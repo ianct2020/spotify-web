@@ -1,5 +1,5 @@
 import { isLoggedIn, loginWithSpotify, logout } from './auth.js';
-import { getUserProfile } from './api.js';
+import { getUserProfile, spotifyFetch } from './api.js';
 import { cacheClearAll } from './storage.js';
 import { registerRoute, initRouter, navigate } from './router.js';
 import { showToast } from './ui/toast.js';
@@ -132,6 +132,7 @@ function showApp(profile) {
   });
 
   registerRoute('home', renderHome);
+  registerRoute('debug', renderDebug);
   registerRoute('sync', renderSync);
   registerRoute('dedupe', renderDedupe);
   registerRoute('orphans', renderOrphans);
@@ -170,6 +171,76 @@ function renderHome(container) {
       </a>
     </div>
   `;
+}
+
+async function renderDebug(container) {
+  container.innerHTML = `
+    <div class="page-header">
+      <h1>API Debug</h1>
+      <p>Prueba cada endpoint por separado.</p>
+    </div>
+    <button class="btn btn-primary" id="debug-run-btn">Correr tests</button>
+    <pre id="debug-log" style="margin-top:20px;background:var(--color-surface);padding:20px;border-radius:var(--radius-md);font-size:13px;overflow-x:auto;white-space:pre-wrap;word-break:break-all;max-height:70vh;overflow-y:auto"></pre>
+  `;
+
+  document.getElementById('debug-run-btn').onclick = async () => {
+    const log = document.getElementById('debug-log');
+    const btn = document.getElementById('debug-run-btn');
+    btn.disabled = true;
+    log.textContent = '';
+
+    const write = (msg) => { log.textContent += msg + '\n'; };
+
+    const tests = [
+      { name: 'GET /me', url: '/me' },
+      { name: 'GET /me/tracks?limit=1', url: '/me/tracks?limit=1' },
+      { name: 'GET /me/playlists?limit=5', url: '/me/playlists?limit=5' },
+    ];
+
+    for (const test of tests) {
+      write(`--- ${test.name} ---`);
+      try {
+        const data = await spotifyFetch(test.url);
+        write(`OK (${JSON.stringify(data).slice(0, 200)}...)`);
+      } catch (e) {
+        write(`ERROR: ${e.message}`);
+      }
+      write('');
+    }
+
+    // si playlists anduvo, probar leer items de la primera
+    write('--- GET /playlists/{id}/tracks?limit=1 ---');
+    try {
+      const playlists = await spotifyFetch('/me/playlists?limit=1');
+      if (playlists.items?.length > 0) {
+        const pl = playlists.items[0];
+        write(`Usando playlist: "${pl.name}" (${pl.id})`);
+        try {
+          const items = await spotifyFetch(`/playlists/${pl.id}/tracks?limit=1`);
+          write(`OK (${JSON.stringify(items).slice(0, 200)}...)`);
+        } catch (e) {
+          write(`ERROR: ${e.message}`);
+
+          // probar endpoint alternativo
+          write('');
+          write('--- Probando /playlists/{id}?fields=tracks.items(track(name,id))&limit=1 ---');
+          try {
+            const alt = await spotifyFetch(`/playlists/${pl.id}?fields=tracks.items(track(name,id))`);
+            write(`OK (${JSON.stringify(alt).slice(0, 200)}...)`);
+          } catch (e2) {
+            write(`ERROR: ${e2.message}`);
+          }
+        }
+      } else {
+        write('No hay playlists para testear');
+      }
+    } catch (e) {
+      write(`ERROR al cargar playlists: ${e.message}`);
+    }
+
+    write('\n=== Tests completos ===');
+    btn.disabled = false;
+  };
 }
 
 init();
