@@ -2,13 +2,15 @@ import { getValidToken, refreshAccessToken } from './auth.js';
 
 const BASE = 'https://api.spotify.com/v1';
 const MIN_RETRY_WAIT = 5000;
-const MAX_RETRIES = 3;
+const MAX_429_RETRIES = 5;
 
 async function spotifyFetch(endpoint, options = {}) {
   const url = endpoint.startsWith('http') ? endpoint : `${BASE}${endpoint}`;
   const method = (options.method || 'GET').toUpperCase();
 
-  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+  let rateLimitRetries = 0;
+
+  for (let attempt = 0; attempt <= MAX_429_RETRIES; attempt++) {
     const token = await getValidToken();
 
     const headers = {
@@ -22,8 +24,8 @@ async function spotifyFetch(endpoint, options = {}) {
     const response = await fetch(url, { ...options, headers });
 
     if (response.status === 401) {
-      if (attempt < MAX_RETRIES) {
-        console.warn(`401 on ${endpoint}, forcing token refresh (attempt ${attempt + 1})`);
+      if (attempt < 2) {
+        console.warn(`401 on ${endpoint}, forcing token refresh`);
         await refreshAccessToken();
         continue;
       }
@@ -31,12 +33,15 @@ async function spotifyFetch(endpoint, options = {}) {
     }
 
     if (response.status === 429) {
-      if (attempt === MAX_RETRIES) {
-        throw new Error(`Rate limited after ${MAX_RETRIES} retries`);
+      rateLimitRetries++;
+      if (rateLimitRetries > MAX_429_RETRIES) {
+        throw new Error(`Rate limited después de ${MAX_429_RETRIES} reintentos. Esperá unos minutos y volvé a intentar.`);
       }
-      const retryAfter = parseInt(response.headers.get('Retry-After') || '0') * 1000;
-      const wait = Math.max(MIN_RETRY_WAIT, retryAfter);
-      console.warn(`429 rate limited, waiting ${wait}ms (attempt ${attempt + 1}/${MAX_RETRIES})`);
+      const retryAfterHeader = response.headers.get('Retry-After');
+      const retryAfterSecs = parseInt(retryAfterHeader || '0');
+      const backoff = MIN_RETRY_WAIT * Math.pow(2, rateLimitRetries - 1);
+      const wait = Math.max(backoff, retryAfterSecs * 1000);
+      console.warn(`429 rate limited, waiting ${(wait / 1000).toFixed(0)}s (retry ${rateLimitRetries}/${MAX_429_RETRIES}, Retry-After: ${retryAfterHeader})`);
       await sleep(wait);
       continue;
     }
@@ -61,7 +66,13 @@ async function spotifyFetch(endpoint, options = {}) {
     return response.json();
   }
 
-  throw new Error('Request failed after retries');
+  throw new Error('Request falló después de reintentos');
+}
+
+let _requestQueue = Promise.resolve();
+function throttledFetch(endpoint, options) {
+  _requestQueue = _requestQueue.then(() => sleep(100)).then(() => spotifyFetch(endpoint, options));
+  return _requestQueue;
 }
 
 function sleep(ms) {
@@ -83,6 +94,7 @@ async function paginateAll(endpoint, { limit = 50, onProgress } = {}) {
       onProgress({ loaded: items.length, total: data.total, page });
     }
     url = data.next;
+    if (url) await sleep(100);
   }
 
   return items;
