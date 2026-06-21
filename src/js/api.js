@@ -2,15 +2,16 @@ import { getValidToken, refreshAccessToken } from './auth.js';
 
 const BASE = 'https://api.spotify.com/v1';
 const MIN_RETRY_WAIT = 5000;
-const MAX_429_RETRIES = 5;
+const DEFAULT_MAX_RETRIES = 3;
 
 async function spotifyFetch(endpoint, options = {}) {
   const url = endpoint.startsWith('http') ? endpoint : `${BASE}${endpoint}`;
   const method = (options.method || 'GET').toUpperCase();
+  const maxRetries = options._maxRetries ?? DEFAULT_MAX_RETRIES;
 
   let rateLimitRetries = 0;
 
-  for (let attempt = 0; attempt <= MAX_429_RETRIES; attempt++) {
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
     const token = await getValidToken();
 
     const headers = {
@@ -34,14 +35,13 @@ async function spotifyFetch(endpoint, options = {}) {
 
     if (response.status === 429) {
       rateLimitRetries++;
-      if (rateLimitRetries > MAX_429_RETRIES) {
-        throw new Error(`Rate limited después de ${MAX_429_RETRIES} reintentos. Esperá unos minutos y volvé a intentar.`);
+      if (rateLimitRetries > maxRetries) {
+        throw new Error(`Rate limited después de ${maxRetries} reintentos. Esperá unos minutos y recargá.`);
       }
       const retryAfterHeader = response.headers.get('Retry-After');
-      const retryAfterSecs = parseInt(retryAfterHeader || '0');
-      const backoff = MIN_RETRY_WAIT * Math.pow(2, rateLimitRetries - 1);
-      const wait = Math.max(backoff, retryAfterSecs * 1000);
-      console.warn(`429 rate limited, waiting ${(wait / 1000).toFixed(0)}s (retry ${rateLimitRetries}/${MAX_429_RETRIES}, Retry-After: ${retryAfterHeader})`);
+      const retryAfterSecs = parseInt(retryAfterHeader || '5');
+      const wait = Math.max(MIN_RETRY_WAIT, retryAfterSecs * 1000);
+      console.warn(`429 rate limited, waiting ${(wait / 1000).toFixed(0)}s (retry ${rateLimitRetries}/${maxRetries}, Retry-After: ${retryAfterHeader})`);
       await sleep(wait);
       continue;
     }
@@ -85,7 +85,7 @@ async function paginateAll(endpoint, { limit = 50, onProgress } = {}) {
   let page = 0;
 
   while (url) {
-    const data = await spotifyFetch(url);
+    const data = await spotifyFetch(url, { _maxRetries: 5 });
     if (data.items) {
       items.push(...data.items);
     }

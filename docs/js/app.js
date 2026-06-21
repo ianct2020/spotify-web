@@ -17,12 +17,31 @@ async function init() {
     return;
   }
 
+  document.getElementById('app').innerHTML = `
+    <div class="login-screen">
+      <div class="spinner spinner-lg"></div>
+      <p id="init-status" style="margin-top:16px;color:var(--color-text-secondary)">Conectando con Spotify...</p>
+    </div>
+  `;
+
   try {
     const profile = await getUserProfile();
     showApp(profile);
   } catch (e) {
     console.error('Failed to load profile:', e);
-    showLogin();
+    document.getElementById('app').innerHTML = `
+      <div class="login-screen">
+        <div class="login-card">
+          <h2 style="color:var(--color-error);margin-bottom:12px">Error al conectar</h2>
+          <p style="margin-bottom:8px">${e.message}</p>
+          <p style="color:var(--color-text-muted);font-size:13px;margin-bottom:24px">Si dice "rate limited", esperá unos minutos y recargá.</p>
+          <div style="display:flex;gap:12px;justify-content:center">
+            <button class="btn btn-primary" onclick="location.reload()">Reintentar</button>
+            <button class="btn btn-secondary" onclick="localStorage.clear();location.reload()">Reset + Login</button>
+          </div>
+        </div>
+      </div>
+    `;
   }
 }
 
