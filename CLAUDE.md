@@ -20,7 +20,7 @@ user-library-read user-library-modify playlist-read-private playlist-read-collab
 
 ## Redirect URIs
 - Dev: http://127.0.0.1:5500/callback.html
-- Prod: (pendiente — se agrega post-deploy)
+- Prod: https://ianct2020.github.io/spotify-web/callback.html
 
 ---
 
