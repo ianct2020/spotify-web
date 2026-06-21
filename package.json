@@ -1,0 +1,10 @@
+{
+  "name": "spotify-web",
+  "version": "1.0.0",
+  "description": "Personal Spotify library management tool",
+  "private": true,
+  "scripts": {
+    "dev": "python3 -m http.server 5500 --directory src",
+    "build": "cp -r src/* docs/"
+  }
+}

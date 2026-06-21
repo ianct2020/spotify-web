@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>spotify-tools — Autenticando...</title>
+  <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="css/theme.css">
+  <link rel="stylesheet" href="css/components.css">
+  <link rel="stylesheet" href="css/main.css">
+</head>
+<body>
+  <div class="login-screen">
+    <div class="spinner spinner-lg"></div>
+    <p style="margin-top:20px;color:var(--color-text-secondary)" id="callback-status">Autenticando con Spotify...</p>
+  </div>
+  <script type="module">
+    import { handleCallback } from './js/auth.js';
+
+    try {
+      await handleCallback();
+      document.getElementById('callback-status').textContent = 'Listo, redirigiendo...';
+      window.location.href = window.location.pathname.replace('callback.html', 'index.html');
+    } catch (e) {
+      document.getElementById('callback-status').textContent = 'Error: ' + e.message;
+      document.getElementById('callback-status').style.color = 'var(--color-error)';
+      console.error(e);
+    }
+  </script>
+</body>
+</html>
