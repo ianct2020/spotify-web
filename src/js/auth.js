@@ -158,4 +158,4 @@ function logout() {
   window.location.reload();
 }
 
-export { loginWithSpotify, handleCallback, getValidToken, isLoggedIn, logout };
+export { loginWithSpotify, handleCallback, getValidToken, refreshAccessToken, isLoggedIn, logout };

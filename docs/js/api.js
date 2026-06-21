@@ -1,4 +1,4 @@
-import { getValidToken, logout } from './auth.js';
+import { getValidToken, refreshAccessToken } from './auth.js';
 
 const BASE = 'https://api.spotify.com/v1';
 const MIN_RETRY_WAIT = 5000;
@@ -6,21 +6,28 @@ const MAX_RETRIES = 3;
 
 async function spotifyFetch(endpoint, options = {}) {
   const url = endpoint.startsWith('http') ? endpoint : `${BASE}${endpoint}`;
+  const method = (options.method || 'GET').toUpperCase();
 
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
     const token = await getValidToken();
 
-    const response = await fetch(url, {
-      ...options,
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json',
-        ...options.headers,
-      },
-    });
+    const headers = {
+      'Authorization': `Bearer ${token}`,
+      ...options.headers,
+    };
+    if (method !== 'GET' && method !== 'HEAD') {
+      headers['Content-Type'] = 'application/json';
+    }
 
-    if (response.status === 401 && attempt === 0) {
-      continue;
+    const response = await fetch(url, { ...options, headers });
+
+    if (response.status === 401) {
+      if (attempt < MAX_RETRIES) {
+        console.warn(`401 on ${endpoint}, forcing token refresh (attempt ${attempt + 1})`);
+        await refreshAccessToken();
+        continue;
+      }
+      throw new Error('No se pudo autenticar después de refrescar el token');
     }
 
     if (response.status === 429) {
@@ -34,19 +41,21 @@ async function spotifyFetch(endpoint, options = {}) {
       continue;
     }
 
-    if (response.status === 403) {
-      const text = await response.text();
-      console.error(`403 Forbidden on ${endpoint}: ${text}`);
-      throw new Error(`Acceso denegado a ${endpoint}. Puede ser un scope faltante o endpoint deprecado.`);
-    }
-
     if (response.status === 204) {
       return null;
     }
 
     if (!response.ok) {
       const text = await response.text();
-      throw new Error(`Spotify API ${response.status}: ${text}`);
+      let msg;
+      try {
+        const json = JSON.parse(text);
+        msg = json.error?.message || text;
+      } catch {
+        msg = text;
+      }
+      console.error(`Spotify ${response.status} on ${endpoint}:`, text);
+      throw new Error(`Spotify ${response.status}: ${msg}`);
     }
 
     return response.json();
