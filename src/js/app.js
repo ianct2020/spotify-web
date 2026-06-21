@@ -9,6 +9,7 @@ import { render as renderDedupe } from './features/dedupe.js';
 import { render as renderOrphans } from './features/orphans.js';
 import { render as renderZombies } from './features/zombies.js';
 import { render as renderVersions } from './features/versions.js';
+import { render as renderDashboard } from './features/dashboard.js';
 
 async function init() {
   if (!isLoggedIn()) {
@@ -75,6 +76,12 @@ function showApp(profile) {
       </div>
       <nav class="sidebar-nav">
         <div class="sidebar-section">
+          <div class="sidebar-section-title">General</div>
+          <a class="nav-link" data-route="dashboard" href="#dashboard">
+            <span class="nav-link-icon">&#9733;</span> Dashboard
+          </a>
+        </div>
+        <div class="sidebar-section">
           <div class="sidebar-section-title">Limpieza</div>
           <a class="nav-link" data-route="sync" href="#sync">
             <span class="nav-link-icon">&#8644;</span> Sync Mirror
@@ -132,6 +139,7 @@ function showApp(profile) {
   });
 
   registerRoute('home', renderHome);
+  registerRoute('dashboard', renderDashboard);
   registerRoute('debug', renderDebug);
   registerRoute('sync', renderSync);
   registerRoute('dedupe', renderDedupe);
@@ -148,24 +156,24 @@ function renderHome(container) {
       <h1>Bienvenido</h1>
       <p>Elegí una herramienta del menú para empezar.</p>
     </div>
-    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:16px">
-      <a href="#sync" class="card" style="text-decoration:none;color:inherit">
+    <div class="home-grid">
+      <a href="#sync" class="card home-card">
         <h3 style="margin-bottom:6px">&#8644; Sync Mirror</h3>
         <p style="color:var(--color-text-secondary);font-size:14px">Mantenés una playlist como copia exacta de tus Liked Songs.</p>
       </a>
-      <a href="#dedupe" class="card" style="text-decoration:none;color:inherit">
+      <a href="#dedupe" class="card home-card">
         <h3 style="margin-bottom:6px">&#9851; Dedupe</h3>
         <p style="color:var(--color-text-secondary);font-size:14px">Encontrá y eliminá tracks duplicados dentro de cada playlist.</p>
       </a>
-      <a href="#orphans" class="card" style="text-decoration:none;color:inherit">
+      <a href="#orphans" class="card home-card">
         <h3 style="margin-bottom:6px">&#9829; Huérfanas</h3>
         <p style="color:var(--color-text-secondary);font-size:14px">Likes que no están en ninguna playlist.</p>
       </a>
-      <a href="#zombies" class="card" style="text-decoration:none;color:inherit">
+      <a href="#zombies" class="card home-card">
         <h3 style="margin-bottom:6px">&#9760; Zombis</h3>
         <p style="color:var(--color-text-secondary);font-size:14px">Tracks eliminados del catálogo de Spotify.</p>
       </a>
-      <a href="#versions" class="card" style="text-decoration:none;color:inherit">
+      <a href="#versions" class="card home-card">
         <h3 style="margin-bottom:6px">&#9842; Versiones</h3>
         <p style="color:var(--color-text-secondary);font-size:14px">Mismo tema en distintos álbumes (remaster, live, etc.).</p>
       </a>
