@@ -20,18 +20,17 @@ async function testConnection() {
   return res;
 }
 
-function showRateLimitScreen(retryAfter) {
-  const waitSecs = Math.max(retryAfter || 30, 30);
+function showRateLimitScreen() {
+  const WAIT = 300;
   document.getElementById('app').innerHTML = `
     <div class="login-screen">
       <div class="login-card">
         <h2 style="color:var(--color-error);margin-bottom:12px">Rate limited por Spotify</h2>
-        <p style="margin-bottom:8px">Spotify bloqueó temporalmente las requests.</p>
-        <p id="countdown-text" style="color:var(--color-accent);font-size:20px;font-weight:700;margin-bottom:8px"></p>
-        <p id="retry-status" style="color:var(--color-text-muted);font-size:13px;margin-bottom:24px">Esperá a que termine el timer.</p>
+        <p style="margin-bottom:16px">Spotify bloquea las requests si se hacen muchas seguidas. Cada reintento antes de tiempo <strong>extiende el bloqueo</strong>.</p>
+        <p id="countdown-text" style="color:var(--color-accent);font-size:24px;font-weight:700;margin-bottom:8px"></p>
+        <p id="retry-status" style="color:var(--color-text-muted);font-size:13px;margin-bottom:24px">No recargues la página — eso también cuenta como request.</p>
         <div style="display:flex;gap:12px;justify-content:center">
           <button class="btn btn-primary" id="retry-btn" disabled>Reintentar</button>
-          <button class="btn btn-secondary" onclick="localStorage.clear();location.reload()">Reset + Login</button>
         </div>
       </div>
     </div>
@@ -40,16 +39,23 @@ function showRateLimitScreen(retryAfter) {
   const countdownEl = document.getElementById('countdown-text');
   const retryBtn = document.getElementById('retry-btn');
   const statusEl = document.getElementById('retry-status');
-  let remaining = waitSecs;
+  let remaining = WAIT;
+
+  const formatTime = (s) => {
+    const m = Math.floor(s / 60);
+    const sec = s % 60;
+    return m > 0 ? `${m}:${String(sec).padStart(2, '0')}` : `${sec}s`;
+  };
 
   const tick = () => {
     if (remaining <= 0) {
-      countdownEl.textContent = '¡Listo! Probá ahora';
+      countdownEl.textContent = '¡Listo!';
+      statusEl.textContent = 'Apretá Reintentar — se va a probar con 1 sola request.';
       retryBtn.disabled = false;
       retryBtn.focus();
       return;
     }
-    countdownEl.textContent = `Esperá ${remaining}s...`;
+    countdownEl.textContent = formatTime(remaining);
     remaining--;
     setTimeout(tick, 1000);
   };
@@ -62,16 +68,20 @@ function showRateLimitScreen(retryAfter) {
     try {
       const res = await testConnection();
       if (res.status === 429) {
-        const ra = parseInt(res.headers.get('Retry-After') || '30');
-        statusEl.textContent = `Todavía bloqueado. Retry-After: ${ra}s`;
-        remaining = Math.max(ra, 30);
+        statusEl.textContent = 'Todavía bloqueado. Esperando 5 min más...';
+        remaining = WAIT;
         tick();
+      } else if (res.status === 401) {
+        statusEl.textContent = 'Token vencido, re-logueando...';
+        localStorage.clear();
+        location.reload();
       } else if (res.ok) {
         statusEl.textContent = 'Conectado, cargando...';
         const profile = await res.json();
         showApp(profile);
       } else {
-        statusEl.textContent = `Error ${res.status}. Probá Reset + Login.`;
+        const text = await res.text().catch(() => '');
+        statusEl.textContent = `Error ${res.status}: ${text.slice(0, 100)}`;
         retryBtn.disabled = false;
       }
     } catch (e) {
@@ -97,9 +107,8 @@ async function init() {
   try {
     const res = await testConnection();
     if (res.status === 429) {
-      const ra = parseInt(res.headers.get('Retry-After') || '30');
-      console.warn(`Rate limited on init, Retry-After: ${ra}`);
-      showRateLimitScreen(ra);
+      console.warn('Rate limited on init');
+      showRateLimitScreen();
       return;
     }
     if (!res.ok) {

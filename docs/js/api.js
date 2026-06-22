@@ -94,7 +94,7 @@ async function paginateAll(endpoint, { limit = 50, onProgress } = {}) {
       onProgress({ loaded: items.length, total: data.total, page });
     }
     url = data.next;
-    if (url) await sleep(100);
+    if (url) await sleep(250);
   }
 
   return items;
