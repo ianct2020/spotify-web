@@ -11,6 +11,24 @@ import { render as renderZombies } from './features/zombies.js';
 import { render as renderVersions } from './features/versions.js';
 import { render as renderDashboard } from './features/dashboard.js';
 
+function startCountdown(seconds) {
+  const el = document.getElementById('countdown-text');
+  const btn = document.getElementById('retry-btn');
+  if (!el) return;
+  let remaining = seconds;
+  const tick = () => {
+    if (remaining <= 0) {
+      el.textContent = '¡Listo! Probá ahora';
+      if (btn) { btn.disabled = false; btn.focus(); }
+      return;
+    }
+    el.textContent = `Esperá ${remaining}s...`;
+    remaining--;
+    setTimeout(tick, 1000);
+  };
+  tick();
+}
+
 async function init() {
   if (!isLoggedIn()) {
     showLogin();
@@ -25,23 +43,28 @@ async function init() {
   `;
 
   try {
-    const profile = await getUserProfile();
+    const profile = await spotifyFetch('/me', { _maxRetries: 1 });
     showApp(profile);
   } catch (e) {
     console.error('Failed to load profile:', e);
+    const isRateLimit = e.message.includes('Rate limit') || e.message.includes('429');
     document.getElementById('app').innerHTML = `
       <div class="login-screen">
         <div class="login-card">
-          <h2 style="color:var(--color-error);margin-bottom:12px">Error al conectar</h2>
-          <p style="margin-bottom:8px">${e.message}</p>
-          <p style="color:var(--color-text-muted);font-size:13px;margin-bottom:24px">Si dice "rate limited", esperá unos minutos y recargá.</p>
+          <h2 style="color:var(--color-error);margin-bottom:12px">${isRateLimit ? 'Rate limited por Spotify' : 'Error al conectar'}</h2>
+          <p style="margin-bottom:8px">${isRateLimit ? 'Spotify bloqueó temporalmente las requests. Esto pasa cuando se hacen muchas llamadas seguidas.' : e.message}</p>
+          ${isRateLimit ? '<p id="countdown-text" style="color:var(--color-accent);font-size:20px;font-weight:700;margin-bottom:8px"></p>' : ''}
+          <p style="color:var(--color-text-muted);font-size:13px;margin-bottom:24px">${isRateLimit ? 'Esperá a que termine el timer y apretá Reintentar.' : ''}</p>
           <div style="display:flex;gap:12px;justify-content:center">
-            <button class="btn btn-primary" onclick="location.reload()">Reintentar</button>
+            <button class="btn btn-primary" id="retry-btn" onclick="location.reload()" ${isRateLimit ? 'disabled' : ''}>Reintentar</button>
             <button class="btn btn-secondary" onclick="localStorage.clear();location.reload()">Reset + Login</button>
           </div>
         </div>
       </div>
     `;
+    if (isRateLimit) {
+      startCountdown(60);
+    }
   }
 }
 
