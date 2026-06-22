@@ -1,5 +1,6 @@
 import { isLoggedIn, loginWithSpotify, logout } from './auth.js';
 import { getUserProfile, spotifyFetch } from './api.js';
+import { getValidToken } from './auth.js';
 import { cacheClearAll } from './storage.js';
 import { registerRoute, initRouter, navigate } from './router.js';
 import { showToast } from './ui/toast.js';
@@ -11,22 +12,73 @@ import { render as renderZombies } from './features/zombies.js';
 import { render as renderVersions } from './features/versions.js';
 import { render as renderDashboard } from './features/dashboard.js';
 
-function startCountdown(seconds) {
-  const el = document.getElementById('countdown-text');
-  const btn = document.getElementById('retry-btn');
-  if (!el) return;
-  let remaining = seconds;
+async function testConnection() {
+  const token = await getValidToken();
+  const res = await fetch('https://api.spotify.com/v1/me', {
+    headers: { 'Authorization': `Bearer ${token}` },
+  });
+  return res;
+}
+
+function showRateLimitScreen(retryAfter) {
+  const waitSecs = Math.max(retryAfter || 30, 30);
+  document.getElementById('app').innerHTML = `
+    <div class="login-screen">
+      <div class="login-card">
+        <h2 style="color:var(--color-error);margin-bottom:12px">Rate limited por Spotify</h2>
+        <p style="margin-bottom:8px">Spotify bloqueó temporalmente las requests.</p>
+        <p id="countdown-text" style="color:var(--color-accent);font-size:20px;font-weight:700;margin-bottom:8px"></p>
+        <p id="retry-status" style="color:var(--color-text-muted);font-size:13px;margin-bottom:24px">Esperá a que termine el timer.</p>
+        <div style="display:flex;gap:12px;justify-content:center">
+          <button class="btn btn-primary" id="retry-btn" disabled>Reintentar</button>
+          <button class="btn btn-secondary" onclick="localStorage.clear();location.reload()">Reset + Login</button>
+        </div>
+      </div>
+    </div>
+  `;
+
+  const countdownEl = document.getElementById('countdown-text');
+  const retryBtn = document.getElementById('retry-btn');
+  const statusEl = document.getElementById('retry-status');
+  let remaining = waitSecs;
+
   const tick = () => {
     if (remaining <= 0) {
-      el.textContent = '¡Listo! Probá ahora';
-      if (btn) { btn.disabled = false; btn.focus(); }
+      countdownEl.textContent = '¡Listo! Probá ahora';
+      retryBtn.disabled = false;
+      retryBtn.focus();
       return;
     }
-    el.textContent = `Esperá ${remaining}s...`;
+    countdownEl.textContent = `Esperá ${remaining}s...`;
     remaining--;
     setTimeout(tick, 1000);
   };
   tick();
+
+  retryBtn.onclick = async () => {
+    retryBtn.disabled = true;
+    countdownEl.textContent = '';
+    statusEl.textContent = 'Probando conexión...';
+    try {
+      const res = await testConnection();
+      if (res.status === 429) {
+        const ra = parseInt(res.headers.get('Retry-After') || '30');
+        statusEl.textContent = `Todavía bloqueado. Retry-After: ${ra}s`;
+        remaining = Math.max(ra, 30);
+        tick();
+      } else if (res.ok) {
+        statusEl.textContent = 'Conectado, cargando...';
+        const profile = await res.json();
+        showApp(profile);
+      } else {
+        statusEl.textContent = `Error ${res.status}. Probá Reset + Login.`;
+        retryBtn.disabled = false;
+      }
+    } catch (e) {
+      statusEl.textContent = `Error: ${e.message}`;
+      retryBtn.disabled = false;
+    }
+  };
 }
 
 async function init() {
@@ -43,28 +95,32 @@ async function init() {
   `;
 
   try {
-    const profile = await spotifyFetch('/me', { _maxRetries: 1 });
+    const res = await testConnection();
+    if (res.status === 429) {
+      const ra = parseInt(res.headers.get('Retry-After') || '30');
+      console.warn(`Rate limited on init, Retry-After: ${ra}`);
+      showRateLimitScreen(ra);
+      return;
+    }
+    if (!res.ok) {
+      throw new Error(`Spotify ${res.status}: ${await res.text()}`);
+    }
+    const profile = await res.json();
     showApp(profile);
   } catch (e) {
     console.error('Failed to load profile:', e);
-    const isRateLimit = e.message.includes('Rate limit') || e.message.includes('429');
     document.getElementById('app').innerHTML = `
       <div class="login-screen">
         <div class="login-card">
-          <h2 style="color:var(--color-error);margin-bottom:12px">${isRateLimit ? 'Rate limited por Spotify' : 'Error al conectar'}</h2>
-          <p style="margin-bottom:8px">${isRateLimit ? 'Spotify bloqueó temporalmente las requests. Esto pasa cuando se hacen muchas llamadas seguidas.' : e.message}</p>
-          ${isRateLimit ? '<p id="countdown-text" style="color:var(--color-accent);font-size:20px;font-weight:700;margin-bottom:8px"></p>' : ''}
-          <p style="color:var(--color-text-muted);font-size:13px;margin-bottom:24px">${isRateLimit ? 'Esperá a que termine el timer y apretá Reintentar.' : ''}</p>
-          <div style="display:flex;gap:12px;justify-content:center">
-            <button class="btn btn-primary" id="retry-btn" onclick="location.reload()" ${isRateLimit ? 'disabled' : ''}>Reintentar</button>
+          <h2 style="color:var(--color-error);margin-bottom:12px">Error al conectar</h2>
+          <p style="margin-bottom:8px">${e.message}</p>
+          <div style="display:flex;gap:12px;justify-content:center;margin-top:24px">
+            <button class="btn btn-primary" onclick="location.reload()">Reintentar</button>
             <button class="btn btn-secondary" onclick="localStorage.clear();location.reload()">Reset + Login</button>
           </div>
         </div>
       </div>
     `;
-    if (isRateLimit) {
-      startCountdown(60);
-    }
   }
 }
 
