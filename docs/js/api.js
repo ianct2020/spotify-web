@@ -81,20 +81,27 @@ function sleep(ms) {
 
 async function paginateAll(endpoint, { limit = 50, onProgress } = {}) {
   const items = [];
-  let url = `${BASE}${endpoint}${endpoint.includes('?') ? '&' : '?'}limit=${limit}`;
+  let offset = 0;
+  let total = Infinity;
   let page = 0;
+  const sep = endpoint.includes('?') ? '&' : '?';
 
-  while (url) {
+  while (offset < total) {
+    const url = `${BASE}${endpoint}${sep}limit=${limit}&offset=${offset}`;
     const data = await spotifyFetch(url, { _maxRetries: 5 });
     if (data.items) {
       items.push(...data.items);
     }
-    page++;
-    if (onProgress) {
-      onProgress({ loaded: items.length, total: data.total, page });
+    if (data.total != null) {
+      total = data.total;
     }
-    url = data.next;
-    if (url) await sleep(250);
+    page++;
+    offset += limit;
+    if (onProgress) {
+      onProgress({ loaded: items.length, total, page });
+    }
+    if (!data.next) break;
+    await sleep(250);
   }
 
   return items;
