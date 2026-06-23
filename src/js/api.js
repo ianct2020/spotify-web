@@ -8,6 +8,14 @@ const LIKES_CACHE_KEY = 'all_liked_tracks';
 const PLAYLISTS_CACHE_KEY = 'all_user_playlists';
 const CACHE_TTL_MIN = 60;
 
+// MODO PRUEBA: cuando true, limita las cargas a un 25% para iterar más rápido
+// y no fundir el rate limit. Cuando todo ande, poner false.
+const TEST_MODE = true;
+const TEST_MAX_LIKES = 2500;
+const TEST_MAX_PLAYLIST_ITEMS = 200;
+
+export const isTestMode = () => TEST_MODE;
+
 async function spotifyFetch(endpoint, options = {}) {
   const url = endpoint.startsWith('http') ? endpoint : `${BASE}${endpoint}`;
   const method = (options.method || 'GET').toUpperCase();
@@ -83,7 +91,7 @@ function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-async function paginateAll(endpoint, { limit = 50, onProgress, partialCacheKey, transform } = {}) {
+async function paginateAll(endpoint, { limit = 50, onProgress, partialCacheKey, transform, maxItems } = {}) {
   let items = [];
   let offset = 0;
   let total = Infinity;
@@ -100,7 +108,7 @@ async function paginateAll(endpoint, { limit = 50, onProgress, partialCacheKey, 
   }
 
   let pagesSinceSave = 0;
-  while (offset < total) {
+  while (offset < total && (!maxItems || items.length < maxItems)) {
     const url = `${BASE}${endpoint}${sep}limit=${limit}&offset=${offset}`;
     try {
       const data = await spotifyFetch(url, { _maxRetries: 2 });
@@ -188,6 +196,7 @@ async function getAllLikedTracks(onProgress, { force = false } = {}) {
     onProgress,
     partialCacheKey: LIKES_CACHE_KEY,
     transform: item => ({ added_at: item.added_at, track: slimTrack(item.track) }),
+    maxItems: TEST_MODE ? TEST_MAX_LIKES : undefined,
   });
   cacheSet(LIKES_CACHE_KEY, items, CACHE_TTL_MIN);
   return items;
@@ -221,7 +230,11 @@ function invalidatePlaylistsCache() {
 }
 
 async function getAllPlaylistItems(playlistId, onProgress) {
-  return paginateAll(`/playlists/${playlistId}/items`, { limit: 100, onProgress });
+  return paginateAll(`/playlists/${playlistId}/items`, {
+    limit: 100,
+    onProgress,
+    maxItems: TEST_MODE ? TEST_MAX_PLAYLIST_ITEMS : undefined,
+  });
 }
 
 async function getUserProfile() {
