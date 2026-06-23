@@ -111,6 +111,39 @@ async function paginateAll(endpoint, { limit = 50, onProgress } = {}) {
   return items;
 }
 
+function slimTrack(t) {
+  if (!t) return t;
+  return {
+    id: t.id,
+    uri: t.uri,
+    name: t.name,
+    popularity: t.popularity,
+    duration_ms: t.duration_ms,
+    explicit: t.explicit,
+    is_playable: t.is_playable,
+    external_ids: t.external_ids ? { isrc: t.external_ids.isrc } : undefined,
+    artists: (t.artists || []).map(a => ({ id: a.id, name: a.name })),
+    album: t.album ? {
+      id: t.album.id,
+      name: t.album.name,
+      release_date: t.album.release_date,
+      images: (t.album.images || []).slice(-1),
+    } : undefined,
+  };
+}
+
+function slimPlaylist(p) {
+  if (!p) return p;
+  return {
+    id: p.id,
+    name: p.name,
+    owner: p.owner ? { id: p.owner.id, display_name: p.owner.display_name } : undefined,
+    tracks: p.tracks ? { total: p.tracks.total } : undefined,
+    public: p.public,
+    collaborative: p.collaborative,
+  };
+}
+
 async function getAllLikedTracks(onProgress, { force = false } = {}) {
   if (!force) {
     const cached = cacheGet(LIKES_CACHE_KEY);
@@ -120,8 +153,12 @@ async function getAllLikedTracks(onProgress, { force = false } = {}) {
     }
   }
   const items = await paginateAll('/me/tracks', { limit: 50, onProgress });
-  cacheSet(LIKES_CACHE_KEY, items, CACHE_TTL_MIN);
-  return items;
+  const slim = items.map(item => ({
+    added_at: item.added_at,
+    track: slimTrack(item.track),
+  }));
+  cacheSet(LIKES_CACHE_KEY, slim, CACHE_TTL_MIN);
+  return slim;
 }
 
 async function getAllUserPlaylists(onProgress, { force = false } = {}) {
@@ -133,8 +170,9 @@ async function getAllUserPlaylists(onProgress, { force = false } = {}) {
     }
   }
   const items = await paginateAll('/me/playlists', { limit: 50, onProgress });
-  cacheSet(PLAYLISTS_CACHE_KEY, items, CACHE_TTL_MIN);
-  return items;
+  const slim = items.map(slimPlaylist);
+  cacheSet(PLAYLISTS_CACHE_KEY, slim, CACHE_TTL_MIN);
+  return slim;
 }
 
 function invalidateLikesCache() {

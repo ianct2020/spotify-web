@@ -27,9 +27,13 @@ function cacheSet(key, value, ttlMinutes = DEFAULT_TTL) {
     localStorage.setItem(CACHE_PREFIX + key, JSON.stringify(data));
   } catch (e) {
     if (e.name === 'QuotaExceededError') {
-      console.warn('localStorage full, clearing cache');
+      console.warn('localStorage full, clearing cache and retrying');
       cacheClearAll();
-      localStorage.setItem(CACHE_PREFIX + key, JSON.stringify(data));
+      try {
+        localStorage.setItem(CACHE_PREFIX + key, JSON.stringify(data));
+      } catch (e2) {
+        console.warn(`Cache value too large for "${key}", skipping cache`);
+      }
     }
   }
 }
