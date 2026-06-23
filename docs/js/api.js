@@ -83,29 +83,59 @@ function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-async function paginateAll(endpoint, { limit = 50, onProgress } = {}) {
-  const items = [];
+async function paginateAll(endpoint, { limit = 50, onProgress, partialCacheKey, transform } = {}) {
+  let items = [];
   let offset = 0;
   let total = Infinity;
   let page = 0;
   const sep = endpoint.includes('?') ? '&' : '?';
 
+  if (partialCacheKey) {
+    const partial = cacheGet(partialCacheKey + '_partial');
+    if (partial && partial.items) {
+      items = partial.items;
+      offset = partial.offset;
+      console.log(`Resuming from offset ${offset} (${items.length} items already cached)`);
+    }
+  }
+
+  let pagesSinceSave = 0;
   while (offset < total) {
     const url = `${BASE}${endpoint}${sep}limit=${limit}&offset=${offset}`;
-    const data = await spotifyFetch(url, { _maxRetries: 2 });
-    if (data.items) {
-      items.push(...data.items);
+    try {
+      const data = await spotifyFetch(url, { _maxRetries: 2 });
+      if (data.items) {
+        const newItems = transform ? data.items.map(transform) : data.items;
+        items.push(...newItems);
+      }
+      if (data.total != null) {
+        total = data.total;
+      }
+      page++;
+      offset += limit;
+      pagesSinceSave++;
+      if (onProgress) {
+        onProgress({ loaded: items.length, total, page });
+      }
+
+      if (partialCacheKey && pagesSinceSave >= 10) {
+        cacheSet(partialCacheKey + '_partial', { items, offset }, 60);
+        pagesSinceSave = 0;
+      }
+
+      if (!data.next) break;
+      await sleep(400);
+    } catch (e) {
+      if (partialCacheKey && items.length > 0) {
+        cacheSet(partialCacheKey + '_partial', { items, offset }, 60);
+        console.warn(`Saved partial progress: ${items.length} items at offset ${offset}`);
+      }
+      throw e;
     }
-    if (data.total != null) {
-      total = data.total;
-    }
-    page++;
-    offset += limit;
-    if (onProgress) {
-      onProgress({ loaded: items.length, total, page });
-    }
-    if (!data.next) break;
-    await sleep(250);
+  }
+
+  if (partialCacheKey) {
+    cacheClear(partialCacheKey + '_partial');
   }
 
   return items;
@@ -152,13 +182,15 @@ async function getAllLikedTracks(onProgress, { force = false } = {}) {
       return cached;
     }
   }
-  const items = await paginateAll('/me/tracks', { limit: 50, onProgress });
-  const slim = items.map(item => ({
-    added_at: item.added_at,
-    track: slimTrack(item.track),
-  }));
-  cacheSet(LIKES_CACHE_KEY, slim, CACHE_TTL_MIN);
-  return slim;
+  if (force) cacheClear(LIKES_CACHE_KEY + '_partial');
+  const items = await paginateAll('/me/tracks', {
+    limit: 50,
+    onProgress,
+    partialCacheKey: LIKES_CACHE_KEY,
+    transform: item => ({ added_at: item.added_at, track: slimTrack(item.track) }),
+  });
+  cacheSet(LIKES_CACHE_KEY, items, CACHE_TTL_MIN);
+  return items;
 }
 
 async function getAllUserPlaylists(onProgress, { force = false } = {}) {
@@ -169,10 +201,15 @@ async function getAllUserPlaylists(onProgress, { force = false } = {}) {
       return cached;
     }
   }
-  const items = await paginateAll('/me/playlists', { limit: 50, onProgress });
-  const slim = items.map(slimPlaylist);
-  cacheSet(PLAYLISTS_CACHE_KEY, slim, CACHE_TTL_MIN);
-  return slim;
+  if (force) cacheClear(PLAYLISTS_CACHE_KEY + '_partial');
+  const items = await paginateAll('/me/playlists', {
+    limit: 50,
+    onProgress,
+    partialCacheKey: PLAYLISTS_CACHE_KEY,
+    transform: slimPlaylist,
+  });
+  cacheSet(PLAYLISTS_CACHE_KEY, items, CACHE_TTL_MIN);
+  return items;
 }
 
 function invalidateLikesCache() {
