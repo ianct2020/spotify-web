@@ -323,34 +323,30 @@ async function renderDebug(container) {
       write('');
     }
 
-    // si playlists anduvo, probar leer items de la primera
-    write('--- GET /playlists/{id}/tracks?limit=1 ---');
+    // probar nuevo endpoint /playlists/{id}/items
+    write('--- GET /playlists/{id}/items?limit=1 ---');
     try {
       const playlists = await spotifyFetch('/me/playlists?limit=1');
       if (playlists.items?.length > 0) {
         const pl = playlists.items[0];
         write(`Usando playlist: "${pl.name}" (${pl.id})`);
-        try {
-          const items = await spotifyFetch(`/playlists/${pl.id}/tracks?limit=1`);
-          write(`OK (${JSON.stringify(items).slice(0, 200)}...)`);
-        } catch (e) {
-          write(`ERROR: ${e.message}`);
-
-          // probar endpoint alternativo
-          write('');
-          write('--- Probando /playlists/{id}?fields=tracks.items(track(name,id))&limit=1 ---');
-          try {
-            const alt = await spotifyFetch(`/playlists/${pl.id}?fields=tracks.items(track(name,id))`);
-            write(`OK (${JSON.stringify(alt).slice(0, 200)}...)`);
-          } catch (e2) {
-            write(`ERROR: ${e2.message}`);
-          }
-        }
+        const items = await spotifyFetch(`/playlists/${pl.id}/items?limit=1`);
+        write(`OK (${JSON.stringify(items).slice(0, 200)}...)`);
       } else {
         write('No hay playlists para testear');
       }
     } catch (e) {
-      write(`ERROR al cargar playlists: ${e.message}`);
+      write(`ERROR: ${e.message}`);
+    }
+
+    // probar DELETE /me/library (dry run con ID inexistente)
+    write('');
+    write('--- DELETE /me/library?uris=spotify:track:nonexistent ---');
+    try {
+      await spotifyFetch(`/me/library?uris=${encodeURIComponent('spotify:track:0000000000000000000000')}`, { method: 'DELETE' });
+      write('OK (200)');
+    } catch (e) {
+      write(`ERROR: ${e.message}`);
     }
 
     write('\n=== Tests completos ===');

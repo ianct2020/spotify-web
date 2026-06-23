@@ -109,7 +109,7 @@ async function getAllUserPlaylists(onProgress) {
 }
 
 async function getAllPlaylistItems(playlistId, onProgress) {
-  return paginateAll(`/playlists/${playlistId}/tracks`, { limit: 100, onProgress });
+  return paginateAll(`/playlists/${playlistId}/items`, { limit: 100, onProgress });
 }
 
 async function getUserProfile() {
@@ -122,7 +122,7 @@ async function addTracksToPlaylist(playlistId, uris) {
     chunks.push(uris.slice(i, i + 100));
   }
   for (const chunk of chunks) {
-    await spotifyFetch(`/playlists/${playlistId}/tracks`, {
+    await spotifyFetch(`/playlists/${playlistId}/items`, {
       method: 'POST',
       body: JSON.stringify({ uris: chunk }),
     });
@@ -135,7 +135,7 @@ async function removeTracksFromPlaylist(playlistId, uris) {
     chunks.push(uris.slice(i, i + 100));
   }
   for (const chunk of chunks) {
-    await spotifyFetch(`/playlists/${playlistId}/tracks`, {
+    await spotifyFetch(`/playlists/${playlistId}/items`, {
       method: 'DELETE',
       body: JSON.stringify({ tracks: chunk.map(uri => ({ uri })) }),
     });
@@ -144,20 +144,19 @@ async function removeTracksFromPlaylist(playlistId, uris) {
 
 async function removeLikedTracks(ids) {
   const chunks = [];
-  for (let i = 0; i < ids.length; i += 50) {
-    chunks.push(ids.slice(i, i + 50));
+  for (let i = 0; i < ids.length; i += 40) {
+    chunks.push(ids.slice(i, i + 40));
   }
   for (const chunk of chunks) {
-    await spotifyFetch('/me/tracks', {
+    const uris = chunk.map(id => `spotify:track:${id}`).join(',');
+    await spotifyFetch(`/me/library?uris=${encodeURIComponent(uris)}`, {
       method: 'DELETE',
-      body: JSON.stringify({ ids: chunk }),
     });
   }
 }
 
 async function createPlaylist(name, description = '', isPublic = false) {
-  const me = await getUserProfile();
-  return spotifyFetch(`/users/${me.id}/playlists`, {
+  return spotifyFetch('/me/playlists', {
     method: 'POST',
     body: JSON.stringify({ name, description, public: isPublic }),
   });

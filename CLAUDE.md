@@ -6,11 +6,17 @@
 - Deploy: GitHub Pages
 - Cache: localStorage con TTL 24h
 
-## Decisiones de API (junio 2026)
-- playlist_items devuelve `items[].item` (NO `items[].track`)
-- saved tracks sigue usando `items[].track`
-- Rate limit 429: esperar mínimo 5 segundos aunque Retry-After diga 0
-- Endpoints deprecados (403): Audio Features, Audio Analysis, Recommendations, Related Artists, Featured Playlists, Get Several Albums/Artists, Get Artist Top Tracks, Get New Releases
+## Decisiones de API (junio 2026 — post migración feb 2026)
+- GET playlist items: `/playlists/{id}/items` (NO `/playlists/{id}/tracks` — da 403)
+- POST/DELETE playlist items: `/playlists/{id}/items` (NO `/playlists/{id}/tracks`)
+- playlist items response: `items[].item` (NO `items[].track`)
+- saved tracks (GET /me/tracks) sigue usando `items[].track`
+- Remove from library: `DELETE /me/library?uris=spotify:track:{id},...` (NO `DELETE /me/tracks` — da 403)
+  - Máximo 40 URIs por request, usa query params (no body)
+- Save to library: `PUT /me/library` con URIs (NO `PUT /me/tracks`)
+- Create playlist: `POST /me/playlists` (NO `POST /users/{id}/playlists`)
+- Rate limit 429: esperar mínimo 5 segundos, Retry-After header no visible por CORS
+- Endpoints deprecados (403): Audio Features, Audio Analysis, Recommendations, Related Artists, Featured Playlists, Get Several Albums/Artists, Get Artist Top Tracks, Get New Releases, GET /users/{id}, GET /users/{id}/playlists
 
 ## Client ID
 0c8c92ad128e4b89be7097c6b8082797
