@@ -1,9 +1,6 @@
-import { getAllLikedTracks, getUserProfile } from '../api.js';
-import { cacheGet, cacheSet } from '../storage.js';
+import { getAllLikedTracks, invalidateLikesCache } from '../api.js';
 import { showProgress, hideProgress } from '../ui/components.js';
-import { showToast } from '../ui/toast.js';
 
-const CACHE_KEY = 'dashboard_likes';
 let charts = [];
 
 export function render(container) {
@@ -36,17 +33,14 @@ async function loadData(forceRefresh) {
   const content = document.getElementById('dash-content');
   if (!content) return;
 
-  try {
-    let likes = forceRefresh ? null : cacheGet(CACHE_KEY);
+  if (forceRefresh) invalidateLikesCache();
 
-    if (!likes) {
-      showProgress('Cargando Liked Songs...', 0, 0);
-      likes = await getAllLikedTracks(({ loaded, total }) => {
-        showProgress('Cargando Liked Songs...', loaded, total);
-      });
-      cacheSet(CACHE_KEY, likes, 60 * 24);
-      hideProgress();
-    }
+  try {
+    showProgress('Cargando Liked Songs...', 0, 0);
+    const likes = await getAllLikedTracks(({ loaded, total }) => {
+      showProgress('Cargando Liked Songs...', loaded, total);
+    });
+    hideProgress();
 
     charts.forEach(c => c.destroy());
     charts = [];

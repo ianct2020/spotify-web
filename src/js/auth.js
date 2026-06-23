@@ -102,30 +102,42 @@ async function handleCallback() {
   return data;
 }
 
+let _refreshPromise = null;
+
 async function refreshAccessToken() {
-  const refreshToken = localStorage.getItem(AUTH.REFRESH_KEY);
-  if (!refreshToken) {
-    throw new Error('No refresh token available');
+  if (_refreshPromise) return _refreshPromise;
+
+  _refreshPromise = (async () => {
+    const refreshToken = localStorage.getItem(AUTH.REFRESH_KEY);
+    if (!refreshToken) {
+      throw new Error('No refresh token available');
+    }
+
+    const response = await fetch('https://accounts.spotify.com/api/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        client_id: AUTH.CLIENT_ID,
+        grant_type: 'refresh_token',
+        refresh_token: refreshToken,
+      }),
+    });
+
+    if (!response.ok) {
+      const text = await response.text().catch(() => '');
+      throw new Error(`Token refresh failed: ${response.status} ${text.slice(0, 100)}`);
+    }
+
+    const data = await response.json();
+    saveTokens(data);
+    return data;
+  })();
+
+  try {
+    return await _refreshPromise;
+  } finally {
+    _refreshPromise = null;
   }
-
-  const response = await fetch('https://accounts.spotify.com/api/token', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({
-      client_id: AUTH.CLIENT_ID,
-      grant_type: 'refresh_token',
-      refresh_token: refreshToken,
-    }),
-  });
-
-  if (!response.ok) {
-    logout();
-    throw new Error('Token refresh failed — logged out');
-  }
-
-  const data = await response.json();
-  saveTokens(data);
-  return data;
 }
 
 function saveTokens(data) {

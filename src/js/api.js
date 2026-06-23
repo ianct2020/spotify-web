@@ -1,8 +1,12 @@
 import { getValidToken, refreshAccessToken } from './auth.js';
+import { cacheGet, cacheSet, cacheClear } from './storage.js';
 
 const BASE = 'https://api.spotify.com/v1';
 const MIN_RETRY_WAIT = 5000;
 const DEFAULT_MAX_RETRIES = 3;
+const LIKES_CACHE_KEY = 'all_liked_tracks';
+const PLAYLISTS_CACHE_KEY = 'all_user_playlists';
+const CACHE_TTL_MIN = 60;
 
 async function spotifyFetch(endpoint, options = {}) {
   const url = endpoint.startsWith('http') ? endpoint : `${BASE}${endpoint}`;
@@ -88,7 +92,7 @@ async function paginateAll(endpoint, { limit = 50, onProgress } = {}) {
 
   while (offset < total) {
     const url = `${BASE}${endpoint}${sep}limit=${limit}&offset=${offset}`;
-    const data = await spotifyFetch(url, { _maxRetries: 5 });
+    const data = await spotifyFetch(url, { _maxRetries: 2 });
     if (data.items) {
       items.push(...data.items);
     }
@@ -107,12 +111,38 @@ async function paginateAll(endpoint, { limit = 50, onProgress } = {}) {
   return items;
 }
 
-async function getAllLikedTracks(onProgress) {
-  return paginateAll('/me/tracks', { limit: 50, onProgress });
+async function getAllLikedTracks(onProgress, { force = false } = {}) {
+  if (!force) {
+    const cached = cacheGet(LIKES_CACHE_KEY);
+    if (cached) {
+      if (onProgress) onProgress({ loaded: cached.length, total: cached.length, page: 1, cached: true });
+      return cached;
+    }
+  }
+  const items = await paginateAll('/me/tracks', { limit: 50, onProgress });
+  cacheSet(LIKES_CACHE_KEY, items, CACHE_TTL_MIN);
+  return items;
 }
 
-async function getAllUserPlaylists(onProgress) {
-  return paginateAll('/me/playlists', { limit: 50, onProgress });
+async function getAllUserPlaylists(onProgress, { force = false } = {}) {
+  if (!force) {
+    const cached = cacheGet(PLAYLISTS_CACHE_KEY);
+    if (cached) {
+      if (onProgress) onProgress({ loaded: cached.length, total: cached.length, page: 1, cached: true });
+      return cached;
+    }
+  }
+  const items = await paginateAll('/me/playlists', { limit: 50, onProgress });
+  cacheSet(PLAYLISTS_CACHE_KEY, items, CACHE_TTL_MIN);
+  return items;
+}
+
+function invalidateLikesCache() {
+  cacheClear(LIKES_CACHE_KEY);
+}
+
+function invalidatePlaylistsCache() {
+  cacheClear(PLAYLISTS_CACHE_KEY);
 }
 
 async function getAllPlaylistItems(playlistId, onProgress) {
@@ -144,7 +174,7 @@ async function removeTracksFromPlaylist(playlistId, uris) {
   for (const chunk of chunks) {
     await spotifyFetch(`/playlists/${playlistId}/items`, {
       method: 'DELETE',
-      body: JSON.stringify({ tracks: chunk.map(uri => ({ uri })) }),
+      body: JSON.stringify({ items: chunk.map(uri => ({ uri })) }),
     });
   }
 }
@@ -155,18 +185,21 @@ async function removeLikedTracks(ids) {
     chunks.push(ids.slice(i, i + 40));
   }
   for (const chunk of chunks) {
-    const uris = chunk.map(id => `spotify:track:${id}`).join(',');
-    await spotifyFetch(`/me/library?uris=${encodeURIComponent(uris)}`, {
+    const uris = chunk.map(id => encodeURIComponent(`spotify:track:${id}`)).join(',');
+    await spotifyFetch(`/me/library?uris=${uris}`, {
       method: 'DELETE',
     });
   }
+  invalidateLikesCache();
 }
 
 async function createPlaylist(name, description = '', isPublic = false) {
-  return spotifyFetch('/me/playlists', {
+  const result = await spotifyFetch('/me/playlists', {
     method: 'POST',
     body: JSON.stringify({ name, description, public: isPublic }),
   });
+  invalidatePlaylistsCache();
+  return result;
 }
 
 export {
@@ -180,4 +213,6 @@ export {
   removeTracksFromPlaylist,
   removeLikedTracks,
   createPlaylist,
+  invalidateLikesCache,
+  invalidatePlaylistsCache,
 };
