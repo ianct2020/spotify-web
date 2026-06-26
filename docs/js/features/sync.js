@@ -35,10 +35,10 @@ async function analyze() {
   btn.disabled = true;
 
   try {
-    showProgress('Cargando Liked Songs...', 0, 0);
+    showProgress('Cargando Liked Songs (las más recientes)...', 0, 0);
     const likes = await getAllLikedTracks(({ loaded, total }) => {
-      showProgress('Cargando Liked Songs...', loaded, total);
-    });
+      showProgress('Cargando Liked Songs (las más recientes)...', loaded, total);
+    }, { randomize: false });
 
     showProgress('Cargando playlists...', 0, 0);
     const playlists = await getAllUserPlaylists();

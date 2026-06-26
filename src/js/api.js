@@ -189,18 +189,19 @@ function slimPlaylist(p) {
   };
 }
 
-async function getAllLikedTracks(onProgress, { force = false } = {}) {
+async function getAllLikedTracks(onProgress, { force = false, randomize = TEST_MODE } = {}) {
+  const cacheKey = randomize ? LIKES_CACHE_KEY : LIKES_CACHE_KEY + '_newest';
   if (!force) {
-    const cached = cacheGet(LIKES_CACHE_KEY);
+    const cached = cacheGet(cacheKey);
     if (cached) {
       if (onProgress) onProgress({ loaded: cached.length, total: cached.length, page: 1, cached: true });
       return cached;
     }
   }
-  if (force) cacheClear(LIKES_CACHE_KEY + '_partial');
+  if (force) cacheClear(cacheKey + '_partial');
 
   let startOffset = 0;
-  if (TEST_MODE) {
+  if (TEST_MODE && randomize) {
     try {
       const head = await spotifyFetch('/me/tracks?limit=1');
       const total = head.total || 0;
@@ -210,17 +211,19 @@ async function getAllLikedTracks(onProgress, { force = false } = {}) {
     } catch (e) {
       console.warn('No se pudo obtener total para offset random, usando 0', e);
     }
+  } else if (TEST_MODE && !randomize) {
+    console.log(`MODO PRUEBA: cargando las ${TEST_MAX_LIKES} más recientes (offset 0)`);
   }
 
   const items = await paginateAll('/me/tracks', {
     limit: 50,
     onProgress,
-    partialCacheKey: LIKES_CACHE_KEY,
+    partialCacheKey: cacheKey,
     transform: item => ({ added_at: item.added_at, track: slimTrack(item.track) }),
     maxItems: TEST_MODE ? TEST_MAX_LIKES : undefined,
     startOffset,
   });
-  cacheSet(LIKES_CACHE_KEY, items, CACHE_TTL_MIN);
+  cacheSet(cacheKey, items, CACHE_TTL_MIN);
   return items;
 }
 

@@ -7,7 +7,6 @@ import { showToast } from './ui/toast.js';
 
 import { render as renderSync } from './features/sync.js';
 import { render as renderDedupe } from './features/dedupe.js';
-import { render as renderOrphans } from './features/orphans.js';
 import { render as renderZombies } from './features/zombies.js';
 import { render as renderVersions } from './features/versions.js';
 import { render as renderDashboard } from './features/dashboard.js';
@@ -201,9 +200,6 @@ function showApp(profile) {
           <a class="nav-link" data-route="dedupe" href="#dedupe">
             <span class="nav-link-icon">&#9851;</span> Dedupe
           </a>
-          <a class="nav-link" data-route="orphans" href="#orphans">
-            <span class="nav-link-icon">&#9829;</span> Huérfanas
-          </a>
           <a class="nav-link" data-route="zombies" href="#zombies">
             <span class="nav-link-icon">&#9760;</span> Zombis
           </a>
@@ -255,7 +251,6 @@ function showApp(profile) {
   registerRoute('debug', renderDebug);
   registerRoute('sync', renderSync);
   registerRoute('dedupe', renderDedupe);
-  registerRoute('orphans', renderOrphans);
   registerRoute('zombies', renderZombies);
   registerRoute('versions', renderVersions);
 
@@ -276,10 +271,6 @@ function renderHome(container) {
       <a href="#dedupe" class="card home-card">
         <h3 style="margin-bottom:6px">&#9851; Dedupe</h3>
         <p style="color:var(--color-text-secondary);font-size:14px">Encontrá y eliminá tracks duplicados dentro de cada playlist.</p>
-      </a>
-      <a href="#orphans" class="card home-card">
-        <h3 style="margin-bottom:6px">&#9829; Huérfanas</h3>
-        <p style="color:var(--color-text-secondary);font-size:14px">Likes que no están en ninguna playlist.</p>
       </a>
       <a href="#zombies" class="card home-card">
         <h3 style="margin-bottom:6px">&#9760; Zombis</h3>
