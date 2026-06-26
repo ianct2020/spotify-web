@@ -152,7 +152,17 @@ function saveTokens(data) {
 async function getValidToken() {
   const expiry = parseInt(localStorage.getItem(AUTH.EXPIRY_KEY) || '0');
   if (Date.now() >= expiry) {
-    await refreshAccessToken();
+    try {
+      await refreshAccessToken();
+    } catch (e) {
+      console.warn('Refresh failed, forcing re-login:', e.message);
+      localStorage.removeItem(AUTH.TOKEN_KEY);
+      localStorage.removeItem(AUTH.REFRESH_KEY);
+      localStorage.removeItem(AUTH.EXPIRY_KEY);
+      window.location.hash = '';
+      window.location.reload();
+      throw e;
+    }
   }
   return localStorage.getItem(AUTH.TOKEN_KEY);
 }
