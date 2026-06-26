@@ -2,14 +2,14 @@ import { getAllLikedTracks, removeLikedTracks } from '../api.js';
 import { showProgress, hideProgress, typeConfirmModal, renderTrackRow, escapeHtml } from '../ui/components.js';
 import { showToast } from '../ui/toast.js';
 
-const selectedIds = new Set();
+const keepIds = new Set();
 let allClusters = [];
 
 export function render(container) {
   container.innerHTML = `
     <div class="page-header">
       <h1>Versiones Duplicadas</h1>
-      <p>Encontrá likes con el mismo nombre y artista en distintos álbumes (original, remaster, live, etc.).</p>
+      <p>Encontrá likes con el mismo nombre y artista en distintos álbumes (original, remaster, live, etc.). Marcá la versión que querés <strong>quedarte</strong> — el resto del grupo se borra.</p>
     </div>
     <div class="feature-actions">
       <button class="btn btn-primary" id="versions-analyze-btn">Analizar</button>
@@ -36,7 +36,7 @@ async function analyze() {
   const results = document.getElementById('versions-results');
   const btn = document.getElementById('versions-analyze-btn');
   btn.disabled = true;
-  selectedIds.clear();
+  keepIds.clear();
 
   try {
     showProgress('Cargando Liked Songs...', 0, 0);
@@ -85,12 +85,15 @@ async function analyze() {
         </div>
       </div>
 
-      <div id="batch-actions" style="position:sticky;top:0;z-index:50;background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-md);padding:12px 16px;margin-bottom:16px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
-        <div>
-          <strong id="batch-count">0</strong> seleccionada(s) para borrar
-          <button class="btn btn-secondary btn-sm" id="batch-clear-btn" style="margin-left:8px" disabled>Limpiar selección</button>
+      <div id="batch-actions" style="position:sticky;top:0;z-index:50;background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-md);padding:12px 16px;margin-bottom:16px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;box-shadow:0 2px 8px rgba(0,0,0,0.2)">
+        <div style="line-height:1.4">
+          <div><strong id="batch-keep-count">0</strong> versión(es) marcada(s) para quedarse</div>
+          <div style="font-size:12px;color:var(--color-text-secondary)"><strong id="batch-delete-count">0</strong> sobrante(s) van a borrarse</div>
         </div>
-        <button class="btn btn-danger" id="batch-delete-btn" disabled>Borrar seleccionadas</button>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-secondary btn-sm" id="batch-clear-btn" disabled>Limpiar</button>
+          <button class="btn btn-danger" id="batch-delete-btn" disabled>Borrar sobrantes</button>
+        </div>
       </div>
 
       <div id="versions-clusters">
@@ -99,21 +102,17 @@ async function analyze() {
       </div>
     `;
 
-    results.querySelectorAll('.version-keep-btn').forEach(b => {
-      b.onclick = () => keepVersion(b.dataset.clusterIdx, clusters, b.dataset.keepId);
-    });
-
-    results.querySelectorAll('.version-check').forEach(box => {
+    results.querySelectorAll('.keep-check').forEach(box => {
       box.addEventListener('change', () => {
-        if (box.checked) selectedIds.add(box.dataset.trackId);
-        else selectedIds.delete(box.dataset.trackId);
+        if (box.checked) keepIds.add(box.dataset.trackId);
+        else keepIds.delete(box.dataset.trackId);
         updateBatchBar();
       });
     });
 
     document.getElementById('batch-clear-btn').onclick = () => {
-      selectedIds.clear();
-      results.querySelectorAll('.version-check').forEach(b => { b.checked = false; });
+      keepIds.clear();
+      results.querySelectorAll('.keep-check').forEach(b => { b.checked = false; });
       updateBatchBar();
     };
 
@@ -128,39 +127,73 @@ async function analyze() {
   }
 }
 
+function computeRemovals() {
+  const toRemove = [];
+  document.querySelectorAll('.cluster-group').forEach(clusterEl => {
+    const idx = parseInt(clusterEl.dataset.clusterIdx);
+    const cluster = allClusters[idx];
+    if (!cluster) return;
+    const hasKeep = cluster.some(item => keepIds.has(item.track.id));
+    if (!hasKeep) return;
+    cluster.forEach(item => {
+      if (!keepIds.has(item.track.id)) toRemove.push(item.track.id);
+    });
+  });
+  return toRemove;
+}
+
 function updateBatchBar() {
-  const count = selectedIds.size;
-  document.getElementById('batch-count').textContent = count;
-  document.getElementById('batch-delete-btn').disabled = count === 0;
-  document.getElementById('batch-clear-btn').disabled = count === 0;
+  document.getElementById('batch-keep-count').textContent = keepIds.size;
+  const toRemoveCount = computeRemovals().length;
+  document.getElementById('batch-delete-count').textContent = toRemoveCount;
+  document.getElementById('batch-delete-btn').disabled = toRemoveCount === 0;
+  document.getElementById('batch-clear-btn').disabled = keepIds.size === 0;
 }
 
 async function batchDelete() {
-  const ids = [...selectedIds];
-  if (ids.length === 0) return;
+  const toRemoveIds = computeRemovals();
+  if (toRemoveIds.length === 0) return;
 
   const ok = await typeConfirmModal(
-    'Borrar versiones marcadas',
-    `Se van a quitar <strong>${ids.length}</strong> tracks marcados de tus Liked Songs.`,
+    'Borrar versiones sobrantes',
+    `Vas a <strong>mantener</strong> las ${keepIds.size} versión(es) marcadas en verde y <strong>borrar</strong> las otras ${toRemoveIds.length} de tus Liked Songs.`,
     'BORRAR'
   );
   if (!ok) return;
 
   try {
-    showProgress('Borrando...', 0, ids.length);
-    await removeLikedTracks(ids);
+    showProgress('Borrando sobrantes...', 0, toRemoveIds.length);
+    await removeLikedTracks(toRemoveIds);
     hideProgress();
-    showToast(`${ids.length} versión(es) eliminada(s)`, 'success');
+    showToast(`${toRemoveIds.length} versión(es) eliminada(s)`, 'success');
 
-    document.querySelectorAll('.version-check').forEach(box => {
-      if (selectedIds.has(box.dataset.trackId)) {
-        const row = box.closest('.track-row');
-        if (row) row.style.opacity = '0.3';
-        box.disabled = true;
+    const toRemoveSet = new Set(toRemoveIds);
+    document.querySelectorAll('.cluster-group').forEach(clusterEl => {
+      const idx = parseInt(clusterEl.dataset.clusterIdx);
+      const cluster = allClusters[idx];
+      if (!cluster) return;
+      const hadKeep = cluster.some(item => keepIds.has(item.track.id));
+      if (!hadKeep) return;
+
+      clusterEl.querySelectorAll('.version-row').forEach(rowEl => {
+        if (toRemoveSet.has(rowEl.dataset.trackId)) rowEl.remove();
+      });
+
+      const remaining = clusterEl.querySelectorAll('.version-row').length;
+      if (remaining <= 1) {
+        const headerSpan = clusterEl.querySelector('.cluster-header span:first-child');
+        const badge = clusterEl.querySelector('.cluster-header .badge');
+        if (badge) {
+          badge.className = 'badge badge-success';
+          badge.textContent = 'resuelto';
+        }
+        if (headerSpan) {
+          headerSpan.innerHTML = '✓ ' + headerSpan.innerHTML;
+        }
       }
     });
 
-    selectedIds.clear();
+    keepIds.clear();
     updateBatchBar();
   } catch (e) {
     hideProgress();
@@ -173,7 +206,7 @@ function renderCluster(cluster, idx) {
   const artistName = firstTrack.artists?.map(a => a.name).join(', ') || 'Unknown';
 
   return `
-    <div class="cluster-group">
+    <div class="cluster-group" data-cluster-idx="${idx}">
       <div class="cluster-header">
         <span>${escapeHtml(firstTrack.name)} — ${escapeHtml(artistName)}</span>
         <span class="badge badge-warning">${cluster.length} versiones</span>
@@ -183,22 +216,26 @@ function renderCluster(cluster, idx) {
           const t = item.track;
           const albumInfo = t.album ? `${t.album.name} (${t.album.release_date?.slice(0, 4) || '?'})` : '';
           const popBadge = `<span class="badge badge-accent" style="margin-left:auto;flex-shrink:0">pop ${t.popularity || 0}</span>`;
-          const keepBtn = `<button class="btn btn-sm btn-secondary version-keep-btn" data-cluster-idx="${idx}" data-keep-id="${t.id}" style="flex-shrink:0;margin-left:8px">Quedarse esta</button>`;
-          const checkbox = `<label style="display:flex;align-items:center;padding:0 8px;cursor:pointer" title="Marcar para borrar"><input type="checkbox" class="version-check" data-track-id="${t.id}" style="width:18px;height:18px;cursor:pointer;accent-color:var(--color-error)"></label>`;
+          const checkbox = `
+            <label class="keep-check-wrap" title="Marcar esta versión para quedártela">
+              <input type="checkbox" class="keep-check" data-track-id="${t.id}">
+              <span class="keep-check-label">quedarme</span>
+            </label>
+          `;
           const row = renderTrackRow(t, `
             <div style="display:flex;align-items:center;gap:6px;flex-shrink:0">
               <span style="font-size:12px;color:var(--color-text-secondary)">${escapeHtml(albumInfo)}</span>
               ${popBadge}
-              ${keepBtn}
             </div>
           `);
-          return `<div style="display:flex;align-items:center">${checkbox}<div style="flex:1">${row}</div></div>`;
+          return `<div class="version-row" data-track-id="${t.id}" style="display:flex;align-items:center;border-bottom:1px solid var(--color-border)">${checkbox}<div style="flex:1">${row}</div></div>`;
         }).join('')}
       </div>
     </div>
   `;
 }
 
+// keepVersion kept for future use - not currently wired to any button
 async function keepVersion(clusterIdx, clusters, keepId) {
   const cluster = clusters[clusterIdx];
   if (!cluster) return;
@@ -220,15 +257,6 @@ async function keepVersion(clusterIdx, clusters, keepId) {
     const ids = toRemove.map(item => item.track.id);
     await removeLikedTracks(ids);
     showToast(`${toRemove.length} versión(es) eliminada(s)`, 'success');
-
-    const clusterEl = document.querySelectorAll('.cluster-group')[clusterIdx];
-    if (clusterEl) {
-      clusterEl.innerHTML = `
-        <div class="cluster-header" style="background:var(--color-success);color:white">
-          <span>Resuelto — se mantuvo la versión de "${escapeHtml(keepTrack?.album?.name || '')}"</span>
-        </div>
-      `;
-    }
   } catch (e) {
     showToast('Error: ' + e.message, 'error');
   }
