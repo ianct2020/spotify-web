@@ -62,8 +62,9 @@ async function spotifyFetch(endpoint, options = {}) {
       return null;
     }
 
+    const text = await response.text();
+
     if (!response.ok) {
-      const text = await response.text();
       let msg;
       try {
         const json = JSON.parse(text);
@@ -75,7 +76,12 @@ async function spotifyFetch(endpoint, options = {}) {
       throw new Error(`Spotify ${response.status}: ${msg}`);
     }
 
-    return response.json();
+    if (!text) return null;
+    try {
+      return JSON.parse(text);
+    } catch {
+      return null;
+    }
   }
 
   throw new Error('Request falló después de reintentos');
