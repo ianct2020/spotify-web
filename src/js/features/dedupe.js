@@ -28,12 +28,24 @@ async function analyze() {
     const ownPlaylists = playlists.filter(p => p.owner?.id !== 'spotify');
 
     const duplicatesByPlaylist = [];
+    const skipped = [];
 
     for (let i = 0; i < ownPlaylists.length; i++) {
       const pl = ownPlaylists[i];
       showProgress(`Analizando "${pl.name}"...`, i + 1, ownPlaylists.length);
 
-      const items = await getAllPlaylistItems(pl.id);
+      let items;
+      try {
+        items = await getAllPlaylistItems(pl.id);
+      } catch (e) {
+        if (/40[34]/.test(e.message)) {
+          console.warn(`Playlist "${pl.name}" skipped: ${e.message}`);
+          skipped.push(pl.name);
+          continue;
+        }
+        throw e;
+      }
+
       const seen = new Map();
       const dupes = [];
 
@@ -54,6 +66,9 @@ async function analyze() {
     }
 
     hideProgress();
+    if (skipped.length > 0) {
+      showToast(`Saltadas ${skipped.length} playlist(s) inaccesibles`, 'info');
+    }
 
     if (duplicatesByPlaylist.length === 0) {
       results.innerHTML = `

@@ -97,16 +97,17 @@ function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-async function paginateAll(endpoint, { limit = 50, onProgress, partialCacheKey, transform, maxItems } = {}) {
+async function paginateAll(endpoint, { limit = 50, onProgress, partialCacheKey, transform, maxItems, startOffset = 0 } = {}) {
   let items = [];
-  let offset = 0;
+  let offset = startOffset;
+  const initialOffset = startOffset;
   let total = Infinity;
   let page = 0;
   const sep = endpoint.includes('?') ? '&' : '?';
 
   if (partialCacheKey) {
     const partial = cacheGet(partialCacheKey + '_partial');
-    if (partial && partial.items) {
+    if (partial && partial.items && partial.startOffset === initialOffset) {
       items = partial.items;
       offset = partial.offset;
       console.log(`Resuming from offset ${offset} (${items.length} items already cached)`);
@@ -133,7 +134,7 @@ async function paginateAll(endpoint, { limit = 50, onProgress, partialCacheKey, 
       }
 
       if (partialCacheKey && pagesSinceSave >= 10) {
-        cacheSet(partialCacheKey + '_partial', { items, offset }, 60);
+        cacheSet(partialCacheKey + '_partial', { items, offset, startOffset: initialOffset }, 60);
         pagesSinceSave = 0;
       }
 
@@ -141,7 +142,7 @@ async function paginateAll(endpoint, { limit = 50, onProgress, partialCacheKey, 
       await sleep(400);
     } catch (e) {
       if (partialCacheKey && items.length > 0) {
-        cacheSet(partialCacheKey + '_partial', { items, offset }, 60);
+        cacheSet(partialCacheKey + '_partial', { items, offset, startOffset: initialOffset }, 60);
         console.warn(`Saved partial progress: ${items.length} items at offset ${offset}`);
       }
       throw e;
@@ -197,12 +198,27 @@ async function getAllLikedTracks(onProgress, { force = false } = {}) {
     }
   }
   if (force) cacheClear(LIKES_CACHE_KEY + '_partial');
+
+  let startOffset = 0;
+  if (TEST_MODE) {
+    try {
+      const head = await spotifyFetch('/me/tracks?limit=1');
+      const total = head.total || 0;
+      const maxStart = Math.max(0, total - TEST_MAX_LIKES);
+      startOffset = Math.floor(Math.random() * (maxStart + 1));
+      console.log(`MODO PRUEBA: cargando ${TEST_MAX_LIKES} likes desde offset ${startOffset}/${total}`);
+    } catch (e) {
+      console.warn('No se pudo obtener total para offset random, usando 0', e);
+    }
+  }
+
   const items = await paginateAll('/me/tracks', {
     limit: 50,
     onProgress,
     partialCacheKey: LIKES_CACHE_KEY,
     transform: item => ({ added_at: item.added_at, track: slimTrack(item.track) }),
     maxItems: TEST_MODE ? TEST_MAX_LIKES : undefined,
+    startOffset,
   });
   cacheSet(LIKES_CACHE_KEY, items, CACHE_TTL_MIN);
   return items;

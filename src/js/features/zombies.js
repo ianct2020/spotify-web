@@ -37,10 +37,21 @@ async function analyze() {
     const playlists = await getAllUserPlaylists();
 
     const zombiesByPlaylist = [];
+    const skipped = [];
     for (let i = 0; i < playlists.length; i++) {
       const pl = playlists[i];
       showProgress(`Escaneando playlists... (${i + 1}/${playlists.length})`, i + 1, playlists.length);
-      const items = await getAllPlaylistItems(pl.id);
+      let items;
+      try {
+        items = await getAllPlaylistItems(pl.id);
+      } catch (e) {
+        if (/40[34]/.test(e.message)) {
+          console.warn(`Playlist "${pl.name}" skipped: ${e.message}`);
+          skipped.push(pl.name);
+          continue;
+        }
+        throw e;
+      }
       const zombies = items.filter(item => {
         const t = item.track || item.item;
         return !t || !t.id || t.is_playable === false;
@@ -51,6 +62,9 @@ async function analyze() {
     }
 
     hideProgress();
+    if (skipped.length > 0) {
+      showToast(`Saltadas ${skipped.length} playlist(s) inaccesibles`, 'info');
+    }
 
     const totalPlaylistZombies = zombiesByPlaylist.reduce((s, z) => s + z.zombies.length, 0);
 

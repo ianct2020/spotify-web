@@ -32,17 +32,31 @@ async function analyze() {
     const playlists = await getAllUserPlaylists();
 
     const allPlaylistTrackIds = new Set();
+    const skipped = [];
     for (let i = 0; i < playlists.length; i++) {
       const pl = playlists[i];
       showProgress(`Escaneando playlists... (${i + 1}/${playlists.length})`, i + 1, playlists.length);
-      const items = await getAllPlaylistItems(pl.id);
-      items.forEach(item => {
-        const track = item.track || item.item;
-        if (track?.id) allPlaylistTrackIds.add(track.id);
-      });
+      try {
+        const items = await getAllPlaylistItems(pl.id);
+        items.forEach(item => {
+          const track = item.track || item.item;
+          if (track?.id) allPlaylistTrackIds.add(track.id);
+        });
+      } catch (e) {
+        if (/40[34]/.test(e.message)) {
+          console.warn(`Playlist "${pl.name}" (${pl.id}) skipped: ${e.message}`);
+          skipped.push(pl.name);
+        } else {
+          throw e;
+        }
+      }
     }
 
     hideProgress();
+    if (skipped.length > 0) {
+      console.warn(`Skipped ${skipped.length} playlists:`, skipped);
+      showToast(`Saltadas ${skipped.length} playlist(s) inaccesibles (Spotify-owned)`, 'info');
+    }
 
     const orphans = likes.filter(item => {
       const id = item.track?.id;
