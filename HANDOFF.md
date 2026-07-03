@@ -109,7 +109,7 @@ Definido en `src/js/api.js` arriba de todo. Cuando `true`:
 | **Versiones** | ✅ **Probada con borrado real** | User borró 26 versiones (9520→9494). Checkbox = "quedarme con esta", se borran las del mismo cluster no marcadas |
 | **Zombis** | ✅ Funcionando | Checkbox para marcar individualmente + "Marcar todos", fade out 15s top-to-bottom (stagger 80ms) después de borrar. Separado en Likes vs por-playlist |
 | **Dedupe** | ⏳ No probado aún | Detecta URI repetido dentro de una sola playlist (distinto a Versiones) |
-| **Sync Mirror** | ⚠️ Bug pendiente | Tira `Spotify 400: Playlist size limit reached` — Spotify máx 10k por playlist. Hay que agregar check previo + opción "vaciar primero". Now usa randomize:false (siempre desde más recientes) |
+| **Sync Mirror** | 🧪 Fix aplicado, a probar | Precheck 10k con badge de warning + 3 modos: Sincronizar / Solo agregar (sin quitar) / Vaciar y llenar. En TEST_MODE avisa que "Quitar" borra tracks válidos y sugiere "Solo agregar". Usa randomize:false (siempre desde más recientes) |
 | **Dashboard** | ✅ Visualmente OK | User dijo "datos están buenos", pero pidió que sea más lindo. Pendiente prettify |
 | Huérfanas | 🗑️ Eliminado | Escaneaba 9500 likes vs ~25k items de playlists, impracticable. Se sacó del menú/rutas. El archivo queda en `features/orphans.js` |
 
@@ -127,8 +127,8 @@ Definido en `src/js/api.js` arriba de todo. Cuando `true`:
 
 ## Próximos pasos (en orden, por confirmar con user)
 
-1. **Probar Dedupe** end-to-end
-2. **Fix Sync 10k limit**: agregar check `current + toAdd ≤ 10000` antes de ejecutar, sino ofrecer "vaciar playlist primero"
+1. **Probar Sync Mirror** con los 3 modos nuevos (Solo agregar es el modo seguro en TEST_MODE)
+2. **Probar Dedupe** end-to-end
 3. **Dashboard prettify**
 4. **Flipear `TEST_MODE = false`** en api.js (y commit), bumpear cache, build, push
 5. **Pasar a Fase 2**
@@ -146,8 +146,8 @@ Definido en `src/js/api.js` arriba de todo. Cuando `true`:
 
 ## Versión actual desplegada
 
-- Git: rama `main`, último commit `0aab889` ("ui: prettier keep-check...")
-- Cache bust: `?v=14`
+- Git: rama `main`, próximo commit incluye fix de Sync 10k
+- Cache bust: `?v=15`
 - TEST_MODE: `true` (2500 likes, 200 playlist items)
 
 ---
@@ -165,8 +165,8 @@ Definido en `src/js/api.js` arriba de todo. Cuando `true`:
 
 ## Changelog reciente (últimos 5 cambios)
 
+- `v=15`: fix Sync 10k — precheck `newSize > 10000`, badge de warning en TEST_MODE (avisa que "Quitar" borra tracks válidos), botón "Solo agregar (sin quitar)" para probar sin destruir, botón "Vaciar y llenar" cuando excede límite (bloqueado en TEST_MODE por seguridad)
 - `v=14` (0aab889): checkbox lindo con gradient + animación pop del tilde
 - `v=13` (525c90d): elimino Huérfanas, checkboxes en Zombis, sync mirror randomize:false
 - `v=12` (1a94bd7): semántica invertida checkbox en Versiones (marcar = quedarme), fade out borradas
 - `v=11` (3b07549): skip 403/404 en orphans/dedupe/zombies, rotación TEST_MODE, batch delete versions
-- `v=10` (7e72a51): handle empty body en 200 OK responses (sync delete)
