@@ -61,6 +61,14 @@ Otros gotchas:
 - Paginación: **NO uses `data.next`** — Spotify mete `locale=en-US,en;q=0.9,es;q=0.8` con semicolons que rompen el CORS preflight. Construí URLs manualmente con offset/limit.
 - localStorage quota ~5MB: usamos `slimTrack()` y `slimPlaylist()` en `api.js` para reducir cada track de ~5KB a ~500B antes de cachear.
 
+Endpoints confirmados en uso:
+- `POST /me/playlists` → `createPlaylist(name)` en api.js
+- `DELETE /playlists/{id}/followers` → `unfollowPlaylist(id)` — así se "borra" una playlist propia (unfollow del owner). Spotify guarda backup ~90 días en spotify.com/account/recover-playlists.
+
+Límites reales:
+- **Playlists**: máx **10.000 tracks**. Spotify no fuerza corte hacia atrás (playlists viejas pueden tener +), pero no aceptan nuevos add.
+- **Liked Songs**: **sin límite** (Spotify quitó el cap de 10k en 2020).
+
 ## Scopes
 
 `user-library-read user-library-modify playlist-read-private playlist-read-collaborative playlist-modify-public playlist-modify-private user-top-read user-read-recently-played user-follow-read`
@@ -109,7 +117,7 @@ Definido en `src/js/api.js` arriba de todo. Cuando `true`:
 | **Versiones** | ✅ **Probada con borrado real** | User borró 26 versiones (9520→9494). Checkbox = "quedarme con esta", se borran las del mismo cluster no marcadas |
 | **Zombis** | ✅ Funcionando | Checkbox para marcar individualmente + "Marcar todos", fade out 15s top-to-bottom (stagger 80ms) después de borrar. Separado en Likes vs por-playlist |
 | **Dedupe** | ⏳ No probado aún | Detecta URI repetido dentro de una sola playlist (distinto a Versiones) |
-| **Sync Mirror** | 🧪 Fix aplicado, a probar | Precheck 10k con badge de warning + 3 modos: Sincronizar / Solo agregar (sin quitar) / Vaciar y llenar. En TEST_MODE avisa que "Quitar" borra tracks válidos y sugiere "Solo agregar". Usa randomize:false (siempre desde más recientes) |
+| **Sync Mirror** | 🧪 Rebuild feature agregada | Precheck usa `target.tracks.total` (real, no muestra). Si target llena (≥10k) → UI con 2 opciones: (A) Borrar y rehacer con mismo nombre, (B) Crear "another one N+1". Si target no existe → ofrece crearla. Rebuild bypasea TEST_MODE (`forceAll:true`) para llenar con los ~9.500 likes reales. Los modos "Solo agregar" y "Sincronizar" siguen ahí para la operación normal |
 | **Dashboard** | ✅ Visualmente OK | User dijo "datos están buenos", pero pidió que sea más lindo. Pendiente prettify |
 | Huérfanas | 🗑️ Eliminado | Escaneaba 9500 likes vs ~25k items de playlists, impracticable. Se sacó del menú/rutas. El archivo queda en `features/orphans.js` |
 
@@ -146,8 +154,8 @@ Definido en `src/js/api.js` arriba de todo. Cuando `true`:
 
 ## Versión actual desplegada
 
-- Git: rama `main`, último commit `e08234a` ("fix(sync): 10k playlist limit precheck + safe modes")
-- Cache bust: `?v=15`
+- Git: rama `main`, próximo commit trae rebuild feature de Sync Mirror
+- Cache bust: `?v=16`
 - TEST_MODE: `true` (2500 likes, 200 playlist items)
 
 ---
@@ -165,8 +173,8 @@ Definido en `src/js/api.js` arriba de todo. Cuando `true`:
 
 ## Changelog reciente (últimos 5 cambios)
 
-- `v=15` (e08234a): fix Sync 10k — precheck `newSize > 10000`, badge de warning en TEST_MODE (avisa que "Quitar" borra tracks válidos), botón "Solo agregar (sin quitar)" para probar sin destruir, botón "Vaciar y llenar" cuando excede límite (bloqueado en TEST_MODE por seguridad)
+- `v=16`: rebuild feature en Sync Mirror — usa `target.tracks.total` real para el precheck (fix bug del `v=15` donde la muestra de 200 hacía que el warning nunca dispare). Cuando target ≥10k → UI con "borrar y rehacer" o "crear another one N+1". Cuando no existe → ofrece crearla. Rebuild bypasea TEST_MODE (`getAllLikedTracks({ forceAll: true })`) para llenar con los 9500 reales. Agrega `unfollowPlaylist(id)` en api.js.
+- `v=15` (e08234a): fix Sync 10k — precheck `newSize > 10000`, badge de warning en TEST_MODE, botón "Solo agregar", botón "Vaciar y llenar" (buggy: usaba la muestra en vez del total real)
 - `v=14` (0aab889): checkbox lindo con gradient + animación pop del tilde
 - `v=13` (525c90d): elimino Huérfanas, checkboxes en Zombis, sync mirror randomize:false
 - `v=12` (1a94bd7): semántica invertida checkbox en Versiones (marcar = quedarme), fade out borradas
-- `v=11` (3b07549): skip 403/404 en orphans/dedupe/zombies, rotación TEST_MODE, batch delete versions

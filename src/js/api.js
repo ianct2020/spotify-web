@@ -189,8 +189,12 @@ function slimPlaylist(p) {
   };
 }
 
-async function getAllLikedTracks(onProgress, { force = false, randomize = TEST_MODE } = {}) {
-  const cacheKey = randomize ? LIKES_CACHE_KEY : LIKES_CACHE_KEY + '_newest';
+async function getAllLikedTracks(onProgress, { force = false, randomize = TEST_MODE, forceAll = false } = {}) {
+  const useTestCap = TEST_MODE && !forceAll;
+  const cacheKey = forceAll
+    ? LIKES_CACHE_KEY + '_all'
+    : (randomize ? LIKES_CACHE_KEY : LIKES_CACHE_KEY + '_newest');
+
   if (!force) {
     const cached = cacheGet(cacheKey);
     if (cached) {
@@ -201,7 +205,7 @@ async function getAllLikedTracks(onProgress, { force = false, randomize = TEST_M
   if (force) cacheClear(cacheKey + '_partial');
 
   let startOffset = 0;
-  if (TEST_MODE && randomize) {
+  if (useTestCap && randomize) {
     try {
       const head = await spotifyFetch('/me/tracks?limit=1');
       const total = head.total || 0;
@@ -211,8 +215,10 @@ async function getAllLikedTracks(onProgress, { force = false, randomize = TEST_M
     } catch (e) {
       console.warn('No se pudo obtener total para offset random, usando 0', e);
     }
-  } else if (TEST_MODE && !randomize) {
+  } else if (useTestCap && !randomize) {
     console.log(`MODO PRUEBA: cargando las ${TEST_MAX_LIKES} más recientes (offset 0)`);
+  } else if (forceAll) {
+    console.log('forceAll: cargando TODOS los likes (bypass TEST_MODE)');
   }
 
   const items = await paginateAll('/me/tracks', {
@@ -220,7 +226,7 @@ async function getAllLikedTracks(onProgress, { force = false, randomize = TEST_M
     onProgress,
     partialCacheKey: cacheKey,
     transform: item => ({ added_at: item.added_at, track: slimTrack(item.track) }),
-    maxItems: TEST_MODE ? TEST_MAX_LIKES : undefined,
+    maxItems: useTestCap ? TEST_MAX_LIKES : undefined,
     startOffset,
   });
   cacheSet(cacheKey, items, CACHE_TTL_MIN);
@@ -315,6 +321,11 @@ async function createPlaylist(name, description = '', isPublic = false) {
   return result;
 }
 
+async function unfollowPlaylist(playlistId) {
+  await spotifyFetch(`/playlists/${playlistId}/followers`, { method: 'DELETE' });
+  invalidatePlaylistsCache();
+}
+
 export {
   spotifyFetch,
   paginateAll,
@@ -326,6 +337,7 @@ export {
   removeTracksFromPlaylist,
   removeLikedTracks,
   createPlaylist,
+  unfollowPlaylist,
   invalidateLikesCache,
   invalidatePlaylistsCache,
 };
