@@ -154,7 +154,7 @@ Definido en `src/js/api.js` arriba de todo. Cuando `true`:
 
 ## Versión actual desplegada
 
-- Git: rama `main`, próximo commit trae rebuild feature de Sync Mirror
+- Git: rama `main`, último commit `ae1297e` ("feat(sync): rebuild target playlist when full or missing")
 - Cache bust: `?v=16`
 - TEST_MODE: `true` (2500 likes, 200 playlist items)
 
@@ -173,7 +173,7 @@ Definido en `src/js/api.js` arriba de todo. Cuando `true`:
 
 ## Changelog reciente (últimos 5 cambios)
 
-- `v=16`: rebuild feature en Sync Mirror — usa `target.tracks.total` real para el precheck (fix bug del `v=15` donde la muestra de 200 hacía que el warning nunca dispare). Cuando target ≥10k → UI con "borrar y rehacer" o "crear another one N+1". Cuando no existe → ofrece crearla. Rebuild bypasea TEST_MODE (`getAllLikedTracks({ forceAll: true })`) para llenar con los 9500 reales. Agrega `unfollowPlaylist(id)` en api.js.
+- `v=16` (ae1297e): rebuild feature en Sync Mirror — usa `target.tracks.total` real para el precheck (fix bug del `v=15` donde la muestra de 200 hacía que el warning nunca dispare). Cuando target ≥10k → UI con "borrar y rehacer" o "crear another one N+1". Cuando no existe → ofrece crearla. Rebuild bypasea TEST_MODE (`getAllLikedTracks({ forceAll: true })`) para llenar con los 9500 reales. Agrega `unfollowPlaylist(id)` en api.js.
 - `v=15` (e08234a): fix Sync 10k — precheck `newSize > 10000`, badge de warning en TEST_MODE, botón "Solo agregar", botón "Vaciar y llenar" (buggy: usaba la muestra en vez del total real)
 - `v=14` (0aab889): checkbox lindo con gradient + animación pop del tilde
 - `v=13` (525c90d): elimino Huérfanas, checkboxes en Zombis, sync mirror randomize:false
