@@ -3,7 +3,7 @@ import { cacheGet, cacheSet } from '../storage.js';
 import { showProgress, hideProgress, typeConfirmModal, renderTrackRow, escapeHtml } from '../ui/components.js';
 import { showToast } from '../ui/toast.js';
 
-const TARGET_PLAYLIST_NAME = 'another one';
+const TARGET_PLAYLIST_NAME = 'anothertwo';
 const SPOTIFY_PLAYLIST_MAX = 10000;
 
 export function render(container) {
