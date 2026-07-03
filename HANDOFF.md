@@ -95,6 +95,7 @@ src/
 │       ├── versions.js              ← versiones (mismo nombre+artista en distintos álbumes)
 │       ├── zombies.js               ← tracks eliminados del catálogo
 │       ├── dashboard.js             ← stats y charts
+│       ├── duplicate-albums.js      ← Álbumes repetidos (nueva)
 │       └── orphans.js               ← DESACTIVADO (archivo queda, no se enrutea)
 ```
 
@@ -116,7 +117,8 @@ Definido en `src/js/api.js` arriba de todo. Cuando `true`:
 | Auth/Login PKCE | ✅ Funcionando | Refresh dedupe + auto-relogin si refresh falla |
 | **Versiones** | ✅ **Probada con borrado real** | User borró 26 versiones (9520→9494). Checkbox = "quedarme con esta", se borran las del mismo cluster no marcadas |
 | **Zombis** | ✅ Funcionando | Checkbox para marcar individualmente + "Marcar todos", fade out 15s top-to-bottom (stagger 80ms) después de borrar. Separado en Likes vs por-playlist |
-| **Dedupe** | ⏳ No probado aún | Detecta URI repetido dentro de una sola playlist (distinto a Versiones) |
+| **Dedupe** | 🧪 Rediseñado, a probar | Ahora: grid visual de playlists (cover + nombre + N tracks) → click en una → analiza esa sola → muestra grupos con contador de copias + posiciones → botón "Quitar N copias extra" que usa `removePlaylistItemsAtPositions` (preserva la primera aparición usando `positions` en el DELETE) |
+| **Álbumes repetidos** | 🆕 Nueva feature | Detecta álbumes con 2+ tracks distintos dentro de UNA playlist (ideal para "listened albums"). Grid visual → click playlist → grupos por álbum con cover + tracks con checkbox tipo Versiones (1 por álbum). "Quitar sobrantes" quita los no-marcados de los álbumes con selección. |
 | **Sync Mirror** | 🧪 Rebuild feature agregada | Precheck usa `target.tracks.total` (real, no muestra). Si target llena (≥10k) → UI con 2 opciones: (A) Borrar y rehacer con mismo nombre, (B) Crear "another one N+1". Si target no existe → ofrece crearla. Rebuild bypasea TEST_MODE (`forceAll:true`) para llenar con los ~9.500 likes reales. Los modos "Solo agregar" y "Sincronizar" siguen ahí para la operación normal |
 | **Dashboard** | ✅ Visualmente OK | User dijo "datos están buenos", pero pidió que sea más lindo. Pendiente prettify |
 | Huérfanas | 🗑️ Eliminado | Escaneaba 9500 likes vs ~25k items de playlists, impracticable. Se sacó del menú/rutas. El archivo queda en `features/orphans.js` |
@@ -135,11 +137,12 @@ Definido en `src/js/api.js` arriba de todo. Cuando `true`:
 
 ## Próximos pasos (en orden, por confirmar con user)
 
-1. **Probar Sync Mirror** con los 3 modos nuevos (Solo agregar es el modo seguro en TEST_MODE)
-2. **Probar Dedupe** end-to-end
-3. **Dashboard prettify**
-4. **Flipear `TEST_MODE = false`** en api.js (y commit), bumpear cache, build, push
-5. **Pasar a Fase 2**
+1. **Probar Dedupe** con la nueva UI (grid de playlists → seleccionar → analizar)
+2. **Probar Álbumes repetidos** en "listened albums"
+3. **Smart playlists** (por año / década / random N)
+4. **Backup/Export JSON** + Import
+5. **Flipear `TEST_MODE = false`** en api.js, bumpear cache, build, push
+6. **Fase 2 restante**
 
 ## Ideas Fase 2 (las que el user marcó interés)
 
@@ -154,8 +157,8 @@ Definido en `src/js/api.js` arriba de todo. Cuando `true`:
 
 ## Versión actual desplegada
 
-- Git: rama `main`, último commit `adb81c0` ("chore(sync): default target renamed to anothertwo")
-- Cache bust: `?v=17`
+- Git: rama `main`, próximo commit trae Dedupe rediseñado + Álbumes repetidos
+- Cache bust: `?v=18`
 - TEST_MODE: `true` (2500 likes, 200 playlist items)
 - **Playlist espejo activa**: `anothertwo` (9.485 tracks). La vieja `another one` (11k) se borró vía script one-shot en la consola el 2026-07-03. Diferencia entre 9498 likes y 9485 en playlist = ~13 tracks locales / sin URI válido que la API no acepta agregar a playlists.
 
@@ -174,6 +177,7 @@ Definido en `src/js/api.js` arriba de todo. Cuando `true`:
 
 ## Changelog reciente (últimos 5 cambios)
 
+- `v=18`: Dedupe rediseñado (grid visual de playlists → seleccionar una → analizar) + nueva feature Álbumes repetidos. `slimPlaylist` guarda ahora `image` (URL de la cover chica). `renderPlaylistGrid`/`bindPlaylistGrid` en `ui/components.js` como componente compartido. Nueva `removePlaylistItemsAtPositions` en api.js (usa `positions` en el DELETE para preservar la primera aparición en Dedupe). Nueva ruta `#dupalbums` en app.js.
 - `v=17` (adb81c0): default target "another one" → "anothertwo" (la vieja se borró vía script one-shot en consola)
 - `v=16` (ae1297e): rebuild feature en Sync Mirror — usa `target.tracks.total` real para el precheck (fix bug del `v=15` donde la muestra de 200 hacía que el warning nunca dispare). Cuando target ≥10k → UI con "borrar y rehacer" o "crear another one N+1". Cuando no existe → ofrece crearla. Rebuild bypasea TEST_MODE (`getAllLikedTracks({ forceAll: true })`) para llenar con los 9500 reales. Agrega `unfollowPlaylist(id)` en api.js.
 - `v=15` (e08234a): fix Sync 10k — precheck `newSize > 10000`, badge de warning en TEST_MODE, botón "Solo agregar", botón "Vaciar y llenar" (buggy: usaba la muestra en vez del total real)
