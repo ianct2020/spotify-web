@@ -1,4 +1,4 @@
-import { getAllLikedTracks, getAllPlaylistItems, getAllUserPlaylists, addTracksToPlaylist, removeTracksFromPlaylist, isTestMode } from '../api.js';
+import { getAllLikedTracks, getAllPlaylistItems, getAllUserPlaylists, addTracksToPlaylist, removeTracksFromPlaylist, createPlaylist, unfollowPlaylist, isTestMode } from '../api.js';
 import { cacheGet, cacheSet } from '../storage.js';
 import { showProgress, hideProgress, typeConfirmModal, renderTrackRow, escapeHtml } from '../ui/components.js';
 import { showToast } from '../ui/toast.js';
@@ -50,12 +50,13 @@ async function analyze() {
 
     if (!target) {
       hideProgress();
-      results.innerHTML = `
-        <div class="card">
-          <p style="color:var(--color-warning)">No se encontró la playlist "${escapeHtml(nameOrId)}".</p>
-          <p style="color:var(--color-text-secondary);margin-top:8px">Verificá el nombre o usá el ID de la playlist.</p>
-        </div>
-      `;
+      renderMissingPlaylistUI(nameOrId, playlists);
+      return;
+    }
+
+    if ((target.tracks?.total || 0) >= SPOTIFY_PLAYLIST_MAX) {
+      hideProgress();
+      renderFullPlaylistUI(target, playlists);
       return;
     }
 
@@ -278,6 +279,167 @@ async function executeWipeAndFill(playlist, playlistItems, likes) {
   } catch (e) {
     hideProgress();
     showToast('Error durante wipe: ' + e.message, 'error');
+    console.error(e);
+  }
+}
+
+function nextPlaylistName(baseName, playlists) {
+  const base = baseName.toLowerCase().trim();
+  const usedNumbers = new Set();
+  for (const p of playlists) {
+    const n = p.name.toLowerCase().trim();
+    if (n === base) usedNumbers.add(1);
+    const m = n.match(/^(.+?)\s+(\d+)$/);
+    if (m && m[1].trim() === base) usedNumbers.add(parseInt(m[2], 10));
+  }
+  let next = 2;
+  while (usedNumbers.has(next)) next++;
+  return `${baseName} ${next}`;
+}
+
+function renderMissingPlaylistUI(nameOrId, playlists) {
+  const results = document.getElementById('sync-results');
+  results.innerHTML = `
+    <div class="card" style="margin-bottom:16px;border-color:var(--color-warning)">
+      <p style="color:var(--color-warning);margin-bottom:6px"><strong>No se encontró</strong> la playlist "${escapeHtml(nameOrId)}".</p>
+      <p style="color:var(--color-text-secondary);margin-bottom:16px">Podés crearla vacía y llenarla desde cero con todos tus likes reales.</p>
+      <button class="btn btn-primary" id="sync-create-fresh-btn">Crear "${escapeHtml(nameOrId)}" y poblar con Likes</button>
+    </div>
+  `;
+  document.getElementById('sync-create-fresh-btn').onclick = () =>
+    rebuildFreshPlaylist(nameOrId);
+}
+
+function renderFullPlaylistUI(target, playlists) {
+  const results = document.getElementById('sync-results');
+  const nextName = nextPlaylistName(target.name, playlists);
+  results.innerHTML = `
+    <div class="card" style="margin-bottom:16px;border-color:var(--color-error);background:rgba(239,68,68,0.06)">
+      <div style="display:flex;align-items:flex-start;gap:10px">
+        <span class="badge badge-error">LLENA</span>
+        <div style="flex:1">
+          <strong>"${escapeHtml(target.name)}"</strong> tiene <strong>${target.tracks.total.toLocaleString()}</strong> tracks — Spotify no deja pasar de ${SPOTIFY_PLAYLIST_MAX.toLocaleString()}.<br>
+          No se puede sincronizar directo. Elegí una opción:
+        </div>
+      </div>
+    </div>
+
+    <div class="card" style="margin-bottom:12px">
+      <h3 style="margin-bottom:8px">Opción A — Rehacer desde cero (recomendada)</h3>
+      <p style="color:var(--color-text-secondary);margin-bottom:12px">
+        Borra <strong>"${escapeHtml(target.name)}"</strong> (${target.tracks.total.toLocaleString()} tracks), crea una vacía con el mismo nombre, y la llena con <strong>todos tus likes reales</strong> (bypasea MODO PRUEBA).
+      </p>
+      <button class="btn btn-danger" id="sync-rebuild-inplace-btn">Borrar y rehacer "${escapeHtml(target.name)}"</button>
+    </div>
+
+    <div class="card">
+      <h3 style="margin-bottom:8px">Opción B — Crear "${escapeHtml(nextName)}" (dejar la vieja)</h3>
+      <p style="color:var(--color-text-secondary);margin-bottom:12px">
+        No toca "${escapeHtml(target.name)}", crea <strong>"${escapeHtml(nextName)}"</strong> vacía y la llena con todos tus likes reales.
+      </p>
+      <button class="btn btn-primary" id="sync-create-next-btn">Crear "${escapeHtml(nextName)}"</button>
+    </div>
+  `;
+  document.getElementById('sync-rebuild-inplace-btn').onclick = () =>
+    rebuildInPlace(target);
+  document.getElementById('sync-create-next-btn').onclick = () =>
+    rebuildFreshPlaylist(nextName);
+}
+
+async function loadAllRealLikes() {
+  showProgress('Cargando TODOS los likes (bypass MODO PRUEBA)...', 0, 0);
+  const likes = await getAllLikedTracks(({ loaded, total }) => {
+    showProgress(`Cargando likes reales... ${loaded}/${total || '?'}`, loaded, total);
+  }, { forceAll: true, force: true });
+  return likes.map(item => item.track?.uri).filter(Boolean);
+}
+
+async function fillPlaylistWithUris(playlistId, uris, playlistName) {
+  const totalChunks = Math.ceil(uris.length / 100);
+  showProgress(`Agregando a "${playlistName}"...`, 0, uris.length);
+  for (let i = 0; i < uris.length; i += 100) {
+    const chunk = uris.slice(i, i + 100);
+    await addTracksToPlaylist(playlistId, chunk);
+    showProgress(`Agregando a "${playlistName}"... ${Math.min(i + 100, uris.length)}/${uris.length}`, Math.min(i + 100, uris.length), uris.length);
+  }
+}
+
+async function rebuildInPlace(target) {
+  const confirmed = await typeConfirmModal(
+    'Rehacer playlist desde cero',
+    `Se va a <strong>borrar</strong> "${escapeHtml(target.name)}" (${target.tracks.total.toLocaleString()} tracks) y crear una vacía con el mismo nombre poblada con todos tus likes.<br><br>Spotify guarda backup ~90 días en <em>spotify.com/account/recover-playlists</em>, pero desde la app la vieja se pierde.`,
+    'REHACER'
+  );
+  if (!confirmed) return;
+
+  try {
+    const uris = await loadAllRealLikes();
+    if (uris.length > SPOTIFY_PLAYLIST_MAX) {
+      hideProgress();
+      showToast(`Tenés ${uris.length} likes, no caben (máx ${SPOTIFY_PLAYLIST_MAX}). No se ejecutó nada.`, 'error');
+      return;
+    }
+
+    showProgress(`Borrando "${target.name}"...`, 0, 0);
+    await unfollowPlaylist(target.id);
+
+    showProgress(`Creando "${target.name}" vacía...`, 0, 0);
+    const fresh = await createPlaylist(target.name, 'Espejo de Liked Songs (rehecha)', false);
+
+    await fillPlaylistWithUris(fresh.id, uris, fresh.name);
+
+    hideProgress();
+    showToast(`"${fresh.name}" rehecha con ${uris.length.toLocaleString()} tracks`, 'success');
+    document.getElementById('sync-results').innerHTML = `
+      <div class="card">
+        <div style="display:flex;align-items:center;gap:10px">
+          <span class="badge badge-success">Rehecha</span>
+          <span>"${escapeHtml(fresh.name)}" quedó con ${uris.length.toLocaleString()} tracks.</span>
+        </div>
+      </div>
+    `;
+  } catch (e) {
+    hideProgress();
+    showToast('Error durante rebuild: ' + e.message, 'error');
+    console.error(e);
+  }
+}
+
+async function rebuildFreshPlaylist(name) {
+  const confirmed = await typeConfirmModal(
+    'Crear playlist nueva',
+    `Se va a crear la playlist "<strong>${escapeHtml(name)}</strong>" vacía y llenarla con todos tus likes reales (bypasea MODO PRUEBA, tarda unos minutos).`,
+    'CREAR'
+  );
+  if (!confirmed) return;
+
+  try {
+    const uris = await loadAllRealLikes();
+    if (uris.length > SPOTIFY_PLAYLIST_MAX) {
+      hideProgress();
+      showToast(`Tenés ${uris.length} likes, no caben (máx ${SPOTIFY_PLAYLIST_MAX}). No se ejecutó nada.`, 'error');
+      return;
+    }
+
+    showProgress(`Creando "${name}"...`, 0, 0);
+    const fresh = await createPlaylist(name, 'Espejo de Liked Songs', false);
+
+    await fillPlaylistWithUris(fresh.id, uris, fresh.name);
+
+    hideProgress();
+    showToast(`"${fresh.name}" creada con ${uris.length.toLocaleString()} tracks`, 'success');
+    document.getElementById('sync-results').innerHTML = `
+      <div class="card">
+        <div style="display:flex;align-items:center;gap:10px">
+          <span class="badge badge-success">Creada</span>
+          <span>"${escapeHtml(fresh.name)}" quedó con ${uris.length.toLocaleString()} tracks. Cambiá el input al nombre nuevo si querés seguir sincronizando esta.</span>
+        </div>
+      </div>
+    `;
+    document.getElementById('sync-playlist-name').value = fresh.name;
+  } catch (e) {
+    hideProgress();
+    showToast('Error durante creación: ' + e.message, 'error');
     console.error(e);
   }
 }
