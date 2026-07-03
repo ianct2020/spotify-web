@@ -1,9 +1,10 @@
-import { getAllLikedTracks, getAllPlaylistItems, getAllUserPlaylists, addTracksToPlaylist, removeTracksFromPlaylist } from '../api.js';
+import { getAllLikedTracks, getAllPlaylistItems, getAllUserPlaylists, addTracksToPlaylist, removeTracksFromPlaylist, isTestMode } from '../api.js';
 import { cacheGet, cacheSet } from '../storage.js';
 import { showProgress, hideProgress, typeConfirmModal, renderTrackRow, escapeHtml } from '../ui/components.js';
 import { showToast } from '../ui/toast.js';
 
 const TARGET_PLAYLIST_NAME = 'another one';
+const SPOTIFY_PLAYLIST_MAX = 10000;
 
 export function render(container) {
   container.innerHTML = `
@@ -95,11 +96,16 @@ async function analyze() {
       if (t) playlistMap.set(t.uri, t);
     });
 
+    const testMode = isTestMode();
+    const newSize = playlistItems.length - toRemove.length + toAdd.length;
+    const exceedsLimit = newSize > SPOTIFY_PLAYLIST_MAX;
+    const testWarnRemove = testMode && toRemove.length > 100;
+
     results.innerHTML = `
       <div class="results-summary">
         <div class="stat-card">
           <div class="stat-value">${likes.length.toLocaleString()}</div>
-          <div class="stat-label">Liked Songs</div>
+          <div class="stat-label">Liked Songs${testMode ? ' (muestra)' : ''}</div>
         </div>
         <div class="stat-card">
           <div class="stat-value">${playlistItems.length.toLocaleString()}</div>
@@ -114,6 +120,34 @@ async function analyze() {
           <div class="stat-label">Para quitar</div>
         </div>
       </div>
+
+      ${testWarnRemove ? `
+        <div class="card" style="margin-bottom:16px;border-color:var(--color-warning);background:rgba(245,158,11,0.06)">
+          <div style="display:flex;align-items:flex-start;gap:10px">
+            <span class="badge badge-warning">MODO PRUEBA</span>
+            <div>
+              <strong>Ojo con "Quitar":</strong> en modo prueba solo se cargaron ${likes.length.toLocaleString()} likes (muestra), no los ~9.500 reales.
+              Los ${toRemove.length.toLocaleString()} tracks marcados para quitar probablemente son <em>válidos</em> (están en tus likes reales pero no en la muestra).
+              <br><br>
+              Usá <strong>"Solo agregar"</strong> para probar sin borrar nada.
+            </div>
+          </div>
+        </div>
+      ` : ''}
+
+      ${exceedsLimit ? `
+        <div class="card" style="margin-bottom:16px;border-color:var(--color-error);background:rgba(239,68,68,0.06)">
+          <div style="display:flex;align-items:flex-start;gap:10px">
+            <span class="badge badge-error">LÍMITE 10K</span>
+            <div>
+              La playlist quedaría con <strong>${newSize.toLocaleString()}</strong> tracks, pero Spotify limita a <strong>${SPOTIFY_PLAYLIST_MAX.toLocaleString()}</strong> por playlist.
+              ${testMode
+                ? 'En modo prueba no se puede resolver esto con seguridad. Desactivá TEST_MODE y volvé a probar.'
+                : 'Podés <strong>vaciar la playlist primero</strong> y llenarla desde cero con tus likes.'}
+            </div>
+          </div>
+        </div>
+      ` : ''}
 
       ${toAdd.length > 0 ? `
         <div class="card" style="margin-bottom:16px">
@@ -135,10 +169,18 @@ async function analyze() {
         </div>
       ` : ''}
 
-      <button class="btn btn-primary btn-lg" id="sync-execute-btn">Sincronizar</button>
+      <div style="display:flex;gap:10px;flex-wrap:wrap">
+        <button class="btn btn-primary btn-lg" id="sync-execute-btn" ${exceedsLimit && testMode ? 'disabled' : ''}>Sincronizar</button>
+        ${toAdd.length > 0 ? `<button class="btn btn-secondary btn-lg" id="sync-add-only-btn">Solo agregar (sin quitar)</button>` : ''}
+        ${exceedsLimit && !testMode ? `<button class="btn btn-danger btn-lg" id="sync-wipe-btn">Vaciar y llenar</button>` : ''}
+      </div>
     `;
 
     document.getElementById('sync-execute-btn').onclick = () => executeSync(target, toAdd, toRemove);
+    const addOnlyBtn = document.getElementById('sync-add-only-btn');
+    if (addOnlyBtn) addOnlyBtn.onclick = () => executeSync(target, toAdd, [], { mode: 'add-only' });
+    const wipeBtn = document.getElementById('sync-wipe-btn');
+    if (wipeBtn) wipeBtn.onclick = () => executeWipeAndFill(target, playlistItems, likes);
 
   } catch (e) {
     hideProgress();
@@ -149,10 +191,13 @@ async function analyze() {
   }
 }
 
-async function executeSync(playlist, toAdd, toRemove) {
+async function executeSync(playlist, toAdd, toRemove, { mode = 'full' } = {}) {
+  const label = mode === 'add-only' ? 'Solo agregar' : 'Sincronizar playlist';
   const confirmed = await typeConfirmModal(
-    'Sincronizar playlist',
-    `Se van a agregar <strong>${toAdd.length}</strong> y quitar <strong>${toRemove.length}</strong> tracks de "${escapeHtml(playlist.name)}".`,
+    label,
+    mode === 'add-only'
+      ? `Se van a agregar <strong>${toAdd.length}</strong> tracks a "${escapeHtml(playlist.name)}". No se va a quitar nada.`
+      : `Se van a agregar <strong>${toAdd.length}</strong> y quitar <strong>${toRemove.length}</strong> tracks de "${escapeHtml(playlist.name)}".`,
     'SYNC'
   );
 
@@ -187,7 +232,52 @@ async function executeSync(playlist, toAdd, toRemove) {
     `;
   } catch (e) {
     hideProgress();
-    showToast('Error durante sync: ' + e.message, 'error');
+    const msg = /playlist size limit/i.test(e.message)
+      ? `Playlist llena (${SPOTIFY_PLAYLIST_MAX} máx). Usá "Vaciar y llenar" o quitá tracks primero.`
+      : 'Error durante sync: ' + e.message;
+    showToast(msg, 'error');
+    console.error(e);
+  }
+}
+
+async function executeWipeAndFill(playlist, playlistItems, likes) {
+  const currentUris = playlistItems.map(item => (item.track || item.item)?.uri).filter(Boolean);
+  const likeUris = likes.map(item => item.track?.uri).filter(Boolean);
+
+  if (likeUris.length > SPOTIFY_PLAYLIST_MAX) {
+    showToast(`Tenés ${likeUris.length} likes, no caben en una playlist (máx ${SPOTIFY_PLAYLIST_MAX})`, 'error');
+    return;
+  }
+
+  const confirmed = await typeConfirmModal(
+    'Vaciar y llenar playlist',
+    `Se van a <strong>quitar los ${currentUris.length.toLocaleString()}</strong> tracks actuales de "${escapeHtml(playlist.name)}" y agregar los <strong>${likeUris.length.toLocaleString()}</strong> likes desde cero.<br><br>Esta acción es destructiva.`,
+    'VACIAR'
+  );
+  if (!confirmed) return;
+
+  try {
+    showProgress('Vaciando playlist...', 0, currentUris.length + likeUris.length);
+    if (currentUris.length > 0) {
+      await removeTracksFromPlaylist(playlist.id, currentUris);
+    }
+    showProgress('Agregando likes...', currentUris.length, currentUris.length + likeUris.length);
+    if (likeUris.length > 0) {
+      await addTracksToPlaylist(playlist.id, likeUris);
+    }
+    hideProgress();
+    showToast(`Playlist rehecha con ${likeUris.length.toLocaleString()} tracks`, 'success');
+    document.getElementById('sync-results').innerHTML = `
+      <div class="card">
+        <div style="display:flex;align-items:center;gap:10px">
+          <span class="badge badge-success">Sincronizado</span>
+          <span>Playlist "${escapeHtml(playlist.name)}" reconstruida desde cero.</span>
+        </div>
+      </div>
+    `;
+  } catch (e) {
+    hideProgress();
+    showToast('Error durante wipe: ' + e.message, 'error');
     console.error(e);
   }
 }
