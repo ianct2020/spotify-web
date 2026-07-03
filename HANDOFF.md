@@ -157,7 +157,7 @@ Definido en `src/js/api.js` arriba de todo. Cuando `true`:
 
 ## Versión actual desplegada
 
-- Git: rama `main`, próximo commit trae Dedupe rediseñado + Álbumes repetidos
+- Git: rama `main`, último commit `0e62d53` ("feat: dedupe visual grid + album dupes feature")
 - Cache bust: `?v=18`
 - TEST_MODE: `true` (2500 likes, 200 playlist items)
 - **Playlist espejo activa**: `anothertwo` (9.485 tracks). La vieja `another one` (11k) se borró vía script one-shot en la consola el 2026-07-03. Diferencia entre 9498 likes y 9485 en playlist = ~13 tracks locales / sin URI válido que la API no acepta agregar a playlists.
@@ -177,7 +177,7 @@ Definido en `src/js/api.js` arriba de todo. Cuando `true`:
 
 ## Changelog reciente (últimos 5 cambios)
 
-- `v=18`: Dedupe rediseñado (grid visual de playlists → seleccionar una → analizar) + nueva feature Álbumes repetidos. `slimPlaylist` guarda ahora `image` (URL de la cover chica). `renderPlaylistGrid`/`bindPlaylistGrid` en `ui/components.js` como componente compartido. Nueva `removePlaylistItemsAtPositions` en api.js (usa `positions` en el DELETE para preservar la primera aparición en Dedupe). Nueva ruta `#dupalbums` en app.js.
+- `v=18` (0e62d53): Dedupe rediseñado (grid visual de playlists → seleccionar una → analizar) + nueva feature Álbumes repetidos. `slimPlaylist` guarda ahora `image` (URL de la cover chica). `renderPlaylistGrid`/`bindPlaylistGrid` en `ui/components.js` como componente compartido. Nueva `removePlaylistItemsAtPositions` en api.js (usa `positions` en el DELETE para preservar la primera aparición en Dedupe). Nueva ruta `#dupalbums` en app.js.
 - `v=17` (adb81c0): default target "another one" → "anothertwo" (la vieja se borró vía script one-shot en consola)
 - `v=16` (ae1297e): rebuild feature en Sync Mirror — usa `target.tracks.total` real para el precheck (fix bug del `v=15` donde la muestra de 200 hacía que el warning nunca dispare). Cuando target ≥10k → UI con "borrar y rehacer" o "crear another one N+1". Cuando no existe → ofrece crearla. Rebuild bypasea TEST_MODE (`getAllLikedTracks({ forceAll: true })`) para llenar con los 9500 reales. Agrega `unfollowPlaylist(id)` en api.js.
 - `v=15` (e08234a): fix Sync 10k — precheck `newSize > 10000`, badge de warning en TEST_MODE, botón "Solo agregar", botón "Vaciar y llenar" (buggy: usaba la muestra en vez del total real)
