@@ -7,6 +7,7 @@ import { showToast } from './ui/toast.js';
 
 import { render as renderSync } from './features/sync.js';
 import { render as renderDedupe } from './features/dedupe.js';
+import { render as renderDupalbums } from './features/duplicate-albums.js';
 import { render as renderZombies } from './features/zombies.js';
 import { render as renderVersions } from './features/versions.js';
 import { render as renderDashboard } from './features/dashboard.js';
@@ -200,6 +201,9 @@ function showApp(profile) {
           <a class="nav-link" data-route="dedupe" href="#dedupe">
             <span class="nav-link-icon">&#9851;</span> Dedupe
           </a>
+          <a class="nav-link" data-route="dupalbums" href="#dupalbums">
+            <span class="nav-link-icon">&#9834;</span> Álbumes repetidos
+          </a>
           <a class="nav-link" data-route="zombies" href="#zombies">
             <span class="nav-link-icon">&#9760;</span> Zombis
           </a>
@@ -251,6 +255,7 @@ function showApp(profile) {
   registerRoute('debug', renderDebug);
   registerRoute('sync', renderSync);
   registerRoute('dedupe', renderDedupe);
+  registerRoute('dupalbums', renderDupalbums);
   registerRoute('zombies', renderZombies);
   registerRoute('versions', renderVersions);
 

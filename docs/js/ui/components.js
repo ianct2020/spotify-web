@@ -117,4 +117,28 @@ function escapeHtml(str) {
   return div.innerHTML;
 }
 
-export { renderTrackRow, showProgress, hideProgress, confirmModal, typeConfirmModal, escapeHtml };
+function renderPlaylistGrid(playlists) {
+  return `
+    <div class="playlist-grid">
+      ${playlists.map(p => `
+        <button class="playlist-card" data-playlist-id="${p.id}">
+          <div class="playlist-card-cover">
+            ${p.image
+              ? `<img src="${p.image}" loading="lazy" alt="">`
+              : `<div class="playlist-card-cover-placeholder">♪</div>`}
+          </div>
+          <div class="playlist-card-name">${escapeHtml(p.name)}</div>
+          <div class="playlist-card-meta">${(p.tracks?.total ?? '?').toLocaleString()} tracks</div>
+        </button>
+      `).join('')}
+    </div>
+  `;
+}
+
+function bindPlaylistGrid(container, onSelect) {
+  container.querySelectorAll('.playlist-card').forEach(card => {
+    card.onclick = () => onSelect(card.dataset.playlistId);
+  });
+}
+
+export { renderTrackRow, showProgress, hideProgress, confirmModal, typeConfirmModal, escapeHtml, renderPlaylistGrid, bindPlaylistGrid };

@@ -179,6 +179,8 @@ function slimTrack(t) {
 
 function slimPlaylist(p) {
   if (!p) return p;
+  const imgs = p.images || [];
+  const smallest = imgs.length > 0 ? imgs[imgs.length - 1].url : null;
   return {
     id: p.id,
     name: p.name,
@@ -186,6 +188,7 @@ function slimPlaylist(p) {
     tracks: p.tracks ? { total: p.tracks.total } : undefined,
     public: p.public,
     collaborative: p.collaborative,
+    image: smallest,
   };
 }
 
@@ -298,6 +301,21 @@ async function removeTracksFromPlaylist(playlistId, uris) {
   }
 }
 
+async function removePlaylistItemsAtPositions(playlistId, itemsWithPositions) {
+  const meta = await spotifyFetch(`/playlists/${playlistId}?fields=snapshot_id`);
+  const snapshotId = meta.snapshot_id;
+  const chunks = [];
+  for (let i = 0; i < itemsWithPositions.length; i += 100) {
+    chunks.push(itemsWithPositions.slice(i, i + 100));
+  }
+  for (const chunk of chunks) {
+    await spotifyFetch(`/playlists/${playlistId}/items`, {
+      method: 'DELETE',
+      body: JSON.stringify({ items: chunk, snapshot_id: snapshotId }),
+    });
+  }
+}
+
 async function removeLikedTracks(ids) {
   const chunks = [];
   for (let i = 0; i < ids.length; i += 40) {
@@ -335,6 +353,7 @@ export {
   getUserProfile,
   addTracksToPlaylist,
   removeTracksFromPlaylist,
+  removePlaylistItemsAtPositions,
   removeLikedTracks,
   createPlaylist,
   unfollowPlaylist,
