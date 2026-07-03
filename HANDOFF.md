@@ -146,7 +146,7 @@ Definido en `src/js/api.js` arriba de todo. Cuando `true`:
 
 ## Versión actual desplegada
 
-- Git: rama `main`, próximo commit incluye fix de Sync 10k
+- Git: rama `main`, último commit `e08234a` ("fix(sync): 10k playlist limit precheck + safe modes")
 - Cache bust: `?v=15`
 - TEST_MODE: `true` (2500 likes, 200 playlist items)
 
@@ -165,7 +165,7 @@ Definido en `src/js/api.js` arriba de todo. Cuando `true`:
 
 ## Changelog reciente (últimos 5 cambios)
 
-- `v=15`: fix Sync 10k — precheck `newSize > 10000`, badge de warning en TEST_MODE (avisa que "Quitar" borra tracks válidos), botón "Solo agregar (sin quitar)" para probar sin destruir, botón "Vaciar y llenar" cuando excede límite (bloqueado en TEST_MODE por seguridad)
+- `v=15` (e08234a): fix Sync 10k — precheck `newSize > 10000`, badge de warning en TEST_MODE (avisa que "Quitar" borra tracks válidos), botón "Solo agregar (sin quitar)" para probar sin destruir, botón "Vaciar y llenar" cuando excede límite (bloqueado en TEST_MODE por seguridad)
 - `v=14` (0aab889): checkbox lindo con gradient + animación pop del tilde
 - `v=13` (525c90d): elimino Huérfanas, checkboxes en Zombis, sync mirror randomize:false
 - `v=12` (1a94bd7): semántica invertida checkbox en Versiones (marcar = quedarme), fade out borradas
