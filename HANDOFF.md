@@ -132,17 +132,51 @@ Definido en `src/js/api.js` arriba de todo. Cuando `true`:
 - **Cluster delete con semántica invertida**: la versión vieja interpretaba checkbox como "borrar esta", confundió al user y borró la equivocada. Ahora checkbox = **mantener** esta, se borran las otras del cluster
 - **JSON parse error en DELETE**: Spotify devuelve 200 OK con body vacío en algunas mutaciones → spotifyFetch lee como text y parsea solo si no está vacío
 - **No refresh token available**: si refresh falla, `getValidToken` limpia tokens y reload → muestra login
+- **Precheck 10k con muestra parcial**: en TEST_MODE la playlist se cargaba capada (200 items), y el precheck del límite comparaba con esa muestra, no con el total real → nunca disparaba. Fix: usar `target.tracks.total` (que viene en el objeto de `/me/playlists`), no `playlistItems.length`.
+- **DELETE de duplicados exactos**: mandar `{items:[{uri}]}` borra **todas** las copias de esa URI. Para preservar la primera aparición hay que usar `{items:[{uri, positions:[N,M,...]}]}`. Función helper: `removePlaylistItemsAtPositions(id, [{uri, positions}])`. Fetchea `snapshot_id` primero y lo pasa en el body para evitar race conditions.
+- **Tracks locales no aceptan add en playlists**: si un like es un archivo local (MP3 subido por el user), su URI es `spotify:local:...` y `POST /playlists/{id}/items` los rechaza silenciosamente o con 400. Al hacer rebuild de "another one" (9498 likes) quedaron 9485 en la nueva playlist — los 13 faltantes son tracks locales o con URI inválida. **No es bug del código**, es limitación de la API. Solo el cliente oficial de Spotify puede mover tracks locales entre playlists.
+
+## Patrón "script one-shot en consola"
+
+Para operaciones destructivas puntuales que NO justifican gastar tokens armando UI + build + deploy (por ejemplo: borrar una playlist saturada y rehacerla desde cero), es válido darle al user un script para pegar en la consola del browser (F12). El script usa el token de localStorage (`sp_access_token`) y hace fetches directos a la API. **Referencia funcional en el repo**: `scripts/rebuild-anothertwo.js` (usado en la sesión 2026-07-03 — ejemplo de patrón con auth por localStorage, paginación manual, rate limit backoff, y confirm nativo).
+
+Reglas del patrón:
+1. Confirmar con el user antes de darle el script (es destructivo).
+2. Que el script tenga `confirm()` nativo antes de mutaciones.
+3. Que no exponga el Client Secret (nunca lo hardcodees — usa el token del user).
+4. Que loguee progreso paso a paso para que el user sepa qué pasa.
+5. Después de que corra, actualizá HANDOFF con la operación hecha y su fecha.
 
 ---
 
 ## Próximos pasos (en orden, por confirmar con user)
 
-1. **Probar Dedupe** con la nueva UI (grid de playlists → seleccionar → analizar)
-2. **Probar Álbumes repetidos** en "listened albums"
-3. **Smart playlists** (por año / década / random N)
-4. **Backup/Export JSON** + Import
-5. **Flipear `TEST_MODE = false`** en api.js, bumpear cache, build, push
-6. **Fase 2 restante**
+**Testing pendiente (arranca por acá cuando vuelva):**
+1. **Dedupe** con la nueva UI — probar en una playlist chica primero. Grid con cover → click una → debería mostrar duplicados con "Nx" y posiciones → botón "Quitar N copias extra". Chequeá que la primera aparición **queda** y las otras se van (no todas).
+2. **Álbumes repetidos** — probar en `listened albums`. Marcá 1 track por álbum (checkbox tipo Versiones — al marcar otro del mismo álbum se desmarca el primero) → "Quitar sobrantes".
+
+**Features aún no implementadas** (el user las dejó agendadas):
+
+3. **Smart playlists** — el user dijo "seguimos con smart playlist" antes de cortar la sesión. Ideas:
+   - "Likes de {año}" basado en `added_at` de `/me/tracks`
+   - "Década X" basado en `release_date` del álbum
+   - "Random N tracks" (elegir un tamaño y crear playlist con selección aleatoria de likes)
+   - UI: form → selector de criterio → preview → botón "Crear playlist"
+   - Endpoints ya disponibles: `createPlaylist`, `addTracksToPlaylist`, `getAllLikedTracks({forceAll:true})`
+
+4. **Backup/Export + Import** JSON — descarga estado completo (likes con added_at, playlists con nombre/descripción/tracks). Import: subís JSON, la app recrea. Ojo: `added_at` de likes **no** se puede setear al restaurar (API no lo permite); en el import se pierde la fecha original.
+
+5. **Dashboard prettify** (cosmético — el user dijo que los datos ya están bien; bajo prioridad).
+
+**Cierre de Fase 1:**
+
+6. Cuando 1-5 estén listos, **flipear `TEST_MODE = false`** en `src/js/api.js:13`, bump cache, build, push.
+
+7. Fase 2 restante (elegir con el user):
+   - Bulk add / Mover likes a playlist
+   - Álbumes para completar (playlist con >1 track de un álbum → mostrar tracks faltantes)
+   - Solapamiento entre playlists
+   - Keywords sospechosas / tracks <1s / artistas con 1 sola canción
 
 ## Ideas Fase 2 (las que el user marcó interés)
 
@@ -157,10 +191,30 @@ Definido en `src/js/api.js` arriba de todo. Cuando `true`:
 
 ## Versión actual desplegada
 
-- Git: rama `main`, último commit `0e62d53` ("feat: dedupe visual grid + album dupes feature")
+- Git: rama `main`, último commit `e45858c` (después de `0e62d53` "feat: dedupe visual grid + album dupes feature")
 - Cache bust: `?v=18`
 - TEST_MODE: `true` (2500 likes, 200 playlist items)
 - **Playlist espejo activa**: `anothertwo` (9.485 tracks). La vieja `another one` (11k) se borró vía script one-shot en la consola el 2026-07-03. Diferencia entre 9498 likes y 9485 en playlist = ~13 tracks locales / sin URI válido que la API no acepta agregar a playlists.
+- Default de Sync Mirror ya apunta a `anothertwo` (constante `TARGET_PLAYLIST_NAME` en `src/js/features/sync.js:7`).
+
+## Sesión 2026-07-03 (contexto para el próximo Claude)
+
+**Se hizo:**
+- Fix Sync 10k (`v=15`): precheck y 3 modos (sincronizar / solo agregar / vaciar y llenar). **Buggy en TEST_MODE porque comparaba muestra con total** (ver Fix histórico clave).
+- Rebuild feature Sync (`v=16`): fix del precheck usando `target.tracks.total`, UI de "playlist llena" con opción de rehacer o crear "N+1", bypass TEST_MODE en rebuild.
+- Migración manual (`v=17`): el user optó por hacer el rebuild vía **script one-shot en consola** (`scripts/rebuild-anothertwo.js`) en lugar de usar la UI. Se borró `another one` (11k) y se creó `anothertwo` (9485). El default del input se cambió a `anothertwo`.
+- Dedupe rediseñado + Álbumes repetidos (`v=18`): grid visual con cover de playlists como selector, `removePlaylistItemsAtPositions` para preservar la primera aparición al deduplicar exacto.
+
+**Se probó (por el user):**
+- Sync analizar en `anothertwo` OK (mostraba muestra vs total real correctamente en `v=15`, warning naranja de TEST_MODE)
+- Rebuild vía consola: OK (9485 tracks migrados)
+
+**No se probó todavía (para arrancar mañana):**
+- Dedupe con la nueva UI
+- Álbumes repetidos con la playlist `listened albums` (esa es la que motivó la feature)
+- Sync Mirror sobre `anothertwo` con "Solo agregar"
+
+**Estado de tokens del user al cortar la sesión:** el user dijo "me queda poco usage" y el budget se le reseteaba tarde en el día. Cuando arranques mañana, no gastes tokens en re-derivar contexto: leé este archivo, chequeá git log (últimos 5 commits) y arranca con las tareas de "Próximos pasos".
 
 ---
 
@@ -172,6 +226,8 @@ Definido en `src/js/api.js` arriba de todo. Cuando `true`:
 3. Si descubrís un nuevo gotcha de API → agregalo a **Fix histórico clave**
 4. Si el user toma una decisión nueva → agregala a **Reglas duras** o **Próximos pasos**
 5. Mantenelo conciso. No es un changelog — es un mapa para retomar.
+6. Cuando cierres una sesión, agregá una entrada en **Sesión YYYY-MM-DD (contexto para el próximo Claude)** con qué se hizo, qué se probó y qué queda. Reemplazá la sesión anterior si el estado quedó reflejado en el resto del doc.
+7. Si se corrió un script one-shot en la consola del user → dejá el archivo en `scratchpad/` y anotalo brevemente en Sesión + el patrón general está documentado arriba.
 
 ---
 
