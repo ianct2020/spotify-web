@@ -88,18 +88,16 @@ async function searchSpotifyArtist(query) {
     }
     results.innerHTML = `
       <div style="border-top:1px solid var(--color-border);margin-top:8px;padding-top:8px">
-        ${artists.map(a => `
-          <div class="similar-search-item" data-name="${escapeHtml(a.name)}" data-id="${a.id}"
-               style="display:flex;align-items:center;gap:10px;padding:8px;border-radius:var(--radius-sm);cursor:pointer">
-            ${a.images?.[a.images.length - 1]?.url
-              ? `<img src="${a.images[a.images.length - 1].url}" style="width:36px;height:36px;border-radius:50%;object-fit:cover">`
-              : `<div style="width:36px;height:36px;border-radius:50%;background:var(--color-elevated)"></div>`}
-            <div style="flex:1;min-width:0">
-              <div style="font-weight:500">${escapeHtml(a.name)}</div>
-              <div style="font-size:12px;color:var(--color-text-muted)">${(a.followers?.total || 0).toLocaleString()} followers</div>
+        ${artists.map(a => {
+          const img = a.images?.[a.images.length - 1]?.url;
+          return `
+            <div class="similar-search-item" data-name="${escapeHtml(a.name)}" data-id="${a.id}"
+                 style="display:flex;align-items:center;gap:10px;padding:8px;border-radius:var(--radius-sm);cursor:pointer">
+              ${img ? `<img src="${img}" style="width:32px;height:32px;border-radius:50%;object-fit:cover">` : ''}
+              <div style="flex:1;min-width:0;font-weight:500">${escapeHtml(a.name)}</div>
             </div>
-          </div>
-        `).join('')}
+          `;
+        }).join('')}
       </div>
     `;
     results.querySelectorAll('.similar-search-item').forEach(el => {
@@ -138,13 +136,10 @@ function renderSimilarGrid() {
     <div style="margin-bottom:8px;color:var(--color-text-secondary);font-size:14px">
       ${similarList.length} artistas similares a <strong>${escapeHtml(sourceArtist)}</strong>. Elegí uno para ver sus top tracks.
     </div>
-    <div class="smart-grid">
+    <div class="smart-grid smart-grid-compact">
       ${similarList.map((a, i) => `
         <button class="smart-card similar-artist-card" data-idx="${i}">
-          ${a.image
-            ? `<img src="${a.image}" style="width:80px;height:80px;border-radius:50%;object-fit:cover;margin-bottom:4px">`
-            : `<div style="width:80px;height:80px;border-radius:50%;background:var(--color-elevated);margin-bottom:4px"></div>`}
-          <div class="smart-card-title" style="font-size:14px">${escapeHtml(a.name)}</div>
+          <div class="smart-card-title" style="font-size:15px">${escapeHtml(a.name)}</div>
           <div class="smart-card-meta">match ${(a.match * 100).toFixed(0)}%</div>
         </button>
       `).join('')}
@@ -250,10 +245,17 @@ function renderResolvedTracks() {
       </div>
     </div>
 
+    ${resolvedTracks.some(t => !t.matched) ? `
+      <div style="font-size:12px;color:var(--color-text-muted);margin-bottom:8px">
+        "Sin match" = el nombre del track en Last.fm no coincide con ningún track de Spotify (título distinto, no disponible en tu región, o error tipográfico).
+      </div>
+    ` : ''}
+
     <div class="card">
       ${resolvedTracks.map((t, i) => t.matched ? `
-        <label style="display:flex;align-items:center;gap:12px;padding:10px 12px;border-bottom:1px solid var(--color-border);cursor:pointer">
-          <input type="checkbox" class="similar-track-check" data-uri="${t.uri}" checked>
+        <label class="pretty-check-row">
+          <input type="checkbox" class="pretty-check similar-track-check" data-uri="${t.uri}" checked>
+          <span class="pretty-check-box"></span>
           ${t.image ? `<img src="${t.image}" style="width:40px;height:40px;border-radius:var(--radius-sm);object-fit:cover">` : `<div style="width:40px;height:40px;background:var(--color-elevated);border-radius:var(--radius-sm)"></div>`}
           <div style="flex:1;min-width:0">
             <div style="font-size:14px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(t.name)}</div>
@@ -261,11 +263,11 @@ function renderResolvedTracks() {
           </div>
         </label>
       ` : `
-        <div style="display:flex;align-items:center;gap:12px;padding:10px 12px;border-bottom:1px solid var(--color-border);opacity:0.5">
+        <div class="pretty-check-row" style="opacity:0.5">
           <div style="width:40px;height:40px;background:var(--color-elevated);border-radius:var(--radius-sm);display:flex;align-items:center;justify-content:center;font-size:12px;color:var(--color-text-muted)">?</div>
           <div style="flex:1;min-width:0">
             <div style="font-size:14px">${escapeHtml(t.name)}</div>
-            <div style="font-size:12px;color:var(--color-text-muted)">${escapeHtml(t.artist)} — no encontrado en Spotify</div>
+            <div style="font-size:12px;color:var(--color-text-muted)">${escapeHtml(t.artist)} — sin match en Spotify</div>
           </div>
         </div>
       `).join('')}

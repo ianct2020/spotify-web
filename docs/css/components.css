@@ -437,3 +437,61 @@
   font-size: 12px;
   color: var(--color-text-secondary);
 }
+
+.smart-grid-compact {
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 10px;
+}
+
+.smart-grid-compact .smart-card {
+  padding: 14px 8px;
+}
+
+.pretty-check-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--color-border);
+  cursor: pointer;
+}
+
+.pretty-check-row:hover {
+  background: var(--color-elevated);
+}
+
+.pretty-check-row:last-child {
+  border-bottom: none;
+}
+
+.pretty-check {
+  display: none;
+}
+
+.pretty-check-box {
+  width: 20px;
+  height: 20px;
+  border: 2px solid var(--color-border);
+  border-radius: 4px;
+  background: var(--color-elevated);
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+  position: relative;
+}
+
+.pretty-check:checked + .pretty-check-box {
+  background: var(--color-accent);
+  border-color: var(--color-accent);
+}
+
+.pretty-check:checked + .pretty-check-box::after {
+  content: '';
+  width: 5px;
+  height: 10px;
+  border-right: 2px solid white;
+  border-bottom: 2px solid white;
+  transform: rotate(45deg) translate(-1px, -1px);
+}

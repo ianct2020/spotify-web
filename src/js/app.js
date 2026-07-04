@@ -13,6 +13,7 @@ import { render as renderVersions } from './features/versions.js';
 import { render as renderDashboard } from './features/dashboard.js';
 import { render as renderSmart } from './features/smart.js';
 import { render as renderSimilar } from './features/similar-artists.js';
+import { render as renderRabbit } from './features/rabbit-hole.js';
 
 async function testConnection() {
   const token = await getValidToken();
@@ -206,6 +207,9 @@ function showApp(profile) {
           <a class="nav-link" data-route="similar" href="#similar">
             <span class="nav-link-icon">&#9737;</span> Artistas similares
           </a>
+          <a class="nav-link" data-route="rabbit" href="#rabbit">
+            <span class="nav-link-icon">&#8734;</span> Rabbit hole
+          </a>
         </div>
         <div class="sidebar-section">
           <div class="sidebar-section-title">Limpieza</div>
@@ -269,6 +273,7 @@ function showApp(profile) {
   registerRoute('debug', renderDebug);
   registerRoute('smart', renderSmart);
   registerRoute('similar', renderSimilar);
+  registerRoute('rabbit', renderRabbit);
   registerRoute('sync', renderSync);
   registerRoute('dedupe', renderDedupe);
   registerRoute('dupalbums', renderDupalbums);
