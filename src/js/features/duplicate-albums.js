@@ -1,4 +1,4 @@
-import { getAllUserPlaylists, getAllPlaylistItems, removePlaylistItemsAtPositions } from '../api.js';
+import { getAllUserPlaylists, getAllPlaylistItems, removePlaylistItemsAtPositions, getCurrentUserId } from '../api.js';
 import { showProgress, hideProgress, typeConfirmModal, escapeHtml, renderPlaylistGrid, bindPlaylistGrid } from '../ui/components.js';
 import { showToast } from '../ui/toast.js';
 
@@ -21,8 +21,8 @@ async function loadAndShowGrid() {
   content.innerHTML = `<div class="empty-state"><div class="spinner spinner-lg"></div><div style="margin-top:16px">Cargando playlists...</div></div>`;
 
   try {
-    const playlists = await getAllUserPlaylists();
-    ownPlaylists = playlists.filter(p => p.owner?.id !== 'spotify');
+    const [playlists, userId] = await Promise.all([getAllUserPlaylists(), getCurrentUserId()]);
+    ownPlaylists = playlists.filter(p => p.owner?.id === userId);
     if (ownPlaylists.length === 0) {
       content.innerHTML = `<div class="card"><p>No tenés playlists propias.</p></div>`;
       return;
@@ -64,7 +64,7 @@ async function analyzePlaylist(playlistId) {
   try {
     const items = await getAllPlaylistItems(playlistId, ({ loaded, total }) => {
       showProgress(`Cargando tracks...`, loaded, total);
-    });
+    }, { forceAll: true });
     hideProgress();
 
     const byAlbum = new Map();

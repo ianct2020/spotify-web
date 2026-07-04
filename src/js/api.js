@@ -263,16 +263,24 @@ function invalidatePlaylistsCache() {
   cacheClear(PLAYLISTS_CACHE_KEY);
 }
 
-async function getAllPlaylistItems(playlistId, onProgress) {
+async function getAllPlaylistItems(playlistId, onProgress, { forceAll = false } = {}) {
   return paginateAll(`/playlists/${playlistId}/items`, {
     limit: 100,
     onProgress,
-    maxItems: TEST_MODE ? TEST_MAX_PLAYLIST_ITEMS : undefined,
+    maxItems: (TEST_MODE && !forceAll) ? TEST_MAX_PLAYLIST_ITEMS : undefined,
   });
 }
 
 async function getUserProfile() {
   return spotifyFetch('/me');
+}
+
+let _cachedUserId = null;
+async function getCurrentUserId() {
+  if (_cachedUserId) return _cachedUserId;
+  const me = await spotifyFetch('/me');
+  _cachedUserId = me.id;
+  return _cachedUserId;
 }
 
 async function addTracksToPlaylist(playlistId, uris) {
@@ -351,6 +359,7 @@ export {
   getAllUserPlaylists,
   getAllPlaylistItems,
   getUserProfile,
+  getCurrentUserId,
   addTracksToPlaylist,
   removeTracksFromPlaylist,
   removePlaylistItemsAtPositions,
