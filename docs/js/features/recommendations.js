@@ -6,7 +6,9 @@ import { showToast } from '../ui/toast.js';
 let recommendations = [];
 let currentPick = null;
 let resolvedTracks = [];
+let alreadyLikedInResolution = 0;
 const pickedUris = new Set();
+const likedUris = new Set();
 
 export function render(container) {
   container.innerHTML = `
@@ -97,9 +99,11 @@ async function run() {
 
     const [likes] = await Promise.all([getAllLikedTracks(() => {}).catch(() => [])]);
     const knownArtists = new Set();
+    likedUris.clear();
     likes.forEach(i => {
       const n = i.track?.artists?.[0]?.name;
       if (n) knownArtists.add(n.toLowerCase());
+      if (i.track?.uri) likedUris.add(i.track.uri);
     });
 
     panel.innerHTML = `
@@ -207,7 +211,7 @@ async function resolveTracksOnSpotify(topTracks) {
   const tracksEl = document.getElementById('recs-tracks');
   tracksEl.innerHTML = `<div class="empty-state"><div class="spinner spinner-lg"></div><div style="margin-top:16px">Buscando en Spotify (0/${topTracks.length})...</div></div>`;
 
-  resolvedTracks = [];
+  const raw = [];
   for (let i = 0; i < topTracks.length; i++) {
     const t = topTracks[i];
     try {
@@ -215,7 +219,7 @@ async function resolveTracksOnSpotify(topTracks) {
       const data = await spotifyFetch(`/search?q=${encodeURIComponent(q)}&type=track&limit=1`);
       const hit = data.tracks?.items?.[0];
       if (hit) {
-        resolvedTracks.push({
+        raw.push({
           uri: hit.uri, name: hit.name,
           artist: (hit.artists || []).map(a => a.name).join(', '),
           album: hit.album?.name,
@@ -223,13 +227,16 @@ async function resolveTracksOnSpotify(topTracks) {
           matched: true,
         });
       } else {
-        resolvedTracks.push({ uri: null, name: t.name, artist: t.artist, matched: false });
+        raw.push({ uri: null, name: t.name, artist: t.artist, matched: false });
       }
     } catch {
-      resolvedTracks.push({ uri: null, name: t.name, artist: t.artist, matched: false });
+      raw.push({ uri: null, name: t.name, artist: t.artist, matched: false });
     }
     tracksEl.querySelector('.empty-state div:last-child').textContent = `Buscando en Spotify (${i + 1}/${topTracks.length})...`;
   }
+
+  alreadyLikedInResolution = raw.filter(t => t.matched && likedUris.has(t.uri)).length;
+  resolvedTracks = raw.filter(t => !(t.matched && likedUris.has(t.uri)));
 
   renderResolvedTracks();
 }
@@ -243,13 +250,20 @@ function renderResolvedTracks() {
     <div class="results-summary">
       <div class="stat-card">
         <div class="stat-value">${matched.length}</div>
-        <div class="stat-label">Tracks en Spotify</div>
+        <div class="stat-label">Nuevos en Spotify</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value" style="color:var(--color-text-muted)">${alreadyLikedInResolution}</div>
+        <div class="stat-label">Ya en tus likes (ocultos)</div>
       </div>
       <div class="stat-card">
         <div class="stat-value" style="color:var(--color-text-muted)">${resolvedTracks.length - matched.length}</div>
         <div class="stat-label">Sin match</div>
       </div>
     </div>
+    ${matched.length === 0 ? `
+      <div class="card" style="margin-bottom:16px"><p>Todos los top tracks de este artista ya están en tus likes. Volvé y probá con otro.</p></div>
+    ` : ''}
 
     <div style="position:sticky;top:0;z-index:50;background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-md);padding:12px 16px;margin-bottom:16px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;box-shadow:0 2px 8px rgba(0,0,0,0.2)">
       <div style="font-size:13px;color:var(--color-text-secondary)">
