@@ -200,38 +200,71 @@ Consideraciones técnicas:
 
 ## Sesión 2026-07-04 (contexto para el próximo Claude)
 
-**Hecho:**
+Sesión doble (mañana + tarde). Salió mucho. Última acción del día: preparar handoff porque el user pasa a otra PC.
+
+**Hecho de mañana:**
 - ✅ Fix filtro de Dedupe y Álbumes repetidos: ahora usa `owner.id === currentUserId` (antes solo excluía "spotify"), agregado `getCurrentUserId()` cacheado en `api.js`.
-- ✅ Fix cap TEST_MODE en `getAllPlaylistItems`: agregado `{ forceAll }` param, usado desde Dedupe y Álbumes repetidos para cargar la playlist completa (antes se quedaba en 200).
-- ✅ **Álbumes repetidos** testeado en producción — el user detectó 14 duplicados en "listened albums", los borró, re-analizó → limpio.
-- ✅ **Smart Playlists** implementado y desplegado (feature nueva, sidebar sección "Crear"):
-  - Por año: agrupa por `getYear(track.album.release_date)`
-  - Por década: `Math.floor(year / 10) * 10`
-  - Random N: shuffle Fisher-Yates + input con presets
-  - Nombre único auto (` (2)`, ` (3)`) si ya existe
-  - Confirmación typeConfirm antes de crear
-- ✅ Testing: el user creó "Likes 80s" (51 tracks) y una random de 2000. Ambas funcionaron.
+- ✅ Fix cap TEST_MODE en `getAllPlaylistItems`: agregado `{ forceAll }` param.
+- ✅ **Álbumes repetidos** testeado — user borró 14 duplicados en "listened albums".
+- ✅ **Smart Playlists** implementado (features/smart.js): por año, por década, random N. User creó "Likes 80s" (51) y random 2000, OK.
 
-**No hecho:**
-- ❌ Genre-by-artist (bloqueado por Get Several Artists deprecated, ver arriba).
-- ❌ Flip TEST_MODE (pospuesto por el user para no gastar usage).
-- ❌ Testear Dedupe con datos reales (bloqueado por Spotify UI que no deja duplicar).
+**Hecho de tarde — Fase 3 arrancada con Last.fm** (user aprobó, sacó API key `cdd56ad523b6142afaeb4ae9fcad62b1`, username `i-an-iam`):
 
-**Estado actual:**
-- Último commit: `e56a2b1` (feat: smart playlists).
-- Cache bust: `?v=20`.
-- TEST_MODE: `true`.
-- Playlist espejo activa: `anothertwo` (9485 tracks).
+- ✅ **Artistas similares** (features/similar-artists.js): search Spotify → grid de similares de Last.fm → click uno → top tracks resueltos en Spotify → checkbox multi-select → crear playlist "Similar a X: Y". La primera versión tenía imagen placeholder feo y checkbox horrible, se refactorizó a UI limpia:
+  - Search minimal (solo nombre + hasta 3 géneros del `artist.genres` de Spotify, sin followers, sin imagen)
+  - Grid compacto (Last.fm no sirve imágenes de artista desde 2019, sin placeholder)
+  - Checkbox custom violeta (`.pretty-check` en components.css)
+- ✅ **Rabbit hole por género** (features/rabbit-hole.js): input + 18 chips sugeridos → top artistas del tag → click → top tracks → playlist.
+- ✅ **Recomendaciones (scrobbles)** (features/recommendations.js): pide username, `user.gettopartists` últimos 6 meses (top 30), fetch similares de cada uno, agrega score `playcount * match`, filtra artistas que ya tenés y **también tracks individuales ya en likes** (fix del primer intento donde solo filtraba por artista).
+- ✅ **Clasificar por género** (features/by-genre.js): la feature de "clasificación automática" que estuvo bloqueada — se resolvió usando Last.fm (`artist.gettoptags`) en lugar de Get Several Artists deprecado de Spotify. Fetchea top tags de cada artista único (~569 en TEST_MODE, ~2000 en real), throttle 200ms → cache persistente 30 días → grid de géneros con # de tracks → click → crea playlist "Género: X". User lo probó, 569 artistas procesados en ~2 min, dio 195 géneros con top: Hip-Hop 1063, Rap 985, Hip Hop 660, etc.
+- ✅ **Related tags en Rabbit hole**: `tag.getSimilar` de Last.fm está roto (devuelve vacío desde ~2018). Fallback local: agarra top 8 artistas del tag, agrega sus top tags, muestra los que aparecen 2+ veces como "Géneros parecidos" en chips clickeables.
+- ✅ **Scrollbar custom** (main.css): fino, thumb color border, hover accent.
+- ✅ **API user management**: user preguntó, le expliqué que el cap Spotify Dev Mode es **25 usuarios** (no 5, otro chat le había dicho mal), el dueño no cuenta, se agregan por Settings → User Management con email exacto.
+
+**Estado técnico:**
+- Último commit: `033d47e` (fix rabbit+recs).
+- Cache bust: `?v=25`.
+- TEST_MODE: `true` (2500 likes).
+- Cache de `artist.gettoptags` en localStorage key `lastfm_artist_tags_cache` (30d TTL).
+- API key de Last.fm en localStorage `lastfm_api_key`. Username en `lastfm_username`.
+
+**Sidebar actual:**
+```
+GENERAL     Dashboard
+CREAR       Smart Playlists
+DESCUBRIR   Artistas similares
+            Rabbit hole
+            Recomendaciones
+            Por género
+LIMPIEZA    Sync Mirror, Dedupe, Álbumes repetidos, Zombis, Versiones
+```
+
+**Pendiente (arranca por acá cuando vuelva):**
+1. **Flip TEST_MODE = false** en `src/js/api.js:13`. User lo pospuso 2 veces por budget; su argumento "si anduvo en 2500 va a andar en 9500" es válido, solo agregar `~7 min` extra de carga inicial y verificar que no revienta `localStorage` (~2.85 MB estimados, entra en 5 MB con margen).
+2. Con `TEST_MODE=false`: re-correr **Por género** para clasificar los 9500 reales (~7 min más para los ~2000 artistas restantes que no cachearon).
+3. Cierre de Fase 1.
+
+**Ideas Fase 4 (aún no propuestas al user, pero mencionadas de pasada):**
+- Bio del artista via `artist.getInfo` (user dijo NO ahora)
+- New releases via `/me/following` + album lookups (user dijo NO, prefiere el descubrimiento manual de Spotify los viernes)
+- Feature "artistas en común" — dado un tag, mostrar cuáles de tus likes están en su top
+
+---
+
+## Sesión 2026-07-04 anterior (mañana)
+
+(Ver sección de sesión doble arriba — todo se fusionó porque fue el mismo día.)
 
 ---
 
 ## Versión actual desplegada
 
-- Git: rama `main`, último commit `e45858c` (después de `0e62d53` "feat: dedupe visual grid + album dupes feature")
-- Cache bust: `?v=18`
+- Git: rama `main`, último commit `033d47e` "fix(rabbit+recs): related tags real + filtro ya-en-likes"
+- Cache bust: `?v=25`
 - TEST_MODE: `true` (2500 likes, 200 playlist items)
-- **Playlist espejo activa**: `anothertwo` (9.485 tracks). La vieja `another one` (11k) se borró vía script one-shot en la consola el 2026-07-03. Diferencia entre 9498 likes y 9485 en playlist = ~13 tracks locales / sin URI válido que la API no acepta agregar a playlists.
-- Default de Sync Mirror ya apunta a `anothertwo` (constante `TARGET_PLAYLIST_NAME` en `src/js/features/sync.js:7`).
+- **Playlist espejo activa**: `anothertwo` (9.485 tracks). La vieja `another one` (11k) se borró vía script one-shot en la consola el 2026-07-03.
+- Default de Sync Mirror apunta a `anothertwo` (constante `TARGET_PLAYLIST_NAME` en `src/js/features/sync.js:7`).
+- **Last.fm integrado**. API key y username en localStorage del user, no en el repo. Ver `src/js/api/lastfm.js`.
 
 ## Sesión 2026-07-03 (contexto para el próximo Claude)
 
@@ -269,6 +302,13 @@ Consideraciones técnicas:
 
 ## Changelog reciente (últimos 5 cambios)
 
+- `v=25` (033d47e): Rabbit hole related tags fallback (computeRelatedTags agrega top tags de top 8 artistas). Recomendaciones filtra tracks individuales ya-en-likes con stat "Ya en tus likes (ocultos)".
+- `v=24` (6912ba8): Fase 3 completa — clasificación por género (by-genre.js con cache 30d en localStorage), recomendaciones basadas en scrobbles (recommendations.js), related tags en rabbit hole (roto por tag.getSimilar, luego reemplazado en v=25).
+- `v=23` (d2521cf): search minimal (solo nombre + géneros de Spotify sin imagen ni followers), scrollbar custom global.
+- `v=22` (1748570): Rabbit hole por género + polish UI de Similar (grid sin placeholder de imagen, checkbox pretty).
+- `v=21` (9f57762): Fase 3.1 — Artistas similares vía Last.fm. Nuevo módulo `src/js/api/lastfm.js`. API key en localStorage.
+- `v=20` (e56a2b1): Smart Playlists (por año/década/random N). Nueva sección "Crear" en sidebar.
+- `v=19` (6fcd271): fix filtro por owner real (usando getCurrentUserId), fix cap TEST_MODE en getAllPlaylistItems con forceAll.
 - `v=18` (0e62d53): Dedupe rediseñado (grid visual de playlists → seleccionar una → analizar) + nueva feature Álbumes repetidos. `slimPlaylist` guarda ahora `image` (URL de la cover chica). `renderPlaylistGrid`/`bindPlaylistGrid` en `ui/components.js` como componente compartido. Nueva `removePlaylistItemsAtPositions` en api.js (usa `positions` en el DELETE para preservar la primera aparición en Dedupe). Nueva ruta `#dupalbums` en app.js.
 - `v=17` (adb81c0): default target "another one" → "anothertwo" (la vieja se borró vía script one-shot en consola)
 - `v=16` (ae1297e): rebuild feature en Sync Mirror — usa `target.tracks.total` real para el precheck (fix bug del `v=15` donde la muestra de 200 hacía que el warning nunca dispare). Cuando target ≥10k → UI con "borrar y rehacer" o "crear another one N+1". Cuando no existe → ofrece crearla. Rebuild bypasea TEST_MODE (`getAllLikedTracks({ forceAll: true })`) para llenar con los 9500 reales. Agrega `unfollowPlaylist(id)` en api.js.
