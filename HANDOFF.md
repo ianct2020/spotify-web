@@ -151,41 +151,77 @@ Reglas del patrón:
 
 ## Próximos pasos (en orden, por confirmar con user)
 
-**Testing pendiente (arranca por acá cuando vuelva):**
-1. **Dedupe** con la nueva UI — probar en una playlist chica primero. Grid con cover → click una → debería mostrar duplicados con "Nx" y posiciones → botón "Quitar N copias extra". Chequeá que la primera aparición **queda** y las otras se van (no todas).
-2. **Álbumes repetidos** — probar en `listened albums`. Marcá 1 track por álbum (checkbox tipo Versiones — al marcar otro del mismo álbum se desmarca el primero) → "Quitar sobrantes".
-
-**Features aún no implementadas** (el user las dejó agendadas):
-
-3. **Smart playlists** — el user dijo "seguimos con smart playlist" antes de cortar la sesión. Ideas:
-   - "Likes de {año}" basado en `added_at` de `/me/tracks`
-   - "Década X" basado en `release_date` del álbum
-   - "Random N tracks" (elegir un tamaño y crear playlist con selección aleatoria de likes)
-   - UI: form → selector de criterio → preview → botón "Crear playlist"
-   - Endpoints ya disponibles: `createPlaylist`, `addTracksToPlaylist`, `getAllLikedTracks({forceAll:true})`
-
-4. **Backup/Export + Import** JSON — descarga estado completo (likes con added_at, playlists con nombre/descripción/tracks). Import: subís JSON, la app recrea. Ojo: `added_at` de likes **no** se puede setear al restaurar (API no lo permite); en el import se pierde la fecha original.
-
-5. **Dashboard prettify** (cosmético — el user dijo que los datos ya están bien; bajo prioridad).
+**Testing pendiente cuando el user vuelva:**
+1. **Dedupe** con la nueva UI — no se pudo testear en la sesión 2026-07-04 porque Spotify UI no deja duplicar tracks. El código es idéntico al de Álbumes repetidos (que sí funcionó), así que confianza alta pero sin verificar. Si querés testear, hay que inyectar duplicados vía API en consola.
 
 **Cierre de Fase 1:**
+2. **Flipear `TEST_MODE = false`** en `src/js/api.js:13`, bump cache, build, push. El user prefirió posponerlo para no gastar usage de Spotify en la sesión 2026-07-04.
 
-6. Cuando 1-5 estén listos, **flipear `TEST_MODE = false`** en `src/js/api.js:13`, bump cache, build, push.
+**Feature bloqueada — Auto-clasificación por género:**
 
-7. Fase 2 restante (elegir con el user):
-   - Bulk add / Mover likes a playlist
-   - Álbumes para completar (playlist con >1 track de un álbum → mostrar tracks faltantes)
-   - Solapamiento entre playlists
-   - Keywords sospechosas / tracks <1s / artistas con 1 sola canción
+- El user lo pidió porque clasificar manualmente es su mayor pérdida de tiempo.
+- Los géneros están en el objeto **artista** (`artist.genres: [...]`), no en el track.
+- **PROBLEMA**: `GET /artists?ids=...` (Get Several Artists) está deprecated (403) post-migración feb 2026 según CLAUDE.md.
+- `GET /artists/{id}` individual **no se testeó** — habría que probar en el debug panel primero. Si vive, 2000 artistas únicos = 2000 requests (con cache persistente por 30 días es tolerable la primera vez).
+- Si no vive, la feature muere sin alternativa dentro de la API de Spotify. Habría que esperar a la Fase 2 con Last.fm.
 
-## Ideas Fase 2 (las que el user marcó interés)
+**Fase 2 restante (features menores, elegir con el user):**
 
-(Pendiente que confirme cuáles, las propuestas que se le mostraron son:)
+- Bulk add / Mover likes a playlist
+- Álbumes para completar (playlist con >1 track de un álbum → mostrar tracks faltantes)
+- Solapamiento entre playlists
+- Keywords sospechosas / tracks <1s / artistas con 1 sola canción
 
-- 🎯 **Acciones masivas**: Bulk add to playlist, Mover likes a playlist y quitar de likes, Backup/Export JSON+CSV
-- 🔍 **Descubrimiento**: Álbumes para completar, Solapamiento entre playlists, Stats por artista
-- 🎨 **Smart playlists**: Por año (basado en added_at), Random N tracks, Por década (release_date)
-- 🧹 **Limpieza extra**: Tracks con keywords sospechosas (demo, instrumental, intro), Tracks de <1s, Artistas con 1 sola canción
+**Salteadas explícitamente por el user:**
+
+- ~~Backup/Export JSON+Import~~ — el user prefiere el workaround de crear una segunda cuenta de Spotify y usar Sync Mirror hacia una playlist compartida como backup. No gasta usage armar la feature.
+- ~~Dashboard prettify~~ — el user dijo que los datos ya están bien.
+- ~~Filtro por idioma en Smart Playlists~~ — no hay endpoint. ISRC country es lo más cerca pero ruidoso; el user decidió no hacerlo.
+
+---
+
+## Fase 3 — Descubrimiento con Last.fm (futuro)
+
+El user quiere esta fase después de cerrar Fase 1 + 2. Se hace con Last.fm porque los endpoints de descubrimiento de Spotify (Related Artists, Recommendations, Featured Playlists) están todos deprecados post-feb 2026.
+
+- ⬜ Obtener API key de Last.fm (gratis, sin verificación)
+- ⬜ **Artistas similares** — reemplaza el Related Artists deprecado de Spotify. Endpoint: `artist.getSimilar`.
+- ⬜ **Rabbit hole por género** — dado un género, navegar artistas y tracks encadenados. Endpoint: `tag.getTopArtists` + `artist.getTopTracks`.
+- ⬜ **New releases de tus Followed Artists** — Spotify sí deja listar followed artists (`GET /me/following`) pero no sus releases nuevos. Last.fm no tiene calendario de releases; habría que combinar con MusicBrainz o el propio Spotify (`GET /artists/{id}/albums` si sigue vivo — hay que verificar).
+- ⬜ **Recomendaciones basadas en scrobbles** — requiere que el user tenga cuenta de Last.fm scrobbleando desde Spotify. Endpoint: `user.getTopArtists` / `user.getTopTracks` + cruzar con similares.
+
+Consideraciones técnicas:
+- Last.fm API es REST + JSON, key en query param (sin OAuth por el read-only side).
+- No hay CORS restrictions salvo browsers viejos.
+- Rate limit: 5 req/s por API key, generoso.
+- Cache local agresivo — artistas similares no cambian a menudo.
+
+---
+
+## Sesión 2026-07-04 (contexto para el próximo Claude)
+
+**Hecho:**
+- ✅ Fix filtro de Dedupe y Álbumes repetidos: ahora usa `owner.id === currentUserId` (antes solo excluía "spotify"), agregado `getCurrentUserId()` cacheado en `api.js`.
+- ✅ Fix cap TEST_MODE en `getAllPlaylistItems`: agregado `{ forceAll }` param, usado desde Dedupe y Álbumes repetidos para cargar la playlist completa (antes se quedaba en 200).
+- ✅ **Álbumes repetidos** testeado en producción — el user detectó 14 duplicados en "listened albums", los borró, re-analizó → limpio.
+- ✅ **Smart Playlists** implementado y desplegado (feature nueva, sidebar sección "Crear"):
+  - Por año: agrupa por `getYear(track.album.release_date)`
+  - Por década: `Math.floor(year / 10) * 10`
+  - Random N: shuffle Fisher-Yates + input con presets
+  - Nombre único auto (` (2)`, ` (3)`) si ya existe
+  - Confirmación typeConfirm antes de crear
+- ✅ Testing: el user creó "Likes 80s" (51 tracks) y una random de 2000. Ambas funcionaron.
+
+**No hecho:**
+- ❌ Genre-by-artist (bloqueado por Get Several Artists deprecated, ver arriba).
+- ❌ Flip TEST_MODE (pospuesto por el user para no gastar usage).
+- ❌ Testear Dedupe con datos reales (bloqueado por Spotify UI que no deja duplicar).
+
+**Estado actual:**
+- Último commit: `e56a2b1` (feat: smart playlists).
+- Cache bust: `?v=20`.
+- TEST_MODE: `true`.
+- Playlist espejo activa: `anothertwo` (9485 tracks).
 
 ---
 
