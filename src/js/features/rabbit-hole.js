@@ -1,5 +1,5 @@
 import { spotifyFetch, createPlaylist, addTracksToPlaylist, invalidatePlaylistsCache } from '../api.js';
-import { hasKey, setKey, getTopArtistsByTag, getArtistTopTracks } from '../api/lastfm.js';
+import { hasKey, setKey, getTopArtistsByTag, getArtistTopTracks, getSimilarTags } from '../api/lastfm.js';
 import { showProgress, hideProgress, typeConfirmModal, escapeHtml } from '../ui/components.js';
 import { showToast } from '../ui/toast.js';
 
@@ -94,13 +94,20 @@ function renderTagInput() {
   input.focus();
 }
 
+let relatedTags = [];
+
 async function loadTag(tag) {
   currentTag = tag;
   const panel = document.getElementById('rabbit-panel');
   panel.innerHTML = `<div class="empty-state"><div class="spinner spinner-lg"></div><div style="margin-top:16px">Buscando top artistas de "${escapeHtml(tag)}"...</div></div>`;
 
   try {
-    artistList = await getTopArtistsByTag(tag, 50);
+    const [artists, related] = await Promise.all([
+      getTopArtistsByTag(tag, 50),
+      getSimilarTags(tag).catch(() => []),
+    ]);
+    artistList = artists;
+    relatedTags = related.slice(0, 10);
     if (artistList.length === 0) {
       panel.innerHTML = `<div class="card"><p>Last.fm no tiene artistas para el tag "${escapeHtml(tag)}". Probá con otro nombre.</p></div>`;
       return;
@@ -117,6 +124,16 @@ function renderArtistGrid() {
     <div style="margin-bottom:8px;color:var(--color-text-secondary);font-size:14px">
       Top ${artistList.length} artistas del género <strong>${escapeHtml(currentTag)}</strong>. Elegí uno para ver sus top tracks.
     </div>
+    ${relatedTags.length > 0 ? `
+      <div style="margin-bottom:16px">
+        <div style="font-size:12px;color:var(--color-text-secondary);margin-bottom:6px">Géneros parecidos:</div>
+        <div style="display:flex;flex-wrap:wrap;gap:6px">
+          ${relatedTags.map(t => `
+            <button class="btn btn-secondary btn-sm rabbit-related-chip" data-tag="${escapeHtml(t.name)}" style="font-size:12px;padding:4px 10px">${escapeHtml(t.name)}</button>
+          `).join('')}
+        </div>
+      </div>
+    ` : ''}
     <div class="smart-grid smart-grid-compact">
       ${artistList.map((a, i) => `
         <button class="smart-card rabbit-artist-card" data-idx="${i}">
@@ -128,6 +145,13 @@ function renderArtistGrid() {
   `;
   panel.querySelectorAll('.rabbit-artist-card').forEach(el => {
     el.onclick = () => pickArtist(artistList[parseInt(el.dataset.idx)]);
+  });
+  panel.querySelectorAll('.rabbit-related-chip').forEach(el => {
+    el.onclick = () => {
+      const input = document.getElementById('rabbit-tag-input');
+      if (input) input.value = el.dataset.tag;
+      loadTag(el.dataset.tag);
+    };
   });
 }
 

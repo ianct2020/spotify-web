@@ -1,4 +1,5 @@
 const LASTFM_KEY_STORAGE = 'lastfm_api_key';
+const LASTFM_USER_STORAGE = 'lastfm_username';
 const BASE = 'https://ws.audioscrobbler.com/2.0/';
 
 function getKey() {
@@ -15,6 +16,18 @@ function clearKey() {
 
 function hasKey() {
   return !!getKey();
+}
+
+function getUsername() {
+  return localStorage.getItem(LASTFM_USER_STORAGE);
+}
+
+function setUsername(u) {
+  localStorage.setItem(LASTFM_USER_STORAGE, u.trim());
+}
+
+function hasUsername() {
+  return !!getUsername();
 }
 
 async function lastfmFetch(method, params = {}) {
@@ -67,13 +80,79 @@ async function getTopArtistsByTag(tag, limit = 50) {
   }));
 }
 
+async function getArtistTopTags(artistName) {
+  const data = await lastfmFetch('artist.gettoptags', { artist: artistName, autocorrect: 1 });
+  const list = data.toptags?.tag || [];
+  return list
+    .map(t => ({ name: (t.name || '').toLowerCase(), count: parseInt(t.count) || 0 }))
+    .filter(t => t.name && t.count >= 5);
+}
+
+async function getSimilarTags(tag) {
+  const data = await lastfmFetch('tag.getsimilar', { tag });
+  const list = data.similartags?.tag || [];
+  return list.map(t => ({ name: t.name, url: t.url }));
+}
+
+async function getUserTopArtists(username, period = '6month', limit = 30) {
+  const data = await lastfmFetch('user.gettopartists', { user: username, period, limit });
+  const list = data.topartists?.artist || [];
+  return list.map(a => ({
+    name: a.name,
+    playcount: parseInt(a.playcount) || 0,
+    rank: parseInt(a['@attr']?.rank) || 0,
+  }));
+}
+
+const TAGS_CACHE_KEY = 'lastfm_artist_tags_cache';
+const TAGS_CACHE_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+
+function loadTagsCache() {
+  try {
+    return JSON.parse(localStorage.getItem(TAGS_CACHE_KEY) || '{}');
+  } catch {
+    return {};
+  }
+}
+
+function saveTagsCache(cache) {
+  try {
+    localStorage.setItem(TAGS_CACHE_KEY, JSON.stringify(cache));
+  } catch (e) {
+    console.warn('No se pudo guardar cache de tags:', e.message);
+  }
+}
+
+function getCachedTags(artistName) {
+  const cache = loadTagsCache();
+  const key = artistName.toLowerCase();
+  const entry = cache[key];
+  if (!entry) return null;
+  if (Date.now() - entry.at > TAGS_CACHE_TTL_MS) return null;
+  return entry.tags;
+}
+
+function setCachedTags(artistName, tags) {
+  const cache = loadTagsCache();
+  cache[artistName.toLowerCase()] = { tags, at: Date.now() };
+  saveTagsCache(cache);
+}
+
 export {
   getKey,
   setKey,
   clearKey,
   hasKey,
+  getUsername,
+  setUsername,
+  hasUsername,
   lastfmFetch,
   getSimilarArtists,
   getArtistTopTracks,
   getTopArtistsByTag,
+  getArtistTopTags,
+  getSimilarTags,
+  getUserTopArtists,
+  getCachedTags,
+  setCachedTags,
 };

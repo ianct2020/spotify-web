@@ -14,6 +14,8 @@ import { render as renderDashboard } from './features/dashboard.js';
 import { render as renderSmart } from './features/smart.js';
 import { render as renderSimilar } from './features/similar-artists.js';
 import { render as renderRabbit } from './features/rabbit-hole.js';
+import { render as renderByGenre } from './features/by-genre.js';
+import { render as renderRecs } from './features/recommendations.js';
 
 async function testConnection() {
   const token = await getValidToken();
@@ -210,6 +212,12 @@ function showApp(profile) {
           <a class="nav-link" data-route="rabbit" href="#rabbit">
             <span class="nav-link-icon">&#8734;</span> Rabbit hole
           </a>
+          <a class="nav-link" data-route="recs" href="#recs">
+            <span class="nav-link-icon">&#9835;</span> Recomendaciones
+          </a>
+          <a class="nav-link" data-route="genre" href="#genre">
+            <span class="nav-link-icon">&#9833;</span> Por género
+          </a>
         </div>
         <div class="sidebar-section">
           <div class="sidebar-section-title">Limpieza</div>
@@ -274,6 +282,8 @@ function showApp(profile) {
   registerRoute('smart', renderSmart);
   registerRoute('similar', renderSimilar);
   registerRoute('rabbit', renderRabbit);
+  registerRoute('recs', renderRecs);
+  registerRoute('genre', renderByGenre);
   registerRoute('sync', renderSync);
   registerRoute('dedupe', renderDedupe);
   registerRoute('dupalbums', renderDupalbums);
