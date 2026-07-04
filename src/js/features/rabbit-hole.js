@@ -1,5 +1,5 @@
 import { spotifyFetch, createPlaylist, addTracksToPlaylist, invalidatePlaylistsCache } from '../api.js';
-import { hasKey, setKey, getTopArtistsByTag, getArtistTopTracks, getSimilarTags } from '../api/lastfm.js';
+import { hasKey, setKey, getTopArtistsByTag, getArtistTopTracks, getArtistTopTags } from '../api/lastfm.js';
 import { showProgress, hideProgress, typeConfirmModal, escapeHtml } from '../ui/components.js';
 import { showToast } from '../ui/toast.js';
 
@@ -96,23 +96,73 @@ function renderTagInput() {
 
 let relatedTags = [];
 
+const RABBIT_NOISE_TAGS = new Set([
+  'seen live', 'favorites', 'favorite', 'favourite', 'favourites',
+  'awesome', 'love', 'love it', 'best', 'good', 'amazing',
+  'usa', 'american', 'british', 'uk', 'canadian', 'australian',
+  'male vocalists', 'female vocalists', 'male vocalist', 'female vocalist',
+  'my music', 'my favourite', 'mymusic', 'my favorites', 'spotify',
+]);
+
+function tagSleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+async function computeRelatedTags(currentTagName, artists) {
+  const currentLower = currentTagName.toLowerCase();
+  const tagCounts = new Map();
+  const sample = artists.slice(0, 8);
+  for (const a of sample) {
+    try {
+      const tags = await getArtistTopTags(a.name);
+      tags.slice(0, 5).forEach(t => {
+        const key = t.name.toLowerCase();
+        if (key === currentLower) return;
+        if (RABBIT_NOISE_TAGS.has(key)) return;
+        tagCounts.set(key, (tagCounts.get(key) || 0) + 1);
+      });
+    } catch {}
+    await tagSleep(200);
+  }
+  return [...tagCounts.entries()]
+    .filter(([, c]) => c >= 2)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 10)
+    .map(([name]) => ({ name }));
+}
+
 async function loadTag(tag) {
   currentTag = tag;
+  relatedTags = [];
   const panel = document.getElementById('rabbit-panel');
   panel.innerHTML = `<div class="empty-state"><div class="spinner spinner-lg"></div><div style="margin-top:16px">Buscando top artistas de "${escapeHtml(tag)}"...</div></div>`;
 
   try {
-    const [artists, related] = await Promise.all([
-      getTopArtistsByTag(tag, 50),
-      getSimilarTags(tag).catch(() => []),
-    ]);
-    artistList = artists;
-    relatedTags = related.slice(0, 10);
+    artistList = await getTopArtistsByTag(tag, 50);
     if (artistList.length === 0) {
       panel.innerHTML = `<div class="card"><p>Last.fm no tiene artistas para el tag "${escapeHtml(tag)}". Probá con otro nombre.</p></div>`;
       return;
     }
     renderArtistGrid();
+    computeRelatedTags(tag, artistList).then(rt => {
+      relatedTags = rt;
+      const holder = document.getElementById('rabbit-related-holder');
+      if (holder && rt.length > 0) {
+        holder.innerHTML = `
+          <div style="font-size:12px;color:var(--color-text-secondary);margin-bottom:6px">Géneros parecidos:</div>
+          <div style="display:flex;flex-wrap:wrap;gap:6px">
+            ${rt.map(t => `
+              <button class="btn btn-secondary btn-sm rabbit-related-chip" data-tag="${escapeHtml(t.name)}" style="font-size:12px;padding:4px 10px">${escapeHtml(t.name)}</button>
+            `).join('')}
+          </div>
+        `;
+        holder.querySelectorAll('.rabbit-related-chip').forEach(el => {
+          el.onclick = () => {
+            const input = document.getElementById('rabbit-tag-input');
+            if (input) input.value = el.dataset.tag;
+            loadTag(el.dataset.tag);
+          };
+        });
+      }
+    });
   } catch (e) {
     panel.innerHTML = `<div class="card"><p style="color:var(--color-error)">${escapeHtml(e.message)}</p></div>`;
   }
@@ -124,16 +174,16 @@ function renderArtistGrid() {
     <div style="margin-bottom:8px;color:var(--color-text-secondary);font-size:14px">
       Top ${artistList.length} artistas del género <strong>${escapeHtml(currentTag)}</strong>. Elegí uno para ver sus top tracks.
     </div>
-    ${relatedTags.length > 0 ? `
-      <div style="margin-bottom:16px">
+    <div id="rabbit-related-holder" style="margin-bottom:16px">
+      ${relatedTags.length > 0 ? `
         <div style="font-size:12px;color:var(--color-text-secondary);margin-bottom:6px">Géneros parecidos:</div>
         <div style="display:flex;flex-wrap:wrap;gap:6px">
           ${relatedTags.map(t => `
             <button class="btn btn-secondary btn-sm rabbit-related-chip" data-tag="${escapeHtml(t.name)}" style="font-size:12px;padding:4px 10px">${escapeHtml(t.name)}</button>
           `).join('')}
         </div>
-      </div>
-    ` : ''}
+      ` : ''}
+    </div>
     <div class="smart-grid smart-grid-compact">
       ${artistList.map((a, i) => `
         <button class="smart-card rabbit-artist-card" data-idx="${i}">
