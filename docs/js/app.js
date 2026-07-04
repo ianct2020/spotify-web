@@ -12,6 +12,7 @@ import { render as renderZombies } from './features/zombies.js';
 import { render as renderVersions } from './features/versions.js';
 import { render as renderDashboard } from './features/dashboard.js';
 import { render as renderSmart } from './features/smart.js';
+import { render as renderSimilar } from './features/similar-artists.js';
 
 async function testConnection() {
   const token = await getValidToken();
@@ -201,6 +202,12 @@ function showApp(profile) {
           </a>
         </div>
         <div class="sidebar-section">
+          <div class="sidebar-section-title">Descubrir</div>
+          <a class="nav-link" data-route="similar" href="#similar">
+            <span class="nav-link-icon">&#9737;</span> Artistas similares
+          </a>
+        </div>
+        <div class="sidebar-section">
           <div class="sidebar-section-title">Limpieza</div>
           <a class="nav-link" data-route="sync" href="#sync">
             <span class="nav-link-icon">&#8644;</span> Sync Mirror
@@ -261,6 +268,7 @@ function showApp(profile) {
   registerRoute('dashboard', renderDashboard);
   registerRoute('debug', renderDebug);
   registerRoute('smart', renderSmart);
+  registerRoute('similar', renderSimilar);
   registerRoute('sync', renderSync);
   registerRoute('dedupe', renderDedupe);
   registerRoute('dupalbums', renderDupalbums);
