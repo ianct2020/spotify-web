@@ -89,12 +89,12 @@ async function searchSpotifyArtist(query) {
     results.innerHTML = `
       <div style="border-top:1px solid var(--color-border);margin-top:8px;padding-top:8px">
         ${artists.map(a => {
-          const img = a.images?.[a.images.length - 1]?.url;
+          const genres = (a.genres || []).slice(0, 3).join(' · ');
           return `
             <div class="similar-search-item" data-name="${escapeHtml(a.name)}" data-id="${a.id}"
-                 style="display:flex;align-items:center;gap:10px;padding:8px;border-radius:var(--radius-sm);cursor:pointer">
-              ${img ? `<img src="${img}" style="width:32px;height:32px;border-radius:50%;object-fit:cover">` : ''}
-              <div style="flex:1;min-width:0;font-weight:500">${escapeHtml(a.name)}</div>
+                 style="padding:10px 12px;border-radius:var(--radius-sm);cursor:pointer">
+              <div style="font-weight:500">${escapeHtml(a.name)}</div>
+              ${genres ? `<div style="font-size:12px;color:var(--color-text-muted);margin-top:2px">${escapeHtml(genres)}</div>` : ''}
             </div>
           `;
         }).join('')}
