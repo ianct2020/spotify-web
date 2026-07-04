@@ -11,6 +11,7 @@ import { render as renderDupalbums } from './features/duplicate-albums.js';
 import { render as renderZombies } from './features/zombies.js';
 import { render as renderVersions } from './features/versions.js';
 import { render as renderDashboard } from './features/dashboard.js';
+import { render as renderSmart } from './features/smart.js';
 
 async function testConnection() {
   const token = await getValidToken();
@@ -194,6 +195,12 @@ function showApp(profile) {
           </a>
         </div>
         <div class="sidebar-section">
+          <div class="sidebar-section-title">Crear</div>
+          <a class="nav-link" data-route="smart" href="#smart">
+            <span class="nav-link-icon">&#10022;</span> Smart Playlists
+          </a>
+        </div>
+        <div class="sidebar-section">
           <div class="sidebar-section-title">Limpieza</div>
           <a class="nav-link" data-route="sync" href="#sync">
             <span class="nav-link-icon">&#8644;</span> Sync Mirror
@@ -253,6 +260,7 @@ function showApp(profile) {
   registerRoute('home', renderHome);
   registerRoute('dashboard', renderDashboard);
   registerRoute('debug', renderDebug);
+  registerRoute('smart', renderSmart);
   registerRoute('sync', renderSync);
   registerRoute('dedupe', renderDedupe);
   registerRoute('dupalbums', renderDupalbums);
