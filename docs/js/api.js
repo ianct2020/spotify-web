@@ -8,14 +8,6 @@ const LIKES_CACHE_KEY = 'all_liked_tracks';
 const PLAYLISTS_CACHE_KEY = 'all_user_playlists';
 const CACHE_TTL_MIN = 60;
 
-// MODO PRUEBA: cuando true, limita las cargas a un 25% para iterar más rápido
-// y no fundir el rate limit. Cuando todo ande, poner false.
-const TEST_MODE = false;
-const TEST_MAX_LIKES = 2500;
-const TEST_MAX_PLAYLIST_ITEMS = 200;
-
-export const isTestMode = () => TEST_MODE;
-
 async function spotifyFetch(endpoint, options = {}) {
   const url = endpoint.startsWith('http') ? endpoint : `${BASE}${endpoint}`;
   const method = (options.method || 'GET').toUpperCase();
@@ -192,11 +184,8 @@ function slimPlaylist(p) {
   };
 }
 
-async function getAllLikedTracks(onProgress, { force = false, randomize = TEST_MODE, forceAll = false } = {}) {
-  const useTestCap = TEST_MODE && !forceAll;
-  const cacheKey = forceAll
-    ? LIKES_CACHE_KEY + '_all'
-    : (randomize ? LIKES_CACHE_KEY : LIKES_CACHE_KEY + '_newest');
+async function getAllLikedTracks(onProgress, { force = false } = {}) {
+  const cacheKey = LIKES_CACHE_KEY;
 
   if (!force) {
     const cached = cacheGet(cacheKey);
@@ -204,24 +193,8 @@ async function getAllLikedTracks(onProgress, { force = false, randomize = TEST_M
       if (onProgress) onProgress({ loaded: cached.length, total: cached.length, page: 1, cached: true });
       return cached;
     }
-  }
-  if (force) cacheClear(cacheKey + '_partial');
-
-  let startOffset = 0;
-  if (useTestCap && randomize) {
-    try {
-      const head = await spotifyFetch('/me/tracks?limit=1');
-      const total = head.total || 0;
-      const maxStart = Math.max(0, total - TEST_MAX_LIKES);
-      startOffset = Math.floor(Math.random() * (maxStart + 1));
-      console.log(`MODO PRUEBA: cargando ${TEST_MAX_LIKES} likes desde offset ${startOffset}/${total}`);
-    } catch (e) {
-      console.warn('No se pudo obtener total para offset random, usando 0', e);
-    }
-  } else if (useTestCap && !randomize) {
-    console.log(`MODO PRUEBA: cargando las ${TEST_MAX_LIKES} más recientes (offset 0)`);
-  } else if (forceAll) {
-    console.log('forceAll: cargando TODOS los likes (bypass TEST_MODE)');
+  } else {
+    cacheClear(cacheKey + '_partial');
   }
 
   const items = await paginateAll('/me/tracks', {
@@ -229,8 +202,6 @@ async function getAllLikedTracks(onProgress, { force = false, randomize = TEST_M
     onProgress,
     partialCacheKey: cacheKey,
     transform: item => ({ added_at: item.added_at, track: slimTrack(item.track) }),
-    maxItems: useTestCap ? TEST_MAX_LIKES : undefined,
-    startOffset,
   });
   cacheSet(cacheKey, items, CACHE_TTL_MIN);
   return items;
@@ -263,11 +234,10 @@ function invalidatePlaylistsCache() {
   cacheClear(PLAYLISTS_CACHE_KEY);
 }
 
-async function getAllPlaylistItems(playlistId, onProgress, { forceAll = false } = {}) {
+async function getAllPlaylistItems(playlistId, onProgress) {
   return paginateAll(`/playlists/${playlistId}/items`, {
     limit: 100,
     onProgress,
-    maxItems: (TEST_MODE && !forceAll) ? TEST_MAX_PLAYLIST_ITEMS : undefined,
   });
 }
 

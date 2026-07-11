@@ -1,5 +1,5 @@
 import { isLoggedIn, loginWithSpotify, logout } from './auth.js';
-import { getUserProfile, spotifyFetch, isTestMode } from './api.js';
+import { getUserProfile, spotifyFetch } from './api.js';
 import { getValidToken } from './auth.js';
 import { cacheClearAll } from './storage.js';
 import { registerRoute, initRouter, navigate } from './router.js';
@@ -186,11 +186,6 @@ function showApp(profile) {
         <img class="sidebar-logo" src="assets/favicon.svg" alt="">
         <span class="sidebar-title">spotify-tools</span>
       </div>
-      ${isTestMode() ? `
-        <div style="background:#FF6B2C;color:white;padding:8px 16px;font-size:11px;font-weight:700;text-align:center;letter-spacing:0.5px">
-          MODO PRUEBA — 25% de datos
-        </div>
-      ` : ''}
       <nav class="sidebar-nav">
         <div class="sidebar-section">
           <div class="sidebar-section-title">General</div>
