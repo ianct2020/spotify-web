@@ -10,7 +10,7 @@ const CACHE_TTL_MIN = 60;
 
 // MODO PRUEBA: cuando true, limita las cargas a un 25% para iterar más rápido
 // y no fundir el rate limit. Cuando todo ande, poner false.
-const TEST_MODE = true;
+const TEST_MODE = false;
 const TEST_MAX_LIKES = 2500;
 const TEST_MAX_PLAYLIST_ITEMS = 200;
 
