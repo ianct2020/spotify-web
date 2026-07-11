@@ -63,7 +63,7 @@ async function analyzePlaylist(playlistId) {
   try {
     const items = await getAllPlaylistItems(playlistId, ({ loaded, total }) => {
       showProgress(`Cargando tracks...`, loaded, total);
-    }, { forceAll: true });
+    });
     hideProgress();
 
     const groups = new Map();

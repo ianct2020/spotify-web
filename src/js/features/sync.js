@@ -1,4 +1,4 @@
-import { getAllLikedTracks, getAllPlaylistItems, getAllUserPlaylists, addTracksToPlaylist, removeTracksFromPlaylist, createPlaylist, unfollowPlaylist, isTestMode } from '../api.js';
+import { getAllLikedTracks, getAllPlaylistItems, getAllUserPlaylists, addTracksToPlaylist, removeTracksFromPlaylist, createPlaylist, unfollowPlaylist } from '../api.js';
 import { cacheGet, cacheSet } from '../storage.js';
 import { showProgress, hideProgress, typeConfirmModal, renderTrackRow, escapeHtml } from '../ui/components.js';
 import { showToast } from '../ui/toast.js';
@@ -97,16 +97,14 @@ async function analyze() {
       if (t) playlistMap.set(t.uri, t);
     });
 
-    const testMode = isTestMode();
     const newSize = playlistItems.length - toRemove.length + toAdd.length;
     const exceedsLimit = newSize > SPOTIFY_PLAYLIST_MAX;
-    const testWarnRemove = testMode && toRemove.length > 100;
 
     results.innerHTML = `
       <div class="results-summary">
         <div class="stat-card">
           <div class="stat-value">${likes.length.toLocaleString()}</div>
-          <div class="stat-label">Liked Songs${testMode ? ' (muestra)' : ''}</div>
+          <div class="stat-label">Liked Songs</div>
         </div>
         <div class="stat-card">
           <div class="stat-value">${playlistItems.length.toLocaleString()}</div>
@@ -122,29 +120,13 @@ async function analyze() {
         </div>
       </div>
 
-      ${testWarnRemove ? `
-        <div class="card" style="margin-bottom:16px;border-color:var(--color-warning);background:rgba(245,158,11,0.06)">
-          <div style="display:flex;align-items:flex-start;gap:10px">
-            <span class="badge badge-warning">MODO PRUEBA</span>
-            <div>
-              <strong>Ojo con "Quitar":</strong> en modo prueba solo se cargaron ${likes.length.toLocaleString()} likes (muestra), no los ~9.500 reales.
-              Los ${toRemove.length.toLocaleString()} tracks marcados para quitar probablemente son <em>válidos</em> (están en tus likes reales pero no en la muestra).
-              <br><br>
-              Usá <strong>"Solo agregar"</strong> para probar sin borrar nada.
-            </div>
-          </div>
-        </div>
-      ` : ''}
-
       ${exceedsLimit ? `
         <div class="card" style="margin-bottom:16px;border-color:var(--color-error);background:rgba(239,68,68,0.06)">
           <div style="display:flex;align-items:flex-start;gap:10px">
             <span class="badge badge-error">LÍMITE 10K</span>
             <div>
               La playlist quedaría con <strong>${newSize.toLocaleString()}</strong> tracks, pero Spotify limita a <strong>${SPOTIFY_PLAYLIST_MAX.toLocaleString()}</strong> por playlist.
-              ${testMode
-                ? 'En modo prueba no se puede resolver esto con seguridad. Desactivá TEST_MODE y volvé a probar.'
-                : 'Podés <strong>vaciar la playlist primero</strong> y llenarla desde cero con tus likes.'}
+              Podés <strong>vaciar la playlist primero</strong> y llenarla desde cero con tus likes.
             </div>
           </div>
         </div>
@@ -171,9 +153,9 @@ async function analyze() {
       ` : ''}
 
       <div style="display:flex;gap:10px;flex-wrap:wrap">
-        <button class="btn btn-primary btn-lg" id="sync-execute-btn" ${exceedsLimit && testMode ? 'disabled' : ''}>Sincronizar</button>
+        <button class="btn btn-primary btn-lg" id="sync-execute-btn">Sincronizar</button>
         ${toAdd.length > 0 ? `<button class="btn btn-secondary btn-lg" id="sync-add-only-btn">Solo agregar (sin quitar)</button>` : ''}
-        ${exceedsLimit && !testMode ? `<button class="btn btn-danger btn-lg" id="sync-wipe-btn">Vaciar y llenar</button>` : ''}
+        ${exceedsLimit ? `<button class="btn btn-danger btn-lg" id="sync-wipe-btn">Vaciar y llenar</button>` : ''}
       </div>
     `;
 
@@ -327,7 +309,7 @@ function renderFullPlaylistUI(target, playlists) {
     <div class="card" style="margin-bottom:12px">
       <h3 style="margin-bottom:8px">Opción A — Rehacer desde cero (recomendada)</h3>
       <p style="color:var(--color-text-secondary);margin-bottom:12px">
-        Borra <strong>"${escapeHtml(target.name)}"</strong> (${target.tracks.total.toLocaleString()} tracks), crea una vacía con el mismo nombre, y la llena con <strong>todos tus likes reales</strong> (bypasea MODO PRUEBA).
+        Borra <strong>"${escapeHtml(target.name)}"</strong> (${target.tracks.total.toLocaleString()} tracks), crea una vacía con el mismo nombre, y la llena con <strong>todos tus likes</strong>.
       </p>
       <button class="btn btn-danger" id="sync-rebuild-inplace-btn">Borrar y rehacer "${escapeHtml(target.name)}"</button>
     </div>
@@ -335,7 +317,7 @@ function renderFullPlaylistUI(target, playlists) {
     <div class="card">
       <h3 style="margin-bottom:8px">Opción B — Crear "${escapeHtml(nextName)}" (dejar la vieja)</h3>
       <p style="color:var(--color-text-secondary);margin-bottom:12px">
-        No toca "${escapeHtml(target.name)}", crea <strong>"${escapeHtml(nextName)}"</strong> vacía y la llena con todos tus likes reales.
+        No toca "${escapeHtml(target.name)}", crea <strong>"${escapeHtml(nextName)}"</strong> vacía y la llena con todos tus likes.
       </p>
       <button class="btn btn-primary" id="sync-create-next-btn">Crear "${escapeHtml(nextName)}"</button>
     </div>
@@ -347,10 +329,10 @@ function renderFullPlaylistUI(target, playlists) {
 }
 
 async function loadAllRealLikes() {
-  showProgress('Cargando TODOS los likes (bypass MODO PRUEBA)...', 0, 0);
+  showProgress('Cargando todos los likes...', 0, 0);
   const likes = await getAllLikedTracks(({ loaded, total }) => {
-    showProgress(`Cargando likes reales... ${loaded}/${total || '?'}`, loaded, total);
-  }, { forceAll: true, force: true });
+    showProgress(`Cargando likes... ${loaded}/${total || '?'}`, loaded, total);
+  }, { force: true });
   return likes.map(item => item.track?.uri).filter(Boolean);
 }
 
@@ -408,7 +390,7 @@ async function rebuildInPlace(target) {
 async function rebuildFreshPlaylist(name) {
   const confirmed = await typeConfirmModal(
     'Crear playlist nueva',
-    `Se va a crear la playlist "<strong>${escapeHtml(name)}</strong>" vacía y llenarla con todos tus likes reales (bypasea MODO PRUEBA, tarda unos minutos).`,
+    `Se va a crear la playlist "<strong>${escapeHtml(name)}</strong>" vacía y llenarla con todos tus likes (tarda unos minutos).`,
     'CREAR'
   );
   if (!confirmed) return;
