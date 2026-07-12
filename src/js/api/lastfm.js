@@ -138,6 +138,28 @@ function setCachedTags(artistName, tags) {
   saveTagsCache(cache);
 }
 
+function mergeCachedTags(artistName, incomingTags) {
+  const cache = loadTagsCache();
+  const key = artistName.toLowerCase();
+  const existing = cache[key]?.tags || [];
+  const byName = new Map();
+  existing.forEach(t => {
+    if (t?.name) byName.set(t.name.toLowerCase(), { ...t, name: t.name.toLowerCase() });
+  });
+  incomingTags.forEach(t => {
+    if (!t?.name) return;
+    const name = t.name.toLowerCase();
+    const cur = byName.get(name);
+    if (!cur) {
+      byName.set(name, { name, count: t.count ?? 100 });
+    } else if ((t.count ?? 0) > (cur.count ?? 0)) {
+      byName.set(name, { ...cur, count: t.count });
+    }
+  });
+  cache[key] = { tags: [...byName.values()], at: Date.now() };
+  saveTagsCache(cache);
+}
+
 function exportTagsCache() {
   const cache = loadTagsCache();
   return {
@@ -188,6 +210,7 @@ export {
   getUserTopArtists,
   getCachedTags,
   setCachedTags,
+  mergeCachedTags,
   exportTagsCache,
   importTagsCache,
 };
