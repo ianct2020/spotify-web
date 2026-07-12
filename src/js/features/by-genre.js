@@ -1,5 +1,6 @@
 import { getAllLikedTracks, createPlaylist, addTracksToPlaylist, invalidatePlaylistsCache } from '../api.js';
-import { hasKey, setKey, getArtistTopTags, getCachedTags, setCachedTags, exportTagsCache, importTagsCache } from '../api/lastfm.js';
+import { hasKey, setKey, getArtistTopTags, getCachedTags, setCachedTags, mergeCachedTags, exportTagsCache, importTagsCache } from '../api/lastfm.js';
+import * as statsfm from '../api/statsfm.js';
 import { showProgress, hideProgress, typeConfirmModal, escapeHtml } from '../ui/components.js';
 import { showToast } from '../ui/toast.js';
 
@@ -84,12 +85,13 @@ async function start() {
             <button class="btn btn-secondary" id="genre-show-btn">Ver géneros</button>
           </div>
         </div>
-        <div style="display:flex;gap:8px;margin-top:12px;padding-top:12px;border-top:1px solid var(--color-border);flex-wrap:wrap">
-          <button class="btn btn-secondary btn-sm" id="genre-export-btn" ${cachedCount === 0 ? 'disabled' : ''}>Exportar cache (JSON)</button>
+        <div style="display:flex;gap:8px;margin-top:12px;padding-top:12px;border-top:1px solid var(--color-border);flex-wrap:wrap;align-items:center">
+          <button class="btn btn-secondary btn-sm" id="genre-export-btn" ${cachedCount === 0 ? 'disabled' : ''}>Exportar cache</button>
           <button class="btn btn-secondary btn-sm" id="genre-import-btn">Importar cache</button>
           <input type="file" id="genre-import-input" accept=".json,application/json" style="display:none">
+          <button class="btn btn-secondary btn-sm" id="genre-statsfm-btn">${statsfm.hasUsername() ? 'Sync desde Stats.fm' : 'Conectar Stats.fm'}</button>
           <span style="font-size:11px;color:var(--color-text-secondary);align-self:center;margin-left:4px">
-            Bajá el cache cada tanto y evitá re-analizar desde Last.fm.
+            Exportá el cache cada tanto. Stats.fm agrega géneros de Spotify sin gastar Last.fm.
           </span>
         </div>
       </div>
@@ -105,6 +107,7 @@ async function start() {
     const importInput = document.getElementById('genre-import-input');
     document.getElementById('genre-import-btn').onclick = () => importInput.click();
     importInput.onchange = handleImport;
+    document.getElementById('genre-statsfm-btn').onclick = handleStatsfm;
 
     if (uncached.length === 0) showGenres();
   } catch (e) {
@@ -131,6 +134,85 @@ function handleExport() {
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
   showToast(`Exportados ${count} artistas`, 'success');
+}
+
+async function handleStatsfm() {
+  let username = statsfm.getUsername();
+  if (!username) {
+    username = await promptStatsfmUsername();
+    if (!username) return;
+  }
+
+  const progressEl = document.getElementById('genre-progress');
+  progressEl.innerHTML = `
+    <div class="card" style="margin-bottom:16px">
+      <div id="statsfm-progress-text" style="font-size:14px">Consultando Stats.fm (${escapeHtml(username)})...</div>
+    </div>
+  `;
+  const textEl = document.getElementById('statsfm-progress-text');
+
+  try {
+    const artists = await statsfm.getTopArtists(username, { range: 'lifetime', limit: 1000 });
+    if (artists.length === 0) {
+      textEl.innerHTML = '<span style="color:var(--color-warning)">Stats.fm no devolvió artistas. ¿El perfil es público?</span>';
+      return;
+    }
+
+    textEl.textContent = `Mergeando ${artists.length} artistas con el cache local...`;
+
+    let merged = 0;
+    let skipped = 0;
+    for (const a of artists) {
+      const tags = a.genres.map(g => ({ name: g, count: 100 }));
+      if (tags.length === 0) { skipped++; continue; }
+      mergeCachedTags(a.name, tags);
+      merged++;
+    }
+
+    textEl.innerHTML = `<strong>Sync listo</strong> — ${merged} artistas mergeados desde Stats.fm (${skipped} sin géneros). Recargando vista...`;
+    showToast(`Stats.fm: ${merged} artistas agregados/mergeados`, 'success');
+    setTimeout(() => start(), 800);
+  } catch (e) {
+    textEl.innerHTML = `<span style="color:var(--color-error)">Error: ${escapeHtml(e.message)}</span>`;
+    showToast('Stats.fm falló: ' + e.message, 'error');
+  }
+}
+
+function promptStatsfmUsername() {
+  return new Promise(resolve => {
+    const modal = document.createElement('div');
+    modal.className = 'modal-overlay';
+    modal.innerHTML = `
+      <div class="modal" style="max-width:480px">
+        <h3 style="margin-bottom:8px">Conectar Stats.fm</h3>
+        <p style="color:var(--color-text-secondary);font-size:13px;margin-bottom:12px">
+          Ingresá tu username de Stats.fm (el slug de tu URL de perfil, ej: <code>i.an.iam</code> si tu perfil es <code>stats.fm/i.an.iam</code>). No hace falta API key.
+        </p>
+        <input type="text" id="statsfm-user-input" placeholder="username"
+               style="width:100%;padding:10px;background:var(--color-elevated);border:1px solid var(--color-border);border-radius:var(--radius-sm);color:var(--color-text);font-family:monospace;font-size:14px;margin-bottom:12px">
+        <div style="display:flex;gap:8px;justify-content:flex-end">
+          <button class="btn btn-secondary" id="statsfm-cancel">Cancelar</button>
+          <button class="btn btn-primary" id="statsfm-save">Guardar</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(modal);
+    const input = modal.querySelector('#statsfm-user-input');
+    input.focus();
+
+    const close = val => {
+      document.body.removeChild(modal);
+      resolve(val);
+    };
+    modal.querySelector('#statsfm-cancel').onclick = () => close(null);
+    modal.querySelector('#statsfm-save').onclick = () => {
+      const v = input.value.trim();
+      if (v.length < 2) { showToast('Username inválido', 'error'); return; }
+      statsfm.setUsername(v);
+      close(v);
+    };
+    input.onkeydown = e => { if (e.key === 'Enter') modal.querySelector('#statsfm-save').click(); };
+  });
 }
 
 async function handleImport(e) {
