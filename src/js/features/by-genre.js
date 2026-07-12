@@ -1,5 +1,5 @@
 import { getAllLikedTracks, createPlaylist, addTracksToPlaylist, invalidatePlaylistsCache } from '../api.js';
-import { hasKey, setKey, getArtistTopTags, getCachedTags, setCachedTags } from '../api/lastfm.js';
+import { hasKey, setKey, getArtistTopTags, getCachedTags, setCachedTags, exportTagsCache, importTagsCache } from '../api/lastfm.js';
 import { showProgress, hideProgress, typeConfirmModal, escapeHtml } from '../ui/components.js';
 import { showToast } from '../ui/toast.js';
 
@@ -71,17 +71,26 @@ async function start() {
     const artistNames = extractUniqueArtists(likes);
     const uncached = artistNames.filter(a => !getCachedTags(a));
 
+    const cachedCount = artistNames.length - uncached.length;
     content.innerHTML = `
       <div class="card" style="margin-bottom:16px">
         <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
           <div>
             <div style="font-size:14px;margin-bottom:4px">${likes.length.toLocaleString()} likes · ${artistNames.length} artistas únicos</div>
-            <div style="font-size:12px;color:var(--color-text-secondary)">${(artistNames.length - uncached.length).toLocaleString()} ya cacheados · ${uncached.length.toLocaleString()} por analizar</div>
+            <div style="font-size:12px;color:var(--color-text-secondary)">${cachedCount.toLocaleString()} ya cacheados · ${uncached.length.toLocaleString()} por analizar</div>
           </div>
-          <div style="display:flex;gap:8px">
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
             ${uncached.length > 0 ? `<button class="btn btn-primary" id="genre-fetch-btn">Analizar ${uncached.length}</button>` : ''}
             <button class="btn btn-secondary" id="genre-show-btn">Ver géneros</button>
           </div>
+        </div>
+        <div style="display:flex;gap:8px;margin-top:12px;padding-top:12px;border-top:1px solid var(--color-border);flex-wrap:wrap">
+          <button class="btn btn-secondary btn-sm" id="genre-export-btn" ${cachedCount === 0 ? 'disabled' : ''}>Exportar cache (JSON)</button>
+          <button class="btn btn-secondary btn-sm" id="genre-import-btn">Importar cache</button>
+          <input type="file" id="genre-import-input" accept=".json,application/json" style="display:none">
+          <span style="font-size:11px;color:var(--color-text-secondary);align-self:center;margin-left:4px">
+            Bajá el cache cada tanto y evitá re-analizar desde Last.fm.
+          </span>
         </div>
       </div>
       <div id="genre-progress"></div>
@@ -92,11 +101,51 @@ async function start() {
     if (uncached.length > 0) {
       document.getElementById('genre-fetch-btn').onclick = () => fetchAllTags(uncached);
     }
+    document.getElementById('genre-export-btn').onclick = handleExport;
+    const importInput = document.getElementById('genre-import-input');
+    document.getElementById('genre-import-btn').onclick = () => importInput.click();
+    importInput.onchange = handleImport;
 
     if (uncached.length === 0) showGenres();
   } catch (e) {
     hideProgress();
     content.innerHTML = `<div class="card"><p style="color:var(--color-error)">${escapeHtml(e.message)}</p></div>`;
+  }
+}
+
+function handleExport() {
+  const data = exportTagsCache();
+  const count = Object.keys(data.entries).length;
+  if (count === 0) {
+    showToast('El cache está vacío', 'error');
+    return;
+  }
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const today = new Date().toISOString().slice(0, 10);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `spotify-tools-genres-${today}.json`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  showToast(`Exportados ${count} artistas`, 'success');
+}
+
+async function handleImport(e) {
+  const file = e.target.files?.[0];
+  e.target.value = '';
+  if (!file) return;
+
+  try {
+    const text = await file.text();
+    const parsed = JSON.parse(text);
+    const result = importTagsCache(parsed, { mode: 'merge' });
+    showToast(`Importado: ${result.added} nuevos, ${result.updated} actualizados`, 'success');
+    setTimeout(() => start(), 400);
+  } catch (err) {
+    showToast('Error importando: ' + err.message, 'error');
   }
 }
 

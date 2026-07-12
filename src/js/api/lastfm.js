@@ -138,6 +138,39 @@ function setCachedTags(artistName, tags) {
   saveTagsCache(cache);
 }
 
+function exportTagsCache() {
+  const cache = loadTagsCache();
+  return {
+    _format: 'spotify-tools-genres',
+    _version: 1,
+    _exportedAt: new Date().toISOString(),
+    entries: cache,
+  };
+}
+
+function importTagsCache(parsed, { mode = 'merge' } = {}) {
+  if (!parsed || typeof parsed !== 'object') throw new Error('Archivo inválido: no es JSON.');
+  const entries = parsed.entries && typeof parsed.entries === 'object' ? parsed.entries : parsed;
+  const incoming = Object.entries(entries).filter(([k, v]) =>
+    typeof k === 'string' && v && Array.isArray(v.tags)
+  );
+  if (incoming.length === 0) throw new Error('No se encontraron entradas válidas en el archivo.');
+
+  const current = mode === 'replace' ? {} : loadTagsCache();
+  let added = 0;
+  let updated = 0;
+  const now = Date.now();
+  for (const [key, entry] of incoming) {
+    const at = typeof entry.at === 'number' ? entry.at : now;
+    const tags = entry.tags.filter(t => t && typeof t.name === 'string');
+    if (current[key]) updated++;
+    else added++;
+    current[key] = { tags, at };
+  }
+  saveTagsCache(current);
+  return { added, updated, total: incoming.length };
+}
+
 export {
   getKey,
   setKey,
@@ -155,4 +188,6 @@ export {
   getUserTopArtists,
   getCachedTags,
   setCachedTags,
+  exportTagsCache,
+  importTagsCache,
 };
