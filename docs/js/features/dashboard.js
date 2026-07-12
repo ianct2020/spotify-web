@@ -1,5 +1,6 @@
-import { getAllLikedTracks, invalidateLikesCache } from '../api.js';
+import { getAllLikedTracks, invalidateLikesCache, exportLikesData, importLikesData } from '../api.js';
 import { showProgress, hideProgress } from '../ui/components.js';
+import { showToast } from '../ui/toast.js';
 
 let charts = [];
 
@@ -10,7 +11,12 @@ export function render(container) {
         <h1>Dashboard</h1>
         <p>Stats de tu biblioteca de Liked Songs.</p>
       </div>
-      <button class="btn btn-secondary btn-sm" id="dash-refresh-btn">Actualizar datos</button>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-secondary btn-sm" id="dash-export-likes-btn">Exportar likes</button>
+        <button class="btn btn-secondary btn-sm" id="dash-import-likes-btn">Importar likes</button>
+        <input type="file" id="dash-import-likes-input" accept=".json,application/json" style="display:none">
+        <button class="btn btn-secondary btn-sm" id="dash-refresh-btn">Actualizar datos</button>
+      </div>
     </div>
     <div id="dash-content">
       <div class="empty-state">
@@ -21,12 +27,60 @@ export function render(container) {
   `;
 
   document.getElementById('dash-refresh-btn').onclick = () => loadData(true);
+  document.getElementById('dash-export-likes-btn').onclick = handleExportLikes;
+  const importInput = document.getElementById('dash-import-likes-input');
+  document.getElementById('dash-import-likes-btn').onclick = () => importInput.click();
+  importInput.onchange = handleImportLikes;
+
   loadData(false);
 
   return () => {
     charts.forEach(c => c.destroy());
     charts = [];
   };
+}
+
+function handleExportLikes() {
+  const data = exportLikesData();
+  if (!data.items || data.items.length === 0) {
+    showToast('No hay likes cargados aún. Cargá antes de exportar.', 'error');
+    return;
+  }
+  const blob = new Blob([JSON.stringify(data)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const today = new Date().toISOString().slice(0, 10);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `spotify-tools-likes-${today}.json`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  showToast(`Exportados ${data.items.length.toLocaleString()} likes`, 'success');
+}
+
+async function handleImportLikes(e) {
+  const file = e.target.files?.[0];
+  e.target.value = '';
+  if (!file) return;
+
+  try {
+    const text = await file.text();
+    const parsed = JSON.parse(text);
+    showProgress('Importando likes...', 0, 0);
+    const result = await importLikesData(parsed, ({ message }) => {
+      showProgress(message, 0, 0);
+    });
+    hideProgress();
+    const msg = result.added > 0
+      ? `Importados ${result.imported.toLocaleString()} · ${result.added} nuevos traídos de Spotify (total: ${result.totalNow.toLocaleString()})`
+      : `Importados ${result.imported.toLocaleString()} · sin cambios (total sigue en ${result.totalNow.toLocaleString()})`;
+    showToast(msg, 'success');
+    loadData(false);
+  } catch (err) {
+    hideProgress();
+    showToast('Error importando: ' + err.message, 'error');
+  }
 }
 
 async function loadData(forceRefresh) {

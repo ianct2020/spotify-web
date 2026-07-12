@@ -230,6 +230,62 @@ function invalidateLikesCache() {
   cacheClear(LIKES_CACHE_KEY);
 }
 
+async function getLikesTotal() {
+  const data = await spotifyFetch('/me/tracks?limit=1');
+  return data?.total ?? 0;
+}
+
+async function getRecentLikes(count) {
+  if (count <= 0) return [];
+  const items = await paginateAll('/me/tracks', {
+    limit: Math.min(50, count),
+    transform: item => ({ added_at: item.added_at, track: slimTrack(item.track) }),
+    maxItems: count,
+  });
+  return items.slice(0, count);
+}
+
+function exportLikesData() {
+  const cached = cacheGet(LIKES_CACHE_KEY) || [];
+  return {
+    _format: 'spotify-tools-likes',
+    _version: 1,
+    _exportedAt: new Date().toISOString(),
+    totalAtExport: cached.length,
+    items: cached,
+  };
+}
+
+async function importLikesData(parsed, onProgress) {
+  if (!parsed || typeof parsed !== 'object') throw new Error('Archivo inválido');
+  const imported = Array.isArray(parsed.items) ? parsed.items : (Array.isArray(parsed) ? parsed : null);
+  if (!imported) throw new Error('El archivo no tiene items');
+
+  const totalAtExport = typeof parsed.totalAtExport === 'number' ? parsed.totalAtExport : imported.length;
+  if (onProgress) onProgress({ phase: 'checking', message: 'Chequeando total con Spotify...' });
+  const totalNow = await getLikesTotal();
+  const delta = totalNow - totalAtExport;
+
+  let finalItems = imported;
+
+  if (delta > 0) {
+    if (onProgress) onProgress({ phase: 'fetching', message: `Trayendo ${delta} likes nuevos...`, delta });
+    const knownUris = new Set(imported.map(i => i?.track?.uri).filter(Boolean));
+    const fetchCount = delta + 20;
+    const recent = await getRecentLikes(fetchCount);
+    const newOnes = recent.filter(r => r?.track?.uri && !knownUris.has(r.track.uri));
+    finalItems = [...newOnes, ...imported];
+  }
+
+  cacheSet(LIKES_CACHE_KEY, finalItems, CACHE_TTL_MIN);
+  return {
+    imported: imported.length,
+    added: finalItems.length - imported.length,
+    totalNow,
+    totalAtExport,
+  };
+}
+
 function invalidatePlaylistsCache() {
   cacheClear(PLAYLISTS_CACHE_KEY);
 }
@@ -338,4 +394,7 @@ export {
   unfollowPlaylist,
   invalidateLikesCache,
   invalidatePlaylistsCache,
+  getLikesTotal,
+  exportLikesData,
+  importLikesData,
 };
