@@ -28,10 +28,15 @@ let genreMap = new Map();
 let selectedTags = new Set();
 
 export function render(container) {
+  likes = [];
+  artistToTags = new Map();
+  genreMap = new Map();
+  selectedTags = new Set();
+
   container.innerHTML = `
     <div class="page-header">
       <h1>Clasificar por género</h1>
-      <p>Agrupa tus likes por género usando los tags de Last.fm. Después podés crear una playlist para cada uno.</p>
+      <p>Agrupa tus likes por género usando tags de Last.fm y géneros de Stats.fm.</p>
     </div>
     <div id="genre-content"></div>
   `;
@@ -40,7 +45,34 @@ export function render(container) {
     renderKeySetup();
     return;
   }
-  start();
+  renderStartScreen();
+}
+
+function renderStartScreen() {
+  const content = document.getElementById('genre-content');
+  const cachedCount = Object.keys(JSON.parse(localStorage.getItem('lastfm_artist_tags_cache') || '{}')).length;
+
+  content.innerHTML = `
+    <div class="card" style="max-width:640px">
+      <h3 style="margin-bottom:8px">¿Cómo querés arrancar?</h3>
+      <p style="color:var(--color-text-secondary);font-size:13px;margin-bottom:16px">
+        Tenés <strong>${cachedCount.toLocaleString()}</strong> artistas ya cacheados. Podés importar un cache previo antes de cargar tus likes, así no re-analizás desde cero.
+      </p>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-primary" id="genre-begin-btn">Cargar mis likes y arrancar</button>
+        <button class="btn btn-secondary" id="genre-preimport-btn">Importar cache primero</button>
+        <input type="file" id="genre-preimport-input" accept=".json,application/json" style="display:none">
+      </div>
+    </div>
+  `;
+
+  document.getElementById('genre-begin-btn').onclick = start;
+  const preInput = document.getElementById('genre-preimport-input');
+  document.getElementById('genre-preimport-btn').onclick = () => preInput.click();
+  preInput.onchange = async (e) => {
+    await handleImport(e, { skipRefresh: true });
+    renderStartScreen();
+  };
 }
 
 function renderKeySetup() {
@@ -57,7 +89,7 @@ function renderKeySetup() {
     const val = document.getElementById('lastfm-key-input').value.trim();
     if (val.length < 20) { showToast('Key inválida', 'error'); return; }
     setKey(val);
-    start();
+    renderStartScreen();
   };
 }
 
@@ -169,9 +201,9 @@ async function handleStatsfm() {
       merged++;
     }
 
-    textEl.innerHTML = `<strong>Sync listo</strong> — ${merged} artistas mergeados desde Stats.fm (${skipped} sin géneros). Recargando vista...`;
-    showToast(`Stats.fm: ${merged} artistas agregados/mergeados`, 'success');
-    setTimeout(() => start(), 800);
+    textEl.innerHTML = `<strong>Sync listo</strong> — ${merged} artistas mergeados desde Stats.fm (${skipped} sin géneros).`;
+    showToast(`Stats.fm: ${merged} artistas mergeados`, 'success');
+    refreshHeaderAndGenres();
   } catch (e) {
     textEl.innerHTML = `<span style="color:var(--color-error)">Error: ${escapeHtml(e.message)}</span>`;
     showToast('Stats.fm falló: ' + e.message, 'error');
@@ -215,7 +247,7 @@ function promptStatsfmUsername() {
   });
 }
 
-async function handleImport(e) {
+async function handleImport(e, { skipRefresh = false } = {}) {
   const file = e.target.files?.[0];
   e.target.value = '';
   if (!file) return;
@@ -225,10 +257,33 @@ async function handleImport(e) {
     const parsed = JSON.parse(text);
     const result = importTagsCache(parsed, { mode: 'merge' });
     showToast(`Importado: ${result.added} nuevos, ${result.updated} actualizados`, 'success');
-    setTimeout(() => start(), 400);
+    if (!skipRefresh) refreshHeaderAndGenres();
   } catch (err) {
     showToast('Error importando: ' + err.message, 'error');
   }
+}
+
+function refreshHeaderAndGenres() {
+  if (likes.length === 0) return;
+  const artistNames = extractUniqueArtists(likes);
+  const uncached = artistNames.filter(a => !getCachedTags(a));
+  const cachedCount = artistNames.length - uncached.length;
+
+  const header = document.querySelector('#genre-content .card');
+  if (header) {
+    const statusLine = header.querySelector('div > div > div:nth-child(2)');
+    if (statusLine) {
+      statusLine.innerHTML = `${cachedCount.toLocaleString()} ya cacheados · ${uncached.length.toLocaleString()} por analizar`;
+    }
+    const fetchBtn = document.getElementById('genre-fetch-btn');
+    if (fetchBtn) {
+      if (uncached.length > 0) fetchBtn.textContent = `Analizar ${uncached.length}`;
+      else fetchBtn.remove();
+    }
+    const exportBtn = document.getElementById('genre-export-btn');
+    if (exportBtn) exportBtn.disabled = cachedCount === 0;
+  }
+  showGenres();
 }
 
 function extractUniqueArtists(items) {
