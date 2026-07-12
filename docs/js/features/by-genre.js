@@ -10,6 +10,12 @@ const NOISE_TAGS = new Set([
   'male vocalists', 'female vocalists', 'male vocalist', 'female vocalist',
   'my music', 'my favourite', 'mymusic', 'my favorites',
   'my favourite artists', 'spotify',
+  'racism', 'racist', 'woman beater', 'wife beater', 'misogyny',
+  'misogynistic', 'sexist', 'sexism', 'homophobic', 'homophobia',
+  'nazi', 'fascist', 'edgy', 'problematic',
+  'overrated', 'underrated', 'guilty pleasure',
+  'cool', 'chill', 'vibes', 'mood', 'nostalgia', 'nostalgic',
+  'legend', 'legends', 'goat', 'king', 'queen',
 ]);
 
 const TOP_TAGS_PER_ARTIST = 5;
@@ -18,6 +24,7 @@ const MIN_TRACKS_PER_GENRE = 5;
 let likes = [];
 let artistToTags = new Map();
 let genreMap = new Map();
+let selectedTags = new Set();
 
 export function render(container) {
   container.innerHTML = `
@@ -182,6 +189,7 @@ function buildGenreMap() {
 
 function showGenres() {
   genreMap = buildGenreMap();
+  selectedTags = new Set();
   const results = document.getElementById('genre-results');
 
   const genres = [...genreMap.entries()]
@@ -195,9 +203,9 @@ function showGenres() {
 
   results.innerHTML = `
     <div style="margin-bottom:8px;color:var(--color-text-secondary);font-size:14px">
-      ${genres.length} géneros con ${MIN_TRACKS_PER_GENRE}+ tracks. Click en uno para crear playlist.
+      ${genres.length} géneros con ${MIN_TRACKS_PER_GENRE}+ tracks. Click para seleccionar uno o varios, después "Crear playlist".
     </div>
-    <div class="smart-grid">
+    <div class="smart-grid" style="padding-bottom:80px">
       ${genres.map(([tag, tracks]) => `
         <button class="smart-card genre-card" data-tag="${escapeHtml(tag)}">
           <div class="smart-card-title" style="font-size:15px;text-transform:capitalize">${escapeHtml(tag)}</div>
@@ -205,36 +213,97 @@ function showGenres() {
         </button>
       `).join('')}
     </div>
+    <div id="genre-action-bar"></div>
   `;
 
   results.querySelectorAll('.genre-card').forEach(el => {
-    el.onclick = () => createPlaylistForGenre(el.dataset.tag);
+    el.onclick = () => toggleTag(el);
   });
 }
 
-async function createPlaylistForGenre(tag) {
-  const tracks = genreMap.get(tag) || [];
-  const uris = [...new Set(tracks.map(t => t.uri))];
+function toggleTag(el) {
+  const tag = el.dataset.tag;
+  if (selectedTags.has(tag)) {
+    selectedTags.delete(tag);
+    el.classList.remove('selected');
+  } else {
+    selectedTags.add(tag);
+    el.classList.add('selected');
+  }
+  updateActionBar();
+}
+
+function updateActionBar() {
+  const bar = document.getElementById('genre-action-bar');
+  if (!bar) return;
+
+  if (selectedTags.size === 0) {
+    bar.innerHTML = '';
+    return;
+  }
+
+  const uniqueUris = new Set();
+  selectedTags.forEach(tag => {
+    (genreMap.get(tag) || []).forEach(t => uniqueUris.add(t.uri));
+  });
+
+  const label = selectedTags.size === 1
+    ? [...selectedTags][0]
+    : `${selectedTags.size} géneros`;
+
+  bar.innerHTML = `
+    <div class="action-bar">
+      <div class="action-bar-info">
+        <strong>${escapeHtml(label)}</strong> — ${uniqueUris.size.toLocaleString()} tracks únicos
+      </div>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-secondary" id="genre-clear-btn">Limpiar</button>
+        <button class="btn btn-primary" id="genre-create-btn">Crear playlist</button>
+      </div>
+    </div>
+  `;
+
+  document.getElementById('genre-clear-btn').onclick = clearSelection;
+  document.getElementById('genre-create-btn').onclick = createPlaylistForSelected;
+}
+
+function clearSelection() {
+  selectedTags.clear();
+  document.querySelectorAll('.genre-card.selected').forEach(el => el.classList.remove('selected'));
+  updateActionBar();
+}
+
+async function createPlaylistForSelected() {
+  const tags = [...selectedTags];
+  if (tags.length === 0) return;
+
+  const uniqueUris = new Set();
+  tags.forEach(tag => {
+    (genreMap.get(tag) || []).forEach(t => uniqueUris.add(t.uri));
+  });
+  const uris = [...uniqueUris];
   if (uris.length === 0) return;
 
-  const capitalized = tag.replace(/\b\w/g, c => c.toUpperCase());
-  const name = `Género: ${capitalized}`;
+  const capitalize = s => s.replace(/\b\w/g, c => c.toUpperCase());
+  const nameSuffix = tags.map(capitalize).join(' + ');
+  const name = `Género: ${nameSuffix}`;
 
-  const confirmed = await typeConfirmModal(
-    'Crear playlist',
-    `Se va a crear <strong>"${escapeHtml(name)}"</strong> con <strong>${uris.length}</strong> tracks (likes cuyos artistas tienen "${escapeHtml(tag)}" entre sus top tags).`,
-    'CREAR'
-  );
+  const bodyMsg = tags.length === 1
+    ? `Se va a crear <strong>"${escapeHtml(name)}"</strong> con <strong>${uris.length}</strong> tracks (likes cuyos artistas tienen "${escapeHtml(tags[0])}" entre sus top tags).`
+    : `Se va a crear <strong>"${escapeHtml(name)}"</strong> con <strong>${uris.length}</strong> tracks (unión de likes cuyos artistas tienen alguno de: ${tags.map(t => `"${escapeHtml(t)}"`).join(', ')}).`;
+
+  const confirmed = await typeConfirmModal('Crear playlist', bodyMsg, 'CREAR');
   if (!confirmed) return;
 
   try {
     showProgress(`Creando "${name}"...`, 0, uris.length);
-    const playlist = await createPlaylist(name, `Clasificado por Last.fm tags`, false);
+    const playlist = await createPlaylist(name, 'Clasificado por Last.fm tags', false);
     showProgress('Agregando tracks...', 0, uris.length);
     await addTracksToPlaylist(playlist.id, uris);
     invalidatePlaylistsCache();
     hideProgress();
     showToast(`"${name}" creada con ${uris.length} tracks`, 'success');
+    clearSelection();
   } catch (e) {
     hideProgress();
     showToast('Error: ' + e.message, 'error');
