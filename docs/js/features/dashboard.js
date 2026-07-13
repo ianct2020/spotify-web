@@ -1,4 +1,4 @@
-import { getAllLikedTracks, invalidateLikesCache, exportAllData, importAllData, getCurrentUserId } from '../api.js';
+import { getAllLikedTracks, invalidateLikesCache, exportAllData, importAllData, getCurrentUserId, getLikesTotal, syncLikesIncremental } from '../api.js';
 import { showProgress, hideProgress } from '../ui/components.js';
 import { showToast } from '../ui/toast.js';
 
@@ -22,7 +22,7 @@ export function render(container) {
     <div id="dash-content"></div>
   `;
 
-  document.getElementById('dash-refresh-btn').onclick = () => loadData(true);
+  document.getElementById('dash-refresh-btn').onclick = handleRefresh;
   document.getElementById('dash-export-all-btn').onclick = handleExportAll;
   const importInput = document.getElementById('dash-import-all-input');
   document.getElementById('dash-import-all-btn').onclick = () => importInput.click();
@@ -64,6 +64,40 @@ function renderStartScreen() {
   const preInput = document.getElementById('dash-preimport-input');
   document.getElementById('dash-preimport-btn').onclick = () => preInput.click();
   preInput.onchange = handleImportAll;
+}
+
+async function handleRefresh() {
+  const content = document.getElementById('dash-content');
+  if (!content) return;
+
+  content.innerHTML = `
+    <div class="card" style="max-width:640px;text-align:center">
+      <div class="spinner spinner-lg" style="margin:0 auto 16px"></div>
+      <div id="refresh-text" style="font-size:14px">Chequeando delta con Spotify...</div>
+    </div>
+  `;
+  const textEl = document.getElementById('refresh-text');
+
+  try {
+    const result = await syncLikesIncremental(({ message }) => {
+      if (textEl) textEl.textContent = message;
+    });
+
+    if (!result.hadCache) {
+      showToast('No hay cache. Cargando completo desde Spotify...', 'info');
+      loadData(true);
+      return;
+    }
+    if (result.added === 0) {
+      showToast(`Sin cambios (${result.cachedCount.toLocaleString()} likes, coincide con Spotify)`, 'success');
+    } else {
+      showToast(`+${result.added} likes nuevos traídos (total: ${result.totalNow.toLocaleString()})`, 'success');
+    }
+    loadData(false);
+  } catch (e) {
+    showToast('Error: ' + e.message, 'error');
+    renderStartScreen();
+  }
 }
 
 async function handleExportAll() {
