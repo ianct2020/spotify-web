@@ -1,5 +1,5 @@
 import { isLoggedIn, loginWithSpotify, logout } from './auth.js';
-import { getUserProfile, spotifyFetch } from './api.js';
+import { getUserProfile, spotifyFetch, tryAutoLoadUserBackup } from './api.js';
 import { getValidToken } from './auth.js';
 import { cacheClearAll } from './storage.js';
 import { registerRoute, initRouter, navigate } from './router.js';
@@ -270,6 +270,18 @@ function showApp(profile) {
       overlay.classList.remove('open');
     });
   });
+
+  tryAutoLoadUserBackup(profile.id).then(result => {
+    if (result.loaded) {
+      const parts = [];
+      if (result.likesCount > 0) parts.push(`${result.likesCount.toLocaleString()} likes`);
+      if (result.delta > 0) parts.push(`+${result.delta} nuevos`);
+      if (result.tagsCount > 0) parts.push(`${result.tagsCount} artistas con tags`);
+      if (parts.length > 0) {
+        showToast(`Backup del repo cargado: ${parts.join(' · ')}`, 'success');
+      }
+    }
+  }).catch(e => console.warn('Auto-load error:', e));
 
   registerRoute('home', renderHome);
   registerRoute('dashboard', renderDashboard);

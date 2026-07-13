@@ -1,5 +1,5 @@
-import { getAllLikedTracks, createPlaylist, addTracksToPlaylist, invalidatePlaylistsCache } from '../api.js';
-import { hasKey, setKey, getArtistTopTags, getCachedTags, setCachedTags, mergeCachedTags, exportTagsCache, importTagsCache } from '../api/lastfm.js';
+import { getAllLikedTracks, createPlaylist, addTracksToPlaylist, invalidatePlaylistsCache, exportAllData, importAllData, getCurrentUserId } from '../api.js';
+import { hasKey, setKey, getArtistTopTags, getCachedTags, setCachedTags, mergeCachedTags } from '../api/lastfm.js';
 import * as statsfm from '../api/statsfm.js';
 import { showProgress, hideProgress, typeConfirmModal, escapeHtml } from '../ui/components.js';
 import { showToast } from '../ui/toast.js';
@@ -148,24 +148,28 @@ async function start() {
   }
 }
 
-function handleExport() {
-  const data = exportTagsCache();
-  const count = Object.keys(data.entries).length;
-  if (count === 0) {
-    showToast('El cache está vacío', 'error');
+async function handleExport() {
+  let userId = null;
+  try { userId = await getCurrentUserId(); } catch {}
+  const data = exportAllData(userId);
+  const likesCount = data.likes.items.length;
+  const tagsCount = Object.keys(data.tags.entries).length;
+  if (likesCount === 0 && tagsCount === 0) {
+    showToast('No hay datos para exportar', 'error');
     return;
   }
-  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  const blob = new Blob([JSON.stringify(data)], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
   const today = new Date().toISOString().slice(0, 10);
+  const filename = userId ? `user-${userId}.json` : `spotify-tools-data-${today}.json`;
   const a = document.createElement('a');
   a.href = url;
-  a.download = `spotify-tools-genres-${today}.json`;
+  a.download = filename;
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
-  showToast(`Exportados ${count} artistas`, 'success');
+  showToast(`Exportado: ${likesCount.toLocaleString()} likes + ${tagsCount.toLocaleString()} artistas`, 'success');
 }
 
 async function handleStatsfm() {
@@ -255,8 +259,12 @@ async function handleImport(e, { skipRefresh = false } = {}) {
   try {
     const text = await file.text();
     const parsed = JSON.parse(text);
-    const result = importTagsCache(parsed, { mode: 'merge' });
-    showToast(`Importado: ${result.added} nuevos, ${result.updated} actualizados`, 'success');
+    const result = await importAllData(parsed);
+    const parts = [];
+    if (result.likesImported > 0) parts.push(`${result.likesImported.toLocaleString()} likes`);
+    if (result.tagsImported > 0) parts.push(`${result.tagsImported} artistas nuevos`);
+    if (result.tagsUpdated > 0) parts.push(`${result.tagsUpdated} actualizados`);
+    showToast(parts.length > 0 ? `Importado: ${parts.join(' · ')}` : 'Sin cambios', 'success');
     if (!skipRefresh) refreshHeaderAndGenres();
   } catch (err) {
     showToast('Error importando: ' + err.message, 'error');
@@ -382,7 +390,9 @@ function showGenres() {
     .filter(([, tracks]) => tracks.length >= MIN_TRACKS_PER_GENRE)
     .sort((a, b) => b[1].length - a[1].length);
 
-  if (genres.length === 0) {
+  const unclassified = computeUnclassified();
+
+  if (genres.length === 0 && unclassified.length === 0) {
     results.innerHTML = `<div class="card"><p>No hay géneros con suficientes tracks (mín ${MIN_TRACKS_PER_GENRE}). Puede que necesites correr "Analizar" primero.</p></div>`;
     return;
   }
@@ -398,13 +408,61 @@ function showGenres() {
           <div class="smart-card-meta">${tracks.length.toLocaleString()} tracks</div>
         </button>
       `).join('')}
+      ${unclassified.length > 0 ? `
+        <button class="smart-card genre-card" id="unclassified-card" style="border-color:var(--color-warning);border-style:dashed">
+          <div class="smart-card-title" style="font-size:15px;color:var(--color-warning)">Sin clasificar</div>
+          <div class="smart-card-meta">${unclassified.length.toLocaleString()} tracks</div>
+        </button>
+      ` : ''}
     </div>
     <div id="genre-action-bar"></div>
   `;
 
-  results.querySelectorAll('.genre-card').forEach(el => {
+  results.querySelectorAll('.genre-card:not(#unclassified-card)').forEach(el => {
     el.onclick = () => toggleTag(el);
   });
+  const uncEl = document.getElementById('unclassified-card');
+  if (uncEl) uncEl.onclick = () => createPlaylistForUnclassified(unclassified);
+}
+
+function computeUnclassified() {
+  const uris = new Set();
+  const classifiedUris = new Set();
+  genreMap.forEach(tracks => tracks.forEach(t => classifiedUris.add(t.uri)));
+  const result = [];
+  likes.forEach(item => {
+    const track = item.track;
+    if (!track?.uri) return;
+    if (classifiedUris.has(track.uri)) return;
+    if (uris.has(track.uri)) return;
+    uris.add(track.uri);
+    result.push(track);
+  });
+  return result;
+}
+
+async function createPlaylistForUnclassified(tracks) {
+  const uris = [...new Set(tracks.map(t => t.uri))];
+  const name = `Sin clasificar (${uris.length})`;
+  const confirmed = await typeConfirmModal(
+    'Crear playlist con tracks sin clasificar',
+    `Se va a crear <strong>"${escapeHtml(name)}"</strong> con <strong>${uris.length}</strong> tracks cuyos artistas no aparecen en el cache de tags (Last.fm ni Stats.fm). Podés clasificarlos manual desde ahí.`,
+    'CREAR'
+  );
+  if (!confirmed) return;
+
+  try {
+    showProgress(`Creando "${name}"...`, 0, uris.length);
+    const playlist = await createPlaylist(name, 'Tracks sin género detectado', false);
+    showProgress('Agregando tracks...', 0, uris.length);
+    await addTracksToPlaylist(playlist.id, uris);
+    invalidatePlaylistsCache();
+    hideProgress();
+    showToast(`"${name}" creada con ${uris.length} tracks`, 'success');
+  } catch (e) {
+    hideProgress();
+    showToast('Error: ' + e.message, 'error');
+  }
 }
 
 function toggleTag(el) {
