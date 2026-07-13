@@ -3,6 +3,7 @@ import { showProgress, hideProgress } from '../ui/components.js';
 import { showToast } from '../ui/toast.js';
 
 let charts = [];
+let _loadController = null;
 
 export function render(container) {
   container.innerHTML = `
@@ -18,12 +19,7 @@ export function render(container) {
         <button class="btn btn-secondary btn-sm" id="dash-refresh-btn">Actualizar datos</button>
       </div>
     </div>
-    <div id="dash-content">
-      <div class="empty-state">
-        <div class="spinner spinner-lg"></div>
-        <p style="margin-top:16px">Cargando estadísticas...</p>
-      </div>
-    </div>
+    <div id="dash-content"></div>
   `;
 
   document.getElementById('dash-refresh-btn').onclick = () => loadData(true);
@@ -32,12 +28,42 @@ export function render(container) {
   document.getElementById('dash-import-likes-btn').onclick = () => importInput.click();
   importInput.onchange = handleImportLikes;
 
-  loadData(false);
+  renderStartScreen();
 
   return () => {
     charts.forEach(c => c.destroy());
     charts = [];
   };
+}
+
+function renderStartScreen() {
+  const content = document.getElementById('dash-content');
+  if (!content) return;
+
+  const cached = JSON.parse(localStorage.getItem('cache_all_liked_tracks') || 'null');
+  const cachedCount = cached?.data?.length || 0;
+  const hasCache = cachedCount > 0;
+
+  content.innerHTML = `
+    <div class="card" style="max-width:640px">
+      <h3 style="margin-bottom:8px">¿Cómo querés arrancar?</h3>
+      <p style="color:var(--color-text-secondary);font-size:13px;margin-bottom:16px">
+        ${hasCache
+          ? `Tenés <strong>${cachedCount.toLocaleString()}</strong> likes cacheados en este browser (menos de 60 min de antigüedad). Podés usarlos directo o importar un JSON previo.`
+          : `No hay likes cacheados. Podés cargar todo desde Spotify (~190 requests, tarda ~2 min) o importar un JSON previo (1 request, mucho más rápido).`}
+      </p>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-primary" id="dash-start-btn">${hasCache ? 'Usar los cacheados' : 'Cargar desde Spotify'}</button>
+        <button class="btn btn-secondary" id="dash-preimport-btn">Importar JSON de likes</button>
+        <input type="file" id="dash-preimport-input" accept=".json,application/json" style="display:none">
+      </div>
+    </div>
+  `;
+
+  document.getElementById('dash-start-btn').onclick = () => loadData(false);
+  const preInput = document.getElementById('dash-preimport-input');
+  document.getElementById('dash-preimport-btn').onclick = () => preInput.click();
+  preInput.onchange = handleImportLikes;
 }
 
 function handleExportLikes() {
@@ -89,12 +115,36 @@ async function loadData(forceRefresh) {
 
   if (forceRefresh) invalidateLikesCache();
 
+  _loadController = new AbortController();
+
+  content.innerHTML = `
+    <div class="card" style="max-width:640px;text-align:center">
+      <div class="spinner spinner-lg" style="margin:0 auto 16px"></div>
+      <div id="dash-load-text" style="font-size:14px;margin-bottom:8px">Cargando Liked Songs...</div>
+      <div style="height:8px;background:var(--color-elevated);border-radius:4px;overflow:hidden;margin-bottom:16px">
+        <div id="dash-load-bar" style="height:100%;background:var(--color-accent);width:0%;transition:width 0.2s"></div>
+      </div>
+      <button class="btn btn-secondary btn-sm" id="dash-cancel-btn">Cancelar carga</button>
+    </div>
+  `;
+
+  const textEl = document.getElementById('dash-load-text');
+  const barEl = document.getElementById('dash-load-bar');
+  document.getElementById('dash-cancel-btn').onclick = () => {
+    _loadController?.abort();
+  };
+
   try {
-    showProgress('Cargando Liked Songs...', 0, 0);
-    const likes = await getAllLikedTracks(({ loaded, total }) => {
-      showProgress('Cargando Liked Songs...', loaded, total);
-    });
-    hideProgress();
+    const likes = await getAllLikedTracks(({ loaded, total, cached }) => {
+      if (cached) {
+        textEl.textContent = `Usando cache local (${loaded.toLocaleString()} likes)`;
+        barEl.style.width = '100%';
+      } else {
+        const pct = total > 0 ? Math.min(100, (loaded / total) * 100) : 0;
+        textEl.textContent = `Cargando ${loaded.toLocaleString()} / ${(total || '?').toLocaleString()}`;
+        barEl.style.width = `${pct}%`;
+      }
+    }, { signal: _loadController.signal });
 
     charts.forEach(c => c.destroy());
     charts = [];
@@ -102,13 +152,18 @@ async function loadData(forceRefresh) {
     const stats = computeStats(likes);
     renderDashboard(content, stats);
   } catch (e) {
-    hideProgress();
+    const cancelled = e.message.includes('cancelada');
     content.innerHTML = `
-      <div class="card" style="text-align:center;padding:40px">
-        <p style="color:var(--color-error);margin-bottom:12px">${e.message}</p>
-        <button class="btn btn-primary" onclick="location.reload()">Reintentar</button>
+      <div class="card" style="text-align:center;padding:40px;max-width:640px">
+        <p style="color:${cancelled ? 'var(--color-warning)' : 'var(--color-error)'};margin-bottom:12px">
+          ${cancelled ? 'Carga cancelada.' : e.message}
+        </p>
+        <button class="btn btn-primary" id="dash-back-btn">Volver</button>
       </div>
     `;
+    document.getElementById('dash-back-btn').onclick = renderStartScreen;
+  } finally {
+    _loadController = null;
   }
 }
 
