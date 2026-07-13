@@ -263,6 +263,116 @@ function exportLikesData() {
   };
 }
 
+function exportAllData(spotifyUserId) {
+  const likes = cacheGet(LIKES_CACHE_KEY) || [];
+  const tagsCache = JSON.parse(localStorage.getItem('lastfm_artist_tags_cache') || '{}');
+  return {
+    _format: 'spotify-tools-data',
+    _version: 1,
+    _exportedAt: new Date().toISOString(),
+    spotifyUserId: spotifyUserId || null,
+    likes: {
+      totalAtExport: likes.length,
+      items: likes,
+    },
+    tags: {
+      entries: tagsCache,
+    },
+  };
+}
+
+async function importAllData(parsed, onProgress) {
+  if (!parsed || typeof parsed !== 'object') throw new Error('Archivo inválido');
+
+  const result = {
+    likesImported: 0,
+    likesAdded: 0,
+    tagsImported: 0,
+    tagsUpdated: 0,
+    format: parsed._format || 'desconocido',
+  };
+
+  const hasNewLikes = parsed.likes?.items && Array.isArray(parsed.likes.items);
+  const isOldLikes = Array.isArray(parsed.items) && parsed._format === 'spotify-tools-likes';
+  if (hasNewLikes || isOldLikes) {
+    const likesPayload = hasNewLikes ? parsed.likes : parsed;
+    const r = await importLikesData(likesPayload, onProgress);
+    result.likesImported = r.imported;
+    result.likesAdded = r.added;
+  }
+
+  const hasNewTags = parsed.tags?.entries && typeof parsed.tags.entries === 'object';
+  const isOldTags = parsed.entries && parsed._format === 'spotify-tools-genres';
+  if (hasNewTags || isOldTags) {
+    const tagsPayload = hasNewTags ? parsed.tags : parsed;
+    const cache = JSON.parse(localStorage.getItem('lastfm_artist_tags_cache') || '{}');
+    let added = 0;
+    let updated = 0;
+    for (const [key, entry] of Object.entries(tagsPayload.entries || {})) {
+      if (!entry || !Array.isArray(entry.tags)) continue;
+      if (cache[key]) updated++;
+      else added++;
+      cache[key] = { tags: entry.tags, at: entry.at || Date.now() };
+    }
+    localStorage.setItem('lastfm_artist_tags_cache', JSON.stringify(cache));
+    result.tagsImported = added;
+    result.tagsUpdated = updated;
+  }
+
+  return result;
+}
+
+async function tryAutoLoadUserBackup(spotifyUserId) {
+  if (!spotifyUserId) return { loaded: false };
+
+  const cachedLikes = cacheGet(LIKES_CACHE_KEY);
+  if (cachedLikes && cachedLikes.length > 0) {
+    return { loaded: false, reason: 'ya-hay-cache-local' };
+  }
+
+  const safeId = spotifyUserId.replace(/[^A-Za-z0-9._-]/g, '');
+  const url = `data/user-${safeId}.json`;
+  try {
+    const res = await fetch(url, { cache: 'no-store' });
+    if (res.status === 404) return { loaded: false, reason: 'sin-archivo' };
+    if (!res.ok) return { loaded: false, reason: `http-${res.status}` };
+    const parsed = await res.json();
+
+    let likesCount = 0;
+    let tagsCount = 0;
+    let delta = 0;
+
+    if (parsed.likes?.items && Array.isArray(parsed.likes.items)) {
+      const result = await importLikesData(parsed.likes);
+      likesCount = result.imported;
+      delta = result.added;
+    } else if (Array.isArray(parsed.items) && parsed._format === 'spotify-tools-likes') {
+      const result = await importLikesData(parsed);
+      likesCount = result.imported;
+      delta = result.added;
+    }
+
+    if (parsed.tags?.entries || parsed._format === 'spotify-tools-genres') {
+      const cache = JSON.parse(localStorage.getItem('lastfm_artist_tags_cache') || '{}');
+      const entries = parsed.tags?.entries || parsed.entries || {};
+      let merged = 0;
+      for (const [key, entry] of Object.entries(entries)) {
+        if (entry && Array.isArray(entry.tags) && !cache[key]) {
+          cache[key] = entry;
+          merged++;
+        }
+      }
+      localStorage.setItem('lastfm_artist_tags_cache', JSON.stringify(cache));
+      tagsCount = merged;
+    }
+
+    return { loaded: true, likesCount, tagsCount, delta };
+  } catch (e) {
+    console.warn('Auto-load falló:', e.message);
+    return { loaded: false, reason: e.message };
+  }
+}
+
 async function importLikesData(parsed, onProgress) {
   if (!parsed || typeof parsed !== 'object') throw new Error('Archivo inválido');
   const imported = Array.isArray(parsed.items) ? parsed.items : (Array.isArray(parsed) ? parsed : null);
@@ -404,4 +514,7 @@ export {
   getLikesTotal,
   exportLikesData,
   importLikesData,
+  exportAllData,
+  importAllData,
+  tryAutoLoadUserBackup,
 };
