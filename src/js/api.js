@@ -89,7 +89,7 @@ function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-async function paginateAll(endpoint, { limit = 50, onProgress, partialCacheKey, transform, maxItems, startOffset = 0 } = {}) {
+async function paginateAll(endpoint, { limit = 50, onProgress, partialCacheKey, transform, maxItems, startOffset = 0, signal } = {}) {
   let items = [];
   let offset = startOffset;
   const initialOffset = startOffset;
@@ -108,6 +108,12 @@ async function paginateAll(endpoint, { limit = 50, onProgress, partialCacheKey, 
 
   let pagesSinceSave = 0;
   while (offset < total && (!maxItems || items.length < maxItems)) {
+    if (signal?.aborted) {
+      if (partialCacheKey && items.length > 0) {
+        cacheSet(partialCacheKey + '_partial', { items, offset, startOffset: initialOffset }, 60);
+      }
+      throw new Error('Carga cancelada');
+    }
     const url = `${BASE}${endpoint}${sep}limit=${limit}&offset=${offset}`;
     try {
       const data = await spotifyFetch(url, { _maxRetries: 2 });
@@ -184,7 +190,7 @@ function slimPlaylist(p) {
   };
 }
 
-async function getAllLikedTracks(onProgress, { force = false } = {}) {
+async function getAllLikedTracks(onProgress, { force = false, signal } = {}) {
   const cacheKey = LIKES_CACHE_KEY;
 
   if (!force) {
@@ -202,6 +208,7 @@ async function getAllLikedTracks(onProgress, { force = false } = {}) {
     onProgress,
     partialCacheKey: cacheKey,
     transform: item => ({ added_at: item.added_at, track: slimTrack(item.track) }),
+    signal,
   });
   cacheSet(cacheKey, items, CACHE_TTL_MIN);
   return items;
