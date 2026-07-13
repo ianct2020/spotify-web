@@ -252,6 +252,29 @@ async function getRecentLikes(count) {
   return items.slice(0, count);
 }
 
+async function syncLikesIncremental(onProgress) {
+  const cached = cacheGet(LIKES_CACHE_KEY);
+  if (!cached || cached.length === 0) {
+    return { hadCache: false };
+  }
+
+  if (onProgress) onProgress({ phase: 'checking', message: 'Chequeando total con Spotify (1 request)...' });
+  const totalNow = await getLikesTotal();
+  const delta = totalNow - cached.length;
+
+  if (delta <= 0) {
+    return { hadCache: true, added: 0, totalNow, cachedCount: cached.length };
+  }
+
+  if (onProgress) onProgress({ phase: 'fetching', message: `Trayendo ${delta} likes nuevos...`, delta });
+  const knownUris = new Set(cached.map(i => i?.track?.uri).filter(Boolean));
+  const recent = await getRecentLikes(delta + 20);
+  const newOnes = recent.filter(r => r?.track?.uri && !knownUris.has(r.track.uri));
+  const finalItems = [...newOnes, ...cached];
+  cacheSet(LIKES_CACHE_KEY, finalItems, CACHE_TTL_MIN);
+  return { hadCache: true, added: newOnes.length, totalNow, cachedCount: finalItems.length };
+}
+
 function exportLikesData() {
   const cached = cacheGet(LIKES_CACHE_KEY) || [];
   return {
@@ -379,19 +402,29 @@ async function importLikesData(parsed, onProgress) {
   if (!imported) throw new Error('El archivo no tiene items');
 
   const totalAtExport = typeof parsed.totalAtExport === 'number' ? parsed.totalAtExport : imported.length;
-  if (onProgress) onProgress({ phase: 'checking', message: 'Chequeando total con Spotify...' });
+
+  if (imported.length === 0) {
+    if (onProgress) onProgress({ phase: 'empty', message: 'El archivo está vacío' });
+    return { imported: 0, added: 0, totalNow: null, totalAtExport, empty: true };
+  }
+
+  if (onProgress) onProgress({ phase: 'checking', message: 'Chequeando total con Spotify (1 request)...' });
   const totalNow = await getLikesTotal();
   const delta = totalNow - totalAtExport;
 
   let finalItems = imported;
 
   if (delta > 0) {
-    if (onProgress) onProgress({ phase: 'fetching', message: `Trayendo ${delta} likes nuevos...`, delta });
-    const knownUris = new Set(imported.map(i => i?.track?.uri).filter(Boolean));
-    const fetchCount = delta + 20;
-    const recent = await getRecentLikes(fetchCount);
-    const newOnes = recent.filter(r => r?.track?.uri && !knownUris.has(r.track.uri));
-    finalItems = [...newOnes, ...imported];
+    if (delta > 1000) {
+      if (onProgress) onProgress({ phase: 'skip-big', message: `El archivo tiene ${imported.length} likes pero Spotify tiene ${totalNow} (delta ${delta}). Se importa solo lo del archivo. Para sincronizar todo usá "Actualizar datos".` });
+    } else {
+      if (onProgress) onProgress({ phase: 'fetching', message: `Trayendo ${delta} likes nuevos...`, delta });
+      const knownUris = new Set(imported.map(i => i?.track?.uri).filter(Boolean));
+      const fetchCount = delta + 20;
+      const recent = await getRecentLikes(fetchCount);
+      const newOnes = recent.filter(r => r?.track?.uri && !knownUris.has(r.track.uri));
+      finalItems = [...newOnes, ...imported];
+    }
   }
 
   cacheSet(LIKES_CACHE_KEY, finalItems, CACHE_TTL_MIN);
@@ -400,6 +433,7 @@ async function importLikesData(parsed, onProgress) {
     added: finalItems.length - imported.length,
     totalNow,
     totalAtExport,
+    skippedBigDelta: delta > 1000,
   };
 }
 
@@ -512,6 +546,7 @@ export {
   invalidateLikesCache,
   invalidatePlaylistsCache,
   getLikesTotal,
+  syncLikesIncremental,
   exportLikesData,
   importLikesData,
   exportAllData,
