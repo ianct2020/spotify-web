@@ -219,6 +219,8 @@ function computeStats(likes) {
   const popularityBuckets = { '0-19': 0, '20-39': 0, '40-59': 0, '60-79': 0, '80-100': 0 };
   let totalDuration = 0;
   let totalPopularity = 0;
+  let popularityCount = 0;
+  let nullPopularityCount = 0;
   let explicitCount = 0;
 
   likes.forEach(item => {
@@ -250,11 +252,14 @@ function computeStats(likes) {
 
     if (t.popularity != null) {
       totalPopularity += t.popularity;
+      popularityCount++;
       if (t.popularity < 20) popularityBuckets['0-19']++;
       else if (t.popularity < 40) popularityBuckets['20-39']++;
       else if (t.popularity < 60) popularityBuckets['40-59']++;
       else if (t.popularity < 80) popularityBuckets['60-79']++;
       else popularityBuckets['80-100']++;
+    } else {
+      nullPopularityCount++;
     }
 
     totalDuration += t.duration_ms || 0;
@@ -291,7 +296,9 @@ function computeStats(likes) {
     addedByDow,
     addedByHour,
     popularityBuckets,
-    avgPopularity: likes.length > 0 ? Math.round(totalPopularity / likes.length) : 0,
+    avgPopularity: popularityCount > 0 ? Math.round(totalPopularity / popularityCount) : 0,
+    popularityCount,
+    nullPopularityCount,
     totalDuration,
     explicitCount,
     explicitPct: likes.length > 0 ? Math.round((explicitCount / likes.length) * 100) : 0,
@@ -469,10 +476,16 @@ function buildCharts(stats) {
     if (canvas) {
       const card = canvas.closest('.dash-chart-card');
       if (card) {
+        const nullPct = stats.nullPopularityCount > 0
+          ? Math.round((stats.nullPopularityCount / (stats.nullPopularityCount + stats.popularityCount)) * 100)
+          : 0;
         card.innerHTML = `
           <h3>Popularidad</h3>
-          <div style="display:flex;align-items:center;justify-content:center;min-height:180px;color:var(--color-text-secondary);text-align:center;padding:16px;font-size:13px">
-            Los tracks no tienen datos de popularidad. Puede que Spotify no lo devuelva en este endpoint post-migración feb 2026, o que el JSON importado esté sin este campo. Probá "Actualizar datos".
+          <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:180px;color:var(--color-text-secondary);text-align:center;padding:16px;font-size:13px;gap:8px">
+            <div><strong style="color:var(--color-warning)">${nullPct}%</strong> de tus tracks (${stats.nullPopularityCount.toLocaleString()}) no tienen popularity.</div>
+            ${nullPct === 100
+              ? `<div>Spotify probablemente sacó el campo <code>popularity</code> del endpoint <code>/me/tracks</code> en la migración feb 2026.</div>`
+              : `<div>Los que sí tienen popularity: ${stats.popularityCount.toLocaleString()}. Probá "Actualizar datos" para volver a bajar.</div>`}
           </div>
         `;
       }
