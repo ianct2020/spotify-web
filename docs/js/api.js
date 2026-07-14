@@ -6,7 +6,7 @@ const MIN_RETRY_WAIT = 5000;
 const DEFAULT_MAX_RETRIES = 5;
 const LIKES_CACHE_KEY = 'all_liked_tracks';
 const PLAYLISTS_CACHE_KEY = 'all_user_playlists';
-const CACHE_TTL_MIN = 60;
+const CACHE_TTL_MIN = 60 * 24;
 
 async function spotifyFetch(endpoint, options = {}) {
   const url = endpoint.startsWith('http') ? endpoint : `${BASE}${endpoint}`;
