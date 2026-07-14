@@ -257,14 +257,16 @@ LIMPIEZA    Sync Mirror, Dedupe, Álbumes repetidos, Zombis, Versiones
 
 ---
 
-## Versión actual desplegada
+## Versión actual desplegada (actualizado 2026-07-13 noche)
 
-- Git: rama `main`, último commit `033d47e` "fix(rabbit+recs): related tags real + filtro ya-en-likes"
-- Cache bust: `?v=25`
-- TEST_MODE: `true` (2500 likes, 200 playlist items)
-- **Playlist espejo activa**: `anothertwo` (9.485 tracks). La vieja `another one` (11k) se borró vía script one-shot en la consola el 2026-07-03.
-- Default de Sync Mirror apunta a `anothertwo` (constante `TARGET_PLAYLIST_NAME` en `src/js/features/sync.js:7`).
-- **Last.fm integrado**. API key y username en localStorage del user, no en el repo. Ver `src/js/api/lastfm.js`.
+- Git: rama `main`, último commit **`8c55c84`** "data: backup de tags del user + throttle 400→600ms"
+- Cache bust: **`?v=37`**
+- **TEST_MODE eliminado por completo del código** (2026-07-11). Ver "Fase 4" abajo.
+- Playlist espejo activa: `anothertwo`. Default de Sync Mirror en `src/js/features/sync.js:7`.
+- **Last.fm + Stats.fm integrados**. Ver Fase 4 abajo.
+- Spotify user ID de Ian: `orhs6wu5ykk7ql80u92ujn74o`
+- Backup del user en el repo: `docs/data/user-orhs6wu5ykk7ql80u92ujn74o.json` (0 likes, 1503 tags al 2026-07-13).
+- Cache TTL: **24 horas** (subido de 60 min el 2026-07-13 porque Ian se quedaba sin cache al salir y volver más tarde).
 
 ## Sesión 2026-07-03 (contexto para el próximo Claude)
 
@@ -300,8 +302,101 @@ LIMPIEZA    Sync Mirror, Dedupe, Álbumes repetidos, Zombis, Versiones
 
 ---
 
+## Sesiones 2026-07-11 al 2026-07-13 — Fase 4 (contexto para el próximo Claude)
+
+**Contexto:** en tres sesiones consecutivas (11-12-13 julio 2026) se cerró Fase 3 y se hizo toda la Fase 4. Al 13 de julio la app tiene features avanzadas pero Ian tuvo problemas con rate limit y cache que se explican abajo.
+
+### Estado técnico
+
+- **Commit**: `8c55c84` — v=37
+- **TEST_MODE**: eliminado (ver más abajo)
+- **Cache TTL**: 24 horas (era 60 min, se subió para que no se pierda al salir del sitio)
+- **Backup del user en el repo**: `docs/data/user-orhs6wu5ykk7ql80u92ujn74o.json` (293 KB, tiene 0 likes + 1503 tags — Ian nunca terminó de cargar sus likes por rate limit)
+
+### Fase 3 cerrada (finales 2026-07-11)
+
+- ✅ Rippear TEST_MODE por completo. Se sacó `const TEST_MODE = true` de api.js, `isTestMode()`, badge "MODO PRUEBA — 25% de datos" del sidebar, warnings en sync.js. Ian confirmó "salió perfecto con datos reales (9506 likes, 2209 artistas únicos)".
+
+### Fase 4 — 2026-07-12
+
+- ✅ **NOISE_TAGS ampliado** en `by-genre.js`: filtra racism, misogyny, nazi, edgy, cool, chill, vibes, mood, nostalgia, legend, goat, king, queen, etc. (Ian vio "woman beater" en su listado — no era gracioso).
+- ✅ **Multi-género** en Por género: cards actúan como toggle, barra fija abajo con contador de tracks únicos, botón "Crear playlist" con nombre concatenado `Género: Rock + Metal`. CSS: `.smart-card.selected` con border accent + checkmark en esquina, `.action-bar` sticky bottom.
+- ✅ **Export/Import JSON del cache de tags** (después reemplazado por JSON unificado).
+- ✅ **Stats.fm integrado** (`src/js/api/statsfm.js`): endpoints públicos sin API key. Ian: username `i.an.iam`, Spotify ID `orhs6wu5ykk7ql80u92ujn74o`. `getTopArtists(username, {range:'lifetime', limit:1000})` — 1 request devuelve top 1000 con géneros de Spotify por artista. **Mata el bottleneck** de Last.fm (7 min → 1 request para las 1000 más escuchadas). `mergeCachedTags` en `lastfm.js` combina Last.fm + Stats.fm sin pisarse. Géneros compuestos tipo `hip-hop/rap` se splitean.
+- ✅ **Pantalla de bienvenida en Por género**: no auto-arranca, dos botones "Cargar mis likes" o "Importar cache primero".
+- ✅ **Cache incremental de likes** (formato inicial, después unificado): botón "Exportar likes" / "Importar likes" en Dashboard. Import: 1 request `/me/tracks?limit=1` para leer total actual → si hay delta, trae solo los N nuevos (offset 0) → mergea al frente dedupeando por URI. Ignora borrados (Ian confirmó que si borra 1-2 no importa).
+- ✅ DEFAULT_MAX_RETRIES en api.js: 3 → 5.
+
+### Fase 4 continuación — 2026-07-13
+
+**A. JSON unificado (v=34)**
+- Nueva `exportAllData(userId)` / `importAllData(parsed)` en api.js — **un solo archivo `user-<spotifyId>.json`** con `{likes, tags, spotifyUserId}`.
+- **Retrocompat** con formatos viejos (`spotify-tools-likes` / `spotify-tools-genres`).
+- Dashboard: botones renombrados a "Exportar todo" / "Importar todo".
+- Por género: los botones usan el mismo formato unificado.
+
+**B. Auto-load desde GitHub según user (v=34)**
+- Nueva `tryAutoLoadUserBackup(userId)` en api.js: hace `fetch('data/user-<safeId>.json')` en el mismo dominio de GitHub Pages.
+- Si existe y no hay cache local reciente, carga y mergea con toast "Backup del repo cargado: N likes · M artistas con tags".
+- `app.js` dispara post-login sin bloquear el render de la UI.
+- `src/data/README.md` con instrucciones para crear el backup.
+- `src/data/user-orhs6wu5ykk7ql80u92ujn74o.json` — backup de Ian ya commiteado.
+
+**C. Sin clasificar en Por género (v=34)**
+- Card con border warning dashed al final del grid con tracks cuyos artistas no tienen tags.
+- Click crea playlist "Sin clasificar (N)" para clasificar manual.
+
+**Fix popularidad (v=34, v=36)**
+- Si `popularityBuckets` está todo en 0, el chart se reemplaza con mensaje explicativo. En v=36 se agregó **auto-diagnóstico**: `computeStats` cuenta cuántos tracks tienen `popularity == null` vs con valor. El mensaje ahora dice `X% de tracks (N) no tienen popularity`. Si es 100%, es la API (Spotify sacó el campo post-migración feb 2026). Si es <100%, es datos incompletos.
+
+**Fix "Actualizar datos" full refresh (v=35)**
+- Nueva `syncLikesIncremental()` en api.js: 1 request HEAD + delta.
+- Dashboard "Actualizar datos" → usa incremental si hay cache, full si no.
+- `importLikesData`: si archivo tiene 0 items → aborta con mensaje. Si delta > 1000 → salta el fetch y avisa que use "Actualizar datos".
+
+**Fix cache TTL + throttle (v=36, v=37)**
+- `CACHE_TTL_MIN`: 60 → **1440** (24h). Antes se le perdía el cache si salía y volvía en el día.
+- Sleep entre requests paginados: **400 → 600ms**. Reduce chance de 429 en cargas grandes.
+- `avgPopularity` ahora divide por `popularityCount` real (no `likes.length`) para no promediar en null.
+
+### Testing bloqueado por rate limit (2026-07-13 noche)
+
+Ian pasó todo el día con rate limit por intentar cargar los 9538 likes varias veces sin éxito. Cuando el rate limit pase (30-60 min desde el último 429), el orden de tareas es:
+
+1. **Cargar likes UNA vez**: Dashboard → "Cargar desde Spotify" → esperar ~3-4 min con el throttle nuevo de 600ms.
+2. **Exportar todo**: Dashboard → "Exportar todo" → se baja `user-orhs6wu5ykk7ql80u92ujn74o.json` con los 9538 likes + 1503 tags.
+3. **Commitear al repo**: Ian pide ayuda para mover el archivo (`/home/ian/Descargas/user-orhs6wu5ykk7ql80u92ujn74o.json`) a `/home/ian/spotify-web/src/data/`, hacer build + commit + push.
+4. Verificar que el auto-load funciona: recargar el sitio, chequear que toast dice "Backup cargado" y **NO** arranca a paginar de cero.
+5. Testear Multi-género real, Sin clasificar, Sync Stats.fm.
+
+### Bugs abiertos
+
+- **Popularidad**: pendiente confirmar si el endpoint `/me/tracks` de Spotify sigue devolviendo `popularity`. El mensaje de v=36 va a mostrar el % exacto — con eso se decide si el bug es de la API (100% null) o de datos (parcial). Sin verificar aún porque Ian no logró cargar likes completos.
+- **Rate limit sensibilidad**: aún con throttle 600ms, si Ian entra rápido varias veces, cae en 429. No hay más para reducir sin duplicar la duración de la carga.
+
+### Cosas NO implementadas (ideas)
+
+- Auto-sync incremental de likes al entrar al Dashboard: si hay export previo, chequear delta al vuelo. Hoy es manual (botón "Actualizar datos").
+- Range switcher para Stats.fm (hoy hardcoded `lifetime`).
+- Badges por tag mostrando source (Last.fm / Stats.fm). Baja prioridad.
+- Recomendaciones híbridas: hoy solo usa Last.fm `user.gettopartists`. Podría usar Stats.fm también.
+
+---
+
 ## Changelog reciente (últimos 5 cambios)
 
+- `v=37` (8c55c84): data — backup de tags de Ian en repo + throttle paginación 400→600ms.
+- `v=36` (183a57d): cache TTL 60min → 24h + diagnóstico automático de popularidad con % de nulls.
+- `v=35` (8ec7e50): "Actualizar datos" hace incremental sync + aviso de archivo vacío en import.
+- `v=34` (c2cb731): JSON unificado (likes + tags en un archivo) + auto-load desde GitHub según user + Sin clasificar en Por género + fix popularidad defensivo.
+- `v=33` (c6ef5a8): Dashboard con pantalla de bienvenida + botón cancelar carga (AbortController).
+- `v=32` (0a6493c): cache incremental de likes (export/import JSON) — ~190 requests → 2.
+- `v=31` (3e1af93): pantalla de bienvenida en Por género + no re-cargar likes tras sync/import.
+- `v=30` (a16f20c): integración Stats.fm — sin API key, un lifetime request trae top 1000 con géneros.
+- `v=29` (7505c70): export/import JSON del cache de géneros.
+- `v=28` (09c2c51): multi-género con toggle + NOISE_TAGS ampliado.
+- `v=27` (1ad979a): TEST_MODE rippado completo — evita mostrar "25% de datos".
+- `v=26` (2c93dd7): TEST_MODE off — carga los 9500 likes reales.
 - `v=25` (033d47e): Rabbit hole related tags fallback (computeRelatedTags agrega top tags de top 8 artistas). Recomendaciones filtra tracks individuales ya-en-likes con stat "Ya en tus likes (ocultos)".
 - `v=24` (6912ba8): Fase 3 completa — clasificación por género (by-genre.js con cache 30d en localStorage), recomendaciones basadas en scrobbles (recommendations.js), related tags en rabbit hole (roto por tag.getSimilar, luego reemplazado en v=25).
 - `v=23` (d2521cf): search minimal (solo nombre + géneros de Spotify sin imagen ni followers), scrollbar custom global.
