@@ -137,7 +137,7 @@ async function paginateAll(endpoint, { limit = 50, onProgress, partialCacheKey, 
       }
 
       if (!data.next) break;
-      await sleep(400);
+      await sleep(600);
     } catch (e) {
       if (partialCacheKey && items.length > 0) {
         cacheSet(partialCacheKey + '_partial', { items, offset, startOffset: initialOffset }, 60);
