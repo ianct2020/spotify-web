@@ -1,5 +1,5 @@
 import { getValidToken, refreshAccessToken } from './auth.js';
-import { cacheGet, cacheSet, cacheClear } from './storage.js';
+import { cacheGet, cacheGetRaw, cacheGetTimestamp, cacheSet, cacheClear } from './storage.js';
 
 const BASE = 'https://api.spotify.com/v1';
 const MIN_RETRY_WAIT = 5000;
@@ -275,25 +275,44 @@ async function syncLikesIncremental(onProgress) {
   return { hadCache: true, added: newOnes.length, totalNow, cachedCount: finalItems.length };
 }
 
+function getBestAvailableLikes() {
+  const full = cacheGetRaw(LIKES_CACHE_KEY);
+  if (Array.isArray(full) && full.length > 0) {
+    return { items: full, source: 'full' };
+  }
+  const partial = cacheGetRaw(LIKES_CACHE_KEY + '_partial');
+  if (partial && Array.isArray(partial.items) && partial.items.length > 0) {
+    return { items: partial.items, source: 'partial' };
+  }
+  return { items: [], source: 'empty' };
+}
+
+function getLikesCacheTimestamp() {
+  const ts = cacheGetTimestamp(LIKES_CACHE_KEY);
+  if (ts) return ts;
+  return cacheGetTimestamp(LIKES_CACHE_KEY + '_partial');
+}
+
 function exportLikesData() {
-  const cached = cacheGet(LIKES_CACHE_KEY) || [];
+  const { items } = getBestAvailableLikes();
   return {
     _format: 'spotify-tools-likes',
     _version: 1,
     _exportedAt: new Date().toISOString(),
-    totalAtExport: cached.length,
-    items: cached,
+    totalAtExport: items.length,
+    items,
   };
 }
 
 function exportAllData(spotifyUserId) {
-  const likes = cacheGet(LIKES_CACHE_KEY) || [];
+  const { items: likes, source } = getBestAvailableLikes();
   const tagsCache = JSON.parse(localStorage.getItem('lastfm_artist_tags_cache') || '{}');
   return {
     _format: 'spotify-tools-data',
     _version: 1,
     _exportedAt: new Date().toISOString(),
     spotifyUserId: spotifyUserId || null,
+    _likesSource: source,
     likes: {
       totalAtExport: likes.length,
       items: likes,
@@ -516,9 +535,14 @@ async function removeLikedTracks(ids) {
 }
 
 async function createPlaylist(name, description = '', isPublic = false) {
+  const safeName = String(name || '').trim().slice(0, 100);
+  if (safeName.length === 0) throw new Error('El nombre de la playlist no puede estar vacío');
+  if (safeName.length !== String(name).trim().length) {
+    console.warn(`createPlaylist: nombre truncado de ${String(name).trim().length} a 100 chars`);
+  }
   const result = await spotifyFetch('/me/playlists', {
     method: 'POST',
-    body: JSON.stringify({ name, description, public: isPublic }),
+    body: JSON.stringify({ name: safeName, description: String(description || '').slice(0, 300), public: isPublic }),
   });
   invalidatePlaylistsCache();
   return result;
@@ -552,4 +576,6 @@ export {
   exportAllData,
   importAllData,
   tryAutoLoadUserBackup,
+  getBestAvailableLikes,
+  getLikesCacheTimestamp,
 };

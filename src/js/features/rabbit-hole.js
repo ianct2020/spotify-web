@@ -1,6 +1,6 @@
 import { spotifyFetch, createPlaylist, addTracksToPlaylist, invalidatePlaylistsCache } from '../api.js';
 import { hasKey, setKey, getTopArtistsByTag, getArtistTopTracks, getArtistTopTags } from '../api/lastfm.js';
-import { showProgress, hideProgress, typeConfirmModal, escapeHtml } from '../ui/components.js';
+import { showProgress, hideProgress, promptPlaylistName, escapeHtml } from '../ui/components.js';
 import { showToast } from '../ui/toast.js';
 
 const SUGGESTED_TAGS = [
@@ -344,13 +344,9 @@ async function createPlaylistFromPicks() {
     return;
   }
   const uris = [...pickedUris];
-  const name = `${currentTag}: ${currentArtistPick.name}`;
-  const confirmed = await typeConfirmModal(
-    'Crear playlist',
-    `Se va a crear <strong>"${escapeHtml(name)}"</strong> con <strong>${uris.length}</strong> tracks.`,
-    'CREAR'
-  );
-  if (!confirmed) return;
+  const suggested = `${currentTag}: ${currentArtistPick.name}`;
+  const name = await promptPlaylistName(suggested, { trackCount: uris.length });
+  if (!name) return;
 
   try {
     showProgress(`Creando "${name}"...`, 0, uris.length);

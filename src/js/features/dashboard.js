@@ -1,4 +1,4 @@
-import { getAllLikedTracks, invalidateLikesCache, exportAllData, importAllData, getCurrentUserId, getLikesTotal, syncLikesIncremental } from '../api.js';
+import { getAllLikedTracks, invalidateLikesCache, exportAllData, importAllData, getCurrentUserId, getLikesTotal, syncLikesIncremental, getLikesCacheTimestamp, getBestAvailableLikes } from '../api.js';
 import { showProgress, hideProgress } from '../ui/components.js';
 import { showToast } from '../ui/toast.js';
 
@@ -11,10 +11,17 @@ export function render(container) {
       <div>
         <h1>Dashboard</h1>
         <p>Stats de tu biblioteca de Liked Songs.</p>
+        <div id="dash-last-sync" style="font-size:12px;color:var(--color-text-muted);margin-top:4px"></div>
       </div>
-      <div style="display:flex;gap:8px;flex-wrap:wrap">
-        <button class="btn btn-secondary btn-sm" id="dash-export-all-btn">Exportar todo</button>
-        <button class="btn btn-secondary btn-sm" id="dash-import-all-btn">Importar todo</button>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-start">
+        <div style="position:relative">
+          <button class="btn btn-secondary btn-sm" id="dash-export-all-btn" title="Elegí formato">Exportar ▾</button>
+          <div id="dash-export-menu" style="display:none;position:absolute;top:100%;right:0;margin-top:4px;background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-sm);box-shadow:0 4px 12px rgba(0,0,0,0.3);z-index:10;min-width:200px">
+            <button class="dash-export-opt" data-fmt="json" style="display:block;width:100%;text-align:left;padding:10px 14px;background:transparent;border:none;color:var(--color-text);cursor:pointer;font-size:13px">JSON <span style="color:var(--color-text-muted)">— likes + tags</span></button>
+            <button class="dash-export-opt" data-fmt="csv" style="display:block;width:100%;text-align:left;padding:10px 14px;background:transparent;border:none;color:var(--color-text);cursor:pointer;font-size:13px;border-top:1px solid var(--color-border)">CSV <span style="color:var(--color-text-muted)">— solo likes, plano</span></button>
+          </div>
+        </div>
+        <button class="btn btn-secondary btn-sm" id="dash-import-all-btn">Importar</button>
         <input type="file" id="dash-import-all-input" accept=".json,application/json" style="display:none">
         <button class="btn btn-secondary btn-sm" id="dash-refresh-btn">Actualizar datos</button>
       </div>
@@ -22,8 +29,25 @@ export function render(container) {
     <div id="dash-content"></div>
   `;
 
+  refreshLastSyncLabel();
+
   document.getElementById('dash-refresh-btn').onclick = handleRefresh;
-  document.getElementById('dash-export-all-btn').onclick = handleExportAll;
+  const exportBtn = document.getElementById('dash-export-all-btn');
+  const exportMenu = document.getElementById('dash-export-menu');
+  exportBtn.onclick = (e) => {
+    e.stopPropagation();
+    exportMenu.style.display = exportMenu.style.display === 'block' ? 'none' : 'block';
+  };
+  document.addEventListener('click', () => { exportMenu.style.display = 'none'; });
+  exportMenu.querySelectorAll('.dash-export-opt').forEach(b => {
+    b.onmouseenter = () => { b.style.background = 'var(--color-elevated)'; };
+    b.onmouseleave = () => { b.style.background = 'transparent'; };
+    b.onclick = () => {
+      exportMenu.style.display = 'none';
+      if (b.dataset.fmt === 'json') handleExportAll();
+      else if (b.dataset.fmt === 'csv') handleExportCsv();
+    };
+  });
   const importInput = document.getElementById('dash-import-all-input');
   document.getElementById('dash-import-all-btn').onclick = () => importInput.click();
   importInput.onchange = handleImportAll;
@@ -40,20 +64,30 @@ function renderStartScreen() {
   const content = document.getElementById('dash-content');
   if (!content) return;
 
-  const cached = JSON.parse(localStorage.getItem('cache_all_liked_tracks') || 'null');
-  const cachedCount = cached?.data?.length || 0;
-  const hasCache = cachedCount > 0;
+  const { items: cachedItems, source: cacheSource } = getBestAvailableLikes();
+  const cachedCount = cachedItems.length;
+  const hasFull = cachedCount > 0 && cacheSource === 'full';
+  const hasPartial = cachedCount > 0 && cacheSource === 'partial';
+  const timestamp = getLikesCacheTimestamp();
+  const lastSyncLabel = timestamp ? formatRelativeTime(timestamp) : null;
+
+  let intro;
+  if (hasFull) {
+    intro = `Tenés <strong>${cachedCount.toLocaleString()}</strong> likes cacheados${lastSyncLabel ? ` · última sync <strong>${lastSyncLabel}</strong>` : ''}. Podés usarlos directo o importar un JSON previo.`;
+  } else if (hasPartial) {
+    intro = `<span style="color:var(--color-warning)">Carga parcial:</span> tenés <strong>${cachedCount.toLocaleString()}</strong> likes (se cortó a mitad la última vez${lastSyncLabel ? ', hace ' + lastSyncLabel : ''}). Podés retomar o importar un JSON.`;
+  } else {
+    intro = `No hay likes cacheados. Podés cargar todo desde Spotify (~190 requests, tarda ~2-4 min) o importar un JSON previo (1 request, mucho más rápido).`;
+  }
+
+  const primaryLabel = hasFull ? 'Usar los cacheados' : (hasPartial ? 'Retomar carga' : 'Cargar desde Spotify');
 
   content.innerHTML = `
     <div class="card" style="max-width:640px">
       <h3 style="margin-bottom:8px">¿Cómo querés arrancar?</h3>
-      <p style="color:var(--color-text-secondary);font-size:13px;margin-bottom:16px">
-        ${hasCache
-          ? `Tenés <strong>${cachedCount.toLocaleString()}</strong> likes cacheados en este browser (menos de 60 min de antigüedad). Podés usarlos directo o importar un JSON previo.`
-          : `No hay likes cacheados. Podés cargar todo desde Spotify (~190 requests, tarda ~2 min) o importar un JSON previo (1 request, mucho más rápido).`}
-      </p>
+      <p style="color:var(--color-text-secondary);font-size:13px;margin-bottom:16px">${intro}</p>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
-        <button class="btn btn-primary" id="dash-start-btn">${hasCache ? 'Usar los cacheados' : 'Cargar desde Spotify'}</button>
+        <button class="btn btn-primary" id="dash-start-btn">${primaryLabel}</button>
         <button class="btn btn-secondary" id="dash-preimport-btn">Importar JSON</button>
         <input type="file" id="dash-preimport-input" accept=".json,application/json" style="display:none">
       </div>
@@ -64,6 +98,33 @@ function renderStartScreen() {
   const preInput = document.getElementById('dash-preimport-input');
   document.getElementById('dash-preimport-btn').onclick = () => preInput.click();
   preInput.onchange = handleImportAll;
+}
+
+function refreshLastSyncLabel() {
+  const el = document.getElementById('dash-last-sync');
+  if (!el) return;
+  const ts = getLikesCacheTimestamp();
+  const { source, items } = getBestAvailableLikes();
+  if (!ts || items.length === 0) {
+    el.textContent = '';
+    return;
+  }
+  const rel = formatRelativeTime(ts);
+  const tag = source === 'partial' ? ' (carga parcial)' : '';
+  el.textContent = `Última sync: ${rel} — ${items.length.toLocaleString()} likes cacheados${tag}`;
+  el.style.color = source === 'partial' ? 'var(--color-warning)' : 'var(--color-text-muted)';
+}
+
+function formatRelativeTime(timestamp) {
+  const diffMs = Date.now() - timestamp;
+  const min = Math.floor(diffMs / 60000);
+  if (min < 1) return 'hace instantes';
+  if (min < 60) return `hace ${min} min`;
+  const hr = Math.floor(min / 60);
+  if (hr < 24) return `hace ${hr}h`;
+  const days = Math.floor(hr / 24);
+  if (days === 1) return 'ayer';
+  return `hace ${days} días`;
 }
 
 async function handleRefresh() {
@@ -100,16 +161,85 @@ async function handleRefresh() {
   }
 }
 
+function csvEscape(val) {
+  const s = val == null ? '' : String(val);
+  if (/[",\n\r]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
+  return s;
+}
+
+async function handleExportCsv() {
+  const { items, source } = getBestAvailableLikes();
+  if (items.length === 0) {
+    showToast('No hay likes cacheados para exportar. Cargalos primero.', 'error');
+    return;
+  }
+  if (source === 'partial') {
+    const ok = confirm(
+      `Atención: la carga se cortó antes de terminar.\n\n` +
+      `Solo tenés ${items.length.toLocaleString()} likes cacheados (parcial).\n\n` +
+      `¿Exportar el CSV igual?`
+    );
+    if (!ok) return;
+  }
+  const header = ['added_at', 'artist', 'title', 'album', 'release_date', 'year', 'popularity', 'duration_ms', 'explicit', 'isrc', 'uri'];
+  const rows = [header.map(csvEscape).join(',')];
+  items.forEach(item => {
+    const t = item.track;
+    if (!t) return;
+    const artist = (t.artists || []).map(a => a.name).join('; ');
+    const releaseDate = t.album?.release_date || '';
+    const year = releaseDate.slice(0, 4);
+    rows.push([
+      item.added_at || '',
+      artist,
+      t.name || '',
+      t.album?.name || '',
+      releaseDate,
+      year,
+      t.popularity ?? '',
+      t.duration_ms ?? '',
+      t.explicit ? 'true' : 'false',
+      t.external_ids?.isrc || '',
+      t.uri || '',
+    ].map(csvEscape).join(','));
+  });
+  const csv = '﻿' + rows.join('\r\n');
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const today = new Date().toISOString().slice(0, 10);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `spotify-likes-${today}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  const tag = source === 'partial' ? ' (parcial)' : '';
+  showToast(`CSV exportado${tag}: ${items.length.toLocaleString()} likes`, 'success');
+}
+
 async function handleExportAll() {
   let userId = null;
   try { userId = await getCurrentUserId(); } catch {}
   const data = exportAllData(userId);
   const likesCount = data.likes.items.length;
   const tagsCount = Object.keys(data.tags.entries).length;
+  const source = data._likesSource;
+
   if (likesCount === 0 && tagsCount === 0) {
-    showToast('No hay datos para exportar (cargá likes o corrí "Por género" primero)', 'error');
+    showToast('No hay datos para exportar. Cargá likes desde el Dashboard o corré "Por género" primero.', 'error');
     return;
   }
+
+  if (source === 'partial') {
+    const ok = confirm(
+      `Atención: la carga anterior se cortó antes de terminar.\n\n` +
+      `Solo tenés ${likesCount.toLocaleString()} likes cacheados (parcial).\n\n` +
+      `¿Exportar igual? Si querés todos, cancelá y usá "Actualizar datos" antes.`
+    );
+    if (!ok) return;
+  }
+
   const blob = new Blob([JSON.stringify(data)], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
   const today = new Date().toISOString().slice(0, 10);
@@ -121,7 +251,8 @@ async function handleExportAll() {
   a.click();
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
-  showToast(`Exportado: ${likesCount.toLocaleString()} likes + ${tagsCount.toLocaleString()} artistas`, 'success');
+  const tag = source === 'partial' ? ' (parcial)' : '';
+  showToast(`Exportado${tag}: ${likesCount.toLocaleString()} likes + ${tagsCount.toLocaleString()} artistas con tags`, 'success');
 }
 
 async function handleImportAll(e) {
@@ -158,33 +289,52 @@ async function loadData(forceRefresh) {
   if (forceRefresh) invalidateLikesCache();
 
   _loadController = new AbortController();
+  const startTime = Date.now();
 
   content.innerHTML = `
-    <div class="card" style="max-width:640px;text-align:center">
+    <div class="card" style="max-width:640px;text-align:center;padding:28px">
       <div class="spinner spinner-lg" style="margin:0 auto 16px"></div>
-      <div id="dash-load-text" style="font-size:14px;margin-bottom:8px">Cargando Liked Songs...</div>
-      <div style="height:8px;background:var(--color-elevated);border-radius:4px;overflow:hidden;margin-bottom:16px">
+      <div id="dash-load-text" style="font-size:15px;margin-bottom:6px;font-weight:500">Cargando Liked Songs...</div>
+      <div id="dash-load-eta" style="font-size:13px;color:var(--color-text-secondary);margin-bottom:14px">Calculando ETA...</div>
+      <div style="height:10px;background:var(--color-elevated);border-radius:5px;overflow:hidden;margin-bottom:20px">
         <div id="dash-load-bar" style="height:100%;background:var(--color-accent);width:0%;transition:width 0.2s"></div>
       </div>
-      <button class="btn btn-secondary btn-sm" id="dash-cancel-btn">Cancelar carga</button>
+      <button class="btn btn-danger" id="dash-cancel-btn" style="min-width:180px">Detener carga</button>
+      <div style="font-size:12px;color:var(--color-text-muted);margin-top:10px">Podés detener sin problema — la próxima vez retoma desde donde quedó.</div>
     </div>
   `;
 
   const textEl = document.getElementById('dash-load-text');
+  const etaEl = document.getElementById('dash-load-eta');
   const barEl = document.getElementById('dash-load-bar');
   document.getElementById('dash-cancel-btn').onclick = () => {
     _loadController?.abort();
+  };
+
+  const formatEta = (secs) => {
+    if (!isFinite(secs) || secs <= 0) return '';
+    if (secs < 60) return `~${Math.round(secs)}s restantes`;
+    const m = Math.floor(secs / 60);
+    const s = Math.round(secs % 60);
+    return `~${m}m ${s}s restantes`;
   };
 
   try {
     const likes = await getAllLikedTracks(({ loaded, total, cached }) => {
       if (cached) {
         textEl.textContent = `Usando cache local (${loaded.toLocaleString()} likes)`;
+        etaEl.textContent = 'Listo desde cache.';
         barEl.style.width = '100%';
       } else {
         const pct = total > 0 ? Math.min(100, (loaded / total) * 100) : 0;
-        textEl.textContent = `Cargando ${loaded.toLocaleString()} / ${(total || '?').toLocaleString()}`;
+        textEl.textContent = `${loaded.toLocaleString()} / ${(total || '?').toLocaleString()} likes`;
         barEl.style.width = `${pct}%`;
+        const elapsed = (Date.now() - startTime) / 1000;
+        if (loaded > 0 && total > 0 && elapsed > 2) {
+          const rate = loaded / elapsed;
+          const remaining = (total - loaded) / rate;
+          etaEl.textContent = formatEta(remaining);
+        }
       }
     }, { signal: _loadController.signal });
 
@@ -193,6 +343,7 @@ async function loadData(forceRefresh) {
 
     const stats = computeStats(likes);
     renderDashboard(content, stats);
+    refreshLastSyncLabel();
   } catch (e) {
     const cancelled = e.message.includes('cancelada');
     content.innerHTML = `
