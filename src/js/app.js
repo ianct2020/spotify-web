@@ -15,6 +15,7 @@ import { render as renderSmart } from './features/smart.js';
 import { render as renderSimilar } from './features/similar-artists.js';
 import { render as renderRabbit } from './features/rabbit-hole.js';
 import { render as renderByGenre } from './features/by-genre.js';
+import { render as renderByArtist } from './features/by-artist.js';
 import { render as renderRecs } from './features/recommendations.js';
 
 async function testConnection() {
@@ -198,6 +199,9 @@ function showApp(profile) {
           <a class="nav-link" data-route="smart" href="#smart">
             <span class="nav-link-icon">&#10022;</span> Smart Playlists
           </a>
+          <a class="nav-link" data-route="byartist" href="#byartist">
+            <span class="nav-link-icon">&#9835;</span> Por artista
+          </a>
         </div>
         <div class="sidebar-section">
           <div class="sidebar-section-title">Descubrir</div>
@@ -291,6 +295,7 @@ function showApp(profile) {
   registerRoute('rabbit', renderRabbit);
   registerRoute('recs', renderRecs);
   registerRoute('genre', renderByGenre);
+  registerRoute('byartist', renderByArtist);
   registerRoute('sync', renderSync);
   registerRoute('dedupe', renderDedupe);
   registerRoute('dupalbums', renderDupalbums);

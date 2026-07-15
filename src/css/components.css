@@ -453,6 +453,12 @@
   position: relative;
 }
 
+.sort-btn.sort-active {
+  background: var(--color-accent);
+  color: white;
+  border-color: var(--color-accent);
+}
+
 .smart-card.selected::after {
   content: '';
   position: absolute;

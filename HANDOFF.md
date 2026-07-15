@@ -257,10 +257,10 @@ LIMPIEZA    Sync Mirror, Dedupe, Álbumes repetidos, Zombis, Versiones
 
 ---
 
-## Versión actual desplegada (actualizado 2026-07-13 noche)
+## Versión actual desplegada (actualizado 2026-07-15)
 
-- Git: rama `main`, último commit **`8c55c84`** "data: backup de tags del user + throttle 400→600ms"
-- Cache bust: **`?v=37`**
+- Git: rama `main`, cambios sin commitear todavía
+- Cache bust: **`?v=38`**
 - **TEST_MODE eliminado por completo del código** (2026-07-11). Ver "Fase 4" abajo.
 - Playlist espejo activa: `anothertwo`. Default de Sync Mirror en `src/js/features/sync.js:7`.
 - **Last.fm + Stats.fm integrados**. Ver Fase 4 abajo.
@@ -385,6 +385,7 @@ Ian pasó todo el día con rate limit por intentar cargar los 9538 likes varias 
 
 ## Changelog reciente (últimos 5 cambios)
 
+- `v=38` (uncommitted): fix export vacío (fallback a partial cache) + modal `promptPlaylistName` con contador 100 chars (fix "playlist name too long" con multi-género) + cap defensivo en `createPlaylist` + búsqueda y orden en Por género + ETA y botón "Detener" prominente en carga de likes + hint "última sync" en Dashboard + export CSV (dropdown JSON/CSV) + nueva feature "Por artista".
 - `v=37` (8c55c84): data — backup de tags de Ian en repo + throttle paginación 400→600ms.
 - `v=36` (183a57d): cache TTL 60min → 24h + diagnóstico automático de popularidad con % de nulls.
 - `v=35` (8ec7e50): "Actualizar datos" hace incremental sync + aviso de archivo vacío en import.

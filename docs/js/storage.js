@@ -18,10 +18,36 @@ function cacheGet(key) {
   }
 }
 
+function cacheGetRaw(key) {
+  const raw = localStorage.getItem(CACHE_PREFIX + key);
+  if (!raw) return null;
+  try {
+    const { value } = JSON.parse(raw);
+    return value;
+  } catch {
+    return null;
+  }
+}
+
+function cacheGetTimestamp(key) {
+  const raw = localStorage.getItem(CACHE_PREFIX + key);
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw);
+    if (typeof parsed.storedAt === 'number') return parsed.storedAt;
+    if (typeof parsed.expiry === 'number') return parsed.expiry - DEFAULT_TTL * 60 * 1000;
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 function cacheSet(key, value, ttlMinutes = DEFAULT_TTL) {
+  const now = Date.now();
   const data = {
     value,
-    expiry: Date.now() + (ttlMinutes * 60 * 1000),
+    storedAt: now,
+    expiry: now + (ttlMinutes * 60 * 1000),
   };
   try {
     localStorage.setItem(CACHE_PREFIX + key, JSON.stringify(data));
@@ -51,4 +77,4 @@ function cacheClearAll() {
   keys.forEach(k => localStorage.removeItem(k));
 }
 
-export { cacheGet, cacheSet, cacheClear, cacheClearAll };
+export { cacheGet, cacheGetRaw, cacheGetTimestamp, cacheSet, cacheClear, cacheClearAll };
