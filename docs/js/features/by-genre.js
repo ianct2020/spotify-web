@@ -1,7 +1,7 @@
 import { getAllLikedTracks, createPlaylist, addTracksToPlaylist, invalidatePlaylistsCache, exportAllData, importAllData, getCurrentUserId } from '../api.js';
 import { hasKey, setKey, getArtistTopTags, getCachedTags, setCachedTags, mergeCachedTags } from '../api/lastfm.js';
 import * as statsfm from '../api/statsfm.js';
-import { showProgress, hideProgress, typeConfirmModal, escapeHtml } from '../ui/components.js';
+import { showProgress, hideProgress, promptPlaylistName, escapeHtml } from '../ui/components.js';
 import { showToast } from '../ui/toast.js';
 
 const NOISE_TAGS = new Set([
@@ -26,6 +26,16 @@ let likes = [];
 let artistToTags = new Map();
 let genreMap = new Map();
 let selectedTags = new Set();
+let genreFilter = '';
+const SORT_KEY = 'genre_sort_mode';
+const VALID_SORTS = new Set(['count-desc', 'count-asc', 'name-asc']);
+function getSortMode() {
+  const v = localStorage.getItem(SORT_KEY);
+  return VALID_SORTS.has(v) ? v : 'count-desc';
+}
+function setSortMode(v) {
+  if (VALID_SORTS.has(v)) localStorage.setItem(SORT_KEY, v);
+}
 
 export function render(container) {
   likes = [];
@@ -154,9 +164,18 @@ async function handleExport() {
   const data = exportAllData(userId);
   const likesCount = data.likes.items.length;
   const tagsCount = Object.keys(data.tags.entries).length;
+  const source = data._likesSource;
   if (likesCount === 0 && tagsCount === 0) {
     showToast('No hay datos para exportar', 'error');
     return;
+  }
+  if (source === 'partial') {
+    const ok = confirm(
+      `Atención: la carga de likes se cortó antes de terminar.\n\n` +
+      `Solo tenés ${likesCount.toLocaleString()} likes cacheados (parcial).\n\n` +
+      `¿Exportar igual?`
+    );
+    if (!ok) return;
   }
   const blob = new Blob([JSON.stringify(data)], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
@@ -169,7 +188,8 @@ async function handleExport() {
   a.click();
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
-  showToast(`Exportado: ${likesCount.toLocaleString()} likes + ${tagsCount.toLocaleString()} artistas`, 'success');
+  const tag = source === 'partial' ? ' (parcial)' : '';
+  showToast(`Exportado${tag}: ${likesCount.toLocaleString()} likes + ${tagsCount.toLocaleString()} artistas`, 'success');
 }
 
 async function handleStatsfm() {
@@ -381,48 +401,121 @@ function buildGenreMap() {
   return map;
 }
 
+function sortGenres(entries) {
+  const mode = getSortMode();
+  const copy = [...entries];
+  if (mode === 'count-asc') copy.sort((a, b) => a[1].length - b[1].length);
+  else if (mode === 'name-asc') copy.sort((a, b) => a[0].localeCompare(b[0]));
+  else copy.sort((a, b) => b[1].length - a[1].length);
+  return copy;
+}
+
+let cachedUnclassified = [];
+
 function showGenres() {
   genreMap = buildGenreMap();
   selectedTags = new Set();
+  genreFilter = '';
+  cachedUnclassified = computeUnclassified();
   const results = document.getElementById('genre-results');
 
-  const genres = [...genreMap.entries()]
-    .filter(([, tracks]) => tracks.length >= MIN_TRACKS_PER_GENRE)
-    .sort((a, b) => b[1].length - a[1].length);
+  const allGenres = [...genreMap.entries()].filter(([, tracks]) => tracks.length >= MIN_TRACKS_PER_GENRE);
 
-  const unclassified = computeUnclassified();
-
-  if (genres.length === 0 && unclassified.length === 0) {
+  if (allGenres.length === 0 && cachedUnclassified.length === 0) {
     results.innerHTML = `<div class="card"><p>No hay géneros con suficientes tracks (mín ${MIN_TRACKS_PER_GENRE}). Puede que necesites correr "Analizar" primero.</p></div>`;
     return;
   }
 
+  const mode = getSortMode();
   results.innerHTML = `
-    <div style="margin-bottom:8px;color:var(--color-text-secondary);font-size:14px">
-      ${genres.length} géneros con ${MIN_TRACKS_PER_GENRE}+ tracks. Click para seleccionar uno o varios, después "Crear playlist".
+    <div style="display:flex;gap:12px;align-items:center;margin-bottom:12px;flex-wrap:wrap">
+      <div style="flex:1;min-width:240px;position:relative">
+        <input type="text" id="genre-search-input" placeholder="Buscar género... (ej: rock, hip)"
+               style="width:100%;padding:9px 34px 9px 12px;background:var(--color-elevated);border:1px solid var(--color-border);border-radius:var(--radius-sm);color:var(--color-text);font-size:14px">
+        <button id="genre-search-clear" title="Limpiar"
+                style="position:absolute;right:6px;top:50%;transform:translateY(-50%);background:transparent;border:none;color:var(--color-text-muted);font-size:18px;cursor:pointer;padding:4px 8px;display:none">×</button>
+      </div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap">
+        <button class="btn btn-secondary btn-sm sort-btn ${mode === 'count-desc' ? 'sort-active' : ''}" data-sort="count-desc">Más tracks</button>
+        <button class="btn btn-secondary btn-sm sort-btn ${mode === 'count-asc' ? 'sort-active' : ''}" data-sort="count-asc">Menos tracks</button>
+        <button class="btn btn-secondary btn-sm sort-btn ${mode === 'name-asc' ? 'sort-active' : ''}" data-sort="name-asc">A-Z</button>
+      </div>
     </div>
+    <div id="genre-summary" style="margin-bottom:8px;color:var(--color-text-secondary);font-size:14px"></div>
+    <div id="genre-grid-holder"></div>
+    <div id="genre-action-bar"></div>
+  `;
+
+  const searchInput = document.getElementById('genre-search-input');
+  const clearBtn = document.getElementById('genre-search-clear');
+  searchInput.addEventListener('input', () => {
+    genreFilter = searchInput.value.trim().toLowerCase();
+    clearBtn.style.display = genreFilter ? 'block' : 'none';
+    renderGrid();
+  });
+  clearBtn.onclick = () => {
+    searchInput.value = '';
+    genreFilter = '';
+    clearBtn.style.display = 'none';
+    renderGrid();
+    searchInput.focus();
+  };
+  results.querySelectorAll('.sort-btn').forEach(btn => {
+    btn.onclick = () => {
+      setSortMode(btn.dataset.sort);
+      results.querySelectorAll('.sort-btn').forEach(b => b.classList.toggle('sort-active', b === btn));
+      renderGrid();
+    };
+  });
+
+  renderGrid();
+}
+
+function renderGrid() {
+  const holder = document.getElementById('genre-grid-holder');
+  const summary = document.getElementById('genre-summary');
+  if (!holder || !summary) return;
+
+  const allGenres = [...genreMap.entries()].filter(([, tracks]) => tracks.length >= MIN_TRACKS_PER_GENRE);
+  const filtered = genreFilter
+    ? allGenres.filter(([tag]) => tag.toLowerCase().includes(genreFilter))
+    : allGenres;
+  const sorted = sortGenres(filtered);
+  const showUnclassified = !genreFilter && cachedUnclassified.length > 0;
+
+  if (genreFilter) {
+    summary.textContent = `${sorted.length} de ${allGenres.length} géneros coinciden con "${genreFilter}"`;
+  } else {
+    summary.textContent = `${allGenres.length} géneros con ${MIN_TRACKS_PER_GENRE}+ tracks. Click para seleccionar uno o varios, después "Crear playlist".`;
+  }
+
+  if (sorted.length === 0 && !showUnclassified) {
+    holder.innerHTML = `<div class="card"><p>Ningún género coincide con "${escapeHtml(genreFilter)}".</p></div>`;
+    return;
+  }
+
+  holder.innerHTML = `
     <div class="smart-grid" style="padding-bottom:80px">
-      ${genres.map(([tag, tracks]) => `
-        <button class="smart-card genre-card" data-tag="${escapeHtml(tag)}">
+      ${sorted.map(([tag, tracks]) => `
+        <button class="smart-card genre-card ${selectedTags.has(tag) ? 'selected' : ''}" data-tag="${escapeHtml(tag)}">
           <div class="smart-card-title" style="font-size:15px;text-transform:capitalize">${escapeHtml(tag)}</div>
           <div class="smart-card-meta">${tracks.length.toLocaleString()} tracks</div>
         </button>
       `).join('')}
-      ${unclassified.length > 0 ? `
+      ${showUnclassified ? `
         <button class="smart-card genre-card" id="unclassified-card" style="border-color:var(--color-warning);border-style:dashed">
           <div class="smart-card-title" style="font-size:15px;color:var(--color-warning)">Sin clasificar</div>
-          <div class="smart-card-meta">${unclassified.length.toLocaleString()} tracks</div>
+          <div class="smart-card-meta">${cachedUnclassified.length.toLocaleString()} tracks</div>
         </button>
       ` : ''}
     </div>
-    <div id="genre-action-bar"></div>
   `;
 
-  results.querySelectorAll('.genre-card:not(#unclassified-card)').forEach(el => {
+  holder.querySelectorAll('.genre-card:not(#unclassified-card)').forEach(el => {
     el.onclick = () => toggleTag(el);
   });
   const uncEl = document.getElementById('unclassified-card');
-  if (uncEl) uncEl.onclick = () => createPlaylistForUnclassified(unclassified);
+  if (uncEl) uncEl.onclick = () => createPlaylistForUnclassified(cachedUnclassified);
 }
 
 function computeUnclassified() {
@@ -443,13 +536,12 @@ function computeUnclassified() {
 
 async function createPlaylistForUnclassified(tracks) {
   const uris = [...new Set(tracks.map(t => t.uri))];
-  const name = `Sin clasificar (${uris.length})`;
-  const confirmed = await typeConfirmModal(
-    'Crear playlist con tracks sin clasificar',
-    `Se va a crear <strong>"${escapeHtml(name)}"</strong> con <strong>${uris.length}</strong> tracks cuyos artistas no aparecen en el cache de tags (Last.fm ni Stats.fm). Podés clasificarlos manual desde ahí.`,
-    'CREAR'
-  );
-  if (!confirmed) return;
+  const suggested = `Sin clasificar (${uris.length})`;
+  const name = await promptPlaylistName(suggested, {
+    trackCount: uris.length,
+    subtitle: 'Tracks cuyos artistas no aparecen en el cache de tags. Podés clasificarlos manual desde acá.',
+  });
+  if (!name) return;
 
   try {
     showProgress(`Creando "${name}"...`, 0, uris.length);
@@ -530,14 +622,17 @@ async function createPlaylistForSelected() {
 
   const capitalize = s => s.replace(/\b\w/g, c => c.toUpperCase());
   const nameSuffix = tags.map(capitalize).join(' + ');
-  const name = `Género: ${nameSuffix}`;
+  const suggested = `Género: ${nameSuffix}`;
 
-  const bodyMsg = tags.length === 1
-    ? `Se va a crear <strong>"${escapeHtml(name)}"</strong> con <strong>${uris.length}</strong> tracks (likes cuyos artistas tienen "${escapeHtml(tags[0])}" entre sus top tags).`
-    : `Se va a crear <strong>"${escapeHtml(name)}"</strong> con <strong>${uris.length}</strong> tracks (unión de likes cuyos artistas tienen alguno de: ${tags.map(t => `"${escapeHtml(t)}"`).join(', ')}).`;
+  const subtitle = tags.length === 1
+    ? `Likes con "${tags[0]}" entre los top tags del artista.`
+    : `Unión de likes cuyos artistas tienen alguno de: ${tags.join(', ')}.`;
 
-  const confirmed = await typeConfirmModal('Crear playlist', bodyMsg, 'CREAR');
-  if (!confirmed) return;
+  const name = await promptPlaylistName(suggested, {
+    trackCount: uris.length,
+    subtitle,
+  });
+  if (!name) return;
 
   try {
     showProgress(`Creando "${name}"...`, 0, uris.length);

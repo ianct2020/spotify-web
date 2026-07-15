@@ -1,5 +1,5 @@
 import { getAllLikedTracks, createPlaylist, addTracksToPlaylist, getAllUserPlaylists, invalidatePlaylistsCache } from '../api.js';
-import { showProgress, hideProgress, typeConfirmModal, escapeHtml } from '../ui/components.js';
+import { showProgress, hideProgress, promptPlaylistName, escapeHtml } from '../ui/components.js';
 import { showToast } from '../ui/toast.js';
 
 let likes = [];
@@ -203,13 +203,9 @@ async function promptCreate(baseName, tracks) {
     return;
   }
   const uris = tracks.map(t => t.uri).filter(Boolean);
-  const finalName = await pickUniqueName(baseName);
-  const confirmed = await typeConfirmModal(
-    'Crear playlist',
-    `Se va a crear <strong>"${escapeHtml(finalName)}"</strong> con <strong>${uris.length.toLocaleString()}</strong> tracks.`,
-    'CREAR'
-  );
-  if (!confirmed) return;
+  const suggested = await pickUniqueName(baseName);
+  const finalName = await promptPlaylistName(suggested, { trackCount: uris.length });
+  if (!finalName) return;
 
   try {
     showProgress(`Creando "${finalName}"...`, 0, uris.length);

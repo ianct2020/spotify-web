@@ -117,6 +117,71 @@ function escapeHtml(str) {
   return div.innerHTML;
 }
 
+const PLAYLIST_NAME_MAX = 100;
+
+function promptPlaylistName(defaultName, opts = {}) {
+  const { trackCount = null, subtitle = '' } = opts;
+  const initial = (defaultName || '').slice(0, PLAYLIST_NAME_MAX);
+  return new Promise(resolve => {
+    const overlay = document.createElement('div');
+    overlay.className = 'modal-overlay';
+    overlay.innerHTML = `
+      <div class="modal" style="max-width:520px">
+        <h2 style="margin-bottom:8px">Nombre de la playlist</h2>
+        ${subtitle ? `<p style="color:var(--color-text-secondary);font-size:13px;margin-bottom:12px">${escapeHtml(subtitle)}</p>` : ''}
+        ${trackCount != null ? `<p style="color:var(--color-text-secondary);font-size:13px;margin-bottom:12px"><strong>${trackCount.toLocaleString()}</strong> tracks se van a agregar.</p>` : ''}
+        <input type="text" id="playlist-name-input" maxlength="${PLAYLIST_NAME_MAX}"
+               style="width:100%;padding:10px;background:var(--color-elevated);border:1px solid var(--color-border);border-radius:var(--radius-sm);color:var(--color-text);font-size:14px;margin-bottom:6px">
+        <div style="display:flex;justify-content:space-between;align-items:center;font-size:12px;color:var(--color-text-muted);margin-bottom:14px">
+          <span id="playlist-name-hint">Podés editarlo antes de crear.</span>
+          <span id="playlist-name-counter">0/${PLAYLIST_NAME_MAX}</span>
+        </div>
+        <div class="modal-actions">
+          <button class="btn btn-secondary" id="modal-cancel">Cancelar</button>
+          <button class="btn btn-primary" id="modal-confirm">Crear playlist</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+
+    const input = overlay.querySelector('#playlist-name-input');
+    const counter = overlay.querySelector('#playlist-name-counter');
+    const hint = overlay.querySelector('#playlist-name-hint');
+    const confirmBtn = overlay.querySelector('#modal-confirm');
+
+    input.value = initial;
+    setTimeout(() => { input.focus(); input.select(); }, 20);
+
+    const update = () => {
+      const len = input.value.length;
+      counter.textContent = `${len}/${PLAYLIST_NAME_MAX}`;
+      counter.style.color = len >= PLAYLIST_NAME_MAX ? 'var(--color-warning)' : 'var(--color-text-muted)';
+      const trimmed = input.value.trim();
+      confirmBtn.disabled = trimmed.length === 0;
+      if (defaultName && input.value !== initial && trimmed.length > 0) {
+        hint.textContent = 'Editado';
+      }
+    };
+    input.addEventListener('input', update);
+    update();
+
+    const close = val => {
+      overlay.remove();
+      resolve(val);
+    };
+    overlay.querySelector('#modal-cancel').onclick = () => close(null);
+    confirmBtn.onclick = () => {
+      const val = input.value.trim().slice(0, PLAYLIST_NAME_MAX);
+      if (val.length === 0) return;
+      close(val);
+    };
+    input.addEventListener('keydown', e => {
+      if (e.key === 'Enter' && !confirmBtn.disabled) confirmBtn.click();
+      else if (e.key === 'Escape') close(null);
+    });
+  });
+}
+
 function renderPlaylistGrid(playlists) {
   return `
     <div class="playlist-grid">
@@ -141,4 +206,4 @@ function bindPlaylistGrid(container, onSelect) {
   });
 }
 
-export { renderTrackRow, showProgress, hideProgress, confirmModal, typeConfirmModal, escapeHtml, renderPlaylistGrid, bindPlaylistGrid };
+export { renderTrackRow, showProgress, hideProgress, confirmModal, typeConfirmModal, promptPlaylistName, PLAYLIST_NAME_MAX, escapeHtml, renderPlaylistGrid, bindPlaylistGrid };
