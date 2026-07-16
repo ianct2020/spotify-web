@@ -259,8 +259,8 @@ LIMPIEZA    Sync Mirror, Dedupe, Álbumes repetidos, Zombis, Versiones
 
 ## Versión actual desplegada (actualizado 2026-07-15)
 
-- Git: rama `main`, cambios sin commitear todavía
-- Cache bust: **`?v=38`**
+- Git: rama `main`, sin commitear (v=39)
+- Cache bust: **`?v=39`**
 - **TEST_MODE eliminado por completo del código** (2026-07-11). Ver "Fase 4" abajo.
 - Playlist espejo activa: `anothertwo`. Default de Sync Mirror en `src/js/features/sync.js:7`.
 - **Last.fm + Stats.fm integrados**. Ver Fase 4 abajo.
@@ -385,7 +385,8 @@ Ian pasó todo el día con rate limit por intentar cargar los 9538 likes varias 
 
 ## Changelog reciente (últimos 5 cambios)
 
-- `v=38` (uncommitted): fix export vacío (fallback a partial cache) + modal `promptPlaylistName` con contador 100 chars (fix "playlist name too long" con multi-género) + cap defensivo en `createPlaylist` + búsqueda y orden en Por género + ETA y botón "Detener" prominente en carga de likes + hint "última sync" en Dashboard + export CSV (dropdown JSON/CSV) + nueva feature "Por artista".
+- `v=39` (uncommitted): **MIGRACIÓN A INDEXEDDB** para likes (bypass del cap 5MB de localStorage — 9538 likes × ~500B = 4.8MB en UTF-16 = 9.6MB de cuota, no entraba). Nuevo `src/js/idb.js` con wrapper mínimo. Migración automática desde localStorage al arrancar. `getAllLikedTracks`/`syncLikesIncremental`/`exportAllData`/`getBestAvailableLikes`/`getLikesCacheTimestamp` ahora async. Partial cache también en IDB. + Warning fuerte cuando el import tiene items:[] (confirm modal explícito). + NOISE_TAGS expandido con ~90 tags nuevos (artistas, ciudades, países, descriptivos vagos, categorías de app). + Feature "Agrupar parecidos" en Por género: toggle que colapsa ~350 tags a ~20 grupos canónicos usando el mapping en `src/js/features/genre-groups.js`. Persistido en localStorage.
+- `v=38` (6f4babe): fix export vacío (fallback a partial cache) + modal `promptPlaylistName` con contador 100 chars (fix "playlist name too long" con multi-género) + cap defensivo en `createPlaylist` + búsqueda y orden en Por género + ETA y botón "Detener" prominente en carga de likes + hint "última sync" en Dashboard + export CSV (dropdown JSON/CSV) + nueva feature "Por artista".
 - `v=37` (8c55c84): data — backup de tags de Ian en repo + throttle paginación 400→600ms.
 - `v=36` (183a57d): cache TTL 60min → 24h + diagnóstico automático de popularidad con % de nulls.
 - `v=35` (8ec7e50): "Actualizar datos" hace incremental sync + aviso de archivo vacío en import.

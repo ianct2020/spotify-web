@@ -1,5 +1,7 @@
 import { getValidToken, refreshAccessToken } from './auth.js';
 import { cacheGet, cacheGetRaw, cacheGetTimestamp, cacheSet, cacheClear } from './storage.js';
+import { idbGet, idbSet, idbDel, idbGetCached, idbGetCachedRaw, idbGetTimestamp, idbSetCached, idbAvailable } from './idb.js';
+import { showToast } from './ui/toast.js';
 
 const BASE = 'https://api.spotify.com/v1';
 const MIN_RETRY_WAIT = 5000;
@@ -89,6 +91,31 @@ function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
+const LIKES_PARTIAL_KEY = LIKES_CACHE_KEY + '_partial';
+
+async function savePartial(key, payload) {
+  if (key === LIKES_CACHE_KEY || key === LIKES_PARTIAL_KEY) {
+    try { await idbSetCached(LIKES_PARTIAL_KEY, payload, 24 * 60); } catch (e) { console.warn('savePartial IDB:', e); }
+  } else {
+    cacheSet(key + '_partial', payload, 60);
+  }
+}
+
+async function loadPartial(key) {
+  if (key === LIKES_CACHE_KEY || key === LIKES_PARTIAL_KEY) {
+    try { return await idbGetCached(LIKES_PARTIAL_KEY); } catch { return null; }
+  }
+  return cacheGet(key + '_partial');
+}
+
+async function clearPartial(key) {
+  if (key === LIKES_CACHE_KEY || key === LIKES_PARTIAL_KEY) {
+    try { await idbDel(LIKES_PARTIAL_KEY); } catch {}
+  } else {
+    cacheClear(key + '_partial');
+  }
+}
+
 async function paginateAll(endpoint, { limit = 50, onProgress, partialCacheKey, transform, maxItems, startOffset = 0, signal } = {}) {
   let items = [];
   let offset = startOffset;
@@ -98,7 +125,7 @@ async function paginateAll(endpoint, { limit = 50, onProgress, partialCacheKey, 
   const sep = endpoint.includes('?') ? '&' : '?';
 
   if (partialCacheKey) {
-    const partial = cacheGet(partialCacheKey + '_partial');
+    const partial = await loadPartial(partialCacheKey);
     if (partial && partial.items && partial.startOffset === initialOffset) {
       items = partial.items;
       offset = partial.offset;
@@ -110,7 +137,7 @@ async function paginateAll(endpoint, { limit = 50, onProgress, partialCacheKey, 
   while (offset < total && (!maxItems || items.length < maxItems)) {
     if (signal?.aborted) {
       if (partialCacheKey && items.length > 0) {
-        cacheSet(partialCacheKey + '_partial', { items, offset, startOffset: initialOffset }, 60);
+        await savePartial(partialCacheKey, { items, offset, startOffset: initialOffset });
       }
       throw new Error('Carga cancelada');
     }
@@ -132,7 +159,7 @@ async function paginateAll(endpoint, { limit = 50, onProgress, partialCacheKey, 
       }
 
       if (partialCacheKey && pagesSinceSave >= 10) {
-        cacheSet(partialCacheKey + '_partial', { items, offset, startOffset: initialOffset }, 60);
+        await savePartial(partialCacheKey, { items, offset, startOffset: initialOffset });
         pagesSinceSave = 0;
       }
 
@@ -140,7 +167,7 @@ async function paginateAll(endpoint, { limit = 50, onProgress, partialCacheKey, 
       await sleep(600);
     } catch (e) {
       if (partialCacheKey && items.length > 0) {
-        cacheSet(partialCacheKey + '_partial', { items, offset, startOffset: initialOffset }, 60);
+        await savePartial(partialCacheKey, { items, offset, startOffset: initialOffset });
         console.warn(`Saved partial progress: ${items.length} items at offset ${offset}`);
       }
       throw e;
@@ -148,7 +175,7 @@ async function paginateAll(endpoint, { limit = 50, onProgress, partialCacheKey, 
   }
 
   if (partialCacheKey) {
-    cacheClear(partialCacheKey + '_partial');
+    await clearPartial(partialCacheKey);
   }
 
   return items;
@@ -190,27 +217,60 @@ function slimPlaylist(p) {
   };
 }
 
+async function migrateLikesFromLocalStorage() {
+  const legacy = cacheGetRaw(LIKES_CACHE_KEY);
+  if (Array.isArray(legacy) && legacy.length > 0) {
+    try {
+      await idbSetCached(LIKES_CACHE_KEY, legacy, CACHE_TTL_MIN);
+      cacheClear(LIKES_CACHE_KEY);
+      console.log(`Migrated ${legacy.length} likes from localStorage to IndexedDB`);
+    } catch (e) {
+      console.warn('Migration failed:', e);
+    }
+  }
+  const legacyPartial = cacheGetRaw(LIKES_CACHE_KEY + '_partial');
+  if (legacyPartial && legacyPartial.items?.length > 0) {
+    try {
+      await idbSetCached(LIKES_PARTIAL_KEY, legacyPartial, CACHE_TTL_MIN);
+      cacheClear(LIKES_CACHE_KEY + '_partial');
+    } catch (e) {
+      console.warn('Partial migration failed:', e);
+    }
+  }
+}
+
+async function saveLikes(items) {
+  try {
+    await idbSetCached(LIKES_CACHE_KEY, items, CACHE_TTL_MIN);
+    return { ok: true };
+  } catch (e) {
+    console.error('IDB saveLikes failed:', e);
+    showToast(`Error guardando ${items.length.toLocaleString()} likes en el navegador: ${e.message}. Exportá el JSON YA para no perderlos.`, 'error');
+    return { ok: false, error: e };
+  }
+}
+
 async function getAllLikedTracks(onProgress, { force = false, signal } = {}) {
-  const cacheKey = LIKES_CACHE_KEY;
+  await migrateLikesFromLocalStorage();
 
   if (!force) {
-    const cached = cacheGet(cacheKey);
-    if (cached) {
+    const cached = await idbGetCached(LIKES_CACHE_KEY);
+    if (cached && Array.isArray(cached)) {
       if (onProgress) onProgress({ loaded: cached.length, total: cached.length, page: 1, cached: true });
       return cached;
     }
   } else {
-    cacheClear(cacheKey + '_partial');
+    await clearPartial(LIKES_CACHE_KEY);
   }
 
   const items = await paginateAll('/me/tracks', {
     limit: 50,
     onProgress,
-    partialCacheKey: cacheKey,
+    partialCacheKey: LIKES_CACHE_KEY,
     transform: item => ({ added_at: item.added_at, track: slimTrack(item.track) }),
     signal,
   });
-  cacheSet(cacheKey, items, CACHE_TTL_MIN);
+  await saveLikes(items);
   return items;
 }
 
@@ -235,6 +295,8 @@ async function getAllUserPlaylists(onProgress, { force = false } = {}) {
 
 function invalidateLikesCache() {
   cacheClear(LIKES_CACHE_KEY);
+  idbDel(LIKES_CACHE_KEY).catch(() => {});
+  idbDel(LIKES_PARTIAL_KEY).catch(() => {});
 }
 
 async function getLikesTotal() {
@@ -253,7 +315,8 @@ async function getRecentLikes(count) {
 }
 
 async function syncLikesIncremental(onProgress) {
-  const cached = cacheGet(LIKES_CACHE_KEY);
+  await migrateLikesFromLocalStorage();
+  const cached = await idbGetCached(LIKES_CACHE_KEY);
   if (!cached || cached.length === 0) {
     return { hadCache: false };
   }
@@ -271,30 +334,41 @@ async function syncLikesIncremental(onProgress) {
   const recent = await getRecentLikes(delta + 20);
   const newOnes = recent.filter(r => r?.track?.uri && !knownUris.has(r.track.uri));
   const finalItems = [...newOnes, ...cached];
-  cacheSet(LIKES_CACHE_KEY, finalItems, CACHE_TTL_MIN);
+  await saveLikes(finalItems);
   return { hadCache: true, added: newOnes.length, totalNow, cachedCount: finalItems.length };
 }
 
-function getBestAvailableLikes() {
-  const full = cacheGetRaw(LIKES_CACHE_KEY);
+async function getBestAvailableLikes() {
+  await migrateLikesFromLocalStorage();
+  const full = await idbGetCachedRaw(LIKES_CACHE_KEY);
   if (Array.isArray(full) && full.length > 0) {
     return { items: full, source: 'full' };
   }
-  const partial = cacheGetRaw(LIKES_CACHE_KEY + '_partial');
+  const partial = await idbGetCachedRaw(LIKES_PARTIAL_KEY);
   if (partial && Array.isArray(partial.items) && partial.items.length > 0) {
     return { items: partial.items, source: 'partial' };
+  }
+  const legacyFull = cacheGetRaw(LIKES_CACHE_KEY);
+  if (Array.isArray(legacyFull) && legacyFull.length > 0) {
+    return { items: legacyFull, source: 'full' };
+  }
+  const legacyPartial = cacheGetRaw(LIKES_CACHE_KEY + '_partial');
+  if (legacyPartial && Array.isArray(legacyPartial.items) && legacyPartial.items.length > 0) {
+    return { items: legacyPartial.items, source: 'partial' };
   }
   return { items: [], source: 'empty' };
 }
 
-function getLikesCacheTimestamp() {
-  const ts = cacheGetTimestamp(LIKES_CACHE_KEY);
+async function getLikesCacheTimestamp() {
+  const ts = await idbGetTimestamp(LIKES_CACHE_KEY);
   if (ts) return ts;
-  return cacheGetTimestamp(LIKES_CACHE_KEY + '_partial');
+  const tsPartial = await idbGetTimestamp(LIKES_PARTIAL_KEY);
+  if (tsPartial) return tsPartial;
+  return cacheGetTimestamp(LIKES_CACHE_KEY) || cacheGetTimestamp(LIKES_CACHE_KEY + '_partial');
 }
 
-function exportLikesData() {
-  const { items } = getBestAvailableLikes();
+async function exportLikesData() {
+  const { items } = await getBestAvailableLikes();
   return {
     _format: 'spotify-tools-likes',
     _version: 1,
@@ -304,8 +378,8 @@ function exportLikesData() {
   };
 }
 
-function exportAllData(spotifyUserId) {
-  const { items: likes, source } = getBestAvailableLikes();
+async function exportAllData(spotifyUserId) {
+  const { items: likes, source } = await getBestAvailableLikes();
   const tagsCache = JSON.parse(localStorage.getItem('lastfm_artist_tags_cache') || '{}');
   return {
     _format: 'spotify-tools-data',
@@ -366,8 +440,9 @@ async function importAllData(parsed, onProgress) {
 
 async function tryAutoLoadUserBackup(spotifyUserId) {
   if (!spotifyUserId) return { loaded: false };
+  await migrateLikesFromLocalStorage();
 
-  const cachedLikes = cacheGet(LIKES_CACHE_KEY);
+  const cachedLikes = await idbGetCached(LIKES_CACHE_KEY);
   if (cachedLikes && cachedLikes.length > 0) {
     return { loaded: false, reason: 'ya-hay-cache-local' };
   }
@@ -446,7 +521,7 @@ async function importLikesData(parsed, onProgress) {
     }
   }
 
-  cacheSet(LIKES_CACHE_KEY, finalItems, CACHE_TTL_MIN);
+  await saveLikes(finalItems);
   return {
     imported: imported.length,
     added: finalItems.length - imported.length,

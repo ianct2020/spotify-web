@@ -60,15 +60,16 @@ export function render(container) {
   };
 }
 
-function renderStartScreen() {
+async function renderStartScreen() {
   const content = document.getElementById('dash-content');
   if (!content) return;
+  content.innerHTML = `<div class="empty-state"><div class="spinner spinner-lg"></div><div style="margin-top:16px">Leyendo cache local...</div></div>`;
 
-  const { items: cachedItems, source: cacheSource } = getBestAvailableLikes();
+  const { items: cachedItems, source: cacheSource } = await getBestAvailableLikes();
   const cachedCount = cachedItems.length;
   const hasFull = cachedCount > 0 && cacheSource === 'full';
   const hasPartial = cachedCount > 0 && cacheSource === 'partial';
-  const timestamp = getLikesCacheTimestamp();
+  const timestamp = await getLikesCacheTimestamp();
   const lastSyncLabel = timestamp ? formatRelativeTime(timestamp) : null;
 
   let intro;
@@ -100,11 +101,11 @@ function renderStartScreen() {
   preInput.onchange = handleImportAll;
 }
 
-function refreshLastSyncLabel() {
+async function refreshLastSyncLabel() {
   const el = document.getElementById('dash-last-sync');
   if (!el) return;
-  const ts = getLikesCacheTimestamp();
-  const { source, items } = getBestAvailableLikes();
+  const ts = await getLikesCacheTimestamp();
+  const { source, items } = await getBestAvailableLikes();
   if (!ts || items.length === 0) {
     el.textContent = '';
     return;
@@ -168,7 +169,7 @@ function csvEscape(val) {
 }
 
 async function handleExportCsv() {
-  const { items, source } = getBestAvailableLikes();
+  const { items, source } = await getBestAvailableLikes();
   if (items.length === 0) {
     showToast('No hay likes cacheados para exportar. Cargalos primero.', 'error');
     return;
@@ -221,7 +222,7 @@ async function handleExportCsv() {
 async function handleExportAll() {
   let userId = null;
   try { userId = await getCurrentUserId(); } catch {}
-  const data = exportAllData(userId);
+  const data = await exportAllData(userId);
   const likesCount = data.likes.items.length;
   const tagsCount = Object.keys(data.tags.entries).length;
   const source = data._likesSource;
@@ -263,6 +264,22 @@ async function handleImportAll(e) {
   try {
     const text = await file.text();
     const parsed = JSON.parse(text);
+
+    const inspection = inspectImportPayload(parsed);
+    if (!inspection.hasLikes && !inspection.hasTags) {
+      showToast('El archivo no tiene ni likes ni tags reconocibles — ¿estás seguro que es un export de spotify-tools?', 'error');
+      return;
+    }
+    if (!inspection.hasLikes) {
+      const ok = confirm(
+        `Este archivo NO tiene likes cacheados (0 tracks).\n\n` +
+        `Solo trae ${inspection.tagsCount.toLocaleString()} artistas con tags.\n\n` +
+        `Si buscabas cargar tus likes, este archivo no sirve — vas a tener que cargarlos desde Spotify (o buscar un JSON que sí tenga likes).\n\n` +
+        `¿Importar los tags igual?`
+      );
+      if (!ok) return;
+    }
+
     showProgress('Importando...', 0, 0);
     const result = await importAllData(parsed, ({ message }) => {
       showProgress(message, 0, 0);
@@ -274,12 +291,26 @@ async function handleImportAll(e) {
     if (result.tagsImported > 0) parts.push(`${result.tagsImported} artistas nuevos`);
     if (result.tagsUpdated > 0) parts.push(`${result.tagsUpdated} actualizados`);
     const msg = parts.length > 0 ? `Importado: ${parts.join(' · ')}` : 'Archivo importado (sin cambios)';
-    showToast(msg, 'success');
+    const type = result.likesImported === 0 && inspection.hasLikes === false ? 'error' : 'success';
+    showToast(msg, type);
     loadData(false);
   } catch (err) {
     hideProgress();
     showToast('Error importando: ' + err.message, 'error');
   }
+}
+
+function inspectImportPayload(parsed) {
+  const likesItems = parsed?.likes?.items;
+  const oldFormatItems = parsed?._format === 'spotify-tools-likes' && Array.isArray(parsed?.items) ? parsed.items : null;
+  const items = Array.isArray(likesItems) ? likesItems : oldFormatItems;
+  const tagsEntries = parsed?.tags?.entries || (parsed?._format === 'spotify-tools-genres' ? parsed.entries : null);
+  return {
+    hasLikes: Array.isArray(items) && items.length > 0,
+    likesCount: Array.isArray(items) ? items.length : 0,
+    hasTags: !!tagsEntries && Object.keys(tagsEntries).length > 0,
+    tagsCount: tagsEntries ? Object.keys(tagsEntries).length : 0,
+  };
 }
 
 async function loadData(forceRefresh) {
