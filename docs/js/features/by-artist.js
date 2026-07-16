@@ -17,7 +17,7 @@ let artistMap = new Map();
 let selectedArtists = new Set();
 let filterText = '';
 
-export function render(container) {
+export async function render(container) {
   likes = [];
   artistMap = new Map();
   selectedArtists = new Set();
@@ -28,10 +28,12 @@ export function render(container) {
       <h1>Por artista</h1>
       <p>Elegí uno o varios artistas y armá una playlist con todos tus likes de ellos.</p>
     </div>
-    <div id="by-artist-content"></div>
+    <div id="by-artist-content">
+      <div class="empty-state"><div class="spinner spinner-lg"></div><div style="margin-top:16px">Leyendo cache local...</div></div>
+    </div>
   `;
 
-  const { items } = getBestAvailableLikes();
+  const { items } = await getBestAvailableLikes();
   if (items.length === 0) {
     renderStart();
   } else {

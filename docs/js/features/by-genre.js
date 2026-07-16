@@ -3,20 +3,51 @@ import { hasKey, setKey, getArtistTopTags, getCachedTags, setCachedTags, mergeCa
 import * as statsfm from '../api/statsfm.js';
 import { showProgress, hideProgress, promptPlaylistName, escapeHtml } from '../ui/components.js';
 import { showToast } from '../ui/toast.js';
+import { tagToGroup } from './genre-groups.js';
 
 const NOISE_TAGS = new Set([
   'seen live', 'favorites', 'favorite', 'favourite', 'favourites',
-  'awesome', 'love', 'love it', 'best', 'good', 'amazing',
+  'awesome', 'love', 'love it', 'best', 'good', 'amazing', 'good music',
   'usa', 'american', 'british', 'uk', 'canadian', 'australian',
   'male vocalists', 'female vocalists', 'male vocalist', 'female vocalist',
   'my music', 'my favourite', 'mymusic', 'my favorites',
-  'my favourite artists', 'spotify',
+  'my favourite artists', 'spotify', 'my top songs', 'x factor',
   'racism', 'racist', 'woman beater', 'wife beater', 'misogyny',
   'misogynistic', 'sexist', 'sexism', 'homophobic', 'homophobia',
   'nazi', 'fascist', 'edgy', 'problematic',
   'overrated', 'underrated', 'guilty pleasure',
   'cool', 'chill', 'vibes', 'mood', 'nostalgia', 'nostalgic',
   'legend', 'legends', 'goat', 'king', 'queen',
+  'catchy', 'smooth', 'dreamy', 'mellow', 'romantic', 'sexy', 'sweet',
+  'ass', 'scat', 'swag', 'peak', 'hard', 'burger', 'sleazepop',
+  'live', 'cover', 'covers', 'to tag', 'love at first listen',
+  'under 500 listeners', 'disney', 'boyband', 'boybands', 'girl groups',
+  'rutracker', 'us',
+  'biracial', 'white rapper', 'white boi', 'bald', 'pelado', 'calvo',
+  'boliche', 'previa', 'fiesta', 'joda', 'que paso tan asustado',
+  'rich parents', 'chetocore', 'palermo', 'palermitano', 'rally house',
+  'oway', 'peak', '4et', 'six20', 'stepteam', 'troop', 'bald', 'ovo',
+  'ysl', 'ofwgkta', 'homixide gang', 'rip gang', 'steezemusik',
+  'kanye west', 'travis scott', 'chris brown', 'ariana grande',
+  'one direction', '5 seconds of summer', 'jason derulo', 'demi lovato',
+  'kid rock', 'young thug', 'quavo', 'leo larregui', 'lil yachty',
+  'mf doom', 'lucki', 'whitney houston', 'jay-z', 'rihanna',
+  'justin bieber', 'the intruders', 'mint condition', 'slowsilver03',
+  'glo', 'pimmie',
+  'argentina', 'canada', 'spain', 'puerto rico', 'atlanta', 'new york',
+  'texas', 'chile', 'brazil', 'colombia', 'venezuela', 'uruguay',
+  'mexico', 'los angeles', 'compton', 'philadelphia', 'california',
+  'houston', 'chicago', 'detroit', 'arizona', 'north carolina',
+  'new zealand', 'ohio', 'indiana', 'florida', 'georgia', 'virginia',
+  'west coast', 'east coast', 'pittsburgh', 'new jersey', 'sweden',
+  'swedish', 'japan', 'japanese', 'korea', 'korean', 'france', 'french',
+  'germany', 'german', 'italy', 'italian', 'russia', 'russian',
+  'india', 'indian', 'irish', 'scottish', 'polish', 'norwegian',
+  'danish', 'icelandic', 'dutch', 'nigeria', 'nigerian', 'kenyan',
+  'congolese', 'zimbabwe', 'mexican', 'jamaican', 'jamaica', 'cuba',
+  'cuban', 'puerto rican', 'united states', 'united kingdom', 'australia',
+  'brazilian', 'latino', 'latin american', 'world', 'baltimore rap',
+  'malianteo', 'los patos feos', 'neoperreo',
 ]);
 
 const TOP_TAGS_PER_ARTIST = 5;
@@ -27,6 +58,7 @@ let artistToTags = new Map();
 let genreMap = new Map();
 let selectedTags = new Set();
 let genreFilter = '';
+let groupsMode = localStorage.getItem('genre_groups_mode') === '1';
 const SORT_KEY = 'genre_sort_mode';
 const VALID_SORTS = new Set(['count-desc', 'count-asc', 'name-asc']);
 function getSortMode() {
@@ -161,7 +193,7 @@ async function start() {
 async function handleExport() {
   let userId = null;
   try { userId = await getCurrentUserId(); } catch {}
-  const data = exportAllData(userId);
+  const data = await exportAllData(userId);
   const likesCount = data.likes.items.length;
   const tagsCount = Object.keys(data.tags.entries).length;
   const source = data._likesSource;
@@ -271,6 +303,19 @@ function promptStatsfmUsername() {
   });
 }
 
+function inspectImportPayload(parsed) {
+  const likesItems = parsed?.likes?.items;
+  const oldFormatItems = parsed?._format === 'spotify-tools-likes' && Array.isArray(parsed?.items) ? parsed.items : null;
+  const items = Array.isArray(likesItems) ? likesItems : oldFormatItems;
+  const tagsEntries = parsed?.tags?.entries || (parsed?._format === 'spotify-tools-genres' ? parsed.entries : null);
+  return {
+    hasLikes: Array.isArray(items) && items.length > 0,
+    likesCount: Array.isArray(items) ? items.length : 0,
+    hasTags: !!tagsEntries && Object.keys(tagsEntries).length > 0,
+    tagsCount: tagsEntries ? Object.keys(tagsEntries).length : 0,
+  };
+}
+
 async function handleImport(e, { skipRefresh = false } = {}) {
   const file = e.target.files?.[0];
   e.target.value = '';
@@ -279,6 +324,20 @@ async function handleImport(e, { skipRefresh = false } = {}) {
   try {
     const text = await file.text();
     const parsed = JSON.parse(text);
+    const inspection = inspectImportPayload(parsed);
+    if (!inspection.hasLikes && !inspection.hasTags) {
+      showToast('El archivo no tiene ni likes ni tags reconocibles', 'error');
+      return;
+    }
+    if (!inspection.hasLikes && inspection.hasTags) {
+      const ok = confirm(
+        `El archivo NO tiene likes cacheados.\n\n` +
+        `Solo trae ${inspection.tagsCount.toLocaleString()} artistas con tags.\n\n` +
+        `¿Importar los tags igual? Los likes vas a tener que cargarlos aparte.`
+      );
+      if (!ok) return;
+    }
+
     const result = await importAllData(parsed);
     const parts = [];
     if (result.likesImported > 0) parts.push(`${result.likesImported.toLocaleString()} likes`);
@@ -386,15 +445,23 @@ function buildGenreMap() {
     if (tags === undefined) {
       const cached = getCachedTags(artistName) || [];
       tags = cached
-        .filter(t => !NOISE_TAGS.has(t.name))
+        .filter(t => !NOISE_TAGS.has(String(t.name).toLowerCase()))
         .slice(0, TOP_TAGS_PER_ARTIST)
         .map(t => t.name);
       artistToTags.set(artistName, tags);
     }
 
+    const buckets = new Set();
     tags.forEach(tag => {
-      if (!map.has(tag)) map.set(tag, []);
-      map.get(tag).push(track);
+      let bucket = tag;
+      if (groupsMode) {
+        const grp = tagToGroup(tag);
+        if (grp) bucket = grp;
+      }
+      if (buckets.has(bucket)) return;
+      buckets.add(bucket);
+      if (!map.has(bucket)) map.set(bucket, []);
+      map.get(bucket).push(track);
     });
   });
 
@@ -435,6 +502,10 @@ function showGenres() {
         <button id="genre-search-clear" title="Limpiar"
                 style="position:absolute;right:6px;top:50%;transform:translateY(-50%);background:transparent;border:none;color:var(--color-text-muted);font-size:18px;cursor:pointer;padding:4px 8px;display:none">×</button>
       </div>
+      <label style="display:flex;gap:6px;align-items:center;font-size:13px;color:var(--color-text-secondary);cursor:pointer;user-select:none;padding:6px 10px;border:1px solid var(--color-border);border-radius:var(--radius-sm);background:var(--color-elevated)">
+        <input type="checkbox" id="genre-groups-toggle" ${groupsMode ? 'checked' : ''} style="margin:0">
+        <span>Agrupar parecidos</span>
+      </label>
       <div style="display:flex;gap:6px;flex-wrap:wrap">
         <button class="btn btn-secondary btn-sm sort-btn ${mode === 'count-desc' ? 'sort-active' : ''}" data-sort="count-desc">Más tracks</button>
         <button class="btn btn-secondary btn-sm sort-btn ${mode === 'count-asc' ? 'sort-active' : ''}" data-sort="count-asc">Menos tracks</button>
@@ -468,6 +539,13 @@ function showGenres() {
     };
   });
 
+  document.getElementById('genre-groups-toggle').onchange = (e) => {
+    groupsMode = e.target.checked;
+    localStorage.setItem('genre_groups_mode', groupsMode ? '1' : '0');
+    selectedTags = new Set();
+    showGenres();
+  };
+
   renderGrid();
 }
 
@@ -483,10 +561,13 @@ function renderGrid() {
   const sorted = sortGenres(filtered);
   const showUnclassified = !genreFilter && cachedUnclassified.length > 0;
 
+  const noun = groupsMode ? 'grupos' : 'géneros';
   if (genreFilter) {
-    summary.textContent = `${sorted.length} de ${allGenres.length} géneros coinciden con "${genreFilter}"`;
+    summary.textContent = `${sorted.length} de ${allGenres.length} ${noun} coinciden con "${genreFilter}"`;
   } else {
-    summary.textContent = `${allGenres.length} géneros con ${MIN_TRACKS_PER_GENRE}+ tracks. Click para seleccionar uno o varios, después "Crear playlist".`;
+    summary.textContent = groupsMode
+      ? `${allGenres.length} grupos + subgéneros sin agrupar (mín ${MIN_TRACKS_PER_GENRE} tracks). Un track cuenta 1 vez por grupo.`
+      : `${allGenres.length} géneros con ${MIN_TRACKS_PER_GENRE}+ tracks. Click para seleccionar uno o varios, después "Crear playlist".`;
   }
 
   if (sorted.length === 0 && !showUnclassified) {
