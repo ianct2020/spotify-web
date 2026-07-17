@@ -1,5 +1,5 @@
 import { getAllLikedTracks, invalidateLikesCache, exportAllData, importAllData, getCurrentUserId, getLikesTotal, syncLikesIncremental, getLikesCacheTimestamp, getBestAvailableLikes } from '../api.js';
-import { showProgress, hideProgress } from '../ui/components.js';
+import { showProgress, hideProgress, alertModal } from '../ui/components.js';
 import { showToast } from '../ui/toast.js';
 
 let charts = [];
@@ -175,10 +175,11 @@ async function handleExportCsv() {
     return;
   }
   if (source === 'partial') {
-    const ok = confirm(
-      `Atención: la carga se cortó antes de terminar.\n\n` +
-      `Solo tenés ${items.length.toLocaleString()} likes cacheados (parcial).\n\n` +
-      `¿Exportar el CSV igual?`
+    const ok = await alertModal(
+      'La carga se cortó a mitad',
+      `<p>Solo tenés <strong>${items.length.toLocaleString()} likes cacheados</strong> (parcial). El CSV va a incluir solo esos.</p>
+       <p>¿Exportar igual, o cancelar y usar "Actualizar datos" primero?</p>`,
+      { variant: 'warning', confirmText: 'Exportar CSV parcial', cancelText: 'Cancelar' }
     );
     if (!ok) return;
   }
@@ -233,10 +234,11 @@ async function handleExportAll() {
   }
 
   if (source === 'partial') {
-    const ok = confirm(
-      `Atención: la carga anterior se cortó antes de terminar.\n\n` +
-      `Solo tenés ${likesCount.toLocaleString()} likes cacheados (parcial).\n\n` +
-      `¿Exportar igual? Si querés todos, cancelá y usá "Actualizar datos" antes.`
+    const ok = await alertModal(
+      'La carga se cortó a mitad',
+      `<p>Solo tenés <strong>${likesCount.toLocaleString()} likes cacheados</strong> (parcial). La última vez que cargaste desde Spotify se interrumpió antes de terminar.</p>
+       <p>Podés exportar igual, o cancelar y usar <strong>"Actualizar datos"</strong> para completar los que faltan primero.</p>`,
+      { variant: 'warning', confirmText: 'Exportar parcial igual', cancelText: 'Cancelar' }
     );
     if (!ok) return;
   }
@@ -271,11 +273,12 @@ async function handleImportAll(e) {
       return;
     }
     if (!inspection.hasLikes) {
-      const ok = confirm(
-        `Este archivo NO tiene likes cacheados (0 tracks).\n\n` +
-        `Solo trae ${inspection.tagsCount.toLocaleString()} artistas con tags.\n\n` +
-        `Si buscabas cargar tus likes, este archivo no sirve — vas a tener que cargarlos desde Spotify (o buscar un JSON que sí tenga likes).\n\n` +
-        `¿Importar los tags igual?`
+      const ok = await alertModal(
+        'Este archivo no tiene likes',
+        `<p>El JSON trae <strong>0 tracks</strong> en likes pero sí <strong>${inspection.tagsCount.toLocaleString()} artistas con tags</strong>.</p>
+         <p>Si buscabas cargar tu biblioteca de Liked Songs, este archivo <strong>no sirve</strong> — cargala desde el botón "Cargar desde Spotify" y después exportá con la versión actual (v=39+).</p>
+         <p>Si solo querías los tags para clasificar en Por género, seguí.</p>`,
+        { variant: 'warning', confirmText: 'Importar solo los tags', cancelText: 'Cancelar' }
       );
       if (!ok) return;
     }
