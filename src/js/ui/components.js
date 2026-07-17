@@ -117,6 +117,53 @@ function escapeHtml(str) {
   return div.innerHTML;
 }
 
+function alertModal(title, messageHtml, opts = {}) {
+  const {
+    confirmText = 'Aceptar',
+    cancelText = 'Cancelar',
+    variant = 'info',
+    icon = null,
+  } = opts;
+
+  return new Promise(resolve => {
+    const overlay = document.createElement('div');
+    overlay.className = 'modal-overlay';
+    const iconChar = icon || (variant === 'warning' ? '!' : variant === 'danger' ? '×' : 'i');
+    overlay.innerHTML = `
+      <div class="modal modal-alert modal-alert-${variant}" style="max-width:520px">
+        <div class="modal-alert-head">
+          <span class="modal-alert-icon">${iconChar}</span>
+          <h2 style="margin:0">${escapeHtml(title)}</h2>
+        </div>
+        <div class="modal-alert-body">${messageHtml}</div>
+        <div class="modal-actions">
+          <button class="btn btn-secondary" id="modal-cancel">${escapeHtml(cancelText)}</button>
+          <button class="btn btn-primary" id="modal-confirm">${escapeHtml(confirmText)}</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+    const cancelBtn = overlay.querySelector('#modal-cancel');
+    const confirmBtn = overlay.querySelector('#modal-confirm');
+    setTimeout(() => confirmBtn.focus(), 20);
+
+    const close = val => { overlay.remove(); resolve(val); };
+    cancelBtn.onclick = () => close(false);
+    confirmBtn.onclick = () => close(true);
+    overlay.onkeydown = e => {
+      if (e.key === 'Escape') close(false);
+      else if (e.key === 'Enter') close(true);
+    };
+    overlay.addEventListener('keydown', e => {
+      if (e.key === 'Escape') close(false);
+    });
+  });
+}
+
+function infoModal(title, messageHtml, opts = {}) {
+  return alertModal(title, messageHtml, { ...opts, cancelText: opts.cancelText || 'Cerrar', variant: opts.variant || 'info' });
+}
+
 const PLAYLIST_NAME_MAX = 100;
 
 function promptPlaylistName(defaultName, opts = {}) {
@@ -206,4 +253,4 @@ function bindPlaylistGrid(container, onSelect) {
   });
 }
 
-export { renderTrackRow, showProgress, hideProgress, confirmModal, typeConfirmModal, promptPlaylistName, PLAYLIST_NAME_MAX, escapeHtml, renderPlaylistGrid, bindPlaylistGrid };
+export { renderTrackRow, showProgress, hideProgress, confirmModal, typeConfirmModal, promptPlaylistName, alertModal, infoModal, PLAYLIST_NAME_MAX, escapeHtml, renderPlaylistGrid, bindPlaylistGrid };

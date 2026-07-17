@@ -1,7 +1,7 @@
 import { getAllLikedTracks, createPlaylist, addTracksToPlaylist, invalidatePlaylistsCache, exportAllData, importAllData, getCurrentUserId } from '../api.js';
 import { hasKey, setKey, getArtistTopTags, getCachedTags, setCachedTags, mergeCachedTags } from '../api/lastfm.js';
 import * as statsfm from '../api/statsfm.js';
-import { showProgress, hideProgress, promptPlaylistName, escapeHtml } from '../ui/components.js';
+import { showProgress, hideProgress, promptPlaylistName, alertModal, escapeHtml } from '../ui/components.js';
 import { showToast } from '../ui/toast.js';
 import { tagToGroup } from './genre-groups.js';
 
@@ -202,10 +202,11 @@ async function handleExport() {
     return;
   }
   if (source === 'partial') {
-    const ok = confirm(
-      `Atención: la carga de likes se cortó antes de terminar.\n\n` +
-      `Solo tenés ${likesCount.toLocaleString()} likes cacheados (parcial).\n\n` +
-      `¿Exportar igual?`
+    const ok = await alertModal(
+      'La carga se cortó a mitad',
+      `<p>Solo tenés <strong>${likesCount.toLocaleString()} likes cacheados</strong> (parcial). El JSON va a incluir solo esos.</p>
+       <p>¿Exportar igual?</p>`,
+      { variant: 'warning', confirmText: 'Exportar parcial', cancelText: 'Cancelar' }
     );
     if (!ok) return;
   }
@@ -330,10 +331,11 @@ async function handleImport(e, { skipRefresh = false } = {}) {
       return;
     }
     if (!inspection.hasLikes && inspection.hasTags) {
-      const ok = confirm(
-        `El archivo NO tiene likes cacheados.\n\n` +
-        `Solo trae ${inspection.tagsCount.toLocaleString()} artistas con tags.\n\n` +
-        `¿Importar los tags igual? Los likes vas a tener que cargarlos aparte.`
+      const ok = await alertModal(
+        'Este archivo no tiene likes',
+        `<p>El JSON trae <strong>0 tracks</strong> pero sí <strong>${inspection.tagsCount.toLocaleString()} artistas con tags</strong>.</p>
+         <p>Los tags sirven para clasificar en Por género. Los likes vas a tener que cargarlos aparte desde el Dashboard.</p>`,
+        { variant: 'warning', confirmText: 'Importar solo tags', cancelText: 'Cancelar' }
       );
       if (!ok) return;
     }
