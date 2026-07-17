@@ -1,4 +1,4 @@
-import { getAllLikedTracks, createPlaylist, addTracksToPlaylist, invalidatePlaylistsCache, exportAllData, importAllData, getCurrentUserId } from '../api.js';
+import { getAllLikedTracks, createPlaylist, addTracksToPlaylist, invalidatePlaylistsCache, exportAllData, importAllData, getCurrentUserId, getBestAvailableLikes } from '../api.js';
 import { hasKey, setKey, getArtistTopTags, getCachedTags, setCachedTags, mergeCachedTags } from '../api/lastfm.js';
 import * as statsfm from '../api/statsfm.js';
 import { showProgress, hideProgress, promptPlaylistName, alertModal, escapeHtml } from '../ui/components.js';
@@ -90,19 +90,27 @@ export function render(container) {
   renderStartScreen();
 }
 
-function renderStartScreen() {
+async function renderStartScreen() {
   const content = document.getElementById('genre-content');
-  const cachedCount = Object.keys(JSON.parse(localStorage.getItem('lastfm_artist_tags_cache') || '{}')).length;
+  content.innerHTML = `<div class="empty-state"><div class="spinner spinner-lg"></div><div style="margin-top:16px">Leyendo cache local...</div></div>`;
+
+  const cachedTagsCount = Object.keys(JSON.parse(localStorage.getItem('lastfm_artist_tags_cache') || '{}')).length;
+  const { items: cachedLikes } = await getBestAvailableLikes();
+  const hasLikes = cachedLikes.length > 0;
+
+  const intro = hasLikes
+    ? `Tenés <strong>${cachedLikes.length.toLocaleString()}</strong> likes y <strong>${cachedTagsCount.toLocaleString()}</strong> artistas con tags cacheados. Ya podés ver tus géneros.`
+    : `Tenés <strong>${cachedTagsCount.toLocaleString()}</strong> artistas con tags pero <strong>0 likes</strong> cacheados. Cargá los likes desde Spotify o importá un JSON previo que los tenga.`;
+
+  const primaryLabel = hasLikes ? 'Ver mis géneros' : 'Cargar mis likes desde Spotify';
 
   content.innerHTML = `
     <div class="card" style="max-width:640px">
       <h3 style="margin-bottom:8px">¿Cómo querés arrancar?</h3>
-      <p style="color:var(--color-text-secondary);font-size:13px;margin-bottom:16px">
-        Tenés <strong>${cachedCount.toLocaleString()}</strong> artistas ya cacheados. Podés importar un cache previo antes de cargar tus likes, así no re-analizás desde cero.
-      </p>
+      <p style="color:var(--color-text-secondary);font-size:13px;margin-bottom:16px">${intro}</p>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
-        <button class="btn btn-primary" id="genre-begin-btn">Cargar mis likes y arrancar</button>
-        <button class="btn btn-secondary" id="genre-preimport-btn">Importar cache primero</button>
+        <button class="btn btn-primary" id="genre-begin-btn">${primaryLabel}</button>
+        <button class="btn btn-secondary" id="genre-preimport-btn">${hasLikes ? 'Importar otro JSON' : 'Importar cache primero'}</button>
         <input type="file" id="genre-preimport-input" accept=".json,application/json" style="display:none">
       </div>
     </div>
@@ -112,8 +120,12 @@ function renderStartScreen() {
   const preInput = document.getElementById('genre-preimport-input');
   document.getElementById('genre-preimport-btn').onclick = () => preInput.click();
   preInput.onchange = async (e) => {
-    await handleImport(e, { skipRefresh: true });
-    renderStartScreen();
+    const result = await handleImport(e, { skipRefresh: true, returnResult: true });
+    if (result && result.likesImported > 0) {
+      start();
+    } else {
+      renderStartScreen();
+    }
   };
 }
 
@@ -317,10 +329,10 @@ function inspectImportPayload(parsed) {
   };
 }
 
-async function handleImport(e, { skipRefresh = false } = {}) {
+async function handleImport(e, { skipRefresh = false, returnResult = false } = {}) {
   const file = e.target.files?.[0];
   e.target.value = '';
-  if (!file) return;
+  if (!file) return null;
 
   try {
     const text = await file.text();
@@ -328,7 +340,7 @@ async function handleImport(e, { skipRefresh = false } = {}) {
     const inspection = inspectImportPayload(parsed);
     if (!inspection.hasLikes && !inspection.hasTags) {
       showToast('El archivo no tiene ni likes ni tags reconocibles', 'error');
-      return;
+      return null;
     }
     if (!inspection.hasLikes && inspection.hasTags) {
       const ok = await alertModal(
@@ -337,7 +349,7 @@ async function handleImport(e, { skipRefresh = false } = {}) {
          <p>Los tags sirven para clasificar en Por género. Los likes vas a tener que cargarlos aparte desde el Dashboard.</p>`,
         { variant: 'warning', confirmText: 'Importar solo tags', cancelText: 'Cancelar' }
       );
-      if (!ok) return;
+      if (!ok) return null;
     }
 
     const result = await importAllData(parsed);
@@ -347,8 +359,10 @@ async function handleImport(e, { skipRefresh = false } = {}) {
     if (result.tagsUpdated > 0) parts.push(`${result.tagsUpdated} actualizados`);
     showToast(parts.length > 0 ? `Importado: ${parts.join(' · ')}` : 'Sin cambios', 'success');
     if (!skipRefresh) refreshHeaderAndGenres();
+    return returnResult ? result : null;
   } catch (err) {
     showToast('Error importando: ' + err.message, 'error');
+    return null;
   }
 }
 
