@@ -401,11 +401,7 @@ function computeStats(likes) {
   const addedByMonth = {};
   const addedByDow = [0, 0, 0, 0, 0, 0, 0];
   const addedByHour = new Array(24).fill(0);
-  const popularityBuckets = { '0-19': 0, '20-39': 0, '40-59': 0, '60-79': 0, '80-100': 0 };
   let totalDuration = 0;
-  let totalPopularity = 0;
-  let popularityCount = 0;
-  let nullPopularityCount = 0;
   let explicitCount = 0;
 
   likes.forEach(item => {
@@ -433,18 +429,6 @@ function computeStats(likes) {
       addedByMonth[monthKey] = (addedByMonth[monthKey] || 0) + 1;
       addedByDow[date.getDay()]++;
       addedByHour[date.getHours()]++;
-    }
-
-    if (t.popularity != null) {
-      totalPopularity += t.popularity;
-      popularityCount++;
-      if (t.popularity < 20) popularityBuckets['0-19']++;
-      else if (t.popularity < 40) popularityBuckets['20-39']++;
-      else if (t.popularity < 60) popularityBuckets['40-59']++;
-      else if (t.popularity < 80) popularityBuckets['60-79']++;
-      else popularityBuckets['80-100']++;
-    } else {
-      nullPopularityCount++;
     }
 
     totalDuration += t.duration_ms || 0;
@@ -480,10 +464,6 @@ function computeStats(likes) {
     addedByMonth: cumulativeByMonth,
     addedByDow,
     addedByHour,
-    popularityBuckets,
-    avgPopularity: popularityCount > 0 ? Math.round(totalPopularity / popularityCount) : 0,
-    popularityCount,
-    nullPopularityCount,
     totalDuration,
     explicitCount,
     explicitPct: likes.length > 0 ? Math.round((explicitCount / likes.length) * 100) : 0,
@@ -513,10 +493,6 @@ function renderDashboard(container, stats) {
         <div class="stat-label">${days} días de música</div>
       </div>
       <div class="stat-card">
-        <div class="stat-value">${stats.avgPopularity}</div>
-        <div class="stat-label">Popularidad promedio</div>
-      </div>
-      <div class="stat-card">
         <div class="stat-value">${stats.explicitPct}%</div>
         <div class="stat-label">Explícitas</div>
       </div>
@@ -530,10 +506,6 @@ function renderDashboard(container, stats) {
       <div class="card dash-chart-card">
         <h3>Top 15 artistas</h3>
         <canvas id="chart-artists"></canvas>
-      </div>
-      <div class="card dash-chart-card">
-        <h3>Popularidad</h3>
-        <canvas id="chart-popularity"></canvas>
       </div>
       <div class="card dash-chart-card">
         <h3>Día de la semana</h3>
@@ -652,58 +624,6 @@ function buildCharts(stats) {
       },
     },
   });
-
-  const popLabels = Object.keys(stats.popularityBuckets);
-  const popData = Object.values(stats.popularityBuckets);
-  const popTotal = popData.reduce((a, b) => a + b, 0);
-  if (popTotal === 0) {
-    const canvas = document.getElementById('chart-popularity');
-    if (canvas) {
-      const card = canvas.closest('.dash-chart-card');
-      if (card) {
-        const nullPct = stats.nullPopularityCount > 0
-          ? Math.round((stats.nullPopularityCount / (stats.nullPopularityCount + stats.popularityCount)) * 100)
-          : 0;
-        card.innerHTML = `
-          <h3>Popularidad</h3>
-          <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:180px;color:var(--color-text-secondary);text-align:center;padding:16px;font-size:13px;gap:8px">
-            <div><strong style="color:var(--color-warning)">${nullPct}%</strong> de tus tracks (${stats.nullPopularityCount.toLocaleString()}) no tienen popularity.</div>
-            ${nullPct === 100
-              ? `<div>Spotify probablemente sacó el campo <code>popularity</code> del endpoint <code>/me/tracks</code> en la migración feb 2026.</div>`
-              : `<div>Los que sí tienen popularity: ${stats.popularityCount.toLocaleString()}. Probá "Actualizar datos" para volver a bajar.</div>`}
-          </div>
-        `;
-      }
-    }
-  } else {
-    makeChart('chart-popularity', {
-      type: 'doughnut',
-      data: {
-        labels: popLabels,
-        datasets: [{
-          data: popData,
-          backgroundColor: [
-            'rgba(124, 58, 237, 0.3)',
-            'rgba(124, 58, 237, 0.5)',
-            'rgba(124, 58, 237, 0.65)',
-            'rgba(124, 58, 237, 0.8)',
-            'rgba(124, 58, 237, 1)',
-          ],
-          borderWidth: 0,
-        }],
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: {
-          legend: {
-            position: 'bottom',
-            labels: { color: CHART_COLORS.text, font: { family: 'Inter', size: 11 }, padding: 12 },
-          },
-        },
-      },
-    });
-  }
 
   const dowLabels = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
   makeChart('chart-dow', {

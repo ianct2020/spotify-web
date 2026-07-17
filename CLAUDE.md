@@ -17,6 +17,7 @@
 - Create playlist: `POST /me/playlists` (NO `POST /users/{id}/playlists`)
 - Rate limit 429: esperar mínimo 5 segundos, Retry-After header no visible por CORS
 - Endpoints deprecados (403): Audio Features, Audio Analysis, Recommendations, Related Artists, Featured Playlists, Get Several Albums/Artists, Get Artist Top Tracks, Get New Releases, GET /users/{id}, GET /users/{id}/playlists
+- Campo `popularity` en `/me/tracks`: **removido en la migración feb 2026**. Confirmado 2026-07-17 con 9548 tracks reales → 100% null. No usar más. Chart de popularidad sacado del Dashboard en v=41.
 
 ## Client ID
 0c8c92ad128e4b89be7097c6b8082797
