@@ -487,6 +487,81 @@ h3 { font-size: 18px; font-weight: 600; }
   margin-bottom: 12px;
 }
 
+.modal-alert {
+  padding: 24px 24px 20px;
+}
+
+.modal-alert-head {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 16px;
+}
+
+.modal-alert-head h2 {
+  font-size: 18px;
+  line-height: 1.3;
+}
+
+.modal-alert-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 20px;
+  flex-shrink: 0;
+  font-family: 'Inter', sans-serif;
+  line-height: 1;
+}
+
+.modal-alert-info .modal-alert-icon {
+  background: rgba(124, 58, 237, 0.15);
+  color: var(--color-accent);
+}
+
+.modal-alert-warning .modal-alert-icon {
+  background: rgba(234, 179, 8, 0.15);
+  color: var(--color-warning);
+}
+
+.modal-alert-danger .modal-alert-icon {
+  background: rgba(239, 68, 68, 0.15);
+  color: var(--color-error);
+}
+
+.modal-alert-body {
+  color: var(--color-text-secondary);
+  font-size: 14px;
+  line-height: 1.55;
+  margin-bottom: 22px;
+}
+
+.modal-alert-body p {
+  margin: 0 0 10px 0;
+  color: inherit;
+  font-size: inherit;
+}
+
+.modal-alert-body p:last-child {
+  margin-bottom: 0;
+}
+
+.modal-alert-body strong {
+  color: var(--color-text);
+}
+
+.modal-alert-body ul {
+  margin: 8px 0 8px 0;
+  padding-left: 20px;
+}
+
+.modal-alert-body li {
+  margin-bottom: 4px;
+}
+
 .modal p {
   color: var(--color-text-secondary);
   font-size: 14px;
