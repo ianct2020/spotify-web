@@ -518,14 +518,16 @@ function showGenres() {
         <button id="genre-search-clear" title="Limpiar"
                 style="position:absolute;right:6px;top:50%;transform:translateY(-50%);background:transparent;border:none;color:var(--color-text-muted);font-size:18px;cursor:pointer;padding:4px 8px;display:none">×</button>
       </div>
-      <label style="display:flex;gap:6px;align-items:center;font-size:13px;color:var(--color-text-secondary);cursor:pointer;user-select:none;padding:6px 10px;border:1px solid var(--color-border);border-radius:var(--radius-sm);background:var(--color-elevated)">
-        <input type="checkbox" id="genre-groups-toggle" ${groupsMode ? 'checked' : ''} style="margin:0">
+      <label class="pill-toggle ${groupsMode ? 'active' : ''}" title="Colapsa géneros parecidos (indie rock + rock argentino + classic rock → 'Rock')">
+        <input type="checkbox" id="genre-groups-toggle" ${groupsMode ? 'checked' : ''}>
+        <span class="pill-toggle-icon">${groupsMode ? '⚫' : '⚪'}</span>
         <span>Agrupar parecidos</span>
       </label>
-      <div style="display:flex;gap:6px;flex-wrap:wrap">
-        <button class="btn btn-secondary btn-sm sort-btn ${mode === 'count-desc' ? 'sort-active' : ''}" data-sort="count-desc">Más tracks</button>
-        <button class="btn btn-secondary btn-sm sort-btn ${mode === 'count-asc' ? 'sort-active' : ''}" data-sort="count-asc">Menos tracks</button>
-        <button class="btn btn-secondary btn-sm sort-btn ${mode === 'name-asc' ? 'sort-active' : ''}" data-sort="name-asc">A-Z</button>
+      <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+        <span style="font-size:12px;color:var(--color-text-muted);margin-right:4px">Ordenar por:</span>
+        <button class="btn btn-secondary btn-sm sort-btn ${mode === 'count-desc' ? 'sort-active' : ''}" data-sort="count-desc" title="Géneros con más canciones arriba">Más canciones</button>
+        <button class="btn btn-secondary btn-sm sort-btn ${mode === 'count-asc' ? 'sort-active' : ''}" data-sort="count-asc" title="Géneros con menos canciones arriba">Menos canciones</button>
+        <button class="btn btn-secondary btn-sm sort-btn ${mode === 'name-asc' ? 'sort-active' : ''}" data-sort="name-asc" title="Alfabético">A-Z</button>
       </div>
     </div>
     <div id="genre-summary" style="margin-bottom:8px;color:var(--color-text-secondary);font-size:14px"></div>
@@ -555,7 +557,8 @@ function showGenres() {
     };
   });
 
-  document.getElementById('genre-groups-toggle').onchange = (e) => {
+  const groupsToggle = document.getElementById('genre-groups-toggle');
+  groupsToggle.onchange = (e) => {
     groupsMode = e.target.checked;
     localStorage.setItem('genre_groups_mode', groupsMode ? '1' : '0');
     selectedTags = new Set();
