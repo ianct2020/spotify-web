@@ -459,6 +459,43 @@
   border-color: var(--color-accent);
 }
 
+.pill-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  cursor: pointer;
+  user-select: none;
+  padding: 7px 14px;
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  background: var(--color-elevated);
+  color: var(--color-text-secondary);
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.pill-toggle input {
+  display: none;
+}
+
+.pill-toggle:hover {
+  border-color: var(--color-accent);
+  color: var(--color-text);
+}
+
+.pill-toggle.active {
+  background: var(--color-accent);
+  color: white;
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.15);
+}
+
+.pill-toggle-icon {
+  font-size: 10px;
+  line-height: 1;
+}
+
 .smart-card.selected::after {
   content: '';
   position: absolute;
