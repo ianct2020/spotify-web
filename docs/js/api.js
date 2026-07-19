@@ -378,12 +378,44 @@ async function exportLikesData() {
   };
 }
 
+const CONFIG_LOCAL_KEYS = [
+  'listened_albums_playlist_id',
+  'listened_albums_playlist_name',
+  'lastfm_username',
+  'statsfm_username',
+  'genre_sort_mode',
+  'genre_groups_mode',
+  'artist_sort_mode',
+];
+
+function readLocalConfig() {
+  const cfg = {};
+  for (const k of CONFIG_LOCAL_KEYS) {
+    const v = localStorage.getItem(k);
+    if (v != null) cfg[k] = v;
+  }
+  return cfg;
+}
+
+function applyLocalConfig(cfg, { overwrite = false } = {}) {
+  if (!cfg || typeof cfg !== 'object') return 0;
+  let applied = 0;
+  for (const k of CONFIG_LOCAL_KEYS) {
+    if (cfg[k] == null) continue;
+    if (overwrite || localStorage.getItem(k) == null) {
+      localStorage.setItem(k, String(cfg[k]));
+      applied++;
+    }
+  }
+  return applied;
+}
+
 async function exportAllData(spotifyUserId) {
   const { items: likes, source } = await getBestAvailableLikes();
   const tagsCache = JSON.parse(localStorage.getItem('lastfm_artist_tags_cache') || '{}');
   return {
     _format: 'spotify-tools-data',
-    _version: 1,
+    _version: 2,
     _exportedAt: new Date().toISOString(),
     spotifyUserId: spotifyUserId || null,
     _likesSource: source,
@@ -394,10 +426,11 @@ async function exportAllData(spotifyUserId) {
     tags: {
       entries: tagsCache,
     },
+    _config: readLocalConfig(),
   };
 }
 
-async function importAllData(parsed, onProgress) {
+async function importAllData(parsed, onProgress, { currentUserId = null } = {}) {
   if (!parsed || typeof parsed !== 'object') throw new Error('Archivo inválido');
 
   const result = {
@@ -405,6 +438,8 @@ async function importAllData(parsed, onProgress) {
     likesAdded: 0,
     tagsImported: 0,
     tagsUpdated: 0,
+    configApplied: 0,
+    configSkipped: false,
     format: parsed._format || 'desconocido',
   };
 
@@ -433,6 +468,15 @@ async function importAllData(parsed, onProgress) {
     localStorage.setItem('lastfm_artist_tags_cache', JSON.stringify(cache));
     result.tagsImported = added;
     result.tagsUpdated = updated;
+  }
+
+  if (parsed._config && typeof parsed._config === 'object') {
+    const backupUserId = parsed.spotifyUserId || null;
+    if (currentUserId && backupUserId && currentUserId === backupUserId) {
+      result.configApplied = applyLocalConfig(parsed._config, { overwrite: true });
+    } else {
+      result.configSkipped = true;
+    }
   }
 
   return result;
@@ -483,7 +527,12 @@ async function tryAutoLoadUserBackup(spotifyUserId) {
       tagsCount = merged;
     }
 
-    return { loaded: true, likesCount, tagsCount, delta };
+    let configApplied = 0;
+    if (parsed._config && typeof parsed._config === 'object' && parsed.spotifyUserId === spotifyUserId) {
+      configApplied = applyLocalConfig(parsed._config, { overwrite: false });
+    }
+
+    return { loaded: true, likesCount, tagsCount, delta, configApplied };
   } catch (e) {
     console.warn('Auto-load falló:', e.message);
     return { loaded: false, reason: e.message };
@@ -653,4 +702,7 @@ export {
   tryAutoLoadUserBackup,
   getBestAvailableLikes,
   getLikesCacheTimestamp,
+  readLocalConfig,
+  applyLocalConfig,
+  CONFIG_LOCAL_KEYS,
 };
