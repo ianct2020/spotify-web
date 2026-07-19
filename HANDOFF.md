@@ -257,10 +257,10 @@ LIMPIEZA    Sync Mirror, Dedupe, Álbumes repetidos, Zombis, Versiones
 
 ---
 
-## Versión actual desplegada (actualizado 2026-07-15)
+## Versión actual desplegada (actualizado 2026-07-19)
 
-- Git: rama `main`, sin commitear (v=39)
-- Cache bust: **`?v=39`**
+- Git: rama `main`, sin commitear (v=44)
+- Cache bust: **`?v=44`**
 - **TEST_MODE eliminado por completo del código** (2026-07-11). Ver "Fase 4" abajo.
 - Playlist espejo activa: `anothertwo`. Default de Sync Mirror en `src/js/features/sync.js:7`.
 - **Last.fm + Stats.fm integrados**. Ver Fase 4 abajo.
@@ -383,9 +383,46 @@ Ian pasó todo el día con rate limit por intentar cargar los 9538 likes varias 
 
 ---
 
+## Fase 5 (pendiente — arrancar acá el próximo chat)
+
+**Álbumes escuchados** — Ian tiene una playlist tipo "listened albums" que usa como registro de qué álbumes ya escuchó completos. La capa 1 (contador en Dashboard) está hecha en v=44.
+
+### Capa 2 — Grid de listened albums (pendiente)
+- Nueva ruta `#listened` en sidebar (sección "Descubrir").
+- Fetch de los items de la playlist configurada (id en localStorage `listened_albums_playlist_id`).
+- Agrupar por `album.id`. Card por álbum con cover + nombre + artista + año + count de tracks.
+- Buscador + orden (año, artista, más tracks, A-Z).
+- Click en un álbum → ver los tracks que tenés en la playlist para ese álbum.
+
+### Capa 3 (rediseñada según pedido explícito de Ian 2026-07-19) — "Álbum → similar filtrado"
+Ian **NO quiere** feature "agregar tracks a playlist" ni recomendaciones bulk. Quiere algo simple:
+- Buscador de álbum (search Spotify o input libre).
+- Al elegir un álbum → devolver **1 álbum relativamente parecido** (o si no hay álbumes parecidos disponibles, canciones parecidas).
+- **Filtros duros**:
+  - Ninguna canción del resultado debe estar en su cache de likes.
+  - El álbum resultado NO debe estar entre los `album.id` de la playlist de listened albums.
+- Approach técnico sugerido:
+  1. Del artista del álbum input, `getSimilarArtists` (Last.fm).
+  2. Para cada similar (top 5-10), fetch de sus álbumes vía Spotify `GET /artists/{id}/albums?album_group=album`.
+  3. Filtrar los que ya están en likes o en listened.
+  4. Elegir 1 (o pocos). Devolverlo con cover + tracklist previa.
+- Sin Discogs a menos que Ian pida más profundidad después.
+
+### Config personal en JSON del repo (hecho en v=44)
+- exportAllData ahora incluye `_config` con: playlist listened albums (id + nombre), lastfm_username, statsfm_username, y modos de sort/agrupación.
+- Al importar, `_config` **solo se aplica si el spotifyUserId del backup matchea el user actual**. Si no matchea, se ignora (para que el JSON del repo sea seguro de subir — otro user no hereda mi config).
+- Al importar manual, el toast avisa "N preferencias tuyas restauradas" o "config del backup ignorada (no es tu cuenta)".
+
+### MusicBrainz integrado (hecho en v=44, testear)
+- `src/js/api/musicbrainz.js`: rate limit 1.1 seg entre requests. UA header con URL del repo. `getGenresForArtist(name)` → search + inc=genres+tags.
+- Botón "Enriquecer sin clasificar (MusicBrainz)" en Por género. Solo procesa los artistas de `computeUnclassified()`. Muestra un modal con ETA antes de arrancar. Progress bar en vivo con hits/no encontrados/errores.
+- Última pista pendiente: verificar user-agent — MusicBrainz exige uno descriptivo o rate-limitea/banea. Actual: `spotify-tools/1.0 (github.com/ianct2020/spotify-web)`.
+
 ## Changelog reciente (últimos 5 cambios)
 
-- `v=42` (uncommitted): fix Por género — la pantalla de bienvenida ahora chequea IDB (no solo tags de localStorage) y muestra "Ver mis géneros" en vez de "Cargar" si ya hay cache. Después de import con likes, salta directo a `start()` (no se queda en la pantalla de bienvenida). `handleImport` acepta `returnResult`.
+- `v=44` (uncommitted): _config en JSON del repo (solo aplica si matchea userId) + stat card configurable "Álbumes escuchados" en Dashboard con modal buscador de playlist + MusicBrainz wrapper + botón "Enriquecer sin clasificar".
+- `v=43` (88fb235): pill toggle lindo para "Agrupar parecidos" + label "Ordenar por:" antes de los botones + tooltips. Consistencia en Por artista.
+- `v=42` (c45a890): fix Por género — la pantalla de bienvenida ahora chequea IDB (no solo tags de localStorage) y muestra "Ver mis géneros" en vez de "Cargar" si ya hay cache. Después de import con likes, salta directo a `start()` (no se queda en la pantalla de bienvenida). `handleImport` acepta `returnResult`.
 - `v=41` (4fee89b): sacado chart de Popularidad del Dashboard — confirmado 100% null con 9548 tracks reales, Spotify removió `popularity` en migración feb 2026. Backup del user actualizado en `docs/data/` con export real (5.3M, 9548 likes + 2260 tags). CLAUDE.md actualizado.
 - `v=40` (4c54300): `alertModal(title, html, {variant, confirmText, cancelText})` en components.js con iconos ⚠/i/× según variant. CSS `.modal-alert*` en main.css. Reemplaza los 5 `confirm()` nativos que había en Dashboard (handleImportAll, handleExportAll, handleExportCsv) y by-genre (handleImport, handleExport). Todos los avisos ahora son modales estilo app.
 - `v=39` (2565530): **MIGRACIÓN A INDEXEDDB** para likes (bypass del cap 5MB de localStorage — 9538 likes × ~500B = 4.8MB en UTF-16 = 9.6MB de cuota, no entraba). Nuevo `src/js/idb.js` con wrapper mínimo. Migración automática desde localStorage al arrancar. `getAllLikedTracks`/`syncLikesIncremental`/`exportAllData`/`getBestAvailableLikes`/`getLikesCacheTimestamp` ahora async. Partial cache también en IDB. + Warning fuerte cuando el import tiene items:[] (confirm modal explícito). + NOISE_TAGS expandido con ~90 tags nuevos (artistas, ciudades, países, descriptivos vagos, categorías de app). + Feature "Agrupar parecidos" en Por género: toggle que colapsa ~350 tags a ~20 grupos canónicos usando el mapping en `src/js/features/genre-groups.js`. Persistido en localStorage.

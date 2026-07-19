@@ -380,6 +380,16 @@ h3 { font-size: 18px; font-weight: 600; }
   margin-top: 2px;
 }
 
+.stat-card-clickable {
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.stat-card-clickable:hover {
+  border-color: var(--color-accent);
+  background: var(--color-elevated);
+}
+
 .results-list {
   display: flex;
   flex-direction: column;

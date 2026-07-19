@@ -1,6 +1,7 @@
 import { getAllLikedTracks, createPlaylist, addTracksToPlaylist, invalidatePlaylistsCache, exportAllData, importAllData, getCurrentUserId, getBestAvailableLikes } from '../api.js';
 import { hasKey, setKey, getArtistTopTags, getCachedTags, setCachedTags, mergeCachedTags } from '../api/lastfm.js';
 import * as statsfm from '../api/statsfm.js';
+import { getGenresForArtist as mbGetGenres } from '../api/musicbrainz.js';
 import { showProgress, hideProgress, promptPlaylistName, alertModal, escapeHtml } from '../ui/components.js';
 import { showToast } from '../ui/toast.js';
 import { tagToGroup } from './genre-groups.js';
@@ -176,8 +177,9 @@ async function start() {
           <button class="btn btn-secondary btn-sm" id="genre-import-btn">Importar cache</button>
           <input type="file" id="genre-import-input" accept=".json,application/json" style="display:none">
           <button class="btn btn-secondary btn-sm" id="genre-statsfm-btn">${statsfm.hasUsername() ? 'Sync desde Stats.fm' : 'Conectar Stats.fm'}</button>
+          <button class="btn btn-secondary btn-sm" id="genre-mb-btn" title="Consulta MusicBrainz para artistas sin género. Rate limit 1 req/seg — tarda ~1 min cada 60 artistas.">Enriquecer sin clasificar (MusicBrainz)</button>
           <span style="font-size:11px;color:var(--color-text-secondary);align-self:center;margin-left:4px">
-            Exportá el cache cada tanto. Stats.fm agrega géneros de Spotify sin gastar Last.fm.
+            Exportá el cache cada tanto. Stats.fm agrega géneros de Spotify sin gastar Last.fm. MusicBrainz completa los que ni Last.fm ni Stats.fm reconocen.
           </span>
         </div>
       </div>
@@ -194,6 +196,7 @@ async function start() {
     document.getElementById('genre-import-btn').onclick = () => importInput.click();
     importInput.onchange = handleImport;
     document.getElementById('genre-statsfm-btn').onclick = handleStatsfm;
+    document.getElementById('genre-mb-btn').onclick = handleMusicBrainz;
 
     if (uncached.length === 0) showGenres();
   } catch (e) {
@@ -235,6 +238,76 @@ async function handleExport() {
   URL.revokeObjectURL(url);
   const tag = source === 'partial' ? ' (parcial)' : '';
   showToast(`Exportado${tag}: ${likesCount.toLocaleString()} likes + ${tagsCount.toLocaleString()} artistas`, 'success');
+}
+
+async function handleMusicBrainz() {
+  cachedUnclassified = computeUnclassified();
+  const artistsToProcess = new Set();
+  cachedUnclassified.forEach(t => {
+    const a = t.artists?.[0]?.name;
+    if (a) artistsToProcess.add(a);
+  });
+  const artistList = [...artistsToProcess];
+
+  if (artistList.length === 0) {
+    showToast('No hay artistas sin clasificar para consultar en MusicBrainz', 'info');
+    return;
+  }
+
+  const etaMin = Math.ceil(artistList.length * 1.1 / 60);
+  const ok = await alertModal(
+    'Enriquecer con MusicBrainz',
+    `<p>Se van a consultar <strong>${artistList.length}</strong> artistas sin género en MusicBrainz.</p>
+     <p>Rate limit: <strong>1 request/seg</strong>. Tiempo estimado: <strong>~${etaMin} min</strong>.</p>
+     <p>Podés cerrar esta pestaña — el proceso se corta solo. Los resultados se van guardando cada 10 artistas.</p>`,
+    { variant: 'info', confirmText: 'Empezar', cancelText: 'Cancelar' }
+  );
+  if (!ok) return;
+
+  const progressEl = document.getElementById('genre-progress');
+  progressEl.innerHTML = `
+    <div class="card" style="margin-bottom:16px">
+      <div id="mb-progress-text" style="margin-bottom:8px;font-size:14px">Empezando...</div>
+      <div style="height:8px;background:var(--color-elevated);border-radius:4px;overflow:hidden">
+        <div id="mb-progress-bar" style="height:100%;background:var(--color-accent);width:0%;transition:width 0.2s"></div>
+      </div>
+    </div>
+  `;
+  const textEl = document.getElementById('mb-progress-text');
+  const barEl = document.getElementById('mb-progress-bar');
+
+  let done = 0;
+  let hits = 0;
+  let notFound = 0;
+  let errors = 0;
+  const start = Date.now();
+
+  for (const name of artistList) {
+    try {
+      const r = await mbGetGenres(name);
+      if (r.notFound || r.tags.length === 0) {
+        notFound++;
+        setCachedTags(name, []);
+      } else {
+        hits++;
+        mergeCachedTags(name, r.tags);
+      }
+    } catch (e) {
+      errors++;
+      console.warn('MB error', name, e.message);
+    }
+    done++;
+    const pct = ((done / artistList.length) * 100).toFixed(1);
+    const elapsed = (Date.now() - start) / 1000;
+    const rate = done / elapsed;
+    const eta = rate > 0 ? Math.round((artistList.length - done) / rate) : 0;
+    textEl.textContent = `${done}/${artistList.length} · ${hits} hits · ${notFound} no encontrados · ${errors} errores · ETA ${formatTime(eta)}`;
+    barEl.style.width = `${pct}%`;
+  }
+
+  textEl.innerHTML = `<strong>Listo</strong> — ${hits} artistas enriquecidos, ${notFound} sin match en MusicBrainz.`;
+  showToast(`MusicBrainz: ${hits} artistas enriquecidos`, 'success');
+  refreshHeaderAndGenres();
 }
 
 async function handleStatsfm() {
