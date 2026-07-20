@@ -315,30 +315,64 @@ function showApp(profile) {
   initRouter();
 }
 
+const HOME_SECTIONS = [
+  {
+    title: 'General',
+    items: [
+      { hash: 'dashboard', icon: '&#9733;', name: 'Dashboard', desc: 'Stats de tu biblioteca de Liked Songs.' },
+    ],
+  },
+  {
+    title: 'Crear',
+    items: [
+      { hash: 'smart', icon: '&#10022;', name: 'Smart Playlists', desc: 'Playlists por año, década o random.' },
+      { hash: 'byartist', icon: '&#9835;', name: 'Por artista', desc: 'Todos tus likes de uno o varios artistas.' },
+    ],
+  },
+  {
+    title: 'Descubrir',
+    items: [
+      { hash: 'similar', icon: '&#9737;', name: 'Artistas similares', desc: 'Artistas parecidos a los que te gustan, vía Last.fm.' },
+      { hash: 'rabbit', icon: '&#8734;', name: 'Rabbit hole', desc: 'Navegá artistas y tracks encadenados por género.' },
+      { hash: 'recs', icon: '&#9835;', name: 'Recomendaciones', desc: 'Basadas en tus scrobbles de Last.fm.' },
+      { hash: 'genre', icon: '&#9833;', name: 'Por género', desc: 'Agrupá tus likes por género y armá playlists.' },
+      { hash: 'discover', icon: '&#9673;', name: 'Álbum similar', desc: 'Un álbum parecido que no tengas en likes ni escuchados.' },
+      { hash: 'listened', icon: '&#9635;', name: 'Álbumes escuchados', desc: 'Los álbumes de tu playlist de registro, agrupados.' },
+    ],
+  },
+  {
+    title: 'Limpieza',
+    items: [
+      { hash: 'sync', icon: '&#8644;', name: 'Sync Mirror', desc: 'Una playlist como copia exacta de tus Liked Songs.' },
+      { hash: 'dedupe', icon: '&#9851;', name: 'Dedupe', desc: 'Eliminá tracks duplicados dentro de cada playlist.' },
+      { hash: 'dupalbums', icon: '&#9834;', name: 'Álbumes repetidos', desc: 'Álbumes con varios tracks distintos en una playlist.' },
+      { hash: 'zombies', icon: '&#9760;', name: 'Zombis', desc: 'Tracks eliminados del catálogo de Spotify.' },
+      { hash: 'versions', icon: '&#9842;', name: 'Versiones', desc: 'Mismo tema en distintos álbumes (remaster, live, etc.).' },
+    ],
+  },
+];
+
 function renderHome(container) {
+  const sections = HOME_SECTIONS.map(sec => `
+    <div style="margin-bottom:28px">
+      <div class="sidebar-section-title" style="margin-bottom:12px">${sec.title}</div>
+      <div class="home-grid">
+        ${sec.items.map(it => `
+          <a href="#${it.hash}" class="card home-card">
+            <h3 style="margin-bottom:6px">${it.icon} ${it.name}</h3>
+            <p style="color:var(--color-text-secondary);font-size:14px">${it.desc}</p>
+          </a>
+        `).join('')}
+      </div>
+    </div>
+  `).join('');
+
   container.innerHTML = `
     <div class="page-header">
       <h1>Bienvenido</h1>
-      <p>Elegí una herramienta del menú para empezar.</p>
+      <p>Elegí una herramienta para empezar.</p>
     </div>
-    <div class="home-grid">
-      <a href="#sync" class="card home-card">
-        <h3 style="margin-bottom:6px">&#8644; Sync Mirror</h3>
-        <p style="color:var(--color-text-secondary);font-size:14px">Mantenés una playlist como copia exacta de tus Liked Songs.</p>
-      </a>
-      <a href="#dedupe" class="card home-card">
-        <h3 style="margin-bottom:6px">&#9851; Dedupe</h3>
-        <p style="color:var(--color-text-secondary);font-size:14px">Encontrá y eliminá tracks duplicados dentro de cada playlist.</p>
-      </a>
-      <a href="#zombies" class="card home-card">
-        <h3 style="margin-bottom:6px">&#9760; Zombis</h3>
-        <p style="color:var(--color-text-secondary);font-size:14px">Tracks eliminados del catálogo de Spotify.</p>
-      </a>
-      <a href="#versions" class="card home-card">
-        <h3 style="margin-bottom:6px">&#9842; Versiones</h3>
-        <p style="color:var(--color-text-secondary);font-size:14px">Mismo tema en distintos álbumes (remaster, live, etc.).</p>
-      </a>
-    </div>
+    ${sections}
   `;
 }
 
