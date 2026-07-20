@@ -259,8 +259,8 @@ LIMPIEZA    Sync Mirror, Dedupe, Álbumes repetidos, Zombis, Versiones
 
 ## Versión actual desplegada (actualizado 2026-07-19)
 
-- Git: rama `main`, sin commitear (v=44)
-- Cache bust: **`?v=44`**
+- Git: rama `main` (v=45 — Fase 5 capas 2 y 3)
+- Cache bust: **`?v=45`**
 - **TEST_MODE eliminado por completo del código** (2026-07-11). Ver "Fase 4" abajo.
 - Playlist espejo activa: `anothertwo`. Default de Sync Mirror en `src/js/features/sync.js:7`.
 - **Last.fm + Stats.fm integrados**. Ver Fase 4 abajo.
@@ -387,26 +387,25 @@ Ian pasó todo el día con rate limit por intentar cargar los 9538 likes varias 
 
 **Álbumes escuchados** — Ian tiene una playlist tipo "listened albums" que usa como registro de qué álbumes ya escuchó completos. La capa 1 (contador en Dashboard) está hecha en v=44.
 
-### Capa 2 — Grid de listened albums (pendiente)
-- Nueva ruta `#listened` en sidebar (sección "Descubrir").
-- Fetch de los items de la playlist configurada (id en localStorage `listened_albums_playlist_id`).
-- Agrupar por `album.id`. Card por álbum con cover + nombre + artista + año + count de tracks.
-- Buscador + orden (año, artista, más tracks, A-Z).
-- Click en un álbum → ver los tracks que tenés en la playlist para ese álbum.
+### Capa 2 — Grid de listened albums (HECHO en v=45)
+- Ruta `#listened` en sidebar (sección "Descubrir"), label "Álbumes escuchados".
+- `src/js/features/listened.js`: fetch de items de la playlist configurada (`listened_albums_playlist_id`), agrupa por `album.id` con `groupItemsByAlbum` del módulo compartido.
+- Grid con cover + nombre + artista + año + count de tracks (reusa `.playlist-grid`/`.playlist-card`).
+- Buscador (nombre o artista) + orden: Recientes (por `added_at`), Año ↓/↑, Artista, Más tracks, A-Z. Persistido en `listened_sort_mode`.
+- Click en un álbum → modal con los tracks que tenés de él en la playlist + link "Ver álbum en Spotify".
+- Refactor: el picker de playlist salió de dashboard.js a `src/js/features/listened-shared.js` (`getListenedPlaylist`, `setListenedPlaylist`, `clearListenedPlaylist`, `groupItemsByAlbum`, `openListenedAlbumsPicker`). Dashboard y Listened lo comparten.
 
-### Capa 3 (rediseñada según pedido explícito de Ian 2026-07-19) — "Álbum → similar filtrado"
-Ian **NO quiere** feature "agregar tracks a playlist" ni recomendaciones bulk. Quiere algo simple:
-- Buscador de álbum (search Spotify o input libre).
-- Al elegir un álbum → devolver **1 álbum relativamente parecido** (o si no hay álbumes parecidos disponibles, canciones parecidas).
-- **Filtros duros**:
-  - Ninguna canción del resultado debe estar en su cache de likes.
-  - El álbum resultado NO debe estar entre los `album.id` de la playlist de listened albums.
-- Approach técnico sugerido:
-  1. Del artista del álbum input, `getSimilarArtists` (Last.fm).
-  2. Para cada similar (top 5-10), fetch de sus álbumes vía Spotify `GET /artists/{id}/albums?album_group=album`.
-  3. Filtrar los que ya están en likes o en listened.
-  4. Elegir 1 (o pocos). Devolverlo con cover + tracklist previa.
-- Sin Discogs a menos que Ian pida más profundidad después.
+### Capa 3 — "Álbum → similar filtrado" (HECHO en v=45)
+`src/js/features/discover-album.js`, ruta `#discover`, label "Álbum similar".
+- Buscador de álbum (`/search?type=album` — endpoint confirmado vivo).
+- Al elegir un álbum → toma el artista principal, pide `getSimilarArtists` (Last.fm), y para cada similar (top 12 por match) busca sus álbumes con `/search?q=artist:"NAME"&type=album` (NO se usó `GET /artists/{id}/albums` para no arriesgar un endpoint sin verificar — search está confirmado).
+- **Filtros duros** (ambos derivados de data local, sin fetch extra por álbum):
+  - `album.id ∉ likedAlbumIds` — likedAlbumIds se arma del cache de likes (`item.track.album.id`). Si un track del álbum está likeado, su album.id está en el set → filtra exactamente "no la tengo en likes".
+  - `album.id ∉ listenedAlbumIds` — de la playlist de listened albums (1 fetch, cacheado en la sesión).
+  - Solo `album_type === 'album'` (sin singles/compilados), artista principal ≈ el similar (evita features), dedupe por id y por nombre+artista (evita deluxe/remaster).
+- Muestra 1 candidato (mejor match primero, luego más nuevo) con cover + "Abrir en Spotify" + "Mostrar otro parecido". Tracklist preview best-effort vía `/albums/{id}/tracks` (si el endpoint está deprecado, degrada sin ruido).
+- Fallback si no hay álbumes: botón "Buscar canciones sueltas" → top tracks de similares resueltos en Spotify, filtrados por URI que no esté en likes.
+- Sin Discogs (Ian dijo "no me sirve").
 
 ### Config personal en JSON del repo (hecho en v=44)
 - exportAllData ahora incluye `_config` con: playlist listened albums (id + nombre), lastfm_username, statsfm_username, y modos de sort/agrupación.
@@ -420,7 +419,8 @@ Ian **NO quiere** feature "agregar tracks a playlist" ni recomendaciones bulk. Q
 
 ## Changelog reciente (últimos 5 cambios)
 
-- `v=44` (uncommitted): _config en JSON del repo (solo aplica si matchea userId) + stat card configurable "Álbumes escuchados" en Dashboard con modal buscador de playlist + MusicBrainz wrapper + botón "Enriquecer sin clasificar".
+- `v=45`: **Fase 5 capas 2 y 3.** Capa 2 "Álbumes escuchados" (`#listened`, `features/listened.js`): grid de álbumes de la playlist de registro, agrupados por album.id, con buscador + orden + detalle por álbum. Capa 3 "Álbum similar" (`#discover`, `features/discover-album.js`): buscás un álbum y te devuelve 1 álbum parecido de un artista similar (Last.fm), filtrado para que no esté en likes ni en escuchados, con "Mostrar otro" y fallback a canciones sueltas. Refactor: picker de listened albums extraído a `features/listened-shared.js` (compartido con Dashboard). Se evitó `GET /artists/{id}/albums` usando `/search?q=artist:"X"&type=album` (confirmado vivo).
+- `v=44` (5c23614): _config en JSON del repo (solo aplica si matchea userId) + stat card configurable "Álbumes escuchados" en Dashboard con modal buscador de playlist + MusicBrainz wrapper + botón "Enriquecer sin clasificar".
 - `v=43` (88fb235): pill toggle lindo para "Agrupar parecidos" + label "Ordenar por:" antes de los botones + tooltips. Consistencia en Por artista.
 - `v=42` (c45a890): fix Por género — la pantalla de bienvenida ahora chequea IDB (no solo tags de localStorage) y muestra "Ver mis géneros" en vez de "Cargar" si ya hay cache. Después de import con likes, salta directo a `start()` (no se queda en la pantalla de bienvenida). `handleImport` acepta `returnResult`.
 - `v=41` (4fee89b): sacado chart de Popularidad del Dashboard — confirmado 100% null con 9548 tracks reales, Spotify removió `popularity` en migración feb 2026. Backup del user actualizado en `docs/data/` con export real (5.3M, 9548 likes + 2260 tags). CLAUDE.md actualizado.

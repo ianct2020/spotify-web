@@ -1,6 +1,7 @@
-import { getAllLikedTracks, invalidateLikesCache, exportAllData, importAllData, getCurrentUserId, getLikesTotal, syncLikesIncremental, getLikesCacheTimestamp, getBestAvailableLikes, getAllUserPlaylists, getAllPlaylistItems } from '../api.js';
+import { getAllLikedTracks, invalidateLikesCache, exportAllData, importAllData, getCurrentUserId, getLikesTotal, syncLikesIncremental, getLikesCacheTimestamp, getBestAvailableLikes, getAllPlaylistItems } from '../api.js';
 import { showProgress, hideProgress, alertModal, escapeHtml } from '../ui/components.js';
 import { showToast } from '../ui/toast.js';
+import { openListenedAlbumsPicker } from './listened-shared.js';
 
 let charts = [];
 let _loadController = null;
@@ -559,11 +560,16 @@ async function hydrateListenedAlbumsCard() {
   const playlistId = localStorage.getItem('listened_albums_playlist_id');
   const playlistName = localStorage.getItem('listened_albums_playlist_name');
 
+  const openPicker = () => openListenedAlbumsPicker({
+    onSelect: hydrateListenedAlbumsCard,
+    onClear: hydrateListenedAlbumsCard,
+  });
+
   if (!playlistId) {
     valueEl.textContent = '+';
     valueEl.style.fontSize = '32px';
     labelEl.textContent = 'Configurar álbumes escuchados';
-    card.onclick = openListenedAlbumsPicker;
+    card.onclick = openPicker;
     return;
   }
 
@@ -579,91 +585,14 @@ async function hydrateListenedAlbumsCard() {
     valueEl.textContent = albumIds.size.toLocaleString();
     valueEl.style.fontSize = '';
     labelEl.innerHTML = `${escapeHtml(playlistName || 'Álbumes escuchados')} <span style="opacity:0.6">· ${items.length.toLocaleString()} tracks</span>`;
-    card.onclick = openListenedAlbumsPicker;
+    card.onclick = openPicker;
     card.title = 'Click para cambiar la playlist';
   } catch (e) {
     valueEl.textContent = '!';
     labelEl.textContent = `Error: ${e.message.slice(0, 40)}`;
-    card.onclick = openListenedAlbumsPicker;
+    card.onclick = openPicker;
   }
 }
-
-async function openListenedAlbumsPicker() {
-  let playlists;
-  try {
-    playlists = await getAllUserPlaylists();
-  } catch (e) {
-    showToast('Error cargando playlists: ' + e.message, 'error');
-    return;
-  }
-
-  const current = localStorage.getItem('listened_albums_playlist_id');
-  const overlay = document.createElement('div');
-  overlay.className = 'modal-overlay';
-  overlay.innerHTML = `
-    <div class="modal" style="max-width:560px">
-      <h2 style="margin-bottom:8px">Elegí tu playlist de álbumes escuchados</h2>
-      <p style="color:var(--color-text-secondary);font-size:13px;margin-bottom:12px">
-        La app va a contar los álbumes únicos de la playlist que elijas. Se guarda en tu cache local (y en tu backup JSON si exportás).
-      </p>
-      <input type="text" id="lap-search" placeholder="Buscar playlist..." autocomplete="off"
-             style="width:100%;padding:10px;background:var(--color-elevated);border:1px solid var(--color-border);border-radius:var(--radius-sm);color:var(--color-text);font-size:14px;margin-bottom:12px">
-      <div id="lap-list" style="max-height:360px;overflow-y:auto;border:1px solid var(--color-border);border-radius:var(--radius-sm);background:var(--color-elevated)">
-      </div>
-      <div class="modal-actions" style="margin-top:14px">
-        ${current ? '<button class="btn btn-secondary" id="lap-clear">Desconectar</button>' : ''}
-        <button class="btn btn-secondary" id="lap-cancel">Cancelar</button>
-      </div>
-    </div>
-  `;
-  document.body.appendChild(overlay);
-
-  const listEl = overlay.querySelector('#lap-list');
-  const searchEl = overlay.querySelector('#lap-search');
-  const renderList = (filter) => {
-    const f = (filter || '').toLowerCase();
-    const filtered = playlists.filter(p => !f || p.name.toLowerCase().includes(f));
-    listEl.innerHTML = filtered.slice(0, 200).map(p => `
-      <div class="lap-item" data-id="${p.id}" data-name="${escapeHtml(p.name)}"
-           style="display:flex;align-items:center;gap:10px;padding:10px 12px;cursor:pointer;border-bottom:1px solid var(--color-border)">
-        ${p.image ? `<img src="${p.image}" style="width:36px;height:36px;border-radius:var(--radius-sm);object-fit:cover">` : `<div style="width:36px;height:36px;background:var(--color-surface);border-radius:var(--radius-sm);display:flex;align-items:center;justify-content:center">♪</div>`}
-        <div style="flex:1;min-width:0">
-          <div style="font-size:14px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(p.name)}</div>
-          <div style="font-size:12px;color:var(--color-text-muted)">${(p.tracks?.total ?? '?').toLocaleString()} tracks</div>
-        </div>
-        ${current === p.id ? '<span style="color:var(--color-accent);font-size:12px">actual</span>' : ''}
-      </div>
-    `).join('') || `<div style="padding:20px;text-align:center;color:var(--color-text-muted);font-size:13px">Sin resultados</div>`;
-
-    listEl.querySelectorAll('.lap-item').forEach(el => {
-      el.onmouseenter = () => { el.style.background = 'var(--color-surface)'; };
-      el.onmouseleave = () => { el.style.background = 'transparent'; };
-      el.onclick = () => {
-        localStorage.setItem('listened_albums_playlist_id', el.dataset.id);
-        localStorage.setItem('listened_albums_playlist_name', el.dataset.name);
-        overlay.remove();
-        hydrateListenedAlbumsCard();
-        showToast(`"${el.dataset.name}" configurada como álbumes escuchados`, 'success');
-      };
-    });
-  };
-  renderList('');
-  searchEl.oninput = () => renderList(searchEl.value.trim());
-  setTimeout(() => searchEl.focus(), 30);
-
-  overlay.querySelector('#lap-cancel').onclick = () => overlay.remove();
-  const clearBtn = overlay.querySelector('#lap-clear');
-  if (clearBtn) {
-    clearBtn.onclick = () => {
-      localStorage.removeItem('listened_albums_playlist_id');
-      localStorage.removeItem('listened_albums_playlist_name');
-      overlay.remove();
-      hydrateListenedAlbumsCard();
-      showToast('Álbumes escuchados desconectado', 'info');
-    };
-  }
-}
-
 
 const CHART_COLORS = {
   accent: '#7C3AED',
