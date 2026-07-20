@@ -17,6 +17,8 @@ import { render as renderRabbit } from './features/rabbit-hole.js';
 import { render as renderByGenre } from './features/by-genre.js';
 import { render as renderByArtist } from './features/by-artist.js';
 import { render as renderRecs } from './features/recommendations.js';
+import { render as renderListened } from './features/listened.js';
+import { render as renderDiscoverAlbum } from './features/discover-album.js';
 
 async function testConnection() {
   const token = await getValidToken();
@@ -217,6 +219,12 @@ function showApp(profile) {
           <a class="nav-link" data-route="genre" href="#genre">
             <span class="nav-link-icon">&#9833;</span> Por género
           </a>
+          <a class="nav-link" data-route="discover" href="#discover">
+            <span class="nav-link-icon">&#9673;</span> Álbum similar
+          </a>
+          <a class="nav-link" data-route="listened" href="#listened">
+            <span class="nav-link-icon">&#9635;</span> Álbumes escuchados
+          </a>
         </div>
         <div class="sidebar-section">
           <div class="sidebar-section-title">Limpieza</div>
@@ -296,6 +304,8 @@ function showApp(profile) {
   registerRoute('recs', renderRecs);
   registerRoute('genre', renderByGenre);
   registerRoute('byartist', renderByArtist);
+  registerRoute('discover', renderDiscoverAlbum);
+  registerRoute('listened', renderListened);
   registerRoute('sync', renderSync);
   registerRoute('dedupe', renderDedupe);
   registerRoute('dupalbums', renderDupalbums);
