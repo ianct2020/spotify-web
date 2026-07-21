@@ -2,11 +2,13 @@ import { spotifyFetch, getBestAvailableLikes, getAllPlaylistItems } from '../api
 import { hasKey, setKey, getSimilarArtists, getArtistTopTracks } from '../api/lastfm.js';
 import { escapeHtml } from '../ui/components.js';
 import { showToast } from '../ui/toast.js';
-import { getListenedPlaylist } from './listened-shared.js';
+import { getListenedPlaylist, norm, albumKey } from './listened-shared.js';
 
-const MAX_SIMILAR_SCAN = 12;   // artistas similares a escanear
-const ALBUMS_PER_ARTIST = 20;  // resultados de búsqueda por artista
-const ENOUGH_CANDIDATES = 16;  // corte temprano
+const MAX_SIMILAR_SCAN = 18;   // artistas similares a escanear
+const ALBUMS_PER_ARTIST = 25;  // resultados de búsqueda por artista
+const ENOUGH_CANDIDATES = 18;  // corte temprano
+const ALBUM_ONLY = new Set(['album']);              // default: álbum parecido a álbum
+const ALBUM_AND_SINGLES = new Set(['album', 'single']); // opt-in: incluye EPs/singles ('single' cubre EPs)
 
 let sourceAlbum = null;
 let candidates = [];
@@ -19,23 +21,10 @@ let listenedAlbumIds = null;
 let likedAlbumKeys = null;      // clave nombre-sin-edición|artista (matchea deluxe vs normal)
 let listenedAlbumKeys = null;
 
-function norm(s) {
-  return String(s || '')
-    .toLowerCase()
-    .normalize('NFD').replace(/[̀-ͯ]/g, '')
-    .replace(/[^a-z0-9]/g, '');
-}
-
-// Saca marcas de edición para que "X" y "X (Deluxe Version)" cuenten como el mismo álbum.
-function baseName(name) {
-  let s = String(name || '').toLowerCase();
-  s = s.replace(/[([][^)\]]*(deluxe|remaster|expanded|edition|version|anniversary|reissue|bonus|explicit|mono|stereo|special|platinum|collector)[^)\]]*[)\]]/g, ' ');
-  s = s.replace(/\s*[-–—:]\s*(deluxe|remaster(?:ed)?|expanded|special|anniversary|reissue|bonus)\b.*$/g, ' ');
-  s = s.replace(/\b(deluxe|remastered|remaster|expanded|edition|version|anniversary|reissue)\b/g, ' ');
-  return s;
-}
-function albumKey(name, artist) {
-  return `${norm(baseName(name))}|${norm(artist)}`;
+function releaseTypeLabel(al) {
+  if (al.album_type === 'album') return 'Álbum';
+  if (al.album_type === 'single') return (al.total_tracks || 1) > 1 ? 'EP' : 'Single';
+  return al.album_type || 'Álbum';
 }
 
 export function render(container) {
@@ -178,10 +167,11 @@ async function ensureFilters() {
   }
 }
 
-async function pickSourceAlbum(album) {
+async function pickSourceAlbum(album, { includeSingles = false } = {}) {
   sourceAlbum = album;
   candidates = [];
   candidateIdx = 0;
+  const allowedTypes = includeSingles ? ALBUM_AND_SINGLES : ALBUM_ONLY;
   document.getElementById('disc-search-input').value = `${album.name} — ${(album.artists || []).map(a => a.name).join(', ')}`;
   document.getElementById('disc-search-results').innerHTML = '';
 
@@ -224,10 +214,12 @@ async function pickSourceAlbum(album) {
 
     const seenAlbumIds = new Set();
     const seenNameArtist = new Set();
+    const stats = { scanned: 0, raw: 0, type: 0, artist: 0, owned: 0 }; // diagnóstico
 
     for (let i = 0; i < scan.length; i++) {
       const s = scan[i];
-      textEl.textContent = `Buscando álbumes de artistas parecidos (${i + 1}/${scan.length}: ${s.name})...`;
+      stats.scanned++;
+      textEl.textContent = `Buscando lanzamientos de artistas parecidos (${i + 1}/${scan.length}: ${s.name})...`;
       barEl.style.width = `${((i + 1) / scan.length * 100).toFixed(0)}%`;
 
       let found;
@@ -242,16 +234,15 @@ async function pickSourceAlbum(album) {
 
       const sNorm = norm(s.name);
       for (const al of found) {
-        if (al.album_type !== 'album') continue;                    // sin singles ni compilados
+        stats.raw++;
+        if (!allowedTypes.has(al.album_type)) { stats.type++; continue; }   // compilados (y singles si no están habilitados)
         const primary = al.artists?.[0]?.name || '';
         const pNorm = norm(primary);
-        if (!(pNorm === sNorm || pNorm.includes(sNorm) || sNorm.includes(pNorm))) continue; // evita features
+        if (!(pNorm === sNorm || pNorm.includes(sNorm) || sNorm.includes(pNorm))) { stats.artist++; continue; } // evita features
         if (al.id === sourceAlbum.id) continue;
-        if (likedAlbumIds.has(al.id)) continue;                     // ya tenés un track de él en likes
-        if (listenedAlbumIds.has(al.id)) continue;                  // ya lo escuchaste
         const editionKey = albumKey(al.name, primary);
-        if (likedAlbumKeys.has(editionKey)) continue;               // misma obra en likes (deluxe/no deluxe)
-        if (listenedAlbumKeys.has(editionKey)) continue;            // misma obra ya escuchada (otra edición)
+        if (likedAlbumIds.has(al.id) || likedAlbumKeys.has(editionKey) ||
+            listenedAlbumIds.has(al.id) || listenedAlbumKeys.has(editionKey)) { stats.owned++; continue; } // ya lo tenés
         if (seenAlbumIds.has(al.id)) continue;
         const naKey = `${norm(al.name)}|${pNorm}`;
         if (seenNameArtist.has(naKey)) continue;                    // deluxe/remaster duplicado
@@ -265,12 +256,16 @@ async function pickSourceAlbum(album) {
     }
 
     if (candidates.length === 0) {
-      renderNoAlbums(scan);
+      renderNoAlbums(scan, stats, includeSingles);
       return;
     }
 
-    // orden: mejor match primero, luego más nuevo
-    candidates.sort((a, b) => (b.match - a.match) || ((b.album.release_date || '').localeCompare(a.album.release_date || '')));
+    // orden: álbumes completos antes que singles/EPs, luego mejor match, luego más nuevo
+    const rank = al => (al.album_type === 'album' ? 0 : 1);
+    candidates.sort((a, b) =>
+      (rank(a.album) - rank(b.album)) ||
+      (b.match - a.match) ||
+      ((b.album.release_date || '').localeCompare(a.album.release_date || '')));
     candidateIdx = 0;
     renderCandidate();
   } catch (e) {
@@ -299,7 +294,7 @@ function renderCandidate() {
       <div style="flex:1;min-width:220px">
         <h2 style="margin-bottom:4px">${escapeHtml(al.name)}</h2>
         <div style="color:var(--color-text-secondary);font-size:15px;margin-bottom:2px">${escapeHtml(artist)}</div>
-        <div style="color:var(--color-text-muted);font-size:13px;margin-bottom:16px">${year ? year + ' · ' : ''}${al.total_tracks || '?'} tracks</div>
+        <div style="color:var(--color-text-muted);font-size:13px;margin-bottom:16px">${releaseTypeLabel(al)}${year ? ` · ${year}` : ''} · ${al.total_tracks || '?'} tracks</div>
         <div style="display:flex;gap:8px;flex-wrap:wrap">
           ${al.external_urls?.spotify ? `<a class="btn btn-primary" href="${al.external_urls.spotify}" target="_blank" rel="noopener">Abrir en Spotify</a>` : ''}
           <button class="btn btn-secondary" id="disc-next" ${candidateIdx >= candidates.length - 1 ? 'disabled' : ''}>Mostrar otro parecido</button>
@@ -346,16 +341,26 @@ async function loadTracklistPreview(albumId) {
   }
 }
 
-async function renderNoAlbums(scanArtists) {
+async function renderNoAlbums(scanArtists, stats, includeSingles) {
   const panel = document.getElementById('disc-panel');
+  const diag = stats ? `
+      <p style="color:var(--color-text-muted);font-size:11px;margin-bottom:16px;font-family:monospace">
+        diag: escaneé ${stats.scanned} artistas · ${stats.raw} lanzamientos vistos · ${stats.owned} ya los tenías · ${stats.type} ${includeSingles ? 'compilados' : 'singles/compilados'} descartados · ${stats.artist} de features/otros
+      </p>` : '';
+  // Si buscamos solo álbumes y se descartaron muchos singles, vale la pena ofrecer incluirlos.
+  const offerSingles = !includeSingles && stats && stats.type > 0;
   panel.innerHTML = `
     <div class="card">
-      <p style="margin-bottom:8px">No encontré ningún <strong>álbum</strong> parecido que no tengas ya en likes o escuchados.</p>
-      <p style="color:var(--color-text-secondary);font-size:13px;margin-bottom:16px">
-        Puede ser que ya tengas cubierto todo lo cercano. Probá con canciones sueltas de artistas parecidos, filtradas para que no estén en tus likes.
+      <p style="margin-bottom:8px">No encontré ningún <strong>${includeSingles ? 'lanzamiento' : 'álbum'}</strong> parecido que no tengas ya en likes o escuchados.</p>
+      <p style="color:var(--color-text-secondary);font-size:13px;margin-bottom:8px">
+        ${offerSingles
+          ? 'Estos artistas parecidos sacan mucho como EP/single. Podés incluirlos, o buscar canciones sueltas filtradas para que no estén en tus likes.'
+          : 'Puede ser que ya tengas cubierto todo lo cercano. Probá con canciones sueltas de artistas parecidos, filtradas para que no estén en tus likes.'}
       </p>
+      ${diag}
       <div style="display:flex;gap:8px;flex-wrap:wrap">
-        <button class="btn btn-primary" id="disc-loose">Buscar canciones sueltas</button>
+        ${offerSingles ? `<button class="btn btn-primary" id="disc-singles">Incluir EPs y singles</button>` : ''}
+        <button class="btn ${offerSingles ? 'btn-secondary' : 'btn-primary'}" id="disc-loose">Buscar canciones sueltas</button>
         <button class="btn btn-secondary" id="disc-restart2">← Otro álbum de origen</button>
       </div>
       <div id="disc-loose-holder" style="margin-top:16px"></div>
@@ -363,6 +368,8 @@ async function renderNoAlbums(scanArtists) {
   `;
   document.getElementById('disc-restart2').onclick = renderSearch;
   document.getElementById('disc-loose').onclick = () => findLooseTracks(scanArtists.slice(0, 6));
+  const singlesBtn = document.getElementById('disc-singles');
+  if (singlesBtn) singlesBtn.onclick = () => pickSourceAlbum(sourceAlbum, { includeSingles: true });
 }
 
 async function findLooseTracks(scanArtists) {
