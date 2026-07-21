@@ -16,6 +16,7 @@ async function spotifyFetch(endpoint, options = {}) {
   const maxRetries = options._maxRetries ?? DEFAULT_MAX_RETRIES;
 
   let rateLimitRetries = 0;
+  let networkRetries = 0;
 
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     const token = await getValidToken();
@@ -28,7 +29,21 @@ async function spotifyFetch(endpoint, options = {}) {
       headers['Content-Type'] = 'application/json';
     }
 
-    const response = await fetch(url, { ...options, headers });
+    let response;
+    try {
+      response = await fetch(url, { ...options, headers });
+    } catch (netErr) {
+      // Error de red sin respuesta HTTP: "Failed to fetch", conexión cortada,
+      // rate-limit enmascarado como CORS, etc. Reintentamos con backoff.
+      networkRetries++;
+      if (networkRetries > maxRetries) {
+        throw new Error(`No se pudo conectar con Spotify (${netErr.message}). Revisá tu conexión y reintentá.`);
+      }
+      const wait = Math.min(4000, 800 * networkRetries);
+      console.warn(`fetch de red falló en ${endpoint} (${netErr.message}), reintento ${networkRetries}/${maxRetries} en ${(wait / 1000).toFixed(1)}s`);
+      await sleep(wait);
+      continue;
+    }
 
     if (response.status === 401) {
       if (attempt < 2) {
