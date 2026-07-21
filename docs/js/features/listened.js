@@ -79,7 +79,16 @@ async function loadAlbums() {
     }
     buildUI(items.length);
   } catch (e) {
-    content.innerHTML = `<div class="card"><p style="color:var(--color-error)">Error: ${escapeHtml(e.message)}</p></div>`;
+    content.innerHTML = `
+      <div class="card" style="max-width:560px">
+        <p style="color:var(--color-error);margin-bottom:6px">Error: ${escapeHtml(e.message)}</p>
+        <p style="color:var(--color-text-secondary);font-size:13px;margin-bottom:16px">
+          Suele ser un bache de conexión o un límite temporal de Spotify. Probá de nuevo.
+        </p>
+        <button class="btn btn-primary" id="listened-retry-btn">Reintentar</button>
+      </div>
+    `;
+    document.getElementById('listened-retry-btn').onclick = () => loadAlbums();
   }
 }
 
