@@ -16,12 +16,26 @@ let candidateIdx = 0;
 let likedAlbumIds = null;
 let likedUris = null;
 let listenedAlbumIds = null;
+let likedAlbumKeys = null;      // clave nombre-sin-edición|artista (matchea deluxe vs normal)
+let listenedAlbumKeys = null;
 
 function norm(s) {
   return String(s || '')
     .toLowerCase()
     .normalize('NFD').replace(/[̀-ͯ]/g, '')
     .replace(/[^a-z0-9]/g, '');
+}
+
+// Saca marcas de edición para que "X" y "X (Deluxe Version)" cuenten como el mismo álbum.
+function baseName(name) {
+  let s = String(name || '').toLowerCase();
+  s = s.replace(/[([][^)\]]*(deluxe|remaster|expanded|edition|version|anniversary|reissue|bonus|explicit|mono|stereo|special|platinum|collector)[^)\]]*[)\]]/g, ' ');
+  s = s.replace(/\s*[-–—:]\s*(deluxe|remaster(?:ed)?|expanded|special|anniversary|reissue|bonus)\b.*$/g, ' ');
+  s = s.replace(/\b(deluxe|remastered|remaster|expanded|edition|version|anniversary|reissue)\b/g, ' ');
+  return s;
+}
+function albumKey(name, artist) {
+  return `${norm(baseName(name))}|${norm(artist)}`;
 }
 
 export function render(container) {
@@ -72,7 +86,10 @@ function renderSearch() {
   const content = document.getElementById('disc-content');
   content.innerHTML = `
     <div class="card" style="max-width:560px;margin-bottom:20px">
-      <label style="display:block;margin-bottom:8px;font-weight:500">Buscar álbum</label>
+      <label style="display:block;margin-bottom:4px;font-weight:500">Buscar álbum</label>
+      <p style="color:var(--color-text-muted);font-size:12px;margin-bottom:8px">
+        Tomo el artista del álbum que elijas, busco en Last.fm hasta 12 <strong>otros</strong> artistas que suenan parecido, y te propongo álbumes de ellos (no del mismo artista) que no tengas en likes ni escuchados.
+      </p>
       <input type="text" id="disc-search-input" placeholder="Ej: In Rainbows"
              style="width:100%;padding:10px;background:var(--color-elevated);border:1px solid var(--color-border);border-radius:var(--radius-sm);color:var(--color-text);font-size:14px;margin-bottom:8px">
       <div id="disc-search-results"></div>
@@ -128,25 +145,32 @@ async function searchAlbum(query) {
 }
 
 async function ensureFilters() {
-  if (likedAlbumIds && likedUris && listenedAlbumIds) return;
+  if (likedAlbumIds && likedUris && listenedAlbumIds && likedAlbumKeys && listenedAlbumKeys) return;
 
   const { items: likes } = await getBestAvailableLikes();
   likedAlbumIds = new Set();
   likedUris = new Set();
+  likedAlbumKeys = new Set();
   for (const it of likes) {
     const t = it.track;
     if (t?.album?.id) likedAlbumIds.add(t.album.id);
     if (t?.uri) likedUris.add(t.uri);
+    if (t?.album?.name) likedAlbumKeys.add(albumKey(t.album.name, t.artists?.[0]?.name || ''));
   }
 
   listenedAlbumIds = new Set();
+  listenedAlbumKeys = new Set();
   const pl = getListenedPlaylist();
   if (pl) {
     try {
       const items = await getAllPlaylistItems(pl.id);
       for (const it of items) {
-        const id = it.item?.album?.id || it.track?.album?.id;
-        if (id) listenedAlbumIds.add(id);
+        const alb = it.item?.album || it.track?.album;
+        if (alb?.id) listenedAlbumIds.add(alb.id);
+        if (alb?.name) {
+          const an = alb.artists?.[0]?.name || it.item?.artists?.[0]?.name || it.track?.artists?.[0]?.name || '';
+          listenedAlbumKeys.add(albumKey(alb.name, an));
+        }
       }
     } catch (e) {
       console.warn('No se pudieron cargar los álbumes escuchados:', e.message);
@@ -225,6 +249,9 @@ async function pickSourceAlbum(album) {
         if (al.id === sourceAlbum.id) continue;
         if (likedAlbumIds.has(al.id)) continue;                     // ya tenés un track de él en likes
         if (listenedAlbumIds.has(al.id)) continue;                  // ya lo escuchaste
+        const editionKey = albumKey(al.name, primary);
+        if (likedAlbumKeys.has(editionKey)) continue;               // misma obra en likes (deluxe/no deluxe)
+        if (listenedAlbumKeys.has(editionKey)) continue;            // misma obra ya escuchada (otra edición)
         if (seenAlbumIds.has(al.id)) continue;
         const naKey = `${norm(al.name)}|${pNorm}`;
         if (seenNameArtist.has(naKey)) continue;                    // deluxe/remaster duplicado

@@ -108,7 +108,7 @@ function buildUI(totalTracks) {
         <button class="btn btn-secondary btn-sm sort-btn ${mode === 'year-desc' ? 'sort-active' : ''}" data-sort="year-desc" title="Año de salida, más nuevos arriba">Año ↓</button>
         <button class="btn btn-secondary btn-sm sort-btn ${mode === 'year-asc' ? 'sort-active' : ''}" data-sort="year-asc" title="Año de salida, más viejos arriba">Año ↑</button>
         <button class="btn btn-secondary btn-sm sort-btn ${mode === 'artist-asc' ? 'sort-active' : ''}" data-sort="artist-asc" title="Artista alfabético">Artista</button>
-        <button class="btn btn-secondary btn-sm sort-btn ${mode === 'tracks-desc' ? 'sort-active' : ''}" data-sort="tracks-desc" title="Más tracks tuyos del álbum arriba">Más tracks</button>
+        <button class="btn btn-secondary btn-sm sort-btn ${mode === 'tracks-desc' ? 'sort-active' : ''}" data-sort="tracks-desc" title="Ordena los álbumes por cuántos temas tuyos tenés de cada uno (no agrega nada)">Más temas tuyos</button>
         <button class="btn btn-secondary btn-sm sort-btn ${mode === 'name-asc' ? 'sort-active' : ''}" data-sort="name-asc" title="Nombre del álbum alfabético">A-Z</button>
       </div>
     </div>
