@@ -5,6 +5,28 @@ import { showToast } from '../ui/toast.js';
 const PID_KEY = 'listened_albums_playlist_id';
 const PNAME_KEY = 'listened_albums_playlist_name';
 
+// Normaliza texto para comparar (minúsculas, sin acentos ni símbolos).
+function norm(s) {
+  return String(s || '')
+    .toLowerCase()
+    .normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .replace(/[^a-z0-9]/g, '');
+}
+
+// Saca marcas de edición para que "X" y "X (Deluxe Version)" cuenten como el mismo álbum.
+function baseName(name) {
+  let s = String(name || '').toLowerCase();
+  s = s.replace(/[([][^)\]]*(deluxe|remaster|expanded|edition|version|anniversary|reissue|bonus|explicit|mono|stereo|special|platinum|collector)[^)\]]*[)\]]/g, ' ');
+  s = s.replace(/\s*[-–—:]\s*(deluxe|remaster(?:ed)?|expanded|special|anniversary|reissue|bonus)\b.*$/g, ' ');
+  s = s.replace(/\b(deluxe|remastered|remaster|expanded|edition|version|anniversary|reissue)\b/g, ' ');
+  return s;
+}
+
+// Clave que matchea la misma obra entre ediciones: nombre-sin-edición | artista.
+function albumKey(name, artist) {
+  return `${norm(baseName(name))}|${norm(artist)}`;
+}
+
 function getListenedPlaylist() {
   const id = localStorage.getItem(PID_KEY);
   if (!id) return null;
@@ -136,6 +158,9 @@ export {
   clearListenedPlaylist,
   groupItemsByAlbum,
   openListenedAlbumsPicker,
+  norm,
+  baseName,
+  albumKey,
   PID_KEY,
   PNAME_KEY,
 };

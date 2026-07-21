@@ -1,10 +1,13 @@
-import { getAllPlaylistItems } from '../api.js';
+import { getAllPlaylistItems, getBestAvailableLikes } from '../api.js';
+import { idbGetCached, idbSetCached, idbGetTimestamp } from '../idb.js';
 import { escapeHtml } from '../ui/components.js';
 import { showToast } from '../ui/toast.js';
-import { getListenedPlaylist, groupItemsByAlbum, openListenedAlbumsPicker } from './listened-shared.js';
+import { getListenedPlaylist, groupItemsByAlbum, openListenedAlbumsPicker, albumKey } from './listened-shared.js';
 
 const SORT_KEY = 'listened_sort_mode';
-const VALID_SORTS = new Set(['recent', 'year-desc', 'year-asc', 'artist-asc', 'tracks-desc', 'name-asc']);
+const VALID_SORTS = new Set(['recent', 'year-desc', 'year-asc', 'artist-asc', 'likes-desc', 'name-asc']);
+const CACHE_TTL_MIN = 24 * 60; // refresca la playlist agrupada solo si pasó más de un día
+const cacheKeyFor = id => `listened_grouped_${id}`;
 function getSortMode() {
   const v = localStorage.getItem(SORT_KEY);
   return VALID_SORTS.has(v) ? v : 'recent';
@@ -57,17 +60,34 @@ function renderNotConfigured() {
   });
 }
 
-async function loadAlbums() {
+async function loadAlbums({ force = false } = {}) {
   const content = document.getElementById('listened-content');
-  content.innerHTML = `<div class="empty-state"><div class="spinner spinner-lg"></div><div style="margin-top:16px">Cargando "${escapeHtml(playlistInfo.name)}"...</div></div>`;
+  const key = cacheKeyFor(playlistInfo.id);
+  content.innerHTML = `<div class="empty-state"><div class="spinner spinner-lg"></div><div style="margin-top:16px">${force ? 'Actualizando' : 'Cargando'} "${escapeHtml(playlistInfo.name)}"...</div></div>`;
 
   try {
-    const items = await getAllPlaylistItems(playlistInfo.id);
-    albums = groupItemsByAlbum(items);
+    let totalTracks;
+    let cached = null;
+    if (!force) {
+      try { cached = await idbGetCached(key); } catch { /* ignora */ }
+    }
+
+    if (cached && Array.isArray(cached.albums)) {
+      albums = cached.albums;
+      totalTracks = cached.totalTracks ?? albums.reduce((n, a) => n + a.tracks.length, 0);
+    } else {
+      const items = await getAllPlaylistItems(playlistInfo.id);
+      albums = groupItemsByAlbum(items);
+      totalTracks = items.length;
+      if (albums.length > 0) {
+        try { await idbSetCached(key, { albums, totalTracks }, CACHE_TTL_MIN); } catch (e) { console.warn('cache listened:', e.message); }
+      }
+    }
+
     if (albums.length === 0) {
       content.innerHTML = `
         <div class="card" style="max-width:560px">
-          <p style="margin-bottom:12px">La playlist <strong>${escapeHtml(playlistInfo.name)}</strong> no tiene tracks con álbum reconocible (${items.length.toLocaleString()} items).</p>
+          <p style="margin-bottom:12px">La playlist <strong>${escapeHtml(playlistInfo.name)}</strong> no tiene tracks con álbum reconocible (${totalTracks.toLocaleString()} items).</p>
           <button class="btn btn-secondary" id="listened-change-btn">Cambiar playlist</button>
         </div>
       `;
@@ -77,7 +97,11 @@ async function loadAlbums() {
       });
       return;
     }
-    buildUI(items.length);
+
+    await attachLikes(albums);
+    let ts = null;
+    try { ts = await idbGetTimestamp(key); } catch { /* ignora */ }
+    buildUI(totalTracks, ts);
   } catch (e) {
     content.innerHTML = `
       <div class="card" style="max-width:560px">
@@ -88,20 +112,47 @@ async function loadAlbums() {
         <button class="btn btn-primary" id="listened-retry-btn">Reintentar</button>
       </div>
     `;
-    document.getElementById('listened-retry-btn').onclick = () => loadAlbums();
+    document.getElementById('listened-retry-btn').onclick = () => loadAlbums({ force: true });
   }
 }
 
-function buildUI(totalTracks) {
+// Cruza cada álbum con tus Liked Songs (por nombre-sin-edición|artista, así matchea deluxe vs normal).
+async function attachLikes(albumList) {
+  let byKey = new Map();
+  try {
+    const { items } = await getBestAvailableLikes();
+    for (const it of items) {
+      const t = it.track;
+      if (!t?.album?.name) continue;
+      const k = albumKey(t.album.name, t.artists?.[0]?.name || '');
+      let arr = byKey.get(k);
+      if (!arr) { arr = []; byKey.set(k, arr); }
+      arr.push({ name: t.name || '', artists: (t.artists || []).map(a => a.name).join(', ') });
+    }
+  } catch (e) {
+    console.warn('No se pudieron cargar likes para el cruce:', e.message);
+    byKey = new Map();
+  }
+  for (const a of albumList) {
+    a.likes = byKey.get(albumKey(a.name, a.artist)) || [];
+  }
+}
+
+function buildUI(totalTracks, ts) {
   const content = document.getElementById('listened-content');
   const mode = getSortMode();
+  const totalLikes = albums.reduce((n, a) => n + (a.likes?.length || 0), 0);
 
   content.innerHTML = `
     <div class="card" style="margin-bottom:16px;display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
       <div style="font-size:14px">
-        <strong>${albums.length.toLocaleString()}</strong> álbumes · <strong>${totalTracks.toLocaleString()}</strong> tracks en <strong>${escapeHtml(playlistInfo.name)}</strong>
+        <strong>${albums.length.toLocaleString()}</strong> álbumes · <strong>${totalTracks.toLocaleString()}</strong> tracks${totalLikes ? ` · <span style="color:var(--color-accent)">♥ ${totalLikes.toLocaleString()} en tus likes</span>` : ''} en <strong>${escapeHtml(playlistInfo.name)}</strong>
+        ${ts ? `<div style="font-size:12px;color:var(--color-text-muted);margin-top:2px">Actualizado ${timeAgo(ts)}</div>` : ''}
       </div>
-      <button class="btn btn-secondary btn-sm" id="listened-change-btn">Cambiar playlist</button>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-secondary btn-sm" id="listened-refresh-btn" title="Vuelve a leer la playlist desde Spotify (si no, se refresca solo una vez por día)">Actualizar</button>
+        <button class="btn btn-secondary btn-sm" id="listened-change-btn">Cambiar playlist</button>
+      </div>
     </div>
 
     <div style="display:flex;gap:12px;align-items:center;margin-bottom:12px;flex-wrap:wrap">
@@ -117,7 +168,7 @@ function buildUI(totalTracks) {
         <button class="btn btn-secondary btn-sm sort-btn ${mode === 'year-desc' ? 'sort-active' : ''}" data-sort="year-desc" title="Año de salida, más nuevos arriba">Año ↓</button>
         <button class="btn btn-secondary btn-sm sort-btn ${mode === 'year-asc' ? 'sort-active' : ''}" data-sort="year-asc" title="Año de salida, más viejos arriba">Año ↑</button>
         <button class="btn btn-secondary btn-sm sort-btn ${mode === 'artist-asc' ? 'sort-active' : ''}" data-sort="artist-asc" title="Artista alfabético">Artista</button>
-        <button class="btn btn-secondary btn-sm sort-btn ${mode === 'tracks-desc' ? 'sort-active' : ''}" data-sort="tracks-desc" title="Ordena los álbumes por cuántos temas tuyos tenés de cada uno (no agrega nada)">Más temas tuyos</button>
+        <button class="btn btn-secondary btn-sm sort-btn ${mode === 'likes-desc' ? 'sort-active' : ''}" data-sort="likes-desc" title="Ordena por cuántas canciones de cada álbum tenés en tus Liked Songs">Más likeados ♥</button>
         <button class="btn btn-secondary btn-sm sort-btn ${mode === 'name-asc' ? 'sort-active' : ''}" data-sort="name-asc" title="Nombre del álbum alfabético">A-Z</button>
       </div>
     </div>
@@ -125,6 +176,8 @@ function buildUI(totalTracks) {
     <div id="listened-summary" style="margin-bottom:8px;color:var(--color-text-secondary);font-size:14px"></div>
     <div id="listened-grid-holder"></div>
   `;
+
+  document.getElementById('listened-refresh-btn').onclick = () => loadAlbums({ force: true });
 
   document.getElementById('listened-change-btn').onclick = () => openListenedAlbumsPicker({
     onSelect: () => { playlistInfo = getListenedPlaylist(); loadAlbums(); },
@@ -162,10 +215,20 @@ function sortAlbums(list) {
   if (mode === 'year-desc') copy.sort((a, b) => (b.year || '0').localeCompare(a.year || '0'));
   else if (mode === 'year-asc') copy.sort((a, b) => (a.year || '9999').localeCompare(b.year || '9999'));
   else if (mode === 'artist-asc') copy.sort((a, b) => a.artist.localeCompare(b.artist));
-  else if (mode === 'tracks-desc') copy.sort((a, b) => b.tracks.length - a.tracks.length);
+  else if (mode === 'likes-desc') copy.sort((a, b) => (b.likes?.length || 0) - (a.likes?.length || 0) || b.tracks.length - a.tracks.length);
   else if (mode === 'name-asc') copy.sort((a, b) => a.name.localeCompare(b.name));
   else copy.sort((a, b) => b.addedAt - a.addedAt); // recent
   return copy;
+}
+
+function timeAgo(ts) {
+  const mins = Math.max(0, Math.round((Date.now() - ts) / 60000));
+  if (mins < 1) return 'recién';
+  if (mins < 60) return `hace ${mins} min`;
+  const hrs = Math.round(mins / 60);
+  if (hrs < 24) return `hace ${hrs} h`;
+  const days = Math.round(hrs / 24);
+  return `hace ${days} día${days === 1 ? '' : 's'}`;
 }
 
 function renderGrid() {
@@ -198,7 +261,7 @@ function renderGrid() {
           </div>
           <div class="playlist-card-name">${escapeHtml(a.name)}</div>
           <div class="playlist-card-meta">${escapeHtml(a.artist)}${a.year ? ` · ${a.year}` : ''}</div>
-          <div class="playlist-card-meta" style="color:var(--color-text-muted)">${a.tracks.length} track${a.tracks.length === 1 ? '' : 's'} en la playlist</div>
+          <div class="playlist-card-meta" style="color:var(--color-text-muted)">${a.tracks.length} en la playlist${a.likes?.length ? ` · <span style="color:var(--color-accent)">♥ ${a.likes.length}</span>` : ''}</div>
         </button>
       `).join('')}
     </div>
@@ -225,7 +288,8 @@ function openAlbumDetail(albumId) {
           <div style="color:var(--color-text-muted);font-size:12px;margin-top:2px">${album.tracks.length} track${album.tracks.length === 1 ? '' : 's'} tuyos en la playlist</div>
         </div>
       </div>
-      <div style="max-height:320px;overflow-y:auto;border:1px solid var(--color-border);border-radius:var(--radius-sm)">
+      <div style="font-size:12px;color:var(--color-text-muted);margin-bottom:6px">En la playlist (${album.tracks.length})</div>
+      <div style="max-height:220px;overflow-y:auto;border:1px solid var(--color-border);border-radius:var(--radius-sm)">
         ${album.tracks.map((t, i) => `
           <div style="display:flex;align-items:center;gap:10px;padding:9px 12px;border-bottom:1px solid var(--color-border)">
             <span style="width:22px;text-align:center;color:var(--color-text-muted);font-size:12px;flex-shrink:0">${i + 1}</span>
@@ -236,6 +300,20 @@ function openAlbumDetail(albumId) {
           </div>
         `).join('')}
       </div>
+
+      <div style="font-size:12px;color:var(--color-accent);margin:16px 0 6px">♥ De este álbum en tus Liked Songs (${album.likes?.length || 0})</div>
+      ${album.likes?.length ? `
+      <div style="max-height:220px;overflow-y:auto;border:1px solid var(--color-border);border-radius:var(--radius-sm)">
+        ${album.likes.map((t, i) => `
+          <div style="display:flex;align-items:center;gap:10px;padding:9px 12px;border-bottom:1px solid var(--color-border)">
+            <span style="width:22px;text-align:center;color:var(--color-accent);font-size:12px;flex-shrink:0">♥</span>
+            <div style="flex:1;min-width:0">
+              <div style="font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(t.name)}</div>
+              <div style="font-size:12px;color:var(--color-text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(t.artists)}</div>
+            </div>
+          </div>
+        `).join('')}
+      </div>` : `<div style="color:var(--color-text-muted);font-size:13px">No tenés canciones de este álbum en tus likes.</div>`}
       <div class="modal-actions" style="margin-top:16px">
         ${album.url ? `<a class="btn btn-secondary" href="${album.url}" target="_blank" rel="noopener">Ver álbum en Spotify</a>` : ''}
         <button class="btn btn-primary" id="listened-detail-close">Cerrar</button>
