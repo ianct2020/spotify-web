@@ -257,10 +257,10 @@ LIMPIEZA    Sync Mirror, Dedupe, Álbumes repetidos, Zombis, Versiones
 
 ---
 
-## Versión actual desplegada (actualizado 2026-07-20)
+## Versión actual desplegada (actualizado 2026-07-22)
 
-- Git: rama `main` (v=47 — filtro deluxe en Álbum similar)
-- Cache bust: **`?v=47`**
+- Git: rama `main` (v=49 — likes por álbum + Álbum similar álbum-only)
+- Cache bust: **`?v=49`**
 - **`docs/.nojekyll`** agregado en v=46 (commit 0fd5a9f): el build legacy de Jekyll de GitHub Pages venía fallando desde ~v=44 y dejó el sitio congelado en v=43. `.nojekyll` lo destraba. Si el sitio vuelve a "congelarse", revisar el build status de Pages, no el push.
 - **TEST_MODE eliminado por completo del código** (2026-07-11). Ver "Fase 4" abajo.
 - Playlist espejo activa: `anothertwo`. Default de Sync Mirror en `src/js/features/sync.js:7`.
@@ -420,6 +420,7 @@ Ian pasó todo el día con rate limit por intentar cargar los 9538 likes varias 
 
 ## Changelog reciente (últimos 5 cambios)
 
+- `v=49` (7f12749): **Likes por álbum + Álbum similar refinado + hover + cache.** (1) `listened.js`: cruza cada álbum escuchado con Liked Songs por `albumKey` (nombre-sin-edición|artista, matchea deluxe vs normal); cards muestran `♥ N`, nuevo orden "Más likeados" (reemplaza el confuso "Más temas tuyos"), y el modal lista scrolleable las canciones del álbum que están en likes. (2) Cache IndexedDB de la playlist agrupada, TTL 24h (`listened_grouped_<pid>`), con botón "Actualizar" (`force`) y "Actualizado hace X". (3) `discover-album.js`: default **solo álbumes completos**; si da 0 y se descartaron singles, botón opt-in "Incluir EPs y singles" (`pickSourceAlbum(album,{includeSingles})`); escanea 18 artistas; muestra tipo de release; **diagnóstico** en la pantalla de "no encontré" (scanned/raw/owned/type/artist) para debuggear por qué un artista da pocos álbumes. (4) `spotifyFetch` reintenta ante errores de red (no solo 401/429) — fix del "Failed to fetch". (5) CSS: `<a>` estilado como botón/card no se subraya en hover. Refactor: `norm`/`baseName`/`albumKey` viven en `listened-shared.js`.
 - `v=47` (c519551): **Álbum similar — filtro robusto de ediciones.** Además de filtrar por `album.id`, ahora compara por `baseName(nombre)|artista` (saca "deluxe/remaster/expanded/edition/version/anniversary/reissue" y paréntesis de edición), así una Deluxe de algo que ya tenés en likes o escuchados también se descarta (idea de Ian). `ensureFilters` arma `likedAlbumKeys`/`listenedAlbumKeys`. También: la UI de Álbum similar explica que busca OTROS artistas parecidos vía Last.fm (no el mismo). Álbumes escuchados: label "Más tracks" → "Más temas tuyos" (confundía con "agregar").
 - `v=46` (a47528a + 0fd5a9f): pantalla Bienvenido muestra TODAS las funciones agrupadas (General/Crear/Descubrir/Limpieza) como cards. **`docs/.nojekyll`** para destrabar Pages (ver arriba).
 - `v=45`: **Fase 5 capas 2 y 3.** Capa 2 "Álbumes escuchados" (`#listened`, `features/listened.js`): grid de álbumes de la playlist de registro, agrupados por album.id, con buscador + orden + detalle por álbum. Capa 3 "Álbum similar" (`#discover`, `features/discover-album.js`): buscás un álbum y te devuelve 1 álbum parecido de un artista similar (Last.fm), filtrado para que no esté en likes ni en escuchados, con "Mostrar otro" y fallback a canciones sueltas. Refactor: picker de listened albums extraído a `features/listened-shared.js` (compartido con Dashboard). Se evitó `GET /artists/{id}/albums` usando `/search?q=artist:"X"&type=album` (confirmado vivo).
