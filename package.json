@@ -5,7 +5,7 @@
   "private": true,
   "scripts": {
     "dev": "python3 -m http.server 5500 --directory src",
-    "build": "rm -rf docs/* && cp -r src/* docs/ && touch docs/.nojekyll && echo 'Build OK → docs/'",
+    "build": "bash build.sh",
     "deploy": "npm run build && cd ~/spotify-web && git add docs/ && git commit -m 'chore: rebuild docs' && git push"
   }
 }
