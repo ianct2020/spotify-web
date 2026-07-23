@@ -1,8 +1,8 @@
-import { getAllPlaylistItems, getBestAvailableLikes, addTracksToPlaylist, removeTracksFromPlaylist } from '../api.js?v=56';
-import { idbGetCached, idbSetCached, idbGetTimestamp } from '../idb.js?v=56';
-import { escapeHtml, confirmModal } from '../ui/components.js?v=56';
-import { showToast } from '../ui/toast.js?v=56';
-import { getListenedPlaylist, groupItemsByAlbum, openListenedAlbumsPicker, albumKey, baseName, norm } from './listened-shared.js?v=56';
+import { getAllPlaylistItems, getBestAvailableLikes, addTracksToPlaylist, removeTracksFromPlaylist } from '../api.js?v=57';
+import { idbGetCached, idbSetCached, idbGetTimestamp, idbDel } from '../idb.js?v=57';
+import { escapeHtml, confirmModal } from '../ui/components.js?v=57';
+import { showToast } from '../ui/toast.js?v=57';
+import { getListenedPlaylist, groupItemsByAlbum, openListenedAlbumsPicker, albumKey, baseName, norm } from './listened-shared.js?v=57';
 
 const SORT_KEY = 'listened_sort_mode';
 const VALID_SORTS = new Set(['recent', 'year-desc', 'year-asc', 'artist-asc', 'likes-desc', 'name-asc']);
@@ -119,6 +119,14 @@ async function loadAlbums({ force = false } = {}) {
   }
 }
 
+// Después de modificar la playlist (agregar/sacar): esperar a que Spotify refleje el cambio,
+// re-leer fresco, y limpiar el cache para que la próxima entrada re-analice.
+async function refreshAfterWrite() {
+  await new Promise(r => setTimeout(r, 900));
+  await loadAlbums({ force: true });
+  try { await idbDel(cacheKeyFor(playlistInfo.id)); } catch { /* ignora */ }
+}
+
 // Cruza cada álbum con tus Liked Songs (por nombre-sin-edición|artista, así matchea deluxe vs normal).
 // Deja el mapa completo en likesByKey para reusarlo en "quizás sin registrar".
 async function attachLikes(albumList) {
@@ -175,10 +183,6 @@ function isEdition(name) {
   return norm(name) !== norm(baseName(name));
 }
 
-// Todos los álbumes registrados que son ediciones (deluxe/remaster/etc).
-function computeEditions() {
-  return albums.filter(a => isEdition(a.name)).sort((a, b) => a.artist.localeCompare(b.artist));
-}
 
 // Álbumes registrados que aparecen en 2+ ediciones (ej: la normal Y la deluxe).
 // Devuelve grupos [{ keeper, remove:[...] }] donde 'remove' son las ediciones sobrantes.
@@ -211,7 +215,6 @@ function buildUI(totalTracks, ts) {
   const totalLikes = albums.reduce((n, a) => n + (a.likes?.length || 0), 0);
   const unregistered = computeUnregistered();
   const dupes = computeEditionDupes();
-  const editions = computeEditions();
 
   content.innerHTML = `
     <div class="card" style="margin-bottom:16px;display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
@@ -221,8 +224,7 @@ function buildUI(totalTracks, ts) {
       </div>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
         <button class="btn btn-secondary btn-sm" id="listened-unreg-btn" title="Álbumes con varias canciones tuyas en likes que no están en tu registro (ajustás el mínimo adentro)">🎧 Sin registrar (${unregistered.length})</button>
-        <button class="btn btn-secondary btn-sm" id="listened-dupes-btn" title="Álbumes registrados dos veces (deluxe Y normal): sacás la sobrante y queda una sola">💿 Duplicados (${dupes.length})</button>
-        <button class="btn btn-secondary btn-sm" id="listened-deluxe-btn" title="Todos los álbumes registrados que son ediciones deluxe/remaster (para sacar los que quieras)">💿 Deluxe (${editions.length})</button>
+        <button class="btn btn-secondary btn-sm" id="listened-dupes-btn" title="Álbumes registrados dos veces (deluxe Y normal): sacás la sobrante y queda una sola versión">💿 Duplicados (${dupes.length})</button>
         <button class="btn btn-secondary btn-sm" id="listened-refresh-btn" title="Vuelve a leer la playlist desde Spotify (si no, se refresca solo una vez por día)">Actualizar</button>
         <button class="btn btn-secondary btn-sm" id="listened-change-btn">Cambiar playlist</button>
       </div>
@@ -257,9 +259,6 @@ function buildUI(totalTracks, ts) {
 
   const dupesBtn = document.getElementById('listened-dupes-btn');
   if (dupesBtn) dupesBtn.onclick = () => openDupes(dupes);
-
-  const deluxeBtn = document.getElementById('listened-deluxe-btn');
-  if (deluxeBtn) deluxeBtn.onclick = () => openEditions(editions);
 
   document.getElementById('listened-change-btn').onclick = () => openListenedAlbumsPicker({
     onSelect: () => { playlistInfo = getListenedPlaylist(); loadAlbums(); },
@@ -424,7 +423,7 @@ function openUnregistered() {
       </p>
       <div style="display:flex;gap:6px;align-items:center;margin-bottom:12px;flex-wrap:wrap;flex-shrink:0">
         <span style="font-size:12px;color:var(--color-text-muted)">Mínimo de canciones en likes:</span>
-        ${[2, 3, 4, 5, 6, 7, 8].map(n => `<button class="btn ${n === unregMin ? 'btn-primary' : 'btn-secondary'} btn-sm unreg-th" data-th="${n}">${n}+</button>`).join('')}
+        ${[1, 2, 3, 4, 5, 6, 7, 8].map(n => `<button class="btn ${n === unregMin ? 'btn-primary' : 'btn-secondary'} btn-sm unreg-th" data-th="${n}">${n}+</button>`).join('')}
       </div>
       <div id="unreg-list" class="picker-scroll"></div>
       <div class="modal-actions" style="margin-top:16px">
@@ -507,7 +506,7 @@ function openUnregistered() {
       await addTracksToPlaylist(playlistInfo.id, uris);      // sin confirmación (pedido de Ian)
       showToast(`${uris.length} álbum${uris.length === 1 ? '' : 'es'} agregado${uris.length === 1 ? '' : 's'} a escuchados`, 'success');
       close();
-      await loadAlbums({ force: true });
+      await refreshAfterWrite();
     } catch (err) {
       showToast('Error al agregar: ' + err.message, 'error');
       addBtn.disabled = false;
@@ -603,87 +602,7 @@ function openDupes(groups) {
       await removeTracksFromPlaylist(playlistInfo.id, uris);
       showToast(`${selected.length} edición${selected.length === 1 ? '' : 'es'} sacada${selected.length === 1 ? '' : 's'}`, 'success');
       close();
-      await loadAlbums({ force: true });
-    } catch (err) {
-      showToast('Error al sacar: ' + err.message, 'error');
-      delBtn.disabled = false;
-      updateDelBtn();
-    }
-  };
-}
-
-// Modal con TODAS las ediciones deluxe/remaster del registro. Seleccionás y sacás las que quieras.
-function openEditions(list) {
-  const overlay = document.createElement('div');
-  overlay.className = 'modal-overlay';
-  overlay.innerHTML = `
-    <div class="modal modal-picker" style="max-width:560px">
-      <h2 style="margin-bottom:4px">💿 Ediciones deluxe en tu registro</h2>
-      <p style="color:var(--color-text-secondary);font-size:13px;margin-bottom:10px;flex-shrink:0">
-        Todos los álbumes de <strong>${escapeHtml(playlistInfo.name)}</strong> registrados como edición (deluxe, remaster, etc.).
-        Seleccioná los que quieras <strong>sacar</strong> de la playlist.
-      </p>
-      ${list.length ? `
-      <label style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--color-text-muted);margin-bottom:6px;cursor:pointer;flex-shrink:0">
-        <input type="checkbox" id="ed-all"> Seleccionar todos (${list.length})
-      </label>` : ''}
-      <div class="picker-scroll" style="border:1px solid var(--color-border);border-radius:var(--radius-sm)">
-        ${list.length ? list.map(a => {
-          const uris = (a.tracks || []).map(t => t.uri).filter(Boolean).join(',');
-          return `
-          <label style="display:flex;align-items:center;gap:10px;padding:9px 12px;border-bottom:1px solid var(--color-border);cursor:${uris ? 'pointer' : 'default'}">
-            <input type="checkbox" class="ed-cb" data-uris="${uris}" ${uris ? '' : 'disabled'}>
-            ${a.cover ? `<img src="${a.cover}" loading="lazy" style="width:40px;height:40px;border-radius:var(--radius-sm);object-fit:cover;flex-shrink:0">` : `<div style="width:40px;height:40px;background:var(--color-elevated);border-radius:var(--radius-sm);flex-shrink:0"></div>`}
-            <div style="flex:1;min-width:0">
-              <div style="font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(a.name)}</div>
-              <div style="font-size:12px;color:var(--color-text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(a.artist)}${a.year ? ` · ${a.year}` : ''}</div>
-            </div>
-            ${a.url ? `<a href="${a.url}" target="_blank" rel="noopener" style="color:var(--color-accent);font-size:12px;flex-shrink:0">abrir</a>` : ''}
-          </label>`;
-        }).join('') : `<div style="color:var(--color-text-muted);font-size:13px;padding:12px">No tenés álbumes registrados como edición deluxe.</div>`}
-      </div>
-      <div class="modal-actions" style="margin-top:16px">
-        <button class="btn btn-danger" id="ed-del" disabled>Sacar de escuchados (0)</button>
-        <button class="btn btn-secondary" id="ed-close">Cerrar</button>
-      </div>
-    </div>
-  `;
-  document.body.appendChild(overlay);
-
-  const delBtn = overlay.querySelector('#ed-del');
-  const updateDelBtn = () => {
-    const n = overlay.querySelectorAll('.ed-cb:checked').length;
-    delBtn.textContent = `Sacar de escuchados (${n})`;
-    delBtn.disabled = n === 0;
-  };
-  overlay.querySelectorAll('.ed-cb').forEach(cb => cb.addEventListener('change', updateDelBtn));
-  const allCb = overlay.querySelector('#ed-all');
-  if (allCb) allCb.addEventListener('change', () => {
-    overlay.querySelectorAll('.ed-cb:not(:disabled)').forEach(cb => { cb.checked = allCb.checked; });
-    updateDelBtn();
-  });
-
-  const close = () => overlay.remove();
-  overlay.querySelector('#ed-close').onclick = close;
-  overlay.onclick = (e) => { if (e.target === overlay) close(); };
-
-  delBtn.onclick = async () => {
-    const selected = [...overlay.querySelectorAll('.ed-cb:checked')];
-    const uris = selected.flatMap(cb => (cb.dataset.uris || '').split(',').filter(Boolean));
-    if (uris.length === 0) return;
-    const ok = await confirmModal(
-      'Sacar de escuchados',
-      `Se van a <strong>sacar ${selected.length} álbum${selected.length === 1 ? '' : 'es'}</strong> de tu playlist "${escapeHtml(playlistInfo.name)}". Esto modifica tu playlist en Spotify. ¿Seguro?`,
-      'Sacar'
-    );
-    if (!ok) return;
-    delBtn.disabled = true;
-    delBtn.textContent = 'Sacando...';
-    try {
-      await removeTracksFromPlaylist(playlistInfo.id, uris);
-      showToast(`${selected.length} álbum${selected.length === 1 ? '' : 'es'} sacado${selected.length === 1 ? '' : 's'} de escuchados`, 'success');
-      close();
-      await loadAlbums({ force: true });
+      await refreshAfterWrite();
     } catch (err) {
       showToast('Error al sacar: ' + err.message, 'error');
       delBtn.disabled = false;
