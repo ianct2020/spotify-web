@@ -1,10 +1,10 @@
-import { getAllLikedTracks, createPlaylist, addTracksToPlaylist, invalidatePlaylistsCache, exportAllData, importAllData, getCurrentUserId, getBestAvailableLikes } from '../api.js?v=53';
-import { hasKey, setKey, getArtistTopTags, getCachedTags, setCachedTags, mergeCachedTags } from '../api/lastfm.js?v=53';
-import * as statsfm from '../api/statsfm.js?v=53';
-import { getGenresForArtist as mbGetGenres } from '../api/musicbrainz.js?v=53';
-import { showProgress, hideProgress, promptPlaylistName, alertModal, escapeHtml } from '../ui/components.js?v=53';
-import { showToast } from '../ui/toast.js?v=53';
-import { tagToGroup } from './genre-groups.js?v=53';
+import { getAllLikedTracks, createPlaylist, addTracksToPlaylist, invalidatePlaylistsCache, exportAllData, importAllData, getCurrentUserId, getBestAvailableLikes } from '../api.js?v=54';
+import { hasKey, setKey, getArtistTopTags, getCachedTags, setCachedTags, mergeCachedTags } from '../api/lastfm.js?v=54';
+import * as statsfm from '../api/statsfm.js?v=54';
+import { getGenresForArtist as mbGetGenres } from '../api/musicbrainz.js?v=54';
+import { showProgress, hideProgress, promptPlaylistName, alertModal, escapeHtml } from '../ui/components.js?v=54';
+import { showToast } from '../ui/toast.js?v=54';
+import { tagToGroup } from './genre-groups.js?v=54';
 
 const NOISE_TAGS = new Set([
   'seen live', 'favorites', 'favorite', 'favourite', 'favourites',

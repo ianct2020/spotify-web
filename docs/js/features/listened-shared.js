@@ -1,6 +1,6 @@
-import { getAllUserPlaylists } from '../api.js?v=53';
-import { escapeHtml } from '../ui/components.js?v=53';
-import { showToast } from '../ui/toast.js?v=53';
+import { getAllUserPlaylists } from '../api.js?v=54';
+import { escapeHtml } from '../ui/components.js?v=54';
+import { showToast } from '../ui/toast.js?v=54';
 
 const PID_KEY = 'listened_albums_playlist_id';
 const PNAME_KEY = 'listened_albums_playlist_name';
@@ -70,6 +70,7 @@ function groupItemsByAlbum(items) {
     entry.tracks.push({
       name: t.name || '',
       artists: (t.artists || []).map(a => a.name).join(', '),
+      uri: t.uri || (t.id ? `spotify:track:${t.id}` : null),
       url: t.external_urls?.spotify || null,
     });
     const added = it.added_at ? Date.parse(it.added_at) : 0;
