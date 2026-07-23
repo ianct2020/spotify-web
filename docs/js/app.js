@@ -1,24 +1,24 @@
-import { isLoggedIn, loginWithSpotify, logout } from './auth.js';
-import { getUserProfile, spotifyFetch, tryAutoLoadUserBackup } from './api.js';
-import { getValidToken } from './auth.js';
-import { cacheClearAll } from './storage.js';
-import { registerRoute, initRouter, navigate } from './router.js';
-import { showToast } from './ui/toast.js';
+import { isLoggedIn, loginWithSpotify, logout } from './auth.js?v=52';
+import { getUserProfile, spotifyFetch, tryAutoLoadUserBackup } from './api.js?v=52';
+import { getValidToken } from './auth.js?v=52';
+import { cacheClearAll } from './storage.js?v=52';
+import { registerRoute, initRouter, navigate } from './router.js?v=52';
+import { showToast } from './ui/toast.js?v=52';
 
-import { render as renderSync } from './features/sync.js';
-import { render as renderDedupe } from './features/dedupe.js';
-import { render as renderDupalbums } from './features/duplicate-albums.js';
-import { render as renderZombies } from './features/zombies.js';
-import { render as renderVersions } from './features/versions.js';
-import { render as renderDashboard } from './features/dashboard.js';
-import { render as renderSmart } from './features/smart.js';
-import { render as renderSimilar } from './features/similar-artists.js';
-import { render as renderRabbit } from './features/rabbit-hole.js';
-import { render as renderByGenre } from './features/by-genre.js';
-import { render as renderByArtist } from './features/by-artist.js';
-import { render as renderRecs } from './features/recommendations.js';
-import { render as renderListened } from './features/listened.js';
-import { render as renderDiscoverAlbum } from './features/discover-album.js';
+import { render as renderSync } from './features/sync.js?v=52';
+import { render as renderDedupe } from './features/dedupe.js?v=52';
+import { render as renderDupalbums } from './features/duplicate-albums.js?v=52';
+import { render as renderZombies } from './features/zombies.js?v=52';
+import { render as renderVersions } from './features/versions.js?v=52';
+import { render as renderDashboard } from './features/dashboard.js?v=52';
+import { render as renderSmart } from './features/smart.js?v=52';
+import { render as renderSimilar } from './features/similar-artists.js?v=52';
+import { render as renderRabbit } from './features/rabbit-hole.js?v=52';
+import { render as renderByGenre } from './features/by-genre.js?v=52';
+import { render as renderByArtist } from './features/by-artist.js?v=52';
+import { render as renderRecs } from './features/recommendations.js?v=52';
+import { render as renderListened } from './features/listened.js?v=52';
+import { render as renderDiscoverAlbum } from './features/discover-album.js?v=52';
 
 async function testConnection() {
   const token = await getValidToken();

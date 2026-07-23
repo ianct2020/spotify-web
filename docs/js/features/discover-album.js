@@ -1,8 +1,8 @@
-import { spotifyFetch, getBestAvailableLikes, getAllPlaylistItems } from '../api.js';
-import { hasKey, setKey, getSimilarArtists, getArtistTopTracks } from '../api/lastfm.js';
-import { escapeHtml } from '../ui/components.js';
-import { showToast } from '../ui/toast.js';
-import { getListenedPlaylist, norm, albumKey } from './listened-shared.js';
+import { spotifyFetch, getBestAvailableLikes, getAllPlaylistItems } from '../api.js?v=52';
+import { hasKey, setKey, getSimilarArtists, getArtistTopTracks } from '../api/lastfm.js?v=52';
+import { escapeHtml } from '../ui/components.js?v=52';
+import { showToast } from '../ui/toast.js?v=52';
+import { getListenedPlaylist, norm, albumKey } from './listened-shared.js?v=52';
 
 const MAX_SIMILAR_SCAN = 18;   // artistas similares a escanear
 const ALBUMS_PER_ARTIST = 25;  // resultados de búsqueda por artista

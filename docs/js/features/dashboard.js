@@ -1,7 +1,7 @@
-import { getAllLikedTracks, invalidateLikesCache, exportAllData, importAllData, getCurrentUserId, getLikesTotal, syncLikesIncremental, getLikesCacheTimestamp, getBestAvailableLikes, getAllPlaylistItems } from '../api.js';
-import { showProgress, hideProgress, alertModal, escapeHtml } from '../ui/components.js';
-import { showToast } from '../ui/toast.js';
-import { openListenedAlbumsPicker } from './listened-shared.js';
+import { getAllLikedTracks, invalidateLikesCache, exportAllData, importAllData, getCurrentUserId, getLikesTotal, syncLikesIncremental, getLikesCacheTimestamp, getBestAvailableLikes, getAllPlaylistItems } from '../api.js?v=52';
+import { showProgress, hideProgress, alertModal, escapeHtml } from '../ui/components.js?v=52';
+import { showToast } from '../ui/toast.js?v=52';
+import { openListenedAlbumsPicker } from './listened-shared.js?v=52';
 
 let charts = [];
 let _loadController = null;
