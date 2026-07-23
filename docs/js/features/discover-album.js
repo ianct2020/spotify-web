@@ -224,8 +224,9 @@ async function pickSourceAlbum(album, { includeSingles = false } = {}) {
 
       let found;
       try {
-        const q = encodeURIComponent(`artist:"${s.name}"`);
-        const data = await spotifyFetch(`/search?q=${q}&type=album&limit=${ALBUMS_PER_ARTIST}`);
+        // Texto libre (el filtro artist:"..." con type=album devuelve 0 post-migración).
+        // Filtramos por artista del lado del cliente más abajo.
+        const data = await spotifyFetch(`/search?q=${encodeURIComponent(s.name)}&type=album&limit=${ALBUMS_PER_ARTIST}`);
         found = data.albums?.items || [];
       } catch (e) {
         console.warn('search album falló para', s.name, e.message);
