@@ -18,7 +18,6 @@ import { render as renderByGenre } from './features/by-genre.js';
 import { render as renderByArtist } from './features/by-artist.js';
 import { render as renderRecs } from './features/recommendations.js';
 import { render as renderListened } from './features/listened.js';
-import { render as renderDiscoverAlbum } from './features/discover-album.js';
 
 async function testConnection() {
   const token = await getValidToken();
@@ -219,9 +218,6 @@ function showApp(profile) {
           <a class="nav-link" data-route="genre" href="#genre">
             <span class="nav-link-icon">&#9833;</span> Por género
           </a>
-          <a class="nav-link" data-route="discover" href="#discover">
-            <span class="nav-link-icon">&#9673;</span> Álbum similar
-          </a>
           <a class="nav-link" data-route="listened" href="#listened">
             <span class="nav-link-icon">&#9635;</span> Álbumes escuchados
           </a>
@@ -304,7 +300,6 @@ function showApp(profile) {
   registerRoute('recs', renderRecs);
   registerRoute('genre', renderByGenre);
   registerRoute('byartist', renderByArtist);
-  registerRoute('discover', renderDiscoverAlbum);
   registerRoute('listened', renderListened);
   registerRoute('sync', renderSync);
   registerRoute('dedupe', renderDedupe);
@@ -336,7 +331,6 @@ const HOME_SECTIONS = [
       { hash: 'rabbit', icon: '&#8734;', name: 'Rabbit hole', desc: 'Navegá artistas y tracks encadenados por género.' },
       { hash: 'recs', icon: '&#9835;', name: 'Recomendaciones', desc: 'Basadas en tus scrobbles de Last.fm.' },
       { hash: 'genre', icon: '&#9833;', name: 'Por género', desc: 'Agrupá tus likes por género y armá playlists.' },
-      { hash: 'discover', icon: '&#9673;', name: 'Álbum similar', desc: 'Un álbum parecido que no tengas en likes ni escuchados.' },
       { hash: 'listened', icon: '&#9635;', name: 'Álbumes escuchados', desc: 'Los álbumes de tu playlist de registro, agrupados.' },
     ],
   },

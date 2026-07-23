@@ -1,6 +1,6 @@
-import { getAllLikedTracks, removeLikedTracks } from '../api.js?v=52';
-import { showProgress, hideProgress, typeConfirmModal, renderTrackRow, escapeHtml } from '../ui/components.js?v=52';
-import { showToast } from '../ui/toast.js?v=52';
+import { getAllLikedTracks, removeLikedTracks } from '../api.js?v=53';
+import { showProgress, hideProgress, typeConfirmModal, renderTrackRow, escapeHtml } from '../ui/components.js?v=53';
+import { showToast } from '../ui/toast.js?v=53';
 
 const keepIds = new Set();
 let allClusters = [];
