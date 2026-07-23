@@ -1,8 +1,8 @@
-import { getAllPlaylistItems, getBestAvailableLikes } from '../api.js?v=52';
-import { idbGetCached, idbSetCached, idbGetTimestamp } from '../idb.js?v=52';
-import { escapeHtml } from '../ui/components.js?v=52';
-import { showToast } from '../ui/toast.js?v=52';
-import { getListenedPlaylist, groupItemsByAlbum, openListenedAlbumsPicker, albumKey } from './listened-shared.js?v=52';
+import { getAllPlaylistItems, getBestAvailableLikes } from '../api.js?v=53';
+import { idbGetCached, idbSetCached, idbGetTimestamp } from '../idb.js?v=53';
+import { escapeHtml } from '../ui/components.js?v=53';
+import { showToast } from '../ui/toast.js?v=53';
+import { getListenedPlaylist, groupItemsByAlbum, openListenedAlbumsPicker, albumKey, baseName, norm } from './listened-shared.js?v=53';
 
 const SORT_KEY = 'listened_sort_mode';
 const VALID_SORTS = new Set(['recent', 'year-desc', 'year-asc', 'artist-asc', 'likes-desc', 'name-asc']);
@@ -170,11 +170,20 @@ function computeUnregistered(min = unregMin) {
   return out;
 }
 
+// Un álbum es "edición" (deluxe/remaster/etc) si sacarle las marcas cambia el nombre.
+function isEdition(name) {
+  return norm(name) !== norm(baseName(name));
+}
+function computeEditions() {
+  return albums.filter(a => isEdition(a.name)).sort((a, b) => a.artist.localeCompare(b.artist));
+}
+
 function buildUI(totalTracks, ts) {
   const content = document.getElementById('listened-content');
   const mode = getSortMode();
   const totalLikes = albums.reduce((n, a) => n + (a.likes?.length || 0), 0);
   const unregistered = computeUnregistered();
+  const editions = computeEditions();
 
   content.innerHTML = `
     <div class="card" style="margin-bottom:16px;display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
@@ -184,6 +193,7 @@ function buildUI(totalTracks, ts) {
       </div>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
         ${unregistered.length ? `<button class="btn btn-secondary btn-sm" id="listened-unreg-btn" title="Álbumes con ${unregMin}+ canciones tuyas en likes que no están en tu registro">🎧 Quizás sin registrar (${unregistered.length})</button>` : ''}
+        ${editions.length ? `<button class="btn btn-secondary btn-sm" id="listened-editions-btn" title="Álbumes registrados que son ediciones deluxe/remaster (para reemplazar por la normal a mano)">💿 Ediciones deluxe (${editions.length})</button>` : ''}
         <button class="btn btn-secondary btn-sm" id="listened-refresh-btn" title="Vuelve a leer la playlist desde Spotify (si no, se refresca solo una vez por día)">Actualizar</button>
         <button class="btn btn-secondary btn-sm" id="listened-change-btn">Cambiar playlist</button>
       </div>
@@ -215,6 +225,9 @@ function buildUI(totalTracks, ts) {
 
   const unregBtn = document.getElementById('listened-unreg-btn');
   if (unregBtn) unregBtn.onclick = () => openUnregistered();
+
+  const editionsBtn = document.getElementById('listened-editions-btn');
+  if (editionsBtn) editionsBtn.onclick = () => openEditions(editions);
 
   document.getElementById('listened-change-btn').onclick = () => openListenedAlbumsPicker({
     onSelect: () => { playlistInfo = getListenedPlaylist(); loadAlbums(); },
@@ -427,5 +440,39 @@ function openUnregistered() {
 
   const close = () => overlay.remove();
   overlay.querySelector('#listened-unreg-close').onclick = close;
+  overlay.onclick = (e) => { if (e.target === overlay) close(); };
+}
+
+// Modal con los álbumes registrados que son ediciones deluxe/remaster (para reemplazar a mano).
+function openEditions(list) {
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  overlay.innerHTML = `
+    <div class="modal" style="max-width:560px">
+      <h2 style="margin-bottom:4px">💿 Ediciones deluxe en tu registro</h2>
+      <p style="color:var(--color-text-secondary);font-size:13px;margin-bottom:14px">
+        Estos álbumes de <strong>${escapeHtml(playlistInfo.name)}</strong> están registrados como edición (deluxe, remaster, etc.).
+        Si preferís la versión normal, abrí el álbum en Spotify, sacalo de la playlist y agregá un tema de la edición normal.
+      </p>
+      <div style="max-height:60vh;overflow-y:auto;border:1px solid var(--color-border);border-radius:var(--radius-sm)">
+        ${list.map(a => `
+          <div style="display:flex;align-items:center;gap:10px;padding:9px 12px;border-bottom:1px solid var(--color-border)">
+            ${a.cover ? `<img src="${a.cover}" loading="lazy" style="width:40px;height:40px;border-radius:var(--radius-sm);object-fit:cover">` : `<div style="width:40px;height:40px;background:var(--color-elevated);border-radius:var(--radius-sm)"></div>`}
+            <div style="flex:1;min-width:0">
+              <div style="font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(a.name)}</div>
+              <div style="font-size:12px;color:var(--color-text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(a.artist)}${a.year ? ` · ${a.year}` : ''}</div>
+            </div>
+            ${a.url ? `<a href="${a.url}" target="_blank" rel="noopener" style="color:var(--color-accent);font-size:12px;flex-shrink:0">abrir</a>` : ''}
+          </div>
+        `).join('')}
+      </div>
+      <div class="modal-actions" style="margin-top:16px">
+        <button class="btn btn-primary" id="listened-editions-close">Cerrar</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+  const close = () => overlay.remove();
+  overlay.querySelector('#listened-editions-close').onclick = close;
   overlay.onclick = (e) => { if (e.target === overlay) close(); };
 }
