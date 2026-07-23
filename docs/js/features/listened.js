@@ -200,8 +200,10 @@ function buildUI(totalTracks, ts) {
   };
   content.querySelectorAll('.sort-btn').forEach(btn => {
     btn.onclick = () => {
-      setSortMode(btn.dataset.sort);
-      content.querySelectorAll('.sort-btn').forEach(b => b.classList.toggle('sort-active', b === btn));
+      // Reapretar el orden activo lo deselecciona y vuelve al default (Recientes).
+      const newMode = btn.classList.contains('sort-active') ? 'recent' : btn.dataset.sort;
+      setSortMode(newMode);
+      content.querySelectorAll('.sort-btn').forEach(b => b.classList.toggle('sort-active', b.dataset.sort === newMode));
       renderGrid();
     };
   });
