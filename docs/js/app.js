@@ -1,24 +1,23 @@
-import { isLoggedIn, loginWithSpotify, logout } from './auth.js?v=52';
-import { getUserProfile, spotifyFetch, tryAutoLoadUserBackup } from './api.js?v=52';
-import { getValidToken } from './auth.js?v=52';
-import { cacheClearAll } from './storage.js?v=52';
-import { registerRoute, initRouter, navigate } from './router.js?v=52';
-import { showToast } from './ui/toast.js?v=52';
+import { isLoggedIn, loginWithSpotify, logout } from './auth.js?v=53';
+import { getUserProfile, spotifyFetch, tryAutoLoadUserBackup } from './api.js?v=53';
+import { getValidToken } from './auth.js?v=53';
+import { cacheClearAll } from './storage.js?v=53';
+import { registerRoute, initRouter, navigate } from './router.js?v=53';
+import { showToast } from './ui/toast.js?v=53';
 
-import { render as renderSync } from './features/sync.js?v=52';
-import { render as renderDedupe } from './features/dedupe.js?v=52';
-import { render as renderDupalbums } from './features/duplicate-albums.js?v=52';
-import { render as renderZombies } from './features/zombies.js?v=52';
-import { render as renderVersions } from './features/versions.js?v=52';
-import { render as renderDashboard } from './features/dashboard.js?v=52';
-import { render as renderSmart } from './features/smart.js?v=52';
-import { render as renderSimilar } from './features/similar-artists.js?v=52';
-import { render as renderRabbit } from './features/rabbit-hole.js?v=52';
-import { render as renderByGenre } from './features/by-genre.js?v=52';
-import { render as renderByArtist } from './features/by-artist.js?v=52';
-import { render as renderRecs } from './features/recommendations.js?v=52';
-import { render as renderListened } from './features/listened.js?v=52';
-import { render as renderDiscoverAlbum } from './features/discover-album.js?v=52';
+import { render as renderSync } from './features/sync.js?v=53';
+import { render as renderDedupe } from './features/dedupe.js?v=53';
+import { render as renderDupalbums } from './features/duplicate-albums.js?v=53';
+import { render as renderZombies } from './features/zombies.js?v=53';
+import { render as renderVersions } from './features/versions.js?v=53';
+import { render as renderDashboard } from './features/dashboard.js?v=53';
+import { render as renderSmart } from './features/smart.js?v=53';
+import { render as renderSimilar } from './features/similar-artists.js?v=53';
+import { render as renderRabbit } from './features/rabbit-hole.js?v=53';
+import { render as renderByGenre } from './features/by-genre.js?v=53';
+import { render as renderByArtist } from './features/by-artist.js?v=53';
+import { render as renderRecs } from './features/recommendations.js?v=53';
+import { render as renderListened } from './features/listened.js?v=53';
 
 async function testConnection() {
   const token = await getValidToken();
@@ -219,9 +218,6 @@ function showApp(profile) {
           <a class="nav-link" data-route="genre" href="#genre">
             <span class="nav-link-icon">&#9833;</span> Por género
           </a>
-          <a class="nav-link" data-route="discover" href="#discover">
-            <span class="nav-link-icon">&#9673;</span> Álbum similar
-          </a>
           <a class="nav-link" data-route="listened" href="#listened">
             <span class="nav-link-icon">&#9635;</span> Álbumes escuchados
           </a>
@@ -304,7 +300,6 @@ function showApp(profile) {
   registerRoute('recs', renderRecs);
   registerRoute('genre', renderByGenre);
   registerRoute('byartist', renderByArtist);
-  registerRoute('discover', renderDiscoverAlbum);
   registerRoute('listened', renderListened);
   registerRoute('sync', renderSync);
   registerRoute('dedupe', renderDedupe);
@@ -336,7 +331,6 @@ const HOME_SECTIONS = [
       { hash: 'rabbit', icon: '&#8734;', name: 'Rabbit hole', desc: 'Navegá artistas y tracks encadenados por género.' },
       { hash: 'recs', icon: '&#9835;', name: 'Recomendaciones', desc: 'Basadas en tus scrobbles de Last.fm.' },
       { hash: 'genre', icon: '&#9833;', name: 'Por género', desc: 'Agrupá tus likes por género y armá playlists.' },
-      { hash: 'discover', icon: '&#9673;', name: 'Álbum similar', desc: 'Un álbum parecido que no tengas en likes ni escuchados.' },
       { hash: 'listened', icon: '&#9635;', name: 'Álbumes escuchados', desc: 'Los álbumes de tu playlist de registro, agrupados.' },
     ],
   },
