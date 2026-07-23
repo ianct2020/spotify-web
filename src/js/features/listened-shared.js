@@ -18,7 +18,7 @@ function baseName(name) {
   let s = String(name || '').toLowerCase();
   s = s.replace(/[([][^)\]]*(deluxe|remaster|expanded|edition|version|anniversary|reissue|bonus|explicit|mono|stereo|special|platinum|collector)[^)\]]*[)\]]/g, ' ');
   s = s.replace(/\s*[-–—:]\s*(deluxe|remaster(?:ed)?|expanded|special|anniversary|reissue|bonus)\b.*$/g, ' ');
-  s = s.replace(/\b(deluxe|remastered|remaster|expanded|edition|version|anniversary|reissue)\b/g, ' ');
+  s = s.replace(/\b(deluxe|remastered|remaster|expanded|edition|version|anniversary|reissue|collector(?:'?s)?|platinum)\b/g, ' ');
   return s;
 }
 

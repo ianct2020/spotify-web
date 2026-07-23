@@ -1,7 +1,7 @@
-import { spotifyFetch, createPlaylist, addTracksToPlaylist, invalidatePlaylistsCache } from '../api.js?v=57';
-import { hasKey, setKey, getSimilarArtists, getArtistTopTracks } from '../api/lastfm.js?v=57';
-import { showProgress, hideProgress, promptPlaylistName, escapeHtml } from '../ui/components.js?v=57';
-import { showToast } from '../ui/toast.js?v=57';
+import { spotifyFetch, createPlaylist, addTracksToPlaylist, invalidatePlaylistsCache } from '../api.js?v=58';
+import { hasKey, setKey, getSimilarArtists, getArtistTopTracks } from '../api/lastfm.js?v=58';
+import { showProgress, hideProgress, promptPlaylistName, escapeHtml } from '../ui/components.js?v=58';
+import { showToast } from '../ui/toast.js?v=58';
 
 let sourceArtist = null;
 let similarList = [];
