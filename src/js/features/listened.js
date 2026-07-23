@@ -165,12 +165,15 @@ async function attachLikes(albumList) {
 // Heurística de "probablemente lo escuchaste completo y no lo agregaste".
 function computeUnregistered(min = unregMin) {
   if (!likesByKey) return [];
-  // registered usa albumKey (nombre-sin-edición|artista): si tenés la Deluxe registrada,
-  // la normal cae bajo la misma clave y queda excluida → no cuenta dos veces.
-  const registered = new Set(albums.map(a => albumKey(a.name, a.artist)));
+  // Excluimos por albumKey (nombre-sin-edición|artista → matchea deluxe vs normal)
+  // Y TAMBIÉN por id de álbum exacto: cuando agregás un álbum, el track que meto es de
+  // ese id, así que al re-analizar el id queda registrado aunque el artista del álbum
+  // difiera del artista del track (evita que reaparezca y lo agregues dos veces).
+  const registeredKeys = new Set(albums.map(a => albumKey(a.name, a.artist)));
+  const registeredIds = new Set(albums.map(a => a.id));
   const out = [];
   for (const [k, e] of likesByKey) {
-    if (registered.has(k)) continue;
+    if (registeredKeys.has(k) || registeredIds.has(e.id)) continue;
     if (e.tracks.length < min) continue;
     out.push(e);
   }
