@@ -70,6 +70,7 @@ function groupItemsByAlbum(items) {
     entry.tracks.push({
       name: t.name || '',
       artists: (t.artists || []).map(a => a.name).join(', '),
+      uri: t.uri || (t.id ? `spotify:track:${t.id}` : null),
       url: t.external_urls?.spotify || null,
     });
     const added = it.added_at ? Date.parse(it.added_at) : 0;

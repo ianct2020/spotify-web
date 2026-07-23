@@ -1,8 +1,8 @@
-import { getAllPlaylistItems, getBestAvailableLikes } from '../api.js?v=53';
-import { idbGetCached, idbSetCached, idbGetTimestamp } from '../idb.js?v=53';
-import { escapeHtml } from '../ui/components.js?v=53';
-import { showToast } from '../ui/toast.js?v=53';
-import { getListenedPlaylist, groupItemsByAlbum, openListenedAlbumsPicker, albumKey, baseName, norm } from './listened-shared.js?v=53';
+import { getAllPlaylistItems, getBestAvailableLikes, addTracksToPlaylist, removeTracksFromPlaylist } from '../api.js?v=54';
+import { idbGetCached, idbSetCached, idbGetTimestamp } from '../idb.js?v=54';
+import { escapeHtml, confirmModal } from '../ui/components.js?v=54';
+import { showToast } from '../ui/toast.js?v=54';
+import { getListenedPlaylist, groupItemsByAlbum, openListenedAlbumsPicker, albumKey, baseName, norm } from './listened-shared.js?v=54';
 
 const SORT_KEY = 'listened_sort_mode';
 const VALID_SORTS = new Set(['recent', 'year-desc', 'year-asc', 'artist-asc', 'likes-desc', 'name-asc']);
@@ -142,7 +142,7 @@ async function attachLikes(albumList) {
         };
         likesByKey.set(k, e);
       }
-      e.tracks.push({ name: t.name || '', artists: (t.artists || []).map(a => a.name).join(', ') });
+      e.tracks.push({ name: t.name || '', artists: (t.artists || []).map(a => a.name).join(', '), uri: t.uri || (t.id ? `spotify:track:${t.id}` : null) });
     }
   } catch (e) {
     console.warn('No se pudieron cargar likes para el cruce:', e.message);
@@ -396,26 +396,39 @@ function openUnregistered() {
       </div>
       <div id="unreg-list"></div>
       <div class="modal-actions" style="margin-top:16px">
-        <button class="btn btn-primary" id="listened-unreg-close">Cerrar</button>
+        <button class="btn btn-primary" id="unreg-add" disabled>Agregar a escuchados (0)</button>
+        <button class="btn btn-secondary" id="listened-unreg-close">Cerrar</button>
       </div>
     </div>
   `;
   document.body.appendChild(overlay);
+
+  const addBtn = overlay.querySelector('#unreg-add');
+  const updateAddBtn = () => {
+    const n = overlay.querySelectorAll('.unreg-cb:checked').length;
+    addBtn.textContent = `Agregar a escuchados (${n})`;
+    addBtn.disabled = n === 0;
+  };
 
   const renderList = () => {
     const list = computeUnregistered(unregMin);
     const holder = overlay.querySelector('#unreg-list');
     if (list.length === 0) {
       holder.innerHTML = `<div style="color:var(--color-text-muted);font-size:13px;padding:8px 0">No hay álbumes con ${unregMin}+ canciones en likes fuera de tu registro.</div>`;
+      updateAddBtn();
       return;
     }
     holder.innerHTML = `
-      <div style="font-size:12px;color:var(--color-text-muted);margin-bottom:6px">${list.length} álbumes</div>
-      <div style="max-height:55vh;overflow-y:auto;border:1px solid var(--color-border);border-radius:var(--radius-sm)">
+      <label style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--color-text-muted);margin-bottom:6px;cursor:pointer">
+        <input type="checkbox" id="unreg-all"> Seleccionar todos (${list.length} álbumes)
+      </label>
+      <div style="max-height:52vh;overflow-y:auto;border:1px solid var(--color-border);border-radius:var(--radius-sm)">
         ${list.map(e => {
           const url = e.id ? `https://open.spotify.com/album/${e.id}` : null;
+          const uri = e.tracks.find(t => t.uri)?.uri || '';
           return `
-          <div style="display:flex;align-items:center;gap:10px;padding:9px 12px;border-bottom:1px solid var(--color-border)">
+          <label style="display:flex;align-items:center;gap:10px;padding:9px 12px;border-bottom:1px solid var(--color-border);cursor:${uri ? 'pointer' : 'default'}">
+            <input type="checkbox" class="unreg-cb" data-uri="${uri}" ${uri ? '' : 'disabled'}>
             ${e.image ? `<img src="${e.image}" loading="lazy" style="width:40px;height:40px;border-radius:var(--radius-sm);object-fit:cover">` : `<div style="width:40px;height:40px;background:var(--color-elevated);border-radius:var(--radius-sm)"></div>`}
             <div style="flex:1;min-width:0">
               <div style="font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(e.name)}</div>
@@ -423,10 +436,17 @@ function openUnregistered() {
             </div>
             <span style="color:var(--color-accent);font-size:13px;flex-shrink:0">♥ ${e.tracks.length}</span>
             ${url ? `<a href="${url}" target="_blank" rel="noopener" style="color:var(--color-accent);font-size:12px;flex-shrink:0">abrir</a>` : ''}
-          </div>`;
+          </label>`;
         }).join('')}
       </div>
     `;
+    holder.querySelectorAll('.unreg-cb').forEach(cb => cb.addEventListener('change', updateAddBtn));
+    const allCb = holder.querySelector('#unreg-all');
+    if (allCb) allCb.addEventListener('change', () => {
+      holder.querySelectorAll('.unreg-cb:not(:disabled)').forEach(cb => { cb.checked = allCb.checked; });
+      updateAddBtn();
+    });
+    updateAddBtn();
   };
   renderList();
 
@@ -441,38 +461,101 @@ function openUnregistered() {
   const close = () => overlay.remove();
   overlay.querySelector('#listened-unreg-close').onclick = close;
   overlay.onclick = (e) => { if (e.target === overlay) close(); };
+
+  addBtn.onclick = async () => {
+    const uris = [...overlay.querySelectorAll('.unreg-cb:checked')].map(cb => cb.dataset.uri).filter(Boolean);
+    if (uris.length === 0) return;
+    addBtn.disabled = true;
+    addBtn.textContent = 'Agregando...';
+    try {
+      await addTracksToPlaylist(playlistInfo.id, uris);      // sin confirmación (pedido de Ian)
+      showToast(`${uris.length} álbum${uris.length === 1 ? '' : 'es'} agregado${uris.length === 1 ? '' : 's'} a escuchados`, 'success');
+      close();
+      await loadAlbums({ force: true });
+    } catch (err) {
+      showToast('Error al agregar: ' + err.message, 'error');
+      addBtn.disabled = false;
+      updateAddBtn();
+    }
+  };
 }
 
-// Modal con los álbumes registrados que son ediciones deluxe/remaster (para reemplazar a mano).
+// Modal con los álbumes registrados que son ediciones deluxe/remaster.
+// Se pueden seleccionar y borrar de la playlist (con confirmación).
 function openEditions(list) {
   const overlay = document.createElement('div');
   overlay.className = 'modal-overlay';
   overlay.innerHTML = `
     <div class="modal" style="max-width:560px">
       <h2 style="margin-bottom:4px">💿 Ediciones deluxe en tu registro</h2>
-      <p style="color:var(--color-text-secondary);font-size:13px;margin-bottom:14px">
+      <p style="color:var(--color-text-secondary);font-size:13px;margin-bottom:10px">
         Estos álbumes de <strong>${escapeHtml(playlistInfo.name)}</strong> están registrados como edición (deluxe, remaster, etc.).
-        Si preferís la versión normal, abrí el álbum en Spotify, sacalo de la playlist y agregá un tema de la edición normal.
+        Seleccioná los que quieras <strong>sacar</strong> de la playlist (después agregás la edición normal a mano desde Spotify).
       </p>
-      <div style="max-height:60vh;overflow-y:auto;border:1px solid var(--color-border);border-radius:var(--radius-sm)">
-        ${list.map(a => `
-          <div style="display:flex;align-items:center;gap:10px;padding:9px 12px;border-bottom:1px solid var(--color-border)">
+      <label style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--color-text-muted);margin-bottom:6px;cursor:pointer">
+        <input type="checkbox" id="ed-all"> Seleccionar todos (${list.length})
+      </label>
+      <div style="max-height:52vh;overflow-y:auto;border:1px solid var(--color-border);border-radius:var(--radius-sm)">
+        ${list.map(a => {
+          const uris = (a.tracks || []).map(t => t.uri).filter(Boolean).join(',');
+          return `
+          <label style="display:flex;align-items:center;gap:10px;padding:9px 12px;border-bottom:1px solid var(--color-border);cursor:${uris ? 'pointer' : 'default'}">
+            <input type="checkbox" class="ed-cb" data-uris="${uris}" ${uris ? '' : 'disabled'}>
             ${a.cover ? `<img src="${a.cover}" loading="lazy" style="width:40px;height:40px;border-radius:var(--radius-sm);object-fit:cover">` : `<div style="width:40px;height:40px;background:var(--color-elevated);border-radius:var(--radius-sm)"></div>`}
             <div style="flex:1;min-width:0">
               <div style="font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(a.name)}</div>
               <div style="font-size:12px;color:var(--color-text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(a.artist)}${a.year ? ` · ${a.year}` : ''}</div>
             </div>
             ${a.url ? `<a href="${a.url}" target="_blank" rel="noopener" style="color:var(--color-accent);font-size:12px;flex-shrink:0">abrir</a>` : ''}
-          </div>
-        `).join('')}
+          </label>`;
+        }).join('')}
       </div>
       <div class="modal-actions" style="margin-top:16px">
-        <button class="btn btn-primary" id="listened-editions-close">Cerrar</button>
+        <button class="btn btn-danger" id="ed-del" disabled>Borrar de escuchados (0)</button>
+        <button class="btn btn-secondary" id="listened-editions-close">Cerrar</button>
       </div>
     </div>
   `;
   document.body.appendChild(overlay);
+
+  const delBtn = overlay.querySelector('#ed-del');
+  const updateDelBtn = () => {
+    const n = overlay.querySelectorAll('.ed-cb:checked').length;
+    delBtn.textContent = `Borrar de escuchados (${n})`;
+    delBtn.disabled = n === 0;
+  };
+  overlay.querySelectorAll('.ed-cb').forEach(cb => cb.addEventListener('change', updateDelBtn));
+  const allCb = overlay.querySelector('#ed-all');
+  if (allCb) allCb.addEventListener('change', () => {
+    overlay.querySelectorAll('.ed-cb:not(:disabled)').forEach(cb => { cb.checked = allCb.checked; });
+    updateDelBtn();
+  });
+
   const close = () => overlay.remove();
   overlay.querySelector('#listened-editions-close').onclick = close;
   overlay.onclick = (e) => { if (e.target === overlay) close(); };
+
+  delBtn.onclick = async () => {
+    const selected = [...overlay.querySelectorAll('.ed-cb:checked')];
+    const uris = selected.flatMap(cb => (cb.dataset.uris || '').split(',').filter(Boolean));
+    if (uris.length === 0) return;
+    const ok = await confirmModal(
+      'Borrar de escuchados',
+      `Se van a <strong>sacar ${selected.length} álbum${selected.length === 1 ? '' : 'es'}</strong> de tu playlist "${escapeHtml(playlistInfo.name)}". Esto modifica tu playlist en Spotify. ¿Seguro?`,
+      'Borrar'
+    );
+    if (!ok) return;
+    delBtn.disabled = true;
+    delBtn.textContent = 'Borrando...';
+    try {
+      await removeTracksFromPlaylist(playlistInfo.id, uris);
+      showToast(`${selected.length} álbum${selected.length === 1 ? '' : 'es'} sacado${selected.length === 1 ? '' : 's'} de escuchados`, 'success');
+      close();
+      await loadAlbums({ force: true });
+    } catch (err) {
+      showToast('Error al borrar: ' + err.message, 'error');
+      delBtn.disabled = false;
+      updateDelBtn();
+    }
+  };
 }
