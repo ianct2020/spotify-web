@@ -8,6 +8,9 @@ const SORT_KEY = 'listened_sort_mode';
 const VALID_SORTS = new Set(['recent', 'year-desc', 'year-asc', 'artist-asc', 'likes-desc', 'name-asc']);
 const CACHE_TTL_MIN = 24 * 60; // refresca la playlist agrupada solo si pasó más de un día
 const cacheKeyFor = id => `listened_grouped_${id}`;
+const UNREG_MIN = 5; // mín. de canciones en likes para sugerir un álbum como "quizás escuchado sin registrar"
+
+let likesByKey = null; // Map albumKey -> { id, name, artist, year, image, tracks:[{name,artists}] }
 function getSortMode() {
   const v = localStorage.getItem(SORT_KEY);
   return VALID_SORTS.has(v) ? v : 'recent';
@@ -117,31 +120,59 @@ async function loadAlbums({ force = false } = {}) {
 }
 
 // Cruza cada álbum con tus Liked Songs (por nombre-sin-edición|artista, así matchea deluxe vs normal).
+// Deja el mapa completo en likesByKey para reusarlo en "quizás sin registrar".
 async function attachLikes(albumList) {
-  let byKey = new Map();
+  likesByKey = new Map();
   try {
     const { items } = await getBestAvailableLikes();
     for (const it of items) {
       const t = it.track;
       if (!t?.album?.name) continue;
       const k = albumKey(t.album.name, t.artists?.[0]?.name || '');
-      let arr = byKey.get(k);
-      if (!arr) { arr = []; byKey.set(k, arr); }
-      arr.push({ name: t.name || '', artists: (t.artists || []).map(a => a.name).join(', ') });
+      let e = likesByKey.get(k);
+      if (!e) {
+        const imgs = t.album.images || [];
+        e = {
+          id: t.album.id,
+          name: t.album.name,
+          artist: t.artists?.[0]?.name || '',
+          year: (t.album.release_date || '').slice(0, 4),
+          image: imgs.length ? imgs[imgs.length - 1].url : null,
+          tracks: [],
+        };
+        likesByKey.set(k, e);
+      }
+      e.tracks.push({ name: t.name || '', artists: (t.artists || []).map(a => a.name).join(', ') });
     }
   } catch (e) {
     console.warn('No se pudieron cargar likes para el cruce:', e.message);
-    byKey = new Map();
+    likesByKey = new Map();
   }
   for (const a of albumList) {
-    a.likes = byKey.get(albumKey(a.name, a.artist)) || [];
+    a.likes = likesByKey.get(albumKey(a.name, a.artist))?.tracks || [];
   }
+}
+
+// Álbumes de los que tenés muchas canciones en likes pero NO están en tu registro.
+// Heurística de "probablemente lo escuchaste completo y no lo agregaste".
+function computeUnregistered() {
+  if (!likesByKey) return [];
+  const registered = new Set(albums.map(a => albumKey(a.name, a.artist)));
+  const out = [];
+  for (const [k, e] of likesByKey) {
+    if (registered.has(k)) continue;
+    if (e.tracks.length < UNREG_MIN) continue;
+    out.push(e);
+  }
+  out.sort((a, b) => b.tracks.length - a.tracks.length);
+  return out;
 }
 
 function buildUI(totalTracks, ts) {
   const content = document.getElementById('listened-content');
   const mode = getSortMode();
   const totalLikes = albums.reduce((n, a) => n + (a.likes?.length || 0), 0);
+  const unregistered = computeUnregistered();
 
   content.innerHTML = `
     <div class="card" style="margin-bottom:16px;display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
@@ -150,6 +181,7 @@ function buildUI(totalTracks, ts) {
         ${ts ? `<div style="font-size:12px;color:var(--color-text-muted);margin-top:2px">Actualizado ${timeAgo(ts)}</div>` : ''}
       </div>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
+        ${unregistered.length ? `<button class="btn btn-secondary btn-sm" id="listened-unreg-btn" title="Álbumes con ${UNREG_MIN}+ canciones tuyas en likes que no están en tu registro">🎧 Quizás sin registrar (${unregistered.length})</button>` : ''}
         <button class="btn btn-secondary btn-sm" id="listened-refresh-btn" title="Vuelve a leer la playlist desde Spotify (si no, se refresca solo una vez por día)">Actualizar</button>
         <button class="btn btn-secondary btn-sm" id="listened-change-btn">Cambiar playlist</button>
       </div>
@@ -178,6 +210,9 @@ function buildUI(totalTracks, ts) {
   `;
 
   document.getElementById('listened-refresh-btn').onclick = () => loadAlbums({ force: true });
+
+  const unregBtn = document.getElementById('listened-unreg-btn');
+  if (unregBtn) unregBtn.onclick = () => openUnregistered(unregistered);
 
   document.getElementById('listened-change-btn').onclick = () => openListenedAlbumsPicker({
     onSelect: () => { playlistInfo = getListenedPlaylist(); loadAlbums(); },
@@ -325,5 +360,42 @@ function openAlbumDetail(albumId) {
   document.body.appendChild(overlay);
   const close = () => overlay.remove();
   overlay.querySelector('#listened-detail-close').onclick = close;
+  overlay.onclick = (e) => { if (e.target === overlay) close(); };
+}
+
+// Modal con álbumes que tenés muy likeados pero no figuran en tu playlist de registro.
+function openUnregistered(list) {
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  overlay.innerHTML = `
+    <div class="modal" style="max-width:560px">
+      <h2 style="margin-bottom:4px">🎧 Quizás escuchaste y no registraste</h2>
+      <p style="color:var(--color-text-secondary);font-size:13px;margin-bottom:14px">
+        Álbumes con <strong>${UNREG_MIN}+ canciones tuyas en Liked Songs</strong> que no están en <strong>${escapeHtml(playlistInfo.name)}</strong>.
+        Muchos likes de un mismo álbum suele indicar que lo escuchaste bastante. Ordenados por cantidad de likes.
+      </p>
+      <div style="max-height:60vh;overflow-y:auto;border:1px solid var(--color-border);border-radius:var(--radius-sm)">
+        ${list.map(e => {
+          const url = e.id ? `https://open.spotify.com/album/${e.id}` : null;
+          return `
+          <div style="display:flex;align-items:center;gap:10px;padding:9px 12px;border-bottom:1px solid var(--color-border)">
+            ${e.image ? `<img src="${e.image}" loading="lazy" style="width:40px;height:40px;border-radius:var(--radius-sm);object-fit:cover">` : `<div style="width:40px;height:40px;background:var(--color-elevated);border-radius:var(--radius-sm)"></div>`}
+            <div style="flex:1;min-width:0">
+              <div style="font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(e.name)}</div>
+              <div style="font-size:12px;color:var(--color-text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(e.artist)}${e.year ? ` · ${e.year}` : ''}</div>
+            </div>
+            <span style="color:var(--color-accent);font-size:13px;flex-shrink:0">♥ ${e.tracks.length}</span>
+            ${url ? `<a href="${url}" target="_blank" rel="noopener" style="color:var(--color-accent);font-size:12px;flex-shrink:0">abrir</a>` : ''}
+          </div>`;
+        }).join('')}
+      </div>
+      <div class="modal-actions" style="margin-top:16px">
+        <button class="btn btn-primary" id="listened-unreg-close">Cerrar</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+  const close = () => overlay.remove();
+  overlay.querySelector('#listened-unreg-close').onclick = close;
   overlay.onclick = (e) => { if (e.target === overlay) close(); };
 }

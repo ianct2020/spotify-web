@@ -185,10 +185,10 @@ function showApp(profile) {
     <button class="hamburger" id="hamburger-btn">&#9776;</button>
     <div class="sidebar-overlay" id="sidebar-overlay"></div>
     <aside class="sidebar" id="sidebar">
-      <div class="sidebar-header">
+      <a class="sidebar-header" href="#home" title="Ir al inicio" style="text-decoration:none;color:inherit;cursor:pointer">
         <img class="sidebar-logo" src="assets/favicon.svg" alt="">
         <span class="sidebar-title">spotify-tools</span>
-      </div>
+      </a>
       <nav class="sidebar-nav">
         <div class="sidebar-section">
           <div class="sidebar-section-title">General</div>
