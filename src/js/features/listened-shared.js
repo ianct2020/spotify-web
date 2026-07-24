@@ -16,10 +16,10 @@ function norm(s) {
 // Saca marcas de edición para que "X" y "X (Deluxe Version)" cuenten como el mismo álbum.
 function baseName(name) {
   let s = String(name || '').toLowerCase();
-  // Saca cualquier grupo entre paréntesis/corchetes al final, aunque NO diga "deluxe":
-  // así "Poetry" y "Poetry (Intimate)" cuentan como el mismo álbum.
-  s = s.replace(/\s*[([][^)\]]*[)\]]\s*$/, ' ');
-  s = s.replace(/[([][^)\]]*(deluxe|remaster|expanded|edition|version|anniversary|reissue|bonus|explicit|mono|stereo|special|platinum|collector)[^)\]]*[)\]]/g, ' ');
+  // Saca marcas de edición entre paréntesis/corchetes: "X" y "X (Deluxe/Intimate/Acoustic…)"
+  // cuentan como el mismo álbum. OJO: NO tocamos números ni volúmenes (LP3, II, Vol. 2, Part 1),
+  // porque esos son álbumes DISTINTOS, no ediciones del mismo.
+  s = s.replace(/[([][^)\]]*(deluxe|remaster|expanded|edition|version|anniversary|reissue|bonus|explicit|mono|stereo|special|platinum|collector|intimate|acoustic|instrumental|unplugged)[^)\]]*[)\]]/g, ' ');
   s = s.replace(/\s*[-–—:]\s*(deluxe|remaster(?:ed)?|expanded|special|anniversary|reissue|bonus)\b.*$/g, ' ');
   s = s.replace(/\b(deluxe|remastered|remaster|expanded|edition|version|anniversary|reissue|collector(?:'?s)?|platinum)\b/g, ' ');
   return s;
