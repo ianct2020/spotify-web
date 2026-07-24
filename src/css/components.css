@@ -113,6 +113,12 @@ input[type="checkbox"]:disabled {
   flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+/* Con un cartel abierto, el fondo no scrollea: el scroll queda solo dentro del cartel. */
+body.modal-open {
+  overflow: hidden;
 }
 .modal.modal-picker .modal-actions {
   flex-shrink: 0;

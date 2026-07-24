@@ -9,8 +9,29 @@ const VALID_SORTS = new Set(['recent', 'year-desc', 'year-asc', 'artist-asc', 'l
 const CACHE_TTL_MIN = 24 * 60; // refresca la playlist agrupada solo si pasó más de un día
 const cacheKeyFor = id => `listened_grouped_${id}`;
 let unregMin = 4; // mín. de canciones en likes para sugerir un álbum como "quizás escuchado sin registrar" (ajustable)
+const DISMISS_KEY = 'listened_unreg_dismissed'; // álbumes que el usuario ocultó de "sin registrar"
 
-let likesByKey = null; // Map albumKey -> { id, name, artist, year, image, tracks:[{name,artists}] }
+let likesByKey = null; // Map albumKey -> { id, ids:Set, name, artist, year, image, tracks:[{name,artists,uri}] }
+
+// Álbumes que Ian marcó "no me interesa" para que no vuelvan a aparecer en "sin registrar".
+function getDismissed() {
+  try { return new Set(JSON.parse(localStorage.getItem(DISMISS_KEY) || '[]')); } catch { return new Set(); }
+}
+function dismissUnreg(key) {
+  const s = getDismissed();
+  s.add(key);
+  localStorage.setItem(DISMISS_KEY, JSON.stringify([...s]));
+}
+function clearDismissed() {
+  localStorage.removeItem(DISMISS_KEY);
+}
+// Actualiza los números de los botones del header sin tener que recargar todo.
+function refreshHeaderCounts() {
+  const u = document.getElementById('listened-unreg-btn');
+  if (u) u.textContent = `🎧 Sin registrar (${computeUnregistered().length})`;
+  const d = document.getElementById('listened-dupes-btn');
+  if (d) d.textContent = `💿 Duplicados (${computeEditionDupes().length})`;
+}
 function getSortMode() {
   const v = localStorage.getItem(SORT_KEY);
   return VALID_SORTS.has(v) ? v : 'recent';
@@ -127,35 +148,74 @@ async function refreshAfterWrite() {
   try { await idbDel(cacheKeyFor(playlistInfo.id)); } catch { /* ignora */ }
 }
 
-// Cruza cada álbum con tus Liked Songs (por nombre-sin-edición|artista, así matchea deluxe vs normal).
-// Deja el mapa completo en likesByKey para reusarlo en "quizás sin registrar".
+// Cruza cada álbum con tus Liked Songs. El conteo tiene que ser EXACTO:
+//  1) agrupamos por album.id (un lanzamiento real) — NO por artista, porque dentro de un
+//     mismo álbum el artista principal del track cambia con los feats (ej "$ome $exy $ong$ 4 U"),
+//     y eso partía el conteo en pedazos.
+//  2) después fusionamos deluxe + normal (misma obra) por albumKey, deduplicando por nombre
+//     de canción para no contar dos veces el mismo tema.
 async function attachLikes(albumList) {
   likesByKey = new Map();
+  let items = [];
   try {
-    const { items } = await getBestAvailableLikes();
-    for (const it of items) {
-      const t = it.track;
-      if (!t?.album?.name) continue;
-      const k = albumKey(t.album.name, t.artists?.[0]?.name || '');
-      let e = likesByKey.get(k);
-      if (!e) {
-        const imgs = t.album.images || [];
-        e = {
-          id: t.album.id,
-          name: t.album.name,
-          artist: t.artists?.[0]?.name || '',
-          year: (t.album.release_date || '').slice(0, 4),
-          image: imgs.length ? imgs[imgs.length - 1].url : null,
-          tracks: [],
-        };
-        likesByKey.set(k, e);
-      }
-      e.tracks.push({ name: t.name || '', artists: (t.artists || []).map(a => a.name).join(', '), uri: t.uri || (t.id ? `spotify:track:${t.id}` : null) });
-    }
+    ({ items } = await getBestAvailableLikes());
   } catch (e) {
     console.warn('No se pudieron cargar likes para el cruce:', e.message);
-    likesByKey = new Map();
+    for (const a of albumList) a.likes = [];
+    return;
   }
+
+  // 1) Una entrada por lanzamiento físico (album.id) con TODOS sus tracks likeados.
+  const byId = new Map();
+  for (const it of items) {
+    const t = it.track;
+    if (!t?.album?.id) continue;
+    let e = byId.get(t.album.id);
+    if (!e) {
+      const imgs = t.album.images || [];
+      e = {
+        id: t.album.id,
+        name: t.album.name || '',
+        year: (t.album.release_date || '').slice(0, 4),
+        image: imgs.length ? imgs[imgs.length - 1].url : null,
+        tracks: [],
+        artistCount: new Map(),
+      };
+      byId.set(e.id, e);
+    }
+    e.tracks.push({ name: t.name || '', artists: (t.artists || []).map(a => a.name).join(', '), uri: t.uri || (t.id ? `spotify:track:${t.id}` : null) });
+    const pa = t.artists?.[0]?.name || '';
+    e.artistCount.set(pa, (e.artistCount.get(pa) || 0) + 1);
+  }
+  // Artista representativo del álbum = el principal más frecuente entre sus tracks.
+  for (const e of byId.values()) {
+    let best = '', bestN = -1;
+    for (const [name, n] of e.artistCount) if (n > bestN) { best = name; bestN = n; }
+    e.artist = best;
+    delete e.artistCount;
+  }
+
+  // 2) Fusionar lanzamientos que son la misma obra (deluxe + normal → uno), dedup por nombre.
+  for (const e of byId.values()) {
+    const k = albumKey(e.name, e.artist);
+    let m = likesByKey.get(k);
+    if (!m) {
+      m = { id: e.id, ids: new Set([e.id]), name: e.name, artist: e.artist, year: e.year, image: e.image, tracks: [], _repCount: e.tracks.length, _seen: new Set() };
+      likesByKey.set(k, m);
+    } else {
+      m.ids.add(e.id);
+      // El lanzamiento con más tracks manda como representativo (suele ser el deluxe/completo).
+      if (e.tracks.length > m._repCount) { m.name = e.name; m.artist = e.artist; m.image = e.image || m.image; m.year = e.year || m.year; m.id = e.id; m._repCount = e.tracks.length; }
+    }
+    for (const t of e.tracks) {
+      const nk = norm(t.name);
+      if (m._seen.has(nk)) continue;
+      m._seen.add(nk);
+      m.tracks.push(t);
+    }
+  }
+  for (const m of likesByKey.values()) { delete m._repCount; delete m._seen; }
+
   for (const a of albumList) {
     a.likes = likesByKey.get(albumKey(a.name, a.artist))?.tracks || [];
   }
@@ -165,17 +225,25 @@ async function attachLikes(albumList) {
 // Heurística de "probablemente lo escuchaste completo y no lo agregaste".
 function computeUnregistered(min = unregMin) {
   if (!likesByKey) return [];
-  // Excluimos por albumKey (nombre-sin-edición|artista → matchea deluxe vs normal)
-  // Y TAMBIÉN por id de álbum exacto: cuando agregás un álbum, el track que meto es de
-  // ese id, así que al re-analizar el id queda registrado aunque el artista del álbum
-  // difiera del artista del track (evita que reaparezca y lo agregues dos veces).
+  // Excluimos un álbum de las sugerencias si YA está registrado, por lo que sea:
+  //  - albumKey (nombre-sin-edición|artista) → matchea deluxe vs normal;
+  //  - id de álbum exacto (cualquiera de sus ediciones);
+  //  - o si CUALQUIER track suyo ya está en la playlist (a prueba de nombres raros
+  //    tipo "$ome $exy $ong$ 4 U", donde el nombre/artista no matchean pero el track sí).
+  //  - o si lo ocultaste a mano.
+  const dismissed = getDismissed();
   const registeredKeys = new Set(albums.map(a => albumKey(a.name, a.artist)));
   const registeredIds = new Set(albums.map(a => a.id));
+  const registeredUris = new Set();
+  for (const a of albums) for (const t of a.tracks) if (t.uri) registeredUris.add(t.uri);
   const out = [];
   for (const [k, e] of likesByKey) {
-    if (registeredKeys.has(k) || registeredIds.has(e.id)) continue;
+    if (dismissed.has(k)) continue;
+    if (registeredKeys.has(k)) continue;
+    if ([...e.ids].some(id => registeredIds.has(id))) continue;
+    if (e.tracks.some(t => t.uri && registeredUris.has(t.uri))) continue;
     if (e.tracks.length < min) continue;
-    out.push(e);
+    out.push({ ...e, key: k });
   }
   out.sort((a, b) => b.tracks.length - a.tracks.length);
   return out;
@@ -429,7 +497,8 @@ function openUnregistered() {
         ${[1, 2, 3, 4, 5, 6, 7, 8].map(n => `<button class="btn ${n === unregMin ? 'btn-primary' : 'btn-secondary'} btn-sm unreg-th" data-th="${n}">${n}+</button>`).join('')}
       </div>
       <div id="unreg-list" class="picker-scroll"></div>
-      <div class="modal-actions" style="margin-top:16px">
+      <div id="unreg-hidden-note" style="font-size:12px;color:var(--color-text-muted);margin-top:8px;flex-shrink:0"></div>
+      <div class="modal-actions" style="margin-top:12px">
         <button class="btn btn-primary" id="unreg-add" disabled>Agregar a escuchados (0)</button>
         <button class="btn btn-secondary" id="listened-unreg-close">Cerrar</button>
       </div>
@@ -470,17 +539,46 @@ function openUnregistered() {
             </div>
             <span style="color:var(--color-accent);font-size:13px;flex-shrink:0">♥ ${e.tracks.length}</span>
             ${url ? `<a href="${url}" target="_blank" rel="noopener" style="color:var(--color-accent);font-size:12px;flex-shrink:0">abrir</a>` : ''}
+            <button class="unreg-hide" data-key="${e.key}" title="No me interesa, ocultar" style="background:transparent;border:none;color:var(--color-text-muted);font-size:16px;cursor:pointer;padding:2px 6px;flex-shrink:0;line-height:1;border-radius:var(--radius-sm)">✕</button>
           </label>`;
         }).join('')}
       </div>
     `;
     holder.querySelectorAll('.unreg-cb').forEach(cb => cb.addEventListener('change', updateAddBtn));
+    holder.querySelectorAll('.unreg-hide').forEach(btn => {
+      btn.addEventListener('mouseenter', () => { btn.style.color = 'var(--color-error)'; btn.style.background = 'var(--color-elevated)'; });
+      btn.addEventListener('mouseleave', () => { btn.style.color = 'var(--color-text-muted)'; btn.style.background = 'transparent'; });
+      btn.addEventListener('click', ev => {
+        ev.preventDefault();
+        ev.stopPropagation();
+        dismissUnreg(btn.dataset.key);
+        refreshHeaderCounts();
+        renderList();
+      });
+    });
     const allCb = holder.querySelector('#unreg-all');
     if (allCb) allCb.addEventListener('change', () => {
       holder.querySelectorAll('.unreg-cb:not(:disabled)').forEach(cb => { cb.checked = allCb.checked; });
       updateAddBtn();
     });
+    updateHiddenNote();
     updateAddBtn();
+  };
+
+  const updateHiddenNote = () => {
+    const note = overlay.querySelector('#unreg-hidden-note');
+    if (!note) return;
+    const n = getDismissed().size;
+    note.innerHTML = n
+      ? `${n} oculto${n === 1 ? '' : 's'} · <a href="#" id="unreg-show-hidden" style="color:var(--color-accent)">volver a mostrar</a>`
+      : '';
+    const showLink = note.querySelector('#unreg-show-hidden');
+    if (showLink) showLink.onclick = ev => {
+      ev.preventDefault();
+      clearDismissed();
+      refreshHeaderCounts();
+      renderList();
+    };
   };
   renderList();
 

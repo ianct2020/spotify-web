@@ -436,4 +436,11 @@ async function renderDebug(container) {
   };
 }
 
+// Mientras haya cualquier cartel (.modal-overlay) abierto, bloqueamos el scroll del fondo:
+// así al scrollear se mueve solo el contenido del cartel, no la página de atrás.
+const modalScrollLock = new MutationObserver(() => {
+  document.body.classList.toggle('modal-open', document.querySelector('.modal-overlay') !== null);
+});
+modalScrollLock.observe(document.body, { childList: true });
+
 init();

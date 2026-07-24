@@ -1,6 +1,6 @@
-import { getAllUserPlaylists } from '../api.js?v=58';
-import { escapeHtml } from '../ui/components.js?v=58';
-import { showToast } from '../ui/toast.js?v=58';
+import { getAllUserPlaylists } from '../api.js?v=59';
+import { escapeHtml } from '../ui/components.js?v=59';
+import { showToast } from '../ui/toast.js?v=59';
 
 const PID_KEY = 'listened_albums_playlist_id';
 const PNAME_KEY = 'listened_albums_playlist_name';
@@ -16,6 +16,9 @@ function norm(s) {
 // Saca marcas de edición para que "X" y "X (Deluxe Version)" cuenten como el mismo álbum.
 function baseName(name) {
   let s = String(name || '').toLowerCase();
+  // Saca cualquier grupo entre paréntesis/corchetes al final, aunque NO diga "deluxe":
+  // así "Poetry" y "Poetry (Intimate)" cuentan como el mismo álbum.
+  s = s.replace(/\s*[([][^)\]]*[)\]]\s*$/, ' ');
   s = s.replace(/[([][^)\]]*(deluxe|remaster|expanded|edition|version|anniversary|reissue|bonus|explicit|mono|stereo|special|platinum|collector)[^)\]]*[)\]]/g, ' ');
   s = s.replace(/\s*[-–—:]\s*(deluxe|remaster(?:ed)?|expanded|special|anniversary|reissue|bonus)\b.*$/g, ' ');
   s = s.replace(/\b(deluxe|remastered|remaster|expanded|edition|version|anniversary|reissue|collector(?:'?s)?|platinum)\b/g, ' ');
