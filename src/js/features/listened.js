@@ -1,4 +1,4 @@
-import { getAllPlaylistItems, getBestAvailableLikes, addTracksToPlaylist, removeTracksFromPlaylist } from '../api.js';
+import { getAllPlaylistItems, getBestAvailableLikes, addTracksToPlaylist, removeTracksFromPlaylist, getAllUserPlaylists } from '../api.js';
 import { idbGetCached, idbSetCached, idbGetTimestamp, idbDel } from '../idb.js';
 import { escapeHtml, confirmModal } from '../ui/components.js';
 import { showToast } from '../ui/toast.js';
@@ -11,6 +11,8 @@ const cacheKeyFor = id => `listened_grouped_${id}`;
 let unregMin = 4; // mín. de canciones en likes para sugerir un álbum como "quizás escuchado sin registrar" (ajustable)
 const DISMISS_KEY = 'listened_unreg_dismissed'; // álbumes que el usuario ocultó de "sin registrar"
 const DUP_DISMISS_KEY = 'listened_dupes_dismissed'; // grupos que el usuario marcó "no es duplicado"
+const QUEUE_PID_KEY = 'listened_queue_playlist_id';   // playlist "para cuando termine los actuales"
+const QUEUE_PNAME_KEY = 'listened_queue_playlist_name';
 
 let likesByKey = null; // Map albumKey -> { id, ids:Set, name, artist, year, image, tracks:[{name,artists,uri}] }
 
@@ -312,6 +314,7 @@ function buildUI(totalTracks, ts) {
       <div style="display:flex;gap:8px;flex-wrap:wrap">
         <button class="btn btn-secondary btn-sm" id="listened-unreg-btn" title="Álbumes con varias canciones tuyas en likes que no están en tu registro (ajustás el mínimo adentro)">🎧 Sin registrar (${unregistered.length})</button>
         <button class="btn btn-secondary btn-sm" id="listened-dupes-btn" title="Álbumes registrados dos veces (deluxe Y normal): sacás la sobrante y queda una sola versión">💿 Duplicados (${dupes.length})</button>
+        <button class="btn btn-secondary btn-sm" id="listened-queue-btn" title="Saca de tu playlist-cola (ej: para cuando termine los actuales) los álbumes que ya escuchaste">🎯 Limpiar cola</button>
         <button class="btn btn-secondary btn-sm" id="listened-refresh-btn" title="Vuelve a leer la playlist desde Spotify (si no, se refresca solo una vez por día)">Actualizar</button>
         <button class="btn btn-secondary btn-sm" id="listened-change-btn">Cambiar playlist</button>
       </div>
@@ -343,6 +346,9 @@ function buildUI(totalTracks, ts) {
 
   const unregBtn = document.getElementById('listened-unreg-btn');
   if (unregBtn) unregBtn.onclick = () => openUnregistered();
+
+  const queueBtn = document.getElementById('listened-queue-btn');
+  if (queueBtn) queueBtn.onclick = () => openQueueCleaner();
 
   const dupesBtn = document.getElementById('listened-dupes-btn');
   if (dupesBtn) dupesBtn.onclick = () => openDupes();
@@ -772,4 +778,155 @@ function openDupes() {
       updateDelBtn();
     }
   };
+}
+
+// ── Cola "para cuando termine los actuales" ────────────────────────────────
+// Saca de una playlist-cola los álbumes que YA están en tu registro de escuchados,
+// así al elegir qué escuchar no te aparecen repetidos.
+function getQueuePlaylist() {
+  const id = localStorage.getItem(QUEUE_PID_KEY);
+  return id ? { id, name: localStorage.getItem(QUEUE_PNAME_KEY) || 'Cola' } : null;
+}
+function setQueuePlaylist(id, name) {
+  localStorage.setItem(QUEUE_PID_KEY, id);
+  localStorage.setItem(QUEUE_PNAME_KEY, name);
+}
+
+function openQueueCleaner() {
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  overlay.innerHTML = `
+    <div class="modal modal-picker" style="max-width:560px">
+      <h2 style="margin-bottom:4px">🎯 Sacar de la cola lo ya escuchado</h2>
+      <p id="queue-sub" style="color:var(--color-text-secondary);font-size:13px;margin-bottom:10px;flex-shrink:0"></p>
+      <div id="queue-body" class="picker-scroll" style="border:1px solid var(--color-border);border-radius:var(--radius-sm)"></div>
+      <div class="modal-actions" style="margin-top:12px">
+        <button class="btn btn-danger" id="queue-del" style="display:none" disabled>Sacar de la cola (0)</button>
+        <button class="btn btn-secondary" id="queue-close">Cerrar</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+  const body = overlay.querySelector('#queue-body');
+  const sub = overlay.querySelector('#queue-sub');
+  const delBtn = overlay.querySelector('#queue-del');
+  const close = () => overlay.remove();
+  overlay.querySelector('#queue-close').onclick = close;
+  overlay.onclick = (e) => { if (e.target === overlay) close(); };
+
+  const q = getQueuePlaylist();
+  if (q) loadQueue(q); else renderPicker();
+
+  async function renderPicker() {
+    delBtn.style.display = 'none';
+    sub.textContent = 'Elegí tu playlist-cola (ej: "para cuando termine los actuales").';
+    body.innerHTML = `<div style="padding:16px;text-align:center"><div class="spinner spinner-lg"></div></div>`;
+    let pls;
+    try { pls = await getAllUserPlaylists(); }
+    catch (e) { body.innerHTML = `<div style="padding:16px;color:var(--color-error)">Error: ${escapeHtml(e.message)}</div>`; return; }
+    body.innerHTML = `
+      <input type="text" id="queue-search" placeholder="Buscar playlist..." autocomplete="off"
+             style="width:calc(100% - 24px);margin:12px;padding:9px 12px;background:var(--color-elevated);border:1px solid var(--color-border);border-radius:var(--radius-sm);color:var(--color-text);font-size:14px">
+      <div id="queue-pls"></div>`;
+    const plsEl = body.querySelector('#queue-pls');
+    const draw = (f) => {
+      const ff = (f || '').toLowerCase();
+      plsEl.innerHTML = pls.filter(p => !ff || p.name.toLowerCase().includes(ff)).slice(0, 200).map(p => `
+        <div class="queue-pl" data-id="${p.id}" data-name="${escapeHtml(p.name)}"
+             style="display:flex;align-items:center;gap:10px;padding:9px 12px;cursor:pointer;border-top:1px solid var(--color-border)">
+          ${p.image ? `<img src="${p.image}" style="width:34px;height:34px;border-radius:var(--radius-sm);object-fit:cover">` : `<div style="width:34px;height:34px;background:var(--color-elevated);border-radius:var(--radius-sm)"></div>`}
+          <div style="flex:1;min-width:0"><div style="font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(p.name)}</div>
+          <div style="font-size:12px;color:var(--color-text-muted)">${(p.tracks?.total ?? '?').toLocaleString()} tracks</div></div>
+        </div>`).join('') || `<div style="padding:16px;color:var(--color-text-muted);font-size:13px">Sin resultados</div>`;
+      plsEl.querySelectorAll('.queue-pl').forEach(el => {
+        el.onmouseenter = () => { el.style.background = 'var(--color-surface)'; };
+        el.onmouseleave = () => { el.style.background = 'transparent'; };
+        el.onclick = () => { setQueuePlaylist(el.dataset.id, el.dataset.name); loadQueue(getQueuePlaylist()); };
+      });
+    };
+    draw('');
+    body.querySelector('#queue-search').oninput = (e) => draw(e.target.value.trim());
+  }
+
+  async function loadQueue(qp) {
+    sub.innerHTML = `Cola: <strong>${escapeHtml(qp.name)}</strong> · <a href="#" id="queue-change" style="color:var(--color-accent)">cambiar</a>`;
+    body.querySelector && (body.innerHTML = `<div style="padding:16px;text-align:center"><div class="spinner spinner-lg"></div><div style="margin-top:10px;font-size:13px;color:var(--color-text-muted)">Leyendo "${escapeHtml(qp.name)}"...</div></div>`);
+    overlay.querySelector('#queue-change').onclick = (e) => { e.preventDefault(); renderPicker(); };
+    let items;
+    try { items = await getAllPlaylistItems(qp.id); }
+    catch (e) { body.innerHTML = `<div style="padding:16px;color:var(--color-error)">Error: ${escapeHtml(e.message)}</div>`; return; }
+    const qAlbums = groupItemsByAlbum(items);
+
+    const regKeys = new Set(albums.map(a => albumKey(a.name, a.artist)));
+    const regIds = new Set(albums.map(a => a.id));
+    const regUris = new Set();
+    for (const a of albums) for (const t of a.tracks) if (t.uri) regUris.add(t.uri);
+
+    const cand = qAlbums.filter(a =>
+      regKeys.has(albumKey(a.name, a.artist)) ||
+      regIds.has(a.id) ||
+      a.tracks.some(t => t.uri && regUris.has(t.uri))
+    );
+
+    if (cand.length === 0) {
+      delBtn.style.display = 'none';
+      body.innerHTML = `<div style="padding:16px;color:var(--color-text-muted);font-size:13px">Ningún álbum de la cola figura ya en tus escuchados. 👌 (${qAlbums.length} álbumes en la cola)</div>`;
+      return;
+    }
+    body.innerHTML = `
+      <label style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--color-text-muted);padding:10px 12px;border-bottom:1px solid var(--color-border);cursor:pointer">
+        <input type="checkbox" id="queue-all" checked> Seleccionar todos (${cand.length})
+      </label>
+      ${cand.map(a => {
+        const uris = (a.tracks || []).map(t => t.uri).filter(Boolean).join(',');
+        return `
+        <label style="display:flex;align-items:center;gap:10px;padding:9px 12px;border-bottom:1px solid var(--color-border);cursor:${uris ? 'pointer' : 'default'}">
+          <input type="checkbox" class="queue-cb" data-uris="${uris}" ${uris ? 'checked' : 'disabled'}>
+          ${a.cover ? `<img src="${a.cover}" loading="lazy" style="width:38px;height:38px;border-radius:var(--radius-sm);object-fit:cover">` : `<div style="width:38px;height:38px;background:var(--color-elevated);border-radius:var(--radius-sm)"></div>`}
+          <div style="flex:1;min-width:0">
+            <div style="font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(a.name)}</div>
+            <div style="font-size:12px;color:var(--color-text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(a.artist)}${a.year ? ` · ${a.year}` : ''} · ya escuchado</div>
+          </div>
+          <span style="color:var(--color-text-muted);font-size:12px;flex-shrink:0">${a.tracks.length} track${a.tracks.length === 1 ? '' : 's'}</span>
+        </label>`;
+      }).join('')}
+    `;
+    delBtn.style.display = '';
+    const update = () => {
+      const n = overlay.querySelectorAll('.queue-cb:checked').length;
+      delBtn.textContent = `Sacar de la cola (${n})`;
+      delBtn.disabled = n === 0;
+    };
+    overlay.querySelectorAll('.queue-cb').forEach(cb => cb.addEventListener('change', update));
+    const allCb = overlay.querySelector('#queue-all');
+    allCb.addEventListener('change', () => {
+      overlay.querySelectorAll('.queue-cb:not(:disabled)').forEach(cb => { cb.checked = allCb.checked; });
+      update();
+    });
+    update();
+
+    delBtn.onclick = async () => {
+      const uris = [...overlay.querySelectorAll('.queue-cb:checked')].flatMap(cb => (cb.dataset.uris || '').split(',').filter(Boolean));
+      const nAlb = overlay.querySelectorAll('.queue-cb:checked').length;
+      if (uris.length === 0) return;
+      const ok = await confirmModal(
+        'Sacar de la cola',
+        `Se van a <strong>sacar ${nAlb} álbum${nAlb === 1 ? '' : 'es'}</strong> (${uris.length} tracks) de tu playlist "${escapeHtml(qp.name)}", porque ya están en tus escuchados. Esto modifica esa playlist en Spotify. ¿Seguro?`,
+        'Sacar'
+      );
+      if (!ok) return;
+      delBtn.disabled = true;
+      delBtn.textContent = 'Sacando...';
+      try {
+        await removeTracksFromPlaylist(qp.id, uris);
+        showToast(`${nAlb} álbum${nAlb === 1 ? '' : 'es'} sacado${nAlb === 1 ? '' : 's'} de la cola`, 'success');
+        await new Promise(r => setTimeout(r, 900));
+        loadQueue(qp);
+      } catch (err) {
+        showToast('Error al sacar: ' + err.message, 'error');
+        delBtn.disabled = false;
+        update();
+      }
+    };
+  }
 }
