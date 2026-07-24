@@ -10,6 +10,7 @@ const CACHE_TTL_MIN = 24 * 60; // refresca la playlist agrupada solo si pasó m�
 const cacheKeyFor = id => `listened_grouped_${id}`;
 let unregMin = 4; // mín. de canciones en likes para sugerir un álbum como "quizás escuchado sin registrar" (ajustable)
 const DISMISS_KEY = 'listened_unreg_dismissed'; // álbumes que el usuario ocultó de "sin registrar"
+const DUP_DISMISS_KEY = 'listened_dupes_dismissed'; // grupos que el usuario marcó "no es duplicado"
 
 let likesByKey = null; // Map albumKey -> { id, ids:Set, name, artist, year, image, tracks:[{name,artists,uri}] }
 
@@ -24,6 +25,19 @@ function dismissUnreg(key) {
 }
 function clearDismissed() {
   localStorage.removeItem(DISMISS_KEY);
+}
+
+// Idem para grupos de "duplicados" marcados como "no es duplicado" (ej: LP3/II/Vol. son distintos).
+function getDismissedDupes() {
+  try { return new Set(JSON.parse(localStorage.getItem(DUP_DISMISS_KEY) || '[]')); } catch { return new Set(); }
+}
+function dismissDupe(key) {
+  const s = getDismissedDupes();
+  s.add(key);
+  localStorage.setItem(DUP_DISMISS_KEY, JSON.stringify([...s]));
+}
+function clearDismissedDupes() {
+  localStorage.removeItem(DUP_DISMISS_KEY);
 }
 // Actualiza los números de los botones del header sin tener que recargar todo.
 function refreshHeaderCounts() {
@@ -140,12 +154,12 @@ async function loadAlbums({ force = false } = {}) {
   }
 }
 
-// Después de modificar la playlist (agregar/sacar): esperar a que Spotify refleje el cambio,
-// re-leer fresco, y limpiar el cache para que la próxima entrada re-analice.
+// Después de modificar la playlist (agregar/sacar): esperar a que Spotify refleje el cambio
+// y re-leer una sola vez (eso ya deja el cache fresco). NO borramos el cache después: si lo
+// borráramos, la próxima entrada volvería a bajar TODA la playlist de Spotify al pedo.
 async function refreshAfterWrite() {
   await new Promise(r => setTimeout(r, 900));
   await loadAlbums({ force: true });
-  try { await idbDel(cacheKeyFor(playlistInfo.id)); } catch { /* ignora */ }
 }
 
 // Cruza cada álbum con tus Liked Songs. El conteo tiene que ser EXACTO:
@@ -259,6 +273,7 @@ function isEdition(name) {
 // Devuelve grupos [{ keeper, remove:[...] }] donde 'remove' son las ediciones sobrantes.
 // Regla: si hay una versión normal, esa se queda; si son todas ediciones, se queda la de más tracks.
 function computeEditionDupes() {
+  const dismissed = getDismissedDupes();
   const byKey = new Map();
   for (const a of albums) {
     const k = albumKey(a.name, a.artist);
@@ -267,14 +282,15 @@ function computeEditionDupes() {
     arr.push(a);
   }
   const groups = [];
-  for (const arr of byKey.values()) {
+  for (const [k, arr] of byKey) {
     if (arr.length < 2) continue;
+    if (dismissed.has(k)) continue; // Ian dijo "esto no es duplicado", no lo mostramos más.
     const normals = arr.filter(a => !isEdition(a.name));
     let keeper;
     if (normals.length) keeper = normals.slice().sort((a, b) => b.tracks.length - a.tracks.length)[0];
     else keeper = arr.slice().sort((a, b) => b.tracks.length - a.tracks.length)[0];
     const remove = arr.filter(a => a !== keeper);
-    groups.push({ keeper, remove });
+    groups.push({ key: k, keeper, remove });
   }
   groups.sort((g1, g2) => g1.keeper.artist.localeCompare(g2.keeper.artist));
   return groups;
@@ -329,7 +345,7 @@ function buildUI(totalTracks, ts) {
   if (unregBtn) unregBtn.onclick = () => openUnregistered();
 
   const dupesBtn = document.getElementById('listened-dupes-btn');
-  if (dupesBtn) dupesBtn.onclick = () => openDupes(dupes);
+  if (dupesBtn) dupesBtn.onclick = () => openDupes();
 
   document.getElementById('listened-change-btn').onclick = () => openListenedAlbumsPicker({
     onSelect: () => { playlistInfo = getListenedPlaylist(); loadAlbums(); },
@@ -496,6 +512,7 @@ function openUnregistered() {
         <span style="font-size:12px;color:var(--color-text-muted)">Mínimo de canciones en likes:</span>
         ${[1, 2, 3, 4, 5, 6, 7, 8].map(n => `<button class="btn ${n === unregMin ? 'btn-primary' : 'btn-secondary'} btn-sm unreg-th" data-th="${n}">${n}+</button>`).join('')}
       </div>
+      <div id="unreg-selall" style="flex-shrink:0;margin-bottom:6px"></div>
       <div id="unreg-list" class="picker-scroll"></div>
       <div id="unreg-hidden-note" style="font-size:12px;color:var(--color-text-muted);margin-top:8px;flex-shrink:0"></div>
       <div class="modal-actions" style="margin-top:12px">
@@ -514,24 +531,31 @@ function openUnregistered() {
   };
 
   const renderList = () => {
+    // Guardamos qué estaba tildado para no perder la selección al ocultar/re-renderizar.
+    const prevChecked = new Set([...overlay.querySelectorAll('.unreg-cb:checked')].map(cb => cb.dataset.uri).filter(Boolean));
     const list = computeUnregistered(unregMin);
     const holder = overlay.querySelector('#unreg-list');
+    const selall = overlay.querySelector('#unreg-selall');
     if (list.length === 0) {
+      selall.innerHTML = '';
       holder.innerHTML = `<div style="color:var(--color-text-muted);font-size:13px;padding:8px 0">No hay álbumes con ${unregMin}+ canciones en likes fuera de tu registro.</div>`;
+      updateHiddenNote();
       updateAddBtn();
       return;
     }
-    holder.innerHTML = `
-      <label style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--color-text-muted);margin-bottom:6px;cursor:pointer">
+    // "Seleccionar todos" fijo arriba (fuera del scroll) para no tener que subir a buscarlo.
+    selall.innerHTML = `
+      <label style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--color-text-muted);cursor:pointer">
         <input type="checkbox" id="unreg-all"> Seleccionar todos (${list.length} álbumes)
-      </label>
+      </label>`;
+    holder.innerHTML = `
       <div style="border:1px solid var(--color-border);border-radius:var(--radius-sm)">
         ${list.map(e => {
           const url = e.id ? `https://open.spotify.com/album/${e.id}` : null;
           const uri = e.tracks.find(t => t.uri)?.uri || '';
           return `
           <label style="display:flex;align-items:center;gap:10px;padding:9px 12px;border-bottom:1px solid var(--color-border);cursor:${uri ? 'pointer' : 'default'}">
-            <input type="checkbox" class="unreg-cb" data-uri="${uri}" ${uri ? '' : 'disabled'}>
+            <input type="checkbox" class="unreg-cb" data-uri="${uri}" ${uri ? '' : 'disabled'} ${uri && prevChecked.has(uri) ? 'checked' : ''}>
             ${e.image ? `<img src="${e.image}" loading="lazy" style="width:40px;height:40px;border-radius:var(--radius-sm);object-fit:cover">` : `<div style="width:40px;height:40px;background:var(--color-elevated);border-radius:var(--radius-sm)"></div>`}
             <div style="flex:1;min-width:0">
               <div style="font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(e.name)}</div>
@@ -556,7 +580,7 @@ function openUnregistered() {
         renderList();
       });
     });
-    const allCb = holder.querySelector('#unreg-all');
+    const allCb = overlay.querySelector('#unreg-all');
     if (allCb) allCb.addEventListener('change', () => {
       holder.querySelectorAll('.unreg-cb:not(:disabled)').forEach(cb => { cb.checked = allCb.checked; });
       updateAddBtn();
@@ -618,41 +642,10 @@ function openUnregistered() {
 
 // Modal de álbumes registrados por duplicado (2+ ediciones). Se marca para sacar la
 // sobrante y dejar una sola (por defecto se queda la normal / la de más tracks).
-function openDupes(groups) {
+function openDupes() {
   const cover = (a, size = 34) => a.cover
     ? `<img src="${a.cover}" loading="lazy" style="width:${size}px;height:${size}px;border-radius:var(--radius-sm);object-fit:cover;flex-shrink:0">`
     : `<div style="width:${size}px;height:${size}px;background:var(--color-elevated);border-radius:var(--radius-sm);flex-shrink:0"></div>`;
-
-  const groupsHtml = groups.map(g => {
-    const base = baseName(g.keeper.name).trim() || g.keeper.name;
-    const keepRow = `
-      <div style="display:flex;align-items:center;gap:10px;padding:8px 12px;opacity:0.7">
-        <span style="width:19px;text-align:center;color:var(--color-accent);flex-shrink:0">✓</span>
-        ${cover(g.keeper)}
-        <div style="flex:1;min-width:0">
-          <div style="font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(g.keeper.name)}</div>
-          <div style="font-size:12px;color:var(--color-accent)">se queda</div>
-        </div>
-      </div>`;
-    const removeRows = g.remove.map(a => {
-      const uris = (a.tracks || []).map(t => t.uri).filter(Boolean).join(',');
-      return `
-      <label style="display:flex;align-items:center;gap:10px;padding:8px 12px;cursor:${uris ? 'pointer' : 'default'}">
-        <input type="checkbox" class="dup-cb" data-uris="${uris}" ${uris ? 'checked' : 'disabled'}>
-        ${cover(a)}
-        <div style="flex:1;min-width:0">
-          <div style="font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(a.name)}</div>
-          <div style="font-size:12px;color:var(--color-error)">sacar${a.url ? ` · <a href="${a.url}" target="_blank" rel="noopener" style="color:var(--color-accent)">abrir</a>` : ''}</div>
-        </div>
-      </label>`;
-    }).join('');
-    return `
-      <div style="border-bottom:1px solid var(--color-border)">
-        <div style="font-size:11px;color:var(--color-text-muted);padding:9px 12px 2px;text-transform:uppercase;letter-spacing:0.04em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(g.keeper.artist)} — ${escapeHtml(base)}</div>
-        ${keepRow}
-        ${removeRows}
-      </div>`;
-  }).join('');
 
   const overlay = document.createElement('div');
   overlay.className = 'modal-overlay';
@@ -661,12 +654,11 @@ function openDupes(groups) {
       <h2 style="margin-bottom:4px">💿 Duplicados por edición</h2>
       <p style="color:var(--color-text-secondary);font-size:13px;margin-bottom:10px;flex-shrink:0">
         Álbumes que tenés registrados <strong>dos veces</strong> en <strong>${escapeHtml(playlistInfo.name)}</strong> (deluxe Y normal, etc.).
-        Ya marqué la sobrante para sacar (queda la normal / la de más tracks). Revisá y confirmá.
+        Ya marqué la sobrante para sacar (queda la normal / la de más tracks). Si alguno <strong>no</strong> es duplicado (LP3, II, Vol. 2…), tocá la ✕ para ignorarlo.
       </p>
-      <div class="picker-scroll" style="border:1px solid var(--color-border);border-radius:var(--radius-sm)">
-        ${groupsHtml}
-      </div>
-      <div class="modal-actions" style="margin-top:16px">
+      <div id="dup-scroll" class="picker-scroll" style="border:1px solid var(--color-border);border-radius:var(--radius-sm)"></div>
+      <div id="dup-hidden-note" style="font-size:12px;color:var(--color-text-muted);margin-top:8px;flex-shrink:0"></div>
+      <div class="modal-actions" style="margin-top:12px">
         <button class="btn btn-danger" id="dup-del">Sacar seleccionados (0)</button>
         <button class="btn btn-secondary" id="dup-close">Cerrar</button>
       </div>
@@ -675,13 +667,83 @@ function openDupes(groups) {
   document.body.appendChild(overlay);
 
   const delBtn = overlay.querySelector('#dup-del');
+  const scroll = overlay.querySelector('#dup-scroll');
   const updateDelBtn = () => {
     const n = overlay.querySelectorAll('.dup-cb:checked').length;
     delBtn.textContent = `Sacar seleccionados (${n})`;
     delBtn.disabled = n === 0;
   };
-  overlay.querySelectorAll('.dup-cb').forEach(cb => cb.addEventListener('change', updateDelBtn));
-  updateDelBtn();
+
+  const updateHiddenNote = () => {
+    const note = overlay.querySelector('#dup-hidden-note');
+    const n = getDismissedDupes().size;
+    note.innerHTML = n
+      ? `${n} marcado${n === 1 ? '' : 's'} como "no es duplicado" · <a href="#" id="dup-show-hidden" style="color:var(--color-accent)">volver a mostrar</a>`
+      : '';
+    const link = note.querySelector('#dup-show-hidden');
+    if (link) link.onclick = ev => { ev.preventDefault(); clearDismissedDupes(); refreshHeaderCounts(); render(); };
+  };
+
+  const render = () => {
+    const prevChecked = new Set([...overlay.querySelectorAll('.dup-cb:checked')].map(cb => cb.dataset.uris));
+    const groups = computeEditionDupes();
+    if (groups.length === 0) {
+      scroll.innerHTML = `<div style="color:var(--color-text-muted);font-size:13px;padding:12px">No hay álbumes duplicados por edición. 👌</div>`;
+      updateHiddenNote();
+      updateDelBtn();
+      return;
+    }
+    scroll.innerHTML = groups.map(g => {
+      const base = baseName(g.keeper.name).trim() || g.keeper.name;
+      const keepRow = `
+        <div style="display:flex;align-items:center;gap:10px;padding:8px 12px;opacity:0.7">
+          <span style="width:19px;text-align:center;color:var(--color-accent);flex-shrink:0">✓</span>
+          ${cover(g.keeper)}
+          <div style="flex:1;min-width:0">
+            <div style="font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(g.keeper.name)}</div>
+            <div style="font-size:12px;color:var(--color-accent)">se queda</div>
+          </div>
+        </div>`;
+      const removeRows = g.remove.map(a => {
+        const uris = (a.tracks || []).map(t => t.uri).filter(Boolean).join(',');
+        const checked = uris && (prevChecked.size === 0 || prevChecked.has(uris)) ? 'checked' : '';
+        return `
+        <label style="display:flex;align-items:center;gap:10px;padding:8px 12px;cursor:${uris ? 'pointer' : 'default'}">
+          <input type="checkbox" class="dup-cb" data-uris="${uris}" ${uris ? checked : 'disabled'}>
+          ${cover(a)}
+          <div style="flex:1;min-width:0">
+            <div style="font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(a.name)}</div>
+            <div style="font-size:12px;color:var(--color-error)">sacar${a.url ? ` · <a href="${a.url}" target="_blank" rel="noopener" style="color:var(--color-accent)">abrir</a>` : ''}</div>
+          </div>
+        </label>`;
+      }).join('');
+      return `
+        <div style="border-bottom:1px solid var(--color-border)">
+          <div style="display:flex;align-items:center;gap:6px;padding:9px 12px 2px">
+            <div style="flex:1;min-width:0;font-size:11px;color:var(--color-text-muted);text-transform:uppercase;letter-spacing:0.04em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(g.keeper.artist)} — ${escapeHtml(base)}</div>
+            <button class="dup-hide" data-key="${g.key}" title="No es duplicado, ignorar" style="background:transparent;border:none;color:var(--color-text-muted);font-size:15px;cursor:pointer;padding:2px 6px;flex-shrink:0;line-height:1;border-radius:var(--radius-sm)">✕</button>
+          </div>
+          ${keepRow}
+          ${removeRows}
+        </div>`;
+    }).join('');
+
+    scroll.querySelectorAll('.dup-cb').forEach(cb => cb.addEventListener('change', updateDelBtn));
+    scroll.querySelectorAll('.dup-hide').forEach(btn => {
+      btn.addEventListener('mouseenter', () => { btn.style.color = 'var(--color-error)'; btn.style.background = 'var(--color-elevated)'; });
+      btn.addEventListener('mouseleave', () => { btn.style.color = 'var(--color-text-muted)'; btn.style.background = 'transparent'; });
+      btn.addEventListener('click', ev => {
+        ev.preventDefault();
+        ev.stopPropagation();
+        dismissDupe(btn.dataset.key);
+        refreshHeaderCounts();
+        render();
+      });
+    });
+    updateHiddenNote();
+    updateDelBtn();
+  };
+  render();
 
   const close = () => overlay.remove();
   overlay.querySelector('#dup-close').onclick = close;

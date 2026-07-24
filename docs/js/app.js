@@ -1,23 +1,24 @@
-import { isLoggedIn, loginWithSpotify, logout } from './auth.js?v=59';
-import { getUserProfile, spotifyFetch, tryAutoLoadUserBackup } from './api.js?v=59';
-import { getValidToken } from './auth.js?v=59';
-import { cacheClearAll } from './storage.js?v=59';
-import { registerRoute, initRouter, navigate } from './router.js?v=59';
-import { showToast } from './ui/toast.js?v=59';
+import { isLoggedIn, loginWithSpotify, logout } from './auth.js?v=60';
+import { getUserProfile, spotifyFetch, tryAutoLoadUserBackup } from './api.js?v=60';
+import { getValidToken } from './auth.js?v=60';
+import { cacheClearAll } from './storage.js?v=60';
+import { idbClearAll } from './idb.js?v=60';
+import { registerRoute, initRouter, navigate } from './router.js?v=60';
+import { showToast } from './ui/toast.js?v=60';
 
-import { render as renderSync } from './features/sync.js?v=59';
-import { render as renderDedupe } from './features/dedupe.js?v=59';
-import { render as renderDupalbums } from './features/duplicate-albums.js?v=59';
-import { render as renderZombies } from './features/zombies.js?v=59';
-import { render as renderVersions } from './features/versions.js?v=59';
-import { render as renderDashboard } from './features/dashboard.js?v=59';
-import { render as renderSmart } from './features/smart.js?v=59';
-import { render as renderSimilar } from './features/similar-artists.js?v=59';
-import { render as renderRabbit } from './features/rabbit-hole.js?v=59';
-import { render as renderByGenre } from './features/by-genre.js?v=59';
-import { render as renderByArtist } from './features/by-artist.js?v=59';
-import { render as renderRecs } from './features/recommendations.js?v=59';
-import { render as renderListened } from './features/listened.js?v=59';
+import { render as renderSync } from './features/sync.js?v=60';
+import { render as renderDedupe } from './features/dedupe.js?v=60';
+import { render as renderDupalbums } from './features/duplicate-albums.js?v=60';
+import { render as renderZombies } from './features/zombies.js?v=60';
+import { render as renderVersions } from './features/versions.js?v=60';
+import { render as renderDashboard } from './features/dashboard.js?v=60';
+import { render as renderSmart } from './features/smart.js?v=60';
+import { render as renderSimilar } from './features/similar-artists.js?v=60';
+import { render as renderRabbit } from './features/rabbit-hole.js?v=60';
+import { render as renderByGenre } from './features/by-genre.js?v=60';
+import { render as renderByArtist } from './features/by-artist.js?v=60';
+import { render as renderRecs } from './features/recommendations.js?v=60';
+import { render as renderListened } from './features/listened.js?v=60';
 
 async function testConnection() {
   const token = await getValidToken();
@@ -254,9 +255,21 @@ function showApp(profile) {
   `;
 
   document.getElementById('logout-btn').onclick = logout;
-  document.getElementById('refresh-all-btn').onclick = () => {
-    cacheClearAll();
-    showToast('Cache limpiado', 'info');
+  document.getElementById('refresh-all-btn').onclick = async () => {
+    const btn = document.getElementById('refresh-all-btn');
+    const orig = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = 'Limpiando...';
+    cacheClearAll(); // localStorage
+    try {
+      // Vacía IndexedDB (grouped de playlists, análisis, etc.) menos tus likes (caros de re-bajar).
+      const n = await idbClearAll(['all_liked_tracks', 'all_liked_tracks_partial']);
+      showToast(`Cache limpiado (${n} entrada${n === 1 ? '' : 's'}). Tus likes se conservan.`, 'success');
+    } catch (e) {
+      showToast('Cache local limpiado (IDB falló: ' + e.message + ')', 'info');
+    }
+    btn.textContent = orig;
+    btn.disabled = false;
   };
 
   const hamburger = document.getElementById('hamburger-btn');
