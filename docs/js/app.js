@@ -1,23 +1,23 @@
-import { isLoggedIn, loginWithSpotify, logout } from './auth.js?v=58';
-import { getUserProfile, spotifyFetch, tryAutoLoadUserBackup } from './api.js?v=58';
-import { getValidToken } from './auth.js?v=58';
-import { cacheClearAll } from './storage.js?v=58';
-import { registerRoute, initRouter, navigate } from './router.js?v=58';
-import { showToast } from './ui/toast.js?v=58';
+import { isLoggedIn, loginWithSpotify, logout } from './auth.js?v=59';
+import { getUserProfile, spotifyFetch, tryAutoLoadUserBackup } from './api.js?v=59';
+import { getValidToken } from './auth.js?v=59';
+import { cacheClearAll } from './storage.js?v=59';
+import { registerRoute, initRouter, navigate } from './router.js?v=59';
+import { showToast } from './ui/toast.js?v=59';
 
-import { render as renderSync } from './features/sync.js?v=58';
-import { render as renderDedupe } from './features/dedupe.js?v=58';
-import { render as renderDupalbums } from './features/duplicate-albums.js?v=58';
-import { render as renderZombies } from './features/zombies.js?v=58';
-import { render as renderVersions } from './features/versions.js?v=58';
-import { render as renderDashboard } from './features/dashboard.js?v=58';
-import { render as renderSmart } from './features/smart.js?v=58';
-import { render as renderSimilar } from './features/similar-artists.js?v=58';
-import { render as renderRabbit } from './features/rabbit-hole.js?v=58';
-import { render as renderByGenre } from './features/by-genre.js?v=58';
-import { render as renderByArtist } from './features/by-artist.js?v=58';
-import { render as renderRecs } from './features/recommendations.js?v=58';
-import { render as renderListened } from './features/listened.js?v=58';
+import { render as renderSync } from './features/sync.js?v=59';
+import { render as renderDedupe } from './features/dedupe.js?v=59';
+import { render as renderDupalbums } from './features/duplicate-albums.js?v=59';
+import { render as renderZombies } from './features/zombies.js?v=59';
+import { render as renderVersions } from './features/versions.js?v=59';
+import { render as renderDashboard } from './features/dashboard.js?v=59';
+import { render as renderSmart } from './features/smart.js?v=59';
+import { render as renderSimilar } from './features/similar-artists.js?v=59';
+import { render as renderRabbit } from './features/rabbit-hole.js?v=59';
+import { render as renderByGenre } from './features/by-genre.js?v=59';
+import { render as renderByArtist } from './features/by-artist.js?v=59';
+import { render as renderRecs } from './features/recommendations.js?v=59';
+import { render as renderListened } from './features/listened.js?v=59';
 
 async function testConnection() {
   const token = await getValidToken();
@@ -435,5 +435,12 @@ async function renderDebug(container) {
     btn.disabled = false;
   };
 }
+
+// Mientras haya cualquier cartel (.modal-overlay) abierto, bloqueamos el scroll del fondo:
+// así al scrollear se mueve solo el contenido del cartel, no la página de atrás.
+const modalScrollLock = new MutationObserver(() => {
+  document.body.classList.toggle('modal-open', document.querySelector('.modal-overlay') !== null);
+});
+modalScrollLock.observe(document.body, { childList: true });
 
 init();
