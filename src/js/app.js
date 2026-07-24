@@ -2,6 +2,7 @@ import { isLoggedIn, loginWithSpotify, logout } from './auth.js';
 import { getUserProfile, spotifyFetch, tryAutoLoadUserBackup } from './api.js';
 import { getValidToken } from './auth.js';
 import { cacheClearAll } from './storage.js';
+import { idbClearAll } from './idb.js';
 import { registerRoute, initRouter, navigate } from './router.js';
 import { showToast } from './ui/toast.js';
 
@@ -254,9 +255,21 @@ function showApp(profile) {
   `;
 
   document.getElementById('logout-btn').onclick = logout;
-  document.getElementById('refresh-all-btn').onclick = () => {
-    cacheClearAll();
-    showToast('Cache limpiado', 'info');
+  document.getElementById('refresh-all-btn').onclick = async () => {
+    const btn = document.getElementById('refresh-all-btn');
+    const orig = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = 'Limpiando...';
+    cacheClearAll(); // localStorage
+    try {
+      // Vacía IndexedDB (grouped de playlists, análisis, etc.) menos tus likes (caros de re-bajar).
+      const n = await idbClearAll(['all_liked_tracks', 'all_liked_tracks_partial']);
+      showToast(`Cache limpiado (${n} entrada${n === 1 ? '' : 's'}). Tus likes se conservan.`, 'success');
+    } catch (e) {
+      showToast('Cache local limpiado (IDB falló: ' + e.message + ')', 'info');
+    }
+    btn.textContent = orig;
+    btn.disabled = false;
   };
 
   const hamburger = document.getElementById('hamburger-btn');

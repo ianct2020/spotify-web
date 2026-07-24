@@ -88,8 +88,31 @@ function idbAvailable() {
   return typeof indexedDB !== 'undefined';
 }
 
+// Borra TODO el cache de IndexedDB (grouped de playlists, análisis, etc.),
+// menos las keys en keepKeys (por defecto no se conserva nada). Devuelve cuántas borró.
+async function idbClearAll(keepKeys = []) {
+  const keep = new Set(keepKeys);
+  const db = await openDb();
+  const keys = await new Promise((res, rej) => {
+    const t = db.transaction(STORE, 'readonly');
+    const r = t.objectStore(STORE).getAllKeys();
+    r.onsuccess = () => res(r.result);
+    r.onerror = () => rej(r.error);
+  });
+  const toDel = keys.filter(k => !keep.has(k));
+  if (toDel.length === 0) return 0;
+  await new Promise((res, rej) => {
+    const t = db.transaction(STORE, 'readwrite');
+    const store = t.objectStore(STORE);
+    toDel.forEach(k => store.delete(k));
+    t.oncomplete = () => res();
+    t.onerror = () => rej(t.error);
+  });
+  return toDel.length;
+}
+
 export {
   idbGet, idbSet, idbDel,
   idbGetCached, idbGetCachedRaw, idbGetTimestamp, idbSetCached,
-  idbAvailable,
+  idbAvailable, idbClearAll,
 };
