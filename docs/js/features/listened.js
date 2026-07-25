@@ -1,8 +1,8 @@
-import { getAllPlaylistItems, getBestAvailableLikes, addTracksToPlaylist, removeTracksFromPlaylist, getAllUserPlaylists } from '../api.js?v=62';
-import { idbGetCached, idbSetCached, idbGetTimestamp, idbDel } from '../idb.js?v=62';
-import { escapeHtml, confirmModal } from '../ui/components.js?v=62';
-import { showToast } from '../ui/toast.js?v=62';
-import { getListenedPlaylist, groupItemsByAlbum, openListenedAlbumsPicker, albumKey, baseName, norm } from './listened-shared.js?v=62';
+import { getAllPlaylistItems, getBestAvailableLikes, addTracksToPlaylist, removeTracksFromPlaylist, getAllUserPlaylists, getSeveralTracks } from '../api.js?v=63';
+import { idbGetCached, idbSetCached, idbGetTimestamp, idbDel } from '../idb.js?v=63';
+import { escapeHtml, confirmModal } from '../ui/components.js?v=63';
+import { showToast } from '../ui/toast.js?v=63';
+import { getListenedPlaylist, groupItemsByAlbum, openListenedAlbumsPicker, albumKey, baseName, norm } from './listened-shared.js?v=63';
 
 const SORT_KEY = 'listened_sort_mode';
 const VALID_SORTS = new Set(['recent', 'year-desc', 'year-asc', 'artist-asc', 'likes-desc', 'name-asc']);
@@ -16,10 +16,15 @@ const QUEUE_PNAME_KEY = 'listened_queue_playlist_name';
 const HISTORY_DISMISS_KEY = 'listened_history_dismissed'; // álbumes del historial ocultados
 const HISTORY_VERSION = 1; // subir cuando regenero data/listening-history.json
 const HISTORY_CACHE_KEY = `history_albums_v${HISTORY_VERSION}`;
+const HISTORY_INFO_CACHE_KEY = 'history_track_info_v1'; // trackId -> { img, albId, albType, total }
+const HISTORY_EP_MIN_TRACKS = 6; // un release con menos de esto (o tipo single) se considera single/EP y se filtra
 
 let likesByKey = null; // Map albumKey -> { id, ids:Set, name, artist, year, image, tracks:[{name,artists,uri}] }
 let historyAlbums = null; // array de { a, ar, u, dt, min, y1 } del historial de reproducción (data/ committeado)
 let historyMin = 5; // mín. de tracks distintos escuchados para sugerir desde el historial
+let histInfo = null; // Map trackId -> { img, albId, albType, total } resuelto vía /tracks (tapas, single, etc.)
+let lastTotalTracks = 0; // para rebuild optimista sin re-bajar la playlist de Spotify
+let lastTs = null;
 
 // Álbumes que Ian marcó "no me interesa" para que no vuelvan a aparecer en "sin registrar".
 function getDismissed() {
@@ -81,11 +86,70 @@ async function loadHistoryData() {
   return historyAlbums;
 }
 
+// trackId a partir de una uri "spotify:track:XXXX".
+function trackIdOf(uri) {
+  return (uri || '').startsWith('spotify:track:') ? uri.slice('spotify:track:'.length) : null;
+}
+
+// Carga el cache de info de tracks (tapas / single / total) desde IndexedDB.
+async function loadHistInfo() {
+  if (histInfo) return histInfo;
+  histInfo = new Map();
+  try {
+    const cached = await idbGetCached(HISTORY_INFO_CACHE_KEY);
+    if (cached && typeof cached === 'object') for (const [id, v] of Object.entries(cached)) histInfo.set(id, v);
+  } catch { /* ignora */ }
+  return histInfo;
+}
+
+// Resuelve vía /tracks la info que falta de una lista del historial (tapa, tipo, total tracks).
+// Best-effort: si /tracks no responde, se queda con lo que tenga (placeholders, sin filtrar singles).
+async function enrichHistory(entries) {
+  await loadHistInfo();
+  const missing = [];
+  for (const h of entries) {
+    const id = trackIdOf(h.u);
+    if (id && !histInfo.has(id)) missing.push(id);
+  }
+  if (missing.length === 0) return;
+  // Marca provisional 'unknown' para no volver a pedir en loop si /tracks falla o no devuelve el id.
+  for (const id of missing) histInfo.set(id, { img: null, albId: null, albType: null, total: 0, unknown: true });
+  let tracks = [];
+  try { tracks = await getSeveralTracks(missing); }
+  catch { tracks = []; }
+  for (const t of tracks) {
+    if (!t?.id) continue;
+    const imgs = t.album?.images || [];
+    histInfo.set(t.id, {
+      img: imgs.length ? imgs[imgs.length - 1].url : null,
+      albId: t.album?.id || null,
+      albType: t.album?.album_type || null,
+      total: t.album?.total_tracks || 0,
+    });
+  }
+  // Guardamos el cache como objeto plano.
+  try {
+    const obj = {};
+    for (const [id, v] of histInfo) obj[id] = v;
+    await idbSetCached(HISTORY_INFO_CACHE_KEY, obj, 90 * 24 * 60);
+  } catch { /* ignora */ }
+}
+
+// ¿La info resuelta dice que este release es un single / EP chico? (se filtra de las sugerencias)
+function isSingleOrEp(info) {
+  if (!info || info.unknown) return false; // sin info confiable → no filtramos
+  if (info.albType === 'single') return true;
+  if (info.total && info.total < HISTORY_EP_MIN_TRACKS) return true;
+  return false;
+}
+
 // Álbumes que ESCUCHASTE (según el historial: N+ tracks distintos con ≥30s) y NO están registrados.
+// Si ya resolvimos la info del track, además filtramos singles/EPs y excluimos por album.id real.
 function computeHistoryUnregistered(min = historyMin) {
   if (!historyAlbums) return [];
   const dismissed = getDismissedHistory();
   const regKeys = new Set(albums.map(a => albumKey(a.name, a.artist)));
+  const regIds = new Set(albums.map(a => a.id));
   const regUris = new Set();
   for (const a of albums) for (const t of a.tracks) if (t.uri) regUris.add(t.uri);
   const out = [];
@@ -95,6 +159,11 @@ function computeHistoryUnregistered(min = historyMin) {
     if (dismissed.has(k)) continue;
     if (regKeys.has(k)) continue;
     if (h.u && regUris.has(h.u)) continue;
+    const info = histInfo?.get(trackIdOf(h.u));
+    if (info && !info.unknown) {
+      if (isSingleOrEp(info)) continue;              // single/EP → fuera
+      if (info.albId && regIds.has(info.albId)) continue; // ya está en listened (por id real)
+    }
     out.push({ ...h, key: k });
   }
   out.sort((a, b) => b.dt - a.dt || b.min - a.min);
@@ -201,6 +270,7 @@ async function loadAlbums({ force = false } = {}) {
 
     await attachLikes(albums);
     try { await loadHistoryData(); } catch { /* no fatal */ }
+    try { await loadHistInfo(); } catch { /* no fatal */ }
     let ts = null;
     try { ts = await idbGetTimestamp(key); } catch { /* ignora */ }
     buildUI(totalTracks, ts);
@@ -224,6 +294,48 @@ async function loadAlbums({ force = false } = {}) {
 async function refreshAfterWrite() {
   await new Promise(r => setTimeout(r, 900));
   await loadAlbums({ force: true });
+}
+
+// Rebuild INSTANTÁNEO del estado local (sin spinner ni re-bajar de Spotify) + reguardar cache.
+async function persistAndRebuild(totalTracks) {
+  lastTotalTracks = totalTracks;
+  try { await idbSetCached(cacheKeyFor(playlistInfo.id), { albums, totalTracks }, CACHE_TTL_MIN); } catch { /* ignora */ }
+  buildUI(totalTracks, lastTs);
+}
+
+// Agrega álbumes al estado local al toque (después Spotify ya los tiene; al 'Actualizar' se reconcilia).
+async function addAlbumsLocally(entries) {
+  const existing = new Set(albums.map(a => a.id));
+  let added = 0;
+  for (const e of entries) {
+    const id = e.id || (e.uri ? `local:${e.uri}` : null);
+    if (!id || existing.has(id)) continue;
+    existing.add(id);
+    const a = {
+      id,
+      name: e.name || '(sin nombre)',
+      artist: e.artist || '',
+      year: e.year || '',
+      image: e.image || e.cover || null,
+      cover: e.cover || e.image || null,
+      url: (typeof id === 'string' && !id.includes(':')) ? `https://open.spotify.com/album/${id}` : null,
+      tracks: [{ name: '', artists: e.artist || '', uri: e.uri || null }],
+      addedAt: Date.now(),
+    };
+    a.likes = likesByKey?.get(albumKey(a.name, a.artist))?.tracks || [];
+    albums.push(a);
+    added++;
+  }
+  await persistAndRebuild(lastTotalTracks + added);
+  return added;
+}
+
+// Saca del estado local los álbumes indicados (objetos de `albums`), al toque.
+async function removeAlbumEntriesLocally(albumObjs) {
+  const rm = new Set(albumObjs);
+  let removedTracks = 0;
+  albums = albums.filter(a => { if (rm.has(a)) { removedTracks += a.tracks.length; return false; } return true; });
+  await persistAndRebuild(Math.max(0, lastTotalTracks - removedTracks));
 }
 
 // Cruza cada álbum con tus Liked Songs. El conteo tiene que ser EXACTO:
@@ -361,6 +473,8 @@ function computeEditionDupes() {
 }
 
 function buildUI(totalTracks, ts) {
+  lastTotalTracks = totalTracks;
+  lastTs = ts;
   const content = document.getElementById('listened-content');
   const mode = getSortMode();
   const totalLikes = albums.reduce((n, a) => n + (a.likes?.length || 0), 0);
@@ -596,6 +710,7 @@ function openUnregistered() {
   document.body.appendChild(overlay);
 
   const addBtn = overlay.querySelector('#unreg-add');
+  let unregRendered = [];
   const updateAddBtn = () => {
     const n = overlay.querySelectorAll('.unreg-cb:checked').length;
     addBtn.textContent = `Agregar a escuchados (${n})`;
@@ -606,6 +721,7 @@ function openUnregistered() {
     // Guardamos qué estaba tildado para no perder la selección al ocultar/re-renderizar.
     const prevChecked = new Set([...overlay.querySelectorAll('.unreg-cb:checked')].map(cb => cb.dataset.uri).filter(Boolean));
     const list = computeUnregistered(unregMin);
+    unregRendered = list;
     const holder = overlay.querySelector('#unreg-list');
     const selall = overlay.querySelector('#unreg-selall');
     if (list.length === 0) {
@@ -627,7 +743,7 @@ function openUnregistered() {
           const uri = e.tracks.find(t => t.uri)?.uri || '';
           return `
           <label style="display:flex;align-items:center;gap:10px;padding:9px 12px;border-bottom:1px solid var(--color-border);cursor:${uri ? 'pointer' : 'default'}">
-            <input type="checkbox" class="unreg-cb" data-uri="${uri}" ${uri ? '' : 'disabled'} ${uri && prevChecked.has(uri) ? 'checked' : ''}>
+            <input type="checkbox" class="unreg-cb" data-uri="${uri}" data-key="${e.key}" ${uri ? '' : 'disabled'} ${uri && prevChecked.has(uri) ? 'checked' : ''}>
             ${e.image ? `<img src="${e.image}" loading="lazy" style="width:40px;height:40px;border-radius:var(--radius-sm);object-fit:cover">` : `<div style="width:40px;height:40px;background:var(--color-elevated);border-radius:var(--radius-sm)"></div>`}
             <div style="flex:1;min-width:0">
               <div style="font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(e.name)}</div>
@@ -666,14 +782,21 @@ function openUnregistered() {
     if (!note) return;
     const n = getDismissed().size;
     note.innerHTML = n
-      ? `${n} oculto${n === 1 ? '' : 's'} · <a href="#" id="unreg-show-hidden" style="color:var(--color-accent)">volver a mostrar</a>`
+      ? `${n} oculto${n === 1 ? '' : 's'} · <a href="#" id="unreg-show-hidden" style="color:var(--color-accent)">ver ocultos</a>`
       : '';
     const showLink = note.querySelector('#unreg-show-hidden');
     if (showLink) showLink.onclick = ev => {
       ev.preventDefault();
-      clearDismissed();
-      refreshHeaderCounts();
-      renderList();
+      openHiddenManager({
+        title: '🎧 Ocultos de sin registrar',
+        keys: [...getDismissed()],
+        lookup: k => {
+          const e = likesByKey?.get(k);
+          return e ? { name: e.name, artist: e.artist, extra: `♥ ${e.tracks.length}` } : null;
+        },
+        onRestore: k => { const s = getDismissed(); s.delete(k); localStorage.setItem(DISMISS_KEY, JSON.stringify([...s])); },
+        onChange: () => { refreshHeaderCounts(); renderList(); },
+      });
     };
   };
   renderList();
@@ -695,7 +818,9 @@ function openUnregistered() {
   overlay.onclick = (e) => { if (e.target === overlay) close(); };
 
   addBtn.onclick = async () => {
-    const uris = [...overlay.querySelectorAll('.unreg-cb:checked')].map(cb => cb.dataset.uri).filter(Boolean);
+    const checkedKeys = new Set([...overlay.querySelectorAll('.unreg-cb:checked')].map(cb => cb.dataset.key));
+    const picked = unregRendered.filter(e => checkedKeys.has(e.key));
+    const uris = picked.map(e => e.tracks.find(t => t.uri)?.uri).filter(Boolean);
     if (uris.length === 0) return;
     addBtn.disabled = true;
     addBtn.textContent = 'Agregando...';
@@ -703,7 +828,11 @@ function openUnregistered() {
       await addTracksToPlaylist(playlistInfo.id, uris);      // sin confirmación (pedido de Ian)
       showToast(`${uris.length} álbum${uris.length === 1 ? '' : 'es'} agregado${uris.length === 1 ? '' : 's'} a escuchados`, 'success');
       close();
-      await refreshAfterWrite();
+      // Update local instantáneo (sin re-bajar la playlist ni mostrar "Actualizando").
+      await addAlbumsLocally(picked.map(e => ({
+        id: e.id, name: e.name, artist: e.artist, year: e.year, image: e.image,
+        uri: e.tracks.find(t => t.uri)?.uri,
+      })));
     } catch (err) {
       showToast('Error al agregar: ' + err.message, 'error');
       addBtn.disabled = false;
@@ -781,7 +910,7 @@ function openDupes() {
         const checked = uris && (prevChecked.size === 0 || prevChecked.has(uris)) ? 'checked' : '';
         return `
         <label style="display:flex;align-items:center;gap:10px;padding:8px 12px;cursor:${uris ? 'pointer' : 'default'}">
-          <input type="checkbox" class="dup-cb" data-uris="${uris}" ${uris ? checked : 'disabled'}>
+          <input type="checkbox" class="dup-cb" data-uris="${uris}" data-albid="${a.id}" ${uris ? checked : 'disabled'}>
           ${cover(a)}
           <div style="flex:1;min-width:0">
             <div style="font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(a.name)}</div>
@@ -824,6 +953,7 @@ function openDupes() {
   delBtn.onclick = async () => {
     const selected = [...overlay.querySelectorAll('.dup-cb:checked')];
     const uris = selected.flatMap(cb => (cb.dataset.uris || '').split(',').filter(Boolean));
+    const selIds = new Set(selected.map(cb => cb.dataset.albid));
     if (uris.length === 0) return;
     const ok = await confirmModal(
       'Sacar ediciones duplicadas',
@@ -837,7 +967,8 @@ function openDupes() {
       await removeTracksFromPlaylist(playlistInfo.id, uris);
       showToast(`${selected.length} edición${selected.length === 1 ? '' : 'es'} sacada${selected.length === 1 ? '' : 's'}`, 'success');
       close();
-      await refreshAfterWrite();
+      // Update local instantáneo (sin re-bajar la playlist).
+      await removeAlbumEntriesLocally(albums.filter(a => selIds.has(a.id)));
     } catch (err) {
       showToast('Error al sacar: ' + err.message, 'error');
       delBtn.disabled = false;
@@ -1016,6 +1147,7 @@ function openHistory() {
         <span style="font-size:12px;color:var(--color-text-muted)">Mín. de temas distintos escuchados:</span>
         ${[3, 4, 5, 6, 8, 10, 12].map(n => `<button class="btn ${n === historyMin ? 'btn-primary' : 'btn-secondary'} btn-sm hist-th" data-th="${n}">${n}+</button>`).join('')}
       </div>
+      <div id="hist-enrich-note" style="font-size:11px;color:var(--color-text-muted);margin-bottom:4px;flex-shrink:0"></div>
       <div id="hist-selall" style="flex-shrink:0;margin-bottom:6px"></div>
       <div id="hist-list" class="picker-scroll"></div>
       <div id="hist-hidden-note" style="font-size:12px;color:var(--color-text-muted);margin-top:8px;flex-shrink:0"></div>
@@ -1028,6 +1160,8 @@ function openHistory() {
   document.body.appendChild(overlay);
 
   const addBtn = overlay.querySelector('#hist-add');
+  let histRendered = [];
+  let enriching = false;
   const updateAddBtn = () => {
     const n = overlay.querySelectorAll('.hist-cb:checked').length;
     addBtn.textContent = `Agregar a escuchados (${n})`;
@@ -1037,17 +1171,40 @@ function openHistory() {
     const note = overlay.querySelector('#hist-hidden-note');
     const n = getDismissedHistory().size;
     note.innerHTML = n
-      ? `${n} oculto${n === 1 ? '' : 's'} · <a href="#" id="hist-show-hidden" style="color:var(--color-accent)">volver a mostrar</a>`
+      ? `${n} oculto${n === 1 ? '' : 's'} · <a href="#" id="hist-show-hidden" style="color:var(--color-accent)">ver ocultos</a>`
       : '';
     const link = note.querySelector('#hist-show-hidden');
-    if (link) link.onclick = ev => { ev.preventDefault(); clearDismissedHistory(); refreshHeaderCounts(); renderList(); };
+    if (link) link.onclick = ev => {
+      ev.preventDefault();
+      openHiddenManager({
+        title: '📊 Ocultos del historial',
+        keys: [...getDismissedHistory()],
+        lookup: k => {
+          const h = historyAlbums.find(x => albumKey(x.a, x.ar) === k);
+          return h ? { name: h.a, artist: h.ar, extra: `${h.dt} temas · ${h.min.toLocaleString()} min` } : null;
+        },
+        onRestore: k => { const s = getDismissedHistory(); s.delete(k); localStorage.setItem(HISTORY_DISMISS_KEY, JSON.stringify([...s])); },
+        onChange: () => { refreshHeaderCounts(); renderList(); },
+      });
+    };
   };
 
   const renderList = () => {
     const prevChecked = new Set([...overlay.querySelectorAll('.hist-cb:checked')].map(cb => cb.dataset.uri).filter(Boolean));
     const list = computeHistoryUnregistered(historyMin);
+    histRendered = list;
     const holder = overlay.querySelector('#hist-list');
     const selall = overlay.querySelector('#hist-selall');
+    const enrichNote = overlay.querySelector('#hist-enrich-note');
+    // Resolvemos tapas / single / total de los que falten (una vez; queda cacheado).
+    const needInfo = list.some(h => trackIdOf(h.u) && !histInfo?.has(trackIdOf(h.u)));
+    if (needInfo && !enriching) {
+      enriching = true;
+      if (enrichNote) enrichNote.textContent = '⏳ Cargando tapas y filtrando singles…';
+      enrichHistory(list).finally(() => { enriching = false; if (enrichNote) enrichNote.textContent = ''; renderList(); });
+    } else if (enrichNote && !enriching) {
+      enrichNote.textContent = '';
+    }
     if (list.length === 0) {
       selall.innerHTML = '';
       holder.innerHTML = `<div style="color:var(--color-text-muted);font-size:13px;padding:8px 0">No hay álbumes con ${historyMin}+ temas escuchados fuera de tu registro.</div>`;
@@ -1063,12 +1220,12 @@ function openHistory() {
       <div style="border:1px solid var(--color-border);border-radius:var(--radius-sm)">
         ${list.map(h => {
           const uri = h.u || '';
-          const img = likesByKey?.get(h.key)?.image || null;
-          const tid = uri.startsWith('spotify:track:') ? uri.slice('spotify:track:'.length) : null;
+          const tid = trackIdOf(uri);
+          const img = histInfo?.get(tid)?.img || likesByKey?.get(h.key)?.image || null;
           const url = tid ? `https://open.spotify.com/track/${tid}` : null;
           return `
           <label style="display:flex;align-items:center;gap:10px;padding:9px 12px;border-bottom:1px solid var(--color-border);cursor:${uri ? 'pointer' : 'default'}">
-            <input type="checkbox" class="hist-cb" data-uri="${uri}" ${uri ? '' : 'disabled'} ${uri && prevChecked.has(uri) ? 'checked' : ''}>
+            <input type="checkbox" class="hist-cb" data-uri="${uri}" data-key="${h.key}" ${uri ? '' : 'disabled'} ${uri && prevChecked.has(uri) ? 'checked' : ''}>
             ${img ? `<img src="${img}" loading="lazy" style="width:40px;height:40px;border-radius:var(--radius-sm);object-fit:cover">` : `<div style="width:40px;height:40px;background:var(--color-elevated);border-radius:var(--radius-sm);display:flex;align-items:center;justify-content:center;color:var(--color-text-muted);font-size:16px">♪</div>`}
             <div style="flex:1;min-width:0">
               <div style="font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(h.a)}</div>
@@ -1123,7 +1280,9 @@ function openHistory() {
   overlay.onclick = (e) => { if (e.target === overlay) close(); };
 
   addBtn.onclick = async () => {
-    const uris = [...overlay.querySelectorAll('.hist-cb:checked')].map(cb => cb.dataset.uri).filter(Boolean);
+    const checkedKeys = new Set([...overlay.querySelectorAll('.hist-cb:checked')].map(cb => cb.dataset.key));
+    const picked = histRendered.filter(h => checkedKeys.has(h.key));
+    const uris = picked.map(h => h.u).filter(Boolean);
     if (uris.length === 0) return;
     addBtn.disabled = true;
     addBtn.textContent = 'Agregando...';
@@ -1131,11 +1290,61 @@ function openHistory() {
       await addTracksToPlaylist(playlistInfo.id, uris);
       showToast(`${uris.length} álbum${uris.length === 1 ? '' : 'es'} agregado${uris.length === 1 ? '' : 's'} a escuchados`, 'success');
       close();
-      await refreshAfterWrite();
+      await addAlbumsLocally(picked.map(h => {
+        const info = histInfo?.get(trackIdOf(h.u));
+        return { id: info?.albId || null, name: h.a, artist: h.ar, year: h.y1 ? String(h.y1) : '', image: info?.img || likesByKey?.get(h.key)?.image || null, uri: h.u };
+      }));
     } catch (err) {
       showToast('Error al agregar: ' + err.message, 'error');
       addBtn.disabled = false;
       updateAddBtn();
     }
   };
+}
+
+// Mini-modal reutilizable para ver/restaurar los álbumes ocultados de una lista.
+// keys: array de albumKeys ocultados; lookup(key)->{name,artist,extra}|null; onRestore(key) desmarca; onChange() refresca el modal padre.
+function openHiddenManager({ title, keys, lookup, onRestore, onChange }) {
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  overlay.innerHTML = `
+    <div class="modal modal-picker" style="max-width:460px">
+      <h2 style="margin-bottom:8px">${escapeHtml(title)}</h2>
+      <div id="hm-list" class="picker-scroll" style="border:1px solid var(--color-border);border-radius:var(--radius-sm)"></div>
+      <div class="modal-actions" style="margin-top:12px">
+        <button class="btn btn-secondary" id="hm-close">Cerrar</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+  const listEl = overlay.querySelector('#hm-list');
+  const close = () => overlay.remove();
+  overlay.querySelector('#hm-close').onclick = close;
+  overlay.onclick = (e) => { if (e.target === overlay) close(); };
+
+  const render = () => {
+    const items = keys.map(k => ({ k, info: lookup(k) })).filter(x => x.info);
+    if (items.length === 0) {
+      listEl.innerHTML = `<div style="padding:14px;color:var(--color-text-muted);font-size:13px">No hay ocultos.</div>`;
+      return;
+    }
+    listEl.innerHTML = items.map(({ k, info }) => `
+      <div style="display:flex;align-items:center;gap:10px;padding:9px 12px;border-bottom:1px solid var(--color-border)">
+        <div style="flex:1;min-width:0">
+          <div style="font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(info.name)}</div>
+          <div style="font-size:12px;color:var(--color-text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(info.artist)}${info.extra ? ` · ${escapeHtml(info.extra)}` : ''}</div>
+        </div>
+        <button class="btn btn-secondary btn-sm hm-restore" data-key="${k}">Restaurar</button>
+      </div>`).join('');
+    listEl.querySelectorAll('.hm-restore').forEach(btn => {
+      btn.onclick = () => {
+        const k = btn.dataset.key;
+        onRestore(k);
+        keys = keys.filter(x => x !== k);
+        onChange?.();
+        render();
+      };
+    });
+  };
+  render();
 }
