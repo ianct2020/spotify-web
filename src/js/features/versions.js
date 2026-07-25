@@ -13,13 +13,15 @@ export function render(container) {
       <h1>Versiones Duplicadas</h1>
       <p>Encontrá likes con el mismo nombre y artista en distintos álbumes (original, remaster, live, etc.). Marcá la versión que querés <strong>quedarte</strong> — el resto del grupo se borra.</p>
     </div>
-    <div class="feature-actions">
+    <div class="feature-actions" style="display:flex;gap:8px;flex-wrap:wrap">
       <button class="btn btn-primary" id="versions-analyze-btn">Analizar</button>
+      <button class="btn btn-secondary" id="versions-refresh-btn" title="Vuelve a bajar tus likes desde Spotify (usalo si borraste versiones y todavía aparecen)">↻ Re-analizar (bajar likes de nuevo)</button>
     </div>
     <div id="versions-results"></div>
   `;
 
-  document.getElementById('versions-analyze-btn').onclick = analyze;
+  document.getElementById('versions-analyze-btn').onclick = () => analyze(false);
+  document.getElementById('versions-refresh-btn').onclick = () => analyze(true);
 }
 
 function normalizeKey(track) {
@@ -34,17 +36,18 @@ function normalizeKey(track) {
   return `${artist}|||${name}`;
 }
 
-async function analyze() {
+async function analyze(force = false) {
   const results = document.getElementById('versions-results');
   const btn = document.getElementById('versions-analyze-btn');
   btn.disabled = true;
   keepIds.clear();
 
   try {
-    showProgress('Cargando Liked Songs...', 0, 0);
+    const msg = force ? 'Re-bajando Liked Songs desde Spotify...' : 'Cargando Liked Songs...';
+    showProgress(msg, 0, 0);
     const likes = await getAllLikedTracks(({ loaded, total }) => {
-      showProgress('Cargando Liked Songs...', loaded, total);
-    });
+      showProgress(msg, loaded, total);
+    }, { force });
     hideProgress();
 
     const groups = new Map();

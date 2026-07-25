@@ -1,6 +1,6 @@
-import { getAllLikedTracks, createPlaylist, addTracksToPlaylist, invalidatePlaylistsCache, getBestAvailableLikes } from '../api.js?v=66';
-import { showProgress, hideProgress, promptPlaylistName, escapeHtml } from '../ui/components.js?v=66';
-import { showToast } from '../ui/toast.js?v=66';
+import { getAllLikedTracks, createPlaylist, addTracksToPlaylist, invalidatePlaylistsCache, getBestAvailableLikes } from '../api.js?v=67';
+import { showProgress, hideProgress, promptPlaylistName, escapeHtml } from '../ui/components.js?v=67';
+import { showToast } from '../ui/toast.js?v=67';
 
 const SORT_KEY = 'artist_sort_mode';
 const VALID_SORTS = new Set(['count-desc', 'count-asc', 'name-asc']);
