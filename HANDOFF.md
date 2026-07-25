@@ -5,7 +5,7 @@
 
 ---
 
-## ⭐ ESTADO ACTUAL — 2026-07-25 · v=66 · commit f2c42d2 (LEER ESTO PRIMERO)
+## ⭐ ESTADO ACTUAL — 2026-07-25 · v=67 · commit 07d0236 (LEER ESTO PRIMERO)
 
 **Contexto:** Ian está **migrando a otra cuenta de Claude hoy** (se quedó sin usage). Este handoff + el archivo `NEXT-PROMPT.txt` (en la raíz del repo) son para retomar en la cuenta nueva. Toda la actividad reciente (v=54→v=66) fue sobre la feature **Álbumes escuchados** (`src/js/features/listened.js`, la más grande y activa) + el **historial de reproducción**.
 
@@ -45,10 +45,10 @@
 - **Cerrar sesión**: botón rojo en el footer (antes era una X).
 
 ### ⏳ PENDIENTE (lo que pidió Ian y NO llegué a hacer — arrancá por acá)
-1. **Versiones sigue mostrando lo que borró HOY** (ya no está en sus likes). Su cache de likes quedó viejo (borró en una versión anterior al fix). **Agregar en Versiones un botón "Re-analizar (bajar likes de nuevo)"** que haga `getAllLikedTracks(cb, {force:true})` para traer la lista fresca de Spotify (ahora ya son consistentes). Sin eso, tiene que esperar el TTL de 24h.
-2. **Dedupe / "analizar canciones repetidas": poder elegir Liked Songs como si fuera una playlist.** Hoy el grid de Dedupe (`features/dedupe.js`) solo lista playlists; Ian quiere analizar duplicados dentro de sus **Liked Songs** también. Agregar una "playlist virtual" Liked Songs al selector (usa `getAllLikedTracks`).
-3. **Sync Mirror: que NO pregunte cuál playlist.** Ian: "que directamente diga Analizar, es esa (anothertwo)". Hacer que auto-analice sobre `anothertwo` (ej: llamar `analyze()` en `render()`, o sacar el paso de confirmación de playlist). `src/js/features/sync.js`, `TARGET_PLAYLIST_NAME='anothertwo'`.
-4. **Mejorar el Dashboard con el historial de reproducción** (Ian lo pidió explícito: "ahora que te pasé el historial se podría mejorar el dashboard, ¿qué otros datos se podrían agregar?"). Ideas con el streaming history (210k plays): minutos/horas totales escuchados por año, top artistas/álbumes REALES por tiempo escuchado (no por likes), evolución por año, "tu artista del año", día/hora pico de escucha, décadas más escuchadas, % skips, rachas. El dato está en los crudos de `~/Descargas/...` — habría que agregar un JSON agregado más rico (o extender `listening-history.json`) y charts nuevos en `dashboard.js`.
+1. ✅ HECHO (v=67): Versiones tiene botón **"↻ Re-analizar (bajar likes de nuevo)"** que hace `getAllLikedTracks(cb,{force:true})`. Con eso se van los que borró hoy.
+2. **Dedupe / "analizar canciones repetidas": poder elegir Liked Songs como si fuera una playlist.** Hoy el grid de Dedupe (`features/dedupe.js`) solo lista playlists; Ian quiere analizar duplicados dentro de sus **Liked Songs** también. Agregar una "playlist virtual" Liked Songs al selector (usa `getAllLikedTracks`). ← ESTE QUEDA PENDIENTE.
+3. ✅ HECHO (v=67): Sync Mirror auto-analiza `anothertwo` al entrar (no pregunta nada). `analyze()` se llama en `render()` de `sync.js`.
+4. **Mejorar el Dashboard con el historial de reproducción** ← PRÓXIMO GRANDE. (Ian lo pidió explícito: "ahora que te pasé el historial se podría mejorar el dashboard, ¿qué otros datos se podrían agregar?"). Ideas con el streaming history (210k plays): minutos/horas totales escuchados por año, top artistas/álbumes REALES por tiempo escuchado (no por likes), evolución por año, "tu artista del año", día/hora pico de escucha, décadas más escuchadas, % skips, rachas. El dato está en los crudos de `~/Descargas/...` — habría que agregar un JSON agregado más rico (o extender `listening-history.json`) y charts nuevos en `dashboard.js`.
 5. **"¿Qué más se le puede agregar?"** (Ian preguntó). Ideas propuestas: (a) en "Del historial" ordenar por minutos además de por temas; (b) "álbumes para completar" (tenés X de N tracks); (c) export del registro de escuchados; (d) stats de escuchados (por año/género); (e) marcar un álbum como escuchado directo desde "Del historial" con más contexto. Confirmá con Ian antes de construir.
 
 ### Estado técnico rápido
