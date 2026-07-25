@@ -1,4 +1,4 @@
-import { getAllPlaylistItems, getBestAvailableLikes, addTracksToPlaylist, removeTracksFromPlaylist, getAllUserPlaylists, getSeveralTracks } from '../api.js';
+import { getAllPlaylistItems, getBestAvailableLikes, addTracksToPlaylist, removeTracksFromPlaylist, getAllUserPlaylists } from '../api.js';
 import { idbGetCached, idbSetCached, idbGetTimestamp, idbDel } from '../idb.js';
 import { escapeHtml, confirmModal } from '../ui/components.js';
 import { showToast } from '../ui/toast.js';
@@ -14,15 +14,12 @@ const DUP_DISMISS_KEY = 'listened_dupes_dismissed'; // grupos que el usuario mar
 const QUEUE_PID_KEY = 'listened_queue_playlist_id';   // playlist "para cuando termine los actuales"
 const QUEUE_PNAME_KEY = 'listened_queue_playlist_name';
 const HISTORY_DISMISS_KEY = 'listened_history_dismissed'; // álbumes del historial ocultados
-const HISTORY_VERSION = 1; // subir cuando regenero data/listening-history.json
+const HISTORY_VERSION = 2; // subir cuando regenero data/listening-history.json (v2 = con tapas horneadas)
 const HISTORY_CACHE_KEY = `history_albums_v${HISTORY_VERSION}`;
-const HISTORY_INFO_CACHE_KEY = 'history_track_info_v1'; // trackId -> { img, albId, albType, total }
-const HISTORY_EP_MIN_TRACKS = 6; // un release con menos de esto (o tipo single) se considera single/EP y se filtra
 
 let likesByKey = null; // Map albumKey -> { id, ids:Set, name, artist, year, image, tracks:[{name,artists,uri}] }
-let historyAlbums = null; // array de { a, ar, u, dt, min, y1 } del historial de reproducción (data/ committeado)
+let historyAlbums = null; // array de { a, ar, u, dt, min, y1, img } del historial de reproducción (data/ committeado)
 let historyMin = 5; // mín. de tracks distintos escuchados para sugerir desde el historial
-let histInfo = null; // Map trackId -> { img, albId, albType, total } resuelto vía /tracks (tapas, single, etc.)
 let lastTotalTracks = 0; // para rebuild optimista sin re-bajar la playlist de Spotify
 let lastTs = null;
 
@@ -91,65 +88,11 @@ function trackIdOf(uri) {
   return (uri || '').startsWith('spotify:track:') ? uri.slice('spotify:track:'.length) : null;
 }
 
-// Carga el cache de info de tracks (tapas / single / total) desde IndexedDB.
-async function loadHistInfo() {
-  if (histInfo) return histInfo;
-  histInfo = new Map();
-  try {
-    const cached = await idbGetCached(HISTORY_INFO_CACHE_KEY);
-    if (cached && typeof cached === 'object') for (const [id, v] of Object.entries(cached)) histInfo.set(id, v);
-  } catch { /* ignora */ }
-  return histInfo;
-}
-
-// Resuelve vía /tracks la info que falta de una lista del historial (tapa, tipo, total tracks).
-// Best-effort: si /tracks no responde, se queda con lo que tenga (placeholders, sin filtrar singles).
-async function enrichHistory(entries) {
-  await loadHistInfo();
-  const missing = [];
-  for (const h of entries) {
-    const id = trackIdOf(h.u);
-    if (id && !histInfo.has(id)) missing.push(id);
-  }
-  if (missing.length === 0) return;
-  // Marca provisional 'unknown' para no volver a pedir en loop si /tracks falla o no devuelve el id.
-  for (const id of missing) histInfo.set(id, { img: null, albId: null, albType: null, total: 0, unknown: true });
-  let tracks = [];
-  try { tracks = await getSeveralTracks(missing); }
-  catch { tracks = []; }
-  for (const t of tracks) {
-    if (!t?.id) continue;
-    const imgs = t.album?.images || [];
-    histInfo.set(t.id, {
-      img: imgs.length ? imgs[imgs.length - 1].url : null,
-      albId: t.album?.id || null,
-      albType: t.album?.album_type || null,
-      total: t.album?.total_tracks || 0,
-    });
-  }
-  // Guardamos el cache como objeto plano.
-  try {
-    const obj = {};
-    for (const [id, v] of histInfo) obj[id] = v;
-    await idbSetCached(HISTORY_INFO_CACHE_KEY, obj, 90 * 24 * 60);
-  } catch { /* ignora */ }
-}
-
-// ¿La info resuelta dice que este release es un single / EP chico? (se filtra de las sugerencias)
-function isSingleOrEp(info) {
-  if (!info || info.unknown) return false; // sin info confiable → no filtramos
-  if (info.albType === 'single') return true;
-  if (info.total && info.total < HISTORY_EP_MIN_TRACKS) return true;
-  return false;
-}
-
 // Álbumes que ESCUCHASTE (según el historial: N+ tracks distintos con ≥30s) y NO están registrados.
-// Si ya resolvimos la info del track, además filtramos singles/EPs y excluimos por album.id real.
 function computeHistoryUnregistered(min = historyMin) {
   if (!historyAlbums) return [];
   const dismissed = getDismissedHistory();
   const regKeys = new Set(albums.map(a => albumKey(a.name, a.artist)));
-  const regIds = new Set(albums.map(a => a.id));
   const regUris = new Set();
   for (const a of albums) for (const t of a.tracks) if (t.uri) regUris.add(t.uri);
   const out = [];
@@ -159,11 +102,6 @@ function computeHistoryUnregistered(min = historyMin) {
     if (dismissed.has(k)) continue;
     if (regKeys.has(k)) continue;
     if (h.u && regUris.has(h.u)) continue;
-    const info = histInfo?.get(trackIdOf(h.u));
-    if (info && !info.unknown) {
-      if (isSingleOrEp(info)) continue;              // single/EP → fuera
-      if (info.albId && regIds.has(info.albId)) continue; // ya está en listened (por id real)
-    }
     out.push({ ...h, key: k });
   }
   out.sort((a, b) => b.dt - a.dt || b.min - a.min);
@@ -270,7 +208,6 @@ async function loadAlbums({ force = false } = {}) {
 
     await attachLikes(albums);
     try { await loadHistoryData(); } catch { /* no fatal */ }
-    try { await loadHistInfo(); } catch { /* no fatal */ }
     let ts = null;
     try { ts = await idbGetTimestamp(key); } catch { /* ignora */ }
     buildUI(totalTracks, ts);
@@ -742,24 +679,22 @@ function openUnregistered() {
           const url = e.id ? `https://open.spotify.com/album/${e.id}` : null;
           const uri = e.tracks.find(t => t.uri)?.uri || '';
           return `
-          <label style="display:flex;align-items:center;gap:10px;padding:9px 12px;border-bottom:1px solid var(--color-border);cursor:${uri ? 'pointer' : 'default'}">
+          <label class="pick-row" style="display:flex;align-items:center;gap:11px;padding:9px 12px;border-bottom:1px solid var(--color-border);cursor:${uri ? 'pointer' : 'default'}">
             <input type="checkbox" class="unreg-cb" data-uri="${uri}" data-key="${e.key}" ${uri ? '' : 'disabled'} ${uri && prevChecked.has(uri) ? 'checked' : ''}>
-            ${e.image ? `<img src="${e.image}" loading="lazy" style="width:40px;height:40px;border-radius:var(--radius-sm);object-fit:cover">` : `<div style="width:40px;height:40px;background:var(--color-elevated);border-radius:var(--radius-sm)"></div>`}
+            ${e.image ? `<img src="${e.image}" loading="lazy" class="pick-cover">` : `<div class="pick-cover" style="background:var(--color-elevated);display:flex;align-items:center;justify-content:center;color:var(--color-text-muted);font-size:16px">♪</div>`}
             <div style="flex:1;min-width:0">
-              <div style="font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(e.name)}</div>
+              <div style="font-size:14px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(e.name)}</div>
               <div style="font-size:12px;color:var(--color-text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(e.artist)}${e.year ? ` · ${e.year}` : ''}</div>
             </div>
-            <span style="color:var(--color-accent);font-size:13px;flex-shrink:0">♥ ${e.tracks.length}</span>
-            ${url ? `<a href="${url}" target="_blank" rel="noopener" style="color:var(--color-accent);font-size:12px;flex-shrink:0">abrir</a>` : ''}
-            <button class="unreg-hide" data-key="${e.key}" title="No me interesa, ocultar" style="background:transparent;border:none;color:var(--color-text-muted);font-size:16px;cursor:pointer;padding:2px 6px;flex-shrink:0;line-height:1;border-radius:var(--radius-sm)">✕</button>
+            <span class="pick-pill" style="color:var(--color-accent)">♥ ${e.tracks.length}</span>
+            ${url ? `<a href="${url}" target="_blank" rel="noopener" title="Abrir en Spotify" style="color:var(--color-text-muted);font-size:15px;flex-shrink:0;text-decoration:none">↗</a>` : ''}
+            <button class="unreg-hide pick-x" data-key="${e.key}" title="No me interesa, ocultar">✕</button>
           </label>`;
         }).join('')}
       </div>
     `;
     holder.querySelectorAll('.unreg-cb').forEach(cb => cb.addEventListener('change', updateAddBtn));
     holder.querySelectorAll('.unreg-hide').forEach(btn => {
-      btn.addEventListener('mouseenter', () => { btn.style.color = 'var(--color-error)'; btn.style.background = 'var(--color-elevated)'; });
-      btn.addEventListener('mouseleave', () => { btn.style.color = 'var(--color-text-muted)'; btn.style.background = 'transparent'; });
       btn.addEventListener('click', ev => {
         ev.preventDefault();
         ev.stopPropagation();
@@ -1147,7 +1082,6 @@ function openHistory() {
         <span style="font-size:12px;color:var(--color-text-muted)">Mín. de temas distintos escuchados:</span>
         ${[3, 4, 5, 6, 8, 10, 12].map(n => `<button class="btn ${n === historyMin ? 'btn-primary' : 'btn-secondary'} btn-sm hist-th" data-th="${n}">${n}+</button>`).join('')}
       </div>
-      <div id="hist-enrich-note" style="font-size:11px;color:var(--color-text-muted);margin-bottom:4px;flex-shrink:0"></div>
       <div id="hist-selall" style="flex-shrink:0;margin-bottom:6px"></div>
       <div id="hist-list" class="picker-scroll"></div>
       <div id="hist-hidden-note" style="font-size:12px;color:var(--color-text-muted);margin-top:8px;flex-shrink:0"></div>
@@ -1161,7 +1095,6 @@ function openHistory() {
 
   const addBtn = overlay.querySelector('#hist-add');
   let histRendered = [];
-  let enriching = false;
   const updateAddBtn = () => {
     const n = overlay.querySelectorAll('.hist-cb:checked').length;
     addBtn.textContent = `Agregar a escuchados (${n})`;
@@ -1195,16 +1128,6 @@ function openHistory() {
     histRendered = list;
     const holder = overlay.querySelector('#hist-list');
     const selall = overlay.querySelector('#hist-selall');
-    const enrichNote = overlay.querySelector('#hist-enrich-note');
-    // Resolvemos tapas / single / total de los que falten (una vez; queda cacheado).
-    const needInfo = list.some(h => trackIdOf(h.u) && !histInfo?.has(trackIdOf(h.u)));
-    if (needInfo && !enriching) {
-      enriching = true;
-      if (enrichNote) enrichNote.textContent = '⏳ Cargando tapas y filtrando singles…';
-      enrichHistory(list).finally(() => { enriching = false; if (enrichNote) enrichNote.textContent = ''; renderList(); });
-    } else if (enrichNote && !enriching) {
-      enrichNote.textContent = '';
-    }
     if (list.length === 0) {
       selall.innerHTML = '';
       holder.innerHTML = `<div style="color:var(--color-text-muted);font-size:13px;padding:8px 0">No hay álbumes con ${historyMin}+ temas escuchados fuera de tu registro.</div>`;
@@ -1217,34 +1140,33 @@ function openHistory() {
         <input type="checkbox" id="hist-all"> Seleccionar todos (${list.length} álbumes)
       </label>`;
     holder.innerHTML = `
-      <div style="border:1px solid var(--color-border);border-radius:var(--radius-sm)">
-        ${list.map(h => {
+      <div style="border:1px solid var(--color-border);border-radius:var(--radius-md);overflow:hidden">
+        ${list.map((h, i) => {
           const uri = h.u || '';
           const tid = trackIdOf(uri);
-          const img = histInfo?.get(tid)?.img || likesByKey?.get(h.key)?.image || null;
+          const img = h.img || likesByKey?.get(h.key)?.image || null;
           const url = tid ? `https://open.spotify.com/track/${tid}` : null;
           return `
-          <label style="display:flex;align-items:center;gap:10px;padding:9px 12px;border-bottom:1px solid var(--color-border);cursor:${uri ? 'pointer' : 'default'}">
+          <label class="pick-row" style="display:flex;align-items:center;gap:11px;padding:9px 12px;border-bottom:1px solid var(--color-border);cursor:${uri ? 'pointer' : 'default'}">
             <input type="checkbox" class="hist-cb" data-uri="${uri}" data-key="${h.key}" ${uri ? '' : 'disabled'} ${uri && prevChecked.has(uri) ? 'checked' : ''}>
-            ${img ? `<img src="${img}" loading="lazy" style="width:40px;height:40px;border-radius:var(--radius-sm);object-fit:cover">` : `<div style="width:40px;height:40px;background:var(--color-elevated);border-radius:var(--radius-sm);display:flex;align-items:center;justify-content:center;color:var(--color-text-muted);font-size:16px">♪</div>`}
+            <span style="width:20px;text-align:right;font-size:12px;color:var(--color-text-muted);flex-shrink:0;font-variant-numeric:tabular-nums">${i + 1}</span>
+            ${img ? `<img src="${img}" loading="lazy" class="pick-cover">` : `<div class="pick-cover" style="background:var(--color-elevated);display:flex;align-items:center;justify-content:center;color:var(--color-text-muted);font-size:16px">♪</div>`}
             <div style="flex:1;min-width:0">
-              <div style="font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(h.a)}</div>
-              <div style="font-size:12px;color:var(--color-text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(h.ar)}${h.y1 ? ` · escuchado ${h.y1}` : ''}</div>
+              <div style="font-size:14px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(h.a)}</div>
+              <div style="font-size:12px;color:var(--color-text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(h.ar)}${h.y1 ? ` · ${h.y1}` : ''}</div>
             </div>
-            <div style="text-align:right;flex-shrink:0">
-              <div style="color:var(--color-accent);font-size:13px">${h.dt} temas</div>
-              <div style="color:var(--color-text-muted);font-size:11px">${h.min.toLocaleString()} min</div>
+            <div style="display:flex;flex-direction:column;align-items:flex-end;gap:2px;flex-shrink:0">
+              <span class="pick-pill">🎵 ${h.dt}</span>
+              <span style="color:var(--color-text-muted);font-size:11px;font-variant-numeric:tabular-nums">${h.min.toLocaleString()} min</span>
             </div>
-            ${url ? `<a href="${url}" target="_blank" rel="noopener" style="color:var(--color-accent);font-size:12px;flex-shrink:0">abrir</a>` : ''}
-            <button class="hist-hide" data-key="${h.key}" title="No me interesa, ocultar" style="background:transparent;border:none;color:var(--color-text-muted);font-size:16px;cursor:pointer;padding:2px 6px;flex-shrink:0;line-height:1;border-radius:var(--radius-sm)">✕</button>
+            ${url ? `<a href="${url}" target="_blank" rel="noopener" title="Abrir en Spotify" style="color:var(--color-text-muted);font-size:15px;flex-shrink:0;text-decoration:none">↗</a>` : ''}
+            <button class="hist-hide pick-x" data-key="${h.key}" title="No me interesa, ocultar">✕</button>
           </label>`;
         }).join('')}
       </div>
     `;
     holder.querySelectorAll('.hist-cb').forEach(cb => cb.addEventListener('change', updateAddBtn));
     holder.querySelectorAll('.hist-hide').forEach(btn => {
-      btn.addEventListener('mouseenter', () => { btn.style.color = 'var(--color-error)'; btn.style.background = 'var(--color-elevated)'; });
-      btn.addEventListener('mouseleave', () => { btn.style.color = 'var(--color-text-muted)'; btn.style.background = 'transparent'; });
       btn.addEventListener('click', ev => {
         ev.preventDefault();
         ev.stopPropagation();
@@ -1290,10 +1212,10 @@ function openHistory() {
       await addTracksToPlaylist(playlistInfo.id, uris);
       showToast(`${uris.length} álbum${uris.length === 1 ? '' : 'es'} agregado${uris.length === 1 ? '' : 's'} a escuchados`, 'success');
       close();
-      await addAlbumsLocally(picked.map(h => {
-        const info = histInfo?.get(trackIdOf(h.u));
-        return { id: info?.albId || null, name: h.a, artist: h.ar, year: h.y1 ? String(h.y1) : '', image: info?.img || likesByKey?.get(h.key)?.image || null, uri: h.u };
-      }));
+      await addAlbumsLocally(picked.map(h => ({
+        id: null, name: h.a, artist: h.ar, year: h.y1 ? String(h.y1) : '',
+        image: h.img || likesByKey?.get(h.key)?.image || null, uri: h.u,
+      })));
     } catch (err) {
       showToast('Error al agregar: ' + err.message, 'error');
       addBtn.disabled = false;
