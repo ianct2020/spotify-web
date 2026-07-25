@@ -231,9 +231,6 @@ function showApp(profile) {
           <a class="nav-link" data-route="dedupe" href="#dedupe">
             <span class="nav-link-icon">&#9851;</span> Dedupe
           </a>
-          <a class="nav-link" data-route="dupalbums" href="#dupalbums">
-            <span class="nav-link-icon">&#9834;</span> Álbumes repetidos
-          </a>
           <a class="nav-link" data-route="zombies" href="#zombies">
             <span class="nav-link-icon">&#9760;</span> Zombis
           </a>
@@ -352,7 +349,6 @@ const HOME_SECTIONS = [
     items: [
       { hash: 'sync', icon: '&#8644;', name: 'Sync Mirror', desc: 'Una playlist como copia exacta de tus Liked Songs.' },
       { hash: 'dedupe', icon: '&#9851;', name: 'Dedupe', desc: 'Eliminá tracks duplicados dentro de cada playlist.' },
-      { hash: 'dupalbums', icon: '&#9834;', name: 'Álbumes repetidos', desc: 'Álbumes con varios tracks distintos en una playlist.' },
       { hash: 'zombies', icon: '&#9760;', name: 'Zombis', desc: 'Tracks eliminados del catálogo de Spotify.' },
       { hash: 'versions', icon: '&#9842;', name: 'Versiones', desc: 'Mismo tema en distintos álbumes (remaster, live, etc.).' },
     ],

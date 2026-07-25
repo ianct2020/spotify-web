@@ -4,6 +4,8 @@ import { showToast } from '../ui/toast.js';
 
 const keepIds = new Set();
 let allClusters = [];
+const SHOWN_STEP = 50;
+let shownCount = SHOWN_STEP;
 
 export function render(container) {
   container.innerHTML = `
@@ -96,19 +98,11 @@ async function analyze() {
         </div>
       </div>
 
-      <div id="versions-clusters">
-        ${clusters.slice(0, 50).map((cluster, idx) => renderCluster(cluster, idx)).join('')}
-        ${clusters.length > 50 ? `<div style="padding:16px;color:var(--color-text-secondary)">...y ${clusters.length - 50} grupos más</div>` : ''}
-      </div>
+      <div id="versions-clusters"></div>
     `;
 
-    results.querySelectorAll('.keep-check').forEach(box => {
-      box.addEventListener('change', () => {
-        if (box.checked) keepIds.add(box.dataset.trackId);
-        else keepIds.delete(box.dataset.trackId);
-        updateBatchBar();
-      });
-    });
+    shownCount = SHOWN_STEP;
+    renderClusterList();
 
     document.getElementById('batch-clear-btn').onclick = () => {
       keepIds.clear();
@@ -125,6 +119,26 @@ async function analyze() {
   } finally {
     btn.disabled = false;
   }
+}
+
+function renderClusterList() {
+  const holder = document.getElementById('versions-clusters');
+  if (!holder) return;
+  const shown = allClusters.slice(0, shownCount);
+  const rest = allClusters.length - shown.length;
+  holder.innerHTML = `
+    ${shown.map((cluster, idx) => renderCluster(cluster, idx)).join('')}
+    ${rest > 0 ? `<div style="text-align:center;padding:16px"><button class="btn btn-secondary" id="versions-more-btn">Ver ${Math.min(SHOWN_STEP, rest)} grupos más (${rest} restantes)</button></div>` : ''}
+  `;
+  holder.querySelectorAll('.keep-check').forEach(box => {
+    box.addEventListener('change', () => {
+      if (box.checked) keepIds.add(box.dataset.trackId);
+      else keepIds.delete(box.dataset.trackId);
+      updateBatchBar();
+    });
+  });
+  const moreBtn = document.getElementById('versions-more-btn');
+  if (moreBtn) moreBtn.onclick = () => { shownCount += SHOWN_STEP; renderClusterList(); };
 }
 
 function computeRemovals() {
@@ -218,7 +232,7 @@ function renderCluster(cluster, idx) {
           const popBadge = `<span class="badge badge-accent" style="margin-left:auto;flex-shrink:0">pop ${t.popularity || 0}</span>`;
           const checkbox = `
             <label class="keep-check-wrap" title="Marcar esta versión para quedártela">
-              <input type="checkbox" class="keep-check" data-track-id="${t.id}">
+              <input type="checkbox" class="keep-check" data-track-id="${t.id}" ${keepIds.has(t.id) ? 'checked' : ''}>
               <span class="keep-check-label">quedarme</span>
             </label>
           `;

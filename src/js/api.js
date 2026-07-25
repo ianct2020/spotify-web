@@ -677,6 +677,23 @@ async function removePlaylistItemsAtPositions(playlistId, itemsWithPositions) {
   }
 }
 
+// Saca ids del cache de likes SIN re-bajar todo (evita el full-refetch y que por consistencia
+// eventual de Spotify reaparezcan los recién borrados).
+async function removeFromLikesCache(ids) {
+  const idSet = new Set(ids);
+  try {
+    const cached = await idbGetCached(LIKES_CACHE_KEY);
+    if (Array.isArray(cached)) {
+      const filtered = cached.filter(it => !idSet.has(it?.track?.id));
+      await idbSetCached(LIKES_CACHE_KEY, filtered, CACHE_TTL_MIN);
+    }
+  } catch (e) {
+    console.warn('removeFromLikesCache falló, invalidando cache entero:', e.message);
+    invalidateLikesCache();
+  }
+  cacheClear(LIKES_CACHE_KEY); // limpia copia legacy en localStorage si existiera
+}
+
 async function removeLikedTracks(ids) {
   const chunks = [];
   for (let i = 0; i < ids.length; i += 40) {
@@ -688,7 +705,7 @@ async function removeLikedTracks(ids) {
       method: 'DELETE',
     });
   }
-  invalidateLikesCache();
+  await removeFromLikesCache(ids);
 }
 
 async function createPlaylist(name, description = '', isPublic = false) {
