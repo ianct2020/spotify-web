@@ -1,24 +1,24 @@
-import { isLoggedIn, loginWithSpotify, logout } from './auth.js?v=64';
-import { getUserProfile, spotifyFetch, tryAutoLoadUserBackup } from './api.js?v=64';
-import { getValidToken } from './auth.js?v=64';
-import { cacheClearAll } from './storage.js?v=64';
-import { idbClearAll } from './idb.js?v=64';
-import { registerRoute, initRouter, navigate } from './router.js?v=64';
-import { showToast } from './ui/toast.js?v=64';
+import { isLoggedIn, loginWithSpotify, logout } from './auth.js?v=65';
+import { getUserProfile, spotifyFetch, tryAutoLoadUserBackup } from './api.js?v=65';
+import { getValidToken } from './auth.js?v=65';
+import { cacheClearAll } from './storage.js?v=65';
+import { idbClearAll } from './idb.js?v=65';
+import { registerRoute, initRouter, navigate } from './router.js?v=65';
+import { showToast } from './ui/toast.js?v=65';
 
-import { render as renderSync } from './features/sync.js?v=64';
-import { render as renderDedupe } from './features/dedupe.js?v=64';
-import { render as renderDupalbums } from './features/duplicate-albums.js?v=64';
-import { render as renderZombies } from './features/zombies.js?v=64';
-import { render as renderVersions } from './features/versions.js?v=64';
-import { render as renderDashboard } from './features/dashboard.js?v=64';
-import { render as renderSmart } from './features/smart.js?v=64';
-import { render as renderSimilar } from './features/similar-artists.js?v=64';
-import { render as renderRabbit } from './features/rabbit-hole.js?v=64';
-import { render as renderByGenre } from './features/by-genre.js?v=64';
-import { render as renderByArtist } from './features/by-artist.js?v=64';
-import { render as renderRecs } from './features/recommendations.js?v=64';
-import { render as renderListened } from './features/listened.js?v=64';
+import { render as renderSync } from './features/sync.js?v=65';
+import { render as renderDedupe } from './features/dedupe.js?v=65';
+import { render as renderDupalbums } from './features/duplicate-albums.js?v=65';
+import { render as renderZombies } from './features/zombies.js?v=65';
+import { render as renderVersions } from './features/versions.js?v=65';
+import { render as renderDashboard } from './features/dashboard.js?v=65';
+import { render as renderSmart } from './features/smart.js?v=65';
+import { render as renderSimilar } from './features/similar-artists.js?v=65';
+import { render as renderRabbit } from './features/rabbit-hole.js?v=65';
+import { render as renderByGenre } from './features/by-genre.js?v=65';
+import { render as renderByArtist } from './features/by-artist.js?v=65';
+import { render as renderRecs } from './features/recommendations.js?v=65';
+import { render as renderListened } from './features/listened.js?v=65';
 
 async function testConnection() {
   const token = await getValidToken();
@@ -231,9 +231,6 @@ function showApp(profile) {
           <a class="nav-link" data-route="dedupe" href="#dedupe">
             <span class="nav-link-icon">&#9851;</span> Dedupe
           </a>
-          <a class="nav-link" data-route="dupalbums" href="#dupalbums">
-            <span class="nav-link-icon">&#9834;</span> Álbumes repetidos
-          </a>
           <a class="nav-link" data-route="zombies" href="#zombies">
             <span class="nav-link-icon">&#9760;</span> Zombis
           </a>
@@ -352,7 +349,6 @@ const HOME_SECTIONS = [
     items: [
       { hash: 'sync', icon: '&#8644;', name: 'Sync Mirror', desc: 'Una playlist como copia exacta de tus Liked Songs.' },
       { hash: 'dedupe', icon: '&#9851;', name: 'Dedupe', desc: 'Eliminá tracks duplicados dentro de cada playlist.' },
-      { hash: 'dupalbums', icon: '&#9834;', name: 'Álbumes repetidos', desc: 'Álbumes con varios tracks distintos en una playlist.' },
       { hash: 'zombies', icon: '&#9760;', name: 'Zombis', desc: 'Tracks eliminados del catálogo de Spotify.' },
       { hash: 'versions', icon: '&#9842;', name: 'Versiones', desc: 'Mismo tema en distintos álbumes (remaster, live, etc.).' },
     ],

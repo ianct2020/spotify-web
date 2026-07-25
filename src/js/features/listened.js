@@ -107,6 +107,10 @@ function computeHistoryUnregistered(min = historyMin) {
   out.sort((a, b) => b.dt - a.dt || b.min - a.min);
   return out;
 }
+// Álbumes con MÁS de un track en la playlist (querés 1 track por álbum). Ordenados por cantidad.
+function computeRepeatedAlbums() {
+  return albums.filter(a => a.tracks.length > 1).sort((x, y) => y.tracks.length - x.tracks.length);
+}
 // Actualiza los números de los botones del header sin tener que recargar todo.
 function refreshHeaderCounts() {
   const u = document.getElementById('listened-unreg-btn');
@@ -115,6 +119,8 @@ function refreshHeaderCounts() {
   if (d) d.textContent = `💿 Duplicados (${computeEditionDupes().length})`;
   const h = document.getElementById('listened-history-btn');
   if (h) h.textContent = `📊 Del historial (${computeHistoryUnregistered().length})`;
+  const rp = document.getElementById('listened-repeated-btn');
+  if (rp) rp.textContent = `🎵 Repetidos (${computeRepeatedAlbums().length})`;
 }
 function getSortMode() {
   const v = localStorage.getItem(SORT_KEY);
@@ -427,6 +433,7 @@ function buildUI(totalTracks, ts) {
       <div style="display:flex;gap:8px;flex-wrap:wrap">
         <button class="btn btn-secondary btn-sm" id="listened-unreg-btn" title="Álbumes con varias canciones tuyas en likes que no están en tu registro (ajustás el mínimo adentro)">🎧 Sin registrar (${unregistered.length})</button>
         <button class="btn btn-secondary btn-sm" id="listened-dupes-btn" title="Álbumes registrados dos veces (deluxe Y normal): sacás la sobrante y queda una sola versión">💿 Duplicados (${dupes.length})</button>
+        <button class="btn btn-secondary btn-sm" id="listened-repeated-btn" title="Álbumes con varios tracks en la playlist: dejás 1 track por álbum y sacás los demás">🎵 Repetidos (${computeRepeatedAlbums().length})</button>
         <button class="btn btn-secondary btn-sm" id="listened-history-btn" title="Álbumes que ESCUCHASTE de verdad (según tu historial de reproducción) y no tenés registrados">📊 Del historial (${computeHistoryUnregistered().length})</button>
         <button class="btn btn-secondary btn-sm" id="listened-queue-btn" title="Saca de tu playlist-cola (ej: para cuando termine los actuales) los álbumes que ya escuchaste">🎯 Limpiar cola</button>
         <button class="btn btn-secondary btn-sm" id="listened-refresh-btn" title="Vuelve a leer la playlist desde Spotify (si no, se refresca solo una vez por día)">Actualizar</button>
@@ -469,6 +476,9 @@ function buildUI(totalTracks, ts) {
 
   const dupesBtn = document.getElementById('listened-dupes-btn');
   if (dupesBtn) dupesBtn.onclick = () => openDupes();
+
+  const repeatedBtn = document.getElementById('listened-repeated-btn');
+  if (repeatedBtn) repeatedBtn.onclick = () => openRepeated();
 
   document.getElementById('listened-change-btn').onclick = () => openListenedAlbumsPicker({
     onSelect: () => { playlistInfo = getListenedPlaylist(); loadAlbums(); },
@@ -1269,4 +1279,106 @@ function openHiddenManager({ title, keys, lookup, onRestore, onChange }) {
     });
   };
   render();
+}
+
+// Modal: álbumes con varios tracks en la playlist → dejar 1 por álbum, sacar los sobrantes.
+// (Antes era "Álbumes repetidos" en el sidebar; ahora vive acá dentro.)
+function openRepeated() {
+  const cover = (a) => a.cover
+    ? `<img src="${a.cover}" loading="lazy" class="pick-cover">`
+    : `<div class="pick-cover" style="background:var(--color-elevated);display:flex;align-items:center;justify-content:center;color:var(--color-text-muted);font-size:16px">♪</div>`;
+
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  overlay.innerHTML = `
+    <div class="modal modal-picker" style="max-width:560px">
+      <h2 style="margin-bottom:4px">🎵 Álbumes repetidos (varios tracks)</h2>
+      <p style="color:var(--color-text-secondary);font-size:13px;margin-bottom:10px;flex-shrink:0">
+        Álbumes de los que tenés <strong>más de un track</strong> en <strong>${escapeHtml(playlistInfo.name)}</strong>. Para tener <strong>1 track por álbum</strong>, dejo el primero y saco el resto.
+      </p>
+      <div id="rep-selall" style="flex-shrink:0;margin-bottom:6px"></div>
+      <div id="rep-list" class="picker-scroll"></div>
+      <div class="modal-actions" style="margin-top:12px">
+        <button class="btn btn-danger" id="rep-del" disabled>Dejar 1 por álbum (0)</button>
+        <button class="btn btn-secondary" id="rep-close">Cerrar</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+  const delBtn = overlay.querySelector('#rep-del');
+  const close = () => overlay.remove();
+  overlay.querySelector('#rep-close').onclick = close;
+  overlay.onclick = (e) => { if (e.target === overlay) close(); };
+
+  const update = () => {
+    const checked = [...overlay.querySelectorAll('.rep-cb:checked')];
+    const extra = checked.reduce((n, cb) => n + (parseInt(cb.dataset.extra) || 0), 0);
+    delBtn.textContent = `Dejar 1 por álbum (sacar ${extra})`;
+    delBtn.disabled = extra === 0;
+  };
+
+  const render = () => {
+    const list = computeRepeatedAlbums();
+    const holder = overlay.querySelector('#rep-list');
+    const selall = overlay.querySelector('#rep-selall');
+    if (list.length === 0) {
+      selall.innerHTML = '';
+      holder.innerHTML = `<div style="color:var(--color-text-muted);font-size:13px;padding:12px">Ningún álbum tiene más de un track. 👌 Ya tenés 1 por álbum.</div>`;
+      update();
+      return;
+    }
+    selall.innerHTML = `
+      <label style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--color-text-muted);cursor:pointer">
+        <input type="checkbox" id="rep-all" checked> Seleccionar todos (${list.length} álbumes)
+      </label>`;
+    holder.innerHTML = `
+      <div style="border:1px solid var(--color-border);border-radius:var(--radius-md);overflow:hidden">
+        ${list.map(a => `
+          <label class="pick-row" style="display:flex;align-items:center;gap:11px;padding:9px 12px;border-bottom:1px solid var(--color-border);cursor:pointer">
+            <input type="checkbox" class="rep-cb" data-albid="${a.id}" data-extra="${a.tracks.length - 1}" checked>
+            ${cover(a)}
+            <div style="flex:1;min-width:0">
+              <div style="font-size:14px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(a.name)}</div>
+              <div style="font-size:12px;color:var(--color-text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(a.artist)}${a.year ? ` · ${a.year}` : ''}</div>
+            </div>
+            <span class="pick-pill">${a.tracks.length} → 1</span>
+          </label>`).join('')}
+      </div>`;
+    holder.querySelectorAll('.rep-cb').forEach(cb => cb.addEventListener('change', update));
+    const allCb = overlay.querySelector('#rep-all');
+    if (allCb) allCb.addEventListener('change', () => {
+      holder.querySelectorAll('.rep-cb').forEach(cb => { cb.checked = allCb.checked; });
+      update();
+    });
+    update();
+  };
+  render();
+
+  delBtn.onclick = async () => {
+    const checked = [...overlay.querySelectorAll('.rep-cb:checked')];
+    const ids = new Set(checked.map(cb => cb.dataset.albid));
+    const selectedAlbums = albums.filter(a => ids.has(a.id) && a.tracks.length > 1);
+    const uris = selectedAlbums.flatMap(a => a.tracks.slice(1).map(t => t.uri).filter(Boolean));
+    if (uris.length === 0) return;
+    const ok = await confirmModal(
+      'Dejar 1 track por álbum',
+      `Se van a <strong>sacar ${uris.length} tracks sobrantes</strong> de ${selectedAlbums.length} álbum${selectedAlbums.length === 1 ? '' : 'es'} en "${escapeHtml(playlistInfo.name)}", dejando 1 track por álbum. Esto modifica tu playlist en Spotify. ¿Seguro?`,
+      'Sacar'
+    );
+    if (!ok) return;
+    delBtn.disabled = true;
+    delBtn.textContent = 'Sacando...';
+    try {
+      await removeTracksFromPlaylist(playlistInfo.id, uris);
+      showToast(`${uris.length} tracks sobrantes sacados`, 'success');
+      close();
+      let removed = 0;
+      for (const a of selectedAlbums) { removed += a.tracks.length - 1; a.tracks = [a.tracks[0]]; }
+      await persistAndRebuild(Math.max(0, lastTotalTracks - removed));
+    } catch (err) {
+      showToast('Error al sacar: ' + err.message, 'error');
+      delBtn.disabled = false;
+      update();
+    }
+  };
 }

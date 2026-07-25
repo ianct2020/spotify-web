@@ -1,7 +1,7 @@
-import { getValidToken, refreshAccessToken } from './auth.js?v=64';
-import { cacheGet, cacheGetRaw, cacheGetTimestamp, cacheSet, cacheClear } from './storage.js?v=64';
-import { idbGet, idbSet, idbDel, idbGetCached, idbGetCachedRaw, idbGetTimestamp, idbSetCached, idbAvailable } from './idb.js?v=64';
-import { showToast } from './ui/toast.js?v=64';
+import { getValidToken, refreshAccessToken } from './auth.js?v=65';
+import { cacheGet, cacheGetRaw, cacheGetTimestamp, cacheSet, cacheClear } from './storage.js?v=65';
+import { idbGet, idbSet, idbDel, idbGetCached, idbGetCachedRaw, idbGetTimestamp, idbSetCached, idbAvailable } from './idb.js?v=65';
+import { showToast } from './ui/toast.js?v=65';
 
 const BASE = 'https://api.spotify.com/v1';
 const MIN_RETRY_WAIT = 5000;
@@ -677,6 +677,23 @@ async function removePlaylistItemsAtPositions(playlistId, itemsWithPositions) {
   }
 }
 
+// Saca ids del cache de likes SIN re-bajar todo (evita el full-refetch y que por consistencia
+// eventual de Spotify reaparezcan los recién borrados).
+async function removeFromLikesCache(ids) {
+  const idSet = new Set(ids);
+  try {
+    const cached = await idbGetCached(LIKES_CACHE_KEY);
+    if (Array.isArray(cached)) {
+      const filtered = cached.filter(it => !idSet.has(it?.track?.id));
+      await idbSetCached(LIKES_CACHE_KEY, filtered, CACHE_TTL_MIN);
+    }
+  } catch (e) {
+    console.warn('removeFromLikesCache falló, invalidando cache entero:', e.message);
+    invalidateLikesCache();
+  }
+  cacheClear(LIKES_CACHE_KEY); // limpia copia legacy en localStorage si existiera
+}
+
 async function removeLikedTracks(ids) {
   const chunks = [];
   for (let i = 0; i < ids.length; i += 40) {
@@ -688,7 +705,7 @@ async function removeLikedTracks(ids) {
       method: 'DELETE',
     });
   }
-  invalidateLikesCache();
+  await removeFromLikesCache(ids);
 }
 
 async function createPlaylist(name, description = '', isPublic = false) {
