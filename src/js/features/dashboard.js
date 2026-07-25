@@ -513,7 +513,7 @@ function renderDashboard(container, stats) {
         <canvas id="chart-decades"></canvas>
       </div>
       <div class="card dash-chart-card">
-        <h3>Top 15 artistas</h3>
+        <h3>Top 15 artistas <span style="font-weight:400;color:var(--color-text-muted);font-size:13px">· nº = canciones tuyas en likes</span></h3>
         <canvas id="chart-artists"></canvas>
       </div>
       <div class="card dash-chart-card">
@@ -573,8 +573,12 @@ async function hydrateListenedAlbumsCard() {
     return;
   }
 
+  const goToListened = () => { location.hash = '#listened'; };
+
   valueEl.textContent = '…';
-  labelEl.textContent = escapeHtml(playlistName || 'Álbumes escuchados');
+  labelEl.textContent = 'Álbumes escuchados';
+  card.onclick = goToListened;
+  card.title = 'Ir a Álbumes escuchados';
   try {
     const items = await getAllPlaylistItems(playlistId);
     const albumIds = new Set();
@@ -584,13 +588,13 @@ async function hydrateListenedAlbumsCard() {
     }
     valueEl.textContent = albumIds.size.toLocaleString();
     valueEl.style.fontSize = '';
-    labelEl.innerHTML = `${escapeHtml(playlistName || 'Álbumes escuchados')} <span style="opacity:0.6">· ${items.length.toLocaleString()} tracks</span>`;
-    card.onclick = openPicker;
-    card.title = 'Click para cambiar la playlist';
+    labelEl.textContent = 'Álbumes escuchados';
+    card.onclick = goToListened;
+    card.title = 'Ir a Álbumes escuchados';
   } catch (e) {
     valueEl.textContent = '!';
     labelEl.textContent = `Error: ${e.message.slice(0, 40)}`;
-    card.onclick = openPicker;
+    card.onclick = goToListened;
   }
 }
 
@@ -664,6 +668,10 @@ function buildCharts(stats) {
       indexAxis: 'y',
       scales: {
         ...CHART_DEFAULTS.scales,
+        x: {
+          ...CHART_DEFAULTS.scales.x,
+          title: { display: true, text: 'Canciones tuyas en Liked Songs', color: '#8888A0', font: { family: 'Inter', size: 11 } },
+        },
         y: {
           ...CHART_DEFAULTS.scales.y,
           ticks: { ...CHART_DEFAULTS.scales.y.ticks, font: { family: 'Inter', size: 10 } },

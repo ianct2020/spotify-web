@@ -81,7 +81,7 @@ function showRateLimitScreen() {
         tick();
       } else if (res.status === 401) {
         statusEl.textContent = 'Token vencido, re-logueando...';
-        localStorage.clear();
+        logout(); // solo borra las keys de auth (NO tus ocultos/config/prefs)
         location.reload();
       } else if (res.ok) {
         statusEl.textContent = 'Conectado, cargando...';
@@ -145,8 +145,8 @@ function showLogin() {
   document.getElementById('app').innerHTML = `
     <div class="login-screen">
       <div class="login-card">
-        <img class="login-icon" src="assets/favicon.svg" alt="spotify-tools">
-        <h1>spotify-tools</h1>
+        <img class="login-icon" src="assets/favicon.svg" alt="Fonoteca">
+        <h1>Fonoteca</h1>
         <p>Administrá tu biblioteca de Spotify: sync, deduplicación, likes huérfanas, tracks zombi, y más.</p>
         <button class="btn btn-primary login-btn" id="login-btn">Conectar con Spotify</button>
 
@@ -187,7 +187,7 @@ function showApp(profile) {
     <aside class="sidebar" id="sidebar">
       <a class="sidebar-header" href="#home" title="Ir al inicio" style="text-decoration:none;color:inherit;cursor:pointer">
         <img class="sidebar-logo" src="assets/favicon.svg" alt="">
-        <span class="sidebar-title">spotify-tools</span>
+        <span class="sidebar-title">Fonoteca</span>
       </a>
       <nav class="sidebar-nav">
         <div class="sidebar-section">
@@ -243,9 +243,9 @@ function showApp(profile) {
         <div class="sidebar-user">
           ${avatarHtml}
           <span class="sidebar-username">${profile.display_name || profile.id}</span>
-          <button class="sidebar-logout" id="logout-btn" title="Cerrar sesión">&#10005;</button>
         </div>
         <button class="btn btn-secondary btn-sm" id="refresh-all-btn" style="width:100%;margin-top:10px;justify-content:center;font-size:12px">Limpiar cache</button>
+        <button class="btn btn-danger btn-sm" id="logout-btn" style="width:100%;margin-top:8px;justify-content:center;font-size:12px">Cerrar sesión</button>
       </div>
     </aside>
     <main class="main" id="main-content"></main>
