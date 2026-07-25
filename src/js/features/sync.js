@@ -25,6 +25,8 @@ export function render(container) {
   `;
 
   document.getElementById('sync-analyze-btn').onclick = analyze;
+  // Auto-analiza "anothertwo" directo, sin que Ian tenga que apretar nada (pedido de Ian).
+  analyze();
 }
 
 async function analyze() {
