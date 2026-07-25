@@ -606,6 +606,24 @@ async function getAllPlaylistItems(playlistId, onProgress) {
   });
 }
 
+// Trae varios tracks por id (chunks de 50). Devuelve array de track objects (o null por id fallido).
+// Best-effort: si un chunk falla, esa tanda vuelve como nulls y seguimos.
+async function getSeveralTracks(ids) {
+  const clean = [...new Set((ids || []).filter(Boolean))];
+  const out = [];
+  for (let i = 0; i < clean.length; i += 50) {
+    const chunk = clean.slice(i, i + 50);
+    try {
+      const data = await spotifyFetch(`/tracks?ids=${chunk.join(',')}`);
+      out.push(...(data?.tracks || chunk.map(() => null)));
+    } catch (e) {
+      console.warn('getSeveralTracks chunk falló:', e.message);
+      out.push(...chunk.map(() => null));
+    }
+  }
+  return out;
+}
+
 async function getUserProfile() {
   return spotifyFetch('/me');
 }
@@ -698,6 +716,7 @@ export {
   getAllLikedTracks,
   getAllUserPlaylists,
   getAllPlaylistItems,
+  getSeveralTracks,
   getUserProfile,
   getCurrentUserId,
   addTracksToPlaylist,
