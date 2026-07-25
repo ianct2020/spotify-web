@@ -1,6 +1,60 @@
 # HANDOFF — spotify-web
 
 > **Si sos un Claude nuevo entrando al proyecto: leé este archivo entero antes de hacer cualquier cosa. Después leé `CLAUDE.md` para las notas técnicas de la API de Spotify.**
+> **La app se llama ahora "Fonoteca" (antes "spotify-tools"). El repo/carpeta sigue siendo `spotify-web`.**
+
+---
+
+## ⭐ ESTADO ACTUAL — 2026-07-25 · v=66 · commit f2c42d2 (LEER ESTO PRIMERO)
+
+**Contexto:** Ian está **migrando a otra cuenta de Claude hoy** (se quedó sin usage). Este handoff + el archivo `NEXT-PROMPT.txt` (en la raíz del repo) son para retomar en la cuenta nueva. Toda la actividad reciente (v=54→v=66) fue sobre la feature **Álbumes escuchados** (`src/js/features/listened.js`, la más grande y activa) + el **historial de reproducción**.
+
+### Cómo trabajar (workflow de Ian, respetalo)
+- Ian **testea en vivo** en `https://ianct2020.github.io/spotify-web/` haciendo **Ctrl+Shift+R** (GitHub Pages cachea el `index.html`, así que un reload normal sirve el JS viejo → SIEMPRE hay que hard-refresh para ver un `?v=` nuevo).
+- Flujo de deploy: editar en `src/` → `bash build.sh` (copia a `docs/` y versiona todos los imports con `?v=N`) → `git commit` + `git push` directo a `main` → verificar en vivo con `curl` que sirve el `?v=` nuevo.
+- Bumpear `?v=N` en `src/index.html` en CADA deploy (sed `s/?v=OLD/?v=NEW/g`).
+- Español rioplatense. Nada de `confirm()` nativo (usar `confirmModal`/`alertModal` de `ui/components.js`).
+- Yo (Claude) puedo testear en el browser de Ian vía las tools `mcp__claude-in-chrome__*` (él deja una sesión logueada). El token vive en `localStorage['sp_access_token']` pero **se vence** — la app lo refresca sola al cargar. Para tocar la API a mano, refrescá con el refresh token (PKCE) o usá la app.
+
+### API — hallazgos nuevos (además de lo de CLAUDE.md)
+- **`GET /tracks/{id}` y `GET /tracks?ids=` = 403 MUERTOS** (confirmado en vivo 2026-07-25). No sirven para tapas/metadata. → Las tapas del historial se **hornean** en el JSON con **oEmbed** (`https://open.spotify.com/oembed?url=spotify:track:{id}` → `thumbnail_url`, público sin auth). oEmbed rate-limitea si vas rápido: usar script suave/resumible (3 workers, backoff). iTunes Search NO sirve de fallback (33% acierto en artistas under).
+- **DELETE playlist items**: body `{ items: [{uri}] }` (NO `{tracks:[...]}` → 400).
+
+### Historial de reproducción (Extended Streaming History) — feature "📊 Del historial"
+- Crudos de Ian (NO commitear, tienen IP+timestamps): `/home/ian/Descargas/my_spotify_data/Spotify Extended Streaming History/Streaming_History_Audio_*.json` (~158MB, 210k reproducciones, 20.511 álbumes).
+- Committeado: **`src/data/listening-history.json`** (~605KB): 3047 álbumes con ≥3 temas distintos escuchados ≥30s. Schema por álbum: `{a:nombre, ar:artista, u:track-uri, dt:temas distintos, min:minutos, y1:último año, img:tapa oEmbed}`. Sin IPs. 3038/3047 con tapa.
+- La app lo baja con `new URL('../../data/listening-history.json?v=N', import.meta.url)`, cachea 30d en IndexedDB (key `history_albums_v${HISTORY_VERSION}`). **Si regenerás el JSON, subí `HISTORY_VERSION`** en `listened.js` (bustea el cache IDB y la query). Lee la tapa de `h.img`.
+
+### Álbumes escuchados — botones actuales del header (todos en `listened.js`)
+- **🎧 Sin registrar (N)**: álbumes con N+ temas en likes fuera del registro (umbral 1-8). Agregar (optimista) / ocultar (✕) / "ver ocultos" (mini-modal con Restaurar).
+- **💿 Duplicados (N)**: álbum registrado 2 veces (deluxe+normal, o "(Intimate)" etc. — `baseName` saca ediciones por keyword, NO números/volúmenes LP3/II/Vol). ✕ "no es duplicado".
+- **🎵 Repetidos (N)**: álbum con >1 track en la playlist → dejar 1 por álbum (era "Álbumes repetidos" del sidebar, se movió acá).
+- **📊 Del historial (N)**: lo del streaming history, con tapas, umbral por temas distintos (3-12).
+- **🎯 Limpiar cola**: saca de una playlist-cola ("para cuando termine los actuales") los álbumes ya escuchados.
+- **Actualizar** / **Cambiar playlist**.
+- **Add es optimista** (`addAlbumsLocally`/`persistAndRebuild`): actualiza el estado local sin re-bajar la playlist ni mostrar spinner "Actualizando". Sacar (duplicados/repetidos) idem (`removeAlbumEntriesLocally`).
+- Ocultos persistidos en localStorage (`listened_unreg_dismissed`, `listened_dupes_dismissed`, `listened_history_dismissed`).
+
+### Hecho en ESTA sesión (2026-07-25)
+- Rename **spotify-tools → Fonoteca** (sidebar, login, `<title>`).
+- Títulos del menú con **animación shimmer violeta** (elegida por Ian; en `main.css .sidebar-section-title`, respeta `prefers-reduced-motion`).
+- **FIX importante:** el 401 en `app.js` hacía `localStorage.clear()` → borraba los ocultos/config/prefs. Ahora hace `logout()` (solo auth). Esto arregla "se borran los ocultos al reloguear".
+- Dashboard: card "Álbumes escuchados" **lleva a `#listened`** (antes abría picker), dice "Álbumes escuchados" (no el nombre de playlist ni la cantidad de tracks), y el chart Top-15 artistas aclara que el nº = canciones en likes (+ título eje X).
+- **Versiones**: botón "Ver más" para ver TODOS los grupos (antes cortaba en 50).
+- **FIX cache likes**: `removeLikedTracks` ahora saca los ids del cache quirúrgicamente (`removeFromLikesCache`) en vez de invalidar todo → no re-baja 9500 y los borrados no reaparecen por consistencia eventual.
+- **Cerrar sesión**: botón rojo en el footer (antes era una X).
+
+### ⏳ PENDIENTE (lo que pidió Ian y NO llegué a hacer — arrancá por acá)
+1. **Versiones sigue mostrando lo que borró HOY** (ya no está en sus likes). Su cache de likes quedó viejo (borró en una versión anterior al fix). **Agregar en Versiones un botón "Re-analizar (bajar likes de nuevo)"** que haga `getAllLikedTracks(cb, {force:true})` para traer la lista fresca de Spotify (ahora ya son consistentes). Sin eso, tiene que esperar el TTL de 24h.
+2. **Dedupe / "analizar canciones repetidas": poder elegir Liked Songs como si fuera una playlist.** Hoy el grid de Dedupe (`features/dedupe.js`) solo lista playlists; Ian quiere analizar duplicados dentro de sus **Liked Songs** también. Agregar una "playlist virtual" Liked Songs al selector (usa `getAllLikedTracks`).
+3. **Sync Mirror: que NO pregunte cuál playlist.** Ian: "que directamente diga Analizar, es esa (anothertwo)". Hacer que auto-analice sobre `anothertwo` (ej: llamar `analyze()` en `render()`, o sacar el paso de confirmación de playlist). `src/js/features/sync.js`, `TARGET_PLAYLIST_NAME='anothertwo'`.
+4. **Mejorar el Dashboard con el historial de reproducción** (Ian lo pidió explícito: "ahora que te pasé el historial se podría mejorar el dashboard, ¿qué otros datos se podrían agregar?"). Ideas con el streaming history (210k plays): minutos/horas totales escuchados por año, top artistas/álbumes REALES por tiempo escuchado (no por likes), evolución por año, "tu artista del año", día/hora pico de escucha, décadas más escuchadas, % skips, rachas. El dato está en los crudos de `~/Descargas/...` — habría que agregar un JSON agregado más rico (o extender `listening-history.json`) y charts nuevos en `dashboard.js`.
+5. **"¿Qué más se le puede agregar?"** (Ian preguntó). Ideas propuestas: (a) en "Del historial" ordenar por minutos además de por temas; (b) "álbumes para completar" (tenés X de N tracks); (c) export del registro de escuchados; (d) stats de escuchados (por año/género); (e) marcar un álbum como escuchado directo desde "Del historial" con más contexto. Confirmá con Ian antes de construir.
+
+### Estado técnico rápido
+- Commit: **f2c42d2**, `?v=66`, `HISTORY_VERSION=2`.
+- Spotify user de Ian: `orhs6wu5ykk7ql80u92ujn74o`. Playlist listened albums id: `6TtmJm9dTZdyYUSEP01qSk` (~2052 tracks). Playlist espejo: `anothertwo`.
+- Archivos clave tocados: `src/js/features/listened.js` (grande), `versions.js`, `dashboard.js`, `app.js`, `api.js`, `src/css/{main,components}.css`, `src/data/listening-history.json`.
 
 ---
 
