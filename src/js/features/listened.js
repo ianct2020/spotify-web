@@ -108,6 +108,39 @@ function computeHistoryUnregistered(min = historyMin) {
   return out;
 }
 // Álbumes con MÁS de un track en la playlist (querés 1 track por álbum). Ordenados por cantidad.
+// Cuenta álbumes por género, usando el cache de tags Last.fm (llenado por la feature "Por género").
+// Para cada álbum tomamos el top tag del artista principal. Devuelve top N géneros con lista.
+function loadArtistTagsCache() {
+  try { return JSON.parse(localStorage.getItem('lastfm_artist_tags_cache') || '{}'); }
+  catch { return {}; }
+}
+
+function topTagOf(cache, artist) {
+  if (!artist) return null;
+  const entry = cache[artist.toLowerCase()];
+  const tags = entry?.tags || [];
+  if (!tags.length) return null;
+  const sorted = [...tags].sort((a, b) => (b.count || 0) - (a.count || 0));
+  const t = sorted[0];
+  if (!t?.name) return null;
+  return t.name.toLowerCase();
+}
+
+function computeGenreDistribution(topN = 15) {
+  const cache = loadArtistTagsCache();
+  const buckets = new Map();
+  let uncached = 0;
+  for (const a of albums) {
+    const tag = topTagOf(cache, a.artist);
+    if (!tag) { uncached++; continue; }
+    if (!buckets.has(tag)) buckets.set(tag, []);
+    buckets.get(tag).push(a);
+  }
+  const list = [...buckets.entries()].map(([g, arr]) => ({ genre: g, count: arr.length, albums: arr }));
+  list.sort((a, b) => b.count - a.count);
+  return { top: list.slice(0, topN), total: list.length, uncached, cached: albums.length - uncached };
+}
+
 // Cuenta álbumes registrados por año, usando `addedAt` (cuándo se agregó el primer track del álbum a la playlist).
 // Devuelve [{year:'2025', count:N, albums:[...]}, ...] ordenado del más nuevo al más viejo.
 // Los álbumes sin addedAt se agrupan en '—' (fallback, no debería pasar en tracks bajados con added_at).
@@ -477,6 +510,28 @@ function buildUI(totalTracks, ts) {
       `;
     })()}
 
+    ${(() => {
+      const gd = computeGenreDistribution(15);
+      if (!gd.top.length) return '';
+      return `
+        <div class="card" style="margin-bottom:16px">
+          <div style="display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin-bottom:10px;flex-wrap:wrap">
+            <h3 style="margin:0;font-size:15px">Por género</h3>
+            <span style="font-size:12px;color:var(--color-text-muted)">
+              Género principal del artista (Last.fm) · ${gd.cached.toLocaleString()} clasificados${gd.uncached ? ` · ${gd.uncached.toLocaleString()} sin clasificar` : ''}
+            </span>
+          </div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            ${gd.top.map(g => `
+              <button class="genre-tile" data-genre="${escapeHtml(g.genre)}" style="background:var(--color-elevated);border:1px solid var(--color-border);border-radius:999px;padding:6px 14px;cursor:pointer;font-size:13px;color:var(--color-text);transition:border-color .15s">
+                ${escapeHtml(g.genre)} <span style="color:var(--color-text-muted);font-size:12px">· ${g.count}</span>
+              </button>
+            `).join('')}
+          </div>
+        </div>
+      `;
+    })()}
+
     <div style="display:flex;gap:12px;align-items:center;margin-bottom:12px;flex-wrap:wrap">
       <div style="flex:1;min-width:240px;position:relative">
         <input type="text" id="listened-search" placeholder="Buscar álbum o artista..."
@@ -537,6 +592,9 @@ function buildUI(totalTracks, ts) {
   };
   content.querySelectorAll('.year-tile').forEach(tile => {
     tile.onclick = () => openYearAlbums(tile.dataset.year);
+  });
+  content.querySelectorAll('.genre-tile').forEach(tile => {
+    tile.onclick = () => openGenreAlbums(tile.dataset.genre);
   });
   content.querySelectorAll('.sort-btn').forEach(btn => {
     btn.onclick = () => {
@@ -713,6 +771,47 @@ function openYearAlbums(year) {
   document.body.appendChild(overlay);
   const close = () => overlay.remove();
   overlay.querySelector('#year-close').onclick = close;
+  overlay.addEventListener('click', ev => { if (ev.target === overlay) close(); });
+}
+
+function openGenreAlbums(genre) {
+  const gd = computeGenreDistribution(999);
+  const bucket = gd.top.find(g => g.genre === genre);
+  if (!bucket) return;
+  const list = [...bucket.albums].sort((a, b) => b.addedAt - a.addedAt);
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  overlay.innerHTML = `
+    <div class="modal modal-picker" style="max-width:560px">
+      <h2 style="margin-bottom:4px">Género: ${escapeHtml(genre)}</h2>
+      <p style="color:var(--color-text-secondary);font-size:13px;margin-bottom:10px">
+        ${bucket.count.toLocaleString()} álbum${bucket.count === 1 ? '' : 'es'} cuyo artista principal tiene este género en Last.fm.
+      </p>
+      <div class="picker-scroll">
+        <div style="border:1px solid var(--color-border);border-radius:var(--radius-sm)">
+          ${list.map(a => {
+            const url = a.id && !String(a.id).includes(':') ? `https://open.spotify.com/album/${a.id}` : (a.url || null);
+            return `
+              <div class="pick-row" style="display:flex;align-items:center;gap:11px;padding:9px 12px;border-bottom:1px solid var(--color-border)">
+                ${a.cover || a.image ? `<img src="${a.cover || a.image}" loading="lazy" class="pick-cover">` : `<div class="pick-cover" style="background:var(--color-elevated);display:flex;align-items:center;justify-content:center;color:var(--color-text-muted);font-size:16px">♪</div>`}
+                <div style="flex:1;min-width:0">
+                  <div style="font-size:14px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(a.name)}</div>
+                  <div style="font-size:12px;color:var(--color-text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(a.artist)}${a.year ? ` · ${escapeHtml(a.year)}` : ''}</div>
+                </div>
+                ${url ? `<a href="${url}" target="_blank" rel="noopener" title="Abrir en Spotify" style="color:var(--color-text-muted);font-size:15px;flex-shrink:0;text-decoration:none">↗</a>` : ''}
+              </div>
+            `;
+          }).join('')}
+        </div>
+      </div>
+      <div class="modal-actions" style="margin-top:12px">
+        <button class="btn btn-secondary" id="genre-close">Cerrar</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+  const close = () => overlay.remove();
+  overlay.querySelector('#genre-close').onclick = close;
   overlay.addEventListener('click', ev => { if (ev.target === overlay) close(); });
 }
 

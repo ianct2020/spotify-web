@@ -19,6 +19,8 @@ import { render as renderByGenre } from './features/by-genre.js';
 import { render as renderByArtist } from './features/by-artist.js';
 import { render as renderRecs } from './features/recommendations.js';
 import { render as renderListened } from './features/listened.js';
+import { render as renderWrapped } from './features/wrapped.js';
+import { render as renderZeroPlays } from './features/zero-plays.js';
 
 async function testConnection() {
   const token = await getValidToken();
@@ -195,6 +197,9 @@ function showApp(profile) {
           <a class="nav-link" data-route="dashboard" href="#dashboard">
             <span class="nav-link-icon">&#9733;</span> Dashboard
           </a>
+          <a class="nav-link" data-route="wrapped" href="#wrapped">
+            <span class="nav-link-icon">&#10038;</span> Wrapped
+          </a>
         </div>
         <div class="sidebar-section">
           <div class="sidebar-section-title">Crear</div>
@@ -236,6 +241,9 @@ function showApp(profile) {
           </a>
           <a class="nav-link" data-route="versions" href="#versions">
             <span class="nav-link-icon">&#9842;</span> Versiones
+          </a>
+          <a class="nav-link" data-route="zeroplays" href="#zeroplays">
+            <span class="nav-link-icon">&#9675;</span> Sin plays
           </a>
         </div>
       </nav>
@@ -316,6 +324,8 @@ function showApp(profile) {
   registerRoute('dupalbums', renderDupalbums);
   registerRoute('zombies', renderZombies);
   registerRoute('versions', renderVersions);
+  registerRoute('wrapped', renderWrapped);
+  registerRoute('zeroplays', renderZeroPlays);
 
   initRouter();
 }
@@ -325,6 +335,7 @@ const HOME_SECTIONS = [
     title: 'General',
     items: [
       { hash: 'dashboard', icon: '&#9733;', name: 'Dashboard', desc: 'Stats de tu biblioteca de Liked Songs.' },
+      { hash: 'wrapped', icon: '&#10038;', name: 'Wrapped', desc: 'Tu resumen del año — año calendario completo, hecho con el streaming history.' },
     ],
   },
   {
@@ -351,6 +362,7 @@ const HOME_SECTIONS = [
       { hash: 'dedupe', icon: '&#9851;', name: 'Dedupe', desc: 'Eliminá tracks duplicados dentro de cada playlist.' },
       { hash: 'zombies', icon: '&#9760;', name: 'Zombis', desc: 'Tracks eliminados del catálogo de Spotify.' },
       { hash: 'versions', icon: '&#9842;', name: 'Versiones', desc: 'Mismo tema en distintos álbumes (remaster, live, etc.).' },
+      { hash: 'zeroplays', icon: '&#9675;', name: 'Sin plays', desc: 'Likes que nunca reprodujiste según tu historial de Spotify.' },
     ],
   },
 ];
