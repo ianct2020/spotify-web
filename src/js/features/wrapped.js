@@ -165,27 +165,24 @@ function renderYearCard() {
         </div>
       </div>
 
-      <div class="wrapped-lists">
-        ${renderTopList('Top artistas', y.top_artists?.slice(0, 15) || [], 'name', 'min', 'plays')}
-        ${renderTopList('Top álbumes', y.top_albums?.slice(0, 15) || [], 'name', 'min', 'plays', 'artist')}
-        ${renderTopList('Top tracks', y.top_tracks?.slice(0, 15) || [], 'name', 'min', 'plays', 'artist')}
-      </div>
+    </div>
+
+    <div class="wrapped-top-cards">
+      ${renderTopCard('Top artistas', y.top_artists?.slice(0, 15) || [], 'name', 'min', 'plays')}
+      ${renderTopCard('Top álbumes', y.top_albums?.slice(0, 15) || [], 'name', 'min', 'plays', 'artist')}
+      ${renderTopCard('Top tracks', y.top_tracks?.slice(0, 15) || [], 'name', 'min', 'plays', 'artist')}
     </div>
   `;
 }
 
-function daysInYear(y) {
-  return ((y % 4 === 0 && y % 100 !== 0) || y % 400 === 0) ? 366 : 365;
-}
-
-function renderTopList(title, items, keyName, keyMin, keyPlays, keyArtist) {
+function renderTopCard(title, items, keyName, keyMin, keyPlays, keyArtist) {
   if (!items.length) return '';
   return `
-    <div>
-      <h3 style="margin:0 0 10px 0;font-size:15px">${title}</h3>
+    <div class="card wrapped-top-card">
+      <h3 style="margin:0 0 12px 0;font-size:16px">${title}</h3>
       <div style="display:flex;flex-direction:column;gap:6px">
         ${items.map((it, i) => `
-          <div style="display:flex;align-items:center;gap:10px;padding:6px 8px;border-radius:var(--radius-sm);background:var(--color-elevated)">
+          <div style="display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:var(--radius-sm);background:var(--color-elevated)">
             <span style="width:22px;text-align:right;color:var(--color-text-muted);font-weight:700;font-size:12px;flex-shrink:0">${i + 1}</span>
             <div style="flex:1;min-width:0">
               <div style="font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(it[keyName])}</div>
@@ -199,6 +196,10 @@ function renderTopList(title, items, keyName, keyMin, keyPlays, keyArtist) {
   `;
 }
 
+function daysInYear(y) {
+  return ((y % 4 === 0 && y % 100 !== 0) || y % 400 === 0) ? 366 : 365;
+}
+
 function renderAllTime() {
   const holder = document.getElementById('wrapped-alltime');
   const t = stats.totals || {};
@@ -208,7 +209,7 @@ function renderAllTime() {
       <p style="color:var(--color-text-secondary);font-size:13px;margin-bottom:16px">
         Todo tu historial junto — desde ${fmtDate(stats.years[0].first_play)} hasta ${fmtDate(stats.years[stats.years.length-1].last_play)}.
       </p>
-      <div class="wrapped-grid" style="margin-bottom:20px">
+      <div class="wrapped-grid">
         <div class="wrapped-tile">
           <div class="wrapped-tile-label">Total escuchado</div>
           <div class="wrapped-tile-value">${fmtMinutes(t.min)}</div>
@@ -230,11 +231,12 @@ function renderAllTime() {
           <div class="wrapped-tile-hint">únicos con al menos una play ≥30s</div>
         </div>
       </div>
-      <div class="wrapped-lists">
-        ${renderTopList('Top artistas de siempre', (stats.top_artists_all_time || []).slice(0, 20), 'name', 'min', 'plays')}
-        ${renderTopList('Top álbumes de siempre', (stats.top_albums_all_time || []).slice(0, 20), 'name', 'min', 'plays', 'artist')}
-        ${renderTopList('Top tracks de siempre', (stats.top_tracks_all_time || []).slice(0, 20), 'name', 'min', 'plays', 'artist')}
-      </div>
+    </div>
+
+    <div class="wrapped-top-cards" style="margin-top:20px">
+      ${renderTopCard('Top artistas de siempre', (stats.top_artists_all_time || []).slice(0, 20), 'name', 'min', 'plays')}
+      ${renderTopCard('Top álbumes de siempre', (stats.top_albums_all_time || []).slice(0, 20), 'name', 'min', 'plays', 'artist')}
+      ${renderTopCard('Top tracks de siempre', (stats.top_tracks_all_time || []).slice(0, 20), 'name', 'min', 'plays', 'artist')}
     </div>
   `;
 }

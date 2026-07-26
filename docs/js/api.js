@@ -1,7 +1,7 @@
-import { getValidToken, refreshAccessToken } from './auth.js?v=72';
-import { cacheGet, cacheGetRaw, cacheGetTimestamp, cacheSet, cacheClear } from './storage.js?v=72';
-import { idbGet, idbSet, idbDel, idbGetCached, idbGetCachedRaw, idbGetTimestamp, idbSetCached, idbAvailable } from './idb.js?v=72';
-import { showToast } from './ui/toast.js?v=72';
+import { getValidToken, refreshAccessToken } from './auth.js?v=73';
+import { cacheGet, cacheGetRaw, cacheGetTimestamp, cacheSet, cacheClear } from './storage.js?v=73';
+import { idbGet, idbSet, idbDel, idbGetCached, idbGetCachedRaw, idbGetTimestamp, idbSetCached, idbAvailable } from './idb.js?v=73';
+import { showToast } from './ui/toast.js?v=73';
 
 const BASE = 'https://api.spotify.com/v1';
 const MIN_RETRY_WAIT = 5000;
@@ -63,6 +63,18 @@ async function spotifyFetch(endpoint, options = {}) {
       const retryAfterSecs = parseInt(retryAfterHeader || '5');
       const wait = Math.max(MIN_RETRY_WAIT, retryAfterSecs * 1000);
       console.warn(`429 rate limited, waiting ${(wait / 1000).toFixed(0)}s (retry ${rateLimitRetries}/${maxRetries}, Retry-After: ${retryAfterHeader})`);
+      await sleep(wait);
+      continue;
+    }
+
+    // Errores transitorios del backend de Spotify (500, 502, 503, 504): backoff exponencial.
+    if ([500, 502, 503, 504].includes(response.status)) {
+      networkRetries++;
+      if (networkRetries > maxRetries) {
+        throw new Error(`Spotify ${response.status}: el servicio no responde después de ${maxRetries} reintentos. Probá de nuevo en un rato.`);
+      }
+      const wait = Math.min(8000, 500 * Math.pow(2, networkRetries - 1));
+      console.warn(`Spotify ${response.status} en ${endpoint}, backoff ${(wait / 1000).toFixed(1)}s (retry ${networkRetries}/${maxRetries})`);
       await sleep(wait);
       continue;
     }

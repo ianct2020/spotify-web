@@ -30,6 +30,13 @@ TOP_N_YEAR = 40       # top X por año
 TOP_N_ALLTIME = 60    # top X global
 KEEP_TRACK_IF_MS = 60000  # solo indexamos tracks con >=60s totales (reduce peso del JSON)
 
+# Tracks a excluir de todos los agregados (funcionales de despertador/notificación
+# que aparecen inflados por reproducciones automáticas y no representan música escuchada).
+# Match case-insensitive por subcadena en el nombre del track.
+EXCLUDED_TRACK_SUBSTRINGS = [
+    "sonido para sacar agua del movil",  # despertador iOS, sale en todos los tops
+]
+
 # Regla mix A+C para detectar "álbum escuchado" desde el historial:
 # el álbum cuenta cuando en un mismo día tuvo >=MIN_TRACKS_SAMEDAY tracks distintos
 # O >=MIN_MIN_SAMEDAY minutos acumulados (lo que se cumpla primero).
@@ -168,6 +175,11 @@ def build_stats(plays, img_idx):
         uri = r.get("spotify_track_uri") or ""
         skipped = bool(r.get("skipped"))
         end_reason = r.get("reason_end") or ""
+
+        # Filtrar tracks excluidos (funcionales que inflan tops sin ser música)
+        track_lc = track.lower()
+        if any(sub in track_lc for sub in EXCLUDED_TRACK_SUBSTRINGS):
+            continue
 
         # skip% cuenta contra el total de plays
         is_skip = skipped or (end_reason == "fwdbtn" and ms < MIN_MS)
