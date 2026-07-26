@@ -727,3 +727,6 @@ h3 { font-size: 18px; font-weight: 600; }
     grid-template-columns: 1fr;
   }
 }
+
+.year-tile:hover { border-color: var(--color-accent) !important; }
+.year-tile:active { transform: scale(0.98); }
