@@ -24,10 +24,17 @@ OLD_IMG_JSON = "/home/ian/spotify-web/src/data/listening-history.json"
 
 MIN_MS = 30000  # trigger warning: ignoramos plays de menos de 30s
 STATS_VERSION = 1
-TRACK_PLAYS_VERSION = 1
+TRACK_PLAYS_VERSION = 2      # bump: ahora incluye entries "partial" para tracks solo con plays <30s
+LISTENED_VERSION = 1
 TOP_N_YEAR = 40       # top X por año
 TOP_N_ALLTIME = 60    # top X global
 KEEP_TRACK_IF_MS = 60000  # solo indexamos tracks con >=60s totales (reduce peso del JSON)
+
+# Regla mix A+C para detectar "álbum escuchado" desde el historial:
+# el álbum cuenta cuando en un mismo día tuvo >=MIN_TRACKS_SAMEDAY tracks distintos
+# O >=MIN_MIN_SAMEDAY minutos acumulados (lo que se cumpla primero).
+MIN_TRACKS_SAMEDAY = 4
+MIN_MIN_SAMEDAY = 25
 
 # ---------------------------------------------------------------------------
 # 1. Cargar y dedupear
@@ -92,6 +99,9 @@ def track_key(name, artist):
     return f"{(name or '').lower()}||{(artist or '').lower()}"
 
 def build_stats(plays, img_idx):
+    # Orden cronológico ascendente para que "primer año", "descubrimiento" y
+    # "primer día que cumple umbral" salgan correctos.
+    plays = sorted(plays, key=lambda r: r.get("ts", ""))
     # totales
     total_plays = len(plays)
     total_valid_ms = 0
@@ -134,8 +144,16 @@ def build_stats(plays, img_idx):
     # heatmap 7x24 (0=lunes)
     heatmap = [[0]*24 for _ in range(7)]
 
-    # índice de plays por track para cruce con likes
+    # índice de plays por track para cruce con likes (solo plays >=30s)
     track_uri_stats = defaultdict(lambda: {"p": 0, "ms": 0})
+    # tracks que solo tuvieron plays <30s (nunca completadas): útil para "quizás lo escuchaste"
+    track_uri_partial = defaultdict(lambda: {"p": 0, "ms": 0})
+
+    # Estado por álbum × día para detectar "escuchado" (mix A+C).
+    # ak -> day (YYYY-MM-DD) -> {tracks_set, ms}
+    album_day = defaultdict(lambda: defaultdict(lambda: {"tracks": set(), "ms": 0}))
+    # Álbum -> primer día que cumplió el umbral (se llena una sola vez).
+    listened_first = {}  # ak -> {"date": "YYYY-MM-DD", "tracks_that_day": N, "min_that_day": M}
 
     for r in plays:
         ts_str = r["ts"]
@@ -157,7 +175,11 @@ def build_stats(plays, img_idx):
             total_skipped += 1
 
         if ms < MIN_MS:
-            continue  # trigger warning: todo lo demás lo ignora
+            # Trigger warning: no cuenta para stats. Igual anotamos en partial para el badge de zeroplays.
+            if uri:
+                track_uri_partial[uri]["p"] += 1
+                track_uri_partial[uri]["ms"] += ms
+            continue
 
         y = dt.year
         month = dt.month
@@ -180,6 +202,22 @@ def build_stats(plays, img_idx):
                 "artist": artist,
                 "img": img_idx.get((album.lower(), artist.lower())),
             }
+
+        # Mix A+C: contar tracks distintos y minutos del álbum ese día.
+        if ak not in listened_first:
+            state = album_day[ak][day]
+            state["tracks"].add(track)  # nombre del track como identidad (evita covers/masterings distintos)
+            state["ms"] += ms
+            distinct = len(state["tracks"])
+            minutes = state["ms"] / 60000
+            if distinct >= MIN_TRACKS_SAMEDAY or minutes >= MIN_MIN_SAMEDAY:
+                listened_first[ak] = {
+                    "date": day,
+                    "tracks_that_day": distinct,
+                    "min_that_day": round(minutes, 1),
+                }
+                # ya no necesitamos guardar más estado por día para este álbum
+                del album_day[ak]
 
         tk = track_key(track, artist)
         track_ms[tk] += ms
@@ -354,14 +392,51 @@ def build_stats(plays, img_idx):
         ],
     }
 
-    # índice por uri, filtrado — formato compacto: id (sin prefix) -> [plays, segundos]
+    # índice por uri — formato compacto: id (sin prefix) -> [plays, segundos] o [plays, seg, "p"] para partial-only
     track_plays_out = {}
     for uri, v in track_uri_stats.items():
         if v["ms"] >= KEEP_TRACK_IF_MS:
             tid = uri.split(":")[-1]
             track_plays_out[tid] = [v["p"], round(v["ms"]/1000)]
+    # tracks que SOLO tuvieron plays <30s: útiles para el badge "N plays cortas" en zeroplays
+    for uri, v in track_uri_partial.items():
+        tid = uri.split(":")[-1]
+        if tid in track_plays_out:
+            continue  # el track ya tiene plays válidas (>=30s), no es partial-only
+        if v["p"] == 0:
+            continue
+        track_plays_out[tid] = [v["p"], round(v["ms"]/1000), "p"]
 
-    return stats, track_plays_out
+    # Álbumes "escuchados" (mix A+C) agrupados por año del primer día
+    listened_by_year = defaultdict(list)
+    for ak, info in listened_first.items():
+        meta = album_meta.get(ak, {})
+        y = int(info["date"][:4])
+        listened_by_year[y].append({
+            "name": meta.get("name", ""),
+            "artist": meta.get("artist", ""),
+            "date": info["date"],
+            "tracks_that_day": info["tracks_that_day"],
+            "min_that_day": info["min_that_day"],
+            "img": meta.get("img"),
+        })
+    listened_years = []
+    for y in sorted(listened_by_year.keys()):
+        arr = sorted(listened_by_year[y], key=lambda a: a["date"], reverse=True)
+        listened_years.append({"year": y, "count": len(arr), "albums": arr})
+
+    listened_payload = {
+        "version": LISTENED_VERSION,
+        "criteria": {"min_tracks_sameday": MIN_TRACKS_SAMEDAY, "min_min_sameday": MIN_MIN_SAMEDAY},
+        "generated_at": stats["generated_at"],
+        "totals": {
+            "albums": sum(y["count"] for y in listened_years),
+            "years": len(listened_years),
+        },
+        "years": listened_years,
+    }
+
+    return stats, track_plays_out, listened_payload
 
 
 def main():
@@ -374,10 +449,11 @@ def main():
     print(f"  tapas indexadas: {len(img_idx):,}")
 
     print("Agregando…")
-    stats, track_plays = build_stats(plays, img_idx)
+    stats, track_plays, listened = build_stats(plays, img_idx)
 
     stats_path = os.path.join(OUT_DIR, "history-stats.json")
     tp_path = os.path.join(OUT_DIR, "history-track-plays.json")
+    listened_path = os.path.join(OUT_DIR, "history-listened-albums.json")
 
     with open(stats_path, "w") as f:
         json.dump(stats, f, separators=(",", ":"), ensure_ascii=False)
@@ -387,10 +463,14 @@ def main():
             "generated_at": stats["generated_at"],
             "tracks": track_plays,
         }, f, separators=(",", ":"), ensure_ascii=False)
+    with open(listened_path, "w") as f:
+        json.dump(listened, f, separators=(",", ":"), ensure_ascii=False)
 
     print(f"OK → {stats_path} ({os.path.getsize(stats_path)/1024:.1f} KB)")
     print(f"OK → {tp_path} ({os.path.getsize(tp_path)/1024:.1f} KB)")
-    print(f"totales: {stats['totals']}")
+    print(f"OK → {listened_path} ({os.path.getsize(listened_path)/1024:.1f} KB)")
+    print(f"totales stats: {stats['totals']}")
+    print(f"totales listened: {listened['totals']} · years: {[y['year'] for y in listened['years']]}")
 
 
 if __name__ == "__main__":

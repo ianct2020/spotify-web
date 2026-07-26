@@ -1,16 +1,19 @@
 // Loader compartido de los agregados del Extended Streaming History.
 // Ambos JSONs se generan con scripts/gen-stats.py y viven en src/data/.
 
-import { idbGetCached, idbSetCached } from '../idb.js?v=70';
+import { idbGetCached, idbSetCached } from '../idb.js?v=71';
 
 const STATS_VERSION = 1;
-const PLAYS_VERSION = 1;
+const PLAYS_VERSION = 2; // ahora incluye entries "partial" para tracks con solo plays <30s
+const LISTENED_VERSION = 1;
 const STATS_KEY = `history_stats_v${STATS_VERSION}`;
 const PLAYS_KEY = `history_track_plays_v${PLAYS_VERSION}`;
+const LISTENED_KEY = `history_listened_albums_v${LISTENED_VERSION}`;
 const TTL_MIN = 30 * 24 * 60;
 
 let statsMem = null;
 let playsMem = null;
+let listenedMem = null;
 
 async function loadHistoryStats() {
   if (statsMem) return statsMem;
@@ -50,11 +53,30 @@ async function loadTrackPlays() {
   return playsMem;
 }
 
+async function loadListenedAlbums() {
+  if (listenedMem) return listenedMem;
+  try {
+    const cached = await idbGetCached(LISTENED_KEY);
+    if (cached && cached.years) { listenedMem = cached; return listenedMem; }
+  } catch { /* ignora */ }
+  try {
+    const url = new URL(`../../data/history-listened-albums.json?v=${LISTENED_VERSION}`, import.meta.url);
+    const res = await fetch(url);
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    listenedMem = await res.json();
+    try { await idbSetCached(LISTENED_KEY, listenedMem, TTL_MIN); } catch { /* ignora */ }
+  } catch (e) {
+    console.warn('No se pudo cargar history-listened-albums:', e.message);
+    listenedMem = null;
+  }
+  return listenedMem;
+}
+
 function trackIdOf(uri) {
   return (uri || '').startsWith('spotify:track:') ? uri.slice(14) : null;
 }
 
-// Devuelve [plays, segundos] o null si el track no está en el historial.
+// Devuelve [plays, segundos] o [plays, segundos, "p"] (partial) o null.
 function playsFor(uri, index) {
   if (!index || !index.tracks) return null;
   const id = trackIdOf(uri);
@@ -62,4 +84,4 @@ function playsFor(uri, index) {
   return index.tracks[id] || null;
 }
 
-export { loadHistoryStats, loadTrackPlays, playsFor, trackIdOf };
+export { loadHistoryStats, loadTrackPlays, loadListenedAlbums, playsFor, trackIdOf };
