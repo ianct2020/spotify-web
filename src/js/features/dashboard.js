@@ -1,8 +1,8 @@
 import { getAllLikedTracks, invalidateLikesCache, exportAllData, importAllData, getCurrentUserId, getLikesTotal, syncLikesIncremental, getLikesCacheTimestamp, getBestAvailableLikes, getAllPlaylistItems } from '../api.js';
 import { showProgress, hideProgress, alertModal, escapeHtml } from '../ui/components.js';
 import { showToast } from '../ui/toast.js';
-import { openListenedAlbumsPicker, groupItemsByAlbum } from './listened-shared.js';
-import { loadHistoryStats } from './history-data.js';
+import { openListenedAlbumsPicker } from './listened-shared.js';
+import { loadHistoryStats, loadListenedAlbums } from './history-data.js';
 
 let charts = [];
 let _loadController = null;
@@ -511,7 +511,7 @@ function renderDashboard(container, stats) {
     <div class="card" id="listened-year-card" style="margin-top:20px;display:none">
       <div style="display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin-bottom:10px;flex-wrap:wrap">
         <h3 style="margin:0">Álbumes escuchados por año</h3>
-        <span style="font-size:12px;color:var(--color-text-muted)">Cuándo agregaste cada álbum al registro · click para ver la lista</span>
+        <span style="font-size:12px;color:var(--color-text-muted)" id="listened-year-hint">Detectados desde tu historial · click para ver la lista</span>
       </div>
       <div id="listened-year-tiles" style="display:flex;gap:10px;flex-wrap:wrap;min-height:70px;align-items:center;color:var(--color-text-muted);font-size:13px">Cargando…</div>
     </div>
@@ -550,13 +550,13 @@ function renderDashboard(container, stats) {
           <h3>Evolución mensual — minutos escuchados</h3>
           <canvas id="chart-history-monthly"></canvas>
         </div>
-        <div class="card dash-chart-card dash-chart-wide">
-          <h3>Heatmap — cuándo escuchás <span style="font-weight:400;color:var(--color-text-muted);font-size:13px">· minutos por día × hora, todos los años juntos</span></h3>
-          <div id="history-heatmap"></div>
-        </div>
         <div class="card dash-chart-card">
+          <h3>Heatmap — cuándo escuchás <span style="font-weight:400;color:var(--color-text-muted);font-size:13px">· min / día × hora</span></h3>
+          <div id="history-heatmap" style="display:flex;justify-content:center;align-items:center;padding:8px 0"></div>
+        </div>
+        <div class="card dash-chart-card dash-chart-wide">
           <h3>Top 20 artistas <span style="font-weight:400;color:var(--color-text-muted);font-size:13px">· por tiempo escuchado real</span></h3>
-          <canvas id="chart-history-artists" style="min-height:520px"></canvas>
+          <canvas id="chart-history-artists" style="min-height:640px"></canvas>
         </div>
         <div class="card dash-chart-card">
           <h3>Top 20 álbumes <span style="font-weight:400;color:var(--color-text-muted);font-size:13px">· por tiempo escuchado real</span></h3>
@@ -683,7 +683,7 @@ async function hydrateHistorySection() {
           },
           y: {
             ...CHART_DEFAULTS.scales.y,
-            ticks: { ...CHART_DEFAULTS.scales.y.ticks, font: { family: 'Inter', size: 10 } },
+            ticks: { ...CHART_DEFAULTS.scales.y.ticks, font: { family: 'Inter', size: 13, weight: '500' } },
           },
         },
       },
@@ -715,107 +715,130 @@ function renderHeatmap(matrix) {
   for (const row of matrix) for (const v of row) if (v > max) max = v;
   if (max === 0) { holder.innerHTML = '<div style="color:var(--color-text-muted);font-size:13px;padding:12px">Sin datos</div>'; return; }
 
-  const cellSize = 20;
+  const cellSize = 13;
   const cellGap = 2;
-  const labelWidth = 34;
-  const hourLabelHeight = 20;
+  const labelWidth = 28;
+  const hourLabelHeight = 18;
   const width = labelWidth + 24 * (cellSize + cellGap);
   const height = hourLabelHeight + 7 * (cellSize + cellGap);
 
-  let svg = `<div style="overflow-x:auto"><svg viewBox="0 0 ${width} ${height}" style="min-width:${width}px;max-width:100%;height:auto;font-family:Inter,sans-serif">`;
+  let svg = `<svg viewBox="0 0 ${width} ${height}" style="width:100%;max-width:${width}px;height:auto;font-family:Inter,sans-serif;display:block">`;
   // etiquetas de hora (cada 3)
   for (let h = 0; h < 24; h++) {
     if (h % 3 !== 0) continue;
     const x = labelWidth + h * (cellSize + cellGap) + cellSize/2;
-    svg += `<text x="${x}" y="${hourLabelHeight - 6}" fill="#8888A0" font-size="10" text-anchor="middle">${h}h</text>`;
+    svg += `<text x="${x}" y="${hourLabelHeight - 5}" fill="#8888A0" font-size="9" text-anchor="middle">${h}h</text>`;
   }
   // filas
   for (let d = 0; d < 7; d++) {
     const y = hourLabelHeight + d * (cellSize + cellGap);
-    svg += `<text x="${labelWidth - 6}" y="${y + cellSize/2 + 3}" fill="#8888A0" font-size="10" text-anchor="end">${dayLabels[d]}</text>`;
+    svg += `<text x="${labelWidth - 5}" y="${y + cellSize/2 + 3}" fill="#8888A0" font-size="9" text-anchor="end">${dayLabels[d]}</text>`;
     for (let h = 0; h < 24; h++) {
       const x = labelWidth + h * (cellSize + cellGap);
       const val = matrix[d][h] || 0;
       const alpha = val / max;
       const fill = alpha === 0 ? 'rgba(255,255,255,0.03)' : `rgba(124,58,237,${0.15 + alpha * 0.85})`;
-      svg += `<rect x="${x}" y="${y}" width="${cellSize}" height="${cellSize}" rx="3" fill="${fill}"><title>${dayLabels[d]} ${h}:00 · ${Math.round(val).toLocaleString('es-AR')} min</title></rect>`;
+      const pctOfMax = Math.round(alpha * 100);
+      svg += `<rect class="heatmap-cell" x="${x}" y="${y}" width="${cellSize}" height="${cellSize}" rx="2" fill="${fill}" data-d="${d}" data-h="${h}" data-v="${Math.round(val)}" data-p="${pctOfMax}"></rect>`;
     }
   }
-  svg += '</svg></div>';
+  svg += '</svg>';
   holder.innerHTML = svg;
+
+  // Tooltip flotante custom
+  let tip = document.getElementById('heatmap-tip');
+  if (!tip) {
+    tip = document.createElement('div');
+    tip.id = 'heatmap-tip';
+    tip.style.cssText = 'position:fixed;background:#0f0f18;border:1px solid #2a2a3a;border-radius:6px;padding:6px 10px;font-size:12px;color:#f0f0f5;pointer-events:none;z-index:9999;display:none;white-space:nowrap;box-shadow:0 4px 12px rgba(0,0,0,0.4);font-family:Inter,sans-serif';
+    document.body.appendChild(tip);
+  }
+
+  holder.querySelectorAll('.heatmap-cell').forEach(rect => {
+    rect.addEventListener('mouseenter', ev => {
+      const d = +rect.dataset.d, h = +rect.dataset.h, v = +rect.dataset.v, p = +rect.dataset.p;
+      const hourStr = String(h).padStart(2, '0') + ':00';
+      tip.innerHTML = `<strong>${dayLabels[d]} ${hourStr}</strong><br><span style="color:#a68cf0">${v.toLocaleString('es-AR')} min</span> · ${p}% del pico`;
+      tip.style.display = 'block';
+    });
+    rect.addEventListener('mousemove', ev => {
+      const pad = 14;
+      let x = ev.clientX + pad;
+      let y = ev.clientY + pad;
+      const tw = tip.offsetWidth, th = tip.offsetHeight;
+      if (x + tw > window.innerWidth) x = ev.clientX - tw - pad;
+      if (y + th > window.innerHeight) y = ev.clientY - th - pad;
+      tip.style.left = x + 'px';
+      tip.style.top = y + 'px';
+    });
+    rect.addEventListener('mouseleave', () => { tip.style.display = 'none'; });
+  });
 }
 
 async function hydrateListenedYearTiles() {
   const card = document.getElementById('listened-year-card');
   const holder = document.getElementById('listened-year-tiles');
+  const hint = document.getElementById('listened-year-hint');
   if (!card || !holder) return;
-  const playlistId = localStorage.getItem('listened_albums_playlist_id');
-  const playlistName = localStorage.getItem('listened_albums_playlist_name');
-  if (!playlistId) return; // sin registro configurado, no mostramos la card
 
   card.style.display = '';
   try {
-    const items = await getAllPlaylistItems(playlistId);
-    const albums = groupItemsByAlbum(items);
-    if (albums.length === 0) { card.style.display = 'none'; return; }
+    const data = await loadListenedAlbums();
+    if (!data || !data.years?.length) { card.style.display = 'none'; return; }
 
-    const buckets = new Map();
-    for (const a of albums) {
-      const y = a.addedAt ? String(new Date(a.addedAt).getFullYear()) : '—';
-      if (!buckets.has(y)) buckets.set(y, []);
-      buckets.get(y).push(a);
+    const years = [...data.years].sort((a, b) => b.year - a.year);
+    if (hint && data.criteria) {
+      hint.textContent = `Detectados en tu historial · ≥${data.criteria.min_tracks_sameday} tracks distintos o ≥${data.criteria.min_min_sameday} min en un mismo día · click para ver la lista`;
     }
-    const years = [...buckets.entries()].map(([year, list]) => ({ year, count: list.length, albums: list }));
-    years.sort((a, b) => (a.year === '—' ? 1 : b.year === '—' ? -1 : b.year.localeCompare(a.year)));
 
     holder.style.color = '';
     holder.style.fontSize = '';
     holder.innerHTML = years.map(y => `
-      <button class="year-tile" data-year="${escapeHtml(y.year)}" style="flex:1 1 120px;min-width:100px;background:var(--color-elevated);border:1px solid var(--color-border);border-radius:var(--radius-sm);padding:12px 14px;text-align:left;cursor:pointer;transition:border-color .15s,transform .05s">
-        <div style="font-size:22px;font-weight:700;color:var(--color-text);line-height:1.1">${y.count.toLocaleString()}</div>
-        <div style="font-size:12px;color:var(--color-text-muted);margin-top:4px">${escapeHtml(y.year)}</div>
+      <button class="year-tile" data-year="${y.year}" style="flex:1 1 120px;min-width:100px;background:var(--color-elevated);border:1px solid var(--color-border);border-radius:var(--radius-sm);padding:12px 14px;text-align:left;cursor:pointer;transition:border-color .15s,transform .05s">
+        <div style="font-size:22px;font-weight:700;color:var(--color-text);line-height:1.1">${y.count.toLocaleString('es-AR')}</div>
+        <div style="font-size:12px;color:var(--color-text-muted);margin-top:4px">${y.year}</div>
       </button>
     `).join('');
     holder.querySelectorAll('.year-tile').forEach(tile => {
-      tile.onclick = () => openYearAlbumsModal(tile.dataset.year, years.find(y => y.year === tile.dataset.year), playlistName || 'la playlist');
+      tile.onclick = () => openHistoryYearModal(+tile.dataset.year, years.find(y => y.year === +tile.dataset.year), data.criteria);
     });
   } catch (e) {
     holder.innerHTML = `<span style="color:var(--color-error)">Error cargando: ${escapeHtml(e.message)}</span>`;
   }
 }
 
-function openYearAlbumsModal(year, bucket, playlistName) {
+function openHistoryYearModal(year, bucket, criteria) {
   if (!bucket) return;
-  const list = [...bucket.albums].sort((a, b) => b.addedAt - a.addedAt);
-  const fmt = ts => {
-    if (!ts) return '';
-    const d = new Date(ts);
+  const list = bucket.albums; // ya vienen ordenados desc por date
+  const fmt = iso => {
+    if (!iso) return '';
+    const d = new Date(iso + 'T00:00:00');
+    if (isNaN(d)) return iso;
     return d.toLocaleDateString('es-AR', { day: '2-digit', month: 'short', year: 'numeric' });
   };
   const overlay = document.createElement('div');
   overlay.className = 'modal-overlay';
   overlay.innerHTML = `
     <div class="modal modal-picker" style="max-width:560px">
-      <h2 style="margin-bottom:4px">Álbumes escuchados en ${escapeHtml(year)}</h2>
+      <h2 style="margin-bottom:4px">Álbumes escuchados en ${year}</h2>
       <p style="color:var(--color-text-secondary);font-size:13px;margin-bottom:10px">
-        ${bucket.count.toLocaleString()} álbum${bucket.count === 1 ? '' : 'es'} registrado${bucket.count === 1 ? '' : 's'} en <strong>${escapeHtml(playlistName)}</strong> durante ${escapeHtml(year)}.
+        ${bucket.count.toLocaleString('es-AR')} álbum${bucket.count === 1 ? '' : 'es'} detectado${bucket.count === 1 ? '' : 's'} en ${year} (≥${criteria?.min_tracks_sameday || 4} tracks distintos o ≥${criteria?.min_min_sameday || 25} min en un mismo día).
       </p>
       <div class="picker-scroll">
         <div style="border:1px solid var(--color-border);border-radius:var(--radius-sm)">
-          ${list.map(a => {
-            const url = a.id && !String(a.id).includes(':') ? `https://open.spotify.com/album/${a.id}` : (a.url || null);
-            return `
-              <div class="pick-row" style="display:flex;align-items:center;gap:11px;padding:9px 12px;border-bottom:1px solid var(--color-border)">
-                ${a.cover || a.image ? `<img src="${a.cover || a.image}" loading="lazy" class="pick-cover">` : `<div class="pick-cover" style="background:var(--color-elevated);display:flex;align-items:center;justify-content:center;color:var(--color-text-muted);font-size:16px">♪</div>`}
-                <div style="flex:1;min-width:0">
-                  <div style="font-size:14px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(a.name)}</div>
-                  <div style="font-size:12px;color:var(--color-text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(a.artist)}${a.year ? ` · ${escapeHtml(a.year)}` : ''}</div>
-                </div>
-                <span style="font-size:11px;color:var(--color-text-muted);flex-shrink:0">${escapeHtml(fmt(a.addedAt))}</span>
-                ${url ? `<a href="${url}" target="_blank" rel="noopener" title="Abrir en Spotify" style="color:var(--color-text-muted);font-size:15px;flex-shrink:0;text-decoration:none">↗</a>` : ''}
+          ${list.map(a => `
+            <div class="pick-row" style="display:flex;align-items:center;gap:11px;padding:9px 12px;border-bottom:1px solid var(--color-border)">
+              ${a.img ? `<img src="${a.img}" loading="lazy" class="pick-cover">` : `<div class="pick-cover" style="background:var(--color-elevated);display:flex;align-items:center;justify-content:center;color:var(--color-text-muted);font-size:16px">♪</div>`}
+              <div style="flex:1;min-width:0">
+                <div style="font-size:14px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(a.name || '(sin nombre)')}</div>
+                <div style="font-size:12px;color:var(--color-text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(a.artist || '')}</div>
               </div>
-            `;
-          }).join('')}
+              <div style="text-align:right;flex-shrink:0">
+                <div style="font-size:11px;color:var(--color-text-muted)">${escapeHtml(fmt(a.date))}</div>
+                <div style="font-size:11px;color:var(--color-text-muted)">${a.tracks_that_day} tks · ${Math.round(a.min_that_day)} min</div>
+              </div>
+            </div>
+          `).join('')}
         </div>
       </div>
       <div class="modal-actions" style="margin-top:12px">

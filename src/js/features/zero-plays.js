@@ -37,31 +37,40 @@ async function analyze() {
   }
   const zeros = [];
   const some = [];
+  let partialsInZeros = 0;
   for (const it of likes) {
     const t = it.track || it;
     const uri = t.uri || (t.id ? `spotify:track:${t.id}` : null);
     const id = trackIdOf(uri);
     if (!id) continue;
     const p = plays.tracks[id];
-    if (!p) zeros.push({ track: t, uri, id });
-    else some.push({ track: t, uri, id, plays: p[0], seconds: p[1] });
+    if (!p) {
+      zeros.push({ track: t, uri, id });
+    } else if (p[2] === 'p') {
+      // solo tuvo plays <30s (partial): igual va a zeros, con badge
+      zeros.push({ track: t, uri, id, partial: { p: p[0], s: p[1] } });
+      partialsInZeros++;
+    } else {
+      some.push({ track: t, uri, id, plays: p[0], seconds: p[1] });
+    }
   }
-  cache = { zeros, some, likesCount: likes.length };
+  cache = { zeros, some, likesCount: likes.length, partialsInZeros };
   renderResults();
 }
 
 function renderResults() {
   const content = document.getElementById('zeroplays-content');
-  const { zeros, some, likesCount } = cache;
+  const { zeros, some, likesCount, partialsInZeros } = cache;
+  const nunca = zeros.length - (partialsInZeros || 0);
 
   content.innerHTML = `
     <div class="card" style="margin-bottom:16px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px">
       <div>
         <div style="font-size:14px">
-          <strong>${zeros.length.toLocaleString('es-AR')}</strong> likes sin plays de ${likesCount.toLocaleString('es-AR')} totales
+          <strong>${zeros.length.toLocaleString('es-AR')}</strong> likes sin plays ≥30s de ${likesCount.toLocaleString('es-AR')} totales
         </div>
         <div style="font-size:12px;color:var(--color-text-muted);margin-top:2px">
-          ${some.length.toLocaleString('es-AR')} likes tienen al menos una play ≥30s en tu historial.
+          ${nunca.toLocaleString('es-AR')} nunca sonaron${partialsInZeros ? ` · ${partialsInZeros.toLocaleString('es-AR')} tuvieron plays cortas (badge naranja)` : ''} · ${some.length.toLocaleString('es-AR')} tienen alguna play ≥30s.
         </div>
       </div>
       <div style="display:flex;gap:8px">
@@ -75,16 +84,22 @@ function renderResults() {
     ` : `
       <div class="card" style="padding:0">
         <div style="max-height:65vh;overflow:auto">
-          ${zeros.map((z, i) => `
+          ${zeros.map((z, i) => {
+            const imgs = z.track.album?.images || [];
+            const cover = imgs[2]?.url || imgs[1]?.url || imgs[0]?.url || null;
+            const partial = z.partial || null; // {p:plays, s:seg} si vino de una play cortita
+            return `
             <label class="pick-row" style="display:flex;align-items:center;gap:11px;padding:10px 14px;border-bottom:1px solid var(--color-border);cursor:pointer">
               <input type="checkbox" class="zp-cb" data-i="${i}">
+              ${cover ? `<img src="${cover}" alt="" loading="lazy" class="pick-cover">` : `<div class="pick-cover" style="background:var(--color-elevated);display:flex;align-items:center;justify-content:center;color:var(--color-text-muted);font-size:16px">♪</div>`}
               <div style="flex:1;min-width:0">
                 <div style="font-size:14px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(z.track.name || '(sin nombre)')}</div>
                 <div style="font-size:12px;color:var(--color-text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml((z.track.artists || []).map(a => a.name || a).join(', '))} · ${escapeHtml(z.track.album?.name || '')}</div>
               </div>
+              ${partial ? `<span title="Escuchada al menos una vez menos de 30s (por eso no cuenta como play)" style="font-size:11px;color:#f59e0b;flex-shrink:0;background:rgba(245,158,11,.1);padding:3px 8px;border-radius:10px;white-space:nowrap">${partial.p} play${partial.p === 1 ? '' : 's'} cortas</span>` : ''}
               ${z.uri ? `<a href="https://open.spotify.com/track/${z.id}" target="_blank" rel="noopener" title="Abrir en Spotify" style="color:var(--color-text-muted);font-size:15px;flex-shrink:0;text-decoration:none">↗</a>` : ''}
             </label>
-          `).join('')}
+          `;}).join('')}
         </div>
       </div>
     `}
