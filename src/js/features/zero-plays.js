@@ -96,7 +96,7 @@ function renderResults() {
                 <div style="font-size:14px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(z.track.name || '(sin nombre)')}</div>
                 <div style="font-size:12px;color:var(--color-text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml((z.track.artists || []).map(a => a.name || a).join(', '))} · ${escapeHtml(z.track.album?.name || '')}</div>
               </div>
-              ${partial ? `<span title="Escuchada al menos una vez menos de 30s (por eso no cuenta como play)" style="font-size:11px;color:#f59e0b;flex-shrink:0;background:rgba(245,158,11,.1);padding:3px 8px;border-radius:10px;white-space:nowrap">${partial.p} play${partial.p === 1 ? '' : 's'} cortas</span>` : ''}
+              ${partial ? `<span title="Escuchada al menos una vez menos de 30s (por eso no cuenta como play)" style="font-size:11px;color:#f59e0b;flex-shrink:0;background:rgba(245,158,11,.1);padding:3px 8px;border-radius:10px;white-space:nowrap">${partial.p} play${partial.p === 1 ? ' corta' : 's cortas'}</span>` : ''}
               ${z.uri ? `<a href="https://open.spotify.com/track/${z.id}" target="_blank" rel="noopener" title="Abrir en Spotify" style="color:var(--color-text-muted);font-size:15px;flex-shrink:0;text-decoration:none">↗</a>` : ''}
             </label>
           `;}).join('')}
