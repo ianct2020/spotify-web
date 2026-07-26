@@ -1,8 +1,8 @@
 // Wrapped propio: mini-resumen tuyo por año, hecho con el Extended Streaming History.
 // A diferencia del Wrapped oficial (que corre oct-sept), este es del año calendario completo.
 
-import { loadHistoryStats } from './history-data.js?v=69';
-import { escapeHtml } from '../ui/components.js?v=69';
+import { loadHistoryStats } from './history-data.js?v=70';
+import { escapeHtml } from '../ui/components.js?v=70';
 
 let stats = null;
 let selectedYear = null;
@@ -95,8 +95,8 @@ function renderYearCard() {
   const topArtist = y.top_artists?.[0];
   const topAlbum = y.top_albums?.[0];
   const topTrack = y.top_tracks?.[0];
-  const monthName = y.peak_month ? MESES[parseInt(y.peak_month.month.split('-')[1] || y.peak_month.month, 10) - 1] : '';
-  const monthYear = y.peak_month ? y.peak_month.month : '';
+  // peak_month.month es un número 1-12 (así lo guarda gen-stats.py)
+  const monthName = y.peak_month ? MESES[(Number(y.peak_month.month) || 1) - 1] : '';
 
   holder.innerHTML = `
     <div class="card wrapped-card">
@@ -138,7 +138,7 @@ function renderYearCard() {
         ` : ''}
         <div class="wrapped-tile">
           <div class="wrapped-tile-label">Mes pico</div>
-          <div class="wrapped-tile-value">${monthName}${monthYear ? ' ' + monthYear.split('-')[0] : ''}</div>
+          <div class="wrapped-tile-value">${monthName} ${y.year}</div>
           <div class="wrapped-tile-hint">${y.peak_month ? fmtMinutes(y.peak_month.min) : '—'}</div>
         </div>
         ${y.peak_day ? `

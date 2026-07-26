@@ -1,7 +1,7 @@
 // Loader compartido de los agregados del Extended Streaming History.
 // Ambos JSONs se generan con scripts/gen-stats.py y viven en src/data/.
 
-import { idbGetCached, idbSetCached } from '../idb.js?v=69';
+import { idbGetCached, idbSetCached } from '../idb.js?v=70';
 
 const STATS_VERSION = 1;
 const PLAYS_VERSION = 1;
