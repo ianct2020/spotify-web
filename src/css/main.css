@@ -730,3 +730,78 @@ h3 { font-size: 18px; font-weight: 600; }
 
 .year-tile:hover { border-color: var(--color-accent) !important; }
 .year-tile:active { transform: scale(0.98); }
+.genre-tile:hover { border-color: var(--color-accent); }
+.genre-tile:active { transform: scale(0.97); }
+
+.wrapped-year-tab:hover { border-color: var(--color-accent) !important; }
+
+.wrapped-card { padding: 0; overflow: hidden; }
+.wrapped-hero {
+  padding: 32px 24px;
+  background: linear-gradient(135deg, var(--color-accent) 0%, #4c1d95 100%);
+  color: #fff;
+  text-align: center;
+}
+.wrapped-hero-year {
+  font-size: 14px;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  opacity: 0.85;
+  margin-bottom: 6px;
+}
+.wrapped-hero-min {
+  font-size: 56px;
+  font-weight: 800;
+  line-height: 1;
+  margin-bottom: 8px;
+  letter-spacing: -0.03em;
+}
+.wrapped-hero-sub {
+  font-size: 14px;
+  opacity: 0.9;
+}
+.wrapped-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 10px;
+  padding: 20px;
+}
+.wrapped-tile {
+  background: var(--color-elevated);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  padding: 14px;
+}
+.wrapped-tile-label {
+  font-size: 11px;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-bottom: 6px;
+}
+.wrapped-tile-value {
+  font-size: 22px;
+  font-weight: 700;
+  line-height: 1.15;
+  margin-bottom: 4px;
+  color: var(--color-text);
+  word-break: break-word;
+}
+.wrapped-tile-cover {
+  width: 100%;
+  aspect-ratio: 1;
+  border-radius: 4px;
+  margin-bottom: 8px;
+  object-fit: cover;
+}
+.wrapped-tile-hint {
+  font-size: 12px;
+  color: var(--color-text-muted);
+  line-height: 1.35;
+}
+.wrapped-lists {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 20px;
+  padding: 0 20px 20px 20px;
+}

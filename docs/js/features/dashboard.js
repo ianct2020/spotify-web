@@ -1,7 +1,8 @@
-import { getAllLikedTracks, invalidateLikesCache, exportAllData, importAllData, getCurrentUserId, getLikesTotal, syncLikesIncremental, getLikesCacheTimestamp, getBestAvailableLikes, getAllPlaylistItems } from '../api.js?v=68';
-import { showProgress, hideProgress, alertModal, escapeHtml } from '../ui/components.js?v=68';
-import { showToast } from '../ui/toast.js?v=68';
-import { openListenedAlbumsPicker, groupItemsByAlbum } from './listened-shared.js?v=68';
+import { getAllLikedTracks, invalidateLikesCache, exportAllData, importAllData, getCurrentUserId, getLikesTotal, syncLikesIncremental, getLikesCacheTimestamp, getBestAvailableLikes, getAllPlaylistItems } from '../api.js?v=69';
+import { showProgress, hideProgress, alertModal, escapeHtml } from '../ui/components.js?v=69';
+import { showToast } from '../ui/toast.js?v=69';
+import { openListenedAlbumsPicker, groupItemsByAlbum } from './listened-shared.js?v=69';
+import { loadHistoryStats } from './history-data.js?v=69';
 
 let charts = [];
 let _loadController = null;
@@ -538,6 +539,32 @@ function renderDashboard(container, stats) {
       </div>
     </div>
 
+    <div id="history-section" style="margin-top:20px;display:none">
+      <div style="display:flex;align-items:baseline;gap:10px;margin:20px 0 12px 0;flex-wrap:wrap">
+        <h2 style="margin:0;font-size:20px">Del historial de reproducción</h2>
+        <span style="font-size:12px;color:var(--color-text-muted)">Tu Extended Streaming History real, no lo que likeaste</span>
+      </div>
+      <div class="dash-stats-row" id="history-stat-tiles"></div>
+      <div class="dash-grid" style="margin-top:16px">
+        <div class="card dash-chart-card dash-chart-wide">
+          <h3>Evolución mensual — minutos escuchados</h3>
+          <canvas id="chart-history-monthly"></canvas>
+        </div>
+        <div class="card dash-chart-card dash-chart-wide">
+          <h3>Heatmap — cuándo escuchás <span style="font-weight:400;color:var(--color-text-muted);font-size:13px">· minutos por día × hora, todos los años juntos</span></h3>
+          <div id="history-heatmap"></div>
+        </div>
+        <div class="card dash-chart-card">
+          <h3>Top 20 artistas <span style="font-weight:400;color:var(--color-text-muted);font-size:13px">· por tiempo escuchado real</span></h3>
+          <canvas id="chart-history-artists" style="min-height:520px"></canvas>
+        </div>
+        <div class="card dash-chart-card">
+          <h3>Top 20 álbumes <span style="font-weight:400;color:var(--color-text-muted);font-size:13px">· por tiempo escuchado real</span></h3>
+          <div id="history-top-albums" class="results-list"></div>
+        </div>
+      </div>
+    </div>
+
     <div class="card" style="margin-top:20px">
       <h3 style="margin-bottom:16px">Top 10 álbumes</h3>
       <div class="results-list">
@@ -558,6 +585,164 @@ function renderDashboard(container, stats) {
   buildCharts(stats);
   hydrateListenedAlbumsCard();
   hydrateListenedYearTiles();
+  hydrateHistorySection();
+}
+
+async function hydrateHistorySection() {
+  const section = document.getElementById('history-section');
+  if (!section) return;
+  const h = await loadHistoryStats();
+  if (!h || !h.years?.length) { section.style.display = 'none'; return; }
+  section.style.display = '';
+
+  // Stat tiles arriba (5)
+  const t = h.totals || {};
+  const totalHours = Math.round((t.min || 0) / 60);
+  const totalDays = ((t.min || 0) / 60 / 24).toFixed(1);
+  const tiles = document.getElementById('history-stat-tiles');
+  if (tiles) tiles.innerHTML = `
+    <div class="stat-card"><div class="stat-value">${totalHours.toLocaleString('es-AR')}h</div><div class="stat-label">${totalDays} días de música</div></div>
+    <div class="stat-card"><div class="stat-value">${(t.plays_valid || 0).toLocaleString('es-AR')}</div><div class="stat-label">Plays (≥30s)</div></div>
+    <div class="stat-card"><div class="stat-value">${(t.days_active || 0).toLocaleString('es-AR')}</div><div class="stat-label">Días activos</div></div>
+    <div class="stat-card"><div class="stat-value">${t.longest_streak || 0}</div><div class="stat-label">Racha más larga (días)</div></div>
+    <div class="stat-card"><div class="stat-value">${t.skip_pct || 0}%</div><div class="stat-label">Skips</div></div>
+  `;
+
+  // Evolución mensual (line)
+  if (h.monthly?.length) {
+    makeChart('chart-history-monthly', {
+      type: 'line',
+      data: {
+        labels: h.monthly.map(m => m.m),
+        datasets: [{
+          data: h.monthly.map(m => m.min),
+          borderColor: CHART_COLORS.accent,
+          backgroundColor: CHART_COLORS.accentSoft,
+          fill: true,
+          borderWidth: 2,
+          pointRadius: 0,
+          pointHoverRadius: 4,
+          tension: 0.25,
+        }],
+      },
+      options: {
+        ...CHART_DEFAULTS,
+        plugins: {
+          ...CHART_DEFAULTS.plugins,
+          tooltip: { callbacks: { label: ctx => `${Math.round(ctx.parsed.y).toLocaleString('es-AR')} min` } },
+        },
+        scales: {
+          ...CHART_DEFAULTS.scales,
+          x: {
+            ...CHART_DEFAULTS.scales.x,
+            ticks: {
+              ...CHART_DEFAULTS.scales.x.ticks,
+              maxRotation: 0,
+              autoSkip: true,
+              maxTicksLimit: 12,
+              callback: function (val) {
+                const label = this.getLabelForValue(val);
+                return label && label.endsWith('-01') ? label.slice(0, 4) : '';
+              },
+            },
+          },
+        },
+      },
+    });
+  }
+
+  // Heatmap 7×24
+  renderHeatmap(h.heatmap);
+
+  // Top 20 artistas por minutos (bar horizontal)
+  const topArtists = (h.top_artists_all_time || []).slice(0, 20);
+  if (topArtists.length) {
+    makeChart('chart-history-artists', {
+      type: 'bar',
+      data: {
+        labels: topArtists.map(a => a.name),
+        datasets: [{
+          data: topArtists.map(a => a.min),
+          backgroundColor: CHART_COLORS.accent,
+          borderRadius: 4,
+          borderSkipped: false,
+        }],
+      },
+      options: {
+        ...CHART_DEFAULTS,
+        indexAxis: 'y',
+        plugins: {
+          ...CHART_DEFAULTS.plugins,
+          tooltip: { callbacks: { label: ctx => `${Math.round(ctx.parsed.x).toLocaleString('es-AR')} min` } },
+        },
+        scales: {
+          ...CHART_DEFAULTS.scales,
+          x: {
+            ...CHART_DEFAULTS.scales.x,
+            title: { display: true, text: 'Minutos totales escuchados', color: '#8888A0', font: { family: 'Inter', size: 11 } },
+          },
+          y: {
+            ...CHART_DEFAULTS.scales.y,
+            ticks: { ...CHART_DEFAULTS.scales.y.ticks, font: { family: 'Inter', size: 10 } },
+          },
+        },
+      },
+    });
+  }
+
+  // Top 20 álbumes por minutos (lista simple)
+  const topAlbums = (h.top_albums_all_time || []).slice(0, 20);
+  const listHolder = document.getElementById('history-top-albums');
+  if (listHolder) listHolder.innerHTML = topAlbums.map((a, i) => `
+    <div class="track-row">
+      <span style="width:28px;text-align:center;color:var(--color-text-muted);font-weight:700;flex-shrink:0">${i + 1}</span>
+      ${a.img ? `<img src="${a.img}" alt="" style="width:36px;height:36px;border-radius:4px;object-fit:cover;flex-shrink:0" loading="lazy">` : ''}
+      <div class="track-info">
+        <div class="track-name">${escapeHtml(a.name)}</div>
+        <div class="track-artist">${escapeHtml(a.artist)}</div>
+      </div>
+      <span class="badge badge-accent">${Math.round(a.min).toLocaleString('es-AR')}m</span>
+    </div>
+  `).join('');
+}
+
+function renderHeatmap(matrix) {
+  const holder = document.getElementById('history-heatmap');
+  if (!holder || !matrix || !matrix.length) return;
+
+  const dayLabels = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
+  let max = 0;
+  for (const row of matrix) for (const v of row) if (v > max) max = v;
+  if (max === 0) { holder.innerHTML = '<div style="color:var(--color-text-muted);font-size:13px;padding:12px">Sin datos</div>'; return; }
+
+  const cellSize = 20;
+  const cellGap = 2;
+  const labelWidth = 34;
+  const hourLabelHeight = 20;
+  const width = labelWidth + 24 * (cellSize + cellGap);
+  const height = hourLabelHeight + 7 * (cellSize + cellGap);
+
+  let svg = `<div style="overflow-x:auto"><svg viewBox="0 0 ${width} ${height}" style="min-width:${width}px;max-width:100%;height:auto;font-family:Inter,sans-serif">`;
+  // etiquetas de hora (cada 3)
+  for (let h = 0; h < 24; h++) {
+    if (h % 3 !== 0) continue;
+    const x = labelWidth + h * (cellSize + cellGap) + cellSize/2;
+    svg += `<text x="${x}" y="${hourLabelHeight - 6}" fill="#8888A0" font-size="10" text-anchor="middle">${h}h</text>`;
+  }
+  // filas
+  for (let d = 0; d < 7; d++) {
+    const y = hourLabelHeight + d * (cellSize + cellGap);
+    svg += `<text x="${labelWidth - 6}" y="${y + cellSize/2 + 3}" fill="#8888A0" font-size="10" text-anchor="end">${dayLabels[d]}</text>`;
+    for (let h = 0; h < 24; h++) {
+      const x = labelWidth + h * (cellSize + cellGap);
+      const val = matrix[d][h] || 0;
+      const alpha = val / max;
+      const fill = alpha === 0 ? 'rgba(255,255,255,0.03)' : `rgba(124,58,237,${0.15 + alpha * 0.85})`;
+      svg += `<rect x="${x}" y="${y}" width="${cellSize}" height="${cellSize}" rx="3" fill="${fill}"><title>${dayLabels[d]} ${h}:00 · ${Math.round(val).toLocaleString('es-AR')} min</title></rect>`;
+    }
+  }
+  svg += '</svg></div>';
+  holder.innerHTML = svg;
 }
 
 async function hydrateListenedYearTiles() {
