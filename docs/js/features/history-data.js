@@ -1,7 +1,7 @@
 // Loader compartido de los agregados del Extended Streaming History.
 // Ambos JSONs se generan con scripts/gen-stats.py y viven en src/data/.
 
-import { idbGetCached, idbSetCached } from '../idb.js?v=71';
+import { idbGetCached, idbSetCached } from '../idb.js?v=72';
 
 const STATS_VERSION = 1;
 const PLAYS_VERSION = 2; // ahora incluye entries "partial" para tracks con solo plays <30s

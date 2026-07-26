@@ -1,7 +1,7 @@
-import { getValidToken, refreshAccessToken } from './auth.js?v=71';
-import { cacheGet, cacheGetRaw, cacheGetTimestamp, cacheSet, cacheClear } from './storage.js?v=71';
-import { idbGet, idbSet, idbDel, idbGetCached, idbGetCachedRaw, idbGetTimestamp, idbSetCached, idbAvailable } from './idb.js?v=71';
-import { showToast } from './ui/toast.js?v=71';
+import { getValidToken, refreshAccessToken } from './auth.js?v=72';
+import { cacheGet, cacheGetRaw, cacheGetTimestamp, cacheSet, cacheClear } from './storage.js?v=72';
+import { idbGet, idbSet, idbDel, idbGetCached, idbGetCachedRaw, idbGetTimestamp, idbSetCached, idbAvailable } from './idb.js?v=72';
+import { showToast } from './ui/toast.js?v=72';
 
 const BASE = 'https://api.spotify.com/v1';
 const MIN_RETRY_WAIT = 5000;
