@@ -5,9 +5,55 @@
 
 ---
 
-## ⭐ ESTADO ACTUAL — 2026-07-25 · v=67 · commit 07d0236 (LEER ESTO PRIMERO)
+## ⭐ ESTADO ACTUAL — 2026-07-26 · v=70 · commit d267228 (LEER ESTO PRIMERO)
 
-**Contexto:** Ian está **migrando a otra cuenta de Claude hoy** (se quedó sin usage). Este handoff + el archivo `NEXT-PROMPT.txt` (en la raíz del repo) son para retomar en la cuenta nueva. Toda la actividad reciente (v=54→v=66) fue sobre la feature **Álbumes escuchados** (`src/js/features/listened.js`, la más grande y activa) + el **historial de reproducción**.
+**Contexto (2026-07-26):** Ian se está quedando sin usage (3%). Volvió a probar la tanda grande de features nuevas (Wrapped, Dashboard con historial, zero-plays, stats por género, tiles año en listened) y me pasó feedback. **NO trabajar todavía, esperar a que Ian confirme que tiene usage**. El HANDOFF de abajo tiene los detalles del pedido.
+
+### Lo que salió en la sesión 2026-07-26 (commit d267228, v=70)
+
+- **Feature Wrapped** (`src/js/features/wrapped.js`, ruta `#wrapped`, sidebar → General): resumen por año calendario del Extended Streaming History. Tabs por año (2018-2026), hero con minutos totales del año, tiles con artista/álbum/track del año, descubrimiento del año, mes/día pico, días activos + racha, primera/última play, skip%. Card "De siempre" con tops all-time.
+- **Dashboard mejorado** (`dashboard.js` → nueva sección "Del historial de reproducción"): 5 stat tiles (horas totales, plays ≥30s, días activos, racha más larga, skip%), line chart de evolución mensual, heatmap SVG 7×24, top 20 artistas por tiempo real (bar), top 20 álbumes con tapa.
+- **Zero plays** (`src/js/features/zero-plays.js`, ruta `#zeroplays`, sidebar → Limpieza): cruza likes contra el índice track_uri → plays del historial. Multi-select + bulk-remove con confirmModal.
+- **Stats por género en #listened**: card "Por género" con top 15 tags Last.fm (cache existente). Click en chip → modal con lista de álbumes.
+- **Script `scripts/gen-stats.py`**: genera `src/data/history-stats.json` (138KB) + `src/data/history-track-plays.json` (1.3MB, formato compacto `{id: [plays, seg]}`) filtrando `ms_played < 30000`. Dedupe por `(ts, uri, ms)` para archivos `_N`.
+- **Loader compartido**: `src/js/features/history-data.js` con cache IDB 30d.
+- Fix intermedio v=70: `peak_month.month` es un número 1-12, no un string YYYY-MM.
+
+**Números clave:**
+- 209k plays únicas crudas (dedup por (ts, uri, ms)), 102k plays ≥30s.
+- 4.380h totales (~182 días equivalentes), 1.822 días activos.
+- Racha más larga histórica: 312 días.
+- Skip%: 64.2%. Zero plays: **569 tracks** de 9.548 likes.
+
+### 🔧 PENDIENTE — feedback de Ian del 2026-07-26 (ARRANCÁ POR ACÁ)
+
+Todo confirmado en vivo por Ian, con screenshots. Orden sugerido:
+
+1. **Heatmap del Dashboard más chico**. Ahora las celdas son 20×20px y ocupan TODA la pantalla (screenshot lo confirma). Bajar `cellSize` a 12 (o 10), `cellGap` a 2. Poner la card a altura fija (~360px como las otras del dash-grid).
+
+2. **Top 20 artistas del Dashboard: letras ilegibles**. Ahora el font-size del eje Y es 10px y el `min-height:520px`. Subir el font-size a 12-13px y bajar el min-height a ~500 o dejar auto. Alternativa: aumentar el `min-height` a 720px para que respire (los nombres cortos se leen mal ahora).
+
+3. **Heatmap: tooltip visible al hover**. Ya tiene `<title>` SVG nativo pero es feo/lento. Ideal: div flotante posicionado cerca del cursor con "Vie 21h · 380 min". Usar `mouseover`/`mousemove`/`mouseout` sobre cada `<rect>`, crear un div `position:fixed`, `pointer-events:none`.
+
+4. **Álbumes escuchados por año — desde el historial, NO desde el `added_at` de la playlist** (esto va tanto para el Dashboard como para la card en #listened). Motivo de Ian: "la playlist listened albums la hice mucho más tarde de cuando empecé a escuchar álbumes, entonces el added_at no representa cuándo escuché". Necesita un algoritmo que detecte "escuché un álbum" desde los plays crudos.
+
+   **Opciones a proponerle a Ian antes de codear:**
+   - **A) N tracks distintos del álbum escuchados ≥30s en el mismo día.** Umbral por default: 4. Fecha del álbum = primer día en que se cumplió. Simple, transparente, no necesita metadata extra.
+   - **B) N tracks distintos en ventana de 7 días.** Más laxo, para álbumes que se escucharon en varias sesiones cortas.
+   - **C) X minutos totales del álbum acumulados el mismo día.** Ej: 25 min = ~4-5 tracks promedio. Ventaja: no necesita saber el total de tracks.
+   - Mi voto: **A o C**. Con umbral ajustable en la UI (2-8 tracks o 15-45 min).
+
+   Implementación: agregar a `gen-stats.py` una salida nueva `src/data/history-albums-by-year.json` con `[{year, count, albums:[{name, artist, first_date, img}]}]`. La card del dashboard consume ese JSON en vez de fetchear la playlist. La card en #listened también.
+
+5. **Zero plays: mostrar tapa del álbum**. Ian tiene memoria visual, sin tapa no reconoce. Los items ya vienen de `getBestAvailableLikes` que trae `track.album.images` en el objeto — solo hay que renderizar `<img>` en cada `.pick-row` de `zero-plays.js`. Usar el 3er img (más chico, 64px). Ejemplo del patrón: `dashboard.js` → `history-top-albums` ya lo hace.
+
+6. **Zero plays: falso positivos**. Ian dice "algunas estoy seguro que las escuché". Puede ser:
+   - Filtro `>=30000ms` = si el track dura <30s o si lo skipeó todas las veces, no aparece.
+   - Migración de cuenta de Spotify (perdió historial viejo).
+   - Investigar: mostrar `Última play parcial: X ms (Y días atrás)` para los tracks que SÍ tienen alguna play pero <30s. Eso requiere agregar al índice todas las plays (no solo las ≥30s) o generar un índice paralelo `history-track-plays-all.json`. Alternativa más barata: agregar un flag `partial: true` al índice actual cuando el track tiene alguna play <30s pero ninguna ≥30s.
+
+### ✅ HECHO — Feedback bueno de Ian
+- La card "Por año" y "Por género" en #listened con modales: **"lo dejaste re bien, me gustó"**.
 
 ### Cómo trabajar (workflow de Ian, respetalo)
 - Ian **testea en vivo** en `https://ianct2020.github.io/spotify-web/` haciendo **Ctrl+Shift+R** (GitHub Pages cachea el `index.html`, así que un reload normal sirve el JS viejo → SIEMPRE hay que hard-refresh para ver un `?v=` nuevo).
