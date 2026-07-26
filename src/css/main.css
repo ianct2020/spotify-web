@@ -114,17 +114,24 @@ h3 { font-size: 18px; font-weight: 600; }
   letter-spacing: 1px;
   padding: 0 8px;
   margin-bottom: 8px;
-  /* Shimmer violeta: un brillo suave barre las letras. */
-  background: linear-gradient(100deg, var(--color-text-muted) 30%, #ffffff 46%, var(--color-accent) 54%, var(--color-text-muted) 70%);
-  background-size: 220% 100%;
+  /* Shimmer violeta: un brillo barre las letras. Sin costura: los extremos son del
+     mismo color base, y la animación es lineal, así no se ve el reset. */
+  background: linear-gradient(100deg,
+    var(--color-text-muted) 0%,
+    var(--color-text-muted) 45%,
+    #ffffff 50%,
+    var(--color-accent) 55%,
+    var(--color-text-muted) 60%,
+    var(--color-text-muted) 100%);
+  background-size: 200% 100%;
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
-  animation: sidebarShimmer 3.6s ease-in-out infinite;
+  animation: sidebarShimmer 4.5s linear infinite;
 }
 @keyframes sidebarShimmer {
-  0% { background-position: 120% 0; }
-  100% { background-position: -120% 0; }
+  0% { background-position: 200% 0; }
+  100% { background-position: -100% 0; }
 }
 @media (prefers-reduced-motion: reduce) {
   .sidebar-section-title { animation: none; }
@@ -206,9 +213,20 @@ h3 { font-size: 18px; font-weight: 600; }
 .main {
   flex: 1;
   margin-left: 240px;
-  padding: 32px;
-  max-width: 1000px;
+  padding: 32px 32px 32px 72px;
+  max-width: 1240px;
+  transition: margin-left var(--transition-normal), max-width var(--transition-normal);
   animation: fade-in 0.3s ease;
+}
+
+/* Sidebar colapsado en desktop (por click en hamburguesa) */
+body.sidebar-hidden .sidebar {
+  transform: translateX(-100%);
+}
+body.sidebar-hidden .main {
+  margin-left: 0;
+  max-width: 1400px;
+  padding-left: 72px;
 }
 
 .page-header {
@@ -242,9 +260,9 @@ h3 { font-size: 18px; font-weight: 600; }
   text-decoration: none;
 }
 
-/* ── Hamburger ── */
+/* ── Hamburger: visible en todo momento (permite colapsar el sidebar en desktop) ── */
 .hamburger {
-  display: none;
+  display: block;
   position: fixed;
   top: 16px;
   left: 16px;
@@ -257,6 +275,10 @@ h3 { font-size: 18px; font-weight: 600; }
   cursor: pointer;
   font-size: 20px;
   line-height: 1;
+  transition: background var(--transition-fast), border-color var(--transition-fast);
+}
+.hamburger:hover {
+  border-color: var(--color-accent);
 }
 
 .sidebar-overlay {
@@ -629,20 +651,20 @@ h3 { font-size: 18px; font-weight: 600; }
 /* ── Dashboard ── */
 .dash-stats-row {
   display: flex;
-  gap: 14px;
+  gap: 18px;
   flex-wrap: wrap;
-  margin-bottom: 24px;
+  margin-bottom: 28px;
 }
 
 .dash-stats-row .stat-card {
   flex: 1;
-  min-width: 120px;
+  min-width: 130px;
 }
 
 .dash-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 16px;
+  gap: 22px;
 }
 
 .dash-chart-card {
@@ -804,4 +826,56 @@ h3 { font-size: 18px; font-weight: 600; }
   grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
   gap: 20px;
   padding: 0 20px 20px 20px;
+}
+.wrapped-top-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 16px;
+  margin-top: 20px;
+}
+.wrapped-top-card {
+  padding: 18px 20px;
+}
+
+/* Fade-in stagger para cards del dashboard y wrapped */
+@keyframes dashFadeIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.dash-stats-row .stat-card,
+.dash-grid > .card,
+.wrapped-top-card,
+#listened-year-card,
+.wrapped-card {
+  animation: dashFadeIn 0.4s ease-out both;
+}
+.dash-stats-row .stat-card:nth-child(1) { animation-delay: 0.00s; }
+.dash-stats-row .stat-card:nth-child(2) { animation-delay: 0.04s; }
+.dash-stats-row .stat-card:nth-child(3) { animation-delay: 0.08s; }
+.dash-stats-row .stat-card:nth-child(4) { animation-delay: 0.12s; }
+.dash-stats-row .stat-card:nth-child(5) { animation-delay: 0.16s; }
+.dash-stats-row .stat-card:nth-child(6) { animation-delay: 0.20s; }
+.dash-grid > .card:nth-child(1) { animation-delay: 0.05s; }
+.dash-grid > .card:nth-child(2) { animation-delay: 0.10s; }
+.dash-grid > .card:nth-child(3) { animation-delay: 0.15s; }
+.dash-grid > .card:nth-child(4) { animation-delay: 0.20s; }
+.dash-grid > .card:nth-child(5) { animation-delay: 0.25s; }
+.dash-grid > .card:nth-child(6) { animation-delay: 0.30s; }
+
+/* Heatmap: rects que aparecen con leve escala */
+@keyframes heatmapPop {
+  from { opacity: 0; transform: scale(0.7); transform-origin: center; }
+  to { opacity: 1; transform: scale(1); }
+}
+#history-heatmap svg rect.heatmap-cell {
+  animation: heatmapPop 0.35s ease-out both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dash-stats-row .stat-card,
+  .dash-grid > .card,
+  .wrapped-top-card,
+  #listened-year-card,
+  .wrapped-card,
+  #history-heatmap svg rect.heatmap-cell { animation: none; }
 }

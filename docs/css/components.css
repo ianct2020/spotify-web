@@ -124,12 +124,20 @@ body.modal-open {
 /* Filas de los selectores (sin registrar / del historial): más lindas y con hover. */
 .pick-row {
   transition: background var(--transition-fast);
+  outline: none;
 }
 .pick-row:last-child {
   border-bottom: none !important;
 }
 .pick-row:hover {
   background: var(--color-elevated);
+}
+.pick-row input[type="checkbox"] { outline: none; }
+.pick-row input[type="checkbox"]:focus { outline: none; box-shadow: none; }
+/* Contenedor de rows en scroll: recorta para que el hover no sobresalga por las esquinas */
+.pick-list-scroll {
+  border-radius: var(--radius-md);
+  overflow: hidden;
 }
 .pick-cover {
   width: 44px;

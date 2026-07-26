@@ -1,10 +1,10 @@
 // Likes con 0 plays: tracks likeados que nunca escuchaste según el Extended Streaming History.
 // Cruce local: likes vs history-track-plays.json (índice de plays por track id).
 
-import { getBestAvailableLikes, removeLikedTracks } from '../api.js?v=72';
-import { loadTrackPlays, trackIdOf } from './history-data.js?v=72';
-import { escapeHtml, confirmModal } from '../ui/components.js?v=72';
-import { showToast } from '../ui/toast.js?v=72';
+import { getBestAvailableLikes, removeLikedTracks } from '../api.js?v=73';
+import { loadTrackPlays, trackIdOf } from './history-data.js?v=73';
+import { escapeHtml, confirmModal } from '../ui/components.js?v=73';
+import { showToast } from '../ui/toast.js?v=73';
 
 let cache = null;
 
@@ -82,8 +82,8 @@ function renderResults() {
     ${zeros.length === 0 ? `
       <div class="card"><p>No hay likes sin plays. Todos tus likes se escucharon al menos una vez ≥30s.</p></div>
     ` : `
-      <div class="card" style="padding:0">
-        <div style="max-height:65vh;overflow:auto">
+      <div class="card" style="padding:0;overflow:hidden">
+        <div class="pick-list-scroll" style="max-height:65vh;overflow:auto">
           ${zeros.map((z, i) => {
             const imgs = z.track.album?.images || [];
             const cover = imgs[2]?.url || imgs[1]?.url || imgs[0]?.url || null;

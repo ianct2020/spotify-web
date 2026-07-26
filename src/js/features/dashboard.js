@@ -513,7 +513,7 @@ function renderDashboard(container, stats) {
         <h3 style="margin:0">Álbumes escuchados por año</h3>
         <span style="font-size:12px;color:var(--color-text-muted)" id="listened-year-hint">Detectados desde tu historial · click para ver la lista</span>
       </div>
-      <div id="listened-year-tiles" style="display:flex;gap:10px;flex-wrap:wrap;min-height:70px;align-items:center;color:var(--color-text-muted);font-size:13px">Cargando…</div>
+      <div id="listened-year-tiles" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:12px;min-height:70px;align-items:center;color:var(--color-text-muted);font-size:13px">Cargando…</div>
     </div>
 
     <div class="dash-grid">
@@ -565,21 +565,6 @@ function renderDashboard(container, stats) {
       </div>
     </div>
 
-    <div class="card" style="margin-top:20px">
-      <h3 style="margin-bottom:16px">Top 10 álbumes</h3>
-      <div class="results-list">
-        ${stats.topAlbums.map((a, i) => `
-          <div class="track-row">
-            <span style="width:28px;text-align:center;color:var(--color-text-muted);font-weight:700;flex-shrink:0">${i + 1}</span>
-            <div class="track-info">
-              <div class="track-name">${escapeHtml(a.album)}</div>
-              <div class="track-artist">${escapeHtml(a.artist)}</div>
-            </div>
-            <span class="badge badge-accent">${a.count} tracks</span>
-          </div>
-        `).join('')}
-      </div>
-    </div>
   `;
 
   buildCharts(stats);
@@ -629,7 +614,13 @@ async function hydrateHistorySection() {
         ...CHART_DEFAULTS,
         plugins: {
           ...CHART_DEFAULTS.plugins,
-          tooltip: { callbacks: { label: ctx => `${Math.round(ctx.parsed.y).toLocaleString('es-AR')} min` } },
+          tooltip: {
+            ...CHART_DEFAULTS.plugins.tooltip,
+            callbacks: {
+              title: items => items[0]?.label || '',
+              label: ctx => `${Math.round(ctx.parsed.y).toLocaleString('es-AR')} min`,
+            },
+          },
         },
         scales: {
           ...CHART_DEFAULTS.scales,
@@ -673,7 +664,13 @@ async function hydrateHistorySection() {
         indexAxis: 'y',
         plugins: {
           ...CHART_DEFAULTS.plugins,
-          tooltip: { callbacks: { label: ctx => `${Math.round(ctx.parsed.x).toLocaleString('es-AR')} min` } },
+          tooltip: {
+            ...CHART_DEFAULTS.plugins.tooltip,
+            callbacks: {
+              title: items => items[0]?.label || '',
+              label: ctx => `${Math.round(ctx.parsed.x).toLocaleString('es-AR')} min`,
+            },
+          },
         },
         scales: {
           ...CHART_DEFAULTS.scales,
@@ -739,7 +736,8 @@ function renderHeatmap(matrix) {
       const alpha = val / max;
       const fill = alpha === 0 ? 'rgba(255,255,255,0.03)' : `rgba(124,58,237,${0.15 + alpha * 0.85})`;
       const pctOfMax = Math.round(alpha * 100);
-      svg += `<rect class="heatmap-cell" x="${x}" y="${y}" width="${cellSize}" height="${cellSize}" rx="2" fill="${fill}" data-d="${d}" data-h="${h}" data-v="${Math.round(val)}" data-p="${pctOfMax}"></rect>`;
+      const delay = (d * 24 + h) * 4;
+      svg += `<rect class="heatmap-cell" x="${x}" y="${y}" width="${cellSize}" height="${cellSize}" rx="2" fill="${fill}" data-d="${d}" data-h="${h}" data-v="${Math.round(val)}" data-p="${pctOfMax}" style="animation-delay:${delay}ms"></rect>`;
     }
   }
   svg += '</svg>';
@@ -794,7 +792,7 @@ async function hydrateListenedYearTiles() {
     holder.style.color = '';
     holder.style.fontSize = '';
     holder.innerHTML = years.map(y => `
-      <button class="year-tile" data-year="${y.year}" style="flex:1 1 120px;min-width:100px;background:var(--color-elevated);border:1px solid var(--color-border);border-radius:var(--radius-sm);padding:12px 14px;text-align:left;cursor:pointer;transition:border-color .15s,transform .05s">
+      <button class="year-tile" data-year="${y.year}" style="background:var(--color-elevated);border:1px solid var(--color-border);border-radius:var(--radius-sm);padding:14px 16px;text-align:left;cursor:pointer;transition:border-color .15s,transform .05s">
         <div style="font-size:22px;font-weight:700;color:var(--color-text);line-height:1.1">${y.count.toLocaleString('es-AR')}</div>
         <div style="font-size:12px;color:var(--color-text-muted);margin-top:4px">${y.year}</div>
       </button>
@@ -911,8 +909,28 @@ const CHART_COLORS = {
 const CHART_DEFAULTS = {
   responsive: true,
   maintainAspectRatio: false,
+  interaction: {
+    mode: 'index',
+    intersect: false,
+    axis: 'xy',
+  },
   plugins: {
     legend: { display: false },
+    tooltip: {
+      enabled: true,
+      backgroundColor: 'rgba(15, 15, 24, 0.96)',
+      titleColor: '#f0f0f5',
+      titleFont: { family: 'Inter', size: 12, weight: '600' },
+      bodyColor: '#a68cf0',
+      bodyFont: { family: 'Inter', size: 13, weight: '500' },
+      padding: 10,
+      borderColor: '#2a2a3a',
+      borderWidth: 1,
+      cornerRadius: 8,
+      displayColors: false,
+      caretSize: 6,
+      caretPadding: 8,
+    },
   },
   scales: {
     x: {
@@ -1051,6 +1069,7 @@ function buildCharts(stats) {
     options: {
       ...CHART_DEFAULTS,
       plugins: {
+        ...CHART_DEFAULTS.plugins,
         legend: {
           display: true,
           position: 'top',

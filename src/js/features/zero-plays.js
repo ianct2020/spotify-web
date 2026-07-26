@@ -82,8 +82,8 @@ function renderResults() {
     ${zeros.length === 0 ? `
       <div class="card"><p>No hay likes sin plays. Todos tus likes se escucharon al menos una vez ≥30s.</p></div>
     ` : `
-      <div class="card" style="padding:0">
-        <div style="max-height:65vh;overflow:auto">
+      <div class="card" style="padding:0;overflow:hidden">
+        <div class="pick-list-scroll" style="max-height:65vh;overflow:auto">
           ${zeros.map((z, i) => {
             const imgs = z.track.album?.images || [];
             const cover = imgs[2]?.url || imgs[1]?.url || imgs[0]?.url || null;

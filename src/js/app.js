@@ -195,55 +195,55 @@ function showApp(profile) {
         <div class="sidebar-section">
           <div class="sidebar-section-title">General</div>
           <a class="nav-link" data-route="dashboard" href="#dashboard">
-            <span class="nav-link-icon">&#9733;</span> Dashboard
+            <span class="nav-link-icon">📊</span> Dashboard
           </a>
           <a class="nav-link" data-route="wrapped" href="#wrapped">
-            <span class="nav-link-icon">&#10038;</span> Wrapped
+            <span class="nav-link-icon">🎁</span> Wrapped
           </a>
         </div>
         <div class="sidebar-section">
           <div class="sidebar-section-title">Crear</div>
           <a class="nav-link" data-route="smart" href="#smart">
-            <span class="nav-link-icon">&#10022;</span> Smart Playlists
+            <span class="nav-link-icon">🪄</span> Smart Playlists
           </a>
           <a class="nav-link" data-route="byartist" href="#byartist">
-            <span class="nav-link-icon">&#9835;</span> Por artista
+            <span class="nav-link-icon">🎤</span> Por artista
           </a>
         </div>
         <div class="sidebar-section">
           <div class="sidebar-section-title">Descubrir</div>
           <a class="nav-link" data-route="similar" href="#similar">
-            <span class="nav-link-icon">&#9737;</span> Artistas similares
+            <span class="nav-link-icon">🎯</span> Artistas similares
           </a>
           <a class="nav-link" data-route="rabbit" href="#rabbit">
-            <span class="nav-link-icon">&#8734;</span> Rabbit hole
+            <span class="nav-link-icon">🐇</span> Rabbit hole
           </a>
           <a class="nav-link" data-route="recs" href="#recs">
-            <span class="nav-link-icon">&#9835;</span> Recomendaciones
+            <span class="nav-link-icon">💡</span> Recomendaciones
           </a>
           <a class="nav-link" data-route="genre" href="#genre">
-            <span class="nav-link-icon">&#9833;</span> Por género
+            <span class="nav-link-icon">🎼</span> Por género
           </a>
           <a class="nav-link" data-route="listened" href="#listened">
-            <span class="nav-link-icon">&#9635;</span> Álbumes escuchados
+            <span class="nav-link-icon">💿</span> Álbumes escuchados
           </a>
         </div>
         <div class="sidebar-section">
           <div class="sidebar-section-title">Limpieza</div>
           <a class="nav-link" data-route="sync" href="#sync">
-            <span class="nav-link-icon">&#8644;</span> Sync Mirror
+            <span class="nav-link-icon">🔁</span> Sync Mirror
           </a>
           <a class="nav-link" data-route="dedupe" href="#dedupe">
-            <span class="nav-link-icon">&#9851;</span> Dedupe
+            <span class="nav-link-icon">🧬</span> Dedupe
           </a>
           <a class="nav-link" data-route="zombies" href="#zombies">
-            <span class="nav-link-icon">&#9760;</span> Zombis
+            <span class="nav-link-icon">👻</span> Zombis
           </a>
           <a class="nav-link" data-route="versions" href="#versions">
-            <span class="nav-link-icon">&#9842;</span> Versiones
+            <span class="nav-link-icon">🎚️</span> Versiones
           </a>
           <a class="nav-link" data-route="zeroplays" href="#zeroplays">
-            <span class="nav-link-icon">&#9675;</span> Sin plays
+            <span class="nav-link-icon">🚫</span> Sin plays
           </a>
         </div>
       </nav>
@@ -281,9 +281,22 @@ function showApp(profile) {
   const sidebar = document.getElementById('sidebar');
   const overlay = document.getElementById('sidebar-overlay');
 
+  // Preferencia persistida del user para el sidebar en desktop
+  const SIDEBAR_HIDDEN_KEY = 'sidebar_hidden';
+  if (localStorage.getItem(SIDEBAR_HIDDEN_KEY) === '1') {
+    document.body.classList.add('sidebar-hidden');
+  }
+
   hamburger.onclick = () => {
-    sidebar.classList.toggle('open');
-    overlay.classList.toggle('open');
+    // En mobile (<=768): abrir/cerrar como overlay. En desktop: toggle desktop-collapse.
+    if (window.matchMedia('(max-width: 768px)').matches) {
+      sidebar.classList.toggle('open');
+      overlay.classList.toggle('open');
+    } else {
+      const hidden = document.body.classList.toggle('sidebar-hidden');
+      if (hidden) localStorage.setItem(SIDEBAR_HIDDEN_KEY, '1');
+      else localStorage.removeItem(SIDEBAR_HIDDEN_KEY);
+    }
   };
   overlay.onclick = () => {
     sidebar.classList.remove('open');
@@ -334,35 +347,35 @@ const HOME_SECTIONS = [
   {
     title: 'General',
     items: [
-      { hash: 'dashboard', icon: '&#9733;', name: 'Dashboard', desc: 'Stats de tu biblioteca de Liked Songs.' },
-      { hash: 'wrapped', icon: '&#10038;', name: 'Wrapped', desc: 'Tu resumen del año — año calendario completo, hecho con el streaming history.' },
+      { hash: 'dashboard', icon: '📊', name: 'Dashboard', desc: 'Stats de tu biblioteca de Liked Songs.' },
+      { hash: 'wrapped', icon: '🎁', name: 'Wrapped', desc: 'Tu resumen del año — año calendario completo, hecho con el streaming history.' },
     ],
   },
   {
     title: 'Crear',
     items: [
-      { hash: 'smart', icon: '&#10022;', name: 'Smart Playlists', desc: 'Playlists por año, década o random.' },
-      { hash: 'byartist', icon: '&#9835;', name: 'Por artista', desc: 'Todos tus likes de uno o varios artistas.' },
+      { hash: 'smart', icon: '🪄', name: 'Smart Playlists', desc: 'Playlists por año, década o random.' },
+      { hash: 'byartist', icon: '🎤', name: 'Por artista', desc: 'Todos tus likes de uno o varios artistas.' },
     ],
   },
   {
     title: 'Descubrir',
     items: [
-      { hash: 'similar', icon: '&#9737;', name: 'Artistas similares', desc: 'Artistas parecidos a los que te gustan, vía Last.fm.' },
-      { hash: 'rabbit', icon: '&#8734;', name: 'Rabbit hole', desc: 'Navegá artistas y tracks encadenados por género.' },
-      { hash: 'recs', icon: '&#9835;', name: 'Recomendaciones', desc: 'Basadas en tus scrobbles de Last.fm.' },
-      { hash: 'genre', icon: '&#9833;', name: 'Por género', desc: 'Agrupá tus likes por género y armá playlists.' },
-      { hash: 'listened', icon: '&#9635;', name: 'Álbumes escuchados', desc: 'Los álbumes de tu playlist de registro, agrupados.' },
+      { hash: 'similar', icon: '🎯', name: 'Artistas similares', desc: 'Artistas parecidos a los que te gustan, vía Last.fm.' },
+      { hash: 'rabbit', icon: '🐇', name: 'Rabbit hole', desc: 'Navegá artistas y tracks encadenados por género.' },
+      { hash: 'recs', icon: '💡', name: 'Recomendaciones', desc: 'Basadas en tus scrobbles de Last.fm.' },
+      { hash: 'genre', icon: '🎼', name: 'Por género', desc: 'Agrupá tus likes por género y armá playlists.' },
+      { hash: 'listened', icon: '💿', name: 'Álbumes escuchados', desc: 'Los álbumes de tu playlist de registro, agrupados.' },
     ],
   },
   {
     title: 'Limpieza',
     items: [
-      { hash: 'sync', icon: '&#8644;', name: 'Sync Mirror', desc: 'Una playlist como copia exacta de tus Liked Songs.' },
-      { hash: 'dedupe', icon: '&#9851;', name: 'Dedupe', desc: 'Eliminá tracks duplicados dentro de cada playlist.' },
-      { hash: 'zombies', icon: '&#9760;', name: 'Zombis', desc: 'Tracks eliminados del catálogo de Spotify.' },
-      { hash: 'versions', icon: '&#9842;', name: 'Versiones', desc: 'Mismo tema en distintos álbumes (remaster, live, etc.).' },
-      { hash: 'zeroplays', icon: '&#9675;', name: 'Sin plays', desc: 'Likes que nunca reprodujiste según tu historial de Spotify.' },
+      { hash: 'sync', icon: '🔁', name: 'Sync Mirror', desc: 'Una playlist como copia exacta de tus Liked Songs.' },
+      { hash: 'dedupe', icon: '🧬', name: 'Dedupe', desc: 'Eliminá tracks duplicados dentro de cada playlist.' },
+      { hash: 'zombies', icon: '👻', name: 'Zombis', desc: 'Tracks eliminados del catálogo de Spotify.' },
+      { hash: 'versions', icon: '🎚️', name: 'Versiones', desc: 'Mismo tema en distintos álbumes (remaster, live, etc.).' },
+      { hash: 'zeroplays', icon: '🚫', name: 'Sin plays', desc: 'Likes que nunca reprodujiste según tu historial de Spotify.' },
     ],
   },
 ];

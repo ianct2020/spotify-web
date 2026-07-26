@@ -67,6 +67,18 @@ async function spotifyFetch(endpoint, options = {}) {
       continue;
     }
 
+    // Errores transitorios del backend de Spotify (500, 502, 503, 504): backoff exponencial.
+    if ([500, 502, 503, 504].includes(response.status)) {
+      networkRetries++;
+      if (networkRetries > maxRetries) {
+        throw new Error(`Spotify ${response.status}: el servicio no responde después de ${maxRetries} reintentos. Probá de nuevo en un rato.`);
+      }
+      const wait = Math.min(8000, 500 * Math.pow(2, networkRetries - 1));
+      console.warn(`Spotify ${response.status} en ${endpoint}, backoff ${(wait / 1000).toFixed(1)}s (retry ${networkRetries}/${maxRetries})`);
+      await sleep(wait);
+      continue;
+    }
+
     if (response.status === 204) {
       return null;
     }
