@@ -1,7 +1,7 @@
-import { getAllLikedTracks, invalidateLikesCache, exportAllData, importAllData, getCurrentUserId, getLikesTotal, syncLikesIncremental, getLikesCacheTimestamp, getBestAvailableLikes, getAllPlaylistItems } from '../api.js?v=67';
-import { showProgress, hideProgress, alertModal, escapeHtml } from '../ui/components.js?v=67';
-import { showToast } from '../ui/toast.js?v=67';
-import { openListenedAlbumsPicker } from './listened-shared.js?v=67';
+import { getAllLikedTracks, invalidateLikesCache, exportAllData, importAllData, getCurrentUserId, getLikesTotal, syncLikesIncremental, getLikesCacheTimestamp, getBestAvailableLikes, getAllPlaylistItems } from '../api.js?v=68';
+import { showProgress, hideProgress, alertModal, escapeHtml } from '../ui/components.js?v=68';
+import { showToast } from '../ui/toast.js?v=68';
+import { openListenedAlbumsPicker, groupItemsByAlbum } from './listened-shared.js?v=68';
 
 let charts = [];
 let _loadController = null;
@@ -507,6 +507,14 @@ function renderDashboard(container, stats) {
       </div>
     </div>
 
+    <div class="card" id="listened-year-card" style="margin-top:20px;display:none">
+      <div style="display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin-bottom:10px;flex-wrap:wrap">
+        <h3 style="margin:0">Álbumes escuchados por año</h3>
+        <span style="font-size:12px;color:var(--color-text-muted)">Cuándo agregaste cada álbum al registro · click para ver la lista</span>
+      </div>
+      <div id="listened-year-tiles" style="display:flex;gap:10px;flex-wrap:wrap;min-height:70px;align-items:center;color:var(--color-text-muted);font-size:13px">Cargando…</div>
+    </div>
+
     <div class="dash-grid">
       <div class="card dash-chart-card">
         <h3>Por década</h3>
@@ -549,6 +557,91 @@ function renderDashboard(container, stats) {
 
   buildCharts(stats);
   hydrateListenedAlbumsCard();
+  hydrateListenedYearTiles();
+}
+
+async function hydrateListenedYearTiles() {
+  const card = document.getElementById('listened-year-card');
+  const holder = document.getElementById('listened-year-tiles');
+  if (!card || !holder) return;
+  const playlistId = localStorage.getItem('listened_albums_playlist_id');
+  const playlistName = localStorage.getItem('listened_albums_playlist_name');
+  if (!playlistId) return; // sin registro configurado, no mostramos la card
+
+  card.style.display = '';
+  try {
+    const items = await getAllPlaylistItems(playlistId);
+    const albums = groupItemsByAlbum(items);
+    if (albums.length === 0) { card.style.display = 'none'; return; }
+
+    const buckets = new Map();
+    for (const a of albums) {
+      const y = a.addedAt ? String(new Date(a.addedAt).getFullYear()) : '—';
+      if (!buckets.has(y)) buckets.set(y, []);
+      buckets.get(y).push(a);
+    }
+    const years = [...buckets.entries()].map(([year, list]) => ({ year, count: list.length, albums: list }));
+    years.sort((a, b) => (a.year === '—' ? 1 : b.year === '—' ? -1 : b.year.localeCompare(a.year)));
+
+    holder.style.color = '';
+    holder.style.fontSize = '';
+    holder.innerHTML = years.map(y => `
+      <button class="year-tile" data-year="${escapeHtml(y.year)}" style="flex:1 1 120px;min-width:100px;background:var(--color-elevated);border:1px solid var(--color-border);border-radius:var(--radius-sm);padding:12px 14px;text-align:left;cursor:pointer;transition:border-color .15s,transform .05s">
+        <div style="font-size:22px;font-weight:700;color:var(--color-text);line-height:1.1">${y.count.toLocaleString()}</div>
+        <div style="font-size:12px;color:var(--color-text-muted);margin-top:4px">${escapeHtml(y.year)}</div>
+      </button>
+    `).join('');
+    holder.querySelectorAll('.year-tile').forEach(tile => {
+      tile.onclick = () => openYearAlbumsModal(tile.dataset.year, years.find(y => y.year === tile.dataset.year), playlistName || 'la playlist');
+    });
+  } catch (e) {
+    holder.innerHTML = `<span style="color:var(--color-error)">Error cargando: ${escapeHtml(e.message)}</span>`;
+  }
+}
+
+function openYearAlbumsModal(year, bucket, playlistName) {
+  if (!bucket) return;
+  const list = [...bucket.albums].sort((a, b) => b.addedAt - a.addedAt);
+  const fmt = ts => {
+    if (!ts) return '';
+    const d = new Date(ts);
+    return d.toLocaleDateString('es-AR', { day: '2-digit', month: 'short', year: 'numeric' });
+  };
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  overlay.innerHTML = `
+    <div class="modal modal-picker" style="max-width:560px">
+      <h2 style="margin-bottom:4px">Álbumes escuchados en ${escapeHtml(year)}</h2>
+      <p style="color:var(--color-text-secondary);font-size:13px;margin-bottom:10px">
+        ${bucket.count.toLocaleString()} álbum${bucket.count === 1 ? '' : 'es'} registrado${bucket.count === 1 ? '' : 's'} en <strong>${escapeHtml(playlistName)}</strong> durante ${escapeHtml(year)}.
+      </p>
+      <div class="picker-scroll">
+        <div style="border:1px solid var(--color-border);border-radius:var(--radius-sm)">
+          ${list.map(a => {
+            const url = a.id && !String(a.id).includes(':') ? `https://open.spotify.com/album/${a.id}` : (a.url || null);
+            return `
+              <div class="pick-row" style="display:flex;align-items:center;gap:11px;padding:9px 12px;border-bottom:1px solid var(--color-border)">
+                ${a.cover || a.image ? `<img src="${a.cover || a.image}" loading="lazy" class="pick-cover">` : `<div class="pick-cover" style="background:var(--color-elevated);display:flex;align-items:center;justify-content:center;color:var(--color-text-muted);font-size:16px">♪</div>`}
+                <div style="flex:1;min-width:0">
+                  <div style="font-size:14px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(a.name)}</div>
+                  <div style="font-size:12px;color:var(--color-text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(a.artist)}${a.year ? ` · ${escapeHtml(a.year)}` : ''}</div>
+                </div>
+                <span style="font-size:11px;color:var(--color-text-muted);flex-shrink:0">${escapeHtml(fmt(a.addedAt))}</span>
+                ${url ? `<a href="${url}" target="_blank" rel="noopener" title="Abrir en Spotify" style="color:var(--color-text-muted);font-size:15px;flex-shrink:0;text-decoration:none">↗</a>` : ''}
+              </div>
+            `;
+          }).join('')}
+        </div>
+      </div>
+      <div class="modal-actions" style="margin-top:12px">
+        <button class="btn btn-secondary" id="year-close">Cerrar</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+  const close = () => overlay.remove();
+  overlay.querySelector('#year-close').onclick = close;
+  overlay.addEventListener('click', ev => { if (ev.target === overlay) close(); });
 }
 
 async function hydrateListenedAlbumsCard() {

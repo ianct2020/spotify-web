@@ -1,6 +1,6 @@
-import { getAllLikedTracks, createPlaylist, addTracksToPlaylist, getAllUserPlaylists, invalidatePlaylistsCache } from '../api.js?v=67';
-import { showProgress, hideProgress, promptPlaylistName, escapeHtml } from '../ui/components.js?v=67';
-import { showToast } from '../ui/toast.js?v=67';
+import { getAllLikedTracks, createPlaylist, addTracksToPlaylist, getAllUserPlaylists, invalidatePlaylistsCache } from '../api.js?v=68';
+import { showProgress, hideProgress, promptPlaylistName, escapeHtml } from '../ui/components.js?v=68';
+import { showToast } from '../ui/toast.js?v=68';
 
 let likes = [];
 let currentTab = 'year';

@@ -1,8 +1,8 @@
-import { getAllPlaylistItems, getBestAvailableLikes, addTracksToPlaylist, removeTracksFromPlaylist, getAllUserPlaylists } from '../api.js?v=67';
-import { idbGetCached, idbSetCached, idbGetTimestamp, idbDel } from '../idb.js?v=67';
-import { escapeHtml, confirmModal } from '../ui/components.js?v=67';
-import { showToast } from '../ui/toast.js?v=67';
-import { getListenedPlaylist, groupItemsByAlbum, openListenedAlbumsPicker, albumKey, baseName, norm } from './listened-shared.js?v=67';
+import { getAllPlaylistItems, getBestAvailableLikes, addTracksToPlaylist, removeTracksFromPlaylist, getAllUserPlaylists } from '../api.js?v=68';
+import { idbGetCached, idbSetCached, idbGetTimestamp, idbDel } from '../idb.js?v=68';
+import { escapeHtml, confirmModal } from '../ui/components.js?v=68';
+import { showToast } from '../ui/toast.js?v=68';
+import { getListenedPlaylist, groupItemsByAlbum, openListenedAlbumsPicker, albumKey, baseName, norm } from './listened-shared.js?v=68';
 
 const SORT_KEY = 'listened_sort_mode';
 const VALID_SORTS = new Set(['recent', 'year-desc', 'year-asc', 'artist-asc', 'likes-desc', 'name-asc']);
@@ -108,6 +108,21 @@ function computeHistoryUnregistered(min = historyMin) {
   return out;
 }
 // Álbumes con MÁS de un track en la playlist (querés 1 track por álbum). Ordenados por cantidad.
+// Cuenta álbumes registrados por año, usando `addedAt` (cuándo se agregó el primer track del álbum a la playlist).
+// Devuelve [{year:'2025', count:N, albums:[...]}, ...] ordenado del más nuevo al más viejo.
+// Los álbumes sin addedAt se agrupan en '—' (fallback, no debería pasar en tracks bajados con added_at).
+function computeYearCounts() {
+  const buckets = new Map();
+  for (const a of albums) {
+    const y = a.addedAt ? String(new Date(a.addedAt).getFullYear()) : '—';
+    if (!buckets.has(y)) buckets.set(y, []);
+    buckets.get(y).push(a);
+  }
+  const out = [...buckets.entries()].map(([year, list]) => ({ year, count: list.length, albums: list }));
+  out.sort((a, b) => (a.year === '—' ? 1 : b.year === '—' ? -1 : b.year.localeCompare(a.year)));
+  return out;
+}
+
 function computeRepeatedAlbums() {
   return albums.filter(a => a.tracks.length > 1).sort((x, y) => y.tracks.length - x.tracks.length);
 }
@@ -441,6 +456,27 @@ function buildUI(totalTracks, ts) {
       </div>
     </div>
 
+    ${(() => {
+      const years = computeYearCounts();
+      if (years.length === 0) return '';
+      return `
+        <div class="card" style="margin-bottom:16px">
+          <div style="display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin-bottom:10px;flex-wrap:wrap">
+            <h3 style="margin:0;font-size:15px">Por año</h3>
+            <span style="font-size:12px;color:var(--color-text-muted)">Cuándo agregaste cada álbum al registro · click para ver la lista</span>
+          </div>
+          <div style="display:flex;gap:10px;flex-wrap:wrap">
+            ${years.map(y => `
+              <button class="year-tile" data-year="${escapeHtml(y.year)}" style="flex:1 1 120px;min-width:100px;background:var(--color-elevated);border:1px solid var(--color-border);border-radius:var(--radius-sm);padding:12px 14px;text-align:left;cursor:pointer;transition:border-color .15s,transform .05s">
+                <div style="font-size:22px;font-weight:700;color:var(--color-text);line-height:1.1">${y.count.toLocaleString()}</div>
+                <div style="font-size:12px;color:var(--color-text-muted);margin-top:4px">${escapeHtml(y.year)}</div>
+              </button>
+            `).join('')}
+          </div>
+        </div>
+      `;
+    })()}
+
     <div style="display:flex;gap:12px;align-items:center;margin-bottom:12px;flex-wrap:wrap">
       <div style="flex:1;min-width:240px;position:relative">
         <input type="text" id="listened-search" placeholder="Buscar álbum o artista..."
@@ -499,6 +535,9 @@ function buildUI(totalTracks, ts) {
     renderGrid();
     searchInput.focus();
   };
+  content.querySelectorAll('.year-tile').forEach(tile => {
+    tile.onclick = () => openYearAlbums(tile.dataset.year);
+  });
   content.querySelectorAll('.sort-btn').forEach(btn => {
     btn.onclick = () => {
       // Reapretar el orden activo lo deselecciona y vuelve al default (Recientes).
@@ -631,6 +670,52 @@ function openAlbumDetail(albumId) {
 
 // Modal con álbumes que tenés muy likeados pero no figuran en tu playlist de registro.
 // Umbral ajustable en vivo (3/4/5/6/8 canciones en likes).
+function openYearAlbums(year) {
+  const bucket = computeYearCounts().find(y => y.year === year);
+  if (!bucket) return;
+  const list = [...bucket.albums].sort((a, b) => b.addedAt - a.addedAt); // más recientes arriba
+  const fmt = ts => {
+    if (!ts) return '';
+    const d = new Date(ts);
+    return d.toLocaleDateString('es-AR', { day: '2-digit', month: 'short', year: 'numeric' });
+  };
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  overlay.innerHTML = `
+    <div class="modal modal-picker" style="max-width:560px">
+      <h2 style="margin-bottom:4px">Álbumes escuchados en ${escapeHtml(year)}</h2>
+      <p style="color:var(--color-text-secondary);font-size:13px;margin-bottom:10px">
+        ${bucket.count.toLocaleString()} álbum${bucket.count === 1 ? '' : 'es'} registrado${bucket.count === 1 ? '' : 's'} en <strong>${escapeHtml(playlistInfo.name)}</strong> durante ${escapeHtml(year)}.
+      </p>
+      <div class="picker-scroll">
+        <div style="border:1px solid var(--color-border);border-radius:var(--radius-sm)">
+          ${list.map(a => {
+            const url = a.id && !String(a.id).includes(':') ? `https://open.spotify.com/album/${a.id}` : (a.url || null);
+            return `
+              <div class="pick-row" style="display:flex;align-items:center;gap:11px;padding:9px 12px;border-bottom:1px solid var(--color-border)">
+                ${a.cover || a.image ? `<img src="${a.cover || a.image}" loading="lazy" class="pick-cover">` : `<div class="pick-cover" style="background:var(--color-elevated);display:flex;align-items:center;justify-content:center;color:var(--color-text-muted);font-size:16px">♪</div>`}
+                <div style="flex:1;min-width:0">
+                  <div style="font-size:14px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(a.name)}</div>
+                  <div style="font-size:12px;color:var(--color-text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(a.artist)}${a.year ? ` · ${escapeHtml(a.year)}` : ''}</div>
+                </div>
+                <span style="font-size:11px;color:var(--color-text-muted);flex-shrink:0">${escapeHtml(fmt(a.addedAt))}</span>
+                ${url ? `<a href="${url}" target="_blank" rel="noopener" title="Abrir en Spotify" style="color:var(--color-text-muted);font-size:15px;flex-shrink:0;text-decoration:none">↗</a>` : ''}
+              </div>
+            `;
+          }).join('')}
+        </div>
+      </div>
+      <div class="modal-actions" style="margin-top:12px">
+        <button class="btn btn-secondary" id="year-close">Cerrar</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+  const close = () => overlay.remove();
+  overlay.querySelector('#year-close').onclick = close;
+  overlay.addEventListener('click', ev => { if (ev.target === overlay) close(); });
+}
+
 function openUnregistered() {
   const overlay = document.createElement('div');
   overlay.className = 'modal-overlay';
