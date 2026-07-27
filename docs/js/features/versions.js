@@ -1,8 +1,11 @@
-import { getAllLikedTracks, removeLikedTracks } from '../api.js?v=76';
-import { showProgress, hideProgress, typeConfirmModal, renderTrackRow, escapeHtml } from '../ui/components.js?v=76';
-import { showToast } from '../ui/toast.js?v=76';
+import { getAllLikedTracks, removeLikedTracks } from '../api.js?v=77';
+import { showProgress, hideProgress, typeConfirmModal, renderTrackRow, escapeHtml } from '../ui/components.js?v=77';
+import { showToast } from '../ui/toast.js?v=77';
 
 const keepIds = new Set();
+// Persiste los cluster idx que ya resolviste (batchDelete). Sobrevive a "Ver más"
+// y a re-renders del listado — así podés ver de dónde seguir la sesión.
+const resolvedClusterIdxs = new Set();
 let allClusters = [];
 const SHOWN_STEP = 50;
 let shownCount = SHOWN_STEP;
@@ -41,6 +44,8 @@ async function analyze(force = false) {
   const btn = document.getElementById('versions-analyze-btn');
   btn.disabled = true;
   keepIds.clear();
+  // Empezar el análisis desde cero también limpia lo "resuelto" — es un nuevo run.
+  resolvedClusterIdxs.clear();
 
   try {
     const msg = force ? 'Re-bajando Liked Songs desde Spotify...' : 'Cargando Liked Songs...';
@@ -185,32 +190,18 @@ async function batchDelete() {
     showToast(`${toRemoveIds.length} versión(es) eliminada(s)`, 'success');
 
     const toRemoveSet = new Set(toRemoveIds);
-    document.querySelectorAll('.cluster-group').forEach(clusterEl => {
-      const idx = parseInt(clusterEl.dataset.clusterIdx);
-      const cluster = allClusters[idx];
-      if (!cluster) return;
+    // Mutar allClusters: dejar solo lo que se quedó. Así "Ver más" o cualquier re-render
+    // muestra el cluster con la version keeper solamente + badge "guardada".
+    allClusters.forEach((cluster, idx) => {
       const hadKeep = cluster.some(item => keepIds.has(item.track.id));
       if (!hadKeep) return;
-
-      clusterEl.querySelectorAll('.version-row').forEach(rowEl => {
-        if (toRemoveSet.has(rowEl.dataset.trackId)) rowEl.remove();
-      });
-
-      const remaining = clusterEl.querySelectorAll('.version-row').length;
-      if (remaining <= 1) {
-        const headerSpan = clusterEl.querySelector('.cluster-header span:first-child');
-        const badge = clusterEl.querySelector('.cluster-header .badge');
-        if (badge) {
-          badge.className = 'badge badge-success';
-          badge.textContent = 'resuelto';
-        }
-        if (headerSpan) {
-          headerSpan.innerHTML = '✓ ' + headerSpan.innerHTML;
-        }
-      }
+      const kept = cluster.filter(item => !toRemoveSet.has(item.track.id));
+      allClusters[idx] = kept;
+      resolvedClusterIdxs.add(idx);
     });
 
     keepIds.clear();
+    renderClusterList();
     updateBatchBar();
   } catch (e) {
     hideProgress();
@@ -219,14 +210,20 @@ async function batchDelete() {
 }
 
 function renderCluster(cluster, idx) {
+  if (!cluster.length) return '';
   const firstTrack = cluster[0].track;
   const artistName = firstTrack.artists?.map(a => a.name).join(', ') || 'Unknown';
+  const isResolved = resolvedClusterIdxs.has(idx);
+  const headerBadge = isResolved
+    ? `<span class="badge badge-success">✓ guardada</span>`
+    : `<span class="badge badge-warning">${cluster.length} versiones</span>`;
+  const headerPrefix = isResolved ? '✓ ' : '';
 
   return `
-    <div class="cluster-group" data-cluster-idx="${idx}">
+    <div class="cluster-group ${isResolved ? 'cluster-resolved' : ''}" data-cluster-idx="${idx}">
       <div class="cluster-header">
-        <span>${escapeHtml(firstTrack.name)} — ${escapeHtml(artistName)}</span>
-        <span class="badge badge-warning">${cluster.length} versiones</span>
+        <span>${headerPrefix}${escapeHtml(firstTrack.name)} — ${escapeHtml(artistName)}</span>
+        ${headerBadge}
       </div>
       <div style="padding:8px">
         ${cluster.map(item => {

@@ -152,7 +152,9 @@ async function handleRefresh() {
       loadData(true);
       return;
     }
-    if (result.added === 0) {
+    if (result.reconciled) {
+      showToast(`Reconciliado: ${result.removed} like(s) que borraste en Spotify se sacaron del cache (total: ${result.cachedCount.toLocaleString()})`, 'success');
+    } else if (result.added === 0) {
       showToast(`Sin cambios (${result.cachedCount.toLocaleString()} likes, coincide con Spotify)`, 'success');
     } else {
       showToast(`+${result.added} likes nuevos traídos (total: ${result.totalNow.toLocaleString()})`, 'success');
@@ -662,8 +664,8 @@ async function hydrateHistorySection() {
       options: {
         ...CHART_DEFAULTS,
         indexAxis: 'y',
-        // En bar horizontal, forzamos el hit-test por eje Y para que hover-drake devuelva Drake.
-        interaction: { mode: 'index', axis: 'y', intersect: false },
+        // intersect: true → el tooltip aparece solo si el mouse está DENTRO de la barra.
+        interaction: { mode: 'nearest', axis: 'y', intersect: true },
         plugins: {
           ...CHART_DEFAULTS.plugins,
           tooltip: {
@@ -999,7 +1001,9 @@ function buildCharts(stats) {
     options: {
       ...CHART_DEFAULTS,
       indexAxis: 'y',
-      interaction: { mode: 'index', axis: 'y', intersect: false },
+      // intersect: true → el tooltip aparece solo si el mouse está DENTRO de la barra.
+      // Antes con intersect:false, apoyar el mouse debajo del gráfico mostraba la última barra.
+      interaction: { mode: 'nearest', axis: 'y', intersect: true },
       scales: {
         ...CHART_DEFAULTS.scales,
         x: {

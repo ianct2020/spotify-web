@@ -1,6 +1,6 @@
-import { getAllLikedTracks, getAllUserPlaylists, getAllPlaylistItems, createPlaylist, addTracksToPlaylist } from '../api.js?v=76';
-import { showProgress, hideProgress, confirmModal, renderTrackRow } from '../ui/components.js?v=76';
-import { showToast } from '../ui/toast.js?v=76';
+import { getAllLikedTracks, getAllUserPlaylists, getAllPlaylistItems, createPlaylist, addTracksToPlaylist } from '../api.js?v=77';
+import { showProgress, hideProgress, confirmModal, renderTrackRow } from '../ui/components.js?v=77';
+import { showToast } from '../ui/toast.js?v=77';
 
 export function render(container) {
   container.innerHTML = `
