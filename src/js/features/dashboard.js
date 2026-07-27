@@ -550,13 +550,13 @@ function renderDashboard(container, stats) {
           <h3>Evolución mensual — minutos escuchados</h3>
           <canvas id="chart-history-monthly"></canvas>
         </div>
-        <div class="card dash-chart-card">
+        <div class="card dash-chart-card dash-chart-wide">
           <h3>Heatmap — cuándo escuchás <span style="font-weight:400;color:var(--color-text-muted);font-size:13px">· min / día × hora</span></h3>
           <div id="history-heatmap" style="display:flex;justify-content:center;align-items:center;padding:8px 0"></div>
         </div>
-        <div class="card dash-chart-card">
+        <div class="card dash-chart-card dash-chart-wide">
           <h3>Top 20 artistas <span style="font-weight:400;color:var(--color-text-muted);font-size:13px">· por tiempo escuchado real</span></h3>
-          <canvas id="chart-history-artists" style="min-height:520px"></canvas>
+          <canvas id="chart-history-artists" style="min-height:620px"></canvas>
         </div>
         <div class="card dash-chart-card dash-chart-wide">
           <h3>Top 20 álbumes <span style="font-weight:400;color:var(--color-text-muted);font-size:13px">· por tiempo escuchado real</span></h3>
@@ -663,7 +663,7 @@ async function hydrateHistorySection() {
         ...CHART_DEFAULTS,
         indexAxis: 'y',
         // En bar horizontal, forzamos el hit-test por eje Y para que hover-drake devuelva Drake.
-        interaction: { mode: 'nearest', axis: 'y', intersect: false },
+        interaction: { mode: 'index', axis: 'y', intersect: false },
         plugins: {
           ...CHART_DEFAULTS.plugins,
           tooltip: {
@@ -682,7 +682,7 @@ async function hydrateHistorySection() {
           },
           y: {
             ...CHART_DEFAULTS.scales.y,
-            ticks: { ...CHART_DEFAULTS.scales.y.ticks, font: { family: 'Inter', size: 12, weight: '500' } },
+            ticks: { ...CHART_DEFAULTS.scales.y.ticks, font: { family: 'Inter', size: 14, weight: '500' } },
           },
         },
       },
@@ -714,10 +714,10 @@ function renderHeatmap(matrix) {
   for (const row of matrix) for (const v of row) if (v > max) max = v;
   if (max === 0) { holder.innerHTML = '<div style="color:var(--color-text-muted);font-size:13px;padding:12px">Sin datos</div>'; return; }
 
-  const cellSize = 18;
-  const cellGap = 3;
-  const labelWidth = 36;
-  const hourLabelHeight = 20;
+  const cellSize = 26;
+  const cellGap = 4;
+  const labelWidth = 44;
+  const hourLabelHeight = 24;
   const width = labelWidth + 24 * (cellSize + cellGap);
   const height = hourLabelHeight + 7 * (cellSize + cellGap);
 
@@ -726,12 +726,12 @@ function renderHeatmap(matrix) {
   for (let h = 0; h < 24; h++) {
     if (h % 3 !== 0) continue;
     const x = labelWidth + h * (cellSize + cellGap) + cellSize/2;
-    svg += `<text x="${x}" y="${hourLabelHeight - 5}" fill="#8888A0" font-size="11" text-anchor="middle">${h}h</text>`;
+    svg += `<text x="${x}" y="${hourLabelHeight - 5}" fill="#8888A0" font-size="13" text-anchor="middle">${h}h</text>`;
   }
   // filas
   for (let d = 0; d < 7; d++) {
     const y = hourLabelHeight + d * (cellSize + cellGap);
-    svg += `<text x="${labelWidth - 5}" y="${y + cellSize/2 + 3}" fill="#8888A0" font-size="11" text-anchor="end">${dayLabels[d]}</text>`;
+    svg += `<text x="${labelWidth - 5}" y="${y + cellSize/2 + 3}" fill="#8888A0" font-size="13" text-anchor="end">${dayLabels[d]}</text>`;
     for (let h = 0; h < 24; h++) {
       const x = labelWidth + h * (cellSize + cellGap);
       const val = matrix[d][h] || 0;
@@ -948,12 +948,12 @@ const CHART_DEFAULTS = {
   },
   scales: {
     x: {
-      ticks: { color: CHART_COLORS.text, font: { family: 'Inter', size: 11 } },
+      ticks: { color: CHART_COLORS.text, font: { family: 'Inter', size: 13 } },
       grid: { color: CHART_COLORS.grid },
       border: { color: CHART_COLORS.grid },
     },
     y: {
-      ticks: { color: CHART_COLORS.text, font: { family: 'Inter', size: 11 } },
+      ticks: { color: CHART_COLORS.text, font: { family: 'Inter', size: 13 } },
       grid: { color: CHART_COLORS.grid },
       border: { color: CHART_COLORS.grid },
     },
@@ -999,7 +999,7 @@ function buildCharts(stats) {
     options: {
       ...CHART_DEFAULTS,
       indexAxis: 'y',
-      interaction: { mode: 'nearest', axis: 'y', intersect: false },
+      interaction: { mode: 'index', axis: 'y', intersect: false },
       scales: {
         ...CHART_DEFAULTS.scales,
         x: {
@@ -1008,7 +1008,7 @@ function buildCharts(stats) {
         },
         y: {
           ...CHART_DEFAULTS.scales.y,
-          ticks: { ...CHART_DEFAULTS.scales.y.ticks, font: { family: 'Inter', size: 11 } },
+          ticks: { ...CHART_DEFAULTS.scales.y.ticks, font: { family: 'Inter', size: 13 } },
         },
       },
     },

@@ -82,7 +82,7 @@ h3 { font-size: 18px; font-weight: 600; }
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 20px;
+  padding: 20px 20px 20px 68px; /* deja espacio a la izquierda para el botón hamburguesa (que está en left:16px) */
   border-bottom: 1px solid var(--color-border);
 }
 
@@ -171,8 +171,31 @@ h3 { font-size: 18px; font-weight: 600; }
 
 .nav-link-icon {
   width: 18px;
-  text-align: center;
+  height: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   flex-shrink: 0;
+  color: currentColor;
+}
+.nav-link-icon svg {
+  width: 18px;
+  height: 18px;
+  display: block;
+}
+/* Home cards: iconos más grandes */
+.home-card-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  color: var(--color-accent);
+  margin-bottom: 12px;
+}
+.home-card-icon svg {
+  width: 32px;
+  height: 32px;
 }
 
 .sidebar-footer {
@@ -801,7 +824,7 @@ body.sidebar-hidden .sidebar.desktop-open {
 }
 .wrapped-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
   gap: 10px;
   padding: 20px;
 }
@@ -847,32 +870,36 @@ body.sidebar-hidden .sidebar.desktop-open {
 
 .wrapped-year-layout {
   display: grid;
-  grid-template-columns: 1fr minmax(200px, 260px) 1fr;
+  grid-template-columns: 1fr minmax(180px, 220px) 1fr;
   gap: 12px;
   padding: 20px;
+  align-items: stretch;
 }
 .wrapped-year-stats-left,
 .wrapped-year-stats-right {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 10px;
-  align-content: start;
+  align-content: stretch;
 }
 .wrapped-album-hero {
   background: var(--color-elevated);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-sm);
-  padding: 14px;
+  padding: 12px;
   display: flex;
   flex-direction: column;
   gap: 6px;
+  min-width: 0;
 }
 .wrapped-album-hero-cover {
   width: 100%;
+  max-height: 180px;
   aspect-ratio: 1;
   border-radius: 6px;
   object-fit: cover;
   margin-top: 4px;
+  align-self: center;
 }
 .wrapped-album-hero-name {
   font-size: 17px;
