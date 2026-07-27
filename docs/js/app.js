@@ -1,26 +1,26 @@
-import { isLoggedIn, loginWithSpotify, logout } from './auth.js?v=75';
-import { getUserProfile, spotifyFetch, tryAutoLoadUserBackup } from './api.js?v=75';
-import { getValidToken } from './auth.js?v=75';
-import { cacheClearAll } from './storage.js?v=75';
-import { idbClearAll } from './idb.js?v=75';
-import { registerRoute, initRouter, navigate } from './router.js?v=75';
-import { showToast } from './ui/toast.js?v=75';
+import { isLoggedIn, loginWithSpotify, logout } from './auth.js?v=76';
+import { getUserProfile, spotifyFetch, tryAutoLoadUserBackup } from './api.js?v=76';
+import { getValidToken } from './auth.js?v=76';
+import { cacheClearAll } from './storage.js?v=76';
+import { idbClearAll } from './idb.js?v=76';
+import { registerRoute, initRouter, navigate } from './router.js?v=76';
+import { showToast } from './ui/toast.js?v=76';
 
-import { render as renderSync } from './features/sync.js?v=75';
-import { render as renderDedupe } from './features/dedupe.js?v=75';
-import { render as renderDupalbums } from './features/duplicate-albums.js?v=75';
-import { render as renderZombies } from './features/zombies.js?v=75';
-import { render as renderVersions } from './features/versions.js?v=75';
-import { render as renderDashboard } from './features/dashboard.js?v=75';
-import { render as renderSmart } from './features/smart.js?v=75';
-import { render as renderSimilar } from './features/similar-artists.js?v=75';
-import { render as renderRabbit } from './features/rabbit-hole.js?v=75';
-import { render as renderByGenre } from './features/by-genre.js?v=75';
-import { render as renderByArtist } from './features/by-artist.js?v=75';
-import { render as renderRecs } from './features/recommendations.js?v=75';
-import { render as renderListened } from './features/listened.js?v=75';
-import { render as renderWrapped } from './features/wrapped.js?v=75';
-import { render as renderZeroPlays } from './features/zero-plays.js?v=75';
+import { render as renderSync } from './features/sync.js?v=76';
+import { render as renderDedupe } from './features/dedupe.js?v=76';
+import { render as renderDupalbums } from './features/duplicate-albums.js?v=76';
+import { render as renderZombies } from './features/zombies.js?v=76';
+import { render as renderVersions } from './features/versions.js?v=76';
+import { render as renderDashboard } from './features/dashboard.js?v=76';
+import { render as renderSmart } from './features/smart.js?v=76';
+import { render as renderSimilar } from './features/similar-artists.js?v=76';
+import { render as renderRabbit } from './features/rabbit-hole.js?v=76';
+import { render as renderByGenre } from './features/by-genre.js?v=76';
+import { render as renderByArtist } from './features/by-artist.js?v=76';
+import { render as renderRecs } from './features/recommendations.js?v=76';
+import { render as renderListened } from './features/listened.js?v=76';
+import { render as renderWrapped } from './features/wrapped.js?v=76';
+import { render as renderZeroPlays } from './features/zero-plays.js?v=76';
 
 async function testConnection() {
   const token = await getValidToken();
@@ -195,55 +195,55 @@ function showApp(profile) {
         <div class="sidebar-section">
           <div class="sidebar-section-title">General</div>
           <a class="nav-link" data-route="dashboard" href="#dashboard">
-            <span class="nav-link-icon">📊</span> Dashboard
+            <span class="nav-link-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg></span> Dashboard
           </a>
           <a class="nav-link" data-route="wrapped" href="#wrapped">
-            <span class="nav-link-icon">🎁</span> Wrapped
+            <span class="nav-link-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 12 20 22 4 22 4 12"/><rect x="2" y="7" width="20" height="5"/><line x1="12" y1="22" x2="12" y2="7"/><path d="M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7z"/><path d="M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z"/></svg></span> Wrapped
           </a>
         </div>
         <div class="sidebar-section">
           <div class="sidebar-section-title">Crear</div>
           <a class="nav-link" data-route="smart" href="#smart">
-            <span class="nav-link-icon">🪄</span> Smart Playlists
+            <span class="nav-link-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1"/><circle cx="12" cy="12" r="3"/></svg></span> Smart Playlists
           </a>
           <a class="nav-link" data-route="byartist" href="#byartist">
-            <span class="nav-link-icon">🎤</span> Por artista
+            <span class="nav-link-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg></span> Por artista
           </a>
         </div>
         <div class="sidebar-section">
           <div class="sidebar-section-title">Descubrir</div>
           <a class="nav-link" data-route="similar" href="#similar">
-            <span class="nav-link-icon">🎯</span> Artistas similares
+            <span class="nav-link-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg></span> Artistas similares
           </a>
           <a class="nav-link" data-route="rabbit" href="#rabbit">
-            <span class="nav-link-icon">🐇</span> Rabbit hole
+            <span class="nav-link-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22C6.5 22 2 17.5 2 12S6.5 2 12 2s10 4.5 10 10c0 3-2 5-4.5 5S13 15 13 13s1.5-3.5 3.5-3.5"/></svg></span> Rabbit hole
           </a>
           <a class="nav-link" data-route="recs" href="#recs">
-            <span class="nav-link-icon">💡</span> Recomendaciones
+            <span class="nav-link-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 22h4M15 14a5 5 0 1 0-6 0c.5.5 1 1 1 2v2h4v-2c0-1 .5-1.5 1-2z"/></svg></span> Recomendaciones
           </a>
           <a class="nav-link" data-route="genre" href="#genre">
-            <span class="nav-link-icon">🎼</span> Por género
+            <span class="nav-link-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20.6 13.4l-7.2 7.2a2 2 0 0 1-2.8 0L2 12V2h10l8.6 8.6a2 2 0 0 1 0 2.8z"/><circle cx="7" cy="7" r="1.5"/></svg></span> Por género
           </a>
           <a class="nav-link" data-route="listened" href="#listened">
-            <span class="nav-link-icon">💿</span> Álbumes escuchados
+            <span class="nav-link-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/></svg></span> Álbumes escuchados
           </a>
         </div>
         <div class="sidebar-section">
           <div class="sidebar-section-title">Limpieza</div>
           <a class="nav-link" data-route="sync" href="#sync">
-            <span class="nav-link-icon">🔁</span> Sync Mirror
+            <span class="nav-link-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg></span> Sync Mirror
           </a>
           <a class="nav-link" data-route="dedupe" href="#dedupe">
-            <span class="nav-link-icon">🧬</span> Dedupe
+            <span class="nav-link-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/></svg></span> Dedupe
           </a>
           <a class="nav-link" data-route="zombies" href="#zombies">
-            <span class="nav-link-icon">👻</span> Zombis
+            <span class="nav-link-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 9h.01M15 9h.01M9 15c1.5-.5 4.5-.5 6 0"/><circle cx="12" cy="12" r="10"/></svg></span> Zombis
           </a>
           <a class="nav-link" data-route="versions" href="#versions">
-            <span class="nav-link-icon">🎚️</span> Versiones
+            <span class="nav-link-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/></svg></span> Versiones
           </a>
           <a class="nav-link" data-route="zeroplays" href="#zeroplays">
-            <span class="nav-link-icon">🚫</span> Sin plays
+            <span class="nav-link-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="4.9" y1="4.9" x2="19.1" y2="19.1"/></svg></span> Sin plays
           </a>
         </div>
       </nav>
@@ -361,39 +361,57 @@ function showApp(profile) {
   initRouter();
 }
 
+// Set unificado de iconos Lucide inline. Cada uno con currentColor así toma el color del texto.
+const ICONS = {
+  dashboard: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>',
+  wrapped: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 12 20 22 4 22 4 12"/><rect x="2" y="7" width="20" height="5"/><line x1="12" y1="22" x2="12" y2="7"/><path d="M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7z"/><path d="M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z"/></svg>',
+  smart: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1"/><circle cx="12" cy="12" r="3"/></svg>',
+  byartist: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>',
+  similar: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>',
+  rabbit: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22C6.5 22 2 17.5 2 12S6.5 2 12 2s10 4.5 10 10c0 3-2 5-4.5 5S13 15 13 13s1.5-3.5 3.5-3.5"/></svg>',
+  recs: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 22h4M15 14a5 5 0 1 0-6 0c.5.5 1 1 1 2v2h4v-2c0-1 .5-1.5 1-2z"/></svg>',
+  genre: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20.6 13.4l-7.2 7.2a2 2 0 0 1-2.8 0L2 12V2h10l8.6 8.6a2 2 0 0 1 0 2.8z"/><circle cx="7" cy="7" r="1.5"/></svg>',
+  listened: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/></svg>',
+  sync: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>',
+  dedupe: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/></svg>',
+  zombies: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 9h.01M15 9h.01M9 15c1.5-.5 4.5-.5 6 0"/><circle cx="12" cy="12" r="10"/></svg>',
+  versions: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/></svg>',
+  zeroplays: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="4.9" y1="4.9" x2="19.1" y2="19.1"/></svg>',
+};
+
 const HOME_SECTIONS = [
   {
     title: 'General',
     items: [
-      { hash: 'dashboard', icon: '📊', name: 'Dashboard', desc: 'Stats de tu biblioteca de Liked Songs.' },
-      { hash: 'wrapped', icon: '🎁', name: 'Wrapped', desc: 'Tu resumen del año — año calendario completo, hecho con el streaming history.' },
+      { hash: 'dashboard', icon: ICONS.dashboard, name: 'Dashboard', desc: 'Stats de tu biblioteca de Liked Songs.' },
+      { hash: 'wrapped', icon: ICONS.wrapped, name: 'Wrapped', desc: 'Tu resumen del año — año calendario completo, hecho con el streaming history.' },
     ],
   },
   {
     title: 'Crear',
     items: [
-      { hash: 'smart', icon: '🪄', name: 'Smart Playlists', desc: 'Playlists por año, década o random.' },
-      { hash: 'byartist', icon: '🎤', name: 'Por artista', desc: 'Todos tus likes de uno o varios artistas.' },
+      { hash: 'smart', icon: ICONS.smart, name: 'Smart Playlists', desc: 'Playlists por año, década o random.' },
+      { hash: 'byartist', icon: ICONS.byartist, name: 'Por artista', desc: 'Todos tus likes de uno o varios artistas.' },
     ],
   },
   {
     title: 'Descubrir',
     items: [
-      { hash: 'similar', icon: '🎯', name: 'Artistas similares', desc: 'Artistas parecidos a los que te gustan, vía Last.fm.' },
-      { hash: 'rabbit', icon: '🐇', name: 'Rabbit hole', desc: 'Navegá artistas y tracks encadenados por género.' },
-      { hash: 'recs', icon: '💡', name: 'Recomendaciones', desc: 'Basadas en tus scrobbles de Last.fm.' },
-      { hash: 'genre', icon: '🎼', name: 'Por género', desc: 'Agrupá tus likes por género y armá playlists.' },
-      { hash: 'listened', icon: '💿', name: 'Álbumes escuchados', desc: 'Los álbumes de tu playlist de registro, agrupados.' },
+      { hash: 'similar', icon: ICONS.similar, name: 'Artistas similares', desc: 'Artistas parecidos a los que te gustan, vía Last.fm.' },
+      { hash: 'rabbit', icon: ICONS.rabbit, name: 'Rabbit hole', desc: 'Navegá artistas y tracks encadenados por género.' },
+      { hash: 'recs', icon: ICONS.recs, name: 'Recomendaciones', desc: 'Basadas en tus scrobbles de Last.fm.' },
+      { hash: 'genre', icon: ICONS.genre, name: 'Por género', desc: 'Agrupá tus likes por género y armá playlists.' },
+      { hash: 'listened', icon: ICONS.listened, name: 'Álbumes escuchados', desc: 'Los álbumes de tu playlist de registro, agrupados.' },
     ],
   },
   {
     title: 'Limpieza',
     items: [
-      { hash: 'sync', icon: '🔁', name: 'Sync Mirror', desc: 'Una playlist como copia exacta de tus Liked Songs.' },
-      { hash: 'dedupe', icon: '🧬', name: 'Dedupe', desc: 'Eliminá tracks duplicados dentro de cada playlist.' },
-      { hash: 'zombies', icon: '👻', name: 'Zombis', desc: 'Tracks eliminados del catálogo de Spotify.' },
-      { hash: 'versions', icon: '🎚️', name: 'Versiones', desc: 'Mismo tema en distintos álbumes (remaster, live, etc.).' },
-      { hash: 'zeroplays', icon: '🚫', name: 'Sin plays', desc: 'Likes que nunca reprodujiste según tu historial de Spotify.' },
+      { hash: 'sync', icon: ICONS.sync, name: 'Sync Mirror', desc: 'Una playlist como copia exacta de tus Liked Songs.' },
+      { hash: 'dedupe', icon: ICONS.dedupe, name: 'Dedupe', desc: 'Eliminá tracks duplicados dentro de cada playlist.' },
+      { hash: 'zombies', icon: ICONS.zombies, name: 'Zombis', desc: 'Tracks eliminados del catálogo de Spotify.' },
+      { hash: 'versions', icon: ICONS.versions, name: 'Versiones', desc: 'Mismo tema en distintos álbumes (remaster, live, etc.).' },
+      { hash: 'zeroplays', icon: ICONS.zeroplays, name: 'Sin plays', desc: 'Likes que nunca reprodujiste según tu historial de Spotify.' },
     ],
   },
 ];
@@ -405,7 +423,8 @@ function renderHome(container) {
       <div class="home-grid">
         ${sec.items.map(it => `
           <a href="#${it.hash}" class="card home-card">
-            <h3 style="margin-bottom:6px">${it.icon} ${it.name}</h3>
+            <div class="home-card-icon">${it.icon}</div>
+            <h3 style="margin-bottom:6px">${it.name}</h3>
             <p style="color:var(--color-text-secondary);font-size:14px">${it.desc}</p>
           </a>
         `).join('')}
