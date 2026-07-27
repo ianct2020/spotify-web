@@ -714,10 +714,10 @@ function renderHeatmap(matrix) {
   for (const row of matrix) for (const v of row) if (v > max) max = v;
   if (max === 0) { holder.innerHTML = '<div style="color:var(--color-text-muted);font-size:13px;padding:12px">Sin datos</div>'; return; }
 
-  const cellSize = 13;
-  const cellGap = 2;
-  const labelWidth = 28;
-  const hourLabelHeight = 18;
+  const cellSize = 18;
+  const cellGap = 3;
+  const labelWidth = 36;
+  const hourLabelHeight = 20;
   const width = labelWidth + 24 * (cellSize + cellGap);
   const height = hourLabelHeight + 7 * (cellSize + cellGap);
 
@@ -726,12 +726,12 @@ function renderHeatmap(matrix) {
   for (let h = 0; h < 24; h++) {
     if (h % 3 !== 0) continue;
     const x = labelWidth + h * (cellSize + cellGap) + cellSize/2;
-    svg += `<text x="${x}" y="${hourLabelHeight - 5}" fill="#8888A0" font-size="9" text-anchor="middle">${h}h</text>`;
+    svg += `<text x="${x}" y="${hourLabelHeight - 5}" fill="#8888A0" font-size="11" text-anchor="middle">${h}h</text>`;
   }
   // filas
   for (let d = 0; d < 7; d++) {
     const y = hourLabelHeight + d * (cellSize + cellGap);
-    svg += `<text x="${labelWidth - 5}" y="${y + cellSize/2 + 3}" fill="#8888A0" font-size="9" text-anchor="end">${dayLabels[d]}</text>`;
+    svg += `<text x="${labelWidth - 5}" y="${y + cellSize/2 + 3}" fill="#8888A0" font-size="11" text-anchor="end">${dayLabels[d]}</text>`;
     for (let h = 0; h < 24; h++) {
       const x = labelWidth + h * (cellSize + cellGap);
       const val = matrix[d][h] || 0;
@@ -880,10 +880,24 @@ async function hydrateListenedAlbumsCard() {
 
   const goToListened = () => { location.hash = '#listened'; };
 
-  valueEl.textContent = '…';
   labelEl.textContent = 'Álbumes escuchados';
   card.onclick = goToListened;
   card.title = 'Ir a Álbumes escuchados';
+  valueEl.style.fontSize = '';
+
+  // Mostrar YA el conteo del historial (viene del IDB, instantáneo) para no dejar "..."
+  try {
+    const listened = await loadListenedAlbums();
+    if (listened?.totals?.albums) {
+      valueEl.textContent = listened.totals.albums.toLocaleString('es-AR');
+    } else {
+      valueEl.textContent = '—';
+    }
+  } catch {
+    valueEl.textContent = '—';
+  }
+
+  // En segundo plano, actualizar con el conteo real de la playlist del registro.
   try {
     const items = await getAllPlaylistItems(playlistId);
     const albumIds = new Set();
@@ -891,15 +905,9 @@ async function hydrateListenedAlbumsCard() {
       const albumId = it.item?.album?.id || it.track?.album?.id;
       if (albumId) albumIds.add(albumId);
     }
-    valueEl.textContent = albumIds.size.toLocaleString();
-    valueEl.style.fontSize = '';
-    labelEl.textContent = 'Álbumes escuchados';
-    card.onclick = goToListened;
-    card.title = 'Ir a Álbumes escuchados';
+    valueEl.textContent = albumIds.size.toLocaleString('es-AR');
   } catch (e) {
-    valueEl.textContent = '!';
-    labelEl.textContent = `Error: ${e.message.slice(0, 40)}`;
-    card.onclick = goToListened;
+    // dejamos el número del historial; no ensuciamos el UI con error acá
   }
 }
 

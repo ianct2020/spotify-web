@@ -1,8 +1,8 @@
 // Wrapped propio: mini-resumen tuyo por año, hecho con el Extended Streaming History.
 // A diferencia del Wrapped oficial (que corre oct-sept), este es del año calendario completo.
 
-import { loadHistoryStats } from './history-data.js?v=74';
-import { escapeHtml } from '../ui/components.js?v=74';
+import { loadHistoryStats } from './history-data.js?v=75';
+import { escapeHtml } from '../ui/components.js?v=75';
 
 let stats = null;
 let selectedYear = null;
@@ -107,17 +107,7 @@ function renderYearCard() {
       </div>
 
       <div class="wrapped-year-layout">
-        ${topAlbum ? `
-          <div class="wrapped-album-hero">
-            <div class="wrapped-tile-label">Álbum del año</div>
-            ${topAlbum.img ? `<img src="${topAlbum.img}" alt="" class="wrapped-album-hero-cover" loading="lazy">` : `<div class="wrapped-album-hero-cover" style="background:var(--color-elevated);display:flex;align-items:center;justify-content:center;color:var(--color-text-muted);font-size:44px">♪</div>`}
-            <div class="wrapped-album-hero-name">${escapeHtml(topAlbum.name)}</div>
-            <div class="wrapped-album-hero-artist">${escapeHtml(topAlbum.artist)}</div>
-            <div class="wrapped-album-hero-meta">${fmtMinutes(topAlbum.min)} · ${topAlbum.plays.toLocaleString('es-AR')} plays</div>
-          </div>
-        ` : ''}
-
-        <div class="wrapped-year-stats">
+        <div class="wrapped-year-stats-left">
           ${topArtist ? `
             <div class="wrapped-tile compact">
               <div class="wrapped-tile-label">Artista del año</div>
@@ -144,6 +134,19 @@ function renderYearCard() {
             <div class="wrapped-tile-value">${monthName} ${y.year}</div>
             <div class="wrapped-tile-hint">${y.peak_month ? fmtMinutes(y.peak_month.min) : '—'}</div>
           </div>
+        </div>
+
+        ${topAlbum ? `
+          <div class="wrapped-album-hero">
+            <div class="wrapped-tile-label">Álbum del año</div>
+            ${topAlbum.img ? `<img src="${topAlbum.img}" alt="" class="wrapped-album-hero-cover" loading="lazy">` : `<div class="wrapped-album-hero-cover" style="background:var(--color-elevated);display:flex;align-items:center;justify-content:center;color:var(--color-text-muted);font-size:44px">♪</div>`}
+            <div class="wrapped-album-hero-name">${escapeHtml(topAlbum.name)}</div>
+            <div class="wrapped-album-hero-artist">${escapeHtml(topAlbum.artist)}</div>
+            <div class="wrapped-album-hero-meta">${fmtMinutes(topAlbum.min)} · ${topAlbum.plays.toLocaleString('es-AR')} plays</div>
+          </div>
+        ` : ''}
+
+        <div class="wrapped-year-stats-right">
           ${y.peak_day ? `
             <div class="wrapped-tile compact">
               <div class="wrapped-tile-label">Día más largo</div>
@@ -184,15 +187,15 @@ function renderTopCard(title, items, keyName, keyMin, keyPlays, keyArtist) {
   return `
     <div class="card wrapped-top-card">
       <h3 style="margin:0 0 12px 0;font-size:16px">${title}</h3>
-      <div style="display:flex;flex-direction:column;gap:6px">
+      <div class="wrapped-top-scroll">
         ${items.map((it, i) => `
-          <div style="display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:var(--radius-sm);background:var(--color-elevated)">
-            <span style="width:22px;text-align:right;color:var(--color-text-muted);font-weight:700;font-size:12px;flex-shrink:0">${i + 1}</span>
-            <div style="flex:1;min-width:0">
-              <div style="font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(it[keyName])}</div>
-              ${keyArtist && it[keyArtist] ? `<div style="font-size:11px;color:var(--color-text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(it[keyArtist])}</div>` : ''}
+          <div class="wrapped-top-row">
+            <span class="wrapped-top-rank">${i + 1}</span>
+            <div class="wrapped-top-info">
+              <div class="wrapped-top-name">${escapeHtml(it[keyName])}</div>
+              ${keyArtist && it[keyArtist] ? `<div class="wrapped-top-artist">${escapeHtml(it[keyArtist])}</div>` : ''}
             </div>
-            <span style="font-size:11px;color:var(--color-text-muted);flex-shrink:0">${fmtMinutes(it[keyMin])}${it[keyPlays] ? ` · ${it[keyPlays]}` : ''}</span>
+            <span class="wrapped-top-meta">${fmtMinutes(it[keyMin])}${it[keyPlays] ? ` · ${it[keyPlays]}` : ''}</span>
           </div>
         `).join('')}
       </div>
@@ -208,17 +211,13 @@ function renderAllTime() {
   const holder = document.getElementById('wrapped-alltime');
   const t = stats.totals || {};
   holder.innerHTML = `
-    <div class="card">
-      <h2 style="margin:0 0 4px 0">De siempre</h2>
-      <p style="color:var(--color-text-secondary);font-size:13px;margin-bottom:16px">
-        Todo tu historial junto — desde ${fmtDate(stats.years[0].first_play)} hasta ${fmtDate(stats.years[stats.years.length-1].last_play)}.
-      </p>
+    <div class="card wrapped-card">
+      <div class="wrapped-hero">
+        <div class="wrapped-hero-year">DE SIEMPRE</div>
+        <div class="wrapped-hero-min">${fmtMinutes(t.min)}</div>
+        <div class="wrapped-hero-sub">${fmtDays(t.min || 0)} · desde ${fmtDate(stats.years[0].first_play)} hasta ${fmtDate(stats.years[stats.years.length-1].last_play)}</div>
+      </div>
       <div class="wrapped-grid">
-        <div class="wrapped-tile">
-          <div class="wrapped-tile-label">Total escuchado</div>
-          <div class="wrapped-tile-value">${fmtMinutes(t.min)}</div>
-          <div class="wrapped-tile-hint">${fmtDays(t.min || 0)}</div>
-        </div>
         <div class="wrapped-tile">
           <div class="wrapped-tile-label">Plays válidas</div>
           <div class="wrapped-tile-value">${(t.plays_valid || 0).toLocaleString('es-AR')}</div>

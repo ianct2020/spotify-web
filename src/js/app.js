@@ -282,13 +282,15 @@ function showApp(profile) {
   const overlay = document.getElementById('sidebar-overlay');
 
   // Sidebar visible en Home, cerrado en las demás rutas.
-  // El toggle manual cambia temporalmente hasta la próxima navegación (no persistimos).
+  // El toggle manual del hamburguesa lo abre como OVERLAY sobre el contenido (no empuja).
   const isHome = () => {
     const h = window.location.hash.slice(1);
     return !h || h === 'home';
   };
   const applyRouteSidebar = () => {
     if (window.matchMedia('(max-width: 768px)').matches) return; // en mobile lo maneja el overlay
+    sidebar.classList.remove('desktop-open'); // cerrar overlay al navegar
+    overlay.classList.remove('open');
     if (isHome()) document.body.classList.remove('sidebar-hidden');
     else document.body.classList.add('sidebar-hidden');
   };
@@ -296,16 +298,26 @@ function showApp(profile) {
   window.addEventListener('hashchange', applyRouteSidebar);
 
   hamburger.onclick = () => {
-    // En mobile (<=768): abrir/cerrar como overlay. En desktop: toggle desktop-collapse (temporal).
     if (window.matchMedia('(max-width: 768px)').matches) {
+      // Mobile: overlay tradicional
       sidebar.classList.toggle('open');
       overlay.classList.toggle('open');
+      return;
+    }
+    // Desktop:
+    // - Si estás en Home (sidebar visible): lo escondemos temporal (sidebar-hidden)
+    // - Si estás con sidebar-hidden (cualquier otra ruta): lo abrimos como OVERLAY sobre el main
+    if (document.body.classList.contains('sidebar-hidden')) {
+      const opening = !sidebar.classList.contains('desktop-open');
+      sidebar.classList.toggle('desktop-open');
+      overlay.classList.toggle('open', opening);
     } else {
-      document.body.classList.toggle('sidebar-hidden');
+      document.body.classList.add('sidebar-hidden');
     }
   };
   overlay.onclick = () => {
     sidebar.classList.remove('open');
+    sidebar.classList.remove('desktop-open');
     overlay.classList.remove('open');
   };
 
