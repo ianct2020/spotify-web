@@ -242,6 +242,9 @@ h3 { font-size: 18px; font-weight: 600; }
 /* ── Main Content ── */
 .main {
   flex: 1;
+  /* Sin esto el .main (flex item, min-width:auto por defecto) se estira más allá del
+     viewport cuando algo adentro desborda, y arrastra toda la grilla hacia la derecha. */
+  min-width: 0;
   margin-left: 0;
   padding: 32px 32px 32px 72px;
   max-width: 1400px;
@@ -701,14 +704,26 @@ body.sidebar-hidden .sidebar.desktop-open {
   min-width: 130px;
 }
 
+/* Los tracks van con minmax(0, 1fr) y no con 1fr (= minmax(auto, 1fr)): el mínimo `auto`
+   toma como piso el min-content del item, y el min-content de una card con un canvas de
+   Chart.js adentro es el ancho en px que Chart.js le escribió al canvas. Resultado: la card
+   puede crecer pero nunca achicarse, y al primer reflow (aparece el scrollbar vertical
+   cuando se revela #history-section, o el user achica la ventana) queda más ancha que la
+   grilla y se pasa para la derecha. Con minmax(0, 1fr) el track sí achica, el
+   ResizeObserver de Chart.js ve el cambio y el chart se re-renderiza al ancho nuevo. */
 .dash-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: 22px;
+}
+
+.dash-grid > * {
+  min-width: 0;
 }
 
 .dash-chart-card {
   position: relative;
+  min-width: 0;
 }
 
 .dash-chart-card h3 {
@@ -718,6 +733,10 @@ body.sidebar-hidden .sidebar.desktop-open {
 
 .dash-chart-card canvas {
   height: 240px !important;
+  /* Red de contención por un frame: entre que el contenedor achica y Chart.js
+     re-renderiza, el canvas conserva su width inline viejo. */
+  max-width: 100%;
+  display: block;
 }
 
 .dash-chart-wide {
@@ -782,7 +801,7 @@ body.sidebar-hidden .sidebar.desktop-open {
   }
 
   .dash-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .home-grid {

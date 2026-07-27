@@ -1,8 +1,8 @@
-import { getAllLikedTracks, invalidateLikesCache, exportAllData, importAllData, getCurrentUserId, getLikesTotal, syncLikesIncremental, getLikesCacheTimestamp, getBestAvailableLikes, getAllPlaylistItems } from '../api.js?v=77';
-import { showProgress, hideProgress, alertModal, escapeHtml } from '../ui/components.js?v=77';
-import { showToast } from '../ui/toast.js?v=77';
-import { openListenedAlbumsPicker } from './listened-shared.js?v=77';
-import { loadHistoryStats, loadListenedAlbums } from './history-data.js?v=77';
+import { getAllLikedTracks, invalidateLikesCache, exportAllData, importAllData, getCurrentUserId, getLikesTotal, syncLikesIncremental, getLikesCacheTimestamp, getBestAvailableLikes, getAllPlaylistItems } from '../api.js?v=78';
+import { showProgress, hideProgress, alertModal, escapeHtml } from '../ui/components.js?v=78';
+import { showToast } from '../ui/toast.js?v=78';
+import { openListenedAlbumsPicker } from './listened-shared.js?v=78';
+import { loadHistoryStats, loadListenedAlbums } from './history-data.js?v=78';
 
 let charts = [];
 let _loadController = null;
@@ -562,7 +562,7 @@ function renderDashboard(container, stats) {
         </div>
         <div class="card dash-chart-card dash-chart-wide">
           <h3>Top 20 álbumes <span style="font-weight:400;color:var(--color-text-muted);font-size:13px">· por tiempo escuchado real</span></h3>
-          <div id="history-top-albums" style="display:grid;grid-template-columns:1fr 1fr;gap:6px 20px"></div>
+          <div id="history-top-albums" style="display:grid;grid-template-columns:repeat(2, minmax(0, 1fr));gap:6px 20px"></div>
         </div>
       </div>
     </div>
