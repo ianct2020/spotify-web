@@ -1,8 +1,8 @@
 // Wrapped propio: mini-resumen tuyo por año, hecho con el Extended Streaming History.
 // A diferencia del Wrapped oficial (que corre oct-sept), este es del año calendario completo.
 
-import { loadHistoryStats } from './history-data.js?v=77';
-import { escapeHtml } from '../ui/components.js?v=77';
+import { loadHistoryStats } from './history-data.js?v=78';
+import { escapeHtml } from '../ui/components.js?v=78';
 
 let stats = null;
 let selectedYear = null;

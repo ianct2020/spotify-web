@@ -562,7 +562,7 @@ function renderDashboard(container, stats) {
         </div>
         <div class="card dash-chart-card dash-chart-wide">
           <h3>Top 20 álbumes <span style="font-weight:400;color:var(--color-text-muted);font-size:13px">· por tiempo escuchado real</span></h3>
-          <div id="history-top-albums" style="display:grid;grid-template-columns:1fr 1fr;gap:6px 20px"></div>
+          <div id="history-top-albums" style="display:grid;grid-template-columns:repeat(2, minmax(0, 1fr));gap:6px 20px"></div>
         </div>
       </div>
     </div>
