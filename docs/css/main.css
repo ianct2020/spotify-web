@@ -219,21 +219,28 @@ h3 { font-size: 18px; font-weight: 600; }
 /* ── Main Content ── */
 .main {
   flex: 1;
-  margin-left: 240px;
+  margin-left: 0;
   padding: 32px 32px 32px 72px;
-  max-width: 1240px;
-  transition: margin-left var(--transition-normal), max-width var(--transition-normal);
+  max-width: 1400px;
+  transition: padding-left var(--transition-normal);
   animation: fade-in 0.3s ease;
 }
 
-/* Sidebar colapsado en desktop (por click en hamburguesa) */
+/* Sidebar visible en desktop (Home): el main deja espacio a la izquierda para no taparse.
+   En las demás rutas el sidebar está oculto (sidebar-hidden) y el main ocupa todo el ancho. */
+body:not(.sidebar-hidden) .main {
+  margin-left: 240px;
+  max-width: 1240px;
+}
+
+/* Sidebar colapsado en desktop: se desliza fuera de vista pero cuando el user lo
+   abre vuelve a aparecer como OVERLAY encima del contenido, sin correr el main. */
 body.sidebar-hidden .sidebar {
   transform: translateX(-100%);
 }
-body.sidebar-hidden .main {
-  margin-left: 0;
-  max-width: 1400px;
-  padding-left: 72px;
+body.sidebar-hidden .sidebar.desktop-open {
+  transform: translateX(0);
+  box-shadow: 8px 0 32px rgba(0, 0, 0, 0.5);
 }
 
 .page-header {
@@ -294,6 +301,9 @@ body.sidebar-hidden .main {
   inset: 0;
   background: rgba(0, 0, 0, 0.6);
   z-index: 90;
+}
+.sidebar-overlay.open {
+  display: block;
 }
 
 /* ── Login Screen ── */
@@ -837,9 +847,16 @@ body.sidebar-hidden .main {
 
 .wrapped-year-layout {
   display: grid;
-  grid-template-columns: minmax(220px, 280px) 1fr;
-  gap: 14px;
+  grid-template-columns: 1fr minmax(200px, 260px) 1fr;
+  gap: 12px;
   padding: 20px;
+}
+.wrapped-year-stats-left,
+.wrapped-year-stats-right {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  align-content: start;
 }
 .wrapped-album-hero {
   background: var(--color-elevated);
@@ -848,7 +865,7 @@ body.sidebar-hidden .main {
   padding: 14px;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
 }
 .wrapped-album-hero-cover {
   width: 100%;
@@ -858,7 +875,7 @@ body.sidebar-hidden .main {
   margin-top: 4px;
 }
 .wrapped-album-hero-name {
-  font-size: 18px;
+  font-size: 17px;
   font-weight: 700;
   line-height: 1.2;
   color: var(--color-text);
@@ -874,12 +891,6 @@ body.sidebar-hidden .main {
   margin-top: auto;
   padding-top: 6px;
 }
-.wrapped-year-stats {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-  gap: 10px;
-  align-content: start;
-}
 .wrapped-tile.compact {
   padding: 10px 12px;
 }
@@ -890,7 +901,16 @@ body.sidebar-hidden .main {
 .wrapped-tile.compact .wrapped-tile-label {
   margin-bottom: 4px;
 }
-@media (max-width: 720px) {
+@media (max-width: 900px) {
+  .wrapped-year-layout {
+    grid-template-columns: minmax(200px, 260px) 1fr;
+  }
+  .wrapped-year-stats-left,
+  .wrapped-year-stats-right {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+@media (max-width: 640px) {
   .wrapped-year-layout {
     grid-template-columns: 1fr;
   }
@@ -900,9 +920,62 @@ body.sidebar-hidden .main {
   grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
   gap: 16px;
   margin-top: 20px;
+  align-items: stretch; /* todas las cards misma altura */
 }
 .wrapped-top-card {
   padding: 18px 20px;
+  display: flex;
+  flex-direction: column;
+}
+.wrapped-top-scroll {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 460px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+.wrapped-top-scroll::-webkit-scrollbar {
+  width: 6px;
+}
+.wrapped-top-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  background: var(--color-elevated);
+  flex-shrink: 0;
+}
+.wrapped-top-rank {
+  width: 22px;
+  text-align: right;
+  color: var(--color-text-muted);
+  font-weight: 700;
+  font-size: 12px;
+  flex-shrink: 0;
+}
+.wrapped-top-info {
+  flex: 1;
+  min-width: 0;
+}
+.wrapped-top-name {
+  font-size: 13px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.wrapped-top-artist {
+  font-size: 11px;
+  color: var(--color-text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.wrapped-top-meta {
+  font-size: 11px;
+  color: var(--color-text-muted);
+  flex-shrink: 0;
 }
 
 /* Fade-in stagger para cards del dashboard y wrapped */
