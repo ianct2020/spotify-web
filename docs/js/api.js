@@ -1,7 +1,7 @@
-import { getValidToken, refreshAccessToken } from './auth.js?v=76';
-import { cacheGet, cacheGetRaw, cacheGetTimestamp, cacheSet, cacheClear } from './storage.js?v=76';
-import { idbGet, idbSet, idbDel, idbGetCached, idbGetCachedRaw, idbGetTimestamp, idbSetCached, idbAvailable } from './idb.js?v=76';
-import { showToast } from './ui/toast.js?v=76';
+import { getValidToken, refreshAccessToken } from './auth.js?v=77';
+import { cacheGet, cacheGetRaw, cacheGetTimestamp, cacheSet, cacheClear } from './storage.js?v=77';
+import { idbGet, idbSet, idbDel, idbGetCached, idbGetCachedRaw, idbGetTimestamp, idbSetCached, idbAvailable } from './idb.js?v=77';
+import { showToast } from './ui/toast.js?v=77';
 
 const BASE = 'https://api.spotify.com/v1';
 const MIN_RETRY_WAIT = 5000;
@@ -352,17 +352,31 @@ async function syncLikesIncremental(onProgress) {
   const totalNow = await getLikesTotal();
   const delta = totalNow - cached.length;
 
-  if (delta <= 0) {
-    return { hadCache: true, added: 0, totalNow, cachedCount: cached.length };
+  // Igual: nada que hacer.
+  if (delta === 0) {
+    return { hadCache: true, added: 0, removed: 0, totalNow, cachedCount: cached.length };
   }
 
+  // Borraste likes en Spotify (o desde otra herramienta). Bajamos todo de nuevo
+  // para reconciliar — un incremental no sabe QUÉ desaparecieron.
+  if (delta < 0) {
+    const removed = -delta;
+    if (onProgress) onProgress({ phase: 'reconciling', message: `En Spotify hay ${removed.toLocaleString('es-AR')} likes menos que en cache. Re-bajando todo para reconciliar...` });
+    invalidateLikesCache();
+    const fresh = await getAllLikedTracks(({ loaded, total }) => {
+      if (onProgress) onProgress({ phase: 'fetching-full', message: `Re-bajando likes (${loaded.toLocaleString('es-AR')} / ${(total || totalNow).toLocaleString('es-AR')})...`, loaded, total: total || totalNow });
+    });
+    return { hadCache: true, added: 0, removed, totalNow, cachedCount: fresh.length, reconciled: true };
+  }
+
+  // delta > 0: hay likes nuevos → los agregamos al frente.
   if (onProgress) onProgress({ phase: 'fetching', message: `Trayendo ${delta} likes nuevos...`, delta });
   const knownUris = new Set(cached.map(i => i?.track?.uri).filter(Boolean));
   const recent = await getRecentLikes(delta + 20);
   const newOnes = recent.filter(r => r?.track?.uri && !knownUris.has(r.track.uri));
   const finalItems = [...newOnes, ...cached];
   await saveLikes(finalItems);
-  return { hadCache: true, added: newOnes.length, totalNow, cachedCount: finalItems.length };
+  return { hadCache: true, added: newOnes.length, removed: 0, totalNow, cachedCount: finalItems.length };
 }
 
 async function getBestAvailableLikes() {

@@ -21,6 +21,7 @@ import { render as renderRecs } from './features/recommendations.js';
 import { render as renderListened } from './features/listened.js';
 import { render as renderWrapped } from './features/wrapped.js';
 import { render as renderZeroPlays } from './features/zero-plays.js';
+import { render as renderSearchLikes } from './features/search-likes.js';
 
 async function testConnection() {
   const token = await getValidToken();
@@ -200,6 +201,9 @@ function showApp(profile) {
           <a class="nav-link" data-route="wrapped" href="#wrapped">
             <span class="nav-link-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 12 20 22 4 22 4 12"/><rect x="2" y="7" width="20" height="5"/><line x1="12" y1="22" x2="12" y2="7"/><path d="M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7z"/><path d="M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z"/></svg></span> Wrapped
           </a>
+          <a class="nav-link" data-route="search" href="#search">
+            <span class="nav-link-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></span> Buscar likes
+          </a>
         </div>
         <div class="sidebar-section">
           <div class="sidebar-section-title">Crear</div>
@@ -357,6 +361,7 @@ function showApp(profile) {
   registerRoute('versions', renderVersions);
   registerRoute('wrapped', renderWrapped);
   registerRoute('zeroplays', renderZeroPlays);
+  registerRoute('search', renderSearchLikes);
 
   initRouter();
 }
@@ -377,6 +382,7 @@ const ICONS = {
   zombies: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 9h.01M15 9h.01M9 15c1.5-.5 4.5-.5 6 0"/><circle cx="12" cy="12" r="10"/></svg>',
   versions: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/></svg>',
   zeroplays: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="4.9" y1="4.9" x2="19.1" y2="19.1"/></svg>',
+  search: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>',
 };
 
 const HOME_SECTIONS = [
@@ -385,6 +391,7 @@ const HOME_SECTIONS = [
     items: [
       { hash: 'dashboard', icon: ICONS.dashboard, name: 'Dashboard', desc: 'Stats de tu biblioteca de Liked Songs.' },
       { hash: 'wrapped', icon: ICONS.wrapped, name: 'Wrapped', desc: 'Tu resumen del año — año calendario completo, hecho con el streaming history.' },
+      { hash: 'search', icon: ICONS.search, name: 'Buscar likes', desc: 'Buscador instantáneo en tus Liked Songs (local, sin ir a Spotify).' },
     ],
   },
   {
