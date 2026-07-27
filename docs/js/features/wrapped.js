@@ -1,8 +1,8 @@
 // Wrapped propio: mini-resumen tuyo por año, hecho con el Extended Streaming History.
 // A diferencia del Wrapped oficial (que corre oct-sept), este es del año calendario completo.
 
-import { loadHistoryStats } from './history-data.js?v=73';
-import { escapeHtml } from '../ui/components.js?v=73';
+import { loadHistoryStats } from './history-data.js?v=74';
+import { escapeHtml } from '../ui/components.js?v=74';
 
 let stats = null;
 let selectedYear = null;
@@ -106,62 +106,66 @@ function renderYearCard() {
         <div class="wrapped-hero-sub">${fmtDays(y.min)} · ${y.plays.toLocaleString('es-AR')} plays</div>
       </div>
 
-      <div class="wrapped-grid">
-        ${topArtist ? `
-          <div class="wrapped-tile">
-            <div class="wrapped-tile-label">Artista del año</div>
-            <div class="wrapped-tile-value">${escapeHtml(topArtist.name)}</div>
-            <div class="wrapped-tile-hint">${fmtMinutes(topArtist.min)} · ${topArtist.plays.toLocaleString('es-AR')} plays</div>
-          </div>
-        ` : ''}
+      <div class="wrapped-year-layout">
         ${topAlbum ? `
-          <div class="wrapped-tile">
+          <div class="wrapped-album-hero">
             <div class="wrapped-tile-label">Álbum del año</div>
-            ${topAlbum.img ? `<img src="${topAlbum.img}" alt="" class="wrapped-tile-cover" loading="lazy">` : ''}
-            <div class="wrapped-tile-value" style="font-size:18px">${escapeHtml(topAlbum.name)}</div>
-            <div class="wrapped-tile-hint">${escapeHtml(topAlbum.artist)} · ${fmtMinutes(topAlbum.min)}</div>
+            ${topAlbum.img ? `<img src="${topAlbum.img}" alt="" class="wrapped-album-hero-cover" loading="lazy">` : `<div class="wrapped-album-hero-cover" style="background:var(--color-elevated);display:flex;align-items:center;justify-content:center;color:var(--color-text-muted);font-size:44px">♪</div>`}
+            <div class="wrapped-album-hero-name">${escapeHtml(topAlbum.name)}</div>
+            <div class="wrapped-album-hero-artist">${escapeHtml(topAlbum.artist)}</div>
+            <div class="wrapped-album-hero-meta">${fmtMinutes(topAlbum.min)} · ${topAlbum.plays.toLocaleString('es-AR')} plays</div>
           </div>
         ` : ''}
-        ${topTrack ? `
-          <div class="wrapped-tile">
-            <div class="wrapped-tile-label">Track del año</div>
-            <div class="wrapped-tile-value" style="font-size:18px">${escapeHtml(topTrack.name)}</div>
-            <div class="wrapped-tile-hint">${escapeHtml(topTrack.artist)} · ${topTrack.plays.toLocaleString('es-AR')} plays · ${fmtMinutes(topTrack.min)}</div>
+
+        <div class="wrapped-year-stats">
+          ${topArtist ? `
+            <div class="wrapped-tile compact">
+              <div class="wrapped-tile-label">Artista del año</div>
+              <div class="wrapped-tile-value">${escapeHtml(topArtist.name)}</div>
+              <div class="wrapped-tile-hint">${fmtMinutes(topArtist.min)} · ${topArtist.plays.toLocaleString('es-AR')} plays</div>
+            </div>
+          ` : ''}
+          ${topTrack ? `
+            <div class="wrapped-tile compact">
+              <div class="wrapped-tile-label">Track del año</div>
+              <div class="wrapped-tile-value" style="font-size:16px">${escapeHtml(topTrack.name)}</div>
+              <div class="wrapped-tile-hint">${escapeHtml(topTrack.artist)} · ${fmtMinutes(topTrack.min)}</div>
+            </div>
+          ` : ''}
+          ${y.discovery ? `
+            <div class="wrapped-tile compact">
+              <div class="wrapped-tile-label">Descubrimiento</div>
+              <div class="wrapped-tile-value">${escapeHtml(y.discovery.artist)}</div>
+              <div class="wrapped-tile-hint">Primera vez en ${y.year} · ${fmtMinutes(y.discovery.min)}</div>
+            </div>
+          ` : ''}
+          <div class="wrapped-tile compact">
+            <div class="wrapped-tile-label">Mes pico</div>
+            <div class="wrapped-tile-value">${monthName} ${y.year}</div>
+            <div class="wrapped-tile-hint">${y.peak_month ? fmtMinutes(y.peak_month.min) : '—'}</div>
           </div>
-        ` : ''}
-        ${y.discovery ? `
-          <div class="wrapped-tile">
-            <div class="wrapped-tile-label">Descubrimiento del año</div>
-            <div class="wrapped-tile-value">${escapeHtml(y.discovery.artist)}</div>
-            <div class="wrapped-tile-hint">Primera vez en ${y.year} · ${fmtMinutes(y.discovery.min)}</div>
+          ${y.peak_day ? `
+            <div class="wrapped-tile compact">
+              <div class="wrapped-tile-label">Día más largo</div>
+              <div class="wrapped-tile-value" style="font-size:15px">${fmtDate(y.peak_day.date)}</div>
+              <div class="wrapped-tile-hint">${fmtMinutes(y.peak_day.min)}</div>
+            </div>
+          ` : ''}
+          <div class="wrapped-tile compact">
+            <div class="wrapped-tile-label">Días activos</div>
+            <div class="wrapped-tile-value">${y.days_active}</div>
+            <div class="wrapped-tile-hint">de ${daysInYear(y.year)} · racha ${y.longest_streak} d</div>
           </div>
-        ` : ''}
-        <div class="wrapped-tile">
-          <div class="wrapped-tile-label">Mes pico</div>
-          <div class="wrapped-tile-value">${monthName} ${y.year}</div>
-          <div class="wrapped-tile-hint">${y.peak_month ? fmtMinutes(y.peak_month.min) : '—'}</div>
-        </div>
-        ${y.peak_day ? `
-          <div class="wrapped-tile">
-            <div class="wrapped-tile-label">Día más largo</div>
-            <div class="wrapped-tile-value">${fmtDate(y.peak_day.date)}</div>
-            <div class="wrapped-tile-hint">${fmtMinutes(y.peak_day.min)}</div>
+          <div class="wrapped-tile compact">
+            <div class="wrapped-tile-label">Skips</div>
+            <div class="wrapped-tile-value">${y.skip_pct}%</div>
+            <div class="wrapped-tile-hint">por skip o &lt;30s</div>
           </div>
-        ` : ''}
-        <div class="wrapped-tile">
-          <div class="wrapped-tile-label">Días activos</div>
-          <div class="wrapped-tile-value">${y.days_active}</div>
-          <div class="wrapped-tile-hint">de ${daysInYear(y.year)} · racha más larga ${y.longest_streak} días</div>
-        </div>
-        <div class="wrapped-tile">
-          <div class="wrapped-tile-label">Skips</div>
-          <div class="wrapped-tile-value">${y.skip_pct}%</div>
-          <div class="wrapped-tile-hint">de las plays terminaron por skip o <30s</div>
-        </div>
-        <div class="wrapped-tile">
-          <div class="wrapped-tile-label">Primera play</div>
-          <div class="wrapped-tile-value" style="font-size:16px">${fmtDate(y.first_play)}</div>
-          <div class="wrapped-tile-hint">Última: ${fmtDate(y.last_play)}</div>
+          <div class="wrapped-tile compact">
+            <div class="wrapped-tile-label">Primera play</div>
+            <div class="wrapped-tile-value" style="font-size:14px">${fmtDate(y.first_play)}</div>
+            <div class="wrapped-tile-hint">Última: ${fmtDate(y.last_play)}</div>
+          </div>
         </div>
       </div>
 
@@ -226,9 +230,19 @@ function renderAllTime() {
           <div class="wrapped-tile-hint">racha más larga: ${t.longest_streak || 0} días</div>
         </div>
         <div class="wrapped-tile">
-          <div class="wrapped-tile-label">Artistas · álbumes · tracks</div>
-          <div class="wrapped-tile-value" style="font-size:20px">${(t.unique_artists || 0).toLocaleString('es-AR')} · ${(t.unique_albums || 0).toLocaleString('es-AR')} · ${(t.unique_tracks || 0).toLocaleString('es-AR')}</div>
-          <div class="wrapped-tile-hint">únicos con al menos una play ≥30s</div>
+          <div class="wrapped-tile-label">Artistas únicos</div>
+          <div class="wrapped-tile-value">${(t.unique_artists || 0).toLocaleString('es-AR')}</div>
+          <div class="wrapped-tile-hint">con al menos una play ≥30s</div>
+        </div>
+        <div class="wrapped-tile">
+          <div class="wrapped-tile-label">Álbumes únicos</div>
+          <div class="wrapped-tile-value">${(t.unique_albums || 0).toLocaleString('es-AR')}</div>
+          <div class="wrapped-tile-hint">con al menos una play ≥30s</div>
+        </div>
+        <div class="wrapped-tile">
+          <div class="wrapped-tile-label">Tracks únicos</div>
+          <div class="wrapped-tile-value">${(t.unique_tracks || 0).toLocaleString('es-AR')}</div>
+          <div class="wrapped-tile-hint">con al menos una play ≥30s</div>
         </div>
       </div>
     </div>

@@ -3,9 +3,9 @@
 
 import { idbGetCached, idbSetCached } from '../idb.js';
 
-const STATS_VERSION = 1;
+const STATS_VERSION = 2;
 const PLAYS_VERSION = 2; // ahora incluye entries "partial" para tracks con solo plays <30s
-const LISTENED_VERSION = 1;
+const LISTENED_VERSION = 2;
 const STATS_KEY = `history_stats_v${STATS_VERSION}`;
 const PLAYS_KEY = `history_track_plays_v${PLAYS_VERSION}`;
 const LISTENED_KEY = `history_listened_albums_v${LISTENED_VERSION}`;

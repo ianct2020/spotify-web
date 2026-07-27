@@ -23,9 +23,9 @@ OUT_DIR = "/home/ian/spotify-web/src/data"
 OLD_IMG_JSON = "/home/ian/spotify-web/src/data/listening-history.json"
 
 MIN_MS = 30000  # trigger warning: ignoramos plays de menos de 30s
-STATS_VERSION = 1
-TRACK_PLAYS_VERSION = 2      # bump: ahora incluye entries "partial" para tracks solo con plays <30s
-LISTENED_VERSION = 1
+STATS_VERSION = 2            # bump: excluye "Sonido Para Sacar Agua Del Movil"
+TRACK_PLAYS_VERSION = 2      # incluye entries "partial" para tracks solo con plays <30s
+LISTENED_VERSION = 2         # bump: excluye "Sonido Para Sacar Agua Del Movil"
 TOP_N_YEAR = 40       # top X por año
 TOP_N_ALLTIME = 60    # top X global
 KEEP_TRACK_IF_MS = 60000  # solo indexamos tracks con >=60s totales (reduce peso del JSON)

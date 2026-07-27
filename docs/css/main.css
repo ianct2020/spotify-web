@@ -114,14 +114,21 @@ h3 { font-size: 18px; font-weight: 600; }
   letter-spacing: 1px;
   padding: 0 8px;
   margin-bottom: 8px;
-  /* Shimmer violeta: un brillo barre las letras. Sin costura: los extremos son del
-     mismo color base, y la animación es lineal, así no se ve el reset. */
+  /* Shimmer violeta con DOS brillos simétricos en un gradient periódico.
+     bg-size 200% + desplazamiento 100% = un ciclo entero del gradient, que empieza y
+     termina exactamente en la misma imagen → loop matemáticamente perfecto, sin costura. */
   background: linear-gradient(100deg,
     var(--color-text-muted) 0%,
-    var(--color-text-muted) 45%,
-    #ffffff 50%,
-    var(--color-accent) 55%,
-    var(--color-text-muted) 60%,
+    var(--color-text-muted) 22%,
+    #ffffff 27%,
+    var(--color-accent) 30%,
+    #ffffff 33%,
+    var(--color-text-muted) 38%,
+    var(--color-text-muted) 72%,
+    #ffffff 77%,
+    var(--color-accent) 80%,
+    #ffffff 83%,
+    var(--color-text-muted) 88%,
     var(--color-text-muted) 100%);
   background-size: 200% 100%;
   -webkit-background-clip: text;
@@ -130,8 +137,8 @@ h3 { font-size: 18px; font-weight: 600; }
   animation: sidebarShimmer 4.5s linear infinite;
 }
 @keyframes sidebarShimmer {
-  0% { background-position: 200% 0; }
-  100% { background-position: -100% 0; }
+  0% { background-position: 100% 0; }
+  100% { background-position: 0% 0; }
 }
 @media (prefers-reduced-motion: reduce) {
   .sidebar-section-title { animation: none; }
@@ -826,6 +833,67 @@ body.sidebar-hidden .main {
   grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
   gap: 20px;
   padding: 0 20px 20px 20px;
+}
+
+.wrapped-year-layout {
+  display: grid;
+  grid-template-columns: minmax(220px, 280px) 1fr;
+  gap: 14px;
+  padding: 20px;
+}
+.wrapped-album-hero {
+  background: var(--color-elevated);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.wrapped-album-hero-cover {
+  width: 100%;
+  aspect-ratio: 1;
+  border-radius: 6px;
+  object-fit: cover;
+  margin-top: 4px;
+}
+.wrapped-album-hero-name {
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1.2;
+  color: var(--color-text);
+  word-break: break-word;
+}
+.wrapped-album-hero-artist {
+  font-size: 13px;
+  color: var(--color-text-muted);
+}
+.wrapped-album-hero-meta {
+  font-size: 12px;
+  color: var(--color-text-muted);
+  margin-top: auto;
+  padding-top: 6px;
+}
+.wrapped-year-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 10px;
+  align-content: start;
+}
+.wrapped-tile.compact {
+  padding: 10px 12px;
+}
+.wrapped-tile.compact .wrapped-tile-value {
+  font-size: 18px;
+  margin-bottom: 3px;
+}
+.wrapped-tile.compact .wrapped-tile-label {
+  margin-bottom: 4px;
+}
+@media (max-width: 720px) {
+  .wrapped-year-layout {
+    grid-template-columns: 1fr;
+  }
 }
 .wrapped-top-cards {
   display: grid;
