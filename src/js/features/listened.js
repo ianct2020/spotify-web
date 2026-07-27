@@ -498,11 +498,11 @@ function buildUI(totalTracks, ts) {
             <h3 style="margin:0;font-size:15px">Por año</h3>
             <span style="font-size:12px;color:var(--color-text-muted)">Cuándo agregaste cada álbum al registro · click para ver la lista</span>
           </div>
-          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:12px">
+          <div style="display:grid;grid-template-columns:${years.length <= 12 ? `repeat(${years.length}, minmax(0, 1fr))` : 'repeat(auto-fit, minmax(110px, 1fr))'};gap:10px">
             ${years.map(y => `
-              <button class="year-tile" data-year="${escapeHtml(y.year)}" style="background:var(--color-elevated);border:1px solid var(--color-border);border-radius:var(--radius-sm);padding:14px 16px;text-align:left;cursor:pointer;transition:border-color .15s,transform .05s">
-                <div style="font-size:22px;font-weight:700;color:var(--color-text);line-height:1.1">${y.count.toLocaleString()}</div>
-                <div style="font-size:12px;color:var(--color-text-muted);margin-top:4px">${escapeHtml(y.year)}</div>
+              <button class="year-tile" data-year="${escapeHtml(y.year)}" style="background:var(--color-elevated);border:1px solid var(--color-border);border-radius:var(--radius-sm);padding:10px 12px;text-align:left;cursor:pointer;transition:border-color .15s,transform .05s;min-width:0">
+                <div style="font-size:19px;font-weight:700;color:var(--color-text);line-height:1.1">${y.count.toLocaleString()}</div>
+                <div style="font-size:11px;color:var(--color-text-muted);margin-top:3px">${escapeHtml(y.year)}</div>
               </button>
             `).join('')}
           </div>

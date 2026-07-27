@@ -1,26 +1,26 @@
-import { isLoggedIn, loginWithSpotify, logout } from './auth.js?v=73';
-import { getUserProfile, spotifyFetch, tryAutoLoadUserBackup } from './api.js?v=73';
-import { getValidToken } from './auth.js?v=73';
-import { cacheClearAll } from './storage.js?v=73';
-import { idbClearAll } from './idb.js?v=73';
-import { registerRoute, initRouter, navigate } from './router.js?v=73';
-import { showToast } from './ui/toast.js?v=73';
+import { isLoggedIn, loginWithSpotify, logout } from './auth.js?v=74';
+import { getUserProfile, spotifyFetch, tryAutoLoadUserBackup } from './api.js?v=74';
+import { getValidToken } from './auth.js?v=74';
+import { cacheClearAll } from './storage.js?v=74';
+import { idbClearAll } from './idb.js?v=74';
+import { registerRoute, initRouter, navigate } from './router.js?v=74';
+import { showToast } from './ui/toast.js?v=74';
 
-import { render as renderSync } from './features/sync.js?v=73';
-import { render as renderDedupe } from './features/dedupe.js?v=73';
-import { render as renderDupalbums } from './features/duplicate-albums.js?v=73';
-import { render as renderZombies } from './features/zombies.js?v=73';
-import { render as renderVersions } from './features/versions.js?v=73';
-import { render as renderDashboard } from './features/dashboard.js?v=73';
-import { render as renderSmart } from './features/smart.js?v=73';
-import { render as renderSimilar } from './features/similar-artists.js?v=73';
-import { render as renderRabbit } from './features/rabbit-hole.js?v=73';
-import { render as renderByGenre } from './features/by-genre.js?v=73';
-import { render as renderByArtist } from './features/by-artist.js?v=73';
-import { render as renderRecs } from './features/recommendations.js?v=73';
-import { render as renderListened } from './features/listened.js?v=73';
-import { render as renderWrapped } from './features/wrapped.js?v=73';
-import { render as renderZeroPlays } from './features/zero-plays.js?v=73';
+import { render as renderSync } from './features/sync.js?v=74';
+import { render as renderDedupe } from './features/dedupe.js?v=74';
+import { render as renderDupalbums } from './features/duplicate-albums.js?v=74';
+import { render as renderZombies } from './features/zombies.js?v=74';
+import { render as renderVersions } from './features/versions.js?v=74';
+import { render as renderDashboard } from './features/dashboard.js?v=74';
+import { render as renderSmart } from './features/smart.js?v=74';
+import { render as renderSimilar } from './features/similar-artists.js?v=74';
+import { render as renderRabbit } from './features/rabbit-hole.js?v=74';
+import { render as renderByGenre } from './features/by-genre.js?v=74';
+import { render as renderByArtist } from './features/by-artist.js?v=74';
+import { render as renderRecs } from './features/recommendations.js?v=74';
+import { render as renderListened } from './features/listened.js?v=74';
+import { render as renderWrapped } from './features/wrapped.js?v=74';
+import { render as renderZeroPlays } from './features/zero-plays.js?v=74';
 
 async function testConnection() {
   const token = await getValidToken();
@@ -281,21 +281,27 @@ function showApp(profile) {
   const sidebar = document.getElementById('sidebar');
   const overlay = document.getElementById('sidebar-overlay');
 
-  // Preferencia persistida del user para el sidebar en desktop
-  const SIDEBAR_HIDDEN_KEY = 'sidebar_hidden';
-  if (localStorage.getItem(SIDEBAR_HIDDEN_KEY) === '1') {
-    document.body.classList.add('sidebar-hidden');
-  }
+  // Sidebar visible en Home, cerrado en las demás rutas.
+  // El toggle manual cambia temporalmente hasta la próxima navegación (no persistimos).
+  const isHome = () => {
+    const h = window.location.hash.slice(1);
+    return !h || h === 'home';
+  };
+  const applyRouteSidebar = () => {
+    if (window.matchMedia('(max-width: 768px)').matches) return; // en mobile lo maneja el overlay
+    if (isHome()) document.body.classList.remove('sidebar-hidden');
+    else document.body.classList.add('sidebar-hidden');
+  };
+  applyRouteSidebar();
+  window.addEventListener('hashchange', applyRouteSidebar);
 
   hamburger.onclick = () => {
-    // En mobile (<=768): abrir/cerrar como overlay. En desktop: toggle desktop-collapse.
+    // En mobile (<=768): abrir/cerrar como overlay. En desktop: toggle desktop-collapse (temporal).
     if (window.matchMedia('(max-width: 768px)').matches) {
       sidebar.classList.toggle('open');
       overlay.classList.toggle('open');
     } else {
-      const hidden = document.body.classList.toggle('sidebar-hidden');
-      if (hidden) localStorage.setItem(SIDEBAR_HIDDEN_KEY, '1');
-      else localStorage.removeItem(SIDEBAR_HIDDEN_KEY);
+      document.body.classList.toggle('sidebar-hidden');
     }
   };
   overlay.onclick = () => {

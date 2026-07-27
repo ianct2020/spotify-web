@@ -513,7 +513,7 @@ function renderDashboard(container, stats) {
         <h3 style="margin:0">Álbumes escuchados por año</h3>
         <span style="font-size:12px;color:var(--color-text-muted)" id="listened-year-hint">Detectados desde tu historial · click para ver la lista</span>
       </div>
-      <div id="listened-year-tiles" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:12px;min-height:70px;align-items:center;color:var(--color-text-muted);font-size:13px">Cargando…</div>
+      <div id="listened-year-tiles" style="display:grid;gap:10px;min-height:70px;align-items:center;color:var(--color-text-muted);font-size:13px">Cargando…</div>
     </div>
 
     <div class="dash-grid">
@@ -554,13 +554,13 @@ function renderDashboard(container, stats) {
           <h3>Heatmap — cuándo escuchás <span style="font-weight:400;color:var(--color-text-muted);font-size:13px">· min / día × hora</span></h3>
           <div id="history-heatmap" style="display:flex;justify-content:center;align-items:center;padding:8px 0"></div>
         </div>
-        <div class="card dash-chart-card dash-chart-wide">
-          <h3>Top 20 artistas <span style="font-weight:400;color:var(--color-text-muted);font-size:13px">· por tiempo escuchado real</span></h3>
-          <canvas id="chart-history-artists" style="min-height:640px"></canvas>
-        </div>
         <div class="card dash-chart-card">
+          <h3>Top 20 artistas <span style="font-weight:400;color:var(--color-text-muted);font-size:13px">· por tiempo escuchado real</span></h3>
+          <canvas id="chart-history-artists" style="min-height:520px"></canvas>
+        </div>
+        <div class="card dash-chart-card dash-chart-wide">
           <h3>Top 20 álbumes <span style="font-weight:400;color:var(--color-text-muted);font-size:13px">· por tiempo escuchado real</span></h3>
-          <div id="history-top-albums" class="results-list"></div>
+          <div id="history-top-albums" style="display:grid;grid-template-columns:1fr 1fr;gap:6px 20px"></div>
         </div>
       </div>
     </div>
@@ -662,6 +662,8 @@ async function hydrateHistorySection() {
       options: {
         ...CHART_DEFAULTS,
         indexAxis: 'y',
+        // En bar horizontal, forzamos el hit-test por eje Y para que hover-drake devuelva Drake.
+        interaction: { mode: 'nearest', axis: 'y', intersect: false },
         plugins: {
           ...CHART_DEFAULTS.plugins,
           tooltip: {
@@ -680,7 +682,7 @@ async function hydrateHistorySection() {
           },
           y: {
             ...CHART_DEFAULTS.scales.y,
-            ticks: { ...CHART_DEFAULTS.scales.y.ticks, font: { family: 'Inter', size: 13, weight: '500' } },
+            ticks: { ...CHART_DEFAULTS.scales.y.ticks, font: { family: 'Inter', size: 12, weight: '500' } },
           },
         },
       },
@@ -791,10 +793,14 @@ async function hydrateListenedYearTiles() {
 
     holder.style.color = '';
     holder.style.fontSize = '';
+    // Forzar 1 fila cuando la cantidad de años entra bien (típicamente 9-10).
+    holder.style.gridTemplateColumns = years.length <= 12
+      ? `repeat(${years.length}, minmax(0, 1fr))`
+      : 'repeat(auto-fit, minmax(110px, 1fr))';
     holder.innerHTML = years.map(y => `
-      <button class="year-tile" data-year="${y.year}" style="background:var(--color-elevated);border:1px solid var(--color-border);border-radius:var(--radius-sm);padding:14px 16px;text-align:left;cursor:pointer;transition:border-color .15s,transform .05s">
-        <div style="font-size:22px;font-weight:700;color:var(--color-text);line-height:1.1">${y.count.toLocaleString('es-AR')}</div>
-        <div style="font-size:12px;color:var(--color-text-muted);margin-top:4px">${y.year}</div>
+      <button class="year-tile" data-year="${y.year}" style="background:var(--color-elevated);border:1px solid var(--color-border);border-radius:var(--radius-sm);padding:10px 12px;text-align:left;cursor:pointer;transition:border-color .15s,transform .05s;min-width:0">
+        <div style="font-size:19px;font-weight:700;color:var(--color-text);line-height:1.1">${y.count.toLocaleString('es-AR')}</div>
+        <div style="font-size:11px;color:var(--color-text-muted);margin-top:3px">${y.year}</div>
       </button>
     `).join('');
     holder.querySelectorAll('.year-tile').forEach(tile => {
@@ -985,6 +991,7 @@ function buildCharts(stats) {
     options: {
       ...CHART_DEFAULTS,
       indexAxis: 'y',
+      interaction: { mode: 'nearest', axis: 'y', intersect: false },
       scales: {
         ...CHART_DEFAULTS.scales,
         x: {
@@ -993,7 +1000,7 @@ function buildCharts(stats) {
         },
         y: {
           ...CHART_DEFAULTS.scales.y,
-          ticks: { ...CHART_DEFAULTS.scales.y.ticks, font: { family: 'Inter', size: 10 } },
+          ticks: { ...CHART_DEFAULTS.scales.y.ticks, font: { family: 'Inter', size: 11 } },
         },
       },
     },
