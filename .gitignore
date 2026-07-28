@@ -2,3 +2,20 @@ node_modules/
 .env
 .DS_Store
 dist/
+
+# Datos personales — NUNCA subir
+CHAT-SUMMARY.txt
+FONOTECA-*.txt
+NEXT-PROMPT.txt
+PROMPT_NUEVO_CHAT.md
+RESUMEN-MAESTRO.txt
+fonoteca-prompts-*.txt
+spotify-web-resumen-maestro-*.txt
+user-*.json
+docs/data/user-*.json
+my_spotify_data/
+Descargas/
+
+# Exports temporales de Fonoteca (data privada)
+*-export-*.json
+deleted-clusters.json
