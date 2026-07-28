@@ -1,8 +1,8 @@
-import { getAllPlaylistItems, getBestAvailableLikes, addTracksToPlaylist, removeTracksFromPlaylist, getAllUserPlaylists } from '../api.js?v=78';
-import { idbGetCached, idbSetCached, idbGetTimestamp, idbDel } from '../idb.js?v=78';
-import { escapeHtml, confirmModal } from '../ui/components.js?v=78';
-import { showToast } from '../ui/toast.js?v=78';
-import { getListenedPlaylist, groupItemsByAlbum, openListenedAlbumsPicker, albumKey, baseName, norm } from './listened-shared.js?v=78';
+import { getAllPlaylistItems, getBestAvailableLikes, addTracksToPlaylist, removeTracksFromPlaylist, getAllUserPlaylists } from '../api.js?v=79';
+import { idbGetCached, idbSetCached, idbGetTimestamp, idbDel } from '../idb.js?v=79';
+import { escapeHtml, confirmModal } from '../ui/components.js?v=79';
+import { showToast } from '../ui/toast.js?v=79';
+import { getListenedPlaylist, groupItemsByAlbum, openListenedAlbumsPicker, albumKey, baseName, norm } from './listened-shared.js?v=79';
 
 const SORT_KEY = 'listened_sort_mode';
 const VALID_SORTS = new Set(['recent', 'year-desc', 'year-asc', 'artist-asc', 'likes-desc', 'name-asc']);

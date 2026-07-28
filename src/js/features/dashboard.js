@@ -664,8 +664,10 @@ async function hydrateHistorySection() {
       options: {
         ...CHART_DEFAULTS,
         indexAxis: 'y',
-        // intersect: true → el tooltip aparece solo si el mouse está DENTRO de la barra.
-        interaction: { mode: 'nearest', axis: 'y', intersect: true },
+        // mode 'y' + intersect:false: en barras horizontales proyecta el Y del mouse
+        // a la fila de categoría — engancha la barra que el ojo espera, sin off-by-one
+        // por el label pintado abajo del centro del bar.
+        interaction: { mode: 'y', intersect: false },
         plugins: {
           ...CHART_DEFAULTS.plugins,
           tooltip: {
@@ -1001,9 +1003,8 @@ function buildCharts(stats) {
     options: {
       ...CHART_DEFAULTS,
       indexAxis: 'y',
-      // intersect: true → el tooltip aparece solo si el mouse está DENTRO de la barra.
-      // Antes con intersect:false, apoyar el mouse debajo del gráfico mostraba la última barra.
-      interaction: { mode: 'nearest', axis: 'y', intersect: true },
+      // Ver dashboard "chart-history-artists": mismo motivo.
+      interaction: { mode: 'y', intersect: false },
       scales: {
         ...CHART_DEFAULTS.scales,
         x: {
