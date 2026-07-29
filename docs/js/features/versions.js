@@ -1,6 +1,6 @@
-import { getAllLikedTracks, removeLikedTracks } from '../api.js?v=81';
-import { showProgress, hideProgress, progressController, isCancelled, typeConfirmModal, renderTrackRow, escapeHtml } from '../ui/components.js?v=81';
-import { showToast } from '../ui/toast.js?v=81';
+import { getAllLikedTracks, removeLikedTracks, checkLibraryContains } from '../api.js?v=82';
+import { showProgress, hideProgress, progressController, isCancelled, typeConfirmModal, renderTrackRow, escapeHtml } from '../ui/components.js?v=82';
+import { showToast } from '../ui/toast.js?v=82';
 
 const keepIds = new Set();
 // Persiste los cluster idx que ya resolviste (batchDelete). Sobrevive a "Ver más"
@@ -317,8 +317,26 @@ async function batchDelete() {
   try {
     showProgress('Borrando sobrantes...', 0, toRemoveIds.length);
     await removeLikedTracks(toRemoveIds);
+    // Verificación contra Spotify: chequeo si los ids que borré siguen en la
+    // biblioteca. Post-migración feb 2026 el que vive es /me/library/contains
+    // con URIs (verificado en vivo 2026-07-28). No falla si el endpoint muere
+    // en el futuro — el toast simplemente omite el resumen.
+    let verifyLine = '';
+    try {
+      showProgress('Verificando con Spotify...', 0, toRemoveIds.length);
+      const contains = await checkLibraryContains(toRemoveIds);
+      const stillIn = toRemoveIds.filter(id => contains.get(id) === true);
+      if (stillIn.length === 0) {
+        verifyLine = ` · ✓ verificado: ${toRemoveIds.length} de ${toRemoveIds.length} salieron`;
+      } else {
+        verifyLine = ` · ⚠ ${stillIn.length} de ${toRemoveIds.length} siguen en tu biblioteca — revisá`;
+        console.warn('Versiones: ids que no salieron:', stillIn);
+      }
+    } catch (verr) {
+      console.warn('Versiones: verificación falló, sigo igual:', verr.message);
+    }
     hideProgress();
-    showToast(`${toRemoveIds.length} versión(es) eliminada(s)`, 'success');
+    showToast(`${toRemoveIds.length} versión(es) eliminada(s)${verifyLine}`, 'success');
 
     const toRemoveSet = new Set(toRemoveIds);
     // Mutar allClusters: dejar solo lo que se quedó. Así "Ver más" o cualquier re-render

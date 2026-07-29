@@ -1,7 +1,7 @@
-import { getValidToken, refreshAccessToken } from './auth.js?v=81';
-import { cacheGet, cacheGetRaw, cacheGetTimestamp, cacheSet, cacheClear } from './storage.js?v=81';
-import { idbGet, idbSet, idbDel, idbGetCached, idbGetCachedRaw, idbGetTimestamp, idbSetCached, idbAvailable } from './idb.js?v=81';
-import { showToast } from './ui/toast.js?v=81';
+import { getValidToken, refreshAccessToken } from './auth.js?v=82';
+import { cacheGet, cacheGetRaw, cacheGetTimestamp, cacheSet, cacheClear } from './storage.js?v=82';
+import { idbGet, idbSet, idbDel, idbGetCached, idbGetCachedRaw, idbGetTimestamp, idbSetCached, idbAvailable } from './idb.js?v=82';
+import { showToast } from './ui/toast.js?v=82';
 
 const BASE = 'https://api.spotify.com/v1';
 const MIN_RETRY_WAIT = 5000;
@@ -626,6 +626,22 @@ function invalidatePlaylistsCache() {
   cacheClear(PLAYLISTS_CACHE_KEY);
 }
 
+// Confirma cuáles ids siguen en la biblioteca. Post-migración feb 2026:
+// GET /me/tracks/contains → 403; el que vive es GET /me/library/contains con URIs.
+// Devuelve Map<id, bool>. Chunks de 50, encaja con el resto de endpoints /me/library.
+async function checkLibraryContains(ids) {
+  const clean = [...new Set((ids || []).filter(Boolean))];
+  const out = new Map();
+  for (let i = 0; i < clean.length; i += 50) {
+    const chunk = clean.slice(i, i + 50);
+    const uris = chunk.map(id => `spotify:track:${id}`).join(',');
+    const r = await spotifyFetch(`/me/library/contains?uris=${encodeURIComponent(uris)}`);
+    if (Array.isArray(r)) chunk.forEach((id, j) => out.set(id, !!r[j]));
+    if (i + 50 < clean.length) await sleep(300);
+  }
+  return out;
+}
+
 async function getAllPlaylistItems(playlistId, onProgress, { signal } = {}) {
   return paginateAll(`/playlists/${playlistId}/items`, {
     limit: 100,
@@ -768,6 +784,7 @@ export {
   removeTracksFromPlaylist,
   removePlaylistItemsAtPositions,
   removeLikedTracks,
+  checkLibraryContains,
   createPlaylist,
   unfollowPlaylist,
   invalidateLikesCache,
