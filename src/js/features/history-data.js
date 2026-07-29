@@ -6,14 +6,17 @@ import { idbGetCached, idbSetCached } from '../idb.js';
 const STATS_VERSION = 2;
 const PLAYS_VERSION = 2; // ahora incluye entries "partial" para tracks con solo plays <30s
 const LISTENED_VERSION = 2;
+const SKIP_VERSION = 1;
 const STATS_KEY = `history_stats_v${STATS_VERSION}`;
 const PLAYS_KEY = `history_track_plays_v${PLAYS_VERSION}`;
 const LISTENED_KEY = `history_listened_albums_v${LISTENED_VERSION}`;
+const SKIP_KEY = `history_skip_stats_v${SKIP_VERSION}`;
 const TTL_MIN = 30 * 24 * 60;
 
 let statsMem = null;
 let playsMem = null;
 let listenedMem = null;
+let skipMem = null;
 
 async function loadHistoryStats() {
   if (statsMem) return statsMem;
@@ -72,6 +75,25 @@ async function loadListenedAlbums() {
   return listenedMem;
 }
 
+async function loadSkipStats() {
+  if (skipMem) return skipMem;
+  try {
+    const cached = await idbGetCached(SKIP_KEY);
+    if (cached && cached.tracks) { skipMem = cached; return skipMem; }
+  } catch { /* ignora */ }
+  try {
+    const url = new URL(`../../data/history-skip-stats.json?v=${SKIP_VERSION}`, import.meta.url);
+    const res = await fetch(url);
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    skipMem = await res.json();
+    try { await idbSetCached(SKIP_KEY, skipMem, TTL_MIN); } catch { /* ignora */ }
+  } catch (e) {
+    console.warn('No se pudo cargar history-skip-stats:', e.message);
+    skipMem = null;
+  }
+  return skipMem;
+}
+
 function trackIdOf(uri) {
   return (uri || '').startsWith('spotify:track:') ? uri.slice(14) : null;
 }
@@ -84,4 +106,4 @@ function playsFor(uri, index) {
   return index.tracks[id] || null;
 }
 
-export { loadHistoryStats, loadTrackPlays, loadListenedAlbums, playsFor, trackIdOf };
+export { loadHistoryStats, loadTrackPlays, loadListenedAlbums, loadSkipStats, playsFor, trackIdOf };
