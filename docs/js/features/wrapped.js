@@ -1,11 +1,12 @@
 // Wrapped propio: mini-resumen tuyo por año, hecho con el Extended Streaming History.
 // A diferencia del Wrapped oficial (que corre oct-sept), este es del año calendario completo.
 
-import { loadHistoryStats, isOwner, ownerLockedMessage } from './history-data.js?v=90';
-import { escapeHtml } from '../ui/components.js?v=90';
-import { findTrackPreview, findArtistTopPreview } from '../api/itunes.js?v=90';
-import { attachHover } from '../ui/preview-player.js?v=90';
-import { openTrackCard } from './track-card.js?v=90';
+import { loadHistoryStats, isOwner, ownerLockedMessage } from './history-data.js?v=91';
+import { escapeHtml } from '../ui/components.js?v=91';
+import { findTrackPreview, findArtistTopPreview } from '../api/itunes.js?v=91';
+import { attachHover } from '../ui/preview-player.js?v=91';
+import { openTrackCard } from './track-card.js?v=91';
+import { getMyTop } from '../api.js?v=91';
 
 let stats = null;
 let selectedYear = null;
@@ -46,9 +47,11 @@ export async function render(container) {
   stats = await loadHistoryStats();
   const content = document.getElementById('wrapped-content');
   if (!stats || !stats.years || !stats.years.length) {
-    content.innerHTML = (await isOwner())
-      ? `<div class="card"><p>No pude cargar el historial de reproducción. Volvé a probar.</p></div>`
-      : ownerLockedMessage('Wrapped');
+    if (await isOwner()) {
+      content.innerHTML = `<div class="card"><p>No pude cargar el historial de reproducción. Volvé a probar.</p></div>`;
+    } else {
+      await renderLite(content);
+    }
     return;
   }
 
@@ -349,4 +352,99 @@ function renderAllTime() {
   wireTopHover(holder, 'at-trk', (stats.top_tracks_all_time || []).slice(0, 20), 'track');
   wireTopHover(holder, 'at-tile-art', topArtist ? [topArtist] : [], 'artist');
   wireTopHover(holder, 'at-tile-trk', topTrack ? [topTrack] : [], 'track');
+}
+
+// ============ Wrapped lite: para users sin Extended Streaming History ============
+// Usa /me/top de la API (scope user-top-read): top 50 artistas y tracks en 3
+// ventanas. Sin minutos ni histórico por año, pero es TU wrapped igual.
+
+const LITE_RANGES = [
+  ['short_term', 'Último mes'],
+  ['medium_term', 'Últimos 6 meses'],
+  ['long_term', 'Último año y pico'],
+];
+let liteRange = 'medium_term';
+
+async function renderLite(content) {
+  content.innerHTML = `<div class="empty-state"><div class="spinner spinner-lg"></div><div style="margin-top:16px">Cargando tus tops desde Spotify…</div></div>`;
+
+  let artists, tracks;
+  try {
+    [artists, tracks] = await Promise.all([
+      getMyTop('artists', liteRange),
+      getMyTop('tracks', liteRange),
+    ]);
+  } catch (e) {
+    // /me/top caído o sin permiso: mostramos la explicación estándar
+    console.warn('Wrapped lite: /me/top falló:', e.message);
+    content.innerHTML = ownerLockedMessage('El Wrapped completo');
+    return;
+  }
+
+  if (!artists.length && !tracks.length) {
+    content.innerHTML = `<div class="card"><p>Spotify todavía no tiene tops tuyos para este período — escuchá un poco más y volvé.</p></div>` + ownerLockedMessage('El Wrapped completo');
+    return;
+  }
+
+  content.innerHTML = `
+    <div class="card" style="margin-bottom:16px">
+      <div style="font-size:12px;color:var(--color-text-muted);letter-spacing:0.06em;text-transform:uppercase;margin-bottom:10px">Tu top según Spotify</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap" id="wl-range-tabs">
+        ${LITE_RANGES.map(([v, label]) => `
+          <button class="wrapped-year-tab" data-range="${v}"
+                  style="padding:8px 14px;border-radius:var(--radius-sm);border:1px solid var(--color-border);
+                         background:${v === liteRange ? 'var(--color-accent)' : 'var(--color-elevated)'};
+                         color:${v === liteRange ? '#fff' : 'var(--color-text)'};
+                         font-weight:${v === liteRange ? '600' : '500'};font-size:14px;cursor:pointer">${label}</button>
+        `).join('')}
+      </div>
+    </div>
+
+    <div class="wrapped-top-cards" style="grid-template-columns:repeat(auto-fill,minmax(320px,1fr))">
+      <div class="card wrapped-top-card">
+        <h3 style="margin:0 0 12px;font-size:16px">Top artistas</h3>
+        <div class="wrapped-top-scroll">
+          ${artists.map((a, i) => {
+            const img = a.images?.[2]?.url || a.images?.[1]?.url || a.images?.[0]?.url;
+            return `
+            <div class="wrapped-top-row" data-hover="wl-a:${i}">
+              <span class="wrapped-top-rank">${i + 1}</span>
+              ${img ? `<img src="${img}" alt="" loading="lazy" style="width:36px;height:36px;border-radius:50%;object-fit:cover;flex-shrink:0">` : ''}
+              <div class="wrapped-top-info">
+                <div class="wrapped-top-name">${escapeHtml(a.name)}</div>
+                ${a.genres?.length ? `<div class="wrapped-top-artist">${escapeHtml(a.genres.slice(0, 2).join(', '))}</div>` : ''}
+              </div>
+            </div>
+          `;}).join('')}
+        </div>
+      </div>
+      <div class="card wrapped-top-card">
+        <h3 style="margin:0 0 12px;font-size:16px">Top tracks</h3>
+        <div class="wrapped-top-scroll">
+          ${tracks.map((t, i) => {
+            const imgs = t.album?.images || [];
+            const img = imgs[2]?.url || imgs[1]?.url || imgs[0]?.url;
+            return `
+            <div class="wrapped-top-row" data-hover="wl-t:${i}">
+              <span class="wrapped-top-rank">${i + 1}</span>
+              ${img ? `<img src="${img}" alt="" loading="lazy" style="width:36px;height:36px;border-radius:4px;object-fit:cover;flex-shrink:0">` : ''}
+              <div class="wrapped-top-info">
+                <div class="wrapped-top-name">${escapeHtml(t.name)}</div>
+                <div class="wrapped-top-artist">${escapeHtml((t.artists || []).map(a => a.name).join(', '))}</div>
+              </div>
+            </div>
+          `;}).join('')}
+        </div>
+      </div>
+    </div>
+
+    <div style="margin-top:20px">${ownerLockedMessage('La versión completa (minutos, histórico por año, récords)')}</div>
+  `;
+
+  content.querySelectorAll('#wl-range-tabs .wrapped-year-tab').forEach(btn => {
+    btn.onclick = () => { liteRange = btn.dataset.range; renderLite(content); };
+  });
+
+  wireTopHover(content, 'wl-a', artists.map(a => ({ name: a.name })), 'artist');
+  wireTopHover(content, 'wl-t', tracks.map(t => ({ name: t.name, artist: t.artists?.[0]?.name || '' })), 'track');
 }

@@ -1,7 +1,7 @@
-import { getValidToken, refreshAccessToken } from './auth.js?v=90';
-import { cacheGet, cacheGetRaw, cacheGetTimestamp, cacheSet, cacheClear } from './storage.js?v=90';
-import { idbGet, idbSet, idbDel, idbGetCached, idbGetCachedRaw, idbGetTimestamp, idbSetCached, idbAvailable } from './idb.js?v=90';
-import { showToast } from './ui/toast.js?v=90';
+import { getValidToken, refreshAccessToken } from './auth.js?v=91';
+import { cacheGet, cacheGetRaw, cacheGetTimestamp, cacheSet, cacheClear } from './storage.js?v=91';
+import { idbGet, idbSet, idbDel, idbGetCached, idbGetCachedRaw, idbGetTimestamp, idbSetCached, idbAvailable } from './idb.js?v=91';
+import { showToast } from './ui/toast.js?v=91';
 
 const BASE = 'https://api.spotify.com/v1';
 const MIN_RETRY_WAIT = 5000;
@@ -705,6 +705,14 @@ async function getSeveralTracks(ids) {
   return out;
 }
 
+// Tops del user logueado (scope user-top-read, ya pedido en auth).
+// type: 'artists' | 'tracks' · timeRange: short_term (~1 mes) | medium_term (~6 meses) | long_term (~1 año+)
+// No verificado post-migración feb 2026: los callers degradan con try/catch.
+async function getMyTop(type, timeRange = 'medium_term', limit = 50) {
+  const d = await spotifyFetch(`/me/top/${type}?time_range=${timeRange}&limit=${limit}`);
+  return d?.items || [];
+}
+
 async function getUserProfile() {
   return spotifyFetch('/me');
 }
@@ -841,6 +849,7 @@ export {
   getAllUserPlaylists,
   getAllPlaylistItems,
   updatePlaylistItemsCache,
+  getMyTop,
   getSeveralTracks,
   getUserProfile,
   getCurrentUserId,

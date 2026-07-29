@@ -705,6 +705,14 @@ async function getSeveralTracks(ids) {
   return out;
 }
 
+// Tops del user logueado (scope user-top-read, ya pedido en auth).
+// type: 'artists' | 'tracks' · timeRange: short_term (~1 mes) | medium_term (~6 meses) | long_term (~1 año+)
+// No verificado post-migración feb 2026: los callers degradan con try/catch.
+async function getMyTop(type, timeRange = 'medium_term', limit = 50) {
+  const d = await spotifyFetch(`/me/top/${type}?time_range=${timeRange}&limit=${limit}`);
+  return d?.items || [];
+}
+
 async function getUserProfile() {
   return spotifyFetch('/me');
 }
@@ -841,6 +849,7 @@ export {
   getAllUserPlaylists,
   getAllPlaylistItems,
   updatePlaylistItemsCache,
+  getMyTop,
   getSeveralTracks,
   getUserProfile,
   getCurrentUserId,
