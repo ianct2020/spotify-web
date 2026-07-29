@@ -1,10 +1,11 @@
 // Likes con 0 plays: tracks likeados que nunca escuchaste según el Extended Streaming History.
 // Cruce local: likes vs history-track-plays.json (índice de plays por track id).
 
-import { getBestAvailableLikes, removeLikedTracks } from '../api.js?v=89';
-import { loadTrackPlays, trackIdOf, isOwner, ownerLockedMessage } from './history-data.js?v=89';
-import { escapeHtml, confirmModal } from '../ui/components.js?v=89';
-import { showToast } from '../ui/toast.js?v=89';
+import { getBestAvailableLikes, removeLikedTracks } from '../api.js?v=90';
+import { loadTrackPlays, trackIdOf, isOwner, ownerLockedMessage } from './history-data.js?v=90';
+import { escapeHtml, confirmModal } from '../ui/components.js?v=90';
+import { showToast } from '../ui/toast.js?v=90';
+import { openTrackCard } from './track-card.js?v=90';
 
 let cache = null;
 
@@ -94,8 +95,8 @@ function renderResults() {
             <label class="pick-row" style="display:flex;align-items:center;gap:11px;padding:10px 14px;border-bottom:1px solid var(--color-border);cursor:pointer">
               <input type="checkbox" class="zp-cb" data-i="${i}">
               ${cover ? `<img src="${cover}" alt="" loading="lazy" class="pick-cover">` : `<div class="pick-cover" style="background:var(--color-elevated);display:flex;align-items:center;justify-content:center;color:var(--color-text-muted);font-size:16px">♪</div>`}
-              <div style="flex:1;min-width:0">
-                <div style="font-size:14px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(z.track.name || '(sin nombre)')}</div>
+              <div class="zp-info tc-clickable" data-i="${i}" title="Ver ficha del tema" style="flex:1;min-width:0">
+                <div class="track-name" style="font-size:14px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(z.track.name || '(sin nombre)')}</div>
                 <div style="font-size:12px;color:var(--color-text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml((z.track.artists || []).map(a => a.name || a).join(', '))} · ${escapeHtml(z.track.album?.name || '')}</div>
               </div>
               ${partial ? `<span title="Escuchada al menos una vez menos de 30s (por eso no cuenta como play)" style="font-size:11px;color:#f59e0b;flex-shrink:0;background:rgba(245,158,11,.1);padding:3px 8px;border-radius:10px;white-space:nowrap">${partial.p} play${partial.p === 1 ? ' corta' : 's cortas'}</span>` : ''}
@@ -117,6 +118,23 @@ function renderResults() {
     rmBtn.disabled = n === 0;
   };
   content.querySelectorAll('.zp-cb').forEach(cb => cb.addEventListener('change', updateBtn));
+  // Click en título/artista → ficha (frena el toggle del checkbox del <label>)
+  content.querySelectorAll('.zp-info').forEach(el => {
+    el.onclick = (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const z = cache.zeros[+el.dataset.i];
+      if (!z) return;
+      const imgs = z.track.album?.images || [];
+      openTrackCard({
+        id: z.id,
+        name: z.track.name,
+        artist: (z.track.artists || []).map(a => a.name || a)[0] || '',
+        album: z.track.album?.name,
+        img: imgs[2]?.url || imgs[1]?.url || imgs[0]?.url,
+      });
+    };
+  });
   selAllBtn.onclick = () => {
     const cbs = content.querySelectorAll('.zp-cb');
     const allChecked = [...cbs].every(cb => cb.checked);

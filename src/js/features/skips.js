@@ -9,6 +9,7 @@ import { escapeHtml, confirmModal } from '../ui/components.js';
 import { showToast } from '../ui/toast.js';
 import { findTrackPreview } from '../api/itunes.js';
 import { togglePreview, playingKey } from '../ui/preview-player.js';
+import { openTrackCard } from './track-card.js';
 
 let cache = null;
 let minPlays = 5;    // solo tracks con ≥N plays totales (ok+skip)
@@ -191,6 +192,27 @@ function wireRows() {
     cbs.forEach(cb => cb.checked = !allChecked);
     updateBtn();
   };
+
+  // Click en el título/artista → ficha de canción (dentro de un <label>, hay
+  // que frenar el toggle del checkbox).
+  content.querySelectorAll('.skips-row .skips-info').forEach(el => {
+    el.classList.add('tc-clickable');
+    el.title = 'Ver ficha del tema';
+    el.onclick = (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const r = filtered()[+el.closest('.skips-row').dataset.i];
+      if (!r) return;
+      const imgs = r.track.album?.images || [];
+      openTrackCard({
+        id: r.id,
+        name: r.track.name,
+        artist: (r.track.artists || []).map(a => a.name || a)[0] || '',
+        album: r.track.album?.name,
+        img: imgs[2]?.url || imgs[1]?.url || imgs[0]?.url,
+      });
+    };
+  });
 
   // Preview: primero iTunes (instantáneo, sin plays en el historial); si no
   // está el tema ahí, cae al iframe embed de Spotify en el slot.

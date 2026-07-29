@@ -5,6 +5,7 @@ import { loadHistoryStats, isOwner, ownerLockedMessage } from './history-data.js
 import { escapeHtml } from '../ui/components.js';
 import { findTrackPreview, findArtistTopPreview } from '../api/itunes.js';
 import { attachHover } from '../ui/preview-player.js';
+import { openTrackCard } from './track-card.js';
 
 let stats = null;
 let selectedYear = null;
@@ -202,6 +203,16 @@ function wireTopHover(holder, cardKey, items, kind) {
     const it = items[i];
     if (!it) return;
     el.title = 'Mantené el mouse para escuchar un preview';
+    // Los tracks del historial traen uri → click abre la ficha de canción
+    if (kind === 'track' && it.uri) {
+      el.classList.add('tc-clickable');
+      el.title = 'Preview al apoyar el mouse · click para ver la ficha';
+      el.onclick = () => openTrackCard({
+        id: it.uri.split(':').pop(),
+        name: it.name,
+        artist: it.artist || '',
+      });
+    }
     const getter = kind === 'artist'
       ? async () => {
           const p = await findArtistTopPreview(it.name);
