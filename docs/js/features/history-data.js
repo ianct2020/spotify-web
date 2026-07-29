@@ -6,8 +6,8 @@
 // un mensaje explicando que este historial es de otro user. Evita mostrar
 // los datos personales de Ian al resto de los usuarios.
 
-import { idbGetCached, idbSetCached } from '../idb.js?v=86';
-import { getCurrentUserId } from '../api.js?v=86';
+import { idbGetCached, idbSetCached } from '../idb.js?v=87';
+import { getCurrentUserId } from '../api.js?v=87';
 
 const HISTORY_OWNER_ID = 'orhs6wu5ykk7ql80u92ujn74o';
 
