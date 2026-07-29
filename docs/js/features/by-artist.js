@@ -1,8 +1,8 @@
-import { getAllLikedTracks, createPlaylist, addTracksToPlaylist, invalidatePlaylistsCache, getBestAvailableLikes } from '../api.js?v=91';
-import { showProgress, hideProgress, progressController, isCancelled, promptPlaylistName, escapeHtml } from '../ui/components.js?v=91';
-import { showToast } from '../ui/toast.js?v=91';
-import { findArtistTopPreview } from '../api/itunes.js?v=91';
-import { attachHover } from '../ui/preview-player.js?v=91';
+import { getAllLikedTracks, createPlaylist, addTracksToPlaylist, invalidatePlaylistsCache, getBestAvailableLikes } from '../api.js?v=92';
+import { showProgress, hideProgress, progressController, isCancelled, promptPlaylistName, escapeHtml } from '../ui/components.js?v=92';
+import { showToast } from '../ui/toast.js?v=92';
+import { findArtistTopPreview } from '../api/itunes.js?v=92';
+import { attachHover } from '../ui/preview-player.js?v=92';
 
 const SORT_KEY = 'artist_sort_mode';
 const VALID_SORTS = new Set(['count-desc', 'count-asc', 'name-asc']);

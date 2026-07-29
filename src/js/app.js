@@ -1,9 +1,9 @@
 import { isLoggedIn, loginWithSpotify, logout } from './auth.js';
-import { getUserProfile, spotifyFetch, tryAutoLoadUserBackup } from './api.js';
+import { spotifyFetch, tryAutoLoadUserBackup } from './api.js';
 import { getValidToken } from './auth.js';
 import { cacheClearAll } from './storage.js';
 import { idbClearAll } from './idb.js';
-import { registerRoute, initRouter, navigate } from './router.js';
+import { registerRoute, initRouter } from './router.js';
 import { showToast } from './ui/toast.js';
 
 import { render as renderSync } from './features/sync.js';

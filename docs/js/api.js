@@ -1,7 +1,7 @@
-import { getValidToken, refreshAccessToken } from './auth.js?v=91';
-import { cacheGet, cacheGetRaw, cacheGetTimestamp, cacheSet, cacheClear } from './storage.js?v=91';
-import { idbGet, idbSet, idbDel, idbGetCached, idbGetCachedRaw, idbGetTimestamp, idbSetCached, idbAvailable } from './idb.js?v=91';
-import { showToast } from './ui/toast.js?v=91';
+import { getValidToken, refreshAccessToken } from './auth.js?v=92';
+import { cacheGet, cacheGetRaw, cacheGetTimestamp, cacheSet, cacheClear } from './storage.js?v=92';
+import { idbDel, idbGetCached, idbGetCachedRaw, idbGetTimestamp, idbSetCached } from './idb.js?v=92';
+import { showToast } from './ui/toast.js?v=92';
 
 const BASE = 'https://api.spotify.com/v1';
 const MIN_RETRY_WAIT = 5000;
@@ -106,12 +106,6 @@ async function spotifyFetch(endpoint, options = {}) {
   }
 
   throw new Error('Request falló después de reintentos');
-}
-
-let _requestQueue = Promise.resolve();
-function throttledFetch(endpoint, options) {
-  _requestQueue = _requestQueue.then(() => sleep(100)).then(() => spotifyFetch(endpoint, options));
-  return _requestQueue;
 }
 
 function sleep(ms) {
@@ -409,17 +403,6 @@ async function getLikesCacheTimestamp() {
   return cacheGetTimestamp(LIKES_CACHE_KEY) || cacheGetTimestamp(LIKES_CACHE_KEY + '_partial');
 }
 
-async function exportLikesData() {
-  const { items } = await getBestAvailableLikes();
-  return {
-    _format: 'spotify-tools-likes',
-    _version: 1,
-    _exportedAt: new Date().toISOString(),
-    totalAtExport: items.length,
-    items,
-  };
-}
-
 const CONFIG_LOCAL_KEYS = [
   'listened_albums_playlist_id',
   'listened_albums_playlist_name',
@@ -687,24 +670,6 @@ async function updatePlaylistItemsCache(playlistId, items, snapshot) {
   } catch { /* ignora */ }
 }
 
-// Trae varios tracks por id (chunks de 50). Devuelve array de track objects (o null por id fallido).
-// Best-effort: si un chunk falla, esa tanda vuelve como nulls y seguimos.
-async function getSeveralTracks(ids) {
-  const clean = [...new Set((ids || []).filter(Boolean))];
-  const out = [];
-  for (let i = 0; i < clean.length; i += 50) {
-    const chunk = clean.slice(i, i + 50);
-    try {
-      const data = await spotifyFetch(`/tracks?ids=${chunk.join(',')}`);
-      out.push(...(data?.tracks || chunk.map(() => null)));
-    } catch (e) {
-      console.warn('getSeveralTracks chunk falló:', e.message);
-      out.push(...chunk.map(() => null));
-    }
-  }
-  return out;
-}
-
 // Tops del user logueado (scope user-top-read, ya pedido en auth).
 // type: 'artists' | 'tracks' · timeRange: short_term (~1 mes) | medium_term (~6 meses) | long_term (~1 año+)
 // No verificado post-migración feb 2026: los callers degradan con try/catch.
@@ -850,7 +815,6 @@ export {
   getAllPlaylistItems,
   updatePlaylistItemsCache,
   getMyTop,
-  getSeveralTracks,
   getUserProfile,
   getCurrentUserId,
   addTracksToPlaylist,
@@ -864,7 +828,6 @@ export {
   invalidatePlaylistsCache,
   getLikesTotal,
   syncLikesIncremental,
-  exportLikesData,
   importLikesData,
   exportAllData,
   importAllData,

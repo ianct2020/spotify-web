@@ -1,4 +1,4 @@
-import { getAllLikedTracks, invalidateLikesCache, exportAllData, importAllData, getCurrentUserId, getLikesTotal, syncLikesIncremental, getLikesCacheTimestamp, getBestAvailableLikes, getAllPlaylistItems } from '../api.js';
+import { getAllLikedTracks, invalidateLikesCache, exportAllData, importAllData, getCurrentUserId, syncLikesIncremental, getLikesCacheTimestamp, getBestAvailableLikes, getAllPlaylistItems } from '../api.js';
 import { showProgress, hideProgress, alertModal, escapeHtml } from '../ui/components.js';
 import { showToast } from '../ui/toast.js';
 import { openListenedAlbumsPicker } from './listened-shared.js';
