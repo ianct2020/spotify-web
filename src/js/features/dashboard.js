@@ -536,23 +536,23 @@ function renderDashboard(container, stats) {
     <div class="dash-grid">
       <div class="card dash-chart-card">
         <h3>Por década</h3>
-        <canvas id="chart-decades"></canvas>
+        <div class="chart-box"><canvas id="chart-decades"></canvas></div>
       </div>
       <div class="card dash-chart-card">
         <h3>Top 15 artistas <span style="font-weight:400;color:var(--color-text-muted);font-size:13px">· nº = canciones tuyas en likes</span></h3>
-        <canvas id="chart-artists"></canvas>
+        <div class="chart-box"><canvas id="chart-artists"></canvas></div>
       </div>
       <div class="card dash-chart-card">
         <h3>Día de la semana</h3>
-        <canvas id="chart-dow"></canvas>
+        <div class="chart-box"><canvas id="chart-dow"></canvas></div>
       </div>
       <div class="card dash-chart-card">
         <h3>Hora del día</h3>
-        <canvas id="chart-hour"></canvas>
+        <div class="chart-box"><canvas id="chart-hour"></canvas></div>
       </div>
       <div class="card dash-chart-card dash-chart-wide">
         <h3>Evolución de la biblioteca</h3>
-        <canvas id="chart-evolution"></canvas>
+        <div class="chart-box"><canvas id="chart-evolution"></canvas></div>
       </div>
     </div>
 
@@ -565,7 +565,7 @@ function renderDashboard(container, stats) {
       <div class="dash-grid" style="margin-top:16px">
         <div class="card dash-chart-card dash-chart-wide">
           <h3>Evolución mensual — minutos escuchados</h3>
-          <canvas id="chart-history-monthly"></canvas>
+          <div class="chart-box"><canvas id="chart-history-monthly"></canvas></div>
         </div>
         <div class="card dash-chart-card dash-chart-wide">
           <h3>Heatmap — cuándo escuchás <span style="font-weight:400;color:var(--color-text-muted);font-size:13px">· min / día × hora</span></h3>
@@ -573,7 +573,7 @@ function renderDashboard(container, stats) {
         </div>
         <div class="card dash-chart-card dash-chart-wide">
           <h3>Top 20 artistas <span style="font-weight:400;color:var(--color-text-muted);font-size:13px">· por tiempo escuchado real</span></h3>
-          <canvas id="chart-history-artists" style="min-height:620px"></canvas>
+          <div class="chart-box chart-box-tall"><canvas id="chart-history-artists"></canvas></div>
         </div>
         <div class="card dash-chart-card dash-chart-wide">
           <h3>Top 20 álbumes <span style="font-weight:400;color:var(--color-text-muted);font-size:13px">· por tiempo escuchado real</span></h3>

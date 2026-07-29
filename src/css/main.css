@@ -752,8 +752,17 @@ body.sidebar-hidden .sidebar.desktop-open {
   font-size: 15px;
 }
 
+/* El alto de los charts va en el wrapper, NUNCA en el canvas: Chart.js dimensiona
+   el canvas según su contenedor directo; forzar height en el canvas con !important
+   desalinea el tamaño interno del visible y corre el hit-detection de los tooltips
+   (engancha la barra vecina). */
+.chart-box {
+  position: relative;
+  height: 240px;
+  min-width: 0;
+}
+
 .dash-chart-card canvas {
-  height: 240px !important;
   /* Red de contención por un frame: entre que el contenedor achica y Chart.js
      re-renderiza, el canvas conserva su width inline viejo. */
   max-width: 100%;
@@ -764,8 +773,14 @@ body.sidebar-hidden .sidebar.desktop-open {
   grid-column: 1 / -1;
 }
 
-.dash-chart-wide canvas {
-  height: 280px !important;
+.dash-chart-wide .chart-box {
+  height: 280px;
+}
+
+/* Top 20 artistas del historial: 20 barras horizontales necesitan más alto.
+   Va después de la regla wide para ganarle. */
+.dash-chart-wide .chart-box.chart-box-tall {
+  height: 620px;
 }
 
 /* ── Mobile ── */
