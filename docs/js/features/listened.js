@@ -1,8 +1,8 @@
-import { getAllPlaylistItems, getBestAvailableLikes, addTracksToPlaylist, removeTracksFromPlaylist, getAllUserPlaylists } from '../api.js?v=91';
-import { idbGetCached, idbSetCached, idbGetTimestamp, idbDel } from '../idb.js?v=91';
-import { escapeHtml, confirmModal } from '../ui/components.js?v=91';
-import { showToast } from '../ui/toast.js?v=91';
-import { getListenedPlaylist, groupItemsByAlbum, openListenedAlbumsPicker, albumKey, baseName, norm } from './listened-shared.js?v=91';
+import { getAllPlaylistItems, getBestAvailableLikes, addTracksToPlaylist, removeTracksFromPlaylist, getAllUserPlaylists } from '../api.js?v=92';
+import { idbGetCached, idbSetCached, idbGetTimestamp } from '../idb.js?v=92';
+import { escapeHtml, confirmModal } from '../ui/components.js?v=92';
+import { showToast } from '../ui/toast.js?v=92';
+import { getListenedPlaylist, groupItemsByAlbum, openListenedAlbumsPicker, albumKey, baseName, norm } from './listened-shared.js?v=92';
 
 const SORT_KEY = 'listened_sort_mode';
 const VALID_SORTS = new Set(['recent', 'year-desc', 'year-asc', 'artist-asc', 'likes-desc', 'name-asc']);
@@ -32,10 +32,6 @@ function dismissUnreg(key) {
   s.add(key);
   localStorage.setItem(DISMISS_KEY, JSON.stringify([...s]));
 }
-function clearDismissed() {
-  localStorage.removeItem(DISMISS_KEY);
-}
-
 // Idem para grupos de "duplicados" marcados como "no es duplicado" (ej: LP3/II/Vol. son distintos).
 function getDismissedDupes() {
   try { return new Set(JSON.parse(localStorage.getItem(DUP_DISMISS_KEY) || '[]')); } catch { return new Set(); }
@@ -58,10 +54,6 @@ function dismissHistory(key) {
   s.add(key);
   localStorage.setItem(HISTORY_DISMISS_KEY, JSON.stringify([...s]));
 }
-function clearDismissedHistory() {
-  localStorage.removeItem(HISTORY_DISMISS_KEY);
-}
-
 // Baja el JSON agregado del historial (una vez), lo cachea en IndexedDB.
 // Solo lo bajamos si el user logueado es el dueño (Ian): son sus datos personales.
 async function loadHistoryData() {
@@ -280,14 +272,6 @@ async function loadAlbums({ force = false } = {}) {
     `;
     document.getElementById('listened-retry-btn').onclick = () => loadAlbums({ force: true });
   }
-}
-
-// Después de modificar la playlist (agregar/sacar): esperar a que Spotify refleje el cambio
-// y re-leer una sola vez (eso ya deja el cache fresco). NO borramos el cache después: si lo
-// borráramos, la próxima entrada volvería a bajar TODA la playlist de Spotify al pedo.
-async function refreshAfterWrite() {
-  await new Promise(r => setTimeout(r, 900));
-  await loadAlbums({ force: true });
 }
 
 // Rebuild INSTANTÁNEO del estado local (sin spinner ni re-bajar de Spotify) + reguardar cache.

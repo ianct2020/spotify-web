@@ -1,10 +1,10 @@
-import { getAllLikedTracks, createPlaylist, addTracksToPlaylist, invalidatePlaylistsCache, exportAllData, importAllData, getCurrentUserId, getBestAvailableLikes } from '../api.js?v=91';
-import { hasKey, setKey, getArtistTopTags, getCachedTags, setCachedTags, mergeCachedTags } from '../api/lastfm.js?v=91';
-import * as statsfm from '../api/statsfm.js?v=91';
-import { getGenresForArtist as mbGetGenres } from '../api/musicbrainz.js?v=91';
-import { showProgress, hideProgress, progressController, isCancelled, promptPlaylistName, alertModal, escapeHtml } from '../ui/components.js?v=91';
-import { showToast } from '../ui/toast.js?v=91';
-import { tagToGroup } from './genre-groups.js?v=91';
+import { getAllLikedTracks, createPlaylist, addTracksToPlaylist, invalidatePlaylistsCache, exportAllData, importAllData, getCurrentUserId, getBestAvailableLikes } from '../api.js?v=92';
+import { hasKey, setKey, getArtistTopTags, getCachedTags, setCachedTags, mergeCachedTags } from '../api/lastfm.js?v=92';
+import * as statsfm from '../api/statsfm.js?v=92';
+import { getGenresForArtist as mbGetGenres } from '../api/musicbrainz.js?v=92';
+import { showProgress, hideProgress, progressController, isCancelled, promptPlaylistName, alertModal, confirmModal, escapeHtml } from '../ui/components.js?v=92';
+import { showToast } from '../ui/toast.js?v=92';
+import { tagToGroup } from './genre-groups.js?v=92';
 
 const NOISE_TAGS = new Set([
   'seen live', 'favorites', 'favorite', 'favourite', 'favourites',
@@ -68,6 +68,16 @@ function getSortMode() {
 }
 function setSortMode(v) {
   if (VALID_SORTS.has(v)) localStorage.setItem(SORT_KEY, v);
+}
+
+// Tags ocultos a mano por el usuario (además de NOISE_TAGS hardcodeado):
+// para tapar basura nueva sin esperar un deploy. Persiste en localStorage.
+const HIDDEN_KEY = 'genre_hidden_tags';
+function getHiddenTags() {
+  try { return new Set(JSON.parse(localStorage.getItem(HIDDEN_KEY) || '[]')); } catch { return new Set(); }
+}
+function saveHiddenTags(set) {
+  try { localStorage.setItem(HIDDEN_KEY, JSON.stringify([...set])); } catch { /* ignora */ }
 }
 
 export function render(container) {
@@ -650,7 +660,8 @@ function renderGrid() {
   const summary = document.getElementById('genre-summary');
   if (!holder || !summary) return;
 
-  const allGenres = [...genreMap.entries()].filter(([, tracks]) => tracks.length >= MIN_TRACKS_PER_GENRE);
+  const hidden = getHiddenTags();
+  const allGenres = [...genreMap.entries()].filter(([tag, tracks]) => tracks.length >= MIN_TRACKS_PER_GENRE && !hidden.has(tag));
   const filtered = genreFilter
     ? allGenres.filter(([tag]) => tag.toLowerCase().includes(genreFilter))
     : allGenres;
@@ -658,13 +669,28 @@ function renderGrid() {
   const showUnclassified = !genreFilter && cachedUnclassified.length > 0;
 
   const noun = groupsMode ? 'grupos' : 'géneros';
+  const hiddenLink = hidden.size
+    ? ` · <a href="#" id="genre-hidden-link" style="color:var(--color-accent)">${hidden.size} oculto${hidden.size === 1 ? '' : 's'} (restaurar)</a>`
+    : '';
   if (genreFilter) {
-    summary.textContent = `${sorted.length} de ${allGenres.length} ${noun} coinciden con "${genreFilter}"`;
+    summary.innerHTML = `${sorted.length} de ${allGenres.length} ${noun} coinciden con "${escapeHtml(genreFilter)}"${hiddenLink}`;
   } else {
-    summary.textContent = groupsMode
+    summary.innerHTML = (groupsMode
       ? `${allGenres.length} grupos + subgéneros sin agrupar (mín ${MIN_TRACKS_PER_GENRE} tracks). Un track cuenta 1 vez por grupo.`
-      : `${allGenres.length} géneros con ${MIN_TRACKS_PER_GENRE}+ tracks. Click para seleccionar uno o varios, después "Crear playlist".`;
+      : `${allGenres.length} géneros con ${MIN_TRACKS_PER_GENRE}+ tracks. Click para seleccionar uno o varios, después "Crear playlist". El ✕ de cada card lo oculta para siempre.`) + hiddenLink;
   }
+  const hiddenLinkEl = document.getElementById('genre-hidden-link');
+  if (hiddenLinkEl) hiddenLinkEl.onclick = async (e) => {
+    e.preventDefault();
+    const ok = await confirmModal(
+      'Restaurar géneros ocultos',
+      `Vas a volver a mostrar: <strong>${[...hidden].map(escapeHtml).join('</strong>, <strong>')}</strong>`,
+      'Restaurar todos'
+    );
+    if (!ok) return;
+    saveHiddenTags(new Set());
+    renderGrid();
+  };
 
   if (sorted.length === 0 && !showUnclassified) {
     holder.innerHTML = `<div class="card"><p>Ningún género coincide con "${escapeHtml(genreFilter)}".</p></div>`;
@@ -675,6 +701,7 @@ function renderGrid() {
     <div class="smart-grid" style="padding-bottom:80px">
       ${sorted.map(([tag, tracks]) => `
         <button class="smart-card genre-card ${selectedTags.has(tag) ? 'selected' : ''}" data-tag="${escapeHtml(tag)}">
+          <span class="genre-hide-btn" title="Ocultar este género para siempre">✕</span>
           <div class="smart-card-title" style="font-size:15px;text-transform:capitalize">${escapeHtml(tag)}</div>
           <div class="smart-card-meta">${tracks.length.toLocaleString()} tracks</div>
         </button>
@@ -690,6 +717,19 @@ function renderGrid() {
 
   holder.querySelectorAll('.genre-card:not(#unclassified-card)').forEach(el => {
     el.onclick = () => toggleTag(el);
+  });
+  holder.querySelectorAll('.genre-hide-btn').forEach(btn => {
+    btn.onclick = (e) => {
+      e.stopPropagation();
+      const tag = btn.closest('.genre-card').dataset.tag;
+      const h = getHiddenTags();
+      h.add(tag);
+      saveHiddenTags(h);
+      selectedTags.delete(tag);
+      showToast(`"${tag}" oculto — lo restaurás desde el link de arriba`, 'info');
+      renderGrid();
+      updateActionBar();
+    };
   });
   const uncEl = document.getElementById('unclassified-card');
   if (uncEl) uncEl.onclick = () => createPlaylistForUnclassified(cachedUnclassified);

@@ -160,16 +160,6 @@ function mergeCachedTags(artistName, incomingTags) {
   saveTagsCache(cache);
 }
 
-function exportTagsCache() {
-  const cache = loadTagsCache();
-  return {
-    _format: 'spotify-tools-genres',
-    _version: 1,
-    _exportedAt: new Date().toISOString(),
-    entries: cache,
-  };
-}
-
 function importTagsCache(parsed, { mode = 'merge' } = {}) {
   if (!parsed || typeof parsed !== 'object') throw new Error('Archivo inválido: no es JSON.');
   const entries = parsed.entries && typeof parsed.entries === 'object' ? parsed.entries : parsed;
@@ -211,6 +201,5 @@ export {
   getCachedTags,
   setCachedTags,
   mergeCachedTags,
-  exportTagsCache,
   importTagsCache,
 };

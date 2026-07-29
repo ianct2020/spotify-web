@@ -5,7 +5,6 @@
 import { getBestAvailableLikes } from '../api.js';
 import { renderTrackRow, escapeHtml } from '../ui/components.js';
 import { openTrackCard } from './track-card.js';
-import { showToast } from '../ui/toast.js';
 
 const MAX_RESULTS = 300;
 let cachedItems = [];
