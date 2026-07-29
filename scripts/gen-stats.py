@@ -5,6 +5,9 @@ Genera JSONs agregados a partir del Extended Streaming History de Spotify.
 Salidas:
 - src/data/history-stats.json    Wrapped + Dashboard: totales, por año, heatmap, timeline mensual, all-time tops
 - src/data/history-track-plays.json  Índice track_uri -> {p:plays, ms:ms_totales} para cruces con likes
+- src/data/history-skip-stats.json   Índice track_id -> [ok, skip] para "Skips crónicos"
+  · ok = plays con reason_end == 'trackdone'
+  · skip = plays con reason_end == 'fwdbtn' y ms_played >= SKIP_MIN_MS (skip consciente)
 
 Filtros:
 - Se descartan plays con ms_played < 30000 para todos los agregados MENOS skip% (que usa total)
@@ -18,13 +21,16 @@ import os
 from collections import defaultdict, Counter
 from datetime import datetime, date, timedelta
 
-HISTORY_DIR = "/home/ian/Descargas/my_spotify_data/Spotify Extended Streaming History"
+HISTORY_DIR = "/home/ian/spotify-web/my_spotify_data/Spotify Extended Streaming History"
 OUT_DIR = "/home/ian/spotify-web/src/data"
 OLD_IMG_JSON = "/home/ian/spotify-web/src/data/listening-history.json"
 
 MIN_MS = 30000  # trigger warning: ignoramos plays de menos de 30s
+SKIP_MIN_MS = 5000  # skip "consciente": si le dio next después de 5s+ es deliberado
+SKIP_STATS_MIN_PLAYS = 3  # excluimos tracks con menos de 3 plays totales (ruido)
 STATS_VERSION = 2            # bump: excluye "Sonido Para Sacar Agua Del Movil"
 TRACK_PLAYS_VERSION = 2      # incluye entries "partial" para tracks solo con plays <30s
+SKIP_STATS_VERSION = 1
 LISTENED_VERSION = 2         # bump: excluye "Sonido Para Sacar Agua Del Movil"
 TOP_N_YEAR = 40       # top X por año
 TOP_N_ALLTIME = 60    # top X global
@@ -155,6 +161,11 @@ def build_stats(plays, img_idx):
     track_uri_stats = defaultdict(lambda: {"p": 0, "ms": 0})
     # tracks que solo tuvieron plays <30s (nunca completadas): útil para "quizás lo escuchaste"
     track_uri_partial = defaultdict(lambda: {"p": 0, "ms": 0})
+    # Skips por track: ok = trackdone, skip = fwdbtn con >=SKIP_MIN_MS.
+    # Cuenta el track_id (sin prefijo spotify:track:) para pegar directo con likes.
+    # Guardamos también el meta para poder mostrar tapa/nombre sin depender de los likes.
+    track_skip_stats = defaultdict(lambda: {"ok": 0, "skip": 0})
+    track_skip_meta = {}
 
     # Estado por álbum × día para detectar "escuchado" (mix A+C).
     # ak -> day (YYYY-MM-DD) -> {tracks_set, ms}
@@ -185,6 +196,18 @@ def build_stats(plays, img_idx):
         is_skip = skipped or (end_reason == "fwdbtn" and ms < MIN_MS)
         if is_skip:
             total_skipped += 1
+
+        # Skips por track: solo si tenemos URI. Contamos ok si terminó bien,
+        # skip si el usuario le dio next después de escuchar al menos 5s
+        # (menos que eso puede ser autoplay skipeado o cambio accidental).
+        if uri:
+            tid_only = uri.split(":")[-1]
+            if end_reason == "trackdone":
+                track_skip_stats[tid_only]["ok"] += 1
+            elif end_reason == "fwdbtn" and ms >= SKIP_MIN_MS:
+                track_skip_stats[tid_only]["skip"] += 1
+            if tid_only not in track_skip_meta and (track or artist):
+                track_skip_meta[tid_only] = {"n": track, "a": artist, "al": album}
 
         if ms < MIN_MS:
             # Trigger warning: no cuenta para stats. Igual anotamos en partial para el badge de zeroplays.
@@ -448,7 +471,29 @@ def build_stats(plays, img_idx):
         "years": listened_years,
     }
 
-    return stats, track_plays_out, listened_payload
+    # Skip stats: filtramos tracks con muy pocas plays (ruido) y armamos el JSON
+    # compacto: {id: [ok, skip]}. Meta va aparte para poder cachearlo distinto.
+    skip_out = {}
+    skip_meta_out = {}
+    for tid, v in track_skip_stats.items():
+        total = v["ok"] + v["skip"]
+        if total < SKIP_STATS_MIN_PLAYS:
+            continue
+        skip_out[tid] = [v["ok"], v["skip"]]
+        m = track_skip_meta.get(tid)
+        if m:
+            skip_meta_out[tid] = m
+
+    skip_payload = {
+        "version": SKIP_STATS_VERSION,
+        "generated_at": stats["generated_at"],
+        "min_plays": SKIP_STATS_MIN_PLAYS,
+        "skip_min_ms": SKIP_MIN_MS,
+        "tracks": skip_out,
+        "meta": skip_meta_out,
+    }
+
+    return stats, track_plays_out, listened_payload, skip_payload
 
 
 def main():
@@ -461,11 +506,12 @@ def main():
     print(f"  tapas indexadas: {len(img_idx):,}")
 
     print("Agregando…")
-    stats, track_plays, listened = build_stats(plays, img_idx)
+    stats, track_plays, listened, skip_stats = build_stats(plays, img_idx)
 
     stats_path = os.path.join(OUT_DIR, "history-stats.json")
     tp_path = os.path.join(OUT_DIR, "history-track-plays.json")
     listened_path = os.path.join(OUT_DIR, "history-listened-albums.json")
+    skip_path = os.path.join(OUT_DIR, "history-skip-stats.json")
 
     with open(stats_path, "w") as f:
         json.dump(stats, f, separators=(",", ":"), ensure_ascii=False)
@@ -477,12 +523,16 @@ def main():
         }, f, separators=(",", ":"), ensure_ascii=False)
     with open(listened_path, "w") as f:
         json.dump(listened, f, separators=(",", ":"), ensure_ascii=False)
+    with open(skip_path, "w") as f:
+        json.dump(skip_stats, f, separators=(",", ":"), ensure_ascii=False)
 
     print(f"OK → {stats_path} ({os.path.getsize(stats_path)/1024:.1f} KB)")
     print(f"OK → {tp_path} ({os.path.getsize(tp_path)/1024:.1f} KB)")
     print(f"OK → {listened_path} ({os.path.getsize(listened_path)/1024:.1f} KB)")
+    print(f"OK → {skip_path} ({os.path.getsize(skip_path)/1024:.1f} KB)")
     print(f"totales stats: {stats['totals']}")
     print(f"totales listened: {listened['totals']} · years: {[y['year'] for y in listened['years']]}")
+    print(f"skip stats: {len(skip_stats['tracks'])} tracks con >={SKIP_STATS_MIN_PLAYS} plays")
 
 
 if __name__ == "__main__":

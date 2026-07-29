@@ -21,6 +21,7 @@ import { render as renderRecs } from './features/recommendations.js';
 import { render as renderListened } from './features/listened.js';
 import { render as renderWrapped } from './features/wrapped.js';
 import { render as renderZeroPlays } from './features/zero-plays.js';
+import { render as renderSkips } from './features/skips.js';
 import { render as renderSearchLikes } from './features/search-likes.js';
 
 async function testConnection() {
@@ -249,6 +250,9 @@ function showApp(profile) {
           <a class="nav-link" data-route="zeroplays" href="#zeroplays">
             <span class="nav-link-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="4.9" y1="4.9" x2="19.1" y2="19.1"/></svg></span> Sin plays
           </a>
+          <a class="nav-link" data-route="skips" href="#skips">
+            <span class="nav-link-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 4 15 12 5 20 5 4"/><line x1="19" y1="5" x2="19" y2="19"/></svg></span> Skips crónicos
+          </a>
         </div>
       </nav>
       <div class="sidebar-footer">
@@ -361,6 +365,7 @@ function showApp(profile) {
   registerRoute('versions', renderVersions);
   registerRoute('wrapped', renderWrapped);
   registerRoute('zeroplays', renderZeroPlays);
+  registerRoute('skips', renderSkips);
   registerRoute('search', renderSearchLikes);
 
   initRouter();
@@ -382,6 +387,7 @@ const ICONS = {
   zombies: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 9h.01M15 9h.01M9 15c1.5-.5 4.5-.5 6 0"/><circle cx="12" cy="12" r="10"/></svg>',
   versions: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/></svg>',
   zeroplays: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="4.9" y1="4.9" x2="19.1" y2="19.1"/></svg>',
+  skips: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 4 15 12 5 20 5 4"/><line x1="19" y1="5" x2="19" y2="19"/></svg>',
   search: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>',
 };
 
@@ -419,6 +425,7 @@ const HOME_SECTIONS = [
       { hash: 'zombies', icon: ICONS.zombies, name: 'Zombis', desc: 'Tracks eliminados del catálogo de Spotify.' },
       { hash: 'versions', icon: ICONS.versions, name: 'Versiones', desc: 'Mismo tema en distintos álbumes (remaster, live, etc.).' },
       { hash: 'zeroplays', icon: ICONS.zeroplays, name: 'Sin plays', desc: 'Likes que nunca reprodujiste según tu historial de Spotify.' },
+      { hash: 'skips', icon: ICONS.skips, name: 'Skips crónicos', desc: 'Likes que reproducís seguido pero casi siempre le das next.' },
     ],
   },
 ];
