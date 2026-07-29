@@ -1,29 +1,29 @@
-import { isLoggedIn, loginWithSpotify, logout } from './auth.js?v=90';
-import { getUserProfile, spotifyFetch, tryAutoLoadUserBackup } from './api.js?v=90';
-import { getValidToken } from './auth.js?v=90';
-import { cacheClearAll } from './storage.js?v=90';
-import { idbClearAll } from './idb.js?v=90';
-import { registerRoute, initRouter, navigate } from './router.js?v=90';
-import { showToast } from './ui/toast.js?v=90';
+import { isLoggedIn, loginWithSpotify, logout } from './auth.js?v=91';
+import { getUserProfile, spotifyFetch, tryAutoLoadUserBackup } from './api.js?v=91';
+import { getValidToken } from './auth.js?v=91';
+import { cacheClearAll } from './storage.js?v=91';
+import { idbClearAll } from './idb.js?v=91';
+import { registerRoute, initRouter, navigate } from './router.js?v=91';
+import { showToast } from './ui/toast.js?v=91';
 
-import { render as renderSync } from './features/sync.js?v=90';
-import { render as renderDedupe } from './features/dedupe.js?v=90';
-import { render as renderDupalbums } from './features/duplicate-albums.js?v=90';
-import { render as renderZombies } from './features/zombies.js?v=90';
-import { render as renderVersions } from './features/versions.js?v=90';
-import { render as renderDashboard } from './features/dashboard.js?v=90';
-import { render as renderSmart } from './features/smart.js?v=90';
-import { render as renderSimilar } from './features/similar-artists.js?v=90';
-import { render as renderRabbit } from './features/rabbit-hole.js?v=90';
-import { render as renderByGenre } from './features/by-genre.js?v=90';
-import { render as renderByArtist } from './features/by-artist.js?v=90';
-import { render as renderRecs } from './features/recommendations.js?v=90';
-import { render as renderListened } from './features/listened.js?v=90';
-import { render as renderWrapped } from './features/wrapped.js?v=90';
-import { render as renderRecords } from './features/records.js?v=90';
-import { render as renderZeroPlays } from './features/zero-plays.js?v=90';
-import { render as renderSkips } from './features/skips.js?v=90';
-import { render as renderSearchLikes } from './features/search-likes.js?v=90';
+import { render as renderSync } from './features/sync.js?v=91';
+import { render as renderDedupe } from './features/dedupe.js?v=91';
+import { render as renderDupalbums } from './features/duplicate-albums.js?v=91';
+import { render as renderZombies } from './features/zombies.js?v=91';
+import { render as renderVersions } from './features/versions.js?v=91';
+import { render as renderDashboard } from './features/dashboard.js?v=91';
+import { render as renderSmart } from './features/smart.js?v=91';
+import { render as renderSimilar } from './features/similar-artists.js?v=91';
+import { render as renderRabbit } from './features/rabbit-hole.js?v=91';
+import { render as renderByGenre } from './features/by-genre.js?v=91';
+import { render as renderByArtist } from './features/by-artist.js?v=91';
+import { render as renderRecs } from './features/recommendations.js?v=91';
+import { render as renderListened } from './features/listened.js?v=91';
+import { render as renderWrapped } from './features/wrapped.js?v=91';
+import { render as renderRecords } from './features/records.js?v=91';
+import { render as renderZeroPlays } from './features/zero-plays.js?v=91';
+import { render as renderSkips } from './features/skips.js?v=91';
+import { render as renderSearchLikes } from './features/search-likes.js?v=91';
 
 async function testConnection() {
   const token = await getValidToken();
@@ -534,5 +534,11 @@ const modalScrollLock = new MutationObserver(() => {
   document.body.classList.toggle('modal-open', document.querySelector('.modal-overlay') !== null);
 });
 modalScrollLock.observe(document.body, { childList: true });
+
+// PWA: registra el service worker (path relativo → scope /spotify-web/ en Pages).
+// Con esto Chrome ofrece "Instalar Fonoteca" y los estáticos quedan offline.
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('sw.js').catch(e => console.warn('SW no registrado:', e.message));
+}
 
 init();

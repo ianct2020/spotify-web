@@ -3,10 +3,10 @@
 // días distintos, récord en un día — más preview iTunes y link a Spotify.
 // Se abre desde cualquier feature con openTrackCard({ id, name, artist, album, img }).
 
-import { loadTrackPlays, loadTrackDetail, isOwner } from './history-data.js?v=90';
-import { escapeHtml } from '../ui/components.js?v=90';
-import { findTrackPreview } from '../api/itunes.js?v=90';
-import { togglePreview, playingKey } from '../ui/preview-player.js?v=90';
+import { loadTrackPlays, loadTrackDetail, isOwner } from './history-data.js?v=91';
+import { escapeHtml } from '../ui/components.js?v=91';
+import { findTrackPreview } from '../api/itunes.js?v=91';
+import { togglePreview, playingKey } from '../ui/preview-player.js?v=91';
 
 const MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
 

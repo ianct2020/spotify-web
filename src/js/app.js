@@ -535,4 +535,10 @@ const modalScrollLock = new MutationObserver(() => {
 });
 modalScrollLock.observe(document.body, { childList: true });
 
+// PWA: registra el service worker (path relativo → scope /spotify-web/ en Pages).
+// Con esto Chrome ofrece "Instalar Fonoteca" y los estáticos quedan offline.
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('sw.js').catch(e => console.warn('SW no registrado:', e.message));
+}
+
 init();

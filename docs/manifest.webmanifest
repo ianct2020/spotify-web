@@ -1,0 +1,15 @@
+{
+  "name": "Fonoteca",
+  "short_name": "Fonoteca",
+  "description": "Tu biblioteca de Spotify con superpoderes: stats, wrapped propio, limpieza de likes y más.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#0A0A0F",
+  "theme_color": "#0A0A0F",
+  "icons": [
+    { "src": "assets/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "assets/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "assets/icon-512-maskable.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
