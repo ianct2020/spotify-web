@@ -1,8 +1,8 @@
-import { getAllLikedTracks, invalidateLikesCache, exportAllData, importAllData, getCurrentUserId, getLikesTotal, syncLikesIncremental, getLikesCacheTimestamp, getBestAvailableLikes, getAllPlaylistItems } from '../api.js?v=81';
-import { showProgress, hideProgress, alertModal, escapeHtml } from '../ui/components.js?v=81';
-import { showToast } from '../ui/toast.js?v=81';
-import { openListenedAlbumsPicker } from './listened-shared.js?v=81';
-import { loadHistoryStats, loadListenedAlbums } from './history-data.js?v=81';
+import { getAllLikedTracks, invalidateLikesCache, exportAllData, importAllData, getCurrentUserId, getLikesTotal, syncLikesIncremental, getLikesCacheTimestamp, getBestAvailableLikes, getAllPlaylistItems } from '../api.js?v=83';
+import { showProgress, hideProgress, alertModal, escapeHtml } from '../ui/components.js?v=83';
+import { showToast } from '../ui/toast.js?v=83';
+import { openListenedAlbumsPicker } from './listened-shared.js?v=83';
+import { loadHistoryStats, loadListenedAlbums } from './history-data.js?v=83';
 
 let charts = [];
 let _loadController = null;
@@ -682,7 +682,7 @@ async function hydrateHistorySection() {
         // mode 'y' + intersect:false: en barras horizontales proyecta el Y del mouse
         // a la fila de categoría — engancha la barra que el ojo espera, sin off-by-one
         // por el label pintado abajo del centro del bar.
-        interaction: { mode: 'y', intersect: false },
+        interaction: { mode: 'nearest', intersect: false, axis: 'y' },
         plugins: {
           ...CHART_DEFAULTS.plugins,
           tooltip: {
@@ -942,10 +942,15 @@ const CHART_COLORS = {
 const CHART_DEFAULTS = {
   responsive: true,
   maintainAspectRatio: false,
+  // 'nearest' + axis:'x' es lo correcto para bar charts VERTICALES (Por década,
+  // Día de la semana, Hora del día, Evolución): agarra la barra cuya X está más
+  // cerca del cursor. 'index'/'xy' anteriores enganchaban la barra de al lado
+  // cuando el cursor caía entre dos. Los charts con indexAxis:'y' (Top artistas,
+  // Top álbumes del historial) sobrescriben con axis:'y' abajo.
   interaction: {
-    mode: 'index',
+    mode: 'nearest',
     intersect: false,
-    axis: 'xy',
+    axis: 'x',
   },
   plugins: {
     legend: { display: false },
@@ -1019,7 +1024,7 @@ function buildCharts(stats) {
       ...CHART_DEFAULTS,
       indexAxis: 'y',
       // Ver dashboard "chart-history-artists": mismo motivo.
-      interaction: { mode: 'y', intersect: false },
+      interaction: { mode: 'nearest', intersect: false, axis: 'y' },
       scales: {
         ...CHART_DEFAULTS.scales,
         x: {
