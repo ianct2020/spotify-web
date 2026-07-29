@@ -1,4 +1,4 @@
-import { getAllLikedTracks, getAllPlaylistItems, getAllUserPlaylists, addTracksToPlaylist, removeTracksFromPlaylist, createPlaylist, unfollowPlaylist } from '../api.js';
+import { getAllLikedTracks, getAllPlaylistItems, updatePlaylistItemsCache, getAllUserPlaylists, addTracksToPlaylist, removeTracksFromPlaylist, createPlaylist, unfollowPlaylist } from '../api.js';
 import { cacheGet, cacheSet } from '../storage.js';
 import { showProgress, hideProgress, progressController, isCancelled, typeConfirmModal, renderTrackRow, escapeHtml } from '../ui/components.js';
 import { showToast } from '../ui/toast.js';
@@ -164,9 +164,10 @@ async function analyze() {
       </div>
     `;
 
-    document.getElementById('sync-execute-btn').onclick = () => executeSync(target, toAdd, toRemove);
+    const ctx = { playlistItems, likeMap };
+    document.getElementById('sync-execute-btn').onclick = () => executeSync(target, toAdd, toRemove, ctx);
     const addOnlyBtn = document.getElementById('sync-add-only-btn');
-    if (addOnlyBtn) addOnlyBtn.onclick = () => executeSync(target, toAdd, [], { mode: 'add-only' });
+    if (addOnlyBtn) addOnlyBtn.onclick = () => executeSync(target, toAdd, [], { ...ctx, mode: 'add-only' });
     const wipeBtn = document.getElementById('sync-wipe-btn');
     if (wipeBtn) wipeBtn.onclick = () => executeWipeAndFill(target, playlistItems, likes);
 
@@ -189,7 +190,7 @@ async function analyze() {
   }
 }
 
-async function executeSync(playlist, toAdd, toRemove, { mode = 'full' } = {}) {
+async function executeSync(playlist, toAdd, toRemove, { mode = 'full', playlistItems = [], likeMap = new Map() } = {}) {
   const label = mode === 'add-only' ? 'Solo agregar' : 'Sincronizar playlist';
   const confirmed = await typeConfirmModal(
     label,
@@ -204,18 +205,27 @@ async function executeSync(playlist, toAdd, toRemove, { mode = 'full' } = {}) {
   try {
     let done = 0;
     const total = toRemove.length + toAdd.length;
+    let snapshot = null;
 
     if (toRemove.length > 0) {
       showProgress('Quitando tracks...', done, total);
-      await removeTracksFromPlaylist(playlist.id, toRemove);
+      snapshot = await removeTracksFromPlaylist(playlist.id, toRemove) || snapshot;
       done += toRemove.length;
     }
 
     if (toAdd.length > 0) {
       showProgress('Agregando tracks...', done, total);
-      await addTracksToPlaylist(playlist.id, toAdd);
+      snapshot = await addTracksToPlaylist(playlist.id, toAdd) || snapshot;
       done += toAdd.length;
     }
+
+    // Actualiza el cache de items en el lugar: sabemos qué agregamos/quitamos,
+    // así el próximo "Analizar" es instantáneo en vez de re-bajar 9k tracks.
+    const removedSet = new Set(toRemove);
+    const newItems = playlistItems
+      .filter(it => { const u = (it.track || it.item)?.uri; return u && !removedSet.has(u); })
+      .concat(toAdd.map(uri => ({ item: likeMap.get(uri) || { uri, name: uri, artists: [] } })));
+    await updatePlaylistItemsCache(playlist.id, newItems, snapshot);
 
     hideProgress();
     showToast(`Sync completo: +${toAdd.length} / -${toRemove.length}`, 'success');
@@ -260,9 +270,11 @@ async function executeWipeAndFill(playlist, playlistItems, likes) {
       await removeTracksFromPlaylist(playlist.id, currentUris);
     }
     showProgress('Agregando likes...', currentUris.length, currentUris.length + likeUris.length);
+    let snapshot = null;
     if (likeUris.length > 0) {
-      await addTracksToPlaylist(playlist.id, likeUris);
+      snapshot = await addTracksToPlaylist(playlist.id, likeUris);
     }
+    await updatePlaylistItemsCache(playlist.id, likes.filter(i => i.track).map(i => ({ item: i.track })), snapshot);
     hideProgress();
     showToast(`Playlist rehecha con ${likeUris.length.toLocaleString()} tracks`, 'success');
     document.getElementById('sync-results').innerHTML = `
@@ -379,6 +391,7 @@ async function rebuildInPlace(target) {
 
     showProgress(`Borrando "${target.name}"...`, 0, 0);
     await unfollowPlaylist(target.id);
+    await updatePlaylistItemsCache(target.id, null, null); // la playlist vieja ya no existe
 
     showProgress(`Creando "${target.name}" vacía...`, 0, 0);
     const fresh = await createPlaylist(target.name, 'Espejo de Liked Songs (rehecha)', false);

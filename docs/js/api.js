@@ -1,7 +1,7 @@
-import { getValidToken, refreshAccessToken } from './auth.js?v=88';
-import { cacheGet, cacheGetRaw, cacheGetTimestamp, cacheSet, cacheClear } from './storage.js?v=88';
-import { idbGet, idbSet, idbDel, idbGetCached, idbGetCachedRaw, idbGetTimestamp, idbSetCached, idbAvailable } from './idb.js?v=88';
-import { showToast } from './ui/toast.js?v=88';
+import { getValidToken, refreshAccessToken } from './auth.js?v=89';
+import { cacheGet, cacheGetRaw, cacheGetTimestamp, cacheSet, cacheClear } from './storage.js?v=89';
+import { idbGet, idbSet, idbDel, idbGetCached, idbGetCachedRaw, idbGetTimestamp, idbSetCached, idbAvailable } from './idb.js?v=89';
+import { showToast } from './ui/toast.js?v=89';
 
 const BASE = 'https://api.spotify.com/v1';
 const MIN_RETRY_WAIT = 5000;
@@ -642,12 +642,49 @@ async function checkLibraryContains(ids) {
   return out;
 }
 
-async function getAllPlaylistItems(playlistId, onProgress, { signal } = {}) {
-  return paginateAll(`/playlists/${playlistId}/items`, {
+const PLAYLIST_ITEMS_TTL_MIN = 30 * 24 * 60; // el snapshot_id valida frescura; el TTL solo limpia playlists abandonadas
+
+// Items de playlist con cache en IDB validado por snapshot_id: un request barato
+// pide el snapshot actual; si coincide con el cacheado, la carga es instantánea.
+// Clave para playlists grandes (anothertwo ~9k tracks = ~93 requests sin cache).
+async function getAllPlaylistItems(playlistId, onProgress, { signal, useCache = true } = {}) {
+  const key = `playlist_items_${playlistId}`;
+  let snapshot = null;
+  if (useCache) {
+    try {
+      const meta = await spotifyFetch(`/playlists/${playlistId}?fields=snapshot_id`);
+      snapshot = meta?.snapshot_id || null;
+      if (snapshot) {
+        const cached = await idbGetCached(key);
+        if (cached && cached.snapshot === snapshot && Array.isArray(cached.items)) {
+          if (onProgress) onProgress({ loaded: cached.items.length, total: cached.items.length });
+          return cached.items;
+        }
+      }
+    } catch { /* sin snapshot o sin IDB: carga paginada normal */ }
+  }
+  const items = await paginateAll(`/playlists/${playlistId}/items`, {
     limit: 100,
     onProgress,
     signal,
   });
+  if (snapshot) {
+    try { await idbSetCached(key, { snapshot, items }, PLAYLIST_ITEMS_TTL_MIN); } catch { /* ignora */ }
+  }
+  return items;
+}
+
+// Actualiza (o borra, si falta snapshot/items) el cache de items después de que
+// NOSOTROS escribimos en la playlist — así el próximo análisis no re-baja todo.
+async function updatePlaylistItemsCache(playlistId, items, snapshot) {
+  const key = `playlist_items_${playlistId}`;
+  try {
+    if (snapshot && Array.isArray(items)) {
+      await idbSetCached(key, { snapshot, items }, PLAYLIST_ITEMS_TTL_MIN);
+    } else {
+      await idbDel(key);
+    }
+  } catch { /* ignora */ }
 }
 
 // Trae varios tracks por id (chunks de 50). Devuelve array de track objects (o null por id fallido).
@@ -698,17 +735,22 @@ async function getCurrentUserId() {
   return _cachedUserId;
 }
 
+// Devuelven el snapshot_id de la última escritura para poder actualizar el
+// cache de items en el caller (updatePlaylistItemsCache) sin re-bajar todo.
 async function addTracksToPlaylist(playlistId, uris) {
   const chunks = [];
   for (let i = 0; i < uris.length; i += 100) {
     chunks.push(uris.slice(i, i + 100));
   }
+  let snapshot = null;
   for (const chunk of chunks) {
-    await spotifyFetch(`/playlists/${playlistId}/items`, {
+    const r = await spotifyFetch(`/playlists/${playlistId}/items`, {
       method: 'POST',
       body: JSON.stringify({ uris: chunk }),
     });
+    if (r?.snapshot_id) snapshot = r.snapshot_id;
   }
+  return snapshot;
 }
 
 async function removeTracksFromPlaylist(playlistId, uris) {
@@ -716,12 +758,15 @@ async function removeTracksFromPlaylist(playlistId, uris) {
   for (let i = 0; i < uris.length; i += 100) {
     chunks.push(uris.slice(i, i + 100));
   }
+  let snapshot = null;
   for (const chunk of chunks) {
-    await spotifyFetch(`/playlists/${playlistId}/items`, {
+    const r = await spotifyFetch(`/playlists/${playlistId}/items`, {
       method: 'DELETE',
       body: JSON.stringify({ items: chunk.map(uri => ({ uri })) }),
     });
+    if (r?.snapshot_id) snapshot = r.snapshot_id;
   }
+  return snapshot;
 }
 
 async function removePlaylistItemsAtPositions(playlistId, itemsWithPositions) {
@@ -795,6 +840,7 @@ export {
   getAllLikedTracks,
   getAllUserPlaylists,
   getAllPlaylistItems,
+  updatePlaylistItemsCache,
   getSeveralTracks,
   getUserProfile,
   getCurrentUserId,

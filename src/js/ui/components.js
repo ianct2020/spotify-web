@@ -20,11 +20,30 @@ function renderTrackRow(track, extra = '') {
 // Callback de cancelación del overlay activo. Vive acá afuera porque showProgress se
 // llama en loop desde los onProgress (sin opts), y esas llamadas no tienen que pisarlo.
 let _progressCancel = null;
+// Minimizado: la carga sigue pero en un pill abajo a la izquierda, con la app usable.
+let _progressMin = false;
+// Último estado conocido, para re-renderizar con datos frescos al minimizar/expandir.
+let _progressState = { text: '', loaded: 0, total: 0 };
 
-function renderProgressOverlay(text, loaded, total, cancellable) {
+function renderProgressOverlay(text, loaded, total, cancellable, minimized) {
   const pct = total > 0 ? Math.round((loaded / total) * 100) : 0;
+  const count = `${loaded.toLocaleString()}${total ? ` / ${total.toLocaleString()}` : ''}`;
+  if (minimized) {
+    return `
+      <div class="progress-mini" id="progress-overlay" data-mode="mini" data-cancellable="${cancellable ? 1 : 0}" title="Click para ver el progreso completo">
+        <div class="spinner"></div>
+        <div class="progress-mini-body">
+          <div class="progress-mini-label" id="progress-label">${escapeHtml(text)}</div>
+          <div class="progress-bar">
+            <div class="progress-bar-fill" id="progress-fill" style="width:${pct}%"></div>
+          </div>
+          <div class="progress-mini-count" id="progress-count">${count}</div>
+        </div>
+      </div>
+    `;
+  }
   return `
-    <div class="progress-overlay" id="progress-overlay">
+    <div class="progress-overlay" id="progress-overlay" data-mode="full" data-cancellable="${cancellable ? 1 : 0}">
       <div class="spinner spinner-lg"></div>
       <div class="progress-text" id="progress-label">${escapeHtml(text)}</div>
       <div style="width:220px">
@@ -32,37 +51,54 @@ function renderProgressOverlay(text, loaded, total, cancellable) {
           <div class="progress-bar-fill" id="progress-fill" style="width:${pct}%"></div>
         </div>
       </div>
-      <div class="progress-text" id="progress-count">${loaded.toLocaleString()}${total ? ` / ${total.toLocaleString()}` : ''}</div>
+      <div class="progress-text" id="progress-count">${count}</div>
       ${cancellable ? `
         <button class="btn btn-danger" id="progress-cancel-btn" style="min-width:180px;margin-top:6px">Detener carga</button>
+        <button class="btn btn-secondary" id="progress-min-btn" style="min-width:180px">Minimizar — seguir usando la app</button>
         <div class="progress-note">Podés detener sin problema — la próxima vez retoma desde donde quedó.</div>
       ` : ''}
     </div>
   `;
 }
 
-// showProgress(text, loaded, total, { onCancel }) — pasá onCancel solo en la primera
-// llamada; las de progreso (3 args) actualizan sin tocar el botón.
-function showProgress(text, loaded = 0, total = 0, opts = {}) {
-  if (opts.onCancel) _progressCancel = opts.onCancel;
-  const cancellable = !!_progressCancel;
+function wireProgressButtons() {
   const overlay = document.getElementById('progress-overlay');
-  const hasBtn = !!document.getElementById('progress-cancel-btn');
+  if (!overlay) return;
+  const btn = document.getElementById('progress-cancel-btn');
+  if (btn) btn.onclick = () => {
+    btn.disabled = true;
+    btn.textContent = 'Deteniendo...';
+    _progressCancel?.();
+  };
+  const minBtn = document.getElementById('progress-min-btn');
+  if (minBtn) minBtn.onclick = () => {
+    _progressMin = true;
+    showProgress(_progressState.text, _progressState.loaded, _progressState.total);
+  };
+  if (overlay.dataset.mode === 'mini') overlay.onclick = () => {
+    _progressMin = false;
+    showProgress(_progressState.text, _progressState.loaded, _progressState.total);
+  };
+}
 
-  if (!overlay || hasBtn !== cancellable) {
-    const html = renderProgressOverlay(text, loaded, total, cancellable);
+// showProgress(text, loaded, total, { onCancel }) — pasá onCancel solo en la primera
+// llamada; las de progreso (3 args) actualizan sin tocar los botones.
+function showProgress(text, loaded = 0, total = 0, opts = {}) {
+  if (opts.onCancel) { _progressCancel = opts.onCancel; _progressMin = false; }
+  _progressState = { text, loaded, total };
+  const cancellable = !!_progressCancel;
+  const mode = _progressMin ? 'mini' : 'full';
+  const overlay = document.getElementById('progress-overlay');
+
+  if (!overlay || overlay.dataset.mode !== mode || (overlay.dataset.cancellable === '1') !== cancellable) {
+    const html = renderProgressOverlay(text, loaded, total, cancellable, _progressMin);
     if (overlay) overlay.outerHTML = html;
     else document.body.insertAdjacentHTML('beforeend', html);
-    const btn = document.getElementById('progress-cancel-btn');
-    if (btn) btn.onclick = () => {
-      btn.disabled = true;
-      btn.textContent = 'Deteniendo...';
-      _progressCancel?.();
-    };
+    wireProgressButtons();
     return;
   }
 
-  // Mismo overlay: actualizo textos y barra, así el botón conserva su handler.
+  // Mismo overlay: actualizo textos y barra, así los botones conservan su handler.
   const pct = total > 0 ? Math.round((loaded / total) * 100) : 0;
   overlay.querySelector('#progress-label').textContent = text;
   overlay.querySelector('#progress-fill').style.width = `${pct}%`;
@@ -73,6 +109,7 @@ function showProgress(text, loaded = 0, total = 0, opts = {}) {
 function hideProgress() {
   document.getElementById('progress-overlay')?.remove();
   _progressCancel = null;
+  _progressMin = false;
 }
 
 // Azúcar para las features: arma el AbortController, muestra el overlay con botón
