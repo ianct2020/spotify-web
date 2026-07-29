@@ -1,7 +1,20 @@
 // Loader compartido de los agregados del Extended Streaming History.
 // Ambos JSONs se generan con scripts/gen-stats.py y viven en src/data/.
+//
+// GUARD por owner: los JSONs son del dueño de la app (Ian). Si otra persona
+// entra con su Spotify, los loaders devuelven null y las features muestran
+// un mensaje explicando que este historial es de otro user. Evita mostrar
+// los datos personales de Ian al resto de los usuarios.
 
-import { idbGetCached, idbSetCached } from '../idb.js?v=84';
+import { idbGetCached, idbSetCached } from '../idb.js?v=86';
+import { getCurrentUserId } from '../api.js?v=86';
+
+const HISTORY_OWNER_ID = 'orhs6wu5ykk7ql80u92ujn74o';
+
+async function isOwner() {
+  try { return (await getCurrentUserId()) === HISTORY_OWNER_ID; }
+  catch { return false; }
+}
 
 const STATS_VERSION = 2;
 const PLAYS_VERSION = 2; // ahora incluye entries "partial" para tracks con solo plays <30s
@@ -20,6 +33,7 @@ let skipMem = null;
 
 async function loadHistoryStats() {
   if (statsMem) return statsMem;
+  if (!(await isOwner())) return null;
   try {
     const cached = await idbGetCached(STATS_KEY);
     if (cached && typeof cached === 'object') { statsMem = cached; return statsMem; }
@@ -39,6 +53,7 @@ async function loadHistoryStats() {
 
 async function loadTrackPlays() {
   if (playsMem) return playsMem;
+  if (!(await isOwner())) return null;
   try {
     const cached = await idbGetCached(PLAYS_KEY);
     if (cached && cached.tracks) { playsMem = cached; return playsMem; }
@@ -58,6 +73,7 @@ async function loadTrackPlays() {
 
 async function loadListenedAlbums() {
   if (listenedMem) return listenedMem;
+  if (!(await isOwner())) return null;
   try {
     const cached = await idbGetCached(LISTENED_KEY);
     if (cached && cached.years) { listenedMem = cached; return listenedMem; }
@@ -77,6 +93,7 @@ async function loadListenedAlbums() {
 
 async function loadSkipStats() {
   if (skipMem) return skipMem;
+  if (!(await isOwner())) return null;
   try {
     const cached = await idbGetCached(SKIP_KEY);
     if (cached && cached.tracks) { skipMem = cached; return skipMem; }
@@ -106,4 +123,15 @@ function playsFor(uri, index) {
   return index.tracks[id] || null;
 }
 
-export { loadHistoryStats, loadTrackPlays, loadListenedAlbums, loadSkipStats, playsFor, trackIdOf };
+// HTML listo para pegar en cualquier feature cuando la carga devuelve null
+// porque el user logueado no es el dueño. Es la explicación estándar.
+function ownerLockedMessage(featureName = 'esta vista') {
+  return `<div class="card"><h3 style="margin-bottom:8px">Historial no disponible</h3>
+    <p style="color:var(--color-text-secondary);margin:0">
+      ${featureName} usa el <strong>Extended Streaming History</strong> del dueño de esta instancia de Fonoteca (Ian).
+      Como estás logueado con otra cuenta, no se muestra su historial personal.
+      Podés seguir usando el resto de las funciones que trabajan solo con tus likes (Sync Mirror, Dedupe, Versiones, Zombis, Buscar likes, Por artista, Por género, Smart Playlists, etc.).
+    </p></div>`;
+}
+
+export { loadHistoryStats, loadTrackPlays, loadListenedAlbums, loadSkipStats, playsFor, trackIdOf, isOwner, HISTORY_OWNER_ID, ownerLockedMessage };

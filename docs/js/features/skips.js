@@ -2,10 +2,10 @@
 // Cruce local: likes vs history-skip-stats.json (ok = trackdone, skip = fwdbtn con ms>=5s).
 // Preview 30s con iframe embed oficial (preview_url murió post-migración feb 2026).
 
-import { getBestAvailableLikes, removeLikedTracks } from '../api.js?v=85';
-import { loadSkipStats, trackIdOf } from './history-data.js?v=85';
-import { escapeHtml, confirmModal } from '../ui/components.js?v=85';
-import { showToast } from '../ui/toast.js?v=85';
+import { getBestAvailableLikes, removeLikedTracks } from '../api.js?v=86';
+import { loadSkipStats, trackIdOf, isOwner, ownerLockedMessage } from './history-data.js?v=86';
+import { escapeHtml, confirmModal } from '../ui/components.js?v=86';
+import { showToast } from '../ui/toast.js?v=86';
 
 let cache = null;
 let minPlays = 5;    // solo tracks con ≥N plays totales (ok+skip)
@@ -38,7 +38,9 @@ async function analyze() {
     return;
   }
   if (!stats || !stats.tracks) {
-    content.innerHTML = `<div class="card"><p>No pude cargar el historial de skips. Reintentá.</p></div>`;
+    content.innerHTML = (await isOwner())
+      ? `<div class="card"><p>No pude cargar el historial de skips. Reintentá.</p></div>`
+      : ownerLockedMessage('Skips crónicos');
     return;
   }
 
