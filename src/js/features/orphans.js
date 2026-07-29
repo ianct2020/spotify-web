@@ -1,5 +1,5 @@
 import { getAllLikedTracks, getAllUserPlaylists, getAllPlaylistItems, createPlaylist, addTracksToPlaylist } from '../api.js';
-import { showProgress, hideProgress, confirmModal, renderTrackRow } from '../ui/components.js';
+import { showProgress, hideProgress, progressController, isCancelled, confirmModal, renderTrackRow } from '../ui/components.js';
 import { showToast } from '../ui/toast.js';
 
 export function render(container) {
@@ -23,21 +23,24 @@ async function analyze() {
   btn.disabled = true;
 
   try {
-    showProgress('Cargando Liked Songs...', 0, 0);
+    const prog = progressController('Cargando Liked Songs...');
     const likes = await getAllLikedTracks(({ loaded, total }) => {
-      showProgress('Cargando Liked Songs...', loaded, total);
-    });
+      prog.update(loaded, total);
+    }, { signal: prog.signal });
 
-    showProgress('Cargando playlists...', 0, 0);
-    const playlists = await getAllUserPlaylists();
+    prog.update(0, 0, 'Cargando playlists...');
+    const playlists = await getAllUserPlaylists(({ loaded, total }) => {
+      prog.update(loaded, total, 'Cargando playlists...');
+    }, { signal: prog.signal });
 
     const allPlaylistTrackIds = new Set();
     const skipped = [];
     for (let i = 0; i < playlists.length; i++) {
+      if (prog.signal.aborted) throw new Error('Carga cancelada');
       const pl = playlists[i];
-      showProgress(`Escaneando playlists... (${i + 1}/${playlists.length})`, i + 1, playlists.length);
+      prog.update(i + 1, playlists.length, `Escaneando playlists... (${i + 1}/${playlists.length})`);
       try {
-        const items = await getAllPlaylistItems(pl.id);
+        const items = await getAllPlaylistItems(pl.id, null, { signal: prog.signal });
         items.forEach(item => {
           const track = item.track || item.item;
           if (track?.id) allPlaylistTrackIds.add(track.id);
@@ -110,8 +113,12 @@ async function analyze() {
 
   } catch (e) {
     hideProgress();
-    showToast(e.message, 'error');
-    console.error(e);
+    if (isCancelled(e)) {
+      showToast('Carga detenida — lo que se bajó quedó guardado', 'warning');
+    } else {
+      showToast(e.message, 'error');
+      console.error(e);
+    }
   } finally {
     btn.disabled = false;
   }

@@ -17,33 +17,78 @@ function renderTrackRow(track, extra = '') {
   `;
 }
 
-function renderProgressOverlay(text, loaded, total) {
+// Callback de cancelación del overlay activo. Vive acá afuera porque showProgress se
+// llama en loop desde los onProgress (sin opts), y esas llamadas no tienen que pisarlo.
+let _progressCancel = null;
+
+function renderProgressOverlay(text, loaded, total, cancellable) {
   const pct = total > 0 ? Math.round((loaded / total) * 100) : 0;
   return `
     <div class="progress-overlay" id="progress-overlay">
       <div class="spinner spinner-lg"></div>
-      <div class="progress-text">${escapeHtml(text)}</div>
-      <div style="width:200px">
+      <div class="progress-text" id="progress-label">${escapeHtml(text)}</div>
+      <div style="width:220px">
         <div class="progress-bar">
-          <div class="progress-bar-fill" style="width:${pct}%"></div>
+          <div class="progress-bar-fill" id="progress-fill" style="width:${pct}%"></div>
         </div>
       </div>
-      <div class="progress-text">${loaded.toLocaleString()}${total ? ` / ${total.toLocaleString()}` : ''}</div>
+      <div class="progress-text" id="progress-count">${loaded.toLocaleString()}${total ? ` / ${total.toLocaleString()}` : ''}</div>
+      ${cancellable ? `
+        <button class="btn btn-danger" id="progress-cancel-btn" style="min-width:180px;margin-top:6px">Detener carga</button>
+        <div class="progress-note">Podés detener sin problema — la próxima vez retoma desde donde quedó.</div>
+      ` : ''}
     </div>
   `;
 }
 
-function showProgress(text, loaded = 0, total = 0) {
-  let overlay = document.getElementById('progress-overlay');
-  if (!overlay) {
-    document.body.insertAdjacentHTML('beforeend', renderProgressOverlay(text, loaded, total));
-  } else {
-    overlay.outerHTML = renderProgressOverlay(text, loaded, total);
+// showProgress(text, loaded, total, { onCancel }) — pasá onCancel solo en la primera
+// llamada; las de progreso (3 args) actualizan sin tocar el botón.
+function showProgress(text, loaded = 0, total = 0, opts = {}) {
+  if (opts.onCancel) _progressCancel = opts.onCancel;
+  const cancellable = !!_progressCancel;
+  const overlay = document.getElementById('progress-overlay');
+  const hasBtn = !!document.getElementById('progress-cancel-btn');
+
+  if (!overlay || hasBtn !== cancellable) {
+    const html = renderProgressOverlay(text, loaded, total, cancellable);
+    if (overlay) overlay.outerHTML = html;
+    else document.body.insertAdjacentHTML('beforeend', html);
+    const btn = document.getElementById('progress-cancel-btn');
+    if (btn) btn.onclick = () => {
+      btn.disabled = true;
+      btn.textContent = 'Deteniendo...';
+      _progressCancel?.();
+    };
+    return;
   }
+
+  // Mismo overlay: actualizo textos y barra, así el botón conserva su handler.
+  const pct = total > 0 ? Math.round((loaded / total) * 100) : 0;
+  overlay.querySelector('#progress-label').textContent = text;
+  overlay.querySelector('#progress-fill').style.width = `${pct}%`;
+  overlay.querySelector('#progress-count').textContent =
+    `${loaded.toLocaleString()}${total ? ` / ${total.toLocaleString()}` : ''}`;
 }
 
 function hideProgress() {
   document.getElementById('progress-overlay')?.remove();
+  _progressCancel = null;
+}
+
+// Azúcar para las features: arma el AbortController, muestra el overlay con botón
+// Detener y devuelve el signal + un update() para el onProgress.
+function progressController(text) {
+  const ctrl = new AbortController();
+  showProgress(text, 0, 0, { onCancel: () => ctrl.abort() });
+  return {
+    signal: ctrl.signal,
+    update: (loaded, total, label = text) => showProgress(label, loaded, total),
+    done: hideProgress,
+  };
+}
+
+function isCancelled(err) {
+  return /cancelada/i.test(err?.message || '');
 }
 
 function confirmModal(title, message, confirmText = 'Confirmar') {
@@ -253,4 +298,4 @@ function bindPlaylistGrid(container, onSelect) {
   });
 }
 
-export { renderTrackRow, showProgress, hideProgress, confirmModal, typeConfirmModal, promptPlaylistName, alertModal, infoModal, PLAYLIST_NAME_MAX, escapeHtml, renderPlaylistGrid, bindPlaylistGrid };
+export { renderTrackRow, showProgress, hideProgress, progressController, isCancelled, confirmModal, typeConfirmModal, promptPlaylistName, alertModal, infoModal, PLAYLIST_NAME_MAX, escapeHtml, renderPlaylistGrid, bindPlaylistGrid };

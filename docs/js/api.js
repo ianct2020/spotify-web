@@ -1,7 +1,7 @@
-import { getValidToken, refreshAccessToken } from './auth.js?v=79';
-import { cacheGet, cacheGetRaw, cacheGetTimestamp, cacheSet, cacheClear } from './storage.js?v=79';
-import { idbGet, idbSet, idbDel, idbGetCached, idbGetCachedRaw, idbGetTimestamp, idbSetCached, idbAvailable } from './idb.js?v=79';
-import { showToast } from './ui/toast.js?v=79';
+import { getValidToken, refreshAccessToken } from './auth.js?v=80';
+import { cacheGet, cacheGetRaw, cacheGetTimestamp, cacheSet, cacheClear } from './storage.js?v=80';
+import { idbGet, idbSet, idbDel, idbGetCached, idbGetCachedRaw, idbGetTimestamp, idbSetCached, idbAvailable } from './idb.js?v=80';
+import { showToast } from './ui/toast.js?v=80';
 
 const BASE = 'https://api.spotify.com/v1';
 const MIN_RETRY_WAIT = 5000;
@@ -301,7 +301,7 @@ async function getAllLikedTracks(onProgress, { force = false, signal } = {}) {
   return items;
 }
 
-async function getAllUserPlaylists(onProgress, { force = false } = {}) {
+async function getAllUserPlaylists(onProgress, { force = false, signal } = {}) {
   if (!force) {
     const cached = cacheGet(PLAYLISTS_CACHE_KEY);
     if (cached) {
@@ -315,6 +315,7 @@ async function getAllUserPlaylists(onProgress, { force = false } = {}) {
     onProgress,
     partialCacheKey: PLAYLISTS_CACHE_KEY,
     transform: slimPlaylist,
+    signal,
   });
   cacheSet(PLAYLISTS_CACHE_KEY, items, CACHE_TTL_MIN);
   return items;
@@ -625,10 +626,11 @@ function invalidatePlaylistsCache() {
   cacheClear(PLAYLISTS_CACHE_KEY);
 }
 
-async function getAllPlaylistItems(playlistId, onProgress) {
+async function getAllPlaylistItems(playlistId, onProgress, { signal } = {}) {
   return paginateAll(`/playlists/${playlistId}/items`, {
     limit: 100,
     onProgress,
+    signal,
   });
 }
 

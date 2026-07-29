@@ -1,7 +1,7 @@
-import { getAllLikedTracks, getAllPlaylistItems, getAllUserPlaylists, addTracksToPlaylist, removeTracksFromPlaylist, createPlaylist, unfollowPlaylist } from '../api.js?v=79';
-import { cacheGet, cacheSet } from '../storage.js?v=79';
-import { showProgress, hideProgress, typeConfirmModal, renderTrackRow, escapeHtml } from '../ui/components.js?v=79';
-import { showToast } from '../ui/toast.js?v=79';
+import { getAllLikedTracks, getAllPlaylistItems, getAllUserPlaylists, addTracksToPlaylist, removeTracksFromPlaylist, createPlaylist, unfollowPlaylist } from '../api.js?v=80';
+import { cacheGet, cacheSet } from '../storage.js?v=80';
+import { showProgress, hideProgress, progressController, isCancelled, typeConfirmModal, renderTrackRow, escapeHtml } from '../ui/components.js?v=80';
+import { showToast } from '../ui/toast.js?v=80';
 
 const TARGET_PLAYLIST_NAME = 'anothertwo';
 const SPOTIFY_PLAYLIST_MAX = 10000;
@@ -38,13 +38,15 @@ async function analyze() {
   btn.disabled = true;
 
   try {
-    showProgress('Cargando Liked Songs (las más recientes)...', 0, 0);
+    const prog = progressController('Cargando Liked Songs (las más recientes)...');
     const likes = await getAllLikedTracks(({ loaded, total }) => {
-      showProgress('Cargando Liked Songs (las más recientes)...', loaded, total);
-    }, { randomize: false });
+      prog.update(loaded, total);
+    }, { randomize: false, signal: prog.signal });
 
-    showProgress('Cargando playlists...', 0, 0);
-    const playlists = await getAllUserPlaylists();
+    prog.update(0, 0, 'Cargando playlists...');
+    const playlists = await getAllUserPlaylists(({ loaded, total }) => {
+      prog.update(loaded, total, 'Cargando playlists...');
+    }, { signal: prog.signal });
 
     let target = playlists.find(p =>
       p.id === nameOrId || p.name.toLowerCase() === nameOrId.toLowerCase()
@@ -62,11 +64,12 @@ async function analyze() {
       return;
     }
 
-    showProgress(`Cargando tracks de "${target.name}"...`, 0, 0);
+    const itemsMsg = `Cargando tracks de "${target.name}"...`;
+    prog.update(0, 0, itemsMsg);
     const playlistItems = await getAllPlaylistItems(target.id, ({ loaded, total }) => {
-      showProgress(`Cargando tracks de "${target.name}"...`, loaded, total);
-    });
-    hideProgress();
+      prog.update(loaded, total, itemsMsg);
+    }, { signal: prog.signal });
+    prog.done();
 
     const likeUris = new Set(likes.map(item => item.track?.uri).filter(Boolean));
     const playlistUris = new Set(playlistItems.map(item => (item.track || item.item)?.uri).filter(Boolean));
@@ -169,8 +172,18 @@ async function analyze() {
 
   } catch (e) {
     hideProgress();
-    showToast(e.message, 'error');
-    console.error(e);
+    if (isCancelled(e)) {
+      results.innerHTML = `
+        <div class="card dash-state-card dash-state-card-center">
+          <p style="color:var(--color-warning);margin-bottom:12px">Carga detenida. Lo que se bajó quedó guardado.</p>
+          <button class="btn btn-primary" id="sync-retry-btn">Reintentar</button>
+        </div>
+      `;
+      document.getElementById('sync-retry-btn').onclick = analyze;
+    } else {
+      showToast(e.message, 'error');
+      console.error(e);
+    }
   } finally {
     btn.disabled = false;
   }
@@ -331,10 +344,10 @@ function renderFullPlaylistUI(target, playlists) {
 }
 
 async function loadAllRealLikes() {
-  showProgress('Cargando todos los likes...', 0, 0);
+  const prog = progressController('Cargando todos los likes...');
   const likes = await getAllLikedTracks(({ loaded, total }) => {
-    showProgress(`Cargando likes... ${loaded}/${total || '?'}`, loaded, total);
-  }, { force: true });
+    prog.update(loaded, total, `Cargando likes... ${loaded}/${total || '?'}`);
+  }, { force: true, signal: prog.signal });
   return likes.map(item => item.track?.uri).filter(Boolean);
 }
 

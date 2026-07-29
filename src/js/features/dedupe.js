@@ -1,5 +1,5 @@
 import { getAllUserPlaylists, getAllPlaylistItems, removePlaylistItemsAtPositions, getCurrentUserId, getBestAvailableLikes, removeLikedTracks } from '../api.js';
-import { showProgress, hideProgress, typeConfirmModal, renderTrackRow, escapeHtml, renderPlaylistGrid, bindPlaylistGrid } from '../ui/components.js';
+import { showProgress, hideProgress, progressController, isCancelled, typeConfirmModal, renderTrackRow, escapeHtml, renderPlaylistGrid, bindPlaylistGrid } from '../ui/components.js';
 import { showToast } from '../ui/toast.js';
 
 let ownPlaylists = [];
@@ -72,10 +72,11 @@ async function analyzePlaylist(playlistId) {
   document.getElementById('dedupe-back-btn').onclick = loadAndShowGrid;
 
   try {
+    const prog = progressController('Cargando tracks...');
     const items = await getAllPlaylistItems(playlistId, ({ loaded, total }) => {
-      showProgress(`Cargando tracks...`, loaded, total);
-    });
-    hideProgress();
+      prog.update(loaded, total);
+    }, { signal: prog.signal });
+    prog.done();
 
     const groups = new Map();
     items.forEach((item, idx) => {
@@ -139,7 +140,10 @@ async function analyzePlaylist(playlistId) {
     document.getElementById('dedupe-clean-btn').onclick = () => cleanDupes(playlist, dupGroups);
   } catch (e) {
     hideProgress();
-    document.getElementById('dedupe-analysis').innerHTML = `<div class="card"><p style="color:var(--color-error)">${escapeHtml(e.message)}</p></div>`;
+    const msg = isCancelled(e)
+      ? 'Carga detenida. Volvé a entrar para retomar.'
+      : escapeHtml(e.message);
+    document.getElementById('dedupe-analysis').innerHTML = `<div class="card"><p style="color:var(--color-${isCancelled(e) ? 'warning' : 'error'})">${msg}</p></div>`;
   }
 }
 
