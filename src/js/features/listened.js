@@ -63,8 +63,11 @@ function clearDismissedHistory() {
 }
 
 // Baja el JSON agregado del historial (una vez), lo cachea en IndexedDB.
+// Solo lo bajamos si el user logueado es el dueño (Ian): son sus datos personales.
 async function loadHistoryData() {
   if (historyAlbums) return historyAlbums;
+  const { isOwner } = await import('./history-data.js');
+  if (!(await isOwner())) { historyAlbums = []; return historyAlbums; }
   try {
     const cached = await idbGetCached(HISTORY_CACHE_KEY);
     if (Array.isArray(cached)) { historyAlbums = cached; return historyAlbums; }

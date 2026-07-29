@@ -673,10 +673,28 @@ async function getUserProfile() {
 }
 
 let _cachedUserId = null;
+const LAST_USER_KEY = 'fonoteca_last_user_id';
 async function getCurrentUserId() {
   if (_cachedUserId) return _cachedUserId;
   const me = await spotifyFetch('/me');
   _cachedUserId = me.id;
+  // Si el user id cambió respecto al último que estuvo en este browser,
+  // limpio caches de likes/playlists para que no se mezclen. También limpio
+  // los caches del historial pre-cargado (JSONs del owner) en IDB.
+  try {
+    const prev = localStorage.getItem(LAST_USER_KEY);
+    if (prev && prev !== _cachedUserId) {
+      console.info(`Fonoteca: user cambió (${prev} → ${_cachedUserId}), limpiando cache local`);
+      invalidateLikesCache();
+      invalidatePlaylistsCache();
+      // Caches del historial del owner: si el nuevo user no es el owner, sobran;
+      // si es el owner de vuelta, los re-baja del JSON del repo.
+      for (const k of ['history_stats_v2','history_track_plays_v2','history_listened_albums_v2','history_skip_stats_v1','history_albums_v2']) {
+        idbDel(k).catch(() => {});
+      }
+    }
+    localStorage.setItem(LAST_USER_KEY, _cachedUserId);
+  } catch { /* ignora si no hay localStorage */ }
   return _cachedUserId;
 }
 

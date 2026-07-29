@@ -1,8 +1,8 @@
 // Wrapped propio: mini-resumen tuyo por año, hecho con el Extended Streaming History.
 // A diferencia del Wrapped oficial (que corre oct-sept), este es del año calendario completo.
 
-import { loadHistoryStats } from './history-data.js?v=84';
-import { escapeHtml } from '../ui/components.js?v=84';
+import { loadHistoryStats, isOwner, ownerLockedMessage } from './history-data.js?v=86';
+import { escapeHtml } from '../ui/components.js?v=86';
 
 let stats = null;
 let selectedYear = null;
@@ -43,7 +43,9 @@ export async function render(container) {
   stats = await loadHistoryStats();
   const content = document.getElementById('wrapped-content');
   if (!stats || !stats.years || !stats.years.length) {
-    content.innerHTML = `<div class="card"><p>No pude cargar el historial de reproducción. Volvé a probar.</p></div>`;
+    content.innerHTML = (await isOwner())
+      ? `<div class="card"><p>No pude cargar el historial de reproducción. Volvé a probar.</p></div>`
+      : ownerLockedMessage('Wrapped');
     return;
   }
 

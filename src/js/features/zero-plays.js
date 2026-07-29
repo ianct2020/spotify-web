@@ -2,7 +2,7 @@
 // Cruce local: likes vs history-track-plays.json (índice de plays por track id).
 
 import { getBestAvailableLikes, removeLikedTracks } from '../api.js';
-import { loadTrackPlays, trackIdOf } from './history-data.js';
+import { loadTrackPlays, trackIdOf, isOwner, ownerLockedMessage } from './history-data.js';
 import { escapeHtml, confirmModal } from '../ui/components.js';
 import { showToast } from '../ui/toast.js';
 
@@ -32,7 +32,9 @@ async function analyze() {
     return;
   }
   if (!plays || !plays.tracks) {
-    content.innerHTML = `<div class="card"><p>No pude cargar el historial. Volvé a probar.</p></div>`;
+    content.innerHTML = (await isOwner())
+      ? `<div class="card"><p>No pude cargar el historial. Volvé a probar.</p></div>`
+      : ownerLockedMessage('Sin plays');
     return;
   }
   const zeros = [];

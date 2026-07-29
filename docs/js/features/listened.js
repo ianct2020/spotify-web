@@ -1,8 +1,8 @@
-import { getAllPlaylistItems, getBestAvailableLikes, addTracksToPlaylist, removeTracksFromPlaylist, getAllUserPlaylists } from '../api.js?v=84';
-import { idbGetCached, idbSetCached, idbGetTimestamp, idbDel } from '../idb.js?v=84';
-import { escapeHtml, confirmModal } from '../ui/components.js?v=84';
-import { showToast } from '../ui/toast.js?v=84';
-import { getListenedPlaylist, groupItemsByAlbum, openListenedAlbumsPicker, albumKey, baseName, norm } from './listened-shared.js?v=84';
+import { getAllPlaylistItems, getBestAvailableLikes, addTracksToPlaylist, removeTracksFromPlaylist, getAllUserPlaylists } from '../api.js?v=86';
+import { idbGetCached, idbSetCached, idbGetTimestamp, idbDel } from '../idb.js?v=86';
+import { escapeHtml, confirmModal } from '../ui/components.js?v=86';
+import { showToast } from '../ui/toast.js?v=86';
+import { getListenedPlaylist, groupItemsByAlbum, openListenedAlbumsPicker, albumKey, baseName, norm } from './listened-shared.js?v=86';
 
 const SORT_KEY = 'listened_sort_mode';
 const VALID_SORTS = new Set(['recent', 'year-desc', 'year-asc', 'artist-asc', 'likes-desc', 'name-asc']);
@@ -63,8 +63,11 @@ function clearDismissedHistory() {
 }
 
 // Baja el JSON agregado del historial (una vez), lo cachea en IndexedDB.
+// Solo lo bajamos si el user logueado es el dueño (Ian): son sus datos personales.
 async function loadHistoryData() {
   if (historyAlbums) return historyAlbums;
+  const { isOwner } = await import('./history-data.js');
+  if (!(await isOwner())) { historyAlbums = []; return historyAlbums; }
   try {
     const cached = await idbGetCached(HISTORY_CACHE_KEY);
     if (Array.isArray(cached)) { historyAlbums = cached; return historyAlbums; }

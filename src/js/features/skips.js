@@ -3,7 +3,7 @@
 // Preview 30s con iframe embed oficial (preview_url murió post-migración feb 2026).
 
 import { getBestAvailableLikes, removeLikedTracks } from '../api.js';
-import { loadSkipStats, trackIdOf } from './history-data.js';
+import { loadSkipStats, trackIdOf, isOwner, ownerLockedMessage } from './history-data.js';
 import { escapeHtml, confirmModal } from '../ui/components.js';
 import { showToast } from '../ui/toast.js';
 
@@ -38,7 +38,9 @@ async function analyze() {
     return;
   }
   if (!stats || !stats.tracks) {
-    content.innerHTML = `<div class="card"><p>No pude cargar el historial de skips. Reintentá.</p></div>`;
+    content.innerHTML = (await isOwner())
+      ? `<div class="card"><p>No pude cargar el historial de skips. Reintentá.</p></div>`
+      : ownerLockedMessage('Skips crónicos');
     return;
   }
 

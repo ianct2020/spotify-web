@@ -1,6 +1,6 @@
-import { getAllUserPlaylists, getAllPlaylistItems, removePlaylistItemsAtPositions, getCurrentUserId } from '../api.js?v=84';
-import { showProgress, hideProgress, typeConfirmModal, escapeHtml, renderPlaylistGrid, bindPlaylistGrid } from '../ui/components.js?v=84';
-import { showToast } from '../ui/toast.js?v=84';
+import { getAllUserPlaylists, getAllPlaylistItems, removePlaylistItemsAtPositions, getCurrentUserId } from '../api.js?v=86';
+import { showProgress, hideProgress, typeConfirmModal, escapeHtml, renderPlaylistGrid, bindPlaylistGrid } from '../ui/components.js?v=86';
+import { showToast } from '../ui/toast.js?v=86';
 
 let ownPlaylists = [];
 const keepUris = new Set();

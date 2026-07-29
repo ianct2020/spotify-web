@@ -1,10 +1,10 @@
 // Likes con 0 plays: tracks likeados que nunca escuchaste según el Extended Streaming History.
 // Cruce local: likes vs history-track-plays.json (índice de plays por track id).
 
-import { getBestAvailableLikes, removeLikedTracks } from '../api.js?v=84';
-import { loadTrackPlays, trackIdOf } from './history-data.js?v=84';
-import { escapeHtml, confirmModal } from '../ui/components.js?v=84';
-import { showToast } from '../ui/toast.js?v=84';
+import { getBestAvailableLikes, removeLikedTracks } from '../api.js?v=86';
+import { loadTrackPlays, trackIdOf, isOwner, ownerLockedMessage } from './history-data.js?v=86';
+import { escapeHtml, confirmModal } from '../ui/components.js?v=86';
+import { showToast } from '../ui/toast.js?v=86';
 
 let cache = null;
 
@@ -32,7 +32,9 @@ async function analyze() {
     return;
   }
   if (!plays || !plays.tracks) {
-    content.innerHTML = `<div class="card"><p>No pude cargar el historial. Volvé a probar.</p></div>`;
+    content.innerHTML = (await isOwner())
+      ? `<div class="card"><p>No pude cargar el historial. Volvé a probar.</p></div>`
+      : ownerLockedMessage('Sin plays');
     return;
   }
   const zeros = [];
