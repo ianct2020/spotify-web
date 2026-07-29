@@ -1,5 +1,5 @@
 import { getAllLikedTracks, createPlaylist, addTracksToPlaylist, invalidatePlaylistsCache, getBestAvailableLikes } from '../api.js';
-import { showProgress, hideProgress, promptPlaylistName, escapeHtml } from '../ui/components.js';
+import { showProgress, hideProgress, progressController, isCancelled, promptPlaylistName, escapeHtml } from '../ui/components.js';
 import { showToast } from '../ui/toast.js';
 
 const SORT_KEY = 'artist_sort_mode';
@@ -60,13 +60,17 @@ async function loadLikes() {
   const content = document.getElementById('by-artist-content');
   content.innerHTML = `<div class="empty-state"><div class="spinner spinner-lg"></div><div style="margin-top:16px">Cargando Liked Songs...</div></div>`;
 
+  const prog = progressController('Cargando likes...');
   try {
-    likes = await getAllLikedTracks(({ loaded, total }) => showProgress('Cargando likes...', loaded, total));
-    hideProgress();
+    likes = await getAllLikedTracks(({ loaded, total }) => prog.update(loaded, total), { signal: prog.signal });
+    prog.done();
     build();
   } catch (e) {
     hideProgress();
-    content.innerHTML = `<div class="card"><p style="color:var(--color-error)">${escapeHtml(e.message)}</p></div>`;
+    const msg = isCancelled(e)
+      ? 'Carga detenida. Lo que se bajó quedó guardado — entrá de nuevo para retomar.'
+      : escapeHtml(e.message);
+    content.innerHTML = `<div class="card"><p style="color:var(--color-${isCancelled(e) ? 'warning' : 'error'})">${msg}</p></div>`;
   }
 }
 

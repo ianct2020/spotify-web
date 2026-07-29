@@ -1,6 +1,6 @@
-import { getAllLikedTracks, createPlaylist, addTracksToPlaylist, getAllUserPlaylists, invalidatePlaylistsCache } from '../api.js?v=79';
-import { showProgress, hideProgress, promptPlaylistName, escapeHtml } from '../ui/components.js?v=79';
-import { showToast } from '../ui/toast.js?v=79';
+import { getAllLikedTracks, createPlaylist, addTracksToPlaylist, getAllUserPlaylists, invalidatePlaylistsCache } from '../api.js?v=80';
+import { showProgress, hideProgress, progressController, isCancelled, promptPlaylistName, escapeHtml } from '../ui/components.js?v=80';
+import { showToast } from '../ui/toast.js?v=80';
 
 let likes = [];
 let currentTab = 'year';
@@ -51,15 +51,19 @@ function updateTabStyles() {
 }
 
 async function loadLikes() {
+  const prog = progressController('Cargando Liked Songs...');
   try {
     likes = await getAllLikedTracks(({ loaded, total }) => {
-      showProgress('Cargando Liked Songs...', loaded, total);
-    });
-    hideProgress();
+      prog.update(loaded, total);
+    }, { signal: prog.signal });
+    prog.done();
     renderTab();
   } catch (e) {
     hideProgress();
-    document.getElementById('smart-content').innerHTML = `<div class="card"><p style="color:var(--color-error)">${escapeHtml(e.message)}</p></div>`;
+    const msg = isCancelled(e)
+      ? 'Carga detenida. Lo que se bajó quedó guardado — entrá de nuevo para retomar.'
+      : escapeHtml(e.message);
+    document.getElementById('smart-content').innerHTML = `<div class="card"><p style="color:var(--color-${isCancelled(e) ? 'warning' : 'error'})">${msg}</p></div>`;
   }
 }
 

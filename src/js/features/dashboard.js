@@ -78,7 +78,7 @@ async function renderStartScreen() {
   if (hasFull) {
     intro = `Tenés <strong>${cachedCount.toLocaleString()}</strong> likes cacheados${lastSyncLabel ? ` · última sync <strong>${lastSyncLabel}</strong>` : ''}. Podés usarlos directo o importar un JSON previo.`;
   } else if (hasPartial) {
-    intro = `<span style="color:var(--color-warning)">Carga parcial:</span> tenés <strong>${cachedCount.toLocaleString()}</strong> likes (se cortó a mitad la última vez${lastSyncLabel ? ', hace ' + lastSyncLabel : ''}). Podés retomar o importar un JSON.`;
+    intro = `<span style="color:var(--color-warning)">Carga parcial:</span> tenés <strong>${cachedCount.toLocaleString()}</strong> likes (se cortó a mitad la última vez${lastSyncLabel ? ', hace ' + lastSyncLabel : ''}). Podés retomar desde donde quedó, ver el dashboard ya mismo con lo que hay, o importar un JSON.`;
   } else {
     intro = `No hay likes cacheados. Podés cargar todo desde Spotify (~190 requests, tarda ~2-4 min) o importar un JSON previo (1 request, mucho más rápido).`;
   }
@@ -86,11 +86,12 @@ async function renderStartScreen() {
   const primaryLabel = hasFull ? 'Usar los cacheados' : (hasPartial ? 'Retomar carga' : 'Cargar desde Spotify');
 
   content.innerHTML = `
-    <div class="card" style="max-width:640px">
+    <div class="card dash-state-card">
       <h3 style="margin-bottom:8px">¿Cómo querés arrancar?</h3>
       <p style="color:var(--color-text-secondary);font-size:13px;margin-bottom:16px">${intro}</p>
-      <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:center">
         <button class="btn btn-primary" id="dash-start-btn">${primaryLabel}</button>
+        ${hasPartial ? `<button class="btn btn-secondary" id="dash-usepartial-btn">Usar los ${cachedCount.toLocaleString()} que ya tengo</button>` : ''}
         <button class="btn btn-secondary" id="dash-preimport-btn">Importar JSON</button>
         <input type="file" id="dash-preimport-input" accept=".json,application/json" style="display:none">
       </div>
@@ -98,9 +99,23 @@ async function renderStartScreen() {
   `;
 
   document.getElementById('dash-start-btn').onclick = () => loadData(false);
+  const usePartialBtn = document.getElementById('dash-usepartial-btn');
+  if (usePartialBtn) usePartialBtn.onclick = () => renderFromCachedItems(cachedItems);
   const preInput = document.getElementById('dash-preimport-input');
   document.getElementById('dash-preimport-btn').onclick = () => preInput.click();
   preInput.onchange = handleImportAll;
+}
+
+// Dibuja el dashboard con lo que ya está en cache (típicamente una carga parcial que
+// cortaste con "Detener carga"). Cero requests a Spotify — si querés los que faltan,
+// está "Actualizar datos" arriba.
+function renderFromCachedItems(items) {
+  const content = document.getElementById('dash-content');
+  if (!content || !items?.length) return;
+  charts.forEach(c => c.destroy());
+  charts = [];
+  renderDashboard(content, computeStats(items));
+  refreshLastSyncLabel();
 }
 
 async function refreshLastSyncLabel() {
@@ -135,7 +150,7 @@ async function handleRefresh() {
   if (!content) return;
 
   content.innerHTML = `
-    <div class="card" style="max-width:640px;text-align:center">
+    <div class="card dash-state-card dash-state-card-center">
       <div class="spinner spinner-lg" style="margin:0 auto 16px"></div>
       <div id="refresh-text" style="font-size:14px">Chequeando delta con Spotify...</div>
     </div>
@@ -334,15 +349,15 @@ async function loadData(forceRefresh) {
   const startTime = Date.now();
 
   content.innerHTML = `
-    <div class="card" style="max-width:640px;text-align:center;padding:28px">
+    <div class="card dash-state-card dash-state-card-center">
       <div class="spinner spinner-lg" style="margin:0 auto 16px"></div>
       <div id="dash-load-text" style="font-size:15px;margin-bottom:6px;font-weight:500">Cargando Liked Songs...</div>
-      <div id="dash-load-eta" style="font-size:13px;color:var(--color-text-secondary);margin-bottom:14px">Calculando ETA...</div>
-      <div style="height:10px;background:var(--color-elevated);border-radius:5px;overflow:hidden;margin-bottom:20px">
+      <div id="dash-load-eta" style="font-size:13px;color:var(--color-text-secondary);margin-bottom:18px">Calculando ETA...</div>
+      <div style="height:10px;background:var(--color-elevated);border-radius:5px;overflow:hidden;margin-bottom:22px">
         <div id="dash-load-bar" style="height:100%;background:var(--color-accent);width:0%;transition:width 0.2s"></div>
       </div>
       <button class="btn btn-danger" id="dash-cancel-btn" style="min-width:180px">Detener carga</button>
-      <div style="font-size:12px;color:var(--color-text-muted);margin-top:10px">Podés detener sin problema — la próxima vez retoma desde donde quedó.</div>
+      <div style="font-size:12px;color:var(--color-text-muted);margin-top:12px">Podés detener sin problema — la próxima vez retoma desde donde quedó.</div>
     </div>
   `;
 
@@ -389,7 +404,7 @@ async function loadData(forceRefresh) {
   } catch (e) {
     const cancelled = e.message.includes('cancelada');
     content.innerHTML = `
-      <div class="card" style="text-align:center;padding:40px;max-width:640px">
+      <div class="card dash-state-card dash-state-card-center" style="padding:40px">
         <p style="color:${cancelled ? 'var(--color-warning)' : 'var(--color-error)'};margin-bottom:12px">
           ${cancelled ? 'Carga cancelada.' : e.message}
         </p>
@@ -510,7 +525,7 @@ function renderDashboard(container, stats) {
       </div>
     </div>
 
-    <div class="card" id="listened-year-card" style="margin-top:20px;display:none">
+    <div class="card" id="listened-year-card" style="margin-top:22px;margin-bottom:22px;display:none">
       <div style="display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin-bottom:10px;flex-wrap:wrap">
         <h3 style="margin:0">Álbumes escuchados por año</h3>
         <span style="font-size:12px;color:var(--color-text-muted)" id="listened-year-hint">Detectados desde tu historial · click para ver la lista</span>

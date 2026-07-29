@@ -2,7 +2,7 @@ import { getAllLikedTracks, createPlaylist, addTracksToPlaylist, invalidatePlayl
 import { hasKey, setKey, getArtistTopTags, getCachedTags, setCachedTags, mergeCachedTags } from '../api/lastfm.js';
 import * as statsfm from '../api/statsfm.js';
 import { getGenresForArtist as mbGetGenres } from '../api/musicbrainz.js';
-import { showProgress, hideProgress, promptPlaylistName, alertModal, escapeHtml } from '../ui/components.js';
+import { showProgress, hideProgress, progressController, isCancelled, promptPlaylistName, alertModal, escapeHtml } from '../ui/components.js';
 import { showToast } from '../ui/toast.js';
 import { tagToGroup } from './genre-groups.js';
 
@@ -152,9 +152,10 @@ async function start() {
   const content = document.getElementById('genre-content');
   content.innerHTML = `<div class="empty-state"><div class="spinner spinner-lg"></div><div style="margin-top:16px">Cargando Liked Songs...</div></div>`;
 
+  const prog = progressController('Cargando likes...');
   try {
-    likes = await getAllLikedTracks(({ loaded, total }) => showProgress('Cargando likes...', loaded, total));
-    hideProgress();
+    likes = await getAllLikedTracks(({ loaded, total }) => prog.update(loaded, total), { signal: prog.signal });
+    prog.done();
 
     const artistNames = extractUniqueArtists(likes);
     const uncached = artistNames.filter(a => !getCachedTags(a));
@@ -201,7 +202,10 @@ async function start() {
     if (uncached.length === 0) showGenres();
   } catch (e) {
     hideProgress();
-    content.innerHTML = `<div class="card"><p style="color:var(--color-error)">${escapeHtml(e.message)}</p></div>`;
+    const msg = isCancelled(e)
+      ? 'Carga detenida. Lo que se bajó quedó guardado — entrá de nuevo para retomar.'
+      : escapeHtml(e.message);
+    content.innerHTML = `<div class="card"><p style="color:var(--color-${isCancelled(e) ? 'warning' : 'error'})">${msg}</p></div>`;
   }
 }
 

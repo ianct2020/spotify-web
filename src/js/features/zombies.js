@@ -1,5 +1,5 @@
 import { getAllLikedTracks, getAllUserPlaylists, getAllPlaylistItems, removeLikedTracks, removeTracksFromPlaylist } from '../api.js';
-import { showProgress, hideProgress, typeConfirmModal, renderTrackRow, escapeHtml } from '../ui/components.js';
+import { showProgress, hideProgress, progressController, isCancelled, typeConfirmModal, renderTrackRow, escapeHtml } from '../ui/components.js';
 import { showToast } from '../ui/toast.js';
 
 const FADE_DURATION_MS = 15000;
@@ -31,27 +31,30 @@ async function analyze() {
   selectedPlaylistUris.clear();
 
   try {
-    showProgress('Cargando Liked Songs...', 0, 0);
+    const prog = progressController('Cargando Liked Songs...');
     const likes = await getAllLikedTracks(({ loaded, total }) => {
-      showProgress('Cargando Liked Songs...', loaded, total);
-    });
+      prog.update(loaded, total);
+    }, { signal: prog.signal });
 
     const zombieLikes = likes.filter(item => {
       const t = item.track;
       return !t || !t.id || t.is_playable === false;
     });
 
-    showProgress('Cargando playlists...', 0, 0);
-    const playlists = await getAllUserPlaylists();
+    prog.update(0, 0, 'Cargando playlists...');
+    const playlists = await getAllUserPlaylists(({ loaded, total }) => {
+      prog.update(loaded, total, 'Cargando playlists...');
+    }, { signal: prog.signal });
 
     const zombiesByPlaylist = [];
     const skipped = [];
     for (let i = 0; i < playlists.length; i++) {
+      if (prog.signal.aborted) throw new Error('Carga cancelada');
       const pl = playlists[i];
-      showProgress(`Escaneando playlists... (${i + 1}/${playlists.length})`, i + 1, playlists.length);
+      prog.update(i + 1, playlists.length, `Escaneando playlists... (${i + 1}/${playlists.length})`);
       let items;
       try {
-        items = await getAllPlaylistItems(pl.id);
+        items = await getAllPlaylistItems(pl.id, null, { signal: prog.signal });
       } catch (e) {
         if (/40[34]/.test(e.message)) {
           console.warn(`Playlist "${pl.name}" skipped: ${e.message}`);
@@ -208,8 +211,12 @@ async function analyze() {
 
   } catch (e) {
     hideProgress();
-    showToast(e.message, 'error');
-    console.error(e);
+    if (isCancelled(e)) {
+      showToast('Carga detenida — lo que se bajó quedó guardado', 'warning');
+    } else {
+      showToast(e.message, 'error');
+      console.error(e);
+    }
   } finally {
     btn.disabled = false;
   }

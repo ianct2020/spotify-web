@@ -686,6 +686,14 @@ body.sidebar-hidden .sidebar.desktop-open {
   gap: 16px;
 }
 
+.progress-note {
+  color: var(--color-text-muted);
+  font-size: 12px;
+  margin-top: -8px;
+  max-width: 340px;
+  text-align: center;
+}
+
 .progress-text {
   color: var(--color-text-secondary);
   font-size: 14px;
@@ -711,6 +719,19 @@ body.sidebar-hidden .sidebar.desktop-open {
    cuando se revela #history-section, o el user achica la ventana) queda más ancha que la
    grilla y se pasa para la derecha. Con minmax(0, 1fr) el track sí achica, el
    ResizeObserver de Chart.js ve el cambio y el chart se re-renderiza al ancho nuevo. */
+/* Cards de estado del dashboard (arranque, carga, refresh, error). Van centradas en la
+   página: antes tenían max-width sin margin auto y quedaban pegadas a la izquierda. */
+.dash-state-card {
+  max-width: 640px;
+  margin-left: auto;
+  margin-right: auto;
+  padding: 28px;
+}
+
+.dash-state-card-center {
+  text-align: center;
+}
+
 .dash-grid {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);

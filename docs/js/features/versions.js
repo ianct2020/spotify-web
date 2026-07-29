@@ -1,6 +1,6 @@
-import { getAllLikedTracks, removeLikedTracks } from '../api.js?v=79';
-import { showProgress, hideProgress, typeConfirmModal, renderTrackRow, escapeHtml } from '../ui/components.js?v=79';
-import { showToast } from '../ui/toast.js?v=79';
+import { getAllLikedTracks, removeLikedTracks } from '../api.js?v=80';
+import { showProgress, hideProgress, progressController, isCancelled, typeConfirmModal, renderTrackRow, escapeHtml } from '../ui/components.js?v=80';
+import { showToast } from '../ui/toast.js?v=80';
 
 const keepIds = new Set();
 // Persiste los cluster idx que ya resolviste (batchDelete). Sobrevive a "Ver más"
@@ -49,11 +49,11 @@ async function analyze(force = false) {
 
   try {
     const msg = force ? 'Re-bajando Liked Songs desde Spotify...' : 'Cargando Liked Songs...';
-    showProgress(msg, 0, 0);
+    const prog = progressController(msg);
     const likes = await getAllLikedTracks(({ loaded, total }) => {
-      showProgress(msg, loaded, total);
-    }, { force });
-    hideProgress();
+      prog.update(loaded, total);
+    }, { force, signal: prog.signal });
+    prog.done();
 
     const groups = new Map();
     likes.forEach(item => {
@@ -122,8 +122,12 @@ async function analyze(force = false) {
 
   } catch (e) {
     hideProgress();
-    showToast(e.message, 'error');
-    console.error(e);
+    if (isCancelled(e)) {
+      showToast('Carga detenida — lo que se bajó quedó guardado', 'warning');
+    } else {
+      showToast(e.message, 'error');
+      console.error(e);
+    }
   } finally {
     btn.disabled = false;
   }
