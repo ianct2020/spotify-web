@@ -6,8 +6,8 @@
 // un mensaje explicando que este historial es de otro user. Evita mostrar
 // los datos personales de Ian al resto de los usuarios.
 
-import { idbGetCached, idbSetCached } from '../idb.js?v=87';
-import { getCurrentUserId } from '../api.js?v=87';
+import { idbGetCached, idbSetCached } from '../idb.js?v=88';
+import { getCurrentUserId } from '../api.js?v=88';
 
 const HISTORY_OWNER_ID = 'orhs6wu5ykk7ql80u92ujn74o';
 
@@ -131,7 +131,14 @@ function ownerLockedMessage(featureName = 'esta vista') {
       ${featureName} usa el <strong>Extended Streaming History</strong> del dueño de esta instancia de Fonoteca (Ian).
       Como estás logueado con otra cuenta, no se muestra su historial personal.
       Podés seguir usando el resto de las funciones que trabajan solo con tus likes (Sync Mirror, Dedupe, Versiones, Zombis, Buscar likes, Por artista, Por género, Smart Playlists, etc.).
-    </p></div>`;
+    </p>
+    <p style="color:var(--color-text-secondary);margin:12px 0 10px">
+      ¿Querés esto con <strong>tus</strong> datos? Pedile tu historial a Spotify: en la ventana que se abre,
+      bajá hasta <strong>«Descargar tus datos»</strong>, marcá <strong>Historial de reproducción ampliado</strong>
+      y confirmá. Llega por mail en unos días (Spotify no deja automatizar ese click, hay que tocarlo a mano).
+    </p>
+    <button class="btn btn-secondary btn-sm" onclick="window.open('https://www.spotify.com/account/privacy/','sp_privacy','width='+Math.round(screen.width*0.67)+',height='+Math.round(screen.height*0.85)+',left='+Math.round(screen.width*0.16))">Abrir Privacidad de Spotify</button>
+    </div>`;
 }
 
 export { loadHistoryStats, loadTrackPlays, loadListenedAlbums, loadSkipStats, playsFor, trackIdOf, isOwner, HISTORY_OWNER_ID, ownerLockedMessage };

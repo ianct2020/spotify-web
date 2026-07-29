@@ -1102,3 +1102,105 @@ body.sidebar-hidden .sidebar.desktop-open {
   .wrapped-card,
   #history-heatmap svg rect.heatmap-cell { animation: none; }
 }
+
+/* ============ Preview player global (iTunes 30s) ============ */
+
+/* Pill flotante abajo a la derecha: qué está sonando + stop */
+.preview-pill {
+  position: fixed;
+  right: 20px;
+  bottom: 20px;
+  z-index: 900;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--color-elevated);
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  padding: 9px 10px 9px 16px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5), var(--shadow-glow);
+  max-width: min(420px, calc(100vw - 40px));
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(10px);
+  transition: opacity 0.18s ease, transform 0.18s ease;
+}
+.preview-pill.show {
+  opacity: 1;
+  pointer-events: auto;
+  transform: none;
+}
+.preview-pill-label {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--color-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.preview-pill-close {
+  background: none;
+  border: none;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+  padding: 4px 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.preview-pill-close:hover { color: var(--color-text); }
+
+/* Barritas de ecualizador animadas mientras suena */
+.preview-eq {
+  display: flex;
+  gap: 2px;
+  align-items: flex-end;
+  height: 14px;
+  flex-shrink: 0;
+}
+.preview-eq span {
+  width: 3px;
+  background: var(--color-accent);
+  border-radius: 1px;
+  animation: previewEq 0.9s ease-in-out infinite;
+}
+.preview-eq span:nth-child(2) { animation-delay: 0.25s; }
+.preview-eq span:nth-child(3) { animation-delay: 0.5s; }
+@keyframes previewEq {
+  0%, 100% { height: 4px; }
+  50% { height: 14px; }
+}
+.preview-pill.loading .preview-eq span {
+  animation-play-state: paused;
+  height: 4px;
+  opacity: 0.5;
+}
+@media (prefers-reduced-motion: reduce) {
+  .preview-eq span { animation: none; height: 10px; }
+}
+
+/* Affordance de hover-play en filas/tiles del Wrapped */
+.wrapped-top-row[data-hover],
+.wrapped-tile[data-hover] {
+  cursor: pointer;
+  transition: background 0.12s ease;
+  border-radius: var(--radius-sm, 6px);
+}
+.wrapped-top-row[data-hover]:hover,
+.wrapped-tile[data-hover]:hover {
+  background: var(--color-accent-soft);
+}
+
+/* Nota "hasta cuándo llegan los datos" en el hero del año más nuevo */
+.wrapped-hero-note {
+  margin-top: 10px;
+  font-size: 12.5px;
+  color: var(--color-text-muted);
+  background: var(--color-accent-soft);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm, 6px);
+  padding: 6px 12px;
+  display: inline-block;
+}
+.wrapped-hero-note strong { color: var(--color-text); }
