@@ -3,6 +3,8 @@ import { showProgress, hideProgress, alertModal, escapeHtml } from '../ui/compon
 import { showToast } from '../ui/toast.js';
 import { openListenedAlbumsPicker } from './listened-shared.js';
 import { loadHistoryStats, loadListenedAlbums } from './history-data.js';
+import { findArtistTopPreview } from '../api/itunes.js';
+import { hoverIn, hoverOut } from '../ui/preview-player.js';
 
 let charts = [];
 let _loadController = null;
@@ -678,6 +680,7 @@ async function hydrateHistorySection() {
       },
       options: {
         ...CHART_DEFAULTS,
+        ...artistHoverHandlers(topArtists.map(a => a.name)),
         indexAxis: 'y',
         // mode 'y' + intersect:false: en barras horizontales proyecta el Y del mouse
         // a la fila de categoría — engancha la barra que el ojo espera, sin off-by-one
@@ -706,6 +709,7 @@ async function hydrateHistorySection() {
         },
       },
     });
+    wireChartHoverExit('chart-history-artists');
   }
 
   // Top 20 álbumes por minutos (lista simple)
@@ -992,6 +996,29 @@ function makeChart(id, config) {
   return chart;
 }
 
+// Hover-play para charts de artistas: apoyás el mouse en una barra y suena el
+// tema más escuchado del artista (preview iTunes, se corta al salir). El delay
+// de 500ms evita ametrallar la API barriendo el chart de punta a punta.
+function artistHoverHandlers(labels) {
+  return {
+    onHover(evt, elements) {
+      if (elements?.length) {
+        const name = labels[elements[0].index];
+        hoverIn(`dash-art:${name}`, async () => {
+          const p = await findArtistTopPreview(name);
+          return p && { url: p.url, label: `${p.track} — ${p.artist}` };
+        }, 500);
+      } else {
+        hoverOut();
+      }
+    },
+  };
+}
+
+function wireChartHoverExit(id) {
+  document.getElementById(id)?.addEventListener('mouseleave', hoverOut);
+}
+
 function buildCharts(stats) {
   const sortedDecades = Object.entries(stats.decades).sort((a, b) => a[0].localeCompare(b[0]));
 
@@ -1022,6 +1049,7 @@ function buildCharts(stats) {
     },
     options: {
       ...CHART_DEFAULTS,
+      ...artistHoverHandlers(stats.topArtists.map(a => a[0])),
       indexAxis: 'y',
       // Ver dashboard "chart-history-artists": mismo motivo.
       interaction: { mode: 'nearest', intersect: false, axis: 'y' },
@@ -1038,6 +1066,7 @@ function buildCharts(stats) {
       },
     },
   });
+  wireChartHoverExit('chart-artists');
 
   const dowLabels = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
   makeChart('chart-dow', {

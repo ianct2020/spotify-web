@@ -1,11 +1,14 @@
 // Skips crónicos: likes que reproducís seguido pero casi siempre le das next.
 // Cruce local: likes vs history-skip-stats.json (ok = trackdone, skip = fwdbtn con ms>=5s).
-// Preview 30s con iframe embed oficial (preview_url murió post-migración feb 2026).
+// Preview 30s instantáneo vía iTunes (arranca en el estribillo, no suma plays
+// en tu historial de Spotify). Fallback: iframe embed oficial si iTunes no lo tiene.
 
-import { getBestAvailableLikes, removeLikedTracks } from '../api.js?v=87';
-import { loadSkipStats, trackIdOf, isOwner, ownerLockedMessage } from './history-data.js?v=87';
-import { escapeHtml, confirmModal } from '../ui/components.js?v=87';
-import { showToast } from '../ui/toast.js?v=87';
+import { getBestAvailableLikes, removeLikedTracks } from '../api.js?v=88';
+import { loadSkipStats, trackIdOf, isOwner, ownerLockedMessage } from './history-data.js?v=88';
+import { escapeHtml, confirmModal } from '../ui/components.js?v=88';
+import { showToast } from '../ui/toast.js?v=88';
+import { findTrackPreview } from '../api/itunes.js?v=88';
+import { togglePreview, playingKey } from '../ui/preview-player.js?v=88';
 
 let cache = null;
 let minPlays = 5;    // solo tracks con ≥N plays totales (ok+skip)
@@ -148,7 +151,7 @@ function renderRow(r, i) {
           <span class="skips-badge-ratio">${r.ratio}%</span>
           <span class="skips-badge-count">${r.skip}/${r.total}</span>
         </span>
-        <button class="skips-play-btn" data-id="${r.id}" title="Preview 30s (Spotify)">
+        <button class="skips-play-btn ${playingKey() === `sk:${r.id}` ? 'playing' : ''}" data-id="${r.id}" title="Preview 30s — no suma plays en tu historial">
           <svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14"><path d="M8 5v14l11-7z"/></svg>
         </button>
         ${r.uri
@@ -189,13 +192,29 @@ function wireRows() {
     updateBtn();
   };
 
-  // Preview: toggle iframe embed en el slot. Solo un preview abierto a la vez
-  // para no dejar 10 iframes cargando en simultáneo.
+  // Preview: primero iTunes (instantáneo, sin plays en el historial); si no
+  // está el tema ahí, cae al iframe embed de Spotify en el slot.
   content.querySelectorAll('.skips-play-btn').forEach(btn => {
-    btn.onclick = (e) => {
+    btn.onclick = async (e) => {
       e.preventDefault();
       e.stopPropagation();
-      togglePreview(btn.dataset.id, btn);
+      const row = btn.closest('.skips-row');
+      const r = filtered()[+row.dataset.i];
+      if (!r) return;
+      // Si este tema ya tiene el embed fallback abierto, este click lo cierra.
+      const slot = content.querySelector(`.skips-preview-slot[data-id="${r.id}"].open`);
+      if (slot) {
+        closeEmbeds(content);
+        btn.classList.remove('playing');
+        return;
+      }
+      closeEmbeds(content);
+      const artist = (r.track.artists || []).map(a => a.name || a)[0] || '';
+      const res = await togglePreview(`sk:${r.id}`, async () => {
+        const p = await findTrackPreview(artist, r.track.name || '');
+        return p && { url: p.url, label: `${r.track.name} — ${artist}` };
+      });
+      if (res === null) toggleEmbed(r.id, btn); // iTunes no lo tiene → embed Spotify
     };
   });
 
@@ -222,21 +241,33 @@ function wireRows() {
   };
 }
 
-// Toggle del preview iframe. Cierra el que estaba abierto (si había uno) antes
-// de abrir el nuevo. Usa el embed oficial de Spotify (30s sin auth).
-function togglePreview(id, btn) {
+// Sincroniza el estado .playing de los botones con el player global.
+// Listener único a nivel módulo: si la página no está montada, el query no matchea nada.
+document.addEventListener('previewchange', (e) => {
+  const content = document.getElementById('skips-content');
+  if (!content) return;
+  const key = e.detail.key || '';
+  content.querySelectorAll('.skips-play-btn').forEach(b => {
+    b.classList.toggle('playing', key === `sk:${b.dataset.id}`);
+  });
+});
+
+function closeEmbeds(content) {
+  content.querySelectorAll('.skips-preview-slot.open').forEach(s => {
+    s.classList.remove('open');
+    s.innerHTML = '';
+  });
+}
+
+// Fallback: toggle del iframe embed oficial de Spotify (30s sin auth).
+// Solo se usa cuando iTunes no tiene el tema. Ojo: este SÍ puede sumar al historial.
+function toggleEmbed(id, btn) {
   const content = document.getElementById('skips-content');
   const slot = content.querySelector(`.skips-preview-slot[data-id="${id}"]`);
   if (!slot) return;
 
   const isOpen = slot.classList.contains('open');
-
-  // Cerrar todos los previews abiertos
-  content.querySelectorAll('.skips-preview-slot.open').forEach(s => {
-    s.classList.remove('open');
-    s.innerHTML = '';
-  });
-  content.querySelectorAll('.skips-play-btn.playing').forEach(b => b.classList.remove('playing'));
+  closeEmbeds(content);
 
   if (!isOpen) {
     slot.innerHTML = `

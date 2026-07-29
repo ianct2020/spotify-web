@@ -1,8 +1,10 @@
 // Wrapped propio: mini-resumen tuyo por año, hecho con el Extended Streaming History.
 // A diferencia del Wrapped oficial (que corre oct-sept), este es del año calendario completo.
 
-import { loadHistoryStats, isOwner, ownerLockedMessage } from './history-data.js?v=87';
-import { escapeHtml } from '../ui/components.js?v=87';
+import { loadHistoryStats, isOwner, ownerLockedMessage } from './history-data.js?v=88';
+import { escapeHtml } from '../ui/components.js?v=88';
+import { findTrackPreview, findArtistTopPreview } from '../api/itunes.js?v=88';
+import { attachHover } from '../ui/preview-player.js?v=88';
 
 let stats = null;
 let selectedYear = null;
@@ -61,7 +63,7 @@ export async function render(container) {
         <div>
           <div style="font-size:12px;color:var(--color-text-muted);letter-spacing:0.06em;text-transform:uppercase">Elegí el año</div>
         </div>
-        <div style="font-size:12px;color:var(--color-text-muted)">Datos desde ${fmtDate(stats.totals?.first_play || stats.years[0].first_play)} · ${stats.totals.plays_valid.toLocaleString('es-AR')} plays válidas (≥30s)</div>
+        <div style="font-size:12px;color:var(--color-text-muted)">Datos desde ${fmtDate(stats.totals?.first_play || stats.years[0].first_play)} <strong style="color:var(--color-text)">hasta el ${fmtDate(stats.totals?.last_play || yearsDesc[0].last_play)}</strong> · ${stats.totals.plays_valid.toLocaleString('es-AR')} plays válidas (≥30s)</div>
       </div>
       <div style="display:flex;gap:8px;flex-wrap:wrap" id="wrapped-year-tabs">
         ${yearsDesc.map(y => `
@@ -99,6 +101,7 @@ function renderYearCard() {
   const topTrack = y.top_tracks?.[0];
   // peak_month.month es un número 1-12 (así lo guarda gen-stats.py)
   const monthName = y.peak_month ? MESES[(Number(y.peak_month.month) || 1) - 1] : '';
+  const isLatest = y.year === Math.max(...stats.years.map(yy => yy.year));
 
   holder.innerHTML = `
     <div class="card wrapped-card">
@@ -106,26 +109,27 @@ function renderYearCard() {
         <div class="wrapped-hero-year">${y.year}</div>
         <div class="wrapped-hero-min">${fmtMinutes(y.min)}</div>
         <div class="wrapped-hero-sub">${fmtDays(y.min)} · ${y.plays.toLocaleString('es-AR')} plays</div>
+        ${isLatest ? `<div class="wrapped-hero-note">El export llega hasta el <strong>${fmtDate(y.last_play)}</strong> — lo que escuchaste después no está contado. Para actualizarlo hay que pedirle el historial a Spotify de nuevo.</div>` : ''}
       </div>
 
       <div class="wrapped-year-layout">
         <div class="wrapped-year-stats-left">
           ${topArtist ? `
-            <div class="wrapped-tile compact">
+            <div class="wrapped-tile compact" data-hover="y-tile-art:0">
               <div class="wrapped-tile-label">Artista del año</div>
               <div class="wrapped-tile-value">${escapeHtml(topArtist.name)}</div>
               <div class="wrapped-tile-hint">${fmtMinutes(topArtist.min)} · ${topArtist.plays.toLocaleString('es-AR')} plays</div>
             </div>
           ` : ''}
           ${topTrack ? `
-            <div class="wrapped-tile compact">
+            <div class="wrapped-tile compact" data-hover="y-tile-trk:0">
               <div class="wrapped-tile-label">Track del año</div>
               <div class="wrapped-tile-value" style="font-size:16px">${escapeHtml(topTrack.name)}</div>
               <div class="wrapped-tile-hint">${escapeHtml(topTrack.artist)} · ${fmtMinutes(topTrack.min)}</div>
             </div>
           ` : ''}
           ${y.discovery ? `
-            <div class="wrapped-tile compact">
+            <div class="wrapped-tile compact" data-hover="y-tile-disc:0">
               <div class="wrapped-tile-label">Descubrimiento</div>
               <div class="wrapped-tile-value">${escapeHtml(y.discovery.artist)}</div>
               <div class="wrapped-tile-hint">Primera vez en ${y.year} · ${fmtMinutes(y.discovery.min)}</div>
@@ -177,21 +181,48 @@ function renderYearCard() {
     </div>
 
     <div class="wrapped-top-cards">
-      ${renderTopCard('Top artistas', y.top_artists?.slice(0, 15) || [], 'name', 'min', 'plays')}
+      ${renderTopCard('Top artistas', y.top_artists?.slice(0, 15) || [], 'name', 'min', 'plays', null, 'y-art')}
       ${renderTopCard('Top álbumes', y.top_albums?.slice(0, 15) || [], 'name', 'min', 'plays', 'artist')}
-      ${renderTopCard('Top tracks', y.top_tracks?.slice(0, 15) || [], 'name', 'min', 'plays', 'artist')}
+      ${renderTopCard('Top tracks', y.top_tracks?.slice(0, 15) || [], 'name', 'min', 'plays', 'artist', 'y-trk')}
     </div>
   `;
+
+  wireTopHover(holder, 'y-art', y.top_artists?.slice(0, 15) || [], 'artist');
+  wireTopHover(holder, 'y-trk', y.top_tracks?.slice(0, 15) || [], 'track');
+  wireTopHover(holder, 'y-tile-art', topArtist ? [topArtist] : [], 'artist');
+  wireTopHover(holder, 'y-tile-trk', topTrack ? [topTrack] : [], 'track');
+  wireTopHover(holder, 'y-tile-disc', y.discovery ? [{ name: y.discovery.artist }] : [], 'artist');
 }
 
-function renderTopCard(title, items, keyName, keyMin, keyPlays, keyArtist) {
+// Hover-play: pasás el mouse por una fila/tile y suena un preview de 30s
+// (iTunes: el top del artista, o el track puntual). Se corta al sacar el mouse.
+function wireTopHover(holder, cardKey, items, kind) {
+  holder.querySelectorAll(`[data-hover^="${cardKey}:"]`).forEach(el => {
+    const i = +el.dataset.hover.split(':')[1];
+    const it = items[i];
+    if (!it) return;
+    el.title = 'Mantené el mouse para escuchar un preview';
+    const getter = kind === 'artist'
+      ? async () => {
+          const p = await findArtistTopPreview(it.name);
+          return p && { url: p.url, label: `${p.track} — ${p.artist}` };
+        }
+      : async () => {
+          const p = await findTrackPreview(it.artist || '', it.name);
+          return p && { url: p.url, label: `${it.name} — ${it.artist || ''}` };
+        };
+    attachHover(el, `wr:${cardKey}:${i}`, getter);
+  });
+}
+
+function renderTopCard(title, items, keyName, keyMin, keyPlays, keyArtist, hoverKey) {
   if (!items.length) return '';
   return `
     <div class="card wrapped-top-card">
       <h3 style="margin:0 0 12px 0;font-size:16px">${title}</h3>
       <div class="wrapped-top-scroll">
         ${items.map((it, i) => `
-          <div class="wrapped-top-row">
+          <div class="wrapped-top-row"${hoverKey ? ` data-hover="${hoverKey}:${i}"` : ''}>
             <span class="wrapped-top-rank">${i + 1}</span>
             <div class="wrapped-top-info">
               <div class="wrapped-top-name">${escapeHtml(it[keyName])}</div>
@@ -236,14 +267,14 @@ function renderAllTime() {
       <div class="wrapped-year-layout">
         <div class="wrapped-year-stats-left">
           ${topArtist ? `
-            <div class="wrapped-tile compact">
+            <div class="wrapped-tile compact" data-hover="at-tile-art:0">
               <div class="wrapped-tile-label">Artista de siempre</div>
               <div class="wrapped-tile-value">${escapeHtml(topArtist.name)}</div>
               <div class="wrapped-tile-hint">${fmtMinutes(topArtist.min)} · ${(topArtist.plays || 0).toLocaleString('es-AR')} plays</div>
             </div>
           ` : ''}
           ${topTrack ? `
-            <div class="wrapped-tile compact">
+            <div class="wrapped-tile compact" data-hover="at-tile-trk:0">
               <div class="wrapped-tile-label">Track de siempre</div>
               <div class="wrapped-tile-value" style="font-size:16px">${escapeHtml(topTrack.name)}</div>
               <div class="wrapped-tile-hint">${escapeHtml(topTrack.artist)} · ${fmtMinutes(topTrack.min)}</div>
@@ -297,9 +328,14 @@ function renderAllTime() {
     </div>
 
     <div class="wrapped-top-cards" style="margin-top:20px">
-      ${renderTopCard('Top artistas de siempre', (stats.top_artists_all_time || []).slice(0, 20), 'name', 'min', 'plays')}
+      ${renderTopCard('Top artistas de siempre', (stats.top_artists_all_time || []).slice(0, 20), 'name', 'min', 'plays', null, 'at-art')}
       ${renderTopCard('Top álbumes de siempre', (stats.top_albums_all_time || []).slice(0, 20), 'name', 'min', 'plays', 'artist')}
-      ${renderTopCard('Top tracks de siempre', (stats.top_tracks_all_time || []).slice(0, 20), 'name', 'min', 'plays', 'artist')}
+      ${renderTopCard('Top tracks de siempre', (stats.top_tracks_all_time || []).slice(0, 20), 'name', 'min', 'plays', 'artist', 'at-trk')}
     </div>
   `;
+
+  wireTopHover(holder, 'at-art', (stats.top_artists_all_time || []).slice(0, 20), 'artist');
+  wireTopHover(holder, 'at-trk', (stats.top_tracks_all_time || []).slice(0, 20), 'track');
+  wireTopHover(holder, 'at-tile-art', topArtist ? [topArtist] : [], 'artist');
+  wireTopHover(holder, 'at-tile-trk', topTrack ? [topTrack] : [], 'track');
 }
