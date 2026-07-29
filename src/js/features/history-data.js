@@ -20,16 +20,22 @@ const STATS_VERSION = 2;
 const PLAYS_VERSION = 2; // ahora incluye entries "partial" para tracks con solo plays <30s
 const LISTENED_VERSION = 2;
 const SKIP_VERSION = 1;
+const DETAIL_VERSION = 1;   // ficha de canción: plays por mes + primera/última
+const RECORDS_VERSION = 1;  // página Récords
 const STATS_KEY = `history_stats_v${STATS_VERSION}`;
 const PLAYS_KEY = `history_track_plays_v${PLAYS_VERSION}`;
 const LISTENED_KEY = `history_listened_albums_v${LISTENED_VERSION}`;
 const SKIP_KEY = `history_skip_stats_v${SKIP_VERSION}`;
+const DETAIL_KEY = `history_track_detail_v${DETAIL_VERSION}`;
+const RECORDS_KEY = `history_records_v${RECORDS_VERSION}`;
 const TTL_MIN = 30 * 24 * 60;
 
 let statsMem = null;
 let playsMem = null;
 let listenedMem = null;
 let skipMem = null;
+let detailMem = null;
+let recordsMem = null;
 
 async function loadHistoryStats() {
   if (statsMem) return statsMem;
@@ -111,6 +117,46 @@ async function loadSkipStats() {
   return skipMem;
 }
 
+async function loadTrackDetail() {
+  if (detailMem) return detailMem;
+  if (!(await isOwner())) return null;
+  try {
+    const cached = await idbGetCached(DETAIL_KEY);
+    if (cached && cached.tracks) { detailMem = cached; return detailMem; }
+  } catch { /* ignora */ }
+  try {
+    const url = new URL(`../../data/history-track-detail.json?v=${DETAIL_VERSION}`, import.meta.url);
+    const res = await fetch(url);
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    detailMem = await res.json();
+    try { await idbSetCached(DETAIL_KEY, detailMem, TTL_MIN); } catch { /* ignora */ }
+  } catch (e) {
+    console.warn('No se pudo cargar history-track-detail:', e.message);
+    detailMem = null;
+  }
+  return detailMem;
+}
+
+async function loadRecords() {
+  if (recordsMem) return recordsMem;
+  if (!(await isOwner())) return null;
+  try {
+    const cached = await idbGetCached(RECORDS_KEY);
+    if (cached && cached.top_days) { recordsMem = cached; return recordsMem; }
+  } catch { /* ignora */ }
+  try {
+    const url = new URL(`../../data/history-records.json?v=${RECORDS_VERSION}`, import.meta.url);
+    const res = await fetch(url);
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    recordsMem = await res.json();
+    try { await idbSetCached(RECORDS_KEY, recordsMem, TTL_MIN); } catch { /* ignora */ }
+  } catch (e) {
+    console.warn('No se pudo cargar history-records:', e.message);
+    recordsMem = null;
+  }
+  return recordsMem;
+}
+
 function trackIdOf(uri) {
   return (uri || '').startsWith('spotify:track:') ? uri.slice(14) : null;
 }
@@ -141,4 +187,4 @@ function ownerLockedMessage(featureName = 'esta vista') {
     </div>`;
 }
 
-export { loadHistoryStats, loadTrackPlays, loadListenedAlbums, loadSkipStats, playsFor, trackIdOf, isOwner, HISTORY_OWNER_ID, ownerLockedMessage };
+export { loadHistoryStats, loadTrackPlays, loadListenedAlbums, loadSkipStats, loadTrackDetail, loadRecords, playsFor, trackIdOf, isOwner, HISTORY_OWNER_ID, ownerLockedMessage };

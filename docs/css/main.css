@@ -1248,3 +1248,77 @@ body.sidebar-hidden .sidebar.desktop-open {
   display: inline-block;
 }
 .wrapped-hero-note strong { color: var(--color-text); }
+
+/* ============ Ficha de canción (track-card) ============ */
+.tc-stats {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+}
+.tc-stat {
+  background: var(--color-elevated);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm, 6px);
+  padding: 10px 8px;
+  text-align: center;
+}
+.tc-stat-v {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--color-accent);
+}
+.tc-stat-l {
+  font-size: 11px;
+  color: var(--color-text-muted);
+  margin-top: 2px;
+}
+@media (max-width: 520px) {
+  .tc-stats { grid-template-columns: repeat(2, 1fr); }
+}
+
+/* ============ Récords ============ */
+.records-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+  gap: 16px;
+}
+.records-milestones {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 10px;
+}
+.records-milestone {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--color-elevated);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm, 6px);
+  padding: 10px 12px;
+}
+.records-milestone-n {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--color-accent);
+  flex-shrink: 0;
+}
+.records-milestone-info { min-width: 0; }
+.records-milestone-track {
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.records-milestone-meta {
+  font-size: 11px;
+  color: var(--color-text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Filas clickeables que abren la ficha */
+.tc-clickable { cursor: pointer; }
+.tc-clickable:hover .skips-title,
+.tc-clickable:hover .track-name { color: var(--color-accent); }

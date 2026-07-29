@@ -2,9 +2,10 @@
 // Sirve para cuando la búsqueda de Spotify tarda o no encuentra bien:
 // tipeás, filtra en memoria por título/artista/álbum, sin pegarle a la API.
 
-import { getBestAvailableLikes } from '../api.js?v=89';
-import { renderTrackRow, escapeHtml } from '../ui/components.js?v=89';
-import { showToast } from '../ui/toast.js?v=89';
+import { getBestAvailableLikes } from '../api.js?v=90';
+import { renderTrackRow, escapeHtml } from '../ui/components.js?v=90';
+import { openTrackCard } from './track-card.js?v=90';
+import { showToast } from '../ui/toast.js?v=90';
 
 const MAX_RESULTS = 300;
 let cachedItems = [];
@@ -150,7 +151,7 @@ function renderResults(holder, matches, query) {
         const albumLine = t.album?.name ? `<div style="font-size:11px;color:var(--color-text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(t.album.name)}</div>` : '';
         return `
           <div style="display:flex;align-items:center;gap:10px;padding:6px 4px;border-bottom:1px solid var(--color-border)">
-            <div style="flex:1;min-width:0">${renderTrackRow(t, albumLine)}</div>
+            <div class="sl-info tc-clickable" data-i="${shown.indexOf(item)}" title="Ver ficha del tema" style="flex:1;min-width:0">${renderTrackRow(t, albumLine)}</div>
             ${added}
             ${openBtn}
           </div>
@@ -158,4 +159,22 @@ function renderResults(holder, matches, query) {
       }).join('')}
     </div>
   `;
+
+  // Click en la fila → ficha de canción
+  holder.querySelectorAll('.sl-info').forEach(el => {
+    el.onclick = () => {
+      const t = shown[+el.dataset.i]?.track;
+      if (!t) return;
+      const id = t.id || (t.uri || '').split(':').pop();
+      if (!id) return;
+      const imgs = t.album?.images || [];
+      openTrackCard({
+        id,
+        name: t.name,
+        artist: (t.artists || []).map(a => a.name || a)[0] || '',
+        album: t.album?.name,
+        img: imgs[2]?.url || imgs[1]?.url || imgs[0]?.url,
+      });
+    };
+  });
 }

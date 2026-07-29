@@ -32,6 +32,10 @@ STATS_VERSION = 2            # bump: excluye "Sonido Para Sacar Agua Del Movil"
 TRACK_PLAYS_VERSION = 2      # incluye entries "partial" para tracks solo con plays <30s
 SKIP_STATS_VERSION = 1
 LISTENED_VERSION = 2         # bump: excluye "Sonido Para Sacar Agua Del Movil"
+TRACK_DETAIL_VERSION = 1     # ficha de canción: plays por mes + primera/última + récords del track
+RECORDS_VERSION = 1          # página de récords: días pico, maratones, rachas, hitos
+DETAIL_MIN_PLAYS = 5         # solo tracks con >=N plays válidas entran al detalle (controla peso)
+MILESTONE_TARGETS = {1, 10000, 25000, 50000, 75000, 100000, 125000, 150000, 175000, 200000, 250000, 300000}
 TOP_N_YEAR = 40       # top X por año
 TOP_N_ALLTIME = 60    # top X global
 KEEP_TRACK_IF_MS = 60000  # solo indexamos tracks con >=60s totales (reduce peso del JSON)
@@ -41,6 +45,7 @@ KEEP_TRACK_IF_MS = 60000  # solo indexamos tracks con >=60s totales (reduce peso
 # Match case-insensitive por subcadena en el nombre del track.
 EXCLUDED_TRACK_SUBSTRINGS = [
     "sonido para sacar agua del movil",  # despertador iOS, sale en todos los tops
+    "sonido para eliminar agua",         # variante nBeats del mismo sonido funcional
 ]
 
 # Regla mix A+C para detectar "álbum escuchado" desde el historial:
@@ -166,6 +171,21 @@ def build_stats(plays, img_idx):
     # Guardamos también el meta para poder mostrar tapa/nombre sin depender de los likes.
     track_skip_stats = defaultdict(lambda: {"ok": 0, "skip": 0})
     track_skip_meta = {}
+
+    # Ficha de canción: detalle por uri (plays por mes, primera/última, días, pico diario)
+    track_uri_monthly = defaultdict(Counter)   # uri -> {"YYYY-MM": plays}
+    track_uri_first = {}
+    track_uri_last = {}
+    track_uri_daycount = defaultdict(Counter)  # uri -> {day: plays}
+    # Récords: acumuladores por día/semana
+    day_ms_global = Counter()
+    day_plays = Counter()
+    day_artist_ms = defaultdict(Counter)       # day -> Counter(artista -> ms)
+    day_track_plays = defaultdict(Counter)     # day -> Counter(tk -> plays)
+    week_track_plays = Counter()               # (tk, lunes de la semana) -> plays
+    tk_days = defaultdict(set)                 # tk -> set de días en que sonó
+    milestones = []
+    valid_seq = 0
 
     # Estado por álbum × día para detectar "escuchado" (mix A+C).
     # ak -> day (YYYY-MM-DD) -> {tracks_set, ms}
@@ -293,6 +313,24 @@ def build_stats(plays, img_idx):
         u = track_uri_stats[uri]
         u["p"] += 1
         u["ms"] += ms
+
+        # detalle por track (ficha de canción)
+        track_uri_monthly[uri][ym] += 1
+        if uri not in track_uri_first:
+            track_uri_first[uri] = day
+        track_uri_last[uri] = day
+        track_uri_daycount[uri][day] += 1
+
+        # récords
+        day_ms_global[day] += ms
+        day_plays[day] += 1
+        day_artist_ms[day][artist] += ms
+        day_track_plays[day][tk] += 1
+        week_track_plays[(tk, (dt.date() - timedelta(days=dt.weekday())).isoformat())] += 1
+        tk_days[tk].add(day)
+        valid_seq += 1
+        if valid_seq in MILESTONE_TARGETS:
+            milestones.append({"n": valid_seq, "date": day, "name": track, "artist": artist})
 
     # racha global histórica
     all_days_sorted = sorted(active_days_all)
@@ -493,7 +531,111 @@ def build_stats(plays, img_idx):
         "meta": skip_meta_out,
     }
 
-    return stats, track_plays_out, listened_payload, skip_payload
+    # ---- Ficha de canción: detalle por track (solo >=DETAIL_MIN_PLAYS plays) ----
+    track_detail_out = {}
+    for uri, months in track_uri_monthly.items():
+        if track_uri_stats[uri]["p"] < DETAIL_MIN_PLAYS:
+            continue
+        tid = uri.split(":")[-1]
+        daycounts = track_uri_daycount[uri]
+        track_detail_out[tid] = {
+            "m": dict(sorted(months.items())),
+            "f": track_uri_first[uri],
+            "l": track_uri_last[uri],
+            "d": len(daycounts),
+            "x": max(daycounts.values()),
+        }
+    detail_payload = {
+        "version": TRACK_DETAIL_VERSION,
+        "generated_at": stats["generated_at"],
+        "min_plays": DETAIL_MIN_PLAYS,
+        "tracks": track_detail_out,
+    }
+
+    # ---- Récords ----
+    def tk_name(tk):
+        m = track_meta.get(tk, {})
+        return {"name": m.get("name", ""), "artist": m.get("artist", "")}
+
+    top_days_out = []
+    for day, ms in sorted(day_ms_global.items(), key=lambda kv: kv[1], reverse=True)[:20]:
+        arts = day_artist_ms[day]
+        ta, tams = arts.most_common(1)[0] if arts else ("", 0)
+        trs = day_track_plays[day]
+        entry = {
+            "date": day,
+            "min": round(ms / 60000, 1),
+            "plays": day_plays[day],
+            "top_artist": {"name": ta, "min": round(tams / 60000, 1)},
+        }
+        if trs:
+            ttk, ttp = trs.most_common(1)[0]
+            entry["top_track"] = {**tk_name(ttk), "plays": ttp}
+        top_days_out.append(entry)
+
+    # mismo tema más veces en un solo día
+    track_day_records = []
+    for day, ctr in day_track_plays.items():
+        for tk, n in ctr.items():
+            if n >= 5:
+                track_day_records.append((n, day, tk))
+    track_day_records.sort(reverse=True)
+    top_track_days_out = [{**tk_name(tk), "date": day, "plays": n} for n, day, tk in track_day_records[:15]]
+
+    # maratón de un solo artista en un día
+    artist_day_records = []
+    for day, ctr in day_artist_ms.items():
+        for a, a_ms in ctr.items():
+            artist_day_records.append((a_ms, day, a))
+    artist_day_records.sort(reverse=True)
+    top_artist_days_out = [
+        {"artist": a, "date": day, "min": round(a_ms / 60000, 1)}
+        for a_ms, day, a in artist_day_records[:15]
+    ]
+
+    # semana (lunes a domingo) con más plays del mismo tema
+    top_track_weeks_out = [
+        {**tk_name(tk), "week_start": ws, "plays": n}
+        for (tk, ws), n in week_track_plays.most_common(10)
+    ]
+
+    # todas las rachas, ordenadas
+    streaks = []
+    if all_days_sorted:
+        s_start = s_prev = date.fromisoformat(all_days_sorted[0])
+        s_cur = 1
+        for s in all_days_sorted[1:]:
+            d = date.fromisoformat(s)
+            if (d - s_prev).days == 1:
+                s_cur += 1
+            elif d != s_prev:
+                streaks.append((s_cur, s_start.isoformat(), s_prev.isoformat()))
+                s_start = d
+                s_cur = 1
+            s_prev = d
+        streaks.append((s_cur, s_start.isoformat(), s_prev.isoformat()))
+    streaks.sort(reverse=True)
+    top_streaks_out = [{"days": n, "start": s, "end": e} for n, s, e in streaks[:10]]
+
+    # tracks que sonaron en más días distintos
+    track_most_days_out = [
+        {**tk_name(tk), "days": len(ds)}
+        for tk, ds in sorted(tk_days.items(), key=lambda kv: len(kv[1]), reverse=True)[:15]
+    ]
+
+    records_payload = {
+        "version": RECORDS_VERSION,
+        "generated_at": stats["generated_at"],
+        "top_days": top_days_out,
+        "top_track_days": top_track_days_out,
+        "top_artist_days": top_artist_days_out,
+        "top_track_weeks": top_track_weeks_out,
+        "top_streaks": top_streaks_out,
+        "track_most_days": track_most_days_out,
+        "milestones": milestones,
+    }
+
+    return stats, track_plays_out, listened_payload, skip_payload, detail_payload, records_payload
 
 
 def main():
@@ -506,12 +648,14 @@ def main():
     print(f"  tapas indexadas: {len(img_idx):,}")
 
     print("Agregando…")
-    stats, track_plays, listened, skip_stats = build_stats(plays, img_idx)
+    stats, track_plays, listened, skip_stats, detail, records = build_stats(plays, img_idx)
 
     stats_path = os.path.join(OUT_DIR, "history-stats.json")
     tp_path = os.path.join(OUT_DIR, "history-track-plays.json")
     listened_path = os.path.join(OUT_DIR, "history-listened-albums.json")
     skip_path = os.path.join(OUT_DIR, "history-skip-stats.json")
+    detail_path = os.path.join(OUT_DIR, "history-track-detail.json")
+    records_path = os.path.join(OUT_DIR, "history-records.json")
 
     with open(stats_path, "w") as f:
         json.dump(stats, f, separators=(",", ":"), ensure_ascii=False)
@@ -525,7 +669,13 @@ def main():
         json.dump(listened, f, separators=(",", ":"), ensure_ascii=False)
     with open(skip_path, "w") as f:
         json.dump(skip_stats, f, separators=(",", ":"), ensure_ascii=False)
+    with open(detail_path, "w") as f:
+        json.dump(detail, f, separators=(",", ":"), ensure_ascii=False)
+    with open(records_path, "w") as f:
+        json.dump(records, f, separators=(",", ":"), ensure_ascii=False)
 
+    print(f"OK → {detail_path} ({os.path.getsize(detail_path)/1024:.1f} KB, {len(detail['tracks'])} tracks)")
+    print(f"OK → {records_path} ({os.path.getsize(records_path)/1024:.1f} KB)")
     print(f"OK → {stats_path} ({os.path.getsize(stats_path)/1024:.1f} KB)")
     print(f"OK → {tp_path} ({os.path.getsize(tp_path)/1024:.1f} KB)")
     print(f"OK → {listened_path} ({os.path.getsize(listened_path)/1024:.1f} KB)")
