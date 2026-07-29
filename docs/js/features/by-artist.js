@@ -1,6 +1,8 @@
-import { getAllLikedTracks, createPlaylist, addTracksToPlaylist, invalidatePlaylistsCache, getBestAvailableLikes } from '../api.js?v=88';
-import { showProgress, hideProgress, progressController, isCancelled, promptPlaylistName, escapeHtml } from '../ui/components.js?v=88';
-import { showToast } from '../ui/toast.js?v=88';
+import { getAllLikedTracks, createPlaylist, addTracksToPlaylist, invalidatePlaylistsCache, getBestAvailableLikes } from '../api.js?v=89';
+import { showProgress, hideProgress, progressController, isCancelled, promptPlaylistName, escapeHtml } from '../ui/components.js?v=89';
+import { showToast } from '../ui/toast.js?v=89';
+import { findArtistTopPreview } from '../api/itunes.js?v=89';
+import { attachHover } from '../ui/preview-player.js?v=89';
 
 const SORT_KEY = 'artist_sort_mode';
 const VALID_SORTS = new Set(['count-desc', 'count-asc', 'name-asc']);
@@ -184,8 +186,15 @@ function renderGrid() {
     </div>
   `;
 
-  holder.querySelectorAll('.artist-card').forEach(el => {
+  // El índice del querySelectorAll coincide con capped (mismo orden de render).
+  // Hover-play: apoyás el mouse en la card y suena el hit del artista (iTunes).
+  holder.querySelectorAll('.artist-card').forEach((el, i) => {
     el.onclick = () => toggleArtist(el);
+    const name = capped[i][0];
+    attachHover(el, `ba:${name}`, async () => {
+      const p = await findArtistTopPreview(name);
+      return p && { url: p.url, label: `${p.track} — ${p.artist}` };
+    }, 550);
   });
   updateActionBar();
 }
