@@ -156,18 +156,53 @@ function playsFor(uri, index) {
 // HTML para el estado "el user no tiene historial disponible". Antes solo mostraba
 // el mensaje "esto es de Ian"; ahora ofrece subir el propio ZIP como alternativa.
 function ownerLockedMessage(featureName = 'esta vista') {
-  return `<div class="card"><h3 style="margin-bottom:8px">Historial no disponible</h3>
-    <p style="color:var(--color-text-secondary);margin:0 0 14px">
-      ${featureName} necesita el <strong>Extended Streaming History</strong>. El del dueño de esta instancia (Ian) queda oculto para el resto — vos podés cargar el tuyo y usar todas las features con tus propios datos.
-    </p>
-    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px">
-      <button class="btn btn-primary btn-sm" data-open-import>Ya tengo mi ZIP — subirlo</button>
-      <button class="btn btn-secondary btn-sm" data-open-spotify-privacy>Todavía no lo tengo — abrir Privacidad de Spotify</button>
+  return `<div class="olm-card">
+    <div class="olm-header">
+      <div class="olm-header-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="20" height="20">
+          <path d="M3 3v18h18"/><path d="M18.7 8L14 12.7l-3-3L8 13l-2-2"/>
+        </svg>
+      </div>
+      <div style="flex:1;min-width:0">
+        <h3 style="margin:0;font-size:16px">Necesito tu historial</h3>
+        <div style="color:var(--color-text-muted);font-size:12px;margin-top:2px">${escapeHtmlLite(featureName)} usa el Extended Streaming History — el de Ian queda oculto</div>
+      </div>
     </div>
-    <p style="color:var(--color-text-muted);font-size:12px;margin:0">
-      Cómo conseguirlo: en Privacidad de Spotify, bajá hasta <strong>«Descargar tus datos»</strong>, marcá <strong>Historial de reproducción ampliado</strong>, confirmá y esperá el mail (unos días). Después subís acá el ZIP entero. Todo se procesa <strong>en tu navegador</strong> — nada sale de tu compu.
-    </p>
+    <div class="olm-options">
+      <button class="olm-option olm-option-primary" data-open-import>
+        <div class="olm-option-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" width="20" height="20">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+            <polyline points="17 8 12 3 7 8"/>
+            <line x1="12" y1="3" x2="12" y2="15"/>
+          </svg>
+        </div>
+        <div class="olm-option-body">
+          <div class="olm-option-title">Ya tengo mi ZIP</div>
+          <div class="olm-option-sub">Subilo y en ~5s tenés todo funcionando</div>
+        </div>
+      </button>
+      <button class="olm-option" data-open-spotify-privacy>
+        <div class="olm-option-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" width="20" height="20">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+            <polyline points="14 2 14 8 20 8"/>
+            <line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/>
+          </svg>
+        </div>
+        <div class="olm-option-body">
+          <div class="olm-option-title">Todavía no lo tengo</div>
+          <div class="olm-option-sub">Pedile el historial a Spotify (tarda unos días)</div>
+        </div>
+      </button>
+    </div>
+    <p class="olm-note">Todo se procesa <strong>en tu navegador</strong> — tus datos nunca salen de tu compu.</p>
     </div>`;
+}
+
+// Micro-escape para no tener que importar escapeHtml acá y evitar el ciclo con components
+function escapeHtmlLite(s) {
+  return String(s || '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
 
 // Bootstrap: engancha los botones del ownerLockedMessage globalmente (una vez).

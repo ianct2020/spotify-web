@@ -2,10 +2,10 @@
 // Acepta ZIP del export de Spotify o los Streaming_History_Audio_*.json sueltos.
 // Extrae + procesa + guarda todo en el IDB del user (nada sale de su compu).
 
-import { processStreamingHistory } from '../history-processor.js?v=98';
-import { saveMyHistory, clearMyHistory, hasLocalHistory } from './history-data.js?v=98';
-import { escapeHtml, showProgress, hideProgress, confirmModal, alertModal } from '../ui/components.js?v=98';
-import { showToast } from '../ui/toast.js?v=98';
+import { processStreamingHistory } from '../history-processor.js?v=99';
+import { saveMyHistory, clearMyHistory, hasLocalHistory } from './history-data.js?v=99';
+import { escapeHtml, showProgress, hideProgress, confirmModal, alertModal } from '../ui/components.js?v=99';
+import { showToast } from '../ui/toast.js?v=99';
 
 let overlay = null;
 
@@ -22,27 +22,56 @@ async function openImportHistory() {
   overlay.className = 'modal-overlay';
   overlay.id = 'import-history-overlay';
   overlay.innerHTML = `
-    <div class="modal" style="max-width:540px;width:min(540px,92vw)">
-      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px">
-        <h3 style="margin:0;font-size:18px">Cargar mi historial de Spotify</h3>
-        <button class="btn btn-secondary btn-sm" id="ih-close" title="Cerrar">✕</button>
+    <div class="modal ih-modal" style="max-width:560px;width:min(560px,94vw)">
+      <div class="ih-header">
+        <div class="ih-header-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="22" height="22">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+            <polyline points="17 8 12 3 7 8"/>
+            <line x1="12" y1="3" x2="12" y2="15"/>
+          </svg>
+        </div>
+        <div style="flex:1;min-width:0">
+          <h3 style="margin:0;font-size:17px">Mi historial de Spotify</h3>
+          <div style="font-size:12px;color:var(--color-text-muted);margin-top:2px">Todo se procesa en tu navegador — nada se sube a ningún lado</div>
+        </div>
+        <button class="btn btn-secondary btn-sm ih-close-btn" id="ih-close" title="Cerrar" aria-label="Cerrar">✕</button>
       </div>
-      <p style="color:var(--color-text-secondary);font-size:13px;margin:0 0 14px">
-        Arrastrá el <strong>ZIP</strong> del <em>Extended Streaming History</em> tal como te lo mandó Spotify — o los archivos <code>Streaming_History_Audio_*.json</code> sueltos. Todo se procesa <strong>en tu navegador</strong>: nada se sube a ningún lado.
-      </p>
 
-      <label id="ih-drop" style="display:block;border:2px dashed var(--color-border);border-radius:var(--radius-md,10px);padding:28px 16px;text-align:center;cursor:pointer;transition:border-color .15s,background .15s">
+      <label id="ih-drop" class="ih-drop">
         <input type="file" id="ih-file" accept=".zip,application/zip,.json,application/json" multiple style="display:none">
-        <div style="font-size:14px;color:var(--color-text)">Arrastrá acá o hacé click para elegir</div>
-        <div style="font-size:12px;color:var(--color-text-muted);margin-top:6px">ZIP (my_spotify_data.zip) o JSONs sueltos</div>
+        <div class="ih-drop-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" width="36" height="36">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+            <polyline points="14 2 14 8 20 8"/>
+            <line x1="12" y1="18" x2="12" y2="12"/>
+            <line x1="9" y1="15" x2="12" y2="12"/>
+            <line x1="15" y1="15" x2="12" y2="12"/>
+          </svg>
+        </div>
+        <div class="ih-drop-title">Arrastrá tu ZIP acá</div>
+        <div class="ih-drop-sub">o hacé click para elegir · ZIP entero o JSONs sueltos</div>
       </label>
 
-      <div id="ih-status" style="margin-top:14px;font-size:13px;color:var(--color-text-secondary);min-height:20px"></div>
+      <div id="ih-status" class="ih-status" aria-live="polite"></div>
+
+      <details class="ih-howto">
+        <summary>Cómo conseguir el ZIP <span class="ih-howto-hint">(si todavía no lo tenés)</span></summary>
+        <ol>
+          <li>Andá a <a href="https://www.spotify.com/account/privacy/" target="_blank" rel="noopener">spotify.com/account/privacy</a> con tu cuenta.</li>
+          <li>Bajá hasta <strong>«Descargar tus datos»</strong>.</li>
+          <li>Marcá <strong>Historial de reproducción ampliado</strong> y confirmá.</li>
+          <li>Esperá el mail (unos días). Cuando llegue, descargás el ZIP y lo subís acá.</li>
+        </ol>
+        <button class="btn btn-secondary btn-sm" data-open-spotify-privacy>Abrir Privacidad de Spotify ↗</button>
+      </details>
 
       ${alreadyHas ? `
-        <div style="border-top:1px solid var(--color-border);margin-top:16px;padding-top:14px">
-          <div style="font-size:12px;color:var(--color-text-muted);margin-bottom:8px">Ya tenés historial cargado localmente:</div>
-          <button class="btn btn-danger btn-sm" id="ih-clear">Borrar mi historial local</button>
+        <div class="ih-clear-section">
+          <div style="font-size:12px;color:var(--color-text-muted)">
+            Ya tenés historial cargado en este browser
+          </div>
+          <button class="btn btn-danger btn-sm" id="ih-clear">Borrarlo</button>
         </div>
       ` : ''}
     </div>
@@ -55,11 +84,11 @@ async function openImportHistory() {
   const drop = overlay.querySelector('#ih-drop');
   const input = overlay.querySelector('#ih-file');
   drop.onclick = () => input.click();
-  drop.ondragover = (e) => { e.preventDefault(); drop.style.borderColor = 'var(--color-accent)'; drop.style.background = 'var(--color-accent-soft)'; };
-  drop.ondragleave = () => { drop.style.borderColor = ''; drop.style.background = ''; };
+  drop.ondragover = (e) => { e.preventDefault(); drop.classList.add('dragging'); };
+  drop.ondragleave = () => { drop.classList.remove('dragging'); };
   drop.ondrop = (e) => {
     e.preventDefault();
-    drop.style.borderColor = ''; drop.style.background = '';
+    drop.classList.remove('dragging');
     if (e.dataTransfer.files?.length) handleFiles([...e.dataTransfer.files]);
   };
   input.onchange = (e) => { if (e.target.files?.length) handleFiles([...e.target.files]); };
@@ -78,7 +107,11 @@ async function openImportHistory() {
 
 async function handleFiles(files) {
   const status = document.getElementById('ih-status');
-  const setStatus = (html) => { if (status) status.innerHTML = html; };
+  const setStatus = (html, kind = 'info') => {
+    if (!status) return;
+    status.className = 'ih-status active' + (kind === 'error' ? ' error' : '');
+    status.innerHTML = html;
+  };
 
   let jsonFiles = [];
   const zip = files.find(f => f.name.toLowerCase().endsWith('.zip'));
@@ -89,19 +122,19 @@ async function handleFiles(files) {
     try {
       jsonFiles = await extractHistoryJsons(zip);
     } catch (e) {
-      setStatus(`<span style="color:var(--color-error)">Error descomprimiendo: ${escapeHtml(e.message)}</span>`);
+      setStatus(`Error descomprimiendo: ${escapeHtml(e.message)}`, 'error');
       return;
     }
   } else if (jsons.length) {
     jsonFiles = jsons;
   } else {
-    setStatus('<span style="color:var(--color-error)">Ningún archivo válido. Necesito el ZIP entero o los Streaming_History_Audio_*.json</span>');
+    setStatus('Ningún archivo válido. Necesito el ZIP entero o los <code>Streaming_History_Audio_*.json</code>.', 'error');
     return;
   }
 
   const useful = jsonFiles.filter(f => /Streaming_History_Audio.*\.json$/i.test(f.name || ''));
   if (!useful.length) {
-    setStatus(`<span style="color:var(--color-error)">No encontré ningún Streaming_History_Audio_*.json en lo que subiste. Asegurate de descargar el <em>Extended Streaming History</em>, no el Account Data básico.</span>`);
+    setStatus('No encontré ningún <code>Streaming_History_Audio_*.json</code>. Necesitás el <em>Extended Streaming History</em> (el que tarda días), no el Account Data básico.', 'error');
     return;
   }
 
@@ -113,7 +146,7 @@ async function handleFiles(files) {
     try {
       arrays.push(JSON.parse(text));
     } catch (e) {
-      setStatus(`<span style="color:var(--color-error)">Error parseando ${escapeHtml(f.name)}: ${escapeHtml(e.message)}</span>`);
+      setStatus(`Error parseando ${escapeHtml(f.name)}: ${escapeHtml(e.message)}`, 'error');
       return;
     }
   }

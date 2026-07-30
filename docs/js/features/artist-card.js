@@ -2,12 +2,49 @@
 // primer/último año, top tracks del artista, hover-play, y plays actuales
 // vía Stats.fm si aplica. Se abre desde cualquier feature con openArtistCard({ name }).
 
-import { loadHistoryStats, isOwner } from './history-data.js?v=98';
-import { escapeHtml } from '../ui/components.js?v=98';
-import { findArtistTopPreview } from '../api/itunes.js?v=98';
-import { togglePreview, playingKey, attachHover } from '../ui/preview-player.js?v=98';
-import { hasUsername, loadTopLifetime } from '../api/statsfm.js?v=98';
-import { openTrackCard } from './track-card.js?v=98';
+import { loadHistoryStats, isOwner } from './history-data.js?v=99';
+import { escapeHtml } from '../ui/components.js?v=99';
+import { findArtistTopPreview } from '../api/itunes.js?v=99';
+import { togglePreview, playingKey, attachHover } from '../ui/preview-player.js?v=99';
+import { hasUsername, loadTopLifetime } from '../api/statsfm.js?v=99';
+import { openTrackCard } from './track-card.js?v=99';
+import { spotifyFetch } from '../api.js?v=99';
+
+// Cache de imágenes de artistas resueltas por Spotify search. TTL 30 días.
+// Se persiste el hit y la falta (null) para no reintentar contra tracks
+// desconocidos por Spotify.
+const IMG_CACHE_KEY = 'spotify_artist_imgs_v1';
+const IMG_CACHE_MAX = 400;
+const IMG_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+function loadImgCache() {
+  try { return JSON.parse(localStorage.getItem(IMG_CACHE_KEY)) || {}; } catch { return {}; }
+}
+function saveImgCache(c) {
+  const keys = Object.keys(c);
+  if (keys.length > IMG_CACHE_MAX) for (const k of keys.slice(0, keys.length - IMG_CACHE_MAX)) delete c[k];
+  try { localStorage.setItem(IMG_CACHE_KEY, JSON.stringify(c)); } catch { /* full */ }
+}
+async function fetchArtistImage(name) {
+  const key = name.toLowerCase();
+  const cache = loadImgCache();
+  const hit = cache[key];
+  if (hit && (Date.now() - hit.t) < IMG_TTL_MS) return hit.u;
+  try {
+    const data = await spotifyFetch(`/search?q=${encodeURIComponent(`artist:"${name}"`)}&type=artist&limit=3`);
+    const artists = data?.artists?.items || [];
+    // Match exacto por nombre normalizado, preferido; si no, el primer resultado
+    const norm = s => (s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    const na = norm(name);
+    const exact = artists.find(a => norm(a.name) === na);
+    const pick = exact || artists[0];
+    const img = pick?.images?.[1]?.url || pick?.images?.[0]?.url || null;
+    cache[key] = { u: img, t: Date.now() };
+    saveImgCache(cache);
+    return img;
+  } catch {
+    return null;
+  }
+}
 
 let chart = null;
 
@@ -40,7 +77,7 @@ async function openArtistCard(a) {
   overlay.innerHTML = `
     <div class="modal" style="max-width:640px;width:min(640px,92vw)">
       <div style="display:flex;gap:14px;align-items:flex-start;margin-bottom:14px">
-        <div style="width:64px;height:64px;border-radius:50%;background:var(--color-accent-soft);display:flex;align-items:center;justify-content:center;font-size:24px;color:var(--color-accent);font-weight:700;flex-shrink:0">
+        <div id="ac-avatar" style="width:64px;height:64px;border-radius:50%;background:var(--color-accent-soft);display:flex;align-items:center;justify-content:center;font-size:24px;color:var(--color-accent);font-weight:700;flex-shrink:0;overflow:hidden">
           ${escapeHtml((a.name[0] || '?').toUpperCase())}
         </div>
         <div style="flex:1;min-width:0">
@@ -61,6 +98,13 @@ async function openArtistCard(a) {
   document.body.appendChild(overlay);
   overlay.querySelector('#ac-close').onclick = close;
   overlay.querySelector('#ac-byartist').onclick = () => { close(); };
+
+  // Carga la foto real del artista via Spotify search (async, sin bloquear el resto)
+  fetchArtistImage(a.name).then(url => {
+    const av = document.getElementById('ac-avatar');
+    if (!av || !url) return;
+    av.innerHTML = `<img src="${url}" alt="" style="width:100%;height:100%;object-fit:cover">`;
+  });
 
   const previewBtn = overlay.querySelector('#ac-preview');
   previewBtn.onclick = async () => {
