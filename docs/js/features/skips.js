@@ -3,17 +3,24 @@
 // Preview 30s instantáneo vía iTunes (arranca en el estribillo, no suma plays
 // en tu historial de Spotify). Fallback: iframe embed oficial si iTunes no lo tiene.
 
-import { getBestAvailableLikes, removeLikedTracks } from '../api.js?v=95';
-import { loadSkipStats, trackIdOf, isOwner, ownerLockedMessage } from './history-data.js?v=95';
-import { escapeHtml, confirmModal } from '../ui/components.js?v=95';
-import { showToast } from '../ui/toast.js?v=95';
-import { findTrackPreview } from '../api/itunes.js?v=95';
-import { togglePreview, playingKey } from '../ui/preview-player.js?v=95';
-import { openTrackCard } from './track-card.js?v=95';
+import { getBestAvailableLikes, removeLikedTracks } from '../api.js?v=96';
+import { loadSkipStats, trackIdOf, isOwner, ownerLockedMessage } from './history-data.js?v=96';
+import { escapeHtml, confirmModal } from '../ui/components.js?v=96';
+import { showToast } from '../ui/toast.js?v=96';
+import { findTrackPreview } from '../api/itunes.js?v=96';
+import { togglePreview, playingKey } from '../ui/preview-player.js?v=96';
+import { openTrackCard } from './track-card.js?v=96';
+import { hasUsername, loadTopLifetime } from '../api/statsfm.js?v=96';
 
 let cache = null;
 let minPlays = 5;    // solo tracks con ≥N plays totales (ok+skip)
 let minRatio = 70;   // ratio de skip mínimo (%)
+
+// Toggle Stats.fm: si un tema tuvo plays nuevas desde el export, las cuenta
+// como "ok" (asumiendo que si no volviste a skipearlo lo estás dejando pasar) y
+// recalcula el ratio. Los que caen por debajo del umbral desaparecen del listado.
+const STATSFM_TOGGLE_KEY = 'skips_use_statsfm';
+let useStatsfm = localStorage.getItem(STATSFM_TOGGLE_KEY) === '1';
 
 const RATIO_STEPS = [70, 80, 90, 100];
 const PLAYS_STEPS = [3, 5, 10, 15];
@@ -31,12 +38,15 @@ export async function render(container) {
 
 async function analyze() {
   const content = document.getElementById('skips-content');
-  let likes, stats;
+  let likes, stats, top = null;
   try {
     [{ items: likes }, stats] = await Promise.all([
       getBestAvailableLikes(),
       loadSkipStats(),
     ]);
+    if (useStatsfm && hasUsername()) {
+      top = await loadTopLifetime().catch(() => null);
+    }
   } catch (e) {
     content.innerHTML = `<div class="card"><p style="color:var(--color-error)">Error: ${escapeHtml(e.message)}</p></div>`;
     return;
@@ -49,6 +59,7 @@ async function analyze() {
   }
 
   const rows = [];
+  let updatedCount = 0;
   for (const it of likes) {
     const t = it.track || it;
     const uri = t.uri || (t.id ? `spotify:track:${t.id}` : null);
@@ -56,13 +67,25 @@ async function analyze() {
     if (!id) continue;
     const s = stats.tracks[id];
     if (!s) continue;
-    const [ok, skip] = s;
-    const total = ok + skip;
+    let [ok, skip] = s;
+    let total = ok + skip;
+    let updated = false;
+    if (top) {
+      const hit = top.map.get(id);
+      if (hit && hit.streams > total) {
+        // Plays nuevas desde el export → asumo que fueron completas (si no volviste
+        // a skipearlas). skip queda igual, ok sube, total y ratio se recalculan.
+        ok += (hit.streams - total);
+        total = ok + skip;
+        updated = true;
+        updatedCount++;
+      }
+    }
     if (total === 0 || skip === 0) continue;
-    rows.push({ track: t, uri, id, ok, skip, total, ratio: Math.round((skip / total) * 100) });
+    rows.push({ track: t, uri, id, ok, skip, total, ratio: Math.round((skip / total) * 100), updated });
   }
   rows.sort((a, b) => (b.ratio - a.ratio) || (b.total - a.total));
-  cache = { rows, likesCount: likes.length };
+  cache = { rows, likesCount: likes.length, statsfmUsed: !!top, statsfmUpdated: updatedCount };
   renderResults();
 }
 
@@ -77,6 +100,9 @@ function renderResults() {
   const withAnySkip = cache.rows.length;
 
   // Stats hero cards + filtros en chips + tabla. Todo simétrico en grid.
+  const sfLabel = cache.statsfmUsed
+    ? `Cruzando con Stats.fm — ${cache.statsfmUpdated.toLocaleString('es-AR')} temas ajustados con plays post-export`
+    : (hasUsername() ? 'Cruzar con Stats.fm (usa tus plays post-export para depurar falsos positivos)' : '');
   content.innerHTML = `
     <div class="skips-header">
       <div class="skips-stat">
@@ -92,6 +118,13 @@ function renderResults() {
         <div class="skips-stat-label">likes totales</div>
       </div>
     </div>
+
+    ${sfLabel ? `
+      <label class="statsfm-toggle" title="Al activarlo, un tema que después del export escuchaste enteras N veces más ya no cuenta como skip crónico.">
+        <input type="checkbox" id="skips-statsfm-toggle" ${useStatsfm ? 'checked' : ''}>
+        <span>${escapeHtml(sfLabel)}</span>
+      </label>
+    ` : ''}
 
     <div class="skips-filters">
       <div class="skips-filter-group">
@@ -148,7 +181,7 @@ function renderRow(r, i) {
           <div class="skips-title">${escapeHtml(r.track.name || '(sin nombre)')}</div>
           <div class="skips-meta">${escapeHtml(artists)}${r.track.album?.name ? ` · ${escapeHtml(r.track.album.name)}` : ''}</div>
         </div>
-        <span class="skips-badge ${ratioClass}" title="Skipeaste ${r.skip} de ${r.total} veces">
+        <span class="skips-badge ${ratioClass}${r.updated ? ' skips-badge-updated' : ''}" title="${r.updated ? 'Ratio actualizado con Stats.fm (' + r.skip + ' skips de ' + r.total + ' plays totales hoy)' : 'Skipeaste ' + r.skip + ' de ' + r.total + ' veces'}">
           <span class="skips-badge-ratio">${r.ratio}%</span>
           <span class="skips-badge-count">${r.skip}/${r.total}</span>
         </span>
@@ -172,6 +205,14 @@ function wireFilters() {
   content.querySelectorAll('#skips-ratio-chips .skips-chip').forEach(btn => {
     btn.onclick = () => { minRatio = parseInt(btn.dataset.ratio); renderResults(); };
   });
+  const sfToggle = content.querySelector('#skips-statsfm-toggle');
+  if (sfToggle) sfToggle.onchange = async () => {
+    useStatsfm = sfToggle.checked;
+    localStorage.setItem(STATSFM_TOGGLE_KEY, useStatsfm ? '1' : '0');
+    const container = content.parentElement;
+    content.innerHTML = `<div class="empty-state"><div class="spinner spinner-lg"></div><div style="margin-top:16px">${useStatsfm ? 'Cruzando con Stats.fm…' : 'Recalculando…'}</div></div>`;
+    await analyze();
+  };
 }
 
 function wireRows() {

@@ -6,8 +6,12 @@ import { loadTrackPlays, trackIdOf, isOwner, ownerLockedMessage } from './histor
 import { escapeHtml, confirmModal } from '../ui/components.js';
 import { showToast } from '../ui/toast.js';
 import { openTrackCard } from './track-card.js';
+import { hasUsername, loadTopLifetime } from '../api/statsfm.js';
 
 let cache = null;
+
+const STATSFM_TOGGLE_KEY = 'zeroplays_use_statsfm';
+let useStatsfm = localStorage.getItem(STATSFM_TOGGLE_KEY) === '1';
 
 export async function render(container) {
   container.innerHTML = `
@@ -22,12 +26,15 @@ export async function render(container) {
 
 async function analyze() {
   const content = document.getElementById('zeroplays-content');
-  let likes, plays;
+  let likes, plays, top = null;
   try {
     [{ items: likes }, plays] = await Promise.all([
       getBestAvailableLikes(),
       loadTrackPlays(),
     ]);
+    if (useStatsfm && hasUsername()) {
+      top = await loadTopLifetime().catch(() => null);
+    }
   } catch (e) {
     content.innerHTML = `<div class="card"><p style="color:var(--color-error)">Error: ${escapeHtml(e.message)}</p></div>`;
     return;
@@ -41,6 +48,7 @@ async function analyze() {
   const zeros = [];
   const some = [];
   let partialsInZeros = 0;
+  let statsfmRescued = 0;
   for (const it of likes) {
     const t = it.track || it;
     const uri = t.uri || (t.id ? `spotify:track:${t.id}` : null);
@@ -48,23 +56,34 @@ async function analyze() {
     if (!id) continue;
     const p = plays.tracks[id];
     if (!p) {
+      // Con Stats.fm: si el tema aparece en el top-1000 lifetime, ya no es "sin plays"
+      if (top && top.map.has(id)) { statsfmRescued++; continue; }
       zeros.push({ track: t, uri, id });
     } else if (p[2] === 'p') {
-      // solo tuvo plays <30s (partial): igual va a zeros, con badge
+      if (top && top.map.has(id)) { statsfmRescued++; continue; }
       zeros.push({ track: t, uri, id, partial: { p: p[0], s: p[1] } });
       partialsInZeros++;
     } else {
       some.push({ track: t, uri, id, plays: p[0], seconds: p[1] });
     }
   }
-  cache = { zeros, some, likesCount: likes.length, partialsInZeros };
+  cache = { zeros, some, likesCount: likes.length, partialsInZeros, statsfmUsed: !!top, statsfmRescued };
   renderResults();
 }
 
 function renderResults() {
   const content = document.getElementById('zeroplays-content');
-  const { zeros, some, likesCount, partialsInZeros } = cache;
+  const { zeros, some, likesCount, partialsInZeros, statsfmUsed, statsfmRescued } = cache;
   const nunca = zeros.length - (partialsInZeros || 0);
+
+  const sfLine = statsfmUsed
+    ? `<div style="font-size:12px;color:var(--color-accent);margin-top:2px">Cruzando con Stats.fm — sacados ${statsfmRescued.toLocaleString('es-AR')} temas que sí escuchaste después del export.</div>`
+    : '';
+  const sfToggleHtml = hasUsername() ? `
+    <label class="statsfm-toggle" title="Al activarlo, un tema que después del export escuchaste al menos una vez ya no aparece como 'sin plays'.">
+      <input type="checkbox" id="zp-statsfm-toggle" ${useStatsfm ? 'checked' : ''}>
+      <span>Cruzar con Stats.fm (plays post-export)</span>
+    </label>` : '';
 
   content.innerHTML = `
     <div class="card" style="margin-bottom:16px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px">
@@ -75,12 +94,14 @@ function renderResults() {
         <div style="font-size:12px;color:var(--color-text-muted);margin-top:2px">
           ${nunca.toLocaleString('es-AR')} nunca sonaron${partialsInZeros ? ` · ${partialsInZeros.toLocaleString('es-AR')} tuvieron plays cortas (badge naranja)` : ''} · ${some.length.toLocaleString('es-AR')} tienen alguna play ≥30s.
         </div>
+        ${sfLine}
       </div>
       <div style="display:flex;gap:8px">
         <button class="btn btn-secondary btn-sm" id="zp-select-all">Seleccionar todos</button>
         <button class="btn btn-danger btn-sm" id="zp-remove" disabled>Sacar de likes (0)</button>
       </div>
     </div>
+    ${sfToggleHtml}
 
     ${zeros.length === 0 ? `
       <div class="card"><p>No hay likes sin plays. Todos tus likes se escucharon al menos una vez ≥30s.</p></div>
@@ -107,6 +128,14 @@ function renderResults() {
       </div>
     `}
   `;
+
+  const sfToggle = content.querySelector('#zp-statsfm-toggle');
+  if (sfToggle) sfToggle.onchange = async () => {
+    useStatsfm = sfToggle.checked;
+    localStorage.setItem(STATSFM_TOGGLE_KEY, useStatsfm ? '1' : '0');
+    content.innerHTML = `<div class="empty-state"><div class="spinner spinner-lg"></div><div style="margin-top:16px">${useStatsfm ? 'Cruzando con Stats.fm…' : 'Recalculando…'}</div></div>`;
+    await analyze();
+  };
 
   const rmBtn = content.querySelector('#zp-remove');
   const selAllBtn = content.querySelector('#zp-select-all');

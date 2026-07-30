@@ -2,10 +2,10 @@
 // maratones de un artista, temas en loop, rachas e hitos. Todo sale de
 // history-records.json (gen-stats.py) ya calculado, acá es solo UI.
 
-import { loadRecords, isOwner, ownerLockedMessage } from './history-data.js?v=95';
-import { escapeHtml } from '../ui/components.js?v=95';
-import { findTrackPreview, findArtistTopPreview } from '../api/itunes.js?v=95';
-import { attachHover } from '../ui/preview-player.js?v=95';
+import { loadRecords, isOwner, ownerLockedMessage } from './history-data.js?v=96';
+import { escapeHtml } from '../ui/components.js?v=96';
+import { findTrackPreview, findArtistTopPreview } from '../api/itunes.js?v=96';
+import { attachHover } from '../ui/preview-player.js?v=96';
 
 const MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
 const DIAS = ['lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado', 'domingo'];

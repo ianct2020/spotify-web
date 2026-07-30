@@ -1,3 +1,5 @@
+import { idbGetCached, idbSetCached } from '../idb.js';
+
 const STATSFM_USER_STORAGE = 'statsfm_username';
 const BASE = 'https://api.stats.fm/api/v1';
 
@@ -112,6 +114,90 @@ async function getTrackCurrentStats(trackId) {
   return { count: it.count, durationMs: it.durationMs || 0 };
 }
 
+// ---- Top lifetime cacheado (2026-07-29, Plus) ----
+// El endpoint per-track /streams/tracks/{id}/stats NO incluye lo importado
+// (limitación del backend, ni con Plus cambia). El único endpoint que sí trae
+// TOTALES actuales con el import incluido es /top/tracks?range=lifetime, pero
+// tope de limit=1000 (con más da 400). Ergo: bajamos el top-1000 una vez, lo
+// cacheamos en IDB por 24h, y armamos un Map<spotifyId, {streams, playedMs, ...}>
+// que sirve a Ficha / Skips / Sin plays. Cualquier tema con menos plays que el
+// del puesto 1000 no está en el mapa (fallback: per-track live).
+
+const TOP_LIFETIME_KEY = 'statsfm_top_lifetime_v1';
+const TOP_LIFETIME_TTL_MIN = 24 * 60;
+const TOP_LIFETIME_LIMIT = 1000;
+
+let _topMemCache = null; // { map, meta, generatedAt }
+
+// Devuelve { map: Map<spotifyId, {streams, playedMs, name, artist, statsfmId}>,
+//            minStreams, totalItems, generatedAt } — o null si no hay username.
+async function loadTopLifetime({ force = false } = {}) {
+  const u = getUsername();
+  if (!u) return null;
+  if (!force && _topMemCache) return _topMemCache;
+
+  if (!force) {
+    try {
+      const cached = await idbGetCached(TOP_LIFETIME_KEY);
+      if (cached && cached.username === u && Array.isArray(cached.entries)) {
+        _topMemCache = rehydrate(cached);
+        return _topMemCache;
+      }
+    } catch { /* ignora */ }
+  }
+
+  const url = `${BASE}/users/${encodeURIComponent(u)}/top/tracks?range=lifetime&limit=${TOP_LIFETIME_LIMIT}`;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`Stats.fm ${res.status}: no pude cargar el top lifetime`);
+  const data = await res.json();
+  const items = data.items || [];
+  const entries = [];
+  for (const it of items) {
+    const t = it.track;
+    if (!t) continue;
+    const spotifyIds = t.externalIds?.spotify || [];
+    if (!spotifyIds.length) continue;
+    const firstArtist = t.artists?.[0]?.name || '';
+    for (const sid of spotifyIds) {
+      entries.push({
+        sid,
+        statsfmId: t.id,
+        streams: it.streams || 0,
+        playedMs: it.playedMs || 0,
+        name: t.name || '',
+        artist: firstArtist,
+      });
+    }
+  }
+  const generatedAt = Date.now();
+  try {
+    await idbSetCached(TOP_LIFETIME_KEY, { username: u, entries, generatedAt }, TOP_LIFETIME_TTL_MIN);
+  } catch { /* ignora */ }
+  _topMemCache = rehydrate({ entries, generatedAt });
+  return _topMemCache;
+}
+
+function rehydrate({ entries, generatedAt }) {
+  const map = new Map();
+  let minStreams = Infinity;
+  for (const e of entries) {
+    // si el mismo spotifyId apareciera en varias entradas (raro), gana la de más streams
+    const prev = map.get(e.sid);
+    if (!prev || e.streams > prev.streams) map.set(e.sid, e);
+    if (e.streams < minStreams) minStreams = e.streams;
+  }
+  return {
+    map,
+    minStreams: isFinite(minStreams) ? minStreams : 0,
+    totalItems: entries.length,
+    generatedAt,
+  };
+}
+
+function clearTopLifetimeCache() {
+  _topMemCache = null;
+}
+
 export {
   getUsername,
   setUsername,
@@ -121,4 +207,6 @@ export {
   getTopArtists,
   findTrackId,
   getTrackCurrentStats,
+  loadTopLifetime,
+  clearTopLifetimeCache,
 };
