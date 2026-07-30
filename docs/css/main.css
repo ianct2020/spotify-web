@@ -253,20 +253,26 @@ h3 { font-size: 18px; font-weight: 600; }
 }
 
 /* Sidebar visible en desktop (Home): el main deja espacio a la izquierda para no taparse.
-   En las demás rutas el sidebar está oculto (sidebar-hidden) y el main ocupa todo el ancho. */
-body:not(.sidebar-hidden) .main {
-  margin-left: 240px;
-  max-width: 1240px;
+   En las demás rutas el sidebar está oculto (sidebar-hidden) y el main ocupa todo el ancho.
+   En mobile SIEMPRE margin-left:0 — el sidebar es overlay, no push. */
+@media (min-width: 769px) {
+  body:not(.sidebar-hidden) .main {
+    margin-left: 240px;
+    max-width: 1240px;
+  }
 }
 
 /* Sidebar colapsado en desktop: se desliza fuera de vista pero cuando el user lo
-   abre vuelve a aparecer como OVERLAY encima del contenido, sin correr el main. */
-body.sidebar-hidden .sidebar {
-  transform: translateX(-100%);
-}
-body.sidebar-hidden .sidebar.desktop-open {
-  transform: translateX(0);
-  box-shadow: 8px 0 32px rgba(0, 0, 0, 0.5);
+   abre vuelve a aparecer como OVERLAY encima del contenido, sin correr el main.
+   Solo en desktop — en mobile el sidebar-hidden no debe pisar al .sidebar.open. */
+@media (min-width: 769px) {
+  body.sidebar-hidden .sidebar {
+    transform: translateX(-100%);
+  }
+  body.sidebar-hidden .sidebar.desktop-open {
+    transform: translateX(0);
+    box-shadow: 8px 0 32px rgba(0, 0, 0, 0.5);
+  }
 }
 
 .page-header {
@@ -1700,52 +1706,100 @@ body.sidebar-hidden .sidebar.desktop-open {
   .statsfm-ticker-hint { display: none; }
 }
 
-/* ============ Mobile responsive (celu / ≤600px) ============ */
+/* ============ Mobile responsive (celu / ≤600px) v=101 ============ */
 @media (max-width: 600px) {
-  /* Page headers: título más chico, sin bajar el aire */
+  /* Layout base: menos padding para aprovechar el ancho */
+  .main { padding: 20px 12px; padding-top: 64px; }
+
+  /* Page headers */
+  .page-header { margin-bottom: 18px; }
   .page-header h1 { font-size: 22px; }
   .page-header p { font-size: 13px; }
 
-  /* Cards: menos padding para que quepan */
+  /* Cards en general */
   .card { padding: 14px 12px; }
+  .card h3, .card > h3 { font-size: 15px; }
 
-  /* Dashboard: 1 columna, stats más compactos */
+  /* ── Dashboard ── */
   .dash-stats-row { grid-template-columns: repeat(2, 1fr); gap: 8px; }
   .dash-stats-row .stat-value { font-size: 22px; }
   .dash-grid { grid-template-columns: 1fr !important; gap: 12px; }
-  .chart-box { height: 200px !important; }
-  .dash-chart-wide .chart-box { height: 240px !important; }
-  .dash-chart-wide .chart-box.chart-box-tall { height: 480px !important; }
+  .chart-box { height: 220px !important; }
+  .dash-chart-wide .chart-box { height: 260px !important; }
+  .dash-chart-wide .chart-box.chart-box-tall { height: 520px !important; }
+  /* Top 20 álbumes: 1 columna en mobile (era 2 hardcoded inline) */
+  .dash-top-albums-grid { grid-template-columns: 1fr !important; gap: 4px 0 !important; }
+  /* Listened year tiles: 3 columnas en vez de flex sin control */
+  .listened-year-grid { grid-template-columns: repeat(3, 1fr) !important; gap: 6px; }
+  /* Heatmap: contenedor sin padding extra */
+  #history-heatmap { padding: 0 !important; overflow-x: auto; }
 
-  /* Wrapped: hero más chico */
+  /* ── Wrapped ── */
+  .wrapped-hero { padding: 22px 16px; }
   .wrapped-hero-year { font-size: 12px; }
   .wrapped-hero-min { font-size: 40px; }
   .wrapped-hero-sub { font-size: 12px; }
   .wrapped-year-tab { font-size: 12px !important; padding: 6px 10px !important; }
+  .wrapped-year-layout { padding: 14px; gap: 10px; grid-template-columns: 1fr !important; }
+  /* Los "stats-left" y "stats-right" que eran 2 cols en el 900px query — todo 1 col */
+  .wrapped-year-stats-left,
+  .wrapped-year-stats-right { grid-template-columns: 1fr !important; gap: 8px; }
+  .wrapped-tile.compact { padding: 10px 12px; }
+  .wrapped-tile.compact .wrapped-tile-value {
+    font-size: 16px !important;
+    word-break: normal;
+    overflow-wrap: anywhere;
+  }
+  .wrapped-album-hero { padding: 14px; align-items: center; text-align: center; }
+  .wrapped-album-hero-cover { max-width: 220px; max-height: 220px; }
+  .wrapped-album-hero-name { font-size: 16px; }
+  .wrapped-album-hero-meta { padding-top: 4px; }
+  .wrapped-top-cards { grid-template-columns: 1fr !important; gap: 12px; margin-top: 12px; }
+  .wrapped-top-card { padding: 14px 14px 12px; }
+  .wrapped-top-scroll { max-height: unset; }
+  .wrapped-top-row { padding: 8px 10px; gap: 8px; min-height: 40px; }
+  .wrapped-top-name { font-size: 12.5px; }
+  .wrapped-top-artist { font-size: 10.5px; }
+  .wrapped-top-meta { font-size: 10.5px; }
+  /* Grid de wrapped-grid (Wrapped lite / tiles anchas) */
+  .wrapped-grid { grid-template-columns: 1fr 1fr; gap: 8px; padding: 14px; }
 
-  /* Récords y Wrapped tops: 1 columna */
-  .records-grid,
-  .wrapped-top-cards { grid-template-columns: 1fr !important; gap: 12px; }
+  /* ── Récords ── */
+  .records-grid { grid-template-columns: 1fr !important; gap: 12px; }
+  .records-milestones { grid-template-columns: 1fr !important; }
+  .records-milestone { padding: 8px 10px; }
 
-  /* Skips: acciones apiladas si no entran */
+  /* ── Skips crónicos ── */
+  .skips-header { grid-template-columns: repeat(3, 1fr) !important; gap: 6px; margin-bottom: 12px; }
+  .skips-stat { padding: 10px 8px !important; gap: 2px; border-radius: 8px; }
+  .skips-stat-value { font-size: 18px !important; }
+  .skips-stat-secondary .skips-stat-value { font-size: 15px !important; }
+  .skips-stat-label { font-size: 10px !important; line-height: 1.25; }
+  .skips-filters { padding: 10px 12px; gap: 10px; }
+  .skips-list { max-height: unset; }
   .skips-row-main { padding: 10px 12px 8px; }
-  .skips-row-actions { padding-left: 60px; flex-wrap: wrap; }
+  .skips-row-top { grid-template-columns: auto 40px 1fr auto; gap: 8px; }
+  .skips-cover { width: 40px; height: 40px; }
+  .skips-title { font-size: 13px; }
+  .skips-badge { padding: 3px 7px; }
+  .skips-badge-ratio { font-size: 12px; }
+  .skips-row-actions { padding: 4px 0 4px 52px; gap: 6px; flex-wrap: wrap; }
+  .skips-play-btn { font-size: 12px; padding: 0 10px; height: 26px; }
 
-  /* Sidebar y modales */
-  .modal { padding: 16px !important; }
+  /* ── Home cards ── */
+  .home-grid { grid-template-columns: 1fr !important; gap: 10px; }
+
+  /* ── Ficha canción / artista ── */
   .tc-stats { grid-template-columns: repeat(2, 1fr) !important; }
 
-  /* Ticker Stats.fm más compacto */
-  .statsfm-ticker { font-size: 11.5px; padding: 4px 10px; }
-
-  /* Preview pill: que no ocupe tanto */
-  .preview-pill { max-width: calc(100vw - 30px); left: 15px; right: 15px; }
-
-  /* Progress pill: idem */
-  .progress-mini { left: 15px; right: 15px; width: auto; }
-
-  /* Smart grids (Por artista, Por género) más chicos */
+  /* ── Smart grids (Por artista, Por género) ── */
   .smart-grid { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)) !important; gap: 8px; }
+
+  /* ── Modales y sidebar ── */
+  .modal { padding: 16px !important; }
+  .statsfm-ticker { font-size: 11.5px; padding: 4px 10px; }
+  .preview-pill { max-width: calc(100vw - 30px); left: 15px; right: 15px; }
+  .progress-mini { left: 15px; right: 15px; width: auto; }
 }
 
 /* Filas clickeables que abren la ficha */

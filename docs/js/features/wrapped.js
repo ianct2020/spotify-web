@@ -1,13 +1,14 @@
 // Wrapped propio: mini-resumen tuyo por año, hecho con el Extended Streaming History.
 // A diferencia del Wrapped oficial (que corre oct-sept), este es del año calendario completo.
 
-import { loadHistoryStats, isOwner, ownerLockedMessage } from './history-data.js?v=100';
-import { escapeHtml } from '../ui/components.js?v=100';
-import { findTrackPreview, findArtistTopPreview } from '../api/itunes.js?v=100';
-import { attachHover } from '../ui/preview-player.js?v=100';
-import { openTrackCard } from './track-card.js?v=100';
-import { openArtistCard } from './artist-card.js?v=100';
-import { getMyTop } from '../api.js?v=100';
+import { loadHistoryStats, isOwner, ownerLockedMessage } from './history-data.js?v=101';
+import { escapeHtml } from '../ui/components.js?v=101';
+import { findTrackPreview, findArtistTopPreview } from '../api/itunes.js?v=101';
+import { attachHover } from '../ui/preview-player.js?v=101';
+import { openTrackCard } from './track-card.js?v=101';
+import { openArtistCard } from './artist-card.js?v=101';
+import { openAlbumCard } from './album-card.js?v=101';
+import { getMyTop } from '../api.js?v=101';
 
 let stats = null;
 let selectedYear = null;
@@ -150,7 +151,7 @@ function renderYearCard() {
         </div>
 
         ${topAlbum ? `
-          <div class="wrapped-album-hero">
+          <div class="wrapped-album-hero tc-clickable" data-album-hero title="Click para ver la ficha del álbum">
             <div class="wrapped-tile-label">Álbum del año</div>
             ${topAlbum.img ? `<img src="${topAlbum.img}" alt="" class="wrapped-album-hero-cover" loading="lazy">` : `<div class="wrapped-album-hero-cover" style="background:var(--color-elevated);display:flex;align-items:center;justify-content:center;color:var(--color-text-muted);font-size:44px">♪</div>`}
             <div class="wrapped-album-hero-name">${escapeHtml(topAlbum.name)}</div>
@@ -189,7 +190,7 @@ function renderYearCard() {
 
     <div class="wrapped-top-cards">
       ${renderTopCard('Top artistas', y.top_artists?.slice(0, 15) || [], 'name', 'min', 'plays', null, 'y-art')}
-      ${renderTopCard('Top álbumes', y.top_albums?.slice(0, 15) || [], 'name', 'min', 'plays', 'artist')}
+      ${renderTopCard('Top álbumes', y.top_albums?.slice(0, 15) || [], 'name', 'min', 'plays', 'artist', null, 'y-alb')}
       ${renderTopCard('Top tracks', y.top_tracks?.slice(0, 15) || [], 'name', 'min', 'plays', 'artist', 'y-trk')}
     </div>
   `;
@@ -199,6 +200,34 @@ function renderYearCard() {
   wireTopHover(holder, 'y-tile-art', topArtist ? [topArtist] : [], 'artist');
   wireTopHover(holder, 'y-tile-trk', topTrack ? [topTrack] : [], 'track');
   wireTopHover(holder, 'y-tile-disc', y.discovery ? [{ name: y.discovery.artist }] : [], 'artist');
+  wireTopClick(holder, 'y-alb', y.top_albums?.slice(0, 15) || [], 'album');
+  wireAlbumHero(holder, topAlbum);
+}
+
+// Click en fila (sin hover-play) → abre la ficha correspondiente.
+function wireTopClick(holder, cardKey, items, kind) {
+  holder.querySelectorAll(`[data-click="${cardKey}"]`).forEach(el => {
+    const i = +el.dataset.i;
+    const it = items[i];
+    if (!it) return;
+    el.classList.add('tc-clickable');
+    if (kind === 'album') {
+      el.title = 'Click para ver la ficha del álbum';
+      el.onclick = () => openAlbumCard({ name: it.name, artist: it.artist, plays: it.plays, min: it.min, img: it.img });
+    }
+  });
+}
+
+function wireAlbumHero(holder, topAlbum) {
+  const el = holder.querySelector('[data-album-hero]');
+  if (!el || !topAlbum) return;
+  el.onclick = () => openAlbumCard({
+    name: topAlbum.name,
+    artist: topAlbum.artist,
+    plays: topAlbum.plays,
+    min: topAlbum.min,
+    img: topAlbum.img,
+  });
 }
 
 // Hover-play: pasás el mouse por una fila/tile y suena un preview de 30s
@@ -237,14 +266,18 @@ function wireTopHover(holder, cardKey, items, kind) {
   });
 }
 
-function renderTopCard(title, items, keyName, keyMin, keyPlays, keyArtist, hoverKey) {
+function renderTopCard(title, items, keyName, keyMin, keyPlays, keyArtist, hoverKey, clickKey) {
   if (!items.length) return '';
   return `
     <div class="card wrapped-top-card">
       <h3 style="margin:0 0 12px 0;font-size:16px">${title}</h3>
       <div class="wrapped-top-scroll">
-        ${items.map((it, i) => `
-          <div class="wrapped-top-row"${hoverKey ? ` data-hover="${hoverKey}:${i}"` : ''}>
+        ${items.map((it, i) => {
+          const attrs = [];
+          if (hoverKey) attrs.push(`data-hover="${hoverKey}:${i}"`);
+          if (clickKey) attrs.push(`data-click="${clickKey}"`, `data-i="${i}"`);
+          return `
+          <div class="wrapped-top-row"${attrs.length ? ' ' + attrs.join(' ') : ''}>
             <span class="wrapped-top-rank">${i + 1}</span>
             <div class="wrapped-top-info">
               <div class="wrapped-top-name">${escapeHtml(it[keyName])}</div>
@@ -252,7 +285,7 @@ function renderTopCard(title, items, keyName, keyMin, keyPlays, keyArtist, hover
             </div>
             <span class="wrapped-top-meta">${fmtMinutes(it[keyMin])}${it[keyPlays] ? ` · ${it[keyPlays]}` : ''}</span>
           </div>
-        `).join('')}
+        `;}).join('')}
       </div>
     </div>
   `;
@@ -315,7 +348,7 @@ function renderAllTime() {
         </div>
 
         ${topAlbum ? `
-          <div class="wrapped-album-hero">
+          <div class="wrapped-album-hero tc-clickable" data-album-hero title="Click para ver la ficha del álbum">
             <div class="wrapped-tile-label">Álbum de siempre</div>
             ${topAlbum.img ? `<img src="${topAlbum.img}" alt="" class="wrapped-album-hero-cover" loading="lazy">` : `<div class="wrapped-album-hero-cover" style="background:var(--color-elevated);display:flex;align-items:center;justify-content:center;color:var(--color-text-muted);font-size:44px">♪</div>`}
             <div class="wrapped-album-hero-name">${escapeHtml(topAlbum.name)}</div>
@@ -351,7 +384,7 @@ function renderAllTime() {
 
     <div class="wrapped-top-cards" style="margin-top:20px">
       ${renderTopCard('Top artistas de siempre', (stats.top_artists_all_time || []).slice(0, 20), 'name', 'min', 'plays', null, 'at-art')}
-      ${renderTopCard('Top álbumes de siempre', (stats.top_albums_all_time || []).slice(0, 20), 'name', 'min', 'plays', 'artist')}
+      ${renderTopCard('Top álbumes de siempre', (stats.top_albums_all_time || []).slice(0, 20), 'name', 'min', 'plays', 'artist', null, 'at-alb')}
       ${renderTopCard('Top tracks de siempre', (stats.top_tracks_all_time || []).slice(0, 20), 'name', 'min', 'plays', 'artist', 'at-trk')}
     </div>
   `;
@@ -360,6 +393,8 @@ function renderAllTime() {
   wireTopHover(holder, 'at-trk', (stats.top_tracks_all_time || []).slice(0, 20), 'track');
   wireTopHover(holder, 'at-tile-art', topArtist ? [topArtist] : [], 'artist');
   wireTopHover(holder, 'at-tile-trk', topTrack ? [topTrack] : [], 'track');
+  wireTopClick(holder, 'at-alb', (stats.top_albums_all_time || []).slice(0, 20), 'album');
+  wireAlbumHero(holder, topAlbum);
 }
 
 // ============ Wrapped lite: para users sin Extended Streaming History ============

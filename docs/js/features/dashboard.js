@@ -1,13 +1,14 @@
-import { getAllLikedTracks, invalidateLikesCache, exportAllData, importAllData, getCurrentUserId, syncLikesIncremental, getLikesCacheTimestamp, getBestAvailableLikes, getAllPlaylistItems } from '../api.js?v=100';
-import { showProgress, hideProgress, alertModal, escapeHtml } from '../ui/components.js?v=100';
-import { showToast } from '../ui/toast.js?v=100';
-import { openListenedAlbumsPicker } from './listened-shared.js?v=100';
-import { loadHistoryStats, loadListenedAlbums } from './history-data.js?v=100';
-import { findArtistTopPreview } from '../api/itunes.js?v=100';
-import { hoverIn, hoverOut } from '../ui/preview-player.js?v=100';
-import { hasUsername, getUsername } from '../api/statsfm.js?v=100';
-import { loadHistoryStats as _loadStatsForCounter } from './history-data.js?v=100';
-import { openArtistCard } from './artist-card.js?v=100';
+import { getAllLikedTracks, invalidateLikesCache, exportAllData, importAllData, getCurrentUserId, syncLikesIncremental, getLikesCacheTimestamp, getBestAvailableLikes, getAllPlaylistItems } from '../api.js?v=101';
+import { showProgress, hideProgress, alertModal, escapeHtml } from '../ui/components.js?v=101';
+import { showToast } from '../ui/toast.js?v=101';
+import { openListenedAlbumsPicker } from './listened-shared.js?v=101';
+import { loadHistoryStats, loadListenedAlbums } from './history-data.js?v=101';
+import { findArtistTopPreview } from '../api/itunes.js?v=101';
+import { hoverIn, hoverOut } from '../ui/preview-player.js?v=101';
+import { hasUsername, getUsername } from '../api/statsfm.js?v=101';
+import { loadHistoryStats as _loadStatsForCounter } from './history-data.js?v=101';
+import { openArtistCard } from './artist-card.js?v=101';
+import { openAlbumCard } from './album-card.js?v=101';
 
 let charts = [];
 let _loadController = null;
@@ -584,7 +585,7 @@ function renderDashboard(container, stats) {
         </div>
         <div class="card dash-chart-card dash-chart-wide">
           <h3>Top 20 álbumes <span style="font-weight:400;color:var(--color-text-muted);font-size:13px">· por tiempo escuchado real</span></h3>
-          <div id="history-top-albums" style="display:grid;grid-template-columns:repeat(2, minmax(0, 1fr));gap:6px 20px"></div>
+          <div id="history-top-albums" class="dash-top-albums-grid" style="display:grid;grid-template-columns:repeat(2, minmax(0, 1fr));gap:6px 20px"></div>
         </div>
       </div>
     </div>
@@ -717,20 +718,28 @@ async function hydrateHistorySection() {
     wireChartHoverExit('chart-history-artists');
   }
 
-  // Top 20 álbumes por minutos (lista simple)
+  // Top 20 álbumes por minutos (lista simple). Cada fila abre la ficha de álbum.
   const topAlbums = (h.top_albums_all_time || []).slice(0, 20);
   const listHolder = document.getElementById('history-top-albums');
-  if (listHolder) listHolder.innerHTML = topAlbums.map((a, i) => `
-    <div class="track-row">
-      <span style="width:28px;text-align:center;color:var(--color-text-muted);font-weight:700;flex-shrink:0">${i + 1}</span>
-      ${a.img ? `<img src="${a.img}" alt="" style="width:36px;height:36px;border-radius:4px;object-fit:cover;flex-shrink:0" loading="lazy">` : ''}
-      <div class="track-info">
-        <div class="track-name">${escapeHtml(a.name)}</div>
-        <div class="track-artist">${escapeHtml(a.artist)}</div>
+  if (listHolder) {
+    listHolder.innerHTML = topAlbums.map((a, i) => `
+      <div class="track-row tc-clickable" data-alb-i="${i}" title="Click para ver la ficha del álbum">
+        <span style="width:28px;text-align:center;color:var(--color-text-muted);font-weight:700;flex-shrink:0">${i + 1}</span>
+        ${a.img ? `<img src="${a.img}" alt="" style="width:36px;height:36px;border-radius:4px;object-fit:cover;flex-shrink:0" loading="lazy">` : ''}
+        <div class="track-info">
+          <div class="track-name">${escapeHtml(a.name)}</div>
+          <div class="track-artist">${escapeHtml(a.artist)}</div>
+        </div>
+        <span class="badge badge-accent">${Math.round(a.min).toLocaleString('es-AR')}m</span>
       </div>
-      <span class="badge badge-accent">${Math.round(a.min).toLocaleString('es-AR')}m</span>
-    </div>
-  `).join('');
+    `).join('');
+    listHolder.querySelectorAll('[data-alb-i]').forEach(el => {
+      el.onclick = () => {
+        const a = topAlbums[+el.dataset.albI];
+        if (a) openAlbumCard({ name: a.name, artist: a.artist, plays: a.plays, min: a.min, img: a.img });
+      };
+    });
+  }
 }
 
 function renderHeatmap(matrix) {
@@ -742,35 +751,69 @@ function renderHeatmap(matrix) {
   for (const row of matrix) for (const v of row) if (v > max) max = v;
   if (max === 0) { holder.innerHTML = '<div style="color:var(--color-text-muted);font-size:13px;padding:12px">Sin datos</div>'; return; }
 
-  const cellSize = 26;
-  const cellGap = 4;
-  const labelWidth = 44;
-  const hourLabelHeight = 24;
-  const width = labelWidth + 24 * (cellSize + cellGap);
-  const height = hourLabelHeight + 7 * (cellSize + cellGap);
+  const vertical = window.matchMedia('(max-width: 600px)').matches;
+  let svg, width, height;
 
-  let svg = `<svg viewBox="0 0 ${width} ${height}" style="width:100%;max-width:${width}px;height:auto;font-family:Inter,sans-serif;display:block">`;
-  // etiquetas de hora (cada 3)
-  for (let h = 0; h < 24; h++) {
-    if (h % 3 !== 0) continue;
-    const x = labelWidth + h * (cellSize + cellGap) + cellSize/2;
-    svg += `<text x="${x}" y="${hourLabelHeight - 5}" fill="#8888A0" font-size="13" text-anchor="middle">${h}h</text>`;
-  }
-  // filas
-  for (let d = 0; d < 7; d++) {
-    const y = hourLabelHeight + d * (cellSize + cellGap);
-    svg += `<text x="${labelWidth - 5}" y="${y + cellSize/2 + 3}" fill="#8888A0" font-size="13" text-anchor="end">${dayLabels[d]}</text>`;
-    for (let h = 0; h < 24; h++) {
-      const x = labelWidth + h * (cellSize + cellGap);
-      const val = matrix[d][h] || 0;
-      const alpha = val / max;
-      const fill = alpha === 0 ? 'rgba(255,255,255,0.03)' : `rgba(124,58,237,${0.15 + alpha * 0.85})`;
-      const pctOfMax = Math.round(alpha * 100);
-      const delay = (d * 24 + h) * 4;
-      svg += `<rect class="heatmap-cell" x="${x}" y="${y}" width="${cellSize}" height="${cellSize}" rx="2" fill="${fill}" data-d="${d}" data-h="${h}" data-v="${Math.round(val)}" data-p="${pctOfMax}" style="animation-delay:${delay}ms"></rect>`;
+  if (vertical) {
+    // Mobile: 7 columnas (días) × 24 filas (horas). Aprovecha alto de la pantalla.
+    const cellSize = 22;
+    const cellGap = 3;
+    const labelHeight = 22;   // fila superior con día
+    const labelWidth = 26;    // columna izq con hora
+    width = labelWidth + 7 * (cellSize + cellGap);
+    height = labelHeight + 24 * (cellSize + cellGap);
+    svg = `<svg viewBox="0 0 ${width} ${height}" style="width:100%;max-width:${width}px;height:auto;font-family:Inter,sans-serif;display:block">`;
+    // etiquetas día (top)
+    for (let d = 0; d < 7; d++) {
+      const x = labelWidth + d * (cellSize + cellGap) + cellSize/2;
+      svg += `<text x="${x}" y="${labelHeight - 6}" fill="#8888A0" font-size="11" text-anchor="middle">${dayLabels[d]}</text>`;
     }
+    // filas de hora
+    for (let h = 0; h < 24; h++) {
+      const y = labelHeight + h * (cellSize + cellGap);
+      if (h % 3 === 0) {
+        svg += `<text x="${labelWidth - 4}" y="${y + cellSize/2 + 3}" fill="#8888A0" font-size="10" text-anchor="end">${h}h</text>`;
+      }
+      for (let d = 0; d < 7; d++) {
+        const x = labelWidth + d * (cellSize + cellGap);
+        const val = matrix[d][h] || 0;
+        const alpha = val / max;
+        const fill = alpha === 0 ? 'rgba(255,255,255,0.03)' : `rgba(124,58,237,${0.15 + alpha * 0.85})`;
+        const pctOfMax = Math.round(alpha * 100);
+        const delay = (h * 7 + d) * 4;
+        svg += `<rect class="heatmap-cell" x="${x}" y="${y}" width="${cellSize}" height="${cellSize}" rx="2" fill="${fill}" data-d="${d}" data-h="${h}" data-v="${Math.round(val)}" data-p="${pctOfMax}" style="animation-delay:${delay}ms"></rect>`;
+      }
+    }
+    svg += '</svg>';
+  } else {
+    // Desktop: 24 columnas (horas) × 7 filas (días).
+    const cellSize = 26;
+    const cellGap = 4;
+    const labelWidth = 44;
+    const hourLabelHeight = 24;
+    width = labelWidth + 24 * (cellSize + cellGap);
+    height = hourLabelHeight + 7 * (cellSize + cellGap);
+    svg = `<svg viewBox="0 0 ${width} ${height}" style="width:100%;max-width:${width}px;height:auto;font-family:Inter,sans-serif;display:block">`;
+    for (let h = 0; h < 24; h++) {
+      if (h % 3 !== 0) continue;
+      const x = labelWidth + h * (cellSize + cellGap) + cellSize/2;
+      svg += `<text x="${x}" y="${hourLabelHeight - 5}" fill="#8888A0" font-size="13" text-anchor="middle">${h}h</text>`;
+    }
+    for (let d = 0; d < 7; d++) {
+      const y = hourLabelHeight + d * (cellSize + cellGap);
+      svg += `<text x="${labelWidth - 5}" y="${y + cellSize/2 + 3}" fill="#8888A0" font-size="13" text-anchor="end">${dayLabels[d]}</text>`;
+      for (let h = 0; h < 24; h++) {
+        const x = labelWidth + h * (cellSize + cellGap);
+        const val = matrix[d][h] || 0;
+        const alpha = val / max;
+        const fill = alpha === 0 ? 'rgba(255,255,255,0.03)' : `rgba(124,58,237,${0.15 + alpha * 0.85})`;
+        const pctOfMax = Math.round(alpha * 100);
+        const delay = (d * 24 + h) * 4;
+        svg += `<rect class="heatmap-cell" x="${x}" y="${y}" width="${cellSize}" height="${cellSize}" rx="2" fill="${fill}" data-d="${d}" data-h="${h}" data-v="${Math.round(val)}" data-p="${pctOfMax}" style="animation-delay:${delay}ms"></rect>`;
+      }
+    }
+    svg += '</svg>';
   }
-  svg += '</svg>';
   holder.innerHTML = svg;
 
   // Tooltip flotante custom
