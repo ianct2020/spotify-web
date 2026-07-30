@@ -9,6 +9,7 @@ import { openTrackCard } from './track-card.js';
 import { openArtistCard } from './artist-card.js';
 import { openAlbumCard } from './album-card.js';
 import { getMyTop } from '../api.js';
+import { activateMarquee, marqueeSpan } from '../ui/marquee.js';
 
 let stats = null;
 let selectedYear = null;
@@ -63,16 +64,22 @@ export async function render(container) {
     selectedYear = yearsDesc[0].year;
   }
 
+  const dataFrom = fmtDate(stats.totals?.first_play || stats.years[0].first_play);
+  const dataTo = fmtDate(stats.totals?.last_play || yearsDesc[0].last_play);
+  const dataPlays = stats.totals.plays_valid.toLocaleString('es-AR');
+
   content.innerHTML = `
-    <div class="card" style="margin-bottom:16px">
-      <div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:12px">
-        <div>
-          <div style="font-size:12px;color:var(--color-text-muted);letter-spacing:0.06em;text-transform:uppercase">Elegí el año</div>
-        </div>
-        <div style="font-size:12px;color:var(--color-text-muted);text-align:right;max-width:420px">
-          Datos desde ${fmtDate(stats.totals?.first_play || stats.years[0].first_play)} <strong style="color:var(--color-text)">hasta el ${fmtDate(stats.totals?.last_play || yearsDesc[0].last_play)}</strong> · ${stats.totals.plays_valid.toLocaleString('es-AR')} plays válidas (≥30s)
-          <span title="El Extended Streaming History se pide a Spotify una vez cada tanto. Lo que escuchaste después de esa fecha no aparece hasta que lo vuelvas a pedir." style="cursor:help;opacity:0.6;margin-left:4px">ⓘ</span>
-        </div>
+    <div class="card" style="margin-bottom:16px;position:relative">
+      <div style="display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin-bottom:12px">
+        <div style="font-size:12px;color:var(--color-text-muted);letter-spacing:0.06em;text-transform:uppercase">Elegí el año</div>
+        <button class="wrapped-info-btn" id="wrapped-info-btn" aria-label="Ver rango de datos"
+          style="background:none;border:1px solid var(--color-border);color:var(--color-text-muted);
+                 width:24px;height:24px;border-radius:50%;font-size:12px;cursor:pointer;padding:0;line-height:1;
+                 display:flex;align-items:center;justify-content:center;flex-shrink:0">ⓘ</button>
+      </div>
+      <div id="wrapped-info-panel" style="display:none;background:var(--color-elevated);border:1px solid var(--color-border);border-radius:var(--radius-sm);padding:10px 12px;margin-bottom:12px;font-size:12px;color:var(--color-text-muted);line-height:1.5">
+        Datos desde <strong style="color:var(--color-text)">${dataFrom}</strong> hasta el <strong style="color:var(--color-text)">${dataTo}</strong> · ${dataPlays} plays válidas (≥30s).
+        El Extended Streaming History se pide a Spotify una vez cada tanto — lo que escuchaste después de esa fecha no aparece hasta que lo vuelvas a pedir.
       </div>
       <div style="display:flex;gap:8px;flex-wrap:wrap" id="wrapped-year-tabs">
         ${yearsDesc.map(y => `
@@ -88,6 +95,14 @@ export async function render(container) {
     <div id="wrapped-year-card"></div>
     <div id="wrapped-alltime" style="margin-top:24px"></div>
   `;
+
+  const infoBtn = document.getElementById('wrapped-info-btn');
+  const infoPanel = document.getElementById('wrapped-info-panel');
+  if (infoBtn && infoPanel) {
+    infoBtn.onclick = () => {
+      infoPanel.style.display = infoPanel.style.display === 'none' ? 'block' : 'none';
+    };
+  }
 
   content.querySelectorAll('.wrapped-year-tab').forEach(btn => {
     btn.onclick = () => {
@@ -202,6 +217,7 @@ function renderYearCard() {
   wireTopHover(holder, 'y-tile-disc', y.discovery ? [{ name: y.discovery.artist }] : [], 'artist');
   wireTopClick(holder, 'y-alb', y.top_albums?.slice(0, 15) || [], 'album');
   wireAlbumHero(holder, topAlbum);
+  activateMarquee(holder);
 }
 
 // Click en fila (sin hover-play) → abre la ficha correspondiente.
@@ -280,8 +296,8 @@ function renderTopCard(title, items, keyName, keyMin, keyPlays, keyArtist, hover
           <div class="wrapped-top-row"${attrs.length ? ' ' + attrs.join(' ') : ''}>
             <span class="wrapped-top-rank">${i + 1}</span>
             <div class="wrapped-top-info">
-              <div class="wrapped-top-name">${escapeHtml(it[keyName])}</div>
-              ${keyArtist && it[keyArtist] ? `<div class="wrapped-top-artist">${escapeHtml(it[keyArtist])}</div>` : ''}
+              <div class="wrapped-top-name">${marqueeSpan(escapeHtml(it[keyName]))}</div>
+              ${keyArtist && it[keyArtist] ? `<div class="wrapped-top-artist">${marqueeSpan(escapeHtml(it[keyArtist]))}</div>` : ''}
             </div>
             <span class="wrapped-top-meta">${fmtMinutes(it[keyMin])}${it[keyPlays] ? ` · ${it[keyPlays]}` : ''}</span>
           </div>
@@ -395,6 +411,7 @@ function renderAllTime() {
   wireTopHover(holder, 'at-tile-trk', topTrack ? [topTrack] : [], 'track');
   wireTopClick(holder, 'at-alb', (stats.top_albums_all_time || []).slice(0, 20), 'album');
   wireAlbumHero(holder, topAlbum);
+  activateMarquee(holder);
 }
 
 // ============ Wrapped lite: para users sin Extended Streaming History ============

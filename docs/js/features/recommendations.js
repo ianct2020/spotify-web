@@ -1,7 +1,7 @@
-import { spotifyFetch, createPlaylist, addTracksToPlaylist, invalidatePlaylistsCache, getAllLikedTracks } from '../api.js?v=101';
-import { hasKey, setKey, hasUsername, getUsername, setUsername, getUserTopArtists, getSimilarArtists, getArtistTopTracks } from '../api/lastfm.js?v=101';
-import { showProgress, hideProgress, promptPlaylistName, escapeHtml } from '../ui/components.js?v=101';
-import { showToast } from '../ui/toast.js?v=101';
+import { spotifyFetch, createPlaylist, addTracksToPlaylist, invalidatePlaylistsCache, getAllLikedTracks } from '../api.js?v=102';
+import { hasKey, setKey, hasUsername, getUsername, setUsername, getUserTopArtists, getSimilarArtists, getArtistTopTracks } from '../api/lastfm.js?v=102';
+import { showProgress, hideProgress, promptPlaylistName, escapeHtml } from '../ui/components.js?v=102';
+import { showToast } from '../ui/toast.js?v=102';
 
 let recommendations = [];
 let currentPick = null;
