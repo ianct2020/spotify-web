@@ -699,7 +699,7 @@ async function getCurrentUserId() {
       invalidatePlaylistsCache();
       // Caches del historial del owner: si el nuevo user no es el owner, sobran;
       // si es el owner de vuelta, los re-baja del JSON del repo.
-      for (const k of ['history_stats_v2','history_track_plays_v2','history_listened_albums_v2','history_skip_stats_v1','history_albums_v2','history_track_detail_v1','history_records_v1']) {
+      for (const k of ['history_stats_v2','history_track_plays_v2','history_listened_albums_v2','history_skip_stats_v1','history_albums_v2','history_track_detail_v1','history_records_v2']) {
         idbDel(k).catch(() => {});
       }
     }

@@ -6,8 +6,8 @@
 // un mensaje explicando que este historial es de otro user. Evita mostrar
 // los datos personales de Ian al resto de los usuarios.
 
-import { idbGetCached, idbSetCached } from '../idb.js?v=92';
-import { getCurrentUserId } from '../api.js?v=92';
+import { idbGetCached, idbSetCached } from '../idb.js?v=93';
+import { getCurrentUserId } from '../api.js?v=93';
 
 const HISTORY_OWNER_ID = 'orhs6wu5ykk7ql80u92ujn74o';
 
@@ -21,7 +21,7 @@ const PLAYS_VERSION = 2; // ahora incluye entries "partial" para tracks con solo
 const LISTENED_VERSION = 2;
 const SKIP_VERSION = 1;
 const DETAIL_VERSION = 1;   // ficha de canción: plays por mes + primera/última
-const RECORDS_VERSION = 1;  // página Récords
+const RECORDS_VERSION = 2;  // v2: excluye todas las variantes del sonido saca-agua
 const STATS_KEY = `history_stats_v${STATS_VERSION}`;
 const PLAYS_KEY = `history_track_plays_v${PLAYS_VERSION}`;
 const LISTENED_KEY = `history_listened_albums_v${LISTENED_VERSION}`;
