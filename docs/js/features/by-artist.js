@@ -1,8 +1,9 @@
-import { getAllLikedTracks, createPlaylist, addTracksToPlaylist, invalidatePlaylistsCache, getBestAvailableLikes } from '../api.js?v=96';
-import { showProgress, hideProgress, progressController, isCancelled, promptPlaylistName, escapeHtml } from '../ui/components.js?v=96';
-import { showToast } from '../ui/toast.js?v=96';
-import { findArtistTopPreview } from '../api/itunes.js?v=96';
-import { attachHover } from '../ui/preview-player.js?v=96';
+import { getAllLikedTracks, createPlaylist, addTracksToPlaylist, invalidatePlaylistsCache, getBestAvailableLikes } from '../api.js?v=97';
+import { showProgress, hideProgress, progressController, isCancelled, promptPlaylistName, escapeHtml } from '../ui/components.js?v=97';
+import { showToast } from '../ui/toast.js?v=97';
+import { findArtistTopPreview } from '../api/itunes.js?v=97';
+import { attachHover } from '../ui/preview-player.js?v=97';
+import { openArtistCard } from './artist-card.js?v=97';
 
 const SORT_KEY = 'artist_sort_mode';
 const VALID_SORTS = new Set(['count-desc', 'count-asc', 'name-asc']);
@@ -179,6 +180,7 @@ function renderGrid() {
     <div class="smart-grid" style="padding-bottom:80px">
       ${capped.map(([name, tracks]) => `
         <button class="smart-card artist-card ${selectedArtists.has(name) ? 'selected' : ''}" data-artist="${escapeHtml(name)}">
+          <span class="artist-card-ficha" title="Ver ficha del artista">ⓘ</span>
           <div class="smart-card-title" style="font-size:15px">${escapeHtml(name)}</div>
           <div class="smart-card-meta">${tracks.length.toLocaleString()} tracks</div>
         </button>
@@ -195,6 +197,8 @@ function renderGrid() {
       const p = await findArtistTopPreview(name);
       return p && { url: p.url, label: `${p.track} — ${p.artist}` };
     }, 550);
+    const fichaBtn = el.querySelector('.artist-card-ficha');
+    if (fichaBtn) fichaBtn.onclick = (e) => { e.stopPropagation(); openArtistCard({ name }); };
   });
   updateActionBar();
 }

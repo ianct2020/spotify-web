@@ -6,6 +6,7 @@ import { loadRecords, isOwner, ownerLockedMessage } from './history-data.js';
 import { escapeHtml } from '../ui/components.js';
 import { findTrackPreview, findArtistTopPreview } from '../api/itunes.js';
 import { attachHover } from '../ui/preview-player.js';
+import { openArtistCard } from './artist-card.js';
 
 const MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
 const DIAS = ['lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado', 'domingo'];
@@ -156,7 +157,7 @@ function wireHovers(content) {
     const h = hoverTargets[+el.dataset.recHover];
     if (!h) return;
     el.classList.add('tc-clickable');
-    el.title = 'Mantené el mouse para escuchar un preview';
+    el.title = 'Mantené el mouse para escuchar un preview · click para ficha';
     const getter = h.kind === 'artist'
       ? async () => {
           const p = await findArtistTopPreview(h.name);
@@ -167,6 +168,12 @@ function wireHovers(content) {
           return p && { url: p.url, label: `${h.name} — ${h.artist || ''}` };
         };
     attachHover(el, `rec:${el.dataset.recHover}`, getter);
+    // Click → ficha (artista o canción). Los tracks acá no traen uri —
+    // la ficha va a mostrar meta+preview, sin la curva mensual.
+    el.onclick = () => {
+      if (h.kind === 'artist') openArtistCard({ name: h.name });
+      else if (h.kind === 'track') openArtistCard({ name: h.artist });  // sin uri, mejor abrir el artista
+    };
   });
   hoverTargets = [];
 }
