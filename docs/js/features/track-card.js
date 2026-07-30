@@ -3,10 +3,11 @@
 // días distintos, récord en un día — más preview iTunes y link a Spotify.
 // Se abre desde cualquier feature con openTrackCard({ id, name, artist, album, img }).
 
-import { loadTrackPlays, loadTrackDetail, isOwner } from './history-data.js?v=93';
-import { escapeHtml } from '../ui/components.js?v=93';
-import { findTrackPreview } from '../api/itunes.js?v=93';
-import { togglePreview, playingKey } from '../ui/preview-player.js?v=93';
+import { loadTrackPlays, loadTrackDetail, isOwner } from './history-data.js?v=94';
+import { escapeHtml } from '../ui/components.js?v=94';
+import { findTrackPreview } from '../api/itunes.js?v=94';
+import { togglePreview, playingKey } from '../ui/preview-player.js?v=94';
+import { hasUsername, findTrackId, getTrackCurrentStats } from '../api/statsfm.js?v=94';
 
 const MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
 
@@ -112,7 +113,9 @@ async function openTrackCard(t) {
   const det = detail?.tracks?.[t.id] || null;     // { m, f, l, d, x }
 
   if (!totals && !det) {
-    body.innerHTML = `<p style="color:var(--color-text-secondary);font-size:13px;margin:0">Este tema no aparece en tu historial (o solo tuvo plays de menos de 30s). Nunca lo escuchaste entero desde 2018.</p>`;
+    body.innerHTML = `<p style="color:var(--color-text-secondary);font-size:13px;margin:0">Este tema no aparece en tu historial (o solo tuvo plays de menos de 30s). Nunca lo escuchaste entero desde 2018.</p>
+      <div id="tc-statsfm"></div>`;
+    fillStatsfmLine(t);
     return;
   }
 
@@ -136,7 +139,10 @@ async function openTrackCard(t) {
     ` : `
       <p style="color:var(--color-text-muted);font-size:12px;margin:10px 0 0">Curva mensual disponible solo para temas con 5+ plays.</p>
     `}
+    <div id="tc-statsfm"></div>
   `;
+
+  fillStatsfmLine(t, totals ? totals[0] : 0);
 
   if (det) {
     const { labels, data } = buildSeries(det.m);
@@ -180,6 +186,35 @@ async function openTrackCard(t) {
         },
       },
     });
+  }
+}
+
+// Plays actuales según Stats.fm (que sigue trackeando después del export).
+// Async y silencioso: si no hay username configurado o no encuentra el tema,
+// no muestra nada. Funciona sin Plus.
+async function fillStatsfmLine(t, exportPlays = null) {
+  if (!hasUsername()) return;
+  const holder = document.getElementById('tc-statsfm');
+  if (!holder) return;
+  holder.innerHTML = `<div style="font-size:12px;color:var(--color-text-muted);margin-top:10px">Consultando Stats.fm…</div>`;
+  try {
+    const id = await findTrackId(t.name || '', t.artist || '');
+    const stats = id && await getTrackCurrentStats(id);
+    if (!document.getElementById('tc-statsfm')) return; // cerraron la ficha
+    if (!stats) { holder.innerHTML = ''; return; }
+    const min = Math.round(stats.durationMs / 60000);
+    const delta = exportPlays != null && stats.count > exportPlays
+      ? ` <span style="color:var(--color-accent)">(+${stats.count - exportPlays} desde el export)</span>`
+      : '';
+    holder.innerHTML = `
+      <div style="display:flex;align-items:center;gap:8px;margin-top:12px;padding:8px 12px;background:var(--color-elevated);border:1px solid var(--color-border);border-radius:var(--radius-sm,6px);font-size:12.5px;color:var(--color-text-secondary)">
+        <strong style="color:var(--color-text)">Stats.fm en vivo:</strong>
+        ${stats.count.toLocaleString('es-AR')} plays · ${min.toLocaleString('es-AR')}m${delta}
+        <span style="color:var(--color-text-muted);margin-left:auto" title="Stats.fm sigue trackeando tu Spotify después del export congelado">actualizado hoy</span>
+      </div>`;
+  } catch {
+    const h = document.getElementById('tc-statsfm');
+    if (h) h.innerHTML = '';
   }
 }
 
