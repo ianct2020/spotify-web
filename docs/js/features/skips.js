@@ -3,13 +3,13 @@
 // Preview 30s instantáneo vía iTunes (arranca en el estribillo, no suma plays
 // en tu historial de Spotify). Fallback: iframe embed oficial si iTunes no lo tiene.
 
-import { getBestAvailableLikes, removeLikedTracks } from '../api.js?v=94';
-import { loadSkipStats, trackIdOf, isOwner, ownerLockedMessage } from './history-data.js?v=94';
-import { escapeHtml, confirmModal } from '../ui/components.js?v=94';
-import { showToast } from '../ui/toast.js?v=94';
-import { findTrackPreview } from '../api/itunes.js?v=94';
-import { togglePreview, playingKey } from '../ui/preview-player.js?v=94';
-import { openTrackCard } from './track-card.js?v=94';
+import { getBestAvailableLikes, removeLikedTracks } from '../api.js?v=95';
+import { loadSkipStats, trackIdOf, isOwner, ownerLockedMessage } from './history-data.js?v=95';
+import { escapeHtml, confirmModal } from '../ui/components.js?v=95';
+import { showToast } from '../ui/toast.js?v=95';
+import { findTrackPreview } from '../api/itunes.js?v=95';
+import { togglePreview, playingKey } from '../ui/preview-player.js?v=95';
+import { openTrackCard } from './track-card.js?v=95';
 
 let cache = null;
 let minPlays = 5;    // solo tracks con ≥N plays totales (ok+skip)
