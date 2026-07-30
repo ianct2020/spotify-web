@@ -3,14 +3,14 @@
 // Preview 30s instantáneo vía iTunes (arranca en el estribillo, no suma plays
 // en tu historial de Spotify). Fallback: iframe embed oficial si iTunes no lo tiene.
 
-import { getBestAvailableLikes, removeLikedTracks } from '../api.js?v=96';
-import { loadSkipStats, trackIdOf, isOwner, ownerLockedMessage } from './history-data.js?v=96';
-import { escapeHtml, confirmModal } from '../ui/components.js?v=96';
-import { showToast } from '../ui/toast.js?v=96';
-import { findTrackPreview } from '../api/itunes.js?v=96';
-import { togglePreview, playingKey } from '../ui/preview-player.js?v=96';
-import { openTrackCard } from './track-card.js?v=96';
-import { hasUsername, loadTopLifetime } from '../api/statsfm.js?v=96';
+import { getBestAvailableLikes, removeLikedTracks } from '../api.js?v=97';
+import { loadSkipStats, trackIdOf, isOwner, ownerLockedMessage } from './history-data.js?v=97';
+import { escapeHtml, confirmModal } from '../ui/components.js?v=97';
+import { showToast } from '../ui/toast.js?v=97';
+import { findTrackPreview } from '../api/itunes.js?v=97';
+import { togglePreview, playingKey } from '../ui/preview-player.js?v=97';
+import { openTrackCard } from './track-card.js?v=97';
+import { hasUsername, loadTopLifetime } from '../api/statsfm.js?v=97';
 
 let cache = null;
 let minPlays = 5;    // solo tracks con ≥N plays totales (ok+skip)
@@ -170,28 +170,37 @@ function renderRow(r, i) {
   const artists = (r.track.artists || []).map(a => a.name || a).join(', ');
   const ratioClass = r.ratio >= 90 ? 'skips-badge-danger' : 'skips-badge-warn';
 
+  // Layout de 2 filas: fila 1 con check+tapa+info+badge, fila 2 con los controles
+  // (play + spotify) alineados a la derecha para que estén siempre cerca del mouse.
+  // Link a Spotify va SIEMPRE — se arma con r.id, que existe aunque r.uri no venga.
   return `
     <div class="skips-row" data-i="${i}" data-id="${r.id}">
-      <label class="skips-row-main">
-        <input type="checkbox" class="sk-cb skips-check" data-i="${i}">
-        ${cover
-          ? `<img src="${cover}" alt="" loading="lazy" class="skips-cover">`
-          : `<div class="skips-cover skips-cover-empty">♪</div>`}
-        <div class="skips-info">
-          <div class="skips-title">${escapeHtml(r.track.name || '(sin nombre)')}</div>
-          <div class="skips-meta">${escapeHtml(artists)}${r.track.album?.name ? ` · ${escapeHtml(r.track.album.name)}` : ''}</div>
+      <div class="skips-row-main">
+        <label class="skips-row-top">
+          <input type="checkbox" class="sk-cb skips-check" data-i="${i}">
+          ${cover
+            ? `<img src="${cover}" alt="" loading="lazy" class="skips-cover">`
+            : `<div class="skips-cover skips-cover-empty">♪</div>`}
+          <div class="skips-info">
+            <div class="skips-title">${escapeHtml(r.track.name || '(sin nombre)')}</div>
+            <div class="skips-meta">${escapeHtml(artists)}${r.track.album?.name ? ` · ${escapeHtml(r.track.album.name)}` : ''}</div>
+          </div>
+          <span class="skips-badge ${ratioClass}${r.updated ? ' skips-badge-updated' : ''}" title="${r.updated ? 'Ratio actualizado con Stats.fm (' + r.skip + ' skips de ' + r.total + ' plays totales hoy)' : 'Skipeaste ' + r.skip + ' de ' + r.total + ' veces'}">
+            <span class="skips-badge-ratio">${r.ratio}%</span>
+            <span class="skips-badge-count">${r.skip}/${r.total}</span>
+          </span>
+        </label>
+        <div class="skips-row-actions">
+          <button class="skips-play-btn ${playingKey() === `sk:${r.id}` ? 'playing' : ''}" data-id="${r.id}" title="Preview 30s — no suma plays en tu historial">
+            <svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14"><path d="M8 5v14l11-7z"/></svg>
+            <span class="skips-play-label">Preview</span>
+          </button>
+          <a href="https://open.spotify.com/track/${r.id}" target="_blank" rel="noopener" class="skips-open" title="Abrir en Spotify">
+            <span class="skips-open-arrow">↗</span>
+            <span class="skips-open-label">Spotify</span>
+          </a>
         </div>
-        <span class="skips-badge ${ratioClass}${r.updated ? ' skips-badge-updated' : ''}" title="${r.updated ? 'Ratio actualizado con Stats.fm (' + r.skip + ' skips de ' + r.total + ' plays totales hoy)' : 'Skipeaste ' + r.skip + ' de ' + r.total + ' veces'}">
-          <span class="skips-badge-ratio">${r.ratio}%</span>
-          <span class="skips-badge-count">${r.skip}/${r.total}</span>
-        </span>
-        <button class="skips-play-btn ${playingKey() === `sk:${r.id}` ? 'playing' : ''}" data-id="${r.id}" title="Preview 30s — no suma plays en tu historial">
-          <svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14"><path d="M8 5v14l11-7z"/></svg>
-        </button>
-        ${r.uri
-          ? `<a href="https://open.spotify.com/track/${r.id}" target="_blank" rel="noopener" class="skips-open" title="Abrir en Spotify">↗</a>`
-          : '<span class="skips-open" style="visibility:hidden">↗</span>'}
-      </label>
+      </div>
       <div class="skips-preview-slot" data-id="${r.id}"></div>
     </div>
   `;

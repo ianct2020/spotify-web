@@ -864,15 +864,26 @@ body.modal-open {
 .skips-row:last-child { border-bottom: none; }
 
 .skips-row-main {
-  display: grid;
-  grid-template-columns: auto 44px 1fr auto auto auto;
-  align-items: center;
-  gap: 12px;
-  padding: 10px 16px;
-  cursor: pointer;
+  padding: 10px 16px 8px;
   transition: background .1s;
 }
 .skips-row-main:hover { background: var(--color-elevated); }
+
+.skips-row-top {
+  display: grid;
+  grid-template-columns: auto 44px 1fr auto;
+  align-items: center;
+  gap: 12px;
+  cursor: pointer;
+}
+
+.skips-row-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  align-items: center;
+  padding: 6px 0 0 68px;   /* 68px = 24px check + 44px cover + 12px gap: alinea con el título */
+}
 
 .skips-check { flex-shrink: 0; margin: 0; }
 
@@ -924,19 +935,19 @@ body.modal-open {
 .skips-badge-danger { background: rgba(239,68,68,.12); color: #ef4444; }
 
 .skips-play-btn {
-  width: 30px;
-  height: 30px;
-  border-radius: 50%;
+  height: 28px;
+  border-radius: 14px;
   border: 1px solid var(--color-border);
   background: var(--color-elevated);
   color: var(--color-text-secondary);
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  justify-content: center;
+  gap: 6px;
   cursor: pointer;
-  flex-shrink: 0;
-  padding: 0;
-  transition: background .15s, color .15s, border-color .15s, transform .1s;
+  padding: 0 12px 0 10px;
+  font-size: 12px;
+  font-weight: 500;
+  transition: background .15s, color .15s, border-color .15s;
 }
 .skips-play-btn:hover {
   background: var(--color-accent);
@@ -947,18 +958,25 @@ body.modal-open {
   background: var(--color-accent);
   color: white;
   border-color: var(--color-accent);
-  transform: scale(1.05);
 }
-.skips-play-btn svg { transform: translateX(1px); }
 
 .skips-open {
-  color: var(--color-text-muted);
-  font-size: 15px;
+  height: 28px;
+  border-radius: 14px;
+  border: 1px solid var(--color-border);
+  background: var(--color-elevated);
+  color: var(--color-text-secondary);
   text-decoration: none;
-  flex-shrink: 0;
-  padding: 4px 6px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 12px;
+  font-size: 12px;
+  font-weight: 500;
+  transition: background .15s, color .15s, border-color .15s;
 }
-.skips-open:hover { color: var(--color-accent); }
+.skips-open:hover { background: var(--color-accent); color: white; border-color: var(--color-accent); }
+.skips-open-arrow { font-size: 13px; }
 
 .skips-preview-slot {
   max-height: 0;

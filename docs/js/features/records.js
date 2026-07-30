@@ -2,10 +2,11 @@
 // maratones de un artista, temas en loop, rachas e hitos. Todo sale de
 // history-records.json (gen-stats.py) ya calculado, acá es solo UI.
 
-import { loadRecords, isOwner, ownerLockedMessage } from './history-data.js?v=96';
-import { escapeHtml } from '../ui/components.js?v=96';
-import { findTrackPreview, findArtistTopPreview } from '../api/itunes.js?v=96';
-import { attachHover } from '../ui/preview-player.js?v=96';
+import { loadRecords, isOwner, ownerLockedMessage } from './history-data.js?v=97';
+import { escapeHtml } from '../ui/components.js?v=97';
+import { findTrackPreview, findArtistTopPreview } from '../api/itunes.js?v=97';
+import { attachHover } from '../ui/preview-player.js?v=97';
+import { openArtistCard } from './artist-card.js?v=97';
 
 const MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
 const DIAS = ['lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado', 'domingo'];
@@ -156,7 +157,7 @@ function wireHovers(content) {
     const h = hoverTargets[+el.dataset.recHover];
     if (!h) return;
     el.classList.add('tc-clickable');
-    el.title = 'Mantené el mouse para escuchar un preview';
+    el.title = 'Mantené el mouse para escuchar un preview · click para ficha';
     const getter = h.kind === 'artist'
       ? async () => {
           const p = await findArtistTopPreview(h.name);
@@ -167,6 +168,12 @@ function wireHovers(content) {
           return p && { url: p.url, label: `${h.name} — ${h.artist || ''}` };
         };
     attachHover(el, `rec:${el.dataset.recHover}`, getter);
+    // Click → ficha (artista o canción). Los tracks acá no traen uri —
+    // la ficha va a mostrar meta+preview, sin la curva mensual.
+    el.onclick = () => {
+      if (h.kind === 'artist') openArtistCard({ name: h.name });
+      else if (h.kind === 'track') openArtistCard({ name: h.artist });  // sin uri, mejor abrir el artista
+    };
   });
   hoverTargets = [];
 }

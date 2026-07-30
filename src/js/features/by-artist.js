@@ -3,6 +3,7 @@ import { showProgress, hideProgress, progressController, isCancelled, promptPlay
 import { showToast } from '../ui/toast.js';
 import { findArtistTopPreview } from '../api/itunes.js';
 import { attachHover } from '../ui/preview-player.js';
+import { openArtistCard } from './artist-card.js';
 
 const SORT_KEY = 'artist_sort_mode';
 const VALID_SORTS = new Set(['count-desc', 'count-asc', 'name-asc']);
@@ -179,6 +180,7 @@ function renderGrid() {
     <div class="smart-grid" style="padding-bottom:80px">
       ${capped.map(([name, tracks]) => `
         <button class="smart-card artist-card ${selectedArtists.has(name) ? 'selected' : ''}" data-artist="${escapeHtml(name)}">
+          <span class="artist-card-ficha" title="Ver ficha del artista">ⓘ</span>
           <div class="smart-card-title" style="font-size:15px">${escapeHtml(name)}</div>
           <div class="smart-card-meta">${tracks.length.toLocaleString()} tracks</div>
         </button>
@@ -195,6 +197,8 @@ function renderGrid() {
       const p = await findArtistTopPreview(name);
       return p && { url: p.url, label: `${p.track} — ${p.artist}` };
     }, 550);
+    const fichaBtn = el.querySelector('.artist-card-ficha');
+    if (fichaBtn) fichaBtn.onclick = (e) => { e.stopPropagation(); openArtistCard({ name }); };
   });
   updateActionBar();
 }

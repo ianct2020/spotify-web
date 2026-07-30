@@ -5,6 +5,9 @@ import { openListenedAlbumsPicker } from './listened-shared.js';
 import { loadHistoryStats, loadListenedAlbums } from './history-data.js';
 import { findArtistTopPreview } from '../api/itunes.js';
 import { hoverIn, hoverOut } from '../ui/preview-player.js';
+import { hasUsername, getUsername } from '../api/statsfm.js';
+import { loadHistoryStats as _loadStatsForCounter } from './history-data.js';
+import { openArtistCard } from './artist-card.js';
 
 let charts = [];
 let _loadController = null;
@@ -16,6 +19,7 @@ export function render(container) {
         <h1>Dashboard</h1>
         <p>Stats de tu biblioteca de Liked Songs.</p>
         <div id="dash-last-sync" style="font-size:12px;color:var(--color-text-muted);margin-top:4px"></div>
+        <div id="dash-statsfm-ticker" class="statsfm-ticker" style="display:none"></div>
       </div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-start">
         <div style="position:relative">
@@ -34,6 +38,7 @@ export function render(container) {
   `;
 
   refreshLastSyncLabel();
+  fillStatsfmTicker();
 
   document.getElementById('dash-refresh-btn').onclick = handleRefresh;
   const exportBtn = document.getElementById('dash-export-all-btn');
@@ -999,9 +1004,12 @@ function makeChart(id, config) {
 // Hover-play para charts de artistas: apoyás el mouse en una barra y suena el
 // tema más escuchado del artista (preview iTunes, se corta al salir). El delay
 // de 500ms evita ametrallar la API barriendo el chart de punta a punta.
+// Click en una barra → ficha del artista.
 function artistHoverHandlers(labels) {
   return {
     onHover(evt, elements) {
+      const canvas = evt.native?.target;
+      if (canvas) canvas.style.cursor = elements?.length ? 'pointer' : '';
       if (elements?.length) {
         const name = labels[elements[0].index];
         hoverIn(`dash-art:${name}`, async () => {
@@ -1011,6 +1019,10 @@ function artistHoverHandlers(labels) {
       } else {
         hoverOut();
       }
+    },
+    onClick(evt, elements) {
+      if (!elements?.length) return;
+      openArtistCard({ name: labels[elements[0].index] });
     },
   };
 }
@@ -1160,4 +1172,30 @@ function buildCharts(stats) {
       },
     },
   });
+}
+
+// Ticker de plays actuales según Stats.fm (todas las plays trackeadas hasta HOY,
+// incluyendo lo importado). Le suma el delta desde la última vez que se pidió
+// el export a Spotify, así ves cuánto escuchaste después del corte del historial.
+async function fillStatsfmTicker() {
+  const el = document.getElementById('dash-statsfm-ticker');
+  if (!el || !hasUsername()) return;
+  const u = getUsername();
+  try {
+    const [statsRes, hist] = await Promise.all([
+      fetch(`https://api.stats.fm/api/v1/users/${encodeURIComponent(u)}/streams/stats?range=lifetime`),
+      _loadStatsForCounter().catch(() => null),
+    ]);
+    if (!statsRes.ok) return;
+    const totalNow = (await statsRes.json()).items?.count;
+    if (typeof totalNow !== 'number') return;
+    const exportPlays = hist?.totals?.plays_valid || null;
+    const delta = exportPlays != null ? totalNow - exportPlays : null;
+    el.style.display = '';
+    el.innerHTML = `
+      <span class="statsfm-ticker-dot"></span>
+      <strong>${totalNow.toLocaleString('es-AR')}</strong> plays según Stats.fm
+      ${delta != null && delta > 0 ? `<span class="statsfm-ticker-delta">+${delta.toLocaleString('es-AR')} desde el export</span>` : ''}
+    `;
+  } catch { /* silencioso */ }
 }

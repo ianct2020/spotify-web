@@ -1,12 +1,13 @@
 // Wrapped propio: mini-resumen tuyo por año, hecho con el Extended Streaming History.
 // A diferencia del Wrapped oficial (que corre oct-sept), este es del año calendario completo.
 
-import { loadHistoryStats, isOwner, ownerLockedMessage } from './history-data.js?v=96';
-import { escapeHtml } from '../ui/components.js?v=96';
-import { findTrackPreview, findArtistTopPreview } from '../api/itunes.js?v=96';
-import { attachHover } from '../ui/preview-player.js?v=96';
-import { openTrackCard } from './track-card.js?v=96';
-import { getMyTop } from '../api.js?v=96';
+import { loadHistoryStats, isOwner, ownerLockedMessage } from './history-data.js?v=97';
+import { escapeHtml } from '../ui/components.js?v=97';
+import { findTrackPreview, findArtistTopPreview } from '../api/itunes.js?v=97';
+import { attachHover } from '../ui/preview-player.js?v=97';
+import { openTrackCard } from './track-card.js?v=97';
+import { openArtistCard } from './artist-card.js?v=97';
+import { getMyTop } from '../api.js?v=97';
 
 let stats = null;
 let selectedYear = null;
@@ -67,7 +68,10 @@ export async function render(container) {
         <div>
           <div style="font-size:12px;color:var(--color-text-muted);letter-spacing:0.06em;text-transform:uppercase">Elegí el año</div>
         </div>
-        <div style="font-size:12px;color:var(--color-text-muted)">Datos desde ${fmtDate(stats.totals?.first_play || stats.years[0].first_play)} <strong style="color:var(--color-text)">hasta el ${fmtDate(stats.totals?.last_play || yearsDesc[0].last_play)}</strong> · ${stats.totals.plays_valid.toLocaleString('es-AR')} plays válidas (≥30s)</div>
+        <div style="font-size:12px;color:var(--color-text-muted);text-align:right;max-width:420px">
+          Datos desde ${fmtDate(stats.totals?.first_play || stats.years[0].first_play)} <strong style="color:var(--color-text)">hasta el ${fmtDate(stats.totals?.last_play || yearsDesc[0].last_play)}</strong> · ${stats.totals.plays_valid.toLocaleString('es-AR')} plays válidas (≥30s)
+          <span title="El Extended Streaming History se pide a Spotify una vez cada tanto. Lo que escuchaste después de esa fecha no aparece hasta que lo vuelvas a pedir." style="cursor:help;opacity:0.6;margin-left:4px">ⓘ</span>
+        </div>
       </div>
       <div style="display:flex;gap:8px;flex-wrap:wrap" id="wrapped-year-tabs">
         ${yearsDesc.map(y => `
@@ -113,7 +117,6 @@ function renderYearCard() {
         <div class="wrapped-hero-year">${y.year}</div>
         <div class="wrapped-hero-min">${fmtMinutes(y.min)}</div>
         <div class="wrapped-hero-sub">${fmtDays(y.min)} · ${y.plays.toLocaleString('es-AR')} plays</div>
-        ${isLatest ? `<div class="wrapped-hero-note">El export llega hasta el <strong>${fmtDate(y.last_play)}</strong> — lo que escuchaste después no está contado. Para actualizarlo hay que pedirle el historial a Spotify de nuevo.</div>` : ''}
       </div>
 
       <div class="wrapped-year-layout">
@@ -206,7 +209,8 @@ function wireTopHover(holder, cardKey, items, kind) {
     const it = items[i];
     if (!it) return;
     el.title = 'Mantené el mouse para escuchar un preview';
-    // Los tracks del historial traen uri → click abre la ficha de canción
+    // Los tracks del historial traen uri → click abre la ficha de canción.
+    // Los artistas → ficha de artista.
     if (kind === 'track' && it.uri) {
       el.classList.add('tc-clickable');
       el.title = 'Preview al apoyar el mouse · click para ver la ficha';
@@ -215,6 +219,10 @@ function wireTopHover(holder, cardKey, items, kind) {
         name: it.name,
         artist: it.artist || '',
       });
+    } else if (kind === 'artist' && it.name) {
+      el.classList.add('tc-clickable');
+      el.title = 'Preview al apoyar el mouse · click para ver la ficha del artista';
+      el.onclick = () => openArtistCard({ name: it.name });
     }
     const getter = kind === 'artist'
       ? async () => {

@@ -68,9 +68,11 @@ async function openTrackCard(t) {
   overlay.innerHTML = `
     <div class="modal" style="max-width:640px;width:min(640px,92vw)">
       <div style="display:flex;gap:14px;align-items:flex-start;margin-bottom:14px">
-        ${t.img
-          ? `<img src="${t.img}" alt="" style="width:64px;height:64px;border-radius:8px;object-fit:cover;flex-shrink:0">`
-          : `<div style="width:64px;height:64px;border-radius:8px;background:var(--color-elevated);display:flex;align-items:center;justify-content:center;font-size:26px;color:var(--color-text-muted);flex-shrink:0">♪</div>`}
+        <div id="tc-cover" style="width:64px;height:64px;border-radius:8px;background:var(--color-elevated);display:flex;align-items:center;justify-content:center;font-size:26px;color:var(--color-text-muted);flex-shrink:0;overflow:hidden">
+          ${t.img
+            ? `<img src="${t.img}" alt="" style="width:100%;height:100%;object-fit:cover">`
+            : `♪`}
+        </div>
         <div style="flex:1;min-width:0">
           <h3 style="margin:0 0 2px;font-size:18px;line-height:1.25">${escapeHtml(t.name || '(sin nombre)')}</h3>
           <div style="color:var(--color-text-secondary);font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">
@@ -89,6 +91,10 @@ async function openTrackCard(t) {
   overlay.onclick = (e) => { if (e.target === overlay) close(); };
   document.body.appendChild(overlay);
   overlay.querySelector('#tc-close').onclick = close;
+
+  // Si el llamador no pasó tapa (típico de tracks del Wrapped/Récords, que vienen
+  // solo con {name, artist, uri}), la traemos vía oEmbed — CORS abierto, sin auth.
+  if (!t.img) fillCoverFromOembed(t.id);
 
   const previewBtn = overlay.querySelector('#tc-preview');
   previewBtn.onclick = async () => {
@@ -243,6 +249,20 @@ async function fillStatsfmLine(t, exportPlays = null) {
     const h = document.getElementById('tc-statsfm');
     if (h) h.innerHTML = '';
   }
+}
+
+// Fallback de tapa: oEmbed de Spotify devuelve thumbnail_url sin auth y CORS
+// abierto (ver CLAUDE.md). Async y silencioso — si falla, queda el ♪.
+async function fillCoverFromOembed(id) {
+  try {
+    const res = await fetch(`https://open.spotify.com/oembed?url=spotify:track:${id}`);
+    if (!res.ok) return;
+    const data = await res.json();
+    const url = data.thumbnail_url;
+    const cover = document.getElementById('tc-cover');
+    if (!url || !cover) return;
+    cover.innerHTML = `<img src="${url}" alt="" style="width:100%;height:100%;object-fit:cover">`;
+  } catch { /* silencioso */ }
 }
 
 export { openTrackCard };

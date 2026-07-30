@@ -1,6 +1,6 @@
-import { getAllLikedTracks, getAllPlaylistItems, updatePlaylistItemsCache, getAllUserPlaylists, addTracksToPlaylist, removeTracksFromPlaylist, createPlaylist, unfollowPlaylist } from '../api.js?v=96';
-import { showProgress, hideProgress, progressController, isCancelled, typeConfirmModal, renderTrackRow, escapeHtml } from '../ui/components.js?v=96';
-import { showToast } from '../ui/toast.js?v=96';
+import { getAllLikedTracks, getAllPlaylistItems, updatePlaylistItemsCache, getAllUserPlaylists, addTracksToPlaylist, removeTracksFromPlaylist, createPlaylist, unfollowPlaylist } from '../api.js?v=97';
+import { showProgress, hideProgress, progressController, isCancelled, typeConfirmModal, renderTrackRow, escapeHtml } from '../ui/components.js?v=97';
+import { showToast } from '../ui/toast.js?v=97';
 
 const TARGET_PLAYLIST_NAME = 'anothertwo';
 const SPOTIFY_PLAYLIST_MAX = 10000;
