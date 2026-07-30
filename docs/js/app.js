@@ -1,29 +1,31 @@
-import { isLoggedIn, loginWithSpotify, logout } from './auth.js?v=97';
-import { spotifyFetch, tryAutoLoadUserBackup } from './api.js?v=97';
-import { getValidToken } from './auth.js?v=97';
-import { cacheClearAll } from './storage.js?v=97';
-import { idbClearAll } from './idb.js?v=97';
-import { registerRoute, initRouter } from './router.js?v=97';
-import { showToast } from './ui/toast.js?v=97';
+import { isLoggedIn, loginWithSpotify, logout } from './auth.js?v=98';
+import { spotifyFetch, tryAutoLoadUserBackup } from './api.js?v=98';
+import { getValidToken } from './auth.js?v=98';
+import { cacheClearAll } from './storage.js?v=98';
+import { idbClearAll } from './idb.js?v=98';
+import { registerRoute, initRouter } from './router.js?v=98';
+import { showToast } from './ui/toast.js?v=98';
 
-import { render as renderSync } from './features/sync.js?v=97';
-import { render as renderDedupe } from './features/dedupe.js?v=97';
-import { render as renderDupalbums } from './features/duplicate-albums.js?v=97';
-import { render as renderZombies } from './features/zombies.js?v=97';
-import { render as renderVersions } from './features/versions.js?v=97';
-import { render as renderDashboard } from './features/dashboard.js?v=97';
-import { render as renderSmart } from './features/smart.js?v=97';
-import { render as renderSimilar } from './features/similar-artists.js?v=97';
-import { render as renderRabbit } from './features/rabbit-hole.js?v=97';
-import { render as renderByGenre } from './features/by-genre.js?v=97';
-import { render as renderByArtist } from './features/by-artist.js?v=97';
-import { render as renderRecs } from './features/recommendations.js?v=97';
-import { render as renderListened } from './features/listened.js?v=97';
-import { render as renderWrapped } from './features/wrapped.js?v=97';
-import { render as renderRecords } from './features/records.js?v=97';
-import { render as renderZeroPlays } from './features/zero-plays.js?v=97';
-import { render as renderSkips } from './features/skips.js?v=97';
-import { render as renderSearchLikes } from './features/search-likes.js?v=97';
+import { render as renderSync } from './features/sync.js?v=98';
+import { render as renderDedupe } from './features/dedupe.js?v=98';
+import { render as renderDupalbums } from './features/duplicate-albums.js?v=98';
+import { render as renderZombies } from './features/zombies.js?v=98';
+import { render as renderVersions } from './features/versions.js?v=98';
+import { render as renderDashboard } from './features/dashboard.js?v=98';
+import { render as renderSmart } from './features/smart.js?v=98';
+import { render as renderSimilar } from './features/similar-artists.js?v=98';
+import { render as renderRabbit } from './features/rabbit-hole.js?v=98';
+import { render as renderByGenre } from './features/by-genre.js?v=98';
+import { render as renderByArtist } from './features/by-artist.js?v=98';
+import { render as renderRecs } from './features/recommendations.js?v=98';
+import { render as renderListened } from './features/listened.js?v=98';
+import { render as renderWrapped } from './features/wrapped.js?v=98';
+import { render as renderRecords } from './features/records.js?v=98';
+import { openImportHistory } from './features/import-history.js?v=98';
+import { bindOwnerLockedButtons } from './features/history-data.js?v=98';
+import { render as renderZeroPlays } from './features/zero-plays.js?v=98';
+import { render as renderSkips } from './features/skips.js?v=98';
+import { render as renderSearchLikes } from './features/search-likes.js?v=98';
 
 async function testConnection() {
   const token = await getValidToken();
@@ -264,7 +266,8 @@ function showApp(profile) {
           ${avatarHtml}
           <span class="sidebar-username">${profile.display_name || profile.id}</span>
         </div>
-        <button class="btn btn-secondary btn-sm" id="refresh-all-btn" style="width:100%;margin-top:10px;justify-content:center;font-size:12px">Limpiar cache</button>
+        <button class="btn btn-secondary btn-sm" id="my-history-btn" style="width:100%;margin-top:10px;justify-content:center;font-size:12px" title="Subir tu Extended Streaming History (ZIP) o borrar el que ya tengas cargado">Mi historial ▾</button>
+        <button class="btn btn-secondary btn-sm" id="refresh-all-btn" style="width:100%;margin-top:8px;justify-content:center;font-size:12px">Limpiar cache</button>
         <button class="btn btn-danger btn-sm" id="logout-btn" style="width:100%;margin-top:8px;justify-content:center;font-size:12px">Cerrar sesión</button>
       </div>
     </aside>
@@ -272,6 +275,7 @@ function showApp(profile) {
   `;
 
   document.getElementById('logout-btn').onclick = logout;
+  document.getElementById('my-history-btn').onclick = () => openImportHistory();
   document.getElementById('refresh-all-btn').onclick = async () => {
     const btn = document.getElementById('refresh-all-btn');
     const orig = btn.textContent;
@@ -540,5 +544,10 @@ modalScrollLock.observe(document.body, { childList: true });
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('sw.js').catch(e => console.warn('SW no registrado:', e.message));
 }
+
+// Delego los botones "Subir mi ZIP" / "Abrir Privacidad de Spotify" del
+// ownerLockedMessage (que se inserta en varias features).
+bindOwnerLockedButtons(openImportHistory);
+window.__openImportHistory = openImportHistory; // para el link "Mi historial" del sidebar
 
 init();
