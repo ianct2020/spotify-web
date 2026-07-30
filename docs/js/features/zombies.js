@@ -1,6 +1,6 @@
-import { getAllLikedTracks, getAllUserPlaylists, getAllPlaylistItems, removeLikedTracks, removeTracksFromPlaylist } from '../api.js?v=94';
-import { showProgress, hideProgress, progressController, isCancelled, typeConfirmModal, renderTrackRow, escapeHtml } from '../ui/components.js?v=94';
-import { showToast } from '../ui/toast.js?v=94';
+import { getAllLikedTracks, getAllUserPlaylists, getAllPlaylistItems, removeLikedTracks, removeTracksFromPlaylist } from '../api.js?v=95';
+import { showProgress, hideProgress, progressController, isCancelled, typeConfirmModal, renderTrackRow, escapeHtml } from '../ui/components.js?v=95';
+import { showToast } from '../ui/toast.js?v=95';
 
 const FADE_DURATION_MS = 15000;
 const STAGGER_PER_ROW_MS = 80;

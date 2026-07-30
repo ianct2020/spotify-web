@@ -201,7 +201,8 @@ async function fillStatsfmLine(t, exportPlays = null) {
     const id = await findTrackId(t.name || '', t.artist || '');
     const stats = id && await getTrackCurrentStats(id);
     if (!document.getElementById('tc-statsfm')) return; // cerraron la ficha
-    if (!stats) { holder.innerHTML = ''; return; }
+    // count 0 = Stats.fm no trackeó ese tema (o es otra versión): mejor no mostrar nada
+    if (!stats || !stats.count) { holder.innerHTML = ''; return; }
     const min = Math.round(stats.durationMs / 60000);
     const delta = exportPlays != null && stats.count > exportPlays
       ? ` <span style="color:var(--color-accent)">(+${stats.count - exportPlays} desde el export)</span>`

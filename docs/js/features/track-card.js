@@ -3,11 +3,11 @@
 // días distintos, récord en un día — más preview iTunes y link a Spotify.
 // Se abre desde cualquier feature con openTrackCard({ id, name, artist, album, img }).
 
-import { loadTrackPlays, loadTrackDetail, isOwner } from './history-data.js?v=94';
-import { escapeHtml } from '../ui/components.js?v=94';
-import { findTrackPreview } from '../api/itunes.js?v=94';
-import { togglePreview, playingKey } from '../ui/preview-player.js?v=94';
-import { hasUsername, findTrackId, getTrackCurrentStats } from '../api/statsfm.js?v=94';
+import { loadTrackPlays, loadTrackDetail, isOwner } from './history-data.js?v=95';
+import { escapeHtml } from '../ui/components.js?v=95';
+import { findTrackPreview } from '../api/itunes.js?v=95';
+import { togglePreview, playingKey } from '../ui/preview-player.js?v=95';
+import { hasUsername, findTrackId, getTrackCurrentStats } from '../api/statsfm.js?v=95';
 
 const MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
 
@@ -201,7 +201,8 @@ async function fillStatsfmLine(t, exportPlays = null) {
     const id = await findTrackId(t.name || '', t.artist || '');
     const stats = id && await getTrackCurrentStats(id);
     if (!document.getElementById('tc-statsfm')) return; // cerraron la ficha
-    if (!stats) { holder.innerHTML = ''; return; }
+    // count 0 = Stats.fm no trackeó ese tema (o es otra versión): mejor no mostrar nada
+    if (!stats || !stats.count) { holder.innerHTML = ''; return; }
     const min = Math.round(stats.durationMs / 60000);
     const delta = exportPlays != null && stats.count > exportPlays
       ? ` <span style="color:var(--color-accent)">(+${stats.count - exportPlays} desde el export)</span>`
