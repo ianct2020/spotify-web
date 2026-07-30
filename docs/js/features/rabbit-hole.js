@@ -1,7 +1,7 @@
-import { spotifyFetch, createPlaylist, addTracksToPlaylist, invalidatePlaylistsCache } from '../api.js?v=93';
-import { hasKey, setKey, getTopArtistsByTag, getArtistTopTracks, getArtistTopTags } from '../api/lastfm.js?v=93';
-import { showProgress, hideProgress, promptPlaylistName, escapeHtml } from '../ui/components.js?v=93';
-import { showToast } from '../ui/toast.js?v=93';
+import { spotifyFetch, createPlaylist, addTracksToPlaylist, invalidatePlaylistsCache } from '../api.js?v=94';
+import { hasKey, setKey, getTopArtistsByTag, getArtistTopTracks, getArtistTopTags } from '../api/lastfm.js?v=94';
+import { showProgress, hideProgress, promptPlaylistName, escapeHtml } from '../ui/components.js?v=94';
+import { showToast } from '../ui/toast.js?v=94';
 
 const SUGGESTED_TAGS = [
   'rock', 'indie', 'hip-hop', 'electronic', 'pop', 'metal',
