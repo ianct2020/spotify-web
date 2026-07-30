@@ -1,13 +1,13 @@
-import { getAllLikedTracks, invalidateLikesCache, exportAllData, importAllData, getCurrentUserId, syncLikesIncremental, getLikesCacheTimestamp, getBestAvailableLikes, getAllPlaylistItems } from '../api.js?v=99';
-import { showProgress, hideProgress, alertModal, escapeHtml } from '../ui/components.js?v=99';
-import { showToast } from '../ui/toast.js?v=99';
-import { openListenedAlbumsPicker } from './listened-shared.js?v=99';
-import { loadHistoryStats, loadListenedAlbums } from './history-data.js?v=99';
-import { findArtistTopPreview } from '../api/itunes.js?v=99';
-import { hoverIn, hoverOut } from '../ui/preview-player.js?v=99';
-import { hasUsername, getUsername } from '../api/statsfm.js?v=99';
-import { loadHistoryStats as _loadStatsForCounter } from './history-data.js?v=99';
-import { openArtistCard } from './artist-card.js?v=99';
+import { getAllLikedTracks, invalidateLikesCache, exportAllData, importAllData, getCurrentUserId, syncLikesIncremental, getLikesCacheTimestamp, getBestAvailableLikes, getAllPlaylistItems } from '../api.js?v=100';
+import { showProgress, hideProgress, alertModal, escapeHtml } from '../ui/components.js?v=100';
+import { showToast } from '../ui/toast.js?v=100';
+import { openListenedAlbumsPicker } from './listened-shared.js?v=100';
+import { loadHistoryStats, loadListenedAlbums } from './history-data.js?v=100';
+import { findArtistTopPreview } from '../api/itunes.js?v=100';
+import { hoverIn, hoverOut } from '../ui/preview-player.js?v=100';
+import { hasUsername, getUsername } from '../api/statsfm.js?v=100';
+import { loadHistoryStats as _loadStatsForCounter } from './history-data.js?v=100';
+import { openArtistCard } from './artist-card.js?v=100';
 
 let charts = [];
 let _loadController = null;
@@ -1174,28 +1174,86 @@ function buildCharts(stats) {
   });
 }
 
-// Ticker de plays actuales según Stats.fm (todas las plays trackeadas hasta HOY,
-// incluyendo lo importado). Le suma el delta desde la última vez que se pidió
-// el export a Spotify, así ves cuánto escuchaste después del corte del historial.
+// Contador live de plays trackeadas por Stats.fm — total lifetime incluyendo
+// lo importado. Auto-refresh cada STATSFM_POLL_MS mientras el Dashboard está
+// visible. Guarda el count inicial de la sesión para animar "+N nuevas" cuando
+// Stats.fm registra plays nuevas en vivo.
+const STATSFM_POLL_MS = 60000;
+let _statsfmPollTimer = null;
+let _statsfmSessionStart = null; // count al abrir la app (baseline para "+N nuevas")
+
+async function pollStatsfmCount() {
+  const u = getUsername();
+  if (!u) return null;
+  try {
+    const res = await fetch(`https://api.stats.fm/api/v1/users/${encodeURIComponent(u)}/streams/stats?range=lifetime`);
+    if (!res.ok) return null;
+    const c = (await res.json()).items?.count;
+    return typeof c === 'number' ? c : null;
+  } catch { return null; }
+}
+
+function animateCount(el, from, to, ms = 800) {
+  if (from === to) { el.textContent = to.toLocaleString('es-AR'); return; }
+  const start = performance.now();
+  function step(t) {
+    const p = Math.min(1, (t - start) / ms);
+    const eased = 1 - Math.pow(1 - p, 3);
+    const val = Math.round(from + (to - from) * eased);
+    el.textContent = val.toLocaleString('es-AR');
+    if (p < 1) requestAnimationFrame(step);
+  }
+  requestAnimationFrame(step);
+}
+
+function renderStatsfmTicker(el, totalNow, exportPlays) {
+  const deltaExport = exportPlays != null ? totalNow - exportPlays : null;
+  const sessionBadge = (_statsfmSessionStart != null && totalNow > _statsfmSessionStart)
+    ? `<span class="statsfm-ticker-session">+${(totalNow - _statsfmSessionStart).toLocaleString('es-AR')} desde que abriste</span>`
+    : '';
+  el.style.display = '';
+  el.innerHTML = `
+    <span class="statsfm-ticker-dot" aria-hidden="true"></span>
+    <div class="statsfm-ticker-body">
+      <div class="statsfm-ticker-count"><span class="statsfm-ticker-num">${totalNow.toLocaleString('es-AR')}</span> <span class="statsfm-ticker-label">plays hoy · Stats.fm</span></div>
+      <div class="statsfm-ticker-meta">
+        ${deltaExport != null && deltaExport > 0 ? `<span>+${deltaExport.toLocaleString('es-AR')} desde el export</span>` : ''}
+        ${sessionBadge}
+      </div>
+    </div>
+    <span class="statsfm-ticker-hint" title="Se actualiza solo cada minuto mientras mirás esta pantalla">actualiza automático</span>
+  `;
+}
+
 async function fillStatsfmTicker() {
   const el = document.getElementById('dash-statsfm-ticker');
   if (!el || !hasUsername()) return;
-  const u = getUsername();
-  try {
-    const [statsRes, hist] = await Promise.all([
-      fetch(`https://api.stats.fm/api/v1/users/${encodeURIComponent(u)}/streams/stats?range=lifetime`),
-      _loadStatsForCounter().catch(() => null),
-    ]);
-    if (!statsRes.ok) return;
-    const totalNow = (await statsRes.json()).items?.count;
-    if (typeof totalNow !== 'number') return;
-    const exportPlays = hist?.totals?.plays_valid || null;
-    const delta = exportPlays != null ? totalNow - exportPlays : null;
-    el.style.display = '';
-    el.innerHTML = `
-      <span class="statsfm-ticker-dot"></span>
-      <strong>${totalNow.toLocaleString('es-AR')}</strong> plays según Stats.fm
-      ${delta != null && delta > 0 ? `<span class="statsfm-ticker-delta">+${delta.toLocaleString('es-AR')} desde el export</span>` : ''}
-    `;
-  } catch { /* silencioso */ }
+  if (_statsfmPollTimer) { clearInterval(_statsfmPollTimer); _statsfmPollTimer = null; }
+
+  const [totalNow, hist] = await Promise.all([pollStatsfmCount(), _loadStatsForCounter().catch(() => null)]);
+  if (totalNow == null) return;
+  const exportPlays = hist?.totals?.plays_valid || null;
+  if (_statsfmSessionStart == null) _statsfmSessionStart = totalNow;
+  renderStatsfmTicker(el, totalNow, exportPlays);
+
+  // Polling: cada 60s. Si el count sube, animo el número y flasheo el ticker.
+  let lastCount = totalNow;
+  _statsfmPollTimer = setInterval(async () => {
+    if (!document.getElementById('dash-statsfm-ticker')) {
+      clearInterval(_statsfmPollTimer); _statsfmPollTimer = null; return;
+    }
+    if (document.hidden) return; // ahorra requests si la pestaña no está visible
+    const now = await pollStatsfmCount();
+    if (now == null || now === lastCount) return;
+    const target = document.getElementById('dash-statsfm-ticker');
+    if (!target) return;
+    renderStatsfmTicker(target, now, exportPlays);
+    // Animar el número desde lastCount y flashear el ticker
+    const numEl = target.querySelector('.statsfm-ticker-num');
+    if (numEl) animateCount(numEl, lastCount, now);
+    target.classList.remove('statsfm-ticker-flash');
+    void target.offsetWidth; // reflow para reiniciar la animación
+    target.classList.add('statsfm-ticker-flash');
+    lastCount = now;
+  }, STATSFM_POLL_MS);
 }
