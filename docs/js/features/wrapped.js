@@ -1,12 +1,12 @@
 // Wrapped propio: mini-resumen tuyo por año, hecho con el Extended Streaming History.
 // A diferencia del Wrapped oficial (que corre oct-sept), este es del año calendario completo.
 
-import { loadHistoryStats, isOwner, ownerLockedMessage } from './history-data.js?v=92';
-import { escapeHtml } from '../ui/components.js?v=92';
-import { findTrackPreview, findArtistTopPreview } from '../api/itunes.js?v=92';
-import { attachHover } from '../ui/preview-player.js?v=92';
-import { openTrackCard } from './track-card.js?v=92';
-import { getMyTop } from '../api.js?v=92';
+import { loadHistoryStats, isOwner, ownerLockedMessage } from './history-data.js?v=93';
+import { escapeHtml } from '../ui/components.js?v=93';
+import { findTrackPreview, findArtistTopPreview } from '../api/itunes.js?v=93';
+import { attachHover } from '../ui/preview-player.js?v=93';
+import { openTrackCard } from './track-card.js?v=93';
+import { getMyTop } from '../api.js?v=93';
 
 let stats = null;
 let selectedYear = null;

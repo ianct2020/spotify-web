@@ -33,7 +33,7 @@ TRACK_PLAYS_VERSION = 2      # incluye entries "partial" para tracks solo con pl
 SKIP_STATS_VERSION = 1
 LISTENED_VERSION = 2         # bump: excluye "Sonido Para Sacar Agua Del Movil"
 TRACK_DETAIL_VERSION = 1     # ficha de canción: plays por mes + primera/última + récords del track
-RECORDS_VERSION = 1          # página de récords: días pico, maratones, rachas, hitos
+RECORDS_VERSION = 2          # v2: excluye todas las variantes del sonido saca-agua
 DETAIL_MIN_PLAYS = 5         # solo tracks con >=N plays válidas entran al detalle (controla peso)
 MILESTONE_TARGETS = {1, 10000, 25000, 50000, 75000, 100000, 125000, 150000, 175000, 200000, 250000, 300000}
 TOP_N_YEAR = 40       # top X por año
@@ -45,7 +45,8 @@ KEEP_TRACK_IF_MS = 60000  # solo indexamos tracks con >=60s totales (reduce peso
 # Match case-insensitive por subcadena en el nombre del track.
 EXCLUDED_TRACK_SUBSTRINGS = [
     "sonido para sacar agua del movil",  # despertador iOS, sale en todos los tops
-    "sonido para eliminar agua",         # variante nBeats del mismo sonido funcional
+    "sonido para eliminar",              # variantes nBeats del mismo sonido funcional ("...agua de los altavoces/auriculares")
+    "sonido para sacar agua",            # cubre "del movil", "del teléfono", etc.
 ]
 
 # Regla mix A+C para detectar "álbum escuchado" desde el historial:

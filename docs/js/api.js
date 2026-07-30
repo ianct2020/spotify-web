@@ -1,7 +1,7 @@
-import { getValidToken, refreshAccessToken } from './auth.js?v=92';
-import { cacheGet, cacheGetRaw, cacheGetTimestamp, cacheSet, cacheClear } from './storage.js?v=92';
-import { idbDel, idbGetCached, idbGetCachedRaw, idbGetTimestamp, idbSetCached } from './idb.js?v=92';
-import { showToast } from './ui/toast.js?v=92';
+import { getValidToken, refreshAccessToken } from './auth.js?v=93';
+import { cacheGet, cacheGetRaw, cacheGetTimestamp, cacheSet, cacheClear } from './storage.js?v=93';
+import { idbDel, idbGetCached, idbGetCachedRaw, idbGetTimestamp, idbSetCached } from './idb.js?v=93';
+import { showToast } from './ui/toast.js?v=93';
 
 const BASE = 'https://api.spotify.com/v1';
 const MIN_RETRY_WAIT = 5000;
@@ -699,7 +699,7 @@ async function getCurrentUserId() {
       invalidatePlaylistsCache();
       // Caches del historial del owner: si el nuevo user no es el owner, sobran;
       // si es el owner de vuelta, los re-baja del JSON del repo.
-      for (const k of ['history_stats_v2','history_track_plays_v2','history_listened_albums_v2','history_skip_stats_v1','history_albums_v2','history_track_detail_v1','history_records_v1']) {
+      for (const k of ['history_stats_v2','history_track_plays_v2','history_listened_albums_v2','history_skip_stats_v1','history_albums_v2','history_track_detail_v1','history_records_v2']) {
         idbDel(k).catch(() => {});
       }
     }
