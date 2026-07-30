@@ -7,7 +7,7 @@ import { loadTrackPlays, loadTrackDetail, isOwner } from './history-data.js';
 import { escapeHtml } from '../ui/components.js';
 import { findTrackPreview } from '../api/itunes.js';
 import { togglePreview, playingKey } from '../ui/preview-player.js';
-import { hasUsername, findTrackId, getTrackCurrentStats } from '../api/statsfm.js';
+import { hasUsername, findTrackId, getTrackCurrentStats, loadTopLifetime } from '../api/statsfm.js';
 
 const MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
 
@@ -189,29 +189,55 @@ async function openTrackCard(t) {
   }
 }
 
-// Plays actuales según Stats.fm (que sigue trackeando después del export).
-// Async y silencioso: si no hay username configurado o no encuentra el tema,
-// no muestra nada. Funciona sin Plus.
+// Plays actuales según Stats.fm. Estrategia doble:
+// 1) Primero busco el spotifyId en el top-1000 lifetime (cache 24h) — esos
+//    conteos INCLUYEN todo lo importado y son el número real actual.
+// 2) Si el tema no está en el top-1000 (menos de ~17 plays), fallback al
+//    per-track live (que solo trae lo trackeado post-conexión con Spotify,
+//    sin lo importado — pero al menos algo).
+// Silencioso si no hay username o ningún dato útil.
 async function fillStatsfmLine(t, exportPlays = null) {
   if (!hasUsername()) return;
   const holder = document.getElementById('tc-statsfm');
   if (!holder) return;
   holder.innerHTML = `<div style="font-size:12px;color:var(--color-text-muted);margin-top:10px">Consultando Stats.fm…</div>`;
   try {
+    // 1) Top lifetime cacheado (fuente autoritativa)
+    const top = await loadTopLifetime().catch(() => null);
+    const hit = top?.map.get(t.id);
+    if (hit) {
+      if (!document.getElementById('tc-statsfm')) return;
+      const min = Math.round(hit.playedMs / 60000);
+      const delta = exportPlays != null
+        ? (hit.streams > exportPlays
+            ? ` <span style="color:var(--color-accent)">(+${(hit.streams - exportPlays).toLocaleString('es-AR')} desde el export)</span>`
+            : (hit.streams < exportPlays ? ` <span style="color:var(--color-text-muted)">(export tenía ${exportPlays})</span>` : ''))
+        : '';
+      holder.innerHTML = `
+        <div style="display:flex;align-items:center;gap:8px;margin-top:12px;padding:8px 12px;background:var(--color-elevated);border:1px solid var(--color-border);border-radius:var(--radius-sm,6px);font-size:12.5px;color:var(--color-text-secondary)">
+          <strong style="color:var(--color-text)">Stats.fm hoy:</strong>
+          ${hit.streams.toLocaleString('es-AR')} plays · ${min.toLocaleString('es-AR')}m${delta}
+          <span style="color:var(--color-text-muted);margin-left:auto" title="Total real actual según tu Top de todos los tiempos (incluye lo importado + lo trackeado en vivo)">total actual</span>
+        </div>`;
+      return;
+    }
+
+    // 2) Fallback per-track (solo lo trackeado post-conexión, sin import)
     const id = await findTrackId(t.name || '', t.artist || '');
     const stats = id && await getTrackCurrentStats(id);
-    if (!document.getElementById('tc-statsfm')) return; // cerraron la ficha
-    // count 0 = Stats.fm no trackeó ese tema (o es otra versión): mejor no mostrar nada
-    if (!stats || !stats.count) { holder.innerHTML = ''; return; }
+    if (!document.getElementById('tc-statsfm')) return;
+    if (!stats || !stats.count) {
+      holder.innerHTML = top
+        ? `<div style="font-size:11.5px;color:var(--color-text-muted);margin-top:10px">Menos de ${top.minStreams} plays totales según Stats.fm (fuera de tu top-${top.totalItems}).</div>`
+        : '';
+      return;
+    }
     const min = Math.round(stats.durationMs / 60000);
-    const delta = exportPlays != null && stats.count > exportPlays
-      ? ` <span style="color:var(--color-accent)">(+${stats.count - exportPlays} desde el export)</span>`
-      : '';
     holder.innerHTML = `
       <div style="display:flex;align-items:center;gap:8px;margin-top:12px;padding:8px 12px;background:var(--color-elevated);border:1px solid var(--color-border);border-radius:var(--radius-sm,6px);font-size:12.5px;color:var(--color-text-secondary)">
         <strong style="color:var(--color-text)">Stats.fm en vivo:</strong>
-        ${stats.count.toLocaleString('es-AR')} plays · ${min.toLocaleString('es-AR')}m${delta}
-        <span style="color:var(--color-text-muted);margin-left:auto" title="Stats.fm sigue trackeando tu Spotify después del export congelado">actualizado hoy</span>
+        ${stats.count.toLocaleString('es-AR')} plays · ${min.toLocaleString('es-AR')}m
+        <span style="color:var(--color-text-muted);margin-left:auto" title="Solo lo trackeado desde que conectaste Stats.fm (sin lo importado del export)">solo post-conexión</span>
       </div>`;
   } catch {
     const h = document.getElementById('tc-statsfm');
