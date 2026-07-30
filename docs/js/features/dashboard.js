@@ -1,13 +1,13 @@
-import { getAllLikedTracks, invalidateLikesCache, exportAllData, importAllData, getCurrentUserId, syncLikesIncremental, getLikesCacheTimestamp, getBestAvailableLikes, getAllPlaylistItems } from '../api.js?v=97';
-import { showProgress, hideProgress, alertModal, escapeHtml } from '../ui/components.js?v=97';
-import { showToast } from '../ui/toast.js?v=97';
-import { openListenedAlbumsPicker } from './listened-shared.js?v=97';
-import { loadHistoryStats, loadListenedAlbums } from './history-data.js?v=97';
-import { findArtistTopPreview } from '../api/itunes.js?v=97';
-import { hoverIn, hoverOut } from '../ui/preview-player.js?v=97';
-import { hasUsername, getUsername } from '../api/statsfm.js?v=97';
-import { loadHistoryStats as _loadStatsForCounter } from './history-data.js?v=97';
-import { openArtistCard } from './artist-card.js?v=97';
+import { getAllLikedTracks, invalidateLikesCache, exportAllData, importAllData, getCurrentUserId, syncLikesIncremental, getLikesCacheTimestamp, getBestAvailableLikes, getAllPlaylistItems } from '../api.js?v=98';
+import { showProgress, hideProgress, alertModal, escapeHtml } from '../ui/components.js?v=98';
+import { showToast } from '../ui/toast.js?v=98';
+import { openListenedAlbumsPicker } from './listened-shared.js?v=98';
+import { loadHistoryStats, loadListenedAlbums } from './history-data.js?v=98';
+import { findArtistTopPreview } from '../api/itunes.js?v=98';
+import { hoverIn, hoverOut } from '../ui/preview-player.js?v=98';
+import { hasUsername, getUsername } from '../api/statsfm.js?v=98';
+import { loadHistoryStats as _loadStatsForCounter } from './history-data.js?v=98';
+import { openArtistCard } from './artist-card.js?v=98';
 
 let charts = [];
 let _loadController = null;

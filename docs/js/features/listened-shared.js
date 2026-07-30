@@ -1,6 +1,6 @@
-import { getAllUserPlaylists } from '../api.js?v=97';
-import { escapeHtml } from '../ui/components.js?v=97';
-import { showToast } from '../ui/toast.js?v=97';
+import { getAllUserPlaylists } from '../api.js?v=98';
+import { escapeHtml } from '../ui/components.js?v=98';
+import { showToast } from '../ui/toast.js?v=98';
 
 const PID_KEY = 'listened_albums_playlist_id';
 const PNAME_KEY = 'listened_albums_playlist_name';

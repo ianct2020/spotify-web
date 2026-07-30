@@ -21,6 +21,8 @@ import { render as renderRecs } from './features/recommendations.js';
 import { render as renderListened } from './features/listened.js';
 import { render as renderWrapped } from './features/wrapped.js';
 import { render as renderRecords } from './features/records.js';
+import { openImportHistory } from './features/import-history.js';
+import { bindOwnerLockedButtons } from './features/history-data.js';
 import { render as renderZeroPlays } from './features/zero-plays.js';
 import { render as renderSkips } from './features/skips.js';
 import { render as renderSearchLikes } from './features/search-likes.js';
@@ -264,7 +266,8 @@ function showApp(profile) {
           ${avatarHtml}
           <span class="sidebar-username">${profile.display_name || profile.id}</span>
         </div>
-        <button class="btn btn-secondary btn-sm" id="refresh-all-btn" style="width:100%;margin-top:10px;justify-content:center;font-size:12px">Limpiar cache</button>
+        <button class="btn btn-secondary btn-sm" id="my-history-btn" style="width:100%;margin-top:10px;justify-content:center;font-size:12px" title="Subir tu Extended Streaming History (ZIP) o borrar el que ya tengas cargado">Mi historial ▾</button>
+        <button class="btn btn-secondary btn-sm" id="refresh-all-btn" style="width:100%;margin-top:8px;justify-content:center;font-size:12px">Limpiar cache</button>
         <button class="btn btn-danger btn-sm" id="logout-btn" style="width:100%;margin-top:8px;justify-content:center;font-size:12px">Cerrar sesión</button>
       </div>
     </aside>
@@ -272,6 +275,7 @@ function showApp(profile) {
   `;
 
   document.getElementById('logout-btn').onclick = logout;
+  document.getElementById('my-history-btn').onclick = () => openImportHistory();
   document.getElementById('refresh-all-btn').onclick = async () => {
     const btn = document.getElementById('refresh-all-btn');
     const orig = btn.textContent;
@@ -540,5 +544,10 @@ modalScrollLock.observe(document.body, { childList: true });
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('sw.js').catch(e => console.warn('SW no registrado:', e.message));
 }
+
+// Delego los botones "Subir mi ZIP" / "Abrir Privacidad de Spotify" del
+// ownerLockedMessage (que se inserta en varias features).
+bindOwnerLockedButtons(openImportHistory);
+window.__openImportHistory = openImportHistory; // para el link "Mi historial" del sidebar
 
 init();

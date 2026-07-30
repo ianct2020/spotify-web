@@ -2,12 +2,12 @@
 // primer/último año, top tracks del artista, hover-play, y plays actuales
 // vía Stats.fm si aplica. Se abre desde cualquier feature con openArtistCard({ name }).
 
-import { loadHistoryStats, isOwner } from './history-data.js?v=97';
-import { escapeHtml } from '../ui/components.js?v=97';
-import { findArtistTopPreview } from '../api/itunes.js?v=97';
-import { togglePreview, playingKey, attachHover } from '../ui/preview-player.js?v=97';
-import { hasUsername, loadTopLifetime } from '../api/statsfm.js?v=97';
-import { openTrackCard } from './track-card.js?v=97';
+import { loadHistoryStats, isOwner } from './history-data.js?v=98';
+import { escapeHtml } from '../ui/components.js?v=98';
+import { findArtistTopPreview } from '../api/itunes.js?v=98';
+import { togglePreview, playingKey, attachHover } from '../ui/preview-player.js?v=98';
+import { hasUsername, loadTopLifetime } from '../api/statsfm.js?v=98';
+import { openTrackCard } from './track-card.js?v=98';
 
 let chart = null;
 
