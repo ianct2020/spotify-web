@@ -75,21 +75,19 @@ async function openArtistCard(a) {
   overlay.className = 'modal-overlay';
   overlay.id = 'artist-card-overlay';
   overlay.innerHTML = `
-    <div class="modal" style="max-width:640px;width:min(640px,92vw)">
-      <div style="display:flex;gap:14px;align-items:flex-start;margin-bottom:14px">
-        <div id="ac-avatar" style="width:64px;height:64px;border-radius:50%;background:var(--color-accent-soft);display:flex;align-items:center;justify-content:center;font-size:24px;color:var(--color-accent);font-weight:700;flex-shrink:0;overflow:hidden">
-          ${escapeHtml((a.name[0] || '?').toUpperCase())}
+    <div class="modal card-modal" style="max-width:640px;width:min(640px,94vw)">
+      <div class="card-modal-head">
+        <div id="ac-avatar" class="card-modal-avatar" style="background:var(--color-accent-soft);color:var(--color-accent);font-weight:700">${escapeHtml((a.name[0] || '?').toUpperCase())}</div>
+        <div class="card-modal-title">
+          <h3>${escapeHtml(a.name)}</h3>
+          <div class="card-modal-sub">Artista</div>
         </div>
-        <div style="flex:1;min-width:0">
-          <h3 style="margin:0 0 2px;font-size:18px;line-height:1.25">${escapeHtml(a.name)}</h3>
-          <div style="color:var(--color-text-secondary);font-size:13px">Artista</div>
-          <div style="display:flex;gap:8px;margin-top:8px">
-            <button class="btn btn-secondary btn-sm" id="ac-preview">▶ Preview</button>
-            <a class="btn btn-secondary btn-sm" href="https://open.spotify.com/search/${encodeURIComponent(a.name)}/artists" target="_blank" rel="noopener">Buscar en Spotify ↗</a>
-            <a class="btn btn-secondary btn-sm" href="#byartist" id="ac-byartist">Mis likes de este artista</a>
-          </div>
-        </div>
-        <button class="btn btn-secondary btn-sm" id="ac-close" title="Cerrar" style="flex-shrink:0">✕</button>
+        <button class="btn btn-secondary btn-sm card-modal-close" id="ac-close" title="Cerrar">✕</button>
+      </div>
+      <div class="card-modal-actions">
+        <button class="btn btn-secondary btn-sm" id="ac-preview">▶ Preview</button>
+        <a class="btn btn-secondary btn-sm" href="https://open.spotify.com/search/${encodeURIComponent(a.name)}/artists" target="_blank" rel="noopener">↗ Spotify</a>
+        <a class="btn btn-secondary btn-sm" href="#byartist" id="ac-byartist">Mis likes</a>
       </div>
       <div id="ac-body"><div style="text-align:center;padding:24px"><div class="spinner"></div></div></div>
     </div>

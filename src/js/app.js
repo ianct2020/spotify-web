@@ -26,6 +26,7 @@ import { bindOwnerLockedButtons } from './features/history-data.js';
 import { render as renderZeroPlays } from './features/zero-plays.js';
 import { render as renderSkips } from './features/skips.js';
 import { render as renderSearchLikes } from './features/search-likes.js';
+import { render as renderWthree } from './features/wthree.js';
 
 async function testConnection() {
   const token = await getValidToken();
@@ -220,6 +221,9 @@ function showApp(profile) {
           <a class="nav-link" data-route="byartist" href="#byartist">
             <span class="nav-link-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg></span> Por artista
           </a>
+          <a class="nav-link" data-route="wthree" href="#wthree">
+            <span class="nav-link-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16"/><path d="M4 12h10"/><path d="M4 18h16"/><path d="M18 12l3 3-3 3"/></svg></span> W-Three helper
+          </a>
         </div>
         <div class="sidebar-section">
           <div class="sidebar-section-title">Descubrir</div>
@@ -387,6 +391,7 @@ function showApp(profile) {
   registerRoute('zeroplays', renderZeroPlays);
   registerRoute('skips', renderSkips);
   registerRoute('search', renderSearchLikes);
+  registerRoute('wthree', renderWthree);
 
   initRouter();
 }

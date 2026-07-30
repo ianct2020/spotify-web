@@ -1,31 +1,32 @@
-import { isLoggedIn, loginWithSpotify, logout } from './auth.js?v=101';
-import { spotifyFetch, tryAutoLoadUserBackup } from './api.js?v=101';
-import { getValidToken } from './auth.js?v=101';
-import { cacheClearAll } from './storage.js?v=101';
-import { idbClearAll } from './idb.js?v=101';
-import { registerRoute, initRouter } from './router.js?v=101';
-import { showToast } from './ui/toast.js?v=101';
+import { isLoggedIn, loginWithSpotify, logout } from './auth.js?v=102';
+import { spotifyFetch, tryAutoLoadUserBackup } from './api.js?v=102';
+import { getValidToken } from './auth.js?v=102';
+import { cacheClearAll } from './storage.js?v=102';
+import { idbClearAll } from './idb.js?v=102';
+import { registerRoute, initRouter } from './router.js?v=102';
+import { showToast } from './ui/toast.js?v=102';
 
-import { render as renderSync } from './features/sync.js?v=101';
-import { render as renderDedupe } from './features/dedupe.js?v=101';
-import { render as renderDupalbums } from './features/duplicate-albums.js?v=101';
-import { render as renderZombies } from './features/zombies.js?v=101';
-import { render as renderVersions } from './features/versions.js?v=101';
-import { render as renderDashboard } from './features/dashboard.js?v=101';
-import { render as renderSmart } from './features/smart.js?v=101';
-import { render as renderSimilar } from './features/similar-artists.js?v=101';
-import { render as renderRabbit } from './features/rabbit-hole.js?v=101';
-import { render as renderByGenre } from './features/by-genre.js?v=101';
-import { render as renderByArtist } from './features/by-artist.js?v=101';
-import { render as renderRecs } from './features/recommendations.js?v=101';
-import { render as renderListened } from './features/listened.js?v=101';
-import { render as renderWrapped } from './features/wrapped.js?v=101';
-import { render as renderRecords } from './features/records.js?v=101';
-import { openImportHistory } from './features/import-history.js?v=101';
-import { bindOwnerLockedButtons } from './features/history-data.js?v=101';
-import { render as renderZeroPlays } from './features/zero-plays.js?v=101';
-import { render as renderSkips } from './features/skips.js?v=101';
-import { render as renderSearchLikes } from './features/search-likes.js?v=101';
+import { render as renderSync } from './features/sync.js?v=102';
+import { render as renderDedupe } from './features/dedupe.js?v=102';
+import { render as renderDupalbums } from './features/duplicate-albums.js?v=102';
+import { render as renderZombies } from './features/zombies.js?v=102';
+import { render as renderVersions } from './features/versions.js?v=102';
+import { render as renderDashboard } from './features/dashboard.js?v=102';
+import { render as renderSmart } from './features/smart.js?v=102';
+import { render as renderSimilar } from './features/similar-artists.js?v=102';
+import { render as renderRabbit } from './features/rabbit-hole.js?v=102';
+import { render as renderByGenre } from './features/by-genre.js?v=102';
+import { render as renderByArtist } from './features/by-artist.js?v=102';
+import { render as renderRecs } from './features/recommendations.js?v=102';
+import { render as renderListened } from './features/listened.js?v=102';
+import { render as renderWrapped } from './features/wrapped.js?v=102';
+import { render as renderRecords } from './features/records.js?v=102';
+import { openImportHistory } from './features/import-history.js?v=102';
+import { bindOwnerLockedButtons } from './features/history-data.js?v=102';
+import { render as renderZeroPlays } from './features/zero-plays.js?v=102';
+import { render as renderSkips } from './features/skips.js?v=102';
+import { render as renderSearchLikes } from './features/search-likes.js?v=102';
+import { render as renderWthree } from './features/wthree.js?v=102';
 
 async function testConnection() {
   const token = await getValidToken();
@@ -220,6 +221,9 @@ function showApp(profile) {
           <a class="nav-link" data-route="byartist" href="#byartist">
             <span class="nav-link-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg></span> Por artista
           </a>
+          <a class="nav-link" data-route="wthree" href="#wthree">
+            <span class="nav-link-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16"/><path d="M4 12h10"/><path d="M4 18h16"/><path d="M18 12l3 3-3 3"/></svg></span> W-Three helper
+          </a>
         </div>
         <div class="sidebar-section">
           <div class="sidebar-section-title">Descubrir</div>
@@ -387,6 +391,7 @@ function showApp(profile) {
   registerRoute('zeroplays', renderZeroPlays);
   registerRoute('skips', renderSkips);
   registerRoute('search', renderSearchLikes);
+  registerRoute('wthree', renderWthree);
 
   initRouter();
 }

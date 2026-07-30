@@ -1,38 +1,40 @@
-import { getAllLikedTracks, invalidateLikesCache, exportAllData, importAllData, getCurrentUserId, syncLikesIncremental, getLikesCacheTimestamp, getBestAvailableLikes, getAllPlaylistItems } from '../api.js?v=101';
-import { showProgress, hideProgress, alertModal, escapeHtml } from '../ui/components.js?v=101';
-import { showToast } from '../ui/toast.js?v=101';
-import { openListenedAlbumsPicker } from './listened-shared.js?v=101';
-import { loadHistoryStats, loadListenedAlbums } from './history-data.js?v=101';
-import { findArtistTopPreview } from '../api/itunes.js?v=101';
-import { hoverIn, hoverOut } from '../ui/preview-player.js?v=101';
-import { hasUsername, getUsername } from '../api/statsfm.js?v=101';
-import { loadHistoryStats as _loadStatsForCounter } from './history-data.js?v=101';
-import { openArtistCard } from './artist-card.js?v=101';
-import { openAlbumCard } from './album-card.js?v=101';
+import { getAllLikedTracks, invalidateLikesCache, exportAllData, importAllData, getCurrentUserId, syncLikesIncremental, getLikesCacheTimestamp, getBestAvailableLikes, getAllPlaylistItems } from '../api.js?v=102';
+import { showProgress, hideProgress, alertModal, escapeHtml } from '../ui/components.js?v=102';
+import { showToast } from '../ui/toast.js?v=102';
+import { openListenedAlbumsPicker } from './listened-shared.js?v=102';
+import { loadHistoryStats, loadListenedAlbums } from './history-data.js?v=102';
+import { findArtistTopPreview } from '../api/itunes.js?v=102';
+import { hoverIn, hoverOut } from '../ui/preview-player.js?v=102';
+import { hasUsername, getUsername } from '../api/statsfm.js?v=102';
+import { loadHistoryStats as _loadStatsForCounter } from './history-data.js?v=102';
+import { openArtistCard } from './artist-card.js?v=102';
+import { openAlbumCard } from './album-card.js?v=102';
+import { activateMarquee, marqueeSpan } from '../ui/marquee.js?v=102';
 
 let charts = [];
 let _loadController = null;
 
 export function render(container) {
   container.innerHTML = `
-    <div class="page-header" style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:12px">
-      <div>
+    <div class="dash-header">
+      <div class="dash-header-left">
         <h1>Dashboard</h1>
-        <p>Stats de tu biblioteca de Liked Songs.</p>
-        <div id="dash-last-sync" style="font-size:12px;color:var(--color-text-muted);margin-top:4px"></div>
-        <div id="dash-statsfm-ticker" class="statsfm-ticker" style="display:none"></div>
+        <div id="dash-last-sync" class="dash-last-sync"></div>
       </div>
-      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-start">
-        <div style="position:relative">
-          <button class="btn btn-secondary btn-sm" id="dash-export-all-btn" title="Elegí formato">Exportar ▾</button>
-          <div id="dash-export-menu" style="display:none;position:absolute;top:100%;right:0;margin-top:4px;background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-sm);box-shadow:0 4px 12px rgba(0,0,0,0.3);z-index:10;min-width:200px">
-            <button class="dash-export-opt" data-fmt="json" style="display:block;width:100%;text-align:left;padding:10px 14px;background:transparent;border:none;color:var(--color-text);cursor:pointer;font-size:13px">JSON <span style="color:var(--color-text-muted)">— likes + tags</span></button>
-            <button class="dash-export-opt" data-fmt="csv" style="display:block;width:100%;text-align:left;padding:10px 14px;background:transparent;border:none;color:var(--color-text);cursor:pointer;font-size:13px;border-top:1px solid var(--color-border)">CSV <span style="color:var(--color-text-muted)">— solo likes, plano</span></button>
+      <div class="dash-header-right">
+        <div id="dash-statsfm-ticker" class="statsfm-ticker dash-header-ticker" style="display:none"></div>
+        <div class="dash-header-actions">
+          <div style="position:relative">
+            <button class="btn btn-secondary btn-sm" id="dash-export-all-btn" title="Elegí formato">Exportar ▾</button>
+            <div id="dash-export-menu" style="display:none;position:absolute;top:100%;right:0;margin-top:4px;background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-sm);box-shadow:0 4px 12px rgba(0,0,0,0.3);z-index:10;min-width:200px">
+              <button class="dash-export-opt" data-fmt="json" style="display:block;width:100%;text-align:left;padding:10px 14px;background:transparent;border:none;color:var(--color-text);cursor:pointer;font-size:13px">JSON <span style="color:var(--color-text-muted)">— likes + tags</span></button>
+              <button class="dash-export-opt" data-fmt="csv" style="display:block;width:100%;text-align:left;padding:10px 14px;background:transparent;border:none;color:var(--color-text);cursor:pointer;font-size:13px;border-top:1px solid var(--color-border)">CSV <span style="color:var(--color-text-muted)">— solo likes, plano</span></button>
+            </div>
           </div>
+          <button class="btn btn-secondary btn-sm" id="dash-import-all-btn">Importar</button>
+          <input type="file" id="dash-import-all-input" accept=".json,application/json" style="display:none">
+          <button class="btn btn-secondary btn-sm" id="dash-refresh-btn">Actualizar datos</button>
         </div>
-        <button class="btn btn-secondary btn-sm" id="dash-import-all-btn">Importar</button>
-        <input type="file" id="dash-import-all-input" accept=".json,application/json" style="display:none">
-        <button class="btn btn-secondary btn-sm" id="dash-refresh-btn">Actualizar datos</button>
       </div>
     </div>
     <div id="dash-content"></div>
@@ -724,15 +726,16 @@ async function hydrateHistorySection() {
   if (listHolder) {
     listHolder.innerHTML = topAlbums.map((a, i) => `
       <div class="track-row tc-clickable" data-alb-i="${i}" title="Click para ver la ficha del álbum">
-        <span style="width:28px;text-align:center;color:var(--color-text-muted);font-weight:700;flex-shrink:0">${i + 1}</span>
+        <span style="width:24px;text-align:center;color:var(--color-text-muted);font-weight:700;flex-shrink:0">${i + 1}</span>
         ${a.img ? `<img src="${a.img}" alt="" style="width:36px;height:36px;border-radius:4px;object-fit:cover;flex-shrink:0" loading="lazy">` : ''}
-        <div class="track-info">
-          <div class="track-name">${escapeHtml(a.name)}</div>
+        <div class="track-info" style="min-width:0;overflow:hidden">
+          <div class="track-name">${marqueeSpan(escapeHtml(a.name))}</div>
           <div class="track-artist">${escapeHtml(a.artist)}</div>
         </div>
-        <span class="badge badge-accent">${Math.round(a.min).toLocaleString('es-AR')}m</span>
+        <span class="badge badge-accent" style="flex-shrink:0">${Math.round(a.min).toLocaleString('es-AR')}m</span>
       </div>
     `).join('');
+    activateMarquee(listHolder);
     listHolder.querySelectorAll('[data-alb-i]').forEach(el => {
       el.onclick = () => {
         const a = topAlbums[+el.dataset.albI];
@@ -864,10 +867,13 @@ async function hydrateListenedYearTiles() {
 
     holder.style.color = '';
     holder.style.fontSize = '';
-    // Forzar 1 fila cuando la cantidad de años entra bien (típicamente 9-10).
-    holder.style.gridTemplateColumns = years.length <= 12
-      ? `repeat(${years.length}, minmax(0, 1fr))`
-      : 'repeat(auto-fit, minmax(110px, 1fr))';
+    // Mobile: 3 columnas (tiles chicos pero legibles). Desktop: 1 fila entera cuando entra.
+    const isMobile = window.matchMedia('(max-width: 600px)').matches;
+    holder.style.gridTemplateColumns = isMobile
+      ? 'repeat(3, minmax(0, 1fr))'
+      : (years.length <= 12
+          ? `repeat(${years.length}, minmax(0, 1fr))`
+          : 'repeat(auto-fit, minmax(110px, 1fr))');
     holder.innerHTML = years.map(y => `
       <button class="year-tile" data-year="${y.year}" style="background:var(--color-elevated);border:1px solid var(--color-border);border-radius:var(--radius-sm);padding:10px 12px;text-align:left;cursor:pointer;transition:border-color .15s,transform .05s;min-width:0">
         <div style="font-size:19px;font-weight:700;color:var(--color-text);line-height:1.1">${y.count.toLocaleString('es-AR')}</div>
@@ -1221,7 +1227,7 @@ function buildCharts(stats) {
 // lo importado. Auto-refresh cada STATSFM_POLL_MS mientras el Dashboard está
 // visible. Guarda el count inicial de la sesión para animar "+N nuevas" cuando
 // Stats.fm registra plays nuevas en vivo.
-const STATSFM_POLL_MS = 60000;
+const STATSFM_POLL_MS = 15000;
 let _statsfmPollTimer = null;
 let _statsfmSessionStart = null; // count al abrir la app (baseline para "+N nuevas")
 
@@ -1264,7 +1270,7 @@ function renderStatsfmTicker(el, totalNow, exportPlays) {
         ${sessionBadge}
       </div>
     </div>
-    <span class="statsfm-ticker-hint" title="Se actualiza solo cada minuto mientras mirás esta pantalla">actualiza automático</span>
+    <span class="statsfm-ticker-hint" title="Se actualiza solo cada 15 segundos mientras mirás esta pantalla">actualiza cada 15s</span>
   `;
 }
 
