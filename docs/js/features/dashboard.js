@@ -1,15 +1,15 @@
-import { getAllLikedTracks, invalidateLikesCache, exportAllData, importAllData, getCurrentUserId, syncLikesIncremental, getLikesCacheTimestamp, getBestAvailableLikes, getAllPlaylistItems } from '../api.js?v=102';
-import { showProgress, hideProgress, alertModal, escapeHtml } from '../ui/components.js?v=102';
-import { showToast } from '../ui/toast.js?v=102';
-import { openListenedAlbumsPicker } from './listened-shared.js?v=102';
-import { loadHistoryStats, loadListenedAlbums } from './history-data.js?v=102';
-import { findArtistTopPreview } from '../api/itunes.js?v=102';
-import { hoverIn, hoverOut } from '../ui/preview-player.js?v=102';
-import { hasUsername, getUsername } from '../api/statsfm.js?v=102';
-import { loadHistoryStats as _loadStatsForCounter } from './history-data.js?v=102';
-import { openArtistCard } from './artist-card.js?v=102';
-import { openAlbumCard } from './album-card.js?v=102';
-import { activateMarquee, marqueeSpan } from '../ui/marquee.js?v=102';
+import { getAllLikedTracks, invalidateLikesCache, exportAllData, importAllData, getCurrentUserId, syncLikesIncremental, getLikesCacheTimestamp, getBestAvailableLikes, getAllPlaylistItems } from '../api.js?v=103';
+import { showProgress, hideProgress, alertModal, escapeHtml } from '../ui/components.js?v=103';
+import { showToast } from '../ui/toast.js?v=103';
+import { openListenedAlbumsPicker } from './listened-shared.js?v=103';
+import { loadHistoryStats, loadListenedAlbums } from './history-data.js?v=103';
+import { findArtistTopPreview } from '../api/itunes.js?v=103';
+import { hoverIn, hoverOut } from '../ui/preview-player.js?v=103';
+import { hasUsername, getUsername } from '../api/statsfm.js?v=103';
+import { loadHistoryStats as _loadStatsForCounter } from './history-data.js?v=103';
+import { openArtistCard } from './artist-card.js?v=103';
+import { openAlbumCard } from './album-card.js?v=103';
+import { activateMarquee, marqueeSpan } from '../ui/marquee.js?v=103';
 
 let charts = [];
 let _loadController = null;

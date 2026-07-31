@@ -1942,8 +1942,10 @@ h3 { font-size: 18px; font-weight: 600; }
   .chart-box { height: 220px !important; }
   .dash-chart-wide .chart-box { height: 260px !important; }
   .dash-chart-wide .chart-box.chart-box-tall { height: 520px !important; }
-  /* Top 20 álbumes: 1 columna en mobile (era 2 hardcoded inline) */
-  .dash-top-albums-grid { grid-template-columns: 1fr !important; gap: 4px 0 !important; }
+  /* Top 20 álbumes: 1 columna en mobile (era 2 hardcoded inline)
+     minmax(0, 1fr) es CRÍTICO — con solo "1fr" el content-based min-width
+     hace que la columna se expanda a lo ancho del texto más largo. */
+  .dash-top-albums-grid { grid-template-columns: minmax(0, 1fr) !important; gap: 4px 0 !important; }
   /* Listened year tiles: 3 columnas en vez de flex sin control */
   .listened-year-grid { grid-template-columns: repeat(3, 1fr) !important; gap: 6px; }
   /* Heatmap: contenedor sin padding extra */
@@ -1955,10 +1957,10 @@ h3 { font-size: 18px; font-weight: 600; }
   .wrapped-hero-min { font-size: 40px; }
   .wrapped-hero-sub { font-size: 12px; }
   .wrapped-year-tab { font-size: 12px !important; padding: 6px 10px !important; }
-  .wrapped-year-layout { padding: 14px; gap: 10px; grid-template-columns: 1fr !important; }
+  .wrapped-year-layout { padding: 14px; gap: 10px; grid-template-columns: minmax(0, 1fr) !important; }
   /* Los "stats-left" y "stats-right" que eran 2 cols en el 900px query — todo 1 col */
   .wrapped-year-stats-left,
-  .wrapped-year-stats-right { grid-template-columns: 1fr !important; gap: 8px; }
+  .wrapped-year-stats-right { grid-template-columns: minmax(0, 1fr) !important; gap: 8px; }
   .wrapped-tile.compact { padding: 10px 12px; }
   .wrapped-tile.compact .wrapped-tile-value {
     font-size: 16px !important;
@@ -2004,7 +2006,7 @@ h3 { font-size: 18px; font-weight: 600; }
   .skips-play-btn { font-size: 12px; padding: 0 10px; height: 26px; }
 
   /* ── Home cards ── */
-  .home-grid { grid-template-columns: 1fr !important; gap: 10px; }
+  .home-grid { grid-template-columns: minmax(0, 1fr) !important; gap: 10px; }
 
   /* ── Ficha canción / artista ── */
   .tc-stats { grid-template-columns: repeat(2, 1fr) !important; }
@@ -2020,10 +2022,14 @@ h3 { font-size: 18px; font-weight: 600; }
 }
 
 /* Marquee: si el texto no entra, se desliza al costado en loop. Solo se activa
-   con la clase .marquee (agregada por JS después de medir scrollWidth vs clientWidth) */
+   con la clase .marquee (agregada por JS después de medir scrollWidth vs clientWidth).
+   El wrap tiene que ser block (o inline-block con width) para que overflow:hidden clippee
+   y no expanda al parent. */
 .marquee-wrap {
+  display: block;
   overflow: hidden;
   min-width: 0;
+  max-width: 100%;
   position: relative;
 }
 .marquee-wrap > .marquee-text {

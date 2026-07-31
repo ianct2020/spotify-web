@@ -2,11 +2,11 @@
 // por álbum). Muestra qué álbumes ya tienen picks, cuántos, y cuáles te faltan.
 // Ordenado por álbumes más escuchados primero para priorizar tu tiempo.
 
-import { spotifyFetch, getAllPlaylistItems, getAllUserPlaylists, addTracksToPlaylist, removeTracksFromPlaylist, updatePlaylistItemsCache } from '../api.js?v=102';
-import { loadHistoryStats, isOwner, ownerLockedMessage } from './history-data.js?v=102';
-import { escapeHtml } from '../ui/components.js?v=102';
-import { showToast } from '../ui/toast.js?v=102';
-import { activateMarquee, marqueeSpan } from '../ui/marquee.js?v=102';
+import { spotifyFetch, getAllPlaylistItems, getAllUserPlaylists, addTracksToPlaylist, removeTracksFromPlaylist, updatePlaylistItemsCache } from '../api.js?v=103';
+import { loadHistoryStats, isOwner, ownerLockedMessage } from './history-data.js?v=103';
+import { escapeHtml } from '../ui/components.js?v=103';
+import { showToast } from '../ui/toast.js?v=103';
+import { activateMarquee, marqueeSpan } from '../ui/marquee.js?v=103';
 
 const LS_KEY_ID = 'wthree_playlist_id';
 const LS_KEY_NAME = 'wthree_playlist_name';
