@@ -3,11 +3,12 @@
 // días distintos, récord en un día — más preview iTunes y link a Spotify.
 // Se abre desde cualquier feature con openTrackCard({ id, name, artist, album, img }).
 
-import { loadTrackPlays, loadTrackDetail, isOwner } from './history-data.js';
+import { loadTrackPlays, loadTrackDetail, loadHistoryStats, isOwner } from './history-data.js';
 import { escapeHtml } from '../ui/components.js';
 import { findTrackPreview } from '../api/itunes.js';
 import { togglePreview, playingKey } from '../ui/preview-player.js';
 import { hasUsername, findTrackId, getTrackCurrentStats, loadTopLifetime } from '../api/statsfm.js';
+import { openAlbumCard } from './album-card.js';
 
 const MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
 
@@ -68,7 +69,7 @@ async function openTrackCard(t) {
   overlay.innerHTML = `
     <div class="modal" style="max-width:640px;width:min(640px,92vw)">
       <div style="display:flex;gap:14px;align-items:flex-start;margin-bottom:14px">
-        <div id="tc-cover" style="width:64px;height:64px;border-radius:8px;background:var(--color-elevated);display:flex;align-items:center;justify-content:center;font-size:26px;color:var(--color-text-muted);flex-shrink:0;overflow:hidden">
+        <div id="tc-cover" title="${t.album ? 'Ver ficha del álbum' : ''}" style="width:64px;height:64px;border-radius:8px;background:var(--color-elevated);display:flex;align-items:center;justify-content:center;font-size:26px;color:var(--color-text-muted);flex-shrink:0;overflow:hidden;${t.album ? 'cursor:pointer' : ''}">
           ${t.img
             ? `<img src="${t.img}" alt="" style="width:100%;height:100%;object-fit:cover">`
             : `♪`}
@@ -91,6 +92,26 @@ async function openTrackCard(t) {
   overlay.onclick = (e) => { if (e.target === overlay) close(); };
   document.body.appendChild(overlay);
   overlay.querySelector('#tc-close').onclick = close;
+
+  // Click en la tapa → abrir ficha del álbum (si tenemos album name)
+  const cover = overlay.querySelector('#tc-cover');
+  if (cover && t.album) {
+    cover.onclick = async () => {
+      // Buscar el álbum en el historial para conseguir stats (plays, min, img)
+      let albumInfo = { name: t.album, artist: t.artist, img: t.img };
+      try {
+        const stats = await loadHistoryStats();
+        const found = (stats?.top_albums_all_time || []).find(
+          a => a.name === t.album && a.artist === t.artist
+        );
+        if (found) {
+          albumInfo = { name: found.name, artist: found.artist, img: found.img || t.img, plays: found.plays, min: found.min };
+        }
+      } catch { /* noop */ }
+      close();
+      openAlbumCard(albumInfo);
+    };
+  }
 
   // Si el llamador no pasó tapa (típico de tracks del Wrapped/Récords, que vienen
   // solo con {name, artist, uri}), la traemos vía oEmbed — CORS abierto, sin auth.

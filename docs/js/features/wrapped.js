@@ -1,15 +1,15 @@
 // Wrapped propio: mini-resumen tuyo por año, hecho con el Extended Streaming History.
 // A diferencia del Wrapped oficial (que corre oct-sept), este es del año calendario completo.
 
-import { loadHistoryStats, isOwner, ownerLockedMessage } from './history-data.js?v=105';
-import { escapeHtml } from '../ui/components.js?v=105';
-import { findTrackPreview, findArtistTopPreview } from '../api/itunes.js?v=105';
-import { attachHover } from '../ui/preview-player.js?v=105';
-import { openTrackCard } from './track-card.js?v=105';
-import { openArtistCard } from './artist-card.js?v=105';
-import { openAlbumCard } from './album-card.js?v=105';
-import { getMyTop } from '../api.js?v=105';
-import { activateMarquee, marqueeSpan } from '../ui/marquee.js?v=105';
+import { loadHistoryStats, isOwner, ownerLockedMessage } from './history-data.js?v=106';
+import { escapeHtml } from '../ui/components.js?v=106';
+import { findTrackPreview, findArtistTopPreview } from '../api/itunes.js?v=106';
+import { attachHover } from '../ui/preview-player.js?v=106';
+import { openTrackCard } from './track-card.js?v=106';
+import { openArtistCard } from './artist-card.js?v=106';
+import { openAlbumCard } from './album-card.js?v=106';
+import { getMyTop } from '../api.js?v=106';
+import { activateMarquee, marqueeSpan } from '../ui/marquee.js?v=106';
 
 let stats = null;
 let selectedYear = null;

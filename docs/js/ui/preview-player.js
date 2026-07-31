@@ -3,8 +3,8 @@
 // Dispara 'previewchange' en document con { detail: { key } } (key null = parado)
 // para que cada feature actualice sus botones sin acoplarse al player.
 
-import { escapeHtml } from './components.js?v=105';
-import { showToast } from './toast.js?v=105';
+import { escapeHtml } from './components.js?v=106';
+import { showToast } from './toast.js?v=106';
 
 const audio = new Audio();
 audio.preload = 'none';
