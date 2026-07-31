@@ -2225,6 +2225,73 @@ h3 { font-size: 18px; font-weight: 600; }
 .wthree-track-picked { background: rgba(16, 185, 129, 0.05); }
 .wthree-track-suggested { background: rgba(124, 58, 237, 0.06); }
 
+/* Panel de orden dentro del álbum */
+.wthree-order-panel:not(:empty) {
+  margin-top: 14px;
+  padding: 12px;
+  background: rgba(16, 185, 129, 0.06);
+  border: 1px solid rgba(16, 185, 129, 0.3);
+  border-radius: var(--radius-sm);
+}
+.wthree-order-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: #10b981;
+  margin-bottom: 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.wthree-order-hint {
+  font-weight: 400;
+  color: var(--color-text-muted);
+  text-transform: none;
+  letter-spacing: 0;
+  margin-left: 6px;
+  font-size: 11px;
+}
+.wthree-order-list { display: flex; flex-direction: column; gap: 4px; }
+.wthree-order-item {
+  display: grid;
+  grid-template-columns: 22px 1fr auto auto;
+  gap: 6px;
+  align-items: center;
+  padding: 6px 8px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  font-size: 12.5px;
+  min-width: 0;
+}
+.wthree-order-rank {
+  font-weight: 700;
+  color: #10b981;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+.wthree-order-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wthree-order-btn {
+  background: var(--color-elevated);
+  border: 1px solid var(--color-border);
+  color: var(--color-text-secondary);
+  width: 24px;
+  height: 24px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  line-height: 1;
+  transition: background .1s, color .1s;
+}
+.wthree-order-btn:hover:not(:disabled) {
+  background: var(--color-accent);
+  color: white;
+  border-color: var(--color-accent);
+}
+.wthree-order-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+
 @media (max-width: 600px) {
   .wthree-summary { grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 4px; }
   .wthree-stat { padding: 8px 4px; }
