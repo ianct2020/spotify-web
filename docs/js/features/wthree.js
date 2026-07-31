@@ -2,11 +2,11 @@
 // por álbum). Muestra qué álbumes ya tienen picks, cuántos, y cuáles te faltan.
 // Ordenado por álbumes más escuchados primero para priorizar tu tiempo.
 
-import { spotifyFetch, getAllPlaylistItems, getAllUserPlaylists, addTracksToPlaylist, removeTracksFromPlaylist, updatePlaylistItemsCache } from '../api.js?v=105';
-import { loadHistoryStats, loadListenedAlbums, isOwner, ownerLockedMessage } from './history-data.js?v=105';
-import { escapeHtml } from '../ui/components.js?v=105';
-import { showToast } from '../ui/toast.js?v=105';
-import { activateMarquee, marqueeSpan } from '../ui/marquee.js?v=105';
+import { spotifyFetch, getAllPlaylistItems, getAllUserPlaylists, addTracksToPlaylist, removeTracksFromPlaylist, updatePlaylistItemsCache } from '../api.js?v=106';
+import { loadHistoryStats, loadListenedAlbums, isOwner, ownerLockedMessage } from './history-data.js?v=106';
+import { escapeHtml } from '../ui/components.js?v=106';
+import { showToast } from '../ui/toast.js?v=106';
+import { activateMarquee, marqueeSpan } from '../ui/marquee.js?v=106';
 
 const LS_KEY_ID = 'wthree_playlist_id';
 const LS_KEY_NAME = 'wthree_playlist_name';
@@ -242,11 +242,11 @@ function renderBuckets(content) {
 
   const isSel = (k) => selectedBucket === k;
   const bucketDef = [
-    { key: '0', label: 'sin picks', cls: 'wthree-stat-danger', count: buckets['0'].length },
-    { key: '1', label: 'con 1', cls: '', count: buckets['1'].length },
-    { key: '2', label: 'con 2', cls: '', count: buckets['2'].length },
-    { key: '3', label: 'completos ✓', cls: 'wthree-stat-ok', count: buckets['3'].length },
-    { key: '4+', label: 'más de 3', cls: 'wthree-stat-warn', count: buckets['4+'].length },
+    { key: '0', label: '🔴 sin picks', cls: 'wthree-stat-danger', count: buckets['0'].length },
+    { key: '1', label: '🟠 con 1', cls: '', count: buckets['1'].length },
+    { key: '2', label: '🟡 con 2', cls: '', count: buckets['2'].length },
+    { key: '3', label: '✅ completos', cls: 'wthree-stat-ok', count: buckets['3'].length },
+    { key: '4+', label: '⚠️ más de 3', cls: 'wthree-stat-warn', count: buckets['4+'].length },
   ];
 
   content.innerHTML = `
@@ -274,11 +274,11 @@ function renderBuckets(content) {
       </div>
     ` : ''}
 
-    ${!selectedBucket || selectedBucket === '0' ? renderBucket('Sin picks — priorizados por tiempo escuchado', buckets['0'], 'danger', selectedBucket === '0' ? 999 : 20) : ''}
-    ${!selectedBucket || selectedBucket === '1' ? renderBucket('Con 1 pick — completar', buckets['1'], '', selectedBucket === '1' ? 999 : 15) : ''}
-    ${!selectedBucket || selectedBucket === '2' ? renderBucket('Con 2 picks — falta uno', buckets['2'], '', selectedBucket === '2' ? 999 : 15) : ''}
-    ${!selectedBucket || selectedBucket === '3' ? renderBucket('Ya con 3 ✓', buckets['3'], 'ok', selectedBucket === '3' ? 999 : 10) : ''}
-    ${buckets['4+'].length && (!selectedBucket || selectedBucket === '4+') ? renderBucket('Más de 3 picks — sacar alguno?', buckets['4+'], 'warn', selectedBucket === '4+' ? 999 : 10) : ''}
+    ${!selectedBucket || selectedBucket === '0' ? renderBucket('🔴 Sin picks — priorizados por tiempo escuchado', buckets['0'], 'danger', selectedBucket === '0' ? 999 : 20) : ''}
+    ${!selectedBucket || selectedBucket === '1' ? renderBucket('🟠 Con 1 pick — completar', buckets['1'], '', selectedBucket === '1' ? 999 : 15) : ''}
+    ${!selectedBucket || selectedBucket === '2' ? renderBucket('🟡 Con 2 picks — falta uno', buckets['2'], '', selectedBucket === '2' ? 999 : 15) : ''}
+    ${!selectedBucket || selectedBucket === '3' ? renderBucket('✅ Ya con 3', buckets['3'], 'ok', selectedBucket === '3' ? 999 : 10) : ''}
+    ${buckets['4+'].length && (!selectedBucket || selectedBucket === '4+') ? renderBucket('⚠️ Más de 3 picks — sacar alguno?', buckets['4+'], 'warn', selectedBucket === '4+' ? 999 : 10) : ''}
 
     <div style="font-size:11px;color:var(--color-text-muted);margin-top:14px;text-align:center">
       ${historyCount} álbumes del top historial${listenedCount ? ` · ${listenedCount} más detectados en tu historial de escucha` : ''} · ${picksByAlbum.size} álbumes en la playlist
@@ -338,7 +338,7 @@ function renderAlbumRow(a, kind) {
       <div class="wthree-album-info">
         <div class="wthree-album-name">${marqueeSpan(escapeHtml(a.name))}</div>
         <div class="wthree-album-artist">${marqueeSpan(escapeHtml(a.artist))}</div>
-        ${a.min > 0 ? `<div class="wthree-album-meta">${fmtMinutesShort(a.min)} · ${a.plays} plays</div>` : `<div class="wthree-album-meta" style="opacity:0.6">no está en tu top</div>`}
+        ${a.min > 0 ? `<div class="wthree-album-meta">${fmtMinutesShort(a.min)} · ${a.plays} plays</div>` : `<div class="wthree-album-meta" style="opacity:0.6">${a.detectedIn ? `escuchado en ${a.detectedIn} · fuera del top 1000` : 'fuera del top / de la playlist'}</div>`}
       </div>
       ${badge}
     </div>
