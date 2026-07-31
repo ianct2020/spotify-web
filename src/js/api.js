@@ -710,18 +710,23 @@ async function getCurrentUserId() {
 
 // Devuelven el snapshot_id de la última escritura para poder actualizar el
 // cache de items en el caller (updatePlaylistItemsCache) sin re-bajar todo.
-async function addTracksToPlaylist(playlistId, uris) {
+async function addTracksToPlaylist(playlistId, uris, options = {}) {
+  const { position } = options;
   const chunks = [];
   for (let i = 0; i < uris.length; i += 100) {
     chunks.push(uris.slice(i, i + 100));
   }
   let snapshot = null;
+  let pos = position;
   for (const chunk of chunks) {
+    const body = { uris: chunk };
+    if (pos != null) body.position = pos;
     const r = await spotifyFetch(`/playlists/${playlistId}/items`, {
       method: 'POST',
-      body: JSON.stringify({ uris: chunk }),
+      body: JSON.stringify(body),
     });
     if (r?.snapshot_id) snapshot = r.snapshot_id;
+    if (pos != null) pos += chunk.length;
   }
   return snapshot;
 }

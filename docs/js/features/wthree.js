@@ -2,11 +2,11 @@
 // por álbum). Muestra qué álbumes ya tienen picks, cuántos, y cuáles te faltan.
 // Ordenado por álbumes más escuchados primero para priorizar tu tiempo.
 
-import { spotifyFetch, getAllPlaylistItems, getAllUserPlaylists, addTracksToPlaylist, removeTracksFromPlaylist, updatePlaylistItemsCache } from '../api.js?v=103';
-import { loadHistoryStats, isOwner, ownerLockedMessage } from './history-data.js?v=103';
-import { escapeHtml } from '../ui/components.js?v=103';
-import { showToast } from '../ui/toast.js?v=103';
-import { activateMarquee, marqueeSpan } from '../ui/marquee.js?v=103';
+import { spotifyFetch, getAllPlaylistItems, getAllUserPlaylists, addTracksToPlaylist, removeTracksFromPlaylist, updatePlaylistItemsCache } from '../api.js?v=104';
+import { loadHistoryStats, loadListenedAlbums, isOwner, ownerLockedMessage } from './history-data.js?v=104';
+import { escapeHtml } from '../ui/components.js?v=104';
+import { showToast } from '../ui/toast.js?v=104';
+import { activateMarquee, marqueeSpan } from '../ui/marquee.js?v=104';
 
 const LS_KEY_ID = 'wthree_playlist_id';
 const LS_KEY_NAME = 'wthree_playlist_name';
@@ -14,10 +14,12 @@ const LS_KEY_NAME = 'wthree_playlist_name';
 // ── Estado ──
 let playlistId = null;
 let playlistName = null;
-let picksByAlbum = null;   // Map<key, {name, artist, img, picks:[{name,id,uri}]}>
+let picksByAlbum = null;   // Map<key, {name, artist, img, picks:[{name,id,uri,pos}]}>
 let albumsList = null;     // [{name, artist, img, min, plays, picks[]}] cross de historial vs playlist
 let historyStats = null;
+let listenedAlbums = null; // { years: [{ year, albums: [{name, artist, img, date}] }] }
 let albumTracksCache = new Map(); // key → tracks fetched from Spotify
+let selectedBucket = null; // null = all, o '0'/'1'/'2'/'3'/'4+'
 
 const albumKey = (name, artist) => `${(name || '').toLowerCase().trim()}||${(artist || '').toLowerCase().trim()}`;
 
@@ -106,13 +108,15 @@ async function loadAndRender(content) {
   content.innerHTML = `<div class="card"><div class="empty-state"><div class="spinner"></div><div style="margin-top:10px">Cargando "${escapeHtml(playlistName || 'playlist')}" y tu historial…</div></div></div>`;
 
   try {
-    const [items, stats] = await Promise.all([
+    const [items, stats, listened] = await Promise.all([
       getAllPlaylistItems(playlistId),
       loadHistoryStats(),
+      loadListenedAlbums().catch(() => null),
     ]);
     historyStats = stats;
+    listenedAlbums = listened;
     buildAlbumIndex(items);
-    crossWithHistory(stats);
+    crossWithHistory(stats, listened);
     renderBuckets(content);
   } catch (e) {
     content.innerHTML = `<div class="card"><p style="color:var(--color-error)">Error: ${escapeHtml(e.message)}</p><button class="btn btn-secondary btn-sm" id="wthree-reset" style="margin-top:8px">Elegir otra playlist</button></div>`;
@@ -131,9 +135,9 @@ function reset() {
 
 function buildAlbumIndex(items) {
   picksByAlbum = new Map();
-  for (const it of items) {
+  items.forEach((it, i) => {
     const t = it.item || it.track;
-    if (!t || !t.album) continue;
+    if (!t || !t.album) return;
     const artistName = t.artists?.[0]?.name || '';
     const key = albumKey(t.album.name, artistName);
     if (!picksByAlbum.has(key)) {
@@ -145,13 +149,17 @@ function buildAlbumIndex(items) {
         picks: [],
       });
     }
-    picksByAlbum.get(key).picks.push({ name: t.name, id: t.id, uri: t.uri });
-  }
+    // pos = índice 0-based en la playlist. Sirve para insertar la nueva
+    // canción del mismo álbum en (maxPos + 1), no al final.
+    picksByAlbum.get(key).picks.push({ name: t.name, id: t.id, uri: t.uri, pos: i });
+  });
 }
 
-function crossWithHistory(stats) {
+function crossWithHistory(stats, listened) {
   const albums = [];
   const seen = new Set();
+
+  // 1. Álbumes del top historial (con minutos + plays)
   for (const a of (stats?.top_albums_all_time || [])) {
     const key = albumKey(a.name, a.artist);
     seen.add(key);
@@ -164,9 +172,35 @@ function crossWithHistory(stats) {
       plays: a.plays || 0,
       picks: info ? info.picks : [],
       albumId: info?.albumId,
+      source: 'history',
     });
   }
-  // Álbumes en la playlist que NO están en el top historial (pueden ser recientes o pocos escuchados)
+
+  // 2. Álbumes escuchados detectados (listened_albums) que no estén en el top
+  //    (te dan una lista más amplia — no solo los más escuchados)
+  if (listened?.years) {
+    for (const y of listened.years) {
+      for (const a of (y.albums || [])) {
+        const key = albumKey(a.name, a.artist);
+        if (seen.has(key)) continue;
+        seen.add(key);
+        const info = picksByAlbum.get(key);
+        albums.push({
+          name: a.name,
+          artist: a.artist,
+          img: a.img || info?.img,
+          min: 0,
+          plays: 0,
+          detectedIn: y.year,
+          picks: info ? info.picks : [],
+          albumId: info?.albumId,
+          source: 'listened',
+        });
+      }
+    }
+  }
+
+  // 3. Álbumes que solo están en la playlist (ni en top ni en listened)
   for (const [key, info] of picksByAlbum) {
     if (seen.has(key)) continue;
     albums.push({
@@ -177,10 +211,17 @@ function crossWithHistory(stats) {
       plays: 0,
       picks: info.picks,
       albumId: info.albumId,
+      source: 'playlist',
     });
   }
-  // Ordenar: primero por picks ascendente (menos = más prioridad), luego minutos desc
-  albums.sort((a, b) => a.picks.length - b.picks.length || b.min - a.min);
+
+  // Ordenar: primero picks ASC (menos picks = más prioridad),
+  // luego minutos DESC, luego año detectado DESC (más reciente primero)
+  albums.sort((a, b) =>
+    a.picks.length - b.picks.length
+    || b.min - a.min
+    || (b.detectedIn || 0) - (a.detectedIn || 0)
+  );
   albumsList = albums;
 }
 
@@ -195,6 +236,19 @@ function renderBuckets(content) {
     else buckets['4+'].push(a);
   }
 
+  // Meta info: fuentes de datos
+  const historyCount = albumsList.filter(a => a.source === 'history').length;
+  const listenedCount = albumsList.filter(a => a.source === 'listened').length;
+
+  const isSel = (k) => selectedBucket === k;
+  const bucketDef = [
+    { key: '0', label: 'sin picks', cls: 'wthree-stat-danger', count: buckets['0'].length },
+    { key: '1', label: 'con 1', cls: '', count: buckets['1'].length },
+    { key: '2', label: 'con 2', cls: '', count: buckets['2'].length },
+    { key: '3', label: 'completos ✓', cls: 'wthree-stat-ok', count: buckets['3'].length },
+    { key: '4+', label: 'más de 3', cls: 'wthree-stat-warn', count: buckets['4+'].length },
+  ];
+
   content.innerHTML = `
     <div class="wthree-header">
       <div class="wthree-header-name">
@@ -205,21 +259,45 @@ function renderBuckets(content) {
     </div>
 
     <div class="wthree-summary">
-      <div class="wthree-stat wthree-stat-danger"><div class="wthree-stat-v">${buckets['0'].length}</div><div class="wthree-stat-l">sin picks</div></div>
-      <div class="wthree-stat"><div class="wthree-stat-v">${buckets['1'].length}</div><div class="wthree-stat-l">con 1</div></div>
-      <div class="wthree-stat"><div class="wthree-stat-v">${buckets['2'].length}</div><div class="wthree-stat-l">con 2</div></div>
-      <div class="wthree-stat wthree-stat-ok"><div class="wthree-stat-v">${buckets['3'].length}</div><div class="wthree-stat-l">completos ✓</div></div>
-      <div class="wthree-stat wthree-stat-warn"><div class="wthree-stat-v">${buckets['4+'].length}</div><div class="wthree-stat-l">más de 3</div></div>
+      ${bucketDef.map(b => `
+        <button class="wthree-stat ${b.cls} ${isSel(b.key) ? 'wthree-stat-active' : ''}" data-bucket="${b.key}">
+          <div class="wthree-stat-v">${b.count}</div>
+          <div class="wthree-stat-l">${b.label}</div>
+        </button>
+      `).join('')}
     </div>
 
-    ${renderBucket('Sin picks — priorizados por tiempo escuchado', buckets['0'], 'danger', 20)}
-    ${renderBucket('Con 1 pick — completar', buckets['1'], '', 15)}
-    ${renderBucket('Con 2 picks — falta uno', buckets['2'], '', 15)}
-    ${renderBucket('Ya con 3 ✓', buckets['3'], 'ok', 10)}
-    ${buckets['4+'].length ? renderBucket('Más de 3 picks — sacar alguno?', buckets['4+'], 'warn', 10) : ''}
+    ${selectedBucket ? `
+      <div class="wthree-filter-active">
+        Mostrando solo: <strong>${bucketDef.find(b => b.key === selectedBucket)?.label}</strong>
+        <button class="wthree-clear-filter" id="wthree-clear-filter">✕ Ver todos</button>
+      </div>
+    ` : ''}
+
+    ${!selectedBucket || selectedBucket === '0' ? renderBucket('Sin picks — priorizados por tiempo escuchado', buckets['0'], 'danger', selectedBucket === '0' ? 999 : 20) : ''}
+    ${!selectedBucket || selectedBucket === '1' ? renderBucket('Con 1 pick — completar', buckets['1'], '', selectedBucket === '1' ? 999 : 15) : ''}
+    ${!selectedBucket || selectedBucket === '2' ? renderBucket('Con 2 picks — falta uno', buckets['2'], '', selectedBucket === '2' ? 999 : 15) : ''}
+    ${!selectedBucket || selectedBucket === '3' ? renderBucket('Ya con 3 ✓', buckets['3'], 'ok', selectedBucket === '3' ? 999 : 10) : ''}
+    ${buckets['4+'].length && (!selectedBucket || selectedBucket === '4+') ? renderBucket('Más de 3 picks — sacar alguno?', buckets['4+'], 'warn', selectedBucket === '4+' ? 999 : 10) : ''}
+
+    <div style="font-size:11px;color:var(--color-text-muted);margin-top:14px;text-align:center">
+      ${historyCount} álbumes del top historial${listenedCount ? ` · ${listenedCount} más detectados en tu historial de escucha` : ''} · ${picksByAlbum.size} álbumes en la playlist
+    </div>
   `;
 
   document.getElementById('wthree-change').onclick = reset;
+  document.getElementById('wthree-clear-filter')?.addEventListener('click', () => {
+    selectedBucket = null;
+    renderBuckets(content);
+  });
+  content.querySelectorAll('[data-bucket]').forEach(btn => {
+    btn.onclick = () => {
+      selectedBucket = selectedBucket === btn.dataset.bucket ? null : btn.dataset.bucket;
+      renderBuckets(content);
+      // Scroll al primer bucket después del cambio
+      if (selectedBucket) content.querySelector('.wthree-bucket')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    };
+  });
   wireAlbumClicks(content);
   activateMarquee(content);
 }
@@ -448,31 +526,29 @@ async function applyChanges(a, body, overlay) {
   saveBtn.disabled = true;
   saveBtn.textContent = 'Guardando…';
   try {
-    if (toAdd.length) await addTracksToPlaylist(playlistId, toAdd);
+    // Insertar junto a las otras del mismo álbum. Si el álbum ya tiene picks,
+    // metemos las nuevas justo después del último pick existente.
+    // Si no tiene picks aún, se agrega al final (position omitido).
+    if (toAdd.length) {
+      const existingPicks = a.picks || [];
+      const maxPos = existingPicks.length
+        ? Math.max(...existingPicks.map(p => p.pos ?? -1))
+        : -1;
+      const insertPos = maxPos >= 0 ? maxPos + 1 : null;
+      await addTracksToPlaylist(playlistId, toAdd, insertPos != null ? { position: insertPos } : {});
+    }
     if (toRemove.length) await removeTracksFromPlaylist(playlistId, toRemove);
 
-    // Refresh: los tracks del álbum ahora en la playlist actualizados en memoria
-    const key = albumKey(a.name, a.artist);
-    const info = picksByAlbum.get(key) || { name: a.name, artist: a.artist, picks: [] };
-    // Re-armar picks desde los checkboxes marcados
-    const allBoxes = body.querySelectorAll('.wthree-track-check');
-    info.picks = [];
-    allBoxes.forEach(cb => {
-      if (cb.checked) {
-        const label = cb.closest('label');
-        const nameSpan = label.querySelector('.wthree-track-name');
-        info.picks.push({ name: nameSpan?.textContent || '', id: cb.dataset.id, uri: cb.dataset.uri });
-      }
-    });
-    picksByAlbum.set(key, info);
-    a.picks = info.picks;
-
+    // Re-fetch los items para tener posiciones frescas (insertar en X corre
+    // todos los items >= X, así que cache queda inválido).
     showToast(`Playlist actualizada: +${toAdd.length} · -${toRemove.length}`, 'success');
     overlay.remove();
-    // Re-render los buckets
     const content = document.getElementById('wthree-content');
     if (content) {
-      crossWithHistory(historyStats);
+      content.querySelector('.wthree-bucket')?.style?.setProperty('opacity', '0.5');
+      const freshItems = await getAllPlaylistItems(playlistId, null, { useCache: false });
+      buildAlbumIndex(freshItems);
+      crossWithHistory(historyStats, listenedAlbums);
       renderBuckets(content);
     }
   } catch (e) {
