@@ -2,11 +2,11 @@
 // por álbum). Muestra qué álbumes ya tienen picks, cuántos, y cuáles te faltan.
 // Ordenado por álbumes más escuchados primero para priorizar tu tiempo.
 
-import { spotifyFetch, getAllPlaylistItems, getAllUserPlaylists, addTracksToPlaylist, removeTracksFromPlaylist, updatePlaylistItemsCache } from '../api.js?v=104';
-import { loadHistoryStats, loadListenedAlbums, isOwner, ownerLockedMessage } from './history-data.js?v=104';
-import { escapeHtml } from '../ui/components.js?v=104';
-import { showToast } from '../ui/toast.js?v=104';
-import { activateMarquee, marqueeSpan } from '../ui/marquee.js?v=104';
+import { spotifyFetch, getAllPlaylistItems, getAllUserPlaylists, addTracksToPlaylist, removeTracksFromPlaylist, updatePlaylistItemsCache } from '../api.js?v=105';
+import { loadHistoryStats, loadListenedAlbums, isOwner, ownerLockedMessage } from './history-data.js?v=105';
+import { escapeHtml } from '../ui/components.js?v=105';
+import { showToast } from '../ui/toast.js?v=105';
+import { activateMarquee, marqueeSpan } from '../ui/marquee.js?v=105';
 
 const LS_KEY_ID = 'wthree_playlist_id';
 const LS_KEY_NAME = 'wthree_playlist_name';
@@ -438,41 +438,106 @@ async function openAlbumModal(a) {
     .map(t => t.id);
   const suggestedSet = new Set(suggestions);
 
+  // Orden inicial: picks ordenados por su posición en la playlist (ascendente)
+  const origOrder = [...a.picks].sort((x, y) => (x.pos ?? 0) - (y.pos ?? 0));
+  let orderedPicks = origOrder.map(p => ({ id: p.id, uri: p.uri, name: p.name }));
+
+  const trackByUri = new Map(trackData.map(t => [t.uri, t]));
+
   body.innerHTML = `
     <div style="font-size:12px;color:var(--color-text-muted);margin:0 0 10px">
-      ${tracks.length} tracks · ${a.picks.length} en w-three
+      ${tracks.length} tracks · <span id="wt-picked-count">${a.picks.length}</span> en w-three
       ${suggestions.length > 0 ? ` · <span style="color:var(--color-accent)">💡 ${suggestions.length} sugerido${suggestions.length === 1 ? '' : 's'}</span>` : ''}
     </div>
     <div class="wthree-tracklist">
       ${trackData.map((t, i) => `
         <label class="wthree-track ${t.picked ? 'wthree-track-picked' : ''} ${suggestedSet.has(t.id) ? 'wthree-track-suggested' : ''}">
-          <input type="checkbox" class="wthree-track-check" data-id="${t.id}" data-uri="${t.uri}" ${t.picked ? 'checked' : ''}>
+          <input type="checkbox" class="wthree-track-check" data-id="${t.id}" data-uri="${t.uri}" data-name="${escapeHtml(t.name)}" ${t.picked ? 'checked' : ''}>
           <span class="wthree-track-num">${i + 1}</span>
           <span class="wthree-track-name">${escapeHtml(t.name)}</span>
           ${t.plays > 0 ? `<span class="wthree-track-plays">${t.plays} play${t.plays === 1 ? '' : 's'}</span>` : ''}
           ${suggestedSet.has(t.id) ? `<span class="wthree-track-tag">sugerido</span>` : ''}
-          ${t.picked ? `<span class="wthree-track-tag wthree-track-tag-ok">en w-three</span>` : ''}
         </label>
       `).join('')}
     </div>
+
+    <div class="wthree-order-panel" id="wt-order-panel"></div>
+
     <div style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap">
       ${suggestions.length > 0 ? `<button class="btn btn-primary btn-sm" id="wt-add-suggested" style="flex:1;min-width:180px">Agregar los ${suggestions.length} sugeridos</button>` : ''}
       <button class="btn btn-secondary btn-sm" id="wt-save" style="flex:1;min-width:100px">Guardar cambios</button>
     </div>
   `;
 
+  const orderPanel = document.getElementById('wt-order-panel');
+
+  function renderOrderPanel() {
+    if (orderedPicks.length === 0) {
+      orderPanel.innerHTML = '';
+      return;
+    }
+    orderPanel.innerHTML = `
+      <div class="wthree-order-title">
+        Orden dentro del álbum en la playlist
+        <span class="wthree-order-hint">(1ra = la que más te gusta)</span>
+      </div>
+      <div class="wthree-order-list">
+        ${orderedPicks.map((p, i) => `
+          <div class="wthree-order-item" data-id="${p.id}">
+            <span class="wthree-order-rank">${i + 1}</span>
+            <span class="wthree-order-name">${escapeHtml(p.name || '')}</span>
+            <button class="wthree-order-btn" data-move="up" data-i="${i}" title="Subir" ${i === 0 ? 'disabled' : ''}>▲</button>
+            <button class="wthree-order-btn" data-move="down" data-i="${i}" title="Bajar" ${i === orderedPicks.length - 1 ? 'disabled' : ''}>▼</button>
+          </div>
+        `).join('')}
+      </div>
+    `;
+    orderPanel.querySelectorAll('[data-move]').forEach(btn => {
+      btn.onclick = () => {
+        const i = +btn.dataset.i;
+        const dir = btn.dataset.move === 'up' ? -1 : 1;
+        const j = i + dir;
+        if (j < 0 || j >= orderedPicks.length) return;
+        [orderedPicks[i], orderedPicks[j]] = [orderedPicks[j], orderedPicks[i]];
+        renderOrderPanel();
+      };
+    });
+  }
+  renderOrderPanel();
+
+  // Cuando toggle un checkbox, actualizar orderedPicks
+  body.querySelectorAll('.wthree-track-check').forEach(cb => {
+    cb.addEventListener('change', () => {
+      const id = cb.dataset.id;
+      const uri = cb.dataset.uri;
+      const name = cb.dataset.name;
+      if (cb.checked) {
+        if (!orderedPicks.some(p => p.id === id)) {
+          orderedPicks.push({ id, uri, name });
+        }
+      } else {
+        orderedPicks = orderedPicks.filter(p => p.id !== id);
+      }
+      document.getElementById('wt-picked-count').textContent = orderedPicks.length;
+      renderOrderPanel();
+    });
+  });
+
   const addBtn = document.getElementById('wt-add-suggested');
   if (addBtn) {
     addBtn.onclick = () => {
       suggestions.forEach(id => {
         const cb = body.querySelector(`.wthree-track-check[data-id="${id}"]`);
-        if (cb) cb.checked = true;
+        if (cb && !cb.checked) {
+          cb.checked = true;
+          cb.dispatchEvent(new Event('change'));
+        }
       });
-      showToast('Marcados. Apretá "Guardar cambios" para aplicar.', 'info');
+      showToast('Marcados. Ajustá el orden si querés y apretá "Guardar cambios".', 'info');
     };
   }
 
-  document.getElementById('wt-save').onclick = () => applyChanges(a, body, overlay);
+  document.getElementById('wt-save').onclick = () => applyChanges(a, body, overlay, orderedPicks, origOrder);
 }
 
 async function fetchAlbumTracks(a) {
@@ -501,23 +566,22 @@ async function fetchAlbumTracks(a) {
   }
 }
 
-async function applyChanges(a, body, overlay) {
-  const currentPickIds = new Set(a.picks.map(p => p.id));
-  const newPickIds = new Set();
-  body.querySelectorAll('.wthree-track-check').forEach(cb => {
-    if (cb.checked) newPickIds.add(cb.dataset.id);
-  });
+async function applyChanges(a, body, overlay, orderedPicks, origOrder) {
+  // Diferencia entre el orden nuevo y el original
+  const origIds = origOrder.map(p => p.id);
+  const newIds = orderedPicks.map(p => p.id);
 
-  const toAdd = [];
-  const toRemove = [];
-  body.querySelectorAll('.wthree-track-check').forEach(cb => {
-    const id = cb.dataset.id;
-    const uri = cb.dataset.uri;
-    if (cb.checked && !currentPickIds.has(id)) toAdd.push(uri);
-    if (!cb.checked && currentPickIds.has(id)) toRemove.push(uri);
-  });
+  const toRemoveUris = origOrder.filter(p => !newIds.includes(p.id)).map(p => p.uri);
+  const toAddUris = orderedPicks.filter(p => !origIds.includes(p.id)).map(p => p.uri);
 
-  if (toAdd.length === 0 && toRemove.length === 0) {
+  // Detectar si el ORDEN cambió entre las que quedan (intersección)
+  const keptOrig = origIds.filter(id => newIds.includes(id));
+  const keptNew = newIds.filter(id => origIds.includes(id));
+  const orderChanged = keptOrig.length > 0
+    && keptOrig.some((id, i) => id !== keptNew[i]);
+
+  const noChanges = toAddUris.length === 0 && toRemoveUris.length === 0 && !orderChanged;
+  if (noChanges) {
     showToast('No hay cambios', 'info');
     return;
   }
@@ -526,22 +590,39 @@ async function applyChanges(a, body, overlay) {
   saveBtn.disabled = true;
   saveBtn.textContent = 'Guardando…';
   try {
-    // Insertar junto a las otras del mismo álbum. Si el álbum ya tiene picks,
-    // metemos las nuevas justo después del último pick existente.
-    // Si no tiene picks aún, se agrega al final (position omitido).
-    if (toAdd.length) {
-      const existingPicks = a.picks || [];
-      const maxPos = existingPicks.length
-        ? Math.max(...existingPicks.map(p => p.pos ?? -1))
-        : -1;
-      const insertPos = maxPos >= 0 ? maxPos + 1 : null;
-      await addTracksToPlaylist(playlistId, toAdd, insertPos != null ? { position: insertPos } : {});
+    if (orderChanged) {
+      // Estrategia: sacar TODOS los picks originales del álbum, re-insertar
+      // en el orden nuevo (incluyendo los que se agregan) en la posición
+      // del primero de los originales. Así queda perfectamente contiguo y ordenado.
+      const insertPos = origOrder.length
+        ? Math.min(...origOrder.map(p => p.pos ?? Infinity))
+        : null;
+      const allOrigUris = origOrder.map(p => p.uri);
+      if (allOrigUris.length) await removeTracksFromPlaylist(playlistId, allOrigUris);
+      const finalUris = orderedPicks.map(p => p.uri);
+      if (finalUris.length) {
+        await addTracksToPlaylist(playlistId, finalUris,
+          insertPos != null ? { position: insertPos } : {});
+      }
+    } else {
+      // Sin cambio de orden: solo add + remove como antes
+      if (toAddUris.length) {
+        const existingPicks = a.picks || [];
+        const maxPos = existingPicks.length
+          ? Math.max(...existingPicks.map(p => p.pos ?? -1))
+          : -1;
+        const insertPos = maxPos >= 0 ? maxPos + 1 : null;
+        await addTracksToPlaylist(playlistId, toAddUris, insertPos != null ? { position: insertPos } : {});
+      }
+      if (toRemoveUris.length) await removeTracksFromPlaylist(playlistId, toRemoveUris);
     }
-    if (toRemove.length) await removeTracksFromPlaylist(playlistId, toRemove);
 
     // Re-fetch los items para tener posiciones frescas (insertar en X corre
     // todos los items >= X, así que cache queda inválido).
-    showToast(`Playlist actualizada: +${toAdd.length} · -${toRemove.length}`, 'success');
+    const msg = orderChanged
+      ? `Orden actualizado: ${orderedPicks.length} en el álbum`
+      : `Playlist actualizada: +${toAddUris.length} · -${toRemoveUris.length}`;
+    showToast(msg, 'success');
     overlay.remove();
     const content = document.getElementById('wthree-content');
     if (content) {
