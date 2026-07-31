@@ -71,7 +71,7 @@ async function showSetup(content) {
           ${guessed.slice(0, 4).map(p => `
             <button class="wthree-choice" data-id="${p.id}" data-name="${escapeHtml(p.name)}">
               <div class="wthree-choice-name">${escapeHtml(p.name)}</div>
-              <div class="wthree-choice-meta">${p.tracks?.total || 0} tracks · ${p.owner?.display_name || 'vos'}</div>
+              <div class="wthree-choice-meta">${p.owner?.display_name || 'vos'}${p.public === false ? ' · privada' : ''}${p.collaborative ? ' · colaborativa' : ''}</div>
             </button>
           `).join('')}
         </div>
@@ -83,7 +83,7 @@ async function showSetup(content) {
           ${playlists.map(p => `
             <button class="wthree-choice" data-id="${p.id}" data-name="${escapeHtml(p.name)}">
               <div class="wthree-choice-name">${escapeHtml(p.name)}</div>
-              <div class="wthree-choice-meta">${p.tracks?.total || 0} tracks · ${p.owner?.display_name || 'vos'}</div>
+              <div class="wthree-choice-meta">${p.owner?.display_name || 'vos'}${p.public === false ? ' · privada' : ''}${p.collaborative ? ' · colaborativa' : ''}</div>
             </button>
           `).join('')}
         </div>
