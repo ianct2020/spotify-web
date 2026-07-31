@@ -1,7 +1,7 @@
-import { getValidToken, refreshAccessToken } from './auth.js?v=103';
-import { cacheGet, cacheGetRaw, cacheGetTimestamp, cacheSet, cacheClear } from './storage.js?v=103';
-import { idbDel, idbGetCached, idbGetCachedRaw, idbGetTimestamp, idbSetCached } from './idb.js?v=103';
-import { showToast } from './ui/toast.js?v=103';
+import { getValidToken, refreshAccessToken } from './auth.js?v=104';
+import { cacheGet, cacheGetRaw, cacheGetTimestamp, cacheSet, cacheClear } from './storage.js?v=104';
+import { idbDel, idbGetCached, idbGetCachedRaw, idbGetTimestamp, idbSetCached } from './idb.js?v=104';
+import { showToast } from './ui/toast.js?v=104';
 
 const BASE = 'https://api.spotify.com/v1';
 const MIN_RETRY_WAIT = 5000;
@@ -710,18 +710,23 @@ async function getCurrentUserId() {
 
 // Devuelven el snapshot_id de la última escritura para poder actualizar el
 // cache de items en el caller (updatePlaylistItemsCache) sin re-bajar todo.
-async function addTracksToPlaylist(playlistId, uris) {
+async function addTracksToPlaylist(playlistId, uris, options = {}) {
+  const { position } = options;
   const chunks = [];
   for (let i = 0; i < uris.length; i += 100) {
     chunks.push(uris.slice(i, i + 100));
   }
   let snapshot = null;
+  let pos = position;
   for (const chunk of chunks) {
+    const body = { uris: chunk };
+    if (pos != null) body.position = pos;
     const r = await spotifyFetch(`/playlists/${playlistId}/items`, {
       method: 'POST',
-      body: JSON.stringify({ uris: chunk }),
+      body: JSON.stringify(body),
     });
     if (r?.snapshot_id) snapshot = r.snapshot_id;
+    if (pos != null) pos += chunk.length;
   }
   return snapshot;
 }

@@ -1,12 +1,12 @@
 // Likes con 0 plays: tracks likeados que nunca escuchaste según el Extended Streaming History.
 // Cruce local: likes vs history-track-plays.json (índice de plays por track id).
 
-import { getBestAvailableLikes, removeLikedTracks } from '../api.js?v=103';
-import { loadTrackPlays, trackIdOf, isOwner, ownerLockedMessage } from './history-data.js?v=103';
-import { escapeHtml, confirmModal } from '../ui/components.js?v=103';
-import { showToast } from '../ui/toast.js?v=103';
-import { openTrackCard } from './track-card.js?v=103';
-import { hasUsername, loadTopLifetime } from '../api/statsfm.js?v=103';
+import { getBestAvailableLikes, removeLikedTracks } from '../api.js?v=104';
+import { loadTrackPlays, trackIdOf, isOwner, ownerLockedMessage } from './history-data.js?v=104';
+import { escapeHtml, confirmModal } from '../ui/components.js?v=104';
+import { showToast } from '../ui/toast.js?v=104';
+import { openTrackCard } from './track-card.js?v=104';
+import { hasUsername, loadTopLifetime } from '../api/statsfm.js?v=104';
 
 let cache = null;
 
