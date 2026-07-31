@@ -2039,15 +2039,15 @@ h3 { font-size: 18px; font-weight: 600; }
   will-change: transform;
 }
 .marquee-wrap.marquee > .marquee-text {
-  animation: marquee-slide 12s linear infinite;
-  padding-right: 40px;
+  animation: marquee-slide 10s ease-in-out infinite;
+  padding-right: 20px;
 }
 .marquee-wrap.marquee:hover > .marquee-text { animation-play-state: paused; }
+/* 0-25% quieto al inicio (2.5s lees el principio) · 25-75% desliza (5s) ·
+   75-100% quieto al final (2.5s lees el final) · loop */
 @keyframes marquee-slide {
-  0% { transform: translateX(0); }
-  15% { transform: translateX(0); }
-  85% { transform: translateX(calc(-100% + var(--marquee-container, 100%))); }
-  100% { transform: translateX(calc(-100% + var(--marquee-container, 100%))); }
+  0%, 25% { transform: translateX(0); }
+  75%, 100% { transform: translateX(calc(-100% + var(--marquee-container, 100%))); }
 }
 @media (prefers-reduced-motion: reduce) {
   .marquee-wrap.marquee > .marquee-text { animation: none; }
