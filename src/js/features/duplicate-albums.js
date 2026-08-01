@@ -1,5 +1,5 @@
 import { getAllUserPlaylists, getAllPlaylistItems, removePlaylistItemsAtPositions, getCurrentUserId } from '../api.js';
-import { showProgress, hideProgress, typeConfirmModal, escapeHtml, renderPlaylistGrid, bindPlaylistGrid } from '../ui/components.js';
+import { showProgress, hideProgress, typeConfirmModal, escapeHtml, renderPlaylistGrid, bindPlaylistGrid, pageHeader } from '../ui/components.js';
 import { showToast } from '../ui/toast.js';
 
 let ownPlaylists = [];
@@ -7,10 +7,7 @@ const keepUris = new Set();
 
 export function render(container) {
   container.innerHTML = `
-    <div class="page-header">
-      <h1>Álbumes repetidos</h1>
-      <p>Detectá álbumes con más de un track en la misma playlist (ej: "listened albums" donde querés 1 track por álbum).</p>
-    </div>
+    ${pageHeader({ title: 'Álbumes repetidos' })}
     <div id="dupalbums-content"></div>
   `;
   loadAndShowGrid();

@@ -1,5 +1,5 @@
 import { getAllLikedTracks, removeLikedTracks, checkLibraryContains } from '../api.js';
-import { showProgress, hideProgress, progressController, isCancelled, typeConfirmModal, renderTrackRow, escapeHtml } from '../ui/components.js';
+import { showProgress, hideProgress, progressController, isCancelled, typeConfirmModal, renderTrackRow, escapeHtml, pageHeader } from '../ui/components.js';
 import { showToast } from '../ui/toast.js';
 import { openModal, closeTop } from '../ui/modal-stack.js';
 
@@ -25,10 +25,7 @@ let shownCount = SHOWN_STEP;
 
 export function render(container) {
   container.innerHTML = `
-    <div class="page-header">
-      <h1>Versiones Duplicadas</h1>
-      <p>Encontrá likes con el mismo nombre y artista en distintos álbumes (original, remaster, etc.). Marcá la versión que querés <strong>quedarte</strong> — el resto del grupo se borra.</p>
-    </div>
+    ${pageHeader({ title: 'Versiones Duplicadas' })}
     <div class="feature-actions" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
       <button class="btn btn-primary" id="versions-analyze-btn">Analizar</button>
       <button class="btn btn-secondary" id="versions-refresh-btn" title="Vuelve a bajar tus likes desde Spotify (usalo si borraste versiones y todavía aparecen)">↻ Re-analizar (bajar likes de nuevo)</button>

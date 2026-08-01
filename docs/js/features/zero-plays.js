@@ -1,12 +1,12 @@
 // Likes con 0 plays: tracks likeados que nunca escuchaste según el Extended Streaming History.
 // Cruce local: likes vs history-track-plays.json (índice de plays por track id).
 
-import { getBestAvailableLikes, removeLikedTracks } from '../api.js?v=107';
-import { loadTrackPlays, trackIdOf, isOwner, ownerLockedMessage } from './history-data.js?v=107';
-import { escapeHtml, confirmModal } from '../ui/components.js?v=107';
-import { showToast } from '../ui/toast.js?v=107';
-import { openTrackCard } from './track-card.js?v=107';
-import { hasUsername, loadTopLifetime } from '../api/statsfm.js?v=107';
+import { getBestAvailableLikes, removeLikedTracks } from '../api.js?v=108';
+import { loadTrackPlays, trackIdOf, isOwner, ownerLockedMessage } from './history-data.js?v=108';
+import { escapeHtml, confirmModal, pageHeader } from '../ui/components.js?v=108';
+import { showToast } from '../ui/toast.js?v=108';
+import { openTrackCard } from './track-card.js?v=108';
+import { hasUsername, loadTopLifetime } from '../api/statsfm.js?v=108';
 
 let cache = null;
 
@@ -15,10 +15,7 @@ let useStatsfm = localStorage.getItem(STATSFM_TOGGLE_KEY) === '1';
 
 export async function render(container) {
   container.innerHTML = `
-    <div class="page-header">
-      <h1>Sin plays</h1>
-      <p>Likes que <strong>nunca reprodujiste</strong> con al menos 30s en tu Extended Streaming History. Candidatos a limpiar.</p>
-    </div>
+    ${pageHeader({ title: 'Sin plays' })}
     <div id="zeroplays-content"><div class="empty-state"><div class="spinner spinner-lg"></div><div style="margin-top:16px">Cruzando likes con historial…</div></div></div>
   `;
   await analyze();

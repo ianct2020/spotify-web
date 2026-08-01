@@ -1,7 +1,7 @@
-import { spotifyFetch, createPlaylist, addTracksToPlaylist, invalidatePlaylistsCache } from '../api.js?v=107';
-import { hasKey, setKey, getSimilarArtists, getArtistTopTracks } from '../api/lastfm.js?v=107';
-import { showProgress, hideProgress, promptPlaylistName, escapeHtml } from '../ui/components.js?v=107';
-import { showToast } from '../ui/toast.js?v=107';
+import { spotifyFetch, createPlaylist, addTracksToPlaylist, invalidatePlaylistsCache } from '../api.js?v=108';
+import { hasKey, setKey, getSimilarArtists, getArtistTopTracks } from '../api/lastfm.js?v=108';
+import { showProgress, hideProgress, promptPlaylistName, escapeHtml, pageHeader } from '../ui/components.js?v=108';
+import { showToast } from '../ui/toast.js?v=108';
 
 let sourceArtist = null;
 let similarList = [];
@@ -11,10 +11,7 @@ const pickedUris = new Set();
 
 export function render(container) {
   container.innerHTML = `
-    <div class="page-header">
-      <h1>Artistas similares</h1>
-      <p>Descubrí artistas parecidos a los que ya te gustan, vía Last.fm.</p>
-    </div>
+    ${pageHeader({ title: 'Artistas similares' })}
     <div id="similar-content"></div>
   `;
 

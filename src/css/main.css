@@ -280,18 +280,44 @@ h3 { font-size: 18px; font-weight: 600; }
   }
 }
 
+/* ── Header de página unificado (v=108) ──
+   Fila única flex: [☰] [H1] [ slot derecha opcional ]. El hamburguesa vive
+   INLINE en la misma fila que el H1 (no fixed), así los ejes verticales quedan
+   siempre alineados sin depender del padding-top del main. */
 .page-header {
-  margin-bottom: 28px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 20px;
+  min-height: 36px;
 }
-
-.page-header h1 {
-  margin-bottom: 6px;
-  letter-spacing: -0.3px;
+.page-header .hamburger {
+  position: static;   /* pisa al position:fixed que era default */
+  flex-shrink: 0;
+  margin: 0;
 }
-
-.page-header p {
-  color: var(--color-text-secondary);
-  font-size: 15px;
+.page-header-title {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 700;
+  line-height: 1.15;
+  letter-spacing: -0.2px;
+  flex: 1 1 auto;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.page-header-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+  min-width: 0;
+}
+@media (max-width: 600px) {
+  .page-header { margin-bottom: 14px; gap: 10px; }
+  .page-header-title { font-size: 19px; }
 }
 
 .home-grid {
@@ -311,21 +337,24 @@ h3 { font-size: 18px; font-weight: 600; }
   text-decoration: none;
 }
 
-/* ── Hamburger: visible en todo momento (permite colapsar el sidebar en desktop) ── */
+/* ── Hamburger ─
+   Ahora es un botón inline dentro del .page-header (v=108). El shell del app
+   ya no renderiza uno fixed suelto; cada page-header pone el suyo con
+   [data-hamburger] y el click se maneja por delegación. */
 .hamburger {
-  display: block;
-  position: fixed;
-  top: 16px;
-  left: 16px;
-  z-index: 200;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   background: var(--color-surface);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
   color: var(--color-text);
-  padding: 8px 10px;
+  padding: 0;
   cursor: pointer;
   font-size: 20px;
   line-height: 1;
+  width: 36px;
+  height: 36px;
   transition: background var(--transition-fast), border-color var(--transition-fast);
 }
 .hamburger:hover {
@@ -453,20 +482,24 @@ h3 { font-size: 18px; font-weight: 600; }
   background: var(--color-surface);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
-  padding: 16px 20px;
-  min-width: 140px;
+  padding: 12px 14px;
+  min-width: 0;
 }
 
 .stat-value {
-  font-size: 28px;
+  font-size: 22px;
   font-weight: 700;
   color: var(--color-accent);
+  line-height: 1.15;
 }
 
 .stat-label {
-  font-size: 12px;
+  font-size: 11px;
   color: var(--color-text-secondary);
   margin-top: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .stat-card-clickable {
@@ -714,11 +747,12 @@ h3 { font-size: 18px; font-weight: 600; }
   font-size: 14px;
 }
 
-/* Progreso minimizado: pill abajo a la izquierda, la app queda usable.
-   Click en el pill vuelve al overlay completo. */
+/* Progreso minimizado: pill abajo a la DERECHA (v=108, antes a la izquierda —
+   tapaba el sidebar cuando se abría). Click en el pill vuelve al overlay completo.
+   Si el preview-player (misma esquina) está visible, el progreso se apila arriba. */
 .progress-mini {
   position: fixed;
-  left: 20px;
+  right: 20px;
   bottom: 20px;
   z-index: 600;
   display: flex;
@@ -731,6 +765,11 @@ h3 { font-size: 18px; font-weight: 600; }
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
   cursor: pointer;
   width: min(300px, calc(100vw - 40px));
+}
+/* Apilado vertical: si hay preview-pill mostrándose, el progress-mini sube.
+   Se usa :has() para no tener que coordinar via JS entre los dos módulos. */
+body:has(.preview-pill.show) .progress-mini {
+  bottom: 76px;
 }
 .progress-mini:hover { border-color: var(--color-accent); }
 .progress-mini .spinner {
@@ -759,16 +798,16 @@ h3 { font-size: 18px; font-weight: 600; }
 }
 
 /* ── Dashboard ── */
+/* 6 stat cards en una fila en desktop (v=108). En mobile 2×3. */
 .dash-stats-row {
-  display: flex;
-  gap: 18px;
-  flex-wrap: wrap;
-  margin-bottom: 28px;
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 20px;
 }
 
 .dash-stats-row .stat-card {
-  flex: 1;
-  min-width: 130px;
+  min-width: 0;
 }
 
 /* Los tracks van con minmax(0, 1fr) y no con 1fr (= minmax(auto, 1fr)): el mínimo `auto`
@@ -862,8 +901,7 @@ h3 { font-size: 18px; font-weight: 600; }
 
   .main {
     margin-left: 0;
-    padding: 24px 16px;
-    padding-top: 64px;
+    padding: 20px 16px;
   }
 
   .login-features {
@@ -888,11 +926,13 @@ h3 { font-size: 18px; font-weight: 600; }
   }
 
   .dash-stats-row {
-    gap: 10px;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
   }
 
   .dash-stats-row .stat-card {
-    min-width: calc(50% - 10px);
+    min-width: 0;
+    padding: 10px 12px;
   }
 
   .dash-grid {
@@ -909,31 +949,92 @@ h3 { font-size: 18px; font-weight: 600; }
 .genre-tile:hover { border-color: var(--color-accent); }
 .genre-tile:active { transform: scale(0.97); }
 
-.wrapped-year-tab:hover { border-color: var(--color-accent) !important; }
+/* Barra "ELEGÍ EL AÑO" en una única fila horizontal (v=108) */
+.wrapped-year-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  margin-bottom: 14px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  min-width: 0;
+  overflow: hidden;
+}
+.wrapped-year-bar-label {
+  font-size: 11px;
+  color: var(--color-text-muted);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  flex-shrink: 0;
+}
+.wrapped-year-bar-tabs {
+  display: flex;
+  gap: 6px;
+  flex: 1 1 auto;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+.wrapped-year-tab {
+  padding: 6px 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-border);
+  background: var(--color-elevated);
+  color: var(--color-text);
+  font-weight: 500;
+  font-size: 13px;
+  cursor: pointer;
+  transition: transform .05s, border-color .15s;
+}
+.wrapped-year-tab.active {
+  background: var(--color-accent);
+  color: #fff;
+  font-weight: 600;
+  border-color: var(--color-accent);
+}
+.wrapped-year-tab:hover { border-color: var(--color-accent); }
+.wrapped-info-btn {
+  background: none;
+  border: 1px solid var(--color-border);
+  color: var(--color-text-muted);
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  font-size: 13px;
+  cursor: pointer;
+  padding: 0;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.wrapped-info-btn:hover { border-color: var(--color-accent); color: var(--color-text); }
 
 .wrapped-card { padding: 0; overflow: hidden; }
 .wrapped-hero {
-  padding: 32px 24px;
+  padding: 18px 20px;
   background: linear-gradient(135deg, var(--color-accent) 0%, #4c1d95 100%);
   color: #fff;
   text-align: center;
 }
 .wrapped-hero-year {
-  font-size: 14px;
+  font-size: 12px;
   letter-spacing: 0.15em;
   text-transform: uppercase;
   opacity: 0.85;
-  margin-bottom: 6px;
+  margin-bottom: 4px;
 }
 .wrapped-hero-min {
-  font-size: 56px;
+  font-size: 40px;
   font-weight: 800;
   line-height: 1;
-  margin-bottom: 8px;
+  margin-bottom: 6px;
   letter-spacing: -0.03em;
 }
 .wrapped-hero-sub {
-  font-size: 14px;
+  font-size: 13px;
   opacity: 0.9;
 }
 .wrapped-grid {
@@ -982,79 +1083,82 @@ h3 { font-size: 18px; font-weight: 600; }
   padding: 0 20px 20px 20px;
 }
 
+/* Grid denso de 5 columnas con el álbum ocupando la col 3 spanning 2 filas.
+   [art][trk][alb][day][days]
+   [disc][mes][alb][skp][fst] */
 .wrapped-year-layout {
   display: grid;
-  grid-template-columns: 1fr minmax(180px, 220px) 1fr;
-  gap: 12px;
-  padding: 20px;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-rows: auto auto;
+  grid-template-areas:
+    "art trk alb day days"
+    "disc mes alb skp fst";
+  gap: 8px;
+  padding: 10px;
   align-items: stretch;
-}
-.wrapped-year-stats-left,
-.wrapped-year-stats-right {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 10px;
-  align-content: stretch;
 }
 .wrapped-album-hero {
   background: var(--color-elevated);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-sm);
-  padding: 12px;
+  padding: 8px;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 4px;
   min-width: 0;
 }
 .wrapped-album-hero-cover {
   width: 100%;
-  max-height: 180px;
   aspect-ratio: 1;
   border-radius: 6px;
   object-fit: cover;
-  margin-top: 4px;
+  margin-top: 2px;
   align-self: center;
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: 100%;
 }
 .wrapped-album-hero-name {
-  font-size: 17px;
+  font-size: 14px;
   font-weight: 700;
   line-height: 1.2;
   color: var(--color-text);
   word-break: break-word;
 }
 .wrapped-album-hero-artist {
-  font-size: 13px;
+  font-size: 12px;
   color: var(--color-text-muted);
 }
 .wrapped-album-hero-meta {
-  font-size: 12px;
+  font-size: 11px;
   color: var(--color-text-muted);
   margin-top: auto;
-  padding-top: 6px;
+  padding-top: 4px;
 }
 .wrapped-tile.compact {
-  padding: 10px 12px;
+  padding: 8px 10px;
 }
 .wrapped-tile.compact .wrapped-tile-value {
-  font-size: 18px;
-  margin-bottom: 3px;
+  font-size: 15px;
+  margin-bottom: 2px;
 }
 .wrapped-tile.compact .wrapped-tile-label {
-  margin-bottom: 4px;
+  margin-bottom: 3px;
+  font-size: 10px;
 }
 @media (max-width: 900px) {
   .wrapped-year-layout {
-    grid-template-columns: minmax(200px, 260px) 1fr;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-rows: auto;
+    grid-template-areas:
+      "alb alb"
+      "art trk"
+      "day days"
+      "disc mes"
+      "skp fst";
   }
-  .wrapped-year-stats-left,
-  .wrapped-year-stats-right {
-    grid-template-columns: 1fr 1fr;
-  }
-}
-@media (max-width: 640px) {
-  .wrapped-year-layout {
-    grid-template-columns: 1fr;
-  }
+  .wrapped-album-hero { flex-direction: row; align-items: center; }
+  .wrapped-album-hero-cover { max-width: 90px; max-height: 90px; align-self: flex-start; }
 }
 .wrapped-top-cards {
   display: grid;
@@ -1778,70 +1882,92 @@ h3 { font-size: 18px; font-weight: 600; }
   .album-modal-actions .btn { flex: 1 0 100%; }
 }
 
-/* ============ Dashboard header compacto (v=102) ============
-   H1 chico a la izquierda + sync + acciones a la derecha + ticker Stats.fm
-   arriba de las acciones. En mobile se stackea. */
-.dash-header {
+/* ============ Dashboard header nuevo (v=108) ============
+   [☰] "Dashboard" · pill Stats.fm ................. [⚙]
+   El pageHeader unificado maneja alineación ☰/H1. Acá van pill + dropdown ⚙
+   y la "última sync" que ahora vive centrada al pie de la página. */
+.dash-actions-wrap {
+  position: relative;
+}
+.dash-cog-btn {
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  font-size: 18px;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.dash-cog-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  min-width: 220px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+  padding: 4px;
+  z-index: 30;
+}
+.dash-cog-item {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
-  gap: 16px;
-  margin-bottom: 22px;
-  flex-wrap: wrap;
+  gap: 10px;
+  width: 100%;
+  text-align: left;
+  padding: 9px 12px;
+  background: transparent;
+  border: none;
+  color: var(--color-text);
+  cursor: pointer;
+  font-size: 13px;
+  border-radius: var(--radius-sm);
 }
-.dash-header-left {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  min-width: 0;
+.dash-cog-item:hover {
+  background: var(--color-elevated);
 }
-.dash-header-left h1 {
-  font-size: 22px;
-  font-weight: 700;
-  line-height: 1.15;
-  letter-spacing: -0.2px;
+.dash-cog-hint {
+  color: var(--color-text-muted);
+  font-size: 11px;
+  font-weight: 400;
 }
 .dash-last-sync {
+  margin-top: 24px;
   font-size: 12px;
   color: var(--color-text-muted);
+  text-align: center;
+  min-height: 1em;
 }
-.dash-header-right {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 8px;
-  min-width: 0;
-}
-.dash-header-actions {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-}
-.dash-header-ticker { margin-top: 0 !important; }
 
 @media (max-width: 600px) {
-  .dash-header { gap: 10px; margin-bottom: 16px; }
-  .dash-header-left h1 { font-size: 20px; }
-  .dash-header-right { width: 100%; align-items: stretch; }
-  .dash-header-actions { justify-content: flex-start; }
-  .dash-header-ticker { align-self: flex-start; }
+  .dash-cog-menu { right: 0; left: auto; min-width: 190px; }
 }
 
 /* Contador live de plays según Stats.fm — bloque prominente en el header del
    Dashboard. Se auto-actualiza cada 15s; el número tick-ea cuando cambia. */
 .statsfm-ticker {
-  margin-top: 12px;
+  margin-top: 0;
   display: inline-flex;
   align-items: center;
-  gap: 12px;
-  padding: 10px 16px;
-  border-radius: var(--radius-md, 10px);
+  gap: 8px;
+  padding: 6px 12px;
+  border-radius: 999px;
   background: linear-gradient(135deg, var(--color-accent-soft), rgba(124, 58, 237, 0.04));
   border: 1px solid rgba(124, 58, 237, 0.35);
   color: var(--color-text-secondary);
   transition: box-shadow .3s ease, border-color .3s ease;
 }
+/* Dentro del header (pill compacto): el numerito grande + meta lo permitimos
+   pero apretamos el resto. */
+.page-header-right .statsfm-ticker { padding: 4px 12px; }
+.page-header-right .statsfm-ticker-num { font-size: 18px; }
+.page-header-right .statsfm-ticker-label,
+.page-header-right .statsfm-ticker-meta,
+.page-header-right .statsfm-ticker-session,
+.page-header-right .statsfm-ticker-hint { display: none; }
 .statsfm-ticker-body { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .statsfm-ticker-count {
   display: flex;
@@ -1911,10 +2037,10 @@ h3 { font-size: 18px; font-weight: 600; }
 
 /* ============ Mobile responsive (celu / ≤600px) v=101/102 ============ */
 @media (max-width: 600px) {
-  /* Layout base: menos padding para aprovechar el ancho, sin overflow horizontal */
+  /* Layout base: menos padding para aprovechar el ancho, sin overflow horizontal.
+     El hamburguesa ya no está fixed (v=108), así que no hace falta padding-top extra. */
   .main {
-    padding: 16px 10px;
-    padding-top: 60px;
+    padding: 14px 10px;
     max-width: 100vw;
     min-width: 0;
     overflow-x: hidden;
@@ -1933,8 +2059,8 @@ h3 { font-size: 18px; font-weight: 600; }
   .card h3, .card > h3 { font-size: 15px; }
 
   /* ── Dashboard ── */
-  .dash-stats-row { grid-template-columns: repeat(2, 1fr); gap: 8px; }
-  .dash-stats-row .stat-value { font-size: 22px; }
+  .dash-stats-row { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; gap: 8px; }
+  .dash-stats-row .stat-value { font-size: 20px; }
   .dash-grid { grid-template-columns: minmax(0, 1fr) !important; gap: 12px; }
   .dash-chart-card { min-width: 0; overflow: hidden; }
   .chart-box { min-width: 0; max-width: 100%; overflow: hidden; }
@@ -1952,16 +2078,25 @@ h3 { font-size: 18px; font-weight: 600; }
   #history-heatmap { padding: 0 !important; overflow-x: auto; }
 
   /* ── Wrapped ── */
-  .wrapped-hero { padding: 22px 16px; }
-  .wrapped-hero-year { font-size: 12px; }
-  .wrapped-hero-min { font-size: 40px; }
+  .wrapped-hero { padding: 14px 12px; }
+  .wrapped-hero-year { font-size: 11px; }
+  .wrapped-hero-min { font-size: 32px; }
   .wrapped-hero-sub { font-size: 12px; }
-  .wrapped-year-tab { font-size: 12px !important; padding: 6px 10px !important; }
-  .wrapped-year-layout { padding: 14px; gap: 10px; grid-template-columns: minmax(0, 1fr) !important; }
-  /* Los "stats-left" y "stats-right" que eran 2 cols en el 900px query — todo 1 col */
-  .wrapped-year-stats-left,
-  .wrapped-year-stats-right { grid-template-columns: minmax(0, 1fr) !important; gap: 8px; }
-  .wrapped-tile.compact { padding: 10px 12px; }
+  .wrapped-year-bar { padding: 8px 10px; gap: 8px; }
+  .wrapped-year-bar-label { font-size: 10px; }
+  .wrapped-year-tab { font-size: 12px; padding: 5px 9px; }
+  .wrapped-year-layout {
+    padding: 8px;
+    gap: 6px;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-areas:
+      "alb alb"
+      "art trk"
+      "day days"
+      "disc mes"
+      "skp fst" !important;
+  }
+  .wrapped-tile.compact { padding: 8px 10px; }
   .wrapped-tile.compact .wrapped-tile-value {
     font-size: 16px !important;
     word-break: normal;
@@ -2019,6 +2154,7 @@ h3 { font-size: 18px; font-weight: 600; }
   .statsfm-ticker { font-size: 11.5px; padding: 4px 10px; }
   .preview-pill { max-width: calc(100vw - 30px); left: 15px; right: 15px; }
   .progress-mini { left: 15px; right: 15px; width: auto; }
+  body:has(.preview-pill.show) .progress-mini { bottom: 84px; }
 }
 
 /* Marquee: si el texto no entra, se desliza al costado en loop. Solo se activa

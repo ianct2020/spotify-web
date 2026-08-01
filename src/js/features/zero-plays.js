@@ -3,7 +3,7 @@
 
 import { getBestAvailableLikes, removeLikedTracks } from '../api.js';
 import { loadTrackPlays, trackIdOf, isOwner, ownerLockedMessage } from './history-data.js';
-import { escapeHtml, confirmModal } from '../ui/components.js';
+import { escapeHtml, confirmModal, pageHeader } from '../ui/components.js';
 import { showToast } from '../ui/toast.js';
 import { openTrackCard } from './track-card.js';
 import { hasUsername, loadTopLifetime } from '../api/statsfm.js';
@@ -15,10 +15,7 @@ let useStatsfm = localStorage.getItem(STATSFM_TOGGLE_KEY) === '1';
 
 export async function render(container) {
   container.innerHTML = `
-    <div class="page-header">
-      <h1>Sin plays</h1>
-      <p>Likes que <strong>nunca reprodujiste</strong> con al menos 30s en tu Extended Streaming History. Candidatos a limpiar.</p>
-    </div>
+    ${pageHeader({ title: 'Sin plays' })}
     <div id="zeroplays-content"><div class="empty-state"><div class="spinner spinner-lg"></div><div style="margin-top:16px">Cruzando likes con historial…</div></div></div>
   `;
   await analyze();

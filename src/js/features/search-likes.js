@@ -3,7 +3,7 @@
 // tipeás, filtra en memoria por título/artista/álbum, sin pegarle a la API.
 
 import { getBestAvailableLikes } from '../api.js';
-import { renderTrackRow, escapeHtml } from '../ui/components.js';
+import { renderTrackRow, escapeHtml, pageHeader } from '../ui/components.js';
 import { openTrackCard } from './track-card.js';
 
 const MAX_RESULTS = 300;
@@ -38,10 +38,7 @@ function formatAdded(iso) {
 
 export async function render(container) {
   container.innerHTML = `
-    <div class="page-header">
-      <h1>Buscar en tus Liked Songs</h1>
-      <p>Instantáneo, sobre tu cache local. Buscá por título, artista o álbum — soporta varias palabras (todas tienen que matchear).</p>
-    </div>
+    ${pageHeader({ title: 'Buscar en tus Liked Songs' })}
     <div class="card" style="margin-bottom:16px">
       <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
         <div style="flex:1;min-width:240px;position:relative">

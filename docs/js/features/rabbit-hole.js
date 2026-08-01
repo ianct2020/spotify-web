@@ -1,7 +1,7 @@
-import { spotifyFetch, createPlaylist, addTracksToPlaylist, invalidatePlaylistsCache } from '../api.js?v=107';
-import { hasKey, setKey, getTopArtistsByTag, getArtistTopTracks, getArtistTopTags } from '../api/lastfm.js?v=107';
-import { showProgress, hideProgress, promptPlaylistName, escapeHtml } from '../ui/components.js?v=107';
-import { showToast } from '../ui/toast.js?v=107';
+import { spotifyFetch, createPlaylist, addTracksToPlaylist, invalidatePlaylistsCache } from '../api.js?v=108';
+import { hasKey, setKey, getTopArtistsByTag, getArtistTopTracks, getArtistTopTags } from '../api/lastfm.js?v=108';
+import { showProgress, hideProgress, promptPlaylistName, escapeHtml, pageHeader } from '../ui/components.js?v=108';
+import { showToast } from '../ui/toast.js?v=108';
 
 const SUGGESTED_TAGS = [
   'rock', 'indie', 'hip-hop', 'electronic', 'pop', 'metal',
@@ -17,10 +17,7 @@ const pickedUris = new Set();
 
 export function render(container) {
   container.innerHTML = `
-    <div class="page-header">
-      <h1>Rabbit hole por género</h1>
-      <p>Elegí un género y explorá los top artistas de Last.fm para ese tag.</p>
-    </div>
+    ${pageHeader({ title: 'Rabbit hole por género' })}
     <div id="rabbit-content"></div>
   `;
 

@@ -5,6 +5,7 @@ import { cacheClearAll } from './storage.js';
 import { idbClearAll } from './idb.js';
 import { registerRoute, initRouter } from './router.js';
 import { showToast } from './ui/toast.js';
+import { pageHeader } from './ui/components.js';
 
 import { render as renderSync } from './features/sync.js';
 import { render as renderDedupe } from './features/dedupe.js';
@@ -190,7 +191,6 @@ function showApp(profile) {
     : `<div class="sidebar-avatar" style="background:var(--color-accent);display:flex;align-items:center;justify-content:center;color:white;font-weight:700;font-size:14px">${(profile.display_name || '?')[0].toUpperCase()}</div>`;
 
   document.getElementById('app').innerHTML = `
-    <button class="hamburger" id="hamburger-btn">&#9776;</button>
     <div class="sidebar-overlay" id="sidebar-overlay"></div>
     <aside class="sidebar" id="sidebar">
       <a class="sidebar-header" href="#home" title="Ir al inicio" style="text-decoration:none;color:inherit;cursor:pointer">
@@ -308,7 +308,6 @@ function showApp(profile) {
     btn.disabled = false;
   };
 
-  const hamburger = document.getElementById('hamburger-btn');
   const sidebar = document.getElementById('sidebar');
   const overlay = document.getElementById('sidebar-overlay');
 
@@ -328,7 +327,12 @@ function showApp(profile) {
   applyRouteSidebar();
   window.addEventListener('hashchange', applyRouteSidebar);
 
-  hamburger.onclick = () => {
+  // Delegación: el hamburguesa vive dentro de cada .page-header (v=108) — el
+  // botón se re-renderiza en cada cambio de ruta, así que en vez de bindear
+  // por id, escuchamos clicks sobre cualquier elemento con [data-hamburger].
+  document.addEventListener('click', (e) => {
+    const target = e.target.closest && e.target.closest('[data-hamburger]');
+    if (!target) return;
     if (window.matchMedia('(max-width: 768px)').matches) {
       // Mobile: overlay tradicional
       sidebar.classList.toggle('open');
@@ -345,7 +349,7 @@ function showApp(profile) {
     } else {
       document.body.classList.add('sidebar-hidden');
     }
-  };
+  });
   overlay.onclick = () => {
     sidebar.classList.remove('open');
     sidebar.classList.remove('desktop-open');
@@ -474,10 +478,7 @@ function renderHome(container) {
   `).join('');
 
   container.innerHTML = `
-    <div class="page-header">
-      <h1>Bienvenido</h1>
-      <p>Elegí una herramienta para empezar.</p>
-    </div>
+    ${pageHeader({ title: 'Bienvenido' })}
     ${sections}
   `;
 }

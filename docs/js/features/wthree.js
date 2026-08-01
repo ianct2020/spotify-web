@@ -2,12 +2,12 @@
 // por álbum). Muestra qué álbumes ya tienen picks, cuántos, y cuáles te faltan.
 // Ordenado por álbumes más escuchados primero para priorizar tu tiempo.
 
-import { spotifyFetch, getAllPlaylistItems, getAllUserPlaylists, addTracksToPlaylist, removeTracksFromPlaylist, updatePlaylistItemsCache } from '../api.js?v=107';
-import { loadHistoryStats, loadListenedAlbums, isOwner, ownerLockedMessage } from './history-data.js?v=107';
-import { escapeHtml } from '../ui/components.js?v=107';
-import { showToast } from '../ui/toast.js?v=107';
-import { activateMarquee, marqueeSpan } from '../ui/marquee.js?v=107';
-import { openModal, closeTop, closeById } from '../ui/modal-stack.js?v=107';
+import { spotifyFetch, getAllPlaylistItems, getAllUserPlaylists, addTracksToPlaylist, removeTracksFromPlaylist, updatePlaylistItemsCache } from '../api.js?v=108';
+import { loadHistoryStats, loadListenedAlbums, isOwner, ownerLockedMessage } from './history-data.js?v=108';
+import { escapeHtml, pageHeader } from '../ui/components.js?v=108';
+import { showToast } from '../ui/toast.js?v=108';
+import { activateMarquee, marqueeSpan } from '../ui/marquee.js?v=108';
+import { openModal, closeTop, closeById } from '../ui/modal-stack.js?v=108';
 
 const LS_KEY_ID = 'wthree_playlist_id';
 const LS_KEY_NAME = 'wthree_playlist_name';
@@ -29,10 +29,7 @@ export async function render(container) {
   playlistName = localStorage.getItem(LS_KEY_NAME);
 
   container.innerHTML = `
-    <div class="page-header">
-      <h1>W-Three helper</h1>
-      <p>Ordenás las mejores 3 canciones de cada álbum. Acá ves cuáles ya cubriste y cuáles te faltan.</p>
-    </div>
+    ${pageHeader({ title: 'W-Three helper' })}
     <div id="wthree-content"><div class="empty-state"><div class="spinner spinner-lg"></div></div></div>
   `;
 

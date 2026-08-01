@@ -1,5 +1,5 @@
 import { getAllLikedTracks, createPlaylist, addTracksToPlaylist, getAllUserPlaylists, invalidatePlaylistsCache } from '../api.js';
-import { showProgress, hideProgress, progressController, isCancelled, promptPlaylistName, escapeHtml } from '../ui/components.js';
+import { showProgress, hideProgress, progressController, isCancelled, promptPlaylistName, escapeHtml, pageHeader } from '../ui/components.js';
 import { showToast } from '../ui/toast.js';
 
 let likes = [];
@@ -7,10 +7,7 @@ let currentTab = 'year';
 
 export function render(container) {
   container.innerHTML = `
-    <div class="page-header">
-      <h1>Smart Playlists</h1>
-      <p>Generá playlists automáticas a partir de tus Liked Songs.</p>
-    </div>
+    ${pageHeader({ title: 'Smart Playlists' })}
 
     <div class="tabs" style="display:flex;gap:8px;border-bottom:1px solid var(--color-border);margin-bottom:20px">
       <button class="tab-btn" data-tab="year">Por año</button>

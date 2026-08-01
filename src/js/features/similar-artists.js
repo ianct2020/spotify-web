@@ -1,6 +1,6 @@
 import { spotifyFetch, createPlaylist, addTracksToPlaylist, invalidatePlaylistsCache } from '../api.js';
 import { hasKey, setKey, getSimilarArtists, getArtistTopTracks } from '../api/lastfm.js';
-import { showProgress, hideProgress, promptPlaylistName, escapeHtml } from '../ui/components.js';
+import { showProgress, hideProgress, promptPlaylistName, escapeHtml, pageHeader } from '../ui/components.js';
 import { showToast } from '../ui/toast.js';
 
 let sourceArtist = null;
@@ -11,10 +11,7 @@ const pickedUris = new Set();
 
 export function render(container) {
   container.innerHTML = `
-    <div class="page-header">
-      <h1>Artistas similares</h1>
-      <p>Descubrí artistas parecidos a los que ya te gustan, vía Last.fm.</p>
-    </div>
+    ${pageHeader({ title: 'Artistas similares' })}
     <div id="similar-content"></div>
   `;
 

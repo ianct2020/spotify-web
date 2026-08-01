@@ -2,7 +2,7 @@
 // A diferencia del Wrapped oficial (que corre oct-sept), este es del año calendario completo.
 
 import { loadHistoryStats, isOwner, ownerLockedMessage } from './history-data.js';
-import { escapeHtml } from '../ui/components.js';
+import { escapeHtml, pageHeader } from '../ui/components.js';
 import { findTrackPreview, findArtistTopPreview } from '../api/itunes.js';
 import { attachHover } from '../ui/preview-player.js';
 import { openTrackCard } from './track-card.js';
@@ -66,10 +66,7 @@ function openWrappedInfoModal(dataFrom, dataTo, dataPlays) {
 
 export async function render(container) {
   container.innerHTML = `
-    <div class="page-header">
-      <h1>Wrapped tuyo, por año</h1>
-      <p>Todo tu Extended Streaming History resumido por año calendario. Sin cortes por Wrapped oficial.</p>
-    </div>
+    ${pageHeader({ title: 'Wrapped tuyo, por año' })}
     <div id="wrapped-content"><div class="empty-state"><div class="spinner spinner-lg"></div><div style="margin-top:16px">Cargando historial…</div></div></div>
   `;
 
@@ -95,27 +92,17 @@ export async function render(container) {
   const dataPlays = stats.totals.plays_valid.toLocaleString('es-AR');
 
   content.innerHTML = `
-    <div class="card" style="margin-bottom:16px">
-      <div style="display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin-bottom:12px">
-        <div style="font-size:12px;color:var(--color-text-muted);letter-spacing:0.06em;text-transform:uppercase">Elegí el año</div>
-        <button class="wrapped-info-btn" id="wrapped-info-btn" aria-label="Ver rango de datos"
-          style="background:none;border:1px solid var(--color-border);color:var(--color-text-muted);
-                 width:24px;height:24px;border-radius:50%;font-size:12px;cursor:pointer;padding:0;line-height:1;
-                 display:flex;align-items:center;justify-content:center;flex-shrink:0">ⓘ</button>
-      </div>
-      <div style="display:flex;gap:8px;flex-wrap:wrap" id="wrapped-year-tabs">
+    <div class="wrapped-year-bar">
+      <div class="wrapped-year-bar-label">Elegí el año</div>
+      <div class="wrapped-year-bar-tabs" id="wrapped-year-tabs">
         ${yearsDesc.map(y => `
-          <button class="wrapped-year-tab ${y.year === selectedYear ? 'active' : ''}" data-year="${y.year}"
-                  style="padding:8px 14px;border-radius:var(--radius-sm);border:1px solid var(--color-border);
-                         background:${y.year === selectedYear ? 'var(--color-accent)' : 'var(--color-elevated)'};
-                         color:${y.year === selectedYear ? '#fff' : 'var(--color-text)'};
-                         font-weight:${y.year === selectedYear ? '600' : '500'};font-size:14px;cursor:pointer;
-                         transition:transform .05s,border-color .15s">${y.year}</button>
+          <button class="wrapped-year-tab${y.year === selectedYear ? ' active' : ''}" data-year="${y.year}">${y.year}</button>
         `).join('')}
       </div>
+      <button class="wrapped-info-btn" id="wrapped-info-btn" aria-label="Ver rango de datos">ⓘ</button>
     </div>
     <div id="wrapped-year-card"></div>
-    <div id="wrapped-alltime" style="margin-top:24px"></div>
+    <div id="wrapped-alltime" style="margin-top:20px"></div>
   `;
 
   const infoBtn = document.getElementById('wrapped-info-btn');
@@ -155,68 +142,65 @@ function renderYearCard() {
       </div>
 
       <div class="wrapped-year-layout">
-        <div class="wrapped-year-stats-left">
-          ${topArtist ? `
-            <div class="wrapped-tile compact" data-hover="y-tile-art:0">
-              <div class="wrapped-tile-label">Artista del año</div>
-              <div class="wrapped-tile-value">${escapeHtml(topArtist.name)}</div>
-              <div class="wrapped-tile-hint">${fmtMinutes(topArtist.min)} · ${topArtist.plays.toLocaleString('es-AR')} plays</div>
-            </div>
-          ` : ''}
-          ${topTrack ? `
-            <div class="wrapped-tile compact" data-hover="y-tile-trk:0">
-              <div class="wrapped-tile-label">Track del año</div>
-              <div class="wrapped-tile-value" style="font-size:16px">${escapeHtml(topTrack.name)}</div>
-              <div class="wrapped-tile-hint">${escapeHtml(topTrack.artist)} · ${fmtMinutes(topTrack.min)}</div>
-            </div>
-          ` : ''}
-          ${y.discovery ? `
-            <div class="wrapped-tile compact" data-hover="y-tile-disc:0">
-              <div class="wrapped-tile-label">Descubrimiento</div>
-              <div class="wrapped-tile-value">${escapeHtml(y.discovery.artist)}</div>
-              <div class="wrapped-tile-hint">Primera vez en ${y.year} · ${fmtMinutes(y.discovery.min)}</div>
-            </div>
-          ` : ''}
-          <div class="wrapped-tile compact">
-            <div class="wrapped-tile-label">Mes pico</div>
-            <div class="wrapped-tile-value">${monthName} ${y.year}</div>
-            <div class="wrapped-tile-hint">${y.peak_month ? fmtMinutes(y.peak_month.min) : '—'}</div>
+        ${topArtist ? `
+          <div class="wrapped-tile compact" data-hover="y-tile-art:0" style="grid-area:art">
+            <div class="wrapped-tile-label">Artista del año</div>
+            <div class="wrapped-tile-value">${escapeHtml(topArtist.name)}</div>
+            <div class="wrapped-tile-hint">${fmtMinutes(topArtist.min)} · ${topArtist.plays.toLocaleString('es-AR')} plays</div>
           </div>
-        </div>
+        ` : `<div style="grid-area:art"></div>`}
+        ${topTrack ? `
+          <div class="wrapped-tile compact" data-hover="y-tile-trk:0" style="grid-area:trk">
+            <div class="wrapped-tile-label">Track del año</div>
+            <div class="wrapped-tile-value" style="font-size:16px">${escapeHtml(topTrack.name)}</div>
+            <div class="wrapped-tile-hint">${escapeHtml(topTrack.artist)} · ${fmtMinutes(topTrack.min)}</div>
+          </div>
+        ` : `<div style="grid-area:trk"></div>`}
 
         ${topAlbum ? `
-          <div class="wrapped-album-hero tc-clickable" data-album-hero title="Click para ver la ficha del álbum">
+          <div class="wrapped-album-hero tc-clickable" data-album-hero title="Click para ver la ficha del álbum" style="grid-area:alb">
             <div class="wrapped-tile-label">Álbum del año</div>
             ${topAlbum.img ? `<img src="${topAlbum.img}" alt="" class="wrapped-album-hero-cover" loading="lazy">` : `<div class="wrapped-album-hero-cover" style="background:var(--color-elevated);display:flex;align-items:center;justify-content:center;color:var(--color-text-muted);font-size:44px">♪</div>`}
             <div class="wrapped-album-hero-name">${escapeHtml(topAlbum.name)}</div>
             <div class="wrapped-album-hero-artist">${escapeHtml(topAlbum.artist)}</div>
             <div class="wrapped-album-hero-meta">${fmtMinutes(topAlbum.min)} · ${topAlbum.plays.toLocaleString('es-AR')} plays</div>
           </div>
-        ` : ''}
+        ` : `<div style="grid-area:alb"></div>`}
 
-        <div class="wrapped-year-stats-right">
-          ${y.peak_day ? `
-            <div class="wrapped-tile compact">
-              <div class="wrapped-tile-label">Día más largo</div>
-              <div class="wrapped-tile-value" style="font-size:15px">${fmtDate(y.peak_day.date)}</div>
-              <div class="wrapped-tile-hint">${fmtMinutes(y.peak_day.min)}</div>
-            </div>
-          ` : ''}
-          <div class="wrapped-tile compact">
-            <div class="wrapped-tile-label">Días activos</div>
-            <div class="wrapped-tile-value">${y.days_active}</div>
-            <div class="wrapped-tile-hint">de ${daysInYear(y.year)} · racha ${y.longest_streak} d</div>
+        ${y.peak_day ? `
+          <div class="wrapped-tile compact" style="grid-area:day">
+            <div class="wrapped-tile-label">Día más largo</div>
+            <div class="wrapped-tile-value" style="font-size:15px">${fmtDate(y.peak_day.date)}</div>
+            <div class="wrapped-tile-hint">${fmtMinutes(y.peak_day.min)}</div>
           </div>
-          <div class="wrapped-tile compact">
-            <div class="wrapped-tile-label">Skips</div>
-            <div class="wrapped-tile-value">${y.skip_pct}%</div>
-            <div class="wrapped-tile-hint">por skip o &lt;30s</div>
+        ` : `<div style="grid-area:day"></div>`}
+        <div class="wrapped-tile compact" style="grid-area:days">
+          <div class="wrapped-tile-label">Días activos</div>
+          <div class="wrapped-tile-value">${y.days_active}</div>
+          <div class="wrapped-tile-hint">de ${daysInYear(y.year)} · racha ${y.longest_streak} d</div>
+        </div>
+
+        ${y.discovery ? `
+          <div class="wrapped-tile compact" data-hover="y-tile-disc:0" style="grid-area:disc">
+            <div class="wrapped-tile-label">Descubrimiento</div>
+            <div class="wrapped-tile-value">${escapeHtml(y.discovery.artist)}</div>
+            <div class="wrapped-tile-hint">Primera vez en ${y.year} · ${fmtMinutes(y.discovery.min)}</div>
           </div>
-          <div class="wrapped-tile compact">
-            <div class="wrapped-tile-label">Primera play</div>
-            <div class="wrapped-tile-value" style="font-size:14px">${fmtDate(y.first_play)}</div>
-            <div class="wrapped-tile-hint">Última: ${fmtDate(y.last_play)}</div>
-          </div>
+        ` : `<div style="grid-area:disc"></div>`}
+        <div class="wrapped-tile compact" style="grid-area:mes">
+          <div class="wrapped-tile-label">Mes pico</div>
+          <div class="wrapped-tile-value">${monthName} ${y.year}</div>
+          <div class="wrapped-tile-hint">${y.peak_month ? fmtMinutes(y.peak_month.min) : '—'}</div>
+        </div>
+        <div class="wrapped-tile compact" style="grid-area:skp">
+          <div class="wrapped-tile-label">Skips</div>
+          <div class="wrapped-tile-value">${y.skip_pct}%</div>
+          <div class="wrapped-tile-hint">por skip o &lt;30s</div>
+        </div>
+        <div class="wrapped-tile compact" style="grid-area:fst">
+          <div class="wrapped-tile-label">Primera play</div>
+          <div class="wrapped-tile-value" style="font-size:14px">${fmtDate(y.first_play)}</div>
+          <div class="wrapped-tile-hint">Última: ${fmtDate(y.last_play)}</div>
         </div>
       </div>
 

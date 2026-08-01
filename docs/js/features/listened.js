@@ -1,9 +1,9 @@
-import { getAllPlaylistItems, getBestAvailableLikes, addTracksToPlaylist, removeTracksFromPlaylist, getAllUserPlaylists } from '../api.js?v=107';
-import { idbGetCached, idbSetCached, idbGetTimestamp } from '../idb.js?v=107';
-import { escapeHtml, confirmModal } from '../ui/components.js?v=107';
-import { showToast } from '../ui/toast.js?v=107';
-import { openModal, closeTop } from '../ui/modal-stack.js?v=107';
-import { getListenedPlaylist, groupItemsByAlbum, openListenedAlbumsPicker, albumKey, baseName, norm } from './listened-shared.js?v=107';
+import { getAllPlaylistItems, getBestAvailableLikes, addTracksToPlaylist, removeTracksFromPlaylist, getAllUserPlaylists } from '../api.js?v=108';
+import { idbGetCached, idbSetCached, idbGetTimestamp } from '../idb.js?v=108';
+import { escapeHtml, confirmModal, pageHeader } from '../ui/components.js?v=108';
+import { showToast } from '../ui/toast.js?v=108';
+import { openModal, closeTop } from '../ui/modal-stack.js?v=108';
+import { getListenedPlaylist, groupItemsByAlbum, openListenedAlbumsPicker, albumKey, baseName, norm } from './listened-shared.js?v=108';
 
 const SORT_KEY = 'listened_sort_mode';
 const VALID_SORTS = new Set(['recent', 'year-desc', 'year-asc', 'artist-asc', 'likes-desc', 'name-asc']);
@@ -183,10 +183,7 @@ export async function render(container) {
   filterText = '';
 
   container.innerHTML = `
-    <div class="page-header">
-      <h1>Álbumes escuchados</h1>
-      <p>Los álbumes de tu playlist de registro, agrupados y con buscador.</p>
-    </div>
+    ${pageHeader({ title: 'Álbumes escuchados' })}
     <div id="listened-content">
       <div class="empty-state"><div class="spinner spinner-lg"></div><div style="margin-top:16px">Leyendo configuración...</div></div>
     </div>

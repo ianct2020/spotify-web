@@ -2,7 +2,7 @@ import { getAllLikedTracks, createPlaylist, addTracksToPlaylist, invalidatePlayl
 import { hasKey, setKey, getArtistTopTags, getCachedTags, setCachedTags, mergeCachedTags } from '../api/lastfm.js';
 import * as statsfm from '../api/statsfm.js';
 import { getGenresForArtist as mbGetGenres } from '../api/musicbrainz.js';
-import { showProgress, hideProgress, progressController, isCancelled, promptPlaylistName, alertModal, confirmModal, escapeHtml } from '../ui/components.js';
+import { showProgress, hideProgress, progressController, isCancelled, promptPlaylistName, alertModal, confirmModal, escapeHtml, pageHeader } from '../ui/components.js';
 import { showToast } from '../ui/toast.js';
 import { openModal, closeTop } from '../ui/modal-stack.js';
 import { tagToGroup } from './genre-groups.js';
@@ -88,10 +88,7 @@ export function render(container) {
   selectedTags = new Set();
 
   container.innerHTML = `
-    <div class="page-header">
-      <h1>Clasificar por género</h1>
-      <p>Agrupa tus likes por género usando tags de Last.fm y géneros de Stats.fm.</p>
-    </div>
+    ${pageHeader({ title: 'Clasificar por género' })}
     <div id="genre-content"></div>
   `;
 

@@ -1,6 +1,6 @@
 import { spotifyFetch, createPlaylist, addTracksToPlaylist, invalidatePlaylistsCache, getAllLikedTracks } from '../api.js';
 import { hasKey, setKey, hasUsername, getUsername, setUsername, getUserTopArtists, getSimilarArtists, getArtistTopTracks } from '../api/lastfm.js';
-import { showProgress, hideProgress, promptPlaylistName, escapeHtml } from '../ui/components.js';
+import { showProgress, hideProgress, promptPlaylistName, escapeHtml, pageHeader } from '../ui/components.js';
 import { showToast } from '../ui/toast.js';
 
 let recommendations = [];
@@ -12,10 +12,7 @@ const likedUris = new Set();
 
 export function render(container) {
   container.innerHTML = `
-    <div class="page-header">
-      <h1>Recomendaciones (scrobbles)</h1>
-      <p>Basado en lo que escuchás según Last.fm. Cruza tus top artistas con sus similares y filtra los que ya tenés.</p>
-    </div>
+    ${pageHeader({ title: 'Recomendaciones (scrobbles)' })}
     <div id="recs-content"></div>
   `;
 

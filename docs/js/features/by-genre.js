@@ -1,11 +1,11 @@
-import { getAllLikedTracks, createPlaylist, addTracksToPlaylist, invalidatePlaylistsCache, exportAllData, importAllData, getCurrentUserId, getBestAvailableLikes } from '../api.js?v=107';
-import { hasKey, setKey, getArtistTopTags, getCachedTags, setCachedTags, mergeCachedTags } from '../api/lastfm.js?v=107';
-import * as statsfm from '../api/statsfm.js?v=107';
-import { getGenresForArtist as mbGetGenres } from '../api/musicbrainz.js?v=107';
-import { showProgress, hideProgress, progressController, isCancelled, promptPlaylistName, alertModal, confirmModal, escapeHtml } from '../ui/components.js?v=107';
-import { showToast } from '../ui/toast.js?v=107';
-import { openModal, closeTop } from '../ui/modal-stack.js?v=107';
-import { tagToGroup } from './genre-groups.js?v=107';
+import { getAllLikedTracks, createPlaylist, addTracksToPlaylist, invalidatePlaylistsCache, exportAllData, importAllData, getCurrentUserId, getBestAvailableLikes } from '../api.js?v=108';
+import { hasKey, setKey, getArtistTopTags, getCachedTags, setCachedTags, mergeCachedTags } from '../api/lastfm.js?v=108';
+import * as statsfm from '../api/statsfm.js?v=108';
+import { getGenresForArtist as mbGetGenres } from '../api/musicbrainz.js?v=108';
+import { showProgress, hideProgress, progressController, isCancelled, promptPlaylistName, alertModal, confirmModal, escapeHtml, pageHeader } from '../ui/components.js?v=108';
+import { showToast } from '../ui/toast.js?v=108';
+import { openModal, closeTop } from '../ui/modal-stack.js?v=108';
+import { tagToGroup } from './genre-groups.js?v=108';
 
 const NOISE_TAGS = new Set([
   'seen live', 'favorites', 'favorite', 'favourite', 'favourites',
@@ -88,10 +88,7 @@ export function render(container) {
   selectedTags = new Set();
 
   container.innerHTML = `
-    <div class="page-header">
-      <h1>Clasificar por género</h1>
-      <p>Agrupa tus likes por género usando tags de Last.fm y géneros de Stats.fm.</p>
-    </div>
+    ${pageHeader({ title: 'Clasificar por género' })}
     <div id="genre-content"></div>
   `;
 
