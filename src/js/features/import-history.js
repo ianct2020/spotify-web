@@ -6,22 +6,25 @@ import { processStreamingHistory } from '../history-processor.js';
 import { saveMyHistory, clearMyHistory, hasLocalHistory } from './history-data.js';
 import { escapeHtml, showProgress, hideProgress, confirmModal, alertModal } from '../ui/components.js';
 import { showToast } from '../ui/toast.js';
+import { openModal, closeTop, closeById } from '../ui/modal-stack.js';
 
+const OVERLAY_ID = 'import-history-overlay';
 let overlay = null;
 
 function close() {
-  overlay?.remove();
-  overlay = null;
+  if (closeById(OVERLAY_ID)) {
+    overlay = null;
+  }
 }
 
 async function openImportHistory() {
   close();
   const alreadyHas = await hasLocalHistory();
 
-  overlay = document.createElement('div');
-  overlay.className = 'modal-overlay';
-  overlay.id = 'import-history-overlay';
-  overlay.innerHTML = `
+  overlay = openModal({
+    id: OVERLAY_ID,
+    onClose: () => { overlay = null; },
+    html: `
     <div class="modal ih-modal" style="max-width:560px;width:min(560px,94vw)">
       <div class="ih-header">
         <div class="ih-header-icon" aria-hidden="true">
@@ -35,7 +38,7 @@ async function openImportHistory() {
           <h3 style="margin:0;font-size:17px">Mi historial de Spotify</h3>
           <div style="font-size:12px;color:var(--color-text-muted);margin-top:2px">Todo se procesa en tu navegador — nada se sube a ningún lado</div>
         </div>
-        <button class="btn btn-secondary btn-sm ih-close-btn" id="ih-close" title="Cerrar" aria-label="Cerrar">✕</button>
+        <button class="btn btn-secondary btn-sm ih-close-btn" data-close-modal title="Cerrar" aria-label="Cerrar">✕</button>
       </div>
 
       <label id="ih-drop" class="ih-drop">
@@ -75,11 +78,8 @@ async function openImportHistory() {
         </div>
       ` : ''}
     </div>
-  `;
-  overlay.onclick = (e) => { if (e.target === overlay) close(); };
-  document.body.appendChild(overlay);
-
-  overlay.querySelector('#ih-close').onclick = close;
+  `,
+  });
 
   const drop = overlay.querySelector('#ih-drop');
   const input = overlay.querySelector('#ih-file');

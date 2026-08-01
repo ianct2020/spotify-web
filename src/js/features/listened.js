@@ -2,6 +2,7 @@ import { getAllPlaylistItems, getBestAvailableLikes, addTracksToPlaylist, remove
 import { idbGetCached, idbSetCached, idbGetTimestamp } from '../idb.js';
 import { escapeHtml, confirmModal } from '../ui/components.js';
 import { showToast } from '../ui/toast.js';
+import { openModal, closeTop } from '../ui/modal-stack.js';
 import { getListenedPlaylist, groupItemsByAlbum, openListenedAlbumsPicker, albumKey, baseName, norm } from './listened-shared.js';
 
 const SORT_KEY = 'listened_sort_mode';
@@ -663,9 +664,9 @@ function openAlbumDetail(albumId) {
   const album = albums.find(a => a.id === albumId);
   if (!album) return;
 
-  const overlay = document.createElement('div');
-  overlay.className = 'modal-overlay';
-  overlay.innerHTML = `
+  const overlay = openModal({
+    id: `listened-album:${album.id}`,
+    html: `
     <div class="modal" style="max-width:520px">
       <div style="display:flex;gap:14px;align-items:center;margin-bottom:16px">
         ${album.cover ? `<img src="${album.cover}" style="width:72px;height:72px;border-radius:var(--radius-sm);object-fit:cover">` : `<div style="width:72px;height:72px;background:var(--color-elevated);border-radius:var(--radius-sm)"></div>`}
@@ -703,14 +704,11 @@ function openAlbumDetail(albumId) {
       </div>` : `<div style="color:var(--color-text-muted);font-size:13px">No tenés canciones de este álbum en tus likes.</div>`}
       <div class="modal-actions" style="margin-top:16px">
         ${album.url ? `<a class="btn btn-secondary" href="${album.url}" target="_blank" rel="noopener">Ver álbum en Spotify</a>` : ''}
-        <button class="btn btn-primary" id="listened-detail-close">Cerrar</button>
+        <button class="btn btn-primary" data-close-modal>Cerrar</button>
       </div>
     </div>
-  `;
-  document.body.appendChild(overlay);
-  const close = () => overlay.remove();
-  overlay.querySelector('#listened-detail-close').onclick = close;
-  overlay.onclick = (e) => { if (e.target === overlay) close(); };
+  `,
+  });
 }
 
 // Modal con álbumes que tenés muy likeados pero no figuran en tu playlist de registro.
@@ -724,9 +722,9 @@ function openYearAlbums(year) {
     const d = new Date(ts);
     return d.toLocaleDateString('es-AR', { day: '2-digit', month: 'short', year: 'numeric' });
   };
-  const overlay = document.createElement('div');
-  overlay.className = 'modal-overlay';
-  overlay.innerHTML = `
+  const overlay = openModal({
+    id: `listened-year:${year}`,
+    html: `
     <div class="modal modal-picker" style="max-width:560px">
       <h2 style="margin-bottom:4px">Álbumes escuchados en ${escapeHtml(year)}</h2>
       <p style="color:var(--color-text-secondary);font-size:13px;margin-bottom:10px">
@@ -751,14 +749,11 @@ function openYearAlbums(year) {
         </div>
       </div>
       <div class="modal-actions" style="margin-top:12px">
-        <button class="btn btn-secondary" id="year-close">Cerrar</button>
+        <button class="btn btn-secondary" data-close-modal>Cerrar</button>
       </div>
     </div>
-  `;
-  document.body.appendChild(overlay);
-  const close = () => overlay.remove();
-  overlay.querySelector('#year-close').onclick = close;
-  overlay.addEventListener('click', ev => { if (ev.target === overlay) close(); });
+  `,
+  });
 }
 
 function openGenreAlbums(genre) {
@@ -766,9 +761,9 @@ function openGenreAlbums(genre) {
   const bucket = gd.top.find(g => g.genre === genre);
   if (!bucket) return;
   const list = [...bucket.albums].sort((a, b) => b.addedAt - a.addedAt);
-  const overlay = document.createElement('div');
-  overlay.className = 'modal-overlay';
-  overlay.innerHTML = `
+  const overlay = openModal({
+    id: `listened-genre:${genre}`,
+    html: `
     <div class="modal modal-picker" style="max-width:560px">
       <h2 style="margin-bottom:4px">Género: ${escapeHtml(genre)}</h2>
       <p style="color:var(--color-text-secondary);font-size:13px;margin-bottom:10px">
@@ -792,20 +787,17 @@ function openGenreAlbums(genre) {
         </div>
       </div>
       <div class="modal-actions" style="margin-top:12px">
-        <button class="btn btn-secondary" id="genre-close">Cerrar</button>
+        <button class="btn btn-secondary" data-close-modal>Cerrar</button>
       </div>
     </div>
-  `;
-  document.body.appendChild(overlay);
-  const close = () => overlay.remove();
-  overlay.querySelector('#genre-close').onclick = close;
-  overlay.addEventListener('click', ev => { if (ev.target === overlay) close(); });
+  `,
+  });
 }
 
 function openUnregistered() {
-  const overlay = document.createElement('div');
-  overlay.className = 'modal-overlay';
-  overlay.innerHTML = `
+  const overlay = openModal({
+    id: 'listened-unregistered',
+    html: `
     <div class="modal modal-picker" style="max-width:560px">
       <h2 style="margin-bottom:4px">🎧 Quizás escuchaste y no registraste</h2>
       <p style="color:var(--color-text-secondary);font-size:13px;margin-bottom:10px">
@@ -821,11 +813,11 @@ function openUnregistered() {
       <div id="unreg-hidden-note" style="font-size:12px;color:var(--color-text-muted);margin-top:8px;flex-shrink:0"></div>
       <div class="modal-actions" style="margin-top:12px">
         <button class="btn btn-primary" id="unreg-add" disabled>Agregar a escuchados (0)</button>
-        <button class="btn btn-secondary" id="listened-unreg-close">Cerrar</button>
+        <button class="btn btn-secondary" data-close-modal>Cerrar</button>
       </div>
     </div>
-  `;
-  document.body.appendChild(overlay);
+  `,
+  });
 
   const addBtn = overlay.querySelector('#unreg-add');
   let unregRendered = [];
@@ -929,9 +921,7 @@ function openUnregistered() {
     };
   });
 
-  const close = () => overlay.remove();
-  overlay.querySelector('#listened-unreg-close').onclick = close;
-  overlay.onclick = (e) => { if (e.target === overlay) close(); };
+  const close = () => closeTop();
 
   addBtn.onclick = async () => {
     const checkedKeys = new Set([...overlay.querySelectorAll('.unreg-cb:checked')].map(cb => cb.dataset.key));
@@ -964,9 +954,9 @@ function openDupes() {
     ? `<img src="${a.cover}" loading="lazy" style="width:${size}px;height:${size}px;border-radius:var(--radius-sm);object-fit:cover;flex-shrink:0">`
     : `<div style="width:${size}px;height:${size}px;background:var(--color-elevated);border-radius:var(--radius-sm);flex-shrink:0"></div>`;
 
-  const overlay = document.createElement('div');
-  overlay.className = 'modal-overlay';
-  overlay.innerHTML = `
+  const overlay = openModal({
+    id: 'listened-dupes',
+    html: `
     <div class="modal modal-picker" style="max-width:560px">
       <h2 style="margin-bottom:4px">💿 Duplicados por edición</h2>
       <p style="color:var(--color-text-secondary);font-size:13px;margin-bottom:10px;flex-shrink:0">
@@ -977,11 +967,11 @@ function openDupes() {
       <div id="dup-hidden-note" style="font-size:12px;color:var(--color-text-muted);margin-top:8px;flex-shrink:0"></div>
       <div class="modal-actions" style="margin-top:12px">
         <button class="btn btn-danger" id="dup-del">Sacar seleccionados (0)</button>
-        <button class="btn btn-secondary" id="dup-close">Cerrar</button>
+        <button class="btn btn-secondary" data-close-modal>Cerrar</button>
       </div>
     </div>
-  `;
-  document.body.appendChild(overlay);
+  `,
+  });
 
   const delBtn = overlay.querySelector('#dup-del');
   const scroll = overlay.querySelector('#dup-scroll');
@@ -1062,9 +1052,7 @@ function openDupes() {
   };
   render();
 
-  const close = () => overlay.remove();
-  overlay.querySelector('#dup-close').onclick = close;
-  overlay.onclick = (e) => { if (e.target === overlay) close(); };
+  const close = () => closeTop();
 
   delBtn.onclick = async () => {
     const selected = [...overlay.querySelectorAll('.dup-cb:checked')];
@@ -1106,26 +1094,24 @@ function setQueuePlaylist(id, name) {
 }
 
 function openQueueCleaner() {
-  const overlay = document.createElement('div');
-  overlay.className = 'modal-overlay';
-  overlay.innerHTML = `
+  const overlay = openModal({
+    id: 'queue-cleaner',
+    html: `
     <div class="modal modal-picker" style="max-width:560px">
       <h2 style="margin-bottom:4px">🎯 Sacar de la cola lo ya escuchado</h2>
       <p id="queue-sub" style="color:var(--color-text-secondary);font-size:13px;margin-bottom:10px;flex-shrink:0"></p>
       <div id="queue-body" class="picker-scroll" style="border:1px solid var(--color-border);border-radius:var(--radius-sm)"></div>
       <div class="modal-actions" style="margin-top:12px">
         <button class="btn btn-danger" id="queue-del" style="display:none" disabled>Sacar de la cola (0)</button>
-        <button class="btn btn-secondary" id="queue-close">Cerrar</button>
+        <button class="btn btn-secondary" data-close-modal>Cerrar</button>
       </div>
     </div>
-  `;
-  document.body.appendChild(overlay);
+  `,
+  });
   const body = overlay.querySelector('#queue-body');
   const sub = overlay.querySelector('#queue-sub');
   const delBtn = overlay.querySelector('#queue-del');
-  const close = () => overlay.remove();
-  overlay.querySelector('#queue-close').onclick = close;
-  overlay.onclick = (e) => { if (e.target === overlay) close(); };
+  const close = () => closeTop();
 
   const q = getQueuePlaylist();
   if (q) loadQueue(q); else renderPicker();
@@ -1251,9 +1237,9 @@ function openHistory() {
     showToast('No se pudo cargar el historial de reproducción.', 'error');
     return;
   }
-  const overlay = document.createElement('div');
-  overlay.className = 'modal-overlay';
-  overlay.innerHTML = `
+  const overlay = openModal({
+    id: 'listened-history-unreg',
+    html: `
     <div class="modal modal-picker" style="max-width:560px">
       <h2 style="margin-bottom:4px">📊 Escuchaste (según tu historial) y no registraste</h2>
       <p style="color:var(--color-text-secondary);font-size:13px;margin-bottom:10px;flex-shrink:0">
@@ -1268,11 +1254,11 @@ function openHistory() {
       <div id="hist-hidden-note" style="font-size:12px;color:var(--color-text-muted);margin-top:8px;flex-shrink:0"></div>
       <div class="modal-actions" style="margin-top:12px">
         <button class="btn btn-primary" id="hist-add" disabled>Agregar a escuchados (0)</button>
-        <button class="btn btn-secondary" id="hist-close">Cerrar</button>
+        <button class="btn btn-secondary" data-close-modal>Cerrar</button>
       </div>
     </div>
-  `;
-  document.body.appendChild(overlay);
+  `,
+  });
 
   const addBtn = overlay.querySelector('#hist-add');
   let histRendered = [];
@@ -1378,9 +1364,7 @@ function openHistory() {
     };
   });
 
-  const close = () => overlay.remove();
-  overlay.querySelector('#hist-close').onclick = close;
-  overlay.onclick = (e) => { if (e.target === overlay) close(); };
+  const close = () => closeTop();
 
   addBtn.onclick = async () => {
     const checkedKeys = new Set([...overlay.querySelectorAll('.hist-cb:checked')].map(cb => cb.dataset.key));
@@ -1408,22 +1392,19 @@ function openHistory() {
 // Mini-modal reutilizable para ver/restaurar los álbumes ocultados de una lista.
 // keys: array de albumKeys ocultados; lookup(key)->{name,artist,extra}|null; onRestore(key) desmarca; onChange() refresca el modal padre.
 function openHiddenManager({ title, keys, lookup, onRestore, onChange }) {
-  const overlay = document.createElement('div');
-  overlay.className = 'modal-overlay';
-  overlay.innerHTML = `
+  const overlay = openModal({
+    id: `listened-hidden-mgr:${title}`,
+    html: `
     <div class="modal modal-picker" style="max-width:460px">
       <h2 style="margin-bottom:8px">${escapeHtml(title)}</h2>
       <div id="hm-list" class="picker-scroll" style="border:1px solid var(--color-border);border-radius:var(--radius-sm)"></div>
       <div class="modal-actions" style="margin-top:12px">
-        <button class="btn btn-secondary" id="hm-close">Cerrar</button>
+        <button class="btn btn-secondary" data-close-modal>Cerrar</button>
       </div>
     </div>
-  `;
-  document.body.appendChild(overlay);
+  `,
+  });
   const listEl = overlay.querySelector('#hm-list');
-  const close = () => overlay.remove();
-  overlay.querySelector('#hm-close').onclick = close;
-  overlay.onclick = (e) => { if (e.target === overlay) close(); };
 
   const render = () => {
     const items = keys.map(k => ({ k, info: lookup(k) })).filter(x => x.info);
@@ -1459,9 +1440,9 @@ function openRepeated() {
     ? `<img src="${a.cover}" loading="lazy" class="pick-cover">`
     : `<div class="pick-cover" style="background:var(--color-elevated);display:flex;align-items:center;justify-content:center;color:var(--color-text-muted);font-size:16px">♪</div>`;
 
-  const overlay = document.createElement('div');
-  overlay.className = 'modal-overlay';
-  overlay.innerHTML = `
+  const overlay = openModal({
+    id: 'listened-repeated',
+    html: `
     <div class="modal modal-picker" style="max-width:560px">
       <h2 style="margin-bottom:4px">🎵 Álbumes repetidos (varios tracks)</h2>
       <p style="color:var(--color-text-secondary);font-size:13px;margin-bottom:10px;flex-shrink:0">
@@ -1471,15 +1452,13 @@ function openRepeated() {
       <div id="rep-list" class="picker-scroll"></div>
       <div class="modal-actions" style="margin-top:12px">
         <button class="btn btn-danger" id="rep-del" disabled>Dejar 1 por álbum (0)</button>
-        <button class="btn btn-secondary" id="rep-close">Cerrar</button>
+        <button class="btn btn-secondary" data-close-modal>Cerrar</button>
       </div>
     </div>
-  `;
-  document.body.appendChild(overlay);
+  `,
+  });
   const delBtn = overlay.querySelector('#rep-del');
-  const close = () => overlay.remove();
-  overlay.querySelector('#rep-close').onclick = close;
-  overlay.onclick = (e) => { if (e.target === overlay) close(); };
+  const close = () => closeTop();
 
   const update = () => {
     const checked = [...overlay.querySelectorAll('.rep-cb:checked')];

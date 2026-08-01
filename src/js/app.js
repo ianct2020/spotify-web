@@ -548,12 +548,9 @@ async function renderDebug(container) {
   };
 }
 
-// Mientras haya cualquier cartel (.modal-overlay) abierto, bloqueamos el scroll del fondo:
-// así al scrollear se mueve solo el contenido del cartel, no la página de atrás.
-const modalScrollLock = new MutationObserver(() => {
-  document.body.classList.toggle('modal-open', document.querySelector('.modal-overlay') !== null);
-});
-modalScrollLock.observe(document.body, { childList: true });
+// El bloqueo de scroll con modales lo maneja src/js/ui/modal-stack.js
+// (mete/quita body.modal-open + guarda scrollY). Ya no hace falta el
+// MutationObserver que había acá antes.
 
 // PWA: registra el service worker (path relativo → scope /spotify-web/ en Pages).
 // Con esto Chrome ofrece "Instalar Fonoteca" y los estáticos quedan offline.

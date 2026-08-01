@@ -1,6 +1,7 @@
 import { getAllLikedTracks, removeLikedTracks, checkLibraryContains } from '../api.js';
 import { showProgress, hideProgress, progressController, isCancelled, typeConfirmModal, renderTrackRow, escapeHtml } from '../ui/components.js';
 import { showToast } from '../ui/toast.js';
+import { openModal, closeTop } from '../ui/modal-stack.js';
 
 const keepIds = new Set();
 // Persiste los cluster idx que ya resolviste (batchDelete). Sobrevive a "Ver más"
@@ -415,24 +416,21 @@ function openHiddenManager() {
   const dismissed = getDismissed();
   const keys = [...dismissed];
 
-  const overlay = document.createElement('div');
-  overlay.className = 'modal-overlay';
-  overlay.innerHTML = `
+  const overlay = openModal({
+    id: 'versions-hidden-modal',
+    html: `
     <div class="modal modal-picker" style="max-width:520px">
       <h2 style="margin-bottom:4px">Clusters ocultos</h2>
       <p style="color:var(--color-text-secondary);font-size:13px;margin-bottom:10px">Cluster(s) que marcaste como "no es duplicado". Podés restaurarlos y van a aparecer en el próximo Analizar.</p>
       <div id="hm-list" class="picker-scroll" style="border:1px solid var(--color-border);border-radius:var(--radius-sm)"></div>
       <div class="modal-actions" style="margin-top:12px">
         <button class="btn btn-secondary" id="hm-restore-all" ${keys.length === 0 ? 'disabled' : ''}>Restaurar todos</button>
-        <button class="btn btn-secondary" id="hm-close">Cerrar</button>
+        <button class="btn btn-secondary" data-close-modal>Cerrar</button>
       </div>
     </div>
-  `;
-  document.body.appendChild(overlay);
+  `,
+  });
   const listEl = overlay.querySelector('#hm-list');
-  const close = () => overlay.remove();
-  overlay.querySelector('#hm-close').onclick = close;
-  overlay.onclick = (e) => { if (e.target === overlay) close(); };
 
   const restoreOne = (k) => {
     const s = getDismissed();

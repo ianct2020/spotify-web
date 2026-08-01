@@ -10,6 +10,7 @@ import { openArtistCard } from './artist-card.js';
 import { openAlbumCard } from './album-card.js';
 import { getMyTop } from '../api.js';
 import { activateMarquee, marqueeSpan } from '../ui/marquee.js';
+import { openModal } from '../ui/modal-stack.js';
 
 let stats = null;
 let selectedYear = null;
@@ -36,6 +37,31 @@ function fmtMinutes(min) {
 function fmtDays(minutes) {
   const days = minutes / (60 * 24);
   return `${days.toFixed(1)} días equivalentes`;
+}
+
+// Modal chico con el rango de datos del historial (antes era un panel inline
+// que empujaba el layout — ahora abre y cierra sin mover nada).
+function openWrappedInfoModal(dataFrom, dataTo, dataPlays) {
+  openModal({
+    id: 'wrapped-info',
+    html: `
+      <div class="modal" style="max-width:440px">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px">
+          <h3 style="margin:0;font-size:16px">Rango de datos</h3>
+          <button class="btn btn-secondary btn-sm" data-close-modal title="Cerrar">✕</button>
+        </div>
+        <p style="color:var(--color-text-secondary);font-size:14px;line-height:1.55;margin:0">
+          Datos desde <strong style="color:var(--color-text)">${escapeHtml(dataFrom)}</strong>
+          hasta el <strong style="color:var(--color-text)">${escapeHtml(dataTo)}</strong>
+          · ${dataPlays} plays válidas (≥30s).
+        </p>
+        <p style="color:var(--color-text-muted);font-size:12.5px;line-height:1.5;margin:10px 0 0">
+          El Extended Streaming History se pide a Spotify una vez cada tanto — lo que
+          escuchaste después de esa fecha no aparece hasta que lo vuelvas a pedir.
+        </p>
+      </div>
+    `,
+  });
 }
 
 export async function render(container) {
@@ -69,17 +95,13 @@ export async function render(container) {
   const dataPlays = stats.totals.plays_valid.toLocaleString('es-AR');
 
   content.innerHTML = `
-    <div class="card" style="margin-bottom:16px;position:relative">
+    <div class="card" style="margin-bottom:16px">
       <div style="display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin-bottom:12px">
         <div style="font-size:12px;color:var(--color-text-muted);letter-spacing:0.06em;text-transform:uppercase">Elegí el año</div>
         <button class="wrapped-info-btn" id="wrapped-info-btn" aria-label="Ver rango de datos"
           style="background:none;border:1px solid var(--color-border);color:var(--color-text-muted);
                  width:24px;height:24px;border-radius:50%;font-size:12px;cursor:pointer;padding:0;line-height:1;
                  display:flex;align-items:center;justify-content:center;flex-shrink:0">ⓘ</button>
-      </div>
-      <div id="wrapped-info-panel" style="display:none;background:var(--color-elevated);border:1px solid var(--color-border);border-radius:var(--radius-sm);padding:10px 12px;margin-bottom:12px;font-size:12px;color:var(--color-text-muted);line-height:1.5">
-        Datos desde <strong style="color:var(--color-text)">${dataFrom}</strong> hasta el <strong style="color:var(--color-text)">${dataTo}</strong> · ${dataPlays} plays válidas (≥30s).
-        El Extended Streaming History se pide a Spotify una vez cada tanto — lo que escuchaste después de esa fecha no aparece hasta que lo vuelvas a pedir.
       </div>
       <div style="display:flex;gap:8px;flex-wrap:wrap" id="wrapped-year-tabs">
         ${yearsDesc.map(y => `
@@ -97,11 +119,8 @@ export async function render(container) {
   `;
 
   const infoBtn = document.getElementById('wrapped-info-btn');
-  const infoPanel = document.getElementById('wrapped-info-panel');
-  if (infoBtn && infoPanel) {
-    infoBtn.onclick = () => {
-      infoPanel.style.display = infoPanel.style.display === 'none' ? 'block' : 'none';
-    };
+  if (infoBtn) {
+    infoBtn.onclick = () => openWrappedInfoModal(dataFrom, dataTo, dataPlays);
   }
 
   content.querySelectorAll('.wrapped-year-tab').forEach(btn => {

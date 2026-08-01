@@ -2,8 +2,9 @@
 // y botones para saltar a la ficha del artista o abrir el álbum en Spotify.
 // Se dispara desde openAlbumCard({ name, artist, plays, min, img }).
 
-import { escapeHtml } from '../ui/components.js?v=106';
-import { openArtistCard } from './artist-card.js?v=106';
+import { escapeHtml } from '../ui/components.js?v=107';
+import { openArtistCard } from './artist-card.js?v=107';
+import { openModal, closeTop } from '../ui/modal-stack.js?v=107';
 
 function fmtMinutes(min) {
   if (!min && min !== 0) return '—';
@@ -11,25 +12,19 @@ function fmtMinutes(min) {
   return `${Math.round(min)}m`;
 }
 
-function close() {
-  document.getElementById('album-card-overlay')?.remove();
-}
-
 export function openAlbumCard(a) {
   if (!a || !a.name) return;
-  close();
 
   const spotifyQuery = encodeURIComponent(`${a.name} ${a.artist || ''}`.trim());
   const spotifyUrl = `https://open.spotify.com/search/${spotifyQuery}`;
 
-  const overlay = document.createElement('div');
-  overlay.className = 'modal-overlay';
-  overlay.id = 'album-card-overlay';
-  overlay.innerHTML = `
+  const overlay = openModal({
+    id: `album-card:${a.name}||${a.artist || ''}`,
+    html: `
     <div class="modal card-modal album-modal" style="max-width:420px;width:min(420px,94vw)">
       <div class="card-modal-head-simple">
         <div class="card-modal-eyebrow">Ficha de álbum</div>
-        <button class="btn btn-secondary btn-sm card-modal-close" id="alb-close">✕</button>
+        <button class="btn btn-secondary btn-sm card-modal-close" data-close-modal>✕</button>
       </div>
       <div class="album-modal-body">
         ${a.img
@@ -54,23 +49,13 @@ export function openAlbumCard(a) {
         <a class="btn btn-secondary btn-sm" id="alb-spotify" href="${spotifyUrl}" target="_blank" rel="noopener">Buscar en Spotify</a>
       </div>
     </div>
-  `;
+  `,
+  });
 
-  document.body.appendChild(overlay);
-
-  overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
-  document.getElementById('alb-close').onclick = close;
-  document.getElementById('alb-artist').onclick = () => {
-    close();
+  overlay.querySelector('#alb-artist').onclick = () => {
     if (a.artist) openArtistCard({ name: a.artist });
   };
-  document.getElementById('alb-go-artist').onclick = () => {
-    close();
+  overlay.querySelector('#alb-go-artist').onclick = () => {
     if (a.artist) openArtistCard({ name: a.artist });
   };
 }
-
-// Cierre con ESC
-document.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape' && document.getElementById('album-card-overlay')) close();
-});
