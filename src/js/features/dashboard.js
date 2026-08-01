@@ -1,5 +1,6 @@
 import { getAllLikedTracks, invalidateLikesCache, exportAllData, importAllData, getCurrentUserId, syncLikesIncremental, getLikesCacheTimestamp, getBestAvailableLikes, getAllPlaylistItems } from '../api.js';
 import { showProgress, hideProgress, alertModal, escapeHtml } from '../ui/components.js';
+import { openModal, closeTop } from '../ui/modal-stack.js';
 import { showToast } from '../ui/toast.js';
 import { openListenedAlbumsPicker } from './listened-shared.js';
 import { loadHistoryStats, loadListenedAlbums } from './history-data.js';
@@ -897,9 +898,9 @@ function openHistoryYearModal(year, bucket, criteria) {
     if (isNaN(d)) return iso;
     return d.toLocaleDateString('es-AR', { day: '2-digit', month: 'short', year: 'numeric' });
   };
-  const overlay = document.createElement('div');
-  overlay.className = 'modal-overlay';
-  overlay.innerHTML = `
+  openModal({
+    id: `dashboard-listened-year:${year}`,
+    html: `
     <div class="modal modal-picker" style="max-width:560px">
       <h2 style="margin-bottom:4px">Álbumes escuchados en ${year}</h2>
       <p style="color:var(--color-text-secondary);font-size:13px;margin-bottom:10px">
@@ -923,14 +924,11 @@ function openHistoryYearModal(year, bucket, criteria) {
         </div>
       </div>
       <div class="modal-actions" style="margin-top:12px">
-        <button class="btn btn-secondary" id="year-close">Cerrar</button>
+        <button class="btn btn-secondary" data-close-modal>Cerrar</button>
       </div>
     </div>
-  `;
-  document.body.appendChild(overlay);
-  const close = () => overlay.remove();
-  overlay.querySelector('#year-close').onclick = close;
-  overlay.addEventListener('click', ev => { if (ev.target === overlay) close(); });
+  `,
+  });
 }
 
 async function hydrateListenedAlbumsCard() {

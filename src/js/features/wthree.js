@@ -7,6 +7,7 @@ import { loadHistoryStats, loadListenedAlbums, isOwner, ownerLockedMessage } fro
 import { escapeHtml } from '../ui/components.js';
 import { showToast } from '../ui/toast.js';
 import { activateMarquee, marqueeSpan } from '../ui/marquee.js';
+import { openModal, closeTop, closeById } from '../ui/modal-stack.js';
 
 const LS_KEY_ID = 'wthree_playlist_id';
 const LS_KEY_NAME = 'wthree_playlist_name';
@@ -369,15 +370,15 @@ function wireAlbumClicks(root) {
 // ── Modal por álbum: lista tracks del álbum con picks marcados y sugerencias ──
 
 async function openAlbumModal(a) {
-  document.getElementById('wthree-modal')?.remove();
-  const overlay = document.createElement('div');
-  overlay.className = 'modal-overlay';
-  overlay.id = 'wthree-modal';
-  overlay.innerHTML = `
+  const modalId = 'wthree-album-modal';
+  closeById(modalId);
+  const overlay = openModal({
+    id: modalId,
+    html: `
     <div class="modal card-modal album-modal" style="max-width:520px;width:min(520px,94vw)">
       <div class="card-modal-head-simple">
         <div class="card-modal-eyebrow">W-Three · álbum</div>
-        <button class="btn btn-secondary btn-sm card-modal-close" id="wt-close">✕</button>
+        <button class="btn btn-secondary btn-sm card-modal-close" data-close-modal>✕</button>
       </div>
       <div class="album-modal-body" style="gap:6px">
         ${a.img
@@ -388,10 +389,8 @@ async function openAlbumModal(a) {
       </div>
       <div id="wt-modal-body"><div style="text-align:center;padding:16px"><div class="spinner"></div></div></div>
     </div>
-  `;
-  document.body.appendChild(overlay);
-  overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
-  document.getElementById('wt-close').onclick = () => overlay.remove();
+  `,
+  });
 
   const body = document.getElementById('wt-modal-body');
   const tracks = await fetchAlbumTracks(a);
@@ -537,7 +536,7 @@ async function openAlbumModal(a) {
     };
   }
 
-  document.getElementById('wt-save').onclick = () => applyChanges(a, body, overlay, orderedPicks, origOrder);
+  document.getElementById('wt-save').onclick = () => applyChanges(a, body, orderedPicks, origOrder);
 }
 
 async function fetchAlbumTracks(a) {
@@ -566,7 +565,7 @@ async function fetchAlbumTracks(a) {
   }
 }
 
-async function applyChanges(a, body, overlay, orderedPicks, origOrder) {
+async function applyChanges(a, body, orderedPicks, origOrder) {
   // Diferencia entre el orden nuevo y el original
   const origIds = origOrder.map(p => p.id);
   const newIds = orderedPicks.map(p => p.id);
@@ -623,7 +622,7 @@ async function applyChanges(a, body, overlay, orderedPicks, origOrder) {
       ? `Orden actualizado: ${orderedPicks.length} en el álbum`
       : `Playlist actualizada: +${toAddUris.length} · -${toRemoveUris.length}`;
     showToast(msg, 'success');
-    overlay.remove();
+    closeById('wthree-album-modal');
     const content = document.getElementById('wthree-content');
     if (content) {
       content.querySelector('.wthree-bucket')?.style?.setProperty('opacity', '0.5');

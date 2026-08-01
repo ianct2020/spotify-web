@@ -1,15 +1,16 @@
-import { getAllLikedTracks, invalidateLikesCache, exportAllData, importAllData, getCurrentUserId, syncLikesIncremental, getLikesCacheTimestamp, getBestAvailableLikes, getAllPlaylistItems } from '../api.js?v=106';
-import { showProgress, hideProgress, alertModal, escapeHtml } from '../ui/components.js?v=106';
-import { showToast } from '../ui/toast.js?v=106';
-import { openListenedAlbumsPicker } from './listened-shared.js?v=106';
-import { loadHistoryStats, loadListenedAlbums } from './history-data.js?v=106';
-import { findArtistTopPreview } from '../api/itunes.js?v=106';
-import { hoverIn, hoverOut } from '../ui/preview-player.js?v=106';
-import { hasUsername, getUsername } from '../api/statsfm.js?v=106';
-import { loadHistoryStats as _loadStatsForCounter } from './history-data.js?v=106';
-import { openArtistCard } from './artist-card.js?v=106';
-import { openAlbumCard } from './album-card.js?v=106';
-import { activateMarquee, marqueeSpan } from '../ui/marquee.js?v=106';
+import { getAllLikedTracks, invalidateLikesCache, exportAllData, importAllData, getCurrentUserId, syncLikesIncremental, getLikesCacheTimestamp, getBestAvailableLikes, getAllPlaylistItems } from '../api.js?v=107';
+import { showProgress, hideProgress, alertModal, escapeHtml } from '../ui/components.js?v=107';
+import { openModal, closeTop } from '../ui/modal-stack.js?v=107';
+import { showToast } from '../ui/toast.js?v=107';
+import { openListenedAlbumsPicker } from './listened-shared.js?v=107';
+import { loadHistoryStats, loadListenedAlbums } from './history-data.js?v=107';
+import { findArtistTopPreview } from '../api/itunes.js?v=107';
+import { hoverIn, hoverOut } from '../ui/preview-player.js?v=107';
+import { hasUsername, getUsername } from '../api/statsfm.js?v=107';
+import { loadHistoryStats as _loadStatsForCounter } from './history-data.js?v=107';
+import { openArtistCard } from './artist-card.js?v=107';
+import { openAlbumCard } from './album-card.js?v=107';
+import { activateMarquee, marqueeSpan } from '../ui/marquee.js?v=107';
 
 let charts = [];
 let _loadController = null;
@@ -897,9 +898,9 @@ function openHistoryYearModal(year, bucket, criteria) {
     if (isNaN(d)) return iso;
     return d.toLocaleDateString('es-AR', { day: '2-digit', month: 'short', year: 'numeric' });
   };
-  const overlay = document.createElement('div');
-  overlay.className = 'modal-overlay';
-  overlay.innerHTML = `
+  openModal({
+    id: `dashboard-listened-year:${year}`,
+    html: `
     <div class="modal modal-picker" style="max-width:560px">
       <h2 style="margin-bottom:4px">Álbumes escuchados en ${year}</h2>
       <p style="color:var(--color-text-secondary);font-size:13px;margin-bottom:10px">
@@ -923,14 +924,11 @@ function openHistoryYearModal(year, bucket, criteria) {
         </div>
       </div>
       <div class="modal-actions" style="margin-top:12px">
-        <button class="btn btn-secondary" id="year-close">Cerrar</button>
+        <button class="btn btn-secondary" data-close-modal>Cerrar</button>
       </div>
     </div>
-  `;
-  document.body.appendChild(overlay);
-  const close = () => overlay.remove();
-  overlay.querySelector('#year-close').onclick = close;
-  overlay.addEventListener('click', ev => { if (ev.target === overlay) close(); });
+  `,
+  });
 }
 
 async function hydrateListenedAlbumsCard() {

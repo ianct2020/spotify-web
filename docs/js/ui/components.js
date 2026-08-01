@@ -1,3 +1,5 @@
+import { openModal, closeTop } from './modal-stack.js?v=107';
+
 function renderTrackRow(track, extra = '') {
   const art = track.album?.images?.[2]?.url || track.album?.images?.[0]?.url || '';
   const artists = track.artists?.map(a => a.name).join(', ') || 'Unknown';
@@ -130,9 +132,11 @@ function isCancelled(err) {
 
 function confirmModal(title, message, confirmText = 'Confirmar') {
   return new Promise(resolve => {
-    const overlay = document.createElement('div');
-    overlay.className = 'modal-overlay';
-    overlay.innerHTML = `
+    let resolved = false;
+    const done = val => { if (resolved) return; resolved = true; resolve(val); closeTop(); };
+    const overlay = openModal({
+      onClose: () => { if (!resolved) { resolved = true; resolve(false); } },
+      html: `
       <div class="modal">
         <h2>${escapeHtml(title)}</h2>
         <p>${message}</p>
@@ -141,25 +145,20 @@ function confirmModal(title, message, confirmText = 'Confirmar') {
           <button class="btn btn-danger" id="modal-confirm">${escapeHtml(confirmText)}</button>
         </div>
       </div>
-    `;
-    document.body.appendChild(overlay);
-
-    overlay.querySelector('#modal-cancel').onclick = () => {
-      overlay.remove();
-      resolve(false);
-    };
-    overlay.querySelector('#modal-confirm').onclick = () => {
-      overlay.remove();
-      resolve(true);
-    };
+    `,
+    });
+    overlay.querySelector('#modal-cancel').onclick = () => done(false);
+    overlay.querySelector('#modal-confirm').onclick = () => done(true);
   });
 }
 
 function typeConfirmModal(title, message, requiredText = 'BORRAR') {
   return new Promise(resolve => {
-    const overlay = document.createElement('div');
-    overlay.className = 'modal-overlay';
-    overlay.innerHTML = `
+    let resolved = false;
+    const done = val => { if (resolved) return; resolved = true; resolve(val); closeTop(); };
+    const overlay = openModal({
+      onClose: () => { if (!resolved) { resolved = true; resolve(false); } },
+      html: `
       <div class="modal">
         <h2>${escapeHtml(title)}</h2>
         <p>${message}</p>
@@ -172,8 +171,8 @@ function typeConfirmModal(title, message, requiredText = 'BORRAR') {
           <button class="btn btn-danger" id="modal-confirm" disabled>Confirmar</button>
         </div>
       </div>
-    `;
-    document.body.appendChild(overlay);
+    `,
+    });
 
     const input = overlay.querySelector('#confirm-text-input');
     const confirmBtn = overlay.querySelector('#modal-confirm');
@@ -182,14 +181,8 @@ function typeConfirmModal(title, message, requiredText = 'BORRAR') {
       confirmBtn.disabled = input.value !== requiredText;
     });
 
-    overlay.querySelector('#modal-cancel').onclick = () => {
-      overlay.remove();
-      resolve(false);
-    };
-    confirmBtn.onclick = () => {
-      overlay.remove();
-      resolve(true);
-    };
+    overlay.querySelector('#modal-cancel').onclick = () => done(false);
+    confirmBtn.onclick = () => done(true);
   });
 }
 
@@ -208,10 +201,12 @@ function alertModal(title, messageHtml, opts = {}) {
   } = opts;
 
   return new Promise(resolve => {
-    const overlay = document.createElement('div');
-    overlay.className = 'modal-overlay';
+    let resolved = false;
+    const done = val => { if (resolved) return; resolved = true; resolve(val); closeTop(); };
     const iconChar = icon || (variant === 'warning' ? '!' : variant === 'danger' ? '×' : 'i');
-    overlay.innerHTML = `
+    const overlay = openModal({
+      onClose: () => { if (!resolved) { resolved = true; resolve(false); } },
+      html: `
       <div class="modal modal-alert modal-alert-${variant}" style="max-width:520px">
         <div class="modal-alert-head">
           <span class="modal-alert-icon">${iconChar}</span>
@@ -223,21 +218,16 @@ function alertModal(title, messageHtml, opts = {}) {
           <button class="btn btn-primary" id="modal-confirm">${escapeHtml(confirmText)}</button>
         </div>
       </div>
-    `;
-    document.body.appendChild(overlay);
+    `,
+    });
     const cancelBtn = overlay.querySelector('#modal-cancel');
     const confirmBtn = overlay.querySelector('#modal-confirm');
     setTimeout(() => confirmBtn.focus(), 20);
 
-    const close = val => { overlay.remove(); resolve(val); };
-    cancelBtn.onclick = () => close(false);
-    confirmBtn.onclick = () => close(true);
-    overlay.onkeydown = e => {
-      if (e.key === 'Escape') close(false);
-      else if (e.key === 'Enter') close(true);
-    };
+    cancelBtn.onclick = () => done(false);
+    confirmBtn.onclick = () => done(true);
     overlay.addEventListener('keydown', e => {
-      if (e.key === 'Escape') close(false);
+      if (e.key === 'Enter') { e.preventDefault(); done(true); }
     });
   });
 }
@@ -252,9 +242,11 @@ function promptPlaylistName(defaultName, opts = {}) {
   const { trackCount = null, subtitle = '' } = opts;
   const initial = (defaultName || '').slice(0, PLAYLIST_NAME_MAX);
   return new Promise(resolve => {
-    const overlay = document.createElement('div');
-    overlay.className = 'modal-overlay';
-    overlay.innerHTML = `
+    let resolved = false;
+    const done = val => { if (resolved) return; resolved = true; resolve(val); closeTop(); };
+    const overlay = openModal({
+      onClose: () => { if (!resolved) { resolved = true; resolve(null); } },
+      html: `
       <div class="modal" style="max-width:520px">
         <h2 style="margin-bottom:8px">Nombre de la playlist</h2>
         ${subtitle ? `<p style="color:var(--color-text-secondary);font-size:13px;margin-bottom:12px">${escapeHtml(subtitle)}</p>` : ''}
@@ -270,8 +262,8 @@ function promptPlaylistName(defaultName, opts = {}) {
           <button class="btn btn-primary" id="modal-confirm">Crear playlist</button>
         </div>
       </div>
-    `;
-    document.body.appendChild(overlay);
+    `,
+    });
 
     const input = overlay.querySelector('#playlist-name-input');
     const counter = overlay.querySelector('#playlist-name-counter');
@@ -294,19 +286,14 @@ function promptPlaylistName(defaultName, opts = {}) {
     input.addEventListener('input', update);
     update();
 
-    const close = val => {
-      overlay.remove();
-      resolve(val);
-    };
-    overlay.querySelector('#modal-cancel').onclick = () => close(null);
+    overlay.querySelector('#modal-cancel').onclick = () => done(null);
     confirmBtn.onclick = () => {
       const val = input.value.trim().slice(0, PLAYLIST_NAME_MAX);
       if (val.length === 0) return;
-      close(val);
+      done(val);
     };
     input.addEventListener('keydown', e => {
-      if (e.key === 'Enter' && !confirmBtn.disabled) confirmBtn.click();
-      else if (e.key === 'Escape') close(null);
+      if (e.key === 'Enter' && !confirmBtn.disabled) { e.preventDefault(); confirmBtn.click(); }
     });
   });
 }

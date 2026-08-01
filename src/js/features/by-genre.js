@@ -4,6 +4,7 @@ import * as statsfm from '../api/statsfm.js';
 import { getGenresForArtist as mbGetGenres } from '../api/musicbrainz.js';
 import { showProgress, hideProgress, progressController, isCancelled, promptPlaylistName, alertModal, confirmModal, escapeHtml } from '../ui/components.js';
 import { showToast } from '../ui/toast.js';
+import { openModal, closeTop } from '../ui/modal-stack.js';
 import { tagToGroup } from './genre-groups.js';
 
 const NOISE_TAGS = new Set([
@@ -368,9 +369,11 @@ async function handleStatsfm() {
 
 function promptStatsfmUsername() {
   return new Promise(resolve => {
-    const modal = document.createElement('div');
-    modal.className = 'modal-overlay';
-    modal.innerHTML = `
+    let resolved = false;
+    const done = val => { if (resolved) return; resolved = true; resolve(val); closeTop(); };
+    const overlay = openModal({
+      onClose: () => { if (!resolved) { resolved = true; resolve(null); } },
+      html: `
       <div class="modal" style="max-width:480px">
         <h3 style="margin-bottom:8px">Conectar Stats.fm</h3>
         <p style="color:var(--color-text-secondary);font-size:13px;margin-bottom:12px">
@@ -383,23 +386,19 @@ function promptStatsfmUsername() {
           <button class="btn btn-primary" id="statsfm-save">Guardar</button>
         </div>
       </div>
-    `;
-    document.body.appendChild(modal);
-    const input = modal.querySelector('#statsfm-user-input');
-    input.focus();
+    `,
+    });
+    const input = overlay.querySelector('#statsfm-user-input');
+    setTimeout(() => input.focus(), 20);
 
-    const close = val => {
-      document.body.removeChild(modal);
-      resolve(val);
-    };
-    modal.querySelector('#statsfm-cancel').onclick = () => close(null);
-    modal.querySelector('#statsfm-save').onclick = () => {
+    overlay.querySelector('#statsfm-cancel').onclick = () => done(null);
+    overlay.querySelector('#statsfm-save').onclick = () => {
       const v = input.value.trim();
       if (v.length < 2) { showToast('Username inválido', 'error'); return; }
       statsfm.setUsername(v);
-      close(v);
+      done(v);
     };
-    input.onkeydown = e => { if (e.key === 'Enter') modal.querySelector('#statsfm-save').click(); };
+    input.onkeydown = e => { if (e.key === 'Enter') overlay.querySelector('#statsfm-save').click(); };
   });
 }
 

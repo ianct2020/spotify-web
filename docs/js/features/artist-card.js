@@ -2,13 +2,14 @@
 // primer/último año, top tracks del artista, hover-play, y plays actuales
 // vía Stats.fm si aplica. Se abre desde cualquier feature con openArtistCard({ name }).
 
-import { loadHistoryStats, isOwner } from './history-data.js?v=106';
-import { escapeHtml } from '../ui/components.js?v=106';
-import { findArtistTopPreview } from '../api/itunes.js?v=106';
-import { togglePreview, playingKey, attachHover } from '../ui/preview-player.js?v=106';
-import { hasUsername, loadTopLifetime } from '../api/statsfm.js?v=106';
-import { openTrackCard } from './track-card.js?v=106';
-import { spotifyFetch } from '../api.js?v=106';
+import { loadHistoryStats, isOwner } from './history-data.js?v=107';
+import { escapeHtml } from '../ui/components.js?v=107';
+import { findArtistTopPreview, findTrackPreview } from '../api/itunes.js?v=107';
+import { togglePreview, playingKey, attachHover } from '../ui/preview-player.js?v=107';
+import { hasUsername, loadTopLifetime } from '../api/statsfm.js?v=107';
+import { openTrackCard } from './track-card.js?v=107';
+import { spotifyFetch, getBestAvailableLikes } from '../api.js?v=107';
+import { openModal, closeTop } from '../ui/modal-stack.js?v=107';
 
 // Cache de imágenes de artistas resueltas por Spotify search. TTL 30 días.
 // Se persiste el hit y la falta (null) para no reintentar contra tracks
@@ -54,9 +55,8 @@ function fmtMinutes(min) {
   return `${Math.round(min)}m`;
 }
 
-function close() {
+function onModalClose() {
   if (chart) { chart.destroy(); chart = null; }
-  document.getElementById('artist-card-overlay')?.remove();
 }
 
 document.addEventListener('previewchange', (e) => {
@@ -69,12 +69,11 @@ document.addEventListener('previewchange', (e) => {
 async function openArtistCard(a) {
   // a: { name } — todo lo demás lo derivamos del historial.
   if (!a || !a.name) return;
-  close();
 
-  const overlay = document.createElement('div');
-  overlay.className = 'modal-overlay';
-  overlay.id = 'artist-card-overlay';
-  overlay.innerHTML = `
+  const overlay = openModal({
+    id: `artist-card:${a.name}`,
+    onClose: onModalClose,
+    html: `
     <div class="modal card-modal" style="max-width:640px;width:min(640px,94vw)">
       <div class="card-modal-head">
         <div id="ac-avatar" class="card-modal-avatar" style="background:var(--color-accent-soft);color:var(--color-accent);font-weight:700">${escapeHtml((a.name[0] || '?').toUpperCase())}</div>
@@ -82,20 +81,18 @@ async function openArtistCard(a) {
           <h3>${escapeHtml(a.name)}</h3>
           <div class="card-modal-sub">Artista</div>
         </div>
-        <button class="btn btn-secondary btn-sm card-modal-close" id="ac-close" title="Cerrar">✕</button>
+        <button class="btn btn-secondary btn-sm card-modal-close" data-close-modal title="Cerrar">✕</button>
       </div>
       <div class="card-modal-actions">
         <button class="btn btn-secondary btn-sm" id="ac-preview">▶ Preview</button>
         <a class="btn btn-secondary btn-sm" href="https://open.spotify.com/search/${encodeURIComponent(a.name)}/artists" target="_blank" rel="noopener">↗ Spotify</a>
-        <a class="btn btn-secondary btn-sm" href="#byartist" id="ac-byartist">Mis likes</a>
+        <button class="btn btn-secondary btn-sm" id="ac-mis-likes" type="button">Mis likes</button>
       </div>
       <div id="ac-body"><div style="text-align:center;padding:24px"><div class="spinner"></div></div></div>
     </div>
-  `;
-  overlay.onclick = (e) => { if (e.target === overlay) close(); };
-  document.body.appendChild(overlay);
-  overlay.querySelector('#ac-close').onclick = close;
-  overlay.querySelector('#ac-byartist').onclick = () => { close(); };
+  `,
+  });
+  overlay.querySelector('#ac-mis-likes').onclick = () => openArtistLikesModal(a.name);
 
   // Carga la foto real del artista via Spotify search (async, sin bloquear el resto)
   fetchArtistImage(a.name).then(url => {
@@ -252,8 +249,118 @@ async function fillStatsfmArtist(name) {
   } catch { /* silencioso */ }
 }
 
+// Modal de "Mis likes del artista" — apilado encima de la ficha de artista.
+// Filtra el cache de likes en IDB por nombre de artista normalizado y muestra
+// las canciones con tapa chica, álbum y fecha de like.
+// Click en una fila → ficha canción encima (tercer nivel de la pila).
+const normName = s => (s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+
+function fmtLikeDate(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (isNaN(d)) return '';
+  return d.toLocaleDateString('es-AR', { day: '2-digit', month: 'short', year: 'numeric' });
+}
+
+async function openArtistLikesModal(artistName) {
+  const overlay = openModal({
+    id: `artist-likes:${artistName}`,
+    html: `
+      <div class="modal modal-picker" style="max-width:560px;width:min(560px,94vw)">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px">
+          <div>
+            <h2 style="margin:0 0 2px;font-size:17px">Mis likes de ${escapeHtml(artistName)}</h2>
+            <div id="al-count" style="font-size:12px;color:var(--color-text-muted)">Cargando…</div>
+          </div>
+          <button class="btn btn-secondary btn-sm" data-close-modal title="Cerrar">✕</button>
+        </div>
+        <div class="picker-scroll" id="al-scroll">
+          <div style="text-align:center;padding:32px"><div class="spinner"></div></div>
+        </div>
+      </div>
+    `,
+  });
+
+  const scroll = overlay.querySelector('#al-scroll');
+  const countEl = overlay.querySelector('#al-count');
+
+  let likes;
+  try {
+    const res = await getBestAvailableLikes();
+    likes = res.items || [];
+  } catch (e) {
+    scroll.innerHTML = `<p style="color:var(--color-text-secondary);padding:16px;text-align:center">No pude leer tus likes: ${escapeHtml(e.message)}</p>`;
+    return;
+  }
+
+  if (!likes.length) {
+    countEl.textContent = '';
+    scroll.innerHTML = `<p style="color:var(--color-text-secondary);padding:16px;text-align:center">Todavía no bajaste tus likes. Andá al Dashboard y apretá "Actualizar" para sincronizarlos.</p>`;
+    return;
+  }
+
+  const target = normName(artistName);
+  const filtered = likes.filter(it => {
+    const t = it.track;
+    if (!t) return false;
+    const artists = t.artists || [];
+    return artists.some(x => normName(x.name) === target);
+  });
+
+  if (!filtered.length) {
+    countEl.textContent = '0 likes';
+    scroll.innerHTML = `<p style="color:var(--color-text-secondary);padding:24px 16px;text-align:center">No tenés likes de ${escapeHtml(artistName)}. Todavía.</p>`;
+    return;
+  }
+
+  // Ordenados por fecha de like descendente (más recientes primero)
+  filtered.sort((a, b) => (b.added_at || '').localeCompare(a.added_at || ''));
+
+  countEl.textContent = `${filtered.length} like${filtered.length === 1 ? '' : 's'}`;
+  scroll.innerHTML = `
+    <div style="border:1px solid var(--color-border);border-radius:var(--radius-sm);overflow:hidden">
+      ${filtered.map((it, i) => {
+        const t = it.track;
+        const img = t.album?.images?.[2]?.url || t.album?.images?.[1]?.url || t.album?.images?.[0]?.url || '';
+        const album = t.album?.name || '';
+        return `
+          <div class="pick-row al-row" data-i="${i}"
+               style="display:flex;align-items:center;gap:11px;padding:9px 12px;border-bottom:1px solid var(--color-border);cursor:pointer">
+            ${img
+              ? `<img src="${img}" loading="lazy" class="pick-cover" alt="">`
+              : `<div class="pick-cover" style="background:var(--color-elevated);display:flex;align-items:center;justify-content:center;color:var(--color-text-muted)">♪</div>`}
+            <div style="flex:1;min-width:0">
+              <div style="font-size:14px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(t.name || '(sin nombre)')}</div>
+              <div style="font-size:12px;color:var(--color-text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(album)}</div>
+            </div>
+            <div style="font-size:11px;color:var(--color-text-muted);flex-shrink:0;text-align:right">${escapeHtml(fmtLikeDate(it.added_at))}</div>
+          </div>
+        `;
+      }).join('')}
+    </div>
+  `;
+
+  scroll.querySelectorAll('.al-row').forEach(row => {
+    const idx = +row.dataset.i;
+    const it = filtered[idx];
+    const t = it.track;
+    const img = t.album?.images?.[2]?.url || t.album?.images?.[1]?.url || t.album?.images?.[0]?.url || '';
+    row.onclick = () => openTrackCard({
+      id: t.id,
+      name: t.name,
+      artist: (t.artists || []).map(x => x.name).join(', '),
+      album: t.album?.name,
+      img,
+    });
+    attachHover(row, `al-hover:${t.id}`, async () => {
+      const p = await findTrackPreview((t.artists?.[0]?.name) || artistName, t.name || '');
+      return p && { url: p.url, label: `${t.name} — ${(t.artists?.[0]?.name) || artistName}` };
+    });
+  });
+}
+
 // Azúcar: enganchar hover-play + click-ficha en un elemento cualquiera que
-// represente un artista. Devuelve el listener por si querés desengancharlo.
+// representa un artista. Devuelve el listener por si querés desengancharlo.
 function attachArtistCard(el, name) {
   el.classList.add('tc-clickable');
   el.title = 'Preview al apoyar el mouse · click para ver la ficha';

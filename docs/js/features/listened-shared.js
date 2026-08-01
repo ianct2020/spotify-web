@@ -1,6 +1,7 @@
-import { getAllUserPlaylists } from '../api.js?v=106';
-import { escapeHtml } from '../ui/components.js?v=106';
-import { showToast } from '../ui/toast.js?v=106';
+import { getAllUserPlaylists } from '../api.js?v=107';
+import { escapeHtml } from '../ui/components.js?v=107';
+import { showToast } from '../ui/toast.js?v=107';
+import { openModal, closeTop } from '../ui/modal-stack.js?v=107';
 
 const PID_KEY = 'listened_albums_playlist_id';
 const PNAME_KEY = 'listened_albums_playlist_name';
@@ -93,9 +94,9 @@ async function openListenedAlbumsPicker({ onSelect, onClear } = {}) {
   }
 
   const current = localStorage.getItem(PID_KEY);
-  const overlay = document.createElement('div');
-  overlay.className = 'modal-overlay';
-  overlay.innerHTML = `
+  const overlay = openModal({
+    id: 'listened-albums-picker',
+    html: `
     <div class="modal" style="max-width:560px">
       <h2 style="margin-bottom:8px">Elegí tu playlist de álbumes escuchados</h2>
       <p style="color:var(--color-text-secondary);font-size:13px;margin-bottom:12px">
@@ -106,11 +107,11 @@ async function openListenedAlbumsPicker({ onSelect, onClear } = {}) {
       <div id="lap-list" style="max-height:360px;overflow-y:auto;border:1px solid var(--color-border);border-radius:var(--radius-sm);background:var(--color-elevated)"></div>
       <div class="modal-actions" style="margin-top:14px">
         ${current ? '<button class="btn btn-secondary" id="lap-clear">Desconectar</button>' : ''}
-        <button class="btn btn-secondary" id="lap-cancel">Cancelar</button>
+        <button class="btn btn-secondary" data-close-modal>Cancelar</button>
       </div>
     </div>
-  `;
-  document.body.appendChild(overlay);
+  `,
+  });
 
   const listEl = overlay.querySelector('#lap-list');
   const searchEl = overlay.querySelector('#lap-search');
@@ -134,7 +135,7 @@ async function openListenedAlbumsPicker({ onSelect, onClear } = {}) {
       el.onmouseleave = () => { el.style.background = 'transparent'; };
       el.onclick = () => {
         setListenedPlaylist(el.dataset.id, el.dataset.name);
-        overlay.remove();
+        closeTop();
         showToast(`"${el.dataset.name}" configurada como álbumes escuchados`, 'success');
         onSelect?.(el.dataset.id, el.dataset.name);
       };
@@ -144,12 +145,11 @@ async function openListenedAlbumsPicker({ onSelect, onClear } = {}) {
   searchEl.oninput = () => renderList(searchEl.value.trim());
   setTimeout(() => searchEl.focus(), 30);
 
-  overlay.querySelector('#lap-cancel').onclick = () => overlay.remove();
   const clearBtn = overlay.querySelector('#lap-clear');
   if (clearBtn) {
     clearBtn.onclick = () => {
       clearListenedPlaylist();
-      overlay.remove();
+      closeTop();
       showToast('Álbumes escuchados desconectado', 'info');
       onClear?.();
     };

@@ -3,12 +3,13 @@
 // días distintos, récord en un día — más preview iTunes y link a Spotify.
 // Se abre desde cualquier feature con openTrackCard({ id, name, artist, album, img }).
 
-import { loadTrackPlays, loadTrackDetail, loadHistoryStats, isOwner } from './history-data.js?v=106';
-import { escapeHtml } from '../ui/components.js?v=106';
-import { findTrackPreview } from '../api/itunes.js?v=106';
-import { togglePreview, playingKey } from '../ui/preview-player.js?v=106';
-import { hasUsername, findTrackId, getTrackCurrentStats, loadTopLifetime } from '../api/statsfm.js?v=106';
-import { openAlbumCard } from './album-card.js?v=106';
+import { loadTrackPlays, loadTrackDetail, loadHistoryStats, isOwner } from './history-data.js?v=107';
+import { escapeHtml } from '../ui/components.js?v=107';
+import { findTrackPreview } from '../api/itunes.js?v=107';
+import { togglePreview, playingKey } from '../ui/preview-player.js?v=107';
+import { hasUsername, findTrackId, getTrackCurrentStats, loadTopLifetime } from '../api/statsfm.js?v=107';
+import { openAlbumCard } from './album-card.js?v=107';
+import { openModal, closeTop } from '../ui/modal-stack.js?v=107';
 
 const MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
 
@@ -44,9 +45,8 @@ function buildSeries(monthly) {
   return { labels, data };
 }
 
-function close() {
+function onModalClose() {
   if (chart) { chart.destroy(); chart = null; }
-  document.getElementById('track-card-overlay')?.remove();
 }
 
 // Listener único a nivel módulo: si el preview de la ficha dejó de sonar
@@ -61,12 +61,11 @@ document.addEventListener('previewchange', (e) => {
 async function openTrackCard(t) {
   // t: { id, name, artist, album?, img? } — id es el track id de Spotify (sin prefijo)
   if (!t || !t.id) return;
-  close();
 
-  const overlay = document.createElement('div');
-  overlay.className = 'modal-overlay';
-  overlay.id = 'track-card-overlay';
-  overlay.innerHTML = `
+  const overlay = openModal({
+    id: `track-card:${t.id}`,
+    onClose: onModalClose,
+    html: `
     <div class="modal" style="max-width:640px;width:min(640px,92vw)">
       <div style="display:flex;gap:14px;align-items:flex-start;margin-bottom:14px">
         <div id="tc-cover" title="${t.album ? 'Ver ficha del álbum' : ''}" style="width:64px;height:64px;border-radius:8px;background:var(--color-elevated);display:flex;align-items:center;justify-content:center;font-size:26px;color:var(--color-text-muted);flex-shrink:0;overflow:hidden;${t.album ? 'cursor:pointer' : ''}">
@@ -84,20 +83,18 @@ async function openTrackCard(t) {
             <a class="btn btn-secondary btn-sm" href="https://open.spotify.com/track/${t.id}" target="_blank" rel="noopener">Abrir en Spotify ↗</a>
           </div>
         </div>
-        <button class="btn btn-secondary btn-sm" id="tc-close" title="Cerrar" style="flex-shrink:0">✕</button>
+        <button class="btn btn-secondary btn-sm" data-close-modal title="Cerrar" style="flex-shrink:0">✕</button>
       </div>
       <div id="tc-body"><div style="text-align:center;padding:24px"><div class="spinner"></div></div></div>
     </div>
-  `;
-  overlay.onclick = (e) => { if (e.target === overlay) close(); };
-  document.body.appendChild(overlay);
-  overlay.querySelector('#tc-close').onclick = close;
+  `,
+  });
 
-  // Click en la tapa → abrir ficha del álbum (si tenemos album name)
+  // Click en la tapa → abrir ficha del álbum ENCIMA (no cierra la de canción,
+  // así la flecha ← vuelve). Si tenemos album name.
   const cover = overlay.querySelector('#tc-cover');
   if (cover && t.album) {
     cover.onclick = async () => {
-      // Buscar el álbum en el historial para conseguir stats (plays, min, img)
       let albumInfo = { name: t.album, artist: t.artist, img: t.img };
       try {
         const stats = await loadHistoryStats();
@@ -108,7 +105,6 @@ async function openTrackCard(t) {
           albumInfo = { name: found.name, artist: found.artist, img: found.img || t.img, plays: found.plays, min: found.min };
         }
       } catch { /* noop */ }
-      close();
       openAlbumCard(albumInfo);
     };
   }
