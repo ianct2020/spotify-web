@@ -1,4 +1,4 @@
-import { openModal, closeTop } from './modal-stack.js?v=107';
+import { openModal, closeTop } from './modal-stack.js?v=108';
 
 function renderTrackRow(track, extra = '') {
   const art = track.album?.images?.[2]?.url || track.album?.images?.[0]?.url || '';
@@ -322,4 +322,22 @@ function bindPlaylistGrid(container, onSelect) {
   });
 }
 
-export { renderTrackRow, showProgress, hideProgress, progressController, isCancelled, confirmModal, typeConfirmModal, promptPlaylistName, alertModal, infoModal, PLAYLIST_NAME_MAX, escapeHtml, renderPlaylistGrid, bindPlaylistGrid };
+// Header de página unificado: [☰] "Título" [ slot derecha opcional ]
+// Todos alineados verticalmente en la misma fila flex. Cada feature debe usar
+// esto en vez de armar su propio .page-header/H1 a mano, así el ☰ queda siempre
+// en el mismo eje vertical que el H1 y hay un solo lugar donde tocar el padding.
+// El botón ☰ (data-hamburger) se togglea vía delegación en app.js.
+function pageHeader({ title, right = '' } = {}) {
+  const rightHtml = right
+    ? `<div class="page-header-right">${right}</div>`
+    : '';
+  return `
+    <div class="page-header">
+      <button class="hamburger" data-hamburger aria-label="Abrir menú">&#9776;</button>
+      <h1 class="page-header-title">${escapeHtml(title || '')}</h1>
+      ${rightHtml}
+    </div>
+  `;
+}
+
+export { renderTrackRow, showProgress, hideProgress, progressController, isCancelled, confirmModal, typeConfirmModal, promptPlaylistName, alertModal, infoModal, PLAYLIST_NAME_MAX, escapeHtml, renderPlaylistGrid, bindPlaylistGrid, pageHeader };

@@ -1,5 +1,5 @@
 import { getAllLikedTracks, invalidateLikesCache, exportAllData, importAllData, getCurrentUserId, syncLikesIncremental, getLikesCacheTimestamp, getBestAvailableLikes, getAllPlaylistItems } from '../api.js';
-import { showProgress, hideProgress, alertModal, escapeHtml } from '../ui/components.js';
+import { showProgress, hideProgress, alertModal, escapeHtml, pageHeader } from '../ui/components.js';
 import { openModal, closeTop } from '../ui/modal-stack.js';
 import { showToast } from '../ui/toast.js';
 import { openListenedAlbumsPicker } from './listened-shared.js';
@@ -16,53 +16,64 @@ let charts = [];
 let _loadController = null;
 
 export function render(container) {
-  container.innerHTML = `
-    <div class="dash-header">
-      <div class="dash-header-left">
-        <h1>Dashboard</h1>
-        <div id="dash-last-sync" class="dash-last-sync"></div>
-      </div>
-      <div class="dash-header-right">
-        <div id="dash-statsfm-ticker" class="statsfm-ticker dash-header-ticker" style="display:none"></div>
-        <div class="dash-header-actions">
-          <div style="position:relative">
-            <button class="btn btn-secondary btn-sm" id="dash-export-all-btn" title="Elegí formato">Exportar ▾</button>
-            <div id="dash-export-menu" style="display:none;position:absolute;top:100%;right:0;margin-top:4px;background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-sm);box-shadow:0 4px 12px rgba(0,0,0,0.3);z-index:10;min-width:200px">
-              <button class="dash-export-opt" data-fmt="json" style="display:block;width:100%;text-align:left;padding:10px 14px;background:transparent;border:none;color:var(--color-text);cursor:pointer;font-size:13px">JSON <span style="color:var(--color-text-muted)">— likes + tags</span></button>
-              <button class="dash-export-opt" data-fmt="csv" style="display:block;width:100%;text-align:left;padding:10px 14px;background:transparent;border:none;color:var(--color-text);cursor:pointer;font-size:13px;border-top:1px solid var(--color-border)">CSV <span style="color:var(--color-text-muted)">— solo likes, plano</span></button>
-            </div>
-          </div>
-          <button class="btn btn-secondary btn-sm" id="dash-import-all-btn">Importar</button>
-          <input type="file" id="dash-import-all-input" accept=".json,application/json" style="display:none">
-          <button class="btn btn-secondary btn-sm" id="dash-refresh-btn">Actualizar datos</button>
-        </div>
+  // Header nuevo (v=108): título + pill del contador Stats.fm inline, botón ⚙
+  // a la derecha con dropdown (Exportar JSON/CSV, Importar, Actualizar).
+  // "Última sync" salió del header y ahora vive centrada al pie de la página.
+  const headerRight = `
+    <div id="dash-statsfm-ticker" class="statsfm-ticker" style="display:none"></div>
+    <div class="dash-actions-wrap">
+      <button class="btn btn-secondary btn-sm dash-cog-btn" id="dash-cog-btn" title="Acciones" aria-haspopup="menu" aria-expanded="false" aria-label="Acciones">⚙</button>
+      <div id="dash-cog-menu" class="dash-cog-menu" role="menu" hidden>
+        <button class="dash-cog-item" data-act="export-json" role="menuitem">Exportar JSON <span class="dash-cog-hint">likes + tags</span></button>
+        <button class="dash-cog-item" data-act="export-csv" role="menuitem">Exportar CSV <span class="dash-cog-hint">solo likes, plano</span></button>
+        <button class="dash-cog-item" data-act="import" role="menuitem">Importar JSON</button>
+        <button class="dash-cog-item" data-act="refresh" role="menuitem">Actualizar datos</button>
       </div>
     </div>
+    <input type="file" id="dash-import-all-input" accept=".json,application/json" style="display:none">
+  `;
+  container.innerHTML = `
+    ${pageHeader({ title: 'Dashboard', right: headerRight })}
     <div id="dash-content"></div>
+    <div id="dash-last-sync" class="dash-last-sync"></div>
   `;
 
   refreshLastSyncLabel();
   fillStatsfmTicker();
 
-  document.getElementById('dash-refresh-btn').onclick = handleRefresh;
-  const exportBtn = document.getElementById('dash-export-all-btn');
-  const exportMenu = document.getElementById('dash-export-menu');
-  exportBtn.onclick = (e) => {
-    e.stopPropagation();
-    exportMenu.style.display = exportMenu.style.display === 'block' ? 'none' : 'block';
+  // Dropdown del ⚙: abrir/cerrar con click en el botón, cerrar con ESC o
+  // click fuera. NO es un modal — es un menú anclado al botón.
+  const cogBtn = document.getElementById('dash-cog-btn');
+  const cogMenu = document.getElementById('dash-cog-menu');
+  const closeCog = () => {
+    cogMenu.hidden = true;
+    cogBtn.setAttribute('aria-expanded', 'false');
   };
-  document.addEventListener('click', () => { exportMenu.style.display = 'none'; });
-  exportMenu.querySelectorAll('.dash-export-opt').forEach(b => {
-    b.onmouseenter = () => { b.style.background = 'var(--color-elevated)'; };
-    b.onmouseleave = () => { b.style.background = 'transparent'; };
-    b.onclick = () => {
-      exportMenu.style.display = 'none';
-      if (b.dataset.fmt === 'json') handleExportAll();
-      else if (b.dataset.fmt === 'csv') handleExportCsv();
-    };
+  const openCog = () => {
+    cogMenu.hidden = false;
+    cogBtn.setAttribute('aria-expanded', 'true');
+  };
+  cogBtn.onclick = (e) => {
+    e.stopPropagation();
+    if (cogMenu.hidden) openCog(); else closeCog();
+  };
+  document.addEventListener('click', (e) => {
+    if (!cogMenu.hidden && !cogMenu.contains(e.target) && e.target !== cogBtn) closeCog();
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && !cogMenu.hidden) closeCog();
   });
   const importInput = document.getElementById('dash-import-all-input');
-  document.getElementById('dash-import-all-btn').onclick = () => importInput.click();
+  cogMenu.querySelectorAll('.dash-cog-item').forEach(item => {
+    item.onclick = () => {
+      const act = item.dataset.act;
+      closeCog();
+      if (act === 'export-json') handleExportAll();
+      else if (act === 'export-csv') handleExportCsv();
+      else if (act === 'import') importInput.click();
+      else if (act === 'refresh') handleRefresh();
+    };
+  });
   importInput.onchange = handleImportAll;
 
   renderStartScreen();
@@ -868,16 +879,29 @@ async function hydrateListenedYearTiles() {
 
     holder.style.color = '';
     holder.style.fontSize = '';
-    // Mobile: 3 columnas (tiles chicos pero legibles). Desktop: 1 fila entera cuando entra.
+    // Desktop (v=108): fila única con scroll horizontal si no entran los años.
+    // Mobile: 3 columnas para no romper la lectura.
     const isMobile = window.matchMedia('(max-width: 600px)').matches;
-    holder.style.gridTemplateColumns = isMobile
-      ? 'repeat(3, minmax(0, 1fr))'
-      : (years.length <= 12
-          ? `repeat(${years.length}, minmax(0, 1fr))`
-          : 'repeat(auto-fit, minmax(110px, 1fr))');
+    if (isMobile) {
+      holder.style.display = 'grid';
+      holder.style.gridTemplateColumns = 'repeat(3, minmax(0, 1fr))';
+      holder.style.overflowX = '';
+    } else {
+      holder.style.display = 'flex';
+      holder.style.gridTemplateColumns = '';
+      holder.style.overflowX = 'auto';
+      holder.style.overflowY = 'hidden';
+      holder.style.scrollSnapType = 'x proximity';
+      holder.style.paddingBottom = '4px';
+    }
+    // En desktop, tiles con min-width fijo (~92px) para que scrolleen; en
+    // mobile ocupan el ancho del grid.
+    const tileStyle = isMobile
+      ? 'min-width:0'
+      : 'min-width:92px;flex:0 0 auto;scroll-snap-align:start';
     holder.innerHTML = years.map(y => `
-      <button class="year-tile" data-year="${y.year}" style="background:var(--color-elevated);border:1px solid var(--color-border);border-radius:var(--radius-sm);padding:10px 12px;text-align:left;cursor:pointer;transition:border-color .15s,transform .05s;min-width:0">
-        <div style="font-size:19px;font-weight:700;color:var(--color-text);line-height:1.1">${y.count.toLocaleString('es-AR')}</div>
+      <button class="year-tile" data-year="${y.year}" style="background:var(--color-elevated);border:1px solid var(--color-border);border-radius:var(--radius-sm);padding:8px 12px;text-align:left;cursor:pointer;transition:border-color .15s,transform .05s;${tileStyle}">
+        <div style="font-size:18px;font-weight:700;color:var(--color-text);line-height:1.1">${y.count.toLocaleString('es-AR')}</div>
         <div style="font-size:11px;color:var(--color-text-muted);margin-top:3px">${y.year}</div>
       </button>
     `).join('');

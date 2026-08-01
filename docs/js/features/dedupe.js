@@ -1,16 +1,13 @@
-import { getAllUserPlaylists, getAllPlaylistItems, removePlaylistItemsAtPositions, getCurrentUserId, getBestAvailableLikes } from '../api.js?v=107';
-import { showProgress, hideProgress, progressController, isCancelled, typeConfirmModal, renderTrackRow, escapeHtml, renderPlaylistGrid, bindPlaylistGrid } from '../ui/components.js?v=107';
-import { showToast } from '../ui/toast.js?v=107';
+import { getAllUserPlaylists, getAllPlaylistItems, removePlaylistItemsAtPositions, getCurrentUserId, getBestAvailableLikes } from '../api.js?v=108';
+import { showProgress, hideProgress, progressController, isCancelled, typeConfirmModal, renderTrackRow, escapeHtml, renderPlaylistGrid, bindPlaylistGrid, pageHeader } from '../ui/components.js?v=108';
+import { showToast } from '../ui/toast.js?v=108';
 
 let ownPlaylists = [];
 const LIKED_VIRTUAL_ID = '__liked_songs__';
 
 export function render(container) {
   container.innerHTML = `
-    <div class="page-header">
-      <h1>Dedupe</h1>
-      <p>Encontrá canciones repetidas dentro de una playlist. Elegí una para analizar.</p>
-    </div>
+    ${pageHeader({ title: 'Dedupe' })}
     <div id="dedupe-content"></div>
   `;
 

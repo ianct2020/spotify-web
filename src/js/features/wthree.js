@@ -4,7 +4,7 @@
 
 import { spotifyFetch, getAllPlaylistItems, getAllUserPlaylists, addTracksToPlaylist, removeTracksFromPlaylist, updatePlaylistItemsCache } from '../api.js';
 import { loadHistoryStats, loadListenedAlbums, isOwner, ownerLockedMessage } from './history-data.js';
-import { escapeHtml } from '../ui/components.js';
+import { escapeHtml, pageHeader } from '../ui/components.js';
 import { showToast } from '../ui/toast.js';
 import { activateMarquee, marqueeSpan } from '../ui/marquee.js';
 import { openModal, closeTop, closeById } from '../ui/modal-stack.js';
@@ -29,10 +29,7 @@ export async function render(container) {
   playlistName = localStorage.getItem(LS_KEY_NAME);
 
   container.innerHTML = `
-    <div class="page-header">
-      <h1>W-Three helper</h1>
-      <p>Ordenás las mejores 3 canciones de cada álbum. Acá ves cuáles ya cubriste y cuáles te faltan.</p>
-    </div>
+    ${pageHeader({ title: 'W-Three helper' })}
     <div id="wthree-content"><div class="empty-state"><div class="spinner spinner-lg"></div></div></div>
   `;
 

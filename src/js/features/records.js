@@ -3,7 +3,7 @@
 // history-records.json (gen-stats.py) ya calculado, acá es solo UI.
 
 import { loadRecords, isOwner, ownerLockedMessage } from './history-data.js';
-import { escapeHtml } from '../ui/components.js';
+import { escapeHtml, pageHeader } from '../ui/components.js';
 import { findTrackPreview, findArtistTopPreview } from '../api/itunes.js';
 import { attachHover } from '../ui/preview-player.js';
 import { openArtistCard } from './artist-card.js';
@@ -30,10 +30,7 @@ function fmtHours(min) {
 
 export async function render(container) {
   container.innerHTML = `
-    <div class="page-header">
-      <h1>Récords</h1>
-      <p>Los extremos de tu historial: días épicos, maratones, loops y rachas. Datos desde 2018.</p>
-    </div>
+    ${pageHeader({ title: 'Récords' })}
     <div id="records-content"><div class="empty-state"><div class="spinner spinner-lg"></div></div></div>
   `;
 

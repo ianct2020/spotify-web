@@ -1,9 +1,9 @@
-import { getAllLikedTracks, createPlaylist, addTracksToPlaylist, invalidatePlaylistsCache, getBestAvailableLikes } from '../api.js?v=107';
-import { showProgress, hideProgress, progressController, isCancelled, promptPlaylistName, escapeHtml } from '../ui/components.js?v=107';
-import { showToast } from '../ui/toast.js?v=107';
-import { findArtistTopPreview } from '../api/itunes.js?v=107';
-import { attachHover } from '../ui/preview-player.js?v=107';
-import { openArtistCard } from './artist-card.js?v=107';
+import { getAllLikedTracks, createPlaylist, addTracksToPlaylist, invalidatePlaylistsCache, getBestAvailableLikes } from '../api.js?v=108';
+import { showProgress, hideProgress, progressController, isCancelled, promptPlaylistName, escapeHtml, pageHeader } from '../ui/components.js?v=108';
+import { showToast } from '../ui/toast.js?v=108';
+import { findArtistTopPreview } from '../api/itunes.js?v=108';
+import { attachHover } from '../ui/preview-player.js?v=108';
+import { openArtistCard } from './artist-card.js?v=108';
 
 const SORT_KEY = 'artist_sort_mode';
 const VALID_SORTS = new Set(['count-desc', 'count-asc', 'name-asc']);
@@ -27,10 +27,7 @@ export async function render(container) {
   filterText = '';
 
   container.innerHTML = `
-    <div class="page-header">
-      <h1>Por artista</h1>
-      <p>Elegí uno o varios artistas y armá una playlist con todos tus likes de ellos.</p>
-    </div>
+    ${pageHeader({ title: 'Por artista' })}
     <div id="by-artist-content">
       <div class="empty-state"><div class="spinner spinner-lg"></div><div style="margin-top:16px">Leyendo cache local...</div></div>
     </div>

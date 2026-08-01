@@ -1,16 +1,13 @@
-import { getAllLikedTracks, getAllPlaylistItems, updatePlaylistItemsCache, getAllUserPlaylists, addTracksToPlaylist, removeTracksFromPlaylist, createPlaylist, unfollowPlaylist } from '../api.js?v=107';
-import { showProgress, hideProgress, progressController, isCancelled, typeConfirmModal, renderTrackRow, escapeHtml } from '../ui/components.js?v=107';
-import { showToast } from '../ui/toast.js?v=107';
+import { getAllLikedTracks, getAllPlaylistItems, updatePlaylistItemsCache, getAllUserPlaylists, addTracksToPlaylist, removeTracksFromPlaylist, createPlaylist, unfollowPlaylist } from '../api.js?v=108';
+import { showProgress, hideProgress, progressController, isCancelled, typeConfirmModal, renderTrackRow, escapeHtml, pageHeader } from '../ui/components.js?v=108';
+import { showToast } from '../ui/toast.js?v=108';
 
 const TARGET_PLAYLIST_NAME = 'anothertwo';
 const SPOTIFY_PLAYLIST_MAX = 10000;
 
 export function render(container) {
   container.innerHTML = `
-    <div class="page-header">
-      <h1>Sync Mirror</h1>
-      <p>Sincroniza una playlist como espejo exacto de tus Liked Songs.</p>
-    </div>
+    ${pageHeader({ title: 'Sync Mirror' })}
 
     <div class="card" style="margin-bottom:20px">
       <label style="display:block;font-size:13px;color:var(--color-text-secondary);margin-bottom:6px">Playlist objetivo</label>

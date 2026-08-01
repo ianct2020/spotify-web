@@ -1,13 +1,10 @@
-import { getAllLikedTracks, getAllUserPlaylists, getAllPlaylistItems, createPlaylist, addTracksToPlaylist } from '../api.js?v=107';
-import { showProgress, hideProgress, progressController, isCancelled, confirmModal, renderTrackRow } from '../ui/components.js?v=107';
-import { showToast } from '../ui/toast.js?v=107';
+import { getAllLikedTracks, getAllUserPlaylists, getAllPlaylistItems, createPlaylist, addTracksToPlaylist } from '../api.js?v=108';
+import { showProgress, hideProgress, progressController, isCancelled, confirmModal, renderTrackRow, pageHeader } from '../ui/components.js?v=108';
+import { showToast } from '../ui/toast.js?v=108';
 
 export function render(container) {
   container.innerHTML = `
-    <div class="page-header">
-      <h1>Likes Huérfanas</h1>
-      <p>Encontrá Liked Songs que no están en ninguna de tus playlists.</p>
-    </div>
+    ${pageHeader({ title: 'Likes Huérfanas' })}
     <div class="feature-actions">
       <button class="btn btn-primary" id="orphans-analyze-btn">Analizar</button>
     </div>

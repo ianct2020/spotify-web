@@ -1,32 +1,33 @@
-import { isLoggedIn, loginWithSpotify, logout } from './auth.js?v=107';
-import { spotifyFetch, tryAutoLoadUserBackup } from './api.js?v=107';
-import { getValidToken } from './auth.js?v=107';
-import { cacheClearAll } from './storage.js?v=107';
-import { idbClearAll } from './idb.js?v=107';
-import { registerRoute, initRouter } from './router.js?v=107';
-import { showToast } from './ui/toast.js?v=107';
+import { isLoggedIn, loginWithSpotify, logout } from './auth.js?v=108';
+import { spotifyFetch, tryAutoLoadUserBackup } from './api.js?v=108';
+import { getValidToken } from './auth.js?v=108';
+import { cacheClearAll } from './storage.js?v=108';
+import { idbClearAll } from './idb.js?v=108';
+import { registerRoute, initRouter } from './router.js?v=108';
+import { showToast } from './ui/toast.js?v=108';
+import { pageHeader } from './ui/components.js?v=108';
 
-import { render as renderSync } from './features/sync.js?v=107';
-import { render as renderDedupe } from './features/dedupe.js?v=107';
-import { render as renderDupalbums } from './features/duplicate-albums.js?v=107';
-import { render as renderZombies } from './features/zombies.js?v=107';
-import { render as renderVersions } from './features/versions.js?v=107';
-import { render as renderDashboard } from './features/dashboard.js?v=107';
-import { render as renderSmart } from './features/smart.js?v=107';
-import { render as renderSimilar } from './features/similar-artists.js?v=107';
-import { render as renderRabbit } from './features/rabbit-hole.js?v=107';
-import { render as renderByGenre } from './features/by-genre.js?v=107';
-import { render as renderByArtist } from './features/by-artist.js?v=107';
-import { render as renderRecs } from './features/recommendations.js?v=107';
-import { render as renderListened } from './features/listened.js?v=107';
-import { render as renderWrapped } from './features/wrapped.js?v=107';
-import { render as renderRecords } from './features/records.js?v=107';
-import { openImportHistory } from './features/import-history.js?v=107';
-import { bindOwnerLockedButtons } from './features/history-data.js?v=107';
-import { render as renderZeroPlays } from './features/zero-plays.js?v=107';
-import { render as renderSkips } from './features/skips.js?v=107';
-import { render as renderSearchLikes } from './features/search-likes.js?v=107';
-import { render as renderWthree } from './features/wthree.js?v=107';
+import { render as renderSync } from './features/sync.js?v=108';
+import { render as renderDedupe } from './features/dedupe.js?v=108';
+import { render as renderDupalbums } from './features/duplicate-albums.js?v=108';
+import { render as renderZombies } from './features/zombies.js?v=108';
+import { render as renderVersions } from './features/versions.js?v=108';
+import { render as renderDashboard } from './features/dashboard.js?v=108';
+import { render as renderSmart } from './features/smart.js?v=108';
+import { render as renderSimilar } from './features/similar-artists.js?v=108';
+import { render as renderRabbit } from './features/rabbit-hole.js?v=108';
+import { render as renderByGenre } from './features/by-genre.js?v=108';
+import { render as renderByArtist } from './features/by-artist.js?v=108';
+import { render as renderRecs } from './features/recommendations.js?v=108';
+import { render as renderListened } from './features/listened.js?v=108';
+import { render as renderWrapped } from './features/wrapped.js?v=108';
+import { render as renderRecords } from './features/records.js?v=108';
+import { openImportHistory } from './features/import-history.js?v=108';
+import { bindOwnerLockedButtons } from './features/history-data.js?v=108';
+import { render as renderZeroPlays } from './features/zero-plays.js?v=108';
+import { render as renderSkips } from './features/skips.js?v=108';
+import { render as renderSearchLikes } from './features/search-likes.js?v=108';
+import { render as renderWthree } from './features/wthree.js?v=108';
 
 async function testConnection() {
   const token = await getValidToken();
@@ -190,7 +191,6 @@ function showApp(profile) {
     : `<div class="sidebar-avatar" style="background:var(--color-accent);display:flex;align-items:center;justify-content:center;color:white;font-weight:700;font-size:14px">${(profile.display_name || '?')[0].toUpperCase()}</div>`;
 
   document.getElementById('app').innerHTML = `
-    <button class="hamburger" id="hamburger-btn">&#9776;</button>
     <div class="sidebar-overlay" id="sidebar-overlay"></div>
     <aside class="sidebar" id="sidebar">
       <a class="sidebar-header" href="#home" title="Ir al inicio" style="text-decoration:none;color:inherit;cursor:pointer">
@@ -308,7 +308,6 @@ function showApp(profile) {
     btn.disabled = false;
   };
 
-  const hamburger = document.getElementById('hamburger-btn');
   const sidebar = document.getElementById('sidebar');
   const overlay = document.getElementById('sidebar-overlay');
 
@@ -328,7 +327,12 @@ function showApp(profile) {
   applyRouteSidebar();
   window.addEventListener('hashchange', applyRouteSidebar);
 
-  hamburger.onclick = () => {
+  // Delegación: el hamburguesa vive dentro de cada .page-header (v=108) — el
+  // botón se re-renderiza en cada cambio de ruta, así que en vez de bindear
+  // por id, escuchamos clicks sobre cualquier elemento con [data-hamburger].
+  document.addEventListener('click', (e) => {
+    const target = e.target.closest && e.target.closest('[data-hamburger]');
+    if (!target) return;
     if (window.matchMedia('(max-width: 768px)').matches) {
       // Mobile: overlay tradicional
       sidebar.classList.toggle('open');
@@ -345,7 +349,7 @@ function showApp(profile) {
     } else {
       document.body.classList.add('sidebar-hidden');
     }
-  };
+  });
   overlay.onclick = () => {
     sidebar.classList.remove('open');
     sidebar.classList.remove('desktop-open');
@@ -474,10 +478,7 @@ function renderHome(container) {
   `).join('');
 
   container.innerHTML = `
-    <div class="page-header">
-      <h1>Bienvenido</h1>
-      <p>Elegí una herramienta para empezar.</p>
-    </div>
+    ${pageHeader({ title: 'Bienvenido' })}
     ${sections}
   `;
 }

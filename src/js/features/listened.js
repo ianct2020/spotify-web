@@ -1,6 +1,6 @@
 import { getAllPlaylistItems, getBestAvailableLikes, addTracksToPlaylist, removeTracksFromPlaylist, getAllUserPlaylists } from '../api.js';
 import { idbGetCached, idbSetCached, idbGetTimestamp } from '../idb.js';
-import { escapeHtml, confirmModal } from '../ui/components.js';
+import { escapeHtml, confirmModal, pageHeader } from '../ui/components.js';
 import { showToast } from '../ui/toast.js';
 import { openModal, closeTop } from '../ui/modal-stack.js';
 import { getListenedPlaylist, groupItemsByAlbum, openListenedAlbumsPicker, albumKey, baseName, norm } from './listened-shared.js';
@@ -183,10 +183,7 @@ export async function render(container) {
   filterText = '';
 
   container.innerHTML = `
-    <div class="page-header">
-      <h1>Álbumes escuchados</h1>
-      <p>Los álbumes de tu playlist de registro, agrupados y con buscador.</p>
-    </div>
+    ${pageHeader({ title: 'Álbumes escuchados' })}
     <div id="listened-content">
       <div class="empty-state"><div class="spinner spinner-lg"></div><div style="margin-top:16px">Leyendo configuración...</div></div>
     </div>

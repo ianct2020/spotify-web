@@ -5,7 +5,7 @@
 
 import { getBestAvailableLikes, removeLikedTracks } from '../api.js';
 import { loadSkipStats, trackIdOf, isOwner, ownerLockedMessage } from './history-data.js';
-import { escapeHtml, confirmModal } from '../ui/components.js';
+import { escapeHtml, confirmModal, pageHeader } from '../ui/components.js';
 import { showToast } from '../ui/toast.js';
 import { findTrackPreview } from '../api/itunes.js';
 import { togglePreview, playingKey } from '../ui/preview-player.js';
@@ -27,10 +27,7 @@ const PLAYS_STEPS = [3, 5, 10, 15];
 
 export async function render(container) {
   container.innerHTML = `
-    <div class="page-header">
-      <h1>Skips crónicos</h1>
-      <p>Likes que <strong>reproducís seguido pero casi siempre skipeás</strong>. Basado en tu Extended Streaming History. Un skip cuenta si le diste next después de escuchar ≥5s (así descartamos autoplay accidental).</p>
-    </div>
+    ${pageHeader({ title: 'Skips crónicos' })}
     <div id="skips-content"><div class="empty-state"><div class="spinner spinner-lg"></div><div style="margin-top:16px">Cruzando likes con historial…</div></div></div>
   `;
   await analyze();

@@ -1,5 +1,5 @@
 import { getAllLikedTracks, createPlaylist, addTracksToPlaylist, invalidatePlaylistsCache, getBestAvailableLikes } from '../api.js';
-import { showProgress, hideProgress, progressController, isCancelled, promptPlaylistName, escapeHtml } from '../ui/components.js';
+import { showProgress, hideProgress, progressController, isCancelled, promptPlaylistName, escapeHtml, pageHeader } from '../ui/components.js';
 import { showToast } from '../ui/toast.js';
 import { findArtistTopPreview } from '../api/itunes.js';
 import { attachHover } from '../ui/preview-player.js';
@@ -27,10 +27,7 @@ export async function render(container) {
   filterText = '';
 
   container.innerHTML = `
-    <div class="page-header">
-      <h1>Por artista</h1>
-      <p>Elegí uno o varios artistas y armá una playlist con todos tus likes de ellos.</p>
-    </div>
+    ${pageHeader({ title: 'Por artista' })}
     <div id="by-artist-content">
       <div class="empty-state"><div class="spinner spinner-lg"></div><div style="margin-top:16px">Leyendo cache local...</div></div>
     </div>

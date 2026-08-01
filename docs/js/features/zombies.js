@@ -1,6 +1,6 @@
-import { getAllLikedTracks, getAllUserPlaylists, getAllPlaylistItems, removeLikedTracks, removeTracksFromPlaylist } from '../api.js?v=107';
-import { showProgress, hideProgress, progressController, isCancelled, typeConfirmModal, renderTrackRow, escapeHtml } from '../ui/components.js?v=107';
-import { showToast } from '../ui/toast.js?v=107';
+import { getAllLikedTracks, getAllUserPlaylists, getAllPlaylistItems, removeLikedTracks, removeTracksFromPlaylist } from '../api.js?v=108';
+import { showProgress, hideProgress, progressController, isCancelled, typeConfirmModal, renderTrackRow, escapeHtml, pageHeader } from '../ui/components.js?v=108';
+import { showToast } from '../ui/toast.js?v=108';
 
 const FADE_DURATION_MS = 15000;
 const STAGGER_PER_ROW_MS = 80;
@@ -10,10 +10,7 @@ const selectedPlaylistUris = new Map();
 
 export function render(container) {
   container.innerHTML = `
-    <div class="page-header">
-      <h1>Zombis</h1>
-      <p>Tracks eliminados del catálogo de Spotify. Marcá los que querés quitar y borrá en batch.</p>
-    </div>
+    ${pageHeader({ title: 'Zombis' })}
     <div class="feature-actions">
       <button class="btn btn-primary" id="zombies-analyze-btn">Analizar</button>
     </div>

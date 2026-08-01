@@ -3,14 +3,14 @@
 // Preview 30s instantáneo vía iTunes (arranca en el estribillo, no suma plays
 // en tu historial de Spotify). Fallback: iframe embed oficial si iTunes no lo tiene.
 
-import { getBestAvailableLikes, removeLikedTracks } from '../api.js?v=107';
-import { loadSkipStats, trackIdOf, isOwner, ownerLockedMessage } from './history-data.js?v=107';
-import { escapeHtml, confirmModal } from '../ui/components.js?v=107';
-import { showToast } from '../ui/toast.js?v=107';
-import { findTrackPreview } from '../api/itunes.js?v=107';
-import { togglePreview, playingKey } from '../ui/preview-player.js?v=107';
-import { openTrackCard } from './track-card.js?v=107';
-import { hasUsername, loadTopLifetime } from '../api/statsfm.js?v=107';
+import { getBestAvailableLikes, removeLikedTracks } from '../api.js?v=108';
+import { loadSkipStats, trackIdOf, isOwner, ownerLockedMessage } from './history-data.js?v=108';
+import { escapeHtml, confirmModal, pageHeader } from '../ui/components.js?v=108';
+import { showToast } from '../ui/toast.js?v=108';
+import { findTrackPreview } from '../api/itunes.js?v=108';
+import { togglePreview, playingKey } from '../ui/preview-player.js?v=108';
+import { openTrackCard } from './track-card.js?v=108';
+import { hasUsername, loadTopLifetime } from '../api/statsfm.js?v=108';
 
 let cache = null;
 let minPlays = 5;    // solo tracks con ≥N plays totales (ok+skip)
@@ -27,10 +27,7 @@ const PLAYS_STEPS = [3, 5, 10, 15];
 
 export async function render(container) {
   container.innerHTML = `
-    <div class="page-header">
-      <h1>Skips crónicos</h1>
-      <p>Likes que <strong>reproducís seguido pero casi siempre skipeás</strong>. Basado en tu Extended Streaming History. Un skip cuenta si le diste next después de escuchar ≥5s (así descartamos autoplay accidental).</p>
-    </div>
+    ${pageHeader({ title: 'Skips crónicos' })}
     <div id="skips-content"><div class="empty-state"><div class="spinner spinner-lg"></div><div style="margin-top:16px">Cruzando likes con historial…</div></div></div>
   `;
   await analyze();

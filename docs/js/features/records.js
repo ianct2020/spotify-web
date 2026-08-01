@@ -2,11 +2,11 @@
 // maratones de un artista, temas en loop, rachas e hitos. Todo sale de
 // history-records.json (gen-stats.py) ya calculado, acá es solo UI.
 
-import { loadRecords, isOwner, ownerLockedMessage } from './history-data.js?v=107';
-import { escapeHtml } from '../ui/components.js?v=107';
-import { findTrackPreview, findArtistTopPreview } from '../api/itunes.js?v=107';
-import { attachHover } from '../ui/preview-player.js?v=107';
-import { openArtistCard } from './artist-card.js?v=107';
+import { loadRecords, isOwner, ownerLockedMessage } from './history-data.js?v=108';
+import { escapeHtml, pageHeader } from '../ui/components.js?v=108';
+import { findTrackPreview, findArtistTopPreview } from '../api/itunes.js?v=108';
+import { attachHover } from '../ui/preview-player.js?v=108';
+import { openArtistCard } from './artist-card.js?v=108';
 
 const MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
 const DIAS = ['lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado', 'domingo'];
@@ -30,10 +30,7 @@ function fmtHours(min) {
 
 export async function render(container) {
   container.innerHTML = `
-    <div class="page-header">
-      <h1>Récords</h1>
-      <p>Los extremos de tu historial: días épicos, maratones, loops y rachas. Datos desde 2018.</p>
-    </div>
+    ${pageHeader({ title: 'Récords' })}
     <div id="records-content"><div class="empty-state"><div class="spinner spinner-lg"></div></div></div>
   `;
 
