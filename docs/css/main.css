@@ -2651,3 +2651,233 @@ body:has(.preview-pill.show) .progress-mini {
 .tc-clickable { cursor: pointer; }
 .tc-clickable:hover .skips-title,
 .tc-clickable:hover .track-name { color: var(--color-accent); }
+
+/* ============ Vista #covers — grid denso de tapas (v=111) ============ */
+.covers-narrow-hint {
+  display: none;
+  padding: 8px 12px;
+  border-radius: var(--radius-sm);
+  background: var(--color-elevated);
+  border: 1px dashed var(--color-border);
+  color: var(--color-text-muted);
+  font-size: 12px;
+  margin-bottom: 10px;
+}
+@media (max-width: 700px) {
+  .covers-narrow-hint { display: block; }
+}
+.covers-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+.covers-summary { font-size: 13px; color: var(--color-text-secondary); }
+.covers-controls { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+.covers-control-group {
+  display: inline-flex;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+.covers-btn {
+  background: var(--color-surface);
+  color: var(--color-text-secondary);
+  border: 0;
+  padding: 6px 12px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: background .12s, color .12s;
+}
+.covers-btn:hover { background: var(--color-elevated); color: var(--color-text); }
+.covers-btn.is-on {
+  background: var(--color-accent);
+  color: white;
+}
+.covers-btn + .covers-btn { border-left: 1px solid var(--color-border); }
+.covers-select {
+  background: var(--color-surface);
+  color: var(--color-text);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  padding: 6px 10px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.covers-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(var(--cover-min, 64px), 1fr));
+  gap: 4px;
+  min-width: 0;
+}
+.cover-cell {
+  position: relative;
+  aspect-ratio: 1 / 1;
+  background: var(--color-elevated);   /* placeholder gris mientras carga */
+  border: 0;
+  padding: 0;
+  border-radius: 3px;
+  overflow: hidden;
+  cursor: pointer;
+  min-width: 0;
+}
+.cover-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  background: var(--color-elevated);
+}
+.cover-fallback {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-text-muted);
+  font-weight: 700;
+  font-size: calc(var(--cover-min, 64px) * 0.4);
+  background: var(--color-elevated);
+}
+.cover-overlay {
+  position: absolute;
+  inset: 0;
+  padding: 6px 8px;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  gap: 1px;
+  background: linear-gradient(to top, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0.55) 40%, rgba(0,0,0,0) 80%);
+  color: white;
+  opacity: 0;
+  transition: opacity .14s;
+  pointer-events: none;   /* clicks pasan al botón padre */
+  min-width: 0;
+}
+.cover-cell:hover .cover-overlay,
+.cover-cell:focus-visible .cover-overlay { opacity: 1; }
+.cover-overlay-name {
+  font-size: 11px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  line-height: 1.15;
+}
+.cover-overlay-artist {
+  font-size: 10px;
+  color: rgba(255,255,255,0.85);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cover-overlay-meta {
+  font-size: 9px;
+  color: rgba(255,255,255,0.65);
+  margin-top: 2px;
+}
+/* Cuando las celdas son chicas, el overlay se pisa el nombre — bajo tamaño de fuente aún más */
+.covers-grid[data-size="48"] .cover-overlay-name { font-size: 10px; -webkit-line-clamp: 1; }
+.covers-grid[data-size="48"] .cover-overlay-artist { font-size: 9px; }
+.covers-grid[data-size="48"] .cover-overlay-meta { display: none; }
+
+/* ============ Ficha de artista comprimida (v=111) ============ */
+.ac-modal {
+  padding: 0 !important;
+  max-height: 85vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.ac-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--color-border);
+  background: var(--color-surface);
+  flex-shrink: 0;
+  min-width: 0;
+}
+.ac-avatar {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  flex-shrink: 0;
+  overflow: hidden;
+}
+.ac-avatar img { width: 100%; height: 100%; object-fit: cover; }
+.ac-title { min-width: 0; flex: 1; }
+.ac-title h3 {
+  margin: 0;
+  font-size: 16px;
+  line-height: 1.2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ac-sub {
+  font-size: 11px;
+  color: var(--color-text-muted);
+  margin-top: 1px;
+}
+.ac-head-actions {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+  align-items: center;
+  flex-wrap: nowrap;
+}
+.ac-head-actions .btn { padding: 4px 10px; font-size: 12px; }
+
+.ac-body-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 12px 16px 16px;
+}
+.ac-stats { gap: 6px; }
+.ac-stats .tc-stat { padding: 8px 6px; }
+.ac-stats .tc-stat-v { font-size: 15px; }
+.ac-stats .tc-stat-l { font-size: 10px; }
+
+.ac-cols {
+  margin-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+.ac-col-title {
+  font-size: 12px;
+  color: var(--color-text-muted);
+  margin-bottom: 6px;
+}
+
+/* Desktop >900px: chart izquierda, top tracks derecha */
+@media (min-width: 900px) {
+  .ac-cols {
+    display: grid;
+    grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
+    gap: 16px;
+    align-items: start;
+  }
+}
+
+/* En mobile la cabecera se estruja si los 3 botones no entran — bajamos label a
+   solo icon en Preview/Spotify/Mis likes achicando padding. */
+@media (max-width: 600px) {
+  .ac-head { flex-wrap: wrap; padding: 10px 12px; }
+  .ac-head-actions { width: 100%; justify-content: flex-end; }
+  .ac-avatar { width: 40px; height: 40px; font-size: 16px; }
+  .ac-title h3 { font-size: 15px; }
+}

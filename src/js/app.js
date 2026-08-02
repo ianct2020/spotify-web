@@ -28,6 +28,7 @@ import { render as renderZeroPlays } from './features/zero-plays.js';
 import { render as renderSkips } from './features/skips.js';
 import { render as renderSearchLikes } from './features/search-likes.js';
 import { render as renderWthree } from './features/wthree.js';
+import { render as renderCovers } from './features/covers.js';
 
 async function testConnection() {
   const token = await getValidToken();
@@ -208,6 +209,9 @@ function showApp(profile) {
           </a>
           <a class="nav-link" data-route="records" href="#records">
             <span class="nav-link-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/></svg></span> Récords
+          </a>
+          <a class="nav-link" data-route="covers" href="#covers">
+            <span class="nav-link-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg></span> Mis tapas
           </a>
           <a class="nav-link" data-route="search" href="#search">
             <span class="nav-link-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></span> Buscar likes
@@ -396,6 +400,7 @@ function showApp(profile) {
   registerRoute('skips', renderSkips);
   registerRoute('search', renderSearchLikes);
   registerRoute('wthree', renderWthree);
+  registerRoute('covers', renderCovers);
 
   initRouter();
 }

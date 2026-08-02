@@ -2,15 +2,15 @@
 // por álbum). Muestra qué álbumes ya tienen picks, cuántos, y cuáles te faltan.
 // Ordenado por álbumes más escuchados primero para priorizar tu tiempo.
 
-import { spotifyFetch, getAllPlaylistItems, getAllUserPlaylists, addTracksToPlaylist, removeTracksFromPlaylist, updatePlaylistItemsCache } from '../api.js?v=110';
-import { loadHistoryStats, loadListenedAlbums, isOwner, ownerLockedMessage } from './history-data.js?v=110';
-import { escapeHtml, pageHeader } from '../ui/components.js?v=110';
-import { showToast } from '../ui/toast.js?v=110';
-import { activateMarquee, marqueeSpan } from '../ui/marquee.js?v=110';
-import { openModal, closeTop, closeById } from '../ui/modal-stack.js?v=110';
-import { getPreview } from '../api/preview-providers.js?v=110';
-import { togglePreview, playingKey } from '../ui/preview-player.js?v=110';
-import { openAlbumCard } from './album-card.js?v=110';
+import { spotifyFetch, getAllPlaylistItems, getAllUserPlaylists, addTracksToPlaylist, removeTracksFromPlaylist, updatePlaylistItemsCache } from '../api.js?v=111';
+import { loadHistoryStats, loadListenedAlbums, isOwner, ownerLockedMessage } from './history-data.js?v=111';
+import { escapeHtml, pageHeader } from '../ui/components.js?v=111';
+import { showToast } from '../ui/toast.js?v=111';
+import { activateMarquee, marqueeSpan } from '../ui/marquee.js?v=111';
+import { openModal, closeTop, closeById } from '../ui/modal-stack.js?v=111';
+import { getPreview } from '../api/preview-providers.js?v=111';
+import { togglePreview, playingKey } from '../ui/preview-player.js?v=111';
+import { openAlbumCard } from './album-card.js?v=111';
 
 const LS_KEY_ID = 'wthree_playlist_id';
 const LS_KEY_NAME = 'wthree_playlist_name';

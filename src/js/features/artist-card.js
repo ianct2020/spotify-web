@@ -98,21 +98,21 @@ async function openArtistCard(a) {
     onClose: onModalClose,
     onReveal: onModalReveal,
     html: `
-    <div class="modal card-modal" style="max-width:640px;width:min(640px,94vw)">
-      <div class="card-modal-head">
-        <div id="ac-avatar" class="card-modal-avatar" style="background:var(--color-accent-soft);color:var(--color-accent);font-weight:700">${avatarInner}</div>
-        <div class="card-modal-title">
+    <div class="modal card-modal ac-modal" style="max-width:720px;width:min(720px,94vw)">
+      <div class="ac-head">
+        <div id="ac-avatar" class="ac-avatar" style="background:var(--color-accent-soft);color:var(--color-accent);font-weight:700">${avatarInner}</div>
+        <div class="ac-title">
           <h3>${escapeHtml(a.name)}</h3>
-          <div class="card-modal-sub">Artista</div>
+          <div class="ac-sub">Artista</div>
         </div>
-        <button class="btn btn-secondary btn-sm card-modal-close" data-close-modal title="Cerrar">✕</button>
+        <div class="ac-head-actions">
+          <button class="btn btn-secondary btn-sm" id="ac-preview">▶ Preview</button>
+          <a class="btn btn-secondary btn-sm" href="https://open.spotify.com/search/${encodeURIComponent(a.name)}/artists" target="_blank" rel="noopener">↗ Spotify</a>
+          <button class="btn btn-secondary btn-sm" id="ac-mis-likes" type="button">Mis likes</button>
+          <button class="btn btn-secondary btn-sm card-modal-close" data-close-modal title="Cerrar">✕</button>
+        </div>
       </div>
-      <div class="card-modal-actions">
-        <button class="btn btn-secondary btn-sm" id="ac-preview">▶ Preview</button>
-        <a class="btn btn-secondary btn-sm" href="https://open.spotify.com/search/${encodeURIComponent(a.name)}/artists" target="_blank" rel="noopener">↗ Spotify</a>
-        <button class="btn btn-secondary btn-sm" id="ac-mis-likes" type="button">Mis likes</button>
-      </div>
-      <div id="ac-body"><div style="text-align:center;padding:24px"><div class="spinner"></div></div></div>
+      <div class="ac-body-scroll" id="ac-body"><div style="text-align:center;padding:24px"><div class="spinner"></div></div></div>
     </div>
   `,
   });
@@ -184,31 +184,38 @@ async function openArtistCard(a) {
 
   const topTracks = [...trackAcum.values()].sort((a, b) => b.plays - a.plays).slice(0, 5);
 
+  const hasChart = yearsWithArtist.some(y => y.min > 0);
   body.innerHTML = `
-    <div class="tc-stats">
+    <div class="tc-stats ac-stats">
       <div class="tc-stat"><div class="tc-stat-v">${fmtMinutes(totalMin)}</div><div class="tc-stat-l">minutos totales</div></div>
       <div class="tc-stat"><div class="tc-stat-v">${totalPlays.toLocaleString('es-AR')}</div><div class="tc-stat-l">plays</div></div>
       <div class="tc-stat"><div class="tc-stat-v">${firstYear || '—'}</div><div class="tc-stat-l">primer año</div></div>
       <div class="tc-stat"><div class="tc-stat-v">${lastYear || '—'}</div><div class="tc-stat-l">último año</div></div>
     </div>
-    ${yearsWithArtist.some(y => y.min > 0) ? `
-      <div style="font-size:12px;color:var(--color-text-muted);margin:12px 2px 6px">Minutos escuchados por año</div>
-      <div class="chart-box" style="height:180px"><canvas id="ac-chart"></canvas></div>
-    ` : ''}
-    ${topTracks.length ? `
-      <div style="font-size:12px;color:var(--color-text-muted);margin:16px 2px 6px">Tus 5 tracks más escuchados</div>
-      <div style="display:flex;flex-direction:column;gap:6px">
-        ${topTracks.map((t, i) => `
-          <div class="wrapped-top-row tc-clickable" data-uri="${t.uri || ''}" data-name="${escapeHtml(t.name)}">
-            <span class="wrapped-top-rank">${i + 1}</span>
-            <div class="wrapped-top-info">
-              <div class="wrapped-top-name">${escapeHtml(t.name)}</div>
-            </div>
-            <span class="wrapped-top-meta">${fmtMinutes(t.min)} · ${t.plays} plays</span>
+    <div class="ac-cols">
+      ${hasChart ? `
+        <div class="ac-col-chart">
+          <div class="ac-col-title">Minutos escuchados por año</div>
+          <div class="chart-box" style="height:180px"><canvas id="ac-chart"></canvas></div>
+        </div>
+      ` : ''}
+      ${topTracks.length ? `
+        <div class="ac-col-tracks">
+          <div class="ac-col-title">Tus 5 tracks más escuchados</div>
+          <div style="display:flex;flex-direction:column;gap:6px">
+            ${topTracks.map((t, i) => `
+              <div class="wrapped-top-row tc-clickable" data-uri="${t.uri || ''}" data-name="${escapeHtml(t.name)}">
+                <span class="wrapped-top-rank">${i + 1}</span>
+                <div class="wrapped-top-info">
+                  <div class="wrapped-top-name">${escapeHtml(t.name)}</div>
+                </div>
+                <span class="wrapped-top-meta">${fmtMinutes(t.min)} · ${t.plays} plays</span>
+              </div>
+            `).join('')}
           </div>
-        `).join('')}
-      </div>
-    ` : ''}
+        </div>
+      ` : ''}
+    </div>
     <div id="ac-statsfm"></div>
   `;
 
