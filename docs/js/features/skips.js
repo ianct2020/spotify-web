@@ -3,14 +3,14 @@
 // Preview 30s instantáneo vía iTunes (arranca en el estribillo, no suma plays
 // en tu historial de Spotify). Fallback: iframe embed oficial si iTunes no lo tiene.
 
-import { getBestAvailableLikes, removeLikedTracks } from '../api.js?v=109';
-import { loadSkipStats, trackIdOf, isOwner, ownerLockedMessage } from './history-data.js?v=109';
-import { escapeHtml, confirmModal, pageHeader } from '../ui/components.js?v=109';
-import { showToast } from '../ui/toast.js?v=109';
-import { getPreview } from '../api/preview-providers.js?v=109';
-import { togglePreview, playingKey } from '../ui/preview-player.js?v=109';
-import { openTrackCard } from './track-card.js?v=109';
-import { hasUsername, loadTopLifetime } from '../api/statsfm.js?v=109';
+import { getBestAvailableLikes, removeLikedTracks } from '../api.js?v=110';
+import { loadSkipStats, trackIdOf, isOwner, ownerLockedMessage } from './history-data.js?v=110';
+import { escapeHtml, confirmModal, pageHeader } from '../ui/components.js?v=110';
+import { showToast } from '../ui/toast.js?v=110';
+import { getPreview } from '../api/preview-providers.js?v=110';
+import { togglePreview, playingKey } from '../ui/preview-player.js?v=110';
+import { openTrackCard } from './track-card.js?v=110';
+import { hasUsername, loadTopLifetime } from '../api/statsfm.js?v=110';
 
 let cache = null;
 let minPlays = 5;    // solo tracks con ≥N plays totales (ok+skip)

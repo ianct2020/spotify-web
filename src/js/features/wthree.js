@@ -14,6 +14,7 @@ import { openAlbumCard } from './album-card.js';
 
 const LS_KEY_ID = 'wthree_playlist_id';
 const LS_KEY_NAME = 'wthree_playlist_name';
+const LS_KEY_HIDDEN = 'wthree_hidden_albums';
 
 // ── Estado ──
 let playlistId = null;
@@ -24,8 +25,26 @@ let historyStats = null;
 let listenedAlbums = null; // { years: [{ year, albums: [{name, artist, img, date}] }] }
 let albumTracksCache = new Map(); // key → tracks fetched from Spotify
 let selectedBucket = null; // null = all, o '0'/'1'/'2'/'3'/'4+'
+let hiddenSet = null;      // Set<key> de álbumes marcados como "ya está, no me interesa"
+let showingHidden = false; // vista invertida (mostrar SOLO los ocultos para restaurarlos)
 
 const albumKey = (name, artist) => `${(name || '').toLowerCase().trim()}||${(artist || '').toLowerCase().trim()}`;
+
+function loadHidden() {
+  try {
+    const arr = JSON.parse(localStorage.getItem(LS_KEY_HIDDEN)) || [];
+    hiddenSet = new Set(arr);
+  } catch { hiddenSet = new Set(); }
+}
+function saveHidden() {
+  try { localStorage.setItem(LS_KEY_HIDDEN, JSON.stringify([...hiddenSet])); } catch { /* full */ }
+}
+function toggleHidden(key) {
+  if (!hiddenSet) loadHidden();
+  if (hiddenSet.has(key)) hiddenSet.delete(key);
+  else hiddenSet.add(key);
+  saveHidden();
+}
 
 // Cuando el preview global cambia, resetear los ▶/⏸ de la tracklist abierta.
 // Los que corresponden al key sonando quedan como ⏸, el resto vuelve a ▶.
@@ -237,8 +256,17 @@ function crossWithHistory(stats, listened) {
 }
 
 function renderBuckets(content) {
+  if (!hiddenSet) loadHidden();
+
+  // "Ocultos" NO cuentan en los buckets normales — desaparecen de la vista y
+  // de los contadores. En la vista invertida (showingHidden) mostramos SOLO
+  // esos, con el botón invertido para restaurarlos.
+  const visible = showingHidden
+    ? albumsList.filter(a => hiddenSet.has(albumKey(a.name, a.artist)))
+    : albumsList.filter(a => !hiddenSet.has(albumKey(a.name, a.artist)));
+
   const buckets = { '0': [], '1': [], '2': [], '3': [], '4+': [] };
-  for (const a of albumsList) {
+  for (const a of visible) {
     const n = a.picks.length;
     if (n === 0) buckets['0'].push(a);
     else if (n === 1) buckets['1'].push(a);
@@ -247,9 +275,10 @@ function renderBuckets(content) {
     else buckets['4+'].push(a);
   }
 
-  // Meta info: fuentes de datos
-  const historyCount = albumsList.filter(a => a.source === 'history').length;
-  const listenedCount = albumsList.filter(a => a.source === 'listened').length;
+  // Meta info: fuentes de datos (sobre el conjunto visible)
+  const historyCount = visible.filter(a => a.source === 'history').length;
+  const listenedCount = visible.filter(a => a.source === 'listened').length;
+  const hiddenCount = hiddenSet.size;
 
   const isSel = (k) => selectedBucket === k;
   const bucketDef = [
@@ -260,14 +289,28 @@ function renderBuckets(content) {
     { key: '4+', label: '⚠️ más de 3', cls: 'wthree-stat-warn', count: buckets['4+'].length },
   ];
 
+  const hiddenToggle = (hiddenCount > 0 && !showingHidden)
+    ? `<button class="btn btn-secondary btn-sm" id="wthree-show-hidden" title="Ver los que ocultaste">👁️‍🗨️ Ocultos (${hiddenCount})</button>`
+    : '';
+
   content.innerHTML = `
     <div class="wthree-header">
       <div class="wthree-header-name">
         <div style="font-size:11px;color:var(--color-text-muted);text-transform:uppercase;letter-spacing:0.06em">Playlist activa</div>
         <div style="font-size:15px;font-weight:600">${escapeHtml(playlistName || 'w three')}</div>
       </div>
-      <button class="btn btn-secondary btn-sm" id="wthree-change">Cambiar</button>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end">
+        ${hiddenToggle}
+        <button class="btn btn-secondary btn-sm" id="wthree-change">Cambiar</button>
+      </div>
     </div>
+
+    ${showingHidden ? `
+      <div class="wthree-filter-active">
+        Mostrando <strong>solo los ocultos</strong> (${hiddenCount})
+        <button class="wthree-clear-filter" id="wthree-back-to-all">✕ Volver a la lista</button>
+      </div>
+    ` : ''}
 
     <div class="wthree-summary">
       ${bucketDef.map(b => `
@@ -292,12 +335,22 @@ function renderBuckets(content) {
     ${buckets['4+'].length && (!selectedBucket || selectedBucket === '4+') ? renderBucket('⚠️ Más de 3 picks — sacar alguno?', buckets['4+'], 'warn', selectedBucket === '4+' ? 999 : 10) : ''}
 
     <div style="font-size:11px;color:var(--color-text-muted);margin-top:14px;text-align:center">
-      ${historyCount} álbumes del top historial${listenedCount ? ` · ${listenedCount} más detectados en tu historial de escucha` : ''} · ${picksByAlbum.size} álbumes en la playlist
+      ${historyCount} álbumes del top historial${listenedCount ? ` · ${listenedCount} más detectados en tu historial de escucha` : ''} · ${picksByAlbum.size} álbumes en la playlist${hiddenCount && !showingHidden ? ` · ${hiddenCount} oculto${hiddenCount === 1 ? '' : 's'}` : ''}
     </div>
   `;
 
   document.getElementById('wthree-change').onclick = reset;
   document.getElementById('wthree-clear-filter')?.addEventListener('click', () => {
+    selectedBucket = null;
+    renderBuckets(content);
+  });
+  document.getElementById('wthree-show-hidden')?.addEventListener('click', () => {
+    showingHidden = true;
+    selectedBucket = null;
+    renderBuckets(content);
+  });
+  document.getElementById('wthree-back-to-all')?.addEventListener('click', () => {
+    showingHidden = false;
     selectedBucket = null;
     renderBuckets(content);
   });
@@ -333,6 +386,7 @@ function renderBucket(title, albums, kind, limit) {
 
 function renderAlbumRow(a, kind) {
   const key = albumKey(a.name, a.artist);
+  const isHidden = hiddenSet && hiddenSet.has(key);
   const badge = a.picks.length === 0
     ? `<span class="wthree-pill wthree-pill-danger">0 / 3</span>`
     : a.picks.length === 3
@@ -340,6 +394,9 @@ function renderAlbumRow(a, kind) {
       : a.picks.length > 3
         ? `<span class="wthree-pill wthree-pill-warn">${a.picks.length} / 3</span>`
         : `<span class="wthree-pill">${a.picks.length} / 3</span>`;
+
+  // Ojo tachado = ocultar; ojo normal = mostrar de vuelta (en la vista invertida).
+  const hideBtn = `<button class="wthree-hide-btn" data-hide-key="${escapeHtml(key)}" title="${isHidden ? 'Restaurar en la lista' : 'Ocultar este álbum'}" aria-label="${isHidden ? 'Restaurar' : 'Ocultar'}">${isHidden ? '👁️' : '🙈'}</button>`;
 
   return `
     <div class="wthree-album-row" data-album-key="${escapeHtml(key)}">
@@ -352,6 +409,7 @@ function renderAlbumRow(a, kind) {
         ${a.min > 0 ? `<div class="wthree-album-meta">${fmtMinutesShort(a.min)} · ${a.plays} plays</div>` : `<div class="wthree-album-meta" style="opacity:0.6">${a.detectedIn ? `escuchado en ${a.detectedIn} · fuera del top 1000` : 'fuera del top / de la playlist'}</div>`}
       </div>
       ${badge}
+      ${hideBtn}
     </div>
   `;
 }
@@ -368,6 +426,21 @@ function wireAlbumClicks(root) {
       const a = albumsList.find(x => albumKey(x.name, x.artist) === key);
       if (a) openAlbumModal(a);
     };
+  });
+  // Botón "ocultar / restaurar" por fila — stopPropagation para no abrir el modal.
+  root.querySelectorAll('.wthree-hide-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const key = btn.dataset.hideKey;
+      const wasHidden = hiddenSet.has(key);
+      toggleHidden(key);
+      // Si estábamos en la vista invertida y ya no quedan ocultos, volvemos a la
+      // vista normal para no dejar al usuario mirando una lista vacía.
+      if (showingHidden && hiddenSet.size === 0) showingHidden = false;
+      showToast(wasHidden ? 'Álbum restaurado en la lista' : 'Álbum ocultado', 'info');
+      renderBuckets(root);
+    });
   });
   // "Ver N más" buttons — no implementado por ahora (MVP)
   root.querySelectorAll('[data-more]').forEach(btn => {

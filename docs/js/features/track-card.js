@@ -3,13 +3,13 @@
 // días distintos, récord en un día — más preview iTunes y link a Spotify.
 // Se abre desde cualquier feature con openTrackCard({ id, name, artist, album, img }).
 
-import { loadTrackPlays, loadTrackDetail, loadHistoryStats, isOwner } from './history-data.js?v=109';
-import { escapeHtml } from '../ui/components.js?v=109';
-import { getPreview } from '../api/preview-providers.js?v=109';
-import { togglePreview, playingKey } from '../ui/preview-player.js?v=109';
-import { hasUsername, findTrackId, getTrackCurrentStats, loadTopLifetime } from '../api/statsfm.js?v=109';
-import { openAlbumCard } from './album-card.js?v=109';
-import { openModal, closeTop } from '../ui/modal-stack.js?v=109';
+import { loadTrackPlays, loadTrackDetail, loadHistoryStats, isOwner } from './history-data.js?v=110';
+import { escapeHtml } from '../ui/components.js?v=110';
+import { getPreview } from '../api/preview-providers.js?v=110';
+import { togglePreview, playingKey } from '../ui/preview-player.js?v=110';
+import { hasUsername, findTrackId, getTrackCurrentStats, loadTopLifetime } from '../api/statsfm.js?v=110';
+import { openAlbumCard } from './album-card.js?v=110';
+import { openModal, closeTop } from '../ui/modal-stack.js?v=110';
 
 const MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
 
