@@ -16,7 +16,7 @@
 // pasado el TTL. Los URLs de audio los cachea cada proveedor por su cuenta
 // (itunes.js ya lo hace; Deezer usa el suyo interno más abajo).
 
-import { findTrackPreview } from './itunes.js?v=110';
+import { findTrackPreview } from './itunes.js?v=111';
 
 const PROVIDER_CACHE_KEY = 'preview_provider_map_v1';
 const PROVIDER_CACHE_MAX = 800;
