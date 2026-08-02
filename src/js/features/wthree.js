@@ -8,6 +8,9 @@ import { escapeHtml, pageHeader } from '../ui/components.js';
 import { showToast } from '../ui/toast.js';
 import { activateMarquee, marqueeSpan } from '../ui/marquee.js';
 import { openModal, closeTop, closeById } from '../ui/modal-stack.js';
+import { getPreview } from '../api/preview-providers.js';
+import { togglePreview, playingKey } from '../ui/preview-player.js';
+import { openAlbumCard } from './album-card.js';
 
 const LS_KEY_ID = 'wthree_playlist_id';
 const LS_KEY_NAME = 'wthree_playlist_name';
@@ -23,6 +26,16 @@ let albumTracksCache = new Map(); // key → tracks fetched from Spotify
 let selectedBucket = null; // null = all, o '0'/'1'/'2'/'3'/'4+'
 
 const albumKey = (name, artist) => `${(name || '').toLowerCase().trim()}||${(artist || '').toLowerCase().trim()}`;
+
+// Cuando el preview global cambia, resetear los ▶/⏸ de la tracklist abierta.
+// Los que corresponden al key sonando quedan como ⏸, el resto vuelve a ▶.
+document.addEventListener('previewchange', (e) => {
+  const key = e.detail?.key || '';
+  document.querySelectorAll('.wt-play-btn').forEach(btn => {
+    if (btn.disabled) return;
+    btn.textContent = (key === `wt:${btn.dataset.playId}`) ? '⏸' : '▶';
+  });
+});
 
 export async function render(container) {
   playlistId = localStorage.getItem(LS_KEY_ID);
@@ -369,30 +382,64 @@ function wireAlbumClicks(root) {
 async function openAlbumModal(a) {
   const modalId = 'wthree-album-modal';
   closeById(modalId);
+
+  // Estructura nueva (v=109): modal compacto ≤85vh con 3 zonas verticales:
+  // 1. Header fijo (chip w-three · álbum + tapa chica + nombre/artista + meta).
+  // 2. Zona scrolleable (tracklist + panel de orden — cada uno con scroll
+  //    interno propio). Es la que crece o achica.
+  // 3. Footer fijo abajo con "Guardar cambios" full-width.
+  // El .modal en sí NUNCA se scrollea — todo el scroll vive DENTRO.
+  const coverImg = a.img
+    ? `<img src="${a.img}" alt="" class="wt-cover">`
+    : `<div class="wt-cover wt-cover-empty">♪</div>`;
+
   const overlay = openModal({
     id: modalId,
     html: `
-    <div class="modal card-modal album-modal" style="max-width:520px;width:min(520px,94vw)">
-      <div class="card-modal-head-simple">
-        <div class="card-modal-eyebrow">W-Three · álbum</div>
-        <button class="btn btn-secondary btn-sm card-modal-close" data-close-modal>✕</button>
+    <div class="modal wt-modal">
+      <div class="wt-head">
+        <div class="wt-head-top">
+          <div class="card-modal-eyebrow">W-Three · álbum</div>
+          <button class="btn btn-secondary btn-sm card-modal-close" data-close-modal>✕</button>
+        </div>
+        <div class="wt-head-body">
+          <button class="wt-cover-btn" id="wt-open-album" type="button" title="Ver ficha del álbum">${coverImg}</button>
+          <div class="wt-head-info">
+            <button class="wt-title-btn" id="wt-open-album-name" type="button">${escapeHtml(a.name)}</button>
+            <div class="wt-artist">${escapeHtml(a.artist)}</div>
+            <div class="wt-meta" id="wt-meta">Cargando…</div>
+          </div>
+        </div>
       </div>
-      <div class="album-modal-body" style="gap:6px">
-        ${a.img
-          ? `<img src="${a.img}" alt="" class="album-modal-cover" style="width:140px;height:140px;max-width:45vw;max-height:45vw">`
-          : `<div class="album-modal-cover album-modal-cover-empty" style="width:140px;height:140px;max-width:45vw;max-height:45vw">♪</div>`}
-        <div class="album-modal-name">${escapeHtml(a.name)}</div>
-        <div style="color:var(--color-text-muted);font-size:13px">${escapeHtml(a.artist)}</div>
+      <div class="wt-scroll" id="wt-scroll">
+        <div style="text-align:center;padding:16px"><div class="spinner"></div></div>
       </div>
-      <div id="wt-modal-body"><div style="text-align:center;padding:16px"><div class="spinner"></div></div></div>
+      <div class="wt-footer">
+        <button class="btn btn-primary" id="wt-save" disabled>Cargando…</button>
+      </div>
     </div>
   `,
   });
 
-  const body = document.getElementById('wt-modal-body');
+  // C1: clic en tapa o nombre del álbum → ficha de álbum APILADA encima.
+  const openAlbumFicha = () => openAlbumCard({
+    name: a.name, artist: a.artist, img: a.img,
+    plays: a.plays || 0, min: a.min || 0,
+  });
+  overlay.querySelector('#wt-open-album').onclick = openAlbumFicha;
+  overlay.querySelector('#wt-open-album-name').onclick = openAlbumFicha;
+
+  const scroll = overlay.querySelector('#wt-scroll');
+  const saveBtn = overlay.querySelector('#wt-save');
+  const metaEl = overlay.querySelector('#wt-meta');
+
   const tracks = await fetchAlbumTracks(a);
   if (!tracks.length) {
-    body.innerHTML = `<p style="color:var(--color-text-muted);text-align:center;padding:12px">No pude cargar los tracks del álbum desde Spotify. Ya está: ${a.picks.length} pick${a.picks.length === 1 ? '' : 's'}.</p>`;
+    metaEl.textContent = `${a.picks.length} en w-three`;
+    scroll.innerHTML = `<p style="color:var(--color-text-muted);text-align:center;padding:16px">No pude cargar los tracks del álbum desde Spotify. Ya está: ${a.picks.length} pick${a.picks.length === 1 ? '' : 's'}.</p>`;
+    saveBtn.textContent = 'Cerrar';
+    saveBtn.disabled = false;
+    saveBtn.onclick = () => closeById(modalId);
     return;
   }
 
@@ -404,7 +451,6 @@ async function openAlbumModal(a) {
       playsByTrackName.set(norm, (playsByTrackName.get(norm) || 0) + (t.plays || 0));
     }
   }
-  // También revisar años (por si un track fuerte de un año particular no está en top all-time)
   for (const y of (historyStats?.years || [])) {
     for (const t of (y.top_tracks || [])) {
       if ((t.artist || '').toLowerCase() !== (a.artist || '').toLowerCase()) continue;
@@ -425,7 +471,6 @@ async function openAlbumModal(a) {
     };
   });
 
-  // Sugerencias: top 3 por plays entre los NO pickeados (si el álbum tiene <3 picks)
   const missingSlots = Math.max(0, 3 - a.picks.length);
   const suggestions = trackData
     .filter(t => !t.picked && t.plays > 0)
@@ -434,38 +479,34 @@ async function openAlbumModal(a) {
     .map(t => t.id);
   const suggestedSet = new Set(suggestions);
 
-  // Orden inicial: picks ordenados por su posición en la playlist (ascendente)
   const origOrder = [...a.picks].sort((x, y) => (x.pos ?? 0) - (y.pos ?? 0));
   let orderedPicks = origOrder.map(p => ({ id: p.id, uri: p.uri, name: p.name }));
 
-  const trackByUri = new Map(trackData.map(t => [t.uri, t]));
+  metaEl.textContent = `${tracks.length} pistas · ${a.picks.length} en w-three${suggestions.length ? ` · 💡 ${suggestions.length} sugerido${suggestions.length === 1 ? '' : 's'}` : ''}`;
 
-  body.innerHTML = `
-    <div style="font-size:12px;color:var(--color-text-muted);margin:0 0 10px">
-      ${tracks.length} tracks · <span id="wt-picked-count">${a.picks.length}</span> en w-three
-      ${suggestions.length > 0 ? ` · <span style="color:var(--color-accent)">💡 ${suggestions.length} sugerido${suggestions.length === 1 ? '' : 's'}</span>` : ''}
+  scroll.innerHTML = `
+    <div class="wt-tracklist-wrap">
+      <div class="wt-section-title">Pistas del álbum</div>
+      <div class="wthree-tracklist wt-tracklist">
+        ${trackData.map((t, i) => `
+          <label class="wthree-track ${t.picked ? 'wthree-track-picked' : ''} ${suggestedSet.has(t.id) ? 'wthree-track-suggested' : ''}">
+            <input type="checkbox" class="wthree-track-check" data-id="${t.id}" data-uri="${t.uri}" data-name="${escapeHtml(t.name)}" ${t.picked ? 'checked' : ''}>
+            <span class="wthree-track-num">${i + 1}</span>
+            <span class="wthree-track-name">${escapeHtml(t.name)}</span>
+            <span class="wthree-track-plays">${t.plays > 0 ? t.plays : ''}</span>
+            <button type="button" class="wt-play-btn" data-play-id="${t.id}" data-play-name="${escapeHtml(t.name)}" title="Preview 30s" aria-label="Preview de ${escapeHtml(t.name)}">▶</button>
+          </label>
+        `).join('')}
+      </div>
+      ${suggestions.length > 0 ? `<button class="btn btn-secondary btn-sm wt-suggest-btn" id="wt-add-suggested">💡 Agregar los ${suggestions.length} sugeridos</button>` : ''}
     </div>
-    <div class="wthree-tracklist">
-      ${trackData.map((t, i) => `
-        <label class="wthree-track ${t.picked ? 'wthree-track-picked' : ''} ${suggestedSet.has(t.id) ? 'wthree-track-suggested' : ''}">
-          <input type="checkbox" class="wthree-track-check" data-id="${t.id}" data-uri="${t.uri}" data-name="${escapeHtml(t.name)}" ${t.picked ? 'checked' : ''}>
-          <span class="wthree-track-num">${i + 1}</span>
-          <span class="wthree-track-name">${escapeHtml(t.name)}</span>
-          ${t.plays > 0 ? `<span class="wthree-track-plays">${t.plays} play${t.plays === 1 ? '' : 's'}</span>` : ''}
-          ${suggestedSet.has(t.id) ? `<span class="wthree-track-tag">sugerido</span>` : ''}
-        </label>
-      `).join('')}
-    </div>
-
     <div class="wthree-order-panel" id="wt-order-panel"></div>
-
-    <div style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap">
-      ${suggestions.length > 0 ? `<button class="btn btn-primary btn-sm" id="wt-add-suggested" style="flex:1;min-width:180px">Agregar los ${suggestions.length} sugeridos</button>` : ''}
-      <button class="btn btn-secondary btn-sm" id="wt-save" style="flex:1;min-width:100px">Guardar cambios</button>
-    </div>
   `;
 
-  const orderPanel = document.getElementById('wt-order-panel');
+  saveBtn.textContent = 'Guardar cambios';
+  saveBtn.disabled = false;
+
+  const orderPanel = overlay.querySelector('#wt-order-panel');
 
   function renderOrderPanel() {
     if (orderedPicks.length === 0) {
@@ -477,7 +518,7 @@ async function openAlbumModal(a) {
         Orden dentro del álbum en la playlist
         <span class="wthree-order-hint">(1ra = la que más te gusta)</span>
       </div>
-      <div class="wthree-order-list">
+      <div class="wthree-order-list wt-order-scroll">
         ${orderedPicks.map((p, i) => `
           <div class="wthree-order-item" data-id="${p.id}">
             <span class="wthree-order-rank">${i + 1}</span>
@@ -501,29 +542,52 @@ async function openAlbumModal(a) {
   }
   renderOrderPanel();
 
-  // Cuando toggle un checkbox, actualizar orderedPicks
-  body.querySelectorAll('.wthree-track-check').forEach(cb => {
+  // Toggle checkbox → actualizar orderedPicks + meta.
+  const updateMeta = () => {
+    metaEl.textContent = `${tracks.length} pistas · ${orderedPicks.length} en w-three${suggestions.length ? ` · 💡 ${suggestions.length} sugerido${suggestions.length === 1 ? '' : 's'}` : ''}`;
+  };
+  scroll.querySelectorAll('.wthree-track-check').forEach(cb => {
     cb.addEventListener('change', () => {
       const id = cb.dataset.id;
       const uri = cb.dataset.uri;
       const name = cb.dataset.name;
       if (cb.checked) {
-        if (!orderedPicks.some(p => p.id === id)) {
-          orderedPicks.push({ id, uri, name });
-        }
+        if (!orderedPicks.some(p => p.id === id)) orderedPicks.push({ id, uri, name });
       } else {
         orderedPicks = orderedPicks.filter(p => p.id !== id);
       }
-      document.getElementById('wt-picked-count').textContent = orderedPicks.length;
+      updateMeta();
       renderOrderPanel();
     });
   });
 
-  const addBtn = document.getElementById('wt-add-suggested');
+  // C2: ▶ preview por track (cadena de proveedores). stopPropagation para
+  // que el click en el botón NO togglee el checkbox del <label> padre.
+  scroll.querySelectorAll('.wt-play-btn').forEach(btn => {
+    const id = btn.dataset.playId;
+    const name = btn.dataset.playName;
+    const setLabel = () => {
+      btn.textContent = playingKey() === `wt:${id}` ? '⏸' : '▶';
+    };
+    setLabel();
+    btn.addEventListener('click', async (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      btn.textContent = '…';
+      const res = await togglePreview(`wt:${id}`, async () => {
+        return await getPreview({ name, artist: a.artist, spotifyId: id });
+      });
+      if (res === true) btn.textContent = '⏸';
+      else if (res === null) { btn.textContent = '—'; btn.title = 'Sin preview'; btn.disabled = true; }
+      else btn.textContent = '▶';
+    });
+  });
+
+  const addBtn = overlay.querySelector('#wt-add-suggested');
   if (addBtn) {
     addBtn.onclick = () => {
       suggestions.forEach(id => {
-        const cb = body.querySelector(`.wthree-track-check[data-id="${id}"]`);
+        const cb = scroll.querySelector(`.wthree-track-check[data-id="${id}"]`);
         if (cb && !cb.checked) {
           cb.checked = true;
           cb.dispatchEvent(new Event('change'));
@@ -533,7 +597,7 @@ async function openAlbumModal(a) {
     };
   }
 
-  document.getElementById('wt-save').onclick = () => applyChanges(a, body, orderedPicks, origOrder);
+  saveBtn.onclick = () => applyChanges(a, saveBtn, orderedPicks, origOrder);
 }
 
 async function fetchAlbumTracks(a) {
@@ -562,7 +626,7 @@ async function fetchAlbumTracks(a) {
   }
 }
 
-async function applyChanges(a, body, orderedPicks, origOrder) {
+async function applyChanges(a, saveBtn, orderedPicks, origOrder) {
   // Diferencia entre el orden nuevo y el original
   const origIds = origOrder.map(p => p.id);
   const newIds = orderedPicks.map(p => p.id);
@@ -582,7 +646,6 @@ async function applyChanges(a, body, orderedPicks, origOrder) {
     return;
   }
 
-  const saveBtn = document.getElementById('wt-save');
   saveBtn.disabled = true;
   saveBtn.textContent = 'Guardando…';
   try {

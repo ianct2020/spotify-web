@@ -3,14 +3,14 @@
 // Preview 30s instantáneo vía iTunes (arranca en el estribillo, no suma plays
 // en tu historial de Spotify). Fallback: iframe embed oficial si iTunes no lo tiene.
 
-import { getBestAvailableLikes, removeLikedTracks } from '../api.js?v=108';
-import { loadSkipStats, trackIdOf, isOwner, ownerLockedMessage } from './history-data.js?v=108';
-import { escapeHtml, confirmModal, pageHeader } from '../ui/components.js?v=108';
-import { showToast } from '../ui/toast.js?v=108';
-import { findTrackPreview } from '../api/itunes.js?v=108';
-import { togglePreview, playingKey } from '../ui/preview-player.js?v=108';
-import { openTrackCard } from './track-card.js?v=108';
-import { hasUsername, loadTopLifetime } from '../api/statsfm.js?v=108';
+import { getBestAvailableLikes, removeLikedTracks } from '../api.js?v=109';
+import { loadSkipStats, trackIdOf, isOwner, ownerLockedMessage } from './history-data.js?v=109';
+import { escapeHtml, confirmModal, pageHeader } from '../ui/components.js?v=109';
+import { showToast } from '../ui/toast.js?v=109';
+import { getPreview } from '../api/preview-providers.js?v=109';
+import { togglePreview, playingKey } from '../ui/preview-player.js?v=109';
+import { openTrackCard } from './track-card.js?v=109';
+import { hasUsername, loadTopLifetime } from '../api/statsfm.js?v=109';
 
 let cache = null;
 let minPlays = 5;    // solo tracks con ≥N plays totales (ok+skip)
@@ -279,11 +279,13 @@ function wireRows() {
       }
       closeEmbeds(content);
       const artist = (r.track.artists || []).map(a => a.name || a)[0] || '';
+      // No pasamos spotifyId a getPreview a propósito: en Skips el iframe
+      // embed va INLINE en la fila (toggleEmbed) — no queremos que la cadena
+      // lo abra en el pill flotante y encima una segunda fuente en la fila.
       const res = await togglePreview(`sk:${r.id}`, async () => {
-        const p = await findTrackPreview(artist, r.track.name || '');
-        return p && { url: p.url, label: `${r.track.name} — ${artist}` };
+        return await getPreview({ name: r.track.name || '', artist });
       });
-      if (res === null) toggleEmbed(r.id, btn); // iTunes no lo tiene → embed Spotify
+      if (res === null) toggleEmbed(r.id, btn); // ni iTunes ni Deezer → embed Spotify inline
     };
   });
 

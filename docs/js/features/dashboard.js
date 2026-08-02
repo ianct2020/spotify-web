@@ -1,16 +1,16 @@
-import { getAllLikedTracks, invalidateLikesCache, exportAllData, importAllData, getCurrentUserId, syncLikesIncremental, getLikesCacheTimestamp, getBestAvailableLikes, getAllPlaylistItems } from '../api.js?v=108';
-import { showProgress, hideProgress, alertModal, escapeHtml, pageHeader } from '../ui/components.js?v=108';
-import { openModal, closeTop } from '../ui/modal-stack.js?v=108';
-import { showToast } from '../ui/toast.js?v=108';
-import { openListenedAlbumsPicker } from './listened-shared.js?v=108';
-import { loadHistoryStats, loadListenedAlbums } from './history-data.js?v=108';
-import { findArtistTopPreview } from '../api/itunes.js?v=108';
-import { hoverIn, hoverOut } from '../ui/preview-player.js?v=108';
-import { hasUsername, getUsername } from '../api/statsfm.js?v=108';
-import { loadHistoryStats as _loadStatsForCounter } from './history-data.js?v=108';
-import { openArtistCard } from './artist-card.js?v=108';
-import { openAlbumCard } from './album-card.js?v=108';
-import { activateMarquee, marqueeSpan } from '../ui/marquee.js?v=108';
+import { getAllLikedTracks, invalidateLikesCache, exportAllData, importAllData, getCurrentUserId, syncLikesIncremental, getLikesCacheTimestamp, getBestAvailableLikes, getAllPlaylistItems } from '../api.js?v=109';
+import { showProgress, hideProgress, alertModal, escapeHtml, pageHeader } from '../ui/components.js?v=109';
+import { openModal, closeTop } from '../ui/modal-stack.js?v=109';
+import { showToast } from '../ui/toast.js?v=109';
+import { openListenedAlbumsPicker } from './listened-shared.js?v=109';
+import { loadHistoryStats, loadListenedAlbums } from './history-data.js?v=109';
+import { getArtistTopPreview } from '../api/preview-providers.js?v=109';
+import { hoverIn, hoverOut } from '../ui/preview-player.js?v=109';
+import { hasUsername, getUsername } from '../api/statsfm.js?v=109';
+import { loadHistoryStats as _loadStatsForCounter } from './history-data.js?v=109';
+import { openArtistCard } from './artist-card.js?v=109';
+import { openAlbumCard } from './album-card.js?v=109';
+import { activateMarquee, marqueeSpan } from '../ui/marquee.js?v=109';
 
 let charts = [];
 let _loadController = null;
@@ -1084,8 +1084,7 @@ function artistHoverHandlers(labels) {
       if (elements?.length) {
         const name = labels[elements[0].index];
         hoverIn(`dash-art:${name}`, async () => {
-          const p = await findArtistTopPreview(name);
-          return p && { url: p.url, label: `${p.track} — ${p.artist}` };
+          return await getArtistTopPreview(name);
         }, 500);
       } else {
         hoverOut();

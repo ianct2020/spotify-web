@@ -1294,6 +1294,12 @@ body:has(.preview-pill.show) .progress-mini {
   pointer-events: auto;
   transform: none;
 }
+.preview-pill-main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  gap: 1px;
+}
 .preview-pill-label {
   font-size: 13px;
   font-weight: 500;
@@ -1301,6 +1307,34 @@ body:has(.preview-pill.show) .progress-mini {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+.preview-pill-provider {
+  font-size: 10px;
+  color: var(--color-text-muted);
+  line-height: 1;
+  letter-spacing: 0.02em;
+}
+.preview-pill-provider:empty { display: none; }
+
+/* Cuando el proveedor devuelve type:'embed' (Spotify), el pill deja de ser
+   una píldora chica y se agranda para contener el iframe. */
+.preview-pill.preview-pill-embedded {
+  border-radius: var(--radius-md, 10px);
+  padding: 10px 10px 8px 12px;
+  align-items: stretch;
+  max-width: min(360px, calc(100vw - 40px));
+  flex-direction: column;
+  gap: 6px;
+}
+.preview-pill-embed { display: block; }
+.preview-pill-embed[hidden] { display: none; }
+.preview-pill-provider-embed { margin-top: 4px; }
+.preview-pill.preview-pill-embedded .preview-pill-close {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  background: color-mix(in srgb, var(--color-surface) 80%, transparent);
+  border-radius: 999px;
 }
 .preview-pill-close {
   background: none;
@@ -2428,6 +2462,171 @@ body:has(.preview-pill.show) .progress-mini {
 }
 .wthree-order-btn:disabled { opacity: 0.3; cursor: not-allowed; }
 
+/* ============ W-Three: modal por álbum (v=109, compacto) ============ */
+/* Layout de 3 zonas verticales — head y footer fijos, medio con scrolls
+   internos. El .wt-modal en sí NUNCA se scrollea. */
+.wt-modal {
+  padding: 0 !important;
+  max-width: 520px;
+  width: min(520px, 94vw);
+  max-height: 85vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.wt-head {
+  padding: 12px 16px 10px;
+  border-bottom: 1px solid var(--color-border);
+  background: var(--color-surface);
+  flex-shrink: 0;
+}
+.wt-head-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.wt-head-body {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  min-width: 0;
+}
+.wt-cover-btn {
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  border-radius: 6px;
+  flex-shrink: 0;
+  transition: transform .12s;
+}
+.wt-cover-btn:hover { transform: scale(1.04); }
+.wt-cover {
+  width: 64px;
+  height: 64px;
+  border-radius: 6px;
+  object-fit: cover;
+  display: block;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.35);
+}
+.wt-cover-empty {
+  background: var(--color-elevated);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-text-muted);
+  font-size: 22px;
+}
+.wt-head-info { min-width: 0; flex: 1; }
+.wt-title-btn {
+  background: none;
+  border: 0;
+  padding: 0;
+  color: var(--color-text);
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  text-align: left;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+  display: block;
+}
+.wt-title-btn:hover { color: var(--color-accent); }
+.wt-artist { font-size: 13px; color: var(--color-text-secondary); margin-top: 1px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wt-meta { font-size: 11px; color: var(--color-text-muted); margin-top: 5px; }
+
+.wt-scroll {
+  flex: 1;
+  min-height: 0;             /* clave: permite que overflow-y funcione dentro del flex */
+  overflow-y: auto;
+  padding: 12px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.wt-section-title {
+  font-size: 11px;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 2px;
+}
+.wt-tracklist-wrap { min-width: 0; }
+/* Tracklist: alto fijo para ~5 filas visibles, resto con scroll interno propio.
+   Cada fila ~36px + gap 4px = ~200px total. */
+.wt-tracklist {
+  max-height: 220px;
+  overflow-y: auto;
+  padding-right: 2px;
+}
+.wt-suggest-btn { width: 100%; margin-top: 8px; }
+/* Panel de orden con su scroll interno propio */
+.wt-order-scroll {
+  max-height: 180px;
+  overflow-y: auto;
+  padding-right: 2px;
+}
+
+.wt-footer {
+  padding: 10px 16px 12px;
+  border-top: 1px solid var(--color-border);
+  background: var(--color-surface);
+  flex-shrink: 0;
+}
+.wt-footer .btn {
+  width: 100%;
+  justify-content: center;
+}
+
+/* Botón ▶ chico por fila — 26×26 con look de píldora */
+.wt-play-btn {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: var(--color-surface);
+  color: var(--color-text);
+  border: 1px solid var(--color-border);
+  cursor: pointer;
+  font-size: 11px;
+  line-height: 1;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: background .12s, border-color .12s, transform .1s;
+}
+.wt-play-btn:hover:not(:disabled) {
+  background: var(--color-accent);
+  border-color: var(--color-accent);
+  color: white;
+}
+.wt-play-btn:disabled { opacity: 0.35; cursor: default; }
+.wt-play-btn:active { transform: scale(0.94); }
+
+/* Filas del tracklist más bajas dentro del modal compacto */
+.wt-tracklist .wthree-track { padding: 6px 10px; font-size: 12.5px; }
+.wt-tracklist .wthree-track-plays { min-width: 22px; text-align: right; }
+
+/* Desktop wide: 2 columnas (tracklist + panel orden lado a lado) manteniendo
+   la densidad y los scrolls internos. */
+@media (min-width: 900px) {
+  .wt-modal { max-width: 720px; width: min(720px, 94vw); }
+  .wt-scroll {
+    display: grid;
+    grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
+    gap: 14px;
+    align-items: start;
+  }
+  .wt-tracklist { max-height: 340px; }
+  .wt-order-scroll { max-height: 340px; }
+  .wthree-order-panel:not(:empty) { margin-top: 0; }
+}
+
 @media (max-width: 600px) {
   .wthree-summary { grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 4px; }
   .wthree-stat { padding: 8px 4px; }
@@ -2435,8 +2634,12 @@ body:has(.preview-pill.show) .progress-mini {
   .wthree-stat-l { font-size: 9px; }
   .wthree-header { padding: 10px 12px; }
   .wthree-album-cover { width: 40px; height: 40px; }
-  .wthree-track { grid-template-columns: auto 18px 1fr auto; }
-  .wthree-track-plays, .wthree-track-tag { grid-column: 3 / -1; grid-row: 2; }
+  .wthree-track { grid-template-columns: auto 18px minmax(0,1fr) auto auto; }
+  .wt-tracklist { max-height: 200px; }
+  .wt-order-scroll { max-height: 140px; }
+  /* En mobile el modal ocupa desde abajo hasta 85vh — heredado del
+     .modal-overlay { align-items:flex-end }, pero con nuestro max-height. */
+  .wt-modal { max-width: 100%; width: 100%; max-height: 85vh; }
 }
 
 /* Filas clickeables que abren la ficha */

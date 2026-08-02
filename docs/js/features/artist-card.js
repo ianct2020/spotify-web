@@ -2,14 +2,14 @@
 // primer/último año, top tracks del artista, hover-play, y plays actuales
 // vía Stats.fm si aplica. Se abre desde cualquier feature con openArtistCard({ name }).
 
-import { loadHistoryStats, isOwner } from './history-data.js?v=108';
-import { escapeHtml } from '../ui/components.js?v=108';
-import { findArtistTopPreview, findTrackPreview } from '../api/itunes.js?v=108';
-import { togglePreview, playingKey, attachHover } from '../ui/preview-player.js?v=108';
-import { hasUsername, loadTopLifetime } from '../api/statsfm.js?v=108';
-import { openTrackCard } from './track-card.js?v=108';
-import { spotifyFetch, getBestAvailableLikes } from '../api.js?v=108';
-import { openModal, closeTop } from '../ui/modal-stack.js?v=108';
+import { loadHistoryStats, isOwner } from './history-data.js?v=109';
+import { escapeHtml } from '../ui/components.js?v=109';
+import { getPreview, getArtistTopPreview } from '../api/preview-providers.js?v=109';
+import { togglePreview, playingKey, attachHover } from '../ui/preview-player.js?v=109';
+import { hasUsername, loadTopLifetime } from '../api/statsfm.js?v=109';
+import { openTrackCard } from './track-card.js?v=109';
+import { spotifyFetch, getBestAvailableLikes } from '../api.js?v=109';
+import { openModal, closeTop } from '../ui/modal-stack.js?v=109';
 
 // Cache de imágenes de artistas resueltas por Spotify search. TTL 30 días.
 // Se persiste el hit y la falta (null) para no reintentar contra tracks
@@ -24,6 +24,15 @@ function saveImgCache(c) {
   const keys = Object.keys(c);
   if (keys.length > IMG_CACHE_MAX) for (const k of keys.slice(0, keys.length - IMG_CACHE_MAX)) delete c[k];
   try { localStorage.setItem(IMG_CACHE_KEY, JSON.stringify(c)); } catch { /* full */ }
+}
+// Lee sync del cache — sirve para pintar la foto en el primer frame del render
+// (evita que aparezca el placeholder con la inicial antes de que resuelva la
+// promesa async, que es lo que se veía al reabrir la ficha desde la pila).
+function getArtistImageSync(name) {
+  const cache = loadImgCache();
+  const hit = cache[(name || '').toLowerCase()];
+  if (hit && (Date.now() - hit.t) < IMG_TTL_MS) return hit.u || null;
+  return null;
 }
 async function fetchArtistImage(name) {
   const key = name.toLowerCase();
@@ -59,6 +68,13 @@ function onModalClose() {
   if (chart) { chart.destroy(); chart = null; }
 }
 
+// Cuando este modal vuelve a ser el top de la pila (recupera visibility),
+// Chart.js necesita una re-medición: mientras estuvo hidden puede haber
+// perdido el ancho del contenedor y quedar con canvas 0×0.
+function onModalReveal() {
+  if (chart) requestAnimationFrame(() => { try { chart.resize(); } catch { /* noop */ } });
+}
+
 document.addEventListener('previewchange', (e) => {
   const btn = document.getElementById('ac-preview');
   if (btn && !(e.detail.key || '').startsWith('ac:') && btn.textContent !== 'Sin preview') {
@@ -70,13 +86,21 @@ async function openArtistCard(a) {
   // a: { name } — todo lo demás lo derivamos del historial.
   if (!a || !a.name) return;
 
+  // Foto cacheada 30d: si la tenemos, la inyectamos en el markup inicial para
+  // que no aparezca el placeholder ni por un frame al reabrir la ficha.
+  const cachedImg = getArtistImageSync(a.name);
+  const avatarInner = cachedImg
+    ? `<img src="${cachedImg}" alt="" style="width:100%;height:100%;object-fit:cover">`
+    : escapeHtml((a.name[0] || '?').toUpperCase());
+
   const overlay = openModal({
     id: `artist-card:${a.name}`,
     onClose: onModalClose,
+    onReveal: onModalReveal,
     html: `
     <div class="modal card-modal" style="max-width:640px;width:min(640px,94vw)">
       <div class="card-modal-head">
-        <div id="ac-avatar" class="card-modal-avatar" style="background:var(--color-accent-soft);color:var(--color-accent);font-weight:700">${escapeHtml((a.name[0] || '?').toUpperCase())}</div>
+        <div id="ac-avatar" class="card-modal-avatar" style="background:var(--color-accent-soft);color:var(--color-accent);font-weight:700">${avatarInner}</div>
         <div class="card-modal-title">
           <h3>${escapeHtml(a.name)}</h3>
           <div class="card-modal-sub">Artista</div>
@@ -94,18 +118,19 @@ async function openArtistCard(a) {
   });
   overlay.querySelector('#ac-mis-likes').onclick = () => openArtistLikesModal(a.name);
 
-  // Carga la foto real del artista via Spotify search (async, sin bloquear el resto)
-  fetchArtistImage(a.name).then(url => {
-    const av = document.getElementById('ac-avatar');
-    if (!av || !url) return;
-    av.innerHTML = `<img src="${url}" alt="" style="width:100%;height:100%;object-fit:cover">`;
-  });
+  // Si no había cache, resolvemos async y pintamos apenas llega
+  if (!cachedImg) {
+    fetchArtistImage(a.name).then(url => {
+      const av = overlay.querySelector('#ac-avatar');
+      if (!av || !url) return;
+      av.innerHTML = `<img src="${url}" alt="" style="width:100%;height:100%;object-fit:cover">`;
+    });
+  }
 
   const previewBtn = overlay.querySelector('#ac-preview');
   previewBtn.onclick = async () => {
     const res = await togglePreview(`ac:${a.name}`, async () => {
-      const p = await findArtistTopPreview(a.name);
-      return p && { url: p.url, label: `${p.track} — ${p.artist}` };
+      return await getArtistTopPreview(a.name);
     });
     previewBtn.textContent = res === true ? '⏹ Parar' : '▶ Preview';
     if (res === null) previewBtn.textContent = 'Sin preview';
@@ -195,33 +220,41 @@ async function openArtistCard(a) {
     el.onclick = () => openTrackCard({ id, name: el.dataset.name, artist: a.name });
   });
 
-  // Chart de años (solo años con datos)
+  // Chart de años (solo años con datos). Doble rAF para que el browser haga
+  // layout de todo el modal antes de que Chart.js mida el contenedor — si lo
+  // instanciamos justo después de innerHTML, el .chart-box todavía no tiene
+  // ancho medido dentro del modal (flex+overflow del overlay) y Chart.js se
+  // engancha al 0 y queda para siempre así (v=107 modal-stack).
   if (yearsWithArtist.some(y => y.min > 0)) {
-    const accent = getComputedStyle(document.documentElement).getPropertyValue('--color-accent').trim() || '#7C3AED';
-    chart = new Chart(document.getElementById('ac-chart'), {
-      type: 'bar',
-      data: {
-        labels: yearsWithArtist.map(y => y.year),
-        datasets: [{ data: yearsWithArtist.map(y => y.min), backgroundColor: accent, borderRadius: 3 }],
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        interaction: { mode: 'nearest', intersect: false, axis: 'x' },
-        plugins: {
-          legend: { display: false },
-          tooltip: { callbacks: { label: ctx => `${Math.round(ctx.parsed.y)} min` } },
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      const canvas = overlay.querySelector('#ac-chart');
+      if (!canvas) return;
+      const accent = getComputedStyle(document.documentElement).getPropertyValue('--color-accent').trim() || '#7C3AED';
+      chart = new Chart(canvas, {
+        type: 'bar',
+        data: {
+          labels: yearsWithArtist.map(y => y.year),
+          datasets: [{ data: yearsWithArtist.map(y => y.min), backgroundColor: accent, borderRadius: 3 }],
         },
-        scales: {
-          x: { ticks: { color: '#8888A0', font: { family: 'Inter', size: 11 } }, grid: { display: false } },
-          y: {
-            beginAtZero: true,
-            ticks: { color: '#8888A0', font: { family: 'Inter', size: 10 } },
-            grid: { color: 'rgba(136,136,160,0.12)' },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          interaction: { mode: 'nearest', intersect: false, axis: 'x' },
+          plugins: {
+            legend: { display: false },
+            tooltip: { callbacks: { label: ctx => `${Math.round(ctx.parsed.y)} min` } },
+          },
+          scales: {
+            x: { ticks: { color: '#8888A0', font: { family: 'Inter', size: 11 } }, grid: { display: false } },
+            y: {
+              beginAtZero: true,
+              ticks: { color: '#8888A0', font: { family: 'Inter', size: 10 } },
+              grid: { color: 'rgba(136,136,160,0.12)' },
+            },
           },
         },
-      },
-    });
+      });
+    }));
   }
 
   // Stats.fm actual (si está en el top-1000 lifetime)
@@ -353,8 +386,11 @@ async function openArtistLikesModal(artistName) {
       img,
     });
     attachHover(row, `al-hover:${t.id}`, async () => {
-      const p = await findTrackPreview((t.artists?.[0]?.name) || artistName, t.name || '');
-      return p && { url: p.url, label: `${t.name} — ${(t.artists?.[0]?.name) || artistName}` };
+      return await getPreview({
+        name: t.name || '',
+        artist: (t.artists?.[0]?.name) || artistName,
+        spotifyId: t.id,
+      });
     });
   });
 }
@@ -366,8 +402,7 @@ function attachArtistCard(el, name) {
   el.title = 'Preview al apoyar el mouse · click para ver la ficha';
   el.onclick = () => openArtistCard({ name });
   attachHover(el, `ac-hover:${name}`, async () => {
-    const p = await findArtistTopPreview(name);
-    return p && { url: p.url, label: `${p.track} — ${p.artist}` };
+    return await getArtistTopPreview(name);
   });
 }
 
