@@ -4,7 +4,7 @@ import { openModal, closeTop } from '../ui/modal-stack.js';
 import { showToast } from '../ui/toast.js';
 import { openListenedAlbumsPicker } from './listened-shared.js';
 import { loadHistoryStats, loadListenedAlbums } from './history-data.js';
-import { findArtistTopPreview } from '../api/itunes.js';
+import { getArtistTopPreview } from '../api/preview-providers.js';
 import { hoverIn, hoverOut } from '../ui/preview-player.js';
 import { hasUsername, getUsername } from '../api/statsfm.js';
 import { loadHistoryStats as _loadStatsForCounter } from './history-data.js';
@@ -1084,8 +1084,7 @@ function artistHoverHandlers(labels) {
       if (elements?.length) {
         const name = labels[elements[0].index];
         hoverIn(`dash-art:${name}`, async () => {
-          const p = await findArtistTopPreview(name);
-          return p && { url: p.url, label: `${p.track} — ${p.artist}` };
+          return await getArtistTopPreview(name);
         }, 500);
       } else {
         hoverOut();

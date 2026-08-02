@@ -3,7 +3,7 @@
 
 import { loadHistoryStats, isOwner, ownerLockedMessage } from './history-data.js';
 import { escapeHtml, pageHeader } from '../ui/components.js';
-import { findTrackPreview, findArtistTopPreview } from '../api/itunes.js';
+import { getPreview, getArtistTopPreview } from '../api/preview-providers.js';
 import { attachHover } from '../ui/preview-player.js';
 import { openTrackCard } from './track-card.js';
 import { openArtistCard } from './artist-card.js';
@@ -272,15 +272,10 @@ function wireTopHover(holder, cardKey, items, kind) {
       el.title = 'Preview al apoyar el mouse · click para ver la ficha del artista';
       el.onclick = () => openArtistCard({ name: it.name });
     }
+    const trackId = it.uri ? it.uri.split(':').pop() : undefined;
     const getter = kind === 'artist'
-      ? async () => {
-          const p = await findArtistTopPreview(it.name);
-          return p && { url: p.url, label: `${p.track} — ${p.artist}` };
-        }
-      : async () => {
-          const p = await findTrackPreview(it.artist || '', it.name);
-          return p && { url: p.url, label: `${it.name} — ${it.artist || ''}` };
-        };
+      ? async () => await getArtistTopPreview(it.name)
+      : async () => await getPreview({ name: it.name, artist: it.artist || '', spotifyId: trackId });
     attachHover(el, `wr:${cardKey}:${i}`, getter);
   });
 }

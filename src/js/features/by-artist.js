@@ -1,7 +1,7 @@
 import { getAllLikedTracks, createPlaylist, addTracksToPlaylist, invalidatePlaylistsCache, getBestAvailableLikes } from '../api.js';
 import { showProgress, hideProgress, progressController, isCancelled, promptPlaylistName, escapeHtml, pageHeader } from '../ui/components.js';
 import { showToast } from '../ui/toast.js';
-import { findArtistTopPreview } from '../api/itunes.js';
+import { getArtistTopPreview } from '../api/preview-providers.js';
 import { attachHover } from '../ui/preview-player.js';
 import { openArtistCard } from './artist-card.js';
 
@@ -191,8 +191,7 @@ function renderGrid() {
     el.onclick = () => toggleArtist(el);
     const name = capped[i][0];
     attachHover(el, `ba:${name}`, async () => {
-      const p = await findArtistTopPreview(name);
-      return p && { url: p.url, label: `${p.track} — ${p.artist}` };
+      return await getArtistTopPreview(name);
     }, 550);
     const fichaBtn = el.querySelector('.artist-card-ficha');
     if (fichaBtn) fichaBtn.onclick = (e) => { e.stopPropagation(); openArtistCard({ name }); };

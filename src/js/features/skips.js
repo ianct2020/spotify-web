@@ -7,7 +7,7 @@ import { getBestAvailableLikes, removeLikedTracks } from '../api.js';
 import { loadSkipStats, trackIdOf, isOwner, ownerLockedMessage } from './history-data.js';
 import { escapeHtml, confirmModal, pageHeader } from '../ui/components.js';
 import { showToast } from '../ui/toast.js';
-import { findTrackPreview } from '../api/itunes.js';
+import { getPreview } from '../api/preview-providers.js';
 import { togglePreview, playingKey } from '../ui/preview-player.js';
 import { openTrackCard } from './track-card.js';
 import { hasUsername, loadTopLifetime } from '../api/statsfm.js';
@@ -279,11 +279,13 @@ function wireRows() {
       }
       closeEmbeds(content);
       const artist = (r.track.artists || []).map(a => a.name || a)[0] || '';
+      // No pasamos spotifyId a getPreview a propósito: en Skips el iframe
+      // embed va INLINE en la fila (toggleEmbed) — no queremos que la cadena
+      // lo abra en el pill flotante y encima una segunda fuente en la fila.
       const res = await togglePreview(`sk:${r.id}`, async () => {
-        const p = await findTrackPreview(artist, r.track.name || '');
-        return p && { url: p.url, label: `${r.track.name} — ${artist}` };
+        return await getPreview({ name: r.track.name || '', artist });
       });
-      if (res === null) toggleEmbed(r.id, btn); // iTunes no lo tiene → embed Spotify
+      if (res === null) toggleEmbed(r.id, btn); // ni iTunes ni Deezer → embed Spotify inline
     };
   });
 

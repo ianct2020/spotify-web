@@ -1,9 +1,9 @@
-import { getAllLikedTracks, createPlaylist, addTracksToPlaylist, invalidatePlaylistsCache, getBestAvailableLikes } from '../api.js?v=108';
-import { showProgress, hideProgress, progressController, isCancelled, promptPlaylistName, escapeHtml, pageHeader } from '../ui/components.js?v=108';
-import { showToast } from '../ui/toast.js?v=108';
-import { findArtistTopPreview } from '../api/itunes.js?v=108';
-import { attachHover } from '../ui/preview-player.js?v=108';
-import { openArtistCard } from './artist-card.js?v=108';
+import { getAllLikedTracks, createPlaylist, addTracksToPlaylist, invalidatePlaylistsCache, getBestAvailableLikes } from '../api.js?v=109';
+import { showProgress, hideProgress, progressController, isCancelled, promptPlaylistName, escapeHtml, pageHeader } from '../ui/components.js?v=109';
+import { showToast } from '../ui/toast.js?v=109';
+import { getArtistTopPreview } from '../api/preview-providers.js?v=109';
+import { attachHover } from '../ui/preview-player.js?v=109';
+import { openArtistCard } from './artist-card.js?v=109';
 
 const SORT_KEY = 'artist_sort_mode';
 const VALID_SORTS = new Set(['count-desc', 'count-asc', 'name-asc']);
@@ -191,8 +191,7 @@ function renderGrid() {
     el.onclick = () => toggleArtist(el);
     const name = capped[i][0];
     attachHover(el, `ba:${name}`, async () => {
-      const p = await findArtistTopPreview(name);
-      return p && { url: p.url, label: `${p.track} — ${p.artist}` };
+      return await getArtistTopPreview(name);
     }, 550);
     const fichaBtn = el.querySelector('.artist-card-ficha');
     if (fichaBtn) fichaBtn.onclick = (e) => { e.stopPropagation(); openArtistCard({ name }); };

@@ -5,7 +5,7 @@
 
 import { loadTrackPlays, loadTrackDetail, loadHistoryStats, isOwner } from './history-data.js';
 import { escapeHtml } from '../ui/components.js';
-import { findTrackPreview } from '../api/itunes.js';
+import { getPreview } from '../api/preview-providers.js';
 import { togglePreview, playingKey } from '../ui/preview-player.js';
 import { hasUsername, findTrackId, getTrackCurrentStats, loadTopLifetime } from '../api/statsfm.js';
 import { openAlbumCard } from './album-card.js';
@@ -49,6 +49,13 @@ function onModalClose() {
   if (chart) { chart.destroy(); chart = null; }
 }
 
+// Cuando este modal vuelve a ser top de la pila (otro se cerró encima),
+// re-medir el chart — mientras estuvo con visibility:hidden puede haber
+// perdido el ancho del contenedor.
+function onModalReveal() {
+  if (chart) requestAnimationFrame(() => { try { chart.resize(); } catch { /* noop */ } });
+}
+
 // Listener único a nivel módulo: si el preview de la ficha dejó de sonar
 // (terminó o empezó otro), el botón vuelve a "▶ Preview".
 document.addEventListener('previewchange', (e) => {
@@ -65,6 +72,7 @@ async function openTrackCard(t) {
   const overlay = openModal({
     id: `track-card:${t.id}`,
     onClose: onModalClose,
+    onReveal: onModalReveal,
     html: `
     <div class="modal" style="max-width:640px;width:min(640px,92vw)">
       <div style="display:flex;gap:14px;align-items:flex-start;margin-bottom:14px">
@@ -116,8 +124,7 @@ async function openTrackCard(t) {
   const previewBtn = overlay.querySelector('#tc-preview');
   previewBtn.onclick = async () => {
     const res = await togglePreview(`tc:${t.id}`, async () => {
-      const p = await findTrackPreview(t.artist || '', t.name || '');
-      return p && { url: p.url, label: `${t.name} — ${t.artist || ''}` };
+      return await getPreview({ name: t.name || '', artist: t.artist || '', spotifyId: t.id });
     });
     previewBtn.textContent = res === true ? '⏹ Parar' : '▶ Preview';
     if (res === null) previewBtn.textContent = 'Sin preview';
@@ -170,7 +177,12 @@ async function openTrackCard(t) {
   if (det) {
     const { labels, data } = buildSeries(det.m);
     const accent = getComputedStyle(document.documentElement).getPropertyValue('--color-accent').trim() || '#7C3AED';
-    chart = new Chart(document.getElementById('tc-chart'), {
+    // Doble rAF: dejamos que el browser haga layout del modal antes de que
+    // Chart.js mida el contenedor (ver artist-card.js para el detalle).
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+    const canvas = overlay.querySelector('#tc-chart');
+    if (!canvas) return;
+    chart = new Chart(canvas, {
       type: 'bar',
       data: {
         labels,
@@ -209,6 +221,7 @@ async function openTrackCard(t) {
         },
       },
     });
+    }));
   }
 }
 

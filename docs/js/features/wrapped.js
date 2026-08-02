@@ -1,16 +1,16 @@
 // Wrapped propio: mini-resumen tuyo por año, hecho con el Extended Streaming History.
 // A diferencia del Wrapped oficial (que corre oct-sept), este es del año calendario completo.
 
-import { loadHistoryStats, isOwner, ownerLockedMessage } from './history-data.js?v=108';
-import { escapeHtml, pageHeader } from '../ui/components.js?v=108';
-import { findTrackPreview, findArtistTopPreview } from '../api/itunes.js?v=108';
-import { attachHover } from '../ui/preview-player.js?v=108';
-import { openTrackCard } from './track-card.js?v=108';
-import { openArtistCard } from './artist-card.js?v=108';
-import { openAlbumCard } from './album-card.js?v=108';
-import { getMyTop } from '../api.js?v=108';
-import { activateMarquee, marqueeSpan } from '../ui/marquee.js?v=108';
-import { openModal } from '../ui/modal-stack.js?v=108';
+import { loadHistoryStats, isOwner, ownerLockedMessage } from './history-data.js?v=109';
+import { escapeHtml, pageHeader } from '../ui/components.js?v=109';
+import { getPreview, getArtistTopPreview } from '../api/preview-providers.js?v=109';
+import { attachHover } from '../ui/preview-player.js?v=109';
+import { openTrackCard } from './track-card.js?v=109';
+import { openArtistCard } from './artist-card.js?v=109';
+import { openAlbumCard } from './album-card.js?v=109';
+import { getMyTop } from '../api.js?v=109';
+import { activateMarquee, marqueeSpan } from '../ui/marquee.js?v=109';
+import { openModal } from '../ui/modal-stack.js?v=109';
 
 let stats = null;
 let selectedYear = null;
@@ -272,15 +272,10 @@ function wireTopHover(holder, cardKey, items, kind) {
       el.title = 'Preview al apoyar el mouse · click para ver la ficha del artista';
       el.onclick = () => openArtistCard({ name: it.name });
     }
+    const trackId = it.uri ? it.uri.split(':').pop() : undefined;
     const getter = kind === 'artist'
-      ? async () => {
-          const p = await findArtistTopPreview(it.name);
-          return p && { url: p.url, label: `${p.track} — ${p.artist}` };
-        }
-      : async () => {
-          const p = await findTrackPreview(it.artist || '', it.name);
-          return p && { url: p.url, label: `${it.name} — ${it.artist || ''}` };
-        };
+      ? async () => await getArtistTopPreview(it.name)
+      : async () => await getPreview({ name: it.name, artist: it.artist || '', spotifyId: trackId });
     attachHover(el, `wr:${cardKey}:${i}`, getter);
   });
 }

@@ -4,7 +4,7 @@
 
 import { loadRecords, isOwner, ownerLockedMessage } from './history-data.js';
 import { escapeHtml, pageHeader } from '../ui/components.js';
-import { findTrackPreview, findArtistTopPreview } from '../api/itunes.js';
+import { getPreview, getArtistTopPreview } from '../api/preview-providers.js';
 import { attachHover } from '../ui/preview-player.js';
 import { openArtistCard } from './artist-card.js';
 
@@ -156,14 +156,8 @@ function wireHovers(content) {
     el.classList.add('tc-clickable');
     el.title = 'Mantené el mouse para escuchar un preview · click para ficha';
     const getter = h.kind === 'artist'
-      ? async () => {
-          const p = await findArtistTopPreview(h.name);
-          return p && { url: p.url, label: `${p.track} — ${p.artist}` };
-        }
-      : async () => {
-          const p = await findTrackPreview(h.artist || '', h.name);
-          return p && { url: p.url, label: `${h.name} — ${h.artist || ''}` };
-        };
+      ? async () => await getArtistTopPreview(h.name)
+      : async () => await getPreview({ name: h.name, artist: h.artist || '', spotifyId: h.id });
     attachHover(el, `rec:${el.dataset.recHover}`, getter);
     // Click → ficha (artista o canción). Los tracks acá no traen uri —
     // la ficha va a mostrar meta+preview, sin la curva mensual.
