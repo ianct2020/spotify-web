@@ -2323,6 +2323,22 @@ body:has(.preview-pill.show) .progress-mini {
   font-size: 18px;
 }
 .wthree-album-info { min-width: 0; overflow: hidden; }
+/* Botón chico "ocultar / restaurar" por fila del W-Three (v=110). */
+.wthree-hide-btn {
+  background: none;
+  border: 1px solid transparent;
+  color: var(--color-text-muted);
+  font-size: 14px;
+  line-height: 1;
+  padding: 4px 6px;
+  border-radius: var(--radius-sm, 6px);
+  cursor: pointer;
+  flex-shrink: 0;
+  opacity: 0.55;
+  transition: opacity .12s, background .12s, border-color .12s;
+}
+.wthree-album-row:hover .wthree-hide-btn { opacity: 1; }
+.wthree-hide-btn:hover { background: var(--color-elevated); border-color: var(--color-border); }
 .wthree-album-name { font-size: 13px; font-weight: 500; }
 .wthree-album-artist { font-size: 11px; color: var(--color-text-muted); }
 .wthree-album-meta { font-size: 10.5px; color: var(--color-text-muted); margin-top: 1px; }
@@ -2612,20 +2628,9 @@ body:has(.preview-pill.show) .progress-mini {
 .wt-tracklist .wthree-track { padding: 6px 10px; font-size: 12.5px; }
 .wt-tracklist .wthree-track-plays { min-width: 22px; text-align: right; }
 
-/* Desktop wide: 2 columnas (tracklist + panel orden lado a lado) manteniendo
-   la densidad y los scrolls internos. */
-@media (min-width: 900px) {
-  .wt-modal { max-width: 720px; width: min(720px, 94vw); }
-  .wt-scroll {
-    display: grid;
-    grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
-    gap: 14px;
-    align-items: start;
-  }
-  .wt-tracklist { max-height: 340px; }
-  .wt-order-scroll { max-height: 340px; }
-  .wthree-order-panel:not(:empty) { margin-top: 0; }
-}
+/* Ian decidió (v=110): W-Three en UNA sola columna siempre. Antes había una
+   media query >900px que partía el .wt-scroll en 2 columnas (tracklist / orden
+   lado a lado). Se sacó — max-width 520px centrado en todos los tamaños. */
 
 @media (max-width: 600px) {
   .wthree-summary { grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 4px; }
