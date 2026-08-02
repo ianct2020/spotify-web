@@ -2,7 +2,7 @@
 // por álbum). Muestra qué álbumes ya tienen picks, cuántos, y cuáles te faltan.
 // Ordenado por álbumes más escuchados primero para priorizar tu tiempo.
 
-import { spotifyFetch, getAllPlaylistItems, getAllUserPlaylists, addTracksToPlaylist, removeTracksFromPlaylist, updatePlaylistItemsCache } from '../api.js';
+import { spotifyFetch, getAllPlaylistItems, getAllUserPlaylists, addTracksToPlaylist, removeTracksFromPlaylist, reorderPlaylistItems, getPlaylistSnapshotId, updatePlaylistItemsCache } from '../api.js';
 import { loadHistoryStats, loadListenedAlbums, isOwner, ownerLockedMessage } from './history-data.js';
 import { escapeHtml, pageHeader } from '../ui/components.js';
 import { showToast } from '../ui/toast.js';
@@ -699,19 +699,77 @@ async function fetchAlbumTracks(a) {
   }
 }
 
+// Reorder mínimo (v=112): en vez de borrar todos los picks y re-insertar el
+// orden nuevo, calculamos la mínima secuencia de PUT /playlists/{id}/items
+// para mover pick-por-pick al lugar correcto. Cada PUT trae snapshot_id que
+// encadenamos. Las posiciones son ABSOLUTAS en la playlist entera —
+// recalculamos entre movimientos porque los items intermedios shiftean.
+//
+// Algoritmo (greedy, óptimo para permutaciones): para cada índice target
+// en orden ascendente, si el track deseado no está ya en su lugar, lo
+// movemos desde su posición actual a la target. Simulamos el nuevo estado
+// para saber las posiciones absolutas del siguiente pick a mover.
+async function reorderPicksMinimal(picks, targetOrder, initialSnapshot) {
+  const working = picks.map(p => ({ ...p }));
+  let snapshot = initialSnapshot;
+  let moveCount = 0;
+
+  for (let target = 0; target < targetOrder.length; target++) {
+    const wantedId = targetOrder[target];
+    const currentIdx = working.findIndex((p, i) => i >= target && p.id === wantedId);
+    if (currentIdx === -1 || currentIdx === target) continue;
+
+    const fromPos = working[currentIdx].pos;
+    const toPos = working[target].pos;
+    // insert_before es exclusivo: para bajar (fromPos<toPos) hay que apuntar
+    // a toPos+1; para subir, a toPos directo.
+    const insert_before = fromPos < toPos ? toPos + 1 : toPos;
+
+    snapshot = await reorderPlaylistItems(playlistId, {
+      range_start: fromPos,
+      insert_before,
+      range_length: 1,
+      snapshot_id: snapshot,
+    });
+    moveCount++;
+
+    // Simular el nuevo estado. Los picks entre fromPos y toPos shiftean.
+    const [moved] = working.splice(currentIdx, 1);
+    working.splice(target, 0, moved);
+    if (fromPos < toPos) {
+      working.forEach(p => { if (p !== moved && p.pos > fromPos && p.pos <= toPos) p.pos -= 1; });
+    } else {
+      working.forEach(p => { if (p !== moved && p.pos >= toPos && p.pos < fromPos) p.pos += 1; });
+    }
+    moved.pos = toPos;
+  }
+
+  return { snapshot, moveCount };
+}
+
+// Dada la playlist entera (freshItems) y las URIs de los picks de este álbum,
+// devuelve los picks con sus posiciones absolutas ordenados por posición.
+function locatePicksInPlaylist(freshItems, pickUris) {
+  const set = new Set(pickUris);
+  const found = [];
+  freshItems.forEach((it, i) => {
+    const t = it.item || it.track;
+    if (t && set.has(t.uri)) found.push({ id: t.id, uri: t.uri, name: t.name, pos: i });
+  });
+  found.sort((x, y) => x.pos - y.pos);
+  return found;
+}
+
 async function applyChanges(a, saveBtn, orderedPicks, origOrder) {
-  // Diferencia entre el orden nuevo y el original
   const origIds = origOrder.map(p => p.id);
   const newIds = orderedPicks.map(p => p.id);
 
   const toRemoveUris = origOrder.filter(p => !newIds.includes(p.id)).map(p => p.uri);
   const toAddUris = orderedPicks.filter(p => !origIds.includes(p.id)).map(p => p.uri);
 
-  // Detectar si el ORDEN cambió entre las que quedan (intersección)
   const keptOrig = origIds.filter(id => newIds.includes(id));
   const keptNew = newIds.filter(id => origIds.includes(id));
-  const orderChanged = keptOrig.length > 0
-    && keptOrig.some((id, i) => id !== keptNew[i]);
+  const orderChanged = keptOrig.length > 0 && keptOrig.some((id, i) => id !== keptNew[i]);
 
   const noChanges = toAddUris.length === 0 && toRemoveUris.length === 0 && !orderChanged;
   if (noChanges) {
@@ -721,38 +779,49 @@ async function applyChanges(a, saveBtn, orderedPicks, origOrder) {
 
   saveBtn.disabled = true;
   saveBtn.textContent = 'Guardando…';
+  let apiCalls = 0;
+  let moveCount = 0;
   try {
-    if (orderChanged) {
-      // Estrategia: sacar TODOS los picks originales del álbum, re-insertar
-      // en el orden nuevo (incluyendo los que se agregan) en la posición
-      // del primero de los originales. Así queda perfectamente contiguo y ordenado.
-      const insertPos = origOrder.length
-        ? Math.min(...origOrder.map(p => p.pos ?? Infinity))
-        : null;
-      const allOrigUris = origOrder.map(p => p.uri);
-      if (allOrigUris.length) await removeTracksFromPlaylist(playlistId, allOrigUris);
-      const finalUris = orderedPicks.map(p => p.uri);
-      if (finalUris.length) {
-        await addTracksToPlaylist(playlistId, finalUris,
-          insertPos != null ? { position: insertPos } : {});
-      }
-    } else {
-      // Sin cambio de orden: solo add + remove como antes
-      if (toAddUris.length) {
-        const existingPicks = a.picks || [];
-        const maxPos = existingPicks.length
-          ? Math.max(...existingPicks.map(p => p.pos ?? -1))
-          : -1;
-        const insertPos = maxPos >= 0 ? maxPos + 1 : null;
-        await addTracksToPlaylist(playlistId, toAddUris, insertPos != null ? { position: insertPos } : {});
-      }
-      if (toRemoveUris.length) await removeTracksFromPlaylist(playlistId, toRemoveUris);
+    // Fase 1: agregar los nuevos (lógica de v=104). Si el álbum ya tenía
+    // picks, insertar en maxPos+1 para que queden contiguos con los actuales.
+    if (toAddUris.length) {
+      const existingPicks = a.picks || [];
+      const maxPos = existingPicks.length ? Math.max(...existingPicks.map(p => p.pos ?? -1)) : -1;
+      const insertPos = maxPos >= 0 ? maxPos + 1 : null;
+      await addTracksToPlaylist(playlistId, toAddUris, insertPos != null ? { position: insertPos } : {});
+      apiCalls++;
     }
 
-    // Re-fetch los items para tener posiciones frescas (insertar en X corre
-    // todos los items >= X, así que cache queda inválido).
-    const msg = orderChanged
-      ? `Orden actualizado: ${orderedPicks.length} en el álbum`
+    // Fase 2: sacar los quitados.
+    if (toRemoveUris.length) {
+      await removeTracksFromPlaylist(playlistId, toRemoveUris);
+      apiCalls++;
+    }
+
+    // Fase 3: reordenar si hace falta. Refetcheamos para tener posiciones
+    // absolutas reales — necesarias tanto si cambió el orden de los que
+    // quedan como si agregamos nuevos que en el "insert al final" no
+    // terminan en su lugar target (ej: picks=[A], target=[B,A] con B nuevo).
+    const needsReorderCheck = orderChanged || toAddUris.length > 0;
+    if (needsReorderCheck) {
+      const freshItems = await getAllPlaylistItems(playlistId, null, { useCache: false });
+      apiCalls++;
+      const picksNow = locatePicksInPlaylist(freshItems, orderedPicks.map(p => p.uri));
+      const currentOrder = picksNow.map(p => p.id);
+      const targetOrder = orderedPicks.map(p => p.id);
+      const orderDiffers = currentOrder.length === targetOrder.length
+        && currentOrder.some((id, i) => id !== targetOrder[i]);
+      if (orderDiffers) {
+        const snap = await getPlaylistSnapshotId(playlistId);
+        apiCalls++;
+        const { moveCount: mc } = await reorderPicksMinimal(picksNow, targetOrder, snap);
+        moveCount = mc;
+        apiCalls += mc;
+      }
+    }
+
+    const msg = moveCount > 0
+      ? `Orden actualizado: ${orderedPicks.length} en el álbum (${moveCount} movimiento${moveCount === 1 ? '' : 's'})`
       : `Playlist actualizada: +${toAddUris.length} · -${toRemoveUris.length}`;
     showToast(msg, 'success');
     closeById('wthree-album-modal');
@@ -767,6 +836,15 @@ async function applyChanges(a, saveBtn, orderedPicks, origOrder) {
   } catch (e) {
     saveBtn.disabled = false;
     saveBtn.textContent = 'Guardar cambios';
-    showToast('Error: ' + e.message, 'error');
+    // Si falló en el medio, la playlist puede haber quedado a medio reordenar.
+    // Refresh de la vista con useCache:false para reflejar el estado real.
+    showToast('Error guardando: ' + e.message + '. Refrescando…', 'error');
+    try {
+      const freshItems = await getAllPlaylistItems(playlistId, null, { useCache: false });
+      buildAlbumIndex(freshItems);
+      crossWithHistory(historyStats, listenedAlbums);
+      const content = document.getElementById('wthree-content');
+      if (content) renderBuckets(content);
+    } catch { /* noop — ya avisamos con el toast anterior */ }
   }
 }

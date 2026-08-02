@@ -1,7 +1,7 @@
-import { getValidToken, refreshAccessToken } from './auth.js?v=111';
-import { cacheGet, cacheGetRaw, cacheGetTimestamp, cacheSet, cacheClear } from './storage.js?v=111';
-import { idbDel, idbGetCached, idbGetCachedRaw, idbGetTimestamp, idbSetCached } from './idb.js?v=111';
-import { showToast } from './ui/toast.js?v=111';
+import { getValidToken, refreshAccessToken } from './auth.js?v=112';
+import { cacheGet, cacheGetRaw, cacheGetTimestamp, cacheSet, cacheClear } from './storage.js?v=112';
+import { idbDel, idbGetCached, idbGetCachedRaw, idbGetTimestamp, idbSetCached } from './idb.js?v=112';
+import { showToast } from './ui/toast.js?v=112';
 
 const BASE = 'https://api.spotify.com/v1';
 const MIN_RETRY_WAIT = 5000;
@@ -747,6 +747,25 @@ async function removeTracksFromPlaylist(playlistId, uris) {
   return snapshot;
 }
 
+// Reorder mínimo: PUT /playlists/{id}/items con {range_start, insert_before,
+// range_length, snapshot_id}. Devuelve el snapshot_id nuevo para encadenar la
+// próxima llamada. Confirmado vivo 2026-08-02 (200) — el mismo endpoint con
+// path /tracks da 403 post-migración.
+async function reorderPlaylistItems(playlistId, { range_start, insert_before, range_length = 1, snapshot_id }) {
+  const body = { range_start, insert_before, range_length };
+  if (snapshot_id) body.snapshot_id = snapshot_id;
+  const r = await spotifyFetch(`/playlists/${playlistId}/items`, {
+    method: 'PUT',
+    body: JSON.stringify(body),
+  });
+  return r?.snapshot_id || null;
+}
+
+async function getPlaylistSnapshotId(playlistId) {
+  const r = await spotifyFetch(`/playlists/${playlistId}?fields=snapshot_id`);
+  return r?.snapshot_id || null;
+}
+
 async function removePlaylistItemsAtPositions(playlistId, itemsWithPositions) {
   const meta = await spotifyFetch(`/playlists/${playlistId}?fields=snapshot_id`);
   const snapshotId = meta.snapshot_id;
@@ -824,6 +843,8 @@ export {
   getCurrentUserId,
   addTracksToPlaylist,
   removeTracksFromPlaylist,
+  reorderPlaylistItems,
+  getPlaylistSnapshotId,
   removePlaylistItemsAtPositions,
   removeLikedTracks,
   checkLibraryContains,
