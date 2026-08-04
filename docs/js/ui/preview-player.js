@@ -7,8 +7,8 @@
 // Dispara 'previewchange' en document con { detail: { key, provider } }
 // (key null = parado) para que cada feature actualice sus botones.
 
-import { escapeHtml } from './components.js?v=112';
-import { showToast } from './toast.js?v=112';
+import { escapeHtml } from './components.js?v=113';
+import { showToast } from './toast.js?v=113';
 
 const audio = new Audio();
 audio.preload = 'none';
@@ -60,7 +60,7 @@ function showPillAudio(label, provider, loading) {
   p.querySelector('.preview-pill-embed').innerHTML = '';
   p.querySelector('.preview-pill-label').innerHTML = escapeHtml(label || '');
   const provEl = p.querySelector('.preview-pill-provider');
-  provEl.textContent = loading ? 'buscando…' : (PROVIDER_LABEL[provider] || '');
+  provEl.textContent = loading ? 'buscando…' : '';
   p.classList.toggle('loading', !!loading);
   p.classList.add('show');
 }
@@ -75,7 +75,7 @@ function showPillEmbed(url, label) {
   box.hidden = false;
   box.innerHTML = `
     <iframe src="${url}" allow="encrypted-media" title="${escapeHtml(label || '')}" style="border:0;width:100%;height:80px;border-radius:8px" loading="lazy"></iframe>
-    <div class="preview-pill-provider preview-pill-provider-embed">vía Spotify · ${escapeHtml(label || '')}</div>
+    <div class="preview-pill-provider preview-pill-provider-embed">${escapeHtml(label || '')}</div>
   `;
   p.classList.add('show');
 }

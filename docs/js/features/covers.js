@@ -10,9 +10,9 @@
 // próximo lote cuando entra al viewport. `loading="lazy"` en <img> deja al
 // browser diferir la descarga.
 
-import { loadListenedAlbums, isOwner, ownerLockedMessage } from './history-data.js?v=112';
-import { escapeHtml, pageHeader } from '../ui/components.js?v=112';
-import { openAlbumCard } from './album-card.js?v=112';
+import { loadListenedAlbums, isOwner, ownerLockedMessage } from './history-data.js?v=113';
+import { escapeHtml, pageHeader } from '../ui/components.js?v=113';
+import { openAlbumCard } from './album-card.js?v=113';
 
 const LS_KEY_SIZE = 'covers_cell_size';
 const LS_KEY_SORT = 'covers_sort_mode';

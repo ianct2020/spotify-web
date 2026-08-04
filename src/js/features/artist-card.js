@@ -182,6 +182,13 @@ async function openArtistCard(a) {
     return;
   }
 
+  // Completo trackAcum con top_tracks_all_time del artista (tiene más profundidad
+   // que la unión de tops anuales). Esto arregla que Bad Bunny mostrara solo 2.
+  for (const t of (stats.top_tracks_all_time || [])) {
+    if (t.artist !== a.name) continue;
+    if (trackAcum.has(t.name)) continue;
+    trackAcum.set(t.name, { name: t.name, min: t.min || 0, plays: t.plays || 0, uri: t.uri });
+  }
   const topTracks = [...trackAcum.values()].sort((a, b) => b.plays - a.plays).slice(0, 5);
 
   const hasChart = yearsWithArtist.some(y => y.min > 0);
@@ -199,22 +206,20 @@ async function openArtistCard(a) {
           <div class="chart-box" style="height:180px"><canvas id="ac-chart"></canvas></div>
         </div>
       ` : ''}
-      ${topTracks.length ? `
-        <div class="ac-col-tracks">
-          <div class="ac-col-title">Tus 5 tracks más escuchados</div>
-          <div style="display:flex;flex-direction:column;gap:6px">
-            ${topTracks.map((t, i) => `
-              <div class="wrapped-top-row tc-clickable" data-uri="${t.uri || ''}" data-name="${escapeHtml(t.name)}">
-                <span class="wrapped-top-rank">${i + 1}</span>
-                <div class="wrapped-top-info">
-                  <div class="wrapped-top-name">${escapeHtml(t.name)}</div>
-                </div>
-                <span class="wrapped-top-meta">${fmtMinutes(t.min)} · ${t.plays} plays</span>
+      <div class="ac-col-tracks">
+        <div class="ac-col-title">Tus 5 tracks más escuchados</div>
+        <div id="ac-top-tracks" style="display:flex;flex-direction:column;gap:6px">
+          ${topTracks.length ? topTracks.map((t, i) => `
+            <div class="wrapped-top-row tc-clickable" data-uri="${t.uri || ''}" data-name="${escapeHtml(t.name)}">
+              <span class="wrapped-top-rank">${i + 1}</span>
+              <div class="wrapped-top-info">
+                <div class="wrapped-top-name">${escapeHtml(t.name)}</div>
               </div>
-            `).join('')}
-          </div>
+              <span class="wrapped-top-meta">${fmtMinutes(t.min)} · ${t.plays} plays</span>
+            </div>
+          `).join('') : `<div style="color:var(--color-text-muted);font-size:12px;padding:8px 4px">Sin tracks puntuales en tu historial anual — buscando en Stats.fm…</div>`}
         </div>
-      ` : ''}
+      </div>
     </div>
     <div id="ac-statsfm"></div>
   `;
@@ -265,27 +270,63 @@ async function openArtistCard(a) {
   }
 
   // Stats.fm actual (si está en el top-1000 lifetime)
-  if (hasUsername()) fillStatsfmArtist(a.name);
+  if (hasUsername()) fillStatsfmArtist(a.name, topTracks.length === 0);
 }
 
-async function fillStatsfmArtist(name) {
+async function fillStatsfmArtist(name, fillEmptyTracks = false) {
   const holder = document.getElementById('ac-statsfm');
-  if (!holder) return;
+  const tracksHolder = fillEmptyTracks ? document.getElementById('ac-top-tracks') : null;
+  if (!holder && !tracksHolder) return;
   try {
     const top = await loadTopLifetime();
-    if (!top) return;
-    // Sumar streams de todos los tracks del artista que estén en el top
-    let plays = 0, ms = 0, tracks = 0;
-    for (const e of top.map.values()) {
-      if (e.artist === name) { plays += e.streams; ms += e.playedMs; tracks++; }
+    if (!top) {
+      if (tracksHolder) tracksHolder.innerHTML = `<div style="color:var(--color-text-muted);font-size:12px;padding:8px 4px">Sin tracks puntuales en tu historial anual.</div>`;
+      return;
     }
-    if (!plays) return;
-    holder.innerHTML = `
-      <div style="display:flex;align-items:center;gap:8px;margin-top:14px;padding:8px 12px;background:var(--color-elevated);border:1px solid var(--color-border);border-radius:var(--radius-sm,6px);font-size:12.5px;color:var(--color-text-secondary)">
-        <strong style="color:var(--color-text)">Stats.fm hoy:</strong>
-        ${plays.toLocaleString('es-AR')} plays · ${Math.round(ms / 60000).toLocaleString('es-AR')}m
-        <span style="color:var(--color-text-muted)">(${tracks} track${tracks === 1 ? '' : 's'} en tu top-1000)</span>
-      </div>`;
+    // Sumar streams y juntar tracks del artista en el top-1000
+    let plays = 0, ms = 0, tracks = 0;
+    const artistTracks = [];
+    for (const e of top.map.values()) {
+      if (e.artist !== name) continue;
+      plays += e.streams;
+      ms += e.playedMs;
+      tracks++;
+      artistTracks.push(e);
+    }
+    if (holder && plays) {
+      holder.innerHTML = `
+        <div style="display:flex;align-items:center;gap:8px;margin-top:14px;padding:8px 12px;background:var(--color-elevated);border:1px solid var(--color-border);border-radius:var(--radius-sm,6px);font-size:12.5px;color:var(--color-text-secondary)">
+          <strong style="color:var(--color-text)">Stats.fm hoy:</strong>
+          ${plays.toLocaleString('es-AR')} plays · ${Math.round(ms / 60000).toLocaleString('es-AR')}m
+          <span style="color:var(--color-text-muted)">(${tracks} track${tracks === 1 ? '' : 's'} en tu top-1000)</span>
+        </div>`;
+    }
+    if (tracksHolder) {
+      const top5 = artistTracks.sort((a, b) => b.streams - a.streams).slice(0, 5);
+      if (top5.length) {
+        tracksHolder.innerHTML = top5.map((t, i) => {
+          const min = Math.round(t.playedMs / 60000);
+          const id = t.sid || '';
+          return `
+            <div class="wrapped-top-row${id ? ' tc-clickable' : ''}" data-uri="${id ? 'spotify:track:' + id : ''}" data-name="${escapeHtml(t.name || '')}">
+              <span class="wrapped-top-rank">${i + 1}</span>
+              <div class="wrapped-top-info">
+                <div class="wrapped-top-name">${escapeHtml(t.name || '(sin nombre)')}</div>
+                <div class="wrapped-top-artist" style="font-size:10px;color:var(--color-text-muted)">Stats.fm</div>
+              </div>
+              <span class="wrapped-top-meta">${min.toLocaleString('es-AR')}m · ${t.streams} plays</span>
+            </div>`;
+        }).join('');
+        tracksHolder.querySelectorAll('[data-uri]').forEach(el => {
+          const uri = el.dataset.uri;
+          if (!uri) return;
+          const id = uri.split(':').pop();
+          el.onclick = () => openTrackCard({ id, name: el.dataset.name, artist: name });
+        });
+      } else {
+        tracksHolder.innerHTML = `<div style="color:var(--color-text-muted);font-size:12px;padding:8px 4px">Sin tracks puntuales en tu top-1000 tampoco.</div>`;
+      }
+    }
   } catch { /* silencioso */ }
 }
 

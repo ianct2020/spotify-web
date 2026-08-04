@@ -26,6 +26,9 @@ let _progressCancel = null;
 let _progressMin = false;
 // Último estado conocido, para re-renderizar con datos frescos al minimizar/expandir.
 let _progressState = { text: '', loaded: 0, total: 0 };
+// Auto-cierre si no llegan más updates en N segundos (protección contra overlays huérfanos)
+let _progressIdleTimer = null;
+const PROGRESS_IDLE_TIMEOUT_MS = 10000;
 
 function renderProgressOverlay(text, loaded, total, cancellable, minimized) {
   const pct = total > 0 ? Math.round((loaded / total) * 100) : 0;
@@ -46,6 +49,7 @@ function renderProgressOverlay(text, loaded, total, cancellable, minimized) {
   }
   return `
     <div class="progress-overlay" id="progress-overlay" data-mode="full" data-cancellable="${cancellable ? 1 : 0}">
+      <button class="progress-close-x" id="progress-close-x" aria-label="Cerrar" title="Cerrar el overlay (la operación sigue en background)">✕</button>
       <div class="spinner spinner-lg"></div>
       <div class="progress-text" id="progress-label">${escapeHtml(text)}</div>
       <div style="width:220px">
@@ -77,6 +81,8 @@ function wireProgressButtons() {
     _progressMin = true;
     showProgress(_progressState.text, _progressState.loaded, _progressState.total);
   };
+  const closeX = document.getElementById('progress-close-x');
+  if (closeX) closeX.onclick = (e) => { e.stopPropagation(); hideProgress(); };
   if (overlay.dataset.mode === 'mini') overlay.onclick = () => {
     _progressMin = false;
     showProgress(_progressState.text, _progressState.loaded, _progressState.total);
@@ -91,6 +97,7 @@ function showProgress(text, loaded = 0, total = 0, opts = {}) {
   const cancellable = !!_progressCancel;
   const mode = _progressMin ? 'mini' : 'full';
   const overlay = document.getElementById('progress-overlay');
+  resetProgressIdleTimer();
 
   if (!overlay || overlay.dataset.mode !== mode || (overlay.dataset.cancellable === '1') !== cancellable) {
     const html = renderProgressOverlay(text, loaded, total, cancellable, _progressMin);
@@ -108,10 +115,20 @@ function showProgress(text, loaded = 0, total = 0, opts = {}) {
     `${loaded.toLocaleString()}${total ? ` / ${total.toLocaleString()}` : ''}`;
 }
 
+function resetProgressIdleTimer() {
+  if (_progressIdleTimer) clearTimeout(_progressIdleTimer);
+  _progressIdleTimer = setTimeout(() => {
+    // Si el overlay sigue montado y nadie llamó a showProgress en 10s, lo cerramos:
+    // asumimos que la operación terminó pero alguien olvidó hideProgress.
+    if (document.getElementById('progress-overlay')) hideProgress();
+  }, PROGRESS_IDLE_TIMEOUT_MS);
+}
+
 function hideProgress() {
   document.getElementById('progress-overlay')?.remove();
   _progressCancel = null;
   _progressMin = false;
+  if (_progressIdleTimer) { clearTimeout(_progressIdleTimer); _progressIdleTimer = null; }
 }
 
 // Azúcar para las features: arma el AbortController, muestra el overlay con botón

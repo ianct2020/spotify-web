@@ -4,6 +4,8 @@ import { showToast } from '../ui/toast.js';
 
 let likes = [];
 let currentTab = 'year';
+let selectedYears = new Set();
+let selectedDecades = new Set();
 
 export function render(container) {
   container.innerHTML = `
@@ -107,13 +109,18 @@ function renderYearTab() {
     content.innerHTML = `<div class="card"><p>No hay años disponibles.</p></div>`;
     return;
   }
+  // Purgar selecciones que ya no existen en el dataset
+  const validYears = new Set(groups.map(([y]) => y));
+  for (const y of selectedYears) if (!validYears.has(y)) selectedYears.delete(y);
+
   content.innerHTML = `
     <div style="margin-bottom:12px;color:var(--color-text-secondary);font-size:14px">
       ${likes.length.toLocaleString()} likes analizados · ${groups.length} años distintos
     </div>
+    <div class="smart-selectbar" id="smart-selectbar-year"></div>
     <div class="smart-grid">
       ${groups.map(([year, tracks]) => `
-        <button class="smart-card" data-year="${year}">
+        <button class="smart-card${selectedYears.has(year) ? ' selected' : ''}" data-year="${year}">
           <div class="smart-card-title">${year}</div>
           <div class="smart-card-meta">${tracks.length.toLocaleString()} likes</div>
         </button>
@@ -121,8 +128,15 @@ function renderYearTab() {
     </div>
   `;
   content.querySelectorAll('.smart-card').forEach(el => {
-    el.onclick = () => promptCreate(`Likes ${el.dataset.year}`, groupByYear().find(([y]) => y == el.dataset.year)[1]);
+    el.onclick = () => {
+      const year = Number(el.dataset.year);
+      if (selectedYears.has(year)) selectedYears.delete(year);
+      else selectedYears.add(year);
+      el.classList.toggle('selected');
+      updateSelectBar('year', groups);
+    };
   });
+  updateSelectBar('year', groups);
 }
 
 function renderDecadeTab() {
@@ -132,13 +146,17 @@ function renderDecadeTab() {
     content.innerHTML = `<div class="card"><p>No hay décadas disponibles.</p></div>`;
     return;
   }
+  const validDecades = new Set(groups.map(([d]) => d));
+  for (const d of selectedDecades) if (!validDecades.has(d)) selectedDecades.delete(d);
+
   content.innerHTML = `
     <div style="margin-bottom:12px;color:var(--color-text-secondary);font-size:14px">
       ${likes.length.toLocaleString()} likes analizados · ${groups.length} décadas
     </div>
+    <div class="smart-selectbar" id="smart-selectbar-decade"></div>
     <div class="smart-grid">
       ${groups.map(([decade, tracks]) => `
-        <button class="smart-card" data-decade="${decade}">
+        <button class="smart-card${selectedDecades.has(decade) ? ' selected' : ''}" data-decade="${decade}">
           <div class="smart-card-title">${decade}s</div>
           <div class="smart-card-meta">${tracks.length.toLocaleString()} likes</div>
         </button>
@@ -146,8 +164,62 @@ function renderDecadeTab() {
     </div>
   `;
   content.querySelectorAll('.smart-card').forEach(el => {
-    el.onclick = () => promptCreate(`Likes ${el.dataset.decade}s`, groupByDecade().find(([d]) => d == el.dataset.decade)[1]);
+    el.onclick = () => {
+      const decade = Number(el.dataset.decade);
+      if (selectedDecades.has(decade)) selectedDecades.delete(decade);
+      else selectedDecades.add(decade);
+      el.classList.toggle('selected');
+      updateSelectBar('decade', groups);
+    };
   });
+  updateSelectBar('decade', groups);
+}
+
+// Barra sticky arriba: cuenta lo seleccionado + botón crear + limpiar.
+function updateSelectBar(kind, groups) {
+  const bar = document.getElementById(`smart-selectbar-${kind}`);
+  if (!bar) return;
+  const selected = kind === 'year' ? selectedYears : selectedDecades;
+  const label = kind === 'year' ? 'año' : 'década';
+  const suffix = kind === 'year' ? '' : 's';
+
+  let tracks = 0;
+  const picked = [];
+  for (const [key, arr] of groups) {
+    if (!selected.has(key)) continue;
+    tracks += arr.length;
+    picked.push(key);
+  }
+  picked.sort((a, b) => a - b);
+
+  if (selected.size === 0) {
+    bar.innerHTML = `<div class="smart-selectbar-empty">Tocá uno o más ${label}${suffix} para armar una playlist.</div>`;
+    return;
+  }
+  const listLabel = picked.map(p => `${p}${kind === 'decade' ? 's' : ''}`).join(' + ');
+  bar.innerHTML = `
+    <div class="smart-selectbar-info">
+      <strong>${tracks.toLocaleString()}</strong> tracks · ${selected.size} ${label}${selected.size === 1 ? '' : (kind === 'year' ? 's' : '')} · <span style="color:var(--color-text-muted)">${escapeHtml(listLabel)}</span>
+    </div>
+    <div class="smart-selectbar-actions">
+      <button class="btn btn-secondary btn-sm" id="smart-clear-sel">Limpiar</button>
+      <button class="btn btn-primary btn-sm" id="smart-create-sel">Crear playlist</button>
+    </div>
+  `;
+  bar.querySelector('#smart-clear-sel').onclick = () => {
+    selected.clear();
+    document.querySelectorAll('.smart-card.selected').forEach(el => el.classList.remove('selected'));
+    updateSelectBar(kind, groups);
+  };
+  bar.querySelector('#smart-create-sel').onclick = () => {
+    const tracksAll = [];
+    for (const [key, arr] of groups) {
+      if (!selected.has(key)) continue;
+      for (const t of arr) tracksAll.push(t);
+    }
+    const name = `Random ${listLabel}`;
+    promptCreate(name, tracksAll);
+  };
 }
 
 function renderRandomTab() {

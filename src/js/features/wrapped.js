@@ -160,7 +160,9 @@ function renderYearCard() {
         ${topAlbum ? `
           <div class="wrapped-album-hero tc-clickable" data-album-hero title="Click para ver la ficha del álbum" style="grid-area:alb">
             <div class="wrapped-tile-label">Álbum del año</div>
-            ${topAlbum.img ? `<img src="${topAlbum.img}" alt="" class="wrapped-album-hero-cover" loading="lazy">` : `<div class="wrapped-album-hero-cover" style="background:var(--color-elevated);display:flex;align-items:center;justify-content:center;color:var(--color-text-muted);font-size:44px">♪</div>`}
+            ${topAlbum.img
+              ? `<img src="${topAlbum.img}" alt="" class="wrapped-album-hero-cover" loading="lazy" onerror="this.outerHTML='&lt;div class=&quot;wrapped-album-hero-cover&quot; style=&quot;background:var(--color-elevated);display:flex;align-items:center;justify-content:center;color:var(--color-text-muted);font-size:44px&quot;&gt;♪&lt;/div&gt;'">`
+              : `<div class="wrapped-album-hero-cover" style="background:var(--color-elevated);display:flex;align-items:center;justify-content:center;color:var(--color-text-muted);font-size:44px">♪</div>`}
             <div class="wrapped-album-hero-name">${escapeHtml(topAlbum.name)}</div>
             <div class="wrapped-album-hero-artist">${escapeHtml(topAlbum.artist)}</div>
             <div class="wrapped-album-hero-meta">${fmtMinutes(topAlbum.min)} · ${topAlbum.plays.toLocaleString('es-AR')} plays</div>
@@ -334,64 +336,63 @@ function renderAllTime() {
       </div>
 
       <div class="wrapped-year-layout">
-        <div class="wrapped-year-stats-left">
-          ${topArtist ? `
-            <div class="wrapped-tile compact" data-hover="at-tile-art:0">
-              <div class="wrapped-tile-label">Artista de siempre</div>
-              <div class="wrapped-tile-value">${escapeHtml(topArtist.name)}</div>
-              <div class="wrapped-tile-hint">${fmtMinutes(topArtist.min)} · ${(topArtist.plays || 0).toLocaleString('es-AR')} plays</div>
-            </div>
-          ` : ''}
-          ${topTrack ? `
-            <div class="wrapped-tile compact" data-hover="at-tile-trk:0">
-              <div class="wrapped-tile-label">Track de siempre</div>
-              <div class="wrapped-tile-value" style="font-size:16px">${escapeHtml(topTrack.name)}</div>
-              <div class="wrapped-tile-hint">${escapeHtml(topTrack.artist)} · ${fmtMinutes(topTrack.min)}</div>
-            </div>
-          ` : ''}
-          <div class="wrapped-tile compact">
-            <div class="wrapped-tile-label">Plays válidas</div>
-            <div class="wrapped-tile-value">${(t.plays_valid || 0).toLocaleString('es-AR')}</div>
-            <div class="wrapped-tile-hint">de ${(t.plays_raw || 0).toLocaleString('es-AR')} crudas · ${t.skip_pct}% skips</div>
+        ${topArtist ? `
+          <div class="wrapped-tile compact" data-hover="at-tile-art:0" style="grid-area:art">
+            <div class="wrapped-tile-label">Artista de siempre</div>
+            <div class="wrapped-tile-value">${escapeHtml(topArtist.name)}</div>
+            <div class="wrapped-tile-hint">${fmtMinutes(topArtist.min)} · ${(topArtist.plays || 0).toLocaleString('es-AR')} plays</div>
           </div>
-          <div class="wrapped-tile compact">
-            <div class="wrapped-tile-label">Días activos</div>
-            <div class="wrapped-tile-value">${daysActive.toLocaleString('es-AR')}</div>
-            <div class="wrapped-tile-hint">${totalPossibleDays ? `de ${totalPossibleDays.toLocaleString('es-AR')} totales · ` : ''}racha ${t.longest_streak || 0} d</div>
+        ` : `<div style="grid-area:art"></div>`}
+        ${topTrack ? `
+          <div class="wrapped-tile compact" data-hover="at-tile-trk:0" style="grid-area:trk">
+            <div class="wrapped-tile-label">Track de siempre</div>
+            <div class="wrapped-tile-value" style="font-size:16px">${escapeHtml(topTrack.name)}</div>
+            <div class="wrapped-tile-hint">${escapeHtml(topTrack.artist)} · ${fmtMinutes(topTrack.min)}</div>
           </div>
-        </div>
+        ` : `<div style="grid-area:trk"></div>`}
 
         ${topAlbum ? `
-          <div class="wrapped-album-hero tc-clickable" data-album-hero title="Click para ver la ficha del álbum">
+          <div class="wrapped-album-hero tc-clickable" data-album-hero title="Click para ver la ficha del álbum" style="grid-area:alb">
             <div class="wrapped-tile-label">Álbum de siempre</div>
-            ${topAlbum.img ? `<img src="${topAlbum.img}" alt="" class="wrapped-album-hero-cover" loading="lazy">` : `<div class="wrapped-album-hero-cover" style="background:var(--color-elevated);display:flex;align-items:center;justify-content:center;color:var(--color-text-muted);font-size:44px">♪</div>`}
+            ${topAlbum.img
+              ? `<img src="${topAlbum.img}" alt="" class="wrapped-album-hero-cover" loading="lazy" onerror="this.outerHTML='&lt;div class=&quot;wrapped-album-hero-cover&quot; style=&quot;background:var(--color-elevated);display:flex;align-items:center;justify-content:center;color:var(--color-text-muted);font-size:44px&quot;&gt;♪&lt;/div&gt;'">`
+              : `<div class="wrapped-album-hero-cover" style="background:var(--color-elevated);display:flex;align-items:center;justify-content:center;color:var(--color-text-muted);font-size:44px">♪</div>`}
             <div class="wrapped-album-hero-name">${escapeHtml(topAlbum.name)}</div>
             <div class="wrapped-album-hero-artist">${escapeHtml(topAlbum.artist)}</div>
             <div class="wrapped-album-hero-meta">${fmtMinutes(topAlbum.min)} · ${(topAlbum.plays || 0).toLocaleString('es-AR')} plays</div>
           </div>
-        ` : ''}
+        ` : `<div style="grid-area:alb"></div>`}
 
-        <div class="wrapped-year-stats-right">
-          <div class="wrapped-tile compact">
-            <div class="wrapped-tile-label">Artistas únicos</div>
-            <div class="wrapped-tile-value">${(t.unique_artists || 0).toLocaleString('es-AR')}</div>
-            <div class="wrapped-tile-hint">con al menos una play ≥30s</div>
-          </div>
-          <div class="wrapped-tile compact">
-            <div class="wrapped-tile-label">Álbumes únicos</div>
-            <div class="wrapped-tile-value">${(t.unique_albums || 0).toLocaleString('es-AR')}</div>
-            <div class="wrapped-tile-hint">con al menos una play ≥30s</div>
-          </div>
-          <div class="wrapped-tile compact">
-            <div class="wrapped-tile-label">Tracks únicos</div>
-            <div class="wrapped-tile-value">${(t.unique_tracks || 0).toLocaleString('es-AR')}</div>
-            <div class="wrapped-tile-hint">con al menos una play ≥30s</div>
-          </div>
-          <div class="wrapped-tile compact">
-            <div class="wrapped-tile-label">Años con datos</div>
-            <div class="wrapped-tile-value">${stats.years.length}</div>
-            <div class="wrapped-tile-hint">${stats.years[stats.years.length-1].year} → ${stats.years[0].year}</div>
-          </div>
+        <div class="wrapped-tile compact" style="grid-area:day">
+          <div class="wrapped-tile-label">Artistas únicos</div>
+          <div class="wrapped-tile-value">${(t.unique_artists || 0).toLocaleString('es-AR')}</div>
+          <div class="wrapped-tile-hint">con al menos una play ≥30s</div>
+        </div>
+        <div class="wrapped-tile compact" style="grid-area:days">
+          <div class="wrapped-tile-label">Álbumes únicos</div>
+          <div class="wrapped-tile-value">${(t.unique_albums || 0).toLocaleString('es-AR')}</div>
+          <div class="wrapped-tile-hint">con al menos una play ≥30s</div>
+        </div>
+
+        <div class="wrapped-tile compact" style="grid-area:disc">
+          <div class="wrapped-tile-label">Plays válidas</div>
+          <div class="wrapped-tile-value">${(t.plays_valid || 0).toLocaleString('es-AR')}</div>
+          <div class="wrapped-tile-hint">de ${(t.plays_raw || 0).toLocaleString('es-AR')} crudas · ${t.skip_pct}% skips</div>
+        </div>
+        <div class="wrapped-tile compact" style="grid-area:mes">
+          <div class="wrapped-tile-label">Días activos</div>
+          <div class="wrapped-tile-value">${daysActive.toLocaleString('es-AR')}</div>
+          <div class="wrapped-tile-hint">${totalPossibleDays ? `de ${totalPossibleDays.toLocaleString('es-AR')} totales · ` : ''}racha ${t.longest_streak || 0} d</div>
+        </div>
+        <div class="wrapped-tile compact" style="grid-area:skp">
+          <div class="wrapped-tile-label">Tracks únicos</div>
+          <div class="wrapped-tile-value">${(t.unique_tracks || 0).toLocaleString('es-AR')}</div>
+          <div class="wrapped-tile-hint">con al menos una play ≥30s</div>
+        </div>
+        <div class="wrapped-tile compact" style="grid-area:fst">
+          <div class="wrapped-tile-label">Años con datos</div>
+          <div class="wrapped-tile-value">${stats.years.length}</div>
+          <div class="wrapped-tile-hint">${stats.years[stats.years.length-1].year} → ${stats.years[0].year}</div>
         </div>
       </div>
     </div>

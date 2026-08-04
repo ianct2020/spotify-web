@@ -10,6 +10,7 @@ import { togglePreview, playingKey } from '../ui/preview-player.js';
 import { hasUsername, findTrackId, getTrackCurrentStats, loadTopLifetime } from '../api/statsfm.js';
 import { openAlbumCard } from './album-card.js';
 import { openModal, closeTop } from '../ui/modal-stack.js';
+import { getBestAvailableLikes } from '../api.js';
 
 const MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
 
@@ -76,7 +77,7 @@ async function openTrackCard(t) {
     html: `
     <div class="modal" style="max-width:640px;width:min(640px,92vw)">
       <div style="display:flex;gap:14px;align-items:flex-start;margin-bottom:14px">
-        <div id="tc-cover" title="${t.album ? 'Ver ficha del álbum' : ''}" style="width:64px;height:64px;border-radius:8px;background:var(--color-elevated);display:flex;align-items:center;justify-content:center;font-size:26px;color:var(--color-text-muted);flex-shrink:0;overflow:hidden;${t.album ? 'cursor:pointer' : ''}">
+        <div id="tc-cover" title="Ver ficha del álbum" style="width:64px;height:64px;border-radius:8px;background:var(--color-elevated);display:flex;align-items:center;justify-content:center;font-size:26px;color:var(--color-text-muted);flex-shrink:0;overflow:hidden;cursor:pointer">
           ${t.img
             ? `<img src="${t.img}" alt="" style="width:100%;height:100%;object-fit:cover">`
             : `♪`}
@@ -99,21 +100,45 @@ async function openTrackCard(t) {
   });
 
   // Click en la tapa → abrir ficha del álbum ENCIMA (no cierra la de canción,
-  // así la flecha ← vuelve). Si tenemos album name.
+  // así la flecha ← vuelve). Si el caller no pasó `album`, lo resolvemos:
+  // 1) match por id en los likes cacheados; 2) top_albums_all_time filtrado
+  // por artista si hay un único álbum. Si no se logra, no rompe.
   const cover = overlay.querySelector('#tc-cover');
-  if (cover && t.album) {
+  if (cover) {
     cover.onclick = async () => {
-      let albumInfo = { name: t.album, artist: t.artist, img: t.img };
+      let albumName = t.album || null;
+      let albumInfo = { name: albumName, artist: t.artist, img: t.img };
       try {
-        const stats = await loadHistoryStats();
-        const found = (stats?.top_albums_all_time || []).find(
-          a => a.name === t.album && a.artist === t.artist
-        );
-        if (found) {
-          albumInfo = { name: found.name, artist: found.artist, img: found.img || t.img, plays: found.plays, min: found.min };
+        const stats = await loadHistoryStats().catch(() => null);
+        if (albumName) {
+          const found = (stats?.top_albums_all_time || []).find(
+            a => a.name === albumName && a.artist === t.artist
+          );
+          if (found) {
+            albumInfo = { name: found.name, artist: found.artist, img: found.img || t.img, plays: found.plays, min: found.min };
+          }
+        } else {
+          const likes = await getBestAvailableLikes().catch(() => ({ items: [] }));
+          const like = (likes.items || []).find(l => l.track?.id === t.id);
+          if (like?.track?.album?.name) {
+            const imgs = like.track.album.images || [];
+            albumName = like.track.album.name;
+            albumInfo = {
+              name: albumName,
+              artist: t.artist,
+              img: imgs[1]?.url || imgs[0]?.url || imgs[2]?.url || t.img,
+            };
+          }
+          if (!albumName && stats?.top_albums_all_time && t.artist) {
+            const cands = stats.top_albums_all_time.filter(a => a.artist === t.artist);
+            if (cands.length === 1) {
+              albumInfo = { name: cands[0].name, artist: cands[0].artist, img: cands[0].img, plays: cands[0].plays, min: cands[0].min };
+              albumName = cands[0].name;
+            }
+          }
         }
       } catch { /* noop */ }
-      openAlbumCard(albumInfo);
+      if (albumInfo.name) openAlbumCard(albumInfo);
     };
   }
 
