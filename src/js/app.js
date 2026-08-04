@@ -216,6 +216,9 @@ function showApp(profile) {
           <a class="nav-link" data-route="search" href="#search">
             <span class="nav-link-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></span> Buscar likes
           </a>
+          <a class="nav-link" data-route="listened" href="#listened">
+            <span class="nav-link-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/></svg></span> Álbumes escuchados
+          </a>
         </div>
         <div class="sidebar-section">
           <div class="sidebar-section-title">Crear</div>
@@ -228,6 +231,9 @@ function showApp(profile) {
           <a class="nav-link" data-route="wthree" href="#wthree">
             <span class="nav-link-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16"/><path d="M4 12h10"/><path d="M4 18h16"/><path d="M18 12l3 3-3 3"/></svg></span> W-Three helper
           </a>
+          <a class="nav-link" data-route="genre" href="#genre">
+            <span class="nav-link-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20.6 13.4l-7.2 7.2a2 2 0 0 1-2.8 0L2 12V2h10l8.6 8.6a2 2 0 0 1 0 2.8z"/><circle cx="7" cy="7" r="1.5"/></svg></span> Por género
+          </a>
         </div>
         <div class="sidebar-section">
           <div class="sidebar-section-title">Descubrir</div>
@@ -239,12 +245,6 @@ function showApp(profile) {
           </a>
           <a class="nav-link" data-route="recs" href="#recs">
             <span class="nav-link-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 22h4M15 14a5 5 0 1 0-6 0c.5.5 1 1 1 2v2h4v-2c0-1 .5-1.5 1-2z"/></svg></span> Recomendaciones
-          </a>
-          <a class="nav-link" data-route="genre" href="#genre">
-            <span class="nav-link-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20.6 13.4l-7.2 7.2a2 2 0 0 1-2.8 0L2 12V2h10l8.6 8.6a2 2 0 0 1 0 2.8z"/><circle cx="7" cy="7" r="1.5"/></svg></span> Por género
-          </a>
-          <a class="nav-link" data-route="listened" href="#listened">
-            <span class="nav-link-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/></svg></span> Álbumes escuchados
           </a>
         </div>
         <div class="sidebar-section">
@@ -434,6 +434,7 @@ const HOME_SECTIONS = [
       { hash: 'wrapped', icon: ICONS.wrapped, name: 'Wrapped', desc: 'Tu resumen del año — año calendario completo, hecho con el streaming history.' },
       { hash: 'records', icon: ICONS.records, name: 'Récords', desc: 'Días épicos, maratones, temas en loop, rachas e hitos de tu historial.' },
       { hash: 'search', icon: ICONS.search, name: 'Buscar likes', desc: 'Buscador instantáneo en tus Liked Songs (local, sin ir a Spotify).' },
+      { hash: 'listened', icon: ICONS.listened, name: 'Álbumes escuchados', desc: 'Los álbumes de tu playlist de registro, agrupados.' },
     ],
   },
   {
@@ -441,6 +442,7 @@ const HOME_SECTIONS = [
     items: [
       { hash: 'smart', icon: ICONS.smart, name: 'Smart Playlists', desc: 'Playlists por año, década o random.' },
       { hash: 'byartist', icon: ICONS.byartist, name: 'Por artista', desc: 'Todos tus likes de uno o varios artistas.' },
+      { hash: 'genre', icon: ICONS.genre, name: 'Por género', desc: 'Agrupá tus likes por género y armá playlists.' },
     ],
   },
   {
@@ -449,8 +451,6 @@ const HOME_SECTIONS = [
       { hash: 'similar', icon: ICONS.similar, name: 'Artistas similares', desc: 'Artistas parecidos a los que te gustan, vía Last.fm.' },
       { hash: 'rabbit', icon: ICONS.rabbit, name: 'Rabbit hole', desc: 'Navegá artistas y tracks encadenados por género.' },
       { hash: 'recs', icon: ICONS.recs, name: 'Recomendaciones', desc: 'Basadas en tus scrobbles de Last.fm.' },
-      { hash: 'genre', icon: ICONS.genre, name: 'Por género', desc: 'Agrupá tus likes por género y armá playlists.' },
-      { hash: 'listened', icon: ICONS.listened, name: 'Álbumes escuchados', desc: 'Los álbumes de tu playlist de registro, agrupados.' },
     ],
   },
   {

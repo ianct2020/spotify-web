@@ -1,4 +1,4 @@
-import { openModal, closeTop } from './modal-stack.js?v=113';
+import { openModal, closeTop } from './modal-stack.js?v=114';
 
 function renderTrackRow(track, extra = '') {
   const art = track.album?.images?.[2]?.url || track.album?.images?.[0]?.url || '';
