@@ -2,9 +2,9 @@
 // y botones para saltar a la ficha del artista o abrir el álbum en Spotify.
 // Se dispara desde openAlbumCard({ name, artist, plays, min, img }).
 
-import { escapeHtml } from '../ui/components.js?v=114';
-import { openArtistCard } from './artist-card.js?v=114';
-import { openModal, closeTop } from '../ui/modal-stack.js?v=114';
+import { escapeHtml } from '../ui/components.js?v=115';
+import { openArtistCard } from './artist-card.js?v=115';
+import { openModal, closeTop } from '../ui/modal-stack.js?v=115';
 
 function fmtMinutes(min) {
   if (!min && min !== 0) return '—';

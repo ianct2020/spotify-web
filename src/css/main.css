@@ -2838,7 +2838,6 @@ body:has(.preview-pill.show) .progress-mini {
   flex-wrap: wrap;
   margin-bottom: 12px;
 }
-.covers-summary { font-size: 13px; color: var(--color-text-secondary); }
 .covers-controls { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
 .covers-control-group {
   display: inline-flex;
@@ -2871,19 +2870,47 @@ body:has(.preview-pill.show) .progress-mini {
   cursor: pointer;
 }
 
+.covers-summary { font-size: 13px; color: var(--color-text-secondary); display:flex; flex-wrap:wrap; align-items:baseline; gap:8px; }
+.covers-summary-sub { font-size: 11px; color: var(--color-text-muted); }
+.covers-fit-btn.is-on { background: var(--color-accent); color: white; }
+
+.covers-year-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 10px;
+  min-width: 0;
+}
+.covers-chip {
+  background: var(--color-surface);
+  color: var(--color-text-secondary);
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  padding: 4px 12px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: background .12s, color .12s, border-color .12s;
+}
+.covers-chip:hover { background: var(--color-elevated); color: var(--color-text); }
+.covers-chip.is-on {
+  background: var(--color-accent);
+  color: white;
+  border-color: var(--color-accent);
+}
+
 .covers-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(var(--cover-min, 64px), 1fr));
-  gap: 4px;
+  grid-template-columns: repeat(auto-fill, minmax(var(--cover-min, 28px), 1fr));
+  gap: var(--cover-gap, 2px);
   min-width: 0;
 }
 .cover-cell {
   position: relative;
   aspect-ratio: 1 / 1;
-  background: var(--color-elevated);   /* placeholder gris mientras carga */
+  background: var(--color-elevated);   /* placeholder gris visible desde el primer frame */
   border: 0;
   padding: 0;
-  border-radius: 3px;
+  border-radius: 2px;
   overflow: hidden;
   cursor: pointer;
   min-width: 0;
@@ -2903,52 +2930,32 @@ body:has(.preview-pill.show) .progress-mini {
   justify-content: center;
   color: var(--color-text-muted);
   font-weight: 700;
-  font-size: calc(var(--cover-min, 64px) * 0.4);
+  font-size: calc(var(--cover-min, 28px) * 0.4);
   background: var(--color-elevated);
 }
-.cover-overlay {
-  position: absolute;
-  inset: 0;
-  padding: 6px 8px;
-  display: flex;
-  flex-direction: column;
-  justify-content: flex-end;
-  gap: 1px;
-  background: linear-gradient(to top, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0.55) 40%, rgba(0,0,0,0) 80%);
+
+/* Tooltip flotante — reemplaza al overlay hover porque a 28px no entra nada. */
+.covers-tooltip {
+  position: fixed;
+  z-index: 1000;
+  top: 0;
+  left: 0;
+  display: none;
+  padding: 8px 10px;
+  background: rgba(20,20,28,0.95);
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
   color: white;
-  opacity: 0;
-  transition: opacity .14s;
-  pointer-events: none;   /* clicks pasan al botón padre */
-  min-width: 0;
+  font-size: 12px;
+  line-height: 1.25;
+  max-width: 280px;
+  box-shadow: 0 6px 20px rgba(0,0,0,0.5);
+  pointer-events: none;
 }
-.cover-cell:hover .cover-overlay,
-.cover-cell:focus-visible .cover-overlay { opacity: 1; }
-.cover-overlay-name {
-  font-size: 11px;
-  font-weight: 600;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  line-height: 1.15;
-}
-.cover-overlay-artist {
-  font-size: 10px;
-  color: rgba(255,255,255,0.85);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.cover-overlay-meta {
-  font-size: 9px;
-  color: rgba(255,255,255,0.65);
-  margin-top: 2px;
-}
-/* Cuando las celdas son chicas, el overlay se pisa el nombre — bajo tamaño de fuente aún más */
-.covers-grid[data-size="48"] .cover-overlay-name { font-size: 10px; -webkit-line-clamp: 1; }
-.covers-grid[data-size="48"] .cover-overlay-artist { font-size: 9px; }
-.covers-grid[data-size="48"] .cover-overlay-meta { display: none; }
+.covers-tooltip.is-on { display: block; }
+.covers-tooltip .ct-name { font-weight: 600; margin-bottom: 2px; }
+.covers-tooltip .ct-artist { color: rgba(255,255,255,0.75); font-size: 11px; }
+.covers-tooltip .ct-year { color: rgba(255,255,255,0.55); font-size: 10px; margin-top: 2px; }
 
 /* ============ Ficha de artista comprimida (v=111) ============ */
 .ac-modal {
