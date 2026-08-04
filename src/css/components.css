@@ -1,6 +1,7 @@
 .btn {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 8px;
   padding: 10px 20px;
   border: none;
@@ -11,6 +12,7 @@
   cursor: pointer;
   transition: all var(--transition-fast);
   text-decoration: none;
+  text-align: center;
 }
 
 .btn-primary {
@@ -685,6 +687,39 @@ body.modal-open {
   position: relative;
 }
 
+.smart-selectbar {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  background: var(--color-bg, var(--color-surface));
+  padding: 10px 14px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  margin-bottom: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  min-height: 42px;
+}
+.smart-selectbar-empty {
+  color: var(--color-text-muted);
+  font-size: 13px;
+}
+.smart-selectbar-info {
+  font-size: 13px;
+  color: var(--color-text-secondary);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.smart-selectbar-actions {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
 .sort-btn.sort-active {
   background: var(--color-accent);
   color: white;
@@ -834,6 +869,68 @@ body.modal-open {
 }
 
 /* ─── Skips crónicos ─────────────────────────────────────────────────────── */
+
+.skips-topbar {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: 10px 14px;
+  margin-bottom: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.skips-topbar-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+.skips-topbar-row + .skips-topbar-row {
+  border-top: 1px dashed var(--color-border);
+  padding-top: 8px;
+}
+.skips-topbar-actions {
+  display: flex;
+  gap: 8px;
+  margin-left: auto;
+  flex-wrap: wrap;
+}
+.skips-stat-mini {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 4px 10px;
+  background: var(--color-elevated);
+  border-radius: 100px;
+  font-variant-numeric: tabular-nums;
+  min-width: 0;
+}
+.skips-stat-mini-v {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--color-accent);
+}
+.skips-stat-mini-l {
+  font-size: 11px;
+  color: var(--color-text-muted);
+  white-space: nowrap;
+}
+.skips-chip-group {
+  display: inline-flex;
+  gap: 4px;
+  align-items: center;
+}
+.statsfm-toggle-compact {
+  font-size: 12px;
+  padding: 4px 10px;
+  gap: 6px;
+}
+@media (max-width: 720px) {
+  .skips-topbar-row { gap: 8px; }
+  .skips-topbar-actions { margin-left: 0; width: 100%; justify-content: flex-end; }
+}
 
 .skips-header {
   display: grid;

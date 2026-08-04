@@ -3,18 +3,33 @@
 // Preview 30s instantáneo vía iTunes (arranca en el estribillo, no suma plays
 // en tu historial de Spotify). Fallback: iframe embed oficial si iTunes no lo tiene.
 
-import { getBestAvailableLikes, removeLikedTracks } from '../api.js?v=112';
-import { loadSkipStats, trackIdOf, isOwner, ownerLockedMessage } from './history-data.js?v=112';
-import { escapeHtml, confirmModal, pageHeader } from '../ui/components.js?v=112';
-import { showToast } from '../ui/toast.js?v=112';
-import { getPreview } from '../api/preview-providers.js?v=112';
-import { togglePreview, playingKey } from '../ui/preview-player.js?v=112';
-import { openTrackCard } from './track-card.js?v=112';
-import { hasUsername, loadTopLifetime } from '../api/statsfm.js?v=112';
+import { getBestAvailableLikes, removeLikedTracks } from '../api.js?v=113';
+import { loadSkipStats, trackIdOf, isOwner, ownerLockedMessage } from './history-data.js?v=113';
+import { escapeHtml, confirmModal, pageHeader } from '../ui/components.js?v=113';
+import { showToast } from '../ui/toast.js?v=113';
+import { getPreview } from '../api/preview-providers.js?v=113';
+import { togglePreview, playingKey } from '../ui/preview-player.js?v=113';
+import { openTrackCard } from './track-card.js?v=113';
+import { hasUsername, loadTopLifetime } from '../api/statsfm.js?v=113';
 
 let cache = null;
 let minPlays = 5;    // solo tracks con ≥N plays totales (ok+skip)
 let minRatio = 70;   // ratio de skip mínimo (%)
+
+const HIDDEN_KEY = 'skips_hidden_tracks';
+function loadHidden() {
+  try {
+    const raw = localStorage.getItem(HIDDEN_KEY);
+    if (!raw) return new Set();
+    const arr = JSON.parse(raw);
+    return new Set(Array.isArray(arr) ? arr : []);
+  } catch { return new Set(); }
+}
+function saveHidden(set) {
+  try { localStorage.setItem(HIDDEN_KEY, JSON.stringify([...set])); } catch { /* ignora */ }
+}
+let hiddenTracks = loadHidden();
+let showingHidden = false;
 
 // Toggle Stats.fm: si un tema tuvo plays nuevas desde el export, las cuenta
 // como "ok" (asumiendo que si no volviste a skipearlo lo estás dejando pasar) y
@@ -88,66 +103,69 @@ async function analyze() {
 
 function filtered() {
   if (!cache) return [];
-  return cache.rows.filter(r => r.total >= minPlays && r.ratio >= minRatio);
+  return cache.rows.filter(r => {
+    if (r.total < minPlays || r.ratio < minRatio) return false;
+    const isHidden = hiddenTracks.has(r.id);
+    return showingHidden ? isHidden : !isHidden;
+  });
 }
 
 function renderResults() {
   const content = document.getElementById('skips-content');
   const rows = filtered();
   const withAnySkip = cache.rows.length;
+  const hiddenCount = hiddenTracks.size;
 
-  // Stats hero cards + filtros en chips + tabla. Todo simétrico en grid.
   const sfLabel = cache.statsfmUsed
-    ? `Cruzando con Stats.fm — ${cache.statsfmUpdated.toLocaleString('es-AR')} temas ajustados con plays post-export`
-    : (hasUsername() ? 'Cruzar con Stats.fm (usa tus plays post-export para depurar falsos positivos)' : '');
+    ? `Cruzando con Stats.fm — ${cache.statsfmUpdated.toLocaleString('es-AR')} ajustados con plays post-export`
+    : (hasUsername() ? 'Cruzar con Stats.fm' : '');
+
+  // Layout compacto en 2 filas: fila 1 = stats+chips; fila 2 = toggles+acciones.
   content.innerHTML = `
-    <div class="skips-header">
-      <div class="skips-stat">
-        <div class="skips-stat-value">${rows.length.toLocaleString('es-AR')}</div>
-        <div class="skips-stat-label">candidatos con los filtros actuales</div>
-      </div>
-      <div class="skips-stat skips-stat-secondary">
-        <div class="skips-stat-value">${withAnySkip.toLocaleString('es-AR')}</div>
-        <div class="skips-stat-label">likes con al menos 1 skip</div>
-      </div>
-      <div class="skips-stat skips-stat-secondary">
-        <div class="skips-stat-value">${cache.likesCount.toLocaleString('es-AR')}</div>
-        <div class="skips-stat-label">likes totales</div>
-      </div>
-    </div>
-
-    ${sfLabel ? `
-      <label class="statsfm-toggle" title="Al activarlo, un tema que después del export escuchaste enteras N veces más ya no cuenta como skip crónico.">
-        <input type="checkbox" id="skips-statsfm-toggle" ${useStatsfm ? 'checked' : ''}>
-        <span>${escapeHtml(sfLabel)}</span>
-      </label>
-    ` : ''}
-
-    <div class="skips-filters">
-      <div class="skips-filter-group">
-        <div class="skips-filter-label">Plays mínimas</div>
-        <div class="skips-chips" id="skips-plays-chips">
+    <div class="skips-topbar">
+      <div class="skips-topbar-row">
+        <div class="skips-stat-mini">
+          <span class="skips-stat-mini-v">${rows.length.toLocaleString('es-AR')}</span>
+          <span class="skips-stat-mini-l">candidatos${showingHidden ? ' (ocultos)' : ''}</span>
+        </div>
+        <div class="skips-stat-mini">
+          <span class="skips-stat-mini-v">${withAnySkip.toLocaleString('es-AR')}</span>
+          <span class="skips-stat-mini-l">con ≥1 skip</span>
+        </div>
+        <div class="skips-stat-mini">
+          <span class="skips-stat-mini-v">${cache.likesCount.toLocaleString('es-AR')}</span>
+          <span class="skips-stat-mini-l">likes totales</span>
+        </div>
+        <div class="skips-chip-group" id="skips-plays-chips" title="Plays mínimas (ok+skip)">
           ${PLAYS_STEPS.map(v => `
             <button class="skips-chip ${v === minPlays ? 'active' : ''}" data-plays="${v}">≥${v}</button>
           `).join('')}
         </div>
-      </div>
-      <div class="skips-filter-group">
-        <div class="skips-filter-label">Ratio de skip</div>
-        <div class="skips-chips" id="skips-ratio-chips">
+        <div class="skips-chip-group" id="skips-ratio-chips" title="Ratio de skip mínimo">
           ${RATIO_STEPS.map(v => `
             <button class="skips-chip ${v === minRatio ? 'active' : ''}" data-ratio="${v}">${v === 100 ? '100%' : '≥' + v + '%'}</button>
           `).join('')}
         </div>
       </div>
-      <div class="skips-filter-group skips-filter-actions">
-        <button class="btn btn-secondary btn-sm" id="sk-select-all" ${rows.length === 0 ? 'disabled' : ''}>Seleccionar todos</button>
-        <button class="btn btn-danger btn-sm" id="sk-remove" disabled>Sacar de likes (0)</button>
+      <div class="skips-topbar-row">
+        ${sfLabel ? `
+          <label class="statsfm-toggle statsfm-toggle-compact" title="Al activarlo, temas que después del export escuchaste enteras N veces más ya no cuentan.">
+            <input type="checkbox" id="skips-statsfm-toggle" ${useStatsfm ? 'checked' : ''}>
+            <span>${escapeHtml(sfLabel)}</span>
+          </label>
+        ` : '<span></span>'}
+        <div class="skips-topbar-actions">
+          ${hiddenCount > 0 || showingHidden ? `
+            <button class="btn btn-secondary btn-sm ${showingHidden ? 'sort-active' : ''}" id="sk-toggle-hidden" title="${showingHidden ? 'Volver a la vista normal' : 'Ver solo los que ocultaste'}">${showingHidden ? '← Volver' : 'Ocultos (' + hiddenCount + ')'}</button>
+          ` : ''}
+          <button class="btn btn-secondary btn-sm" id="sk-select-all" ${rows.length === 0 ? 'disabled' : ''}>Seleccionar todos</button>
+          <button class="btn btn-danger btn-sm" id="sk-remove" disabled>Sacar de likes (0)</button>
+        </div>
       </div>
     </div>
 
     ${rows.length === 0 ? `
-      <div class="card"><p style="text-align:center;color:var(--color-text-muted);margin:0">Ningún like cumple los umbrales. Bajá los filtros para ver más candidatos.</p></div>
+      <div class="card"><p style="text-align:center;color:var(--color-text-muted);margin:0">${showingHidden ? 'No hay tracks ocultos que cumplan los umbrales actuales.' : 'Ningún like cumple los umbrales. Bajá los filtros para ver más candidatos.'}</p></div>
     ` : `
       <div class="card" style="padding:0;overflow:hidden">
         <div class="skips-list" id="skips-list">
@@ -196,6 +214,11 @@ function renderRow(r, i) {
             <span class="skips-open-arrow">↗</span>
             <span class="skips-open-label">Spotify</span>
           </a>
+          <button class="wthree-hide-btn sk-hide-btn" data-id="${r.id}" title="${showingHidden ? 'Restaurar en la lista' : 'Ocultar de la lista'}" aria-label="${showingHidden ? 'Restaurar' : 'Ocultar'}">
+            ${showingHidden
+              ? `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>`
+              : `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>`}
+          </button>
         </div>
       </div>
       <div class="skips-preview-slot" data-id="${r.id}"></div>
@@ -287,6 +310,24 @@ function wireRows() {
       });
       if (res === null) toggleEmbed(r.id, btn); // ni iTunes ni Deezer → embed Spotify inline
     };
+  });
+
+  const hideToggle = content.querySelector('#sk-toggle-hidden');
+  if (hideToggle) hideToggle.onclick = () => {
+    showingHidden = !showingHidden;
+    renderResults();
+  };
+  content.querySelectorAll('.sk-hide-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const id = btn.dataset.id;
+      if (hiddenTracks.has(id)) hiddenTracks.delete(id);
+      else hiddenTracks.add(id);
+      saveHidden(hiddenTracks);
+      if (showingHidden && hiddenTracks.size === 0) showingHidden = false;
+      renderResults();
+    });
   });
 
   rmBtn.onclick = async () => {

@@ -1,16 +1,16 @@
-import { getAllLikedTracks, invalidateLikesCache, exportAllData, importAllData, getCurrentUserId, syncLikesIncremental, getLikesCacheTimestamp, getBestAvailableLikes, getAllPlaylistItems } from '../api.js?v=112';
-import { showProgress, hideProgress, alertModal, escapeHtml, pageHeader } from '../ui/components.js?v=112';
-import { openModal, closeTop } from '../ui/modal-stack.js?v=112';
-import { showToast } from '../ui/toast.js?v=112';
-import { openListenedAlbumsPicker } from './listened-shared.js?v=112';
-import { loadHistoryStats, loadListenedAlbums } from './history-data.js?v=112';
-import { getArtistTopPreview } from '../api/preview-providers.js?v=112';
-import { hoverIn, hoverOut } from '../ui/preview-player.js?v=112';
-import { hasUsername, getUsername } from '../api/statsfm.js?v=112';
-import { loadHistoryStats as _loadStatsForCounter } from './history-data.js?v=112';
-import { openArtistCard } from './artist-card.js?v=112';
-import { openAlbumCard } from './album-card.js?v=112';
-import { activateMarquee, marqueeSpan } from '../ui/marquee.js?v=112';
+import { getAllLikedTracks, invalidateLikesCache, exportAllData, importAllData, getCurrentUserId, syncLikesIncremental, getLikesCacheTimestamp, getBestAvailableLikes, getAllPlaylistItems } from '../api.js?v=113';
+import { showProgress, hideProgress, alertModal, escapeHtml, pageHeader } from '../ui/components.js?v=113';
+import { openModal, closeTop } from '../ui/modal-stack.js?v=113';
+import { showToast } from '../ui/toast.js?v=113';
+import { openListenedAlbumsPicker } from './listened-shared.js?v=113';
+import { loadHistoryStats, loadListenedAlbums } from './history-data.js?v=113';
+import { getArtistTopPreview } from '../api/preview-providers.js?v=113';
+import { hoverIn, hoverOut } from '../ui/preview-player.js?v=113';
+import { hasUsername, getUsername } from '../api/statsfm.js?v=113';
+import { loadHistoryStats as _loadStatsForCounter } from './history-data.js?v=113';
+import { openArtistCard } from './artist-card.js?v=113';
+import { openAlbumCard } from './album-card.js?v=113';
+import { activateMarquee, marqueeSpan } from '../ui/marquee.js?v=113';
 
 let charts = [];
 let _loadController = null;
@@ -548,11 +548,15 @@ function renderDashboard(container, stats) {
     </div>
 
     <div class="card" id="listened-year-card" style="margin-top:22px;margin-bottom:22px;display:none">
-      <div style="display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin-bottom:10px;flex-wrap:wrap">
-        <h3 style="margin:0">Álbumes escuchados por año</h3>
-        <span style="font-size:12px;color:var(--color-text-muted)" id="listened-year-hint">Detectados desde tu historial · click para ver la lista</span>
+      <div class="listened-year-row">
+        <div class="listened-year-head">
+          <h3 style="margin:0">Álbumes escuchados por año</h3>
+          <button type="button" id="listened-year-info" class="info-btn" title="Sobre esta sección" aria-label="Sobre esta sección">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+          </button>
+        </div>
+        <div id="listened-year-tiles" class="listened-year-tiles-inline" style="color:var(--color-text-muted);font-size:13px">Cargando…</div>
       </div>
-      <div id="listened-year-tiles" style="display:grid;gap:10px;min-height:70px;align-items:center;color:var(--color-text-muted);font-size:13px">Cargando…</div>
     </div>
 
     <div class="dash-grid">
@@ -864,7 +868,7 @@ function renderHeatmap(matrix) {
 async function hydrateListenedYearTiles() {
   const card = document.getElementById('listened-year-card');
   const holder = document.getElementById('listened-year-tiles');
-  const hint = document.getElementById('listened-year-hint');
+  const infoBtn = document.getElementById('listened-year-info');
   if (!card || !holder) return;
 
   card.style.display = '';
@@ -873,36 +877,29 @@ async function hydrateListenedYearTiles() {
     if (!data || !data.years?.length) { card.style.display = 'none'; return; }
 
     const years = [...data.years].sort((a, b) => b.year - a.year);
-    if (hint && data.criteria) {
-      hint.textContent = `Detectados en tu historial · ≥${data.criteria.min_tracks_sameday} tracks distintos o ≥${data.criteria.min_min_sameday} min en un mismo día · click para ver la lista`;
+    if (infoBtn && data.criteria) {
+      infoBtn.onclick = () => {
+        openModal({
+          id: 'listened-year-info',
+          html: `
+            <div class="modal" style="max-width:420px">
+              <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:8px">
+                <h2 style="margin:0;font-size:18px">Álbumes escuchados por año</h2>
+                <button type="button" class="modal-close" data-close-modal aria-label="Cerrar">✕</button>
+              </div>
+              <p style="color:var(--color-text-secondary);font-size:14px;line-height:1.5;margin:0">
+                Detectados en tu historial: un álbum entra en un año cuando en un mismo día escuchaste al menos <strong>${data.criteria.min_tracks_sameday} tracks distintos</strong> o <strong>${data.criteria.min_min_sameday} min</strong> de él. Haz click en un año para ver la lista completa.
+              </p>
+            </div>
+          `
+        });
+      };
     }
 
-    holder.style.color = '';
-    holder.style.fontSize = '';
-    // Desktop (v=108): fila única con scroll horizontal si no entran los años.
-    // Mobile: 3 columnas para no romper la lectura.
-    const isMobile = window.matchMedia('(max-width: 600px)').matches;
-    if (isMobile) {
-      holder.style.display = 'grid';
-      holder.style.gridTemplateColumns = 'repeat(3, minmax(0, 1fr))';
-      holder.style.overflowX = '';
-    } else {
-      holder.style.display = 'flex';
-      holder.style.gridTemplateColumns = '';
-      holder.style.overflowX = 'auto';
-      holder.style.overflowY = 'hidden';
-      holder.style.scrollSnapType = 'x proximity';
-      holder.style.paddingBottom = '4px';
-    }
-    // En desktop, tiles con min-width fijo (~92px) para que scrolleen; en
-    // mobile ocupan el ancho del grid.
-    const tileStyle = isMobile
-      ? 'min-width:0'
-      : 'min-width:92px;flex:0 0 auto;scroll-snap-align:start';
     holder.innerHTML = years.map(y => `
-      <button class="year-tile" data-year="${y.year}" style="background:var(--color-elevated);border:1px solid var(--color-border);border-radius:var(--radius-sm);padding:8px 12px;text-align:left;cursor:pointer;transition:border-color .15s,transform .05s;${tileStyle}">
-        <div style="font-size:18px;font-weight:700;color:var(--color-text);line-height:1.1">${y.count.toLocaleString('es-AR')}</div>
-        <div style="font-size:11px;color:var(--color-text-muted);margin-top:3px">${y.year}</div>
+      <button class="year-tile" data-year="${y.year}">
+        <div class="year-tile-count">${y.count.toLocaleString('es-AR')}</div>
+        <div class="year-tile-year">${y.year}</div>
       </button>
     `).join('');
     holder.querySelectorAll('.year-tile').forEach(tile => {
