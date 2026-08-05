@@ -168,7 +168,7 @@ function renderResults() {
       <div class="card"><p style="text-align:center;color:var(--color-text-muted);margin:0">${showingHidden ? 'No hay tracks ocultos que cumplan los umbrales actuales.' : 'Ningún like cumple los umbrales. Bajá los filtros para ver más candidatos.'}</p></div>
     ` : `
       <div class="card" style="padding:0;overflow:hidden">
-        <div class="skips-list" id="skips-list">
+        <div class="skips-list ${rows.length >= 6 ? 'skips-list-cols' : ''}" id="skips-list" style="--sk-rows:${Math.ceil(rows.length / 2)}">
           ${rows.map((r, i) => renderRow(r, i)).join('')}
         </div>
       </div>

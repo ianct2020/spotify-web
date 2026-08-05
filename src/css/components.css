@@ -1052,6 +1052,53 @@ body.modal-open {
 .skips-row { border-bottom: 1px solid var(--color-border); }
 .skips-row:last-child { border-bottom: none; }
 
+/* 2 columnas desktop >=900px: doblo la densidad visual — misma altura, doble
+   de items visibles. Se lee columna-por-columna (arriba a abajo y sigue en la
+   derecha) usando grid-auto-flow:column con --sk-rows inyectado en JS.
+   Labels de los botones se colapsan a icono para que entren cómodos. */
+@media (min-width: 900px) {
+  .skips-list.skips-list-cols {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    grid-template-rows: repeat(var(--sk-rows, 1), auto);
+    grid-auto-flow: column;
+    column-gap: 8px;
+    row-gap: 0;
+    max-height: 70vh;
+  }
+  .skips-list.skips-list-cols .skips-row {
+    border-bottom: 1px solid var(--color-border);
+    min-width: 0;
+  }
+  .skips-list.skips-list-cols .skips-row-main { padding: 8px 12px 6px; }
+  .skips-list.skips-list-cols .skips-row-top {
+    grid-template-columns: auto 36px minmax(0,1fr) auto;
+    gap: 8px;
+  }
+  .skips-list.skips-list-cols .skips-cover { width: 36px; height: 36px; }
+  .skips-list.skips-list-cols .skips-title { font-size: 12.5px; }
+  .skips-list.skips-list-cols .skips-meta { font-size: 11px; }
+  .skips-list.skips-list-cols .skips-badge { padding: 3px 6px; }
+  .skips-list.skips-list-cols .skips-badge-ratio { font-size: 11px; }
+  .skips-list.skips-list-cols .skips-badge-count { font-size: 9px; }
+  .skips-list.skips-list-cols .skips-row-actions {
+    padding: 4px 0 0 56px;
+    gap: 6px;
+  }
+  /* Labels de los botones a icono en modo compacto — el título tooltip queda igual. */
+  .skips-list.skips-list-cols .skips-play-label,
+  .skips-list.skips-list-cols .skips-open-label { display: none; }
+  .skips-list.skips-list-cols .skips-play-btn,
+  .skips-list.skips-list-cols .skips-open {
+    padding: 0;
+    width: 26px;
+    height: 26px;
+    justify-content: center;
+  }
+  .skips-list.skips-list-cols .skips-open-arrow { font-size: 12px; line-height: 1; }
+  .skips-list.skips-list-cols .sk-hide-btn { width: 26px; height: 26px; padding: 0; }
+}
+
 .skips-row-main {
   padding: 10px 16px 8px;
   transition: background .1s;

@@ -3,14 +3,14 @@
 // Preview 30s instantáneo vía iTunes (arranca en el estribillo, no suma plays
 // en tu historial de Spotify). Fallback: iframe embed oficial si iTunes no lo tiene.
 
-import { getBestAvailableLikes, removeLikedTracks } from '../api.js?v=116';
-import { loadSkipStats, trackIdOf, isOwner, ownerLockedMessage } from './history-data.js?v=116';
-import { escapeHtml, confirmModal, pageHeader } from '../ui/components.js?v=116';
-import { showToast } from '../ui/toast.js?v=116';
-import { getPreview } from '../api/preview-providers.js?v=116';
-import { togglePreview, playingKey } from '../ui/preview-player.js?v=116';
-import { openTrackCard } from './track-card.js?v=116';
-import { hasUsername, loadTopLifetime } from '../api/statsfm.js?v=116';
+import { getBestAvailableLikes, removeLikedTracks } from '../api.js?v=117';
+import { loadSkipStats, trackIdOf, isOwner, ownerLockedMessage } from './history-data.js?v=117';
+import { escapeHtml, confirmModal, pageHeader } from '../ui/components.js?v=117';
+import { showToast } from '../ui/toast.js?v=117';
+import { getPreview } from '../api/preview-providers.js?v=117';
+import { togglePreview, playingKey } from '../ui/preview-player.js?v=117';
+import { openTrackCard } from './track-card.js?v=117';
+import { hasUsername, loadTopLifetime } from '../api/statsfm.js?v=117';
 
 let cache = null;
 let minPlays = 5;    // solo tracks con ≥N plays totales (ok+skip)
@@ -168,7 +168,7 @@ function renderResults() {
       <div class="card"><p style="text-align:center;color:var(--color-text-muted);margin:0">${showingHidden ? 'No hay tracks ocultos que cumplan los umbrales actuales.' : 'Ningún like cumple los umbrales. Bajá los filtros para ver más candidatos.'}</p></div>
     ` : `
       <div class="card" style="padding:0;overflow:hidden">
-        <div class="skips-list" id="skips-list">
+        <div class="skips-list ${rows.length >= 6 ? 'skips-list-cols' : ''}" id="skips-list" style="--sk-rows:${Math.ceil(rows.length / 2)}">
           ${rows.map((r, i) => renderRow(r, i)).join('')}
         </div>
       </div>

@@ -1,7 +1,7 @@
-import { getAllUserPlaylists } from '../api.js?v=116';
-import { escapeHtml } from '../ui/components.js?v=116';
-import { showToast } from '../ui/toast.js?v=116';
-import { openModal, closeTop } from '../ui/modal-stack.js?v=116';
+import { getAllUserPlaylists } from '../api.js?v=117';
+import { escapeHtml } from '../ui/components.js?v=117';
+import { showToast } from '../ui/toast.js?v=117';
+import { openModal, closeTop } from '../ui/modal-stack.js?v=117';
 
 const PID_KEY = 'listened_albums_playlist_id';
 const PNAME_KEY = 'listened_albums_playlist_name';
