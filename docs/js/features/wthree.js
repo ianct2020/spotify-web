@@ -2,17 +2,17 @@
 // por álbum). Muestra qué álbumes ya tienen picks, cuántos, y cuáles te faltan.
 // Ordenado por álbumes más escuchados primero para priorizar tu tiempo.
 
-import { spotifyFetch, getAllPlaylistItems, getAllUserPlaylists, addTracksToPlaylist, removeTracksFromPlaylist, reorderPlaylistItems, getPlaylistSnapshotId, getCachedPlaylistSnapshot, updatePlaylistItemsCache } from '../api.js?v=119';
-import { loadHistoryStats, loadListenedAlbums, isOwner, ownerLockedMessage } from './history-data.js?v=119';
-import { escapeHtml, pageHeader } from '../ui/components.js?v=119';
-import { showToast } from '../ui/toast.js?v=119';
-import { activateMarquee, marqueeSpan } from '../ui/marquee.js?v=119';
-import { openModal, closeTop, closeById } from '../ui/modal-stack.js?v=119';
-import { getPreview } from '../api/preview-providers.js?v=119';
-import { togglePreview, playingKey } from '../ui/preview-player.js?v=119';
-import { openAlbumCard } from './album-card.js?v=119';
-import { albumKey } from '../util/album-key.js?v=119';
-import { computeUpdatedPickPositions } from '../util/reorder-shifts.js?v=119';
+import { spotifyFetch, getAllPlaylistItems, getAllUserPlaylists, addTracksToPlaylist, removeTracksFromPlaylist, reorderPlaylistItems, getPlaylistSnapshotId, getCachedPlaylistSnapshot, updatePlaylistItemsCache } from '../api.js?v=120';
+import { loadHistoryStats, loadListenedAlbums, isOwner, ownerLockedMessage } from './history-data.js?v=120';
+import { escapeHtml, pageHeader } from '../ui/components.js?v=120';
+import { showToast } from '../ui/toast.js?v=120';
+import { activateMarquee, marqueeSpan } from '../ui/marquee.js?v=120';
+import { openModal, closeTop, closeById } from '../ui/modal-stack.js?v=120';
+import { getPreview } from '../api/preview-providers.js?v=120';
+import { togglePreview, playingKey } from '../ui/preview-player.js?v=120';
+import { openAlbumCard } from './album-card.js?v=120';
+import { albumKey } from '../util/album-key.js?v=120';
+import { computeUpdatedPickPositions } from '../util/reorder-shifts.js?v=120';
 
 const LS_KEY_ID = 'wthree_playlist_id';
 const LS_KEY_NAME = 'wthree_playlist_name';
@@ -29,6 +29,11 @@ let albumTracksCache = new Map(); // key → tracks fetched from Spotify
 let selectedBucket = null; // null = all, o '0'/'1'/'2'/'3'/'4+'
 let hiddenSet = null;      // Set<key> de álbumes marcados como "ya está, no me interesa"
 let showingHidden = false; // vista invertida (mostrar SOLO los ocultos para restaurarlos)
+// Snapshot de la última escritura exitosa desde este cliente. Sirve para que
+// el segundo guardado sepa que las posiciones de picksByAlbum son confiables
+// (nadie más editó entre medio), sin depender del cache de items que fue
+// invalidado post-save. Sin esto, cada guardado forzaría un refetch de 18s.
+let lastLocalSnapshot = null;
 
 function loadHidden() {
   try {
@@ -803,10 +808,17 @@ async function fetchAlbumTracks(a) {
 // en orden ascendente, si el track deseado no está ya en su lugar, lo
 // movemos desde su posición actual a la target. Simulamos el nuevo estado
 // para saber las posiciones absolutas del siguiente pick a mover.
+//
+// Devuelve `working` con posiciones absolutas post-reorder — el caller lo
+// necesita para verify y para no ensuciar picksByAlbum con posiciones stale.
 async function reorderPicksMinimal(picks, targetOrder, initialSnapshot) {
   const working = picks.map(p => ({ ...p }));
   let snapshot = initialSnapshot;
   let moveCount = 0;
+
+  console.info('[wthree] reorder start · picks:', working.map(p => `${shortId(p.id)}@${p.pos}`).join(' | '),
+    '· target:', targetOrder.map(id => shortId(id)).join(' | '),
+    '· snapshot:', shortSnap(snapshot));
 
   for (let target = 0; target < targetOrder.length; target++) {
     const wantedId = targetOrder[target];
@@ -819,12 +831,12 @@ async function reorderPicksMinimal(picks, targetOrder, initialSnapshot) {
     // a toPos+1; para subir, a toPos directo.
     const insert_before = fromPos < toPos ? toPos + 1 : toPos;
 
-    snapshot = await reorderPlaylistItems(playlistId, {
-      range_start: fromPos,
-      insert_before,
-      range_length: 1,
-      snapshot_id: snapshot,
-    });
+    const body = { range_start: fromPos, insert_before, range_length: 1, snapshot_id: snapshot };
+    console.info(`[wthree] PUT #${moveCount + 1} · move "${working[currentIdx].name}" (${shortId(wantedId)}) from ${fromPos} → before ${insert_before} · snapshot in: ${shortSnap(snapshot)}`);
+
+    const newSnap = await reorderPlaylistItems(playlistId, body);
+    console.info(`[wthree] PUT #${moveCount + 1} done · snapshot out: ${shortSnap(newSnap)}`);
+    snapshot = newSnap;
     moveCount++;
 
     // Simular el nuevo estado. Los picks entre fromPos y toPos shiftean.
@@ -836,10 +848,16 @@ async function reorderPicksMinimal(picks, targetOrder, initialSnapshot) {
       working.forEach(p => { if (p !== moved && p.pos >= toPos && p.pos < fromPos) p.pos += 1; });
     }
     moved.pos = toPos;
+
+    console.info(`[wthree] simulated state: ${working.map(p => `${shortId(p.id)}@${p.pos}`).join(' | ')}`);
   }
 
-  return { snapshot, moveCount };
+  return { snapshot, moveCount, workingPicks: working };
 }
+
+function shortId(id) { return id ? String(id).slice(0, 6) : '??'; }
+function shortSnap(s) { return s ? String(s).slice(0, 8) + '…' : 'null'; }
+function shortUri(u) { return u ? String(u).split(':').pop().slice(0, 6) : '??'; }
 
 // Dada la playlist entera (freshItems) y las URIs de los picks de este álbum,
 // devuelve los picks con sus posiciones absolutas ordenados por posición.
@@ -895,22 +913,38 @@ async function applyChanges(a, saveBtn, orderedPicks, origOrder) {
   let apiCalls = 0;
   let moveCount = 0;
 
+  console.info(`[wthree] applyChanges · álbum "${a.name}" · origOrder:`,
+    origOrder.map(p => `${shortId(p.id)}@${p.pos} (${p.name})`).join(' | '));
+  console.info('[wthree] target orderedPicks:',
+    orderedPicks.map(p => `${shortId(p.id)} (${p.name})`).join(' | '));
+  console.info(`[wthree] diff · +${toAddUris.length} · -${toRemoveUris.length} · orderChanged=${orderChanged}`);
+
   try {
-    // 0. Snapshot check: si el server cambió desde que cargamos el modal,
-    //    las posiciones absolutas que tenemos en origOrder están stale.
-    //    En ese caso caemos al refetch entero (lento pero correcto). En el
-    //    caso común "abrí modal, edité, guardé" el snapshot no cambia y
-    //    seguimos con las posiciones locales — mucho más rápido.
+    // 0. Snapshot check: si el server cambió desde que cargamos el modal
+    //    (o no tenemos cache), refetch para tener posiciones reales. Sin
+    //    cache no podemos asumir que las posiciones de origOrder siguen válidas.
     let workingPicks = origOrder.map(p => ({ id: p.id, uri: p.uri, name: p.name, pos: p.pos }));
     const serverSnapshot = await getPlaylistSnapshotId(playlistId);
     apiCalls++;
     const cachedSnapshot = await getCachedPlaylistSnapshot(playlistId);
     let snapshot = serverSnapshot;
-    if (cachedSnapshot && serverSnapshot !== cachedSnapshot) {
-      console.info('[wthree] snapshot server difiere del cache — refetch para posiciones reales');
+    console.info(`[wthree] snapshot server=${shortSnap(serverSnapshot)} · cached=${shortSnap(cachedSnapshot)} · lastLocal=${shortSnap(lastLocalSnapshot)}`);
+    // Confiamos en las posiciones de origOrder (via picksByAlbum) si:
+    // - el snapshot del server coincide con el cache de items (nadie escribió), O
+    // - coincide con el snapshot que dejamos nosotros en la última escritura
+    //   exitosa (invalidamos el cache pero picksByAlbum quedó al día).
+    // Si no coincide con ninguno → refetch entero.
+    const trustLocal = (cachedSnapshot && serverSnapshot === cachedSnapshot)
+      || (lastLocalSnapshot && serverSnapshot === lastLocalSnapshot);
+    if (!trustLocal) {
+      console.info('[wthree] snapshot no coincide — refetch para posiciones reales');
       const fresh = await getAllPlaylistItems(playlistId, null, { useCache: false });
       apiCalls += Math.ceil(fresh.length / 100);
       workingPicks = locatePicksInPlaylist(fresh, origOrder.map(p => p.uri));
+      console.info('[wthree] refetch · picks localizados:',
+        workingPicks.map(p => `${shortId(p.id)}@${p.pos}`).join(' | '));
+    } else {
+      console.info('[wthree] posiciones locales confiables — sin refetch');
     }
 
     // 1. Add — siempre en maxPos+1 (contiguo con los picks originales).
@@ -921,6 +955,7 @@ async function applyChanges(a, saveBtn, orderedPicks, origOrder) {
       const sn = await addTracksToPlaylist(playlistId, toAddUris, addInsertPos != null ? { position: addInsertPos } : {});
       apiCalls++;
       if (sn) snapshot = sn;
+      console.info(`[wthree] add · ${toAddUris.length} tracks en pos ${addInsertPos} · snapshot: ${shortSnap(snapshot)}`);
     }
 
     // 2. Remove por URI. Los que quedan se shiftean local.
@@ -928,6 +963,7 @@ async function applyChanges(a, saveBtn, orderedPicks, origOrder) {
       const sn = await removeTracksFromPlaylist(playlistId, toRemoveUris);
       apiCalls++;
       if (sn) snapshot = sn;
+      console.info(`[wthree] remove · ${toRemoveUris.length} tracks · snapshot: ${shortSnap(snapshot)}`);
     }
 
     // Reconstruir workingPicks con posiciones absolutas actualizadas (puro,
@@ -956,30 +992,43 @@ async function applyChanges(a, saveBtn, orderedPicks, origOrder) {
       snapshot = res.snapshot || snapshot;
       moveCount = res.moveCount;
       apiCalls += moveCount;
+      // CRÍTICO: usar el working post-reorder con posiciones actualizadas
+      // — sino picksByAlbum queda con posiciones stale y el siguiente guardado
+      // arranca con estado equivocado. (bug v=119)
+      workingPicks = res.workingPicks;
     }
 
     // 4. Verificación: un GET dirigido al rango donde deberían estar los picks.
     //    Confirma que Spotify quedó como esperamos antes de decir "guardado".
     //    Si algún request falló silencioso o Spotify aplicó algo raro, acá se cae.
     if (workingPicks.length > 0) {
-      // Después del reorder no rastreamos posiciones exactas de cada pick, pero
-      // sí sabemos que los picks quedan contiguos en el rango [minPos, minPos+N-1]
-      // partiendo de la posición del que menos se movió — usamos el min actual
-      // como referencia con margen ancho para cubrir el rango del álbum.
+      // Rango centrado en las nuevas posiciones absolutas de los picks. Usar
+      // el min/max reales del post-reorder — con margen para tolerar picks no
+      // contiguos (ej. el álbum ocupa 5 slots pero solo 3 son picks).
       const minPos = Math.min(...workingPicks.map(p => p.pos));
-      const rangeLen = Math.min(50, workingPicks.length + 5);
+      const maxPos = Math.max(...workingPicks.map(p => p.pos));
+      const rangeLen = Math.min(50, (maxPos - minPos) + 5);
       const targetUris = orderedPicks.map(p => p.uri);
+      console.info(`[wthree] verify range · offset=${minPos} · len=${rangeLen} · expected order:`,
+        targetUris.map(u => shortUri(u)).join(' | '));
       const verify = await verifyAlbumOrderAtRange(playlistId, targetUris, Math.max(0, minPos), rangeLen);
       apiCalls++;
       if (!verify.ok) {
-        console.warn('[wthree] verificación falló · esperado:', targetUris, '· encontrado:', verify.got);
+        console.warn('[wthree] verificación falló · esperado:',
+          targetUris.map(u => shortUri(u)).join(' | '),
+          '· encontrado:', verify.got.map(u => shortUri(u)).join(' | '));
         throw new Error('Spotify no aplicó el orden como esperábamos');
       }
+      console.info('[wthree] verify OK · got:', verify.got.map(u => shortUri(u)).join(' | '));
     }
 
-    // 5. Invalidar el cache local — próximo abrir de modal se re-baja limpio
-    //    (aceptable: costo de una vez tras editar).
+    // 5. Invalidar el cache de items (otros features que llaman
+    //    getAllPlaylistItems se recargarán). Guardamos el snapshot final en
+    //    lastLocalSnapshot: la próxima operación de W-Three sabe que si el
+    //    server sigue en ese snapshot, las posiciones de picksByAlbum son OK
+    //    y no hace falta refetch.
     await updatePlaylistItemsCache(playlistId, null, null);
+    lastLocalSnapshot = snapshot;
 
     const elapsed = Math.round(performance.now() - t0);
     console.info(`[wthree] guardado OK en ${elapsed}ms · ${apiCalls} API calls · +${toAddUris.length} · -${toRemoveUris.length} · ${moveCount} reorders`);
