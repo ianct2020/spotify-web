@@ -1,16 +1,16 @@
-import { getAllLikedTracks, invalidateLikesCache, exportAllData, importAllData, getCurrentUserId, syncLikesIncremental, getLikesCacheTimestamp, getBestAvailableLikes, getAllPlaylistItems } from '../api.js?v=115';
-import { showProgress, hideProgress, alertModal, escapeHtml, pageHeader } from '../ui/components.js?v=115';
-import { openModal, closeTop } from '../ui/modal-stack.js?v=115';
-import { showToast } from '../ui/toast.js?v=115';
-import { openListenedAlbumsPicker } from './listened-shared.js?v=115';
-import { loadHistoryStats, loadListenedAlbums } from './history-data.js?v=115';
-import { getArtistTopPreview } from '../api/preview-providers.js?v=115';
-import { hoverIn, hoverOut } from '../ui/preview-player.js?v=115';
-import { hasUsername, getUsername } from '../api/statsfm.js?v=115';
-import { loadHistoryStats as _loadStatsForCounter } from './history-data.js?v=115';
-import { openArtistCard } from './artist-card.js?v=115';
-import { openAlbumCard } from './album-card.js?v=115';
-import { activateMarquee, marqueeSpan } from '../ui/marquee.js?v=115';
+import { getAllLikedTracks, invalidateLikesCache, exportAllData, importAllData, getCurrentUserId, syncLikesIncremental, getLikesCacheTimestamp, getBestAvailableLikes, getAllPlaylistItems } from '../api.js?v=116';
+import { showProgress, hideProgress, alertModal, escapeHtml, pageHeader } from '../ui/components.js?v=116';
+import { openModal, closeTop } from '../ui/modal-stack.js?v=116';
+import { showToast } from '../ui/toast.js?v=116';
+import { openListenedAlbumsPicker } from './listened-shared.js?v=116';
+import { loadHistoryStats, loadListenedAlbums } from './history-data.js?v=116';
+import { getArtistTopPreview } from '../api/preview-providers.js?v=116';
+import { hoverIn, hoverOut } from '../ui/preview-player.js?v=116';
+import { hasUsername, getUsername } from '../api/statsfm.js?v=116';
+import { loadHistoryStats as _loadStatsForCounter } from './history-data.js?v=116';
+import { openArtistCard } from './artist-card.js?v=116';
+import { openAlbumCard } from './album-card.js?v=116';
+import { activateMarquee, marqueeSpan } from '../ui/marquee.js?v=116';
 
 let charts = [];
 let _loadController = null;
@@ -551,11 +551,11 @@ function renderDashboard(container, stats) {
       <div class="listened-year-row">
         <div class="listened-year-head">
           <h3 style="margin:0">Álbumes escuchados por año</h3>
-          <button type="button" id="listened-year-info" class="info-btn" title="Sobre esta sección" aria-label="Sobre esta sección">
-            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
-          </button>
         </div>
         <div id="listened-year-tiles" class="listened-year-tiles-inline" style="color:var(--color-text-muted);font-size:13px">Cargando…</div>
+        <button type="button" id="listened-year-info" class="info-btn listened-year-info-end" title="Sobre esta sección" aria-label="Sobre esta sección">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+        </button>
       </div>
     </div>
 
@@ -882,13 +882,13 @@ async function hydrateListenedYearTiles() {
         openModal({
           id: 'listened-year-info',
           html: `
-            <div class="modal" style="max-width:420px">
-              <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:8px">
-                <h2 style="margin:0;font-size:18px">Álbumes escuchados por año</h2>
-                <button type="button" class="modal-close" data-close-modal aria-label="Cerrar">✕</button>
+            <div class="modal" style="max-width:440px">
+              <div class="modal-hdr">
+                <h3 class="modal-hdr-title">Álbumes escuchados por año</h3>
+                <button class="btn btn-secondary btn-sm" data-close-modal title="Cerrar" aria-label="Cerrar">✕</button>
               </div>
-              <p style="color:var(--color-text-secondary);font-size:14px;line-height:1.5;margin:0">
-                Detectados en tu historial: un álbum entra en un año cuando en un mismo día escuchaste al menos <strong>${data.criteria.min_tracks_sameday} tracks distintos</strong> o <strong>${data.criteria.min_min_sameday} min</strong> de él. Haz click en un año para ver la lista completa.
+              <p style="color:var(--color-text-secondary);font-size:14px;line-height:1.55;margin:0">
+                Detectados en tu historial: un álbum entra en un año cuando en un mismo día escuchaste al menos <strong style="color:var(--color-text)">${data.criteria.min_tracks_sameday} tracks distintos</strong> o <strong style="color:var(--color-text)">${data.criteria.min_min_sameday} min</strong> de él. Haz click en un año para ver la lista completa.
               </p>
             </div>
           `

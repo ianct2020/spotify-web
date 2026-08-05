@@ -2,15 +2,16 @@
 // por álbum). Muestra qué álbumes ya tienen picks, cuántos, y cuáles te faltan.
 // Ordenado por álbumes más escuchados primero para priorizar tu tiempo.
 
-import { spotifyFetch, getAllPlaylistItems, getAllUserPlaylists, addTracksToPlaylist, removeTracksFromPlaylist, reorderPlaylistItems, getPlaylistSnapshotId, updatePlaylistItemsCache } from '../api.js?v=115';
-import { loadHistoryStats, loadListenedAlbums, isOwner, ownerLockedMessage } from './history-data.js?v=115';
-import { escapeHtml, pageHeader } from '../ui/components.js?v=115';
-import { showToast } from '../ui/toast.js?v=115';
-import { activateMarquee, marqueeSpan } from '../ui/marquee.js?v=115';
-import { openModal, closeTop, closeById } from '../ui/modal-stack.js?v=115';
-import { getPreview } from '../api/preview-providers.js?v=115';
-import { togglePreview, playingKey } from '../ui/preview-player.js?v=115';
-import { openAlbumCard } from './album-card.js?v=115';
+import { spotifyFetch, getAllPlaylistItems, getAllUserPlaylists, addTracksToPlaylist, removeTracksFromPlaylist, reorderPlaylistItems, getPlaylistSnapshotId, updatePlaylistItemsCache } from '../api.js?v=116';
+import { loadHistoryStats, loadListenedAlbums, isOwner, ownerLockedMessage } from './history-data.js?v=116';
+import { escapeHtml, pageHeader } from '../ui/components.js?v=116';
+import { showToast } from '../ui/toast.js?v=116';
+import { activateMarquee, marqueeSpan } from '../ui/marquee.js?v=116';
+import { openModal, closeTop, closeById } from '../ui/modal-stack.js?v=116';
+import { getPreview } from '../api/preview-providers.js?v=116';
+import { togglePreview, playingKey } from '../ui/preview-player.js?v=116';
+import { openAlbumCard } from './album-card.js?v=116';
+import { albumKey } from '../util/album-key.js?v=116';
 
 const LS_KEY_ID = 'wthree_playlist_id';
 const LS_KEY_NAME = 'wthree_playlist_name';
@@ -27,8 +28,6 @@ let albumTracksCache = new Map(); // key → tracks fetched from Spotify
 let selectedBucket = null; // null = all, o '0'/'1'/'2'/'3'/'4+'
 let hiddenSet = null;      // Set<key> de álbumes marcados como "ya está, no me interesa"
 let showingHidden = false; // vista invertida (mostrar SOLO los ocultos para restaurarlos)
-
-const albumKey = (name, artist) => `${(name || '').toLowerCase().trim()}||${(artist || '').toLowerCase().trim()}`;
 
 function loadHidden() {
   try {

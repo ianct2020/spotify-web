@@ -1,4 +1,4 @@
-import { openModal, closeTop } from './modal-stack.js?v=115';
+import { openModal, closeTop } from './modal-stack.js?v=116';
 
 function renderTrackRow(track, extra = '') {
   const art = track.album?.images?.[2]?.url || track.album?.images?.[0]?.url || '';
@@ -267,7 +267,7 @@ function promptPlaylistName(defaultName, opts = {}) {
       <div class="modal" style="max-width:520px">
         <h2 style="margin-bottom:8px">Nombre de la playlist</h2>
         ${subtitle ? `<p style="color:var(--color-text-secondary);font-size:13px;margin-bottom:12px">${escapeHtml(subtitle)}</p>` : ''}
-        ${trackCount != null ? `<p style="color:var(--color-text-secondary);font-size:13px;margin-bottom:12px"><strong>${trackCount.toLocaleString()}</strong> tracks se van a agregar.</p>` : ''}
+        ${trackCount != null ? `<p style="color:var(--color-text-secondary);font-size:13px;margin-bottom:12px"><strong>${trackCount.toLocaleString('es-ES')}</strong> tracks se van a añadir.</p>` : ''}
         <input type="text" id="playlist-name-input" maxlength="${PLAYLIST_NAME_MAX}"
                style="width:100%;padding:10px;background:var(--color-elevated);border:1px solid var(--color-border);border-radius:var(--radius-sm);color:var(--color-text);font-size:14px;margin-bottom:6px">
         <div style="display:flex;justify-content:space-between;align-items:center;font-size:12px;color:var(--color-text-muted);margin-bottom:14px">

@@ -2,16 +2,18 @@
 // de verdad (history-listened-albums.json) más las que tiene en su playlist
 // "w three". Nada inferido — solo estas dos fuentes.
 //
-// Objetivo v=115: que las ~2411 tapas entren enteras en una pantalla de
-// escritorio, como el collage que Ian arma a mano en Canva. Tamaño "mini"
-// 28px, botón "Ajustar a pantalla" que calcula el lado óptimo, filtro por
-// año multi-selección, tooltip flotante y renderizado de golpe con los
-// placeholders visibles desde el primer frame.
+// v=116: dedup canónica compartida (util/album-key.js) que ignora
+// diacríticos y sufijos "(Remastered)" etc. — antes álbumes iguales aparecían
+// duplicados. Rescate de tapas W-Three-only vía oEmbed cuando no hay img.
+// Carga progresiva del primer viewport con fetchpriority=high + fade
+// placeholder→img. Botón "Pantalla completa" (Fullscreen API) que oculta
+// sidebar/header/toolbar y recalcula el lado.
 
-import { loadListenedAlbums, isOwner, ownerLockedMessage } from './history-data.js?v=115';
-import { getAllPlaylistItems } from '../api.js?v=115';
-import { escapeHtml, pageHeader } from '../ui/components.js?v=115';
-import { openAlbumCard } from './album-card.js?v=115';
+import { loadListenedAlbums, isOwner, ownerLockedMessage } from './history-data.js?v=116';
+import { getAllPlaylistItems } from '../api.js?v=116';
+import { escapeHtml, pageHeader } from '../ui/components.js?v=116';
+import { openAlbumCard } from './album-card.js?v=116';
+import { albumKey } from '../util/album-key.js?v=116';
 
 const LS_KEY_SIZE = 'covers_cell_size';
 const LS_KEY_SORT = 'covers_sort_mode';
@@ -20,9 +22,7 @@ const LS_WTHREE_ID = 'wthree_playlist_id';
 
 const VALID_SIZES = new Set(['28', '48', '64', '96']);
 const VALID_SORTS = new Set(['date-asc', 'min-desc', 'artist-asc']);
-const GRID_GAP = 2; // px — muy chico para el modo mosaico
-
-const key = (n, a) => `${(n || '').toLowerCase().trim()}||${(a || '').toLowerCase().trim()}`;
+const GRID_GAP = 2;
 
 function getSize() {
   const v = localStorage.getItem(LS_KEY_SIZE);
@@ -55,7 +55,7 @@ function buildList(data, wthreeItems) {
   for (const y of (data?.years || [])) {
     const yn = Number(y.year) || null;
     for (const a of (y.albums || [])) {
-      const k = key(a.name, a.artist);
+      const k = albumKey(a.name, a.artist);
       const prev = map.get(k);
       if (prev) {
         prev.min += (a.min_that_day || 0);
@@ -71,6 +71,7 @@ function buildList(data, wthreeItems) {
           min: a.min_that_day || 0,
           years: new Set(yn ? [yn] : []),
           sources: new Set(['listened']),
+          trackId: null,
         });
       }
     }
@@ -83,20 +84,23 @@ function buildList(data, wthreeItems) {
       const albumName = t.album.name || '';
       const artistName = t.artists?.[0]?.name || '';
       if (!albumName) continue;
-      const k = key(albumName, artistName);
+      const k = albumKey(albumName, artistName);
+      const wImg = t.album.images?.[1]?.url || t.album.images?.[0]?.url || '';
       const prev = map.get(k);
       if (prev) {
         prev.sources.add('wthree');
-        if (!prev.img) prev.img = t.album.images?.[1]?.url || t.album.images?.[0]?.url || '';
+        if (!prev.img && wImg) prev.img = wImg;
+        if (!prev.trackId) prev.trackId = t.id || null;
       } else {
         map.set(k, {
           name: albumName,
           artist: artistName,
-          img: t.album.images?.[1]?.url || t.album.images?.[0]?.url || '',
+          img: wImg,
           date: '',
           min: 0,
           years: new Set(),
           sources: new Set(['wthree']),
+          trackId: t.id || null,
         });
       }
     }
@@ -120,9 +124,6 @@ function sortList(list, mode) {
   return copy;
 }
 
-// Fórmula: floor(W / lado) * floor(H / lado) >= N, con `lado + GAP` porque el
-// grid tiene un gap. Busco el lado ENTERO más grande que satisface la
-// desigualdad. Rango razonable: 8..200 px.
 function fitCellSize(N, W, H, gap = GRID_GAP) {
   if (!N || W <= 0 || H <= 0) return 96;
   const wPlus = W + gap;
@@ -135,13 +136,45 @@ function fitCellSize(N, W, H, gap = GRID_GAP) {
   return 8;
 }
 
-function cellHtml(a, i) {
+// Estimación: cuántas celdas caben en el primer viewport visible del grid.
+// Sirve para saber a cuántas <img> les ponemos fetchpriority=high.
+function firstViewportCount(cellSize, gridWidth, viewportHeight, gridTop) {
+  const s = Math.max(1, cellSize);
+  const cols = Math.max(1, Math.floor((gridWidth + GRID_GAP) / (s + GRID_GAP)));
+  const availH = Math.max(200, viewportHeight - gridTop);
+  const rows = Math.max(1, Math.ceil((availH + GRID_GAP) / (s + GRID_GAP)));
+  return cols * rows;
+}
+
+function cellHtml(a, i, hi) {
   const initial = escapeHtml(((a.artist || a.name || '?')[0] || '?').toUpperCase());
+  const eager = hi ? ' fetchpriority="high"' : '';
+  const loading = hi ? '' : ' loading="lazy"';
   return `<button type="button" class="cover-cell" data-i="${i}">
     ${a.img
-      ? `<img class="cover-img" src="${a.img}" alt="" loading="lazy" decoding="async">`
+      ? `<img class="cover-img" src="${a.img}" alt="" decoding="async"${eager}${loading}>`
       : `<div class="cover-fallback">${initial}</div>`}
   </button>`;
+}
+
+// oEmbed de Spotify — nos permite recuperar la tapa de un track sin auth.
+// Cache en memoria para no repetir la misma tapa entre re-renders.
+const oembedCache = new Map();
+async function tapaViaOembed(trackId) {
+  if (!trackId) return null;
+  if (oembedCache.has(trackId)) return oembedCache.get(trackId);
+  try {
+    const url = `https://open.spotify.com/oembed?url=spotify:track:${trackId}`;
+    const res = await fetch(url);
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const j = await res.json();
+    const t = j?.thumbnail_url || null;
+    oembedCache.set(trackId, t);
+    return t;
+  } catch {
+    oembedCache.set(trackId, null);
+    return null;
+  }
 }
 
 export async function render(container) {
@@ -163,8 +196,6 @@ export async function render(container) {
     return;
   }
 
-  // W-Three merge — si el usuario tiene la playlist configurada, sumo sus
-  // álbumes. Si falla el fetch (offline, 401, etc.) no bloqueo el mosaico.
   let wthreeItems = null;
   const wthreeId = localStorage.getItem(LS_WTHREE_ID);
   if (wthreeId) {
@@ -178,22 +209,23 @@ export async function render(container) {
     return;
   }
 
-  // Años disponibles (unión de años escuchados) para los chips del filtro.
   const yearsAvailable = [...new Set(allAlbums.flatMap(a => a.years))].sort((x, y) => x - y);
 
   let size = getSize();
   let sort = getSort();
-  let yearsSel = getYearsSel();  // vacío = todos
+  let yearsSel = getYearsSel();
   let fitEnabled = false;
+  let isFullscreen = false;
 
   const wthreeCount = wthreeItems ? new Set(wthreeItems.map(it => {
     const t = it?.item || it?.track;
     if (!t || !t.album) return null;
-    return key(t.album.name, t.artists?.[0]?.name || '');
+    return albumKey(t.album.name, t.artists?.[0]?.name || '');
   }).filter(Boolean)).size : 0;
 
+  const missingImgs = allAlbums.filter(a => !a.img).length;
   const sourcesLine = wthreeItems
-    ? `<span class="covers-summary-sub">${allAlbums.length.toLocaleString('es-ES')} tapas · ${wthreeCount} en W-Three</span>`
+    ? `<span class="covers-summary-sub">${allAlbums.length.toLocaleString('es-ES')} tapas · ${wthreeCount} en W-Three${missingImgs ? ` · ${missingImgs} sin tapa` : ''}</span>`
     : `<span class="covers-summary-sub">${allAlbums.length.toLocaleString('es-ES')} tapas</span>`;
 
   content.innerHTML = `
@@ -205,6 +237,10 @@ export async function render(container) {
       </div>
       <div class="covers-controls">
         <button type="button" class="covers-btn covers-fit-btn" id="covers-fit">Ajustar a pantalla</button>
+        <button type="button" class="covers-btn" id="covers-fullscreen" title="Ver el mosaico a pantalla completa">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:4px"><path d="M8 3H5a2 2 0 0 0-2 2v3"/><path d="M21 8V5a2 2 0 0 0-2-2h-3"/><path d="M3 16v3a2 2 0 0 0 2 2h3"/><path d="M16 21h3a2 2 0 0 0 2-2v-3"/></svg>
+          Pantalla completa
+        </button>
         <div class="covers-control-group" role="radiogroup" aria-label="Tamaño de tapa">
           <button type="button" class="covers-btn ${size === '28' ? 'is-on' : ''}" data-size="28">Mini</button>
           <button type="button" class="covers-btn ${size === '48' ? 'is-on' : ''}" data-size="48">Chico</button>
@@ -222,7 +258,9 @@ export async function render(container) {
       <button type="button" class="covers-chip ${yearsSel.size === 0 ? 'is-on' : ''}" data-year="all">Todos</button>
       ${yearsAvailable.map(y => `<button type="button" class="covers-chip ${yearsSel.has(y) ? 'is-on' : ''}" data-year="${y}">${y}</button>`).join('')}
     </div>
-    <div class="covers-grid" id="covers-grid" data-size="${size}" style="--cover-min:${size}px;--cover-gap:${GRID_GAP}px"></div>
+    <div class="covers-grid-wrap" id="covers-grid-wrap">
+      <div class="covers-grid" id="covers-grid" data-size="${size}" style="--cover-min:${size}px;--cover-gap:${GRID_GAP}px"></div>
+    </div>
     <div class="covers-tooltip" id="covers-tooltip" role="tooltip" aria-hidden="true">
       <div class="ct-name"></div>
       <div class="ct-artist"></div>
@@ -230,11 +268,13 @@ export async function render(container) {
     </div>
   `;
 
+  const gridWrap = document.getElementById('covers-grid-wrap');
   const grid = document.getElementById('covers-grid');
   const tooltip = document.getElementById('covers-tooltip');
   const countEl = document.getElementById('covers-count');
   const chipsEl = document.getElementById('covers-year-chips');
   const fitBtn = document.getElementById('covers-fit');
+  const fsBtn = document.getElementById('covers-fullscreen');
 
   let currentList = filterAndSort();
 
@@ -246,39 +286,60 @@ export async function render(container) {
     return sortList(list, sort);
   }
 
-  // Render de golpe: TODAS las celdas en el DOM desde el primer frame. Con
-  // 2411 botones + imgs con loading=lazy el browser hace su parte progresiva.
-  // Medimos: (a) tiempo hasta que el layout está pintado, (b) tiempo hasta
-  // que todas las imágenes cargaron.
+  // Render de golpe: TODAS las celdas en el DOM desde el primer frame. Las
+  // primeras N (viewport visible) llevan fetchpriority=high; el resto va con
+  // loading=lazy para que el browser descargue el fondo sin bloquear.
   function fullRender() {
     const t0 = performance.now();
-    grid.innerHTML = currentList.map((a, i) => cellHtml(a, i)).join('');
+    const cellSize = parseInt(size, 10) || 28;
+    const rect = grid.getBoundingClientRect();
+    const hiCount = firstViewportCount(cellSize, Math.floor(rect.width || window.innerWidth), window.innerHeight, rect.top || 100);
+
+    grid.innerHTML = currentList.map((a, i) => cellHtml(a, i, i < hiCount)).join('');
     countEl.textContent = currentList.length.toLocaleString('es-ES');
     window.__coversLastRender = null;
+
     requestAnimationFrame(() => requestAnimationFrame(() => {
       const tLayout = performance.now() - t0;
-      console.log(`[covers] ${currentList.length} celdas en DOM en ${tLayout.toFixed(1)}ms (size=${size}px)`);
-      // Track image loads
+      console.log(`[covers] ${currentList.length} celdas en DOM en ${tLayout.toFixed(1)}ms (size=${size}px, hi=${hiCount})`);
+
       const imgs = grid.querySelectorAll('img.cover-img');
       const total = imgs.length;
       if (total === 0) {
-        window.__coversLastRender = { layoutMs: tLayout, imgsMs: 0, cells: currentList.length, imgs: 0 };
+        window.__coversLastRender = { layoutMs: tLayout, imgsMs: 0, cells: currentList.length, imgs: 0, viewportMs: 0, viewportImgs: 0 };
         return;
       }
+
+      // Fade placeholder → img: apenas carga cada <img>, le agrego .is-loaded
+      // para que el CSS haga el fade corto.
       let done = 0;
-      const finish = () => {
+      let viewportDone = 0;
+      const viewportTarget = Math.min(hiCount, total);
+      let viewportMs = 0;
+      const markLoaded = (img) => {
+        if (!img.classList.contains('is-loaded')) img.classList.add('is-loaded');
+      };
+      const finish = (img, idx) => {
+        markLoaded(img);
         done++;
+        if (idx < viewportTarget) {
+          viewportDone++;
+          if (viewportDone === viewportTarget) {
+            viewportMs = performance.now() - t0;
+            console.log(`[covers] primer viewport: ${viewportTarget} imágenes en ${viewportMs.toFixed(0)}ms`);
+          }
+        }
         if (done === total) {
           const tImgs = performance.now() - t0;
           console.log(`[covers] ${total} imágenes cargadas en ${tImgs.toFixed(0)}ms`);
-          window.__coversLastRender = { layoutMs: tLayout, imgsMs: tImgs, cells: currentList.length, imgs: total };
+          window.__coversLastRender = { layoutMs: tLayout, imgsMs: tImgs, cells: currentList.length, imgs: total, viewportMs, viewportImgs: viewportTarget };
         }
       };
-      imgs.forEach(img => {
-        if (img.complete && img.naturalWidth) finish();
+      imgs.forEach((img, idx) => {
+        if (img.complete && img.naturalWidth) finish(img, idx);
         else {
-          img.addEventListener('load', finish, { once: true });
-          img.addEventListener('error', finish, { once: true });
+          img.addEventListener('load', () => finish(img, idx), { once: true });
+          img.addEventListener('error', () => finish(img, idx), { once: true });
         }
       });
     }));
@@ -286,18 +347,42 @@ export async function render(container) {
 
   fullRender();
 
+  // Rescate de tapas vía oEmbed para álbumes que quedaron sin img (típicamente
+  // W-Three-only sin album.images completo). Corre en background, best-effort:
+  // resuelve una por una y patchea el DOM cuando llega. Limitado a los primeros
+  // 60 para no saturar oEmbed en cada visita.
+  (async () => {
+    const missing = currentList
+      .map((a, i) => ({ a, i }))
+      .filter(x => !x.a.img && x.a.trackId)
+      .slice(0, 60);
+    if (!missing.length) return;
+    console.log(`[covers] rescatando ${missing.length} tapas vía oEmbed`);
+    let rescued = 0;
+    for (const { a, i } of missing) {
+      const url = await tapaViaOembed(a.trackId);
+      if (!url) continue;
+      a.img = url;
+      const cell = grid.querySelector(`.cover-cell[data-i="${i}"]`);
+      if (!cell) continue;
+      cell.innerHTML = `<img class="cover-img" src="${url}" alt="" decoding="async" loading="lazy">`;
+      const img = cell.querySelector('img');
+      img?.addEventListener('load', () => img.classList.add('is-loaded'), { once: true });
+      img?.addEventListener('error', () => img.classList.add('is-loaded'), { once: true });
+      rescued++;
+    }
+    console.log(`[covers] oEmbed: ${rescued}/${missing.length} tapas recuperadas`);
+  })();
+
   function applyFit() {
     const rect = grid.getBoundingClientRect();
     const W = Math.floor(rect.width);
-    // Alto disponible = desde el top del grid hasta el fondo del viewport,
-    // menos un pequeño margen para respirar.
     const H = Math.max(200, Math.floor(window.innerHeight - rect.top - 12));
     const N = currentList.length;
     const s = fitCellSize(N, W, H, GRID_GAP);
     size = String(s);
     grid.dataset.size = size;
     grid.style.setProperty('--cover-min', `${s}px`);
-    // Marcado visual de los botones de tamaño: apago si no coincide
     content.querySelectorAll('[data-size]').forEach(b => b.classList.toggle('is-on', b.dataset.size === size));
     fitBtn.classList.add('is-on');
     console.log(`[covers] ajustar: N=${N} W=${W} H=${H} → lado=${s}px (cols=${Math.floor((W+GRID_GAP)/(s+GRID_GAP))} rows=${Math.ceil(N/Math.floor((W+GRID_GAP)/(s+GRID_GAP)))})`);
@@ -328,7 +413,6 @@ export async function render(container) {
     if (fitEnabled) applyFit();
   });
 
-  // Chips año — click en "Todos" limpia; click en un año togglea (multi-select).
   chipsEl.addEventListener('click', (e) => {
     const chip = e.target.closest('.covers-chip');
     if (!chip) return;
@@ -341,7 +425,6 @@ export async function render(container) {
       else yearsSel.add(n);
     }
     setYearsSel(yearsSel);
-    // Refresh chip visual
     chipsEl.querySelectorAll('.covers-chip').forEach(c => {
       const cy = c.dataset.year;
       const on = cy === 'all' ? yearsSel.size === 0 : yearsSel.has(Number(cy));
@@ -352,7 +435,6 @@ export async function render(container) {
     if (fitEnabled) applyFit();
   });
 
-  // Ventana resize → recalcular fit si está activo (debounce 120ms).
   let resizeTimer = null;
   const onResize = () => {
     if (!fitEnabled) return;
@@ -361,7 +443,57 @@ export async function render(container) {
   };
   window.addEventListener('resize', onResize);
 
-  // Click en una tapa → ficha de álbum apilada.
+  // ── Fullscreen API ──
+  // Entra a fullscreen sobre el grid-wrap. body.covers-fs oculta sidebar,
+  // header y toolbar por CSS. Al entrar/salir recalculamos el tamaño para
+  // aprovechar el viewport nuevo.
+  function enterFullscreen() {
+    if (!document.fullscreenEnabled) {
+      console.warn('[covers] fullscreen no disponible');
+      return;
+    }
+    gridWrap.requestFullscreen?.().catch(err => console.warn('[covers] fs error:', err.message));
+  }
+  function exitFullscreen() {
+    if (document.fullscreenElement) document.exitFullscreen?.();
+  }
+  fsBtn.addEventListener('click', () => {
+    if (document.fullscreenElement) exitFullscreen();
+    else enterFullscreen();
+  });
+  const onFullscreenChange = () => {
+    isFullscreen = document.fullscreenElement === gridWrap;
+    document.body.classList.toggle('covers-fs', isFullscreen);
+    fsBtn.classList.toggle('is-on', isFullscreen);
+    // Recalculo el tamaño para el nuevo viewport. Si el user tenía fit activo,
+    // lo mantiene; si no, ajusto al fullscreen y al salir vuelvo al size guardado.
+    if (fitEnabled) {
+      setTimeout(applyFit, 60);
+    } else if (isFullscreen) {
+      const savedSize = size;
+      setTimeout(() => {
+        applyFit();
+        fitEnabled = false;
+        fitBtn.classList.remove('is-on');
+        // Marco el size en el que quedó (no lo persisto, solo visual).
+        content.querySelectorAll('[data-size]').forEach(b => b.classList.toggle('is-on', b.dataset.size === size));
+      }, 60);
+      // Guardo el original en el botón para restaurar
+      fsBtn.dataset.origSize = savedSize;
+    } else {
+      // Salimos: vuelvo al size que tenía antes
+      const orig = fsBtn.dataset.origSize;
+      if (orig && VALID_SIZES.has(orig)) {
+        size = orig;
+        grid.dataset.size = size;
+        grid.style.setProperty('--cover-min', `${size}px`);
+        content.querySelectorAll('[data-size]').forEach(b => b.classList.toggle('is-on', b.dataset.size === size));
+        delete fsBtn.dataset.origSize;
+      }
+    }
+  };
+  document.addEventListener('fullscreenchange', onFullscreenChange);
+
   grid.addEventListener('click', (e) => {
     const btn = e.target.closest('.cover-cell');
     if (!btn) return;
@@ -371,7 +503,6 @@ export async function render(container) {
     openAlbumCard({ name: a.name, artist: a.artist, img: a.img, plays: 0, min: a.min });
   });
 
-  // Fallback si una tapa da 404: pinto la inicial en vez del ícono roto.
   grid.addEventListener('error', (e) => {
     if (e.target && e.target.classList && e.target.classList.contains('cover-img')) {
       const cell = e.target.closest('.cover-cell');
@@ -387,8 +518,6 @@ export async function render(container) {
     }
   }, true);
 
-  // Tooltip flotante — reemplaza al overlay hover porque no entra en celdas
-  // chicas. Un solo elemento fijo, sigue al puntero.
   let currentIdx = -1;
   grid.addEventListener('pointermove', (e) => {
     const btn = e.target.closest('.cover-cell');
@@ -424,10 +553,12 @@ export async function render(container) {
     currentIdx = -1;
   });
 
-  // Cleanup al salir de la ruta
   return () => {
     window.removeEventListener('resize', onResize);
+    document.removeEventListener('fullscreenchange', onFullscreenChange);
+    document.body.classList.remove('covers-fs');
     clearTimeout(resizeTimer);
     tooltip.remove();
+    if (document.fullscreenElement === gridWrap) document.exitFullscreen?.().catch(() => {});
   };
 }

@@ -11,6 +11,7 @@ import { openModal, closeTop, closeById } from '../ui/modal-stack.js';
 import { getPreview } from '../api/preview-providers.js';
 import { togglePreview, playingKey } from '../ui/preview-player.js';
 import { openAlbumCard } from './album-card.js';
+import { albumKey } from '../util/album-key.js';
 
 const LS_KEY_ID = 'wthree_playlist_id';
 const LS_KEY_NAME = 'wthree_playlist_name';
@@ -27,8 +28,6 @@ let albumTracksCache = new Map(); // key → tracks fetched from Spotify
 let selectedBucket = null; // null = all, o '0'/'1'/'2'/'3'/'4+'
 let hiddenSet = null;      // Set<key> de álbumes marcados como "ya está, no me interesa"
 let showingHidden = false; // vista invertida (mostrar SOLO los ocultos para restaurarlos)
-
-const albumKey = (name, artist) => `${(name || '').toLowerCase().trim()}||${(artist || '').toLowerCase().trim()}`;
 
 function loadHidden() {
   try {

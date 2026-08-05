@@ -1,6 +1,6 @@
-import { getAllLikedTracks, createPlaylist, addTracksToPlaylist, getAllUserPlaylists, invalidatePlaylistsCache } from '../api.js?v=115';
-import { showProgress, hideProgress, progressController, isCancelled, promptPlaylistName, escapeHtml, pageHeader } from '../ui/components.js?v=115';
-import { showToast } from '../ui/toast.js?v=115';
+import { getAllLikedTracks, createPlaylist, addTracksToPlaylist, getAllUserPlaylists, invalidatePlaylistsCache } from '../api.js?v=116';
+import { showProgress, hideProgress, progressController, isCancelled, promptPlaylistName, escapeHtml, pageHeader } from '../ui/components.js?v=116';
+import { showToast } from '../ui/toast.js?v=116';
 
 let likes = [];
 let currentTab = 'year';
@@ -272,7 +272,7 @@ function shuffle(arr) {
 
 async function promptCreate(baseName, tracks) {
   if (!tracks || tracks.length === 0) {
-    showToast('No hay tracks para agregar', 'error');
+    showToast('No hay tracks para añadir', 'error');
     return;
   }
   const uris = tracks.map(t => t.uri).filter(Boolean);

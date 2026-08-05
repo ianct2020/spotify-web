@@ -120,20 +120,20 @@ function renderResults() {
     ? `Cruzando con Stats.fm — ${cache.statsfmUpdated.toLocaleString('es-AR')} ajustados con plays post-export`
     : (hasUsername() ? 'Cruzar con Stats.fm' : '');
 
-  // Layout compacto en 2 filas: fila 1 = stats+chips; fila 2 = toggles+acciones.
+  // Layout compacto en 2 filas: fila 1 = stats+chips+toggle Stats.fm; fila 2 = acciones.
   content.innerHTML = `
     <div class="skips-topbar">
       <div class="skips-topbar-row">
         <div class="skips-stat-mini">
-          <span class="skips-stat-mini-v">${rows.length.toLocaleString('es-AR')}</span>
+          <span class="skips-stat-mini-v">${rows.length.toLocaleString('es-ES')}</span>
           <span class="skips-stat-mini-l">candidatos${showingHidden ? ' (ocultos)' : ''}</span>
         </div>
         <div class="skips-stat-mini">
-          <span class="skips-stat-mini-v">${withAnySkip.toLocaleString('es-AR')}</span>
+          <span class="skips-stat-mini-v">${withAnySkip.toLocaleString('es-ES')}</span>
           <span class="skips-stat-mini-l">con ≥1 skip</span>
         </div>
         <div class="skips-stat-mini">
-          <span class="skips-stat-mini-v">${cache.likesCount.toLocaleString('es-AR')}</span>
+          <span class="skips-stat-mini-v">${cache.likesCount.toLocaleString('es-ES')}</span>
           <span class="skips-stat-mini-l">likes totales</span>
         </div>
         <div class="skips-chip-group" id="skips-plays-chips" title="Plays mínimas (ok+skip)">
@@ -146,14 +146,14 @@ function renderResults() {
             <button class="skips-chip ${v === minRatio ? 'active' : ''}" data-ratio="${v}">${v === 100 ? '100%' : '≥' + v + '%'}</button>
           `).join('')}
         </div>
+        ${sfLabel ? `
+          <button type="button" class="skips-chip skips-chip-toggle ${useStatsfm ? 'active' : ''}" id="skips-statsfm-toggle" title="Al activarlo, temas que después del export escuchaste enteros N veces más ya no cuentan." aria-pressed="${useStatsfm}">
+            <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" class="skips-chip-check" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>
+            <span>${escapeHtml(sfLabel)}</span>
+          </button>
+        ` : ''}
       </div>
       <div class="skips-topbar-row">
-        ${sfLabel ? `
-          <label class="statsfm-toggle statsfm-toggle-compact" title="Al activarlo, temas que después del export escuchaste enteras N veces más ya no cuentan.">
-            <input type="checkbox" id="skips-statsfm-toggle" ${useStatsfm ? 'checked' : ''}>
-            <span>${escapeHtml(sfLabel)}</span>
-          </label>
-        ` : '<span></span>'}
         <div class="skips-topbar-actions">
           ${hiddenCount > 0 || showingHidden ? `
             <button class="btn btn-secondary btn-sm ${showingHidden ? 'sort-active' : ''}" id="sk-toggle-hidden" title="${showingHidden ? 'Volver a la vista normal' : 'Ver solo los que ocultaste'}">${showingHidden ? '← Volver' : 'Ocultos (' + hiddenCount + ')'}</button>
@@ -235,10 +235,9 @@ function wireFilters() {
     btn.onclick = () => { minRatio = parseInt(btn.dataset.ratio); renderResults(); };
   });
   const sfToggle = content.querySelector('#skips-statsfm-toggle');
-  if (sfToggle) sfToggle.onchange = async () => {
-    useStatsfm = sfToggle.checked;
+  if (sfToggle) sfToggle.onclick = async () => {
+    useStatsfm = !useStatsfm;
     localStorage.setItem(STATSFM_TOGGLE_KEY, useStatsfm ? '1' : '0');
-    const container = content.parentElement;
     content.innerHTML = `<div class="empty-state"><div class="spinner spinner-lg"></div><div style="margin-top:16px">${useStatsfm ? 'Cruzando con Stats.fm…' : 'Recalculando…'}</div></div>`;
     await analyze();
   };
