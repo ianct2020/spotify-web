@@ -996,6 +996,74 @@ body:has(.preview-pill.show) .progress-mini {
   margin-left: auto;
   flex: 0 0 auto;
 }
+/* Ficha de álbum: sección de likes de ese álbum. */
+.album-modal-likes {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--color-border);
+}
+.album-modal-likes-loading {
+  font-size: 11.5px;
+  color: var(--color-text-muted);
+  text-align: center;
+  padding: 4px 0;
+}
+.album-modal-likes-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+.album-modal-likes-title {
+  font-size: 12px;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-weight: 600;
+}
+.album-modal-likes-list {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  max-height: 240px;
+  overflow-y: auto;
+  padding-right: 2px;
+}
+.album-modal-like-row {
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+  padding: 5px 8px;
+  background: var(--color-elevated);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-size: 12.5px;
+  transition: background .1s, color .1s;
+  min-width: 0;
+}
+.album-modal-like-row:hover {
+  background: rgba(124, 58, 237, 0.1);
+}
+.album-modal-like-row:hover .album-modal-like-name {
+  color: var(--color-accent);
+}
+.album-modal-like-num {
+  font-size: 11px;
+  color: var(--color-text-muted);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.album-modal-like-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.album-modal-like-play {
+  width: 24px;
+  height: 24px;
+}
+
 /* Estilo "estándar" del header de modal — reutilizable en modales chicos
    (títulos con ✕ arriba a la derecha, padding respirable, ✕ alineada). */
 .modal-hdr {
@@ -2565,7 +2633,7 @@ body:has(.preview-pill.show) .progress-mini {
 .wthree-order-list { display: flex; flex-direction: column; gap: 4px; }
 .wthree-order-item {
   display: grid;
-  grid-template-columns: 22px 1fr auto auto;
+  grid-template-columns: 18px 22px minmax(0,1fr) auto auto;
   gap: 6px;
   align-items: center;
   padding: 6px 8px;
@@ -2574,6 +2642,48 @@ body:has(.preview-pill.show) .progress-mini {
   border-radius: var(--radius-sm);
   font-size: 12.5px;
   min-width: 0;
+  position: relative;
+  cursor: grab;
+  transition: background .12s, border-color .12s, transform .1s;
+}
+.wthree-order-item:hover { border-color: var(--color-text-muted); }
+.wthree-order-item.is-dragging {
+  opacity: 0.35;
+  cursor: grabbing;
+}
+.wthree-order-item.drop-above::before,
+.wthree-order-item.drop-below::after {
+  content: "";
+  position: absolute;
+  left: 4px; right: 4px;
+  height: 3px;
+  background: #10b981;
+  border-radius: 2px;
+  pointer-events: none;
+}
+.wthree-order-item.drop-above::before { top: -3px; }
+.wthree-order-item.drop-below::after { bottom: -3px; }
+.wthree-order-drag {
+  color: var(--color-text-muted);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: grab;
+}
+.wthree-order-item:hover .wthree-order-drag { color: var(--color-text); }
+
+/* D&D solo desktop; en mobile mostramos ▲▼ (touch drag nativo no anda bien). */
+.wthree-order-mobile-only { display: none; }
+.wt-order-hint-mobile { display: none; }
+@media (max-width: 899px) {
+  .wthree-order-item {
+    grid-template-columns: 22px minmax(0,1fr) auto auto;
+    cursor: default;
+  }
+  .wthree-order-drag { display: none; }
+  .wthree-order-mobile-only { display: inline-flex; }
+  .wt-order-hint-desktop { display: none; }
+  .wt-order-hint-mobile { display: inline; }
 }
 .wthree-order-rank {
   font-weight: 700;
@@ -2612,8 +2722,8 @@ body:has(.preview-pill.show) .progress-mini {
    sin tener que scrollear. <900px → apilado en 1 columna. */
 .wt-modal {
   padding: 0 !important;
-  max-width: 760px;
-  width: min(760px, 94vw);
+  max-width: 920px;
+  width: min(920px, 94vw);
   max-height: 85vh;
   display: flex;
   flex-direction: column;
@@ -2801,6 +2911,28 @@ body:has(.preview-pill.show) .progress-mini {
 /* Filas del tracklist más bajas dentro del modal compacto */
 .wt-tracklist .wthree-track { padding: 6px 10px; font-size: 12.5px; }
 .wt-tracklist .wthree-track-plays { min-width: 22px; text-align: right; }
+
+/* Tracklist en 2 columnas: el orden se lee columna-por-columna (arriba a
+   abajo la izquierda y sigue a la derecha). JS inyecta --wt-track-rows con
+   ceil(N/2) para que `grid-auto-flow:column` sepa cuándo cortar. */
+@media (min-width: 900px) {
+  .wt-tracklist.wt-tracklist-cols {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    grid-template-rows: repeat(var(--wt-track-rows, 1), auto);
+    grid-auto-flow: column;
+    gap: 4px 10px;
+  }
+  .wt-tracklist.wt-tracklist-cols .wthree-track {
+    padding: 5px 8px;
+    font-size: 11.5px;
+    grid-template-columns: auto 18px minmax(0, 1fr) auto auto;
+    gap: 6px;
+  }
+  .wt-tracklist.wt-tracklist-cols .wthree-track-num { font-size: 10px; }
+  .wt-tracklist.wt-tracklist-cols .wthree-track-plays { font-size: 10px; min-width: 18px; }
+  .wt-tracklist.wt-tracklist-cols .wt-play-btn { width: 22px; height: 22px; }
+}
 
 /* v=114: debajo de 900px el body se apila (1 columna). Cada columna vuelve
    a tener altura acotada (así entran las dos dentro del scroll del body). */
@@ -3033,6 +3165,216 @@ body.covers-fs .main {
   margin: 0 !important;
 }
 .covers-btn.is-on { background: var(--color-accent); color: white; }
+
+/* ============ #discover-artists (v=117) ============ */
+.disco-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+.disco-summary {
+  font-size: 13px;
+  color: var(--color-text-secondary);
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+.disco-summary-sub { font-size: 11px; color: var(--color-text-muted); }
+.disco-controls { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+.disco-chip-group {
+  display: inline-flex;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+.disco-chip {
+  background: var(--color-surface);
+  color: var(--color-text-secondary);
+  border: 0;
+  padding: 6px 12px;
+  font-size: 12px;
+  cursor: pointer;
+}
+.disco-chip:hover { background: var(--color-elevated); color: var(--color-text); }
+.disco-chip.is-on { background: var(--color-accent); color: white; }
+.disco-chip + .disco-chip { border-left: 1px solid var(--color-border); }
+.disco-select {
+  background: var(--color-surface);
+  color: var(--color-text);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  padding: 6px 10px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.disco-progress {
+  background: var(--color-elevated);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  padding: 8px 12px;
+  margin-bottom: 14px;
+}
+.disco-progress-bar {
+  height: 4px;
+  background: var(--color-surface);
+  border-radius: 2px;
+  overflow: hidden;
+  margin-bottom: 6px;
+}
+.disco-progress-fill {
+  height: 100%;
+  background: var(--color-accent);
+  transition: width .2s ease;
+}
+.disco-progress-label {
+  font-size: 11px;
+  color: var(--color-text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.disco-list {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+.disco-artist {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: 14px 16px;
+}
+.disco-artist-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+.disco-artist-name {
+  background: none;
+  border: 0;
+  color: var(--color-text);
+  font-size: 16px;
+  font-weight: 600;
+  padding: 0;
+  cursor: pointer;
+  text-align: left;
+}
+.disco-artist-name:hover { color: var(--color-accent); }
+.disco-artist-meta {
+  font-size: 11px;
+  color: var(--color-text-muted);
+  white-space: nowrap;
+}
+
+.disco-album-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 8px;
+}
+.disco-album {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+  padding: 6px 8px;
+  background: var(--color-elevated);
+  border-radius: var(--radius-sm);
+  min-width: 0;
+}
+.disco-album-check-wrap {
+  display: inline-flex;
+  align-items: center;
+  cursor: pointer;
+}
+.disco-check {
+  cursor: pointer;
+  accent-color: var(--color-accent);
+  margin: 0;
+}
+.disco-album-body {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  color: var(--color-text);
+  text-align: left;
+  min-width: 0;
+  overflow: hidden;
+}
+.disco-album-body:hover .disco-album-name { color: var(--color-accent); }
+.disco-album-img {
+  width: 40px;
+  height: 40px;
+  border-radius: 4px;
+  object-fit: cover;
+  flex-shrink: 0;
+}
+.disco-album-img-empty {
+  background: var(--color-surface);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-text-muted);
+  font-size: 18px;
+}
+.disco-album-info { min-width: 0; }
+.disco-album-name {
+  font-size: 12.5px;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: color .1s;
+}
+.disco-album-meta {
+  font-size: 10.5px;
+  color: var(--color-text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.disco-save-btn {
+  padding: 4px 8px !important;
+  font-size: 11px !important;
+  flex-shrink: 0;
+}
+
+.disco-actionbar {
+  position: sticky;
+  bottom: 12px;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-accent);
+  border-radius: var(--radius-md);
+  margin: 16px 0;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.4);
+}
+.disco-actionbar #disco-sel-count {
+  font-size: 13px;
+  color: var(--color-text);
+  font-weight: 600;
+  margin-right: auto;
+}
+@media (max-width: 720px) {
+  .disco-album-grid { grid-template-columns: minmax(0, 1fr); }
+  .disco-controls { width: 100%; justify-content: flex-start; }
+}
 
 /* ============ Ficha de artista comprimida (v=111) ============ */
 .ac-modal {

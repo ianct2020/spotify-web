@@ -2,16 +2,16 @@
 // por álbum). Muestra qué álbumes ya tienen picks, cuántos, y cuáles te faltan.
 // Ordenado por álbumes más escuchados primero para priorizar tu tiempo.
 
-import { spotifyFetch, getAllPlaylistItems, getAllUserPlaylists, addTracksToPlaylist, removeTracksFromPlaylist, reorderPlaylistItems, getPlaylistSnapshotId, updatePlaylistItemsCache } from '../api.js?v=116';
-import { loadHistoryStats, loadListenedAlbums, isOwner, ownerLockedMessage } from './history-data.js?v=116';
-import { escapeHtml, pageHeader } from '../ui/components.js?v=116';
-import { showToast } from '../ui/toast.js?v=116';
-import { activateMarquee, marqueeSpan } from '../ui/marquee.js?v=116';
-import { openModal, closeTop, closeById } from '../ui/modal-stack.js?v=116';
-import { getPreview } from '../api/preview-providers.js?v=116';
-import { togglePreview, playingKey } from '../ui/preview-player.js?v=116';
-import { openAlbumCard } from './album-card.js?v=116';
-import { albumKey } from '../util/album-key.js?v=116';
+import { spotifyFetch, getAllPlaylistItems, getAllUserPlaylists, addTracksToPlaylist, removeTracksFromPlaylist, reorderPlaylistItems, getPlaylistSnapshotId, updatePlaylistItemsCache } from '../api.js?v=117';
+import { loadHistoryStats, loadListenedAlbums, isOwner, ownerLockedMessage } from './history-data.js?v=117';
+import { escapeHtml, pageHeader } from '../ui/components.js?v=117';
+import { showToast } from '../ui/toast.js?v=117';
+import { activateMarquee, marqueeSpan } from '../ui/marquee.js?v=117';
+import { openModal, closeTop, closeById } from '../ui/modal-stack.js?v=117';
+import { getPreview } from '../api/preview-providers.js?v=117';
+import { togglePreview, playingKey } from '../ui/preview-player.js?v=117';
+import { openAlbumCard } from './album-card.js?v=117';
+import { albumKey } from '../util/album-key.js?v=117';
 
 const LS_KEY_ID = 'wthree_playlist_id';
 const LS_KEY_NAME = 'wthree_playlist_name';
@@ -581,10 +581,14 @@ async function openAlbumModal(a) {
 
   metaEl.textContent = `${tracks.length} pistas · ${a.picks.length} en w-three${suggestions.length ? ` · 💡 ${suggestions.length} sugerido${suggestions.length === 1 ? '' : 's'}` : ''}`;
 
+  // Tracklist en 2 columnas cuando hay ≥6 pistas (con <6 no vale la pena).
+  // grid-auto-flow: column necesita saber cuántas filas por columna → ceil(N/2).
+  const useCols = trackData.length >= 6;
+  const rowsPerCol = Math.ceil(trackData.length / 2);
   body.innerHTML = `
     <div class="wt-col wt-col-left">
       <div class="wt-section-title">Pistas del álbum</div>
-      <div class="wthree-tracklist wt-tracklist">
+      <div class="wthree-tracklist wt-tracklist ${useCols ? 'wt-tracklist-cols' : ''}" style="--wt-track-rows:${rowsPerCol}">
         ${trackData.map((t, i) => `
           <label class="wthree-track ${t.picked ? 'wthree-track-picked' : ''} ${suggestedSet.has(t.id) ? 'wthree-track-suggested' : ''}">
             <input type="checkbox" class="wthree-track-check" data-id="${t.id}" data-uri="${t.uri}" data-name="${escapeHtml(t.name)}" ${t.picked ? 'checked' : ''}>
@@ -613,15 +617,19 @@ async function openAlbumModal(a) {
       orderPanel.innerHTML = `<div class="wt-order-empty">Marca pistas a la izquierda para elegir el orden.</div>`;
       return;
     }
+    // ⬆⬇ solo en mobile (touch, drag HTML5 no anda). En desktop se arrastra.
     orderPanel.innerHTML = `
-      <div class="wthree-order-hint">1.ª = la que más te gusta</div>
-      <div class="wthree-order-list wt-order-scroll">
+      <div class="wthree-order-hint">1.ª = la que más te gusta · <span class="wt-order-hint-desktop">arrastra para reordenar</span><span class="wt-order-hint-mobile">usa ▲▼</span></div>
+      <div class="wthree-order-list wt-order-scroll" id="wt-order-list">
         ${orderedPicks.map((p, i) => `
-          <div class="wthree-order-item" data-id="${p.id}">
+          <div class="wthree-order-item" data-id="${p.id}" data-i="${i}" draggable="true">
+            <span class="wthree-order-drag" aria-hidden="true" title="Arrastra para reordenar">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><circle cx="9" cy="6" r="1.6"/><circle cx="15" cy="6" r="1.6"/><circle cx="9" cy="12" r="1.6"/><circle cx="15" cy="12" r="1.6"/><circle cx="9" cy="18" r="1.6"/><circle cx="15" cy="18" r="1.6"/></svg>
+            </span>
             <span class="wthree-order-rank">${i + 1}</span>
             <span class="wthree-order-name">${escapeHtml(p.name || '')}</span>
-            <button class="wthree-order-btn" data-move="up" data-i="${i}" title="Subir" ${i === 0 ? 'disabled' : ''}>▲</button>
-            <button class="wthree-order-btn" data-move="down" data-i="${i}" title="Bajar" ${i === orderedPicks.length - 1 ? 'disabled' : ''}>▼</button>
+            <button class="wthree-order-btn wthree-order-mobile-only" data-move="up" data-i="${i}" title="Subir" ${i === 0 ? 'disabled' : ''}>▲</button>
+            <button class="wthree-order-btn wthree-order-mobile-only" data-move="down" data-i="${i}" title="Bajar" ${i === orderedPicks.length - 1 ? 'disabled' : ''}>▼</button>
           </div>
         `).join('')}
       </div>
@@ -636,7 +644,68 @@ async function openAlbumModal(a) {
         renderOrderPanel();
       };
     });
+    wireOrderDragDrop();
   }
+
+  // HTML5 drag & drop nativo. La fila se hace draggable, y sobre las demás
+  // filas manejamos dragover para pintar un indicador (línea horizontal arriba
+  // o abajo). Al dropear, movemos el pick a la nueva posición.
+  function wireOrderDragDrop() {
+    const list = orderPanel.querySelector('#wt-order-list');
+    if (!list) return;
+    let draggingFrom = -1;
+
+    const clearIndicators = () => {
+      list.querySelectorAll('.wthree-order-item.drop-above, .wthree-order-item.drop-below')
+        .forEach(el => el.classList.remove('drop-above', 'drop-below'));
+    };
+
+    list.querySelectorAll('.wthree-order-item').forEach(item => {
+      item.addEventListener('dragstart', (e) => {
+        draggingFrom = +item.dataset.i;
+        item.classList.add('is-dragging');
+        e.dataTransfer.effectAllowed = 'move';
+        try { e.dataTransfer.setData('text/plain', String(draggingFrom)); } catch { /* Safari */ }
+      });
+      item.addEventListener('dragend', () => {
+        item.classList.remove('is-dragging');
+        clearIndicators();
+        draggingFrom = -1;
+      });
+      item.addEventListener('dragover', (e) => {
+        if (draggingFrom < 0) return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        const rect = item.getBoundingClientRect();
+        const isTop = (e.clientY - rect.top) < rect.height / 2;
+        clearIndicators();
+        item.classList.add(isTop ? 'drop-above' : 'drop-below');
+      });
+      item.addEventListener('dragleave', () => {
+        item.classList.remove('drop-above', 'drop-below');
+      });
+      item.addEventListener('drop', (e) => {
+        e.preventDefault();
+        if (draggingFrom < 0) return;
+        const overIdx = +item.dataset.i;
+        const rect = item.getBoundingClientRect();
+        const isTop = (e.clientY - rect.top) < rect.height / 2;
+        let insertAt = isTop ? overIdx : overIdx + 1;
+        // Si soltás sobre vos mismo (o adyacente en la misma dirección), no hay cambio.
+        if (insertAt === draggingFrom || insertAt === draggingFrom + 1) {
+          clearIndicators();
+          return;
+        }
+        const moving = orderedPicks[draggingFrom];
+        orderedPicks.splice(draggingFrom, 1);
+        // El splice previo shiftea si se saca antes del target.
+        if (draggingFrom < insertAt) insertAt--;
+        orderedPicks.splice(insertAt, 0, moving);
+        renderOrderPanel();
+      });
+    });
+  }
+
   renderOrderPanel();
 
   // Toggle checkbox → actualizar orderedPicks + meta.

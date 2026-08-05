@@ -29,6 +29,7 @@ import { render as renderSkips } from './features/skips.js';
 import { render as renderSearchLikes } from './features/search-likes.js';
 import { render as renderWthree } from './features/wthree.js';
 import { render as renderCovers } from './features/covers.js';
+import { render as renderDiscoverArtists } from './features/discover-artists.js';
 
 async function testConnection() {
   const token = await getValidToken();
@@ -246,6 +247,9 @@ function showApp(profile) {
           <a class="nav-link" data-route="recs" href="#recs">
             <span class="nav-link-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 22h4M15 14a5 5 0 1 0-6 0c.5.5 1 1 1 2v2h4v-2c0-1 .5-1.5 1-2z"/></svg></span> Recomendaciones
           </a>
+          <a class="nav-link" data-route="discoverartists" href="#discover-artists">
+            <span class="nav-link-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.35-4.35"/></svg></span> Sin escuchar de tus artistas
+          </a>
         </div>
         <div class="sidebar-section">
           <div class="sidebar-section-title">Limpieza</div>
@@ -401,6 +405,7 @@ function showApp(profile) {
   registerRoute('search', renderSearchLikes);
   registerRoute('wthree', renderWthree);
   registerRoute('covers', renderCovers);
+  registerRoute('discover-artists', renderDiscoverArtists);
 
   initRouter();
 }
@@ -451,6 +456,7 @@ const HOME_SECTIONS = [
       { hash: 'similar', icon: ICONS.similar, name: 'Artistas similares', desc: 'Artistas parecidos a los que te gustan, vía Last.fm.' },
       { hash: 'rabbit', icon: ICONS.rabbit, name: 'Rabbit hole', desc: 'Navegá artistas y tracks encadenados por género.' },
       { hash: 'recs', icon: ICONS.recs, name: 'Recomendaciones', desc: 'Basadas en tus scrobbles de Last.fm.' },
+      { hash: 'discover-artists', icon: ICONS.search, name: 'Sin escuchar de tus artistas', desc: 'Discografía de tus artistas favoritos que aún no escuchaste.' },
     ],
   },
   {

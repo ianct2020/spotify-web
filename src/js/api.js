@@ -831,6 +831,106 @@ async function unfollowPlaylist(playlistId) {
   invalidatePlaylistsCache();
 }
 
+// PUT /me/library con { ids: [...] } (batches de 50). Confirmado vivo
+// post-migración (usado en Sync). Devuelve null; el cache de likes se
+// invalida en el caller si corresponde.
+async function saveToLibrary(ids) {
+  if (!Array.isArray(ids) || ids.length === 0) return;
+  const uniq = [...new Set(ids.filter(Boolean))];
+  for (let i = 0; i < uniq.length; i += 50) {
+    const chunk = uniq.slice(i, i + 50);
+    await spotifyFetch(`/me/library`, {
+      method: 'PUT',
+      body: JSON.stringify({ ids: chunk }),
+    });
+  }
+}
+
+// Discografía de un artista. En feb 2026 quedó en gris `GET /artists/{id}/albums`
+// (nunca lo re-verificamos post-migración). Estrategia: probamos el endpoint
+// nativo primero — si da 403, caemos a `/search?q=artist:"NAME"&type=album`
+// que sí sabemos que funciona. Cachea la decisión en memoria para no repetir
+// el probe en cada llamada.
+let _artistAlbumsEndpoint = null; // 'native' | 'search'
+async function getArtistAlbums(artistId, artistName, { includeSingles = true, limit = 50 } = {}) {
+  const groups = includeSingles ? 'album,single' : 'album';
+  const tryNative = async () => {
+    const items = [];
+    let url = `/artists/${artistId}/albums?include_groups=${groups}&limit=${limit}&market=from_token`;
+    for (let i = 0; i < 10; i++) {
+      const res = await spotifyFetch(url);
+      if (!res) break;
+      const batch = res.items || [];
+      items.push(...batch);
+      if (!res.next) break;
+      url = res.next.replace('https://api.spotify.com/v1', '');
+      if (items.length >= 200) break; // límite razonable — nadie tiene 200 lanzamientos
+    }
+    return items;
+  };
+  const trySearch = async () => {
+    // /search: 50 max por página, hasta 3 páginas = 150 resultados posibles.
+    const items = [];
+    for (let offset = 0; offset < 150; offset += 50) {
+      const q = `artist:"${(artistName || '').replace(/"/g, '')}"`;
+      const res = await spotifyFetch(`/search?q=${encodeURIComponent(q)}&type=album&limit=50&offset=${offset}`);
+      const batch = res?.albums?.items || [];
+      items.push(...batch);
+      if (batch.length < 50) break;
+    }
+    // /search no diferencia includeSingles bien — filtramos por album_type.
+    return items.filter(al => {
+      if (!includeSingles && al.album_type !== 'album') return false;
+      return true;
+    });
+  };
+
+  if (_artistAlbumsEndpoint === 'search') return trySearch();
+
+  try {
+    const items = await tryNative();
+    if (_artistAlbumsEndpoint == null) {
+      _artistAlbumsEndpoint = 'native';
+      console.log('[api] getArtistAlbums: /artists/{id}/albums OK — usando nativo');
+    }
+    return items;
+  } catch (e) {
+    if (/403/.test(e.message)) {
+      _artistAlbumsEndpoint = 'search';
+      console.warn('[api] getArtistAlbums: /artists/{id}/albums → 403 · fallback a /search');
+      return trySearch();
+    }
+    throw e;
+  }
+}
+
+// GET /albums/{id}/tracks (los items traen name, uri, track_number, duration_ms).
+async function getAlbumTracks(albumId, { limit = 50 } = {}) {
+  const items = [];
+  let url = `/albums/${albumId}/tracks?limit=${limit}`;
+  for (let i = 0; i < 5; i++) {
+    const res = await spotifyFetch(url);
+    if (!res) break;
+    const batch = res.items || [];
+    items.push(...batch);
+    if (!res.next) break;
+    url = res.next.replace('https://api.spotify.com/v1', '');
+  }
+  return items;
+}
+
+// Búsqueda de artista por nombre — devuelve el mejor match (id + name + image).
+async function searchArtistByName(name) {
+  if (!name) return null;
+  const q = `artist:"${name.replace(/"/g, '')}"`;
+  const res = await spotifyFetch(`/search?q=${encodeURIComponent(q)}&type=artist&limit=5`);
+  const items = res?.artists?.items || [];
+  // El mejor match por exact name (case insensitive), si no el primero.
+  const lc = name.toLowerCase();
+  const exact = items.find(a => (a.name || '').toLowerCase() === lc);
+  return exact || items[0] || null;
+}
+
 export {
   spotifyFetch,
   paginateAll,
@@ -850,6 +950,10 @@ export {
   checkLibraryContains,
   createPlaylist,
   unfollowPlaylist,
+  saveToLibrary,
+  getArtistAlbums,
+  getAlbumTracks,
+  searchArtistByName,
   invalidateLikesCache,
   invalidatePlaylistsCache,
   getLikesTotal,
