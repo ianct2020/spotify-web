@@ -766,6 +766,16 @@ async function getPlaylistSnapshotId(playlistId) {
   return r?.snapshot_id || null;
 }
 
+// Snapshot con el que guardamos el último cache de items de la playlist.
+// Sirve para saber si las posiciones cacheadas siguen válidas sin refetch:
+// si server snapshot === cached snapshot, nadie escribió → posiciones OK.
+async function getCachedPlaylistSnapshot(playlistId) {
+  try {
+    const cached = await idbGetCached(`playlist_items_${playlistId}`);
+    return cached?.snapshot || null;
+  } catch { return null; }
+}
+
 async function removePlaylistItemsAtPositions(playlistId, itemsWithPositions) {
   const meta = await spotifyFetch(`/playlists/${playlistId}?fields=snapshot_id`);
   const snapshotId = meta.snapshot_id;
@@ -945,6 +955,7 @@ export {
   removeTracksFromPlaylist,
   reorderPlaylistItems,
   getPlaylistSnapshotId,
+  getCachedPlaylistSnapshot,
   removePlaylistItemsAtPositions,
   removeLikedTracks,
   checkLibraryContains,
