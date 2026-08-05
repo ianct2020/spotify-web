@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Validar v=118 · W-Three guardar</title>
+  <style>
+    body { font: 14px/1.5 -apple-system, sans-serif; max-width: 800px; margin: 24px auto; padding: 0 16px; background: #0a0a0f; color: #f0f0f5; }
+    h1 { font-size: 20px; margin: 0 0 8px; }
+    .muted { color: #8888a0; font-size: 13px; }
+    button { background: #7c3aed; color: white; border: 0; padding: 10px 18px; border-radius: 6px; font: inherit; cursor: pointer; margin: 4px 4px 4px 0; }
+    button:disabled { opacity: 0.4; cursor: not-allowed; }
+    button.secondary { background: #2a2a3a; }
+    button.danger { background: #b02a4a; }
+    #log { background: #16161f; border: 1px solid #2a2a3a; border-radius: 6px; padding: 12px; margin-top: 16px; max-height: 500px; overflow-y: auto; font: 12px/1.45 ui-monospace, monospace; white-space: pre-wrap; }
+    .ok { color: #06d6a0; }
+    .err { color: #ff6b6b; }
+    .warn { color: #ffd166; }
+    .info { color: #8888ff; }
+    .step { border-left: 3px solid #7c3aed; padding-left: 10px; margin: 12px 0; }
+    input[type=text] { background: #16161f; color: #f0f0f5; border: 1px solid #2a2a3a; padding: 6px 10px; border-radius: 4px; font: inherit; width: 260px; }
+  </style>
+</head>
+<body>
+  <h1>Validar v=118 · guardar de W-Three</h1>
+  <p class="muted">Corre el flujo real contra tu Spotify: backup → reorder → verify → cleanup (deja todo como estaba). Mide tiempos reales. Descarga un log JSON al final que pegás en /home/ian/ para que lo lea.</p>
+
+  <div class="step">
+    <strong>1. Backup de la playlist w-three</strong>
+    <button id="btn-backup">Descargar backup</button>
+    <span class="muted">Descarga backup-wthree-timestamp.json a Descargas</span>
+  </div>
+
+  <div class="step">
+    <strong>2. Elegir álbum de prueba</strong>
+    <p class="muted">Álbum con exactamente 3 picks en la playlist. Se prueban 2 swaps y se DEJA como estaba al terminar.</p>
+    <input type="text" id="album-name" placeholder="Nombre del álbum (ej: Donda)" value="Donda">
+    <button id="btn-pick">Buscar álbum</button>
+    <div id="album-result" class="muted"></div>
+  </div>
+
+  <div class="step">
+    <strong>3. Correr validación</strong>
+    <button id="btn-run" disabled>Reordenar → Verificar → Volver</button>
+    <span class="muted" id="run-status"></span>
+  </div>
+
+  <div class="step">
+    <strong>4. Descargar log</strong>
+    <button id="btn-download" disabled>Descargar validation-v118-timestamp.json</button>
+  </div>
+
+  <div id="log">Esperando…</div>
+
+  <script>
+    const $ = (s) => document.querySelector(s);
+    const logEl = $('#log');
+    const events = [];
+    function log(msg, cls) {
+      const line = `[${new Date().toISOString().substring(11, 19)}] ${msg}`;
+      events.push({ t: Date.now(), msg, cls });
+      const div = document.createElement('div');
+      if (cls) div.className = cls;
+      div.textContent = line;
+      logEl.appendChild(div);
+      logEl.scrollTop = logEl.scrollHeight;
+    }
+
+    const token = localStorage.getItem('sp_access_token');
+    const playlistId = localStorage.getItem('wthree_playlist_id');
+    logEl.textContent = '';
+    if (!token) log('ERROR: no hay sp_access_token en localStorage. ¿Estás logueado en Fonoteca?', 'err');
+    else log(`Token OK: ${token.substring(0, 20)}…`, 'ok');
+    if (!playlistId) log('ERROR: no hay wthree_playlist_id. Andá a #wthree en Fonoteca primero.', 'err');
+    else log(`Playlist w-three: ${playlistId}`, 'ok');
+
+    async function sfetch(url, opts = {}) {
+      const t0 = performance.now();
+      const r = await fetch(`https://api.spotify.com/v1${url}`, {
+        ...opts,
+        headers: { Authorization: `Bearer ${token}`, ...(opts.headers || {}) },
+      });
+      const ms = Math.round(performance.now() - t0);
+      const data = r.status === 204 || r.headers.get('content-length') === '0' ? null : await r.json();
+      log(`  ← ${r.status} ${opts.method || 'GET'} ${url.substring(0, 60)} · ${ms}ms`, r.ok ? 'info' : 'err');
+      if (!r.ok) throw new Error(`HTTP ${r.status}: ${JSON.stringify(data)}`);
+      return { data, ms, snapshot: data?.snapshot_id };
+    }
+
+    // ── Backup ──────────────────────────────────────────────────────────
+    $('#btn-backup').onclick = async () => {
+      $('#btn-backup').disabled = true;
+      log('=== BACKUP ===', 'warn');
+      const t0 = performance.now();
+      const meta = (await sfetch(`/playlists/${playlistId}?fields=snapshot_id,name,tracks.total`)).data;
+      log(`Playlist "${meta.name}" · ${meta.tracks.total} tracks · snapshot ${meta.snapshot_id}`);
+      const items = [];
+      let off = 0;
+      while (true) {
+        const d = (await sfetch(`/playlists/${playlistId}/items?limit=100&offset=${off}`)).data;
+        (d.items || []).forEach((it, i) => {
+          const t = it.item || it.track;
+          if (t) items.push({ pos: off + i, uri: t.uri, id: t.id, name: t.name, artists: (t.artists || []).map(a => a.name).join(', '), album: t.album?.name });
+        });
+        if (!d.next || (d.items || []).length < 100) break;
+        off += 100;
+        await new Promise(r => setTimeout(r, 250));
+      }
+      const backup = { exported_at: new Date().toISOString(), playlist_id: playlistId, playlist_name: meta.name, snapshot_id: meta.snapshot_id, total_tracks: items.length, items };
+      const now = new Date();
+      const stamp = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}-${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}`;
+      const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `backup-wthree-${stamp}.json`;
+      document.body.appendChild(a); a.click(); a.remove();
+      log(`Backup listo (${(performance.now() - t0).toFixed(0)}ms) → backup-wthree-${stamp}.json`, 'ok');
+      window._backup = backup;
+      $('#btn-backup').disabled = false;
+    };
+
+    // ── Buscar álbum ────────────────────────────────────────────────────
+    $('#btn-pick').onclick = async () => {
+      if (!window._backup) { log('Primero corré el backup', 'err'); return; }
+      const name = $('#album-name').value.trim().toLowerCase();
+      if (!name) return;
+      log(`=== BUSCAR ÁLBUM "${name}" ===`, 'warn');
+      const byAlbum = new Map();
+      for (const t of window._backup.items) {
+        const key = (t.album || '').toLowerCase();
+        if (!byAlbum.has(key)) byAlbum.set(key, { name: t.album, artist: t.artists, picks: [] });
+        byAlbum.get(key).picks.push({ id: t.id, uri: t.uri, name: t.name, pos: t.pos });
+      }
+      const matches = [...byAlbum.entries()].filter(([k, v]) => k.includes(name) && v.picks.length === 3);
+      if (matches.length === 0) {
+        $('#album-result').textContent = 'No hay álbum con ese nombre y exactamente 3 picks';
+        log('Sin match — buscá otro álbum con 3 picks', 'warn');
+        return;
+      }
+      const [, alb] = matches[0];
+      window._album = alb;
+      $('#album-result').innerHTML = `<span class="ok">Álbum: <strong>${alb.name}</strong> — ${alb.artist} · picks:</span> ${alb.picks.map(p => `${p.name}@${p.pos}`).join(' → ')}`;
+      log(`Match: "${alb.name}" con 3 picks: ${alb.picks.map(p => p.name).join(', ')}`, 'ok');
+      $('#btn-run').disabled = false;
+    };
+
+    // ── Correr validación ───────────────────────────────────────────────
+    async function reorderMove(pl, snapshot, range_start, insert_before) {
+      const r = await sfetch(`/playlists/${pl}/items`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ range_start, insert_before, range_length: 1, snapshot_id: snapshot }),
+      });
+      return r.data.snapshot_id;
+    }
+
+    $('#btn-run').onclick = async () => {
+      $('#btn-run').disabled = true;
+      const alb = window._album;
+      log('=== VALIDACIÓN ===', 'warn');
+      const totals = { snapshot_checks: 0, reorders: 0, verify_calls: 0 };
+      try {
+        const picks = alb.picks.slice(); // [A,B,C] con .pos
+        const originalOrder = picks.map(p => p.id);
+        // Test 1: swap A ↔ C → [C,B,A]
+        log(`\n--- Test 1: swap A↔C ([${picks.map(p => p.name.substring(0, 8)).join(', ')}] → [${[picks[2], picks[1], picks[0]].map(p => p.name.substring(0, 8)).join(', ')}]) ---`);
+        const t1 = performance.now();
+        const snap1a = (await sfetch(`/playlists/${playlistId}?fields=snapshot_id`)).data.snapshot_id;
+        totals.snapshot_checks++;
+        // Mover picks[2] (posición C) al lugar de picks[0] (posición A). insert_before = A.pos
+        const snap1b = await reorderMove(playlistId, snap1a, picks[2].pos, picks[0].pos);
+        totals.reorders++;
+        // Ahora el orden es [C, A, B]. Necesitamos [C, B, A]: mover B (que está en pos originales+2, ahora en pos+2 tras el move? no)
+        // Después del primer move: C@picks[0].pos, A@picks[0].pos+1, B@picks[0].pos+2
+        // Target [C, B, A]: mover A (que está en picks[0].pos+1) a después de B (picks[0].pos+2). fromPos<toPos → insert_before=toPos+1
+        const A_now = picks[0].pos + 1;
+        const B_now = picks[0].pos + 2;
+        const snap1c = await reorderMove(playlistId, snap1b, A_now, B_now + 1);
+        totals.reorders++;
+        // Verify: leer rango
+        const minP = picks[0].pos;
+        const d = (await sfetch(`/playlists/${playlistId}/items?offset=${minP}&limit=8`)).data;
+        totals.verify_calls++;
+        const gotUris = (d.items || []).map(it => (it.item || it.track)?.uri).filter(u => [picks[0].uri, picks[1].uri, picks[2].uri].includes(u));
+        const expected1 = [picks[2].uri, picks[1].uri, picks[0].uri];
+        const ok1 = gotUris.length === 3 && gotUris.every((u, i) => u === expected1[i]);
+        const t1total = Math.round(performance.now() - t1);
+        log(`  esperado: ${expected1.map(u => u.slice(-6)).join(', ')}`);
+        log(`  obtenido: ${gotUris.map(u => u.slice(-6)).join(', ')}`);
+        log(`  Test 1 ${ok1 ? 'OK' : 'FAIL'} · ${t1total}ms · 3 reorder calls total`, ok1 ? 'ok' : 'err');
+
+        // Test 2: volver al orden original [A,B,C] — snapshot check + reorder mínimo
+        log(`\n--- Test 2: volver al orden original [${originalOrder.map(id => picks.find(p => p.id === id).name.substring(0, 8)).join(', ')}] ---`);
+        const t2 = performance.now();
+        const snap2a = (await sfetch(`/playlists/${playlistId}?fields=snapshot_id`)).data.snapshot_id;
+        totals.snapshot_checks++;
+        // Orden actual: [C, B, A] en picks[0].pos, picks[0].pos+1, picks[0].pos+2
+        // Target: [A, B, C]. Mover A (picks[0].pos+2) a picks[0].pos → insert_before=picks[0].pos
+        const snap2b = await reorderMove(playlistId, snap2a, picks[0].pos + 2, picks[0].pos);
+        totals.reorders++;
+        // Ahora: [A, C, B]. Mover C (picks[0].pos+1) a después de B (picks[0].pos+2) → insert_before=picks[0].pos+3
+        const snap2c = await reorderMove(playlistId, snap2b, picks[0].pos + 1, picks[0].pos + 3);
+        totals.reorders++;
+        const d2 = (await sfetch(`/playlists/${playlistId}/items?offset=${minP}&limit=8`)).data;
+        totals.verify_calls++;
+        const gotUris2 = (d2.items || []).map(it => (it.item || it.track)?.uri).filter(u => [picks[0].uri, picks[1].uri, picks[2].uri].includes(u));
+        const expected2 = [picks[0].uri, picks[1].uri, picks[2].uri];
+        const ok2 = gotUris2.length === 3 && gotUris2.every((u, i) => u === expected2[i]);
+        const t2total = Math.round(performance.now() - t2);
+        log(`  esperado: ${expected2.map(u => u.slice(-6)).join(', ')}`);
+        log(`  obtenido: ${gotUris2.map(u => u.slice(-6)).join(', ')}`);
+        log(`  Test 2 ${ok2 ? 'OK' : 'FAIL'} · ${t2total}ms · restaurado al orden original`, ok2 ? 'ok' : 'err');
+
+        log(`\n=== TOTAL ===`, 'warn');
+        log(`  ${totals.snapshot_checks} snapshot checks · ${totals.reorders} reorder PUTs · ${totals.verify_calls} verify GETs`, 'ok');
+        log(`  Ningún GET items paginado — 0 refetch de playlist entera ✓`, 'ok');
+
+        window._results = {
+          finished_at: new Date().toISOString(),
+          version_expected: 'v=118',
+          album: alb.name,
+          tests: [
+            { name: 'swap A↔C', ok: ok1, elapsed_ms: t1total, expected: expected1, got: gotUris },
+            { name: 'restore [A,B,C]', ok: ok2, elapsed_ms: t2total, expected: expected2, got: gotUris2 },
+          ],
+          totals,
+          all_events: events,
+        };
+        $('#btn-download').disabled = false;
+        $('#run-status').textContent = ok1 && ok2 ? '✅ ambos tests OK' : '❌ algún test falló';
+      } catch (e) {
+        log(`FALLÓ: ${e.message}`, 'err');
+        $('#run-status').textContent = 'error — ver log';
+      }
+    };
+
+    $('#btn-download').onclick = () => {
+      const stamp = new Date().toISOString().replace(/[:.]/g, '-').substring(0, 19);
+      const blob = new Blob([JSON.stringify(window._results, null, 2)], { type: 'application/json' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `validation-v118-${stamp}.json`;
+      document.body.appendChild(a); a.click(); a.remove();
+    };
+  </script>
+</body>
+</html>
