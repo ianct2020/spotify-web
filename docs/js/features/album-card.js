@@ -2,9 +2,9 @@
 // y botones para saltar a la ficha del artista o abrir el álbum en Spotify.
 // Se dispara desde openAlbumCard({ name, artist, plays, min, img }).
 
-import { escapeHtml } from '../ui/components.js?v=115';
-import { openArtistCard } from './artist-card.js?v=115';
-import { openModal, closeTop } from '../ui/modal-stack.js?v=115';
+import { escapeHtml } from '../ui/components.js?v=116';
+import { openArtistCard } from './artist-card.js?v=116';
+import { openModal, closeTop } from '../ui/modal-stack.js?v=116';
 
 function fmtMinutes(min) {
   if (!min && min !== 0) return '—';
@@ -34,16 +34,20 @@ export function openAlbumCard(a) {
         <div class="album-modal-name">${escapeHtml(a.name)}</div>
         <button class="album-modal-artist-link" id="alb-artist">${escapeHtml(a.artist || '')}</button>
       </div>
+      ${(a.plays > 0 || a.min > 0) ? `
       <div class="album-modal-stats">
         <div class="album-modal-stat">
           <div class="album-modal-stat-v">${fmtMinutes(a.min)}</div>
           <div class="album-modal-stat-l">tiempo escuchado</div>
         </div>
         <div class="album-modal-stat">
-          <div class="album-modal-stat-v">${(a.plays || 0).toLocaleString('es-AR')}</div>
+          <div class="album-modal-stat-v">${(a.plays || 0).toLocaleString('es-ES')}</div>
           <div class="album-modal-stat-l">plays</div>
         </div>
       </div>
+      ` : `
+      <div class="album-modal-no-data">Sin datos de escucha en tu historial</div>
+      `}
       <div class="album-modal-actions">
         <button class="btn btn-primary btn-sm" id="alb-go-artist">Ver ficha del artista</button>
         <a class="btn btn-secondary btn-sm" id="alb-spotify" href="${spotifyUrl}" target="_blank" rel="noopener">Buscar en Spotify</a>

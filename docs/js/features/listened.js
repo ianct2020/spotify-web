@@ -1,9 +1,9 @@
-import { getAllPlaylistItems, getBestAvailableLikes, addTracksToPlaylist, removeTracksFromPlaylist, getAllUserPlaylists } from '../api.js?v=115';
-import { idbGetCached, idbSetCached, idbGetTimestamp } from '../idb.js?v=115';
-import { escapeHtml, confirmModal, pageHeader } from '../ui/components.js?v=115';
-import { showToast } from '../ui/toast.js?v=115';
-import { openModal, closeTop } from '../ui/modal-stack.js?v=115';
-import { getListenedPlaylist, groupItemsByAlbum, openListenedAlbumsPicker, albumKey, baseName, norm } from './listened-shared.js?v=115';
+import { getAllPlaylistItems, getBestAvailableLikes, addTracksToPlaylist, removeTracksFromPlaylist, getAllUserPlaylists } from '../api.js?v=116';
+import { idbGetCached, idbSetCached, idbGetTimestamp } from '../idb.js?v=116';
+import { escapeHtml, confirmModal, pageHeader } from '../ui/components.js?v=116';
+import { showToast } from '../ui/toast.js?v=116';
+import { openModal, closeTop } from '../ui/modal-stack.js?v=116';
+import { getListenedPlaylist, groupItemsByAlbum, openListenedAlbumsPicker, albumKey, baseName, norm } from './listened-shared.js?v=116';
 
 const SORT_KEY = 'listened_sort_mode';
 const VALID_SORTS = new Set(['recent', 'year-desc', 'year-asc', 'artist-asc', 'likes-desc', 'name-asc']);
@@ -526,7 +526,7 @@ function buildUI(totalTracks, ts) {
       </div>
       <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
         <span style="font-size:12px;color:var(--color-text-muted);margin-right:4px">Ordenar por:</span>
-        <button class="btn btn-secondary btn-sm sort-btn ${mode === 'recent' ? 'sort-active' : ''}" data-sort="recent" title="Agregados más recientemente a la playlist">Recientes</button>
+        <button class="btn btn-secondary btn-sm sort-btn ${mode === 'recent' ? 'sort-active' : ''}" data-sort="recent" title="Añadidos más recientemente a la playlist">Recientes</button>
         <button class="btn btn-secondary btn-sm sort-btn ${mode === 'year-desc' ? 'sort-active' : ''}" data-sort="year-desc" title="Año de salida, más nuevos arriba">Año ↓</button>
         <button class="btn btn-secondary btn-sm sort-btn ${mode === 'year-asc' ? 'sort-active' : ''}" data-sort="year-asc" title="Año de salida, más viejos arriba">Año ↑</button>
         <button class="btn btn-secondary btn-sm sort-btn ${mode === 'artist-asc' ? 'sort-active' : ''}" data-sort="artist-asc" title="Artista alfabético">Artista</button>
@@ -809,7 +809,7 @@ function openUnregistered() {
       <div id="unreg-list" class="picker-scroll"></div>
       <div id="unreg-hidden-note" style="font-size:12px;color:var(--color-text-muted);margin-top:8px;flex-shrink:0"></div>
       <div class="modal-actions" style="margin-top:12px">
-        <button class="btn btn-primary" id="unreg-add" disabled>Agregar a escuchados (0)</button>
+        <button class="btn btn-primary" id="unreg-add" disabled>Añadir a escuchados (0)</button>
         <button class="btn btn-secondary" data-close-modal>Cerrar</button>
       </div>
     </div>
@@ -820,7 +820,7 @@ function openUnregistered() {
   let unregRendered = [];
   const updateAddBtn = () => {
     const n = overlay.querySelectorAll('.unreg-cb:checked').length;
-    addBtn.textContent = `Agregar a escuchados (${n})`;
+    addBtn.textContent = `Añadir a escuchados (${n})`;
     addBtn.disabled = n === 0;
   };
 
@@ -929,7 +929,7 @@ function openUnregistered() {
     addBtn.textContent = 'Agregando...';
     try {
       await addTracksToPlaylist(playlistInfo.id, uris);      // sin confirmación (pedido de Ian)
-      showToast(`${uris.length} álbum${uris.length === 1 ? '' : 'es'} agregado${uris.length === 1 ? '' : 's'} a escuchados`, 'success');
+      showToast(`${uris.length} álbum${uris.length === 1 ? '' : 'es'} añadido${uris.length === 1 ? '' : 's'} a escuchados`, 'success');
       close();
       // Update local instantáneo (sin re-bajar la playlist ni mostrar "Actualizando").
       await addAlbumsLocally(picked.map(e => ({
@@ -937,7 +937,7 @@ function openUnregistered() {
         uri: e.tracks.find(t => t.uri)?.uri,
       })));
     } catch (err) {
-      showToast('Error al agregar: ' + err.message, 'error');
+      showToast('Error al añadir: ' + err.message, 'error');
       addBtn.disabled = false;
       updateAddBtn();
     }
@@ -1250,7 +1250,7 @@ function openHistory() {
       <div id="hist-list" class="picker-scroll"></div>
       <div id="hist-hidden-note" style="font-size:12px;color:var(--color-text-muted);margin-top:8px;flex-shrink:0"></div>
       <div class="modal-actions" style="margin-top:12px">
-        <button class="btn btn-primary" id="hist-add" disabled>Agregar a escuchados (0)</button>
+        <button class="btn btn-primary" id="hist-add" disabled>Añadir a escuchados (0)</button>
         <button class="btn btn-secondary" data-close-modal>Cerrar</button>
       </div>
     </div>
@@ -1261,7 +1261,7 @@ function openHistory() {
   let histRendered = [];
   const updateAddBtn = () => {
     const n = overlay.querySelectorAll('.hist-cb:checked').length;
-    addBtn.textContent = `Agregar a escuchados (${n})`;
+    addBtn.textContent = `Añadir a escuchados (${n})`;
     addBtn.disabled = n === 0;
   };
   const updateHiddenNote = () => {
@@ -1372,14 +1372,14 @@ function openHistory() {
     addBtn.textContent = 'Agregando...';
     try {
       await addTracksToPlaylist(playlistInfo.id, uris);
-      showToast(`${uris.length} álbum${uris.length === 1 ? '' : 'es'} agregado${uris.length === 1 ? '' : 's'} a escuchados`, 'success');
+      showToast(`${uris.length} álbum${uris.length === 1 ? '' : 'es'} añadido${uris.length === 1 ? '' : 's'} a escuchados`, 'success');
       close();
       await addAlbumsLocally(picked.map(h => ({
         id: null, name: h.a, artist: h.ar, year: h.y1 ? String(h.y1) : '',
         image: h.img || likesByKey?.get(h.key)?.image || null, uri: h.u,
       })));
     } catch (err) {
-      showToast('Error al agregar: ' + err.message, 'error');
+      showToast('Error al añadir: ' + err.message, 'error');
       addBtn.disabled = false;
       updateAddBtn();
     }

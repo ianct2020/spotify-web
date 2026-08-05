@@ -272,7 +272,7 @@ function shuffle(arr) {
 
 async function promptCreate(baseName, tracks) {
   if (!tracks || tracks.length === 0) {
-    showToast('No hay tracks para agregar', 'error');
+    showToast('No hay tracks para añadir', 'error');
     return;
   }
   const uris = tracks.map(t => t.uri).filter(Boolean);

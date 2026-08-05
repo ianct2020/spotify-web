@@ -927,6 +927,31 @@ body.modal-open {
   padding: 4px 10px;
   gap: 6px;
 }
+/* Skips: chip Stats.fm que actúa como toggle (mismo estilo que los otros
+   .skips-chip pero con ícono ✓ integrado que aparece cuando está activo). */
+.skips-chip.skips-chip-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  max-width: 100%;
+  white-space: nowrap;
+}
+.skips-chip.skips-chip-toggle .skips-chip-check {
+  opacity: 0;
+  width: 12px;
+  height: 12px;
+  flex-shrink: 0;
+  transition: opacity .12s;
+}
+.skips-chip.skips-chip-toggle.active .skips-chip-check {
+  opacity: 1;
+}
+.skips-chip.skips-chip-toggle span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
 @media (max-width: 720px) {
   .skips-topbar-row { gap: 8px; }
   .skips-topbar-actions { margin-left: 0; width: 100%; justify-content: flex-end; }

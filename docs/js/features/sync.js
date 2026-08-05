@@ -1,6 +1,6 @@
-import { getAllLikedTracks, getAllPlaylistItems, updatePlaylistItemsCache, getAllUserPlaylists, addTracksToPlaylist, removeTracksFromPlaylist, createPlaylist, unfollowPlaylist } from '../api.js?v=115';
-import { showProgress, hideProgress, progressController, isCancelled, typeConfirmModal, renderTrackRow, escapeHtml, pageHeader } from '../ui/components.js?v=115';
-import { showToast } from '../ui/toast.js?v=115';
+import { getAllLikedTracks, getAllPlaylistItems, updatePlaylistItemsCache, getAllUserPlaylists, addTracksToPlaylist, removeTracksFromPlaylist, createPlaylist, unfollowPlaylist } from '../api.js?v=116';
+import { showProgress, hideProgress, progressController, isCancelled, typeConfirmModal, renderTrackRow, escapeHtml, pageHeader } from '../ui/components.js?v=116';
+import { showToast } from '../ui/toast.js?v=116';
 
 const TARGET_PLAYLIST_NAME = 'anothertwo';
 const SPOTIFY_PLAYLIST_MAX = 10000;
@@ -113,7 +113,7 @@ async function analyze() {
         </div>
         <div class="stat-card">
           <div class="stat-value" style="color:var(--color-success)">+${toAdd.length.toLocaleString()}</div>
-          <div class="stat-label">Para agregar</div>
+          <div class="stat-label">Para añadir</div>
         </div>
         <div class="stat-card">
           <div class="stat-value" style="color:var(--color-error)">-${toRemove.length.toLocaleString()}</div>
@@ -135,7 +135,7 @@ async function analyze() {
 
       ${toAdd.length > 0 ? `
         <div class="card" style="margin-bottom:16px">
-          <h3 style="margin-bottom:12px">Tracks para agregar (${toAdd.length})</h3>
+          <h3 style="margin-bottom:12px">Tracks para añadir (${toAdd.length})</h3>
           <div class="results-list" style="max-height:300px;overflow-y:auto">
             ${toAdd.slice(0, 50).map(uri => renderTrackRow(likeMap.get(uri) || { name: uri, artists: [] })).join('')}
             ${toAdd.length > 50 ? `<div style="padding:10px 14px;color:var(--color-text-secondary)">...y ${toAdd.length - 50} más</div>` : ''}
@@ -155,7 +155,7 @@ async function analyze() {
 
       <div style="display:flex;gap:10px;flex-wrap:wrap">
         <button class="btn btn-primary btn-lg" id="sync-execute-btn">Sincronizar</button>
-        ${toAdd.length > 0 ? `<button class="btn btn-secondary btn-lg" id="sync-add-only-btn">Solo agregar (sin quitar)</button>` : ''}
+        ${toAdd.length > 0 ? `<button class="btn btn-secondary btn-lg" id="sync-add-only-btn">Solo añadir (sin quitar)</button>` : ''}
         ${exceedsLimit ? `<button class="btn btn-danger btn-lg" id="sync-wipe-btn">Vaciar y llenar</button>` : ''}
       </div>
     `;
@@ -187,12 +187,12 @@ async function analyze() {
 }
 
 async function executeSync(playlist, toAdd, toRemove, { mode = 'full', playlistItems = [], likeMap = new Map() } = {}) {
-  const label = mode === 'add-only' ? 'Solo agregar' : 'Sincronizar playlist';
+  const label = mode === 'add-only' ? 'Solo añadir' : 'Sincronizar playlist';
   const confirmed = await typeConfirmModal(
     label,
     mode === 'add-only'
-      ? `Se van a agregar <strong>${toAdd.length}</strong> tracks a "${escapeHtml(playlist.name)}". No se va a quitar nada.`
-      : `Se van a agregar <strong>${toAdd.length}</strong> y quitar <strong>${toRemove.length}</strong> tracks de "${escapeHtml(playlist.name)}".`,
+      ? `Se van a añadir <strong>${toAdd.length}</strong> tracks a "${escapeHtml(playlist.name)}". No se va a quitar nada.`
+      : `Se van a añadir <strong>${toAdd.length}</strong> y quitar <strong>${toRemove.length}</strong> tracks de "${escapeHtml(playlist.name)}".`,
     'SYNC'
   );
 
@@ -255,7 +255,7 @@ async function executeWipeAndFill(playlist, playlistItems, likes) {
 
   const confirmed = await typeConfirmModal(
     'Vaciar y llenar playlist',
-    `Se van a <strong>quitar los ${currentUris.length.toLocaleString()}</strong> tracks actuales de "${escapeHtml(playlist.name)}" y agregar los <strong>${likeUris.length.toLocaleString()}</strong> likes desde cero.<br><br>Esta acción es destructiva.`,
+    `Se van a <strong>quitar los ${currentUris.length.toLocaleString('es-ES')}</strong> tracks actuales de "${escapeHtml(playlist.name)}" y añadir los <strong>${likeUris.length.toLocaleString('es-ES')}</strong> likes desde cero.<br><br>Esta acción es destructiva.`,
     'VACIAR'
   );
   if (!confirmed) return;

@@ -62,6 +62,19 @@ async function hasLocalHistory() {
   } catch { return false; }
 }
 
+// Claves de versiones anteriores por kind — si aparecen en IDB y la nueva
+// versión no está en cache, las usamos como fallback y migramos la data.
+// Evita el re-fetch cuando bumpeamos una _VERSION del pipeline pero el JSON
+// remoto no cambió estructuralmente.
+const OWNER_PREV_KEYS = {
+  stats: ['history_stats_v1'],
+  plays: ['history_track_plays_v1'],
+  listened: ['history_listened_albums_v1', 'history_albums_v1'],
+  skip: [],
+  detail: [],
+  records: ['history_records_v1'],
+};
+
 async function loadOne(kind, cacheField, sanityCheck, fetchUrlForOwner) {
   const uid = await ensureFreshMem();
   if (memCache[cacheField]) return memCache[cacheField];
@@ -70,7 +83,10 @@ async function loadOne(kind, cacheField, sanityCheck, fetchUrlForOwner) {
   if (uid) {
     try {
       const cached = await idbGetCached(localKey(uid, kind));
-      if (cached && sanityCheck(cached)) { memCache[cacheField] = cached; return cached; }
+      if (cached && sanityCheck(cached)) {
+        console.log(`[history-data] ${kind}: hit local BYOH (${uid})`);
+        memCache[cacheField] = cached; return cached;
+      }
     } catch { /* ignora */ }
   }
 
@@ -81,15 +97,37 @@ async function loadOne(kind, cacheField, sanityCheck, fetchUrlForOwner) {
 
   try {
     const cached = await idbGetCached(OWNER_KEYS[kind]);
-    if (cached && sanityCheck(cached)) { memCache[cacheField] = cached; return cached; }
+    if (cached && sanityCheck(cached)) {
+      console.log(`[history-data] ${kind}: hit IDB owner (${OWNER_KEYS[kind]})`);
+      memCache[cacheField] = cached; return cached;
+    }
   } catch { /* ignora */ }
 
+  // 2b) fallback a versión anterior si existe — migra a la nueva key.
+  for (const prevKey of (OWNER_PREV_KEYS[kind] || [])) {
+    try {
+      const prev = await idbGetCached(prevKey);
+      if (prev && sanityCheck(prev)) {
+        console.log(`[history-data] ${kind}: migrando ${prevKey} → ${OWNER_KEYS[kind]}`);
+        memCache[cacheField] = prev;
+        try { await idbSetCached(OWNER_KEYS[kind], prev, 365 * 24 * 60); } catch { /* ignora */ }
+        return prev;
+      }
+    } catch { /* ignora */ }
+  }
+
   try {
-    const res = await fetch(fetchUrlForOwner());
+    const url = fetchUrlForOwner();
+    console.log(`[history-data] ${kind}: FETCH ${url.toString ? url.toString() : url}`);
+    const res = await fetch(url);
     if (!res.ok) throw new Error('HTTP ' + res.status);
     const data = await res.json();
     memCache[cacheField] = data;
-    try { await idbSetCached(OWNER_KEYS[kind], data, 30 * 24 * 60); } catch { /* ignora */ }
+    // TTL 1 año: los JSON del owner casi nunca cambian (solo cuando bumpeo el
+    // pipeline y subo _VERSION — ahí la key cambia y esta entrada queda
+    // huérfana igual, así que el TTL corto no ayuda a nada). El único costo
+    // real del cache viejo es un fetch inútil por 365 días.
+    try { await idbSetCached(OWNER_KEYS[kind], data, 365 * 24 * 60); } catch { /* ignora */ }
     return data;
   } catch (e) {
     console.warn(`No se pudo cargar ${kind}:`, e.message);

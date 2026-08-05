@@ -985,12 +985,34 @@ body:has(.preview-pill.show) .progress-mini {
 .year-tile:hover { border-color: var(--color-accent) !important; }
 .year-tile:active { transform: scale(0.98); }
 
-/* Álbumes escuchados por año — H3 + ⓘ + tiles en una sola fila (v=113) */
+/* Álbumes escuchados por año — H3 + tiles + ⓘ (al final, alineado a la derecha) */
 .listened-year-row {
   display: flex;
   align-items: center;
   gap: 14px;
   min-width: 0;
+}
+.listened-year-info-end {
+  margin-left: auto;
+  flex: 0 0 auto;
+}
+/* Estilo "estándar" del header de modal — reutilizable en modales chicos
+   (títulos con ✕ arriba a la derecha, padding respirable, ✕ alineada). */
+.modal-hdr {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--color-border);
+}
+.modal-hdr-title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.3;
+  color: var(--color-text);
 }
 .listened-year-head {
   display: flex;
@@ -2921,6 +2943,18 @@ body:has(.preview-pill.show) .progress-mini {
   object-fit: cover;
   display: block;
   background: var(--color-elevated);
+  opacity: 0;
+  transition: opacity 160ms ease-out;
+}
+.cover-img.is-loaded {
+  opacity: 1;
+}
+/* Sin JS o si el navegador no dispara load (cache): fade suave por defecto */
+.cover-img[src]:not(.is-loaded) {
+  animation: cover-img-fadein 320ms ease-out 200ms forwards;
+}
+@keyframes cover-img-fadein {
+  to { opacity: 1; }
 }
 .cover-fallback {
   width: 100%;
@@ -2956,6 +2990,49 @@ body:has(.preview-pill.show) .progress-mini {
 .covers-tooltip .ct-name { font-weight: 600; margin-bottom: 2px; }
 .covers-tooltip .ct-artist { color: rgba(255,255,255,0.75); font-size: 11px; }
 .covers-tooltip .ct-year { color: rgba(255,255,255,0.55); font-size: 10px; margin-top: 2px; }
+
+/* Wrapper del grid: en modo fullscreen se convierte en el contenedor entero
+   del viewport y ahí adentro sólo vive el mosaico. */
+.covers-grid-wrap {
+  min-width: 0;
+}
+.covers-grid-wrap:fullscreen {
+  width: 100vw;
+  height: 100vh;
+  padding: 0;
+  margin: 0;
+  background: #000;
+  overflow: hidden;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+}
+.covers-grid-wrap:fullscreen .covers-grid {
+  width: 100%;
+  height: 100%;
+  align-content: flex-start;
+  padding: 6px;
+  box-sizing: border-box;
+}
+/* Cuando el mosaico está en fullscreen ocultamos sidebar/header/toolbar del
+   layout normal. El :fullscreen viene del contenedor grid-wrap; toggeamos la
+   clase body.covers-fs desde JS para poder targetear estos elementos globales
+   que viven fuera del elemento fullscreen (el browser hace hidden a los que
+   están fuera del árbol :fullscreen, pero mantener la clase nos deja
+   restaurar layout limpio al salir). */
+body.covers-fs .sidebar,
+body.covers-fs .sidebar-overlay,
+body.covers-fs .page-header,
+body.covers-fs .covers-toolbar,
+body.covers-fs .covers-year-chips,
+body.covers-fs .covers-narrow-hint {
+  display: none !important;
+}
+body.covers-fs .main {
+  padding: 0 !important;
+  margin: 0 !important;
+}
+.covers-btn.is-on { background: var(--color-accent); color: white; }
 
 /* ============ Ficha de artista comprimida (v=111) ============ */
 .ac-modal {
