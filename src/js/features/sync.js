@@ -1,4 +1,4 @@
-import { getAllLikedTracks, getAllPlaylistItems, updatePlaylistItemsCache, getAllUserPlaylists, addTracksToPlaylist, removeTracksFromPlaylist, createPlaylist, unfollowPlaylist } from '../api.js';
+import { getAllLikedTracks, getAllPlaylistItems, updatePlaylistItemsCache, getAllUserPlaylists, addTracksToPlaylist, removeTracksFromPlaylist, createPlaylist, unfollowPlaylist, spotifyFetch } from '../api.js';
 import { showProgress, hideProgress, progressController, isCancelled, typeConfirmModal, renderTrackRow, escapeHtml, pageHeader } from '../ui/components.js';
 import { showToast } from '../ui/toast.js';
 
@@ -54,9 +54,13 @@ async function analyze() {
       return;
     }
 
-    if ((target.tracks?.total || 0) >= SPOTIFY_PLAYLIST_MAX) {
+    // Post-migración feb 2026: /me/playlists NO devuelve tracks.total, así
+    // que pedimos el total real con /items?limit=1 (barato, 1 request).
+    const meta = await spotifyFetch(`/playlists/${target.id}/items?limit=1`);
+    const targetTotal = meta?.total ?? 0;
+    if (targetTotal >= SPOTIFY_PLAYLIST_MAX) {
       hideProgress();
-      renderFullPlaylistUI(target, playlists);
+      renderFullPlaylistUI(target, playlists, targetTotal);
       return;
     }
 
@@ -315,15 +319,16 @@ function renderMissingPlaylistUI(nameOrId, playlists) {
     rebuildFreshPlaylist(nameOrId);
 }
 
-function renderFullPlaylistUI(target, playlists) {
+function renderFullPlaylistUI(target, playlists, targetTotal) {
   const results = document.getElementById('sync-results');
   const nextName = nextPlaylistName(target.name, playlists);
+  const totalStr = (targetTotal ?? 0).toLocaleString();
   results.innerHTML = `
     <div class="card" style="margin-bottom:16px;border-color:var(--color-error);background:rgba(239,68,68,0.06)">
       <div style="display:flex;align-items:flex-start;gap:10px">
         <span class="badge badge-error">LLENA</span>
         <div style="flex:1">
-          <strong>"${escapeHtml(target.name)}"</strong> tiene <strong>${target.tracks.total.toLocaleString()}</strong> tracks — Spotify no deja pasar de ${SPOTIFY_PLAYLIST_MAX.toLocaleString()}.<br>
+          <strong>"${escapeHtml(target.name)}"</strong> tiene <strong>${totalStr}</strong> tracks — Spotify no deja pasar de ${SPOTIFY_PLAYLIST_MAX.toLocaleString()}.<br>
           No se puede sincronizar directo. Elegí una opción:
         </div>
       </div>
@@ -332,7 +337,7 @@ function renderFullPlaylistUI(target, playlists) {
     <div class="card" style="margin-bottom:12px">
       <h3 style="margin-bottom:8px">Opción A — Rehacer desde cero (recomendada)</h3>
       <p style="color:var(--color-text-secondary);margin-bottom:12px">
-        Borra <strong>"${escapeHtml(target.name)}"</strong> (${target.tracks.total.toLocaleString()} tracks), crea una vacía con el mismo nombre, y la llena con <strong>todos tus likes</strong>.
+        Borra <strong>"${escapeHtml(target.name)}"</strong> (${totalStr} tracks), crea una vacía con el mismo nombre, y la llena con <strong>todos tus likes</strong>.
       </p>
       <button class="btn btn-danger" id="sync-rebuild-inplace-btn">Borrar y rehacer "${escapeHtml(target.name)}"</button>
     </div>
@@ -346,7 +351,7 @@ function renderFullPlaylistUI(target, playlists) {
     </div>
   `;
   document.getElementById('sync-rebuild-inplace-btn').onclick = () =>
-    rebuildInPlace(target);
+    rebuildInPlace(target, targetTotal);
   document.getElementById('sync-create-next-btn').onclick = () =>
     rebuildFreshPlaylist(nextName);
 }
@@ -369,10 +374,11 @@ async function fillPlaylistWithUris(playlistId, uris, playlistName) {
   }
 }
 
-async function rebuildInPlace(target) {
+async function rebuildInPlace(target, targetTotal) {
+  const totalStr = (targetTotal ?? 0).toLocaleString();
   const confirmed = await typeConfirmModal(
     'Rehacer playlist desde cero',
-    `Se va a <strong>borrar</strong> "${escapeHtml(target.name)}" (${target.tracks.total.toLocaleString()} tracks) y crear una vacía con el mismo nombre poblada con todos tus likes.<br><br>Spotify guarda backup ~90 días en <em>spotify.com/account/recover-playlists</em>, pero desde la app la vieja se pierde.`,
+    `Se va a <strong>borrar</strong> "${escapeHtml(target.name)}" (${totalStr} tracks) y crear una vacía con el mismo nombre poblada con todos tus likes.<br><br>Spotify guarda backup ~90 días en <em>spotify.com/account/recover-playlists</em>, pero desde la app la vieja se pierde.`,
     'REHACER'
   );
   if (!confirmed) return;

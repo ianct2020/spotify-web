@@ -17,14 +17,14 @@
 // Carga progresiva: mostramos artistas a medida que llegan (batch 3 en
 // paralelo, respetando 429 → 5s de espera). Pill de progreso arriba.
 
-import { spotifyFetch, getBestAvailableLikes, searchArtistByName, getArtistAlbums, getAlbumTracks, saveToLibrary, createPlaylist, addTracksToPlaylist } from '../api.js?v=118';
-import { idbGetCached, idbSetCached } from '../idb.js?v=118';
-import { escapeHtml, pageHeader } from '../ui/components.js?v=118';
-import { showToast } from '../ui/toast.js?v=118';
-import { openArtistCard } from './artist-card.js?v=118';
-import { openAlbumCard } from './album-card.js?v=118';
-import { loadListenedAlbums, isOwner } from './history-data.js?v=118';
-import { albumKey } from '../util/album-key.js?v=118';
+import { spotifyFetch, getBestAvailableLikes, searchArtistByName, getArtistAlbums, getAlbumTracks, saveToLibrary, createPlaylist, addTracksToPlaylist } from '../api.js?v=119';
+import { idbGetCached, idbSetCached } from '../idb.js?v=119';
+import { escapeHtml, pageHeader } from '../ui/components.js?v=119';
+import { showToast } from '../ui/toast.js?v=119';
+import { openArtistCard } from './artist-card.js?v=119';
+import { openAlbumCard } from './album-card.js?v=119';
+import { loadListenedAlbums, isOwner } from './history-data.js?v=119';
+import { albumKey } from '../util/album-key.js?v=119';
 
 const LS_FILTER_KIND = 'discoverart_filter_kind';   // 'all' | 'album' | 'single'
 const LS_FILTER_YEARS = 'discoverart_filter_years'; // 0 = todo, o número de años
