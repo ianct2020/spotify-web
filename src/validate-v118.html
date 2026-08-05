@@ -91,12 +91,20 @@
       $('#btn-backup').disabled = true;
       log('=== BACKUP ===', 'warn');
       const t0 = performance.now();
-      const meta = (await sfetch(`/playlists/${playlistId}?fields=snapshot_id,name,tracks.total`)).data;
-      log(`Playlist "${meta.name}" · ${meta.tracks.total} tracks · snapshot ${meta.snapshot_id}`);
+      // Post-migración feb 2026 el campo `tracks` no viene aunque lo pidas en
+      // fields (ver CONTEXTO-TECNICO.md). Sacamos snapshot+name acá y el total
+      // lo tomamos del `total` que devuelve la primera página de /items.
+      const meta = (await sfetch(`/playlists/${playlistId}?fields=snapshot_id,name`)).data;
+      log(`Playlist "${meta.name}" · snapshot ${meta.snapshot_id}`);
       const items = [];
       let off = 0;
+      let expectedTotal = null;
       while (true) {
         const d = (await sfetch(`/playlists/${playlistId}/items?limit=100&offset=${off}`)).data;
+        if (expectedTotal == null && d.total != null) {
+          expectedTotal = d.total;
+          log(`  total real: ${expectedTotal} tracks`);
+        }
         (d.items || []).forEach((it, i) => {
           const t = it.item || it.track;
           if (t) items.push({ pos: off + i, uri: t.uri, id: t.id, name: t.name, artists: (t.artists || []).map(a => a.name).join(', '), album: t.album?.name });
