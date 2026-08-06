@@ -10,6 +10,7 @@ import { showToast } from '../ui/toast.js';
 import { getPreview } from '../api/preview-providers.js';
 import { togglePreview, playingKey } from '../ui/preview-player.js';
 import { openTrackCard } from './track-card.js';
+import { activateMarquee, marqueeSpan } from '../ui/marquee.js';
 import { hasUsername, loadTopLifetime } from '../api/statsfm.js';
 
 let cache = null;
@@ -166,58 +167,65 @@ function renderResults() {
     ${rows.length === 0 ? `
       <div class="card"><p style="text-align:center;color:var(--color-text-muted);margin:0">${showingHidden ? 'No hay tracks ocultos que cumplan los umbrales actuales.' : 'Ningún like cumple los umbrales. Bajá los filtros para ver más candidatos.'}</p></div>
     ` : `
-      <div class="card" style="padding:0;overflow:hidden">
-        <div class="skips-list ${rows.length >= 6 ? 'skips-list-cols' : ''}" id="skips-list" style="--sk-rows:${Math.ceil(rows.length / 2)}">
-          ${rows.map((r, i) => renderRow(r, i)).join('')}
-        </div>
+      <div class="skips-grid" id="skips-list">
+        ${rows.map((r, i) => renderRow(r, i)).join('')}
       </div>
     `}
   `;
 
   wireFilters();
   wireRows();
+  activateMarquee(content);
 }
 
+// Tarjeta por track (v=123): reemplaza a las dos listas de filas anchas, que
+// en 2 columnas dejaban la derecha con solo la tapa y el porcentaje. En grid
+// de tarjetas entran 20+ tracks en pantalla y todos se leen igual de bien.
 function renderRow(r, i) {
   const imgs = r.track.album?.images || [];
   const cover = imgs[2]?.url || imgs[1]?.url || imgs[0]?.url || null;
   const artists = (r.track.artists || []).map(a => a.name || a).join(', ');
+  const album = r.track.album?.name ? ` · ${escapeHtml(r.track.album.name)}` : '';
   const ratioClass = r.ratio >= 90 ? 'skips-badge-danger' : 'skips-badge-warn';
+  const badgeTitle = r.updated
+    ? `Ratio actualizado con Stats.fm (${r.skip} skips de ${r.total} plays totales hoy)`
+    : `Skipeaste ${r.skip} de ${r.total} veces`;
 
-  // Layout de 2 filas: fila 1 con check+tapa+info+badge, fila 2 con los controles
-  // (play + spotify) alineados a la derecha para que estén siempre cerca del mouse.
-  // Link a Spotify va SIEMPRE — se arma con r.id, que existe aunque r.uri no venga.
   return `
-    <div class="skips-row" data-i="${i}" data-id="${r.id}">
-      <div class="skips-row-main">
-        <label class="skips-row-top">
-          <input type="checkbox" class="sk-cb skips-check" data-i="${i}">
+    <div class="skips-card" data-i="${i}" data-id="${r.id}">
+      <div class="skips-card-main">
+        <div class="skips-card-cover">
           ${cover
             ? `<img src="${cover}" alt="" loading="lazy" class="skips-cover">`
             : `<div class="skips-cover skips-cover-empty">♪</div>`}
+          <label class="skips-card-sel" title="Seleccionar">
+            <input type="checkbox" class="sk-cb skips-check" data-i="${i}">
+          </label>
+        </div>
+        <div class="skips-card-body">
           <div class="skips-info">
-            <div class="skips-title">${escapeHtml(r.track.name || '(sin nombre)')}</div>
-            <div class="skips-meta">${escapeHtml(artists)}${r.track.album?.name ? ` · ${escapeHtml(r.track.album.name)}` : ''}</div>
+            <div class="skips-title">${marqueeSpan(escapeHtml(r.track.name || '(sin nombre)'))}</div>
+            <div class="skips-meta">${escapeHtml(artists)}${album}</div>
           </div>
-          <span class="skips-badge ${ratioClass}${r.updated ? ' skips-badge-updated' : ''}" title="${r.updated ? 'Ratio actualizado con Stats.fm (' + r.skip + ' skips de ' + r.total + ' plays totales hoy)' : 'Skipeaste ' + r.skip + ' de ' + r.total + ' veces'}">
-            <span class="skips-badge-ratio">${r.ratio}%</span>
-            <span class="skips-badge-count">${r.skip}/${r.total}</span>
-          </span>
-        </label>
-        <div class="skips-row-actions">
-          <button class="skips-play-btn ${playingKey() === `sk:${r.id}` ? 'playing' : ''}" data-id="${r.id}" title="Preview 30s — no suma plays en tu historial">
-            <svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14"><path d="M8 5v14l11-7z"/></svg>
-            <span class="skips-play-label">Preview</span>
-          </button>
-          <a href="https://open.spotify.com/track/${r.id}" target="_blank" rel="noopener" class="skips-open" title="Abrir en Spotify">
-            <span class="skips-open-arrow">↗</span>
-            <span class="skips-open-label">Spotify</span>
-          </a>
-          <button class="wthree-hide-btn sk-hide-btn" data-id="${r.id}" title="${showingHidden ? 'Restaurar en la lista' : 'Ocultar de la lista'}" aria-label="${showingHidden ? 'Restaurar' : 'Ocultar'}">
-            ${showingHidden
-              ? `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>`
-              : `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>`}
-          </button>
+          <div class="skips-card-foot">
+            <span class="skips-badge ${ratioClass}${r.updated ? ' skips-badge-updated' : ''}" title="${badgeTitle}">
+              <span class="skips-badge-ratio">${r.ratio}%</span>
+              <span class="skips-badge-count">${r.skip}/${r.total}</span>
+            </span>
+            <div class="skips-card-actions">
+              <button class="skips-play-btn ${playingKey() === `sk:${r.id}` ? 'playing' : ''}" data-id="${r.id}" title="Preview 30s — no suma plays en tu historial" aria-label="Preview">
+                <svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14"><path d="M8 5v14l11-7z"/></svg>
+              </button>
+              <a href="https://open.spotify.com/track/${r.id}" target="_blank" rel="noopener" class="skips-open" title="Abrir en Spotify" aria-label="Abrir en Spotify">
+                <span class="skips-open-arrow">↗</span>
+              </a>
+              <button class="wthree-hide-btn sk-hide-btn" data-id="${r.id}" title="${showingHidden ? 'Restaurar en la lista' : 'Ocultar de la lista'}" aria-label="${showingHidden ? 'Restaurar' : 'Ocultar'}">
+                ${showingHidden
+                  ? `<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>`
+                  : `<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>`}
+              </button>
+            </div>
+          </div>
         </div>
       </div>
       <div class="skips-preview-slot" data-id="${r.id}"></div>
@@ -263,13 +271,13 @@ function wireRows() {
 
   // Click en el título/artista → ficha de canción (dentro de un <label>, hay
   // que frenar el toggle del checkbox).
-  content.querySelectorAll('.skips-row .skips-info').forEach(el => {
+  content.querySelectorAll('.skips-card .skips-info').forEach(el => {
     el.classList.add('tc-clickable');
     el.title = 'Ver ficha del tema';
     el.onclick = (e) => {
       e.preventDefault();
       e.stopPropagation();
-      const r = filtered()[+el.closest('.skips-row').dataset.i];
+      const r = filtered()[+el.closest('.skips-card').dataset.i];
       if (!r) return;
       const imgs = r.track.album?.images || [];
       openTrackCard({
@@ -288,7 +296,7 @@ function wireRows() {
     btn.onclick = async (e) => {
       e.preventDefault();
       e.stopPropagation();
-      const row = btn.closest('.skips-row');
+      const row = btn.closest('.skips-card');
       const r = filtered()[+row.dataset.i];
       if (!r) return;
       // Si este tema ya tiene el embed fallback abierto, este click lo cierra.

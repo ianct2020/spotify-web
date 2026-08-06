@@ -4,7 +4,12 @@
 // (preview_url de Spotify murió en la migración feb 2026; el embed iframe
 // queda como fallback para lo que iTunes no tenga.)
 
-const LS_KEY = 'itunes_preview_cache_v1';
+import { pickBestMatch, artistMatches } from '../util/track-match.js';
+
+// v2: la key sube de v1 porque el cache de v1 tiene matches equivocados
+// guardados (se aceptaba cualquier tema del artista cuando el título no
+// coincidía). Empezamos de cero en vez de servir basura durante días.
+const LS_KEY = 'itunes_preview_cache_v2';
 const MAX_CACHE = 600;
 
 let cache = null;      // Map clave → {u,a,t} (hit persistido)
@@ -46,12 +51,10 @@ async function search(term, limit) {
   return (await res.json()).results || [];
 }
 
-function matches(a, b) {
-  if (!a || !b) return false;
-  return a === b || a.includes(b) || b.includes(a);
-}
-
 // Preview de un track puntual. Devuelve { url, artist, track } o null si no está.
+// Solo devuelve el resultado si TÍTULO Y ARTISTA coinciden (util/track-match.js).
+// Si iTunes trae otra canción del mismo artista, es un miss: preferimos "sin
+// preview" antes que reproducir un tema equivocado.
 async function findTrackPreview(artist, track) {
   const c = loadCache();
   const key = `t:${norm(artist)}|${norm(track)}`;
@@ -60,13 +63,15 @@ async function findTrackPreview(artist, track) {
 
   let results;
   try {
-    results = await search(`${artist} ${track}`, 5);
+    results = await search(`${artist} ${track}`, 8);
   } catch {
     return null; // red caída o rate limit: no cachear, reintentable
   }
-  const na = norm(artist), nt = norm(track);
-  const hit = results.find(r => r.previewUrl && matches(norm(r.artistName), na) && matches(norm(r.trackName), nt))
-    || results.find(r => r.previewUrl && matches(norm(r.artistName), na));
+  const hit = pickBestMatch(
+    { name: track, artist },
+    results.filter(r => r.previewUrl),
+    r => ({ name: r.trackName, artist: r.artistName }),
+  );
   if (!hit) { misses.add(key); return null; }
 
   c.set(key, { u: hit.previewUrl, a: hit.artistName, t: hit.trackName });
@@ -89,8 +94,7 @@ async function findArtistTopPreview(artist) {
   } catch {
     return null;
   }
-  const na = norm(artist);
-  const hit = results.find(r => r.previewUrl && matches(norm(r.artistName), na));
+  const hit = results.find(r => r.previewUrl && artistMatches(artist, r.artistName));
   if (!hit) { misses.add(key); return null; }
 
   c.set(key, { u: hit.previewUrl, a: hit.artistName, t: hit.trackName });

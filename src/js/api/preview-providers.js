@@ -17,13 +17,16 @@
 // (itunes.js ya lo hace; Deezer usa el suyo interno más abajo).
 
 import { findTrackPreview } from './itunes.js';
+import { pickBestMatch, artistMatches } from '../util/track-match.js';
 
-const PROVIDER_CACHE_KEY = 'preview_provider_map_v1';
+// v2: las keys suben porque el cache de v1 guardó matches equivocados (se
+// aceptaba cualquier tema del artista si el título no coincidía).
+const PROVIDER_CACHE_KEY = 'preview_provider_map_v2';
 const PROVIDER_CACHE_MAX = 800;
 const NEG_TTL = 3 * 24 * 60 * 60 * 1000;      // 3 días para reintentar "sin preview"
 const POS_TTL = 30 * 24 * 60 * 60 * 1000;     // 30 días para el proveedor ganador
 
-const DEEZER_URL_CACHE_KEY = 'deezer_preview_url_cache_v1';
+const DEEZER_URL_CACHE_KEY = 'deezer_preview_url_cache_v2';
 const DEEZER_URL_CACHE_MAX = 600;
 // Las URLs de Deezer traen `hdnea=exp=…` con TTL de ~30d — dejamos 7d de
 // margen y refetcheamos si se pasó.
@@ -115,23 +118,22 @@ function norm(s) {
     .replace(/\s+/g, ' ')
     .trim();
 }
-function loose(a, b) {
-  if (!a || !b) return false;
-  return a === b || a.includes(b) || b.includes(a);
-}
-
+// Igual que iTunes: el candidato tiene que coincidir en TÍTULO Y ARTISTA
+// (util/track-match.js). Si no, devolvemos null y la cadena sigue de largo.
 async function tryDeezer(name, artist) {
   const cacheKey = `d:${norm(artist)}|${norm(name)}`;
   const cached = deezerCachedUrl(cacheKey);
   if (cached) return { url: cached.u, artist: cached.a, track: cached.n };
 
   let data;
-  try { data = await deezerSearchJsonp(`${artist} ${name}`, 3); }
+  try { data = await deezerSearchJsonp(`${artist} ${name}`, 8); }
   catch { return null; }
-  const items = data?.data || [];
-  const na = norm(artist), nn = norm(name);
-  const hit = items.find(r => r.preview && loose(norm(r.artist?.name), na) && loose(norm(r.title), nn))
-    || items.find(r => r.preview && loose(norm(r.artist?.name), na));
+  const items = (data?.data || []).filter(r => r.preview);
+  const hit = pickBestMatch(
+    { name, artist },
+    items,
+    r => ({ name: r.title, artist: r.artist?.name }),
+  );
   if (!hit || !hit.preview) return null;
   setDeezerCached(cacheKey, { u: hit.preview, a: hit.artist?.name || artist, n: hit.title || name });
   return { url: hit.preview, artist: hit.artist?.name || artist, track: hit.title || name };
@@ -161,6 +163,10 @@ function spotifyEmbed(spotifyId, name, artist) {
 async function getPreview({ name, artist, spotifyId } = {}) {
   if (!name || !artist) return null;
   const key = `p:${norm(artist)}|${norm(name)}${spotifyId ? '|' + spotifyId : ''}`;
+  // El pill muestra SIEMPRE lo que pidió el usuario, nunca el título que
+  // devolvió el proveedor: si alguna vez volvemos a servir algo distinto, se
+  // nota al toque en vez de disimularse.
+  const label = `${name} — ${artist}`;
 
   const cached = providerFor(key);
   if (cached === 'none') return null;
@@ -169,7 +175,7 @@ async function getPreview({ name, artist, spotifyId } = {}) {
     const it = await findTrackPreview(artist, name);
     if (it) {
       setProvider(key, 'itunes');
-      return { url: it.url, provider: 'itunes', type: 'audio', label: `${it.track} — ${it.artist}`, trackName: it.track, trackArtist: it.artist };
+      return { url: it.url, provider: 'itunes', type: 'audio', label, trackName: name, trackArtist: artist };
     }
     if (cached === 'itunes') {
       // Estaba cacheado como iTunes pero ahora falla — dejamos que caigan
@@ -181,7 +187,7 @@ async function getPreview({ name, artist, spotifyId } = {}) {
     const dz = await tryDeezer(name, artist);
     if (dz) {
       setProvider(key, 'deezer');
-      return { url: dz.url, provider: 'deezer', type: 'audio', label: `${dz.track} — ${dz.artist}`, trackName: dz.track, trackArtist: dz.artist };
+      return { url: dz.url, provider: 'deezer', type: 'audio', label, trackName: name, trackArtist: artist };
     }
   }
 
@@ -215,8 +221,7 @@ async function getArtistTopPreview(artist) {
   if (cached === 'deezer' || !cached) {
     try {
       const data = await deezerSearchJsonp(artist, 3);
-      const na = norm(artist);
-      const hit = (data?.data || []).find(r => r.preview && loose(norm(r.artist?.name), na));
+      const hit = (data?.data || []).find(r => r.preview && artistMatches(artist, r.artist?.name));
       if (hit) {
         setProvider(key, 'deezer');
         return { url: hit.preview, provider: 'deezer', type: 'audio', label: `${hit.title} — ${hit.artist?.name}`, trackName: hit.title, trackArtist: hit.artist?.name };

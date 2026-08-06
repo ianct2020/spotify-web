@@ -2356,15 +2356,12 @@ body:has(.preview-pill.show) .progress-mini {
   .skips-stat-secondary .skips-stat-value { font-size: 15px !important; }
   .skips-stat-label { font-size: 10px !important; line-height: 1.25; }
   .skips-filters { padding: 10px 12px; gap: 10px; }
-  .skips-list { max-height: unset; }
-  .skips-row-main { padding: 10px 12px 8px; }
-  .skips-row-top { grid-template-columns: auto 40px 1fr auto; gap: 8px; }
-  .skips-cover { width: 40px; height: 40px; }
+  .skips-grid { grid-template-columns: minmax(0, 1fr); max-height: none; overflow-y: visible; gap: 8px; }
+  .skips-card-main { grid-template-columns: 48px minmax(0, 1fr); padding: 8px; }
+  .skips-card-cover, .skips-cover { width: 48px; height: 48px; }
   .skips-title { font-size: 13px; }
   .skips-badge { padding: 3px 7px; }
   .skips-badge-ratio { font-size: 12px; }
-  .skips-row-actions { padding: 4px 0 4px 52px; gap: 6px; flex-wrap: wrap; }
-  .skips-play-btn { font-size: 12px; padding: 0 10px; height: 26px; }
 
   /* ── Home cards ── */
   .home-grid { grid-template-columns: minmax(0, 1fr) !important; gap: 10px; }
