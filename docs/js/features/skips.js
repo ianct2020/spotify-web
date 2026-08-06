@@ -3,15 +3,15 @@
 // Preview 30s instantáneo vía iTunes (arranca en el estribillo, no suma plays
 // en tu historial de Spotify). Fallback: iframe embed oficial si iTunes no lo tiene.
 
-import { getBestAvailableLikes, removeLikedTracks } from '../api.js?v=123';
-import { loadSkipStats, trackIdOf, isOwner, ownerLockedMessage } from './history-data.js?v=123';
-import { escapeHtml, confirmModal, pageHeader } from '../ui/components.js?v=123';
-import { showToast } from '../ui/toast.js?v=123';
-import { getPreview } from '../api/preview-providers.js?v=123';
-import { togglePreview, playingKey } from '../ui/preview-player.js?v=123';
-import { openTrackCard } from './track-card.js?v=123';
-import { activateMarquee, marqueeSpan } from '../ui/marquee.js?v=123';
-import { hasUsername, loadTopLifetime } from '../api/statsfm.js?v=123';
+import { getBestAvailableLikes, removeLikedTracks } from '../api.js?v=124';
+import { loadSkipStats, trackIdOf, isOwner, ownerLockedMessage } from './history-data.js?v=124';
+import { escapeHtml, confirmModal, pageHeader } from '../ui/components.js?v=124';
+import { showToast } from '../ui/toast.js?v=124';
+import { getPreview } from '../api/preview-providers.js?v=124';
+import { togglePreview, playingKey } from '../ui/preview-player.js?v=124';
+import { openTrackCard } from './track-card.js?v=124';
+import { activateMarquee, marqueeSpan } from '../ui/marquee.js?v=124';
+import { hasUsername, loadTopLifetime } from '../api/statsfm.js?v=124';
 
 let cache = null;
 let minPlays = 5;    // solo tracks con ≥N plays totales (ok+skip)

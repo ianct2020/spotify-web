@@ -2,7 +2,7 @@ import { getValidToken, refreshAccessToken } from './auth.js';
 import { cacheGet, cacheGetRaw, cacheGetTimestamp, cacheSet, cacheClear } from './storage.js';
 import { idbDel, idbGetCached, idbGetCachedRaw, idbGetTimestamp, idbSetCached } from './idb.js';
 import { showToast } from './ui/toast.js';
-import { artistMatches } from './util/track-match.js';
+import { artistIsSame } from './util/track-match.js';
 
 const BASE = 'https://api.spotify.com/v1';
 const MIN_RETRY_WAIT = 5000;
@@ -902,10 +902,13 @@ async function getArtistAlbums(artistId, artistName, { includeSingles = true, li
 
   const trySearch = async () => {
     // /search devuelve cualquier cosa que matchee el texto: buscando
-    // artist:"Drake" aparecen Nick Drake y Drake Bell. Filtramos por nombre de
-    // artista, si no la vista de "sin escuchar" se llena de artistas ajenos.
+    // artist:"Drake" aparecen Nick Drake, Drake Bell y "draken". Filtramos por
+    // **id** del artista (lo tenemos) y, si el álbum no lo trae, por nombre
+    // exacto. Sin esto la vista de "sin escuchar" se llena de artistas ajenos.
     const wanted = (artistName || '').trim();
     if (!wanted) return [];
+    const isMine = (al) => (al.artists || []).some(a =>
+      (artistId && a.id === artistId) || artistIsSame(wanted, a.name));
     const q = `artist:"${wanted.replace(/"/g, '')}"`;
     const items = [];
     let emptyPages = 0;
@@ -913,7 +916,7 @@ async function getArtistAlbums(artistId, artistName, { includeSingles = true, li
       const offset = page * SEARCH_PAGE;
       const res = await spotifyFetch(`/search?q=${encodeURIComponent(q)}&type=album&limit=${SEARCH_PAGE}&offset=${offset}`);
       const batch = res?.albums?.items || [];
-      const mine = batch.filter(al => (al.artists || []).some(a => artistMatches(wanted, a.name)));
+      const mine = batch.filter(isMine);
       items.push(...mine);
       if (batch.length < SEARCH_PAGE) break;
       // Los resultados vienen por relevancia: si dos páginas seguidas no traen

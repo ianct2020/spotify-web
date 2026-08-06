@@ -86,6 +86,18 @@ export function titleMatches(wanted, candidate) {
   return similarity(a, b) >= TITLE_MIN;
 }
 
+// Versión ESTRICTA: "¿es exactamente este artista?". `artistMatches` acepta
+// contención por tokens porque los proveedores de preview devuelven la lista
+// entera de una colaboración en un solo string. Para filtrar discografías eso
+// es demasiado laxo: "Drake" quedaba contenido en "Nick Drake" y la vista de
+// "sin escuchar" se llenaba con Bryter Layter y Pink Moon.
+export function artistIsSame(wanted, candidate) {
+  const a = normText(wanted), b = normText(candidate);
+  if (!a || !b) return false;
+  if (a === b) return true;
+  return similarity(a, b) >= 0.92;
+}
+
 export function artistMatches(wanted, candidate) {
   const a = normText(wanted), b = normText(candidate);
   if (!a || !b) return false;
