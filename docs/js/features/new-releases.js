@@ -10,11 +10,11 @@
 //   - Umbral de likes: 5+ / 10+ / 20+
 //   - Ventana temporal: 3 / 6 / 12 / 24 meses (default 12)
 
-import { escapeHtml, pageHeader } from '../ui/components.js?v=122';
-import { showToast } from '../ui/toast.js?v=122';
-import { openArtistCard } from './artist-card.js?v=122';
-import { openAlbumCard } from './album-card.js?v=122';
-import { buildAlbumHeardIndex, markAlbumHeard } from '../util/album-heard.js?v=122';
+import { escapeHtml, pageHeader } from '../ui/components.js?v=123';
+import { showToast } from '../ui/toast.js?v=123';
+import { openArtistCard } from './artist-card.js?v=123';
+import { openAlbumCard } from './album-card.js?v=123';
+import { buildAlbumHeardIndex, markAlbumHeard } from '../util/album-heard.js?v=123';
 import {
   getArtistIdCached,
   getArtistDiscoCached,
@@ -24,7 +24,13 @@ import {
   releaseTs,
   createDiscoverPlaylist,
   saveAlbumTracksToLibrary,
-} from './discover-common.js?v=122';
+  loadScanCache,
+  saveScanCache,
+  clearScanCache,
+  agoLabel,
+} from './discover-common.js?v=123';
+
+const SCAN_KEY = 'new_releases';
 
 const LS_MIN_LIKES = 'newrel_min_likes';   // 5 / 10 / 20
 const LS_MONTHS = 'newrel_months';         // 3 / 6 / 12 / 24
@@ -55,6 +61,7 @@ const state = {
   minLikes: 10,
   months: 12,
   loadedMore: DEFAULT_INITIAL,
+  scannedAt: null,
 };
 
 export async function render(container) {
@@ -99,7 +106,23 @@ export async function render(container) {
     error: null,
   }));
 
+  state.scannedAt = null;
+  const cached = await loadScanCache(SCAN_KEY);
+  if (cached) {
+    const byName = new Map(cached.artists.map(a => [a.nameLower, a]));
+    let restored = 0;
+    for (const a of state.artists) {
+      const c = byName.get(a.nameLower);
+      if (!c) continue;
+      Object.assign(a, { id: c.id, disco: c.disco || [], scanned: true, error: null });
+      restored++;
+    }
+    if (restored) state.scannedAt = cached.ts || null;
+    console.log(`[newrel] cache de escaneo: ${restored} artistas restaurados (${agoLabel(cached.ts)})`);
+  }
+
   renderShell(content, candidates.length);
+  refreshList(content);
   scanArtists(content).catch(err => console.warn('[newrel] scan:', err));
 }
 
@@ -126,6 +149,7 @@ function renderShell(content, totalCandidates) {
         <div class="disco-chip-group" id="newrel-months">
           ${[3,6,12,24].map(n => `<button class="disco-chip ${state.months === n ? 'is-on' : ''}" data-months="${n}">últimos ${n}m</button>`).join('')}
         </div>
+        <button class="btn btn-secondary btn-sm" id="newrel-refresh" title="${state.scannedAt ? 'Último escaneo ' + agoLabel(state.scannedAt) + '. Volver a consultar Spotify.' : 'Volver a consultar Spotify'}">Actualizar</button>
       </div>
     </div>
     <div class="disco-progress" id="newrel-progress" style="display:none">
@@ -174,6 +198,21 @@ function renderShell(content, totalCandidates) {
     document.getElementById('newrel-total-scan').textContent = targetToScan();
     scanArtists(content).catch(err => console.warn('[newrel] scan:', err));
   });
+  content.querySelector('#newrel-refresh').onclick = async (e) => {
+    const btn = e.currentTarget;
+    btn.disabled = true;
+    btn.textContent = 'Actualizando…';
+    await clearScanCache(SCAN_KEY, state.artists.map(a => a.id).filter(Boolean));
+    for (const a of state.artists) {
+      Object.assign(a, { disco: [], scanned: false, error: null });
+    }
+    state.scannedAt = null;
+    document.getElementById('newrel-count').textContent = '0';
+    refreshList(content);
+    try { await scanArtists(content); } catch (err) { console.warn('[newrel] scan:', err); }
+    btn.disabled = false;
+    btn.textContent = 'Actualizar';
+  };
   content.querySelector('#newrel-sel-clear').onclick = () => {
     state.selection.clear();
     updateSelectionUi(content);
@@ -186,12 +225,14 @@ async function scanArtists(content) {
   const progress = document.getElementById('newrel-progress');
   const progressLabel = document.getElementById('newrel-progress-label');
   const progressFill = document.getElementById('newrel-progress-fill');
-  progress.style.display = '';
 
   const eligible = eligibleArtists();
   const target = Math.min(state.loadedMore, eligible.length);
   const queue = eligible.filter(a => !a.scanned).slice(0, target);
   let scanned = eligible.filter(a => a.scanned).length;
+  document.getElementById('newrel-count').textContent = scanned;
+  if (!queue.length) return;   // todo servido del cache
+  progress.style.display = '';
 
   const workers = Array.from({ length: BATCH_PARALLEL }, () => (async () => {
     while (queue.length) {
@@ -213,6 +254,12 @@ async function scanArtists(content) {
   })());
   await Promise.all(workers);
   progress.style.display = 'none';
+
+  const done = state.artists.filter(a => a.scanned && !a.error);
+  if (done.length) {
+    await saveScanCache(SCAN_KEY, done.map(a => ({ nameLower: a.nameLower, id: a.id, disco: a.disco })));
+    state.scannedAt = Date.now();
+  }
 }
 
 async function processArtist(artist) {

@@ -1,7 +1,8 @@
-import { getValidToken, refreshAccessToken } from './auth.js?v=122';
-import { cacheGet, cacheGetRaw, cacheGetTimestamp, cacheSet, cacheClear } from './storage.js?v=122';
-import { idbDel, idbGetCached, idbGetCachedRaw, idbGetTimestamp, idbSetCached } from './idb.js?v=122';
-import { showToast } from './ui/toast.js?v=122';
+import { getValidToken, refreshAccessToken } from './auth.js?v=123';
+import { cacheGet, cacheGetRaw, cacheGetTimestamp, cacheSet, cacheClear } from './storage.js?v=123';
+import { idbDel, idbGetCached, idbGetCachedRaw, idbGetTimestamp, idbSetCached } from './idb.js?v=123';
+import { showToast } from './ui/toast.js?v=123';
+import { artistMatches } from './util/track-match.js?v=123';
 
 const BASE = 'https://api.spotify.com/v1';
 const MIN_RETRY_WAIT = 5000;
@@ -57,7 +58,9 @@ async function spotifyFetch(endpoint, options = {}) {
     if (response.status === 429) {
       rateLimitRetries++;
       if (rateLimitRetries > maxRetries) {
-        throw new Error(`Rate limited después de ${maxRetries} reintentos. Esperá unos minutos y recargá.`);
+        const err = new Error(`Rate limited después de ${maxRetries} reintentos. Esperá unos minutos y recargá.`);
+        err.status = 429;
+        throw err;
       }
       const retryAfterHeader = response.headers.get('Retry-After');
       const retryAfterSecs = parseInt(retryAfterHeader || '5');
@@ -94,7 +97,9 @@ async function spotifyFetch(endpoint, options = {}) {
         msg = text;
       }
       console.error(`Spotify ${response.status} on ${endpoint}:`, text);
-      throw new Error(`Spotify ${response.status}: ${msg}`);
+      const err = new Error(`Spotify ${response.status}: ${msg}`);
+      err.status = response.status;
+      throw err;
     }
 
     if (!text) return null;
@@ -856,23 +861,35 @@ async function saveToLibrary(ids) {
   }
 }
 
-// Discografía de un artista. En feb 2026 quedó en gris `GET /artists/{id}/albums`
-// (nunca lo re-verificamos post-migración). Estrategia: probamos el endpoint
-// nativo primero — si da 403, caemos a `/search?q=artist:"NAME"&type=album`
-// que sí sabemos que funciona. Cachea la decisión en memoria para no repetir
-// el probe en cada llamada.
+// Discografía de un artista.
+//
+// Estado verificado en vivo el 2026-08-06 con la sesión real:
+//   - `GET /artists/{id}/albums` → **429 en TODAS las llamadas**, con cualquier
+//     limit y sin market. NO es rate limit real: en el mismo segundo `/me`,
+//     `GET /artists/{id}` y `/search` devuelven 200. Es un bloqueo de endpoint
+//     disfrazado de 429 (antes del ajuste de v=122 el disfraz era 400).
+//   - `/search` sí funciona, pero el límite máximo por página bajó a **10**
+//     (11+ → 400 "Invalid limit"). El `offset` sí pagina de verdad.
+//   - `total` de /search viene igual a los items devueltos, así que no sirve
+//     para paginar: hay que ir hasta una página corta.
+//
+// Estrategia: un probe barato al nativo (sin reintentos, para no comerse 25s
+// de esperas por 429) y, ante 400/403/429, pasamos a /search para el resto de
+// la sesión. Si Spotify revive el endpoint, el probe de la próxima carga lo
+// detecta solo.
 let _artistAlbumsEndpoint = null; // 'native' | 'search'
+const SEARCH_PAGE = 10;           // máximo que acepta hoy /search
+const SEARCH_MAX_PAGES = 6;       // 60 resultados por artista
+
 async function getArtistAlbums(artistId, artistName, { includeSingles = true, limit = 20 } = {}) {
-  // Post-migración feb 2026 el endpoint devuelve 400 "Invalid limit" con
-  // limit=50 y también con market=from_token. Bajamos a 20 (el máximo que
-  // acepta hoy) y sacamos el market — verificado 2026-08-05 en vivo con
-  // 100+ llamadas devolviendo 400 antes del ajuste.
   const groups = includeSingles ? 'album,single' : 'album';
   const tryNative = async () => {
     const items = [];
     let url = `/artists/${artistId}/albums?include_groups=${groups}&limit=${Math.min(limit, 20)}`;
     for (let i = 0; i < 15; i++) {
-      const res = await spotifyFetch(url);
+      // El primer request es el probe: sin reintentos, para que un endpoint
+      // muerto no cueste 25 segundos por artista.
+      const res = await spotifyFetch(url, i === 0 && _artistAlbumsEndpoint == null ? { _maxRetries: 0 } : {});
       if (!res) break;
       const batch = res.items || [];
       items.push(...batch);
@@ -882,21 +899,29 @@ async function getArtistAlbums(artistId, artistName, { includeSingles = true, li
     }
     return items;
   };
+
   const trySearch = async () => {
-    // /search: 50 max por página, hasta 3 páginas = 150 resultados posibles.
+    // /search devuelve cualquier cosa que matchee el texto: buscando
+    // artist:"Drake" aparecen Nick Drake y Drake Bell. Filtramos por nombre de
+    // artista, si no la vista de "sin escuchar" se llena de artistas ajenos.
+    const wanted = (artistName || '').trim();
+    if (!wanted) return [];
+    const q = `artist:"${wanted.replace(/"/g, '')}"`;
     const items = [];
-    for (let offset = 0; offset < 150; offset += 50) {
-      const q = `artist:"${(artistName || '').replace(/"/g, '')}"`;
-      const res = await spotifyFetch(`/search?q=${encodeURIComponent(q)}&type=album&limit=50&offset=${offset}`);
+    let emptyPages = 0;
+    for (let page = 0; page < SEARCH_MAX_PAGES; page++) {
+      const offset = page * SEARCH_PAGE;
+      const res = await spotifyFetch(`/search?q=${encodeURIComponent(q)}&type=album&limit=${SEARCH_PAGE}&offset=${offset}`);
       const batch = res?.albums?.items || [];
-      items.push(...batch);
-      if (batch.length < 50) break;
+      const mine = batch.filter(al => (al.artists || []).some(a => artistMatches(wanted, a.name)));
+      items.push(...mine);
+      if (batch.length < SEARCH_PAGE) break;
+      // Los resultados vienen por relevancia: si dos páginas seguidas no traen
+      // nada del artista, lo que sigue es ruido.
+      emptyPages = mine.length ? 0 : emptyPages + 1;
+      if (emptyPages >= 2) break;
     }
-    // /search no diferencia includeSingles bien — filtramos por album_type.
-    return items.filter(al => {
-      if (!includeSingles && al.album_type !== 'album') return false;
-      return true;
-    });
+    return items.filter(al => includeSingles || al.album_type === 'album');
   };
 
   if (_artistAlbumsEndpoint === 'search') return trySearch();
@@ -909,10 +934,11 @@ async function getArtistAlbums(artistId, artistName, { includeSingles = true, li
     }
     return items;
   } catch (e) {
-    // 403 (permiso denegado) o 400 (params inválidos) → fallback a /search.
-    if (/40[03]/.test(e.message)) {
+    // 400 (params inválidos), 403 (denegado) o 429 permanente → a /search.
+    const status = e.status || (e.message.match(/\b(400|403|429)\b/) || [])[1];
+    if (status && [400, 403, 429, '400', '403', '429'].includes(status)) {
       _artistAlbumsEndpoint = 'search';
-      console.warn('[api] getArtistAlbums: /artists/{id}/albums →', e.message.slice(0, 60), '· fallback a /search');
+      console.warn('[api] getArtistAlbums: /artists/{id}/albums →', String(e.message).slice(0, 60), '· fallback a /search');
       return trySearch();
     }
     throw e;

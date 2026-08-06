@@ -6,9 +6,9 @@
 //     (util/album-heard.js: historial completo + likes + listened + w-three)
 //   - permiten "+ Biblioteca" y "Crear playlist con lo elegido"
 
-import { idbGetCached, idbSetCached } from '../idb.js?v=122';
-import { getArtistAlbums, searchArtistByName, getAlbumTracks, saveToLibrary, createPlaylist, addTracksToPlaylist } from '../api.js?v=122';
-import { albumKey } from '../util/album-key.js?v=122';
+import { idbGetCached, idbSetCached, idbDel } from '../idb.js?v=123';
+import { getArtistAlbums, searchArtistByName, getAlbumTracks, saveToLibrary, createPlaylist, addTracksToPlaylist } from '../api.js?v=123';
+import { albumKey } from '../util/album-key.js?v=123';
 
 const DISCO_TTL_MIN = 30 * 24 * 60;       // 30 días
 const ARTIST_ID_TTL_MIN = 60 * 24 * 60;   // 60 días — los ids no cambian
@@ -29,13 +29,16 @@ export async function getArtistIdCached(nameLower, displayName, seedId) {
   return found.id;
 }
 
+// v2 en la key: la v1 guardó discografías VACÍAS durante 30 días cuando el
+// endpoint fallaba, y esas entradas vacías se seguían sirviendo aunque el
+// fetch ya estuviera arreglado. Además ahora no cacheamos resultados vacíos.
 export async function getArtistDiscoCached(artistId, artistName) {
-  const key = `discover_artist_disco_${artistId}`;
+  const key = `discover_artist_disco_v2_${artistId}`;
   try {
     const cached = await idbGetCached(key);
-    if (Array.isArray(cached)) return cached;
+    if (Array.isArray(cached) && cached.length) return cached;
   } catch { /* ignora */ }
-  const items = await getArtistAlbums(artistId, artistName, { includeSingles: true, limit: 50 });
+  const items = await getArtistAlbums(artistId, artistName, { includeSingles: true, limit: 20 });
   const slim = items.map(al => ({
     id: al.id,
     name: al.name,
@@ -45,8 +48,48 @@ export async function getArtistDiscoCached(artistId, artistName) {
     total: al.total_tracks || 0,
     artists: (al.artists || []).map(a => ({ id: a.id, name: a.name })),
   }));
-  try { await idbSetCached(key, slim, DISCO_TTL_MIN); } catch { /* ignora */ }
+  if (slim.length) {
+    try { await idbSetCached(key, slim, DISCO_TTL_MIN); } catch { /* ignora */ }
+  }
   return slim;
+}
+
+// ── Cache del escaneo COMPLETO (no solo de la discografía por artista) ──
+// Sin esto, entrar a la vista dispara 150 escaneos cada vez. Guardamos el
+// resultado ya cruzado con TTL de 7 días; el botón "Actualizar" lo tira.
+
+const SCAN_TTL_MIN = 7 * 24 * 60;   // 7 días
+
+export async function loadScanCache(viewKey) {
+  try {
+    const data = await idbGetCached(`discover_scan_${viewKey}`);
+    return data && Array.isArray(data.artists) ? data : null;
+  } catch { return null; }
+}
+
+export async function saveScanCache(viewKey, artists) {
+  try {
+    await idbSetCached(`discover_scan_${viewKey}`, { ts: Date.now(), artists }, SCAN_TTL_MIN);
+  } catch { /* ignora */ }
+}
+
+export async function clearScanCache(viewKey, artistIds = []) {
+  try { await idbDel(`discover_scan_${viewKey}`); } catch { /* ignora */ }
+  // "Actualizar" tiene que traer datos frescos de verdad: también tiramos las
+  // discografías cacheadas de los artistas ya escaneados.
+  for (const id of artistIds) {
+    if (!id) continue;
+    try { await idbDel(`discover_artist_disco_v2_${id}`); } catch { /* ignora */ }
+  }
+}
+
+// "hace 3 días" / "hoy" para el sub-texto del botón Actualizar.
+export function agoLabel(ts) {
+  if (!ts) return '';
+  const days = Math.floor((Date.now() - ts) / (24 * 60 * 60 * 1000));
+  if (days <= 0) return 'hoy';
+  if (days === 1) return 'ayer';
+  return `hace ${days} días`;
 }
 
 export function yearOf(release) {
