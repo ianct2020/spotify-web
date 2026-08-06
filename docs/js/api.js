@@ -1,8 +1,8 @@
-import { getValidToken, refreshAccessToken } from './auth.js?v=124';
-import { cacheGet, cacheGetRaw, cacheGetTimestamp, cacheSet, cacheClear } from './storage.js?v=124';
-import { idbDel, idbGetCached, idbGetCachedRaw, idbGetTimestamp, idbSetCached } from './idb.js?v=124';
-import { showToast } from './ui/toast.js?v=124';
-import { artistIsSame } from './util/track-match.js?v=124';
+import { getValidToken, refreshAccessToken } from './auth.js?v=125';
+import { cacheGet, cacheGetRaw, cacheGetTimestamp, cacheSet, cacheClear } from './storage.js?v=125';
+import { idbDel, idbGetCached, idbGetCachedRaw, idbGetTimestamp, idbSetCached } from './idb.js?v=125';
+import { showToast } from './ui/toast.js?v=125';
+import { artistIsSame } from './util/track-match.js?v=125';
 
 const BASE = 'https://api.spotify.com/v1';
 const MIN_RETRY_WAIT = 5000;
@@ -879,7 +879,10 @@ async function saveToLibrary(ids) {
 // detecta solo.
 let _artistAlbumsEndpoint = null; // 'native' | 'search'
 const SEARCH_PAGE = 10;           // máximo que acepta hoy /search
-const SEARCH_MAX_PAGES = 6;       // 60 resultados por artista
+// 4 páginas = 40 resultados por artista. Con 6 el escaneo de 100 artistas
+// disparaba 429 en cadena (medido en vivo: artistas enteros caían por rate
+// limit y desaparecían de la lista).
+const SEARCH_MAX_PAGES = 4;
 
 async function getArtistAlbums(artistId, artistName, { includeSingles = true, limit = 20 } = {}) {
   const groups = includeSingles ? 'album,single' : 'album';

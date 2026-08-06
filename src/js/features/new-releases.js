@@ -35,7 +35,10 @@ const SCAN_KEY = 'new_releases';
 const LS_MIN_LIKES = 'newrel_min_likes';   // 5 / 10 / 20
 const LS_MONTHS = 'newrel_months';         // 3 / 6 / 12 / 24
 const LS_LOADED_MORE = 'newrel_loaded_more';
-const BATCH_PARALLEL = 3;
+// 2 y no 3: la discografía sale de /search y con 3 en paralelo Spotify tira
+// 429 en cadena (ver api.js getArtistAlbums).
+const BATCH_PARALLEL = 2;
+const RATE_RETRIES = 2;
 const DEFAULT_INITIAL = 100;
 
 const VALID_LIKES = new Set([5, 10, 20]);
@@ -238,16 +241,29 @@ async function scanArtists(content) {
     while (queue.length) {
       const artist = queue.shift();
       if (!artist) break;
+      let requeued = false;
       try {
         await processArtist(artist);
+        artist.error = null;
       } catch (e) {
-        artist.error = e.message;
-        console.warn(`[newrel] "${artist.name}":`, e.message);
+        const rateLimited = e.status === 429 || /rate limit/i.test(e.message);
+        if (rateLimited && (artist.retries || 0) < RATE_RETRIES) {
+          artist.retries = (artist.retries || 0) + 1;
+          artist.scanned = false;
+          queue.push(artist);
+          requeued = true;
+          console.warn(`[newrel] "${artist.name}": rate limit, reintento ${artist.retries}/${RATE_RETRIES}`);
+        } else {
+          artist.error = e.message;
+          console.warn(`[newrel] "${artist.name}":`, e.message);
+        }
       } finally {
-        scanned++;
-        progressLabel.textContent = `${artist.name} (${scanned}/${target})`;
-        progressFill.style.width = `${Math.min(100, (scanned / target) * 100)}%`;
-        document.getElementById('newrel-count').textContent = scanned;
+        if (!requeued) {
+          scanned++;
+          progressLabel.textContent = `${artist.name} (${scanned}/${target})`;
+          progressFill.style.width = `${Math.min(100, (scanned / target) * 100)}%`;
+          document.getElementById('newrel-count').textContent = scanned;
+        }
         refreshList(content);
       }
     }

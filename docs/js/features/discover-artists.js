@@ -10,12 +10,12 @@
 // 100 artistas en lugar de 20. Lógica de fetch/cache/playlist compartida en
 // features/discover-common.js con #new-releases.
 
-import { escapeHtml, pageHeader } from '../ui/components.js?v=124';
-import { showToast } from '../ui/toast.js?v=124';
-import { openArtistCard } from './artist-card.js?v=124';
-import { openAlbumCard } from './album-card.js?v=124';
-import { albumKey } from '../util/album-key.js?v=124';
-import { buildAlbumHeardIndex, markAlbumHeard } from '../util/album-heard.js?v=124';
+import { escapeHtml, pageHeader } from '../ui/components.js?v=125';
+import { showToast } from '../ui/toast.js?v=125';
+import { openArtistCard } from './artist-card.js?v=125';
+import { openAlbumCard } from './album-card.js?v=125';
+import { albumKey } from '../util/album-key.js?v=125';
+import { buildAlbumHeardIndex, markAlbumHeard } from '../util/album-heard.js?v=125';
 import {
   getArtistIdCached,
   getArtistDiscoCached,
@@ -28,7 +28,7 @@ import {
   saveScanCache,
   clearScanCache,
   agoLabel,
-} from './discover-common.js?v=124';
+} from './discover-common.js?v=125';
 
 const SCAN_KEY = 'discover_artists';
 
@@ -36,7 +36,10 @@ const LS_FILTER_KIND = 'discoverart_filter_kind';    // 'all' | 'album' | 'singl
 const LS_FILTER_YEARS = 'discoverart_filter_years';  // 0 = todo, o número de años
 const LS_LOADED_MORE = 'discoverart_loaded_more';    // cuántos artistas cargar (default 100)
 const MIN_LIKES = 5;
-const BATCH_PARALLEL = 3;
+// 2 y no 3: la discografía sale de /search (el endpoint nativo está muerto) y
+// con 3 en paralelo Spotify tira 429 en cadena.
+const BATCH_PARALLEL = 2;
+const RATE_RETRIES = 2;   // reintentos por artista caído por rate limit
 const DEFAULT_INITIAL = 100;
 
 function getFilterKind() {
@@ -241,16 +244,31 @@ async function scanArtists(content) {
     while (queue.length) {
       const artist = queue.shift();
       if (!artist) break;
+      let requeued = false;
       try {
         await processArtist(artist);
+        artist.error = null;
       } catch (e) {
-        artist.error = e.message;
-        console.warn(`[discover] "${artist.name}":`, e.message);
+        // Un 429 no es "este artista no existe": lo volvemos a encolar al
+        // final en vez de perderlo de la lista, que era justo el síntoma.
+        const rateLimited = e.status === 429 || /rate limit/i.test(e.message);
+        if (rateLimited && (artist.retries || 0) < RATE_RETRIES) {
+          artist.retries = (artist.retries || 0) + 1;
+          artist.scanned = false;
+          queue.push(artist);
+          requeued = true;
+          console.warn(`[discover] "${artist.name}": rate limit, reintento ${artist.retries}/${RATE_RETRIES}`);
+        } else {
+          artist.error = e.message;
+          console.warn(`[discover] "${artist.name}":`, e.message);
+        }
       } finally {
-        scanned++;
-        progressLabel.textContent = `${artist.name} (${scanned}/${target})`;
-        progressFill.style.width = `${Math.min(100, (scanned / target) * 100)}%`;
-        document.getElementById('disco-count').textContent = scanned;
+        if (!requeued) {
+          scanned++;
+          progressLabel.textContent = `${artist.name} (${scanned}/${target})`;
+          progressFill.style.width = `${Math.min(100, (scanned / target) * 100)}%`;
+          document.getElementById('disco-count').textContent = scanned;
+        }
         refreshList(content);
       }
     }
