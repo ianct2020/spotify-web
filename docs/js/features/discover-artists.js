@@ -1,38 +1,37 @@
 // #discover-artists · "Sin escuchar de tus artistas"
 //
 // Idea: para los artistas con más likes (5+), traer su discografía completa
-// (álbumes + singles) desde Spotify y cruzarla con tus likes y con el
-// historial de escucha para marcar qué álbumes/singles NO escuchaste.
+// (álbumes + singles) desde Spotify y cruzarla con el índice unificado de
+// álbumes escuchados (util/album-heard.js — historial completo + likes +
+// listened + w-three). Aparece SOLO lo que nunca tocó de sus artistas.
 //
-// Endpoints usados:
-//   - GET /artists/{id}/albums (probamos primero, fallback a /search)
-//   - GET /albums/{id}/tracks (para agregar todas las pistas al crear playlist)
-//   - PUT /me/library (guardar en biblioteca)
-//   - POST /me/playlists + POST /playlists/{id}/items (crear playlist)
-//
-// Cache: la discografía de cada artista queda 30 días en IDB
-// (`discover_artist_disco_{artistId}`). Los artistas son muchos → nunca le
-// pegamos al endpoint más de una vez cada 30 días por artista.
-//
-// Carga progresiva: mostramos artistas a medida que llegan (batch 3 en
-// paralelo, respetando 429 → 5s de espera). Pill de progreso arriba.
+// v=121: cruce corregido (antes usaba solo listened-albums.json que es un
+// subset por umbral; ahora usa el historial completo v=3 de plays). Default
+// 100 artistas en lugar de 20. Lógica de fetch/cache/playlist compartida en
+// features/discover-common.js con #new-releases.
 
-import { spotifyFetch, getBestAvailableLikes, searchArtistByName, getArtistAlbums, getAlbumTracks, saveToLibrary, createPlaylist, addTracksToPlaylist } from '../api.js?v=120';
-import { idbGetCached, idbSetCached } from '../idb.js?v=120';
-import { escapeHtml, pageHeader } from '../ui/components.js?v=120';
-import { showToast } from '../ui/toast.js?v=120';
-import { openArtistCard } from './artist-card.js?v=120';
-import { openAlbumCard } from './album-card.js?v=120';
-import { loadListenedAlbums, isOwner } from './history-data.js?v=120';
-import { albumKey } from '../util/album-key.js?v=120';
+import { escapeHtml, pageHeader } from '../ui/components.js?v=121';
+import { showToast } from '../ui/toast.js?v=121';
+import { openArtistCard } from './artist-card.js?v=121';
+import { openAlbumCard } from './album-card.js?v=121';
+import { albumKey } from '../util/album-key.js?v=121';
+import { buildAlbumHeardIndex, markAlbumHeard } from '../util/album-heard.js?v=121';
+import {
+  getArtistIdCached,
+  getArtistDiscoCached,
+  dedupDisco,
+  albumIsUnheard,
+  yearOf,
+  createDiscoverPlaylist,
+  saveAlbumTracksToLibrary,
+} from './discover-common.js?v=121';
 
-const LS_FILTER_KIND = 'discoverart_filter_kind';   // 'all' | 'album' | 'single'
-const LS_FILTER_YEARS = 'discoverart_filter_years'; // 0 = todo, o número de años
-const LS_LOADED_MORE = 'discoverart_loaded_more';   // cuántos artistas cargar (default 20)
+const LS_FILTER_KIND = 'discoverart_filter_kind';    // 'all' | 'album' | 'single'
+const LS_FILTER_YEARS = 'discoverart_filter_years';  // 0 = todo, o número de años
+const LS_LOADED_MORE = 'discoverart_loaded_more';    // cuántos artistas cargar (default 100)
 const MIN_LIKES = 5;
 const BATCH_PARALLEL = 3;
-const DISCO_TTL_MIN = 30 * 24 * 60;
-const ARTIST_ID_TTL_MIN = 60 * 24 * 60; // 60 días — los ids no cambian
+const DEFAULT_INITIAL = 100;
 
 function getFilterKind() {
   const v = localStorage.getItem(LS_FILTER_KIND);
@@ -43,127 +42,21 @@ function getFilterYears() {
   return Number.isFinite(n) && n >= 0 ? n : 0;
 }
 function getLoadedMore() {
-  const n = parseInt(localStorage.getItem(LS_LOADED_MORE) || '20', 10);
-  return Number.isFinite(n) && n >= 5 ? n : 20;
+  const n = parseInt(localStorage.getItem(LS_LOADED_MORE) || String(DEFAULT_INITIAL), 10);
+  return Number.isFinite(n) && n >= 5 ? n : DEFAULT_INITIAL;
 }
 
-// Estado del feature (por sesión de página).
 const state = {
-  artists: [],           // [{ id, name, likes, image, disco: [], scanned: bool, error: null }]
-  listenedKeys: null,    // Set<albumKey> de los álbumes escuchados
-  likedIds: null,        // Set<track.id> de los que ya están en likes
-  likedAlbumKeys: null,  // Set<albumKey> (para singles/álbumes con 100% de likes)
-  selection: new Set(),  // Set<albumId> del check "para crear playlist"
+  artists: [],
+  heard: null,           // Set<albumKey>
+  likesByArtist: null,   // Map<nameLower, Set<trackId>>
+  selection: new Set(),
   filterKind: 'all',
   filterYears: 0,
-  loadedMore: 20,
-  concurrent: 0,
+  loadedMore: DEFAULT_INITIAL,
 };
 
 const YEAR_NOW = new Date().getFullYear();
-
-function albumsFromLikes(likes) {
-  // Devuelve: (a) Map<artistNameLower, count> de likes por artista
-  //           (b) Set<track.id> de todos los likes
-  //           (c) Set<albumKey> de álbumes que ya están en tus likes
-  const byArtist = new Map();
-  const likedIds = new Set();
-  const likedAlbums = new Set();
-  const artistDisplay = new Map(); // artistNameLower -> display name preservado
-  const artistImage = new Map();
-  const artistIds = new Map();     // spotify artist id → nameLower (para preferir el id real)
-  for (const it of likes) {
-    const t = it?.track || it;
-    if (!t || !t.artists?.length) continue;
-    // Solo contamos el primer artista para no inflar cross-features.
-    const a0 = t.artists[0];
-    const nameLower = (a0.name || '').toLowerCase().trim();
-    if (!nameLower) continue;
-    byArtist.set(nameLower, (byArtist.get(nameLower) || 0) + 1);
-    artistDisplay.set(nameLower, a0.name);
-    if (a0.id && !artistIds.has(nameLower)) artistIds.set(nameLower, a0.id);
-    if (t.id) likedIds.add(t.id);
-    const alb = t.album || {};
-    const albName = alb.name || '';
-    if (albName) likedAlbums.add(albumKey(albName, a0.name));
-    if (!artistImage.get(nameLower)) {
-      // El objeto track no trae imágenes de artista. Nos apoyaremos en el
-      // álbum como aproximación visual.
-      artistImage.set(nameLower, alb.images?.[2]?.url || alb.images?.[1]?.url || alb.images?.[0]?.url || null);
-    }
-  }
-  return { byArtist, likedIds, likedAlbums, artistDisplay, artistImage, artistIds };
-}
-
-async function getArtistIdCached(nameLower, displayName, seedId) {
-  // Cache de artist id por nombre (60 días).
-  const key = `discover_artist_id_${nameLower}`;
-  if (seedId) {
-    try { await idbSetCached(key, seedId, ARTIST_ID_TTL_MIN); } catch {}
-    return seedId;
-  }
-  try {
-    const cached = await idbGetCached(key);
-    if (cached) return cached;
-  } catch {}
-  const found = await searchArtistByName(displayName);
-  if (!found?.id) return null;
-  try { await idbSetCached(key, found.id, ARTIST_ID_TTL_MIN); } catch {}
-  return found.id;
-}
-
-async function getArtistDiscoCached(artistId, artistName) {
-  const key = `discover_artist_disco_${artistId}`;
-  try {
-    const cached = await idbGetCached(key);
-    if (Array.isArray(cached)) return cached;
-  } catch {}
-  const items = await getArtistAlbums(artistId, artistName, { includeSingles: true, limit: 50 });
-  // Slim para no gastar cuota IDB.
-  const slim = items.map(al => ({
-    id: al.id,
-    name: al.name,
-    type: al.album_type,          // 'album' | 'single' | 'compilation'
-    img: al.images?.[1]?.url || al.images?.[0]?.url || null,
-    release: al.release_date || '',
-    total: al.total_tracks || 0,
-    artists: (al.artists || []).map(a => ({ id: a.id, name: a.name })),
-  }));
-  try { await idbSetCached(key, slim, DISCO_TTL_MIN); } catch {}
-  return slim;
-}
-
-function yearOf(release) {
-  const y = parseInt((release || '').slice(0, 4), 10);
-  return Number.isFinite(y) ? y : 0;
-}
-
-function dedupDisco(disco) {
-  // La discografía de Spotify suele tener múltiples ediciones del mismo álbum
-  // (deluxe, remaster, etc). Los normalizamos con albumKey y nos quedamos con
-  // la primera edición (release date más antiguo).
-  const map = new Map();
-  for (const al of disco) {
-    const artistName = al.artists?.[0]?.name || '';
-    const k = albumKey(al.name, artistName);
-    const prev = map.get(k);
-    if (!prev) { map.set(k, al); continue; }
-    // Preferimos el más antiguo (primera edición) — y si empatan, el que
-    // tenga img.
-    const prevY = yearOf(prev.release);
-    const curY = yearOf(al.release);
-    if (curY && (!prevY || curY < prevY)) map.set(k, al);
-    else if (curY === prevY && !prev.img && al.img) map.set(k, al);
-  }
-  return [...map.values()];
-}
-
-function albumIsUnheard(al, artistName, listenedKeys, likedAlbums) {
-  const k = albumKey(al.name, artistName);
-  if (listenedKeys.has(k)) return false;
-  if (likedAlbums.has(k)) return false;
-  return true;
-}
 
 export async function render(container) {
   container.innerHTML = `
@@ -172,53 +65,29 @@ export async function render(container) {
   `;
   const content = document.getElementById('disco-content');
 
-  // Necesitamos likes. También intentamos historial (owner) para cruzar por
-  // álbumes escuchados; si no somos owner o no está, seguimos con solo likes.
-  let likes = [];
+  let idx;
   try {
-    const res = await getBestAvailableLikes();
-    likes = Array.isArray(res?.items) ? res.items : (Array.isArray(res) ? res : []);
+    idx = await buildAlbumHeardIndex();
   } catch (e) {
-    content.innerHTML = `<div class="card"><p style="color:var(--color-error)">No pude cargar tus likes: ${escapeHtml(e.message)}</p></div>`;
+    content.innerHTML = `<div class="card"><p style="color:var(--color-error)">No pude cargar tus datos: ${escapeHtml(e.message)}</p></div>`;
     return;
   }
-  if (!likes.length) {
-    content.innerHTML = `<div class="card"><p>Todavía no tienes likes. Guarda algunas canciones en Spotify y volvé.</p></div>`;
-    return;
-  }
+  state.heard = idx.heard;
+  state.likesByArtist = idx.likesByArtist;
 
-  const { byArtist, likedIds, likedAlbums, artistDisplay, artistImage, artistIds } = albumsFromLikes(likes);
-  state.likedIds = likedIds;
-  state.likedAlbumKeys = likedAlbums;
-
-  // Historial: solo si el user es owner (o subió su ZIP).
-  const listenedKeys = new Set();
-  try {
-    if (await isOwner()) {
-      const data = await loadListenedAlbums();
-      for (const y of (data?.years || [])) {
-        for (const al of (y.albums || [])) {
-          listenedKeys.add(albumKey(al.name, al.artist));
-        }
-      }
-    }
-  } catch { /* ignora */ }
-  state.listenedKeys = listenedKeys;
-
-  // Artistas candidatos: los con MIN_LIKES+ likes, ordenados desc.
-  const candidates = [...byArtist.entries()]
-    .filter(([, count]) => count >= MIN_LIKES)
-    .sort((a, b) => b[1] - a[1])
-    .map(([nameLower, count]) => ({
+  const candidates = [...idx.likesByArtist.entries()]
+    .map(([nameLower, ids]) => ({
       nameLower,
-      name: artistDisplay.get(nameLower) || nameLower,
-      likes: count,
-      seedId: artistIds.get(nameLower) || null,
-      image: artistImage.get(nameLower) || null,
-    }));
+      name: idx.artistDisplay.get(nameLower) || nameLower,
+      likes: ids.size,
+      seedId: idx.artistIds.get(nameLower) || null,
+      image: idx.artistImage.get(nameLower) || null,
+    }))
+    .filter(a => a.likes >= MIN_LIKES)
+    .sort((a, b) => b.likes - a.likes);
 
   if (!candidates.length) {
-    content.innerHTML = `<div class="card"><p>Necesito al menos un artista con ${MIN_LIKES} canciones en likes para armar esta vista. Guarda más canciones y volvé.</p></div>`;
+    content.innerHTML = `<div class="card"><p>Necesito al menos un artista con ${MIN_LIKES} canciones en likes para armar esta vista. Guarda más canciones y vuelve.</p></div>`;
     return;
   }
 
@@ -272,7 +141,7 @@ function renderShell(content, totalCandidates) {
     </div>
     <div class="disco-list" id="disco-list"></div>
     <div class="disco-load-more" style="text-align:center;margin:20px 0">
-      <button class="btn btn-secondary" id="disco-load-more">Cargar más artistas (+20)</button>
+      <button class="btn btn-secondary" id="disco-load-more">Cargar más artistas (+50)</button>
     </div>
     <div class="disco-actionbar" id="disco-actionbar" style="display:none">
       <span id="disco-sel-count">0 seleccionados</span>
@@ -294,8 +163,8 @@ function renderShell(content, totalCandidates) {
     localStorage.setItem(LS_FILTER_YEARS, String(state.filterYears));
     refreshList(content);
   });
-  content.querySelector('#disco-load-more').addEventListener('click', async () => {
-    state.loadedMore = Math.min(state.loadedMore + 20, state.artists.length);
+  content.querySelector('#disco-load-more').addEventListener('click', () => {
+    state.loadedMore = Math.min(state.loadedMore + 50, state.artists.length);
     localStorage.setItem(LS_LOADED_MORE, String(state.loadedMore));
     document.getElementById('disco-total-scan').textContent = state.loadedMore;
     scanArtists(content).catch(err => console.warn('[discover] scan:', err));
@@ -305,7 +174,7 @@ function renderShell(content, totalCandidates) {
     updateSelectionUi(content);
     refreshList(content);
   };
-  content.querySelector('#disco-sel-playlist').onclick = () => createPlaylistFromSelection(content);
+  content.querySelector('#disco-sel-playlist').onclick = () => onCreatePlaylist(content);
 }
 
 async function scanArtists(content) {
@@ -317,21 +186,17 @@ async function scanArtists(content) {
   const target = Math.min(state.loadedMore, state.artists.length);
   let scanned = state.artists.filter(a => a.scanned).length;
 
-  // Batches paralelos, respetando la cuota. Si un fetch falla con 429 el
-  // spotifyFetch ya espera 5s adentro; solo capturamos el error final.
   const queue = state.artists.filter(a => !a.scanned).slice(0, target - scanned);
   const workers = Array.from({ length: BATCH_PARALLEL }, () => (async () => {
     while (queue.length) {
       const artist = queue.shift();
       if (!artist) break;
-      state.concurrent++;
       try {
         await processArtist(artist);
       } catch (e) {
         artist.error = e.message;
         console.warn(`[discover] "${artist.name}":`, e.message);
       } finally {
-        state.concurrent--;
         scanned++;
         progressLabel.textContent = `${artist.name} (${scanned}/${target})`;
         progressFill.style.width = `${Math.min(100, (scanned / target) * 100)}%`;
@@ -351,7 +216,7 @@ async function processArtist(artist) {
   artist.id = id;
   const disco = await getArtistDiscoCached(id, artist.name);
   artist.disco = dedupDisco(disco);
-  const unheard = artist.disco.filter(al => albumIsUnheard(al, artist.name, state.listenedKeys, state.likedAlbumKeys));
+  const unheard = artist.disco.filter(al => albumIsUnheard(al, artist.name, state.heard));
   artist.unheardAlbums = unheard.filter(al => al.type === 'album');
   artist.unheardSingles = unheard.filter(al => al.type === 'single');
   artist.scanned = true;
@@ -474,17 +339,12 @@ async function saveAlbumToLibrary(albumId, artistName, btn) {
   btn.disabled = true;
   btn.textContent = 'Guardando…';
   try {
-    const tracks = await getAlbumTracks(albumId);
-    const ids = tracks.map(t => t.id).filter(Boolean);
-    if (!ids.length) throw new Error('el álbum no tiene pistas');
-    await saveToLibrary(ids);
+    const ids = await saveAlbumTracksToLibrary(albumId);
     btn.textContent = `✓ ${ids.length} en likes`;
     showToast(`${ids.length} pistas de "${al.name}" añadidas a tus me gusta`, 'success');
-    // Marco el álbum como ya en likes para que no salga más como "sin escuchar".
-    state.likedAlbumKeys.add(albumKey(al.name, artistName));
-    ids.forEach(id => state.likedIds.add(id));
+    // Marco el álbum como escuchado para que no salga más en la lista.
+    markAlbumHeard(al.name, artistName);
     setTimeout(() => {
-      // Refresh la lista para sacarlo.
       const content = document.getElementById('disco-content');
       if (content) refreshList(content);
     }, 800);
@@ -495,35 +355,15 @@ async function saveAlbumToLibrary(albumId, artistName, btn) {
   }
 }
 
-async function createPlaylistFromSelection(content) {
+async function onCreatePlaylist(content) {
   const ids = [...state.selection];
   if (!ids.length) return;
   const btn = content.querySelector('#disco-sel-playlist');
   btn.disabled = true;
   btn.textContent = 'Creando…';
-
   try {
-    // Traer todas las pistas de todos los álbumes seleccionados.
-    const allTrackUris = [];
-    for (const albumId of ids) {
-      const tracks = await getAlbumTracks(albumId);
-      tracks.forEach(t => { if (t.uri) allTrackUris.push(t.uri); });
-    }
-    if (!allTrackUris.length) throw new Error('los álbumes seleccionados no tienen pistas');
-
-    const now = new Date();
-    const dateStr = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
-    const name = `Descubrir · ${dateStr}`;
-    const desc = `${ids.length} álbumes/singles de tus artistas favoritos que aún no escuchaste. Generado por Fonoteca.`;
-    const created = await createPlaylist(name, desc, false);
-
-    // Chunks de 100 (spotify limit por request de add).
-    for (let i = 0; i < allTrackUris.length; i += 100) {
-      const chunk = allTrackUris.slice(i, i + 100);
-      await addTracksToPlaylist(created.id, chunk);
-    }
-
-    showToast(`Playlist "${name}" creada con ${allTrackUris.length} pistas`, 'success');
+    const { name, tracks } = await createDiscoverPlaylist(ids, findAlbum, { label: 'Descubrir' });
+    showToast(`Playlist "${name}" creada con ${tracks} pistas`, 'success');
     state.selection.clear();
     updateSelectionUi(content);
     refreshList(content);

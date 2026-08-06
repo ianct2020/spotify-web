@@ -120,9 +120,10 @@ function renderResults() {
     ? `Cruzando con Stats.fm — ${cache.statsfmUpdated.toLocaleString('es-AR')} ajustados con plays post-export`
     : (hasUsername() ? 'Cruzar con Stats.fm' : '');
 
-  // Layout compacto en 2 filas: fila 1 = stats+chips+toggle Stats.fm; fila 2 = acciones.
+  // Topbar en UNA sola fila (v=121): stats mini + chips + toggle Stats.fm + acciones
+  // agrupados con auto-margin. Todo compactado para que quepa cómodo en desktop.
   content.innerHTML = `
-    <div class="skips-topbar">
+    <div class="skips-topbar skips-topbar-single">
       <div class="skips-topbar-row">
         <div class="skips-stat-mini">
           <span class="skips-stat-mini-v">${rows.length.toLocaleString('es-ES')}</span>
@@ -134,7 +135,7 @@ function renderResults() {
         </div>
         <div class="skips-stat-mini">
           <span class="skips-stat-mini-v">${cache.likesCount.toLocaleString('es-ES')}</span>
-          <span class="skips-stat-mini-l">likes totales</span>
+          <span class="skips-stat-mini-l">likes</span>
         </div>
         <div class="skips-chip-group" id="skips-plays-chips" title="Plays mínimas (ok+skip)">
           ${PLAYS_STEPS.map(v => `
@@ -152,8 +153,6 @@ function renderResults() {
             <span>${escapeHtml(sfLabel)}</span>
           </button>
         ` : ''}
-      </div>
-      <div class="skips-topbar-row">
         <div class="skips-topbar-actions">
           ${hiddenCount > 0 || showingHidden ? `
             <button class="btn btn-secondary btn-sm ${showingHidden ? 'sort-active' : ''}" id="sk-toggle-hidden" title="${showingHidden ? 'Volver a la vista normal' : 'Ver solo los que ocultaste'}">${showingHidden ? '← Volver' : 'Ocultos (' + hiddenCount + ')'}</button>

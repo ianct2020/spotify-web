@@ -3,14 +3,14 @@
 // Preview 30s instantáneo vía iTunes (arranca en el estribillo, no suma plays
 // en tu historial de Spotify). Fallback: iframe embed oficial si iTunes no lo tiene.
 
-import { getBestAvailableLikes, removeLikedTracks } from '../api.js?v=120';
-import { loadSkipStats, trackIdOf, isOwner, ownerLockedMessage } from './history-data.js?v=120';
-import { escapeHtml, confirmModal, pageHeader } from '../ui/components.js?v=120';
-import { showToast } from '../ui/toast.js?v=120';
-import { getPreview } from '../api/preview-providers.js?v=120';
-import { togglePreview, playingKey } from '../ui/preview-player.js?v=120';
-import { openTrackCard } from './track-card.js?v=120';
-import { hasUsername, loadTopLifetime } from '../api/statsfm.js?v=120';
+import { getBestAvailableLikes, removeLikedTracks } from '../api.js?v=121';
+import { loadSkipStats, trackIdOf, isOwner, ownerLockedMessage } from './history-data.js?v=121';
+import { escapeHtml, confirmModal, pageHeader } from '../ui/components.js?v=121';
+import { showToast } from '../ui/toast.js?v=121';
+import { getPreview } from '../api/preview-providers.js?v=121';
+import { togglePreview, playingKey } from '../ui/preview-player.js?v=121';
+import { openTrackCard } from './track-card.js?v=121';
+import { hasUsername, loadTopLifetime } from '../api/statsfm.js?v=121';
 
 let cache = null;
 let minPlays = 5;    // solo tracks con ≥N plays totales (ok+skip)
@@ -120,9 +120,10 @@ function renderResults() {
     ? `Cruzando con Stats.fm — ${cache.statsfmUpdated.toLocaleString('es-AR')} ajustados con plays post-export`
     : (hasUsername() ? 'Cruzar con Stats.fm' : '');
 
-  // Layout compacto en 2 filas: fila 1 = stats+chips+toggle Stats.fm; fila 2 = acciones.
+  // Topbar en UNA sola fila (v=121): stats mini + chips + toggle Stats.fm + acciones
+  // agrupados con auto-margin. Todo compactado para que quepa cómodo en desktop.
   content.innerHTML = `
-    <div class="skips-topbar">
+    <div class="skips-topbar skips-topbar-single">
       <div class="skips-topbar-row">
         <div class="skips-stat-mini">
           <span class="skips-stat-mini-v">${rows.length.toLocaleString('es-ES')}</span>
@@ -134,7 +135,7 @@ function renderResults() {
         </div>
         <div class="skips-stat-mini">
           <span class="skips-stat-mini-v">${cache.likesCount.toLocaleString('es-ES')}</span>
-          <span class="skips-stat-mini-l">likes totales</span>
+          <span class="skips-stat-mini-l">likes</span>
         </div>
         <div class="skips-chip-group" id="skips-plays-chips" title="Plays mínimas (ok+skip)">
           ${PLAYS_STEPS.map(v => `
@@ -152,8 +153,6 @@ function renderResults() {
             <span>${escapeHtml(sfLabel)}</span>
           </button>
         ` : ''}
-      </div>
-      <div class="skips-topbar-row">
         <div class="skips-topbar-actions">
           ${hiddenCount > 0 || showingHidden ? `
             <button class="btn btn-secondary btn-sm ${showingHidden ? 'sort-active' : ''}" id="sk-toggle-hidden" title="${showingHidden ? 'Volver a la vista normal' : 'Ver solo los que ocultaste'}">${showingHidden ? '← Volver' : 'Ocultos (' + hiddenCount + ')'}</button>

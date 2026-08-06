@@ -14,7 +14,7 @@ const MIN_MS = 30000;
 const SKIP_MIN_MS = 5000;
 const SKIP_STATS_MIN_PLAYS = 3;
 const STATS_VERSION = 2;
-const TRACK_PLAYS_VERSION = 2;
+const TRACK_PLAYS_VERSION = 3;
 const SKIP_STATS_VERSION = 1;
 const LISTENED_VERSION = 2;
 const TRACK_DETAIL_VERSION = 1;
@@ -592,10 +592,16 @@ function processStreamingHistory(fileArrays, { onProgress } = {}) {
     milestones,
   };
 
+  const albumsPlayedOut = [];
+  for (const [ak, m] of albumMeta) {
+    if ((albumMs.get(ak) || 0) > 0) albumsPlayedOut.push([m.name || '', m.artist || '']);
+  }
+
   const trackPlays = {
     version: TRACK_PLAYS_VERSION,
     generated_at: generatedAt,
     tracks: trackPlaysOut,
+    albums: albumsPlayedOut,
   };
 
   return { stats, trackPlays, listened, skipStats, detail, records };
