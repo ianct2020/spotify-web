@@ -29,7 +29,7 @@ MIN_MS = 30000  # trigger warning: ignoramos plays de menos de 30s
 SKIP_MIN_MS = 5000  # skip "consciente": si le dio next después de 5s+ es deliberado
 SKIP_STATS_MIN_PLAYS = 3  # excluimos tracks con menos de 3 plays totales (ruido)
 STATS_VERSION = 2            # bump: excluye "Sonido Para Sacar Agua Del Movil"
-TRACK_PLAYS_VERSION = 2      # incluye entries "partial" para tracks solo con plays <30s
+TRACK_PLAYS_VERSION = 3      # v3: agrega `albums` (lista name/artist de TODO álbum tocado, aunque sea 1 play). v2: incluía entries "partial" para tracks solo con plays <30s
 SKIP_STATS_VERSION = 1
 LISTENED_VERSION = 2         # bump: excluye "Sonido Para Sacar Agua Del Movil"
 TRACK_DETAIL_VERSION = 1     # ficha de canción: plays por mes + primera/última + récords del track
@@ -481,6 +481,16 @@ def build_stats(plays, img_idx):
             continue
         track_plays_out[tid] = [v["p"], round(v["ms"]/1000), "p"]
 
+    # Lista de TODO álbum con al menos 1 play válida (>=30s). Se usa en
+    # #discover-artists / #new-releases para decidir si un álbum de la discografía
+    # ya fue escuchado. El JS canonicaliza (name, artist) con util/album-key.js
+    # (strip diacríticos, sufijos de edición), así que emitimos los nombres crudos.
+    albums_played_out = [
+        [m.get("name", ""), m.get("artist", "")]
+        for ak, m in album_meta.items()
+        if album_ms.get(ak, 0) > 0
+    ]
+
     # Álbumes "escuchados" (mix A+C) agrupados por año del primer día
     listened_by_year = defaultdict(list)
     for ak, info in listened_first.items():
@@ -636,7 +646,7 @@ def build_stats(plays, img_idx):
         "milestones": milestones,
     }
 
-    return stats, track_plays_out, listened_payload, skip_payload, detail_payload, records_payload
+    return stats, track_plays_out, albums_played_out, listened_payload, skip_payload, detail_payload, records_payload
 
 
 def main():
@@ -649,7 +659,7 @@ def main():
     print(f"  tapas indexadas: {len(img_idx):,}")
 
     print("Agregando…")
-    stats, track_plays, listened, skip_stats, detail, records = build_stats(plays, img_idx)
+    stats, track_plays, albums_played, listened, skip_stats, detail, records = build_stats(plays, img_idx)
 
     stats_path = os.path.join(OUT_DIR, "history-stats.json")
     tp_path = os.path.join(OUT_DIR, "history-track-plays.json")
@@ -665,6 +675,7 @@ def main():
             "version": TRACK_PLAYS_VERSION,
             "generated_at": stats["generated_at"],
             "tracks": track_plays,
+            "albums": albums_played,
         }, f, separators=(",", ":"), ensure_ascii=False)
     with open(listened_path, "w") as f:
         json.dump(listened, f, separators=(",", ":"), ensure_ascii=False)
@@ -678,7 +689,7 @@ def main():
     print(f"OK → {detail_path} ({os.path.getsize(detail_path)/1024:.1f} KB, {len(detail['tracks'])} tracks)")
     print(f"OK → {records_path} ({os.path.getsize(records_path)/1024:.1f} KB)")
     print(f"OK → {stats_path} ({os.path.getsize(stats_path)/1024:.1f} KB)")
-    print(f"OK → {tp_path} ({os.path.getsize(tp_path)/1024:.1f} KB)")
+    print(f"OK → {tp_path} ({os.path.getsize(tp_path)/1024:.1f} KB, {len(track_plays)} tracks, {len(albums_played)} álbumes tocados)")
     print(f"OK → {listened_path} ({os.path.getsize(listened_path)/1024:.1f} KB)")
     print(f"OK → {skip_path} ({os.path.getsize(skip_path)/1024:.1f} KB)")
     print(f"totales stats: {stats['totals']}")

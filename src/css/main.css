@@ -2491,21 +2491,29 @@ body:has(.preview-pill.show) .progress-mini {
 .wthree-bucket-ok { border-left: 3px solid #10b981; opacity: 0.85; }
 .wthree-bucket-warn { border-left: 3px solid var(--color-warning, #f59e0b); }
 
-.wthree-album-list { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.wthree-album-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px 10px;
+  min-width: 0;
+}
 .wthree-album-row {
   display: grid;
-  grid-template-columns: 44px minmax(0, 1fr) auto auto;
-  gap: 10px;
+  grid-template-columns: 40px minmax(0, 1fr) auto auto;
+  gap: 8px;
   align-items: center;
-  padding: 8px 10px;
+  padding: 6px 8px;
   border-radius: var(--radius-sm);
   background: var(--color-elevated);
   cursor: pointer;
   transition: background .1s;
   min-width: 0;
 }
+@media (max-width: 900px) {
+  .wthree-album-list { grid-template-columns: minmax(0, 1fr); }
+}
 .wthree-album-row:hover { background: rgba(124, 58, 237, 0.08); }
-.wthree-album-cover { width: 44px; height: 44px; border-radius: 4px; object-fit: cover; flex-shrink: 0; }
+.wthree-album-cover { width: 40px; height: 40px; border-radius: 4px; object-fit: cover; flex-shrink: 0; }
 .wthree-album-cover-empty {
   background: var(--color-surface);
   display: flex;
@@ -2534,9 +2542,9 @@ body:has(.preview-pill.show) .progress-mini {
 }
 .wthree-album-row:hover .wthree-hide-btn { opacity: 1; }
 .wthree-hide-btn:hover { background: var(--color-elevated); border-color: var(--color-border); }
-.wthree-album-name { font-size: 13px; font-weight: 500; }
-.wthree-album-artist { font-size: 11px; color: var(--color-text-muted); }
-.wthree-album-meta { font-size: 10.5px; color: var(--color-text-muted); margin-top: 1px; }
+.wthree-album-name { font-size: 12.5px; font-weight: 500; }
+.wthree-album-artist { font-size: 10.5px; color: var(--color-text-muted); }
+.wthree-album-meta { font-size: 10px; color: var(--color-text-muted); margin-top: 1px; }
 
 .wthree-pill {
   display: inline-flex;
@@ -3365,7 +3373,8 @@ body.covers-fs .main {
   margin: 16px 0;
   box-shadow: 0 10px 30px rgba(0,0,0,0.4);
 }
-.disco-actionbar #disco-sel-count {
+.disco-actionbar #disco-sel-count,
+.disco-actionbar #newrel-sel-count {
   font-size: 13px;
   color: var(--color-text);
   font-weight: 600;
@@ -3374,6 +3383,26 @@ body.covers-fs .main {
 @media (max-width: 720px) {
   .disco-album-grid { grid-template-columns: minmax(0, 1fr); }
   .disco-controls { width: 100%; justify-content: flex-start; }
+}
+
+/* ============ #new-releases (v=121) ============ */
+.newrel-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 8px;
+}
+.newrel-album .disco-album-body { align-items: flex-start; }
+.newrel-album .disco-album-img { width: 48px; height: 48px; }
+.newrel-artist-line { margin: 2px 0 1px; }
+.newrel-artist-btn {
+  background: none; border: 0; padding: 0; cursor: pointer;
+  color: var(--color-text-secondary);
+  font-size: 11.5px;
+  text-align: left;
+}
+.newrel-artist-btn:hover { color: var(--color-accent); }
+@media (max-width: 720px) {
+  .newrel-grid { grid-template-columns: minmax(0, 1fr); }
 }
 
 /* ============ Ficha de artista comprimida (v=111) ============ */

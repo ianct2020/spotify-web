@@ -1,35 +1,36 @@
-import { isLoggedIn, loginWithSpotify, logout } from './auth.js?v=120';
-import { spotifyFetch, tryAutoLoadUserBackup } from './api.js?v=120';
-import { getValidToken } from './auth.js?v=120';
-import { cacheClearAll } from './storage.js?v=120';
-import { idbClearAll } from './idb.js?v=120';
-import { registerRoute, initRouter } from './router.js?v=120';
-import { showToast } from './ui/toast.js?v=120';
-import { pageHeader } from './ui/components.js?v=120';
+import { isLoggedIn, loginWithSpotify, logout } from './auth.js?v=121';
+import { spotifyFetch, tryAutoLoadUserBackup } from './api.js?v=121';
+import { getValidToken } from './auth.js?v=121';
+import { cacheClearAll } from './storage.js?v=121';
+import { idbClearAll } from './idb.js?v=121';
+import { registerRoute, initRouter } from './router.js?v=121';
+import { showToast } from './ui/toast.js?v=121';
+import { pageHeader } from './ui/components.js?v=121';
 
-import { render as renderSync } from './features/sync.js?v=120';
-import { render as renderDedupe } from './features/dedupe.js?v=120';
-import { render as renderDupalbums } from './features/duplicate-albums.js?v=120';
-import { render as renderZombies } from './features/zombies.js?v=120';
-import { render as renderVersions } from './features/versions.js?v=120';
-import { render as renderDashboard } from './features/dashboard.js?v=120';
-import { render as renderSmart } from './features/smart.js?v=120';
-import { render as renderSimilar } from './features/similar-artists.js?v=120';
-import { render as renderRabbit } from './features/rabbit-hole.js?v=120';
-import { render as renderByGenre } from './features/by-genre.js?v=120';
-import { render as renderByArtist } from './features/by-artist.js?v=120';
-import { render as renderRecs } from './features/recommendations.js?v=120';
-import { render as renderListened } from './features/listened.js?v=120';
-import { render as renderWrapped } from './features/wrapped.js?v=120';
-import { render as renderRecords } from './features/records.js?v=120';
-import { openImportHistory } from './features/import-history.js?v=120';
-import { bindOwnerLockedButtons } from './features/history-data.js?v=120';
-import { render as renderZeroPlays } from './features/zero-plays.js?v=120';
-import { render as renderSkips } from './features/skips.js?v=120';
-import { render as renderSearchLikes } from './features/search-likes.js?v=120';
-import { render as renderWthree } from './features/wthree.js?v=120';
-import { render as renderCovers } from './features/covers.js?v=120';
-import { render as renderDiscoverArtists } from './features/discover-artists.js?v=120';
+import { render as renderSync } from './features/sync.js?v=121';
+import { render as renderDedupe } from './features/dedupe.js?v=121';
+import { render as renderDupalbums } from './features/duplicate-albums.js?v=121';
+import { render as renderZombies } from './features/zombies.js?v=121';
+import { render as renderVersions } from './features/versions.js?v=121';
+import { render as renderDashboard } from './features/dashboard.js?v=121';
+import { render as renderSmart } from './features/smart.js?v=121';
+import { render as renderSimilar } from './features/similar-artists.js?v=121';
+import { render as renderRabbit } from './features/rabbit-hole.js?v=121';
+import { render as renderByGenre } from './features/by-genre.js?v=121';
+import { render as renderByArtist } from './features/by-artist.js?v=121';
+import { render as renderRecs } from './features/recommendations.js?v=121';
+import { render as renderListened } from './features/listened.js?v=121';
+import { render as renderWrapped } from './features/wrapped.js?v=121';
+import { render as renderRecords } from './features/records.js?v=121';
+import { openImportHistory } from './features/import-history.js?v=121';
+import { bindOwnerLockedButtons } from './features/history-data.js?v=121';
+import { render as renderZeroPlays } from './features/zero-plays.js?v=121';
+import { render as renderSkips } from './features/skips.js?v=121';
+import { render as renderSearchLikes } from './features/search-likes.js?v=121';
+import { render as renderWthree } from './features/wthree.js?v=121';
+import { render as renderCovers } from './features/covers.js?v=121';
+import { render as renderDiscoverArtists } from './features/discover-artists.js?v=121';
+import { render as renderNewReleases } from './features/new-releases.js?v=121';
 
 async function testConnection() {
   const token = await getValidToken();
@@ -250,6 +251,9 @@ function showApp(profile) {
           <a class="nav-link" data-route="discoverartists" href="#discover-artists">
             <span class="nav-link-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.35-4.35"/></svg></span> Sin escuchar de tus artistas
           </a>
+          <a class="nav-link" data-route="newreleases" href="#new-releases">
+            <span class="nav-link-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></span> Novedades de tus artistas
+          </a>
         </div>
         <div class="sidebar-section">
           <div class="sidebar-section-title">Limpieza</div>
@@ -406,6 +410,7 @@ function showApp(profile) {
   registerRoute('wthree', renderWthree);
   registerRoute('covers', renderCovers);
   registerRoute('discover-artists', renderDiscoverArtists);
+  registerRoute('new-releases', renderNewReleases);
 
   initRouter();
 }
@@ -457,6 +462,7 @@ const HOME_SECTIONS = [
       { hash: 'rabbit', icon: ICONS.rabbit, name: 'Rabbit hole', desc: 'Navegá artistas y tracks encadenados por género.' },
       { hash: 'recs', icon: ICONS.recs, name: 'Recomendaciones', desc: 'Basadas en tus scrobbles de Last.fm.' },
       { hash: 'discover-artists', icon: ICONS.search, name: 'Sin escuchar de tus artistas', desc: 'Discografía de tus artistas favoritos que aún no escuchaste.' },
+      { hash: 'new-releases', icon: ICONS.records, name: 'Novedades de tus artistas', desc: 'Lanzamientos recientes de tus artistas favoritos, filtrando lo que ya oíste.' },
     ],
   },
   {

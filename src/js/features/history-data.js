@@ -19,7 +19,7 @@ async function isOwner() {
 }
 
 const STATS_VERSION = 2;
-const PLAYS_VERSION = 2;
+const PLAYS_VERSION = 3;
 const LISTENED_VERSION = 2;
 const SKIP_VERSION = 1;
 const DETAIL_VERSION = 1;
@@ -68,7 +68,8 @@ async function hasLocalHistory() {
 // remoto no cambió estructuralmente.
 const OWNER_PREV_KEYS = {
   stats: ['history_stats_v1'],
-  plays: ['history_track_plays_v1'],
+  // v2 y v1 no traen `albums` — no las migro para forzar refetch de v3 con la lista de álbumes.
+  plays: [],
   listened: ['history_listened_albums_v1', 'history_albums_v1'],
   skip: [],
   detail: [],
@@ -141,7 +142,8 @@ async function loadHistoryStats() {
   return loadOne('stats', 'stats', d => !!d.years, () => dataUrl('history-stats.json', STATS_VERSION));
 }
 async function loadTrackPlays() {
-  return loadOne('plays', 'plays', d => !!d.tracks, () => dataUrl('history-track-plays.json', PLAYS_VERSION));
+  // requerimos `albums` para invalidar cualquier v2 stale (v2 solo traía tracks).
+  return loadOne('plays', 'plays', d => !!d.tracks && Array.isArray(d.albums), () => dataUrl('history-track-plays.json', PLAYS_VERSION));
 }
 async function loadListenedAlbums() {
   return loadOne('listened', 'listened', d => !!d.years, () => dataUrl('history-listened-albums.json', LISTENED_VERSION));

@@ -30,6 +30,7 @@ import { render as renderSearchLikes } from './features/search-likes.js';
 import { render as renderWthree } from './features/wthree.js';
 import { render as renderCovers } from './features/covers.js';
 import { render as renderDiscoverArtists } from './features/discover-artists.js';
+import { render as renderNewReleases } from './features/new-releases.js';
 
 async function testConnection() {
   const token = await getValidToken();
@@ -250,6 +251,9 @@ function showApp(profile) {
           <a class="nav-link" data-route="discoverartists" href="#discover-artists">
             <span class="nav-link-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.35-4.35"/></svg></span> Sin escuchar de tus artistas
           </a>
+          <a class="nav-link" data-route="newreleases" href="#new-releases">
+            <span class="nav-link-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></span> Novedades de tus artistas
+          </a>
         </div>
         <div class="sidebar-section">
           <div class="sidebar-section-title">Limpieza</div>
@@ -406,6 +410,7 @@ function showApp(profile) {
   registerRoute('wthree', renderWthree);
   registerRoute('covers', renderCovers);
   registerRoute('discover-artists', renderDiscoverArtists);
+  registerRoute('new-releases', renderNewReleases);
 
   initRouter();
 }
@@ -457,6 +462,7 @@ const HOME_SECTIONS = [
       { hash: 'rabbit', icon: ICONS.rabbit, name: 'Rabbit hole', desc: 'Navegá artistas y tracks encadenados por género.' },
       { hash: 'recs', icon: ICONS.recs, name: 'Recomendaciones', desc: 'Basadas en tus scrobbles de Last.fm.' },
       { hash: 'discover-artists', icon: ICONS.search, name: 'Sin escuchar de tus artistas', desc: 'Discografía de tus artistas favoritos que aún no escuchaste.' },
+      { hash: 'new-releases', icon: ICONS.records, name: 'Novedades de tus artistas', desc: 'Lanzamientos recientes de tus artistas favoritos, filtrando lo que ya oíste.' },
     ],
   },
   {

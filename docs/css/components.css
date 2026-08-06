@@ -874,7 +874,7 @@ body.modal-open {
   background: var(--color-surface);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
-  padding: 10px 14px;
+  padding: 8px 12px;
   margin-bottom: 14px;
   display: flex;
   flex-direction: column;
@@ -883,7 +883,7 @@ body.modal-open {
 .skips-topbar-row {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 8px;
   flex-wrap: wrap;
   min-width: 0;
 }
@@ -893,27 +893,27 @@ body.modal-open {
 }
 .skips-topbar-actions {
   display: flex;
-  gap: 8px;
+  gap: 6px;
   margin-left: auto;
   flex-wrap: wrap;
 }
 .skips-stat-mini {
   display: inline-flex;
   align-items: baseline;
-  gap: 6px;
-  padding: 4px 10px;
+  gap: 4px;
+  padding: 3px 8px;
   background: var(--color-elevated);
   border-radius: 100px;
   font-variant-numeric: tabular-nums;
   min-width: 0;
 }
 .skips-stat-mini-v {
-  font-size: 15px;
+  font-size: 13px;
   font-weight: 700;
   color: var(--color-accent);
 }
 .skips-stat-mini-l {
-  font-size: 11px;
+  font-size: 10.5px;
   color: var(--color-text-muted);
   white-space: nowrap;
 }
@@ -1025,9 +1025,9 @@ body.modal-open {
   border: 1px solid var(--color-border);
   background: var(--color-elevated);
   color: var(--color-text-secondary);
-  padding: 6px 12px;
+  padding: 4px 10px;
   border-radius: 100px;
-  font-size: 12px;
+  font-size: 11.5px;
   font-weight: 600;
   cursor: pointer;
   font-variant-numeric: tabular-nums;
@@ -1059,18 +1059,33 @@ body.modal-open {
 @media (min-width: 900px) {
   .skips-list.skips-list-cols {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    /* Los dos minmax + un track "gutter" de 1px con background del border
+       hacen de separador sutil entre columnas — se lee como dos listas. */
+    grid-template-columns: minmax(0, 1fr) 1px minmax(0, 1fr);
     grid-template-rows: repeat(var(--sk-rows, 1), auto);
     grid-auto-flow: column;
-    column-gap: 8px;
-    row-gap: 0;
+    column-gap: 14px;
+    row-gap: 4px;
     max-height: 70vh;
+    position: relative;
+  }
+  /* Franjita vertical al centro que actúa de separador entre columnas. */
+  .skips-list.skips-list-cols::before {
+    content: '';
+    position: absolute;
+    top: 12px;
+    bottom: 12px;
+    left: 50%;
+    width: 1px;
+    background: var(--color-border);
+    opacity: 0.7;
+    pointer-events: none;
   }
   .skips-list.skips-list-cols .skips-row {
     border-bottom: 1px solid var(--color-border);
     min-width: 0;
   }
-  .skips-list.skips-list-cols .skips-row-main { padding: 8px 12px 6px; }
+  .skips-list.skips-list-cols .skips-row-main { padding: 10px 12px 8px; }
   .skips-list.skips-list-cols .skips-row-top {
     grid-template-columns: auto 36px minmax(0,1fr) auto;
     gap: 8px;
