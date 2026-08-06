@@ -27,7 +27,7 @@
 - DELETE playlist items: body `{ items: [{uri}] }` (NO `{ tracks: [...] }` → da 400 "No uris provided")
 - Campo `popularity` en `/me/tracks`: **removido en la migración feb 2026**. Confirmado 2026-07-17 con 9548 tracks reales → 100% null. No usar más. Chart de popularidad sacado del Dashboard en v=41.
 - **Búsqueda** (`/search?type=album|track|artist`, con filtros `artist:"..."`): CONFIRMADO vivo (se usa en Similar y en Álbum similar v=45).
-- `GET /artists/{id}/albums`: **NO verificado** post-migración → en "Álbum similar" (v=45) se evitó y se usó `/search?q=artist:"X"&type=album` en su lugar. Si algún día hace falta, probar en el debug panel primero.
+- `GET /artists/{id}/albums`: **verificado 2026-08-05**: 400 "Invalid limit" con `limit=50&market=from_token`; funciona con `limit=20` sin `market`. Usado en `#discover-artists` y `#new-releases`. `getArtistAlbums()` (api.js) baja el limit a 20 y cae a `/search?q=artist:"X"&type=album` si el nativo devuelve 400 o 403.
 - `GET /albums/{id}/tracks`: usado best-effort en "Álbum similar" para el tracklist preview. Está envuelto en try/catch — si devuelve 403 la feature degrada sin romperse. No confirmado si sigue vivo.
 
 ## Client ID
