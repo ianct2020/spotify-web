@@ -862,12 +862,16 @@ async function saveToLibrary(ids) {
 // que sí sabemos que funciona. Cachea la decisión en memoria para no repetir
 // el probe en cada llamada.
 let _artistAlbumsEndpoint = null; // 'native' | 'search'
-async function getArtistAlbums(artistId, artistName, { includeSingles = true, limit = 50 } = {}) {
+async function getArtistAlbums(artistId, artistName, { includeSingles = true, limit = 20 } = {}) {
+  // Post-migración feb 2026 el endpoint devuelve 400 "Invalid limit" con
+  // limit=50 y también con market=from_token. Bajamos a 20 (el máximo que
+  // acepta hoy) y sacamos el market — verificado 2026-08-05 en vivo con
+  // 100+ llamadas devolviendo 400 antes del ajuste.
   const groups = includeSingles ? 'album,single' : 'album';
   const tryNative = async () => {
     const items = [];
-    let url = `/artists/${artistId}/albums?include_groups=${groups}&limit=${limit}&market=from_token`;
-    for (let i = 0; i < 10; i++) {
+    let url = `/artists/${artistId}/albums?include_groups=${groups}&limit=${Math.min(limit, 20)}`;
+    for (let i = 0; i < 15; i++) {
       const res = await spotifyFetch(url);
       if (!res) break;
       const batch = res.items || [];
@@ -905,9 +909,10 @@ async function getArtistAlbums(artistId, artistName, { includeSingles = true, li
     }
     return items;
   } catch (e) {
-    if (/403/.test(e.message)) {
+    // 403 (permiso denegado) o 400 (params inválidos) → fallback a /search.
+    if (/40[03]/.test(e.message)) {
       _artistAlbumsEndpoint = 'search';
-      console.warn('[api] getArtistAlbums: /artists/{id}/albums → 403 · fallback a /search');
+      console.warn('[api] getArtistAlbums: /artists/{id}/albums →', e.message.slice(0, 60), '· fallback a /search');
       return trySearch();
     }
     throw e;

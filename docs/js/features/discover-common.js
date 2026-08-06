@@ -6,9 +6,9 @@
 //     (util/album-heard.js: historial completo + likes + listened + w-three)
 //   - permiten "+ Biblioteca" y "Crear playlist con lo elegido"
 
-import { idbGetCached, idbSetCached } from '../idb.js?v=121';
-import { getArtistAlbums, searchArtistByName, getAlbumTracks, saveToLibrary, createPlaylist, addTracksToPlaylist } from '../api.js?v=121';
-import { albumKey } from '../util/album-key.js?v=121';
+import { idbGetCached, idbSetCached } from '../idb.js?v=122';
+import { getArtistAlbums, searchArtistByName, getAlbumTracks, saveToLibrary, createPlaylist, addTracksToPlaylist } from '../api.js?v=122';
+import { albumKey } from '../util/album-key.js?v=122';
 
 const DISCO_TTL_MIN = 30 * 24 * 60;       // 30 días
 const ARTIST_ID_TTL_MIN = 60 * 24 * 60;   // 60 días — los ids no cambian

@@ -42,8 +42,9 @@ function getFilterYears() {
   return Number.isFinite(n) && n >= 0 ? n : 0;
 }
 function getLoadedMore() {
-  const n = parseInt(localStorage.getItem(LS_LOADED_MORE) || String(DEFAULT_INITIAL), 10);
-  return Number.isFinite(n) && n >= 5 ? n : DEFAULT_INITIAL;
+  // Piso duro en DEFAULT_INITIAL — si el localStorage viejo tenía 20/40, hoy arrancamos 100 igual.
+  const n = parseInt(localStorage.getItem(LS_LOADED_MORE) || '0', 10);
+  return Math.max(DEFAULT_INITIAL, Number.isFinite(n) ? n : 0);
 }
 
 const state = {

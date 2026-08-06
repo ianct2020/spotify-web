@@ -112,13 +112,12 @@ function targetToScan() {
 }
 
 function renderShell(content, totalCandidates) {
-  const eligible = eligibleArtists().length;
   content.innerHTML = `
     <div class="disco-topbar">
       <div class="disco-summary">
         <span id="newrel-count">0</span>/<span id="newrel-total-scan">${targetToScan()}</span> artistas escaneados
         · <span id="newrel-unheard-count">0</span> novedades sin escuchar
-        <span class="disco-summary-sub">${eligible.toLocaleString('es-ES')} artistas con ≥${state.minLikes} likes</span>
+        <span class="disco-summary-sub" id="newrel-summary-sub">${eligibleArtists().length.toLocaleString('es-ES')} artistas con ≥${state.minLikes} likes</span>
       </div>
       <div class="disco-controls">
         <div class="disco-chip-group" id="newrel-likes">
@@ -152,8 +151,10 @@ function renderShell(content, totalCandidates) {
     state.minLikes = n;
     localStorage.setItem(LS_MIN_LIKES, String(n));
     content.querySelectorAll('#newrel-likes [data-min]').forEach(b => b.classList.toggle('is-on', b === btn));
-    // Al subir el umbral se puede haber vaciado la cola de scan — reprobamos.
+    // Al cambiar el umbral se puede haber vaciado la cola — reprobamos + actualizo sub.
     document.getElementById('newrel-total-scan').textContent = targetToScan();
+    const sub = document.getElementById('newrel-summary-sub');
+    if (sub) sub.textContent = `${eligibleArtists().length.toLocaleString('es-ES')} artistas con ≥${state.minLikes} likes`;
     scanArtists(content).catch(err => console.warn('[newrel] scan:', err));
     refreshList(content);
   });

@@ -10,12 +10,12 @@
 // 100 artistas en lugar de 20. Lógica de fetch/cache/playlist compartida en
 // features/discover-common.js con #new-releases.
 
-import { escapeHtml, pageHeader } from '../ui/components.js?v=121';
-import { showToast } from '../ui/toast.js?v=121';
-import { openArtistCard } from './artist-card.js?v=121';
-import { openAlbumCard } from './album-card.js?v=121';
-import { albumKey } from '../util/album-key.js?v=121';
-import { buildAlbumHeardIndex, markAlbumHeard } from '../util/album-heard.js?v=121';
+import { escapeHtml, pageHeader } from '../ui/components.js?v=122';
+import { showToast } from '../ui/toast.js?v=122';
+import { openArtistCard } from './artist-card.js?v=122';
+import { openAlbumCard } from './album-card.js?v=122';
+import { albumKey } from '../util/album-key.js?v=122';
+import { buildAlbumHeardIndex, markAlbumHeard } from '../util/album-heard.js?v=122';
 import {
   getArtistIdCached,
   getArtistDiscoCached,
@@ -24,7 +24,7 @@ import {
   yearOf,
   createDiscoverPlaylist,
   saveAlbumTracksToLibrary,
-} from './discover-common.js?v=121';
+} from './discover-common.js?v=122';
 
 const LS_FILTER_KIND = 'discoverart_filter_kind';    // 'all' | 'album' | 'single'
 const LS_FILTER_YEARS = 'discoverart_filter_years';  // 0 = todo, o número de años
@@ -42,8 +42,9 @@ function getFilterYears() {
   return Number.isFinite(n) && n >= 0 ? n : 0;
 }
 function getLoadedMore() {
-  const n = parseInt(localStorage.getItem(LS_LOADED_MORE) || String(DEFAULT_INITIAL), 10);
-  return Number.isFinite(n) && n >= 5 ? n : DEFAULT_INITIAL;
+  // Piso duro en DEFAULT_INITIAL — si el localStorage viejo tenía 20/40, hoy arrancamos 100 igual.
+  const n = parseInt(localStorage.getItem(LS_LOADED_MORE) || '0', 10);
+  return Math.max(DEFAULT_INITIAL, Number.isFinite(n) ? n : 0);
 }
 
 const state = {

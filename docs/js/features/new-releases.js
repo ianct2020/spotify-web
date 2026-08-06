@@ -10,11 +10,11 @@
 //   - Umbral de likes: 5+ / 10+ / 20+
 //   - Ventana temporal: 3 / 6 / 12 / 24 meses (default 12)
 
-import { escapeHtml, pageHeader } from '../ui/components.js?v=121';
-import { showToast } from '../ui/toast.js?v=121';
-import { openArtistCard } from './artist-card.js?v=121';
-import { openAlbumCard } from './album-card.js?v=121';
-import { buildAlbumHeardIndex, markAlbumHeard } from '../util/album-heard.js?v=121';
+import { escapeHtml, pageHeader } from '../ui/components.js?v=122';
+import { showToast } from '../ui/toast.js?v=122';
+import { openArtistCard } from './artist-card.js?v=122';
+import { openAlbumCard } from './album-card.js?v=122';
+import { buildAlbumHeardIndex, markAlbumHeard } from '../util/album-heard.js?v=122';
 import {
   getArtistIdCached,
   getArtistDiscoCached,
@@ -24,7 +24,7 @@ import {
   releaseTs,
   createDiscoverPlaylist,
   saveAlbumTracksToLibrary,
-} from './discover-common.js?v=121';
+} from './discover-common.js?v=122';
 
 const LS_MIN_LIKES = 'newrel_min_likes';   // 5 / 10 / 20
 const LS_MONTHS = 'newrel_months';         // 3 / 6 / 12 / 24
@@ -112,13 +112,12 @@ function targetToScan() {
 }
 
 function renderShell(content, totalCandidates) {
-  const eligible = eligibleArtists().length;
   content.innerHTML = `
     <div class="disco-topbar">
       <div class="disco-summary">
         <span id="newrel-count">0</span>/<span id="newrel-total-scan">${targetToScan()}</span> artistas escaneados
         · <span id="newrel-unheard-count">0</span> novedades sin escuchar
-        <span class="disco-summary-sub">${eligible.toLocaleString('es-ES')} artistas con ≥${state.minLikes} likes</span>
+        <span class="disco-summary-sub" id="newrel-summary-sub">${eligibleArtists().length.toLocaleString('es-ES')} artistas con ≥${state.minLikes} likes</span>
       </div>
       <div class="disco-controls">
         <div class="disco-chip-group" id="newrel-likes">
@@ -152,8 +151,10 @@ function renderShell(content, totalCandidates) {
     state.minLikes = n;
     localStorage.setItem(LS_MIN_LIKES, String(n));
     content.querySelectorAll('#newrel-likes [data-min]').forEach(b => b.classList.toggle('is-on', b === btn));
-    // Al subir el umbral se puede haber vaciado la cola de scan — reprobamos.
+    // Al cambiar el umbral se puede haber vaciado la cola — reprobamos + actualizo sub.
     document.getElementById('newrel-total-scan').textContent = targetToScan();
+    const sub = document.getElementById('newrel-summary-sub');
+    if (sub) sub.textContent = `${eligibleArtists().length.toLocaleString('es-ES')} artistas con ≥${state.minLikes} likes`;
     scanArtists(content).catch(err => console.warn('[newrel] scan:', err));
     refreshList(content);
   });
