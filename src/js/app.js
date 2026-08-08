@@ -31,6 +31,7 @@ import { render as renderWthree } from './features/wthree.js';
 import { render as renderCovers } from './features/covers.js';
 import { render as renderDiscoverArtists } from './features/discover-artists.js';
 import { render as renderNewReleases } from './features/new-releases.js';
+import { render as renderSinClasificar } from './features/sin-clasificar.js';
 
 async function testConnection() {
   const token = await getValidToken();
@@ -272,6 +273,9 @@ function showApp(profile) {
           <a class="nav-link" data-route="zeroplays" href="#zeroplays">
             <span class="nav-link-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="4.9" y1="4.9" x2="19.1" y2="19.1"/></svg></span> Sin plays
           </a>
+          <a class="nav-link" data-route="sin-clasificar" href="#sin-clasificar">
+            <span class="nav-link-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h13"/><path d="M3 12h9"/><path d="M3 18h7"/><circle cx="18" cy="16" r="3"/><path d="M18 10.5v1.5"/></svg></span> Sin clasificar
+          </a>
           <a class="nav-link" data-route="skips" href="#skips">
             <span class="nav-link-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 4 15 12 5 20 5 4"/><line x1="19" y1="5" x2="19" y2="19"/></svg></span> Skips crónicos
           </a>
@@ -411,6 +415,7 @@ function showApp(profile) {
   registerRoute('covers', renderCovers);
   registerRoute('discover-artists', renderDiscoverArtists);
   registerRoute('new-releases', renderNewReleases);
+  registerRoute('sin-clasificar', renderSinClasificar);
 
   initRouter();
 }
@@ -434,6 +439,7 @@ const ICONS = {
   zeroplays: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="4.9" y1="4.9" x2="19.1" y2="19.1"/></svg>',
   skips: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 4 15 12 5 20 5 4"/><line x1="19" y1="5" x2="19" y2="19"/></svg>',
   search: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>',
+  sinclasificar: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h13"/><path d="M3 12h9"/><path d="M3 18h7"/><circle cx="18" cy="16" r="3"/><path d="M18 10.5v1.5"/></svg>',
 };
 
 const HOME_SECTIONS = [
@@ -473,6 +479,7 @@ const HOME_SECTIONS = [
       { hash: 'zombies', icon: ICONS.zombies, name: 'Zombis', desc: 'Tracks eliminados del catálogo de Spotify.' },
       { hash: 'versions', icon: ICONS.versions, name: 'Versiones', desc: 'Mismo tema en distintos álbumes (remaster, live, etc.).' },
       { hash: 'zeroplays', icon: ICONS.zeroplays, name: 'Sin plays', desc: 'Likes que nunca reprodujiste según tu historial de Spotify.' },
+      { hash: 'sin-clasificar', icon: ICONS.sinclasificar, name: 'Sin clasificar', desc: 'Likes que no están en ninguna de tus playlists temáticas.' },
       { hash: 'skips', icon: ICONS.skips, name: 'Skips crónicos', desc: 'Likes que reproducís seguido pero casi siempre le das next.' },
     ],
   },
