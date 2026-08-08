@@ -1,4 +1,4 @@
-import { openModal, closeTop } from './modal-stack.js?v=128';
+import { openModal, closeTop } from './modal-stack.js?v=129';
 
 function renderTrackRow(track, extra = '') {
   const art = track.album?.images?.[2]?.url || track.album?.images?.[0]?.url || '';
@@ -89,10 +89,13 @@ function wireProgressButtons() {
   };
 }
 
-// showProgress(text, loaded, total, { onCancel }) — pasá onCancel solo en la primera
-// llamada; las de progreso (3 args) actualizan sin tocar los botones.
+// showProgress(text, loaded, total, { onCancel, minimized }) — pasá onCancel solo en la
+// primera llamada; las de progreso (3 args) actualizan sin tocar los botones.
+// `minimized: true` arranca directo en el pill chico, para procesos largos que no
+// tienen que bloquear la app (ej: el escaneo de #sin-clasificar).
 function showProgress(text, loaded = 0, total = 0, opts = {}) {
   if (opts.onCancel) { _progressCancel = opts.onCancel; _progressMin = false; }
+  if (opts.minimized !== undefined) _progressMin = !!opts.minimized;
   _progressState = { text, loaded, total };
   const cancellable = !!_progressCancel;
   const mode = _progressMin ? 'mini' : 'full';

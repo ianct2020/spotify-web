@@ -10,11 +10,11 @@
 //   - Umbral de likes: 5+ / 10+ / 20+
 //   - Ventana temporal: 3 / 6 / 12 / 24 meses (default 12)
 
-import { escapeHtml, pageHeader } from '../ui/components.js?v=128';
-import { showToast } from '../ui/toast.js?v=128';
-import { openArtistCard } from './artist-card.js?v=128';
-import { openAlbumCard } from './album-card.js?v=128';
-import { buildAlbumHeardIndex, markAlbumHeard } from '../util/album-heard.js?v=128';
+import { escapeHtml, pageHeader } from '../ui/components.js?v=129';
+import { showToast } from '../ui/toast.js?v=129';
+import { openArtistCard } from './artist-card.js?v=129';
+import { openAlbumCard } from './album-card.js?v=129';
+import { buildAlbumHeardIndex, markAlbumHeard } from '../util/album-heard.js?v=129';
 import {
   getArtistIdCached,
   getArtistDiscoCached,
@@ -28,7 +28,7 @@ import {
   saveScanCache,
   clearScanCache,
   agoLabel,
-} from './discover-common.js?v=128';
+} from './discover-common.js?v=129';
 
 const SCAN_KEY = 'new_releases';
 

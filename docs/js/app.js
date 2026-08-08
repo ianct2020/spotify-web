@@ -1,36 +1,37 @@
-import { isLoggedIn, loginWithSpotify, logout } from './auth.js?v=128';
-import { spotifyFetch, tryAutoLoadUserBackup } from './api.js?v=128';
-import { getValidToken } from './auth.js?v=128';
-import { cacheClearAll } from './storage.js?v=128';
-import { idbClearAll } from './idb.js?v=128';
-import { registerRoute, initRouter } from './router.js?v=128';
-import { showToast } from './ui/toast.js?v=128';
-import { pageHeader } from './ui/components.js?v=128';
+import { isLoggedIn, loginWithSpotify, logout } from './auth.js?v=129';
+import { spotifyFetch, tryAutoLoadUserBackup } from './api.js?v=129';
+import { getValidToken } from './auth.js?v=129';
+import { cacheClearAll } from './storage.js?v=129';
+import { idbClearAll } from './idb.js?v=129';
+import { registerRoute, initRouter } from './router.js?v=129';
+import { showToast } from './ui/toast.js?v=129';
+import { pageHeader } from './ui/components.js?v=129';
 
-import { render as renderSync } from './features/sync.js?v=128';
-import { render as renderDedupe } from './features/dedupe.js?v=128';
-import { render as renderDupalbums } from './features/duplicate-albums.js?v=128';
-import { render as renderZombies } from './features/zombies.js?v=128';
-import { render as renderVersions } from './features/versions.js?v=128';
-import { render as renderDashboard } from './features/dashboard.js?v=128';
-import { render as renderSmart } from './features/smart.js?v=128';
-import { render as renderSimilar } from './features/similar-artists.js?v=128';
-import { render as renderRabbit } from './features/rabbit-hole.js?v=128';
-import { render as renderByGenre } from './features/by-genre.js?v=128';
-import { render as renderByArtist } from './features/by-artist.js?v=128';
-import { render as renderRecs } from './features/recommendations.js?v=128';
-import { render as renderListened } from './features/listened.js?v=128';
-import { render as renderWrapped } from './features/wrapped.js?v=128';
-import { render as renderRecords } from './features/records.js?v=128';
-import { openImportHistory } from './features/import-history.js?v=128';
-import { bindOwnerLockedButtons } from './features/history-data.js?v=128';
-import { render as renderZeroPlays } from './features/zero-plays.js?v=128';
-import { render as renderSkips } from './features/skips.js?v=128';
-import { render as renderSearchLikes } from './features/search-likes.js?v=128';
-import { render as renderWthree } from './features/wthree.js?v=128';
-import { render as renderCovers } from './features/covers.js?v=128';
-import { render as renderDiscoverArtists } from './features/discover-artists.js?v=128';
-import { render as renderNewReleases } from './features/new-releases.js?v=128';
+import { render as renderSync } from './features/sync.js?v=129';
+import { render as renderDedupe } from './features/dedupe.js?v=129';
+import { render as renderDupalbums } from './features/duplicate-albums.js?v=129';
+import { render as renderZombies } from './features/zombies.js?v=129';
+import { render as renderVersions } from './features/versions.js?v=129';
+import { render as renderDashboard } from './features/dashboard.js?v=129';
+import { render as renderSmart } from './features/smart.js?v=129';
+import { render as renderSimilar } from './features/similar-artists.js?v=129';
+import { render as renderRabbit } from './features/rabbit-hole.js?v=129';
+import { render as renderByGenre } from './features/by-genre.js?v=129';
+import { render as renderByArtist } from './features/by-artist.js?v=129';
+import { render as renderRecs } from './features/recommendations.js?v=129';
+import { render as renderListened } from './features/listened.js?v=129';
+import { render as renderWrapped } from './features/wrapped.js?v=129';
+import { render as renderRecords } from './features/records.js?v=129';
+import { openImportHistory } from './features/import-history.js?v=129';
+import { bindOwnerLockedButtons } from './features/history-data.js?v=129';
+import { render as renderZeroPlays } from './features/zero-plays.js?v=129';
+import { render as renderSkips } from './features/skips.js?v=129';
+import { render as renderSearchLikes } from './features/search-likes.js?v=129';
+import { render as renderWthree } from './features/wthree.js?v=129';
+import { render as renderCovers } from './features/covers.js?v=129';
+import { render as renderDiscoverArtists } from './features/discover-artists.js?v=129';
+import { render as renderNewReleases } from './features/new-releases.js?v=129';
+import { render as renderSinClasificar } from './features/sin-clasificar.js?v=129';
 
 async function testConnection() {
   const token = await getValidToken();
@@ -272,6 +273,9 @@ function showApp(profile) {
           <a class="nav-link" data-route="zeroplays" href="#zeroplays">
             <span class="nav-link-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="4.9" y1="4.9" x2="19.1" y2="19.1"/></svg></span> Sin plays
           </a>
+          <a class="nav-link" data-route="sin-clasificar" href="#sin-clasificar">
+            <span class="nav-link-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h13"/><path d="M3 12h9"/><path d="M3 18h7"/><circle cx="18" cy="16" r="3"/><path d="M18 10.5v1.5"/></svg></span> Sin clasificar
+          </a>
           <a class="nav-link" data-route="skips" href="#skips">
             <span class="nav-link-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 4 15 12 5 20 5 4"/><line x1="19" y1="5" x2="19" y2="19"/></svg></span> Skips crónicos
           </a>
@@ -411,6 +415,7 @@ function showApp(profile) {
   registerRoute('covers', renderCovers);
   registerRoute('discover-artists', renderDiscoverArtists);
   registerRoute('new-releases', renderNewReleases);
+  registerRoute('sin-clasificar', renderSinClasificar);
 
   initRouter();
 }
@@ -434,6 +439,7 @@ const ICONS = {
   zeroplays: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="4.9" y1="4.9" x2="19.1" y2="19.1"/></svg>',
   skips: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 4 15 12 5 20 5 4"/><line x1="19" y1="5" x2="19" y2="19"/></svg>',
   search: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>',
+  sinclasificar: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h13"/><path d="M3 12h9"/><path d="M3 18h7"/><circle cx="18" cy="16" r="3"/><path d="M18 10.5v1.5"/></svg>',
 };
 
 const HOME_SECTIONS = [
@@ -473,6 +479,7 @@ const HOME_SECTIONS = [
       { hash: 'zombies', icon: ICONS.zombies, name: 'Zombis', desc: 'Tracks eliminados del catálogo de Spotify.' },
       { hash: 'versions', icon: ICONS.versions, name: 'Versiones', desc: 'Mismo tema en distintos álbumes (remaster, live, etc.).' },
       { hash: 'zeroplays', icon: ICONS.zeroplays, name: 'Sin plays', desc: 'Likes que nunca reprodujiste según tu historial de Spotify.' },
+      { hash: 'sin-clasificar', icon: ICONS.sinclasificar, name: 'Sin clasificar', desc: 'Likes que no están en ninguna de tus playlists temáticas.' },
       { hash: 'skips', icon: ICONS.skips, name: 'Skips crónicos', desc: 'Likes que reproducís seguido pero casi siempre le das next.' },
     ],
   },

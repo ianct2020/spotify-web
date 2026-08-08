@@ -2,14 +2,14 @@
 // primer/último año, top tracks del artista, hover-play, y plays actuales
 // vía Stats.fm si aplica. Se abre desde cualquier feature con openArtistCard({ name }).
 
-import { loadHistoryStats, loadArtistTracks, isOwner } from './history-data.js?v=128';
-import { escapeHtml } from '../ui/components.js?v=128';
-import { getPreview, getArtistTopPreview } from '../api/preview-providers.js?v=128';
-import { togglePreview, playingKey, attachHover } from '../ui/preview-player.js?v=128';
-import { hasUsername, loadTopLifetime } from '../api/statsfm.js?v=128';
-import { openTrackCard } from './track-card.js?v=128';
-import { spotifyFetch, getBestAvailableLikes } from '../api.js?v=128';
-import { openModal, closeTop } from '../ui/modal-stack.js?v=128';
+import { loadHistoryStats, loadArtistTracks, isOwner } from './history-data.js?v=129';
+import { escapeHtml } from '../ui/components.js?v=129';
+import { getPreview, getArtistTopPreview } from '../api/preview-providers.js?v=129';
+import { togglePreview, playingKey, attachHover } from '../ui/preview-player.js?v=129';
+import { hasUsername, loadTopLifetime } from '../api/statsfm.js?v=129';
+import { openTrackCard } from './track-card.js?v=129';
+import { spotifyFetch, getBestAvailableLikes } from '../api.js?v=129';
+import { openModal, closeTop } from '../ui/modal-stack.js?v=129';
 
 // Cache de imágenes de artistas resueltas por Spotify search. TTL 30 días.
 // Se persiste el hit y la falta (null) para no reintentar contra tracks
