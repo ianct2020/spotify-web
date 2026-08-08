@@ -2,17 +2,17 @@
 // por álbum). Muestra qué álbumes ya tienen picks, cuántos, y cuáles te faltan.
 // Ordenado por álbumes más escuchados primero para priorizar tu tiempo.
 
-import { spotifyFetch, getAllPlaylistItems, getAllUserPlaylists, addTracksToPlaylist, removeTracksFromPlaylist, reorderPlaylistItems, getPlaylistSnapshotId, getCachedPlaylistSnapshot, updatePlaylistItemsCache, getBestAvailableLikes } from '../api.js?v=127';
-import { loadHistoryStats, loadListenedAlbums, isOwner, ownerLockedMessage } from './history-data.js?v=127';
-import { escapeHtml, pageHeader } from '../ui/components.js?v=127';
-import { showToast } from '../ui/toast.js?v=127';
-import { activateMarquee, marqueeSpan } from '../ui/marquee.js?v=127';
-import { openModal, closeTop, closeById } from '../ui/modal-stack.js?v=127';
-import { getPreview } from '../api/preview-providers.js?v=127';
-import { togglePreview, playingKey } from '../ui/preview-player.js?v=127';
-import { openAlbumCard } from './album-card.js?v=127';
-import { albumKey } from '../util/album-key.js?v=127';
-import { computeUpdatedPickPositions } from '../util/reorder-shifts.js?v=127';
+import { spotifyFetch, getAllPlaylistItems, getAllUserPlaylists, addTracksToPlaylist, removeTracksFromPlaylist, reorderPlaylistItems, getPlaylistSnapshotId, getCachedPlaylistSnapshot, updatePlaylistItemsCache, getBestAvailableLikes } from '../api.js?v=128';
+import { loadHistoryStats, loadListenedAlbums, isOwner, ownerLockedMessage } from './history-data.js?v=128';
+import { escapeHtml, pageHeader } from '../ui/components.js?v=128';
+import { showToast } from '../ui/toast.js?v=128';
+import { activateMarquee, marqueeSpan } from '../ui/marquee.js?v=128';
+import { openModal, closeTop, closeById } from '../ui/modal-stack.js?v=128';
+import { getPreview } from '../api/preview-providers.js?v=128';
+import { togglePreview, playingKey } from '../ui/preview-player.js?v=128';
+import { openAlbumCard } from './album-card.js?v=128';
+import { albumKey } from '../util/album-key.js?v=128';
+import { computeUpdatedPickPositions } from '../util/reorder-shifts.js?v=128';
 
 const LS_KEY_ID = 'wthree_playlist_id';
 const LS_KEY_NAME = 'wthree_playlist_name';
