@@ -2,17 +2,17 @@
 // por álbum). Muestra qué álbumes ya tienen picks, cuántos, y cuáles te faltan.
 // Ordenado por álbumes más escuchados primero para priorizar tu tiempo.
 
-import { spotifyFetch, getAllPlaylistItems, getAllUserPlaylists, addTracksToPlaylist, removeTracksFromPlaylist, reorderPlaylistItems, getPlaylistSnapshotId, getCachedPlaylistSnapshot, updatePlaylistItemsCache } from '../api.js?v=126';
-import { loadHistoryStats, loadListenedAlbums, isOwner, ownerLockedMessage } from './history-data.js?v=126';
-import { escapeHtml, pageHeader } from '../ui/components.js?v=126';
-import { showToast } from '../ui/toast.js?v=126';
-import { activateMarquee, marqueeSpan } from '../ui/marquee.js?v=126';
-import { openModal, closeTop, closeById } from '../ui/modal-stack.js?v=126';
-import { getPreview } from '../api/preview-providers.js?v=126';
-import { togglePreview, playingKey } from '../ui/preview-player.js?v=126';
-import { openAlbumCard } from './album-card.js?v=126';
-import { albumKey } from '../util/album-key.js?v=126';
-import { computeUpdatedPickPositions } from '../util/reorder-shifts.js?v=126';
+import { spotifyFetch, getAllPlaylistItems, getAllUserPlaylists, addTracksToPlaylist, removeTracksFromPlaylist, reorderPlaylistItems, getPlaylistSnapshotId, getCachedPlaylistSnapshot, updatePlaylistItemsCache, getBestAvailableLikes } from '../api.js?v=127';
+import { loadHistoryStats, loadListenedAlbums, isOwner, ownerLockedMessage } from './history-data.js?v=127';
+import { escapeHtml, pageHeader } from '../ui/components.js?v=127';
+import { showToast } from '../ui/toast.js?v=127';
+import { activateMarquee, marqueeSpan } from '../ui/marquee.js?v=127';
+import { openModal, closeTop, closeById } from '../ui/modal-stack.js?v=127';
+import { getPreview } from '../api/preview-providers.js?v=127';
+import { togglePreview, playingKey } from '../ui/preview-player.js?v=127';
+import { openAlbumCard } from './album-card.js?v=127';
+import { albumKey } from '../util/album-key.js?v=127';
+import { computeUpdatedPickPositions } from '../util/reorder-shifts.js?v=127';
 
 const LS_KEY_ID = 'wthree_playlist_id';
 const LS_KEY_NAME = 'wthree_playlist_name';
@@ -34,6 +34,47 @@ let showingHidden = false; // vista invertida (mostrar SOLO los ocultos para res
 // (nadie más editó entre medio), sin depender del cache de items que fue
 // invalidado post-save. Sin esto, cada guardado forzaría un refetch de 18s.
 let lastLocalSnapshot = null;
+
+// ── Likes, para marcar con ♥ las pistas de la tracklist (v=127) ──────────────
+//
+// Elegir los 3 picks a ciegas era adivinar: ahora se ve de un vistazo cuáles ya
+// están en "me gusta". Se indexa por id de track y también por nombre+artista
+// normalizados, porque un like puede venir de otra edición del disco (deluxe,
+// remaster) y ahí el id no coincide aunque sea la misma canción.
+let likedIndex = null;      // { ids:Set, nameKeys:Set } | null
+let likedIndexPromise = null;
+
+function likeNameKey(name, artist) {
+  const n = (name || '').toLowerCase().replace(/\s*[([].*?[)\]]/g, '').trim();
+  const ar = (artist || '').toLowerCase().trim();
+  return `${n}||${ar}`;
+}
+
+function ensureLikedIndex() {
+  if (likedIndex) return Promise.resolve(likedIndex);
+  if (likedIndexPromise) return likedIndexPromise;
+  likedIndexPromise = (async () => {
+    const ids = new Set();
+    const nameKeys = new Set();
+    try {
+      const { items } = await getBestAvailableLikes();
+      for (const it of (items || [])) {
+        const t = it?.track;
+        if (!t) continue;
+        if (t.id) ids.add(t.id);
+        nameKeys.add(likeNameKey(t.name, t.artists?.[0]?.name));
+      }
+      console.info(`[wthree] índice de likes: ${ids.size} pistas`);
+    } catch (e) {
+      console.warn('[wthree] no pude cargar likes para marcar la tracklist:', e.message);
+    }
+    likedIndex = { ids, nameKeys };
+    return likedIndex;
+  })();
+  return likedIndexPromise;
+}
+
+const HEART_SVG = '<svg viewBox="0 0 24 24" width="11" height="11" fill="currentColor" aria-hidden="true"><path d="M12 21s-7.5-4.6-9.5-9A5 5 0 0 1 12 6.5 5 5 0 0 1 21.5 12c-2 4.4-9.5 9-9.5 9z"/></svg>';
 
 function loadHidden() {
   try {
@@ -562,6 +603,10 @@ async function openAlbumModal(a) {
     }
   }
 
+  // Los likes ya suelen estar en caché (IDB); si no, esto no bloquea el modal
+  // más de lo que ya tardó el fetch del álbum.
+  const liked = await ensureLikedIndex();
+
   const pickIds = new Set(a.picks.map(p => p.id));
   const trackData = tracks.map(t => {
     const norm = (t.name || '').toLowerCase().replace(/\s*\(.*?\)|\s*\[.*?\]/g, '').trim();
@@ -571,8 +616,10 @@ async function openAlbumModal(a) {
       name: t.name,
       plays: playsByTrackName.get(norm) || 0,
       picked: pickIds.has(t.id),
+      liked: liked.ids.has(t.id) || liked.nameKeys.has(likeNameKey(t.name, t.artists?.[0]?.name || a.artist)),
     };
   });
+  const likedCount = trackData.filter(t => t.liked).length;
 
   const missingSlots = Math.max(0, 3 - a.picks.length);
   const suggestions = trackData
@@ -585,7 +632,7 @@ async function openAlbumModal(a) {
   const origOrder = [...a.picks].sort((x, y) => (x.pos ?? 0) - (y.pos ?? 0));
   let orderedPicks = origOrder.map(p => ({ id: p.id, uri: p.uri, name: p.name }));
 
-  metaEl.textContent = `${tracks.length} pistas · ${a.picks.length} en w-three${suggestions.length ? ` · 💡 ${suggestions.length} sugerido${suggestions.length === 1 ? '' : 's'}` : ''}`;
+  metaEl.textContent = `${tracks.length} pistas · ${a.picks.length} en w-three${likedCount ? ` · ♥ ${likedCount} en me gusta` : ''}${suggestions.length ? ` · 💡 ${suggestions.length} sugerido${suggestions.length === 1 ? '' : 's'}` : ''}`;
 
   // Tracklist en 2 columnas cuando hay ≥6 pistas (con <6 no vale la pena).
   // grid-auto-flow: column necesita saber cuántas filas por columna → ceil(N/2).
@@ -600,6 +647,7 @@ async function openAlbumModal(a) {
             <input type="checkbox" class="wthree-track-check" data-id="${t.id}" data-uri="${t.uri}" data-name="${escapeHtml(t.name)}" ${t.picked ? 'checked' : ''}>
             <span class="wthree-track-num">${i + 1}</span>
             <span class="wthree-track-name">${escapeHtml(t.name)}</span>
+            <span class="wthree-track-like" ${t.liked ? `title="Ya está en tus me gusta" aria-label="En me gusta"` : 'aria-hidden="true"'}>${t.liked ? HEART_SVG : ''}</span>
             <span class="wthree-track-plays">${t.plays > 0 ? t.plays : ''}</span>
             <button type="button" class="wt-play-btn" data-play-id="${t.id}" data-play-name="${escapeHtml(t.name)}" title="Preview 30s" aria-label="Preview de ${escapeHtml(t.name)}">${PLAY_SVG}</button>
           </label>
@@ -769,7 +817,16 @@ async function openAlbumModal(a) {
     };
   }
 
-  saveBtn.onclick = () => applyChanges(a, saveBtn, orderedPicks, origOrder);
+  // Cierra el modal al toque y deja el guardado corriendo solo. Si no hay nada
+  // que guardar, el modal se queda abierto y solo avisa.
+  saveBtn.onclick = () => {
+    if (computeDiff(orderedPicks, origOrder).noChanges) {
+      showToast('No hay cambios', 'info');
+      return;
+    }
+    closeById(modalId);
+    saveInBackground(a, orderedPicks, origOrder);
+  };
 }
 
 async function fetchAlbumTracks(a) {
@@ -890,7 +947,68 @@ async function verifyAlbumOrderAtRange(playlistId, expectedUris, offset, limit) 
   return { ok: true, got: gotInOrder };
 }
 
-async function applyChanges(a, saveBtn, orderedPicks, origOrder) {
+// ── Guardado en segundo plano (v=127) ────────────────────────────────────────
+//
+// Guardar tarda 30-40s (snapshot + add + remove + un reorder por pick + verify)
+// y hasta ahora se hacía con el modal abierto y el botón en "Guardando…": la
+// app quedaba clavada todo ese rato. Ahora el modal se cierra al instante y el
+// guardado sigue solo, con un pill fijo abajo a la izquierda como señal de que
+// hay algo en curso. Al terminar, el toast (sticky por tipo, ver ui/toast.js)
+// dice si salió bien o mal.
+//
+// Ojo: NO se toca applyChanges por dentro. Esto es solo cómo se la invoca y
+// cómo se muestra el progreso.
+let savingCount = 0;
+
+function updateSavingPill(label) {
+  let pill = document.getElementById('wt-saving-pill');
+  if (savingCount <= 0) {
+    pill?.remove();
+    return;
+  }
+  if (!pill) {
+    pill = document.createElement('div');
+    pill.id = 'wt-saving-pill';
+    pill.className = 'wt-saving-pill';
+    pill.setAttribute('role', 'status');
+    document.body.appendChild(pill);
+  }
+  const texto = savingCount > 1 ? `Guardando ${savingCount} álbumes en w three…` : `Guardando «${label}» en w three…`;
+  pill.innerHTML = `<span class="wt-saving-spinner" aria-hidden="true"></span><span>${escapeHtml(texto)}</span>`;
+}
+
+function saveInBackground(a, orderedPicks, origOrder) {
+  savingCount++;
+  updateSavingPill(a.name);
+  applyChanges(a, null, orderedPicks, origOrder)
+    .then(async (ok) => {
+      if (ok) return;
+      // Falló: el estado del servidor puede haber quedado a medias (por ejemplo
+      // el add entró y el reorder no). Tiramos la caché de items y recargamos
+      // para que el álbum vuelva a la lista con lo que hay DE VERDAD en la
+      // playlist, no con lo que creíamos antes de guardar.
+      try {
+        await updatePlaylistItemsCache(playlistId, null, null);
+        const content = document.getElementById('wthree-content');
+        if (content) await loadAndRender(content);
+      } catch (e) {
+        console.warn('[wthree] no pude refrescar tras el fallo:', e.message);
+      }
+    })
+    .catch(e => {
+      console.error('[wthree] guardado en segundo plano rompió:', e);
+      showToast('No se pudo guardar: ' + (e.message || 'error desconocido'), 'error');
+    })
+    .finally(() => {
+      savingCount--;
+      updateSavingPill(a.name);
+    });
+}
+
+// Diff entre el orden original y el elegido. Se extrajo de applyChanges (sin
+// cambiarlo) para que el handler del botón pueda saber si hay algo que guardar
+// ANTES de cerrar el modal y mandar el guardado a segundo plano.
+function computeDiff(orderedPicks, origOrder) {
   const origIds = origOrder.map(p => p.id);
   const newIds = orderedPicks.map(p => p.id);
 
@@ -902,13 +1020,23 @@ async function applyChanges(a, saveBtn, orderedPicks, origOrder) {
   const orderChanged = keptOrig.length > 0 && keptOrig.some((id, i) => id !== keptNew[i]);
 
   const noChanges = toAddUris.length === 0 && toRemoveUris.length === 0 && !orderChanged;
+  return { origIds, newIds, toAddUris, toRemoveUris, orderChanged, noChanges };
+}
+
+// `saveBtn` puede venir en null: cuando el guardado corre en segundo plano el
+// modal ya está cerrado y no hay botón que actualizar. Devuelve true/false para
+// que quien la invoque sepa si terminó bien (la lógica de dentro no cambió).
+async function applyChanges(a, saveBtn, orderedPicks, origOrder) {
+  const { toAddUris, toRemoveUris, orderChanged, noChanges } = computeDiff(orderedPicks, origOrder);
   if (noChanges) {
     showToast('No hay cambios', 'info');
-    return;
+    return true;
   }
 
-  saveBtn.disabled = true;
-  saveBtn.textContent = 'Guardando…';
+  if (saveBtn) {
+    saveBtn.disabled = true;
+    saveBtn.textContent = 'Guardando…';
+  }
   const t0 = performance.now();
   let apiCalls = 0;
   let moveCount = 0;
@@ -1059,13 +1187,17 @@ async function applyChanges(a, saveBtn, orderedPicks, origOrder) {
     if (albumEntry) albumEntry.picks = newPicks;
     const content = document.getElementById('wthree-content');
     if (content) renderBuckets(content);
+    return true;
 
   } catch (e) {
     const elapsed = Math.round(performance.now() - t0);
     console.error(`[wthree] guardado FALLÓ en ${elapsed}ms · ${apiCalls} API calls:`, e);
-    saveBtn.disabled = false;
-    saveBtn.textContent = 'Guardar cambios';
+    if (saveBtn) {
+      saveBtn.disabled = false;
+      saveBtn.textContent = 'Guardar cambios';
+    }
     showToast('No se pudo guardar: ' + (e.message || 'error desconocido'), 'error');
+    return false;
     // No refetch bloqueante: si algo raro pasó, al próximo abrir el modal
     // (o al reabrir la vista) se refresca. Preferible que el usuario lo
     // decida a que la app se cuelgue otros 30s.

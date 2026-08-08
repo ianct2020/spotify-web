@@ -1,10 +1,10 @@
-import { getAllPlaylistItems, getBestAvailableLikes, addTracksToPlaylist, removeTracksFromPlaylist, getAllUserPlaylists } from '../api.js?v=126';
-import { idbGetCached, idbSetCached, idbGetTimestamp } from '../idb.js?v=126';
-import { escapeHtml, confirmModal, pageHeader } from '../ui/components.js?v=126';
-import { showToast } from '../ui/toast.js?v=126';
-import { isJunkTrack } from '../util/junk.js?v=126';
-import { openModal, closeTop } from '../ui/modal-stack.js?v=126';
-import { getListenedPlaylist, groupItemsByAlbum, openListenedAlbumsPicker, albumKey, baseName, norm } from './listened-shared.js?v=126';
+import { getAllPlaylistItems, getBestAvailableLikes, addTracksToPlaylist, removeTracksFromPlaylist, getAllUserPlaylists } from '../api.js?v=127';
+import { idbGetCached, idbSetCached, idbGetTimestamp } from '../idb.js?v=127';
+import { escapeHtml, confirmModal, pageHeader } from '../ui/components.js?v=127';
+import { showToast } from '../ui/toast.js?v=127';
+import { isJunkTrack } from '../util/junk.js?v=127';
+import { openModal, closeTop } from '../ui/modal-stack.js?v=127';
+import { getListenedPlaylist, groupItemsByAlbum, openListenedAlbumsPicker, albumKey, baseName, norm } from './listened-shared.js?v=127';
 
 const SORT_KEY = 'listened_sort_mode';
 const VALID_SORTS = new Set(['recent', 'year-desc', 'year-asc', 'artist-asc', 'likes-desc', 'name-asc']);
@@ -346,6 +346,8 @@ async function attachLikes(albumList) {
         name: t.album.name || '',
         year: (t.album.release_date || '').slice(0, 4),
         image: imgs.length ? imgs[imgs.length - 1].url : null,
+        albumType: t.album.album_type || null,
+        totalTracks: t.album.total_tracks || 0,
         tracks: [],
         artistCount: new Map(),
       };
@@ -368,12 +370,12 @@ async function attachLikes(albumList) {
     const k = albumKey(e.name, e.artist);
     let m = likesByKey.get(k);
     if (!m) {
-      m = { id: e.id, ids: new Set([e.id]), name: e.name, artist: e.artist, year: e.year, image: e.image, tracks: [], _repCount: e.tracks.length, _seen: new Set() };
+      m = { id: e.id, ids: new Set([e.id]), name: e.name, artist: e.artist, year: e.year, image: e.image, albumType: e.albumType, totalTracks: e.totalTracks, tracks: [], _repCount: e.tracks.length, _seen: new Set() };
       likesByKey.set(k, m);
     } else {
       m.ids.add(e.id);
       // El lanzamiento con más tracks manda como representativo (suele ser el deluxe/completo).
-      if (e.tracks.length > m._repCount) { m.name = e.name; m.artist = e.artist; m.image = e.image || m.image; m.year = e.year || m.year; m.id = e.id; m._repCount = e.tracks.length; }
+      if (e.tracks.length > m._repCount) { m.name = e.name; m.artist = e.artist; m.image = e.image || m.image; m.year = e.year || m.year; m.id = e.id; m.albumType = e.albumType; m.totalTracks = e.totalTracks; m._repCount = e.tracks.length; }
     }
     for (const t of e.tracks) {
       const nk = norm(t.name);
@@ -389,9 +391,62 @@ async function attachLikes(albumList) {
   }
 }
 
+// ── Tipo de lanzamiento (v=127) ──────────────────────────────────────────────
+//
+// La lista de "sin registrar" mostraba ~2.500 entradas y la enorme mayoría eran
+// singles con UN solo like: encontrar un álbum de verdad ahí adentro era
+// imposible. Ahora se puede filtrar por tipo.
+//
+// El dato sale de `album.album_type` de /me/tracks ('album' | 'single' |
+// 'compilation'). Spotify no tiene un tipo "EP": los publica como 'single'.
+// Por eso un 'single' de 4+ pistas lo contamos como EP y va al grupo de
+// álbumes, que es lo que Ian espera ver ahí.
+//
+// Si album_type viniera vacío (caché vieja de antes del bump a _v2, o un
+// lanzamiento raro), caemos a la cantidad de pistas: ≤3 = single.
+const UNREG_TYPE_KEY = 'listened_unreg_type_v1';
+const VALID_UNREG_TYPES = new Set(['all', 'albums', 'singles']);
+
+// Cascada de señales, de la más fiable a la más pobre:
+//   1) album_type de la API. 'single' con 4+ pistas lo tratamos como EP.
+//   2) sin album_type pero con total_tracks: ≤3 pistas = single.
+//   3) sin ninguno de los dos: la cantidad de canciones que Ian tiene EN LIKES
+//      de ese lanzamiento. Es un proxy pobre pero es lo único que queda, y no
+//      es descabellado: de un single no se pueden tener 4 likes distintos.
+//
+// El caso 3 no es teórico. El backup de likes que vive en el repo
+// (src/data/user-*.json, el que usa la app cuando no hay sesión ni caché) se
+// generó con el slimTrack viejo y NO tiene album_type ni total_tracks. Con
+// sesión iniciada los likes vienen de la API y estamos en el caso 1.
+function releaseKind(e) {
+  const t = e?.albumType;
+  if (t === 'album' || t === 'compilation') return 'albums';
+  if (t === 'single') return (e.totalTracks || 0) >= 4 ? 'albums' : 'singles';
+  if (e?.totalTracks) return e.totalTracks >= 4 ? 'albums' : 'singles';
+  return (e?.tracks?.length || 0) >= 4 ? 'albums' : 'singles';
+}
+
+// ¿Estamos adivinando el tipo? Sirve para avisarlo en la interfaz en vez de
+// presentar un conteo dudoso como si fuera exacto.
+function typeIsGuessed() {
+  if (!likesByKey) return false;
+  let total = 0, conTipo = 0;
+  for (const e of likesByKey.values()) { total++; if (e.albumType) conTipo++; }
+  return total > 0 && conTipo / total < 0.5;
+}
+
+function getUnregType() {
+  const v = localStorage.getItem(UNREG_TYPE_KEY);
+  return VALID_UNREG_TYPES.has(v) ? v : 'albums';   // default: solo álbumes y EPs
+}
+function setUnregType(v) {
+  if (VALID_UNREG_TYPES.has(v)) localStorage.setItem(UNREG_TYPE_KEY, v);
+}
+
 // Álbumes de los que tenés muchas canciones en likes pero NO están en tu registro.
 // Heurística de "probablemente lo escuchaste completo y no lo agregaste".
-function computeUnregistered(min = unregMin) {
+// `type` filtra por tipo de lanzamiento: 'all' | 'albums' | 'singles'.
+function computeUnregistered(min = unregMin, type = 'all') {
   if (!likesByKey) return [];
   // Excluimos un álbum de las sugerencias si YA está registrado, por lo que sea:
   //  - albumKey (nombre-sin-edición|artista) → matchea deluxe vs normal;
@@ -411,7 +466,9 @@ function computeUnregistered(min = unregMin) {
     if ([...e.ids].some(id => registeredIds.has(id))) continue;
     if (e.tracks.some(t => t.uri && registeredUris.has(t.uri))) continue;
     if (e.tracks.length < min) continue;
-    out.push({ ...e, key: k });
+    const kind = releaseKind(e);
+    if (type !== 'all' && kind !== type) continue;
+    out.push({ ...e, key: k, kind });
   }
   out.sort((a, b) => b.tracks.length - a.tracks.length);
   return out;
@@ -803,6 +860,10 @@ function openUnregistered() {
         Álbumes que no están en <strong>${escapeHtml(playlistInfo.name)}</strong> pero de los que tenés varias canciones en Liked Songs.
         Muchos likes de un mismo álbum suele indicar que lo escuchaste bastante. (Deluxe y normal cuentan como uno solo.)
       </p>
+      <div style="display:flex;gap:6px;align-items:center;margin-bottom:8px;flex-wrap:wrap;flex-shrink:0">
+        <span style="font-size:12px;color:var(--color-text-muted)">Tipo:</span>
+        <span id="unreg-type-chips" style="display:flex;gap:6px;flex-wrap:wrap"></span>
+      </div>
       <div style="display:flex;gap:6px;align-items:center;margin-bottom:12px;flex-wrap:wrap;flex-shrink:0">
         <span style="font-size:12px;color:var(--color-text-muted)">Mínimo de canciones en likes:</span>
         ${[1, 2, 3, 4, 5, 6, 7, 8].map(n => `<button class="btn ${n === unregMin ? 'btn-primary' : 'btn-secondary'} btn-sm unreg-th" data-th="${n}">${n}+</button>`).join('')}
@@ -826,16 +887,47 @@ function openUnregistered() {
     addBtn.disabled = n === 0;
   };
 
+  let unregType = getUnregType();
+
+  // Los chips llevan el conteo por tipo con el umbral actual, así que se
+  // recalculan cada vez que cambia el mínimo o se oculta un álbum.
+  const renderTypeChips = () => {
+    const all = computeUnregistered(unregMin, 'all');
+    const nAlbums = all.filter(e => e.kind === 'albums').length;
+    const nSingles = all.length - nAlbums;
+    const opts = [
+      ['all', `Todos (${all.length.toLocaleString('es-ES')})`],
+      ['albums', `Álbumes y EPs (${nAlbums.toLocaleString('es-ES')})`],
+      ['singles', `Singles (${nSingles.toLocaleString('es-ES')})`],
+    ];
+    const holder = overlay.querySelector('#unreg-type-chips');
+    if (!holder) return;
+    holder.innerHTML = opts.map(([v, label]) =>
+      `<button class="btn ${v === unregType ? 'btn-primary' : 'btn-secondary'} btn-sm unreg-type" data-type="${v}">${label}</button>`
+    ).join('') + (typeIsGuessed()
+      ? `<span title="Los likes cargados no traen el tipo de lanzamiento; se deduce de cuántas canciones tienes de cada uno. Inicia sesión para que el tipo venga de Spotify." style="font-size:11px;color:var(--color-text-muted);align-self:center">tipo estimado</span>`
+      : '');
+    holder.querySelectorAll('.unreg-type').forEach(btn => {
+      btn.onclick = () => {
+        unregType = btn.dataset.type;
+        setUnregType(unregType);
+        renderList();
+      };
+    });
+  };
+
   const renderList = () => {
     // Guardamos qué estaba tildado para no perder la selección al ocultar/re-renderizar.
     const prevChecked = new Set([...overlay.querySelectorAll('.unreg-cb:checked')].map(cb => cb.dataset.uri).filter(Boolean));
-    const list = computeUnregistered(unregMin);
+    renderTypeChips();
+    const list = computeUnregistered(unregMin, unregType);
     unregRendered = list;
     const holder = overlay.querySelector('#unreg-list');
     const selall = overlay.querySelector('#unreg-selall');
     if (list.length === 0) {
       selall.innerHTML = '';
-      holder.innerHTML = `<div style="color:var(--color-text-muted);font-size:13px;padding:8px 0">No hay álbumes con ${unregMin}+ canciones en likes fuera de tu registro.</div>`;
+      const queTipo = unregType === 'albums' ? 'álbumes ni EPs' : unregType === 'singles' ? 'singles' : 'álbumes';
+      holder.innerHTML = `<div style="color:var(--color-text-muted);font-size:13px;padding:8px 0">No hay ${queTipo} con ${unregMin}+ canciones en likes fuera de tu registro.</div>`;
       updateHiddenNote();
       updateAddBtn();
       return;

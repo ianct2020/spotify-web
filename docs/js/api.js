@@ -1,13 +1,17 @@
-import { getValidToken, refreshAccessToken } from './auth.js?v=126';
-import { cacheGet, cacheGetRaw, cacheGetTimestamp, cacheSet, cacheClear } from './storage.js?v=126';
-import { idbDel, idbGetCached, idbGetCachedRaw, idbGetTimestamp, idbSetCached } from './idb.js?v=126';
-import { showToast } from './ui/toast.js?v=126';
-import { artistIsSame } from './util/track-match.js?v=126';
+import { getValidToken, refreshAccessToken } from './auth.js?v=127';
+import { cacheGet, cacheGetRaw, cacheGetTimestamp, cacheSet, cacheClear } from './storage.js?v=127';
+import { idbDel, idbGetCached, idbGetCachedRaw, idbGetTimestamp, idbSetCached } from './idb.js?v=127';
+import { showToast } from './ui/toast.js?v=127';
+import { artistIsSame } from './util/track-match.js?v=127';
 
 const BASE = 'https://api.spotify.com/v1';
 const MIN_RETRY_WAIT = 5000;
 const DEFAULT_MAX_RETRIES = 5;
-const LIKES_CACHE_KEY = 'all_liked_tracks';
+// v=127: sufijo _v2. La caché vieja se guardó con un slimTrack que no tenía
+// album_type/total_tracks; si la siguiéramos leyendo, el filtro por tipo de
+// #listened vería todo como "sin tipo". Cambiar la clave fuerza UNA recarga de
+// likes y a partir de ahí el campo ya viaja en la caché.
+const LIKES_CACHE_KEY = 'all_liked_tracks_v2';
 const PLAYLISTS_CACHE_KEY = 'all_user_playlists';
 const CACHE_TTL_MIN = 60 * 24;
 
@@ -223,6 +227,12 @@ function slimTrack(t) {
       id: t.album.id,
       name: t.album.name,
       release_date: t.album.release_date,
+      // v=127: hasta ahora los tirábamos y sin ellos no hay forma de saber si
+      // un like viene de un álbum o de un single suelto. Los necesita el filtro
+      // por tipo de "Quizás escuchaste y no registraste" (#listened), donde los
+      // singles con un solo like tapaban a los álbumes de verdad.
+      album_type: t.album.album_type,
+      total_tracks: t.album.total_tracks,
       images: (t.album.images || []).slice(-1),
     } : undefined,
   };

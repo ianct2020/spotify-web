@@ -2664,7 +2664,7 @@ body:has(.preview-pill.show) .progress-mini {
 .wthree-tracklist { display: flex; flex-direction: column; gap: 4px; max-height: 44vh; overflow-y: auto; }
 .wthree-track {
   display: grid;
-  grid-template-columns: auto 22px 1fr auto auto;
+  grid-template-columns: auto 22px minmax(0, 1fr) 13px auto auto;
   gap: 8px;
   align-items: center;
   padding: 8px 10px;
@@ -2679,6 +2679,7 @@ body:has(.preview-pill.show) .progress-mini {
 .wthree-track-check { cursor: pointer; accent-color: var(--color-accent); }
 .wthree-track-num { color: var(--color-text-muted); font-size: 11px; text-align: right; font-variant-numeric: tabular-nums; }
 .wthree-track-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wthree-track-like { display: inline-flex; align-items: center; justify-content: center; color: var(--color-accent); }
 .wthree-track-plays { font-size: 11px; color: var(--color-text-muted); font-variant-numeric: tabular-nums; }
 .wthree-track-tag {
   font-size: 10px;
@@ -3014,7 +3015,7 @@ body:has(.preview-pill.show) .progress-mini {
   .wt-tracklist.wt-tracklist-cols .wthree-track {
     padding: 5px 8px;
     font-size: 11.5px;
-    grid-template-columns: auto 18px minmax(0, 1fr) auto auto;
+    grid-template-columns: auto 18px minmax(0, 1fr) 13px auto auto;
     gap: 6px;
   }
   .wt-tracklist.wt-tracklist-cols .wthree-track-num { font-size: 10px; }
@@ -3045,7 +3046,7 @@ body:has(.preview-pill.show) .progress-mini {
   .wthree-stat-l { font-size: 9px; }
   .wthree-header { padding: 10px 12px; }
   .wthree-album-cover { width: 40px; height: 40px; }
-  .wthree-track { grid-template-columns: auto 18px minmax(0,1fr) auto auto; }
+  .wthree-track { grid-template-columns: auto 18px minmax(0,1fr) 13px auto auto; }
   .wt-tracklist { max-height: 220px; }
   .wt-order-scroll { max-height: 180px; }
   /* En mobile el modal ocupa desde abajo hasta 85vh — heredado del
@@ -3080,19 +3081,41 @@ body:has(.preview-pill.show) .progress-mini {
   flex-wrap: wrap;
   margin-bottom: 12px;
 }
-.covers-controls { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+/* Toolbar de #covers (v=127).
+   Antes cada control traía su propio alto y padding: los botones eran <button>
+   sin borde dentro de un grupo, el select era un control nativo suelto con
+   borde propio, y el conjunto se veía desparejo. Ahora todo comparte una única
+   altura (--covers-ctl-h) y el mismo padding, y los tres bloques (vista /
+   tamaño / orden) son grupos con el mismo borde y radio. */
+.covers-controls {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+  --covers-ctl-h: 28px;
+}
 .covers-control-group {
   display: inline-flex;
+  align-items: stretch;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-sm);
   overflow: hidden;
+  height: var(--covers-ctl-h);
 }
 .covers-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
   background: var(--color-surface);
   color: var(--color-text-secondary);
   border: 0;
-  padding: 6px 12px;
+  height: 100%;
+  padding: 0 11px;
+  font-family: inherit;
   font-size: 12px;
+  line-height: 1;
+  white-space: nowrap;
   cursor: pointer;
   transition: background .12s, color .12s;
 }
@@ -3102,15 +3125,31 @@ body:has(.preview-pill.show) .progress-mini {
   color: white;
 }
 .covers-btn + .covers-btn { border-left: 1px solid var(--color-border); }
+/* El select comparte caja, alto, fuente y padding con los botones. Se le saca
+   la apariencia nativa y se le dibuja el chevron con un background-image, para
+   que no rompa la línea de la toolbar. */
 .covers-select {
+  appearance: none;
+  -webkit-appearance: none;
   background: var(--color-surface);
-  color: var(--color-text);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
-  padding: 6px 10px;
+  background-image: linear-gradient(45deg, transparent 50%, currentColor 50%),
+                    linear-gradient(135deg, currentColor 50%, transparent 50%);
+  background-position: right 12px center, right 7px center;
+  background-size: 5px 5px, 5px 5px;
+  background-repeat: no-repeat;
+  color: var(--color-text-secondary);
+  border: 0;
+  height: 100%;
+  padding: 0 24px 0 11px;
+  font-family: inherit;
   font-size: 12px;
+  line-height: 1;
   cursor: pointer;
+  transition: background-color .12s, color .12s;
 }
+.covers-select:hover { background-color: var(--color-elevated); color: var(--color-text); }
+.covers-select:focus-visible { outline: 2px solid var(--color-accent); outline-offset: -2px; }
+.covers-btn:focus-visible { outline: 2px solid var(--color-accent); outline-offset: -2px; }
 
 .covers-summary { font-size: 13px; color: var(--color-text-secondary); display:flex; flex-wrap:wrap; align-items:baseline; gap:8px; }
 .covers-summary-sub { font-size: 11px; color: var(--color-text-muted); }
@@ -3579,4 +3618,45 @@ body.covers-fs .main {
   .ac-head-actions { width: 100%; justify-content: flex-end; }
   .ac-avatar { width: 40px; height: 40px; font-size: 16px; }
   .ac-title h3 { font-size: 15px; }
+}
+
+/* Pill de guardado en segundo plano de W-Three (v=127).
+   Guardar tarda 30-40s; el modal se cierra al instante y esto queda como única
+   señal visible de que hay una escritura en curso. Fijo abajo a la izquierda
+   para no chocar con el pill del reproductor de preview ni con los toasts. */
+.wt-saving-pill {
+  position: fixed;
+  left: 16px;
+  bottom: 16px;
+  z-index: 900;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  max-width: min(360px, calc(100vw - 32px));
+  padding: 9px 14px;
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  background: var(--color-elevated);
+  color: var(--color-text);
+  font-size: 12.5px;
+  line-height: 1.3;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, .45);
+}
+.wt-saving-pill > span:last-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.wt-saving-spinner {
+  flex-shrink: 0;
+  width: 13px;
+  height: 13px;
+  border: 2px solid var(--color-border);
+  border-top-color: var(--color-accent);
+  border-radius: 50%;
+  animation: wt-saving-spin .7s linear infinite;
+}
+@keyframes wt-saving-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) {
+  .wt-saving-spinner { animation-duration: 2.4s; }
 }
