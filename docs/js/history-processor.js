@@ -9,7 +9,7 @@
 //
 // Devuelve la misma forma que los JSONs del repo (mismos `version` numbers).
 
-import { isJunkTrack } from './util/junk.js?v=127';
+import { isJunkTrack } from './util/junk.js?v=128';
 
 // ---- Configuración (igual a gen-stats.py) ----
 const MIN_MS = 30000;

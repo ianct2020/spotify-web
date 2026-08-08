@@ -1,17 +1,20 @@
-import { getValidToken, refreshAccessToken } from './auth.js?v=127';
-import { cacheGet, cacheGetRaw, cacheGetTimestamp, cacheSet, cacheClear } from './storage.js?v=127';
-import { idbDel, idbGetCached, idbGetCachedRaw, idbGetTimestamp, idbSetCached } from './idb.js?v=127';
-import { showToast } from './ui/toast.js?v=127';
-import { artistIsSame } from './util/track-match.js?v=127';
+import { getValidToken, refreshAccessToken } from './auth.js?v=128';
+import { cacheGet, cacheGetRaw, cacheGetTimestamp, cacheSet, cacheClear } from './storage.js?v=128';
+import { idbDel, idbGetCached, idbGetCachedRaw, idbGetTimestamp, idbSetCached } from './idb.js?v=128';
+import { showToast } from './ui/toast.js?v=128';
+import { artistIsSame } from './util/track-match.js?v=128';
 
 const BASE = 'https://api.spotify.com/v1';
 const MIN_RETRY_WAIT = 5000;
 const DEFAULT_MAX_RETRIES = 5;
-// v=127: sufijo _v2. La caché vieja se guardó con un slimTrack que no tenía
-// album_type/total_tracks; si la siguiéramos leyendo, el filtro por tipo de
-// #listened vería todo como "sin tipo". Cambiar la clave fuerza UNA recarga de
-// likes y a partir de ahí el campo ya viaja en la caché.
-const LIKES_CACHE_KEY = 'all_liked_tracks_v2';
+// NO cambiar este nombre para forzar recargas. Se probó en v=127 ponerle _v2
+// (para que la caché vieja, guardada con un slimTrack sin album_type, dejara de
+// usarse) y el resultado fue que getBestAvailableLikes devolvía source:"empty":
+// la clave nueva no existía y nada dispara un fetch desde #listened, así que la
+// vista quedaba con 0 likes y "Sin registrar (0)". La caché ya tiene TTL de 24h
+// y se renueva sola; hasta entonces releaseKind() en listened.js deduce el tipo
+// y lo avisa con "tipo estimado".
+const LIKES_CACHE_KEY = 'all_liked_tracks';
 const PLAYLISTS_CACHE_KEY = 'all_user_playlists';
 const CACHE_TTL_MIN = 60 * 24;
 
