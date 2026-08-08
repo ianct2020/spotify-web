@@ -557,6 +557,10 @@ h3 { font-size: 18px; font-weight: 600; }
   display: flex;
   flex-direction: column-reverse;
   gap: 8px;
+  /* v=126: los avisos importantes se quedan hasta que los cierres, así que la
+     pila puede crecer. Que scrollee en vez de taparte la pantalla. */
+  max-height: calc(100vh - 48px);
+  overflow-y: auto;
 }
 
 .toast {
@@ -576,6 +580,25 @@ h3 { font-size: 18px; font-weight: 600; }
 .toast-error { background: var(--color-error); color: white; }
 .toast-warning { background: var(--color-warning); color: #1a1a1a; }
 .toast-info { background: var(--color-info); color: white; }
+
+/* ✕ de cierre — presente en todos los toasts desde v=126. */
+.toast-close {
+  flex: 0 0 auto;
+  margin: -4px -6px -4px 4px;
+  padding: 4px 6px;
+  background: none;
+  border: none;
+  border-radius: var(--radius-sm);
+  color: inherit;
+  opacity: 0.75;
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  transition: opacity var(--transition-fast), background var(--transition-fast);
+}
+.toast-close:hover { opacity: 1; background: rgba(0, 0, 0, 0.18); }
+.toast-close:focus-visible { outline: 2px solid currentColor; outline-offset: 1px; }
 
 @keyframes toast-in {
   from { transform: translateY(20px); opacity: 0; }
@@ -884,6 +907,17 @@ body:has(.preview-pill.show) .progress-mini {
   min-width: 0;
 }
 
+/* v=126: pie de cada gráfico del dashboard. Mismos font/size/color que el
+   título de eje del "Top 15 artistas" (Inter 11 / #8888A0), que hasta ahora
+   era el único chart con explicación. */
+.chart-note {
+  margin: 8px 0 0 0;
+  font-family: var(--font-sans);
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--color-text-secondary);
+}
+
 .dash-chart-card canvas {
   /* Red de contención por un frame: entre que el contenedor achica y Chart.js
      re-renderiza, el canvas conserva su width inline viejo. */
@@ -980,8 +1014,9 @@ body:has(.preview-pill.show) .progress-mini {
   flex: 0 0 auto;
   scroll-snap-align: start;
 }
-.year-tile-count { font-size: 18px; font-weight: 700; color: var(--color-text); line-height: 1.1; }
-.year-tile-year { font-size: 11px; color: var(--color-text-muted); margin-top: 3px; }
+/* v=126: jerarquía invertida — manda el AÑO, el conteo es el dato secundario. */
+.year-tile-year { font-size: 18px; font-weight: 700; color: var(--color-text); line-height: 1.1; }
+.year-tile-count { font-size: 11px; color: var(--color-text-muted); margin-top: 3px; }
 .year-tile:hover { border-color: var(--color-accent) !important; }
 .year-tile:active { transform: scale(0.98); }
 
@@ -1154,24 +1189,72 @@ body:has(.preview-pill.show) .progress-mini {
   flex-wrap: wrap;
   min-width: 0;
 }
+/* v=126: los chips de año eran los únicos botones que no heredaban `--font-sans`
+   (un <button> sin font-family cae al font del UA, no a Inter) y solo cambiaban
+   el borde al hover. Ahora usan el mismo lenguaje que .btn/.btn-secondary. */
 .wrapped-year-tab {
-  padding: 6px 12px;
-  border-radius: var(--radius-sm);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px 14px;
+  border-radius: var(--radius-md);
   border: 1px solid var(--color-border);
-  background: var(--color-elevated);
-  color: var(--color-text);
-  font-weight: 500;
+  background: var(--color-surface);
+  color: var(--color-text-secondary);
+  font-family: var(--font-sans);
+  font-weight: 600;
   font-size: 13px;
+  line-height: 1.4;
+  letter-spacing: 0.01em;
   cursor: pointer;
-  transition: transform .05s, border-color .15s;
+  transition: background var(--transition-fast), border-color var(--transition-fast),
+              color var(--transition-fast), box-shadow var(--transition-fast), transform .06s ease;
+}
+.wrapped-year-tab:hover {
+  background: var(--color-surface-hover);
+  border-color: var(--color-accent);
+  color: var(--color-text);
+}
+.wrapped-year-tab:active { transform: translateY(1px); }
+.wrapped-year-tab:focus-visible {
+  outline: none;
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 3px var(--color-accent-soft);
 }
 .wrapped-year-tab.active {
   background: var(--color-accent);
-  color: #fff;
-  font-weight: 600;
   border-color: var(--color-accent);
+  color: #fff;
+  box-shadow: 0 0 0 3px var(--color-accent-soft);
 }
-.wrapped-year-tab:hover { border-color: var(--color-accent); }
+.wrapped-year-tab.active:hover {
+  background: var(--color-accent-hover);
+  border-color: var(--color-accent-hover);
+  color: #fff;
+}
+/* ⓘ inline dentro de un .wrapped-tile-hint (v=126, "Última registrada"). */
+.wrapped-hint-info {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: 4px;
+  padding: 0;
+  width: 15px;
+  height: 15px;
+  vertical-align: -2px;
+  background: none;
+  border: none;
+  border-radius: 50%;
+  color: var(--color-text-muted);
+  font-family: var(--font-sans);
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+  transition: color var(--transition-fast), background var(--transition-fast);
+}
+.wrapped-hint-info:hover { color: var(--color-accent); background: var(--color-accent-soft); }
+.wrapped-hint-info:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 1px; }
+
 .wrapped-info-btn {
   background: none;
   border: 1px solid var(--color-border);

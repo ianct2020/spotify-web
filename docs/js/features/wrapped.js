@@ -1,16 +1,16 @@
 // Wrapped propio: mini-resumen tuyo por año, hecho con el Extended Streaming History.
 // A diferencia del Wrapped oficial (que corre oct-sept), este es del año calendario completo.
 
-import { loadHistoryStats, isOwner, ownerLockedMessage } from './history-data.js?v=125';
-import { escapeHtml, pageHeader } from '../ui/components.js?v=125';
-import { getPreview, getArtistTopPreview } from '../api/preview-providers.js?v=125';
-import { attachHover } from '../ui/preview-player.js?v=125';
-import { openTrackCard } from './track-card.js?v=125';
-import { openArtistCard } from './artist-card.js?v=125';
-import { openAlbumCard } from './album-card.js?v=125';
-import { getMyTop } from '../api.js?v=125';
-import { activateMarquee, marqueeSpan } from '../ui/marquee.js?v=125';
-import { openModal } from '../ui/modal-stack.js?v=125';
+import { loadHistoryStats, isOwner, ownerLockedMessage } from './history-data.js?v=126';
+import { escapeHtml, pageHeader } from '../ui/components.js?v=126';
+import { getPreview, getArtistTopPreview } from '../api/preview-providers.js?v=126';
+import { attachHover } from '../ui/preview-player.js?v=126';
+import { openTrackCard } from './track-card.js?v=126';
+import { openArtistCard } from './artist-card.js?v=126';
+import { openAlbumCard } from './album-card.js?v=126';
+import { getMyTop } from '../api.js?v=126';
+import { activateMarquee, marqueeSpan } from '../ui/marquee.js?v=126';
+import { openModal } from '../ui/modal-stack.js?v=126';
 
 let stats = null;
 let selectedYear = null;
@@ -202,7 +202,9 @@ function renderYearCard() {
         <div class="wrapped-tile compact" style="grid-area:fst">
           <div class="wrapped-tile-label">Primera play</div>
           <div class="wrapped-tile-value" style="font-size:14px">${fmtDate(y.first_play)}</div>
-          <div class="wrapped-tile-hint">Última: ${fmtDate(y.last_play)}</div>
+          <div class="wrapped-tile-hint">Última registrada: ${fmtDate(y.last_play)}${isLatest ? `
+            <button type="button" class="wrapped-hint-info" id="wrapped-lastplay-info"
+              title="Por qué esta fecha" aria-label="Por qué esta fecha">ⓘ</button>` : ''}</div>
         </div>
       </div>
 
@@ -222,7 +224,42 @@ function renderYearCard() {
   wireTopHover(holder, 'y-tile-disc', y.discovery ? [{ name: y.discovery.artist }] : [], 'artist');
   wireTopClick(holder, 'y-alb', y.top_albums?.slice(0, 15) || [], 'album');
   wireAlbumHero(holder, topAlbum);
+
+  // "Última: 22 jul 2026" no era un bug: es donde termina el ZIP del Extended
+  // Streaming History. Verificado contra el export crudo — la play más reciente
+  // de los 26 archivos es 2026-07-22T21:26:10Z. El dato estaba bien y el texto
+  // engañaba, así que ahora dice "Última registrada" y el ⓘ lo explica.
+  const lastPlayInfo = holder.querySelector('#wrapped-lastplay-info');
+  if (lastPlayInfo) {
+    lastPlayInfo.onclick = () => openLastPlayModal(fmtDate(y.last_play));
+  }
+
   activateMarquee(holder);
+}
+
+function openLastPlayModal(lastDate) {
+  openModal({
+    id: 'wrapped-last-play',
+    html: `
+      <div class="modal" style="max-width:440px">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px">
+          <h3 style="margin:0;font-size:16px">Última play registrada</h3>
+          <button class="btn btn-secondary btn-sm" data-close-modal title="Cerrar">✕</button>
+        </div>
+        <p style="color:var(--color-text-secondary);font-size:14px;line-height:1.55;margin:0">
+          El <strong style="color:var(--color-text)">${escapeHtml(lastDate)}</strong> no es
+          la última vez que escuchaste música: es la última play que aparece en tu
+          Extended Streaming History.
+        </p>
+        <p style="color:var(--color-text-muted);font-size:12.5px;line-height:1.5;margin:10px 0 0">
+          El historial es una descarga puntual, no una conexión en vivo. Todo lo que
+          escuchaste después de esa fecha existe en Spotify, pero no en este archivo.
+          Para ponerlo al día hay que volver a pedir el export en la página de
+          privacidad de Spotify y subir el ZIP nuevo.
+        </p>
+      </div>
+    `,
+  });
 }
 
 // Click en fila (sin hover-play) → abre la ficha correspondiente.

@@ -8,8 +8,8 @@
 // Otro user cualquiera sin historial local ve el ownerLockedMessage que
 // invita a subir su ZIP.
 
-import { idbGetCached, idbSetCached, idbDel } from '../idb.js?v=125';
-import { getCurrentUserId } from '../api.js?v=125';
+import { idbGetCached, idbSetCached, idbDel } from '../idb.js?v=126';
+import { getCurrentUserId } from '../api.js?v=126';
 
 const HISTORY_OWNER_ID = 'orhs6wu5ykk7ql80u92ujn74o';
 
@@ -24,6 +24,7 @@ const LISTENED_VERSION = 2;
 const SKIP_VERSION = 1;
 const DETAIL_VERSION = 1;
 const RECORDS_VERSION = 2;
+const ARTIST_TRACKS_VERSION = 1;
 
 // Claves del cache del owner (repo → IDB)
 const OWNER_KEYS = {
@@ -33,6 +34,7 @@ const OWNER_KEYS = {
   skip: `history_skip_stats_v${SKIP_VERSION}`,
   detail: `history_track_detail_v${DETAIL_VERSION}`,
   records: `history_records_v${RECORDS_VERSION}`,
+  artistTracks: `history_artist_tracks_v${ARTIST_TRACKS_VERSION}`,
 };
 
 // Claves para historial local por user (BYOH). No usan TTL porque los subió el
@@ -44,11 +46,11 @@ function localKey(uid, kind) {
 }
 
 // Caches en memoria (por sesión de página). Se resetean al cambiar de user.
-let memCache = { uid: null, stats: null, plays: null, listened: null, skip: null, detail: null, records: null };
+let memCache = { uid: null, stats: null, plays: null, listened: null, skip: null, detail: null, records: null, artistTracks: null };
 
 async function ensureFreshMem() {
   const uid = await getCurrentUserId().catch(() => null);
-  if (memCache.uid !== uid) memCache = { uid, stats: null, plays: null, listened: null, skip: null, detail: null, records: null };
+  if (memCache.uid !== uid) memCache = { uid, stats: null, plays: null, listened: null, skip: null, detail: null, records: null, artistTracks: null };
   return uid;
 }
 
@@ -74,6 +76,7 @@ const OWNER_PREV_KEYS = {
   skip: [],
   detail: [],
   records: ['history_records_v1'],
+  artistTracks: [],
 };
 
 async function loadOne(kind, cacheField, sanityCheck, fetchUrlForOwner) {
@@ -154,6 +157,11 @@ async function loadSkipStats() {
 async function loadTrackDetail() {
   return loadOne('detail', 'detail', d => !!d.tracks, () => dataUrl('history-track-detail.json', DETAIL_VERSION));
 }
+// v=126 — top de tracks por artista sacado del historial COMPLETO. Se carga
+// bajo demanda (solo lo abre la ficha de artista): ~930 KB.
+async function loadArtistTracks() {
+  return loadOne('artistTracks', 'artistTracks', d => !!d.artists, () => dataUrl('history-artist-tracks.json', ARTIST_TRACKS_VERSION));
+}
 async function loadRecords() {
   return loadOne('records', 'records', d => !!d.top_days, () => dataUrl('history-records.json', RECORDS_VERSION));
 }
@@ -170,16 +178,17 @@ async function saveMyHistory(payload) {
     idbSetCached(localKey(uid, 'skip'), payload.skipStats, LOCAL_TTL_MIN),
     idbSetCached(localKey(uid, 'detail'), payload.detail, LOCAL_TTL_MIN),
     idbSetCached(localKey(uid, 'records'), payload.records, LOCAL_TTL_MIN),
+    idbSetCached(localKey(uid, 'artistTracks'), payload.artistTracks, LOCAL_TTL_MIN),
   ]);
   // Invalido memoria para que la próxima carga vaya al IDB fresco
-  memCache = { uid: null, stats: null, plays: null, listened: null, skip: null, detail: null, records: null };
+  memCache = { uid: null, stats: null, plays: null, listened: null, skip: null, detail: null, records: null, artistTracks: null };
 }
 
 async function clearMyHistory() {
   const uid = await getCurrentUserId().catch(() => null);
   if (!uid) return;
-  await Promise.all(['stats', 'plays', 'listened', 'skip', 'detail', 'records'].map(k => idbDel(localKey(uid, k)).catch(() => {})));
-  memCache = { uid: null, stats: null, plays: null, listened: null, skip: null, detail: null, records: null };
+  await Promise.all(['stats', 'plays', 'listened', 'skip', 'detail', 'records', 'artistTracks'].map(k => idbDel(localKey(uid, k)).catch(() => {})));
+  memCache = { uid: null, stats: null, plays: null, listened: null, skip: null, detail: null, records: null, artistTracks: null };
 }
 
 function trackIdOf(uri) {
@@ -266,7 +275,7 @@ function bindOwnerLockedButtons(openImportFn) {
 }
 
 export {
-  loadHistoryStats, loadTrackPlays, loadListenedAlbums, loadSkipStats, loadTrackDetail, loadRecords,
+  loadHistoryStats, loadTrackPlays, loadListenedAlbums, loadSkipStats, loadTrackDetail, loadRecords, loadArtistTracks,
   playsFor, trackIdOf, isOwner, HISTORY_OWNER_ID, ownerLockedMessage,
   hasLocalHistory, saveMyHistory, clearMyHistory, bindOwnerLockedButtons,
 };

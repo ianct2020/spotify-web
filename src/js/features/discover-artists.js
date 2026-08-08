@@ -15,6 +15,7 @@ import { showToast } from '../ui/toast.js';
 import { openArtistCard } from './artist-card.js';
 import { openAlbumCard } from './album-card.js';
 import { albumKey } from '../util/album-key.js';
+import { isJunkTrack } from '../util/junk.js';
 import { buildAlbumHeardIndex, markAlbumHeard } from '../util/album-heard.js';
 import {
   getArtistIdCached,
@@ -95,6 +96,8 @@ export async function render(container) {
       image: idx.artistImage.get(nameLower) || null,
     }))
     .filter(a => a.likes >= MIN_LIKES)
+    // v=126: fábricas de sonidos funcionales fuera de los candidatos.
+    .filter(a => !isJunkTrack('', a.name))
     .sort((a, b) => b.likes - a.likes);
 
   if (!candidates.length) {

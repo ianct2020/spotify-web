@@ -9,6 +9,8 @@
 //
 // Devuelve la misma forma que los JSONs del repo (mismos `version` numbers).
 
+import { isJunkTrack } from './util/junk.js?v=126';
+
 // ---- Configuración (igual a gen-stats.py) ----
 const MIN_MS = 30000;
 const SKIP_MIN_MS = 5000;
@@ -19,16 +21,15 @@ const SKIP_STATS_VERSION = 1;
 const LISTENED_VERSION = 2;
 const TRACK_DETAIL_VERSION = 1;
 const RECORDS_VERSION = 2;
+const ARTIST_TRACKS_VERSION = 1;
+const ARTIST_TRACKS_TOP_N = 6;
 const DETAIL_MIN_PLAYS = 5;
 const MILESTONE_TARGETS = new Set([1, 10000, 25000, 50000, 75000, 100000, 125000, 150000, 175000, 200000, 250000, 300000]);
 const TOP_N_YEAR = 40;
 const TOP_N_ALLTIME = 60;
 const KEEP_TRACK_IF_MS = 60000;
-const EXCLUDED_TRACK_SUBSTRINGS = [
-  'sonido para sacar agua del movil',
-  'sonido para eliminar',
-  'sonido para sacar agua',
-];
+// v=126: el ruleset de basura vive en util/junk.js, compartido con las vistas
+// (y espejado en scripts/gen-stats.py para los JSON del owner).
 const MIN_TRACKS_SAMEDAY = 4;
 const MIN_MIN_SAMEDAY = 25;
 
@@ -182,9 +183,8 @@ function processStreamingHistory(fileArrays, { onProgress } = {}) {
     const skipped = !!r.skipped;
     const endReason = r.reason_end || '';
 
-    // Excluidos por nombre (funcionales)
-    const trackLc = track.toLowerCase();
-    if (EXCLUDED_TRACK_SUBSTRINGS.some(sub => trackLc.includes(sub))) continue;
+    // Basura funcional (sonidos saca-agua, lluvia para dormir, 432 Hz…)
+    if (isJunkTrack(track, artist)) continue;
 
     // skip% (contra el total, sin filtro de ms)
     const isSkip = skipped || (endReason === 'fwdbtn' && ms < MIN_MS);
@@ -604,7 +604,54 @@ function processStreamingHistory(fileArrays, { onProgress } = {}) {
     albums: albumsPlayedOut,
   };
 
-  return { stats, trackPlays, listened, skipStats, detail, records };
+  // v=126 — top de tracks POR ARTISTA desde el historial completo. Es lo que
+  // usa la ficha de artista: los tops anuales (40) y el global (60) dejaban a
+  // los artistas chicos con un solo track visible. Espejo de gen-stats.py.
+  const perArtist = new Map();
+  for (const [tk, m] of trackMeta) {
+    const arr = perArtist.get(m.artist) || [];
+    arr.push(tk);
+    perArtist.set(m.artist, arr);
+  }
+  const artistTracksOut = {};
+  const artistTotalsOut = {};
+  for (const [artistName, tks] of perArtist) {
+    // Totales reales: los tops anuales (40) y el global (60) dejan fuera a la
+    // mayoría de los artistas, y sin esto la ficha mostraría 0 plays, "último
+    // año —" y sin chart.
+    const curve = [...years.entries()]
+      .sort((a, b) => a[0] - b[0])
+      .filter(([, yb]) => yb.artistMs.get(artistName))
+      .map(([y, yb]) => [y, round1(yb.artistMs.get(artistName) / 60000), yb.artistPlays.get(artistName) || 0]);
+    artistTotalsOut[artistName] = [
+      artistPlays.get(artistName) || 0,
+      round1((artistMs.get(artistName) || 0) / 60000),
+      artistFirstYear.get(artistName) ?? null,
+      curve.length ? curve[curve.length - 1][0] : null,
+      curve,
+    ];
+    tks.sort((a, b) =>
+      (trackPlaysCount.get(b) || 0) - (trackPlaysCount.get(a) || 0) ||
+      (trackMs.get(b) || 0) - (trackMs.get(a) || 0));
+    artistTracksOut[artistName] = tks.slice(0, ARTIST_TRACKS_TOP_N).map(tk => {
+      const m = trackMeta.get(tk) || {};
+      return [
+        m.name || '',
+        trackPlaysCount.get(tk) || 0,
+        round1((trackMs.get(tk) || 0) / 60000),
+        (m.uri || '').split(':').pop(),
+      ];
+    });
+  }
+
+  const artistTracks = {
+    version: ARTIST_TRACKS_VERSION,
+    generated_at: generatedAt,
+    artists: artistTracksOut,
+    totals: artistTotalsOut,
+  };
+
+  return { stats, trackPlays, listened, skipStats, detail, records, artistTracks };
 }
 
 export { processStreamingHistory };

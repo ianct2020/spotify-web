@@ -10,12 +10,13 @@
 // 100 artistas en lugar de 20. Lógica de fetch/cache/playlist compartida en
 // features/discover-common.js con #new-releases.
 
-import { escapeHtml, pageHeader } from '../ui/components.js?v=125';
-import { showToast } from '../ui/toast.js?v=125';
-import { openArtistCard } from './artist-card.js?v=125';
-import { openAlbumCard } from './album-card.js?v=125';
-import { albumKey } from '../util/album-key.js?v=125';
-import { buildAlbumHeardIndex, markAlbumHeard } from '../util/album-heard.js?v=125';
+import { escapeHtml, pageHeader } from '../ui/components.js?v=126';
+import { showToast } from '../ui/toast.js?v=126';
+import { openArtistCard } from './artist-card.js?v=126';
+import { openAlbumCard } from './album-card.js?v=126';
+import { albumKey } from '../util/album-key.js?v=126';
+import { isJunkTrack } from '../util/junk.js?v=126';
+import { buildAlbumHeardIndex, markAlbumHeard } from '../util/album-heard.js?v=126';
 import {
   getArtistIdCached,
   getArtistDiscoCached,
@@ -28,7 +29,7 @@ import {
   saveScanCache,
   clearScanCache,
   agoLabel,
-} from './discover-common.js?v=125';
+} from './discover-common.js?v=126';
 
 const SCAN_KEY = 'discover_artists';
 
@@ -95,6 +96,8 @@ export async function render(container) {
       image: idx.artistImage.get(nameLower) || null,
     }))
     .filter(a => a.likes >= MIN_LIKES)
+    // v=126: fábricas de sonidos funcionales fuera de los candidatos.
+    .filter(a => !isJunkTrack('', a.name))
     .sort((a, b) => b.likes - a.likes);
 
   if (!candidates.length) {

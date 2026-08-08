@@ -2,7 +2,7 @@
 // primer/último año, top tracks del artista, hover-play, y plays actuales
 // vía Stats.fm si aplica. Se abre desde cualquier feature con openArtistCard({ name }).
 
-import { loadHistoryStats, isOwner } from './history-data.js';
+import { loadHistoryStats, loadArtistTracks, isOwner } from './history-data.js';
 import { escapeHtml } from '../ui/components.js';
 import { getPreview, getArtistTopPreview } from '../api/preview-providers.js';
 import { togglePreview, playingKey, attachHover } from '../ui/preview-player.js';
@@ -58,10 +58,27 @@ async function fetchArtistImage(name) {
 
 let chart = null;
 
+// El índice está keyeado por el nombre exacto que trae el historial. La ficha
+// casi siempre llega con ese mismo nombre, pero si viene de otra fuente (likes,
+// Stats.fm) puede diferir en mayúsculas. Índice lowercase perezoso, una vez.
+let _artistCI = null;
+function resolveArtistKey(artistTracks, name) {
+  if (!artistTracks?.artists || !name) return null;
+  if (_artistCI?.src !== artistTracks) {
+    const map = new Map();
+    for (const k of Object.keys(artistTracks.artists)) map.set(k.toLowerCase(), k);
+    _artistCI = { src: artistTracks, map };
+  }
+  return _artistCI.map.get(name.toLowerCase()) || null;
+}
+
 function fmtMinutes(min) {
   if (!min && min !== 0) return '—';
-  if (min >= 60) return `${Math.floor(min / 60).toLocaleString('es-AR')}h ${Math.round(min % 60)}m`;
-  return `${Math.round(min)}m`;
+  // Redondear PRIMERO y después partir en h/m. Al revés, 419,6 min daba
+  // "6h 60m" (floor 6 + round(59,6) = 60) en vez de "7h 0m".
+  const total = Math.round(min);
+  if (total >= 60) return `${Math.floor(total / 60).toLocaleString('es-AR')}h ${total % 60}m`;
+  return `${total}m`;
 }
 
 function onModalClose() {
@@ -177,19 +194,61 @@ async function openArtistCard(a) {
     firstYear = firstYear || allTime.first_year;
   }
 
-  if (!totalPlays && !allTime) {
+  // FUENTE PRINCIPAL (v=126): índice del historial COMPLETO por artista.
+  //
+  // Antes esto salía de la unión de los top_tracks anuales (top 40 por año) y,
+  // como relleno, de top_tracks_all_time (top 60 global). Los dos son tops
+  // recortados: un artista chico no entra en ninguno. "prettifun", con 89 plays
+  // y 3h 34m, mostraba UN solo track ("Light") porque era el único que se había
+  // colado en un top anual. history-artist-tracks.json indexa todo artista con
+  // al menos una play válida, así que acá ya vienen los 6 reales.
+  const artistTracks = await loadArtistTracks();
+  const histKey = artistTracks?.artists?.[a.name] ? a.name : resolveArtistKey(artistTracks, a.name);
+  const fromHistory = histKey ? artistTracks.artists[histKey] : null;
+
+  // Totales del índice: mandan sobre los tops, que recortan a 40/60 artistas.
+  const histTotals = histKey ? artistTracks.totals?.[histKey] : null;
+  if (histTotals) {
+    const [hPlays, hMin, hFirst, hLast, hCurve] = histTotals;
+    totalPlays = hPlays || totalPlays;
+    totalMin = hMin || totalMin;
+    firstYear = hFirst || firstYear;
+    lastYear = hLast || lastYear;
+    // La curva del índice cubre TODOS los años del artista. La que se armó
+    // arriba con los tops anuales se queda en cero para cualquiera que no
+    // entre en el top 40 de su año, y dejaba la ficha sin gráfico.
+    if (hCurve?.length) {
+      const byYear = new Map(hCurve.map(([yy, mm, pp]) => [yy, { min: mm, plays: pp }]));
+      yearsWithArtist.length = 0;
+      for (const y of stats.years) {
+        const hit = byYear.get(y.year);
+        yearsWithArtist.push({ year: y.year, min: hit?.min || 0, plays: hit?.plays || 0 });
+      }
+    }
+  }
+
+  if (fromHistory?.length) {
+    trackAcum.clear();
+    for (const [name, plays, min, id] of fromHistory) {
+      trackAcum.set(name, { name, min: min || 0, plays: plays || 0, uri: id ? `spotify:track:${id}` : null });
+    }
+  } else {
+    // Fallback 1: top_tracks_all_time (top 60 global). Solo sirve para artistas
+    // grandes, pero es lo único disponible si no hay índice por artista.
+    for (const t of (stats.top_tracks_all_time || [])) {
+      if (t.artist !== a.name) continue;
+      if (trackAcum.has(t.name)) continue;
+      trackAcum.set(t.name, { name: t.name, min: t.min || 0, plays: t.plays || 0, uri: t.uri });
+    }
+  }
+  const topTracks = [...trackAcum.values()].sort((a, b) => b.plays - a.plays).slice(0, 5);
+
+  // El corte por "no está en ningún top" se hace DESPUÉS de mirar el historial
+  // completo: un artista puede no entrar en ningún top y aun así tener plays.
+  if (!totalPlays && !allTime && !topTracks.length) {
     body.innerHTML = `<p style="color:var(--color-text-secondary);font-size:13px;margin:0">No aparece en tu historial (o no está en los tops de ningún año). Igual podés escucharlo en Spotify y ver el preview arriba.</p>`;
     return;
   }
-
-  // Completo trackAcum con top_tracks_all_time del artista (tiene más profundidad
-   // que la unión de tops anuales). Esto arregla que Bad Bunny mostrara solo 2.
-  for (const t of (stats.top_tracks_all_time || [])) {
-    if (t.artist !== a.name) continue;
-    if (trackAcum.has(t.name)) continue;
-    trackAcum.set(t.name, { name: t.name, min: t.min || 0, plays: t.plays || 0, uri: t.uri });
-  }
-  const topTracks = [...trackAcum.values()].sort((a, b) => b.plays - a.plays).slice(0, 5);
 
   const hasChart = yearsWithArtist.some(y => y.min > 0);
   body.innerHTML = `

@@ -1,9 +1,10 @@
-import { getAllPlaylistItems, getBestAvailableLikes, addTracksToPlaylist, removeTracksFromPlaylist, getAllUserPlaylists } from '../api.js?v=125';
-import { idbGetCached, idbSetCached, idbGetTimestamp } from '../idb.js?v=125';
-import { escapeHtml, confirmModal, pageHeader } from '../ui/components.js?v=125';
-import { showToast } from '../ui/toast.js?v=125';
-import { openModal, closeTop } from '../ui/modal-stack.js?v=125';
-import { getListenedPlaylist, groupItemsByAlbum, openListenedAlbumsPicker, albumKey, baseName, norm } from './listened-shared.js?v=125';
+import { getAllPlaylistItems, getBestAvailableLikes, addTracksToPlaylist, removeTracksFromPlaylist, getAllUserPlaylists } from '../api.js?v=126';
+import { idbGetCached, idbSetCached, idbGetTimestamp } from '../idb.js?v=126';
+import { escapeHtml, confirmModal, pageHeader } from '../ui/components.js?v=126';
+import { showToast } from '../ui/toast.js?v=126';
+import { isJunkTrack } from '../util/junk.js?v=126';
+import { openModal, closeTop } from '../ui/modal-stack.js?v=126';
+import { getListenedPlaylist, groupItemsByAlbum, openListenedAlbumsPicker, albumKey, baseName, norm } from './listened-shared.js?v=126';
 
 const SORT_KEY = 'listened_sort_mode';
 const VALID_SORTS = new Set(['recent', 'year-desc', 'year-asc', 'artist-asc', 'likes-desc', 'name-asc']);
@@ -336,6 +337,7 @@ async function attachLikes(albumList) {
   for (const it of items) {
     const t = it.track;
     if (!t?.album?.id) continue;
+    if (isJunkTrack(t.name, t.artists?.[0]?.name)) continue;  // v=126
     let e = byId.get(t.album.id);
     if (!e) {
       const imgs = t.album.images || [];
