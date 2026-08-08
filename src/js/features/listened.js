@@ -2,6 +2,7 @@ import { getAllPlaylistItems, getBestAvailableLikes, addTracksToPlaylist, remove
 import { idbGetCached, idbSetCached, idbGetTimestamp } from '../idb.js';
 import { escapeHtml, confirmModal, pageHeader } from '../ui/components.js';
 import { showToast } from '../ui/toast.js';
+import { isJunkTrack } from '../util/junk.js';
 import { openModal, closeTop } from '../ui/modal-stack.js';
 import { getListenedPlaylist, groupItemsByAlbum, openListenedAlbumsPicker, albumKey, baseName, norm } from './listened-shared.js';
 
@@ -336,6 +337,7 @@ async function attachLikes(albumList) {
   for (const it of items) {
     const t = it.track;
     if (!t?.album?.id) continue;
+    if (isJunkTrack(t.name, t.artists?.[0]?.name)) continue;  // v=126
     let e = byId.get(t.album.id);
     if (!e) {
       const imgs = t.album.images || [];

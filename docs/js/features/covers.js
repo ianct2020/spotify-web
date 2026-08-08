@@ -9,11 +9,12 @@
 // placeholder→img. Botón "Pantalla completa" (Fullscreen API) que oculta
 // sidebar/header/toolbar y recalcula el lado.
 
-import { loadListenedAlbums, isOwner, ownerLockedMessage } from './history-data.js?v=125';
-import { getAllPlaylistItems } from '../api.js?v=125';
-import { escapeHtml, pageHeader } from '../ui/components.js?v=125';
-import { openAlbumCard } from './album-card.js?v=125';
-import { albumKey } from '../util/album-key.js?v=125';
+import { loadListenedAlbums, isOwner, ownerLockedMessage } from './history-data.js?v=126';
+import { isJunkTrack } from '../util/junk.js?v=126';
+import { getAllPlaylistItems } from '../api.js?v=126';
+import { escapeHtml, pageHeader } from '../ui/components.js?v=126';
+import { openAlbumCard } from './album-card.js?v=126';
+import { albumKey } from '../util/album-key.js?v=126';
 
 const LS_KEY_SIZE = 'covers_cell_size';
 const LS_KEY_SORT = 'covers_sort_mode';
@@ -81,6 +82,7 @@ function buildList(data, wthreeItems) {
     for (const it of wthreeItems) {
       const t = it?.item || it?.track;
       if (!t || !t.album) continue;
+      if (isJunkTrack(t.name, t.artists?.[0]?.name)) continue;  // v=126
       const albumName = t.album.name || '';
       const artistName = t.artists?.[0]?.name || '';
       if (!albumName) continue;
@@ -220,6 +222,7 @@ export async function render(container) {
   const wthreeCount = wthreeItems ? new Set(wthreeItems.map(it => {
     const t = it?.item || it?.track;
     if (!t || !t.album) return null;
+    if (isJunkTrack(t.name, t.artists?.[0]?.name)) return null;  // v=126
     return albumKey(t.album.name, t.artists?.[0]?.name || '');
   }).filter(Boolean)).size : 0;
 

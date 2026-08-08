@@ -18,6 +18,7 @@ Filtros:
 import json
 import glob
 import os
+import unicodedata
 from collections import defaultdict, Counter
 from datetime import datetime, date, timedelta
 
@@ -34,6 +35,8 @@ SKIP_STATS_VERSION = 1
 LISTENED_VERSION = 2         # bump: excluye "Sonido Para Sacar Agua Del Movil"
 TRACK_DETAIL_VERSION = 1     # ficha de canción: plays por mes + primera/última + récords del track
 RECORDS_VERSION = 2          # v2: excluye todas las variantes del sonido saca-agua
+ARTIST_TRACKS_VERSION = 1    # v=126: top de tracks por artista desde el historial COMPLETO (ficha de artista)
+ARTIST_TRACKS_TOP_N = 6      # la ficha muestra 5; guardamos 6 de colchón
 DETAIL_MIN_PLAYS = 5         # solo tracks con >=N plays válidas entran al detalle (controla peso)
 MILESTONE_TARGETS = {1, 10000, 25000, 50000, 75000, 100000, 125000, 150000, 175000, 200000, 250000, 300000}
 TOP_N_YEAR = 40       # top X por año
@@ -43,11 +46,69 @@ KEEP_TRACK_IF_MS = 60000  # solo indexamos tracks con >=60s totales (reduce peso
 # Tracks a excluir de todos los agregados (funcionales de despertador/notificación
 # que aparecen inflados por reproducciones automáticas y no representan música escuchada).
 # Match case-insensitive por subcadena en el nombre del track.
+# v=126: ampliado de 3 substrings a artistas + substrings. Debe quedar
+# sincronizado con src/js/util/junk.js (mismo ruleset, mismas normalizaciones).
+# Verificado contra el historial real de Ian: 63 entradas / 205 plays filtradas,
+# sin falsos positivos sobre música de verdad.
+
+# Artistas que solo publican sonidos funcionales — se van enteros.
+EXCLUDED_ARTISTS = {
+    "nbeats",                          # sonidos saca-agua, alarmas, repelente de mosquitos
+    "miracle tones",                   # catálogo entero de "432 Hz ..."
+    "para dormir",                     # "Sonido de Lluvia en la Ventana - Parte NN"
+    "lluvia del bosque",
+    "24h rain sounds",
+    "naturaleza sonidos",
+    "sonidos de truenos y lluvia",
+    "estudio de sonidos de lluvia",
+    "calmwaves",
+    "musica instrumental para dormir",
+}
+
+# Substrings sobre el nombre del track normalizado (minúsculas, sin tildes).
+# Deliberadamente estrechos: "white noise" y "pink noise" a secas se probaron y
+# pisaban canciones reales (Brent Faiyaz, Ella Vos, young friend), así que no están.
 EXCLUDED_TRACK_SUBSTRINGS = [
-    "sonido para sacar agua del movil",  # despertador iOS, sale en todos los tops
-    "sonido para eliminar",              # variantes nBeats del mismo sonido funcional ("...agua de los altavoces/auriculares")
-    "sonido para sacar agua",            # cubre "del movil", "del teléfono", etc.
+    "sonido para",                 # sacar agua / eliminar agua / enfriar el teléfono
+    "sonidos para",
+    "sonido de lluvia",
+    "sonidos de lluvia",
+    "sonidos de naturaleza",
+    "lluvia de fondo para dormir",
+    "fix my speakers",
+    "water eject",
+    "eject water",
+    "remove water from",
+    "som para remover agua",
+    "ruido fuerte para molestar",
+    "ruido blanco",
+    "frecuencia de repelente",
+    "frecuencias de repelente",
+    "rain sounds",
+    "rain soundscape",
+    "432 hz",
+    "432hz",
+    "528 hz",
+    "528hz",
+    "theta waves",
+    "binaural beat",
+    "tono de prueba",
+    "test tone",
 ]
+
+
+def _norm_junk(s):
+    """Minúsculas sin tildes, para que 'Teléfono' y 'Telefono' caigan igual."""
+    s = unicodedata.normalize("NFD", (s or "").lower())
+    return "".join(c for c in s if unicodedata.category(c) != "Mn")
+
+
+def is_junk_track(track, artist):
+    """¿Esta entrada es un sonido funcional en vez de música?"""
+    if artist and _norm_junk(artist) in EXCLUDED_ARTISTS:
+        return True
+    t = _norm_junk(track)
+    return bool(t) and any(sub in t for sub in EXCLUDED_TRACK_SUBSTRINGS)
 
 # Regla mix A+C para detectar "álbum escuchado" desde el historial:
 # el álbum cuenta cuando en un mismo día tuvo >=MIN_TRACKS_SAMEDAY tracks distintos
@@ -208,9 +269,8 @@ def build_stats(plays, img_idx):
         skipped = bool(r.get("skipped"))
         end_reason = r.get("reason_end") or ""
 
-        # Filtrar tracks excluidos (funcionales que inflan tops sin ser música)
-        track_lc = track.lower()
-        if any(sub in track_lc for sub in EXCLUDED_TRACK_SUBSTRINGS):
+        # Filtrar basura (sonidos funcionales que inflan tops sin ser música)
+        if is_junk_track(track, artist):
             continue
 
         # skip% cuenta contra el total de plays
@@ -466,6 +526,51 @@ def build_stats(plays, img_idx):
         ],
     }
 
+    # v=126 — top de tracks POR ARTISTA sacado del historial completo.
+    # La ficha de artista mostraba un solo track para artistas chicos porque solo
+    # miraba top_tracks_all_time (top 60 global) y los top_tracks anuales (top 40
+    # por año): "prettifun" con 89 plays no entra en ninguno de los dos.
+    # Acá indexamos TODO artista con al menos una play válida (>=30s).
+    artist_tracks_out = {}
+    artist_totals_out = {}
+    per_artist = defaultdict(list)
+    for tk, meta in track_meta.items():
+        per_artist[meta["artist"]].append(tk)
+    for artist_name, tks in per_artist.items():
+        tks.sort(key=lambda t: (-track_plays_count[t], -track_ms[t]))
+        # Totales reales del artista. top_artists_all_time solo llega a 60 y los
+        # tops anuales a 40, así que sin esto un artista chico salía con 0 plays.
+        # La curva por año va acá por el mismo motivo: sin ella la ficha de un
+        # artista fuera de los tops se quedaba sin chart y con "último año —".
+        curve = [
+            [y, round(yb["artist_ms"][artist_name] / 60000, 1), yb["artist_plays"][artist_name]]
+            for y, yb in sorted(years.items())
+            if yb["artist_ms"].get(artist_name)
+        ]
+        artist_totals_out[artist_name] = [
+            artist_plays[artist_name],
+            round(artist_ms[artist_name] / 60000, 1),
+            artist_first_year.get(artist_name),
+            curve[-1][0] if curve else None,
+            curve,
+        ]
+        artist_tracks_out[artist_name] = [
+            [
+                track_meta[t]["name"],
+                track_plays_count[t],
+                round(track_ms[t] / 60000, 1),
+                (track_meta[t]["uri"] or "").split(":")[-1],
+            ]
+            for t in tks[:ARTIST_TRACKS_TOP_N]
+        ]
+
+    artist_tracks_payload = {
+        "version": ARTIST_TRACKS_VERSION,
+        "generated_at": stats["generated_at"],
+        "artists": artist_tracks_out,
+        "totals": artist_totals_out,
+    }
+
     # índice por uri — formato compacto: id (sin prefix) -> [plays, segundos] o [plays, seg, "p"] para partial-only
     track_plays_out = {}
     for uri, v in track_uri_stats.items():
@@ -646,7 +751,7 @@ def build_stats(plays, img_idx):
         "milestones": milestones,
     }
 
-    return stats, track_plays_out, albums_played_out, listened_payload, skip_payload, detail_payload, records_payload
+    return stats, track_plays_out, albums_played_out, listened_payload, skip_payload, detail_payload, records_payload, artist_tracks_payload
 
 
 def main():
@@ -659,7 +764,7 @@ def main():
     print(f"  tapas indexadas: {len(img_idx):,}")
 
     print("Agregando…")
-    stats, track_plays, albums_played, listened, skip_stats, detail, records = build_stats(plays, img_idx)
+    stats, track_plays, albums_played, listened, skip_stats, detail, records, artist_tracks = build_stats(plays, img_idx)
 
     stats_path = os.path.join(OUT_DIR, "history-stats.json")
     tp_path = os.path.join(OUT_DIR, "history-track-plays.json")
@@ -667,7 +772,10 @@ def main():
     skip_path = os.path.join(OUT_DIR, "history-skip-stats.json")
     detail_path = os.path.join(OUT_DIR, "history-track-detail.json")
     records_path = os.path.join(OUT_DIR, "history-records.json")
+    at_path = os.path.join(OUT_DIR, "history-artist-tracks.json")
 
+    with open(at_path, "w") as f:
+        json.dump(artist_tracks, f, separators=(",", ":"), ensure_ascii=False)
     with open(stats_path, "w") as f:
         json.dump(stats, f, separators=(",", ":"), ensure_ascii=False)
     with open(tp_path, "w") as f:
@@ -692,6 +800,7 @@ def main():
     print(f"OK → {tp_path} ({os.path.getsize(tp_path)/1024:.1f} KB, {len(track_plays)} tracks, {len(albums_played)} álbumes tocados)")
     print(f"OK → {listened_path} ({os.path.getsize(listened_path)/1024:.1f} KB)")
     print(f"OK → {skip_path} ({os.path.getsize(skip_path)/1024:.1f} KB)")
+    print(f"OK → {at_path} ({os.path.getsize(at_path)/1024:.1f} KB, {len(artist_tracks['artists'])} artistas)")
     print(f"totales stats: {stats['totals']}")
     print(f"totales listened: {listened['totals']} · years: {[y['year'] for y in listened['years']]}")
     print(f"skip stats: {len(skip_stats['tracks'])} tracks con >={SKIP_STATS_MIN_PLAYS} plays")

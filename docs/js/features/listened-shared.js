@@ -1,7 +1,8 @@
-import { getAllUserPlaylists } from '../api.js?v=125';
-import { escapeHtml } from '../ui/components.js?v=125';
-import { showToast } from '../ui/toast.js?v=125';
-import { openModal, closeTop } from '../ui/modal-stack.js?v=125';
+import { getAllUserPlaylists } from '../api.js?v=126';
+import { escapeHtml } from '../ui/components.js?v=126';
+import { showToast } from '../ui/toast.js?v=126';
+import { isJunkTrack } from '../util/junk.js?v=126';
+import { openModal, closeTop } from '../ui/modal-stack.js?v=126';
 
 const PID_KEY = 'listened_albums_playlist_id';
 const PNAME_KEY = 'listened_albums_playlist_name';
@@ -55,6 +56,7 @@ function groupItemsByAlbum(items) {
     const t = it.item || it.track;
     const album = t?.album;
     if (!album?.id) continue;
+    if (isJunkTrack(t.name, t.artists?.[0]?.name)) continue;  // v=126
     let entry = map.get(album.id);
     if (!entry) {
       const imgs = album.images || [];

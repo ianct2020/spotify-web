@@ -1,16 +1,17 @@
-import { getAllLikedTracks, invalidateLikesCache, exportAllData, importAllData, getCurrentUserId, syncLikesIncremental, getLikesCacheTimestamp, getBestAvailableLikes, getAllPlaylistItems } from '../api.js?v=125';
-import { showProgress, hideProgress, alertModal, escapeHtml, pageHeader } from '../ui/components.js?v=125';
-import { openModal, closeTop } from '../ui/modal-stack.js?v=125';
-import { showToast } from '../ui/toast.js?v=125';
-import { openListenedAlbumsPicker } from './listened-shared.js?v=125';
-import { loadHistoryStats, loadListenedAlbums } from './history-data.js?v=125';
-import { getArtistTopPreview } from '../api/preview-providers.js?v=125';
-import { hoverIn, hoverOut } from '../ui/preview-player.js?v=125';
-import { hasUsername, getUsername } from '../api/statsfm.js?v=125';
-import { loadHistoryStats as _loadStatsForCounter } from './history-data.js?v=125';
-import { openArtistCard } from './artist-card.js?v=125';
-import { openAlbumCard } from './album-card.js?v=125';
-import { activateMarquee, marqueeSpan } from '../ui/marquee.js?v=125';
+import { getAllLikedTracks, invalidateLikesCache, exportAllData, importAllData, getCurrentUserId, syncLikesIncremental, getLikesCacheTimestamp, getBestAvailableLikes, getAllPlaylistItems } from '../api.js?v=126';
+import { showProgress, hideProgress, alertModal, escapeHtml, pageHeader } from '../ui/components.js?v=126';
+import { openModal, closeTop } from '../ui/modal-stack.js?v=126';
+import { showToast } from '../ui/toast.js?v=126';
+import { openListenedAlbumsPicker } from './listened-shared.js?v=126';
+import { loadHistoryStats, loadListenedAlbums } from './history-data.js?v=126';
+import { getArtistTopPreview } from '../api/preview-providers.js?v=126';
+import { hoverIn, hoverOut } from '../ui/preview-player.js?v=126';
+import { hasUsername, getUsername } from '../api/statsfm.js?v=126';
+import { loadHistoryStats as _loadStatsForCounter } from './history-data.js?v=126';
+import { openArtistCard } from './artist-card.js?v=126';
+import { openAlbumCard } from './album-card.js?v=126';
+import { activateMarquee, marqueeSpan } from '../ui/marquee.js?v=126';
+import { isJunkTrack } from '../util/junk.js?v=126';
 
 let charts = [];
 let _loadController = null;
@@ -452,6 +453,8 @@ function computeStats(likes) {
   likes.forEach(item => {
     const t = item.track;
     if (!t) return;
+    // v=126: sonidos funcionales fuera de todos los charts del dashboard.
+    if (isJunkTrack(t.name, t.artists?.[0]?.name)) return;
 
     const year = parseInt(t.album?.release_date?.slice(0, 4));
     if (year) {
@@ -563,22 +566,27 @@ function renderDashboard(container, stats) {
       <div class="card dash-chart-card">
         <h3>Por década</h3>
         <div class="chart-box"><canvas id="chart-decades"></canvas></div>
+        <p class="chart-note">Tus canciones guardadas repartidas por la década en que se publicó el álbum.</p>
       </div>
       <div class="card dash-chart-card">
         <h3>Top 15 artistas <span style="font-weight:400;color:var(--color-text-muted);font-size:13px">· nº = canciones tuyas en likes</span></h3>
         <div class="chart-box"><canvas id="chart-artists"></canvas></div>
+        <p class="chart-note">Canciones tuyas en Liked Songs.</p>
       </div>
       <div class="card dash-chart-card">
         <h3>Día de la semana</h3>
         <div class="chart-box"><canvas id="chart-dow"></canvas></div>
+        <p class="chart-note">Qué día de la semana añades canciones a tus likes, según la fecha de guardado.</p>
       </div>
       <div class="card dash-chart-card">
         <h3>Hora del día</h3>
         <div class="chart-box"><canvas id="chart-hour"></canvas></div>
+        <p class="chart-note">A qué hora del día añades canciones a tus likes, en la hora local de este equipo.</p>
       </div>
       <div class="card dash-chart-card dash-chart-wide">
         <h3>Evolución de la biblioteca</h3>
         <div class="chart-box"><canvas id="chart-evolution"></canvas></div>
+        <p class="chart-note">Total acumulado de likes mes a mes, y cuántos añadiste en cada uno.</p>
       </div>
     </div>
 
@@ -592,18 +600,22 @@ function renderDashboard(container, stats) {
         <div class="card dash-chart-card dash-chart-wide">
           <h3>Evolución mensual — minutos escuchados</h3>
           <div class="chart-box"><canvas id="chart-history-monthly"></canvas></div>
+          <p class="chart-note">Minutos que escuchaste cada mes, contando solo las reproducciones de 30 segundos o más.</p>
         </div>
         <div class="card dash-chart-card dash-chart-wide">
           <h3>Heatmap — cuándo escuchás <span style="font-weight:400;color:var(--color-text-muted);font-size:13px">· min / día × hora</span></h3>
           <div id="history-heatmap" style="display:flex;justify-content:center;align-items:center;padding:8px 0"></div>
+          <p class="chart-note">Cada celda son los minutos acumulados en ese día de la semana y esa hora, en horario UTC. Cuanto más intenso el violeta, más escucha.</p>
         </div>
         <div class="card dash-chart-card dash-chart-wide">
           <h3>Top 20 artistas <span style="font-weight:400;color:var(--color-text-muted);font-size:13px">· por tiempo escuchado real</span></h3>
           <div class="chart-box chart-box-tall"><canvas id="chart-history-artists"></canvas></div>
+          <p class="chart-note">Los artistas a los que más minutos dedicaste en todo tu historial, no los que más veces guardaste.</p>
         </div>
         <div class="card dash-chart-card dash-chart-wide">
           <h3>Top 20 álbumes <span style="font-weight:400;color:var(--color-text-muted);font-size:13px">· por tiempo escuchado real</span></h3>
           <div id="history-top-albums" class="dash-top-albums-grid" style="display:grid;grid-template-columns:repeat(2, minmax(0, 1fr));gap:6px 20px"></div>
+          <p class="chart-note">Los álbumes con más minutos escuchados. Cuenta el tiempo real de escucha, no el número de pistas distintas.</p>
         </div>
       </div>
     </div>
@@ -898,8 +910,8 @@ async function hydrateListenedYearTiles() {
 
     holder.innerHTML = years.map(y => `
       <button class="year-tile" data-year="${y.year}">
-        <div class="year-tile-count">${y.count.toLocaleString('es-AR')}</div>
         <div class="year-tile-year">${y.year}</div>
+        <div class="year-tile-count">${y.count.toLocaleString('es-AR')}</div>
       </button>
     `).join('');
     holder.querySelectorAll('.year-tile').forEach(tile => {
@@ -1134,10 +1146,9 @@ function buildCharts(stats) {
       interaction: { mode: 'nearest', intersect: false, axis: 'y' },
       scales: {
         ...CHART_DEFAULTS.scales,
-        x: {
-          ...CHART_DEFAULTS.scales.x,
-          title: { display: true, text: 'Canciones tuyas en Liked Songs', color: '#8888A0', font: { family: 'Inter', size: 11 } },
-        },
+        // v=126: la explicación pasó a un <p class="chart-note"> bajo el chart,
+        // igual que el resto de los gráficos del dashboard.
+        x: { ...CHART_DEFAULTS.scales.x },
         y: {
           ...CHART_DEFAULTS.scales.y,
           ticks: { ...CHART_DEFAULTS.scales.y.ticks, font: { family: 'Inter', size: 13 } },
