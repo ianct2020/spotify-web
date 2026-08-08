@@ -9,12 +9,12 @@
 // placeholder→img. Botón "Pantalla completa" (Fullscreen API) que oculta
 // sidebar/header/toolbar y recalcula el lado.
 
-import { loadListenedAlbums, isOwner, ownerLockedMessage } from './history-data.js?v=126';
-import { isJunkTrack } from '../util/junk.js?v=126';
-import { getAllPlaylistItems } from '../api.js?v=126';
-import { escapeHtml, pageHeader } from '../ui/components.js?v=126';
-import { openAlbumCard } from './album-card.js?v=126';
-import { albumKey } from '../util/album-key.js?v=126';
+import { loadListenedAlbums, isOwner, ownerLockedMessage } from './history-data.js?v=127';
+import { isJunkTrack } from '../util/junk.js?v=127';
+import { getAllPlaylistItems } from '../api.js?v=127';
+import { escapeHtml, pageHeader } from '../ui/components.js?v=127';
+import { openAlbumCard } from './album-card.js?v=127';
+import { albumKey, coverId } from '../util/album-key.js?v=127';
 
 const LS_KEY_SIZE = 'covers_cell_size';
 const LS_KEY_SORT = 'covers_sort_mode';
@@ -108,7 +108,41 @@ function buildList(data, wthreeItems) {
     }
   }
 
-  return [...map.values()].map(a => ({
+  // ── 2.º pase de dedup: por TAPA ──────────────────────────────────────────
+  //
+  // v=127. La clave canónica compara nombre+artista, y eso deja pasar el caso
+  // más visible del mosaico: el mismo álbum acreditado a artistas distintos.
+  // El export del historial guarda como "artist" el principal del track que
+  // sonó, así que un disco colaborativo entra varias veces:
+  //   "$ome $exy $ongs 4 U" / Drake   +   "$ome $exy $ongs 4 U" / PARTYNEXTDOOR
+  //   "POMPEII // UTILITY" / Earl Sweatshirt  +  … / MIKE
+  //   "East of Underground" aparecía CUATRO veces con 4 artistas distintos.
+  // También junta singles que reusan el arte del álbum y recopilatorios con la
+  // misma portada.
+  //
+  // Para una vista que es literalmente un collage de imágenes, "misma tapa" ES
+  // "misma celda": si el hash de la imagen coincide, el píxel resultante es
+  // idéntico y el usuario lo lee como repetido. Por eso acá deduplicamos por
+  // coverId y no por nombre — es la señal que se corresponde con lo que se ve.
+  const byCover = new Map();
+  const out = [];
+  for (const a of map.values()) {
+    const cid = coverId(a.img);
+    const prev = cid ? byCover.get(cid) : null;
+    if (prev) {
+      // Nos quedamos con la escucha más antigua y sumamos minutos y años.
+      prev.min += a.min;
+      if (a.date && (!prev.date || a.date < prev.date)) prev.date = a.date;
+      for (const y of a.years) prev.years.add(y);
+      for (const s of a.sources) prev.sources.add(s);
+      if (!prev.trackId) prev.trackId = a.trackId;
+      continue;
+    }
+    if (cid) byCover.set(cid, a);
+    out.push(a);
+  }
+
+  return out.map(a => ({
     ...a,
     years: [...a.years].sort((x, y) => x - y),
     sources: [...a.sources],
@@ -140,43 +174,30 @@ function fitCellSize(N, W, H, gap = GRID_GAP) {
 
 // Estimación: cuántas celdas caben en el primer viewport visible del grid.
 // Sirve para saber a cuántas <img> les ponemos fetchpriority=high.
+//
+// El tope de EAGER_MAX importa. En "Mini" (28px) entran ~714 tapas en el primer
+// viewport, y marcarlas todas como high + sin lazy dispara 714 descargas y 714
+// decodificaciones a la vez: la red se satura, el hilo principal se va en
+// decodificar y los requestAnimationFrame del render por lotes se espacian
+// muchísimo (medido: 2,5s hasta el primer frame). Con un tope chico el resto
+// entra como loading=lazy y es el navegador el que decide qué bajar según lo
+// que de verdad se ve.
+const EAGER_MAX = 120;
+
 function firstViewportCount(cellSize, gridWidth, viewportHeight, gridTop) {
   const s = Math.max(1, cellSize);
   const cols = Math.max(1, Math.floor((gridWidth + GRID_GAP) / (s + GRID_GAP)));
   const availH = Math.max(200, viewportHeight - gridTop);
   const rows = Math.max(1, Math.ceil((availH + GRID_GAP) / (s + GRID_GAP)));
-  return cols * rows;
+  return Math.min(cols * rows, EAGER_MAX);
 }
 
+// Toda celda que llega acá tiene tapa: las que no la tienen se filtran antes de
+// renderizar (v=127), así que no hay más cuadro-con-inicial en el collage.
 function cellHtml(a, i, hi) {
-  const initial = escapeHtml(((a.artist || a.name || '?')[0] || '?').toUpperCase());
   const eager = hi ? ' fetchpriority="high"' : '';
   const loading = hi ? '' : ' loading="lazy"';
-  return `<button type="button" class="cover-cell" data-i="${i}">
-    ${a.img
-      ? `<img class="cover-img" src="${a.img}" alt="" decoding="async"${eager}${loading}>`
-      : `<div class="cover-fallback">${initial}</div>`}
-  </button>`;
-}
-
-// oEmbed de Spotify — nos permite recuperar la tapa de un track sin auth.
-// Cache en memoria para no repetir la misma tapa entre re-renders.
-const oembedCache = new Map();
-async function tapaViaOembed(trackId) {
-  if (!trackId) return null;
-  if (oembedCache.has(trackId)) return oembedCache.get(trackId);
-  try {
-    const url = `https://open.spotify.com/oembed?url=spotify:track:${trackId}`;
-    const res = await fetch(url);
-    if (!res.ok) throw new Error('HTTP ' + res.status);
-    const j = await res.json();
-    const t = j?.thumbnail_url || null;
-    oembedCache.set(trackId, t);
-    return t;
-  } catch {
-    oembedCache.set(trackId, null);
-    return null;
-  }
+  return `<button type="button" class="cover-cell" data-i="${i}"><img class="cover-img" src="${a.img}" alt="" decoding="async"${eager}${loading}></button>`;
 }
 
 export async function render(container) {
@@ -205,7 +226,16 @@ export async function render(container) {
     catch (e) { console.warn('[covers] no pude cargar W-Three:', e.message); }
   }
 
-  const allAlbums = buildList(data, wthreeItems);
+  // v=127: las celdas sin tapa mostraban un cuadro gris con la inicial y
+  // ensuciaban el collage. Fuera del mosaico y fuera del contador — el número
+  // que se muestra es el de tapas que se ven de verdad.
+  const built = buildList(data, wthreeItems);
+  const noCover = built.filter(a => !a.img);
+  const allAlbums = built.filter(a => a.img);
+  if (noCover.length) {
+    console.log(`[covers] ${noCover.length} álbumes sin tapa excluidos del mosaico:`,
+      noCover.map(a => `${a.name} — ${a.artist}`).join(' | '));
+  }
   if (!allAlbums.length) {
     content.innerHTML = `<div class="card"><p>Todavía no hay álbumes en tu historial. Importa el ZIP de Extended Streaming History desde la barra lateral.</p></div>`;
     return;
@@ -226,10 +256,10 @@ export async function render(container) {
     return albumKey(t.album.name, t.artists?.[0]?.name || '');
   }).filter(Boolean)).size : 0;
 
-  const missingImgs = allAlbums.filter(a => !a.img).length;
+  const sinTapa = noCover.length ? ` · ${noCover.length} sin tapa, fuera del mosaico` : '';
   const sourcesLine = wthreeItems
-    ? `<span class="covers-summary-sub">${allAlbums.length.toLocaleString('es-ES')} tapas · ${wthreeCount} en W-Three${missingImgs ? ` · ${missingImgs} sin tapa` : ''}</span>`
-    : `<span class="covers-summary-sub">${allAlbums.length.toLocaleString('es-ES')} tapas</span>`;
+    ? `<span class="covers-summary-sub">Historial de escuchas + playlist w three · ${wthreeCount} en W-Three${sinTapa}</span>`
+    : `<span class="covers-summary-sub">Historial de escuchas${sinTapa}</span>`;
 
   content.innerHTML = `
     <div class="covers-narrow-hint">Vista pensada para pantalla grande — mejor en escritorio.</div>
@@ -239,22 +269,25 @@ export async function render(container) {
         ${sourcesLine}
       </div>
       <div class="covers-controls">
-        <button type="button" class="covers-btn covers-fit-btn" id="covers-fit">Ajustar a pantalla</button>
-        <button type="button" class="covers-btn" id="covers-fullscreen" title="Ver el mosaico a pantalla completa">
-          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:4px"><path d="M8 3H5a2 2 0 0 0-2 2v3"/><path d="M21 8V5a2 2 0 0 0-2-2h-3"/><path d="M3 16v3a2 2 0 0 0 2 2h3"/><path d="M16 21h3a2 2 0 0 0 2-2v-3"/></svg>
-          Pantalla completa
-        </button>
+        <div class="covers-control-group" aria-label="Vista">
+          <button type="button" class="covers-btn covers-fit-btn" id="covers-fit" title="Calcular el lado para que entren todas las tapas sin scroll">Ajustar</button>
+          <button type="button" class="covers-btn" id="covers-fullscreen" title="Ver el mosaico a pantalla completa" aria-label="Pantalla completa">
+            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3"/><path d="M21 8V5a2 2 0 0 0-2-2h-3"/><path d="M3 16v3a2 2 0 0 0 2 2h3"/><path d="M16 21h3a2 2 0 0 0 2-2v-3"/></svg>
+          </button>
+        </div>
         <div class="covers-control-group" role="radiogroup" aria-label="Tamaño de tapa">
           <button type="button" class="covers-btn ${size === '28' ? 'is-on' : ''}" data-size="28">Mini</button>
           <button type="button" class="covers-btn ${size === '48' ? 'is-on' : ''}" data-size="48">Chico</button>
           <button type="button" class="covers-btn ${size === '64' ? 'is-on' : ''}" data-size="64">Medio</button>
           <button type="button" class="covers-btn ${size === '96' ? 'is-on' : ''}" data-size="96">Grande</button>
         </div>
-        <select class="covers-select" id="covers-sort" aria-label="Ordenar por">
-          <option value="date-asc" ${sort === 'date-asc' ? 'selected' : ''}>Por fecha (más antigua primero)</option>
-          <option value="min-desc" ${sort === 'min-desc' ? 'selected' : ''}>Por minutos escuchados</option>
-          <option value="artist-asc" ${sort === 'artist-asc' ? 'selected' : ''}>Por artista (A–Z)</option>
-        </select>
+        <div class="covers-control-group covers-select-wrap">
+          <select class="covers-select" id="covers-sort" aria-label="Ordenar por">
+            <option value="date-asc" ${sort === 'date-asc' ? 'selected' : ''}>Más antiguas primero</option>
+            <option value="min-desc" ${sort === 'min-desc' ? 'selected' : ''}>Más minutos primero</option>
+            <option value="artist-asc" ${sort === 'artist-asc' ? 'selected' : ''}>Artista (A–Z)</option>
+          </select>
+        </div>
       </div>
     </div>
     <div class="covers-year-chips" id="covers-year-chips" role="group" aria-label="Filtrar por año">
@@ -289,93 +322,121 @@ export async function render(container) {
     return sortList(list, sort);
   }
 
-  // Render de golpe: TODAS las celdas en el DOM desde el primer frame. Las
-  // primeras N (viewport visible) llevan fetchpriority=high; el resto va con
-  // loading=lazy para que el browser descargue el fondo sin bloquear.
+  // Render por lotes — "persiana".
+  //
+  // v=115 había sacado el IntersectionObserver y pasado a inyectar las ~2.400
+  // celdas de una sola vez. Eso construye 2.400 <button> + 2.400 <img> en un
+  // único task de JS y fuerza un layout gigante: el hilo principal se bloquea
+  // varios segundos y la vista se siente colgada al entrar.
+  //
+  // v=127 vuelve a inyectar en lotes, pero sin observer: un lote de 100 celdas
+  // por frame con requestAnimationFrame. Como el grid llena en orden de
+  // documento, el resultado visual es exactamente el que pidió Ian — se llena
+  // de izquierda a derecha y de arriba a abajo, como una persiana. Entre lote y
+  // lote el navegador puede pintar y atender clics, así que la página responde
+  // desde el primer frame.
+  //
+  // El primer lote va sincrónico para que nunca haya un frame vacío.
+  const BATCH = 100;
+  let renderToken = 0;
+  let imgSettledHandler = null;   // el del render vigente, para poder sacarlo
+
   function fullRender() {
+    const token = ++renderToken;   // invalida los lotes de un render anterior
+    // fullRender corre de nuevo con cada cambio de orden o de año. Sin esto los
+    // listeners delegados se irían apilando en el mismo #covers-grid y cada uno
+    // retendría la lista del render anterior.
+    if (imgSettledHandler) {
+      grid.removeEventListener('load', imgSettledHandler, true);
+      grid.removeEventListener('error', imgSettledHandler, true);
+      imgSettledHandler = null;
+    }
     const t0 = performance.now();
     const cellSize = parseInt(size, 10) || 28;
     const rect = grid.getBoundingClientRect();
     const hiCount = firstViewportCount(cellSize, Math.floor(rect.width || window.innerWidth), window.innerHeight, rect.top || 100);
+    const list = currentList;
+    const total = list.length;
 
-    grid.innerHTML = currentList.map((a, i) => cellHtml(a, i, i < hiCount)).join('');
-    countEl.textContent = currentList.length.toLocaleString('es-ES');
+    grid.innerHTML = '';
+    countEl.textContent = total.toLocaleString('es-ES');
     window.__coversLastRender = null;
 
-    requestAnimationFrame(() => requestAnimationFrame(() => {
-      const tLayout = performance.now() - t0;
-      console.log(`[covers] ${currentList.length} celdas en DOM en ${tLayout.toFixed(1)}ms (size=${size}px, hi=${hiCount})`);
+    // Fade placeholder → img: apenas carga cada <img> le pongo .is-loaded.
+    // Delegado en el grid para no colgar 2 listeners por imagen (con 2.400
+    // celdas eso son ~4.800 listeners y se nota).
+    let viewportDone = 0;
+    const viewportTarget = Math.min(hiCount, total);
+    let firstBatchMs = 0;
+    let cellsMs = 0;
+    let viewportMs = 0;
 
-      const imgs = grid.querySelectorAll('img.cover-img');
-      const total = imgs.length;
-      if (total === 0) {
-        window.__coversLastRender = { layoutMs: tLayout, imgsMs: 0, cells: currentList.length, imgs: 0, viewportMs: 0, viewportImgs: 0 };
+    const onImgSettled = (e) => {
+      const img = e.target;
+      if (!img.classList || !img.classList.contains('cover-img')) return;
+      if (!img.classList.contains('is-loaded')) img.classList.add('is-loaded');
+      const idx = +(img.closest('.cover-cell')?.dataset.i ?? -1);
+      if (idx >= 0 && idx < viewportTarget) {
+        viewportDone++;
+        if (viewportDone === viewportTarget) {
+          viewportMs = performance.now() - t0;
+          console.log(`[covers] primer viewport (${viewportTarget} tapas) completo en ${viewportMs.toFixed(0)}ms`);
+          report();
+        }
+      }
+    };
+    imgSettledHandler = onImgSettled;
+    grid.addEventListener('load', onImgSettled, true);
+    grid.addEventListener('error', onImgSettled, true);
+
+    const report = () => {
+      window.__coversLastRender = {
+        firstBatchMs, cellsMs, viewportMs,
+        cells: total, batch: BATCH, viewportImgs: viewportTarget,
+      };
+    };
+
+    const inject = (from) => {
+      const to = Math.min(from + BATCH, total);
+      let html = '';
+      for (let i = from; i < to; i++) html += cellHtml(list[i], i, i < hiCount);
+      grid.insertAdjacentHTML('beforeend', html);
+      return to;
+    };
+
+    // Lote 0 sincrónico: contenido en pantalla en el primer frame.
+    let next = inject(0);
+    requestAnimationFrame(() => {
+      firstBatchMs = performance.now() - t0;
+      console.log(`[covers] primer frame interactivo en ${firstBatchMs.toFixed(1)}ms (${Math.min(BATCH, total)} de ${total} celdas, size=${size}px)`);
+      report();
+    });
+
+    // Un lote por frame sería lo más parejo, pero con 24 lotes eso son 24
+    // frames como mínimo — y si el navegador está decodificando tapas cada
+    // frame se alarga. En vez de eso, cada frame inyecta lotes hasta gastar
+    // FRAME_BUDGET_MS y devuelve el hilo. Así el mosaico se completa rápido en
+    // una máquina desahogada sin dejar de ceder el control entre medio.
+    const FRAME_BUDGET_MS = 8;
+    const step = () => {
+      if (token !== renderToken) return;          // render cancelado
+      const frameStart = performance.now();
+      while (next < total && performance.now() - frameStart < FRAME_BUDGET_MS) {
+        next = inject(next);
+      }
+      if (next >= total) {
+        cellsMs = performance.now() - t0;
+        console.log(`[covers] mosaico completo: ${total} celdas en ${cellsMs.toFixed(1)}ms`);
+        report();
         return;
       }
-
-      // Fade placeholder → img: apenas carga cada <img>, le agrego .is-loaded
-      // para que el CSS haga el fade corto.
-      let done = 0;
-      let viewportDone = 0;
-      const viewportTarget = Math.min(hiCount, total);
-      let viewportMs = 0;
-      const markLoaded = (img) => {
-        if (!img.classList.contains('is-loaded')) img.classList.add('is-loaded');
-      };
-      const finish = (img, idx) => {
-        markLoaded(img);
-        done++;
-        if (idx < viewportTarget) {
-          viewportDone++;
-          if (viewportDone === viewportTarget) {
-            viewportMs = performance.now() - t0;
-            console.log(`[covers] primer viewport: ${viewportTarget} imágenes en ${viewportMs.toFixed(0)}ms`);
-          }
-        }
-        if (done === total) {
-          const tImgs = performance.now() - t0;
-          console.log(`[covers] ${total} imágenes cargadas en ${tImgs.toFixed(0)}ms`);
-          window.__coversLastRender = { layoutMs: tLayout, imgsMs: tImgs, cells: currentList.length, imgs: total, viewportMs, viewportImgs: viewportTarget };
-        }
-      };
-      imgs.forEach((img, idx) => {
-        if (img.complete && img.naturalWidth) finish(img, idx);
-        else {
-          img.addEventListener('load', () => finish(img, idx), { once: true });
-          img.addEventListener('error', () => finish(img, idx), { once: true });
-        }
-      });
-    }));
+      requestAnimationFrame(step);
+    };
+    if (next < total) requestAnimationFrame(step);
+    else requestAnimationFrame(() => { cellsMs = performance.now() - t0; report(); });
   }
 
   fullRender();
-
-  // Rescate de tapas vía oEmbed para álbumes que quedaron sin img (típicamente
-  // W-Three-only sin album.images completo). Corre en background, best-effort:
-  // resuelve una por una y patchea el DOM cuando llega. Limitado a los primeros
-  // 60 para no saturar oEmbed en cada visita.
-  (async () => {
-    const missing = currentList
-      .map((a, i) => ({ a, i }))
-      .filter(x => !x.a.img && x.a.trackId)
-      .slice(0, 60);
-    if (!missing.length) return;
-    console.log(`[covers] rescatando ${missing.length} tapas vía oEmbed`);
-    let rescued = 0;
-    for (const { a, i } of missing) {
-      const url = await tapaViaOembed(a.trackId);
-      if (!url) continue;
-      a.img = url;
-      const cell = grid.querySelector(`.cover-cell[data-i="${i}"]`);
-      if (!cell) continue;
-      cell.innerHTML = `<img class="cover-img" src="${url}" alt="" decoding="async" loading="lazy">`;
-      const img = cell.querySelector('img');
-      img?.addEventListener('load', () => img.classList.add('is-loaded'), { once: true });
-      img?.addEventListener('error', () => img.classList.add('is-loaded'), { once: true });
-      rescued++;
-    }
-    console.log(`[covers] oEmbed: ${rescued}/${missing.length} tapas recuperadas`);
-  })();
 
   function applyFit() {
     const rect = grid.getBoundingClientRect();
@@ -506,18 +567,11 @@ export async function render(container) {
     openAlbumCard({ name: a.name, artist: a.artist, img: a.img, plays: 0, min: a.min });
   });
 
+  // Si una tapa 404ea, sacamos la celda entera en vez de poner el cuadro con la
+  // inicial: Ian quiere el collage sin huecos con letras (v=127).
   grid.addEventListener('error', (e) => {
-    if (e.target && e.target.classList && e.target.classList.contains('cover-img')) {
-      const cell = e.target.closest('.cover-cell');
-      if (!cell) return;
-      const idx = +cell.dataset.i;
-      const a = currentList[idx];
-      const initial = escapeHtml(((a?.artist || a?.name || '?')[0] || '?').toUpperCase());
-      e.target.remove();
-      const fb = document.createElement('div');
-      fb.className = 'cover-fallback';
-      fb.textContent = initial;
-      cell.insertBefore(fb, cell.firstChild);
+    if (e.target?.classList?.contains('cover-img')) {
+      e.target.closest('.cover-cell')?.remove();
     }
   }, true);
 
@@ -557,6 +611,11 @@ export async function render(container) {
   });
 
   return () => {
+    renderToken++;                 // corta los lotes que quedaran en vuelo
+    if (imgSettledHandler) {
+      grid.removeEventListener('load', imgSettledHandler, true);
+      grid.removeEventListener('error', imgSettledHandler, true);
+    }
     window.removeEventListener('resize', onResize);
     document.removeEventListener('fullscreenchange', onFullscreenChange);
     document.body.classList.remove('covers-fs');

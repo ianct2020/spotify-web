@@ -46,5 +46,21 @@ export function albumKey(name, artist) {
   return `${normPart(name)}||${normPart(artist)}`;
 }
 
+// Identidad real de una tapa de Spotify, independiente del CDN y del tamaño.
+//
+// Las URLs vienen como:
+//   https://image-cdn-ak.spotifycdn.com/image/ab67616d00001e02c31ce98936c6c5d0deefe978
+//   https://image-cdn-fa.spotifycdn.com/image/ab67616d00001e02c31ce98936c6c5d0deefe978
+//   https://i.scdn.co/image/ab67616d0000b273c31ce98936c6c5d0deefe978   ← misma tapa, 640px
+//
+// Los primeros 16 hex codifican el tamaño (…1e02 = 300px, …b273 = 640px) y el
+// host rota entre varios CDN. Los 24 hex finales son la tapa en sí. Comparar
+// por ahí es la única forma de saber que dos entradas muestran la MISMA imagen
+// aunque vengan de fuentes distintas (export del historial vs API de W-Three).
+export function coverId(url) {
+  const m = /\/image\/[0-9a-f]{16}([0-9a-f]{24})$/i.exec(String(url || ''));
+  return m ? m[1].toLowerCase() : null;
+}
+
 // Export para tests / debugging
 export { normPart as _normPart };
