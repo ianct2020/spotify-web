@@ -6,7 +6,7 @@ import { openListenedAlbumsPicker } from './listened-shared.js?v=130';
 import { loadHistoryStats, loadListenedAlbums } from './history-data.js?v=130';
 import { getArtistTopPreview } from '../api/preview-providers.js?v=130';
 import { hoverIn, hoverOut } from '../ui/preview-player.js?v=130';
-import { hasUsername, getUsername } from '../api/statsfm.js?v=130';
+import { hasUsername, getUsername, setUsername } from '../api/statsfm.js?v=130';
 import { loadHistoryStats as _loadStatsForCounter } from './history-data.js?v=130';
 import { openArtistCard } from './artist-card.js?v=130';
 import { openAlbumCard } from './album-card.js?v=130';
@@ -29,6 +29,7 @@ export function render(container) {
         <button class="dash-cog-item" data-act="export-csv" role="menuitem">Exportar CSV <span class="dash-cog-hint">solo likes, plano</span></button>
         <button class="dash-cog-item" data-act="import" role="menuitem">Importar JSON</button>
         <button class="dash-cog-item" data-act="refresh" role="menuitem">Actualizar datos</button>
+        <button class="dash-cog-item" data-act="statsfm" role="menuitem">Usuario de Stats.fm <span class="dash-cog-hint" id="dash-cog-statsfm-hint">${hasUsername() ? escapeHtml(getUsername()) : 'sin configurar'}</span></button>
       </div>
     </div>
     <input type="file" id="dash-import-all-input" accept=".json,application/json" style="display:none">
@@ -73,6 +74,7 @@ export function render(container) {
       else if (act === 'export-csv') handleExportCsv();
       else if (act === 'import') importInput.click();
       else if (act === 'refresh') handleRefresh();
+      else if (act === 'statsfm') promptStatsfm();
     };
   });
   importInput.onchange = handleImportAll;
@@ -166,6 +168,44 @@ function formatRelativeTime(timestamp) {
   const days = Math.floor(hr / 24);
   if (days === 1) return 'ayer';
   return `hace ${days} días`;
+}
+
+// Hasta v=129 el username de Stats.fm solo se podía cargar entrando a "Por
+// género" y tocando "Conectar Stats.fm" — nada obvio, y por eso quedó sin
+// configurar. Ahora también se carga desde acá, que es donde se busca la
+// configuración.
+function promptStatsfm() {
+  const actual = hasUsername() ? getUsername() : '';
+  const overlay = openModal({
+    id: 'dash-statsfm-modal',
+    html: `
+      <div class="modal" style="max-width:480px">
+        <h3 style="margin-bottom:8px">Usuario de Stats.fm</h3>
+        <p style="color:var(--color-text-secondary);font-size:13px;margin-bottom:12px">
+          El slug de tu URL de perfil: si tu perfil es <code>stats.fm/i.an.iam</code>, el usuario es <code>i.an.iam</code>. No hace falta API key.
+        </p>
+        <input type="text" id="dash-statsfm-input" placeholder="usuario" value="${escapeHtml(actual)}"
+               style="width:100%;padding:10px;background:var(--color-elevated);border:1px solid var(--color-border);border-radius:var(--radius-sm);color:var(--color-text);font-family:monospace;font-size:14px;margin-bottom:12px">
+        <div style="display:flex;gap:8px;justify-content:flex-end">
+          <button class="btn btn-secondary" id="dash-statsfm-cancel">Cancelar</button>
+          <button class="btn btn-primary" id="dash-statsfm-save">Guardar</button>
+        </div>
+      </div>
+    `,
+  });
+  const input = overlay.querySelector('#dash-statsfm-input');
+  setTimeout(() => input.focus(), 20);
+  overlay.querySelector('#dash-statsfm-cancel').onclick = () => closeTop();
+  overlay.querySelector('#dash-statsfm-save').onclick = () => {
+    const v = input.value.trim().replace(/^https?:\/\/(www\.)?stats\.fm\//i, '').replace(/\/+$/, '');
+    if (v.length < 2) { showToast('Usuario inválido', 'error'); return; }
+    setUsername(v);
+    const hint = document.getElementById('dash-cog-statsfm-hint');
+    if (hint) hint.textContent = v;
+    closeTop();
+    showToast(`Stats.fm configurado como «${v}». Volvé a entrar a las vistas que lo usan para que aparezca la línea.`, 'success');
+  };
+  input.onkeydown = e => { if (e.key === 'Enter') overlay.querySelector('#dash-statsfm-save').click(); };
 }
 
 async function handleRefresh() {
