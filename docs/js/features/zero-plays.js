@@ -1,12 +1,12 @@
 // Likes con 0 plays: tracks likeados que nunca escuchaste según el Extended Streaming History.
 // Cruce local: likes vs history-track-plays.json (índice de plays por track id).
 
-import { getBestAvailableLikes, removeLikedTracks } from '../api.js?v=129';
-import { loadTrackPlays, trackIdOf, isOwner, ownerLockedMessage } from './history-data.js?v=129';
-import { escapeHtml, confirmModal, pageHeader } from '../ui/components.js?v=129';
-import { showToast } from '../ui/toast.js?v=129';
-import { openTrackCard } from './track-card.js?v=129';
-import { hasUsername, loadTopLifetime } from '../api/statsfm.js?v=129';
+import { getBestAvailableLikes, removeLikedTracks } from '../api.js?v=130';
+import { loadTrackPlays, trackIdOf, isOwner, ownerLockedMessage } from './history-data.js?v=130';
+import { escapeHtml, confirmModal, pageHeader } from '../ui/components.js?v=130';
+import { showToast } from '../ui/toast.js?v=130';
+import { openTrackCard } from './track-card.js?v=130';
+import { hasUsername, loadTopLifetime } from '../api/statsfm.js?v=130';
 
 let cache = null;
 
@@ -55,15 +55,28 @@ async function analyze() {
     if (!p) {
       // Con Stats.fm: si el tema aparece en el top-1000 lifetime, ya no es "sin plays"
       if (top && top.map.has(id)) { statsfmRescued++; continue; }
-      zeros.push({ track: t, uri, id });
+      zeros.push({ track: t, uri, id, addedAt: it.added_at || null });
     } else if (p[2] === 'p') {
       if (top && top.map.has(id)) { statsfmRescued++; continue; }
-      zeros.push({ track: t, uri, id, partial: { p: p[0], s: p[1] } });
+      zeros.push({ track: t, uri, id, addedAt: it.added_at || null, partial: { p: p[0], s: p[1] } });
       partialsInZeros++;
     } else {
       some.push({ track: t, uri, id, plays: p[0], seconds: p[1] });
     }
   }
+  // Los likes vienen de /me/tracks ordenados por fecha descendente, así que sin
+  // tocar nada arriba quedaban las recién añadidas. Ian escucha offline: un like
+  // de ayer figura "sin plays" solo porque todavía no sincronizó. Las viejas
+  // primero, que son las que de verdad nunca sonaron.
+  zeros.sort((a, b) => {
+    const ta = a.addedAt ? Date.parse(a.addedAt) : NaN;
+    const tb = b.addedAt ? Date.parse(b.addedAt) : NaN;
+    if (Number.isNaN(ta) && Number.isNaN(tb)) return 0;
+    if (Number.isNaN(ta)) return 1;   // sin fecha, al final
+    if (Number.isNaN(tb)) return -1;
+    return ta - tb;
+  });
+
   cache = { zeros, some, likesCount: likes.length, partialsInZeros, statsfmUsed: !!top, statsfmRescued };
   renderResults();
 }

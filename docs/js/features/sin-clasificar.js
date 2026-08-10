@@ -14,18 +14,18 @@
 // nombre+artista normalizado (normText de util/track-match.js).
 
 import {
-  getAllUserPlaylists, getAllPlaylistItems, getBestAvailableLikes, getAllLikedTracks,
+  getAllUserPlaylists, getAllPlaylistItems, getBestAvailableLikes,
   getCurrentUserId, addTracksToPlaylist, updatePlaylistItemsCache,
-} from '../api.js?v=129';
-import { idbGetCached, idbSetCached, idbDel } from '../idb.js?v=129';
-import { escapeHtml, pageHeader, showProgress, hideProgress, isCancelled } from '../ui/components.js?v=129';
-import { openModal, closeTop } from '../ui/modal-stack.js?v=129';
-import { showToast } from '../ui/toast.js?v=129';
-import { getPreview } from '../api/preview-providers.js?v=129';
-import { togglePreview, playingKey } from '../ui/preview-player.js?v=129';
-import { openTrackCard } from './track-card.js?v=129';
-import { normText } from '../util/track-match.js?v=129';
-import { activateMarquee, marqueeSpan } from '../ui/marquee.js?v=129';
+} from '../api.js?v=130';
+import { idbGetCached, idbSetCached, idbDel } from '../idb.js?v=130';
+import { escapeHtml, pageHeader, showProgress, hideProgress, isCancelled } from '../ui/components.js?v=130';
+import { openModal, closeTop } from '../ui/modal-stack.js?v=130';
+import { showToast } from '../ui/toast.js?v=130';
+import { getPreview } from '../api/preview-providers.js?v=130';
+import { togglePreview, playingKey } from '../ui/preview-player.js?v=130';
+import { openTrackCard } from './track-card.js?v=130';
+import { normText } from '../util/track-match.js?v=130';
+import { activateMarquee, marqueeSpan } from '../ui/marquee.js?v=130';
 
 const HIDDEN_KEY = 'sin_clasificar_ocultas';
 const EXCLUDED_KEY = 'sin_clasificar_excluidas';
@@ -121,12 +121,21 @@ async function load({ force }) {
   scanning = true;
   const t0 = performance.now();
   try {
-    let { items: likes } = await getBestAvailableLikes();
-    if (!likes || likes.length === 0) {
-      showProgress('Cargando tus Liked Songs…', 0, 0, { minimized: true });
-      likes = await getAllLikedTracks(({ loaded, total }) => showProgress('Cargando tus Liked Songs…', loaded, total));
-      hideProgress();
-    }
+    // getBestAvailableLikes completa la descarga sola si el caché no está entero
+    // (y se cuelga de la carga de otra vista si ya hay una en curso), así que
+    // solo hay que darle dónde mostrar el progreso.
+    let shownLikesProgress = false;
+    const { items: likes } = await getBestAvailableLikes({
+      onProgress: ({ loaded, total, cached }) => {
+        if (cached) return;
+        if (!shownLikesProgress) {
+          showProgress('Cargando tus Liked Songs…', 0, 0, { minimized: true });
+          shownLikesProgress = true;
+        }
+        showProgress('Cargando tus Liked Songs…', loaded, total);
+      },
+    });
+    if (shownLikesProgress) hideProgress();
 
     const me = await getCurrentUserId();
     const playlists = await getAllUserPlaylists();
@@ -284,13 +293,17 @@ function renderResults() {
   if (!content || !state) return;
   const rows = visible = filtered();
   const hiddenCount = hidden.size;
+  // El número grande cuenta lo que queda por clasificar de verdad: el total del
+  // cruce menos las que Ian ya ocultó. Antes decía 1.987 mientras el grid
+  // pintaba 1.985.
+  const sinClasificarCount = state.rows.reduce((n, r) => n + (hidden.has(r.id) ? 0 : 1), 0);
   const fecha = state.at ? new Date(state.at).toLocaleString('es-ES', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : '';
 
   content.innerHTML = `
     <div class="sc-topbar">
       <div class="sc-summary">
-        <span class="sc-summary-n">${state.rows.length.toLocaleString('es-ES')}</span>
-        <span class="sc-summary-t">canciones sin clasificar de ${state.likesCount.toLocaleString('es-ES')} likes</span>
+        <span class="sc-summary-n">${sinClasificarCount.toLocaleString('es-ES')}</span>
+        <span class="sc-summary-t">canciones sin clasificar de ${state.likesCount.toLocaleString('es-ES')} likes${hiddenCount > 0 ? ` · ${hiddenCount.toLocaleString('es-ES')} oculta${hiddenCount === 1 ? '' : 's'}` : ''}</span>
       </div>
       <div class="sc-topbar-tools">
         <input type="search" class="input sc-search" id="sc-search" placeholder="Filtrar por artista, título o álbum" value="${escapeHtml(filterText)}" autocomplete="off">

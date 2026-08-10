@@ -68,6 +68,14 @@ function ensureLikedIndex() {
     } catch (e) {
       console.warn('[wthree] no pude cargar likes para marcar la tracklist:', e.message);
     }
+    // Un índice vacío NO se memoiza: si el caché de likes todavía no estaba, la
+    // primera llamada dejaba el modal sin corazones para toda la sesión aunque
+    // los likes llegaran un segundo después. Era el motivo real de que Ian no
+    // los viera nunca.
+    if (ids.size === 0) {
+      likedIndexPromise = null;
+      return { ids, nameKeys };
+    }
     likedIndex = { ids, nameKeys };
     return likedIndex;
   })();

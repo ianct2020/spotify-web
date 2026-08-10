@@ -2,17 +2,17 @@
 // por álbum). Muestra qué álbumes ya tienen picks, cuántos, y cuáles te faltan.
 // Ordenado por álbumes más escuchados primero para priorizar tu tiempo.
 
-import { spotifyFetch, getAllPlaylistItems, getAllUserPlaylists, addTracksToPlaylist, removeTracksFromPlaylist, reorderPlaylistItems, getPlaylistSnapshotId, getCachedPlaylistSnapshot, updatePlaylistItemsCache, getBestAvailableLikes } from '../api.js?v=129';
-import { loadHistoryStats, loadListenedAlbums, isOwner, ownerLockedMessage } from './history-data.js?v=129';
-import { escapeHtml, pageHeader } from '../ui/components.js?v=129';
-import { showToast } from '../ui/toast.js?v=129';
-import { activateMarquee, marqueeSpan } from '../ui/marquee.js?v=129';
-import { openModal, closeTop, closeById } from '../ui/modal-stack.js?v=129';
-import { getPreview } from '../api/preview-providers.js?v=129';
-import { togglePreview, playingKey } from '../ui/preview-player.js?v=129';
-import { openAlbumCard } from './album-card.js?v=129';
-import { albumKey } from '../util/album-key.js?v=129';
-import { computeUpdatedPickPositions } from '../util/reorder-shifts.js?v=129';
+import { spotifyFetch, getAllPlaylistItems, getAllUserPlaylists, addTracksToPlaylist, removeTracksFromPlaylist, reorderPlaylistItems, getPlaylistSnapshotId, getCachedPlaylistSnapshot, updatePlaylistItemsCache, getBestAvailableLikes } from '../api.js?v=130';
+import { loadHistoryStats, loadListenedAlbums, isOwner, ownerLockedMessage } from './history-data.js?v=130';
+import { escapeHtml, pageHeader } from '../ui/components.js?v=130';
+import { showToast } from '../ui/toast.js?v=130';
+import { activateMarquee, marqueeSpan } from '../ui/marquee.js?v=130';
+import { openModal, closeTop, closeById } from '../ui/modal-stack.js?v=130';
+import { getPreview } from '../api/preview-providers.js?v=130';
+import { togglePreview, playingKey } from '../ui/preview-player.js?v=130';
+import { openAlbumCard } from './album-card.js?v=130';
+import { albumKey } from '../util/album-key.js?v=130';
+import { computeUpdatedPickPositions } from '../util/reorder-shifts.js?v=130';
 
 const LS_KEY_ID = 'wthree_playlist_id';
 const LS_KEY_NAME = 'wthree_playlist_name';
@@ -67,6 +67,14 @@ function ensureLikedIndex() {
       console.info(`[wthree] índice de likes: ${ids.size} pistas`);
     } catch (e) {
       console.warn('[wthree] no pude cargar likes para marcar la tracklist:', e.message);
+    }
+    // Un índice vacío NO se memoiza: si el caché de likes todavía no estaba, la
+    // primera llamada dejaba el modal sin corazones para toda la sesión aunque
+    // los likes llegaran un segundo después. Era el motivo real de que Ian no
+    // los viera nunca.
+    if (ids.size === 0) {
+      likedIndexPromise = null;
+      return { ids, nameKeys };
     }
     likedIndex = { ids, nameKeys };
     return likedIndex;

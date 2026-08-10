@@ -1,17 +1,21 @@
 // Toasts de la app.
 //
-// v=126: los avisos importantes ya no se cierran solos. Ian se perdía errores y
-// confirmaciones de guardado porque el toast se iba a los 4 segundos.
-//   - error / success / warning → PEGAJOSOS. Solo se van con la ✕.
-//     (todos los 'success' de la app confirman una operación de escritura:
-//      playlists creadas, likes añadidos o sacados, sync, import.)
-//   - info → sigue con auto-cierre, pero de 4s pasó a 10s.
+// v=126: los avisos importantes dejaron de cerrarse solos, porque Ian se perdía
+// errores y confirmaciones de guardado a los 4 segundos.
+//
+// v=130: pegajosos para siempre era demasiado — la pila crecía sin techo y
+// tapaba la app. Ahora:
+//   - error / success / warning (confirmaciones de escritura) → 30 s, con ✕.
+//   - info (avisos menores) → 8 s.
 //   - TODOS llevan ✕ visible.
+//   - Como mucho 3 en pantalla: al llegar el cuarto se va el más viejo.
 // Un caller puede forzar el comportamiento pasando `duration`: un número de ms
 // para que se cierre solo, o 0 / Infinity para que se quede.
 
-const INFO_DURATION_MS = 10000;
-const STICKY_TYPES = new Set(['error', 'success', 'warning']);
+const WRITE_DURATION_MS = 30000;
+const INFO_DURATION_MS = 8000;
+const MAX_VISIBLE = 3;
+const WRITE_TYPES = new Set(['error', 'success', 'warning']);
 
 function ensureContainer() {
   let c = document.querySelector('.toast-container');
@@ -55,11 +59,21 @@ function showToast(message, type = 'info', duration) {
   toast.appendChild(closeBtn);
 
   const ms = duration === undefined
-    ? (STICKY_TYPES.has(type) ? 0 : INFO_DURATION_MS)
+    ? (WRITE_TYPES.has(type) ? WRITE_DURATION_MS : INFO_DURATION_MS)
     : duration;
   if (ms && Number.isFinite(ms)) timer = setTimeout(dismiss, ms);
+  toast._cancelTimer = () => { if (timer) clearTimeout(timer); };
 
   container.appendChild(toast);
+
+  // Techo de 3. El contenedor es column-reverse (el más nuevo abajo), así que
+  // los más viejos son los primeros hijos del DOM. Se sacan sin animación de
+  // salida para que el hueco no quede colgando mientras entra el nuevo.
+  const live = [...container.querySelectorAll('.toast:not(.toast-exit)')];
+  for (const old of live.slice(0, Math.max(0, live.length - MAX_VISIBLE))) {
+    old._cancelTimer?.();
+    old.remove();
+  }
 }
 
 export { showToast };

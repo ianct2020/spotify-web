@@ -1,8 +1,8 @@
-import { getValidToken, refreshAccessToken } from './auth.js?v=129';
-import { cacheGet, cacheGetRaw, cacheGetTimestamp, cacheSet, cacheClear } from './storage.js?v=129';
-import { idbDel, idbGetCached, idbGetCachedRaw, idbGetTimestamp, idbSetCached } from './idb.js?v=129';
-import { showToast } from './ui/toast.js?v=129';
-import { artistIsSame } from './util/track-match.js?v=129';
+import { getValidToken, refreshAccessToken } from './auth.js?v=130';
+import { cacheGet, cacheGetRaw, cacheGetTimestamp, cacheSet, cacheClear } from './storage.js?v=130';
+import { idbDel, idbGetCached, idbGetCachedRaw, idbGetTimestamp, idbSetCached } from './idb.js?v=130';
+import { showToast } from './ui/toast.js?v=130';
+import { artistIsSame } from './util/track-match.js?v=130';
 
 const BASE = 'https://api.spotify.com/v1';
 const MIN_RETRY_WAIT = 5000;
@@ -149,13 +149,19 @@ async function clearPartial(key) {
   }
 }
 
-async function paginateAll(endpoint, { limit = 50, onProgress, partialCacheKey, transform, maxItems, startOffset = 0, signal } = {}) {
+// `meta` (opcional) es un objeto que paginateAll rellena con `{ total, complete }`.
+// `complete` solo es true si la paginación llegó hasta el final por sus propios
+// medios (sin abortos ni errores) Y la cantidad de items cuadra con el `total`
+// que reportó Spotify. Sirve para que el caller sepa si lo que tiene en la mano
+// es la lista entera o un pedazo — ver saveLikes().
+async function paginateAll(endpoint, { limit = 50, onProgress, partialCacheKey, transform, maxItems, startOffset = 0, signal, meta } = {}) {
   let items = [];
   let offset = startOffset;
   const initialOffset = startOffset;
   let total = Infinity;
   let page = 0;
   const sep = endpoint.includes('?') ? '&' : '?';
+  if (meta) { meta.total = null; meta.complete = false; }
 
   if (partialCacheKey) {
     const partial = await loadPartial(partialCacheKey);
@@ -196,7 +202,7 @@ async function paginateAll(endpoint, { limit = 50, onProgress, partialCacheKey, 
         pagesSinceSave = 0;
       }
 
-      if (!data.next) break;
+      if (!data.next) { if (meta) meta.reachedEnd = true; break; }
       await sleep(600);
     } catch (e) {
       if (partialCacheKey && items.length > 0) {
@@ -205,6 +211,15 @@ async function paginateAll(endpoint, { limit = 50, onProgress, partialCacheKey, 
       }
       throw e;
     }
+  }
+
+  if (meta) {
+    meta.total = Number.isFinite(total) ? total : null;
+    // Completa = terminó la paginación por sus medios y la cuenta cuadra con el
+    // total que declaró Spotify. Si `total` no vino (endpoints que no lo mandan),
+    // nos quedamos con haber llegado al final.
+    const ended = meta.reachedEnd || offset >= total;
+    meta.complete = !!ended && (meta.total == null || items.length + initialOffset >= meta.total);
   }
 
   if (partialCacheKey) {
@@ -278,7 +293,16 @@ async function migrateLikesFromLocalStorage() {
   }
 }
 
-async function saveLikes(items) {
+// El caché de likes es o completo o nada. Antes cualquier paginación cortada
+// (aborto, 429, respuesta sin `next`) podía escribir una lista truncada encima
+// de las 9.548 canciones buenas, y el resto de la app la leía como si fuera la
+// biblioteca entera. Ahora una escritura solo pisa el caché si viene marcada
+// como completa; si no, se descarta y queda el caché anterior intacto.
+async function saveLikes(items, { complete = true, total = null } = {}) {
+  if (!complete) {
+    console.warn(`[likes] descarto guardar ${items.length} likes: carga incompleta` + (total != null ? ` (total real ${total})` : ''));
+    return { ok: false, skipped: true };
+  }
   try {
     await idbSetCached(LIKES_CACHE_KEY, items, CACHE_TTL_MIN);
     return { ok: true };
@@ -286,6 +310,80 @@ async function saveLikes(items) {
     console.error('IDB saveLikes failed:', e);
     showToast(`Error guardando ${items.length.toLocaleString()} likes en el navegador: ${e.message}. Exportá el JSON YA para no perderlos.`, 'error');
     return { ok: false, error: e };
+  }
+}
+
+// ── Carga de likes compartida entre vistas ──────────────────────────────────
+// Sin esto, dos vistas abiertas a la vez (p. ej. #sin-clasificar escaneando e
+// Ian entrando a #skips) lanzaban dos paginaciones de ~190 requests sobre la
+// MISMA clave de parcial, pisándose el progreso: la que iba por el ítem 9.000
+// quedaba reemplazada por la que recién llevaba 100. Ahora la primera que llega
+// crea la carga y las demás se cuelgan de la misma promesa.
+//
+// El aborto es por refcount: cancelar en una vista solo la desuscribe; la carga
+// se corta únicamente cuando se van TODOS los interesados.
+let likesInFlight = null;
+
+function startLikesLoad({ force }) {
+  const state = {
+    controller: new AbortController(),
+    listeners: new Set(),
+    subscribers: new Set(),
+  };
+  state.promise = (async () => {
+    try {
+      if (force) await clearPartial(LIKES_CACHE_KEY);
+      const meta = {};
+      const items = await paginateAll('/me/tracks', {
+        limit: 50,
+        onProgress: (p) => {
+          for (const l of state.listeners) {
+            try { l(p); } catch (e) { console.warn('[likes] onProgress:', e); }
+          }
+        },
+        partialCacheKey: LIKES_CACHE_KEY,
+        transform: item => ({ added_at: item.added_at, track: slimTrack(item.track) }),
+        signal: state.controller.signal,
+        meta,
+      });
+      await saveLikes(items, { complete: meta.complete, total: meta.total });
+      if (!meta.complete) {
+        throw new Error(`Carga de likes incompleta (${items.length}${meta.total != null ? ` de ${meta.total}` : ''}). No se guardó nada para no corromper el caché.`);
+      }
+      return items;
+    } finally {
+      if (likesInFlight === state) likesInFlight = null;
+    }
+  })();
+  return state;
+}
+
+async function loadLikesShared(onProgress, { force = false, signal } = {}) {
+  if (!likesInFlight) likesInFlight = startLikesLoad({ force });
+  const state = likesInFlight;
+
+  const token = {};
+  state.subscribers.add(token);
+  if (onProgress) state.listeners.add(onProgress);
+
+  const detach = () => {
+    if (!state.subscribers.has(token)) return;
+    state.subscribers.delete(token);
+    if (onProgress) state.listeners.delete(onProgress);
+    if (state.subscribers.size === 0) state.controller.abort();
+  };
+
+  if (signal) {
+    if (signal.aborted) { detach(); throw new Error('Carga cancelada'); }
+    signal.addEventListener('abort', detach, { once: true });
+  }
+
+  try {
+    return await state.promise;
+  } finally {
+    if (signal) signal.removeEventListener('abort', detach);
+    state.subscribers.delete(token);
+    if (onProgress) state.listeners.delete(onProgress);
   }
 }
 
@@ -298,19 +396,9 @@ async function getAllLikedTracks(onProgress, { force = false, signal } = {}) {
       if (onProgress) onProgress({ loaded: cached.length, total: cached.length, page: 1, cached: true });
       return cached;
     }
-  } else {
-    await clearPartial(LIKES_CACHE_KEY);
   }
 
-  const items = await paginateAll('/me/tracks', {
-    limit: 50,
-    onProgress,
-    partialCacheKey: LIKES_CACHE_KEY,
-    transform: item => ({ added_at: item.added_at, track: slimTrack(item.track) }),
-    signal,
-  });
-  await saveLikes(items);
-  return items;
+  return loadLikesShared(onProgress, { force, signal });
 }
 
 async function getAllUserPlaylists(onProgress, { force = false, signal } = {}) {
@@ -392,25 +480,36 @@ async function syncLikesIncremental(onProgress) {
   return { hadCache: true, added: newOnes.length, removed: 0, totalNow, cachedCount: finalItems.length };
 }
 
-async function getBestAvailableLikes() {
+// Devuelve SIEMPRE la biblioteca entera o nada. Hasta v=129 esta función caía
+// al caché parcial y lo devolvía con `source:'partial'`, pero como ninguna de
+// las 17 vistas que la usan miraba el `source`, un parcial de 100 canciones se
+// mostraba como "100 likes" — el bug que vio Ian al abrir #skips mientras
+// #sin-clasificar escaneaba. Ahora el parcial no se sirve nunca: solo existe
+// para que paginateAll pueda retomar la descarga donde la dejó.
+async function getBestAvailableLikes({ onProgress, signal, allowFetch = true } = {}) {
   await migrateLikesFromLocalStorage();
+
   const full = await idbGetCachedRaw(LIKES_CACHE_KEY);
   if (Array.isArray(full) && full.length > 0) {
     return { items: full, source: 'full' };
-  }
-  const partial = await idbGetCachedRaw(LIKES_PARTIAL_KEY);
-  if (partial && Array.isArray(partial.items) && partial.items.length > 0) {
-    return { items: partial.items, source: 'partial' };
   }
   const legacyFull = cacheGetRaw(LIKES_CACHE_KEY);
   if (Array.isArray(legacyFull) && legacyFull.length > 0) {
     return { items: legacyFull, source: 'full' };
   }
-  const legacyPartial = cacheGetRaw(LIKES_CACHE_KEY + '_partial');
-  if (legacyPartial && Array.isArray(legacyPartial.items) && legacyPartial.items.length > 0) {
-    return { items: legacyPartial.items, source: 'partial' };
+
+  if (!allowFetch) return { items: [], source: 'empty' };
+
+  // No hay caché completo. Puede haber un parcial: completarlo es justamente lo
+  // que hace loadLikesShared (paginateAll retoma desde el offset guardado), y si
+  // otra vista ya está descargando nos colgamos de su misma carga.
+  try {
+    const items = await loadLikesShared(onProgress, { signal });
+    return { items, source: 'full' };
+  } catch (e) {
+    console.warn('[likes] no pude completar la carga:', e.message);
+    return { items: [], source: 'empty', error: e };
   }
-  return { items: [], source: 'empty' };
 }
 
 async function getLikesCacheTimestamp() {
