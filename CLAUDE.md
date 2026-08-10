@@ -89,3 +89,11 @@ user-library-read user-library-modify playlist-read-private playlist-read-collab
 ## Build
 - Dev: `npm run dev` (python http.server en :5500)
 - Build: `npm run build` (copia src/ a docs/)
+
+## Crear playlists privadas — NO SE PUEDE (verificado 2026-08-09)
+`POST /me/playlists` **ignora el campo `public`**: se creó
+`fonoteca · ocultos (skips)` con `{public: false}` y quedó `public: true`.
+`PUT /playlists/{id}` con `{public:false}` devuelve **200 sin efecto**.
+No hay forma de crear ni convertir una playlist a privada por API
+post-migración. Si una feature necesita privacidad, el usuario tiene que
+pasarla a privada a mano desde la app de Spotify.
