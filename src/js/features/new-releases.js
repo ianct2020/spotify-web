@@ -53,8 +53,13 @@ function getMonths() {
   return VALID_MONTHS.has(n) ? n : 12;
 }
 function getLoadedMore() {
-  const n = parseInt(localStorage.getItem(LS_LOADED_MORE) || String(DEFAULT_INITIAL), 10);
-  return Number.isFinite(n) && n >= 5 ? n : DEFAULT_INITIAL;
+  // Piso duro en DEFAULT_INITIAL, igual que #discover-artists. Antes "Cargar
+  // más" hacía Math.min(loadedMore + 50, eligibleArtists().length) y PERSISTÍA
+  // ese número: si el umbral estaba en 20+ (o los likes todavía no habían
+  // terminado de cargar) quedaba escrito un 6 en localStorage, y a partir de ahí
+  // la vista escaneaba 6 artistas para siempre, con cualquier umbral.
+  const n = parseInt(localStorage.getItem(LS_LOADED_MORE) || '0', 10);
+  return Math.max(DEFAULT_INITIAL, Number.isFinite(n) ? n : 0);
 }
 
 const state = {
@@ -196,7 +201,18 @@ function renderShell(content, totalCandidates) {
     refreshList(content);
   });
   content.querySelector('#newrel-load-more').addEventListener('click', () => {
-    state.loadedMore = Math.min(state.loadedMore + 50, eligibleArtists().length);
+    const eligible = eligibleArtists().length;
+    if (!eligible) {
+      showToast(`No hay ningún artista con ${state.minLikes} o más likes. Probá bajando el umbral.`, 'warning');
+      return;
+    }
+    if (state.loadedMore >= eligible && state.artists.every(a => a.likes < state.minLikes || a.scanned)) {
+      showToast(`Ya están escaneados los ${eligible.toLocaleString('es-ES')} artistas con ≥${state.minLikes} likes.`, 'info');
+      return;
+    }
+    // Sin clampear contra eligibleArtists(): ese número cambia con el chip de
+    // umbral y persistirlo dejaba la vista trabada en 6 artistas.
+    state.loadedMore += 50;
     localStorage.setItem(LS_LOADED_MORE, String(state.loadedMore));
     document.getElementById('newrel-total-scan').textContent = targetToScan();
     scanArtists(content).catch(err => console.warn('[newrel] scan:', err));
@@ -231,9 +247,11 @@ async function scanArtists(content) {
 
   const eligible = eligibleArtists();
   const target = Math.min(state.loadedMore, eligible.length);
-  const queue = eligible.filter(a => !a.scanned).slice(0, target);
   let scanned = eligible.filter(a => a.scanned).length;
   document.getElementById('newrel-count').textContent = scanned;
+  // slice sobre lo que FALTA, no sobre el target entero: si 40 ya vinieron del
+  // cache y el target son 100, hay que encolar 60, no 100.
+  const queue = eligible.filter(a => !a.scanned).slice(0, Math.max(0, target - scanned));
   if (!queue.length) return;   // todo servido del cache
   progress.style.display = '';
 
@@ -317,7 +335,23 @@ function refreshList(content) {
   document.getElementById('newrel-unheard-count').textContent = rows.length.toLocaleString('es-ES');
 
   if (!rows.length) {
-    list.innerHTML = `<div class="card"><p style="text-align:center;color:var(--color-text-muted);margin:0">No hay novedades sin escuchar en los últimos ${state.months} meses para tus artistas con ≥${state.minLikes} likes.</p></div>`;
+    const eligible = eligibleArtists().length;
+    const scanned = eligibleArtists().filter(a => a.scanned).length;
+    let msg;
+    if (!state.artists.length) {
+      msg = 'Todavía no tengo tus likes cargados. Abrí el Dashboard para descargarlos y volvé.';
+    } else if (!eligible) {
+      // El caso que veía Ian con 10+ y 20+: cero elegibles, y encima con los
+      // botones sin decir nada. Ahora se explica y se ofrece la salida.
+      const max = Math.max(...state.artists.map(a => a.likes));
+      msg = `Ningún artista llega a ${state.minLikes} likes (el que más tiene llega a ${max}). Bajá el umbral con los chips de arriba.`;
+    } else if (!scanned) {
+      msg = `${eligible.toLocaleString('es-ES')} artistas con ≥${state.minLikes} likes, ninguno escaneado todavía. Tocá «Actualizar» para consultarle a Spotify.`;
+    } else {
+      msg = `No hay novedades sin escuchar en los últimos ${state.months} meses para tus artistas con ≥${state.minLikes} likes.`;
+    }
+    list.innerHTML = `<div class="card"><p style="text-align:center;color:var(--color-text-muted);margin:0">${escapeHtml(msg)}</p></div>`;
+    updateSelectionUi(content);
     return;
   }
 
