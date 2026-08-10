@@ -12,24 +12,20 @@ import { togglePreview, playingKey } from '../ui/preview-player.js';
 import { openTrackCard } from './track-card.js';
 import { activateMarquee, marqueeSpan } from '../ui/marquee.js';
 import { hasUsername, loadTopLifetime } from '../api/statsfm.js';
+import { createHiddenStore } from '../util/hidden-sync.js';
 
 let cache = null;
 let minPlays = 5;    // solo tracks con ≥N plays totales (ok+skip)
 let minRatio = 70;   // ratio de skip mínimo (%)
 
-const HIDDEN_KEY = 'skips_hidden_tracks';
-function loadHidden() {
-  try {
-    const raw = localStorage.getItem(HIDDEN_KEY);
-    if (!raw) return new Set();
-    const arr = JSON.parse(raw);
-    return new Set(Array.isArray(arr) ? arr : []);
-  } catch { return new Set(); }
-}
-function saveHidden(set) {
-  try { localStorage.setItem(HIDDEN_KEY, JSON.stringify([...set])); } catch { /* ignora */ }
-}
-let hiddenTracks = loadHidden();
+// Los ocultos viven en una playlist privada de Spotify, así que sobreviven a
+// borrar el caché del navegador y aparecen igual desde la otra compu.
+const hiddenTracks = createHiddenStore({
+  lsKey: 'skips_hidden_tracks',
+  playlistName: 'fonoteca · ocultos (skips)',
+  label: 'skips',
+  keyOfTrack: (t) => t?.id || null,
+});
 let showingHidden = false;
 
 // Toggle Stats.fm: si un tema tuvo plays nuevas desde el export, las cuenta
@@ -56,6 +52,9 @@ async function analyze() {
     [{ items: likes }, stats] = await Promise.all([
       getBestAvailableLikes(),
       loadSkipStats(),
+      // Trae los ocultos de la playlist de Spotify. No bloquea: si falla o tarda,
+      // la vista arranca con el caché local y se repinta cuando llega.
+      hiddenTracks.ready().then(() => { if (cache) renderResults(); }),
     ]);
     if (useStatsfm && hasUsername()) {
       top = await loadTopLifetime().catch(() => null);
@@ -328,9 +327,7 @@ function wireRows() {
       e.preventDefault();
       e.stopPropagation();
       const id = btn.dataset.id;
-      if (hiddenTracks.has(id)) hiddenTracks.delete(id);
-      else hiddenTracks.add(id);
-      saveHidden(hiddenTracks);
+      hiddenTracks.toggle(id, `spotify:track:${id}`);
       if (showingHidden && hiddenTracks.size === 0) showingHidden = false;
       renderResults();
     });

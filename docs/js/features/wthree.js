@@ -13,6 +13,7 @@ import { togglePreview, playingKey } from '../ui/preview-player.js?v=130';
 import { openAlbumCard } from './album-card.js?v=130';
 import { albumKey } from '../util/album-key.js?v=130';
 import { computeUpdatedPickPositions } from '../util/reorder-shifts.js?v=130';
+import { createHiddenStore } from '../util/hidden-sync.js?v=130';
 
 const LS_KEY_ID = 'wthree_playlist_id';
 const LS_KEY_NAME = 'wthree_playlist_name';
@@ -27,7 +28,9 @@ let historyStats = null;
 let listenedAlbums = null; // { years: [{ year, albums: [{name, artist, img, date}] }] }
 let albumTracksCache = new Map(); // key → tracks fetched from Spotify
 let selectedBucket = null; // null = all, o '0'/'1'/'2'/'3'/'4+'
-let hiddenSet = null;      // Set<key> de álbumes marcados como "ya está, no me interesa"
+let hiddenSet = null;      // store de álbumes marcados como "ya está, no me interesa"
+let lastTrackDataUri = null;  // pista representativa del último álbum abierto en el modal
+let hiddenSyncStarted = false;
 let showingHidden = false; // vista invertida (mostrar SOLO los ocultos para restaurarlos)
 // Snapshot de la última escritura exitosa desde este cliente. Sirve para que
 // el segundo guardado sepa que las posiciones de picksByAlbum son confiables
@@ -84,20 +87,26 @@ function ensureLikedIndex() {
 
 const HEART_SVG = '<svg viewBox="0 0 24 24" width="11" height="11" fill="currentColor" aria-hidden="true"><path d="M12 21s-7.5-4.6-9.5-9A5 5 0 0 1 12 6.5 5 5 0 0 1 21.5 12c-2 4.4-9.5 9-9.5 9z"/></svg>';
 
+// Los álbumes ocultos se sincronizan por playlist privada. Como una playlist
+// solo guarda pistas, de cada álbum oculto se guarda UNA pista representativa y
+// al leer se reconstruye la clave desde el álbum de esa pista.
+const hiddenStore = createHiddenStore({
+  lsKey: LS_KEY_HIDDEN,
+  playlistName: 'fonoteca · ocultos (álbumes)',
+  label: 'wthree',
+  keyOfTrack: (t) => {
+    const albumName = t?.album?.name;
+    if (!albumName) return null;
+    return albumKey(albumName, t.artists?.[0]?.name || '');
+  },
+});
+
 function loadHidden() {
-  try {
-    const arr = JSON.parse(localStorage.getItem(LS_KEY_HIDDEN)) || [];
-    hiddenSet = new Set(arr);
-  } catch { hiddenSet = new Set(); }
+  hiddenSet = hiddenStore;
 }
-function saveHidden() {
-  try { localStorage.setItem(LS_KEY_HIDDEN, JSON.stringify([...hiddenSet])); } catch { /* full */ }
-}
-function toggleHidden(key) {
+function toggleHidden(key, uri) {
   if (!hiddenSet) loadHidden();
-  if (hiddenSet.has(key)) hiddenSet.delete(key);
-  else hiddenSet.add(key);
-  saveHidden();
+  hiddenStore.toggle(key, uri);
 }
 
 const PLAY_SVG = `<svg viewBox="0 0 24 24" width="12" height="12" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>`;
@@ -315,6 +324,13 @@ function crossWithHistory(stats, listened) {
 
 function renderBuckets(content) {
   if (!hiddenSet) loadHidden();
+  // Trae los ocultos de la playlist privada y repinta cuando llegan. No bloquea.
+  // Un solo intento por sesión: si falla, `synced` queda en false y sin esta
+  // bandera el .then() volvería a llamarse en bucle.
+  if (!hiddenSyncStarted) {
+    hiddenSyncStarted = true;
+    hiddenStore.ready().then(() => renderBuckets(content));
+  }
 
   // "Ocultos" NO cuentan en los buckets normales — desaparecen de la vista y
   // de los contadores. En la vista invertida (showingHidden) mostramos SOLO
@@ -456,7 +472,11 @@ function renderAlbumRow(a, kind) {
   // Ojo tachado = ocultar; ojo normal = mostrar de vuelta (en la vista invertida).
   const eyeOpen = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>`;
   const eyeOff = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>`;
-  const hideBtn = `<button class="wthree-hide-btn" data-hide-key="${escapeHtml(key)}" title="${isHidden ? 'Restaurar en la lista' : 'Ocultar este álbum'}" aria-label="${isHidden ? 'Restaurar' : 'Ocultar'}">${isHidden ? eyeOpen : eyeOff}</button>`;
+  // La pista representativa que va a la playlist de ocultos. Los álbumes sin
+  // ningún pick todavía no tienen ninguna: esos quedan ocultos solo en local
+  // hasta que se los abra en el modal, donde sí hay tracklist.
+  const hideUri = a.picks?.[0]?.uri || '';
+  const hideBtn = `<button class="wthree-hide-btn" data-hide-key="${escapeHtml(key)}" data-hide-uri="${escapeHtml(hideUri)}" title="${isHidden ? 'Restaurar en la lista' : 'Ocultar este álbum'}" aria-label="${isHidden ? 'Restaurar' : 'Ocultar'}">${isHidden ? eyeOpen : eyeOff}</button>`;
 
   return `
     <div class="wthree-album-row" data-album-key="${escapeHtml(key)}">
@@ -494,7 +514,7 @@ function wireAlbumClicks(root) {
       e.stopPropagation();
       const key = btn.dataset.hideKey;
       const wasHidden = hiddenSet.has(key);
-      toggleHidden(key);
+      toggleHidden(key, btn.dataset.hideUri || null);
       // Si estábamos en la vista invertida y ya no quedan ocultos, volvemos a la
       // vista normal para no dejar al usuario mirando una lista vacía.
       if (showingHidden && hiddenSet.size === 0) showingHidden = false;
@@ -573,7 +593,9 @@ async function openAlbumModal(a) {
   overlay.querySelector('#wt-hide-album').onclick = () => {
     const key = albumKey(a.name, a.artist);
     const wasHidden = hiddenSet.has(key);
-    toggleHidden(key);
+    // Acá sí hay tracklist cargada: sirve cualquier pista del álbum como
+    // representante en la playlist de ocultos.
+    toggleHidden(key, a.picks?.[0]?.uri || lastTrackDataUri || null);
     if (showingHidden && hiddenSet.size === 0) showingHidden = false;
     showToast(wasHidden ? 'Álbum restaurado en la lista' : 'Álbum ocultado', 'info');
     closeById(modalId);
@@ -614,6 +636,10 @@ async function openAlbumModal(a) {
   // Los likes ya suelen estar en caché (IDB); si no, esto no bloquea el modal
   // más de lo que ya tardó el fetch del álbum.
   const liked = await ensureLikedIndex();
+
+  // Primera pista del álbum: la usa el botón "ocultar" del modal como
+  // representante en la playlist de ocultos cuando el álbum no tiene picks.
+  lastTrackDataUri = tracks.find(t => t?.uri)?.uri || null;
 
   const pickIds = new Set(a.picks.map(p => p.id));
   const trackData = tracks.map(t => {

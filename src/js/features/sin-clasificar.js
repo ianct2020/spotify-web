@@ -18,6 +18,7 @@ import {
   getCurrentUserId, addTracksToPlaylist, updatePlaylistItemsCache,
 } from '../api.js';
 import { idbGetCached, idbSetCached, idbDel } from '../idb.js';
+import { createHiddenStore } from '../util/hidden-sync.js';
 import { escapeHtml, pageHeader, showProgress, hideProgress, isCancelled } from '../ui/components.js';
 import { openModal, closeTop } from '../ui/modal-stack.js';
 import { showToast } from '../ui/toast.js';
@@ -69,7 +70,15 @@ function saveSet(key, set) {
   try { localStorage.setItem(key, JSON.stringify([...set])); } catch { /* lleno */ }
 }
 
-let hidden = loadSet(HIDDEN_KEY);
+// Ocultas sincronizadas vía playlist privada (ver util/hidden-sync.js). Las
+// filas sin id de Spotify usan una clave de nombre+artista y quedan solo
+// locales: no hay pista que subir a la playlist.
+const hidden = createHiddenStore({
+  lsKey: HIDDEN_KEY,
+  playlistName: 'fonoteca · ocultos (sin clasificar)',
+  label: 'sin-clasificar',
+  keyOfTrack: (t) => t?.id || null,
+});
 
 // null = todavía no se configuró nunca (hay que presembrar con los defaults).
 function loadExcluded() {
@@ -136,6 +145,10 @@ async function load({ force }) {
       },
     });
     if (shownLikesProgress) hideProgress();
+
+    // Ocultas desde la playlist de Spotify. En segundo plano: si tarda, la vista
+    // arranca con el caché local y se repinta al llegar.
+    hidden.ready().then(() => { if (state) renderResults(); });
 
     const me = await getCurrentUserId();
     const playlists = await getAllUserPlaylists();
@@ -439,9 +452,7 @@ function wire() {
     btn.onclick = () => {
       const r = visible[+btn.dataset.i];
       if (!r) return;
-      if (hidden.has(r.id)) hidden.delete(r.id);
-      else hidden.add(r.id);
-      saveSet(HIDDEN_KEY, hidden);
+      hidden.toggle(r.id, r.uri || (r.track?.id ? `spotify:track:${r.track.id}` : null));
       if (showingHidden && hidden.size === 0) showingHidden = false;
       renderResults();
     };
