@@ -27,7 +27,7 @@
 - DELETE playlist items: body `{ items: [{uri}] }` (NO `{ tracks: [...] }` → da 400 "No uris provided")
 - Campo `popularity` en `/me/tracks`: **removido en la migración feb 2026**. Confirmado 2026-07-17 con 9548 tracks reales → 100% null. No usar más. Chart de popularidad sacado del Dashboard en v=41.
 - **Búsqueda** (`/search?type=album|track|artist`, con filtros `artist:"..."`): CONFIRMADO vivo (se usa en Similar y en Álbum similar v=45).
-- `GET /artists/{id}/albums`: **verificado 2026-08-05**: 400 "Invalid limit" con `limit=50&market=from_token`; funciona con `limit=20` sin `market`. Usado en `#discover-artists` y `#new-releases`. `getArtistAlbums()` (api.js) baja el limit a 20 y cae a `/search?q=artist:"X"&type=album` si el nativo devuelve 400 o 403.
+- `GET /artists/{id}/albums`: **el limit máximo bajó a 10** (re-verificado en vivo 2026-08-11: `limit` 11..20 devuelven 400 "Invalid limit", `limit=10` devuelve 200 y pagina bien con `next`/`offset` — Taylor Swift, `total: 112`). Antes (2026-08-05) 20 andaba. Nunca mandar `market=from_token`. Usado en `#discover-artists` y `#new-releases`. `getArtistAlbums()` (api.js) capea con `ARTIST_ALBUMS_MAX_LIMIT = 10` y cae a `/search?q=artist:"X"&type=album` si el nativo devuelve 400 o 403. **Ojo**: cuando el limit hardcodeado se queda viejo el nativo falla siempre y todo pasa en silencio por el fallback de `/search`, que es más lento y trae artistas ajenos — si ves `[api] getArtistAlbums: … fallback a /search` en consola, re-probá el limit.
 - `GET /albums/{id}/tracks`: usado best-effort en "Álbum similar" para el tracklist preview. Está envuelto en try/catch — si devuelve 403 la feature degrada sin romperse. No confirmado si sigue vivo.
 
 ## Client ID

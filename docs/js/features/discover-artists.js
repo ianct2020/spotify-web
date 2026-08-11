@@ -10,13 +10,13 @@
 // 100 artistas en lugar de 20. Lógica de fetch/cache/playlist compartida en
 // features/discover-common.js con #new-releases.
 
-import { escapeHtml, pageHeader } from '../ui/components.js?v=130';
-import { showToast } from '../ui/toast.js?v=130';
-import { openArtistCard } from './artist-card.js?v=130';
-import { openAlbumCard } from './album-card.js?v=130';
-import { albumKey } from '../util/album-key.js?v=130';
-import { isJunkTrack } from '../util/junk.js?v=130';
-import { buildAlbumHeardIndex, markAlbumHeard } from '../util/album-heard.js?v=130';
+import { escapeHtml, pageHeader } from '../ui/components.js?v=131';
+import { showToast } from '../ui/toast.js?v=131';
+import { openArtistCard } from './artist-card.js?v=131';
+import { openAlbumCard } from './album-card.js?v=131';
+import { albumKey } from '../util/album-key.js?v=131';
+import { isJunkTrack } from '../util/junk.js?v=131';
+import { buildAlbumHeardIndex, markAlbumHeard } from '../util/album-heard.js?v=131';
 import {
   getArtistIdCached,
   getArtistDiscoCached,
@@ -29,7 +29,7 @@ import {
   saveScanCache,
   clearScanCache,
   agoLabel,
-} from './discover-common.js?v=130';
+} from './discover-common.js?v=131';
 
 const SCAN_KEY = 'discover_artists';
 
