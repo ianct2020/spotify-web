@@ -206,10 +206,15 @@ function typeConfirmModal(title, message, requiredText = 'BORRAR') {
   });
 }
 
+// Escapa también comillas: casi todos los usos meten el resultado DENTRO de un
+// atributo (`data-name="${escapeHtml(p.name)}"`), y el truco de textContent →
+// innerHTML deja las comillas tal cual, así que un álbum como
+// «Songs of a Lost World "Deluxe"» rompía el markup de la tarjeta. Como texto,
+// &quot; y &#39; se renderizan igual que " y '.
 function escapeHtml(str) {
   const div = document.createElement('div');
   div.textContent = str;
-  return div.innerHTML;
+  return div.innerHTML.replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
 function alertModal(title, messageHtml, opts = {}) {
