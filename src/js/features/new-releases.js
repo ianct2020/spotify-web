@@ -12,15 +12,12 @@
 
 import { escapeHtml, pageHeader } from '../ui/components.js';
 import { showToast } from '../ui/toast.js';
-import { openArtistCard } from './artist-card.js';
-import { openAlbumCard } from './album-card.js';
 import { buildAlbumHeardIndex, markAlbumHeard } from '../util/album-heard.js';
 import {
   getArtistIdCached,
   getArtistDiscoCached,
   dedupDisco,
   albumIsUnheard,
-  yearOf,
   releaseTs,
   createDiscoverPlaylist,
   saveAlbumTracksToLibrary,
@@ -28,6 +25,9 @@ import {
   saveScanCache,
   clearScanCache,
   agoLabel,
+  renderAlbumCard,
+  wireAlbumCards,
+  addAlbumsToPlaylists,
 } from './discover-common.js';
 
 const SCAN_KEY = 'new_releases';
@@ -170,8 +170,9 @@ function renderShell(content, totalCandidates) {
     </div>
     <div class="disco-actionbar" id="newrel-actionbar" style="display:none">
       <span id="newrel-sel-count">0 seleccionados</span>
-      <button class="btn btn-secondary btn-sm" id="newrel-sel-clear">Vaciar</button>
-      <button class="btn btn-primary" id="newrel-sel-playlist">Crear playlist con lo seleccionado</button>
+      <button class="btn btn-secondary btn-sm" id="newrel-sel-clear">Limpiar selección</button>
+      <button class="btn btn-secondary btn-sm" id="newrel-sel-addpl">Añadir a playlist…</button>
+      <button class="btn btn-primary btn-sm" id="newrel-sel-playlist">Crear playlist con lo seleccionado</button>
     </div>
   `;
 
@@ -238,6 +239,21 @@ function renderShell(content, totalCandidates) {
     refreshList(content);
   };
   content.querySelector('#newrel-sel-playlist').onclick = () => onCreatePlaylist(content);
+  content.querySelector('#newrel-sel-addpl').onclick = async (e) => {
+    const btn = e.currentTarget;
+    const ids = [...state.selection];
+    if (!ids.length) return;
+    btn.disabled = true;
+    try {
+      await addAlbumsToPlaylists(ids, findAlbum, {
+        onDone: () => { state.selection.clear(); updateSelectionUi(content); refreshList(content); },
+      });
+    } catch (err) {
+      showToast('No se pudieron cargar tus playlists: ' + err.message, 'error');
+    } finally {
+      btn.disabled = false;
+    }
+  };
 }
 
 // El escaneo dura minutos y el usuario se puede ir a otra vista en el medio.
@@ -368,28 +384,17 @@ function refreshList(content) {
     return;
   }
 
-  list.innerHTML = `<div class="newrel-grid">${rows.map(r => renderRelease(r.al, r.artist.name)).join('')}</div>`;
+  list.innerHTML = `<div class="dcard-grid">${rows.map(r => renderAlbumCard(r.al, r.artist.name, {
+    checkClass: 'newrel-check',
+    selected: state.selection.has(r.al.id),
+  })).join('')}</div>`;
 
-  list.querySelectorAll('[data-open-artist]').forEach(btn => {
-    btn.onclick = () => openArtistCard({ name: btn.dataset.openArtist });
-  });
-  list.querySelectorAll('[data-open-album]').forEach(btn => {
-    btn.onclick = () => {
-      const al = findAlbum(btn.dataset.openAlbum);
-      if (!al) return;
-      openAlbumCard({ name: al.name, artist: btn.dataset.openArtist2, img: al.img, plays: 0, min: 0, albumId: al.id, totalTracks: al.total });
-    };
-  });
-  list.querySelectorAll('[data-save-album]').forEach(btn => {
-    btn.onclick = () => saveAlbum(btn.dataset.saveAlbum, btn.dataset.saveArtist, btn);
-  });
-  list.querySelectorAll('.newrel-check').forEach(cb => {
-    cb.checked = state.selection.has(cb.dataset.id);
-    cb.onchange = () => {
-      if (cb.checked) state.selection.add(cb.dataset.id);
-      else state.selection.delete(cb.dataset.id);
-      updateSelectionUi(content);
-    };
+  wireAlbumCards(list, findAlbum, {
+    checkClass: 'newrel-check',
+    selection: state.selection,
+    onSave: (albumId, artistName, btn) => saveAlbum(albumId, artistName, btn),
+    onChange: () => updateSelectionUi(content),
+    afterAdd: () => refreshList(content),
   });
 
   updateSelectionUi(content);
@@ -401,36 +406,6 @@ function findAlbum(albumId) {
     if (found) return found;
   }
   return null;
-}
-
-function fmtRelease(release) {
-  const s = release || '';
-  if (s.length >= 10) return s.slice(0, 10);
-  if (s.length >= 7) return s + '-01';
-  const y = yearOf(s);
-  return y ? String(y) : '—';
-}
-
-function renderRelease(al, artistName) {
-  const typeLabel = al.type === 'single' ? 'single' : 'álbum';
-  return `
-    <div class="disco-album newrel-album" data-id="${al.id}">
-      <label class="disco-album-check-wrap">
-        <input type="checkbox" class="newrel-check" data-id="${escapeHtml(al.id)}">
-      </label>
-      <button type="button" class="disco-album-body" data-open-album="${escapeHtml(al.id)}" data-open-artist2="${escapeHtml(artistName)}">
-        ${al.img
-          ? `<img src="${al.img}" alt="" loading="lazy" class="disco-album-img">`
-          : `<div class="disco-album-img disco-album-img-empty">♪</div>`}
-        <div class="disco-album-info">
-          <div class="disco-album-name">${escapeHtml(al.name)}</div>
-          <div class="newrel-artist-line"><button class="newrel-artist-btn" data-open-artist="${escapeHtml(artistName)}">${escapeHtml(artistName)}</button></div>
-          <div class="disco-album-meta">${fmtRelease(al.release)} · ${typeLabel}${al.total ? ` · ${al.total} pistas` : ''}</div>
-        </div>
-      </button>
-      <button class="btn btn-secondary btn-sm disco-save-btn" data-save-album="${escapeHtml(al.id)}" data-save-artist="${escapeHtml(artistName)}" title="Guardar todas las pistas en tu biblioteca">+ Biblioteca</button>
-    </div>
-  `;
 }
 
 function updateSelectionUi(content) {

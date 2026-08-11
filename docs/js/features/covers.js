@@ -9,12 +9,12 @@
 // placeholder→img. Botón "Pantalla completa" (Fullscreen API) que oculta
 // sidebar/header/toolbar y recalcula el lado.
 
-import { loadListenedAlbums, isOwner, ownerLockedMessage } from './history-data.js?v=131';
-import { isJunkTrack } from '../util/junk.js?v=131';
-import { getAllPlaylistItems } from '../api.js?v=131';
-import { escapeHtml, pageHeader } from '../ui/components.js?v=131';
-import { openAlbumCard } from './album-card.js?v=131';
-import { albumKey, coverId } from '../util/album-key.js?v=131';
+import { loadListenedAlbums, isOwner, ownerLockedMessage } from './history-data.js?v=132';
+import { isJunkTrack } from '../util/junk.js?v=132';
+import { getAllPlaylistItems } from '../api.js?v=132';
+import { escapeHtml, pageHeader } from '../ui/components.js?v=132';
+import { openAlbumCard } from './album-card.js?v=132';
+import { albumKey, coverId } from '../util/album-key.js?v=132';
 
 const LS_KEY_SIZE = 'covers_cell_size';
 const LS_KEY_SORT = 'covers_sort_mode';

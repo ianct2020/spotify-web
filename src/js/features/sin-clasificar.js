@@ -15,12 +15,14 @@
 
 import {
   getAllUserPlaylists, getAllPlaylistItems, getBestAvailableLikes,
-  getCurrentUserId, addTracksToPlaylist, updatePlaylistItemsCache,
+  getCurrentUserId,
 } from '../api.js';
 import { idbGetCached, idbSetCached, idbDel } from '../idb.js';
 import { createHiddenStore } from '../util/hidden-sync.js';
+import { addUrisToPlaylists, toastAddResult } from '../util/playlist-add.js';
 import { escapeHtml, pageHeader, showProgress, hideProgress, isCancelled } from '../ui/components.js';
 import { openModal, closeTop } from '../ui/modal-stack.js';
+import { openPlaylistPicker } from '../ui/playlist-picker.js';
 import { showToast } from '../ui/toast.js';
 import { getPreview } from '../api/preview-providers.js';
 import { togglePreview, playingKey } from '../ui/preview-player.js';
@@ -35,13 +37,19 @@ const CROSS_KEY = 'sin_clasificar_cross_v1';
 const CROSS_TTL_MIN = 24 * 60;
 
 // Playlists que no clasifican nada: el espejo de likes y el depósito de W-Three.
-// Se usan solo la primera vez, para presembrar el selector.
+// Se usan solo la primera vez, para presembrar el selector; a partir de ahí la
+// exclusión vive en localStorage POR ID, no por nombre (renombrar una playlist
+// no la saca de la lista de ignoradas).
 const DEFAULT_EXCLUDED_NAMES = ['anothertwo', 'w three'];
 
-// Pausa entre playlists del escaneo. Aunque el cache por snapshot evite bajar
-// los tracks, cada playlist cuesta 1 request de snapshot: sin freno, 60
-// playlists seguidas se comen un 429.
-const SCAN_PAUSE_MS = 200;
+// Escaneo en paralelo. Antes era secuencial con 200 ms de pausa entre playlists:
+// con 32 playlists eso son 6,4 s de esperas puras más el tiempo de red, todo en
+// serie. Los endpoints de playlist aguantan bien 3 a la vez; el 429 se maneja
+// dentro de spotifyFetch (espera 5 s) y, si aun así agota los reintentos, la
+// playlist se reencola hasta SCAN_RATE_RETRIES veces en vez de perderse.
+const SCAN_PARALLEL = 3;
+const SCAN_PAUSE_MS = 0;
+const SCAN_RATE_RETRIES = 2;
 
 const SORTS = [
   { id: 'recent', label: 'Más recientes primero' },
@@ -59,6 +67,9 @@ let showingHidden = false;
 // leen de acá y NO de filtered(): con el orden aleatorio, cada llamada a
 // filtered() re-baraja y el índice de la tarjeta apuntaría a otra canción.
 let visible = [];
+// Ids de las filas marcadas con el checkbox de la tarjeta. Sobrevive a los
+// re-render (filtro, orden, ocultar) mientras la fila siga existiendo.
+let selected = new Set();
 
 function loadSet(key) {
   try {
@@ -156,10 +167,16 @@ async function load({ force }) {
 
     let excluded = loadExcluded();
     if (excluded == null) {
-      excluded = new Set(own.filter(p => DEFAULT_EXCLUDED_NAMES.includes(normName(p.name))).map(p => p.id));
+      // Presiembra tolerante al espaciado: "w three", "W Three" y "wthree" son
+      // la misma playlist. A partir de acá la exclusión ya vive por id.
+      const sinEspacios = new Set(DEFAULT_EXCLUDED_NAMES.map(n => n.replace(/\s+/g, '')));
+      excluded = new Set(own.filter(p => sinEspacios.has(normName(p.name).replace(/\s+/g, ''))).map(p => p.id));
       saveExcluded(excluded);
+      console.log('[sin-clasificar] exclusiones presembradas por id:',
+        own.filter(p => excluded.has(p.id)).map(p => `${p.name} (${p.id})`));
     }
     const toScan = own.filter(p => !excluded.has(p.id));
+    console.log(`[sin-clasificar] ${toScan.length} playlists a cruzar de ${own.length} propias · ignoradas por id: ${own.filter(p => excluded.has(p.id)).map(p => `${p.name} (${p.id})`).join(', ') || '—'}`);
 
     let cross = force ? null : await idbGetCached(CROSS_KEY).catch(() => null);
     // Si cambió qué playlists entran al cruce, lo cacheado ya no sirve.
@@ -244,40 +261,64 @@ function progreso(texto, loaded, total, onCancel) {
 
 // Baja las pistas de cada playlist y devuelve los índices del cruce.
 // El progreso sale en el pill minimizado para poder seguir usando la app.
+// SCAN_PARALLEL playlists a la vez: el orden de la cola deja de importar, así
+// que el progreso cuenta terminadas, no la posición en la lista.
 async function scanPlaylists(playlists) {
   const ids = new Set();
   const keys = new Set();
   const skipped = [];
+  const total = playlists.length;
+  const cola = playlists.map(p => ({ pl: p, retries: 0 }));
+  let hechas = 0;
   let aborted = false;
+  let fatal = null;
   const cancelar = () => { aborted = true; };
-  progreso(`Escaneando playlists… (0/${playlists.length})`, 0, playlists.length, cancelar);
+  progreso(`Escaneando playlists… (0/${total})`, 0, total, cancelar);
 
-  for (let i = 0; i < playlists.length; i++) {
-    if (aborted) { hideProgress(); throw new Error('Carga cancelada'); }
-    const pl = playlists[i];
-    const etiqueta = `Escaneando «${pl.name}»… (${i + 1}/${playlists.length})`;
-    progreso(etiqueta, i + 1, playlists.length, cancelar);
-    try {
-      // El progreso por página no es decorativo: showProgress cierra el pill si
-      // pasan 10 s sin novedades, y bajar una playlist grande tarda bastante más.
-      const items = await getAllPlaylistItems(pl.id, ({ loaded }) => {
-        progreso(`${etiqueta} · ${loaded.toLocaleString('es-ES')} pistas`, i + 1, playlists.length, cancelar);
-      });
-      for (const item of items) {
-        const t = item.item || item.track;
-        if (!t) continue;
-        if (t.id) ids.add(t.id);
-        const k = fallbackKey(t.name, firstArtist(t));
-        if (k) keys.add(k);
+  const worker = async () => {
+    while (cola.length) {
+      if (aborted) return;
+      const tarea = cola.shift();
+      if (!tarea) return;
+      const pl = tarea.pl;
+      try {
+        // El progreso por página no es decorativo: showProgress cierra el pill si
+        // pasan 10 s sin novedades, y bajar una playlist grande tarda bastante más.
+        const items = await getAllPlaylistItems(pl.id, ({ loaded }) => {
+          progreso(`Escaneando «${pl.name}»… ${loaded.toLocaleString('es-ES')} pistas (${hechas}/${total})`, hechas, total, cancelar);
+        });
+        for (const item of items) {
+          const t = item.item || item.track;
+          if (!t) continue;
+          if (t.id) ids.add(t.id);
+          const k = fallbackKey(t.name, firstArtist(t));
+          if (k) keys.add(k);
+        }
+      } catch (e) {
+        // 403/404: playlists de Spotify o borradas. No frenan el escaneo.
+        if (/40[34]/.test(e.message)) {
+          skipped.push(pl.name);
+        } else if ((e.status === 429 || /rate limit/i.test(e.message)) && tarea.retries < SCAN_RATE_RETRIES) {
+          tarea.retries++;
+          cola.push(tarea);
+          console.warn(`[sin-clasificar] «${pl.name}»: rate limit, reintento ${tarea.retries}/${SCAN_RATE_RETRIES}`);
+          continue;
+        } else {
+          fatal = fatal || e;
+          aborted = true;
+          return;
+        }
       }
-    } catch (e) {
-      // 403/404: playlists de Spotify o borradas. No frenan el escaneo.
-      if (/40[34]/.test(e.message)) skipped.push(pl.name);
-      else throw e;
+      hechas++;
+      progreso(`Escaneando playlists… (${hechas}/${total})`, hechas, total, cancelar);
+      if (SCAN_PAUSE_MS) await new Promise(r => setTimeout(r, SCAN_PAUSE_MS));
     }
-    if (i < playlists.length - 1) await new Promise(r => setTimeout(r, SCAN_PAUSE_MS));
-  }
+  };
+
+  await Promise.all(Array.from({ length: Math.min(SCAN_PARALLEL, total || 1) }, worker));
   hideProgress();
+  if (fatal) throw fatal;
+  if (aborted) throw new Error('Carga cancelada');
   if (skipped.length > 0) console.warn('[sin-clasificar] playlists inaccesibles:', skipped);
   return { ids: [...ids], keys: [...keys], scanned: playlists.map(p => p.id), skipped };
 }
@@ -310,6 +351,12 @@ function renderResults() {
   // cruce menos las que Ian ya ocultó. Antes decía 1.987 mientras el grid
   // pintaba 1.985.
   const sinClasificarCount = state.rows.reduce((n, r) => n + (hidden.has(r.id) ? 0 : 1), 0);
+  // Una fila que ya no existe (porque se añadió a alguna playlist) no puede
+  // seguir contando como seleccionada.
+  if (selected.size) {
+    const vivas = new Set(state.rows.map(r => r.id));
+    for (const id of [...selected]) if (!vivas.has(id)) selected.delete(id);
+  }
   const fecha = state.at ? new Date(state.at).toLocaleString('es-ES', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : '';
 
   content.innerHTML = `
@@ -340,6 +387,12 @@ function renderResults() {
     ` : `
       <div class="sc-grid" id="sc-list">${rows.map((r, i) => renderCard(r, i)).join('')}</div>
     `}
+    <div class="sc-actionbar" id="sc-actionbar" style="display:none">
+      <span id="sc-sel-count">0 seleccionadas</span>
+      <button class="btn btn-primary btn-sm" id="sc-sel-add">Añadir a…</button>
+      <button class="btn btn-secondary btn-sm" id="sc-sel-hide">${showingHidden ? 'Devolver a la lista' : 'Ocultar'}</button>
+      <button class="btn btn-secondary btn-sm" id="sc-sel-clear">Limpiar selección</button>
+    </div>
   `;
   wire();
   activateMarquee(content);
@@ -354,7 +407,10 @@ function fechaLike(iso) {
 
 function renderCard(r, i) {
   return `
-    <div class="sc-card" data-i="${i}" data-id="${escapeHtml(r.id)}">
+    <div class="sc-card${selected.has(r.id) ? ' is-sel' : ''}" data-i="${i}" data-id="${escapeHtml(r.id)}">
+      <label class="sc-check-wrap" title="Seleccionar">
+        <input type="checkbox" class="sc-check" data-i="${i}"${selected.has(r.id) ? ' checked' : ''} aria-label="Seleccionar ${escapeHtml(r.name)}">
+      </label>
       <div class="sc-card-main">
         ${r.cover
           ? `<img class="sc-cover" src="${r.cover}" alt="" loading="lazy">`
@@ -461,9 +517,52 @@ function wire() {
   content.querySelectorAll('.sc-add').forEach(btn => {
     btn.onclick = () => {
       const r = visible[+btn.dataset.i];
-      if (r) openAddModal(r);
+      if (r) openAddModal([r]);
     };
   });
+
+  content.querySelectorAll('.sc-check').forEach(cb => {
+    cb.onchange = () => {
+      const r = visible[+cb.dataset.i];
+      if (!r) return;
+      if (cb.checked) selected.add(r.id); else selected.delete(r.id);
+      cb.closest('.sc-card')?.classList.toggle('is-sel', cb.checked);
+      updateSelectionUi();
+    };
+  });
+
+  const selAdd = content.querySelector('#sc-sel-add');
+  if (selAdd) selAdd.onclick = () => {
+    const filas = selectedRows();
+    if (filas.length) openAddModal(filas);
+  };
+  const selHide = content.querySelector('#sc-sel-hide');
+  if (selHide) selHide.onclick = () => {
+    for (const r of selectedRows()) {
+      hidden.toggle(r.id, r.uri || null);
+    }
+    selected.clear();
+    if (showingHidden && hidden.size === 0) showingHidden = false;
+    renderResults();
+  };
+  const selClear = content.querySelector('#sc-sel-clear');
+  if (selClear) selClear.onclick = () => { selected.clear(); renderResults(); };
+
+  updateSelectionUi();
+}
+
+function selectedRows() {
+  if (!state) return [];
+  return state.rows.filter(r => selected.has(r.id));
+}
+
+function updateSelectionUi() {
+  const bar = document.getElementById('sc-actionbar');
+  if (!bar) return;
+  const n = selected.size;
+  bar.style.display = n > 0 ? '' : 'none';
+  const count = document.getElementById('sc-sel-count');
+  if (count) count.textContent = `${n} seleccionada${n === 1 ? '' : 's'}`;
 }
 
 // Sincroniza el estado de los botones ▶ con el player global.
@@ -479,90 +578,69 @@ document.addEventListener('previewchange', (e) => {
 
 // ── Modal "Añadir a…" ────────────────────────────────────────────────────────
 
-function openAddModal(row) {
+// `rows` puede ser una sola canción (botón de la tarjeta) o la selección
+// múltiple. En los dos casos es el mismo modal de checkboxes y un POST por
+// playlist marcada.
+function openAddModal(rows) {
   const opciones = state.ownPlaylists.filter(p => !state.excluded.has(p.id));
-  const overlay = openModal({
+  const conUri = rows.filter(r => r.uri);
+  const sinUri = rows.length - conUri.length;
+
+  if (!conUri.length) {
+    showToast('Ninguna de las canciones seleccionadas tiene URI de Spotify', 'error');
+    return;
+  }
+
+  const subtitulo = rows.length === 1
+    ? `${rows[0].name} — ${rows[0].artists}`
+    : `${conUri.length} canciones${sinUri ? ` (${sinUri} sin URI de Spotify quedan fuera)` : ''}`;
+
+  openPlaylistPicker({
     id: 'sc-add',
-    html: `
-      <div class="modal sc-modal">
-        <div class="sc-modal-head">
-          <h2 style="margin:0">Añadir a una playlist</h2>
-          <button class="btn btn-secondary btn-sm" data-close-modal title="Cerrar" aria-label="Cerrar">✕</button>
-        </div>
-        <p class="sc-modal-sub">${escapeHtml(row.name)} — ${escapeHtml(row.artists)}</p>
-        <input type="search" class="input" id="sc-pl-search" placeholder="Buscar playlist" autocomplete="off">
-        <div class="sc-pl-list" id="sc-pl-list">
-          ${opciones.map(p => `
-            <button class="sc-pl-item" data-id="${p.id}" data-name="${escapeHtml(p.name)}">
-              ${p.image ? `<img src="${p.image}" alt="" loading="lazy">` : `<span class="sc-pl-ph">♪</span>`}
-              <span class="sc-pl-name">${escapeHtml(p.name)}</span>
-            </button>
-          `).join('')}
-        </div>
-      </div>
-    `,
-  });
+    title: rows.length === 1 ? 'Añadir a playlists' : 'Añadir la selección a playlists',
+    subtitle: subtitulo,
+    playlists: opciones,
+    onConfirm: async (elegidas) => {
+      const res = await addUrisToPlaylists(conUri.map(r => r.uri), elegidas, {
+        appendItems: conUri.map(r => ({
+          id: r.trackId, uri: r.uri, name: r.name, artists: r.raw?.artists || [],
+        })),
+      });
 
-  const list = overlay.querySelector('#sc-pl-list');
-  const buscador = overlay.querySelector('#sc-pl-search');
-  setTimeout(() => buscador.focus(), 30);
-  buscador.addEventListener('input', () => {
-    const q = normText(buscador.value);
-    list.querySelectorAll('.sc-pl-item').forEach(el => {
-      el.hidden = q ? !normText(el.dataset.name).includes(q) : false;
-    });
-  });
+      toastAddResult(res, {
+        what: rows.length === 1 ? `«${rows[0].name}»` : `${conUri.length} canciones`,
+        plural: rows.length !== 1,
+      });
 
-  list.querySelectorAll('.sc-pl-item').forEach(el => {
-    el.onclick = async () => {
-      if (el.disabled) return;
-      list.querySelectorAll('.sc-pl-item').forEach(b => b.disabled = true);
-      el.classList.add('loading');
-      try {
-        await addToPlaylist(row, { id: el.dataset.id, name: el.dataset.name });
-        closeTop();
-      } catch (e) {
-        console.error('[sin-clasificar] añadir falló:', e);
-        showToast(`No se pudo añadir «${row.name}»: ${e.message}`, 'error');
-        list.querySelectorAll('.sc-pl-item').forEach(b => b.disabled = false);
-        el.classList.remove('loading');
-      }
-    };
+      // Solo salen de la lista si se añadieron a AL MENOS una playlist.
+      if (!res.ok.length) throw new Error('no se pudo añadir a ninguna playlist');
+
+      const fuera = new Set(conUri.map(r => r.id));
+      state.rows = state.rows.filter(r => !fuera.has(r.id));
+      for (const id of fuera) selected.delete(id);
+      await patchCross(conUri);
+      renderResults();
+    },
   });
 }
 
-async function addToPlaylist(row, pl) {
-  if (!row.uri) throw new Error('la canción no tiene URI de Spotify');
-  const snapshot = await addTracksToPlaylist(pl.id, [row.uri]);
-
-  // Mantenemos vivo el cache de items de esa playlist (si no, el próximo
-  // escaneo la re-baja entera).
-  try {
-    const cached = await idbGetCached(`playlist_items_${pl.id}`);
-    if (snapshot && cached && Array.isArray(cached.items)) {
-      cached.items.push({ item: { id: row.trackId, uri: row.uri, name: row.name, artists: row.raw?.artists || [] } });
-      await updatePlaylistItemsCache(pl.id, cached.items, snapshot);
-    } else {
-      await updatePlaylistItemsCache(pl.id, null, null);
-    }
-  } catch {
-    await updatePlaylistItemsCache(pl.id, null, null);
-  }
-
-  // Ya está clasificada: fuera de la lista y del cruce cacheado.
-  state.rows = state.rows.filter(r => r.id !== row.id);
+// El cruce cacheado tiene que reflejar que estas canciones ya están en alguna
+// playlist; si no, el próximo escaneo las volvería a listar hasta vencer el TTL.
+async function patchCross(rows) {
   try {
     const cross = await idbGetCached(CROSS_KEY);
-    if (cross) {
-      if (row.trackId && !cross.ids.includes(row.trackId)) cross.ids.push(row.trackId);
-      const k = fallbackKey(row.name, row.artist);
-      if (k && !cross.keys.includes(k)) cross.keys.push(k);
-      await idbSetCached(CROSS_KEY, cross, CROSS_TTL_MIN);
+    if (!cross) return;
+    const ids = new Set(cross.ids);
+    const keys = new Set(cross.keys);
+    for (const r of rows) {
+      if (r.trackId) ids.add(r.trackId);
+      const k = fallbackKey(r.name, r.artist);
+      if (k) keys.add(k);
     }
+    cross.ids = [...ids];
+    cross.keys = [...keys];
+    await idbSetCached(CROSS_KEY, cross, CROSS_TTL_MIN);
   } catch { /* el cruce se rehará al vencer el TTL */ }
-
-  showToast(`«${row.name}» añadida a ${pl.name}`, 'success');
-  renderResults();
 }
 
 // ── Modal de playlists ignoradas ─────────────────────────────────────────────
