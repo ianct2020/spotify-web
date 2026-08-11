@@ -38,7 +38,9 @@ export async function getArtistDiscoCached(artistId, artistName) {
     const cached = await idbGetCached(key);
     if (Array.isArray(cached) && cached.length) return cached;
   } catch { /* ignora */ }
-  const items = await getArtistAlbums(artistId, artistName, { includeSingles: true, limit: 20 });
+  // Sin limit explícito: api.js sabe cuál es el máximo que acepta Spotify hoy
+  // (10 desde 2026-08-11) y pagina hasta el final igual.
+  const items = await getArtistAlbums(artistId, artistName, { includeSingles: true });
   const slim = items.map(al => ({
     id: al.id,
     name: al.name,

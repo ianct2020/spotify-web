@@ -10,11 +10,11 @@
 //   - Umbral de likes: 5+ / 10+ / 20+
 //   - Ventana temporal: 3 / 6 / 12 / 24 meses (default 12)
 
-import { escapeHtml, pageHeader } from '../ui/components.js?v=130';
-import { showToast } from '../ui/toast.js?v=130';
-import { openArtistCard } from './artist-card.js?v=130';
-import { openAlbumCard } from './album-card.js?v=130';
-import { buildAlbumHeardIndex, markAlbumHeard } from '../util/album-heard.js?v=130';
+import { escapeHtml, pageHeader } from '../ui/components.js?v=131';
+import { showToast } from '../ui/toast.js?v=131';
+import { openArtistCard } from './artist-card.js?v=131';
+import { openAlbumCard } from './album-card.js?v=131';
+import { buildAlbumHeardIndex, markAlbumHeard } from '../util/album-heard.js?v=131';
 import {
   getArtistIdCached,
   getArtistDiscoCached,
@@ -28,7 +28,7 @@ import {
   saveScanCache,
   clearScanCache,
   agoLabel,
-} from './discover-common.js?v=130';
+} from './discover-common.js?v=131';
 
 const SCAN_KEY = 'new_releases';
 
@@ -240,6 +240,16 @@ function renderShell(content, totalCandidates) {
   content.querySelector('#newrel-sel-playlist').onclick = () => onCreatePlaylist(content);
 }
 
+// El escaneo dura minutos y el usuario se puede ir a otra vista en el medio.
+// Cuando eso pasa los nodos del progreso ya no existen: escribirles .textContent
+// tiraba un TypeError DENTRO del finally, que se lleva puesto el worker entero
+// y hace que nunca se llegue al saveScanCache del final — o sea, se perdían los
+// artistas ya escaneados y había que volver a pedírselos a Spotify.
+function setCount(n) {
+  const el = document.getElementById('newrel-count');
+  if (el) el.textContent = n;
+}
+
 async function scanArtists(content) {
   const progress = document.getElementById('newrel-progress');
   const progressLabel = document.getElementById('newrel-progress-label');
@@ -248,7 +258,7 @@ async function scanArtists(content) {
   const eligible = eligibleArtists();
   const target = Math.min(state.loadedMore, eligible.length);
   let scanned = eligible.filter(a => a.scanned).length;
-  document.getElementById('newrel-count').textContent = scanned;
+  setCount(scanned);
   // slice sobre lo que FALTA, no sobre el target entero: si 40 ya vinieron del
   // cache y el target son 100, hay que encolar 60, no 100.
   const queue = eligible.filter(a => !a.scanned).slice(0, Math.max(0, target - scanned));
@@ -257,6 +267,9 @@ async function scanArtists(content) {
 
   const workers = Array.from({ length: BATCH_PARALLEL }, () => (async () => {
     while (queue.length) {
+      // Si el usuario se fue de la vista, cortamos acá: lo escaneado hasta
+      // ahora igual se guarda abajo, así la próxima visita no lo repite.
+      if (!content.isConnected) break;
       const artist = queue.shift();
       if (!artist) break;
       let requeued = false;
@@ -278,16 +291,16 @@ async function scanArtists(content) {
       } finally {
         if (!requeued) {
           scanned++;
-          progressLabel.textContent = `${artist.name} (${scanned}/${target})`;
-          progressFill.style.width = `${Math.min(100, (scanned / target) * 100)}%`;
-          document.getElementById('newrel-count').textContent = scanned;
+          if (progressLabel) progressLabel.textContent = `${artist.name} (${scanned}/${target})`;
+          if (progressFill) progressFill.style.width = `${Math.min(100, (scanned / target) * 100)}%`;
+          setCount(scanned);
         }
-        refreshList(content);
+        if (content.isConnected) refreshList(content);
       }
     }
   })());
   await Promise.all(workers);
-  progress.style.display = 'none';
+  if (progress) progress.style.display = 'none';
 
   const done = state.artists.filter(a => a.scanned && !a.error);
   if (done.length) {

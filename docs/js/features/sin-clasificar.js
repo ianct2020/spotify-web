@@ -16,17 +16,17 @@
 import {
   getAllUserPlaylists, getAllPlaylistItems, getBestAvailableLikes,
   getCurrentUserId, addTracksToPlaylist, updatePlaylistItemsCache,
-} from '../api.js?v=130';
-import { idbGetCached, idbSetCached, idbDel } from '../idb.js?v=130';
-import { createHiddenStore } from '../util/hidden-sync.js?v=130';
-import { escapeHtml, pageHeader, showProgress, hideProgress, isCancelled } from '../ui/components.js?v=130';
-import { openModal, closeTop } from '../ui/modal-stack.js?v=130';
-import { showToast } from '../ui/toast.js?v=130';
-import { getPreview } from '../api/preview-providers.js?v=130';
-import { togglePreview, playingKey } from '../ui/preview-player.js?v=130';
-import { openTrackCard } from './track-card.js?v=130';
-import { normText } from '../util/track-match.js?v=130';
-import { activateMarquee, marqueeSpan } from '../ui/marquee.js?v=130';
+} from '../api.js?v=131';
+import { idbGetCached, idbSetCached, idbDel } from '../idb.js?v=131';
+import { createHiddenStore } from '../util/hidden-sync.js?v=131';
+import { escapeHtml, pageHeader, showProgress, hideProgress, isCancelled } from '../ui/components.js?v=131';
+import { openModal, closeTop } from '../ui/modal-stack.js?v=131';
+import { showToast } from '../ui/toast.js?v=131';
+import { getPreview } from '../api/preview-providers.js?v=131';
+import { togglePreview, playingKey } from '../ui/preview-player.js?v=131';
+import { openTrackCard } from './track-card.js?v=131';
+import { normText } from '../util/track-match.js?v=131';
+import { activateMarquee, marqueeSpan } from '../ui/marquee.js?v=131';
 
 const HIDDEN_KEY = 'sin_clasificar_ocultas';
 const EXCLUDED_KEY = 'sin_clasificar_excluidas';

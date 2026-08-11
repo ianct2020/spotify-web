@@ -6,9 +6,9 @@
 //     (util/album-heard.js: historial completo + likes + listened + w-three)
 //   - permiten "+ Biblioteca" y "Crear playlist con lo elegido"
 
-import { idbGetCached, idbSetCached, idbDel } from '../idb.js?v=130';
-import { getArtistAlbums, searchArtistByName, getAlbumTracks, saveToLibrary, createPlaylist, addTracksToPlaylist } from '../api.js?v=130';
-import { albumKey } from '../util/album-key.js?v=130';
+import { idbGetCached, idbSetCached, idbDel } from '../idb.js?v=131';
+import { getArtistAlbums, searchArtistByName, getAlbumTracks, saveToLibrary, createPlaylist, addTracksToPlaylist } from '../api.js?v=131';
+import { albumKey } from '../util/album-key.js?v=131';
 
 const DISCO_TTL_MIN = 30 * 24 * 60;       // 30 días
 const ARTIST_ID_TTL_MIN = 60 * 24 * 60;   // 60 días — los ids no cambian
@@ -38,7 +38,9 @@ export async function getArtistDiscoCached(artistId, artistName) {
     const cached = await idbGetCached(key);
     if (Array.isArray(cached) && cached.length) return cached;
   } catch { /* ignora */ }
-  const items = await getArtistAlbums(artistId, artistName, { includeSingles: true, limit: 20 });
+  // Sin limit explícito: api.js sabe cuál es el máximo que acepta Spotify hoy
+  // (10 desde 2026-08-11) y pagina hasta el final igual.
+  const items = await getArtistAlbums(artistId, artistName, { includeSingles: true });
   const slim = items.map(al => ({
     id: al.id,
     name: al.name,

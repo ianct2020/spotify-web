@@ -3,14 +3,14 @@
 // días distintos, récord en un día — más preview iTunes y link a Spotify.
 // Se abre desde cualquier feature con openTrackCard({ id, name, artist, album, img }).
 
-import { loadTrackPlays, loadTrackDetail, loadHistoryStats, isOwner } from './history-data.js?v=130';
-import { escapeHtml } from '../ui/components.js?v=130';
-import { getPreview } from '../api/preview-providers.js?v=130';
-import { togglePreview, playingKey } from '../ui/preview-player.js?v=130';
-import { hasUsername, findTrackId, getTrackCurrentStats, loadTopLifetime } from '../api/statsfm.js?v=130';
-import { openAlbumCard } from './album-card.js?v=130';
-import { openModal, closeTop } from '../ui/modal-stack.js?v=130';
-import { getBestAvailableLikes } from '../api.js?v=130';
+import { loadTrackPlays, loadTrackDetail, loadHistoryStats, isOwner } from './history-data.js?v=131';
+import { escapeHtml } from '../ui/components.js?v=131';
+import { getPreview } from '../api/preview-providers.js?v=131';
+import { togglePreview, playingKey } from '../ui/preview-player.js?v=131';
+import { hasUsername, findTrackId, getTrackCurrentStats, loadTopLifetime } from '../api/statsfm.js?v=131';
+import { openAlbumCard } from './album-card.js?v=131';
+import { openModal, closeTop } from '../ui/modal-stack.js?v=131';
+import { getBestAvailableLikes } from '../api.js?v=131';
 
 const MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
 

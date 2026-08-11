@@ -996,12 +996,18 @@ const SEARCH_PAGE = 10;           // máximo que acepta hoy /search
 // limit y desaparecían de la lista).
 const SEARCH_MAX_PAGES = 4;
 
-async function getArtistAlbums(artistId, artistName, { includeSingles = true, limit = 20 } = {}) {
+// El limit máximo de /artists/{id}/albums bajó de 20 a 10 (verificado en vivo
+// 2026-08-11: 11..20 devuelven 400 "Invalid limit", 10 devuelve 200). Con 20
+// hardcodeado el endpoint nativo fallaba SIEMPRE y todo caía al fallback por
+// /search, que es más lento y trae artistas ajenos que hay que filtrar a mano.
+const ARTIST_ALBUMS_MAX_LIMIT = 10;
+
+async function getArtistAlbums(artistId, artistName, { includeSingles = true, limit = ARTIST_ALBUMS_MAX_LIMIT } = {}) {
   const groups = includeSingles ? 'album,single' : 'album';
   const tryNative = async () => {
     const items = [];
-    let url = `/artists/${artistId}/albums?include_groups=${groups}&limit=${Math.min(limit, 20)}`;
-    for (let i = 0; i < 15; i++) {
+    let url = `/artists/${artistId}/albums?include_groups=${groups}&limit=${Math.min(limit, ARTIST_ALBUMS_MAX_LIMIT)}`;
+    for (let i = 0; i < 25; i++) {
       // El primer request es el probe: sin reintentos, para que un endpoint
       // muerto no cueste 25 segundos por artista.
       const res = await spotifyFetch(url, i === 0 && _artistAlbumsEndpoint == null ? { _maxRetries: 0 } : {});
