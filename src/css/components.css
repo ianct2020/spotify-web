@@ -1304,9 +1304,16 @@ body.modal-open {
 }
 .sc-check { cursor: pointer; accent-color: var(--color-accent); margin: 0; width: 15px; height: 15px; }
 
+/* `position: fixed`, no sticky: `html` lleva `overflow-x: hidden`, y con eso
+   Chrome no engancha los sticky contra el viewport. Con 2.400 tarjetas la barra
+   quedaba a 66.000 px de scroll, o sea inalcanzable. Verificado en la app real
+   (v=133). Lo mismo vale para .disco-actionbar. */
 .sc-actionbar {
-  position: sticky;
-  bottom: 12px;
+  position: fixed;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: 16px;
+  width: min(1252px, calc(100% - 48px));
   z-index: 10;
   display: flex;
   align-items: center;
@@ -1316,9 +1323,11 @@ body.modal-open {
   background: var(--color-surface);
   border: 1px solid var(--color-accent);
   border-radius: var(--radius-md);
-  margin: 16px 0;
+  margin: 0;
   box-shadow: 0 10px 30px rgba(0,0,0,0.4);
 }
+/* Hueco para que la barra flotante no tape la última fila. */
+.sc-grid { padding-bottom: 84px; }
 .sc-actionbar #sc-sel-count {
   font-size: 13px;
   color: var(--color-text);

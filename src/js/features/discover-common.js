@@ -268,11 +268,14 @@ export async function addAlbumsToPlaylists(albumIds, findAlbumById, { onDone } =
       }
       if (!uris.length) throw new Error('los lanzamientos elegidos no tienen pistas');
       const res = await addUrisToPlaylists(uris, elegidas);
+      // Muchos «lanzamientos» son singles de una sola pista: sin esto el toast
+      // decía "1 pistas … se añadieron".
+      const pistas = `${uris.length} pista${uris.length === 1 ? '' : 's'}`;
       toastAddResult(res, {
         what: albumIds.length === 1
-          ? `${uris.length} pistas de «${nombres[0] || 'el lanzamiento'}»`
-          : `${uris.length} pistas de ${albumIds.length} lanzamientos`,
-        plural: true,
+          ? `${pistas} de «${nombres[0] || 'el lanzamiento'}»`
+          : `${pistas} de ${albumIds.length} lanzamientos`,
+        plural: uris.length !== 1,
       });
       if (!res.ok.length) throw new Error('no se pudo añadir a ninguna playlist');
       if (onDone) onDone();

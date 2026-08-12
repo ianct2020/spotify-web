@@ -6,15 +6,15 @@
 //     (util/album-heard.js: historial completo + likes + listened + w-three)
 //   - permiten "+ Biblioteca" y "Crear playlist con lo elegido"
 
-import { idbGetCached, idbSetCached, idbDel } from '../idb.js?v=132';
-import { getArtistAlbums, searchArtistByName, getAlbumTracks, saveToLibrary, createPlaylist, addTracksToPlaylist } from '../api.js?v=132';
-import { albumKey } from '../util/album-key.js?v=132';
-import { escapeHtml } from '../ui/components.js?v=132';
-import { showToast } from '../ui/toast.js?v=132';
-import { openPlaylistPicker } from '../ui/playlist-picker.js?v=132';
-import { getOwnPlaylists, addUrisToPlaylists, toastAddResult } from '../util/playlist-add.js?v=132';
-import { openArtistCard } from './artist-card.js?v=132';
-import { openAlbumCard } from './album-card.js?v=132';
+import { idbGetCached, idbSetCached, idbDel } from '../idb.js?v=133';
+import { getArtistAlbums, searchArtistByName, getAlbumTracks, saveToLibrary, createPlaylist, addTracksToPlaylist } from '../api.js?v=133';
+import { albumKey } from '../util/album-key.js?v=133';
+import { escapeHtml } from '../ui/components.js?v=133';
+import { showToast } from '../ui/toast.js?v=133';
+import { openPlaylistPicker } from '../ui/playlist-picker.js?v=133';
+import { getOwnPlaylists, addUrisToPlaylists, toastAddResult } from '../util/playlist-add.js?v=133';
+import { openArtistCard } from './artist-card.js?v=133';
+import { openAlbumCard } from './album-card.js?v=133';
 
 const DISCO_TTL_MIN = 30 * 24 * 60;       // 30 días
 const ARTIST_ID_TTL_MIN = 60 * 24 * 60;   // 60 días — los ids no cambian
@@ -268,11 +268,14 @@ export async function addAlbumsToPlaylists(albumIds, findAlbumById, { onDone } =
       }
       if (!uris.length) throw new Error('los lanzamientos elegidos no tienen pistas');
       const res = await addUrisToPlaylists(uris, elegidas);
+      // Muchos «lanzamientos» son singles de una sola pista: sin esto el toast
+      // decía "1 pistas … se añadieron".
+      const pistas = `${uris.length} pista${uris.length === 1 ? '' : 's'}`;
       toastAddResult(res, {
         what: albumIds.length === 1
-          ? `${uris.length} pistas de «${nombres[0] || 'el lanzamiento'}»`
-          : `${uris.length} pistas de ${albumIds.length} lanzamientos`,
-        plural: true,
+          ? `${pistas} de «${nombres[0] || 'el lanzamiento'}»`
+          : `${pistas} de ${albumIds.length} lanzamientos`,
+        plural: uris.length !== 1,
       });
       if (!res.ok.length) throw new Error('no se pudo añadir a ninguna playlist');
       if (onDone) onDone();
