@@ -3527,20 +3527,29 @@ body.covers-fs .main {
   font-size: 11.5px !important;
 }
 
+/* fixed, no sticky: ver el comentario de .sc-actionbar en components.css.
+   `html { overflow-x: hidden }` rompe el sticky, y acá la lista llega a 1.100
+   tarjetas. */
 .disco-actionbar {
-  position: sticky;
-  bottom: 12px;
+  position: fixed;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: 16px;
+  width: min(1252px, calc(100% - 48px));
   z-index: 10;
   display: flex;
   align-items: center;
   gap: 10px;
+  flex-wrap: wrap;
   padding: 10px 14px;
   background: var(--color-surface);
   border: 1px solid var(--color-accent);
   border-radius: var(--radius-md);
-  margin: 16px 0;
+  margin: 0;
   box-shadow: 0 10px 30px rgba(0,0,0,0.4);
 }
+/* Hueco para que la barra flotante no tape la última fila. */
+#disco-list, #newrel-list { padding-bottom: 84px; }
 .disco-actionbar #disco-sel-count,
 .disco-actionbar #newrel-sel-count {
   font-size: 13px;

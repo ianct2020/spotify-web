@@ -12,9 +12,9 @@
 import {
   getAllUserPlaylists, getCurrentUserId,
   addTracksToPlaylist, updatePlaylistItemsCache,
-} from '../api.js?v=132';
-import { idbGetCached } from '../idb.js?v=132';
-import { showToast } from '../ui/toast.js?v=132';
+} from '../api.js?v=133';
+import { idbGetCached } from '../idb.js?v=133';
+import { showToast } from '../ui/toast.js?v=133';
 
 // Playlists propias (las ajenas no se pueden escribir). Se memoiza en el módulo
 // porque las tres vistas piden lo mismo y getAllUserPlaylists ya cachea aparte.
