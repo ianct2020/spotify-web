@@ -3,18 +3,29 @@
 // Preview 30s instantáneo vía iTunes (arranca en el estribillo, no suma plays
 // en tu historial de Spotify). Fallback: iframe embed oficial si iTunes no lo tiene.
 
-import { getBestAvailableLikes, removeLikedTracks } from '../api.js?v=134';
-import { loadSkipStats, trackIdOf, isOwner, ownerLockedMessage } from './history-data.js?v=134';
-import { escapeHtml, confirmModal, pageHeader } from '../ui/components.js?v=134';
-import { showToast } from '../ui/toast.js?v=134';
-import { getPreview } from '../api/preview-providers.js?v=134';
-import { togglePreview, playingKey } from '../ui/preview-player.js?v=134';
-import { openTrackCard } from './track-card.js?v=134';
-import { activateMarquee, marqueeSpan } from '../ui/marquee.js?v=134';
-import { hasUsername, loadTopLifetime } from '../api/statsfm.js?v=134';
-import { createHiddenStore } from '../util/hidden-sync.js?v=134';
+import { getBestAvailableLikes, removeLikedTracks } from '../api.js?v=135';
+import { loadSkipStats, trackIdOf, isOwner, ownerLockedMessage } from './history-data.js?v=135';
+import { escapeHtml, confirmModal, pageHeader } from '../ui/components.js?v=135';
+import { showToast } from '../ui/toast.js?v=135';
+import { getPreview } from '../api/preview-providers.js?v=135';
+import { togglePreview, playingKey } from '../ui/preview-player.js?v=135';
+import { openTrackCard } from './track-card.js?v=135';
+import { activateMarquee, marqueeSpan } from '../ui/marquee.js?v=135';
+import { hasUsername, loadTopLifetime } from '../api/statsfm.js?v=135';
+import { createHiddenStore } from '../util/hidden-sync.js?v=135';
+import { createIncrementalList } from '../ui/incremental-list.js?v=135';
 
 let cache = null;
+// Filas visibles con los filtros actuales, en el mismo orden que las tarjetas
+// del grid. Es la fuente de verdad de la vista: ordenar, filtrar y ocultar
+// operan acá y pasan por list.setItems(), nunca sobre el DOM.
+let currentRows = [];
+let rowById = new Map();
+// La selección vive en el módulo y no en los checkboxes del DOM: con append
+// incremental las tarjetas del final no existen todavía, así que "Seleccionar
+// todos" no podría marcarlas y el contador leería de menos.
+let selectedIds = new Set();
+let list = null;
 let minPlays = 5;    // solo tracks con ≥N plays totales (ok+skip)
 let minRatio = 70;   // ratio de skip mínimo (%)
 
@@ -38,11 +49,23 @@ const RATIO_STEPS = [70, 80, 90, 100];
 const PLAYS_STEPS = [3, 5, 10, 15];
 
 export async function render(container) {
+  teardown();
   container.innerHTML = `
     ${pageHeader({ title: 'Skips crónicos' })}
     <div id="skips-content"><div class="empty-state"><div class="spinner spinner-lg"></div><div style="margin-top:16px">Cruzando likes con historial…</div></div></div>
   `;
   await analyze();
+  // El router llama a esto al salir de la ruta. Sin él, al navegar a mitad de
+  // lista quedaría vivo el IntersectionObserver sobre un centinela ya
+  // desconectado del documento.
+  return teardown;
+}
+
+function teardown() {
+  if (list) { list.destroy(); list = null; }
+  selectedIds.clear();
+  currentRows = [];
+  rowById = new Map();
 }
 
 async function analyze() {
@@ -54,7 +77,7 @@ async function analyze() {
       loadSkipStats(),
       // Trae los ocultos de la playlist de Spotify. No bloquea: si falla o tarda,
       // la vista arranca con el caché local y se repinta cuando llega.
-      hiddenTracks.ready().then(() => { if (cache) renderResults(); }),
+      hiddenTracks.ready().then(refreshAfterHiddenSync),
     ]);
     if (useStatsfm && hasUsername()) {
       top = await loadTopLifetime().catch(() => null);
@@ -101,6 +124,18 @@ async function analyze() {
   renderResults();
 }
 
+// Los ocultos llegan de la playlist de Spotify unos segundos después de pintar.
+// Si a esa altura ya hay lista, se repinta conservando el scroll: repintar
+// entero devolvería al usuario al principio a los 7 segundos de entrar.
+function refreshAfterHiddenSync() {
+  if (!cache) return;
+  if (!list) { renderResults(); return; }
+  const hasBtn = !!document.querySelector('#sk-toggle-hidden');
+  const needsBtn = hiddenTracks.size > 0 || showingHidden;
+  if (hasBtn !== needsBtn) renderResults();
+  else applyRows({ preserveRendered: true });
+}
+
 function filtered() {
   if (!cache) return [];
   return cache.rows.filter(r => {
@@ -110,9 +145,49 @@ function filtered() {
   });
 }
 
-function renderResults() {
+// Tarjetas por lote. 80 llena de sobra el primer viewport (entran ~20-24) y el
+// resto queda de colchón para que el primer scroll no dispare nada.
+const BATCH = 80;
+
+// Recalcula las filas visibles a partir de los datos y las publica en la lista
+// incremental. Nunca se toca el DOM de las tarjetas a mano.
+function applyRows({ preserveRendered = false } = {}) {
+  currentRows = filtered();
+  rowById = new Map(currentRows.map(r => [r.id, r]));
+  // La selección se queda solo con lo que sigue en la lista.
+  for (const id of [...selectedIds]) if (!rowById.has(id)) selectedIds.delete(id);
+  if (list) list.setItems(currentRows, { preserveRendered });
+  updateCounters();
+}
+
+function updateCounters() {
   const content = document.getElementById('skips-content');
+  if (!content) return;
+  const n = content.querySelector('#skips-count-visible');
+  if (n) n.textContent = currentRows.length.toLocaleString('es-ES');
+  const selAll = content.querySelector('#sk-select-all');
+  if (selAll) selAll.disabled = currentRows.length === 0;
+  const hideBtn = content.querySelector('#sk-toggle-hidden');
+  if (hideBtn && !showingHidden) hideBtn.textContent = `Ocultos (${hiddenTracks.size})`;
+  updateRemoveBtn();
+}
+
+function updateRemoveBtn() {
+  const rmBtn = document.querySelector('#sk-remove');
+  if (!rmBtn) return;
+  rmBtn.textContent = `Sacar de likes (${selectedIds.size})`;
+  rmBtn.disabled = selectedIds.size === 0;
+}
+
+function renderResults() {
+  const t0 = performance.now();
+  window.__skipsPerf = { batches: [] };
+  const content = document.getElementById('skips-content');
+  if (list) { list.destroy(); list = null; }
   const rows = filtered();
+  currentRows = rows;
+  rowById = new Map(rows.map(r => [r.id, r]));
+  for (const id of [...selectedIds]) if (!rowById.has(id)) selectedIds.delete(id);
   const withAnySkip = cache.rows.length;
   const hiddenCount = hiddenTracks.size;
 
@@ -126,7 +201,7 @@ function renderResults() {
     <div class="skips-topbar skips-topbar-single">
       <div class="skips-topbar-row">
         <div class="skips-stat-mini">
-          <span class="skips-stat-mini-v">${rows.length.toLocaleString('es-ES')}</span>
+          <span class="skips-stat-mini-v" id="skips-count-visible">${rows.length.toLocaleString('es-ES')}</span>
           <span class="skips-stat-mini-l">candidatos${showingHidden ? ' (ocultos)' : ''}</span>
         </div>
         <div class="skips-stat-mini">
@@ -166,21 +241,57 @@ function renderResults() {
     ${rows.length === 0 ? `
       <div class="card"><p style="text-align:center;color:var(--color-text-muted);margin:0">${showingHidden ? 'No hay tracks ocultos que cumplan los umbrales actuales.' : 'Ningún like cumple los umbrales. Bajá los filtros para ver más candidatos.'}</p></div>
     ` : `
-      <div class="skips-grid" id="skips-list">
-        ${rows.map((r, i) => renderRow(r, i)).join('')}
-      </div>
+      <div class="skips-grid" id="skips-list"></div>
     `}
   `;
 
   wireFilters();
   wireRows();
-  activateMarquee(content);
+
+  // El grid arranca vacío y se llena por lotes (ver ui/incremental-list.js).
+  // Antes se inyectaban las 1.403 tarjetas de una sola vez y el hilo principal
+  // se quedaba varios segundos construyendo DOM y calculando layout.
+  const grid = content.querySelector('#skips-list');
+  if (grid) {
+    list = createIncrementalList({
+      container: grid,
+      items: currentRows,
+      renderItem: renderRow,
+      batchSize: BATCH,
+      rootMargin: '600px',
+      onBatch: ({ rendered, total, added, ms }) => {
+        // Traza de coste de hilo principal (la lee el testeo con la extensión;
+        // el reloj de pared no sirve en una pestaña en segundo plano).
+        const perf = (window.__skipsPerf ||= { batches: [] });
+        perf.batches.push({ added, rendered, total, ms: +ms.toFixed(1) });
+        // Marquee solo sobre lo recién insertado: medir toda la lista en cada
+        // lote sería cuadrático y son medidas de layout, de las caras.
+        const nuevas = grid.querySelectorAll('.skips-card:not([data-mq])');
+        nuevas.forEach(c => c.setAttribute('data-mq', '1'));
+        activateMarquee(nuevas);
+        if (window.__skipsDebug) {
+          console.info(`[skips] lote +${added} → ${rendered}/${total} en ${ms.toFixed(1)} ms`);
+        }
+      },
+    });
+  }
+  // La selección sobrevive a ocultar una pista, así que el botón puede tener que
+  // arrancar con un número distinto de cero.
+  updateRemoveBtn();
+
+  const perf = window.__skipsPerf;
+  perf.totalRows = currentRows.length;
+  perf.firstPaintCards = list ? list.rendered : 0;
+  perf.syncMs = +(performance.now() - t0).toFixed(1);
 }
 
 // Tarjeta por track (v=123): reemplaza a las dos listas de filas anchas, que
 // en 2 columnas dejaban la derecha con solo la tapa y el porcentaje. En grid
 // de tarjetas entran 20+ tracks en pantalla y todos se leen igual de bien.
-function renderRow(r, i) {
+// Se identifica por `data-id` y no por índice: con la lista incremental las
+// tarjetas se appendean en tandas y los handlers están delegados en el grid, así
+// que cada una tiene que poder resolver su fila sola (rowById).
+function renderRow(r) {
   const imgs = r.track.album?.images || [];
   const cover = imgs[2]?.url || imgs[1]?.url || imgs[0]?.url || null;
   const artists = (r.track.artists || []).map(a => a.name || a).join(', ');
@@ -191,18 +302,18 @@ function renderRow(r, i) {
     : `Skipeaste ${r.skip} de ${r.total} veces`;
 
   return `
-    <div class="skips-card" data-i="${i}" data-id="${r.id}">
+    <div class="skips-card" data-id="${r.id}">
       <div class="skips-card-main">
         <div class="skips-card-cover">
           ${cover
             ? `<img src="${cover}" alt="" loading="lazy" class="skips-cover">`
             : `<div class="skips-cover skips-cover-empty">♪</div>`}
           <label class="skips-card-sel" title="Seleccionar">
-            <input type="checkbox" class="sk-cb skips-check" data-i="${i}">
+            <input type="checkbox" class="sk-cb skips-check"${selectedIds.has(r.id) ? ' checked' : ''}>
           </label>
         </div>
         <div class="skips-card-body">
-          <div class="skips-info">
+          <div class="skips-info tc-clickable" title="Ver ficha del tema">
             <div class="skips-title">${marqueeSpan(escapeHtml(r.track.name || '(sin nombre)'))}</div>
             <div class="skips-meta">${escapeHtml(artists)}${album}</div>
           </div>
@@ -249,93 +360,76 @@ function wireFilters() {
   };
 }
 
+// Todos los handlers de las tarjetas van DELEGADOS en el grid. Con append
+// incremental, las tarjetas del lote 3 en adelante no existen cuando se cablea
+// la vista: un `querySelectorAll(...).forEach(addEventListener)` dejaría medio
+// listado muerto (sin preview, sin ocultar, sin ficha) y sin ningún error.
 function wireRows() {
   const content = document.getElementById('skips-content');
   const rmBtn = content.querySelector('#sk-remove');
   const selAllBtn = content.querySelector('#sk-select-all');
+  const grid = content.querySelector('#skips-list');
   if (!rmBtn) return;
 
-  const updateBtn = () => {
-    const n = content.querySelectorAll('.sk-cb:checked').length;
-    rmBtn.textContent = `Sacar de likes (${n})`;
-    rmBtn.disabled = n === 0;
-  };
-  content.querySelectorAll('.sk-cb').forEach(cb => cb.addEventListener('change', updateBtn));
   if (selAllBtn) selAllBtn.onclick = () => {
-    const cbs = content.querySelectorAll('.sk-cb');
-    const allChecked = [...cbs].every(cb => cb.checked);
-    cbs.forEach(cb => cb.checked = !allChecked);
-    updateBtn();
+    // Sobre el array, no sobre los checkboxes pintados: si solo mirara el DOM
+    // marcaría 80 de 1.403.
+    const allSelected = currentRows.length > 0 && currentRows.every(r => selectedIds.has(r.id));
+    selectedIds = allSelected ? new Set() : new Set(currentRows.map(r => r.id));
+    if (grid) grid.querySelectorAll('.sk-cb').forEach(cb => {
+      cb.checked = selectedIds.has(cb.closest('.skips-card')?.dataset.id);
+    });
+    updateRemoveBtn();
   };
 
-  // Click en el título/artista → ficha de canción (dentro de un <label>, hay
-  // que frenar el toggle del checkbox).
-  content.querySelectorAll('.skips-card .skips-info').forEach(el => {
-    el.classList.add('tc-clickable');
-    el.title = 'Ver ficha del tema';
-    el.onclick = (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      const r = filtered()[+el.closest('.skips-card').dataset.i];
-      if (!r) return;
-      const imgs = r.track.album?.images || [];
-      openTrackCard({
-        id: r.id,
-        name: r.track.name,
-        artist: (r.track.artists || []).map(a => a.name || a)[0] || '',
-        album: r.track.album?.name,
-        img: imgs[2]?.url || imgs[1]?.url || imgs[0]?.url,
-      });
-    };
-  });
+  if (grid) {
+    grid.addEventListener('change', (e) => {
+      const cb = e.target.closest('.sk-cb');
+      if (!cb) return;
+      const id = cb.closest('.skips-card')?.dataset.id;
+      if (!id) return;
+      if (cb.checked) selectedIds.add(id); else selectedIds.delete(id);
+      updateRemoveBtn();
+    });
 
-  // Preview: primero iTunes (instantáneo, sin plays en el historial); si no
-  // está el tema ahí, cae al iframe embed de Spotify en el slot.
-  content.querySelectorAll('.skips-play-btn').forEach(btn => {
-    btn.onclick = async (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      const row = btn.closest('.skips-card');
-      const r = filtered()[+row.dataset.i];
+    grid.addEventListener('click', (e) => {
+      const card = e.target.closest('.skips-card');
+      if (!card) return;
+      const r = rowById.get(card.dataset.id);
       if (!r) return;
-      // Si este tema ya tiene el embed fallback abierto, este click lo cierra.
-      const slot = content.querySelector(`.skips-preview-slot[data-id="${r.id}"].open`);
-      if (slot) {
-        closeEmbeds(content);
-        btn.classList.remove('playing');
-        return;
+
+      if (e.target.closest('.skips-open')) return;          // link a Spotify, que siga
+      if (e.target.closest('.skips-card-sel')) return;      // checkbox, lo maneja 'change'
+
+      const playBtn = e.target.closest('.skips-play-btn');
+      if (playBtn) { e.preventDefault(); e.stopPropagation(); onPlayClick(r, playBtn); return; }
+
+      const hideBtn = e.target.closest('.sk-hide-btn');
+      if (hideBtn) { e.preventDefault(); e.stopPropagation(); onHideClick(r.id); return; }
+
+      if (e.target.closest('.skips-info')) {
+        e.preventDefault();
+        e.stopPropagation();
+        const imgs = r.track.album?.images || [];
+        openTrackCard({
+          id: r.id,
+          name: r.track.name,
+          artist: (r.track.artists || []).map(a => a.name || a)[0] || '',
+          album: r.track.album?.name,
+          img: imgs[2]?.url || imgs[1]?.url || imgs[0]?.url,
+        });
       }
-      closeEmbeds(content);
-      const artist = (r.track.artists || []).map(a => a.name || a)[0] || '';
-      // No pasamos spotifyId a getPreview a propósito: en Skips el iframe
-      // embed va INLINE en la fila (toggleEmbed) — no queremos que la cadena
-      // lo abra en el pill flotante y encima una segunda fuente en la fila.
-      const res = await togglePreview(`sk:${r.id}`, async () => {
-        return await getPreview({ name: r.track.name || '', artist });
-      });
-      if (res === null) toggleEmbed(r.id, btn); // ni iTunes ni Deezer → embed Spotify inline
-    };
-  });
+    });
+  }
 
   const hideToggle = content.querySelector('#sk-toggle-hidden');
   if (hideToggle) hideToggle.onclick = () => {
     showingHidden = !showingHidden;
     renderResults();
   };
-  content.querySelectorAll('.sk-hide-btn').forEach(btn => {
-    btn.addEventListener('click', (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      const id = btn.dataset.id;
-      hiddenTracks.toggle(id, `spotify:track:${id}`);
-      if (showingHidden && hiddenTracks.size === 0) showingHidden = false;
-      renderResults();
-    });
-  });
 
   rmBtn.onclick = async () => {
-    const currentRows = filtered();
-    const ids = [...content.querySelectorAll('.sk-cb:checked')].map(cb => currentRows[+cb.dataset.i].id);
+    const ids = currentRows.filter(r => selectedIds.has(r.id)).map(r => r.id);
     if (!ids.length) return;
     const ok = await confirmModal(
       'Sacar de tus Liked Songs',
@@ -351,9 +445,45 @@ function wireRows() {
       await analyze();
     } catch (e) {
       showToast('Error: ' + e.message, 'error');
-      updateBtn();
+      updateRemoveBtn();
     }
   };
+}
+
+// Preview: primero iTunes (instantáneo, sin plays en el historial); si no está
+// el tema ahí, cae al iframe embed de Spotify en el slot de la tarjeta.
+async function onPlayClick(r, btn) {
+  const content = document.getElementById('skips-content');
+  // Si este tema ya tiene el embed fallback abierto, este click lo cierra.
+  const slot = content.querySelector(`.skips-preview-slot[data-id="${r.id}"].open`);
+  if (slot) {
+    closeEmbeds(content);
+    btn.classList.remove('playing');
+    return;
+  }
+  closeEmbeds(content);
+  const artist = (r.track.artists || []).map(a => a.name || a)[0] || '';
+  // No pasamos spotifyId a getPreview a propósito: en Skips el iframe embed va
+  // INLINE en la tarjeta (toggleEmbed) — no queremos que la cadena lo abra en el
+  // pill flotante y encima una segunda fuente en la tarjeta.
+  const res = await togglePreview(`sk:${r.id}`, async () => {
+    return await getPreview({ name: r.track.name || '', artist });
+  });
+  if (res === null) toggleEmbed(r.id, btn);   // ni iTunes ni Deezer → embed Spotify inline
+}
+
+function onHideClick(id) {
+  const hadHidden = hiddenTracks.size > 0;
+  const wasShowingHidden = showingHidden;
+  hiddenTracks.toggle(id, `spotify:track:${id}`);
+  if (showingHidden && hiddenTracks.size === 0) showingHidden = false;
+  // Si aparece o desaparece el botón "Ocultos (N)", o si se sale sola de la
+  // vista de ocultos, hay que repintar la topbar entera. Si no, alcanza con
+  // sacar la fila del array y repintar la lista conservando el scroll y lo que
+  // ya estaba pintado.
+  const structural = ((hiddenTracks.size > 0) !== hadHidden) || (showingHidden !== wasShowingHidden);
+  if (structural) renderResults();
+  else applyRows({ preserveRendered: true });
 }
 
 // Sincroniza el estado .playing de los botones con el player global.
