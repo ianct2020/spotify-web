@@ -4,9 +4,13 @@
 // y llamando activateMarquee(container) después de renderizar.
 // Solo agrega la clase .marquee (y por ende la animación) si scrollWidth > clientWidth.
 
+// `root` puede ser un elemento, o una lista de elementos (array / NodeList)
+// cuando solo hay que medir lo recién insertado — por ejemplo el último lote de
+// una lista incremental, donde re-medir toda la lista sería cuadrático.
 export function activateMarquee(root) {
-  const scope = root || document;
-  scope.querySelectorAll('.marquee-wrap').forEach(wrap => {
+  const scopes = !root ? [document]
+    : (typeof root.querySelectorAll === 'function' ? [root] : Array.from(root));
+  scopes.forEach(scope => scope.querySelectorAll('.marquee-wrap').forEach(wrap => {
     const text = wrap.querySelector('.marquee-text');
     if (!text) return;
     // Medimos dos veces con requestAnimationFrame para asegurar layout listo
@@ -20,7 +24,7 @@ export function activateMarquee(root) {
         wrap.classList.remove('marquee');
       }
     });
-  });
+  }));
 }
 
 // Wrappea un texto plano dado el string

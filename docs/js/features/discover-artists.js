@@ -10,11 +10,11 @@
 // 100 artistas en lugar de 20. Lógica de fetch/cache/playlist compartida en
 // features/discover-common.js con #new-releases.
 
-import { escapeHtml, pageHeader } from '../ui/components.js?v=134';
-import { showToast } from '../ui/toast.js?v=134';
-import { openArtistCard } from './artist-card.js?v=134';
-import { isJunkTrack } from '../util/junk.js?v=134';
-import { buildAlbumHeardIndex, markAlbumHeard } from '../util/album-heard.js?v=134';
+import { escapeHtml, pageHeader } from '../ui/components.js?v=135';
+import { showToast } from '../ui/toast.js?v=135';
+import { openArtistCard } from './artist-card.js?v=135';
+import { isJunkTrack } from '../util/junk.js?v=135';
+import { buildAlbumHeardIndex, markAlbumHeard } from '../util/album-heard.js?v=135';
 import {
   getArtistIdCached,
   getArtistDiscoCached,
@@ -30,7 +30,7 @@ import {
   renderAlbumCard,
   wireAlbumCards,
   addAlbumsToPlaylists,
-} from './discover-common.js?v=134';
+} from './discover-common.js?v=135';
 
 const SCAN_KEY = 'discover_artists';
 
