@@ -13,9 +13,9 @@
 //     onConfirm: async (elegidas) => { … },   // si lanza, el modal sigue abierto
 //   });
 
-import { openModal, closeTop } from './modal-stack.js?v=133';
-import { escapeHtml } from './components.js?v=133';
-import { normText } from '../util/track-match.js?v=133';
+import { openModal, closeTop } from './modal-stack.js?v=134';
+import { escapeHtml } from './components.js?v=134';
+import { normText } from '../util/track-match.js?v=134';
 
 export function openPlaylistPicker({
   id = 'playlist-picker',

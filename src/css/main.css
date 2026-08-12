@@ -3532,10 +3532,7 @@ body.covers-fs .main {
    tarjetas. */
 .disco-actionbar {
   position: fixed;
-  left: 50%;
-  transform: translateX(-50%);
   bottom: 16px;
-  width: min(1252px, calc(100% - 48px));
   z-index: 10;
   display: flex;
   align-items: center;
@@ -3550,6 +3547,32 @@ body.covers-fs .main {
 }
 /* Hueco para que la barra flotante no tape la última fila. */
 #disco-list, #newrel-list { padding-bottom: 84px; }
+
+/* Geometría compartida de las dos barras flotantes: tienen que caer sobre la
+   columna de contenido, no sobre el sidebar (que es fixed y va por encima).
+   Copia los mismos números que .main. main.css carga después de components.css,
+   así que esto gana. */
+.sc-actionbar,
+.disco-actionbar {
+  left: 72px;
+  right: 32px;
+  width: auto;
+  max-width: 1336px;
+  transform: none;
+}
+@media (min-width: 769px) {
+  body:not(.sidebar-hidden) .sc-actionbar,
+  body:not(.sidebar-hidden) .disco-actionbar {
+    left: 312px;
+    max-width: 1176px;
+  }
+}
+@media (max-width: 768px) {
+  .sc-actionbar, .disco-actionbar { left: 16px; right: 16px; }
+}
+@media (max-width: 480px) {
+  .sc-actionbar, .disco-actionbar { left: 10px; right: 10px; }
+}
 .disco-actionbar #disco-sel-count,
 .disco-actionbar #newrel-sel-count {
   font-size: 13px;
