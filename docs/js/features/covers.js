@@ -4,17 +4,16 @@
 //
 // v=116: dedup canónica compartida (util/album-key.js) que ignora
 // diacríticos y sufijos "(Remastered)" etc. — antes álbumes iguales aparecían
-// duplicados. Rescate de tapas W-Three-only vía oEmbed cuando no hay img.
-// Carga progresiva del primer viewport con fetchpriority=high + fade
+// duplicados. Carga progresiva del primer viewport con fetchpriority=high + fade
 // placeholder→img. Botón "Pantalla completa" (Fullscreen API) que oculta
 // sidebar/header/toolbar y recalcula el lado.
 
-import { loadListenedAlbums, isOwner, ownerLockedMessage } from './history-data.js?v=135';
-import { isJunkTrack } from '../util/junk.js?v=135';
-import { getAllPlaylistItems } from '../api.js?v=135';
-import { escapeHtml, pageHeader } from '../ui/components.js?v=135';
-import { openAlbumCard } from './album-card.js?v=135';
-import { albumKey, coverId } from '../util/album-key.js?v=135';
+import { loadListenedAlbums, isOwner, ownerLockedMessage } from './history-data.js?v=137';
+import { isJunkTrack } from '../util/junk.js?v=137';
+import { getAllPlaylistItems } from '../api.js?v=137';
+import { escapeHtml, pageHeader } from '../ui/components.js?v=137';
+import { openAlbumCard } from './album-card.js?v=137';
+import { albumKey, coverId } from '../util/album-key.js?v=137';
 
 const LS_KEY_SIZE = 'covers_cell_size';
 const LS_KEY_SORT = 'covers_sort_mode';
@@ -72,7 +71,6 @@ function buildList(data, wthreeItems) {
           min: a.min_that_day || 0,
           years: new Set(yn ? [yn] : []),
           sources: new Set(['listened']),
-          trackId: null,
         });
       }
     }
@@ -92,7 +90,6 @@ function buildList(data, wthreeItems) {
       if (prev) {
         prev.sources.add('wthree');
         if (!prev.img && wImg) prev.img = wImg;
-        if (!prev.trackId) prev.trackId = t.id || null;
       } else {
         map.set(k, {
           name: albumName,
@@ -102,7 +99,6 @@ function buildList(data, wthreeItems) {
           min: 0,
           years: new Set(),
           sources: new Set(['wthree']),
-          trackId: t.id || null,
         });
       }
     }
@@ -135,7 +131,6 @@ function buildList(data, wthreeItems) {
       if (a.date && (!prev.date || a.date < prev.date)) prev.date = a.date;
       for (const y of a.years) prev.years.add(y);
       for (const s of a.sources) prev.sources.add(s);
-      if (!prev.trackId) prev.trackId = a.trackId;
       continue;
     }
     if (cid) byCover.set(cid, a);

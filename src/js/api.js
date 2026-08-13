@@ -722,8 +722,25 @@ async function importLikesData(parsed, onProgress) {
   };
 }
 
+// Suscriptores a la invalidación del cache de playlists. Existe para que los
+// memos de módulo (hoy el de `util/playlist-add.js`) se enteren de un
+// POST /me/playlists hecho desde CUALQUIER vista sin que api.js tenga que
+// importarlos — eso sería un ciclo, porque playlist-add.js importa api.js.
+// Así queda un solo punto de invalidación en vez de doce call sites de
+// createPlaylist que hay que acordarse de tocar (incluido util/hidden-sync.js,
+// que crea las playlists de ocultos).
+const _playlistsInvalidationSubs = new Set();
+
+function onPlaylistsInvalidated(fn) {
+  _playlistsInvalidationSubs.add(fn);
+  return () => _playlistsInvalidationSubs.delete(fn);
+}
+
 function invalidatePlaylistsCache() {
   cacheClear(PLAYLISTS_CACHE_KEY);
+  for (const fn of _playlistsInvalidationSubs) {
+    try { fn(); } catch (e) { console.warn('[api] suscriptor de invalidación falló:', e.message); }
+  }
 }
 
 // Confirma cuáles ids siguen en la biblioteca. Post-migración feb 2026:
@@ -1122,6 +1139,7 @@ export {
   searchArtistByName,
   invalidateLikesCache,
   invalidatePlaylistsCache,
+  onPlaylistsInvalidated,
   getLikesTotal,
   syncLikesIncremental,
   importLikesData,

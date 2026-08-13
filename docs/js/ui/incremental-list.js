@@ -32,8 +32,8 @@ const DEFAULT_ROOT_MARGIN = '600px';
 // #skips el que scrollea es el propio grid (`max-height: 74vh; overflow-y:
 // auto`) en desktop, y el documento en móvil, donde la media query le saca el
 // overflow. Con el root equivocado el centinela se ve siempre y entrarían los
-// 1.403 de una, que es justo lo que estamos evitando.
-function scrollRootOf(container) {
+// 1.322 de una, que es justo lo que estamos evitando.
+export function scrollRootOf(container) {
   let el = container;
   while (el && el !== document.body && el !== document.documentElement) {
     const oy = getComputedStyle(el).overflowY;
@@ -103,6 +103,9 @@ export function createIncrementalList({
     if (observer) { observer.disconnect(); observer = null; }
   }
 
+  // Corte duro cuando se agotan los items: se desconecta el observer y el
+  // centinela sale del DOM. Sin esto quedaría re-observándose al vacío, y cada
+  // scroll al final de la lista seguiría despertando el callback para nada.
   function finishIfDone() {
     if (rendered >= list.length) {
       stopObserving();
@@ -113,23 +116,30 @@ export function createIncrementalList({
   }
 
   function onIntersect(entries) {
-    if (destroyed || appending) return;
+    // `appending` es una guarda real de reentrada, no un adorno: el callback se
+    // re-arma solo (ver abajo) y durante un scroll rápido puede volver a entrar
+    // antes de que termine de construirse el lote anterior.
+    if (destroyed || appending || !observer) return;
+    // UN SOLO append por pasada, aunque el observer entregue varias entries.
+    // Basta con que alguna esté intersectando; procesar una entry por lote
+    // multiplicaría el trabajo del frame justo cuando el scroll ya va apurado.
     if (!entries.some(e => e.isIntersecting)) return;
+
     appending = true;
     try {
       appendBatch(batchSize);
+      if (finishIfDone()) return;
+      // IntersectionObserver solo avisa cuando cambia el estado de intersección.
+      // Si después de appendear el centinela SIGUE dentro del rootMargin (viewport
+      // más alto que el lote, o el usuario tirado al final), no hay cambio de
+      // estado y no volvería a disparar nunca. Re-observar fuerza una observación
+      // inicial nueva, que llega igual de asincrónica y encadena el lote
+      // siguiente hasta que el centinela quede fuera de vista.
+      observer.unobserve(sentinel);
+      observer.observe(sentinel);
     } finally {
       appending = false;
     }
-    if (finishIfDone()) return;
-    // IntersectionObserver solo avisa cuando cambia el estado de intersección.
-    // Si después de appendear el centinela SIGUE dentro del rootMargin (viewport
-    // más alto que el lote, o el usuario tirado al final), no hay cambio de
-    // estado y no volvería a disparar nunca. Re-observar fuerza una observación
-    // inicial nueva, que llega igual de asincrónica y encadena el lote
-    // siguiente hasta que el centinela quede fuera de vista.
-    observer.unobserve(sentinel);
-    observer.observe(sentinel);
   }
 
   function startObserving() {

@@ -95,20 +95,17 @@ async function renderStartScreen() {
   const { items: cachedItems, source: cacheSource } = await getBestAvailableLikes();
   const cachedCount = cachedItems.length;
   const hasFull = cachedCount > 0 && cacheSource === 'full';
-  const hasPartial = cachedCount > 0 && cacheSource === 'partial';
   const timestamp = await getLikesCacheTimestamp();
   const lastSyncLabel = timestamp ? formatRelativeTime(timestamp) : null;
 
-  let intro;
-  if (hasFull) {
-    intro = `Tenés <strong>${cachedCount.toLocaleString()}</strong> likes cacheados${lastSyncLabel ? ` · última sync <strong>${lastSyncLabel}</strong>` : ''}. Podés usarlos directo o importar un JSON previo.`;
-  } else if (hasPartial) {
-    intro = `<span style="color:var(--color-warning)">Carga parcial:</span> tenés <strong>${cachedCount.toLocaleString()}</strong> likes (se cortó a mitad la última vez${lastSyncLabel ? ', hace ' + lastSyncLabel : ''}). Podés retomar desde donde quedó, ver el dashboard ya mismo con lo que hay, o importar un JSON.`;
-  } else {
-    intro = `No hay likes cacheados. Podés cargar todo desde Spotify (~190 requests, tarda ~2-4 min) o importar un JSON previo (1 request, mucho más rápido).`;
-  }
+  // Desde v=130 getBestAvailableLikes devuelve la biblioteca entera o nada
+  // ('full' | 'empty'): nunca sirve un parcial. Los dos estados de acá son los
+  // únicos que existen.
+  const intro = hasFull
+    ? `Tenés <strong>${cachedCount.toLocaleString()}</strong> likes cacheados${lastSyncLabel ? ` · última sync <strong>${lastSyncLabel}</strong>` : ''}. Podés usarlos directo o importar un JSON previo.`
+    : `No hay likes cacheados. Podés cargar todo desde Spotify (~190 requests, tarda ~2-4 min) o importar un JSON previo (1 request, mucho más rápido).`;
 
-  const primaryLabel = hasFull ? 'Usar los cacheados' : (hasPartial ? 'Retomar carga' : 'Cargar desde Spotify');
+  const primaryLabel = hasFull ? 'Usar los cacheados' : 'Cargar desde Spotify';
 
   content.innerHTML = `
     <div class="card dash-state-card">
@@ -116,7 +113,6 @@ async function renderStartScreen() {
       <p style="color:var(--color-text-secondary);font-size:13px;margin-bottom:16px">${intro}</p>
       <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:center">
         <button class="btn btn-primary" id="dash-start-btn">${primaryLabel}</button>
-        ${hasPartial ? `<button class="btn btn-secondary" id="dash-usepartial-btn">Usar los ${cachedCount.toLocaleString()} que ya tengo</button>` : ''}
         <button class="btn btn-secondary" id="dash-preimport-btn">Importar JSON</button>
         <input type="file" id="dash-preimport-input" accept=".json,application/json" style="display:none">
       </div>
@@ -124,38 +120,22 @@ async function renderStartScreen() {
   `;
 
   document.getElementById('dash-start-btn').onclick = () => loadData(false);
-  const usePartialBtn = document.getElementById('dash-usepartial-btn');
-  if (usePartialBtn) usePartialBtn.onclick = () => renderFromCachedItems(cachedItems);
   const preInput = document.getElementById('dash-preimport-input');
   document.getElementById('dash-preimport-btn').onclick = () => preInput.click();
   preInput.onchange = handleImportAll;
-}
-
-// Dibuja el dashboard con lo que ya está en cache (típicamente una carga parcial que
-// cortaste con "Detener carga"). Cero requests a Spotify — si querés los que faltan,
-// está "Actualizar datos" arriba.
-function renderFromCachedItems(items) {
-  const content = document.getElementById('dash-content');
-  if (!content || !items?.length) return;
-  charts.forEach(c => c.destroy());
-  charts = [];
-  renderDashboard(content, computeStats(items));
-  refreshLastSyncLabel();
 }
 
 async function refreshLastSyncLabel() {
   const el = document.getElementById('dash-last-sync');
   if (!el) return;
   const ts = await getLikesCacheTimestamp();
-  const { source, items } = await getBestAvailableLikes();
+  const { items } = await getBestAvailableLikes();
   if (!ts || items.length === 0) {
     el.textContent = '';
     return;
   }
-  const rel = formatRelativeTime(ts);
-  const tag = source === 'partial' ? ' (carga parcial)' : '';
-  el.textContent = `Última sync: ${rel} — ${items.length.toLocaleString()} likes cacheados${tag}`;
-  el.style.color = source === 'partial' ? 'var(--color-warning)' : 'var(--color-text-muted)';
+  el.textContent = `Última sync: ${formatRelativeTime(ts)} — ${items.length.toLocaleString()} likes cacheados`;
+  el.style.color = 'var(--color-text-muted)';
 }
 
 function formatRelativeTime(timestamp) {
@@ -251,21 +231,12 @@ function csvEscape(val) {
 }
 
 async function handleExportCsv() {
-  const { items, source } = await getBestAvailableLikes();
+  const { items } = await getBestAvailableLikes();
   if (items.length === 0) {
     showToast('No hay likes cacheados para exportar. Cargalos primero.', 'error');
     return;
   }
-  if (source === 'partial') {
-    const ok = await alertModal(
-      'La carga se cortó a mitad',
-      `<p>Solo tenés <strong>${items.length.toLocaleString()} likes cacheados</strong> (parcial). El CSV va a incluir solo esos.</p>
-       <p>¿Exportar igual, o cancelar y usar "Actualizar datos" primero?</p>`,
-      { variant: 'warning', confirmText: 'Exportar CSV parcial', cancelText: 'Cancelar' }
-    );
-    if (!ok) return;
-  }
-  const header = ['added_at', 'artist', 'title', 'album', 'release_date', 'year', 'popularity', 'duration_ms', 'explicit', 'isrc', 'uri'];
+  const header =['added_at', 'artist', 'title', 'album', 'release_date', 'year', 'popularity', 'duration_ms', 'explicit', 'isrc', 'uri'];
   const rows = [header.map(csvEscape).join(',')];
   items.forEach(item => {
     const t = item.track;
@@ -298,8 +269,7 @@ async function handleExportCsv() {
   a.click();
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
-  const tag = source === 'partial' ? ' (parcial)' : '';
-  showToast(`CSV exportado${tag}: ${items.length.toLocaleString()} likes`, 'success');
+  showToast(`CSV exportado: ${items.length.toLocaleString()} likes`, 'success');
 }
 
 async function handleExportAll() {
@@ -308,21 +278,10 @@ async function handleExportAll() {
   const data = await exportAllData(userId);
   const likesCount = data.likes.items.length;
   const tagsCount = Object.keys(data.tags.entries).length;
-  const source = data._likesSource;
 
   if (likesCount === 0 && tagsCount === 0) {
     showToast('No hay datos para exportar. Cargá likes desde el Dashboard o corré "Por género" primero.', 'error');
     return;
-  }
-
-  if (source === 'partial') {
-    const ok = await alertModal(
-      'La carga se cortó a mitad',
-      `<p>Solo tenés <strong>${likesCount.toLocaleString()} likes cacheados</strong> (parcial). La última vez que cargaste desde Spotify se interrumpió antes de terminar.</p>
-       <p>Podés exportar igual, o cancelar y usar <strong>"Actualizar datos"</strong> para completar los que faltan primero.</p>`,
-      { variant: 'warning', confirmText: 'Exportar parcial igual', cancelText: 'Cancelar' }
-    );
-    if (!ok) return;
   }
 
   const blob = new Blob([JSON.stringify(data)], { type: 'application/json' });
@@ -336,8 +295,7 @@ async function handleExportAll() {
   a.click();
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
-  const tag = source === 'partial' ? ' (parcial)' : '';
-  showToast(`Exportado${tag}: ${likesCount.toLocaleString()} likes + ${tagsCount.toLocaleString()} artistas con tags`, 'success');
+  showToast(`Exportado: ${likesCount.toLocaleString()} likes + ${tagsCount.toLocaleString()} artistas con tags`, 'success');
 }
 
 async function handleImportAll(e) {
