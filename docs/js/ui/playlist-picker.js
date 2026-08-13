@@ -10,12 +10,28 @@
 //   openPlaylistPicker({
 //     subtitle: 'CANNIBALISM! — Slayyyter',
 //     playlists: [{ id, name, image }],
-//     onConfirm: async (elegidas) => { … },   // si lanza, el modal sigue abierto
+//     onReload: async () => [{ id, name, image }],       // opcional: botón ↻
+//     onConfirm: async (elegidas, { setStatus }) => { … },
 //   });
+//
+// Si `onConfirm` lanza, el modal sigue abierto. `setStatus` cambia la etiqueta
+// del botón mientras se trabaja (el chequeo de duplicados puede tardar si una
+// playlist grande no está cacheada).
 
-import { openModal, closeTop } from './modal-stack.js?v=135';
-import { escapeHtml } from './components.js?v=135';
-import { normText } from '../util/track-match.js?v=135';
+import { openModal, closeTop } from './modal-stack.js?v=137';
+import { escapeHtml } from './components.js?v=137';
+import { showToast } from './toast.js?v=137';
+import { normText } from '../util/track-match.js?v=137';
+
+function filasHtml(playlists, marcadas = new Set()) {
+  return playlists.map(p => `
+    <label class="sc-ex-item pp-item" data-name="${escapeHtml(p.name)}">
+      <input type="checkbox" value="${escapeHtml(p.id)}"${marcadas.has(p.id) ? ' checked' : ''}>
+      ${p.image ? `<img src="${p.image}" alt="" loading="lazy">` : `<span class="sc-pl-ph">♪</span>`}
+      <span class="sc-pl-name">${escapeHtml(p.name)}</span>
+    </label>
+  `).join('');
+}
 
 export function openPlaylistPicker({
   id = 'playlist-picker',
@@ -24,9 +40,13 @@ export function openPlaylistPicker({
   confirmLabel = 'Añadir',
   playlists = [],
   preselected = [],
+  onReload = null,
   onConfirm,
 } = {}) {
   const marcadas = new Set(preselected);
+  // `playlists` se reemplaza entero al recargar, así que el resto del modal lo
+  // lee siempre desde acá y no desde el parámetro.
+  let actuales = playlists;
 
   const overlay = openModal({
     id,
@@ -38,17 +58,12 @@ export function openPlaylistPicker({
         </div>
         ${subtitle ? `<p class="sc-modal-sub">${escapeHtml(subtitle)}</p>` : ''}
         <p class="sc-modal-sub">Marca todas las playlists a las que quieras añadirlo.</p>
-        <input type="search" class="input" id="pp-search" placeholder="Buscar playlist" autocomplete="off">
-        <div class="sc-pl-list" id="pp-list">
-          ${playlists.map(p => `
-            <label class="sc-ex-item pp-item" data-name="${escapeHtml(p.name)}">
-              <input type="checkbox" value="${escapeHtml(p.id)}"${marcadas.has(p.id) ? ' checked' : ''}>
-              ${p.image ? `<img src="${p.image}" alt="" loading="lazy">` : `<span class="sc-pl-ph">♪</span>`}
-              <span class="sc-pl-name">${escapeHtml(p.name)}</span>
-            </label>
-          `).join('')}
+        <div class="pp-searchrow">
+          <input type="search" class="input" id="pp-search" placeholder="Buscar playlist" autocomplete="off">
+          ${onReload ? `<button class="btn btn-secondary btn-sm" id="pp-reload" title="Volver a pedir tus playlists a Spotify">↻ Recargar</button>` : ''}
         </div>
-        ${playlists.length === 0 ? `<p class="sc-modal-sub">No tienes ninguna playlist propia donde añadirlo.</p>` : ''}
+        <div class="sc-pl-list" id="pp-list">${filasHtml(playlists, marcadas)}</div>
+        <p class="sc-modal-sub" id="pp-empty"${playlists.length ? ' hidden' : ''}>No tienes ninguna playlist propia donde añadirlo.</p>
         <div class="modal-actions">
           <span class="pp-count" id="pp-count">Ninguna playlist marcada</span>
           <button class="btn btn-secondary" data-close-modal>Cancelar</button>
@@ -63,10 +78,13 @@ export function openPlaylistPicker({
   const contador = overlay.querySelector('#pp-count');
   const confirmar = overlay.querySelector('#pp-confirm');
 
+  const recargar = overlay.querySelector('#pp-reload');
+  const vacio = overlay.querySelector('#pp-empty');
+
   const seleccionadas = () =>
     [...list.querySelectorAll('input[type=checkbox]')]
       .filter(cb => cb.checked)
-      .map(cb => playlists.find(p => p.id === cb.value))
+      .map(cb => actuales.find(p => p.id === cb.value))
       .filter(Boolean);
 
   function refrescarContador() {
@@ -79,14 +97,48 @@ export function openPlaylistPicker({
   refrescarContador();
 
   setTimeout(() => buscador.focus(), 30);
-  buscador.addEventListener('input', () => {
+  function aplicarFiltro() {
     const q = normText(buscador.value);
     list.querySelectorAll('.pp-item').forEach(el => {
       el.hidden = q ? !normText(el.dataset.name).includes(q) : false;
     });
-  });
+  }
+  buscador.addEventListener('input', aplicarFiltro);
 
   list.addEventListener('change', refrescarContador);
+
+  // Recargar: para cuando creaste la playlist en Spotify con el modal ya
+  // abierto. Se conservan las marcas y el texto del buscador.
+  if (recargar) {
+    recargar.onclick = async () => {
+      const antes = new Set(actuales.map(p => p.id));
+      const marcadasAhora = new Set(seleccionadas().map(p => p.id));
+      recargar.disabled = true;
+      recargar.textContent = 'Recargando…';
+      try {
+        const frescas = await onReload();
+        actuales = Array.isArray(frescas) ? frescas : actuales;
+        list.innerHTML = filasHtml(actuales, marcadasAhora);
+        vacio.hidden = actuales.length > 0;
+        aplicarFiltro();
+        refrescarContador();
+        const nuevas = actuales.filter(p => !antes.has(p.id));
+        if (nuevas.length === 1) {
+          showToast(`Playlist nueva: ${nuevas[0].name}`, 'success');
+        } else if (nuevas.length > 1) {
+          showToast(`${nuevas.length} playlists nuevas`, 'success');
+        } else {
+          showToast(`La lista ya estaba al día: ${actuales.length} playlists`, 'info');
+        }
+      } catch (e) {
+        console.error('[playlist-picker] recargar', e);
+        showToast(`No se pudieron recargar las playlists: ${e.message}`, 'error');
+      } finally {
+        recargar.disabled = false;
+        recargar.textContent = '↻ Recargar';
+      }
+    };
+  }
 
   confirmar.onclick = async () => {
     const elegidas = seleccionadas();
@@ -94,13 +146,18 @@ export function openPlaylistPicker({
     const textoOriginal = confirmar.textContent;
     confirmar.disabled = true;
     confirmar.textContent = 'Añadiendo…';
+    if (recargar) recargar.disabled = true;
     list.querySelectorAll('input[type=checkbox]').forEach(cb => cb.disabled = true);
+    // El chequeo de duplicados lee cada playlist elegida antes de escribir; si
+    // alguna no está cacheada eso tarda, así que el botón va contando.
+    const setStatus = (txt) => { confirmar.textContent = txt || 'Añadiendo…'; };
     try {
-      if (onConfirm) await onConfirm(elegidas);
+      if (onConfirm) await onConfirm(elegidas, { setStatus });
       closeTop();
     } catch (e) {
       console.error('[playlist-picker]', e);
       confirmar.textContent = textoOriginal;
+      if (recargar) recargar.disabled = false;
       list.querySelectorAll('input[type=checkbox]').forEach(cb => cb.disabled = false);
       refrescarContador();
     }

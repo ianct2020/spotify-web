@@ -1437,6 +1437,11 @@ body.modal-open {
 /* Modal compartido de multi-selección de playlists (ui/playlist-picker.js) */
 .pp-item input[type=checkbox] { cursor: pointer; accent-color: var(--color-accent); margin: 0; }
 .pp-item[hidden] { display: none; }
+/* El buscador se queda con el ancho sobrante; el botón ↻ no se encoge ni parte
+   la etiqueta en dos líneas cuando el nombre del modal es largo. */
+.pp-searchrow { display: flex; align-items: center; gap: 8px; }
+.pp-searchrow .input { flex: 1 1 auto; min-width: 0; }
+.pp-searchrow #pp-reload { flex: 0 0 auto; white-space: nowrap; }
 .pp-count {
   margin-right: auto;
   font-size: 12.5px;

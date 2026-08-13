@@ -223,19 +223,9 @@ async function handleExport() {
   const data = await exportAllData(userId);
   const likesCount = data.likes.items.length;
   const tagsCount = Object.keys(data.tags.entries).length;
-  const source = data._likesSource;
   if (likesCount === 0 && tagsCount === 0) {
     showToast('No hay datos para exportar', 'error');
     return;
-  }
-  if (source === 'partial') {
-    const ok = await alertModal(
-      'La carga se cortó a mitad',
-      `<p>Solo tenés <strong>${likesCount.toLocaleString()} likes cacheados</strong> (parcial). El JSON va a incluir solo esos.</p>
-       <p>¿Exportar igual?</p>`,
-      { variant: 'warning', confirmText: 'Exportar parcial', cancelText: 'Cancelar' }
-    );
-    if (!ok) return;
   }
   const blob = new Blob([JSON.stringify(data)], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
@@ -248,8 +238,7 @@ async function handleExport() {
   a.click();
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
-  const tag = source === 'partial' ? ' (parcial)' : '';
-  showToast(`Exportado${tag}: ${likesCount.toLocaleString()} likes + ${tagsCount.toLocaleString()} artistas`, 'success');
+  showToast(`Exportado: ${likesCount.toLocaleString()} likes + ${tagsCount.toLocaleString()} artistas`, 'success');
 }
 
 async function handleMusicBrainz() {

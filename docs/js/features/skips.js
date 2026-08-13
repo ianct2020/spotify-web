@@ -3,17 +3,18 @@
 // Preview 30s instantáneo vía iTunes (arranca en el estribillo, no suma plays
 // en tu historial de Spotify). Fallback: iframe embed oficial si iTunes no lo tiene.
 
-import { getBestAvailableLikes, removeLikedTracks } from '../api.js?v=135';
-import { loadSkipStats, trackIdOf, isOwner, ownerLockedMessage } from './history-data.js?v=135';
-import { escapeHtml, confirmModal, pageHeader } from '../ui/components.js?v=135';
-import { showToast } from '../ui/toast.js?v=135';
-import { getPreview } from '../api/preview-providers.js?v=135';
-import { togglePreview, playingKey } from '../ui/preview-player.js?v=135';
-import { openTrackCard } from './track-card.js?v=135';
-import { activateMarquee, marqueeSpan } from '../ui/marquee.js?v=135';
-import { hasUsername, loadTopLifetime } from '../api/statsfm.js?v=135';
-import { createHiddenStore } from '../util/hidden-sync.js?v=135';
-import { createIncrementalList } from '../ui/incremental-list.js?v=135';
+import { getBestAvailableLikes, removeLikedTracks } from '../api.js?v=137';
+import { loadSkipStats, trackIdOf, isOwner, ownerLockedMessage } from './history-data.js?v=137';
+import { escapeHtml, confirmModal, pageHeader } from '../ui/components.js?v=137';
+import { showToast } from '../ui/toast.js?v=137';
+import { getPreview } from '../api/preview-providers.js?v=137';
+import { togglePreview, playingKey } from '../ui/preview-player.js?v=137';
+import { openTrackCard } from './track-card.js?v=137';
+import { activateMarquee, marqueeSpan } from '../ui/marquee.js?v=137';
+import { hasUsername, loadTopLifetime } from '../api/statsfm.js?v=137';
+import { createHiddenStore } from '../util/hidden-sync.js?v=137';
+import { createIncrementalList, scrollRootOf } from '../ui/incremental-list.js?v=137';
+import { createLazyImages } from '../ui/lazy-img.js?v=137';
 
 let cache = null;
 // Filas visibles con los filtros actuales, en el mismo orden que las tarjetas
@@ -26,6 +27,11 @@ let rowById = new Map();
 // todos" no podría marcarlas y el contador leería de menos.
 let selectedIds = new Set();
 let list = null;
+// Las tapas se cargan con un IntersectionObserver propio contra el grid (ver
+// ui/lazy-img.js). El `loading="lazy"` nativo resuelve contra el viewport y no
+// contra el ancestro que scrollea, así que disparaba las tapas de todos los
+// lotes appendeados.
+let lazyCovers = null;
 let minPlays = 5;    // solo tracks con ≥N plays totales (ok+skip)
 let minRatio = 70;   // ratio de skip mínimo (%)
 
@@ -63,6 +69,7 @@ export async function render(container) {
 
 function teardown() {
   if (list) { list.destroy(); list = null; }
+  if (lazyCovers) { lazyCovers.destroy(); lazyCovers = null; }
   selectedIds.clear();
   currentRows = [];
   rowById = new Map();
@@ -156,7 +163,12 @@ function applyRows({ preserveRendered = false } = {}) {
   rowById = new Map(currentRows.map(r => [r.id, r]));
   // La selección se queda solo con lo que sigue en la lista.
   for (const id of [...selectedIds]) if (!rowById.has(id)) selectedIds.delete(id);
-  if (list) list.setItems(currentRows, { preserveRendered });
+  if (list) {
+    // setItems repinta el grid entero: los <img> viejos dejan de existir y el
+    // observer de tapas tiene que soltarlos antes de que lleguen los nuevos.
+    lazyCovers?.reset();
+    list.setItems(currentRows, { preserveRendered });
+  }
   updateCounters();
 }
 
@@ -184,6 +196,7 @@ function renderResults() {
   window.__skipsPerf = { batches: [] };
   const content = document.getElementById('skips-content');
   if (list) { list.destroy(); list = null; }
+  if (lazyCovers) { lazyCovers.destroy(); lazyCovers = null; }
   const rows = filtered();
   currentRows = rows;
   rowById = new Map(rows.map(r => [r.id, r]));
@@ -249,10 +262,15 @@ function renderResults() {
   wireRows();
 
   // El grid arranca vacío y se llena por lotes (ver ui/incremental-list.js).
-  // Antes se inyectaban las 1.403 tarjetas de una sola vez y el hilo principal
+  // Antes se inyectaban las 1.322 tarjetas de una sola vez y el hilo principal
   // se quedaba varios segundos construyendo DOM y calculando layout.
   const grid = content.querySelector('#skips-list');
   if (grid) {
+    // El root es el mismo ancestro que scrollea que usa el centinela de la lista
+    // (el grid en escritorio, el documento en móvil, donde la media query le
+    // saca el overflow). rootMargin corto: las tapas van entrando justo antes de
+    // verse, no lote por lote.
+    lazyCovers = createLazyImages({ root: scrollRootOf(grid), rootMargin: '200px' });
     list = createIncrementalList({
       container: grid,
       items: currentRows,
@@ -268,6 +286,7 @@ function renderResults() {
         // lote sería cuadrático y son medidas de layout, de las caras.
         const nuevas = grid.querySelectorAll('.skips-card:not([data-mq])');
         nuevas.forEach(c => c.setAttribute('data-mq', '1'));
+        lazyCovers?.observe(nuevas);
         activateMarquee(nuevas);
         if (window.__skipsDebug) {
           console.info(`[skips] lote +${added} → ${rendered}/${total} en ${ms.toFixed(1)} ms`);
@@ -306,7 +325,7 @@ function renderRow(r) {
       <div class="skips-card-main">
         <div class="skips-card-cover">
           ${cover
-            ? `<img src="${cover}" alt="" loading="lazy" class="skips-cover">`
+            ? `<img data-src="${cover}" alt="" width="56" height="56" decoding="async" class="skips-cover">`
             : `<div class="skips-cover skips-cover-empty">♪</div>`}
           <label class="skips-card-sel" title="Seleccionar">
             <input type="checkbox" class="sk-cb skips-check"${selectedIds.has(r.id) ? ' checked' : ''}>
@@ -373,7 +392,7 @@ function wireRows() {
 
   if (selAllBtn) selAllBtn.onclick = () => {
     // Sobre el array, no sobre los checkboxes pintados: si solo mirara el DOM
-    // marcaría 80 de 1.403.
+    // marcaría 80 de 1.322.
     const allSelected = currentRows.length > 0 && currentRows.every(r => selectedIds.has(r.id));
     selectedIds = allSelected ? new Set() : new Set(currentRows.map(r => r.id));
     if (grid) grid.querySelectorAll('.sk-cb').forEach(cb => {

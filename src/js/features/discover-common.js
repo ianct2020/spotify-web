@@ -260,14 +260,20 @@ export async function addAlbumsToPlaylists(albumIds, findAlbumById, { onDone } =
     title: albumIds.length === 1 ? 'Añadir a playlists' : 'Añadir la selección a playlists',
     subtitle: subtitulo,
     playlists,
-    onConfirm: async (elegidas) => {
+    onReload: () => getOwnPlaylists({ force: true }),
+    onConfirm: async (elegidas, { setStatus } = {}) => {
       const uris = [];
+      const namesByUri = new Map();
       for (const albumId of albumIds) {
         const tracks = await getAlbumTracks(albumId);
-        tracks.forEach(t => { if (t.uri) uris.push(t.uri); });
+        tracks.forEach(t => {
+          if (!t.uri) return;
+          uris.push(t.uri);
+          if (t.name) namesByUri.set(t.uri, t.name);
+        });
       }
       if (!uris.length) throw new Error('los lanzamientos elegidos no tienen pistas');
-      const res = await addUrisToPlaylists(uris, elegidas);
+      const res = await addUrisToPlaylists(uris, elegidas, { namesByUri, onStatus: setStatus });
       // Muchos «lanzamientos» son singles de una sola pista: sin esto el toast
       // decía "1 pistas … se añadieron".
       const pistas = `${uris.length} pista${uris.length === 1 ? '' : 's'}`;
@@ -277,7 +283,8 @@ export async function addAlbumsToPlaylists(albumIds, findAlbumById, { onDone } =
           : `${pistas} de ${albumIds.length} lanzamientos`,
         plural: uris.length !== 1,
       });
-      if (!res.ok.length) throw new Error('no se pudo añadir a ninguna playlist');
+      // Si ya estaba todo, el modal se cierra igual: no es un fallo.
+      if (!res.ok.length && !res.skipped.length) throw new Error('no se pudo añadir a ninguna playlist');
       if (onDone) onDone();
     },
   });

@@ -16,19 +16,19 @@
 import {
   getAllUserPlaylists, getAllPlaylistItems, getBestAvailableLikes,
   getCurrentUserId,
-} from '../api.js?v=135';
-import { idbGetCached, idbSetCached, idbDel } from '../idb.js?v=135';
-import { createHiddenStore } from '../util/hidden-sync.js?v=135';
-import { addUrisToPlaylists, toastAddResult } from '../util/playlist-add.js?v=135';
-import { escapeHtml, pageHeader, showProgress, hideProgress, isCancelled } from '../ui/components.js?v=135';
-import { openModal, closeTop } from '../ui/modal-stack.js?v=135';
-import { openPlaylistPicker } from '../ui/playlist-picker.js?v=135';
-import { showToast } from '../ui/toast.js?v=135';
-import { getPreview } from '../api/preview-providers.js?v=135';
-import { togglePreview, playingKey } from '../ui/preview-player.js?v=135';
-import { openTrackCard } from './track-card.js?v=135';
-import { normText } from '../util/track-match.js?v=135';
-import { activateMarquee, marqueeSpan } from '../ui/marquee.js?v=135';
+} from '../api.js?v=137';
+import { idbGetCached, idbSetCached, idbDel } from '../idb.js?v=137';
+import { createHiddenStore } from '../util/hidden-sync.js?v=137';
+import { addUrisToPlaylists, toastAddResult, getOwnPlaylists } from '../util/playlist-add.js?v=137';
+import { escapeHtml, pageHeader, showProgress, hideProgress, isCancelled } from '../ui/components.js?v=137';
+import { openModal, closeTop } from '../ui/modal-stack.js?v=137';
+import { openPlaylistPicker } from '../ui/playlist-picker.js?v=137';
+import { showToast } from '../ui/toast.js?v=137';
+import { getPreview } from '../api/preview-providers.js?v=137';
+import { togglePreview, playingKey } from '../ui/preview-player.js?v=137';
+import { openTrackCard } from './track-card.js?v=137';
+import { normText } from '../util/track-match.js?v=137';
+import { activateMarquee, marqueeSpan } from '../ui/marquee.js?v=137';
 
 const HIDDEN_KEY = 'sin_clasificar_ocultas';
 const EXCLUDED_KEY = 'sin_clasificar_excluidas';
@@ -581,6 +581,16 @@ document.addEventListener('previewchange', (e) => {
 // `rows` puede ser una sola canción (botón de la tarjeta) o la selección
 // múltiple. En los dos casos es el mismo modal de checkboxes y un POST por
 // playlist marcada.
+// Botón ↻ del modal: vuelve a pedir las playlists propias saltándose los cachés
+// y actualiza el estado de la vista. No re-dispara el cruce — una playlist recién
+// creada entra en el escaneo la próxima vez que se escanee.
+async function recargarPlaylists() {
+  const own = await getOwnPlaylists({ force: true });
+  if (!state) return own;
+  state.ownPlaylists = own;
+  return own.filter(p => !state.excluded.has(p.id));
+}
+
 function openAddModal(rows) {
   const opciones = state.ownPlaylists.filter(p => !state.excluded.has(p.id));
   const conUri = rows.filter(r => r.uri);
@@ -600,11 +610,14 @@ function openAddModal(rows) {
     title: rows.length === 1 ? 'Añadir a playlists' : 'Añadir la selección a playlists',
     subtitle: subtitulo,
     playlists: opciones,
-    onConfirm: async (elegidas) => {
+    onReload: recargarPlaylists,
+    onConfirm: async (elegidas, { setStatus } = {}) => {
       const res = await addUrisToPlaylists(conUri.map(r => r.uri), elegidas, {
         appendItems: conUri.map(r => ({
           id: r.trackId, uri: r.uri, name: r.name, artists: r.raw?.artists || [],
         })),
+        namesByUri: new Map(conUri.map(r => [r.uri, r.name])),
+        onStatus: setStatus,
       });
 
       toastAddResult(res, {
@@ -612,8 +625,10 @@ function openAddModal(rows) {
         plural: rows.length !== 1,
       });
 
-      // Solo salen de la lista si se añadieron a AL MENOS una playlist.
-      if (!res.ok.length) throw new Error('no se pudo añadir a ninguna playlist');
+      // Salen de la lista si se añadieron a AL MENOS una playlist — o si ya
+      // estaban en alguna de las elegidas, que para esta vista (likes que no
+      // están en ninguna playlist) significa exactamente lo mismo.
+      if (!res.ok.length && !res.skipped.length) throw new Error('no se pudo añadir a ninguna playlist');
 
       const fuera = new Set(conUri.map(r => r.id));
       state.rows = state.rows.filter(r => !fuera.has(r.id));

@@ -1,11 +1,11 @@
-import { getAllLikedTracks, createPlaylist, addTracksToPlaylist, invalidatePlaylistsCache, exportAllData, importAllData, getCurrentUserId, getBestAvailableLikes } from '../api.js?v=135';
-import { hasKey, setKey, getArtistTopTags, getCachedTags, setCachedTags, mergeCachedTags } from '../api/lastfm.js?v=135';
-import * as statsfm from '../api/statsfm.js?v=135';
-import { getGenresForArtist as mbGetGenres } from '../api/musicbrainz.js?v=135';
-import { showProgress, hideProgress, progressController, isCancelled, promptPlaylistName, alertModal, confirmModal, escapeHtml, pageHeader } from '../ui/components.js?v=135';
-import { showToast } from '../ui/toast.js?v=135';
-import { openModal, closeTop } from '../ui/modal-stack.js?v=135';
-import { tagToGroup } from './genre-groups.js?v=135';
+import { getAllLikedTracks, createPlaylist, addTracksToPlaylist, invalidatePlaylistsCache, exportAllData, importAllData, getCurrentUserId, getBestAvailableLikes } from '../api.js?v=137';
+import { hasKey, setKey, getArtistTopTags, getCachedTags, setCachedTags, mergeCachedTags } from '../api/lastfm.js?v=137';
+import * as statsfm from '../api/statsfm.js?v=137';
+import { getGenresForArtist as mbGetGenres } from '../api/musicbrainz.js?v=137';
+import { showProgress, hideProgress, progressController, isCancelled, promptPlaylistName, alertModal, confirmModal, escapeHtml, pageHeader } from '../ui/components.js?v=137';
+import { showToast } from '../ui/toast.js?v=137';
+import { openModal, closeTop } from '../ui/modal-stack.js?v=137';
+import { tagToGroup } from './genre-groups.js?v=137';
 
 const NOISE_TAGS = new Set([
   'seen live', 'favorites', 'favorite', 'favourite', 'favourites',
@@ -223,19 +223,9 @@ async function handleExport() {
   const data = await exportAllData(userId);
   const likesCount = data.likes.items.length;
   const tagsCount = Object.keys(data.tags.entries).length;
-  const source = data._likesSource;
   if (likesCount === 0 && tagsCount === 0) {
     showToast('No hay datos para exportar', 'error');
     return;
-  }
-  if (source === 'partial') {
-    const ok = await alertModal(
-      'La carga se cortó a mitad',
-      `<p>Solo tenés <strong>${likesCount.toLocaleString()} likes cacheados</strong> (parcial). El JSON va a incluir solo esos.</p>
-       <p>¿Exportar igual?</p>`,
-      { variant: 'warning', confirmText: 'Exportar parcial', cancelText: 'Cancelar' }
-    );
-    if (!ok) return;
   }
   const blob = new Blob([JSON.stringify(data)], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
@@ -248,8 +238,7 @@ async function handleExport() {
   a.click();
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
-  const tag = source === 'partial' ? ' (parcial)' : '';
-  showToast(`Exportado${tag}: ${likesCount.toLocaleString()} likes + ${tagsCount.toLocaleString()} artistas`, 'success');
+  showToast(`Exportado: ${likesCount.toLocaleString()} likes + ${tagsCount.toLocaleString()} artistas`, 'success');
 }
 
 async function handleMusicBrainz() {

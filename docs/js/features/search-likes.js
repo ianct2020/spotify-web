@@ -2,13 +2,12 @@
 // Sirve para cuando la búsqueda de Spotify tarda o no encuentra bien:
 // tipeás, filtra en memoria por título/artista/álbum, sin pegarle a la API.
 
-import { getBestAvailableLikes } from '../api.js?v=135';
-import { renderTrackRow, escapeHtml, pageHeader } from '../ui/components.js?v=135';
-import { openTrackCard } from './track-card.js?v=135';
+import { getBestAvailableLikes } from '../api.js?v=137';
+import { renderTrackRow, escapeHtml, pageHeader } from '../ui/components.js?v=137';
+import { openTrackCard } from './track-card.js?v=137';
 
 const MAX_RESULTS = 300;
 let cachedItems = [];
-let cachedSource = 'empty';
 
 function normalize(s) {
   return (s || '')
@@ -62,9 +61,8 @@ export async function render(container) {
 
   results.innerHTML = `<div class="empty-state"><div class="spinner spinner-lg"></div><div style="margin-top:16px">Cargando cache de likes…</div></div>`;
 
-  const { items, source } = await getBestAvailableLikes();
+  const { items } = await getBestAvailableLikes();
   cachedItems = items;
-  cachedSource = source;
 
   if (!items.length) {
     results.innerHTML = `
@@ -77,8 +75,7 @@ export async function render(container) {
     return;
   }
 
-  const sourceTag = source === 'partial' ? ' <span style="color:var(--color-warning)">(carga parcial)</span>' : '';
-  info.innerHTML = `${items.length.toLocaleString('es-AR')} likes en cache${sourceTag}`;
+  info.innerHTML = `${items.length.toLocaleString('es-AR')} likes en cache`;
 
   results.innerHTML = `<div class="card"><p style="color:var(--color-text-secondary)">Empezá a tipear arriba — los resultados aparecen al toque.</p></div>`;
 

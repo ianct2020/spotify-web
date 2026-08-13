@@ -7,8 +7,8 @@
 // Dispara 'previewchange' en document con { detail: { key, provider } }
 // (key null = parado) para que cada feature actualice sus botones.
 
-import { escapeHtml } from './components.js?v=135';
-import { showToast } from './toast.js?v=135';
+import { escapeHtml } from './components.js?v=137';
+import { showToast } from './toast.js?v=137';
 
 const audio = new Audio();
 audio.preload = 'none';
