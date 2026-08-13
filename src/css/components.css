@@ -1123,12 +1123,17 @@ body.modal-open {
 }
 .skips-card-actions .sk-hide-btn { width: 26px; height: 26px; padding: 0; }
 
+/* El alto/ancho está fijado acá y en los atributos del <img>: la tapa entra por
+   IntersectionObserver (ui/lazy-img.js) y hasta que llega el hueco tiene que
+   medir lo mismo, o cada tapa que carga reacomoda la fila. El fondo hace de
+   placeholder mientras tanto. */
 .skips-cover {
   width: 56px;
   height: 56px;
   border-radius: var(--radius-sm);
   object-fit: cover;
   display: block;
+  background: var(--color-elevated);
 }
 .skips-cover-empty {
   background: var(--color-elevated);
