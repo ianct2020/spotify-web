@@ -3,18 +3,18 @@
 // Preview 30s instantáneo vía iTunes (arranca en el estribillo, no suma plays
 // en tu historial de Spotify). Fallback: iframe embed oficial si iTunes no lo tiene.
 
-import { getBestAvailableLikes, removeLikedTracks } from '../api.js?v=138';
-import { loadSkipStats, trackIdOf, isOwner, ownerLockedMessage } from './history-data.js?v=138';
-import { escapeHtml, confirmModal, pageHeader } from '../ui/components.js?v=138';
-import { showToast } from '../ui/toast.js?v=138';
-import { getPreview } from '../api/preview-providers.js?v=138';
-import { togglePreview, playingKey } from '../ui/preview-player.js?v=138';
-import { openTrackCard } from './track-card.js?v=138';
-import { activateMarquee, marqueeSpan } from '../ui/marquee.js?v=138';
-import { hasUsername, loadTopLifetime } from '../api/statsfm.js?v=138';
-import { createHiddenStore } from '../util/hidden-sync.js?v=138';
-import { createIncrementalList, scrollRootOf } from '../ui/incremental-list.js?v=138';
-import { createLazyImages } from '../ui/lazy-img.js?v=138';
+import { getBestAvailableLikes, removeLikedTracks } from '../api.js?v=139';
+import { loadSkipStats, trackIdOf, isOwner, ownerLockedMessage } from './history-data.js?v=139';
+import { escapeHtml, confirmModal, pageHeader } from '../ui/components.js?v=139';
+import { showToast } from '../ui/toast.js?v=139';
+import { getPreview } from '../api/preview-providers.js?v=139';
+import { togglePreview, playingKey } from '../ui/preview-player.js?v=139';
+import { openTrackCard } from './track-card.js?v=139';
+import { activateMarquee, marqueeSpan } from '../ui/marquee.js?v=139';
+import { hasUsername, loadTopLifetime } from '../api/statsfm.js?v=139';
+import { createHiddenStore } from '../util/hidden-sync.js?v=139';
+import { createIncrementalList, scrollRootOf } from '../ui/incremental-list.js?v=139';
+import { createLazyImages } from '../ui/lazy-img.js?v=139';
 
 let cache = null;
 // Filas visibles con los filtros actuales, en el mismo orden que las tarjetas

@@ -4,7 +4,7 @@
 // (preview_url de Spotify murió en la migración feb 2026; el embed iframe
 // queda como fallback para lo que iTunes no tenga.)
 
-import { pickBestMatch, artistMatches } from '../util/track-match.js?v=138';
+import { pickBestMatch, artistMatches } from '../util/track-match.js?v=139';
 
 // v2: la key sube de v1 porque el cache de v1 tiene matches equivocados
 // guardados (se aceptaba cualquier tema del artista cuando el título no

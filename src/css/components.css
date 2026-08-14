@@ -1303,6 +1303,11 @@ body.modal-open {
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md, 10px);
   cursor: pointer;
+  /* La tarjeta es un control, no texto: sin esto, shift+click para marcar un
+     rango arrastra la selección de texto del navegador y pinta media lista de
+     azul. */
+  -webkit-user-select: none;
+  user-select: none;
   transition: border-color .12s, background .12s;
 }
 .sc-card:hover { background: var(--color-elevated); border-color: var(--color-accent); }
