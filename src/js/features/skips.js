@@ -299,6 +299,9 @@ function renderResults() {
   updateRemoveBtn();
 
   const perf = window.__skipsPerf;
+  // Tapas cargadas / descargadas ahora mismo (ui/lazy-img.js). Se lee en las
+  // mediciones: tiene que quedar acotado, no crecer con la lista recorrida.
+  Object.defineProperty(perf, 'lazy', { get: () => lazyCovers?.stats || null, configurable: true });
   perf.totalRows = currentRows.length;
   perf.firstPaintCards = list ? list.rendered : 0;
   perf.syncMs = +(performance.now() - t0).toFixed(1);
@@ -540,7 +543,6 @@ function toggleEmbed(id, btn) {
         width="100%" height="80"
         frameborder="0" allowtransparency="true"
         allow="encrypted-media"
-        loading="lazy"
         style="border-radius:8px;display:block"></iframe>
     `;
     slot.classList.add('open');

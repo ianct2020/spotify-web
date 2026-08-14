@@ -3,18 +3,18 @@
 // Preview 30s instantáneo vía iTunes (arranca en el estribillo, no suma plays
 // en tu historial de Spotify). Fallback: iframe embed oficial si iTunes no lo tiene.
 
-import { getBestAvailableLikes, removeLikedTracks } from '../api.js?v=137';
-import { loadSkipStats, trackIdOf, isOwner, ownerLockedMessage } from './history-data.js?v=137';
-import { escapeHtml, confirmModal, pageHeader } from '../ui/components.js?v=137';
-import { showToast } from '../ui/toast.js?v=137';
-import { getPreview } from '../api/preview-providers.js?v=137';
-import { togglePreview, playingKey } from '../ui/preview-player.js?v=137';
-import { openTrackCard } from './track-card.js?v=137';
-import { activateMarquee, marqueeSpan } from '../ui/marquee.js?v=137';
-import { hasUsername, loadTopLifetime } from '../api/statsfm.js?v=137';
-import { createHiddenStore } from '../util/hidden-sync.js?v=137';
-import { createIncrementalList, scrollRootOf } from '../ui/incremental-list.js?v=137';
-import { createLazyImages } from '../ui/lazy-img.js?v=137';
+import { getBestAvailableLikes, removeLikedTracks } from '../api.js?v=138';
+import { loadSkipStats, trackIdOf, isOwner, ownerLockedMessage } from './history-data.js?v=138';
+import { escapeHtml, confirmModal, pageHeader } from '../ui/components.js?v=138';
+import { showToast } from '../ui/toast.js?v=138';
+import { getPreview } from '../api/preview-providers.js?v=138';
+import { togglePreview, playingKey } from '../ui/preview-player.js?v=138';
+import { openTrackCard } from './track-card.js?v=138';
+import { activateMarquee, marqueeSpan } from '../ui/marquee.js?v=138';
+import { hasUsername, loadTopLifetime } from '../api/statsfm.js?v=138';
+import { createHiddenStore } from '../util/hidden-sync.js?v=138';
+import { createIncrementalList, scrollRootOf } from '../ui/incremental-list.js?v=138';
+import { createLazyImages } from '../ui/lazy-img.js?v=138';
 
 let cache = null;
 // Filas visibles con los filtros actuales, en el mismo orden que las tarjetas
@@ -299,6 +299,9 @@ function renderResults() {
   updateRemoveBtn();
 
   const perf = window.__skipsPerf;
+  // Tapas cargadas / descargadas ahora mismo (ui/lazy-img.js). Se lee en las
+  // mediciones: tiene que quedar acotado, no crecer con la lista recorrida.
+  Object.defineProperty(perf, 'lazy', { get: () => lazyCovers?.stats || null, configurable: true });
   perf.totalRows = currentRows.length;
   perf.firstPaintCards = list ? list.rendered : 0;
   perf.syncMs = +(performance.now() - t0).toFixed(1);
@@ -540,7 +543,6 @@ function toggleEmbed(id, btn) {
         width="100%" height="80"
         frameborder="0" allowtransparency="true"
         allow="encrypted-media"
-        loading="lazy"
         style="border-radius:8px;display:block"></iframe>
     `;
     slot.classList.add('open');

@@ -1,8 +1,8 @@
-import { getValidToken, refreshAccessToken } from './auth.js?v=137';
-import { cacheGet, cacheGetRaw, cacheGetTimestamp, cacheSet, cacheClear } from './storage.js?v=137';
-import { idbDel, idbGetCached, idbGetCachedRaw, idbGetTimestamp, idbSetCached } from './idb.js?v=137';
-import { showToast } from './ui/toast.js?v=137';
-import { artistIsSame } from './util/track-match.js?v=137';
+import { getValidToken, refreshAccessToken } from './auth.js?v=138';
+import { cacheGet, cacheGetRaw, cacheGetTimestamp, cacheSet, cacheClear } from './storage.js?v=138';
+import { idbDel, idbGetCached, idbGetCachedRaw, idbGetTimestamp, idbSetCached } from './idb.js?v=138';
+import { showToast } from './ui/toast.js?v=138';
+import { artistIsSame } from './util/track-match.js?v=138';
 
 const BASE = 'https://api.spotify.com/v1';
 const MIN_RETRY_WAIT = 5000;
@@ -251,7 +251,11 @@ function slimTrack(t) {
       // singles con un solo like tapaban a los álbumes de verdad.
       album_type: t.album.album_type,
       total_tracks: t.album.total_tracks,
-      images: (t.album.images || []).slice(-1),
+      // v=138: las DOS más chicas (300 y 64), no solo la de 64. #sin-clasificar
+      // pinta la tapa a 96px y con la de 64 se ve borrosa. Es una URL más por
+      // like (~0,6 MB de caché con 9.500 likes). Las cachés viejas siguen
+      // trayendo una sola: util/cover-size.js deduce la de 300 desde la de 64.
+      images: (t.album.images || []).slice(-2),
     } : undefined,
   };
 }

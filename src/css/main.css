@@ -3552,23 +3552,29 @@ body.covers-fs .main {
    columna de contenido, no sobre el sidebar (que es fixed y va por encima).
    Copia los mismos números que .main. main.css carga después de components.css,
    así que esto gana. */
+/* La barra se ajusta a su contenido y se queda a la izquierda de la columna:
+   así la esquina derecha queda libre para el pill del reproductor, que es
+   `fixed` con z-index 900 y le tapaba «Añadir a…», «Ocultar» y «Limpiar
+   selección». Antes iba de borde a borde de la columna. */
 .sc-actionbar,
 .disco-actionbar {
   left: 72px;
-  right: 32px;
-  width: auto;
-  max-width: 1336px;
+  right: auto;
+  width: max-content;
+  max-width: calc(100vw - 104px);
   transform: none;
 }
 @media (min-width: 769px) {
   body:not(.sidebar-hidden) .sc-actionbar,
   body:not(.sidebar-hidden) .disco-actionbar {
     left: 312px;
-    max-width: 1176px;
+    max-width: calc(100vw - 344px);
   }
 }
+/* En móvil la barra sí ocupa el ancho entero (no hay sitio para las dos cosas
+   en una fila), así que ahí se sube por encima del pill. */
 @media (max-width: 768px) {
-  .sc-actionbar, .disco-actionbar { left: 16px; right: 16px; }
+  .sc-actionbar, .disco-actionbar { left: 16px; right: 16px; width: auto; max-width: none; }
 }
 @media (max-width: 480px) {
   .sc-actionbar, .disco-actionbar { left: 10px; right: 10px; }

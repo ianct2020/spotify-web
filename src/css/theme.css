@@ -2,6 +2,9 @@
   --color-accent: #7C3AED;
   --color-accent-hover: #6D28D9;
   --color-accent-soft: rgba(124, 58, 237, 0.1);
+  /* Fondo de "esto está seleccionado". Un punto más marcado que --color-accent-soft,
+     que se usa en 15 sitios como hover y halo: subirlo ahí restilaría media app. */
+  --color-accent-tint: rgba(124, 58, 237, 0.14);
   --color-accent-glow: rgba(124, 58, 237, 0.25);
 
   --color-bg: #0A0A0F;
