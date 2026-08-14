@@ -16,22 +16,22 @@
 import {
   getAllUserPlaylists, getAllPlaylistItems, getBestAvailableLikes,
   getCurrentUserId,
-} from '../api.js?v=138';
-import { idbGetCached, idbSetCached, idbDel } from '../idb.js?v=138';
-import { createHiddenStore } from '../util/hidden-sync.js?v=138';
-import { addUrisToPlaylists, toastAddResult, getOwnPlaylists } from '../util/playlist-add.js?v=138';
-import { escapeHtml, pageHeader, showProgress, hideProgress, isCancelled } from '../ui/components.js?v=138';
-import { openModal, closeTop } from '../ui/modal-stack.js?v=138';
-import { openPlaylistPicker } from '../ui/playlist-picker.js?v=138';
-import { showToast } from '../ui/toast.js?v=138';
-import { getPreview } from '../api/preview-providers.js?v=138';
-import { togglePreview, playingKey } from '../ui/preview-player.js?v=138';
-import { openTrackCard } from './track-card.js?v=138';
-import { normText } from '../util/track-match.js?v=138';
-import { activateMarquee, marqueeSpan } from '../ui/marquee.js?v=138';
-import { createIncrementalList, scrollRootOf } from '../ui/incremental-list.js?v=138';
-import { createLazyImages } from '../ui/lazy-img.js?v=138';
-import { coverAtSize } from '../util/cover-size.js?v=138';
+} from '../api.js?v=139';
+import { idbGetCached, idbSetCached, idbDel } from '../idb.js?v=139';
+import { createHiddenStore } from '../util/hidden-sync.js?v=139';
+import { addUrisToPlaylists, toastAddResult, getOwnPlaylists } from '../util/playlist-add.js?v=139';
+import { escapeHtml, pageHeader, showProgress, hideProgress, isCancelled } from '../ui/components.js?v=139';
+import { openModal, closeTop } from '../ui/modal-stack.js?v=139';
+import { openPlaylistPicker } from '../ui/playlist-picker.js?v=139';
+import { showToast } from '../ui/toast.js?v=139';
+import { getPreview } from '../api/preview-providers.js?v=139';
+import { togglePreview, playingKey } from '../ui/preview-player.js?v=139';
+import { openTrackCard } from './track-card.js?v=139';
+import { normText } from '../util/track-match.js?v=139';
+import { activateMarquee, marqueeSpan } from '../ui/marquee.js?v=139';
+import { createIncrementalList, scrollRootOf } from '../ui/incremental-list.js?v=139';
+import { createLazyImages } from '../ui/lazy-img.js?v=139';
+import { coverAtSize } from '../util/cover-size.js?v=139';
 
 const HIDDEN_KEY = 'sin_clasificar_ocultas';
 const EXCLUDED_KEY = 'sin_clasificar_excluidas';
