@@ -7,14 +7,14 @@
 // nombre + artista normalizados con util/album-key.js). Cada fila abre la
 // ficha de canción y tiene botón ▶ de preview.
 
-import { escapeHtml } from '../ui/components.js?v=137';
-import { openArtistCard } from './artist-card.js?v=137';
-import { openModal, closeTop } from '../ui/modal-stack.js?v=137';
-import { getBestAvailableLikes } from '../api.js?v=137';
-import { albumKey } from '../util/album-key.js?v=137';
-import { getPreview } from '../api/preview-providers.js?v=137';
-import { togglePreview, playingKey } from '../ui/preview-player.js?v=137';
-import { openTrackCard } from './track-card.js?v=137';
+import { escapeHtml } from '../ui/components.js?v=138';
+import { openArtistCard } from './artist-card.js?v=138';
+import { openModal, closeTop } from '../ui/modal-stack.js?v=138';
+import { getBestAvailableLikes } from '../api.js?v=138';
+import { albumKey } from '../util/album-key.js?v=138';
+import { getPreview } from '../api/preview-providers.js?v=138';
+import { togglePreview, playingKey } from '../ui/preview-player.js?v=138';
+import { openTrackCard } from './track-card.js?v=138';
 
 const PLAY_SVG = `<svg viewBox="0 0 24 24" width="10" height="10" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>`;
 const PAUSE_SVG = `<svg viewBox="0 0 24 24" width="10" height="10" fill="currentColor" aria-hidden="true"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>`;

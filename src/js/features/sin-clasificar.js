@@ -29,6 +29,9 @@ import { togglePreview, playingKey } from '../ui/preview-player.js';
 import { openTrackCard } from './track-card.js';
 import { normText } from '../util/track-match.js';
 import { activateMarquee, marqueeSpan } from '../ui/marquee.js';
+import { createIncrementalList, scrollRootOf } from '../ui/incremental-list.js';
+import { createLazyImages } from '../ui/lazy-img.js';
+import { coverAtSize } from '../util/cover-size.js';
 
 const HIDDEN_KEY = 'sin_clasificar_ocultas';
 const EXCLUDED_KEY = 'sin_clasificar_excluidas';
@@ -63,13 +66,32 @@ let scanning = false;
 let filterText = '';
 let sortMode = localStorage.getItem(SORT_KEY) || 'recent';
 let showingHidden = false;
-// Filas efectivamente pintadas, en el orden en que se pintaron. Los handlers
-// leen de acá y NO de filtered(): con el orden aleatorio, cada llamada a
-// filtered() re-baraja y el índice de la tarjeta apuntaría a otra canción.
+// Filas visibles con el filtro y el orden actuales, en el mismo orden que las
+// tarjetas del grid. Los handlers leen de acá y NO de filtered(): con el orden
+// aleatorio, cada llamada a filtered() re-baraja y devolvería otra canción.
+// Ojo: la lista se pinta por lotes, así que `visible` tiene TODAS las filas y
+// el DOM solo las appendeadas hasta ahora.
 let visible = [];
-// Ids de las filas marcadas con el checkbox de la tarjeta. Sobrevive a los
-// re-render (filtro, orden, ocultar) mientras la fila siga existiendo.
+// Resolución de tarjeta → fila por data-id. Los handlers van delegados en el
+// grid, así que cada tarjeta tiene que poder resolverse sola: con append
+// incremental, un índice dentro de un `querySelectorAll` no vale.
+let rowById = new Map();
+// Ids de las filas seleccionadas. Vive en el módulo y NO en el DOM: con la
+// lista incremental, "Seleccionar todas" solo marcaría lo pintado y la barra
+// inferior contaría de menos. Sobrevive a los re-render (filtro, orden,
+// ocultar) mientras la fila siga existiendo.
 let selected = new Set();
+// Ancla del shift+click: última tarjeta que se tocó a mano.
+let lastClickedId = null;
+let list = null;
+// Tapas de 300×300 pintadas a 96px: sin carga diferida contra el scroller Y sin
+// descarga al alejarse, recorrer la lista entera dejaría ~715 MB decodificados
+// en memoria. Ver ui/lazy-img.js.
+let lazyCovers = null;
+
+// Tarjetas por lote. 80 llena de sobra el primer viewport y deja colchón para
+// que el primer scroll no dispare nada. Mismo número que #skips.
+const BATCH = 80;
 
 function loadSet(key) {
   try {
@@ -102,6 +124,14 @@ function loadExcluded() {
 }
 function saveExcluded(set) { saveSet(EXCLUDED_KEY, set); }
 
+// Las tres playlists que crea la app para los ocultos (skips / sin clasificar /
+// álbumes). Se comparan por nombre porque los ids los crea Spotify y viven en
+// cada máquina; el nombre lo pone hidden-sync.js.
+const PREFIJO_OCULTOS = 'fonoteca · ocultos';
+function esPlaylistDeOcultos(nombre) {
+  return normName(nombre).startsWith(PREFIJO_OCULTOS);
+}
+
 function normName(s) {
   return String(s || '').toLowerCase().replace(/\s+/g, ' ').trim();
 }
@@ -114,24 +144,58 @@ function fallbackKey(name, artist) {
   return `${n}|${a}`;
 }
 
+// La más chica del array: es la que siempre está.
+function chicaCover(imgs) {
+  return imgs.length ? (imgs[imgs.length - 1].url || null) : null;
+}
+// La de ~300px para pintar a 96. Si el álbum no la trae, se deduce.
+function medianaCover(imgs) {
+  const chica = chicaCover(imgs);
+  const media = imgs.find(im => (im.width || 0) >= 240 && (im.width || 0) <= 400)
+    || imgs.find(im => (im.width || 0) >= 240);
+  return media?.url || (chica ? coverAtSize(chica, 300) : null);
+}
+
+// Ojo con el `||`: hay un like con `artists: [{ id: …, name: "" }]` (nombre
+// vacío, no ausente). Con `a.name || a` esa fila devolvía el OBJETO artista, y
+// entonces ordenar «Por artista» tiraba `a.artist.localeCompare is not a
+// function` y dejaba la vista intacta sin decir nada. Verificado sobre los
+// 9.548 likes: 1 caso.
 function firstArtist(t) {
   const a = (t?.artists || [])[0];
-  return (a && (a.name || a)) || '';
+  const n = (a && typeof a === 'object') ? a.name : a;
+  return typeof n === 'string' ? n : '';
 }
 
 export async function render(container) {
+  teardown();
   container.innerHTML = `
     ${pageHeader({ title: 'Sin clasificar' })}
     <div id="sc-content"></div>
   `;
   if (state) {
     renderResults();
-    return;
+    // El router llama a esto al salir de la ruta. Sin él quedarían vivos los
+    // IntersectionObserver (centinela de la lista y tapas) sobre nodos ya
+    // desconectados del documento.
+    return teardown;
   }
   document.getElementById('sc-content').innerHTML = `
     <div class="empty-state"><div class="spinner spinner-lg"></div><div style="margin-top:16px">Cruzando tus likes con tus playlists…</div></div>
   `;
   await load({ force: false });
+  return teardown;
+}
+
+// No toca `state`: el cruce cacheado en memoria es lo que hace que volver a la
+// vista sea instantáneo. Solo suelta lo que cuelga del DOM que se va.
+function teardown() {
+  if (list) { list.destroy(); list = null; }
+  if (lazyCovers) { lazyCovers.destroy(); lazyCovers = null; }
+  selected.clear();
+  lastClickedId = null;
+  visible = [];
+  rowById = new Map();
 }
 
 // ── Carga y cruce ────────────────────────────────────────────────────────────
@@ -175,8 +239,13 @@ async function load({ force }) {
       console.log('[sin-clasificar] exclusiones presembradas por id:',
         own.filter(p => excluded.has(p.id)).map(p => `${p.name} (${p.id})`));
     }
-    const toScan = own.filter(p => !excluded.has(p.id));
-    console.log(`[sin-clasificar] ${toScan.length} playlists a cruzar de ${own.length} propias · ignoradas por id: ${own.filter(p => excluded.has(p.id)).map(p => `${p.name} (${p.id})`).join(', ') || '—'}`);
+    // Las playlists de ocultos de la propia app NUNCA cuentan para el cruce.
+    // Son el almacén de "esto no lo quiero ver" (util/hidden-sync.js), así que
+    // si entraran, ocultar una canción la marcaría como clasificada y al
+    // devolverla a la lista ya no volvería a aparecer: se perdería en silencio.
+    const toScan = own.filter(p => !excluded.has(p.id) && !esPlaylistDeOcultos(p.name));
+    const deOcultos = own.filter(p => esPlaylistDeOcultos(p.name)).map(p => p.name);
+    console.log(`[sin-clasificar] ${toScan.length} playlists a cruzar de ${own.length} propias · ignoradas por id: ${own.filter(p => excluded.has(p.id)).map(p => `${p.name} (${p.id})`).join(', ') || '—'}${deOcultos.length ? ` · fuera por ser de ocultos: ${deOcultos.join(', ')}` : ''}`);
 
     let cross = force ? null : await idbGetCached(CROSS_KEY).catch(() => null);
     // Si cambió qué playlists entran al cruce, lo cacheado ya no sirve.
@@ -209,10 +278,16 @@ async function load({ force }) {
         trackId: id,
         uri: t.uri || (id ? `spotify:track:${id}` : null),
         name: t.name || '(sin nombre)',
-        artists: (t.artists || []).map(a => a.name || a).join(', '),
+        artists: (t.artists || []).map(a => (a && typeof a === 'object') ? (a.name || '') : (a || '')).filter(Boolean).join(', '),
         artist,
         album: t.album?.name || '',
-        cover: imgs[2]?.url || imgs[1]?.url || imgs[0]?.url || null,
+        // La tapa se pinta a 96px, así que hay que usar la de 300×300. El
+        // caché de likes guarda las más chicas (ver slimTrack en api.js): si la
+        // de 300 no está —cachés de antes de v=138 y el backup del repo, que
+        // solo tienen la de 64— se deduce del prefijo del CDN, con la chica de
+        // respaldo en el onerror del <img>.
+        cover: medianaCover(imgs),
+        coverSmall: chicaCover(imgs),
         addedAt: it.added_at || null,
         raw: t,
       });
@@ -342,10 +417,36 @@ function filtered() {
   return rows;
 }
 
+// Recalcula las filas visibles y las publica en la lista incremental. Ordenar,
+// filtrar y ocultar pasan por acá: nunca se toca el DOM de las tarjetas a mano.
+function applyRows({ preserveRendered = false } = {}) {
+  visible = filtered();
+  rowById = new Map(visible.map(r => [r.id, r]));
+  // Una fila que ya no existe (porque se añadió a alguna playlist) no puede
+  // seguir contando como seleccionada. Se compara contra TODAS las filas, no
+  // contra `visible`: filtrar no deselecciona nada.
+  if (selected.size) {
+    const vivas = new Set(state.rows.map(r => r.id));
+    for (const id of [...selected]) if (!vivas.has(id)) selected.delete(id);
+  }
+  if (list) {
+    // setItems repinta el grid entero: los <img> viejos dejan de existir y el
+    // observer de tapas tiene que soltarlos antes de que lleguen los nuevos.
+    lazyCovers?.reset();
+    list.setItems(visible, { preserveRendered });
+  }
+  updateSelectionUi();
+}
+
 function renderResults() {
   const content = document.getElementById('sc-content');
   if (!content || !state) return;
+  const t0 = performance.now();
+  window.__scPerf = { batches: [] };
+  if (list) { list.destroy(); list = null; }
+  if (lazyCovers) { lazyCovers.destroy(); lazyCovers = null; }
   const rows = visible = filtered();
+  rowById = new Map(rows.map(r => [r.id, r]));
   const hiddenCount = hidden.size;
   // El número grande cuenta lo que queda por clasificar de verdad: el total del
   // cruce menos las que Ian ya ocultó. Antes decía 1.987 mientras el grid
@@ -373,6 +474,7 @@ function renderResults() {
         ${hiddenCount > 0 || showingHidden ? `
           <button class="btn btn-secondary btn-sm ${showingHidden ? 'sc-on' : ''}" id="sc-toggle-hidden">${showingHidden ? '← Volver' : 'Ocultas (' + hiddenCount + ')'}</button>
         ` : ''}
+        <button class="btn btn-secondary btn-sm" id="sc-sel-all" ${rows.length === 0 ? 'disabled' : ''} title="Marca las ${rows.length.toLocaleString('es-ES')} de la lista, no solo las pintadas">Seleccionar todas</button>
         <button class="btn btn-secondary btn-sm" id="sc-excluded-btn" title="Elegir qué playlists no cuentan para el cruce">Playlists ignoradas (${state.excluded.size})</button>
         <button class="btn btn-secondary btn-sm" id="sc-refresh-btn" title="Rehacer el cruce ignorando la caché">Actualizar</button>
       </div>
@@ -385,7 +487,7 @@ function renderResults() {
         ${showingHidden ? 'No hay canciones ocultas con este filtro.' : (filterText ? 'Ninguna canción sin clasificar coincide con el filtro.' : 'Todos tus likes están en alguna playlist.')}
       </p></div>
     ` : `
-      <div class="sc-grid" id="sc-list">${rows.map((r, i) => renderCard(r, i)).join('')}</div>
+      <div class="sc-grid" id="sc-list" role="listbox" aria-multiselectable="true" aria-label="Canciones sin clasificar"></div>
     `}
     <div class="sc-actionbar" id="sc-actionbar" style="display:none">
       <span id="sc-sel-count">0 seleccionadas</span>
@@ -395,7 +497,46 @@ function renderResults() {
     </div>
   `;
   wire();
-  activateMarquee(content);
+
+  // El grid arranca vacío y se llena por lotes (ver ui/incremental-list.js).
+  // Antes se inyectaban las ~1.988 tarjetas de una sola vez.
+  const grid = content.querySelector('#sc-list');
+  if (grid) {
+    // El root del observer es el ancestro que scrollea DE VERDAD. Acá, a
+    // diferencia de #skips (donde el propio grid tiene `max-height: 74vh`), el
+    // .sc-grid no tiene overflow propio: scrollea el documento, así que
+    // scrollRootOf devuelve null y el root es el viewport. Se calcula, no se
+    // asume: si algún día la vista gana un scroller propio, esto lo sigue.
+    const scroller = scrollRootOf(grid);
+    lazyCovers = createLazyImages({ root: scroller, rootMargin: '200px' });
+    list = createIncrementalList({
+      container: grid,
+      items: visible,
+      renderItem: renderCard,
+      batchSize: BATCH,
+      rootMargin: '600px',
+      onBatch: ({ rendered, total, added, ms }) => {
+        const perf = (window.__scPerf ||= { batches: [] });
+        perf.batches.push({ added, rendered, total, ms: +ms.toFixed(1) });
+        // Marquee y tapas solo sobre lo recién insertado: medir toda la lista
+        // en cada lote sería cuadrático, y son medidas de layout, de las caras.
+        const nuevas = grid.querySelectorAll('.sc-card:not([data-mq])');
+        nuevas.forEach(c => c.setAttribute('data-mq', '1'));
+        lazyCovers?.observe(nuevas);
+        activateMarquee(nuevas);
+        if (window.__scDebug) {
+          console.info(`[sin-clasificar] lote +${added} → ${rendered}/${total} en ${ms.toFixed(1)} ms`);
+        }
+      },
+    });
+  }
+  updateSelectionUi();
+
+  const perf = window.__scPerf;
+  Object.defineProperty(perf, 'lazy', { get: () => lazyCovers?.stats || null, configurable: true });
+  perf.totalRows = rows.length;
+  perf.firstPaintCards = list ? list.rendered : 0;
+  perf.syncMs = +(performance.now() - t0).toFixed(1);
 }
 
 function fechaLike(iso) {
@@ -405,34 +546,54 @@ function fechaLike(iso) {
   return d.toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' });
 }
 
-function renderCard(r, i) {
+// Tarjeta horizontal: tapa grande a la izquierda (96px, desde la imagen de
+// 300×300) y el texto a la derecha. La selección es de la tarjeta ENTERA —
+// borde de acento, fondo tintado y un check sobre la esquina de la tapa — así
+// que no hay checkbox suelto. Se identifica por `data-id` y no por índice: con
+// la lista incremental las tarjetas se appendean en tandas y los handlers están
+// delegados en el grid, así que cada una resuelve su fila sola (rowById).
+function renderCard(r) {
+  const sel = selected.has(r.id);
   return `
-    <div class="sc-card${selected.has(r.id) ? ' is-sel' : ''}" data-i="${i}" data-id="${escapeHtml(r.id)}">
-      <label class="sc-check-wrap" title="Seleccionar">
-        <input type="checkbox" class="sc-check" data-i="${i}"${selected.has(r.id) ? ' checked' : ''} aria-label="Seleccionar ${escapeHtml(r.name)}">
-      </label>
-      <div class="sc-card-main">
+    <div class="sc-card${sel ? ' is-sel' : ''}" data-id="${escapeHtml(r.id)}"
+         role="option" aria-selected="${sel}" tabindex="0"
+         aria-label="${escapeHtml(r.name)} — ${escapeHtml(r.artists)}">
+      <div class="sc-cover-wrap">
         ${r.cover
-          ? `<img class="sc-cover" src="${r.cover}" alt="" loading="lazy">`
+          ? `<img class="sc-cover" data-src="${escapeHtml(r.cover)}" alt="" width="96" height="96" decoding="async"${
+              r.coverSmall && r.coverSmall !== r.cover
+                // La URL de 300 sale de una convención del CDN, no de la API:
+                // si alguna vez no existe, la tapa cae a la de 64 en vez de
+                // quedar rota. El onerror se desarma solo para no ciclar.
+                ? ` onerror="this.onerror=null;this.src='${escapeHtml(r.coverSmall)}'"`
+                : ''}>`
           : `<div class="sc-cover sc-cover-empty">♪</div>`}
-        <div class="sc-card-body">
-          <div class="sc-info">
-            <div class="sc-title">${marqueeSpan(escapeHtml(r.name))}</div>
-            <div class="sc-meta">${escapeHtml(r.artists)}</div>
-            <div class="sc-meta sc-meta-sub">${escapeHtml(r.album)}${r.addedAt ? ` · ${fechaLike(r.addedAt)}` : ''}</div>
-          </div>
-          <div class="sc-actions">
-            <button class="sc-btn sc-play ${playingKey() === `sc:${r.id}` ? 'playing' : ''}" data-i="${i}" title="Preview de 30 s — no suma reproducciones" aria-label="Preview">
-              <svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14"><path d="M8 5v14l11-7z"/></svg>
+        <span class="sc-check-badge" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+        </span>
+      </div>
+      <div class="sc-card-body">
+        <div class="sc-info">
+          <div class="sc-title">${marqueeSpan(escapeHtml(r.name))}</div>
+          <div class="sc-meta">${escapeHtml(r.artists)}</div>
+          <div class="sc-meta sc-meta-sub">${escapeHtml(r.album)}${r.addedAt ? ` · ${fechaLike(r.addedAt)}` : ''}</div>
+        </div>
+        <div class="sc-actions">
+          <button type="button" class="sc-btn sc-play ${playingKey() === `sc:${r.id}` ? 'playing' : ''}" title="Preview de 30 s — no suma reproducciones" aria-label="Preview">
+            <svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14"><path d="M8 5v14l11-7z"/></svg>
+          </button>
+          ${r.trackId ? `
+            <button type="button" class="sc-btn sc-card-btn" title="Ver la ficha del tema" aria-label="Ver ficha">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><line x1="12" y1="11" x2="12" y2="16"/><line x1="12" y1="8" x2="12" y2="8"/></svg>
             </button>
-            <button class="sc-btn sc-add" data-i="${i}" title="Añadir a una playlist">Añadir a…</button>
-            ${r.trackId ? `<a class="sc-btn sc-open" href="https://open.spotify.com/track/${r.trackId}" target="_blank" rel="noopener" title="Abrir en Spotify" aria-label="Abrir en Spotify">↗</a>` : ''}
-            <button class="sc-btn sc-hide" data-i="${i}" title="${showingHidden ? 'Devolver a la lista' : 'Ocultar de la lista (no toca Spotify)'}" aria-label="${showingHidden ? 'Devolver' : 'Ocultar'}">
-              ${showingHidden
-                ? `<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>`
-                : `<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>`}
-            </button>
-          </div>
+          ` : ''}
+          <button type="button" class="sc-btn sc-add" title="Añadir a una playlist">Añadir a…</button>
+          ${r.trackId ? `<a class="sc-btn sc-open" href="https://open.spotify.com/track/${r.trackId}" target="_blank" rel="noopener" title="Abrir en Spotify" aria-label="Abrir en Spotify">↗</a>` : ''}
+          <button type="button" class="sc-btn sc-hide" title="${showingHidden ? 'Devolver a la lista' : 'Ocultar de la lista (no toca Spotify)'}" aria-label="${showingHidden ? 'Devolver' : 'Ocultar'}">
+            ${showingHidden
+              ? `<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>`
+              : `<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>`}
+          </button>
         </div>
       </div>
     </div>
@@ -451,9 +612,11 @@ function wire() {
       timer = setTimeout(() => {
         filterText = search.value;
         const pos = search.selectionStart;
-        renderResults();
+        refreshList();
+        // Si hubo que repintar la vista entera (resultado vacío), el input es
+        // otro nodo y hay que devolverle el foco y el cursor.
         const nuevo = document.getElementById('sc-search');
-        if (nuevo) { nuevo.focus(); nuevo.setSelectionRange(pos, pos); }
+        if (nuevo && nuevo !== search) { nuevo.focus(); nuevo.setSelectionRange(pos, pos); }
       }, 180);
     });
   }
@@ -462,7 +625,7 @@ function wire() {
   if (sort) sort.onchange = () => {
     sortMode = sort.value;
     localStorage.setItem(SORT_KEY, sortMode);
-    renderResults();
+    refreshList();
   };
 
   const toggleHidden = content.querySelector('#sc-toggle-hidden');
@@ -479,57 +642,54 @@ function wire() {
   const excludedBtn = content.querySelector('#sc-excluded-btn');
   if (excludedBtn) excludedBtn.onclick = openExcludedModal;
 
-  content.querySelectorAll('.sc-info').forEach(el => {
-    el.classList.add('tc-clickable');
-    el.title = 'Ver ficha del tema';
-    el.onclick = () => {
-      const r = visible[+el.closest('.sc-card').dataset.i];
-      if (!r || !r.trackId) return;
-      openTrackCard({ id: r.trackId, name: r.name, artist: r.artist, album: r.album, img: r.cover });
-    };
-  });
-
-  content.querySelectorAll('.sc-play').forEach(btn => {
-    btn.onclick = async () => {
-      const r = visible[+btn.dataset.i];
+  // Handlers de tarjeta DELEGADOS en el grid: con append incremental, las
+  // tarjetas del lote 3 en adelante no existen cuando se cablea la vista, así
+  // que un querySelectorAll().forEach dejaría medio listado muerto y sin error.
+  const grid = content.querySelector('#sc-list');
+  if (grid) {
+    grid.addEventListener('click', (e) => {
+      const card = e.target.closest('.sc-card');
+      if (!card) return;
+      const r = rowById.get(card.dataset.id);
       if (!r) return;
-      // getPreview tal cual: la verificación título+artista de v=125 vive ahí
-      // dentro y es la que garantiza que suene ESTA canción.
-      const res = await togglePreview(`sc:${r.id}`, () => getPreview({
-        name: r.name,
-        artist: r.artist,
-        spotifyId: r.trackId || undefined,
-      }));
-      if (res === null) showToast(`Sin preview disponible de «${r.name}»`, 'info');
-    };
-  });
 
-  content.querySelectorAll('.sc-hide').forEach(btn => {
-    btn.onclick = () => {
-      const r = visible[+btn.dataset.i];
-      if (!r) return;
-      hidden.toggle(r.id, r.uri || (r.track?.id ? `spotify:track:${r.track.id}` : null));
-      if (showingHidden && hidden.size === 0) showingHidden = false;
-      renderResults();
-    };
-  });
+      // Los controles cortan acá: tocarlos no selecciona la tarjeta. El ↗ de
+      // Spotify es un <a>, así que no alcanza con mirar los <button>.
+      const control = e.target.closest('button, a');
+      if (control) {
+        if (control.classList.contains('sc-open')) return;   // link externo, que siga
+        e.preventDefault();
+        e.stopPropagation();
+        if (control.classList.contains('sc-play')) onPlayClick(r);
+        else if (control.classList.contains('sc-card-btn')) onCardClick(r);
+        else if (control.classList.contains('sc-add')) openAddModal([r]);
+        else if (control.classList.contains('sc-hide')) onHideClick(r);
+        return;
+      }
 
-  content.querySelectorAll('.sc-add').forEach(btn => {
-    btn.onclick = () => {
-      const r = visible[+btn.dataset.i];
-      if (r) openAddModal([r]);
-    };
-  });
+      toggleSelection(r.id, { range: e.shiftKey });
+    });
 
-  content.querySelectorAll('.sc-check').forEach(cb => {
-    cb.onchange = () => {
-      const r = visible[+cb.dataset.i];
-      if (!r) return;
-      if (cb.checked) selected.add(r.id); else selected.delete(r.id);
-      cb.closest('.sc-card')?.classList.toggle('is-sel', cb.checked);
-      updateSelectionUi();
-    };
-  });
+    // Enter y Espacio togglean la tarjeta enfocada. El Espacio además scrollea
+    // la página por defecto, así que hay que cortarlo.
+    grid.addEventListener('keydown', (e) => {
+      if (e.key !== 'Enter' && e.key !== ' ' && e.key !== 'Spacebar') return;
+      const card = e.target.closest?.('.sc-card');
+      if (!card || e.target.closest('button, a')) return;
+      e.preventDefault();
+      toggleSelection(card.dataset.id, { range: e.shiftKey });
+    });
+  }
+
+  const selAll = content.querySelector('#sc-sel-all');
+  if (selAll) selAll.onclick = () => {
+    // Sobre el array, no sobre las tarjetas pintadas: si mirara el DOM marcaría
+    // 80 de 1.988.
+    const todas = visible.length > 0 && visible.every(r => selected.has(r.id));
+    selected = todas ? new Set() : new Set(visible.map(r => r.id));
+    repaintSelection();
+    updateSelectionUi();
+  };
 
   const selAdd = content.querySelector('#sc-sel-add');
   if (selAdd) selAdd.onclick = () => {
@@ -542,13 +702,62 @@ function wire() {
       hidden.toggle(r.id, r.uri || null);
     }
     selected.clear();
+    lastClickedId = null;
     if (showingHidden && hidden.size === 0) showingHidden = false;
     renderResults();
   };
   const selClear = content.querySelector('#sc-sel-clear');
-  if (selClear) selClear.onclick = () => { selected.clear(); renderResults(); };
+  if (selClear) selClear.onclick = () => {
+    selected.clear();
+    lastClickedId = null;
+    repaintSelection();
+    updateSelectionUi();
+  };
 
   updateSelectionUi();
+}
+
+// ── Selección ────────────────────────────────────────────────────────────────
+
+// shift+click marca el rango desde la última tarjeta que se tocó a mano. Con el
+// Set y el array ordenado sale de dos índices, sin tocar el DOM de por medio.
+function toggleSelection(id, { range = false } = {}) {
+  const r = rowById.get(id);
+  if (!r) return;
+  if (range && lastClickedId && lastClickedId !== id) {
+    const desde = visible.findIndex(x => x.id === lastClickedId);
+    const hasta = visible.findIndex(x => x.id === id);
+    if (desde >= 0 && hasta >= 0) {
+      const [a, b] = desde < hasta ? [desde, hasta] : [hasta, desde];
+      for (let i = a; i <= b; i++) selected.add(visible[i].id);
+      lastClickedId = id;
+      repaintSelection();
+      updateSelectionUi();
+      return;
+    }
+  }
+  if (selected.has(id)) selected.delete(id); else selected.add(id);
+  lastClickedId = id;
+  markCard(id);
+  updateSelectionUi();
+}
+
+function markCard(id) {
+  const card = document.querySelector(`#sc-list .sc-card[data-id="${CSS.escape(id)}"]`);
+  if (!card) return;
+  const sel = selected.has(id);
+  card.classList.toggle('is-sel', sel);
+  card.setAttribute('aria-selected', String(sel));
+}
+
+// Solo repinta el estado de las tarjetas que existen: las de los lotes que
+// falten nacen ya marcadas, porque renderCard lee del Set.
+function repaintSelection() {
+  document.querySelectorAll('#sc-list .sc-card').forEach(card => {
+    const sel = selected.has(card.dataset.id);
+    card.classList.toggle('is-sel', sel);
+    card.setAttribute('aria-selected', String(sel));
+  });
 }
 
 function selectedRows() {
@@ -558,11 +767,77 @@ function selectedRows() {
 
 function updateSelectionUi() {
   const bar = document.getElementById('sc-actionbar');
-  if (!bar) return;
   const n = selected.size;
-  bar.style.display = n > 0 ? '' : 'none';
-  const count = document.getElementById('sc-sel-count');
-  if (count) count.textContent = `${n} seleccionada${n === 1 ? '' : 's'}`;
+  if (bar) {
+    bar.style.display = n > 0 ? '' : 'none';
+    const count = document.getElementById('sc-sel-count');
+    // Cuenta del Set, no de los checkboxes pintados.
+    if (count) count.textContent = `${n} seleccionada${n === 1 ? '' : 's'}`;
+  }
+  const selAll = document.getElementById('sc-sel-all');
+  if (selAll) {
+    selAll.disabled = visible.length === 0;
+    const todas = visible.length > 0 && n >= visible.length && visible.every(r => selected.has(r.id));
+    selAll.textContent = todas ? 'Quitar selección' : 'Seleccionar todas';
+  }
+}
+
+// ── Handlers de tarjeta ──────────────────────────────────────────────────────
+
+async function onPlayClick(r) {
+  // getPreview tal cual: la verificación título+artista de v=125 vive ahí
+  // dentro y es la que garantiza que suene ESTA canción.
+  const res = await togglePreview(`sc:${r.id}`, () => getPreview({
+    name: r.name,
+    artist: r.artist,
+    spotifyId: r.trackId || undefined,
+  }));
+  if (res === null) showToast(`Sin preview disponible de «${r.name}»`, 'info');
+}
+
+// La ficha del tema salía de hacer click en el bloque de texto de la tarjeta.
+// Ahora ese click selecciona, así que la ficha vive SOLO en su botón.
+function onCardClick(r) {
+  if (!r.trackId) return;
+  openTrackCard({ id: r.trackId, name: r.name, artist: r.artist, album: r.album, img: r.coverSmall || r.cover });
+}
+
+function onHideClick(r) {
+  const hadHidden = hidden.size > 0;
+  const wasShowingHidden = showingHidden;
+  hidden.toggle(r.id, r.uri || null);
+  selected.delete(r.id);
+  if (showingHidden && hidden.size === 0) showingHidden = false;
+  // Si aparece o desaparece el botón "Ocultas (N)", o si se sale sola de la
+  // vista de ocultas, hay que repintar la cabecera entera (los contadores
+  // cambian). Si no, alcanza con sacar la fila del array y repintar la lista
+  // conservando el scroll y lo que ya estaba pintado.
+  const structural = ((hidden.size > 0) !== hadHidden) || (showingHidden !== wasShowingHidden);
+  if (structural) { renderResults(); return; }
+  updateSummary();
+  applyRows({ preserveRendered: true });
+}
+
+// El número grande y su leyenda, sin repintar la vista entera (que devolvería
+// al usuario al primer lote).
+function updateSummary() {
+  if (!state) return;
+  const c = document.getElementById('sc-content');
+  const n = c?.querySelector('.sc-summary-n');
+  if (n) n.textContent = state.rows.reduce((acc, x) => acc + (hidden.has(x.id) ? 0 : 1), 0).toLocaleString('es-ES');
+  const t = c?.querySelector('.sc-summary-t');
+  if (t) {
+    const oc = hidden.size;
+    t.textContent = `canciones sin clasificar de ${state.likesCount.toLocaleString('es-ES')} likes${oc > 0 ? ` · ${oc.toLocaleString('es-ES')} oculta${oc === 1 ? '' : 's'}` : ''}`;
+  }
+}
+
+// Cambió el filtro o el orden: la lista se recalcula y pasa por setItems(), sin
+// tocar el DOM a mano. Si el resultado queda vacío hay que repintar la vista
+// entera, porque el mensaje de "nada coincide" ocupa el lugar del grid.
+function refreshList() {
+  if (filtered().length === 0 || !document.getElementById('sc-list')) { renderResults(); return; }
+  applyRows();
 }
 
 // Sincroniza el estado de los botones ▶ con el player global.
@@ -634,7 +909,10 @@ function openAddModal(rows) {
       state.rows = state.rows.filter(r => !fuera.has(r.id));
       for (const id of fuera) selected.delete(id);
       await patchCross(conUri);
-      renderResults();
+      // Conservando el scroll y lo pintado: añadir desde la tarjeta 900 no
+      // puede devolver al usuario al principio de la lista.
+      updateSummary();
+      applyRows({ preserveRendered: true });
     },
   });
 }
