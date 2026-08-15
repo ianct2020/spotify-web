@@ -1,4 +1,4 @@
-import { guardRoute } from './ui/crash-guard.js?v=140';
+import { guardRoute } from './ui/crash-guard.js?v=141';
 
 const routes = {};
 
@@ -16,6 +16,14 @@ function navigate(hash) {
 }
 
 async function handleRoute() {
+  // Teardown transversal: lo que tiene que morir al cambiar de ruta y no
+  // pertenece a ninguna feature en particular. Hoy lo escuchan el reproductor
+  // de previews (si no, el audio sigue sonando en la ruta nueva) y el botón
+  // «Volver arriba» (que tiene que olvidarse del scroller de la vista vieja).
+  // Se dispara SIEMPRE, incluso sin cleanup de ruta anterior: no depende de que
+  // la vista que se va haya registrado uno.
+  document.dispatchEvent(new CustomEvent('routeteardown'));
+
   if (currentCleanup) {
     // El teardown de la ruta anterior NO puede llevarse puesto el cambio de
     // ruta: si tira acá, nos quedamos sin pintar la nueva y con la vieja a

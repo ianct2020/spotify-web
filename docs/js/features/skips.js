@@ -3,20 +3,20 @@
 // Preview 30s instantáneo vía iTunes (arranca en el estribillo, no suma plays
 // en tu historial de Spotify). Fallback: iframe embed oficial si iTunes no lo tiene.
 
-import { getBestAvailableLikes, removeLikedTracks } from '../api.js?v=140';
-import { loadSkipStats, trackIdOf, isOwner, ownerLockedMessage } from './history-data.js?v=140';
-import { escapeHtml, confirmModal, pageHeader } from '../ui/components.js?v=140';
-import { showToast } from '../ui/toast.js?v=140';
-import { getPreview } from '../api/preview-providers.js?v=140';
-import { togglePreview, playingKey } from '../ui/preview-player.js?v=140';
-import { openTrackCard } from './track-card.js?v=140';
-import { activateMarquee } from '../ui/marquee.js?v=140';
-import { hasUsername, loadTopLifetime } from '../api/statsfm.js?v=140';
-import { createHiddenStore } from '../util/hidden-sync.js?v=140';
-import { createIncrementalList, scrollRootOf } from '../ui/incremental-list.js?v=140';
-import { createLazyImages } from '../ui/lazy-img.js?v=140';
-import { renderTrackCardRow, wireTrackCardGrid, paintCardSelection } from '../ui/track-card-row.js?v=140';
-import { coverAtSize } from '../util/cover-size.js?v=140';
+import { getBestAvailableLikes, removeLikedTracks } from '../api.js?v=141';
+import { loadSkipStats, trackIdOf, isOwner, ownerLockedMessage } from './history-data.js?v=141';
+import { escapeHtml, confirmModal, pageHeader } from '../ui/components.js?v=141';
+import { showToast } from '../ui/toast.js?v=141';
+import { getPreview } from '../api/preview-providers.js?v=141';
+import { togglePreview, playingKey } from '../ui/preview-player.js?v=141';
+import { openTrackCard } from './track-card.js?v=141';
+import { activateMarquee } from '../ui/marquee.js?v=141';
+import { hasUsername, loadTopLifetime } from '../api/statsfm.js?v=141';
+import { createHiddenStore } from '../util/hidden-sync.js?v=141';
+import { createIncrementalList, scrollRootOf } from '../ui/incremental-list.js?v=141';
+import { createLazyImages } from '../ui/lazy-img.js?v=141';
+import { renderTrackCardRow, wireTrackCardGrid, paintCardSelection } from '../ui/track-card-row.js?v=141';
+import { coverAtSize } from '../util/cover-size.js?v=141';
 
 let cache = null;
 // Filas visibles con los filtros actuales, en el mismo orden que las tarjetas

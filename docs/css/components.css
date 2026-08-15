@@ -1233,16 +1233,15 @@ body.modal-open {
 }
 /* Hueco para que la barra flotante no tape la última fila. */
 .sc-grid { padding-bottom: 84px; }
-/* En desktop la barra se ajusta a su contenido y el pill del reproductor vive
-   en la esquina de al lado (ver la geometría en main.css). En móvil la barra
-   ocupa el ancho entero, así que ahí sí hay que subirla por encima del pill —
-   mismo recurso (`:has()`) que ya usa `.progress-mini`, sin coordinar por JS. */
+/* La barra flotante no vive en la capa de abajo (se pinta dentro de su vista, y
+   tres features la buscan con `content.querySelector('#…-actionbar')`), pero
+   comparte esquina con ella, así que se coordina por las variables que la capa
+   publica — ver ui/bottom-layer.js. La geometría concreta está en main.css,
+   junto al resto de los números de .main. */
 @media (max-width: 768px) {
-  body:has(.preview-pill.show) .sc-actionbar,
-  body:has(.preview-pill.show) .disco-actionbar {
-    bottom: 92px;
+  .sc-grid {
+    padding-bottom: calc(84px + var(--blayer-h, 0px));
   }
-  body:has(.preview-pill.show) .sc-grid { padding-bottom: 160px; }
 }
 .sc-actionbar #sc-sel-count {
   font-size: 13px;

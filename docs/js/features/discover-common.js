@@ -6,15 +6,15 @@
 //     (util/album-heard.js: historial completo + likes + listened + w-three)
 //   - permiten "+ Biblioteca" y "Crear playlist con lo elegido"
 
-import { idbGetCached, idbSetCached, idbDel } from '../idb.js?v=140';
-import { getArtistAlbums, searchArtistByName, getAlbumTracks, saveToLibrary, createPlaylist, addTracksToPlaylist } from '../api.js?v=140';
-import { albumKey } from '../util/album-key.js?v=140';
-import { escapeHtml } from '../ui/components.js?v=140';
-import { showToast } from '../ui/toast.js?v=140';
-import { openPlaylistPicker } from '../ui/playlist-picker.js?v=140';
-import { getOwnPlaylists, addUrisToPlaylists, toastAddResult } from '../util/playlist-add.js?v=140';
-import { openArtistCard } from './artist-card.js?v=140';
-import { openAlbumCard } from './album-card.js?v=140';
+import { idbGetCached, idbSetCached, idbDel } from '../idb.js?v=141';
+import { getArtistAlbums, searchArtistByName, getAlbumTracks, saveToLibrary, createPlaylist, addTracksToPlaylist } from '../api.js?v=141';
+import { albumKey } from '../util/album-key.js?v=141';
+import { escapeHtml } from '../ui/components.js?v=141';
+import { showToast } from '../ui/toast.js?v=141';
+import { openPlaylistPicker } from '../ui/playlist-picker.js?v=141';
+import { getOwnPlaylists, addUrisToPlaylists, toastAddResult } from '../util/playlist-add.js?v=141';
+import { openArtistCard } from './artist-card.js?v=141';
+import { openAlbumCard } from './album-card.js?v=141';
 
 const DISCO_TTL_MIN = 30 * 24 * 60;       // 30 días
 const ARTIST_ID_TTL_MIN = 60 * 24 * 60;   // 60 días — los ids no cambian

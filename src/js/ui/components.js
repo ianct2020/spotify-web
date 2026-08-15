@@ -1,4 +1,5 @@
 import { openModal, closeTop } from './modal-stack.js';
+import { mountBottomHtml } from './bottom-layer.js';
 
 function renderTrackRow(track, extra = '') {
   const art = track.album?.images?.[2]?.url || track.album?.images?.[0]?.url || '';
@@ -104,7 +105,14 @@ function showProgress(text, loaded = 0, total = 0, opts = {}) {
 
   if (!overlay || overlay.dataset.mode !== mode || (overlay.dataset.cancellable === '1') !== cancellable) {
     const html = renderProgressOverlay(text, loaded, total, cancellable, _progressMin);
-    if (overlay) overlay.outerHTML = html;
+    // El minimizado (el pill de "Cargando tracks de X… 900/9.214") va en la
+    // capa de abajo, apilado con el player y los toasts. El modo completo NO:
+    // es un overlay `inset: 0` que tapa la pantalla entera y no tiene nada que
+    // hacer dentro de una columna. Por eso se re-monta en vez de usar
+    // `outerHTML`, que dejaría el nodo nuevo en el padre del viejo al cambiar
+    // de modo.
+    if (overlay) overlay.remove();
+    if (_progressMin) mountBottomHtml('progress', html);
     else document.body.insertAdjacentHTML('beforeend', html);
     wireProgressButtons();
     return;

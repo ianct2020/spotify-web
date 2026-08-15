@@ -12,6 +12,8 @@
 // Un caller puede forzar el comportamiento pasando `duration`: un número de ms
 // para que se cierre solo, o 0 / Infinity para que se quede.
 
+import { mountBottom } from './bottom-layer.js?v=141';
+
 const WRITE_DURATION_MS = 30000;
 const INFO_DURATION_MS = 8000;
 const MAX_VISIBLE = 3;
@@ -22,9 +24,11 @@ function ensureContainer() {
   if (!c) {
     c = document.createElement('div');
     c.className = 'toast-container';
-    document.body.appendChild(c);
   }
-  return c;
+  // Siempre en el slot 'toasts' de la capa de abajo: ya no se posiciona solo
+  // (era `fixed` en la misma esquina que el player y el progreso, y con los
+  // tres a la vez se tapaban). `mountBottom` es idempotente.
+  return mountBottom('toasts', c);
 }
 
 function showToast(message, type = 'info', duration) {

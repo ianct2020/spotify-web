@@ -9,6 +9,7 @@
 
 import { escapeHtml } from './components.js';
 import { showToast } from './toast.js';
+import { mountBottom } from './bottom-layer.js';
 
 const audio = new Audio();
 audio.preload = 'none';
@@ -47,8 +48,20 @@ function ensurePill() {
     <button class="preview-pill-close" title="Parar preview">✕</button>
   `;
   pill.querySelector('.preview-pill-close').onclick = () => stopPreview();
-  document.body.appendChild(pill);
+  // El pill ya no se posiciona solo: es un item más de la capa de abajo, que
+  // es la que garantiza que no se pise con el progreso ni con los toasts.
+  mountBottom('player', pill);
   return pill;
+}
+
+// Las tres barritas del ecualizador se mueven SOLO cuando hay audio sonando de
+// verdad. La clase la ponen y la sacan los eventos del <audio>, no un timer
+// aparte: si el audio se pausa, se traba buffereando o se acaba, la animación
+// para en el mismo momento. Con el embed de Spotify no hay ninguna señal de
+// reproducción desde el iframe, así que ahí las barritas quedan quietas a
+// propósito (ver `showPillEmbed`, que ni siquiera las muestra).
+function setEqPlaying(on) {
+  if (pill) pill.classList.toggle('is-playing', !!on);
 }
 
 function showPillAudio(label, provider, loading) {
@@ -62,6 +75,8 @@ function showPillAudio(label, provider, loading) {
   const provEl = p.querySelector('.preview-pill-provider');
   provEl.textContent = loading ? 'buscando…' : '';
   p.classList.toggle('loading', !!loading);
+  // Quietas hasta que el <audio> avise que está sonando de verdad.
+  p.classList.remove('is-playing');
   p.classList.add('show');
 }
 
@@ -83,6 +98,7 @@ function showPillEmbed(url, label) {
 function hidePill() {
   if (pill) {
     pill.classList.remove('show');
+    pill.classList.remove('is-playing');
     // Limpia el iframe para que no siga cargando/reproduciendo en background
     const box = pill.querySelector('.preview-pill-embed');
     if (box) { box.innerHTML = ''; box.hidden = true; }
@@ -96,6 +112,16 @@ audio.addEventListener('ended', () => {
   hidePill();
   emit();
 });
+
+// Arranque y parada de las barritas, enganchados al audio real.
+// `playing` es el que avisa de que efectivamente está SONANDO (`play` solo
+// dice que se pidió reproducir); `waiting` es que se quedó sin buffer.
+audio.addEventListener('playing', () => setEqPlaying(true));
+audio.addEventListener('play', () => setEqPlaying(!audio.paused));
+audio.addEventListener('pause', () => setEqPlaying(false));
+audio.addEventListener('waiting', () => setEqPlaying(false));
+audio.addEventListener('stalled', () => setEqPlaying(false));
+audio.addEventListener('emptied', () => setEqPlaying(false));
 
 function playAudio(key, { url, label, provider }) {
   currentKey = key;
@@ -192,5 +218,25 @@ function attachHover(el, key, getter, delay = 400) {
   el.addEventListener('mouseenter', () => hoverIn(key, getter, delay));
   el.addEventListener('mouseleave', () => hoverOut());
 }
+
+// ── Teardown: el preview NO puede sobrevivir a salir de donde se lanzó ──
+//
+// Esto va acá y no en cada feature justamente porque el bug era que cada
+// feature tenía que acordarse. Se engancha a dos señales transversales:
+//
+//   - 'routeteardown', que dispara el router en CADA cambio de ruta (router.js),
+//     antes de correr el cleanup de la vista que se va;
+//   - 'modalstackempty', que dispara ui/modal-stack.js cuando se cierra el
+//     último modal de la pila (o sea: se cerró la ficha).
+//
+// Se escucha por evento y no importando las funciones al revés para no armar
+// un ciclo de imports: components.js ya importa modal-stack.js y este módulo
+// importa components.js.
+//
+// La señal de modal es "la pila quedó VACÍA", no "se cerró un modal
+// cualquiera": si estás oyendo un preview lanzado desde una lista y encima se
+// abre y se cierra el selector de playlists, el audio no tiene por qué cortarse.
+document.addEventListener('routeteardown', () => stopPreview());
+document.addEventListener('modalstackempty', () => stopPreview());
 
 export { togglePreview, stopPreview, playingKey, playingProvider, hoverIn, hoverOut, attachHover };
