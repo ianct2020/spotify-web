@@ -10,11 +10,13 @@ import { showToast } from '../ui/toast.js';
 import { getPreview } from '../api/preview-providers.js';
 import { togglePreview, playingKey } from '../ui/preview-player.js';
 import { openTrackCard } from './track-card.js';
-import { activateMarquee, marqueeSpan } from '../ui/marquee.js';
+import { activateMarquee } from '../ui/marquee.js';
 import { hasUsername, loadTopLifetime } from '../api/statsfm.js';
 import { createHiddenStore } from '../util/hidden-sync.js';
 import { createIncrementalList, scrollRootOf } from '../ui/incremental-list.js';
 import { createLazyImages } from '../ui/lazy-img.js';
+import { renderTrackCardRow, wireTrackCardGrid, paintCardSelection } from '../ui/track-card-row.js';
+import { coverAtSize } from '../util/cover-size.js';
 
 let cache = null;
 // Filas visibles con los filtros actuales, en el mismo orden que las tarjetas
@@ -137,10 +139,8 @@ async function analyze() {
 function refreshAfterHiddenSync() {
   if (!cache) return;
   if (!list) { renderResults(); return; }
-  const hasBtn = !!document.querySelector('#sk-toggle-hidden');
-  const needsBtn = hiddenTracks.size > 0 || showingHidden;
-  if (hasBtn !== needsBtn) renderResults();
-  else applyRows({ preserveRendered: true });
+  syncHiddenToggle();
+  applyRows({ preserveRendered: true });
 }
 
 function filtered() {
@@ -170,6 +170,38 @@ function applyRows({ preserveRendered = false } = {}) {
     list.setItems(currentRows, { preserveRendered });
   }
   updateCounters();
+}
+
+// El toggle "Ocultos (N)" solo existe si hay algo oculto (o si estás mirando
+// los ocultos). Vive en su propia función porque aparecer y desaparecer NO
+// puede costar un repintado de la vista: era eso lo que devolvía el scroll al
+// principio la primera vez que ocultabas una pista estando abajo.
+function hiddenToggleHtml(n) {
+  if (!(n > 0 || showingHidden)) return '';
+  return `<button class="btn btn-secondary btn-sm ${showingHidden ? 'sort-active' : ''}" id="sk-toggle-hidden" title="${showingHidden ? 'Volver a la vista normal' : 'Ver solo los que ocultaste'}">${showingHidden ? '← Volver' : 'Ocultos (' + n + ')'}</button>`;
+}
+
+// Mete o saca el toggle en el sitio y lo deja cableado. Devuelve true si la
+// presencia del botón cambió.
+function syncHiddenToggle() {
+  const actions = document.getElementById('sk-actions');
+  if (!actions) return false;
+  const actual = actions.querySelector('#sk-toggle-hidden');
+  const html = hiddenToggleHtml(hiddenTracks.size);
+  if (!html) {
+    if (!actual) return false;
+    actual.remove();
+    return true;
+  }
+  if (actual) { actual.outerHTML = html; }
+  else { actions.insertAdjacentHTML('afterbegin', html); }
+  wireHiddenToggle();
+  return !actual;
+}
+
+function wireHiddenToggle() {
+  const btn = document.getElementById('sk-toggle-hidden');
+  if (btn) btn.onclick = () => { showingHidden = !showingHidden; renderResults(); };
 }
 
 function updateCounters() {
@@ -241,10 +273,8 @@ function renderResults() {
             <span>${escapeHtml(sfLabel)}</span>
           </button>
         ` : ''}
-        <div class="skips-topbar-actions">
-          ${hiddenCount > 0 || showingHidden ? `
-            <button class="btn btn-secondary btn-sm ${showingHidden ? 'sort-active' : ''}" id="sk-toggle-hidden" title="${showingHidden ? 'Volver a la vista normal' : 'Ver solo los que ocultaste'}">${showingHidden ? '← Volver' : 'Ocultos (' + hiddenCount + ')'}</button>
-          ` : ''}
+        <div class="skips-topbar-actions" id="sk-actions">
+          ${hiddenToggleHtml(hiddenCount)}
           <button class="btn btn-secondary btn-sm" id="sk-select-all" ${rows.length === 0 ? 'disabled' : ''}>Seleccionar todos</button>
           <button class="btn btn-danger btn-sm" id="sk-remove" disabled>Sacar de likes (0)</button>
         </div>
@@ -254,7 +284,7 @@ function renderResults() {
     ${rows.length === 0 ? `
       <div class="card"><p style="text-align:center;color:var(--color-text-muted);margin:0">${showingHidden ? 'No hay tracks ocultos que cumplan los umbrales actuales.' : 'Ningún like cumple los umbrales. Bajá los filtros para ver más candidatos.'}</p></div>
     ` : `
-      <div class="skips-grid" id="skips-list"></div>
+      <div class="skips-grid sc-grid" id="skips-list" role="listbox" aria-multiselectable="true" aria-label="Skips crónicos"></div>
     `}
   `;
 
@@ -284,7 +314,7 @@ function renderResults() {
         perf.batches.push({ added, rendered, total, ms: +ms.toFixed(1) });
         // Marquee solo sobre lo recién insertado: medir toda la lista en cada
         // lote sería cuadrático y son medidas de layout, de las caras.
-        const nuevas = grid.querySelectorAll('.skips-card:not([data-mq])');
+        const nuevas = grid.querySelectorAll('.sc-card:not([data-mq])');
         nuevas.forEach(c => c.setAttribute('data-mq', '1'));
         lazyCovers?.observe(nuevas);
         activateMarquee(nuevas);
@@ -307,62 +337,61 @@ function renderResults() {
   perf.syncMs = +(performance.now() - t0).toFixed(1);
 }
 
-// Tarjeta por track (v=123): reemplaza a las dos listas de filas anchas, que
-// en 2 columnas dejaban la derecha con solo la tapa y el porcentaje. En grid
-// de tarjetas entran 20+ tracks en pantalla y todos se leen igual de bien.
+// La tarjeta es la MISMA que la de `#sin-clasificar` desde v=140:
+// `ui/track-card-row.js`, tapa de 96px y selección de la tarjeta entera. Lo
+// único propio de esta vista es el badge del ratio, que va antes de los botones,
+// y el slot del embed de Spotify, que se cuelga al final de la tarjeta.
+//
 // Se identifica por `data-id` y no por índice: con la lista incremental las
 // tarjetas se appendean en tandas y los handlers están delegados en el grid, así
 // que cada una tiene que poder resolver su fila sola (rowById).
 function renderRow(r) {
   const imgs = r.track.album?.images || [];
-  const cover = imgs[2]?.url || imgs[1]?.url || imgs[0]?.url || null;
-  const artists = (r.track.artists || []).map(a => a.name || a).join(', ');
-  const album = r.track.album?.name ? ` · ${escapeHtml(r.track.album.name)}` : '';
+  // La de ~300 para pintar a 96. Las cachés viejas de likes y el backup del
+  // repo solo tienen la de 64: ahí se deduce del prefijo del CDN y la de 64
+  // queda de `onerror` (ver util/cover-size.js).
+  const chica = imgs.length ? (imgs[imgs.length - 1].url || null) : null;
+  const media = imgs.find(im => (im.width || 0) >= 240 && (im.width || 0) <= 400)
+    || imgs.find(im => (im.width || 0) >= 240);
+  const cover = media?.url || (chica ? coverAtSize(chica, 300) : null);
+
   const ratioClass = r.ratio >= 90 ? 'skips-badge-danger' : 'skips-badge-warn';
   const badgeTitle = r.updated
     ? `Ratio actualizado con Stats.fm (${r.skip} skips de ${r.total} plays totales hoy)`
     : `Skipeaste ${r.skip} de ${r.total} veces`;
+  const badge = `
+    <span class="skips-badge ${ratioClass}${r.updated ? ' skips-badge-updated' : ''}" title="${escapeHtml(badgeTitle)}">
+      <span class="skips-badge-ratio">${r.ratio}%</span>
+      <span class="skips-badge-count">${r.skip}/${r.total}</span>
+    </span>`;
 
-  return `
-    <div class="skips-card" data-id="${r.id}">
-      <div class="skips-card-main">
-        <div class="skips-card-cover">
-          ${cover
-            ? `<img data-src="${cover}" alt="" width="56" height="56" decoding="async" class="skips-cover">`
-            : `<div class="skips-cover skips-cover-empty">♪</div>`}
-          <label class="skips-card-sel" title="Seleccionar">
-            <input type="checkbox" class="sk-cb skips-check"${selectedIds.has(r.id) ? ' checked' : ''}>
-          </label>
-        </div>
-        <div class="skips-card-body">
-          <div class="skips-info tc-clickable" title="Ver ficha del tema">
-            <div class="skips-title">${marqueeSpan(escapeHtml(r.track.name || '(sin nombre)'))}</div>
-            <div class="skips-meta">${escapeHtml(artists)}${album}</div>
-          </div>
-          <div class="skips-card-foot">
-            <span class="skips-badge ${ratioClass}${r.updated ? ' skips-badge-updated' : ''}" title="${badgeTitle}">
-              <span class="skips-badge-ratio">${r.ratio}%</span>
-              <span class="skips-badge-count">${r.skip}/${r.total}</span>
-            </span>
-            <div class="skips-card-actions">
-              <button class="skips-play-btn ${playingKey() === `sk:${r.id}` ? 'playing' : ''}" data-id="${r.id}" title="Preview 30s — no suma plays en tu historial" aria-label="Preview">
-                <svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14"><path d="M8 5v14l11-7z"/></svg>
-              </button>
-              <a href="https://open.spotify.com/track/${r.id}" target="_blank" rel="noopener" class="skips-open" title="Abrir en Spotify" aria-label="Abrir en Spotify">
-                <span class="skips-open-arrow">↗</span>
-              </a>
-              <button class="wthree-hide-btn sk-hide-btn" data-id="${r.id}" title="${showingHidden ? 'Restaurar en la lista' : 'Ocultar de la lista'}" aria-label="${showingHidden ? 'Restaurar' : 'Ocultar'}">
-                ${showingHidden
-                  ? `<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>`
-                  : `<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>`}
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-      <div class="skips-preview-slot" data-id="${r.id}"></div>
-    </div>
-  `;
+  return renderTrackCardRow(
+    {
+      id: r.id,
+      trackId: r.id,
+      name: r.track.name,
+      artists: (r.track.artists || []).map(firstArtistName).filter(Boolean).join(', '),
+      sub: r.track.album?.name || '',
+      cover,
+      coverSmall: chica,
+    },
+    {
+      selected: selectedIds.has(r.id),
+      playing: playingKey() === `sk:${r.id}`,
+      hidden: showingHidden,
+      badge,
+      extra: `<div class="skips-preview-slot" data-id="${r.id}"></div>`,
+    },
+  );
+}
+
+// Ojo con el `a.name || a`: hay un like con `artists: [{ id: …, name: "" }]`
+// (nombre vacío, no ausente) y ese patrón devuelve el OBJETO artista. Acá solo
+// pintaría `[object Object]`, pero en `#sin-clasificar` el mismo bug tiraba
+// abajo el orden «Por artista» (v=138). Unificado.
+function firstArtistName(a) {
+  const n = (a && typeof a === 'object') ? a.name : a;
+  return typeof n === 'string' ? n : '';
 }
 
 function wireFilters() {
@@ -398,57 +427,39 @@ function wireRows() {
     // marcaría 80 de 1.322.
     const allSelected = currentRows.length > 0 && currentRows.every(r => selectedIds.has(r.id));
     selectedIds = allSelected ? new Set() : new Set(currentRows.map(r => r.id));
-    if (grid) grid.querySelectorAll('.sk-cb').forEach(cb => {
-      cb.checked = selectedIds.has(cb.closest('.skips-card')?.dataset.id);
+    // Solo repinta lo que existe: las tarjetas de los lotes que falten nacen ya
+    // marcadas, porque renderRow lee del Set.
+    if (grid) grid.querySelectorAll('.sc-card').forEach(card => {
+      paintCardSelection(card, selectedIds.has(card.dataset.id));
     });
     updateRemoveBtn();
   };
 
-  if (grid) {
-    grid.addEventListener('change', (e) => {
-      const cb = e.target.closest('.sk-cb');
-      if (!cb) return;
-      const id = cb.closest('.skips-card')?.dataset.id;
-      if (!id) return;
-      if (cb.checked) selectedIds.add(id); else selectedIds.delete(id);
+  // La tarjeta entera es el control de selección (no hay checkbox): el click
+  // sobre un botón corta antes de llegar al toggle, y Enter/Espacio togglean la
+  // tarjeta enfocada. Todo delegado en el grid, ver ui/track-card-row.js.
+  wireTrackCardGrid(grid, {
+    rowById: (id) => rowById.get(id),
+    onToggle: (id) => {
+      if (selectedIds.has(id)) selectedIds.delete(id); else selectedIds.add(id);
+      paintCardSelection(grid.querySelector(`.sc-card[data-id="${CSS.escape(id)}"]`), selectedIds.has(id));
       updateRemoveBtn();
-    });
+    },
+    onPlay: (r, card) => onPlayClick(r, card.querySelector('.sc-play')),
+    onCard: (r) => {
+      const imgs = r.track.album?.images || [];
+      openTrackCard({
+        id: r.id,
+        name: r.track.name,
+        artist: (r.track.artists || []).map(firstArtistName).filter(Boolean)[0] || '',
+        album: r.track.album?.name,
+        img: imgs[imgs.length - 1]?.url || imgs[0]?.url,
+      });
+    },
+    onHide: (r) => onHideClick(r.id),
+  });
 
-    grid.addEventListener('click', (e) => {
-      const card = e.target.closest('.skips-card');
-      if (!card) return;
-      const r = rowById.get(card.dataset.id);
-      if (!r) return;
-
-      if (e.target.closest('.skips-open')) return;          // link a Spotify, que siga
-      if (e.target.closest('.skips-card-sel')) return;      // checkbox, lo maneja 'change'
-
-      const playBtn = e.target.closest('.skips-play-btn');
-      if (playBtn) { e.preventDefault(); e.stopPropagation(); onPlayClick(r, playBtn); return; }
-
-      const hideBtn = e.target.closest('.sk-hide-btn');
-      if (hideBtn) { e.preventDefault(); e.stopPropagation(); onHideClick(r.id); return; }
-
-      if (e.target.closest('.skips-info')) {
-        e.preventDefault();
-        e.stopPropagation();
-        const imgs = r.track.album?.images || [];
-        openTrackCard({
-          id: r.id,
-          name: r.track.name,
-          artist: (r.track.artists || []).map(a => a.name || a)[0] || '',
-          album: r.track.album?.name,
-          img: imgs[2]?.url || imgs[1]?.url || imgs[0]?.url,
-        });
-      }
-    });
-  }
-
-  const hideToggle = content.querySelector('#sk-toggle-hidden');
-  if (hideToggle) hideToggle.onclick = () => {
-    showingHidden = !showingHidden;
-    renderResults();
-  };
+  wireHiddenToggle();
 
   rmBtn.onclick = async () => {
     const ids = currentRows.filter(r => selectedIds.has(r.id)).map(r => r.id);
@@ -495,17 +506,20 @@ async function onPlayClick(r, btn) {
 }
 
 function onHideClick(id) {
-  const hadHidden = hiddenTracks.size > 0;
   const wasShowingHidden = showingHidden;
   hiddenTracks.toggle(id, `spotify:track:${id}`);
   if (showingHidden && hiddenTracks.size === 0) showingHidden = false;
-  // Si aparece o desaparece el botón "Ocultos (N)", o si se sale sola de la
-  // vista de ocultos, hay que repintar la topbar entera. Si no, alcanza con
-  // sacar la fila del array y repintar la lista conservando el scroll y lo que
-  // ya estaba pintado.
-  const structural = ((hiddenTracks.size > 0) !== hadHidden) || (showingHidden !== wasShowingHidden);
-  if (structural) renderResults();
-  else applyRows({ preserveRendered: true });
+
+  // Salirse sola de la vista de ocultos SÍ cambia la vista entera (cambia el
+  // conjunto que se muestra y el icono de todas las tarjetas), así que ahí se
+  // repinta. En el caso normal —ocultar una pista— la lista se recalcula
+  // conservando el scroll y lo que ya estaba pintado, y el toggle "Ocultos (N)"
+  // aparece o se actualiza en el sitio. Antes, la PRIMERA vez que ocultabas
+  // algo el botón nacía y eso disparaba un repintado completo: estando abajo
+  // del todo, la lista te devolvía al principio.
+  if (showingHidden !== wasShowingHidden) { renderResults(); return; }
+  syncHiddenToggle();
+  applyRows({ preserveRendered: true });
 }
 
 // Sincroniza el estado .playing de los botones con el player global.
@@ -514,8 +528,9 @@ document.addEventListener('previewchange', (e) => {
   const content = document.getElementById('skips-content');
   if (!content) return;
   const key = e.detail.key || '';
-  content.querySelectorAll('.skips-play-btn').forEach(b => {
-    b.classList.toggle('playing', key === `sk:${b.dataset.id}`);
+  content.querySelectorAll('#skips-list .sc-card').forEach(card => {
+    const btn = card.querySelector('.sc-play');
+    if (btn) btn.classList.toggle('playing', key === `sk:${card.dataset.id}`);
   });
 });
 

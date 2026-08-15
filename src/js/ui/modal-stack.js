@@ -14,6 +14,13 @@
 // Dedup: si `id` ya está en la pila, cerramos los modales que están encima
 // hasta dejar ese como top (y lo revelamos) — no apilamos duplicado.
 // Tope de profundidad: MAX_DEPTH; si se supera, cerramos el de más abajo.
+//
+// Cerrar POR HANDLE: `closeModal(overlay)` cierra EXACTAMENTE el modal que
+// devolvió `openModal`, no "el de arriba de la pila". Es lo que necesita
+// cualquier flujo asíncrono que abre un modal, se va a esperar algo y quiere
+// cerrar el suyo al volver: entre medio el usuario pudo haber abierto otro, y
+// `closeTop()` le cerraría ese. Si el modal ya no está en la pila, no hace
+// nada; si está enterrado, sale del medio sin tocar a los de arriba.
 
 const MAX_DEPTH = 5;
 
@@ -210,6 +217,11 @@ function getStack() {
 // Cierra un modal por id (y todos los que quedaron por encima). Útil cuando
 // una feature quiere cerrar su propio modal sin importar si otro se apiló
 // después (raro, pero pasa con confirmaciones anidadas).
+//
+// OJO: el id NO identifica una apertura concreta. W-Three, por ejemplo, usa el
+// mismo id para el modal de cualquier álbum, así que `closeById` desde un
+// guardado asíncrono cierra el álbum que esté abierto AHORA, no el que se
+// guardó. Para eso está `closeModal(overlay)`.
 function closeById(id) {
   const idx = findIndexById(id);
   if (idx < 0) return false;
@@ -217,4 +229,28 @@ function closeById(id) {
   return true;
 }
 
-export { openModal, closeTop, closeAll, getStack, closeById };
+// Cierra el modal identificado por el overlay que devolvió `openModal`.
+// Devuelve true si lo cerró, false si ese modal ya no estaba en la pila (que es
+// el caso normal cuando el usuario lo cerró a mano mientras esperábamos).
+function closeModal(overlay) {
+  if (!overlay) return false;
+  const idx = stack.findIndex(e => e.overlay === overlay);
+  if (idx < 0) return false;
+
+  // Si es el top, es un closeTop normal (revela el de abajo, suelta el body).
+  if (idx === stack.length - 1) { closeTop(); return true; }
+
+  // Enterrado: sale del medio y los de arriba se quedan como están. No hay que
+  // revelar nada (el top sigue siendo el top) ni tocar el scroll-lock (la pila
+  // no queda vacía). Los z-index de los de arriba ya son mayores, así que
+  // sacarle uno de abajo no cambia el apilado.
+  const [entry] = stack.splice(idx, 1);
+  if (entry.onClose) {
+    try { entry.onClose(); } catch { /* noop */ }
+  }
+  entry.overlay.remove();
+  updateBackArrows();
+  return true;
+}
+
+export { openModal, closeTop, closeAll, getStack, closeById, closeModal };

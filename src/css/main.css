@@ -2440,9 +2440,6 @@ body:has(.preview-pill.show) .progress-mini {
   .skips-stat-label { font-size: 10px !important; line-height: 1.25; }
   .skips-filters { padding: 10px 12px; gap: 10px; }
   .skips-grid { grid-template-columns: minmax(0, 1fr); max-height: none; overflow-y: visible; gap: 8px; }
-  .skips-card-main { grid-template-columns: 48px minmax(0, 1fr); padding: 8px; }
-  .skips-card-cover, .skips-cover { width: 48px; height: 48px; }
-  .skips-title { font-size: 13px; }
   .skips-badge { padding: 3px 7px; }
   .skips-badge-ratio { font-size: 12px; }
 
@@ -3056,7 +3053,6 @@ body:has(.preview-pill.show) .progress-mini {
 
 /* Filas clickeables que abren la ficha */
 .tc-clickable { cursor: pointer; }
-.tc-clickable:hover .skips-title,
 .tc-clickable:hover .track-name { color: var(--color-accent); }
 
 /* ============ Vista #covers — grid denso de tapas (v=111) ============ */

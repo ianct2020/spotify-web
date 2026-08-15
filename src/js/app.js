@@ -6,6 +6,7 @@ import { idbClearAll } from './idb.js';
 import { registerRoute, initRouter } from './router.js';
 import { showToast } from './ui/toast.js';
 import { pageHeader } from './ui/components.js';
+import { installCrashGuard } from './ui/crash-guard.js';
 
 import { render as renderSync } from './features/sync.js';
 import { render as renderDedupe } from './features/dedupe.js';
@@ -576,6 +577,11 @@ async function renderDebug(container) {
 // El bloqueo de scroll con modales lo maneja src/js/ui/modal-stack.js
 // (mete/quita body.modal-open + guarda scrollY). Ya no hace falta el
 // MutationObserver que había acá antes.
+
+// Último recurso contra la pantalla en blanco: cualquier error o promesa sin
+// catch que se escape pinta un cartel con botón de recargar. Se instala ANTES
+// de init() para cubrir también el arranque. Ver ui/crash-guard.js.
+installCrashGuard();
 
 // PWA: registra el service worker (path relativo → scope /spotify-web/ en Pages).
 // Con esto Chrome ofrece "Instalar Fonoteca" y los estáticos quedan offline.

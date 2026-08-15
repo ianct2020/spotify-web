@@ -2,18 +2,18 @@
 // por álbum). Muestra qué álbumes ya tienen picks, cuántos, y cuáles te faltan.
 // Ordenado por álbumes más escuchados primero para priorizar tu tiempo.
 
-import { spotifyFetch, getAllPlaylistItems, getAllUserPlaylists, addTracksToPlaylist, removeTracksFromPlaylist, reorderPlaylistItems, getPlaylistSnapshotId, getCachedPlaylistSnapshot, updatePlaylistItemsCache, getBestAvailableLikes } from '../api.js?v=139';
-import { loadHistoryStats, loadListenedAlbums, isOwner, ownerLockedMessage } from './history-data.js?v=139';
-import { escapeHtml, pageHeader } from '../ui/components.js?v=139';
-import { showToast } from '../ui/toast.js?v=139';
-import { activateMarquee, marqueeSpan } from '../ui/marquee.js?v=139';
-import { openModal, closeTop, closeById } from '../ui/modal-stack.js?v=139';
-import { getPreview } from '../api/preview-providers.js?v=139';
-import { togglePreview, playingKey } from '../ui/preview-player.js?v=139';
-import { openAlbumCard } from './album-card.js?v=139';
-import { albumKey } from '../util/album-key.js?v=139';
-import { computeUpdatedPickPositions } from '../util/reorder-shifts.js?v=139';
-import { createHiddenStore } from '../util/hidden-sync.js?v=139';
+import { spotifyFetch, getAllPlaylistItems, getAllUserPlaylists, addTracksToPlaylist, removeTracksFromPlaylist, reorderPlaylistItems, getPlaylistSnapshotId, getCachedPlaylistSnapshot, updatePlaylistItemsCache, getBestAvailableLikes } from '../api.js?v=140';
+import { loadHistoryStats, loadListenedAlbums, isOwner, ownerLockedMessage } from './history-data.js?v=140';
+import { escapeHtml, pageHeader } from '../ui/components.js?v=140';
+import { showToast } from '../ui/toast.js?v=140';
+import { activateMarquee, marqueeSpan } from '../ui/marquee.js?v=140';
+import { openModal, closeById, closeModal } from '../ui/modal-stack.js?v=140';
+import { getPreview } from '../api/preview-providers.js?v=140';
+import { togglePreview, playingKey } from '../ui/preview-player.js?v=140';
+import { openAlbumCard } from './album-card.js?v=140';
+import { albumKey } from '../util/album-key.js?v=140';
+import { computeUpdatedPickPositions } from '../util/reorder-shifts.js?v=140';
+import { createHiddenStore } from '../util/hidden-sync.js?v=140';
 
 const LS_KEY_ID = 'wthree_playlist_id';
 const LS_KEY_NAME = 'wthree_playlist_name';
@@ -858,8 +858,11 @@ async function openAlbumModal(a) {
       showToast('No hay cambios', 'info');
       return;
     }
-    closeById(modalId);
-    saveInBackground(a, orderedPicks, origOrder);
+    // El modal se cierra acá y el guardado sigue solo. Igual le pasamos el
+    // handle: si algún día el cierre deja de ser inmediato, el guardado tiene
+    // que cerrar EL SUYO y no el álbum que el usuario abrió mientras tanto.
+    closeModal(overlay);
+    saveInBackground(a, orderedPicks, origOrder, overlay);
   };
 }
 
@@ -1011,10 +1014,10 @@ function updateSavingPill(label) {
   pill.innerHTML = `<span class="wt-saving-spinner" aria-hidden="true"></span><span>${escapeHtml(texto)}</span>`;
 }
 
-function saveInBackground(a, orderedPicks, origOrder) {
+function saveInBackground(a, orderedPicks, origOrder, modalOverlay = null) {
   savingCount++;
   updateSavingPill(a.name);
-  applyChanges(a, null, orderedPicks, origOrder)
+  applyChanges(a, null, orderedPicks, origOrder, modalOverlay)
     .then(async (ok) => {
       if (ok) return;
       // Falló: el estado del servidor puede haber quedado a medias (por ejemplo
@@ -1060,7 +1063,12 @@ function computeDiff(orderedPicks, origOrder) {
 // `saveBtn` puede venir en null: cuando el guardado corre en segundo plano el
 // modal ya está cerrado y no hay botón que actualizar. Devuelve true/false para
 // que quien la invoque sepa si terminó bien (la lógica de dentro no cambió).
-async function applyChanges(a, saveBtn, orderedPicks, origOrder) {
+//
+// `modalOverlay` es el handle del modal que disparó ESTE guardado. Al terminar
+// se cierra ese y nada más: antes se hacía `closeById('wthree-album-modal')`,
+// que es el id compartido por el modal de cualquier álbum, así que si el
+// usuario abría otro álbum mientras guardaba, al terminar se le cerraba ese.
+async function applyChanges(a, saveBtn, orderedPicks, origOrder, modalOverlay = null) {
   const { toAddUris, toRemoveUris, orderChanged, noChanges } = computeDiff(orderedPicks, origOrder);
   if (noChanges) {
     showToast('No hay cambios', 'info');
@@ -1199,7 +1207,9 @@ async function applyChanges(a, saveBtn, orderedPicks, origOrder) {
       ? `Orden actualizado (${moveCount} movimiento${moveCount === 1 ? '' : 's'}, ${(elapsed / 1000).toFixed(1)}s)`
       : `Playlist actualizada: +${toAddUris.length} · -${toRemoveUris.length} (${(elapsed / 1000).toFixed(1)}s)`;
     showToast(msg, 'success');
-    closeById('wthree-album-modal');
+    // Solo el modal de ESTE álbum. Si ya lo cerró el usuario (o el propio
+    // handler del botón, que es lo normal), no hace nada.
+    closeModal(modalOverlay);
 
     // Rerender local optimista: actualizamos picksByAlbum y albumsList del
     // álbum tocado, sin refetch bloqueante. Refleja el nuevo estado al toque.

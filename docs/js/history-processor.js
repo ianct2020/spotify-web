@@ -9,14 +9,14 @@
 //
 // Devuelve la misma forma que los JSONs del repo (mismos `version` numbers).
 
-import { isJunkTrack } from './util/junk.js?v=139';
+import { isJunkTrack } from './util/junk.js?v=140';
 
 // ---- Configuración (igual a gen-stats.py) ----
 const MIN_MS = 30000;
 const SKIP_MIN_MS = 5000;
 const SKIP_STATS_MIN_PLAYS = 3;
 const STATS_VERSION = 2;
-const TRACK_PLAYS_VERSION = 3;
+const TRACK_PLAYS_VERSION = 4;   // v4: cada álbum de `albums` lleva plays y ms (espejo de gen-stats.py)
 const SKIP_STATS_VERSION = 1;
 const LISTENED_VERSION = 2;
 const TRACK_DETAIL_VERSION = 1;
@@ -592,9 +592,13 @@ function processStreamingHistory(fileArrays, { onProgress } = {}) {
     milestones,
   };
 
+  // [name, artist, plays, ms]. Los dos primeros campos NO se mueven: album-heard.js
+  // desestructura `[name, artist]` y tiene que seguir andando con los JSON v3.
+  // Los dos nuevos los usa la ficha de álbum (antes decía "0 plays").
   const albumsPlayedOut = [];
   for (const [ak, m] of albumMeta) {
-    if ((albumMs.get(ak) || 0) > 0) albumsPlayedOut.push([m.name || '', m.artist || '']);
+    const ms = albumMs.get(ak) || 0;
+    if (ms > 0) albumsPlayedOut.push([m.name || '', m.artist || '', albumPlaysCounter.get(ak) || 0, ms]);
   }
 
   const trackPlays = {

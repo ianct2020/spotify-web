@@ -1,37 +1,38 @@
-import { isLoggedIn, loginWithSpotify, logout } from './auth.js?v=139';
-import { spotifyFetch, tryAutoLoadUserBackup } from './api.js?v=139';
-import { getValidToken } from './auth.js?v=139';
-import { cacheClearAll } from './storage.js?v=139';
-import { idbClearAll } from './idb.js?v=139';
-import { registerRoute, initRouter } from './router.js?v=139';
-import { showToast } from './ui/toast.js?v=139';
-import { pageHeader } from './ui/components.js?v=139';
+import { isLoggedIn, loginWithSpotify, logout } from './auth.js?v=140';
+import { spotifyFetch, tryAutoLoadUserBackup } from './api.js?v=140';
+import { getValidToken } from './auth.js?v=140';
+import { cacheClearAll } from './storage.js?v=140';
+import { idbClearAll } from './idb.js?v=140';
+import { registerRoute, initRouter } from './router.js?v=140';
+import { showToast } from './ui/toast.js?v=140';
+import { pageHeader } from './ui/components.js?v=140';
+import { installCrashGuard } from './ui/crash-guard.js?v=140';
 
-import { render as renderSync } from './features/sync.js?v=139';
-import { render as renderDedupe } from './features/dedupe.js?v=139';
-import { render as renderDupalbums } from './features/duplicate-albums.js?v=139';
-import { render as renderZombies } from './features/zombies.js?v=139';
-import { render as renderVersions } from './features/versions.js?v=139';
-import { render as renderDashboard } from './features/dashboard.js?v=139';
-import { render as renderSmart } from './features/smart.js?v=139';
-import { render as renderSimilar } from './features/similar-artists.js?v=139';
-import { render as renderRabbit } from './features/rabbit-hole.js?v=139';
-import { render as renderByGenre } from './features/by-genre.js?v=139';
-import { render as renderByArtist } from './features/by-artist.js?v=139';
-import { render as renderRecs } from './features/recommendations.js?v=139';
-import { render as renderListened } from './features/listened.js?v=139';
-import { render as renderWrapped } from './features/wrapped.js?v=139';
-import { render as renderRecords } from './features/records.js?v=139';
-import { openImportHistory } from './features/import-history.js?v=139';
-import { bindOwnerLockedButtons } from './features/history-data.js?v=139';
-import { render as renderZeroPlays } from './features/zero-plays.js?v=139';
-import { render as renderSkips } from './features/skips.js?v=139';
-import { render as renderSearchLikes } from './features/search-likes.js?v=139';
-import { render as renderWthree } from './features/wthree.js?v=139';
-import { render as renderCovers } from './features/covers.js?v=139';
-import { render as renderDiscoverArtists } from './features/discover-artists.js?v=139';
-import { render as renderNewReleases } from './features/new-releases.js?v=139';
-import { render as renderSinClasificar } from './features/sin-clasificar.js?v=139';
+import { render as renderSync } from './features/sync.js?v=140';
+import { render as renderDedupe } from './features/dedupe.js?v=140';
+import { render as renderDupalbums } from './features/duplicate-albums.js?v=140';
+import { render as renderZombies } from './features/zombies.js?v=140';
+import { render as renderVersions } from './features/versions.js?v=140';
+import { render as renderDashboard } from './features/dashboard.js?v=140';
+import { render as renderSmart } from './features/smart.js?v=140';
+import { render as renderSimilar } from './features/similar-artists.js?v=140';
+import { render as renderRabbit } from './features/rabbit-hole.js?v=140';
+import { render as renderByGenre } from './features/by-genre.js?v=140';
+import { render as renderByArtist } from './features/by-artist.js?v=140';
+import { render as renderRecs } from './features/recommendations.js?v=140';
+import { render as renderListened } from './features/listened.js?v=140';
+import { render as renderWrapped } from './features/wrapped.js?v=140';
+import { render as renderRecords } from './features/records.js?v=140';
+import { openImportHistory } from './features/import-history.js?v=140';
+import { bindOwnerLockedButtons } from './features/history-data.js?v=140';
+import { render as renderZeroPlays } from './features/zero-plays.js?v=140';
+import { render as renderSkips } from './features/skips.js?v=140';
+import { render as renderSearchLikes } from './features/search-likes.js?v=140';
+import { render as renderWthree } from './features/wthree.js?v=140';
+import { render as renderCovers } from './features/covers.js?v=140';
+import { render as renderDiscoverArtists } from './features/discover-artists.js?v=140';
+import { render as renderNewReleases } from './features/new-releases.js?v=140';
+import { render as renderSinClasificar } from './features/sin-clasificar.js?v=140';
 
 async function testConnection() {
   const token = await getValidToken();
@@ -576,6 +577,11 @@ async function renderDebug(container) {
 // El bloqueo de scroll con modales lo maneja src/js/ui/modal-stack.js
 // (mete/quita body.modal-open + guarda scrollY). Ya no hace falta el
 // MutationObserver que había acá antes.
+
+// Último recurso contra la pantalla en blanco: cualquier error o promesa sin
+// catch que se escape pinta un cartel con botón de recargar. Se instala ANTES
+// de init() para cubrir también el arranque. Ver ui/crash-guard.js.
+installCrashGuard();
 
 // PWA: registra el service worker (path relativo → scope /spotify-web/ en Pages).
 // Con esto Chrome ofrece "Instalar Fonoteca" y los estáticos quedan offline.
