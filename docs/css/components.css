@@ -1243,7 +1243,8 @@ body.modal-open {
     padding-bottom: calc(84px + var(--blayer-h, 0px));
   }
 }
-.sc-actionbar #sc-sel-count {
+.sc-actionbar #sc-sel-count,
+.sc-actionbar #zp-sel-count {
   font-size: 13px;
   color: var(--color-text);
   font-weight: 600;
@@ -1308,8 +1309,28 @@ body.modal-open {
   transition: background .15s, color .15s, border-color .15s;
 }
 .sc-btn:hover { background: var(--color-accent); color: #fff; border-color: var(--color-accent); }
-.sc-play, .sc-open, .sc-hide, .sc-card-btn { padding: 0; }
+.sc-play, .sc-open, .sc-hide, .sc-card-btn, .sc-unlike { padding: 0; }
 .sc-play.playing { background: var(--color-accent); color: #fff; border-color: var(--color-accent); }
+/* El único botón de la tarjeta que escribe en Spotify y borra algo. En reposo
+   se comporta como los demás; el rojo aparece al apuntarlo, que es cuando hace
+   falta que avise. */
+.sc-btn.sc-danger:hover {
+  background: var(--color-error);
+  border-color: var(--color-error);
+  color: #fff;
+}
+
+/* Badge de «plays cortas» de #zeroplays, en el slot que la tarjeta reserva
+   delante de los botones. */
+.zp-partial {
+  font-size: 11px;
+  color: var(--color-warning);
+  background: rgba(245, 158, 11, .1);
+  padding: 3px 8px;
+  border-radius: 10px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
 
 /* Modales de "Añadir a…" y "Playlists ignoradas" */
 .sc-modal { max-width: 520px; display: flex; flex-direction: column; gap: 10px; }

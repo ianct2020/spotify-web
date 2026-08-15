@@ -15,12 +15,12 @@
 
 import {
   getAllUserPlaylists, getAllPlaylistItems, getBestAvailableLikes,
-  getCurrentUserId,
+  getCurrentUserId, removeLikedTracks,
 } from '../api.js';
 import { idbGetCached, idbSetCached, idbDel } from '../idb.js';
 import { createHiddenStore } from '../util/hidden-sync.js';
 import { addUrisToPlaylists, toastAddResult, getOwnPlaylists } from '../util/playlist-add.js';
-import { escapeHtml, pageHeader, showProgress, hideProgress, isCancelled } from '../ui/components.js';
+import { escapeHtml, pageHeader, showProgress, hideProgress, isCancelled, confirmModal } from '../ui/components.js';
 import { openModal, closeTop } from '../ui/modal-stack.js';
 import { openPlaylistPicker } from '../ui/playlist-picker.js';
 import { showToast } from '../ui/toast.js';
@@ -494,6 +494,7 @@ function renderResults() {
       <span id="sc-sel-count">0 seleccionadas</span>
       <button class="btn btn-primary btn-sm" id="sc-sel-add">Añadir a…</button>
       <button class="btn btn-secondary btn-sm" id="sc-sel-hide">${showingHidden ? 'Devolver a la lista' : 'Ocultar'}</button>
+      <button class="btn btn-danger btn-sm" id="sc-sel-unlike">Sacar de likes</button>
       <button class="btn btn-secondary btn-sm" id="sc-sel-clear">Limpiar selección</button>
     </div>
   `;
@@ -557,6 +558,7 @@ function renderCard(r) {
       playing: playingKey() === `sc:${r.id}`,
       hidden: showingHidden,
       showAdd: true,
+      showUnlike: true,
     },
   );
 }
@@ -613,6 +615,7 @@ function wire() {
     onCard: (r) => onCardClick(r),
     onAdd: (r) => openAddModal([r]),
     onHide: (r) => onHideClick(r),
+    onUnlike: (r) => sacarDeLikes([r]),
   });
 
   const selAll = content.querySelector('#sc-sel-all');
@@ -640,6 +643,12 @@ function wire() {
     if (showingHidden && hidden.size === 0) showingHidden = false;
     renderResults();
   };
+  const selUnlike = content.querySelector('#sc-sel-unlike');
+  if (selUnlike) selUnlike.onclick = () => {
+    const filas = selectedRows();
+    if (filas.length) sacarDeLikes(filas);
+  };
+
   const selClear = content.querySelector('#sc-sel-clear');
   if (selClear) selClear.onclick = () => {
     selected.clear();
@@ -745,6 +754,70 @@ function onHideClick(r) {
   // conservando el scroll y lo que ya estaba pintado.
   const structural = ((hidden.size > 0) !== hadHidden) || (showingHidden !== wasShowingHidden);
   if (structural) { renderResults(); return; }
+  updateSummary();
+  applyRows({ preserveRendered: true });
+}
+
+// ── Sacar de tus me gusta ────────────────────────────────────────────────────
+//
+// Es la única acción de esta vista que BORRA algo en Spotify, así que:
+//   - confirmModal SIEMPRE, diciendo cuántas canciones. Sin «no volver a
+//     preguntar»: el día que el checkbox esté marcado y el click sea el
+//     equivocado, no hay deshacer.
+//   - el DELETE va por `removeLikedTracks` (api.js), que es quien sabe que
+//     `DELETE /me/library` lleva las uris por QUERY y admite 40 por llamada, y
+//     chunkea solo.
+//
+// Sobre el caché de likes: se ACTUALIZA EN MEMORIA (removeLikedTracks llama a
+// removeFromLikesCache, que filtra los ids del array cacheado y lo reescribe),
+// no se fuerza una re-descarga. Dos motivos:
+//   1. La regla de v=130 es que `all_liked_tracks` es o completo o no existe.
+//      Invalidarlo dejaría a la app SIN likes hasta que alguien vuelva a bajar
+//      las ~9.500 canciones (~190 requests, 2-4 min), y mientras tanto todas
+//      las vistas que lo leen se ven vacías. Filtrar el array cacheado mantiene
+//      el invariante: sigue siendo la biblioteca entera, con N menos.
+//   2. Spotify tiene consistencia eventual en `/me/tracks`: re-bajar justo
+//      después de un DELETE devuelve, a veces, las canciones que acabás de
+//      sacar — y ahí sí quedaría un caché completo pero MAL.
+async function sacarDeLikes(rows) {
+  const conId = rows.filter(r => r.trackId);
+  if (!conId.length) {
+    showToast('Ninguna de las canciones seleccionadas tiene id de Spotify', 'error');
+    return;
+  }
+  const n = conId.length;
+  const sinId = rows.length - n;
+  const detalle = n === 1
+    ? `«${escapeHtml(conId[0].name)}» — ${escapeHtml(conId[0].artists)}`
+    : `${n} canciones`;
+  const ok = await confirmModal(
+    'Sacar de tus me gusta',
+    `Vas a sacar <strong>${detalle}</strong> de tus me gusta en Spotify.` +
+    `${sinId ? ` (${sinId} sin id de Spotify quedan fuera.)` : ''}` +
+    ` Esto BORRA el like: para recuperarlo hay que volver a darle al corazón a mano.`,
+    n === 1 ? 'Sacar de likes' : `Sacar las ${n}`,
+  );
+  if (!ok) return;
+
+  const ids = conId.map(r => r.trackId);
+  try {
+    await removeLikedTracks(ids);
+  } catch (e) {
+    showToast('No se pudieron sacar de likes: ' + e.message, 'error');
+    return;
+  }
+  showToast(n === 1
+    ? `«${conId[0].name}» ya no está en tus me gusta`
+    : `${n} canciones fuera de tus me gusta`, 'success');
+
+  // Las filas salen de la lista sin repintar la vista: `applyRows` pasa por
+  // setItems() y conserva el scroll y lo ya pintado, que es lo que hace que
+  // sacar la tarjeta 900 no te devuelva al principio.
+  const fuera = new Set(conId.map(r => r.id));
+  state.rows = state.rows.filter(r => !fuera.has(r.id));
+  state.likesCount = Math.max(0, state.likesCount - n);
+  for (const id of fuera) selected.delete(id);
+  lastClickedId = null;
   updateSummary();
   applyRows({ preserveRendered: true });
 }

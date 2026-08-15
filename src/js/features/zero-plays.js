@@ -1,5 +1,10 @@
 // Likes con 0 plays: tracks likeados que nunca escuchaste según el Extended Streaming History.
 // Cruce local: likes vs history-track-plays.json (índice de plays por track id).
+//
+// v=143: la lista pasó de filas de texto a la tarjeta compartida
+// `ui/track-card-row.js` — las mismas dos columnas, la misma tapa de 96 y el
+// mismo ▶ de preview que #sin-clasificar y #skips —, con lista incremental y
+// carga diferida de tapas porque acá hay miles de filas.
 
 import { getBestAvailableLikes, removeLikedTracks } from '../api.js';
 import { loadTrackPlays, trackIdOf, isOwner, ownerLockedMessage } from './history-data.js';
@@ -7,18 +12,71 @@ import { escapeHtml, confirmModal, pageHeader } from '../ui/components.js';
 import { showToast } from '../ui/toast.js';
 import { openTrackCard } from './track-card.js';
 import { hasUsername, loadTopLifetime } from '../api/statsfm.js';
+import { getPreview } from '../api/preview-providers.js';
+import { togglePreview, playingKey } from '../ui/preview-player.js';
+import { renderTrackCardRow, wireTrackCardGrid, paintCardSelection } from '../ui/track-card-row.js';
+import { createIncrementalList, scrollRootOf } from '../ui/incremental-list.js';
+import { createLazyImages } from '../ui/lazy-img.js';
+import { activateMarquee } from '../ui/marquee.js';
+import { coverAtSize } from '../util/cover-size.js';
 
 let cache = null;
 
 const STATSFM_TOGGLE_KEY = 'zeroplays_use_statsfm';
 let useStatsfm = localStorage.getItem(STATSFM_TOGGLE_KEY) === '1';
 
+// Mismo tamaño de lote que #sin-clasificar y #skips: llena el primer viewport
+// con colchón de sobra.
+const BATCH = 80;
+
+// Estado de la lista pintada. Vive en el módulo, no en el DOM: con append
+// incremental, «Seleccionar todos» mirando checkboxes marcaría 80 de 3.000.
+let selected = new Set();
+let lastClickedId = null;
+let rowById = new Map();
+let list = null;
+let lazyCovers = null;
+
 export async function render(container) {
+  teardown();
   container.innerHTML = `
     ${pageHeader({ title: 'Sin plays' })}
     <div id="zeroplays-content"><div class="empty-state"><div class="spinner spinner-lg"></div><div style="margin-top:16px">Cruzando likes con historial…</div></div></div>
   `;
   await analyze();
+  // El router lo llama al salir: sin esto quedarían vivos los dos
+  // IntersectionObserver (centinela de la lista y tapas) sobre nodos ya
+  // desconectados del documento.
+  return teardown;
+}
+
+function teardown() {
+  if (list) { list.destroy(); list = null; }
+  if (lazyCovers) { lazyCovers.destroy(); lazyCovers = null; }
+  selected.clear();
+  lastClickedId = null;
+  rowById = new Map();
+}
+
+// La tapa se pinta a 96px, así que hace falta la de 300×300; el caché de likes
+// guarda las chicas (slimTrack en api.js), y si la de 300 no está se deduce del
+// prefijo del CDN con la chica de respaldo en el onerror. Igual que en
+// #sin-clasificar.
+function chicaCover(imgs) {
+  return imgs.length ? (imgs[imgs.length - 1].url || null) : null;
+}
+function medianaCover(imgs) {
+  const chica = chicaCover(imgs);
+  const media = imgs.find(im => (im.width || 0) >= 240 && (im.width || 0) <= 400)
+    || imgs.find(im => (im.width || 0) >= 240);
+  return media?.url || (chica ? coverAtSize(chica, 300) : null);
+}
+
+function fechaLike(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (isNaN(d)) return '';
+  return d.toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' });
 }
 
 async function analyze() {
@@ -55,10 +113,10 @@ async function analyze() {
     if (!p) {
       // Con Stats.fm: si el tema aparece en el top-1000 lifetime, ya no es "sin plays"
       if (top && top.map.has(id)) { statsfmRescued++; continue; }
-      zeros.push({ track: t, uri, id, addedAt: it.added_at || null });
+      zeros.push(fila(t, uri, id, it.added_at || null, null));
     } else if (p[2] === 'p') {
       if (top && top.map.has(id)) { statsfmRescued++; continue; }
-      zeros.push({ track: t, uri, id, addedAt: it.added_at || null, partial: { p: p[0], s: p[1] } });
+      zeros.push(fila(t, uri, id, it.added_at || null, { p: p[0], s: p[1] }));
       partialsInZeros++;
     } else {
       some.push({ track: t, uri, id, plays: p[0], seconds: p[1] });
@@ -78,16 +136,48 @@ async function analyze() {
   });
 
   cache = { zeros, some, likesCount: likes.length, partialsInZeros, statsfmUsed: !!top, statsfmRescued };
+  console.log(`[zeroplays] ${zeros.length} tarjetas (${partialsInZeros} con plays cortas) de ${likes.length} likes`);
   renderResults();
+}
+
+// La fila que consume la tarjeta compartida. `artists` va como string porque es
+// lo que pide renderTrackCardRow; `artist` suelto queda para la ficha.
+function fila(t, uri, id, addedAt, partial) {
+  const imgs = t.album?.images || [];
+  const nombres = (t.artists || []).map(a => (a && typeof a === 'object') ? (a.name || '') : (a || '')).filter(Boolean);
+  return {
+    id,
+    trackId: id,
+    uri,
+    name: t.name || '(sin nombre)',
+    artists: nombres.join(', '),
+    artist: nombres[0] || '',
+    artistList: nombres,
+    album: t.album?.name || '',
+    cover: medianaCover(imgs),
+    coverSmall: chicaCover(imgs),
+    addedAt,
+    partial,
+  };
 }
 
 function renderResults() {
   const content = document.getElementById('zeroplays-content');
+  if (!content || !cache) return;
+  if (list) { list.destroy(); list = null; }
+  if (lazyCovers) { lazyCovers.destroy(); lazyCovers = null; }
+
   const { zeros, some, likesCount, partialsInZeros, statsfmUsed, statsfmRescued } = cache;
   const nunca = zeros.length - (partialsInZeros || 0);
+  rowById = new Map(zeros.map(r => [r.id, r]));
+  // Una fila que ya no existe (porque la sacaste de likes) no puede seguir
+  // contando como seleccionada.
+  if (selected.size) {
+    for (const id of [...selected]) if (!rowById.has(id)) selected.delete(id);
+  }
 
   const sfLine = statsfmUsed
-    ? `<div style="font-size:12px;color:var(--color-accent);margin-top:2px">Cruzando con Stats.fm — sacados ${statsfmRescued.toLocaleString('es-AR')} temas que sí escuchaste después del export.</div>`
+    ? `<div style="font-size:12px;color:var(--color-accent);margin-top:2px">Cruzando con Stats.fm — sacados ${statsfmRescued.toLocaleString('es-ES')} temas que sí escuchaste después del export.</div>`
     : '';
   const sfToggleHtml = hasUsername() ? `
     <label class="statsfm-toggle" title="Al activarlo, un tema que después del export escuchaste al menos una vez ya no aparece como 'sin plays'.">
@@ -99,16 +189,15 @@ function renderResults() {
     <div class="card" style="margin-bottom:16px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px">
       <div>
         <div style="font-size:14px">
-          <strong>${zeros.length.toLocaleString('es-AR')}</strong> likes sin plays ≥30s de ${likesCount.toLocaleString('es-AR')} totales
+          <strong>${zeros.length.toLocaleString('es-ES')}</strong> likes sin plays ≥30s de ${likesCount.toLocaleString('es-ES')} totales
         </div>
         <div style="font-size:12px;color:var(--color-text-muted);margin-top:2px">
-          ${nunca.toLocaleString('es-AR')} nunca sonaron${partialsInZeros ? ` · ${partialsInZeros.toLocaleString('es-AR')} tuvieron plays cortas (badge naranja)` : ''} · ${some.length.toLocaleString('es-AR')} tienen alguna play ≥30s.
+          ${nunca.toLocaleString('es-ES')} nunca sonaron${partialsInZeros ? ` · ${partialsInZeros.toLocaleString('es-ES')} tuvieron plays cortas (badge naranja)` : ''} · ${some.length.toLocaleString('es-ES')} tienen alguna play ≥30s.
         </div>
         ${sfLine}
       </div>
       <div style="display:flex;gap:8px">
-        <button class="btn btn-secondary btn-sm" id="zp-select-all">Seleccionar todos</button>
-        <button class="btn btn-danger btn-sm" id="zp-remove" disabled>Sacar de likes (0)</button>
+        <button class="btn btn-secondary btn-sm" id="zp-select-all" ${zeros.length === 0 ? 'disabled' : ''} title="Marca las ${zeros.length.toLocaleString('es-ES')} de la lista, no solo las pintadas">Seleccionar todos</button>
       </div>
     </div>
     ${sfToggleHtml}
@@ -116,85 +205,217 @@ function renderResults() {
     ${zeros.length === 0 ? `
       <div class="card"><p>No hay likes sin plays. Todos tus likes se escucharon al menos una vez ≥30s.</p></div>
     ` : `
-      <div class="card" style="padding:0;overflow:hidden">
-        <div class="pick-list-scroll" style="max-height:65vh;overflow:auto">
-          ${zeros.map((z, i) => {
-            const imgs = z.track.album?.images || [];
-            const cover = imgs[2]?.url || imgs[1]?.url || imgs[0]?.url || null;
-            const partial = z.partial || null; // {p:plays, s:seg} si vino de una play cortita
-            return `
-            <label class="pick-row" style="display:flex;align-items:center;gap:11px;padding:10px 14px;border-bottom:1px solid var(--color-border);cursor:pointer">
-              <input type="checkbox" class="zp-cb" data-i="${i}">
-              ${cover ? `<img src="${cover}" alt="" loading="lazy" class="pick-cover">` : `<div class="pick-cover" style="background:var(--color-elevated);display:flex;align-items:center;justify-content:center;color:var(--color-text-muted);font-size:16px">♪</div>`}
-              <div class="zp-info tc-clickable" data-i="${i}" title="Ver ficha del tema" style="flex:1;min-width:0">
-                <div class="track-name" style="font-size:14px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(z.track.name || '(sin nombre)')}</div>
-                <div style="font-size:12px;color:var(--color-text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml((z.track.artists || []).map(a => a.name || a).join(', '))} · ${escapeHtml(z.track.album?.name || '')}</div>
-              </div>
-              ${partial ? `<span title="Escuchada al menos una vez menos de 30s (por eso no cuenta como play)" style="font-size:11px;color:#f59e0b;flex-shrink:0;background:rgba(245,158,11,.1);padding:3px 8px;border-radius:10px;white-space:nowrap">${partial.p} play${partial.p === 1 ? ' corta' : 's cortas'}</span>` : ''}
-              ${z.uri ? `<a href="https://open.spotify.com/track/${z.id}" target="_blank" rel="noopener" title="Abrir en Spotify" style="color:var(--color-text-muted);font-size:15px;flex-shrink:0;text-decoration:none">↗</a>` : ''}
-            </label>
-          `;}).join('')}
-        </div>
-      </div>
+      <div class="sc-grid" id="zp-list" role="listbox" aria-multiselectable="true" aria-label="Likes sin plays"></div>
     `}
+    <div class="sc-actionbar" id="zp-actionbar" style="display:none">
+      <span id="zp-sel-count">0 seleccionadas</span>
+      <button class="btn btn-danger btn-sm" id="zp-remove">Sacar de likes</button>
+      <button class="btn btn-secondary btn-sm" id="zp-sel-clear">Limpiar selección</button>
+    </div>
   `;
 
   const sfToggle = content.querySelector('#zp-statsfm-toggle');
   if (sfToggle) sfToggle.onchange = async () => {
     useStatsfm = sfToggle.checked;
     localStorage.setItem(STATSFM_TOGGLE_KEY, useStatsfm ? '1' : '0');
+    teardown();
     content.innerHTML = `<div class="empty-state"><div class="spinner spinner-lg"></div><div style="margin-top:16px">${useStatsfm ? 'Cruzando con Stats.fm…' : 'Recalculando…'}</div></div>`;
     await analyze();
   };
 
-  const rmBtn = content.querySelector('#zp-remove');
-  const selAllBtn = content.querySelector('#zp-select-all');
-  if (!rmBtn) return;
+  const grid = content.querySelector('#zp-list');
+  if (grid) {
+    // El root del observer es el ancestro que scrollea DE VERDAD. Acá el grid no
+    // tiene overflow propio (scrollea el documento), así que scrollRootOf
+    // devuelve null y el root es el viewport — pero se calcula, no se asume.
+    const scroller = scrollRootOf(grid);
+    lazyCovers = createLazyImages({ root: scroller, rootMargin: '200px' });
+    list = createIncrementalList({
+      container: grid,
+      items: zeros,
+      renderItem: renderCard,
+      batchSize: BATCH,
+      rootMargin: '600px',
+      onBatch: () => {
+        const nuevas = grid.querySelectorAll('.sc-card:not([data-mq])');
+        nuevas.forEach(c => c.setAttribute('data-mq', '1'));
+        lazyCovers?.observe(nuevas);
+        activateMarquee(nuevas);
+      },
+    });
 
-  const updateBtn = () => {
-    const n = content.querySelectorAll('.zp-cb:checked').length;
-    rmBtn.textContent = `Sacar de likes (${n})`;
-    rmBtn.disabled = n === 0;
+    // Handlers DELEGADOS: las tarjetas de los lotes siguientes todavía no
+    // existen cuando se cablea la vista.
+    wireTrackCardGrid(grid, {
+      rowById: (id) => rowById.get(id),
+      onToggle: (id, o) => toggleSelection(id, o),
+      onPlay: (r) => onPlayClick(r),
+      onCard: (r) => openTrackCard({ id: r.trackId, name: r.name, artist: r.artist, album: r.album, img: r.coverSmall || r.cover }),
+      onUnlike: (r) => sacarDeLikes([r]),
+    });
+  }
+
+  const selAll = content.querySelector('#zp-select-all');
+  if (selAll) selAll.onclick = () => {
+    const todas = zeros.length > 0 && zeros.every(r => selected.has(r.id));
+    selected = todas ? new Set() : new Set(zeros.map(r => r.id));
+    repaintSelection();
+    updateSelectionUi();
   };
-  content.querySelectorAll('.zp-cb').forEach(cb => cb.addEventListener('change', updateBtn));
-  // Click en título/artista → ficha (frena el toggle del checkbox del <label>)
-  content.querySelectorAll('.zp-info').forEach(el => {
-    el.onclick = (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      const z = cache.zeros[+el.dataset.i];
-      if (!z) return;
-      const imgs = z.track.album?.images || [];
-      openTrackCard({
-        id: z.id,
-        name: z.track.name,
-        artist: (z.track.artists || []).map(a => a.name || a)[0] || '',
-        album: z.track.album?.name,
-        img: imgs[2]?.url || imgs[1]?.url || imgs[0]?.url,
-      });
-    };
-  });
-  selAllBtn.onclick = () => {
-    const cbs = content.querySelectorAll('.zp-cb');
-    const allChecked = [...cbs].every(cb => cb.checked);
-    cbs.forEach(cb => cb.checked = !allChecked);
-    updateBtn();
+  const selClear = content.querySelector('#zp-sel-clear');
+  if (selClear) selClear.onclick = () => {
+    selected.clear();
+    lastClickedId = null;
+    repaintSelection();
+    updateSelectionUi();
   };
-  rmBtn.onclick = async () => {
-    const ids = [...content.querySelectorAll('.zp-cb:checked')].map(cb => cache.zeros[+cb.dataset.i].id);
-    if (!ids.length) return;
-    const ok = await confirmModal('Sacar de tus Liked Songs', `Vas a sacar <strong>${ids.length}</strong> tracks de tus Liked Songs. Podés recuperarlos manualmente después.`, 'Sacar');
-    if (!ok) return;
-    rmBtn.disabled = true;
-    rmBtn.textContent = 'Sacando…';
-    try {
-      await removeLikedTracks(ids);
-      showToast(`Sacaste ${ids.length} tracks de tus likes`, 'success');
-      // reanalizar
-      await analyze();
-    } catch (e) {
-      showToast('Error: ' + e.message, 'error');
-      updateBtn();
+  const rm = content.querySelector('#zp-remove');
+  if (rm) rm.onclick = () => {
+    const filas = cache.zeros.filter(r => selected.has(r.id));
+    if (filas.length) sacarDeLikes(filas);
+  };
+
+  updateSelectionUi();
+}
+
+function renderCard(r) {
+  // El badge de "plays cortas" es el mismo dato de antes, ahora en el slot que
+  // la tarjeta reserva delante de los botones.
+  const badge = r.partial
+    ? `<span class="zp-partial" title="Escuchada al menos una vez menos de 30s (por eso no cuenta como play)">${r.partial.p} play${r.partial.p === 1 ? ' corta' : 's cortas'}</span>`
+    : '';
+  return renderTrackCardRow(
+    { ...r, sub: `${r.album || ''}${r.addedAt ? ` · añadida el ${fechaLike(r.addedAt)}` : ''}` },
+    {
+      selected: selected.has(r.id),
+      playing: playingKey() === `zp:${r.id}`,
+      showUnlike: true,
+      // Acá no hay lista de ocultos: la vista es "lo que no escuchaste" y la
+      // salida es sacarlo de likes o dejarlo. Un ojo sin handler sería un botón
+      // muerto.
+      showHide: false,
+      badge,
+    },
+  );
+}
+
+// ── Selección ────────────────────────────────────────────────────────────────
+
+function toggleSelection(id, { range = false } = {}) {
+  const r = rowById.get(id);
+  if (!r) return;
+  const filas = cache?.zeros || [];
+  if (range && lastClickedId && lastClickedId !== id) {
+    const desde = filas.findIndex(x => x.id === lastClickedId);
+    const hasta = filas.findIndex(x => x.id === id);
+    if (desde >= 0 && hasta >= 0) {
+      const [a, b] = desde < hasta ? [desde, hasta] : [hasta, desde];
+      for (let i = a; i <= b; i++) selected.add(filas[i].id);
+      lastClickedId = id;
+      repaintSelection();
+      updateSelectionUi();
+      return;
     }
-  };
+  }
+  if (selected.has(id)) selected.delete(id); else selected.add(id);
+  lastClickedId = id;
+  paintCardSelection(document.querySelector(`#zp-list .sc-card[data-id="${CSS.escape(id)}"]`), selected.has(id));
+  updateSelectionUi();
+}
+
+// Solo repinta lo que existe: las tarjetas de los lotes que falten nacen ya
+// marcadas, porque renderCard lee del Set.
+function repaintSelection() {
+  document.querySelectorAll('#zp-list .sc-card').forEach(card => {
+    paintCardSelection(card, selected.has(card.dataset.id));
+  });
+}
+
+function updateSelectionUi() {
+  const n = selected.size;
+  const bar = document.getElementById('zp-actionbar');
+  if (bar) bar.style.display = n > 0 ? '' : 'none';
+  const count = document.getElementById('zp-sel-count');
+  if (count) count.textContent = `${n} seleccionada${n === 1 ? '' : 's'}`;
+  const rm = document.getElementById('zp-remove');
+  if (rm) rm.textContent = `Sacar de likes (${n})`;
+  const selAll = document.getElementById('zp-select-all');
+  if (selAll && cache) {
+    const todas = cache.zeros.length > 0 && n >= cache.zeros.length && cache.zeros.every(r => selected.has(r.id));
+    selAll.textContent = todas ? 'Quitar selección' : 'Seleccionar todos';
+  }
+}
+
+// ── Preview ──────────────────────────────────────────────────────────────────
+
+async function onPlayClick(r) {
+  const res = await togglePreview(`zp:${r.id}`, () => getPreview({
+    name: r.name,
+    artists: r.artistList,
+    artist: r.artist,
+    spotifyId: r.trackId || undefined,
+  }));
+  if (res === null) showToast(`Sin preview disponible de «${r.name}»`, 'info');
+}
+
+document.addEventListener('previewchange', (e) => {
+  const content = document.getElementById('zeroplays-content');
+  if (!content) return;
+  const key = e.detail.key || '';
+  content.querySelectorAll('.sc-card').forEach(card => {
+    const btn = card.querySelector('.sc-play');
+    if (btn) btn.classList.toggle('playing', key === `zp:${card.dataset.id}`);
+  });
+});
+
+// ── Sacar de likes ───────────────────────────────────────────────────────────
+//
+// Mismo trato que en #sin-clasificar: confirmación siempre, y el caché de likes
+// se actualiza en memoria (removeLikedTracks → removeFromLikesCache) en vez de
+// forzar una re-descarga, que dejaría la app sin likes durante minutos por la
+// regla de "o completo o no existe".
+async function sacarDeLikes(rows) {
+  const ids = rows.map(r => r.trackId).filter(Boolean);
+  if (!ids.length) return;
+  const n = ids.length;
+  const detalle = n === 1
+    ? `«${escapeHtml(rows[0].name)}» — ${escapeHtml(rows[0].artists)}`
+    : `${n} canciones`;
+  const ok = await confirmModal(
+    'Sacar de tus me gusta',
+    `Vas a sacar <strong>${detalle}</strong> de tus me gusta en Spotify. Esto BORRA el like: para recuperarlo hay que volver a darle al corazón a mano.`,
+    n === 1 ? 'Sacar de likes' : `Sacar las ${n}`,
+  );
+  if (!ok) return;
+
+  try {
+    await removeLikedTracks(ids);
+  } catch (e) {
+    showToast('No se pudieron sacar de likes: ' + e.message, 'error');
+    return;
+  }
+  showToast(n === 1
+    ? `«${rows[0].name}» ya no está en tus me gusta`
+    : `${n} canciones fuera de tus me gusta`, 'success');
+
+  const fuera = new Set(ids);
+  cache.zeros = cache.zeros.filter(r => !fuera.has(r.id));
+  cache.likesCount = Math.max(0, cache.likesCount - n);
+  for (const id of fuera) selected.delete(id);
+  lastClickedId = null;
+  rowById = new Map(cache.zeros.map(r => [r.id, r]));
+  // setItems conserva el scroll y lo ya pintado: sacar la tarjeta 900 no puede
+  // devolver al usuario al principio de la lista.
+  lazyCovers?.reset();
+  list?.setItems(cache.zeros, { preserveRendered: true });
+  actualizarResumen();
+  updateSelectionUi();
+}
+
+// El número grande, sin repintar la vista entera.
+function actualizarResumen() {
+  const content = document.getElementById('zeroplays-content');
+  if (!content || !cache) return;
+  const strong = content.querySelector('.card strong');
+  if (strong) strong.textContent = cache.zeros.length.toLocaleString('es-ES');
 }

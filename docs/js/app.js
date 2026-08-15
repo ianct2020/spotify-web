@@ -1,40 +1,40 @@
-import { isLoggedIn, loginWithSpotify, logout } from './auth.js?v=142';
-import { spotifyFetch, tryAutoLoadUserBackup } from './api.js?v=142';
-import { getValidToken } from './auth.js?v=142';
-import { cacheClearAll } from './storage.js?v=142';
-import { idbClearAll } from './idb.js?v=142';
-import { registerRoute, initRouter } from './router.js?v=142';
-import { showToast } from './ui/toast.js?v=142';
-import { pageHeader } from './ui/components.js?v=142';
-import { installCrashGuard } from './ui/crash-guard.js?v=142';
-import { getStack } from './ui/modal-stack.js?v=142';
-import { installBackToTop } from './ui/back-to-top.js?v=142';
+import { isLoggedIn, loginWithSpotify, logout } from './auth.js?v=143';
+import { spotifyFetch, tryAutoLoadUserBackup } from './api.js?v=143';
+import { getValidToken } from './auth.js?v=143';
+import { cacheClearAll } from './storage.js?v=143';
+import { idbClearAll } from './idb.js?v=143';
+import { registerRoute, initRouter } from './router.js?v=143';
+import { showToast } from './ui/toast.js?v=143';
+import { pageHeader } from './ui/components.js?v=143';
+import { installCrashGuard } from './ui/crash-guard.js?v=143';
+import { getStack } from './ui/modal-stack.js?v=143';
+import { installBackToTop } from './ui/back-to-top.js?v=143';
 
-import { render as renderSync } from './features/sync.js?v=142';
-import { render as renderDedupe } from './features/dedupe.js?v=142';
-import { render as renderDupalbums } from './features/duplicate-albums.js?v=142';
-import { render as renderZombies } from './features/zombies.js?v=142';
-import { render as renderVersions } from './features/versions.js?v=142';
-import { render as renderDashboard } from './features/dashboard.js?v=142';
-import { render as renderSmart } from './features/smart.js?v=142';
-import { render as renderSimilar } from './features/similar-artists.js?v=142';
-import { render as renderRabbit } from './features/rabbit-hole.js?v=142';
-import { render as renderByGenre } from './features/by-genre.js?v=142';
-import { render as renderByArtist } from './features/by-artist.js?v=142';
-import { render as renderRecs } from './features/recommendations.js?v=142';
-import { render as renderListened } from './features/listened.js?v=142';
-import { render as renderWrapped } from './features/wrapped.js?v=142';
-import { render as renderRecords } from './features/records.js?v=142';
-import { openImportHistory } from './features/import-history.js?v=142';
-import { bindOwnerLockedButtons } from './features/history-data.js?v=142';
-import { render as renderZeroPlays } from './features/zero-plays.js?v=142';
-import { render as renderSkips } from './features/skips.js?v=142';
-import { render as renderSearchLikes } from './features/search-likes.js?v=142';
-import { render as renderWthree } from './features/wthree.js?v=142';
-import { render as renderCovers } from './features/covers.js?v=142';
-import { render as renderDiscoverArtists } from './features/discover-artists.js?v=142';
-import { render as renderNewReleases } from './features/new-releases.js?v=142';
-import { render as renderSinClasificar } from './features/sin-clasificar.js?v=142';
+import { render as renderSync } from './features/sync.js?v=143';
+import { render as renderDedupe } from './features/dedupe.js?v=143';
+import { render as renderDupalbums } from './features/duplicate-albums.js?v=143';
+import { render as renderZombies } from './features/zombies.js?v=143';
+import { render as renderVersions } from './features/versions.js?v=143';
+import { render as renderDashboard } from './features/dashboard.js?v=143';
+import { render as renderSmart } from './features/smart.js?v=143';
+import { render as renderSimilar } from './features/similar-artists.js?v=143';
+import { render as renderRabbit } from './features/rabbit-hole.js?v=143';
+import { render as renderByGenre } from './features/by-genre.js?v=143';
+import { render as renderByArtist } from './features/by-artist.js?v=143';
+import { render as renderRecs } from './features/recommendations.js?v=143';
+import { render as renderListened } from './features/listened.js?v=143';
+import { render as renderWrapped } from './features/wrapped.js?v=143';
+import { render as renderRecords } from './features/records.js?v=143';
+import { openImportHistory } from './features/import-history.js?v=143';
+import { bindOwnerLockedButtons } from './features/history-data.js?v=143';
+import { render as renderZeroPlays } from './features/zero-plays.js?v=143';
+import { render as renderSkips } from './features/skips.js?v=143';
+import { render as renderSearchLikes } from './features/search-likes.js?v=143';
+import { render as renderWthree } from './features/wthree.js?v=143';
+import { render as renderCovers } from './features/covers.js?v=143';
+import { render as renderDiscoverArtists } from './features/discover-artists.js?v=143';
+import { render as renderNewReleases } from './features/new-releases.js?v=143';
+import { render as renderSinClasificar } from './features/sin-clasificar.js?v=143';
 
 async function testConnection() {
   const token = await getValidToken();
@@ -619,8 +619,24 @@ installCrashGuard();
 
 // PWA: registra el service worker (path relativo → scope /spotify-web/ en Pages).
 // Con esto Chrome ofrece "Instalar Fonoteca" y los estáticos quedan offline.
+//
+// En DEV no se registra, y si quedó registrado de antes se desregistra y se
+// tira su caché. El SW sirve stale-while-revalidate para los estáticos
+// same-origin, y en dev los imports NO llevan `?v=` (los versiona build.sh al
+// copiar a docs/), así que un módulo editado se seguía sirviendo viejo desde la
+// caché del SW por más que el servidor de dev mande `Cache-Control: no-store`.
+// Es el mismo pozo que documenta scripts/dev-server.mjs, un piso más abajo:
+// pasó otra vez el 2026-08-15, probando esta versión.
+const ES_DEV = ['127.0.0.1', 'localhost'].includes(location.hostname);
 if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.register('sw.js').catch(e => console.warn('SW no registrado:', e.message));
+  if (ES_DEV) {
+    navigator.serviceWorker.getRegistrations()
+      .then(rs => Promise.all(rs.map(r => r.unregister())))
+      .then(() => caches?.keys?.().then(ks => Promise.all(ks.map(k => caches.delete(k)))))
+      .catch(() => { /* si no se puede, no rompe nada */ });
+  } else {
+    navigator.serviceWorker.register('sw.js').catch(e => console.warn('SW no registrado:', e.message));
+  }
 }
 
 // Delego los botones "Subir mi ZIP" / "Abrir Privacidad de Spotify" del

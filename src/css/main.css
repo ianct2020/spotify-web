@@ -3671,6 +3671,15 @@ body.covers-fs .main {
   align-items: start;
   min-width: 0;
 }
+/* La tapa lleva el ▶ encima. Van como hermanos dentro del wrapper y no anidados
+   (un <button> dentro de otro es HTML inválido y el click interno no llega). El
+   wrapper es además el blanco del hover-play. */
+.dcard-cover-wrap {
+  position: relative;
+  width: 104px;
+  height: 104px;
+  line-height: 0;
+}
 .dcard-cover {
   background: none;
   border: 0;
@@ -3678,6 +3687,36 @@ body.covers-fs .main {
   cursor: pointer;
   line-height: 0;
 }
+.dcard-play {
+  position: absolute;
+  right: 5px;
+  bottom: 5px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  cursor: pointer;
+  color: #fff;
+  background: rgba(0, 0, 0, .62);
+  /* Aparece al pasar por la tarjeta; en táctil no hay hover, así que ahí queda
+     siempre visible (la media query de abajo). */
+  opacity: 0;
+  transition: opacity .12s, background .12s;
+}
+.dcard:hover .dcard-play,
+.dcard-play:focus-visible,
+.dcard-play.is-playing { opacity: 1; }
+.dcard-play:hover { background: var(--color-accent); }
+.dcard-play.is-playing { background: var(--color-accent); }
+.dcard-play[disabled] { cursor: default; font-size: 13px; background: rgba(0, 0, 0, .45); }
+@media (hover: none) {
+  .dcard-play { opacity: 1; }
+}
+.dcard-hide { line-height: 0; }
 .dcard-img {
   width: 104px;
   height: 104px;
@@ -3833,6 +3872,7 @@ body.covers-fs .main {
   .dcard-grid { grid-template-columns: minmax(0, 1fr); }
   .dcard-top { grid-template-columns: 84px minmax(0, 1fr); }
   .dcard-img { width: 84px; height: 84px; }
+  .dcard-cover-wrap { width: 84px; height: 84px; }
   .disco-controls { width: 100%; justify-content: flex-start; }
 }
 

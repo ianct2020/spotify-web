@@ -28,6 +28,9 @@ import {
   renderAlbumCard,
   wireAlbumCards,
   addAlbumsToPlaylists,
+  hiddenAlbums,
+  cardKey,
+  toggleHiddenAlbum,
 } from './discover-common.js';
 
 const SCAN_KEY = 'new_releases';
@@ -70,6 +73,10 @@ const state = {
   months: 12,
   loadedMore: DEFAULT_INITIAL,
   scannedAt: null,
+  // 'normal' | 'hidden'. Acá no hay modo «escuchados»: marcar como escuchado es
+  // una acción de #discover-artists (evaluar la discografía vieja). Los que Ian
+  // marque allá igual desaparecen de acá, porque el filtro es compartido.
+  mode: 'normal',
 };
 
 export async function render(container) {
@@ -91,6 +98,14 @@ export async function render(container) {
   state.minLikes = getMinLikes();
   state.months = getMonths();
   state.loadedMore = getLoadedMore();
+  state.mode = 'normal';
+
+  // Ocultos desde la playlist de Spotify, en segundo plano: la vista arranca
+  // con el caché local y se repinta al llegar la reconciliación.
+  hiddenAlbums.ready().then(() => {
+    const c = document.getElementById('newrel-content');
+    if (c && c.isConnected) refreshList(c);
+  });
 
   const candidates = [...idx.likesByArtist.entries()]
     .map(([nameLower, ids]) => ({
@@ -157,6 +172,7 @@ function renderShell(content, totalCandidates) {
         <div class="disco-chip-group" id="newrel-months">
           ${[3,6,12,24].map(n => `<button class="disco-chip ${state.months === n ? 'is-on' : ''}" data-months="${n}">últimos ${n}m</button>`).join('')}
         </div>
+        <button class="btn btn-secondary btn-sm ${state.mode === 'hidden' ? 'sc-on' : ''}" id="newrel-mode-hidden" title="Las novedades que ocultaste. Se sincronizan con la playlist «fonoteca · ocultos (descubrir)».">Ocultos (<span id="newrel-hidden-n">${hiddenAlbums.size}</span>)</button>
         <button class="btn btn-secondary btn-sm" id="newrel-refresh" title="${state.scannedAt ? 'Último escaneo ' + agoLabel(state.scannedAt) + '. Volver a consultar Spotify.' : 'Volver a consultar Spotify'}">Actualizar</button>
       </div>
     </div>
@@ -233,6 +249,13 @@ function renderShell(content, totalCandidates) {
     btn.disabled = false;
     btn.textContent = 'Actualizar';
   };
+  content.querySelector('#newrel-mode-hidden').onclick = () => {
+    state.mode = state.mode === 'hidden' ? 'normal' : 'hidden';
+    renderShell(content, totalCandidates);
+    setCount(eligibleArtists().filter(a => a.scanned).length);
+    refreshList(content);
+  };
+
   content.querySelector('#newrel-sel-clear').onclick = () => {
     state.selection.clear();
     updateSelectionUi(content);
@@ -337,6 +360,7 @@ async function processArtist(artist) {
 
 function releasesInWindow() {
   const cutoff = Date.now() - state.months * 30 * 24 * 60 * 60 * 1000;
+  const modoOcultos = state.mode === 'hidden';
   const out = [];
   for (const a of state.artists) {
     if (!a.scanned || a.error) continue;
@@ -344,7 +368,17 @@ function releasesInWindow() {
     for (const al of a.disco) {
       const ts = releaseTs(al.release);
       if (!ts || ts < cutoff) continue;
-      if (!albumIsUnheard(al, a.name, state.heard)) continue;
+      const oculto = hiddenAlbums.has(cardKey(al, a.name));
+      // En el modo ocultos la lista son EXACTAMENTE los ocultos de la ventana,
+      // sin pasar por «sin escuchar»: si no, un disco que ocultaste y después
+      // guardaste en la biblioteca desaparecería de los dos lados y no habría
+      // forma de devolverlo.
+      if (modoOcultos) {
+        if (!oculto) continue;
+      } else {
+        if (oculto) continue;
+        if (!albumIsUnheard(al, a.name, state.heard)) continue;
+      }
       out.push({ al, artist: a });
     }
   }
@@ -362,6 +396,8 @@ function refreshList(content) {
   if (!list) return;
   const rows = releasesInWindow();
   document.getElementById('newrel-unheard-count').textContent = rows.length.toLocaleString('es-ES');
+  const nHidden = document.getElementById('newrel-hidden-n');
+  if (nHidden) nHidden.textContent = hiddenAlbums.size;
 
   if (!rows.length) {
     const eligible = eligibleArtists().length;
@@ -376,6 +412,8 @@ function refreshList(content) {
       msg = `Ningún artista llega a ${state.minLikes} likes (el que más tiene llega a ${max}). Bajá el umbral con los chips de arriba.`;
     } else if (!scanned) {
       msg = `${eligible.toLocaleString('es-ES')} artistas con ≥${state.minLikes} likes, ninguno escaneado todavía. Tocá «Actualizar» para consultarle a Spotify.`;
+    } else if (state.mode === 'hidden') {
+      msg = `No ocultaste ninguna novedad de los últimos ${state.months} meses.`;
     } else {
       msg = `No hay novedades sin escuchar en los últimos ${state.months} meses para tus artistas con ≥${state.minLikes} likes.`;
     }
@@ -387,6 +425,7 @@ function refreshList(content) {
   list.innerHTML = `<div class="dcard-grid">${rows.map(r => renderAlbumCard(r.al, r.artist.name, {
     checkClass: 'newrel-check',
     selected: state.selection.has(r.al.id),
+    hiddenMode: state.mode === 'hidden',
   })).join('')}</div>`;
 
   wireAlbumCards(list, findAlbum, {
@@ -395,6 +434,22 @@ function refreshList(content) {
     onSave: (albumId, artistName, btn) => saveAlbum(albumId, artistName, btn),
     onChange: () => updateSelectionUi(content),
     afterAdd: () => refreshList(content),
+    onHide: async (albumId, artistName, btn) => {
+      const al = findAlbum(albumId);
+      if (!al) return;
+      btn.disabled = true;
+      try {
+        const oculto = await toggleHiddenAlbum(al, artistName);
+        showToast(oculto
+          ? `«${al.name}» oculto — no vuelve a aparecer`
+          : `«${al.name}» vuelve a la lista`, 'success');
+      } catch (e) {
+        showToast('No se pudo ocultar: ' + e.message, 'error');
+      } finally {
+        btn.disabled = false;
+      }
+      refreshList(content);
+    },
   });
 
   updateSelectionUi(content);
