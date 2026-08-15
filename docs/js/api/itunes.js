@@ -4,12 +4,13 @@
 // (preview_url de Spotify murió en la migración feb 2026; el embed iframe
 // queda como fallback para lo que iTunes no tenga.)
 
-import { pickBestMatch, artistMatches } from '../util/track-match.js?v=141';
+import { pickBestMatch, artistMatches, artistList, preferredQueryArtists } from '../util/track-match.js?v=142';
 
-// v2: la key sube de v1 porque el cache de v1 tiene matches equivocados
-// guardados (se aceptaba cualquier tema del artista cuando el título no
-// coincidía). Empezamos de cero en vez de servir basura durante días.
-const LS_KEY = 'itunes_preview_cache_v2';
+// v3: la key sube de v2 porque hasta v=141 se comparaba contra UN solo artista
+// (el del álbum). En los discos acreditados a un alias —«¥$» = Kanye West + Ty
+// Dolla $ign— eso daba miss siempre, y los misses de esta sesión + los hits
+// equivocados de antes no sirven para nada con la regla nueva.
+const LS_KEY = 'itunes_preview_cache_v3';
 const MAX_CACHE = 600;
 
 let cache = null;      // Map clave → {u,a,t} (hit persistido)
@@ -51,32 +52,52 @@ async function search(term, limit) {
   return (await res.json()).results || [];
 }
 
+// Cuántas búsquedas distintas se aceptan por track. Con dos alcanza para el
+// caso real (el alias primero, un humano después) sin multiplicar las llamadas
+// a Apple en un álbum entero.
+const MAX_QUERIES = 2;
+
 // Preview de un track puntual. Devuelve { url, artist, track } o null si no está.
 // Solo devuelve el resultado si TÍTULO Y ARTISTA coinciden (util/track-match.js).
 // Si iTunes trae otra canción del mismo artista, es un miss: preferimos "sin
 // preview" antes que reproducir un tema equivocado.
+//
+// `artist` puede ser un nombre o la lista entera de artistas del track. Con
+// varios: el candidato vale si coincide con CUALQUIERA (la comparación en sí
+// no se relajó), y si la primera búsqueda no da nada se reintenta con el
+// siguiente nombre — «¥$ CARNIVAL» no devuelve nada útil en iTunes, «Kanye
+// West CARNIVAL» sí.
 async function findTrackPreview(artist, track) {
+  const artists = artistList(artist);
   const c = loadCache();
-  const key = `t:${norm(artist)}|${norm(track)}`;
+  const key = `t:${artists.map(norm).filter(Boolean).join('/')}|${norm(track)}`;
   if (c.has(key)) { const h = c.get(key); return { url: h.u, artist: h.a, track: h.t }; }
   if (misses.has(key)) return null;
 
-  let results;
-  try {
-    results = await search(`${artist} ${track}`, 8);
-  } catch {
-    return null; // red caída o rate limit: no cachear, reintentable
-  }
-  const hit = pickBestMatch(
-    { name: track, artist },
-    results.filter(r => r.previewUrl),
-    r => ({ name: r.trackName, artist: r.artistName }),
-  );
-  if (!hit) { misses.add(key); return null; }
+  const queries = preferredQueryArtists(artists).slice(0, MAX_QUERIES);
+  if (!queries.length) queries.push('');
 
-  c.set(key, { u: hit.previewUrl, a: hit.artistName, t: hit.trackName });
-  saveCache();
-  return { url: hit.previewUrl, artist: hit.artistName, track: hit.trackName };
+  for (const q of queries) {
+    let results;
+    try {
+      results = await search(`${q} ${track}`.trim(), 8);
+    } catch {
+      return null; // red caída o rate limit: no cachear, reintentable
+    }
+    const hit = pickBestMatch(
+      { name: track, artists },
+      results.filter(r => r.previewUrl),
+      r => ({ name: r.trackName, artist: r.artistName }),
+    );
+    if (!hit) continue;
+
+    c.set(key, { u: hit.previewUrl, a: hit.artistName, t: hit.trackName });
+    saveCache();
+    return { url: hit.previewUrl, artist: hit.artistName, track: hit.trackName };
+  }
+
+  misses.add(key);
+  return null;
 }
 
 // Tema más popular de un artista (para hover-play sobre el nombre del artista).

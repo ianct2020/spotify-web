@@ -1215,13 +1215,11 @@ h3 { font-size: 18px; font-weight: 600; }
   display: flex;
   flex-direction: column;
   gap: 3px;
-  max-height: 240px;
-  overflow-y: auto;
   padding-right: 2px;
 }
 .album-modal-like-row {
   display: grid;
-  grid-template-columns: 22px minmax(0, 1fr) auto;
+  grid-template-columns: 16px 20px minmax(0, 1fr) auto;
   gap: 8px;
   align-items: center;
   padding: 5px 8px;
@@ -1243,6 +1241,13 @@ h3 { font-size: 18px; font-weight: 600; }
   color: var(--color-text-muted);
   text-align: right;
   font-variant-numeric: tabular-nums;
+}
+/* Corazón "está en tus me gusta", igual que en la tracklist de W-Three. */
+.album-modal-like-heart {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-accent);
 }
 .album-modal-like-name {
   overflow: hidden;
@@ -2293,6 +2298,38 @@ h3 { font-size: 18px; font-weight: 600; }
 .card-modal-actions .btn { flex: 1; min-width: 90px; justify-content: center; }
 
 /* Álbum modal específico */
+
+/* Dos columnas (v=142): pistas | tapa + info de escucha. Antes era una sola
+   columna angosta con la lista de pistas metida en un scroll interno de 240px.
+   El DOM trae la info primero para que al plegarse quede la tapa arriba; en
+   escritorio `order` las cruza. Todo por media query — sin JS. */
+.album-modal-cols {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+}
+.album-modal-col { min-width: 0; }
+
+@media (min-width: 820px) {
+  .album-modal-cols {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 300px);
+    gap: 22px;
+    align-items: start;
+  }
+  .album-modal-col-tracks { order: 1; }
+  .album-modal-col-info { order: 2; position: sticky; top: 0; }
+  /* En dos columnas la lista ya no necesita separador propio arriba. */
+  .album-modal-col-tracks .album-modal-likes {
+    margin-top: 0;
+    padding-top: 0;
+    border-top: none;
+  }
+  .album-modal-actions { flex-direction: column; }
+  .album-modal-actions .btn { width: 100%; }
+}
+
 .album-modal-body {
   display: flex;
   flex-direction: column;

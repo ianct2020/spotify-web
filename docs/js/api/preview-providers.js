@@ -16,17 +16,18 @@
 // pasado el TTL. Los URLs de audio los cachea cada proveedor por su cuenta
 // (itunes.js ya lo hace; Deezer usa el suyo interno más abajo).
 
-import { findTrackPreview } from './itunes.js?v=141';
-import { pickBestMatch, artistMatches } from '../util/track-match.js?v=141';
+import { findTrackPreview } from './itunes.js?v=142';
+import { pickBestMatch, artistMatches, artistList, preferredQueryArtists } from '../util/track-match.js?v=142';
 
-// v2: las keys suben porque el cache de v1 guardó matches equivocados (se
-// aceptaba cualquier tema del artista si el título no coincidía).
-const PROVIDER_CACHE_KEY = 'preview_provider_map_v2';
+// v3: las keys suben porque hasta v=141 se comparaba contra UN solo artista (el
+// del álbum) y en los discos con alias —«¥$»— eso cacheaba 'spotify-embed' o
+// 'none' para el álbum entero. Con la regla nueva esas entradas son basura.
+const PROVIDER_CACHE_KEY = 'preview_provider_map_v3';
 const PROVIDER_CACHE_MAX = 800;
 const NEG_TTL = 3 * 24 * 60 * 60 * 1000;      // 3 días para reintentar "sin preview"
 const POS_TTL = 30 * 24 * 60 * 60 * 1000;     // 30 días para el proveedor ganador
 
-const DEEZER_URL_CACHE_KEY = 'deezer_preview_url_cache_v2';
+const DEEZER_URL_CACHE_KEY = 'deezer_preview_url_cache_v3';
 const DEEZER_URL_CACHE_MAX = 600;
 // Las URLs de Deezer traen `hdnea=exp=…` con TTL de ~30d — dejamos 7d de
 // margen y refetcheamos si se pasó.
@@ -119,24 +120,36 @@ function norm(s) {
     .trim();
 }
 // Igual que iTunes: el candidato tiene que coincidir en TÍTULO Y ARTISTA
-// (util/track-match.js). Si no, devolvemos null y la cadena sigue de largo.
+// (util/track-match.js), y con varios artistas alcanza con que pase uno. Si no,
+// devolvemos null y la cadena sigue de largo. Hasta 2 búsquedas: el alias del
+// álbum («¥$») no encuentra nada en Deezer, el nombre real sí.
+const DEEZER_MAX_QUERIES = 2;
+
 async function tryDeezer(name, artist) {
-  const cacheKey = `d:${norm(artist)}|${norm(name)}`;
+  const artists = artistList(artist);
+  const cacheKey = `d:${artists.map(norm).filter(Boolean).join('/')}|${norm(name)}`;
   const cached = deezerCachedUrl(cacheKey);
   if (cached) return { url: cached.u, artist: cached.a, track: cached.n };
 
-  let data;
-  try { data = await deezerSearchJsonp(`${artist} ${name}`, 8); }
-  catch { return null; }
-  const items = (data?.data || []).filter(r => r.preview);
-  const hit = pickBestMatch(
-    { name, artist },
-    items,
-    r => ({ name: r.title, artist: r.artist?.name }),
-  );
-  if (!hit || !hit.preview) return null;
-  setDeezerCached(cacheKey, { u: hit.preview, a: hit.artist?.name || artist, n: hit.title || name });
-  return { url: hit.preview, artist: hit.artist?.name || artist, track: hit.title || name };
+  const queries = preferredQueryArtists(artists).slice(0, DEEZER_MAX_QUERIES);
+  if (!queries.length) queries.push('');
+  const fallbackArtist = artists[0] || '';
+
+  for (const q of queries) {
+    let data;
+    try { data = await deezerSearchJsonp(`${q} ${name}`.trim(), 8); }
+    catch { return null; }
+    const items = (data?.data || []).filter(r => r.preview);
+    const hit = pickBestMatch(
+      { name, artists },
+      items,
+      r => ({ name: r.title, artist: r.artist?.name }),
+    );
+    if (!hit || !hit.preview) continue;
+    setDeezerCached(cacheKey, { u: hit.preview, a: hit.artist?.name || fallbackArtist, n: hit.title || name });
+    return { url: hit.preview, artist: hit.artist?.name || fallbackArtist, track: hit.title || name };
+  }
+  return null;
 }
 
 // ── Spotify embed iframe ──
@@ -156,26 +169,32 @@ function spotifyEmbed(spotifyId, name, artist) {
 
 // ── API pública ──
 
-// getPreview({ name, artist, spotifyId? }) → resultado o null.
+// getPreview({ name, artist, artists?, spotifyId? }) → resultado o null.
+// `artist` puede ser un nombre o un array, y `artists` la lista entera del
+// track (los dos se juntan). Con varios, el match vale si pasa CUALQUIERA:
+// sin eso, un álbum acreditado a un alias («¥$») no matchea en ningún
+// proveedor y se va entero al embed de Spotify, que no puede autoarrancar.
+//
 // Estrategia:
 //   1. Si hay cache "provider": ir directo a ese proveedor (menos llamadas).
 //   2. Si no: intentar iTunes → Deezer → embed. Guardar el ganador (o 'none').
-async function getPreview({ name, artist, spotifyId } = {}) {
-  if (!name || !artist) return null;
-  const key = `p:${norm(artist)}|${norm(name)}${spotifyId ? '|' + spotifyId : ''}`;
+async function getPreview({ name, artist, artists, spotifyId } = {}) {
+  const lista = artistList({ artist, artists });
+  if (!name || !lista.length) return null;
+  const key = `p:${lista.map(norm).filter(Boolean).join('/')}|${norm(name)}${spotifyId ? '|' + spotifyId : ''}`;
   // El pill muestra SIEMPRE lo que pidió el usuario, nunca el título que
   // devolvió el proveedor: si alguna vez volvemos a servir algo distinto, se
   // nota al toque en vez de disimularse.
-  const label = `${name} — ${artist}`;
+  const label = `${name} — ${lista[0]}`;
 
   const cached = providerFor(key);
   if (cached === 'none') return null;
 
   if (cached === 'itunes' || !cached) {
-    const it = await findTrackPreview(artist, name);
+    const it = await findTrackPreview(lista, name);
     if (it) {
       setProvider(key, 'itunes');
-      return { url: it.url, provider: 'itunes', type: 'audio', label, trackName: name, trackArtist: artist };
+      return { url: it.url, provider: 'itunes', type: 'audio', label, trackName: name, trackArtist: lista[0] };
     }
     if (cached === 'itunes') {
       // Estaba cacheado como iTunes pero ahora falla — dejamos que caigan
@@ -184,16 +203,16 @@ async function getPreview({ name, artist, spotifyId } = {}) {
   }
 
   if (cached === 'deezer' || !cached) {
-    const dz = await tryDeezer(name, artist);
+    const dz = await tryDeezer(name, lista);
     if (dz) {
       setProvider(key, 'deezer');
-      return { url: dz.url, provider: 'deezer', type: 'audio', label, trackName: name, trackArtist: artist };
+      return { url: dz.url, provider: 'deezer', type: 'audio', label, trackName: name, trackArtist: lista[0] };
     }
   }
 
   if ((cached === 'spotify-embed' || !cached) && spotifyId) {
     setProvider(key, 'spotify-embed');
-    return spotifyEmbed(spotifyId, name, artist);
+    return spotifyEmbed(spotifyId, name, lista[0]);
   }
 
   setProvider(key, 'none');

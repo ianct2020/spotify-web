@@ -495,7 +495,8 @@ async function openArtistLikesModal(artistName) {
     attachHover(row, `al-hover:${t.id}`, async () => {
       return await getPreview({
         name: t.name || '',
-        artist: (t.artists?.[0]?.name) || artistName,
+        artists: (t.artists || []).map(x => x.name).filter(Boolean),
+        artist: artistName,
         spotifyId: t.id,
       });
     });
