@@ -16,23 +16,23 @@
 import {
   getAllUserPlaylists, getAllPlaylistItems, getBestAvailableLikes,
   getCurrentUserId,
-} from '../api.js?v=141';
-import { idbGetCached, idbSetCached, idbDel } from '../idb.js?v=141';
-import { createHiddenStore } from '../util/hidden-sync.js?v=141';
-import { addUrisToPlaylists, toastAddResult, getOwnPlaylists } from '../util/playlist-add.js?v=141';
-import { escapeHtml, pageHeader, showProgress, hideProgress, isCancelled } from '../ui/components.js?v=141';
-import { openModal, closeTop } from '../ui/modal-stack.js?v=141';
-import { openPlaylistPicker } from '../ui/playlist-picker.js?v=141';
-import { showToast } from '../ui/toast.js?v=141';
-import { getPreview } from '../api/preview-providers.js?v=141';
-import { togglePreview, playingKey } from '../ui/preview-player.js?v=141';
-import { openTrackCard } from './track-card.js?v=141';
-import { normText } from '../util/track-match.js?v=141';
-import { activateMarquee } from '../ui/marquee.js?v=141';
-import { renderTrackCardRow, wireTrackCardGrid, paintCardSelection } from '../ui/track-card-row.js?v=141';
-import { createIncrementalList, scrollRootOf } from '../ui/incremental-list.js?v=141';
-import { createLazyImages } from '../ui/lazy-img.js?v=141';
-import { coverAtSize } from '../util/cover-size.js?v=141';
+} from '../api.js?v=142';
+import { idbGetCached, idbSetCached, idbDel } from '../idb.js?v=142';
+import { createHiddenStore } from '../util/hidden-sync.js?v=142';
+import { addUrisToPlaylists, toastAddResult, getOwnPlaylists } from '../util/playlist-add.js?v=142';
+import { escapeHtml, pageHeader, showProgress, hideProgress, isCancelled } from '../ui/components.js?v=142';
+import { openModal, closeTop } from '../ui/modal-stack.js?v=142';
+import { openPlaylistPicker } from '../ui/playlist-picker.js?v=142';
+import { showToast } from '../ui/toast.js?v=142';
+import { getPreview } from '../api/preview-providers.js?v=142';
+import { togglePreview, playingKey } from '../ui/preview-player.js?v=142';
+import { openTrackCard } from './track-card.js?v=142';
+import { normText } from '../util/track-match.js?v=142';
+import { activateMarquee } from '../ui/marquee.js?v=142';
+import { renderTrackCardRow, wireTrackCardGrid, paintCardSelection } from '../ui/track-card-row.js?v=142';
+import { createIncrementalList, scrollRootOf } from '../ui/incremental-list.js?v=142';
+import { createLazyImages } from '../ui/lazy-img.js?v=142';
+import { coverAtSize } from '../util/cover-size.js?v=142';
 
 const HIDDEN_KEY = 'sin_clasificar_ocultas';
 const EXCLUDED_KEY = 'sin_clasificar_excluidas';

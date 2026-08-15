@@ -17,6 +17,19 @@
 //     de bigramas ≥ ARTIST_MIN.
 //   - Los títulos de una sola palabra corta ("Go", "24") son los que más
 //     falsos positivos dan: ahí exigimos igualdad exacta.
+//
+// v=142 — el pedido puede traer VARIOS artistas y alcanza con que UNO pase.
+// El caso que lo motivó: VULTURES 1 está acreditado a «¥$», el alias de Kanye
+// West + Ty Dolla $ign. iTunes y Deezer lo listan como "Kanye West & Ty Dolla
+// $ign" y contra "¥$" no hay similitud posible (normalizado queda en la cadena
+// vacía), así que TODAS las pistas del álbum caían al embed de Spotify. Los
+// tracks sí traen la lista entera ("¥$, Kanye West, Ty Dolla $ign"): probando
+// contra cada uno, el match sale por "Kanye West".
+//
+// Importante: no se relajó NADA de la comparación. Los umbrales son los
+// mismos, la regla de títulos de una palabra o ≤4 caracteres sigue exigiendo
+// igualdad exacta (es la que evita que "Not PLaying" reproduzca "Timeless").
+// Lo único que cambia es CONTRA QUÉ se compara el artista.
 
 const TITLE_MIN = 0.86;
 const ARTIST_MIN = 0.80;
@@ -98,7 +111,49 @@ export function artistIsSame(wanted, candidate) {
   return similarity(a, b) >= 0.92;
 }
 
-export function artistMatches(wanted, candidate) {
+// Lista de artistas pedidos, ya sea que venga uno solo (string), un array, o
+// las dos cosas repartidas entre `artist` y `artists`. Sin duplicados y sin
+// vacíos. Los nombres que se normalizan a la cadena vacía ("¥$", "∆") no se
+// tiran acá: `artistOneMatches` los descarta al comparar, pero mantenerlos en
+// la lista deja que `preferredQueryArtists` decida el orden de las búsquedas.
+export function artistList(wanted) {
+  const raw = [];
+  if (Array.isArray(wanted)) raw.push(...wanted);
+  else if (wanted && typeof wanted === 'object') {
+    if (Array.isArray(wanted.artists)) raw.push(...wanted.artists);
+    if (wanted.artist) raw.push(...(Array.isArray(wanted.artist) ? wanted.artist : [wanted.artist]));
+  } else if (wanted) raw.push(wanted);
+
+  const out = [];
+  const seen = new Set();
+  for (const item of raw) {
+    const name = String(item?.name ?? item ?? '').trim();
+    if (!name) continue;
+    const k = name.toLowerCase();
+    if (seen.has(k)) continue;
+    seen.add(k);
+    out.push(name);
+  }
+  return out;
+}
+
+// Nombre "crudo": minúsculas, sin diacríticos y con los espacios colapsados,
+// pero CONSERVANDO los símbolos. `normText` los tira todos, y hay nombres que
+// son solo símbolos: «¥$» queda en la cadena vacía y ahí no hay comparación
+// posible. Deezer lista las pistas de VULTURES 1 justo así, como «¥$» a secas.
+function rawName(s) {
+  return stripDiacritics(String(s || '').toLowerCase()).replace(/\s+/g, ' ').trim();
+}
+
+// Match de UN artista pedido contra el string del candidato. Es la regla de
+// siempre; `artistMatches` la aplica sobre la lista entera.
+function artistOneMatches(wanted, candidate) {
+  // Igualdad exacta del nombre crudo. Es la comparación MÁS estricta que hay
+  // (más que la de bigramas), así que no afloja nada: solo cubre los nombres
+  // que la normalización deja vacíos o irreconocibles.
+  const ra = rawName(wanted);
+  if (ra && ra === rawName(candidate)) return true;
+
   const a = normText(wanted), b = normText(candidate);
   if (!a || !b) return false;
   if (a === b) return true;
@@ -106,14 +161,47 @@ export function artistMatches(wanted, candidate) {
   return similarity(a, b) >= ARTIST_MIN;
 }
 
+// `wanted` puede ser un nombre, un array de nombres o {artist, artists}.
+// Alcanza con que UNO pase: los proveedores acreditan las colaboraciones de
+// mil formas distintas y basta con reconocer a uno de los que están de verdad.
+export function artistMatches(wanted, candidate) {
+  const list = artistList(wanted);
+  if (!list.length) return false;
+  return list.some(a => artistOneMatches(a, candidate));
+}
+
+// Similitud del mejor artista de la lista contra el candidato. Solo para el
+// score (desempatar entre candidatos válidos), no para aceptar o rechazar.
+function bestArtistSimilarity(wanted, candidate) {
+  const b = normText(candidate);
+  let best = 0;
+  for (const a of artistList(wanted)) {
+    const s = similarity(normText(a), b);
+    if (s > best) best = s;
+  }
+  return best;
+}
+
 // Un candidato sirve solo si coinciden TÍTULO Y ARTISTA. Devuelve un score
 // para poder elegir el mejor entre varios candidatos válidos.
 export function candidateScore(wanted, candidate) {
   if (!titleMatches(wanted.name, candidate.name)) return 0;
-  if (!artistMatches(wanted.artist, candidate.artist)) return 0;
+  const artists = artistList(wanted);
+  if (!artistMatches(artists, candidate.artist)) return 0;
   const t = similarity(normText(wanted.name), normText(candidate.name));
-  const ar = similarity(normText(wanted.artist), normText(candidate.artist));
+  const ar = bestArtistSimilarity(artists, candidate.artist);
   return 0.7 * t + 0.3 * ar;
+}
+
+// Orden en el que conviene BUSCAR en los proveedores. Un alias como "¥$" o
+// "∆" no es texto buscable (normalizado queda vacío o en un carácter suelto),
+// así que los nombres con letras van primero; los raros quedan al final como
+// último intento en vez de quemarse la primera búsqueda.
+export function preferredQueryArtists(wanted) {
+  const list = artistList(wanted);
+  const buscables = list.filter(a => normText(a).length >= 2);
+  const raros = list.filter(a => normText(a).length < 2);
+  return [...buscables, ...raros];
 }
 
 // Elige el mejor candidato verificado de una lista, o null si ninguno pasa.

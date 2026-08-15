@@ -495,12 +495,15 @@ async function onPlayClick(r, btn) {
     return;
   }
   closeEmbeds(content);
-  const artist = (r.track.artists || []).map(a => a.name || a)[0] || '';
+  // TODOS los artistas del track, no solo el primero: la cadena de proveedores
+  // acepta el match si coincide cualquiera (util/track-match.js), y con los
+  // álbumes acreditados a un alias («¥$») el primero es justo el que no matchea.
+  const artists = (r.track.artists || []).map(a => a.name || a).filter(Boolean);
   // No pasamos spotifyId a getPreview a propósito: en Skips el iframe embed va
   // INLINE en la tarjeta (toggleEmbed) — no queremos que la cadena lo abra en el
   // pill flotante y encima una segunda fuente en la tarjeta.
   const res = await togglePreview(`sk:${r.id}`, async () => {
-    return await getPreview({ name: r.track.name || '', artist });
+    return await getPreview({ name: r.track.name || '', artists });
   });
   if (res === null) toggleEmbed(r.id, btn);   // ni iTunes ni Deezer → embed Spotify inline
 }

@@ -239,6 +239,10 @@ function slimTrack(t) {
     duration_ms: t.duration_ms,
     explicit: t.explicit,
     is_playable: t.is_playable,
+    // v=142: sin esto, la ficha de álbum no sabía el número de pista de ningún
+    // like (ordenaba alfabético y pintaba un "·" de relleno en cada fila). Las
+    // cachés viejas no lo traen; ahí la fila queda sin número, como hasta ahora.
+    track_number: t.track_number,
     external_ids: t.external_ids ? { isrc: t.external_ids.isrc } : undefined,
     artists: (t.artists || []).map(a => ({ id: a.id, name: a.name })),
     album: t.album ? {

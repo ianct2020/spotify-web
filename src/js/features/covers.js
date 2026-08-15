@@ -10,11 +10,13 @@
 
 import { loadListenedAlbums, isOwner, ownerLockedMessage } from './history-data.js';
 import { isJunkTrack } from '../util/junk.js';
-import { getAllPlaylistItems } from '../api.js';
+import { getAllPlaylistItems, getBestAvailableLikes } from '../api.js';
 import { escapeHtml, pageHeader } from '../ui/components.js';
 import { openAlbumCard } from './album-card.js';
 import { albumKey, coverId } from '../util/album-key.js';
 import { buildAlbumStatsIndex } from '../util/album-stats.js';
+import { getPreview } from '../api/preview-providers.js';
+import { hoverIn, hoverOut } from '../ui/preview-player.js';
 
 const LS_KEY_SIZE = 'covers_cell_size';
 const LS_KEY_SORT = 'covers_sort_mode';
@@ -158,6 +160,78 @@ function buildList(data, wthreeItems, stats) {
     years: [...a.years].sort((x, y) => x - y),
     sources: [...a.sources],
   }));
+}
+
+// ── Hover-play sobre el mosaico (v=142) ─────────────────────────────────────
+//
+// Al parar el mouse sobre una tapa suena una pista al azar de ESE álbum que
+// esté en los me gusta de Ian. El delay lo pone `hoverIn` (400 ms por defecto,
+// ui/preview-player.js): sin eso, barrer el mosaico dispararía cien búsquedas.
+// Salir de la celda cancela el timer y, si ya había arrancado, corta el audio.
+//
+// El índice de likes por álbum se arma una sola vez, en el primer hover, y no
+// al entrar a la vista: el mosaico ya carga 2.400 tapas y no vale la pena
+// competir con eso por nada.
+//
+// Convive con `lazy-img.js` sin tocarlo: `#covers` no lo usa (pinta las tapas
+// con `loading="lazy"` nativo, ver `cellHtml`), y aunque lo usara, el hover
+// solo lee `currentList` y reproduce audio — no toca `src` ni `data-src` de
+// ninguna <img>, que es lo único que la evicción mira.
+let likesPorAlbum = null;
+let likesPorAlbumPromise = null;
+
+function indexarLikes(items) {
+  // Dos claves por track: el hash de la tapa (identidad real del disco, la
+  // misma que dedupea el mosaico) y albumKey(nombre, artista) de respaldo para
+  // los likes cuya tapa no coincide con la del historial.
+  const idx = new Map();
+  const push = (k, v) => {
+    if (!k) return;
+    const arr = idx.get(k);
+    if (arr) { if (!arr.some(x => x.id === v.id)) arr.push(v); }
+    else idx.set(k, [v]);
+  };
+  for (const it of (items || [])) {
+    const t = it?.track || it;
+    if (!t || !t.name || !t.album) continue;
+    if (isJunkTrack(t.name, t.artists?.[0]?.name)) continue;
+    const artistas = (t.artists || []).map(x => x.name).filter(Boolean);
+    const entry = { id: t.id, name: t.name, artists: artistas };
+    for (const im of (t.album.images || [])) push(coverId(im?.url), entry);
+    push(`k:${albumKey(t.album.name || '', artistas[0] || '')}`, entry);
+  }
+  return idx;
+}
+
+function ensureLikesPorAlbum() {
+  if (likesPorAlbum) return Promise.resolve(likesPorAlbum);
+  if (likesPorAlbumPromise) return likesPorAlbumPromise;
+  likesPorAlbumPromise = (async () => {
+    let idx = new Map();
+    try {
+      const res = await getBestAvailableLikes();
+      idx = indexarLikes(res?.items || []);
+      console.info(`[covers] hover-play: ${idx.size} claves de álbum con likes`);
+    } catch (e) {
+      console.warn('[covers] hover-play: no pude cargar los likes:', e.message);
+    }
+    // Un índice vacío NO se memoiza: si la caché de likes todavía no estaba, el
+    // hover quedaría mudo para toda la sesión aunque los likes lleguen un
+    // segundo después (el mismo pozo que tapaba los corazones de W-Three).
+    if (idx.size === 0) { likesPorAlbumPromise = null; return idx; }
+    likesPorAlbum = idx;
+    return idx;
+  })();
+  return likesPorAlbumPromise;
+}
+
+// Una pista al azar de ese álbum que esté en los likes, o null.
+async function pistaAlAzarDelAlbum(a) {
+  const idx = await ensureLikesPorAlbum();
+  const cid = coverId(a.img);
+  const cands = (cid && idx.get(cid)) || idx.get(`k:${albumKey(a.name, a.artist)}`) || null;
+  if (!cands || !cands.length) return null;
+  return cands[Math.floor(Math.random() * cands.length)];
 }
 
 function sortList(list, mode) {
@@ -590,7 +664,7 @@ export async function render(container) {
   grid.addEventListener('pointermove', (e) => {
     const btn = e.target.closest('.cover-cell');
     if (!btn) {
-      if (currentIdx !== -1) { tooltip.classList.remove('is-on'); currentIdx = -1; }
+      if (currentIdx !== -1) { tooltip.classList.remove('is-on'); currentIdx = -1; hoverOut(); }
       return;
     }
     const idx = +btn.dataset.i;
@@ -598,6 +672,18 @@ export async function render(container) {
       currentIdx = idx;
       const a = currentList[idx];
       if (!a) return;
+      // Hover-play: `hoverIn` ya trae el debounce y cancela el anterior cuando
+      // cambia la key, así que pasar de una tapa a otra no encola dos previews.
+      // El getter corre recién después del delay: mover el mouse por encima no
+      // dispara ninguna búsqueda.
+      hoverIn(`cov:${coverId(a.img) || albumKey(a.name, a.artist)}`, async () => {
+        const pista = await pistaAlAzarDelAlbum(a);
+        if (!pista) return null;
+        // Sin spotifyId a propósito: el embed no puede autoarrancar en un
+        // iframe cross-origin, así que como hover no sirve para nada. Si no
+        // hay audio de iTunes ni de Deezer, el hover se queda callado.
+        return await getPreview({ name: pista.name, artists: pista.artists });
+      });
       tooltip.querySelector('.ct-name').textContent = a.name || '—';
       tooltip.querySelector('.ct-artist').textContent = a.artist || '';
       const year = (a.date || '').slice(0, 4);
@@ -619,10 +705,12 @@ export async function render(container) {
   grid.addEventListener('pointerleave', () => {
     tooltip.classList.remove('is-on');
     currentIdx = -1;
+    hoverOut();
   });
 
   return () => {
     renderToken++;                 // corta los lotes que quedaran en vuelo
+    hoverOut();                    // timer de hover-play pendiente, si lo había
     if (imgSettledHandler) {
       grid.removeEventListener('load', imgSettledHandler, true);
       grid.removeEventListener('error', imgSettledHandler, true);

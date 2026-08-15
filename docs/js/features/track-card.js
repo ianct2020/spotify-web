@@ -3,14 +3,15 @@
 // días distintos, récord en un día — más preview iTunes y link a Spotify.
 // Se abre desde cualquier feature con openTrackCard({ id, name, artist, album, img }).
 
-import { loadTrackPlays, loadTrackDetail, loadHistoryStats, isOwner } from './history-data.js?v=141';
-import { escapeHtml } from '../ui/components.js?v=141';
-import { getPreview } from '../api/preview-providers.js?v=141';
-import { togglePreview, playingKey } from '../ui/preview-player.js?v=141';
-import { hasUsername, findTrackId, getTrackCurrentStats, loadTopLifetime } from '../api/statsfm.js?v=141';
-import { openAlbumCard } from './album-card.js?v=141';
-import { openModal, closeTop } from '../ui/modal-stack.js?v=141';
-import { getBestAvailableLikes } from '../api.js?v=141';
+import { loadTrackPlays, loadTrackDetail, loadHistoryStats, isOwner } from './history-data.js?v=142';
+import { escapeHtml } from '../ui/components.js?v=142';
+import { getPreview } from '../api/preview-providers.js?v=142';
+import { togglePreview, playingKey } from '../ui/preview-player.js?v=142';
+import { hasUsername, findTrackId, getTrackCurrentStats, loadTopLifetime } from '../api/statsfm.js?v=142';
+import { openAlbumCard } from './album-card.js?v=142';
+import { openModal, closeTop } from '../ui/modal-stack.js?v=142';
+import { getBestAvailableLikes } from '../api.js?v=142';
+import { showToast } from '../ui/toast.js?v=142';
 
 const MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
 
@@ -92,6 +93,7 @@ async function openTrackCard(t) {
             <a class="btn btn-secondary btn-sm" href="https://open.spotify.com/track/${t.id}" target="_blank" rel="noopener">Abrir en Spotify ↗</a>
           </div>
         </div>
+        <button class="btn btn-secondary btn-sm" id="tc-go-album" title="Abrir la ficha del álbum" style="flex-shrink:0">Ir al álbum</button>
         <button class="btn btn-secondary btn-sm" data-close-modal title="Cerrar" style="flex-shrink:0">✕</button>
       </div>
       <div id="tc-body"><div style="text-align:center;padding:24px"><div class="spinner"></div></div></div>
@@ -99,15 +101,16 @@ async function openTrackCard(t) {
   `,
   });
 
-  // Click en la tapa → abrir ficha del álbum ENCIMA (no cierra la de canción,
-  // así la flecha ← vuelve). Si el caller no pasó `album`, lo resolvemos:
+  // Ir a la ficha del álbum: la abre ENCIMA (no cierra la de canción, así la
+  // flecha ← vuelve). Si el caller no pasó `album`, lo resolvemos:
   // 1) match por id en los likes cacheados; 2) top_albums_all_time filtrado
   // por artista si hay un único álbum. Si no se logra, no rompe.
-  const cover = overlay.querySelector('#tc-cover');
-  if (cover) {
-    cover.onclick = async () => {
+  //
+  // Se dispara desde dos lados: la tapa (que no se ve que sea clickeable) y el
+  // botón "Ir al álbum" de la fila de ← / ✕ (v=142).
+  const irAlAlbum = async () => {
       let albumName = t.album || null;
-      let albumInfo = { name: albumName, artist: t.artist, img: t.img };
+      let albumInfo = { name: albumName, artist: t.artist, img: t.albumImg || t.img };
       try {
         const stats = await loadHistoryStats().catch(() => null);
         if (albumName) {
@@ -139,8 +142,13 @@ async function openTrackCard(t) {
         }
       } catch { /* noop */ }
       if (albumInfo.name) openAlbumCard(albumInfo);
-    };
-  }
+      else showToast('No pude averiguar de qué álbum es esta canción', 'info');
+  };
+
+  const cover = overlay.querySelector('#tc-cover');
+  if (cover) cover.onclick = irAlAlbum;
+  const goAlbumBtn = overlay.querySelector('#tc-go-album');
+  if (goAlbumBtn) goAlbumBtn.onclick = irAlAlbum;
 
   // Si el llamador no pasó tapa (típico de tracks del Wrapped/Récords, que vienen
   // solo con {name, artist, uri}), la traemos vía oEmbed — CORS abierto, sin auth.
@@ -149,7 +157,9 @@ async function openTrackCard(t) {
   const previewBtn = overlay.querySelector('#tc-preview');
   previewBtn.onclick = async () => {
     const res = await togglePreview(`tc:${t.id}`, async () => {
-      return await getPreview({ name: t.name || '', artist: t.artist || '', spotifyId: t.id });
+      // `artists` (lista completa) si el llamador la trajo; si no, el string de
+      // siempre. La cadena acepta el match si coincide cualquiera de los dos.
+      return await getPreview({ name: t.name || '', artist: t.artist || '', artists: t.artists, spotifyId: t.id });
     });
     previewBtn.textContent = res === true ? '⏹ Parar' : '▶ Preview';
     if (res === null) previewBtn.textContent = 'Sin preview';

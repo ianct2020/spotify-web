@@ -3,20 +3,20 @@
 // Preview 30s instantáneo vía iTunes (arranca en el estribillo, no suma plays
 // en tu historial de Spotify). Fallback: iframe embed oficial si iTunes no lo tiene.
 
-import { getBestAvailableLikes, removeLikedTracks } from '../api.js?v=141';
-import { loadSkipStats, trackIdOf, isOwner, ownerLockedMessage } from './history-data.js?v=141';
-import { escapeHtml, confirmModal, pageHeader } from '../ui/components.js?v=141';
-import { showToast } from '../ui/toast.js?v=141';
-import { getPreview } from '../api/preview-providers.js?v=141';
-import { togglePreview, playingKey } from '../ui/preview-player.js?v=141';
-import { openTrackCard } from './track-card.js?v=141';
-import { activateMarquee } from '../ui/marquee.js?v=141';
-import { hasUsername, loadTopLifetime } from '../api/statsfm.js?v=141';
-import { createHiddenStore } from '../util/hidden-sync.js?v=141';
-import { createIncrementalList, scrollRootOf } from '../ui/incremental-list.js?v=141';
-import { createLazyImages } from '../ui/lazy-img.js?v=141';
-import { renderTrackCardRow, wireTrackCardGrid, paintCardSelection } from '../ui/track-card-row.js?v=141';
-import { coverAtSize } from '../util/cover-size.js?v=141';
+import { getBestAvailableLikes, removeLikedTracks } from '../api.js?v=142';
+import { loadSkipStats, trackIdOf, isOwner, ownerLockedMessage } from './history-data.js?v=142';
+import { escapeHtml, confirmModal, pageHeader } from '../ui/components.js?v=142';
+import { showToast } from '../ui/toast.js?v=142';
+import { getPreview } from '../api/preview-providers.js?v=142';
+import { togglePreview, playingKey } from '../ui/preview-player.js?v=142';
+import { openTrackCard } from './track-card.js?v=142';
+import { activateMarquee } from '../ui/marquee.js?v=142';
+import { hasUsername, loadTopLifetime } from '../api/statsfm.js?v=142';
+import { createHiddenStore } from '../util/hidden-sync.js?v=142';
+import { createIncrementalList, scrollRootOf } from '../ui/incremental-list.js?v=142';
+import { createLazyImages } from '../ui/lazy-img.js?v=142';
+import { renderTrackCardRow, wireTrackCardGrid, paintCardSelection } from '../ui/track-card-row.js?v=142';
+import { coverAtSize } from '../util/cover-size.js?v=142';
 
 let cache = null;
 // Filas visibles con los filtros actuales, en el mismo orden que las tarjetas
@@ -495,12 +495,15 @@ async function onPlayClick(r, btn) {
     return;
   }
   closeEmbeds(content);
-  const artist = (r.track.artists || []).map(a => a.name || a)[0] || '';
+  // TODOS los artistas del track, no solo el primero: la cadena de proveedores
+  // acepta el match si coincide cualquiera (util/track-match.js), y con los
+  // álbumes acreditados a un alias («¥$») el primero es justo el que no matchea.
+  const artists = (r.track.artists || []).map(a => a.name || a).filter(Boolean);
   // No pasamos spotifyId a getPreview a propósito: en Skips el iframe embed va
   // INLINE en la tarjeta (toggleEmbed) — no queremos que la cadena lo abra en el
   // pill flotante y encima una segunda fuente en la tarjeta.
   const res = await togglePreview(`sk:${r.id}`, async () => {
-    return await getPreview({ name: r.track.name || '', artist });
+    return await getPreview({ name: r.track.name || '', artists });
   });
   if (res === null) toggleEmbed(r.id, btn);   // ni iTunes ni Deezer → embed Spotify inline
 }
