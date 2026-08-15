@@ -8,12 +8,13 @@
 // placeholder→img. Botón "Pantalla completa" (Fullscreen API) que oculta
 // sidebar/header/toolbar y recalcula el lado.
 
-import { loadListenedAlbums, isOwner, ownerLockedMessage } from './history-data.js?v=139';
-import { isJunkTrack } from '../util/junk.js?v=139';
-import { getAllPlaylistItems } from '../api.js?v=139';
-import { escapeHtml, pageHeader } from '../ui/components.js?v=139';
-import { openAlbumCard } from './album-card.js?v=139';
-import { albumKey, coverId } from '../util/album-key.js?v=139';
+import { loadListenedAlbums, isOwner, ownerLockedMessage } from './history-data.js?v=140';
+import { isJunkTrack } from '../util/junk.js?v=140';
+import { getAllPlaylistItems } from '../api.js?v=140';
+import { escapeHtml, pageHeader } from '../ui/components.js?v=140';
+import { openAlbumCard } from './album-card.js?v=140';
+import { albumKey, coverId } from '../util/album-key.js?v=140';
+import { buildAlbumStatsIndex } from '../util/album-stats.js?v=140';
 
 const LS_KEY_SIZE = 'covers_cell_size';
 const LS_KEY_SORT = 'covers_sort_mode';
@@ -47,9 +48,16 @@ function setYearsSel(sel) {
 
 // Aplana history-listened-albums.json y mergea la playlist W-Three (si hay).
 // Devuelve la lista de álbumes únicos con: name, artist, img, date (primera
-// escucha), min (suma de minutos), years (Set de años en que se escuchó) y
-// sources (Set con 'listened' / 'wthree').
-function buildList(data, wthreeItems) {
+// escucha), plays y min REALES (del historial completo, ver util/album-stats.js),
+// years (Set de años en que se escuchó) y sources (Set 'listened' / 'wthree').
+//
+// `stats` es el índice albumKey → {plays, ms}. Puede venir vacío (BYOH con un
+// JSON v3, o usuario sin historial): en ese caso plays y min quedan en 0 y la
+// ficha muestra "sin datos de escucha", que es honesto. Los `min_that_day` de
+// listened-albums NO se usan como número de minutos: son los del primer día que
+// el álbum cumplió el umbral, no el total, y sumarlos entre entradas no
+// significa nada (eso era el "20m" de VULTURES 1).
+function buildList(data, wthreeItems, stats) {
   const map = new Map();
 
   for (const y of (data?.years || [])) {
@@ -58,17 +66,20 @@ function buildList(data, wthreeItems) {
       const k = albumKey(a.name, a.artist);
       const prev = map.get(k);
       if (prev) {
-        prev.min += (a.min_that_day || 0);
         if ((a.date || '') && (!prev.date || a.date < prev.date)) prev.date = a.date;
         if (!prev.img && a.img) prev.img = a.img;
         if (yn) prev.years.add(yn);
       } else {
+        const t = stats?.get(k);
         map.set(k, {
           name: a.name || '',
           artist: a.artist || '',
           img: a.img || '',
           date: a.date || '',
-          min: a.min_that_day || 0,
+          // Del índice, no del min_that_day. Una sola vez por clave: el índice
+          // ya trae el total del álbum, sumarlo por cada año lo multiplicaría.
+          plays: t?.plays || 0,
+          min: t ? t.ms / 60000 : 0,
           years: new Set(yn ? [yn] : []),
           sources: new Set(['listened']),
         });
@@ -91,12 +102,14 @@ function buildList(data, wthreeItems) {
         prev.sources.add('wthree');
         if (!prev.img && wImg) prev.img = wImg;
       } else {
+        const t = stats?.get(k);
         map.set(k, {
           name: albumName,
           artist: artistName,
           img: wImg,
           date: '',
-          min: 0,
+          plays: t?.plays || 0,
+          min: t ? t.ms / 60000 : 0,
           years: new Set(),
           sources: new Set(['wthree']),
         });
@@ -126,7 +139,10 @@ function buildList(data, wthreeItems) {
     const cid = coverId(a.img);
     const prev = cid ? byCover.get(cid) : null;
     if (prev) {
-      // Nos quedamos con la escucha más antigua y sumamos minutos y años.
+      // Nos quedamos con la escucha más antigua y sumamos plays, minutos y años.
+      // Acá es donde se junta el disco colaborativo partido en dos claves
+      // (VULTURES 1 como «¥$» y como «Kanye West»): 109+39 plays y 271+102 min.
+      prev.plays += a.plays;
       prev.min += a.min;
       if (a.date && (!prev.date || a.date < prev.date)) prev.date = a.date;
       for (const y of a.years) prev.years.add(y);
@@ -224,7 +240,7 @@ export async function render(container) {
   // v=127: las celdas sin tapa mostraban un cuadro gris con la inicial y
   // ensuciaban el collage. Fuera del mosaico y fuera del contador — el número
   // que se muestra es el de tapas que se ven de verdad.
-  const built = buildList(data, wthreeItems);
+  const built = buildList(data, wthreeItems, await buildAlbumStatsIndex());
   const noCover = built.filter(a => !a.img);
   const allAlbums = built.filter(a => a.img);
   if (noCover.length) {
@@ -559,7 +575,7 @@ export async function render(container) {
     const idx = +btn.dataset.i;
     const a = currentList[idx];
     if (!a) return;
-    openAlbumCard({ name: a.name, artist: a.artist, img: a.img, plays: 0, min: a.min });
+    openAlbumCard({ name: a.name, artist: a.artist, img: a.img, plays: a.plays, min: a.min });
   });
 
   // Si una tapa 404ea, sacamos la celda entera en vez de poner el cuadro con la

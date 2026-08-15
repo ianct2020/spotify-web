@@ -1,0 +1,169 @@
+// Tarjeta horizontal de canción, compartida por `#sin-clasificar` y `#skips`.
+//
+// Nació en v=138 dentro de `sin-clasificar.js`; en v=140 se extrajo acá para
+// que `#skips` use LA MISMA, no una copia. El CSS vive en `components.css`
+// bajo el prefijo `.sc-`, que se quedó por historia: hoy es el de esta
+// tarjeta, no el de una vista.
+//
+// Anatomía: tapa de 96px a la izquierda (desde la imagen de 300×300, con la de
+// 64 en el `onerror`) y a la derecha título con marquee, artistas, una línea
+// secundaria y la fila de controles.
+//
+// La tarjeta ENTERA es el control de selección — `role="option"` dentro de un
+// `role="listbox" aria-multiselectable`, borde de acento + `--color-accent-tint`
+// + un check sobre la esquina de la tapa cuando está marcada, `tabindex`,
+// Enter/Espacio y focus visible. Por eso no hay checkbox suelto.
+//
+// Reglas que hay que respetar al usarla:
+//   - Los handlers van DELEGADOS en el grid (`wireTrackCardGrid`). Con lista
+//     incremental las tarjetas de los lotes siguientes no existen todavía;
+//     cablear por tarjeta deja medio listado muerto y sin un solo error.
+//   - Cada tarjeta se resuelve por `data-id` contra un Map, nunca por índice.
+//   - La selección vive en un Set del feature, no en el DOM.
+
+import { escapeHtml } from './components.js';
+import { marqueeSpan } from './marquee.js';
+
+const OJO_ABIERTO = `<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>`;
+const OJO_TACHADO = `<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>`;
+const PLAY = `<svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14"><path d="M8 5v14l11-7z"/></svg>`;
+const FICHA = `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><line x1="12" y1="11" x2="12" y2="16"/><line x1="12" y1="8" x2="12" y2="8"/></svg>`;
+const CHECK = `<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>`;
+
+/**
+ * Devuelve el HTML de una tarjeta. Todos los campos de texto se escapan acá.
+ *
+ * @param {object} r
+ * @param {string} r.id        identidad de la fila (va en `data-id`)
+ * @param {string} r.name      título
+ * @param {string} r.artists   artistas ya unidos en un string
+ * @param {string} [r.sub]     tercera línea (álbum, fecha…)
+ * @param {string} [r.cover]   URL de la tapa grande (300×300). Va en `data-src`:
+ *                             la carga la resuelve `ui/lazy-img.js`.
+ * @param {string} [r.coverSmall] tapa de 64 para el `onerror`
+ * @param {string} [r.trackId] id de Spotify, para el ↗
+ * @param {object} [opts]
+ * @param {boolean} [opts.selected]
+ * @param {boolean} [opts.playing]
+ * @param {boolean} [opts.hidden]  la tarjeta está en la vista de ocultos
+ * @param {boolean} [opts.showAdd] muestra el botón «Añadir a…»
+ * @param {boolean} [opts.showCard] muestra el ⓘ de la ficha del tema
+ * @param {string} [opts.badge]   HTML que va antes de los botones (el % de skips)
+ * @param {string} [opts.extra]   HTML al final de la tarjeta (el slot del embed)
+ */
+export function renderTrackCardRow(r, opts = {}) {
+  const {
+    selected = false, playing = false, hidden = false,
+    showAdd = false, showCard = true, badge = '', extra = '',
+  } = opts;
+
+  const id = escapeHtml(r.id);
+  const nombre = escapeHtml(r.name || '(sin nombre)');
+  const artistas = escapeHtml(r.artists || '');
+  const sub = r.sub ? escapeHtml(r.sub) : '';
+
+  // La URL de 300 se deduce del prefijo del CDN (util/cover-size.js), que es
+  // una convención NO documentada: si alguna vez no existe, la tapa cae a la de
+  // 64 en vez de quedar rota. El onerror se desarma solo para no ciclar.
+  const fallback = r.coverSmall && r.coverSmall !== r.cover
+    ? ` onerror="this.onerror=null;this.src='${escapeHtml(r.coverSmall)}'"`
+    : '';
+
+  return `
+    <div class="sc-card${selected ? ' is-sel' : ''}" data-id="${id}"
+         role="option" aria-selected="${selected}" tabindex="0"
+         aria-label="${nombre} — ${artistas}">
+      <div class="sc-cover-wrap">
+        ${r.cover
+          ? `<img class="sc-cover" data-src="${escapeHtml(r.cover)}" alt="" width="96" height="96" decoding="async"${fallback}>`
+          : `<div class="sc-cover sc-cover-empty">♪</div>`}
+        <span class="sc-check-badge" aria-hidden="true">${CHECK}</span>
+      </div>
+      <div class="sc-card-body">
+        <div class="sc-info">
+          <div class="sc-title">${marqueeSpan(nombre)}</div>
+          <div class="sc-meta">${artistas}</div>
+          ${sub ? `<div class="sc-meta sc-meta-sub">${sub}</div>` : ''}
+        </div>
+        <div class="sc-actions">
+          ${badge}
+          <button type="button" class="sc-btn sc-play${playing ? ' playing' : ''}" title="Preview de 30 s — no suma reproducciones" aria-label="Preview">${PLAY}</button>
+          ${showCard && r.trackId
+            ? `<button type="button" class="sc-btn sc-card-btn" title="Ver la ficha del tema" aria-label="Ver ficha">${FICHA}</button>`
+            : ''}
+          ${showAdd ? `<button type="button" class="sc-btn sc-add" title="Añadir a una playlist">Añadir a…</button>` : ''}
+          ${r.trackId
+            ? `<a class="sc-btn sc-open" href="https://open.spotify.com/track/${escapeHtml(r.trackId)}" target="_blank" rel="noopener" title="Abrir en Spotify" aria-label="Abrir en Spotify">↗</a>`
+            : ''}
+          <button type="button" class="sc-btn sc-hide" title="${hidden ? 'Devolver a la lista' : 'Ocultar de la lista (no toca Spotify)'}" aria-label="${hidden ? 'Devolver' : 'Ocultar'}">
+            ${hidden ? OJO_ABIERTO : OJO_TACHADO}
+          </button>
+        </div>
+      </div>
+      ${extra}
+    </div>
+  `;
+}
+
+/**
+ * Cablea el grid entero por delegación. Devuelve una función para desarmarlo.
+ *
+ * @param {HTMLElement} grid
+ * @param {object} handlers
+ * @param {(id: string) => any} handlers.rowById   resuelve la fila desde el data-id
+ * @param {(id: string, o: {range: boolean}) => void} handlers.onToggle
+ * @param {(r: any, card: HTMLElement) => void} [handlers.onPlay]
+ * @param {(r: any) => void} [handlers.onCard]
+ * @param {(r: any) => void} [handlers.onAdd]
+ * @param {(r: any) => void} [handlers.onHide]
+ */
+export function wireTrackCardGrid(grid, { rowById, onToggle, onPlay, onCard, onAdd, onHide } = {}) {
+  if (!grid) return () => {};
+
+  const onClick = (e) => {
+    const card = e.target.closest('.sc-card');
+    if (!card || !grid.contains(card)) return;
+    const r = rowById(card.dataset.id);
+    if (!r) return;
+
+    // Los controles cortan acá: tocarlos no selecciona la tarjeta. El ↗ de
+    // Spotify es un <a>, así que no alcanza con mirar los <button>.
+    const control = e.target.closest('button, a');
+    if (control) {
+      if (control.classList.contains('sc-open')) return;   // link externo, que siga
+      e.preventDefault();
+      e.stopPropagation();
+      if (control.classList.contains('sc-play')) onPlay?.(r, card);
+      else if (control.classList.contains('sc-card-btn')) onCard?.(r);
+      else if (control.classList.contains('sc-add')) onAdd?.(r);
+      else if (control.classList.contains('sc-hide')) onHide?.(r);
+      return;
+    }
+
+    onToggle?.(card.dataset.id, { range: e.shiftKey });
+  };
+
+  // Enter y Espacio togglean la tarjeta enfocada. El Espacio además scrollea la
+  // página por defecto, así que hay que cortarlo.
+  const onKeydown = (e) => {
+    if (e.key !== 'Enter' && e.key !== ' ' && e.key !== 'Spacebar') return;
+    const card = e.target.closest?.('.sc-card');
+    if (!card || e.target.closest('button, a')) return;
+    e.preventDefault();
+    onToggle?.(card.dataset.id, { range: e.shiftKey });
+  };
+
+  grid.addEventListener('click', onClick);
+  grid.addEventListener('keydown', onKeydown);
+  return () => {
+    grid.removeEventListener('click', onClick);
+    grid.removeEventListener('keydown', onKeydown);
+  };
+}
+
+/** Refleja el estado de selección en una tarjeta ya pintada. */
+export function paintCardSelection(card, selected) {
+  if (!card) return;
+  card.classList.toggle('is-sel', selected);
+  card.setAttribute('aria-selected', selected ? 'true' : 'false');
+}

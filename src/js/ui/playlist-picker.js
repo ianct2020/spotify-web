@@ -18,7 +18,7 @@
 // del botón mientras se trabaja (el chequeo de duplicados puede tardar si una
 // playlist grande no está cacheada).
 
-import { openModal, closeTop } from './modal-stack.js';
+import { openModal, closeModal } from './modal-stack.js';
 import { escapeHtml } from './components.js';
 import { showToast } from './toast.js';
 import { normText } from '../util/track-match.js';
@@ -153,7 +153,10 @@ export function openPlaylistPicker({
     const setStatus = (txt) => { confirmar.textContent = txt || 'Añadiendo…'; };
     try {
       if (onConfirm) await onConfirm(elegidas, { setStatus });
-      closeTop();
+      // Por handle y no closeTop(): `onConfirm` lee las playlists elegidas
+      // antes de escribir y eso tarda; si en el medio se apiló otro modal
+      // encima, closeTop() cerraría ese en vez de este.
+      closeModal(overlay);
     } catch (e) {
       console.error('[playlist-picker]', e);
       confirmar.textContent = textoOriginal;

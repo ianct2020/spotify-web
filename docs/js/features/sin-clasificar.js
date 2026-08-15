@@ -16,22 +16,23 @@
 import {
   getAllUserPlaylists, getAllPlaylistItems, getBestAvailableLikes,
   getCurrentUserId,
-} from '../api.js?v=139';
-import { idbGetCached, idbSetCached, idbDel } from '../idb.js?v=139';
-import { createHiddenStore } from '../util/hidden-sync.js?v=139';
-import { addUrisToPlaylists, toastAddResult, getOwnPlaylists } from '../util/playlist-add.js?v=139';
-import { escapeHtml, pageHeader, showProgress, hideProgress, isCancelled } from '../ui/components.js?v=139';
-import { openModal, closeTop } from '../ui/modal-stack.js?v=139';
-import { openPlaylistPicker } from '../ui/playlist-picker.js?v=139';
-import { showToast } from '../ui/toast.js?v=139';
-import { getPreview } from '../api/preview-providers.js?v=139';
-import { togglePreview, playingKey } from '../ui/preview-player.js?v=139';
-import { openTrackCard } from './track-card.js?v=139';
-import { normText } from '../util/track-match.js?v=139';
-import { activateMarquee, marqueeSpan } from '../ui/marquee.js?v=139';
-import { createIncrementalList, scrollRootOf } from '../ui/incremental-list.js?v=139';
-import { createLazyImages } from '../ui/lazy-img.js?v=139';
-import { coverAtSize } from '../util/cover-size.js?v=139';
+} from '../api.js?v=140';
+import { idbGetCached, idbSetCached, idbDel } from '../idb.js?v=140';
+import { createHiddenStore } from '../util/hidden-sync.js?v=140';
+import { addUrisToPlaylists, toastAddResult, getOwnPlaylists } from '../util/playlist-add.js?v=140';
+import { escapeHtml, pageHeader, showProgress, hideProgress, isCancelled } from '../ui/components.js?v=140';
+import { openModal, closeTop } from '../ui/modal-stack.js?v=140';
+import { openPlaylistPicker } from '../ui/playlist-picker.js?v=140';
+import { showToast } from '../ui/toast.js?v=140';
+import { getPreview } from '../api/preview-providers.js?v=140';
+import { togglePreview, playingKey } from '../ui/preview-player.js?v=140';
+import { openTrackCard } from './track-card.js?v=140';
+import { normText } from '../util/track-match.js?v=140';
+import { activateMarquee } from '../ui/marquee.js?v=140';
+import { renderTrackCardRow, wireTrackCardGrid, paintCardSelection } from '../ui/track-card-row.js?v=140';
+import { createIncrementalList, scrollRootOf } from '../ui/incremental-list.js?v=140';
+import { createLazyImages } from '../ui/lazy-img.js?v=140';
+import { coverAtSize } from '../util/cover-size.js?v=140';
 
 const HIDDEN_KEY = 'sin_clasificar_ocultas';
 const EXCLUDED_KEY = 'sin_clasificar_excluidas';
@@ -546,58 +547,18 @@ function fechaLike(iso) {
   return d.toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' });
 }
 
-// Tarjeta horizontal: tapa grande a la izquierda (96px, desde la imagen de
-// 300×300) y el texto a la derecha. La selección es de la tarjeta ENTERA —
-// borde de acento, fondo tintado y un check sobre la esquina de la tapa — así
-// que no hay checkbox suelto. Se identifica por `data-id` y no por índice: con
-// la lista incremental las tarjetas se appendean en tandas y los handlers están
-// delegados en el grid, así que cada una resuelve su fila sola (rowById).
+// La tarjeta la pinta el componente compartido `ui/track-card-row.js` (v=140);
+// antes vivía acá y `#skips` tenía su propia versión con tapa de 56px.
 function renderCard(r) {
-  const sel = selected.has(r.id);
-  return `
-    <div class="sc-card${sel ? ' is-sel' : ''}" data-id="${escapeHtml(r.id)}"
-         role="option" aria-selected="${sel}" tabindex="0"
-         aria-label="${escapeHtml(r.name)} — ${escapeHtml(r.artists)}">
-      <div class="sc-cover-wrap">
-        ${r.cover
-          ? `<img class="sc-cover" data-src="${escapeHtml(r.cover)}" alt="" width="96" height="96" decoding="async"${
-              r.coverSmall && r.coverSmall !== r.cover
-                // La URL de 300 sale de una convención del CDN, no de la API:
-                // si alguna vez no existe, la tapa cae a la de 64 en vez de
-                // quedar rota. El onerror se desarma solo para no ciclar.
-                ? ` onerror="this.onerror=null;this.src='${escapeHtml(r.coverSmall)}'"`
-                : ''}>`
-          : `<div class="sc-cover sc-cover-empty">♪</div>`}
-        <span class="sc-check-badge" aria-hidden="true">
-          <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-        </span>
-      </div>
-      <div class="sc-card-body">
-        <div class="sc-info">
-          <div class="sc-title">${marqueeSpan(escapeHtml(r.name))}</div>
-          <div class="sc-meta">${escapeHtml(r.artists)}</div>
-          <div class="sc-meta sc-meta-sub">${escapeHtml(r.album)}${r.addedAt ? ` · ${fechaLike(r.addedAt)}` : ''}</div>
-        </div>
-        <div class="sc-actions">
-          <button type="button" class="sc-btn sc-play ${playingKey() === `sc:${r.id}` ? 'playing' : ''}" title="Preview de 30 s — no suma reproducciones" aria-label="Preview">
-            <svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14"><path d="M8 5v14l11-7z"/></svg>
-          </button>
-          ${r.trackId ? `
-            <button type="button" class="sc-btn sc-card-btn" title="Ver la ficha del tema" aria-label="Ver ficha">
-              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><line x1="12" y1="11" x2="12" y2="16"/><line x1="12" y1="8" x2="12" y2="8"/></svg>
-            </button>
-          ` : ''}
-          <button type="button" class="sc-btn sc-add" title="Añadir a una playlist">Añadir a…</button>
-          ${r.trackId ? `<a class="sc-btn sc-open" href="https://open.spotify.com/track/${r.trackId}" target="_blank" rel="noopener" title="Abrir en Spotify" aria-label="Abrir en Spotify">↗</a>` : ''}
-          <button type="button" class="sc-btn sc-hide" title="${showingHidden ? 'Devolver a la lista' : 'Ocultar de la lista (no toca Spotify)'}" aria-label="${showingHidden ? 'Devolver' : 'Ocultar'}">
-            ${showingHidden
-              ? `<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>`
-              : `<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>`}
-          </button>
-        </div>
-      </div>
-    </div>
-  `;
+  return renderTrackCardRow(
+    { ...r, sub: `${r.album || ''}${r.addedAt ? ` · ${fechaLike(r.addedAt)}` : ''}` },
+    {
+      selected: selected.has(r.id),
+      playing: playingKey() === `sc:${r.id}`,
+      hidden: showingHidden,
+      showAdd: true,
+    },
+  );
 }
 
 function wire() {
@@ -645,41 +606,14 @@ function wire() {
   // Handlers de tarjeta DELEGADOS en el grid: con append incremental, las
   // tarjetas del lote 3 en adelante no existen cuando se cablea la vista, así
   // que un querySelectorAll().forEach dejaría medio listado muerto y sin error.
-  const grid = content.querySelector('#sc-list');
-  if (grid) {
-    grid.addEventListener('click', (e) => {
-      const card = e.target.closest('.sc-card');
-      if (!card) return;
-      const r = rowById.get(card.dataset.id);
-      if (!r) return;
-
-      // Los controles cortan acá: tocarlos no selecciona la tarjeta. El ↗ de
-      // Spotify es un <a>, así que no alcanza con mirar los <button>.
-      const control = e.target.closest('button, a');
-      if (control) {
-        if (control.classList.contains('sc-open')) return;   // link externo, que siga
-        e.preventDefault();
-        e.stopPropagation();
-        if (control.classList.contains('sc-play')) onPlayClick(r);
-        else if (control.classList.contains('sc-card-btn')) onCardClick(r);
-        else if (control.classList.contains('sc-add')) openAddModal([r]);
-        else if (control.classList.contains('sc-hide')) onHideClick(r);
-        return;
-      }
-
-      toggleSelection(r.id, { range: e.shiftKey });
-    });
-
-    // Enter y Espacio togglean la tarjeta enfocada. El Espacio además scrollea
-    // la página por defecto, así que hay que cortarlo.
-    grid.addEventListener('keydown', (e) => {
-      if (e.key !== 'Enter' && e.key !== ' ' && e.key !== 'Spacebar') return;
-      const card = e.target.closest?.('.sc-card');
-      if (!card || e.target.closest('button, a')) return;
-      e.preventDefault();
-      toggleSelection(card.dataset.id, { range: e.shiftKey });
-    });
-  }
+  wireTrackCardGrid(content.querySelector('#sc-list'), {
+    rowById: (id) => rowById.get(id),
+    onToggle: (id, o) => toggleSelection(id, o),
+    onPlay: (r) => onPlayClick(r),
+    onCard: (r) => onCardClick(r),
+    onAdd: (r) => openAddModal([r]),
+    onHide: (r) => onHideClick(r),
+  });
 
   const selAll = content.querySelector('#sc-sel-all');
   if (selAll) selAll.onclick = () => {
@@ -743,20 +677,17 @@ function toggleSelection(id, { range = false } = {}) {
 }
 
 function markCard(id) {
-  const card = document.querySelector(`#sc-list .sc-card[data-id="${CSS.escape(id)}"]`);
-  if (!card) return;
-  const sel = selected.has(id);
-  card.classList.toggle('is-sel', sel);
-  card.setAttribute('aria-selected', String(sel));
+  paintCardSelection(
+    document.querySelector(`#sc-list .sc-card[data-id="${CSS.escape(id)}"]`),
+    selected.has(id),
+  );
 }
 
 // Solo repinta el estado de las tarjetas que existen: las de los lotes que
 // falten nacen ya marcadas, porque renderCard lee del Set.
 function repaintSelection() {
   document.querySelectorAll('#sc-list .sc-card').forEach(card => {
-    const sel = selected.has(card.dataset.id);
-    card.classList.toggle('is-sel', sel);
-    card.setAttribute('aria-selected', String(sel));
+    paintCardSelection(card, selected.has(card.dataset.id));
   });
 }
 

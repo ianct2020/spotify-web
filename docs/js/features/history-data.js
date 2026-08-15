@@ -8,8 +8,8 @@
 // Otro user cualquiera sin historial local ve el ownerLockedMessage que
 // invita a subir su ZIP.
 
-import { idbGetCached, idbSetCached, idbDel } from '../idb.js?v=139';
-import { getCurrentUserId } from '../api.js?v=139';
+import { idbGetCached, idbSetCached, idbDel } from '../idb.js?v=140';
+import { getCurrentUserId } from '../api.js?v=140';
 
 const HISTORY_OWNER_ID = 'orhs6wu5ykk7ql80u92ujn74o';
 
@@ -19,7 +19,7 @@ async function isOwner() {
 }
 
 const STATS_VERSION = 2;
-const PLAYS_VERSION = 3;
+const PLAYS_VERSION = 4;   // v4: cada álbum de `albums` lleva plays y ms
 const LISTENED_VERSION = 2;
 const SKIP_VERSION = 1;
 const DETAIL_VERSION = 1;
@@ -70,7 +70,9 @@ async function hasLocalHistory() {
 // remoto no cambió estructuralmente.
 const OWNER_PREV_KEYS = {
   stats: ['history_stats_v1'],
-  // v2 y v1 no traen `albums` — no las migro para forzar refetch de v3 con la lista de álbumes.
+  // Ninguna versión anterior sirve: v1/v2 no traen `albums` y v3 lo trae sin
+  // plays ni ms (que es lo que necesita la ficha de álbum). Lista vacía a
+  // propósito, para forzar el refetch del JSON nuevo.
   plays: [],
   listened: ['history_listened_albums_v1', 'history_albums_v1'],
   skip: [],

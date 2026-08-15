@@ -7,14 +7,15 @@
 // nombre + artista normalizados con util/album-key.js). Cada fila abre la
 // ficha de canción y tiene botón ▶ de preview.
 
-import { escapeHtml } from '../ui/components.js?v=139';
-import { openArtistCard } from './artist-card.js?v=139';
-import { openModal, closeTop } from '../ui/modal-stack.js?v=139';
-import { getBestAvailableLikes } from '../api.js?v=139';
-import { albumKey } from '../util/album-key.js?v=139';
-import { getPreview } from '../api/preview-providers.js?v=139';
-import { togglePreview, playingKey } from '../ui/preview-player.js?v=139';
-import { openTrackCard } from './track-card.js?v=139';
+import { escapeHtml } from '../ui/components.js?v=140';
+import { openArtistCard } from './artist-card.js?v=140';
+import { openModal, closeTop } from '../ui/modal-stack.js?v=140';
+import { getBestAvailableLikes } from '../api.js?v=140';
+import { albumKey } from '../util/album-key.js?v=140';
+import { lookupAlbumStats } from '../util/album-stats.js?v=140';
+import { getPreview } from '../api/preview-providers.js?v=140';
+import { togglePreview, playingKey } from '../ui/preview-player.js?v=140';
+import { openTrackCard } from './track-card.js?v=140';
 
 const PLAY_SVG = `<svg viewBox="0 0 24 24" width="10" height="10" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>`;
 const PAUSE_SVG = `<svg viewBox="0 0 24 24" width="10" height="10" fill="currentColor" aria-hidden="true"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>`;
@@ -70,6 +71,23 @@ function likesInAlbum(likes, a) {
   return out;
 }
 
+function statsHtml(a) {
+  if (!(a.plays > 0 || a.min > 0)) {
+    return `<div class="album-modal-no-data">Sin datos de escucha en tu historial</div>`;
+  }
+  return `
+    <div class="album-modal-stats">
+      <div class="album-modal-stat">
+        <div class="album-modal-stat-v">${fmtMinutes(a.min)}</div>
+        <div class="album-modal-stat-l">tiempo escuchado</div>
+      </div>
+      <div class="album-modal-stat">
+        <div class="album-modal-stat-v">${(a.plays || 0).toLocaleString('es-ES')}</div>
+        <div class="album-modal-stat-l">plays</div>
+      </div>
+    </div>`;
+}
+
 export function openAlbumCard(a) {
   if (!a || !a.name) return;
 
@@ -92,20 +110,7 @@ export function openAlbumCard(a) {
         <div class="album-modal-name">${escapeHtml(a.name)}</div>
         <button class="album-modal-artist-link" id="alb-artist">${escapeHtml(a.artist || '')}</button>
       </div>
-      ${(a.plays > 0 || a.min > 0) ? `
-      <div class="album-modal-stats">
-        <div class="album-modal-stat">
-          <div class="album-modal-stat-v">${fmtMinutes(a.min)}</div>
-          <div class="album-modal-stat-l">tiempo escuchado</div>
-        </div>
-        <div class="album-modal-stat">
-          <div class="album-modal-stat-v">${(a.plays || 0).toLocaleString('es-ES')}</div>
-          <div class="album-modal-stat-l">plays</div>
-        </div>
-      </div>
-      ` : `
-      <div class="album-modal-no-data">Sin datos de escucha en tu historial</div>
-      `}
+      <div id="alb-stats">${statsHtml(a)}</div>
       <div class="album-modal-likes" id="alb-likes"><div class="album-modal-likes-loading">cargando tus me gusta…</div></div>
       <div class="album-modal-actions">
         <button class="btn btn-primary btn-sm" id="alb-go-artist">Ver ficha del artista</button>
@@ -121,6 +126,18 @@ export function openAlbumCard(a) {
   overlay.querySelector('#alb-go-artist').onclick = () => {
     if (a.artist) openArtistCard({ name: a.artist });
   };
+
+  // Si el llamador no trajo números (o los trajo en cero), los resolvemos del
+  // historial. Antes cada caller se los inventaba: `#covers` pasaba `plays: 0`
+  // fijo y la ficha de canción sacaba los suyos del top-60, así que casi
+  // siempre decía "0 plays" o "sin datos" para álbumes muy escuchados.
+  if (!(a.plays > 0) && !(a.min > 0)) {
+    lookupAlbumStats(a).then(t => {
+      if (!(t.plays > 0 || t.min > 0)) return;
+      const slot = overlay.querySelector('#alb-stats');
+      if (slot) slot.innerHTML = statsHtml({ ...a, ...t });
+    }).catch(err => console.warn('[album-card] stats:', err.message));
+  }
 
   hydrateLikes(overlay, a).catch(err => {
     console.warn('[album-card] likes:', err.message);

@@ -30,7 +30,7 @@ MIN_MS = 30000  # trigger warning: ignoramos plays de menos de 30s
 SKIP_MIN_MS = 5000  # skip "consciente": si le dio next después de 5s+ es deliberado
 SKIP_STATS_MIN_PLAYS = 3  # excluimos tracks con menos de 3 plays totales (ruido)
 STATS_VERSION = 2            # bump: excluye "Sonido Para Sacar Agua Del Movil"
-TRACK_PLAYS_VERSION = 3      # v3: agrega `albums` (lista name/artist de TODO álbum tocado, aunque sea 1 play). v2: incluía entries "partial" para tracks solo con plays <30s
+TRACK_PLAYS_VERSION = 4      # v4: cada entrada de `albums` lleva plays y ms además de name/artist (la ficha de álbum decía "0 plays"). v3: agregó `albums`. v2: incluía entries "partial" para tracks solo con plays <30s
 SKIP_STATS_VERSION = 1
 LISTENED_VERSION = 2         # bump: excluye "Sonido Para Sacar Agua Del Movil"
 TRACK_DETAIL_VERSION = 1     # ficha de canción: plays por mes + primera/última + récords del track
@@ -588,10 +588,18 @@ def build_stats(plays, img_idx):
 
     # Lista de TODO álbum con al menos 1 play válida (>=30s). Se usa en
     # #discover-artists / #new-releases para decidir si un álbum de la discografía
-    # ya fue escuchado. El JS canonicaliza (name, artist) con util/album-key.js
-    # (strip diacríticos, sufijos de edición), así que emitimos los nombres crudos.
+    # ya fue escuchado, y desde v4 también en la ficha de álbum para poner plays
+    # y minutos REALES (antes #covers pasaba `plays: 0` fijo y los minutos salían
+    # de sumar los `min_that_day` de listened-albums, que son los del primer día
+    # que cumplió el umbral, no el total).
+    #
+    # Formato: [name, artist, plays, ms]. Los dos primeros campos no se mueven
+    # nunca — album-heard.js desestructura `[name, artist]` y tiene que seguir
+    # andando con los JSON viejos. El JS canonicaliza (name, artist) con
+    # util/album-key.js (strip diacríticos, sufijos de edición), así que
+    # emitimos los nombres crudos.
     albums_played_out = [
-        [m.get("name", ""), m.get("artist", "")]
+        [m.get("name", ""), m.get("artist", ""), album_plays.get(ak, 0), album_ms.get(ak, 0)]
         for ak, m in album_meta.items()
         if album_ms.get(ak, 0) > 0
     ]

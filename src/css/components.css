@@ -1050,115 +1050,24 @@ body.modal-open {
 /* Skips en grid de TARJETAS (v=123). Antes eran dos listas de filas anchas y
    la columna derecha quedaba aplastada (solo tapa + porcentaje). Con tarjetas
    entran 20+ tracks en pantalla y todos muestran lo mismo. */
+/* Hereda de `.sc-grid` el display, las columnas de 360px (que es lo que pide la
+   tapa de 96) y el gap. Lo propio de acá es el scroller: esta vista scrollea el
+   GRID y no el documento, y de eso dependen los roots de los dos
+   IntersectionObserver (lista incremental y tapas) vía `scrollRootOf`. */
 .skips-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
-  gap: 10px;
   max-height: 74vh;
   overflow-y: auto;
   padding: 2px;
+  /* `.sc-grid` reserva 84px para la barra flotante de `#sin-clasificar`; acá no
+     hay barra y ese hueco quedaría colgando dentro del scroller. */
+  padding-bottom: 2px;
 }
 
-.skips-card {
-  min-width: 0;
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md, 10px);
-  transition: border-color .12s, background .12s;
-}
-.skips-card:hover {
-  background: var(--color-elevated);
-  border-color: var(--color-accent);
-}
-
-.skips-card-main {
-  display: grid;
-  grid-template-columns: 56px minmax(0, 1fr);
-  gap: 10px;
-  padding: 10px;
-  align-items: start;
-}
-
-.skips-card-cover { position: relative; width: 56px; height: 56px; }
-
-/* Checkbox sobre la esquina de la tapa: no le roba ancho al título. */
-.skips-card-sel {
-  position: absolute;
-  top: -4px;
-  left: -4px;
-  display: flex;
-  padding: 3px;
-  border-radius: 6px;
-  background: var(--color-bg);
-  border: 1px solid var(--color-border);
-  cursor: pointer;
-}
-.skips-check { flex-shrink: 0; margin: 0; cursor: pointer; }
-
-.skips-card-body {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  min-width: 0;
-}
-
-.skips-card-foot {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-}
-
-.skips-card-actions {
-  display: flex;
-  gap: 6px;
-  align-items: center;
-}
-.skips-card-actions .skips-play-btn,
-.skips-card-actions .skips-open {
-  width: 26px;
-  height: 26px;
-  padding: 0;
-  justify-content: center;
-}
-.skips-card-actions .sk-hide-btn { width: 26px; height: 26px; padding: 0; }
-
-/* El alto/ancho está fijado acá y en los atributos del <img>: la tapa entra por
-   IntersectionObserver (ui/lazy-img.js) y hasta que llega el hueco tiene que
-   medir lo mismo, o cada tapa que carga reacomoda la fila. El fondo hace de
-   placeholder mientras tanto. */
-.skips-cover {
-  width: 56px;
-  height: 56px;
-  border-radius: var(--radius-sm);
-  object-fit: cover;
-  display: block;
-  background: var(--color-elevated);
-}
-.skips-cover-empty {
-  background: var(--color-elevated);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--color-text-muted);
-  font-size: 16px;
-}
-
-.skips-info { min-width: 0; }
-.skips-title {
-  font-size: 13.5px;
-  font-weight: 500;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.skips-meta {
-  font-size: 12px;
-  color: var(--color-text-muted);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
+/* La tarjeta de esta vista es la compartida `.sc-card` (ui/track-card-row.js).
+   Lo que queda acá es lo propio de Skips: el badge del ratio y el slot del
+   embed. El bloque de `.skips-card*`, `.skips-cover*`, `.skips-info`,
+   `.skips-title`, `.skips-meta`, `.skips-play-btn` y `.skips-open` se borró en
+   v=140 al unificar la tarjeta — todo eso lo pinta `.sc-*`. */
 
 .skips-badge {
   display: inline-flex;
@@ -1176,58 +1085,18 @@ body.modal-open {
 .skips-badge-warn { background: rgba(245,158,11,.12); color: #f59e0b; }
 .skips-badge-danger { background: rgba(239,68,68,.12); color: #ef4444; }
 
-.skips-play-btn {
-  height: 28px;
-  border-radius: 14px;
-  border: 1px solid var(--color-border);
-  background: var(--color-elevated);
-  color: var(--color-text-secondary);
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  cursor: pointer;
-  padding: 0 12px 0 10px;
-  font-size: 12px;
-  font-weight: 500;
-  transition: background .15s, color .15s, border-color .15s;
-}
-.skips-play-btn:hover {
-  background: var(--color-accent);
-  color: white;
-  border-color: var(--color-accent);
-}
-.skips-play-btn.playing {
-  background: var(--color-accent);
-  color: white;
-  border-color: var(--color-accent);
-}
 
-.skips-open {
-  height: 28px;
-  border-radius: 14px;
-  border: 1px solid var(--color-border);
-  background: var(--color-elevated);
-  color: var(--color-text-secondary);
-  text-decoration: none;
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 0 12px;
-  font-size: 12px;
-  font-weight: 500;
-  transition: background .15s, color .15s, border-color .15s;
-}
-.skips-open:hover { background: var(--color-accent); color: white; border-color: var(--color-accent); }
-.skips-open-arrow { font-size: 13px; }
-
+/* Va como tercera celda de la tarjeta, cruzando las dos columnas (tapa +
+   cuerpo), así que el embed sale debajo de todo y a lo ancho. */
 .skips-preview-slot {
+  grid-column: 1 / -1;
   max-height: 0;
   overflow: hidden;
   transition: max-height .2s ease;
 }
 .skips-preview-slot.open {
   max-height: 100px;
-  padding: 0 10px 10px;
+  padding-top: 8px;
 }
 
 /* Abajo de 900px: una sola columna. */
@@ -1238,6 +1107,9 @@ body.modal-open {
     overflow-y: visible;
   }
 }
+/* El badge del ratio comparte la fila con los botones y empuja al resto a la
+   derecha, como hacía el `justify-content: space-between` del pie viejo. */
+.sc-actions .skips-badge { margin-right: auto; }
 
 /* ─── Sin clasificar (#sin-clasificar) ───────────────────────────────────── */
 
@@ -1509,3 +1381,83 @@ body.modal-open {
   .sc-cover { width: 72px; height: 72px; }
   .sc-card-body { min-height: 72px; }
 }
+
+/* ─── Red de seguridad contra la pantalla en blanco (ui/crash-guard.js) ─────
+   Si una ruta rompe o termina sin pintar, esto es lo que se ve en vez del
+   fondo pelado. Sin variables raras y sin depender de nada más de la app:
+   justamente se usa cuando algo se rompió. */
+.crash-screen {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 60vh;
+  padding: 24px;
+}
+.crash-card {
+  max-width: 560px;
+  width: 100%;
+  text-align: center;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: 28px 24px;
+}
+.crash-card h2 {
+  font-size: 18px;
+  margin: 0 0 10px;
+  color: var(--color-text);
+}
+.crash-msg {
+  margin: 0 0 10px;
+  font-size: 13px;
+  color: var(--color-error, #ef4444);
+  word-break: break-word;
+}
+.crash-hint {
+  margin: 0 0 20px;
+  font-size: 12.5px;
+  color: var(--color-text-muted);
+}
+.crash-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+/* Cuando la app SÍ está pintada, el fallo no le pisa la vista al usuario:
+   avisa arriba y se puede cerrar. */
+.crash-banner {
+  position: fixed;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1200;
+  max-width: min(720px, calc(100vw - 32px));
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px 8px 14px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-error, #ef4444);
+  border-radius: var(--radius-md);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, .45);
+}
+.crash-banner-txt {
+  font-size: 12.5px;
+  color: var(--color-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.crash-banner-x {
+  font-family: var(--font-sans);
+  background: none;
+  border: none;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+  padding: 4px;
+}
+.crash-banner-x:hover { color: var(--color-text); }
