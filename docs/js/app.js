@@ -1,38 +1,40 @@
-import { isLoggedIn, loginWithSpotify, logout } from './auth.js?v=140';
-import { spotifyFetch, tryAutoLoadUserBackup } from './api.js?v=140';
-import { getValidToken } from './auth.js?v=140';
-import { cacheClearAll } from './storage.js?v=140';
-import { idbClearAll } from './idb.js?v=140';
-import { registerRoute, initRouter } from './router.js?v=140';
-import { showToast } from './ui/toast.js?v=140';
-import { pageHeader } from './ui/components.js?v=140';
-import { installCrashGuard } from './ui/crash-guard.js?v=140';
+import { isLoggedIn, loginWithSpotify, logout } from './auth.js?v=141';
+import { spotifyFetch, tryAutoLoadUserBackup } from './api.js?v=141';
+import { getValidToken } from './auth.js?v=141';
+import { cacheClearAll } from './storage.js?v=141';
+import { idbClearAll } from './idb.js?v=141';
+import { registerRoute, initRouter } from './router.js?v=141';
+import { showToast } from './ui/toast.js?v=141';
+import { pageHeader } from './ui/components.js?v=141';
+import { installCrashGuard } from './ui/crash-guard.js?v=141';
+import { getStack } from './ui/modal-stack.js?v=141';
+import { installBackToTop } from './ui/back-to-top.js?v=141';
 
-import { render as renderSync } from './features/sync.js?v=140';
-import { render as renderDedupe } from './features/dedupe.js?v=140';
-import { render as renderDupalbums } from './features/duplicate-albums.js?v=140';
-import { render as renderZombies } from './features/zombies.js?v=140';
-import { render as renderVersions } from './features/versions.js?v=140';
-import { render as renderDashboard } from './features/dashboard.js?v=140';
-import { render as renderSmart } from './features/smart.js?v=140';
-import { render as renderSimilar } from './features/similar-artists.js?v=140';
-import { render as renderRabbit } from './features/rabbit-hole.js?v=140';
-import { render as renderByGenre } from './features/by-genre.js?v=140';
-import { render as renderByArtist } from './features/by-artist.js?v=140';
-import { render as renderRecs } from './features/recommendations.js?v=140';
-import { render as renderListened } from './features/listened.js?v=140';
-import { render as renderWrapped } from './features/wrapped.js?v=140';
-import { render as renderRecords } from './features/records.js?v=140';
-import { openImportHistory } from './features/import-history.js?v=140';
-import { bindOwnerLockedButtons } from './features/history-data.js?v=140';
-import { render as renderZeroPlays } from './features/zero-plays.js?v=140';
-import { render as renderSkips } from './features/skips.js?v=140';
-import { render as renderSearchLikes } from './features/search-likes.js?v=140';
-import { render as renderWthree } from './features/wthree.js?v=140';
-import { render as renderCovers } from './features/covers.js?v=140';
-import { render as renderDiscoverArtists } from './features/discover-artists.js?v=140';
-import { render as renderNewReleases } from './features/new-releases.js?v=140';
-import { render as renderSinClasificar } from './features/sin-clasificar.js?v=140';
+import { render as renderSync } from './features/sync.js?v=141';
+import { render as renderDedupe } from './features/dedupe.js?v=141';
+import { render as renderDupalbums } from './features/duplicate-albums.js?v=141';
+import { render as renderZombies } from './features/zombies.js?v=141';
+import { render as renderVersions } from './features/versions.js?v=141';
+import { render as renderDashboard } from './features/dashboard.js?v=141';
+import { render as renderSmart } from './features/smart.js?v=141';
+import { render as renderSimilar } from './features/similar-artists.js?v=141';
+import { render as renderRabbit } from './features/rabbit-hole.js?v=141';
+import { render as renderByGenre } from './features/by-genre.js?v=141';
+import { render as renderByArtist } from './features/by-artist.js?v=141';
+import { render as renderRecs } from './features/recommendations.js?v=141';
+import { render as renderListened } from './features/listened.js?v=141';
+import { render as renderWrapped } from './features/wrapped.js?v=141';
+import { render as renderRecords } from './features/records.js?v=141';
+import { openImportHistory } from './features/import-history.js?v=141';
+import { bindOwnerLockedButtons } from './features/history-data.js?v=141';
+import { render as renderZeroPlays } from './features/zero-plays.js?v=141';
+import { render as renderSkips } from './features/skips.js?v=141';
+import { render as renderSearchLikes } from './features/search-likes.js?v=141';
+import { render as renderWthree } from './features/wthree.js?v=141';
+import { render as renderCovers } from './features/covers.js?v=141';
+import { render as renderDiscoverArtists } from './features/discover-artists.js?v=141';
+import { render as renderNewReleases } from './features/new-releases.js?v=141';
+import { render as renderSinClasificar } from './features/sin-clasificar.js?v=141';
 
 async function testConnection() {
   const token = await getValidToken();
@@ -202,6 +204,7 @@ function showApp(profile) {
         <img class="sidebar-logo" src="assets/favicon.svg" alt="">
         <span class="sidebar-title">Fonoteca</span>
       </a>
+      <button class="sidebar-close" id="sidebar-close" type="button" title="Cerrar el menú" aria-label="Cerrar el menú">✕</button>
       <nav class="sidebar-nav">
         <div class="sidebar-section">
           <div class="sidebar-section-title">General</div>
@@ -367,11 +370,38 @@ function showApp(profile) {
       document.body.classList.add('sidebar-hidden');
     }
   });
-  overlay.onclick = () => {
+  // Un único cierre para los tres caminos: la ✕, Escape, y el toque fuera en
+  // mobile. En desktop además hay que poner `sidebar-hidden`, porque en Home el
+  // sidebar está acoplado (sin esa clase) y quitarle `desktop-open` no lo mueve.
+  //
+  // Recordatorio del gotcha de v=101: la regla `body.sidebar-hidden .sidebar`
+  // le gana por especificidad a `.sidebar.open`, por eso vive envuelta en
+  // `@media (min-width: 769px)` en main.css. Si se sacara de ahí, esta función
+  // dejaría el sidebar cerrado también en mobile aunque se abra el overlay.
+  const esMobile = () => window.matchMedia('(max-width: 768px)').matches;
+  const sidebarAbierto = () =>
+    sidebar.classList.contains('open') ||
+    sidebar.classList.contains('desktop-open') ||
+    (!esMobile() && !document.body.classList.contains('sidebar-hidden'));
+
+  const closeSidebar = () => {
     sidebar.classList.remove('open');
     sidebar.classList.remove('desktop-open');
     overlay.classList.remove('open');
+    if (!esMobile()) document.body.classList.add('sidebar-hidden');
   };
+
+  document.getElementById('sidebar-close').onclick = closeSidebar;
+  overlay.onclick = closeSidebar;
+
+  // Escape. No le pisa el Escape a los modales: si hay alguno abierto, el que
+  // manda es modal-stack.js y acá no hacemos nada.
+  document.addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape') return;
+    if (getStack().length) return;
+    if (!sidebarAbierto()) return;
+    closeSidebar();
+  });
 
   document.querySelectorAll('.nav-link').forEach(link => {
     link.addEventListener('click', () => {
@@ -418,7 +448,11 @@ function showApp(profile) {
   registerRoute('new-releases', renderNewReleases);
   registerRoute('sin-clasificar', renderSinClasificar);
 
+  // «Volver arriba»: se instala una sola vez para toda la app y descubre solo
+  // qué elemento scrollea en cada vista. Va después de initRouter para que la
+  // primera siembra encuentre algo pintado. Ver ui/back-to-top.js.
   initRouter();
+  installBackToTop();
 }
 
 // Set unificado de iconos Lucide inline. Cada uno con currentColor así toma el color del texto.

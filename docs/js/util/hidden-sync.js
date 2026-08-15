@@ -25,7 +25,7 @@ import {
   removeTracksFromPlaylist,
   createPlaylist,
   getCurrentUserId,
-} from '../api.js?v=140';
+} from '../api.js?v=141';
 
 const PLAYLIST_DESC = 'Lista interna de Fonoteca: lo que ocultaste en esta vista. Si la borrás, se pierden los ocultos.';
 

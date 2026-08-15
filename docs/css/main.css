@@ -87,8 +87,39 @@ h3 { font-size: 18px; font-weight: 600; }
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 20px 20px 20px 68px; /* deja espacio a la izquierda para el botón hamburguesa (que está en left:16px) */
+  padding: 20px 52px 20px 68px; /* izquierda: hueco para el hamburguesa (left:16px). derecha: para la ✕ */
   border-bottom: 1px solid var(--color-border);
+}
+
+/* ✕ de cierre del menú lateral (v=141). Antes el menú solo se cerraba volviendo
+   a tocar el hamburguesa, y en las rutas donde se abre como overlay no había
+   ninguna pista de cómo sacarlo.
+   Va `absolute` dentro del .sidebar (que es `fixed`, o sea que ya hace de
+   contenedor) en vez de dentro del header, porque el header es un <a> y un
+   <button> no puede ir dentro de un enlace. */
+.sidebar-close {
+  position: absolute;
+  top: 22px;
+  right: 12px;
+  width: 32px;
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  color: var(--color-text-muted);
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+  z-index: 2;
+  transition: color var(--transition-fast), border-color var(--transition-fast), background var(--transition-fast);
+}
+.sidebar-close:hover {
+  color: var(--color-text);
+  border-color: var(--color-border);
+  background: var(--color-elevated);
 }
 
 .sidebar-logo {
@@ -548,18 +579,144 @@ h3 { font-size: 18px; font-weight: 600; }
   margin-top: 2px;
 }
 
-/* ── Toast ── */
-.toast-container {
+/* ============================================================
+   CAPA DE ABAJO (v=141)
+   ============================================================
+   Player + progreso minimizado + toasts + «Volver arriba», todos en una sola
+   capa con UN z-index de referencia (--z-blayer) y zonas declaradas.
+
+   Antes cada uno era `fixed` por su cuenta en la misma esquina (pill 20/900,
+   progreso 20/600, toasts 24/1000) y el apaño eran reglas sueltas
+   `body:has(.preview-pill.show) … { bottom: 76px }` que solo contemplaban dos
+   de los tres: con los tres a la vez se tapaban sí o sí.
+
+   La regla dura —ninguno puede quedar debajo de otro— NO se resuelve con
+   z-index ni con `bottom` calculados a mano. Se resuelve con FLUJO: la zona
+   derecha es un flex column y cada widget es un item suyo, así que el
+   solapamiento es imposible por construcción. Los slots van con
+   `display: contents`, o sea que un slot vacío no ocupa ni deja gap — de ahí
+   sale solo el "cuando el player no está, las demás bajan a su lugar".
+
+   Orden de la columna derecha, de ABAJO hacia arriba:
+     player → volver arriba → progreso → toasts
+
+   `position: sticky` NO sirve en esta app (html lleva `overflow-x: hidden`),
+   por eso la capa es `fixed`. La zona izquierda copia la geometría de .main:
+   left 312px con sidebar, 72px sin. La derecha va anclada al viewport, que es
+   donde el pill ya vivía.
+
+   La capa publica su altura en --blayer-h (ui/bottom-layer.js) para lo que no
+   vive acá dentro pero tampoco puede quedar tapado — en móvil, la
+   .sc-actionbar, que ahí ocupa el ancho entero. */
+:root { --z-blayer: 1050; }
+
+.blayer {
   position: fixed;
-  bottom: 24px;
-  right: 24px;
-  z-index: 1000;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: var(--z-blayer);
+  display: flex;
+  align-items: flex-end;
+  gap: 16px;
+  padding: 0 20px 20px 72px;
+  /* La capa cruza toda la pantalla: sin esto se comería los clicks de la app.
+     Los widgets se lo devuelven uno por uno. */
+  pointer-events: none;
+}
+.blayer-slot > *,
+.blayer-left > * { pointer-events: auto; }
+
+@media (min-width: 769px) {
+  body:not(.sidebar-hidden) .blayer { padding-left: 312px; }
+}
+/* En móvil no hay sitio para dos zonas en una fila: la izquierda se pliega
+   (está vacía salvo que W-Three esté guardando) y la columna derecha ocupa el
+   ancho entero, con los widgets estirados. */
+@media (max-width: 768px) {
+  .blayer {
+    padding: 0 15px 15px 15px;
+    gap: 10px;
+    /* Una sola columna: izquierda arriba, derecha abajo. Así --blayer-h es de
+       verdad el alto de todo lo que hay abajo, que es lo que necesita la barra
+       de acciones para apartarse. */
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .blayer-left:empty { display: none; }
+  .blayer-right { align-items: stretch; margin-left: 0; }
+  /* El botón redondo no se estira. */
+  .blayer-right .back-to-top { align-self: flex-end; }
+}
+
+.blayer-left,
+.blayer-right {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+  max-width: 100%;
+}
+/* Pegada a la derecha aunque la zona izquierda esté vacía. */
+.blayer-right {
+  align-items: flex-end;
+  margin-left: auto;
+}
+.blayer-slot { display: contents; }
+
+/* Entrada común de los widgets de la capa. Antes el pill hacía el fade con
+   opacity + transform y se quedaba ocupando sitio estando invisible; acá eso
+   dejaría un hueco en la columna, así que lo que está oculto es `display:none`
+   y la entrada es una animación. */
+/* Igual que los toasts: la entrada va por el eje X. Un `translateY` metería el
+   widget encima de su vecino de abajo mientras dura la animación, que es
+   justo lo que la capa tiene que impedir. */
+@keyframes blayer-in {
+  from { opacity: 0; transform: translateX(16px); }
+  to   { opacity: 1; transform: none; }
+}
+
+/* Botón «Volver arriba» (ui/back-to-top.js). */
+.back-to-top {
+  display: none;
+  width: 44px;
+  height: 44px;
+  border-radius: 999px;
+  background: var(--color-elevated);
+  border: 1px solid var(--color-border);
+  color: var(--color-text-secondary);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+  cursor: pointer;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  transition: color var(--transition-fast), border-color var(--transition-fast), background var(--transition-fast);
+}
+.back-to-top.show {
+  display: inline-flex;
+  animation: blayer-in 0.18s ease;
+}
+.back-to-top:hover {
+  color: var(--color-accent);
+  border-color: var(--color-accent);
+  background: var(--color-surface);
+}
+.back-to-top svg { width: 20px; height: 20px; display: block; }
+@media (prefers-reduced-motion: reduce) {
+  .back-to-top.show { animation: none; }
+}
+
+/* ── Toast ── */
+/* Sin `position`: es un item del slot 'toasts' de la capa de abajo. */
+.toast-container {
   display: flex;
   flex-direction: column-reverse;
+  align-items: flex-end;
   gap: 8px;
   /* v=126: los avisos importantes se quedan hasta que los cierres, así que la
-     pila puede crecer. Que scrollee en vez de taparte la pantalla. */
-  max-height: calc(100vh - 48px);
+     pila puede crecer. Que scrollee en vez de taparte la pantalla. El hueco de
+     abajo es para el resto de la capa (player + progreso + volver arriba). */
+  max-height: calc(100vh - 220px);
   overflow-y: auto;
 }
 
@@ -600,9 +757,13 @@ h3 { font-size: 18px; font-weight: 600; }
 .toast-close:hover { opacity: 1; background: rgba(0, 0, 0, 0.18); }
 .toast-close:focus-visible { outline: 2px solid currentColor; outline-offset: 1px; }
 
+/* Entra y sale DE COSTADO, no de abajo arriba. Con `translateY(20px)` el toast
+   pasaba 300 ms montado sobre lo que tuviera debajo en la columna (medido en
+   v=141: 10 px de solape con el pill de progreso). El eje X está libre: a la
+   derecha no hay nada. */
 @keyframes toast-in {
-  from { transform: translateY(20px); opacity: 0; }
-  to { transform: translateY(0); opacity: 1; }
+  from { transform: translateX(24px); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
 }
 
 .toast-exit {
@@ -610,7 +771,7 @@ h3 { font-size: 18px; font-weight: 600; }
 }
 
 @keyframes toast-out {
-  to { transform: translateY(20px); opacity: 0; }
+  to { transform: translateX(24px); opacity: 0; }
 }
 
 /* ── Modal ── */
@@ -796,12 +957,11 @@ h3 { font-size: 18px; font-weight: 600; }
 
 /* Progreso minimizado: pill abajo a la DERECHA (v=108, antes a la izquierda —
    tapaba el sidebar cuando se abría). Click en el pill vuelve al overlay completo.
-   Si el preview-player (misma esquina) está visible, el progreso se apila arriba. */
+   Desde v=141 no se posiciona solo: es un item del slot 'progress' de la capa de
+   abajo, que lo apila sobre el player. La regla `body:has(.preview-pill.show)
+   .progress-mini { bottom: 76px }` que hacía ese trabajo ya no hace falta —y no
+   servía igual, porque no contaba los toasts. */
 .progress-mini {
-  position: fixed;
-  right: 20px;
-  bottom: 20px;
-  z-index: 600;
   display: flex;
   align-items: center;
   gap: 12px;
@@ -812,11 +972,6 @@ h3 { font-size: 18px; font-weight: 600; }
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
   cursor: pointer;
   width: min(300px, calc(100vw - 40px));
-}
-/* Apilado vertical: si hay preview-pill mostrándose, el progress-mini sube.
-   Se usa :has() para no tener que coordinar via JS entre los dos módulos. */
-body:has(.preview-pill.show) .progress-mini {
-  bottom: 76px;
 }
 .progress-mini:hover { border-color: var(--color-accent); }
 .progress-mini .spinner {
@@ -1530,12 +1685,13 @@ body:has(.preview-pill.show) .progress-mini {
 
 /* ============ Preview player global (iTunes 30s) ============ */
 
-/* Pill flotante abajo a la derecha: qué está sonando + stop */
+/* Pill del player: el ancla de la capa de abajo (ui/bottom-layer.js), o sea lo
+   único que se queda pegado a la esquina inferior derecha. Ya no se posiciona
+   solo ni lleva z-index propio: es un item del slot 'player'.
+   Oculto es `display: none` y no opacity 0 — estando en una columna flex, un
+   pill invisible pero presente dejaría un hueco y las cosas de arriba no
+   bajarían a ocupar su lugar, que es justo lo que se pedía. */
 .preview-pill {
-  position: fixed;
-  right: 20px;
-  bottom: 20px;
-  z-index: 900;
   display: flex;
   align-items: center;
   gap: 10px;
@@ -1544,16 +1700,12 @@ body:has(.preview-pill.show) .progress-mini {
   border-radius: 999px;
   padding: 9px 10px 9px 16px;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5), var(--shadow-glow);
-  max-width: min(420px, calc(100vw - 40px));
-  opacity: 0;
-  pointer-events: none;
-  transform: translateY(10px);
-  transition: opacity 0.18s ease, transform 0.18s ease;
+  max-width: min(420px, 100%);
 }
-.preview-pill.show {
-  opacity: 1;
-  pointer-events: auto;
-  transform: none;
+.preview-pill:not(.show) { display: none; }
+.preview-pill.show { animation: blayer-in 0.18s ease; }
+@media (prefers-reduced-motion: reduce) {
+  .preview-pill.show { animation: none; }
 }
 .preview-pill-main {
   display: flex;
@@ -1583,9 +1735,13 @@ body:has(.preview-pill.show) .progress-mini {
   border-radius: var(--radius-md, 10px);
   padding: 10px 10px 8px 12px;
   align-items: stretch;
-  max-width: min(360px, calc(100vw - 40px));
+  max-width: min(360px, 100%);
   flex-direction: column;
   gap: 6px;
+  /* El ✕ va `position: absolute` dentro del pill. Antes el contenedor lo daba
+     el `position: fixed` del propio pill; ahora que es un item en flujo hay
+     que declararlo, o el ✕ se iría a buscar el viewport. */
+  position: relative;
 }
 .preview-pill-embed { display: block; }
 .preview-pill-embed[hidden] { display: none; }
@@ -1610,7 +1766,17 @@ body:has(.preview-pill.show) .progress-mini {
 }
 .preview-pill-close:hover { color: var(--color-text); }
 
-/* Barritas de ecualizador animadas mientras suena */
+/* Barritas de ecualizador: se mueven SOLO mientras suena audio de verdad.
+   El interruptor es `.preview-pill.is-playing`, que ponen y sacan los eventos
+   del <audio> en ui/preview-player.js — no un timer aparte. En pausa, mientras
+   busca, buffereando o con el embed de Spotify (del que no tenemos ninguna
+   señal de reproducción) quedan quietas.
+
+   El estado por defecto es `paused` y no "sin animación": así arrancar y parar
+   es un solo cambio de `animation-play-state`, sin reiniciar el ciclo ni tener
+   que reponer el `height` a mano. Y por eso las barritas llevan `height`
+   explícito acá abajo: sin él, en pausa el `height` sale del keyframe y no de
+   la regla. */
 .preview-eq {
   display: flex;
   gap: 2px;
@@ -1620,9 +1786,14 @@ body:has(.preview-pill.show) .progress-mini {
 }
 .preview-eq span {
   width: 3px;
+  height: 4px;
   background: var(--color-accent);
   border-radius: 1px;
   animation: previewEq 0.9s ease-in-out infinite;
+  animation-play-state: paused;
+}
+.preview-pill.is-playing .preview-eq span {
+  animation-play-state: running;
 }
 .preview-eq span:nth-child(2) { animation-delay: 0.25s; }
 .preview-eq span:nth-child(3) { animation-delay: 0.5s; }
@@ -1631,12 +1802,28 @@ body:has(.preview-pill.show) .progress-mini {
   50% { height: 14px; }
 }
 .preview-pill.loading .preview-eq span {
-  animation-play-state: paused;
-  height: 4px;
   opacity: 0.5;
 }
+/* CAUSA REAL de "las barritas no se mueven" (diagnosticado en v=141): la
+   animación nunca se rompió ni se quitó — es la misma de v=88. Lo que cambió es
+   el sistema: GNOME quedó con `enable-animations=false`, o sea
+   `prefers-reduced-motion: reduce`, y la regla que había acá era
+   `.preview-eq span { animation: none; height: 10px }`. Barritas quietas a
+   media altura: exactamente el síntoma.
+
+   Acá esa animación NO es decorativa: es la única señal de que hay audio
+   sonando. Apagarla del todo no "reduce movimiento", borra información. Así que
+   con reduced-motion se atenúa en vez de apagarse: mismo recorrido pero mucho
+   más lento y con menos amplitud. */
 @media (prefers-reduced-motion: reduce) {
-  .preview-eq span { animation: none; height: 10px; }
+  .preview-eq span {
+    animation-name: previewEqSuave;
+    animation-duration: 2.4s;
+  }
+}
+@keyframes previewEqSuave {
+  0%, 100% { height: 5px; }
+  50% { height: 9px; }
 }
 
 /* Affordance de hover-play en filas/tiles del Wrapped */
@@ -2455,9 +2642,12 @@ body:has(.preview-pill.show) .progress-mini {
   /* ── Modales y sidebar ── */
   .modal { padding: 16px !important; }
   .statsfm-ticker { font-size: 11.5px; padding: 4px 10px; }
-  .preview-pill { max-width: calc(100vw - 30px); left: 15px; right: 15px; }
-  .progress-mini { left: 15px; right: 15px; width: auto; }
-  body:has(.preview-pill.show) .progress-mini { bottom: 84px; }
+  /* En móvil los widgets ocupan el ancho de la capa (que ahí es el de la
+     pantalla). El apilado ya no se declara acá: lo hace el flex column de
+     .blayer-right. */
+  .preview-pill { max-width: 100%; }
+  .progress-mini { width: auto; }
+  .toast { max-width: 100%; }
 }
 
 /* Marquee: si el texto no entra, se desliza al costado en loop. Solo se activa
@@ -3552,25 +3742,41 @@ body.covers-fs .main {
    así la esquina derecha queda libre para el pill del reproductor, que es
    `fixed` con z-index 900 y le tapaba «Añadir a…», «Ocultar» y «Limpiar
    selección». Antes iba de borde a borde de la columna. */
+/* Y comparte esquina con la capa de abajo, así que se aparta usando las
+   variables que la capa publica (ui/bottom-layer.js), no reglas `:has()`
+   sueltas: `--blayer-left-h` la sube por encima de lo que haya en la zona
+   izquierda (el pill de guardado de W-Three) y `--blayer-right-w` le impide
+   crecer por debajo de la columna derecha (player, progreso, toasts). Las dos
+   valen 0px cuando no hay nada, o sea que sin capa la barra queda donde
+   siempre. */
 .sc-actionbar,
 .disco-actionbar {
   left: 72px;
   right: auto;
   width: max-content;
-  max-width: calc(100vw - 104px);
+  bottom: calc(16px + var(--blayer-left-h, 0px));
+  max-width: calc(100vw - 104px - var(--blayer-right-w, 0px));
   transform: none;
 }
 @media (min-width: 769px) {
   body:not(.sidebar-hidden) .sc-actionbar,
   body:not(.sidebar-hidden) .disco-actionbar {
     left: 312px;
-    max-width: calc(100vw - 344px);
+    max-width: calc(100vw - 344px - var(--blayer-right-w, 0px));
   }
 }
-/* En móvil la barra sí ocupa el ancho entero (no hay sitio para las dos cosas
-   en una fila), así que ahí se sube por encima del pill. */
+/* En móvil la barra ocupa el ancho entero, o sea que no hay eje X que la
+   salve: se sube por encima de la capa ENTERA. Antes esto lo hacía
+   `body:has(.preview-pill.show) { bottom: 92px }`, que solo contaba el pill del
+   player y por eso se pisaba con los toasts y con el progreso. */
 @media (max-width: 768px) {
-  .sc-actionbar, .disco-actionbar { left: 16px; right: 16px; width: auto; max-width: none; }
+  .sc-actionbar, .disco-actionbar {
+    left: 16px;
+    right: 16px;
+    width: auto;
+    max-width: none;
+    bottom: calc(16px + var(--blayer-h, 0px));
+  }
 }
 @media (max-width: 480px) {
   .sc-actionbar, .disco-actionbar { left: 10px; right: 10px; }
@@ -3691,13 +3897,10 @@ body.covers-fs .main {
 
 /* Pill de guardado en segundo plano de W-Three (v=127).
    Guardar tarda 30-40s; el modal se cierra al instante y esto queda como única
-   señal visible de que hay una escritura en curso. Fijo abajo a la izquierda
-   para no chocar con el pill del reproductor de preview ni con los toasts. */
+   señal visible de que hay una escritura en curso. Va en la zona IZQUIERDA de
+   la capa de abajo (v=141): antes era `fixed` a mano en esa esquina, ahora la
+   posición y el z-index los pone la capa, alineados a la columna de contenido. */
 .wt-saving-pill {
-  position: fixed;
-  left: 16px;
-  bottom: 16px;
-  z-index: 900;
   display: flex;
   align-items: center;
   gap: 9px;

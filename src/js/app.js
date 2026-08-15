@@ -7,6 +7,8 @@ import { registerRoute, initRouter } from './router.js';
 import { showToast } from './ui/toast.js';
 import { pageHeader } from './ui/components.js';
 import { installCrashGuard } from './ui/crash-guard.js';
+import { getStack } from './ui/modal-stack.js';
+import { installBackToTop } from './ui/back-to-top.js';
 
 import { render as renderSync } from './features/sync.js';
 import { render as renderDedupe } from './features/dedupe.js';
@@ -202,6 +204,7 @@ function showApp(profile) {
         <img class="sidebar-logo" src="assets/favicon.svg" alt="">
         <span class="sidebar-title">Fonoteca</span>
       </a>
+      <button class="sidebar-close" id="sidebar-close" type="button" title="Cerrar el menú" aria-label="Cerrar el menú">✕</button>
       <nav class="sidebar-nav">
         <div class="sidebar-section">
           <div class="sidebar-section-title">General</div>
@@ -367,11 +370,38 @@ function showApp(profile) {
       document.body.classList.add('sidebar-hidden');
     }
   });
-  overlay.onclick = () => {
+  // Un único cierre para los tres caminos: la ✕, Escape, y el toque fuera en
+  // mobile. En desktop además hay que poner `sidebar-hidden`, porque en Home el
+  // sidebar está acoplado (sin esa clase) y quitarle `desktop-open` no lo mueve.
+  //
+  // Recordatorio del gotcha de v=101: la regla `body.sidebar-hidden .sidebar`
+  // le gana por especificidad a `.sidebar.open`, por eso vive envuelta en
+  // `@media (min-width: 769px)` en main.css. Si se sacara de ahí, esta función
+  // dejaría el sidebar cerrado también en mobile aunque se abra el overlay.
+  const esMobile = () => window.matchMedia('(max-width: 768px)').matches;
+  const sidebarAbierto = () =>
+    sidebar.classList.contains('open') ||
+    sidebar.classList.contains('desktop-open') ||
+    (!esMobile() && !document.body.classList.contains('sidebar-hidden'));
+
+  const closeSidebar = () => {
     sidebar.classList.remove('open');
     sidebar.classList.remove('desktop-open');
     overlay.classList.remove('open');
+    if (!esMobile()) document.body.classList.add('sidebar-hidden');
   };
+
+  document.getElementById('sidebar-close').onclick = closeSidebar;
+  overlay.onclick = closeSidebar;
+
+  // Escape. No le pisa el Escape a los modales: si hay alguno abierto, el que
+  // manda es modal-stack.js y acá no hacemos nada.
+  document.addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape') return;
+    if (getStack().length) return;
+    if (!sidebarAbierto()) return;
+    closeSidebar();
+  });
 
   document.querySelectorAll('.nav-link').forEach(link => {
     link.addEventListener('click', () => {
@@ -418,7 +448,11 @@ function showApp(profile) {
   registerRoute('new-releases', renderNewReleases);
   registerRoute('sin-clasificar', renderSinClasificar);
 
+  // «Volver arriba»: se instala una sola vez para toda la app y descubre solo
+  // qué elemento scrollea en cada vista. Va después de initRouter para que la
+  // primera siembra encuentre algo pintado. Ver ui/back-to-top.js.
   initRouter();
+  installBackToTop();
 }
 
 // Set unificado de iconos Lucide inline. Cada uno con currentColor así toma el color del texto.

@@ -45,6 +45,11 @@ function unlockBody() {
   document.body.classList.remove('modal-open');
   document.body.style.top = '';
   window.scrollTo(0, savedScrollY);
+  // Se cerró la ÚLTIMA ficha (los dos únicos sitios que llaman acá son
+  // closeTop con la pila ya vacía y closeAll). Lo escucha ui/preview-player.js
+  // para cortar el audio; se avisa por evento y no llamándolo directo para no
+  // armar un ciclo de imports con components.js.
+  document.dispatchEvent(new CustomEvent('modalstackempty'));
 }
 
 function createBackBtn() {

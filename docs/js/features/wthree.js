@@ -2,18 +2,19 @@
 // por álbum). Muestra qué álbumes ya tienen picks, cuántos, y cuáles te faltan.
 // Ordenado por álbumes más escuchados primero para priorizar tu tiempo.
 
-import { spotifyFetch, getAllPlaylistItems, getAllUserPlaylists, addTracksToPlaylist, removeTracksFromPlaylist, reorderPlaylistItems, getPlaylistSnapshotId, getCachedPlaylistSnapshot, updatePlaylistItemsCache, getBestAvailableLikes } from '../api.js?v=140';
-import { loadHistoryStats, loadListenedAlbums, isOwner, ownerLockedMessage } from './history-data.js?v=140';
-import { escapeHtml, pageHeader } from '../ui/components.js?v=140';
-import { showToast } from '../ui/toast.js?v=140';
-import { activateMarquee, marqueeSpan } from '../ui/marquee.js?v=140';
-import { openModal, closeById, closeModal } from '../ui/modal-stack.js?v=140';
-import { getPreview } from '../api/preview-providers.js?v=140';
-import { togglePreview, playingKey } from '../ui/preview-player.js?v=140';
-import { openAlbumCard } from './album-card.js?v=140';
-import { albumKey } from '../util/album-key.js?v=140';
-import { computeUpdatedPickPositions } from '../util/reorder-shifts.js?v=140';
-import { createHiddenStore } from '../util/hidden-sync.js?v=140';
+import { spotifyFetch, getAllPlaylistItems, getAllUserPlaylists, addTracksToPlaylist, removeTracksFromPlaylist, reorderPlaylistItems, getPlaylistSnapshotId, getCachedPlaylistSnapshot, updatePlaylistItemsCache, getBestAvailableLikes } from '../api.js?v=141';
+import { loadHistoryStats, loadListenedAlbums, isOwner, ownerLockedMessage } from './history-data.js?v=141';
+import { escapeHtml, pageHeader } from '../ui/components.js?v=141';
+import { showToast } from '../ui/toast.js?v=141';
+import { activateMarquee, marqueeSpan } from '../ui/marquee.js?v=141';
+import { openModal, closeById, closeModal } from '../ui/modal-stack.js?v=141';
+import { getPreview } from '../api/preview-providers.js?v=141';
+import { togglePreview, playingKey } from '../ui/preview-player.js?v=141';
+import { openAlbumCard } from './album-card.js?v=141';
+import { albumKey } from '../util/album-key.js?v=141';
+import { computeUpdatedPickPositions } from '../util/reorder-shifts.js?v=141';
+import { createHiddenStore } from '../util/hidden-sync.js?v=141';
+import { mountBottom } from '../ui/bottom-layer.js?v=141';
 
 const LS_KEY_ID = 'wthree_playlist_id';
 const LS_KEY_NAME = 'wthree_playlist_name';
@@ -1008,7 +1009,9 @@ function updateSavingPill(label) {
     pill.id = 'wt-saving-pill';
     pill.className = 'wt-saving-pill';
     pill.setAttribute('role', 'status');
-    document.body.appendChild(pill);
+    // Zona izquierda de la capa de abajo: alineada a la columna de contenido y
+    // apilada con lo que haya ahí, en vez de `fixed` por su cuenta.
+    mountBottom('left', pill);
   }
   const texto = savingCount > 1 ? `Guardando ${savingCount} álbumes en w three…` : `Guardando «${label}» en w three…`;
   pill.innerHTML = `<span class="wt-saving-spinner" aria-hidden="true"></span><span>${escapeHtml(texto)}</span>`;

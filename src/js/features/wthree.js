@@ -14,6 +14,7 @@ import { openAlbumCard } from './album-card.js';
 import { albumKey } from '../util/album-key.js';
 import { computeUpdatedPickPositions } from '../util/reorder-shifts.js';
 import { createHiddenStore } from '../util/hidden-sync.js';
+import { mountBottom } from '../ui/bottom-layer.js';
 
 const LS_KEY_ID = 'wthree_playlist_id';
 const LS_KEY_NAME = 'wthree_playlist_name';
@@ -1008,7 +1009,9 @@ function updateSavingPill(label) {
     pill.id = 'wt-saving-pill';
     pill.className = 'wt-saving-pill';
     pill.setAttribute('role', 'status');
-    document.body.appendChild(pill);
+    // Zona izquierda de la capa de abajo: alineada a la columna de contenido y
+    // apilada con lo que haya ahí, en vez de `fixed` por su cuenta.
+    mountBottom('left', pill);
   }
   const texto = savingCount > 1 ? `Guardando ${savingCount} álbumes en w three…` : `Guardando «${label}» en w three…`;
   pill.innerHTML = `<span class="wt-saving-spinner" aria-hidden="true"></span><span>${escapeHtml(texto)}</span>`;
