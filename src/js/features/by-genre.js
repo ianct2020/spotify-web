@@ -156,6 +156,23 @@ function renderKeySetup() {
   };
 }
 
+// Cuántas entradas hay REALMENTE en el cache de tags, sin mirar el TTL.
+//
+// Esto no es lo mismo que `cachedCount`, que cuenta los artistas de tus likes
+// cuyos tags siguen frescos (getCachedTags devuelve null pasados 30 días). El
+// botón «Exportar cache» estaba atado a ese número, y por eso quedaba
+// DESHABILITADO con 2.260 artistas guardados en localStorage: no había ninguno
+// vigente. Justo al revés de lo que uno quiere — el momento de bajar el backup
+// es antes de volver a pedir todo. `exportAllData` exporta las entradas crudas,
+// vencidas incluidas, así que el botón tiene que mirar esto.
+function entradasEnCacheDeTags() {
+  try {
+    return Object.keys(JSON.parse(localStorage.getItem('lastfm_artist_tags_cache') || '{}')).length;
+  } catch {
+    return 0;
+  }
+}
+
 async function start() {
   const content = document.getElementById('genre-content');
   content.innerHTML = `<div class="empty-state"><div class="spinner spinner-lg"></div><div style="margin-top:16px">Cargando Liked Songs...</div></div>`;
@@ -182,7 +199,7 @@ async function start() {
           </div>
         </div>
         <div style="display:flex;gap:8px;margin-top:12px;padding-top:12px;border-top:1px solid var(--color-border);flex-wrap:wrap;align-items:center">
-          <button class="btn btn-secondary btn-sm" id="genre-export-btn" ${cachedCount === 0 ? 'disabled' : ''}>Exportar cache</button>
+          <button class="btn btn-secondary btn-sm" id="genre-export-btn" ${entradasEnCacheDeTags() === 0 && likes.length === 0 ? 'disabled' : ''} title="Baja un JSON con tus likes y todos los tags guardados, también los vencidos">Exportar cache</button>
           <button class="btn btn-secondary btn-sm" id="genre-import-btn">Importar cache</button>
           <input type="file" id="genre-import-input" accept=".json,application/json" style="display:none">
           <button class="btn btn-secondary btn-sm" id="genre-statsfm-btn">${statsfm.hasUsername() ? 'Sync desde Stats.fm' : 'Conectar Stats.fm'}</button>
@@ -456,7 +473,7 @@ function refreshHeaderAndGenres() {
       else fetchBtn.remove();
     }
     const exportBtn = document.getElementById('genre-export-btn');
-    if (exportBtn) exportBtn.disabled = cachedCount === 0;
+    if (exportBtn) exportBtn.disabled = entradasEnCacheDeTags() === 0 && likes.length === 0;
   }
   showGenres();
 }

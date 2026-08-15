@@ -983,18 +983,25 @@ async function unfollowPlaylist(playlistId) {
   invalidatePlaylistsCache();
 }
 
-// PUT /me/library con { ids: [...] } (batches de 50). Confirmado vivo
-// post-migración (usado en Sync). Devuelve null; el cache de likes se
-// invalida en el caller si corresponde.
+// PUT /me/library?uris=spotify:track:…,… — las uris van por QUERY, igual que
+// en el DELETE.
+//
+// Verificado en vivo el 2026-08-15 con la sesión real, sobre el mismo track:
+//   - body `{ ids: [...] }`  → 400
+//   - body `{ uris: [...] }` → 400 «Missing required field: uris»
+//   - query `?uris=…`        → 200, y `/me/library/contains` pasa a true
+// O sea que esto estaba ROTO: «+ Biblioteca» de #discover-artists y
+// #new-releases fallaba siempre (el 400 salía como toast «Error al añadir»).
+//
+// Chunks de 40, el mismo tope que el DELETE: no hay documentación del máximo y
+// 40 es el único número confirmado para esta ruta.
 async function saveToLibrary(ids) {
   if (!Array.isArray(ids) || ids.length === 0) return;
   const uniq = [...new Set(ids.filter(Boolean))];
-  for (let i = 0; i < uniq.length; i += 50) {
-    const chunk = uniq.slice(i, i + 50);
-    await spotifyFetch(`/me/library`, {
-      method: 'PUT',
-      body: JSON.stringify({ ids: chunk }),
-    });
+  for (let i = 0; i < uniq.length; i += 40) {
+    const chunk = uniq.slice(i, i + 40);
+    const uris = chunk.map(id => encodeURIComponent(`spotify:track:${id}`)).join(',');
+    await spotifyFetch(`/me/library?uris=${uris}`, { method: 'PUT' });
   }
 }
 

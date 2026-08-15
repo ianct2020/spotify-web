@@ -1,6 +1,7 @@
 import { getAllLikedTracks, getAllUserPlaylists, getAllPlaylistItems, removeLikedTracks, removeTracksFromPlaylist } from '../api.js';
 import { showProgress, hideProgress, progressController, isCancelled, typeConfirmModal, renderTrackRow, escapeHtml, pageHeader } from '../ui/components.js';
 import { showToast } from '../ui/toast.js';
+import { isZombieItem } from '../util/zombie.js';
 
 const FADE_DURATION_MS = 15000;
 const STAGGER_PER_ROW_MS = 80;
@@ -33,10 +34,9 @@ async function analyze() {
       prog.update(loaded, total);
     }, { signal: prog.signal });
 
-    const zombieLikes = likes.filter(item => {
-      const t = item.track;
-      return !t || !t.id || t.is_playable === false;
-    });
+    // El criterio vive en util/zombie.js — lo comparte la Smart Playlist, que
+    // los filtra antes de escribir.
+    const zombieLikes = likes.filter(isZombieItem);
 
     prog.update(0, 0, 'Cargando playlists...');
     const playlists = await getAllUserPlaylists(({ loaded, total }) => {
@@ -60,10 +60,7 @@ async function analyze() {
         }
         throw e;
       }
-      const zombies = items.filter(item => {
-        const t = item.track || item.item;
-        return !t || !t.id || t.is_playable === false;
-      });
+      const zombies = items.filter(isZombieItem);
       if (zombies.length > 0) {
         zombiesByPlaylist.push({ playlist: pl, zombies });
       }

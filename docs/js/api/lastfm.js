@@ -2,14 +2,41 @@ const LASTFM_KEY_STORAGE = 'lastfm_api_key';
 const LASTFM_USER_STORAGE = 'lastfm_username';
 const BASE = 'https://ws.audioscrobbler.com/2.0/';
 
+// API key de Last.fm por defecto, horneada en el código A PROPÓSITO.
+//
+// ESTE REPO ES PÚBLICO y esta key está expuesta a la vista de cualquiera. Es
+// deliberado:
+//   - es de SOLO LECTURA: con ella no se puede escribir nada en Last.fm (no
+//     hay secret ni sesión de usuario; todos los métodos que usamos —
+//     artist.getsimilar, artist.gettoptags, tag.gettopartists,
+//     user.gettopartists— son públicos y de consulta);
+//   - no está atada a ninguna cuenta con datos privados;
+//   - sin ella, la key había que cargarla A MANO EN CADA MÁQUINA Y EN CADA
+//     ORIGEN, porque vivía solo en localStorage, que es por origen: la que
+//     estaba puesta en GitHub Pages no existía en http://127.0.0.1:5500, y por
+//     eso #genre nunca se había podido probar en dev.
+//
+// Si alguien la quema (Last.fm la revoca por abuso, o empieza a devolver
+// errores de cuota), hay que REGENERARLA en https://www.last.fm/api/accounts y
+// reemplazar esta constante. Nada más: el ⚙ del Dashboard permite pisarla
+// localmente mientras tanto.
+const DEFAULT_API_KEY = '';
+
+/** La key que se usa: la propia del usuario si la cargó, si no la del código. */
 function getKey() {
-  return localStorage.getItem(LASTFM_KEY_STORAGE);
+  return localStorage.getItem(LASTFM_KEY_STORAGE) || DEFAULT_API_KEY || null;
+}
+
+/** true si se está usando la del código y no una cargada a mano. */
+function isDefaultKey() {
+  return !localStorage.getItem(LASTFM_KEY_STORAGE) && !!DEFAULT_API_KEY;
 }
 
 function setKey(k) {
   localStorage.setItem(LASTFM_KEY_STORAGE, k.trim());
 }
 
+/** Borra la key propia: se vuelve a la del código. */
 function clearKey() {
   localStorage.removeItem(LASTFM_KEY_STORAGE);
 }
@@ -185,6 +212,7 @@ function importTagsCache(parsed, { mode = 'merge' } = {}) {
 
 export {
   getKey,
+  isDefaultKey,
   setKey,
   clearKey,
   hasKey,

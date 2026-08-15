@@ -1,17 +1,26 @@
-import { getAllLikedTracks, invalidateLikesCache, exportAllData, importAllData, getCurrentUserId, syncLikesIncremental, getLikesCacheTimestamp, getBestAvailableLikes, getAllPlaylistItems } from '../api.js?v=142';
-import { showProgress, hideProgress, alertModal, escapeHtml, pageHeader } from '../ui/components.js?v=142';
-import { openModal, closeTop } from '../ui/modal-stack.js?v=142';
-import { showToast } from '../ui/toast.js?v=142';
-import { openListenedAlbumsPicker } from './listened-shared.js?v=142';
-import { loadHistoryStats, loadListenedAlbums } from './history-data.js?v=142';
-import { getArtistTopPreview } from '../api/preview-providers.js?v=142';
-import { hoverIn, hoverOut } from '../ui/preview-player.js?v=142';
-import { hasUsername, getUsername, setUsername } from '../api/statsfm.js?v=142';
-import { loadHistoryStats as _loadStatsForCounter } from './history-data.js?v=142';
-import { openArtistCard } from './artist-card.js?v=142';
-import { openAlbumCard } from './album-card.js?v=142';
-import { activateMarquee, marqueeSpan } from '../ui/marquee.js?v=142';
-import { isJunkTrack } from '../util/junk.js?v=142';
+import { getAllLikedTracks, invalidateLikesCache, exportAllData, importAllData, getCurrentUserId, syncLikesIncremental, getLikesCacheTimestamp, getBestAvailableLikes, getAllPlaylistItems } from '../api.js?v=143';
+import { showProgress, hideProgress, alertModal, escapeHtml, pageHeader } from '../ui/components.js?v=143';
+import { openModal, closeTop } from '../ui/modal-stack.js?v=143';
+import { showToast } from '../ui/toast.js?v=143';
+import { openListenedAlbumsPicker } from './listened-shared.js?v=143';
+import { loadHistoryStats, loadListenedAlbums } from './history-data.js?v=143';
+import { getArtistTopPreview } from '../api/preview-providers.js?v=143';
+import { hoverIn, hoverOut } from '../ui/preview-player.js?v=143';
+import { hasUsername, getUsername, setUsername } from '../api/statsfm.js?v=143';
+import { getKey as getLastfmKey, setKey as setLastfmKey, clearKey as clearLastfmKey, isDefaultKey as lastfmIsDefaultKey } from '../api/lastfm.js?v=143';
+
+// Tres estados posibles, no dos: puede haber una key propia, la del código, o
+// —si algún día la constante queda vacía— ninguna. El hint del ⚙ tiene que
+// distinguirlos, si no dice «propia» cuando no hay ninguna cargada.
+function estadoLastfm() {
+  if (localStorage.getItem('lastfm_api_key')) return 'propia';
+  return lastfmIsDefaultKey() ? 'la del código' : 'sin configurar';
+}
+import { loadHistoryStats as _loadStatsForCounter } from './history-data.js?v=143';
+import { openArtistCard } from './artist-card.js?v=143';
+import { openAlbumCard } from './album-card.js?v=143';
+import { activateMarquee, marqueeSpan } from '../ui/marquee.js?v=143';
+import { isJunkTrack } from '../util/junk.js?v=143';
 
 let charts = [];
 let _loadController = null;
@@ -30,6 +39,7 @@ export function render(container) {
         <button class="dash-cog-item" data-act="import" role="menuitem">Importar JSON</button>
         <button class="dash-cog-item" data-act="refresh" role="menuitem">Actualizar datos</button>
         <button class="dash-cog-item" data-act="statsfm" role="menuitem">Usuario de Stats.fm <span class="dash-cog-hint" id="dash-cog-statsfm-hint">${hasUsername() ? escapeHtml(getUsername()) : 'sin configurar'}</span></button>
+        <button class="dash-cog-item" data-act="lastfm" role="menuitem">API key de Last.fm <span class="dash-cog-hint" id="dash-cog-lastfm-hint">${estadoLastfm()}</span></button>
       </div>
     </div>
     <input type="file" id="dash-import-all-input" accept=".json,application/json" style="display:none">
@@ -75,6 +85,7 @@ export function render(container) {
       else if (act === 'import') importInput.click();
       else if (act === 'refresh') handleRefresh();
       else if (act === 'statsfm') promptStatsfm();
+      else if (act === 'lastfm') promptLastfm();
     };
   });
   importInput.onchange = handleImportAll;
@@ -186,6 +197,62 @@ function promptStatsfm() {
     showToast(`Stats.fm configurado como «${v}». Volvé a entrar a las vistas que lo usan para que aparezca la línea.`, 'success');
   };
   input.onkeydown = e => { if (e.key === 'Enter') overlay.querySelector('#dash-statsfm-save').click(); };
+}
+
+// La key de Last.fm viene por defecto en el código (ver api/lastfm.js: es de
+// solo lectura y está expuesta a propósito), así que esto no es un requisito
+// para usar la app: es el escape para poner la propia si la del código se quema
+// o si alguien quiere gastar su cuota y no la de Ian.
+function promptLastfm() {
+  const propia = localStorage.getItem('lastfm_api_key') || '';
+  const actual = getLastfmKey() || '';
+  const overlay = openModal({
+    id: 'dash-lastfm-modal',
+    html: `
+      <div class="modal" style="max-width:520px">
+        <h3 style="margin-bottom:8px">API key de Last.fm</h3>
+        <p style="color:var(--color-text-secondary);font-size:13px;margin-bottom:12px">
+          ${lastfmIsDefaultKey() || propia
+            ? `La app trae una key horneada en el código, de solo lectura, así que <strong>no hace falta configurar nada</strong>. Cargá una acá solo si querés usar la tuya.`
+            : `La key del código está vacía, así que hace falta cargar una para que anden «Por género», «Artistas similares», «Recomendaciones» y «Rabbit hole».`}
+          Se saca de <code>last.fm/api/accounts</code>.
+        </p>
+        <p style="color:var(--color-text-muted);font-size:12px;margin-bottom:12px">
+          ${estadoLastfm() === 'sin configurar'
+            ? 'Ahora mismo <strong>no hay ninguna key</strong>.'
+            : `Ahora mismo se está usando <strong>${estadoLastfm() === 'propia' ? 'una key propia' : 'la del código'}</strong>${actual ? ` (…${escapeHtml(actual.slice(-6))})` : ''}.`}
+        </p>
+        <input type="text" id="dash-lastfm-input" placeholder="tu API key" value="${escapeHtml(propia)}"
+               style="width:100%;padding:10px;background:var(--color-elevated);border:1px solid var(--color-border);border-radius:var(--radius-sm);color:var(--color-text);font-family:monospace;font-size:14px;margin-bottom:12px">
+        <div style="display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap">
+          <button class="btn btn-secondary" id="dash-lastfm-reset"${propia ? '' : ' disabled'}>Volver a la del código</button>
+          <button class="btn btn-secondary" id="dash-lastfm-cancel">Cancelar</button>
+          <button class="btn btn-primary" id="dash-lastfm-save">Guardar</button>
+        </div>
+      </div>
+    `,
+  });
+  const input = overlay.querySelector('#dash-lastfm-input');
+  setTimeout(() => input.focus(), 20);
+  const hint = () => document.getElementById('dash-cog-lastfm-hint');
+  overlay.querySelector('#dash-lastfm-cancel').onclick = () => closeTop();
+  overlay.querySelector('#dash-lastfm-reset').onclick = () => {
+    clearLastfmKey();
+    const h = hint();
+    if (h) h.textContent = estadoLastfm();
+    closeTop();
+    showToast('Volviste a la key de Last.fm del código', 'success');
+  };
+  overlay.querySelector('#dash-lastfm-save').onclick = () => {
+    const v = input.value.trim();
+    if (v.length < 20) { showToast('Key inválida: son 32 caracteres', 'error'); return; }
+    setLastfmKey(v);
+    const h = hint();
+    if (h) h.textContent = 'propia';
+    closeTop();
+    showToast('Key de Last.fm guardada en este navegador', 'success');
+  };
+  input.onkeydown = e => { if (e.key === 'Enter') overlay.querySelector('#dash-lastfm-save').click(); };
 }
 
 async function handleRefresh() {

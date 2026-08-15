@@ -1,8 +1,14 @@
-import { getAllLikedTracks, createPlaylist, addTracksToPlaylist, getAllUserPlaylists, invalidatePlaylistsCache } from '../api.js?v=142';
-import { showProgress, hideProgress, progressController, isCancelled, promptPlaylistName, escapeHtml, pageHeader } from '../ui/components.js?v=142';
-import { showToast } from '../ui/toast.js?v=142';
+import { getAllLikedTracks, createPlaylist, addTracksToPlaylist, getAllUserPlaylists, invalidatePlaylistsCache } from '../api.js?v=143';
+import { showProgress, hideProgress, progressController, isCancelled, promptPlaylistName, escapeHtml, pageHeader } from '../ui/components.js?v=143';
+import { showToast } from '../ui/toast.js?v=143';
+import { isZombieItem } from '../util/zombie.js?v=143';
 
+// `likes` es SIEMPRE el pool ya limpio de zombis: todo lo que se agrupa por
+// año, por década o se sortea sale de acá, así que ninguna de las tres pestañas
+// puede escribir una pista que Spotify sacó del catálogo. `zombiesFuera` es
+// solo para poder contárselo al usuario.
 let likes = [];
+let zombiesFuera = 0;
 let currentTab = 'year';
 let selectedYears = new Set();
 let selectedDecades = new Set();
@@ -52,9 +58,17 @@ function updateTabStyles() {
 async function loadLikes() {
   const prog = progressController('Cargando Liked Songs...');
   try {
-    likes = await getAllLikedTracks(({ loaded, total }) => {
+    const todos = await getAllLikedTracks(({ loaded, total }) => {
       prog.update(loaded, total);
     }, { signal: prog.signal });
+    // Los zombis se sacan del pool ACÁ y no en promptCreate: si se filtraran
+    // recién al escribir, los contadores de cada año/década y el máximo de la
+    // pestaña Random prometerían pistas que después no entran en la playlist.
+    likes = todos.filter(it => !isZombieItem(it));
+    zombiesFuera = todos.length - likes.length;
+    if (zombiesFuera) {
+      console.info(`[smart] ${zombiesFuera} zombis fuera del pool (de ${todos.length} likes)`);
+    }
     prog.done();
     renderTab();
   } catch (e) {
@@ -64,6 +78,13 @@ async function loadLikes() {
       : escapeHtml(e.message);
     document.getElementById('smart-content').innerHTML = `<div class="card"><p style="color:var(--color-${isCancelled(e) ? 'warning' : 'error'})">${msg}</p></div>`;
   }
+}
+
+// Coletilla para las tres pestañas: deja claro que el pool no es el total de
+// likes cuando hay zombis, en vez de que los números bailen sin explicación.
+function notaZombis() {
+  if (!zombiesFuera) return '';
+  return ` · <span style="color:var(--color-warning)">${zombiesFuera.toLocaleString()} zombi${zombiesFuera === 1 ? '' : 's'} fuera</span> (Spotify los sacó del catálogo)`;
 }
 
 function renderTab() {
@@ -115,7 +136,7 @@ function renderYearTab() {
 
   content.innerHTML = `
     <div style="margin-bottom:12px;color:var(--color-text-secondary);font-size:14px">
-      ${likes.length.toLocaleString()} likes analizados · ${groups.length} años distintos
+      ${likes.length.toLocaleString()} likes analizados · ${groups.length} años distintos${notaZombis()}
     </div>
     <div class="smart-selectbar" id="smart-selectbar-year"></div>
     <div class="smart-grid">
@@ -151,7 +172,7 @@ function renderDecadeTab() {
 
   content.innerHTML = `
     <div style="margin-bottom:12px;color:var(--color-text-secondary);font-size:14px">
-      ${likes.length.toLocaleString()} likes analizados · ${groups.length} décadas
+      ${likes.length.toLocaleString()} likes analizados · ${groups.length} décadas${notaZombis()}
     </div>
     <div class="smart-selectbar" id="smart-selectbar-decade"></div>
     <div class="smart-grid">
@@ -227,7 +248,7 @@ function renderRandomTab() {
   const validTracks = likes.filter(i => i.track?.uri).length;
   content.innerHTML = `
     <div style="margin-bottom:16px;color:var(--color-text-secondary);font-size:14px">
-      ${validTracks.toLocaleString()} likes disponibles para mezcla random.
+      ${validTracks.toLocaleString()} likes disponibles para mezcla random${notaZombis()}.
     </div>
     <div class="card" style="max-width:420px">
       <label style="display:block;margin-bottom:8px;font-weight:500">Cantidad de tracks</label>

@@ -13,7 +13,7 @@
 - saved tracks (GET /me/tracks) sigue usando `items[].track`
 - Remove from library: `DELETE /me/library?uris=spotify:track:{id},...` (NO `DELETE /me/tracks` — da 403)
   - Máximo 40 URIs por request, usa query params (no body)
-- Save to library: `PUT /me/library` con URIs (NO `PUT /me/tracks`)
+- Save to library: `PUT /me/library?uris=spotify:track:{id},...` — **por QUERY, igual que el DELETE** (verificado en vivo 2026-08-15: body `{ids}` y body `{uris}` dan 400 «Missing required field: uris»; el query da 200). Hasta v=142 `saveToLibrary()` mandaba `{ids}` en el body, así que «+ Biblioteca» de #discover-artists y #new-releases fallaba siempre. Chunks de 40, como el DELETE.
 - Create playlist: `POST /me/playlists` (NO `POST /users/{id}/playlists`)
 - Rate limit 429: esperar mínimo 5 segundos, Retry-After header no visible por CORS
 - Endpoints deprecados (403): Audio Features, Audio Analysis, Recommendations, Related Artists, Featured Playlists, Get Several Albums/Artists, Get Artist Top Tracks, Get New Releases, GET /users/{id}, GET /users/{id}/playlists

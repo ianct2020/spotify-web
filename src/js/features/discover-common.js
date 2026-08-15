@@ -15,6 +15,9 @@ import { openPlaylistPicker } from '../ui/playlist-picker.js';
 import { getOwnPlaylists, addUrisToPlaylists, toastAddResult } from '../util/playlist-add.js';
 import { openArtistCard } from './artist-card.js';
 import { openAlbumCard } from './album-card.js';
+import { createHiddenStore, createLocalStore } from '../util/hidden-sync.js';
+import { getPreview } from '../api/preview-providers.js';
+import { togglePreview, playingKey, attachHover } from '../ui/preview-player.js';
 
 const DISCO_TTL_MIN = 30 * 24 * 60;       // 30 días
 const ARTIST_ID_TTL_MIN = 60 * 24 * 60;   // 60 días — los ids no cambian
@@ -132,9 +135,114 @@ export function dedupDisco(disco) {
   return [...map.values()];
 }
 
+// ── Los dos estados de una tarjeta de descubrimiento ────────────────────────
+//
+// Son cosas DISTINTAS y se guardan separadas a propósito:
+//
+//   escuchado → "ya lo evalué". Lo puse, le di una vuelta, no necesito que me
+//               lo vuelvan a ofrecer. Es una afirmación sobre lo que hice.
+//   oculto    → "no me interesa". No lo escuché ni pienso hacerlo. Es una
+//               afirmación sobre lo que quiero ver.
+//
+// Mezclarlos perdería información: si mañana Ian quiere revisar "¿qué marqué
+// como escuchado?" no puede hacerlo desde una lista que también tiene los que
+// descartó de plano.
+//
+// Fuente de verdad de los OCULTOS: una playlist de Spotify, igual que en
+// #skips, #sin-clasificar y W-Three (util/hidden-sync.js, reconciliación por
+// unión). La clave es un álbum, no una pista, así que —como en W-Three— se
+// guarda una pista representativa y al leer se reconstruye `albumKey` desde su
+// álbum.
+//
+// Una sola playlist para las dos vistas y no una por vista: #discover-artists y
+// #new-releases muestran el MISMO objeto (un álbum de tus artistas que no
+// escuchaste), solo que filtrado por criterios distintos. Ocultar un disco en
+// Novedades y que te lo siga ofreciendo Sin escuchar sería un bug, no una
+// separación útil.
+export const hiddenAlbums = createHiddenStore({
+  lsKey: 'discover_ocultos',
+  playlistName: 'fonoteca · ocultos (descubrir)',
+  label: 'descubrir',
+  keyOfTrack: (t) => {
+    const albumName = t?.album?.name;
+    if (!albumName) return null;
+    return albumKey(albumName, t.artists?.[0]?.name || '');
+  },
+});
+
+// "Escuchado" alcanza con localStorage, pero con la MISMA forma que el store
+// sincronizado (ver createLocalStore): el día que se quiera compartir entre
+// máquinas, se cambia la llamada y nada más.
+export const heardAlbums = createLocalStore({
+  lsKey: 'discover_escuchados',
+  label: 'descubrir-escuchados',
+});
+
+/** La clave con la que se identifica una tarjeta en los dos stores. */
+export function cardKey(al, artistName) {
+  return albumKey(al.name, artistName);
+}
+
+// El índice de escuchados de util/album-heard.js manda igual que antes; encima
+// se suma lo que Ian marcó a mano, que persiste entre sesiones (markAlbumHeard
+// solo vive en memoria).
 export function albumIsUnheard(al, artistName, heardSet) {
   const k = albumKey(al.name, artistName);
-  return !heardSet.has(k);
+  return !heardSet.has(k) && !heardAlbums.has(k);
+}
+
+// ── Preview de un álbum ──────────────────────────────────────────────────────
+//
+// La cadena de proveedores (api/preview-providers.js) busca CANCIONES, y acá lo
+// que hay son álbumes que —por definición de la vista— no están en tus likes,
+// así que no hay ninguna pista conocida de la que tirar. Se resuelve una pista
+// representativa con `GET /albums/{id}/tracks` (la primera del disco) y se
+// memoiza por álbum: el hover puede pasar diez veces por la misma tarjeta y es
+// una sola llamada.
+//
+// Si ese endpoint cae (no está confirmado vivo post-migración, ver CLAUDE.md),
+// se prueba con el nombre del álbum como si fuera el de la canción: en los
+// singles —que son la mitad de esta vista— acierta casi siempre.
+const trackMemo = new Map();   // albumId → { name, artists, uri } | null
+
+export async function representativeTrack(al, artistName) {
+  if (!al?.id) return null;
+  if (trackMemo.has(al.id)) return trackMemo.get(al.id);
+  let out = null;
+  try {
+    const tracks = await getAlbumTracks(al.id, { limit: 50 });
+    const t = tracks.find(x => x?.name) || null;
+    if (t) {
+      out = {
+        name: t.name,
+        artists: (t.artists || []).map(a => a?.name).filter(Boolean),
+        uri: t.uri || (t.id ? `spotify:track:${t.id}` : null),
+      };
+    }
+  } catch (e) {
+    console.warn(`[discover] tracklist de «${al.name}»:`, e.message);
+  }
+  if (out && !out.artists.length) out.artists = [artistName].filter(Boolean);
+  trackMemo.set(al.id, out);
+  return out;
+}
+
+/**
+ * Getter para el player global. Sin `spotifyId` a propósito: el embed de
+ * Spotify no puede autoarrancar en un iframe cross-origin, así que como preview
+ * de una tarjeta no sirve — o hay audio de iTunes/Deezer, o no suena.
+ */
+export async function getAlbumPreview(al, artistName) {
+  const rep = await representativeTrack(al, artistName);
+  const nombre = rep?.name || al.name;
+  const artistas = rep?.artists?.length ? rep.artists : [artistName].filter(Boolean);
+  return await getPreview({ name: nombre, artists: artistas });
+}
+
+/** La uri con la que se representa el álbum en la playlist de ocultos. */
+export async function albumRepresentativeUri(al, artistName) {
+  const rep = await representativeTrack(al, artistName);
+  return rep?.uri || null;
 }
 
 // Crea la playlist "Descubrir · YYYY-MM-DD" con los álbumes seleccionados.
@@ -174,21 +282,61 @@ export function fmtRelease(release) {
   return y ? String(y) : '—';
 }
 
-export function renderAlbumCard(al, artistName, { checkClass = 'dcard-check', selected = false } = {}) {
+const PLAY_SVG = `<svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>`;
+const PAUSE_SVG = `<svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor" aria-hidden="true"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>`;
+const DOTS_SVG = `<svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>`;
+const OJO_TACHADO = `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>`;
+const OJO_ABIERTO = `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>`;
+
+/** La key del player global para una tarjeta. Una sola, para las dos vistas. */
+export function previewKeyOf(albumId) {
+  return `dc:${albumId}`;
+}
+
+// Cuando el player cambia de canción (o para), los ▶/⏸ de TODAS las tarjetas
+// pintadas se ponen al día solos. Va acá y no en cada vista justamente porque
+// las dos usan la misma tarjeta.
+document.addEventListener('previewchange', (e) => {
+  const key = e.detail?.key || '';
+  document.querySelectorAll('.dcard-play').forEach(btn => {
+    if (btn.disabled) return;
+    btn.innerHTML = (key === previewKeyOf(btn.dataset.previewAlbum)) ? PAUSE_SVG : PLAY_SVG;
+    btn.classList.toggle('is-playing', key === previewKeyOf(btn.dataset.previewAlbum));
+  });
+});
+
+/**
+ * @param {object} al  álbum slim (id, name, type, img, release, total)
+ * @param {string} artistName
+ * @param {object} [opts]
+ * @param {string} [opts.checkClass]
+ * @param {boolean} [opts.selected]
+ * @param {boolean} [opts.showHeard]  muestra «Escuchado» (solo #discover-artists)
+ * @param {boolean} [opts.hiddenMode] la tarjeta se está viendo en la lista de
+ *                                    ocultos: el ojo la devuelve en vez de ocultarla
+ */
+export function renderAlbumCard(al, artistName, {
+  checkClass = 'dcard-check', selected = false, showHeard = false, hiddenMode = false,
+} = {}) {
   const tipo = al.type === 'single' ? 'single' : (al.type === 'compilation' ? 'recopilatorio' : 'álbum');
   const id = escapeHtml(al.id);
   const artista = escapeHtml(artistName);
+  const sonando = playingKey() === previewKeyOf(al.id);
   return `
-    <div class="dcard${selected ? ' is-sel' : ''}" data-id="${id}">
+    <div class="dcard${selected ? ' is-sel' : ''}" data-id="${id}" data-artist="${artista}">
       <label class="dcard-check-wrap" title="Seleccionar">
         <input type="checkbox" class="${checkClass}" data-id="${id}"${selected ? ' checked' : ''} aria-label="Seleccionar ${escapeHtml(al.name)}">
       </label>
       <div class="dcard-top">
-        <button type="button" class="dcard-cover" data-open-album="${id}" data-open-artist="${artista}" title="Ver ficha del álbum">
-          ${al.img
-            ? `<img src="${al.img}" alt="" loading="lazy" class="dcard-img">`
-            : `<span class="dcard-img dcard-img-empty">♪</span>`}
-        </button>
+        <div class="dcard-cover-wrap" data-hover-album="${id}">
+          <button type="button" class="dcard-cover" data-open-album="${id}" data-open-artist="${artista}" title="Ver ficha del álbum">
+            ${al.img
+              ? `<img src="${al.img}" alt="" loading="lazy" class="dcard-img">`
+              : `<span class="dcard-img dcard-img-empty">♪</span>`}
+          </button>
+          <button type="button" class="dcard-play${sonando ? ' is-playing' : ''}" data-preview-album="${id}"
+                  title="Preview de 30 s — no suma reproducciones" aria-label="Preview">${sonando ? PAUSE_SVG : PLAY_SVG}</button>
+        </div>
         <div class="dcard-info">
           <button type="button" class="dcard-name" data-open-album="${id}" data-open-artist="${artista}">${escapeHtml(al.name)}</button>
           <button type="button" class="dcard-artist" data-open-artist-card="${artista}">${artista}</button>
@@ -199,6 +347,10 @@ export function renderAlbumCard(al, artistName, { checkClass = 'dcard-check', se
       <div class="dcard-actions">
         <button class="btn btn-secondary btn-sm" data-save-album="${id}" data-save-artist="${artista}" title="Guardar todas las pistas en tu biblioteca">+ Biblioteca</button>
         <button class="btn btn-secondary btn-sm" data-addpl-album="${id}" title="Añadir todas las pistas a una o varias playlists">Añadir a playlist…</button>
+        ${showHeard ? `<button class="btn btn-secondary btn-sm" data-heard-album="${id}" title="Ya lo escuchaste y lo evaluaste: deja de aparecer">Escuchado</button>` : ''}
+        <button class="btn btn-secondary btn-sm dcard-hide" data-hide-album="${id}"
+                title="${hiddenMode ? 'Devolver a la lista' : 'No me interesa: no volver a mostrarlo (no toca tu biblioteca)'}"
+                aria-label="${hiddenMode ? 'Devolver' : 'Ocultar'}">${hiddenMode ? OJO_ABIERTO : OJO_TACHADO}</button>
       </div>
     </div>
   `;
@@ -206,7 +358,48 @@ export function renderAlbumCard(al, artistName, { checkClass = 'dcard-check', se
 
 // Cablea una grilla ya pintada con renderAlbumCard. Las dos vistas usan los
 // mismos data-attributes, así que el wiring también es uno solo.
-export function wireAlbumCards(list, findAlbumById, { checkClass, selection, onSave, onChange, afterAdd }) {
+export function wireAlbumCards(list, findAlbumById, {
+  checkClass, selection, onSave, onChange, afterAdd, onHeard, onHide,
+}) {
+  // ── Preview: botón ▶ y hover sobre la tapa ──
+  // El getter es el mismo en los dos caminos; `hoverIn` (dentro de attachHover)
+  // trae el debounce de 400 ms, así que barrer la grilla con el mouse no
+  // dispara ninguna búsqueda ni ninguna llamada a /albums/{id}/tracks.
+  list.querySelectorAll('[data-preview-album]').forEach(btn => {
+    const al = findAlbumById(btn.dataset.previewAlbum);
+    const artista = btn.closest('.dcard')?.dataset.artist || '';
+    if (!al) return;
+    btn.onclick = async (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const previo = btn.innerHTML;
+      btn.innerHTML = DOTS_SVG;
+      const res = await togglePreview(previewKeyOf(al.id), () => getAlbumPreview(al, artista));
+      if (res === true) btn.innerHTML = PAUSE_SVG;
+      else if (res === null) {
+        btn.innerHTML = '—';
+        btn.title = 'Sin preview disponible';
+        btn.disabled = true;
+        showToast(`Sin preview disponible de «${al.name}»`, 'info');
+      } else btn.innerHTML = previo === DOTS_SVG ? PLAY_SVG : previo;
+    };
+  });
+  list.querySelectorAll('[data-hover-album]').forEach(wrap => {
+    const al = findAlbumById(wrap.dataset.hoverAlbum);
+    const artista = wrap.closest('.dcard')?.dataset.artist || '';
+    if (!al) return;
+    attachHover(wrap, previewKeyOf(al.id), () => getAlbumPreview(al, artista));
+  });
+
+  if (onHeard) {
+    list.querySelectorAll('[data-heard-album]').forEach(btn => {
+      btn.onclick = () => onHeard(btn.dataset.heardAlbum, btn.closest('.dcard')?.dataset.artist || '', btn);
+    });
+  }
+  list.querySelectorAll('[data-hide-album]').forEach(btn => {
+    btn.onclick = () => onHide?.(btn.dataset.hideAlbum, btn.closest('.dcard')?.dataset.artist || '', btn);
+  });
+
   list.querySelectorAll('[data-open-artist-card]').forEach(btn => {
     btn.onclick = () => openArtistCard({ name: btn.dataset.openArtistCard });
   });
@@ -244,6 +437,36 @@ export function wireAlbumCards(list, findAlbumById, { checkClass, selection, onS
       onChange();
     };
   });
+}
+
+// ── Acciones de los dos estados, compartidas por las dos vistas ─────────────
+
+/**
+ * Marca/desmarca "ya lo evalué". Es instantáneo: solo localStorage.
+ * @returns {boolean} true si quedó marcado como escuchado
+ */
+export function toggleHeardAlbum(al, artistName) {
+  return heardAlbums.toggle(cardKey(al, artistName), null);
+}
+
+/**
+ * Oculta/devuelve un álbum. Antes de tocar el store resuelve la pista
+ * representativa, que es lo que se sube a la playlist de Spotify: sin uri el
+ * ocultamiento queda solo local y no viaja a la otra máquina, que es
+ * exactamente el problema que la playlist vino a resolver.
+ *
+ * La resolución está memoizada por álbum, así que si el usuario ya escuchó el
+ * preview de esa tarjeta no cuesta ninguna llamada.
+ *
+ * @returns {Promise<boolean>} true si quedó oculto
+ */
+export async function toggleHiddenAlbum(al, artistName) {
+  const key = cardKey(al, artistName);
+  let uri = null;
+  try {
+    uri = await albumRepresentativeUri(al, artistName);
+  } catch { /* sin uri: queda local, el store lo reintenta en cada sync */ }
+  return hiddenAlbums.toggle(key, uri);
 }
 
 // Abre el modal multi-selección y añade TODAS las pistas de los álbumes

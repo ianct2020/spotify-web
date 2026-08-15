@@ -10,11 +10,11 @@
 // 100 artistas en lugar de 20. Lógica de fetch/cache/playlist compartida en
 // features/discover-common.js con #new-releases.
 
-import { escapeHtml, pageHeader } from '../ui/components.js?v=142';
-import { showToast } from '../ui/toast.js?v=142';
-import { openArtistCard } from './artist-card.js?v=142';
-import { isJunkTrack } from '../util/junk.js?v=142';
-import { buildAlbumHeardIndex, markAlbumHeard } from '../util/album-heard.js?v=142';
+import { escapeHtml, pageHeader } from '../ui/components.js?v=143';
+import { showToast } from '../ui/toast.js?v=143';
+import { openArtistCard } from './artist-card.js?v=143';
+import { isJunkTrack } from '../util/junk.js?v=143';
+import { buildAlbumHeardIndex, markAlbumHeard } from '../util/album-heard.js?v=143';
 import {
   getArtistIdCached,
   getArtistDiscoCached,
@@ -30,7 +30,12 @@ import {
   renderAlbumCard,
   wireAlbumCards,
   addAlbumsToPlaylists,
-} from './discover-common.js?v=142';
+  hiddenAlbums,
+  heardAlbums,
+  cardKey,
+  toggleHeardAlbum,
+  toggleHiddenAlbum,
+} from './discover-common.js?v=143';
 
 const SCAN_KEY = 'discover_artists';
 
@@ -67,6 +72,10 @@ const state = {
   filterYears: 0,
   loadedMore: DEFAULT_INITIAL,
   scannedAt: null,       // ts del escaneo cacheado que estamos mostrando
+  // 'normal' = lo que queda por descubrir · 'hidden' = los que ocultaste ·
+  // 'heard' = los que marcaste como escuchados. Los dos últimos son la única
+  // forma de deshacer, así que no son opcionales.
+  mode: 'normal',
 };
 
 const YEAR_NOW = new Date().getFullYear();
@@ -123,6 +132,15 @@ export async function render(container) {
   state.filterYears = getFilterYears();
   state.loadedMore = Math.min(getLoadedMore(), state.artists.length);
   state.scannedAt = null;
+  state.mode = 'normal';
+
+  // Ocultos desde la playlist de Spotify. En segundo plano: la vista arranca
+  // con el caché local y se repinta cuando llega la reconciliación (unión), que
+  // es lo que trae lo que ocultaste en la otra máquina.
+  hiddenAlbums.ready().then(() => {
+    const c = document.getElementById('disco-content');
+    if (c && c.isConnected) refreshList(c);
+  });
 
   // Escaneo cacheado (7 días): entrar a la vista no puede costar 150 llamadas
   // cada vez. Lo que ya está escaneado se pinta al instante; si el cache cubre
@@ -171,6 +189,8 @@ function renderShell(content, totalCandidates) {
           <option value="5" ${state.filterYears === 5 ? 'selected' : ''}>Últimos 5 años</option>
           <option value="10" ${state.filterYears === 10 ? 'selected' : ''}>Últimos 10 años</option>
         </select>
+        <button class="btn btn-secondary btn-sm ${state.mode === 'heard' ? 'sc-on' : ''}" id="disco-mode-heard" title="Los que marcaste como escuchados. Desde ahí podés devolverlos a la lista.">Escuchados (<span id="disco-heard-n">${heardAlbums.size}</span>)</button>
+        <button class="btn btn-secondary btn-sm ${state.mode === 'hidden' ? 'sc-on' : ''}" id="disco-mode-hidden" title="Los que ocultaste. Se sincronizan con la playlist «fonoteca · ocultos (descubrir)».">Ocultos (<span id="disco-hidden-n">${hiddenAlbums.size}</span>)</button>
         <button class="btn btn-secondary btn-sm" id="disco-refresh" title="${state.scannedAt ? 'Último escaneo ' + agoLabel(state.scannedAt) + '. Volver a consultar Spotify.' : 'Volver a consultar Spotify'}">Actualizar</button>
       </div>
     </div>
@@ -224,6 +244,19 @@ function renderShell(content, totalCandidates) {
     btn.disabled = false;
     btn.textContent = 'Actualizar';
   };
+  // Los dos modos son excluyentes y se apagan tocándolos de nuevo.
+  const setMode = (m) => {
+    state.mode = state.mode === m ? 'normal' : m;
+    renderShell(content, totalCandidates);
+    // renderShell repinta la cabecera entera, incluido el contador de escaneo,
+    // que arranca en 0: hay que devolverle lo que ya estaba escaneado.
+    const escaneados = state.artists.filter(a => a.scanned).length;
+    document.getElementById('disco-count').textContent = escaneados;
+    refreshList(content);
+  };
+  content.querySelector('#disco-mode-heard').onclick = () => setMode('heard');
+  content.querySelector('#disco-mode-hidden').onclick = () => setMode('hidden');
+
   content.querySelector('#disco-sel-clear').onclick = () => {
     state.selection.clear();
     updateSelectionUi(content);
@@ -335,20 +368,36 @@ function passesFilter(al) {
 function refreshList(content) {
   const list = document.getElementById('disco-list');
   if (!list) return;
+  // El pool depende del modo. En el normal se sacan los ocultos y los marcados
+  // como escuchados: `unheardAlbums`/`unheardSingles` pueden venir del caché de
+  // escaneo (7 días), calculados ANTES de que Ian marcara nada, así que el
+  // filtro tiene que aplicarse acá y no solo en el escaneo.
+  const poolDe = (a) => {
+    if (state.mode === 'heard') return (a.disco || []).filter(al => heardAlbums.has(cardKey(al, a.name)));
+    if (state.mode === 'hidden') return (a.disco || []).filter(al => hiddenAlbums.has(cardKey(al, a.name)));
+    return [...a.unheardAlbums, ...a.unheardSingles]
+      .filter(al => !hiddenAlbums.has(cardKey(al, a.name)) && !heardAlbums.has(cardKey(al, a.name)));
+  };
+
   const artists = state.artists
     .filter(a => a.scanned && !a.error)
-    .filter(a => a.unheardAlbums.length + a.unheardSingles.length > 0)
-    .map(a => {
-      const filtered = [...a.unheardAlbums, ...a.unheardSingles].filter(passesFilter);
-      return { ...a, filtered };
-    })
+    .map(a => ({ ...a, filtered: poolDe(a).filter(passesFilter) }))
     .filter(a => a.filtered.length > 0);
 
   const totalUnheard = artists.reduce((s, a) => s + a.filtered.length, 0);
   document.getElementById('disco-unheard-count').textContent = totalUnheard.toLocaleString('es-ES');
+  const nHeard = document.getElementById('disco-heard-n');
+  if (nHeard) nHeard.textContent = heardAlbums.size;
+  const nHidden = document.getElementById('disco-hidden-n');
+  if (nHidden) nHidden.textContent = hiddenAlbums.size;
 
   if (!artists.length) {
-    list.innerHTML = `<div class="card"><p style="text-align:center;color:var(--color-text-muted);margin:0">Nada por descubrir con los filtros actuales.</p></div>`;
+    const msg = state.mode === 'heard'
+      ? 'No marcaste ningún lanzamiento como escuchado.'
+      : state.mode === 'hidden'
+        ? 'No ocultaste ningún lanzamiento.'
+        : 'Nada por descubrir con los filtros actuales.';
+    list.innerHTML = `<div class="card"><p style="text-align:center;color:var(--color-text-muted);margin:0">${msg}</p></div>`;
     return;
   }
 
@@ -362,6 +411,8 @@ function refreshList(content) {
         ${a.filtered.map(al => renderAlbumCard(al, a.name, {
           checkClass: 'disco-check',
           selected: state.selection.has(al.id),
+          showHeard: true,
+          hiddenMode: state.mode === 'hidden',
         })).join('')}
       </div>
     </div>
@@ -376,6 +427,33 @@ function refreshList(content) {
     onSave: (albumId, artistName, btn) => saveAlbumToLibrary(albumId, artistName, btn),
     onChange: () => updateSelectionUi(content),
     afterAdd: () => refreshList(content),
+    onHeard: (albumId, artistName) => {
+      const al = findAlbum(albumId);
+      if (!al) return;
+      const marcado = toggleHeardAlbum(al, artistName);
+      showToast(marcado
+        ? `«${al.name}» marcado como escuchado`
+        : `«${al.name}» vuelve a la lista`, 'success');
+      refreshList(content);
+    },
+    onHide: async (albumId, artistName, btn) => {
+      const al = findAlbum(albumId);
+      if (!al) return;
+      // Resolver la pista representativa es una llamada de red: sin deshabilitar
+      // el botón, dos clicks seguidos ocultan y desocultan a ciegas.
+      btn.disabled = true;
+      try {
+        const oculto = await toggleHiddenAlbum(al, artistName);
+        showToast(oculto
+          ? `«${al.name}» oculto — no vuelve a aparecer`
+          : `«${al.name}» vuelve a la lista`, 'success');
+      } catch (e) {
+        showToast('No se pudo ocultar: ' + e.message, 'error');
+      } finally {
+        btn.disabled = false;
+      }
+      refreshList(content);
+    },
   });
 
   updateSelectionUi(content);

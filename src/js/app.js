@@ -619,8 +619,24 @@ installCrashGuard();
 
 // PWA: registra el service worker (path relativo → scope /spotify-web/ en Pages).
 // Con esto Chrome ofrece "Instalar Fonoteca" y los estáticos quedan offline.
+//
+// En DEV no se registra, y si quedó registrado de antes se desregistra y se
+// tira su caché. El SW sirve stale-while-revalidate para los estáticos
+// same-origin, y en dev los imports NO llevan `?v=` (los versiona build.sh al
+// copiar a docs/), así que un módulo editado se seguía sirviendo viejo desde la
+// caché del SW por más que el servidor de dev mande `Cache-Control: no-store`.
+// Es el mismo pozo que documenta scripts/dev-server.mjs, un piso más abajo:
+// pasó otra vez el 2026-08-15, probando esta versión.
+const ES_DEV = ['127.0.0.1', 'localhost'].includes(location.hostname);
 if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.register('sw.js').catch(e => console.warn('SW no registrado:', e.message));
+  if (ES_DEV) {
+    navigator.serviceWorker.getRegistrations()
+      .then(rs => Promise.all(rs.map(r => r.unregister())))
+      .then(() => caches?.keys?.().then(ks => Promise.all(ks.map(k => caches.delete(k)))))
+      .catch(() => { /* si no se puede, no rompe nada */ });
+  } else {
+    navigator.serviceWorker.register('sw.js').catch(e => console.warn('SW no registrado:', e.message));
+  }
 }
 
 // Delego los botones "Subir mi ZIP" / "Abrir Privacidad de Spotify" del

@@ -29,6 +29,10 @@ const OJO_TACHADO = `<svg viewBox="0 0 24 24" width="15" height="15" fill="none"
 const PLAY = `<svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14"><path d="M8 5v14l11-7z"/></svg>`;
 const FICHA = `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><line x1="12" y1="11" x2="12" y2="16"/><line x1="12" y1="8" x2="12" y2="8"/></svg>`;
 const CHECK = `<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>`;
+// Corazón tachado: sacar de tus me gusta. Es la ÚNICA acción de la tarjeta que
+// escribe en Spotify y no se puede deshacer desde acá, así que va con su propia
+// clase (`sc-danger`) y el que la cablea está obligado a confirmar antes.
+const CORAZON_TACHADO = `<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7.5-4.6-9.5-9A5 5 0 0 1 12 6.5 5 5 0 0 1 21.5 12c-2 4.4-9.5 9-9.5 9z"/><line x1="3" y1="3" x2="21" y2="21"/></svg>`;
 
 /**
  * Devuelve el HTML de una tarjeta. Todos los campos de texto se escapan acá.
@@ -47,6 +51,9 @@ const CHECK = `<svg viewBox="0 0 24 24" width="12" height="12" fill="none" strok
  * @param {boolean} [opts.playing]
  * @param {boolean} [opts.hidden]  la tarjeta está en la vista de ocultos
  * @param {boolean} [opts.showAdd] muestra el botón «Añadir a…»
+ * @param {boolean} [opts.showUnlike] muestra el ♥ tachado («Sacar de likes»)
+ * @param {boolean} [opts.showHide] muestra el ojo de ocultar (true por defecto;
+ *                                  #zeroplays no tiene lista de ocultos)
  * @param {boolean} [opts.showCard] muestra el ⓘ de la ficha del tema
  * @param {string} [opts.badge]   HTML que va antes de los botones (el % de skips)
  * @param {string} [opts.extra]   HTML al final de la tarjeta (el slot del embed)
@@ -54,7 +61,7 @@ const CHECK = `<svg viewBox="0 0 24 24" width="12" height="12" fill="none" strok
 export function renderTrackCardRow(r, opts = {}) {
   const {
     selected = false, playing = false, hidden = false,
-    showAdd = false, showCard = true, badge = '', extra = '',
+    showAdd = false, showCard = true, showUnlike = false, showHide = true, badge = '', extra = '',
   } = opts;
 
   const id = escapeHtml(r.id);
@@ -92,12 +99,15 @@ export function renderTrackCardRow(r, opts = {}) {
             ? `<button type="button" class="sc-btn sc-card-btn" title="Ver la ficha del tema" aria-label="Ver ficha">${FICHA}</button>`
             : ''}
           ${showAdd ? `<button type="button" class="sc-btn sc-add" title="Añadir a una playlist">Añadir a…</button>` : ''}
+          ${showUnlike && r.trackId
+            ? `<button type="button" class="sc-btn sc-unlike sc-danger" title="Sacar de tus me gusta (borra el like en Spotify)" aria-label="Sacar de tus me gusta">${CORAZON_TACHADO}</button>`
+            : ''}
           ${r.trackId
             ? `<a class="sc-btn sc-open" href="https://open.spotify.com/track/${escapeHtml(r.trackId)}" target="_blank" rel="noopener" title="Abrir en Spotify" aria-label="Abrir en Spotify">↗</a>`
             : ''}
-          <button type="button" class="sc-btn sc-hide" title="${hidden ? 'Devolver a la lista' : 'Ocultar de la lista (no toca Spotify)'}" aria-label="${hidden ? 'Devolver' : 'Ocultar'}">
+          ${showHide ? `<button type="button" class="sc-btn sc-hide" title="${hidden ? 'Devolver a la lista' : 'Ocultar de la lista (no toca Spotify)'}" aria-label="${hidden ? 'Devolver' : 'Ocultar'}">
             ${hidden ? OJO_ABIERTO : OJO_TACHADO}
-          </button>
+          </button>` : ''}
         </div>
       </div>
       ${extra}
@@ -116,8 +126,9 @@ export function renderTrackCardRow(r, opts = {}) {
  * @param {(r: any) => void} [handlers.onCard]
  * @param {(r: any) => void} [handlers.onAdd]
  * @param {(r: any) => void} [handlers.onHide]
+ * @param {(r: any) => void} [handlers.onUnlike]  DESTRUCTIVO: tiene que confirmar
  */
-export function wireTrackCardGrid(grid, { rowById, onToggle, onPlay, onCard, onAdd, onHide } = {}) {
+export function wireTrackCardGrid(grid, { rowById, onToggle, onPlay, onCard, onAdd, onHide, onUnlike } = {}) {
   if (!grid) return () => {};
 
   const onClick = (e) => {
@@ -137,6 +148,7 @@ export function wireTrackCardGrid(grid, { rowById, onToggle, onPlay, onCard, onA
       else if (control.classList.contains('sc-card-btn')) onCard?.(r);
       else if (control.classList.contains('sc-add')) onAdd?.(r);
       else if (control.classList.contains('sc-hide')) onHide?.(r);
+      else if (control.classList.contains('sc-unlike')) onUnlike?.(r);
       return;
     }
 

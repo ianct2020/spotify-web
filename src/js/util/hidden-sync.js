@@ -51,6 +51,52 @@ function normName(s) {
  * @param {(track:object)=>string|null} opts.keyOfTrack  clave a partir de una pista de la playlist
  * @param {string} opts.label          para los logs
  */
+/**
+ * Store SOLO local, con exactamente la misma superficie que `createHiddenStore`
+ * (`has` / `size` / `values` / `synced` / `remember` / `ready` / `toggle` /
+ * `clear`). Es para las listas que hoy no necesitan viajar entre máquinas —
+ * "ya lo evalué" en #discover-artists — pero que mañana pueden querer hacerlo:
+ * el día que se sincronicen, el cambio es reemplazar esta llamada por
+ * `createHiddenStore` y darle un `playlistName`, sin tocar el que la usa.
+ *
+ * Por eso `remember(key, uri)` guarda las uris igual aunque acá no sirvan para
+ * nada: son las que haría falta subir a la playlist en esa migración.
+ *
+ * @param {object} opts
+ * @param {string} opts.lsKey  clave de localStorage
+ * @param {string} opts.label  para los logs
+ */
+export function createLocalStore({ lsKey, label }) {
+  let keys = loadLocal(lsKey);
+  const uriByKey = new Map();
+
+  return {
+    has(key) { return keys.has(key); },
+    get size() { return keys.size; },
+    values() { return [...keys]; },
+    // Siempre true: no hay nada remoto con lo que reconciliar, así que la vista
+    // nunca tiene que esperar ni repintar por este store.
+    get synced() { return true; },
+    remember(key, uri) {
+      if (key && uri && !uriByKey.has(key)) uriByKey.set(key, uri);
+    },
+    /** No-op resuelto, para poder llamarlo igual que al store sincronizado. */
+    ready() { return Promise.resolve(); },
+    toggle(key, uri) {
+      const ahora = !keys.has(key);
+      if (uri) this.remember(key, uri);
+      if (ahora) keys.add(key); else keys.delete(key);
+      saveLocal(lsKey, keys);
+      return ahora;
+    },
+    async clear() {
+      keys = new Set();
+      saveLocal(lsKey, keys);
+      console.info(`[local:${label}] lista vaciada`);
+    },
+  };
+}
+
 export function createHiddenStore({ lsKey, playlistName, keyOfTrack, label }) {
   let keys = loadLocal(lsKey);
   const uriByKey = new Map();   // clave → uri de la pista que la representa
