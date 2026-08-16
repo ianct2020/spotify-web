@@ -22,6 +22,7 @@ import { openModal, closeModal } from './modal-stack.js?v=147';
 import { escapeHtml } from './components.js?v=147';
 import { showToast } from './toast.js?v=147';
 import { normText } from '../util/track-match.js?v=147';
+import { isHiddenPlaylistName } from '../util/hidden-sync.js?v=147';
 
 function filasHtml(playlists, marcadas = new Set()) {
   return playlists.map(p => `
@@ -44,6 +45,12 @@ export function openPlaylistPicker({
   onConfirm,
 } = {}) {
   const marcadas = new Set(preselected);
+  // Las playlists «fonoteca · ocultos (…)» son almacenamiento interno de la app
+  // —ahí van las cosas que ocultás en cada vista—, no destinos donde añadir
+  // canciones, pero venían apareciendo como una playlist más. Se filtran ACÁ y
+  // no en getOwnPlaylists() porque hay llamadores que sí necesitan la lista
+  // completa: «Playlists ignoradas» de #sin-clasificar deja marcar cualquiera.
+  playlists = playlists.filter(p => !isHiddenPlaylistName(p.name));
   // `playlists` se reemplaza entero al recargar, así que el resto del modal lo
   // lee siempre desde acá y no desde el parámetro.
   let actuales = playlists;
@@ -117,7 +124,10 @@ export function openPlaylistPicker({
       recargar.textContent = 'Recargando…';
       try {
         const frescas = await onReload();
-        actuales = Array.isArray(frescas) ? frescas : actuales;
+        // Mismo filtro que al abrir: recargar no tiene que devolver las de ocultos.
+        actuales = Array.isArray(frescas)
+          ? frescas.filter(p => !isHiddenPlaylistName(p.name))
+          : actuales;
         list.innerHTML = filasHtml(actuales, marcadasAhora);
         vacio.hidden = actuales.length > 0;
         aplicarFiltro();
