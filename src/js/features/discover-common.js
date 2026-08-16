@@ -306,6 +306,16 @@ document.addEventListener('previewchange', (e) => {
 });
 
 /**
+ * La tapa va con `data-src` y NO con `src` (v=144): las dos vistas pintan por
+ * lotes y las tapas las asigna `ui/lazy-img.js` contra el scroller de verdad.
+ * El `loading="lazy"` nativo no alcanzaba — resuelve contra el viewport del
+ * documento y disparaba las tapas de todo el lote de golpe. El `width`/`height`
+ * explícito es obligatorio: sin él, al DESCARGAR una tapa fuera de vista el
+ * hueco se cerraría y el scroll pegaría un salto.
+ *
+ * Quien pinte estas tarjetas TIENE que llamar a `lazy.observe(nodos)` sobre lo
+ * recién insertado, o las tapas nunca cargan.
+ *
  * @param {object} al  álbum slim (id, name, type, img, release, total)
  * @param {string} artistName
  * @param {object} [opts]
@@ -331,7 +341,7 @@ export function renderAlbumCard(al, artistName, {
         <div class="dcard-cover-wrap" data-hover-album="${id}">
           <button type="button" class="dcard-cover" data-open-album="${id}" data-open-artist="${artista}" title="Ver ficha del álbum">
             ${al.img
-              ? `<img src="${al.img}" alt="" loading="lazy" class="dcard-img">`
+              ? `<img data-src="${escapeHtml(al.img)}" alt="" width="104" height="104" class="dcard-img">`
               : `<span class="dcard-img dcard-img-empty">♪</span>`}
           </button>
           <button type="button" class="dcard-play${sonando ? ' is-playing' : ''}" data-preview-album="${id}"

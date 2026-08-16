@@ -13,6 +13,8 @@
 import { escapeHtml, pageHeader } from '../ui/components.js';
 import { showToast } from '../ui/toast.js';
 import { openArtistCard } from './artist-card.js';
+import { createIncrementalList, scrollRootOf } from '../ui/incremental-list.js';
+import { createLazyImages } from '../ui/lazy-img.js';
 import { isJunkTrack } from '../util/junk.js';
 import { buildAlbumHeardIndex, markAlbumHeard } from '../util/album-heard.js';
 import {
@@ -80,7 +82,42 @@ const state = {
 
 const YEAR_NOW = new Date().getFullYear();
 
+// ── Lista incremental (v=144) ────────────────────────────────────────────────
+//
+// Era la vista que más DOM metía de toda la app: 271 tarjetas de una sola vez
+// con los filtros por defecto, 1.536 con el filtro en «Todo». Ahora se pinta por
+// lotes, como #skips y #sin-clasificar.
+//
+// El item del lote es el BLOQUE DE ARTISTA entero, no la tarjeta suelta: cada
+// artista es una card con su marco, su cabecera y su propia grilla de 3, así
+// que partirlo por tarjeta obligaría a aplanar todo en una grilla única y a
+// perder ese marco. Como los artistas traen entre 1 y 100 lanzamientos, el
+// tamaño del lote se calcula del promedio real para que el primer pintado
+// ronde las TARGET_CARDS tarjetas sea cual sea el corte.
+const TARGET_CARDS = 45;
+const MIN_BATCH_ARTISTS = 2;
+const MAX_BATCH_ARTISTS = 20;
+
+let list = null;         // handle de createIncrementalList
+let lazyCovers = null;   // handle de createLazyImages
+
+function batchSizeFor(artists) {
+  const cards = artists.reduce((s, a) => s + a.filtered.length, 0);
+  if (!artists.length || !cards) return MIN_BATCH_ARTISTS;
+  const media = cards / artists.length;
+  const n = Math.round(TARGET_CARDS / media);
+  return Math.max(MIN_BATCH_ARTISTS, Math.min(MAX_BATCH_ARTISTS, n || MIN_BATCH_ARTISTS));
+}
+
+// Solo suelta lo que cuelga del DOM que se va. No toca `state`: el escaneo en
+// memoria es lo que hace que volver a la vista sea instantáneo.
+function teardown() {
+  if (list) { list.destroy(); list = null; }
+  if (lazyCovers) { lazyCovers.destroy(); lazyCovers = null; }
+}
+
 export async function render(container) {
+  teardown();
   container.innerHTML = `
     ${pageHeader({ title: 'Sin escuchar de tus artistas' })}
     <div id="disco-content"><div class="empty-state"><div class="spinner spinner-lg"></div><div style="margin-top:14px">Cargando tus likes…</div></div></div>
@@ -92,7 +129,7 @@ export async function render(container) {
     idx = await buildAlbumHeardIndex();
   } catch (e) {
     content.innerHTML = `<div class="card"><p style="color:var(--color-error)">No pude cargar tus datos: ${escapeHtml(e.message)}</p></div>`;
-    return;
+    return teardown;
   }
   state.heard = idx.heard;
   state.likesByArtist = idx.likesByArtist;
@@ -112,7 +149,7 @@ export async function render(container) {
 
   if (!candidates.length) {
     content.innerHTML = `<div class="card"><p>Necesito al menos un artista con ${MIN_LIKES} canciones en likes para armar esta vista. Guarda más canciones y vuelve.</p></div>`;
-    return;
+    return teardown;
   }
 
   state.artists = candidates.map(c => ({
@@ -166,9 +203,14 @@ export async function render(container) {
   renderShell(content, candidates.length);
   refreshList(content);
   scanArtists(content).catch(err => console.warn('[discover] scan:', err));
+  return teardown;
 }
 
 function renderShell(content, totalCandidates) {
+  // El shell se repinta entero (también al cambiar de modo), así que el
+  // #disco-list de antes queda desconectado. Sin esto, el handle de la lista y
+  // el de las tapas seguirían observando nodos muertos.
+  teardown();
   content.innerHTML = `
     <div class="disco-topbar">
       <div class="disco-summary">
@@ -366,8 +408,8 @@ function passesFilter(al) {
 }
 
 function refreshList(content) {
-  const list = document.getElementById('disco-list');
-  if (!list) return;
+  const listEl = document.getElementById('disco-list');
+  if (!listEl) return;
   // El pool depende del modo. En el normal se sacan los ocultos y los marcados
   // como escuchados: `unheardAlbums`/`unheardSingles` pueden venir del caché de
   // escaneo (7 días), calculados ANTES de que Ian marcara nada, así que el
@@ -392,16 +434,123 @@ function refreshList(content) {
   if (nHidden) nHidden.textContent = hiddenAlbums.size;
 
   if (!artists.length) {
+    teardown();
     const msg = state.mode === 'heard'
       ? 'No marcaste ningún lanzamiento como escuchado.'
       : state.mode === 'hidden'
         ? 'No ocultaste ningún lanzamiento.'
         : 'Nada por descubrir con los filtros actuales.';
-    list.innerHTML = `<div class="card"><p style="text-align:center;color:var(--color-text-muted);margin:0">${msg}</p></div>`;
+    listEl.innerHTML = `<div class="card"><p style="text-align:center;color:var(--color-text-muted);margin:0">${msg}</p></div>`;
+    updateSelectionUi(content);
     return;
   }
 
-  list.innerHTML = artists.map(a => `
+  const t0 = performance.now();
+  const perf = (window.__discoPerf ||= { batches: [] });
+
+  // Cablear SOLO los bloques recién insertados. `wireAlbumCards` hace
+  // querySelectorAll sobre la raíz que se le pase, así que pasarle el container
+  // entero en cada lote sería cuadrático (y volvería a cablear lo ya cableado).
+  const wireNuevos = () => {
+    const nuevos = listEl.querySelectorAll('.disco-artist:not([data-wired])');
+    if (!nuevos.length) return 0;
+    nuevos.forEach(bloque => {
+      bloque.setAttribute('data-wired', '1');
+      const nombre = bloque.querySelector('.disco-artist-name');
+      if (nombre) nombre.onclick = () => openArtistCard({ name: nombre.dataset.artist });
+      // OJO: los handlers de la tarjeta NO están delegados — wireAlbumCards
+      // asigna onclick uno por uno. Por eso hay que llamarlo por lote: si no,
+      // el hover-play y los botones «Escuchado» / «Ocultar» de las tarjetas de
+      // los lotes tardíos quedarían muertos.
+      wireAlbumCards(bloque, findAlbum, {
+        checkClass: 'disco-check',
+        selection: state.selection,
+        onSave: (albumId, artistName, btn) => saveAlbumToLibrary(albumId, artistName, btn),
+        onChange: () => updateSelectionUi(content),
+        afterAdd: () => refreshList(content),
+        onHeard: (albumId, artistName) => {
+          const al = findAlbum(albumId);
+          if (!al) return;
+          const marcado = toggleHeardAlbum(al, artistName);
+          showToast(marcado
+            ? `«${al.name}» marcado como escuchado`
+            : `«${al.name}» vuelve a la lista`, 'success');
+          refreshList(content);
+        },
+        onHide: async (albumId, artistName, btn) => {
+          const al = findAlbum(albumId);
+          if (!al) return;
+          // Resolver la pista representativa es una llamada de red: sin
+          // deshabilitar el botón, dos clicks seguidos ocultan y desocultan a
+          // ciegas.
+          btn.disabled = true;
+          try {
+            const oculto = await toggleHiddenAlbum(al, artistName);
+            showToast(oculto
+              ? `«${al.name}» oculto — no vuelve a aparecer`
+              : `«${al.name}» vuelve a la lista`, 'success');
+          } catch (e) {
+            showToast('No se pudo ocultar: ' + e.message, 'error');
+          } finally {
+            btn.disabled = false;
+          }
+          refreshList(content);
+        },
+      });
+      lazyCovers?.observe(bloque);
+    });
+    return nuevos.length;
+  };
+
+  const onBatch = ({ rendered, total, added, ms }) => {
+    const cablados = wireNuevos();
+    const tarjetas = listEl.querySelectorAll('.dcard').length;
+    perf.batches.push({ added, rendered, total, tarjetas, ms: +ms.toFixed(1) });
+    if (window.__discoDebug) {
+      console.info(`[discover] lote +${added} artistas (${cablados} cableados) → ${rendered}/${total} · ${tarjetas} tarjetas · ${ms.toFixed(1)} ms`);
+    }
+  };
+
+  // Reutilizar el handle mientras la vista sigue viva: refreshList se llama en
+  // cada artista escaneado (una vez por request), y recrear la lista y el
+  // observer de tapas 100 veces seguidas sería peor que el problema original.
+  if (list) {
+    // La lista se repinta entera: los <img> viejos dejan de existir, así que el
+    // observer de tapas arranca de cero (el Set de "esta URL ya viajó por la
+    // red" sobrevive al reset, o sea que las que ya se vieron se reasignan sin
+    // parpadeo ni pedido nuevo).
+    lazyCovers?.reset();
+    // setItems repinta y dispara el onBatch original, que es el que cablea:
+    // no hace falta (ni conviene) llamarlo a mano acá.
+    list.setItems(artists, { preserveRendered: true });
+  } else {
+    // El root del observer se CALCULA: acá el .disco-list no tiene overflow
+    // propio (scrollea el documento), así que scrollRootOf devuelve null y el
+    // root es el viewport. Si algún día la vista gana un scroller propio, esto
+    // lo sigue solo.
+    const scroller = scrollRootOf(listEl);
+    lazyCovers = createLazyImages({ root: scroller, rootMargin: '300px' });
+    list = createIncrementalList({
+      container: listEl,
+      items: artists,
+      renderItem: renderArtistBlock,
+      batchSize: batchSizeFor(artists),
+      rootMargin: '600px',
+      onBatch,
+    });
+  }
+
+  perf.totalArtistas = artists.length;
+  perf.totalTarjetas = totalUnheard;
+  perf.firstPaintArtistas = list.rendered;
+  perf.syncMs = +(performance.now() - t0).toFixed(1);
+  Object.defineProperty(perf, 'lazy', { get: () => lazyCovers?.stats || null, configurable: true });
+
+  updateSelectionUi(content);
+}
+
+function renderArtistBlock(a) {
+  return `
     <div class="disco-artist">
       <div class="disco-artist-head">
         <button class="disco-artist-name" data-artist="${escapeHtml(a.name)}">${escapeHtml(a.name)}</button>
@@ -416,47 +565,7 @@ function refreshList(content) {
         })).join('')}
       </div>
     </div>
-  `).join('');
-
-  list.querySelectorAll('.disco-artist-name').forEach(btn => {
-    btn.onclick = () => openArtistCard({ name: btn.dataset.artist });
-  });
-  wireAlbumCards(list, findAlbum, {
-    checkClass: 'disco-check',
-    selection: state.selection,
-    onSave: (albumId, artistName, btn) => saveAlbumToLibrary(albumId, artistName, btn),
-    onChange: () => updateSelectionUi(content),
-    afterAdd: () => refreshList(content),
-    onHeard: (albumId, artistName) => {
-      const al = findAlbum(albumId);
-      if (!al) return;
-      const marcado = toggleHeardAlbum(al, artistName);
-      showToast(marcado
-        ? `«${al.name}» marcado como escuchado`
-        : `«${al.name}» vuelve a la lista`, 'success');
-      refreshList(content);
-    },
-    onHide: async (albumId, artistName, btn) => {
-      const al = findAlbum(albumId);
-      if (!al) return;
-      // Resolver la pista representativa es una llamada de red: sin deshabilitar
-      // el botón, dos clicks seguidos ocultan y desocultan a ciegas.
-      btn.disabled = true;
-      try {
-        const oculto = await toggleHiddenAlbum(al, artistName);
-        showToast(oculto
-          ? `«${al.name}» oculto — no vuelve a aparecer`
-          : `«${al.name}» vuelve a la lista`, 'success');
-      } catch (e) {
-        showToast('No se pudo ocultar: ' + e.message, 'error');
-      } finally {
-        btn.disabled = false;
-      }
-      refreshList(content);
-    },
-  });
-
-  updateSelectionUi(content);
+  `;
 }
 
 function findAlbum(albumId) {

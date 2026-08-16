@@ -30,7 +30,14 @@
 - Campo `popularity` en `/me/tracks`: **removido en la migración feb 2026**. Confirmado 2026-07-17 con 9548 tracks reales → 100% null. No usar más. Chart de popularidad sacado del Dashboard en v=41.
 - **Búsqueda** (`/search?type=album|track|artist`, con filtros `artist:"..."`): CONFIRMADO vivo (se usa en Similar y en Álbum similar v=45).
 - `GET /artists/{id}/albums`: **el limit máximo bajó a 10** (re-verificado en vivo 2026-08-11: `limit` 11..20 devuelven 400 "Invalid limit", `limit=10` devuelve 200 y pagina bien con `next`/`offset` — Taylor Swift, `total: 112`). Antes (2026-08-05) 20 andaba. Nunca mandar `market=from_token`. Usado en `#discover-artists` y `#new-releases`. `getArtistAlbums()` (api.js) capea con `ARTIST_ALBUMS_MAX_LIMIT = 10` y cae a `/search?q=artist:"X"&type=album` si el nativo devuelve 400 o 403. **Ojo**: cuando el limit hardcodeado se queda viejo el nativo falla siempre y todo pasa en silencio por el fallback de `/search`, que es más lento y trae artistas ajenos — si ves `[api] getArtistAlbums: … fallback a /search` en consola, re-probá el limit.
-- `GET /albums/{id}/tracks`: usado best-effort en "Álbum similar" para el tracklist preview. Está envuelto en try/catch — si devuelve 403 la feature degrada sin romperse. No confirmado si sigue vivo.
+- `GET /albums/{id}/tracks?limit=50`: **CONFIRMADO vivo (2026-08-16, 200 con token real)**. Lo usan W-Three (tracklist del modal por álbum), `#discover-artists` / `#new-releases` (pista representativa para el preview y para «+ Biblioteca») y, desde v=144, la **ficha de álbum**: sin el tracklist completo el ♥ marcaba todas las filas por igual, porque la lista eran solo los likes de ese disco. Ojo con el `albumId`: casi ningún llamador de `openAlbumCard()` lo trae (el mosaico, el Dashboard y el Wrapped mandan nombre + artista), así que `album-card.js` lo resuelve con `/search?q=album:"…" artist:"…"&type=album&limit=1` y memoiza por `albumKey`. Sigue envuelto en try/catch: si el endpoint cae, la ficha degrada a la lista vieja (solo likes, todos con ♥).
+
+## Tamaño de la playlist «w three» (medido 2026-08-16)
+**3.011 pistas → 31 páginas de 100.** Un refetch entero (`getAllPlaylistItems`
+con `useCache:false`) cuesta 31 × ~626 ms de request + 30 × 600 ms de `sleep`
+entre páginas = **~37 s**. Es el paso más caro de todo W-Three con diferencia:
+cualquier camino que lo dispare convierte un guardado de 3 s en uno de 40-60 s.
+Ver la sección del guardado en `fonoteca-migracion/PENDIENTES.md`.
 
 ## Client ID
 0c8c92ad128e4b89be7097c6b8082797
