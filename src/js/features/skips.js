@@ -23,6 +23,7 @@ import { showToast } from '../ui/toast.js';
 import { getPreview } from '../api/preview-providers.js';
 import { togglePreview, playingKey } from '../ui/preview-player.js';
 import { openTrackCard } from './track-card.js';
+import { firstArtistName } from '../util/artist-name.js';
 import { activateMarquee } from '../ui/marquee.js';
 import { hasUsername, loadTopLifetime } from '../api/statsfm.js';
 import { createHiddenStore } from '../util/hidden-sync.js';
@@ -513,15 +514,6 @@ function renderRow(r) {
       extra: `<div class="skips-preview-slot" data-id="${r.id}"></div>`,
     },
   );
-}
-
-// Ojo con el `a.name || a`: hay un like con `artists: [{ id: …, name: "" }]`
-// (nombre vacío, no ausente) y ese patrón devuelve el OBJETO artista. Acá solo
-// pintaría `[object Object]`, pero en `#sin-clasificar` el mismo bug tiraba
-// abajo el orden «Por artista» (v=138). Unificado.
-function firstArtistName(a) {
-  const n = (a && typeof a === 'object') ? a.name : a;
-  return typeof n === 'string' ? n : '';
 }
 
 function wireFilters() {

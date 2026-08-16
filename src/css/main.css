@@ -3076,15 +3076,24 @@ h3 { font-size: 18px; font-weight: 600; }
 /* v=144: ALTO FIJO. Antes el modal se encogía con los álbumes de pocas pistas
    y crecía con los largos, así que cambiaba de tamaño en cada disco. Ahora
    mide siempre lo mismo, dimensionado para ~20 pistas (10 filas por columna,
-   que es el álbum normal):
-
-     cabecera 123 + padding del body 24 + título de sección 20
-     + 10 filas de 32px con gap de 4 (356) + botón de sugeridos 34
-     + footer 56  ≈  613  →  620px
+   que es el álbum normal).
 
    Con menos pistas sobra espacio y se deja vacío a propósito; con más, el
-   scroll vive DENTRO de la tracklist y el modal no crece. El tope de 85vh
-   sigue mandando en pantallas bajas. */
+   scroll vive DENTRO de la tracklist y el modal no crece.
+
+   v=147 — 1366×768, que es la pantalla de Ian. Ahí el tope de 620px no manda
+   nunca: el viewport útil es 591 px, así que 85vh = 502 px y las 20 pistas no
+   entraban (9 filas por columna). Medido en la app, el reparto de esos 502:
+
+     cabecera 119 + padding del body 16 + título de sección 14
+     + footer 60 + gaps  →  quedan 285 px para la tracklist
+     20 pistas = 10 filas de 26 px + 9 gaps de 2  =  278 px  ✔ (7 px de margen)
+
+   Los tres recortes que lo lograron, y por qué esos: fila 32 → 26 (padding
+   5 → 2), gap de filas 4 → 2, y padding vertical del body 12 → 8. La tapa
+   64 → 48 aporta 10 px de la cabecera; más abajo no sirve porque el piso lo
+   pone .wt-head-info. Nada de esto toca `align-content: start` ni el reparto
+   columna-por-columna: ver el bloque de .wt-tracklist-cols. */
 .wt-modal {
   padding: 0 !important;
   max-width: 920px;
@@ -3125,8 +3134,11 @@ h3 { font-size: 18px; font-weight: 600; }
 }
 .wt-cover-btn:hover { transform: scale(1.04); }
 .wt-cover {
-  width: 64px;
-  height: 64px;
+  /* v=147: 64 → 48. En 1366×768 la cabecera baja de 129 a 119 px (no 16, porque
+     a partir de acá el piso lo pone .wt-head-info con sus tres líneas: bajar más
+     la tapa ya no gana nada). */
+  width: 48px;
+  height: 48px;
   border-radius: 6px;
   object-fit: cover;
   display: block;
@@ -3138,7 +3150,7 @@ h3 { font-size: 18px; font-weight: 600; }
   align-items: center;
   justify-content: center;
   color: var(--color-text-muted);
-  font-size: 22px;
+  font-size: 18px; /* acompaña la tapa de 48px */
 }
 .wt-head-info { min-width: 0; flex: 1; }
 .wt-title-btn {
@@ -3169,7 +3181,9 @@ h3 { font-size: 18px; font-weight: 600; }
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: 12px;
-  padding: 12px 16px;
+  /* v=147: 12 → 8 en vertical. Son 8 px de los 19 que faltaban para meter 20
+     pistas sin scroll en 1366×768 (ver el bloque de .wt-modal). */
+  padding: 8px 16px;
   overflow: hidden;
 }
 .wt-col {
@@ -3287,7 +3301,9 @@ h3 { font-size: 18px; font-weight: 600; }
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
     grid-template-rows: repeat(var(--wt-track-rows, 1), auto);
     grid-auto-flow: column;
-    gap: 4px 10px;
+    /* v=147: el gap de filas baja de 4 a 2. Con 10 filas por columna son 18 px
+       de los 19 que faltaban. El gap de columnas (10) NO se toca. */
+    gap: 2px 10px;
     /* OBLIGATORIO desde que el modal tiene alto fijo (v=144): el contenedor
        pasó a tener altura definida, y `align-content` por defecto (normal =
        stretch) reparte el hueco sobrante entre las filas `auto`. Con un álbum
@@ -3297,7 +3313,9 @@ h3 { font-size: 18px; font-weight: 600; }
     align-content: start;
   }
   .wt-tracklist.wt-tracklist-cols .wthree-track {
-    padding: 5px 8px;
+    /* v=147: 5 → 2 en vertical, que deja la fila en 26 px (era 32). El
+       font-size no se toca: la legibilidad sale del texto, no del padding. */
+    padding: 2px 8px;
     font-size: 11.5px;
     grid-template-columns: auto 18px minmax(0, 1fr) 13px auto auto;
     gap: 6px;

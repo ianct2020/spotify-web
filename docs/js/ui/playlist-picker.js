@@ -18,10 +18,10 @@
 // del botón mientras se trabaja (el chequeo de duplicados puede tardar si una
 // playlist grande no está cacheada).
 
-import { openModal, closeModal } from './modal-stack.js?v=146';
-import { escapeHtml } from './components.js?v=146';
-import { showToast } from './toast.js?v=146';
-import { normText } from '../util/track-match.js?v=146';
+import { openModal, closeModal } from './modal-stack.js?v=147';
+import { escapeHtml } from './components.js?v=147';
+import { showToast } from './toast.js?v=147';
+import { normText } from '../util/track-match.js?v=147';
 
 function filasHtml(playlists, marcadas = new Set()) {
   return playlists.map(p => `

@@ -1,8 +1,8 @@
-import { getValidToken, refreshAccessToken } from './auth.js?v=146';
-import { cacheGet, cacheGetRaw, cacheGetTimestamp, cacheSet, cacheClear } from './storage.js?v=146';
-import { idbDel, idbGetCached, idbGetCachedRaw, idbGetTimestamp, idbSetCached } from './idb.js?v=146';
-import { showToast } from './ui/toast.js?v=146';
-import { artistIsSame } from './util/track-match.js?v=146';
+import { getValidToken, refreshAccessToken } from './auth.js?v=147';
+import { cacheGet, cacheGetRaw, cacheGetTimestamp, cacheSet, cacheClear } from './storage.js?v=147';
+import { idbDel, idbGetCached, idbGetCachedRaw, idbGetTimestamp, idbSetCached } from './idb.js?v=147';
+import { showToast } from './ui/toast.js?v=147';
+import { artistIsSame } from './util/track-match.js?v=147';
 
 const BASE = 'https://api.spotify.com/v1';
 const MIN_RETRY_WAIT = 5000;
@@ -918,6 +918,17 @@ async function getCachedPlaylistSnapshot(playlistId) {
   } catch { return null; }
 }
 
+// El cache completo (items + snapshot) para poder parchearlo en el lugar
+// después de escribir, en vez de borrarlo y pagar un refetch entero al
+// guardado siguiente. Ver util/playlist-cache-patch.js.
+async function getCachedPlaylistItems(playlistId) {
+  try {
+    const cached = await idbGetCached(`playlist_items_${playlistId}`);
+    if (!cached || !Array.isArray(cached.items) || !cached.snapshot) return null;
+    return { items: cached.items, snapshot: cached.snapshot };
+  } catch { return null; }
+}
+
 async function removePlaylistItemsAtPositions(playlistId, itemsWithPositions) {
   const meta = await spotifyFetch(`/playlists/${playlistId}?fields=snapshot_id`);
   const snapshotId = meta.snapshot_id;
@@ -1143,6 +1154,7 @@ export {
   reorderPlaylistItems,
   getPlaylistSnapshotId,
   getCachedPlaylistSnapshot,
+  getCachedPlaylistItems,
   removePlaylistItemsAtPositions,
   removeLikedTracks,
   checkLibraryContains,
