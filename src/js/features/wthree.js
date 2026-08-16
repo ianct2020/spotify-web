@@ -2,7 +2,8 @@
 // por álbum). Muestra qué álbumes ya tienen picks, cuántos, y cuáles te faltan.
 // Ordenado por álbumes más escuchados primero para priorizar tu tiempo.
 
-import { spotifyFetch, getAllPlaylistItems, getAllUserPlaylists, addTracksToPlaylist, removeTracksFromPlaylist, reorderPlaylistItems, getPlaylistSnapshotId, getCachedPlaylistSnapshot, updatePlaylistItemsCache, getBestAvailableLikes } from '../api.js';
+import { spotifyFetch, getAllPlaylistItems, getAllUserPlaylists, addTracksToPlaylist, removeTracksFromPlaylist, reorderPlaylistItems, getCachedPlaylistItems, updatePlaylistItemsCache, getBestAvailableLikes } from '../api.js';
+import { patchPlaylistItems, buildCachedItem } from '../util/playlist-cache-patch.js';
 import { loadHistoryStats, loadListenedAlbums, isOwner, ownerLockedMessage } from './history-data.js';
 import { escapeHtml, pageHeader } from '../ui/components.js';
 import { showToast } from '../ui/toast.js';
@@ -937,6 +938,9 @@ async function reorderPicksMinimal(picks, targetOrder, initialSnapshot, reloj = 
   const working = picks.map(p => ({ ...p }));
   let snapshot = initialSnapshot;
   let moveCount = 0;
+  // La secuencia exacta de PUT que emitimos, para replicarla sobre el array
+  // cacheado de items y no tener que borrar el cache (v=147).
+  const moves = [];
 
   console.info('[wthree] reorder start · picks:', working.map(p => `${shortId(p.id)}@${p.pos}`).join(' | '),
     '· target:', targetOrder.map(id => shortId(id)).join(' | '),
@@ -963,6 +967,7 @@ async function reorderPicksMinimal(picks, targetOrder, initialSnapshot, reloj = 
     console.info(`[wthree] PUT #${moveCount + 1} done · snapshot out: ${shortSnap(newSnap)}`);
     snapshot = newSnap;
     moveCount++;
+    moves.push({ range_start: fromPos, insert_before, range_length: 1 });
 
     // Simular el nuevo estado. Los picks entre fromPos y toPos shiftean.
     const [moved] = working.splice(currentIdx, 1);
@@ -977,7 +982,7 @@ async function reorderPicksMinimal(picks, targetOrder, initialSnapshot, reloj = 
     console.info(`[wthree] simulated state: ${working.map(p => `${shortId(p.id)}@${p.pos}`).join(' | ')}`);
   }
 
-  return { snapshot, moveCount, workingPicks: working };
+  return { snapshot, moveCount, workingPicks: working, moves };
 }
 
 function shortId(id) { return id ? String(id).slice(0, 6) : '??'; }
@@ -995,6 +1000,36 @@ function locatePicksInPlaylist(freshItems, pickUris) {
   });
   found.sort((x, y) => x.pos - y.pos);
   return found;
+}
+
+// Pre-flight (v=147). Reemplaza al `GET /playlists/{id}?fields=snapshot_id` con
+// el que arrancaba el guardado. Ese snapshot es JUSTO el dato que sabemos
+// retrasado respecto a nuestras propias escrituras —medido el 2026-08-16:
+// seguía devolviendo el valor anterior 40 s después del PUT— así que no
+// coincidía con nada y disparaba el refetch entero de 39 s.
+//
+// Por el mismo precio (~600 ms, un GET dirigido igual al del verify) preguntamos
+// lo que de verdad nos importa: ¿los picks siguen en las posiciones que dice
+// picksByAlbum? Si sí, las posiciones locales valen. Si no, editó otro cliente y
+// ahí sí hace falta el refetch.
+const PREFLIGHT_MAX_RANGE = 50;
+async function pickPositionsStillValid(playlistId, picks) {
+  if (!picks.length) return { ok: true, reason: 'sin picks previos' };
+  const minPos = Math.min(...picks.map(p => p.pos));
+  const maxPos = Math.max(...picks.map(p => p.pos));
+  if (!(minPos >= 0)) return { ok: false, reason: 'posiciones locales incompletas' };
+  const len = (maxPos - minPos) + 1;
+  // Picks muy desperdigados: no vale la pena, el GET dirigido dejaría de ser
+  // barato. Caemos al refetch, como antes.
+  if (len > PREFLIGHT_MAX_RANGE) return { ok: false, reason: `rango de ${len} items` };
+  const data = await spotifyFetch(`/playlists/${playlistId}/items?offset=${minPos}&limit=${len}`);
+  const got = (data?.items || []).map(it => (it.item || it.track)?.uri || null);
+  for (const p of picks) {
+    if (got[p.pos - minPos] !== p.uri) {
+      return { ok: false, reason: `«${p.name}» ya no está en ${p.pos}` };
+    }
+  }
+  return { ok: true, reason: `${picks.length} picks en su lugar` };
 }
 
 // Verificación honesta post-guardado: un GET dirigido al rango donde deberían
@@ -1166,27 +1201,32 @@ async function applyChanges(a, saveBtn, orderedPicks, origOrder, modalOverlay = 
   console.info(`[wthree] diff · +${toAddUris.length} · -${toRemoveUris.length} · orderChanged=${orderChanged}`);
 
   try {
-    // 0. Snapshot check: si el server cambió desde que cargamos el modal
-    //    (o no tenemos cache), refetch para tener posiciones reales. Sin
-    //    cache no podemos asumir que las posiciones de origOrder siguen válidas.
+    // 0. Pre-flight dirigido (v=147). NO le preguntamos el snapshot al server:
+    //    va retrasado respecto a nuestras propias escrituras y era justo lo que
+    //    disparaba el refetch de 39 s. Comprobamos las posiciones de los picks
+    //    con un GET al rango, que además detecta que editó otro cliente.
     let workingPicks = origOrder.map(p => ({ id: p.id, uri: p.uri, name: p.name, pos: p.pos }));
-    const serverSnapshot = await reloj.medir('GET snapshot_id', `/playlists/${playlistId}?fields=snapshot_id`, () => getPlaylistSnapshotId(playlistId));
+    // El cache de items lo vamos a parchear al final en vez de borrarlo.
+    let cached = await getCachedPlaylistItems(playlistId);
+    // Se pone en true si el array que tenemos ya viene del server con el add y
+    // el remove aplicados (el refetch de fallback), para no sumárselos dos veces.
+    let yaAplicadoEnCache = false;
+    // Arrancamos SIN snapshot_id en el primer PUT: el único que tenemos a mano
+    // puede estar viejo, y mandar uno viejo es peor que no mandar ninguno. La
+    // cadena de snapshots se arma con lo que devuelven las escrituras.
+    let snapshot = null;
+
+    const pre = await reloj.medir('GET preflight', `picks de «${a.name}»`, () => pickPositionsStillValid(playlistId, workingPicks));
     apiCalls++;
-    const cachedSnapshot = await getCachedPlaylistSnapshot(playlistId);
-    let snapshot = serverSnapshot;
-    console.info(`[wthree] snapshot server=${shortSnap(serverSnapshot)} · cached=${shortSnap(cachedSnapshot)} · lastLocal=${shortSnap(lastLocalSnapshot)}`);
-    // Confiamos en las posiciones de origOrder (via picksByAlbum) si:
-    // - el snapshot del server coincide con el cache de items (nadie escribió), O
-    // - coincide con el snapshot que dejamos nosotros en la última escritura
-    //   exitosa (invalidamos el cache pero picksByAlbum quedó al día).
-    // Si no coincide con ninguno → refetch entero.
-    const trustLocal = (cachedSnapshot && serverSnapshot === cachedSnapshot)
-      || (lastLocalSnapshot && serverSnapshot === lastLocalSnapshot);
-    if (!trustLocal) {
-      console.info('[wthree] snapshot no coincide — refetch para posiciones reales');
-      const fresh = await reloj.medir('REFETCH items (paginado)', 'getAllPlaylistItems useCache:false', () => getAllPlaylistItems(playlistId, null, { useCache: false }));
+    console.info(`[wthree] preflight ${pre.ok ? 'OK' : 'FALLÓ'}: ${pre.reason} · cache de items: ${cached ? cached.items.length + ' items' : 'no hay'}`);
+    if (!pre.ok) {
+      console.info('[wthree] posiciones locales no válidas — refetch para posiciones reales');
+      const fresh = await reloj.medir('REFETCH items (paginado)', 'preflight falló', () => getAllPlaylistItems(playlistId, null, { useCache: false }));
       apiCalls += Math.ceil(fresh.length / 100);
       workingPicks = locatePicksInPlaylist(fresh, origOrder.map(p => p.uri));
+      // El refetch acaba de traer la verdad: ese es el array a parchear. El
+      // snapshot lo pondrá la primera escritura.
+      cached = { items: fresh, snapshot: null };
       console.info('[wthree] refetch · picks localizados:',
         workingPicks.map(p => `${shortId(p.id)}@${p.pos}`).join(' | '));
     } else {
@@ -1198,6 +1238,11 @@ async function applyChanges(a, saveBtn, orderedPicks, origOrder, modalOverlay = 
     if (toAddUris.length) {
       const maxPos = workingPicks.length ? Math.max(...workingPicks.map(p => p.pos)) : -1;
       addInsertPos = maxPos >= 0 ? maxPos + 1 : null;
+      // Álbum sin picks previos: antes esto dejaba pos=null y forzaba el
+      // refetch de 39 s justo en el caso más común (1.189 álbumes sin picks).
+      // Con el cache sabemos dónde termina la playlist, así que el append tiene
+      // posición conocida. Si estuviera mal, el verify de después lo caza.
+      if (addInsertPos == null && cached) addInsertPos = cached.items.length;
       const sn = await reloj.medir('POST add', `${toAddUris.length} uris en pos ${addInsertPos}`, () => addTracksToPlaylist(playlistId, toAddUris, addInsertPos != null ? { position: addInsertPos } : {}));
       apiCalls++;
       if (sn) snapshot = sn;
@@ -1226,6 +1271,12 @@ async function applyChanges(a, saveBtn, orderedPicks, origOrder, modalOverlay = 
       const fresh = await reloj.medir('REFETCH items (paginado)', 'posiciones incompletas', () => getAllPlaylistItems(playlistId, null, { useCache: false }));
       apiCalls += Math.ceil(fresh.length / 100);
       workingPicks = locatePicksInPlaylist(fresh, orderedPicks.map(p => p.uri));
+      // OJO: este refetch pasa DESPUÉS del add y del remove, así que `fresh` ya
+      // los tiene aplicados. Si después le volviéramos a sumar el diff al
+      // parchear, quedarían duplicados. Desde acá el cache arranca de `fresh` y
+      // solo le faltan los movimientos del reorder.
+      cached = { items: fresh, snapshot };
+      yaAplicadoEnCache = true;
     }
 
     // 3. Reorder si difiere del target.
@@ -1233,10 +1284,12 @@ async function applyChanges(a, saveBtn, orderedPicks, origOrder, modalOverlay = 
     const currentOrder = workingPicks.map(p => p.id);
     const orderDiffers = currentOrder.length === targetOrder.length
       && currentOrder.some((id, i) => id !== targetOrder[i]);
+    let reorderMoves = [];
     if (orderDiffers) {
       const res = await reorderPicksMinimal(workingPicks, targetOrder, snapshot, reloj);
       snapshot = res.snapshot || snapshot;
       moveCount = res.moveCount;
+      reorderMoves = res.moves;
       apiCalls += moveCount;
       // CRÍTICO: usar el working post-reorder con posiciones actualizadas
       // — sino picksByAlbum queda con posiciones stale y el siguiente guardado
@@ -1268,12 +1321,32 @@ async function applyChanges(a, saveBtn, orderedPicks, origOrder, modalOverlay = 
       console.info('[wthree] verify OK · got:', verify.got.map(u => shortUri(u)).join(' | '));
     }
 
-    // 5. Invalidar el cache de items (otros features que llaman
-    //    getAllPlaylistItems se recargarán). Guardamos el snapshot final en
-    //    lastLocalSnapshot: la próxima operación de W-Three sabe que si el
-    //    server sigue en ese snapshot, las posiciones de picksByAlbum son OK
-    //    y no hace falta refetch.
-    await updatePlaylistItemsCache(playlistId, null, null);
+    // 5. Parchear el cache de items EN EL LUGAR (v=147) en vez de borrarlo.
+    //    Sabemos exactamente qué cambió, así que le aplicamos el mismo diff que
+    //    le mandamos a Spotify —add en addInsertPos, remove por URI, y la
+    //    secuencia exacta de PUT del reorder— y lo guardamos con el snapshot que
+    //    devolvió la ÚLTIMA escritura. NUNCA se relee del server: releerlo trae
+    //    el snapshot viejo (va 5-40 s retrasado) y guardarlo junto a los items
+    //    nuevos es justo lo que corrompe el cache.
+    if (cached && snapshot) {
+      const albumTracks = albumTracksCache.get(albumKey(a.name, a.artist)) || [];
+      const byUri = new Map(albumTracks.map(t => [t.uri, t]));
+      const addItems = toAddUris.map(uri => buildCachedItem(
+        byUri.get(uri) || orderedPicks.find(p => p.uri === uri) || { uri }, a,
+      ));
+      const patched = yaAplicadoEnCache
+        ? patchPlaylistItems(cached.items, { moves: reorderMoves })
+        : patchPlaylistItems(cached.items, {
+          addItems, addInsertPos, removeUris: toRemoveUris, moves: reorderMoves,
+        });
+      await updatePlaylistItemsCache(playlistId, patched, snapshot);
+      console.info(`[wthree] cache parcheado en el lugar · ${cached.items.length} → ${patched.length} items · snapshot ${shortSnap(snapshot)}`);
+    } else {
+      // Sin cache previo (o sin snapshot de vuelta): no hay nada fiable que
+      // parchear, así que lo borramos como antes.
+      await updatePlaylistItemsCache(playlistId, null, null);
+      console.info('[wthree] sin cache que parchear — invalidado');
+    }
     lastLocalSnapshot = snapshot;
 
     const elapsed = Math.round(performance.now() - t0);

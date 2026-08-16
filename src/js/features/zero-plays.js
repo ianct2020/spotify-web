@@ -19,6 +19,7 @@ import { createIncrementalList, scrollRootOf } from '../ui/incremental-list.js';
 import { createLazyImages } from '../ui/lazy-img.js';
 import { activateMarquee } from '../ui/marquee.js';
 import { coverAtSize } from '../util/cover-size.js';
+import { firstArtistName } from '../util/artist-name.js';
 
 let cache = null;
 
@@ -144,7 +145,7 @@ async function analyze() {
 // lo que pide renderTrackCardRow; `artist` suelto queda para la ficha.
 function fila(t, uri, id, addedAt, partial) {
   const imgs = t.album?.images || [];
-  const nombres = (t.artists || []).map(a => (a && typeof a === 'object') ? (a.name || '') : (a || '')).filter(Boolean);
+  const nombres = (t.artists || []).map(firstArtistName).filter(Boolean);
   return {
     id,
     trackId: id,

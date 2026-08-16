@@ -2,9 +2,10 @@
 // Sirve para cuando la búsqueda de Spotify tarda o no encuentra bien:
 // tipeás, filtra en memoria por título/artista/álbum, sin pegarle a la API.
 
-import { getBestAvailableLikes } from '../api.js?v=146';
-import { renderTrackRow, escapeHtml, pageHeader } from '../ui/components.js?v=146';
-import { openTrackCard } from './track-card.js?v=146';
+import { getBestAvailableLikes } from '../api.js?v=147';
+import { renderTrackRow, escapeHtml, pageHeader } from '../ui/components.js?v=147';
+import { firstArtistName } from '../util/artist-name.js?v=147';
+import { openTrackCard } from './track-card.js?v=147';
 
 const MAX_RESULTS = 300;
 let cachedItems = [];
@@ -22,7 +23,7 @@ function matchesQuery(item, tokens) {
   const t = item.track;
   if (!t) return false;
   const hay = normalize(
-    `${t.name} ${(t.artists || []).map(a => a.name).join(' ')} ${t.album?.name || ''}`
+    `${t.name} ${(t.artists || []).map(firstArtistName).filter(Boolean).join(' ')} ${t.album?.name || ''}`
   );
   // AND entre tokens — tipear "drake views" filtra por ambos.
   return tokens.every(tok => hay.includes(tok));
@@ -164,7 +165,7 @@ function renderResults(holder, matches, query) {
       openTrackCard({
         id,
         name: t.name,
-        artist: (t.artists || []).map(a => a.name || a)[0] || '',
+        artist: (t.artists || []).map(firstArtistName).filter(Boolean)[0] || '',
         album: t.album?.name,
         img: imgs[2]?.url || imgs[1]?.url || imgs[0]?.url,
       });

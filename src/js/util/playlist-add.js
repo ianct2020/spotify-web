@@ -18,6 +18,7 @@ import {
   getAllPlaylistItems,
   onPlaylistsInvalidated,
 } from '../api.js';
+import { isHiddenPlaylistName } from './hidden-sync.js';
 import { showToast } from '../ui/toast.js';
 
 // Playlists propias (las ajenas no se pueden escribir). Se memoiza en el módulo
@@ -42,7 +43,9 @@ export async function getOwnPlaylists({ force = false } = {}) {
     getCurrentUserId(),
     getAllUserPlaylists(null, { force: refrescar }),
   ]);
-  _own = todas.filter(p => p.owner?.id === me);
+  // Las de ocultos son propias pero NO son destinos: las usa la app para
+  // guardar lo que escondiste, y aparecían en «Añadir a…» como una playlist más.
+  _own = todas.filter(p => p.owner?.id === me && !isHiddenPlaylistName(p.name));
   _ownAt = Date.now();
   return _own;
 }

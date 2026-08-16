@@ -4,6 +4,7 @@
 
 import { getBestAvailableLikes } from '../api.js';
 import { renderTrackRow, escapeHtml, pageHeader } from '../ui/components.js';
+import { firstArtistName } from '../util/artist-name.js';
 import { openTrackCard } from './track-card.js';
 
 const MAX_RESULTS = 300;
@@ -22,7 +23,7 @@ function matchesQuery(item, tokens) {
   const t = item.track;
   if (!t) return false;
   const hay = normalize(
-    `${t.name} ${(t.artists || []).map(a => a.name).join(' ')} ${t.album?.name || ''}`
+    `${t.name} ${(t.artists || []).map(firstArtistName).filter(Boolean).join(' ')} ${t.album?.name || ''}`
   );
   // AND entre tokens — tipear "drake views" filtra por ambos.
   return tokens.every(tok => hay.includes(tok));
@@ -164,7 +165,7 @@ function renderResults(holder, matches, query) {
       openTrackCard({
         id,
         name: t.name,
-        artist: (t.artists || []).map(a => a.name || a)[0] || '',
+        artist: (t.artists || []).map(firstArtistName).filter(Boolean)[0] || '',
         album: t.album?.name,
         img: imgs[2]?.url || imgs[1]?.url || imgs[0]?.url,
       });

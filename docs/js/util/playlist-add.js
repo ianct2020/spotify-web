@@ -17,8 +17,9 @@ import {
   addTracksToPlaylist, updatePlaylistItemsCache,
   getAllPlaylistItems,
   onPlaylistsInvalidated,
-} from '../api.js?v=146';
-import { showToast } from '../ui/toast.js?v=146';
+} from '../api.js?v=147';
+import { isHiddenPlaylistName } from './hidden-sync.js?v=147';
+import { showToast } from '../ui/toast.js?v=147';
 
 // Playlists propias (las ajenas no se pueden escribir). Se memoiza en el módulo
 // porque las tres vistas piden lo mismo y getAllUserPlaylists ya cachea aparte.
@@ -42,7 +43,9 @@ export async function getOwnPlaylists({ force = false } = {}) {
     getCurrentUserId(),
     getAllUserPlaylists(null, { force: refrescar }),
   ]);
-  _own = todas.filter(p => p.owner?.id === me);
+  // Las de ocultos son propias pero NO son destinos: las usa la app para
+  // guardar lo que escondiste, y aparecían en «Añadir a…» como una playlist más.
+  _own = todas.filter(p => p.owner?.id === me && !isHiddenPlaylistName(p.name));
   _ownAt = Date.now();
   return _own;
 }

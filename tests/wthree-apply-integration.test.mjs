@@ -11,6 +11,7 @@
 // Corre con:  node tests/wthree-apply-integration.test.mjs
 
 import { computeUpdatedPickPositions } from '../src/js/util/reorder-shifts.js';
+import { patchPlaylistItems, buildCachedItem } from '../src/js/util/playlist-cache-patch.js';
 
 let passed = 0, failed = 0;
 function eq(actual, expected, label) {
@@ -31,6 +32,7 @@ function makeSpotifyMock({
   playlistItems,            // array [{uri, id, name}] con pos = índice
   cachedSnapshot,           // el snapshot con el que cargamos el modal
   serverSnapshot,           // el snapshot que devuelve el server ahora
+  cachedItems = null,       // v=147: el array de items cacheado (null = sin cache)
   onReorder = null,         // hook para simular fallos en el reorder
   verifyMismatch = false,   // hace que el verify devuelva algo distinto al target
 } = {}) {
@@ -118,6 +120,14 @@ function makeSpotifyMock({
       const r = await spotifyFetch(`/playlists/${id}/items`, { method: 'PUT', body: JSON.stringify(body) });
       return r.snapshot_id;
     },
+    // v=147: el cache de items ya no se borra, se parchea en el lugar.
+    // `cachedItems` arranca como una copia del estado inicial de la playlist,
+    // que es lo que dejó `loadAndRender`.
+    cacheEscrito: null,
+    async getCachedPlaylistItems() {
+      if (!cachedItems) return null;
+      return { items: cachedItems, snapshot: cachedSnapshot };
+    },
     async getAllPlaylistItems(id, _, { useCache } = {}) {
       // Simula paginateAll: 100 per page
       const out = [];
@@ -130,7 +140,13 @@ function makeSpotifyMock({
       }
       return out;
     },
-    async updatePlaylistItemsCache() { /* noop en mock */ },
+    async updatePlaylistItemsCache(id, its, snap) {
+      api.cacheEscrito = (snap && Array.isArray(its)) ? { items: its, snapshot: snap } : null;
+      // Round-trip real: lo que se escribe es lo que va a leer el guardado
+      // siguiente. Sin esto el escenario F no probaría nada.
+      cachedItems = api.cacheEscrito ? api.cacheEscrito.items : null;
+      cachedSnapshot = api.cacheEscrito ? api.cacheEscrito.snapshot : null;
+    },
   };
   return api;
 }
@@ -148,24 +164,40 @@ async function simulateApply(api, playlistId, a, orderedPicks, origOrder) {
   if (toAddUris.length === 0 && toRemoveUris.length === 0 && !orderChanged) return { status: 'noop' };
 
   let workingPicks = origOrder.map(p => ({ id: p.id, uri: p.uri, name: p.name, pos: p.pos }));
-  const server = await api.getPlaylistSnapshotId(playlistId);
-  const serverSnap = server?.snapshot_id;
-  const cachedSnap = await api.getCachedPlaylistSnapshot(playlistId);
-  let snapshot = serverSnap;
+  let cached = await api.getCachedPlaylistItems(playlistId);
+  let yaAplicadoEnCache = false;
+  // v=147: nada de `GET ?fields=snapshot_id` (va retrasado respecto a nuestras
+  // propias escrituras). Arrancamos sin snapshot y con un GET dirigido al rango.
+  let snapshot = null;
 
   let refetchedPages = 0;
-  if (cachedSnap && serverSnap !== cachedSnap) {
+  let preflightOk = true;
+  if (workingPicks.length) {
+    const minPos = Math.min(...workingPicks.map(p => p.pos));
+    const maxPos = Math.max(...workingPicks.map(p => p.pos));
+    const len = (maxPos - minPos) + 1;
+    if (len > 50) {
+      preflightOk = false;
+    } else {
+      const d = await api.spotifyFetch(`/playlists/${playlistId}/items?offset=${minPos}&limit=${len}`);
+      const got = (d.items || []).map(x => (x.item || x.track)?.uri || null);
+      preflightOk = workingPicks.every(p => got[p.pos - minPos] === p.uri);
+    }
+  }
+  if (!preflightOk) {
     const fresh = await api.getAllPlaylistItems(playlistId, null, { useCache: false });
     refetchedPages = Math.ceil(fresh.length / 100);
     workingPicks = fresh
       .map((it, i) => ({ ...it.item, pos: i }))
       .filter(t => origOrder.some(op => op.uri === t.uri));
+    cached = { items: fresh, snapshot: null };
   }
 
   let addInsertPos = null;
   if (toAddUris.length) {
     const maxPos = workingPicks.length ? Math.max(...workingPicks.map(p => p.pos)) : -1;
     addInsertPos = maxPos >= 0 ? maxPos + 1 : null;
+    if (addInsertPos == null && cached) addInsertPos = cached.items.length;
     const sn = await api.addTracksToPlaylist(playlistId, toAddUris, addInsertPos != null ? { position: addInsertPos } : {});
     if (sn) snapshot = sn;
   }
@@ -182,6 +214,8 @@ async function simulateApply(api, playlistId, a, orderedPicks, origOrder) {
     workingPicks = fresh
       .map((it, i) => ({ ...it.item, pos: i }))
       .filter(t => orderedPicks.some(op => op.uri === t.uri));
+    cached = { items: fresh, snapshot };
+    yaAplicadoEnCache = true;
   }
 
   const targetOrder = orderedPicks.map(p => p.id);
@@ -189,6 +223,7 @@ async function simulateApply(api, playlistId, a, orderedPicks, origOrder) {
   const orderDiffers = currentOrder.length === targetOrder.length
     && currentOrder.some((id, i) => id !== targetOrder[i]);
   let moveCount = 0;
+  const reorderMoves = [];
   if (orderDiffers) {
     // Reorder mínimo — usamos la lógica igual que reorderPicksMinimal.
     const working = workingPicks.map(p => ({ ...p }));
@@ -204,6 +239,7 @@ async function simulateApply(api, playlistId, a, orderedPicks, origOrder) {
       });
       if (sn) snapshot = sn;
       moveCount++;
+      reorderMoves.push({ range_start: fromPos, insert_before, range_length: 1 });
       const [moved] = working.splice(cur, 1);
       working.splice(t, 0, moved);
       if (fromPos < toPos) working.forEach(p => { if (p !== moved && p.pos > fromPos && p.pos <= toPos) p.pos -= 1; });
@@ -225,6 +261,21 @@ async function simulateApply(api, playlistId, a, orderedPicks, origOrder) {
     const okLen = gotInOrder.length === targetUris.length;
     const okOrder = okLen && targetUris.every((u, i) => gotInOrder[i] === u);
     if (!okOrder) throw new Error('verify failed');
+  }
+
+  // v=147: parche en el lugar en vez de borrar el cache.
+  if (cached && snapshot) {
+    const addItems = toAddUris.map(uri => buildCachedItem(
+      orderedPicks.find(p => p.uri === uri) || { uri }, a,
+    ));
+    const patched = yaAplicadoEnCache
+      ? patchPlaylistItems(cached.items, { moves: reorderMoves })
+      : patchPlaylistItems(cached.items, {
+        addItems, addInsertPos, removeUris: toRemoveUris, moves: reorderMoves,
+      });
+    await api.updatePlaylistItemsCache(playlistId, patched, snapshot);
+  } else {
+    await api.updatePlaylistItemsCache(playlistId, null, null);
   }
 
   return { status: 'ok', moveCount, refetchedPages };
@@ -269,8 +320,10 @@ console.log('\nA. reorder 3 picks — snapshot igual al cache, sin refetch');
   const puts = api.calls.filter(c => c.method === 'PUT' && c.url.endsWith('/items'));
   eq(puts.length, 1, 'exactamente 1 PUT reorder (mover D3 al principio, cascada)');
   const gets = api.calls.filter(c => c.method === 'GET');
-  eq(gets.length, 2, '2 GET: 1 snapshot check + 1 verify (rango del álbum)');
-  const verifyGet = gets.find(c => c.url.includes('offset='));
+  eq(gets.length, 2, '2 GET: 1 preflight + 1 verify, los dos dirigidos al rango');
+  ok(!api.calls.some(c => c.url.includes('fields=snapshot_id')),
+    'v=147: ya NO se le pregunta el snapshot al server (es el dato retrasado)');
+  const verifyGet = gets.reverse().find(c => c.url.includes('offset='));
   ok(verifyGet && verifyGet.url.includes('offset=1547'), 'verify pide offset=1547 (min pos del álbum)');
   ok(verifyGet && !verifyGet.url.includes('limit=100'), 'verify NO usa limit=100 (barato)');
 }
@@ -356,15 +409,25 @@ console.log('\nD. verify falla — debe tirar excepción');
   eq(threw, 'verify failed', 'aplica y luego tira error de verificación');
 }
 
-// ── E. Snapshot cambió desde el load → refetch de fallback ──────────────
-console.log('\nE. snapshot server != cached — cae al refetch entero (fallback correcto)');
+// ── E. Otro cliente movió los picks → el preflight lo caza y refetchea ──
+// Antes este escenario era "el snapshot del server difiere del cacheado". Se
+// cambió en v=147 porque ese ya no es el disparador: el snapshot va retrasado
+// respecto a nuestras propias escrituras (medido: seguía viejo 40 s después del
+// PUT), así que disparaba refetches por cambios NUESTROS. Ahora lo que decide es
+// si los picks siguen donde creemos.
+console.log('\nE. otro cliente movió los picks — el preflight lo caza y refetchea');
 {
   const items = makeWThreePlaylist(1547);
+  // Simulamos la edición ajena: alguien insertó un track antes de los picks, así
+  // que todo se corrió un lugar y D1 ya no está en 1547.
+  items.splice(1000, 0, { uri: 'spotify:track:AJENO', id: 'AJENO', name: 'Ajeno' });
   const api = makeSpotifyMock({
     playlistItems: items,
     cachedSnapshot: 'snap-OLD',
-    serverSnapshot: 'snap-NEW', // difiere
+    serverSnapshot: 'snap-OLD',
+    cachedItems: items.map(t => ({ item: { uri: t.uri, id: t.id, name: t.name } })),
   });
+  // picksByAlbum sigue creyendo en las posiciones viejas.
   const orig = [
     { id: 'D1', uri: 'spotify:track:D1', name: 'D1', pos: 1547 },
     { id: 'D2', uri: 'spotify:track:D2', name: 'D2', pos: 1548 },
@@ -378,6 +441,62 @@ console.log('\nE. snapshot server != cached — cae al refetch entero (fallback 
   const res = await simulateApply(api, 'PL', {}, target, orig);
   eq(res.status, 'ok', 'guardado OK vía fallback');
   ok(res.refetchedPages >= 20, `refetchea la playlist entera (${res.refetchedPages} páginas) — path de fallback correcto`);
+}
+
+// ── F. Dos guardados seguidos — el segundo NO puede refetchear ──────────
+// Es el caso que Ian sufre y el que se midió en producción: guardado #1 rápido
+// (1,9 s) y guardado #2 a 41 s, con 39,6 s de refetch, porque el cache se
+// borraba y el snapshot del server seguía viejo. Acá el cache se parchea, así
+// que el segundo guardado arranca con posiciones válidas.
+console.log('\nF. dos guardados seguidos — el segundo tampoco refetchea (v=147)');
+{
+  const items = makeWThreePlaylist(1547);
+  const api = makeSpotifyMock({
+    playlistItems: items,
+    cachedSnapshot: 'snap-v0',
+    serverSnapshot: 'snap-v0',
+    cachedItems: items.map(t => ({ item: { uri: t.uri, id: t.id, name: t.name } })),
+  });
+  const orig = [
+    { id: 'D1', uri: 'spotify:track:D1', name: 'D1', pos: 1547 },
+    { id: 'D2', uri: 'spotify:track:D2', name: 'D2', pos: 1548 },
+    { id: 'D3', uri: 'spotify:track:D3', name: 'D3', pos: 1549 },
+  ];
+  // Guardado #1: mover D3 arriba de D2 (el caso «24» arriba de «Jonah»).
+  const target1 = [
+    { id: 'D1', uri: 'spotify:track:D1', name: 'D1' },
+    { id: 'D3', uri: 'spotify:track:D3', name: 'D3' },
+    { id: 'D2', uri: 'spotify:track:D2', name: 'D2' },
+  ];
+  const r1 = await simulateApply(api, 'PL', {}, target1, orig);
+  eq(r1.status, 'ok', '#1 guardado OK');
+  eq(r1.refetchedPages, 0, '#1 sin refetch');
+  ok(api.cacheEscrito != null, '#1 dejó el cache escrito, no borrado');
+  eq(api.cacheEscrito.items.slice(1547, 1550).map(x => x.item.id), ['D1', 'D3', 'D2'],
+    '#1 el cache parcheado refleja el orden nuevo');
+  eq(api.cacheEscrito.items.length, 2000, '#1 el cache no cambia de tamaño en un reorder');
+
+  // Guardado #2, dentro de la ventana del snapshot retrasado: volver a dejarlo.
+  // picksByAlbum quedó con las posiciones post-reorder.
+  const orig2 = [
+    { id: 'D1', uri: 'spotify:track:D1', name: 'D1', pos: 1547 },
+    { id: 'D3', uri: 'spotify:track:D3', name: 'D3', pos: 1548 },
+    { id: 'D2', uri: 'spotify:track:D2', name: 'D2', pos: 1549 },
+  ];
+  const target2 = [
+    { id: 'D1', uri: 'spotify:track:D1', name: 'D1' },
+    { id: 'D2', uri: 'spotify:track:D2', name: 'D2' },
+    { id: 'D3', uri: 'spotify:track:D3', name: 'D3' },
+  ];
+  const callsAntes = api.calls.length;
+  const r2 = await simulateApply(api, 'PL', {}, target2, orig2);
+  eq(r2.status, 'ok', '#2 guardado OK');
+  eq(r2.refetchedPages, 0, '#2 TAMPOCO refetchea — es el arreglo entero');
+  ok(api.calls.length - callsAntes <= 3, `#2 son 3 requests (preflight + PUT + verify), no 34 — fueron ${api.calls.length - callsAntes}`);
+  eq(api.getItems().slice(1547, 1550).map(t => t.id), ['D1', 'D2', 'D3'],
+    '#2 la playlist del server volvió al orden original');
+  eq(api.cacheEscrito.items.slice(1547, 1550).map(x => x.item.id), ['D1', 'D2', 'D3'],
+    '#2 el cache quedó igual que el server (no se desincronizó)');
 }
 
 console.log(`\n${passed} passed · ${failed} failed`);

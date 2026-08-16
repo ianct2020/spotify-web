@@ -66,6 +66,16 @@ function normName(s) {
  * @param {string} opts.lsKey  clave de localStorage
  * @param {string} opts.label  para los logs
  */
+// Todas las playlists de ocultos se llaman «fonoteca · ocultos (algo)»:
+// (sin clasificar), (skips), (descubrir) y (álbumes). Son almacenamiento
+// interno de la app, no destinos: no tienen que aparecer en «Añadir a…».
+export const HIDDEN_PLAYLIST_PREFIX = 'fonoteca · ocultos';
+
+export function isHiddenPlaylistName(name) {
+  return typeof name === 'string'
+    && name.trim().toLowerCase().startsWith(HIDDEN_PLAYLIST_PREFIX);
+}
+
 export function createLocalStore({ lsKey, label }) {
   let keys = loadLocal(lsKey);
   const uriByKey = new Map();

@@ -16,20 +16,21 @@
 // Preview 30s instantáneo vía iTunes (arranca en el estribillo, no suma plays
 // en tu historial de Spotify). Fallback: iframe embed oficial si iTunes no lo tiene.
 
-import { getBestAvailableLikes, removeLikedTracks } from '../api.js?v=146';
-import { loadSkipStats, trackIdOf, isOwner, ownerLockedMessage } from './history-data.js?v=146';
-import { escapeHtml, confirmModal, pageHeader } from '../ui/components.js?v=146';
-import { showToast } from '../ui/toast.js?v=146';
-import { getPreview } from '../api/preview-providers.js?v=146';
-import { togglePreview, playingKey } from '../ui/preview-player.js?v=146';
-import { openTrackCard } from './track-card.js?v=146';
-import { activateMarquee } from '../ui/marquee.js?v=146';
-import { hasUsername, loadTopLifetime } from '../api/statsfm.js?v=146';
-import { createHiddenStore } from '../util/hidden-sync.js?v=146';
-import { createIncrementalList, scrollRootOf } from '../ui/incremental-list.js?v=146';
-import { createLazyImages } from '../ui/lazy-img.js?v=146';
-import { renderTrackCardRow, wireTrackCardGrid, paintCardSelection } from '../ui/track-card-row.js?v=146';
-import { coverAtSize } from '../util/cover-size.js?v=146';
+import { getBestAvailableLikes, removeLikedTracks } from '../api.js?v=147';
+import { loadSkipStats, trackIdOf, isOwner, ownerLockedMessage } from './history-data.js?v=147';
+import { escapeHtml, confirmModal, pageHeader } from '../ui/components.js?v=147';
+import { showToast } from '../ui/toast.js?v=147';
+import { getPreview } from '../api/preview-providers.js?v=147';
+import { togglePreview, playingKey } from '../ui/preview-player.js?v=147';
+import { openTrackCard } from './track-card.js?v=147';
+import { firstArtistName } from '../util/artist-name.js?v=147';
+import { activateMarquee } from '../ui/marquee.js?v=147';
+import { hasUsername, loadTopLifetime } from '../api/statsfm.js?v=147';
+import { createHiddenStore } from '../util/hidden-sync.js?v=147';
+import { createIncrementalList, scrollRootOf } from '../ui/incremental-list.js?v=147';
+import { createLazyImages } from '../ui/lazy-img.js?v=147';
+import { renderTrackCardRow, wireTrackCardGrid, paintCardSelection } from '../ui/track-card-row.js?v=147';
+import { coverAtSize } from '../util/cover-size.js?v=147';
 
 let cache = null;
 // Filas visibles con los filtros actuales, en el mismo orden que las tarjetas
@@ -513,15 +514,6 @@ function renderRow(r) {
       extra: `<div class="skips-preview-slot" data-id="${r.id}"></div>`,
     },
   );
-}
-
-// Ojo con el `a.name || a`: hay un like con `artists: [{ id: …, name: "" }]`
-// (nombre vacío, no ausente) y ese patrón devuelve el OBJETO artista. Acá solo
-// pintaría `[object Object]`, pero en `#sin-clasificar` el mismo bug tiraba
-// abajo el orden «Por artista» (v=138). Unificado.
-function firstArtistName(a) {
-  const n = (a && typeof a === 'object') ? a.name : a;
-  return typeof n === 'string' ? n : '';
 }
 
 function wireFilters() {
