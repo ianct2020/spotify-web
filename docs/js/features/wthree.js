@@ -2,19 +2,19 @@
 // por álbum). Muestra qué álbumes ya tienen picks, cuántos, y cuáles te faltan.
 // Ordenado por álbumes más escuchados primero para priorizar tu tiempo.
 
-import { spotifyFetch, getAllPlaylistItems, getAllUserPlaylists, addTracksToPlaylist, removeTracksFromPlaylist, reorderPlaylistItems, getPlaylistSnapshotId, getCachedPlaylistSnapshot, updatePlaylistItemsCache, getBestAvailableLikes } from '../api.js?v=143';
-import { loadHistoryStats, loadListenedAlbums, isOwner, ownerLockedMessage } from './history-data.js?v=143';
-import { escapeHtml, pageHeader } from '../ui/components.js?v=143';
-import { showToast } from '../ui/toast.js?v=143';
-import { activateMarquee, marqueeSpan } from '../ui/marquee.js?v=143';
-import { openModal, closeById, closeModal } from '../ui/modal-stack.js?v=143';
-import { getPreview } from '../api/preview-providers.js?v=143';
-import { togglePreview, playingKey } from '../ui/preview-player.js?v=143';
-import { openAlbumCard } from './album-card.js?v=143';
-import { albumKey } from '../util/album-key.js?v=143';
-import { computeUpdatedPickPositions } from '../util/reorder-shifts.js?v=143';
-import { createHiddenStore } from '../util/hidden-sync.js?v=143';
-import { mountBottom } from '../ui/bottom-layer.js?v=143';
+import { spotifyFetch, getAllPlaylistItems, getAllUserPlaylists, addTracksToPlaylist, removeTracksFromPlaylist, reorderPlaylistItems, getPlaylistSnapshotId, getCachedPlaylistSnapshot, updatePlaylistItemsCache, getBestAvailableLikes } from '../api.js?v=144';
+import { loadHistoryStats, loadListenedAlbums, isOwner, ownerLockedMessage } from './history-data.js?v=144';
+import { escapeHtml, pageHeader } from '../ui/components.js?v=144';
+import { showToast } from '../ui/toast.js?v=144';
+import { activateMarquee, marqueeSpan } from '../ui/marquee.js?v=144';
+import { openModal, closeById, closeModal } from '../ui/modal-stack.js?v=144';
+import { getPreview } from '../api/preview-providers.js?v=144';
+import { togglePreview, playingKey } from '../ui/preview-player.js?v=144';
+import { openAlbumCard } from './album-card.js?v=144';
+import { albumKey } from '../util/album-key.js?v=144';
+import { computeUpdatedPickPositions } from '../util/reorder-shifts.js?v=144';
+import { createHiddenStore } from '../util/hidden-sync.js?v=144';
+import { mountBottom } from '../ui/bottom-layer.js?v=144';
 
 const LS_KEY_ID = 'wthree_playlist_id';
 const LS_KEY_NAME = 'wthree_playlist_name';
@@ -708,7 +708,7 @@ async function openAlbumModal(a) {
     }
     // ⬆⬇ solo en mobile (touch, drag HTML5 no anda). En desktop se arrastra.
     orderPanel.innerHTML = `
-      <div class="wthree-order-hint">1.ª = la que más te gusta · <span class="wt-order-hint-desktop">arrastra para reordenar</span><span class="wt-order-hint-mobile">usa ▲▼</span></div>
+      <div class="wthree-order-hint">1.ª = la que más te gusta · <span class="wt-order-hint-desktop">arrastra para reordenar</span><span class="wt-order-hint-mobile">usa ▲▼</span> · ✕ la saca</div>
       <div class="wthree-order-list wt-order-scroll" id="wt-order-list">
         ${orderedPicks.map((p, i) => `
           <div class="wthree-order-item" data-id="${p.id}" data-i="${i}" draggable="true">
@@ -719,10 +719,37 @@ async function openAlbumModal(a) {
             <span class="wthree-order-name">${escapeHtml(p.name || '')}</span>
             <button class="wthree-order-btn wthree-order-mobile-only" data-move="up" data-i="${i}" title="Subir" ${i === 0 ? 'disabled' : ''}>▲</button>
             <button class="wthree-order-btn wthree-order-mobile-only" data-move="down" data-i="${i}" title="Bajar" ${i === orderedPicks.length - 1 ? 'disabled' : ''}>▼</button>
+            <button class="wthree-order-remove" data-remove="${escapeHtml(p.id || '')}" draggable="false" title="Quitar del orden" aria-label="Quitar «${escapeHtml(p.name || '')}» del orden">✕</button>
           </div>
         `).join('')}
       </div>
     `;
+    // ✕ = sacar del orden (v=144). NO toca orderedPicks por su cuenta: destilda
+    // el checkbox de la izquierda y deja que su `change` haga el trabajo, así
+    // "elegida" sigue siendo UN SOLO estado y no hay forma de que las dos
+    // columnas se desincronicen. Las posiciones absolutas en la playlist las
+    // recalcula computeUpdatedPickPositions() al guardar, como con cualquier
+    // otro destildado: la ✕ no abre ningún camino nuevo hacia la API.
+    orderPanel.querySelectorAll('[data-remove]').forEach(btn => {
+      btn.onclick = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const id = btn.dataset.remove;
+        const cb = body.querySelector(`.wthree-track-check[data-id="${id}"]`);
+        if (cb) {
+          cb.checked = false;
+          cb.dispatchEvent(new Event('change'));
+          return;
+        }
+        // Sin checkbox: el pick está en la playlist pero no en la tracklist del
+        // álbum (otra edición del disco, otro id). Es la única rama que puede
+        // tocar orderedPicks directo, y existe porque si no esos picks serían
+        // imposibles de sacar desde acá.
+        orderedPicks = orderedPicks.filter(p => p.id !== id);
+        updateMeta();
+        renderOrderPanel();
+      };
+    });
     orderPanel.querySelectorAll('[data-move]').forEach(btn => {
       btn.onclick = () => {
         const i = +btn.dataset.i;
@@ -906,7 +933,7 @@ async function fetchAlbumTracks(a) {
 //
 // Devuelve `working` con posiciones absolutas post-reorder — el caller lo
 // necesita para verify y para no ensuciar picksByAlbum con posiciones stale.
-async function reorderPicksMinimal(picks, targetOrder, initialSnapshot) {
+async function reorderPicksMinimal(picks, targetOrder, initialSnapshot, reloj = null) {
   const working = picks.map(p => ({ ...p }));
   let snapshot = initialSnapshot;
   let moveCount = 0;
@@ -929,7 +956,10 @@ async function reorderPicksMinimal(picks, targetOrder, initialSnapshot) {
     const body = { range_start: fromPos, insert_before, range_length: 1, snapshot_id: snapshot };
     console.info(`[wthree] PUT #${moveCount + 1} · move "${working[currentIdx].name}" (${shortId(wantedId)}) from ${fromPos} → before ${insert_before} · snapshot in: ${shortSnap(snapshot)}`);
 
-    const newSnap = await reorderPlaylistItems(playlistId, body);
+    const llamada = () => reorderPlaylistItems(playlistId, body);
+    const newSnap = reloj
+      ? await reloj.medir('PUT reorder', `${fromPos} → antes de ${insert_before}`, llamada)
+      : await llamada();
     console.info(`[wthree] PUT #${moveCount + 1} done · snapshot out: ${shortSnap(newSnap)}`);
     snapshot = newSnap;
     moveCount++;
@@ -1071,12 +1101,55 @@ function computeDiff(orderedPicks, origOrder) {
 // se cierra ese y nada más: antes se hacía `closeById('wthree-album-modal')`,
 // que es el id compartido por el modal de cualquier álbum, así que si el
 // usuario abría otro álbum mientras guardaba, al terminar se le cerraba ese.
+// ── Instrumentación del guardado (v=144, SOLO diagnóstico) ───────────────────
+//
+// El guardado tarda ~60 s y hasta ahora el único número era el total. Esto
+// cronometra cada paso por separado para saber DÓNDE se van los segundos antes
+// de tocar nada. No cambia ninguna decisión ni ningún request: solo mide.
+//
+// Al terminar deja el desglose en `window.__wtSaveLog` (últimos 10 guardados) y
+// lo imprime con console.table.
+function crono() {
+  const pasos = [];
+  const t0 = performance.now();
+  return {
+    async medir(tipo, detalle, fn) {
+      const inicio = performance.now();
+      try {
+        return await fn();
+      } finally {
+        pasos.push({ tipo, detalle, ms: Math.round(performance.now() - inicio) });
+      }
+    },
+    get pasos() { return pasos; },
+    get totalMs() { return Math.round(performance.now() - t0); },
+    volcar(album) {
+      const porTipo = new Map();
+      for (const p of pasos) {
+        const acc = porTipo.get(p.tipo) || { tipo: p.tipo, n: 0, ms: 0 };
+        acc.n++; acc.ms += p.ms;
+        porTipo.set(p.tipo, acc);
+      }
+      const resumen = [...porTipo.values()].sort((x, y) => y.ms - x.ms);
+      const total = this.totalMs;
+      const medido = resumen.reduce((s, r) => s + r.ms, 0);
+      console.info(`[wthree] ⏱ desglose de «${album}» · ${total} ms totales · ${pasos.length} requests · ${total - medido} ms fuera de red`);
+      console.table(resumen.map(r => ({ ...r, '% del total': ((r.ms / total) * 100).toFixed(1) })));
+      console.table(pasos);
+      const log = (window.__wtSaveLog ||= []);
+      log.push({ album, totalMs: total, requests: pasos.length, resumen, pasos });
+      if (log.length > 10) log.shift();
+    },
+  };
+}
+
 async function applyChanges(a, saveBtn, orderedPicks, origOrder, modalOverlay = null) {
   const { toAddUris, toRemoveUris, orderChanged, noChanges } = computeDiff(orderedPicks, origOrder);
   if (noChanges) {
     showToast('No hay cambios', 'info');
     return true;
   }
+  const reloj = crono();
 
   if (saveBtn) {
     saveBtn.disabled = true;
@@ -1097,7 +1170,7 @@ async function applyChanges(a, saveBtn, orderedPicks, origOrder, modalOverlay = 
     //    (o no tenemos cache), refetch para tener posiciones reales. Sin
     //    cache no podemos asumir que las posiciones de origOrder siguen válidas.
     let workingPicks = origOrder.map(p => ({ id: p.id, uri: p.uri, name: p.name, pos: p.pos }));
-    const serverSnapshot = await getPlaylistSnapshotId(playlistId);
+    const serverSnapshot = await reloj.medir('GET snapshot_id', `/playlists/${playlistId}?fields=snapshot_id`, () => getPlaylistSnapshotId(playlistId));
     apiCalls++;
     const cachedSnapshot = await getCachedPlaylistSnapshot(playlistId);
     let snapshot = serverSnapshot;
@@ -1111,7 +1184,7 @@ async function applyChanges(a, saveBtn, orderedPicks, origOrder, modalOverlay = 
       || (lastLocalSnapshot && serverSnapshot === lastLocalSnapshot);
     if (!trustLocal) {
       console.info('[wthree] snapshot no coincide — refetch para posiciones reales');
-      const fresh = await getAllPlaylistItems(playlistId, null, { useCache: false });
+      const fresh = await reloj.medir('REFETCH items (paginado)', 'getAllPlaylistItems useCache:false', () => getAllPlaylistItems(playlistId, null, { useCache: false }));
       apiCalls += Math.ceil(fresh.length / 100);
       workingPicks = locatePicksInPlaylist(fresh, origOrder.map(p => p.uri));
       console.info('[wthree] refetch · picks localizados:',
@@ -1125,7 +1198,7 @@ async function applyChanges(a, saveBtn, orderedPicks, origOrder, modalOverlay = 
     if (toAddUris.length) {
       const maxPos = workingPicks.length ? Math.max(...workingPicks.map(p => p.pos)) : -1;
       addInsertPos = maxPos >= 0 ? maxPos + 1 : null;
-      const sn = await addTracksToPlaylist(playlistId, toAddUris, addInsertPos != null ? { position: addInsertPos } : {});
+      const sn = await reloj.medir('POST add', `${toAddUris.length} uris en pos ${addInsertPos}`, () => addTracksToPlaylist(playlistId, toAddUris, addInsertPos != null ? { position: addInsertPos } : {}));
       apiCalls++;
       if (sn) snapshot = sn;
       console.info(`[wthree] add · ${toAddUris.length} tracks en pos ${addInsertPos} · snapshot: ${shortSnap(snapshot)}`);
@@ -1133,7 +1206,7 @@ async function applyChanges(a, saveBtn, orderedPicks, origOrder, modalOverlay = 
 
     // 2. Remove por URI. Los que quedan se shiftean local.
     if (toRemoveUris.length) {
-      const sn = await removeTracksFromPlaylist(playlistId, toRemoveUris);
+      const sn = await reloj.medir('DELETE remove', `${toRemoveUris.length} uris`, () => removeTracksFromPlaylist(playlistId, toRemoveUris));
       apiCalls++;
       if (sn) snapshot = sn;
       console.info(`[wthree] remove · ${toRemoveUris.length} tracks · snapshot: ${shortSnap(snapshot)}`);
@@ -1150,7 +1223,7 @@ async function applyChanges(a, saveBtn, orderedPicks, origOrder, modalOverlay = 
     // fallback a refetch para tener posiciones reales.
     if (workingPicks.some(p => p.pos == null)) {
       console.info('[wthree] posiciones locales incompletas — refetch para reorder');
-      const fresh = await getAllPlaylistItems(playlistId, null, { useCache: false });
+      const fresh = await reloj.medir('REFETCH items (paginado)', 'posiciones incompletas', () => getAllPlaylistItems(playlistId, null, { useCache: false }));
       apiCalls += Math.ceil(fresh.length / 100);
       workingPicks = locatePicksInPlaylist(fresh, orderedPicks.map(p => p.uri));
     }
@@ -1161,7 +1234,7 @@ async function applyChanges(a, saveBtn, orderedPicks, origOrder, modalOverlay = 
     const orderDiffers = currentOrder.length === targetOrder.length
       && currentOrder.some((id, i) => id !== targetOrder[i]);
     if (orderDiffers) {
-      const res = await reorderPicksMinimal(workingPicks, targetOrder, snapshot);
+      const res = await reorderPicksMinimal(workingPicks, targetOrder, snapshot, reloj);
       snapshot = res.snapshot || snapshot;
       moveCount = res.moveCount;
       apiCalls += moveCount;
@@ -1184,7 +1257,7 @@ async function applyChanges(a, saveBtn, orderedPicks, origOrder, modalOverlay = 
       const targetUris = orderedPicks.map(p => p.uri);
       console.info(`[wthree] verify range · offset=${minPos} · len=${rangeLen} · expected order:`,
         targetUris.map(u => shortUri(u)).join(' | '));
-      const verify = await verifyAlbumOrderAtRange(playlistId, targetUris, Math.max(0, minPos), rangeLen);
+      const verify = await reloj.medir('GET verify', `offset=${Math.max(0, minPos)} len=${rangeLen}`, () => verifyAlbumOrderAtRange(playlistId, targetUris, Math.max(0, minPos), rangeLen));
       apiCalls++;
       if (!verify.ok) {
         console.warn('[wthree] verificación falló · esperado:',
@@ -1205,6 +1278,7 @@ async function applyChanges(a, saveBtn, orderedPicks, origOrder, modalOverlay = 
 
     const elapsed = Math.round(performance.now() - t0);
     console.info(`[wthree] guardado OK en ${elapsed}ms · ${apiCalls} API calls · +${toAddUris.length} · -${toRemoveUris.length} · ${moveCount} reorders`);
+    reloj.volcar(a.name);
 
     const msg = moveCount > 0
       ? `Orden actualizado (${moveCount} movimiento${moveCount === 1 ? '' : 's'}, ${(elapsed / 1000).toFixed(1)}s)`
@@ -1239,6 +1313,7 @@ async function applyChanges(a, saveBtn, orderedPicks, origOrder, modalOverlay = 
   } catch (e) {
     const elapsed = Math.round(performance.now() - t0);
     console.error(`[wthree] guardado FALLÓ en ${elapsed}ms · ${apiCalls} API calls:`, e);
+    reloj.volcar(`${a.name} (FALLÓ)`);
     if (saveBtn) {
       saveBtn.disabled = false;
       saveBtn.textContent = 'Guardar cambios';

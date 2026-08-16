@@ -13,6 +13,8 @@
 import { escapeHtml, pageHeader } from '../ui/components.js';
 import { showToast } from '../ui/toast.js';
 import { buildAlbumHeardIndex, markAlbumHeard } from '../util/album-heard.js';
+import { createIncrementalList, scrollRootOf } from '../ui/incremental-list.js';
+import { createLazyImages } from '../ui/lazy-img.js';
 import {
   getArtistIdCached,
   getArtistDiscoCached,
@@ -79,7 +81,22 @@ const state = {
   mode: 'normal',
 };
 
+// ── Lista incremental (v=144) ────────────────────────────────────────────────
+// La grilla es plana (una sola .dcard-grid con todas las novedades ordenadas
+// por fecha), así que acá el item del lote SÍ es la tarjeta suelta. La tapa la
+// asigna lazy-img: renderAlbumCard pinta `data-src`, no `src`.
+const BATCH = 30;
+
+let list = null;
+let lazyCovers = null;
+
+function teardown() {
+  if (list) { list.destroy(); list = null; }
+  if (lazyCovers) { lazyCovers.destroy(); lazyCovers = null; }
+}
+
 export async function render(container) {
+  teardown();
   container.innerHTML = `
     ${pageHeader({ title: 'Novedades de tus artistas' })}
     <div id="newrel-content"><div class="empty-state"><div class="spinner spinner-lg"></div><div style="margin-top:14px">Cargando tus likes…</div></div></div>
@@ -91,7 +108,7 @@ export async function render(container) {
     idx = await buildAlbumHeardIndex();
   } catch (e) {
     content.innerHTML = `<div class="card"><p style="color:var(--color-error)">No pude cargar tus datos: ${escapeHtml(e.message)}</p></div>`;
-    return;
+    return teardown;
   }
   state.heard = idx.heard;
 
@@ -147,6 +164,7 @@ export async function render(container) {
   renderShell(content, candidates.length);
   refreshList(content);
   scanArtists(content).catch(err => console.warn('[newrel] scan:', err));
+  return teardown;
 }
 
 function eligibleArtists() {
@@ -158,6 +176,9 @@ function targetToScan() {
 }
 
 function renderShell(content, totalCandidates) {
+  // El shell se repinta entero: el #newrel-list de antes queda desconectado y
+  // con él la grilla que estaba observando la lista incremental.
+  teardown();
   content.innerHTML = `
     <div class="disco-topbar">
       <div class="disco-summary">
@@ -392,8 +413,8 @@ function releasesInWindow() {
 }
 
 function refreshList(content) {
-  const list = document.getElementById('newrel-list');
-  if (!list) return;
+  const listEl = document.getElementById('newrel-list');
+  if (!listEl) return;
   const rows = releasesInWindow();
   document.getElementById('newrel-unheard-count').textContent = rows.length.toLocaleString('es-ES');
   const nHidden = document.getElementById('newrel-hidden-n');
@@ -417,40 +438,91 @@ function refreshList(content) {
     } else {
       msg = `No hay novedades sin escuchar en los últimos ${state.months} meses para tus artistas con ≥${state.minLikes} likes.`;
     }
-    list.innerHTML = `<div class="card"><p style="text-align:center;color:var(--color-text-muted);margin:0">${escapeHtml(msg)}</p></div>`;
+    teardown();
+    listEl.innerHTML = `<div class="card"><p style="text-align:center;color:var(--color-text-muted);margin:0">${escapeHtml(msg)}</p></div>`;
     updateSelectionUi(content);
     return;
   }
 
-  list.innerHTML = `<div class="dcard-grid">${rows.map(r => renderAlbumCard(r.al, r.artist.name, {
-    checkClass: 'newrel-check',
-    selected: state.selection.has(r.al.id),
-    hiddenMode: state.mode === 'hidden',
-  })).join('')}</div>`;
+  const t0 = performance.now();
+  const perf = (window.__newrelPerf ||= { batches: [] });
 
-  wireAlbumCards(list, findAlbum, {
-    checkClass: 'newrel-check',
-    selection: state.selection,
-    onSave: (albumId, artistName, btn) => saveAlbum(albumId, artistName, btn),
-    onChange: () => updateSelectionUi(content),
-    afterAdd: () => refreshList(content),
-    onHide: async (albumId, artistName, btn) => {
-      const al = findAlbum(albumId);
-      if (!al) return;
-      btn.disabled = true;
-      try {
-        const oculto = await toggleHiddenAlbum(al, artistName);
-        showToast(oculto
-          ? `«${al.name}» oculto — no vuelve a aparecer`
-          : `«${al.name}» vuelve a la lista`, 'success');
-      } catch (e) {
-        showToast('No se pudo ocultar: ' + e.message, 'error');
-      } finally {
-        btn.disabled = false;
-      }
-      refreshList(content);
-    },
-  });
+  // Los handlers de la tarjeta NO están delegados (wireAlbumCards asigna
+  // onclick uno por uno), así que hay que cablear cada lote nuevo o las
+  // tarjetas tardías quedan muertas.
+  const wireNuevas = () => {
+    const nuevas = grid().querySelectorAll('.dcard:not([data-wired])');
+    if (!nuevas.length) return 0;
+    nuevas.forEach(c => c.setAttribute('data-wired', '1'));
+    nuevas.forEach(card => wireAlbumCards(card, findAlbum, {
+      checkClass: 'newrel-check',
+      selection: state.selection,
+      onSave: (albumId, artistName, btn) => saveAlbum(albumId, artistName, btn),
+      onChange: () => updateSelectionUi(content),
+      afterAdd: () => refreshList(content),
+      onHide: async (albumId, artistName, btn) => {
+        const al = findAlbum(albumId);
+        if (!al) return;
+        btn.disabled = true;
+        try {
+          const oculto = await toggleHiddenAlbum(al, artistName);
+          showToast(oculto
+            ? `«${al.name}» oculto — no vuelve a aparecer`
+            : `«${al.name}» vuelve a la lista`, 'success');
+        } catch (e) {
+          showToast('No se pudo ocultar: ' + e.message, 'error');
+        } finally {
+          btn.disabled = false;
+        }
+        refreshList(content);
+      },
+    }));
+    lazyCovers?.observe(nuevas);
+    return nuevas.length;
+  };
+
+  function grid() {
+    let g = listEl.querySelector('.dcard-grid');
+    if (!g) {
+      listEl.innerHTML = '<div class="dcard-grid"></div>';
+      g = listEl.querySelector('.dcard-grid');
+    }
+    return g;
+  }
+
+  const onBatch = ({ rendered, total, added, ms }) => {
+    wireNuevas();
+    perf.batches.push({ added, rendered, total, ms: +ms.toFixed(1) });
+    if (window.__newrelDebug) {
+      console.info(`[newrel] lote +${added} → ${rendered}/${total} tarjetas · ${ms.toFixed(1)} ms`);
+    }
+  };
+
+  if (list) {
+    lazyCovers?.reset();
+    list.setItems(rows, { preserveRendered: true });
+  } else {
+    const g = grid();
+    const scroller = scrollRootOf(g);
+    lazyCovers = createLazyImages({ root: scroller, rootMargin: '300px' });
+    list = createIncrementalList({
+      container: g,
+      items: rows,
+      renderItem: (r) => renderAlbumCard(r.al, r.artist.name, {
+        checkClass: 'newrel-check',
+        selected: state.selection.has(r.al.id),
+        hiddenMode: state.mode === 'hidden',
+      }),
+      batchSize: BATCH,
+      rootMargin: '600px',
+      onBatch,
+    });
+  }
+
+  perf.total = rows.length;
+  perf.firstPaintCards = list.rendered;
+  perf.syncMs = +(performance.now() - t0).toFixed(1);
+  Object.defineProperty(perf, 'lazy', { get: () => lazyCovers?.stats || null, configurable: true });
 
   updateSelectionUi(content);
 }

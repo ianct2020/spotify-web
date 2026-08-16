@@ -6,18 +6,18 @@
 //     (util/album-heard.js: historial completo + likes + listened + w-three)
 //   - permiten "+ Biblioteca" y "Crear playlist con lo elegido"
 
-import { idbGetCached, idbSetCached, idbDel } from '../idb.js?v=143';
-import { getArtistAlbums, searchArtistByName, getAlbumTracks, saveToLibrary, createPlaylist, addTracksToPlaylist } from '../api.js?v=143';
-import { albumKey } from '../util/album-key.js?v=143';
-import { escapeHtml } from '../ui/components.js?v=143';
-import { showToast } from '../ui/toast.js?v=143';
-import { openPlaylistPicker } from '../ui/playlist-picker.js?v=143';
-import { getOwnPlaylists, addUrisToPlaylists, toastAddResult } from '../util/playlist-add.js?v=143';
-import { openArtistCard } from './artist-card.js?v=143';
-import { openAlbumCard } from './album-card.js?v=143';
-import { createHiddenStore, createLocalStore } from '../util/hidden-sync.js?v=143';
-import { getPreview } from '../api/preview-providers.js?v=143';
-import { togglePreview, playingKey, attachHover } from '../ui/preview-player.js?v=143';
+import { idbGetCached, idbSetCached, idbDel } from '../idb.js?v=144';
+import { getArtistAlbums, searchArtistByName, getAlbumTracks, saveToLibrary, createPlaylist, addTracksToPlaylist } from '../api.js?v=144';
+import { albumKey } from '../util/album-key.js?v=144';
+import { escapeHtml } from '../ui/components.js?v=144';
+import { showToast } from '../ui/toast.js?v=144';
+import { openPlaylistPicker } from '../ui/playlist-picker.js?v=144';
+import { getOwnPlaylists, addUrisToPlaylists, toastAddResult } from '../util/playlist-add.js?v=144';
+import { openArtistCard } from './artist-card.js?v=144';
+import { openAlbumCard } from './album-card.js?v=144';
+import { createHiddenStore, createLocalStore } from '../util/hidden-sync.js?v=144';
+import { getPreview } from '../api/preview-providers.js?v=144';
+import { togglePreview, playingKey, attachHover } from '../ui/preview-player.js?v=144';
 
 const DISCO_TTL_MIN = 30 * 24 * 60;       // 30 días
 const ARTIST_ID_TTL_MIN = 60 * 24 * 60;   // 60 días — los ids no cambian
@@ -306,6 +306,16 @@ document.addEventListener('previewchange', (e) => {
 });
 
 /**
+ * La tapa va con `data-src` y NO con `src` (v=144): las dos vistas pintan por
+ * lotes y las tapas las asigna `ui/lazy-img.js` contra el scroller de verdad.
+ * El `loading="lazy"` nativo no alcanzaba — resuelve contra el viewport del
+ * documento y disparaba las tapas de todo el lote de golpe. El `width`/`height`
+ * explícito es obligatorio: sin él, al DESCARGAR una tapa fuera de vista el
+ * hueco se cerraría y el scroll pegaría un salto.
+ *
+ * Quien pinte estas tarjetas TIENE que llamar a `lazy.observe(nodos)` sobre lo
+ * recién insertado, o las tapas nunca cargan.
+ *
  * @param {object} al  álbum slim (id, name, type, img, release, total)
  * @param {string} artistName
  * @param {object} [opts]
@@ -331,7 +341,7 @@ export function renderAlbumCard(al, artistName, {
         <div class="dcard-cover-wrap" data-hover-album="${id}">
           <button type="button" class="dcard-cover" data-open-album="${id}" data-open-artist="${artista}" title="Ver ficha del álbum">
             ${al.img
-              ? `<img src="${al.img}" alt="" loading="lazy" class="dcard-img">`
+              ? `<img data-src="${escapeHtml(al.img)}" alt="" width="104" height="104" class="dcard-img">`
               : `<span class="dcard-img dcard-img-empty">♪</span>`}
           </button>
           <button type="button" class="dcard-play${sonando ? ' is-playing' : ''}" data-preview-album="${id}"

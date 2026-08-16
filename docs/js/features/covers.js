@@ -8,15 +8,15 @@
 // placeholder→img. Botón "Pantalla completa" (Fullscreen API) que oculta
 // sidebar/header/toolbar y recalcula el lado.
 
-import { loadListenedAlbums, isOwner, ownerLockedMessage } from './history-data.js?v=143';
-import { isJunkTrack } from '../util/junk.js?v=143';
-import { getAllPlaylistItems, getBestAvailableLikes } from '../api.js?v=143';
-import { escapeHtml, pageHeader } from '../ui/components.js?v=143';
-import { openAlbumCard } from './album-card.js?v=143';
-import { albumKey, coverId } from '../util/album-key.js?v=143';
-import { buildAlbumStatsIndex } from '../util/album-stats.js?v=143';
-import { getPreview } from '../api/preview-providers.js?v=143';
-import { hoverIn, hoverOut } from '../ui/preview-player.js?v=143';
+import { loadListenedAlbums, isOwner, ownerLockedMessage } from './history-data.js?v=144';
+import { isJunkTrack } from '../util/junk.js?v=144';
+import { getAllPlaylistItems, getBestAvailableLikes } from '../api.js?v=144';
+import { escapeHtml, pageHeader } from '../ui/components.js?v=144';
+import { openAlbumCard } from './album-card.js?v=144';
+import { albumKey, coverId } from '../util/album-key.js?v=144';
+import { buildAlbumStatsIndex } from '../util/album-stats.js?v=144';
+import { getPreview } from '../api/preview-providers.js?v=144';
+import { hoverIn, hoverOut } from '../ui/preview-player.js?v=144';
 
 const LS_KEY_SIZE = 'covers_cell_size';
 const LS_KEY_SORT = 'covers_sort_mode';

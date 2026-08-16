@@ -1249,6 +1249,13 @@ h3 { font-size: 18px; font-weight: 600; }
   justify-content: center;
   color: var(--color-accent);
 }
+/* v=144: el corazón hueco es la pista del disco que NO está en tus me gusta.
+   Se apaga el color (queda en el gris de texto secundario) para que la lista se
+   lea de un vistazo: lo violeta es lo tuyo. */
+.album-modal-like-heart.is-off { color: var(--color-text-muted); opacity: 0.55; }
+.album-modal-like-row-off { background: transparent; }
+.album-modal-like-row-off .album-modal-like-name { color: var(--color-text-secondary); }
+.album-modal-like-row-off:hover { background: rgba(124, 58, 237, 0.08); }
 .album-modal-like-name {
   overflow: hidden;
   text-overflow: ellipsis;
@@ -2946,7 +2953,8 @@ h3 { font-size: 18px; font-weight: 600; }
 .wthree-order-list { display: flex; flex-direction: column; gap: 4px; }
 .wthree-order-item {
   display: grid;
-  grid-template-columns: 18px 22px minmax(0,1fr) auto auto;
+  /* arrastre · nº · nombre · ▲ · ▼ · ✕ */
+  grid-template-columns: 18px 22px minmax(0,1fr) auto auto auto;
   gap: 6px;
   align-items: center;
   padding: 6px 8px;
@@ -2985,16 +2993,21 @@ h3 { font-size: 18px; font-weight: 600; }
 }
 .wthree-order-item:hover .wthree-order-drag { color: var(--color-text); }
 
-/* D&D solo desktop; en mobile mostramos ▲▼ (touch drag nativo no anda bien). */
-.wthree-order-mobile-only { display: none; }
+/* D&D solo desktop; en mobile mostramos ▲▼ (touch drag nativo no anda bien).
+   El selector va con `.wthree-order-item` delante a propósito: con
+   `.wthree-order-mobile-only` a secas empataba en especificidad con
+   `.wthree-order-btn { display: inline-flex }`, que está más abajo en el
+   archivo y por eso ganaba — los ▲▼ se veían también en escritorio desde
+   v=114. Se notó al meter la ✕ al lado (v=144). */
+.wthree-order-item .wthree-order-mobile-only { display: none; }
 .wt-order-hint-mobile { display: none; }
 @media (max-width: 899px) {
   .wthree-order-item {
-    grid-template-columns: 22px minmax(0,1fr) auto auto;
+    grid-template-columns: 22px minmax(0,1fr) auto auto auto;
     cursor: default;
   }
   .wthree-order-drag { display: none; }
-  .wthree-order-mobile-only { display: inline-flex; }
+  .wthree-order-item .wthree-order-mobile-only { display: inline-flex; }
   .wt-order-hint-desktop { display: none; }
   .wt-order-hint-mobile { display: inline; }
 }
@@ -3028,15 +3041,55 @@ h3 { font-size: 18px; font-weight: 600; }
 }
 .wthree-order-btn:disabled { opacity: 0.3; cursor: not-allowed; }
 
+/* ✕ para sacar una pista del orden (v=144). Mismo glifo que el cierre de los
+   modales y que «✕ Ver todos» de los filtros — en esta app la ✕ es siempre
+   «sacá esto de acá». Hereda el tamaño de .wthree-order-btn y solo cambia el
+   color al pasar por encima, para que no compita con ▲▼. */
+.wthree-order-remove {
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-elevated);
+  color: var(--color-text-muted);
+  font-size: 11px;
+  line-height: 1;
+  cursor: pointer;
+  transition: background .12s, border-color .12s, color .12s;
+}
+.wthree-order-remove:hover {
+  background: rgba(239, 68, 68, 0.14);
+  border-color: rgba(239, 68, 68, 0.55);
+  color: var(--color-error);
+}
+
 /* ============ W-Three: modal por álbum (v=114, 2 columnas) ============ */
 /* Layout: header full-width arriba, body en 2 columnas (tracklist + orden),
    footer full-width abajo. El .wt-modal NUNCA se scrollea — cada columna
    tiene su propio scroll interno para que el panel de orden quede visible
    sin tener que scrollear. <900px → apilado en 1 columna. */
+
+/* v=144: ALTO FIJO. Antes el modal se encogía con los álbumes de pocas pistas
+   y crecía con los largos, así que cambiaba de tamaño en cada disco. Ahora
+   mide siempre lo mismo, dimensionado para ~20 pistas (10 filas por columna,
+   que es el álbum normal):
+
+     cabecera 123 + padding del body 24 + título de sección 20
+     + 10 filas de 32px con gap de 4 (356) + botón de sugeridos 34
+     + footer 56  ≈  613  →  620px
+
+   Con menos pistas sobra espacio y se deja vacío a propósito; con más, el
+   scroll vive DENTRO de la tracklist y el modal no crece. El tope de 85vh
+   sigue mandando en pantallas bajas. */
 .wt-modal {
   padding: 0 !important;
   max-width: 920px;
   width: min(920px, 94vw);
+  height: min(85vh, 620px);
   max-height: 85vh;
   display: flex;
   flex-direction: column;
@@ -3235,6 +3288,13 @@ h3 { font-size: 18px; font-weight: 600; }
     grid-template-rows: repeat(var(--wt-track-rows, 1), auto);
     grid-auto-flow: column;
     gap: 4px 10px;
+    /* OBLIGATORIO desde que el modal tiene alto fijo (v=144): el contenedor
+       pasó a tener altura definida, y `align-content` por defecto (normal =
+       stretch) reparte el hueco sobrante entre las filas `auto`. Con un álbum
+       de 10 pistas las filas se estiraban al doble de alto. `start` las deja
+       en su tamaño natural y manda el espacio libre abajo, que es lo que se
+       quiere. NO tocar el reparto por columna: lo hace grid-auto-flow. */
+    align-content: start;
   }
   .wt-tracklist.wt-tracklist-cols .wthree-track {
     padding: 5px 8px;

@@ -14,7 +14,7 @@
 import { escapeHtml } from '../ui/components.js';
 import { openArtistCard } from './artist-card.js';
 import { openModal, closeTop } from '../ui/modal-stack.js';
-import { getBestAvailableLikes } from '../api.js';
+import { getBestAvailableLikes, getAlbumTracks, spotifyFetch } from '../api.js';
 import { albumKey, coverId } from '../util/album-key.js';
 import { artistMatches } from '../util/track-match.js';
 import { lookupAlbumStats } from '../util/album-stats.js';
@@ -27,6 +27,8 @@ const PAUSE_SVG = `<svg viewBox="0 0 24 24" width="10" height="10" fill="current
 const DOTS_SVG = `<svg viewBox="0 0 24 24" width="10" height="10" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>`;
 // Mismo corazón que la tracklist de W-Three (features/wthree.js).
 const HEART_SVG = `<svg viewBox="0 0 24 24" width="11" height="11" fill="currentColor" aria-hidden="true"><path d="M12 21s-7.5-4.6-9.5-9A5 5 0 0 1 12 6.5 5 5 0 0 1 21.5 12c-2 4.4-9.5 9-9.5 9z"/></svg>`;
+// El mismo trazo, hueco: "esta pista del disco NO está en tus me gusta".
+const HEART_OUTLINE_SVG = `<svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round" aria-hidden="true"><path d="M12 21s-7.5-4.6-9.5-9A5 5 0 0 1 12 6.5 5 5 0 0 1 21.5 12c-2 4.4-9.5 9-9.5 9z"/></svg>`;
 
 // Cache del último set de likes en memoria (evita re-fetch del cache al
 // abrir varias fichas seguidas dentro de la misma sesión).
@@ -106,6 +108,68 @@ function likesInAlbum(likes, a) {
   }
   out.sort((x, y) => (x.trackNumber || 999) - (y.trackNumber || 999) || x.name.localeCompare(y.name, 'es'));
   return out;
+}
+
+// ── Tracklist completo del álbum (v=144) ────────────────────────────────────
+//
+// Hasta v=142 la lista de la ficha eran SOLO los likes de Ian de ese álbum, así
+// que el ♥ salía lleno en todas las filas y no distinguía nada. Con el tracklist
+// entero el corazón vuelve a significar algo: qué pistas del disco están en tus
+// me gusta y cuáles no.
+//
+// `GET /albums/{id}/tracks?limit=50` está CONFIRMADO vivo post-migración (lo
+// usan W-Three y #discover-artists). Igual va con degradación: si falla, la
+// ficha vuelve a mostrar solo los likes, como antes.
+//
+// El problema real es el `albumId`: casi ningún llamador lo trae (el mosaico, el
+// dashboard y el Wrapped mandan nombre + artista y nada más). Para esos se
+// resuelve con /search, que sí está vivo, y se memoiza por clave de álbum: abrir
+// la misma ficha diez veces es una sola búsqueda.
+const _albumIdMemo = new Map();   // albumKey → id | null
+
+async function resolveAlbumId(a) {
+  const directo = a.albumId || a.id || null;
+  if (directo) return directo;
+  const k = albumKey(a.name, a.artist);
+  if (_albumIdMemo.has(k)) return _albumIdMemo.get(k);
+  let id = null;
+  try {
+    const q = `album:"${String(a.name).replace(/"/g, '')}" artist:"${String(a.artist || '').replace(/"/g, '')}"`;
+    const res = await spotifyFetch(`/search?q=${encodeURIComponent(q)}&type=album&limit=1`);
+    id = res?.albums?.items?.[0]?.id || null;
+  } catch (e) {
+    console.warn('[album-card] no pude resolver el álbum:', e.message);
+  }
+  _albumIdMemo.set(k, id);
+  return id;
+}
+
+// Clave "misma canción aunque sea otra edición": el id no sirve para cruzar un
+// like del deluxe contra el tracklist del original. Es la misma normalización
+// que usa la tracklist de W-Three (features/wthree.js).
+function trackNameKey(name) {
+  return (name || '').toLowerCase().replace(/\s*[([].*?[)\]]/g, '').trim();
+}
+
+async function loadAlbumTracklist(a) {
+  const albumId = await resolveAlbumId(a);
+  if (!albumId) return [];
+  try {
+    const items = await getAlbumTracks(albumId, { limit: 50 });
+    return (items || [])
+      .filter(t => t && t.name)
+      .map(t => ({
+        id: t.id || null,
+        name: t.name,
+        artists: artistsOf(t, {}),
+        trackNumber: t.track_number || 0,
+        disc: t.disc_number || 1,
+      }))
+      .sort((x, y) => (x.disc - y.disc) || (x.trackNumber - y.trackNumber));
+  } catch (e) {
+    console.warn('[album-card] tracklist:', e.message);
+    return [];
+  }
 }
 
 function statsHtml(a) {
@@ -201,12 +265,44 @@ async function hydrateLikes(overlay, a) {
   const holder = overlay.querySelector('#alb-likes');
   if (!holder) return;
   const likes = await loadLikesMemo();
-  const matched = likesInAlbum(likes, a);
-  const totalHint = a.totalTracks || null;
-  const countLine = totalHint
-    ? `${matched.length} de ${totalHint} pistas en tus me gusta`
-    : matched.length > 0
-      ? `${matched.length} pista${matched.length === 1 ? '' : 's'} en tus me gusta`
+  const enLikes = likesInAlbum(likes, a);
+
+  // Las dos cosas en paralelo: los likes salen de caché y el tracklist es red.
+  const tracklist = await loadAlbumTracklist(a);
+
+  // Índices de "está en tus me gusta": por id y por nombre normalizado, porque
+  // un like puede venir de otra edición del disco y ahí el id no coincide.
+  const likedIds = new Set(enLikes.map(t => t.id).filter(Boolean));
+  const likedNames = new Set(enLikes.map(t => trackNameKey(t.name)));
+  const likeByKey = new Map(enLikes.map(t => [trackNameKey(t.name), t]));
+
+  // Con tracklist: se pintan TODAS las pistas del disco y el ♥ distingue.
+  // Sin tracklist (endpoint caído, álbum no resuelto): se degrada a lo de
+  // antes — solo los likes, todos con corazón.
+  const completo = tracklist.length > 0;
+  const matched = completo
+    ? tracklist.map(t => {
+      const k = trackNameKey(t.name);
+      const like = likeByKey.get(k);
+      return {
+        id: t.id || like?.id || null,
+        name: t.name,
+        artist: t.artists[0] || like?.artist || a.artist || '',
+        artists: t.artists.length ? t.artists : (like?.artists || []),
+        album: a.name,
+        img: like?.img || a.img || null,
+        trackNumber: t.trackNumber,
+        liked: (t.id && likedIds.has(t.id)) || likedNames.has(k),
+      };
+    })
+    : enLikes.map(t => ({ ...t, liked: true }));
+
+  const nLiked = matched.filter(t => t.liked).length;
+  const total = completo ? matched.length : (a.totalTracks || null);
+  const countLine = total
+    ? `${nLiked} de ${total} pistas en tus me gusta`
+    : nLiked > 0
+      ? `${nLiked} pista${nLiked === 1 ? '' : 's'} en tus me gusta`
       : 'no tienes ninguna en tus me gusta';
 
   // El ♥ marca "está en tus me gusta", igual que en la tracklist de W-Three.
@@ -214,10 +310,10 @@ async function hydrateLikes(overlay, a) {
   // porque la caché de likes (`slimTrack` en api.js) no guardaba `track_number`
   // y el `·` era su relleno para el caso "no sé qué número es".
   //
-  // Todas las filas de esta lista son likes, así que el corazón va lleno en
-  // todas: la lista es "tus me gusta de este álbum", no el tracklist completo
-  // (para eso haría falta `GET /albums/{id}/tracks`, que no está confirmado
-  // vivo post-migración).
+  // Desde v=144 la lista es el TRACKLIST COMPLETO del disco, así que el corazón
+  // separa de verdad: lleno en las que están en me gusta, hueco en las que no.
+  // Cuando no se pudo traer el tracklist se cae a la lista vieja (solo likes) y
+  // ahí sí van todas llenas, porque todas lo son.
   holder.innerHTML = `
     <div class="album-modal-likes-head">
       <div class="album-modal-likes-title">${escapeHtml(countLine)}</div>
@@ -225,8 +321,8 @@ async function hydrateLikes(overlay, a) {
     ${matched.length === 0 ? '' : `
       <div class="album-modal-likes-list">
         ${matched.map(t => `
-          <div class="album-modal-like-row" data-tid="${escapeHtml(t.id || '')}">
-            <span class="album-modal-like-heart" title="Está en tus me gusta" aria-label="En tus me gusta">${HEART_SVG}</span>
+          <div class="album-modal-like-row${t.liked ? '' : ' album-modal-like-row-off'}" data-tid="${escapeHtml(t.id || '')}">
+            <span class="album-modal-like-heart${t.liked ? '' : ' is-off'}" title="${t.liked ? 'Está en tus me gusta' : 'No está en tus me gusta'}" aria-label="${t.liked ? 'En tus me gusta' : 'Fuera de tus me gusta'}">${t.liked ? HEART_SVG : HEART_OUTLINE_SVG}</span>
             <span class="album-modal-like-num">${t.trackNumber || ''}</span>
             <span class="album-modal-like-name">${escapeHtml(t.name)}</span>
             <button type="button" class="wt-play-btn album-modal-like-play" data-play-id="${escapeHtml(t.id || '')}" data-play-name="${escapeHtml(t.name)}" title="Preview 30s" aria-label="Preview">${PLAY_SVG}</button>
