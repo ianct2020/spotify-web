@@ -10,14 +10,27 @@
 // Devuelve la misma forma que los JSONs del repo (mismos `version` numbers).
 
 import { isJunkTrack } from './util/junk.js';
+import { songKey } from './util/song-identity.js';
 
 // ---- Configuración (igual a gen-stats.py) ----
 const MIN_MS = 30000;
 const SKIP_MIN_MS = 5000;
-const SKIP_STATS_MIN_PLAYS = 3;
+// v2: baja de 3 a 1 — con el agrupado por gid, un id con 2 plays ya no es
+// ruido: son 2 plays del total de su tema. Ver gen-stats.py.
+const SKIP_STATS_MIN_PLAYS = 1;
+
+// Cierres "completos": saliste, cerraste sesión o se cayó la app — no le diste
+// next. Espejo de COMPLETE_CLOSES en gen-stats.py.
+const COMPLETE_CLOSES = new Set([
+  'endplay',
+  'logout',
+  'unexpected-exit',
+  'unexpected-exit-while-paused',
+  'backbtn',
+]);
 const STATS_VERSION = 2;
 const TRACK_PLAYS_VERSION = 4;   // v4: cada álbum de `albums` lleva plays y ms (espejo de gen-stats.py)
-const SKIP_STATS_VERSION = 1;
+const SKIP_STATS_VERSION = 2;    // v2: dato crudo (ms de cada skip/cierre) + gid; el veredicto pasó a features/skips.js
 const LISTENED_VERSION = 2;
 const TRACK_DETAIL_VERSION = 1;
 const RECORDS_VERSION = 2;
@@ -147,8 +160,10 @@ function processStreamingHistory(fileArrays, { onProgress } = {}) {
 
   const trackUriStats = new Map(); // uri → { p, ms }
   const trackUriPartial = new Map(); // uri → { p, ms } (solo <30s)
-  const trackSkipStats = new Map(); // tid → { ok, skip }
-  const trackSkipMeta = new Map(); // tid → { n, a, al }
+  // v2: además de los contadores, los ms_played crudos de cada skip y de cada
+  // cierre completo. El veredicto lo arma features/skips.js con el duration_ms.
+  const trackSkipStats = new Map(); // tid → { ok, skip, fwd[], close[] }
+  const trackSkipMeta = new Map(); // tid → [nombre, artista] (solo para el gid; ya no se emite)
 
   // Ficha de canción
   const trackUriMonthly = new Map(); // uri → Map<YM, plays>
@@ -194,11 +209,12 @@ function processStreamingHistory(fileArrays, { onProgress } = {}) {
     if (uri) {
       const tidOnly = uri.split(':').pop();
       let ss = trackSkipStats.get(tidOnly);
-      if (!ss) { ss = { ok: 0, skip: 0 }; trackSkipStats.set(tidOnly, ss); }
+      if (!ss) { ss = { ok: 0, skip: 0, fwd: [], close: [] }; trackSkipStats.set(tidOnly, ss); }
       if (endReason === 'trackdone') ss.ok++;
-      else if (endReason === 'fwdbtn' && ms >= SKIP_MIN_MS) ss.skip++;
+      else if (endReason === 'fwdbtn' && ms >= SKIP_MIN_MS) { ss.skip++; ss.fwd.push(ms); }
+      if (COMPLETE_CLOSES.has(endReason)) ss.close.push(ms);
       if (!trackSkipMeta.has(tidOnly) && (track || artist)) {
-        trackSkipMeta.set(tidOnly, { n: track, a: artist, al: album });
+        trackSkipMeta.set(tidOnly, [track, artist]);
       }
     }
 
@@ -469,22 +485,31 @@ function processStreamingHistory(fileArrays, { onProgress } = {}) {
     years: listenedYears,
   };
 
-  // ---- skip stats ----
+  // ---- skip stats v2: [ok, skip, fwd_ms[], close_ms[], gid] ----
+  // El gid agrupa los ids del MISMO tema (ver util/song-identity.js). Se
+  // recorre en orden de tid para que la numeración salga igual que en el
+  // Python y los dos JSON sean comparables.
   const skipOut = {};
-  const skipMetaOut = {};
-  for (const [tid, v] of trackSkipStats) {
+  const gidSeq = new Map();
+  for (const tid of [...trackSkipStats.keys()].sort()) {
+    const v = trackSkipStats.get(tid);
     const total = v.ok + v.skip;
     if (total < SKIP_STATS_MIN_PLAYS) continue;
-    skipOut[tid] = [v.ok, v.skip];
-    if (trackSkipMeta.has(tid)) skipMetaOut[tid] = trackSkipMeta.get(tid);
+    const [name, artistName] = trackSkipMeta.get(tid) || ['', ''];
+    let key = songKey(name, artistName);
+    // Sin nombre no hay identidad: que sea su propio grupo, no todos juntos.
+    if (!key.split('||')[0]) key = '\x00' + tid;
+    if (!gidSeq.has(key)) gidSeq.set(key, gidSeq.size);
+    skipOut[tid] = [v.ok, v.skip, v.fwd, v.close, gidSeq.get(key)];
   }
   const skipStats = {
     version: SKIP_STATS_VERSION,
     generated_at: generatedAt,
     min_plays: SKIP_STATS_MIN_PLAYS,
     skip_min_ms: SKIP_MIN_MS,
+    complete_closes: [...COMPLETE_CLOSES].sort(),
+    groups: gidSeq.size,
     tracks: skipOut,
-    meta: skipMetaOut,
   };
 
   // ---- detail (ficha de canción, tracks con >= DETAIL_MIN_PLAYS) ----

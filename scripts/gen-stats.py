@@ -5,9 +5,18 @@ Genera JSONs agregados a partir del Extended Streaming History de Spotify.
 Salidas:
 - src/data/history-stats.json    Wrapped + Dashboard: totales, por año, heatmap, timeline mensual, all-time tops
 - src/data/history-track-plays.json  Índice track_uri -> {p:plays, ms:ms_totales} para cruces con likes
-- src/data/history-skip-stats.json   Índice track_id -> [ok, skip] para "Skips crónicos"
+- src/data/history-skip-stats.json   Índice track_id -> [ok, skip, fwd_ms, close_ms, gid] para "Skips crónicos"
   · ok = plays con reason_end == 'trackdone'
   · skip = plays con reason_end == 'fwdbtn' y ms_played >= SKIP_MIN_MS (skip consciente)
+  · fwd_ms = los ms_played de cada uno de esos skips (crudo, sin veredicto)
+  · close_ms = los ms_played de los cierres "completos" (COMPLETE_CLOSES)
+  · gid = id de grupo: los ids de Spotify del MISMO tema comparten gid
+
+  v2 — el pipeline ya NO decide qué es un skip: emite el dato crudo y el
+  veredicto se calcula en features/skips.js, que es el único lado que tiene el
+  `duration_ms` de la pista (viene de los likes) y por lo tanto puede saber QUÉ
+  PORCENTAJE de la canción se escuchó antes del next. Sin eso, bajarse a los 6
+  segundos y bajarse en el minuto 8 contaban exactamente igual.
 
 Filtros:
 - Se descartan plays con ms_played < 30000 para todos los agregados MENOS skip% (que usa total)
@@ -18,6 +27,7 @@ Filtros:
 import json
 import glob
 import os
+import re
 import unicodedata
 from collections import defaultdict, Counter
 from datetime import datetime, date, timedelta
@@ -28,10 +38,25 @@ OLD_IMG_JSON = "/home/ian/spotify-web/src/data/listening-history.json"
 
 MIN_MS = 30000  # trigger warning: ignoramos plays de menos de 30s
 SKIP_MIN_MS = 5000  # skip "consciente": si le dio next después de 5s+ es deliberado
-SKIP_STATS_MIN_PLAYS = 3  # excluimos tracks con menos de 3 plays totales (ruido)
+# v2: baja de 3 a 1. Con el agrupado de ids (gid) las plays de un tema se suman
+# entre TODAS sus versiones, así que un id con 2 plays ya no es ruido: es parte
+# del total de su tema. Dejándolo en 3, esas plays se perdían y el agrupado
+# quedaba incompleto — "Don't Wanna Fall In Love" tiene 3 ids de 4, 9 y 2 plays.
+SKIP_STATS_MIN_PLAYS = 1
+
+# Cierres "completos": la pista se cortó porque saliste, cerraste sesión o se
+# cayó la app, NO porque le dieras next. Si a esa altura ya habías escuchado
+# casi todo el tema, es una escucha completa y no debería quedar sin contar.
+COMPLETE_CLOSES = {
+    "endplay",
+    "logout",
+    "unexpected-exit",
+    "unexpected-exit-while-paused",
+    "backbtn",
+}
 STATS_VERSION = 2            # bump: excluye "Sonido Para Sacar Agua Del Movil"
 TRACK_PLAYS_VERSION = 4      # v4: cada entrada de `albums` lleva plays y ms además de name/artist (la ficha de álbum decía "0 plays"). v3: agregó `albums`. v2: incluía entries "partial" para tracks solo con plays <30s
-SKIP_STATS_VERSION = 1
+SKIP_STATS_VERSION = 2      # v2: dato crudo (ms de cada skip/cierre) + gid de agrupado; el veredicto pasó a skips.js
 LISTENED_VERSION = 2         # bump: excluye "Sonido Para Sacar Agua Del Movil"
 TRACK_DETAIL_VERSION = 1     # ficha de canción: plays por mes + primera/última + récords del track
 RECORDS_VERSION = 2          # v2: excluye todas las variantes del sonido saca-agua
@@ -109,6 +134,52 @@ def is_junk_track(track, artist):
         return True
     t = _norm_junk(track)
     return bool(t) and any(sub in t for sub in EXCLUDED_TRACK_SUBSTRINGS)
+
+# ---------------------------------------------------------------------------
+# Identidad de tema (gid) — PORT EXACTO de src/js/util/song-identity.js.
+# Los dos tienen que dar la misma clave para el mismo (nombre, artista) o el
+# import BYOH agruparía distinto que el historial horneado. Si tocás uno,
+# tocá el otro.
+#
+# El mismo tema vive en varios ids de Spotify (el single, el del álbum, el
+# remaster, el remix, el que tiene un invitado). El cruce de "Skips crónicos"
+# es por id, así que los trackdone se acumulaban en un id y los skips en otro.
+# ---------------------------------------------------------------------------
+
+EDITION_TAIL_RE = re.compile(
+    r"\s*[-–—]\s*(remaster(ed)?|\d{4} remaster(ed)?|remaster(ed)? \d{4}|"
+    r"single version|album version|radio edit|mono|stereo|live|bonus track|"
+    r"deluxe|extended|original mix)\b.*$", re.I)
+FEAT_RE = re.compile(r"\s*(feat\.?|ft\.?|featuring|with)\s+.*$", re.I)
+PARENS_RE = re.compile(r"\(.*?\)|\[.*?\]")
+# Decisión de Ian (2026-08-16): un remix ES el mismo tema. Sin esto, "A Different
+# Way - DEVAULT Remix" (ok=20, skip=4) y "A Different Way (with Lauv)" (ok=1,
+# skip=6) quedan en grupos distintos y el segundo sigue apareciendo al 86 %.
+REMIX_TAIL_RE = re.compile(
+    r"\s*[-–—]\s*.*\b(remix|version|edit|mix|rework|flip|bootleg|"
+    r"instrumental|acoustic)\b.*$", re.I)
+
+
+def _strip_diacritics(s):
+    return "".join(c for c in unicodedata.normalize("NFD", s)
+                   if unicodedata.category(c) != "Mn")
+
+
+def norm_text(s):
+    """Espejo de normText() de src/js/util/track-match.js."""
+    out = _strip_diacritics(str(s or "").lower())
+    out = FEAT_RE.sub(" ", out)
+    out = EDITION_TAIL_RE.sub("", out)
+    out = PARENS_RE.sub(" ", out)
+    out = re.sub(r"[^a-z0-9 ]", " ", out)
+    return re.sub(r"\s+", " ", out).strip()
+
+
+def song_key(name, artist):
+    """Espejo de songKey() de src/js/util/song-identity.js."""
+    flat = _strip_diacritics(str(name or "").lower())
+    return norm_text(REMIX_TAIL_RE.sub("", flat)) + "||" + norm_text(artist)
+
 
 # Regla mix A+C para detectar "álbum escuchado" desde el historial:
 # el álbum cuenta cuando en un mismo día tuvo >=MIN_TRACKS_SAMEDAY tracks distintos
@@ -230,8 +301,12 @@ def build_stats(plays, img_idx):
     track_uri_partial = defaultdict(lambda: {"p": 0, "ms": 0})
     # Skips por track: ok = trackdone, skip = fwdbtn con >=SKIP_MIN_MS.
     # Cuenta el track_id (sin prefijo spotify:track:) para pegar directo con likes.
-    # Guardamos también el meta para poder mostrar tapa/nombre sin depender de los likes.
-    track_skip_stats = defaultdict(lambda: {"ok": 0, "skip": 0})
+    # v2: además de los contadores guardamos los ms_played crudos de cada skip
+    # (`fwd`) y de cada cierre completo (`close`). Son ~57k + ~43k números; el
+    # veredicto lo arma skips.js, que sí tiene el duration_ms.
+    track_skip_stats = defaultdict(lambda: {"ok": 0, "skip": 0, "fwd": [], "close": []})
+    # Solo para calcular el gid: el meta ya NO se emite (nadie lo consumía y
+    # eran 9.585 entradas de peso muerto en el JSON).
     track_skip_meta = {}
 
     # Ficha de canción: detalle por uri (plays por mes, primera/última, días, pico diario)
@@ -283,12 +358,16 @@ def build_stats(plays, img_idx):
         # (menos que eso puede ser autoplay skipeado o cambio accidental).
         if uri:
             tid_only = uri.split(":")[-1]
+            _s = track_skip_stats[tid_only]
             if end_reason == "trackdone":
-                track_skip_stats[tid_only]["ok"] += 1
+                _s["ok"] += 1
             elif end_reason == "fwdbtn" and ms >= SKIP_MIN_MS:
-                track_skip_stats[tid_only]["skip"] += 1
+                _s["skip"] += 1
+                _s["fwd"].append(ms)
+            if end_reason in COMPLETE_CLOSES:
+                _s["close"].append(ms)
             if tid_only not in track_skip_meta and (track or artist):
-                track_skip_meta[tid_only] = {"n": track, "a": artist, "al": album}
+                track_skip_meta[tid_only] = (track, artist)
 
         if ms < MIN_MS:
             # Trigger warning: no cuenta para stats. Igual anotamos en partial para el badge de zeroplays.
@@ -633,26 +712,38 @@ def build_stats(plays, img_idx):
         "years": listened_years,
     }
 
-    # Skip stats: filtramos tracks con muy pocas plays (ruido) y armamos el JSON
-    # compacto: {id: [ok, skip]}. Meta va aparte para poder cachearlo distinto.
+    # Skip stats v2: {id: [ok, skip, fwd_ms[], close_ms[], gid]}.
+    #
+    # El `gid` es un entero por track: los ids del MISMO tema comparten gid. Se
+    # calcula acá y no en el navegador para no tener que mandar 46.158 pares
+    # nombre+artista — con `meta` el JSON se iba a 6,3 MB; así queda en 2,4 MB.
+    # Ojo que esto NO es pre-calcular el veredicto: el gid es una identidad, y
+    # skips.js sigue decidiendo solo (y puede ignorarlo si apagás el toggle).
     skip_out = {}
-    skip_meta_out = {}
-    for tid, v in track_skip_stats.items():
+    gid_seq = {}
+    for tid in sorted(track_skip_stats):
+        v = track_skip_stats[tid]
         total = v["ok"] + v["skip"]
         if total < SKIP_STATS_MIN_PLAYS:
             continue
-        skip_out[tid] = [v["ok"], v["skip"]]
-        m = track_skip_meta.get(tid)
-        if m:
-            skip_meta_out[tid] = m
+        name, artist_ = track_skip_meta.get(tid, ("", ""))
+        key = song_key(name, artist_)
+        # Sin nombre no hay identidad posible: que sea su propio grupo, nunca
+        # todos juntos en el grupo de la cadena vacía.
+        if not key.split("||")[0]:
+            key = "\x00" + tid
+        if key not in gid_seq:
+            gid_seq[key] = len(gid_seq)
+        skip_out[tid] = [v["ok"], v["skip"], v["fwd"], v["close"], gid_seq[key]]
 
     skip_payload = {
         "version": SKIP_STATS_VERSION,
         "generated_at": stats["generated_at"],
         "min_plays": SKIP_STATS_MIN_PLAYS,
         "skip_min_ms": SKIP_MIN_MS,
+        "complete_closes": sorted(COMPLETE_CLOSES),
+        "groups": len(gid_seq),
         "tracks": skip_out,
-        "meta": skip_meta_out,
     }
 
     # ---- Ficha de canción: detalle por track (solo >=DETAIL_MIN_PLAYS plays) ----
@@ -811,7 +902,7 @@ def main():
     print(f"OK → {at_path} ({os.path.getsize(at_path)/1024:.1f} KB, {len(artist_tracks['artists'])} artistas)")
     print(f"totales stats: {stats['totals']}")
     print(f"totales listened: {listened['totals']} · years: {[y['year'] for y in listened['years']]}")
-    print(f"skip stats: {len(skip_stats['tracks'])} tracks con >={SKIP_STATS_MIN_PLAYS} plays")
+    print(f"skip stats: {len(skip_stats['tracks'])} tracks con >={SKIP_STATS_MIN_PLAYS} plays, {skip_stats['groups']} grupos (gid)")
 
 
 if __name__ == "__main__":

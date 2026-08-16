@@ -1,22 +1,35 @@
 // Skips crónicos: likes que reproducís seguido pero casi siempre le das next.
-// Cruce local: likes vs history-skip-stats.json (ok = trackdone, skip = fwdbtn con ms>=5s).
+// Cruce local: likes vs history-skip-stats.json.
+//
+// v2 del cruce — el pipeline dejó de decidir qué es un skip. Ahora emite el dato
+// crudo (los ms_played de cada `fwdbtn` y de cada cierre completo, más un `gid`
+// que agrupa los ids del mismo tema) y el veredicto se arma ACÁ, porque este es
+// el único lado que tiene el `duration_ms` de la pista — viene de los likes. Sin
+// eso no se puede saber qué porcentaje de la canción escuchaste antes del next,
+// y bajarse a los 6 segundos contaba igual que bajarse en el minuto 8.
+//
+// Los tres mecanismos van con toggle (encendidos por defecto) para poder ver el
+// efecto de cada uno sin regenerar nada:
+//   1. Agrupar los ids del mismo tema antes de calcular el ratio.
+//   2. Un `fwdbtn` con >=80 % de la pista deja de contar como skip.
+//   3. Un cierre (endplay/logout/…) con >=80 % de la pista cuenta como ok.
 // Preview 30s instantáneo vía iTunes (arranca en el estribillo, no suma plays
 // en tu historial de Spotify). Fallback: iframe embed oficial si iTunes no lo tiene.
 
-import { getBestAvailableLikes, removeLikedTracks } from '../api.js?v=145';
-import { loadSkipStats, trackIdOf, isOwner, ownerLockedMessage } from './history-data.js?v=145';
-import { escapeHtml, confirmModal, pageHeader } from '../ui/components.js?v=145';
-import { showToast } from '../ui/toast.js?v=145';
-import { getPreview } from '../api/preview-providers.js?v=145';
-import { togglePreview, playingKey } from '../ui/preview-player.js?v=145';
-import { openTrackCard } from './track-card.js?v=145';
-import { activateMarquee } from '../ui/marquee.js?v=145';
-import { hasUsername, loadTopLifetime } from '../api/statsfm.js?v=145';
-import { createHiddenStore } from '../util/hidden-sync.js?v=145';
-import { createIncrementalList, scrollRootOf } from '../ui/incremental-list.js?v=145';
-import { createLazyImages } from '../ui/lazy-img.js?v=145';
-import { renderTrackCardRow, wireTrackCardGrid, paintCardSelection } from '../ui/track-card-row.js?v=145';
-import { coverAtSize } from '../util/cover-size.js?v=145';
+import { getBestAvailableLikes, removeLikedTracks } from '../api.js?v=146';
+import { loadSkipStats, trackIdOf, isOwner, ownerLockedMessage } from './history-data.js?v=146';
+import { escapeHtml, confirmModal, pageHeader } from '../ui/components.js?v=146';
+import { showToast } from '../ui/toast.js?v=146';
+import { getPreview } from '../api/preview-providers.js?v=146';
+import { togglePreview, playingKey } from '../ui/preview-player.js?v=146';
+import { openTrackCard } from './track-card.js?v=146';
+import { activateMarquee } from '../ui/marquee.js?v=146';
+import { hasUsername, loadTopLifetime } from '../api/statsfm.js?v=146';
+import { createHiddenStore } from '../util/hidden-sync.js?v=146';
+import { createIncrementalList, scrollRootOf } from '../ui/incremental-list.js?v=146';
+import { createLazyImages } from '../ui/lazy-img.js?v=146';
+import { renderTrackCardRow, wireTrackCardGrid, paintCardSelection } from '../ui/track-card-row.js?v=146';
+import { coverAtSize } from '../util/cover-size.js?v=146';
 
 let cache = null;
 // Filas visibles con los filtros actuales, en el mismo orden que las tarjetas
@@ -52,6 +65,36 @@ let showingHidden = false;
 // recalcula el ratio. Los que caen por debajo del umbral desaparecen del listado.
 const STATSFM_TOGGLE_KEY = 'skips_use_statsfm';
 let useStatsfm = localStorage.getItem(STATSFM_TOGGLE_KEY) === '1';
+
+// Los tres mecanismos de corrección. Encendidos por defecto (`!== '0'`): son
+// los que sacan los falsos positivos que hacían que aparecieran temas que Ian
+// escucha enteros. Apagándolos de a uno se ve el efecto de cada uno.
+const FIX_TOGGLES = [
+  {
+    key: 'group',
+    lsKey: 'skips_group_ids',
+    label: 'Juntar versiones',
+    title: 'El single, el del álbum y el remix son la misma canción: suma sus plays antes de calcular el ratio.',
+  },
+  {
+    key: 'nearFull',
+    lsKey: 'skips_nearfull_fwd',
+    label: 'Next al final no es skip',
+    title: 'Si ya habías escuchado el 80 % de la pista, ese next no cuenta como skip.',
+  },
+  {
+    key: 'closeOk',
+    lsKey: 'skips_close_ok',
+    label: 'Cerrar cuenta como escucha',
+    title: 'Escuchar el 80 % y cerrar Spotify o cambiar de dispositivo cuenta como escucha completa.',
+  },
+];
+const fixes = Object.fromEntries(
+  FIX_TOGGLES.map(t => [t.key, localStorage.getItem(t.lsKey) !== '0']),
+);
+
+// A partir de qué porcentaje de la pista una escucha se considera "casi entera".
+const NEAR_FULL = 0.80;
 
 const RATIO_STEPS = [70, 80, 90, 100];
 const PLAYS_STEPS = [3, 5, 10, 15];
@@ -102,35 +145,113 @@ async function analyze() {
     return;
   }
 
+  const rows = buildRows(likes, stats, top);
+  rows.sort((a, b) => (b.ratio - a.ratio) || (b.total - a.total));
+  cache = {
+    rows,
+    likesCount: likes.length,
+    statsfmUsed: !!top,
+    statsfmUpdated: rows.filter(r => r.updated).length,
+  };
+  renderResults();
+}
+
+// Arma las filas cruzando likes contra el historial crudo y aplicando los
+// toggles. Una fila = una CANCIÓN, no un id: con «Juntar versiones» encendido un
+// tema con tres ids likeados daba antes tres tarjetas idénticas (102 duplicadas
+// sobre los datos de Ian).
+function buildRows(likes, stats, top) {
+  const grouping = fixes.group;
+
+  // Acumulador por clave: el gid del tema si agrupamos, el propio id si no.
+  // Con agrupado se recorre TODO el JSON, no solo los likes: las plays que
+  // corrigen el ratio suelen estar en un id que ni siquiera tenés likeado
+  // (el del álbum, el del remaster).
+  const acc = new Map();
+  const keyOfId = new Map();
+  for (const id in stats.tracks) {
+    const [ok, skip, fwd, close, gid] = stats.tracks[id];
+    const key = grouping && gid !== undefined ? `g${gid}` : id;
+    keyOfId.set(id, key);
+    let a = acc.get(key);
+    if (!a) { a = { ok: 0, skip: 0, fwd: [], close: [] }; acc.set(key, a); }
+    a.ok += ok;
+    a.skip += skip;
+    if (fwd?.length) a.fwd.push(...fwd);
+    if (close?.length) a.close.push(...close);
+  }
+
+  // Duración de la pista por clave. Solo la saben los likes, y un grupo puede
+  // tener varios ids likeados: nos quedamos con la primera que aparezca (las
+  // versiones del mismo tema duran prácticamente lo mismo).
+  const durOf = new Map();
+  // Todos los ids likeados de cada clave: al sacar de likes hay que sacarlos
+  // TODOS, o el tema vuelve a aparecer con los mismos números por la versión
+  // que quedó likeada.
+  const idsOf = new Map();
+  const trackById = new Map();
+  for (const it of likes) {
+    const t = it.track || it;
+    const id = trackIdOf(t.uri || (t.id ? `spotify:track:${t.id}` : null));
+    if (!id) continue;
+    trackById.set(id, t);
+    const key = keyOfId.get(id);
+    if (key === undefined) continue;
+    if (!idsOf.has(key)) idsOf.set(key, []);
+    idsOf.get(key).push(id);
+    if (t.duration_ms && !durOf.has(key)) durOf.set(key, t.duration_ms);
+  }
+
   const rows = [];
-  let updatedCount = 0;
+  const seen = new Set();
   for (const it of likes) {
     const t = it.track || it;
     const uri = t.uri || (t.id ? `spotify:track:${t.id}` : null);
     const id = trackIdOf(uri);
     if (!id) continue;
-    const s = stats.tracks[id];
-    if (!s) continue;
-    let [ok, skip] = s;
+    const key = keyOfId.get(id);
+    if (key === undefined || seen.has(key)) continue;
+    const a = acc.get(key);
+    if (!a) continue;
+
+    // El id que representa al tema: el que más plays tiene, y a igualdad el
+    // menor alfabéticamente. Tiene que ser estable — es la clave con la que se
+    // guarda "ocultar", y no puede depender del orden en que vengan los likes.
+    const ids = idsOf.get(key) || [id];
+    const repId = ids.length === 1 ? ids[0] : [...ids].sort((x, y) => {
+      const [ax, sx] = stats.tracks[x] || [0, 0];
+      const [ay, sy] = stats.tracks[y] || [0, 0];
+      return (ay + sy) - (ax + sx) || (x < y ? -1 : 1);
+    })[0];
+    const repTrack = trackById.get(repId) || t;
+
+    const dur = durOf.get(key);
+    // Mecanismo 2: el next después de escuchar casi toda la pista no es un skip.
+    let skip = (fixes.nearFull && dur) ? a.fwd.filter(ms => ms / dur < NEAR_FULL).length : a.skip;
+    // Mecanismo 3: cerrar Spotify con la pista casi terminada es una escucha.
+    let ok = (fixes.closeOk && dur) ? a.ok + a.close.filter(ms => ms / dur >= NEAR_FULL).length : a.ok;
+
     let total = ok + skip;
     let updated = false;
     if (top) {
-      const hit = top.map.get(id);
+      const hit = top.map.get(repId);
       if (hit && hit.streams > total) {
         // Plays nuevas desde el export → asumo que fueron completas (si no volviste
         // a skipearlas). skip queda igual, ok sube, total y ratio se recalculan.
         ok += (hit.streams - total);
         total = ok + skip;
         updated = true;
-        updatedCount++;
       }
     }
+    seen.add(key);
     if (total === 0 || skip === 0) continue;
-    rows.push({ track: t, uri, id, ok, skip, total, ratio: Math.round((skip / total) * 100), updated });
+    rows.push({
+      track: repTrack, uri: `spotify:track:${repId}`, id: repId, ids,
+      ok, skip, total, ratio: Math.round((skip / total) * 100), updated,
+      versions: ids.length,
+    });
   }
-  rows.sort((a, b) => (b.ratio - a.ratio) || (b.total - a.total));
-  cache = { rows, likesCount: likes.length, statsfmUsed: !!top, statsfmUpdated: updatedCount };
-  renderResults();
+  return rows;
 }
 
 // Los ocultos llegan de la playlist de Spotify unos segundos después de pintar.
@@ -267,6 +388,14 @@ function renderResults() {
             <button class="skips-chip ${v === minRatio ? 'active' : ''}" data-ratio="${v}">${v === 100 ? '100%' : '≥' + v + '%'}</button>
           `).join('')}
         </div>
+        <div class="skips-chip-group" id="skips-fix-chips" title="Correcciones sobre qué cuenta como skip">
+          ${FIX_TOGGLES.map(t => `
+            <button type="button" class="skips-chip skips-chip-toggle ${fixes[t.key] ? 'active' : ''}" data-fix="${t.key}" title="${escapeHtml(t.title)}" aria-pressed="${fixes[t.key]}">
+              <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" class="skips-chip-check" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>
+              <span>${escapeHtml(t.label)}</span>
+            </button>
+          `).join('')}
+        </div>
         ${sfLabel ? `
           <button type="button" class="skips-chip skips-chip-toggle ${useStatsfm ? 'active' : ''}" id="skips-statsfm-toggle" title="Al activarlo, temas que después del export escuchaste enteros N veces más ya no cuentan." aria-pressed="${useStatsfm}">
             <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" class="skips-chip-check" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>
@@ -356,9 +485,10 @@ function renderRow(r) {
   const cover = media?.url || (chica ? coverAtSize(chica, 300) : null);
 
   const ratioClass = r.ratio >= 90 ? 'skips-badge-danger' : 'skips-badge-warn';
+  const versiones = r.versions > 1 ? ` · juntando ${r.versions} versiones likeadas` : '';
   const badgeTitle = r.updated
-    ? `Ratio actualizado con Stats.fm (${r.skip} skips de ${r.total} plays totales hoy)`
-    : `Skipeaste ${r.skip} de ${r.total} veces`;
+    ? `Ratio actualizado con Stats.fm (${r.skip} skips de ${r.total} plays totales hoy)${versiones}`
+    : `Skipeaste ${r.skip} de ${r.total} veces${versiones}`;
   const badge = `
     <span class="skips-badge ${ratioClass}${r.updated ? ' skips-badge-updated' : ''}" title="${escapeHtml(badgeTitle)}">
       <span class="skips-badge-ratio">${r.ratio}%</span>
@@ -402,6 +532,19 @@ function wireFilters() {
   content.querySelectorAll('#skips-ratio-chips .skips-chip').forEach(btn => {
     btn.onclick = () => { minRatio = parseInt(btn.dataset.ratio); renderResults(); };
   });
+  // Los tres mecanismos: cambian el DATO, no el filtro, así que hay que
+  // recalcular las filas (analyze) y no solo repintar. Los likes y el JSON ya
+  // están memorizados, así que no cuesta red.
+  content.querySelectorAll('#skips-fix-chips .skips-chip').forEach(btn => {
+    btn.onclick = async () => {
+      const k = btn.dataset.fix;
+      fixes[k] = !fixes[k];
+      localStorage.setItem(FIX_TOGGLES.find(t => t.key === k).lsKey, fixes[k] ? '1' : '0');
+      content.innerHTML = `<div class="empty-state"><div class="spinner spinner-lg"></div><div style="margin-top:16px">Recalculando…</div></div>`;
+      await analyze();
+    };
+  });
+
   const sfToggle = content.querySelector('#skips-statsfm-toggle');
   if (sfToggle) sfToggle.onclick = async () => {
     useStatsfm = !useStatsfm;
@@ -462,11 +605,17 @@ function wireRows() {
   wireHiddenToggle();
 
   rmBtn.onclick = async () => {
-    const ids = currentRows.filter(r => selectedIds.has(r.id)).map(r => r.id);
+    const sel = currentRows.filter(r => selectedIds.has(r.id));
+    // Todas las versiones likeadas del tema, no solo la que se ve: si dejamos
+    // likeado el id del álbum, el tema vuelve a la lista con los mismos números.
+    const ids = [...new Set(sel.flatMap(r => r.ids || [r.id]))];
     if (!ids.length) return;
+    const extra = ids.length > sel.length
+      ? ` (son <strong>${ids.length}</strong> versiones entre single, álbum y remixes)`
+      : '';
     const ok = await confirmModal(
       'Sacar de tus Liked Songs',
-      `Vas a sacar <strong>${ids.length}</strong> tracks de tus Liked Songs. Son los que casi siempre skipeás — podés recuperarlos después si te arrepentís.`,
+      `Vas a sacar <strong>${sel.length}</strong> ${sel.length === 1 ? 'canción' : 'canciones'} de tus Liked Songs${extra}. Son las que casi siempre skipeás — podés recuperarlas después si te arrepentís.`,
       'Sacar'
     );
     if (!ok) return;
@@ -474,7 +623,7 @@ function wireRows() {
     rmBtn.textContent = 'Sacando…';
     try {
       await removeLikedTracks(ids);
-      showToast(`Sacaste ${ids.length} tracks de tus likes`, 'success');
+      showToast(`Sacaste ${sel.length} ${sel.length === 1 ? 'canción' : 'canciones'} de tus likes`, 'success');
       await analyze();
     } catch (e) {
       showToast('Error: ' + e.message, 'error');

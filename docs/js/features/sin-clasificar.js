@@ -16,23 +16,23 @@
 import {
   getAllUserPlaylists, getAllPlaylistItems, getBestAvailableLikes,
   getCurrentUserId, removeLikedTracks,
-} from '../api.js?v=145';
-import { idbGetCached, idbSetCached, idbDel } from '../idb.js?v=145';
-import { createHiddenStore } from '../util/hidden-sync.js?v=145';
-import { addUrisToPlaylists, toastAddResult, getOwnPlaylists } from '../util/playlist-add.js?v=145';
-import { escapeHtml, pageHeader, showProgress, hideProgress, isCancelled, confirmModal } from '../ui/components.js?v=145';
-import { openModal, closeTop } from '../ui/modal-stack.js?v=145';
-import { openPlaylistPicker } from '../ui/playlist-picker.js?v=145';
-import { showToast } from '../ui/toast.js?v=145';
-import { getPreview } from '../api/preview-providers.js?v=145';
-import { togglePreview, playingKey } from '../ui/preview-player.js?v=145';
-import { openTrackCard } from './track-card.js?v=145';
-import { normText } from '../util/track-match.js?v=145';
-import { activateMarquee } from '../ui/marquee.js?v=145';
-import { renderTrackCardRow, wireTrackCardGrid, paintCardSelection } from '../ui/track-card-row.js?v=145';
-import { createIncrementalList, scrollRootOf } from '../ui/incremental-list.js?v=145';
-import { createLazyImages } from '../ui/lazy-img.js?v=145';
-import { coverAtSize } from '../util/cover-size.js?v=145';
+} from '../api.js?v=146';
+import { idbGetCached, idbSetCached, idbDel } from '../idb.js?v=146';
+import { createHiddenStore } from '../util/hidden-sync.js?v=146';
+import { addUrisToPlaylists, toastAddResult, getOwnPlaylists } from '../util/playlist-add.js?v=146';
+import { escapeHtml, pageHeader, showProgress, hideProgress, isCancelled, confirmModal } from '../ui/components.js?v=146';
+import { openModal, closeTop } from '../ui/modal-stack.js?v=146';
+import { openPlaylistPicker } from '../ui/playlist-picker.js?v=146';
+import { showToast } from '../ui/toast.js?v=146';
+import { getPreview } from '../api/preview-providers.js?v=146';
+import { togglePreview, playingKey } from '../ui/preview-player.js?v=146';
+import { openTrackCard } from './track-card.js?v=146';
+import { normText } from '../util/track-match.js?v=146';
+import { activateMarquee } from '../ui/marquee.js?v=146';
+import { renderTrackCardRow, wireTrackCardGrid, paintCardSelection } from '../ui/track-card-row.js?v=146';
+import { createIncrementalList, scrollRootOf } from '../ui/incremental-list.js?v=146';
+import { createLazyImages } from '../ui/lazy-img.js?v=146';
+import { coverAtSize } from '../util/cover-size.js?v=146';
 
 const HIDDEN_KEY = 'sin_clasificar_ocultas';
 const EXCLUDED_KEY = 'sin_clasificar_excluidas';
