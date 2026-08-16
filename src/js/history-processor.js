@@ -494,7 +494,10 @@ function processStreamingHistory(fileArrays, { onProgress } = {}) {
   for (const tid of [...trackSkipStats.keys()].sort()) {
     const v = trackSkipStats.get(tid);
     const total = v.ok + v.skip;
-    if (total < SKIP_STATS_MIN_PLAYS) continue;
+    // `|| v.close.length`: un id que siempre terminó en endplay/logout tiene
+    // total 0 y se caía con todos sus cierres (5.177 ids, 6.212 cierres sobre
+    // el historial de Ian). Ver gen-stats.py.
+    if (total < SKIP_STATS_MIN_PLAYS && !v.close.length) continue;
     const [name, artistName] = trackSkipMeta.get(tid) || ['', ''];
     let key = songKey(name, artistName);
     // Sin nombre no hay identidad: que sea su propio grupo, no todos juntos.
