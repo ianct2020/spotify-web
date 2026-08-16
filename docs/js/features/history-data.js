@@ -8,8 +8,8 @@
 // Otro user cualquiera sin historial local ve el ownerLockedMessage que
 // invita a subir su ZIP.
 
-import { idbGetCached, idbSetCached, idbDel } from '../idb.js?v=145';
-import { getCurrentUserId } from '../api.js?v=145';
+import { idbGetCached, idbSetCached, idbDel } from '../idb.js?v=146';
+import { getCurrentUserId } from '../api.js?v=146';
 
 const HISTORY_OWNER_ID = 'orhs6wu5ykk7ql80u92ujn74o';
 
@@ -21,7 +21,7 @@ async function isOwner() {
 const STATS_VERSION = 2;
 const PLAYS_VERSION = 4;   // v4: cada álbum de `albums` lleva plays y ms
 const LISTENED_VERSION = 2;
-const SKIP_VERSION = 1;
+const SKIP_VERSION = 2;    // v2: [ok, skip, fwd_ms, close_ms, gid] — el veredicto lo arma features/skips.js
 const DETAIL_VERSION = 1;
 const RECORDS_VERSION = 2;
 const ARTIST_TRACKS_VERSION = 1;
@@ -75,6 +75,10 @@ const OWNER_PREV_KEYS = {
   // propósito, para forzar el refetch del JSON nuevo.
   plays: [],
   listened: ['history_listened_albums_v1', 'history_albums_v1'],
+  // Vacía A PROPÓSITO, igual que `plays` en v=140: v1 era {id: [ok, skip]} y v2
+  // es {id: [ok, skip, fwd_ms, close_ms, gid]}. Un v1 reciclado dejaría a
+  // skips.js sin los ms de cada play y sin el agrupado, y los tres toggles
+  // nuevos no harían nada en silencio. Que refetchee.
   skip: [],
   detail: [],
   records: ['history_records_v1'],
@@ -154,7 +158,10 @@ async function loadListenedAlbums() {
   return loadOne('listened', 'listened', d => !!d.years, () => dataUrl('history-listened-albums.json', LISTENED_VERSION));
 }
 async function loadSkipStats() {
-  return loadOne('skip', 'skip', d => !!d.tracks, () => dataUrl('history-skip-stats.json', SKIP_VERSION));
+  // Exijo `version >= 2`: un BYOH viejo guardado en IDB (que no lleva versión en
+  // la key, a diferencia del cache del owner) traería el formato v1 y pasaría
+  // el `!!d.tracks` de antes. Así se descarta y el user reimporta su ZIP.
+  return loadOne('skip', 'skip', d => !!d.tracks && (d.version || 1) >= 2, () => dataUrl('history-skip-stats.json', SKIP_VERSION));
 }
 async function loadTrackDetail() {
   return loadOne('detail', 'detail', d => !!d.tracks, () => dataUrl('history-track-detail.json', DETAIL_VERSION));

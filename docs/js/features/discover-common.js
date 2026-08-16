@@ -6,18 +6,18 @@
 //     (util/album-heard.js: historial completo + likes + listened + w-three)
 //   - permiten "+ Biblioteca" y "Crear playlist con lo elegido"
 
-import { idbGetCached, idbSetCached, idbDel } from '../idb.js?v=145';
-import { getArtistAlbums, searchArtistByName, getAlbumTracks, saveToLibrary, createPlaylist, addTracksToPlaylist } from '../api.js?v=145';
-import { albumKey } from '../util/album-key.js?v=145';
-import { escapeHtml } from '../ui/components.js?v=145';
-import { showToast } from '../ui/toast.js?v=145';
-import { openPlaylistPicker } from '../ui/playlist-picker.js?v=145';
-import { getOwnPlaylists, addUrisToPlaylists, toastAddResult } from '../util/playlist-add.js?v=145';
-import { openArtistCard } from './artist-card.js?v=145';
-import { openAlbumCard } from './album-card.js?v=145';
-import { createHiddenStore, createLocalStore } from '../util/hidden-sync.js?v=145';
-import { getPreview } from '../api/preview-providers.js?v=145';
-import { togglePreview, playingKey, attachHover } from '../ui/preview-player.js?v=145';
+import { idbGetCached, idbSetCached, idbDel } from '../idb.js?v=146';
+import { getArtistAlbums, searchArtistByName, getAlbumTracks, saveToLibrary, createPlaylist, addTracksToPlaylist } from '../api.js?v=146';
+import { albumKey } from '../util/album-key.js?v=146';
+import { escapeHtml } from '../ui/components.js?v=146';
+import { showToast } from '../ui/toast.js?v=146';
+import { openPlaylistPicker } from '../ui/playlist-picker.js?v=146';
+import { getOwnPlaylists, addUrisToPlaylists, toastAddResult } from '../util/playlist-add.js?v=146';
+import { openArtistCard } from './artist-card.js?v=146';
+import { openAlbumCard } from './album-card.js?v=146';
+import { createHiddenStore, createLocalStore } from '../util/hidden-sync.js?v=146';
+import { getPreview } from '../api/preview-providers.js?v=146';
+import { togglePreview, playingKey, attachHover } from '../ui/preview-player.js?v=146';
 
 const DISCO_TTL_MIN = 30 * 24 * 60;       // 30 días
 const ARTIST_ID_TTL_MIN = 60 * 24 * 60;   // 60 días — los ids no cambian
