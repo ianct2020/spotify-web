@@ -267,7 +267,8 @@ async function hydrateLikes(overlay, a) {
   const likes = await loadLikesMemo();
   const enLikes = likesInAlbum(likes, a);
 
-  // Las dos cosas en paralelo: los likes salen de caché y el tracklist es red.
+  // Los likes salen de caché (o del memo del módulo); el tracklist es la única
+  // ida a la red de esta función.
   const tracklist = await loadAlbumTracklist(a);
 
   // Índices de "está en tus me gusta": por id y por nombre normalizado, porque
