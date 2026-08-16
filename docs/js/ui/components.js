@@ -1,5 +1,5 @@
-import { openModal, closeTop } from './modal-stack.js?v=144';
-import { mountBottomHtml } from './bottom-layer.js?v=144';
+import { openModal, closeTop } from './modal-stack.js?v=145';
+import { mountBottomHtml } from './bottom-layer.js?v=145';
 
 function renderTrackRow(track, extra = '') {
   const art = track.album?.images?.[2]?.url || track.album?.images?.[0]?.url || '';

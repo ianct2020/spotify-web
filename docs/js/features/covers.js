@@ -8,15 +8,17 @@
 // placeholder→img. Botón "Pantalla completa" (Fullscreen API) que oculta
 // sidebar/header/toolbar y recalcula el lado.
 
-import { loadListenedAlbums, isOwner, ownerLockedMessage } from './history-data.js?v=144';
-import { isJunkTrack } from '../util/junk.js?v=144';
-import { getAllPlaylistItems, getBestAvailableLikes } from '../api.js?v=144';
-import { escapeHtml, pageHeader } from '../ui/components.js?v=144';
-import { openAlbumCard } from './album-card.js?v=144';
-import { albumKey, coverId } from '../util/album-key.js?v=144';
-import { buildAlbumStatsIndex } from '../util/album-stats.js?v=144';
-import { getPreview } from '../api/preview-providers.js?v=144';
-import { hoverIn, hoverOut } from '../ui/preview-player.js?v=144';
+import { loadListenedAlbums, isOwner, ownerLockedMessage } from './history-data.js?v=145';
+import { isJunkTrack } from '../util/junk.js?v=145';
+import { getAllPlaylistItems, getBestAvailableLikes } from '../api.js?v=145';
+import { escapeHtml, pageHeader, showProgress, hideProgress } from '../ui/components.js?v=145';
+import { showToast } from '../ui/toast.js?v=145';
+import { openAlbumCard } from './album-card.js?v=145';
+import { albumKey, coverId } from '../util/album-key.js?v=145';
+import { generarWallpaper, descargarBlob, WALLPAPER_PRESETS } from './covers-wallpaper.js?v=145';
+import { buildAlbumStatsIndex } from '../util/album-stats.js?v=145';
+import { getPreview } from '../api/preview-providers.js?v=145';
+import { hoverIn, hoverOut } from '../ui/preview-player.js?v=145';
 
 const LS_KEY_SIZE = 'covers_cell_size';
 const LS_KEY_SORT = 'covers_sort_mode';
@@ -366,6 +368,10 @@ export async function render(container) {
           <button type="button" class="covers-btn ${size === '64' ? 'is-on' : ''}" data-size="64">Medio</button>
           <button type="button" class="covers-btn ${size === '96' ? 'is-on' : ''}" data-size="96">Grande</button>
         </div>
+        <div class="covers-control-group" aria-label="Descargar como fondo de pantalla">
+          <button type="button" class="covers-btn" id="covers-wall-escritorio" title="Descargar el mosaico como fondo de escritorio (3840×2160)">Fondo 16:9</button>
+          <button type="button" class="covers-btn" id="covers-wall-movil" title="Descargar el mosaico como fondo de celular (1440×3120)">Fondo celular</button>
+        </div>
         <div class="covers-control-group covers-select-wrap">
           <select class="covers-select" id="covers-sort" aria-label="Ordenar por">
             <option value="date-asc" ${sort === 'date-asc' ? 'selected' : ''}>Más antiguas primero</option>
@@ -542,6 +548,62 @@ export async function render(container) {
     applyFit();
   });
 
+  // ── Wallpaper del mosaico (v=145) ─────────────────────────────────────────
+  //
+  // Se dibuja `currentList`, o sea EXACTAMENTE lo que hay en pantalla: el orden
+  // elegido en el select y los años que estén filtrados. El wallpaper es una
+  // foto del mosaico, no otra lista.
+  //
+  // El progreso va al pill de la capa de abajo (`minimized: true`) y no al
+  // overlay que tapa todo: generar el fondo tarda un rato largo y no hay razón
+  // para bloquear la app mientras tanto. Un click en el pill lo expande, y ahí
+  // está el «Detener carga» que aborta de verdad — el `signal` corta los fetch
+  // en vuelo y el bucle se sale entre lote y lote sin dibujar nada más.
+  const wallBtns = [
+    document.getElementById('covers-wall-escritorio'),
+    document.getElementById('covers-wall-movil'),
+  ];
+  let wallCtrl = null;
+
+  async function descargarFondo(preset) {
+    if (wallCtrl) return;                        // ya hay uno en curso
+    const cfg = WALLPAPER_PRESETS[preset];
+    const ctrl = new AbortController();
+    wallCtrl = ctrl;
+    wallBtns.forEach(b => { b.disabled = true; });
+    const etiqueta = `Armando el fondo ${cfg.w}×${cfg.h}…`;
+    showProgress(etiqueta, 0, currentList.length, { onCancel: () => ctrl.abort(), minimized: true });
+    try {
+      const r = await generarWallpaper({
+        lista: currentList,
+        preset,
+        signal: ctrl.signal,
+        onProgress: (hechas, total) => showProgress(etiqueta, hechas, total),
+      });
+      if (!r) { showToast('Fondo cancelado.', 'info'); return; }
+      const nombre = `fonoteca-tapas-${r.archivo}.jpg`;
+      descargarBlob(r.blob, nombre);
+      const fallidas = r.fallidas ? ` · ${r.fallidas} tapas no cargaron` : '';
+      showToast(
+        `${nombre} — ${r.cols}×${r.filas} tapas de ${r.lado}px, ${(r.blob.size / 1048576).toFixed(1)} MB${fallidas}`,
+        'success'
+      );
+    } catch (e) {
+      if (ctrl.signal.aborted) showToast('Fondo cancelado.', 'info');
+      else {
+        console.error('[wallpaper]', e);
+        showToast(`No pude generar el fondo: ${e.message}`, 'error');
+      }
+    } finally {
+      hideProgress();
+      wallCtrl = null;
+      wallBtns.forEach(b => { b.disabled = false; });
+    }
+  }
+
+  wallBtns[0].addEventListener('click', () => descargarFondo('escritorio'));
+  wallBtns[1].addEventListener('click', () => descargarFondo('movil'));
+
   content.querySelectorAll('[data-size]').forEach(btn => {
     btn.addEventListener('click', () => {
       fitEnabled = false;
@@ -711,6 +773,9 @@ export async function render(container) {
   return () => {
     renderToken++;                 // corta los lotes que quedaran en vuelo
     hoverOut();                    // timer de hover-play pendiente, si lo había
+    // Irse de la vista aborta el wallpaper: si no, sigue bajando tapas y
+    // dibujando contra un canvas que ya no le sirve a nadie.
+    wallCtrl?.abort();
     if (imgSettledHandler) {
       grid.removeEventListener('load', imgSettledHandler, true);
       grid.removeEventListener('error', imgSettledHandler, true);
