@@ -724,7 +724,11 @@ def build_stats(plays, img_idx):
     for tid in sorted(track_skip_stats):
         v = track_skip_stats[tid]
         total = v["ok"] + v["skip"]
-        if total < SKIP_STATS_MIN_PLAYS:
+        # El `or v["close"]` no es un detalle: un id que SIEMPRE terminó en
+        # endplay/logout tiene total 0 y se caía entero, y con él sus cierres.
+        # Son 5.177 ids y 6.212 cierres — el 14 % de la señal del mecanismo 3,
+        # que al agrupar le suma `ok` a temas que sí son candidatos.
+        if total < SKIP_STATS_MIN_PLAYS and not v["close"]:
             continue
         name, artist_ = track_skip_meta.get(tid, ("", ""))
         key = song_key(name, artist_)
