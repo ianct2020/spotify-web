@@ -1,7 +1,7 @@
-import { getAllLikedTracks, removeLikedTracks, checkLibraryContains } from '../api.js?v=144';
-import { showProgress, hideProgress, progressController, isCancelled, typeConfirmModal, renderTrackRow, escapeHtml, pageHeader } from '../ui/components.js?v=144';
-import { showToast } from '../ui/toast.js?v=144';
-import { openModal, closeTop } from '../ui/modal-stack.js?v=144';
+import { getAllLikedTracks, removeLikedTracks, checkLibraryContains } from '../api.js?v=145';
+import { showProgress, hideProgress, progressController, isCancelled, typeConfirmModal, renderTrackRow, escapeHtml, pageHeader } from '../ui/components.js?v=145';
+import { showToast } from '../ui/toast.js?v=145';
+import { openModal, closeTop } from '../ui/modal-stack.js?v=145';
 
 const keepIds = new Set();
 // Persiste los cluster idx que ya resolviste (batchDelete). Sobrevive a "Ver más"

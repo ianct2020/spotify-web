@@ -62,5 +62,29 @@ export function coverId(url) {
   return m ? m[1].toLowerCase() : null;
 }
 
+// Los 16 hex del principio codifican el LADO de la imagen, así que se puede
+// pedir otra resolución de la misma tapa cambiando solo ese prefijo — sin ir a
+// la API, que además tiene 403 el Get Album. Verificado en vivo (2026-08-16) en
+// los dos CDN que aparecen en el historial (image-cdn-ak / image-cdn-fa) y en
+// i.scdn.co: los tres devuelven 200 y `access-control-allow-origin: *`.
+//
+// El peso es lo que importa acá: la misma tapa pesa 37 KB en 300px y 2,5 KB en
+// 64px. Lo usa el wallpaper del mosaico, que baja miles de tapas seguidas.
+const COVER_SIZE_PREFIX = { 64: 'ab67616d00004851', 300: 'ab67616d00001e02', 640: 'ab67616d0000b273' };
+
+export const COVER_SIZES = [64, 300, 640];
+
+/**
+ * Devuelve la URL de la misma tapa en otro lado (64, 300 o 640). Si la URL no
+ * es una tapa de álbum de Spotify (`ab67616d…`), la devuelve tal cual: mejor
+ * bajar la que hay que romper la imagen.
+ */
+export function coverVariant(url, px) {
+  const prefix = COVER_SIZE_PREFIX[px];
+  const s = String(url || '');
+  if (!prefix) return s;
+  return s.replace(/(\/image\/)ab67616d[0-9a-f]{8}([0-9a-f]{24})$/i, `$1${prefix}$2`);
+}
+
 // Export para tests / debugging
 export { normPart as _normPart };
