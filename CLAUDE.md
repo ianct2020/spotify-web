@@ -32,6 +32,30 @@
 - `GET /artists/{id}/albums`: **el limit máximo bajó a 10** (re-verificado en vivo 2026-08-11: `limit` 11..20 devuelven 400 "Invalid limit", `limit=10` devuelve 200 y pagina bien con `next`/`offset` — Taylor Swift, `total: 112`). Antes (2026-08-05) 20 andaba. Nunca mandar `market=from_token`. Usado en `#discover-artists` y `#new-releases`. `getArtistAlbums()` (api.js) capea con `ARTIST_ALBUMS_MAX_LIMIT = 10` y cae a `/search?q=artist:"X"&type=album` si el nativo devuelve 400 o 403. **Ojo**: cuando el limit hardcodeado se queda viejo el nativo falla siempre y todo pasa en silencio por el fallback de `/search`, que es más lento y trae artistas ajenos — si ves `[api] getArtistAlbums: … fallback a /search` en consola, re-probá el limit.
 - `GET /albums/{id}/tracks?limit=50`: **CONFIRMADO vivo (2026-08-16, 200 con token real)**. Lo usan W-Three (tracklist del modal por álbum), `#discover-artists` / `#new-releases` (pista representativa para el preview y para «+ Biblioteca») y, desde v=144, la **ficha de álbum**: sin el tracklist completo el ♥ marcaba todas las filas por igual, porque la lista eran solo los likes de ese disco. Ojo con el `albumId`: casi ningún llamador de `openAlbumCard()` lo trae (el mosaico, el Dashboard y el Wrapped mandan nombre + artista), así que `album-card.js` lo resuelve con `/search?q=album:"…" artist:"…"&type=album&limit=1` y memoiza por `albumKey`. Sigue envuelto en try/catch: si el endpoint cae, la ficha degrada a la lista vieja (solo likes, todos con ♥).
 
+## Skips crónicos: el veredicto NO va en el pipeline (v=146)
+`scripts/gen-stats.py` emite **dato crudo**, no decisiones:
+`{id: [ok, skip, fwd_ms[], close_ms[], gid]}`. El motivo es que decidir si un
+`fwdbtn` fue un skip de verdad pide saber **qué porcentaje de la pista** se
+escuchó, y eso necesita el `duration_ms`, que solo está del lado del navegador
+(viene de los likes). El veredicto se arma en `src/js/features/skips.js`, con
+tres toggles encendidos por defecto (juntar versiones / next al final no es
+skip / cerrar cuenta como escucha).
+
+- `gid` agrupa los ids del **mismo tema** (single, álbum, remaster, remix).
+  Se calcula en el pipeline **solo por peso**: mandar los 51.335 pares
+  nombre+artista para agrupar en el browser llevaba el JSON a 6,3 MB.
+- La identidad vive en `src/js/util/song-identity.js` (`songKey`) y está
+  **portada a Python** en `gen-stats.py` (`song_key`). **Si tocás una, tocá la
+  otra** o el import BYOH agrupa distinto que el historial horneado. Verificadas
+  contra 3.853 pares reales del export: 0 discrepancias.
+- El filtro de emisión es `total >= 1 **or** tiene cierres`. El `or` no es
+  cosmético: un id que siempre terminó en `endplay`/`logout` tiene `total = 0`
+  y se caía con todos sus cierres — 5.177 ids y 6.212 cierres, el 14 % de la
+  señal del mecanismo 3, que al agrupar le suma `ok` a temas que sí son
+  candidatos.
+- Al bumpear `SKIP_STATS_VERSION`, `OWNER_PREV_KEYS.skip` va **vacía**: reciclar
+  un JSON viejo deja los toggles sin datos y sin fallar, o sea en silencio.
+
 ## Tamaño de la playlist «w three» (medido 2026-08-16)
 **3.011 pistas → 31 páginas de 100.** Un refetch entero (`getAllPlaylistItems`
 con `useCache:false`) cuesta 31 × ~626 ms de request + 30 × 600 ms de `sleep`
