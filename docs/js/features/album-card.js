@@ -11,16 +11,16 @@
 // tus me gusta" en cada fila y previews que prueban contra TODOS los artistas
 // del track.
 
-import { escapeHtml } from '../ui/components.js?v=147';
-import { openArtistCard } from './artist-card.js?v=147';
-import { openModal, closeTop } from '../ui/modal-stack.js?v=147';
-import { getBestAvailableLikes, getAlbumTracks, spotifyFetch } from '../api.js?v=147';
-import { albumKey, coverId } from '../util/album-key.js?v=147';
-import { artistMatches } from '../util/track-match.js?v=147';
-import { lookupAlbumStats } from '../util/album-stats.js?v=147';
-import { getPreview } from '../api/preview-providers.js?v=147';
-import { togglePreview, playingKey } from '../ui/preview-player.js?v=147';
-import { openTrackCard } from './track-card.js?v=147';
+import { escapeHtml } from '../ui/components.js?v=148';
+import { openArtistCard } from './artist-card.js?v=148';
+import { openModal, closeTop } from '../ui/modal-stack.js?v=148';
+import { getBestAvailableLikes, getAlbumTracks, spotifyFetch } from '../api.js?v=148';
+import { albumKey, coverId } from '../util/album-key.js?v=148';
+import { artistMatches } from '../util/track-match.js?v=148';
+import { lookupAlbumStats } from '../util/album-stats.js?v=148';
+import { getPreview } from '../api/preview-providers.js?v=148';
+import { togglePreview, playingKey } from '../ui/preview-player.js?v=148';
+import { openTrackCard } from './track-card.js?v=148';
 
 const PLAY_SVG = `<svg viewBox="0 0 24 24" width="10" height="10" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>`;
 const PAUSE_SVG = `<svg viewBox="0 0 24 24" width="10" height="10" fill="currentColor" aria-hidden="true"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>`;

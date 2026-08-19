@@ -20,7 +20,7 @@ const BASE = 'https://ws.audioscrobbler.com/2.0/';
 // errores de cuota), hay que REGENERARLA en https://www.last.fm/api/accounts y
 // reemplazar esta constante. Nada más: el ⚙ del Dashboard permite pisarla
 // localmente mientras tanto.
-const DEFAULT_API_KEY = '';
+const DEFAULT_API_KEY = 'c4568320e1c617eecff919d37a540574';
 
 /** La key que se usa: la propia del usuario si la cargó, si no la del código. */
 function getKey() {

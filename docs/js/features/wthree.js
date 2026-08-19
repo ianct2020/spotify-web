@@ -2,20 +2,20 @@
 // por álbum). Muestra qué álbumes ya tienen picks, cuántos, y cuáles te faltan.
 // Ordenado por álbumes más escuchados primero para priorizar tu tiempo.
 
-import { spotifyFetch, getAllPlaylistItems, getAllUserPlaylists, addTracksToPlaylist, removeTracksFromPlaylist, reorderPlaylistItems, getCachedPlaylistItems, updatePlaylistItemsCache, getBestAvailableLikes } from '../api.js?v=147';
-import { patchPlaylistItems, buildCachedItem } from '../util/playlist-cache-patch.js?v=147';
-import { loadHistoryStats, loadListenedAlbums, isOwner, ownerLockedMessage } from './history-data.js?v=147';
-import { escapeHtml, pageHeader } from '../ui/components.js?v=147';
-import { showToast } from '../ui/toast.js?v=147';
-import { activateMarquee, marqueeSpan } from '../ui/marquee.js?v=147';
-import { openModal, closeById, closeModal } from '../ui/modal-stack.js?v=147';
-import { getPreview } from '../api/preview-providers.js?v=147';
-import { togglePreview, playingKey } from '../ui/preview-player.js?v=147';
-import { openAlbumCard } from './album-card.js?v=147';
-import { albumKey } from '../util/album-key.js?v=147';
-import { computeUpdatedPickPositions } from '../util/reorder-shifts.js?v=147';
-import { createHiddenStore } from '../util/hidden-sync.js?v=147';
-import { mountBottom } from '../ui/bottom-layer.js?v=147';
+import { spotifyFetch, getAllPlaylistItems, getAllUserPlaylists, addTracksToPlaylist, removeTracksFromPlaylist, reorderPlaylistItems, getCachedPlaylistItems, updatePlaylistItemsCache, getBestAvailableLikes } from '../api.js?v=148';
+import { patchPlaylistItems, buildCachedItem } from '../util/playlist-cache-patch.js?v=148';
+import { loadHistoryStats, loadListenedAlbums, isOwner, ownerLockedMessage } from './history-data.js?v=148';
+import { escapeHtml, pageHeader } from '../ui/components.js?v=148';
+import { showToast } from '../ui/toast.js?v=148';
+import { activateMarquee, marqueeSpan } from '../ui/marquee.js?v=148';
+import { openModal, closeById, closeModal } from '../ui/modal-stack.js?v=148';
+import { getPreview } from '../api/preview-providers.js?v=148';
+import { togglePreview, playingKey } from '../ui/preview-player.js?v=148';
+import { openAlbumCard } from './album-card.js?v=148';
+import { albumKey } from '../util/album-key.js?v=148';
+import { computeUpdatedPickPositions } from '../util/reorder-shifts.js?v=148';
+import { createHiddenStore } from '../util/hidden-sync.js?v=148';
+import { mountBottom } from '../ui/bottom-layer.js?v=148';
 
 const LS_KEY_ID = 'wthree_playlist_id';
 const LS_KEY_NAME = 'wthree_playlist_name';

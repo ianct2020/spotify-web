@@ -10,13 +10,13 @@
 // 100 artistas en lugar de 20. Lógica de fetch/cache/playlist compartida en
 // features/discover-common.js con #new-releases.
 
-import { escapeHtml, pageHeader } from '../ui/components.js?v=147';
-import { showToast } from '../ui/toast.js?v=147';
-import { openArtistCard } from './artist-card.js?v=147';
-import { createIncrementalList, scrollRootOf } from '../ui/incremental-list.js?v=147';
-import { createLazyImages } from '../ui/lazy-img.js?v=147';
-import { isJunkTrack } from '../util/junk.js?v=147';
-import { buildAlbumHeardIndex, markAlbumHeard } from '../util/album-heard.js?v=147';
+import { escapeHtml, confirmModal, pageHeader } from '../ui/components.js?v=148';
+import { showToast } from '../ui/toast.js?v=148';
+import { openArtistCard } from './artist-card.js?v=148';
+import { createIncrementalList, scrollRootOf } from '../ui/incremental-list.js?v=148';
+import { createLazyImages } from '../ui/lazy-img.js?v=148';
+import { isJunkTrack } from '../util/junk.js?v=148';
+import { buildAlbumHeardIndex } from '../util/album-heard.js?v=148';
 import {
   getArtistIdCached,
   getArtistDiscoCached,
@@ -24,7 +24,10 @@ import {
   albumIsUnheard,
   yearOf,
   createDiscoverPlaylist,
+  saveAlbumToLibrary as guardarAlbumEnBiblioteca,
   saveAlbumTracksToLibrary,
+  albumTrackCount,
+  markAlbumResolved,
   loadScanCache,
   saveScanCache,
   clearScanCache,
@@ -37,7 +40,7 @@ import {
   cardKey,
   toggleHeardAlbum,
   toggleHiddenAlbum,
-} from './discover-common.js?v=147';
+} from './discover-common.js?v=148';
 
 const SCAN_KEY = 'discover_artists';
 
@@ -466,6 +469,7 @@ function refreshList(content) {
         checkClass: 'disco-check',
         selection: state.selection,
         onSave: (albumId, artistName, btn) => saveAlbumToLibrary(albumId, artistName, btn),
+        onLikeTracks: (albumId, artistName, btn) => likearPistasDelAlbum(albumId, artistName, btn),
         onChange: () => updateSelectionUi(content),
         afterAdd: () => refreshList(content),
         onHeard: (albumId, artistName) => {
@@ -587,6 +591,9 @@ function updateSelectionUi(content) {
   }
 }
 
+// «Guardar álbum»: el disco entero como unidad, por `PUT /me/library` con la
+// uri de álbum (verificado 2026-08-18; `PUT /me/albums` da 403). No toca los
+// me gusta de las pistas.
 async function saveAlbumToLibrary(albumId, artistName, btn) {
   const al = findAlbum(albumId);
   if (!al) return;
@@ -594,11 +601,64 @@ async function saveAlbumToLibrary(albumId, artistName, btn) {
   btn.disabled = true;
   btn.textContent = 'Guardando…';
   try {
+    await guardarAlbumEnBiblioteca(albumId);
+    btn.textContent = '✓ Guardado';
+    showToast(`«${al.name}» guardado en tu biblioteca de álbumes`, 'success');
+    // Resuelto: deja de aparecer en la lista, y sigue sin aparecer después de
+    // recargar (el índice en memoria se pierde al recargar).
+    markAlbumResolved(al, artistName);
+    setTimeout(() => {
+      const content = document.getElementById('disco-content');
+      if (content) refreshList(content);
+    }, 800);
+  } catch (e) {
+    btn.disabled = false;
+    btn.textContent = origText;
+    showToast('Error al añadir: ' + e.message, 'error');
+  }
+}
+
+// «Añadir pistas a mis likes»: le da al corazón a CADA pista del disco, una por
+// una. Es una escritura grande y difícil de deshacer (hay que sacar el like de
+// cada pista a mano), así que dice cuántas son ANTES de hacerla — no después,
+// que es como Ian se enteró de que un disco le había metido 12 canciones
+// sueltas en los me gusta.
+async function likearPistasDelAlbum(albumId, artistName, btn) {
+  const al = findAlbum(albumId);
+  if (!al) return;
+  const origText = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = 'Contando…';
+  let n = 0;
+  try {
+    n = await albumTrackCount(al);
+  } catch { /* si no se puede contar, se avisa sin número */ }
+  btn.disabled = false;
+  btn.textContent = origText;
+
+  const cuantas = n
+    ? `<strong>${n}</strong> ${n === 1 ? 'pista' : 'pistas'}`
+    : '<strong>todas las pistas</strong>';
+  const ok = await confirmModal(
+    'Añadir pistas a tus me gusta',
+    `Vas a añadir ${cuantas} de «${escapeHtml(al.name)}» a tus me gusta, una por una. ` +
+    'Esto NO guarda el álbum: te deja las canciones sueltas entre tus likes, y para ' +
+    'deshacerlo hay que sacarle el corazón a cada una a mano. ' +
+    'Si lo que querés es el disco entero, usá «Guardar álbum».',
+    n === 1 ? 'Añadir la pista' : `Añadir ${n || 'las'} pistas`,
+  );
+  if (!ok) return;
+
+  btn.disabled = true;
+  btn.textContent = 'Añadiendo…';
+  try {
     const ids = await saveAlbumTracksToLibrary(albumId);
     btn.textContent = `✓ ${ids.length} en likes`;
-    showToast(`${ids.length} pistas de "${al.name}" añadidas a tus me gusta`, 'success');
-    // Marco el álbum como escuchado para que no salga más en la lista.
-    markAlbumHeard(al.name, artistName);
+    showToast(
+      `${ids.length} ${ids.length === 1 ? 'pista' : 'pistas'} de «${al.name}» ${ids.length === 1 ? 'añadida' : 'añadidas'} a tus me gusta`,
+      'success',
+    );
+    markAlbumResolved(al, artistName);
     setTimeout(() => {
       const content = document.getElementById('disco-content');
       if (content) refreshList(content);

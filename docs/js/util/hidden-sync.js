@@ -25,7 +25,7 @@ import {
   removeTracksFromPlaylist,
   createPlaylist,
   getCurrentUserId,
-} from '../api.js?v=147';
+} from '../api.js?v=148';
 
 const PLAYLIST_DESC = 'Lista interna de Fonoteca: lo que ocultaste en esta vista. Si la borrás, se pierden los ocultos.';
 
@@ -98,6 +98,20 @@ export function createLocalStore({ lsKey, label }) {
       if (ahora) keys.add(key); else keys.delete(key);
       saveLocal(lsKey, keys);
       return ahora;
+    },
+    /**
+     * Marca sin togglear. `toggle` sobre algo ya marcado lo DESMARCA, y hay
+     * flujos que solo saben «esto pasó a estar resuelto» (guardar un álbum,
+     * likear sus pistas) y no pueden depender de en qué estado estaba.
+     * @returns {boolean} true si esta llamada lo agregó
+     */
+    add(key, uri) {
+      if (!key) return false;
+      if (uri) this.remember(key, uri);
+      if (keys.has(key)) return false;
+      keys.add(key);
+      saveLocal(lsKey, keys);
+      return true;
     },
     async clear() {
       keys = new Set();

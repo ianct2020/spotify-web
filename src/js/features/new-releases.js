@@ -10,9 +10,9 @@
 //   - Umbral de likes: 5+ / 10+ / 20+
 //   - Ventana temporal: 3 / 6 / 12 / 24 meses (default 12)
 
-import { escapeHtml, pageHeader } from '../ui/components.js';
+import { escapeHtml, confirmModal, pageHeader } from '../ui/components.js';
 import { showToast } from '../ui/toast.js';
-import { buildAlbumHeardIndex, markAlbumHeard } from '../util/album-heard.js';
+import { buildAlbumHeardIndex } from '../util/album-heard.js';
 import { createIncrementalList, scrollRootOf } from '../ui/incremental-list.js';
 import { createLazyImages } from '../ui/lazy-img.js';
 import {
@@ -22,7 +22,10 @@ import {
   albumIsUnheard,
   releaseTs,
   createDiscoverPlaylist,
+  saveAlbumToLibrary as guardarAlbumEnBiblioteca,
   saveAlbumTracksToLibrary,
+  albumTrackCount,
+  markAlbumResolved,
   loadScanCache,
   saveScanCache,
   clearScanCache,
@@ -458,6 +461,7 @@ function refreshList(content) {
       checkClass: 'newrel-check',
       selection: state.selection,
       onSave: (albumId, artistName, btn) => saveAlbum(albumId, artistName, btn),
+      onLikeTracks: (albumId, artistName, btn) => likearPistasDelAlbum(albumId, artistName, btn),
       onChange: () => updateSelectionUi(content),
       afterAdd: () => refreshList(content),
       onHide: async (albumId, artistName, btn) => {
@@ -546,6 +550,9 @@ function updateSelectionUi(content) {
   }
 }
 
+// «Guardar álbum»: el disco entero como unidad, por `PUT /me/library` con la
+// uri de álbum (verificado 2026-08-18; `PUT /me/albums` da 403). No toca los
+// me gusta de las pistas.
 async function saveAlbum(albumId, artistName, btn) {
   const al = findAlbum(albumId);
   if (!al) return;
@@ -553,10 +560,64 @@ async function saveAlbum(albumId, artistName, btn) {
   btn.disabled = true;
   btn.textContent = 'Guardando…';
   try {
+    await guardarAlbumEnBiblioteca(albumId);
+    btn.textContent = '✓ Guardado';
+    showToast(`«${al.name}» guardado en tu biblioteca de álbumes`, 'success');
+    // Resuelto: deja de aparecer en la lista, y sigue sin aparecer después de
+    // recargar (el índice en memoria se pierde al recargar).
+    markAlbumResolved(al, artistName);
+    setTimeout(() => {
+      const content = document.getElementById('newrel-content');
+      if (content) refreshList(content);
+    }, 800);
+  } catch (e) {
+    btn.disabled = false;
+    btn.textContent = origText;
+    showToast('Error al añadir: ' + e.message, 'error');
+  }
+}
+
+// «Añadir pistas a mis likes»: le da al corazón a CADA pista del disco, una por
+// una. Es una escritura grande y difícil de deshacer (hay que sacar el like de
+// cada pista a mano), así que dice cuántas son ANTES de hacerla — no después,
+// que es como Ian se enteró de que un disco le había metido 12 canciones
+// sueltas en los me gusta.
+async function likearPistasDelAlbum(albumId, artistName, btn) {
+  const al = findAlbum(albumId);
+  if (!al) return;
+  const origText = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = 'Contando…';
+  let n = 0;
+  try {
+    n = await albumTrackCount(al);
+  } catch { /* si no se puede contar, se avisa sin número */ }
+  btn.disabled = false;
+  btn.textContent = origText;
+
+  const cuantas = n
+    ? `<strong>${n}</strong> ${n === 1 ? 'pista' : 'pistas'}`
+    : '<strong>todas las pistas</strong>';
+  const ok = await confirmModal(
+    'Añadir pistas a tus me gusta',
+    `Vas a añadir ${cuantas} de «${escapeHtml(al.name)}» a tus me gusta, una por una. ` +
+    'Esto NO guarda el álbum: te deja las canciones sueltas entre tus likes, y para ' +
+    'deshacerlo hay que sacarle el corazón a cada una a mano. ' +
+    'Si lo que querés es el disco entero, usá «Guardar álbum».',
+    n === 1 ? 'Añadir la pista' : `Añadir ${n || 'las'} pistas`,
+  );
+  if (!ok) return;
+
+  btn.disabled = true;
+  btn.textContent = 'Añadiendo…';
+  try {
     const ids = await saveAlbumTracksToLibrary(albumId);
     btn.textContent = `✓ ${ids.length} en likes`;
-    showToast(`${ids.length} pistas de "${al.name}" añadidas a tus me gusta`, 'success');
-    markAlbumHeard(al.name, artistName);
+    showToast(
+      `${ids.length} ${ids.length === 1 ? 'pista' : 'pistas'} de «${al.name}» ${ids.length === 1 ? 'añadida' : 'añadidas'} a tus me gusta`,
+      'success',
+    );
+    markAlbumResolved(al, artistName);
     setTimeout(() => {
       const content = document.getElementById('newrel-content');
       if (content) refreshList(content);

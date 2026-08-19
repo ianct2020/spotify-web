@@ -8,17 +8,17 @@
 // placeholder→img. Botón "Pantalla completa" (Fullscreen API) que oculta
 // sidebar/header/toolbar y recalcula el lado.
 
-import { loadListenedAlbums, isOwner, ownerLockedMessage } from './history-data.js?v=147';
-import { isJunkTrack } from '../util/junk.js?v=147';
-import { getAllPlaylistItems, getBestAvailableLikes } from '../api.js?v=147';
-import { escapeHtml, pageHeader, showProgress, hideProgress } from '../ui/components.js?v=147';
-import { showToast } from '../ui/toast.js?v=147';
-import { openAlbumCard } from './album-card.js?v=147';
-import { albumKey, coverId } from '../util/album-key.js?v=147';
-import { generarWallpaper, descargarBlob, WALLPAPER_PRESETS } from './covers-wallpaper.js?v=147';
-import { buildAlbumStatsIndex } from '../util/album-stats.js?v=147';
-import { getPreview } from '../api/preview-providers.js?v=147';
-import { hoverIn, hoverOut } from '../ui/preview-player.js?v=147';
+import { loadListenedAlbums, isOwner, ownerLockedMessage } from './history-data.js?v=148';
+import { isJunkTrack } from '../util/junk.js?v=148';
+import { getAllPlaylistItems, getBestAvailableLikes } from '../api.js?v=148';
+import { escapeHtml, pageHeader, showProgress, hideProgress } from '../ui/components.js?v=148';
+import { showToast } from '../ui/toast.js?v=148';
+import { openAlbumCard } from './album-card.js?v=148';
+import { albumKey, coverId } from '../util/album-key.js?v=148';
+import { generarWallpaper, descargarBlob, WALLPAPER_PRESETS } from './covers-wallpaper.js?v=148';
+import { buildAlbumStatsIndex } from '../util/album-stats.js?v=148';
+import { getPreview } from '../api/preview-providers.js?v=148';
+import { hoverIn, hoverOut } from '../ui/preview-player.js?v=148';
 
 const LS_KEY_SIZE = 'covers_cell_size';
 const LS_KEY_SORT = 'covers_sort_mode';

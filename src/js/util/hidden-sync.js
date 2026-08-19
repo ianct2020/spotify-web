@@ -99,6 +99,20 @@ export function createLocalStore({ lsKey, label }) {
       saveLocal(lsKey, keys);
       return ahora;
     },
+    /**
+     * Marca sin togglear. `toggle` sobre algo ya marcado lo DESMARCA, y hay
+     * flujos que solo saben «esto pasó a estar resuelto» (guardar un álbum,
+     * likear sus pistas) y no pueden depender de en qué estado estaba.
+     * @returns {boolean} true si esta llamada lo agregó
+     */
+    add(key, uri) {
+      if (!key) return false;
+      if (uri) this.remember(key, uri);
+      if (keys.has(key)) return false;
+      keys.add(key);
+      saveLocal(lsKey, keys);
+      return true;
+    },
     async clear() {
       keys = new Set();
       saveLocal(lsKey, keys);
