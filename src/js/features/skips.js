@@ -29,7 +29,7 @@ import { hasUsername, loadTopLifetime } from '../api/statsfm.js';
 import { createHiddenStore } from '../util/hidden-sync.js';
 import { createIncrementalList, scrollRootOf } from '../ui/incremental-list.js';
 import { createLazyImages } from '../ui/lazy-img.js';
-import { renderTrackCardRow, wireTrackCardGrid, paintCardSelection } from '../ui/track-card-row.js';
+import { renderTrackCardRow, wireTrackCardGrid, paintCardSelection, paintPlayingCard, paintEmbedCard } from '../ui/track-card-row.js';
 import { coverAtSize } from '../util/cover-size.js';
 
 let cache = null;
@@ -685,7 +685,6 @@ async function onPlayClick(r, btn) {
   const slot = content.querySelector(`.skips-preview-slot[data-id="${r.id}"].open`);
   if (slot) {
     closeEmbeds(content);
-    btn.classList.remove('playing');
     return;
   }
   closeEmbeds(content);
@@ -719,22 +718,23 @@ function onHideClick(id) {
   applyRows({ preserveRendered: true });
 }
 
-// Sincroniza el estado .playing de los botones con el player global.
+// Sincroniza los botones con el player global: cuál es el preview actual y si
+// está SONANDO (▶ ↔ ⏸). El evento lo dispara `ui/preview-player.js` desde los
+// eventos del <audio>, así que acá no hay ni flag ni timer que puedan quedarse
+// desfasados del sonido.
 // Listener único a nivel módulo: si la página no está montada, el query no matchea nada.
 document.addEventListener('previewchange', (e) => {
-  const content = document.getElementById('skips-content');
-  if (!content) return;
-  const key = e.detail.key || '';
-  content.querySelectorAll('#skips-list .sc-card').forEach(card => {
-    const btn = card.querySelector('.sc-play');
-    if (btn) btn.classList.toggle('playing', key === `sk:${card.dataset.id}`);
-  });
+  paintPlayingCard(document.getElementById('skips-list'), 'sk', e.detail);
 });
 
+// Cierra los embeds abiertos Y apaga el botón de su tarjeta. Antes el botón se
+// apagaba solo en el camino de "volver a tocar el mismo": abrir el embed de
+// otra fila dejaba la anterior tintada.
 function closeEmbeds(content) {
   content.querySelectorAll('.skips-preview-slot.open').forEach(s => {
     s.classList.remove('open');
     s.innerHTML = '';
+    paintEmbedCard(s.closest('.sc-card')?.querySelector('.sc-play'), false);
   });
 }
 
@@ -758,6 +758,8 @@ function toggleEmbed(id, btn) {
         style="border-radius:8px;display:block"></iframe>
     `;
     slot.classList.add('open');
-    btn.classList.add('playing');
+    // Tintado pero con el ▶: el iframe de Spotify no nos dice si está sonando,
+    // así que un ⏸ acá sería una promesa que no podemos cumplir.
+    paintEmbedCard(btn, true);
   }
 }

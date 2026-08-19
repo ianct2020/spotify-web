@@ -4,8 +4,18 @@
 // Cuando el proveedor devuelve type:'embed' (Spotify), el pill se rearma con
 // un iframe (Spotify hace la reproducción en su UI).
 //
-// Dispara 'previewchange' en document con { detail: { key, provider } }
+// Dispara 'previewchange' en document con { detail: { key, provider, playing } }
 // (key null = parado) para que cada feature actualice sus botones.
+//
+// `playing` es el estado REAL del <audio>, no un flag nuestro: lo ponen y lo
+// sacan los eventos del elemento (`playing` / `pause` / `ended` / `waiting`…),
+// igual que las barritas del pill desde v=141. Por eso el evento se dispara
+// también cuando no cambia el `key`: lo que cambió es si suena o no.
+//
+// Con el embed de Spotify NO hay señal de reproducción: el iframe no nos avisa
+// de nada. Ahí `playing` es siempre false y el botón de la tarjeta se queda
+// como está (marcado como el preview actual, pero con el ▶), que es lo honesto:
+// no sabemos si Spotify está sonando dentro del iframe.
 
 import { escapeHtml } from './components.js';
 import { showToast } from './toast.js';
@@ -17,6 +27,11 @@ audio.volume = 0.9;
 
 let currentKey = null;         // key del preview sonando (o cargando)
 let currentProvider = null;    // 'itunes' | 'deezer' | 'spotify-embed' | null
+// ¿El <audio> está sonando AHORA MISMO? Lo escriben solo los listeners del
+// elemento, nunca el código que pide reproducir: entre `play()` y el primer
+// frame de sonido hay buffering, y un botón que dice ⏸ mientras todavía no
+// suena nada miente igual que el que se queda en ▶.
+let audioPlaying = false;
 let pill = null;
 
 // --- estado de hover (para hover-play con debounce) ---
@@ -31,7 +46,9 @@ const PROVIDER_LABEL = {
 };
 
 function emit() {
-  document.dispatchEvent(new CustomEvent('previewchange', { detail: { key: currentKey, provider: currentProvider } }));
+  document.dispatchEvent(new CustomEvent('previewchange', {
+    detail: { key: currentKey, provider: currentProvider, playing: audioPlaying },
+  }));
 }
 
 function ensurePill() {
@@ -54,14 +71,18 @@ function ensurePill() {
   return pill;
 }
 
-// Las tres barritas del ecualizador se mueven SOLO cuando hay audio sonando de
-// verdad. La clase la ponen y la sacan los eventos del <audio>, no un timer
-// aparte: si el audio se pausa, se traba buffereando o se acaba, la animación
-// para en el mismo momento. Con el embed de Spotify no hay ninguna señal de
-// reproducción desde el iframe, así que ahí las barritas quedan quietas a
-// propósito (ver `showPillEmbed`, que ni siquiera las muestra).
-function setEqPlaying(on) {
-  if (pill) pill.classList.toggle('is-playing', !!on);
+// Única puerta de entrada al estado "está sonando". Mueve las tres barritas del
+// pill (v=141) y, desde v=149, avisa a las vistas: es lo que hace que el ▶ de
+// la tarjeta pase a ⏸ y vuelva, sin que nadie lleve un flag propio ni un timer.
+// Si el audio se pausa, se traba buffereando o se acaba, las dos cosas paran en
+// el mismo momento. Con el embed de Spotify no hay ninguna señal desde el
+// iframe, así que ahí no se llama nunca: barritas quietas y botón en ▶.
+function setAudioPlaying(on) {
+  const val = !!on;
+  if (pill) pill.classList.toggle('is-playing', val);
+  if (val === audioPlaying) return;
+  audioPlaying = val;
+  emit();
 }
 
 function showPillAudio(label, provider, loading) {
@@ -108,6 +129,7 @@ function hidePill() {
 audio.addEventListener('ended', () => {
   currentKey = null;
   currentProvider = null;
+  audioPlaying = false;
   hoverStartedKey = null;
   hidePill();
   emit();
@@ -116,12 +138,12 @@ audio.addEventListener('ended', () => {
 // Arranque y parada de las barritas, enganchados al audio real.
 // `playing` es el que avisa de que efectivamente está SONANDO (`play` solo
 // dice que se pidió reproducir); `waiting` es que se quedó sin buffer.
-audio.addEventListener('playing', () => setEqPlaying(true));
-audio.addEventListener('play', () => setEqPlaying(!audio.paused));
-audio.addEventListener('pause', () => setEqPlaying(false));
-audio.addEventListener('waiting', () => setEqPlaying(false));
-audio.addEventListener('stalled', () => setEqPlaying(false));
-audio.addEventListener('emptied', () => setEqPlaying(false));
+audio.addEventListener('playing', () => setAudioPlaying(true));
+audio.addEventListener('play', () => setAudioPlaying(!audio.paused));
+audio.addEventListener('pause', () => setAudioPlaying(false));
+audio.addEventListener('waiting', () => setAudioPlaying(false));
+audio.addEventListener('stalled', () => setAudioPlaying(false));
+audio.addEventListener('emptied', () => setAudioPlaying(false));
 
 function playAudio(key, { url, label, provider }) {
   currentKey = key;
@@ -146,6 +168,8 @@ function playEmbed(key, { url, label, provider }) {
   audio.removeAttribute('src');
   currentKey = key;
   currentProvider = provider || 'spotify-embed';
+  // El iframe no nos avisa de nada, así que para nosotros no hay reproducción.
+  audioPlaying = false;
   showPillEmbed(url, label);
   emit();
 }
@@ -161,6 +185,7 @@ function stopPreview() {
   audio.removeAttribute('src');
   currentKey = null;
   currentProvider = null;
+  audioPlaying = false;
   hoverStartedKey = null;
   hidePill();
   emit();
@@ -172,6 +197,12 @@ function playingKey() {
 
 function playingProvider() {
   return currentProvider;
+}
+
+// ¿Está SONANDO de verdad el <audio>? False mientras busca preview, mientras
+// bufferea y siempre que el proveedor sea el embed de Spotify.
+function isPlayingAudio() {
+  return audioPlaying;
 }
 
 // Toggle por click. `getter` es async y devuelve { url, label, provider, type }
@@ -239,4 +270,4 @@ function attachHover(el, key, getter, delay = 400) {
 document.addEventListener('routeteardown', () => stopPreview());
 document.addEventListener('modalstackempty', () => stopPreview());
 
-export { togglePreview, stopPreview, playingKey, playingProvider, hoverIn, hoverOut, attachHover };
+export { togglePreview, stopPreview, playingKey, playingProvider, isPlayingAudio, hoverIn, hoverOut, attachHover };

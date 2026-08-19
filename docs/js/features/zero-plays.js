@@ -5,23 +5,47 @@
 // `ui/track-card-row.js` — las mismas dos columnas, la misma tapa de 96 y el
 // mismo ▶ de preview que #sin-clasificar y #skips —, con lista incremental y
 // carga diferida de tapas porque acá hay miles de filas.
+//
+// v=149: la vista deja de tener una sola salida destructiva. Hasta ahora lo
+// único que se podía hacer con una fila mal listada era «sacar de likes», que
+// borra el like en Spotify y no se puede deshacer; ahora también se puede
+// OCULTAR, que no toca nada de Spotify salvo la playlist interna donde se
+// guardan los ocultos. Es el mismo mecanismo que en #skips y #sin-clasificar:
+// `util/hidden-sync.js`, playlist como fuente de verdad y localStorage como
+// caché local para pintar al instante.
 
-import { getBestAvailableLikes, removeLikedTracks } from '../api.js?v=148';
-import { loadTrackPlays, trackIdOf, isOwner, ownerLockedMessage } from './history-data.js?v=148';
-import { escapeHtml, confirmModal, pageHeader } from '../ui/components.js?v=148';
-import { showToast } from '../ui/toast.js?v=148';
-import { openTrackCard } from './track-card.js?v=148';
-import { hasUsername, loadTopLifetime } from '../api/statsfm.js?v=148';
-import { getPreview } from '../api/preview-providers.js?v=148';
-import { togglePreview, playingKey } from '../ui/preview-player.js?v=148';
-import { renderTrackCardRow, wireTrackCardGrid, paintCardSelection } from '../ui/track-card-row.js?v=148';
-import { createIncrementalList, scrollRootOf } from '../ui/incremental-list.js?v=148';
-import { createLazyImages } from '../ui/lazy-img.js?v=148';
-import { activateMarquee } from '../ui/marquee.js?v=148';
-import { coverAtSize } from '../util/cover-size.js?v=148';
-import { firstArtistName } from '../util/artist-name.js?v=148';
+import { getBestAvailableLikes, removeLikedTracks } from '../api.js?v=149';
+import { loadTrackPlays, trackIdOf, isOwner, ownerLockedMessage } from './history-data.js?v=149';
+import { escapeHtml, confirmModal, pageHeader } from '../ui/components.js?v=149';
+import { showToast } from '../ui/toast.js?v=149';
+import { openTrackCard } from './track-card.js?v=149';
+import { hasUsername, loadTopLifetime } from '../api/statsfm.js?v=149';
+import { getPreview } from '../api/preview-providers.js?v=149';
+import { togglePreview, playingKey } from '../ui/preview-player.js?v=149';
+import { renderTrackCardRow, wireTrackCardGrid, paintCardSelection, paintPlayingCard } from '../ui/track-card-row.js?v=149';
+import { createIncrementalList, scrollRootOf } from '../ui/incremental-list.js?v=149';
+import { createLazyImages } from '../ui/lazy-img.js?v=149';
+import { activateMarquee } from '../ui/marquee.js?v=149';
+import { coverAtSize } from '../util/cover-size.js?v=149';
+import { firstArtistName } from '../util/artist-name.js?v=149';
+import { createHiddenStore } from '../util/hidden-sync.js?v=149';
 
 let cache = null;
+
+// Los ocultos viven en una playlist de Spotify, así que sobreviven a borrar el
+// caché del navegador y aparecen igual desde la otra compu. Es una playlist
+// PROPIA de esta vista: ocultar algo acá no tiene por qué ocultarlo en #skips
+// (allá el criterio es "lo skipeo", acá es "no lo escuché").
+//
+// ⚠️ Nace pública: `POST /me/playlists` ignora `public:false` post-migración.
+// Hay que pasarla a privada a mano desde la app de Spotify, como las otras.
+const hiddenTracks = createHiddenStore({
+  lsKey: 'zeroplays_hidden_tracks',
+  playlistName: 'fonoteca · ocultos (sin plays)',
+  label: 'sin plays',
+  keyOfTrack: (t) => t?.id || null,
+});
+let showingHidden = false;
 
 const STATSFM_TOGGLE_KEY = 'zeroplays_use_statsfm';
 let useStatsfm = localStorage.getItem(STATSFM_TOGGLE_KEY) === '1';
@@ -34,6 +58,11 @@ const BATCH = 80;
 // incremental, «Seleccionar todos» mirando checkboxes marcaría 80 de 3.000.
 let selected = new Set();
 let lastClickedId = null;
+// Filas VISIBLES con el estado actual del toggle de ocultos, en el mismo orden
+// que las tarjetas. Es la fuente de verdad de la lista: el rango de shift+click
+// y «Seleccionar todos» operan acá, nunca sobre `cache.zeros` entero (si no,
+// «Seleccionar todos» marcaría también lo que está oculto).
+let currentRows = [];
 let rowById = new Map();
 let list = null;
 let lazyCovers = null;
@@ -56,6 +85,7 @@ function teardown() {
   if (lazyCovers) { lazyCovers.destroy(); lazyCovers = null; }
   selected.clear();
   lastClickedId = null;
+  currentRows = [];
   rowById = new Map();
 }
 
@@ -87,6 +117,9 @@ async function analyze() {
     [{ items: likes }, plays] = await Promise.all([
       getBestAvailableLikes(),
       loadTrackPlays(),
+      // Trae los ocultos de la playlist de Spotify. No bloquea: si falla o
+      // tarda, la vista arranca con el caché local y se repinta al llegar.
+      hiddenTracks.ready().then(refreshAfterHiddenSync),
     ]);
     if (useStatsfm && hasUsername()) {
       top = await loadTopLifetime().catch(() => null);
@@ -162,20 +195,115 @@ function fila(t, uri, id, addedAt, partial) {
   };
 }
 
+// El desglose de debajo del número grande. Concuerda en número: con una sola
+// fila decía «1 nunca sonaron».
+function desgloseTexto(nunca, parciales, conPlays) {
+  const partes = [`${nunca.toLocaleString('es-ES')} ${nunca === 1 ? 'nunca sonó' : 'nunca sonaron'}`];
+  if (parciales) {
+    partes.push(`${parciales.toLocaleString('es-ES')} ${parciales === 1 ? 'tuvo plays cortas' : 'tuvieron plays cortas'} (badge naranja)`);
+  }
+  partes.push(`${conPlays.toLocaleString('es-ES')} ${conPlays === 1 ? 'tiene' : 'tienen'} alguna play ≥30s.`);
+  return partes.join(' · ');
+}
+
+// Las filas que se ven ahora: las normales, o solo las ocultas si el toggle
+// está puesto.
+function visibles() {
+  if (!cache) return [];
+  return cache.zeros.filter(r => (showingHidden ? hiddenTracks.has(r.id) : !hiddenTracks.has(r.id)));
+}
+
+// Recalcula las filas visibles y las publica en la lista incremental. Nunca se
+// toca el DOM de las tarjetas a mano.
+//
+// `preserveRendered` es obligatorio en el camino de ocultar: sin él, ocultar la
+// tarjeta 900 devuelve el scroll al principio de la lista. Es exactamente lo
+// que se arregló en #skips en v=140.
+function applyRows({ preserveRendered = false } = {}) {
+  currentRows = visibles();
+  rowById = new Map(currentRows.map(r => [r.id, r]));
+  for (const id of [...selected]) if (!rowById.has(id)) selected.delete(id);
+  if (list) {
+    // setItems repinta el grid: los <img> viejos dejan de existir y el observer
+    // de tapas tiene que soltarlos antes de que lleguen los nuevos.
+    lazyCovers?.reset();
+    list.setItems(currentRows, { preserveRendered });
+  }
+  actualizarResumen();
+  updateSelectionUi();
+}
+
+// Los ocultos llegan de la playlist unos segundos después de pintar. Si a esa
+// altura ya hay lista, se repinta conservando el scroll: repintar entero
+// devolvería al usuario al principio a los pocos segundos de entrar.
+function refreshAfterHiddenSync() {
+  if (!cache) return;
+  if (!list) { renderResults(); return; }
+  syncHiddenToggle();
+  applyRows({ preserveRendered: true });
+}
+
+// El toggle «Ocultos (N)» solo existe si hay algo oculto (o si los estás
+// mirando). Vive aparte porque aparecer y desaparecer NO puede costar un
+// repintado de la vista: era eso lo que devolvía el scroll al principio la
+// primera vez que ocultabas algo estando abajo del todo.
+function hiddenToggleHtml(n) {
+  if (!(n > 0 || showingHidden)) return '';
+  return `<button class="btn btn-secondary btn-sm ${showingHidden ? 'sort-active' : ''}" id="zp-toggle-hidden" title="${showingHidden ? 'Volver a la vista normal' : 'Ver solo los que ocultaste'}">${showingHidden ? '← Volver' : 'Ocultos (' + n + ')'}</button>`;
+}
+
+function syncHiddenToggle() {
+  const actions = document.getElementById('zp-actions');
+  if (!actions) return;
+  const actual = actions.querySelector('#zp-toggle-hidden');
+  const html = hiddenToggleHtml(hiddenTracks.size);
+  if (!html) { actual?.remove(); return; }
+  if (actual) actual.outerHTML = html;
+  else actions.insertAdjacentHTML('afterbegin', html);
+  wireHiddenToggle();
+}
+
+function wireHiddenToggle() {
+  const btn = document.getElementById('zp-toggle-hidden');
+  if (btn) btn.onclick = () => { showingHidden = !showingHidden; renderResults(); };
+}
+
+// Ocultar no toca los likes: solo mete la pista en la playlist interna de
+// ocultos. Es la salida NO destructiva que le faltaba a la vista.
+function onHideClick(r) {
+  const wasShowingHidden = showingHidden;
+  hiddenTracks.toggle(r.id, r.uri || null);
+  selected.delete(r.id);
+  if (showingHidden && hiddenTracks.size === 0) showingHidden = false;
+
+  // Salirse sola de la vista de ocultos SÍ cambia la vista entera (cambia el
+  // conjunto y el icono de todas las tarjetas), así que ahí se repinta. En el
+  // caso normal la lista se recalcula conservando el scroll y lo ya pintado, y
+  // el toggle aparece o se actualiza en el sitio.
+  if (showingHidden !== wasShowingHidden) { renderResults(); return; }
+  syncHiddenToggle();
+  applyRows({ preserveRendered: true });
+}
+
 function renderResults() {
   const content = document.getElementById('zeroplays-content');
   if (!content || !cache) return;
   if (list) { list.destroy(); list = null; }
   if (lazyCovers) { lazyCovers.destroy(); lazyCovers = null; }
 
-  const { zeros, some, likesCount, partialsInZeros, statsfmUsed, statsfmRescued } = cache;
-  const nunca = zeros.length - (partialsInZeros || 0);
-  rowById = new Map(zeros.map(r => [r.id, r]));
-  // Una fila que ya no existe (porque la sacaste de likes) no puede seguir
-  // contando como seleccionada.
+  const { zeros, some, likesCount, statsfmUsed, statsfmRescued } = cache;
+  currentRows = visibles();
+  rowById = new Map(currentRows.map(r => [r.id, r]));
+  // Una fila que ya no existe (porque la sacaste de likes, o porque la
+  // ocultaste) no puede seguir contando como seleccionada.
   if (selected.size) {
     for (const id of [...selected]) if (!rowById.has(id)) selected.delete(id);
   }
+  // Los subtotales se cuentan sobre lo que se ve, no sobre `zeros` entero: si
+  // no, ocultar bajaba el número grande y dejaba el desglose contando ocultos.
+  const parciales = currentRows.filter(r => r.partial).length;
+  const nunca = currentRows.length - parciales;
+  const ocultosN = hiddenTracks.size;
 
   const sfLine = statsfmUsed
     ? `<div style="font-size:12px;color:var(--color-accent);margin-top:2px">Cruzando con Stats.fm — sacados ${statsfmRescued.toLocaleString('es-ES')} temas que sí escuchaste después del export.</div>`
@@ -190,21 +318,24 @@ function renderResults() {
     <div class="card" style="margin-bottom:16px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px">
       <div>
         <div style="font-size:14px">
-          <strong>${zeros.length.toLocaleString('es-ES')}</strong> likes sin plays ≥30s de ${likesCount.toLocaleString('es-ES')} totales
+          <strong id="zp-count-visible">${currentRows.length.toLocaleString('es-ES')}</strong> <span id="zp-count-label">${currentRows.length === 1 ? 'like sin plays' : 'likes sin plays'}</span> ≥30s${showingHidden ? (currentRows.length === 1 ? ' (oculto)' : ' (ocultos)') : ''} de ${likesCount.toLocaleString('es-ES')} totales
         </div>
-        <div style="font-size:12px;color:var(--color-text-muted);margin-top:2px">
-          ${nunca.toLocaleString('es-ES')} nunca sonaron${partialsInZeros ? ` · ${partialsInZeros.toLocaleString('es-ES')} tuvieron plays cortas (badge naranja)` : ''} · ${some.length.toLocaleString('es-ES')} tienen alguna play ≥30s.
+        <div style="font-size:12px;color:var(--color-text-muted);margin-top:2px" id="zp-breakdown">
+          ${desgloseTexto(nunca, parciales, some.length)}
         </div>
         ${sfLine}
       </div>
-      <div style="display:flex;gap:8px">
-        <button class="btn btn-secondary btn-sm" id="zp-select-all" ${zeros.length === 0 ? 'disabled' : ''} title="Marca las ${zeros.length.toLocaleString('es-ES')} de la lista, no solo las pintadas">Seleccionar todos</button>
+      <div style="display:flex;gap:8px" id="zp-actions">
+        ${hiddenToggleHtml(ocultosN)}
+        <button class="btn btn-secondary btn-sm" id="zp-select-all" ${currentRows.length === 0 ? 'disabled' : ''} title="Marca las ${currentRows.length.toLocaleString('es-ES')} de la lista, no solo las pintadas">Seleccionar todos</button>
       </div>
     </div>
     ${sfToggleHtml}
 
-    ${zeros.length === 0 ? `
-      <div class="card"><p>No hay likes sin plays. Todos tus likes se escucharon al menos una vez ≥30s.</p></div>
+    ${currentRows.length === 0 ? `
+      <div class="card"><p>${showingHidden
+        ? 'No hay nada oculto en esta vista.'
+        : (zeros.length ? 'Ocultaste todos los likes sin plays. Mirá «Ocultos» para devolver alguno.' : 'No hay likes sin plays. Todos tus likes se escucharon al menos una vez ≥30s.')}</p></div>
     ` : `
       <div class="sc-grid" id="zp-list" role="listbox" aria-multiselectable="true" aria-label="Likes sin plays"></div>
     `}
@@ -233,7 +364,7 @@ function renderResults() {
     lazyCovers = createLazyImages({ root: scroller, rootMargin: '200px' });
     list = createIncrementalList({
       container: grid,
-      items: zeros,
+      items: currentRows,
       renderItem: renderCard,
       batchSize: BATCH,
       rootMargin: '600px',
@@ -252,14 +383,20 @@ function renderResults() {
       onToggle: (id, o) => toggleSelection(id, o),
       onPlay: (r) => onPlayClick(r),
       onCard: (r) => openTrackCard({ id: r.trackId, name: r.name, artist: r.artist, album: r.album, img: r.coverSmall || r.cover }),
+      onHide: (r) => onHideClick(r),
       onUnlike: (r) => sacarDeLikes([r]),
     });
   }
 
+  wireHiddenToggle();
+
   const selAll = content.querySelector('#zp-select-all');
   if (selAll) selAll.onclick = () => {
-    const todas = zeros.length > 0 && zeros.every(r => selected.has(r.id));
-    selected = todas ? new Set() : new Set(zeros.map(r => r.id));
+    // Sobre el array de filas visibles, no sobre las tarjetas pintadas: si solo
+    // mirara el DOM marcaría 80 de 3.000.
+    const todas = currentRows.length > 0 && currentRows.every(r => selected.has(r.id));
+    selected = todas ? new Set() : new Set(currentRows.map(r => r.id));
+    lastClickedId = null;
     repaintSelection();
     updateSelectionUi();
   };
@@ -272,7 +409,7 @@ function renderResults() {
   };
   const rm = content.querySelector('#zp-remove');
   if (rm) rm.onclick = () => {
-    const filas = cache.zeros.filter(r => selected.has(r.id));
+    const filas = currentRows.filter(r => selected.has(r.id));
     if (filas.length) sacarDeLikes(filas);
   };
 
@@ -291,10 +428,11 @@ function renderCard(r) {
       selected: selected.has(r.id),
       playing: playingKey() === `zp:${r.id}`,
       showUnlike: true,
-      // Acá no hay lista de ocultos: la vista es "lo que no escuchaste" y la
-      // salida es sacarlo de likes o dejarlo. Un ojo sin handler sería un botón
-      // muerto.
-      showHide: false,
+      // Desde v=149 sí hay lista de ocultos: para los que Ian sí escuchó pero
+      // aparecen acá igual (el historial no los tiene), ocultar es la salida
+      // que no borra el like.
+      showHide: true,
+      hidden: showingHidden,
       badge,
     },
   );
@@ -305,7 +443,10 @@ function renderCard(r) {
 function toggleSelection(id, { range = false } = {}) {
   const r = rowById.get(id);
   if (!r) return;
-  const filas = cache?.zeros || [];
+  // El rango se mide sobre las filas VISIBLES: con ocultos de por medio,
+  // `cache.zeros` tiene filas que no están pintadas y el rango se llevaría
+  // por delante cosas que el usuario no vio.
+  const filas = currentRows;
   if (range && lastClickedId && lastClickedId !== id) {
     const desde = filas.findIndex(x => x.id === lastClickedId);
     const hasta = filas.findIndex(x => x.id === id);
@@ -341,9 +482,11 @@ function updateSelectionUi() {
   const rm = document.getElementById('zp-remove');
   if (rm) rm.textContent = `Sacar de likes (${n})`;
   const selAll = document.getElementById('zp-select-all');
-  if (selAll && cache) {
-    const todas = cache.zeros.length > 0 && n >= cache.zeros.length && cache.zeros.every(r => selected.has(r.id));
+  if (selAll) {
+    const total = currentRows.length;
+    const todas = total > 0 && n >= total && currentRows.every(r => selected.has(r.id));
     selAll.textContent = todas ? 'Quitar selección' : 'Seleccionar todos';
+    selAll.disabled = total === 0;
   }
 }
 
@@ -359,14 +502,10 @@ async function onPlayClick(r) {
   if (res === null) showToast(`Sin preview disponible de «${r.name}»`, 'info');
 }
 
+// Cuál es el preview actual y si está SONANDO (▶ ↔ ⏸). El evento sale de los
+// eventos del <audio> en `ui/preview-player.js`.
 document.addEventListener('previewchange', (e) => {
-  const content = document.getElementById('zeroplays-content');
-  if (!content) return;
-  const key = e.detail.key || '';
-  content.querySelectorAll('.sc-card').forEach(card => {
-    const btn = card.querySelector('.sc-play');
-    if (btn) btn.classList.toggle('playing', key === `zp:${card.dataset.id}`);
-  });
+  paintPlayingCard(document.getElementById('zp-list'), 'zp', e.detail);
 });
 
 // ── Sacar de likes ───────────────────────────────────────────────────────────
@@ -404,19 +543,28 @@ async function sacarDeLikes(rows) {
   cache.likesCount = Math.max(0, cache.likesCount - n);
   for (const id of fuera) selected.delete(id);
   lastClickedId = null;
-  rowById = new Map(cache.zeros.map(r => [r.id, r]));
-  // setItems conserva el scroll y lo ya pintado: sacar la tarjeta 900 no puede
-  // devolver al usuario al principio de la lista.
-  lazyCovers?.reset();
-  list?.setItems(cache.zeros, { preserveRendered: true });
-  actualizarResumen();
-  updateSelectionUi();
+  // applyRows recalcula las visibles y llama a setItems con preserveRendered:
+  // conserva el scroll y lo ya pintado, o sea que sacar la tarjeta 900 no
+  // devuelve al usuario al principio de la lista.
+  applyRows({ preserveRendered: true });
 }
 
-// El número grande, sin repintar la vista entera.
+// El número grande y su desglose, sin repintar la vista entera. Cuentan lo que
+// se VE: ocultar una fila tiene que bajar el número, igual que sacarla de likes.
 function actualizarResumen() {
   const content = document.getElementById('zeroplays-content');
   if (!content || !cache) return;
-  const strong = content.querySelector('.card strong');
-  if (strong) strong.textContent = cache.zeros.length.toLocaleString('es-ES');
+  const strong = content.querySelector('#zp-count-visible');
+  if (strong) strong.textContent = currentRows.length.toLocaleString('es-ES');
+  const etiqueta = content.querySelector('#zp-count-label');
+  if (etiqueta) etiqueta.textContent = currentRows.length === 1 ? 'like sin plays' : 'likes sin plays';
+  const desglose = content.querySelector('#zp-breakdown');
+  if (desglose) {
+    const parciales = currentRows.filter(r => r.partial).length;
+    const nunca = currentRows.length - parciales;
+    desglose.textContent =
+      desgloseTexto(nunca, parciales, cache.some.length);
+  }
+  const hideBtn = content.querySelector('#zp-toggle-hidden');
+  if (hideBtn && !showingHidden) hideBtn.textContent = `Ocultos (${hiddenTracks.size})`;
 }
