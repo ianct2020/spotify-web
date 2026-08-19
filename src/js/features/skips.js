@@ -42,6 +42,10 @@ let rowById = new Map();
 // incremental las tarjetas del final no existen todavía, así que "Seleccionar
 // todos" no podría marcarlas y el contador leería de menos.
 let selectedIds = new Set();
+// Ancla de shift+click: la última tarjeta que se tocó A MANO. El rango se
+// resuelve sobre `currentRows` (dos índices), nunca sobre el DOM: con lista
+// incremental las tarjetas del final todavía no existen.
+let lastClickedId = null;
 let list = null;
 // Las tapas se cargan con un IntersectionObserver propio contra el grid (ver
 // ui/lazy-img.js). El `loading="lazy"` nativo resuelve contra el viewport y no
@@ -117,6 +121,7 @@ function teardown() {
   if (list) { list.destroy(); list = null; }
   if (lazyCovers) { lazyCovers.destroy(); lazyCovers = null; }
   selectedIds.clear();
+  lastClickedId = null;
   currentRows = [];
   rowById = new Map();
 }
@@ -331,18 +336,63 @@ function updateCounters() {
   if (!content) return;
   const n = content.querySelector('#skips-count-visible');
   if (n) n.textContent = currentRows.length.toLocaleString('es-ES');
-  const selAll = content.querySelector('#sk-select-all');
-  if (selAll) selAll.disabled = currentRows.length === 0;
   const hideBtn = content.querySelector('#sk-toggle-hidden');
   if (hideBtn && !showingHidden) hideBtn.textContent = `Ocultos (${hiddenTracks.size})`;
   updateRemoveBtn();
 }
 
+// Selección de una tarjeta. Con shift marca el RANGO desde la última tocada a
+// mano, igual que en `#sin-clasificar`.
+function toggleSeleccion(id, range) {
+  if (!rowById.has(id)) return;
+  const grid = document.querySelector('#skips-list');
+  if (range && lastClickedId && lastClickedId !== id) {
+    const desde = currentRows.findIndex(r => r.id === lastClickedId);
+    const hasta = currentRows.findIndex(r => r.id === id);
+    if (desde >= 0 && hasta >= 0) {
+      const [a, b] = desde < hasta ? [desde, hasta] : [hasta, desde];
+      for (let i = a; i <= b; i++) selectedIds.add(currentRows[i].id);
+      lastClickedId = id;
+      // Solo repinta lo que existe: las tarjetas de los lotes que falten nacen
+      // ya marcadas, porque renderRow lee del Set.
+      grid?.querySelectorAll('.sc-card').forEach(card => {
+        paintCardSelection(card, selectedIds.has(card.dataset.id));
+      });
+      updateRemoveBtn();
+      return;
+    }
+  }
+  if (selectedIds.has(id)) selectedIds.delete(id); else selectedIds.add(id);
+  lastClickedId = id;
+  paintCardSelection(grid?.querySelector(`.sc-card[data-id="${CSS.escape(id)}"]`), selectedIds.has(id));
+  updateRemoveBtn();
+}
+
+// La barra cuenta SIEMPRE del Set, no de las tarjetas pintadas. Y dice «N de M»
+// cuando la selección es parcial: sin eso, cambiar de filtro con cosas marcadas
+// dejaba «1.155 candidatos» arriba y «(102)» abajo, y parecía que «Seleccionar
+// todos» había marcado 102 de 1.155. Reproducido el 2026-08-18: marcar todo con
+// el chip «100 %» (102 filas) y volver a «≥70 %» (1.155 filas) da exactamente
+// esa pantalla. El botón no marcaba de menos; lo que faltaba era decir el
+// estado.
 function updateRemoveBtn() {
   const rmBtn = document.querySelector('#sk-remove');
+  const n = selectedIds.size;
+  const total = currentRows.length;
+  const selAll = document.querySelector('#sk-select-all');
+  if (selAll) {
+    const todas = total > 0 && n >= total;
+    selAll.textContent = todas
+      ? 'Deseleccionar todas'
+      : (n > 0 ? `Seleccionar las ${total.toLocaleString('es-ES')}` : 'Seleccionar todas');
+    selAll.disabled = total === 0;
+  }
   if (!rmBtn) return;
-  rmBtn.textContent = `Sacar de likes (${selectedIds.size})`;
-  rmBtn.disabled = selectedIds.size === 0;
+  const parcial = n > 0 && n < total;
+  rmBtn.textContent = parcial
+    ? `Sacar de likes (${n.toLocaleString('es-ES')} de ${total.toLocaleString('es-ES')})`
+    : `Sacar de likes (${n.toLocaleString('es-ES')})`;
+  rmBtn.disabled = n === 0;
 }
 
 function renderResults() {
@@ -405,7 +455,7 @@ function renderResults() {
         ` : ''}
         <div class="skips-topbar-actions" id="sk-actions">
           ${hiddenToggleHtml(hiddenCount)}
-          <button class="btn btn-secondary btn-sm" id="sk-select-all" ${rows.length === 0 ? 'disabled' : ''}>Seleccionar todos</button>
+          <button class="btn btn-secondary btn-sm" id="sk-select-all" ${rows.length === 0 ? 'disabled' : ''}>Seleccionar todas</button>
           <button class="btn btn-danger btn-sm" id="sk-remove" disabled>Sacar de likes (0)</button>
         </div>
       </div>
@@ -562,6 +612,9 @@ function wireRows() {
     // marcaría 80 de 1.322.
     const allSelected = currentRows.length > 0 && currentRows.every(r => selectedIds.has(r.id));
     selectedIds = allSelected ? new Set() : new Set(currentRows.map(r => r.id));
+    // El ancla de shift+click no sobrevive a un select-all: el próximo rango se
+    // mide desde la siguiente tarjeta que se toque a mano.
+    lastClickedId = null;
     // Solo repinta lo que existe: las tarjetas de los lotes que falten nacen ya
     // marcadas, porque renderRow lee del Set.
     if (grid) grid.querySelectorAll('.sc-card').forEach(card => {
@@ -575,11 +628,11 @@ function wireRows() {
   // tarjeta enfocada. Todo delegado en el grid, ver ui/track-card-row.js.
   wireTrackCardGrid(grid, {
     rowById: (id) => rowById.get(id),
-    onToggle: (id) => {
-      if (selectedIds.has(id)) selectedIds.delete(id); else selectedIds.add(id);
-      paintCardSelection(grid.querySelector(`.sc-card[data-id="${CSS.escape(id)}"]`), selectedIds.has(id));
-      updateRemoveBtn();
-    },
+    // La tarjeta compartida manda `{ range: e.shiftKey }` desde v=140; esta
+    // vista lo estaba IGNORANDO, así que shift+click marcaba de a una. El
+    // `user-select: none` de `.sc-card` ya estaba puesto, que era la otra mitad
+    // del asunto (sin él, shift+click arrastra la selección de texto).
+    onToggle: (id, { range = false } = {}) => toggleSeleccion(id, range),
     onPlay: (r, card) => onPlayClick(r, card.querySelector('.sc-play')),
     onCard: (r) => {
       const imgs = r.track.album?.images || [];

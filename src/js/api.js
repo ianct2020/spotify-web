@@ -1016,6 +1016,60 @@ async function saveToLibrary(ids) {
   }
 }
 
+// Guardar un ÁLBUM en la biblioteca (el disco entero como unidad, que es lo que
+// hace el ♥ del álbum en la app de Spotify). NO es lo mismo que likear sus
+// pistas una por una: eso es `saveToLibrary`.
+//
+// Verificado en vivo el 2026-08-18 con la sesión real, sobre «Kind Of Blue» de
+// Miles Davis (ciclo completo guardar → comprobar → sacar, biblioteca 33 → 34
+// → 33):
+//   - `PUT /me/albums` body `{ ids: [...] }`  → **403 Forbidden**
+//   - `PUT /me/albums?ids=...`                → **403 Forbidden**
+//   - `PUT /me/library?uris=spotify:album:…`  → **200**, y el álbum aparece en
+//     `GET /me/albums` con su `added_at`
+//
+// O sea: post-migración los álbumes viajan por la MISMA ruta unificada que las
+// pistas, cambiando el tipo de la URI. La ruta `/me/albums` sobrevive solo para
+// LEER (`GET /me/albums` → 200); su variante `contains` no (`GET
+// /me/albums/contains?ids=` → 403, hay que preguntar por
+// `/me/library/contains?uris=spotify:album:…`).
+async function saveAlbumsToLibrary(albumIds) {
+  if (!Array.isArray(albumIds) || albumIds.length === 0) return;
+  const uniq = [...new Set(albumIds.filter(Boolean))];
+  for (let i = 0; i < uniq.length; i += 40) {
+    const chunk = uniq.slice(i, i + 40);
+    const uris = chunk.map(id => encodeURIComponent(`spotify:album:${id}`)).join(',');
+    await spotifyFetch(`/me/library?uris=${uris}`, { method: 'PUT' });
+  }
+}
+
+/** Saca álbumes de la biblioteca. Misma ruta unificada que el guardado. */
+async function removeAlbumsFromLibrary(albumIds) {
+  if (!Array.isArray(albumIds) || albumIds.length === 0) return;
+  const uniq = [...new Set(albumIds.filter(Boolean))];
+  for (let i = 0; i < uniq.length; i += 40) {
+    const chunk = uniq.slice(i, i + 40);
+    const uris = chunk.map(id => encodeURIComponent(`spotify:album:${id}`)).join(',');
+    await spotifyFetch(`/me/library?uris=${uris}`, { method: 'DELETE' });
+  }
+}
+
+/**
+ * ¿Están estos álbumes en la biblioteca? Devuelve Map<albumId, bool>.
+ * Chunks de 50, igual que el `contains` de pistas.
+ */
+async function albumsInLibrary(albumIds) {
+  const out = new Map();
+  const uniq = [...new Set((albumIds || []).filter(Boolean))];
+  for (let i = 0; i < uniq.length; i += 50) {
+    const chunk = uniq.slice(i, i + 50);
+    const uris = chunk.map(id => encodeURIComponent(`spotify:album:${id}`)).join(',');
+    const r = await spotifyFetch(`/me/library/contains?uris=${uris}`);
+    chunk.forEach((id, j) => out.set(id, !!r[j]));
+  }
+  return out;
+}
+
 // Discografía de un artista.
 //
 // Estado verificado en vivo el 2026-08-06 con la sesión real:
@@ -1161,6 +1215,9 @@ export {
   createPlaylist,
   unfollowPlaylist,
   saveToLibrary,
+  saveAlbumsToLibrary,
+  removeAlbumsFromLibrary,
+  albumsInLibrary,
   getArtistAlbums,
   getAlbumTracks,
   searchArtistByName,

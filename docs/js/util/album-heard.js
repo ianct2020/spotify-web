@@ -14,9 +14,9 @@
 // Todas las claves pasan por `albumKey()` (util/album-key.js) — normalizado
 // con strip diacríticos + sufijos de edición.
 
-import { albumKey } from './album-key.js?v=147';
-import { loadTrackPlays, loadListenedAlbums, isOwner } from '../features/history-data.js?v=147';
-import { getBestAvailableLikes, getAllPlaylistItems } from '../api.js?v=147';
+import { albumKey } from './album-key.js?v=148';
+import { loadTrackPlays, loadListenedAlbums, isOwner } from '../features/history-data.js?v=148';
+import { getBestAvailableLikes, getAllPlaylistItems } from '../api.js?v=148';
 
 const LS_WTHREE_ID = 'wthree_playlist_id';
 
@@ -113,9 +113,7 @@ export function invalidateAlbumHeardIndex() {
   cache = null;
 }
 
-// Helper: marca un álbum como escuchado sin reconstruir el índice
-// (útil después de "+ Biblioteca").
-export function markAlbumHeard(name, artist) {
-  if (!cache) return;
-  cache.heard.add(albumKey(name, artist));
-}
+// Acá vivía `markAlbumHeard(name, artist)`, que marcaba el álbum SOLO en el
+// índice en memoria: la tarjeta desaparecía y volvía en la siguiente sesión.
+// Lo que persiste es el store `heardAlbums` de `features/discover-common.js`
+// (localStorage), y por eso el que se usa hoy es `markAlbumResolved()`.

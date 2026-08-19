@@ -1,4 +1,4 @@
-import { guardRoute } from './ui/crash-guard.js?v=147';
+import { guardRoute } from './ui/crash-guard.js?v=148';
 
 const routes = {};
 

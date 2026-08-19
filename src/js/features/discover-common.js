@@ -7,7 +7,7 @@
 //   - permiten "+ Biblioteca" y "Crear playlist con lo elegido"
 
 import { idbGetCached, idbSetCached, idbDel } from '../idb.js';
-import { getArtistAlbums, searchArtistByName, getAlbumTracks, saveToLibrary, createPlaylist, addTracksToPlaylist } from '../api.js';
+import { getArtistAlbums, searchArtistByName, getAlbumTracks, saveToLibrary, saveAlbumsToLibrary, createPlaylist, addTracksToPlaylist } from '../api.js';
 import { albumKey } from '../util/album-key.js';
 import { escapeHtml } from '../ui/components.js';
 import { showToast } from '../ui/toast.js';
@@ -184,8 +184,8 @@ export function cardKey(al, artistName) {
 }
 
 // El índice de escuchados de util/album-heard.js manda igual que antes; encima
-// se suma lo que Ian marcó a mano, que persiste entre sesiones (markAlbumHeard
-// solo vive en memoria).
+// se suma lo que Ian resolvió a mano —«Escuchado», «Guardar álbum», «Añadir
+// pistas a mis likes»—, que persiste entre sesiones en `heardAlbums`.
 export function albumIsUnheard(al, artistName, heardSet) {
   const k = albumKey(al.name, artistName);
   return !heardSet.has(k) && !heardAlbums.has(k);
@@ -355,7 +355,8 @@ export function renderAlbumCard(al, artistName, {
         </div>
       </div>
       <div class="dcard-actions">
-        <button class="btn btn-secondary btn-sm" data-save-album="${id}" data-save-artist="${artista}" title="Guardar todas las pistas en tu biblioteca">+ Biblioteca</button>
+        <button class="btn btn-secondary btn-sm" data-save-album="${id}" data-save-artist="${artista}" title="Guardar el disco entero en tu biblioteca de álbumes">Guardar álbum</button>
+        <button class="btn btn-secondary btn-sm" data-liketracks-album="${id}" data-save-artist="${artista}" title="Darle al corazón a cada pista del disco, una por una">Añadir pistas a mis likes</button>
         <button class="btn btn-secondary btn-sm" data-addpl-album="${id}" title="Añadir todas las pistas a una o varias playlists">Añadir a playlist…</button>
         ${showHeard ? `<button class="btn btn-secondary btn-sm" data-heard-album="${id}" title="Ya lo escuchaste y lo evaluaste: deja de aparecer">Escuchado</button>` : ''}
         <button class="btn btn-secondary btn-sm dcard-hide" data-hide-album="${id}"
@@ -369,7 +370,7 @@ export function renderAlbumCard(al, artistName, {
 // Cablea una grilla ya pintada con renderAlbumCard. Las dos vistas usan los
 // mismos data-attributes, así que el wiring también es uno solo.
 export function wireAlbumCards(list, findAlbumById, {
-  checkClass, selection, onSave, onChange, afterAdd, onHeard, onHide,
+  checkClass, selection, onSave, onLikeTracks, onChange, afterAdd, onHeard, onHide,
 }) {
   // ── Preview: botón ▶ y hover sobre la tapa ──
   // El getter es el mismo en los dos caminos; `hoverIn` (dentro de attachHover)
@@ -422,6 +423,9 @@ export function wireAlbumCards(list, findAlbumById, {
   });
   list.querySelectorAll('[data-save-album]').forEach(btn => {
     btn.onclick = () => onSave(btn.dataset.saveAlbum, btn.dataset.saveArtist, btn);
+  });
+  list.querySelectorAll('[data-liketracks-album]').forEach(btn => {
+    btn.onclick = () => onLikeTracks?.(btn.dataset.liketracksAlbum, btn.dataset.saveArtist, btn);
   });
   list.querySelectorAll('[data-addpl-album]').forEach(btn => {
     btn.onclick = async () => {
@@ -523,10 +527,44 @@ export async function addAlbumsToPlaylists(albumIds, findAlbumById, { onDone } =
   });
 }
 
+// Las DOS cosas distintas que se pueden hacer con un álbum, cada una con su
+// nombre. Hasta v=147 había un solo botón —«+ Biblioteca»— que llamaba a
+// `saveAlbumTracksToLibrary`: Ian lo apretó esperando guardar el disco y le
+// entraron sus 12 pistas sueltas en los me gusta. El botón no estaba roto, el
+// nombre mentía.
+
+/** Guarda el ÁLBUM como unidad. No toca los me gusta de las pistas. */
+export async function saveAlbumToLibrary(albumId) {
+  if (!albumId) throw new Error('álbum sin id');
+  await saveAlbumsToLibrary([albumId]);
+  return albumId;
+}
+
+/** Likea UNA POR UNA todas las pistas del álbum. No guarda el álbum. */
 export async function saveAlbumTracksToLibrary(albumId) {
   const tracks = await getAlbumTracks(albumId);
   const ids = tracks.map(t => t.id).filter(Boolean);
   if (!ids.length) throw new Error('el álbum no tiene pistas');
   await saveToLibrary(ids);
   return ids;
+}
+
+/**
+ * Cuántas pistas tiene el álbum, para poder DECIRLO antes de likearlas.
+ * Usa el dato que ya trae la tarjeta si lo hay; si no, lo pregunta.
+ */
+export async function albumTrackCount(al) {
+  if (al?.total) return al.total;
+  try { return (await getAlbumTracks(al.id)).length; } catch { return 0; }
+}
+
+/**
+ * Un álbum guardado (o con todas sus pistas likeadas) ya está resuelto: tiene
+ * que dejar de aparecer en «Sin escuchar» y en «Novedades», y tiene que
+ * seguir sin aparecer después de recargar. `markAlbumHeard` solo tocaba el
+ * índice EN MEMORIA, así que la tarjeta volvía en la siguiente sesión — que es
+ * lo que más confundía.
+ */
+export function markAlbumResolved(al, artistName) {
+  return heardAlbums.add(cardKey(al, artistName), null);
 }
