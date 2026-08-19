@@ -125,7 +125,9 @@ function norm(s) {
 // álbum («¥$») no encuentra nada en Deezer, el nombre real sí.
 const DEEZER_MAX_QUERIES = 2;
 
-async function tryDeezer(name, artist) {
+// `estado.caido` se pone en true si Deezer no contestó (timeout, script error).
+// Es distinto de "Deezer no tiene el tema": ver el comentario de `getPreview`.
+async function tryDeezer(name, artist, estado = {}) {
   const artists = artistList(artist);
   const cacheKey = `d:${artists.map(norm).filter(Boolean).join('/')}|${norm(name)}`;
   const cached = deezerCachedUrl(cacheKey);
@@ -138,7 +140,7 @@ async function tryDeezer(name, artist) {
   for (const q of queries) {
     let data;
     try { data = await deezerSearchJsonp(`${q} ${name}`.trim(), 8); }
-    catch { return null; }
+    catch { estado.caido = true; return null; }
     const items = (data?.data || []).filter(r => r.preview);
     const hit = pickBestMatch(
       { name, artists },
@@ -178,6 +180,22 @@ function spotifyEmbed(spotifyId, name, artist) {
 // Estrategia:
 //   1. Si hay cache "provider": ir directo a ese proveedor (menos llamadas).
 //   2. Si no: intentar iTunes → Deezer → embed. Guardar el ganador (o 'none').
+//
+// ⚠️ **Un proveedor que no CONTESTA no es un proveedor que no TIENE el tema.**
+// Hasta v=148 los dos caminos terminaban igual —sin resultado— y el veredicto
+// se guardaba en el cache: 'none' 3 días, o 'spotify-embed' **30 días** si el
+// track traía `spotifyId`. O sea que un rate limit de Apple durante una tanda
+// de previews dejaba tracks pegados al embed de Spotify durante un mes, mucho
+// después de que iTunes volviera a contestar.
+//
+// Medido el 2026-08-19 sobre 100 tracks de `#skips`: con 4 búsquedas en
+// paralelo, 4 cayeron a "sin proveedor"; repitiéndolas de a una con 1,2 s de
+// espera, **2 de esas 4 resolvieron a iTunes al primer intento**. O sea que la
+// mitad de los "no hay preview" de esa tanda eran de la propia tanda.
+//
+// Desde v=149 el veredicto solo se cachea si TODOS los proveedores que se
+// probaron contestaron. Si alguno se cayó se sirve lo que haya (el embed, si
+// hay `spotifyId`) pero no se guarda nada: la próxima vez se vuelve a probar.
 async function getPreview({ name, artist, artists, spotifyId } = {}) {
   const lista = artistList({ artist, artists });
   if (!name || !lista.length) return null;
@@ -190,8 +208,18 @@ async function getPreview({ name, artist, artists, spotifyId } = {}) {
   const cached = providerFor(key);
   if (cached === 'none') return null;
 
+  // ¿Alguno de los proveedores que probamos se cayó (red, timeout, rate limit)?
+  // Si sí, el "no encontré nada" de esta llamada no vale como veredicto.
+  let alguienCaido = false;
+
   if (cached === 'itunes' || !cached) {
-    const it = await findTrackPreview(lista, name);
+    let it = null;
+    try {
+      it = await findTrackPreview(lista, name);
+    } catch (e) {
+      alguienCaido = true;
+      console.warn(`[preview] iTunes no contestó para «${name}»:`, e.message);
+    }
     if (it) {
       setProvider(key, 'itunes');
       return { url: it.url, provider: 'itunes', type: 'audio', label, trackName: name, trackArtist: lista[0] };
@@ -203,7 +231,9 @@ async function getPreview({ name, artist, artists, spotifyId } = {}) {
   }
 
   if (cached === 'deezer' || !cached) {
-    const dz = await tryDeezer(name, lista);
+    const estado = {};
+    const dz = await tryDeezer(name, lista, estado);
+    if (estado.caido) alguienCaido = true;
     if (dz) {
       setProvider(key, 'deezer');
       return { url: dz.url, provider: 'deezer', type: 'audio', label, trackName: name, trackArtist: lista[0] };
@@ -211,11 +241,13 @@ async function getPreview({ name, artist, artists, spotifyId } = {}) {
   }
 
   if ((cached === 'spotify-embed' || !cached) && spotifyId) {
-    setProvider(key, 'spotify-embed');
+    // Solo se guarda el veredicto si nadie se cayó: si no, el embed queda
+    // pegado 30 días por un rate limit que duró unos segundos.
+    if (!alguienCaido) setProvider(key, 'spotify-embed');
     return spotifyEmbed(spotifyId, name, lista[0]);
   }
 
-  setProvider(key, 'none');
+  if (!alguienCaido) setProvider(key, 'none');
   return null;
 }
 

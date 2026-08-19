@@ -14,15 +14,25 @@
 //     onConfirm: async (elegidas, { setStatus }) => { … },
 //   });
 //
-// Si `onConfirm` lanza, el modal sigue abierto. `setStatus` cambia la etiqueta
-// del botón mientras se trabaja (el chequeo de duplicados puede tardar si una
-// playlist grande no está cacheada).
+// Al confirmar, el modal SE CIERRA y la operación sigue en segundo plano: el
+// chequeo de duplicados lee cada playlist elegida antes de escribir, y con una
+// grande sin cachear eso son decenas de segundos. Hasta v=148 el propio botón
+// iba narrando («Comprobando «hype drivin»…», «Añadiendo…») con la app
+// bloqueada detrás del modal.
+//
+// Ahora `setStatus` escribe en el **pill de progreso de la capa de abajo**
+// (`ui/bottom-layer.js`, slot 'progress', vía `showProgress(…, { minimized:
+// true })`). Nada de `position: fixed` propio: la capa es la que garantiza que
+// no se pise con el player ni con los toasts.
+//
+// El resultado sigue contándolo el caller con su toast de siempre, que es el
+// único que sabe qué se añadió, qué ya estaba y qué falló.
 
-import { openModal, closeModal } from './modal-stack.js?v=148';
-import { escapeHtml } from './components.js?v=148';
-import { showToast } from './toast.js?v=148';
-import { normText } from '../util/track-match.js?v=148';
-import { isHiddenPlaylistName } from '../util/hidden-sync.js?v=148';
+import { openModal, closeModal } from './modal-stack.js?v=149';
+import { escapeHtml, showProgress, hideProgress } from './components.js?v=149';
+import { showToast } from './toast.js?v=149';
+import { normText } from '../util/track-match.js?v=149';
+import { isHiddenPlaylistName } from '../util/hidden-sync.js?v=149';
 
 function filasHtml(playlists, marcadas = new Set()) {
   return playlists.map(p => `
@@ -150,31 +160,39 @@ export function openPlaylistPicker({
     };
   }
 
-  confirmar.onclick = async () => {
+  confirmar.onclick = () => {
     const elegidas = seleccionadas();
     if (!elegidas.length) return;
-    const textoOriginal = confirmar.textContent;
-    confirmar.disabled = true;
-    confirmar.textContent = 'Añadiendo…';
-    if (recargar) recargar.disabled = true;
-    list.querySelectorAll('input[type=checkbox]').forEach(cb => cb.disabled = true);
-    // El chequeo de duplicados lee cada playlist elegida antes de escribir; si
-    // alguna no está cacheada eso tarda, así que el botón va contando.
-    const setStatus = (txt) => { confirmar.textContent = txt || 'Añadiendo…'; };
-    try {
-      if (onConfirm) await onConfirm(elegidas, { setStatus });
-      // Por handle y no closeTop(): `onConfirm` lee las playlists elegidas
-      // antes de escribir y eso tarda; si en el medio se apiló otro modal
-      // encima, closeTop() cerraría ese en vez de este.
-      closeModal(overlay);
-    } catch (e) {
-      console.error('[playlist-picker]', e);
-      confirmar.textContent = textoOriginal;
-      if (recargar) recargar.disabled = false;
-      list.querySelectorAll('input[type=checkbox]').forEach(cb => cb.disabled = false);
-      refrescarContador();
-    }
+    // Se cierra por handle y no con closeTop(): si en el medio se apiló otro
+    // modal encima, closeTop() cerraría ese en vez de este.
+    closeModal(overlay);
+    enSegundoPlano(elegidas, onConfirm);
   };
 
   return overlay;
+}
+
+// Corre la operación con el modal ya cerrado, contándola en el pill de la capa
+// de abajo. No devuelve nada a nadie: el caller cuenta el resultado con su
+// toast, que es el que sabe qué entró de verdad.
+async function enSegundoPlano(elegidas, onConfirm) {
+  if (!onConfirm) return;
+  let texto = 'Añadiendo a tus playlists…';
+  const pintar = () => showProgress(texto, 0, 0, { minimized: true });
+  pintar();
+  // `showProgress` se cierra solo si nadie lo refresca en 10 s — es la red de
+  // seguridad de components.js para quien se olvida de `hideProgress`. Leer una
+  // playlist de 3.000 pistas tarda más que eso, así que va con latido: sin él
+  // el pill desaparece a mitad de la operación y parece que terminó.
+  const latido = setInterval(pintar, 5000);
+  const setStatus = (txt) => { texto = txt || 'Añadiendo a tus playlists…'; pintar(); };
+  try {
+    await onConfirm(elegidas, { setStatus });
+  } catch (e) {
+    // El caller ya contó el resultado real con su toast antes de llegar acá.
+    console.error('[playlist-picker]', e);
+  } finally {
+    clearInterval(latido);
+    hideProgress();
+  }
 }

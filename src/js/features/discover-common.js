@@ -520,8 +520,9 @@ export async function addAlbumsToPlaylists(albumIds, findAlbumById, { onDone } =
           : `${pistas} de ${albumIds.length} lanzamientos`,
         plural: uris.length !== 1,
       });
-      // Si ya estaba todo, el modal se cierra igual: no es un fallo.
-      if (!res.ok.length && !res.skipped.length) throw new Error('no se pudo añadir a ninguna playlist');
+      // Si no entró en ninguna playlist, el toast de arriba ya lo contó: no hay
+      // nada que refrescar en la vista.
+      if (!res.ok.length && !res.skipped.length) return;
       if (onDone) onDone();
     },
   });

@@ -16,23 +16,23 @@
 import {
   getAllUserPlaylists, getAllPlaylistItems, getBestAvailableLikes,
   getCurrentUserId, removeLikedTracks,
-} from '../api.js?v=148';
-import { idbGetCached, idbSetCached, idbDel } from '../idb.js?v=148';
-import { createHiddenStore } from '../util/hidden-sync.js?v=148';
-import { addUrisToPlaylists, toastAddResult, getOwnPlaylists } from '../util/playlist-add.js?v=148';
-import { escapeHtml, pageHeader, showProgress, hideProgress, isCancelled, confirmModal } from '../ui/components.js?v=148';
-import { openModal, closeTop } from '../ui/modal-stack.js?v=148';
-import { openPlaylistPicker } from '../ui/playlist-picker.js?v=148';
-import { showToast } from '../ui/toast.js?v=148';
-import { getPreview } from '../api/preview-providers.js?v=148';
-import { togglePreview, playingKey } from '../ui/preview-player.js?v=148';
-import { openTrackCard } from './track-card.js?v=148';
-import { normText } from '../util/track-match.js?v=148';
-import { activateMarquee } from '../ui/marquee.js?v=148';
-import { renderTrackCardRow, wireTrackCardGrid, paintCardSelection } from '../ui/track-card-row.js?v=148';
-import { createIncrementalList, scrollRootOf } from '../ui/incremental-list.js?v=148';
-import { createLazyImages } from '../ui/lazy-img.js?v=148';
-import { coverAtSize } from '../util/cover-size.js?v=148';
+} from '../api.js?v=149';
+import { idbGetCached, idbSetCached, idbDel } from '../idb.js?v=149';
+import { createHiddenStore } from '../util/hidden-sync.js?v=149';
+import { addUrisToPlaylists, toastAddResult, getOwnPlaylists } from '../util/playlist-add.js?v=149';
+import { escapeHtml, pageHeader, showProgress, hideProgress, isCancelled, confirmModal } from '../ui/components.js?v=149';
+import { openModal, closeTop } from '../ui/modal-stack.js?v=149';
+import { openPlaylistPicker } from '../ui/playlist-picker.js?v=149';
+import { showToast } from '../ui/toast.js?v=149';
+import { getPreview } from '../api/preview-providers.js?v=149';
+import { togglePreview, playingKey } from '../ui/preview-player.js?v=149';
+import { openTrackCard } from './track-card.js?v=149';
+import { normText } from '../util/track-match.js?v=149';
+import { activateMarquee } from '../ui/marquee.js?v=149';
+import { renderTrackCardRow, wireTrackCardGrid, paintCardSelection, paintPlayingCard } from '../ui/track-card-row.js?v=149';
+import { createIncrementalList, scrollRootOf } from '../ui/incremental-list.js?v=149';
+import { createLazyImages } from '../ui/lazy-img.js?v=149';
+import { coverAtSize } from '../util/cover-size.js?v=149';
 
 const HIDDEN_KEY = 'sin_clasificar_ocultas';
 const EXCLUDED_KEY = 'sin_clasificar_excluidas';
@@ -274,12 +274,17 @@ async function load({ force }) {
       const clasificada = id ? ids.has(id) : (key ? keys.has(key) : false);
       if (clasificada) continue;
       const imgs = t.album?.images || [];
+      // La lista entera de artistas, no solo el primero: es la que va al matcher
+      // de previews (ver `onPlayClick`). `artists` es la misma lista unida, que
+      // es lo que pide la tarjeta compartida.
+      const nombres = (t.artists || []).map(a => (a && typeof a === 'object') ? (a.name || '') : (a || '')).filter(Boolean);
       rows.push({
         id: id || key,
         trackId: id,
         uri: t.uri || (id ? `spotify:track:${id}` : null),
         name: t.name || '(sin nombre)',
-        artists: (t.artists || []).map(a => (a && typeof a === 'object') ? (a.name || '') : (a || '')).filter(Boolean).join(', '),
+        artists: nombres.join(', '),
+        artistList: nombres,
         artist,
         album: t.album?.name || '',
         // La tapa se pinta a 96px, así que hay que usar la de 300×300. El
@@ -727,8 +732,15 @@ function updateSelectionUi() {
 async function onPlayClick(r) {
   // getPreview tal cual: la verificación título+artista de v=125 vive ahí
   // dentro y es la que garantiza que suene ESTA canción.
+  //
+  // Van TODOS los artistas del track, no solo el primero. Es el mismo arreglo
+  // de v=142 que ya tenían `#skips` y `#zeroplays`, y que acá se había quedado
+  // sin aplicar: con el match contra un solo nombre, un tema acreditado al
+  // intérprete equivocado —Schubert antes que Evgeny Kissin— no matcheaba en
+  // ningún proveedor y se iba al embed de Spotify, que no puede autoarrancar.
   const res = await togglePreview(`sc:${r.id}`, () => getPreview({
     name: r.name,
+    artists: r.artistList,
     artist: r.artist,
     spotifyId: r.trackId || undefined,
   }));
@@ -844,15 +856,11 @@ function refreshList() {
   applyRows();
 }
 
-// Sincroniza el estado de los botones ▶ con el player global.
+// Sincroniza los botones con el player global: cuál es el preview actual y si
+// está SONANDO (▶ ↔ ⏸). Lo dispara `ui/preview-player.js` desde los eventos del
+// <audio>, así que no hay flag ni timer que se pueda desfasar del sonido.
 document.addEventListener('previewchange', (e) => {
-  const content = document.getElementById('sc-content');
-  if (!content) return;
-  const key = e.detail.key || '';
-  content.querySelectorAll('.sc-card').forEach(card => {
-    const btn = card.querySelector('.sc-play');
-    if (btn) btn.classList.toggle('playing', key === `sc:${card.dataset.id}`);
-  });
+  paintPlayingCard(document.getElementById('sc-list'), 'sc', e.detail);
 });
 
 // ── Modal "Añadir a…" ────────────────────────────────────────────────────────
@@ -906,8 +914,13 @@ function openAddModal(rows) {
 
       // Salen de la lista si se añadieron a AL MENOS una playlist — o si ya
       // estaban en alguna de las elegidas, que para esta vista (likes que no
-      // están en ninguna playlist) significa exactamente lo mismo.
-      if (!res.ok.length && !res.skipped.length) throw new Error('no se pudo añadir a ninguna playlist');
+      // están en ninguna playlist) significa exactamente lo mismo. Si no entró
+      // en ninguna, el toast de arriba ya lo contó y no hay nada que sacar.
+      if (!res.ok.length && !res.skipped.length) return;
+      // El modal se cierra al confirmar y esto sigue corriendo: para cuando
+      // termina, el usuario puede haberse ido de la vista y `state` ya no
+      // existe. El toast del resultado real salió igual, que es lo que importa.
+      if (!state) return;
 
       const fuera = new Set(conUri.map(r => r.id));
       state.rows = state.rows.filter(r => !fuera.has(r.id));

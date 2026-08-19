@@ -81,8 +81,14 @@ async function findTrackPreview(artist, track) {
     let results;
     try {
       results = await search(`${q} ${track}`.trim(), 8);
-    } catch {
-      return null; // red caída o rate limit: no cachear, reintentable
+    } catch (e) {
+      // Red caída o rate limit de Apple. NO es "este tema no está": si se
+      // devolviera null, el que llama lo cachearía como resultado. Se lanza
+      // marcado para que la cadena de proveedores pueda distinguir las dos
+      // cosas (ver `getPreview` en api/preview-providers.js).
+      const err = new Error(`iTunes no respondió: ${e.message}`);
+      err.proveedorCaido = true;
+      throw err;
     }
     const hit = pickBestMatch(
       { name: track, artists },

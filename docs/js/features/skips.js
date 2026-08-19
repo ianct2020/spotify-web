@@ -16,21 +16,21 @@
 // Preview 30s instantáneo vía iTunes (arranca en el estribillo, no suma plays
 // en tu historial de Spotify). Fallback: iframe embed oficial si iTunes no lo tiene.
 
-import { getBestAvailableLikes, removeLikedTracks } from '../api.js?v=148';
-import { loadSkipStats, trackIdOf, isOwner, ownerLockedMessage } from './history-data.js?v=148';
-import { escapeHtml, confirmModal, pageHeader } from '../ui/components.js?v=148';
-import { showToast } from '../ui/toast.js?v=148';
-import { getPreview } from '../api/preview-providers.js?v=148';
-import { togglePreview, playingKey } from '../ui/preview-player.js?v=148';
-import { openTrackCard } from './track-card.js?v=148';
-import { firstArtistName } from '../util/artist-name.js?v=148';
-import { activateMarquee } from '../ui/marquee.js?v=148';
-import { hasUsername, loadTopLifetime } from '../api/statsfm.js?v=148';
-import { createHiddenStore } from '../util/hidden-sync.js?v=148';
-import { createIncrementalList, scrollRootOf } from '../ui/incremental-list.js?v=148';
-import { createLazyImages } from '../ui/lazy-img.js?v=148';
-import { renderTrackCardRow, wireTrackCardGrid, paintCardSelection } from '../ui/track-card-row.js?v=148';
-import { coverAtSize } from '../util/cover-size.js?v=148';
+import { getBestAvailableLikes, removeLikedTracks } from '../api.js?v=149';
+import { loadSkipStats, trackIdOf, isOwner, ownerLockedMessage } from './history-data.js?v=149';
+import { escapeHtml, confirmModal, pageHeader } from '../ui/components.js?v=149';
+import { showToast } from '../ui/toast.js?v=149';
+import { getPreview } from '../api/preview-providers.js?v=149';
+import { togglePreview, playingKey } from '../ui/preview-player.js?v=149';
+import { openTrackCard } from './track-card.js?v=149';
+import { firstArtistName } from '../util/artist-name.js?v=149';
+import { activateMarquee } from '../ui/marquee.js?v=149';
+import { hasUsername, loadTopLifetime } from '../api/statsfm.js?v=149';
+import { createHiddenStore } from '../util/hidden-sync.js?v=149';
+import { createIncrementalList, scrollRootOf } from '../ui/incremental-list.js?v=149';
+import { createLazyImages } from '../ui/lazy-img.js?v=149';
+import { renderTrackCardRow, wireTrackCardGrid, paintCardSelection, paintPlayingCard, paintEmbedCard } from '../ui/track-card-row.js?v=149';
+import { coverAtSize } from '../util/cover-size.js?v=149';
 
 let cache = null;
 // Filas visibles con los filtros actuales, en el mismo orden que las tarjetas
@@ -685,7 +685,6 @@ async function onPlayClick(r, btn) {
   const slot = content.querySelector(`.skips-preview-slot[data-id="${r.id}"].open`);
   if (slot) {
     closeEmbeds(content);
-    btn.classList.remove('playing');
     return;
   }
   closeEmbeds(content);
@@ -719,22 +718,23 @@ function onHideClick(id) {
   applyRows({ preserveRendered: true });
 }
 
-// Sincroniza el estado .playing de los botones con el player global.
+// Sincroniza los botones con el player global: cuál es el preview actual y si
+// está SONANDO (▶ ↔ ⏸). El evento lo dispara `ui/preview-player.js` desde los
+// eventos del <audio>, así que acá no hay ni flag ni timer que puedan quedarse
+// desfasados del sonido.
 // Listener único a nivel módulo: si la página no está montada, el query no matchea nada.
 document.addEventListener('previewchange', (e) => {
-  const content = document.getElementById('skips-content');
-  if (!content) return;
-  const key = e.detail.key || '';
-  content.querySelectorAll('#skips-list .sc-card').forEach(card => {
-    const btn = card.querySelector('.sc-play');
-    if (btn) btn.classList.toggle('playing', key === `sk:${card.dataset.id}`);
-  });
+  paintPlayingCard(document.getElementById('skips-list'), 'sk', e.detail);
 });
 
+// Cierra los embeds abiertos Y apaga el botón de su tarjeta. Antes el botón se
+// apagaba solo en el camino de "volver a tocar el mismo": abrir el embed de
+// otra fila dejaba la anterior tintada.
 function closeEmbeds(content) {
   content.querySelectorAll('.skips-preview-slot.open').forEach(s => {
     s.classList.remove('open');
     s.innerHTML = '';
+    paintEmbedCard(s.closest('.sc-card')?.querySelector('.sc-play'), false);
   });
 }
 
@@ -758,6 +758,8 @@ function toggleEmbed(id, btn) {
         style="border-radius:8px;display:block"></iframe>
     `;
     slot.classList.add('open');
-    btn.classList.add('playing');
+    // Tintado pero con el ▶: el iframe de Spotify no nos dice si está sonando,
+    // así que un ⏸ acá sería una promesa que no podemos cumplir.
+    paintEmbedCard(btn, true);
   }
 }

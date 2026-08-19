@@ -6,18 +6,18 @@
 //     (util/album-heard.js: historial completo + likes + listened + w-three)
 //   - permiten "+ Biblioteca" y "Crear playlist con lo elegido"
 
-import { idbGetCached, idbSetCached, idbDel } from '../idb.js?v=148';
-import { getArtistAlbums, searchArtistByName, getAlbumTracks, saveToLibrary, saveAlbumsToLibrary, createPlaylist, addTracksToPlaylist } from '../api.js?v=148';
-import { albumKey } from '../util/album-key.js?v=148';
-import { escapeHtml } from '../ui/components.js?v=148';
-import { showToast } from '../ui/toast.js?v=148';
-import { openPlaylistPicker } from '../ui/playlist-picker.js?v=148';
-import { getOwnPlaylists, addUrisToPlaylists, toastAddResult } from '../util/playlist-add.js?v=148';
-import { openArtistCard } from './artist-card.js?v=148';
-import { openAlbumCard } from './album-card.js?v=148';
-import { createHiddenStore, createLocalStore } from '../util/hidden-sync.js?v=148';
-import { getPreview } from '../api/preview-providers.js?v=148';
-import { togglePreview, playingKey, attachHover } from '../ui/preview-player.js?v=148';
+import { idbGetCached, idbSetCached, idbDel } from '../idb.js?v=149';
+import { getArtistAlbums, searchArtistByName, getAlbumTracks, saveToLibrary, saveAlbumsToLibrary, createPlaylist, addTracksToPlaylist } from '../api.js?v=149';
+import { albumKey } from '../util/album-key.js?v=149';
+import { escapeHtml } from '../ui/components.js?v=149';
+import { showToast } from '../ui/toast.js?v=149';
+import { openPlaylistPicker } from '../ui/playlist-picker.js?v=149';
+import { getOwnPlaylists, addUrisToPlaylists, toastAddResult } from '../util/playlist-add.js?v=149';
+import { openArtistCard } from './artist-card.js?v=149';
+import { openAlbumCard } from './album-card.js?v=149';
+import { createHiddenStore, createLocalStore } from '../util/hidden-sync.js?v=149';
+import { getPreview } from '../api/preview-providers.js?v=149';
+import { togglePreview, playingKey, attachHover } from '../ui/preview-player.js?v=149';
 
 const DISCO_TTL_MIN = 30 * 24 * 60;       // 30 días
 const ARTIST_ID_TTL_MIN = 60 * 24 * 60;   // 60 días — los ids no cambian
@@ -520,8 +520,9 @@ export async function addAlbumsToPlaylists(albumIds, findAlbumById, { onDone } =
           : `${pistas} de ${albumIds.length} lanzamientos`,
         plural: uris.length !== 1,
       });
-      // Si ya estaba todo, el modal se cierra igual: no es un fallo.
-      if (!res.ok.length && !res.skipped.length) throw new Error('no se pudo añadir a ninguna playlist');
+      // Si no entró en ninguna playlist, el toast de arriba ya lo contó: no hay
+      // nada que refrescar en la vista.
+      if (!res.ok.length && !res.skipped.length) return;
       if (onDone) onDone();
     },
   });
