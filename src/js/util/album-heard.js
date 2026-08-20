@@ -17,6 +17,7 @@
 import { albumKey } from './album-key.js';
 import { loadTrackPlays, loadListenedAlbums, isOwner } from '../features/history-data.js';
 import { getBestAvailableLikes, getAllPlaylistItems } from '../api.js';
+import { coverUrl } from './cover-size.js';
 
 const LS_WTHREE_ID = 'wthree_playlist_id';
 
@@ -56,7 +57,7 @@ export async function buildAlbumHeardIndex({ force = false } = {}) {
       if (!artistDisplay.has(nameLower)) artistDisplay.set(nameLower, artistName);
       if (a0?.id && !artistIds.has(nameLower)) artistIds.set(nameLower, a0.id);
       if (!artistImage.get(nameLower)) {
-        artistImage.set(nameLower, t.album?.images?.[2]?.url || t.album?.images?.[1]?.url || t.album?.images?.[0]?.url || null);
+        artistImage.set(nameLower, coverUrl(t.album?.images, 'grande'));
       }
     }
   }

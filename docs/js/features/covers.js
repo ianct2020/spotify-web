@@ -8,17 +8,18 @@
 // placeholder→img. Botón "Pantalla completa" (Fullscreen API) que oculta
 // sidebar/header/toolbar y recalcula el lado.
 
-import { loadListenedAlbums, isOwner, ownerLockedMessage } from './history-data.js?v=149';
-import { isJunkTrack } from '../util/junk.js?v=149';
-import { getAllPlaylistItems, getBestAvailableLikes } from '../api.js?v=149';
-import { escapeHtml, pageHeader, showProgress, hideProgress } from '../ui/components.js?v=149';
-import { showToast } from '../ui/toast.js?v=149';
-import { openAlbumCard } from './album-card.js?v=149';
-import { albumKey, coverId } from '../util/album-key.js?v=149';
-import { generarWallpaper, descargarBlob, WALLPAPER_PRESETS } from './covers-wallpaper.js?v=149';
-import { buildAlbumStatsIndex } from '../util/album-stats.js?v=149';
-import { getPreview } from '../api/preview-providers.js?v=149';
-import { hoverIn, hoverOut } from '../ui/preview-player.js?v=149';
+import { loadListenedAlbums, isOwner, ownerLockedMessage } from './history-data.js?v=150';
+import { isJunkTrack } from '../util/junk.js?v=150';
+import { getAllPlaylistItems, getBestAvailableLikes } from '../api.js?v=150';
+import { escapeHtml, pageHeader, showProgress, hideProgress } from '../ui/components.js?v=150';
+import { showToast } from '../ui/toast.js?v=150';
+import { openAlbumCard } from './album-card.js?v=150';
+import { albumKey, coverId } from '../util/album-key.js?v=150';
+import { generarWallpaper, descargarBlob, WALLPAPER_PRESETS } from './covers-wallpaper.js?v=150';
+import { buildAlbumStatsIndex } from '../util/album-stats.js?v=150';
+import { getPreview } from '../api/preview-providers.js?v=150';
+import { hoverIn, hoverOut } from '../ui/preview-player.js?v=150';
+import { coverUrl } from '../util/cover-size.js?v=150';
 
 const LS_KEY_SIZE = 'covers_cell_size';
 const LS_KEY_SORT = 'covers_sort_mode';
@@ -100,7 +101,7 @@ function buildList(data, wthreeItems, stats) {
       const artistName = t.artists?.[0]?.name || '';
       if (!albumName) continue;
       const k = albumKey(albumName, artistName);
-      const wImg = t.album.images?.[1]?.url || t.album.images?.[0]?.url || '';
+      const wImg = coverUrl(t.album.images, 'grande') || '';
       const prev = map.get(k);
       if (prev) {
         prev.sources.add('wthree');

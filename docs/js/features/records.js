@@ -2,11 +2,12 @@
 // maratones de un artista, temas en loop, rachas e hitos. Todo sale de
 // history-records.json (gen-stats.py) ya calculado, acá es solo UI.
 
-import { loadRecords, isOwner, ownerLockedMessage } from './history-data.js?v=149';
-import { escapeHtml, pageHeader } from '../ui/components.js?v=149';
-import { getPreview, getArtistTopPreview } from '../api/preview-providers.js?v=149';
-import { attachHover } from '../ui/preview-player.js?v=149';
-import { openArtistCard } from './artist-card.js?v=149';
+import { loadRecords, isOwner, ownerLockedMessage } from './history-data.js?v=150';
+import { escapeHtml, pageHeader } from '../ui/components.js?v=150';
+import { getPreview } from '../api/preview-providers.js?v=150';
+import { getArtistLikePreview } from '../util/artist-preview.js?v=150';
+import { attachHover } from '../ui/preview-player.js?v=150';
+import { openArtistCard } from './artist-card.js?v=150';
 
 const MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
 const DIAS = ['lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado', 'domingo'];
@@ -156,7 +157,7 @@ function wireHovers(content) {
     el.classList.add('tc-clickable');
     el.title = 'Mantené el mouse para escuchar un preview · click para ficha';
     const getter = h.kind === 'artist'
-      ? async () => await getArtistTopPreview(h.name)
+      ? async () => await getArtistLikePreview(h.name)
       : async () => await getPreview({ name: h.name, artist: h.artist || '', spotifyId: h.id });
     attachHover(el, `rec:${el.dataset.recHover}`, getter);
     // Click → ficha (artista o canción). Los tracks acá no traen uri —

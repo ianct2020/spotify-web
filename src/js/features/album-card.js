@@ -12,11 +12,13 @@
 // del track.
 
 import { escapeHtml } from '../ui/components.js';
-import { openArtistCard } from './artist-card.js';
+import { openArtistCard, knownArtist } from './artist-card.js';
 import { openModal, closeTop } from '../ui/modal-stack.js';
 import { getBestAvailableLikes, getAlbumTracks, spotifyFetch } from '../api.js';
 import { albumKey, coverId } from '../util/album-key.js';
-import { artistMatches } from '../util/track-match.js';
+import { artistMatches, normText } from '../util/track-match.js';
+import { firstArtistName, artistNames, resolveArtistName } from '../util/artist-name.js';
+import { coverUrl } from '../util/cover-size.js';
 import { lookupAlbumStats } from '../util/album-stats.js';
 import { getPreview } from '../api/preview-providers.js';
 import { togglePreview, playingKey } from '../ui/preview-player.js';
@@ -28,6 +30,9 @@ const DOTS_SVG = `<svg viewBox="0 0 24 24" width="10" height="10" fill="currentC
 // Mismo corazón que la tracklist de W-Three (features/wthree.js).
 const HEART_SVG = `<svg viewBox="0 0 24 24" width="11" height="11" fill="currentColor" aria-hidden="true"><path d="M12 21s-7.5-4.6-9.5-9A5 5 0 0 1 12 6.5 5 5 0 0 1 21.5 12c-2 4.4-9.5 9-9.5 9z"/></svg>`;
 // El mismo trazo, hueco: "esta pista del disco NO está en tus me gusta".
+// «Sin preview» dicho con todas las letras (v=150): el «—» de antes se leía
+// como un botón roto, no como una respuesta.
+const SIN_PREVIEW_HTML = '<span class="sin-preview-txt">Sin preview</span>';
 const HEART_OUTLINE_SVG = `<svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round" aria-hidden="true"><path d="M12 21s-7.5-4.6-9.5-9A5 5 0 0 1 12 6.5 5 5 0 0 1 21.5 12c-2 4.4-9.5 9-9.5 9z"/></svg>`;
 
 // Cache del último set de likes en memoria (evita re-fetch del cache al
@@ -102,7 +107,7 @@ function likesInAlbum(likes, a) {
       artist: artistName,
       artists: artistas,
       album: alb.name || a.name,
-      img: alb.images?.[2]?.url || alb.images?.[1]?.url || alb.images?.[0]?.url || null,
+      img: coverUrl(alb.images, 'grande'),
       trackNumber: t.track_number || 0,
     });
   }
@@ -127,16 +132,61 @@ function likesInAlbum(likes, a) {
 // la misma ficha diez veces es una sola búsqueda.
 const _albumIdMemo = new Map();   // albumKey → id | null
 
+// ⚠️ **El apóstrofo dentro de las comillas rompe la query de Spotify** (medido
+// en vivo el 2026-08-19 contra la API real, con la sesión de Ian):
+//
+//   album:"Don't Be Dumb" artist:"A$AP Rocky"  →  0 resultados
+//   album:"Dont Be Dumb"  artist:"A$AP Rocky"  →  2 resultados ✅
+//
+// No es cosa de este disco: afecta a **cualquier** álbum o artista con
+// apóstrofo. El síntoma era mudo — `resolveAlbumId` devolvía null, la ficha se
+// caía al camino degradado de v=142 y en vez de «10 de 15 pistas en tus me
+// gusta» decía «10 pistas», sin que nada avisara.
+//
+// El arreglo: se **relaja la query** (fuera el apóstrofo) y se **aprieta la
+// comparación** después, contra el nombre REAL. Es la lección de v=124 al
+// derecho: aflojar el filtro de resultados es lo que traía a Nick Drake cuando
+// se buscaba Drake, así que la comparación posterior no se toca — al contrario,
+// antes no había ninguna (se agarraba `items[0]` a ciegas con `limit=1`).
+function limpiaParaQuery(s) {
+  return String(s || '')
+    .replace(/["]/g, '')
+    // Apóstrofos rectos y tipográficos: Spotify no los maneja entre comillas.
+    .replace(/['‘’ʼ]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 async function resolveAlbumId(a) {
   const directo = a.albumId || a.id || null;
   if (directo) return directo;
-  const k = albumKey(a.name, a.artist);
+  const artista = firstArtistName(resolveArtistName(a.artist || '', knownArtist));
+  const k = albumKey(a.name, artista);
   if (_albumIdMemo.has(k)) return _albumIdMemo.get(k);
   let id = null;
   try {
-    const q = `album:"${String(a.name).replace(/"/g, '')}" artist:"${String(a.artist || '').replace(/"/g, '')}"`;
-    const res = await spotifyFetch(`/search?q=${encodeURIComponent(q)}&type=album&limit=1`);
-    id = res?.albums?.items?.[0]?.id || null;
+    const q = `album:"${limpiaParaQuery(a.name)}" artist:"${limpiaParaQuery(artista)}"`;
+    // limit=5, no 1: sacado el apóstrofo la búsqueda es más laxa, así que puede
+    // devolver vecinos. El que decide es el filtro de abajo, no el orden.
+    const res = await spotifyFetch(`/search?q=${encodeURIComponent(q)}&type=album&limit=5`);
+    const items = res?.albums?.items || [];
+
+    // Comparación contra el nombre REAL (con apóstrofo y todo). `normText` ya
+    // tira la puntuación, así que «Don't Be Dumb» y «Dont Be Dumb» caen en la
+    // misma clave sin aflojar nada más.
+    const nombreOk = normText(a.name);
+    const artistaOk = normText(artista);
+    const elegido = items.find(it => {
+      if (normText(it.name) !== nombreOk) return false;
+      if (!artistaOk) return true;
+      // El artista pedido tiene que estar de verdad entre los del álbum.
+      return artistNames(it).some(n => normText(n) === artistaOk);
+    }) || null;
+
+    id = elegido?.id || null;
+    if (!id && items.length) {
+      console.warn(`[album-card] «${a.name}» — ${artista}: ${items.length} resultados y ninguno coincide; sigo sin tracklist`);
+    }
   } catch (e) {
     console.warn('[album-card] no pude resolver el álbum:', e.message);
   }
@@ -189,18 +239,39 @@ function statsHtml(a) {
     </div>`;
 }
 
-export function openAlbumCard(a) {
-  if (!a || !a.name) return;
+export function openAlbumCard(entrada) {
+  if (!entrada || !entrada.name) return;
 
-  const spotifyQuery = encodeURIComponent(`${a.name} ${a.artist || ''}`.trim());
+  // El artista del álbum es UNO. Si llega la cadena unida de un track se parte
+  // acá, igual que en las otras dos fichas (v=150).
+  const artista = resolveArtistName(firstArtistName(entrada.artist || ''), knownArtist);
+  const a = { ...entrada, artist: artista };
+
+  const spotifyQuery = encodeURIComponent(`${a.name} ${artista}`.trim());
   const spotifyUrl = `https://open.spotify.com/search/${spotifyQuery}`;
+
+  // ── El id del modal (v=150) ──
+  //
+  // Era `album-card:{nombre}||{artista}`, y con el artista crudo eso fabricaba
+  // ids DISTINTOS para el mismo disco: «Don't Be Dumb||A$AP Rocky» y «Don't Be
+  // Dumb||A$AP Rocky, Brent Faiyaz» convivían apilados en la misma pila
+  // (reproducido en producción el 2026-08-19). Al revés también molestaba: dos
+  // discos homónimos de artistas distintos compartían id y el dedup revelaba el
+  // que no era, cerrando de paso todo lo que hubiera encima.
+  //
+  // Ahora manda el id de álbum de Spotify cuando el llamador lo trae, y si no,
+  // la clave normalizada de nombre + PRIMER artista (`albumKey`, la misma que
+  // ya usan el mosaico y `lookupAlbumStats`).
+  const modalId = a.albumId || a.id
+    ? `album-card:${a.albumId || a.id}`
+    : `album-card:${albumKey(a.name, artista)}`;
 
   // Dos columnas (v=142): pistas a la izquierda, tapa + info de escucha a la
   // derecha. El orden del DOM es al revés (info primero) para que al plegarse
   // en una sola columna la tapa quede arriba; en escritorio las columnas se
   // reordenan con `order` en el CSS. El corte lo hace una media query, sin JS.
   const overlay = openModal({
-    id: `album-card:${a.name}||${a.artist || ''}`,
+    id: modalId,
     html: `
     <div class="modal card-modal album-modal" style="max-width:820px;width:min(820px,94vw)">
       <div class="card-modal-head-simple">
@@ -232,10 +303,10 @@ export function openAlbumCard(a) {
   });
 
   overlay.querySelector('#alb-artist').onclick = () => {
-    if (a.artist) openArtistCard({ name: a.artist });
+    if (artista) openArtistCard({ name: artista });
   };
   overlay.querySelector('#alb-go-artist').onclick = () => {
-    if (a.artist) openArtistCard({ name: a.artist });
+    if (artista) openArtistCard({ name: artista });
   };
 
   // Los números SIEMPRE se recontrastan contra el historial, no solo cuando el
@@ -364,7 +435,10 @@ async function hydrateLikes(overlay, a) {
         return await getPreview({ name, artists: t?.artists, artist: a.artist, spotifyId: id });
       });
       if (res === true) btn.innerHTML = PAUSE_SVG;
-      else if (res === null) { btn.textContent = '—'; btn.title = 'Sin preview'; btn.disabled = true; }
+      // Sin preview: LO DICE. Hasta v=149 esto ponía un «—» pelado y gris, que
+      // desde la fila se lee como «a esta canción le falta el ▶» — fue el
+      // reporte de Ian sobre «Love$ick (feat. A$AP Rocky)».
+      else if (res === null) { btn.innerHTML = SIN_PREVIEW_HTML; btn.classList.add('sin-preview'); btn.title = 'Sin preview en iTunes ni en Deezer'; btn.disabled = true; }
       else btn.innerHTML = PLAY_SVG;
     });
   });

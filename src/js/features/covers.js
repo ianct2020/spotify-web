@@ -19,6 +19,7 @@ import { generarWallpaper, descargarBlob, WALLPAPER_PRESETS } from './covers-wal
 import { buildAlbumStatsIndex } from '../util/album-stats.js';
 import { getPreview } from '../api/preview-providers.js';
 import { hoverIn, hoverOut } from '../ui/preview-player.js';
+import { coverUrl } from '../util/cover-size.js';
 
 const LS_KEY_SIZE = 'covers_cell_size';
 const LS_KEY_SORT = 'covers_sort_mode';
@@ -100,7 +101,7 @@ function buildList(data, wthreeItems, stats) {
       const artistName = t.artists?.[0]?.name || '';
       if (!albumName) continue;
       const k = albumKey(albumName, artistName);
-      const wImg = t.album.images?.[1]?.url || t.album.images?.[0]?.url || '';
+      const wImg = coverUrl(t.album.images, 'grande') || '';
       const prev = map.get(k);
       if (prev) {
         prev.sources.add('wthree');

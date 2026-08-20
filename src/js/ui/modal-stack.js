@@ -22,7 +22,13 @@
 // `closeTop()` le cerraría ese. Si el modal ya no está en la pila, no hace
 // nada; si está enterrado, sale del medio sin tocar a los de arriba.
 
-const MAX_DEPTH = 5;
+// Tope de profundidad. Era 5 hasta v=149 y la secuencia normal de Ian lo
+// pasaba: artista → Mis likes → canción → álbum → artista → Mis likes son SEIS,
+// así que la ficha de artista original se desalojaba en silencio y el ← nunca
+// volvía a ella (medido en producción el 2026-08-19: quedaban 5 overlays y el
+// de abajo ya no estaba). Con la cadena de artistas arreglada esa secuencia
+// baja a 5, pero el margen se queda: es barato y el desalojo ahora se ve.
+const MAX_DEPTH = 8;
 
 const stack = [];
 let savedScrollY = 0;
@@ -123,6 +129,13 @@ function findIndexById(id) {
 function dropBottom() {
   const entry = stack.shift();
   if (!entry) return;
+  // Se avisa SIEMPRE: desalojar es una pérdida de navegación para el usuario
+  // (el ← ya no llega hasta ahí) y hasta v=149 pasaba callado. Si esto aparece
+  // en consola, la pila está quedando corta para un flujo real.
+  console.warn(
+    `[modal-stack] pila llena (${MAX_DEPTH}): desalojo el más viejo «${entry.id || 'sin id'}». ` +
+    `Quedan: ${stack.map(e => e.id || 'sin id').join(' → ')}`
+  );
   if (entry.onClose) {
     try { entry.onClose(); } catch { /* noop */ }
   }
@@ -257,5 +270,20 @@ function closeModal(overlay) {
   updateBackArrows();
   return true;
 }
+
+// Cambiar de ruta cierra la pila entera (v=150).
+//
+// Los modales viven en `document.body`, no dentro de `#main-content`, así que
+// el vaciado del router no se los llevaba: se podía navegar de `#byartist` a
+// `#wrapped` con una ficha de álbum abierta y la ficha se quedaba flotando
+// encima de la vista nueva, con el scroll del body todavía bloqueado.
+// Reproducido en producción el 2026-08-19.
+//
+// `routeteardown` lo dispara `router.js` en CADA cambio de ruta desde v=141, y
+// ya lo escuchan `preview-player.js` y `back-to-top.js`. Se engancha por evento
+// y no importando el router para no armar un ciclo.
+document.addEventListener('routeteardown', () => {
+  if (stack.length) closeAll();
+});
 
 export { openModal, closeTop, closeAll, getStack, closeById, closeModal };

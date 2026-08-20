@@ -4,7 +4,8 @@
 
 import { loadRecords, isOwner, ownerLockedMessage } from './history-data.js';
 import { escapeHtml, pageHeader } from '../ui/components.js';
-import { getPreview, getArtistTopPreview } from '../api/preview-providers.js';
+import { getPreview } from '../api/preview-providers.js';
+import { getArtistLikePreview } from '../util/artist-preview.js';
 import { attachHover } from '../ui/preview-player.js';
 import { openArtistCard } from './artist-card.js';
 
@@ -156,7 +157,7 @@ function wireHovers(content) {
     el.classList.add('tc-clickable');
     el.title = 'Mantené el mouse para escuchar un preview · click para ficha';
     const getter = h.kind === 'artist'
-      ? async () => await getArtistTopPreview(h.name)
+      ? async () => await getArtistLikePreview(h.name)
       : async () => await getPreview({ name: h.name, artist: h.artist || '', spotifyId: h.id });
     attachHover(el, `rec:${el.dataset.recHover}`, getter);
     // Click → ficha (artista o canción). Los tracks acá no traen uri —

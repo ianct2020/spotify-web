@@ -4,12 +4,15 @@
 
 import { loadHistoryStats, loadArtistTracks, isOwner } from './history-data.js';
 import { escapeHtml } from '../ui/components.js';
-import { getPreview, getArtistTopPreview } from '../api/preview-providers.js';
+import { getPreview } from '../api/preview-providers.js';
 import { togglePreview, playingKey, attachHover } from '../ui/preview-player.js';
 import { hasUsername, loadTopLifetime } from '../api/statsfm.js';
 import { openTrackCard } from './track-card.js';
 import { spotifyFetch, getBestAvailableLikes } from '../api.js';
 import { openModal, closeTop } from '../ui/modal-stack.js';
+import { firstArtistName, artistNames, resolveArtistName, looksLikeArtistChain } from '../util/artist-name.js';
+import { coverUrl } from '../util/cover-size.js';
+import { getArtistLikePreview } from '../util/artist-preview.js';
 
 // Cache de imágenes de artistas resueltas por Spotify search. TTL 30 días.
 // Se persiste el hit y la falta (null) para no reintentar contra tracks
@@ -47,7 +50,7 @@ async function fetchArtistImage(name) {
     const na = norm(name);
     const exact = artists.find(a => norm(a.name) === na);
     const pick = exact || artists[0];
-    const img = pick?.images?.[1]?.url || pick?.images?.[0]?.url || null;
+    const img = coverUrl(pick?.images, 'grande');
     cache[key] = { u: img, t: Date.now() };
     saveImgCache(cache);
     return img;
@@ -71,6 +74,34 @@ function resolveArtistKey(artistTracks, name) {
   }
   return _artistCI.map.get(name.toLowerCase()) || null;
 }
+
+// ── Índice de artistas conocidos (v=150) ────────────────────────────────────
+//
+// Lo usa la guarda de `util/artist-name.js` para decidir si «Tyler, The
+// Creator» es UN artista o dos pegados. Se llena solo, sin pedir nada: se
+// alimenta del índice del historial en cuanto alguien lo carga (que es lo
+// primero que hace cualquier ficha de artista). Mientras esté vacío la guarda
+// se queda con el primer segmento, que es el comportamiento seguro.
+//
+// Es sincrónico A PROPÓSITO: `openTrackCard` lo consulta al pintar la cabecera,
+// antes de cualquier await, y no puede quedarse esperando un JSON de 1,3 MB.
+const _conocidos = new Set();
+
+export function knownArtist(name) {
+  return !!name && _conocidos.has(String(name).toLowerCase());
+}
+
+function sembrarConocidos(artistTracks) {
+  if (!artistTracks?.artists) return;
+  for (const k of Object.keys(artistTracks.artists)) _conocidos.add(k.toLowerCase());
+}
+
+// ⚠️ NO se siembra al importar el módulo. `loadArtistTracks()` baja un JSON de
+// 1,3 MB y este módulo lo importa media app, así que hacerlo en el nivel
+// superior le costaría esa descarga a CUALQUIER ruta, incluida Home y los
+// usuarios que no son el dueño del historial. Se siembra donde ya se carga por
+// otro motivo (abajo, en openArtistCard) y, si hace falta antes, la guarda lo
+// pide ella misma.
 
 function fmtMinutes(min) {
   if (!min && min !== 0) return '—';
@@ -99,9 +130,37 @@ document.addEventListener('previewchange', (e) => {
   }
 });
 
-async function openArtistCard(a) {
-  // a: { name } — todo lo demás lo derivamos del historial.
-  if (!a || !a.name) return;
+async function openArtistCard(entrada) {
+  // entrada: { name } o { artists: [...] } — todo lo demás sale del historial.
+  if (!entrada) return;
+
+  // ── La guarda de la puerta (v=150) ──
+  //
+  // Hasta v=149 esto aceptaba cualquier string como nombre de artista, y la
+  // ficha de álbum le pasaba la CADENA DE ARTISTAS UNIDA del track. Como el
+  // historial se cruza por igualdad exacta de nombre, la ficha de «A$AP Rocky,
+  // Imogen Heap, Clams Casino» salía con «No aparece en tu historial», gráfico
+  // vacío y «0 likes» — para el segundo artista más escuchado de Ian.
+  //
+  // El origen se arregló abajo (openArtistLikesModal ya no une la lista), pero
+  // la normalización vive acá para que ningún llamador futuro pueda volver a
+  // meterla. Si el nombre entero es un artista conocido se respeta tal cual:
+  // es lo que salva a «Tyler, The Creator».
+  const desdeLista = (entrada.artists || []).map(firstArtistName).filter(Boolean)[0];
+  const crudo = desdeLista || firstArtistName(entrada.name);
+  if (!crudo) return;
+
+  // Solo cuando huele a cadena esperamos el índice. En el camino normal (un
+  // nombre sin comas) esto no agrega ni un tick: la ficha abre igual de rápido.
+  if (looksLikeArtistChain(crudo) && !knownArtist(crudo)) {
+    await loadArtistTracks().then(sembrarConocidos).catch(() => { /* seguimos sin índice */ });
+  }
+
+  const nombre = resolveArtistName(crudo, knownArtist);
+  if (nombre !== crudo) {
+    console.warn(`[artist-card] llegó una cadena de artistas («${crudo}»); abro «${nombre}»`);
+  }
+  const a = { ...entrada, name: nombre };
 
   // Foto cacheada 30d: si la tenemos, la inyectamos en el markup inicial para
   // que no aparezca el placeholder ni por un frame al reabrir la ficha.
@@ -147,7 +206,7 @@ async function openArtistCard(a) {
   const previewBtn = overlay.querySelector('#ac-preview');
   previewBtn.onclick = async () => {
     const res = await togglePreview(`ac:${a.name}`, async () => {
-      return await getArtistTopPreview(a.name);
+      return await getArtistLikePreview(a.name);
     });
     previewBtn.textContent = res === true ? '⏹ Parar' : '▶ Preview';
     if (res === null) previewBtn.textContent = 'Sin preview';
@@ -203,6 +262,9 @@ async function openArtistCard(a) {
   // colado en un top anual. history-artist-tracks.json indexa todo artista con
   // al menos una play válida, así que acá ya vienen los 6 reales.
   const artistTracks = await loadArtistTracks();
+  // Acá ya está pago: aprovechamos para sembrar el índice de nombres conocidos
+  // que usa la guarda de la cadena de artistas.
+  sembrarConocidos(artistTracks);
   const histKey = artistTracks?.artists?.[a.name] ? a.name : resolveArtistKey(artistTracks, a.name);
   const fromHistory = histKey ? artistTracks.artists[histKey] : null;
 
@@ -461,7 +523,8 @@ async function openArtistLikesModal(artistName) {
     <div style="border:1px solid var(--color-border);border-radius:var(--radius-sm);overflow:hidden">
       ${filtered.map((it, i) => {
         const t = it.track;
-        const img = t.album?.images?.[2]?.url || t.album?.images?.[1]?.url || t.album?.images?.[0]?.url || '';
+        // `.pick-cover` mide 44 px: la chica alcanza y sobra.
+        const img = coverUrl(t.album?.images, 'chica') || '';
         const album = t.album?.name || '';
         return `
           <div class="pick-row al-row" data-i="${i}"
@@ -484,18 +547,23 @@ async function openArtistLikesModal(artistName) {
     const idx = +row.dataset.i;
     const it = filtered[idx];
     const t = it.track;
-    const img = t.album?.images?.[2]?.url || t.album?.images?.[1]?.url || t.album?.images?.[0]?.url || '';
+    // ⚠️ Acá nacía la cadena unida (v=150). `artist: […].join(', ')` metía
+    // «A$AP Rocky, Imogen Heap, Clams Casino» en la ficha de canción, de ahí
+    // pasaba a la de álbum y de ahí a `openArtistCard`, que cruza el historial
+    // por igualdad exacta de nombre. Ahora va la LISTA, que es lo que la ficha
+    // sabe pintar como enlaces separados.
+    const img = coverUrl(t.album?.images, 'grande') || '';
     row.onclick = () => openTrackCard({
       id: t.id,
       name: t.name,
-      artist: (t.artists || []).map(x => x.name).join(', '),
+      artists: artistNames(t),
       album: t.album?.name,
       img,
     });
     attachHover(row, `al-hover:${t.id}`, async () => {
       return await getPreview({
         name: t.name || '',
-        artists: (t.artists || []).map(x => x.name).filter(Boolean),
+        artists: artistNames(t),
         artist: artistName,
         spotifyId: t.id,
       });
@@ -510,7 +578,7 @@ function attachArtistCard(el, name) {
   el.title = 'Preview al apoyar el mouse · click para ver la ficha';
   el.onclick = () => openArtistCard({ name });
   attachHover(el, `ac-hover:${name}`, async () => {
-    return await getArtistTopPreview(name);
+    return await getArtistLikePreview(name);
   });
 }
 

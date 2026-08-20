@@ -1,8 +1,9 @@
-import { openModal, closeTop } from './modal-stack.js?v=149';
-import { mountBottomHtml } from './bottom-layer.js?v=149';
+import { openModal, closeTop } from './modal-stack.js?v=150';
+import { mountBottomHtml } from './bottom-layer.js?v=150';
+import { coverUrl } from '../util/cover-size.js?v=150';
 
 function renderTrackRow(track, extra = '') {
-  const art = track.album?.images?.[2]?.url || track.album?.images?.[0]?.url || '';
+  const art = coverUrl(track.album?.images, 'grande') || '';
   const artists = track.artists?.map(a => a.name).join(', ') || 'Unknown';
   const imgTag = art
     ? `<img class="track-art" src="${art}" alt="" loading="lazy">`
