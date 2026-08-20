@@ -2,6 +2,7 @@ import { getAllLikedTracks, removeLikedTracks, checkLibraryContains } from '../a
 import { showProgress, hideProgress, progressController, isCancelled, typeConfirmModal, renderTrackRow, escapeHtml, pageHeader } from '../ui/components.js';
 import { showToast } from '../ui/toast.js';
 import { openModal, closeTop } from '../ui/modal-stack.js';
+import { coverUrl } from '../util/cover-size.js';
 
 const keepIds = new Set();
 // Persiste los cluster idx que ya resolviste (batchDelete). Sobrevive a "Ver más"
@@ -151,7 +152,7 @@ async function analyze(force = false) {
         clusterMetaCache.set(key, {
           name: t.name,
           artist: t.artists?.map(a => a.name).join(', ') || 'Unknown',
-          cover: t.album?.images?.[2]?.url || t.album?.images?.[0]?.url || null,
+          cover: coverUrl(t.album?.images, 'grande'),
           count: cluster.length,
         });
       }

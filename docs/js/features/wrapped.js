@@ -1,16 +1,18 @@
 // Wrapped propio: mini-resumen tuyo por año, hecho con el Extended Streaming History.
 // A diferencia del Wrapped oficial (que corre oct-sept), este es del año calendario completo.
 
-import { loadHistoryStats, isOwner, ownerLockedMessage } from './history-data.js?v=149';
-import { escapeHtml, pageHeader } from '../ui/components.js?v=149';
-import { getPreview, getArtistTopPreview } from '../api/preview-providers.js?v=149';
-import { attachHover } from '../ui/preview-player.js?v=149';
-import { openTrackCard } from './track-card.js?v=149';
-import { openArtistCard } from './artist-card.js?v=149';
-import { openAlbumCard } from './album-card.js?v=149';
-import { getMyTop } from '../api.js?v=149';
-import { activateMarquee, marqueeSpan } from '../ui/marquee.js?v=149';
-import { openModal } from '../ui/modal-stack.js?v=149';
+import { loadHistoryStats, isOwner, ownerLockedMessage } from './history-data.js?v=150';
+import { escapeHtml, pageHeader } from '../ui/components.js?v=150';
+import { getPreview } from '../api/preview-providers.js?v=150';
+import { getArtistLikePreview, getAlbumLikePreview } from '../util/artist-preview.js?v=150';
+import { attachHover } from '../ui/preview-player.js?v=150';
+import { openTrackCard } from './track-card.js?v=150';
+import { openArtistCard } from './artist-card.js?v=150';
+import { openAlbumCard } from './album-card.js?v=150';
+import { getMyTop } from '../api.js?v=150';
+import { activateMarquee, marqueeSpan } from '../ui/marquee.js?v=150';
+import { openModal } from '../ui/modal-stack.js?v=150';
+import { coverUrl } from '../util/cover-size.js?v=150';
 
 let stats = null;
 let selectedYear = null;
@@ -270,8 +272,15 @@ function wireTopClick(holder, cardKey, items, kind) {
     if (!it) return;
     el.classList.add('tc-clickable');
     if (kind === 'album') {
-      el.title = 'Click para ver la ficha del álbum';
+      // Hover-play (v=150). Las columnas de álbumes eran las ÚNICAS de las tres
+      // sin preview: `renderTopCard` las llamaba con `hoverKey: null`, así que
+      // ninguna de las 15 filas sonaba. El reporte de Ian —«Eric Clapton no
+      // reproduce desde el Wrapped»— era esto: Clapton no está en «Top
+      // artistas», está en «Top álbumes» con su disco homónimo, y esa columna
+      // entera estaba muda.
+      el.title = 'Preview al apoyar el mouse · click para ver la ficha del álbum';
       el.onclick = () => openAlbumCard({ name: it.name, artist: it.artist, plays: it.plays, min: it.min, img: it.img });
+      attachHover(el, `wr:${cardKey}:${i}`, async () => await getAlbumLikePreview(it.name, it.artist));
     }
   });
 }
@@ -286,6 +295,10 @@ function wireAlbumHero(holder, topAlbum) {
     min: topAlbum.min,
     img: topAlbum.img,
   });
+  // El «Álbum del año» estaba tan mudo como la columna (v=150).
+  el.title = 'Preview al apoyar el mouse · click para ver la ficha del álbum';
+  attachHover(el, `wr:album-hero:${topAlbum.name}`, async () =>
+    await getAlbumLikePreview(topAlbum.name, topAlbum.artist));
 }
 
 // Hover-play: pasás el mouse por una fila/tile y suena un preview de 30s
@@ -313,7 +326,7 @@ function wireTopHover(holder, cardKey, items, kind) {
     }
     const trackId = it.uri ? it.uri.split(':').pop() : undefined;
     const getter = kind === 'artist'
-      ? async () => await getArtistTopPreview(it.name)
+      ? async () => await getArtistLikePreview(it.name)
       : async () => await getPreview({ name: it.name, artist: it.artist || '', spotifyId: trackId });
     attachHover(el, `wr:${cardKey}:${i}`, getter);
   });
@@ -501,7 +514,7 @@ async function renderLite(content) {
         <h3 style="margin:0 0 12px;font-size:16px">Top artistas</h3>
         <div class="wrapped-top-scroll">
           ${artists.map((a, i) => {
-            const img = a.images?.[2]?.url || a.images?.[1]?.url || a.images?.[0]?.url;
+            const img = coverUrl(a.images, 'grande');
             return `
             <div class="wrapped-top-row" data-hover="wl-a:${i}">
               <span class="wrapped-top-rank">${i + 1}</span>
@@ -519,7 +532,7 @@ async function renderLite(content) {
         <div class="wrapped-top-scroll">
           ${tracks.map((t, i) => {
             const imgs = t.album?.images || [];
-            const img = imgs[2]?.url || imgs[1]?.url || imgs[0]?.url;
+            const img = coverUrl(imgs, 'grande');
             return `
             <div class="wrapped-top-row" data-hover="wl-t:${i}">
               <span class="wrapped-top-rank">${i + 1}</span>

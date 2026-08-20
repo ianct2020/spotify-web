@@ -1,6 +1,7 @@
 import { getAllUserPlaylists, getAllPlaylistItems, removePlaylistItemsAtPositions, getCurrentUserId } from '../api.js';
 import { showProgress, hideProgress, typeConfirmModal, escapeHtml, renderPlaylistGrid, bindPlaylistGrid, pageHeader } from '../ui/components.js';
 import { showToast } from '../ui/toast.js';
+import { coverUrl } from '../util/cover-size.js';
 
 let ownPlaylists = [];
 const keepUris = new Set();
@@ -134,7 +135,7 @@ async function analyzePlaylist(playlistId) {
 }
 
 function renderAlbumGroup({ album, tracks }) {
-  const cover = album.images?.[0]?.url || '';
+  const cover = coverUrl(album.images, 'grande') || '';
   const artistNames = tracks[0]?.track.artists?.map(a => a.name).join(', ') || '';
   const uniqueTracks = [];
   const seen = new Set();

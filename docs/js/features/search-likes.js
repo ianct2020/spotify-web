@@ -2,10 +2,11 @@
 // Sirve para cuando la búsqueda de Spotify tarda o no encuentra bien:
 // tipeás, filtra en memoria por título/artista/álbum, sin pegarle a la API.
 
-import { getBestAvailableLikes } from '../api.js?v=149';
-import { renderTrackRow, escapeHtml, pageHeader } from '../ui/components.js?v=149';
-import { firstArtistName } from '../util/artist-name.js?v=149';
-import { openTrackCard } from './track-card.js?v=149';
+import { getBestAvailableLikes } from '../api.js?v=150';
+import { renderTrackRow, escapeHtml, pageHeader } from '../ui/components.js?v=150';
+import { firstArtistName } from '../util/artist-name.js?v=150';
+import { openTrackCard } from './track-card.js?v=150';
+import { coverUrl } from '../util/cover-size.js?v=150';
 
 const MAX_RESULTS = 300;
 let cachedItems = [];
@@ -167,7 +168,7 @@ function renderResults(holder, matches, query) {
         name: t.name,
         artist: (t.artists || []).map(firstArtistName).filter(Boolean)[0] || '',
         album: t.album?.name,
-        img: imgs[2]?.url || imgs[1]?.url || imgs[0]?.url,
+        img: coverUrl(imgs, 'grande'),
       });
     };
   });

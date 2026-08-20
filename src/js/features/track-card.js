@@ -1,7 +1,12 @@
 // Ficha de canción: modal con la historia completa de un track según el
 // Extended Streaming History — curva de plays por mes, primera/última vez,
 // días distintos, récord en un día — más preview iTunes y link a Spotify.
-// Se abre desde cualquier feature con openTrackCard({ id, name, artist, album, img }).
+// Se abre desde cualquier feature con openTrackCard({ id, name, artists, album, img }).
+//
+// v=150: `artists` (el array) es la forma preferida. `artist` suelto sigue
+// andando, pero si llega una CADENA UNIDA («A$AP Rocky, Imogen Heap») se parte
+// acá y no se propaga: ver `util/artist-name.js`. Los nombres se pintan como
+// **enlaces separados** y cada uno abre SU ficha de artista.
 
 import { loadTrackPlays, loadTrackDetail, loadHistoryStats, isOwner } from './history-data.js';
 import { escapeHtml } from '../ui/components.js';
@@ -9,9 +14,12 @@ import { getPreview } from '../api/preview-providers.js';
 import { togglePreview, playingKey } from '../ui/preview-player.js';
 import { hasUsername, findTrackId, getTrackCurrentStats, loadTopLifetime } from '../api/statsfm.js';
 import { openAlbumCard } from './album-card.js';
+import { openArtistCard, knownArtist } from './artist-card.js';
 import { openModal, closeTop } from '../ui/modal-stack.js';
 import { getBestAvailableLikes } from '../api.js';
 import { showToast } from '../ui/toast.js';
+import { resolveArtistList } from '../util/artist-name.js';
+import { coverUrl } from '../util/cover-size.js';
 
 const MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
 
@@ -68,8 +76,17 @@ document.addEventListener('previewchange', (e) => {
 });
 
 async function openTrackCard(t) {
-  // t: { id, name, artist, album?, img? } — id es el track id de Spotify (sin prefijo)
+  // t: { id, name, artists?, artist?, album?, img? } — id es el track id de
+  // Spotify (sin prefijo).
   if (!t || !t.id) return;
+
+  // ── La guarda de la puerta (v=150) ──
+  // Preferimos SIEMPRE el array. Si el llamador solo mandó `artist` y resultó
+  // ser una cadena unida, se parte acá, con el índice de artistas conocidos
+  // como desempate (para no romper «Tyler, The Creator»). A partir de esta
+  // línea la cadena no existe más adentro de la app.
+  const artistas = resolveArtistList(t, knownArtist);
+  const artistaPrincipal = artistas[0] || '';
 
   const overlay = openModal({
     id: `track-card:${t.id}`,
@@ -85,8 +102,12 @@ async function openTrackCard(t) {
         </div>
         <div style="flex:1;min-width:0">
           <h3 style="margin:0 0 2px;font-size:18px;line-height:1.25">${escapeHtml(t.name || '(sin nombre)')}</h3>
-          <div style="color:var(--color-text-secondary);font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">
-            ${escapeHtml(t.artist || '')}${t.album ? ` · ${escapeHtml(t.album)}` : ''}
+          <div class="tc-artists" style="color:var(--color-text-secondary);font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">
+            ${artistas.length
+              ? artistas.map((n, i) =>
+                `<button type="button" class="tc-artist-link" data-artist="${escapeHtml(n)}" title="Ver la ficha de ${escapeHtml(n)}">${escapeHtml(n)}</button>${i < artistas.length - 1 ? '<span class="tc-artist-sep">, </span>' : ''}`
+              ).join('')
+              : ''}${t.album ? ` · ${escapeHtml(t.album)}` : ''}
           </div>
           <div style="display:flex;gap:8px;margin-top:8px">
             <button class="btn btn-secondary btn-sm" id="tc-preview">▶ Preview</button>
@@ -110,12 +131,16 @@ async function openTrackCard(t) {
   // botón "Ir al álbum" de la fila de ← / ✕ (v=142).
   const irAlAlbum = async () => {
       let albumName = t.album || null;
-      let albumInfo = { name: albumName, artist: t.artist, img: t.albumImg || t.img };
+      // El artista del álbum es UN artista, no la lista del track: es lo que se
+      // compara contra `top_albums_all_time` (que guarda uno solo) y lo que se
+      // le pasa a la ficha de álbum, que lo usa para su id de modal y para
+      // resolver el álbum en /search.
+      let albumInfo = { name: albumName, artist: artistaPrincipal, img: t.albumImg || t.img };
       try {
         const stats = await loadHistoryStats().catch(() => null);
         if (albumName) {
           const found = (stats?.top_albums_all_time || []).find(
-            a => a.name === albumName && a.artist === t.artist
+            a => a.name === albumName && a.artist === artistaPrincipal
           );
           if (found) {
             albumInfo = { name: found.name, artist: found.artist, img: found.img || t.img, plays: found.plays, min: found.min };
@@ -124,16 +149,19 @@ async function openTrackCard(t) {
           const likes = await getBestAvailableLikes().catch(() => ({ items: [] }));
           const like = (likes.items || []).find(l => l.track?.id === t.id);
           if (like?.track?.album?.name) {
-            const imgs = like.track.album.images || [];
             albumName = like.track.album.name;
             albumInfo = {
               name: albumName,
-              artist: t.artist,
-              img: imgs[1]?.url || imgs[0]?.url || imgs[2]?.url || t.img,
+              artist: artistaPrincipal,
+              // `imgs[1]` era la de 300 cuando slimTrack guardaba las tres; desde
+              // v=138 guarda `[300, 64]` y ese índice pasó a ser **la de 64**.
+              // La ficha de álbum la pinta a 180 px: era la tapa más borrosa de
+              // toda la app (medido en producción el 2026-08-19).
+              img: coverUrl(like.track.album.images, 'grande') || t.img,
             };
           }
-          if (!albumName && stats?.top_albums_all_time && t.artist) {
-            const cands = stats.top_albums_all_time.filter(a => a.artist === t.artist);
+          if (!albumName && stats?.top_albums_all_time && artistaPrincipal) {
+            const cands = stats.top_albums_all_time.filter(a => a.artist === artistaPrincipal);
             if (cands.length === 1) {
               albumInfo = { name: cands[0].name, artist: cands[0].artist, img: cands[0].img, plays: cands[0].plays, min: cands[0].min };
               albumName = cands[0].name;
@@ -150,6 +178,16 @@ async function openTrackCard(t) {
   const goAlbumBtn = overlay.querySelector('#tc-go-album');
   if (goAlbumBtn) goAlbumBtn.onclick = irAlAlbum;
 
+  // Cada nombre abre SU ficha, apilada encima (v=150). Es lo que faltaba para
+  // llegar a la ficha del segundo artista de un feat sin pasar por el álbum.
+  overlay.querySelectorAll('.tc-artist-link').forEach(btn => {
+    btn.onclick = (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      openArtistCard({ name: btn.dataset.artist });
+    };
+  });
+
   // Si el llamador no pasó tapa (típico de tracks del Wrapped/Récords, que vienen
   // solo con {name, artist, uri}), la traemos vía oEmbed — CORS abierto, sin auth.
   if (!t.img) fillCoverFromOembed(t.id);
@@ -157,9 +195,8 @@ async function openTrackCard(t) {
   const previewBtn = overlay.querySelector('#tc-preview');
   previewBtn.onclick = async () => {
     const res = await togglePreview(`tc:${t.id}`, async () => {
-      // `artists` (lista completa) si el llamador la trajo; si no, el string de
-      // siempre. La cadena acepta el match si coincide cualquiera de los dos.
-      return await getPreview({ name: t.name || '', artist: t.artist || '', artists: t.artists, spotifyId: t.id });
+      // La lista ya normalizada: el matcher acepta si coincide CUALQUIERA.
+      return await getPreview({ name: t.name || '', artists: artistas, spotifyId: t.id });
     });
     previewBtn.textContent = res === true ? '⏹ Parar' : '▶ Preview';
     if (res === null) previewBtn.textContent = 'Sin preview';
@@ -294,7 +331,7 @@ async function fillStatsfmLine(t, exportPlays = null) {
     }
 
     // 2) Fallback per-track (solo lo trackeado post-conexión, sin import)
-    const id = await findTrackId(t.name || '', t.artist || '');
+    const id = await findTrackId(t.name || '', artistaPrincipal);
     const stats = id && await getTrackCurrentStats(id);
     if (!document.getElementById('tc-statsfm')) return;
     if (!stats || !stats.count) {

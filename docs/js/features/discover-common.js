@@ -6,18 +6,19 @@
 //     (util/album-heard.js: historial completo + likes + listened + w-three)
 //   - permiten "+ Biblioteca" y "Crear playlist con lo elegido"
 
-import { idbGetCached, idbSetCached, idbDel } from '../idb.js?v=149';
-import { getArtistAlbums, searchArtistByName, getAlbumTracks, saveToLibrary, saveAlbumsToLibrary, createPlaylist, addTracksToPlaylist } from '../api.js?v=149';
-import { albumKey } from '../util/album-key.js?v=149';
-import { escapeHtml } from '../ui/components.js?v=149';
-import { showToast } from '../ui/toast.js?v=149';
-import { openPlaylistPicker } from '../ui/playlist-picker.js?v=149';
-import { getOwnPlaylists, addUrisToPlaylists, toastAddResult } from '../util/playlist-add.js?v=149';
-import { openArtistCard } from './artist-card.js?v=149';
-import { openAlbumCard } from './album-card.js?v=149';
-import { createHiddenStore, createLocalStore } from '../util/hidden-sync.js?v=149';
-import { getPreview } from '../api/preview-providers.js?v=149';
-import { togglePreview, playingKey, attachHover } from '../ui/preview-player.js?v=149';
+import { idbGetCached, idbSetCached, idbDel } from '../idb.js?v=150';
+import { getArtistAlbums, searchArtistByName, getAlbumTracks, saveToLibrary, saveAlbumsToLibrary, createPlaylist, addTracksToPlaylist } from '../api.js?v=150';
+import { albumKey } from '../util/album-key.js?v=150';
+import { escapeHtml } from '../ui/components.js?v=150';
+import { showToast } from '../ui/toast.js?v=150';
+import { openPlaylistPicker } from '../ui/playlist-picker.js?v=150';
+import { getOwnPlaylists, addUrisToPlaylists, toastAddResult } from '../util/playlist-add.js?v=150';
+import { openArtistCard } from './artist-card.js?v=150';
+import { openAlbumCard } from './album-card.js?v=150';
+import { createHiddenStore, createLocalStore } from '../util/hidden-sync.js?v=150';
+import { getPreview } from '../api/preview-providers.js?v=150';
+import { togglePreview, playingKey, attachHover } from '../ui/preview-player.js?v=150';
+import { coverUrl } from '../util/cover-size.js?v=150';
 
 const DISCO_TTL_MIN = 30 * 24 * 60;       // 30 días
 const ARTIST_ID_TTL_MIN = 60 * 24 * 60;   // 60 días — los ids no cambian
@@ -54,7 +55,7 @@ export async function getArtistDiscoCached(artistId, artistName) {
     id: al.id,
     name: al.name,
     type: al.album_type,          // 'album' | 'single' | 'compilation'
-    img: al.images?.[1]?.url || al.images?.[0]?.url || null,
+    img: coverUrl(al.images, 'grande'),
     release: al.release_date || '',
     total: al.total_tracks || 0,
     artists: (al.artists || []).map(a => ({ id: a.id, name: a.name })),
@@ -285,6 +286,9 @@ export function fmtRelease(release) {
 const PLAY_SVG = `<svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>`;
 const PAUSE_SVG = `<svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor" aria-hidden="true"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>`;
 const DOTS_SVG = `<svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>`;
+// «Sin preview» dicho con todas las letras (v=150): el «—» de antes se leía
+// como un botón roto, no como una respuesta.
+const SIN_PREVIEW_HTML = '<span class="sin-preview-txt">Sin preview</span>';
 const OJO_TACHADO = `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>`;
 const OJO_ABIERTO = `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>`;
 
@@ -388,8 +392,9 @@ export function wireAlbumCards(list, findAlbumById, {
       const res = await togglePreview(previewKeyOf(al.id), () => getAlbumPreview(al, artista));
       if (res === true) btn.innerHTML = PAUSE_SVG;
       else if (res === null) {
-        btn.innerHTML = '—';
-        btn.title = 'Sin preview disponible';
+        btn.innerHTML = SIN_PREVIEW_HTML;
+        btn.classList.add('sin-preview');
+        btn.title = 'Sin preview en iTunes ni en Deezer';
         btn.disabled = true;
         showToast(`Sin preview disponible de «${al.name}»`, 'info');
       } else btn.innerHTML = previo === DOTS_SVG ? PLAY_SVG : previo;

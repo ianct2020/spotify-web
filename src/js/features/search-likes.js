@@ -6,6 +6,7 @@ import { getBestAvailableLikes } from '../api.js';
 import { renderTrackRow, escapeHtml, pageHeader } from '../ui/components.js';
 import { firstArtistName } from '../util/artist-name.js';
 import { openTrackCard } from './track-card.js';
+import { coverUrl } from '../util/cover-size.js';
 
 const MAX_RESULTS = 300;
 let cachedItems = [];
@@ -167,7 +168,7 @@ function renderResults(holder, matches, query) {
         name: t.name,
         artist: (t.artists || []).map(firstArtistName).filter(Boolean)[0] || '',
         album: t.album?.name,
-        img: imgs[2]?.url || imgs[1]?.url || imgs[0]?.url,
+        img: coverUrl(imgs, 'grande'),
       });
     };
   });

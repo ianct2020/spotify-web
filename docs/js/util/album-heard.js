@@ -14,9 +14,10 @@
 // Todas las claves pasan por `albumKey()` (util/album-key.js) — normalizado
 // con strip diacríticos + sufijos de edición.
 
-import { albumKey } from './album-key.js?v=149';
-import { loadTrackPlays, loadListenedAlbums, isOwner } from '../features/history-data.js?v=149';
-import { getBestAvailableLikes, getAllPlaylistItems } from '../api.js?v=149';
+import { albumKey } from './album-key.js?v=150';
+import { loadTrackPlays, loadListenedAlbums, isOwner } from '../features/history-data.js?v=150';
+import { getBestAvailableLikes, getAllPlaylistItems } from '../api.js?v=150';
+import { coverUrl } from './cover-size.js?v=150';
 
 const LS_WTHREE_ID = 'wthree_playlist_id';
 
@@ -56,7 +57,7 @@ export async function buildAlbumHeardIndex({ force = false } = {}) {
       if (!artistDisplay.has(nameLower)) artistDisplay.set(nameLower, artistName);
       if (a0?.id && !artistIds.has(nameLower)) artistIds.set(nameLower, a0.id);
       if (!artistImage.get(nameLower)) {
-        artistImage.set(nameLower, t.album?.images?.[2]?.url || t.album?.images?.[1]?.url || t.album?.images?.[0]?.url || null);
+        artistImage.set(nameLower, coverUrl(t.album?.images, 'grande'));
       }
     }
   }

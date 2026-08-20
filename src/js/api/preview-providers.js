@@ -198,7 +198,16 @@ function spotifyEmbed(spotifyId, name, artist) {
 // hay `spotifyId`) pero no se guarda nada: la próxima vez se vuelve a probar.
 async function getPreview({ name, artist, artists, spotifyId } = {}) {
   const lista = artistList({ artist, artists });
-  if (!name || !lista.length) return null;
+  // Sin nombre no hay nada que buscar. Sin ARTISTA sí: no se puede verificar el
+  // match contra iTunes/Deezer (y reproducir la canción equivocada es peor que
+  // no reproducir nada), pero el embed de Spotify va por id y no necesita
+  // verificar nada. Hasta v=149 este early-return se llevaba puesto también al
+  // embed, y el botón quedaba en «sin preview» para tracks que sí tenían: es
+  // el otro camino por el que una fila se queda sin ▶ (v=150).
+  if (!name) return null;
+  if (!lista.length) {
+    return spotifyId ? spotifyEmbed(spotifyId, name, '') : null;
+  }
   const key = `p:${lista.map(norm).filter(Boolean).join('/')}|${norm(name)}${spotifyId ? '|' + spotifyId : ''}`;
   // El pill muestra SIEMPRE lo que pidió el usuario, nunca el título que
   // devolvió el proveedor: si alguna vez volvemos a servir algo distinto, se

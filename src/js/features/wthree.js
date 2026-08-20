@@ -16,6 +16,7 @@ import { albumKey } from '../util/album-key.js';
 import { computeUpdatedPickPositions } from '../util/reorder-shifts.js';
 import { createHiddenStore } from '../util/hidden-sync.js';
 import { mountBottom } from '../ui/bottom-layer.js';
+import { coverUrl } from '../util/cover-size.js';
 
 const LS_KEY_ID = 'wthree_playlist_id';
 const LS_KEY_NAME = 'wthree_playlist_name';
@@ -87,6 +88,9 @@ function ensureLikedIndex() {
   return likedIndexPromise;
 }
 
+// «Sin preview» dicho con todas las letras (v=150): el «—» de antes se leía
+// como un botón roto, no como una respuesta.
+const SIN_PREVIEW_HTML = '<span class="sin-preview-txt">Sin preview</span>';
 const HEART_SVG = '<svg viewBox="0 0 24 24" width="11" height="11" fill="currentColor" aria-hidden="true"><path d="M12 21s-7.5-4.6-9.5-9A5 5 0 0 1 12 6.5 5 5 0 0 1 21.5 12c-2 4.4-9.5 9-9.5 9z"/></svg>';
 
 // Los álbumes ocultos se sincronizan por playlist privada. Como una playlist
@@ -243,7 +247,7 @@ function buildAlbumIndex(items) {
       picksByAlbum.set(key, {
         name: t.album.name,
         artist: artistName,
-        img: t.album.images?.[1]?.url || t.album.images?.[0]?.url || '',
+        img: coverUrl(t.album.images, 'grande') || '',
         albumId: t.album.id,
         picks: [],
       });
@@ -861,7 +865,10 @@ async function openAlbumModal(a) {
         return await getPreview({ name, artist: a.artist, spotifyId: id });
       });
       if (res === true) btn.innerHTML = PAUSE_SVG;
-      else if (res === null) { btn.textContent = '—'; btn.title = 'Sin preview'; btn.disabled = true; }
+      // Sin preview: LO DICE. Hasta v=149 esto ponía un «—» pelado y gris, que
+      // desde la fila se lee como «a esta canción le falta el ▶» — fue el
+      // reporte de Ian sobre «Love$ick (feat. A$AP Rocky)».
+      else if (res === null) { btn.innerHTML = SIN_PREVIEW_HTML; btn.classList.add('sin-preview'); btn.title = 'Sin preview en iTunes ni en Deezer'; btn.disabled = true; }
       else btn.innerHTML = PLAY_SVG;
     });
   });

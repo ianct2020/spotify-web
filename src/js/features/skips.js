@@ -31,6 +31,7 @@ import { createIncrementalList, scrollRootOf } from '../ui/incremental-list.js';
 import { createLazyImages } from '../ui/lazy-img.js';
 import { renderTrackCardRow, wireTrackCardGrid, paintCardSelection, paintPlayingCard, paintEmbedCard } from '../ui/track-card-row.js';
 import { coverAtSize } from '../util/cover-size.js';
+import { coverUrl } from '../util/cover-size.js';
 
 let cache = null;
 // Filas visibles con los filtros actuales, en el mismo orden que las tarjetas
@@ -641,7 +642,7 @@ function wireRows() {
         name: r.track.name,
         artist: (r.track.artists || []).map(firstArtistName).filter(Boolean)[0] || '',
         album: r.track.album?.name,
-        img: imgs[imgs.length - 1]?.url || imgs[0]?.url,
+        img: coverUrl(imgs, 'grande'),
       });
     },
     onHide: (r) => onHideClick(r.id),
