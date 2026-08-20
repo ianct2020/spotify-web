@@ -382,7 +382,7 @@ function renderResults() {
       rowById: (id) => rowById.get(id),
       onToggle: (id, o) => toggleSelection(id, o),
       onPlay: (r) => onPlayClick(r),
-      onCard: (r) => openTrackCard({ id: r.trackId, name: r.name, artist: r.artist, album: r.album, img: r.coverSmall || r.cover }),
+      onCard: (r) => openTrackCard({ id: r.trackId, name: r.name, artists: r.artistList || [r.artist], album: r.album, img: r.coverSmall || r.cover }),
       onHide: (r) => onHideClick(r),
       onUnlike: (r) => sacarDeLikes([r]),
     });

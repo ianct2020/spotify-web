@@ -23,7 +23,7 @@ import { showToast } from '../ui/toast.js?v=150';
 import { getPreview } from '../api/preview-providers.js?v=150';
 import { togglePreview, playingKey } from '../ui/preview-player.js?v=150';
 import { openTrackCard } from './track-card.js?v=150';
-import { firstArtistName } from '../util/artist-name.js?v=150';
+import { firstArtistName, artistNames } from '../util/artist-name.js?v=150';
 import { activateMarquee } from '../ui/marquee.js?v=150';
 import { hasUsername, loadTopLifetime } from '../api/statsfm.js?v=150';
 import { createHiddenStore } from '../util/hidden-sync.js?v=150';
@@ -640,7 +640,7 @@ function wireRows() {
       openTrackCard({
         id: r.id,
         name: r.track.name,
-        artist: (r.track.artists || []).map(firstArtistName).filter(Boolean)[0] || '',
+        artists: artistNames(r.track),
         album: r.track.album?.name,
         img: coverUrl(imgs, 'grande'),
       });
