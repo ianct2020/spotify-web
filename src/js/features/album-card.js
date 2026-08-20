@@ -148,11 +148,21 @@ const _albumIdMemo = new Map();   // albumKey → id | null
 // derecho: aflojar el filtro de resultados es lo que traía a Nick Drake cuando
 // se buscaba Drake, así que la comparación posterior no se toca — al contrario,
 // antes no había ninguna (se agarraba `items[0]` a ciegas con `limit=1`).
+// ⚠️ El apóstrofo se **BORRA**, no se cambia por un espacio. Medido contra la
+// API real el 2026-08-19, y la diferencia es total:
+//
+//   album:"Don t Be Dumb"  →  0 resultados
+//   album:"Dont Be Dumb"   →  2 resultados ✅
+//   album:"1989 (Taylor s Version)"  →  1 resultado
+//   album:"1989 (Taylors Version)"   →  3 resultados ✅
+//
+// O sea que Spotify indexa «don't» como el token `dont`, no como `don t`.
+// Partirlo en dos palabras es otra forma de no encontrar nada.
 function limpiaParaQuery(s) {
   return String(s || '')
     .replace(/["]/g, '')
-    // Apóstrofos rectos y tipográficos: Spotify no los maneja entre comillas.
-    .replace(/['‘’ʼ]/g, ' ')
+    // Apóstrofos rectos y tipográficos, fuera (sin dejar espacio en el medio).
+    .replace(/['‘’ʼ`´]/g, '')
     .replace(/\s+/g, ' ')
     .trim();
 }
@@ -174,13 +184,18 @@ async function resolveAlbumId(a) {
     // Comparación contra el nombre REAL (con apóstrofo y todo). `normText` ya
     // tira la puntuación, así que «Don't Be Dumb» y «Dont Be Dumb» caen en la
     // misma clave sin aflojar nada más.
-    const nombreOk = normText(a.name);
-    const artistaOk = normText(artista);
+    // El apóstrofo se saca a los DOS lados antes de normalizar: `normText` lo
+    // convierte en espacio, así que «Don't Be Dumb» daría «don t be dumb» y
+    // «Dont Be Dumb» daría «dont be dumb» — distintos. Sacándolo primero, las
+    // dos escrituras del mismo disco caen en la misma clave.
+    const clave = (s) => normText(String(s || '').replace(/['‘’ʼ`´]/g, ''));
+    const nombreOk = clave(a.name);
+    const artistaOk = clave(artista);
     const elegido = items.find(it => {
-      if (normText(it.name) !== nombreOk) return false;
+      if (clave(it.name) !== nombreOk) return false;
       if (!artistaOk) return true;
       // El artista pedido tiene que estar de verdad entre los del álbum.
-      return artistNames(it).some(n => normText(n) === artistaOk);
+      return artistNames(it).some(n => clave(n) === artistaOk);
     }) || null;
 
     id = elegido?.id || null;
