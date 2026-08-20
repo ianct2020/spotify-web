@@ -67,18 +67,39 @@ export async function buildAlbumStatsIndex({ force = false } = {}) {
 // trae imagen por álbum. Un álbum que nunca cumplió el umbral de esa lista no
 // tiene tapa acá y se resuelve por `albumKey` a secas — que es exactamente lo
 // que se hacía antes, o sea que no se pierde nada.
+// albumKey → coverId. Es el PUENTE que hace que la unificación funcione aunque
+// el llamador traiga otra tapa (v=150).
+//
+// El caso real: la ficha abierta desde una canción pasa la tapa que está en el
+// caché de likes, y esa imagen puede tener otro hash que la del export del
+// historial — VULTURES 1 llega como `…b2e4a1ea…` desde los likes y el
+// historial la tiene como `…9c654f31…`. Con la tapa distinta, el índice por
+// `coverId` no matcheaba y se caía a `albumKey`, que devuelve UNA sola de las
+// dos claves en las que el export parte el disco: 109 plays / 4h 31m en vez de
+// los 148 / 6h 13m reales.
+//
+// Con este mapa, la caída a `albumKey` ya no termina ahí: se pregunta qué tapa
+// tiene esa clave según el historial y se vuelve a entrar por `porTapa`, que sí
+// tiene la suma de las dos.
+let porClave = null;
+
 async function buildPorTapa() {
   if (porTapa) return porTapa;
 
   const stats = await buildAlbumStatsIndex();
   const idx = new Map();
+  porClave = new Map();
   try {
     const data = await loadListenedAlbums();
     for (const y of (data?.years || [])) {
       for (const al of (y.albums || [])) {
         const cid = coverId(al.img);
         if (!cid) continue;
-        const t = stats.get(albumKey(al.name, al.artist));
+        const k = albumKey(al.name, al.artist);
+        // El puente se llena aunque el álbum no tenga totales: sirve igual para
+        // llegar a la tapa desde la clave.
+        if (!porClave.has(k)) porClave.set(k, cid);
+        const t = stats.get(k);
         if (!t) continue;
         const prev = idx.get(cid);
         // Una clave de álbum puede aparecer en varios años; sus totales ya son
@@ -111,13 +132,28 @@ async function buildPorTapa() {
  */
 export async function lookupAlbumStats(a) {
   if (!a?.name) return { plays: 0, min: 0 };
+  const tapas = await buildPorTapa();
+
+  // 1. Por la tapa que trajo el llamador.
   const cid = coverId(a.img);
   if (cid) {
-    const hit = (await buildPorTapa()).get(cid);
+    const hit = tapas.get(cid);
     if (hit) return { plays: hit.plays, min: hit.ms / 60000 };
   }
-  const hit = (await buildAlbumStatsIndex()).get(albumKey(a.name, a.artist));
+
+  // 2. Por la clave, pero VOLVIENDO a entrar por la tapa: así se suman las
+  //    otras claves del mismo disco aunque el llamador haya traído otra imagen
+  //    (o ninguna). Sin este salto, un colaborativo devuelve solo la mitad.
+  const k = albumKey(a.name, a.artist);
+  const cidDeLaClave = porClave?.get(k);
+  if (cidDeLaClave) {
+    const hit = tapas.get(cidDeLaClave);
+    if (hit) return { plays: hit.plays, min: hit.ms / 60000 };
+  }
+
+  // 3. Sin tapa conocida en ninguna de las dos puntas: la clave a secas.
+  const hit = (await buildAlbumStatsIndex()).get(k);
   return hit ? { plays: hit.plays, min: hit.ms / 60000 } : { plays: 0, min: 0 };
 }
 
-export function invalidateAlbumStatsIndex() { cache = null; porTapa = null; }
+export function invalidateAlbumStatsIndex() { cache = null; porTapa = null; porClave = null; }
