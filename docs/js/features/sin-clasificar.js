@@ -751,7 +751,7 @@ async function onPlayClick(r) {
 // Ahora ese click selecciona, así que la ficha vive SOLO en su botón.
 function onCardClick(r) {
   if (!r.trackId) return;
-  openTrackCard({ id: r.trackId, name: r.name, artist: r.artist, album: r.album, img: r.coverSmall || r.cover });
+  openTrackCard({ id: r.trackId, name: r.name, artists: r.artistList || [r.artist], album: r.album, img: r.coverSmall || r.cover });
 }
 
 function onHideClick(r) {

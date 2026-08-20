@@ -23,7 +23,7 @@ import { showToast } from '../ui/toast.js';
 import { getPreview } from '../api/preview-providers.js';
 import { togglePreview, playingKey } from '../ui/preview-player.js';
 import { openTrackCard } from './track-card.js';
-import { firstArtistName } from '../util/artist-name.js';
+import { firstArtistName, artistNames } from '../util/artist-name.js';
 import { activateMarquee } from '../ui/marquee.js';
 import { hasUsername, loadTopLifetime } from '../api/statsfm.js';
 import { createHiddenStore } from '../util/hidden-sync.js';
@@ -640,7 +640,7 @@ function wireRows() {
       openTrackCard({
         id: r.id,
         name: r.track.name,
-        artist: (r.track.artists || []).map(firstArtistName).filter(Boolean)[0] || '',
+        artists: artistNames(r.track),
         album: r.track.album?.name,
         img: coverUrl(imgs, 'grande'),
       });

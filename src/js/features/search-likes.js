@@ -4,7 +4,7 @@
 
 import { getBestAvailableLikes } from '../api.js';
 import { renderTrackRow, escapeHtml, pageHeader } from '../ui/components.js';
-import { firstArtistName } from '../util/artist-name.js';
+import { firstArtistName, artistNames } from '../util/artist-name.js';
 import { openTrackCard } from './track-card.js';
 import { coverUrl } from '../util/cover-size.js';
 
@@ -166,7 +166,8 @@ function renderResults(holder, matches, query) {
       openTrackCard({
         id,
         name: t.name,
-        artist: (t.artists || []).map(firstArtistName).filter(Boolean)[0] || '',
+        // La lista entera: la ficha pinta un enlace por artista (v=150).
+        artists: artistNames(t),
         album: t.album?.name,
         img: coverUrl(imgs, 'grande'),
       });
