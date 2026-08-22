@@ -2,21 +2,21 @@
 // por álbum). Muestra qué álbumes ya tienen picks, cuántos, y cuáles te faltan.
 // Ordenado por álbumes más escuchados primero para priorizar tu tiempo.
 
-import { spotifyFetch, getAllPlaylistItems, getAllUserPlaylists, addTracksToPlaylist, removeTracksFromPlaylist, reorderPlaylistItems, getCachedPlaylistItems, updatePlaylistItemsCache, getBestAvailableLikes } from '../api.js?v=150';
-import { patchPlaylistItems, buildCachedItem } from '../util/playlist-cache-patch.js?v=150';
-import { loadHistoryStats, loadListenedAlbums, isOwner, ownerLockedMessage } from './history-data.js?v=150';
-import { escapeHtml, pageHeader } from '../ui/components.js?v=150';
-import { showToast } from '../ui/toast.js?v=150';
-import { activateMarquee, marqueeSpan } from '../ui/marquee.js?v=150';
-import { openModal, closeById, closeModal } from '../ui/modal-stack.js?v=150';
-import { getPreview } from '../api/preview-providers.js?v=150';
-import { togglePreview, playingKey } from '../ui/preview-player.js?v=150';
-import { openAlbumCard } from './album-card.js?v=150';
-import { albumKey } from '../util/album-key.js?v=150';
-import { computeUpdatedPickPositions } from '../util/reorder-shifts.js?v=150';
-import { createHiddenStore } from '../util/hidden-sync.js?v=150';
-import { mountBottom } from '../ui/bottom-layer.js?v=150';
-import { coverUrl } from '../util/cover-size.js?v=150';
+import { spotifyFetch, getAllPlaylistItems, getAllUserPlaylists, addTracksToPlaylist, removeTracksFromPlaylist, reorderPlaylistItems, getCachedPlaylistItems, updatePlaylistItemsCache, getBestAvailableLikes } from '../api.js?v=151';
+import { patchPlaylistItems, buildCachedItem } from '../util/playlist-cache-patch.js?v=151';
+import { loadHistoryStats, loadListenedAlbums, isOwner, ownerLockedMessage } from './history-data.js?v=151';
+import { escapeHtml, pageHeader } from '../ui/components.js?v=151';
+import { showToast } from '../ui/toast.js?v=151';
+import { activateMarquee, marqueeSpan } from '../ui/marquee.js?v=151';
+import { openModal, closeById, closeModal } from '../ui/modal-stack.js?v=151';
+import { getPreview } from '../api/preview-providers.js?v=151';
+import { togglePreview, playingKey } from '../ui/preview-player.js?v=151';
+import { openAlbumCard } from './album-card.js?v=151';
+import { albumKey } from '../util/album-key.js?v=151';
+import { computeUpdatedPickPositions } from '../util/reorder-shifts.js?v=151';
+import { createHiddenStore } from '../util/hidden-sync.js?v=151';
+import { mountBottom } from '../ui/bottom-layer.js?v=151';
+import { coverUrl } from '../util/cover-size.js?v=151';
 
 const LS_KEY_ID = 'wthree_playlist_id';
 const LS_KEY_NAME = 'wthree_playlist_name';
@@ -35,6 +35,22 @@ let hiddenSet = null;      // store de álbumes marcados como "ya está, no me i
 let lastTrackDataUri = null;  // pista representativa del último álbum abierto en el modal
 let hiddenSyncStarted = false;
 let showingHidden = false; // vista invertida (mostrar SOLO los ocultos para restaurarlos)
+// v=151: los álbumes sin NINGÚN like quedan fuera de la lista por defecto,
+// detrás de un toggle. Son 638 de 2.497 (25,6 % — medido el 2026-08-22 con los
+// likes exportados el 2026-07-17): demasiados para pedir 3 picks de cada uno,
+// y demasiados para borrarlos sin más. Diez de ellos YA tienen picks, así que
+// esconderlos del todo taparía trabajo hecho: por eso toggle y no borrado.
+let showNoLikes = false;
+let likesFilterStarted = false;
+
+// ¿Este álbum no tiene NI UN like? Mientras el índice no esté cargado devuelve
+// false para todo: la lista se ve entera y nunca se esconde nada por una carga
+// a medias. Lo mismo si el índice llegó vacío (likes caídos).
+function sinLikes(a) {
+  const ak = likedIndex?.albumKeys;
+  if (!ak || ak.size === 0) return false;
+  return !ak.has(albumKey(a.name, a.artist));
+}
 // Snapshot de la última escritura exitosa desde este cliente. Sirve para que
 // el segundo guardado sepa que las posiciones de picksByAlbum son confiables
 // (nadie más editó entre medio), sin depender del cache de items que fue
@@ -47,7 +63,10 @@ let lastLocalSnapshot = null;
 // están en "me gusta". Se indexa por id de track y también por nombre+artista
 // normalizados, porque un like puede venir de otra edición del disco (deluxe,
 // remaster) y ahí el id no coincide aunque sea la misma canción.
-let likedIndex = null;      // { ids:Set, nameKeys:Set } | null
+// `albumKeys` (v=151) es el conjunto de álbumes con AL MENOS UN like. Lo usa el
+// filtro «sin likes» de la lista: si Ian no likeó ni una canción del disco, lo
+// escuchó y no le gustó, y pedirle 3 picks no tiene sentido. Ver `sinLikes()`.
+let likedIndex = null;      // { ids:Set, nameKeys:Set, albumKeys:Set } | null
 let likedIndexPromise = null;
 
 function likeNameKey(name, artist) {
@@ -62,6 +81,7 @@ function ensureLikedIndex() {
   likedIndexPromise = (async () => {
     const ids = new Set();
     const nameKeys = new Set();
+    const albumKeys = new Set();
     try {
       const { items } = await getBestAvailableLikes();
       for (const it of (items || [])) {
@@ -69,8 +89,9 @@ function ensureLikedIndex() {
         if (!t) continue;
         if (t.id) ids.add(t.id);
         nameKeys.add(likeNameKey(t.name, t.artists?.[0]?.name));
+        if (t.album?.name) albumKeys.add(albumKey(t.album.name, t.artists?.[0]?.name || ''));
       }
-      console.info(`[wthree] índice de likes: ${ids.size} pistas`);
+      console.info(`[wthree] índice de likes: ${ids.size} pistas · ${albumKeys.size} álbumes con al menos un like`);
     } catch (e) {
       console.warn('[wthree] no pude cargar likes para marcar la tracklist:', e.message);
     }
@@ -80,9 +101,9 @@ function ensureLikedIndex() {
     // los viera nunca.
     if (ids.size === 0) {
       likedIndexPromise = null;
-      return { ids, nameKeys };
+      return { ids, nameKeys, albumKeys };
     }
-    likedIndex = { ids, nameKeys };
+    likedIndex = { ids, nameKeys, albumKeys };
     return likedIndex;
   })();
   return likedIndexPromise;
@@ -338,12 +359,34 @@ function renderBuckets(content) {
     hiddenStore.ready().then(() => renderBuckets(content));
   }
 
+  // El índice de likes llega asincrónico igual que los ocultos: se pide una vez
+  // y se repinta cuando está. Hasta que llegue, `sinLikes()` da false para todo
+  // y la lista se ve entera — nunca al revés (esconder 638 álbumes porque los
+  // likes todavía no cargaron sería el peor fallo posible de esta vista).
+  // Un solo intento por sesión, con bandera: sin ella, si los likes fallan
+  // `likedIndex` queda en null, el .then() vuelve a llamar a renderBuckets y
+  // esto se convierte en un bucle infinito (el mismo motivo por el que
+  // `hiddenSyncStarted` existe unas líneas más arriba).
+  if (!likesFilterStarted) {
+    likesFilterStarted = true;
+    ensureLikedIndex().then(() => renderBuckets(content));
+  }
+
   // "Ocultos" NO cuentan en los buckets normales — desaparecen de la vista y
   // de los contadores. En la vista invertida (showingHidden) mostramos SOLO
   // esos, con el botón invertido para restaurarlos.
-  const visible = showingHidden
+  const noOcultos = showingHidden
     ? albumsList.filter(a => hiddenSet.has(albumKey(a.name, a.artist)))
     : albumsList.filter(a => !hiddenSet.has(albumKey(a.name, a.artist)));
+
+  // Los «sin ningún like» salen de la lista y de TODOS los contadores de
+  // buckets, igual que los ocultos. El toggle los vuelve a meter. En la vista
+  // de ocultos no se filtra: ahí se va a restaurar cosas puntuales y esconder
+  // más todavía sería desorientador.
+  const sinLikesCount = showingHidden ? 0 : noOcultos.filter(sinLikes).length;
+  const visible = (showingHidden || showNoLikes)
+    ? noOcultos
+    : noOcultos.filter(a => !sinLikes(a));
 
   const buckets = { '0': [], '1': [], '2': [], '3': [], '4+': [] };
   for (const a of visible) {
@@ -373,6 +416,13 @@ function renderBuckets(content) {
     ? `<button class="btn btn-secondary btn-sm" id="wthree-show-hidden" title="Ver los que ocultaste">👁️‍🗨️ Ocultos (${hiddenCount})</button>`
     : '';
 
+  const noLikesToggle = (!showingHidden && (sinLikesCount > 0 || showNoLikes))
+    ? `<button class="btn btn-secondary btn-sm ${showNoLikes ? 'is-on' : ''}" id="wthree-toggle-nolikes" aria-pressed="${showNoLikes}"
+         title="Álbumes de los que no tienes ninguna canción en tus me gusta: los escuchaste y no te gustaron">
+         ${showNoLikes ? 'Ocultar los que no tienen likes' : `Mostrar los que no tienen likes (${sinLikesCount})`}
+       </button>`
+    : '';
+
   content.innerHTML = `
     <div class="wthree-header">
       <div class="wthree-header-name">
@@ -380,6 +430,7 @@ function renderBuckets(content) {
         <div style="font-size:15px;font-weight:600">${escapeHtml(playlistName || 'w three')}</div>
       </div>
       <div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end">
+        ${noLikesToggle}
         ${hiddenToggle}
         <button class="btn btn-secondary btn-sm" id="wthree-change">Cambiar</button>
       </div>
@@ -415,12 +466,17 @@ function renderBuckets(content) {
     ${buckets['4+'].length && (!selectedBucket || selectedBucket === '4+') ? renderBucket('⚠️ Más de 3 picks — sacar alguno?', buckets['4+'], 'warn', selectedBucket === '4+' ? 999 : 10) : ''}
 
     <div style="font-size:11px;color:var(--color-text-muted);margin-top:14px;text-align:center">
-      ${historyCount} álbumes del top historial${listenedCount ? ` · ${listenedCount} más detectados en tu historial de escucha` : ''} · ${picksByAlbum.size} álbumes en la playlist${hiddenCount && !showingHidden ? ` · ${hiddenCount} oculto${hiddenCount === 1 ? '' : 's'}` : ''}
+      ${historyCount} álbumes del top historial${listenedCount ? ` · ${listenedCount} más detectados en tu historial de escucha` : ''} · ${picksByAlbum.size} álbumes en la playlist${hiddenCount && !showingHidden ? ` · ${hiddenCount} oculto${hiddenCount === 1 ? '' : 's'}` : ''}${sinLikesCount && !showNoLikes ? ` · ${sinLikesCount} sin ningún like, fuera de la lista` : ''}
     </div>
   `;
 
   document.getElementById('wthree-change').onclick = reset;
   document.getElementById('wthree-clear-filter')?.addEventListener('click', () => {
+    selectedBucket = null;
+    renderBuckets(content);
+  });
+  document.getElementById('wthree-toggle-nolikes')?.addEventListener('click', () => {
+    showNoLikes = !showNoLikes;
     selectedBucket = null;
     renderBuckets(content);
   });

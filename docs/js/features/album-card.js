@@ -11,18 +11,18 @@
 // tus me gusta" en cada fila y previews que prueban contra TODOS los artistas
 // del track.
 
-import { escapeHtml } from '../ui/components.js?v=150';
-import { openArtistCard, knownArtist } from './artist-card.js?v=150';
-import { openModal, closeTop } from '../ui/modal-stack.js?v=150';
-import { getBestAvailableLikes, getAlbumTracks, spotifyFetch } from '../api.js?v=150';
-import { albumKey, coverId } from '../util/album-key.js?v=150';
-import { artistMatches, normText } from '../util/track-match.js?v=150';
-import { firstArtistName, artistNames, resolveArtistName } from '../util/artist-name.js?v=150';
-import { coverUrl } from '../util/cover-size.js?v=150';
-import { lookupAlbumStats } from '../util/album-stats.js?v=150';
-import { getPreview } from '../api/preview-providers.js?v=150';
-import { togglePreview, playingKey } from '../ui/preview-player.js?v=150';
-import { openTrackCard } from './track-card.js?v=150';
+import { escapeHtml } from '../ui/components.js?v=151';
+import { openArtistCard, knownArtist } from './artist-card.js?v=151';
+import { openModal, closeTop } from '../ui/modal-stack.js?v=151';
+import { getBestAvailableLikes, getAlbumTracks, spotifyFetch } from '../api.js?v=151';
+import { albumKey, coverId } from '../util/album-key.js?v=151';
+import { artistMatches, normText } from '../util/track-match.js?v=151';
+import { firstArtistName, artistNames, resolveArtistName } from '../util/artist-name.js?v=151';
+import { coverUrl } from '../util/cover-size.js?v=151';
+import { lookupAlbumStats } from '../util/album-stats.js?v=151';
+import { getPreview } from '../api/preview-providers.js?v=151';
+import { togglePreview, playingKey } from '../ui/preview-player.js?v=151';
+import { openTrackCard } from './track-card.js?v=151';
 
 const PLAY_SVG = `<svg viewBox="0 0 24 24" width="10" height="10" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>`;
 const PAUSE_SVG = `<svg viewBox="0 0 24 24" width="10" height="10" fill="currentColor" aria-hidden="true"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>`;

@@ -3374,14 +3374,29 @@ h3 { font-size: 18px; font-weight: 600; }
 @media (max-width: 700px) {
   .covers-narrow-hint { display: block; }
 }
+/* v=151 — #covers desaprovechaba espacio.
+   La toolbar era `justify-content: space-between` con el resumen a la izquierda
+   y los controles a la derecha: en pantalla ancha eso abre una banda muerta en
+   el medio, y encima empuja los controles al borde opuesto de donde está
+   mirando el usuario. Ahora todo arranca a la izquierda y va seguido; lo que
+   sobra queda a la derecha, que es donde no molesta.
+   Los márgenes de cabecera, toolbar y chips se ajustan más abajo — el mosaico
+   es lo que importa en esta vista, no el cromo. */
 .covers-toolbar {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 12px;
+  justify-content: flex-start;
+  gap: 8px 14px;
   flex-wrap: wrap;
-  margin-bottom: 12px;
+  margin-bottom: 8px;
 }
+/* Cabecera compacta SOLO acá: `.page-header` es la de toda la app y no se toca.
+   El `:has(+ …)` la alcanza por ser hermana anterior de #covers-content. */
+.page-header:has(+ #covers-content) {
+  margin-bottom: 10px;
+  min-height: 28px;
+}
+.page-header:has(+ #covers-content) .page-header-title { font-size: 19px; }
 /* Toolbar de #covers (v=127).
    Antes cada control traía su propio alto y padding: los botones eran <button>
    sin borde dentro de un grupo, el select era un control nativo suelto con
@@ -3426,6 +3441,32 @@ h3 { font-size: 18px; font-weight: 600; }
   color: white;
 }
 .covers-btn + .covers-btn { border-left: 1px solid var(--color-border); }
+/* Grupo de descarga (v=151). Va separado del resto de la toolbar por un margen
+   propio y lleva la palabra «Descargar» dentro del mismo marco, para que los
+   dos botones se lean como «lo que hace esto es bajar un archivo» y no como
+   otro par de opciones de vista. */
+.covers-dl-group { margin-left: 10px; }
+.covers-dl-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 0 10px;
+  height: 100%;
+  background: var(--color-elevated);
+  border-right: 1px solid var(--color-border);
+  color: var(--color-text-muted);
+  font-size: 11px;
+  line-height: 1;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  white-space: nowrap;
+}
+.covers-dl-label svg { flex-shrink: 0; }
+/* En estrecho se pega al resto (el margen sobra), pero la etiqueta NO se
+   esconde: es justamente la que dice que esto descarga. */
+@media (max-width: 700px) {
+  .covers-dl-group { margin-left: 0; }
+}
 /* El select comparte caja, alto, fuente y padding con los botones. Se le saca
    la apariencia nativa y se le dibuja el chevron con un background-image, para
    que no rompa la línea de la toolbar. */
@@ -3459,8 +3500,8 @@ h3 { font-size: 18px; font-weight: 600; }
 .covers-year-chips {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
-  margin-bottom: 10px;
+  gap: 5px;
+  margin-bottom: 8px;
   min-width: 0;
 }
 .covers-chip {
@@ -3544,11 +3585,34 @@ h3 { font-size: 18px; font-weight: 600; }
   line-height: 1.25;
   max-width: 280px;
   box-shadow: 0 6px 20px rgba(0,0,0,0.5);
-  pointer-events: none;
+  /* v=151: era `none`. Ahora el título y el artista se clickean, así que el
+     tooltip tiene que recibir el puntero. Va anclado al borde de la celda y no
+     al cursor, justamente para que se pueda llegar a él (ver covers.js). */
+  pointer-events: auto;
 }
 .covers-tooltip.is-on { display: block; }
 .covers-tooltip .ct-name { font-weight: 600; margin-bottom: 2px; }
 .covers-tooltip .ct-artist { color: rgba(255,255,255,0.75); font-size: 11px; }
+/* Los dos son <button> de verdad: se resetea la piel del botón y se les da
+   afordancia de enlace, para que se lea que llevan a algún lado. */
+.covers-tooltip .ct-link {
+  display: block;
+  width: 100%;
+  padding: 0;
+  background: none;
+  border: 0;
+  font-family: inherit;
+  font-size: inherit;
+  line-height: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.covers-tooltip .ct-name.ct-link { color: white; }
+.covers-tooltip .ct-link:hover { text-decoration: underline; }
+.covers-tooltip .ct-name.ct-link:hover,
+.covers-tooltip .ct-artist.ct-link:hover { color: var(--color-accent); }
+.covers-tooltip .ct-link:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
+.covers-tooltip .ct-artist.ct-link:empty { display: none; }
 .covers-tooltip .ct-year { color: rgba(255,255,255,0.55); font-size: 10px; margin-top: 2px; }
 
 /* Wrapper del grid: en modo fullscreen se convierte en el contenedor entero

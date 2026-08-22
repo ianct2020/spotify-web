@@ -14,6 +14,7 @@ import { getAllPlaylistItems, getBestAvailableLikes } from '../api.js';
 import { escapeHtml, pageHeader, showProgress, hideProgress } from '../ui/components.js';
 import { showToast } from '../ui/toast.js';
 import { openAlbumCard } from './album-card.js';
+import { openArtistCard } from './artist-card.js';
 import { albumKey, coverId } from '../util/album-key.js';
 import { generarWallpaper, descargarBlob, WALLPAPER_PRESETS } from './covers-wallpaper.js';
 import { buildAlbumStatsIndex } from '../util/album-stats.js';
@@ -369,16 +370,24 @@ export async function render(container) {
           <button type="button" class="covers-btn ${size === '64' ? 'is-on' : ''}" data-size="64">Medio</button>
           <button type="button" class="covers-btn ${size === '96' ? 'is-on' : ''}" data-size="96">Grande</button>
         </div>
-        <div class="covers-control-group" aria-label="Descargar como fondo de pantalla">
-          <button type="button" class="covers-btn" id="covers-wall-escritorio" title="Descargar el mosaico como fondo de escritorio (3840×2160)">Fondo 16:9</button>
-          <button type="button" class="covers-btn" id="covers-wall-movil" title="Descargar el mosaico como fondo de celular (1440×3120)">Fondo celular</button>
-        </div>
         <div class="covers-control-group covers-select-wrap">
           <select class="covers-select" id="covers-sort" aria-label="Ordenar por">
             <option value="date-asc" ${sort === 'date-asc' ? 'selected' : ''}>Más antiguas primero</option>
             <option value="min-desc" ${sort === 'min-desc' ? 'selected' : ''}>Más minutos primero</option>
             <option value="artist-asc" ${sort === 'artist-asc' ? 'selected' : ''}>Artista (A–Z)</option>
           </select>
+        </div>
+        <!-- v=151: los dos fondos DESCARGAN un archivo, y estaban mezclados con
+             los controles de tamaño y orden, que solo cambian lo que se ve. Van
+             al final, en su propio grupo separado y con la palabra «Descargar»
+             delante — la etiqueta la lee el usuario, no hace falta el title. -->
+        <div class="covers-control-group covers-dl-group" role="group" aria-label="Descargar el mosaico como fondo de pantalla">
+          <span class="covers-dl-label" aria-hidden="true">
+            <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            Descargar
+          </span>
+          <button type="button" class="covers-btn" id="covers-wall-escritorio" title="Descarga un archivo PNG de 3840×2160 para usar de fondo de escritorio">Fondo 16:9</button>
+          <button type="button" class="covers-btn" id="covers-wall-movil" title="Descarga un archivo PNG de 1440×3120 para usar de fondo de móvil">Fondo móvil</button>
         </div>
       </div>
     </div>
@@ -389,9 +398,13 @@ export async function render(container) {
     <div class="covers-grid-wrap" id="covers-grid-wrap">
       <div class="covers-grid" id="covers-grid" data-size="${size}" style="--cover-min:${size}px;--cover-gap:${GRID_GAP}px"></div>
     </div>
-    <div class="covers-tooltip" id="covers-tooltip" role="tooltip" aria-hidden="true">
-      <div class="ct-name"></div>
-      <div class="ct-artist"></div>
+    <!-- v=151: el título y el artista son botones de verdad. Ver el bloque de
+         "tooltip clickeable" más abajo para por qué el tooltip deja de seguir
+         al cursor. El role="tooltip" se va: esto ya no es un tooltip pasivo.
+         (Sin acentos graves acá adentro: esto vive en un template literal.) -->
+    <div class="covers-tooltip" id="covers-tooltip" aria-hidden="true">
+      <button type="button" class="ct-name ct-link" title="Abrir la ficha del álbum"></button>
+      <button type="button" class="ct-artist ct-link" title="Abrir la ficha del artista"></button>
       <div class="ct-year"></div>
     </div>
   `;
@@ -712,6 +725,9 @@ export async function render(container) {
     const idx = +btn.dataset.i;
     const a = currentList[idx];
     if (!a) return;
+    // El tooltip es `position: fixed` con z-index propio: si no se cierra acá,
+    // queda flotando ENCIMA de la ficha que se acaba de abrir.
+    hideTooltip();
     openAlbumCard({ name: a.name, artist: a.artist, img: a.img, plays: a.plays, min: a.min });
   });
 
@@ -723,16 +739,89 @@ export async function render(container) {
     }
   }, true);
 
+  // ── Tooltip clickeable (v=151) ──────────────────────────────────────────
+  //
+  // Pedido: click en el título abre la ficha del álbum y click en el artista la
+  // del artista, sin ir a buscarlo a Spotify a mano.
+  //
+  // Para eso hubo que cambiar DOS cosas del tooltip, y las dos son
+  // consecuencia de lo mismo — un elemento no se puede clickear si huye del
+  // cursor:
+  //
+  //   1. Tenía `pointer-events: none`. Ahora los acepta.
+  //   2. Seguía al cursor en CADA `pointermove`. Ahora la posición se congela
+  //      al entrar en una celda y no se vuelve a tocar hasta que se cambia de
+  //      celda, así que hay un objetivo quieto al que llegar.
+  //
+  // Y no se pelea con el click de la celda, que era el riesgo: el tooltip es
+  // hermano del grid, no descendiente. El handler de arriba está en `grid`, así
+  // que un click adentro del tooltip no le llega nunca por burbujeo. Lo único
+  // que hacía falta era que el tooltip no se cerrara al salir de la celda hacia
+  // él: de eso se ocupa `tooltipHot`.
   let currentIdx = -1;
+  let tooltipHot = false;   // el puntero está ENCIMA del tooltip
+
+  let hideTimer = null;
+
+  const hideTooltip = () => {
+    clearTimeout(hideTimer);
+    hideTimer = null;
+    tooltip.classList.remove('is-on');
+    tooltip.setAttribute('aria-hidden', 'true');
+    currentIdx = -1;
+    hoverOut();
+  };
+
+  // El cierre va con un margen de gracia CANCELABLE, y no es un adorno: al
+  // pasar de la celda al tooltip, `pointerleave` del grid dispara ANTES que
+  // `pointerenter` del tooltip. Sin este margen, el tooltip se cierra en el
+  // milisegundo exacto en que el usuario va a clickearlo, y el clic cae sobre
+  // la celda de abajo — o sea, justo la pelea que había que evitar.
+  const GRACIA_MS = 120;
+  const scheduleHide = () => {
+    clearTimeout(hideTimer);
+    hideTimer = setTimeout(() => { if (!tooltipHot) hideTooltip(); }, GRACIA_MS);
+  };
+
+  tooltip.addEventListener('pointerenter', () => {
+    tooltipHot = true;
+    clearTimeout(hideTimer);
+    hideTimer = null;
+  });
+  tooltip.addEventListener('pointerleave', () => {
+    tooltipHot = false;
+    // Salir del tooltip cierra, salvo que se vuelva a una celda: el
+    // `pointermove` del grid lo reabre en el mismo gesto.
+    scheduleHide();
+  });
+
+  tooltip.querySelector('.ct-name').addEventListener('click', () => {
+    const a = currentList[currentIdx];
+    if (!a) return;
+    hideTooltip();
+    openAlbumCard({ name: a.name, artist: a.artist, img: a.img, plays: a.plays, min: a.min });
+  });
+  tooltip.querySelector('.ct-artist').addEventListener('click', () => {
+    const a = currentList[currentIdx];
+    if (!a?.artist) return;
+    hideTooltip();
+    // `openArtistCard` normaliza el nombre por su cuenta (la guarda de v=150),
+    // así que acá no hay que partir nada.
+    openArtistCard({ name: a.artist });
+  });
+
   grid.addEventListener('pointermove', (e) => {
+    // Con el puntero sobre el tooltip no se recalcula nada: si no, moverse
+    // hacia él lo reposicionaría y se escaparía justo al ir a clickearlo.
+    if (tooltipHot) return;
     const btn = e.target.closest('.cover-cell');
     if (!btn) {
-      if (currentIdx !== -1) { tooltip.classList.remove('is-on'); currentIdx = -1; hoverOut(); }
+      if (currentIdx !== -1) scheduleHide();
       return;
     }
     const idx = +btn.dataset.i;
-    if (idx !== currentIdx) {
-      currentIdx = idx;
+    if (idx === currentIdx) return;   // misma celda: la posición queda congelada
+    currentIdx = idx;
       const a = currentList[idx];
       if (!a) return;
       // Hover-play: `hoverIn` ya trae el debounce y cancela el anterior cuando
@@ -747,28 +836,38 @@ export async function render(container) {
         // hay audio de iTunes ni de Deezer, el hover se queda callado.
         return await getPreview({ name: pista.name, artists: pista.artists });
       });
-      tooltip.querySelector('.ct-name').textContent = a.name || '—';
-      tooltip.querySelector('.ct-artist').textContent = a.artist || '';
-      const year = (a.date || '').slice(0, 4);
-      const yEl = tooltip.querySelector('.ct-year');
-      yEl.textContent = year || '';
-      yEl.style.display = year ? '' : 'none';
-      tooltip.classList.add('is-on');
-    }
-    const off = 14;
-    let x = e.clientX + off;
-    let y = e.clientY + off;
+    tooltip.querySelector('.ct-name').textContent = a.name || '—';
+    tooltip.querySelector('.ct-artist').textContent = a.artist || '';
+    const year = (a.date || '').slice(0, 4);
+    const yEl = tooltip.querySelector('.ct-year');
+    yEl.textContent = year || '';
+    yEl.style.display = year ? '' : 'none';
+    tooltip.classList.add('is-on');
+    tooltip.setAttribute('aria-hidden', 'false');
+
+    // Se ancla a la CELDA, pegado a su borde — no al cursor y sin hueco.
+    //
+    // El motivo es que si no, no se puede clickear: puesto en `cursor + 14px`,
+    // el gesto de ir hacia él pasa por las celdas de al lado, cada una
+    // reposiciona el tooltip a `cursor + 14` otra vez y el objetivo huye
+    // manteniendo siempre la misma distancia. Pegado al borde de la celda, en
+    // cambio, salir de la celda hacia él es entrar en él: no hay ninguna celda
+    // intermedia que cruzar, que es justo lo que rompía el gesto.
+    const r = btn.getBoundingClientRect();
     const tw = tooltip.offsetWidth;
     const th = tooltip.offsetHeight;
-    if (x + tw + 8 > window.innerWidth) x = e.clientX - tw - off;
-    if (y + th + 8 > window.innerHeight) y = e.clientY - th - off;
+    let x = r.right;
+    let y = r.top;
+    if (x + tw + 4 > window.innerWidth) x = r.left - tw;   // se voltea al otro lado
+    if (y + th + 4 > window.innerHeight) y = window.innerHeight - th - 4;
     tooltip.style.left = Math.max(4, x) + 'px';
     tooltip.style.top = Math.max(4, y) + 'px';
   });
   grid.addEventListener('pointerleave', () => {
-    tooltip.classList.remove('is-on');
-    currentIdx = -1;
-    hoverOut();
+    // Salir del grid hacia el tooltip NO cierra: el tooltip está fuera del
+    // grid, así que este evento dispara justo al ir a clickearlo.
+    if (tooltipHot) return;
+    scheduleHide();
   });
 
   return () => {
