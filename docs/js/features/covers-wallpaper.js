@@ -28,12 +28,12 @@
 // Los límites de Chrome quedan lejos: dimensión máxima 16.384 px y unos 268 MP
 // de área total (16.384²); el preset más grande son 8,3 MP.
 
-import { coverVariant } from '../util/album-key.js?v=150';
+import { coverVariant } from '../util/album-key.js?v=151';
 
 // Presets. `nombre` es lo que se ve en el botón; `archivo` va en la descarga.
 export const WALLPAPER_PRESETS = {
   escritorio: { w: 3840, h: 2160, nombre: 'Escritorio 16:9', archivo: 'escritorio-3840x2160' },
-  movil: { w: 1440, h: 3120, nombre: 'Celular', archivo: 'celular-1440x3120' },
+  movil: { w: 1440, h: 3120, nombre: 'Móvil', archivo: 'movil-1440x3120' },
 };
 
 // Cuántas tapas vivas a la vez. El número lo pone la RED, no la memoria: 24

@@ -13,11 +13,11 @@
 // El debounce de 400 ms lo pone `attachHover` (ui/preview-player.js), así que
 // barrer una lista de artistas con el mouse no dispara ninguna búsqueda.
 
-import { getPreview, getArtistTopPreview } from '../api/preview-providers.js?v=150';
-import { getBestAvailableLikes } from '../api.js?v=150';
-import { loadArtistTracks } from '../features/history-data.js?v=150';
-import { artistNames } from './artist-name.js?v=150';
-import { albumKey } from './album-key.js?v=150';
+import { getPreview, getArtistTopPreview } from '../api/preview-providers.js?v=151';
+import { getBestAvailableLikes } from '../api.js?v=151';
+import { loadArtistTracks } from '../features/history-data.js?v=151';
+import { artistNames } from './artist-name.js?v=151';
+import { albumKey } from './album-key.js?v=151';
 
 // Cuántas de las más escuchadas entran en el sorteo cuando no hay likes.
 const TOP_HISTORIAL = 15;
