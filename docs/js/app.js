@@ -1,40 +1,40 @@
-import { isLoggedIn, loginWithSpotify, logout } from './auth.js?v=153';
-import { spotifyFetch, tryAutoLoadUserBackup } from './api.js?v=153';
-import { getValidToken } from './auth.js?v=153';
-import { cacheClearAll } from './storage.js?v=153';
-import { idbClearAll } from './idb.js?v=153';
-import { registerRoute, initRouter } from './router.js?v=153';
-import { showToast } from './ui/toast.js?v=153';
-import { pageHeader } from './ui/components.js?v=153';
-import { installCrashGuard } from './ui/crash-guard.js?v=153';
-import { getStack } from './ui/modal-stack.js?v=153';
-import { installBackToTop } from './ui/back-to-top.js?v=153';
+import { isLoggedIn, loginWithSpotify, logout } from './auth.js?v=154';
+import { spotifyFetch, tryAutoLoadUserBackup } from './api.js?v=154';
+import { getValidToken } from './auth.js?v=154';
+import { cacheClearAll } from './storage.js?v=154';
+import { idbClearAll } from './idb.js?v=154';
+import { registerRoute, initRouter } from './router.js?v=154';
+import { showToast } from './ui/toast.js?v=154';
+import { pageHeader } from './ui/components.js?v=154';
+import { installCrashGuard } from './ui/crash-guard.js?v=154';
+import { getStack } from './ui/modal-stack.js?v=154';
+import { installBackToTop } from './ui/back-to-top.js?v=154';
 
-import { render as renderSync } from './features/sync.js?v=153';
-import { render as renderDedupe } from './features/dedupe.js?v=153';
-import { render as renderDupalbums } from './features/duplicate-albums.js?v=153';
-import { render as renderZombies } from './features/zombies.js?v=153';
-import { render as renderVersions } from './features/versions.js?v=153';
-import { render as renderDashboard } from './features/dashboard.js?v=153';
-import { render as renderSmart } from './features/smart.js?v=153';
-import { render as renderSimilar } from './features/similar-artists.js?v=153';
-import { render as renderRabbit } from './features/rabbit-hole.js?v=153';
-import { render as renderByGenre } from './features/by-genre.js?v=153';
-import { render as renderByArtist } from './features/by-artist.js?v=153';
-import { render as renderRecs } from './features/recommendations.js?v=153';
-import { render as renderListened } from './features/listened.js?v=153';
-import { render as renderWrapped } from './features/wrapped.js?v=153';
-import { render as renderRecords } from './features/records.js?v=153';
-import { openImportHistory } from './features/import-history.js?v=153';
-import { bindOwnerLockedButtons } from './features/history-data.js?v=153';
-import { render as renderZeroPlays } from './features/zero-plays.js?v=153';
-import { render as renderSkips } from './features/skips.js?v=153';
-import { render as renderSearchLikes } from './features/search-likes.js?v=153';
-import { render as renderWthree } from './features/wthree.js?v=153';
-import { render as renderCovers } from './features/covers.js?v=153';
-import { render as renderDiscoverArtists } from './features/discover-artists.js?v=153';
-import { render as renderNewReleases } from './features/new-releases.js?v=153';
-import { render as renderSinClasificar } from './features/sin-clasificar.js?v=153';
+import { render as renderSync } from './features/sync.js?v=154';
+import { render as renderDedupe } from './features/dedupe.js?v=154';
+import { render as renderDupalbums } from './features/duplicate-albums.js?v=154';
+import { render as renderZombies } from './features/zombies.js?v=154';
+import { render as renderVersions } from './features/versions.js?v=154';
+import { render as renderDashboard } from './features/dashboard.js?v=154';
+import { render as renderSmart } from './features/smart.js?v=154';
+import { render as renderSimilar } from './features/similar-artists.js?v=154';
+import { render as renderRabbit } from './features/rabbit-hole.js?v=154';
+import { render as renderByGenre } from './features/by-genre.js?v=154';
+import { render as renderByArtist } from './features/by-artist.js?v=154';
+import { render as renderRecs } from './features/recommendations.js?v=154';
+import { render as renderListened } from './features/listened.js?v=154';
+import { render as renderWrapped } from './features/wrapped.js?v=154';
+import { render as renderRecords } from './features/records.js?v=154';
+import { openImportHistory } from './features/import-history.js?v=154';
+import { bindOwnerLockedButtons } from './features/history-data.js?v=154';
+import { render as renderZeroPlays } from './features/zero-plays.js?v=154';
+import { render as renderSkips } from './features/skips.js?v=154';
+import { render as renderSearchLikes } from './features/search-likes.js?v=154';
+import { render as renderWthree } from './features/wthree.js?v=154';
+import { render as renderCovers } from './features/covers.js?v=154';
+import { render as renderDiscoverArtists } from './features/discover-artists.js?v=154';
+import { render as renderNewReleases } from './features/new-releases.js?v=154';
+import { render as renderSinClasificar } from './features/sin-clasificar.js?v=154';
 
 async function testConnection() {
   const token = await getValidToken();
@@ -253,10 +253,10 @@ function showApp(profile) {
           <a class="nav-link" data-route="recs" href="#recs">
             <span class="nav-link-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 22h4M15 14a5 5 0 1 0-6 0c.5.5 1 1 1 2v2h4v-2c0-1 .5-1.5 1-2z"/></svg></span> Recomendaciones
           </a>
-          <a class="nav-link" data-route="discoverartists" href="#discover-artists">
+          <a class="nav-link" data-route="discover-artists" href="#discover-artists">
             <span class="nav-link-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.35-4.35"/></svg></span> Sin escuchar de tus artistas
           </a>
-          <a class="nav-link" data-route="newreleases" href="#new-releases">
+          <a class="nav-link" data-route="new-releases" href="#new-releases">
             <span class="nav-link-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></span> Novedades de tus artistas
           </a>
         </div>
@@ -359,9 +359,29 @@ function showApp(profile) {
       overlay.classList.toggle('open');
       return;
     }
-    // Desktop:
-    // - Si estás en Home (sidebar visible): lo escondemos temporal (sidebar-hidden)
-    // - Si estás con sidebar-hidden (cualquier otra ruta): lo abrimos como OVERLAY sobre el main
+    // Desktop, y acá hay DOS comportamientos distintos (v=154):
+    //
+    // - En HOME el sidebar es parte del layout: el hamburguesa lo DESACOPLA y
+    //   lo vuelve a ACOPLAR. Nunca lo abre como overlay.
+    //
+    //   Hasta v=153 la rama de abajo era una sola y en Home dejaba un estado
+    //   sin salida (reproducido en producción el 2026-08-23): con el hash ya en
+    //   `#home`, cerrar el menú ponía `sidebar-hidden`, y lo único que la saca
+    //   es `applyRouteSidebar`, que corre en `hashchange`. Como el hash ya era
+    //   `#home`, ni el hamburguesa ni el logo «Fonoteca» disparaban uno: el
+    //   menú volvía, pero como OVERLAY con backdrop encima del contenido, y el
+    //   hamburguesa quedaba tapado abajo (x=72, debajo de los 240px del
+    //   sidebar). Para recuperar el menú acoplado había que irse a otra ruta y
+    //   volver, o recargar.
+    //
+    // - En el resto de las rutas el sidebar vive fuera de pantalla y se abre
+    //   como OVERLAY sobre el main, sin correrlo.
+    if (isHome()) {
+      sidebar.classList.remove('desktop-open');
+      overlay.classList.remove('open');
+      document.body.classList.toggle('sidebar-hidden');
+      return;
+    }
     if (document.body.classList.contains('sidebar-hidden')) {
       const opening = !sidebar.classList.contains('desktop-open');
       sidebar.classList.toggle('desktop-open');
@@ -526,7 +546,7 @@ function renderHome(container) {
       <div class="sidebar-section-title" style="margin-bottom:12px">${sec.title}</div>
       <div class="home-grid">
         ${sec.items.map(it => `
-          <a href="#${it.hash}" class="card home-card">
+          <a href="#${it.hash}" class="card home-card" data-route="${it.hash}">
             <div class="home-card-icon">${it.icon}</div>
             <h3 style="margin-bottom:6px">${it.name}</h3>
             <p style="color:var(--color-text-secondary);font-size:14px">${it.desc}</p>

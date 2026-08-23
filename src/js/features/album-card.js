@@ -16,7 +16,14 @@ import { openArtistCard, knownArtist } from './artist-card.js';
 import { openModal, closeTop } from '../ui/modal-stack.js';
 import { getBestAvailableLikes, getAlbumTracks, spotifyFetch } from '../api.js';
 import { albumKey, coverId } from '../util/album-key.js';
-import { artistMatches, normText } from '../util/track-match.js';
+// ⚠️ `limpiaParaQuery` FALTABA acá hasta v=153 y el síntoma era mudo: la usa
+// `resolveAlbumId` en el `try`, así que cada ficha tiraba un ReferenceError que
+// el catch convertía en «no pude resolver el álbum», la ficha se caía al camino
+// degradado de v=142 (solo tus likes, todos con el ♥ lleno) y el tracklist
+// completo de v=144 no se pedía NUNCA. Verificado en producción el 2026-08-23:
+// 6 fichas abiertas, 6 warnings «limpiaParaQuery is not defined» en consola.
+import { artistMatches, normText, limpiaParaQuery } from '../util/track-match.js';
+import { skelTracklist } from '../ui/skeleton.js';
 import { firstArtistName, artistNames, resolveArtistName } from '../util/artist-name.js';
 import { coverUrl } from '../util/cover-size.js';
 import { lookupAlbumStats } from '../util/album-stats.js';
@@ -304,7 +311,7 @@ export function openAlbumCard(entrada) {
           </div>
         </div>
         <div class="album-modal-col album-modal-col-tracks">
-          <div class="album-modal-likes" id="alb-likes"><div class="album-modal-likes-loading">cargando tus me gusta…</div></div>
+          <div class="album-modal-likes" id="alb-likes">${skelTracklist(10)}</div>
         </div>
       </div>
     </div>
@@ -334,6 +341,10 @@ export function openAlbumCard(entrada) {
     if (slot) slot.innerHTML = statsHtml({ ...a, ...t });
   }).catch(err => console.warn('[album-card] stats:', err.message));
 
+  // El esqueleto ya está pintado en el markup de arriba (mismo paso sincrónico
+  // que el modal), así que la ficha aparece ENTERA al instante: tapa, título,
+  // artista, botones y diez filas grises con la forma de la tracklist. Lo único
+  // que hace esta promesa es cambiar el relleno.
   hydrateLikes(overlay, a).catch(err => {
     console.warn('[album-card] likes:', err.message);
     const holder = overlay.querySelector('#alb-likes');

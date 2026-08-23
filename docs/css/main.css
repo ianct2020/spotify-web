@@ -122,6 +122,22 @@ h3 { font-size: 18px; font-weight: 600; }
   background: var(--color-elevated);
 }
 
+/* La ✕ es para CERRAR UN OVERLAY, así que solo aparece cuando el menú es un
+   overlay (v=154).
+   En Home, en escritorio, el sidebar es parte del layout: no está tapando nada,
+   y una ✕ ahí ofrece «cerrar» algo que en realidad se desacopla y reacomoda la
+   página entera. Ahí el toggle es el hamburguesa, que queda a la vista al lado
+   del título en cuanto el menú se va.
+   `body:not(.sidebar-hidden)` en escritorio ocurre SOLO en Home — en cualquier
+   otra ruta `applyRouteSidebar` pone `sidebar-hidden` siempre. Y va dentro del
+   `min-width: 769px` porque en mobile el sidebar es SIEMPRE overlay y ahí la ✕
+   tiene que quedarse (mismo motivo por el que la regla de v=101 vive acá). */
+@media (min-width: 769px) {
+  body:not(.sidebar-hidden) .sidebar-close {
+    display: none;
+  }
+}
+
 .sidebar-logo {
   width: 32px;
   height: 32px;
@@ -366,6 +382,24 @@ h3 { font-size: 18px; font-weight: 600; }
 .home-card:hover {
   transform: translateY(-3px);
   text-decoration: none;
+}
+
+/* Vista activa (v=154). El mismo lenguaje que `.nav-link.active` del <aside>:
+   fondo violeta suave y borde de acento. Lo pone `markActiveRoute()` en
+   router.js sobre cualquier `[data-route]`, así que el sidebar y las tarjetas
+   de HOME_SECTIONS se marcan con el mismo código y no pueden desincronizarse. */
+.home-card.active {
+  background: var(--color-accent-soft);
+  border-color: var(--color-accent);
+}
+.home-card.active h3 {
+  color: var(--color-accent);
+}
+
+/* El .active del <aside> también gana un borde a la izquierda: con el menú
+   entero de un solo color, el fondo suelto se leía poco. */
+.nav-link.active {
+  box-shadow: inset 2px 0 0 var(--color-accent);
 }
 
 /* ── Hamburger ─

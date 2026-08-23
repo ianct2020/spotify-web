@@ -18,6 +18,7 @@ import { openArtistCard, knownArtist } from './artist-card.js';
 import { openModal, closeTop } from '../ui/modal-stack.js';
 import { getBestAvailableLikes } from '../api.js';
 import { showToast } from '../ui/toast.js';
+import { skelCardBody, skelBox } from '../ui/skeleton.js';
 import { resolveArtistList } from '../util/artist-name.js';
 import { coverUrl } from '../util/cover-size.js';
 
@@ -117,7 +118,7 @@ async function openTrackCard(t) {
         <button class="btn btn-secondary btn-sm" id="tc-go-album" title="Abrir la ficha del álbum" style="flex-shrink:0">Ir al álbum</button>
         <button class="btn btn-secondary btn-sm" data-close-modal title="Cerrar" style="flex-shrink:0">✕</button>
       </div>
-      <div id="tc-body"><div style="text-align:center;padding:24px"><div class="spinner"></div></div></div>
+      <div id="tc-body">${skelCardBody({ tiles: 4, lines: 0 })}${skelBox({ w: '100%', h: 160, radius: 10 })}</div>
     </div>
   `,
   });

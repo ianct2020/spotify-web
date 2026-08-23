@@ -595,7 +595,7 @@ function renderDashboard(container, stats) {
       </div>
       <div class="stat-card">
         <div class="stat-value">${stats.uniqueArtists.toLocaleString()}</div>
-        <div class="stat-label">Artistas</div>
+        <div class="stat-label" title="Cuenta a TODOS los artistas acreditados en cada like, colaboraciones y «feat.» incluidos. «Por artista» agrupa por el artista principal de cada canción, así que da bastante menos.">Artistas acreditados</div>
       </div>
       <div class="stat-card">
         <div class="stat-value">${stats.uniqueAlbums.toLocaleString()}</div>

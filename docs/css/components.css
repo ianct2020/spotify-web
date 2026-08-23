@@ -1576,3 +1576,114 @@ button.sin-preview {
   cursor: default;
   opacity: 1;
 }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   ESQUELETOS DE CARGA (v=154) — ui/skeleton.js
+   ══════════════════════════════════════════════════════════════════════════
+
+   Un rectángulo gris con un brillo que lo recorre. El gradiente ocupa el 200 %
+   del ancho y se desplaza un 100 %: un ciclo entero, así que el loop cierra sin
+   costura (la misma cuenta que el shimmer del sidebar en main.css).
+
+   El brillo NO va con `background-clip: text` como el del sidebar: acá el
+   rectángulo ES el elemento, no un texto. */
+.skel {
+  background-color: var(--color-elevated);
+  background-image: linear-gradient(
+    100deg,
+    var(--color-elevated) 0%,
+    var(--color-elevated) 38%,
+    var(--color-surface-hover) 47%,
+    #3A3A4C 50%,
+    var(--color-surface-hover) 53%,
+    var(--color-elevated) 62%,
+    var(--color-elevated) 100%);
+  background-size: 200% 100%;
+  background-repeat: no-repeat;
+  animation: skelShimmer 1.6s linear infinite;
+  flex-shrink: 0;
+}
+@keyframes skelShimmer {
+  0%   { background-position: 100% 0; }
+  100% { background-position: 0% 0; }
+}
+
+/* ⚠️ ATENUAR, NO APAGAR. Es la lección de las barritas del player (v=141): la
+   regla que había allá era `animation: none`, y el resultado no fue «menos
+   movimiento» sino «esto está roto» — un bloque quieto no comunica que se está
+   esperando algo. Ian tiene `enable-animations=false` en GNOME, o sea que este
+   es SU camino, no el caso raro: si acá pusiéramos `animation: none` no vería
+   ningún esqueleto moverse nunca.
+
+   Atenuado = mismo recorrido, cuatro veces más lento y con el brillo mucho más
+   cerca del gris de fondo. Se percibe como una respiración, no como un barrido. */
+@media (prefers-reduced-motion: reduce) {
+  .skel {
+    animation-name: skelShimmerSuave;
+    animation-duration: 6.4s;
+  }
+}
+@keyframes skelShimmerSuave {
+  0%, 100% { background-color: var(--color-elevated); }
+  50%      { background-color: var(--color-surface-hover); }
+}
+
+/* Filas de pista: misma silueta que .album-modal-like-row */
+.skel-rows {
+  display: flex;
+  flex-direction: column;
+}
+.skel-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 10px;
+  border-bottom: 1px solid var(--color-border);
+}
+.skel-row:last-child { border-bottom: none; }
+.skel-row-main {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.skel-tracklist-head {
+  padding: 4px 10px 12px;
+}
+
+/* Cuerpo de ficha (artista / canción) */
+.skel-card-body { padding: 18px 4px 8px; }
+.skel-tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 12px;
+  margin-bottom: 22px;
+}
+.skel-tile {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: 14px;
+}
+.skel-lines { padding: 0 2px; }
+
+/* Placeholder de ruta (router.js) */
+.skel-page { animation: fade-in 0.2s ease; }
+.skel-page-head {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 28px;
+}
+.skel-page-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 16px;
+  margin-bottom: 20px;
+}
+.skel-card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: 20px;
+}
+.skel-card-tall { padding: 24px; }

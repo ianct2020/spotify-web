@@ -13,6 +13,7 @@ import { openModal, closeTop } from '../ui/modal-stack.js';
 import { firstArtistName, artistNames, resolveArtistName, looksLikeArtistChain } from '../util/artist-name.js';
 import { coverUrl } from '../util/cover-size.js';
 import { getArtistLikePreview } from '../util/artist-preview.js';
+import { skelCardBody, skelTrackRows, skelBox } from '../ui/skeleton.js';
 
 // Cache de imágenes de artistas resueltas por Spotify search. TTL 30 días.
 // Se persiste el hit y la falta (null) para no reintentar contra tracks
@@ -188,7 +189,7 @@ async function openArtistCard(entrada) {
           <button class="btn btn-secondary btn-sm card-modal-close" data-close-modal title="Cerrar">✕</button>
         </div>
       </div>
-      <div class="ac-body-scroll" id="ac-body"><div style="text-align:center;padding:24px"><div class="spinner"></div></div></div>
+      <div class="ac-body-scroll" id="ac-body">${skelCardBody({ tiles: 4, lines: 0 })}${skelBox({ w: '100%', h: 150, radius: 10, mb: 18 })}${skelTrackRows(6)}</div>
     </div>
   `,
   });
@@ -477,7 +478,7 @@ async function openArtistLikesModal(artistName) {
           <button class="btn btn-secondary btn-sm" data-close-modal title="Cerrar">✕</button>
         </div>
         <div class="picker-scroll" id="al-scroll">
-          <div style="text-align:center;padding:32px"><div class="spinner"></div></div>
+          ${skelTrackRows(8)}
         </div>
       </div>
     `,
