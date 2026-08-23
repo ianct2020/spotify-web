@@ -81,6 +81,136 @@ rotada con offsets a mano. **Si agregás otro checkbox custom por clase, acordat
 de la especificidad del genérico**, y si le pisás el `::after` anulá también su
 `width`/`height`/`border`/`transform` o `inset: 0` queda sobre-restringido.
 
+## La ficha de álbum nunca pidió el tracklist (v=154)
+`resolveAlbumId()` en `features/album-card.js` usa `limpiaParaQuery`, y el
+`import` **faltaba**. Como la llamada vive dentro de un `try`, el
+ReferenceError caía en el `catch` y salía por consola como
+`[album-card] no pude resolver el álbum: limpiaParaQuery is not defined`:
+un mensaje que se lee como «Spotify no encontró el disco». Resultado: el
+tracklist completo de v=144 **no se pidió NUNCA** y la ficha se caía siempre al
+camino degradado de v=142 — solo tus likes, todas las filas con el ♥ lleno, y
+el contador diciendo «10 pistas» en vez de «9 de 17».
+Medido en producción el 2026-08-23: 6 fichas abiertas → 6 warnings.
+**La lección**: un `catch` que traduce cualquier excepción a un mensaje de
+dominio («no encontré el álbum») esconde los errores de programación con el
+disfraz de un resultado normal. Si el `try` envuelve más que la llamada de red,
+el mensaje del catch tiene que incluir el error crudo — este lo incluía, y aun
+así pasaron nueve versiones sin que nadie mirara la consola.
+
+**Costo real de la ficha de álbum**, medido en vivo el 2026-08-23 (una vez
+arreglado el import):
+- El modal + el esqueleto: **1-2 ms**. Aparece entero (tapa, título, artista,
+  stats, botones) en el mismo paso sincrónico.
+- Las pistas de verdad: **750-1.220 ms** para un álbum frío — `/search` (~590-780 ms)
+  para resolver el id + `/albums/{id}/tracks` (~460-500 ms). Con el id ya
+  memoizado y los tracks en IDB baja a **60-90 ms**.
+- O sea que la espera real que tapa el esqueleto es **~1 segundo**, no 5. Lo de
+  «5 segundos mostrando nada» que reportó Ian no es esta ficha: es el modal de
+  álbum de `#listened` (otro código) o la vista entera de `#covers`, que con
+  2.449 tapas tarda bastante más.
+
+## Zona horaria: la fecha suelta se parsea en UTC (v=154)
+Récords decía «9 ene 2026» y Wrapped «8 ene 2026» **para el mismo récord**. No
+era el pipeline: los dos leen `"2026-01-09"`, verificado contra
+`history-records.json` y `history-stats.json` en producción.
+
+`new Date("2026-01-09")` — la forma **date-only** — la parsea el estándar como
+medianoche **UTC**. `getDate()` después la lee en hora **local**, y en Argentina
+(UTC−3) esa medianoche cae a las 21:00 del día 8. Un día para atrás, siempre,
+para cualquier offset negativo. `records.js` no se lo comía porque parte el
+string a mano (`fmtDayShort`) y nunca construye un `Date`.
+
+⚠️ La regla, para cualquier fecha que venga de `gen-stats.py`:
+- `"2026-01-09"` es un **DÍA del calendario**. Se parte, o se le pega
+  `T12:00:00` (lo que hace `records.js fmtDay`). **Nunca** `new Date(iso)` pelado.
+- `"2026-01-09T04:12:33Z"` es un **INSTANTE**. Ahí `new Date()` y la conversión
+  a local es lo correcto (es lo que hacen `first_play` / `last_play`).
+
+`wrapped.js` distingue las dos formas con `SOLO_FECHA = /^\d{4}-\d{2}-\d{2}$/`.
+Quedan sin revisar con este criterio: `sin-clasificar.js:551`,
+`artist-card.js:462`, `zero-plays.js:108`, `search-likes.js:36`.
+
+## `stats.totals` NO trae first_play ni last_play
+`gen-stats.py` las emite **solo por año**. `totals` tiene `plays_valid`,
+`plays_raw`, `min`, `days_active`, `longest_streak`, `unique_artists`,
+`unique_albums`, `unique_tracks` y `skip_pct`, nada más. El rango global sale de
+`stats.years`, que viene **ordenado ascendente** (`years[0].first_play` y
+`years[last].last_play`). En `wrapped.js` los `stats.totals?.first_play ||
+years[0].first_play` de siempre funcionaban por el fallback, así que la primera
+versión de `daysCovered()` (v=154) leyó `totals.last_play`, dio `undefined`, y
+se fue callada al camino «devolver el año entero»: el tile seguía diciendo «de
+365» y había que mirarlo en vivo para darse cuenta. Arreglado en v=155.
+
+## Los dos «artistas» que no coinciden (v=154)
+El Dashboard decía 3.353 y «Por artista» 2.211. **No es un bug y no es historial
+contra likes**: los dos cuentan los MISMOS likes.
+- `dashboard.js computeStats()` cuenta **todos los artistas acreditados** de cada
+  track (`t.artists.forEach`), o sea con colaboraciones y «feat.».
+- `by-artist.js build()` agrupa por el **artista principal** (`t.artists[0].name`),
+  o sea una canción = un artista.
+
+Medido en vivo sobre el mismo cache de 9.254 likes el 2026-08-23:
+**3.351 acreditados contra 2.215 principales**, 1.136 de diferencia — artistas
+que en la biblioteca de Ian solo aparecen como invitados. (Las diferencias
+chicas contra los números que reportó Ian son el filtro de `isJunkTrack` del
+dashboard y el `if (!t?.uri) return` de by-artist.) Desde v=154 las etiquetas
+dicen «Artistas acreditados» y «artistas principales», con el porqué en el
+`title`.
+
+## El shimmer del esqueleto y prefers-reduced-motion (v=155)
+`ui/skeleton.js` + el bloque `.skel` de `components.css`. El brillo es un
+`background-image` con `background-size: 200%` que se desplaza un 100 % (un
+ciclo entero, loop sin costura — la misma cuenta que el shimmer del sidebar).
+
+⚠️ El primer intento de atenuarlo bajo `prefers-reduced-motion` fue un keyframe
+aparte que animaba **`background-color`**, y no se veía NADA: el
+`background-image` mide el 200 % del ancho y va `no-repeat`, así que **tapa el
+color de fondo entero**. Atenuar por color ahí es apagar la animación sin
+enterarse — justo lo que v=141 dice que no hay que hacer, y encima en silencio.
+Lo que se atenúa es el **gradiente** (menos contraste entre el brillo y el
+gris), conservando el mismo keyframe de `background-position` a 6,4 s en vez de
+1,6 s. Verificado en vivo: bajo reduced-motion el `background-position` va de
+`100%` a `81,25%` en 1,2 s — se mueve.
+
+Ian tiene `enable-animations=false` en GNOME, o sea que el camino atenuado es
+**el suyo**, no el caso raro: cualquier `animation: none` que se escriba acá lo
+ve él primero.
+
+## El menú de Home no tenía vuelta atrás (v=154)
+En Home el sidebar es parte del layout (va **sin** `body.sidebar-hidden`).
+Cerrarlo ponía esa clase, y **lo único que la saca es `applyRouteSidebar`, que
+corre en `hashchange`**. Con el hash ya en `#home` no había ningún hashchange
+que disparar: ni el hamburguesa ni el logo «Fonoteca» (un `<a href="#home">`
+apuntando al hash actual). Reproducido en producción el 2026-08-23 — el menú
+volvía, pero como **overlay con backdrop** encima del contenido, y el
+hamburguesa quedaba **tapado debajo** (x=72, dentro de los 240px del sidebar).
+Para recuperar el menú acoplado había que irse a otra ruta y volver, o recargar.
+
+Desde v=154 el hamburguesa tiene dos comportamientos: en **Home** acopla y
+desacopla (nunca overlay); en el **resto** abre overlay como siempre. Y la ✕
+—que es un botón de cerrar overlay— se esconde mientras el menú está acoplado:
+```css
+@media (min-width: 769px) { body:not(.sidebar-hidden) .sidebar-close { display: none } }
+```
+Va dentro del `min-width: 769px` **por el mismo motivo que la regla de v=101**:
+en mobile el sidebar es SIEMPRE overlay y ahí la ✕ tiene que quedarse.
+
+## Marcar la vista activa: `data-route`, no `.nav-link` (v=154)
+`markActiveRoute()` en `router.js` recorre **`[data-route]`**, no `.nav-link`, y
+corre en el `hashchange` — el `<aside>` se arma una vez en `app.js` y no se
+repinta nunca. Cubre los nav-links, las `.home-card` de `HOME_SECTIONS` y el
+header del sidebar (que lleva `data-route="home"`, porque Home se entra por el
+logo y era la única ruta sin marcar — justo aquella en la que el menú está
+siempre a la vista).
+
+⚠️ Se llama **dos veces**: antes del handler y después. Las `.home-card` nacen
+DENTRO del handler de Home, así que con una sola pasada Home no marcaba nada.
+
+⚠️ `data-route` tiene que coincidir con el hash **exacto**. Hasta v=153 dos no
+coincidían (`discoverartists` contra `#discover-artists`, `newreleases` contra
+`#new-releases`) y esos dos links no se marcaban nunca. Si agregás una ruta,
+copiá el hash tal cual.
+
 ## Client ID
 0c8c92ad128e4b89be7097c6b8082797
 
