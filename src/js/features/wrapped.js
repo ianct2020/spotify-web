@@ -401,11 +401,19 @@ function daysInYear(y) {
 // contra 198/235 (castigo por 32 días que el archivo no cubre).
 //
 // Los años cerrados no cambian: enteros de punta a punta, 365 o 366.
+// ⚠️ `stats.totals` NO trae `first_play` ni `last_play` — gen-stats.py las emite
+// solo por año (verificado contra el JSON en producción: totals tiene
+// plays_valid, plays_raw, min, days_active, longest_streak, unique_* y
+// skip_pct, nada más). El rango global sale de `stats.years`, que viene
+// ordenado ascendente. El `stats.totals?.…` de abajo queda como preferencia por
+// si algún día se agregan, pero el camino real es el de years.
 function daysCovered(year, stats) {
   const total = daysInYear(year);
+  const years = stats?.years || [];
+  if (!years.length) return total;
   const dia = (iso) => (iso || '').slice(0, 10);   // date-only o instante, da igual
-  const primera = dia(stats?.totals?.first_play || stats?.years?.[0]?.first_play);
-  const ultima = dia(stats?.totals?.last_play);
+  const primera = dia(stats?.totals?.first_play || years[0].first_play);
+  const ultima = dia(stats?.totals?.last_play || years[years.length - 1].last_play);
   if (!primera || !ultima) return total;
 
   const yNum = (s) => +s.slice(0, 4);
