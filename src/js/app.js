@@ -200,7 +200,7 @@ function showApp(profile) {
   document.getElementById('app').innerHTML = `
     <div class="sidebar-overlay" id="sidebar-overlay"></div>
     <aside class="sidebar" id="sidebar">
-      <a class="sidebar-header" href="#home" title="Ir al inicio" style="text-decoration:none;color:inherit;cursor:pointer">
+      <a class="sidebar-header" data-route="home" href="#home" title="Ir al inicio" style="text-decoration:none;color:inherit;cursor:pointer">
         <img class="sidebar-logo" src="assets/favicon.svg" alt="">
         <span class="sidebar-title">Fonoteca</span>
       </a>
