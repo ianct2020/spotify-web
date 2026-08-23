@@ -8,18 +8,18 @@
 // acá y no se propaga: ver `util/artist-name.js`. Los nombres se pintan como
 // **enlaces separados** y cada uno abre SU ficha de artista.
 
-import { loadTrackPlays, loadTrackDetail, loadHistoryStats, isOwner } from './history-data.js?v=152';
-import { escapeHtml } from '../ui/components.js?v=152';
-import { getPreview } from '../api/preview-providers.js?v=152';
-import { togglePreview, playingKey } from '../ui/preview-player.js?v=152';
-import { hasUsername, findTrackId, getTrackCurrentStats, loadTopLifetime } from '../api/statsfm.js?v=152';
-import { openAlbumCard } from './album-card.js?v=152';
-import { openArtistCard, knownArtist } from './artist-card.js?v=152';
-import { openModal, closeTop } from '../ui/modal-stack.js?v=152';
-import { getBestAvailableLikes } from '../api.js?v=152';
-import { showToast } from '../ui/toast.js?v=152';
-import { resolveArtistList } from '../util/artist-name.js?v=152';
-import { coverUrl } from '../util/cover-size.js?v=152';
+import { loadTrackPlays, loadTrackDetail, loadHistoryStats, isOwner } from './history-data.js?v=153';
+import { escapeHtml } from '../ui/components.js?v=153';
+import { getPreview } from '../api/preview-providers.js?v=153';
+import { togglePreview, playingKey } from '../ui/preview-player.js?v=153';
+import { hasUsername, findTrackId, getTrackCurrentStats, loadTopLifetime } from '../api/statsfm.js?v=153';
+import { openAlbumCard } from './album-card.js?v=153';
+import { openArtistCard, knownArtist } from './artist-card.js?v=153';
+import { openModal, closeTop } from '../ui/modal-stack.js?v=153';
+import { getBestAvailableLikes } from '../api.js?v=153';
+import { showToast } from '../ui/toast.js?v=153';
+import { resolveArtistList } from '../util/artist-name.js?v=153';
+import { coverUrl } from '../util/cover-size.js?v=153';
 
 const MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
 

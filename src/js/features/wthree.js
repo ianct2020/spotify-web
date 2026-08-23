@@ -728,7 +728,7 @@ async function openAlbumModal(a) {
   const origOrder = [...a.picks].sort((x, y) => (x.pos ?? 0) - (y.pos ?? 0));
   let orderedPicks = origOrder.map(p => ({ id: p.id, uri: p.uri, name: p.name }));
 
-  metaEl.textContent = `${tracks.length} pistas · ${a.picks.length} en w-three${likedCount ? ` · ♥ ${likedCount} en me gusta` : ''}${suggestions.length ? ` · 💡 ${suggestions.length} sugerido${suggestions.length === 1 ? '' : 's'}` : ''}`;
+  metaEl.textContent = `${tracks.length} pista${tracks.length === 1 ? '' : 's'} · ${a.picks.length} en w-three${likedCount ? ` · ♥ ${likedCount} en me gusta` : ''}${suggestions.length ? ` · 💡 ${suggestions.length} sugerido${suggestions.length === 1 ? '' : 's'}` : ''}`;
 
   // Tracklist en 2 columnas cuando hay ≥6 pistas (con <6 no vale la pena).
   // grid-auto-flow: column necesita saber cuántas filas por columna → ceil(N/2).
@@ -887,7 +887,7 @@ async function openAlbumModal(a) {
 
   // Toggle checkbox → actualizar orderedPicks + meta.
   const updateMeta = () => {
-    metaEl.textContent = `${tracks.length} pistas · ${orderedPicks.length} en w-three${suggestions.length ? ` · 💡 ${suggestions.length} sugerido${suggestions.length === 1 ? '' : 's'}` : ''}`;
+    metaEl.textContent = `${tracks.length} pista${tracks.length === 1 ? '' : 's'} · ${orderedPicks.length} en w-three${suggestions.length ? ` · 💡 ${suggestions.length} sugerido${suggestions.length === 1 ? '' : 's'}` : ''}`;
   };
   body.querySelectorAll('.wthree-track-check').forEach(cb => {
     cb.addEventListener('change', () => {

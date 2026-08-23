@@ -11,18 +11,18 @@
 // tus me gusta" en cada fila y previews que prueban contra TODOS los artistas
 // del track.
 
-import { escapeHtml } from '../ui/components.js?v=152';
-import { openArtistCard, knownArtist } from './artist-card.js?v=152';
-import { openModal, closeTop } from '../ui/modal-stack.js?v=152';
-import { getBestAvailableLikes, getAlbumTracks, spotifyFetch } from '../api.js?v=152';
-import { albumKey, coverId } from '../util/album-key.js?v=152';
-import { artistMatches, normText } from '../util/track-match.js?v=152';
-import { firstArtistName, artistNames, resolveArtistName } from '../util/artist-name.js?v=152';
-import { coverUrl } from '../util/cover-size.js?v=152';
-import { lookupAlbumStats } from '../util/album-stats.js?v=152';
-import { getPreview } from '../api/preview-providers.js?v=152';
-import { togglePreview, playingKey } from '../ui/preview-player.js?v=152';
-import { openTrackCard } from './track-card.js?v=152';
+import { escapeHtml } from '../ui/components.js?v=153';
+import { openArtistCard, knownArtist } from './artist-card.js?v=153';
+import { openModal, closeTop } from '../ui/modal-stack.js?v=153';
+import { getBestAvailableLikes, getAlbumTracks, spotifyFetch } from '../api.js?v=153';
+import { albumKey, coverId } from '../util/album-key.js?v=153';
+import { artistMatches, normText } from '../util/track-match.js?v=153';
+import { firstArtistName, artistNames, resolveArtistName } from '../util/artist-name.js?v=153';
+import { coverUrl } from '../util/cover-size.js?v=153';
+import { lookupAlbumStats } from '../util/album-stats.js?v=153';
+import { getPreview } from '../api/preview-providers.js?v=153';
+import { togglePreview, playingKey } from '../ui/preview-player.js?v=153';
+import { openTrackCard } from './track-card.js?v=153';
 
 const PLAY_SVG = `<svg viewBox="0 0 24 24" width="10" height="10" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>`;
 const PAUSE_SVG = `<svg viewBox="0 0 24 24" width="10" height="10" fill="currentColor" aria-hidden="true"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>`;
@@ -381,7 +381,7 @@ async function hydrateLikes(overlay, a) {
   const nLiked = matched.filter(t => t.liked).length;
   const total = completo ? matched.length : (a.totalTracks || null);
   const countLine = total
-    ? `${nLiked} de ${total} pistas en tus me gusta`
+    ? `${nLiked} de ${total} pista${total === 1 ? '' : 's'} en tus me gusta`
     : nLiked > 0
       ? `${nLiked} pista${nLiked === 1 ? '' : 's'} en tus me gusta`
       : 'no tienes ninguna en tus me gusta';

@@ -740,7 +740,7 @@ async function onCreatePlaylist(content) {
   btn.textContent = 'Creando…';
   try {
     const { name, tracks } = await createDiscoverPlaylist(ids, findAlbum, { label: 'Descubrir' });
-    showToast(`Playlist "${name}" creada con ${tracks} pistas`, 'success');
+    showToast(`Playlist "${name}" creada con ${tracks} pista${tracks === 1 ? '' : 's'}`, 'success');
     state.selection.clear();
     updateSelectionUi(content);
     refreshList(content);

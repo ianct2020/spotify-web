@@ -1,7 +1,8 @@
-import { getAllLikedTracks, getAllUserPlaylists, getAllPlaylistItems, removeLikedTracks, removeTracksFromPlaylist } from '../api.js';
+import { getAllLikedTracks, getAllPlaylistItems, removeLikedTracks, removeTracksFromPlaylist } from '../api.js';
 import { showProgress, hideProgress, progressController, isCancelled, typeConfirmModal, renderTrackRow, escapeHtml, pageHeader } from '../ui/components.js';
 import { showToast } from '../ui/toast.js';
 import { isZombieItem } from '../util/zombie.js';
+import { getOwnPlaylists } from '../util/playlist-add.js';
 
 const FADE_DURATION_MS = 15000;
 const STAGGER_PER_ROW_MS = 80;
@@ -39,9 +40,15 @@ async function analyze() {
     const zombieLikes = likes.filter(isZombieItem);
 
     prog.update(0, 0, 'Cargando playlists...');
-    const playlists = await getAllUserPlaylists(({ loaded, total }) => {
-      prog.update(loaded, total, 'Cargando playlists...');
-    }, { signal: prog.signal });
+    // SOLO las propias. `getAllUserPlaylists` trae también las que Ian SIGUE:
+    // medido en vivo el 2026-08-23, 97 en total contra 41 propias, y de las 56
+    // ajenas `GET /playlists/{id}/items` devuelve 403 (8 de 8 probadas). O sea
+    // que el escaneo gastaba 56 requests condenadas al catch para terminar en un
+    // toast de «saltadas 56 inaccesibles» — y encima de una playlist ajena no se
+    // puede borrar nada, así que ni siquiera servía encontrar zombis ahí.
+    // `getOwnPlaylists()` es el mismo filtro por `owner.id` que ya usaban
+    // #dedupe y el picker de «Añadir a playlists».
+    const playlists = await getOwnPlaylists();
 
     const zombiesByPlaylist = [];
     const skipped = [];

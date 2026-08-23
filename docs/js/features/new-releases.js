@@ -10,12 +10,12 @@
 //   - Umbral de likes: 5+ / 10+ / 20+
 //   - Ventana temporal: 3 / 6 / 12 / 24 meses (default 12)
 
-import { escapeHtml, confirmModal, pageHeader } from '../ui/components.js?v=152';
-import { showToast } from '../ui/toast.js?v=152';
-import { buildAlbumHeardIndex } from '../util/album-heard.js?v=152';
-import { loadFiltros, buildFilterContext, applyDiscoverFilters } from '../util/discover-filters.js?v=152';
-import { createIncrementalList, scrollRootOf } from '../ui/incremental-list.js?v=152';
-import { createLazyImages } from '../ui/lazy-img.js?v=152';
+import { escapeHtml, confirmModal, pageHeader } from '../ui/components.js?v=153';
+import { showToast } from '../ui/toast.js?v=153';
+import { buildAlbumHeardIndex } from '../util/album-heard.js?v=153';
+import { loadFiltros, buildFilterContext, applyDiscoverFilters } from '../util/discover-filters.js?v=153';
+import { createIncrementalList, scrollRootOf } from '../ui/incremental-list.js?v=153';
+import { createLazyImages } from '../ui/lazy-img.js?v=153';
 import {
   getArtistIdCached,
   getArtistDiscoCached,
@@ -40,7 +40,7 @@ import {
   hiddenAlbums,
   cardKey,
   toggleHiddenAlbum,
-} from './discover-common.js?v=152';
+} from './discover-common.js?v=153';
 
 const SCAN_KEY = 'new_releases';
 
@@ -690,7 +690,7 @@ async function onCreatePlaylist(content) {
   btn.textContent = 'Creando…';
   try {
     const { name, tracks } = await createDiscoverPlaylist(ids, findAlbum, { label: 'Novedades' });
-    showToast(`Playlist "${name}" creada con ${tracks} pistas`, 'success');
+    showToast(`Playlist "${name}" creada con ${tracks} pista${tracks === 1 ? '' : 's'}`, 'success');
     state.selection.clear();
     updateSelectionUi(content);
     refreshList(content);

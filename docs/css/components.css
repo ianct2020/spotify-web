@@ -509,12 +509,27 @@ body.modal-open {
   background: var(--color-elevated);
 }
 
-.keep-check {
+/* ⚠️ Van con `input[type="checkbox"].keep-check`, no con `.keep-check` a secas.
+   El checkbox custom genérico de más arriba en este mismo archivo
+   (`input[type="checkbox"]`, 19x19) tiene MÁS especificidad (0,1,1) que una
+   clase suelta (0,1,0), así que le ganaba a casi todo este bloque: medido en
+   vivo el 2026-08-23 sobre #versions, la caja quedaba de **24x19** —el ancho
+   salía del `min-width`, que no tenía rival; el alto, del genérico— y el ✓
+   dibujado era el genérico, con su `left: 6px` clavado para una caja de 19.
+   En una caja de 24 de ancho eso es el tilde corrido hacia la izquierda: el
+   bug 6.2. El `::after` de acá necesita un nivel más (0,3,1) para ganarle al
+   `input[type="checkbox"]:checked::after` genérico (0,2,1).
+
+   Y el ✓ pasa a ser un SVG centrado con `inset: 0` + `background-position:
+   center`, en vez de una L rotada con offsets a mano: así el centrado no
+   depende del tamaño de la caja y volver a agrandarla no lo rompe otra vez. */
+input[type="checkbox"].keep-check {
   appearance: none;
   -webkit-appearance: none;
   width: 24px;
   height: 24px;
   min-width: 24px;
+  min-height: 24px;
   border: 2px solid var(--color-border);
   border-radius: 7px;
   cursor: pointer;
@@ -524,35 +539,70 @@ body.modal-open {
   background: var(--color-elevated);
 }
 
-.keep-check:hover {
+input[type="checkbox"].keep-check:hover {
   border-color: #22C55E;
   background: rgba(34, 197, 94, 0.08);
   transform: scale(1.05);
 }
 
-.keep-check:checked {
+input[type="checkbox"].keep-check:checked {
   background: linear-gradient(135deg, #22C55E 0%, #16A34A 100%);
   border-color: #16A34A;
   box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.15);
 }
 
-.keep-check:checked::after {
+input[type="checkbox"].keep-check:checked::after {
   content: '';
   position: absolute;
-  top: 50%;
-  left: 50%;
-  width: 7px;
-  height: 12px;
-  border: solid white;
-  border-width: 0 2.5px 2.5px 0;
-  transform: translate(-50%, -60%) rotate(45deg);
+  inset: 0;
+  /* Los cuatro resets no son de adorno: el `::after` genérico deja puestos
+     `width: 4px`, `height: 9px`, el borde que dibujaba la L y el `rotate(45deg)`.
+     Sin anularlos, `inset: 0` queda sobre-restringido contra un ancho de 4px
+     —gana `left`— y el ✓ nuevo aparece chiquito arriba a la izquierda. */
+  width: auto;
+  height: auto;
+  border: 0;
+  transform: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='3.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4.5 12.5 L9.5 17.5 L19.5 6.5'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: 66% 66%;
   animation: checkPop 0.25s ease-out;
 }
 
 @keyframes checkPop {
-  0% { transform: translate(-50%, -60%) rotate(45deg) scale(0); }
-  60% { transform: translate(-50%, -60%) rotate(45deg) scale(1.2); }
-  100% { transform: translate(-50%, -60%) rotate(45deg) scale(1); }
+  0% { transform: scale(0); }
+  60% { transform: scale(1.2); }
+  100% { transform: scale(1); }
+}
+
+/* Toggle «Ocultar las ya resueltas» de #versions: va dentro de la barra sticky,
+   al lado de los botones, así que se alinea con ellos y no con el texto. */
+.versions-filter {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  user-select: none;
+  padding: 6px 10px;
+  border-radius: var(--radius-sm);
+  transition: background 0.15s, color 0.15s;
+}
+.versions-filter:hover {
+  background: var(--color-elevated);
+  color: var(--color-text);
+}
+.versions-filter[hidden] {
+  display: none;
+}
+.versions-filter input {
+  width: 15px;
+  height: 15px;
+  accent-color: var(--color-accent);
+  cursor: pointer;
+  margin: 0;
 }
 
 .keep-check-label {
