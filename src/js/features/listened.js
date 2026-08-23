@@ -1,4 +1,5 @@
 import { getAllPlaylistItems, getBestAvailableLikes, addTracksToPlaylist, removeTracksFromPlaylist, getAllUserPlaylists } from '../api.js';
+import { esEPoAlbum } from '../util/release-size.js';
 import { idbGetCached, idbSetCached, idbGetTimestamp } from '../idb.js';
 import { escapeHtml, confirmModal, pageHeader } from '../ui/components.js';
 import { showToast } from '../ui/toast.js';
@@ -418,12 +419,15 @@ const VALID_UNREG_TYPES = new Set(['all', 'albums', 'singles']);
 // (src/data/user-*.json, el que usa la app cuando no hay sesión ni caché) se
 // generó con el slimTrack viejo y NO tiene album_type ni total_tracks. Con
 // sesión iniciada los likes vienen de la API y estamos en el caso 1.
+// El umbral de EP (4 pistas) vive en util/release-size.js: lo comparte con el
+// guardado de #discover-artists / #new-releases, que decide con él si un
+// lanzamiento va a la biblioteca o a la playlist de singles.
 function releaseKind(e) {
   const t = e?.albumType;
   if (t === 'album' || t === 'compilation') return 'albums';
-  if (t === 'single') return (e.totalTracks || 0) >= 4 ? 'albums' : 'singles';
-  if (e?.totalTracks) return e.totalTracks >= 4 ? 'albums' : 'singles';
-  return (e?.tracks?.length || 0) >= 4 ? 'albums' : 'singles';
+  if (t === 'single') return esEPoAlbum(e.totalTracks) ? 'albums' : 'singles';
+  if (e?.totalTracks) return esEPoAlbum(e.totalTracks) ? 'albums' : 'singles';
+  return esEPoAlbum(e?.tracks?.length) ? 'albums' : 'singles';
 }
 
 // ¿Estamos adivinando el tipo? Sirve para avisarlo en la interfaz en vez de

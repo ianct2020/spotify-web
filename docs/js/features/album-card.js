@@ -11,18 +11,18 @@
 // tus me gusta" en cada fila y previews que prueban contra TODOS los artistas
 // del track.
 
-import { escapeHtml } from '../ui/components.js?v=151';
-import { openArtistCard, knownArtist } from './artist-card.js?v=151';
-import { openModal, closeTop } from '../ui/modal-stack.js?v=151';
-import { getBestAvailableLikes, getAlbumTracks, spotifyFetch } from '../api.js?v=151';
-import { albumKey, coverId } from '../util/album-key.js?v=151';
-import { artistMatches, normText } from '../util/track-match.js?v=151';
-import { firstArtistName, artistNames, resolveArtistName } from '../util/artist-name.js?v=151';
-import { coverUrl } from '../util/cover-size.js?v=151';
-import { lookupAlbumStats } from '../util/album-stats.js?v=151';
-import { getPreview } from '../api/preview-providers.js?v=151';
-import { togglePreview, playingKey } from '../ui/preview-player.js?v=151';
-import { openTrackCard } from './track-card.js?v=151';
+import { escapeHtml } from '../ui/components.js?v=152';
+import { openArtistCard, knownArtist } from './artist-card.js?v=152';
+import { openModal, closeTop } from '../ui/modal-stack.js?v=152';
+import { getBestAvailableLikes, getAlbumTracks, spotifyFetch } from '../api.js?v=152';
+import { albumKey, coverId } from '../util/album-key.js?v=152';
+import { artistMatches, normText } from '../util/track-match.js?v=152';
+import { firstArtistName, artistNames, resolveArtistName } from '../util/artist-name.js?v=152';
+import { coverUrl } from '../util/cover-size.js?v=152';
+import { lookupAlbumStats } from '../util/album-stats.js?v=152';
+import { getPreview } from '../api/preview-providers.js?v=152';
+import { togglePreview, playingKey } from '../ui/preview-player.js?v=152';
+import { openTrackCard } from './track-card.js?v=152';
 
 const PLAY_SVG = `<svg viewBox="0 0 24 24" width="10" height="10" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>`;
 const PAUSE_SVG = `<svg viewBox="0 0 24 24" width="10" height="10" fill="currentColor" aria-hidden="true"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>`;
@@ -158,14 +158,8 @@ const _albumIdMemo = new Map();   // albumKey → id | null
 //
 // O sea que Spotify indexa «don't» como el token `dont`, no como `don t`.
 // Partirlo en dos palabras es otra forma de no encontrar nada.
-function limpiaParaQuery(s) {
-  return String(s || '')
-    .replace(/["]/g, '')
-    // Apóstrofos rectos y tipográficos, fuera (sin dejar espacio en el medio).
-    .replace(/['‘’ʼ`´]/g, '')
-    .replace(/\s+/g, ' ')
-    .trim();
-}
+// `limpiaParaQuery` vive en util/track-match.js: la misma regla la necesita
+// `getArtistAlbums` en api.js para el fallback por /search.
 
 async function resolveAlbumId(a) {
   const directo = a.albumId || a.id || null;

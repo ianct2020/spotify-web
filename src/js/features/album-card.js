@@ -158,14 +158,8 @@ const _albumIdMemo = new Map();   // albumKey → id | null
 //
 // O sea que Spotify indexa «don't» como el token `dont`, no como `don t`.
 // Partirlo en dos palabras es otra forma de no encontrar nada.
-function limpiaParaQuery(s) {
-  return String(s || '')
-    .replace(/["]/g, '')
-    // Apóstrofos rectos y tipográficos, fuera (sin dejar espacio en el medio).
-    .replace(/['‘’ʼ`´]/g, '')
-    .replace(/\s+/g, ' ')
-    .trim();
-}
+// `limpiaParaQuery` vive en util/track-match.js: la misma regla la necesita
+// `getArtistAlbums` en api.js para el fallback por /search.
 
 async function resolveAlbumId(a) {
   const directo = a.albumId || a.id || null;

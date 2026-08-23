@@ -1,10 +1,11 @@
-import { getAllPlaylistItems, getBestAvailableLikes, addTracksToPlaylist, removeTracksFromPlaylist, getAllUserPlaylists } from '../api.js?v=151';
-import { idbGetCached, idbSetCached, idbGetTimestamp } from '../idb.js?v=151';
-import { escapeHtml, confirmModal, pageHeader } from '../ui/components.js?v=151';
-import { showToast } from '../ui/toast.js?v=151';
-import { isJunkTrack } from '../util/junk.js?v=151';
-import { openModal, closeTop } from '../ui/modal-stack.js?v=151';
-import { getListenedPlaylist, groupItemsByAlbum, openListenedAlbumsPicker, albumKey, baseName, norm } from './listened-shared.js?v=151';
+import { getAllPlaylistItems, getBestAvailableLikes, addTracksToPlaylist, removeTracksFromPlaylist, getAllUserPlaylists } from '../api.js?v=152';
+import { esEPoAlbum } from '../util/release-size.js?v=152';
+import { idbGetCached, idbSetCached, idbGetTimestamp } from '../idb.js?v=152';
+import { escapeHtml, confirmModal, pageHeader } from '../ui/components.js?v=152';
+import { showToast } from '../ui/toast.js?v=152';
+import { isJunkTrack } from '../util/junk.js?v=152';
+import { openModal, closeTop } from '../ui/modal-stack.js?v=152';
+import { getListenedPlaylist, groupItemsByAlbum, openListenedAlbumsPicker, albumKey, baseName, norm } from './listened-shared.js?v=152';
 
 const SORT_KEY = 'listened_sort_mode';
 const VALID_SORTS = new Set(['recent', 'year-desc', 'year-asc', 'artist-asc', 'likes-desc', 'name-asc']);
@@ -418,12 +419,15 @@ const VALID_UNREG_TYPES = new Set(['all', 'albums', 'singles']);
 // (src/data/user-*.json, el que usa la app cuando no hay sesión ni caché) se
 // generó con el slimTrack viejo y NO tiene album_type ni total_tracks. Con
 // sesión iniciada los likes vienen de la API y estamos en el caso 1.
+// El umbral de EP (4 pistas) vive en util/release-size.js: lo comparte con el
+// guardado de #discover-artists / #new-releases, que decide con él si un
+// lanzamiento va a la biblioteca o a la playlist de singles.
 function releaseKind(e) {
   const t = e?.albumType;
   if (t === 'album' || t === 'compilation') return 'albums';
-  if (t === 'single') return (e.totalTracks || 0) >= 4 ? 'albums' : 'singles';
-  if (e?.totalTracks) return e.totalTracks >= 4 ? 'albums' : 'singles';
-  return (e?.tracks?.length || 0) >= 4 ? 'albums' : 'singles';
+  if (t === 'single') return esEPoAlbum(e.totalTracks) ? 'albums' : 'singles';
+  if (e?.totalTracks) return esEPoAlbum(e.totalTracks) ? 'albums' : 'singles';
+  return esEPoAlbum(e?.tracks?.length) ? 'albums' : 'singles';
 }
 
 // ¿Estamos adivinando el tipo? Sirve para avisarlo en la interfaz en vez de
