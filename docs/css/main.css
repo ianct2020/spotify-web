@@ -402,6 +402,14 @@ h3 { font-size: 18px; font-weight: 600; }
   box-shadow: inset 2px 0 0 var(--color-accent);
 }
 
+/* Home no tiene nav-link propio (se entra por el logo), así que sin esto la
+   única ruta que no se marcaba en el <aside> era justamente en la que el menú
+   está siempre a la vista. El header lleva `data-route="home"` y lo marca el
+   mismo `markActiveRoute()` que a todo lo demás. */
+.sidebar-header.active .sidebar-title {
+  color: var(--color-accent);
+}
+
 /* ── Hamburger ─
    Ahora es un botón inline dentro del .page-header (v=108). El shell del app
    ya no renderiza uno fixed suelto; cada page-header pone el suyo con

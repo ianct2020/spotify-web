@@ -1,40 +1,40 @@
-import { isLoggedIn, loginWithSpotify, logout } from './auth.js?v=155';
-import { spotifyFetch, tryAutoLoadUserBackup } from './api.js?v=155';
-import { getValidToken } from './auth.js?v=155';
-import { cacheClearAll } from './storage.js?v=155';
-import { idbClearAll } from './idb.js?v=155';
-import { registerRoute, initRouter } from './router.js?v=155';
-import { showToast } from './ui/toast.js?v=155';
-import { pageHeader } from './ui/components.js?v=155';
-import { installCrashGuard } from './ui/crash-guard.js?v=155';
-import { getStack } from './ui/modal-stack.js?v=155';
-import { installBackToTop } from './ui/back-to-top.js?v=155';
+import { isLoggedIn, loginWithSpotify, logout } from './auth.js?v=156';
+import { spotifyFetch, tryAutoLoadUserBackup } from './api.js?v=156';
+import { getValidToken } from './auth.js?v=156';
+import { cacheClearAll } from './storage.js?v=156';
+import { idbClearAll } from './idb.js?v=156';
+import { registerRoute, initRouter } from './router.js?v=156';
+import { showToast } from './ui/toast.js?v=156';
+import { pageHeader } from './ui/components.js?v=156';
+import { installCrashGuard } from './ui/crash-guard.js?v=156';
+import { getStack } from './ui/modal-stack.js?v=156';
+import { installBackToTop } from './ui/back-to-top.js?v=156';
 
-import { render as renderSync } from './features/sync.js?v=155';
-import { render as renderDedupe } from './features/dedupe.js?v=155';
-import { render as renderDupalbums } from './features/duplicate-albums.js?v=155';
-import { render as renderZombies } from './features/zombies.js?v=155';
-import { render as renderVersions } from './features/versions.js?v=155';
-import { render as renderDashboard } from './features/dashboard.js?v=155';
-import { render as renderSmart } from './features/smart.js?v=155';
-import { render as renderSimilar } from './features/similar-artists.js?v=155';
-import { render as renderRabbit } from './features/rabbit-hole.js?v=155';
-import { render as renderByGenre } from './features/by-genre.js?v=155';
-import { render as renderByArtist } from './features/by-artist.js?v=155';
-import { render as renderRecs } from './features/recommendations.js?v=155';
-import { render as renderListened } from './features/listened.js?v=155';
-import { render as renderWrapped } from './features/wrapped.js?v=155';
-import { render as renderRecords } from './features/records.js?v=155';
-import { openImportHistory } from './features/import-history.js?v=155';
-import { bindOwnerLockedButtons } from './features/history-data.js?v=155';
-import { render as renderZeroPlays } from './features/zero-plays.js?v=155';
-import { render as renderSkips } from './features/skips.js?v=155';
-import { render as renderSearchLikes } from './features/search-likes.js?v=155';
-import { render as renderWthree } from './features/wthree.js?v=155';
-import { render as renderCovers } from './features/covers.js?v=155';
-import { render as renderDiscoverArtists } from './features/discover-artists.js?v=155';
-import { render as renderNewReleases } from './features/new-releases.js?v=155';
-import { render as renderSinClasificar } from './features/sin-clasificar.js?v=155';
+import { render as renderSync } from './features/sync.js?v=156';
+import { render as renderDedupe } from './features/dedupe.js?v=156';
+import { render as renderDupalbums } from './features/duplicate-albums.js?v=156';
+import { render as renderZombies } from './features/zombies.js?v=156';
+import { render as renderVersions } from './features/versions.js?v=156';
+import { render as renderDashboard } from './features/dashboard.js?v=156';
+import { render as renderSmart } from './features/smart.js?v=156';
+import { render as renderSimilar } from './features/similar-artists.js?v=156';
+import { render as renderRabbit } from './features/rabbit-hole.js?v=156';
+import { render as renderByGenre } from './features/by-genre.js?v=156';
+import { render as renderByArtist } from './features/by-artist.js?v=156';
+import { render as renderRecs } from './features/recommendations.js?v=156';
+import { render as renderListened } from './features/listened.js?v=156';
+import { render as renderWrapped } from './features/wrapped.js?v=156';
+import { render as renderRecords } from './features/records.js?v=156';
+import { openImportHistory } from './features/import-history.js?v=156';
+import { bindOwnerLockedButtons } from './features/history-data.js?v=156';
+import { render as renderZeroPlays } from './features/zero-plays.js?v=156';
+import { render as renderSkips } from './features/skips.js?v=156';
+import { render as renderSearchLikes } from './features/search-likes.js?v=156';
+import { render as renderWthree } from './features/wthree.js?v=156';
+import { render as renderCovers } from './features/covers.js?v=156';
+import { render as renderDiscoverArtists } from './features/discover-artists.js?v=156';
+import { render as renderNewReleases } from './features/new-releases.js?v=156';
+import { render as renderSinClasificar } from './features/sin-clasificar.js?v=156';
 
 async function testConnection() {
   const token = await getValidToken();
@@ -200,7 +200,7 @@ function showApp(profile) {
   document.getElementById('app').innerHTML = `
     <div class="sidebar-overlay" id="sidebar-overlay"></div>
     <aside class="sidebar" id="sidebar">
-      <a class="sidebar-header" href="#home" title="Ir al inicio" style="text-decoration:none;color:inherit;cursor:pointer">
+      <a class="sidebar-header" data-route="home" href="#home" title="Ir al inicio" style="text-decoration:none;color:inherit;cursor:pointer">
         <img class="sidebar-logo" src="assets/favicon.svg" alt="">
         <span class="sidebar-title">Fonoteca</span>
       </a>
