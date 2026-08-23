@@ -1,9 +1,9 @@
-import { getAllLikedTracks, createPlaylist, addTracksToPlaylist, invalidatePlaylistsCache, getBestAvailableLikes } from '../api.js?v=153';
-import { showProgress, hideProgress, progressController, isCancelled, promptPlaylistName, escapeHtml, pageHeader } from '../ui/components.js?v=153';
-import { showToast } from '../ui/toast.js?v=153';
-import { getArtistLikePreview } from '../util/artist-preview.js?v=153';
-import { attachHover } from '../ui/preview-player.js?v=153';
-import { openArtistCard } from './artist-card.js?v=153';
+import { getAllLikedTracks, createPlaylist, addTracksToPlaylist, invalidatePlaylistsCache, getBestAvailableLikes } from '../api.js?v=154';
+import { showProgress, hideProgress, progressController, isCancelled, promptPlaylistName, escapeHtml, pageHeader } from '../ui/components.js?v=154';
+import { showToast } from '../ui/toast.js?v=154';
+import { getArtistLikePreview } from '../util/artist-preview.js?v=154';
+import { attachHover } from '../ui/preview-player.js?v=154';
+import { openArtistCard } from './artist-card.js?v=154';
 
 const SORT_KEY = 'artist_sort_mode';
 const VALID_SORTS = new Set(['count-desc', 'count-asc', 'name-asc']);
@@ -91,7 +91,8 @@ function build() {
   content.innerHTML = `
     <div class="card" style="margin-bottom:16px">
       <div style="font-size:14px">
-        <strong>${likes.length.toLocaleString()}</strong> likes · <strong>${artistMap.size.toLocaleString()}</strong> artistas únicos
+        <strong>${likes.length.toLocaleString()}</strong> likes · <strong>${artistMap.size.toLocaleString()}</strong> artistas principales
+        <span style="color:var(--color-text-muted);font-weight:400" title="Cada canción cuenta una sola vez, por su primer artista. El Dashboard cuenta a todos los acreditados (colaboraciones y «feat.» aparte), y por eso su número es mayor.">· cuenta el primer artista de cada canción</span>
       </div>
     </div>
 

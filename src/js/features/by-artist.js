@@ -91,7 +91,8 @@ function build() {
   content.innerHTML = `
     <div class="card" style="margin-bottom:16px">
       <div style="font-size:14px">
-        <strong>${likes.length.toLocaleString()}</strong> likes · <strong>${artistMap.size.toLocaleString()}</strong> artistas únicos
+        <strong>${likes.length.toLocaleString()}</strong> likes · <strong>${artistMap.size.toLocaleString()}</strong> artistas principales
+        <span style="color:var(--color-text-muted);font-weight:400" title="Cada canción cuenta una sola vez, por su primer artista. El Dashboard cuenta a todos los acreditados (colaboraciones y «feat.» aparte), y por eso su número es mayor.">· cuenta el primer artista de cada canción</span>
       </div>
     </div>
 

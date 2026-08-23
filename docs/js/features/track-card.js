@@ -8,18 +8,19 @@
 // acá y no se propaga: ver `util/artist-name.js`. Los nombres se pintan como
 // **enlaces separados** y cada uno abre SU ficha de artista.
 
-import { loadTrackPlays, loadTrackDetail, loadHistoryStats, isOwner } from './history-data.js?v=153';
-import { escapeHtml } from '../ui/components.js?v=153';
-import { getPreview } from '../api/preview-providers.js?v=153';
-import { togglePreview, playingKey } from '../ui/preview-player.js?v=153';
-import { hasUsername, findTrackId, getTrackCurrentStats, loadTopLifetime } from '../api/statsfm.js?v=153';
-import { openAlbumCard } from './album-card.js?v=153';
-import { openArtistCard, knownArtist } from './artist-card.js?v=153';
-import { openModal, closeTop } from '../ui/modal-stack.js?v=153';
-import { getBestAvailableLikes } from '../api.js?v=153';
-import { showToast } from '../ui/toast.js?v=153';
-import { resolveArtistList } from '../util/artist-name.js?v=153';
-import { coverUrl } from '../util/cover-size.js?v=153';
+import { loadTrackPlays, loadTrackDetail, loadHistoryStats, isOwner } from './history-data.js?v=154';
+import { escapeHtml } from '../ui/components.js?v=154';
+import { getPreview } from '../api/preview-providers.js?v=154';
+import { togglePreview, playingKey } from '../ui/preview-player.js?v=154';
+import { hasUsername, findTrackId, getTrackCurrentStats, loadTopLifetime } from '../api/statsfm.js?v=154';
+import { openAlbumCard } from './album-card.js?v=154';
+import { openArtistCard, knownArtist } from './artist-card.js?v=154';
+import { openModal, closeTop } from '../ui/modal-stack.js?v=154';
+import { getBestAvailableLikes } from '../api.js?v=154';
+import { showToast } from '../ui/toast.js?v=154';
+import { skelCardBody, skelBox } from '../ui/skeleton.js?v=154';
+import { resolveArtistList } from '../util/artist-name.js?v=154';
+import { coverUrl } from '../util/cover-size.js?v=154';
 
 const MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
 
@@ -117,7 +118,7 @@ async function openTrackCard(t) {
         <button class="btn btn-secondary btn-sm" id="tc-go-album" title="Abrir la ficha del álbum" style="flex-shrink:0">Ir al álbum</button>
         <button class="btn btn-secondary btn-sm" data-close-modal title="Cerrar" style="flex-shrink:0">✕</button>
       </div>
-      <div id="tc-body"><div style="text-align:center;padding:24px"><div class="spinner"></div></div></div>
+      <div id="tc-body">${skelCardBody({ tiles: 4, lines: 0 })}${skelBox({ w: '100%', h: 160, radius: 10 })}</div>
     </div>
   `,
   });

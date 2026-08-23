@@ -1,13 +1,13 @@
-import { getAllLikedTracks, invalidateLikesCache, exportAllData, importAllData, getCurrentUserId, syncLikesIncremental, getLikesCacheTimestamp, getBestAvailableLikes, getAllPlaylistItems } from '../api.js?v=153';
-import { showProgress, hideProgress, alertModal, escapeHtml, pageHeader } from '../ui/components.js?v=153';
-import { openModal, closeTop } from '../ui/modal-stack.js?v=153';
-import { showToast } from '../ui/toast.js?v=153';
-import { openListenedAlbumsPicker } from './listened-shared.js?v=153';
-import { loadHistoryStats, loadListenedAlbums } from './history-data.js?v=153';
-import { getArtistLikePreview } from '../util/artist-preview.js?v=153';
-import { hoverIn, hoverOut } from '../ui/preview-player.js?v=153';
-import { hasUsername, getUsername, setUsername } from '../api/statsfm.js?v=153';
-import { getKey as getLastfmKey, setKey as setLastfmKey, clearKey as clearLastfmKey, isDefaultKey as lastfmIsDefaultKey } from '../api/lastfm.js?v=153';
+import { getAllLikedTracks, invalidateLikesCache, exportAllData, importAllData, getCurrentUserId, syncLikesIncremental, getLikesCacheTimestamp, getBestAvailableLikes, getAllPlaylistItems } from '../api.js?v=154';
+import { showProgress, hideProgress, alertModal, escapeHtml, pageHeader } from '../ui/components.js?v=154';
+import { openModal, closeTop } from '../ui/modal-stack.js?v=154';
+import { showToast } from '../ui/toast.js?v=154';
+import { openListenedAlbumsPicker } from './listened-shared.js?v=154';
+import { loadHistoryStats, loadListenedAlbums } from './history-data.js?v=154';
+import { getArtistLikePreview } from '../util/artist-preview.js?v=154';
+import { hoverIn, hoverOut } from '../ui/preview-player.js?v=154';
+import { hasUsername, getUsername, setUsername } from '../api/statsfm.js?v=154';
+import { getKey as getLastfmKey, setKey as setLastfmKey, clearKey as clearLastfmKey, isDefaultKey as lastfmIsDefaultKey } from '../api/lastfm.js?v=154';
 
 // Tres estados posibles, no dos: puede haber una key propia, la del código, o
 // —si algún día la constante queda vacía— ninguna. El hint del ⚙ tiene que
@@ -16,11 +16,11 @@ function estadoLastfm() {
   if (localStorage.getItem('lastfm_api_key')) return 'propia';
   return lastfmIsDefaultKey() ? 'la del código' : 'sin configurar';
 }
-import { loadHistoryStats as _loadStatsForCounter } from './history-data.js?v=153';
-import { openArtistCard } from './artist-card.js?v=153';
-import { openAlbumCard } from './album-card.js?v=153';
-import { activateMarquee, marqueeSpan } from '../ui/marquee.js?v=153';
-import { isJunkTrack } from '../util/junk.js?v=153';
+import { loadHistoryStats as _loadStatsForCounter } from './history-data.js?v=154';
+import { openArtistCard } from './artist-card.js?v=154';
+import { openAlbumCard } from './album-card.js?v=154';
+import { activateMarquee, marqueeSpan } from '../ui/marquee.js?v=154';
+import { isJunkTrack } from '../util/junk.js?v=154';
 
 let charts = [];
 let _loadController = null;
@@ -595,7 +595,7 @@ function renderDashboard(container, stats) {
       </div>
       <div class="stat-card">
         <div class="stat-value">${stats.uniqueArtists.toLocaleString()}</div>
-        <div class="stat-label">Artistas</div>
+        <div class="stat-label" title="Cuenta a TODOS los artistas acreditados en cada like, colaboraciones y «feat.» incluidos. «Por artista» agrupa por el artista principal de cada canción, así que da bastante menos.">Artistas acreditados</div>
       </div>
       <div class="stat-card">
         <div class="stat-value">${stats.uniqueAlbums.toLocaleString()}</div>

@@ -2,17 +2,18 @@
 // primer/último año, top tracks del artista, hover-play, y plays actuales
 // vía Stats.fm si aplica. Se abre desde cualquier feature con openArtistCard({ name }).
 
-import { loadHistoryStats, loadArtistTracks, isOwner } from './history-data.js?v=153';
-import { escapeHtml } from '../ui/components.js?v=153';
-import { getPreview } from '../api/preview-providers.js?v=153';
-import { togglePreview, playingKey, attachHover } from '../ui/preview-player.js?v=153';
-import { hasUsername, loadTopLifetime } from '../api/statsfm.js?v=153';
-import { openTrackCard } from './track-card.js?v=153';
-import { spotifyFetch, getBestAvailableLikes } from '../api.js?v=153';
-import { openModal, closeTop } from '../ui/modal-stack.js?v=153';
-import { firstArtistName, artistNames, resolveArtistName, looksLikeArtistChain } from '../util/artist-name.js?v=153';
-import { coverUrl } from '../util/cover-size.js?v=153';
-import { getArtistLikePreview } from '../util/artist-preview.js?v=153';
+import { loadHistoryStats, loadArtistTracks, isOwner } from './history-data.js?v=154';
+import { escapeHtml } from '../ui/components.js?v=154';
+import { getPreview } from '../api/preview-providers.js?v=154';
+import { togglePreview, playingKey, attachHover } from '../ui/preview-player.js?v=154';
+import { hasUsername, loadTopLifetime } from '../api/statsfm.js?v=154';
+import { openTrackCard } from './track-card.js?v=154';
+import { spotifyFetch, getBestAvailableLikes } from '../api.js?v=154';
+import { openModal, closeTop } from '../ui/modal-stack.js?v=154';
+import { firstArtistName, artistNames, resolveArtistName, looksLikeArtistChain } from '../util/artist-name.js?v=154';
+import { coverUrl } from '../util/cover-size.js?v=154';
+import { getArtistLikePreview } from '../util/artist-preview.js?v=154';
+import { skelCardBody, skelTrackRows, skelBox } from '../ui/skeleton.js?v=154';
 
 // Cache de imágenes de artistas resueltas por Spotify search. TTL 30 días.
 // Se persiste el hit y la falta (null) para no reintentar contra tracks
@@ -188,7 +189,7 @@ async function openArtistCard(entrada) {
           <button class="btn btn-secondary btn-sm card-modal-close" data-close-modal title="Cerrar">✕</button>
         </div>
       </div>
-      <div class="ac-body-scroll" id="ac-body"><div style="text-align:center;padding:24px"><div class="spinner"></div></div></div>
+      <div class="ac-body-scroll" id="ac-body">${skelCardBody({ tiles: 4, lines: 0 })}${skelBox({ w: '100%', h: 150, radius: 10, mb: 18 })}${skelTrackRows(6)}</div>
     </div>
   `,
   });
@@ -477,7 +478,7 @@ async function openArtistLikesModal(artistName) {
           <button class="btn btn-secondary btn-sm" data-close-modal title="Cerrar">✕</button>
         </div>
         <div class="picker-scroll" id="al-scroll">
-          <div style="text-align:center;padding:32px"><div class="spinner"></div></div>
+          ${skelTrackRows(8)}
         </div>
       </div>
     `,

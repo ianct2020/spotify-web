@@ -1,26 +1,50 @@
 // Wrapped propio: mini-resumen tuyo por año, hecho con el Extended Streaming History.
 // A diferencia del Wrapped oficial (que corre oct-sept), este es del año calendario completo.
 
-import { loadHistoryStats, isOwner, ownerLockedMessage } from './history-data.js?v=153';
-import { escapeHtml, pageHeader } from '../ui/components.js?v=153';
-import { getPreview } from '../api/preview-providers.js?v=153';
-import { getArtistLikePreview, getAlbumLikePreview } from '../util/artist-preview.js?v=153';
-import { attachHover } from '../ui/preview-player.js?v=153';
-import { openTrackCard } from './track-card.js?v=153';
-import { openArtistCard } from './artist-card.js?v=153';
-import { openAlbumCard } from './album-card.js?v=153';
-import { getMyTop } from '../api.js?v=153';
-import { activateMarquee, marqueeSpan } from '../ui/marquee.js?v=153';
-import { openModal } from '../ui/modal-stack.js?v=153';
-import { coverUrl } from '../util/cover-size.js?v=153';
+import { loadHistoryStats, isOwner, ownerLockedMessage } from './history-data.js?v=154';
+import { escapeHtml, pageHeader } from '../ui/components.js?v=154';
+import { getPreview } from '../api/preview-providers.js?v=154';
+import { getArtistLikePreview, getAlbumLikePreview } from '../util/artist-preview.js?v=154';
+import { attachHover } from '../ui/preview-player.js?v=154';
+import { openTrackCard } from './track-card.js?v=154';
+import { openArtistCard } from './artist-card.js?v=154';
+import { openAlbumCard } from './album-card.js?v=154';
+import { getMyTop } from '../api.js?v=154';
+import { activateMarquee, marqueeSpan } from '../ui/marquee.js?v=154';
+import { openModal } from '../ui/modal-stack.js?v=154';
+import { coverUrl } from '../util/cover-size.js?v=154';
 
 let stats = null;
 let selectedYear = null;
 
 const MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
 
+// ── «9 de enero» en Récords y «8 de enero» en Wrapped (arreglado en v=154) ──
+//
+// NO era zona horaria en el pipeline ni dos criterios de agrupación: los dos
+// leen EL MISMO valor. Verificado en producción el 2026-08-23:
+// `history-records.json` y `history-stats.json` traen los dos `"2026-01-09"`.
+// La diferencia era de FORMATEO, y de esta función.
+//
+// `new Date("2026-01-09")` — la forma date-only — la parsea el estándar como
+// medianoche **UTC**. Después `getDate()` la lee en hora **local**, y en
+// Argentina (UTC−3) esa medianoche cae a las 21:00 del 8. Un día para atrás,
+// siempre, para cualquier offset negativo. `records.js` no se comía esto porque
+// parte el string a mano (`fmtDayShort`) y nunca construye un Date.
+//
+// El arreglo tiene que distinguir DOS formas, porque acá entran las dos:
+//   · "2026-01-09"            → un DÍA del calendario. Sin zona: se parte.
+//   · "2026-01-09T04:12:33Z"  → un INSTANTE. Ahí convertir a local es lo
+//                               correcto y no hay que tocarlo (es lo que hacen
+//                               first_play / last_play).
+const SOLO_FECHA = /^\d{4}-\d{2}-\d{2}$/;
+
 function fmtDate(iso) {
   if (!iso) return '';
+  if (SOLO_FECHA.test(iso)) {
+    const [y, m, d] = iso.split('-');
+    return `${+d} ${MESES[+m - 1]} ${y}`;
+  }
   const d = new Date(iso);
   if (isNaN(d)) return iso;
   return `${d.getDate()} ${MESES[d.getMonth()]} ${d.getFullYear()}`;
@@ -181,7 +205,7 @@ function renderYearCard() {
         <div class="wrapped-tile compact" style="grid-area:days">
           <div class="wrapped-tile-label">Días activos</div>
           <div class="wrapped-tile-value">${y.days_active}</div>
-          <div class="wrapped-tile-hint">de ${daysInYear(y.year)} · racha ${y.longest_streak} d</div>
+          <div class="wrapped-tile-hint">de ${daysCovered(y.year, stats)} con datos · racha ${y.longest_streak} d</div>
         </div>
 
         ${y.discovery ? `
@@ -359,6 +383,42 @@ function renderTopCard(title, items, keyName, keyMin, keyPlays, keyArtist, hover
 
 function daysInYear(y) {
   return ((y % 4 === 0 && y % 100 !== 0) || y % 400 === 0) ? 366 : 365;
+}
+
+// ── «198 de 365» en un año que no terminó (arreglado en v=154) ──────────────
+//
+// El denominador era el año entero SIEMPRE, así que el año en curso arrancaba
+// cada enero pareciendo un desastre y solo se ponía justo el 31 de diciembre.
+// Ahora es la cantidad de días de ese año que el historial PUDO cubrir: del 1
+// de enero (o de la primera play, si el historial empieza a mitad de año, que
+// es el caso de 2018) hasta el último día con datos.
+//
+// El tope es el último día registrado y no «hoy» a propósito: el export de
+// Spotify se pide a mano y llega con semanas de atraso. Contra «hoy», los días
+// entre el fin del export y la fecha de la consulta cuentan como días sin
+// escuchar, y no lo son — es que ahí no hay datos. Con el export de Ian del
+// 2026-08-23, que llega hasta el 22 de julio, la diferencia es 198/203 (real)
+// contra 198/235 (castigo por 32 días que el archivo no cubre).
+//
+// Los años cerrados no cambian: enteros de punta a punta, 365 o 366.
+function daysCovered(year, stats) {
+  const total = daysInYear(year);
+  const dia = (iso) => (iso || '').slice(0, 10);   // date-only o instante, da igual
+  const primera = dia(stats?.totals?.first_play || stats?.years?.[0]?.first_play);
+  const ultima = dia(stats?.totals?.last_play);
+  if (!primera || !ultima) return total;
+
+  const yNum = (s) => +s.slice(0, 4);
+  // Año anterior al rango de datos, o posterior: no hay nada que recortar.
+  if (yNum(primera) > year || yNum(ultima) < year) return total;
+
+  const enero = Date.UTC(year, 0, 1);
+  const diciembre = Date.UTC(year, 11, 31);
+  const aMs = (s) => Date.UTC(+s.slice(0, 4), +s.slice(5, 7) - 1, +s.slice(8, 10));
+  const desde = Math.max(enero, yNum(primera) === year ? aMs(primera) : enero);
+  const hasta = Math.min(diciembre, yNum(ultima) === year ? aMs(ultima) : diciembre);
+  const dias = Math.round((hasta - desde) / 86400000) + 1;
+  return Math.max(1, Math.min(total, dias));
 }
 
 function renderAllTime() {
