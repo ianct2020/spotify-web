@@ -19,6 +19,8 @@ import { createHiddenStore, createLocalStore } from '../util/hidden-sync.js';
 import { getPreview } from '../api/preview-providers.js';
 import { togglePreview, playingKey, attachHover } from '../ui/preview-player.js';
 import { coverUrl } from '../util/cover-size.js';
+import { FILTROS as FILTROS_DEF, saveFiltros } from '../util/discover-filters.js';
+import { esEPoAlbum } from '../util/release-size.js';
 
 const DISCO_TTL_MIN = 30 * 24 * 60;       // 30 días
 const ARTIST_ID_TTL_MIN = 60 * 24 * 60;   // 60 días — los ids no cambian
@@ -333,6 +335,15 @@ export function renderAlbumCard(al, artistName, {
   checkClass = 'dcard-check', selected = false, showHeard = false, hiddenMode = false,
 } = {}) {
   const tipo = al.type === 'single' ? 'single' : (al.type === 'compilation' ? 'recopilatorio' : 'álbum');
+  // El botón dice a dónde va DE VERDAD. Un single suelto no se guarda en la
+  // biblioteca: va a la playlist «fonoteca · sin escuchar» (ver
+  // `guardarLanzamiento`). La lección de v=147 fue exactamente esta — el botón
+  // «+ Biblioteca» no estaba roto, mentía el nombre.
+  const esDisco = esEPoAlbum(al.total);
+  const guardarLabel = esDisco ? 'Guardar álbum' : 'Guardar single';
+  const guardarTitle = esDisco
+    ? 'Guardar el disco entero en tu biblioteca de álbumes'
+    : `Añadir sus pistas a la playlist «${PLAYLIST_SINGLES}» — un single suelto ensucia la biblioteca de álbumes`;
   const id = escapeHtml(al.id);
   const artista = escapeHtml(artistName);
   const sonando = playingKey() === previewKeyOf(al.id);
@@ -359,7 +370,7 @@ export function renderAlbumCard(al, artistName, {
         </div>
       </div>
       <div class="dcard-actions">
-        <button class="btn btn-secondary btn-sm" data-save-album="${id}" data-save-artist="${artista}" title="Guardar el disco entero en tu biblioteca de álbumes">Guardar álbum</button>
+        <button class="btn btn-secondary btn-sm" data-save-album="${id}" data-save-artist="${artista}" title="${escapeHtml(guardarTitle)}">${escapeHtml(guardarLabel)}</button>
         <button class="btn btn-secondary btn-sm" data-liketracks-album="${id}" data-save-artist="${artista}" title="Darle al corazón a cada pista del disco, una por una">Añadir pistas a mis likes</button>
         <button class="btn btn-secondary btn-sm" data-addpl-album="${id}" title="Añadir todas las pistas a una o varias playlists">Añadir a playlist…</button>
         ${showHeard ? `<button class="btn btn-secondary btn-sm" data-heard-album="${id}" title="Ya lo escuchaste y lo evaluaste: deja de aparecer">Escuchado</button>` : ''}
@@ -546,6 +557,80 @@ export async function saveAlbumToLibrary(albumId) {
   return albumId;
 }
 
+// ── Guardar un lanzamiento: la biblioteca no es para todo (v=152) ──────────
+//
+// Un single suelto guardado como «álbum» ensucia la biblioteca: entre discos
+// de verdad aparecen decenas de fichas de una pista. Así que el destino
+// depende del tamaño:
+//
+//   < 4 pistas  → single suelto  → a la playlist «fonoteca · sin escuchar»
+//   ≥ 4 pistas  → EP o álbum     → a la biblioteca, como hasta ahora
+//
+// El umbral sale de `util/release-size.js`, que es el MISMO que ya usaba
+// `features/listened.js` desde v=127 para partir «Sin registrar». El encargo
+// de esta tanda decía «menos de 5 / 5 o más», pero se respeta el criterio que
+// ya estaba: con 5 un EP de 4 pistas iría a la playlist en una vista y
+// contaría como EP en la otra.
+//
+// ⚠️ La playlist se crea PÚBLICA y no hay forma de evitarlo: `POST
+// /me/playlists` ignora el campo `public` post-migración (verificado 2026-08-09,
+// ver CLAUDE.md). Hay que pasarla a privada a mano desde la app de Spotify,
+// como las otras cinco de fonoteca. Por eso el toast lo dice.
+export const PLAYLIST_SINGLES = 'fonoteca · sin escuchar';
+
+let _plSinglesId = null;
+
+/** Busca la playlist de singles y la crea si no está. Memoizada por sesión. */
+export async function ensureSinglesPlaylist() {
+  if (_plSinglesId) return { id: _plSinglesId, creada: false };
+  const propias = await getOwnPlaylists();
+  const ya = propias.find(p => (p.name || '').trim() === PLAYLIST_SINGLES);
+  if (ya) { _plSinglesId = ya.id; return { id: ya.id, creada: false }; }
+  const creada = await createPlaylist(
+    PLAYLIST_SINGLES,
+    'Singles de tus artistas que todavía no escuchaste. Generada por Fonoteca.',
+    false,
+  );
+  _plSinglesId = creada.id;
+  // La lista de playlists propias quedó vieja: sin esto, el próximo
+  // `ensureSinglesPlaylist` de la sesión no la encontraría y crearía otra.
+  await getOwnPlaylists({ force: true });
+  return { id: creada.id, creada: true };
+}
+
+/**
+ * Guarda un lanzamiento donde corresponda según su tamaño.
+ * @returns {Promise<{destino:'biblioteca'|'playlist', pistas?:number, yaEstaban?:number, playlistCreada?:boolean}>}
+ */
+export async function guardarLanzamiento(al) {
+  if (!al?.id) throw new Error('lanzamiento sin id');
+
+  const total = al.total || (await getAlbumTracks(al.id)).length;
+  if (esEPoAlbum(total)) {
+    await saveAlbumsToLibrary([al.id]);
+    return { destino: 'biblioteca' };
+  }
+
+  const tracks = await getAlbumTracks(al.id);
+  const uris = tracks.map(t => t.uri).filter(Boolean);
+  if (!uris.length) throw new Error('el lanzamiento no tiene pistas');
+  const namesByUri = new Map(tracks.filter(t => t.uri && t.name).map(t => [t.uri, t.name]));
+
+  const { id, creada } = await ensureSinglesPlaylist();
+  // `addUrisToPlaylists` es el de util/playlist-add.js: ya mira los items de la
+  // playlist antes de escribir y descarta las uris repetidas, así que añadir
+  // dos veces el mismo single no lo duplica.
+  const res = await addUrisToPlaylists(uris, [{ id, name: PLAYLIST_SINGLES }], { namesByUri });
+  if (res.failed?.length) throw new Error(res.failed[0]?.message || 'no se pudo añadir a la playlist');
+  // La forma que devuelve util/playlist-add.js: `detail[]` trae `added` y `dup`
+  // de las que SÍ se escribieron, y `skipped[]` son las playlists en las que ya
+  // estaba todo (ahí no hubo POST y no hay entrada en `detail`).
+  const añadidas = (res.detail || []).reduce((n, d) => n + (d.added || 0), 0);
+  const yaEstaban = (res.detail || []).reduce((n, d) => n + (d.dup || 0), 0)
+    + (res.skipped || []).reduce((n, sk) => n + (sk.uris?.length || 0), 0);
+  return { destino: 'playlist', pistas: añadidas, yaEstaban, playlistCreada: creada };
+}
+
 /** Likea UNA POR UNA todas las pistas del álbum. No guarda el álbum. */
 export async function saveAlbumTracksToLibrary(albumId) {
   const tracks = await getAlbumTracks(albumId);
@@ -573,4 +658,44 @@ export async function albumTrackCount(al) {
  */
 export function markAlbumResolved(al, artistName) {
   return heardAlbums.add(cardKey(al, artistName), null);
+}
+
+// ── Los cinco filtros como chips de la topbar (v=152) ──────────────────────
+//
+// Comparten módulo porque las dos vistas muestran el MISMO objeto (un
+// lanzamiento de tus artistas que no escuchaste) y tienen que filtrarlo igual.
+// La lógica vive en util/discover-filters.js; acá solo está el HTML y el
+// cableado, que también es uno solo.
+
+/**
+ * Los chips, con el conteo de lo que descarta cada criterio al lado.
+ * El número se muestra SIEMPRE, esté el filtro encendido o apagado: apagado
+ * dice cuántos está dejando entrar, y encendido cuántos está sacando.
+ */
+export function renderFiltroChips(estado, conteos) {
+  return `
+    <div class="disco-filtros" id="disco-filtros" role="group" aria-label="Filtros de la lista">
+      ${FILTROS_DEF.map(f => `
+        <button type="button" class="disco-filtro ${estado[f.key] ? 'is-on' : ''}"
+                data-filtro="${f.key}" aria-pressed="${!!estado[f.key]}" title="${escapeHtml(f.ayuda)}">
+          <span class="disco-filtro-txt">${escapeHtml(f.corto)}</span>
+          <span class="disco-filtro-n">${(conteos?.[f.key] ?? 0).toLocaleString('es-ES')}</span>
+        </button>
+      `).join('')}
+    </div>
+  `;
+}
+
+/** Cablea los chips. `onChange(key, nuevoEstado)` repinta la lista. */
+export function wireFiltroChips(root, estado, onChange) {
+  root.querySelector('#disco-filtros')?.addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-filtro]');
+    if (!btn) return;
+    const k = btn.dataset.filtro;
+    estado[k] = !estado[k];
+    saveFiltros(estado);
+    btn.classList.toggle('is-on', estado[k]);
+    btn.setAttribute('aria-pressed', String(!!estado[k]));
+    onChange(k, estado);
+  });
 }

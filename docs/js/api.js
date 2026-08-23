@@ -1,8 +1,8 @@
-import { getValidToken, refreshAccessToken } from './auth.js?v=151';
-import { cacheGet, cacheGetRaw, cacheGetTimestamp, cacheSet, cacheClear } from './storage.js?v=151';
-import { idbDel, idbGetCached, idbGetCachedRaw, idbGetTimestamp, idbSetCached } from './idb.js?v=151';
-import { showToast } from './ui/toast.js?v=151';
-import { artistIsSame } from './util/track-match.js?v=151';
+import { getValidToken, refreshAccessToken } from './auth.js?v=152';
+import { cacheGet, cacheGetRaw, cacheGetTimestamp, cacheSet, cacheClear } from './storage.js?v=152';
+import { idbDel, idbGetCached, idbGetCachedRaw, idbGetTimestamp, idbSetCached } from './idb.js?v=152';
+import { showToast } from './ui/toast.js?v=152';
+import { artistIsSame, limpiaParaQuery } from './util/track-match.js?v=152';
 
 const BASE = 'https://api.spotify.com/v1';
 const MIN_RETRY_WAIT = 5000;
@@ -1055,6 +1055,33 @@ async function removeAlbumsFromLibrary(albumIds) {
 }
 
 /**
+ * Los álbumes guardados en la biblioteca. `GET /me/albums` es de las pocas
+ * rutas por recurso que sobrevivieron a la migración para LEER (verificado en
+ * vivo el 2026-08-22: 200, paginado, con `added_at` y el tracklist adentro).
+ * Escribir sigue siendo `PUT /me/library?uris=spotify:album:…`.
+ *
+ * Devuelve los items crudos (`{ added_at, album }`). Cache de 60 min: lo usa el
+ * filtro de descubrimiento en cada repintado y no tiene sentido repreguntarlo.
+ */
+const SAVED_ALBUMS_KEY = 'saved_albums_v1';
+async function getSavedAlbums({ force = false } = {}) {
+  if (!force) {
+    const cached = await idbGetCached(SAVED_ALBUMS_KEY);
+    if (Array.isArray(cached)) return cached;
+  }
+  const items = [];
+  let url = '/me/albums?limit=50';
+  // Tope de páginas por las dudas: 40 × 50 = 2.000 álbumes guardados.
+  for (let i = 0; i < 40 && url; i++) {
+    const r = await spotifyFetch(url);
+    items.push(...(r?.items || []));
+    url = r?.next ? r.next.replace('https://api.spotify.com/v1', '') : null;
+  }
+  try { await idbSetCached(SAVED_ALBUMS_KEY, items, 60); } catch { /* ignora */ }
+  return items;
+}
+
+/**
  * ¿Están estos álbumes en la biblioteca? Devuelve Map<albumId, bool>.
  * Chunks de 50, igual que el `contains` de pistas.
  */
@@ -1127,7 +1154,28 @@ async function getArtistAlbums(artistId, artistName, { includeSingles = true, li
     if (!wanted) return [];
     const isMine = (al) => (al.artists || []).some(a =>
       (artistId && a.id === artistId) || artistIsSame(wanted, a.name));
-    const q = `artist:"${wanted.replace(/"/g, '')}"`;
+    // ⚠️ Este `||` deja pasar a los HOMÓNIMOS EXACTOS: hay dos artistas
+    // llamados literalmente «Steve Lacy» y el de jazz metía 17 discos. No se
+    // aprieta acá a propósito — la identidad se decide al PINTAR, en
+    // `util/discover-filters.js` (criterio 'artista'), para que el toggle de la
+    // topbar pueda mostrarlos y esconderlos sin tirar el caché de IDB. Este
+    // filtro queda como red gruesa contra el ruido de /search (Nick Drake).
+    //
+    // ⚠️ **El apóstrofo dentro de las comillas rompe la query** — el mismo bug
+    // que ya se arregló en `features/album-card.js`. Medido en vivo el
+    // 2026-08-22 contra la API real:
+    //
+    //   artist:"Sinéad O'Connor"  →  0 resultados
+    //   artist:"Sinéad OConnor"   →  10 ✅
+    //   artist:"Sinead O'Connor"  →  0 resultados
+    //   artist:"Guns N' Roses"    →  10 (este NO se rompe)
+    //
+    // O sea que no falla siempre —parece necesitar el apóstrofo en mitad de una
+    // palabra que no es la primera— pero BORRARLO no empeora ningún caso y
+    // arregla los rotos, así que se borra siempre. Y se borra, no se cambia por
+    // un espacio: Spotify indexa «don't» como el token `dont`, y «don t» no
+    // encuentra nada. `isMine` compara después contra el nombre REAL.
+    const q = `artist:"${limpiaParaQuery(wanted)}"`;
     const items = [];
     let emptyPages = 0;
     for (let page = 0; page < SEARCH_MAX_PAGES; page++) {
@@ -1218,6 +1266,7 @@ export {
   saveAlbumsToLibrary,
   removeAlbumsFromLibrary,
   albumsInLibrary,
+  getSavedAlbums,
   getArtistAlbums,
   getAlbumTracks,
   searchArtistByName,

@@ -4,18 +4,22 @@
 //   1. alguna de sus pistas apareció en el historial completo de plays
 //      (history-track-plays.json v=3, campo `albums`).
 //   2. alguna de sus pistas está en tus likes (album de cada like).
-//   3. el álbum está en history-listened-albums.json (umbral samestay met).
-//   4. el álbum está en la playlist W-Three (por track).
+//   3. el álbum está en la playlist W-Three (por track).
 //
-// El bug que arregla esta capa: antes solo se cruzaba contra (3), que es un
-// subset (álbumes que en un mismo día tuvieron ≥4 tracks distintos o ≥25 min).
-// Por eso a Ian le aparecían como "sin escuchar" álbumes que sí había tocado.
+// El bug que arregla esta capa: antes solo se cruzaba contra
+// history-listened-albums.json, que es un subset (álbumes que en un mismo día
+// tuvieron ≥4 tracks distintos o ≥25 min). Por eso a Ian le aparecían como
+// "sin escuchar" álbumes que sí había tocado.
+//
+// ⚠️ history-listened-albums.json YA NO se cruza acá (v=152): pasó a ser el
+// criterio 'listened' de `util/discover-filters.js`, que se aplica al pintar
+// para poder apagarlo desde la topbar. Ver la nota en el punto 3 de abajo.
 //
 // Todas las claves pasan por `albumKey()` (util/album-key.js) — normalizado
 // con strip diacríticos + sufijos de edición.
 
 import { albumKey } from './album-key.js';
-import { loadTrackPlays, loadListenedAlbums, isOwner } from '../features/history-data.js';
+import { loadTrackPlays, isOwner } from '../features/history-data.js';
 import { getBestAvailableLikes, getAllPlaylistItems } from '../api.js';
 import { coverUrl } from './cover-size.js';
 
@@ -74,15 +78,15 @@ export async function buildAlbumHeardIndex({ force = false } = {}) {
     }
   } catch { /* ignora */ }
 
-  // 3) history-listened-albums.json (umbral).
-  try {
-    const data = await loadListenedAlbums();
-    if (data?.years) {
-      for (const y of data.years) {
-        for (const al of (y.albums || [])) heard.add(albumKey(al.name, al.artist));
-      }
-    }
-  } catch { /* ignora */ }
+  // 3) history-listened-albums.json — SE FUE DE ACÁ (v=152).
+  //
+  // Pasó a ser el criterio 'listened' de `util/discover-filters.js`, que se
+  // aplica al pintar. El motivo es que ahora es un TOGGLE de la topbar, y un
+  // toggle que filtra acá arriba no se puede apagar: el álbum ya no llegaría
+  // nunca a la lista y el número de al lado del interruptor sería mentira.
+  //
+  // Con el toggle encendido —que es el estado por defecto— el resultado
+  // visible es exactamente el mismo que antes.
 
   // 4) Playlist W-Three: cada track expresa un álbum escuchado.
   try {

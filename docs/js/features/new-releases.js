@@ -10,11 +10,12 @@
 //   - Umbral de likes: 5+ / 10+ / 20+
 //   - Ventana temporal: 3 / 6 / 12 / 24 meses (default 12)
 
-import { escapeHtml, confirmModal, pageHeader } from '../ui/components.js?v=151';
-import { showToast } from '../ui/toast.js?v=151';
-import { buildAlbumHeardIndex } from '../util/album-heard.js?v=151';
-import { createIncrementalList, scrollRootOf } from '../ui/incremental-list.js?v=151';
-import { createLazyImages } from '../ui/lazy-img.js?v=151';
+import { escapeHtml, confirmModal, pageHeader } from '../ui/components.js?v=152';
+import { showToast } from '../ui/toast.js?v=152';
+import { buildAlbumHeardIndex } from '../util/album-heard.js?v=152';
+import { loadFiltros, buildFilterContext, applyDiscoverFilters } from '../util/discover-filters.js?v=152';
+import { createIncrementalList, scrollRootOf } from '../ui/incremental-list.js?v=152';
+import { createLazyImages } from '../ui/lazy-img.js?v=152';
 import {
   getArtistIdCached,
   getArtistDiscoCached,
@@ -22,7 +23,8 @@ import {
   albumIsUnheard,
   releaseTs,
   createDiscoverPlaylist,
-  saveAlbumToLibrary as guardarAlbumEnBiblioteca,
+  guardarLanzamiento,
+  PLAYLIST_SINGLES,
   saveAlbumTracksToLibrary,
   albumTrackCount,
   markAlbumResolved,
@@ -32,11 +34,13 @@ import {
   agoLabel,
   renderAlbumCard,
   wireAlbumCards,
+  renderFiltroChips,
+  wireFiltroChips,
   addAlbumsToPlaylists,
   hiddenAlbums,
   cardKey,
   toggleHiddenAlbum,
-} from './discover-common.js?v=151';
+} from './discover-common.js?v=152';
 
 const SCAN_KEY = 'new_releases';
 
@@ -82,6 +86,11 @@ const state = {
   // una acción de #discover-artists (evaluar la discografía vieja). Los que Ian
   // marque allá igual desaparecen de acá, porque el filtro es compartido.
   mode: 'normal',
+  // Mismos cinco filtros que #discover-artists, mismo módulo y mismo estado
+  // guardado: las dos vistas muestran el mismo objeto y tienen que coincidir.
+  filtros: loadFiltros(),
+  filterCtx: null,
+  conteosFiltro: null,
 };
 
 // ── Lista incremental (v=144) ────────────────────────────────────────────────
@@ -114,6 +123,11 @@ export async function render(container) {
     return teardown;
   }
   state.heard = idx.heard;
+
+  // No bloquea el pintado: hasta que llega, no se descarta nada.
+  buildFilterContext()
+    .then(ctx => { state.filterCtx = ctx; refreshList(content); })
+    .catch(e => console.warn('[newrel] contexto de filtros:', e.message));
 
   state.minLikes = getMinLikes();
   state.months = getMonths();
@@ -196,17 +210,18 @@ function renderShell(content, totalCandidates) {
         <div class="disco-chip-group" id="newrel-months">
           ${[3,6,12,24].map(n => `<button class="disco-chip ${state.months === n ? 'is-on' : ''}" data-months="${n}">últimos ${n}m</button>`).join('')}
         </div>
-        <button class="btn btn-secondary btn-sm ${state.mode === 'hidden' ? 'sc-on' : ''}" id="newrel-mode-hidden" title="Las novedades que ocultaste. Se sincronizan con la playlist «fonoteca · ocultos (descubrir)».">Ocultos (<span id="newrel-hidden-n">${hiddenAlbums.size}</span>)</button>
+        <button class="btn btn-secondary btn-sm ${state.mode === 'hidden' ? 'sc-on' : ''}" id="newrel-mode-hidden" title="Las novedades que ocultaste. Se sincronizan con la playlist «fonoteca · ocultos (descubrir)».">Ocultos <span id="newrel-hidden-n">${hiddenAlbums.size}</span></button>
         <button class="btn btn-secondary btn-sm" id="newrel-refresh" title="${state.scannedAt ? 'Último escaneo ' + agoLabel(state.scannedAt) + '. Volver a consultar Spotify.' : 'Volver a consultar Spotify'}">Actualizar</button>
       </div>
     </div>
+    ${renderFiltroChips(state.filtros, state.conteosFiltro)}
     <div class="disco-progress" id="newrel-progress" style="display:none">
       <div class="disco-progress-bar"><div class="disco-progress-fill" id="newrel-progress-fill" style="width:0%"></div></div>
       <div class="disco-progress-label" id="newrel-progress-label"></div>
     </div>
     <div class="disco-list newrel-list" id="newrel-list"></div>
     <div class="disco-load-more" style="text-align:center;margin:20px 0">
-      <button class="btn btn-secondary" id="newrel-load-more">Cargar más artistas (+50)</button>
+      <button class="btn btn-secondary" id="newrel-load-more">Cargar más artistas +50</button>
     </div>
     <div class="disco-actionbar" id="newrel-actionbar" style="display:none">
       <span id="newrel-sel-count">0 seleccionados</span>
@@ -215,6 +230,8 @@ function renderShell(content, totalCandidates) {
       <button class="btn btn-primary btn-sm" id="newrel-sel-playlist">Crear playlist con lo seleccionado</button>
     </div>
   `;
+
+  wireFiltroChips(content, state.filtros, () => refreshList(content));
 
   content.querySelector('#newrel-likes').addEventListener('click', (e) => {
     const btn = e.target.closest('[data-min]');
@@ -406,13 +423,32 @@ function releasesInWindow() {
       out.push({ al, artist: a });
     }
   }
+  // Los cinco filtros, solo en el modo normal (en «Ocultos» Ian está
+  // revisando lo que descartó a mano y no hay que esconderle nada más).
+  let lista = out;
+  if (!modoOcultos && state.filterCtx) {
+    const items = out.map(o => ({ al: o.al, artista: o.artist.name, artistaId: o.artist.id, _o: o }));
+    const { visibles, conteos } = applyDiscoverFilters(items, state.filterCtx, state.filtros);
+    state.conteosFiltro = conteos;
+    pintarConteosFiltro(conteos);
+    lista = visibles.map(v => v._o);
+  }
+
   // Más nuevo primero. Empate → alfabético por artista.
-  out.sort((x, y) => {
+  lista.sort((x, y) => {
     const dt = releaseTs(y.al.release) - releaseTs(x.al.release);
     if (dt !== 0) return dt;
     return x.artist.name.localeCompare(y.artist.name, 'es');
   });
-  return out;
+  return lista;
+}
+
+// Solo los números de los chips, sin repintar la topbar (perdería el foco).
+function pintarConteosFiltro(conteos) {
+  document.querySelectorAll('#disco-filtros [data-filtro]').forEach(btn => {
+    const n = btn.querySelector('.disco-filtro-n');
+    if (n) n.textContent = (conteos?.[btn.dataset.filtro] ?? 0).toLocaleString('es-ES');
+  });
 }
 
 function refreshList(content) {
@@ -560,11 +596,28 @@ async function saveAlbum(albumId, artistName, btn) {
   btn.disabled = true;
   btn.textContent = 'Guardando…';
   try {
-    await guardarAlbumEnBiblioteca(albumId);
-    btn.textContent = '✓ Guardado';
-    showToast(`«${al.name}» guardado en tu biblioteca de álbumes`, 'success');
-    // Resuelto: deja de aparecer en la lista, y sigue sin aparecer después de
-    // recargar (el índice en memoria se pierde al recargar).
+    const r = await guardarLanzamiento(al);
+    if (r.destino === 'biblioteca') {
+      btn.textContent = '✓ Guardado';
+      showToast(`«${al.name}» guardado en tu biblioteca de álbumes`, 'success');
+    } else {
+      btn.textContent = '✓ En la playlist';
+      const partes = [];
+      if (r.pistas) partes.push(`${r.pistas} ${r.pistas === 1 ? 'pista' : 'pistas'}`);
+      if (r.yaEstaban) partes.push(`${r.yaEstaban} ya ${r.yaEstaban === 1 ? 'estaba' : 'estaban'}`);
+      showToast(
+        `«${al.name}» es un single: ${partes.join(' · ') || 'sin pistas nuevas'} en «${PLAYLIST_SINGLES}»`,
+        'success',
+      );
+      // La playlist se crea PÚBLICA y no hay forma de evitarlo por API. Se
+      // avisa una sola vez, cuando se acaba de crear.
+      if (r.playlistCreada) {
+        showToast(
+          `Creé la playlist «${PLAYLIST_SINGLES}». Spotify la crea PÚBLICA y no se puede cambiar por API: pasala a privada a mano desde la app.`,
+          'info',
+        );
+      }
+    }
     markAlbumResolved(al, artistName);
     setTimeout(() => {
       const content = document.getElementById('newrel-content');

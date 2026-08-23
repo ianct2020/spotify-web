@@ -216,3 +216,37 @@ export function pickBestMatch(wanted, items, map) {
   }
   return best;
 }
+
+// ── Limpieza de texto para las queries de /search ──────────────────────────
+//
+// ⚠️ **El apóstrofo dentro de las comillas rompe la búsqueda de Spotify.**
+// Medido en vivo contra la API real (2026-08-19 con álbumes, 2026-08-22 con
+// artistas):
+//
+//   album:"Don't Be Dumb"     →  0 resultados
+//   album:"Dont Be Dumb"      →  2 ✅
+//   artist:"Sinéad O'Connor"  →  0 resultados
+//   artist:"Sinéad OConnor"   →  10 ✅
+//   artist:"Guns N' Roses"    →  10 (este no se rompe)
+//
+// No falla siempre —parece hacer falta que el apóstrofo esté en mitad de una
+// palabra que no sea la primera— pero sacarlo NUNCA empeora un caso y arregla
+// los rotos, así que se saca siempre.
+//
+// ⚠️ Se **BORRA**, no se cambia por un espacio: Spotify indexa «don't» como el
+// token `dont`, así que «don t» es otra forma de no encontrar nada.
+//
+//   album:"Don t Be Dumb"             →  0 resultados
+//   album:"1989 (Taylor s Version)"   →  1
+//   album:"1989 (Taylors Version)"    →  3 ✅
+//
+// La contrapartida es que la query queda más laxa, así que **el que llama
+// TIENE que comparar el resultado contra el nombre real**. Aflojar el filtro
+// posterior es lo que traía a Nick Drake cuando se buscaba Drake (v=124).
+export function limpiaParaQuery(s) {
+  return String(s || '')
+    .replace(/["]/g, '')
+    .replace(/['‘’ʼ`´]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}

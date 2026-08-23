@@ -14,21 +14,21 @@
 // `util/hidden-sync.js`, playlist como fuente de verdad y localStorage como
 // caché local para pintar al instante.
 
-import { getBestAvailableLikes, removeLikedTracks } from '../api.js?v=151';
-import { loadTrackPlays, trackIdOf, isOwner, ownerLockedMessage } from './history-data.js?v=151';
-import { escapeHtml, confirmModal, pageHeader } from '../ui/components.js?v=151';
-import { showToast } from '../ui/toast.js?v=151';
-import { openTrackCard } from './track-card.js?v=151';
-import { hasUsername, loadTopLifetime } from '../api/statsfm.js?v=151';
-import { getPreview } from '../api/preview-providers.js?v=151';
-import { togglePreview, playingKey } from '../ui/preview-player.js?v=151';
-import { renderTrackCardRow, wireTrackCardGrid, paintCardSelection, paintPlayingCard } from '../ui/track-card-row.js?v=151';
-import { createIncrementalList, scrollRootOf } from '../ui/incremental-list.js?v=151';
-import { createLazyImages } from '../ui/lazy-img.js?v=151';
-import { activateMarquee } from '../ui/marquee.js?v=151';
-import { coverAtSize } from '../util/cover-size.js?v=151';
-import { firstArtistName } from '../util/artist-name.js?v=151';
-import { createHiddenStore } from '../util/hidden-sync.js?v=151';
+import { getBestAvailableLikes, removeLikedTracks } from '../api.js?v=152';
+import { loadTrackPlays, trackIdOf, isOwner, ownerLockedMessage } from './history-data.js?v=152';
+import { escapeHtml, confirmModal, pageHeader } from '../ui/components.js?v=152';
+import { showToast } from '../ui/toast.js?v=152';
+import { openTrackCard } from './track-card.js?v=152';
+import { hasUsername, loadTopLifetime } from '../api/statsfm.js?v=152';
+import { getPreview } from '../api/preview-providers.js?v=152';
+import { togglePreview, playingKey } from '../ui/preview-player.js?v=152';
+import { renderTrackCardRow, wireTrackCardGrid, paintCardSelection, paintPlayingCard } from '../ui/track-card-row.js?v=152';
+import { createIncrementalList, scrollRootOf } from '../ui/incremental-list.js?v=152';
+import { createLazyImages } from '../ui/lazy-img.js?v=152';
+import { activateMarquee } from '../ui/marquee.js?v=152';
+import { coverAtSize } from '../util/cover-size.js?v=152';
+import { firstArtistName } from '../util/artist-name.js?v=152';
+import { createHiddenStore } from '../util/hidden-sync.js?v=152';
 
 let cache = null;
 

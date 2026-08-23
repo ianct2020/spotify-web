@@ -17,6 +17,7 @@ import { createIncrementalList, scrollRootOf } from '../ui/incremental-list.js';
 import { createLazyImages } from '../ui/lazy-img.js';
 import { isJunkTrack } from '../util/junk.js';
 import { buildAlbumHeardIndex } from '../util/album-heard.js';
+import { loadFiltros, buildFilterContext, applyDiscoverFilters } from '../util/discover-filters.js';
 import {
   getArtistIdCached,
   getArtistDiscoCached,
@@ -24,7 +25,8 @@ import {
   albumIsUnheard,
   yearOf,
   createDiscoverPlaylist,
-  saveAlbumToLibrary as guardarAlbumEnBiblioteca,
+  guardarLanzamiento,
+  PLAYLIST_SINGLES,
   saveAlbumTracksToLibrary,
   albumTrackCount,
   markAlbumResolved,
@@ -34,6 +36,8 @@ import {
   agoLabel,
   renderAlbumCard,
   wireAlbumCards,
+  renderFiltroChips,
+  wireFiltroChips,
   addAlbumsToPlaylists,
   hiddenAlbums,
   heardAlbums,
@@ -81,6 +85,12 @@ const state = {
   // 'heard' = los que marcaste como escuchados. Los dos últimos son la única
   // forma de deshacer, así que no son opcionales.
   mode: 'normal',
+  // Los cinco filtros de util/discover-filters.js. `filterCtx` llega
+  // asincrónico (biblioteca + historial + likes); hasta que llegue no se
+  // descarta NADA, nunca al revés.
+  filtros: loadFiltros(),
+  filterCtx: null,
+  conteosFiltro: null,
 };
 
 const YEAR_NOW = new Date().getFullYear();
@@ -136,6 +146,14 @@ export async function render(container) {
   }
   state.heard = idx.heard;
   state.likesByArtist = idx.likesByArtist;
+
+  // El contexto de los filtros (biblioteca guardada + historial + likes) no
+  // bloquea el pintado: hasta que llega, `state.filterCtx` es null y no se
+  // descarta nada. Cuando llega, se repinta. Nunca al revés — esconder
+  // lanzamientos por un contexto a medio cargar sería un fallo mudo.
+  buildFilterContext()
+    .then(ctx => { state.filterCtx = ctx; refreshList(content); })
+    .catch(e => console.warn('[discover] contexto de filtros:', e.message));
 
   const candidates = [...idx.likesByArtist.entries()]
     .map(([nameLower, ids]) => ({
@@ -234,18 +252,19 @@ function renderShell(content, totalCandidates) {
           <option value="5" ${state.filterYears === 5 ? 'selected' : ''}>Últimos 5 años</option>
           <option value="10" ${state.filterYears === 10 ? 'selected' : ''}>Últimos 10 años</option>
         </select>
-        <button class="btn btn-secondary btn-sm ${state.mode === 'heard' ? 'sc-on' : ''}" id="disco-mode-heard" title="Los que marcaste como escuchados. Desde ahí podés devolverlos a la lista.">Escuchados (<span id="disco-heard-n">${heardAlbums.size}</span>)</button>
-        <button class="btn btn-secondary btn-sm ${state.mode === 'hidden' ? 'sc-on' : ''}" id="disco-mode-hidden" title="Los que ocultaste. Se sincronizan con la playlist «fonoteca · ocultos (descubrir)».">Ocultos (<span id="disco-hidden-n">${hiddenAlbums.size}</span>)</button>
+        <button class="btn btn-secondary btn-sm ${state.mode === 'heard' ? 'sc-on' : ''}" id="disco-mode-heard" title="Los que marcaste como escuchados. Desde ahí podés devolverlos a la lista.">Escuchados <span id="disco-heard-n">${heardAlbums.size}</span></button>
+        <button class="btn btn-secondary btn-sm ${state.mode === 'hidden' ? 'sc-on' : ''}" id="disco-mode-hidden" title="Los que ocultaste. Se sincronizan con la playlist «fonoteca · ocultos (descubrir)».">Ocultos <span id="disco-hidden-n">${hiddenAlbums.size}</span></button>
         <button class="btn btn-secondary btn-sm" id="disco-refresh" title="${state.scannedAt ? 'Último escaneo ' + agoLabel(state.scannedAt) + '. Volver a consultar Spotify.' : 'Volver a consultar Spotify'}">Actualizar</button>
       </div>
     </div>
+    ${renderFiltroChips(state.filtros, state.conteosFiltro)}
     <div class="disco-progress" id="disco-progress" style="display:none">
       <div class="disco-progress-bar"><div class="disco-progress-fill" id="disco-progress-fill" style="width:0%"></div></div>
       <div class="disco-progress-label" id="disco-progress-label"></div>
     </div>
     <div class="disco-list" id="disco-list"></div>
     <div class="disco-load-more" style="text-align:center;margin:20px 0">
-      <button class="btn btn-secondary" id="disco-load-more">Cargar más artistas (+50)</button>
+      <button class="btn btn-secondary" id="disco-load-more">Cargar más artistas +50</button>
     </div>
     <div class="disco-actionbar" id="disco-actionbar" style="display:none">
       <span id="disco-sel-count">0 seleccionados</span>
@@ -254,6 +273,8 @@ function renderShell(content, totalCandidates) {
       <button class="btn btn-primary btn-sm" id="disco-sel-playlist">Crear playlist con lo seleccionado</button>
     </div>
   `;
+
+  wireFiltroChips(content, state.filtros, () => refreshList(content));
 
   content.querySelector('#disco-kind').addEventListener('click', (e) => {
     const btn = e.target.closest('[data-kind]');
@@ -410,6 +431,15 @@ function passesFilter(al) {
   return true;
 }
 
+// Actualiza solo los números de los chips, sin repintar la topbar: repintarla
+// perdería el foco del chip que Ian acaba de tocar.
+function pintarConteosFiltro(conteos) {
+  document.querySelectorAll('#disco-filtros [data-filtro]').forEach(btn => {
+    const n = btn.querySelector('.disco-filtro-n');
+    if (n) n.textContent = (conteos?.[btn.dataset.filtro] ?? 0).toLocaleString('es-ES');
+  });
+}
+
 function refreshList(content) {
   const listEl = document.getElementById('disco-list');
   if (!listEl) return;
@@ -424,10 +454,25 @@ function refreshList(content) {
       .filter(al => !hiddenAlbums.has(cardKey(al, a.name)) && !heardAlbums.has(cardKey(al, a.name)));
   };
 
-  const artists = state.artists
+  // Los cinco filtros solo mandan en el modo normal: en «Ocultos» y
+  // «Escuchados» Ian está revisando lo que descartó a mano, y esconderle ahí la
+  // mitad por un criterio automático sería justo lo contrario de lo que busca.
+  let artists = state.artists
     .filter(a => a.scanned && !a.error)
-    .map(a => ({ ...a, filtered: poolDe(a).filter(passesFilter) }))
-    .filter(a => a.filtered.length > 0);
+    .map(a => ({ ...a, filtered: poolDe(a).filter(passesFilter) }));
+
+  if (state.mode === 'normal' && state.filterCtx) {
+    const items = [];
+    for (const a of artists) {
+      for (const al of a.filtered) items.push({ al, artista: a.name, artistaId: a.id });
+    }
+    const { visibles, conteos } = applyDiscoverFilters(items, state.filterCtx, state.filtros);
+    state.conteosFiltro = conteos;
+    const vivos = new Set(visibles.map(v => v.al));
+    artists = artists.map(a => ({ ...a, filtered: a.filtered.filter(al => vivos.has(al)) }));
+    pintarConteosFiltro(conteos);
+  }
+  artists = artists.filter(a => a.filtered.length > 0);
 
   const totalUnheard = artists.reduce((s, a) => s + a.filtered.length, 0);
   document.getElementById('disco-unheard-count').textContent = totalUnheard.toLocaleString('es-ES');
@@ -601,11 +646,28 @@ async function saveAlbumToLibrary(albumId, artistName, btn) {
   btn.disabled = true;
   btn.textContent = 'Guardando…';
   try {
-    await guardarAlbumEnBiblioteca(albumId);
-    btn.textContent = '✓ Guardado';
-    showToast(`«${al.name}» guardado en tu biblioteca de álbumes`, 'success');
-    // Resuelto: deja de aparecer en la lista, y sigue sin aparecer después de
-    // recargar (el índice en memoria se pierde al recargar).
+    const r = await guardarLanzamiento(al);
+    if (r.destino === 'biblioteca') {
+      btn.textContent = '✓ Guardado';
+      showToast(`«${al.name}» guardado en tu biblioteca de álbumes`, 'success');
+    } else {
+      btn.textContent = '✓ En la playlist';
+      const partes = [];
+      if (r.pistas) partes.push(`${r.pistas} ${r.pistas === 1 ? 'pista' : 'pistas'}`);
+      if (r.yaEstaban) partes.push(`${r.yaEstaban} ya ${r.yaEstaban === 1 ? 'estaba' : 'estaban'}`);
+      showToast(
+        `«${al.name}» es un single: ${partes.join(' · ') || 'sin pistas nuevas'} en «${PLAYLIST_SINGLES}»`,
+        'success',
+      );
+      // La playlist se crea PÚBLICA y no hay forma de evitarlo por API. Se
+      // avisa una sola vez, cuando se acaba de crear.
+      if (r.playlistCreada) {
+        showToast(
+          `Creé la playlist «${PLAYLIST_SINGLES}». Spotify la crea PÚBLICA y no se puede cambiar por API: pasala a privada a mano desde la app.`,
+          'info',
+        );
+      }
+    }
     markAlbumResolved(al, artistName);
     setTimeout(() => {
       const content = document.getElementById('disco-content');
