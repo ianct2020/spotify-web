@@ -16,23 +16,23 @@
 import {
   getAllUserPlaylists, getAllPlaylistItems, getBestAvailableLikes,
   getCurrentUserId, removeLikedTracks,
-} from '../api.js?v=152';
-import { idbGetCached, idbSetCached, idbDel } from '../idb.js?v=152';
-import { createHiddenStore } from '../util/hidden-sync.js?v=152';
-import { addUrisToPlaylists, toastAddResult, getOwnPlaylists } from '../util/playlist-add.js?v=152';
-import { escapeHtml, pageHeader, showProgress, hideProgress, isCancelled, confirmModal } from '../ui/components.js?v=152';
-import { openModal, closeTop } from '../ui/modal-stack.js?v=152';
-import { openPlaylistPicker } from '../ui/playlist-picker.js?v=152';
-import { showToast } from '../ui/toast.js?v=152';
-import { getPreview } from '../api/preview-providers.js?v=152';
-import { togglePreview, playingKey } from '../ui/preview-player.js?v=152';
-import { openTrackCard } from './track-card.js?v=152';
-import { normText } from '../util/track-match.js?v=152';
-import { activateMarquee } from '../ui/marquee.js?v=152';
-import { renderTrackCardRow, wireTrackCardGrid, paintCardSelection, paintPlayingCard } from '../ui/track-card-row.js?v=152';
-import { createIncrementalList, scrollRootOf } from '../ui/incremental-list.js?v=152';
-import { createLazyImages } from '../ui/lazy-img.js?v=152';
-import { coverAtSize } from '../util/cover-size.js?v=152';
+} from '../api.js?v=153';
+import { idbGetCached, idbSetCached, idbDel } from '../idb.js?v=153';
+import { createHiddenStore } from '../util/hidden-sync.js?v=153';
+import { addUrisToPlaylists, toastAddResult, getOwnPlaylists } from '../util/playlist-add.js?v=153';
+import { escapeHtml, pageHeader, showProgress, hideProgress, isCancelled, confirmModal } from '../ui/components.js?v=153';
+import { openModal, closeTop } from '../ui/modal-stack.js?v=153';
+import { openPlaylistPicker } from '../ui/playlist-picker.js?v=153';
+import { showToast } from '../ui/toast.js?v=153';
+import { getPreview } from '../api/preview-providers.js?v=153';
+import { togglePreview, playingKey } from '../ui/preview-player.js?v=153';
+import { openTrackCard } from './track-card.js?v=153';
+import { normText } from '../util/track-match.js?v=153';
+import { activateMarquee } from '../ui/marquee.js?v=153';
+import { renderTrackCardRow, wireTrackCardGrid, paintCardSelection, paintPlayingCard } from '../ui/track-card-row.js?v=153';
+import { createIncrementalList, scrollRootOf } from '../ui/incremental-list.js?v=153';
+import { createLazyImages } from '../ui/lazy-img.js?v=153';
+import { coverAtSize } from '../util/cover-size.js?v=153';
 
 const HIDDEN_KEY = 'sin_clasificar_ocultas';
 const EXCLUDED_KEY = 'sin_clasificar_excluidas';
@@ -366,7 +366,7 @@ async function scanPlaylists(playlists) {
         // El progreso por página no es decorativo: showProgress cierra el pill si
         // pasan 10 s sin novedades, y bajar una playlist grande tarda bastante más.
         const items = await getAllPlaylistItems(pl.id, ({ loaded }) => {
-          progreso(`Escaneando «${pl.name}»… ${loaded.toLocaleString('es-ES')} pistas (${hechas}/${total})`, hechas, total, cancelar);
+          progreso(`Escaneando «${pl.name}»… ${loaded.toLocaleString('es-ES')} pista${loaded === 1 ? '' : 's'} (${hechas}/${total})`, hechas, total, cancelar);
         });
         for (const item of items) {
           const t = item.item || item.track;

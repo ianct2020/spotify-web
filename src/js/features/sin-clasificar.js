@@ -366,7 +366,7 @@ async function scanPlaylists(playlists) {
         // El progreso por página no es decorativo: showProgress cierra el pill si
         // pasan 10 s sin novedades, y bajar una playlist grande tarda bastante más.
         const items = await getAllPlaylistItems(pl.id, ({ loaded }) => {
-          progreso(`Escaneando «${pl.name}»… ${loaded.toLocaleString('es-ES')} pistas (${hechas}/${total})`, hechas, total, cancelar);
+          progreso(`Escaneando «${pl.name}»… ${loaded.toLocaleString('es-ES')} pista${loaded === 1 ? '' : 's'} (${hechas}/${total})`, hechas, total, cancelar);
         });
         for (const item of items) {
           const t = item.item || item.track;

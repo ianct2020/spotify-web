@@ -381,7 +381,7 @@ async function hydrateLikes(overlay, a) {
   const nLiked = matched.filter(t => t.liked).length;
   const total = completo ? matched.length : (a.totalTracks || null);
   const countLine = total
-    ? `${nLiked} de ${total} pistas en tus me gusta`
+    ? `${nLiked} de ${total} pista${total === 1 ? '' : 's'} en tus me gusta`
     : nLiked > 0
       ? `${nLiked} pista${nLiked === 1 ? '' : 's'} en tus me gusta`
       : 'no tienes ninguna en tus me gusta';

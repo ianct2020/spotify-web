@@ -1,8 +1,10 @@
-import { getAllLikedTracks, removeLikedTracks, checkLibraryContains } from '../api.js?v=152';
-import { showProgress, hideProgress, progressController, isCancelled, typeConfirmModal, renderTrackRow, escapeHtml, pageHeader } from '../ui/components.js?v=152';
-import { showToast } from '../ui/toast.js?v=152';
-import { openModal, closeTop } from '../ui/modal-stack.js?v=152';
-import { coverUrl } from '../util/cover-size.js?v=152';
+import { getAllLikedTracks, removeLikedTracks, checkLibraryContains } from '../api.js?v=153';
+import { showProgress, hideProgress, progressController, isCancelled, typeConfirmModal, renderTrackRow, escapeHtml, pageHeader } from '../ui/components.js?v=153';
+import { showToast } from '../ui/toast.js?v=153';
+import { openModal, closeTop } from '../ui/modal-stack.js?v=153';
+import { coverUrl } from '../util/cover-size.js?v=153';
+import { openPlaylistPicker } from '../ui/playlist-picker.js?v=153';
+import { getOwnPlaylists, addUrisToPlaylists, toastAddResult } from '../util/playlist-add.js?v=153';
 
 const keepIds = new Set();
 // Persiste los cluster idx que ya resolviste (batchDelete). Sobrevive a "Ver más"
@@ -18,6 +20,11 @@ function saveDismissed(s) {
   localStorage.setItem(DISMISS_KEY, JSON.stringify([...s]));
 }
 let allClusters = [];
+// Las pistas fantasma (ver `esFantasma`) salen del listado de clusters y van a
+// su propia tarjeta: no son versiones de nada.
+let fantasmas = [];
+// 6.3: el toggle deja trabajar solo sobre lo que falta sin perder lo resuelto.
+let ocultarResueltas = false;
 // Snapshot de metadata por cluster key (para poder mostrar ocultos con tapa aunque
 // hayan salido del listado tras un análisis nuevo).
 const clusterMetaCache = new Map();
@@ -84,6 +91,33 @@ function normalizeKey(track) {
   return `${artist}|||${name}`;
 }
 
+// ── Pistas fantasma: likes sin NINGÚN metadato (v=153) ───────────────────────
+//
+// Seis likes llegan de `/me/tracks` con `name`, `artists[0].name` y
+// `album.name` en cadena vacía, `duration_ms: 0`, `is_playable: false`, sin
+// tapa y con `release_date: "0000"`. La vista los agrupaba como si fueran
+// versiones de una misma canción —todas normalizan a la clave `|||`— y les
+// ponía el badge «mismo álbum», que era doblemente falso: ni son la misma
+// canción ni el álbum significa nada. Marcar una y darle a «Borrar sobrantes»
+// habría borrado cinco likes SIN RELACIÓN entre sí. Por eso salen del listado
+// de clusters y van a su propia tarjeta, sin checkbox y sin borrado.
+//
+// Qué son, verificado en vivo el 2026-08-23:
+//   - la uri es `spotify:track:…` NORMAL, no `spotify:local:…` — o sea que la
+//     API SÍ los acepta en una playlist (de ahí el botón);
+//   - `GET /me/library/contains` devuelve `true` para los seis: están de
+//     verdad en la biblioteca, no es basura del cache;
+//   - el nombre no se puede recuperar por ningún lado: `oEmbed` devuelve
+//     `title: ""`, y `GET /albums/{id}` devuelve un álbum de «Various Artists»
+//     con `name: ""`, `release_date: "0000"`, sin tapa y con sus 14 pistas
+//     igual de vacías. No hay metadato que rescatar, ni acá ni en Spotify.
+//
+// Así que la vista no promete un nombre que no existe: dice qué son y deja
+// mandarlos a una playlist para poder mirarlos desde la app de Spotify.
+function esFantasma(track) {
+  return !(track?.name || '').trim();
+}
+
 // Clave para persistencia de ocultos: sobrevive a re-análisis porque no depende
 // del idx dinámico ni de la duración.
 function clusterKey(cluster) {
@@ -135,9 +169,15 @@ async function analyze(force = false) {
     }, { force, signal: prog.signal });
     prog.done();
 
+    // Los fantasmas se apartan ANTES de agrupar: si entran al Map todos caen en
+    // la misma clave (`|||`) y salen como un cluster de versiones que no son.
+    fantasmas = likes.filter(item => item.track?.id && esFantasma(item.track));
+    const fantasmaIds = new Set(fantasmas.map(item => item.track.id));
+
     const groups = new Map();
     likes.forEach(item => {
       if (!item.track?.id) return;
+      if (fantasmaIds.has(item.track.id)) return;
       const key = normalizeKey(item.track);
       if (!groups.has(key)) groups.set(key, []);
       groups.get(key).push(item);
@@ -174,7 +214,9 @@ async function analyze(force = false) {
             <span>No se encontraron versiones duplicadas en tus likes${dismissed.size ? ` (${dismissed.size} oculto${dismissed.size === 1 ? '' : 's'})` : ''}.</span>
           </div>
         </div>
+        ${renderFantasmas()}
       `;
+      bindFantasmas();
       return;
     }
 
@@ -197,17 +239,31 @@ async function analyze(force = false) {
           <div><strong id="batch-keep-count">0</strong> versión(es) marcada(s) para quedarse</div>
           <div style="font-size:12px;color:var(--color-text-secondary)"><strong id="batch-delete-count">0</strong> sobrante(s) van a borrarse</div>
         </div>
-        <div style="display:flex;gap:8px">
+        <div style="display:flex;gap:8px;align-items:center">
+          <label id="versions-hide-resolved-wrap" class="versions-filter" hidden>
+            <input type="checkbox" id="versions-hide-resolved">
+            <span>Ocultar las ya resueltas <span id="versions-resolved-count"></span></span>
+          </label>
           <button class="btn btn-secondary btn-sm" id="batch-clear-btn" disabled>Limpiar</button>
           <button class="btn btn-danger" id="batch-delete-btn" disabled>Borrar sobrantes</button>
         </div>
       </div>
 
+      ${renderFantasmas()}
+
       <div id="versions-clusters" class="versions-grid"></div>
     `;
 
+    bindFantasmas();
     shownCount = SHOWN_STEP;
+    ocultarResueltas = false;
     renderClusterList();
+
+    const toggle = document.getElementById('versions-hide-resolved');
+    if (toggle) toggle.onchange = () => {
+      ocultarResueltas = toggle.checked;
+      renderClusterList();
+    };
 
     document.getElementById('batch-clear-btn').onclick = () => {
       keepIds.clear();
@@ -233,12 +289,20 @@ async function analyze(force = false) {
 function renderClusterList() {
   const holder = document.getElementById('versions-clusters');
   if (!holder) return;
-  const shown = allClusters.slice(0, shownCount);
-  const rest = allClusters.length - shown.length;
+  // El idx que viaja al DOM es la posición REAL en allClusters: `computeRemovals`
+  // y el ✕ de ocultar lo usan para indexar el array. Con el filtro de resueltas
+  // encendido la posición visible ya no coincide, así que se lleva en el par.
+  const visibles = allClusters
+    .map((cluster, idx) => ({ cluster, idx }))
+    .filter(({ idx }) => !(ocultarResueltas && resolvedClusterIdxs.has(idx)));
+  const shown = visibles.slice(0, shownCount);
+  const rest = visibles.length - shown.length;
   holder.innerHTML = `
-    ${shown.map((cluster, idx) => renderCluster(cluster, idx)).join('')}
+    ${shown.map(({ cluster, idx }) => renderCluster(cluster, idx)).join('')}
     ${rest > 0 ? `<div class="versions-more-wrap"><button class="btn btn-secondary" id="versions-more-btn">Ver ${Math.min(SHOWN_STEP, rest)} grupos más (${rest} restantes)</button></div>` : ''}
+    ${visibles.length === 0 ? `<div class="versions-more-wrap" style="color:var(--color-text-muted)">Resolviste los ${allClusters.length} grupos. Desmarcá el filtro para volver a verlos.</div>` : ''}
   `;
+  updateResolvedFilter();
   holder.querySelectorAll('.keep-check').forEach(box => {
     box.addEventListener('change', () => {
       if (box.checked) keepIds.add(box.dataset.trackId);
@@ -258,6 +322,12 @@ function renderClusterList() {
       // Saco de la lista in-place y re-render sin re-analizar todo.
       cluster.forEach(item => keepIds.delete(item.track.id));
       allClusters.splice(idx, 1);
+      // El splice corre una posición a todos los de la derecha: sin remapear,
+      // «resuelto» se le pegaba al cluster de al lado (y el filtro de 6.3
+      // escondía el equivocado).
+      const remapeados = [...resolvedClusterIdxs].map(i => (i > idx ? i - 1 : i));
+      resolvedClusterIdxs.clear();
+      remapeados.forEach(i => resolvedClusterIdxs.add(i));
       renderClusterList();
       updateBatchBar();
       updateHiddenCount();
@@ -266,6 +336,93 @@ function renderClusterList() {
   });
   const moreBtn = document.getElementById('versions-more-btn');
   if (moreBtn) moreBtn.onclick = () => { shownCount += SHOWN_STEP; renderClusterList(); };
+}
+
+// Muestra el toggle solo cuando hay algo que ocultar, y le pone el número al lado.
+function updateResolvedFilter() {
+  const wrap = document.getElementById('versions-hide-resolved-wrap');
+  if (!wrap) return;
+  const n = [...resolvedClusterIdxs].filter(i => i < allClusters.length).length;
+  wrap.hidden = n === 0;
+  const label = document.getElementById('versions-resolved-count');
+  if (label) label.textContent = `(${n})`;
+}
+
+// ── Tarjeta de pistas fantasma ───────────────────────────────────────────────
+// Sin checkbox y sin borrado: ver el comentario de `esFantasma`.
+function renderFantasmas() {
+  if (!fantasmas.length) return '';
+  const n = fantasmas.length;
+  return `
+    <div class="card" id="versions-ghosts" style="margin-bottom:16px">
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:6px">
+        <h3 style="margin:0">${n} pista${n === 1 ? '' : 's'} sin metadatos</h3>
+        <span class="badge badge-secondary">no son versiones duplicadas</span>
+      </div>
+      <p style="color:var(--color-text-secondary);font-size:13px;margin-bottom:12px">
+        Están en tus me gusta y Spotify las reconoce, pero devuelve el título, el artista
+        y el álbum vacíos: no hay nombre que mostrar, ni acá ni en la propia Spotify.
+        No tienen relación entre sí, así que no se pueden borrar como sobrantes desde acá.
+        Mandalas a una playlist para poder verlas desde la app de Spotify, o quitalas de tus
+        me gusta una por una desde ahí.
+      </p>
+      <div class="results-list" style="margin-bottom:12px">
+        ${fantasmas.map(item => {
+          const t = item.track;
+          const alta = (item.added_at || '').slice(0, 10);
+          return `
+            <div style="display:flex;align-items:center;gap:10px;padding:9px 4px;border-bottom:1px solid var(--color-border)">
+              <div style="width:44px;height:44px;border-radius:var(--radius-sm);background:var(--color-elevated);display:flex;align-items:center;justify-content:center;color:var(--color-text-muted);font-size:18px;flex-shrink:0">?</div>
+              <div style="flex:1;min-width:0">
+                <div style="font-size:14px">Pista sin metadatos</div>
+                <div style="font-size:12px;color:var(--color-text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">
+                  ${escapeHtml(t.id)}${alta ? ` · en tus me gusta desde el ${escapeHtml(alta)}` : ''}
+                </div>
+              </div>
+              <a class="btn btn-secondary btn-sm" style="flex-shrink:0" target="_blank" rel="noopener"
+                 href="https://open.spotify.com/track/${encodeURIComponent(t.id)}">Abrir en Spotify</a>
+            </div>`;
+        }).join('')}
+      </div>
+      <button class="btn btn-secondary" id="versions-ghosts-playlist">Mandar ${n === 1 ? 'la pista' : `las ${n}`} a una playlist…</button>
+    </div>
+  `;
+}
+
+function bindFantasmas() {
+  const btn = document.getElementById('versions-ghosts-playlist');
+  if (btn) btn.onclick = () => mandarFantasmasAPlaylist(btn);
+}
+
+// Reusa el picker y el `addUrisToPlaylists` compartidos, igual que
+// #sin-clasificar y #new-releases: chequeo de duplicados y parcheo del cache
+// incluidos. La uri es `spotify:track:…` normal, así que la API las acepta.
+async function mandarFantasmasAPlaylist(btn) {
+  const uris = fantasmas.map(item => item.track?.uri).filter(Boolean);
+  if (!uris.length) return;
+  btn.disabled = true;
+  try {
+    const playlists = await getOwnPlaylists();
+    const n = uris.length;
+    openPlaylistPicker({
+      id: 'versions-ghosts-pl',
+      title: 'Mandar las pistas sin metadatos a playlists',
+      subtitle: `${n} pista${n === 1 ? '' : 's'} sin título ni artista`,
+      playlists,
+      onReload: () => getOwnPlaylists({ force: true }),
+      onConfirm: async (elegidas, { setStatus } = {}) => {
+        const res = await addUrisToPlaylists(uris, elegidas, { onStatus: setStatus });
+        toastAddResult(res, {
+          what: `${n} pista${n === 1 ? '' : 's'} sin metadatos`,
+          plural: n !== 1,
+        });
+      },
+    });
+  } catch (e) {
+    showToast('No se pudieron cargar tus playlists: ' + e.message, 'error');
+  } finally {
+    btn.disabled = false;
+  }
 }
 
 function updateSummaryCounts() {

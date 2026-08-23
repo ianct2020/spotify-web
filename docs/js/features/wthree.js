@@ -2,21 +2,21 @@
 // por álbum). Muestra qué álbumes ya tienen picks, cuántos, y cuáles te faltan.
 // Ordenado por álbumes más escuchados primero para priorizar tu tiempo.
 
-import { spotifyFetch, getAllPlaylistItems, getAllUserPlaylists, addTracksToPlaylist, removeTracksFromPlaylist, reorderPlaylistItems, getCachedPlaylistItems, updatePlaylistItemsCache, getBestAvailableLikes } from '../api.js?v=152';
-import { patchPlaylistItems, buildCachedItem } from '../util/playlist-cache-patch.js?v=152';
-import { loadHistoryStats, loadListenedAlbums, isOwner, ownerLockedMessage } from './history-data.js?v=152';
-import { escapeHtml, pageHeader } from '../ui/components.js?v=152';
-import { showToast } from '../ui/toast.js?v=152';
-import { activateMarquee, marqueeSpan } from '../ui/marquee.js?v=152';
-import { openModal, closeById, closeModal } from '../ui/modal-stack.js?v=152';
-import { getPreview } from '../api/preview-providers.js?v=152';
-import { togglePreview, playingKey } from '../ui/preview-player.js?v=152';
-import { openAlbumCard } from './album-card.js?v=152';
-import { albumKey } from '../util/album-key.js?v=152';
-import { computeUpdatedPickPositions } from '../util/reorder-shifts.js?v=152';
-import { createHiddenStore } from '../util/hidden-sync.js?v=152';
-import { mountBottom } from '../ui/bottom-layer.js?v=152';
-import { coverUrl } from '../util/cover-size.js?v=152';
+import { spotifyFetch, getAllPlaylistItems, getAllUserPlaylists, addTracksToPlaylist, removeTracksFromPlaylist, reorderPlaylistItems, getCachedPlaylistItems, updatePlaylistItemsCache, getBestAvailableLikes } from '../api.js?v=153';
+import { patchPlaylistItems, buildCachedItem } from '../util/playlist-cache-patch.js?v=153';
+import { loadHistoryStats, loadListenedAlbums, isOwner, ownerLockedMessage } from './history-data.js?v=153';
+import { escapeHtml, pageHeader } from '../ui/components.js?v=153';
+import { showToast } from '../ui/toast.js?v=153';
+import { activateMarquee, marqueeSpan } from '../ui/marquee.js?v=153';
+import { openModal, closeById, closeModal } from '../ui/modal-stack.js?v=153';
+import { getPreview } from '../api/preview-providers.js?v=153';
+import { togglePreview, playingKey } from '../ui/preview-player.js?v=153';
+import { openAlbumCard } from './album-card.js?v=153';
+import { albumKey } from '../util/album-key.js?v=153';
+import { computeUpdatedPickPositions } from '../util/reorder-shifts.js?v=153';
+import { createHiddenStore } from '../util/hidden-sync.js?v=153';
+import { mountBottom } from '../ui/bottom-layer.js?v=153';
+import { coverUrl } from '../util/cover-size.js?v=153';
 
 const LS_KEY_ID = 'wthree_playlist_id';
 const LS_KEY_NAME = 'wthree_playlist_name';
@@ -728,7 +728,7 @@ async function openAlbumModal(a) {
   const origOrder = [...a.picks].sort((x, y) => (x.pos ?? 0) - (y.pos ?? 0));
   let orderedPicks = origOrder.map(p => ({ id: p.id, uri: p.uri, name: p.name }));
 
-  metaEl.textContent = `${tracks.length} pistas · ${a.picks.length} en w-three${likedCount ? ` · ♥ ${likedCount} en me gusta` : ''}${suggestions.length ? ` · 💡 ${suggestions.length} sugerido${suggestions.length === 1 ? '' : 's'}` : ''}`;
+  metaEl.textContent = `${tracks.length} pista${tracks.length === 1 ? '' : 's'} · ${a.picks.length} en w-three${likedCount ? ` · ♥ ${likedCount} en me gusta` : ''}${suggestions.length ? ` · 💡 ${suggestions.length} sugerido${suggestions.length === 1 ? '' : 's'}` : ''}`;
 
   // Tracklist en 2 columnas cuando hay ≥6 pistas (con <6 no vale la pena).
   // grid-auto-flow: column necesita saber cuántas filas por columna → ceil(N/2).
@@ -887,7 +887,7 @@ async function openAlbumModal(a) {
 
   // Toggle checkbox → actualizar orderedPicks + meta.
   const updateMeta = () => {
-    metaEl.textContent = `${tracks.length} pistas · ${orderedPicks.length} en w-three${suggestions.length ? ` · 💡 ${suggestions.length} sugerido${suggestions.length === 1 ? '' : 's'}` : ''}`;
+    metaEl.textContent = `${tracks.length} pista${tracks.length === 1 ? '' : 's'} · ${orderedPicks.length} en w-three${suggestions.length ? ` · 💡 ${suggestions.length} sugerido${suggestions.length === 1 ? '' : 's'}` : ''}`;
   };
   body.querySelectorAll('.wthree-track-check').forEach(cb => {
     cb.addEventListener('change', () => {
