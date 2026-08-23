@@ -1615,17 +1615,26 @@ button.sin-preview {
    es SU camino, no el caso raro: si acá pusiéramos `animation: none` no vería
    ningún esqueleto moverse nunca.
 
-   Atenuado = mismo recorrido, cuatro veces más lento y con el brillo mucho más
-   cerca del gris de fondo. Se percibe como una respiración, no como un barrido. */
+   Atenuado = EL MISMO recorrido (el mismo keyframe, el mismo
+   `background-position`), cuatro veces más lento y con el brillo mucho más
+   cerca del gris de fondo: se percibe como una respiración, no como un barrido.
+
+   ⚠️ Y tiene que ser el `background-position` sí o sí. El primer intento fue un
+   keyframe aparte que animaba `background-color`, y no se veía NADA: el
+   `background-image` de arriba mide el 200 % del ancho y `no-repeat`, así que
+   tapa el color de fondo entero. Atenuar por color acá es lo mismo que apagar,
+   solo que sin darse cuenta. Lo que se atenúa es el GRADIENTE. */
 @media (prefers-reduced-motion: reduce) {
   .skel {
-    animation-name: skelShimmerSuave;
+    background-image: linear-gradient(
+      100deg,
+      var(--color-elevated) 0%,
+      var(--color-elevated) 40%,
+      var(--color-surface-hover) 50%,
+      var(--color-elevated) 60%,
+      var(--color-elevated) 100%);
     animation-duration: 6.4s;
   }
-}
-@keyframes skelShimmerSuave {
-  0%, 100% { background-color: var(--color-elevated); }
-  50%      { background-color: var(--color-surface-hover); }
 }
 
 /* Filas de pista: misma silueta que .album-modal-like-row */
