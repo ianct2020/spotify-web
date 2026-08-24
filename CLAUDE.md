@@ -127,8 +127,15 @@ string a mano (`fmtDayShort`) y nunca construye un `Date`.
   a local es lo correcto (es lo que hacen `first_play` / `last_play`).
 
 `wrapped.js` distingue las dos formas con `SOLO_FECHA = /^\d{4}-\d{2}-\d{2}$/`.
-Quedan sin revisar con este criterio: `sin-clasificar.js:551`,
-`artist-card.js:462`, `zero-plays.js:108`, `search-likes.js:36`.
+
+**Los cuatro sitios que quedaban señalados NO tenían el bug** (revisados en
+v=157): `sin-clasificar.js`, `artist-card.js`, `zero-plays.js` y
+`search-likes.js` formateaban `added_at` de los likes, que es un **INSTANTE**
+(`"2024-05-01T12:33:00Z"`), y para un instante `new Date(iso)` + hora local es
+justamente lo correcto. Lo que sí estaba mal era menor: dos usaban `es-AR` y dos
+`es-ES` para la misma fecha. Los cuatro pasaron igual al helper compartido
+`util/fecha.js` (`fmtDia` / `fmtDiaCorto`), que aplica el criterio de Wrapped a
+las dos formas — así el próximo llamador no tiene que acordarse de la regla.
 
 ## `stats.totals` NO trae first_play ni last_play
 `gen-stats.py` las emite **solo por año**. `totals` tiene `plays_valid`,
@@ -210,6 +217,91 @@ DENTRO del handler de Home, así que con una sola pasada Home no marcaba nada.
 coincidían (`discoverartists` contra `#discover-artists`, `newreleases` contra
 `#new-releases`) y esos dos links no se marcaban nunca. Si agregás una ruta,
 copiá el hash tal cual.
+
+## La primera escucha sale del pipeline, no del JSON de álbumes (v=157)
+Las fichas de artista y de álbum muestran «primera vez» con la fecha entera. El
+dato **no existía**: `gen-stats.py` emitía solo el AÑO (`artist_first_year`), y
+la `date` de `history-listened-albums.json` es el primer día que el álbum cumplió
+el umbral de «escuchado» (4 pistas o 25 min el mismo día), que es otra cosa.
+
+Ahora el pipeline emite el día de la primera play **válida (≥30 s)**:
+- `history-artist-tracks` **v2**: `totals[artista]` pasa de 5 a **6** campos, el
+  último es `"YYYY-MM-DD"`.
+- `history-track-plays` **v5**: cada entrada de `albums` pasa de 4 a **5** campos,
+  el quinto es `"YYYY-MM-DD"`.
+Los dos son **append**, así que un lector viejo que desestructure los primeros
+campos sigue andando. `history-processor.js` (el import BYOH) hace lo mismo.
+Las dos `OWNER_PREV_KEYS` van **vacías**: reciclar el JSON anterior dejaría la
+ficha sin fecha y sin fallar, o sea en silencio.
+
+⚠️ **La fecha del álbum se resuelve por `coverId()`, no por `albumKey()`.** Es el
+mismo motivo que los plays de v=140: el export parte los discos colaborativos en
+varias claves y cada una tiene SU primera vez. VULTURES 1 da **10 feb 2024** como
+«Kanye West» y **16 feb 2024** como «¥$». `lookupAlbumStats` devuelve el
+**mínimo** de las claves que comparten tapa — verificado en producción: la ficha
+dice 10 feb 2024.
+
+**No se muestra «última vez» en las fichas de artista/álbum, a propósito**: el
+export termina en julio, así que la última escucha registrada no es la última de
+verdad. La ficha de canción sí la muestra, pero ahí el par primera/última se lee
+como el rango del historial y estaba desde antes.
+
+## «Sus álbumes» de la ficha de artista (v=157)
+`util/artist-albums.js`. La lista sale del historial (`history-track-plays.json`,
+campo `albums`), **no de `/artists/{id}/albums`**: ese pagina de a 10
+post-migración, cuesta una ristra de requests por ficha y trae discos que nunca
+sonaron.
+
+Las tapas salen de dos fuentes locales, las dos ya descargadas:
+`history-listened-albums.json` primero y, si falta, el **cache de likes**
+(`album.images`). La segunda no es un lujo: la primera solo cubre los discos que
+alguna vez cumplieron el umbral de «escuchado», y **los singles no lo cumplen
+nunca** — 2 de los 7 álbumes de «¥$» salían con el placeholder ♪.
+
+⚠️ El truco del layout: la columna es `position:absolute` dentro de su celda del
+grid (`.ac-albums` relativa, `.ac-albums-inner` con `inset: 0`). Si estuviera en
+el flujo normal, sus 26 tapas definirían la altura de la fila y el modal se iría
+a 85vh **siempre**. Así la altura la fija la columna izquierda y la lista
+scrollea adentro. Medido en producción con Kanye West: columna 375 px, contenido
+3.774 px. Abajo de 900px el mismo markup pasa a horizontal (`flex-direction: row`
++ `overflow-x: auto`), verificado en un viewport de 696 px.
+
+## Paleta de colores (v=157)
+`ui/theme-panel.js` + el botón «Paleta» del footer del sidebar. Escribe las
+variables de `theme.css` **inline en `:root`** (le gana a la hoja) y las guarda en
+`localStorage['fonoteca_theme_v1']`. `applyStoredTheme()` se llama en `app.js`
+ANTES de armar nada: si se llamara después del primer render, el tema elegido
+entraría como un flash de la paleta vieja.
+
+Se eligen **8** colores; el resto se **deriva**, y ahí está lo que importa:
+- `--color-accent-hover/soft/tint/glow` salen del acento. Dejarlas fijas
+  significa un tema ámbar con el halo violeta de las tarjetas seleccionadas
+  (`--color-accent-tint` se usa en 15 sitios).
+- `--color-surface-hover` se mezcla hacia el **texto**, no hacia el blanco: en un
+  tema claro «más claro» no se ve y el hover desaparecía.
+
+**El tema claro se probó en producción** (preset «Papel»): Dashboard con los
+cinco charts, Récords, Wrapped, buscador, sidebar, modales y las tres fichas.
+Los `box-shadow` y los backdrops son negros con alpha y sobre claro quedan bien.
+Lo que NO acompaña al tema, y sigue legible igual: los ticks de los charts
+(`#8888A0` hardcodeado en `dashboard.js` y en las fichas) y el tooltip del
+mosaico (`rgba(20,20,28,.95)` con texto blanco, que trae su propio fondo).
+
+## PENDIENTES anotados en v=157
+- **La clave del tema no tiene prefijo por usuario.** `fonoteca_theme_v1` es
+  global, así que dos personas en el mismo browser comparten paleta. Hoy **no
+  existe** ningún helper de prefijo por user en la app (el guard de v=86 invalida
+  caches de IDB por user id, pero las prefs viven en claves globales de
+  localStorage). Cuando se haga el prefijo, esta clave entra con las demás.
+- **Borrar los cuatro .txt gitignoreados de la raíz del repo**
+  (`RESUMEN-MAESTRO.txt`, `FONOTECA-funciones-y-pendientes.txt`,
+  `FONOTECA-PROMPT-PARA-OTRA-IA.txt`, `NEXT-PROMPT.txt`). Pedido de Ian en la
+  tanda 8. ⚠️ Antes de borrarlos hay que decidir dónde vive la doc: hoy esos
+  cuatro **son** la doc que se actualiza cada tanda (dicen «v=156 desplegado»,
+  los actualizaron las tandas 6 y 7) y `FONOTECA-funciones-y-pendientes.txt` es
+  el único inventario de funciones, bugs abiertos y pendientes que hay. Si se
+  borran sin reemplazo, lo único que queda es este CLAUDE.md.
+- **#covers congela el renderer** con 2.449 tapas (viene de la tanda 7).
 
 ## Client ID
 0c8c92ad128e4b89be7097c6b8082797
