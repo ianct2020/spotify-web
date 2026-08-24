@@ -16,22 +16,22 @@
 // Preview 30s instantáneo vía iTunes (arranca en el estribillo, no suma plays
 // en tu historial de Spotify). Fallback: iframe embed oficial si iTunes no lo tiene.
 
-import { getBestAvailableLikes, removeLikedTracks } from '../api.js?v=156';
-import { loadSkipStats, trackIdOf, isOwner, ownerLockedMessage } from './history-data.js?v=156';
-import { escapeHtml, confirmModal, pageHeader } from '../ui/components.js?v=156';
-import { showToast } from '../ui/toast.js?v=156';
-import { getPreview } from '../api/preview-providers.js?v=156';
-import { togglePreview, playingKey } from '../ui/preview-player.js?v=156';
-import { openTrackCard } from './track-card.js?v=156';
-import { firstArtistName, artistNames } from '../util/artist-name.js?v=156';
-import { activateMarquee } from '../ui/marquee.js?v=156';
-import { hasUsername, loadTopLifetime } from '../api/statsfm.js?v=156';
-import { createHiddenStore } from '../util/hidden-sync.js?v=156';
-import { createIncrementalList, scrollRootOf } from '../ui/incremental-list.js?v=156';
-import { createLazyImages } from '../ui/lazy-img.js?v=156';
-import { renderTrackCardRow, wireTrackCardGrid, paintCardSelection, paintPlayingCard, paintEmbedCard } from '../ui/track-card-row.js?v=156';
-import { coverAtSize } from '../util/cover-size.js?v=156';
-import { coverUrl } from '../util/cover-size.js?v=156';
+import { getBestAvailableLikes, removeLikedTracks } from '../api.js?v=157';
+import { loadSkipStats, trackIdOf, isOwner, ownerLockedMessage } from './history-data.js?v=157';
+import { escapeHtml, confirmModal, pageHeader } from '../ui/components.js?v=157';
+import { showToast } from '../ui/toast.js?v=157';
+import { getPreview } from '../api/preview-providers.js?v=157';
+import { togglePreview, playingKey } from '../ui/preview-player.js?v=157';
+import { openTrackCard } from './track-card.js?v=157';
+import { firstArtistName, artistNames } from '../util/artist-name.js?v=157';
+import { activateMarquee } from '../ui/marquee.js?v=157';
+import { hasUsername, loadTopLifetime } from '../api/statsfm.js?v=157';
+import { createHiddenStore } from '../util/hidden-sync.js?v=157';
+import { createIncrementalList, scrollRootOf } from '../ui/incremental-list.js?v=157';
+import { createLazyImages } from '../ui/lazy-img.js?v=157';
+import { renderTrackCardRow, wireTrackCardGrid, paintCardSelection, paintPlayingCard, paintEmbedCard } from '../ui/track-card-row.js?v=157';
+import { coverAtSize } from '../util/cover-size.js?v=157';
+import { coverUrl } from '../util/cover-size.js?v=157';
 
 let cache = null;
 // Filas visibles con los filtros actuales, en el mismo orden que las tarjetas

@@ -24,14 +24,16 @@
 // álbum. Eso fusiona American Football LP3/LP4, Crystal Castles I/II y Ed
 // Sheeran `-` vs `÷`. Está decidido desde v=127.
 
-import { albumKey, coverId } from './album-key.js?v=156';
-import { loadTrackPlays, loadListenedAlbums } from '../features/history-data.js?v=156';
+import { albumKey, coverId } from './album-key.js?v=157';
+import { loadTrackPlays, loadListenedAlbums } from '../features/history-data.js?v=157';
 
 let cache = null;
 let porTapa = null;
 
 /**
- * @returns {Promise<Map<string, {plays: number, ms: number}>>} albumKey → totales.
+ * @returns {Promise<Map<string, {plays: number, ms: number, first: string|null}>>}
+ *   albumKey → totales. `first` es el DÍA («YYYY-MM-DD») de la primera play
+ *   válida, o null con JSONs anteriores a v5.
  *   Vacío si no hay historial (usuario sin owner ni BYOH) o si el JSON es v3.
  */
 export async function buildAlbumStatsIndex({ force = false } = {}) {
@@ -43,12 +45,17 @@ export async function buildAlbumStatsIndex({ force = false } = {}) {
     for (const entry of (data?.albums || [])) {
       // v3 emitía [name, artist] a secas: ahí no hay números que dar y el
       // índice queda vacío, que es exactamente el caso "sin datos".
-      const [name, artist, plays, ms] = entry;
+      const [name, artist, plays, ms, first] = entry;
       if (plays == null || ms == null) continue;
       const k = albumKey(name, artist);
       const prev = idx.get(k);
-      if (prev) { prev.plays += plays; prev.ms += ms; }
-      else idx.set(k, { plays, ms });
+      if (prev) {
+        prev.plays += plays;
+        prev.ms += ms;
+        // Dos entradas crudas pueden caer en la misma clave normalizada: la
+        // primera vez del álbum es la MENOR de las dos, no la última leída.
+        if (first && (!prev.first || first < prev.first)) prev.first = first;
+      } else idx.set(k, { plays, ms, first: first || null });
     }
   } catch (e) {
     console.warn('[album-stats] no pude cargar el historial:', e.message);
@@ -109,8 +116,13 @@ async function buildPorTapa() {
           prev.claves.add(albumKey(al.name, al.artist));
           prev.plays += t.plays;
           prev.ms += t.ms;
+          // La «primera vez» del disco es la más VIEJA de sus claves. Sin este
+          // mínimo, VULTURES 1 contestaba 16 feb 2024 («¥$») o 10 feb 2024
+          // («Kanye West») según por dónde entrara: es el mismo disco y la
+          // fecha de verdad es la primera de las dos.
+          if (t.first && (!prev.first || t.first < prev.first)) prev.first = t.first;
         } else {
-          idx.set(cid, { plays: t.plays, ms: t.ms, claves: new Set([albumKey(al.name, al.artist)]) });
+          idx.set(cid, { plays: t.plays, ms: t.ms, first: t.first || null, claves: new Set([albumKey(al.name, al.artist)]) });
         }
       }
     }
@@ -128,17 +140,18 @@ async function buildPorTapa() {
  * conocida, cae a `albumKey()`.
  *
  * @param {{name?: string, artist?: string, img?: string}} a
- * @returns {Promise<{plays: number, min: number}>} ceros si no hay historial.
+ * @returns {Promise<{plays: number, min: number, first: string|null}>} ceros y
+ *   `first: null` si no hay historial.
  */
 export async function lookupAlbumStats(a) {
-  if (!a?.name) return { plays: 0, min: 0 };
+  if (!a?.name) return { plays: 0, min: 0, first: null };
   const tapas = await buildPorTapa();
 
   // 1. Por la tapa que trajo el llamador.
   const cid = coverId(a.img);
   if (cid) {
     const hit = tapas.get(cid);
-    if (hit) return { plays: hit.plays, min: hit.ms / 60000 };
+    if (hit) return { plays: hit.plays, min: hit.ms / 60000, first: hit.first || null };
   }
 
   // 2. Por la clave, pero VOLVIENDO a entrar por la tapa: así se suman las
@@ -148,12 +161,14 @@ export async function lookupAlbumStats(a) {
   const cidDeLaClave = porClave?.get(k);
   if (cidDeLaClave) {
     const hit = tapas.get(cidDeLaClave);
-    if (hit) return { plays: hit.plays, min: hit.ms / 60000 };
+    if (hit) return { plays: hit.plays, min: hit.ms / 60000, first: hit.first || null };
   }
 
   // 3. Sin tapa conocida en ninguna de las dos puntas: la clave a secas.
   const hit = (await buildAlbumStatsIndex()).get(k);
-  return hit ? { plays: hit.plays, min: hit.ms / 60000 } : { plays: 0, min: 0 };
+  return hit
+    ? { plays: hit.plays, min: hit.ms / 60000, first: hit.first || null }
+    : { plays: 0, min: 0, first: null };
 }
 
 export function invalidateAlbumStatsIndex() { cache = null; porTapa = null; porClave = null; }

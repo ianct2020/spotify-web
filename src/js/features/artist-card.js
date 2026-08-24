@@ -14,6 +14,9 @@ import { firstArtistName, artistNames, resolveArtistName, looksLikeArtistChain }
 import { coverUrl } from '../util/cover-size.js';
 import { getArtistLikePreview } from '../util/artist-preview.js';
 import { skelCardBody, skelTrackRows, skelBox } from '../ui/skeleton.js';
+import { fmtDia, fmtDiaCorto } from '../util/fecha.js';
+import { albumsDeArtista } from '../util/artist-albums.js';
+import { openAlbumCard } from './album-card.js';
 
 // Cache de imágenes de artistas resueltas por Spotify search. TTL 30 días.
 // Se persiste el hit y la falta (null) para no reintentar contra tracks
@@ -175,7 +178,7 @@ async function openArtistCard(entrada) {
     onClose: onModalClose,
     onReveal: onModalReveal,
     html: `
-    <div class="modal card-modal ac-modal" style="max-width:720px;width:min(720px,94vw)">
+    <div class="modal card-modal ac-modal" style="max-width:820px;width:min(820px,94vw)">
       <div class="ac-head">
         <div id="ac-avatar" class="ac-avatar" style="background:var(--color-accent-soft);color:var(--color-accent);font-weight:700">${avatarInner}</div>
         <div class="ac-title">
@@ -228,6 +231,10 @@ async function openArtistCard(entrada) {
   const yearsWithArtist = [];
   const trackAcum = new Map();  // key = nombre → { name, min, plays }
   let firstYear = null, lastYear = null;
+  // Día exacto de la primera play válida (v=157). Sale del 6º campo de
+  // `totals` de history-artist-tracks v2; con un JSON viejo queda null y el
+  // tile vuelve a mostrar el año a secas.
+  let firstDay = null;
   let totalMin = 0, totalPlays = 0;
   for (const y of stats.years) {
     const ta = (y.top_artists || []).find(x => x.name === a.name);
@@ -272,11 +279,12 @@ async function openArtistCard(entrada) {
   // Totales del índice: mandan sobre los tops, que recortan a 40/60 artistas.
   const histTotals = histKey ? artistTracks.totals?.[histKey] : null;
   if (histTotals) {
-    const [hPlays, hMin, hFirst, hLast, hCurve] = histTotals;
+    const [hPlays, hMin, hFirst, hLast, hCurve, hFirstDay] = histTotals;
     totalPlays = hPlays || totalPlays;
     totalMin = hMin || totalMin;
     firstYear = hFirst || firstYear;
     lastYear = hLast || lastYear;
+    firstDay = hFirstDay || firstDay;
     // La curva del índice cubre TODOS los años del artista. La que se armó
     // arriba con los tops anuales se queda en cero para cualquiera que no
     // entre en el top 40 de su año, y dejaba la ficha sin gráfico.
@@ -315,10 +323,12 @@ async function openArtistCard(entrada) {
 
   const hasChart = yearsWithArtist.some(y => y.min > 0);
   body.innerHTML = `
+    <div class="ac-layout">
+    <div class="ac-main">
     <div class="tc-stats ac-stats">
       <div class="tc-stat"><div class="tc-stat-v">${fmtMinutes(totalMin)}</div><div class="tc-stat-l">minutos totales</div></div>
       <div class="tc-stat"><div class="tc-stat-v">${totalPlays.toLocaleString('es-AR')}</div><div class="tc-stat-l">plays</div></div>
-      <div class="tc-stat"><div class="tc-stat-v">${firstYear || '—'}</div><div class="tc-stat-l">primer año</div></div>
+      <div class="tc-stat" title="${firstDay ? 'El primer día que lo escuchaste al menos 30 segundos' : ''}"><div class="tc-stat-v${firstDay ? ' tc-stat-v-fecha' : ''}">${firstDay ? escapeHtml(fmtDia(firstDay)) : (firstYear || '—')}</div><div class="tc-stat-l">${firstDay ? 'primera vez' : 'primer año'}</div></div>
       <div class="tc-stat"><div class="tc-stat-v">${lastYear || '—'}</div><div class="tc-stat-l">último año</div></div>
     </div>
     <div class="ac-cols">
@@ -344,7 +354,20 @@ async function openArtistCard(entrada) {
       </div>
     </div>
     <div id="ac-statsfm"></div>
+    </div>
+    <aside class="ac-albums" id="ac-albums" hidden>
+      <div class="ac-albums-inner">
+        <div class="ac-col-title ac-albums-title">Sus álbumes</div>
+        <div class="ac-albums-scroll" id="ac-albums-scroll"></div>
+      </div>
+    </aside>
+    </div>
   `;
+
+  // Columna de álbumes escuchados (v=157). Va después del innerHTML y sin
+  // await: la ficha ya está pintada y esto solo rellena la columna, que nace
+  // `hidden` para no dejar un hueco si el artista no tiene ninguno.
+  fillAlbumes(overlay, a.name);
 
   // Click en un top track → ficha de canción
   body.querySelectorAll('.wrapped-top-row').forEach(el => {
@@ -393,6 +416,49 @@ async function openArtistCard(entrada) {
 
   // Stats.fm actual (si está en el top-1000 lifetime)
   if (hasUsername()) fillStatsfmArtist(a.name, topTracks.length === 0);
+}
+
+// ── Columna de álbumes del artista (v=157) ──────────────────────────────────
+//
+// Un carrusel VERTICAL angosto al costado, del ancho de una tapa. Tiene su
+// propio scroll y NO estira el modal: la columna es `position:absolute` dentro
+// de su celda del grid, así que la altura la fija el contenido de la izquierda
+// (stats + chart + top tracks) y la lista scrollea adentro de eso. Si en cambio
+// creciera con sus 40 tapas, el modal se iría a 85vh siempre y quedaría
+// desparejo, que es justo lo que había que evitar.
+//
+// Debajo de 900px el CSS lo pasa a horizontal (misma lista, scroll en x).
+async function fillAlbumes(overlay, nombre) {
+  const aside = overlay.querySelector('#ac-albums');
+  const holder = overlay.querySelector('#ac-albums-scroll');
+  if (!aside || !holder) return;
+  let albums = [];
+  try {
+    albums = await albumsDeArtista(nombre);
+  } catch (e) {
+    console.warn('[artist-card] álbumes:', e.message);
+    return;
+  }
+  if (!albums.length) return;
+
+  aside.hidden = false;
+  aside.querySelector('.ac-albums-title').textContent = `Sus álbumes (${albums.length})`;
+  holder.innerHTML = albums.map((al, i) => `
+    <button type="button" class="ac-album" data-i="${i}" title="${escapeHtml(al.name)} — ${al.plays.toLocaleString('es-ES')} plays">
+      ${al.img
+        ? `<img class="ac-album-cover" src="${escapeHtml(al.img)}" alt="" loading="lazy">`
+        : `<div class="ac-album-cover ac-album-cover-empty">♪</div>`}
+      <div class="ac-album-name">${escapeHtml(al.name)}</div>
+      <div class="ac-album-meta">${al.plays.toLocaleString('es-ES')} plays</div>
+    </button>
+  `).join('');
+
+  holder.querySelectorAll('.ac-album').forEach(el => {
+    el.onclick = () => {
+      const al = albums[+el.dataset.i];
+      if (al) openAlbumCard({ name: al.name, artist: al.artist, img: al.img, plays: al.plays, min: al.min });
+    };
+  });
 }
 
 async function fillStatsfmArtist(name, fillEmptyTracks = false) {
@@ -457,13 +523,6 @@ async function fillStatsfmArtist(name, fillEmptyTracks = false) {
 // las canciones con tapa chica, álbum y fecha de like.
 // Click en una fila → ficha canción encima (tercer nivel de la pila).
 const normName = s => (s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
-
-function fmtLikeDate(iso) {
-  if (!iso) return '';
-  const d = new Date(iso);
-  if (isNaN(d)) return '';
-  return d.toLocaleDateString('es-AR', { day: '2-digit', month: 'short', year: 'numeric' });
-}
 
 async function openArtistLikesModal(artistName) {
   const overlay = openModal({
@@ -537,7 +596,7 @@ async function openArtistLikesModal(artistName) {
               <div style="font-size:14px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(t.name || '(sin nombre)')}</div>
               <div style="font-size:12px;color:var(--color-text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(album)}</div>
             </div>
-            <div style="font-size:11px;color:var(--color-text-muted);flex-shrink:0;text-align:right">${escapeHtml(fmtLikeDate(it.added_at))}</div>
+            <div style="font-size:11px;color:var(--color-text-muted);flex-shrink:0;text-align:right">${escapeHtml(fmtDiaCorto(it.added_at))}</div>
           </div>
         `;
       }).join('')}

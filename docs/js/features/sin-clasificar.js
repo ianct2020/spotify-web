@@ -16,23 +16,24 @@
 import {
   getAllUserPlaylists, getAllPlaylistItems, getBestAvailableLikes,
   getCurrentUserId, removeLikedTracks,
-} from '../api.js?v=156';
-import { idbGetCached, idbSetCached, idbDel } from '../idb.js?v=156';
-import { createHiddenStore } from '../util/hidden-sync.js?v=156';
-import { addUrisToPlaylists, toastAddResult, getOwnPlaylists } from '../util/playlist-add.js?v=156';
-import { escapeHtml, pageHeader, showProgress, hideProgress, isCancelled, confirmModal } from '../ui/components.js?v=156';
-import { openModal, closeTop } from '../ui/modal-stack.js?v=156';
-import { openPlaylistPicker } from '../ui/playlist-picker.js?v=156';
-import { showToast } from '../ui/toast.js?v=156';
-import { getPreview } from '../api/preview-providers.js?v=156';
-import { togglePreview, playingKey } from '../ui/preview-player.js?v=156';
-import { openTrackCard } from './track-card.js?v=156';
-import { normText } from '../util/track-match.js?v=156';
-import { activateMarquee } from '../ui/marquee.js?v=156';
-import { renderTrackCardRow, wireTrackCardGrid, paintCardSelection, paintPlayingCard } from '../ui/track-card-row.js?v=156';
-import { createIncrementalList, scrollRootOf } from '../ui/incremental-list.js?v=156';
-import { createLazyImages } from '../ui/lazy-img.js?v=156';
-import { coverAtSize } from '../util/cover-size.js?v=156';
+} from '../api.js?v=157';
+import { idbGetCached, idbSetCached, idbDel } from '../idb.js?v=157';
+import { createHiddenStore } from '../util/hidden-sync.js?v=157';
+import { addUrisToPlaylists, toastAddResult, getOwnPlaylists } from '../util/playlist-add.js?v=157';
+import { escapeHtml, pageHeader, showProgress, hideProgress, isCancelled, confirmModal } from '../ui/components.js?v=157';
+import { openModal, closeTop } from '../ui/modal-stack.js?v=157';
+import { openPlaylistPicker } from '../ui/playlist-picker.js?v=157';
+import { showToast } from '../ui/toast.js?v=157';
+import { getPreview } from '../api/preview-providers.js?v=157';
+import { togglePreview, playingKey } from '../ui/preview-player.js?v=157';
+import { openTrackCard } from './track-card.js?v=157';
+import { normText } from '../util/track-match.js?v=157';
+import { activateMarquee } from '../ui/marquee.js?v=157';
+import { renderTrackCardRow, wireTrackCardGrid, paintCardSelection, paintPlayingCard } from '../ui/track-card-row.js?v=157';
+import { createIncrementalList, scrollRootOf } from '../ui/incremental-list.js?v=157';
+import { createLazyImages } from '../ui/lazy-img.js?v=157';
+import { coverAtSize } from '../util/cover-size.js?v=157';
+import { fmtDiaCorto } from '../util/fecha.js?v=157';
 
 const HIDDEN_KEY = 'sin_clasificar_ocultas';
 const EXCLUDED_KEY = 'sin_clasificar_excluidas';
@@ -546,18 +547,11 @@ function renderResults() {
   perf.syncMs = +(performance.now() - t0).toFixed(1);
 }
 
-function fechaLike(iso) {
-  if (!iso) return '';
-  const d = new Date(iso);
-  if (isNaN(d)) return '';
-  return d.toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' });
-}
-
 // La tarjeta la pinta el componente compartido `ui/track-card-row.js` (v=140);
 // antes vivía acá y `#skips` tenía su propia versión con tapa de 56px.
 function renderCard(r) {
   return renderTrackCardRow(
-    { ...r, sub: `${r.album || ''}${r.addedAt ? ` · ${fechaLike(r.addedAt)}` : ''}` },
+    { ...r, sub: `${r.album || ''}${r.addedAt ? ` · ${fmtDiaCorto(r.addedAt)}` : ''}` },
     {
       selected: selected.has(r.id),
       playing: playingKey() === `sc:${r.id}`,

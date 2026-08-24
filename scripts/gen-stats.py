@@ -55,12 +55,12 @@ COMPLETE_CLOSES = {
     "backbtn",
 }
 STATS_VERSION = 2            # bump: excluye "Sonido Para Sacar Agua Del Movil"
-TRACK_PLAYS_VERSION = 4      # v4: cada entrada de `albums` lleva plays y ms además de name/artist (la ficha de álbum decía "0 plays"). v3: agregó `albums`. v2: incluía entries "partial" para tracks solo con plays <30s
+TRACK_PLAYS_VERSION = 5      # v5: cada entrada de `albums` lleva además el DÍA de la primera play válida (ficha de álbum: «primera vez»). v4: cada entrada de `albums` lleva plays y ms además de name/artist (la ficha de álbum decía "0 plays"). v3: agregó `albums`. v2: incluía entries "partial" para tracks solo con plays <30s
 SKIP_STATS_VERSION = 2      # v2: dato crudo (ms de cada skip/cierre) + gid de agrupado; el veredicto pasó a skips.js
 LISTENED_VERSION = 2         # bump: excluye "Sonido Para Sacar Agua Del Movil"
 TRACK_DETAIL_VERSION = 1     # ficha de canción: plays por mes + primera/última + récords del track
 RECORDS_VERSION = 2          # v2: excluye todas las variantes del sonido saca-agua
-ARTIST_TRACKS_VERSION = 1    # v=126: top de tracks por artista desde el historial COMPLETO (ficha de artista)
+ARTIST_TRACKS_VERSION = 2    # v2: `totals` lleva un 6º campo con el DÍA de la primera play válida del artista (ficha de artista: «primera vez»). v=126: top de tracks por artista desde el historial COMPLETO (ficha de artista)
 ARTIST_TRACKS_TOP_N = 6      # la ficha muestra 5; guardamos 6 de colchón
 DETAIL_MIN_PLAYS = 5         # solo tracks con >=N plays válidas entran al detalle (controla peso)
 MILESTONE_TARGETS = {1, 10000, 25000, 50000, 75000, 100000, 125000, 150000, 175000, 200000, 250000, 300000}
@@ -271,6 +271,12 @@ def build_stats(plays, img_idx):
 
     # first play by artist (para descubrimientos)
     artist_first_year = {}
+    # Primera play VÁLIDA (>=30s) por artista y por álbum, como día de calendario
+    # ("YYYY-MM-DD"). El año suelto no alcanzaba para la ficha, que muestra la
+    # fecha entera. `plays` viene ordenado asc, así que la primera vez que se ve
+    # la clave es la de verdad.
+    artist_first_day = {}
+    album_first_day = {}
 
     # por año
     years = defaultdict(lambda: {
@@ -387,10 +393,14 @@ def build_stats(plays, img_idx):
         artist_plays[artist] += 1
         if artist and artist not in artist_first_year:
             artist_first_year[artist] = y
+        if artist and artist not in artist_first_day:
+            artist_first_day[artist] = day
 
         ak = album_key(album, artist)
         album_ms[ak] += ms
         album_plays[ak] += 1
+        if ak not in album_first_day:
+            album_first_day[ak] = day
         if ak not in album_meta:
             album_meta[ak] = {
                 "name": album,
@@ -632,6 +642,7 @@ def build_stats(plays, img_idx):
             artist_first_year.get(artist_name),
             curve[-1][0] if curve else None,
             curve,
+            artist_first_day.get(artist_name),
         ]
         artist_tracks_out[artist_name] = [
             [
@@ -672,13 +683,14 @@ def build_stats(plays, img_idx):
     # de sumar los `min_that_day` de listened-albums, que son los del primer día
     # que cumplió el umbral, no el total).
     #
-    # Formato: [name, artist, plays, ms]. Los dos primeros campos no se mueven
-    # nunca — album-heard.js desestructura `[name, artist]` y tiene que seguir
-    # andando con los JSON viejos. El JS canonicaliza (name, artist) con
+    # Formato: [name, artist, plays, ms, first_day]. Los dos primeros campos no se
+    # mueven nunca — album-heard.js desestructura `[name, artist]` y tiene que
+    # seguir andando con los JSON viejos; el quinto (v5) es el día de la primera
+    # play válida y los lectores viejos lo ignoran. El JS canonicaliza (name, artist) con
     # util/album-key.js (strip diacríticos, sufijos de edición), así que
     # emitimos los nombres crudos.
     albums_played_out = [
-        [m.get("name", ""), m.get("artist", ""), album_plays.get(ak, 0), album_ms.get(ak, 0)]
+        [m.get("name", ""), m.get("artist", ""), album_plays.get(ak, 0), album_ms.get(ak, 0), album_first_day.get(ak)]
         for ak, m in album_meta.items()
         if album_ms.get(ak, 0) > 0
     ]

@@ -9,6 +9,7 @@ import { pageHeader } from './ui/components.js';
 import { installCrashGuard } from './ui/crash-guard.js';
 import { getStack } from './ui/modal-stack.js';
 import { installBackToTop } from './ui/back-to-top.js';
+import { applyStoredTheme, openThemePanel } from './ui/theme-panel.js';
 
 import { render as renderSync } from './features/sync.js';
 import { render as renderDedupe } from './features/dedupe.js';
@@ -295,6 +296,10 @@ function showApp(profile) {
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
             <span>Mi historial</span>
           </button>
+          <button class="sidebar-action" id="theme-btn" title="Cambiar los colores de la app">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><path d="M12 3a9 9 0 1 0 0 18c.83 0 1.5-.67 1.5-1.5 0-.39-.15-.74-.39-1-.24-.27-.39-.62-.39-1 0-.83.67-1.5 1.5-1.5H16a5 5 0 0 0 5-5c0-4.42-4.03-8-9-8z"/><circle cx="7.5" cy="10.5" r="1"/><circle cx="12" cy="7.5" r="1"/><circle cx="16.5" cy="10.5" r="1"/></svg>
+            <span>Paleta</span>
+          </button>
           <button class="sidebar-action" id="refresh-all-btn" title="Vacía todos los caches locales (likes, playlists, tags, historial)">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
             <span>Limpiar cache</span>
@@ -311,6 +316,7 @@ function showApp(profile) {
 
   document.getElementById('logout-btn').onclick = logout;
   document.getElementById('my-history-btn').onclick = () => openImportHistory();
+  document.getElementById('theme-btn').onclick = () => openThemePanel();
   document.getElementById('refresh-all-btn').onclick = async () => {
     const btn = document.getElementById('refresh-all-btn');
     const orig = btn.textContent;
@@ -636,6 +642,10 @@ async function renderDebug(container) {
 // catch que se escape pinta un cartel con botón de recargar. Se instala ANTES
 // de init() para cubrir también el arranque. Ver ui/crash-guard.js.
 installCrashGuard();
+
+// La paleta guardada se pinta ANTES de que se arme nada: si se aplicara después
+// del primer render, el tema elegido entraría como un flash de la paleta vieja.
+applyStoredTheme();
 
 // PWA: registra el service worker (path relativo → scope /spotify-web/ en Pages).
 // Con esto Chrome ofrece "Instalar Fonoteca" y los estáticos quedan offline.
