@@ -2428,6 +2428,15 @@ h3 { font-size: 18px; font-weight: 600; }
   gap: 8px;
   margin-bottom: 14px;
 }
+/* «Primera vez» va debajo de los dos tiles, no como un tercero: es una fecha,
+   no un número, y en una grilla de dos columnas quedaba huérfana. */
+.album-modal-first {
+  font-size: 12px;
+  color: var(--color-text-muted);
+  text-align: center;
+  margin: -6px 0 14px;
+}
+.album-modal-first strong { color: var(--color-text); font-weight: 600; }
 .album-modal-stat {
   background: var(--color-elevated);
   border: 1px solid var(--color-border);
@@ -4170,6 +4179,9 @@ body.covers-fs .main {
 .ac-stats { gap: 6px; }
 .ac-stats .tc-stat { padding: 8px 6px; }
 .ac-stats .tc-stat-v { font-size: 15px; }
+/* «10 feb 2024» no entra a 15px en una columna de 4: el tile de la primera vez
+   baja un punto y deja de partirse. */
+.ac-stats .tc-stat-v-fecha { font-size: 13px; white-space: nowrap; }
 .ac-stats .tc-stat-l { font-size: 10px; }
 
 .ac-cols {
@@ -4193,6 +4205,93 @@ body.covers-fs .main {
     gap: 16px;
     align-items: start;
   }
+}
+
+/* ---- Columna de álbumes del artista (v=157) ----
+   Carrusel vertical del ancho de una tapa, al costado del cuadro. La celda del
+   grid se estira a la altura de la izquierda (align-items: stretch, que es el
+   default) y el contenido va ABSOLUTO adentro: así las 40 tapas no empujan la
+   altura del modal y scrollean dentro del alto que ya había. */
+.ac-layout { display: block; }
+.ac-albums { display: none; }
+.ac-albums-title { margin-bottom: 6px; flex-shrink: 0; }
+.ac-albums-scroll {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  min-height: 0;
+  flex: 1;
+  padding-right: 2px;
+}
+.ac-album {
+  display: block;
+  width: 100%;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  padding: 4px;
+  cursor: pointer;
+  text-align: left;
+  color: inherit;
+  font: inherit;
+  transition: background var(--transition-fast), border-color var(--transition-fast);
+}
+.ac-album:hover { background: var(--color-accent-soft); border-color: var(--color-border); }
+.ac-album-cover {
+  display: block;
+  width: 100%;
+  aspect-ratio: 1;
+  object-fit: cover;
+  border-radius: var(--radius-sm);
+  background: var(--color-elevated);
+}
+.ac-album-cover-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+  color: var(--color-text-muted);
+}
+.ac-album-name {
+  font-size: 11px;
+  line-height: 1.25;
+  margin-top: 4px;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.ac-album-meta { font-size: 10px; color: var(--color-text-muted); }
+
+@media (min-width: 900px) {
+  .ac-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 116px;
+    gap: 14px;
+  }
+  .ac-main { min-width: 0; }
+  .ac-albums { display: block; position: relative; min-height: 0; }
+  .ac-albums-inner {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+  }
+}
+
+/* Abajo de 900px pasa a horizontal: misma lista, scroll en x, y la tapa deja de
+   depender del ancho de la columna (que ya no existe). */
+@media (max-width: 899px) {
+  .ac-albums { display: block; margin-top: 14px; }
+  .ac-albums-scroll {
+    flex-direction: row;
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding-bottom: 4px;
+  }
+  .ac-album { width: 96px; flex-shrink: 0; }
 }
 
 /* En mobile la cabecera se estruja si los 3 botones no entran — bajamos label a
@@ -4240,4 +4339,85 @@ body.covers-fs .main {
 @keyframes wt-saving-spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) {
   .wt-saving-spinner { animation-duration: 2.4s; }
+}
+
+/* ============ Panel de paleta (v=157) ============ */
+.theme-help {
+  font-size: 12px;
+  color: var(--color-text-secondary);
+  margin: 0 0 14px;
+}
+.theme-presets {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+.theme-preset {
+  background: var(--color-elevated);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: 10px;
+  cursor: pointer;
+  text-align: left;
+  color: var(--color-text);
+  font: inherit;
+  display: block;
+  transition: border-color var(--transition-fast), background var(--transition-fast);
+}
+.theme-preset:hover { border-color: var(--color-accent); }
+.theme-preset.is-on {
+  border-color: var(--color-accent);
+  background: var(--color-accent-tint);
+}
+.theme-preset-swatches { display: flex; gap: 3px; margin-bottom: 8px; }
+.theme-swatch {
+  width: 14px;
+  height: 14px;
+  border-radius: 3px;
+  border: 1px solid rgba(128, 128, 128, 0.35);
+}
+.theme-preset-name { display: block; font-size: 13px; font-weight: 600; }
+.theme-preset-desc { display: block; font-size: 11px; color: var(--color-text-muted); }
+
+.theme-title {
+  font-size: 12px;
+  color: var(--color-text-muted);
+  margin: 18px 0 8px;
+}
+.theme-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+.theme-field {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+}
+/* El <input type="color"> nativo trae su propio marco y un padding que deja el
+   color con forma de sello: se lo saca para que la pastilla SEA el color. */
+.theme-field input[type="color"] {
+  width: 100%;
+  height: 34px;
+  padding: 0;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: none;
+  cursor: pointer;
+}
+.theme-field input[type="color"]::-webkit-color-swatch-wrapper { padding: 2px; }
+.theme-field input[type="color"]::-webkit-color-swatch { border: none; border-radius: 4px; }
+.theme-field input[type="color"]::-moz-color-swatch { border: none; border-radius: 4px; }
+.theme-field-label {
+  font-size: 10px;
+  color: var(--color-text-muted);
+  text-align: center;
+  line-height: 1.2;
+}
+
+@media (max-width: 600px) {
+  .theme-presets { grid-template-columns: minmax(0, 1fr); }
+  .theme-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }

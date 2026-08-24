@@ -14,21 +14,22 @@
 // `util/hidden-sync.js`, playlist como fuente de verdad y localStorage como
 // caché local para pintar al instante.
 
-import { getBestAvailableLikes, removeLikedTracks } from '../api.js?v=156';
-import { loadTrackPlays, trackIdOf, isOwner, ownerLockedMessage } from './history-data.js?v=156';
-import { escapeHtml, confirmModal, pageHeader } from '../ui/components.js?v=156';
-import { showToast } from '../ui/toast.js?v=156';
-import { openTrackCard } from './track-card.js?v=156';
-import { hasUsername, loadTopLifetime } from '../api/statsfm.js?v=156';
-import { getPreview } from '../api/preview-providers.js?v=156';
-import { togglePreview, playingKey } from '../ui/preview-player.js?v=156';
-import { renderTrackCardRow, wireTrackCardGrid, paintCardSelection, paintPlayingCard } from '../ui/track-card-row.js?v=156';
-import { createIncrementalList, scrollRootOf } from '../ui/incremental-list.js?v=156';
-import { createLazyImages } from '../ui/lazy-img.js?v=156';
-import { activateMarquee } from '../ui/marquee.js?v=156';
-import { coverAtSize } from '../util/cover-size.js?v=156';
-import { firstArtistName } from '../util/artist-name.js?v=156';
-import { createHiddenStore } from '../util/hidden-sync.js?v=156';
+import { getBestAvailableLikes, removeLikedTracks } from '../api.js?v=157';
+import { loadTrackPlays, trackIdOf, isOwner, ownerLockedMessage } from './history-data.js?v=157';
+import { escapeHtml, confirmModal, pageHeader } from '../ui/components.js?v=157';
+import { showToast } from '../ui/toast.js?v=157';
+import { openTrackCard } from './track-card.js?v=157';
+import { hasUsername, loadTopLifetime } from '../api/statsfm.js?v=157';
+import { getPreview } from '../api/preview-providers.js?v=157';
+import { togglePreview, playingKey } from '../ui/preview-player.js?v=157';
+import { renderTrackCardRow, wireTrackCardGrid, paintCardSelection, paintPlayingCard } from '../ui/track-card-row.js?v=157';
+import { createIncrementalList, scrollRootOf } from '../ui/incremental-list.js?v=157';
+import { createLazyImages } from '../ui/lazy-img.js?v=157';
+import { activateMarquee } from '../ui/marquee.js?v=157';
+import { coverAtSize } from '../util/cover-size.js?v=157';
+import { firstArtistName } from '../util/artist-name.js?v=157';
+import { createHiddenStore } from '../util/hidden-sync.js?v=157';
+import { fmtDiaCorto } from '../util/fecha.js?v=157';
 
 let cache = null;
 
@@ -101,13 +102,6 @@ function medianaCover(imgs) {
   const media = imgs.find(im => (im.width || 0) >= 240 && (im.width || 0) <= 400)
     || imgs.find(im => (im.width || 0) >= 240);
   return media?.url || (chica ? coverAtSize(chica, 300) : null);
-}
-
-function fechaLike(iso) {
-  if (!iso) return '';
-  const d = new Date(iso);
-  if (isNaN(d)) return '';
-  return d.toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' });
 }
 
 async function analyze() {
@@ -423,7 +417,7 @@ function renderCard(r) {
     ? `<span class="zp-partial" title="Escuchada al menos una vez menos de 30s (por eso no cuenta como play)">${r.partial.p} play${r.partial.p === 1 ? ' corta' : 's cortas'}</span>`
     : '';
   return renderTrackCardRow(
-    { ...r, sub: `${r.album || ''}${r.addedAt ? ` · añadida el ${fechaLike(r.addedAt)}` : ''}` },
+    { ...r, sub: `${r.album || ''}${r.addedAt ? ` · añadida el ${fmtDiaCorto(r.addedAt)}` : ''}` },
     {
       selected: selected.has(r.id),
       playing: playingKey() === `zp:${r.id}`,

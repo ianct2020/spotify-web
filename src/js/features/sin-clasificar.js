@@ -33,6 +33,7 @@ import { renderTrackCardRow, wireTrackCardGrid, paintCardSelection, paintPlaying
 import { createIncrementalList, scrollRootOf } from '../ui/incremental-list.js';
 import { createLazyImages } from '../ui/lazy-img.js';
 import { coverAtSize } from '../util/cover-size.js';
+import { fmtDiaCorto } from '../util/fecha.js';
 
 const HIDDEN_KEY = 'sin_clasificar_ocultas';
 const EXCLUDED_KEY = 'sin_clasificar_excluidas';
@@ -546,18 +547,11 @@ function renderResults() {
   perf.syncMs = +(performance.now() - t0).toFixed(1);
 }
 
-function fechaLike(iso) {
-  if (!iso) return '';
-  const d = new Date(iso);
-  if (isNaN(d)) return '';
-  return d.toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' });
-}
-
 // La tarjeta la pinta el componente compartido `ui/track-card-row.js` (v=140);
 // antes vivía acá y `#skips` tenía su propia versión con tapa de 56px.
 function renderCard(r) {
   return renderTrackCardRow(
-    { ...r, sub: `${r.album || ''}${r.addedAt ? ` · ${fechaLike(r.addedAt)}` : ''}` },
+    { ...r, sub: `${r.album || ''}${r.addedAt ? ` · ${fmtDiaCorto(r.addedAt)}` : ''}` },
     {
       selected: selected.has(r.id),
       playing: playingKey() === `sc:${r.id}`,

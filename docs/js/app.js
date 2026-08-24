@@ -1,40 +1,41 @@
-import { isLoggedIn, loginWithSpotify, logout } from './auth.js?v=156';
-import { spotifyFetch, tryAutoLoadUserBackup } from './api.js?v=156';
-import { getValidToken } from './auth.js?v=156';
-import { cacheClearAll } from './storage.js?v=156';
-import { idbClearAll } from './idb.js?v=156';
-import { registerRoute, initRouter } from './router.js?v=156';
-import { showToast } from './ui/toast.js?v=156';
-import { pageHeader } from './ui/components.js?v=156';
-import { installCrashGuard } from './ui/crash-guard.js?v=156';
-import { getStack } from './ui/modal-stack.js?v=156';
-import { installBackToTop } from './ui/back-to-top.js?v=156';
+import { isLoggedIn, loginWithSpotify, logout } from './auth.js?v=157';
+import { spotifyFetch, tryAutoLoadUserBackup } from './api.js?v=157';
+import { getValidToken } from './auth.js?v=157';
+import { cacheClearAll } from './storage.js?v=157';
+import { idbClearAll } from './idb.js?v=157';
+import { registerRoute, initRouter } from './router.js?v=157';
+import { showToast } from './ui/toast.js?v=157';
+import { pageHeader } from './ui/components.js?v=157';
+import { installCrashGuard } from './ui/crash-guard.js?v=157';
+import { getStack } from './ui/modal-stack.js?v=157';
+import { installBackToTop } from './ui/back-to-top.js?v=157';
+import { applyStoredTheme, openThemePanel } from './ui/theme-panel.js?v=157';
 
-import { render as renderSync } from './features/sync.js?v=156';
-import { render as renderDedupe } from './features/dedupe.js?v=156';
-import { render as renderDupalbums } from './features/duplicate-albums.js?v=156';
-import { render as renderZombies } from './features/zombies.js?v=156';
-import { render as renderVersions } from './features/versions.js?v=156';
-import { render as renderDashboard } from './features/dashboard.js?v=156';
-import { render as renderSmart } from './features/smart.js?v=156';
-import { render as renderSimilar } from './features/similar-artists.js?v=156';
-import { render as renderRabbit } from './features/rabbit-hole.js?v=156';
-import { render as renderByGenre } from './features/by-genre.js?v=156';
-import { render as renderByArtist } from './features/by-artist.js?v=156';
-import { render as renderRecs } from './features/recommendations.js?v=156';
-import { render as renderListened } from './features/listened.js?v=156';
-import { render as renderWrapped } from './features/wrapped.js?v=156';
-import { render as renderRecords } from './features/records.js?v=156';
-import { openImportHistory } from './features/import-history.js?v=156';
-import { bindOwnerLockedButtons } from './features/history-data.js?v=156';
-import { render as renderZeroPlays } from './features/zero-plays.js?v=156';
-import { render as renderSkips } from './features/skips.js?v=156';
-import { render as renderSearchLikes } from './features/search-likes.js?v=156';
-import { render as renderWthree } from './features/wthree.js?v=156';
-import { render as renderCovers } from './features/covers.js?v=156';
-import { render as renderDiscoverArtists } from './features/discover-artists.js?v=156';
-import { render as renderNewReleases } from './features/new-releases.js?v=156';
-import { render as renderSinClasificar } from './features/sin-clasificar.js?v=156';
+import { render as renderSync } from './features/sync.js?v=157';
+import { render as renderDedupe } from './features/dedupe.js?v=157';
+import { render as renderDupalbums } from './features/duplicate-albums.js?v=157';
+import { render as renderZombies } from './features/zombies.js?v=157';
+import { render as renderVersions } from './features/versions.js?v=157';
+import { render as renderDashboard } from './features/dashboard.js?v=157';
+import { render as renderSmart } from './features/smart.js?v=157';
+import { render as renderSimilar } from './features/similar-artists.js?v=157';
+import { render as renderRabbit } from './features/rabbit-hole.js?v=157';
+import { render as renderByGenre } from './features/by-genre.js?v=157';
+import { render as renderByArtist } from './features/by-artist.js?v=157';
+import { render as renderRecs } from './features/recommendations.js?v=157';
+import { render as renderListened } from './features/listened.js?v=157';
+import { render as renderWrapped } from './features/wrapped.js?v=157';
+import { render as renderRecords } from './features/records.js?v=157';
+import { openImportHistory } from './features/import-history.js?v=157';
+import { bindOwnerLockedButtons } from './features/history-data.js?v=157';
+import { render as renderZeroPlays } from './features/zero-plays.js?v=157';
+import { render as renderSkips } from './features/skips.js?v=157';
+import { render as renderSearchLikes } from './features/search-likes.js?v=157';
+import { render as renderWthree } from './features/wthree.js?v=157';
+import { render as renderCovers } from './features/covers.js?v=157';
+import { render as renderDiscoverArtists } from './features/discover-artists.js?v=157';
+import { render as renderNewReleases } from './features/new-releases.js?v=157';
+import { render as renderSinClasificar } from './features/sin-clasificar.js?v=157';
 
 async function testConnection() {
   const token = await getValidToken();
@@ -295,6 +296,10 @@ function showApp(profile) {
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
             <span>Mi historial</span>
           </button>
+          <button class="sidebar-action" id="theme-btn" title="Cambiar los colores de la app">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><path d="M12 3a9 9 0 1 0 0 18c.83 0 1.5-.67 1.5-1.5 0-.39-.15-.74-.39-1-.24-.27-.39-.62-.39-1 0-.83.67-1.5 1.5-1.5H16a5 5 0 0 0 5-5c0-4.42-4.03-8-9-8z"/><circle cx="7.5" cy="10.5" r="1"/><circle cx="12" cy="7.5" r="1"/><circle cx="16.5" cy="10.5" r="1"/></svg>
+            <span>Paleta</span>
+          </button>
           <button class="sidebar-action" id="refresh-all-btn" title="Vacía todos los caches locales (likes, playlists, tags, historial)">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
             <span>Limpiar cache</span>
@@ -311,6 +316,7 @@ function showApp(profile) {
 
   document.getElementById('logout-btn').onclick = logout;
   document.getElementById('my-history-btn').onclick = () => openImportHistory();
+  document.getElementById('theme-btn').onclick = () => openThemePanel();
   document.getElementById('refresh-all-btn').onclick = async () => {
     const btn = document.getElementById('refresh-all-btn');
     const orig = btn.textContent;
@@ -636,6 +642,10 @@ async function renderDebug(container) {
 // catch que se escape pinta un cartel con botón de recargar. Se instala ANTES
 // de init() para cubrir también el arranque. Ver ui/crash-guard.js.
 installCrashGuard();
+
+// La paleta guardada se pinta ANTES de que se arme nada: si se aplicara después
+// del primer render, el tema elegido entraría como un flash de la paleta vieja.
+applyStoredTheme();
 
 // PWA: registra el service worker (path relativo → scope /spotify-web/ en Pages).
 // Con esto Chrome ofrece "Instalar Fonoteca" y los estáticos quedan offline.

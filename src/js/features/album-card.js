@@ -27,6 +27,7 @@ import { skelTracklist } from '../ui/skeleton.js';
 import { firstArtistName, artistNames, resolveArtistName } from '../util/artist-name.js';
 import { coverUrl } from '../util/cover-size.js';
 import { lookupAlbumStats } from '../util/album-stats.js';
+import { fmtDia } from '../util/fecha.js';
 import { getPreview } from '../api/preview-providers.js';
 import { togglePreview, playingKey } from '../ui/preview-player.js';
 import { openTrackCard } from './track-card.js';
@@ -238,9 +239,21 @@ async function loadAlbumTracklist(a) {
   }
 }
 
+// La «primera vez» no lleva su gemela «última vez» a propósito: el export del
+// Extended Streaming History termina en junio, así que la última escucha que
+// podríamos mostrar es la última REGISTRADA, no la última de verdad. Un dato
+// que engaña es peor que ninguno.
+function primeraVezHtml(first) {
+  if (!first) return '';
+  return `
+    <div class="album-modal-first" title="El primer día que escuchaste una pista de este disco al menos 30 segundos">
+      Primera vez: <strong>${escapeHtml(fmtDia(first))}</strong>
+    </div>`;
+}
+
 function statsHtml(a) {
   if (!(a.plays > 0 || a.min > 0)) {
-    return `<div class="album-modal-no-data">Sin datos de escucha en tu historial</div>`;
+    return `<div class="album-modal-no-data">Sin datos de escucha en tu historial</div>${primeraVezHtml(a.first)}`;
   }
   return `
     <div class="album-modal-stats">
@@ -252,7 +265,8 @@ function statsHtml(a) {
         <div class="album-modal-stat-v">${(a.plays || 0).toLocaleString('es-ES')}</div>
         <div class="album-modal-stat-l">plays</div>
       </div>
-    </div>`;
+    </div>
+    ${primeraVezHtml(a.first)}`;
 }
 
 export function openAlbumCard(entrada) {
@@ -336,7 +350,9 @@ export function openAlbumCard(entrada) {
   // que hubiera pasado el llamador.
   lookupAlbumStats(a).then(t => {
     if (!(t.plays > 0 || t.min > 0)) return;
-    if (t.plays <= (a.plays || 0) && t.min <= (a.min || 0)) return;
+    // La fecha SOLO la tiene el índice: si llegó, hay que repintar aunque los
+    // números que trajo el llamador ya fueran los buenos.
+    if (!t.first && t.plays <= (a.plays || 0) && t.min <= (a.min || 0)) return;
     const slot = overlay.querySelector('#alb-stats');
     if (slot) slot.innerHTML = statsHtml({ ...a, ...t });
   }).catch(err => console.warn('[album-card] stats:', err.message));

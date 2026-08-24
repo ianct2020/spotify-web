@@ -9,8 +9,8 @@
 //
 // Devuelve la misma forma que los JSONs del repo (mismos `version` numbers).
 
-import { isJunkTrack } from './util/junk.js?v=156';
-import { songKey } from './util/song-identity.js?v=156';
+import { isJunkTrack } from './util/junk.js?v=157';
+import { songKey } from './util/song-identity.js?v=157';
 
 // ---- Configuración (igual a gen-stats.py) ----
 const MIN_MS = 30000;
@@ -29,12 +29,12 @@ const COMPLETE_CLOSES = new Set([
   'backbtn',
 ]);
 const STATS_VERSION = 2;
-const TRACK_PLAYS_VERSION = 4;   // v4: cada álbum de `albums` lleva plays y ms (espejo de gen-stats.py)
+const TRACK_PLAYS_VERSION = 5;   // v5: cada álbum de `albums` lleva además el día de la primera play válida (espejo de gen-stats.py)
 const SKIP_STATS_VERSION = 2;    // v2: dato crudo (ms de cada skip/cierre) + gid; el veredicto pasó a features/skips.js
 const LISTENED_VERSION = 2;
 const TRACK_DETAIL_VERSION = 1;
 const RECORDS_VERSION = 2;
-const ARTIST_TRACKS_VERSION = 1;
+const ARTIST_TRACKS_VERSION = 2;  // v2: `totals` lleva el día de la primera play válida del artista
 const ARTIST_TRACKS_TOP_N = 6;
 const DETAIL_MIN_PLAYS = 5;
 const MILESTONE_TARGETS = new Set([1, 10000, 25000, 50000, 75000, 100000, 125000, 150000, 175000, 200000, 250000, 300000]);
@@ -135,6 +135,11 @@ function processStreamingHistory(fileArrays, { onProgress } = {}) {
   const trackMeta = new Map();
 
   const artistFirstYear = new Map();
+  // Día de la primera play válida (>=30s) por artista y por álbum, "YYYY-MM-DD".
+  // Las fichas muestran la fecha entera, no solo el año. `plays` ya viene
+  // ordenado asc, así que la primera vez que se ve la clave es la de verdad.
+  const artistFirstDay = new Map();
+  const albumFirstDay = new Map();
 
   // Por año: obj con Maps y stats
   const years = new Map();
@@ -235,11 +240,13 @@ function processStreamingHistory(fileArrays, { onProgress } = {}) {
     artistMs.set(artist, (artistMs.get(artist) || 0) + ms);
     artistPlays.set(artist, (artistPlays.get(artist) || 0) + 1);
     if (artist && !artistFirstYear.has(artist)) artistFirstYear.set(artist, y);
+    if (artist && !artistFirstDay.has(artist)) artistFirstDay.set(artist, day);
 
     const ak = albumKey(album, artist);
     albumMs.set(ak, (albumMs.get(ak) || 0) + ms);
     albumPlaysCounter.set(ak, (albumPlaysCounter.get(ak) || 0) + 1);
     if (!albumMeta.has(ak)) albumMeta.set(ak, { name: album, artist, img: null });
+    if (!albumFirstDay.has(ak)) albumFirstDay.set(ak, day);
 
     // Mix A+C para "álbum escuchado"
     if (!listenedFirst.has(ak)) {
@@ -620,13 +627,14 @@ function processStreamingHistory(fileArrays, { onProgress } = {}) {
     milestones,
   };
 
-  // [name, artist, plays, ms]. Los dos primeros campos NO se mueven: album-heard.js
-  // desestructura `[name, artist]` y tiene que seguir andando con los JSON v3.
-  // Los dos nuevos los usa la ficha de álbum (antes decía "0 plays").
+  // [name, artist, plays, ms, first_day]. Los dos primeros campos NO se mueven:
+  // album-heard.js desestructura `[name, artist]` y tiene que seguir andando con
+  // los JSON v3. Los dos siguientes los usa la ficha de álbum (antes decía
+  // "0 plays") y el quinto, su «primera vez».
   const albumsPlayedOut = [];
   for (const [ak, m] of albumMeta) {
     const ms = albumMs.get(ak) || 0;
-    if (ms > 0) albumsPlayedOut.push([m.name || '', m.artist || '', albumPlaysCounter.get(ak) || 0, ms]);
+    if (ms > 0) albumsPlayedOut.push([m.name || '', m.artist || '', albumPlaysCounter.get(ak) || 0, ms, albumFirstDay.get(ak) || null]);
   }
 
   const trackPlays = {
@@ -661,6 +669,7 @@ function processStreamingHistory(fileArrays, { onProgress } = {}) {
       artistFirstYear.get(artistName) ?? null,
       curve.length ? curve[curve.length - 1][0] : null,
       curve,
+      artistFirstDay.get(artistName) || null,
     ];
     tks.sort((a, b) =>
       (trackPlaysCount.get(b) || 0) - (trackPlaysCount.get(a) || 0) ||

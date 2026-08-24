@@ -11,25 +11,26 @@
 // tus me gusta" en cada fila y previews que prueban contra TODOS los artistas
 // del track.
 
-import { escapeHtml } from '../ui/components.js?v=156';
-import { openArtistCard, knownArtist } from './artist-card.js?v=156';
-import { openModal, closeTop } from '../ui/modal-stack.js?v=156';
-import { getBestAvailableLikes, getAlbumTracks, spotifyFetch } from '../api.js?v=156';
-import { albumKey, coverId } from '../util/album-key.js?v=156';
+import { escapeHtml } from '../ui/components.js?v=157';
+import { openArtistCard, knownArtist } from './artist-card.js?v=157';
+import { openModal, closeTop } from '../ui/modal-stack.js?v=157';
+import { getBestAvailableLikes, getAlbumTracks, spotifyFetch } from '../api.js?v=157';
+import { albumKey, coverId } from '../util/album-key.js?v=157';
 // ⚠️ `limpiaParaQuery` FALTABA acá hasta v=153 y el síntoma era mudo: la usa
 // `resolveAlbumId` en el `try`, así que cada ficha tiraba un ReferenceError que
 // el catch convertía en «no pude resolver el álbum», la ficha se caía al camino
 // degradado de v=142 (solo tus likes, todos con el ♥ lleno) y el tracklist
 // completo de v=144 no se pedía NUNCA. Verificado en producción el 2026-08-23:
 // 6 fichas abiertas, 6 warnings «limpiaParaQuery is not defined» en consola.
-import { artistMatches, normText, limpiaParaQuery } from '../util/track-match.js?v=156';
-import { skelTracklist } from '../ui/skeleton.js?v=156';
-import { firstArtistName, artistNames, resolveArtistName } from '../util/artist-name.js?v=156';
-import { coverUrl } from '../util/cover-size.js?v=156';
-import { lookupAlbumStats } from '../util/album-stats.js?v=156';
-import { getPreview } from '../api/preview-providers.js?v=156';
-import { togglePreview, playingKey } from '../ui/preview-player.js?v=156';
-import { openTrackCard } from './track-card.js?v=156';
+import { artistMatches, normText, limpiaParaQuery } from '../util/track-match.js?v=157';
+import { skelTracklist } from '../ui/skeleton.js?v=157';
+import { firstArtistName, artistNames, resolveArtistName } from '../util/artist-name.js?v=157';
+import { coverUrl } from '../util/cover-size.js?v=157';
+import { lookupAlbumStats } from '../util/album-stats.js?v=157';
+import { fmtDia } from '../util/fecha.js?v=157';
+import { getPreview } from '../api/preview-providers.js?v=157';
+import { togglePreview, playingKey } from '../ui/preview-player.js?v=157';
+import { openTrackCard } from './track-card.js?v=157';
 
 const PLAY_SVG = `<svg viewBox="0 0 24 24" width="10" height="10" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>`;
 const PAUSE_SVG = `<svg viewBox="0 0 24 24" width="10" height="10" fill="currentColor" aria-hidden="true"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>`;
@@ -238,9 +239,21 @@ async function loadAlbumTracklist(a) {
   }
 }
 
+// La «primera vez» no lleva su gemela «última vez» a propósito: el export del
+// Extended Streaming History termina en junio, así que la última escucha que
+// podríamos mostrar es la última REGISTRADA, no la última de verdad. Un dato
+// que engaña es peor que ninguno.
+function primeraVezHtml(first) {
+  if (!first) return '';
+  return `
+    <div class="album-modal-first" title="El primer día que escuchaste una pista de este disco al menos 30 segundos">
+      Primera vez: <strong>${escapeHtml(fmtDia(first))}</strong>
+    </div>`;
+}
+
 function statsHtml(a) {
   if (!(a.plays > 0 || a.min > 0)) {
-    return `<div class="album-modal-no-data">Sin datos de escucha en tu historial</div>`;
+    return `<div class="album-modal-no-data">Sin datos de escucha en tu historial</div>${primeraVezHtml(a.first)}`;
   }
   return `
     <div class="album-modal-stats">
@@ -252,7 +265,8 @@ function statsHtml(a) {
         <div class="album-modal-stat-v">${(a.plays || 0).toLocaleString('es-ES')}</div>
         <div class="album-modal-stat-l">plays</div>
       </div>
-    </div>`;
+    </div>
+    ${primeraVezHtml(a.first)}`;
 }
 
 export function openAlbumCard(entrada) {
@@ -336,7 +350,9 @@ export function openAlbumCard(entrada) {
   // que hubiera pasado el llamador.
   lookupAlbumStats(a).then(t => {
     if (!(t.plays > 0 || t.min > 0)) return;
-    if (t.plays <= (a.plays || 0) && t.min <= (a.min || 0)) return;
+    // La fecha SOLO la tiene el índice: si llegó, hay que repintar aunque los
+    // números que trajo el llamador ya fueran los buenos.
+    if (!t.first && t.plays <= (a.plays || 0) && t.min <= (a.min || 0)) return;
     const slot = overlay.querySelector('#alb-stats');
     if (slot) slot.innerHTML = statsHtml({ ...a, ...t });
   }).catch(err => console.warn('[album-card] stats:', err.message));

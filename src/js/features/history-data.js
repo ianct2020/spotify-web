@@ -19,12 +19,12 @@ async function isOwner() {
 }
 
 const STATS_VERSION = 2;
-const PLAYS_VERSION = 4;   // v4: cada álbum de `albums` lleva plays y ms
+const PLAYS_VERSION = 5;   // v5: cada álbum de `albums` lleva además el día de la primera play válida
 const LISTENED_VERSION = 2;
 const SKIP_VERSION = 2;    // v2: [ok, skip, fwd_ms, close_ms, gid] — el veredicto lo arma features/skips.js
 const DETAIL_VERSION = 1;
 const RECORDS_VERSION = 2;
-const ARTIST_TRACKS_VERSION = 1;
+const ARTIST_TRACKS_VERSION = 2;  // v2: `totals` lleva el día de la primera play válida del artista
 
 // Claves del cache del owner (repo → IDB)
 const OWNER_KEYS = {
@@ -70,9 +70,10 @@ async function hasLocalHistory() {
 // remoto no cambió estructuralmente.
 const OWNER_PREV_KEYS = {
   stats: ['history_stats_v1'],
-  // Ninguna versión anterior sirve: v1/v2 no traen `albums` y v3 lo trae sin
-  // plays ni ms (que es lo que necesita la ficha de álbum). Lista vacía a
-  // propósito, para forzar el refetch del JSON nuevo.
+  // Ninguna versión anterior sirve: v1/v2 no traen `albums`, v3 lo trae sin
+  // plays ni ms (que es lo que necesita la ficha de álbum) y v4 sin el día de
+  // la primera play (v=157). Lista vacía a propósito, para forzar el refetch
+  // del JSON nuevo.
   plays: [],
   listened: ['history_listened_albums_v1', 'history_albums_v1'],
   // Vacía A PROPÓSITO, igual que `plays` en v=140: v1 era {id: [ok, skip]} y v2
@@ -82,6 +83,8 @@ const OWNER_PREV_KEYS = {
   skip: [],
   detail: [],
   records: ['history_records_v1'],
+  // Vacía por el mismo motivo: el v1 de `totals` no trae el día de la primera
+  // play y la ficha de artista se quedaría sin «primera vez», en silencio.
   artistTracks: [],
 };
 

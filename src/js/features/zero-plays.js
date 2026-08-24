@@ -29,6 +29,7 @@ import { activateMarquee } from '../ui/marquee.js';
 import { coverAtSize } from '../util/cover-size.js';
 import { firstArtistName } from '../util/artist-name.js';
 import { createHiddenStore } from '../util/hidden-sync.js';
+import { fmtDiaCorto } from '../util/fecha.js';
 
 let cache = null;
 
@@ -101,13 +102,6 @@ function medianaCover(imgs) {
   const media = imgs.find(im => (im.width || 0) >= 240 && (im.width || 0) <= 400)
     || imgs.find(im => (im.width || 0) >= 240);
   return media?.url || (chica ? coverAtSize(chica, 300) : null);
-}
-
-function fechaLike(iso) {
-  if (!iso) return '';
-  const d = new Date(iso);
-  if (isNaN(d)) return '';
-  return d.toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' });
 }
 
 async function analyze() {
@@ -423,7 +417,7 @@ function renderCard(r) {
     ? `<span class="zp-partial" title="Escuchada al menos una vez menos de 30s (por eso no cuenta como play)">${r.partial.p} play${r.partial.p === 1 ? ' corta' : 's cortas'}</span>`
     : '';
   return renderTrackCardRow(
-    { ...r, sub: `${r.album || ''}${r.addedAt ? ` · añadida el ${fechaLike(r.addedAt)}` : ''}` },
+    { ...r, sub: `${r.album || ''}${r.addedAt ? ` · añadida el ${fmtDiaCorto(r.addedAt)}` : ''}` },
     {
       selected: selected.has(r.id),
       playing: playingKey() === `zp:${r.id}`,

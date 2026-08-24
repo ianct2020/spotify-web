@@ -7,6 +7,7 @@ import { renderTrackRow, escapeHtml, pageHeader } from '../ui/components.js';
 import { firstArtistName, artistNames } from '../util/artist-name.js';
 import { openTrackCard } from './track-card.js';
 import { coverUrl } from '../util/cover-size.js';
+import { fmtDiaCorto } from '../util/fecha.js';
 
 const MAX_RESULTS = 300;
 let cachedItems = [];
@@ -28,13 +29,6 @@ function matchesQuery(item, tokens) {
   );
   // AND entre tokens — tipear "drake views" filtra por ambos.
   return tokens.every(tok => hay.includes(tok));
-}
-
-function formatAdded(iso) {
-  if (!iso) return '';
-  try {
-    return new Date(iso).toLocaleDateString('es-AR', { day: '2-digit', month: 'short', year: 'numeric' });
-  } catch { return iso.slice(0, 10); }
 }
 
 export async function render(container) {
@@ -140,7 +134,7 @@ function renderResults(holder, matches, query) {
     <div class="card" style="padding:4px 8px">
       ${shown.map(item => {
         const t = item.track;
-        const added = item.added_at ? `<span style="font-size:11px;color:var(--color-text-muted);flex-shrink:0">${formatAdded(item.added_at)}</span>` : '';
+        const added = item.added_at ? `<span style="font-size:11px;color:var(--color-text-muted);flex-shrink:0">${fmtDiaCorto(item.added_at)}</span>` : '';
         const openUrl = t.uri ? t.uri.replace('spotify:track:', 'https://open.spotify.com/track/') : (t.external_urls?.spotify || '#');
         const openBtn = `<a href="${openUrl}" target="_blank" rel="noopener" class="btn btn-secondary btn-sm" style="flex-shrink:0" title="Abrir en Spotify">↗</a>`;
         const albumLine = t.album?.name ? `<div style="font-size:11px;color:var(--color-text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(t.album.name)}</div>` : '';
