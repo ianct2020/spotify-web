@@ -1,8 +1,8 @@
-import { getAllLikedTracks, getAllPlaylistItems, removeLikedTracks, removeTracksFromPlaylist } from '../api.js?v=157';
-import { showProgress, hideProgress, progressController, isCancelled, typeConfirmModal, renderTrackRow, escapeHtml, pageHeader } from '../ui/components.js?v=157';
-import { showToast } from '../ui/toast.js?v=157';
-import { isZombieItem } from '../util/zombie.js?v=157';
-import { getOwnPlaylists } from '../util/playlist-add.js?v=157';
+import { getAllLikedTracks, getAllPlaylistItems, removeLikedTracks, removeTracksFromPlaylist } from '../api.js?v=158';
+import { showProgress, hideProgress, progressController, isCancelled, typeConfirmModal, renderTrackRow, escapeHtml, pageHeader } from '../ui/components.js?v=158';
+import { showToast } from '../ui/toast.js?v=158';
+import { isZombieItem } from '../util/zombie.js?v=158';
+import { getOwnPlaylists } from '../util/playlist-add.js?v=158';
 
 const FADE_DURATION_MS = 15000;
 const STAGGER_PER_ROW_MS = 80;
