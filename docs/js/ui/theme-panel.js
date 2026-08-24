@@ -21,8 +21,8 @@
 // texto blanco: los dos siguen legibles en claro, pero no acompañan al tema.
 // Anotado en la doc.
 
-import { openModal, closeTop } from './modal-stack.js?v=157';
-import { showToast } from './toast.js?v=157';
+import { openModal, closeTop } from './modal-stack.js?v=158';
+import { showToast } from './toast.js?v=158';
 
 // ⚠️ La clave NO lleva prefijo por usuario. Hoy no existe ninguno en la app
 // (el guard multi-user de v=86 invalida caches por user id, pero las prefs
