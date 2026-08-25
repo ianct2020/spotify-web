@@ -19,3 +19,7 @@ Descargas/
 # Exports temporales de Fonoteca (data privada)
 *-export-*.json
 deleted-clusters.json
+
+# Basura compilada de Python
+__pycache__/
+*.pyc
