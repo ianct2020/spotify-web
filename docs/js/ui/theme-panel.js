@@ -21,14 +21,18 @@
 // texto blanco: los dos siguen legibles en claro, pero no acompañan al tema.
 // Anotado en la doc.
 
-import { openModal, closeTop } from './modal-stack.js?v=158';
-import { showToast } from './toast.js?v=158';
+import { openModal, closeTop } from './modal-stack.js?v=159';
+import { showToast } from './toast.js?v=159';
+import { prefKey, migratePrefKey } from '../storage.js?v=159';
+import { MODOS, getAnimMode, setAnimMode, systemAsksReducedMotion } from './reveal.js?v=159';
 
-// ⚠️ La clave NO lleva prefijo por usuario. Hoy no existe ninguno en la app
-// (el guard multi-user de v=86 invalida caches por user id, pero las prefs
-// viven en claves globales), así que si dos personas usan el mismo browser
-// comparten paleta. Va anotado en PENDIENTES junto al resto del lío multi-user.
-const LS_KEY = 'fonoteca_theme_v1';
+// La clave lleva prefijo por usuario desde v=159 (antes era global y dos
+// personas en el mismo navegador compartían paleta). El prefijo sale de
+// `fonoteca_last_user_id`, que es SINCRÓNICO: ver el comentario largo de
+// `prefKey()` en `storage.js` — con el id async de `getCurrentUserId()` esto
+// pintaría un flash de tema en cada arranque.
+const LS_BASE = 'fonoteca_theme_v1';
+const LS_KEY = () => prefKey(LS_BASE);
 
 // Las ocho editables, en el orden en que se muestran.
 export const VARS = [
@@ -137,14 +141,14 @@ export function expandTheme(colors) {
 
 function readStored() {
   try {
-    const raw = JSON.parse(localStorage.getItem(LS_KEY));
+    const raw = JSON.parse(localStorage.getItem(LS_KEY()));
     if (raw && typeof raw === 'object' && raw.colors) return raw;
   } catch { /* corrupto = sin tema */ }
   return null;
 }
 
 function write(colors, presetId) {
-  try { localStorage.setItem(LS_KEY, JSON.stringify({ colors, preset: presetId || null })); }
+  try { localStorage.setItem(LS_KEY(), JSON.stringify({ colors, preset: presetId || null })); }
   catch { /* lleno */ }
 }
 
@@ -165,11 +169,49 @@ export function applyTheme(colors) {
  * un flash de la paleta vieja.
  */
 export function applyStoredTheme() {
+  // La migración va PRIMERO y es sincrónica: la paleta que Ian guardó en v=157
+  // vive en la clave sin prefijo, y leer la prefijada sin mudarla antes se la
+  // come. Lo mismo para el modo de animaciones, por si alguna vez se guardó sin
+  // id (primerísima carga del navegador, antes del primer `GET /me`).
+  migratePrefKey(LS_BASE);
+  migratePrefKey('fonoteca_anim_v1');
+
   const st = readStored();
   if (st) applyTheme(st.colors);
 }
 
 // ── el panel ────────────────────────────────────────────────────────────────
+
+// El toggle de animaciones vive ACÁ y no en un icono propio del menú: esto ya
+// es «cómo se ve la app», y el menú no necesita otra entrada.
+const ANIM_OPCIONES = [
+  { id: 'auto', label: 'Sigue al sistema', title: 'Respeta la preferencia de movimiento reducido del sistema operativo' },
+  { id: 'siempre', label: 'Siempre', title: 'Anima aunque el sistema pida movimiento reducido' },
+  { id: 'nunca', label: 'Nunca', title: 'Sin animaciones de entrada, en ningún caso' },
+];
+
+/**
+ * El cartel de debajo del toggle.
+ *
+ * En «Sigue al sistema» con movimiento reducido activo hay que DECIR por qué no
+ * se mueve nada. Sin ese texto, el ajuste parece roto: es lo mismo que pasó con
+ * las barritas del reproductor, que llevaban intactas desde v=88 y se dieron
+ * por rotas dos veces.
+ */
+function animNotaHtml(modo, reducido) {
+  if (modo === 'siempre') {
+    return reducido
+      ? 'Forzado: se anima igual, aunque el sistema pida <strong>movimiento reducido</strong>.'
+      : 'Las secciones del Dashboard y del Wrapped entran al llegar a ellas scrolleando.';
+  }
+  if (modo === 'nunca') {
+    return 'Sin animaciones de entrada. El contenido aparece ya colocado.';
+  }
+  return reducido
+    ? 'Ahora mismo está <strong>apagado</strong> porque tu sistema pide <strong>movimiento reducido</strong>. Elige «Siempre» para animar igual.'
+    : 'Tu sistema no pide movimiento reducido, así que las secciones entran al llegar a ellas scrolleando.';
+}
+
 function swatchesHtml(colors) {
   return VARS.map(v => `<span class="theme-swatch" style="background:${colors[v.k]}"></span>`).join('');
 }
@@ -179,8 +221,14 @@ export function openThemePanel() {
   let actual = { ...ORIGINAL, ...(st?.colors || {}) };
   let presetId = st?.preset || (st ? null : 'violeta');
 
+  // Se llena más abajo, cuando se cablea el toggle de animaciones. Va por
+  // referencia porque `onClose` hay que pasarlo al abrir y el listener se
+  // registra después.
+  let desuscribirMQ = null;
+
   const overlay = openModal({
     id: 'theme-panel',
+    onClose: () => { try { desuscribirMQ?.(); } catch { /* ya no estaba */ } },
     html: `
     <div class="modal card-modal" style="max-width:560px;width:min(560px,94vw)">
       <div class="card-modal-head-simple">
@@ -206,6 +254,14 @@ export function openThemePanel() {
           </label>
         `).join('')}
       </div>
+      <div class="theme-title">Animaciones</div>
+      <div class="theme-anim-row" id="theme-anim-row">
+        ${ANIM_OPCIONES.map(o => `
+          <button type="button" class="theme-anim-opt" data-anim="${o.id}" title="${o.title}">${o.label}</button>
+        `).join('')}
+      </div>
+      <p class="theme-anim-nota" id="theme-anim-nota"></p>
+
       <div class="card-modal-actions" style="margin-top:16px">
         <button class="btn btn-secondary btn-sm" id="theme-reset">Volver al original</button>
         <button class="btn btn-primary btn-sm" id="theme-done">Listo</button>
@@ -246,8 +302,42 @@ export function openThemePanel() {
     };
   });
 
+  // ── animaciones ──
+  // El cartel se recalcula en cada pintada porque `prefers-reduced-motion`
+  // puede cambiar con la pestaña abierta (en GNOME, desactivar las animaciones
+  // del escritorio se refleja al instante).
+  const notaEl = overlay.querySelector('#theme-anim-nota');
+  const pintarAnim = () => {
+    const modo = getAnimMode();
+    overlay.querySelectorAll('.theme-anim-opt').forEach(el => {
+      el.classList.toggle('is-on', el.dataset.anim === modo);
+      el.setAttribute('aria-pressed', String(el.dataset.anim === modo));
+    });
+    if (notaEl) notaEl.innerHTML = animNotaHtml(modo, systemAsksReducedMotion());
+  };
+  pintarAnim();
+
+  overlay.querySelectorAll('.theme-anim-opt').forEach(el => {
+    el.onclick = () => {
+      if (!MODOS.includes(el.dataset.anim)) return;
+      setAnimMode(el.dataset.anim);
+      pintarAnim();
+      // Lo elegido se nota la próxima vez que se entra a una vista con
+      // animaciones: acá no hay nada armado que re-animar.
+      showToast('Se aplica al volver a entrar al Dashboard o al Wrapped', 'info');
+    };
+  });
+
+  // Si el sistema cambia de opinión con el panel abierto, el cartel se entera.
+  let mq = null;
+  try {
+    mq = window.matchMedia('(prefers-reduced-motion: reduce)');
+    mq.addEventListener('change', pintarAnim);
+    desuscribirMQ = () => mq.removeEventListener('change', pintarAnim);
+  } catch { /* navegador sin matchMedia: el cartel se queda como está */ }
+
   overlay.querySelector('#theme-reset').onclick = () => {
-    try { localStorage.removeItem(LS_KEY); } catch { /* noop */ }
+    try { localStorage.removeItem(LS_KEY()); } catch { /* noop */ }
     actual = { ...ORIGINAL };
     presetId = 'violeta';
     applyTheme(null);
