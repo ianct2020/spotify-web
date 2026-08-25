@@ -16,8 +16,8 @@
 // pasado el TTL. Los URLs de audio los cachea cada proveedor por su cuenta
 // (itunes.js ya lo hace; Deezer usa el suyo interno más abajo).
 
-import { findTrackPreview } from './itunes.js?v=159';
-import { pickBestMatch, artistMatches, artistList, preferredQueryArtists } from '../util/track-match.js?v=159';
+import { findTrackPreview } from './itunes.js?v=160';
+import { pickBestMatch, artistMatches, artistList, preferredQueryArtists } from '../util/track-match.js?v=160';
 
 // v3: las keys suben porque hasta v=141 se comparaba contra UN solo artista (el
 // del álbum) y en los discos con alias —«¥$»— eso cacheaba 'spotify-embed' o
