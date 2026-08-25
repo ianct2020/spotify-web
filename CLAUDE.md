@@ -293,14 +293,12 @@ mosaico (`rgba(20,20,28,.95)` con texto blanco, que trae su propio fondo).
   existe** ningún helper de prefijo por user en la app (el guard de v=86 invalida
   caches de IDB por user id, pero las prefs viven en claves globales de
   localStorage). Cuando se haga el prefijo, esta clave entra con las demás.
-- **Borrar los cuatro .txt gitignoreados de la raíz del repo**
-  (`RESUMEN-MAESTRO.txt`, `FONOTECA-funciones-y-pendientes.txt`,
-  `FONOTECA-PROMPT-PARA-OTRA-IA.txt`, `NEXT-PROMPT.txt`). Pedido de Ian en la
-  tanda 8. ⚠️ Antes de borrarlos hay que decidir dónde vive la doc: hoy esos
-  cuatro **son** la doc que se actualiza cada tanda (dicen «v=156 desplegado»,
-  los actualizaron las tandas 6 y 7) y `FONOTECA-funciones-y-pendientes.txt` es
-  el único inventario de funciones, bugs abiertos y pendientes que hay. Si se
-  borran sin reemplazo, lo único que queda es este CLAUDE.md.
+- **Los cuatro .txt gitignoreados de la raíz** (`RESUMEN-MAESTRO.txt`,
+  `FONOTECA-funciones-y-pendientes.txt`, `FONOTECA-PROMPT-PARA-OTRA-IA.txt`,
+  `NEXT-PROMPT.txt`) **NO se borran**: son doc viva y se actualizan cada tanda.
+  `FONOTECA-funciones-y-pendientes.txt` es el único inventario de funciones,
+  bugs abiertos y pendientes que existe. (En la tanda 8 se pidió borrarlos y
+  después Ian retiró el pedido: seguí actualizándolos.)
 - **#covers congela el renderer** con 2.449 tapas (viene de la tanda 7).
 
 ## Client ID
