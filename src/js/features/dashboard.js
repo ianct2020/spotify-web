@@ -699,10 +699,13 @@ function renderDashboard(container, stats) {
   // — lo que rompería a Chart.js sería instanciarlo dentro del callback del
   // observer o con el contenedor en `display: none`, que mide 0.
   //
-  // Son 6 stat cards + los 9 `.dash-chart-card` (5 de likes y 4 del historial).
-  // Los 4 del historial cuelgan de `#history-section`, que nace en
-  // `display: none`: el observer no los ve hasta que `hydrateHistorySection`
+  // Son las 6 stat cards de arriba + los 9 `.dash-chart-card` (5 de likes y 4
+  // del historial). Los 4 del historial cuelgan de `#history-section`, que nace
+  // en `display: none`: el observer no los ve hasta que `hydrateHistorySection`
   // la muestra, y ahí entran solos.
+  //
+  // Los 5 tiles del historial NO se arman acá porque todavía no existen: los
+  // pinta `hydrateHistorySection`, que los arma por su cuenta.
   armRevealAll('.dash-stats-row .stat-card', container, { stagger: 40 });
   armRevealAll('.dash-chart-card', container, { stagger: 60, maxStagger: 4 });
 }
@@ -726,6 +729,11 @@ async function hydrateHistorySection() {
     <div class="stat-card"><div class="stat-value">${t.longest_streak || 0}</div><div class="stat-label">Racha más larga (días)</div></div>
     <div class="stat-card"><div class="stat-value">${t.skip_pct || 0}%</div><div class="stat-label">Skips</div></div>
   `;
+  // Estos 5 tiles NACEN ACÁ, después de que `renderDashboard` ya armó lo suyo,
+  // así que hay que armarlos aparte. Sin esto la sección del historial entraba a
+  // medias: los 4 charts de abajo se animaban y la fila de tiles de arriba
+  // aparecía de golpe. Verificado en producción con v=159.
+  if (tiles) armRevealAll('.stat-card', tiles, { stagger: 40 });
 
   // Evolución mensual (line)
   if (h.monthly?.length) {

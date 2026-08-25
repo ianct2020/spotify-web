@@ -1,14 +1,14 @@
-import { getAllLikedTracks, invalidateLikesCache, exportAllData, importAllData, getCurrentUserId, syncLikesIncremental, getLikesCacheTimestamp, getBestAvailableLikes, getAllPlaylistItems } from '../api.js?v=159';
-import { showProgress, hideProgress, alertModal, escapeHtml, pageHeader } from '../ui/components.js?v=159';
-import { openModal, closeTop } from '../ui/modal-stack.js?v=159';
-import { showToast } from '../ui/toast.js?v=159';
-import { openListenedAlbumsPicker } from './listened-shared.js?v=159';
-import { loadHistoryStats, loadListenedAlbums } from './history-data.js?v=159';
-import { getArtistLikePreview } from '../util/artist-preview.js?v=159';
-import { hoverIn, hoverOut } from '../ui/preview-player.js?v=159';
-import { armRevealAll } from '../ui/reveal.js?v=159';
-import { hasUsername, getUsername, setUsername } from '../api/statsfm.js?v=159';
-import { getKey as getLastfmKey, setKey as setLastfmKey, clearKey as clearLastfmKey, isDefaultKey as lastfmIsDefaultKey } from '../api/lastfm.js?v=159';
+import { getAllLikedTracks, invalidateLikesCache, exportAllData, importAllData, getCurrentUserId, syncLikesIncremental, getLikesCacheTimestamp, getBestAvailableLikes, getAllPlaylistItems } from '../api.js?v=160';
+import { showProgress, hideProgress, alertModal, escapeHtml, pageHeader } from '../ui/components.js?v=160';
+import { openModal, closeTop } from '../ui/modal-stack.js?v=160';
+import { showToast } from '../ui/toast.js?v=160';
+import { openListenedAlbumsPicker } from './listened-shared.js?v=160';
+import { loadHistoryStats, loadListenedAlbums } from './history-data.js?v=160';
+import { getArtistLikePreview } from '../util/artist-preview.js?v=160';
+import { hoverIn, hoverOut } from '../ui/preview-player.js?v=160';
+import { armRevealAll } from '../ui/reveal.js?v=160';
+import { hasUsername, getUsername, setUsername } from '../api/statsfm.js?v=160';
+import { getKey as getLastfmKey, setKey as setLastfmKey, clearKey as clearLastfmKey, isDefaultKey as lastfmIsDefaultKey } from '../api/lastfm.js?v=160';
 
 // Tres estados posibles, no dos: puede haber una key propia, la del código, o
 // —si algún día la constante queda vacía— ninguna. El hint del ⚙ tiene que
@@ -17,11 +17,11 @@ function estadoLastfm() {
   if (localStorage.getItem('lastfm_api_key')) return 'propia';
   return lastfmIsDefaultKey() ? 'la del código' : 'sin configurar';
 }
-import { loadHistoryStats as _loadStatsForCounter } from './history-data.js?v=159';
-import { openArtistCard } from './artist-card.js?v=159';
-import { openAlbumCard } from './album-card.js?v=159';
-import { activateMarquee, marqueeSpan } from '../ui/marquee.js?v=159';
-import { isJunkTrack } from '../util/junk.js?v=159';
+import { loadHistoryStats as _loadStatsForCounter } from './history-data.js?v=160';
+import { openArtistCard } from './artist-card.js?v=160';
+import { openAlbumCard } from './album-card.js?v=160';
+import { activateMarquee, marqueeSpan } from '../ui/marquee.js?v=160';
+import { isJunkTrack } from '../util/junk.js?v=160';
 
 let charts = [];
 let _loadController = null;
@@ -699,10 +699,13 @@ function renderDashboard(container, stats) {
   // — lo que rompería a Chart.js sería instanciarlo dentro del callback del
   // observer o con el contenedor en `display: none`, que mide 0.
   //
-  // Son 6 stat cards + los 9 `.dash-chart-card` (5 de likes y 4 del historial).
-  // Los 4 del historial cuelgan de `#history-section`, que nace en
-  // `display: none`: el observer no los ve hasta que `hydrateHistorySection`
+  // Son las 6 stat cards de arriba + los 9 `.dash-chart-card` (5 de likes y 4
+  // del historial). Los 4 del historial cuelgan de `#history-section`, que nace
+  // en `display: none`: el observer no los ve hasta que `hydrateHistorySection`
   // la muestra, y ahí entran solos.
+  //
+  // Los 5 tiles del historial NO se arman acá porque todavía no existen: los
+  // pinta `hydrateHistorySection`, que los arma por su cuenta.
   armRevealAll('.dash-stats-row .stat-card', container, { stagger: 40 });
   armRevealAll('.dash-chart-card', container, { stagger: 60, maxStagger: 4 });
 }
@@ -726,6 +729,11 @@ async function hydrateHistorySection() {
     <div class="stat-card"><div class="stat-value">${t.longest_streak || 0}</div><div class="stat-label">Racha más larga (días)</div></div>
     <div class="stat-card"><div class="stat-value">${t.skip_pct || 0}%</div><div class="stat-label">Skips</div></div>
   `;
+  // Estos 5 tiles NACEN ACÁ, después de que `renderDashboard` ya armó lo suyo,
+  // así que hay que armarlos aparte. Sin esto la sección del historial entraba a
+  // medias: los 4 charts de abajo se animaban y la fila de tiles de arriba
+  // aparecía de golpe. Verificado en producción con v=159.
+  if (tiles) armRevealAll('.stat-card', tiles, { stagger: 40 });
 
   // Evolución mensual (line)
   if (h.monthly?.length) {
