@@ -288,11 +288,10 @@ Lo que NO acompaña al tema, y sigue legible igual: los ticks de los charts
 mosaico (`rgba(20,20,28,.95)` con texto blanco, que trae su propio fondo).
 
 ## PENDIENTES anotados en v=157
-- **La clave del tema no tiene prefijo por usuario.** `fonoteca_theme_v1` es
-  global, así que dos personas en el mismo browser comparten paleta. Hoy **no
-  existe** ningún helper de prefijo por user en la app (el guard de v=86 invalida
-  caches de IDB por user id, pero las prefs viven en claves globales de
-  localStorage). Cuando se haga el prefijo, esta clave entra con las demás.
+- ~~**La clave del tema no tiene prefijo por usuario.**~~ ✅ **Resuelto en
+  v=159**: `prefKey()` en `storage.js`, aplicado a `fonoteca_theme_v1` y
+  `fonoteca_anim_v1`, con migración del valor guardado. **Siguen sin prefijo las
+  otras ~8 claves de preferencia** — ver la sección de arriba.
 - **Los cuatro .txt gitignoreados de la raíz** (`RESUMEN-MAESTRO.txt`,
   `FONOTECA-funciones-y-pendientes.txt`, `FONOTECA-PROMPT-PARA-OTRA-IA.txt`,
   `NEXT-PROMPT.txt`) **NO se borran**: son doc viva y se actualizan cada tanda.
@@ -300,6 +299,64 @@ mosaico (`rgba(20,20,28,.95)` con texto blanco, que trae su propio fondo).
   bugs abiertos y pendientes que existe. (En la tanda 8 se pidió borrarlos y
   después Ian retiró el pedido: seguí actualizándolos.)
 - **#covers congela el renderer** con 2.449 tapas (viene de la tanda 7).
+
+## Animaciones de entrada al scrollear (v=159)
+`src/js/ui/reveal.js`. Un `IntersectionObserver` compartido, `unobserve` al
+revelar, solo opacidad + `translateY(16px)` en 520 ms. Lo usan Dashboard (29
+elementos) y Wrapped (26).
+
+⚠️ **La regla dura: si algo falla, el contenido queda VISIBLE — y se garantiza
+por ESTRUCTURA, no por cuidado.** El CSS **no oculta nada**: `.reveal-armed` es
+la clase que esconde y la pone el JS en el mismo paso en que llama a `observe()`.
+Si el módulo no se importa, tira al importarse, `IntersectionObserver` no existe
+o `observe()` falla, la clase **nunca se agrega**. **Nunca escribas
+`.algo { opacity: 0 }` en la hoja esperando una clase que puede no llegar**: ese
+es exactamente el fallo que esta estructura evita. Probado en producción
+rompiendo `observe()` a propósito: 26 fallos de armado y la vista intacta.
+
+Al terminar la transición se **quitan** las clases y el `transition-delay`
+inline. No es cosmético: `.reveal-in` y `.year-tile` tienen la misma
+especificidad (0,1,0), así que una `.reveal-in` residual le ganaría por orden de
+hoja a la transición propia del `:active`.
+
+**Los charts se animan por el CONTENEDOR, ya instanciado.** Un contenedor en
+`opacity: 0` **sigue midiendo**, así que Chart.js no se entera (verificado: los
+7 canvas conservan 565/1202 px). Lo que sí lo rompe es instanciarlo dentro del
+callback del observer o con el contenedor en `display: none`, donde mide 0. Por
+eso `armRevealAll` va **después** de `buildCharts()`.
+
+**Armá donde el elemento NACE.** `renderDashboard` arma lo que pinta, pero los 5
+stat tiles del historial los escribe `hydrateHistorySection` después: hasta v=160
+la sección entraba a medias (los charts animaban, los tiles aparecían de golpe).
+
+**`releaseReveal(root)` antes de repintar**: un `IntersectionObserver` mantiene
+referencia FUERTE a lo que observa, así que los nodos que se van con un
+`innerHTML = …` no se liberan solos (caso: cambiar de año en el Wrapped).
+
+El toggle vive en `ui/theme-panel.js` con tres estados (`auto` / `siempre` /
+`nunca`) y **un cartel que dice cuándo está apagado porque el sistema pide
+movimiento reducido** — sin él se lee como roto, igual que las barritas del
+player de v=88. Por eso las reglas nuevas de `main.css` **no** llevan
+`@media (prefers-reduced-motion)`: quién anima lo decide `animationsEnabled()`
+en JS, porque el toggle puede forzar por encima del sistema. Los 10 bloques de
+reduced-motion que ya existían **no se tocaron**.
+
+## Claves de preferencia por usuario (v=159)
+`prefKey(base)` y `migratePrefKey(base)` en `src/js/storage.js`. Aplicado a
+`fonoteca_theme_v1` y `fonoteca_anim_v1`; las otras ~8 preferencias siguen
+globales.
+
+⚠️ **El prefijo sale de `fonoteca_last_user_id`, NUNCA de `getCurrentUserId()`.**
+El segundo es **async** (`api.js:829`, hace `GET /me` la primera vez) y
+`applyStoredTheme()` corre **sincrónico** en `app.js:648`, antes del primer
+frame: prefijar con un id async pinta la paleta de fábrica y salta a la elegida
+un instante después, o sea **flash de tema**. `fonoteca_last_user_id` lo escribe
+`getCurrentUserId()` de forma sincrónica en `api.js:848`.
+
+⚠️ **Al prefijar una clave que ya está en uso, MIGRÁ el valor.** Leer la clave
+prefijada sin mudar la vieja primero devuelve vacío y la preferencia se pierde
+**sin fallar**. `migratePrefKey()` copia y borra, y solo migra si la prefijada
+está vacía. Suite: `tests/pref-key.test.mjs`, 13 asserts.
 
 ## Client ID
 0c8c92ad128e4b89be7097c6b8082797
