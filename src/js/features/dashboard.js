@@ -6,6 +6,7 @@ import { openListenedAlbumsPicker } from './listened-shared.js';
 import { loadHistoryStats, loadListenedAlbums } from './history-data.js';
 import { getArtistLikePreview } from '../util/artist-preview.js';
 import { hoverIn, hoverOut } from '../ui/preview-player.js';
+import { armRevealAll } from '../ui/reveal.js';
 import { hasUsername, getUsername, setUsername } from '../api/statsfm.js';
 import { getKey as getLastfmKey, setKey as setLastfmKey, clearKey as clearLastfmKey, isDefaultKey as lastfmIsDefaultKey } from '../api/lastfm.js';
 
@@ -691,6 +692,19 @@ function renderDashboard(container, stats) {
   hydrateListenedAlbumsCard();
   hydrateListenedYearTiles();
   hydrateHistorySection();
+
+  // Entrada al scrollear (v=159). Va DESPUÉS de `buildCharts`: los charts se
+  // instancian con el contenedor ya medido y en su ancho definitivo. Animar
+  // opacidad y `translateY` no cambia el ancho, así que el chart no se entera
+  // — lo que rompería a Chart.js sería instanciarlo dentro del callback del
+  // observer o con el contenedor en `display: none`, que mide 0.
+  //
+  // Son 6 stat cards + los 9 `.dash-chart-card` (5 de likes y 4 del historial).
+  // Los 4 del historial cuelgan de `#history-section`, que nace en
+  // `display: none`: el observer no los ve hasta que `hydrateHistorySection`
+  // la muestra, y ahí entran solos.
+  armRevealAll('.dash-stats-row .stat-card', container, { stagger: 40 });
+  armRevealAll('.dash-chart-card', container, { stagger: 60, maxStagger: 4 });
 }
 
 async function hydrateHistorySection() {
@@ -982,6 +996,11 @@ async function hydrateListenedYearTiles() {
     holder.querySelectorAll('.year-tile').forEach(tile => {
       tile.onclick = () => openHistoryYearModal(+tile.dataset.year, years.find(y => y.year === +tile.dataset.year), data.criteria);
     });
+    // El contenedor de los tiles scrollea en horizontal (`overflow-y: hidden`),
+    // así que NO es un root de scroll vertical y el observer usa el viewport,
+    // que es lo correcto: lo que decide la entrada es que la fila entera llegue
+    // a pantalla, no la posición dentro del carrusel.
+    armRevealAll('.year-tile', holder, { stagger: 35, maxStagger: 8 });
   } catch (e) {
     holder.innerHTML = `<span style="color:var(--color-error)">Error cargando: ${escapeHtml(e.message)}</span>`;
   }

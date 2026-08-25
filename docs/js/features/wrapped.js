@@ -1,18 +1,19 @@
 // Wrapped propio: mini-resumen tuyo por año, hecho con el Extended Streaming History.
 // A diferencia del Wrapped oficial (que corre oct-sept), este es del año calendario completo.
 
-import { loadHistoryStats, isOwner, ownerLockedMessage } from './history-data.js?v=158';
-import { escapeHtml, pageHeader } from '../ui/components.js?v=158';
-import { getPreview } from '../api/preview-providers.js?v=158';
-import { getArtistLikePreview, getAlbumLikePreview } from '../util/artist-preview.js?v=158';
-import { attachHover } from '../ui/preview-player.js?v=158';
-import { openTrackCard } from './track-card.js?v=158';
-import { openArtistCard } from './artist-card.js?v=158';
-import { openAlbumCard } from './album-card.js?v=158';
-import { getMyTop } from '../api.js?v=158';
-import { activateMarquee, marqueeSpan } from '../ui/marquee.js?v=158';
-import { openModal } from '../ui/modal-stack.js?v=158';
-import { coverUrl } from '../util/cover-size.js?v=158';
+import { loadHistoryStats, isOwner, ownerLockedMessage } from './history-data.js?v=159';
+import { escapeHtml, pageHeader } from '../ui/components.js?v=159';
+import { getPreview } from '../api/preview-providers.js?v=159';
+import { getArtistLikePreview, getAlbumLikePreview } from '../util/artist-preview.js?v=159';
+import { attachHover } from '../ui/preview-player.js?v=159';
+import { openTrackCard } from './track-card.js?v=159';
+import { openArtistCard } from './artist-card.js?v=159';
+import { openAlbumCard } from './album-card.js?v=159';
+import { getMyTop } from '../api.js?v=159';
+import { activateMarquee, marqueeSpan } from '../ui/marquee.js?v=159';
+import { openModal } from '../ui/modal-stack.js?v=159';
+import { armReveal, armRevealAll, releaseReveal } from '../ui/reveal.js?v=159';
+import { coverUrl } from '../util/cover-size.js?v=159';
 
 let stats = null;
 let selectedYear = null;
@@ -149,6 +150,9 @@ export async function render(container) {
 
 function renderYearCard() {
   const holder = document.getElementById('wrapped-year-card');
+  // Cambiar de año repinta la tarjeta entera: hay que soltar los nodos que el
+  // observer todavía tiene agarrados antes de tirarlos.
+  releaseReveal(holder);
   const y = stats.years.find(yy => yy.year === selectedYear);
   if (!y) { holder.innerHTML = ''; return; }
 
@@ -261,6 +265,7 @@ function renderYearCard() {
   }
 
   activateMarquee(holder);
+  armarWrapped(holder);
 }
 
 function openLastPlayModal(lastDate) {
@@ -354,6 +359,19 @@ function wireTopHover(holder, cardKey, items, kind) {
       : async () => await getPreview({ name: it.name, artist: it.artist || '', spotifyId: trackId });
     attachHover(el, `wr:${cardKey}:${i}`, getter);
   });
+}
+
+
+// Entrada al scrollear (v=159). Las dos tarjetas del Wrapped —la del año y la
+// «DE SIEMPRE»— tienen la misma estructura, así que se arman igual: primero el
+// hero, después los tiles de la grilla y por último las tres columnas de tops.
+//
+// Los tiles van con `grid-area`: la opacidad y el `translateY` no tocan la
+// colocación del grid, así que el bloque no se mueve mientras entran.
+function armarWrapped(holder) {
+  armReveal(holder.querySelector('.wrapped-hero'));
+  armRevealAll('.wrapped-tile, .wrapped-album-hero', holder, { stagger: 45, maxStagger: 8 });
+  armRevealAll('.wrapped-top-card', holder, { stagger: 70, maxStagger: 3 });
 }
 
 function renderTopCard(title, items, keyName, keyMin, keyPlays, keyArtist, hoverKey, clickKey) {
@@ -529,6 +547,7 @@ function renderAllTime() {
   wireTopClick(holder, 'at-alb', (stats.top_albums_all_time || []).slice(0, 20), 'album');
   wireAlbumHero(holder, topAlbum);
   activateMarquee(holder);
+  armarWrapped(holder);
 }
 
 // ============ Wrapped lite: para users sin Extended Streaming History ============

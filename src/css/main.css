@@ -4421,3 +4421,73 @@ body.covers-fs .main {
   .theme-presets { grid-template-columns: minmax(0, 1fr); }
   .theme-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Animaciones de entrada al scrollear (v=159) — ver src/js/ui/reveal.js
+   ══════════════════════════════════════════════════════════════════════════
+
+   ⚠️ ACÁ NO SE OCULTA NADA POR DEFECTO. La clase que esconde es
+   `.reveal-armed`, y la pone el JS justo antes de registrar el elemento en el
+   IntersectionObserver. Si el JS no corre, la clase no aparece y todo se ve
+   normal.
+
+   NO escribir nunca una regla del tipo `.reveal { opacity: 0 }` esperando que
+   una clase llegue después: ese es exactamente el fallo que esta estructura
+   evita.
+
+   La duración tiene que coincidir con `DUR_MS` en `ui/reveal.js`, que la usa de
+   backstop para limpiar las clases.
+
+   Estos bloques NO llevan `@media (prefers-reduced-motion)`: la decisión de
+   animar o no la toma `animationsEnabled()` en JS, porque hay un toggle que
+   puede forzar «siempre» por encima del sistema. Los diez bloques de
+   reduced-motion que ya existían en las hojas se quedan como están. */
+.reveal-armed {
+  opacity: 0;
+  transform: translateY(16px);
+  transition: opacity 520ms cubic-bezier(.22, .61, .36, 1),
+              transform 520ms cubic-bezier(.22, .61, .36, 1);
+  /* El navegador puede promover la capa mientras dure la entrada. Se va con la
+     clase, así que no queda una capa de composición viva por elemento. */
+  will-change: opacity, transform;
+}
+.reveal-armed.reveal-in {
+  opacity: 1;
+  transform: none;
+}
+
+/* ── El toggle de animaciones del panel de paleta (v=159) ── */
+.theme-anim-row {
+  display: flex;
+  gap: 6px;
+  margin-top: 6px;
+}
+.theme-anim-opt {
+  flex: 1 1 0;
+  min-width: 0;
+  padding: 7px 8px;
+  font-family: inherit;
+  font-size: 12.5px;
+  color: var(--color-text-secondary);
+  background: var(--color-elevated);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: border-color .15s, color .15s, background .15s;
+}
+.theme-anim-opt:hover { border-color: var(--color-accent); color: var(--color-text); }
+.theme-anim-opt.is-on {
+  border-color: var(--color-accent);
+  background: var(--color-accent-soft);
+  color: var(--color-text);
+  font-weight: 600;
+}
+/* El cartel que explica por qué «Sigue al sistema» no mueve nada. Sin esto, un
+   toggle encendido que no anima se lee como roto. */
+.theme-anim-nota {
+  margin: 8px 0 0;
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--color-text-muted);
+}
+.theme-anim-nota strong { color: var(--color-text-secondary); font-weight: 600; }
