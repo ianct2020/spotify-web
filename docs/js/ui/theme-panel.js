@@ -21,10 +21,10 @@
 // texto blanco: los dos siguen legibles en claro, pero no acompañan al tema.
 // Anotado en la doc.
 
-import { openModal, closeTop } from './modal-stack.js?v=161';
-import { showToast } from './toast.js?v=161';
-import { prefKey, migratePrefKey } from '../storage.js?v=161';
-import { MODOS, getAnimMode, setAnimMode, systemAsksReducedMotion } from './reveal.js?v=161';
+import { openModal, closeTop } from './modal-stack.js?v=162';
+import { showToast } from './toast.js?v=162';
+import { prefKey, migratePrefKey } from '../storage.js?v=162';
+import { MODOS, getAnimMode, setAnimMode } from './reveal.js?v=162';
 
 // La clave lleva prefijo por usuario desde v=159 (antes era global y dos
 // personas en el mismo navegador compartían paleta). El prefijo sale de
@@ -184,32 +184,19 @@ export function applyStoredTheme() {
 
 // El toggle de animaciones vive ACÁ y no en un icono propio del menú: esto ya
 // es «cómo se ve la app», y el menú no necesita otra entrada.
+// v=162: dos estados, encendidas de fábrica. El modo «Sigue al sistema» se
+// quitó — las animaciones de entrada ya no miran `prefers-reduced-motion`. El
+// resto de las animaciones de la aplicación sí lo sigue respetando.
 const ANIM_OPCIONES = [
-  { id: 'auto', label: 'Sigue al sistema', title: 'Respeta la preferencia de movimiento reducido del sistema operativo' },
-  { id: 'siempre', label: 'Siempre', title: 'Anima aunque el sistema pida movimiento reducido' },
-  { id: 'nunca', label: 'Nunca', title: 'Sin animaciones de entrada, en ningún caso' },
+  { id: 'siempre', label: 'Encendidas', title: 'Las secciones entran al llegar a ellas scrolleando' },
+  { id: 'nunca', label: 'Apagadas', title: 'Sin animaciones de entrada: el contenido aparece ya colocado' },
 ];
 
-/**
- * El cartel de debajo del toggle.
- *
- * En «Sigue al sistema» con movimiento reducido activo hay que DECIR por qué no
- * se mueve nada. Sin ese texto, el ajuste parece roto: es lo mismo que pasó con
- * las barritas del reproductor, que llevaban intactas desde v=88 y se dieron
- * por rotas dos veces.
- */
-function animNotaHtml(modo, reducido) {
-  if (modo === 'siempre') {
-    return reducido
-      ? 'Forzado: se anima igual, aunque el sistema pida <strong>movimiento reducido</strong>.'
-      : 'Las secciones del Dashboard y del Wrapped entran al llegar a ellas scrolleando.';
-  }
-  if (modo === 'nunca') {
-    return 'Sin animaciones de entrada. El contenido aparece ya colocado.';
-  }
-  return reducido
-    ? 'Ahora mismo está <strong>apagado</strong> porque tu sistema pide <strong>movimiento reducido</strong>. Elige «Siempre» para animar igual.'
-    : 'Tu sistema no pide movimiento reducido, así que las secciones entran al llegar a ellas scrolleando.';
+/** El cartel de debajo del toggle. */
+function animNotaHtml(modo) {
+  return modo === 'nunca'
+    ? 'Sin animaciones de entrada. El contenido aparece ya colocado.'
+    : 'Las secciones del Dashboard y del Wrapped entran al llegar a ellas scrolleando. No depende del ajuste de movimiento reducido del sistema.';
 }
 
 function swatchesHtml(colors) {
@@ -221,14 +208,10 @@ export function openThemePanel() {
   let actual = { ...ORIGINAL, ...(st?.colors || {}) };
   let presetId = st?.preset || (st ? null : 'violeta');
 
-  // Se llena más abajo, cuando se cablea el toggle de animaciones. Va por
-  // referencia porque `onClose` hay que pasarlo al abrir y el listener se
-  // registra después.
-  let desuscribirMQ = null;
-
+  // Desde v=162 el toggle de animaciones no escucha `prefers-reduced-motion`,
+  // así que el panel ya no deja ningún listener que desuscribir al cerrarse.
   const overlay = openModal({
     id: 'theme-panel',
-    onClose: () => { try { desuscribirMQ?.(); } catch { /* ya no estaba */ } },
     html: `
     <div class="modal card-modal" style="max-width:560px;width:min(560px,94vw)">
       <div class="card-modal-head-simple">
@@ -303,9 +286,6 @@ export function openThemePanel() {
   });
 
   // ── animaciones ──
-  // El cartel se recalcula en cada pintada porque `prefers-reduced-motion`
-  // puede cambiar con la pestaña abierta (en GNOME, desactivar las animaciones
-  // del escritorio se refleja al instante).
   const notaEl = overlay.querySelector('#theme-anim-nota');
   const pintarAnim = () => {
     const modo = getAnimMode();
@@ -313,7 +293,7 @@ export function openThemePanel() {
       el.classList.toggle('is-on', el.dataset.anim === modo);
       el.setAttribute('aria-pressed', String(el.dataset.anim === modo));
     });
-    if (notaEl) notaEl.innerHTML = animNotaHtml(modo, systemAsksReducedMotion());
+    if (notaEl) notaEl.innerHTML = animNotaHtml(modo);
   };
   pintarAnim();
 
@@ -327,14 +307,6 @@ export function openThemePanel() {
       showToast('Se aplica al volver a entrar al Dashboard o al Wrapped', 'info');
     };
   });
-
-  // Si el sistema cambia de opinión con el panel abierto, el cartel se entera.
-  let mq = null;
-  try {
-    mq = window.matchMedia('(prefers-reduced-motion: reduce)');
-    mq.addEventListener('change', pintarAnim);
-    desuscribirMQ = () => mq.removeEventListener('change', pintarAnim);
-  } catch { /* navegador sin matchMedia: el cartel se queda como está */ }
 
   overlay.querySelector('#theme-reset').onclick = () => {
     try { localStorage.removeItem(LS_KEY()); } catch { /* noop */ }

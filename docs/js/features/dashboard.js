@@ -1,14 +1,14 @@
-import { getAllLikedTracks, invalidateLikesCache, exportAllData, importAllData, getCurrentUserId, syncLikesIncremental, getLikesCacheTimestamp, getBestAvailableLikes, getAllPlaylistItems } from '../api.js?v=161';
-import { showProgress, hideProgress, alertModal, escapeHtml, pageHeader } from '../ui/components.js?v=161';
-import { openModal, closeTop } from '../ui/modal-stack.js?v=161';
-import { showToast } from '../ui/toast.js?v=161';
-import { openListenedAlbumsPicker } from './listened-shared.js?v=161';
-import { loadHistoryStats, loadListenedAlbums } from './history-data.js?v=161';
-import { getArtistLikePreview } from '../util/artist-preview.js?v=161';
-import { hoverIn, hoverOut } from '../ui/preview-player.js?v=161';
-import { armRevealAll } from '../ui/reveal.js?v=161';
-import { hasUsername, getUsername, setUsername } from '../api/statsfm.js?v=161';
-import { getKey as getLastfmKey, setKey as setLastfmKey, clearKey as clearLastfmKey, isDefaultKey as lastfmIsDefaultKey } from '../api/lastfm.js?v=161';
+import { getAllLikedTracks, invalidateLikesCache, exportAllData, importAllData, getCurrentUserId, syncLikesIncremental, getLikesCacheTimestamp, getBestAvailableLikes, getAllPlaylistItems } from '../api.js?v=162';
+import { showProgress, hideProgress, alertModal, escapeHtml, pageHeader } from '../ui/components.js?v=162';
+import { openModal, closeTop } from '../ui/modal-stack.js?v=162';
+import { showToast } from '../ui/toast.js?v=162';
+import { openListenedAlbumsPicker } from './listened-shared.js?v=162';
+import { loadHistoryStats, loadListenedAlbums } from './history-data.js?v=162';
+import { getArtistLikePreview } from '../util/artist-preview.js?v=162';
+import { hoverIn, hoverOut } from '../ui/preview-player.js?v=162';
+import { armRevealAll } from '../ui/reveal.js?v=162';
+import { hasUsername, getUsername, setUsername } from '../api/statsfm.js?v=162';
+import { getKey as getLastfmKey, setKey as setLastfmKey, clearKey as clearLastfmKey, isDefaultKey as lastfmIsDefaultKey } from '../api/lastfm.js?v=162';
 
 // Tres estados posibles, no dos: puede haber una key propia, la del código, o
 // —si algún día la constante queda vacía— ninguna. El hint del ⚙ tiene que
@@ -17,11 +17,11 @@ function estadoLastfm() {
   if (localStorage.getItem('lastfm_api_key')) return 'propia';
   return lastfmIsDefaultKey() ? 'la del código' : 'sin configurar';
 }
-import { loadHistoryStats as _loadStatsForCounter } from './history-data.js?v=161';
-import { openArtistCard } from './artist-card.js?v=161';
-import { openAlbumCard } from './album-card.js?v=161';
-import { activateMarquee, marqueeSpan } from '../ui/marquee.js?v=161';
-import { isJunkTrack } from '../util/junk.js?v=161';
+import { loadHistoryStats as _loadStatsForCounter } from './history-data.js?v=162';
+import { openArtistCard } from './artist-card.js?v=162';
+import { openAlbumCard } from './album-card.js?v=162';
+import { activateMarquee, marqueeSpan } from '../ui/marquee.js?v=162';
+import { isJunkTrack } from '../util/junk.js?v=162';
 
 let charts = [];
 let _loadController = null;
@@ -706,8 +706,8 @@ function renderDashboard(container, stats) {
   //
   // Los 5 tiles del historial NO se arman acá porque todavía no existen: los
   // pinta `hydrateHistorySection`, que los arma por su cuenta.
-  armRevealAll('.dash-stats-row .stat-card', container, { stagger: 40 });
-  armRevealAll('.dash-chart-card', container, { stagger: 60, maxStagger: 4 });
+  armRevealAll('.dash-stats-row .stat-card', container, { stagger: 20 });
+  armRevealAll('.dash-chart-card', container, { stagger: 28, maxStagger: 4 });
 }
 
 async function hydrateHistorySection() {
@@ -733,7 +733,7 @@ async function hydrateHistorySection() {
   // así que hay que armarlos aparte. Sin esto la sección del historial entraba a
   // medias: los 4 charts de abajo se animaban y la fila de tiles de arriba
   // aparecía de golpe. Verificado en producción con v=159.
-  if (tiles) armRevealAll('.stat-card', tiles, { stagger: 40 });
+  if (tiles) armRevealAll('.stat-card', tiles, { stagger: 20 });
 
   // Evolución mensual (line)
   if (h.monthly?.length) {
@@ -1008,7 +1008,7 @@ async function hydrateListenedYearTiles() {
     // así que NO es un root de scroll vertical y el observer usa el viewport,
     // que es lo correcto: lo que decide la entrada es que la fila entera llegue
     // a pantalla, no la posición dentro del carrusel.
-    armRevealAll('.year-tile', holder, { stagger: 35, maxStagger: 8 });
+    armRevealAll('.year-tile', holder, { stagger: 18, maxStagger: 8 });
   } catch (e) {
     holder.innerHTML = `<span style="color:var(--color-error)">Error cargando: ${escapeHtml(e.message)}</span>`;
   }

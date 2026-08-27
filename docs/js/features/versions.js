@@ -1,10 +1,10 @@
-import { getAllLikedTracks, removeLikedTracks, checkLibraryContains } from '../api.js?v=161';
-import { showProgress, hideProgress, progressController, isCancelled, typeConfirmModal, renderTrackRow, escapeHtml, pageHeader } from '../ui/components.js?v=161';
-import { showToast } from '../ui/toast.js?v=161';
-import { openModal, closeTop } from '../ui/modal-stack.js?v=161';
-import { coverUrl } from '../util/cover-size.js?v=161';
-import { openPlaylistPicker } from '../ui/playlist-picker.js?v=161';
-import { getOwnPlaylists, addUrisToPlaylists, toastAddResult } from '../util/playlist-add.js?v=161';
+import { getAllLikedTracks, removeLikedTracks, checkLibraryContains } from '../api.js?v=162';
+import { showProgress, hideProgress, progressController, isCancelled, typeConfirmModal, renderTrackRow, escapeHtml, pageHeader } from '../ui/components.js?v=162';
+import { showToast } from '../ui/toast.js?v=162';
+import { openModal, closeTop } from '../ui/modal-stack.js?v=162';
+import { coverUrl } from '../util/cover-size.js?v=162';
+import { openPlaylistPicker } from '../ui/playlist-picker.js?v=162';
+import { getOwnPlaylists, addUrisToPlaylists, toastAddResult } from '../util/playlist-add.js?v=162';
 
 // ── «Borrar sobrantes» inhabilitado (2026-08-26) ─────────────────────────────
 //
@@ -21,29 +21,12 @@ import { getOwnPlaylists, addUrisToPlaylists, toastAddResult } from '../util/pla
 //
 // Lo que ya está puesto para cuando se reactive:
 //   - la confirmación lista nombre y artista de cada pista, no un número;
-//   - cada borrado deja registro en localStorage (`versions_borrado_log_v1`)
-//     con los ids, los nombres y la fecha, para poder deshacerlo.
+//   - el registro del borrado, que desde v=162 lo escribe `removeLikedTracks()`
+//     en `api.js` para TODAS las vistas que borran me gusta
+//     (`likes_borrados_log_v1`). Acá solo se le pasa el origen y la metadata
+//     que la vista ya tenía delante.
 const BORRADO_BLOQUEADO = true;
 const MOTIVO_BLOQUEO = 'Inhabilitado desde el 26/08/2026: en un borrado desapareció también una versión marcada con «quedarme». Se reactivará cuando esté arreglado.';
-
-// Registro local de cada borrado, para que la próxima vez sea recuperable.
-// Guarda los últimos LOG_MAX borrados con metadatos; si localStorage se queja,
-// no rompe el borrado (el registro es una red de seguridad, no un requisito).
-const LOG_KEY = 'versions_borrado_log_v1';
-const LOG_MAX = 20;
-function registrarBorrado(entradas, idsMarcados) {
-  try {
-    const previo = JSON.parse(localStorage.getItem(LOG_KEY) || '[]');
-    previo.unshift({
-      fecha: new Date().toISOString(),
-      borradas: entradas,
-      marcadas: idsMarcados,
-    });
-    localStorage.setItem(LOG_KEY, JSON.stringify(previo.slice(0, LOG_MAX)));
-  } catch (e) {
-    console.warn('Versiones: no se pudo guardar el registro del borrado:', e.message);
-  }
-}
 
 const keepIds = new Set();
 // Persiste los cluster idx que ya resolviste (batchDelete). Sobrevive a "Ver más"
@@ -550,13 +533,15 @@ async function batchDelete() {
   );
   if (!ok) return;
 
-  // El registro va ANTES de tocar la API: si el borrado se corta a la mitad, el
-  // registro tiene de más, que es el lado bueno del error.
-  registrarBorrado(detalle, [...keepIds]);
-
   try {
     showProgress('Borrando sobrantes...', 0, toRemoveIds.length);
-    await removeLikedTracks(toRemoveIds);
+    // El registro lo escribe `removeLikedTracks()` antes del primer DELETE.
+    // Le pasamos la metadata que ya tenemos y las marcas, que es justo lo que
+    // haría falta para reconstruir si esto vuelve a salir mal.
+    await removeLikedTracks(toRemoveIds, {
+      origen: '#versions',
+      meta: detalle.map(d => ({ ...d, marcadasEnEsteBorrado: [...keepIds] })),
+    });
     // Verificación contra Spotify: chequeo si los ids que borré siguen en la
     // biblioteca. Post-migración feb 2026 el que vive es /me/library/contains
     // con URIs (verificado en vivo 2026-07-28). No falla si el endpoint muere

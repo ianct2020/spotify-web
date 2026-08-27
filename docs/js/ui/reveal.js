@@ -44,7 +44,7 @@
 // shimmer de los esqueletos se ajustó en la tanda 7 para ATENUARSE en vez de
 // apagarse, y eso sigue igual.
 
-import { prefKey } from '../storage.js?v=161';
+import { prefKey } from '../storage.js?v=162';
 
 const ARMED = 'reveal-armed';
 const IN = 'reveal-in';
@@ -57,22 +57,37 @@ const IN = 'reveal-in';
 const DUR_MS = 520;
 
 const KEY_BASE = 'fonoteca_anim_v1';
-export const MODOS = ['auto', 'siempre', 'nunca'];
+export const MODOS = ['siempre', 'nunca'];
 
 // ── la preferencia ──────────────────────────────────────────────────────────
+//
+// ⚠️ **Estas animaciones ya NO miran `prefers-reduced-motion`** (v=162, decisión
+// de Ian). Van encendidas por defecto y solo las apaga el toggle.
+//
+// El motivo: Ian tiene `enable-animations = false` en GNOME, así que el modo
+// «sigue al sistema» —que era el de fábrica— dejaba la entrada apagada en su
+// propia máquina, que es donde se mira. La preferencia del sistema sigue
+// mandando en todo lo demás: **los diez bloques `@media (prefers-reduced-motion)`
+// de las hojas no se tocan** (el shimmer atenuado de los esqueletos de la tanda
+// 7 y las barritas del reproductor de v=141 siguen exactamente como estaban).
+//
+// El modo viejo `'auto'` que haya guardado se lee como `'siempre'`: quien no
+// eligió nada tenía el de fábrica, y el de fábrica ahora es encendido.
+const MODO_POR_DEFECTO = 'siempre';
 
-/** 'auto' (sigue al sistema) · 'siempre' · 'nunca'. Por defecto, 'auto'. */
+/** 'siempre' (por defecto) · 'nunca'. */
 export function getAnimMode() {
   try {
     const v = localStorage.getItem(prefKey(KEY_BASE));
-    return MODOS.includes(v) ? v : 'auto';
+    if (v === 'nunca') return 'nunca';
+    return MODO_POR_DEFECTO;
   } catch {
-    return 'auto';
+    return MODO_POR_DEFECTO;
   }
 }
 
 export function setAnimMode(modo) {
-  const m = MODOS.includes(modo) ? modo : 'auto';
+  const m = MODOS.includes(modo) ? modo : MODO_POR_DEFECTO;
   try { localStorage.setItem(prefKey(KEY_BASE), m); } catch { /* lleno o sin localStorage */ }
   return m;
 }
@@ -80,10 +95,8 @@ export function setAnimMode(modo) {
 /**
  * Si el sistema operativo pide movimiento reducido.
  *
- * Ian tiene `enable-animations = false` en GNOME, así que el camino atenuado es
- * EL SUYO, no el caso raro. Y el panel tiene que DECIRLO: sin ese cartel, un
- * toggle en «sigue al sistema» que no anima nada se lee como roto. Es
- * exactamente lo que pasó con las barritas del player, intactas desde v=88.
+ * Se conserva porque sigue siendo el dato correcto para cualquier animación que
+ * SÍ deba respetarlo. Las de entrada al scrollear ya no lo consultan.
  */
 export function systemAsksReducedMotion() {
   try { return window.matchMedia('(prefers-reduced-motion: reduce)').matches; }
@@ -91,10 +104,7 @@ export function systemAsksReducedMotion() {
 }
 
 export function animationsEnabled() {
-  const m = getAnimMode();
-  if (m === 'siempre') return true;
-  if (m === 'nunca') return false;
-  return !systemAsksReducedMotion();
+  return getAnimMode() !== 'nunca';
 }
 
 // ── el observer ─────────────────────────────────────────────────────────────
@@ -180,8 +190,15 @@ export function armReveal(el, { delay = 0 } = {}) {
  * El escalonado se corta en `maxStagger` elementos: con 20 filas y 45 ms cada
  * una la última entraría casi un segundo tarde, y eso ya no se lee como
  * cascada sino como que la página va lenta.
+ *
+ * ⚠️ **El escalonado se bajó a la mitad en v=162.** Con scroll rápido, un
+ * `stagger` de 45 ms cortado en 6 dejaba 270 ms de retardo en el último
+ * elemento, más los 520 ms de su transición: llegabas a la sección y todavía
+ * había zona vacía abajo. Lo que se baja es el RETARDO ENTRE ELEMENTOS, no la
+ * duración de cada uno — la entrada de cada tarjeta sigue durando 520 ms, que
+ * es lo que la hace legible. La cascada se aprieta, no se acelera.
  */
-export function armRevealAll(selector, root = document, { stagger = 45, maxStagger = 6 } = {}) {
+export function armRevealAll(selector, root = document, { stagger = 22, maxStagger = 6 } = {}) {
   if (!animationsEnabled()) return 0;
   let n = 0;
   let els;

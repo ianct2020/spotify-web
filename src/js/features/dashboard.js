@@ -706,8 +706,8 @@ function renderDashboard(container, stats) {
   //
   // Los 5 tiles del historial NO se arman acá porque todavía no existen: los
   // pinta `hydrateHistorySection`, que los arma por su cuenta.
-  armRevealAll('.dash-stats-row .stat-card', container, { stagger: 40 });
-  armRevealAll('.dash-chart-card', container, { stagger: 60, maxStagger: 4 });
+  armRevealAll('.dash-stats-row .stat-card', container, { stagger: 20 });
+  armRevealAll('.dash-chart-card', container, { stagger: 28, maxStagger: 4 });
 }
 
 async function hydrateHistorySection() {
@@ -733,7 +733,7 @@ async function hydrateHistorySection() {
   // así que hay que armarlos aparte. Sin esto la sección del historial entraba a
   // medias: los 4 charts de abajo se animaban y la fila de tiles de arriba
   // aparecía de golpe. Verificado en producción con v=159.
-  if (tiles) armRevealAll('.stat-card', tiles, { stagger: 40 });
+  if (tiles) armRevealAll('.stat-card', tiles, { stagger: 20 });
 
   // Evolución mensual (line)
   if (h.monthly?.length) {
@@ -1008,7 +1008,7 @@ async function hydrateListenedYearTiles() {
     // así que NO es un root de scroll vertical y el observer usa el viewport,
     // que es lo correcto: lo que decide la entrada es que la fila entera llegue
     // a pantalla, no la posición dentro del carrusel.
-    armRevealAll('.year-tile', holder, { stagger: 35, maxStagger: 8 });
+    armRevealAll('.year-tile', holder, { stagger: 18, maxStagger: 8 });
   } catch (e) {
     holder.innerHTML = `<span style="color:var(--color-error)">Error cargando: ${escapeHtml(e.message)}</span>`;
   }
