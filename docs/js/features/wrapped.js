@@ -1,19 +1,19 @@
 // Wrapped propio: mini-resumen tuyo por año, hecho con el Extended Streaming History.
 // A diferencia del Wrapped oficial (que corre oct-sept), este es del año calendario completo.
 
-import { loadHistoryStats, isOwner, ownerLockedMessage } from './history-data.js?v=163';
-import { escapeHtml, pageHeader } from '../ui/components.js?v=163';
-import { getPreview } from '../api/preview-providers.js?v=163';
-import { getArtistLikePreview, getAlbumLikePreview } from '../util/artist-preview.js?v=163';
-import { attachHover } from '../ui/preview-player.js?v=163';
-import { openTrackCard } from './track-card.js?v=163';
-import { openArtistCard } from './artist-card.js?v=163';
-import { openAlbumCard } from './album-card.js?v=163';
-import { getMyTop } from '../api.js?v=163';
-import { activateMarquee, marqueeSpan } from '../ui/marquee.js?v=163';
-import { openModal } from '../ui/modal-stack.js?v=163';
-import { armReveal, armRevealAll, releaseReveal } from '../ui/reveal.js?v=163';
-import { coverUrl } from '../util/cover-size.js?v=163';
+import { loadHistoryStats, isOwner, ownerLockedMessage } from './history-data.js?v=164';
+import { escapeHtml, pageHeader } from '../ui/components.js?v=164';
+import { getPreview } from '../api/preview-providers.js?v=164';
+import { getArtistLikePreview, getAlbumLikePreview } from '../util/artist-preview.js?v=164';
+import { attachHover } from '../ui/preview-player.js?v=164';
+import { openTrackCard } from './track-card.js?v=164';
+import { openArtistCard } from './artist-card.js?v=164';
+import { openAlbumCard } from './album-card.js?v=164';
+import { getMyTop } from '../api.js?v=164';
+import { activateMarquee, marqueeSpan } from '../ui/marquee.js?v=164';
+import { openModal } from '../ui/modal-stack.js?v=164';
+import { armReveal, armRevealAll, releaseReveal } from '../ui/reveal.js?v=164';
+import { coverUrl } from '../util/cover-size.js?v=164';
 
 let stats = null;
 let selectedYear = null;

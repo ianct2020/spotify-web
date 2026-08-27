@@ -6,11 +6,15 @@ import { showToast } from '../ui/toast.js';
 import { isJunkTrack } from '../util/junk.js';
 import { openModal, closeTop } from '../ui/modal-stack.js';
 import { getListenedPlaylist, groupItemsByAlbum, openListenedAlbumsPicker, albumKey, baseName, norm } from './listened-shared.js';
+import { openAlbumCard } from './album-card.js';
 
 const SORT_KEY = 'listened_sort_mode';
 const VALID_SORTS = new Set(['recent', 'year-desc', 'year-asc', 'artist-asc', 'likes-desc', 'name-asc']);
 const CACHE_TTL_MIN = 24 * 60; // refresca la playlist agrupada solo si pasó más de un día
-const cacheKeyFor = id => `listened_grouped_${id}`;
+// v=164: `_v2` porque los álbumes agrupados llevan ahora `artistAlts`, y sin él
+// el cruce de «Quizás escuchaste y no registraste» seguiría corriendo con la
+// clave vieja hasta que el caché caducara solo.
+const cacheKeyFor = id => `listened_grouped_${id}_v2`;
 let unregMin = 4; // mín. de canciones en likes para sugerir un álbum como "quizás escuchado sin registrar" (ajustable)
 const DISMISS_KEY = 'listened_unreg_dismissed'; // álbumes que el usuario ocultó de "sin registrar"
 const DUP_DISMISS_KEY = 'listened_dupes_dismissed'; // grupos que el usuario marcó "no es duplicado"
@@ -293,6 +297,9 @@ async function addAlbumsLocally(entries) {
       id,
       name: e.name || '(sin nombre)',
       artist: e.artist || '',
+      // Los alternativos viajan con el álbum: si no, hasta la próxima
+      // relectura de la playlist el cruce volvería a la clave única.
+      artistAlts: [...(e.artistAlts || [])],
       year: e.year || '',
       image: e.image || e.cover || null,
       cover: e.cover || e.image || null,
@@ -371,18 +378,24 @@ async function attachLikes(albumList) {
     const k = albumKey(e.name, e.artist);
     let m = likesByKey.get(k);
     if (!m) {
-      m = { id: e.id, ids: new Set([e.id]), name: e.name, artist: e.artist, year: e.year, image: e.image, albumType: e.albumType, totalTracks: e.totalTracks, tracks: [], _repCount: e.tracks.length, _seen: new Set() };
+      m = { id: e.id, ids: new Set([e.id]), name: e.name, artist: e.artist, year: e.year, image: e.image, albumType: e.albumType, totalTracks: e.totalTracks, tracks: [], artistAlts: new Set(), _repCount: e.tracks.length, _seen: new Set() };
       likesByKey.set(k, m);
     } else {
       m.ids.add(e.id);
       // El lanzamiento con más tracks manda como representativo (suele ser el deluxe/completo).
       if (e.tracks.length > m._repCount) { m.name = e.name; m.artist = e.artist; m.image = e.image || m.image; m.year = e.year || m.year; m.id = e.id; m.albumType = e.albumType; m.totalTracks = e.totalTracks; m._repCount = e.tracks.length; }
     }
+    if (e.artist) m.artistAlts.add(e.artist);
     for (const t of e.tracks) {
       const nk = norm(t.name);
       if (m._seen.has(nk)) continue;
       m._seen.add(nk);
       m.tracks.push(t);
+      // El primer artista acreditado de cada pista también sirve para cruzar
+      // contra el registro: ver el comentario de `artistAlts` en
+      // listened-shared.js.
+      const primero = String(t.artists || '').split(',')[0].trim();
+      if (primero) m.artistAlts.add(primero);
     }
   }
   for (const m of likesByKey.values()) { delete m._repCount; delete m._seen; }
@@ -458,8 +471,16 @@ function computeUnregistered(min = unregMin, type = 'all') {
   //  - o si CUALQUIER track suyo ya está en la playlist (a prueba de nombres raros
   //    tipo "$ome $exy $ong$ 4 U", donde el nombre/artista no matchean pero el track sí).
   //  - o si lo ocultaste a mano.
+  //  - y, desde v=164, por CUALQUIER combinación de nombre-sin-edición con
+  //    cualquiera de los artistas principales vistos a cada lado: el `artist`
+  //    del registro sale del álbum y el de los likes sale de las pistas, así
+  //    que para un mismo disco no tienen por qué coincidir (ver `artistAlts`).
   const dismissed = getDismissed();
-  const registeredKeys = new Set(albums.map(a => albumKey(a.name, a.artist)));
+  const registeredKeys = new Set();
+  for (const a of albums) {
+    registeredKeys.add(albumKey(a.name, a.artist));
+    for (const alt of (a.artistAlts || [])) registeredKeys.add(albumKey(a.name, alt));
+  }
   const registeredIds = new Set(albums.map(a => a.id));
   const registeredUris = new Set();
   for (const a of albums) for (const t of a.tracks) if (t.uri) registeredUris.add(t.uri);
@@ -467,6 +488,7 @@ function computeUnregistered(min = unregMin, type = 'all') {
   for (const [k, e] of likesByKey) {
     if (dismissed.has(k)) continue;
     if (registeredKeys.has(k)) continue;
+    if (clavesDe(e).some(kk => registeredKeys.has(kk))) continue;
     if ([...e.ids].some(id => registeredIds.has(id))) continue;
     if (e.tracks.some(t => t.uri && registeredUris.has(t.uri))) continue;
     if (e.tracks.length < min) continue;
@@ -476,6 +498,62 @@ function computeUnregistered(min = unregMin, type = 'all') {
   }
   out.sort((a, b) => b.tracks.length - a.tracks.length);
   return out;
+}
+
+// Todas las claves bajo las que un lanzamiento de los likes puede estar
+// registrado: su nombre con cada uno de los artistas principales que se le
+// vieron.
+function clavesDe(e) {
+  return [...(e.artistAlts || [])].map(a => albumKey(e.name, a));
+}
+
+// ── Diagnóstico del cruce (v=164) ────────────────────────────────────────────
+// Mide, sobre lo que la vista ofrece HOY, cuántos ya están registrados y por
+// qué señal se los pilla. Sirve para no discutir de memoria si el cruce falla.
+// Se llama desde la consola: `await window.__unregDiag()`.
+if (typeof window !== 'undefined') {
+  window.__unregDiag = () => {
+    if (!likesByKey) return 'Abrí #listened y esperá a que cargue.';
+    const registeredKeys = new Set();
+    const soloArtistaDelAlbum = new Set();
+    for (const a of albums) {
+      soloArtistaDelAlbum.add(albumKey(a.name, a.artist));
+      registeredKeys.add(albumKey(a.name, a.artist));
+      for (const alt of (a.artistAlts || [])) registeredKeys.add(albumKey(a.name, alt));
+    }
+    const registeredIds = new Set(albums.map(a => a.id));
+    const registeredUris = new Set();
+    for (const a of albums) for (const t of a.tracks) if (t.uri) registeredUris.add(t.uri);
+
+    const dismissed = getDismissed();
+    const ofrecidosAntes = [];
+    for (const [k, e] of likesByKey) {
+      if (dismissed.has(k)) continue;
+      if (soloArtistaDelAlbum.has(k)) continue;
+      if ([...e.ids].some(id => registeredIds.has(id))) continue;
+      if (e.tracks.some(t => t.uri && registeredUris.has(t.uri))) continue;
+      if (e.tracks.length < unregMin) continue;
+      const kind = releaseKind(e);
+      if (kind !== getUnregType() && getUnregType() !== 'all') continue;
+      ofrecidosAntes.push({ ...e, key: k, kind });
+    }
+    const rescatados = ofrecidosAntes.filter(e => clavesDe(e).some(kk => registeredKeys.has(kk)));
+    return {
+      registradosEnLaPlaylist: albums.length,
+      umbral: unregMin,
+      tipo: getUnregType(),
+      ofrecidosConElCruceViejo: ofrecidosAntes.length,
+      yaRegistradosQueSeColaban: rescatados.length,
+      ofrecidosAhora: ofrecidosAntes.length - rescatados.length,
+      ejemplos: rescatados.slice(0, 20).map(e => ({
+        album: e.name,
+        artistaEnLikes: e.artist,
+        clavesDeLikes: clavesDe(e),
+        registradoComo: albums.filter(a => clavesDe(e).some(kk => (a.artistAlts || []).concat([a.artist]).some(x => albumKey(a.name, x) === kk)))
+          .map(a => `${a.name} — ${a.artist} (${a.id})`),
+      })),
+    };
+  };
 }
 
 // Un álbum es "edición" (deluxe/remaster/etc) si sacarle las marcas cambia el nombre.
@@ -949,8 +1027,8 @@ function openUnregistered() {
           return `
           <label class="pick-row" style="display:flex;align-items:center;gap:11px;padding:9px 12px;border-bottom:1px solid var(--color-border);cursor:${uri ? 'pointer' : 'default'}">
             <input type="checkbox" class="unreg-cb" data-uri="${uri}" data-key="${e.key}" ${uri ? '' : 'disabled'} ${uri && prevChecked.has(uri) ? 'checked' : ''}>
-            ${e.image ? `<img src="${e.image}" loading="lazy" class="pick-cover">` : `<div class="pick-cover" style="background:var(--color-elevated);display:flex;align-items:center;justify-content:center;color:var(--color-text-muted);font-size:16px">♪</div>`}
-            <div style="flex:1;min-width:0">
+            ${e.image ? `<img src="${e.image}" loading="lazy" class="pick-cover unreg-open" data-key="${e.key}" title="Ver la ficha del álbum" style="cursor:pointer">` : `<div class="pick-cover unreg-open" data-key="${e.key}" title="Ver la ficha del álbum" style="background:var(--color-elevated);display:flex;align-items:center;justify-content:center;color:var(--color-text-muted);font-size:16px;cursor:pointer">♪</div>`}
+            <div class="unreg-open" data-key="${e.key}" title="Ver la ficha del álbum" style="flex:1;min-width:0;cursor:pointer">
               <div style="font-size:14px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(e.name)}</div>
               <div style="font-size:12px;color:var(--color-text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(e.artist)}${e.year ? ` · ${e.year}` : ''}</div>
             </div>
@@ -962,6 +1040,33 @@ function openUnregistered() {
       </div>
     `;
     holder.querySelectorAll('.unreg-cb').forEach(cb => cb.addEventListener('change', updateAddBtn));
+    // ── Abrir la ficha de álbum desde la lista (v=164) ──────────────────────
+    //
+    // Hasta ahora solo se podía marcar a ciegas: la fila daba nombre, artista y
+    // cuántos likes, y nada más. La tapa y el bloque de texto abren la ficha;
+    // el checkbox sigue siendo el que selecciona.
+    //
+    // ⚠️ La fila es un `<label>` que envuelve el checkbox, así que un click en
+    // cualquier hijo lo tilda. Por eso va `preventDefault()` además de
+    // `stopPropagation()`: sin el primero, abrir la ficha marcaría el álbum de
+    // paso, que es justo lo contrario de «ver qué es antes de decidir».
+    holder.querySelectorAll('.unreg-open').forEach(el => {
+      el.addEventListener('click', ev => {
+        ev.preventDefault();
+        ev.stopPropagation();
+        const e = unregRendered.find(x => x.key === el.dataset.key);
+        if (!e) return;
+        openAlbumCard({
+          name: e.name,
+          artist: e.artist,
+          img: e.image,
+          albumId: e.id,
+          totalTracks: e.totalTracks,
+          plays: 0,
+          min: 0,
+        });
+      });
+    });
     holder.querySelectorAll('.unreg-hide').forEach(btn => {
       btn.addEventListener('click', ev => {
         ev.preventDefault();
@@ -1032,6 +1137,7 @@ function openUnregistered() {
       // Update local instantáneo (sin re-bajar la playlist ni mostrar "Actualizando").
       await addAlbumsLocally(picked.map(e => ({
         id: e.id, name: e.name, artist: e.artist, year: e.year, image: e.image,
+        artistAlts: [...(e.artistAlts || [])],
         uri: e.tracks.find(t => t.uri)?.uri,
       })));
     } catch (err) {
