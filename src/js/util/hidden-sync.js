@@ -25,7 +25,10 @@ import {
   removeTracksFromPlaylist,
   createPlaylist,
   getCurrentUserId,
+  spotifyFetch,
 } from '../api.js';
+import { prefKey } from '../storage.js';
+import { invalidateOwnPlaylists } from './playlist-add.js';
 
 const PLAYLIST_DESC = 'Lista interna de Fonoteca: lo que ocultaste en esta vista. Si la borrás, se pierden los ocultos.';
 
@@ -42,6 +45,39 @@ function saveLocal(key, set) {
 
 function normName(s) {
   return (s || '').trim().toLowerCase();
+}
+
+// ── Qué playlist es la nuestra: POR ID, no por nombre ────────────────────────
+//
+// Buscar por nombre y quedarse con la PRIMERA coincidencia es lo que dejó dos
+// «fonoteca · ocultos (sin clasificar)» en la cuenta: la app leía la de 0 items
+// y el oculto que vivía en la otra era invisible. El nombre NO es una clave
+// —Spotify deja repetirlo— así que en cuanto sabemos el id lo guardamos y de
+// ahí en más buscamos por id. El nombre queda solo como fallback de la primera
+// vez, y como red por si el id guardado deja de existir.
+//
+// ⚠️ La clave va PREFIJADA POR USUARIO con `prefKey()` (v=159): dos cuentas en
+// el mismo navegador tienen playlists distintas y el id de una no sirve para la
+// otra. `prefKey` lee `fonoteca_last_user_id`, que `getCurrentUserId()` deja
+// escrito de forma sincrónica, así que se llama SIEMPRE DESPUÉS de ese await —
+// antes devolvería la clave pelada y guardaría el id sin dueño.
+//
+// No lleva `migratePrefKey()` a propósito: la clave nace prefijada en esta
+// versión, no hay ningún valor viejo sin prefijo que mudar.
+function idKeyFor(lsKey) {
+  return prefKey(`fonoteca_hidden_pl_${lsKey}`);
+}
+
+function leerIdGuardado(lsKey) {
+  try { return localStorage.getItem(idKeyFor(lsKey)) || null; } catch { return null; }
+}
+
+function guardarId(lsKey, id) {
+  try { localStorage.setItem(idKeyFor(lsKey), id); } catch { /* lleno */ }
+}
+
+function olvidarId(lsKey) {
+  try { localStorage.removeItem(idKeyFor(lsKey)); } catch { /* sin localStorage */ }
 }
 
 /**
@@ -132,19 +168,76 @@ export function createHiddenStore({ lsKey, playlistName, keyOfTrack, label }) {
   // pierden: se reintenta subirlas en cada sync.
   const pendingNoUri = new Set();
 
-  async function findPlaylist() {
-    const [me, playlists] = await Promise.all([getCurrentUserId(), getAllUserPlaylists()]);
+  /**
+   * Total real de items de una playlist. `/me/playlists` NO lo trae fiable
+   * desde la migración de la API (el objeto pasó a exponer `items`, no
+   * `tracks`), así que se pide aparte. Es 1 request y solo se usa para
+   * desempatar duplicadas, que es un caso raro.
+   */
+  async function totalDeItems(id) {
+    try {
+      const r = await spotifyFetch(`/playlists/${id}/items?limit=1`);
+      return r?.total ?? 0;
+    } catch { return 0; }
+  }
+
+  async function findPlaylist({ force = false } = {}) {
+    // Primero el await del user id: deja `fonoteca_last_user_id` escrito, que es
+    // de donde `prefKey()` saca el prefijo.
+    const me = await getCurrentUserId();
+
+    const guardado = leerIdGuardado(lsKey);
+    if (guardado) {
+      try {
+        const p = await spotifyFetch(`/playlists/${guardado}?fields=id,name,owner(id)`);
+        if (p?.id && p.owner?.id === me) return p;
+        console.warn(`[ocultos:${label}] la playlist guardada ${guardado} ya no es tuya; vuelvo a buscarla por nombre`);
+      } catch (e) {
+        console.warn(`[ocultos:${label}] la playlist guardada ${guardado} no responde (${e.message}); vuelvo a buscarla por nombre`);
+      }
+      olvidarId(lsKey);
+    }
+
+    const playlists = await getAllUserPlaylists(null, { force });
     const target = normName(playlistName);
-    const mine = playlists.filter(p => p.owner?.id === me);
-    return mine.find(p => normName(p.name) === target) || null;
+    // normName recorta: un nombre con espacios al final sigue coincidiendo.
+    const candidatas = playlists.filter(p => p.owner?.id === me && normName(p.name) === target);
+    if (!candidatas.length) return null;
+
+    let elegida = candidatas[0];
+    if (candidatas.length > 1) {
+      const totales = await Promise.all(candidatas.map(p => totalDeItems(p.id)));
+      let mejor = 0;
+      totales.forEach((t, i) => { if (t > totales[mejor]) mejor = i; });
+      elegida = candidatas[mejor];
+      console.warn(
+        `[ocultos:${label}] hay ${candidatas.length} playlists llamadas «${playlistName}»: ` +
+        candidatas.map((p, i) => `${p.id} (${totales[i]} items)`).join(', ') +
+        `. Uso la de MÁS items (${elegida.id}) y NO creo ninguna. Hay que fusionarlas a mano: ` +
+        `lo que esté en las otras no se ve desde la app.`
+      );
+    }
+    guardarId(lsKey, elegida.id);
+    return elegida;
   }
 
   async function ensurePlaylist() {
     if (playlistId) return playlistId;
     const found = await findPlaylist();
     if (found) { playlistId = found.id; return playlistId; }
+
+    // Antes de crear, releer FRESCO. El cache de `getAllUserPlaylists` dura
+    // horas: una playlist creada hace un rato (en la otra compu, o a mano en la
+    // app de Spotify) no está en la lista cacheada, y crearíamos una SEGUNDA con
+    // el mismo nombre. Ese es exactamente el camino por el que aparecieron las
+    // duplicadas, así que la relectura no es defensiva de más.
+    invalidateOwnPlaylists();
+    const otraVez = await findPlaylist({ force: true });
+    if (otraVez) { playlistId = otraVez.id; return playlistId; }
+
     const created = await createPlaylist(playlistName, PLAYLIST_DESC, false);
     playlistId = created.id;
+    guardarId(lsKey, created.id);
     console.info(`[ocultos:${label}] playlist creada: ${playlistName} (${playlistId})`);
     return playlistId;
   }
