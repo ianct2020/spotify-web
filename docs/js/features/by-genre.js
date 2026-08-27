@@ -1,11 +1,11 @@
-import { getAllLikedTracks, createPlaylist, addTracksToPlaylist, invalidatePlaylistsCache, exportAllData, importAllData, getCurrentUserId, getBestAvailableLikes } from '../api.js?v=163';
-import { hasKey, setKey, getArtistTopTags, getCachedTags, setCachedTags, mergeCachedTags } from '../api/lastfm.js?v=163';
-import * as statsfm from '../api/statsfm.js?v=163';
-import { getGenresForArtist as mbGetGenres } from '../api/musicbrainz.js?v=163';
-import { showProgress, hideProgress, progressController, isCancelled, promptPlaylistName, alertModal, confirmModal, escapeHtml, pageHeader } from '../ui/components.js?v=163';
-import { showToast } from '../ui/toast.js?v=163';
-import { openModal, closeTop } from '../ui/modal-stack.js?v=163';
-import { tagToGroup } from './genre-groups.js?v=163';
+import { getAllLikedTracks, createPlaylist, addTracksToPlaylist, invalidatePlaylistsCache, exportAllData, importAllData, getCurrentUserId, getBestAvailableLikes } from '../api.js?v=164';
+import { hasKey, setKey, getArtistTopTags, getCachedTags, setCachedTags, mergeCachedTags } from '../api/lastfm.js?v=164';
+import * as statsfm from '../api/statsfm.js?v=164';
+import { getGenresForArtist as mbGetGenres } from '../api/musicbrainz.js?v=164';
+import { showProgress, hideProgress, progressController, isCancelled, promptPlaylistName, alertModal, confirmModal, escapeHtml, pageHeader } from '../ui/components.js?v=164';
+import { showToast } from '../ui/toast.js?v=164';
+import { openModal, closeTop } from '../ui/modal-stack.js?v=164';
+import { tagToGroup } from './genre-groups.js?v=164';
 
 const NOISE_TAGS = new Set([
   'seen live', 'favorites', 'favorite', 'favourite', 'favourites',

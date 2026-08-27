@@ -1,10 +1,10 @@
-import { getAllLikedTracks, removeLikedTracks, checkLibraryContains } from '../api.js?v=163';
-import { showProgress, hideProgress, progressController, isCancelled, typeConfirmModal, renderTrackRow, escapeHtml, pageHeader } from '../ui/components.js?v=163';
-import { showToast } from '../ui/toast.js?v=163';
-import { openModal, closeTop } from '../ui/modal-stack.js?v=163';
-import { coverUrl } from '../util/cover-size.js?v=163';
-import { openPlaylistPicker } from '../ui/playlist-picker.js?v=163';
-import { getOwnPlaylists, addUrisToPlaylists, toastAddResult } from '../util/playlist-add.js?v=163';
+import { getAllLikedTracks, removeLikedTracks, checkLibraryContains } from '../api.js?v=164';
+import { showProgress, hideProgress, progressController, isCancelled, typeConfirmModal, renderTrackRow, escapeHtml, pageHeader } from '../ui/components.js?v=164';
+import { showToast } from '../ui/toast.js?v=164';
+import { openModal, closeTop } from '../ui/modal-stack.js?v=164';
+import { coverUrl } from '../util/cover-size.js?v=164';
+import { openPlaylistPicker } from '../ui/playlist-picker.js?v=164';
+import { getOwnPlaylists, addUrisToPlaylists, toastAddResult } from '../util/playlist-add.js?v=164';
 
 // ── «Borrar sobrantes» inhabilitado (2026-08-26) ─────────────────────────────
 //
@@ -27,6 +27,63 @@ import { getOwnPlaylists, addUrisToPlaylists, toastAddResult } from '../util/pla
 //     que la vista ya tenía delante.
 const BORRADO_BLOQUEADO = true;
 const MOTIVO_BLOQUEO = 'Inhabilitado desde el 26/08/2026: en un borrado desapareció también una versión marcada con «quedarme». Se reactivará cuando esté arreglado.';
+
+// ── Doble de borrado: reproducir el fallo sin tocar los me gusta (v=164) ─────
+//
+// El único camino que quedaba sin ejercitar era un SEGUNDO «Borrar sobrantes»
+// dentro de la misma sesión, con `resolvedClusterIdxs` ya poblado por el
+// primero, el filtro «Ocultar las ya resueltas» encendido y «Ver más» pulsado:
+// ahí conviven las tres cosas que mueven índices (la mutación en el sitio de
+// `allClusters[idx] = kept`, el filtro y la paginación). Ejercitarlo de verdad
+// cuesta me gusta, así que el flujo entero —`computeRemovals`, la
+// confirmación, la mutación de `allClusters` y el remapeo— corre igual, pero
+// la llamada a la API se sustituye por un doble que SOLO REGISTRA los ids.
+//
+// Se enciende con `localStorage['versions_dry_run'] = '1'`. Con el doble
+// encendido el botón se habilita aunque `BORRADO_BLOQUEADO` siga en `true`:
+// desde acá no hay ninguna ruta a la API de borrado.
+const DRY_RUN_KEY = 'versions_dry_run';
+const DRY_LOG_KEY = 'versions_dry_run_log_v1';
+
+// Centinela para saltarse la verificación en simulacro sin que el catch de
+// abajo lo reporte como un fallo de red.
+const SALTAR_VERIFICACION = Symbol('simulacro');
+
+function dryRunActivo() {
+  try { return localStorage.getItem(DRY_RUN_KEY) === '1'; } catch { return false; }
+}
+
+// El doble. Devuelve la entrada registrada para que el llamador la muestre.
+function borradoSimulado(ids, { meta = null } = {}) {
+  const entrada = {
+    fecha: new Date().toISOString(),
+    simulacro: true,
+    total: ids.length,
+    ids,
+    marcadas: [...keepIds],
+    borradas: meta,
+  };
+  window.__versionsDryLog = window.__versionsDryLog || [];
+  window.__versionsDryLog.push(entrada);
+  try {
+    const previo = JSON.parse(localStorage.getItem(DRY_LOG_KEY) || '[]');
+    previo.unshift(entrada);
+    localStorage.setItem(DRY_LOG_KEY, JSON.stringify(previo.slice(0, 20)));
+  } catch { /* el registro es una red, no un requisito */ }
+  console.log(`[versions][simulacro] NO se borró nada. ${ids.length} id(s):`, ids);
+  return entrada;
+}
+
+// ── La regla que el 26/08 no se pudo comprobar ───────────────────────────────
+//
+// Una versión marcada con «quedarme» NO puede salir en la lista de borrado,
+// pase lo que pase con los índices. `computeRemovals()` ya lo respeta por
+// construcción, pero eso es un razonamiento sobre el código y lo que se perdió
+// fueron me gusta: acá se comprueba sobre los ids concretos, justo antes de
+// tocar nada. Si alguna vez se cruzan, el borrado se aborta entero.
+function marcadasEnLaLista(ids) {
+  return ids.filter(id => keepIds.has(id));
+}
 
 const keepIds = new Set();
 // Persiste los cluster idx que ya resolviste (batchDelete). Sobrevive a "Ver más"
@@ -244,22 +301,29 @@ async function analyze(force = false) {
 
     const totalDupes = clusters.reduce((s, c) => s + c.length - 1, 0);
 
+    // ── Orden de la vista (v=164) ───────────────────────────────────────────
+    //
+    // Los dos totales («grupos con versiones» y «posibles sobrantes») vivían en
+    // dos stat-cards grandes arriba de todo, y empujaban la barra de acciones y
+    // el primer grupo fuera de la pantalla. Ahora van DENTRO de la cabecera
+    // pegajosa, compactos: se leen igual, siguen a la vista al scrollear y
+    // dejan sitio para más grupos.
+    //
+    // Y «pistas sin metadatos» pasa al FONDO: son 6 pistas que no son
+    // versiones de nada, no se pueden borrar desde acá y no hay nada que
+    // decidir con ellas. Estaban arriba del listado, o sea delante del trabajo
+    // de verdad.
     results.innerHTML = `
-      <div class="results-summary">
-        <div class="stat-card">
-          <div class="stat-value">${clusters.length}</div>
-          <div class="stat-label">Grupos con versiones</div>
-        </div>
-        <div class="stat-card">
-          <div class="stat-value" style="color:var(--color-warning)">${totalDupes}</div>
-          <div class="stat-label">Posibles sobrantes</div>
-        </div>
-      </div>
-
       <div id="batch-actions" style="position:sticky;top:0;z-index:50;background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-md);padding:12px 16px;margin-bottom:16px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;box-shadow:0 2px 8px rgba(0,0,0,0.2)">
-        <div style="line-height:1.4">
-          <div><strong id="batch-keep-count">0</strong> versión(es) marcada(s) para quedarse</div>
-          <div style="font-size:12px;color:var(--color-text-secondary)"><strong id="batch-delete-count">0</strong> sobrante(s) van a borrarse</div>
+        <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap">
+          <div class="versions-summary" style="display:flex;gap:16px;align-items:baseline;flex-wrap:wrap">
+            <span><strong id="versions-count-groups" style="font-size:20px">${clusters.length}</strong> <span style="font-size:12px;color:var(--color-text-secondary)">grupos con versiones</span></span>
+            <span><strong id="versions-count-dupes" style="font-size:20px;color:var(--color-warning)">${totalDupes}</strong> <span style="font-size:12px;color:var(--color-text-secondary)">posibles sobrantes</span></span>
+          </div>
+          <div style="line-height:1.4;padding-left:16px;border-left:1px solid var(--color-border)">
+            <div><strong id="batch-keep-count">0</strong> versión(es) marcada(s) para quedarse</div>
+            <div style="font-size:12px;color:var(--color-text-secondary)"><strong id="batch-delete-count">0</strong> sobrante(s) van a borrarse</div>
+          </div>
         </div>
         <div style="display:flex;gap:8px;align-items:center">
           <label id="versions-hide-resolved-wrap" class="versions-filter" hidden>
@@ -281,9 +345,9 @@ async function analyze(force = false) {
         </div>` : ''}
       </div>
 
-      ${renderFantasmas()}
-
       <div id="versions-clusters" class="versions-grid"></div>
+
+      ${renderFantasmas()}
     `;
 
     bindFantasmas();
@@ -464,12 +528,12 @@ async function mandarFantasmasAPlaylist(btn) {
 }
 
 function updateSummaryCounts() {
-  const summary = document.querySelector('.results-summary');
-  if (!summary) return;
-  const values = summary.querySelectorAll('.stat-value');
+  const grupos = document.getElementById('versions-count-groups');
+  if (!grupos) return;
   const totalDupes = allClusters.reduce((s, c) => s + c.length - 1, 0);
-  if (values[0]) values[0].textContent = allClusters.length;
-  if (values[1]) values[1].textContent = totalDupes;
+  grupos.textContent = allClusters.length;
+  const dupes = document.getElementById('versions-count-dupes');
+  if (dupes) dupes.textContent = totalDupes;
 }
 
 // Devuelve los ITEMS a borrar, no solo los ids: la confirmación tiene que poder
@@ -502,12 +566,15 @@ function updateBatchBar() {
   const toRemoveCount = computeRemovals().length;
   document.getElementById('batch-delete-count').textContent = toRemoveCount;
   // Con el borrado bloqueado el botón no se habilita nunca, aunque haya marcas.
-  document.getElementById('batch-delete-btn').disabled = BORRADO_BLOQUEADO || toRemoveCount === 0;
+  // La excepción es el doble: ahí el flujo corre entero pero no llama a la API.
+  document.getElementById('batch-delete-btn').disabled =
+    (BORRADO_BLOQUEADO && !dryRunActivo()) || toRemoveCount === 0;
   document.getElementById('batch-clear-btn').disabled = keepIds.size === 0;
 }
 
 async function batchDelete() {
-  if (BORRADO_BLOQUEADO) {
+  const simulacro = dryRunActivo();
+  if (BORRADO_BLOQUEADO && !simulacro) {
     showToast(MOTIVO_BLOQUEO, 'warning');
     return;
   }
@@ -525,29 +592,45 @@ async function batchDelete() {
       <div style="font-size:12px;color:var(--color-text-secondary)">${escapeHtml(d.album)}</div>
     </li>`).join('');
   const ok = await typeConfirmModal(
-    'Borrar versiones sobrantes',
-    `Se mantienen las ${keepIds.size} versión(es) marcadas en verde.
-     Se van a borrar de los me gusta estas ${toRemove.length}:
+    simulacro ? 'Simulacro de borrado (no se toca nada)' : 'Borrar versiones sobrantes',
+    `${simulacro ? '<div style="background:var(--color-elevated);border:1px solid var(--color-warning);border-radius:var(--radius-sm);padding:8px 10px;margin-bottom:10px">Modo <strong>simulacro</strong>: se registran los ids y no se borra ni un me gusta.</div>' : ''}
+     Se mantienen las ${keepIds.size} versión(es) marcadas en verde.
+     Se ${simulacro ? 'registrarían' : 'van a borrar de los me gusta'} estas ${toRemove.length}:
      <ul style="margin:10px 0 0;padding-left:20px;max-height:320px;overflow-y:auto">${lista}</ul>`,
     'BORRAR'
   );
   if (!ok) return;
 
+  // El guarda va acá, sobre los ids concretos y con la lista ya cerrada: si una
+  // marcada se coló, no se llama a nadie y se dice cuál.
+  const coladas = marcadasEnLaLista(toRemoveIds);
+  if (coladas.length) {
+    const nombres = coladas.map(id => detalle.find(d => d.id === id)?.nombre || id);
+    console.error('[versions] ABORTADO: hay marcadas en la lista de borrado:', coladas, nombres);
+    showToast(`Borrado abortado: ${coladas.length} versión(es) marcada(s) con «quedarme» estaban en la lista (${nombres.join(', ')}). No se tocó nada.`, 'error');
+    return;
+  }
+
   try {
-    showProgress('Borrando sobrantes...', 0, toRemoveIds.length);
-    // El registro lo escribe `removeLikedTracks()` antes del primer DELETE.
-    // Le pasamos la metadata que ya tenemos y las marcas, que es justo lo que
-    // haría falta para reconstruir si esto vuelve a salir mal.
-    await removeLikedTracks(toRemoveIds, {
-      origen: '#versions',
-      meta: detalle.map(d => ({ ...d, marcadasEnEsteBorrado: [...keepIds] })),
-    });
+    const meta = detalle.map(d => ({ ...d, marcadasEnEsteBorrado: [...keepIds] }));
+    if (simulacro) {
+      borradoSimulado(toRemoveIds, { meta });
+    } else {
+      showProgress('Borrando sobrantes...', 0, toRemoveIds.length);
+      // El registro lo escribe `removeLikedTracks()` antes del primer DELETE.
+      // Le pasamos la metadata que ya tenemos y las marcas, que es justo lo que
+      // haría falta para reconstruir si esto vuelve a salir mal.
+      await removeLikedTracks(toRemoveIds, { origen: '#versions', meta });
+    }
     // Verificación contra Spotify: chequeo si los ids que borré siguen en la
     // biblioteca. Post-migración feb 2026 el que vive es /me/library/contains
     // con URIs (verificado en vivo 2026-07-28). No falla si el endpoint muere
     // en el futuro — el toast simplemente omite el resumen.
+    // En simulacro no se verifica nada: no hay borrado que comprobar y los ids
+    // siguen —correctamente— en la biblioteca.
     let verifyLine = '';
     try {
+      if (simulacro) throw SALTAR_VERIFICACION;
       showProgress('Verificando con Spotify...', 0, toRemoveIds.length);
       const contains = await checkLibraryContains(toRemoveIds);
       const stillIn = toRemoveIds.filter(id => contains.get(id) === true);
@@ -558,10 +641,12 @@ async function batchDelete() {
         console.warn('Versiones: ids que no salieron:', stillIn);
       }
     } catch (verr) {
-      console.warn('Versiones: verificación falló, sigo igual:', verr.message);
+      if (verr !== SALTAR_VERIFICACION) console.warn('Versiones: verificación falló, sigo igual:', verr.message);
     }
     hideProgress();
-    showToast(`${toRemoveIds.length} versión(es) eliminada(s)${verifyLine}`, 'success');
+    showToast(simulacro
+      ? `Simulacro: ${toRemoveIds.length} versión(es) se habrían borrado. No se tocó ningún me gusta.`
+      : `${toRemoveIds.length} versión(es) eliminada(s)${verifyLine}`, simulacro ? 'warning' : 'success');
 
     const toRemoveSet = new Set(toRemoveIds);
     // Mutar allClusters: dejar solo lo que se quedó. Así "Ver más" o cualquier re-render

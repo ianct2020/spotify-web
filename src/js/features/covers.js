@@ -338,17 +338,25 @@ export async function render(container) {
   let fitEnabled = false;
   let isFullscreen = false;
 
-  const wthreeCount = wthreeItems ? new Set(wthreeItems.map(it => {
-    const t = it?.item || it?.track;
-    if (!t || !t.album) return null;
-    if (isJunkTrack(t.name, t.artists?.[0]?.name)) return null;  // v=126
-    return albumKey(t.album.name, t.artists?.[0]?.name || '');
-  }).filter(Boolean)).size : 0;
+  // ── De dónde salen las tapas (v=164) ────────────────────────────────────────
+  //
+  // El rótulo decía «Historial de escuchas + playlist w three», y eso se leía
+  // como si el mosaico juntase el historial ENTERO. No lo junta: la fuente son
+  // los álbumes que el pipeline da por escuchados —los que superaron el umbral
+  // de un mismo día— más la playlist «w three». El umbral sale del propio JSON
+  // (`criteria`), no de un número escrito a mano acá, para que el rótulo no se
+  // quede viejo si el pipeline cambia de criterio.
+  const crit = data?.criteria || {};
+  const umbral = (crit.min_tracks_sameday && crit.min_min_sameday)
+    ? `${crit.min_tracks_sameday}+ canciones o ${crit.min_min_sameday}+ minutos el mismo día`
+    : 'los que superaron el umbral de un mismo día';
+  const deWthree = allAlbums.filter(a => a.sources.has('wthree')).length;
+  const soloWthree = allAlbums.filter(a => a.sources.has('wthree') && !a.sources.has('listened')).length;
 
   const sinTapa = noCover.length ? ` · ${noCover.length} sin tapa, fuera del mosaico` : '';
   const sourcesLine = wthreeItems
-    ? `<span class="covers-summary-sub">Historial de escuchas + playlist w three · ${wthreeCount} en W-Three${sinTapa}</span>`
-    : `<span class="covers-summary-sub">Historial de escuchas${sinTapa}</span>`;
+    ? `<span class="covers-summary-sub">Álbumes dados por escuchados (${escapeHtml(umbral)}) y la playlist «w three» · ${deWthree} están en W-Three, ${soloWthree} solo ahí${sinTapa}</span>`
+    : `<span class="covers-summary-sub">Álbumes dados por escuchados (${escapeHtml(umbral)})${sinTapa}</span>`;
 
   content.innerHTML = `
     <div class="covers-narrow-hint">Vista pensada para pantalla grande — mejor en escritorio.</div>

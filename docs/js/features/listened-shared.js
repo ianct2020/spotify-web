@@ -1,8 +1,8 @@
-import { getAllUserPlaylists } from '../api.js?v=163';
-import { escapeHtml } from '../ui/components.js?v=163';
-import { showToast } from '../ui/toast.js?v=163';
-import { isJunkTrack } from '../util/junk.js?v=163';
-import { openModal, closeTop } from '../ui/modal-stack.js?v=163';
+import { getAllUserPlaylists } from '../api.js?v=164';
+import { escapeHtml } from '../ui/components.js?v=164';
+import { showToast } from '../ui/toast.js?v=164';
+import { isJunkTrack } from '../util/junk.js?v=164';
+import { openModal, closeTop } from '../ui/modal-stack.js?v=164';
 
 const PID_KEY = 'listened_albums_playlist_id';
 const PNAME_KEY = 'listened_albums_playlist_name';
@@ -69,10 +69,28 @@ function groupItemsByAlbum(items) {
         cover: imgs.length ? (imgs[0].url) : null,
         url: album.external_urls?.spotify || null,
         tracks: [],
+        // ── Artistas alternativos (v=164) ──────────────────────────────────
+        //
+        // `artist` de acá sale del ÁLBUM (`album.artists[0]`), mientras que del
+        // lado de los likes (`attachLikes`) sale del artista principal más
+        // frecuente entre las PISTAS. En un recopilatorio, una banda sonora o
+        // un disco donde lo likeado son colaboraciones, los dos no coinciden, y
+        // `albumKey(nombre, artista)` da claves distintas para el MISMO disco.
+        // Eso hacía que «Quizás escuchaste y no registraste» siguiera ofreciendo
+        // discos ya registrados en otra edición: ni la clave, ni el id (otra
+        // edición = otro id), ni la uri (otra edición = otras pistas) los
+        // cruzaban. Al añadirlos quedaban registrados dos veces y aparecían en
+        // «Duplicados».
+        //
+        // Acá se guardan TODOS los artistas principales vistos, para poder
+        // cruzar por cualquiera de ellos.
+        artistAlts: new Set(),
         addedAt: 0,
       };
+      if (album.artists?.[0]?.name) entry.artistAlts.add(album.artists[0].name);
       map.set(album.id, entry);
     }
+    if (t.artists?.[0]?.name) entry.artistAlts.add(t.artists[0].name);
     entry.tracks.push({
       name: t.name || '',
       artists: (t.artists || []).map(a => a.name).join(', '),
@@ -82,7 +100,9 @@ function groupItemsByAlbum(items) {
     const added = it.added_at ? Date.parse(it.added_at) : 0;
     if (added > entry.addedAt) entry.addedAt = added;
   }
-  return [...map.values()];
+  // El Set no sobrevive a un JSON.stringify (el cache de IDB lo guarda como
+  // `{}`): sale como array, que sí.
+  return [...map.values()].map(e => ({ ...e, artistAlts: [...e.artistAlts] }));
 }
 
 // Modal buscador de playlist. Llama onSelect(id, name) / onClear() cuando el user actúa.

@@ -10,12 +10,12 @@
 //   - Umbral de likes: 5+ / 10+ / 20+
 //   - Ventana temporal: 3 / 6 / 12 / 24 meses (default 12)
 
-import { escapeHtml, confirmModal, pageHeader } from '../ui/components.js?v=163';
-import { showToast } from '../ui/toast.js?v=163';
-import { buildAlbumHeardIndex } from '../util/album-heard.js?v=163';
-import { loadFiltros, buildFilterContext, applyDiscoverFilters } from '../util/discover-filters.js?v=163';
-import { createIncrementalList, scrollRootOf } from '../ui/incremental-list.js?v=163';
-import { createLazyImages } from '../ui/lazy-img.js?v=163';
+import { escapeHtml, confirmModal, pageHeader } from '../ui/components.js?v=164';
+import { showToast } from '../ui/toast.js?v=164';
+import { buildAlbumHeardIndex } from '../util/album-heard.js?v=164';
+import { loadFiltros, buildFilterContext, applyDiscoverFilters } from '../util/discover-filters.js?v=164';
+import { createIncrementalList, scrollRootOf } from '../ui/incremental-list.js?v=164';
+import { createLazyImages } from '../ui/lazy-img.js?v=164';
 import {
   getArtistIdCached,
   getArtistDiscoCached,
@@ -40,7 +40,7 @@ import {
   hiddenAlbums,
   cardKey,
   toggleHiddenAlbum,
-} from './discover-common.js?v=163';
+} from './discover-common.js?v=164';
 
 const SCAN_KEY = 'new_releases';
 
