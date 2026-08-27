@@ -807,7 +807,7 @@ async function sacarDeLikes(rows) {
 
   const ids = conId.map(r => r.trackId);
   try {
-    await removeLikedTracks(ids);
+    await removeLikedTracks(ids, { origen: '#sin-clasificar' });
   } catch (e) {
     showToast('No se pudieron sacar de likes: ' + e.message, 'error');
     return;

@@ -523,7 +523,7 @@ async function sacarDeLikes(rows) {
   if (!ok) return;
 
   try {
-    await removeLikedTracks(ids);
+    await removeLikedTracks(ids, { origen: '#zero-plays' });
   } catch (e) {
     showToast('No se pudieron sacar de likes: ' + e.message, 'error');
     return;

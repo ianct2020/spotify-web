@@ -961,7 +961,84 @@ async function removeFromLikesCache(ids) {
   cacheClear(LIKES_CACHE_KEY); // limpia copia legacy en localStorage si existiera
 }
 
-async function removeLikedTracks(ids) {
+// ── Registro local de borrados de me gusta ───────────────────────────────────
+//
+// El caché de likes NO es una copia de seguridad: `removeFromLikesCache()` lo
+// filtra en el mismo momento en que se borra, y le pone `storedAt` de ese
+// instante, así que después de un borrado parece recién sincronizado y ya no
+// tiene las pistas. El 26/08/2026 eso dejó un borrado accidental de #versions
+// sin ninguna copia previa: hubo que reconstruir la lista contra un export de
+// hacía una semana.
+//
+// Por eso el registro vive ACÁ y no en cada vista: así lo escriben todas las
+// que borran me gusta —#versions, #zombies, #zero-plays, #skips,
+// #sin-clasificar— y también cualquiera que se agregue después, sin que nadie
+// tenga que acordarse. Se escribe SIEMPRE antes del primer DELETE: si la
+// operación se corta a la mitad, el registro tiene de más, que es el lado bueno
+// del error.
+//
+// La metadata sale de `meta` si el llamador la trae (es la buena: es lo que la
+// vista tenía a la vista) y, si no, del caché de likes, que en ese momento
+// todavía está sin filtrar. Si no hay ninguna de las dos, se guardan los ids
+// pelados: sirven igual para volver a likear con `PUT /me/library`.
+const BORRADOS_LOG_KEY = 'likes_borrados_log_v1';
+const BORRADOS_LOG_MAX = 20;
+
+async function registrarBorradoDeLikes(ids, { origen = 'desconocido', meta = null } = {}) {
+  let detalle = null;
+  try {
+    if (Array.isArray(meta) && meta.length) {
+      detalle = meta;
+    } else {
+      const cached = await idbGetCachedRaw(LIKES_CACHE_KEY);
+      if (Array.isArray(cached)) {
+        const porId = new Map(cached.map(it => [it?.track?.id, it]));
+        detalle = ids.map(id => {
+          const t = porId.get(id)?.track;
+          if (!t) return { id };
+          return {
+            id,
+            nombre: t.name || '',
+            artista: t.artists?.map(a => a.name).join(', ') || '',
+            album: t.album?.name || '',
+          };
+        });
+      }
+    }
+  } catch (e) {
+    console.warn('registrarBorradoDeLikes: no se pudo resolver la metadata:', e.message);
+  }
+
+  const entrada = {
+    fecha: new Date().toISOString(),
+    origen,
+    total: ids.length,
+    ids,
+    borradas: detalle,
+  };
+
+  // Escritura defensiva: un borrado grande (#zero-plays, #skips) puede ser de
+  // miles de pistas. Si no entra, se degrada —primero sin metadata, después
+  // tirando los registros más viejos— pero NUNCA se deja que el
+  // QuotaExceededError salga de acá: el registro es una red, no un requisito, y
+  // encima `cacheSet()` reacciona a la cuota borrando el caché entero.
+  const guardar = (lista) => localStorage.setItem(BORRADOS_LOG_KEY, JSON.stringify(lista));
+  let previo = [];
+  try { previo = JSON.parse(localStorage.getItem(BORRADOS_LOG_KEY) || '[]'); } catch { previo = []; }
+
+  const intentos = [
+    () => guardar([entrada, ...previo].slice(0, BORRADOS_LOG_MAX)),
+    () => guardar([{ ...entrada, borradas: null }, ...previo].slice(0, BORRADOS_LOG_MAX)),
+    () => guardar([{ ...entrada, borradas: null }]),
+  ];
+  for (const intento of intentos) {
+    try { intento(); return; } catch (e) { /* probamos la forma siguiente */ }
+  }
+  console.warn('registrarBorradoDeLikes: no se pudo guardar el registro del borrado');
+}
+
+async function removeLikedTracks(ids, opciones = {}) {
+  await registrarBorradoDeLikes(ids, opciones);
   const chunks = [];
   for (let i = 0; i < ids.length; i += 40) {
     chunks.push(ids.slice(i, i + 40));

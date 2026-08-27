@@ -252,7 +252,7 @@ async function batchDelete() {
   try {
     showProgress('Quitando zombis...', 0, total);
     if (likeIds.length > 0) {
-      await removeLikedTracks(likeIds);
+      await removeLikedTracks(likeIds, { origen: '#zombies' });
     }
     for (const op of playlistOps) {
       await removeTracksFromPlaylist(op.plId, op.uris);

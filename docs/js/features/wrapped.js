@@ -1,19 +1,19 @@
 // Wrapped propio: mini-resumen tuyo por año, hecho con el Extended Streaming History.
 // A diferencia del Wrapped oficial (que corre oct-sept), este es del año calendario completo.
 
-import { loadHistoryStats, isOwner, ownerLockedMessage } from './history-data.js?v=161';
-import { escapeHtml, pageHeader } from '../ui/components.js?v=161';
-import { getPreview } from '../api/preview-providers.js?v=161';
-import { getArtistLikePreview, getAlbumLikePreview } from '../util/artist-preview.js?v=161';
-import { attachHover } from '../ui/preview-player.js?v=161';
-import { openTrackCard } from './track-card.js?v=161';
-import { openArtistCard } from './artist-card.js?v=161';
-import { openAlbumCard } from './album-card.js?v=161';
-import { getMyTop } from '../api.js?v=161';
-import { activateMarquee, marqueeSpan } from '../ui/marquee.js?v=161';
-import { openModal } from '../ui/modal-stack.js?v=161';
-import { armReveal, armRevealAll, releaseReveal } from '../ui/reveal.js?v=161';
-import { coverUrl } from '../util/cover-size.js?v=161';
+import { loadHistoryStats, isOwner, ownerLockedMessage } from './history-data.js?v=162';
+import { escapeHtml, pageHeader } from '../ui/components.js?v=162';
+import { getPreview } from '../api/preview-providers.js?v=162';
+import { getArtistLikePreview, getAlbumLikePreview } from '../util/artist-preview.js?v=162';
+import { attachHover } from '../ui/preview-player.js?v=162';
+import { openTrackCard } from './track-card.js?v=162';
+import { openArtistCard } from './artist-card.js?v=162';
+import { openAlbumCard } from './album-card.js?v=162';
+import { getMyTop } from '../api.js?v=162';
+import { activateMarquee, marqueeSpan } from '../ui/marquee.js?v=162';
+import { openModal } from '../ui/modal-stack.js?v=162';
+import { armReveal, armRevealAll, releaseReveal } from '../ui/reveal.js?v=162';
+import { coverUrl } from '../util/cover-size.js?v=162';
 
 let stats = null;
 let selectedYear = null;
@@ -370,8 +370,8 @@ function wireTopHover(holder, cardKey, items, kind) {
 // colocación del grid, así que el bloque no se mueve mientras entran.
 function armarWrapped(holder) {
   armReveal(holder.querySelector('.wrapped-hero'));
-  armRevealAll('.wrapped-tile, .wrapped-album-hero', holder, { stagger: 45, maxStagger: 8 });
-  armRevealAll('.wrapped-top-card', holder, { stagger: 70, maxStagger: 3 });
+  armRevealAll('.wrapped-tile, .wrapped-album-hero', holder, { stagger: 22, maxStagger: 8 });
+  armRevealAll('.wrapped-top-card', holder, { stagger: 32, maxStagger: 3 });
 }
 
 function renderTopCard(title, items, keyName, keyMin, keyPlays, keyArtist, hoverKey, clickKey) {

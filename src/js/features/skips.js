@@ -668,7 +668,7 @@ function wireRows() {
     rmBtn.disabled = true;
     rmBtn.textContent = 'Sacando…';
     try {
-      await removeLikedTracks(ids);
+      await removeLikedTracks(ids, { origen: '#skips' });
       showToast(`Sacaste ${sel.length} ${sel.length === 1 ? 'canción' : 'canciones'} de tus likes`, 'success');
       await analyze();
     } catch (e) {

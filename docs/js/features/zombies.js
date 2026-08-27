@@ -1,8 +1,8 @@
-import { getAllLikedTracks, getAllPlaylistItems, removeLikedTracks, removeTracksFromPlaylist } from '../api.js?v=161';
-import { showProgress, hideProgress, progressController, isCancelled, typeConfirmModal, renderTrackRow, escapeHtml, pageHeader } from '../ui/components.js?v=161';
-import { showToast } from '../ui/toast.js?v=161';
-import { isZombieItem } from '../util/zombie.js?v=161';
-import { getOwnPlaylists } from '../util/playlist-add.js?v=161';
+import { getAllLikedTracks, getAllPlaylistItems, removeLikedTracks, removeTracksFromPlaylist } from '../api.js?v=162';
+import { showProgress, hideProgress, progressController, isCancelled, typeConfirmModal, renderTrackRow, escapeHtml, pageHeader } from '../ui/components.js?v=162';
+import { showToast } from '../ui/toast.js?v=162';
+import { isZombieItem } from '../util/zombie.js?v=162';
+import { getOwnPlaylists } from '../util/playlist-add.js?v=162';
 
 const FADE_DURATION_MS = 15000;
 const STAGGER_PER_ROW_MS = 80;
@@ -252,7 +252,7 @@ async function batchDelete() {
   try {
     showProgress('Quitando zombis...', 0, total);
     if (likeIds.length > 0) {
-      await removeLikedTracks(likeIds);
+      await removeLikedTracks(likeIds, { origen: '#zombies' });
     }
     for (const op of playlistOps) {
       await removeTracksFromPlaylist(op.plId, op.uris);

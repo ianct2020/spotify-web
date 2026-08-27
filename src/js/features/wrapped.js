@@ -370,8 +370,8 @@ function wireTopHover(holder, cardKey, items, kind) {
 // colocación del grid, así que el bloque no se mueve mientras entran.
 function armarWrapped(holder) {
   armReveal(holder.querySelector('.wrapped-hero'));
-  armRevealAll('.wrapped-tile, .wrapped-album-hero', holder, { stagger: 45, maxStagger: 8 });
-  armRevealAll('.wrapped-top-card', holder, { stagger: 70, maxStagger: 3 });
+  armRevealAll('.wrapped-tile, .wrapped-album-hero', holder, { stagger: 22, maxStagger: 8 });
+  armRevealAll('.wrapped-top-card', holder, { stagger: 32, maxStagger: 3 });
 }
 
 function renderTopCard(title, items, keyName, keyMin, keyPlays, keyArtist, hoverKey, clickKey) {

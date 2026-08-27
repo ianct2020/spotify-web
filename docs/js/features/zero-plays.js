@@ -14,22 +14,22 @@
 // `util/hidden-sync.js`, playlist como fuente de verdad y localStorage como
 // caché local para pintar al instante.
 
-import { getBestAvailableLikes, removeLikedTracks } from '../api.js?v=161';
-import { loadTrackPlays, trackIdOf, isOwner, ownerLockedMessage } from './history-data.js?v=161';
-import { escapeHtml, confirmModal, pageHeader } from '../ui/components.js?v=161';
-import { showToast } from '../ui/toast.js?v=161';
-import { openTrackCard } from './track-card.js?v=161';
-import { hasUsername, loadTopLifetime } from '../api/statsfm.js?v=161';
-import { getPreview } from '../api/preview-providers.js?v=161';
-import { togglePreview, playingKey } from '../ui/preview-player.js?v=161';
-import { renderTrackCardRow, wireTrackCardGrid, paintCardSelection, paintPlayingCard } from '../ui/track-card-row.js?v=161';
-import { createIncrementalList, scrollRootOf } from '../ui/incremental-list.js?v=161';
-import { createLazyImages } from '../ui/lazy-img.js?v=161';
-import { activateMarquee } from '../ui/marquee.js?v=161';
-import { coverAtSize } from '../util/cover-size.js?v=161';
-import { firstArtistName } from '../util/artist-name.js?v=161';
-import { createHiddenStore } from '../util/hidden-sync.js?v=161';
-import { fmtDiaCorto } from '../util/fecha.js?v=161';
+import { getBestAvailableLikes, removeLikedTracks } from '../api.js?v=162';
+import { loadTrackPlays, trackIdOf, isOwner, ownerLockedMessage } from './history-data.js?v=162';
+import { escapeHtml, confirmModal, pageHeader } from '../ui/components.js?v=162';
+import { showToast } from '../ui/toast.js?v=162';
+import { openTrackCard } from './track-card.js?v=162';
+import { hasUsername, loadTopLifetime } from '../api/statsfm.js?v=162';
+import { getPreview } from '../api/preview-providers.js?v=162';
+import { togglePreview, playingKey } from '../ui/preview-player.js?v=162';
+import { renderTrackCardRow, wireTrackCardGrid, paintCardSelection, paintPlayingCard } from '../ui/track-card-row.js?v=162';
+import { createIncrementalList, scrollRootOf } from '../ui/incremental-list.js?v=162';
+import { createLazyImages } from '../ui/lazy-img.js?v=162';
+import { activateMarquee } from '../ui/marquee.js?v=162';
+import { coverAtSize } from '../util/cover-size.js?v=162';
+import { firstArtistName } from '../util/artist-name.js?v=162';
+import { createHiddenStore } from '../util/hidden-sync.js?v=162';
+import { fmtDiaCorto } from '../util/fecha.js?v=162';
 
 let cache = null;
 
@@ -523,7 +523,7 @@ async function sacarDeLikes(rows) {
   if (!ok) return;
 
   try {
-    await removeLikedTracks(ids);
+    await removeLikedTracks(ids, { origen: '#zero-plays' });
   } catch (e) {
     showToast('No se pudieron sacar de likes: ' + e.message, 'error');
     return;
