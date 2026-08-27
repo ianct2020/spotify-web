@@ -358,6 +358,57 @@ prefijada sin mudar la vieja primero devuelve vacío y la preferencia se pierde
 **sin fallar**. `migratePrefKey()` copia y borra, y solo migra si la prefijada
 está vacía. Suite: `tests/pref-key.test.mjs`, 13 asserts.
 
+## El cruce de #listened usaba dos claves distintas (v=164)
+`groupItemsByAlbum()` (`features/listened-shared.js`) sacaba el artista de
+`album.artists[0].name` —el del ÁLBUM— y `attachLikes()` (`features/listened.js`)
+del artista principal **más frecuente entre las pistas likeadas**. Para un
+recopilatorio, una banda sonora o un disco donde lo likeado son colaboraciones
+los dos **no coinciden**, y `albumKey(nombre, artista)` daba claves distintas
+para el mismo disco. Con otra **edición** ya registrada tampoco lo salvan las
+otras dos redes del cruce: otra edición es otro id de álbum (falla
+`registeredIds`) y otras pistas (falla `registeredUris`). Resultado: «Quizás
+escuchaste y no registraste» ofrecía discos ya añadidos, al añadirlos quedaban
+registrados **dos veces** y aparecían en «Duplicados» — o sea que **el bug de
+cruce se leía como un bug de otra vista**. Desde v=164 los dos lados llevan
+`artistAlts` (todos los artistas principales vistos) y se cruzan por cualquiera.
+⚠️ `artistAlts` viaja como **array, no como Set**: `albums` se guarda en IDB con
+`JSON.stringify` y un `Set` se serializa como `{}`. ⚠️ Y al cambiar la forma de
+algo cacheado hay que bumpear la clave: `cacheKeyFor` pasó a
+`listened_grouped_{id}_v2`, sin eso el caché de 24 h seguía con la clave vieja.
+Suite: `tests/listened-cruce.test.mjs`, 10 asserts.
+
+## Una fila `<label>` se marca desde cualquier hijo (v=164)
+Las filas de ese modal son un `<label>` que **envuelve** el checkbox, así que un
+click en cualquier descendiente lo tilda aunque el descendiente tenga su propio
+handler. Para meter una acción que NO sea marcar —abrir la ficha de álbum— hace
+falta **`preventDefault()` además de `stopPropagation()`**; solo con el segundo
+la acción corre y el álbum queda marcado igual.
+
+## «Borrar sobrantes» no puede borrar una marcada (v=164)
+`computeRemovals()` (`features/versions.js`) decide `hasKeep` y filtra
+`!keepIds.has(id)` **sobre el mismo objeto cluster**: un desajuste de índices
+puede hacer que se procese el cluster equivocado, pero el que se procesa
+**siempre conserva su propia marcada**. Comprobado por fuerza bruta con una
+réplica de la máquina de índices en Node (con un DOM de mentira donde **solo lo
+renderizado** aparece en `querySelectorAll`, como en el real) sobre los 253
+clusters reales: **3.000 sesiones, 61.475 acciones, 13.863 ids, 0 incidencias**.
+⚠️ Y lo que más importa: `analyze()` filtra con `g.length > 1`, así que **un like
+sin otra versión NUNCA entra en `allClusters`** — las 15 pistas que
+desaparecieron enteras el 26/08 eran todas singletons y esta vista no las podía
+tocar. Cuando algo desaparece «entero», mirar primero si la vista sospechada lo
+llegaba a mostrar.
+**El botón sigue INHABILITADO** (`BORRADO_BLOQUEADO = true`): lo que hay es una
+exculpación, no una identificación.
+
+## El doble de borrado de #versions (v=164)
+`localStorage['versions_dry_run'] = '1'` hace que «Borrar sobrantes» corra el
+flujo entero —`computeRemovals`, confirmación, mutación de `allClusters`,
+remapeo— sustituyendo la llamada a la API por un registrador
+(`window.__versionsDryLog` + `versions_dry_run_log_v1`). Con el doble encendido
+el botón se habilita aunque `BORRADO_BLOQUEADO` siga en `true`: **no hay ninguna
+ruta a un DELETE**. Además hay un **guarda duro** antes de tocar la API que
+aborta el borrado entero si una id marcada se coló en la lista.
+
 ## Client ID
 0c8c92ad128e4b89be7097c6b8082797
 
