@@ -6,6 +6,45 @@ import { coverUrl } from '../util/cover-size.js';
 import { openPlaylistPicker } from '../ui/playlist-picker.js';
 import { getOwnPlaylists, addUrisToPlaylists, toastAddResult } from '../util/playlist-add.js';
 
+// ── «Borrar sobrantes» inhabilitado (2026-08-26) ─────────────────────────────
+//
+// El 26 de agosto se marcaron versiones con «quedarme», se pulsó «Borrar
+// sobrantes» y desapareció también una versión marcada. La biblioteca pasó de
+// 9.238 likes (backup del 19 de agosto) a 9.220, y el caché de likes ya se
+// había parcheado con el borrado —`removeFromLikesCache` filtra en el sitio—,
+// así que no quedó ninguna copia previa: la lista de lo que se fue hubo que
+// reconstruirla contra el backup del 19.
+//
+// Mientras no esté identificado el fallo, el botón queda a la vista pero
+// inhabilitado. Un botón que borra me gusta y no respeta el «quedarme» no puede
+// seguir siendo pulsable. Para reactivarlo: poner la constante en false.
+//
+// Lo que ya está puesto para cuando se reactive:
+//   - la confirmación lista nombre y artista de cada pista, no un número;
+//   - cada borrado deja registro en localStorage (`versions_borrado_log_v1`)
+//     con los ids, los nombres y la fecha, para poder deshacerlo.
+const BORRADO_BLOQUEADO = true;
+const MOTIVO_BLOQUEO = 'Inhabilitado desde el 26/08/2026: en un borrado desapareció también una versión marcada con «quedarme». Se reactivará cuando esté arreglado.';
+
+// Registro local de cada borrado, para que la próxima vez sea recuperable.
+// Guarda los últimos LOG_MAX borrados con metadatos; si localStorage se queja,
+// no rompe el borrado (el registro es una red de seguridad, no un requisito).
+const LOG_KEY = 'versions_borrado_log_v1';
+const LOG_MAX = 20;
+function registrarBorrado(entradas, idsMarcados) {
+  try {
+    const previo = JSON.parse(localStorage.getItem(LOG_KEY) || '[]');
+    previo.unshift({
+      fecha: new Date().toISOString(),
+      borradas: entradas,
+      marcadas: idsMarcados,
+    });
+    localStorage.setItem(LOG_KEY, JSON.stringify(previo.slice(0, LOG_MAX)));
+  } catch (e) {
+    console.warn('Versiones: no se pudo guardar el registro del borrado:', e.message);
+  }
+}
+
 const keepIds = new Set();
 // Persiste los cluster idx que ya resolviste (batchDelete). Sobrevive a "Ver más"
 // y a re-renders del listado — así podés ver de dónde seguir la sesión.
@@ -245,8 +284,18 @@ async function analyze(force = false) {
             <span>Ocultar las ya resueltas <span id="versions-resolved-count"></span></span>
           </label>
           <button class="btn btn-secondary btn-sm" id="batch-clear-btn" disabled>Limpiar</button>
-          <button class="btn btn-danger" id="batch-delete-btn" disabled>Borrar sobrantes</button>
+          <button class="btn btn-danger" id="batch-delete-btn" disabled title="${BORRADO_BLOQUEADO ? escapeHtml(MOTIVO_BLOQUEO) : ''}">Borrar sobrantes</button>
         </div>
+        ${BORRADO_BLOQUEADO ? `
+        <div style="flex-basis:100%;display:flex;gap:8px;align-items:flex-start;background:var(--color-elevated);border:1px solid var(--color-warning);border-radius:var(--radius-sm);padding:10px 12px;font-size:13px;line-height:1.45">
+          <span style="flex-shrink:0">⚠️</span>
+          <div>
+            <strong>«Borrar sobrantes» está inhabilitado.</strong>
+            El 26 de agosto un borrado se llevó también una versión marcada con «quedarme».
+            Hasta que esté arreglado, marcar versiones sirve para revisar los grupos, pero no se borra nada.
+            Para quitar una versión suelta, hacerlo desde la aplicación de Spotify.
+          </div>
+        </div>` : ''}
       </div>
 
       ${renderFantasmas()}
@@ -325,7 +374,13 @@ function renderClusterList() {
       // El splice corre una posición a todos los de la derecha: sin remapear,
       // «resuelto» se le pegaba al cluster de al lado (y el filtro de 6.3
       // escondía el equivocado).
-      const remapeados = [...resolvedClusterIdxs].map(i => (i > idx ? i - 1 : i));
+      // ⚠️ El propio idx se DESCARTA, no se conserva: si el cluster que se
+      // oculta estaba marcado como resuelto y se dejaba su índice, ese índice
+      // pasaba a apuntar al vecino de la derecha, que quedaba marcado como
+      // resuelto sin serlo — y con el filtro encendido desaparecía de la vista.
+      const remapeados = [...resolvedClusterIdxs]
+        .filter(i => i !== idx)
+        .map(i => (i > idx ? i - 1 : i));
       resolvedClusterIdxs.clear();
       remapeados.forEach(i => resolvedClusterIdxs.add(i));
       renderClusterList();
@@ -434,6 +489,8 @@ function updateSummaryCounts() {
   if (values[1]) values[1].textContent = totalDupes;
 }
 
+// Devuelve los ITEMS a borrar, no solo los ids: la confirmación tiene que poder
+// listar nombre y artista de cada uno, y el registro local guardarlos.
 function computeRemovals() {
   const toRemove = [];
   document.querySelectorAll('.cluster-group').forEach(clusterEl => {
@@ -443,10 +500,16 @@ function computeRemovals() {
     const hasKeep = cluster.some(item => keepIds.has(item.track.id));
     if (!hasKeep) return;
     cluster.forEach(item => {
-      if (!keepIds.has(item.track.id)) toRemove.push(item.track.id);
+      if (!keepIds.has(item.track.id)) toRemove.push(item);
     });
   });
   return toRemove;
+}
+
+function describirPista(track) {
+  const artista = track.artists?.map(a => a.name).join(', ') || 'Artista desconocido';
+  const album = track.album?.name || 'Sin álbum';
+  return { id: track.id, nombre: track.name || '(sin nombre)', artista, album };
 }
 
 function updateBatchBar() {
@@ -455,20 +518,41 @@ function updateBatchBar() {
   kc.textContent = keepIds.size;
   const toRemoveCount = computeRemovals().length;
   document.getElementById('batch-delete-count').textContent = toRemoveCount;
-  document.getElementById('batch-delete-btn').disabled = toRemoveCount === 0;
+  // Con el borrado bloqueado el botón no se habilita nunca, aunque haya marcas.
+  document.getElementById('batch-delete-btn').disabled = BORRADO_BLOQUEADO || toRemoveCount === 0;
   document.getElementById('batch-clear-btn').disabled = keepIds.size === 0;
 }
 
 async function batchDelete() {
-  const toRemoveIds = computeRemovals();
-  if (toRemoveIds.length === 0) return;
+  if (BORRADO_BLOQUEADO) {
+    showToast(MOTIVO_BLOQUEO, 'warning');
+    return;
+  }
+  const toRemove = computeRemovals();
+  if (toRemove.length === 0) return;
+  const toRemoveIds = toRemove.map(item => item.track.id);
+  const detalle = toRemove.map(item => describirPista(item.track));
 
+  // La confirmación lista una por una lo que se va a borrar. Un número no deja
+  // detectar que en la lista se coló una versión que se quería conservar, que es
+  // exactamente lo que pasó el 26/08/2026.
+  const lista = detalle.map(d => `
+    <li style="margin-bottom:6px">
+      <strong>${escapeHtml(d.nombre)}</strong> — ${escapeHtml(d.artista)}
+      <div style="font-size:12px;color:var(--color-text-secondary)">${escapeHtml(d.album)}</div>
+    </li>`).join('');
   const ok = await typeConfirmModal(
     'Borrar versiones sobrantes',
-    `Vas a <strong>mantener</strong> las ${keepIds.size} versión(es) marcadas en verde y <strong>borrar</strong> las otras ${toRemoveIds.length} de tus Liked Songs.`,
+    `Se mantienen las ${keepIds.size} versión(es) marcadas en verde.
+     Se van a borrar de los me gusta estas ${toRemove.length}:
+     <ul style="margin:10px 0 0;padding-left:20px;max-height:320px;overflow-y:auto">${lista}</ul>`,
     'BORRAR'
   );
   if (!ok) return;
+
+  // El registro va ANTES de tocar la API: si el borrado se corta a la mitad, el
+  // registro tiene de más, que es el lado bueno del error.
+  registrarBorrado(detalle, [...keepIds]);
 
   try {
     showProgress('Borrando sobrantes...', 0, toRemoveIds.length);

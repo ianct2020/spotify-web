@@ -4,7 +4,7 @@
 // (preview_url de Spotify murió en la migración feb 2026; el embed iframe
 // queda como fallback para lo que iTunes no tenga.)
 
-import { pickBestMatch, artistMatches, artistList, preferredQueryArtists } from '../util/track-match.js?v=160';
+import { pickBestMatch, artistMatches, artistList, preferredQueryArtists } from '../util/track-match.js?v=161';
 
 // v3: la key sube de v2 porque hasta v=141 se comparaba contra UN solo artista
 // (el del álbum). En los discos acreditados a un alias —«¥$» = Kanye West + Ty

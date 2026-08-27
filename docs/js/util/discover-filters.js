@@ -17,10 +17,10 @@
 // Normalizar más agresivamente `albumKey` fusionaría American Football LP3/LP4,
 // Crystal Castles I/II y Ed Sheeran ÷ vs =, que ya costó caro dos veces.
 
-import { albumKey } from './album-key.js?v=160';
-import { songKey } from './song-identity.js?v=160';
-import { getSavedAlbums, getBestAvailableLikes } from '../api.js?v=160';
-import { loadListenedAlbums } from '../features/history-data.js?v=160';
+import { albumKey } from './album-key.js?v=161';
+import { songKey } from './song-identity.js?v=161';
+import { getSavedAlbums, getBestAvailableLikes } from '../api.js?v=161';
+import { loadListenedAlbums } from '../features/history-data.js?v=161';
 
 const LS_KEY = 'discover_filtros_v1';
 
