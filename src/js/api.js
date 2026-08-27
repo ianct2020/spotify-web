@@ -272,7 +272,13 @@ function slimPlaylist(p) {
     id: p.id,
     name: p.name,
     owner: p.owner ? { id: p.owner.id, display_name: p.owner.display_name } : undefined,
-    tracks: p.tracks ? { total: p.tracks.total } : undefined,
+    // Post-migración la API expone `items`, no `tracks`. Se sigue guardando
+    // bajo `tracks` para no tocar a los que ya lo leen (#dedupe,
+    // #duplicate-albums, el orden de #wthree), que hasta ahora recibían
+    // `undefined` y mostraban «?».
+    tracks: p.tracks ? { total: p.tracks.total }
+          : p.items  ? { total: p.items.total }
+          : undefined,
     public: p.public,
     collaborative: p.collaborative,
     image: smallest,

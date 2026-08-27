@@ -1,10 +1,10 @@
-import { getAllLikedTracks, removeLikedTracks, checkLibraryContains } from '../api.js?v=162';
-import { showProgress, hideProgress, progressController, isCancelled, typeConfirmModal, renderTrackRow, escapeHtml, pageHeader } from '../ui/components.js?v=162';
-import { showToast } from '../ui/toast.js?v=162';
-import { openModal, closeTop } from '../ui/modal-stack.js?v=162';
-import { coverUrl } from '../util/cover-size.js?v=162';
-import { openPlaylistPicker } from '../ui/playlist-picker.js?v=162';
-import { getOwnPlaylists, addUrisToPlaylists, toastAddResult } from '../util/playlist-add.js?v=162';
+import { getAllLikedTracks, removeLikedTracks, checkLibraryContains } from '../api.js?v=163';
+import { showProgress, hideProgress, progressController, isCancelled, typeConfirmModal, renderTrackRow, escapeHtml, pageHeader } from '../ui/components.js?v=163';
+import { showToast } from '../ui/toast.js?v=163';
+import { openModal, closeTop } from '../ui/modal-stack.js?v=163';
+import { coverUrl } from '../util/cover-size.js?v=163';
+import { openPlaylistPicker } from '../ui/playlist-picker.js?v=163';
+import { getOwnPlaylists, addUrisToPlaylists, toastAddResult } from '../util/playlist-add.js?v=163';
 
 // ── «Borrar sobrantes» inhabilitado (2026-08-26) ─────────────────────────────
 //

@@ -14,22 +14,22 @@
 // `util/hidden-sync.js`, playlist como fuente de verdad y localStorage como
 // caché local para pintar al instante.
 
-import { getBestAvailableLikes, removeLikedTracks } from '../api.js?v=162';
-import { loadTrackPlays, trackIdOf, isOwner, ownerLockedMessage } from './history-data.js?v=162';
-import { escapeHtml, confirmModal, pageHeader } from '../ui/components.js?v=162';
-import { showToast } from '../ui/toast.js?v=162';
-import { openTrackCard } from './track-card.js?v=162';
-import { hasUsername, loadTopLifetime } from '../api/statsfm.js?v=162';
-import { getPreview } from '../api/preview-providers.js?v=162';
-import { togglePreview, playingKey } from '../ui/preview-player.js?v=162';
-import { renderTrackCardRow, wireTrackCardGrid, paintCardSelection, paintPlayingCard } from '../ui/track-card-row.js?v=162';
-import { createIncrementalList, scrollRootOf } from '../ui/incremental-list.js?v=162';
-import { createLazyImages } from '../ui/lazy-img.js?v=162';
-import { activateMarquee } from '../ui/marquee.js?v=162';
-import { coverAtSize } from '../util/cover-size.js?v=162';
-import { firstArtistName } from '../util/artist-name.js?v=162';
-import { createHiddenStore } from '../util/hidden-sync.js?v=162';
-import { fmtDiaCorto } from '../util/fecha.js?v=162';
+import { getBestAvailableLikes, removeLikedTracks } from '../api.js?v=163';
+import { loadTrackPlays, trackIdOf, isOwner, ownerLockedMessage } from './history-data.js?v=163';
+import { escapeHtml, confirmModal, pageHeader } from '../ui/components.js?v=163';
+import { showToast } from '../ui/toast.js?v=163';
+import { openTrackCard } from './track-card.js?v=163';
+import { hasUsername, loadTopLifetime } from '../api/statsfm.js?v=163';
+import { getPreview } from '../api/preview-providers.js?v=163';
+import { togglePreview, playingKey } from '../ui/preview-player.js?v=163';
+import { renderTrackCardRow, wireTrackCardGrid, paintCardSelection, paintPlayingCard } from '../ui/track-card-row.js?v=163';
+import { createIncrementalList, scrollRootOf } from '../ui/incremental-list.js?v=163';
+import { createLazyImages } from '../ui/lazy-img.js?v=163';
+import { activateMarquee } from '../ui/marquee.js?v=163';
+import { coverAtSize } from '../util/cover-size.js?v=163';
+import { firstArtistName } from '../util/artist-name.js?v=163';
+import { createHiddenStore } from '../util/hidden-sync.js?v=163';
+import { fmtDiaCorto } from '../util/fecha.js?v=163';
 
 let cache = null;
 
