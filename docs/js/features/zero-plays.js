@@ -14,22 +14,23 @@
 // `util/hidden-sync.js`, playlist como fuente de verdad y localStorage como
 // caché local para pintar al instante.
 
-import { getBestAvailableLikes, removeLikedTracks } from '../api.js?v=165';
-import { loadTrackPlays, trackIdOf, isOwner, ownerLockedMessage } from './history-data.js?v=165';
-import { escapeHtml, confirmModal, pageHeader } from '../ui/components.js?v=165';
-import { showToast } from '../ui/toast.js?v=165';
-import { openTrackCard } from './track-card.js?v=165';
-import { hasUsername, loadTopLifetime } from '../api/statsfm.js?v=165';
-import { getPreview } from '../api/preview-providers.js?v=165';
-import { togglePreview, playingKey } from '../ui/preview-player.js?v=165';
-import { renderTrackCardRow, wireTrackCardGrid, paintCardSelection, paintPlayingCard } from '../ui/track-card-row.js?v=165';
-import { createIncrementalList, scrollRootOf } from '../ui/incremental-list.js?v=165';
-import { createLazyImages } from '../ui/lazy-img.js?v=165';
-import { activateMarquee } from '../ui/marquee.js?v=165';
-import { coverAtSize } from '../util/cover-size.js?v=165';
-import { firstArtistName } from '../util/artist-name.js?v=165';
-import { createHiddenStore } from '../util/hidden-sync.js?v=165';
-import { fmtDiaCorto } from '../util/fecha.js?v=165';
+import { getBestAvailableLikes, removeLikedTracks, checkLibraryContains } from '../api.js?v=166';
+import { borrarLikesVerificado } from '../util/borrado-verificado.js?v=166';
+import { loadTrackPlays, trackIdOf, isOwner, ownerLockedMessage } from './history-data.js?v=166';
+import { escapeHtml, confirmModal, pageHeader } from '../ui/components.js?v=166';
+import { showToast } from '../ui/toast.js?v=166';
+import { openTrackCard } from './track-card.js?v=166';
+import { hasUsername, loadTopLifetime } from '../api/statsfm.js?v=166';
+import { getPreview } from '../api/preview-providers.js?v=166';
+import { togglePreview, playingKey } from '../ui/preview-player.js?v=166';
+import { renderTrackCardRow, wireTrackCardGrid, paintCardSelection, paintPlayingCard } from '../ui/track-card-row.js?v=166';
+import { createIncrementalList, scrollRootOf } from '../ui/incremental-list.js?v=166';
+import { createLazyImages } from '../ui/lazy-img.js?v=166';
+import { activateMarquee } from '../ui/marquee.js?v=166';
+import { coverAtSize } from '../util/cover-size.js?v=166';
+import { firstArtistName } from '../util/artist-name.js?v=166';
+import { createHiddenStore } from '../util/hidden-sync.js?v=166';
+import { fmtDiaCorto } from '../util/fecha.js?v=166';
 
 let cache = null;
 
@@ -64,6 +65,11 @@ let lastClickedId = null;
 // y «Seleccionar todos» operan acá, nunca sobre `cache.zeros` entero (si no,
 // «Seleccionar todos» marcaría también lo que está oculto).
 let currentRows = [];
+// `window.__filasZeroPlays` espeja `currentRows` en cada recálculo. Es el arnés
+// de la medición de previews: medir «lo que Ian toca» pide las N primeras filas
+// EN EL ORDEN POR DEFECTO, y leerlas del DOM no sirve — la tarjeta muestra los
+// artistas ya unidos en un string y la cadena de proveedores necesita la lista.
+
 let rowById = new Map();
 let list = null;
 let lazyCovers = null;
@@ -216,6 +222,7 @@ function visibles() {
 function applyRows({ preserveRendered = false } = {}) {
   currentRows = visibles();
   rowById = new Map(currentRows.map(r => [r.id, r]));
+  window.__filasZeroPlays = currentRows;
   for (const id of [...selected]) if (!rowById.has(id)) selected.delete(id);
   if (list) {
     // setItems repinta el grid: los <img> viejos dejan de existir y el observer
@@ -288,6 +295,7 @@ function renderResults() {
   const { zeros, some, likesCount, statsfmUsed, statsfmRescued } = cache;
   currentRows = visibles();
   rowById = new Map(currentRows.map(r => [r.id, r]));
+  window.__filasZeroPlays = currentRows;
   // Una fila que ya no existe (porque la sacaste de likes, o porque la
   // ocultaste) no puede seguir contando como seleccionada.
   if (selected.size) {
@@ -523,7 +531,19 @@ async function sacarDeLikes(rows) {
   if (!ok) return;
 
   try {
-    await removeLikedTracks(ids, { origen: '#zero-plays' });
+    // Borra Y verifica. Si la verificación falla, esto tira y el `catch` de
+    // abajo pinta rojo: no se dice «hecho» sin haberlo comprobado, que es
+    // exactamente el bug que tuvo #versions hasta el 28/08.
+    await borrarLikesVerificado(ids, {
+      origen: '#zero-plays',
+      removeLikedTracks,
+      checkLibraryContains,
+      // El usuario saca de likes canciones que NUNCA escuchó. Quedarse en cero
+      // copias no es un accidente: es lo pedido. La guarda del último ejemplar
+      // es un invariante de deduplicación y acá no hay deduplicación ninguna.
+      guarda: 'ninguna',
+      motivoSinGuarda: 'no es un dedup: se saca de likes una canción que no se escucha, y quedarse en cero copias es el resultado buscado',
+    });
   } catch (e) {
     showToast('No se pudieron sacar de likes: ' + e.message, 'error');
     return;

@@ -15,25 +15,26 @@
 
 import {
   getAllUserPlaylists, getAllPlaylistItems, getBestAvailableLikes,
-  getCurrentUserId, removeLikedTracks,
-} from '../api.js?v=165';
-import { idbGetCached, idbSetCached, idbDel } from '../idb.js?v=165';
-import { createHiddenStore } from '../util/hidden-sync.js?v=165';
-import { addUrisToPlaylists, toastAddResult, getOwnPlaylists } from '../util/playlist-add.js?v=165';
-import { escapeHtml, pageHeader, showProgress, hideProgress, isCancelled, confirmModal } from '../ui/components.js?v=165';
-import { openModal, closeTop } from '../ui/modal-stack.js?v=165';
-import { openPlaylistPicker } from '../ui/playlist-picker.js?v=165';
-import { showToast } from '../ui/toast.js?v=165';
-import { getPreview } from '../api/preview-providers.js?v=165';
-import { togglePreview, playingKey } from '../ui/preview-player.js?v=165';
-import { openTrackCard } from './track-card.js?v=165';
-import { normText } from '../util/track-match.js?v=165';
-import { activateMarquee } from '../ui/marquee.js?v=165';
-import { renderTrackCardRow, wireTrackCardGrid, paintCardSelection, paintPlayingCard } from '../ui/track-card-row.js?v=165';
-import { createIncrementalList, scrollRootOf } from '../ui/incremental-list.js?v=165';
-import { createLazyImages } from '../ui/lazy-img.js?v=165';
-import { coverAtSize } from '../util/cover-size.js?v=165';
-import { fmtDiaCorto } from '../util/fecha.js?v=165';
+  getCurrentUserId, removeLikedTracks, checkLibraryContains,
+} from '../api.js?v=166';
+import { borrarLikesVerificado } from '../util/borrado-verificado.js?v=166';
+import { idbGetCached, idbSetCached, idbDel } from '../idb.js?v=166';
+import { createHiddenStore } from '../util/hidden-sync.js?v=166';
+import { addUrisToPlaylists, toastAddResult, getOwnPlaylists } from '../util/playlist-add.js?v=166';
+import { escapeHtml, pageHeader, showProgress, hideProgress, isCancelled, confirmModal } from '../ui/components.js?v=166';
+import { openModal, closeTop } from '../ui/modal-stack.js?v=166';
+import { openPlaylistPicker } from '../ui/playlist-picker.js?v=166';
+import { showToast } from '../ui/toast.js?v=166';
+import { getPreview } from '../api/preview-providers.js?v=166';
+import { togglePreview, playingKey } from '../ui/preview-player.js?v=166';
+import { openTrackCard } from './track-card.js?v=166';
+import { normText } from '../util/track-match.js?v=166';
+import { activateMarquee } from '../ui/marquee.js?v=166';
+import { renderTrackCardRow, wireTrackCardGrid, paintCardSelection, paintPlayingCard } from '../ui/track-card-row.js?v=166';
+import { createIncrementalList, scrollRootOf } from '../ui/incremental-list.js?v=166';
+import { createLazyImages } from '../ui/lazy-img.js?v=166';
+import { coverAtSize } from '../util/cover-size.js?v=166';
+import { fmtDiaCorto } from '../util/fecha.js?v=166';
 
 const HIDDEN_KEY = 'sin_clasificar_ocultas';
 const EXCLUDED_KEY = 'sin_clasificar_excluidas';
@@ -807,7 +808,17 @@ async function sacarDeLikes(rows) {
 
   const ids = conId.map(r => r.trackId);
   try {
-    await removeLikedTracks(ids, { origen: '#sin-clasificar' });
+    // Borra Y verifica; si no se puede verificar, tira y cae en el catch.
+    await borrarLikesVerificado(ids, {
+      origen: '#sin-clasificar',
+      removeLikedTracks,
+      checkLibraryContains,
+      // Sacar de likes una canción que no está en ninguna playlist no es
+      // deduplicar: no hay «otra versión» que deba sobrevivir, y el usuario
+      // pide justamente que no quede ninguna.
+      guarda: 'ninguna',
+      motivoSinGuarda: 'no es un dedup: se saca de likes una canción sin playlist, y quedarse en cero copias es el resultado buscado',
+    });
   } catch (e) {
     showToast('No se pudieron sacar de likes: ' + e.message, 'error');
     return;

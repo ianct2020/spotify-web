@@ -1,4 +1,5 @@
-import { getAllLikedTracks, getAllPlaylistItems, removeLikedTracks, removeTracksFromPlaylist } from '../api.js';
+import { getAllLikedTracks, getAllPlaylistItems, removeLikedTracks, removeTracksFromPlaylist, checkLibraryContains } from '../api.js';
+import { borrarLikesVerificado } from '../util/borrado-verificado.js';
 import { showProgress, hideProgress, progressController, isCancelled, typeConfirmModal, renderTrackRow, escapeHtml, pageHeader } from '../ui/components.js';
 import { showToast } from '../ui/toast.js';
 import { isZombieItem } from '../util/zombie.js';
@@ -252,7 +253,23 @@ async function batchDelete() {
   try {
     showProgress('Quitando zombis...', 0, total);
     if (likeIds.length > 0) {
-      await removeLikedTracks(likeIds, { origen: '#zombies' });
+      // Borrado + verificación en una sola llamada. Si no se puede verificar, o
+      // se verifica y alguna sigue dentro, esto TIRA: no salen los zombis de
+      // playlist, no sale el toast verde y no se limpia la selección. Ver
+      // util/borrado-verificado.js.
+      await borrarLikesVerificado(likeIds, {
+        origen: '#zombies',
+        removeLikedTracks,
+        checkLibraryContains,
+        // Los zombis son pistas MUERTAS del catálogo (relinkeadas, retiradas o
+        // sin mercado): la vista existe justo porque ya no se pueden reproducir.
+        // Exigir que sobreviva «una copia viva» abortaría todas las veces, y la
+        // copia que sobreviviera sería otra pista muerta.
+        guarda: 'ninguna',
+        motivoSinGuarda: 'los zombis son pistas muertas del catálogo; no hay copia viva que preservar y quedarse en cero es lo que se pide',
+        onProgress: (fase, hechas) => showProgress(
+          fase === 'verificando' ? 'Verificando con Spotify...' : 'Quitando zombis...', hechas, total),
+      });
     }
     for (const op of playlistOps) {
       await removeTracksFromPlaylist(op.plId, op.uris);

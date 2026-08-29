@@ -13,6 +13,7 @@
 import { escapeHtml, confirmModal, pageHeader } from '../ui/components.js';
 import { showToast } from '../ui/toast.js';
 import { buildAlbumHeardIndex } from '../util/album-heard.js';
+import { releaseKind } from '../util/release-size.js';
 import { loadFiltros, buildFilterContext, applyDiscoverFilters } from '../util/discover-filters.js';
 import { createIncrementalList, scrollRootOf } from '../ui/incremental-list.js';
 import { createLazyImages } from '../ui/lazy-img.js';
@@ -47,6 +48,11 @@ const SCAN_KEY = 'new_releases';
 const LS_MIN_LIKES = 'newrel_min_likes';   // 5 / 10 / 20
 const LS_MONTHS = 'newrel_months';         // 3 / 6 / 12 / 24
 const LS_LOADED_MORE = 'newrel_loaded_more';
+// COMPARTIDA con #discover-artists a propósito (2026-08-29): la clave es la
+// suya, no una nueva. Las dos vistas ya comparten `filtros` por el mismo
+// motivo — si en una estás mirando sólo EPs y saltás a la otra y ves álbumes,
+// el filtro parece que no se aplicó.
+const LS_FILTER_KIND = 'discoverart_filter_kind';  // 'all' | 'album' | 'ep' | 'single'
 // 2 y no 3: la discografía sale de /search y con 3 en paralelo Spotify tira
 // 429 en cadena (ver api.js getArtistAlbums).
 const BATCH_PARALLEL = 2;
@@ -56,6 +62,12 @@ const DEFAULT_INITIAL = 100;
 const VALID_LIKES = new Set([5, 10, 20]);
 const VALID_MONTHS = new Set([3, 6, 12, 24]);
 
+// Los mismos cuatro que #discover-artists, y por el mismo criterio: Spotify no
+// tiene tipo «EP» (marca los de 5 temas como 'single'), así que quien decide es
+// util/release-size.js por cantidad de pistas.
+const KINDS = ['all', 'album', 'ep', 'single'];
+const KIND_LABEL = { all: 'Todo', album: 'Álbumes', ep: 'EPs', single: 'Singles' };
+
 function getMinLikes() {
   const n = parseInt(localStorage.getItem(LS_MIN_LIKES) || '10', 10);
   return VALID_LIKES.has(n) ? n : 10;
@@ -63,6 +75,10 @@ function getMinLikes() {
 function getMonths() {
   const n = parseInt(localStorage.getItem(LS_MONTHS) || '12', 10);
   return VALID_MONTHS.has(n) ? n : 12;
+}
+function getFilterKind() {
+  const v = localStorage.getItem(LS_FILTER_KIND);
+  return KINDS.includes(v) ? v : 'all';
 }
 function getLoadedMore() {
   // Piso duro en DEFAULT_INITIAL, igual que #discover-artists. Antes "Cargar
@@ -80,6 +96,7 @@ const state = {
   selection: new Set(),
   minLikes: 10,
   months: 12,
+  filterKind: 'all',
   loadedMore: DEFAULT_INITIAL,
   scannedAt: null,
   // 'normal' | 'hidden'. Acá no hay modo «escuchados»: marcar como escuchado es
@@ -131,6 +148,7 @@ export async function render(container) {
 
   state.minLikes = getMinLikes();
   state.months = getMonths();
+  state.filterKind = getFilterKind();
   state.loadedMore = getLoadedMore();
   state.mode = 'normal';
 
@@ -210,6 +228,9 @@ function renderShell(content, totalCandidates) {
         <div class="disco-chip-group" id="newrel-months">
           ${[3,6,12,24].map(n => `<button class="disco-chip ${state.months === n ? 'is-on' : ''}" data-months="${n}">últimos ${n}m</button>`).join('')}
         </div>
+        <div class="disco-chip-group" id="newrel-kind">
+          ${KINDS.map(k => `<button class="disco-chip ${state.filterKind === k ? 'is-on' : ''}" data-kind="${k}">${KIND_LABEL[k]}</button>`).join('')}
+        </div>
         <button class="btn btn-secondary btn-sm ${state.mode === 'hidden' ? 'sc-on' : ''}" id="newrel-mode-hidden" title="Las novedades que ocultaste. Se sincronizan con la playlist «fonoteca · ocultos (descubrir)».">Ocultos <span id="newrel-hidden-n">${hiddenAlbums.size}</span></button>
         <button class="btn btn-secondary btn-sm" id="newrel-refresh" title="${state.scannedAt ? 'Último escaneo ' + agoLabel(state.scannedAt) + '. Volver a consultar Spotify.' : 'Volver a consultar Spotify'}">Actualizar</button>
       </div>
@@ -256,6 +277,16 @@ function renderShell(content, totalCandidates) {
     state.months = n;
     localStorage.setItem(LS_MONTHS, String(n));
     content.querySelectorAll('#newrel-months [data-months]').forEach(b => b.classList.toggle('is-on', b === btn));
+    refreshList(content);
+  });
+  content.querySelector('#newrel-kind').addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-kind]');
+    if (!btn || !KINDS.includes(btn.dataset.kind)) return;
+    state.filterKind = btn.dataset.kind;
+    localStorage.setItem(LS_FILTER_KIND, state.filterKind);
+    content.querySelectorAll('#newrel-kind [data-kind]').forEach(b => b.classList.toggle('is-on', b === btn));
+    // Sólo repinta: el tipo filtra lo YA escaneado, no cambia a qué artistas
+    // hay que pedirle la discografía (a diferencia del umbral de likes).
     refreshList(content);
   });
   content.querySelector('#newrel-load-more').addEventListener('click', () => {
@@ -409,6 +440,7 @@ function releasesInWindow() {
     for (const al of a.disco) {
       const ts = releaseTs(al.release);
       if (!ts || ts < cutoff) continue;
+      if (state.filterKind !== 'all' && releaseKind(al) !== state.filterKind) continue;
       const oculto = hiddenAlbums.has(cardKey(al, a.name));
       // En el modo ocultos la lista son EXACTAMENTE los ocultos de la ventana,
       // sin pasar por «sin escuchar»: si no, un disco que ocultaste y después
@@ -475,7 +507,14 @@ function refreshList(content) {
     } else if (state.mode === 'hidden') {
       msg = `No ocultaste ninguna novedad de los últimos ${state.months} meses.`;
     } else {
-      msg = `No hay novedades sin escuchar en los últimos ${state.months} meses para tus artistas con ≥${state.minLikes} likes.`;
+      // El chip de tipo se nombra aparte: una lista vacía por «sólo EPs» se
+      // parece demasiado a una lista vacía por no haber novedades, y el chip
+      // está guardado entre sesiones (y compartido con #discover-artists), así
+      // que podés llegar acá con un filtro puesto que no recordás haber tocado.
+      const porTipo = state.filterKind !== 'all'
+        ? ` filtrando por ${KIND_LABEL[state.filterKind].toLowerCase()} — probá con «Todo»`
+        : '';
+      msg = `No hay novedades sin escuchar en los últimos ${state.months} meses para tus artistas con ≥${state.minLikes} likes${porTipo}.`;
     }
     teardown();
     listEl.innerHTML = `<div class="card"><p style="text-align:center;color:var(--color-text-muted);margin:0">${escapeHtml(msg)}</p></div>`;

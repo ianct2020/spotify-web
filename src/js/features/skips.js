@@ -16,7 +16,8 @@
 // Preview 30s instantáneo vía iTunes (arranca en el estribillo, no suma plays
 // en tu historial de Spotify). Fallback: iframe embed oficial si iTunes no lo tiene.
 
-import { getBestAvailableLikes, removeLikedTracks } from '../api.js';
+import { getBestAvailableLikes, removeLikedTracks, checkLibraryContains } from '../api.js';
+import { borrarLikesVerificado } from '../util/borrado-verificado.js';
 import { loadSkipStats, trackIdOf, isOwner, ownerLockedMessage } from './history-data.js';
 import { escapeHtml, confirmModal, pageHeader } from '../ui/components.js';
 import { showToast } from '../ui/toast.js';
@@ -38,6 +39,9 @@ let cache = null;
 // del grid. Es la fuente de verdad de la vista: ordenar, filtrar y ocultar
 // operan acá y pasan por list.setItems(), nunca sobre el DOM.
 let currentRows = [];
+// `window.__filasSkips` espeja `currentRows` en cada recálculo — mismo arnés de
+// medición que `#zero-plays`, ver el comentario de aquel archivo.
+
 let rowById = new Map();
 // La selección vive en el módulo y no en los checkboxes del DOM: con append
 // incremental las tarjetas del final no existen todavía, así que "Seleccionar
@@ -289,6 +293,7 @@ const BATCH = 80;
 function applyRows({ preserveRendered = false } = {}) {
   currentRows = filtered();
   rowById = new Map(currentRows.map(r => [r.id, r]));
+  window.__filasSkips = currentRows;
   // La selección se queda solo con lo que sigue en la lista.
   for (const id of [...selectedIds]) if (!rowById.has(id)) selectedIds.delete(id);
   if (list) {
@@ -405,6 +410,7 @@ function renderResults() {
   const rows = filtered();
   currentRows = rows;
   rowById = new Map(rows.map(r => [r.id, r]));
+  window.__filasSkips = currentRows;
   for (const id of [...selectedIds]) if (!rowById.has(id)) selectedIds.delete(id);
   const withAnySkip = cache.rows.length;
   const hiddenCount = hiddenTracks.size;
@@ -668,7 +674,21 @@ function wireRows() {
     rmBtn.disabled = true;
     rmBtn.textContent = 'Sacando…';
     try {
-      await removeLikedTracks(ids, { origen: '#skips' });
+      // Borra Y verifica. Si tira, no sale el toast verde ni se re-analiza:
+      // cae en el catch de abajo con el mensaje concreto.
+      await borrarLikesVerificado(ids, {
+        origen: '#skips',
+        removeLikedTracks,
+        checkLibraryContains,
+        // Acá la guarda del último ejemplar no sólo no aplica: sería
+        // exactamente lo contrario de lo que hace la vista. `ids` se expande a
+        // TODAS las versiones likeadas del tema (single, álbum, remixes) justo
+        // para que no quede ninguna — si dejamos una viva, el tema reaparece en
+        // la lista con los mismos números. Quedarse en cero copias ES la
+        // función. La guarda abortaría el 100% de los borrados legítimos.
+        guarda: 'ninguna',
+        motivoSinGuarda: 'la vista expande a propósito a todas las versiones del tema para que no quede ninguna viva; la guarda del último ejemplar abortaría siempre',
+      });
       showToast(`Sacaste ${sel.length} ${sel.length === 1 ? 'canción' : 'canciones'} de tus likes`, 'success');
       await analyze();
     } catch (e) {

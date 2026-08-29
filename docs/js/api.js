@@ -1,8 +1,8 @@
-import { getValidToken, refreshAccessToken } from './auth.js?v=165';
-import { cacheGet, cacheGetRaw, cacheGetTimestamp, cacheSet, cacheClear } from './storage.js?v=165';
-import { idbDel, idbGetCached, idbGetCachedRaw, idbGetTimestamp, idbSetCached } from './idb.js?v=165';
-import { showToast } from './ui/toast.js?v=165';
-import { artistIsSame, limpiaParaQuery } from './util/track-match.js?v=165';
+import { getValidToken, refreshAccessToken } from './auth.js?v=166';
+import { cacheGet, cacheGetRaw, cacheGetTimestamp, cacheSet, cacheClear } from './storage.js?v=166';
+import { idbDel, idbGetCached, idbGetCachedRaw, idbGetTimestamp, idbSetCached } from './idb.js?v=166';
+import { showToast } from './ui/toast.js?v=166';
+import { artistIsSame, limpiaParaQuery } from './util/track-match.js?v=166';
 
 const BASE = 'https://api.spotify.com/v1';
 const MIN_RETRY_WAIT = 5000;
@@ -757,18 +757,42 @@ function invalidatePlaylistsCache() {
   }
 }
 
+// Tope de uris por request en TODA la ruta /me/library (contains, PUT y DELETE).
+//
+// Medido en vivo el 2026-08-28 con token real: 40 → 200; 41, 42, 43, 44, 45, 48,
+// 49, 50 y 60 → 400 «Too many uris requested»; 100 → 414 (URL demasiado larga).
+// Vale igual para `spotify:track:` y `spotify:album:`.
+//
+// Hasta esa fecha las dos funciones de `contains` iban de a 50 y por lo tanto
+// **fallaban siempre en el primer chunk**. Como la única llamadora las envolvía
+// en un catch con `console.warn`, la verificación posterior a un borrado de más
+// de 40 pistas nunca corrió y nadie se enteró. De ahí sale la constante: que el
+// número viva en un solo sitio y no se pueda volver a desincronizar.
+const LIBRARY_URIS_POR_REQUEST = 40;
+
 // Confirma cuáles ids siguen en la biblioteca. Post-migración feb 2026:
 // GET /me/tracks/contains → 403; el que vive es GET /me/library/contains con URIs.
-// Devuelve Map<id, bool>. Chunks de 50, encaja con el resto de endpoints /me/library.
+// Devuelve Map<id, bool>.
+//
+// TIRA si Spotify responde con error, y tiene que seguir tirando: es una
+// verificación, y una verificación que se traga su propio fallo es peor que no
+// tenerla —da la misma cara que un resultado limpio. Quien la llame decide qué
+// hacer con la excepción, pero no puede ignorarla en silencio.
 async function checkLibraryContains(ids) {
   const clean = [...new Set((ids || []).filter(Boolean))];
   const out = new Map();
-  for (let i = 0; i < clean.length; i += 50) {
-    const chunk = clean.slice(i, i + 50);
+  for (let i = 0; i < clean.length; i += LIBRARY_URIS_POR_REQUEST) {
+    const chunk = clean.slice(i, i + LIBRARY_URIS_POR_REQUEST);
     const uris = chunk.map(id => `spotify:track:${id}`).join(',');
     const r = await spotifyFetch(`/me/library/contains?uris=${encodeURIComponent(uris)}`);
-    if (Array.isArray(r)) chunk.forEach((id, j) => out.set(id, !!r[j]));
-    if (i + 50 < clean.length) await sleep(300);
+    if (!Array.isArray(r) || r.length !== chunk.length) {
+      throw new Error(`/me/library/contains devolvió algo inesperado (esperaba ${chunk.length} booleanos)`);
+    }
+    chunk.forEach((id, j) => out.set(id, !!r[j]));
+    if (i + LIBRARY_URIS_POR_REQUEST < clean.length) await sleep(300);
+  }
+  if (out.size !== clean.length) {
+    throw new Error(`/me/library/contains: pedí ${clean.length} ids y volvieron ${out.size}`);
   }
   return out;
 }
@@ -1046,8 +1070,8 @@ async function registrarBorradoDeLikes(ids, { origen = 'desconocido', meta = nul
 async function removeLikedTracks(ids, opciones = {}) {
   await registrarBorradoDeLikes(ids, opciones);
   const chunks = [];
-  for (let i = 0; i < ids.length; i += 40) {
-    chunks.push(ids.slice(i, i + 40));
+  for (let i = 0; i < ids.length; i += LIBRARY_URIS_POR_REQUEST) {
+    chunks.push(ids.slice(i, i + LIBRARY_URIS_POR_REQUEST));
   }
   for (const chunk of chunks) {
     const uris = chunk.map(id => encodeURIComponent(`spotify:track:${id}`)).join(',');
@@ -1092,8 +1116,8 @@ async function unfollowPlaylist(playlistId) {
 async function saveToLibrary(ids) {
   if (!Array.isArray(ids) || ids.length === 0) return;
   const uniq = [...new Set(ids.filter(Boolean))];
-  for (let i = 0; i < uniq.length; i += 40) {
-    const chunk = uniq.slice(i, i + 40);
+  for (let i = 0; i < uniq.length; i += LIBRARY_URIS_POR_REQUEST) {
+    const chunk = uniq.slice(i, i + LIBRARY_URIS_POR_REQUEST);
     const uris = chunk.map(id => encodeURIComponent(`spotify:track:${id}`)).join(',');
     await spotifyFetch(`/me/library?uris=${uris}`, { method: 'PUT' });
   }
@@ -1119,8 +1143,8 @@ async function saveToLibrary(ids) {
 async function saveAlbumsToLibrary(albumIds) {
   if (!Array.isArray(albumIds) || albumIds.length === 0) return;
   const uniq = [...new Set(albumIds.filter(Boolean))];
-  for (let i = 0; i < uniq.length; i += 40) {
-    const chunk = uniq.slice(i, i + 40);
+  for (let i = 0; i < uniq.length; i += LIBRARY_URIS_POR_REQUEST) {
+    const chunk = uniq.slice(i, i + LIBRARY_URIS_POR_REQUEST);
     const uris = chunk.map(id => encodeURIComponent(`spotify:album:${id}`)).join(',');
     await spotifyFetch(`/me/library?uris=${uris}`, { method: 'PUT' });
   }
@@ -1130,8 +1154,8 @@ async function saveAlbumsToLibrary(albumIds) {
 async function removeAlbumsFromLibrary(albumIds) {
   if (!Array.isArray(albumIds) || albumIds.length === 0) return;
   const uniq = [...new Set(albumIds.filter(Boolean))];
-  for (let i = 0; i < uniq.length; i += 40) {
-    const chunk = uniq.slice(i, i + 40);
+  for (let i = 0; i < uniq.length; i += LIBRARY_URIS_POR_REQUEST) {
+    const chunk = uniq.slice(i, i + LIBRARY_URIS_POR_REQUEST);
     const uris = chunk.map(id => encodeURIComponent(`spotify:album:${id}`)).join(',');
     await spotifyFetch(`/me/library?uris=${uris}`, { method: 'DELETE' });
   }
@@ -1166,15 +1190,19 @@ async function getSavedAlbums({ force = false } = {}) {
 
 /**
  * ¿Están estos álbumes en la biblioteca? Devuelve Map<albumId, bool>.
- * Chunks de 50, igual que el `contains` de pistas.
+ * Mismo tope de 40 que el `contains` de pistas: `LIBRARY_URIS_POR_REQUEST`.
+ * Iba de a 50 y fallaba siempre; corregido el 2026-08-28.
  */
 async function albumsInLibrary(albumIds) {
   const out = new Map();
   const uniq = [...new Set((albumIds || []).filter(Boolean))];
-  for (let i = 0; i < uniq.length; i += 50) {
-    const chunk = uniq.slice(i, i + 50);
+  for (let i = 0; i < uniq.length; i += LIBRARY_URIS_POR_REQUEST) {
+    const chunk = uniq.slice(i, i + LIBRARY_URIS_POR_REQUEST);
     const uris = chunk.map(id => encodeURIComponent(`spotify:album:${id}`)).join(',');
     const r = await spotifyFetch(`/me/library/contains?uris=${uris}`);
+    if (!Array.isArray(r) || r.length !== chunk.length) {
+      throw new Error(`/me/library/contains (álbumes) devolvió algo inesperado (esperaba ${chunk.length} booleanos)`);
+    }
     chunk.forEach((id, j) => out.set(id, !!r[j]));
   }
   return out;
