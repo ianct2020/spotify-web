@@ -19,6 +19,7 @@ import { isJunkTrack } from '../util/junk.js';
 import { buildAlbumHeardIndex } from '../util/album-heard.js';
 import { loadFiltros, buildFilterContext, applyDiscoverFilters } from '../util/discover-filters.js';
 import { releaseKind } from '../util/release-size.js';
+import { vigilarRuta } from '../util/vigencia-ruta.js';
 import {
   getArtistIdCached,
   getArtistDiscoCached,
@@ -144,14 +145,18 @@ export async function render(container) {
     <div id="disco-content"><div class="empty-state"><div class="spinner spinner-lg"></div><div style="margin-top:14px">Cargando tus likes…</div></div></div>
   `;
   const content = document.getElementById('disco-content');
+  // Ver util/vigencia-ruta.js: era la vista con más renders huérfanos (90).
+  const ruta = vigilarRuta();
 
   let idx;
   try {
     idx = await buildAlbumHeardIndex();
   } catch (e) {
+    if (!ruta.vigente()) return teardown;
     content.innerHTML = `<div class="card"><p style="color:var(--color-error)">No pude cargar tus datos: ${escapeHtml(e.message)}</p></div>`;
     return teardown;
   }
+  if (!ruta.vigente()) return teardown;
   state.heard = idx.heard;
   state.likesByArtist = idx.likesByArtist;
 
@@ -212,6 +217,7 @@ export async function render(container) {
   // cada vez. Lo que ya está escaneado se pinta al instante; si el cache cubre
   // menos artistas de los pedidos, el scan solo completa los que faltan.
   const cached = await loadScanCache(SCAN_KEY);
+  if (!ruta.vigente()) return teardown;
   if (cached) {
     const byName = new Map(cached.artists.map(a => [a.nameLower, a]));
     let restored = 0;
@@ -232,7 +238,11 @@ export async function render(container) {
 
   renderShell(content, candidates.length);
   refreshList(content);
-  scanArtists(content).catch(err => console.warn('[discover] scan:', err));
+  // La vigencia del RENDER, no una nueva: este escaneo pertenece a esta carga
+  // de la vista, y si el usuario se va antes de que arranque tiene que cortarse
+  // igual. Los dos llamadores de abajo son handlers (el usuario está en la
+  // vista al tocar el botón), así que ahí sí vale capturarla en el momento.
+  scanArtists(content, ruta).catch(err => console.warn('[discover] scan:', err));
   return teardown;
 }
 
@@ -353,7 +363,10 @@ function renderShell(content, totalCandidates) {
   };
 }
 
-async function scanArtists(content) {
+async function scanArtists(content, ruta = vigilarRuta()) {
+  // El bucle de abajo hace hasta 150 llamadas y puede correr minutos. Sin la
+  // vigencia, cada vuelta escribía en `#disco-count` — que en la ruta nueva no
+  // existe— y repintaba una lista desconectada del documento.
   const progress = document.getElementById('disco-progress');
   const progressLabel = document.getElementById('disco-progress-label');
   const progressFill = document.getElementById('disco-progress-fill');
@@ -368,6 +381,9 @@ async function scanArtists(content) {
 
   const workers = Array.from({ length: BATCH_PARALLEL }, () => (async () => {
     while (queue.length) {
+      // Si te fuiste de la vista, se corta acá: ni una request más ni una
+      // escritura más. Lo ya escaneado queda en `state` y se guarda abajo.
+      if (!ruta.vigente()) return;
       const artist = queue.shift();
       if (!artist) break;
       let requeued = false;
@@ -389,19 +405,25 @@ async function scanArtists(content) {
           console.warn(`[discover] "${artist.name}":`, e.message);
         }
       } finally {
-        if (!requeued) {
-          scanned++;
-          progressLabel.textContent = `${artist.name} (${scanned}/${target})`;
-          progressFill.style.width = `${Math.min(100, (scanned / target) * 100)}%`;
-          document.getElementById('disco-count').textContent = scanned;
+        if (!requeued) scanned++;
+        // Los contadores y la lista SOLO si seguimos en la vista. `processArtist`
+        // puede tardar y la ruta pudo cambiar dentro del try.
+        if (ruta.vigente()) {
+          if (!requeued) {
+            progressLabel.textContent = `${artist.name} (${scanned}/${target})`;
+            progressFill.style.width = `${Math.min(100, (scanned / target) * 100)}%`;
+            const cuenta = document.getElementById('disco-count');
+            if (cuenta) cuenta.textContent = scanned;
+          }
+          refreshList(content);
         }
-        refreshList(content);
       }
     }
   })());
   await Promise.all(workers);
-  progress.style.display = 'none';
+  if (ruta.vigente()) progress.style.display = 'none';
 
+  // El cache SÍ se guarda aunque te hayas ido: son llamadas que ya se pagaron.
   const done = state.artists.filter(a => a.scanned && !a.error);
   if (done.length) {
     await saveScanCache(SCAN_KEY, done.map(a => ({

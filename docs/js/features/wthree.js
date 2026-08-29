@@ -2,22 +2,23 @@
 // por álbum). Muestra qué álbumes ya tienen picks, cuántos, y cuáles te faltan.
 // Ordenado por álbumes más escuchados primero para priorizar tu tiempo.
 
-import { spotifyFetch, getAllPlaylistItems, getAllUserPlaylists, addTracksToPlaylist, removeTracksFromPlaylist, reorderPlaylistItems, getCachedPlaylistItems, updatePlaylistItemsCache, getBestAvailableLikes } from '../api.js?v=174';
-import { patchPlaylistItems, buildCachedItem } from '../util/playlist-cache-patch.js?v=174';
-import { loadHistoryStats, loadListenedAlbums, isOwner, ownerLockedMessage } from './history-data.js?v=174';
-import { escapeHtml, pageHeader } from '../ui/components.js?v=174';
-import { showToast } from '../ui/toast.js?v=174';
-import { activateMarquee, marqueeSpan } from '../ui/marquee.js?v=174';
-import { openModal, closeById, closeModal } from '../ui/modal-stack.js?v=174';
-import { getPreview } from '../api/preview-providers.js?v=174';
-import { togglePreview, playingKey } from '../ui/preview-player.js?v=174';
-import { openAlbumCard } from './album-card.js?v=174';
-import { albumKey } from '../util/album-key.js?v=174';
-import { computeUpdatedPickPositions } from '../util/reorder-shifts.js?v=174';
-import { createHiddenStore } from '../util/hidden-sync.js?v=174';
-import { mountBottom } from '../ui/bottom-layer.js?v=174';
-import { coverUrl } from '../util/cover-size.js?v=174';
-import { insercionPorPuntero, moverA, indicadorPara } from '../util/reorder-drop.js?v=174';
+import { spotifyFetch, getAllPlaylistItems, getAllUserPlaylists, addTracksToPlaylist, removeTracksFromPlaylist, reorderPlaylistItems, getCachedPlaylistItems, updatePlaylistItemsCache, getBestAvailableLikes } from '../api.js?v=175';
+import { vigilarRuta } from '../util/vigencia-ruta.js?v=175';
+import { patchPlaylistItems, buildCachedItem } from '../util/playlist-cache-patch.js?v=175';
+import { loadHistoryStats, loadListenedAlbums, isOwner, ownerLockedMessage } from './history-data.js?v=175';
+import { escapeHtml, pageHeader } from '../ui/components.js?v=175';
+import { showToast } from '../ui/toast.js?v=175';
+import { activateMarquee, marqueeSpan } from '../ui/marquee.js?v=175';
+import { openModal, closeById, closeModal } from '../ui/modal-stack.js?v=175';
+import { getPreview } from '../api/preview-providers.js?v=175';
+import { togglePreview, playingKey } from '../ui/preview-player.js?v=175';
+import { openAlbumCard } from './album-card.js?v=175';
+import { albumKey } from '../util/album-key.js?v=175';
+import { computeUpdatedPickPositions } from '../util/reorder-shifts.js?v=175';
+import { createHiddenStore } from '../util/hidden-sync.js?v=175';
+import { mountBottom } from '../ui/bottom-layer.js?v=175';
+import { coverUrl } from '../util/cover-size.js?v=175';
+import { insercionPorPuntero, moverA, indicadorPara } from '../util/reorder-drop.js?v=175';
 
 const LS_KEY_ID = 'wthree_playlist_id';
 const LS_KEY_NAME = 'wthree_playlist_name';
@@ -161,19 +162,24 @@ export async function render(container) {
   `;
 
   const content = document.getElementById('wthree-content');
-  if (!(await isOwner())) {
+  // Ver util/vigencia-ruta.js: 86 renders huérfanos en la prueba de zapeo.
+  const ruta = vigilarRuta();
+
+  const propio = await isOwner();
+  if (!ruta.vigente()) return;
+  if (!propio) {
     content.innerHTML = ownerLockedMessage('W-Three helper');
     return;
   }
 
   if (!playlistId) {
-    await showSetup(content);
+    await showSetup(content, ruta);
   } else {
-    await loadAndRender(content);
+    await loadAndRender(content, ruta);
   }
 }
 
-async function showSetup(content) {
+async function showSetup(content, ruta = vigilarRuta()) {
   content.innerHTML = `
     <div class="card"><div class="empty-state"><div class="spinner"></div><div style="margin-top:10px">Buscando tus playlists…</div></div></div>
   `;
@@ -181,9 +187,11 @@ async function showSetup(content) {
   try {
     playlists = await getAllUserPlaylists();
   } catch (e) {
+    if (!ruta.vigente()) return;
     content.innerHTML = `<div class="card"><p style="color:var(--color-error)">No pude cargar tus playlists: ${escapeHtml(e.message)}</p></div>`;
     return;
   }
+  if (!ruta.vigente()) return;
 
   const guessRe = /(^|[^a-z])(w[\s\-_]*three|w3|wthree)([^a-z]|$)/i;
   const guessed = playlists.filter(p => guessRe.test(p.name)).sort((a, b) => (b.tracks?.total || 0) - (a.tracks?.total || 0));
@@ -229,7 +237,7 @@ async function showSetup(content) {
   });
 }
 
-async function loadAndRender(content) {
+async function loadAndRender(content, ruta = vigilarRuta()) {
   content.innerHTML = `<div class="card"><div class="empty-state"><div class="spinner"></div><div style="margin-top:10px">Cargando "${escapeHtml(playlistName || 'playlist')}" y tu historial…</div></div></div>`;
 
   try {
@@ -238,12 +246,15 @@ async function loadAndRender(content) {
       loadHistoryStats(),
       loadListenedAlbums().catch(() => null),
     ]);
+    // Una playlist grande son ~93 requests: de sobra para irse de la vista.
+    if (!ruta.vigente()) return;
     historyStats = stats;
     listenedAlbums = listened;
     buildAlbumIndex(items);
     crossWithHistory(stats, listened);
     renderBuckets(content);
   } catch (e) {
+    if (!ruta.vigente()) return;
     content.innerHTML = `<div class="card"><p style="color:var(--color-error)">Error: ${escapeHtml(e.message)}</p><button class="btn btn-secondary btn-sm" id="wthree-reset" style="margin-top:8px">Elegir otra playlist</button></div>`;
     document.getElementById('wthree-reset')?.addEventListener('click', reset);
   }

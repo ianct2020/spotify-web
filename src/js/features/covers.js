@@ -1,4 +1,5 @@
 // Vista "Mis tapas" (#covers): mosaico denso de las tapas que Ian escuchó
+
 // de verdad (history-listened-albums.json) más las que tiene en su playlist
 // "w three". Nada inferido — solo estas dos fuentes.
 //
@@ -10,6 +11,7 @@
 
 import { loadListenedAlbums, isOwner, ownerLockedMessage } from './history-data.js';
 import { isJunkTrack } from '../util/junk.js';
+import { vigilarRuta } from '../util/vigencia-ruta.js';
 import { getAllPlaylistItems, getBestAvailableLikes } from '../api.js';
 import { escapeHtml, pageHeader, showProgress, hideProgress } from '../ui/components.js';
 import { showToast } from '../ui/toast.js';
@@ -295,8 +297,13 @@ export async function render(container) {
     <div id="covers-content"><div class="empty-state"><div class="spinner spinner-lg"></div></div></div>
   `;
   const content = document.getElementById('covers-content');
+  // Ver util/vigencia-ruta.js: esta vista quedaba renderizando hasta 37 s
+  // después de que el usuario se hubiera ido.
+  const ruta = vigilarRuta();
 
-  if (!(await isOwner())) {
+  const propio = await isOwner();
+  if (!ruta.vigente()) return;
+  if (!propio) {
     content.innerHTML = ownerLockedMessage('Mis tapas');
     return;
   }
@@ -304,21 +311,26 @@ export async function render(container) {
   let data;
   try { data = await loadListenedAlbums(); }
   catch (e) {
+    if (!ruta.vigente()) return;
     content.innerHTML = `<div class="card"><p style="color:var(--color-error)">No pude cargar tus álbumes escuchados: ${escapeHtml(e.message)}</p></div>`;
     return;
   }
+  if (!ruta.vigente()) return;
 
   let wthreeItems = null;
   const wthreeId = localStorage.getItem(LS_WTHREE_ID);
   if (wthreeId) {
     try { wthreeItems = await getAllPlaylistItems(wthreeId); }
     catch (e) { console.warn('[covers] no pude cargar W-Three:', e.message); }
+    if (!ruta.vigente()) return;
   }
 
   // v=127: las celdas sin tapa mostraban un cuadro gris con la inicial y
   // ensuciaban el collage. Fuera del mosaico y fuera del contador — el número
   // que se muestra es el de tapas que se ven de verdad.
-  const built = buildList(data, wthreeItems, await buildAlbumStatsIndex());
+  const stats = await buildAlbumStatsIndex();
+  if (!ruta.vigente()) return;
+  const built = buildList(data, wthreeItems, stats);
   const noCover = built.filter(a => !a.img);
   const allAlbums = built.filter(a => a.img);
   if (noCover.length) {

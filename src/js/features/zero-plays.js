@@ -16,6 +16,7 @@
 
 import { getBestAvailableLikes, removeLikedTracks, checkLibraryContains } from '../api.js';
 import { borrarLikesVerificado } from '../util/borrado-verificado.js';
+import { vigilarRuta } from '../util/vigencia-ruta.js';
 import { loadTrackPlays, trackIdOf, isOwner, ownerLockedMessage } from './history-data.js';
 import { escapeHtml, confirmModal, pageHeader } from '../ui/components.js';
 import { showToast } from '../ui/toast.js';
@@ -111,6 +112,9 @@ function medianaCover(imgs) {
 }
 
 async function analyze() {
+  // Ver util/vigencia-ruta.js. Con el caché frío, `getBestAvailableLikes()` se
+  // baja la biblioteca entera: minutos en los que el usuario puede irse.
+  const ruta = vigilarRuta();
   const content = document.getElementById('zeroplays-content');
   let likes, plays, top = null;
   try {
@@ -121,15 +125,20 @@ async function analyze() {
       // tarda, la vista arranca con el caché local y se repinta al llegar.
       hiddenTracks.ready().then(refreshAfterHiddenSync),
     ]);
+    if (!ruta.vigente()) return;
     if (useStatsfm && hasUsername()) {
       top = await loadTopLifetime().catch(() => null);
+      if (!ruta.vigente()) return;
     }
   } catch (e) {
+    if (!ruta.vigente()) return;
     content.innerHTML = `<div class="card"><p style="color:var(--color-error)">Error: ${escapeHtml(e.message)}</p></div>`;
     return;
   }
   if (!plays || !plays.tracks) {
-    content.innerHTML = (await isOwner())
+    const propio = await isOwner();
+    if (!ruta.vigente()) return;
+    content.innerHTML = propio
       ? `<div class="card"><p>No pude cargar el historial. Volvé a probar.</p></div>`
       : ownerLockedMessage('Sin plays');
     return;

@@ -16,24 +16,24 @@
 // Preview 30s instantáneo vía iTunes (arranca en el estribillo, no suma plays
 // en tu historial de Spotify). Fallback: iframe embed oficial si iTunes no lo tiene.
 
-import { getBestAvailableLikes, removeLikedTracks, checkLibraryContains } from '../api.js?v=174';
-import { borrarLikesVerificado } from '../util/borrado-verificado.js?v=174';
-import { loadSkipStats, trackIdOf, isOwner, ownerLockedMessage } from './history-data.js?v=174';
-import { escapeHtml, confirmModal, pageHeader } from '../ui/components.js?v=174';
-import { showToast } from '../ui/toast.js?v=174';
-import { getPreview } from '../api/preview-providers.js?v=174';
-import { togglePreview, playingKey } from '../ui/preview-player.js?v=174';
-import { openTrackCard } from './track-card.js?v=174';
-import { firstArtistName, artistNames } from '../util/artist-name.js?v=174';
-import { activateMarquee } from '../ui/marquee.js?v=174';
-import { hasUsername, loadTopLifetime } from '../api/statsfm.js?v=174';
-import { createHiddenStore } from '../util/hidden-sync.js?v=174';
-import { generacionActual, rutaVigente } from '../router.js?v=174';
-import { createIncrementalList, scrollRootOf } from '../ui/incremental-list.js?v=174';
-import { createLazyImages } from '../ui/lazy-img.js?v=174';
-import { renderTrackCardRow, wireTrackCardGrid, paintCardSelection, paintPlayingCard, paintEmbedCard } from '../ui/track-card-row.js?v=174';
-import { coverAtSize } from '../util/cover-size.js?v=174';
-import { coverUrl } from '../util/cover-size.js?v=174';
+import { getBestAvailableLikes, removeLikedTracks, checkLibraryContains } from '../api.js?v=175';
+import { borrarLikesVerificado } from '../util/borrado-verificado.js?v=175';
+import { loadSkipStats, trackIdOf, isOwner, ownerLockedMessage } from './history-data.js?v=175';
+import { escapeHtml, confirmModal, pageHeader } from '../ui/components.js?v=175';
+import { showToast } from '../ui/toast.js?v=175';
+import { getPreview } from '../api/preview-providers.js?v=175';
+import { togglePreview, playingKey } from '../ui/preview-player.js?v=175';
+import { openTrackCard } from './track-card.js?v=175';
+import { firstArtistName, artistNames } from '../util/artist-name.js?v=175';
+import { activateMarquee } from '../ui/marquee.js?v=175';
+import { hasUsername, loadTopLifetime } from '../api/statsfm.js?v=175';
+import { createHiddenStore } from '../util/hidden-sync.js?v=175';
+import { vigilarRuta } from '../util/vigencia-ruta.js?v=175';
+import { createIncrementalList, scrollRootOf } from '../ui/incremental-list.js?v=175';
+import { createLazyImages } from '../ui/lazy-img.js?v=175';
+import { renderTrackCardRow, wireTrackCardGrid, paintCardSelection, paintPlayingCard, paintEmbedCard } from '../ui/track-card-row.js?v=175';
+import { coverAtSize } from '../util/cover-size.js?v=175';
+import { coverUrl } from '../util/cover-size.js?v=175';
 
 let cache = null;
 // Filas visibles con los filtros actuales, en el mismo orden que las tarjetas
@@ -144,10 +144,9 @@ async function analyze() {
   // existe. Medido: el render de #skips seguía abierto **39 segundos** después
   // de haber salido de la vista.
   //
-  // El `teardown` que devuelve `render()` no alcanza: el router lo llama, sí,
-  // pero no puede interrumpir un `await` que ya está en vuelo. Hay que
-  // preguntar DESPUÉS de cada espera larga.
-  const gen = generacionActual();
+  // El detalle de por qué el `teardown` no alcanza está en
+  // util/vigencia-ruta.js, junto al helper que usan las seis vistas.
+  const ruta = vigilarRuta();
   const content = document.getElementById('skips-content');
   let likes, stats, top = null;
   try {
@@ -158,19 +157,19 @@ async function analyze() {
       // la vista arranca con el caché local y se repinta cuando llega.
       hiddenTracks.ready().then(refreshAfterHiddenSync),
     ]);
-    if (!rutaVigente(gen)) return;   // te fuiste mientras bajaba los likes
+    if (!ruta.vigente()) return;   // te fuiste mientras bajaba los likes
     if (useStatsfm && hasUsername()) {
       top = await loadTopLifetime().catch(() => null);
-      if (!rutaVigente(gen)) return;
+      if (!ruta.vigente()) return;
     }
   } catch (e) {
-    if (!rutaVigente(gen)) return;
+    if (!ruta.vigente()) return;
     content.innerHTML = `<div class="card"><p style="color:var(--color-error)">Error: ${escapeHtml(e.message)}</p></div>`;
     return;
   }
   if (!stats || !stats.tracks) {
     const propio = await isOwner();
-    if (!rutaVigente(gen)) return;
+    if (!ruta.vigente()) return;
     content.innerHTML = propio
       ? `<div class="card"><p>No pude cargar el historial de skips. Reintentá.</p></div>`
       : ownerLockedMessage('Skips crónicos');

@@ -14,23 +14,24 @@
 // `util/hidden-sync.js`, playlist como fuente de verdad y localStorage como
 // caché local para pintar al instante.
 
-import { getBestAvailableLikes, removeLikedTracks, checkLibraryContains } from '../api.js?v=174';
-import { borrarLikesVerificado } from '../util/borrado-verificado.js?v=174';
-import { loadTrackPlays, trackIdOf, isOwner, ownerLockedMessage } from './history-data.js?v=174';
-import { escapeHtml, confirmModal, pageHeader } from '../ui/components.js?v=174';
-import { showToast } from '../ui/toast.js?v=174';
-import { openTrackCard } from './track-card.js?v=174';
-import { hasUsername, loadTopLifetime } from '../api/statsfm.js?v=174';
-import { getPreview } from '../api/preview-providers.js?v=174';
-import { togglePreview, playingKey } from '../ui/preview-player.js?v=174';
-import { renderTrackCardRow, wireTrackCardGrid, paintCardSelection, paintPlayingCard } from '../ui/track-card-row.js?v=174';
-import { createIncrementalList, scrollRootOf } from '../ui/incremental-list.js?v=174';
-import { createLazyImages } from '../ui/lazy-img.js?v=174';
-import { activateMarquee } from '../ui/marquee.js?v=174';
-import { coverAtSize } from '../util/cover-size.js?v=174';
-import { firstArtistName } from '../util/artist-name.js?v=174';
-import { createHiddenStore } from '../util/hidden-sync.js?v=174';
-import { fmtDiaCorto } from '../util/fecha.js?v=174';
+import { getBestAvailableLikes, removeLikedTracks, checkLibraryContains } from '../api.js?v=175';
+import { borrarLikesVerificado } from '../util/borrado-verificado.js?v=175';
+import { vigilarRuta } from '../util/vigencia-ruta.js?v=175';
+import { loadTrackPlays, trackIdOf, isOwner, ownerLockedMessage } from './history-data.js?v=175';
+import { escapeHtml, confirmModal, pageHeader } from '../ui/components.js?v=175';
+import { showToast } from '../ui/toast.js?v=175';
+import { openTrackCard } from './track-card.js?v=175';
+import { hasUsername, loadTopLifetime } from '../api/statsfm.js?v=175';
+import { getPreview } from '../api/preview-providers.js?v=175';
+import { togglePreview, playingKey } from '../ui/preview-player.js?v=175';
+import { renderTrackCardRow, wireTrackCardGrid, paintCardSelection, paintPlayingCard } from '../ui/track-card-row.js?v=175';
+import { createIncrementalList, scrollRootOf } from '../ui/incremental-list.js?v=175';
+import { createLazyImages } from '../ui/lazy-img.js?v=175';
+import { activateMarquee } from '../ui/marquee.js?v=175';
+import { coverAtSize } from '../util/cover-size.js?v=175';
+import { firstArtistName } from '../util/artist-name.js?v=175';
+import { createHiddenStore } from '../util/hidden-sync.js?v=175';
+import { fmtDiaCorto } from '../util/fecha.js?v=175';
 
 let cache = null;
 
@@ -111,6 +112,9 @@ function medianaCover(imgs) {
 }
 
 async function analyze() {
+  // Ver util/vigencia-ruta.js. Con el caché frío, `getBestAvailableLikes()` se
+  // baja la biblioteca entera: minutos en los que el usuario puede irse.
+  const ruta = vigilarRuta();
   const content = document.getElementById('zeroplays-content');
   let likes, plays, top = null;
   try {
@@ -121,15 +125,20 @@ async function analyze() {
       // tarda, la vista arranca con el caché local y se repinta al llegar.
       hiddenTracks.ready().then(refreshAfterHiddenSync),
     ]);
+    if (!ruta.vigente()) return;
     if (useStatsfm && hasUsername()) {
       top = await loadTopLifetime().catch(() => null);
+      if (!ruta.vigente()) return;
     }
   } catch (e) {
+    if (!ruta.vigente()) return;
     content.innerHTML = `<div class="card"><p style="color:var(--color-error)">Error: ${escapeHtml(e.message)}</p></div>`;
     return;
   }
   if (!plays || !plays.tracks) {
-    content.innerHTML = (await isOwner())
+    const propio = await isOwner();
+    if (!ruta.vigente()) return;
+    content.innerHTML = propio
       ? `<div class="card"><p>No pude cargar el historial. Volvé a probar.</p></div>`
       : ownerLockedMessage('Sin plays');
     return;

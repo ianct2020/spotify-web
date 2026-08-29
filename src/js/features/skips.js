@@ -28,7 +28,7 @@ import { firstArtistName, artistNames } from '../util/artist-name.js';
 import { activateMarquee } from '../ui/marquee.js';
 import { hasUsername, loadTopLifetime } from '../api/statsfm.js';
 import { createHiddenStore } from '../util/hidden-sync.js';
-import { generacionActual, rutaVigente } from '../router.js';
+import { vigilarRuta } from '../util/vigencia-ruta.js';
 import { createIncrementalList, scrollRootOf } from '../ui/incremental-list.js';
 import { createLazyImages } from '../ui/lazy-img.js';
 import { renderTrackCardRow, wireTrackCardGrid, paintCardSelection, paintPlayingCard, paintEmbedCard } from '../ui/track-card-row.js';
@@ -144,10 +144,9 @@ async function analyze() {
   // existe. Medido: el render de #skips seguía abierto **39 segundos** después
   // de haber salido de la vista.
   //
-  // El `teardown` que devuelve `render()` no alcanza: el router lo llama, sí,
-  // pero no puede interrumpir un `await` que ya está en vuelo. Hay que
-  // preguntar DESPUÉS de cada espera larga.
-  const gen = generacionActual();
+  // El detalle de por qué el `teardown` no alcanza está en
+  // util/vigencia-ruta.js, junto al helper que usan las seis vistas.
+  const ruta = vigilarRuta();
   const content = document.getElementById('skips-content');
   let likes, stats, top = null;
   try {
@@ -158,19 +157,19 @@ async function analyze() {
       // la vista arranca con el caché local y se repinta cuando llega.
       hiddenTracks.ready().then(refreshAfterHiddenSync),
     ]);
-    if (!rutaVigente(gen)) return;   // te fuiste mientras bajaba los likes
+    if (!ruta.vigente()) return;   // te fuiste mientras bajaba los likes
     if (useStatsfm && hasUsername()) {
       top = await loadTopLifetime().catch(() => null);
-      if (!rutaVigente(gen)) return;
+      if (!ruta.vigente()) return;
     }
   } catch (e) {
-    if (!rutaVigente(gen)) return;
+    if (!ruta.vigente()) return;
     content.innerHTML = `<div class="card"><p style="color:var(--color-error)">Error: ${escapeHtml(e.message)}</p></div>`;
     return;
   }
   if (!stats || !stats.tracks) {
     const propio = await isOwner();
-    if (!rutaVigente(gen)) return;
+    if (!ruta.vigente()) return;
     content.innerHTML = propio
       ? `<div class="card"><p>No pude cargar el historial de skips. Reintentá.</p></div>`
       : ownerLockedMessage('Skips crónicos');

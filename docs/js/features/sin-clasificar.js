@@ -16,25 +16,26 @@
 import {
   getAllUserPlaylists, getAllPlaylistItems, getBestAvailableLikes,
   getCurrentUserId, removeLikedTracks, checkLibraryContains,
-} from '../api.js?v=174';
-import { borrarLikesVerificado } from '../util/borrado-verificado.js?v=174';
-import { idbGetCached, idbSetCached, idbDel } from '../idb.js?v=174';
-import { createHiddenStore } from '../util/hidden-sync.js?v=174';
-import { addUrisToPlaylists, toastAddResult, getOwnPlaylists } from '../util/playlist-add.js?v=174';
-import { escapeHtml, pageHeader, showProgress, hideProgress, isCancelled, confirmModal } from '../ui/components.js?v=174';
-import { openModal, closeTop } from '../ui/modal-stack.js?v=174';
-import { openPlaylistPicker } from '../ui/playlist-picker.js?v=174';
-import { showToast } from '../ui/toast.js?v=174';
-import { getPreview } from '../api/preview-providers.js?v=174';
-import { togglePreview, playingKey } from '../ui/preview-player.js?v=174';
-import { openTrackCard } from './track-card.js?v=174';
-import { normText } from '../util/track-match.js?v=174';
-import { activateMarquee } from '../ui/marquee.js?v=174';
-import { renderTrackCardRow, wireTrackCardGrid, paintCardSelection, paintPlayingCard } from '../ui/track-card-row.js?v=174';
-import { createIncrementalList, scrollRootOf } from '../ui/incremental-list.js?v=174';
-import { createLazyImages } from '../ui/lazy-img.js?v=174';
-import { coverAtSize } from '../util/cover-size.js?v=174';
-import { fmtDiaCorto } from '../util/fecha.js?v=174';
+} from '../api.js?v=175';
+import { borrarLikesVerificado } from '../util/borrado-verificado.js?v=175';
+import { vigilarRuta } from '../util/vigencia-ruta.js?v=175';
+import { idbGetCached, idbSetCached, idbDel } from '../idb.js?v=175';
+import { createHiddenStore } from '../util/hidden-sync.js?v=175';
+import { addUrisToPlaylists, toastAddResult, getOwnPlaylists } from '../util/playlist-add.js?v=175';
+import { escapeHtml, pageHeader, showProgress, hideProgress, isCancelled, confirmModal } from '../ui/components.js?v=175';
+import { openModal, closeTop } from '../ui/modal-stack.js?v=175';
+import { openPlaylistPicker } from '../ui/playlist-picker.js?v=175';
+import { showToast } from '../ui/toast.js?v=175';
+import { getPreview } from '../api/preview-providers.js?v=175';
+import { togglePreview, playingKey } from '../ui/preview-player.js?v=175';
+import { openTrackCard } from './track-card.js?v=175';
+import { normText } from '../util/track-match.js?v=175';
+import { activateMarquee } from '../ui/marquee.js?v=175';
+import { renderTrackCardRow, wireTrackCardGrid, paintCardSelection, paintPlayingCard } from '../ui/track-card-row.js?v=175';
+import { createIncrementalList, scrollRootOf } from '../ui/incremental-list.js?v=175';
+import { createLazyImages } from '../ui/lazy-img.js?v=175';
+import { coverAtSize } from '../util/cover-size.js?v=175';
+import { fmtDiaCorto } from '../util/fecha.js?v=175';
 
 const HIDDEN_KEY = 'sin_clasificar_ocultas';
 const EXCLUDED_KEY = 'sin_clasificar_excluidas';
@@ -207,6 +208,9 @@ async function load({ force }) {
   if (scanning) return;
   scanning = true;
   const t0 = performance.now();
+  // Ver util/vigencia-ruta.js. Esta vista baja la biblioteca Y cruza todas las
+  // playlists propias: es de las más largas que hay.
+  const ruta = vigilarRuta();
   try {
     // getBestAvailableLikes completa la descarga sola si el caché no está entero
     // (y se cuelga de la carga de otra vista si ya hay una en curso), así que
@@ -223,13 +227,16 @@ async function load({ force }) {
       },
     });
     if (shownLikesProgress) hideProgress();
+    if (!ruta.vigente()) return;
 
     // Ocultas desde la playlist de Spotify. En segundo plano: si tarda, la vista
     // arranca con el caché local y se repinta al llegar.
     hidden.ready().then(() => { if (state) renderResults(); });
 
     const me = await getCurrentUserId();
+    if (!ruta.vigente()) return;
     const playlists = await getAllUserPlaylists();
+    if (!ruta.vigente()) return;
     const own = playlists.filter(p => p.owner?.id === me);
 
     let excluded = loadExcluded();
@@ -251,6 +258,7 @@ async function load({ force }) {
     console.log(`[sin-clasificar] ${toScan.length} playlists a cruzar de ${own.length} propias · ignoradas por id: ${own.filter(p => excluded.has(p.id)).map(p => `${p.name} (${p.id})`).join(', ') || '—'}${deOcultos.length ? ` · fuera por ser de ocultos: ${deOcultos.join(', ')}` : ''}`);
 
     let cross = force ? null : await idbGetCached(CROSS_KEY).catch(() => null);
+    if (!ruta.vigente()) return;
     // Si cambió qué playlists entran al cruce, lo cacheado ya no sirve.
     if (cross && cross.scanned?.join(',') !== toScan.map(p => p.id).join(',')) cross = null;
 
@@ -260,7 +268,10 @@ async function load({ force }) {
       scanMs = Math.round(performance.now() - t0);
       cross.at = Date.now();
       cross.scanMs = scanMs;
+      // El cruce se guarda IGUAL aunque el usuario se haya ido: costó minutos y
+      // es válido. Lo que no se hace es pintarlo.
       await idbSetCached(CROSS_KEY, cross, CROSS_TTL_MIN).catch(() => {});
+      if (!ruta.vigente()) return;
     }
 
     const ids = new Set(cross.ids);
