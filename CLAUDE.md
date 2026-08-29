@@ -299,6 +299,14 @@ mosaico (`rgba(20,20,28,.95)` con texto blanco, que trae su propio fondo).
   bugs abiertos y pendientes que existe. (En la tanda 8 se pidió borrarlos y
   después Ian retiró el pedido: seguí actualizándolos.)
 - **#covers congela el renderer** con 2.449 tapas (viene de la tanda 7).
+- **La playlist «fonoteca · sin escuchar» no existe en la cuenta de Ian**
+  (verificado 2026-08-28 contra sus 39 propias). El criterio `sinescuchar` de
+  v=165 la cruza igual y descarta 0 hasta que aparezca. Falta saber dónde
+  fueron a parar los singles que Ian dice haber guardado desde la tanda 4.
+- **`#new-releases` no tiene los chips de tipo** (Todo / Álbumes / EPs /
+  Singles). Los de v=165 se pusieron solo en `#discover-artists`, que era donde
+  el EP quedaba escondido; en Novedades no hay filtro por tipo y no esconde
+  nada, pero las dos vistas ya no ofrecen lo mismo.
 
 ## Animaciones de entrada al scrollear (v=159)
 `src/js/ui/reveal.js`. Un `IntersectionObserver` compartido, `unobserve` al
@@ -340,6 +348,137 @@ player de v=88. Por eso las reglas nuevas de `main.css` **no** llevan
 `@media (prefers-reduced-motion)`: quién anima lo decide `animationsEnabled()`
 en JS, porque el toggle puede forzar por encima del sistema. Los 10 bloques de
 reduced-motion que ya existían **no se tocaron**.
+
+## Los filtros de descubrir comparaban por título exacto (v=165)
+
+`#discover-artists` y `#new-releases` dejaban pasar tres cosas distintas que
+son el MISMO problema: el cruce se hacía por el título tal cual, y cualquier
+agregado lo esquivaba.
+
+**Medido en producción el 2026-08-28**, sobre los **1.097** que veía Ian (chip
+«Todo», ventana «Últimos 5 años», 150 artistas escaneados). Quedan **948**:
+un recorte del **13,6 %**, muy por debajo del 40 % que Ian puso como techo.
+
+| criterio nuevo | se caen |
+|---|---|
+| `edicion` — otra edición de un disco tuyo | **1** (5 con la ventana en «Cualquier año») |
+| `single` — el tope de pistas y la clave BASE | **30 más** de los que ya se caían |
+| `repetido` — el mismo tema repetido en la lista | **118** (56 grupos) |
+| `sinescuchar` — ya está en la playlist | **0**, ver abajo |
+
+### `util/edition-suffix.js` — el agregado de edición
+`baseDeEdicion(titulo)` devuelve el título sin su cola de edición (Deluxe,
+Expanded, Bonus, Anniversary, Remastered, Complete Edition, 10th Anniversary…),
+en las **tres** formas de escribirla: entre paréntesis o corchetes, detrás de un
+guion, y **pegada sin separador** («Igor Deluxe», «Sombras Complete Edition»),
+que es la que `albumKey` no cubría.
+
+⚠️ **Esto NO es aflojar `albumKey`.** El trozo se saca solo si **TODAS** sus
+palabras están en la lista (`NUCLEO` + `RELLENO` + año + ordinal) y al menos una
+es del núcleo. Por eso `American Football (LP2)`, `Crystal Castles II`, `÷` y
+`eternal sunshine (slightly deluxe and also live)` salen intactos: les sobra una
+palabra que no está en la lista. La cola sin separador va con una lista **más
+corta todavía**, porque sin delimitador una palabra ambigua se come parte del
+nombre real (`Midnight Gold` → `Midnight`).
+
+El criterio es **simétrico por construcción**: se le saca el agregado a los dos
+lados y se comparan las bases, así que da igual si el deluxe es el candidato o
+el que ya escuchaste. Y solo suma cuando la clave exacta NO alcanzó, para que el
+contador del chip diga cuántos descarta ÉL y no los de al lado.
+
+### El filtro de singles no estaba roto: miraba para otro lado
+«Timeless (Remix)» de The Weeknd seguía apareciendo con el filtro encendido.
+El índice **sí** tenía `timeless||the weeknd`; lo que fallaba era el tope:
+`MAX_PISTAS_SINGLE = 2` y ese lanzamiento tiene **3 pistas** (verificado contra
+el caché de escaneo real). Un filtro que no descarta nada se lee como roto y
+estaba funcionando: el candidato ni siquiera llegaba a la comparación.
+
+Dos cambios:
+- el tope pasa a `< EP_MIN_TRACKS` (menos de 4), o sea el **mismo** umbral de
+  `util/release-size.js`. Un número menos que inventar, y coherente con los
+  chips «Álbumes / EPs / Singles»: lo que el chip llama single es exactamente
+  lo que este criterio mira;
+- el índice `temaEnAlbum` ya no se limita a los likes cuyo álbum figura en
+  `history-listened-albums.json`. Ese JSON es un subset por umbral y **termina
+  donde termina el export**, así que los temas de 2025-2026 —justo los que
+  tienen remixes dando vueltas— no estaban. Ahora también entra el like que vive
+  en un álbum de 4+ pistas: 5.823 → **7.494 temas**.
+
+### `songKeysCandidatas` / `songKeyBase` (`util/song-identity.js`)
+⚠️ **`songKey` NO se tocó**: está portada a Python en `scripts/gen-stats.py` y
+verificada contra 3.853 pares. Lo nuevo es una capa ENCIMA, que solo usan los
+filtros de descubrimiento.
+
+`songKey` ya cubría «Tema (Remix)» (lo tira `normText` con los paréntesis) y
+«Tema - X Remix» (lo tira `REMIX_TAIL`). Lo que no cubría es la tercera forma:
+la cola **pegada sin separador** — «Timeless Sped Up», «Die For You Acoustic».
+
+Devuelve **varias** claves y no una porque el nombre del remixero va DELANTE de
+la palabra («Timeless DEVAULT Remix») y sin separador no hay forma de saber
+dónde termina el título: se prueban también los prefijos más cortos. El recorte
+se corta en **2 tokens**, para que «One More Time VIP» no pueda matchear un
+«One» cualquiera — un falso positivo acá es SILENCIOSO y uno negativo es
+visible, la misma asimetría de v=152.
+
+### El mismo tema cuatro veces (`dedupPorTema`)
+Agrupa por `songKeyBase` —que incluye el artista, así que dos artistas nunca se
+fusionan— y deja un representante. **El representante es el lanzamiento MÁS
+GRANDE**, no el primero: un álbum y su single pueden compartir título, y
+quedarse con el que tiene más pistas garantiza que el disco no se pierda por
+culpa de su propio adelanto. A igualdad de pistas gana el más viejo, que es el
+criterio que ya usaba `dedupDisco`.
+
+El caso real que lo justifica: **«Desire» de Calvin Harris son ONCE entradas**
+en la lista (VIP Mix, Sub Focus Remix, Steve Aoki & Kaaze, Don Diablo, MEDUZA,
+Acoustic, Cedric Gervais, Hannah Laing, Alok, Extended y el pack de 11).
+
+Va **al final** y sobre lo que sobrevivió a los demás: es el único criterio que
+no mira un lanzamiento sino la lista entera.
+
+### Tres divisiones, no dos (`releaseKind`)
+Spotify no tiene tipo «EP»: `album_type` solo vale album/single/compilation y un
+EP de 6 temas viene marcado como 'single'. Los chips pasan a
+**Todo / Álbumes / EPs / Singles**, con el mismo `EP_MIN_TRACKS = 4` de v=127.
+Medido: **79 EPs** que estaban mezclados entre 882 singles.
+
+⚠️ Y de paso: `processArtist` repartía lo no escuchado en `unheardAlbums`
+(`type === 'album'`) y `unheardSingles` (`type === 'single'`). Los
+**recopilatorios no caían en ninguna de las dos** y la vista no los mostraba
+nunca, con ningún chip. Ahora se guarda también `unheard` entero; los dos campos
+viejos siguen ahí porque el caché de escaneo de 7 días los tiene y no vale la
+pena forzar un rescán de 150 artistas.
+
+### La playlist «fonoteca · sin escuchar» NO EXISTE
+El criterio `sinescuchar` cruza contra los items de esa playlist —la que escribe
+`guardarLanzamiento` para los lanzamientos de menos de 4 pistas—. Verificado en
+vivo el 2026-08-28 contra las **39 playlists propias** de Ian: **no está**. Hay
+seis `fonoteca · ocultos (…)` y ninguna `fonoteca · sin escuchar`. Por eso el
+chip descarta 0. El código degrada en silencio y avisa por consola; el día que
+la playlist exista, el filtro empieza a contar solo.
+
+### La ficha de álbum de descubrir es la compartida
+No había «una versión aparte»: `#discover-artists` ya llamaba a
+`openAlbumCard()`. Lo que se veía distinto eran dos cosas:
+1. `.album-modal-no-data` **no tenía NINGUNA regla de CSS** —se buscó en las
+   tres hojas y no existía—, así que «Sin datos de escucha en tu historial» se
+   pintaba con el cuerpo del modal y gritaba. En estas dos vistas lo hace
+   SIEMPRE, porque ahí ningún álbum tiene datos por definición. Ahora es una
+   línea de 12 px gris, la misma que «Primera vez»;
+2. faltaban los botones de la vista. `openAlbumCard` acepta
+   `acciones: [{label, title, onClick}]` y las pinta detrás de las dos de
+   siempre. **Cada acción aprieta el botón real de la tarjeta**
+   (`accionesDeLaTarjeta` en `discover-common.js`), así que el guardado, el
+   likeo, el picker y los dos stores siguen viviendo en un solo sitio y la
+   ficha no puede desincronizarse de la grilla.
+
+### «Volver arriba» ya estaba y funciona
+Se verificó en producción en **las dos** vistas: aparece pasadas dos pantallas
+(~1.300 px) y la capa de abajo lo mantiene por encima de la barra de selección
+(medido con una tarjeta marcada: el botón en y=583 y la actionbar en y=579, sin
+solaparse). `installBackToTop()` descubre el scroller solo y acá el que scrollea
+es el documento, así que no hacía falta enchufar nada. **Ojo al medir**: fijar
+`scrollingElement.scrollTop` desde la consola NO lo dispara de forma fiable —
+hay que scrollear con la rueda de verdad.
 
 ## Claves de preferencia por usuario (v=159)
 `prefKey(base)` y `migratePrefKey(base)` en `src/js/storage.js`. Aplicado a
