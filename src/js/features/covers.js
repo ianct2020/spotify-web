@@ -57,7 +57,15 @@ function setYearsSel(sel) {
 // Aplana history-listened-albums.json y mergea la playlist W-Three (si hay).
 // Devuelve la lista de álbumes únicos con: name, artist, img, date (primera
 // escucha), plays y min REALES (del historial completo, ver util/album-stats.js),
-// years (Set de años en que se escuchó) y sources (Set 'listened' / 'wthree').
+// years y sources ('listened' / 'wthree').
+//
+// ⚠️ **Las dos son `Set` mientras se arma el mapa, pero SOLO `years` sale como
+// array**: el `return` de abajo lo aplana porque el filtro por año necesita
+// `.some()`. `sources` sale como `Set` y los consumidores le hacen `.has()`.
+// Este comentario decía «Set» de las dos y era la única documentación del
+// contrato: cuando en v=164 llegaron los consumidores con `.has()`, `sources`
+// llevaba ya nueve versiones aplanada a array y la vista murió entera. Si tocás
+// la forma de cualquiera de las dos, es acá donde hay que decirlo.
 //
 // `stats` es el índice albumKey → {plays, ms}. Puede venir vacío (BYOH con un
 // JSON v3, o usuario sin historial): en ese caso plays y min quedan en 0 y la
@@ -161,10 +169,20 @@ function buildList(data, wthreeItems, stats) {
     out.push(a);
   }
 
+  // `years` SÍ se aplana a array, y hace falta: la línea del filtro por año usa
+  // `a.years.some(...)` y el desplegable `flatMap(a => a.years)`, y `.some()` no
+  // existe en `Set`.
+  //
+  // `sources` NO se aplana, y esto es un arreglo (2026-08-29). Se coló en esta
+  // misma conversión en v=115 y el 27/08 (v=164) llegaron los dos consumidores
+  // que hacen `a.sources.has('wthree')`: desde entonces la vista entera moría
+  // con «a.sources.has is not a function» y no pintaba el mosaico nunca.
+  // Los cuatro productores lo construyen como `Set`, el contrato de arriba dice
+  // `Set`, los dos consumidores quieren `Set`, y esta lista no se serializa en
+  // ningún momento — no hay motivo para aplanarla.
   return out.map(a => ({
     ...a,
     years: [...a.years].sort((x, y) => x - y),
-    sources: [...a.sources],
   }));
 }
 
