@@ -1,7 +1,25 @@
-import { spotifyFetch, createPlaylist, addTracksToPlaylist, invalidatePlaylistsCache, getAllLikedTracks } from '../api.js?v=166';
-import { hasKey, setKey, hasUsername, getUsername, setUsername, getUserTopArtists, getSimilarArtists, getArtistTopTracks } from '../api/lastfm.js?v=166';
-import { showProgress, hideProgress, promptPlaylistName, escapeHtml, pageHeader } from '../ui/components.js?v=166';
-import { showToast } from '../ui/toast.js?v=166';
+import { spotifyFetch, createPlaylist, addTracksToPlaylist, invalidatePlaylistsCache, getAllLikedTracks } from '../api.js?v=167';
+import { hasKey, setKey, hasUsername, getUsername, setUsername, getUserTopArtists, getSimilarArtists, getArtistTopTracks } from '../api/lastfm.js?v=167';
+import { showProgress, hideProgress, promptPlaylistName, escapeHtml, pageHeader } from '../ui/components.js?v=167';
+import { showToast } from '../ui/toast.js?v=167';
+import { getPreview } from '../api/preview-providers.js?v=167';
+import { togglePreview, playingKey, isPlayingAudio } from '../ui/preview-player.js?v=167';
+import { paintPlayingCard } from '../ui/track-card-row.js?v=167';
+import { openTrackCard } from './track-card.js?v=167';
+import { openAlbumCard } from './album-card.js?v=167';
+import { limpiaParaQuery, titleMatches, artistMatches } from '../util/track-match.js?v=167';
+
+// Iconos de las dos fichas. Los mismos trazos que usa la tarjeta compartida.
+const ICONO_PLAY = `<svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14"><path d="M8 5v14l11-7z"/></svg>`;
+const ICONO_PAUSA = `<svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14"><path d="M7 5h3.5v14H7zM13.5 5H17v14h-3.5z"/></svg>`;
+const ICONO_FICHA = `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><line x1="12" y1="11" x2="12" y2="16"/><line x1="12" y1="8" x2="12" y2="8"/></svg>`;
+const ICONO_DISCO = `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="2.6"/></svg>`;
+
+// Cuántos top tracks se le piden a Last.fm por artista. Eran 20 hasta v=167.
+// Cada uno cuesta una búsqueda en Spotify, así que subirlo sube el riesgo de
+// 429 — por eso la resolución va con una pausa entre búsquedas.
+const TOP_TRACKS_POR_ARTISTA = 30;
+const PAUSA_ENTRE_BUSQUEDAS = 120;
 
 let recommendations = [];
 let currentPick = null;
@@ -193,7 +211,7 @@ async function pickArtist(artist) {
   document.getElementById('recs-back-btn').onclick = renderRecommendations;
 
   try {
-    const topTracks = await getArtistTopTracks(artist.name, 20);
+    const topTracks = await getArtistTopTracks(artist.name, TOP_TRACKS_POR_ARTISTA);
     if (topTracks.length === 0) {
       document.getElementById('recs-tracks').innerHTML = `<div class="card"><p>Sin top tracks en Last.fm.</p></div>`;
       return;
@@ -204,6 +222,17 @@ async function pickArtist(artist) {
   }
 }
 
+// Resuelve cada top track de Last.fm contra Spotify.
+//
+// ⚠️ **El apóstrofo dentro de las comillas rompe la búsqueda de Spotify** (ver
+// el bloque de `limpiaParaQuery` en `util/track-match.js`): `track:"Can't Feel
+// My Face"` devuelve 0. Esta vista mandaba el título crudo, así que cualquier
+// tema con apóstrofo caía en «sin match» — que se lee como «Spotify no lo
+// tiene» y no como un bug. Ahora se limpia, y como la query queda MÁS LAXA el
+// resultado se verifica contra el nombre real (`titleMatches` + `artistMatches`)
+// antes de darlo por bueno: sin esa verificación, aflojar la query es lo que
+// traía a Nick Drake buscando Drake (v=124). Por eso también `limit=5` y no 1:
+// con la query laxa el primer resultado puede no ser el que corresponde.
 async function resolveTracksOnSpotify(topTracks) {
   const tracksEl = document.getElementById('recs-tracks');
   tracksEl.innerHTML = `<div class="empty-state"><div class="spinner spinner-lg"></div><div style="margin-top:16px">Buscando en Spotify (0/${topTracks.length})...</div></div>`;
@@ -212,15 +241,25 @@ async function resolveTracksOnSpotify(topTracks) {
   for (let i = 0; i < topTracks.length; i++) {
     const t = topTracks[i];
     try {
-      const q = `track:"${t.name}" artist:"${t.artist}"`;
-      const data = await spotifyFetch(`/search?q=${encodeURIComponent(q)}&type=track&limit=1`);
-      const hit = data.tracks?.items?.[0];
+      const q = `track:"${limpiaParaQuery(t.name)}" artist:"${limpiaParaQuery(t.artist)}"`;
+      const data = await spotifyFetch(`/search?q=${encodeURIComponent(q)}&type=track&limit=5`);
+      const hit = (data.tracks?.items || []).find(c =>
+        titleMatches(t.name, c.name) && artistMatches(t.artist, (c.artists || []).map(a => a.name).join(', ')));
       if (hit) {
+        const artistas = (hit.artists || []).map(a => a.name).filter(Boolean);
         raw.push({
-          uri: hit.uri, name: hit.name,
-          artist: (hit.artists || []).map(a => a.name).join(', '),
+          uri: hit.uri,
+          trackId: hit.id,
+          name: hit.name,
+          artist: artistas.join(', '),
+          // La lista entera, no el string unido: la cadena de proveedores acepta
+          // el match si coincide CUALQUIER artista, y con el string unido no hay
+          // más que un nombre imposible («A, B & C») contra el que comparar.
+          artistList: artistas,
           album: hit.album?.name,
+          albumId: hit.album?.id,
           image: hit.album?.images?.[hit.album.images.length - 1]?.url,
+          imageBig: hit.album?.images?.[0]?.url,
           matched: true,
         });
       } else {
@@ -230,12 +269,94 @@ async function resolveTracksOnSpotify(topTracks) {
       raw.push({ uri: null, name: t.name, artist: t.artist, matched: false });
     }
     tracksEl.querySelector('.empty-state div:last-child').textContent = `Buscando en Spotify (${i + 1}/${topTracks.length})...`;
+    if (i < topTracks.length - 1) await sleep(PAUSA_ENTRE_BUSQUEDAS);
   }
 
   alreadyLikedInResolution = raw.filter(t => t.matched && likedUris.has(t.uri)).length;
   resolvedTracks = raw.filter(t => !(t.matched && likedUris.has(t.uri)));
 
   renderResolvedTracks();
+}
+
+function filaPorId(id) {
+  return resolvedTracks.find(t => t.matched && t.trackId === id) || null;
+}
+
+// ── Preview ──────────────────────────────────────────────────────────────────
+//
+// La misma cadena de proveedores que el resto de la app (iTunes → Deezer →
+// embed de Spotify). Se pasa `spotifyId` porque acá el embed es un fallback
+// aceptable: la fila no tiene sitio para un iframe inline como el de `#skips`.
+async function onPlayClick(r) {
+  const res = await togglePreview(`rec:${r.trackId}`, () => getPreview({
+    name: r.name,
+    artists: r.artistList,
+    spotifyId: r.trackId || undefined,
+  }));
+  if (res === null) showToast(`Sin preview disponible de «${r.name}»`, 'info');
+}
+
+document.addEventListener('previewchange', (e) => {
+  paintPlayingCard(document.getElementById('recs-tracks'), 'rec', e.detail);
+});
+
+// Una fila es un `<label>` que ENVUELVE el checkbox, así que un click en
+// cualquier descendiente lo tilda aunque el descendiente tenga su propio
+// handler. Para las acciones que NO son marcar hace falta `preventDefault()`
+// ADEMÁS de `stopPropagation()`: solo con el segundo la acción corre igual y de
+// paso queda la canción marcada (v=164).
+function accionesDeFila(tracksEl) {
+  tracksEl.addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-accion]');
+    if (!btn || !tracksEl.contains(btn)) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const fila = e.target.closest('[data-id]');
+    const r = fila && filaPorId(fila.dataset.id);
+    if (!r) return;
+    if (btn.dataset.accion === 'play') { onPlayClick(r); return; }
+    if (btn.dataset.accion === 'ficha') {
+      openTrackCard({ id: r.trackId, name: r.name, artists: r.artistList, album: r.album, img: r.imageBig || r.image });
+      return;
+    }
+    if (btn.dataset.accion === 'album') {
+      openAlbumCard({ name: r.album, artist: r.artistList?.[0] || r.artist, albumId: r.albumId, img: r.imageBig || r.image });
+    }
+  });
+}
+
+function filaHtml(t) {
+  if (!t.matched) {
+    return `
+      <div class="pretty-check-row" style="opacity:0.5">
+        <div style="width:40px;height:40px;background:var(--color-elevated);border-radius:var(--radius-sm);display:flex;align-items:center;justify-content:center;font-size:12px;color:var(--color-text-muted)">?</div>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:14px">${escapeHtml(t.name)}</div>
+          <div style="font-size:12px;color:var(--color-text-muted)">${escapeHtml(t.artist)} — sin match</div>
+        </div>
+      </div>`;
+  }
+  const sonando = playingKey() === `rec:${t.trackId}`;
+  const pausa = sonando && isPlayingAudio();
+  return `
+    <label class="pretty-check-row" data-id="${escapeHtml(t.trackId)}">
+      <input type="checkbox" class="pretty-check recs-track-check" data-uri="${t.uri}" checked>
+      <span class="pretty-check-box"></span>
+      ${t.image
+        ? `<img src="${t.image}" style="width:40px;height:40px;border-radius:var(--radius-sm);object-fit:cover">`
+        : `<div style="width:40px;height:40px;background:var(--color-elevated);border-radius:var(--radius-sm)"></div>`}
+      <div style="flex:1;min-width:0">
+        <div style="font-size:14px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(t.name)}</div>
+        <div style="font-size:12px;color:var(--color-text-secondary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(t.artist)}${t.album ? ` · ${escapeHtml(t.album)}` : ''}</div>
+      </div>
+      <div class="recs-row-actions">
+        <button type="button" class="sc-btn sc-play${sonando ? ' playing' : ''}" data-accion="play"
+                title="${pausa ? 'Parar el preview' : 'Preview de 30 s — no suma reproducciones'}"
+                aria-label="${pausa ? 'Parar preview' : 'Preview'}">${pausa ? ICONO_PAUSA : ICONO_PLAY}</button>
+        <button type="button" class="sc-btn" data-accion="ficha" title="Ver la ficha del tema" aria-label="Ficha del tema">${ICONO_FICHA}</button>
+        ${t.album ? `<button type="button" class="sc-btn" data-accion="album" title="Ver la ficha del álbum" aria-label="Ficha del álbum">${ICONO_DISCO}</button>` : ''}
+      </div>
+    </label>`;
 }
 
 function renderResolvedTracks() {
@@ -273,27 +394,11 @@ function renderResolvedTracks() {
     </div>
 
     <div class="card">
-      ${resolvedTracks.map(t => t.matched ? `
-        <label class="pretty-check-row">
-          <input type="checkbox" class="pretty-check recs-track-check" data-uri="${t.uri}" checked>
-          <span class="pretty-check-box"></span>
-          ${t.image ? `<img src="${t.image}" style="width:40px;height:40px;border-radius:var(--radius-sm);object-fit:cover">` : `<div style="width:40px;height:40px;background:var(--color-elevated);border-radius:var(--radius-sm)"></div>`}
-          <div style="flex:1;min-width:0">
-            <div style="font-size:14px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(t.name)}</div>
-            <div style="font-size:12px;color:var(--color-text-secondary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(t.artist)}${t.album ? ` · ${escapeHtml(t.album)}` : ''}</div>
-          </div>
-        </label>
-      ` : `
-        <div class="pretty-check-row" style="opacity:0.5">
-          <div style="width:40px;height:40px;background:var(--color-elevated);border-radius:var(--radius-sm);display:flex;align-items:center;justify-content:center;font-size:12px;color:var(--color-text-muted)">?</div>
-          <div style="flex:1;min-width:0">
-            <div style="font-size:14px">${escapeHtml(t.name)}</div>
-            <div style="font-size:12px;color:var(--color-text-muted)">${escapeHtml(t.artist)} — sin match</div>
-          </div>
-        </div>
-      `).join('')}
+      ${resolvedTracks.map(filaHtml).join('')}
     </div>
   `;
+
+  accionesDeFila(tracksEl);
 
   tracksEl.querySelectorAll('.recs-track-check').forEach(box => {
     box.onchange = () => {

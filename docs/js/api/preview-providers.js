@@ -12,17 +12,29 @@
 // Devuelve null si ningún proveedor sirvió.
 //
 // Cache: guardamos QUÉ proveedor sirvió cada track (localStorage
-// `preview_provider_map_v1`). En un miss, el proveedor negativo se re-intenta
+// `preview_provider_map_v4`). En un miss, el proveedor negativo se re-intenta
 // pasado el TTL. Los URLs de audio los cachea cada proveedor por su cuenta
 // (itunes.js ya lo hace; Deezer usa el suyo interno más abajo).
 
-import { findTrackPreview } from './itunes.js?v=166';
-import { pickBestMatch, artistMatches, artistList, preferredQueryArtists } from '../util/track-match.js?v=166';
+import { findTrackPreview } from './itunes.js?v=167';
+import { pickBestMatch, artistMatches, artistList, preferredQueryArtists } from '../util/track-match.js?v=167';
 
-// v3: las keys suben porque hasta v=141 se comparaba contra UN solo artista (el
-// del álbum) y en los discos con alias —«¥$»— eso cacheaba 'spotify-embed' o
-// 'none' para el álbum entero. Con la regla nueva esas entradas son basura.
-const PROVIDER_CACHE_KEY = 'preview_provider_map_v3';
+// v4 (v=167): la clave sube porque cambió la COMPARACIÓN de títulos —ahora se
+// reconoce la cola de versión escrita de las dos formas («- X Remix» y
+// «[X Remix]»)— y todo veredicto 'spotify-embed' o 'none' guardado con la regla
+// vieja puede ser un rechazo que hoy no se haría. Un positivo viejo tampoco
+// vale la pena conservarlo: el que sirvió sigue sirviendo y se re-resuelve
+// contra los caches de URL de iTunes y Deezer, que NO se tocan.
+//
+// De paso se lleva puestas las entradas envenenadas anteriores a v=149, que es
+// lo que había que purgar: hasta entonces un rate limit de Apple durante una
+// tanda dejaba el veredicto 'spotify-embed' pegado **30 días**. Medidas en la
+// app de Ian el 2026-08-29: 3 de 18 embeds cacheados eran de esa época.
+// (v3 subía por la regla de varios artistas de v=141; v2 y v1 por lo mismo.)
+const PROVIDER_CACHE_KEY = 'preview_provider_map_v4';
+// Las versiones viejas no caducan solas: ocupan localStorage para siempre y en
+// la app de Ian seguían las tres. Se borran al cargar el cache por primera vez.
+const PROVIDER_CACHE_KEYS_VIEJAS = ['preview_provider_map_v1', 'preview_provider_map_v2', 'preview_provider_map_v3'];
 const PROVIDER_CACHE_MAX = 800;
 const NEG_TTL = 3 * 24 * 60 * 60 * 1000;      // 3 días para reintentar "sin preview"
 const POS_TTL = 30 * 24 * 60 * 60 * 1000;     // 30 días para el proveedor ganador
@@ -41,6 +53,9 @@ function loadProviderCache() {
   try {
     providerCache = new Map(Object.entries(JSON.parse(localStorage.getItem(PROVIDER_CACHE_KEY)) || {}));
   } catch { providerCache = new Map(); }
+  for (const vieja of PROVIDER_CACHE_KEYS_VIEJAS) {
+    try { localStorage.removeItem(vieja); } catch { /* ignora */ }
+  }
   return providerCache;
 }
 function saveProviderCache() {

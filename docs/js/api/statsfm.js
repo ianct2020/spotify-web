@@ -1,4 +1,4 @@
-import { idbGetCached, idbSetCached } from '../idb.js?v=166';
+import { idbGetCached, idbSetCached } from '../idb.js?v=167';
 
 const STATSFM_USER_STORAGE = 'statsfm_username';
 const BASE = 'https://api.stats.fm/api/v1';
