@@ -17,8 +17,9 @@
 // 'backtotop', así que por construcción no puede taparse con el player: son dos
 // items del mismo flex column.
 
-import { mountBottom, publishHeight } from './bottom-layer.js?v=169';
-import { scrollRootOf } from './incremental-list.js?v=169';
+import { mountBottom, publishHeight } from './bottom-layer.js?v=170';
+import { scrollRootOf } from './incremental-list.js?v=170';
+import { animationsEnabled } from './reveal.js?v=170';
 
 // Aparece pasadas ~2 pantallas de scroll.
 const SHOW_AFTER_SCREENS = 2;
@@ -35,6 +36,72 @@ function clientHeightOf(el) {
   return el ? el.clientHeight : window.innerHeight;
 }
 
+// ── Subir con animación (v=170) ──────────────────────────────────────────────
+//
+// ⚠️ **`behavior: 'smooth'` NO anima si el sistema pide movimiento reducido.**
+// Chrome (y Firefox) tratan `prefers-reduced-motion: reduce` como una orden
+// sobre el scroll suave nativo y saltan de golpe. Ian tiene
+// `enable-animations=false` en GNOME, así que **el camino sin animación era
+// siempre el suyo** y el botón le subía de un tirón desde v=141.
+//
+// Es la misma decisión que se tomó en v=162 con las animaciones de entrada:
+// quién anima lo decide `animationsEnabled()` en JS —el toggle del panel de
+// paleta, con sus tres estados— y no el media query, porque el toggle puede
+// forzar por encima del sistema. Por eso el scroll se hace a mano con
+// `requestAnimationFrame`: es la única forma de que el modo «siempre» pueda
+// ganarle a la preferencia del sistema.
+//
+// Con el toggle en «nunca» salta de una, que es lo pedido.
+
+const DURACION_MS = 420;
+
+// easeOutCubic: arranca rápido y frena al llegar. Sin rebote: el destino es el
+// tope de la lista y pasarse aunque sea un frame se lee como un tirón.
+function easeOutCubic(t) { return 1 - Math.pow(1 - t, 3); }
+
+let animacionEnCurso = null;
+
+function ponerScroll(target, top) {
+  if (target === document.scrollingElement || target === document.documentElement) {
+    // `scrollTo` sobre el elemento raíz también vale, pero `window.scrollTo`
+    // es lo que respetan todos los navegadores por igual para el documento.
+    window.scrollTo(0, top);
+  } else {
+    target.scrollTop = top;
+  }
+}
+
+function subirSuave(target) {
+  if (animacionEnCurso) cancelAnimationFrame(animacionEnCurso);
+  animacionEnCurso = null;
+
+  const desde = scrollTopOf(target === (document.scrollingElement || document.documentElement) ? null : target);
+  if (desde <= 0) return;
+  if (!animationsEnabled()) { ponerScroll(target, 0); return; }
+
+  const t0 = performance.now();
+  const paso = (ahora) => {
+    const t = Math.min(1, (ahora - t0) / DURACION_MS);
+    ponerScroll(target, Math.round(desde * (1 - easeOutCubic(t))));
+    if (t < 1) {
+      animacionEnCurso = requestAnimationFrame(paso);
+    } else {
+      animacionEnCurso = null;
+      // El último frame puede quedarse en 1 px por el redondeo.
+      ponerScroll(target, 0);
+    }
+  };
+  animacionEnCurso = requestAnimationFrame(paso);
+}
+
+// Si el usuario scrollea durante la animación, manda él: cancelamos. Sin esto,
+// la animación le pelea la rueda del ratón hasta que termina.
+function cancelarSubida() {
+  if (!animacionEnCurso) return;
+  cancelAnimationFrame(animacionEnCurso);
+  animacionEnCurso = null;
+}
+
 function ensureBtn() {
   if (btn && btn.isConnected) return btn;
   btn = document.createElement('button');
@@ -45,7 +112,7 @@ function ensureBtn() {
   btn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg>`;
   btn.addEventListener('click', () => {
     const target = scroller || document.scrollingElement || document.documentElement;
-    target.scrollTo({ top: 0, behavior: 'smooth' });
+    subirSuave(target);
     hide();
   });
   mountBottom('backtotop', btn);
@@ -68,6 +135,11 @@ function hide() {
 // Decide visibilidad para un candidato a scroller. Devuelve true si ese
 // elemento es el que manda ahora mismo.
 function evaluate(el) {
+  // Durante la subida el botón ya se escondió: los `scroll` que dispara la
+  // propia animación no pueden volver a encenderlo. Sin esto el botón
+  // reaparece durante los 420 ms y se apaga al final — un parpadeo que con el
+  // salto de golpe no existía porque no había frames intermedios.
+  if (animacionEnCurso) return false;
   const top = scrollTopOf(el);
   const umbral = clientHeightOf(el) * SHOW_AFTER_SCREENS;
   if (top > umbral) {
@@ -93,6 +165,7 @@ function onScrollCapture(e) {
 // Al cambiar de ruta el scroller viejo ya no existe: se resetea y se vuelve a
 // sembrar contra lo que haya pintado la vista nueva.
 function resetForRoute() {
+  cancelarSubida();
   scroller = null;
   hide();
   // Dos rAF: la vista se pinta de forma asíncrona y el primer frame suele
@@ -124,6 +197,10 @@ function installBackToTop() {
   // toda la app, sea cual sea el ancestro que scrollee. Pasivo: no lo
   // cancelamos nunca y así no penaliza el scroll.
   document.addEventListener('scroll', onScrollCapture, { capture: true, passive: true });
+  // La rueda / el touch / el teclado le ganan a la animación en curso.
+  for (const ev of ['wheel', 'touchstart', 'keydown']) {
+    document.addEventListener(ev, cancelarSubida, { capture: true, passive: true });
+  }
   // El router lo dispara en cada cambio de ruta, antes de pintar la nueva.
   document.addEventListener('routeteardown', resetForRoute);
   requestAnimationFrame(() => requestAnimationFrame(seed));

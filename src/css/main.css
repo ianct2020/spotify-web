@@ -3172,6 +3172,14 @@ h3 { font-size: 18px; font-weight: 600; }
      + footer 60 + gaps  →  quedan 285 px para la tracklist
      20 pistas = 10 filas de 26 px + 9 gaps de 2  =  278 px  ✔ (7 px de margen)
 
+   v=170 — ese presupuesto valía para los álbumes SIN sugerencias. Los que
+   tenían sugeridos metían debajo de la tracklist un botón «Añadir los N
+   sugeridos» de ancho completo (`.wt-suggest-btn`, ~36 px con su margen), y
+   esos 36 px salían justo de los 285: la tracklist quedaba en ~249 y las 20
+   pistas ya no entraban. El botón se sacó —la meta de la cabecera ya dice
+   cuántos sugeridos hay y las filas van resaltadas—, así que **ahora TODOS los
+   álbumes usan el mismo presupuesto**, con y sin sugerencias.
+
    Los tres recortes que lo lograron, y por qué esos: fila 32 → 26 (padding
    5 → 2), gap de filas 4 → 2, y padding vertical del body 12 → 8. La tapa
    64 → 48 aporta 10 px de la cabecera; más abajo no sirve porque el piso lo
@@ -3292,7 +3300,6 @@ h3 { font-size: 18px; font-weight: 600; }
   overflow-y: auto;
   padding-right: 2px;
 }
-.wt-suggest-btn { width: 100%; flex-shrink: 0; margin-top: 4px; }
 
 /* Panel de orden: llena el alto de la columna derecha, scroll interno. */
 .wt-col-right .wthree-order-panel {
@@ -3319,7 +3326,14 @@ h3 { font-size: 18px; font-weight: 600; }
   min-height: 0;
   max-height: none;
   overflow-y: auto;
-  padding-right: 2px;
+  /* ⚠️ Los 4 px de arriba y de abajo NO son estética: la línea verde que dice
+     «se inserta acá» es un `::before` en `top: -3px` de la fila, y este
+     contenedor tiene `overflow-y: auto`. Con el scroll en 0 esos 3 px caían
+     FUERA de la caja de relleno y el navegador no los dibujaba, así que
+     «va arriba de todo» —justo el movimiento que Ian no podía hacer— era el
+     único sin señal ninguna. Con el relleno, la primera fila arranca 4 px más
+     abajo y la línea entra. Lo mismo abajo para el `::after` de la última. */
+  padding: 4px 2px 4px 0;
 }
 .wt-order-empty {
   font-size: 12px;
