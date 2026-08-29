@@ -303,6 +303,17 @@ mosaico (`rgba(20,20,28,.95)` con texto blanco, que trae su propio fondo).
   (verificado 2026-08-28 contra sus 39 propias). El criterio `sinescuchar` de
   v=165 la cruza igual y descarta 0 hasta que aparezca. Falta saber dónde
   fueron a parar los singles que Ian dice haber guardado desde la tanda 4.
+- **El gate del arranque es una sola request a `/me`, y `/me` es lo que se
+  rate-limitea.** El 2026-08-29, con `/me` en 429 `QUOTA_EXCEEDED`, `GET
+  /albums/{id}/tracks` devolvía **200**: la app entera estaba caída con el resto
+  de la API sana. Como el user id ya está en `fonoteca_last_user_id`, el
+  arranque podría degradar a ese valor en vez de mostrar la pantalla de bloqueo.
+- **Zapear de ruta rápido con los caches fríos dispara el crash-guard**:
+  «Algo falló por detrás: Cannot set properties of null (setting 'onclick')».
+  Es el render asíncrono de alguna vista terminando DESPUÉS de que el router ya
+  cambió de ruta y escribiendo un `onclick` sobre un nodo que ya no está.
+  Reproducido el 29/08 saltando entre 8 vistas pesadas cada 200 ms; con los
+  caches calientes no aparece. No se identificó cuál de las vistas es.
 - **El `<audio>` de `ui/preview-player.js` no tiene listener de `error`.** Una
   URL de preview muerta deja el pill diciendo «vía iTunes» sin sonar y sin
   avisar. Medido el 29/08 sobre las 59 URLs de `#skips`: 59/59 cargan, así que
@@ -755,6 +766,128 @@ automático de una pista `1fr` que no tiene mínimo propio**; estas ya lo tienen
 puesto a mano en 140px / 120px, así que el contenido no puede ensanchar la
 columna y no hacía falta tocar nada. Lo que desbordaba estaba dentro de la
 tarjeta.
+
+## El presupuesto de alto del modal de W-Three ya no tiene excepción (v=170)
+El botón «Añadir los N sugeridos» (`.wt-suggest-btn`) se sacó por decisión de
+Ian: con que la meta de la cabecera diga cuántos hay, alcanza.
+
+Lo importante es lo que costaba. Medido en la app el 2026-08-29, con el modal
+fijado a **502 px** (que es `min(85vh, 620px)` en el viewport de 591 px de la
+pantalla de Ian) y 20 pistas:
+
+| | alto de la tracklist | contenido | ¿scroll? |
+|---|---|---|---|
+| con el botón (v=169) | **245 px** | 264 px | **sí** |
+| sin el botón (v=170) | **285 px** | 264 px | no, sobran 21 px |
+
+O sea que el botón costaba **exactamente 40 px** (33 de alto + 4 de margen +
+gap) y esos 40 salían del presupuesto de la tracklist. El resultado era que un
+álbum **con** sugerencias metía 20 pistas en 245 px y aparecía scroll, y el
+mismo álbum **sin** sugerencias entraba justo: dos presupuestos distintos para
+el mismo modal, según un botón que aparecía o no. Ahora hay uno solo.
+
+Comprobado a 502 px con 10, 12, 20 y 27 pistas: las tres primeras entran sin
+scroll y **27 desborda a propósito** (390 px de contenido), que es el diseño de
+v=144 — con más de 20 el scroll vive DENTRO de la tracklist y el modal no crece.
+
+⚠️ **Cómo medirlo sin la pantalla de Ian**: la pestaña del grupo MCP tiene el
+viewport clavado (647 px en una ventana nueva) y `resize_window` no lo cambia,
+así que el `85vh` de acá no es el de Ian. Se reproduce fijando
+`modal.style.height = 591 * 0.85 + 'px'`, que es la restricción que importa.
+⚠️ Y `getBoundingClientRect().height` del modal da **477** y no 502: la
+animación de apertura le deja un `scale(.95)`. Para el presupuesto hay que mirar
+`offsetHeight` y los `clientHeight` / `scrollHeight` de la tracklist, que son de
+layout y no los toca el transform.
+
+Los sugeridos se siguen viendo: `.wthree-track-suggested` pasó del **6 %** de
+alpha —invisible— al **14 %** con una marca lateral de 2 px, que no gasta alto.
+
+## El drag & drop del panel de orden (v=170)
+Ian arrastraba la última fila al primer lugar, la soltaba y volvía sola.
+
+**La zona de drop era cada FILA, no la lista.** Sin un `dragover` que llame a
+`preventDefault()`, el navegador rechaza el drop y la fila vuelve a su sitio con
+la animación de «acá no se puede». Todo lo que no fuera una fila era zona
+muerta. Medido en la app con 3 picks y el panel abierto:
+
+- **117 px de espacio vacío** debajo de la última fila — todo muerto;
+- los 4 px de relleno de arriba y los huecos de 4 px entre filas — muertos;
+- para insertar en la posición 0 había que acertarle a la **mitad de arriba de
+  la primera fila: una franja de 17 px**. Eso es lo que Ian describía como
+  «hay que hacerlo en dos pasos».
+
+Ahora `dragover` / `drop` / `dragleave` viven en la **lista**, y el índice sale
+de comparar el puntero con el CENTRO de cada fila. Comprobado con `dragover`
+sintéticos: los seis puntos del panel —relleno de arriba, borde de la fila 0,
+sus dos mitades, un hueco entre filas y el vacío del final— dan destino válido
+(`defaultPrevented = true`) y el índice correcto.
+
+⚠️ **El indicador de «va arriba de todo» caía fuera de la caja.** La línea verde
+es un `::before` en `top: -3px` de la fila; sin relleno arriba, la primera fila
+empieza justo en el borde del contenedor, así que los 3 px quedaban **enteros
+por fuera** (medido: 0 de 3 px dentro; con `padding-top: 4px`, 3 de 3). Mientras
+la lista no desborda Chrome los pinta igual, pegados al borde, pero en cuanto
+hay más picks de los que entran el `overflow-y: auto` los clipea y el único
+movimiento sin señal ninguna es justamente el que no andaba.
+
+⚠️ **El drop nativo NO se puede disparar con un ratón sintético**: el navegador
+solo arranca un arrastre real desde un gesto de usuario. Por eso la aritmética
+se sacó a `util/reorder-drop.js` (`insercionPorPuntero`, `moverA`,
+`indicadorPara`) y se verifica sin DOM: `tests/wthree-drop-index.test.mjs`, 22
+asserts, con una pasada de fuerza bruta 5×6 que comprueba que la lista nunca
+pierde ni duplica un elemento. Lo que queda en `wthree.js` es medir rectángulos.
+Los ▲▼ siguen siendo la vía de respaldo y no se tocaron.
+
+## «Volver arriba» no animaba: `behavior: 'smooth'` y el movimiento reducido (v=170)
+`ui/back-to-top.js` usaba `scrollTo({ top: 0, behavior: 'smooth' })` desde
+v=141. **Chrome trata `prefers-reduced-motion: reduce` como una orden sobre el
+scroll suave nativo y salta de golpe.** Ian tiene `enable-animations=false` en
+GNOME, así que el camino sin animación era **siempre el suyo**.
+
+Medido en la app el 2026-08-29: con `matchMedia('(prefers-reduced-motion:
+reduce)').matches === true`, al llamar a `scrollTo({behavior:'smooth'})` desde
+4000 px la **primera muestra, en t=0 ms, ya daba `scrollTop === 0`**. No hay
+frames intermedios: es un salto.
+
+Ahora el scroll se hace a mano con `requestAnimationFrame` (easeOutCubic,
+420 ms) y quién anima lo decide **`animationsEnabled()`**, igual que las
+animaciones de entrada de v=162: el media query no manda, porque el toggle de
+tres estados del panel de paleta puede forzar por encima del sistema.
+Verificadas las dos ramas en la app: con el toggle en «nunca» salta de una, y
+con «siempre» —que es como lo tiene Ian— el scroll queda gobernado por frames.
+
+Dos detalles que no son de adorno:
+- **`evaluate()` sale temprano mientras hay animación en curso.** El botón se
+  esconde al hacer clic, pero los `scroll` que dispara la propia animación
+  volvían a encenderlo durante los 420 ms y lo apagaban al final. Con el salto
+  de golpe ese parpadeo no existía porque no había frames intermedios.
+- La rueda, el touch y el teclado **cancelan** la subida: si no, la animación le
+  pelea el scroll al usuario hasta terminar.
+
+## La vista activa SÍ se marcaba: lo que no se veía era el link (v=171)
+`markActiveRoute()` funciona. Comprobadas **las 23 rutas una por una** en la app:
+en todas queda exactamente un `[data-route].active` y es el correcto (los
+`data-route` del `<aside>` y los `hash` de `HOME_SECTIONS` coinciden con las
+rutas registradas — el desajuste de v=153 no volvió).
+
+⚠️ **El problema era el scroll del menú.** `.sidebar-nav` tiene `overflow-y:
+auto` y arranca siempre en `scrollTop: 0`. Medido con el menú abierto en
+`#skips` (viewport 879): el `<nav>` mide **585 px de alto para 1076 px de
+contenido**, y el link activo estaba en **y=1075, o sea 490 px por debajo del
+final del menú**. Estaba marcado y era imposible verlo — y las vistas del final
+de la lista (`#skips`, `#zeroplays`, `#versions`, `#sin-clasificar`) son
+justamente las que Ian usa. En su pantalla, con 591 px de viewport, el nav es
+todavía más corto y el problema es peor.
+
+`mostrarActivoEnElMenu()` (router.js) mueve el `scrollTop` del `<nav>` para
+dejar el activo centrado. ⚠️ **A mano y NO con `scrollIntoView()`**: ese
+scrollea TODOS los ancestros scrolleables, incluido el documento, así que en una
+vista larga te movería la lista de abajo del cursor por abrir el menú.
+Verificado en las 20 rutas del `<aside>`: el activo queda dentro de la caja
+visible del nav, que se mueve solo a 0, 271 o 491 según haga falta.
+
+Y ya que se mira, se ve más: barra de 3 px (era 2), texto a 600 y el icono en
+color de acento. El fondo sigue siendo el acento al 10 % de alpha.
 
 ## Client ID
 0c8c92ad128e4b89be7097c6b8082797
