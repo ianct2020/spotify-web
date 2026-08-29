@@ -2473,6 +2473,16 @@ h3 { font-size: 18px; font-weight: 600; }
   flex-wrap: wrap;
 }
 .album-modal-actions .btn { flex: 1; min-width: 130px; justify-content: center; }
+/* Las acciones que #discover-artists y #new-releases le añaden a la ficha
+   (v=165). Van a DOS columnas y con cuerpo chico: son hasta cinco, y con el
+   `min-width: 130px` de arriba entraban de a una por fila en una columna de
+   300 px, dejando «Ocultar» debajo del pliegue del modal. */
+.album-modal-actions .btn[data-alb-accion] {
+  flex: 1 1 calc(50% - 4px);
+  min-width: 0;
+  font-size: 11px;
+  padding: 6px 8px;
+}
 
 @media (max-width: 600px) {
   .card-modal { padding: 16px !important; }
