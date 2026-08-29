@@ -22,9 +22,40 @@ let currentCleanup = null;
 // y no repintando el sidebar entero — el <aside> se arma una sola vez en
 // app.js y no se vuelve a tocar en toda la sesión.
 function markActiveRoute(hash) {
+  let activo = null;
   document.querySelectorAll('[data-route]').forEach(el => {
-    el.classList.toggle('active', el.dataset.route === hash);
+    const encendido = el.dataset.route === hash;
+    el.classList.toggle('active', encendido);
+    if (encendido && el.classList.contains('nav-link')) activo = el;
   });
+  mostrarActivoEnElMenu(activo);
+}
+
+/**
+ * Deja el link marcado DENTRO de la parte visible del menú.
+ *
+ * ⚠️ Marcarlo no alcanza: `.sidebar-nav` tiene scroll propio y no cabe entero.
+ * Medido en la app el 2026-08-29 con el menú abierto en `#skips` (viewport 879):
+ * el `<nav>` mide 585 px de alto para 1076 px de contenido y arranca siempre en
+ * `scrollTop: 0`, así que el link activo estaba en y=1075 — **490 px por debajo
+ * del final del menú**. Estaba marcado y era imposible verlo, y las vistas de
+ * abajo de la lista (`#skips`, `#sin-clasificar`, `#zeroplays`, `#versions`…)
+ * son justo las que Ian usa. Por eso el marcado «no funcionaba».
+ *
+ * Se mueve el `scrollTop` del <nav> a mano y NO con `scrollIntoView()`: ese
+ * scrollea todos los ancestros scrolleables, incluido el documento, así que en
+ * una vista larga te mueve la lista de abajo del cursor por abrir el menú.
+ */
+function mostrarActivoEnElMenu(activo) {
+  if (!activo) return;
+  const nav = activo.closest('.sidebar-nav');
+  if (!nav || nav.scrollHeight <= nav.clientHeight) return;
+  const r = activo.getBoundingClientRect();
+  const rn = nav.getBoundingClientRect();
+  const MARGEN = 24;   // deja ver el link de al lado, para que se lea como lista
+  if (r.top >= rn.top + MARGEN && r.bottom <= rn.bottom - MARGEN) return;
+  const destino = nav.scrollTop + (r.top - rn.top) - (nav.clientHeight - r.height) / 2;
+  nav.scrollTop = Math.max(0, Math.min(destino, nav.scrollHeight - nav.clientHeight));
 }
 
 function registerRoute(hash, handler) {
