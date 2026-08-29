@@ -2764,7 +2764,7 @@ h3 { font-size: 18px; font-weight: 600; }
   .tc-stats { grid-template-columns: repeat(2, 1fr) !important; }
 
   /* ── Smart grids (Por artista, Por género) ── */
-  .smart-grid { grid-template-columns: repeat(auto-fill, minmax(140px, minmax(0, 1fr))) !important; gap: 8px; }
+  .smart-grid { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)) !important; gap: 8px; }
 
   /* ── Modales y sidebar ── */
   .modal { padding: 16px !important; }

@@ -685,12 +685,16 @@ input[type="checkbox"].keep-check:checked::after {
 
 .smart-grid {
   display: grid;
-  /* minmax(0, …) en el MAX, no 1fr pelado: un `1fr` suelto tiene como mínimo
-     automático el `min-content` de la celda, así que un nombre largo sin
-     espacios ensancha su columna y desalinea la grilla entera. Con el máximo
-     acotado a 1fr y el mínimo explícito, el ancho lo manda la grilla y el
-     texto se recorta adentro (v=167). */
-  grid-template-columns: repeat(auto-fill, minmax(140px, minmax(0, 1fr)));
+  /* ⚠️ `minmax()` NO se puede anidar: `minmax(140px, minmax(0, 1fr))` es CSS
+     inválido y el navegador descarta la declaración ENTERA — la grilla se cae a
+     una sola columna a lo ancho de la página. Se probó en producción en v=167 y
+     así se veía.
+     Y no hace falta: la regla de «minmax(0, 1fr) y nunca 1fr pelado» existe
+     porque el mínimo automático de una pista `1fr` es su `min-content`, y acá el
+     mínimo ya está puesto a mano en 140px, así que el contenido no puede
+     ensanchar la columna. Lo que desbordaba era el TÍTULO dentro de la tarjeta,
+     y eso se arregla en `.smart-card-title`. */
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
   gap: 12px;
   /* Todas las tarjetas de una fila miden lo mismo por el stretch del grid; el
      `min-height` del título (dos renglones siempre) es lo que las iguala
@@ -758,7 +762,7 @@ input[type="checkbox"].keep-check:checked::after {
 }
 
 .smart-grid-compact {
-  grid-template-columns: repeat(auto-fill, minmax(120px, minmax(0, 1fr)));
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
   gap: 10px;
 }
 
