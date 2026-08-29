@@ -20,3 +20,27 @@ export const EP_MIN_TRACKS = 4;
 export function esEPoAlbum(totalTracks) {
   return (Number(totalTracks) || 0) >= EP_MIN_TRACKS;
 }
+
+/**
+ * Las TRES divisiones de un lanzamiento (v=165): álbum, EP o single.
+ *
+ * Spotify da dos (`album_type`), y por eso hasta v=164 los chips de
+ * #discover-artists eran «Todo / Solo álbumes / Solo singles»: el EP —que
+ * Spotify marca como 'single'— quedaba mezclado entre los singles de una
+ * pista, que son cientos. Ian encontró así un EP de Justin Bieber que no
+ * habría visto nunca.
+ *
+ * El corte es el MISMO `EP_MIN_TRACKS` de arriba, no uno nuevo.
+ *
+ * ⚠️ Los recopilatorios cuentan como álbum: son un disco entero, y ponerlos en
+ * su propia división habría hecho un cuarto chip para un puñado de fichas.
+ *
+ * @param {{type?: string, album_type?: string, total?: number, total_tracks?: number}} al
+ * @returns {'album'|'ep'|'single'}
+ */
+export function releaseKind(al) {
+  const tipo = al?.type || al?.album_type || '';
+  if (tipo === 'album' || tipo === 'compilation') return 'album';
+  const total = Number(al?.total ?? al?.total_tracks) || 0;
+  return esEPoAlbum(total) ? 'ep' : 'single';
+}

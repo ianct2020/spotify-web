@@ -6,21 +6,21 @@
 //     (util/album-heard.js: historial completo + likes + listened + w-three)
 //   - permiten "+ Biblioteca" y "Crear playlist con lo elegido"
 
-import { idbGetCached, idbSetCached, idbDel } from '../idb.js?v=164';
-import { getArtistAlbums, searchArtistByName, getAlbumTracks, saveToLibrary, saveAlbumsToLibrary, createPlaylist, addTracksToPlaylist } from '../api.js?v=164';
-import { albumKey } from '../util/album-key.js?v=164';
-import { escapeHtml } from '../ui/components.js?v=164';
-import { showToast } from '../ui/toast.js?v=164';
-import { openPlaylistPicker } from '../ui/playlist-picker.js?v=164';
-import { getOwnPlaylists, addUrisToPlaylists, toastAddResult } from '../util/playlist-add.js?v=164';
-import { openArtistCard } from './artist-card.js?v=164';
-import { openAlbumCard } from './album-card.js?v=164';
-import { createHiddenStore, createLocalStore } from '../util/hidden-sync.js?v=164';
-import { getPreview } from '../api/preview-providers.js?v=164';
-import { togglePreview, playingKey, attachHover } from '../ui/preview-player.js?v=164';
-import { coverUrl } from '../util/cover-size.js?v=164';
-import { FILTROS as FILTROS_DEF, saveFiltros } from '../util/discover-filters.js?v=164';
-import { esEPoAlbum } from '../util/release-size.js?v=164';
+import { idbGetCached, idbSetCached, idbDel } from '../idb.js?v=165';
+import { getArtistAlbums, searchArtistByName, getAlbumTracks, saveToLibrary, saveAlbumsToLibrary, createPlaylist, addTracksToPlaylist } from '../api.js?v=165';
+import { albumKey } from '../util/album-key.js?v=165';
+import { escapeHtml } from '../ui/components.js?v=165';
+import { showToast } from '../ui/toast.js?v=165';
+import { openPlaylistPicker } from '../ui/playlist-picker.js?v=165';
+import { getOwnPlaylists, addUrisToPlaylists, toastAddResult } from '../util/playlist-add.js?v=165';
+import { openArtistCard } from './artist-card.js?v=165';
+import { openAlbumCard } from './album-card.js?v=165';
+import { createHiddenStore, createLocalStore } from '../util/hidden-sync.js?v=165';
+import { getPreview } from '../api/preview-providers.js?v=165';
+import { togglePreview, playingKey, attachHover } from '../ui/preview-player.js?v=165';
+import { coverUrl } from '../util/cover-size.js?v=165';
+import { FILTROS as FILTROS_DEF, saveFiltros } from '../util/discover-filters.js?v=165';
+import { esEPoAlbum } from '../util/release-size.js?v=165';
 
 const DISCO_TTL_MIN = 30 * 24 * 60;       // 30 días
 const ARTIST_ID_TTL_MIN = 60 * 24 * 60;   // 60 días — los ids no cambian
@@ -382,6 +382,35 @@ export function renderAlbumCard(al, artistName, {
   `;
 }
 
+// Los botones de la tarjeta, convertidos en acciones para la ficha de álbum.
+// El `label` sale del botón real cuando lo tiene (así «Guardar álbum» y
+// «Guardar single» siguen diciendo a dónde va cada cosa de verdad); el del ojo
+// se pone acá porque en la tarjeta es un icono sin texto.
+const ACCIONES_TARJETA = [
+  { sel: '[data-save-album]' },
+  { sel: '[data-liketracks-album]' },
+  { sel: '[data-addpl-album]' },
+  { sel: '[data-heard-album]' },
+  { sel: '.dcard-hide', label: 'Ocultar' },
+];
+
+function accionesDeLaTarjeta(tarjeta) {
+  if (!tarjeta) return [];
+  const out = [];
+  for (const { sel, label } of ACCIONES_TARJETA) {
+    const b = tarjeta.querySelector(sel);
+    if (!b) continue;   // «Escuchado» solo existe en #discover-artists
+    out.push({
+      label: label || (b.textContent || '').trim(),
+      title: b.title,
+      // Cerrar primero: casi todas estas acciones sacan el álbum de la lista
+      // que hay detrás, y además «Añadir a playlist…» abre SU propio modal.
+      onClick: ({ cerrar }) => { cerrar(); b.click(); },
+    });
+  }
+  return out;
+}
+
 // Cablea una grilla ya pintada con renderAlbumCard. Las dos vistas usan los
 // mismos data-attributes, así que el wiring también es uno solo.
 export function wireAlbumCards(list, findAlbumById, {
@@ -430,11 +459,21 @@ export function wireAlbumCards(list, findAlbumById, {
   list.querySelectorAll('[data-open-artist-card]').forEach(btn => {
     btn.onclick = () => openArtistCard({ name: btn.dataset.openArtistCard });
   });
+  // La ficha es LA MISMA del resto de la app (features/album-card.js), con los
+  // botones de esta vista encima (v=165). Y esos botones no reimplementan nada:
+  // cada uno **aprieta el de la tarjeta**, así que el guardado, el likeo, el
+  // picker de playlists y los dos stores siguen viviendo en un solo sitio y no
+  // hay forma de que la ficha y la grilla se desincronicen.
   list.querySelectorAll('[data-open-album]').forEach(btn => {
     btn.onclick = () => {
       const al = findAlbumById(btn.dataset.openAlbum);
       if (!al) return;
-      openAlbumCard({ name: al.name, artist: btn.dataset.openArtist, img: al.img, plays: 0, min: 0, albumId: al.id, totalTracks: al.total });
+      const tarjeta = btn.closest('.dcard');
+      openAlbumCard({
+        name: al.name, artist: btn.dataset.openArtist, img: al.img,
+        plays: 0, min: 0, albumId: al.id, totalTracks: al.total,
+        acciones: accionesDeLaTarjeta(tarjeta),
+      });
     };
   });
   list.querySelectorAll('[data-save-album]').forEach(btn => {
@@ -660,7 +699,7 @@ export function markAlbumResolved(al, artistName) {
   return heardAlbums.add(cardKey(al, artistName), null);
 }
 
-// ── Los cinco filtros como chips de la topbar (v=152) ──────────────────────
+// ── Los filtros como chips de la topbar (v=152, siete desde v=165) ──────────────────────
 //
 // Comparten módulo porque las dos vistas muestran el MISMO objeto (un
 // lanzamiento de tus artistas que no escuchaste) y tienen que filtrarlo igual.
