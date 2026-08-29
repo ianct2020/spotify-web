@@ -1,5 +1,5 @@
-import { guardRoute } from './ui/crash-guard.js?v=169';
-import { skelPage } from './ui/skeleton.js?v=169';
+import { guardRoute } from './ui/crash-guard.js?v=170';
+import { skelPage } from './ui/skeleton.js?v=170';
 
 const routes = {};
 

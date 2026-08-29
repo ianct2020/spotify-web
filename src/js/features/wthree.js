@@ -17,6 +17,7 @@ import { computeUpdatedPickPositions } from '../util/reorder-shifts.js';
 import { createHiddenStore } from '../util/hidden-sync.js';
 import { mountBottom } from '../ui/bottom-layer.js';
 import { coverUrl } from '../util/cover-size.js';
+import { insercionPorPuntero, moverA, indicadorPara } from '../util/reorder-drop.js';
 
 const LS_KEY_ID = 'wthree_playlist_id';
 const LS_KEY_NAME = 'wthree_playlist_name';
@@ -601,7 +602,12 @@ async function openAlbumModal(a) {
   // Estructura v=114: modal ancho (760px) ≤85vh con 3 zonas verticales:
   // 1. Header full-width (chip w-three · álbum + tapa chica + nombre/artista + meta).
   // 2. Body en 2 columnas grid:
-  //    · IZQUIERDA: tracklist con scroll interno + botón "agregar sugeridos".
+  //    · IZQUIERDA: tracklist con scroll interno. El botón «Añadir los N
+  //      sugeridos» se sacó en v=170: con que la meta diga cuántos hay alcanza,
+  //      y sus ~40 px eran justo los que le faltaban a la tracklist para meter
+  //      20 pistas sin scroll en 1366×768 cuando el álbum tenía sugerencias.
+  //      Los sugeridos se siguen viendo: van con fondo violeta
+  //      (.wthree-track-suggested) y se marcan con su propio checkbox.
   //    · DERECHA: panel de orden con scroll interno.
   //    Debajo de 900px se apilan.
   // 3. Footer full-width con "Guardar cambios" — cruza las 2 columnas.
@@ -749,7 +755,6 @@ async function openAlbumModal(a) {
           </label>
         `).join('')}
       </div>
-      ${suggestions.length > 0 ? `<button class="btn btn-secondary btn-sm wt-suggest-btn" id="wt-add-suggested">Añadir los ${suggestions.length} sugeridos</button>` : ''}
     </div>
     <div class="wt-col wt-col-right">
       <div class="wt-section-title">Orden dentro del álbum</div>
@@ -824,17 +829,50 @@ async function openAlbumModal(a) {
     wireOrderDragDrop();
   }
 
-  // HTML5 drag & drop nativo. La fila se hace draggable, y sobre las demás
-  // filas manejamos dragover para pintar un indicador (línea horizontal arriba
-  // o abajo). Al dropear, movemos el pick a la nueva posición.
+  // ── Drag & drop del panel de orden ─────────────────────────────────────────
+  //
+  // ⚠️ **El área de drop es LA LISTA ENTERA, no cada fila.** Hasta v=169 los
+  // `dragover` / `drop` vivían en cada `.wthree-order-item`, así que todo lo que
+  // no fuera una fila —el padding de la lista, los 4 px de hueco entre filas y,
+  // sobre todo, **la franja de arriba de la primera fila**— era zona muerta: sin
+  // `preventDefault()` en un `dragover`, el navegador rechaza el drop y la fila
+  // vuelve sola a su sitio. Ese es el síntoma que reportó Ian arrastrando la
+  // última al primer lugar: al llevar el puntero al tope del panel se sale de la
+  // fila 1 y el drop se pierde. Con la lista entera como zona, cualquier punto
+  // del panel es un destino válido y el índice sale de comparar el puntero con
+  // el centro de cada fila.
+  //
+  // ⚠️ Y el indicador de «va arriba de todo» estaba **CLIPEADO**: la línea verde
+  // es un `::before` en `top: -3px` de la fila, y la lista es un contenedor con
+  // `overflow-y: auto` — con el scroll en 0, esos 3 px caen fuera de la caja de
+  // relleno y no se dibujan. O sea que ni siquiera había señal de que soltar ahí
+  // fuera a funcionar. Se arregla con `padding: 4px 2px 4px 0` en
+  // `.wt-order-scroll` (main.css): la primera fila arranca 4 px más abajo y la
+  // línea entra.
+  //
+  // Los ▲▼ siguen siendo la vía de respaldo y no se tocan.
   function wireOrderDragDrop() {
     const list = orderPanel.querySelector('#wt-order-list');
     if (!list) return;
     let draggingFrom = -1;
 
+    const items = () => [...list.querySelectorAll('.wthree-order-item')];
+
     const clearIndicators = () => {
       list.querySelectorAll('.wthree-order-item.drop-above, .wthree-order-item.drop-below')
         .forEach(el => el.classList.remove('drop-above', 'drop-below'));
+    };
+
+    // La cuenta vive en util/reorder-drop.js y está testeada ahí: acá solo se
+    // miden los rectángulos.
+    const insercionPara = (clientY) =>
+      insercionPorPuntero(items().map(el => el.getBoundingClientRect()), clientY);
+
+    const pintarIndicador = (insertAt) => {
+      clearIndicators();
+      const filas = items();
+      const ind = indicadorPara(insertAt, filas.length);
+      if (ind) filas[ind.fila].classList.add(ind.lado === 'above' ? 'drop-above' : 'drop-below');
     };
 
     list.querySelectorAll('.wthree-order-item').forEach(item => {
@@ -849,37 +887,38 @@ async function openAlbumModal(a) {
         clearIndicators();
         draggingFrom = -1;
       });
-      item.addEventListener('dragover', (e) => {
-        if (draggingFrom < 0) return;
-        e.preventDefault();
-        e.dataTransfer.dropEffect = 'move';
-        const rect = item.getBoundingClientRect();
-        const isTop = (e.clientY - rect.top) < rect.height / 2;
-        clearIndicators();
-        item.classList.add(isTop ? 'drop-above' : 'drop-below');
-      });
-      item.addEventListener('dragleave', () => {
-        item.classList.remove('drop-above', 'drop-below');
-      });
-      item.addEventListener('drop', (e) => {
-        e.preventDefault();
-        if (draggingFrom < 0) return;
-        const overIdx = +item.dataset.i;
-        const rect = item.getBoundingClientRect();
-        const isTop = (e.clientY - rect.top) < rect.height / 2;
-        let insertAt = isTop ? overIdx : overIdx + 1;
-        // Si soltás sobre vos mismo (o adyacente en la misma dirección), no hay cambio.
-        if (insertAt === draggingFrom || insertAt === draggingFrom + 1) {
-          clearIndicators();
-          return;
-        }
-        const moving = orderedPicks[draggingFrom];
-        orderedPicks.splice(draggingFrom, 1);
-        // El splice previo shiftea si se saca antes del target.
-        if (draggingFrom < insertAt) insertAt--;
-        orderedPicks.splice(insertAt, 0, moving);
-        renderOrderPanel();
-      });
+    });
+
+    // Un solo par de handlers, en la LISTA. `dragover` tiene que llamar a
+    // `preventDefault()` en CADA evento: es lo que declara la zona como destino
+    // válido, y el navegador lo vuelve a preguntar todo el tiempo.
+    list.addEventListener('dragover', (e) => {
+      if (draggingFrom < 0) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      pintarIndicador(insercionPara(e.clientY));
+    });
+
+    // Sale del panel entero (no de una fila a otra: eso lo filtra el
+    // `relatedTarget`, que sigue dentro de la lista).
+    list.addEventListener('dragleave', (e) => {
+      if (e.relatedTarget && list.contains(e.relatedTarget)) return;
+      clearIndicators();
+    });
+
+    list.addEventListener('drop', (e) => {
+      e.preventDefault();
+      if (draggingFrom < 0) return;
+      const insertAt = insercionPara(e.clientY);
+      clearIndicators();
+      const nuevo = moverA(orderedPicks, draggingFrom, insertAt);
+      if (nuevo === orderedPicks) return;
+      // `moverA` devuelve el MISMO contenido si el movimiento no cambia nada
+      // (soltar sobre uno mismo o en el hueco de justo debajo): repintar ahí es
+      // gratis pero hace parpadear la lista, así que se compara.
+      if (nuevo.every((p, i) => p === orderedPicks[i])) return;
+      orderedPicks = nuevo;
+      renderOrderPanel();
     });
   }
 
@@ -928,20 +967,6 @@ async function openAlbumModal(a) {
       else btn.innerHTML = PLAY_SVG;
     });
   });
-
-  const addBtn = overlay.querySelector('#wt-add-suggested');
-  if (addBtn) {
-    addBtn.onclick = () => {
-      suggestions.forEach(id => {
-        const cb = body.querySelector(`.wthree-track-check[data-id="${id}"]`);
-        if (cb && !cb.checked) {
-          cb.checked = true;
-          cb.dispatchEvent(new Event('change'));
-        }
-      });
-      showToast('Marcados. Ajustá el orden si querés y apretá "Guardar cambios".', 'info');
-    };
-  }
 
   // Cierra el modal al toque y deja el guardado corriendo solo. Si no hay nada
   // que guardar, el modal se queda abierto y solo avisa.
