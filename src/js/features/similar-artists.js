@@ -2,6 +2,7 @@ import { spotifyFetch, createPlaylist, addTracksToPlaylist, invalidatePlaylistsC
 import { hasKey, setKey, getSimilarArtists, getArtistTopTracks } from '../api/lastfm.js';
 import { showProgress, hideProgress, promptPlaylistName, escapeHtml, pageHeader } from '../ui/components.js';
 import { showToast } from '../ui/toast.js';
+import { limpiaParaQuery, titleMatches, artistMatches } from '../util/track-match.js';
 
 let sourceArtist = null;
 let similarList = [];
@@ -190,9 +191,14 @@ async function resolveTracksOnSpotify(topTracks) {
   for (let i = 0; i < topTracks.length; i++) {
     const t = topTracks[i];
     try {
-      const q = `track:"${t.name}" artist:"${t.artist}"`;
-      const data = await spotifyFetch(`/search?q=${encodeURIComponent(q)}&type=track&limit=1`);
-      const hit = data.tracks?.items?.[0];
+      // Mismo apóstrofo que rompía #recs: `track:"Can't Feel My Face"` devuelve
+      // 0 resultados y el tema caía en «sin match». Se limpia la query y se
+      // verifica el candidato contra el nombre real, que es lo que la query
+      // laxa deja de garantizar (ver `limpiaParaQuery` en util/track-match.js).
+      const q = `track:"${limpiaParaQuery(t.name)}" artist:"${limpiaParaQuery(t.artist)}"`;
+      const data = await spotifyFetch(`/search?q=${encodeURIComponent(q)}&type=track&limit=5`);
+      const hit = (data.tracks?.items || []).find(c =>
+        titleMatches(t.name, c.name) && artistMatches(t.artist, (c.artists || []).map(a => a.name).join(', ')));
       if (hit) {
         resolvedTracks.push({
           uri: hit.uri,

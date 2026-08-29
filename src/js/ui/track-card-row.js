@@ -217,8 +217,12 @@ export function paintPlayingCard(grid, prefix, { key = null, playing = false } =
   if (!grid) return;
   const p = `${prefix}:`;
   const id = key && key.startsWith(p) ? key.slice(p.length) : null;
+  // El selector NO pide `.sc-card`: `#recs` no usa la tarjeta compartida (sus
+  // filas son `<label>` con checkbox) pero sí el mismo botón `.sc-play`, y con
+  // esto puede reusar este repintado tal cual. Para las vistas que sí usan la
+  // tarjeta no cambia nada: su `.sc-card` es la que lleva el `data-id`.
   const actual = id
-    ? grid.querySelector(`.sc-card[data-id="${CSS.escape(id)}"] .sc-play`)
+    ? grid.querySelector(`[data-id="${CSS.escape(id)}"] .sc-play`)
     : null;
   grid.querySelectorAll('.sc-play.playing').forEach(btn => {
     if (btn !== actual) pintarBoton(btn, false, false);

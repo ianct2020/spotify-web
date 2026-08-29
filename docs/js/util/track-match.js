@@ -88,6 +88,80 @@ function tokensContained(sub, sup) {
   return parts.length > 0 && parts.every(t => S.has(t));
 }
 
+// ── La versión del tema (v=167) ──────────────────────────────────────────────
+//
+// El bug, medido en producción el 2026-08-29 sobre las 60 primeras tarjetas de
+// `#zero-plays`: «A Different Way - DEVAULT Remix» (DJ Snake) caía al embed de
+// Spotify teniendo el tema EXACTO en iTunes y en Deezer.
+//
+//   pedido:    "A Different Way - DEVAULT Remix"     → "a different way devault remix"
+//   candidato: "A Different Way (feat. Lauv) [DEVAULT Remix]" → "a different way"
+//   similitud: 0,696  (el umbral es 0,86)  → rechazado
+//
+// La causa es una ASIMETRÍA de `normText`: el corte de `feat.` se lleva **todo
+// lo que viene después hasta el final de la cadena**, así que al candidato le
+// borra de paso el «[DEVAULT Remix]» que va detrás del «(feat. Lauv)». El
+// pedido, que escribe el remix detrás de un guion, se lo queda. Los dos lados
+// dicen lo mismo y quedan en cadenas distintas.
+//
+// No alcanza con reordenar los cortes: Spotify escribe el remix detrás de un
+// guion y los proveedores entre corchetes, así que la comparación tiene que
+// tratar las dos formas como la misma cosa. Lo que NO se puede es limitarse a
+// borrar la cola en los dos lados: ahí «Tema - X Remix» matchearía el «Tema»
+// original y sonaría la canción equivocada, que es justo lo que esta unidad
+// existe para evitar. Por eso la versión se compara APARTE:
+//
+//   - `tituloBase` es el título sin su cola de versión;
+//   - `tokensDeVersion` es lo que dice esa cola («devault», «remix»);
+//   - dos títulos matchean por esta vía solo si las bases coinciden Y los dos
+//     conjuntos de versión son compatibles: uno contenido en el otro, y **si
+//     uno está vacío el otro también tiene que estarlo**. Un pedido sin versión
+//     nunca acepta un remix, y un remix nunca acepta el original.
+
+// Una cola solo cuenta como VERSIÓN si trae una de estas palabras. Sin esto,
+// «(feat. Lauv)» contaría como versión y «Tema (feat. A)» no matchearía
+// «Tema (feat. B)» — que son el mismo tema acreditado distinto.
+const PALABRA_VERSION = /\b(remix|mix|edit|version|slowed|sped|speed|reverb|acoustic|unplugged|live|instrumental|vip|bootleg|rework|flip|remaster|remastered|extended|radio|club|dub|nightcore|demo|orchestral|karaoke|8d)\b/;
+
+const GRUPOS = /\(([^)]*)\)|\[([^\]]*)\]/g;
+const COLA_GUION = /\s[-–—]\s+(.*)$/;
+
+// Los tokens de la cola de versión, vengan entre paréntesis, entre corchetes o
+// detrás de un guion. Devuelve un Set vacío si el título no declara ninguna.
+export function tokensDeVersion(s) {
+  const raw = stripDiacritics(String(s || '').toLowerCase());
+  const partes = [];
+  for (const m of raw.matchAll(GRUPOS)) partes.push(m[1] ?? m[2] ?? '');
+  const resto = raw.replace(GRUPOS, ' ');
+  const guion = resto.match(COLA_GUION);
+  if (guion) partes.push(guion[1]);
+
+  const toks = new Set();
+  for (const parte of partes) {
+    if (!PALABRA_VERSION.test(parte)) continue;
+    for (const t of parte.replace(/[^a-z0-9 ]/g, ' ').split(/\s+/).filter(Boolean)) toks.add(t);
+  }
+  return toks;
+}
+
+// El título sin su cola de versión. `normText` ya se lleva los paréntesis y los
+// corchetes; lo que agrega esto es la cola detrás de un guion, que `normText`
+// conserva (y hace bien: «Tema - Otra Cosa» puede ser parte del nombre).
+export function tituloBase(s) {
+  const raw = stripDiacritics(String(s || '').toLowerCase());
+  const sinCola = raw.replace(COLA_GUION, (m, cola) => (PALABRA_VERSION.test(cola) ? ' ' : m));
+  return normText(sinCola);
+}
+
+// ¿Las dos colas de versión hablan de lo mismo? Una contenida en la otra
+// («Slowed» dentro de «Slowed + Reverb»), y las dos vacías o las dos llenas.
+function versionesCompatibles(a, b) {
+  if (a.size === 0 || b.size === 0) return a.size === b.size;
+  const [chico, grande] = a.size <= b.size ? [a, b] : [b, a];
+  for (const t of chico) if (!grande.has(t)) return false;
+  return true;
+}
+
 export function titleMatches(wanted, candidate) {
   const a = normText(wanted), b = normText(candidate);
   if (!a || !b) return false;
@@ -96,7 +170,16 @@ export function titleMatches(wanted, candidate) {
   // puede matchear "Go Crazy", ni "24" a "24K Magic".
   const short = a.length <= 4 || !a.includes(' ');
   if (short) return false;
-  return similarity(a, b) >= TITLE_MIN;
+  if (similarity(a, b) >= TITLE_MIN) return true;
+
+  // Segunda vía: misma base y misma versión. Los umbrales y la regla de los
+  // títulos cortos son los MISMOS, aplicados sobre la base.
+  const ba = tituloBase(wanted), bb = tituloBase(candidate);
+  if (!ba || !bb) return false;
+  if (ba.length <= 4 || !ba.includes(' ')) return false;
+  const basesIguales = ba === bb || similarity(ba, bb) >= TITLE_MIN;
+  if (!basesIguales) return false;
+  return versionesCompatibles(tokensDeVersion(wanted), tokensDeVersion(candidate));
 }
 
 // Versión ESTRICTA: "¿es exactamente este artista?". `artistMatches` acepta

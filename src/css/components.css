@@ -685,8 +685,17 @@ input[type="checkbox"].keep-check:checked::after {
 
 .smart-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  /* minmax(0, …) en el MAX, no 1fr pelado: un `1fr` suelto tiene como mínimo
+     automático el `min-content` de la celda, así que un nombre largo sin
+     espacios ensancha su columna y desalinea la grilla entera. Con el máximo
+     acotado a 1fr y el mínimo explícito, el ancho lo manda la grilla y el
+     texto se recorta adentro (v=167). */
+  grid-template-columns: repeat(auto-fill, minmax(140px, minmax(0, 1fr)));
   gap: 12px;
+  /* Todas las tarjetas de una fila miden lo mismo por el stretch del grid; el
+     `min-height` del título (dos renglones siempre) es lo que las iguala
+     también ENTRE filas. */
+  align-items: stretch;
 }
 
 .smart-card {
@@ -715,6 +724,32 @@ input[type="checkbox"].keep-check:checked::after {
   font-size: 20px;
   font-weight: 700;
   color: var(--color-text);
+  /* Nombres largos («Patricio Rey y sus Redonditos de Ricota», «Ken Carson,
+     Playboi Carti & Destroy Lonely») desbordaban la tarjeta: la tarjeta es un
+     flex column con `align-items: center`, y ahí el ancho del hijo es su
+     `max-content` — se sale por los dos costados sin que nadie lo clippee.
+     `min-width: 0` + `max-width: 100%` lo devuelven al ancho de la tarjeta.
+
+     Se muestran DOS renglones y la elipsis aparece donde empezaría el tercero.
+     Se descartó el marquee, que ya existe (`ui/marquee.js`): su animación va
+     `none` bajo `prefers-reduced-motion`, y ese es el camino de Ian —tiene
+     `enable-animations=false` en GNOME—, o sea que el texto quedaría cortado a
+     secas y sin elipsis, que es peor que ahora.
+
+     `min-height` de dos renglones para que un nombre de una sola línea no haga
+     una tarjeta más baja que la de al lado. */
+  min-width: 0;
+  max-width: 100%;
+  line-height: 1.25;
+  min-height: 2.5em;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  /* Un nombre de una sola palabra más ancho que la tarjeta no tiene dónde
+     cortar: sin esto sigue desbordando aunque el clamp esté puesto. */
+  overflow-wrap: anywhere;
 }
 
 .smart-card-meta {
@@ -723,7 +758,7 @@ input[type="checkbox"].keep-check:checked::after {
 }
 
 .smart-grid-compact {
-  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(120px, minmax(0, 1fr)));
   gap: 10px;
 }
 
@@ -1696,3 +1731,12 @@ button.sin-preview {
   padding: 20px;
 }
 .skel-card-tall { padding: 24px; }
+
+/* Acciones de una fila de #recs (preview + las dos fichas). La fila es un
+   `<label>` en flex, así que el bloque va al final y no se encoge. */
+.recs-row-actions {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  flex-shrink: 0;
+}
