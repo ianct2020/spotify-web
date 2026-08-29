@@ -9,20 +9,20 @@
 // placeholder→img. Botón "Pantalla completa" (Fullscreen API) que oculta
 // sidebar/header/toolbar y recalcula el lado.
 
-import { loadListenedAlbums, isOwner, ownerLockedMessage } from './history-data.js?v=176';
-import { isJunkTrack } from '../util/junk.js?v=176';
-import { vigilarRuta } from '../util/vigencia-ruta.js?v=176';
-import { getAllPlaylistItems, getBestAvailableLikes } from '../api.js?v=176';
-import { escapeHtml, pageHeader, showProgress, hideProgress } from '../ui/components.js?v=176';
-import { showToast } from '../ui/toast.js?v=176';
-import { openAlbumCard } from './album-card.js?v=176';
-import { openArtistCard } from './artist-card.js?v=176';
-import { albumKey, coverId } from '../util/album-key.js?v=176';
-import { generarWallpaper, descargarBlob, WALLPAPER_PRESETS } from './covers-wallpaper.js?v=176';
-import { buildAlbumStatsIndex } from '../util/album-stats.js?v=176';
-import { getPreview } from '../api/preview-providers.js?v=176';
-import { hoverIn, hoverOut } from '../ui/preview-player.js?v=176';
-import { coverUrl } from '../util/cover-size.js?v=176';
+import { loadListenedAlbums, isOwner, ownerLockedMessage } from './history-data.js?v=177';
+import { isJunkTrack } from '../util/junk.js?v=177';
+import { vigilarRuta } from '../util/vigencia-ruta.js?v=177';
+import { getAllPlaylistItems, getBestAvailableLikes } from '../api.js?v=177';
+import { escapeHtml, pageHeader, showProgress, hideProgress } from '../ui/components.js?v=177';
+import { showToast } from '../ui/toast.js?v=177';
+import { openAlbumCard } from './album-card.js?v=177';
+import { openArtistCard } from './artist-card.js?v=177';
+import { albumKey, coverId } from '../util/album-key.js?v=177';
+import { generarWallpaper, descargarBlob, WALLPAPER_PRESETS } from './covers-wallpaper.js?v=177';
+import { buildAlbumStatsIndex } from '../util/album-stats.js?v=177';
+import { getPreview } from '../api/preview-providers.js?v=177';
+import { hoverIn, hoverOut } from '../ui/preview-player.js?v=177';
+import { coverUrl } from '../util/cover-size.js?v=177';
 
 const LS_KEY_SIZE = 'covers_cell_size';
 const LS_KEY_SORT = 'covers_sort_mode';
@@ -336,10 +336,20 @@ export async function render(container) {
   if (!ruta.vigente()) return;
 
   let wthreeItems = null;
+  let wthreeFallo = null;
   const wthreeId = localStorage.getItem(LS_WTHREE_ID);
   if (wthreeId) {
     try { wthreeItems = await getAllPlaylistItems(wthreeId); }
-    catch (e) { console.warn('[covers] no pude cargar W-Three:', e.message); }
+    catch (e) {
+      // Se sigue con el historial solo —el mosaico vale igual—, pero el fallo
+      // se GUARDA para decirlo en el rótulo. Comprobado el 2026-08-29 con la
+      // API rate-limiteada: la vista pintaba 376 álbumes y el rótulo decía
+      // «Álbumes dados por escuchados», sin una palabra de que faltaba W-Three.
+      // Un número más chico y una leyenda que suena completa: exactamente el
+      // tipo de degradación silenciosa que nos costó las 123.
+      wthreeFallo = e.message;
+      console.warn('[covers] no pude cargar W-Three:', e.message);
+    }
     if (!ruta.vigente()) return;
   }
 
@@ -384,9 +394,12 @@ export async function render(container) {
   const soloWthree = allAlbums.filter(a => a.sources.has('wthree') && !a.sources.has('listened')).length;
 
   const sinTapa = noCover.length ? ` · ${noCover.length} sin tapa, fuera del mosaico` : '';
+  const avisoWthree = wthreeFallo
+    ? ` · <strong style="color:var(--color-warning)">falta W-Three: ${escapeHtml(wthreeFallo)}</strong>`
+    : '';
   const sourcesLine = wthreeItems
     ? `<span class="covers-summary-sub">Álbumes dados por escuchados (${escapeHtml(umbral)}) y la playlist «w three» · ${deWthree} están en W-Three, ${soloWthree} solo ahí${sinTapa}</span>`
-    : `<span class="covers-summary-sub">Álbumes dados por escuchados (${escapeHtml(umbral)})${sinTapa}</span>`;
+    : `<span class="covers-summary-sub">Álbumes dados por escuchados (${escapeHtml(umbral)})${sinTapa}${avisoWthree}</span>`;
 
   content.innerHTML = `
     <div class="covers-narrow-hint">Vista pensada para pantalla grande — mejor en escritorio.</div>

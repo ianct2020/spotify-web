@@ -11,26 +11,26 @@
 // tus me gusta" en cada fila y previews que prueban contra TODOS los artistas
 // del track.
 
-import { escapeHtml } from '../ui/components.js?v=176';
-import { openArtistCard, knownArtist } from './artist-card.js?v=176';
-import { openModal, closeTop } from '../ui/modal-stack.js?v=176';
-import { getBestAvailableLikes, getAlbumTracks, spotifyFetch } from '../api.js?v=176';
-import { albumKey, coverId } from '../util/album-key.js?v=176';
+import { escapeHtml } from '../ui/components.js?v=177';
+import { openArtistCard, knownArtist } from './artist-card.js?v=177';
+import { openModal, closeTop } from '../ui/modal-stack.js?v=177';
+import { getBestAvailableLikes, getAlbumTracks, spotifyFetch } from '../api.js?v=177';
+import { albumKey, coverId } from '../util/album-key.js?v=177';
 // ⚠️ `limpiaParaQuery` FALTABA acá hasta v=153 y el síntoma era mudo: la usa
 // `resolveAlbumId` en el `try`, así que cada ficha tiraba un ReferenceError que
 // el catch convertía en «no pude resolver el álbum», la ficha se caía al camino
 // degradado de v=142 (solo tus likes, todos con el ♥ lleno) y el tracklist
 // completo de v=144 no se pedía NUNCA. Verificado en producción el 2026-08-23:
 // 6 fichas abiertas, 6 warnings «limpiaParaQuery is not defined» en consola.
-import { artistMatches, normText, limpiaParaQuery } from '../util/track-match.js?v=176';
-import { skelTracklist } from '../ui/skeleton.js?v=176';
-import { firstArtistName, artistNames, resolveArtistName } from '../util/artist-name.js?v=176';
-import { coverUrl } from '../util/cover-size.js?v=176';
-import { lookupAlbumStats } from '../util/album-stats.js?v=176';
-import { fmtDia } from '../util/fecha.js?v=176';
-import { getPreview } from '../api/preview-providers.js?v=176';
-import { togglePreview, playingKey } from '../ui/preview-player.js?v=176';
-import { openTrackCard } from './track-card.js?v=176';
+import { artistMatches, normText, limpiaParaQuery } from '../util/track-match.js?v=177';
+import { skelTracklist } from '../ui/skeleton.js?v=177';
+import { firstArtistName, artistNames, resolveArtistName } from '../util/artist-name.js?v=177';
+import { coverUrl } from '../util/cover-size.js?v=177';
+import { lookupAlbumStats } from '../util/album-stats.js?v=177';
+import { fmtDia } from '../util/fecha.js?v=177';
+import { getPreview } from '../api/preview-providers.js?v=177';
+import { togglePreview, playingKey } from '../ui/preview-player.js?v=177';
+import { openTrackCard } from './track-card.js?v=177';
 
 const PLAY_SVG = `<svg viewBox="0 0 24 24" width="10" height="10" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>`;
 const PAUSE_SVG = `<svg viewBox="0 0 24 24" width="10" height="10" fill="currentColor" aria-hidden="true"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>`;
@@ -369,12 +369,15 @@ export function openAlbumCard(entrada) {
     if (btn) btn.onclick = () => acc.onClick?.({ cerrar: () => closeTop() });
   });
 
-  overlay.querySelector('#alb-artist').onclick = () => {
-    if (artista) openArtistCard({ name: artista });
-  };
-  overlay.querySelector('#alb-go-artist').onclick = () => {
-    if (artista) openArtistCard({ name: artista });
-  };
+  // Guardas de null, como la de `[data-alb-accion]` de arriba: `routeteardown`
+  // cierra la pila de modales, así que una ficha que se estaba abriendo cuando
+  // cambió la ruta se queda sin overlay y esto tiraba «Cannot set properties of
+  // null (setting 'onclick')». Mismo caso que `track-card.js` (v=174).
+  const irAlArtista = () => { if (artista) openArtistCard({ name: artista }); };
+  const elArtista = overlay.querySelector('#alb-artist');
+  if (elArtista) elArtista.onclick = irAlArtista;
+  const btnArtista = overlay.querySelector('#alb-go-artist');
+  if (btnArtista) btnArtista.onclick = irAlArtista;
 
   // Los números SIEMPRE se recontrastan contra el historial, no solo cuando el
   // llamador no trajo ninguno. En v=140 la condición era "los dos en cero", y

@@ -369,12 +369,15 @@ export function openAlbumCard(entrada) {
     if (btn) btn.onclick = () => acc.onClick?.({ cerrar: () => closeTop() });
   });
 
-  overlay.querySelector('#alb-artist').onclick = () => {
-    if (artista) openArtistCard({ name: artista });
-  };
-  overlay.querySelector('#alb-go-artist').onclick = () => {
-    if (artista) openArtistCard({ name: artista });
-  };
+  // Guardas de null, como la de `[data-alb-accion]` de arriba: `routeteardown`
+  // cierra la pila de modales, así que una ficha que se estaba abriendo cuando
+  // cambió la ruta se queda sin overlay y esto tiraba «Cannot set properties of
+  // null (setting 'onclick')». Mismo caso que `track-card.js` (v=174).
+  const irAlArtista = () => { if (artista) openArtistCard({ name: artista }); };
+  const elArtista = overlay.querySelector('#alb-artist');
+  if (elArtista) elArtista.onclick = irAlArtista;
+  const btnArtista = overlay.querySelector('#alb-go-artist');
+  if (btnArtista) btnArtista.onclick = irAlArtista;
 
   // Los números SIEMPRE se recontrastan contra el historial, no solo cuando el
   // llamador no trajo ninguno. En v=140 la condición era "los dos en cero", y

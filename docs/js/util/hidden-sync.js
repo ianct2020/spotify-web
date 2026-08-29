@@ -26,9 +26,9 @@ import {
   createPlaylist,
   getCurrentUserId,
   spotifyFetch,
-} from '../api.js?v=176';
-import { prefKey } from '../storage.js?v=176';
-import { invalidateOwnPlaylists } from './playlist-add.js?v=176';
+} from '../api.js?v=177';
+import { prefKey } from '../storage.js?v=177';
+import { invalidateOwnPlaylists } from './playlist-add.js?v=177';
 
 const PLAYLIST_DESC = 'Lista interna de Fonoteca: lo que ocultaste en esta vista. Si la borrás, se pierden los ocultos.';
 
