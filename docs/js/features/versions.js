@@ -1,43 +1,59 @@
-import { getAllLikedTracks, removeLikedTracks, checkLibraryContains } from '../api.js?v=165';
-import { showProgress, hideProgress, progressController, isCancelled, typeConfirmModal, renderTrackRow, escapeHtml, pageHeader } from '../ui/components.js?v=165';
-import { showToast } from '../ui/toast.js?v=165';
-import { openModal, closeTop } from '../ui/modal-stack.js?v=165';
-import { coverUrl } from '../util/cover-size.js?v=165';
-import { openPlaylistPicker } from '../ui/playlist-picker.js?v=165';
-import { getOwnPlaylists, addUrisToPlaylists, toastAddResult } from '../util/playlist-add.js?v=165';
+import { getAllLikedTracks, removeLikedTracks, checkLibraryContains } from '../api.js?v=166';
+import { borrarLikesVerificado } from '../util/borrado-verificado.js?v=166';
+import { normalizeKey, esFantasma, guardaUltimoEjemplar, indexarBiblioteca } from '../util/versions-guard.js?v=166';
+import { showProgress, hideProgress, progressController, isCancelled, typeConfirmModal, renderTrackRow, escapeHtml, pageHeader } from '../ui/components.js?v=166';
+import { showToast } from '../ui/toast.js?v=166';
+import { openModal, closeTop } from '../ui/modal-stack.js?v=166';
+import { coverUrl } from '../util/cover-size.js?v=166';
+import { openPlaylistPicker } from '../ui/playlist-picker.js?v=166';
+import { getOwnPlaylists, addUrisToPlaylists, toastAddResult } from '../util/playlist-add.js?v=166';
 
-// ── «Borrar sobrantes» inhabilitado (2026-08-26, motivo revisado 2026-08-28) ──
+// ── «Borrar sobrantes» REHABILITADO (2026-08-28) ─────────────────────────────
 //
-// POR QUÉ SE INHABILITÓ (26/08): se marcaron versiones con «quedarme», se pulsó
-// «Borrar sobrantes» y pareció desaparecer también una versión marcada. La
-// biblioteca pasó de 9.238 likes (backup del 19 de agosto) a 9.220.
+// Estuvo inhabilitado del 26/08 al 28/08. Historia corta de por qué, porque el
+// motivo cambió dos veces y confundirlos lleva a conclusiones falsas:
 //
-// ESO YA NO SE SOSTIENE (28/08). El diagnóstico del 28 lo desmontó:
-//   - las 15 pistas que faltaban del 26 eran SINGLETONS —clusters de una sola
-//     versión—, así que el botón no podía tocarlas ni marcándolas: no es él;
-//   - las 491 del cruce anterior se habían perdido en una corrida ANTERIOR al
-//     19/08, no en la del 26;
-//   - o sea que, hasta donde se puede probar, el botón hizo lo que decía.
+//   1. Se bloqueó el 26/08 creyendo que un borrado se había llevado una versión
+//      marcada con «quedarme». FALSO: las 15 pistas que faltaban eran
+//      singletons, clusters de una sola versión que este botón no puede tocar.
+//   2. Siguió bloqueado porque faltaban 123 me gusta sin ninguna copia viva.
+//      Eso SÍ es real y es el daño que importa.
 //
-// POR QUÉ SIGUE INHABILITADO IGUAL. De las 539 que faltan, 416 tienen otra
-// versión viva: eso es exactamente lo que el dedup tenía que hacer. Pero 123 no
-// tienen ninguna copia viva, y ESO NO LO EXPLICA NADIE TODAVÍA. Un dedup que
-// borra el último ejemplar no es un dedup. Mientras ese borrado no tenga nombre
-// —qué corrida fue, qué camino del código, por qué se quedó sin gemelo— el
-// botón no se reactiva, aunque la acusación del 26 haya quedado descartada.
-// Decisión de Ian, 2026-08-28: no se rehabilita hasta que eso esté identificado.
-// La lista de las 123 está en /home/ian/las-123-sin-gemelo-2026-08-28.txt.
+// QUÉ SE SABE Y QUÉ NO, al 2026-08-28. Se sabe por qué nadie se enteró: la
+// verificación posterior al borrado NUNCA CORRIÓ en tandas de más de 40 pistas
+// —`checkLibraryContains` iba de a 50 con el tope real en 40, tiraba en el
+// primer chunk, y el llamador se lo comía en un `console.warn` que la extensión
+// de Chrome ni captura—. Todo borrado grande se dio por bueno a ciegas.
 //
-// Para reactivarlo: poner la constante en false.
+// Pero eso explica el SILENCIO, no el BORRADO: la verificación corre después
+// del DELETE y no puede borrar nada. Qué se llevó las 123 sigue sin
+// identificarse. El candidato que mejor encaja son las pistas fantasma antes de
+// v=153: normalizaban todas a la clave `|||`, caían en un mismo cluster, y la
+// doc ya decía que ahí «Borrar sobrantes» habría borrado likes sin relación
+// entre sí. Encaja con la fecha (la corrida fue anterior al 19/08) pero no está
+// probado.
 //
-// Lo que ya está puesto para cuando se reactive:
-//   - la confirmación lista nombre y artista de cada pista, no un número;
-//   - el registro del borrado, que desde v=162 lo escribe `removeLikedTracks()`
-//     en `api.js` para TODAS las vistas que borran me gusta
-//     (`likes_borrados_log_v1`). Acá solo se le pasa el origen y la metadata
-//     que la vista ya tenía delante.
-const BORRADO_BLOQUEADO = true;
-const MOTIVO_BLOQUEO = 'Inhabilitado desde el 26/08/2026: faltan 123 me gusta sin ninguna copia viva y todavía no se sabe qué los borró. Se reactivará cuando esté identificado.';
+// POR QUÉ SE REHABILITA IGUAL. No porque la causa esté cerrada, sino porque las
+// tres condiciones que la hacían peligrosa están puestas y probadas:
+//
+//   1. Chunks de 40 en `checkLibraryContains()` y `albumsInLibrary()`, con el
+//      número en una sola constante (`LIBRARY_URIS_POR_REQUEST`, api.js).
+//      Máximo medido en vivo el 2026-08-28: 40 pasa, 41 da 400.
+//   2. La verificación ya no puede fallar en silencio. Si tira, o si alguna
+//      pista sigue en la biblioteca, esto TIRA: toast rojo, sin toast verde,
+//      sin marcar clusters como resueltos. No queda ni un `console.warn` en el
+//      camino de un borrado.
+//   3. Guarda dura del último ejemplar antes de cualquier DELETE
+//      (`util/versions-guard.js`, 16 tests en tests/versions-guard.test.mjs):
+//      si el borrado dejaría alguna canción en cero copias, se aborta el lote
+//      entero y se dice cuál. Esto hace IMPOSIBLE repetir el daño de las 123
+//      sea cual sea la causa que lo produjo, que es justamente lo que se quería.
+//
+// Si alguna de las tres se toca, volver a poner la constante en `true`.
+const BORRADO_BLOQUEADO = false;
+// Texto que se muestra si alguien vuelve a poner BORRADO_BLOQUEADO en true.
+// Cambiarlo junto con la constante: tiene que decir POR QUÉ se re-bloqueó.
+const MOTIVO_BLOQUEO = 'El borrado está bloqueado a mano en el código (BORRADO_BLOQUEADO).';
 
 // ── Doble de borrado: reproducir el fallo sin tocar los me gusta (v=164) ─────
 //
@@ -56,9 +72,6 @@ const MOTIVO_BLOQUEO = 'Inhabilitado desde el 26/08/2026: faltan 123 me gusta si
 const DRY_RUN_KEY = 'versions_dry_run';
 const DRY_LOG_KEY = 'versions_dry_run_log_v1';
 
-// Centinela para saltarse la verificación en simulacro sin que el catch de
-// abajo lo reporte como un fallo de red.
-const SALTAR_VERIFICACION = Symbol('simulacro');
 
 function dryRunActivo() {
   try { return localStorage.getItem(DRY_RUN_KEY) === '1'; } catch { return false; }
@@ -110,6 +123,11 @@ function saveDismissed(s) {
   localStorage.setItem(DISMISS_KEY, JSON.stringify([...s]));
 }
 let allClusters = [];
+// Índice clave-de-canción → ids vivos, con TODA la biblioteca (no solo los
+// clusters que se listan). Es la base del guarda del último ejemplar: para
+// saber si borrar una versión deja la canción en cero hay que mirar todas sus
+// copias, incluidas las de clusters ocultos o no renderizados.
+let libraryByKey = new Map();
 // Las pistas fantasma (ver `esFantasma`) salen del listado de clusters y van a
 // su propia tarjeta: no son versiones de nada.
 let fantasmas = [];
@@ -138,48 +156,6 @@ export function render(container) {
   updateHiddenCount();
 }
 
-// Marcadores que hacen que sean OTRA canción (los preservamos en la clave):
-// reprise, acoustic, live, remix, demo, instrumental, sped up, slowed, unplugged,
-// piano version, orchestral, karaoke, extended, edit (a veces cambia). Podés
-// tener el original y la versión live en likes sin que Fonoteca los agrupe.
-const VERSION_MARKERS = /\b(reprise|acoustic|acústic[ao]|live|en vivo|remix|demo|instrumental|sped up|slowed|reverb|unplugged|piano version|orchestral|karaoke|extended|extended mix|edit|edición extendida|reworked|reimagined|rerecorded|re-?record|taylor'?s version)\b/i;
-// Marcadores de EDICIÓN (los sacamos: es la misma grabación):
-// remaster, deluxe, bonus, anniversary, mono, stereo, radio edit, album version,
-// single version, y años sueltos (- 2011).
-const EDITION_STRIP = /\s*[-–—:(\[]\s*(remaster(ed)?|deluxe|bonus track|anniversary|mono|stereo|radio edit|album version|single version|explicit|clean|from ".+"|from the [a-z ]+|expanded edition|expanded)\b.*$/i;
-const YEAR_STRIP = /\s*[-–—]\s*(19|20)\d{2}\s*(remaster(ed)?|version|mix|edit)?\s*$/i;
-const PAREN_YEAR = /\s*\((19|20)\d{2}\s*(remaster(ed)?|version|mix|edit)?\)\s*$/i;
-
-function normalizeName(name) {
-  if (!name) return '';
-  let out = name.toLowerCase().trim();
-  out = out.replace(EDITION_STRIP, '');
-  out = out.replace(PAREN_YEAR, '');
-  out = out.replace(YEAR_STRIP, '');
-  // Marcadores de versión los preservo, pero afuera del paréntesis los mantengo
-  // como sufijo canónico para no depender de puntuación.
-  const versionTags = [];
-  out = out.replace(/[\(\[]([^\)\]]+)[\)\]]/g, (_, inside) => {
-    const m = inside.match(VERSION_MARKERS);
-    if (m) { versionTags.push(m[0].toLowerCase()); return ''; }
-    return ''; // otros paréntesis (featuring, prod. by, etc.) los tiramos igual
-  });
-  // También matcheo el marcador si vino sin paréntesis: "Song - Live"
-  const dashMatch = out.match(new RegExp('\\s*[-–—]\\s*(' + VERSION_MARKERS.source.slice(2, -2) + ')\\s*$', 'i'));
-  if (dashMatch) {
-    versionTags.push(dashMatch[1].toLowerCase());
-    out = out.replace(dashMatch[0], '');
-  }
-  out = out.replace(/\s+/g, ' ').trim();
-  const tags = [...new Set(versionTags.map(t => t.replace(/\s+/g, '')))].sort();
-  return tags.length ? `${out}#${tags.join(',')}` : out;
-}
-
-function normalizeKey(track) {
-  const name = normalizeName(track.name);
-  const artist = (track.artists?.[0]?.name || '').toLowerCase().trim();
-  return `${artist}|||${name}`;
-}
 
 // ── Pistas fantasma: likes sin NINGÚN metadato (v=153) ───────────────────────
 //
@@ -204,9 +180,8 @@ function normalizeKey(track) {
 //
 // Así que la vista no promete un nombre que no existe: dice qué son y deja
 // mandarlos a una playlist para poder mirarlos desde la app de Spotify.
-function esFantasma(track) {
-  return !(track?.name || '').trim();
-}
+// `esFantasma` y la normalización viven ahora en util/versions-guard.js,
+// junto al guarda que depende de ellas. Ver ese archivo y su test.
 
 // Clave para persistencia de ocultos: sobrevive a re-análisis porque no depende
 // del idx dinámico ni de la duración.
@@ -272,6 +247,11 @@ async function analyze(force = false) {
       if (!groups.has(key)) groups.set(key, []);
       groups.get(key).push(item);
     });
+
+    // El índice se arma del Map completo, ANTES de filtrar por tamaño y por
+    // ocultos: un cluster oculto sigue conteniendo copias vivas que cuentan
+    // como gemelo.
+    libraryByKey = indexarBiblioteca(likes);
 
     const dismissed = getDismissed();
     // Guardo snapshot de metadata para el modal de ocultos (aunque después Ian
@@ -349,8 +329,8 @@ async function analyze(force = false) {
           <span style="flex-shrink:0">⚠️</span>
           <div>
             <strong>«Borrar sobrantes» está inhabilitado.</strong>
-            Faltan 123 me gusta de los que no queda ninguna otra versión en la biblioteca, y todavía no se sabe qué los borró.
-            Hasta que eso esté identificado, marcar versiones sirve para revisar los grupos, pero no se borra nada.
+            ${escapeHtml(MOTIVO_BLOQUEO)}
+            Marcar versiones sirve para revisar los grupos, pero no se borra nada.
             Para quitar una versión suelta, hacerlo desde la aplicación de Spotify.
           </div>
         </div>` : ''}
@@ -622,37 +602,47 @@ async function batchDelete() {
     return;
   }
 
+  // Guarda dura del último ejemplar, PRIMERA pasada. Corre también en
+  // simulacro: es justo el camino que hay que poder ejercitar sin gastar me
+  // gusta, y el simulacro no llega a `borrarLikesVerificado`. La segunda pasada
+  // —la que de verdad protege el DELETE— la corre el helper.
+  const sinGemelo = guardaUltimoEjemplar(toRemove, libraryByKey);
+  if (sinGemelo.length) {
+    const nombres = sinGemelo.map(v => `«${v.track.name || '(sin nombre)'}» (${v.motivo})`);
+    console.error('[versions] ABORTADO por el guarda del último ejemplar:', sinGemelo.map(v => ({ id: v.track.id, nombre: v.track.name, motivo: v.motivo })));
+    showToast(`Borrado abortado: ${sinGemelo.length} pista(s) se quedarían sin ninguna copia viva. No se tocó nada. ${nombres.slice(0, 3).join('; ')}${nombres.length > 3 ? '…' : ''}`, 'error');
+    return;
+  }
+
   try {
     const meta = detalle.map(d => ({ ...d, marcadasEnEsteBorrado: [...keepIds] }));
+    let verifyLine = '';
     if (simulacro) {
       borradoSimulado(toRemoveIds, { meta });
     } else {
-      showProgress('Borrando sobrantes...', 0, toRemoveIds.length);
-      // El registro lo escribe `removeLikedTracks()` antes del primer DELETE.
-      // Le pasamos la metadata que ya tenemos y las marcas, que es justo lo que
-      // haría falta para reconstruir si esto vuelve a salir mal.
-      await removeLikedTracks(toRemoveIds, { origen: '#versions', meta });
-    }
-    // Verificación contra Spotify: chequeo si los ids que borré siguen en la
-    // biblioteca. Post-migración feb 2026 el que vive es /me/library/contains
-    // con URIs (verificado en vivo 2026-07-28). No falla si el endpoint muere
-    // en el futuro — el toast simplemente omite el resumen.
-    // En simulacro no se verifica nada: no hay borrado que comprobar y los ids
-    // siguen —correctamente— en la biblioteca.
-    let verifyLine = '';
-    try {
-      if (simulacro) throw SALTAR_VERIFICACION;
-      showProgress('Verificando con Spotify...', 0, toRemoveIds.length);
-      const contains = await checkLibraryContains(toRemoveIds);
-      const stillIn = toRemoveIds.filter(id => contains.get(id) === true);
-      if (stillIn.length === 0) {
-        verifyLine = ` · ✓ verificado: ${toRemoveIds.length} de ${toRemoveIds.length} salieron`;
-      } else {
-        verifyLine = ` · ⚠ ${stillIn.length} de ${toRemoveIds.length} siguen en tu biblioteca — revisá`;
-        console.warn('Versiones: ids que no salieron:', stillIn);
-      }
-    } catch (verr) {
-      if (verr !== SALTAR_VERIFICACION) console.warn('Versiones: verificación falló, sigo igual:', verr.message);
+      // Borrado + verificación + guarda, en `util/borrado-verificado.js`: la
+      // misma secuencia que usan las otras cuatro vistas que borran me gusta.
+      // Vivía acá dentro, copiada, hasta el 29/08.
+      //
+      // Si la verificación no se puede hacer, o se hace y no cuadra, esto TIRA:
+      // no sale el toast verde, no se marcan los clusters como resueltos y no
+      // se limpian las marcas. El registro previo (v=162) lo sigue escribiendo
+      // `removeLikedTracks` antes del primer DELETE.
+      await borrarLikesVerificado(toRemoveIds, {
+        origen: '#versions',
+        meta,
+        removeLikedTracks,
+        checkLibraryContains,
+        // La única de las cinco vistas donde la guarda SÍ aplica: esto es un
+        // dedup, y borrar la última copia viva de una canción es, por
+        // definición, un fallo. Es literalmente lo que pasó con las 123.
+        guarda: 'ultimo-ejemplar',
+        items: toRemove,
+        libraryByKey,
+        onProgress: (fase, hechas, total) => showProgress(
+          fase === 'verificando' ? 'Verificando con Spotify...' : 'Borrando sobrantes...', hechas, total),
+      });
+      verifyLine = ` · ✓ verificado: ${toRemoveIds.length} de ${toRemoveIds.length} salieron`;
     }
     hideProgress();
     showToast(simulacro

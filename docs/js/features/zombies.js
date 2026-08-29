@@ -1,8 +1,9 @@
-import { getAllLikedTracks, getAllPlaylistItems, removeLikedTracks, removeTracksFromPlaylist } from '../api.js?v=165';
-import { showProgress, hideProgress, progressController, isCancelled, typeConfirmModal, renderTrackRow, escapeHtml, pageHeader } from '../ui/components.js?v=165';
-import { showToast } from '../ui/toast.js?v=165';
-import { isZombieItem } from '../util/zombie.js?v=165';
-import { getOwnPlaylists } from '../util/playlist-add.js?v=165';
+import { getAllLikedTracks, getAllPlaylistItems, removeLikedTracks, removeTracksFromPlaylist, checkLibraryContains } from '../api.js?v=166';
+import { borrarLikesVerificado } from '../util/borrado-verificado.js?v=166';
+import { showProgress, hideProgress, progressController, isCancelled, typeConfirmModal, renderTrackRow, escapeHtml, pageHeader } from '../ui/components.js?v=166';
+import { showToast } from '../ui/toast.js?v=166';
+import { isZombieItem } from '../util/zombie.js?v=166';
+import { getOwnPlaylists } from '../util/playlist-add.js?v=166';
 
 const FADE_DURATION_MS = 15000;
 const STAGGER_PER_ROW_MS = 80;
@@ -252,7 +253,23 @@ async function batchDelete() {
   try {
     showProgress('Quitando zombis...', 0, total);
     if (likeIds.length > 0) {
-      await removeLikedTracks(likeIds, { origen: '#zombies' });
+      // Borrado + verificación en una sola llamada. Si no se puede verificar, o
+      // se verifica y alguna sigue dentro, esto TIRA: no salen los zombis de
+      // playlist, no sale el toast verde y no se limpia la selección. Ver
+      // util/borrado-verificado.js.
+      await borrarLikesVerificado(likeIds, {
+        origen: '#zombies',
+        removeLikedTracks,
+        checkLibraryContains,
+        // Los zombis son pistas MUERTAS del catálogo (relinkeadas, retiradas o
+        // sin mercado): la vista existe justo porque ya no se pueden reproducir.
+        // Exigir que sobreviva «una copia viva» abortaría todas las veces, y la
+        // copia que sobreviviera sería otra pista muerta.
+        guarda: 'ninguna',
+        motivoSinGuarda: 'los zombis son pistas muertas del catálogo; no hay copia viva que preservar y quedarse en cero es lo que se pide',
+        onProgress: (fase, hechas) => showProgress(
+          fase === 'verificando' ? 'Verificando con Spotify...' : 'Quitando zombis...', hechas, total),
+      });
     }
     for (const op of playlistOps) {
       await removeTracksFromPlaylist(op.plId, op.uris);

@@ -15,8 +15,9 @@
 
 import {
   getAllUserPlaylists, getAllPlaylistItems, getBestAvailableLikes,
-  getCurrentUserId, removeLikedTracks,
+  getCurrentUserId, removeLikedTracks, checkLibraryContains,
 } from '../api.js';
+import { borrarLikesVerificado } from '../util/borrado-verificado.js';
 import { idbGetCached, idbSetCached, idbDel } from '../idb.js';
 import { createHiddenStore } from '../util/hidden-sync.js';
 import { addUrisToPlaylists, toastAddResult, getOwnPlaylists } from '../util/playlist-add.js';
@@ -807,7 +808,17 @@ async function sacarDeLikes(rows) {
 
   const ids = conId.map(r => r.trackId);
   try {
-    await removeLikedTracks(ids, { origen: '#sin-clasificar' });
+    // Borra Y verifica; si no se puede verificar, tira y cae en el catch.
+    await borrarLikesVerificado(ids, {
+      origen: '#sin-clasificar',
+      removeLikedTracks,
+      checkLibraryContains,
+      // Sacar de likes una canción que no está en ninguna playlist no es
+      // deduplicar: no hay «otra versión» que deba sobrevivir, y el usuario
+      // pide justamente que no quede ninguna.
+      guarda: 'ninguna',
+      motivoSinGuarda: 'no es un dedup: se saca de likes una canción sin playlist, y quedarse en cero copias es el resultado buscado',
+    });
   } catch (e) {
     showToast('No se pudieron sacar de likes: ' + e.message, 'error');
     return;

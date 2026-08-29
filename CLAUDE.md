@@ -29,7 +29,7 @@
 - **Cache de items: parchear, no borrar (v=147).** `updatePlaylistItemsCache(id, null, null)` hace `idbDel`. Llamarlo "para invalidar" al final de un flujo que se repite deja el cache borrado para siempre, y la operación siguiente se come un refetch entero — era el bug del guardado de W-Three (41 s el segundo guardado de la sesión, 39,6 s de ellos en 31 páginas). `util/playlist-cache-patch.js` aplica al array cacheado el mismo diff que se le mandó a Spotify: `patchPlaylistItems(items, { addItems, addInsertPos, removeUris, moves })`, en ese orden, y se guarda con el snapshot de la ÚLTIMA escritura. `applyMoveToItems` replica la semántica de `PUT /items` (`insert_before` exclusivo, corregido solo si el destino está después del origen). Para los items nuevos, `buildCachedItem(track, album)` arma la forma de la API — los campos que los lectores consumen de verdad son `uri`/`id`/`name`, `album.name` + `artists[0].name` (`util/album-heard.js`) y `album.images` (`features/covers.js`). Tests en `tests/wthree-cache-patch.test.mjs`.
 - **`GET /me/top/{artists|tracks}?time_range=short|medium|long_term`**: **CONFIRMADO vivo (2026-07-29, 200 con token real)**. Usado en el Wrapped lite para users sin Extended Streaming History (wrapped.js `renderLite`). Scope `user-top-read` ya pedido.
 - **Stats.fm API** (`api.stats.fm/api/v1`, CORS abierto, sin key): usada en Por género. Más endpoints investigados en /home/ian/STATSFM-API-2026-07-29.md (per-track stats actuales posibles vía `/search/elastic` → id interno → `/users/{u}/streams/tracks/{id}/stats`).
-- **`/me/library/contains?uris=…`** (post-migración): CONFIRMADO vivo (2026-07-28). Devuelve `[bool, ...]`. El clásico `/me/tracks/contains?ids=…` está 403. **El máximo son 40 uris por request** (re-verificado en vivo 2026-08-28 con token real: 40 → 200; **41, 42, 43, 44, 45, 48, 49, 50 y 60 → 400 «Too many uris requested»**; 100 ni llega, da **414** porque se pasa del largo de URL). Mismo tope para `spotify:track:` y para `spotify:album:` — el 41 falla igual en los dos. O sea que es el mismo 40 que ya usan el PUT y el DELETE de `/me/library`: **`/me/library` entero va de a 40**. Decía «chunks de 50» y era falso — con 50 el request fallaba **siempre**. Usado en features/versions.js para verificación de borrados y en `albumsInLibrary()`. **Ojo con el modo de fallo**: `checkLibraryContains()` (api.js) tira en el primer chunk, y el llamador de versions.js lo atrapa y lo reporta con `console.warn` — que la extensión de Chrome no captura. Resultado: **todo borrado de más de 40 versiones se verificó a sí mismo en silencio**, mostrando el toast sin la línea de verificación en vez de un error. Si no ves el ` · ✓ verificado: N de N salieron`, no es que salió bien: es que no se comprobó.
+- **`/me/library/contains?uris=…`** (post-migración): CONFIRMADO vivo (2026-07-28). Devuelve `[bool, ...]`. El clásico `/me/tracks/contains?ids=…` está 403. **El máximo son 40 uris por request** (re-verificado en vivo 2026-08-28 con token real: 40 → 200; **41, 42, 43, 44, 45, 48, 49, 50 y 60 → 400 «Too many uris requested»**; 100 ni llega, da **414** porque se pasa del largo de URL). Mismo tope para `spotify:track:` y para `spotify:album:` — el 41 falla igual en los dos. O sea que es el mismo 40 que ya usan el PUT y el DELETE de `/me/library`: **`/me/library` entero va de a 40**. Decía «chunks de 50» y era falso — con 50 el request fallaba **siempre**. Usado en features/versions.js para verificación de borrados y en `albumsInLibrary()`. **CORREGIDO el 2026-08-28**: el número vive ahora en una sola constante, `LIBRARY_URIS_POR_REQUEST` (api.js), que usan los seis puntos que pegan a `/me/library` (los dos `contains`, el PUT y el DELETE de pistas, y el PUT y el DELETE de álbumes). **Lo que estuvo roto y por qué importa**: hasta esa fecha los dos `contains` iban de a 50, o sea que **fallaban siempre**, y el único llamador (`versions.js`) atrapaba la excepción y la reportaba con `console.warn` — que la extensión de Chrome no captura. Resultado: **todo borrado de más de 40 versiones se dio por verificado sin haberse verificado**, con toast verde. Ese es el patrón a no repetir: una verificación con un `catch` que deja seguir el flujo es peor que no tener verificación, porque da la misma cara que un resultado limpio. Ahora `checkLibraryContains()` tira también si la respuesta no trae exactamente un booleano por id, y `versions.js` aborta con toast rojo en vez de degradar.
 - DELETE playlist items: body `{ items: [{uri}] }` (NO `{ tracks: [...] }` → da 400 "No uris provided")
 - Campo `popularity` en `/me/tracks`: **removido en la migración feb 2026**. Confirmado 2026-07-17 con 9548 tracks reales → 100% null. No usar más. Chart de popularidad sacado del Dashboard en v=41.
 - **Búsqueda** (`/search?type=album|track|artist`, con filtros `artist:"..."`): CONFIRMADO vivo (se usa en Similar y en Álbum similar v=45).
@@ -547,6 +547,37 @@ remapeo— sustituyendo la llamada a la API por un registrador
 el botón se habilita aunque `BORRADO_BLOQUEADO` siga en `true`: **no hay ninguna
 ruta a un DELETE**. Además hay un **guarda duro** antes de tocar la API que
 aborta el borrado entero si una id marcada se coló en la lista.
+
+## Las CINCO vistas que borran me gusta van por un solo helper (2026-08-29)
+`#versions`, `#zombies`, `#zero-plays`, `#skips` y `#sin-clasificar` son las
+únicas que borran me gusta. Hasta el 29/08 **sólo `#versions` verificaba algo**
+—y su verificación fallaba en silencio (ver el bullet de `/me/library/contains`
+más arriba)—, así que las otras cuatro llamaban a `removeLikedTracks()` y daban
+el borrado por hecho sin preguntarle nada a Spotify.
+
+La secuencia vive ahora una sola vez, en **`src/js/util/borrado-verificado.js`**:
+registro previo (lo escribe `removeLikedTracks`, v=162) → DELETE → verificación
+con `checkLibraryContains` → **tira** si no se pudo verificar, si alguna pista
+sigue dentro, o si la respuesta viene corta. Las cinco vistas ya tenían la forma
+correcta alrededor (un `catch` que pinta toast rojo y un camino de éxito
+después), así que tirar basta para que no se diga «hecho» sin saberlo.
+
+**La guarda del último ejemplar sólo aplica en `#versions`, y es a propósito.**
+Es un invariante de DEDUPLICACIÓN: ahí borrás una versión *porque hay otra*, y
+quedarse en cero copias es siempre un fallo (es lo que pasó con las 123). En las
+otras cuatro el usuario borra la canción *porque no la quiere*: quedarse en cero
+es el resultado pedido. En `#skips` sería directamente lo contrario de la
+función de la vista, que expande a propósito a **todas** las versiones del tema
+(`r.ids`) para que no sobreviva ninguna — si dejás una viva, el tema reaparece
+con los mismos números.
+
+Para que esa ausencia no vuelva a parecer un olvido, el parámetro `guarda` es
+**obligatorio y sin valor por defecto**: o `'ultimo-ejemplar'` (y entonces exige
+`items` + `libraryByKey`, y la corre de verdad, en la última instrucción antes
+del DELETE) o `'ninguna'` (y entonces exige `motivoSinGuarda` por escrito). Una
+vista nueva que borre me gusta no compila mentalmente sin decidir cuál de las
+dos es. Tests: `tests/borrado-verificado.test.mjs` (19) y
+`tests/versions-guard.test.mjs` (16), los dos sin navegador ni token.
 
 ## Client ID
 0c8c92ad128e4b89be7097c6b8082797
