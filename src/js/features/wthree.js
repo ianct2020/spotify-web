@@ -842,13 +842,14 @@ async function openAlbumModal(a) {
   // del panel es un destino válido y el índice sale de comparar el puntero con
   // el centro de cada fila.
   //
-  // ⚠️ Y el indicador de «va arriba de todo» estaba **CLIPEADO**: la línea verde
-  // es un `::before` en `top: -3px` de la fila, y la lista es un contenedor con
-  // `overflow-y: auto` — con el scroll en 0, esos 3 px caen fuera de la caja de
-  // relleno y no se dibujan. O sea que ni siquiera había señal de que soltar ahí
-  // fuera a funcionar. Se arregla con `padding: 4px 2px 4px 0` en
-  // `.wt-order-scroll` (main.css): la primera fila arranca 4 px más abajo y la
-  // línea entra.
+  // ⚠️ Y el indicador de «va arriba de todo» caía FUERA de la caja: la línea
+  // verde es un `::before` en `top: -3px` de la fila, y sin relleno arriba la
+  // primera fila empieza justo en el borde del contenedor, así que los 3 px
+  // quedaban **enteros por fuera** (medido: 0 de 3 px dentro de la caja).
+  // Mientras la lista no desborda, Chrome los pinta igual —pegados al borde—,
+  // pero en cuanto hay más picks de los que entran, `overflow-y: auto` los
+  // clipea y no queda ninguna señal. Se arregla con `padding: 4px 2px 4px 0`
+  // en `.wt-order-scroll` (main.css): medido después, los 3 px dentro.
   //
   // Los ▲▼ siguen siendo la vía de respaldo y no se tocan.
   function wireOrderDragDrop() {

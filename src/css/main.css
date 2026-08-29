@@ -397,10 +397,20 @@ h3 { font-size: 18px; font-weight: 600; }
 }
 
 /* El .active del <aside> también gana un borde a la izquierda: con el menú
-   entero de un solo color, el fondo suelto se leía poco. */
+   entero de un solo color, el fondo suelto se leía poco.
+
+   v=170 — se sube de 2 a 3 px y el texto pasa a 600. El marcado FUNCIONA en las
+   23 rutas (comprobado una por una), pero se leía poco: el fondo es el acento
+   al 10 % de alpha sobre `--color-surface`, y a esa distancia la única
+   diferencia clara con un link normal era el color del texto. Lo que de verdad
+   hacía que pareciera roto era otra cosa —el activo quedaba fuera del scroll
+   del menú, ver `mostrarActivoEnElMenu()` en router.js—, pero ya que se mira,
+   que se vea. */
 .nav-link.active {
-  box-shadow: inset 2px 0 0 var(--color-accent);
+  box-shadow: inset 3px 0 0 var(--color-accent);
+  font-weight: 600;
 }
+.nav-link.active .nav-link-icon { color: var(--color-accent); }
 
 /* Home no tiene nav-link propio (se entra por el logo), así que sin esto la
    única ruta que no se marcaba en el <aside> era justamente en la que el menú
@@ -3007,7 +3017,15 @@ h3 { font-size: 18px; font-weight: 600; }
 }
 .wthree-track-tag-ok { background: rgba(16, 185, 129, 0.16); color: #10b981; }
 .wthree-track-picked { background: rgba(16, 185, 129, 0.05); }
-.wthree-track-suggested { background: rgba(124, 58, 237, 0.06); }
+/* v=170: al irse el botón «Añadir los N sugeridos», este resaltado pasa a ser
+   la única forma de ver CUÁLES son los sugeridos (la meta de la cabecera dice
+   cuántos). Al 6 % de alpha era prácticamente invisible: sube a 14 % y gana una
+   marca a la izquierda, que no ocupa alto —que es el recurso escaso del modal—
+   sino los 2 px de un borde interior. */
+.wthree-track-suggested {
+  background: rgba(124, 58, 237, 0.14);
+  box-shadow: inset 2px 0 0 var(--color-accent);
+}
 
 /* Panel de orden dentro del álbum */
 .wthree-order-panel:not(:empty) {
@@ -3327,12 +3345,14 @@ h3 { font-size: 18px; font-weight: 600; }
   max-height: none;
   overflow-y: auto;
   /* ⚠️ Los 4 px de arriba y de abajo NO son estética: la línea verde que dice
-     «se inserta acá» es un `::before` en `top: -3px` de la fila, y este
-     contenedor tiene `overflow-y: auto`. Con el scroll en 0 esos 3 px caían
-     FUERA de la caja de relleno y el navegador no los dibujaba, así que
-     «va arriba de todo» —justo el movimiento que Ian no podía hacer— era el
-     único sin señal ninguna. Con el relleno, la primera fila arranca 4 px más
-     abajo y la línea entra. Lo mismo abajo para el `::after` de la última. */
+     «se inserta acá» es un `::before` en `top: -3px` de la fila, y sin relleno
+     la primera fila empieza justo en el borde de este contenedor, así que los
+     3 px quedaban ENTEROS por fuera (medido en la app: 0 de 3 px dentro de la
+     caja; con el relleno, 3 de 3). Mientras la lista no desborda Chrome los
+     pinta igual, pegados al borde; en cuanto hay más picks de los que entran,
+     el `overflow-y: auto` los clipea y «va arriba de todo» —justo el
+     movimiento que Ian no podía hacer— se queda sin ninguna señal.
+     Lo mismo abajo para el `::after` de la última. */
   padding: 4px 2px 4px 0;
 }
 .wt-order-empty {

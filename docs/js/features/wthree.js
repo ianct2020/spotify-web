@@ -2,22 +2,22 @@
 // por álbum). Muestra qué álbumes ya tienen picks, cuántos, y cuáles te faltan.
 // Ordenado por álbumes más escuchados primero para priorizar tu tiempo.
 
-import { spotifyFetch, getAllPlaylistItems, getAllUserPlaylists, addTracksToPlaylist, removeTracksFromPlaylist, reorderPlaylistItems, getCachedPlaylistItems, updatePlaylistItemsCache, getBestAvailableLikes } from '../api.js?v=170';
-import { patchPlaylistItems, buildCachedItem } from '../util/playlist-cache-patch.js?v=170';
-import { loadHistoryStats, loadListenedAlbums, isOwner, ownerLockedMessage } from './history-data.js?v=170';
-import { escapeHtml, pageHeader } from '../ui/components.js?v=170';
-import { showToast } from '../ui/toast.js?v=170';
-import { activateMarquee, marqueeSpan } from '../ui/marquee.js?v=170';
-import { openModal, closeById, closeModal } from '../ui/modal-stack.js?v=170';
-import { getPreview } from '../api/preview-providers.js?v=170';
-import { togglePreview, playingKey } from '../ui/preview-player.js?v=170';
-import { openAlbumCard } from './album-card.js?v=170';
-import { albumKey } from '../util/album-key.js?v=170';
-import { computeUpdatedPickPositions } from '../util/reorder-shifts.js?v=170';
-import { createHiddenStore } from '../util/hidden-sync.js?v=170';
-import { mountBottom } from '../ui/bottom-layer.js?v=170';
-import { coverUrl } from '../util/cover-size.js?v=170';
-import { insercionPorPuntero, moverA, indicadorPara } from '../util/reorder-drop.js?v=170';
+import { spotifyFetch, getAllPlaylistItems, getAllUserPlaylists, addTracksToPlaylist, removeTracksFromPlaylist, reorderPlaylistItems, getCachedPlaylistItems, updatePlaylistItemsCache, getBestAvailableLikes } from '../api.js?v=171';
+import { patchPlaylistItems, buildCachedItem } from '../util/playlist-cache-patch.js?v=171';
+import { loadHistoryStats, loadListenedAlbums, isOwner, ownerLockedMessage } from './history-data.js?v=171';
+import { escapeHtml, pageHeader } from '../ui/components.js?v=171';
+import { showToast } from '../ui/toast.js?v=171';
+import { activateMarquee, marqueeSpan } from '../ui/marquee.js?v=171';
+import { openModal, closeById, closeModal } from '../ui/modal-stack.js?v=171';
+import { getPreview } from '../api/preview-providers.js?v=171';
+import { togglePreview, playingKey } from '../ui/preview-player.js?v=171';
+import { openAlbumCard } from './album-card.js?v=171';
+import { albumKey } from '../util/album-key.js?v=171';
+import { computeUpdatedPickPositions } from '../util/reorder-shifts.js?v=171';
+import { createHiddenStore } from '../util/hidden-sync.js?v=171';
+import { mountBottom } from '../ui/bottom-layer.js?v=171';
+import { coverUrl } from '../util/cover-size.js?v=171';
+import { insercionPorPuntero, moverA, indicadorPara } from '../util/reorder-drop.js?v=171';
 
 const LS_KEY_ID = 'wthree_playlist_id';
 const LS_KEY_NAME = 'wthree_playlist_name';
@@ -842,13 +842,14 @@ async function openAlbumModal(a) {
   // del panel es un destino válido y el índice sale de comparar el puntero con
   // el centro de cada fila.
   //
-  // ⚠️ Y el indicador de «va arriba de todo» estaba **CLIPEADO**: la línea verde
-  // es un `::before` en `top: -3px` de la fila, y la lista es un contenedor con
-  // `overflow-y: auto` — con el scroll en 0, esos 3 px caen fuera de la caja de
-  // relleno y no se dibujan. O sea que ni siquiera había señal de que soltar ahí
-  // fuera a funcionar. Se arregla con `padding: 4px 2px 4px 0` en
-  // `.wt-order-scroll` (main.css): la primera fila arranca 4 px más abajo y la
-  // línea entra.
+  // ⚠️ Y el indicador de «va arriba de todo» caía FUERA de la caja: la línea
+  // verde es un `::before` en `top: -3px` de la fila, y sin relleno arriba la
+  // primera fila empieza justo en el borde del contenedor, así que los 3 px
+  // quedaban **enteros por fuera** (medido: 0 de 3 px dentro de la caja).
+  // Mientras la lista no desborda, Chrome los pinta igual —pegados al borde—,
+  // pero en cuanto hay más picks de los que entran, `overflow-y: auto` los
+  // clipea y no queda ninguna señal. Se arregla con `padding: 4px 2px 4px 0`
+  // en `.wt-order-scroll` (main.css): medido después, los 3 px dentro.
   //
   // Los ▲▼ siguen siendo la vía de respaldo y no se tocan.
   function wireOrderDragDrop() {
