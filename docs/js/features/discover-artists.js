@@ -10,15 +10,15 @@
 // 100 artistas en lugar de 20. Lógica de fetch/cache/playlist compartida en
 // features/discover-common.js con #new-releases.
 
-import { escapeHtml, confirmModal, pageHeader } from '../ui/components.js?v=171';
-import { showToast } from '../ui/toast.js?v=171';
-import { openArtistCard } from './artist-card.js?v=171';
-import { createIncrementalList, scrollRootOf } from '../ui/incremental-list.js?v=171';
-import { createLazyImages } from '../ui/lazy-img.js?v=171';
-import { isJunkTrack } from '../util/junk.js?v=171';
-import { buildAlbumHeardIndex } from '../util/album-heard.js?v=171';
-import { loadFiltros, buildFilterContext, applyDiscoverFilters } from '../util/discover-filters.js?v=171';
-import { releaseKind } from '../util/release-size.js?v=171';
+import { escapeHtml, confirmModal, pageHeader } from '../ui/components.js?v=172';
+import { showToast } from '../ui/toast.js?v=172';
+import { openArtistCard } from './artist-card.js?v=172';
+import { createIncrementalList, scrollRootOf } from '../ui/incremental-list.js?v=172';
+import { createLazyImages } from '../ui/lazy-img.js?v=172';
+import { isJunkTrack } from '../util/junk.js?v=172';
+import { buildAlbumHeardIndex } from '../util/album-heard.js?v=172';
+import { loadFiltros, buildFilterContext, applyDiscoverFilters } from '../util/discover-filters.js?v=172';
+import { releaseKind } from '../util/release-size.js?v=172';
 import {
   getArtistIdCached,
   getArtistDiscoCached,
@@ -45,7 +45,7 @@ import {
   cardKey,
   toggleHeardAlbum,
   toggleHiddenAlbum,
-} from './discover-common.js?v=171';
+} from './discover-common.js?v=172';
 
 const SCAN_KEY = 'discover_artists';
 
