@@ -41,7 +41,6 @@ let installed = false;
 // El registro queda en localStorage para que Ian lo pueda pasar tal cual: un
 // crash que solo se ve en su máquina, con sus cachés, no se reproduce acá.
 const LOG_KEY = 'fonoteca_crash_log_v1';
-const LOG_MAX = 20;
 
 const rendersEnVuelo = new Map();   // generación → { hash, desde }
 let ultimoCambio = { de: null, a: null, cuando: 0 };
@@ -69,11 +68,25 @@ function enVuelo() {
   return [...rendersEnVuelo.values()].map(r => r.hash);
 }
 
+// Cupos SEPARADOS por tipo, y no un tope global (arreglado el 2026-08-29, a la
+// primera vez que sirvió de verdad): un zapeo rápido genera cientos de
+// «render-huerfano» y con un solo cupo de 20 se comían la «escritura-tardia»,
+// que es la única entrada que dice qué vista rompió. Se perdió justo la buena.
+const CUPOS = { 'escritura-tardia': 30, 'render-huerfano': 15 };
+const CUPO_POR_DEFECTO = 10;
+
 function anotar(entrada) {
   try {
-    const previo = JSON.parse(localStorage.getItem(LOG_KEY) || '[]');
-    const lista = [{ cuando: new Date().toISOString(), ...entrada }, ...previo].slice(0, LOG_MAX);
-    localStorage.setItem(LOG_KEY, JSON.stringify(lista));
+    let previo = [];
+    try { previo = JSON.parse(localStorage.getItem(LOG_KEY) || '[]'); } catch { previo = []; }
+    const lista = [{ cuando: new Date().toISOString(), ...entrada }, ...previo];
+    const vistos = {};
+    const podada = lista.filter(e => {
+      const t = e.tipo || 'otro';
+      vistos[t] = (vistos[t] || 0) + 1;
+      return vistos[t] <= (CUPOS[t] ?? CUPO_POR_DEFECTO);
+    });
+    localStorage.setItem(LOG_KEY, JSON.stringify(podada));
   } catch { /* el registro es una red, no un requisito */ }
 }
 
