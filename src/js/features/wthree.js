@@ -3,6 +3,7 @@
 // Ordenado por álbumes más escuchados primero para priorizar tu tiempo.
 
 import { spotifyFetch, getAllPlaylistItems, getAllUserPlaylists, addTracksToPlaylist, removeTracksFromPlaylist, reorderPlaylistItems, getCachedPlaylistItems, updatePlaylistItemsCache, getBestAvailableLikes } from '../api.js';
+import { vigilarRuta } from '../util/vigencia-ruta.js';
 import { patchPlaylistItems, buildCachedItem } from '../util/playlist-cache-patch.js';
 import { loadHistoryStats, loadListenedAlbums, isOwner, ownerLockedMessage } from './history-data.js';
 import { escapeHtml, pageHeader } from '../ui/components.js';
@@ -161,19 +162,24 @@ export async function render(container) {
   `;
 
   const content = document.getElementById('wthree-content');
-  if (!(await isOwner())) {
+  // Ver util/vigencia-ruta.js: 86 renders huérfanos en la prueba de zapeo.
+  const ruta = vigilarRuta();
+
+  const propio = await isOwner();
+  if (!ruta.vigente()) return;
+  if (!propio) {
     content.innerHTML = ownerLockedMessage('W-Three helper');
     return;
   }
 
   if (!playlistId) {
-    await showSetup(content);
+    await showSetup(content, ruta);
   } else {
-    await loadAndRender(content);
+    await loadAndRender(content, ruta);
   }
 }
 
-async function showSetup(content) {
+async function showSetup(content, ruta = vigilarRuta()) {
   content.innerHTML = `
     <div class="card"><div class="empty-state"><div class="spinner"></div><div style="margin-top:10px">Buscando tus playlists…</div></div></div>
   `;
@@ -181,9 +187,11 @@ async function showSetup(content) {
   try {
     playlists = await getAllUserPlaylists();
   } catch (e) {
+    if (!ruta.vigente()) return;
     content.innerHTML = `<div class="card"><p style="color:var(--color-error)">No pude cargar tus playlists: ${escapeHtml(e.message)}</p></div>`;
     return;
   }
+  if (!ruta.vigente()) return;
 
   const guessRe = /(^|[^a-z])(w[\s\-_]*three|w3|wthree)([^a-z]|$)/i;
   const guessed = playlists.filter(p => guessRe.test(p.name)).sort((a, b) => (b.tracks?.total || 0) - (a.tracks?.total || 0));
@@ -229,7 +237,7 @@ async function showSetup(content) {
   });
 }
 
-async function loadAndRender(content) {
+async function loadAndRender(content, ruta = vigilarRuta()) {
   content.innerHTML = `<div class="card"><div class="empty-state"><div class="spinner"></div><div style="margin-top:10px">Cargando "${escapeHtml(playlistName || 'playlist')}" y tu historial…</div></div></div>`;
 
   try {
@@ -238,12 +246,15 @@ async function loadAndRender(content) {
       loadHistoryStats(),
       loadListenedAlbums().catch(() => null),
     ]);
+    // Una playlist grande son ~93 requests: de sobra para irse de la vista.
+    if (!ruta.vigente()) return;
     historyStats = stats;
     listenedAlbums = listened;
     buildAlbumIndex(items);
     crossWithHistory(stats, listened);
     renderBuckets(content);
   } catch (e) {
+    if (!ruta.vigente()) return;
     content.innerHTML = `<div class="card"><p style="color:var(--color-error)">Error: ${escapeHtml(e.message)}</p><button class="btn btn-secondary btn-sm" id="wthree-reset" style="margin-top:8px">Elegir otra playlist</button></div>`;
     document.getElementById('wthree-reset')?.addEventListener('click', reset);
   }

@@ -18,6 +18,7 @@ import {
   getCurrentUserId, removeLikedTracks, checkLibraryContains,
 } from '../api.js';
 import { borrarLikesVerificado } from '../util/borrado-verificado.js';
+import { vigilarRuta } from '../util/vigencia-ruta.js';
 import { idbGetCached, idbSetCached, idbDel } from '../idb.js';
 import { createHiddenStore } from '../util/hidden-sync.js';
 import { addUrisToPlaylists, toastAddResult, getOwnPlaylists } from '../util/playlist-add.js';
@@ -207,6 +208,9 @@ async function load({ force }) {
   if (scanning) return;
   scanning = true;
   const t0 = performance.now();
+  // Ver util/vigencia-ruta.js. Esta vista baja la biblioteca Y cruza todas las
+  // playlists propias: es de las más largas que hay.
+  const ruta = vigilarRuta();
   try {
     // getBestAvailableLikes completa la descarga sola si el caché no está entero
     // (y se cuelga de la carga de otra vista si ya hay una en curso), así que
@@ -223,13 +227,16 @@ async function load({ force }) {
       },
     });
     if (shownLikesProgress) hideProgress();
+    if (!ruta.vigente()) return;
 
     // Ocultas desde la playlist de Spotify. En segundo plano: si tarda, la vista
     // arranca con el caché local y se repinta al llegar.
     hidden.ready().then(() => { if (state) renderResults(); });
 
     const me = await getCurrentUserId();
+    if (!ruta.vigente()) return;
     const playlists = await getAllUserPlaylists();
+    if (!ruta.vigente()) return;
     const own = playlists.filter(p => p.owner?.id === me);
 
     let excluded = loadExcluded();
@@ -251,6 +258,7 @@ async function load({ force }) {
     console.log(`[sin-clasificar] ${toScan.length} playlists a cruzar de ${own.length} propias · ignoradas por id: ${own.filter(p => excluded.has(p.id)).map(p => `${p.name} (${p.id})`).join(', ') || '—'}${deOcultos.length ? ` · fuera por ser de ocultos: ${deOcultos.join(', ')}` : ''}`);
 
     let cross = force ? null : await idbGetCached(CROSS_KEY).catch(() => null);
+    if (!ruta.vigente()) return;
     // Si cambió qué playlists entran al cruce, lo cacheado ya no sirve.
     if (cross && cross.scanned?.join(',') !== toScan.map(p => p.id).join(',')) cross = null;
 
@@ -260,7 +268,10 @@ async function load({ force }) {
       scanMs = Math.round(performance.now() - t0);
       cross.at = Date.now();
       cross.scanMs = scanMs;
+      // El cruce se guarda IGUAL aunque el usuario se haya ido: costó minutos y
+      // es válido. Lo que no se hace es pintarlo.
       await idbSetCached(CROSS_KEY, cross, CROSS_TTL_MIN).catch(() => {});
+      if (!ruta.vigente()) return;
     }
 
     const ids = new Set(cross.ids);
