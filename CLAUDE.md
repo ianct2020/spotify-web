@@ -303,6 +303,15 @@ mosaico (`rgba(20,20,28,.95)` con texto blanco, que trae su propio fondo).
   (verificado 2026-08-28 contra sus 39 propias). El criterio `sinescuchar` de
   v=165 la cruza igual y descarta 0 hasta que aparezca. Falta saber dónde
   fueron a parar los singles que Ian dice haber guardado desde la tanda 4.
+- **El `<audio>` de `ui/preview-player.js` no tiene listener de `error`.** Una
+  URL de preview muerta deja el pill diciendo «vía iTunes» sin sonar y sin
+  avisar. Medido el 29/08 sobre las 59 URLs de `#skips`: 59/59 cargan, así que
+  hoy no molesta — pero el día que moleste, el síntoma va a ser silencio y no
+  un error.
+- **Queda flojo el match de un tema pedido SIN versión contra un candidato CON
+  versión** («A Different Way» matchea «A Different Way [DEVAULT Remix]»), por
+  el corte de `feat.` de `normText`. Apretarlo sacaría previews en vez de
+  agregarlos, así que se dejó como estaba. Ver la sección de v=167.
 - **`#new-releases` no tiene los chips de tipo** (Todo / Álbumes / EPs /
   Singles). Los de v=165 se pusieron solo en `#discover-artists`, que era donde
   el EP quedaba escondido; en Novedades no hay filtro por tipo y no esconde
@@ -578,6 +587,174 @@ del DELETE) o `'ninguna'` (y entonces exige `motivoSinGuarda` por escrito). Una
 vista nueva que borre me gusta no compila mentalmente sin decidir cuál de las
 dos es. Tests: `tests/borrado-verificado.test.mjs` (19) y
 `tests/versions-guard.test.mjs` (16), los dos sin navegador ni token.
+
+## El embed de previews: medido tarjeta por tarjeta (v=167)
+
+Ian reportaba que en `#zero-plays` y en `#skips` «la mayoría» le abría el embed
+de Spotify. En la tanda 3 se había medido **4-5 %** sobre una muestra al azar y
+se dio por bueno. **Las dos cosas eran ciertas** y no se contradicen.
+
+**Metodología** (la misma antes y después): las **60 primeras filas de cada
+vista en el orden por defecto**, resueltas de a una con la llamada EXACTA que
+hace el botón ▶ de cada vista (`onPlayClick`), y contando el `provider` que
+devuelve `getPreview`. El arnés es `window.__filasZeroPlays` /
+`window.__filasSkips` (v=166): la vista no exponía sus filas, y leerlas del DOM
+no sirve porque la tarjeta muestra los artistas **ya unidos en un string** y la
+cadena de proveedores necesita la lista.
+
+| vista | iTunes | Deezer | embed | sin preview |
+|---|---|---|---|---|
+| `#skips` antes | 48 | 11 | 1 | 0 |
+| `#skips` después | **49** | **11** | **0** | 0 |
+| `#zero-plays` antes | 45 | 8 | 7 | 0 |
+| `#zero-plays` después | **49** | **5** | **6** | 0 |
+
+⚠️ **Los 7 embeds de `#zero-plays` no estaban repartidos: CINCO eran las cinco
+primeras tarjetas.** O sea la primera pantalla entera. El orden por defecto de
+la vista es **por fecha de like ascendente**, y los likes viejos que nunca
+sonaron son justo remixes y ediciones «slowed / sped up / Lo-Fi» de 2018-2022
+subidas por cuentas que ningún proveedor indexa. Esa es la reconciliación: la
+muestra al azar de la tanda 3 medía el promedio de 659 filas y **el promedio no
+es lo que Ian ve** — él ve la cabecera de la lista, que es el peor tramo por
+construcción. Cuando algo «pasa siempre» y la métrica dice 4 %, mirar si la
+métrica está muestreando donde el usuario mira.
+
+⚠️ **`#skips` y `#zero-plays` NO piden el preview igual**: `#skips` **no manda
+`spotifyId` a propósito** (su embed va inline en la tarjeta, no en el pill), así
+que ahí `getPreview` devuelve `null` y el embed lo abre la vista. En
+`#zero-plays` sí lo manda y el embed sale de la cadena. Las dos cosas cuentan
+como «embed» al medir, pero son dos códigos distintos.
+
+### Los tres sospechosos, uno por uno
+1. **Que las vistas pasaran solo el primer artista** (el bug de la tanda 2):
+   **descartado leyendo el código**. Las dos pasan la lista entera
+   (`artistList` en `#zero-plays`, `r.track.artists` mapeado en `#skips`).
+2. **Caché envenenado de v=149**: **real pero chico**. De los 18 veredictos
+   `spotify-embed` que había en el caché de Ian, **3** eran anteriores al 19/08.
+   Purgado igual (ver abajo), que era lo pedido.
+3. **El apóstrofo**: **descartado midiendo**. Es un problema de la sintaxis
+   `campo:"…"` del `/search` de Spotify, y iTunes y Deezer son búsqueda de texto
+   libre. Probado en vivo contra las dos APIs el 2026-08-29: «Guns N' Roses
+   Sweet Child O' Mine», «Sinéad O'Connor Nothing Compares 2 U» y «The Weeknd I
+   Can't Feel My Face» devuelven lo mismo con apóstrofo y sin él.
+   **Pero sí estaba en otro lado**: `#recs` y `#similar` mandaban el título
+   crudo a `/search?q=track:"…"`, así que cualquier tema con apóstrofo caía en
+   «sin match» — que se lee como «Spotify no lo tiene». Arreglado en las dos.
+
+### Lo que sí estaba roto: la cola de versión (`util/track-match.js`)
+«A Different Way - DEVAULT Remix» (DJ Snake) caía al embed **teniendo el tema
+exacto en iTunes y en Deezer**:
+
+```
+pedido:    "A Different Way - DEVAULT Remix"              → "a different way devault remix"
+candidato: "A Different Way (feat. Lauv) [DEVAULT Remix]" → "a different way"
+similitud: 0,696   (el umbral es 0,86)                    → rechazado
+```
+
+La causa es una **asimetría de `normText`**: el corte de `feat.` se lleva **todo
+hasta el final de la cadena**, así que al candidato le borra de paso el
+`[DEVAULT Remix]` que va DETRÁS del `(feat. Lauv)`. El pedido, que escribe el
+remix detrás de un guion, se lo queda. Los dos lados dicen lo mismo y quedan en
+cadenas distintas.
+
+No alcanza con reordenar los cortes: **Spotify escribe la versión detrás de un
+guion y los proveedores entre corchetes**, así que hay que tratar las dos formas
+como la misma cosa. Y no se puede simplemente borrar la cola en los dos lados:
+ahí «Tema - X Remix» matchearía el «Tema» original y sonaría la canción
+equivocada, que es justo lo que esta unidad existe para evitar. Por eso la
+versión se compara **aparte**:
+
+- `tituloBase(s)` — el título sin su cola de versión;
+- `tokensDeVersion(s)` — lo que dice esa cola (`{devault, remix}`), mirando
+  paréntesis, corchetes y cola detrás de guion, y **solo** si el trozo trae una
+  palabra de versión (así `(feat. Lauv)` no cuenta y «Tema (feat. A)» sigue
+  matcheando «Tema (feat. B)»);
+- dos títulos matchean por esta vía solo si las bases coinciden **Y** los dos
+  conjuntos de versión son compatibles: uno contenido en el otro, y **si uno
+  está vacío el otro también**. Un pedido sin versión nunca acepta un remix y un
+  remix nunca acepta el original.
+
+⚠️ **El cambio es ADITIVO por estructura**: la vía nueva solo corre si la
+comparación estricta de siempre ya falló, así que no puede romper ningún match
+que antes funcionaba. Los umbrales y la regla de los títulos cortos son los
+mismos, aplicados sobre la base (por eso «Tema - Slowed» no entra: la base
+«tema» son 4 caracteres). Suite: `tests/track-match-version.test.mjs`, 18
+asserts.
+
+⚠️ **Lo que queda flojo, a propósito**: por el mismo corte de `feat.`, pedir
+«A Different Way» a secas SÍ matchea «A Different Way (feat. Lauv) [DEVAULT
+Remix]», y pedir «Burning Piles (Slowed)» matchea «Burning Piles». Es el
+comportamiento de siempre —`normText` tira los paréntesis a propósito— y
+apretarlo sacaría previews en vez de agregarlos. Anotado, no tocado.
+
+### El caché de veredictos sube a v4
+`preview_provider_map_v4`, y al cargarlo **borra las tres versiones anteriores**
+(v1, v2 y v3 seguían enteras en el localStorage de Ian: **no caducan solas**).
+Sube porque cambió la comparación de títulos y todo `spotify-embed` o `none`
+guardado con la regla vieja puede ser un rechazo que hoy no se haría. Los caches
+de URL de iTunes y de Deezer **no se tocan**: el proveedor que sirvió sigue
+sirviendo.
+
+### Lo que NO era: las URLs muertas
+Se comprobó que las 59 URLs de audio de `#skips` cargan (`loadedmetadata` en un
+`<audio>` de prueba): **59/59 ok**, ninguna caída. Vale saber que si alguna vez
+fallan, **el síntoma NO es el embed sino silencio**: el `<audio>` de
+`ui/preview-player.js` **no tiene listener de `error`**, así que una URL muerta
+deja el pill diciendo «vía iTunes» sin sonar y sin avisar. Pendiente anotado.
+
+### Medir con la pestaña de la extensión
+La pestaña del grupo MCP corre **oculta**, y Chrome clampea los `setTimeout` de
+una pestaña oculta a **uno por minuto**. Un bucle de medición con `await
+sleep(300)` entre ítems avanza 1 ítem por minuto y parece colgado. Los
+veredictos no cambian —el trabajo de red no se throttlea—, pero el bucle hay que
+manejarlo **por tandas desde afuera**, sin sleeps encadenados. Es la otra cara
+de [[fonoteca-pestana-extension-hidden]].
+
+## #recs: preview y las dos fichas por fila (v=167)
+`features/recommendations.js`. Las filas son un `<label>` que envuelve el
+checkbox, así que **cualquier click en un descendiente lo tilda**: las tres
+acciones nuevas van por un delegado que hace `preventDefault()` **además de**
+`stopPropagation()` (v=164). Verificado en producción: con el ▶ y con las dos
+fichas el checkbox no se mueve.
+
+El botón de preview reusa `.sc-play` y `paintPlayingCard()` de la tarjeta
+compartida. Para eso `paintPlayingCard` dejó de exigir `.sc-card` en su
+selector y busca `[data-id="…"] .sc-play`: las vistas que sí usan la tarjeta no
+notan nada (su `.sc-card` es la que lleva el `data-id`).
+
+Los top tracks por artista pasan de **20 a 30** (`TOP_TRACKS_POR_ARTISTA`). Cada
+uno cuesta una búsqueda en Spotify, así que la resolución va con **120 ms entre
+búsquedas** — sin eso, 30 requests seguidas son un 429 esperando.
+
+La resolución además **verifica** el candidato (`titleMatches` + `artistMatches`)
+y pide `limit=5` en vez de 1: al limpiar el apóstrofo la query queda más laxa, y
+la regla de `limpiaParaQuery` dice que el que llama tiene que comparar contra el
+nombre real. Medido después del cambio: Sumo 20/20 con match, bleood 30/30.
+
+## Nombres largos en las tarjetas de la grilla (v=167)
+`.smart-card-title` (`#similar`, `#recs`, `#by-artist`, `#by-genre`,
+`#rabbit-hole`). La tarjeta es un flex column con `align-items: center`, y ahí
+el ancho del hijo es su `max-content`: se salía por los dos costados sin que
+nadie lo clippeara. Ahora `min-width: 0` + `max-width: 100%` + `-webkit-line-clamp: 2`
+(elipsis donde empezaría el tercer renglón) + `overflow-wrap: anywhere` para el
+nombre de una sola palabra más ancho que la tarjeta. El `min-height` de dos
+renglones es lo que iguala la altura **entre filas** (dentro de una fila ya la
+igualaba el stretch del grid).
+
+**Se descartó el marquee**, que ya existe (`ui/marquee.js`): su animación va
+`none` bajo `prefers-reduced-motion`, y ese es **el camino de Ian** —tiene
+`enable-animations=false` en GNOME—, así que el nombre quedaría cortado a secas
+y sin elipsis, que es peor que ahora.
+
+⚠️ **`minmax()` NO se puede anidar.** El primer intento fue
+`repeat(auto-fill, minmax(140px, minmax(0, 1fr)))` y es **CSS inválido**: el
+navegador descarta la declaración ENTERA y la grilla se cae a **una sola columna
+a lo ancho de la página** (visto en producción en `#recs`, v=167 → arreglado en
+v=168). La regla de «`minmax(0, 1fr)` y nunca `1fr` pelado» apunta al **mínimo
+automático de una pista `1fr` que no tiene mínimo propio**; estas ya lo tienen
+puesto a mano en 140px / 120px, así que el contenido no puede ensanchar la
+columna y no hacía falta tocar nada. Lo que desbordaba estaba dentro de la
+tarjeta.
 
 ## Client ID
 0c8c92ad128e4b89be7097c6b8082797
