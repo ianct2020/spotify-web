@@ -930,6 +930,26 @@ zapear, es cuando el render huérfano aterriza. Y ojo: **la extensión de Chrome
 no captura `console.warn`**, hay que envolver `console.warn` en la página para
 ver los avisos del router.
 
+⚠️ **El `curl` del despliegue NO prueba que el navegador tenga la versión
+nueva.** Mordió el 2026-08-29: `curl` devolvía `app.js?v=174` y la pestaña
+seguía corriendo v=173, con los caches y la IndexedDB ya borrados. El culpable
+es el **service worker** (`fonoteca-sw-v1`), que sirve `index.html` de su propio
+cache y se re-registra en cada carga. Para verificar de verdad en el navegador:
+`navigator.serviceWorker.getRegistrations()` → `unregister()` en todas, borrar
+`caches`, y recargar **con un query distinto** (`index.html?frio=1`). El `curl`
+prueba que GitHub Pages publicó; no prueba qué está ejecutando el cliente.
+
+## PENDIENTE: `#covers` rompe la ruta — `a.sources.has is not a function`
+Encontrado el 2026-08-29 mientras se cazaba el crash del zapeo; **sin arreglar**
+(fuera del encargo). Sale por `guardRoute`, o sea que la ruta muestra la
+pantalla de error: no es una escritura tardía, es un crash normal de la vista.
+
+`features/covers.js:165` construye el objeto con **`sources: [...a.sources]`**
+—un array— y `covers.js:353-354` lo consumen como **Set**
+(`a.sources.has('wthree')`). Cuál de las dos formas es la correcta hay que
+mirarlo con las dos rutas de construcción a la vista (la de la línea 108 arranca
+con un `Set` y hace `.add()`), no cambiando la que tira.
+
 ## Client ID
 0c8c92ad128e4b89be7097c6b8082797
 
