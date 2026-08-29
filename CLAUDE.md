@@ -939,10 +939,29 @@ cache y se re-registra en cada carga. Para verificar de verdad en el navegador:
 `caches`, y recargar **con un query distinto** (`index.html?frio=1`). El `curl`
 prueba que GitHub Pages publicó; no prueba qué está ejecutando el cliente.
 
-## PENDIENTE: `#covers` rompe la ruta — `a.sources.has is not a function`
-Encontrado el 2026-08-29 mientras se cazaba el crash del zapeo; **sin arreglar**
-(fuera del encargo). Sale por `guardRoute`, o sea que la ruta muestra la
-pantalla de error: no es una escritura tardía, es un crash normal de la vista.
+## PENDIENTE: `#covers` está ROTA — `a.sources.has is not a function`
+Encontrado el 2026-08-29; **sin arreglar** (a la espera del OK de Ian).
+**No es intermitente: la vista está muerta.** Comprobado entrando a `#covers` y
+dejándola renderizar entera, sin zapear — pantalla de error, el mosaico no se
+pinta nunca. Sale por `guardRoute`, o sea que es un crash normal de la vista, no
+una escritura tardía.
+
+**Diagnóstico, con las dos rutas de construcción a la vista:**
+- Los CUATRO productores tratan `sources` como `Set`: líneas 90 y 120
+  (`new Set([...])`), 108 (`.add()`) y 155 (`for (const s of a.sources) prev.sources.add(s)`).
+- El comentario del contrato, línea 58, dice literalmente «sources (Set)».
+- Los DOS consumidores, 353 y 354, hacen `.has()` — o sea, quieren un `Set`.
+- El ÚNICO sitio donde deja de serlo es la línea 165: `sources: [...a.sources]`.
+- Esa línea existe por `years`, que en el mismo objeto **sí necesita** ser array:
+  la línea 333 hace `flatMap(a => a.years)` y la 433 `a.years.some(...)`, y
+  `.some()` no existe en `Set`. `sources` se coló en la misma conversión.
+- La lista **no se serializa nunca** (no pasa por IDB ni localStorage), así que
+  no hay ningún motivo para aplanarla a array.
+
+**Veredicto: sobra la conversión de `sources` en la línea 165.** Se quita esa
+mitad y se deja la de `years`. NO se tocan 353/354: cambiarlas a `.includes()`
+arreglaría el síntoma dejando el contrato documentado mintiendo y los cuatro
+productores construyendo algo que nadie consume como tal.
 
 `features/covers.js:165` construye el objeto con **`sources: [...a.sources]`**
 —un array— y `covers.js:353-354` lo consumen como **Set**
