@@ -2474,14 +2474,25 @@ h3 { font-size: 18px; font-weight: 600; }
 }
 .album-modal-actions .btn { flex: 1; min-width: 130px; justify-content: center; }
 /* Las acciones que #discover-artists y #new-releases le añaden a la ficha
-   (v=165). Van a DOS columnas y con cuerpo chico: son hasta cinco, y con el
-   `min-width: 130px` de arriba entraban de a una por fila en una columna de
-   300 px, dejando «Ocultar» debajo del pliegue del modal. */
-.album-modal-actions .btn[data-alb-accion] {
-  flex: 1 1 calc(50% - 4px);
+   (v=165). Grid propio de dos columnas, FUERA de `.album-modal-actions`: en el
+   layout de dos columnas esa caja es `flex-direction: column` con
+   `.btn { width: 100% }` —está bien para sus dos botones— y las cinco de acá la
+   convertían en una torre que empujaba «Ocultar» debajo del pliegue. */
+.album-modal-acciones-extra {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  margin-top: 8px;
+}
+.album-modal-acciones-extra .btn {
+  width: 100%;
   min-width: 0;
+  justify-content: center;
   font-size: 11px;
   padding: 6px 8px;
+}
+@media (max-width: 600px) {
+  .album-modal-acciones-extra { grid-template-columns: 1fr; }
 }
 
 @media (max-width: 600px) {

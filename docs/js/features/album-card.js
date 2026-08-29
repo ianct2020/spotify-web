@@ -287,11 +287,16 @@ function statsHtml(a) {
 // las dos de siempre. La ficha no sabe qué hace cada una — y no tiene por qué.
 // `onClick` recibe `{ cerrar }` para que la acción pueda bajar el modal (casi
 // todas sacan el álbum de la lista que hay detrás).
+// Caja PROPIA y no dentro de `.album-modal-actions`: en el layout de dos
+// columnas esa caja es `flex-direction: column` con `.btn { width: 100% }`
+// —correcto para sus dos botones—, y cinco más ahí adentro la convertían en una
+// torre que dejaba «Ocultar» debajo del pliegue del modal.
 function accionesHtml(acciones) {
-  return acciones.map((acc, i) => `
+  if (!acciones.length) return '';
+  return `<div class="album-modal-acciones-extra">${acciones.map((acc, i) => `
     <button class="btn btn-secondary btn-sm" data-alb-accion="${i}"
             title="${escapeHtml(acc.title || acc.label)}">${escapeHtml(acc.label)}</button>
-  `).join('');
+  `).join('')}</div>`;
 }
 
 export function openAlbumCard(entrada) {
@@ -348,8 +353,8 @@ export function openAlbumCard(entrada) {
           <div class="album-modal-actions">
             <button class="btn btn-primary btn-sm" id="alb-go-artist">Ver ficha del artista</button>
             <a class="btn btn-secondary btn-sm" id="alb-spotify" href="${spotifyUrl}" target="_blank" rel="noopener">Buscar en Spotify</a>
-            ${accionesHtml(acciones)}
           </div>
+          ${accionesHtml(acciones)}
         </div>
         <div class="album-modal-col album-modal-col-tracks">
           <div class="album-modal-likes" id="alb-likes">${skelTracklist(10)}</div>
