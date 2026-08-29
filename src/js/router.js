@@ -1,4 +1,4 @@
-import { guardRoute } from './ui/crash-guard.js';
+import { guardRoute, marcarCambioDeRuta, abrirRender, cerrarRender } from './ui/crash-guard.js';
 import { skelPage } from './ui/skeleton.js';
 
 const routes = {};
@@ -15,6 +15,19 @@ const routes = {};
 // queda igual.
 const LOADING_HTML = skelPage();
 let currentCleanup = null;
+
+// Generación de ruta (v=173). Sube en cada cambio y sirve para dos cosas:
+// identificar el render en el registro de escrituras tardías, y darle a la
+// vista una forma barata de preguntar «¿sigo siendo la ruta actual?» desde
+// dentro de un `await` — que es justo lo que le falta a la que crashea.
+let generacionRuta = 0;
+let hashActual = null;
+
+/** ¿La generación que me tocó sigue siendo la vigente? */
+export function rutaVigente(gen) { return gen === generacionRuta; }
+
+/** La generación en curso, para que una vista se la guarde antes de un await. */
+export function generacionActual() { return generacionRuta; }
 
 // Marca la vista activa (v=154). Cualquier elemento con `data-route` se pinta
 // distinto cuando su ruta es la actual: los `.nav-link` del <aside> y las
@@ -73,7 +86,16 @@ async function handleRoute() {
   // «Volver arriba» (que tiene que olvidarse del scroller de la vista vieja).
   // Se dispara SIEMPRE, incluso sin cleanup de ruta anterior: no depende de que
   // la vista que se va haya registrado uno.
-  document.dispatchEvent(new CustomEvent('routeteardown'));
+  const hashNuevo = window.location.hash.slice(1) || 'home';
+  generacionRuta += 1;
+  // El aviso va ANTES del teardown: lo que quede renderizando en este punto es
+  // exactamente lo que va a escribir sobre un DOM muerto, y queremos su nombre.
+  marcarCambioDeRuta(hashActual, hashNuevo);
+  // `detail` con las dos rutas: hasta ahora el evento no decía ni de dónde ni a
+  // dónde, así que un listener no podía saber si le tocaba a él.
+  document.dispatchEvent(new CustomEvent('routeteardown', {
+    detail: { de: hashActual, a: hashNuevo, generacion: generacionRuta },
+  }));
 
   if (currentCleanup) {
     // El teardown de la ruta anterior NO puede llevarse puesto el cambio de
@@ -83,7 +105,8 @@ async function handleRoute() {
     currentCleanup = null;
   }
 
-  const hash = window.location.hash.slice(1) || 'home';
+  const hash = hashNuevo;
+  hashActual = hash;
   const main = document.getElementById('main-content');
   if (!main) return;
 
@@ -101,7 +124,13 @@ async function handleRoute() {
     // dos no hay ningún punto en el que el compositor pueda quedarse con un
     // frame vacío. Con esto, lo peor que se puede ver es un spinner.
     main.innerHTML = LOADING_HTML;
-    currentCleanup = await guardRoute(main, handler);
+    const gen = generacionRuta;
+    abrirRender(gen, hash);
+    try {
+      currentCleanup = await guardRoute(main, handler);
+    } finally {
+      cerrarRender(gen);
+    }
     // Segunda pasada: las `.home-card` de Home nacen DENTRO del handler, o sea
     // después del `markActiveRoute` de arriba. Sin esto, en Home no se marca
     // nada. Es idempotente y recorre unas decenas de nodos.

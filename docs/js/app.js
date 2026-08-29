@@ -1,41 +1,192 @@
-import { isLoggedIn, loginWithSpotify, logout } from './auth.js?v=172';
-import { spotifyFetch, tryAutoLoadUserBackup } from './api.js?v=172';
-import { getValidToken } from './auth.js?v=172';
-import { cacheClearAll } from './storage.js?v=172';
-import { idbClearAll } from './idb.js?v=172';
-import { registerRoute, initRouter } from './router.js?v=172';
-import { showToast } from './ui/toast.js?v=172';
-import { pageHeader } from './ui/components.js?v=172';
-import { installCrashGuard } from './ui/crash-guard.js?v=172';
-import { getStack } from './ui/modal-stack.js?v=172';
-import { installBackToTop } from './ui/back-to-top.js?v=172';
-import { applyStoredTheme, openThemePanel } from './ui/theme-panel.js?v=172';
+import { isLoggedIn, loginWithSpotify, logout } from './auth.js?v=173';
+import { spotifyFetch, tryAutoLoadUserBackup } from './api.js?v=173';
+import { getValidToken } from './auth.js?v=173';
+import { cacheClearAll } from './storage.js?v=173';
+import { idbClearAll } from './idb.js?v=173';
+import { registerRoute, initRouter } from './router.js?v=173';
+import { showToast } from './ui/toast.js?v=173';
+import { pageHeader } from './ui/components.js?v=173';
+import { installCrashGuard } from './ui/crash-guard.js?v=173';
+import { getStack } from './ui/modal-stack.js?v=173';
+import { installBackToTop } from './ui/back-to-top.js?v=173';
+import { applyStoredTheme, openThemePanel } from './ui/theme-panel.js?v=173';
 
-import { render as renderSync } from './features/sync.js?v=172';
-import { render as renderDedupe } from './features/dedupe.js?v=172';
-import { render as renderDupalbums } from './features/duplicate-albums.js?v=172';
-import { render as renderZombies } from './features/zombies.js?v=172';
-import { render as renderVersions } from './features/versions.js?v=172';
-import { render as renderDashboard } from './features/dashboard.js?v=172';
-import { render as renderSmart } from './features/smart.js?v=172';
-import { render as renderSimilar } from './features/similar-artists.js?v=172';
-import { render as renderRabbit } from './features/rabbit-hole.js?v=172';
-import { render as renderByGenre } from './features/by-genre.js?v=172';
-import { render as renderByArtist } from './features/by-artist.js?v=172';
-import { render as renderRecs } from './features/recommendations.js?v=172';
-import { render as renderListened } from './features/listened.js?v=172';
-import { render as renderWrapped } from './features/wrapped.js?v=172';
-import { render as renderRecords } from './features/records.js?v=172';
-import { openImportHistory } from './features/import-history.js?v=172';
-import { bindOwnerLockedButtons } from './features/history-data.js?v=172';
-import { render as renderZeroPlays } from './features/zero-plays.js?v=172';
-import { render as renderSkips } from './features/skips.js?v=172';
-import { render as renderSearchLikes } from './features/search-likes.js?v=172';
-import { render as renderWthree } from './features/wthree.js?v=172';
-import { render as renderCovers } from './features/covers.js?v=172';
-import { render as renderDiscoverArtists } from './features/discover-artists.js?v=172';
-import { render as renderNewReleases } from './features/new-releases.js?v=172';
-import { render as renderSinClasificar } from './features/sin-clasificar.js?v=172';
+import { render as renderSync } from './features/sync.js?v=173';
+import { render as renderDedupe } from './features/dedupe.js?v=173';
+import { render as renderDupalbums } from './features/duplicate-albums.js?v=173';
+import { render as renderZombies } from './features/zombies.js?v=173';
+import { render as renderVersions } from './features/versions.js?v=173';
+import { render as renderDashboard } from './features/dashboard.js?v=173';
+import { render as renderSmart } from './features/smart.js?v=173';
+import { render as renderSimilar } from './features/similar-artists.js?v=173';
+import { render as renderRabbit } from './features/rabbit-hole.js?v=173';
+import { render as renderByGenre } from './features/by-genre.js?v=173';
+import { render as renderByArtist } from './features/by-artist.js?v=173';
+import { render as renderRecs } from './features/recommendations.js?v=173';
+import { render as renderListened } from './features/listened.js?v=173';
+import { render as renderWrapped } from './features/wrapped.js?v=173';
+import { render as renderRecords } from './features/records.js?v=173';
+import { openImportHistory } from './features/import-history.js?v=173';
+import { bindOwnerLockedButtons } from './features/history-data.js?v=173';
+import { render as renderZeroPlays } from './features/zero-plays.js?v=173';
+import { render as renderSkips } from './features/skips.js?v=173';
+import { render as renderSearchLikes } from './features/search-likes.js?v=173';
+import { render as renderWthree } from './features/wthree.js?v=173';
+import { render as renderCovers } from './features/covers.js?v=173';
+import { render as renderDiscoverArtists } from './features/discover-artists.js?v=173';
+import { render as renderNewReleases } from './features/new-releases.js?v=173';
+import { render as renderSinClasificar } from './features/sin-clasificar.js?v=173';
+
+// ── Arranque degradado cuando /me está rate-limiteado (v=173) ────────────────
+//
+// El 28/08 Spotify devolvió 429 en TODO `/me/*` durante más de diez horas
+// mientras el resto de la API (playlists, álbumes, búsqueda) respondía 200. La
+// app se quedaba en la pantalla de bloqueo con un contador de 5 minutos, o sea
+// **caída del todo por una request de identidad**, con la biblioteca entera
+// alcanzable. Un punto único de fallo, y encima en el endpoint que Spotify
+// limita antes que ninguno.
+//
+// Lo que hace falta para arrancar no es `/me`: es el id del usuario, y ese ya
+// está en `fonoteca_last_user_id` de forma SÍNCRONA desde v=162 (lo escribe
+// `getCurrentUserId()`). El perfil —nombre y avatar— es decoración de la
+// barra lateral. Así que con 429 se arranca igual, con lo que haya, y se avisa.
+//
+// La pantalla de bloqueo queda SOLO para el caso en que no hay identidad
+// ninguna (primerísima carga de este navegador): ahí sí no hay con qué seguir.
+const PERFIL_CACHE_KEY = 'fonoteca_perfil_v1';
+const LAST_USER_KEY = 'fonoteca_last_user_id';
+
+function guardarPerfil(profile) {
+  try {
+    localStorage.setItem(PERFIL_CACHE_KEY, JSON.stringify({
+      id: profile.id,
+      display_name: profile.display_name || '',
+      images: profile.images || [],
+      guardadoEn: Date.now(),
+    }));
+  } catch { /* sin localStorage: no es motivo para no arrancar */ }
+}
+
+/**
+ * El perfil con el que arrancar sin `/me`. Devuelve null solo si este navegador
+ * nunca vio una sesión — ahí no hay nada que degradar.
+ */
+function perfilDeEmergencia() {
+  try {
+    const crudo = localStorage.getItem(PERFIL_CACHE_KEY);
+    if (crudo) {
+      const p = JSON.parse(crudo);
+      if (p && p.id) return p;
+    }
+  } catch { /* sigue por el id pelado */ }
+  try {
+    const id = localStorage.getItem(LAST_USER_KEY);
+    // Sin nombre ni avatar, pero con id: alcanza para arrancar y para prefKey().
+    if (id) return { id, display_name: id, images: [] };
+  } catch { /* nada */ }
+  return null;
+}
+
+/** Segundos que Spotify pide esperar, si lo dice. Ver la nota de CORS abajo. */
+function segundosDeEspera(res) {
+  // ⚠️ `Retry-After` NO suele ser legible desde el navegador: es un header de
+  // respuesta que Spotify no expone por CORS (`Access-Control-Expose-Headers`
+  // no lo incluye), así que `headers.get()` devuelve null aunque el header
+  // viaje. Se intenta igual porque si algún día lo exponen, esto lo aprovecha
+  // solo — y mientras tanto el cartel dice honestamente que no se sabe.
+  const v = res && res.headers ? res.headers.get('Retry-After') : null;
+  const n = v ? parseInt(v, 10) : NaN;
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+
+// Backoff: 30s, 1m, 2m, 4m, y de ahí 5m fijo. Arranca corto a propósito —
+// el bloqueo puede ser de un minuto o de diez horas, y en el primer caso no
+// tiene sentido hacer esperar cinco minutos.
+const BACKOFF_SEGUNDOS = [30, 60, 120, 240, 300];
+
+function mostrarBannerDegradado(onRecuperado) {
+  document.getElementById('banner-degradado')?.remove();
+  const banner = document.createElement('div');
+  banner.id = 'banner-degradado';
+  banner.className = 'banner-degradado';
+  banner.innerHTML = `
+    <span class="banner-degradado-punto" aria-hidden="true"></span>
+    <span class="banner-degradado-texto">
+      <strong>Modo degradado:</strong> Spotify está limitando las consultas de tu
+      biblioteca (429). La app funciona con lo que tenía guardado; lo que pida
+      datos nuevos de tus me gusta puede fallar.
+    </span>
+    <span class="banner-degradado-estado" id="banner-degradado-estado"></span>
+    <button class="btn btn-secondary btn-sm" id="banner-degradado-btn" type="button">Reintentar ahora</button>
+  `;
+  document.body.appendChild(banner);
+  document.body.classList.add('con-banner-degradado');
+
+  const estadoEl = banner.querySelector('#banner-degradado-estado');
+  const btn = banner.querySelector('#banner-degradado-btn');
+  let intento = 0;
+  let restante = BACKOFF_SEGUNDOS[0];
+  let timer = null;
+  let probando = false;
+
+  const formato = (s) => (s >= 60 ? `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}` : `${s}s`);
+
+  const quitar = (profile) => {
+    clearTimeout(timer);
+    banner.remove();
+    document.body.classList.remove('con-banner-degradado');
+    onRecuperado(profile);
+  };
+
+  const probar = async () => {
+    if (probando) return;
+    probando = true;
+    btn.disabled = true;
+    estadoEl.textContent = 'Probando…';
+    try {
+      const res = await testConnection();
+      if (res.ok) { guardarPerfil(await res.json().catch(() => ({}))); quitar(await perfilRecuperado()); return; }
+      if (res.status === 401) {
+        // Token vencido durante la espera: esto no lo arregla el backoff.
+        estadoEl.textContent = 'Sesión vencida — recargá para volver a entrar.';
+        btn.disabled = false; probando = false; clearTimeout(timer);
+        return;
+      }
+      const pedidos = segundosDeEspera(res);
+      intento = Math.min(intento + 1, BACKOFF_SEGUNDOS.length - 1);
+      restante = pedidos || BACKOFF_SEGUNDOS[intento];
+      estadoEl.dataset.fuente = pedidos ? 'spotify' : 'estimado';
+    } catch (e) {
+      intento = Math.min(intento + 1, BACKOFF_SEGUNDOS.length - 1);
+      restante = BACKOFF_SEGUNDOS[intento];
+      console.warn('[init] reintento degradado falló:', e.message);
+    }
+    probando = false;
+    btn.disabled = false;
+    tick();
+  };
+
+  const tick = () => {
+    clearTimeout(timer);
+    if (restante <= 0) { probar(); return; }
+    // Que se note de dónde sale el número: si Spotify no lo dice, no inventamos
+    // precisión que no tenemos.
+    const fuente = estadoEl.dataset.fuente === 'spotify' ? '' : ' (estimado — Spotify no dice cuánto)';
+    estadoEl.textContent = `Reintento en ${formato(restante)}${fuente}`;
+    restante -= 1;
+    timer = setTimeout(tick, 1000);
+  };
+
+  btn.onclick = () => { restante = 0; probar(); };
+  tick();
+  return { quitar };
+}
+
+/** El perfil de verdad, ya recuperado, para repintar la barra lateral. */
+async function perfilRecuperado() {
+  try { return JSON.parse(localStorage.getItem(PERFIL_CACHE_KEY) || 'null') || {}; }
+  catch { return {}; }
+}
 
 async function testConnection() {
   const token = await getValidToken();
@@ -132,7 +283,25 @@ async function init() {
   try {
     const res = await testConnection();
     if (res.status === 429) {
-      console.warn('Rate limited on init');
+      // NO bloquear la app entera. `/me` es lo primero que Spotify limita, y
+      // el resto de la API puede estar perfectamente sana (el 28/08: `/me/*`
+      // en 429 durante diez horas, playlists en 200). Arrancamos con la
+      // identidad guardada y avisamos arriba.
+      const deEmergencia = perfilDeEmergencia();
+      if (deEmergencia) {
+        console.warn('[init] /me da 429 — arranque en modo degradado con el perfil guardado');
+        showApp(deEmergencia);
+        mostrarBannerDegradado((profile) => {
+          // Recuperado: repintamos nombre y avatar sin re-montar la app (eso
+          // tiraría la vista que Ian esté mirando y el scroll).
+          refrescarPerfilEnBarra(profile);
+          showToast('Spotify volvió a responder. Ya no estás en modo degradado.', 'success');
+        });
+        return;
+      }
+      // Sin identidad guardada (primerísima carga de este navegador) no hay
+      // con qué degradar: no sabemos ni de quién es la sesión.
+      console.warn('[init] /me da 429 y no hay perfil guardado — pantalla de espera');
       showRateLimitScreen();
       return;
     }
@@ -140,6 +309,7 @@ async function init() {
       throw new Error(`Spotify ${res.status}: ${await res.text()}`);
     }
     const profile = await res.json();
+    guardarPerfil(profile);
     showApp(profile);
   } catch (e) {
     console.error('Failed to load profile:', e);
@@ -190,6 +360,28 @@ function showLogin() {
   `;
 
   document.getElementById('login-btn').onclick = loginWithSpotify;
+}
+
+/**
+ * Repinta nombre y avatar de la barra lateral sin re-montar la app. Se usa al
+ * salir del modo degradado: `showApp()` reconstruye el DOM entero y eso
+ * perdería la vista abierta, el scroll y cualquier análisis a medio correr.
+ */
+function refrescarPerfilEnBarra(profile) {
+  if (!profile) return;
+  const nombre = document.getElementById('sidebar-user-name');
+  if (nombre && profile.display_name) nombre.textContent = profile.display_name;
+  const avatarUrl = profile.images?.[0]?.url;
+  const cont = document.querySelector('.sidebar-avatar');
+  if (avatarUrl && cont && cont.tagName !== 'IMG') {
+    const img = document.createElement('img');
+    img.className = 'sidebar-avatar';
+    img.src = avatarUrl;
+    img.alt = '';
+    cont.replaceWith(img);
+  } else if (avatarUrl && cont) {
+    cont.src = avatarUrl;
+  }
 }
 
 function showApp(profile) {
@@ -289,7 +481,7 @@ function showApp(profile) {
       <div class="sidebar-footer">
         <div class="sidebar-user">
           ${avatarHtml}
-          <span class="sidebar-username">${profile.display_name || profile.id}</span>
+          <span class="sidebar-username" id="sidebar-user-name">${profile.display_name || profile.id}</span>
         </div>
         <div class="sidebar-actions">
           <button class="sidebar-action" id="my-history-btn" title="Subí tu Extended Streaming History (ZIP) o borrá el que tengas cargado">

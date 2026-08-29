@@ -1795,6 +1795,15 @@ h3 { font-size: 18px; font-weight: 600; }
 
 /* Cuando el proveedor devuelve type:'embed' (Spotify), el pill deja de ser
    una píldora chica y se agranda para contener el iframe. */
+/* Preview que no se pudo reproducir (v=173): el pill se queda visible diciendo
+   por qué, en vez de quedar abierto y mudo. */
+.preview-pill.preview-pill-error {
+  border-color: var(--color-error);
+}
+.preview-pill.preview-pill-error .preview-pill-provider {
+  color: var(--color-error);
+}
+
 .preview-pill.preview-pill-embedded {
   border-radius: var(--radius-md, 10px);
   padding: 10px 10px 8px 12px;
