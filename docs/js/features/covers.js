@@ -8,19 +8,19 @@
 // placeholder→img. Botón "Pantalla completa" (Fullscreen API) que oculta
 // sidebar/header/toolbar y recalcula el lado.
 
-import { loadListenedAlbums, isOwner, ownerLockedMessage } from './history-data.js?v=168';
-import { isJunkTrack } from '../util/junk.js?v=168';
-import { getAllPlaylistItems, getBestAvailableLikes } from '../api.js?v=168';
-import { escapeHtml, pageHeader, showProgress, hideProgress } from '../ui/components.js?v=168';
-import { showToast } from '../ui/toast.js?v=168';
-import { openAlbumCard } from './album-card.js?v=168';
-import { openArtistCard } from './artist-card.js?v=168';
-import { albumKey, coverId } from '../util/album-key.js?v=168';
-import { generarWallpaper, descargarBlob, WALLPAPER_PRESETS } from './covers-wallpaper.js?v=168';
-import { buildAlbumStatsIndex } from '../util/album-stats.js?v=168';
-import { getPreview } from '../api/preview-providers.js?v=168';
-import { hoverIn, hoverOut } from '../ui/preview-player.js?v=168';
-import { coverUrl } from '../util/cover-size.js?v=168';
+import { loadListenedAlbums, isOwner, ownerLockedMessage } from './history-data.js?v=169';
+import { isJunkTrack } from '../util/junk.js?v=169';
+import { getAllPlaylistItems, getBestAvailableLikes } from '../api.js?v=169';
+import { escapeHtml, pageHeader, showProgress, hideProgress } from '../ui/components.js?v=169';
+import { showToast } from '../ui/toast.js?v=169';
+import { openAlbumCard } from './album-card.js?v=169';
+import { openArtistCard } from './artist-card.js?v=169';
+import { albumKey, coverId } from '../util/album-key.js?v=169';
+import { generarWallpaper, descargarBlob, WALLPAPER_PRESETS } from './covers-wallpaper.js?v=169';
+import { buildAlbumStatsIndex } from '../util/album-stats.js?v=169';
+import { getPreview } from '../api/preview-providers.js?v=169';
+import { hoverIn, hoverOut } from '../ui/preview-player.js?v=169';
+import { coverUrl } from '../util/cover-size.js?v=169';
 
 const LS_KEY_SIZE = 'covers_cell_size';
 const LS_KEY_SORT = 'covers_sort_mode';
