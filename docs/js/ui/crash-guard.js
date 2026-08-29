@@ -24,6 +24,92 @@
 const BANNER_ID = 'crash-banner';
 let installed = false;
 
+// ── Instrumentación de escrituras tardías (v=173) ────────────────────────────
+//
+// El crash a perseguir: «Cannot set properties of null (setting 'onclick')»
+// zapeando de ruta con los cachés fríos. Un render asíncrono termina DESPUÉS
+// del cambio de ruta y le escribe a un DOM que el router ya reemplazó. El
+// `routeteardown` de v=141 existe justo para esto, pero la vista culpable no lo
+// respeta: sigue adelante.
+//
+// El problema para arreglarlo era no saber CUÁL. El stack no sirve —los
+// handlers son anónimos y el bundle no está mapeado— pero el router sí sabe qué
+// render arrancó y no terminó. Así que se lleva registro de los renders EN
+// VUELO: si al cambiar de ruta queda alguno abierto, esa vista es la candidata,
+// y si además llega un error de escritura sobre null, se la nombra.
+//
+// El registro queda en localStorage para que Ian lo pueda pasar tal cual: un
+// crash que solo se ve en su máquina, con sus cachés, no se reproduce acá.
+const LOG_KEY = 'fonoteca_crash_log_v1';
+const LOG_MAX = 20;
+
+const rendersEnVuelo = new Map();   // generación → { hash, desde }
+let ultimoCambio = { de: null, a: null, cuando: 0 };
+
+/** El router avisa que cambió de ruta, ANTES de arrancar el render nuevo. */
+export function marcarCambioDeRuta(de, a) {
+  ultimoCambio = { de, a, cuando: Date.now() };
+  // Lo que quedó abierto al momento de salir es, por definición, un render que
+  // va a terminar sobre un DOM que ya no existe.
+  for (const [gen, r] of rendersEnVuelo) {
+    const ms = Date.now() - r.desde;
+    console.warn(
+      `[crash-guard] «#${r.hash}» seguía renderizando (${ms} ms) cuando saliste a «#${a}». `
+      + `Si algo escribe en el DOM después de esto, es esta vista.`
+    );
+    anotar({ tipo: 'render-huerfano', vista: r.hash, saliste_a: a, ms, generacion: gen });
+  }
+}
+
+export function abrirRender(gen, hash) { rendersEnVuelo.set(gen, { hash, desde: Date.now() }); }
+export function cerrarRender(gen) { rendersEnVuelo.delete(gen); }
+
+/** Los renders que arrancaron y todavía no terminaron. */
+function enVuelo() {
+  return [...rendersEnVuelo.values()].map(r => r.hash);
+}
+
+function anotar(entrada) {
+  try {
+    const previo = JSON.parse(localStorage.getItem(LOG_KEY) || '[]');
+    const lista = [{ cuando: new Date().toISOString(), ...entrada }, ...previo].slice(0, LOG_MAX);
+    localStorage.setItem(LOG_KEY, JSON.stringify(lista));
+  } catch { /* el registro es una red, no un requisito */ }
+}
+
+/** Para leer el registro desde la consola: `window.__crashLog()`. */
+try {
+  window.__crashLog = () => { try { return JSON.parse(localStorage.getItem(LOG_KEY) || '[]'); } catch { return []; } };
+} catch { /* sin window */ }
+
+// Los dos mensajes con los que el navegador reporta una escritura sobre un nodo
+// que ya no está. Chrome dice «Cannot set properties of null (setting 'x')».
+const ESCRITURA_SOBRE_NULL = /Cannot (?:set|read) propert(?:y|ies) of (?:null|undefined)/i;
+
+/**
+ * ¿Este error es una escritura tardía, y de qué vista?
+ * Devuelve null si no encaja en el patrón.
+ */
+function culparEscrituraTardia(err) {
+  if (!ESCRITURA_SOBRE_NULL.test(mensajeDe(err))) return null;
+  const abiertos = enVuelo();
+  const desdeElCambio = ultimoCambio.cuando ? Date.now() - ultimoCambio.cuando : null;
+  // Sin render abierto y sin cambio de ruta reciente es otra cosa: un bug
+  // normal de la vista actual. No lo disfrazamos.
+  if (!abiertos.length && !(desdeElCambio !== null && desdeElCambio < 10000)) return null;
+  const sospechosa = abiertos[0] || ultimoCambio.de;
+  anotar({
+    tipo: 'escritura-tardia',
+    vista: sospechosa,
+    en_vuelo: abiertos,
+    saliste_de: ultimoCambio.de,
+    estas_en: ultimoCambio.a,
+    ms_desde_el_cambio: desdeElCambio,
+    mensaje: mensajeDe(err),
+  });
+  return sospechosa;
+}
+
 function esc(s) {
   return String(s == null ? '' : s)
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
@@ -70,14 +156,14 @@ export function pantallaDeError(container, err, { titulo = 'Se rompió algo al c
   el.querySelector('[data-crash-reload]')?.addEventListener('click', () => location.reload());
 }
 
-function banner(err) {
+function banner(err, { crudo = false } = {}) {
   if (document.getElementById(BANNER_ID)) return;   // uno solo, no una pila
   const div = document.createElement('div');
   div.id = BANNER_ID;
   div.className = 'crash-banner';
   div.setAttribute('role', 'alert');
   div.innerHTML = `
-    <span class="crash-banner-txt">Algo falló por detrás: ${esc(mensajeDe(err))}</span>
+    <span class="crash-banner-txt">${crudo ? esc(mensajeDe(err)) : `Algo falló por detrás: ${esc(mensajeDe(err))}`}</span>
     <button class="btn btn-secondary btn-sm" data-crash-reload>Recargar</button>
     <button class="crash-banner-x" aria-label="Cerrar aviso">✕</button>
   `;
@@ -87,6 +173,19 @@ function banner(err) {
 }
 
 function alFallar(err) {
+  const culpable = culparEscrituraTardia(err);
+  if (culpable) {
+    // La ruta nueva SÍ está pintada: la app no está rota, solo quedó código de
+    // la vista vieja escribiendo al vacío. El aviso nombra la vista en vez de
+    // mostrar un mensaje del navegador que no dice nada.
+    console.error(
+      `[crash-guard] ESCRITURA TARDÍA de «#${culpable}»: terminó de renderizar después `
+      + `del cambio de ruta y escribió sobre un DOM que ya no existe. `
+      + `No respeta el «routeteardown». Registro en window.__crashLog().`
+    );
+    banner(`«${culpable}» siguió cargando después de que saliste de esa vista. Lo que estás viendo está bien.`, { crudo: true });
+    return;
+  }
   const el = contenedorPrincipal();
   if (estaEnBlanco(el)) pantallaDeError(el, err);
   else banner(err);

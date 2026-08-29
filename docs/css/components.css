@@ -1744,3 +1744,51 @@ button.sin-preview {
   align-items: center;
   flex-shrink: 0;
 }
+
+/* ── Banner de modo degradado (v=173) ────────────────────────────────────────
+   Sale cuando `/me` está en 429 y la app arrancó igual con la identidad
+   guardada. Es una franja fija arriba: tiene que verse en cualquier ruta y no
+   depender de que la vista activa la re-pinte. */
+.banner-degradado {
+  position: fixed;
+  top: 0; left: 0; right: 0;
+  z-index: 900;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 16px;
+  background: var(--color-elevated);
+  border-bottom: 1px solid var(--color-warning);
+  color: var(--color-text);
+  font-size: 13px;
+  line-height: 1.4;
+}
+.banner-degradado-punto {
+  flex: 0 0 auto;
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: var(--color-warning);
+  animation: banner-degradado-latido 2s ease-in-out infinite;
+}
+@keyframes banner-degradado-latido {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+/* Ian corre con `enable-animations = false` en GNOME y el Chrome automatizado
+   con --force-prefers-reduced-motion: sin esto el latido parece un bug de CSS
+   apagado. Acá el punto se queda quieto y visible, que es lo que importa. */
+@media (prefers-reduced-motion: reduce) {
+  .banner-degradado-punto { animation: none; }
+}
+.banner-degradado-texto { flex: 1 1 auto; min-width: 0; }
+.banner-degradado-estado {
+  flex: 0 0 auto;
+  color: var(--color-text-secondary);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+body.con-banner-degradado { padding-top: 44px; }
+@media (max-width: 768px) {
+  .banner-degradado { flex-wrap: wrap; font-size: 12px; }
+  body.con-banner-degradado { padding-top: 72px; }
+}

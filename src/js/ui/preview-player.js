@@ -85,9 +85,30 @@ function setAudioPlaying(on) {
   emit();
 }
 
+/**
+ * Deja el pill diciendo que no se pudo reproducir, en vez de dejarlo abierto y
+ * mudo. No lo cierra solo: si desaparece, parece que nunca pasó nada — que es
+ * exactamente el problema que esto viene a arreglar.
+ */
+function mostrarFalloEnPill(motivo) {
+  const p = pill;
+  if (!p) return;
+  p.classList.remove('loading', 'is-playing');
+  p.classList.add('preview-pill-error');
+  const provEl = p.querySelector('.preview-pill-provider');
+  if (provEl) {
+    provEl.textContent = `no se pudo reproducir — ${motivo}`;
+    provEl.title = 'La URL del preview no respondió. Probá con otro tema o recargá: los enlaces de preview caducan.';
+  }
+  const eq = p.querySelector('.preview-eq');
+  if (eq) eq.style.display = 'none';
+  p.classList.add('show');
+}
+
 function showPillAudio(label, provider, loading) {
   const p = ensurePill();
   p.classList.remove('preview-pill-embedded');
+  p.classList.remove('preview-pill-error');   // el fallo anterior no mancha al siguiente
   p.querySelector('.preview-eq').style.display = '';
   p.querySelector('.preview-pill-main').style.display = '';
   p.querySelector('.preview-pill-embed').hidden = true;
@@ -144,6 +165,36 @@ audio.addEventListener('pause', () => setAudioPlaying(false));
 audio.addEventListener('waiting', () => setAudioPlaying(false));
 audio.addEventListener('stalled', () => setAudioPlaying(false));
 audio.addEventListener('emptied', () => setAudioPlaying(false));
+
+// ── Una URL muerta tiene que decirlo (v=173) ─────────────────────────────────
+//
+// Hasta acá el <audio> no tenía listener de `error`: si la URL del preview
+// moría —el m4a de iTunes caduca, Deezer rota el CDN, el proveedor se cae— el
+// resultado era **silencio**. Apretás play, el pill se abre, y no pasa nada,
+// sin ningún aviso y sin nada en consola. Hoy cargan 59 de 59, así que esto no
+// se ve nunca; el día que un proveedor caiga se ve en todas.
+//
+// El `error` del elemento NO burbujea y no lo agarra `window.onerror`, así que
+// tiene que ir acá. `audio.play()` tampoco lo cubre: la promesa resuelve bien y
+// el fallo llega después, al intentar bajar el medio.
+const MOTIVO_MEDIA = {
+  1: 'cancelado',
+  2: 'se cortó la red',
+  3: 'el archivo está corrupto',
+  4: 'el formato no se puede reproducir o la URL ya no existe',
+};
+
+audio.addEventListener('error', () => {
+  // `emptied` dispara un `error` espurio cuando limpiamos el src a propósito
+  // (stopPreview hace removeAttribute('src')). Sin este filtro, cerrar el pill
+  // mostraría un cartel de fallo cada vez.
+  if (!audio.getAttribute('src')) return;
+  const code = audio.error?.code;
+  const motivo = MOTIVO_MEDIA[code] || 'motivo desconocido';
+  console.warn(`[preview] no se pudo reproducir (${currentProvider || 'sin proveedor'}): ${motivo}`, audio.error);
+  mostrarFalloEnPill(motivo);
+  setAudioPlaying(false);
+});
 
 function playAudio(key, { url, label, provider }) {
   currentKey = key;

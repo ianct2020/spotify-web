@@ -2,11 +2,11 @@
 // Acepta ZIP del export de Spotify o los Streaming_History_Audio_*.json sueltos.
 // Extrae + procesa + guarda todo en el IDB del user (nada sale de su compu).
 
-import { processStreamingHistory } from '../history-processor.js?v=172';
-import { saveMyHistory, clearMyHistory, hasLocalHistory } from './history-data.js?v=172';
-import { escapeHtml, showProgress, hideProgress, confirmModal, alertModal } from '../ui/components.js?v=172';
-import { showToast } from '../ui/toast.js?v=172';
-import { openModal, closeTop, closeById } from '../ui/modal-stack.js?v=172';
+import { processStreamingHistory } from '../history-processor.js?v=173';
+import { saveMyHistory, clearMyHistory, hasLocalHistory } from './history-data.js?v=173';
+import { escapeHtml, showProgress, hideProgress, confirmModal, alertModal } from '../ui/components.js?v=173';
+import { showToast } from '../ui/toast.js?v=173';
+import { openModal, closeTop, closeById } from '../ui/modal-stack.js?v=173';
 
 const OVERLAY_ID = 'import-history-overlay';
 let overlay = null;
