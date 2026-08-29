@@ -8,8 +8,8 @@
 // Otro user cualquiera sin historial local ve el ownerLockedMessage que
 // invita a subir su ZIP.
 
-import { idbGetCached, idbSetCached, idbDel } from '../idb.js?v=175';
-import { getCurrentUserId } from '../api.js?v=175';
+import { idbGetCached, idbSetCached, idbDel } from '../idb.js?v=176';
+import { getCurrentUserId } from '../api.js?v=176';
 
 const HISTORY_OWNER_ID = 'orhs6wu5ykk7ql80u92ujn74o';
 
