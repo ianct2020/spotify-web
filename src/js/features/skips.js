@@ -28,6 +28,7 @@ import { firstArtistName, artistNames } from '../util/artist-name.js';
 import { activateMarquee } from '../ui/marquee.js';
 import { hasUsername, loadTopLifetime } from '../api/statsfm.js';
 import { createHiddenStore } from '../util/hidden-sync.js';
+import { generacionActual, rutaVigente } from '../router.js';
 import { createIncrementalList, scrollRootOf } from '../ui/incremental-list.js';
 import { createLazyImages } from '../ui/lazy-img.js';
 import { renderTrackCardRow, wireTrackCardGrid, paintCardSelection, paintPlayingCard, paintEmbedCard } from '../ui/track-card-row.js';
@@ -132,6 +133,21 @@ function teardown() {
 }
 
 async function analyze() {
+  // ── Vigencia de ruta (v=174) ────────────────────────────────────────────────
+  //
+  // Esta era la vista del crash «Cannot set properties of null (setting
+  // 'onclick')» al zapear de ruta con los cachés fríos. Reproducido el 29/08 y
+  // atribuido por la instrumentación de v=173: con el caché vacío,
+  // `getBestAvailableLikes()` se baja ~9.500 me gusta (185 requests, minutos), y
+  // al volver del await esto seguía adelante como si nada — repintaba, y
+  // `renderResults()` re-consultaba `#skips-content`, que en la ruta nueva ya no
+  // existe. Medido: el render de #skips seguía abierto **39 segundos** después
+  // de haber salido de la vista.
+  //
+  // El `teardown` que devuelve `render()` no alcanza: el router lo llama, sí,
+  // pero no puede interrumpir un `await` que ya está en vuelo. Hay que
+  // preguntar DESPUÉS de cada espera larga.
+  const gen = generacionActual();
   const content = document.getElementById('skips-content');
   let likes, stats, top = null;
   try {
@@ -142,15 +158,20 @@ async function analyze() {
       // la vista arranca con el caché local y se repinta cuando llega.
       hiddenTracks.ready().then(refreshAfterHiddenSync),
     ]);
+    if (!rutaVigente(gen)) return;   // te fuiste mientras bajaba los likes
     if (useStatsfm && hasUsername()) {
       top = await loadTopLifetime().catch(() => null);
+      if (!rutaVigente(gen)) return;
     }
   } catch (e) {
+    if (!rutaVigente(gen)) return;
     content.innerHTML = `<div class="card"><p style="color:var(--color-error)">Error: ${escapeHtml(e.message)}</p></div>`;
     return;
   }
   if (!stats || !stats.tracks) {
-    content.innerHTML = (await isOwner())
+    const propio = await isOwner();
+    if (!rutaVigente(gen)) return;
+    content.innerHTML = propio
       ? `<div class="card"><p>No pude cargar el historial de skips. Reintentá.</p></div>`
       : ownerLockedMessage('Skips crónicos');
     return;
@@ -405,6 +426,11 @@ function renderResults() {
   const t0 = performance.now();
   window.__skipsPerf = { batches: [] };
   const content = document.getElementById('skips-content');
+  // Cinturón y tirantes: `analyze()` ya comprueba la vigencia de la ruta, pero
+  // a `renderResults()` la llaman ocho sitios (chips, toggles, ocultar, sacar
+  // de likes) y basta con que uno llegue tarde para volver al mismo crash.
+  // Sin contenedor no hay nada que pintar, y seguir es escribir sobre null.
+  if (!content) return;
   if (list) { list.destroy(); list = null; }
   if (lazyCovers) { lazyCovers.destroy(); lazyCovers = null; }
   const rows = filtered();

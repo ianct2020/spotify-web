@@ -16,23 +16,24 @@
 // Preview 30s instantáneo vía iTunes (arranca en el estribillo, no suma plays
 // en tu historial de Spotify). Fallback: iframe embed oficial si iTunes no lo tiene.
 
-import { getBestAvailableLikes, removeLikedTracks, checkLibraryContains } from '../api.js?v=173';
-import { borrarLikesVerificado } from '../util/borrado-verificado.js?v=173';
-import { loadSkipStats, trackIdOf, isOwner, ownerLockedMessage } from './history-data.js?v=173';
-import { escapeHtml, confirmModal, pageHeader } from '../ui/components.js?v=173';
-import { showToast } from '../ui/toast.js?v=173';
-import { getPreview } from '../api/preview-providers.js?v=173';
-import { togglePreview, playingKey } from '../ui/preview-player.js?v=173';
-import { openTrackCard } from './track-card.js?v=173';
-import { firstArtistName, artistNames } from '../util/artist-name.js?v=173';
-import { activateMarquee } from '../ui/marquee.js?v=173';
-import { hasUsername, loadTopLifetime } from '../api/statsfm.js?v=173';
-import { createHiddenStore } from '../util/hidden-sync.js?v=173';
-import { createIncrementalList, scrollRootOf } from '../ui/incremental-list.js?v=173';
-import { createLazyImages } from '../ui/lazy-img.js?v=173';
-import { renderTrackCardRow, wireTrackCardGrid, paintCardSelection, paintPlayingCard, paintEmbedCard } from '../ui/track-card-row.js?v=173';
-import { coverAtSize } from '../util/cover-size.js?v=173';
-import { coverUrl } from '../util/cover-size.js?v=173';
+import { getBestAvailableLikes, removeLikedTracks, checkLibraryContains } from '../api.js?v=174';
+import { borrarLikesVerificado } from '../util/borrado-verificado.js?v=174';
+import { loadSkipStats, trackIdOf, isOwner, ownerLockedMessage } from './history-data.js?v=174';
+import { escapeHtml, confirmModal, pageHeader } from '../ui/components.js?v=174';
+import { showToast } from '../ui/toast.js?v=174';
+import { getPreview } from '../api/preview-providers.js?v=174';
+import { togglePreview, playingKey } from '../ui/preview-player.js?v=174';
+import { openTrackCard } from './track-card.js?v=174';
+import { firstArtistName, artistNames } from '../util/artist-name.js?v=174';
+import { activateMarquee } from '../ui/marquee.js?v=174';
+import { hasUsername, loadTopLifetime } from '../api/statsfm.js?v=174';
+import { createHiddenStore } from '../util/hidden-sync.js?v=174';
+import { generacionActual, rutaVigente } from '../router.js?v=174';
+import { createIncrementalList, scrollRootOf } from '../ui/incremental-list.js?v=174';
+import { createLazyImages } from '../ui/lazy-img.js?v=174';
+import { renderTrackCardRow, wireTrackCardGrid, paintCardSelection, paintPlayingCard, paintEmbedCard } from '../ui/track-card-row.js?v=174';
+import { coverAtSize } from '../util/cover-size.js?v=174';
+import { coverUrl } from '../util/cover-size.js?v=174';
 
 let cache = null;
 // Filas visibles con los filtros actuales, en el mismo orden que las tarjetas
@@ -132,6 +133,21 @@ function teardown() {
 }
 
 async function analyze() {
+  // ── Vigencia de ruta (v=174) ────────────────────────────────────────────────
+  //
+  // Esta era la vista del crash «Cannot set properties of null (setting
+  // 'onclick')» al zapear de ruta con los cachés fríos. Reproducido el 29/08 y
+  // atribuido por la instrumentación de v=173: con el caché vacío,
+  // `getBestAvailableLikes()` se baja ~9.500 me gusta (185 requests, minutos), y
+  // al volver del await esto seguía adelante como si nada — repintaba, y
+  // `renderResults()` re-consultaba `#skips-content`, que en la ruta nueva ya no
+  // existe. Medido: el render de #skips seguía abierto **39 segundos** después
+  // de haber salido de la vista.
+  //
+  // El `teardown` que devuelve `render()` no alcanza: el router lo llama, sí,
+  // pero no puede interrumpir un `await` que ya está en vuelo. Hay que
+  // preguntar DESPUÉS de cada espera larga.
+  const gen = generacionActual();
   const content = document.getElementById('skips-content');
   let likes, stats, top = null;
   try {
@@ -142,15 +158,20 @@ async function analyze() {
       // la vista arranca con el caché local y se repinta cuando llega.
       hiddenTracks.ready().then(refreshAfterHiddenSync),
     ]);
+    if (!rutaVigente(gen)) return;   // te fuiste mientras bajaba los likes
     if (useStatsfm && hasUsername()) {
       top = await loadTopLifetime().catch(() => null);
+      if (!rutaVigente(gen)) return;
     }
   } catch (e) {
+    if (!rutaVigente(gen)) return;
     content.innerHTML = `<div class="card"><p style="color:var(--color-error)">Error: ${escapeHtml(e.message)}</p></div>`;
     return;
   }
   if (!stats || !stats.tracks) {
-    content.innerHTML = (await isOwner())
+    const propio = await isOwner();
+    if (!rutaVigente(gen)) return;
+    content.innerHTML = propio
       ? `<div class="card"><p>No pude cargar el historial de skips. Reintentá.</p></div>`
       : ownerLockedMessage('Skips crónicos');
     return;
@@ -405,6 +426,11 @@ function renderResults() {
   const t0 = performance.now();
   window.__skipsPerf = { batches: [] };
   const content = document.getElementById('skips-content');
+  // Cinturón y tirantes: `analyze()` ya comprueba la vigencia de la ruta, pero
+  // a `renderResults()` la llaman ocho sitios (chips, toggles, ocultar, sacar
+  // de likes) y basta con que uno llegue tarde para volver al mismo crash.
+  // Sin contenedor no hay nada que pintar, y seguir es escribir sobre null.
+  if (!content) return;
   if (list) { list.destroy(); list = null; }
   if (lazyCovers) { lazyCovers.destroy(); lazyCovers = null; }
   const rows = filtered();

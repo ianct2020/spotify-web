@@ -838,6 +838,11 @@ asserts, con una pasada de fuerza bruta 5×6 que comprueba que la lista nunca
 pierde ni duplica un elemento. Lo que queda en `wthree.js` es medir rectángulos.
 Los ▲▼ siguen siendo la vía de respaldo y no se tocaron.
 
+✅ **PROBADO POR IAN A MANO (2026-08-29): el arrastre anda bien.** Es la única
+verificación que vale para esto —el drop nativo no se puede disparar desde acá—
+así que queda cerrado. Si vuelve a fallar, lo primero es `tests/wthree-drop-index.test.mjs`
+(la aritmética, sin DOM) y recién después los rectángulos de `wthree.js`.
+
 ## «Volver arriba» no animaba: `behavior: 'smooth'` y el movimiento reducido (v=170)
 `ui/back-to-top.js` usaba `scrollTo({ top: 0, behavior: 'smooth' })` desde
 v=141. **Chrome trata `prefers-reduced-motion: reduce` como una orden sobre el
@@ -888,6 +893,42 @@ visible del nav, que se mueve solo a 0, 271 o 491 según haga falta.
 
 Y ya que se mira, se ve más: barra de 3 px (era 2), texto a 600 y el icono en
 color de acento. El fondo sigue siendo el acento al 10 % de alpha.
+
+## El crash al zapear de ruta era #skips (v=174, reproducido 2026-08-29)
+«Cannot set properties of null (setting 'onclick')» zapeando rápido entre rutas
+con los cachés fríos. Lo cazó la instrumentación de v=173 y lo nombró sola.
+
+**La causa**: `analyze()` de `features/skips.js` espera a
+`getBestAvailableLikes()`, que con el caché vacío se baja ~9.500 me gusta (185
+requests, minutos). Al volver del `await` seguía adelante sin preguntar nada, y
+`renderResults()` re-consultaba `#skips-content` — que en la ruta nueva ya no
+existe.
+
+⚠️ **El `teardown` que devuelve `render()` NO alcanza, y esto es lo importante**:
+el router lo llama, pero **un `teardown` no puede interrumpir un `await` que ya
+está en vuelo**. Sirve para soltar observers y timers, no para abortar trabajo
+asíncrono. Hay que preguntar por la vigencia DESPUÉS de cada espera larga:
+`generacionActual()` antes, `rutaVigente(gen)` después (los dos en `router.js`).
+
+**Medido zapeando 40 veces con los cachés fríos**: 452 renders quedaron abiertos
+después del cambio de ruta, en SEIS vistas — `#skips`, `#sin-clasificar`,
+`#covers`, `#discover-artists`, `#wthree`, `#zeroplays`. El más viejo seguía
+abierto **39 segundos** después de haber salido. Las livianas (`#versions`,
+`#zombies`, `#listened`, `#dashboard`) no aparecen nunca. **Solo se arregló
+`#skips`, que es la que crasheó**; las otras cinco tienen el mismo patrón y
+todavía no la guarda.
+
+Arreglado también, del mismo tipo: `track-card.js` ponía `previewBtn.onclick`
+sin comprobar null, siendo la única de las tres vecinas sin guarda —
+`routeteardown` cierra la pila de modales, así que una ficha abriéndose durante
+un cambio de ruta se queda sin overlay.
+
+**Cómo reproducirlo**: borrar IndexedDB y la Cache API (NO localStorage, ahí
+están los tokens), recargar, zapear entre las seis vistas lentas con esperas de
+40-300 ms, y después **parquear en `#home` y esperar** — el crash no es al
+zapear, es cuando el render huérfano aterriza. Y ojo: **la extensión de Chrome
+no captura `console.warn`**, hay que envolver `console.warn` en la página para
+ver los avisos del router.
 
 ## Client ID
 0c8c92ad128e4b89be7097c6b8082797
