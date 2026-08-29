@@ -14,23 +14,23 @@
 // `util/hidden-sync.js`, playlist como fuente de verdad y localStorage como
 // caché local para pintar al instante.
 
-import { getBestAvailableLikes, removeLikedTracks, checkLibraryContains } from '../api.js?v=167';
-import { borrarLikesVerificado } from '../util/borrado-verificado.js?v=167';
-import { loadTrackPlays, trackIdOf, isOwner, ownerLockedMessage } from './history-data.js?v=167';
-import { escapeHtml, confirmModal, pageHeader } from '../ui/components.js?v=167';
-import { showToast } from '../ui/toast.js?v=167';
-import { openTrackCard } from './track-card.js?v=167';
-import { hasUsername, loadTopLifetime } from '../api/statsfm.js?v=167';
-import { getPreview } from '../api/preview-providers.js?v=167';
-import { togglePreview, playingKey } from '../ui/preview-player.js?v=167';
-import { renderTrackCardRow, wireTrackCardGrid, paintCardSelection, paintPlayingCard } from '../ui/track-card-row.js?v=167';
-import { createIncrementalList, scrollRootOf } from '../ui/incremental-list.js?v=167';
-import { createLazyImages } from '../ui/lazy-img.js?v=167';
-import { activateMarquee } from '../ui/marquee.js?v=167';
-import { coverAtSize } from '../util/cover-size.js?v=167';
-import { firstArtistName } from '../util/artist-name.js?v=167';
-import { createHiddenStore } from '../util/hidden-sync.js?v=167';
-import { fmtDiaCorto } from '../util/fecha.js?v=167';
+import { getBestAvailableLikes, removeLikedTracks, checkLibraryContains } from '../api.js?v=168';
+import { borrarLikesVerificado } from '../util/borrado-verificado.js?v=168';
+import { loadTrackPlays, trackIdOf, isOwner, ownerLockedMessage } from './history-data.js?v=168';
+import { escapeHtml, confirmModal, pageHeader } from '../ui/components.js?v=168';
+import { showToast } from '../ui/toast.js?v=168';
+import { openTrackCard } from './track-card.js?v=168';
+import { hasUsername, loadTopLifetime } from '../api/statsfm.js?v=168';
+import { getPreview } from '../api/preview-providers.js?v=168';
+import { togglePreview, playingKey } from '../ui/preview-player.js?v=168';
+import { renderTrackCardRow, wireTrackCardGrid, paintCardSelection, paintPlayingCard } from '../ui/track-card-row.js?v=168';
+import { createIncrementalList, scrollRootOf } from '../ui/incremental-list.js?v=168';
+import { createLazyImages } from '../ui/lazy-img.js?v=168';
+import { activateMarquee } from '../ui/marquee.js?v=168';
+import { coverAtSize } from '../util/cover-size.js?v=168';
+import { firstArtistName } from '../util/artist-name.js?v=168';
+import { createHiddenStore } from '../util/hidden-sync.js?v=168';
+import { fmtDiaCorto } from '../util/fecha.js?v=168';
 
 let cache = null;
 
