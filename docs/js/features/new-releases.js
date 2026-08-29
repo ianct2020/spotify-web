@@ -10,12 +10,12 @@
 //   - Umbral de likes: 5+ / 10+ / 20+
 //   - Ventana temporal: 3 / 6 / 12 / 24 meses (default 12)
 
-import { escapeHtml, confirmModal, pageHeader } from '../ui/components.js?v=164';
-import { showToast } from '../ui/toast.js?v=164';
-import { buildAlbumHeardIndex } from '../util/album-heard.js?v=164';
-import { loadFiltros, buildFilterContext, applyDiscoverFilters } from '../util/discover-filters.js?v=164';
-import { createIncrementalList, scrollRootOf } from '../ui/incremental-list.js?v=164';
-import { createLazyImages } from '../ui/lazy-img.js?v=164';
+import { escapeHtml, confirmModal, pageHeader } from '../ui/components.js?v=165';
+import { showToast } from '../ui/toast.js?v=165';
+import { buildAlbumHeardIndex } from '../util/album-heard.js?v=165';
+import { loadFiltros, buildFilterContext, applyDiscoverFilters } from '../util/discover-filters.js?v=165';
+import { createIncrementalList, scrollRootOf } from '../ui/incremental-list.js?v=165';
+import { createLazyImages } from '../ui/lazy-img.js?v=165';
 import {
   getArtistIdCached,
   getArtistDiscoCached,
@@ -40,7 +40,7 @@ import {
   hiddenAlbums,
   cardKey,
   toggleHiddenAlbum,
-} from './discover-common.js?v=164';
+} from './discover-common.js?v=165';
 
 const SCAN_KEY = 'new_releases';
 
@@ -86,7 +86,7 @@ const state = {
   // una acción de #discover-artists (evaluar la discografía vieja). Los que Ian
   // marque allá igual desaparecen de acá, porque el filtro es compartido.
   mode: 'normal',
-  // Mismos cinco filtros que #discover-artists, mismo módulo y mismo estado
+  // Mismos filtros que #discover-artists, mismo módulo y mismo estado
   // guardado: las dos vistas muestran el mismo objeto y tienen que coincidir.
   filtros: loadFiltros(),
   filterCtx: null,
@@ -423,7 +423,7 @@ function releasesInWindow() {
       out.push({ al, artist: a });
     }
   }
-  // Los cinco filtros, solo en el modo normal (en «Ocultos» Ian está
+  // Los filtros, solo en el modo normal (en «Ocultos» Ian está
   // revisando lo que descartó a mano y no hay que esconderle nada más).
   let lista = out;
   if (!modoOcultos && state.filterCtx) {

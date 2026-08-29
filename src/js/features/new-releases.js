@@ -86,7 +86,7 @@ const state = {
   // una acción de #discover-artists (evaluar la discografía vieja). Los que Ian
   // marque allá igual desaparecen de acá, porque el filtro es compartido.
   mode: 'normal',
-  // Mismos cinco filtros que #discover-artists, mismo módulo y mismo estado
+  // Mismos filtros que #discover-artists, mismo módulo y mismo estado
   // guardado: las dos vistas muestran el mismo objeto y tienen que coincidir.
   filtros: loadFiltros(),
   filterCtx: null,
@@ -423,7 +423,7 @@ function releasesInWindow() {
       out.push({ al, artist: a });
     }
   }
-  // Los cinco filtros, solo en el modo normal (en «Ocultos» Ian está
+  // Los filtros, solo en el modo normal (en «Ocultos» Ian está
   // revisando lo que descartó a mano y no hay que esconderle nada más).
   let lista = out;
   if (!modoOcultos && state.filterCtx) {

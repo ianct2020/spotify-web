@@ -1,23 +1,34 @@
-import { getAllLikedTracks, removeLikedTracks, checkLibraryContains } from '../api.js?v=164';
-import { showProgress, hideProgress, progressController, isCancelled, typeConfirmModal, renderTrackRow, escapeHtml, pageHeader } from '../ui/components.js?v=164';
-import { showToast } from '../ui/toast.js?v=164';
-import { openModal, closeTop } from '../ui/modal-stack.js?v=164';
-import { coverUrl } from '../util/cover-size.js?v=164';
-import { openPlaylistPicker } from '../ui/playlist-picker.js?v=164';
-import { getOwnPlaylists, addUrisToPlaylists, toastAddResult } from '../util/playlist-add.js?v=164';
+import { getAllLikedTracks, removeLikedTracks, checkLibraryContains } from '../api.js?v=165';
+import { showProgress, hideProgress, progressController, isCancelled, typeConfirmModal, renderTrackRow, escapeHtml, pageHeader } from '../ui/components.js?v=165';
+import { showToast } from '../ui/toast.js?v=165';
+import { openModal, closeTop } from '../ui/modal-stack.js?v=165';
+import { coverUrl } from '../util/cover-size.js?v=165';
+import { openPlaylistPicker } from '../ui/playlist-picker.js?v=165';
+import { getOwnPlaylists, addUrisToPlaylists, toastAddResult } from '../util/playlist-add.js?v=165';
 
-// ── «Borrar sobrantes» inhabilitado (2026-08-26) ─────────────────────────────
+// ── «Borrar sobrantes» inhabilitado (2026-08-26, motivo revisado 2026-08-28) ──
 //
-// El 26 de agosto se marcaron versiones con «quedarme», se pulsó «Borrar
-// sobrantes» y desapareció también una versión marcada. La biblioteca pasó de
-// 9.238 likes (backup del 19 de agosto) a 9.220, y el caché de likes ya se
-// había parcheado con el borrado —`removeFromLikesCache` filtra en el sitio—,
-// así que no quedó ninguna copia previa: la lista de lo que se fue hubo que
-// reconstruirla contra el backup del 19.
+// POR QUÉ SE INHABILITÓ (26/08): se marcaron versiones con «quedarme», se pulsó
+// «Borrar sobrantes» y pareció desaparecer también una versión marcada. La
+// biblioteca pasó de 9.238 likes (backup del 19 de agosto) a 9.220.
 //
-// Mientras no esté identificado el fallo, el botón queda a la vista pero
-// inhabilitado. Un botón que borra me gusta y no respeta el «quedarme» no puede
-// seguir siendo pulsable. Para reactivarlo: poner la constante en false.
+// ESO YA NO SE SOSTIENE (28/08). El diagnóstico del 28 lo desmontó:
+//   - las 15 pistas que faltaban del 26 eran SINGLETONS —clusters de una sola
+//     versión—, así que el botón no podía tocarlas ni marcándolas: no es él;
+//   - las 491 del cruce anterior se habían perdido en una corrida ANTERIOR al
+//     19/08, no en la del 26;
+//   - o sea que, hasta donde se puede probar, el botón hizo lo que decía.
+//
+// POR QUÉ SIGUE INHABILITADO IGUAL. De las 539 que faltan, 416 tienen otra
+// versión viva: eso es exactamente lo que el dedup tenía que hacer. Pero 123 no
+// tienen ninguna copia viva, y ESO NO LO EXPLICA NADIE TODAVÍA. Un dedup que
+// borra el último ejemplar no es un dedup. Mientras ese borrado no tenga nombre
+// —qué corrida fue, qué camino del código, por qué se quedó sin gemelo— el
+// botón no se reactiva, aunque la acusación del 26 haya quedado descartada.
+// Decisión de Ian, 2026-08-28: no se rehabilita hasta que eso esté identificado.
+// La lista de las 123 está en /home/ian/las-123-sin-gemelo-2026-08-28.txt.
+//
+// Para reactivarlo: poner la constante en false.
 //
 // Lo que ya está puesto para cuando se reactive:
 //   - la confirmación lista nombre y artista de cada pista, no un número;
@@ -26,7 +37,7 @@ import { getOwnPlaylists, addUrisToPlaylists, toastAddResult } from '../util/pla
 //     (`likes_borrados_log_v1`). Acá solo se le pasa el origen y la metadata
 //     que la vista ya tenía delante.
 const BORRADO_BLOQUEADO = true;
-const MOTIVO_BLOQUEO = 'Inhabilitado desde el 26/08/2026: en un borrado desapareció también una versión marcada con «quedarme». Se reactivará cuando esté arreglado.';
+const MOTIVO_BLOQUEO = 'Inhabilitado desde el 26/08/2026: faltan 123 me gusta sin ninguna copia viva y todavía no se sabe qué los borró. Se reactivará cuando esté identificado.';
 
 // ── Doble de borrado: reproducir el fallo sin tocar los me gusta (v=164) ─────
 //
@@ -338,8 +349,8 @@ async function analyze(force = false) {
           <span style="flex-shrink:0">⚠️</span>
           <div>
             <strong>«Borrar sobrantes» está inhabilitado.</strong>
-            El 26 de agosto un borrado se llevó también una versión marcada con «quedarme».
-            Hasta que esté arreglado, marcar versiones sirve para revisar los grupos, pero no se borra nada.
+            Faltan 123 me gusta de los que no queda ninguna otra versión en la biblioteca, y todavía no se sabe qué los borró.
+            Hasta que eso esté identificado, marcar versiones sirve para revisar los grupos, pero no se borra nada.
             Para quitar una versión suelta, hacerlo desde la aplicación de Spotify.
           </div>
         </div>` : ''}

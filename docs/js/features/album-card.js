@@ -11,26 +11,26 @@
 // tus me gusta" en cada fila y previews que prueban contra TODOS los artistas
 // del track.
 
-import { escapeHtml } from '../ui/components.js?v=164';
-import { openArtistCard, knownArtist } from './artist-card.js?v=164';
-import { openModal, closeTop } from '../ui/modal-stack.js?v=164';
-import { getBestAvailableLikes, getAlbumTracks, spotifyFetch } from '../api.js?v=164';
-import { albumKey, coverId } from '../util/album-key.js?v=164';
+import { escapeHtml } from '../ui/components.js?v=165';
+import { openArtistCard, knownArtist } from './artist-card.js?v=165';
+import { openModal, closeTop } from '../ui/modal-stack.js?v=165';
+import { getBestAvailableLikes, getAlbumTracks, spotifyFetch } from '../api.js?v=165';
+import { albumKey, coverId } from '../util/album-key.js?v=165';
 // ⚠️ `limpiaParaQuery` FALTABA acá hasta v=153 y el síntoma era mudo: la usa
 // `resolveAlbumId` en el `try`, así que cada ficha tiraba un ReferenceError que
 // el catch convertía en «no pude resolver el álbum», la ficha se caía al camino
 // degradado de v=142 (solo tus likes, todos con el ♥ lleno) y el tracklist
 // completo de v=144 no se pedía NUNCA. Verificado en producción el 2026-08-23:
 // 6 fichas abiertas, 6 warnings «limpiaParaQuery is not defined» en consola.
-import { artistMatches, normText, limpiaParaQuery } from '../util/track-match.js?v=164';
-import { skelTracklist } from '../ui/skeleton.js?v=164';
-import { firstArtistName, artistNames, resolveArtistName } from '../util/artist-name.js?v=164';
-import { coverUrl } from '../util/cover-size.js?v=164';
-import { lookupAlbumStats } from '../util/album-stats.js?v=164';
-import { fmtDia } from '../util/fecha.js?v=164';
-import { getPreview } from '../api/preview-providers.js?v=164';
-import { togglePreview, playingKey } from '../ui/preview-player.js?v=164';
-import { openTrackCard } from './track-card.js?v=164';
+import { artistMatches, normText, limpiaParaQuery } from '../util/track-match.js?v=165';
+import { skelTracklist } from '../ui/skeleton.js?v=165';
+import { firstArtistName, artistNames, resolveArtistName } from '../util/artist-name.js?v=165';
+import { coverUrl } from '../util/cover-size.js?v=165';
+import { lookupAlbumStats } from '../util/album-stats.js?v=165';
+import { fmtDia } from '../util/fecha.js?v=165';
+import { getPreview } from '../api/preview-providers.js?v=165';
+import { togglePreview, playingKey } from '../ui/preview-player.js?v=165';
+import { openTrackCard } from './track-card.js?v=165';
 
 const PLAY_SVG = `<svg viewBox="0 0 24 24" width="10" height="10" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>`;
 const PAUSE_SVG = `<svg viewBox="0 0 24 24" width="10" height="10" fill="currentColor" aria-hidden="true"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>`;
@@ -251,9 +251,15 @@ function primeraVezHtml(first) {
     </div>`;
 }
 
+// Un disco sin datos de escucha no es una anomalía: en #discover-artists y
+// #new-releases son TODOS, por definición de la vista. Hasta v=164 la frase
+// salía en un `<div class="album-modal-no-data">` que no tenía **ninguna regla
+// de CSS** —se buscó en las tres hojas y no existía—, así que se pintaba con el
+// tamaño y el color del cuerpo del modal y quedaba gritando en el medio de la
+// ficha. Ahora es una línea chica y gris, del tamaño de «Primera vez».
 function statsHtml(a) {
   if (!(a.plays > 0 || a.min > 0)) {
-    return `<div class="album-modal-no-data">Sin datos de escucha en tu historial</div>${primeraVezHtml(a.first)}`;
+    return `<div class="album-modal-no-data">Sin datos de escucha</div>${primeraVezHtml(a.first)}`;
   }
   return `
     <div class="album-modal-stats">
@@ -269,6 +275,25 @@ function statsHtml(a) {
     ${primeraVezHtml(a.first)}`;
 }
 
+// ── Acciones extra (v=165) ─────────────────────────────────────────────────
+//
+// #discover-artists y #new-releases necesitan, dentro de la ficha, los mismos
+// botones que la tarjeta de la grilla («Guardar álbum», «Añadir pistas a mis
+// likes», «Añadir a playlist…», «Escuchado», «Ocultar»). Hasta v=164 esas dos
+// vistas terminaban con una ficha aparte para poder tenerlos.
+//
+// La forma de meterlos SIN duplicar la ficha es este punto de extensión: el
+// llamador pasa `acciones: [{ label, title, onClick }]` y se pintan detrás de
+// las dos de siempre. La ficha no sabe qué hace cada una — y no tiene por qué.
+// `onClick` recibe `{ cerrar }` para que la acción pueda bajar el modal (casi
+// todas sacan el álbum de la lista que hay detrás).
+function accionesHtml(acciones) {
+  return acciones.map((acc, i) => `
+    <button class="btn btn-secondary btn-sm" data-alb-accion="${i}"
+            title="${escapeHtml(acc.title || acc.label)}">${escapeHtml(acc.label)}</button>
+  `).join('');
+}
+
 export function openAlbumCard(entrada) {
   if (!entrada || !entrada.name) return;
 
@@ -276,6 +301,7 @@ export function openAlbumCard(entrada) {
   // acá, igual que en las otras dos fichas (v=150).
   const artista = resolveArtistName(firstArtistName(entrada.artist || ''), knownArtist);
   const a = { ...entrada, artist: artista };
+  const acciones = Array.isArray(entrada.acciones) ? entrada.acciones.filter(x => x && x.label) : [];
 
   const spotifyQuery = encodeURIComponent(`${a.name} ${artista}`.trim());
   const spotifyUrl = `https://open.spotify.com/search/${spotifyQuery}`;
@@ -322,6 +348,7 @@ export function openAlbumCard(entrada) {
           <div class="album-modal-actions">
             <button class="btn btn-primary btn-sm" id="alb-go-artist">Ver ficha del artista</button>
             <a class="btn btn-secondary btn-sm" id="alb-spotify" href="${spotifyUrl}" target="_blank" rel="noopener">Buscar en Spotify</a>
+            ${accionesHtml(acciones)}
           </div>
         </div>
         <div class="album-modal-col album-modal-col-tracks">
@@ -330,6 +357,11 @@ export function openAlbumCard(entrada) {
       </div>
     </div>
   `,
+  });
+
+  acciones.forEach((acc, i) => {
+    const btn = overlay.querySelector(`[data-alb-accion="${i}"]`);
+    if (btn) btn.onclick = () => acc.onClick?.({ cerrar: () => closeTop() });
   });
 
   overlay.querySelector('#alb-artist').onclick = () => {

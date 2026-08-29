@@ -10,14 +10,15 @@
 // 100 artistas en lugar de 20. Lógica de fetch/cache/playlist compartida en
 // features/discover-common.js con #new-releases.
 
-import { escapeHtml, confirmModal, pageHeader } from '../ui/components.js?v=164';
-import { showToast } from '../ui/toast.js?v=164';
-import { openArtistCard } from './artist-card.js?v=164';
-import { createIncrementalList, scrollRootOf } from '../ui/incremental-list.js?v=164';
-import { createLazyImages } from '../ui/lazy-img.js?v=164';
-import { isJunkTrack } from '../util/junk.js?v=164';
-import { buildAlbumHeardIndex } from '../util/album-heard.js?v=164';
-import { loadFiltros, buildFilterContext, applyDiscoverFilters } from '../util/discover-filters.js?v=164';
+import { escapeHtml, confirmModal, pageHeader } from '../ui/components.js?v=165';
+import { showToast } from '../ui/toast.js?v=165';
+import { openArtistCard } from './artist-card.js?v=165';
+import { createIncrementalList, scrollRootOf } from '../ui/incremental-list.js?v=165';
+import { createLazyImages } from '../ui/lazy-img.js?v=165';
+import { isJunkTrack } from '../util/junk.js?v=165';
+import { buildAlbumHeardIndex } from '../util/album-heard.js?v=165';
+import { loadFiltros, buildFilterContext, applyDiscoverFilters } from '../util/discover-filters.js?v=165';
+import { releaseKind } from '../util/release-size.js?v=165';
 import {
   getArtistIdCached,
   getArtistDiscoCached,
@@ -44,11 +45,11 @@ import {
   cardKey,
   toggleHeardAlbum,
   toggleHiddenAlbum,
-} from './discover-common.js?v=164';
+} from './discover-common.js?v=165';
 
 const SCAN_KEY = 'discover_artists';
 
-const LS_FILTER_KIND = 'discoverart_filter_kind';    // 'all' | 'album' | 'single'
+const LS_FILTER_KIND = 'discoverart_filter_kind';    // 'all' | 'album' | 'ep' | 'single'
 const LS_FILTER_YEARS = 'discoverart_filter_years';  // 0 = todo, o número de años
 const LS_LOADED_MORE = 'discoverart_loaded_more';    // cuántos artistas cargar (default 100)
 const MIN_LIKES = 5;
@@ -58,9 +59,16 @@ const BATCH_PARALLEL = 2;
 const RATE_RETRIES = 2;   // reintentos por artista caído por rate limit
 const DEFAULT_INITIAL = 100;
 
+// Las tres divisiones y no dos (v=165): el EP lo decide util/release-size.js
+// por cantidad de pistas, porque Spotify no tiene tipo «EP» y los marca como
+// 'single'. El valor viejo guardado en localStorage sigue siendo válido: los
+// tres de antes están entre los cuatro de ahora.
+const KINDS = ['all', 'album', 'ep', 'single'];
+const KIND_LABEL = { all: 'Todo', album: 'Álbumes', ep: 'EPs', single: 'Singles' };
+
 function getFilterKind() {
   const v = localStorage.getItem(LS_FILTER_KIND);
-  return ['all','album','single'].includes(v) ? v : 'all';
+  return KINDS.includes(v) ? v : 'all';
 }
 function getFilterYears() {
   const n = parseInt(localStorage.getItem(LS_FILTER_YEARS) || '0', 10);
@@ -85,7 +93,7 @@ const state = {
   // 'heard' = los que marcaste como escuchados. Los dos últimos son la única
   // forma de deshacer, así que no son opcionales.
   mode: 'normal',
-  // Los cinco filtros de util/discover-filters.js. `filterCtx` llega
+  // Los filtros de util/discover-filters.js. `filterCtx` llega
   // asincrónico (biblioteca + historial + likes); hasta que llegue no se
   // descarta NADA, nunca al revés.
   filtros: loadFiltros(),
@@ -212,6 +220,7 @@ export async function render(container) {
       if (!c) continue;
       Object.assign(a, {
         id: c.id, disco: c.disco || [],
+        unheard: c.unheard || null,
         unheardAlbums: c.unheardAlbums || [], unheardSingles: c.unheardSingles || [],
         scanned: true, error: null,
       });
@@ -241,9 +250,7 @@ function renderShell(content, totalCandidates) {
       </div>
       <div class="disco-controls">
         <div class="disco-chip-group" id="disco-kind">
-          <button class="disco-chip ${state.filterKind === 'all' ? 'is-on' : ''}" data-kind="all">Todo</button>
-          <button class="disco-chip ${state.filterKind === 'album' ? 'is-on' : ''}" data-kind="album">Solo álbumes</button>
-          <button class="disco-chip ${state.filterKind === 'single' ? 'is-on' : ''}" data-kind="single">Solo singles</button>
+          ${KINDS.map(k => `<button class="disco-chip ${state.filterKind === k ? 'is-on' : ''}" data-kind="${k}">${KIND_LABEL[k]}</button>`).join('')}
         </div>
         <select class="disco-select" id="disco-years">
           <option value="0" ${state.filterYears === 0 ? 'selected' : ''}>Cualquier año</option>
@@ -401,6 +408,7 @@ async function scanArtists(content) {
       nameLower: a.nameLower,
       id: a.id,
       disco: a.disco,
+      unheard: a.unheard,
       unheardAlbums: a.unheardAlbums,
       unheardSingles: a.unheardSingles,
     })));
@@ -416,14 +424,20 @@ async function processArtist(artist) {
   const disco = await getArtistDiscoCached(id, artist.name);
   artist.disco = dedupDisco(disco);
   const unheard = artist.disco.filter(al => albumIsUnheard(al, artist.name, state.heard));
+  // `unheard` entero, y no solo la partición en dos (v=165): el reparto por
+  // `al.type` tiraba los RECOPILATORIOS al piso — no eran ni 'album' ni
+  // 'single', así que no entraban en ninguna de las dos listas y la vista no
+  // los mostraba nunca, con ningún chip. Los dos campos viejos se siguen
+  // guardando porque el caché de escaneo de 7 días los tiene y no vale la pena
+  // obligar a un rescán de 150 artistas por esto.
+  artist.unheard = unheard;
   artist.unheardAlbums = unheard.filter(al => al.type === 'album');
   artist.unheardSingles = unheard.filter(al => al.type === 'single');
   artist.scanned = true;
 }
 
 function passesFilter(al) {
-  if (state.filterKind === 'album' && al.type !== 'album') return false;
-  if (state.filterKind === 'single' && al.type !== 'single') return false;
+  if (state.filterKind !== 'all' && releaseKind(al) !== state.filterKind) return false;
   if (state.filterYears > 0) {
     const y = yearOf(al.release);
     if (!y || (YEAR_NOW - y) > state.filterYears) return false;
@@ -450,11 +464,15 @@ function refreshList(content) {
   const poolDe = (a) => {
     if (state.mode === 'heard') return (a.disco || []).filter(al => heardAlbums.has(cardKey(al, a.name)));
     if (state.mode === 'hidden') return (a.disco || []).filter(al => hiddenAlbums.has(cardKey(al, a.name)));
-    return [...a.unheardAlbums, ...a.unheardSingles]
+    // `unheard` es lo nuevo; los dos arrays sueltos son lo que trae un caché
+    // de escaneo viejo (ahí faltan los recopilatorios, pero no se pierde nada
+    // de lo que ya se mostraba).
+    const pool = a.unheard?.length ? a.unheard : [...a.unheardAlbums, ...a.unheardSingles];
+    return pool
       .filter(al => !hiddenAlbums.has(cardKey(al, a.name)) && !heardAlbums.has(cardKey(al, a.name)));
   };
 
-  // Los cinco filtros solo mandan en el modo normal: en «Ocultos» y
+  // Los filtros solo mandan en el modo normal: en «Ocultos» y
   // «Escuchados» Ian está revisando lo que descartó a mano, y esconderle ahí la
   // mitad por un criterio automático sería justo lo contrario de lo que busca.
   let artists = state.artists

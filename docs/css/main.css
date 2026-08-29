@@ -2430,6 +2430,17 @@ h3 { font-size: 18px; font-weight: 600; }
 }
 /* «Primera vez» va debajo de los dos tiles, no como un tercero: es una fecha,
    no un número, y en una grilla de dos columnas quedaba huérfana. */
+/* «Sin datos de escucha» (v=165). No tenía NINGUNA regla: se pintaba con el
+   tamaño del cuerpo del modal y en #discover-artists —donde ningún álbum tiene
+   datos, por definición de la vista— quedaba gritando en el medio de la ficha.
+   Mismo cuerpo y mismo gris que «Primera vez», que es la línea de al lado. */
+.album-modal-no-data {
+  font-size: 12px;
+  color: var(--color-text-muted);
+  text-align: center;
+  margin: 0 0 14px;
+}
+
 .album-modal-first {
   font-size: 12px;
   color: var(--color-text-muted);
