@@ -336,10 +336,20 @@ export async function render(container) {
   if (!ruta.vigente()) return;
 
   let wthreeItems = null;
+  let wthreeFallo = null;
   const wthreeId = localStorage.getItem(LS_WTHREE_ID);
   if (wthreeId) {
     try { wthreeItems = await getAllPlaylistItems(wthreeId); }
-    catch (e) { console.warn('[covers] no pude cargar W-Three:', e.message); }
+    catch (e) {
+      // Se sigue con el historial solo —el mosaico vale igual—, pero el fallo
+      // se GUARDA para decirlo en el rótulo. Comprobado el 2026-08-29 con la
+      // API rate-limiteada: la vista pintaba 376 álbumes y el rótulo decía
+      // «Álbumes dados por escuchados», sin una palabra de que faltaba W-Three.
+      // Un número más chico y una leyenda que suena completa: exactamente el
+      // tipo de degradación silenciosa que nos costó las 123.
+      wthreeFallo = e.message;
+      console.warn('[covers] no pude cargar W-Three:', e.message);
+    }
     if (!ruta.vigente()) return;
   }
 
@@ -384,9 +394,12 @@ export async function render(container) {
   const soloWthree = allAlbums.filter(a => a.sources.has('wthree') && !a.sources.has('listened')).length;
 
   const sinTapa = noCover.length ? ` · ${noCover.length} sin tapa, fuera del mosaico` : '';
+  const avisoWthree = wthreeFallo
+    ? ` · <strong style="color:var(--color-warning)">falta W-Three: ${escapeHtml(wthreeFallo)}</strong>`
+    : '';
   const sourcesLine = wthreeItems
     ? `<span class="covers-summary-sub">Álbumes dados por escuchados (${escapeHtml(umbral)}) y la playlist «w three» · ${deWthree} están en W-Three, ${soloWthree} solo ahí${sinTapa}</span>`
-    : `<span class="covers-summary-sub">Álbumes dados por escuchados (${escapeHtml(umbral)})${sinTapa}</span>`;
+    : `<span class="covers-summary-sub">Álbumes dados por escuchados (${escapeHtml(umbral)})${sinTapa}${avisoWthree}</span>`;
 
   content.innerHTML = `
     <div class="covers-narrow-hint">Vista pensada para pantalla grande — mejor en escritorio.</div>
