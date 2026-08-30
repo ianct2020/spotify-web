@@ -989,6 +989,16 @@ rutas» ya eran 25, y las dos que faltaban en la cuenta eran `#new-releases` y
 token de Spotify de Ian, y sacarlo del navegador no es una opción. Por eso vive
 dentro de la app, corriendo con la sesión real. Es un botón, no un test de CI.
 
+⚠️ **Dejá la pestaña VISIBLE mientras corre.** Chrome clampea `setTimeout` en
+pestañas ocultas, así que los sondeos de 500 ms se estiran: medido el 2026-08-30
+en una pestaña de fondo, el tope de 75 s por vista tardó **119 s** en dispararse.
+El resultado es correcto igual — solo tarda más y las vistas lentas pueden
+marcarse `COLGADA` con menos margen del que parece.
+
+**Probado de punta a punta el 2026-08-30 (v=178)**: 25 rutas, 24 `PINTA` + 1
+`COLGADA` (`#sin-clasificar`, ver abajo), vuelve solo a `#debug` al terminar, y
+al re-entrar muestra «24 de 25 pintan» sin repetir el barrido.
+
 ## Resultado del primer barrido (2026-08-30, v=177) — 25 rutas, no 23
 Después de que `#covers` estuviera muerta nueve versiones, se comprobaron **las
 25 rutas una por una, entrando y mirando que PINTEN**. Resultado completo en
