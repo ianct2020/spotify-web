@@ -9,20 +9,20 @@
 // placeholder→img. Botón "Pantalla completa" (Fullscreen API) que oculta
 // sidebar/header/toolbar y recalcula el lado.
 
-import { loadListenedAlbums, isOwner, ownerLockedMessage } from './history-data.js?v=179';
-import { isJunkTrack } from '../util/junk.js?v=179';
-import { vigilarRuta } from '../util/vigencia-ruta.js?v=179';
-import { getAllPlaylistItems, getBestAvailableLikes } from '../api.js?v=179';
-import { escapeHtml, pageHeader, showProgress, hideProgress } from '../ui/components.js?v=179';
-import { showToast } from '../ui/toast.js?v=179';
-import { openAlbumCard } from './album-card.js?v=179';
-import { openArtistCard } from './artist-card.js?v=179';
-import { albumKey, coverId } from '../util/album-key.js?v=179';
-import { generarWallpaper, descargarBlob, WALLPAPER_PRESETS } from './covers-wallpaper.js?v=179';
-import { buildAlbumStatsIndex } from '../util/album-stats.js?v=179';
-import { getPreview } from '../api/preview-providers.js?v=179';
-import { hoverIn, hoverOut } from '../ui/preview-player.js?v=179';
-import { coverUrl } from '../util/cover-size.js?v=179';
+import { loadListenedAlbums, isOwner, ownerLockedMessage } from './history-data.js?v=180';
+import { isJunkTrack } from '../util/junk.js?v=180';
+import { vigilarRuta } from '../util/vigencia-ruta.js?v=180';
+import { getAllPlaylistItems, getBestAvailableLikes } from '../api.js?v=180';
+import { escapeHtml, pageHeader, showProgress, hideProgress } from '../ui/components.js?v=180';
+import { showToast } from '../ui/toast.js?v=180';
+import { openAlbumCard } from './album-card.js?v=180';
+import { openArtistCard } from './artist-card.js?v=180';
+import { albumKey, coverId } from '../util/album-key.js?v=180';
+import { generarWallpaper, descargarBlob, WALLPAPER_PRESETS } from './covers-wallpaper.js?v=180';
+import { buildAlbumStatsIndex } from '../util/album-stats.js?v=180';
+import { getPreview } from '../api/preview-providers.js?v=180';
+import { hoverIn, hoverOut } from '../ui/preview-player.js?v=180';
+import { coverUrl } from '../util/cover-size.js?v=180';
 
 const LS_KEY_SIZE = 'covers_cell_size';
 const LS_KEY_SORT = 'covers_sort_mode';
