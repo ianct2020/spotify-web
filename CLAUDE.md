@@ -969,6 +969,37 @@ productores construyendo algo que nadie consume como tal.
 mirarlo con las dos rutas de construcción a la vista (la de la línea 108 arranca
 con un `Set` y hace `.add()`), no cambiando la que tira.
 
+## Barrido de vistas vivas (2026-08-30, v=177) — y son 25 rutas, no 23
+Después de que `#covers` estuviera muerta nueve versiones, se comprobaron **las
+25 rutas una por una, entrando y mirando que PINTEN**. Resultado completo en
+`/home/ian/BARRIDO-VISTAS-2026-08-30.txt`.
+
+**24 pintan · 1 colgada · 0 rotas.** `#covers` era la única muerta.
+
+Dos cosas que dejó el barrido:
+
+**Son 25 rutas.** La cuenta de «las 23» de v=171 se quedó vieja: faltan
+`#new-releases` y `#sin-clasificar`. Un barrido que se apoya en un número
+escrito a mano deja fuera justo lo último que se añadió — el listado sale de
+`registerRoute()` en `app.js`, no de la memoria.
+
+**PENDIENTE: `#sin-clasificar` se cuelga para toda la sesión.** Con la familia
+de endpoints de playlists en 429, la vista se queda con el spinner «Cruzando tus
+likes con tus playlists…» **para siempre**: sin mensaje, sin error, sin toast, y
+sin salida salvo recargar. Medido: **cero peticiones nuevas** en 15 s, y cero
+peticiones **y cero logs** al salir y volver a la ruta — o sea que ni arranca.
+
+La causa es el `if (scanning) return;` del principio de `load()`: el primer
+`load()` se queda esperando una promesa que nunca se resuelve, nunca llega a su
+`finally { scanning = false }`, y el lock queda puesto para el resto de la
+sesión. Cada render posterior devuelve al instante y deja el spinner del render
+nuevo. **No es una regresión de la vigencia de ruta de v=175**: esas guardas son
+`return`, y un `return` ejecuta el `finally` y suelta el lock.
+
+Comparar con `#listened` y `#wthree`, que en las MISMAS condiciones de 429
+pintan una tarjeta de error: la vista renderiza y dice qué pasa. El arreglo
+natural es un timeout en el cruce y soltar el lock pase lo que pase. Sin hacer.
+
 ## Client ID
 0c8c92ad128e4b89be7097c6b8082797
 
