@@ -1030,6 +1030,23 @@ Comparar con `#listened` y `#wthree`, que en las MISMAS condiciones de 429
 pintan una tarjeta de error: la vista renderiza y dice qué pasa. El arreglo
 natural es un timeout en el cruce y soltar el lock pase lo que pase. Sin hacer.
 
+## ⛔ NUNCA `git add -A` ni `git add .` — archivo por archivo
+**Este repo es PÚBLICO.** El 2026-07-28 se filtraron datos personales y hubo que
+hacer `filter-branch` + force push. Desde entonces la regla es `git add` **con
+los archivos nombrados uno a uno**, siempre, sin excepción y sin importar lo
+inocente que parezca el cambio.
+
+La regla vivía solo en `fonoteca-migracion/PROMPT-INICIAL.md`, que **no se
+autocarga**: el 2026-08-29 se usó `git add -A` en ocho commits seguidos sin que
+nadie la viera (auditados después: no hubo filtración, pero la regla existe para
+no depender de auditar después). Por eso está copiada acá, que sí se carga solo
+al trabajar en este repo. Ver el porqué en `fonoteca-migracion/CONTEXTO-TECNICO.md`,
+«una regla que no está donde se lee, no existe».
+
+Deploy completo: bumpear los **cuatro** `?v=` de `src/index.html` → `bash build.sh`
+→ `git add` archivo por archivo → commit → push. Y **el `curl` no verifica el
+despliegue**: ver la regla del service worker en `CONTEXTO-TECNICO.md`.
+
 ## Client ID
 0c8c92ad128e4b89be7097c6b8082797
 
