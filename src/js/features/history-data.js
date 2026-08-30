@@ -31,10 +31,27 @@ function idGuardado() {
 // forma SÍNCRONA la primera vez que resuelve — el mismo atajo del arranque
 // degradado de `app.js` (v=173). Nunca tira: en el peor caso (navegador que
 // nunca vio sesión) devuelve `id: null`.
+//
+// [v180] Lo de arriba no alcanzaba: `getCurrentUserId()` memoiza el ÉXITO
+// (`_cachedUserId`, api.js) pero NUNCA el fracaso, así que cada vista que
+// llama a `isOwner()`/`ensureFreshMem()` volvía a pagar la batería completa de
+// `spotifyFetch` contra `/me` (hasta 6 requests, ~25-30s de backoff) antes de
+// caer al mismo fallback de siempre. Con Wrapped + Récords + #covers en la
+// misma sesión eran hasta 18 requests de más contra el endpoint YA bloqueado.
+//
+// `meFalloEnEstaCarga` es memoria de ESTA carga de página, nada más: variable
+// de módulo, nunca `localStorage`. Tiene que morir con la pestaña — si
+// Spotify se destraba, un F5 vuelve a intentar desde cero, no arrastra un
+// fracaso viejo. Con `/me` sano no cambia nada: `getCurrentUserId()` responde
+// y esta bandera ni se toca.
+let meFalloEnEstaCarga = false;
+
 async function resolvedUserId() {
+  if (meFalloEnEstaCarga) return { id: idGuardado(), degradado: true };
   try {
     return { id: await getCurrentUserId(), degradado: false };
   } catch {
+    meFalloEnEstaCarga = true;
     return { id: idGuardado(), degradado: true };
   }
 }
