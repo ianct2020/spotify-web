@@ -969,7 +969,27 @@ productores construyendo algo que nadie consume como tal.
 mirarlo con las dos rutas de construcción a la vista (la de la línea 108 arranca
 con un `Set` y hace `.add()`), no cambiando la que tira.
 
-## Barrido de vistas vivas (2026-08-30, v=177) — y son 25 rutas, no 23
+## Barrido de vistas vivas: `#debug` → «Barrer vistas» (v=178)
+**Antes de cada deploy, correrlo.** Está en `#debug`, botón «Barrer vistas (N
+rutas)». Entra a TODAS las rutas registradas, una por una, espera hasta 75 s por
+cada una y comprueba que **pinta contenido** en `#main-content` — no el marcado
+del menú, no que el módulo cargue. Deja la tabla en la misma vista y la guarda en
+`localStorage['fonoteca_barrido_v1']`, así que volver a `#debug` muestra el
+último barrido sin repetirlo (tarda minutos). Los estados son `PINTA`, `CRASH`,
+`VACIA` y `COLGADA` (se pasó de los 75 s).
+
+⚠️ **La lista sale de `rutasRegistradas()` (router.js), que devuelve las claves
+del registro real.** No hay ningún array escrito a mano y ningún número que se
+pueda quedar viejo: una ruta nueva entra al barrido por el solo hecho de
+llamar a `registerRoute()`. Es exactamente lo que falló en v=171 — «las 23
+rutas» ya eran 25, y las dos que faltaban en la cuenta eran `#new-releases` y
+`#sin-clasificar`.
+
+⚠️ **No se puede automatizar en headless ni meter en `tests/`**: haría falta el
+token de Spotify de Ian, y sacarlo del navegador no es una opción. Por eso vive
+dentro de la app, corriendo con la sesión real. Es un botón, no un test de CI.
+
+## Resultado del primer barrido (2026-08-30, v=177) — 25 rutas, no 23
 Después de que `#covers` estuviera muerta nueve versiones, se comprobaron **las
 25 rutas una por una, entrando y mirando que PINTEN**. Resultado completo en
 `/home/ian/BARRIDO-VISTAS-2026-08-30.txt`.
