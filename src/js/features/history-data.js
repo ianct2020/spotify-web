@@ -10,12 +10,42 @@
 
 import { idbGetCached, idbSetCached, idbDel } from '../idb.js';
 import { getCurrentUserId } from '../api.js';
+import { mostrarBannerDegradadoVista } from '../ui/degraded-banner.js';
 
 const HISTORY_OWNER_ID = 'orhs6wu5ykk7ql80u92ujn74o';
 
+// Mismo literal que `LAST_USER_KEY` en api.js/app.js (no se exporta desde
+// ninguno de los dos, así que se repite — es lo que ya hace app.js).
+const LAST_USER_KEY = 'fonoteca_last_user_id';
+
+function idGuardado() {
+  try { return localStorage.getItem(LAST_USER_KEY) || null; }
+  catch { return null; }
+}
+
+// [v178] Si `/me` falla (429, red, token), `getCurrentUserId()` agota sus
+// reintentos y tira. Antes eso hacía caer todo lo que depende de saber quién
+// sos —incluida la carga de los JSON precomputados del owner, no solo
+// `isOwner()`— aunque ninguno de los dos necesite el PERFIL, solo el id. Acá
+// se cae a `fonoteca_last_user_id`, que `getCurrentUserId()` ya escribe de
+// forma SÍNCRONA la primera vez que resuelve — el mismo atajo del arranque
+// degradado de `app.js` (v=173). Nunca tira: en el peor caso (navegador que
+// nunca vio sesión) devuelve `id: null`.
+async function resolvedUserId() {
+  try {
+    return { id: await getCurrentUserId(), degradado: false };
+  } catch {
+    return { id: idGuardado(), degradado: true };
+  }
+}
+
+// El fallback NUNCA decide solo "sí": compara igual que el camino normal.
+// Si además el resultado vino del fallback, avisa — no degradar en silencio.
 async function isOwner() {
-  try { return (await getCurrentUserId()) === HISTORY_OWNER_ID; }
-  catch { return false; }
+  const { id, degradado } = await resolvedUserId();
+  const owner = id === HISTORY_OWNER_ID;
+  if (owner && degradado) mostrarBannerDegradadoVista();
+  return owner;
 }
 
 const STATS_VERSION = 2;
@@ -49,7 +79,11 @@ function localKey(uid, kind) {
 let memCache = { uid: null, stats: null, plays: null, listened: null, skip: null, detail: null, records: null, artistTracks: null };
 
 async function ensureFreshMem() {
-  const uid = await getCurrentUserId().catch(() => null);
+  // [v178] Mismo fallback que `isOwner()`: sin esto, con `/me` caído el uid
+  // quedaba en `null`, el chequeo `uid === HISTORY_OWNER_ID` de más abajo
+  // fallaba igual que antes, y `isOwner()` podía decir "sí sos el owner"
+  // mientras `loadOne()` seguía sirviendo `null` — banner sin contenido atrás.
+  const { id: uid } = await resolvedUserId();
   if (memCache.uid !== uid) memCache = { uid, stats: null, plays: null, listened: null, skip: null, detail: null, records: null, artistTracks: null };
   return uid;
 }
