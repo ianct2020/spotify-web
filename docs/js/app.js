@@ -1,41 +1,41 @@
-import { isLoggedIn, loginWithSpotify, logout } from './auth.js?v=177';
-import { spotifyFetch, tryAutoLoadUserBackup } from './api.js?v=177';
-import { getValidToken } from './auth.js?v=177';
-import { cacheClearAll } from './storage.js?v=177';
-import { idbClearAll } from './idb.js?v=177';
-import { registerRoute, initRouter } from './router.js?v=177';
-import { showToast } from './ui/toast.js?v=177';
-import { pageHeader } from './ui/components.js?v=177';
-import { installCrashGuard } from './ui/crash-guard.js?v=177';
-import { getStack } from './ui/modal-stack.js?v=177';
-import { installBackToTop } from './ui/back-to-top.js?v=177';
-import { applyStoredTheme, openThemePanel } from './ui/theme-panel.js?v=177';
+import { isLoggedIn, loginWithSpotify, logout } from './auth.js?v=178';
+import { spotifyFetch, tryAutoLoadUserBackup } from './api.js?v=178';
+import { getValidToken } from './auth.js?v=178';
+import { cacheClearAll } from './storage.js?v=178';
+import { idbClearAll } from './idb.js?v=178';
+import { registerRoute, initRouter, rutasRegistradas } from './router.js?v=178';
+import { showToast } from './ui/toast.js?v=178';
+import { pageHeader, escapeHtml } from './ui/components.js?v=178';
+import { installCrashGuard } from './ui/crash-guard.js?v=178';
+import { getStack } from './ui/modal-stack.js?v=178';
+import { installBackToTop } from './ui/back-to-top.js?v=178';
+import { applyStoredTheme, openThemePanel } from './ui/theme-panel.js?v=178';
 
-import { render as renderSync } from './features/sync.js?v=177';
-import { render as renderDedupe } from './features/dedupe.js?v=177';
-import { render as renderDupalbums } from './features/duplicate-albums.js?v=177';
-import { render as renderZombies } from './features/zombies.js?v=177';
-import { render as renderVersions } from './features/versions.js?v=177';
-import { render as renderDashboard } from './features/dashboard.js?v=177';
-import { render as renderSmart } from './features/smart.js?v=177';
-import { render as renderSimilar } from './features/similar-artists.js?v=177';
-import { render as renderRabbit } from './features/rabbit-hole.js?v=177';
-import { render as renderByGenre } from './features/by-genre.js?v=177';
-import { render as renderByArtist } from './features/by-artist.js?v=177';
-import { render as renderRecs } from './features/recommendations.js?v=177';
-import { render as renderListened } from './features/listened.js?v=177';
-import { render as renderWrapped } from './features/wrapped.js?v=177';
-import { render as renderRecords } from './features/records.js?v=177';
-import { openImportHistory } from './features/import-history.js?v=177';
-import { bindOwnerLockedButtons } from './features/history-data.js?v=177';
-import { render as renderZeroPlays } from './features/zero-plays.js?v=177';
-import { render as renderSkips } from './features/skips.js?v=177';
-import { render as renderSearchLikes } from './features/search-likes.js?v=177';
-import { render as renderWthree } from './features/wthree.js?v=177';
-import { render as renderCovers } from './features/covers.js?v=177';
-import { render as renderDiscoverArtists } from './features/discover-artists.js?v=177';
-import { render as renderNewReleases } from './features/new-releases.js?v=177';
-import { render as renderSinClasificar } from './features/sin-clasificar.js?v=177';
+import { render as renderSync } from './features/sync.js?v=178';
+import { render as renderDedupe } from './features/dedupe.js?v=178';
+import { render as renderDupalbums } from './features/duplicate-albums.js?v=178';
+import { render as renderZombies } from './features/zombies.js?v=178';
+import { render as renderVersions } from './features/versions.js?v=178';
+import { render as renderDashboard } from './features/dashboard.js?v=178';
+import { render as renderSmart } from './features/smart.js?v=178';
+import { render as renderSimilar } from './features/similar-artists.js?v=178';
+import { render as renderRabbit } from './features/rabbit-hole.js?v=178';
+import { render as renderByGenre } from './features/by-genre.js?v=178';
+import { render as renderByArtist } from './features/by-artist.js?v=178';
+import { render as renderRecs } from './features/recommendations.js?v=178';
+import { render as renderListened } from './features/listened.js?v=178';
+import { render as renderWrapped } from './features/wrapped.js?v=178';
+import { render as renderRecords } from './features/records.js?v=178';
+import { openImportHistory } from './features/import-history.js?v=178';
+import { bindOwnerLockedButtons } from './features/history-data.js?v=178';
+import { render as renderZeroPlays } from './features/zero-plays.js?v=178';
+import { render as renderSkips } from './features/skips.js?v=178';
+import { render as renderSearchLikes } from './features/search-likes.js?v=178';
+import { render as renderWthree } from './features/wthree.js?v=178';
+import { render as renderCovers } from './features/covers.js?v=178';
+import { render as renderDiscoverArtists } from './features/discover-artists.js?v=178';
+import { render as renderNewReleases } from './features/new-releases.js?v=178';
+import { render as renderSinClasificar } from './features/sin-clasificar.js?v=178';
 
 // ── Arranque degradado cuando /me está rate-limiteado (v=173) ────────────────
 //
@@ -760,15 +760,141 @@ function renderHome(container) {
   `;
 }
 
+
+// ── Barrido de vistas vivas ──────────────────────────────────────────────────
+//
+// Entra a TODAS las rutas registradas, una por una, y comprueba que cada una
+// PINTA CONTENIDO. No el marcado del menú, no que el módulo cargue: que se ve
+// algo en `#main-content`.
+//
+// Por qué existe: `#covers` estuvo muerta NUEVE versiones (v=164 → v=176) y se
+// desplegó por encima nueve veces sin que nadie lo notara. Y no es que no se
+// mirara — v=171 dice «comprobadas una por una» las 23 rutas, pero lo
+// comprobado fue el marcado del menú, que no puede ver que la vista de destino
+// muestra una pantalla de error. Ver la regla en CONTEXTO-TECNICO.md.
+//
+// ⚠️ **La lista sale de `rutasRegistradas()`, no de un array de acá.** Aquella
+// cuenta de «23» ya estaba vieja: le faltaban `#new-releases` y
+// `#sin-clasificar`. Con esto, una ruta nueva entra al barrido por el solo
+// hecho de registrarse, y no hay ningún número que se pueda quedar atrás.
+//
+// ⚠️ **Corre DENTRO de la app, con la sesión de Ian.** No se puede hacer en
+// headless: haría falta el token, y sacarlo del navegador no es una opción.
+// Por eso vive en `#debug` y no en `tests/`.
+const BARRIDO_KEY = 'fonoteca_barrido_v1';
+const BARRIDO_ESPERA_MAX_MS = 75000;   // #skips y #sin-clasificar bajan la biblioteca entera
+
+function estadoDelMain() {
+  const m = document.getElementById('main-content');
+  if (!m) return { clase: 'SIN-MAIN', txt: '' };
+  if (m.querySelector('.crash-screen')) {
+    return { clase: 'CRASH', txt: m.querySelector('.crash-msg')?.textContent?.trim() || '' };
+  }
+  // El esqueleto que deja el router mientras carga NO cuenta como pintado.
+  if (m.childElementCount === 1 && m.firstElementChild.hasAttribute('data-route-placeholder')) {
+    return { clase: 'CARGANDO', txt: '' };
+  }
+  const txt = (m.textContent || '').replace(/\s+/g, ' ').trim();
+  if (!m.childElementCount && !txt) return { clase: 'VACIA', txt: '' };
+  // Un spinner con cuatro palabras al lado es "cargando", no "pintó".
+  if (m.querySelector('.spinner') && txt.length < 120) return { clase: 'CARGANDO', txt: txt.slice(0, 80) };
+  return { clase: 'PINTA', txt: txt.slice(0, 140) };
+}
+
+async function barrerVistas(onProgress) {
+  const rutas = rutasRegistradas();
+  const dormir = (ms) => new Promise(r => setTimeout(r, ms));
+  const filas = [];
+  const volverA = (window.location.hash.slice(1) || 'home');
+
+  for (const ruta of rutas) {
+    const t0 = performance.now();
+    window.location.hash = ruta;
+    await dormir(400);
+    let st = estadoDelMain();
+    while (st.clase === 'CARGANDO' || st.clase === 'SIN-MAIN') {
+      if (performance.now() - t0 > BARRIDO_ESPERA_MAX_MS) { st = { clase: 'COLGADA', txt: st.txt }; break; }
+      await dormir(500);
+      st = estadoDelMain();
+    }
+    const m = document.getElementById('main-content');
+    filas.push({
+      ruta,
+      estado: st.clase,
+      ms: Math.round(performance.now() - t0),
+      nodos: m ? m.childElementCount : 0,
+      muestra: st.txt,
+    });
+    if (onProgress) onProgress(filas.length, rutas.length, ruta, st.clase);
+  }
+
+  const informe = { cuando: new Date().toISOString(), filas };
+  try { localStorage.setItem(BARRIDO_KEY, JSON.stringify(informe)); } catch { /* da igual */ }
+  // Volver a donde estabas. Sin esto te deja tirado en la última ruta.
+  window.location.hash = volverA;
+  return informe;
+}
+
+function tablaDelBarrido(informe) {
+  if (!informe?.filas?.length) return '';
+  const mal = informe.filas.filter(f => f.estado !== 'PINTA');
+  const icono = (e) => (e === 'PINTA' ? '✅' : e === 'CRASH' ? '❌' : '⚠️');
+  const filas = informe.filas.map(f => `
+    <tr>
+      <td style="padding:4px 10px">${icono(f.estado)}</td>
+      <td style="padding:4px 10px"><code>#${escapeHtml(f.ruta)}</code></td>
+      <td style="padding:4px 10px">${escapeHtml(f.estado)}</td>
+      <td style="padding:4px 10px;text-align:right">${(f.ms / 1000).toFixed(1)}s</td>
+      <td style="padding:4px 10px;color:var(--color-text-secondary);font-size:12px">${escapeHtml(f.muestra || '')}</td>
+    </tr>`).join('');
+  return `
+    <div class="card" style="margin-top:20px">
+      <p style="margin:0 0 10px">
+        <strong>${informe.filas.length - mal.length} de ${informe.filas.length} pintan</strong>
+        ${mal.length ? ` · <span style="color:var(--color-error)">${mal.length} sin pintar: ${mal.map(f => '#' + escapeHtml(f.ruta)).join(', ')}</span>` : ' · todas bien'}
+        <span style="color:var(--color-text-muted);font-size:12px"> · ${escapeHtml(informe.cuando)}</span>
+      </p>
+      <div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:13px">${filas}</table></div>
+    </div>`;
+}
+
 async function renderDebug(container) {
   container.innerHTML = `
     <div class="page-header">
       <h1>API Debug</h1>
       <p>Prueba cada endpoint por separado.</p>
     </div>
-    <button class="btn btn-primary" id="debug-run-btn">Correr tests</button>
+    <div style="display:flex;gap:10px;flex-wrap:wrap">
+      <button class="btn btn-primary" id="debug-run-btn">Correr tests</button>
+      <button class="btn btn-secondary" id="debug-barrido-btn" title="Entra a todas las rutas registradas y comprueba que cada una pinta contenido. Tarda unos minutos.">Barrer vistas (${rutasRegistradas().length} rutas)</button>
+    </div>
+    <div id="debug-barrido"></div>
     <pre id="debug-log" style="margin-top:20px;background:var(--color-surface);padding:20px;border-radius:var(--radius-md);font-size:13px;overflow-x:auto;white-space:pre-wrap;word-break:break-all;max-height:70vh;overflow-y:auto"></pre>
   `;
+
+  // El último barrido, si lo hay: entrar a #debug tiene que mostrarlo sin
+  // volver a correrlo (tarda minutos).
+  let ultimo = null;
+  try { ultimo = JSON.parse(localStorage.getItem(BARRIDO_KEY) || 'null'); } catch { /* nada */ }
+  if (ultimo) document.getElementById('debug-barrido').innerHTML = tablaDelBarrido(ultimo);
+
+  document.getElementById('debug-barrido-btn').onclick = async (e) => {
+    const btn = e.currentTarget;
+    btn.disabled = true;
+    // El barrido navega, así que este DOM se destruye a la primera ruta. El
+    // progreso va por toast y el informe se pinta al volver, leyendo de
+    // localStorage — por eso se guarda ahí y no en una variable.
+    showToast('Barriendo vistas… vas a ver pasar las rutas. Tarda unos minutos.', 'info');
+    const informe = await barrerVistas((hechas, total, ruta, estado) => {
+      if (estado !== 'PINTA') showToast(`#${ruta}: ${estado}`, 'error');
+    });
+    const mal = informe.filas.filter(f => f.estado !== 'PINTA');
+    showToast(mal.length
+      ? `Barrido: ${mal.length} de ${informe.filas.length} NO pintan (${mal.map(f => '#' + f.ruta).join(', ')})`
+      : `Barrido: las ${informe.filas.length} rutas pintan`, mal.length ? 'error' : 'success');
+    const caja = document.getElementById('debug-barrido');
+    if (caja) caja.innerHTML = tablaDelBarrido(informe);
+  };
 
   document.getElementById('debug-run-btn').onclick = async () => {
     const log = document.getElementById('debug-log');

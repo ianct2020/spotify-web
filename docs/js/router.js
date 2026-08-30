@@ -1,5 +1,5 @@
-import { guardRoute, marcarCambioDeRuta, abrirRender, cerrarRender } from './ui/crash-guard.js?v=177';
-import { skelPage } from './ui/skeleton.js?v=177';
+import { guardRoute, marcarCambioDeRuta, abrirRender, cerrarRender } from './ui/crash-guard.js?v=178';
+import { skelPage } from './ui/skeleton.js?v=178';
 
 const routes = {};
 
@@ -73,6 +73,19 @@ function mostrarActivoEnElMenu(activo) {
 
 function registerRoute(hash, handler) {
   routes[hash] = handler;
+}
+
+/**
+ * Las rutas REGISTRADAS, tal cual las conoce el router.
+ *
+ * Existe para el barrido de vistas vivas (`#debug`). La gracia es que la lista
+ * sale de acá y no de un array escrito a mano: la cuenta «las 23 rutas» de
+ * v=171 se quedó vieja y dejó fuera `#new-releases` y `#sin-clasificar`, que es
+ * como `#covers` pudo estar muerta nueve versiones sin que nadie la mirara. Una
+ * ruta nueva entra al barrido por el solo hecho de registrarse.
+ */
+function rutasRegistradas() {
+  return Object.keys(routes);
 }
 
 function navigate(hash) {
@@ -150,4 +163,4 @@ function initRouter() {
   handleRoute();
 }
 
-export { registerRoute, navigate, initRouter, handleRoute };
+export { registerRoute, navigate, initRouter, handleRoute, rutasRegistradas };
