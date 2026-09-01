@@ -1,3 +1,5 @@
+import { prefKey, migratePrefKey } from '../storage.js?v=183';
+
 const LASTFM_KEY_STORAGE = 'lastfm_api_key';
 const LASTFM_USER_STORAGE = 'lastfm_username';
 const BASE = 'https://ws.audioscrobbler.com/2.0/';
@@ -24,21 +26,22 @@ const DEFAULT_API_KEY = 'c4568320e1c617eecff919d37a540574';
 
 /** La key que se usa: la propia del usuario si la cargó, si no la del código. */
 function getKey() {
-  return localStorage.getItem(LASTFM_KEY_STORAGE) || DEFAULT_API_KEY || null;
+  migratePrefKey(LASTFM_KEY_STORAGE);
+  return localStorage.getItem(prefKey(LASTFM_KEY_STORAGE)) || DEFAULT_API_KEY || null;
 }
 
 /** true si se está usando la del código y no una cargada a mano. */
 function isDefaultKey() {
-  return !localStorage.getItem(LASTFM_KEY_STORAGE) && !!DEFAULT_API_KEY;
+  return !localStorage.getItem(prefKey(LASTFM_KEY_STORAGE)) && !!DEFAULT_API_KEY;
 }
 
 function setKey(k) {
-  localStorage.setItem(LASTFM_KEY_STORAGE, k.trim());
+  localStorage.setItem(prefKey(LASTFM_KEY_STORAGE), k.trim());
 }
 
 /** Borra la key propia: se vuelve a la del código. */
 function clearKey() {
-  localStorage.removeItem(LASTFM_KEY_STORAGE);
+  localStorage.removeItem(prefKey(LASTFM_KEY_STORAGE));
 }
 
 function hasKey() {
@@ -46,11 +49,12 @@ function hasKey() {
 }
 
 function getUsername() {
-  return localStorage.getItem(LASTFM_USER_STORAGE);
+  migratePrefKey(LASTFM_USER_STORAGE);
+  return localStorage.getItem(prefKey(LASTFM_USER_STORAGE));
 }
 
 function setUsername(u) {
-  localStorage.setItem(LASTFM_USER_STORAGE, u.trim());
+  localStorage.setItem(prefKey(LASTFM_USER_STORAGE), u.trim());
 }
 
 function hasUsername() {

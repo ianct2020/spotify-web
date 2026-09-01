@@ -2,23 +2,24 @@
 // por álbum). Muestra qué álbumes ya tienen picks, cuántos, y cuáles te faltan.
 // Ordenado por álbumes más escuchados primero para priorizar tu tiempo.
 
-import { spotifyFetch, getAllPlaylistItems, getAllUserPlaylists, addTracksToPlaylist, removeTracksFromPlaylist, reorderPlaylistItems, getCachedPlaylistItems, updatePlaylistItemsCache, getBestAvailableLikes } from '../api.js?v=182';
-import { vigilarRuta } from '../util/vigencia-ruta.js?v=182';
-import { patchPlaylistItems, buildCachedItem } from '../util/playlist-cache-patch.js?v=182';
-import { loadHistoryStats, loadListenedAlbums, isOwner, ownerLockedMessage } from './history-data.js?v=182';
-import { escapeHtml, pageHeader } from '../ui/components.js?v=182';
-import { showToast } from '../ui/toast.js?v=182';
-import { activateMarquee, marqueeSpan } from '../ui/marquee.js?v=182';
-import { openModal, closeById, closeModal } from '../ui/modal-stack.js?v=182';
-import { getPreview } from '../api/preview-providers.js?v=182';
-import { togglePreview, playingKey } from '../ui/preview-player.js?v=182';
-import { openAlbumCard } from './album-card.js?v=182';
-import { albumKey } from '../util/album-key.js?v=182';
-import { computeUpdatedPickPositions } from '../util/reorder-shifts.js?v=182';
-import { createHiddenStore } from '../util/hidden-sync.js?v=182';
-import { mountBottom } from '../ui/bottom-layer.js?v=182';
-import { coverUrl } from '../util/cover-size.js?v=182';
-import { insercionPorPuntero, moverA, indicadorPara } from '../util/reorder-drop.js?v=182';
+import { spotifyFetch, getAllPlaylistItems, getAllUserPlaylists, addTracksToPlaylist, removeTracksFromPlaylist, reorderPlaylistItems, getCachedPlaylistItems, updatePlaylistItemsCache, getBestAvailableLikes } from '../api.js?v=183';
+import { vigilarRuta } from '../util/vigencia-ruta.js?v=183';
+import { patchPlaylistItems, buildCachedItem } from '../util/playlist-cache-patch.js?v=183';
+import { loadHistoryStats, loadListenedAlbums, isOwner, ownerLockedMessage } from './history-data.js?v=183';
+import { escapeHtml, pageHeader } from '../ui/components.js?v=183';
+import { showToast } from '../ui/toast.js?v=183';
+import { activateMarquee, marqueeSpan } from '../ui/marquee.js?v=183';
+import { openModal, closeById, closeModal } from '../ui/modal-stack.js?v=183';
+import { getPreview } from '../api/preview-providers.js?v=183';
+import { togglePreview, playingKey } from '../ui/preview-player.js?v=183';
+import { openAlbumCard } from './album-card.js?v=183';
+import { albumKey } from '../util/album-key.js?v=183';
+import { computeUpdatedPickPositions } from '../util/reorder-shifts.js?v=183';
+import { createHiddenStore } from '../util/hidden-sync.js?v=183';
+import { mountBottom } from '../ui/bottom-layer.js?v=183';
+import { coverUrl } from '../util/cover-size.js?v=183';
+import { insercionPorPuntero, moverA, indicadorPara } from '../util/reorder-drop.js?v=183';
+import { prefKey, migratePrefKey } from '../storage.js?v=183';
 
 const LS_KEY_ID = 'wthree_playlist_id';
 const LS_KEY_NAME = 'wthree_playlist_name';
@@ -153,8 +154,10 @@ document.addEventListener('previewchange', (e) => {
 });
 
 export async function render(container) {
-  playlistId = localStorage.getItem(LS_KEY_ID);
-  playlistName = localStorage.getItem(LS_KEY_NAME);
+  migratePrefKey(LS_KEY_ID);
+  migratePrefKey(LS_KEY_NAME);
+  playlistId = localStorage.getItem(prefKey(LS_KEY_ID));
+  playlistName = localStorage.getItem(prefKey(LS_KEY_NAME));
 
   container.innerHTML = `
     ${pageHeader({ title: 'W-Three helper' })}
@@ -230,8 +233,8 @@ async function showSetup(content, ruta = vigilarRuta()) {
     btn.onclick = () => {
       playlistId = btn.dataset.id;
       playlistName = btn.dataset.name;
-      localStorage.setItem(LS_KEY_ID, playlistId);
-      localStorage.setItem(LS_KEY_NAME, playlistName);
+      localStorage.setItem(prefKey(LS_KEY_ID), playlistId);
+      localStorage.setItem(prefKey(LS_KEY_NAME), playlistName);
       loadAndRender(content);
     };
   });
@@ -261,8 +264,8 @@ async function loadAndRender(content, ruta = vigilarRuta()) {
 }
 
 function reset() {
-  localStorage.removeItem(LS_KEY_ID);
-  localStorage.removeItem(LS_KEY_NAME);
+  localStorage.removeItem(prefKey(LS_KEY_ID));
+  localStorage.removeItem(prefKey(LS_KEY_NAME));
   playlistId = null;
   playlistName = null;
   const content = document.getElementById('wthree-content');

@@ -1,18 +1,20 @@
-import { idbGetCached, idbSetCached } from '../idb.js?v=182';
+import { idbGetCached, idbSetCached } from '../idb.js?v=183';
+import { prefKey, migratePrefKey } from '../storage.js?v=183';
 
 const STATSFM_USER_STORAGE = 'statsfm_username';
 const BASE = 'https://api.stats.fm/api/v1';
 
 function getUsername() {
-  return localStorage.getItem(STATSFM_USER_STORAGE);
+  migratePrefKey(STATSFM_USER_STORAGE);
+  return localStorage.getItem(prefKey(STATSFM_USER_STORAGE));
 }
 
 function setUsername(u) {
-  localStorage.setItem(STATSFM_USER_STORAGE, u.trim());
+  localStorage.setItem(prefKey(STATSFM_USER_STORAGE), u.trim());
 }
 
 function clearUsername() {
-  localStorage.removeItem(STATSFM_USER_STORAGE);
+  localStorage.removeItem(prefKey(STATSFM_USER_STORAGE));
 }
 
 function hasUsername() {

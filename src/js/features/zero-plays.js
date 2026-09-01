@@ -32,6 +32,7 @@ import { coverAtSize } from '../util/cover-size.js';
 import { firstArtistName } from '../util/artist-name.js';
 import { createHiddenStore } from '../util/hidden-sync.js';
 import { fmtDiaCorto } from '../util/fecha.js';
+import { prefKey, migratePrefKey } from '../storage.js';
 
 let cache = null;
 
@@ -51,7 +52,7 @@ const hiddenTracks = createHiddenStore({
 let showingHidden = false;
 
 const STATSFM_TOGGLE_KEY = 'zeroplays_use_statsfm';
-let useStatsfm = localStorage.getItem(STATSFM_TOGGLE_KEY) === '1';
+let useStatsfm = false;
 
 // Mismo tamaño de lote que #sin-clasificar y #skips: llena el primer viewport
 // con colchón de sobra.
@@ -77,6 +78,8 @@ let lazyCovers = null;
 
 export async function render(container) {
   teardown();
+  migratePrefKey(STATSFM_TOGGLE_KEY);
+  useStatsfm = localStorage.getItem(prefKey(STATSFM_TOGGLE_KEY)) === '1';
   container.innerHTML = `
     ${pageHeader({ title: 'Sin plays' })}
     <div id="zeroplays-content"><div class="empty-state"><div class="spinner spinner-lg"></div><div style="margin-top:16px">Cruzando likes con historial…</div></div></div>
@@ -360,7 +363,7 @@ function renderResults() {
   const sfToggle = content.querySelector('#zp-statsfm-toggle');
   if (sfToggle) sfToggle.onchange = async () => {
     useStatsfm = sfToggle.checked;
-    localStorage.setItem(STATSFM_TOGGLE_KEY, useStatsfm ? '1' : '0');
+    localStorage.setItem(prefKey(STATSFM_TOGGLE_KEY), useStatsfm ? '1' : '0');
     teardown();
     content.innerHTML = `<div class="empty-state"><div class="spinner spinner-lg"></div><div style="margin-top:16px">${useStatsfm ? 'Cruzando con Stats.fm…' : 'Recalculando…'}</div></div>`;
     await analyze();

@@ -22,6 +22,7 @@ import { albumKey } from './album-key.js';
 import { loadTrackPlays, isOwner } from '../features/history-data.js';
 import { getBestAvailableLikes, getAllPlaylistItems } from '../api.js';
 import { coverUrl } from './cover-size.js';
+import { prefKey, migratePrefKey } from '../storage.js';
 
 const LS_WTHREE_ID = 'wthree_playlist_id';
 
@@ -90,7 +91,8 @@ export async function buildAlbumHeardIndex({ force = false } = {}) {
 
   // 4) Playlist W-Three: cada track expresa un álbum escuchado.
   try {
-    const wid = localStorage.getItem(LS_WTHREE_ID);
+    migratePrefKey(LS_WTHREE_ID);   // por si esto corre antes que #wthree
+    const wid = localStorage.getItem(prefKey(LS_WTHREE_ID));
     if (wid) {
       const items = await getAllPlaylistItems(wid);
       for (const it of (items || [])) {

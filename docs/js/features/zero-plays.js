@@ -14,24 +14,25 @@
 // `util/hidden-sync.js`, playlist como fuente de verdad y localStorage como
 // caché local para pintar al instante.
 
-import { getBestAvailableLikes, removeLikedTracks, checkLibraryContains } from '../api.js?v=182';
-import { borrarLikesVerificado } from '../util/borrado-verificado.js?v=182';
-import { vigilarRuta } from '../util/vigencia-ruta.js?v=182';
-import { loadTrackPlays, trackIdOf, isOwner, ownerLockedMessage } from './history-data.js?v=182';
-import { escapeHtml, confirmModal, pageHeader } from '../ui/components.js?v=182';
-import { showToast } from '../ui/toast.js?v=182';
-import { openTrackCard } from './track-card.js?v=182';
-import { hasUsername, loadTopLifetime } from '../api/statsfm.js?v=182';
-import { getPreview } from '../api/preview-providers.js?v=182';
-import { togglePreview, playingKey } from '../ui/preview-player.js?v=182';
-import { renderTrackCardRow, wireTrackCardGrid, paintCardSelection, paintPlayingCard } from '../ui/track-card-row.js?v=182';
-import { createIncrementalList, scrollRootOf } from '../ui/incremental-list.js?v=182';
-import { createLazyImages } from '../ui/lazy-img.js?v=182';
-import { activateMarquee } from '../ui/marquee.js?v=182';
-import { coverAtSize } from '../util/cover-size.js?v=182';
-import { firstArtistName } from '../util/artist-name.js?v=182';
-import { createHiddenStore } from '../util/hidden-sync.js?v=182';
-import { fmtDiaCorto } from '../util/fecha.js?v=182';
+import { getBestAvailableLikes, removeLikedTracks, checkLibraryContains } from '../api.js?v=183';
+import { borrarLikesVerificado } from '../util/borrado-verificado.js?v=183';
+import { vigilarRuta } from '../util/vigencia-ruta.js?v=183';
+import { loadTrackPlays, trackIdOf, isOwner, ownerLockedMessage } from './history-data.js?v=183';
+import { escapeHtml, confirmModal, pageHeader } from '../ui/components.js?v=183';
+import { showToast } from '../ui/toast.js?v=183';
+import { openTrackCard } from './track-card.js?v=183';
+import { hasUsername, loadTopLifetime } from '../api/statsfm.js?v=183';
+import { getPreview } from '../api/preview-providers.js?v=183';
+import { togglePreview, playingKey } from '../ui/preview-player.js?v=183';
+import { renderTrackCardRow, wireTrackCardGrid, paintCardSelection, paintPlayingCard } from '../ui/track-card-row.js?v=183';
+import { createIncrementalList, scrollRootOf } from '../ui/incremental-list.js?v=183';
+import { createLazyImages } from '../ui/lazy-img.js?v=183';
+import { activateMarquee } from '../ui/marquee.js?v=183';
+import { coverAtSize } from '../util/cover-size.js?v=183';
+import { firstArtistName } from '../util/artist-name.js?v=183';
+import { createHiddenStore } from '../util/hidden-sync.js?v=183';
+import { fmtDiaCorto } from '../util/fecha.js?v=183';
+import { prefKey, migratePrefKey } from '../storage.js?v=183';
 
 let cache = null;
 
@@ -51,7 +52,7 @@ const hiddenTracks = createHiddenStore({
 let showingHidden = false;
 
 const STATSFM_TOGGLE_KEY = 'zeroplays_use_statsfm';
-let useStatsfm = localStorage.getItem(STATSFM_TOGGLE_KEY) === '1';
+let useStatsfm = false;
 
 // Mismo tamaño de lote que #sin-clasificar y #skips: llena el primer viewport
 // con colchón de sobra.
@@ -77,6 +78,8 @@ let lazyCovers = null;
 
 export async function render(container) {
   teardown();
+  migratePrefKey(STATSFM_TOGGLE_KEY);
+  useStatsfm = localStorage.getItem(prefKey(STATSFM_TOGGLE_KEY)) === '1';
   container.innerHTML = `
     ${pageHeader({ title: 'Sin plays' })}
     <div id="zeroplays-content"><div class="empty-state"><div class="spinner spinner-lg"></div><div style="margin-top:16px">Cruzando likes con historial…</div></div></div>
@@ -360,7 +363,7 @@ function renderResults() {
   const sfToggle = content.querySelector('#zp-statsfm-toggle');
   if (sfToggle) sfToggle.onchange = async () => {
     useStatsfm = sfToggle.checked;
-    localStorage.setItem(STATSFM_TOGGLE_KEY, useStatsfm ? '1' : '0');
+    localStorage.setItem(prefKey(STATSFM_TOGGLE_KEY), useStatsfm ? '1' : '0');
     teardown();
     content.innerHTML = `<div class="empty-state"><div class="spinner spinner-lg"></div><div style="margin-top:16px">${useStatsfm ? 'Cruzando con Stats.fm…' : 'Recalculando…'}</div></div>`;
     await analyze();

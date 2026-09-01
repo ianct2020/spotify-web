@@ -1,8 +1,9 @@
-import { getAllUserPlaylists } from '../api.js?v=182';
-import { escapeHtml } from '../ui/components.js?v=182';
-import { showToast } from '../ui/toast.js?v=182';
-import { isJunkTrack } from '../util/junk.js?v=182';
-import { openModal, closeTop } from '../ui/modal-stack.js?v=182';
+import { getAllUserPlaylists } from '../api.js?v=183';
+import { escapeHtml } from '../ui/components.js?v=183';
+import { showToast } from '../ui/toast.js?v=183';
+import { isJunkTrack } from '../util/junk.js?v=183';
+import { openModal, closeTop } from '../ui/modal-stack.js?v=183';
+import { prefKey, migratePrefKey } from '../storage.js?v=183';
 
 const PID_KEY = 'listened_albums_playlist_id';
 const PNAME_KEY = 'listened_albums_playlist_name';
@@ -33,19 +34,21 @@ function albumKey(name, artist) {
 }
 
 function getListenedPlaylist() {
-  const id = localStorage.getItem(PID_KEY);
+  migratePrefKey(PID_KEY);
+  migratePrefKey(PNAME_KEY);
+  const id = localStorage.getItem(prefKey(PID_KEY));
   if (!id) return null;
-  return { id, name: localStorage.getItem(PNAME_KEY) || 'Álbumes escuchados' };
+  return { id, name: localStorage.getItem(prefKey(PNAME_KEY)) || 'Álbumes escuchados' };
 }
 
 function setListenedPlaylist(id, name) {
-  localStorage.setItem(PID_KEY, id);
-  localStorage.setItem(PNAME_KEY, name);
+  localStorage.setItem(prefKey(PID_KEY), id);
+  localStorage.setItem(prefKey(PNAME_KEY), name);
 }
 
 function clearListenedPlaylist() {
-  localStorage.removeItem(PID_KEY);
-  localStorage.removeItem(PNAME_KEY);
+  localStorage.removeItem(prefKey(PID_KEY));
+  localStorage.removeItem(prefKey(PNAME_KEY));
 }
 
 // Agrupa items de una playlist (respuesta de /playlists/{id}/items) por álbum.
@@ -115,7 +118,7 @@ async function openListenedAlbumsPicker({ onSelect, onClear } = {}) {
     return;
   }
 
-  const current = localStorage.getItem(PID_KEY);
+  const current = localStorage.getItem(prefKey(PID_KEY));
   const overlay = openModal({
     id: 'listened-albums-picker',
     html: `

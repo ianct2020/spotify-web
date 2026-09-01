@@ -7,6 +7,7 @@ import { openModal, closeTop } from '../ui/modal-stack.js';
 import { coverUrl } from '../util/cover-size.js';
 import { openPlaylistPicker } from '../ui/playlist-picker.js';
 import { getOwnPlaylists, addUrisToPlaylists, toastAddResult } from '../util/playlist-add.js';
+import { prefKey, migratePrefKey } from '../storage.js';
 
 // ── «Borrar sobrantes» REHABILITADO (2026-08-28) ─────────────────────────────
 //
@@ -117,10 +118,10 @@ const resolvedClusterIdxs = new Set();
 // del cluster (no por idx, así sobrevive a re-analizar).
 const DISMISS_KEY = 'versions_dismissed';
 function getDismissed() {
-  try { return new Set(JSON.parse(localStorage.getItem(DISMISS_KEY) || '[]')); } catch { return new Set(); }
+  try { return new Set(JSON.parse(localStorage.getItem(prefKey(DISMISS_KEY)) || '[]')); } catch { return new Set(); }
 }
 function saveDismissed(s) {
-  localStorage.setItem(DISMISS_KEY, JSON.stringify([...s]));
+  localStorage.setItem(prefKey(DISMISS_KEY), JSON.stringify([...s]));
 }
 let allClusters = [];
 // Índice clave-de-canción → ids vivos, con TODA la biblioteca (no solo los
@@ -140,6 +141,7 @@ const SHOWN_STEP = 50;
 let shownCount = SHOWN_STEP;
 
 export function render(container) {
+  migratePrefKey(DISMISS_KEY);
   container.innerHTML = `
     ${pageHeader({ title: 'Versiones Duplicadas' })}
     <div class="feature-actions" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">

@@ -1,5 +1,5 @@
 import { getValidToken, refreshAccessToken } from './auth.js';
-import { cacheGet, cacheGetRaw, cacheGetTimestamp, cacheSet, cacheClear } from './storage.js';
+import { cacheGet, cacheGetRaw, cacheGetTimestamp, cacheSet, cacheClear, prefKey, migratePrefKey } from './storage.js';
 import { idbDel, idbGetCached, idbGetCachedRaw, idbGetTimestamp, idbSetCached } from './idb.js';
 import { showToast } from './ui/toast.js';
 import { artistIsSame, limpiaParaQuery } from './util/track-match.js';
@@ -544,10 +544,15 @@ const CONFIG_LOCAL_KEYS = [
   'artist_sort_mode',
 ];
 
+// ⚠️ v=183: las claves de CONFIG_LOCAL_KEYS pasaron a vivir prefijadas por
+// usuario (`prefKey()`, ver storage.js). El export/import sigue guardando el
+// nombre BASE en el JSON (no cambia el formato del backup) — lo que cambia es
+// dónde se lee/escribe en ESTE navegador.
 function readLocalConfig() {
   const cfg = {};
   for (const k of CONFIG_LOCAL_KEYS) {
-    const v = localStorage.getItem(k);
+    migratePrefKey(k);
+    const v = localStorage.getItem(prefKey(k));
     if (v != null) cfg[k] = v;
   }
   return cfg;
@@ -558,8 +563,9 @@ function applyLocalConfig(cfg, { overwrite = false } = {}) {
   let applied = 0;
   for (const k of CONFIG_LOCAL_KEYS) {
     if (cfg[k] == null) continue;
-    if (overwrite || localStorage.getItem(k) == null) {
-      localStorage.setItem(k, String(cfg[k]));
+    migratePrefKey(k);
+    if (overwrite || localStorage.getItem(prefKey(k)) == null) {
+      localStorage.setItem(prefKey(k), String(cfg[k]));
       applied++;
     }
   }
@@ -1052,9 +1058,10 @@ async function registrarBorradoDeLikes(ids, { origen = 'desconocido', meta = nul
   // tirando los registros más viejos— pero NUNCA se deja que el
   // QuotaExceededError salga de acá: el registro es una red, no un requisito, y
   // encima `cacheSet()` reacciona a la cuota borrando el caché entero.
-  const guardar = (lista) => localStorage.setItem(BORRADOS_LOG_KEY, JSON.stringify(lista));
+  migratePrefKey(BORRADOS_LOG_KEY);
+  const guardar = (lista) => localStorage.setItem(prefKey(BORRADOS_LOG_KEY), JSON.stringify(lista));
   let previo = [];
-  try { previo = JSON.parse(localStorage.getItem(BORRADOS_LOG_KEY) || '[]'); } catch { previo = []; }
+  try { previo = JSON.parse(localStorage.getItem(prefKey(BORRADOS_LOG_KEY)) || '[]'); } catch { previo = []; }
 
   const intentos = [
     () => guardar([entrada, ...previo].slice(0, BORRADOS_LOG_MAX)),

@@ -17,6 +17,7 @@ import { releaseKind } from '../util/release-size.js';
 import { loadFiltros, buildFilterContext, applyDiscoverFilters } from '../util/discover-filters.js';
 import { createIncrementalList, scrollRootOf } from '../ui/incremental-list.js';
 import { createLazyImages } from '../ui/lazy-img.js';
+import { prefKey, migratePrefKey } from '../storage.js';
 import {
   getArtistIdCached,
   getArtistDiscoCached,
@@ -69,15 +70,15 @@ const KINDS = ['all', 'album', 'ep', 'single'];
 const KIND_LABEL = { all: 'Todo', album: 'Álbumes', ep: 'EPs', single: 'Singles' };
 
 function getMinLikes() {
-  const n = parseInt(localStorage.getItem(LS_MIN_LIKES) || '10', 10);
+  const n = parseInt(localStorage.getItem(prefKey(LS_MIN_LIKES)) || '10', 10);
   return VALID_LIKES.has(n) ? n : 10;
 }
 function getMonths() {
-  const n = parseInt(localStorage.getItem(LS_MONTHS) || '12', 10);
+  const n = parseInt(localStorage.getItem(prefKey(LS_MONTHS)) || '12', 10);
   return VALID_MONTHS.has(n) ? n : 12;
 }
 function getFilterKind() {
-  const v = localStorage.getItem(LS_FILTER_KIND);
+  const v = localStorage.getItem(prefKey(LS_FILTER_KIND));
   return KINDS.includes(v) ? v : 'all';
 }
 function getLoadedMore() {
@@ -86,7 +87,7 @@ function getLoadedMore() {
   // ese número: si el umbral estaba en 20+ (o los likes todavía no habían
   // terminado de cargar) quedaba escrito un 6 en localStorage, y a partir de ahí
   // la vista escaneaba 6 artistas para siempre, con cualquier umbral.
-  const n = parseInt(localStorage.getItem(LS_LOADED_MORE) || '0', 10);
+  const n = parseInt(localStorage.getItem(prefKey(LS_LOADED_MORE)) || '0', 10);
   return Math.max(DEFAULT_INITIAL, Number.isFinite(n) ? n : 0);
 }
 
@@ -126,6 +127,12 @@ function teardown() {
 
 export async function render(container) {
   teardown();
+  migratePrefKey(LS_MIN_LIKES);
+  migratePrefKey(LS_MONTHS);
+  // Compartida a propósito con #discover-artists: mismo string, así que
+  // cualquiera de las dos vistas migra la MISMA clave prefijada.
+  migratePrefKey(LS_FILTER_KIND);
+  migratePrefKey(LS_LOADED_MORE);
   container.innerHTML = `
     ${pageHeader({ title: 'Novedades de tus artistas' })}
     <div id="newrel-content"><div class="empty-state"><div class="spinner spinner-lg"></div><div style="margin-top:14px">Cargando tus likes…</div></div></div>
@@ -260,7 +267,7 @@ function renderShell(content, totalCandidates) {
     const n = parseInt(btn.dataset.min, 10);
     if (!VALID_LIKES.has(n)) return;
     state.minLikes = n;
-    localStorage.setItem(LS_MIN_LIKES, String(n));
+    localStorage.setItem(prefKey(LS_MIN_LIKES), String(n));
     content.querySelectorAll('#newrel-likes [data-min]').forEach(b => b.classList.toggle('is-on', b === btn));
     // Al cambiar el umbral se puede haber vaciado la cola — reprobamos + actualizo sub.
     document.getElementById('newrel-total-scan').textContent = targetToScan();
@@ -275,7 +282,7 @@ function renderShell(content, totalCandidates) {
     const n = parseInt(btn.dataset.months, 10);
     if (!VALID_MONTHS.has(n)) return;
     state.months = n;
-    localStorage.setItem(LS_MONTHS, String(n));
+    localStorage.setItem(prefKey(LS_MONTHS), String(n));
     content.querySelectorAll('#newrel-months [data-months]').forEach(b => b.classList.toggle('is-on', b === btn));
     refreshList(content);
   });
@@ -283,7 +290,7 @@ function renderShell(content, totalCandidates) {
     const btn = e.target.closest('[data-kind]');
     if (!btn || !KINDS.includes(btn.dataset.kind)) return;
     state.filterKind = btn.dataset.kind;
-    localStorage.setItem(LS_FILTER_KIND, state.filterKind);
+    localStorage.setItem(prefKey(LS_FILTER_KIND), state.filterKind);
     content.querySelectorAll('#newrel-kind [data-kind]').forEach(b => b.classList.toggle('is-on', b === btn));
     // Sólo repinta: el tipo filtra lo YA escaneado, no cambia a qué artistas
     // hay que pedirle la discografía (a diferencia del umbral de likes).
@@ -302,7 +309,7 @@ function renderShell(content, totalCandidates) {
     // Sin clampear contra eligibleArtists(): ese número cambia con el chip de
     // umbral y persistirlo dejaba la vista trabada en 6 artistas.
     state.loadedMore += 50;
-    localStorage.setItem(LS_LOADED_MORE, String(state.loadedMore));
+    localStorage.setItem(prefKey(LS_LOADED_MORE), String(state.loadedMore));
     document.getElementById('newrel-total-scan').textContent = targetToScan();
     scanArtists(content).catch(err => console.warn('[newrel] scan:', err));
   });

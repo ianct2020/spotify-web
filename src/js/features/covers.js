@@ -25,6 +25,7 @@ import { buildAlbumStatsIndex } from '../util/album-stats.js';
 import { getPreview } from '../api/preview-providers.js';
 import { hoverIn, hoverOut } from '../ui/preview-player.js';
 import { coverUrl } from '../util/cover-size.js';
+import { prefKey, migratePrefKey } from '../storage.js';
 
 const LS_KEY_SIZE = 'covers_cell_size';
 const LS_KEY_SORT = 'covers_sort_mode';
@@ -36,24 +37,24 @@ const VALID_SORTS = new Set(['date-asc', 'min-desc', 'artist-asc']);
 const GRID_GAP = 2;
 
 function getSize() {
-  const v = localStorage.getItem(LS_KEY_SIZE);
+  const v = localStorage.getItem(prefKey(LS_KEY_SIZE));
   return VALID_SIZES.has(v) ? v : '28';
 }
-function setSize(v) { if (VALID_SIZES.has(v)) localStorage.setItem(LS_KEY_SIZE, v); }
+function setSize(v) { if (VALID_SIZES.has(v)) localStorage.setItem(prefKey(LS_KEY_SIZE), v); }
 function getSort() {
-  const v = localStorage.getItem(LS_KEY_SORT);
+  const v = localStorage.getItem(prefKey(LS_KEY_SORT));
   return VALID_SORTS.has(v) ? v : 'date-asc';
 }
-function setSort(v) { if (VALID_SORTS.has(v)) localStorage.setItem(LS_KEY_SORT, v); }
+function setSort(v) { if (VALID_SORTS.has(v)) localStorage.setItem(prefKey(LS_KEY_SORT), v); }
 function getYearsSel() {
   try {
-    const raw = JSON.parse(localStorage.getItem(LS_KEY_YEARS));
+    const raw = JSON.parse(localStorage.getItem(prefKey(LS_KEY_YEARS)));
     if (Array.isArray(raw)) return new Set(raw.map(Number).filter(Number.isFinite));
   } catch { /* empty = todos */ }
   return new Set();
 }
 function setYearsSel(sel) {
-  try { localStorage.setItem(LS_KEY_YEARS, JSON.stringify([...sel])); } catch { /* full */ }
+  try { localStorage.setItem(prefKey(LS_KEY_YEARS), JSON.stringify([...sel])); } catch { /* full */ }
 }
 
 // Aplana history-listened-albums.json y mergea la playlist W-Three (si hay).
@@ -301,6 +302,9 @@ function cellHtml(a, i) {
 }
 
 export async function render(container) {
+  migratePrefKey(LS_KEY_SIZE);
+  migratePrefKey(LS_KEY_SORT);
+  migratePrefKey(LS_KEY_YEARS);
   container.innerHTML = `
     ${pageHeader({ title: 'Mis tapas' })}
     <div id="covers-content"><div class="empty-state"><div class="spinner spinner-lg"></div></div></div>
@@ -328,7 +332,8 @@ export async function render(container) {
 
   let wthreeItems = null;
   let wthreeFallo = null;
-  const wthreeId = localStorage.getItem(LS_WTHREE_ID);
+  migratePrefKey(LS_WTHREE_ID);   // por si #covers se visita antes que #wthree
+  const wthreeId = localStorage.getItem(prefKey(LS_WTHREE_ID));
   if (wthreeId) {
     try { wthreeItems = await getAllPlaylistItems(wthreeId); }
     catch (e) {
@@ -382,7 +387,7 @@ export async function render(container) {
     ? `${crit.min_tracks_sameday}+ canciones o ${crit.min_min_sameday}+ minutos el mismo día`
     : 'los que superaron el umbral de un mismo día';
 
-  // v=182: los tres subconteos («N están en W-Three», «N solo ahí», «N sin
+  // v=183: los tres subconteos («N están en W-Three», «N solo ahí», «N sin
   // tapa») salían de `allAlbums`/`noCover` SIN filtrar, mientras el número
   // grande de arriba sí respeta el filtro de año (se actualiza en
   // `renderGrid` desde `currentList.length`). Con un filtro puesto podían

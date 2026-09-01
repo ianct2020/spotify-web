@@ -2,19 +2,21 @@ import { getAllLikedTracks, invalidateLikesCache, exportAllData, importAllData, 
 import { showProgress, hideProgress, alertModal, escapeHtml, pageHeader } from '../ui/components.js';
 import { openModal, closeTop } from '../ui/modal-stack.js';
 import { showToast } from '../ui/toast.js';
-import { openListenedAlbumsPicker } from './listened-shared.js';
+import { openListenedAlbumsPicker, getListenedPlaylist } from './listened-shared.js';
 import { loadHistoryStats, loadListenedAlbums } from './history-data.js';
 import { getArtistLikePreview } from '../util/artist-preview.js';
 import { hoverIn, hoverOut } from '../ui/preview-player.js';
 import { armRevealAll } from '../ui/reveal.js';
 import { hasUsername, getUsername, setUsername } from '../api/statsfm.js';
 import { getKey as getLastfmKey, setKey as setLastfmKey, clearKey as clearLastfmKey, isDefaultKey as lastfmIsDefaultKey } from '../api/lastfm.js';
+import { prefKey, migratePrefKey } from '../storage.js';
 
 // Tres estados posibles, no dos: puede haber una key propia, la del código, o
 // —si algún día la constante queda vacía— ninguna. El hint del ⚙ tiene que
 // distinguirlos, si no dice «propia» cuando no hay ninguna cargada.
 function estadoLastfm() {
-  if (localStorage.getItem('lastfm_api_key')) return 'propia';
+  migratePrefKey('lastfm_api_key');
+  if (localStorage.getItem(prefKey('lastfm_api_key'))) return 'propia';
   return lastfmIsDefaultKey() ? 'la del código' : 'sin configurar';
 }
 import { loadHistoryStats as _loadStatsForCounter } from './history-data.js';
@@ -205,7 +207,7 @@ function promptStatsfm() {
 // para usar la app: es el escape para poner la propia si la del código se quema
 // o si alguien quiere gastar su cuota y no la de Ian.
 function promptLastfm() {
-  const propia = localStorage.getItem('lastfm_api_key') || '';
+  const propia = localStorage.getItem(prefKey('lastfm_api_key')) || '';
   const actual = getLastfmKey() || '';
   const overlay = openModal({
     id: 'dash-lastfm-modal',
@@ -1062,8 +1064,9 @@ async function hydrateListenedAlbumsCard() {
   const labelEl = document.getElementById('listened-albums-label');
   if (!card) return;
 
-  const playlistId = localStorage.getItem('listened_albums_playlist_id');
-  const playlistName = localStorage.getItem('listened_albums_playlist_name');
+  const listenedPl = getListenedPlaylist();
+  const playlistId = listenedPl?.id || null;
+  const playlistName = listenedPl?.name || null;
 
   const openPicker = () => openListenedAlbumsPicker({
     onSelect: hydrateListenedAlbumsCard,

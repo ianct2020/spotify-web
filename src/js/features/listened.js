@@ -7,6 +7,7 @@ import { isJunkTrack } from '../util/junk.js';
 import { openModal, closeTop } from '../ui/modal-stack.js';
 import { getListenedPlaylist, groupItemsByAlbum, openListenedAlbumsPicker, albumKey, baseName, norm } from './listened-shared.js';
 import { openAlbumCard } from './album-card.js';
+import { prefKey, migratePrefKey } from '../storage.js';
 
 const SORT_KEY = 'listened_sort_mode';
 const VALID_SORTS = new Set(['recent', 'year-desc', 'year-asc', 'artist-asc', 'likes-desc', 'name-asc']);
@@ -32,34 +33,34 @@ let lastTs = null;
 
 // Álbumes que Ian marcó "no me interesa" para que no vuelvan a aparecer en "sin registrar".
 function getDismissed() {
-  try { return new Set(JSON.parse(localStorage.getItem(DISMISS_KEY) || '[]')); } catch { return new Set(); }
+  try { return new Set(JSON.parse(localStorage.getItem(prefKey(DISMISS_KEY)) || '[]')); } catch { return new Set(); }
 }
 function dismissUnreg(key) {
   const s = getDismissed();
   s.add(key);
-  localStorage.setItem(DISMISS_KEY, JSON.stringify([...s]));
+  localStorage.setItem(prefKey(DISMISS_KEY), JSON.stringify([...s]));
 }
 // Idem para grupos de "duplicados" marcados como "no es duplicado" (ej: LP3/II/Vol. son distintos).
 function getDismissedDupes() {
-  try { return new Set(JSON.parse(localStorage.getItem(DUP_DISMISS_KEY) || '[]')); } catch { return new Set(); }
+  try { return new Set(JSON.parse(localStorage.getItem(prefKey(DUP_DISMISS_KEY)) || '[]')); } catch { return new Set(); }
 }
 function dismissDupe(key) {
   const s = getDismissedDupes();
   s.add(key);
-  localStorage.setItem(DUP_DISMISS_KEY, JSON.stringify([...s]));
+  localStorage.setItem(prefKey(DUP_DISMISS_KEY), JSON.stringify([...s]));
 }
 function clearDismissedDupes() {
-  localStorage.removeItem(DUP_DISMISS_KEY);
+  localStorage.removeItem(prefKey(DUP_DISMISS_KEY));
 }
 
 // Idem para álbumes del historial de reproducción ocultados.
 function getDismissedHistory() {
-  try { return new Set(JSON.parse(localStorage.getItem(HISTORY_DISMISS_KEY) || '[]')); } catch { return new Set(); }
+  try { return new Set(JSON.parse(localStorage.getItem(prefKey(HISTORY_DISMISS_KEY)) || '[]')); } catch { return new Set(); }
 }
 function dismissHistory(key) {
   const s = getDismissedHistory();
   s.add(key);
-  localStorage.setItem(HISTORY_DISMISS_KEY, JSON.stringify([...s]));
+  localStorage.setItem(prefKey(HISTORY_DISMISS_KEY), JSON.stringify([...s]));
 }
 // Baja el JSON agregado del historial (una vez), lo cachea en IndexedDB.
 // Solo lo bajamos si el user logueado es el dueño (Ian): son sus datos personales.
@@ -173,11 +174,11 @@ function refreshHeaderCounts() {
   if (rp) rp.textContent = `🎵 Repetidos (${computeRepeatedAlbums().length})`;
 }
 function getSortMode() {
-  const v = localStorage.getItem(SORT_KEY);
+  const v = localStorage.getItem(prefKey(SORT_KEY));
   return VALID_SORTS.has(v) ? v : 'recent';
 }
 function setSortMode(v) {
-  if (VALID_SORTS.has(v)) localStorage.setItem(SORT_KEY, v);
+  if (VALID_SORTS.has(v)) localStorage.setItem(prefKey(SORT_KEY), v);
 }
 
 let albums = [];
@@ -185,6 +186,13 @@ let filterText = '';
 let playlistInfo = null;
 
 export async function render(container) {
+  migratePrefKey(SORT_KEY);
+  migratePrefKey(DISMISS_KEY);
+  migratePrefKey(DUP_DISMISS_KEY);
+  migratePrefKey(HISTORY_DISMISS_KEY);
+  migratePrefKey(QUEUE_PID_KEY);
+  migratePrefKey(QUEUE_PNAME_KEY);
+  migratePrefKey(UNREG_TYPE_KEY);
   albums = [];
   filterText = '';
 
@@ -453,11 +461,11 @@ function typeIsGuessed() {
 }
 
 function getUnregType() {
-  const v = localStorage.getItem(UNREG_TYPE_KEY);
+  const v = localStorage.getItem(prefKey(UNREG_TYPE_KEY));
   return VALID_UNREG_TYPES.has(v) ? v : 'albums';   // default: solo álbumes y EPs
 }
 function setUnregType(v) {
-  if (VALID_UNREG_TYPES.has(v)) localStorage.setItem(UNREG_TYPE_KEY, v);
+  if (VALID_UNREG_TYPES.has(v)) localStorage.setItem(prefKey(UNREG_TYPE_KEY), v);
 }
 
 // Álbumes de los que tenés muchas canciones en likes pero NO están en tu registro.
@@ -1102,7 +1110,7 @@ function openUnregistered() {
           const e = likesByKey?.get(k);
           return e ? { name: e.name, artist: e.artist, extra: `♥ ${e.tracks.length}` } : null;
         },
-        onRestore: k => { const s = getDismissed(); s.delete(k); localStorage.setItem(DISMISS_KEY, JSON.stringify([...s])); },
+        onRestore: k => { const s = getDismissed(); s.delete(k); localStorage.setItem(prefKey(DISMISS_KEY), JSON.stringify([...s])); },
         onChange: () => { refreshHeaderCounts(); renderList(); },
       });
     };
@@ -1286,12 +1294,12 @@ function openDupes() {
 // Saca de una playlist-cola los álbumes que YA están en tu registro de escuchados,
 // así al elegir qué escuchar no te aparecen repetidos.
 function getQueuePlaylist() {
-  const id = localStorage.getItem(QUEUE_PID_KEY);
-  return id ? { id, name: localStorage.getItem(QUEUE_PNAME_KEY) || 'Cola' } : null;
+  const id = localStorage.getItem(prefKey(QUEUE_PID_KEY));
+  return id ? { id, name: localStorage.getItem(prefKey(QUEUE_PNAME_KEY)) || 'Cola' } : null;
 }
 function setQueuePlaylist(id, name) {
-  localStorage.setItem(QUEUE_PID_KEY, id);
-  localStorage.setItem(QUEUE_PNAME_KEY, name);
+  localStorage.setItem(prefKey(QUEUE_PID_KEY), id);
+  localStorage.setItem(prefKey(QUEUE_PNAME_KEY), name);
 }
 
 function openQueueCleaner() {
@@ -1484,7 +1492,7 @@ function openHistory() {
           const h = historyAlbums.find(x => albumKey(x.a, x.ar) === k);
           return h ? { name: h.a, artist: h.ar, extra: `${h.dt} temas · ${h.min.toLocaleString()} min` } : null;
         },
-        onRestore: k => { const s = getDismissedHistory(); s.delete(k); localStorage.setItem(HISTORY_DISMISS_KEY, JSON.stringify([...s])); },
+        onRestore: k => { const s = getDismissedHistory(); s.delete(k); localStorage.setItem(prefKey(HISTORY_DISMISS_KEY), JSON.stringify([...s])); },
         onChange: () => { refreshHeaderCounts(); renderList(); },
       });
     };
