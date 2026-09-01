@@ -6,8 +6,12 @@
 // corte de `feat.` de `normText` se lleva todo hasta el final de la cadena y le
 // borraba al candidato el «[DEVAULT Remix]» que va DETRÁS del «(feat. Lauv)».
 //
-// Lo que NO puede pasar: que arreglar eso deje sonar el original cuando pediste
-// el remix, o el remix cuando pediste el original.
+// Lo que NO puede pasar: que arreglar eso deje sonar el remix cuando pediste
+// el original a secas... salvo que sea justo el único candidato real, ver
+// abajo (v=185): un pedido SIN versión ahora acepta cualquier versión del
+// candidato, y «from the motion picture / soundtrack» pasa a tratarse como
+// ruido de atribución, no como una versión distinta. Lo que SIGUE sin poder
+// pasar es al revés: pedir un remix y que suene el original.
 // Correr con: node tests/track-match-version.test.mjs
 
 import { titleMatches, candidateScore, tokensDeVersion, tituloBase } from '../src/js/util/track-match.js';
@@ -48,6 +52,40 @@ console.log('\nlo que NO se puede aflojar');
   ok(!titleMatches('Go', 'Go Crazy'), 'los títulos cortos siguen exigiendo exacto');
   ok(!titleMatches('Go', 'Go - Remix'), 'un título corto no entra por la vía de la versión');
   ok(!titleMatches('Tema Largo Uno', 'Tema Largo Dos'), 'bases distintas no matchean');
+  ok(!titleMatches('Tema Largo - DEVAULT Remix', 'Tema Largo'),
+    'pedir un remix sigue sin aceptar el original — esto NO cambió');
+}
+
+console.log('\nun pedido SIN versión acepta cualquier versión del candidato (v=185)');
+{
+  // El caso que motivó el cambio, medido el 2026-09-01 sobre 200 tarjetas
+  // reales de #skips y #sin-clasificar: pedir el tema a secas se quedaba en
+  // embed cuando el único candidato real en iTunes/Deezer era una versión
+  // (sped up, remix, live) y el título no traía ningún «feat.» que la
+  // borrara por accidente.
+  ok(titleMatches('Tema Largo', 'Tema Largo - Sped Up'),
+    'pedir el original ahora SÍ acepta el sped up del candidato');
+  ok(titleMatches('Tema Largo', 'Tema Largo (Live)'),
+    'y también un vivo entre paréntesis');
+  ok(titleMatches('A Different Way', 'A Different Way (feat. Lauv) [DEVAULT Remix]'),
+    'sigue matcheando el remix cuando no se pide ninguna versión');
+  // La dirección contraria NO se tocó: seguir exigiendo el remix pedido.
+  ok(!titleMatches('Tema Largo - DEVAULT Remix', 'Tema Largo'),
+    'pero pedir el remix sigue sin aceptar el original sin versión');
+}
+
+console.log('\n«from the motion picture / soundtrack» es ruido, no una versión (v=185)');
+{
+  // Medido el 2026-09-01: «Honest - From The Amazing Spider-Man 2 Soundtrack»
+  // y «Time - From the Motion Picture "Amsterdam"» se quedaban en embed
+  // porque «from…» no estaba en EDITION_TAIL ni en PALABRA_VERSION, así que
+  // ni se borraba como ruido ni se reconocía como versión comparable.
+  ok(titleMatches('Honest - From The Amazing Spider-Man 2 Soundtrack', 'Honest'),
+    'la atribución a la película no impide matchear el tema limpio');
+  ok(titleMatches('Time - From the Motion Picture "Amsterdam"', 'Time'),
+    'lo mismo con comillas y "Motion Picture" en vez de "Soundtrack"');
+  ok(tituloBase('Honest - From The Amazing Spider-Man 2 Soundtrack') === 'honest',
+    'tituloBase también la descarta');
 }
 
 console.log('\n(feat. X) NO es una versión');

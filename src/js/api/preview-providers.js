@@ -19,22 +19,23 @@
 import { findTrackPreview } from './itunes.js';
 import { pickBestMatch, artistMatches, artistList, preferredQueryArtists } from '../util/track-match.js';
 
-// v4 (v=167): la clave sube porque cambió la COMPARACIÓN de títulos —ahora se
-// reconoce la cola de versión escrita de las dos formas («- X Remix» y
-// «[X Remix]»)— y todo veredicto 'spotify-embed' o 'none' guardado con la regla
-// vieja puede ser un rechazo que hoy no se haría. Un positivo viejo tampoco
-// vale la pena conservarlo: el que sirvió sigue sirviendo y se re-resuelve
-// contra los caches de URL de iTunes y Deezer, que NO se tocan.
+// v5 (v=185): la clave sube otra vez por lo mismo que subió a v4 —cambió
+// la COMPARACIÓN de títulos, no el proveedor— así que un 'none' o
+// 'spotify-embed' guardado con la regla vieja puede ser un rechazo que hoy no
+// se haría: un pedido SIN versión ahora acepta cualquier versión del
+// candidato, y «from the motion picture / soundtrack» se trata como ruido, no
+// como versión. Sin el bump, esos rechazos viejos seguirían sirviendo embed
+// hasta que el TTL de 3 días los reintentara solo. Los caches de URL de
+// iTunes y Deezer NO se tocan: el proveedor que sirvió sigue sirviendo.
 //
-// De paso se lleva puestas las entradas envenenadas anteriores a v=149, que es
-// lo que había que purgar: hasta entonces un rate limit de Apple durante una
-// tanda dejaba el veredicto 'spotify-embed' pegado **30 días**. Medidas en la
-// app de Ian el 2026-08-29: 3 de 18 embeds cacheados eran de esa época.
-// (v3 subía por la regla de varios artistas de v=141; v2 y v1 por lo mismo.)
-const PROVIDER_CACHE_KEY = 'preview_provider_map_v4';
+// v4 (v=167): la clave subió porque cambió la COMPARACIÓN de títulos —ahora se
+// reconoce la cola de versión escrita de las dos formas («- X Remix» y
+// «[X Remix]»)— y de paso se llevó puestas las entradas envenenadas anteriores
+// a v=149 (un rate limit de Apple dejaba 'spotify-embed' pegado 30 días).
+const PROVIDER_CACHE_KEY = 'preview_provider_map_v5';
 // Las versiones viejas no caducan solas: ocupan localStorage para siempre y en
 // la app de Ian seguían las tres. Se borran al cargar el cache por primera vez.
-const PROVIDER_CACHE_KEYS_VIEJAS = ['preview_provider_map_v1', 'preview_provider_map_v2', 'preview_provider_map_v3'];
+const PROVIDER_CACHE_KEYS_VIEJAS = ['preview_provider_map_v1', 'preview_provider_map_v2', 'preview_provider_map_v3', 'preview_provider_map_v4'];
 const PROVIDER_CACHE_MAX = 800;
 const NEG_TTL = 3 * 24 * 60 * 60 * 1000;      // 3 días para reintentar "sin preview"
 const POS_TTL = 30 * 24 * 60 * 60 * 1000;     // 30 días para el proveedor ganador
