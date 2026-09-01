@@ -2,24 +2,24 @@
 // por álbum). Muestra qué álbumes ya tienen picks, cuántos, y cuáles te faltan.
 // Ordenado por álbumes más escuchados primero para priorizar tu tiempo.
 
-import { spotifyFetch, getAllPlaylistItems, getAllUserPlaylists, addTracksToPlaylist, removeTracksFromPlaylist, reorderPlaylistItems, getCachedPlaylistItems, updatePlaylistItemsCache, getBestAvailableLikes } from '../api.js?v=183';
-import { vigilarRuta } from '../util/vigencia-ruta.js?v=183';
-import { patchPlaylistItems, buildCachedItem } from '../util/playlist-cache-patch.js?v=183';
-import { loadHistoryStats, loadListenedAlbums, isOwner, ownerLockedMessage } from './history-data.js?v=183';
-import { escapeHtml, pageHeader } from '../ui/components.js?v=183';
-import { showToast } from '../ui/toast.js?v=183';
-import { activateMarquee, marqueeSpan } from '../ui/marquee.js?v=183';
-import { openModal, closeById, closeModal } from '../ui/modal-stack.js?v=183';
-import { getPreview } from '../api/preview-providers.js?v=183';
-import { togglePreview, playingKey } from '../ui/preview-player.js?v=183';
-import { openAlbumCard } from './album-card.js?v=183';
-import { albumKey } from '../util/album-key.js?v=183';
-import { computeUpdatedPickPositions } from '../util/reorder-shifts.js?v=183';
-import { createHiddenStore } from '../util/hidden-sync.js?v=183';
-import { mountBottom } from '../ui/bottom-layer.js?v=183';
-import { coverUrl } from '../util/cover-size.js?v=183';
-import { insercionPorPuntero, moverA, indicadorPara } from '../util/reorder-drop.js?v=183';
-import { prefKey, migratePrefKey } from '../storage.js?v=183';
+import { spotifyFetch, getAllPlaylistItems, getAllUserPlaylists, addTracksToPlaylist, removeTracksFromPlaylist, reorderPlaylistItems, getCachedPlaylistItems, updatePlaylistItemsCache, getBestAvailableLikes } from '../api.js?v=184';
+import { vigilarRuta } from '../util/vigencia-ruta.js?v=184';
+import { patchPlaylistItems, buildCachedItem } from '../util/playlist-cache-patch.js?v=184';
+import { loadHistoryStats, loadListenedAlbums, isOwner, ownerLockedMessage } from './history-data.js?v=184';
+import { escapeHtml, pageHeader } from '../ui/components.js?v=184';
+import { showToast } from '../ui/toast.js?v=184';
+import { activateMarquee, marqueeSpan } from '../ui/marquee.js?v=184';
+import { openModal, closeById, closeModal } from '../ui/modal-stack.js?v=184';
+import { getPreview } from '../api/preview-providers.js?v=184';
+import { togglePreview, playingKey } from '../ui/preview-player.js?v=184';
+import { openAlbumCard } from './album-card.js?v=184';
+import { albumKey } from '../util/album-key.js?v=184';
+import { computeUpdatedPickPositions } from '../util/reorder-shifts.js?v=184';
+import { createHiddenStore } from '../util/hidden-sync.js?v=184';
+import { mountBottom } from '../ui/bottom-layer.js?v=184';
+import { coverUrl } from '../util/cover-size.js?v=184';
+import { insercionPorPuntero, moverA, indicadorPara } from '../util/reorder-drop.js?v=184';
+import { prefKey, migratePrefKey } from '../storage.js?v=184';
 
 const LS_KEY_ID = 'wthree_playlist_id';
 const LS_KEY_NAME = 'wthree_playlist_name';

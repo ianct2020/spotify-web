@@ -328,6 +328,11 @@ async function load({ force }) {
       fromCache: scanMs === 0,
       totalMs: Math.round(performance.now() - t0),
     };
+    // `window.__filasSinClasificar` espeja `rows` para medir previews desde
+    // afuera, mismo arnés que `window.__filasSkips` / `window.__filasZeroPlays`
+    // (v=166): leer del DOM no sirve porque la tarjeta muestra los artistas ya
+    // unidos en un string, y el matcher necesita la lista.
+    window.__filasSinClasificar = rows;
     console.log(`[sin-clasificar] ${rows.length} sin clasificar de ${likes.length} likes · ${state.fromCache ? 'cache' : 'escaneo'} · total ${state.totalMs} ms`);
     renderResults();
   } catch (e) {
