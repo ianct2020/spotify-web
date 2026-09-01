@@ -323,10 +323,37 @@ mosaico (`rgba(20,20,28,.95)` con texto blanco, que trae su propio fondo).
   avisar. Medido el 29/08 sobre las 59 URLs de `#skips`: 59/59 cargan, así que
   hoy no molesta — pero el día que moleste, el síntoma va a ser silencio y no
   un error.
-- **Queda flojo el match de un tema pedido SIN versión contra un candidato CON
-  versión** («A Different Way» matchea «A Different Way [DEVAULT Remix]»), por
-  el corte de `feat.` de `normText`. Apretarlo sacaría previews en vez de
-  agregarlos, así que se dejó como estaba. Ver la sección de v=167.
+- ~~**Queda flojo el match de un tema pedido SIN versión contra un candidato CON
+  versión**~~ ✅ **Apretado en v=185 (2026-09-01)**. Medido ANTES de tocar
+  código, con el mismo método de la tanda v=150 (100 tarjetas al azar de
+  `#skips`, 100 de `#sin-clasificar`, secuencial y con pausa contra iTunes —
+  no en paralelo, que en v=150 le hizo cortar a Apple y falseó la medición):
+
+  | | itunes | deezer | embed |
+  |---|---:|---:|---:|
+  | `#skips` antes | 77 | 20 | 3 |
+  | `#skips` después | 79 | 20 | **1** |
+  | `#sin-clasificar` antes | 79 | 19 | 2 |
+  | `#sin-clasificar` después | 79 | 19 | 2 |
+
+  Dos cambios en `track-match.js`: `EDITION_TAIL` suma «from…» como cola de
+  atribución a película/serie (no es una versión distinta, es ruido — se borra
+  igual que "remaster"), y `versionesCompatibles()` deja de exigir que las dos
+  colas de versión estén vacías: un pedido SIN versión ahora acepta cualquier
+  versión del candidato. La dirección contraria no se tocó — pedir un remix
+  sigue sin aceptar el original.
+
+  **Los únicos dos cambios reales de los 200** fueron «Honest - From The
+  Amazing Spider-Man 2 Soundtrack» (The Neighbourhood) y «Time - From the
+  Motion Picture "Amsterdam"» (GIVĒON), los dos de embed a iTunes.
+  **Verificados a mano contra lo que devolvió iTunes**: la misma canción, el
+  mismo artista, sin ningún falso positivo. El resto de los 200 —incluidos
+  los que ya resolvían por iTunes/Deezer antes del cambio— resolvió por el
+  MISMO proveedor que antes, id por id: la vía nueva (`versionesCompatibles`)
+  no desplazó ningún match existente por uno distinto. `preview_provider_map`
+  sube a v5 porque la comparación cambió. 8 asserts nuevos en
+  `tests/track-match-version.test.mjs` (26 en total). Ver la sección de v=167
+  para el caso que dejó esto documentado originalmente.
 - **`#new-releases` no tiene los chips de tipo** (Todo / Álbumes / EPs /
   Singles). Los de v=165 se pusieron solo en `#discover-artists`, que era donde
   el EP quedaba escondido; en Novedades no hay filtro por tipo y no esconde
