@@ -1,27 +1,29 @@
-import { getAllLikedTracks, invalidateLikesCache, exportAllData, importAllData, getCurrentUserId, syncLikesIncremental, getLikesCacheTimestamp, getBestAvailableLikes, getAllPlaylistItems } from '../api.js?v=182';
-import { showProgress, hideProgress, alertModal, escapeHtml, pageHeader } from '../ui/components.js?v=182';
-import { openModal, closeTop } from '../ui/modal-stack.js?v=182';
-import { showToast } from '../ui/toast.js?v=182';
-import { openListenedAlbumsPicker } from './listened-shared.js?v=182';
-import { loadHistoryStats, loadListenedAlbums } from './history-data.js?v=182';
-import { getArtistLikePreview } from '../util/artist-preview.js?v=182';
-import { hoverIn, hoverOut } from '../ui/preview-player.js?v=182';
-import { armRevealAll } from '../ui/reveal.js?v=182';
-import { hasUsername, getUsername, setUsername } from '../api/statsfm.js?v=182';
-import { getKey as getLastfmKey, setKey as setLastfmKey, clearKey as clearLastfmKey, isDefaultKey as lastfmIsDefaultKey } from '../api/lastfm.js?v=182';
+import { getAllLikedTracks, invalidateLikesCache, exportAllData, importAllData, getCurrentUserId, syncLikesIncremental, getLikesCacheTimestamp, getBestAvailableLikes, getAllPlaylistItems } from '../api.js?v=183';
+import { showProgress, hideProgress, alertModal, escapeHtml, pageHeader } from '../ui/components.js?v=183';
+import { openModal, closeTop } from '../ui/modal-stack.js?v=183';
+import { showToast } from '../ui/toast.js?v=183';
+import { openListenedAlbumsPicker, getListenedPlaylist } from './listened-shared.js?v=183';
+import { loadHistoryStats, loadListenedAlbums } from './history-data.js?v=183';
+import { getArtistLikePreview } from '../util/artist-preview.js?v=183';
+import { hoverIn, hoverOut } from '../ui/preview-player.js?v=183';
+import { armRevealAll } from '../ui/reveal.js?v=183';
+import { hasUsername, getUsername, setUsername } from '../api/statsfm.js?v=183';
+import { getKey as getLastfmKey, setKey as setLastfmKey, clearKey as clearLastfmKey, isDefaultKey as lastfmIsDefaultKey } from '../api/lastfm.js?v=183';
+import { prefKey, migratePrefKey } from '../storage.js?v=183';
 
 // Tres estados posibles, no dos: puede haber una key propia, la del código, o
 // —si algún día la constante queda vacía— ninguna. El hint del ⚙ tiene que
 // distinguirlos, si no dice «propia» cuando no hay ninguna cargada.
 function estadoLastfm() {
-  if (localStorage.getItem('lastfm_api_key')) return 'propia';
+  migratePrefKey('lastfm_api_key');
+  if (localStorage.getItem(prefKey('lastfm_api_key'))) return 'propia';
   return lastfmIsDefaultKey() ? 'la del código' : 'sin configurar';
 }
-import { loadHistoryStats as _loadStatsForCounter } from './history-data.js?v=182';
-import { openArtistCard } from './artist-card.js?v=182';
-import { openAlbumCard } from './album-card.js?v=182';
-import { activateMarquee, marqueeSpan } from '../ui/marquee.js?v=182';
-import { isJunkTrack } from '../util/junk.js?v=182';
+import { loadHistoryStats as _loadStatsForCounter } from './history-data.js?v=183';
+import { openArtistCard } from './artist-card.js?v=183';
+import { openAlbumCard } from './album-card.js?v=183';
+import { activateMarquee, marqueeSpan } from '../ui/marquee.js?v=183';
+import { isJunkTrack } from '../util/junk.js?v=183';
 
 let charts = [];
 let _loadController = null;
@@ -205,7 +207,7 @@ function promptStatsfm() {
 // para usar la app: es el escape para poner la propia si la del código se quema
 // o si alguien quiere gastar su cuota y no la de Ian.
 function promptLastfm() {
-  const propia = localStorage.getItem('lastfm_api_key') || '';
+  const propia = localStorage.getItem(prefKey('lastfm_api_key')) || '';
   const actual = getLastfmKey() || '';
   const overlay = openModal({
     id: 'dash-lastfm-modal',
@@ -1062,8 +1064,9 @@ async function hydrateListenedAlbumsCard() {
   const labelEl = document.getElementById('listened-albums-label');
   if (!card) return;
 
-  const playlistId = localStorage.getItem('listened_albums_playlist_id');
-  const playlistName = localStorage.getItem('listened_albums_playlist_name');
+  const listenedPl = getListenedPlaylist();
+  const playlistId = listenedPl?.id || null;
+  const playlistName = listenedPl?.name || null;
 
   const openPicker = () => openListenedAlbumsPicker({
     onSelect: hydrateListenedAlbumsCard,

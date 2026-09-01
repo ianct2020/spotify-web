@@ -21,6 +21,7 @@ import { borrarLikesVerificado } from '../util/borrado-verificado.js';
 import { vigilarRuta } from '../util/vigencia-ruta.js';
 import { idbGetCached, idbSetCached, idbDel } from '../idb.js';
 import { createHiddenStore } from '../util/hidden-sync.js';
+import { prefKey, migratePrefKey } from '../storage.js';
 import { addUrisToPlaylists, toastAddResult, getOwnPlaylists } from '../util/playlist-add.js';
 import { escapeHtml, pageHeader, showProgress, hideProgress, isCancelled, confirmModal } from '../ui/components.js';
 import { openModal, closeTop } from '../ui/modal-stack.js';
@@ -68,7 +69,7 @@ const SORTS = [
 let state = null;      // { rows, likesCount, ownPlaylists, scannedAt, scanMs }
 let scanning = false;
 let filterText = '';
-let sortMode = localStorage.getItem(SORT_KEY) || 'recent';
+let sortMode = 'recent';   // se resuelve de verdad en render(), ver prefKey()
 let showingHidden = false;
 // Filas visibles con el filtro y el orden actuales, en el mismo orden que las
 // tarjetas del grid. Los handlers leen de acá y NO de filtered(): con el orden
@@ -119,14 +120,14 @@ const hidden = createHiddenStore({
 
 // null = todavía no se configuró nunca (hay que presembrar con los defaults).
 function loadExcluded() {
-  const raw = localStorage.getItem(EXCLUDED_KEY);
+  const raw = localStorage.getItem(prefKey(EXCLUDED_KEY));
   if (raw == null) return null;
   try {
     const arr = JSON.parse(raw);
     return new Set(Array.isArray(arr) ? arr : []);
   } catch { return null; }
 }
-function saveExcluded(set) { saveSet(EXCLUDED_KEY, set); }
+function saveExcluded(set) { saveSet(prefKey(EXCLUDED_KEY), set); }
 
 // Las tres playlists que crea la app para los ocultos (skips / sin clasificar /
 // álbumes). Se comparan por nombre porque los ids los crea Spotify y viven en
@@ -173,6 +174,9 @@ function firstArtist(t) {
 
 export async function render(container) {
   teardown();
+  migratePrefKey(SORT_KEY);
+  migratePrefKey(EXCLUDED_KEY);
+  sortMode = localStorage.getItem(prefKey(SORT_KEY)) || 'recent';
   container.innerHTML = `
     ${pageHeader({ title: 'Sin clasificar' })}
     <div id="sc-content"></div>
@@ -598,7 +602,7 @@ function wire() {
   const sort = content.querySelector('#sc-sort');
   if (sort) sort.onchange = () => {
     sortMode = sort.value;
-    localStorage.setItem(SORT_KEY, sortMode);
+    localStorage.setItem(prefKey(SORT_KEY), sortMode);
     refreshList();
   };
 

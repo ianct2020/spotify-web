@@ -6,6 +6,7 @@ import { showProgress, hideProgress, progressController, isCancelled, promptPlay
 import { showToast } from '../ui/toast.js';
 import { openModal, closeTop } from '../ui/modal-stack.js';
 import { tagToGroup } from './genre-groups.js';
+import { prefKey, migratePrefKey } from '../storage.js';
 
 const NOISE_TAGS = new Set([
   'seen live', 'favorites', 'favorite', 'favourite', 'favourites',
@@ -60,25 +61,34 @@ let artistToTags = new Map();
 let genreMap = new Map();
 let selectedTags = new Set();
 let genreFilter = '';
-let groupsMode = localStorage.getItem('genre_groups_mode') === '1';
+// Claves de preferencia por usuario (v=183): con `prefKey()`, migradas la
+// primera vez que se leen — ver storage.js.
+const GROUPS_KEY = 'genre_groups_mode';
+let groupsMode = false;
+function migrarPrefsGenre() {
+  migratePrefKey(GROUPS_KEY);
+  migratePrefKey(SORT_KEY);
+  migratePrefKey(HIDDEN_KEY);
+  groupsMode = localStorage.getItem(prefKey(GROUPS_KEY)) === '1';
+}
 const SORT_KEY = 'genre_sort_mode';
 const VALID_SORTS = new Set(['count-desc', 'count-asc', 'name-asc']);
 function getSortMode() {
-  const v = localStorage.getItem(SORT_KEY);
+  const v = localStorage.getItem(prefKey(SORT_KEY));
   return VALID_SORTS.has(v) ? v : 'count-desc';
 }
 function setSortMode(v) {
-  if (VALID_SORTS.has(v)) localStorage.setItem(SORT_KEY, v);
+  if (VALID_SORTS.has(v)) localStorage.setItem(prefKey(SORT_KEY), v);
 }
 
 // Tags ocultos a mano por el usuario (además de NOISE_TAGS hardcodeado):
 // para tapar basura nueva sin esperar un deploy. Persiste en localStorage.
 const HIDDEN_KEY = 'genre_hidden_tags';
 function getHiddenTags() {
-  try { return new Set(JSON.parse(localStorage.getItem(HIDDEN_KEY) || '[]')); } catch { return new Set(); }
+  try { return new Set(JSON.parse(localStorage.getItem(prefKey(HIDDEN_KEY)) || '[]')); } catch { return new Set(); }
 }
 function saveHiddenTags(set) {
-  try { localStorage.setItem(HIDDEN_KEY, JSON.stringify([...set])); } catch { /* ignora */ }
+  try { localStorage.setItem(prefKey(HIDDEN_KEY), JSON.stringify([...set])); } catch { /* ignora */ }
 }
 
 export function render(container) {
@@ -86,6 +96,7 @@ export function render(container) {
   artistToTags = new Map();
   genreMap = new Map();
   selectedTags = new Set();
+  migrarPrefsGenre();
 
   container.innerHTML = `
     ${pageHeader({ title: 'Clasificar por género' })}
@@ -649,7 +660,7 @@ function showGenres() {
   const groupsToggle = document.getElementById('genre-groups-toggle');
   groupsToggle.onchange = (e) => {
     groupsMode = e.target.checked;
-    localStorage.setItem('genre_groups_mode', groupsMode ? '1' : '0');
+    localStorage.setItem(prefKey(GROUPS_KEY), groupsMode ? '1' : '0');
     selectedTags = new Set();
     showGenres();
   };

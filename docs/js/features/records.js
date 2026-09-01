@@ -2,12 +2,12 @@
 // maratones de un artista, temas en loop, rachas e hitos. Todo sale de
 // history-records.json (gen-stats.py) ya calculado, acá es solo UI.
 
-import { loadRecords, isOwner, ownerLockedMessage } from './history-data.js?v=182';
-import { escapeHtml, pageHeader } from '../ui/components.js?v=182';
-import { getPreview } from '../api/preview-providers.js?v=182';
-import { getArtistLikePreview } from '../util/artist-preview.js?v=182';
-import { attachHover } from '../ui/preview-player.js?v=182';
-import { openArtistCard } from './artist-card.js?v=182';
+import { loadRecords, isOwner, ownerLockedMessage } from './history-data.js?v=183';
+import { escapeHtml, pageHeader } from '../ui/components.js?v=183';
+import { getPreview } from '../api/preview-providers.js?v=183';
+import { getArtistLikePreview } from '../util/artist-preview.js?v=183';
+import { attachHover } from '../ui/preview-player.js?v=183';
+import { openArtistCard } from './artist-card.js?v=183';
 
 const MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
 const DIAS = ['lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado', 'domingo'];

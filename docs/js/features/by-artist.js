@@ -1,18 +1,19 @@
-import { getAllLikedTracks, createPlaylist, addTracksToPlaylist, invalidatePlaylistsCache, getBestAvailableLikes } from '../api.js?v=182';
-import { showProgress, hideProgress, progressController, isCancelled, promptPlaylistName, escapeHtml, pageHeader } from '../ui/components.js?v=182';
-import { showToast } from '../ui/toast.js?v=182';
-import { getArtistLikePreview } from '../util/artist-preview.js?v=182';
-import { attachHover } from '../ui/preview-player.js?v=182';
-import { openArtistCard } from './artist-card.js?v=182';
+import { getAllLikedTracks, createPlaylist, addTracksToPlaylist, invalidatePlaylistsCache, getBestAvailableLikes } from '../api.js?v=183';
+import { showProgress, hideProgress, progressController, isCancelled, promptPlaylistName, escapeHtml, pageHeader } from '../ui/components.js?v=183';
+import { showToast } from '../ui/toast.js?v=183';
+import { getArtistLikePreview } from '../util/artist-preview.js?v=183';
+import { attachHover } from '../ui/preview-player.js?v=183';
+import { openArtistCard } from './artist-card.js?v=183';
+import { prefKey, migratePrefKey } from '../storage.js?v=183';
 
 const SORT_KEY = 'artist_sort_mode';
 const VALID_SORTS = new Set(['count-desc', 'count-asc', 'name-asc']);
 function getSortMode() {
-  const v = localStorage.getItem(SORT_KEY);
+  const v = localStorage.getItem(prefKey(SORT_KEY));
   return VALID_SORTS.has(v) ? v : 'count-desc';
 }
 function setSortMode(v) {
-  if (VALID_SORTS.has(v)) localStorage.setItem(SORT_KEY, v);
+  if (VALID_SORTS.has(v)) localStorage.setItem(prefKey(SORT_KEY), v);
 }
 
 let likes = [];
@@ -21,6 +22,7 @@ let selectedArtists = new Set();
 let filterText = '';
 
 export async function render(container) {
+  migratePrefKey(SORT_KEY);
   likes = [];
   artistMap = new Map();
   selectedArtists = new Set();

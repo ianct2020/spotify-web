@@ -1,11 +1,12 @@
-import { getAllLikedTracks, createPlaylist, addTracksToPlaylist, invalidatePlaylistsCache, exportAllData, importAllData, getCurrentUserId, getBestAvailableLikes } from '../api.js?v=182';
-import { hasKey, setKey, getArtistTopTags, getCachedTags, setCachedTags, mergeCachedTags } from '../api/lastfm.js?v=182';
-import * as statsfm from '../api/statsfm.js?v=182';
-import { getGenresForArtist as mbGetGenres } from '../api/musicbrainz.js?v=182';
-import { showProgress, hideProgress, progressController, isCancelled, promptPlaylistName, alertModal, confirmModal, escapeHtml, pageHeader } from '../ui/components.js?v=182';
-import { showToast } from '../ui/toast.js?v=182';
-import { openModal, closeTop } from '../ui/modal-stack.js?v=182';
-import { tagToGroup } from './genre-groups.js?v=182';
+import { getAllLikedTracks, createPlaylist, addTracksToPlaylist, invalidatePlaylistsCache, exportAllData, importAllData, getCurrentUserId, getBestAvailableLikes } from '../api.js?v=183';
+import { hasKey, setKey, getArtistTopTags, getCachedTags, setCachedTags, mergeCachedTags } from '../api/lastfm.js?v=183';
+import * as statsfm from '../api/statsfm.js?v=183';
+import { getGenresForArtist as mbGetGenres } from '../api/musicbrainz.js?v=183';
+import { showProgress, hideProgress, progressController, isCancelled, promptPlaylistName, alertModal, confirmModal, escapeHtml, pageHeader } from '../ui/components.js?v=183';
+import { showToast } from '../ui/toast.js?v=183';
+import { openModal, closeTop } from '../ui/modal-stack.js?v=183';
+import { tagToGroup } from './genre-groups.js?v=183';
+import { prefKey, migratePrefKey } from '../storage.js?v=183';
 
 const NOISE_TAGS = new Set([
   'seen live', 'favorites', 'favorite', 'favourite', 'favourites',
@@ -60,25 +61,34 @@ let artistToTags = new Map();
 let genreMap = new Map();
 let selectedTags = new Set();
 let genreFilter = '';
-let groupsMode = localStorage.getItem('genre_groups_mode') === '1';
+// Claves de preferencia por usuario (v=183): con `prefKey()`, migradas la
+// primera vez que se leen — ver storage.js.
+const GROUPS_KEY = 'genre_groups_mode';
+let groupsMode = false;
+function migrarPrefsGenre() {
+  migratePrefKey(GROUPS_KEY);
+  migratePrefKey(SORT_KEY);
+  migratePrefKey(HIDDEN_KEY);
+  groupsMode = localStorage.getItem(prefKey(GROUPS_KEY)) === '1';
+}
 const SORT_KEY = 'genre_sort_mode';
 const VALID_SORTS = new Set(['count-desc', 'count-asc', 'name-asc']);
 function getSortMode() {
-  const v = localStorage.getItem(SORT_KEY);
+  const v = localStorage.getItem(prefKey(SORT_KEY));
   return VALID_SORTS.has(v) ? v : 'count-desc';
 }
 function setSortMode(v) {
-  if (VALID_SORTS.has(v)) localStorage.setItem(SORT_KEY, v);
+  if (VALID_SORTS.has(v)) localStorage.setItem(prefKey(SORT_KEY), v);
 }
 
 // Tags ocultos a mano por el usuario (además de NOISE_TAGS hardcodeado):
 // para tapar basura nueva sin esperar un deploy. Persiste en localStorage.
 const HIDDEN_KEY = 'genre_hidden_tags';
 function getHiddenTags() {
-  try { return new Set(JSON.parse(localStorage.getItem(HIDDEN_KEY) || '[]')); } catch { return new Set(); }
+  try { return new Set(JSON.parse(localStorage.getItem(prefKey(HIDDEN_KEY)) || '[]')); } catch { return new Set(); }
 }
 function saveHiddenTags(set) {
-  try { localStorage.setItem(HIDDEN_KEY, JSON.stringify([...set])); } catch { /* ignora */ }
+  try { localStorage.setItem(prefKey(HIDDEN_KEY), JSON.stringify([...set])); } catch { /* ignora */ }
 }
 
 export function render(container) {
@@ -86,6 +96,7 @@ export function render(container) {
   artistToTags = new Map();
   genreMap = new Map();
   selectedTags = new Set();
+  migrarPrefsGenre();
 
   container.innerHTML = `
     ${pageHeader({ title: 'Clasificar por género' })}
@@ -649,7 +660,7 @@ function showGenres() {
   const groupsToggle = document.getElementById('genre-groups-toggle');
   groupsToggle.onchange = (e) => {
     groupsMode = e.target.checked;
-    localStorage.setItem('genre_groups_mode', groupsMode ? '1' : '0');
+    localStorage.setItem(prefKey(GROUPS_KEY), groupsMode ? '1' : '0');
     selectedTags = new Set();
     showGenres();
   };

@@ -4,15 +4,16 @@ import { showToast } from '../ui/toast.js';
 import { getArtistLikePreview } from '../util/artist-preview.js';
 import { attachHover } from '../ui/preview-player.js';
 import { openArtistCard } from './artist-card.js';
+import { prefKey, migratePrefKey } from '../storage.js';
 
 const SORT_KEY = 'artist_sort_mode';
 const VALID_SORTS = new Set(['count-desc', 'count-asc', 'name-asc']);
 function getSortMode() {
-  const v = localStorage.getItem(SORT_KEY);
+  const v = localStorage.getItem(prefKey(SORT_KEY));
   return VALID_SORTS.has(v) ? v : 'count-desc';
 }
 function setSortMode(v) {
-  if (VALID_SORTS.has(v)) localStorage.setItem(SORT_KEY, v);
+  if (VALID_SORTS.has(v)) localStorage.setItem(prefKey(SORT_KEY), v);
 }
 
 let likes = [];
@@ -21,6 +22,7 @@ let selectedArtists = new Set();
 let filterText = '';
 
 export async function render(container) {
+  migratePrefKey(SORT_KEY);
   likes = [];
   artistMap = new Map();
   selectedArtists = new Set();

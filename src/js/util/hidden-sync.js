@@ -27,20 +27,31 @@ import {
   getCurrentUserId,
   spotifyFetch,
 } from '../api.js';
-import { prefKey } from '../storage.js';
+import { prefKey, migratePrefKey } from '../storage.js';
 import { invalidateOwnPlaylists } from './playlist-add.js';
 
 const PLAYLIST_DESC = 'Lista interna de Fonoteca: lo que ocultaste en esta vista. Si la borrás, se pierden los ocultos.';
 
+// ── Claves de preferencia por usuario (v=183) ───────────────────────────────
+//
+// `lsKey` (el caché LOCAL de qué está oculto — no el id de playlist, que ya
+// viene prefijado desde v=163 con `idKeyFor`) vivía en una clave global: dos
+// cuentas en el mismo navegador se pisaban la lista de ocultos entre sí.
+//
+// ⚠️ No se puede resolver el prefijo al CREAR el store (`createHiddenStore` /
+// `createLocalStore` corren al importar el módulo, mucho antes de que
+// `fonoteca_last_user_id` exista). Por eso `keys` se carga PEREZOSO, recién en
+// el primer acceso real — para ese momento la app ya arrancó y el id está.
 function loadLocal(key) {
+  migratePrefKey(key);
   try {
-    const arr = JSON.parse(localStorage.getItem(key) || '[]');
+    const arr = JSON.parse(localStorage.getItem(prefKey(key)) || '[]');
     return new Set(Array.isArray(arr) ? arr : []);
   } catch { return new Set(); }
 }
 
 function saveLocal(key, set) {
-  try { localStorage.setItem(key, JSON.stringify([...set])); } catch { /* lleno */ }
+  try { localStorage.setItem(prefKey(key), JSON.stringify([...set])); } catch { /* lleno */ }
 }
 
 function normName(s) {
@@ -113,13 +124,14 @@ export function isHiddenPlaylistName(name) {
 }
 
 export function createLocalStore({ lsKey, label }) {
-  let keys = loadLocal(lsKey);
+  let keys = null;   // perezoso — ver el comentario de `loadLocal`
   const uriByKey = new Map();
+  function ensureKeys() { if (!keys) keys = loadLocal(lsKey); return keys; }
 
   return {
-    has(key) { return keys.has(key); },
-    get size() { return keys.size; },
-    values() { return [...keys]; },
+    has(key) { return ensureKeys().has(key); },
+    get size() { return ensureKeys().size; },
+    values() { return [...ensureKeys()]; },
     // Siempre true: no hay nada remoto con lo que reconciliar, así que la vista
     // nunca tiene que esperar ni repintar por este store.
     get synced() { return true; },
@@ -129,6 +141,7 @@ export function createLocalStore({ lsKey, label }) {
     /** No-op resuelto, para poder llamarlo igual que al store sincronizado. */
     ready() { return Promise.resolve(); },
     toggle(key, uri) {
+      ensureKeys();
       const ahora = !keys.has(key);
       if (uri) this.remember(key, uri);
       if (ahora) keys.add(key); else keys.delete(key);
@@ -143,6 +156,7 @@ export function createLocalStore({ lsKey, label }) {
      */
     add(key, uri) {
       if (!key) return false;
+      ensureKeys();
       if (uri) this.remember(key, uri);
       if (keys.has(key)) return false;
       keys.add(key);
@@ -158,11 +172,12 @@ export function createLocalStore({ lsKey, label }) {
 }
 
 export function createHiddenStore({ lsKey, playlistName, keyOfTrack, label }) {
-  let keys = loadLocal(lsKey);
+  let keys = null;   // perezoso — ver el comentario de `loadLocal`
   const uriByKey = new Map();   // clave → uri de la pista que la representa
   let playlistId = null;
   let syncPromise = null;
   let synced = false;
+  function ensureKeys() { if (!keys) keys = loadLocal(lsKey); return keys; }
 
   // Claves que están en local pero todavía no subieron (sin uri conocida). No se
   // pierden: se reintenta subirlas en cada sync.
@@ -248,6 +263,7 @@ export function createHiddenStore({ lsKey, playlistName, keyOfTrack, label }) {
    * playlist todavía no existe (se sube lo que había local — la migración).
    */
   async function sync() {
+    ensureKeys();
     const existing = await findPlaylist();
 
     if (!existing) {
@@ -301,9 +317,9 @@ export function createHiddenStore({ lsKey, playlistName, keyOfTrack, label }) {
 
   return {
     /** Lectura instantánea desde el caché local. */
-    has(key) { return keys.has(key); },
-    get size() { return keys.size; },
-    values() { return [...keys]; },
+    has(key) { return ensureKeys().has(key); },
+    get size() { return ensureKeys().size; },
+    values() { return [...ensureKeys()]; },
     get synced() { return synced; },
 
     /** Registra la uri representativa de una clave (para poder subirla después). */
@@ -332,6 +348,7 @@ export function createHiddenStore({ lsKey, playlistName, keyOfTrack, label }) {
      * @returns {boolean} true si quedó oculto
      */
     toggle(key, uri) {
+      ensureKeys();
       const nowHidden = !keys.has(key);
       if (uri) this.remember(key, uri);
       if (nowHidden) keys.add(key); else keys.delete(key);
@@ -356,7 +373,7 @@ export function createHiddenStore({ lsKey, playlistName, keyOfTrack, label }) {
 
     /** Vacía la lista, local y en la playlist. */
     async clear() {
-      const uris = [...keys].map(k => uriByKey.get(k)).filter(Boolean);
+      const uris = [...ensureKeys()].map(k => uriByKey.get(k)).filter(Boolean);
       keys = new Set();
       saveLocal(lsKey, keys);
       if (uris.length && playlistId) {

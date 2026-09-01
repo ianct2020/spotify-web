@@ -28,6 +28,7 @@ import { firstArtistName, artistNames } from '../util/artist-name.js';
 import { activateMarquee } from '../ui/marquee.js';
 import { hasUsername, loadTopLifetime } from '../api/statsfm.js';
 import { createHiddenStore } from '../util/hidden-sync.js';
+import { prefKey, migratePrefKey } from '../storage.js';
 import { vigilarRuta } from '../util/vigencia-ruta.js';
 import { createIncrementalList, scrollRootOf } from '../ui/incremental-list.js';
 import { createLazyImages } from '../ui/lazy-img.js';
@@ -75,7 +76,7 @@ let showingHidden = false;
 // como "ok" (asumiendo que si no volviste a skipearlo lo estás dejando pasar) y
 // recalcula el ratio. Los que caen por debajo del umbral desaparecen del listado.
 const STATSFM_TOGGLE_KEY = 'skips_use_statsfm';
-let useStatsfm = localStorage.getItem(STATSFM_TOGGLE_KEY) === '1';
+let useStatsfm = false;
 
 // Los tres mecanismos de corrección. Encendidos por defecto (`!== '0'`): son
 // los que sacan los falsos positivos que hacían que aparecieran temas que Ian
@@ -100,9 +101,13 @@ const FIX_TOGGLES = [
     title: 'Escuchar el 80 % y cerrar Spotify o cambiar de dispositivo cuenta como escucha completa.',
   },
 ];
-const fixes = Object.fromEntries(
-  FIX_TOGGLES.map(t => [t.key, localStorage.getItem(t.lsKey) !== '0']),
-);
+const fixes = Object.fromEntries(FIX_TOGGLES.map(t => [t.key, true]));
+function recargarFixes() {
+  for (const t of FIX_TOGGLES) {
+    migratePrefKey(t.lsKey);
+    fixes[t.key] = localStorage.getItem(prefKey(t.lsKey)) !== '0';
+  }
+}
 
 // A partir de qué porcentaje de la pista una escucha se considera "casi entera".
 const NEAR_FULL = 0.80;
@@ -112,6 +117,9 @@ const PLAYS_STEPS = [3, 5, 10, 15];
 
 export async function render(container) {
   teardown();
+  migratePrefKey(STATSFM_TOGGLE_KEY);
+  useStatsfm = localStorage.getItem(prefKey(STATSFM_TOGGLE_KEY)) === '1';
+  recargarFixes();
   container.innerHTML = `
     ${pageHeader({ title: 'Skips crónicos' })}
     <div id="skips-content"><div class="empty-state"><div class="spinner spinner-lg"></div><div style="margin-top:16px">Cruzando likes con historial…</div></div></div>
@@ -613,7 +621,7 @@ function wireFilters() {
     btn.onclick = async () => {
       const k = btn.dataset.fix;
       fixes[k] = !fixes[k];
-      localStorage.setItem(FIX_TOGGLES.find(t => t.key === k).lsKey, fixes[k] ? '1' : '0');
+      localStorage.setItem(prefKey(FIX_TOGGLES.find(t => t.key === k).lsKey), fixes[k] ? '1' : '0');
       content.innerHTML = `<div class="empty-state"><div class="spinner spinner-lg"></div><div style="margin-top:16px">Recalculando…</div></div>`;
       await analyze();
     };
@@ -622,7 +630,7 @@ function wireFilters() {
   const sfToggle = content.querySelector('#skips-statsfm-toggle');
   if (sfToggle) sfToggle.onclick = async () => {
     useStatsfm = !useStatsfm;
-    localStorage.setItem(STATSFM_TOGGLE_KEY, useStatsfm ? '1' : '0');
+    localStorage.setItem(prefKey(STATSFM_TOGGLE_KEY), useStatsfm ? '1' : '0');
     content.innerHTML = `<div class="empty-state"><div class="spinner spinner-lg"></div><div style="margin-top:16px">${useStatsfm ? 'Cruzando con Stats.fm…' : 'Recalculando…'}</div></div>`;
     await analyze();
   };

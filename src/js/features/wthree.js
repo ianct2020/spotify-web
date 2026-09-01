@@ -19,6 +19,7 @@ import { createHiddenStore } from '../util/hidden-sync.js';
 import { mountBottom } from '../ui/bottom-layer.js';
 import { coverUrl } from '../util/cover-size.js';
 import { insercionPorPuntero, moverA, indicadorPara } from '../util/reorder-drop.js';
+import { prefKey, migratePrefKey } from '../storage.js';
 
 const LS_KEY_ID = 'wthree_playlist_id';
 const LS_KEY_NAME = 'wthree_playlist_name';
@@ -153,8 +154,10 @@ document.addEventListener('previewchange', (e) => {
 });
 
 export async function render(container) {
-  playlistId = localStorage.getItem(LS_KEY_ID);
-  playlistName = localStorage.getItem(LS_KEY_NAME);
+  migratePrefKey(LS_KEY_ID);
+  migratePrefKey(LS_KEY_NAME);
+  playlistId = localStorage.getItem(prefKey(LS_KEY_ID));
+  playlistName = localStorage.getItem(prefKey(LS_KEY_NAME));
 
   container.innerHTML = `
     ${pageHeader({ title: 'W-Three helper' })}
@@ -230,8 +233,8 @@ async function showSetup(content, ruta = vigilarRuta()) {
     btn.onclick = () => {
       playlistId = btn.dataset.id;
       playlistName = btn.dataset.name;
-      localStorage.setItem(LS_KEY_ID, playlistId);
-      localStorage.setItem(LS_KEY_NAME, playlistName);
+      localStorage.setItem(prefKey(LS_KEY_ID), playlistId);
+      localStorage.setItem(prefKey(LS_KEY_NAME), playlistName);
       loadAndRender(content);
     };
   });
@@ -261,8 +264,8 @@ async function loadAndRender(content, ruta = vigilarRuta()) {
 }
 
 function reset() {
-  localStorage.removeItem(LS_KEY_ID);
-  localStorage.removeItem(LS_KEY_NAME);
+  localStorage.removeItem(prefKey(LS_KEY_ID));
+  localStorage.removeItem(prefKey(LS_KEY_NAME));
   playlistId = null;
   playlistName = null;
   const content = document.getElementById('wthree-content');

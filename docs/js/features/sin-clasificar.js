@@ -16,26 +16,27 @@
 import {
   getAllUserPlaylists, getAllPlaylistItems, getBestAvailableLikes,
   getCurrentUserId, removeLikedTracks, checkLibraryContains,
-} from '../api.js?v=182';
-import { borrarLikesVerificado } from '../util/borrado-verificado.js?v=182';
-import { vigilarRuta } from '../util/vigencia-ruta.js?v=182';
-import { idbGetCached, idbSetCached, idbDel } from '../idb.js?v=182';
-import { createHiddenStore } from '../util/hidden-sync.js?v=182';
-import { addUrisToPlaylists, toastAddResult, getOwnPlaylists } from '../util/playlist-add.js?v=182';
-import { escapeHtml, pageHeader, showProgress, hideProgress, isCancelled, confirmModal } from '../ui/components.js?v=182';
-import { openModal, closeTop } from '../ui/modal-stack.js?v=182';
-import { openPlaylistPicker } from '../ui/playlist-picker.js?v=182';
-import { showToast } from '../ui/toast.js?v=182';
-import { getPreview } from '../api/preview-providers.js?v=182';
-import { togglePreview, playingKey } from '../ui/preview-player.js?v=182';
-import { openTrackCard } from './track-card.js?v=182';
-import { normText } from '../util/track-match.js?v=182';
-import { activateMarquee } from '../ui/marquee.js?v=182';
-import { renderTrackCardRow, wireTrackCardGrid, paintCardSelection, paintPlayingCard } from '../ui/track-card-row.js?v=182';
-import { createIncrementalList, scrollRootOf } from '../ui/incremental-list.js?v=182';
-import { createLazyImages } from '../ui/lazy-img.js?v=182';
-import { coverAtSize } from '../util/cover-size.js?v=182';
-import { fmtDiaCorto } from '../util/fecha.js?v=182';
+} from '../api.js?v=183';
+import { borrarLikesVerificado } from '../util/borrado-verificado.js?v=183';
+import { vigilarRuta } from '../util/vigencia-ruta.js?v=183';
+import { idbGetCached, idbSetCached, idbDel } from '../idb.js?v=183';
+import { createHiddenStore } from '../util/hidden-sync.js?v=183';
+import { prefKey, migratePrefKey } from '../storage.js?v=183';
+import { addUrisToPlaylists, toastAddResult, getOwnPlaylists } from '../util/playlist-add.js?v=183';
+import { escapeHtml, pageHeader, showProgress, hideProgress, isCancelled, confirmModal } from '../ui/components.js?v=183';
+import { openModal, closeTop } from '../ui/modal-stack.js?v=183';
+import { openPlaylistPicker } from '../ui/playlist-picker.js?v=183';
+import { showToast } from '../ui/toast.js?v=183';
+import { getPreview } from '../api/preview-providers.js?v=183';
+import { togglePreview, playingKey } from '../ui/preview-player.js?v=183';
+import { openTrackCard } from './track-card.js?v=183';
+import { normText } from '../util/track-match.js?v=183';
+import { activateMarquee } from '../ui/marquee.js?v=183';
+import { renderTrackCardRow, wireTrackCardGrid, paintCardSelection, paintPlayingCard } from '../ui/track-card-row.js?v=183';
+import { createIncrementalList, scrollRootOf } from '../ui/incremental-list.js?v=183';
+import { createLazyImages } from '../ui/lazy-img.js?v=183';
+import { coverAtSize } from '../util/cover-size.js?v=183';
+import { fmtDiaCorto } from '../util/fecha.js?v=183';
 
 const HIDDEN_KEY = 'sin_clasificar_ocultas';
 const EXCLUDED_KEY = 'sin_clasificar_excluidas';
@@ -68,7 +69,7 @@ const SORTS = [
 let state = null;      // { rows, likesCount, ownPlaylists, scannedAt, scanMs }
 let scanning = false;
 let filterText = '';
-let sortMode = localStorage.getItem(SORT_KEY) || 'recent';
+let sortMode = 'recent';   // se resuelve de verdad en render(), ver prefKey()
 let showingHidden = false;
 // Filas visibles con el filtro y el orden actuales, en el mismo orden que las
 // tarjetas del grid. Los handlers leen de acá y NO de filtered(): con el orden
@@ -119,14 +120,14 @@ const hidden = createHiddenStore({
 
 // null = todavía no se configuró nunca (hay que presembrar con los defaults).
 function loadExcluded() {
-  const raw = localStorage.getItem(EXCLUDED_KEY);
+  const raw = localStorage.getItem(prefKey(EXCLUDED_KEY));
   if (raw == null) return null;
   try {
     const arr = JSON.parse(raw);
     return new Set(Array.isArray(arr) ? arr : []);
   } catch { return null; }
 }
-function saveExcluded(set) { saveSet(EXCLUDED_KEY, set); }
+function saveExcluded(set) { saveSet(prefKey(EXCLUDED_KEY), set); }
 
 // Las tres playlists que crea la app para los ocultos (skips / sin clasificar /
 // álbumes). Se comparan por nombre porque los ids los crea Spotify y viven en
@@ -173,6 +174,9 @@ function firstArtist(t) {
 
 export async function render(container) {
   teardown();
+  migratePrefKey(SORT_KEY);
+  migratePrefKey(EXCLUDED_KEY);
+  sortMode = localStorage.getItem(prefKey(SORT_KEY)) || 'recent';
   container.innerHTML = `
     ${pageHeader({ title: 'Sin clasificar' })}
     <div id="sc-content"></div>
@@ -598,7 +602,7 @@ function wire() {
   const sort = content.querySelector('#sc-sort');
   if (sort) sort.onchange = () => {
     sortMode = sort.value;
-    localStorage.setItem(SORT_KEY, sortMode);
+    localStorage.setItem(prefKey(SORT_KEY), sortMode);
     refreshList();
   };
 

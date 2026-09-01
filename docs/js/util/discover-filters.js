@@ -19,13 +19,14 @@
 // Normalizar más agresivamente `albumKey` fusionaría American Football LP3/LP4,
 // Crystal Castles I/II y Ed Sheeran ÷ vs =, que ya costó caro dos veces.
 
-import { albumKey } from './album-key.js?v=182';
-import { songKey, songKeysCandidatas, songKeyBase } from './song-identity.js?v=182';
-import { baseDeEdicion } from './edition-suffix.js?v=182';
-import { EP_MIN_TRACKS } from './release-size.js?v=182';
-import { getSavedAlbums, getBestAvailableLikes, getAllPlaylistItems } from '../api.js?v=182';
-import { getOwnPlaylists } from './playlist-add.js?v=182';
-import { loadListenedAlbums } from '../features/history-data.js?v=182';
+import { albumKey } from './album-key.js?v=183';
+import { songKey, songKeysCandidatas, songKeyBase } from './song-identity.js?v=183';
+import { baseDeEdicion } from './edition-suffix.js?v=183';
+import { EP_MIN_TRACKS } from './release-size.js?v=183';
+import { getSavedAlbums, getBestAvailableLikes, getAllPlaylistItems } from '../api.js?v=183';
+import { getOwnPlaylists } from './playlist-add.js?v=183';
+import { loadListenedAlbums } from '../features/history-data.js?v=183';
+import { prefKey, migratePrefKey } from '../storage.js?v=183';
 
 const LS_KEY = 'discover_filtros_v1';
 
@@ -95,15 +96,16 @@ export const PLAYLIST_SIN_ESCUCHAR = 'fonoteca · sin escuchar';
 const TODOS_ON = Object.fromEntries(FILTROS.map(f => [f.key, true]));
 
 export function loadFiltros() {
+  migratePrefKey(LS_KEY);
   try {
-    const raw = JSON.parse(localStorage.getItem(LS_KEY));
+    const raw = JSON.parse(localStorage.getItem(prefKey(LS_KEY)));
     if (raw && typeof raw === 'object') return { ...TODOS_ON, ...raw };
   } catch { /* corrupto: todos encendidos */ }
   return { ...TODOS_ON };
 }
 
 export function saveFiltros(estado) {
-  try { localStorage.setItem(LS_KEY, JSON.stringify(estado)); } catch { /* lleno */ }
+  try { localStorage.setItem(prefKey(LS_KEY), JSON.stringify(estado)); } catch { /* lleno */ }
 }
 
 // ── Los sufijos de edición ─────────────────────────────────────────────────

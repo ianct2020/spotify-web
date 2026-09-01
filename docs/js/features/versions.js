@@ -1,12 +1,13 @@
-import { getAllLikedTracks, removeLikedTracks, checkLibraryContains } from '../api.js?v=182';
-import { borrarLikesVerificado } from '../util/borrado-verificado.js?v=182';
-import { normalizeKey, esFantasma, guardaUltimoEjemplar, indexarBiblioteca } from '../util/versions-guard.js?v=182';
-import { showProgress, hideProgress, progressController, isCancelled, typeConfirmModal, renderTrackRow, escapeHtml, pageHeader } from '../ui/components.js?v=182';
-import { showToast } from '../ui/toast.js?v=182';
-import { openModal, closeTop } from '../ui/modal-stack.js?v=182';
-import { coverUrl } from '../util/cover-size.js?v=182';
-import { openPlaylistPicker } from '../ui/playlist-picker.js?v=182';
-import { getOwnPlaylists, addUrisToPlaylists, toastAddResult } from '../util/playlist-add.js?v=182';
+import { getAllLikedTracks, removeLikedTracks, checkLibraryContains } from '../api.js?v=183';
+import { borrarLikesVerificado } from '../util/borrado-verificado.js?v=183';
+import { normalizeKey, esFantasma, guardaUltimoEjemplar, indexarBiblioteca } from '../util/versions-guard.js?v=183';
+import { showProgress, hideProgress, progressController, isCancelled, typeConfirmModal, renderTrackRow, escapeHtml, pageHeader } from '../ui/components.js?v=183';
+import { showToast } from '../ui/toast.js?v=183';
+import { openModal, closeTop } from '../ui/modal-stack.js?v=183';
+import { coverUrl } from '../util/cover-size.js?v=183';
+import { openPlaylistPicker } from '../ui/playlist-picker.js?v=183';
+import { getOwnPlaylists, addUrisToPlaylists, toastAddResult } from '../util/playlist-add.js?v=183';
+import { prefKey, migratePrefKey } from '../storage.js?v=183';
 
 // ── «Borrar sobrantes» REHABILITADO (2026-08-28) ─────────────────────────────
 //
@@ -117,10 +118,10 @@ const resolvedClusterIdxs = new Set();
 // del cluster (no por idx, así sobrevive a re-analizar).
 const DISMISS_KEY = 'versions_dismissed';
 function getDismissed() {
-  try { return new Set(JSON.parse(localStorage.getItem(DISMISS_KEY) || '[]')); } catch { return new Set(); }
+  try { return new Set(JSON.parse(localStorage.getItem(prefKey(DISMISS_KEY)) || '[]')); } catch { return new Set(); }
 }
 function saveDismissed(s) {
-  localStorage.setItem(DISMISS_KEY, JSON.stringify([...s]));
+  localStorage.setItem(prefKey(DISMISS_KEY), JSON.stringify([...s]));
 }
 let allClusters = [];
 // Índice clave-de-canción → ids vivos, con TODA la biblioteca (no solo los
@@ -140,6 +141,7 @@ const SHOWN_STEP = 50;
 let shownCount = SHOWN_STEP;
 
 export function render(container) {
+  migratePrefKey(DISMISS_KEY);
   container.innerHTML = `
     ${pageHeader({ title: 'Versiones Duplicadas' })}
     <div class="feature-actions" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">

@@ -20,6 +20,7 @@ import { buildAlbumHeardIndex } from '../util/album-heard.js';
 import { loadFiltros, buildFilterContext, applyDiscoverFilters } from '../util/discover-filters.js';
 import { releaseKind } from '../util/release-size.js';
 import { vigilarRuta } from '../util/vigencia-ruta.js';
+import { prefKey, migratePrefKey } from '../storage.js';
 import {
   getArtistIdCached,
   getArtistDiscoCached,
@@ -68,16 +69,16 @@ const KINDS = ['all', 'album', 'ep', 'single'];
 const KIND_LABEL = { all: 'Todo', album: 'Álbumes', ep: 'EPs', single: 'Singles' };
 
 function getFilterKind() {
-  const v = localStorage.getItem(LS_FILTER_KIND);
+  const v = localStorage.getItem(prefKey(LS_FILTER_KIND));
   return KINDS.includes(v) ? v : 'all';
 }
 function getFilterYears() {
-  const n = parseInt(localStorage.getItem(LS_FILTER_YEARS) || '0', 10);
+  const n = parseInt(localStorage.getItem(prefKey(LS_FILTER_YEARS)) || '0', 10);
   return Number.isFinite(n) && n >= 0 ? n : 0;
 }
 function getLoadedMore() {
   // Piso duro en DEFAULT_INITIAL — si el localStorage viejo tenía 20/40, hoy arrancamos 100 igual.
-  const n = parseInt(localStorage.getItem(LS_LOADED_MORE) || '0', 10);
+  const n = parseInt(localStorage.getItem(prefKey(LS_LOADED_MORE)) || '0', 10);
   return Math.max(DEFAULT_INITIAL, Number.isFinite(n) ? n : 0);
 }
 
@@ -140,6 +141,9 @@ function teardown() {
 
 export async function render(container) {
   teardown();
+  migratePrefKey(LS_FILTER_KIND);
+  migratePrefKey(LS_FILTER_YEARS);
+  migratePrefKey(LS_LOADED_MORE);
   container.innerHTML = `
     ${pageHeader({ title: 'Sin escuchar de tus artistas' })}
     <div id="disco-content"><div class="empty-state"><div class="spinner spinner-lg"></div><div style="margin-top:14px">Cargando tus likes…</div></div></div>
@@ -297,18 +301,18 @@ function renderShell(content, totalCandidates) {
     const btn = e.target.closest('[data-kind]');
     if (!btn) return;
     state.filterKind = btn.dataset.kind;
-    localStorage.setItem(LS_FILTER_KIND, state.filterKind);
+    localStorage.setItem(prefKey(LS_FILTER_KIND), state.filterKind);
     content.querySelectorAll('#disco-kind [data-kind]').forEach(b => b.classList.toggle('is-on', b === btn));
     refreshList(content);
   });
   content.querySelector('#disco-years').addEventListener('change', (e) => {
     state.filterYears = parseInt(e.target.value, 10) || 0;
-    localStorage.setItem(LS_FILTER_YEARS, String(state.filterYears));
+    localStorage.setItem(prefKey(LS_FILTER_YEARS), String(state.filterYears));
     refreshList(content);
   });
   content.querySelector('#disco-load-more').addEventListener('click', () => {
     state.loadedMore = Math.min(state.loadedMore + 50, state.artists.length);
-    localStorage.setItem(LS_LOADED_MORE, String(state.loadedMore));
+    localStorage.setItem(prefKey(LS_LOADED_MORE), String(state.loadedMore));
     document.getElementById('disco-total-scan').textContent = state.loadedMore;
     scanArtists(content).catch(err => console.warn('[discover] scan:', err));
   });
