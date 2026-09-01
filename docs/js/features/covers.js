@@ -9,22 +9,22 @@
 // placeholder→img. Botón "Pantalla completa" (Fullscreen API) que oculta
 // sidebar/header/toolbar y recalcula el lado.
 
-import { loadListenedAlbums, isOwner, ownerLockedMessage } from './history-data.js?v=181';
-import { isJunkTrack } from '../util/junk.js?v=181';
-import { vigilarRuta } from '../util/vigencia-ruta.js?v=181';
-import { createIncrementalList, scrollRootOf } from '../ui/incremental-list.js?v=181';
-import { createLazyImages } from '../ui/lazy-img.js?v=181';
-import { getAllPlaylistItems, getBestAvailableLikes } from '../api.js?v=181';
-import { escapeHtml, pageHeader, showProgress, hideProgress } from '../ui/components.js?v=181';
-import { showToast } from '../ui/toast.js?v=181';
-import { openAlbumCard } from './album-card.js?v=181';
-import { openArtistCard } from './artist-card.js?v=181';
-import { albumKey, coverId } from '../util/album-key.js?v=181';
-import { generarWallpaper, descargarBlob, WALLPAPER_PRESETS } from './covers-wallpaper.js?v=181';
-import { buildAlbumStatsIndex } from '../util/album-stats.js?v=181';
-import { getPreview } from '../api/preview-providers.js?v=181';
-import { hoverIn, hoverOut } from '../ui/preview-player.js?v=181';
-import { coverUrl } from '../util/cover-size.js?v=181';
+import { loadListenedAlbums, isOwner, ownerLockedMessage } from './history-data.js?v=182';
+import { isJunkTrack } from '../util/junk.js?v=182';
+import { vigilarRuta } from '../util/vigencia-ruta.js?v=182';
+import { createIncrementalList, scrollRootOf } from '../ui/incremental-list.js?v=182';
+import { createLazyImages } from '../ui/lazy-img.js?v=182';
+import { getAllPlaylistItems, getBestAvailableLikes } from '../api.js?v=182';
+import { escapeHtml, pageHeader, showProgress, hideProgress } from '../ui/components.js?v=182';
+import { showToast } from '../ui/toast.js?v=182';
+import { openAlbumCard } from './album-card.js?v=182';
+import { openArtistCard } from './artist-card.js?v=182';
+import { albumKey, coverId } from '../util/album-key.js?v=182';
+import { generarWallpaper, descargarBlob, WALLPAPER_PRESETS } from './covers-wallpaper.js?v=182';
+import { buildAlbumStatsIndex } from '../util/album-stats.js?v=182';
+import { getPreview } from '../api/preview-providers.js?v=182';
+import { hoverIn, hoverOut } from '../ui/preview-player.js?v=182';
+import { coverUrl } from '../util/cover-size.js?v=182';
 
 const LS_KEY_SIZE = 'covers_cell_size';
 const LS_KEY_SORT = 'covers_sort_mode';
@@ -381,16 +381,36 @@ export async function render(container) {
   const umbral = (crit.min_tracks_sameday && crit.min_min_sameday)
     ? `${crit.min_tracks_sameday}+ canciones o ${crit.min_min_sameday}+ minutos el mismo día`
     : 'los que superaron el umbral de un mismo día';
-  const deWthree = allAlbums.filter(a => a.sources.has('wthree')).length;
-  const soloWthree = allAlbums.filter(a => a.sources.has('wthree') && !a.sources.has('listened')).length;
 
-  const sinTapa = noCover.length ? ` · ${noCover.length} sin tapa, fuera del mosaico` : '';
-  const avisoWthree = wthreeFallo
-    ? ` · <strong style="color:var(--color-warning)">falta W-Three: ${escapeHtml(wthreeFallo)}</strong>`
-    : '';
-  const sourcesLine = wthreeItems
-    ? `<span class="covers-summary-sub">Álbumes dados por escuchados (${escapeHtml(umbral)}) y la playlist «w three» · ${deWthree} están en W-Three, ${soloWthree} solo ahí${sinTapa}</span>`
-    : `<span class="covers-summary-sub">Álbumes dados por escuchados (${escapeHtml(umbral)})${sinTapa}${avisoWthree}</span>`;
+  // v=182: los tres subconteos («N están en W-Three», «N solo ahí», «N sin
+  // tapa») salían de `allAlbums`/`noCover` SIN filtrar, mientras el número
+  // grande de arriba sí respeta el filtro de año (se actualiza en
+  // `renderGrid` desde `currentList.length`). Con un filtro puesto podían
+  // superar al total mostrado — por eso `buildSourcesLine` recibe la lista YA
+  // filtrada y hay que llamarla de nuevo cada vez que cambia el filtro.
+  function buildSourcesLine(albumsList, noCoverList) {
+    const deWthree = albumsList.filter(a => a.sources.has('wthree')).length;
+    const soloWthree = albumsList.filter(a => a.sources.has('wthree') && !a.sources.has('listened')).length;
+    const sinTapa = noCoverList.length ? ` · ${noCoverList.length} sin tapa, fuera del mosaico` : '';
+    const avisoWthree = wthreeFallo
+      ? ` · <strong style="color:var(--color-warning)">falta W-Three: ${escapeHtml(wthreeFallo)}</strong>`
+      : '';
+    return wthreeItems
+      ? `Álbumes dados por escuchados (${escapeHtml(umbral)}) y la playlist «w three» · ${deWthree} están en W-Three, ${soloWthree} solo ahí${sinTapa}`
+      : `Álbumes dados por escuchados (${escapeHtml(umbral)})${sinTapa}${avisoWthree}`;
+  }
+
+  function albumsFiltered() {
+    if (yearsSel.size === 0) return allAlbums;
+    return allAlbums.filter(a => a.years.some(y => yearsSel.has(y)));
+  }
+
+  function noCoverFiltered() {
+    if (yearsSel.size === 0) return noCover;
+    return noCover.filter(a => a.years.some(y => yearsSel.has(y)));
+  }
+
+  const sourcesLine = `<span class="covers-summary-sub" id="covers-summary-sub">${buildSourcesLine(albumsFiltered(), noCoverFiltered())}</span>`;
 
   content.innerHTML = `
     <div class="covers-narrow-hint">Vista pensada para pantalla grande — mejor en escritorio.</div>
@@ -642,6 +662,8 @@ export async function render(container) {
     currentList = filterAndSort();
     renderGrid();
     if (fitEnabled) applyFit();
+    const subEl = document.getElementById('covers-summary-sub');
+    if (subEl) subEl.innerHTML = buildSourcesLine(albumsFiltered(), noCoverFiltered());
   });
 
   let resizeTimer = null;

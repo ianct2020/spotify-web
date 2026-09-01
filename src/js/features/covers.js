@@ -381,16 +381,36 @@ export async function render(container) {
   const umbral = (crit.min_tracks_sameday && crit.min_min_sameday)
     ? `${crit.min_tracks_sameday}+ canciones o ${crit.min_min_sameday}+ minutos el mismo día`
     : 'los que superaron el umbral de un mismo día';
-  const deWthree = allAlbums.filter(a => a.sources.has('wthree')).length;
-  const soloWthree = allAlbums.filter(a => a.sources.has('wthree') && !a.sources.has('listened')).length;
 
-  const sinTapa = noCover.length ? ` · ${noCover.length} sin tapa, fuera del mosaico` : '';
-  const avisoWthree = wthreeFallo
-    ? ` · <strong style="color:var(--color-warning)">falta W-Three: ${escapeHtml(wthreeFallo)}</strong>`
-    : '';
-  const sourcesLine = wthreeItems
-    ? `<span class="covers-summary-sub">Álbumes dados por escuchados (${escapeHtml(umbral)}) y la playlist «w three» · ${deWthree} están en W-Three, ${soloWthree} solo ahí${sinTapa}</span>`
-    : `<span class="covers-summary-sub">Álbumes dados por escuchados (${escapeHtml(umbral)})${sinTapa}${avisoWthree}</span>`;
+  // v=182: los tres subconteos («N están en W-Three», «N solo ahí», «N sin
+  // tapa») salían de `allAlbums`/`noCover` SIN filtrar, mientras el número
+  // grande de arriba sí respeta el filtro de año (se actualiza en
+  // `renderGrid` desde `currentList.length`). Con un filtro puesto podían
+  // superar al total mostrado — por eso `buildSourcesLine` recibe la lista YA
+  // filtrada y hay que llamarla de nuevo cada vez que cambia el filtro.
+  function buildSourcesLine(albumsList, noCoverList) {
+    const deWthree = albumsList.filter(a => a.sources.has('wthree')).length;
+    const soloWthree = albumsList.filter(a => a.sources.has('wthree') && !a.sources.has('listened')).length;
+    const sinTapa = noCoverList.length ? ` · ${noCoverList.length} sin tapa, fuera del mosaico` : '';
+    const avisoWthree = wthreeFallo
+      ? ` · <strong style="color:var(--color-warning)">falta W-Three: ${escapeHtml(wthreeFallo)}</strong>`
+      : '';
+    return wthreeItems
+      ? `Álbumes dados por escuchados (${escapeHtml(umbral)}) y la playlist «w three» · ${deWthree} están en W-Three, ${soloWthree} solo ahí${sinTapa}`
+      : `Álbumes dados por escuchados (${escapeHtml(umbral)})${sinTapa}${avisoWthree}`;
+  }
+
+  function albumsFiltered() {
+    if (yearsSel.size === 0) return allAlbums;
+    return allAlbums.filter(a => a.years.some(y => yearsSel.has(y)));
+  }
+
+  function noCoverFiltered() {
+    if (yearsSel.size === 0) return noCover;
+    return noCover.filter(a => a.years.some(y => yearsSel.has(y)));
+  }
+
+  const sourcesLine = `<span class="covers-summary-sub" id="covers-summary-sub">${buildSourcesLine(albumsFiltered(), noCoverFiltered())}</span>`;
 
   content.innerHTML = `
     <div class="covers-narrow-hint">Vista pensada para pantalla grande — mejor en escritorio.</div>
@@ -642,6 +662,8 @@ export async function render(container) {
     currentList = filterAndSort();
     renderGrid();
     if (fitEnabled) applyFit();
+    const subEl = document.getElementById('covers-summary-sub');
+    if (subEl) subEl.innerHTML = buildSourcesLine(albumsFiltered(), noCoverFiltered());
   });
 
   let resizeTimer = null;
