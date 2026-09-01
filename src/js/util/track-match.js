@@ -35,8 +35,16 @@ const TITLE_MIN = 0.86;
 const ARTIST_MIN = 0.80;
 
 // Sufijos de edición/versión que no cambian la canción.
+//
+// v=185 — «from…» se agrega acá y no a PALABRA_VERSION porque no es una
+// versión distinta del tema: es la atribución a la película/serie
+// («Honest - From The Amazing Spider-Man 2 Soundtrack», «Time - From the
+// Motion Picture "Amsterdam"»). Tratarla como versión la dejaría exigir
+// `versionesCompatibles`, y el candidato limpio de iTunes/Deezer nunca la va a
+// tener — se cae siempre. Es ruido puro: se borra igual que "remaster" o
+// "live", de los dos lados, antes de comparar.
 const EDITION_TAIL =
-  /\s*[-–—]\s*(remaster(ed)?|\d{4} remaster(ed)?|remaster(ed)? \d{4}|single version|album version|radio edit|mono|stereo|live|bonus track|deluxe|extended|original mix)\b.*$/i;
+  /\s*[-–—]\s*(?:(?:remaster(?:ed)?|\d{4} remaster(?:ed)?|remaster(?:ed)? \d{4}|single version|album version|radio edit|mono|stereo|live|bonus track|deluxe|extended|original mix)\b.*|from\b.*)$/i;
 
 function stripDiacritics(s) {
   return s.normalize('NFD').replace(/[̀-ͯ]/g, '');
@@ -114,9 +122,10 @@ function tokensContained(sub, sup) {
 //   - `tituloBase` es el título sin su cola de versión;
 //   - `tokensDeVersion` es lo que dice esa cola («devault», «remix»);
 //   - dos títulos matchean por esta vía solo si las bases coinciden Y los dos
-//     conjuntos de versión son compatibles: uno contenido en el otro, y **si
-//     uno está vacío el otro también tiene que estarlo**. Un pedido sin versión
-//     nunca acepta un remix, y un remix nunca acepta el original.
+//     conjuntos de versión son compatibles: uno contenido en el otro. Desde
+//     v=185 un PEDIDO sin versión acepta cualquier versión del candidato
+//     (ver `versionesCompatibles`, medido el 2026-09-01); lo que sigue sin
+//     aceptar es al revés: un remix pedido nunca acepta el original.
 
 // Una cola solo cuenta como VERSIÓN si trae una de estas palabras. Sin esto,
 // «(feat. Lauv)» contaría como versión y «Tema (feat. A)» no matchearía
@@ -154,10 +163,20 @@ export function tituloBase(s) {
 }
 
 // ¿Las dos colas de versión hablan de lo mismo? Una contenida en la otra
-// («Slowed» dentro de «Slowed + Reverb»), y las dos vacías o las dos llenas.
-function versionesCompatibles(a, b) {
-  if (a.size === 0 || b.size === 0) return a.size === b.size;
-  const [chico, grande] = a.size <= b.size ? [a, b] : [b, a];
+// («Slowed» dentro de «Slowed + Reverb»), o el PEDIDO sin ninguna versión.
+//
+// v=185 — antes exigía que las dos estuvieran vacías: «pedir "Tema"
+// nunca acepta "Tema - Sped Up"». Medido el 2026-09-01 sobre 200 tarjetas
+// reales (100 de #skips, 100 de #sin-clasificar): la regla vieja frenaba
+// exactamente los casos que el pedido no especifica versión, así que no hay
+// ninguna versión con la que pueda chocar. Ahora un pedido SIN versión acepta
+// cualquier versión del candidato. Lo que NO cambia: un pedido CON versión
+// sigue sin aceptar un candidato sin ninguna («un remix nunca acepta el
+// original», al revés de esto) — `wanted` va siempre primero.
+function versionesCompatibles(wanted, candidate) {
+  if (wanted.size === 0) return true;
+  if (candidate.size === 0) return false;
+  const [chico, grande] = wanted.size <= candidate.size ? [wanted, candidate] : [candidate, wanted];
   for (const t of chico) if (!grande.has(t)) return false;
   return true;
 }
