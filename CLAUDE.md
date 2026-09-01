@@ -298,7 +298,11 @@ mosaico (`rgba(20,20,28,.95)` con texto blanco, que trae su propio fondo).
   `FONOTECA-funciones-y-pendientes.txt` es el único inventario de funciones,
   bugs abiertos y pendientes que existe. (En la tanda 8 se pidió borrarlos y
   después Ian retiró el pedido: seguí actualizándolos.)
-- **#covers congela el renderer** con 2.449 tapas (viene de la tanda 7).
+- ~~**#covers congela el renderer** con 2.449 tapas (viene de la tanda 7).~~
+  ✅ **Cerrado en v=181 (2026-09-01)**: pasó a `createIncrementalList` +
+  `createLazyImages`, el mismo patrón de `#skips`/`#sin-clasificar`. Medido en
+  la app real: 21,5 s → 3,7 ms hasta el primer frame interactivo con las 2.451
+  tapas reales. Detalle en `fonoteca-migracion/PENDIENTES.md`.
 - **La playlist «fonoteca · sin escuchar» no existe en la cuenta de Ian**
   (verificado 2026-08-28 contra sus 39 propias). El criterio `sinescuchar` de
   v=165 la cruza igual y descarta 0 hasta que aparezca. Falta saber dónde
