@@ -9,20 +9,22 @@
 // placeholder→img. Botón "Pantalla completa" (Fullscreen API) que oculta
 // sidebar/header/toolbar y recalcula el lado.
 
-import { loadListenedAlbums, isOwner, ownerLockedMessage } from './history-data.js?v=180';
-import { isJunkTrack } from '../util/junk.js?v=180';
-import { vigilarRuta } from '../util/vigencia-ruta.js?v=180';
-import { getAllPlaylistItems, getBestAvailableLikes } from '../api.js?v=180';
-import { escapeHtml, pageHeader, showProgress, hideProgress } from '../ui/components.js?v=180';
-import { showToast } from '../ui/toast.js?v=180';
-import { openAlbumCard } from './album-card.js?v=180';
-import { openArtistCard } from './artist-card.js?v=180';
-import { albumKey, coverId } from '../util/album-key.js?v=180';
-import { generarWallpaper, descargarBlob, WALLPAPER_PRESETS } from './covers-wallpaper.js?v=180';
-import { buildAlbumStatsIndex } from '../util/album-stats.js?v=180';
-import { getPreview } from '../api/preview-providers.js?v=180';
-import { hoverIn, hoverOut } from '../ui/preview-player.js?v=180';
-import { coverUrl } from '../util/cover-size.js?v=180';
+import { loadListenedAlbums, isOwner, ownerLockedMessage } from './history-data.js?v=181';
+import { isJunkTrack } from '../util/junk.js?v=181';
+import { vigilarRuta } from '../util/vigencia-ruta.js?v=181';
+import { createIncrementalList, scrollRootOf } from '../ui/incremental-list.js?v=181';
+import { createLazyImages } from '../ui/lazy-img.js?v=181';
+import { getAllPlaylistItems, getBestAvailableLikes } from '../api.js?v=181';
+import { escapeHtml, pageHeader, showProgress, hideProgress } from '../ui/components.js?v=181';
+import { showToast } from '../ui/toast.js?v=181';
+import { openAlbumCard } from './album-card.js?v=181';
+import { openArtistCard } from './artist-card.js?v=181';
+import { albumKey, coverId } from '../util/album-key.js?v=181';
+import { generarWallpaper, descargarBlob, WALLPAPER_PRESETS } from './covers-wallpaper.js?v=181';
+import { buildAlbumStatsIndex } from '../util/album-stats.js?v=181';
+import { getPreview } from '../api/preview-providers.js?v=181';
+import { hoverIn, hoverOut } from '../ui/preview-player.js?v=181';
+import { coverUrl } from '../util/cover-size.js?v=181';
 
 const LS_KEY_SIZE = 'covers_cell_size';
 const LS_KEY_SORT = 'covers_sort_mode';
@@ -281,32 +283,21 @@ function fitCellSize(N, W, H, gap = GRID_GAP) {
   return 8;
 }
 
-// Estimación: cuántas celdas caben en el primer viewport visible del grid.
-// Sirve para saber a cuántas <img> les ponemos fetchpriority=high.
-//
-// El tope de EAGER_MAX importa. En "Mini" (28px) entran ~714 tapas en el primer
-// viewport, y marcarlas todas como high + sin lazy dispara 714 descargas y 714
-// decodificaciones a la vez: la red se satura, el hilo principal se va en
-// decodificar y los requestAnimationFrame del render por lotes se espacian
-// muchísimo (medido: 2,5s hasta el primer frame). Con un tope chico el resto
-// entra como loading=lazy y es el navegador el que decide qué bajar según lo
-// que de verdad se ve.
-const EAGER_MAX = 120;
-
-function firstViewportCount(cellSize, gridWidth, viewportHeight, gridTop) {
-  const s = Math.max(1, cellSize);
-  const cols = Math.max(1, Math.floor((gridWidth + GRID_GAP) / (s + GRID_GAP)));
-  const availH = Math.max(200, viewportHeight - gridTop);
-  const rows = Math.max(1, Math.ceil((availH + GRID_GAP) / (s + GRID_GAP)));
-  return Math.min(cols * rows, EAGER_MAX);
-}
-
 // Toda celda que llega acá tiene tapa: las que no la tienen se filtran antes de
 // renderizar (v=127), así que no hay más cuadro-con-inicial en el collage.
-function cellHtml(a, i, hi) {
-  const eager = hi ? ' fetchpriority="high"' : '';
-  const loading = hi ? '' : ' loading="lazy"';
-  return `<button type="button" class="cover-cell" data-i="${i}"><img class="cover-img" src="${a.img}" alt="" decoding="async"${eager}${loading}></button>`;
+//
+// v=181: `data-src` en vez de `src`. Antes esto pintaba TODAS las celdas de
+// una (2.451 <img>) con las primeras ~120 en `fetchpriority=high` sin lazy y
+// el resto en `loading="lazy"` nativo — y el nativo no se salva acá tampoco:
+// con celdas de 28px caben cientos por fila y el margen de precarga de Chrome
+// las toma a casi todas por "cerca del viewport" igual, así que dispara
+// cientos de descargas y decodificaciones de golpe. Medido en la app real el
+// 2026-09-01, con la pestaña visible y 2.451 tapas: **21,5 s hasta el primer
+// frame interactivo** y **24,6 s hasta que el mosaico terminaba de pintar**.
+// Ver ui/lazy-img.js: ahora solo se pide `src` a lo que entra en el
+// `rootMargin` real (200px), y lo que se aleja se suelta.
+function cellHtml(a, i) {
+  return `<button type="button" class="cover-cell" data-i="${i}"><img class="cover-img" data-src="${a.img}" alt="" decoding="async"></button>`;
 }
 
 export async function render(container) {
@@ -471,128 +462,70 @@ export async function render(container) {
   let currentList = filterAndSort();
 
   function filterAndSort() {
-    let list = allAlbums;
+    let out = allAlbums;
     if (yearsSel.size > 0) {
-      list = list.filter(a => a.years.some(y => yearsSel.has(y)));
+      out = out.filter(a => a.years.some(y => yearsSel.has(y)));
     }
-    return sortList(list, sort);
+    return sortList(out, sort);
   }
 
-  // Render por lotes — "persiana".
+  // Lista incremental + tapas lazy (v=181), mismo patrón que #skips y
+  // #sin-clasificar (ui/incremental-list.js + ui/lazy-img.js).
   //
-  // v=115 había sacado el IntersectionObserver y pasado a inyectar las ~2.400
-  // celdas de una sola vez. Eso construye 2.400 <button> + 2.400 <img> en un
-  // único task de JS y fuerza un layout gigante: el hilo principal se bloquea
-  // varios segundos y la vista se siente colgada al entrar.
+  // Lo que había antes (v=127, "persiana"): un lote de 100 celdas por frame
+  // con requestAnimationFrame, pero las 2.451 <img> se pintaban TODAS —
+  // ~120 en `fetchpriority=high` sin lazy y el resto en `loading="lazy"`
+  // nativo. El nativo no salva nada acá: con celdas de 28px caben cientos por
+  // fila y el margen de precarga de Chrome toma a casi todas por "cerca del
+  // viewport" igual. Medido en la app real el 2026-09-01, con la pestaña
+  // visible y 2.451 tapas reales (no las 1.044 que muestra el rótulo con un
+  // filtro de año puesto — ver la nota de arriba): **21,5 s hasta el primer
+  // frame interactivo, 24,6 s hasta que el mosaico terminaba de pintar**.
   //
-  // v=127 vuelve a inyectar en lotes, pero sin observer: un lote de 100 celdas
-  // por frame con requestAnimationFrame. Como el grid llena en orden de
-  // documento, el resultado visual es exactamente el que pidió Ian — se llena
-  // de izquierda a derecha y de arriba a abajo, como una persiana. Entre lote y
-  // lote el navegador puede pintar y atender clics, así que la página responde
-  // desde el primer frame.
-  //
-  // El primer lote va sincrónico para que nunca haya un frame vacío.
-  const BATCH = 100;
-  let renderToken = 0;
-  let imgSettledHandler = null;   // el del render vigente, para poder sacarlo
+  // Ahora el DOM se arma incrementalmente igual que en las otras vistas
+  // pesadas, y las tapas piden `src` solo cuando entran al `rootMargin` real
+  // (200px) — lo que se aleja se suelta (ver ui/lazy-img.js). El fade
+  // placeholder→imagen ya no hace falta cablearlo a mano: `.cover-img[src]`
+  // se anima solo por CSS (`main.css`, `.cover-img[src]:not(.is-loaded)`).
+  const BATCH = 200;
+  let list = null;
+  let lazyCovers = null;
 
-  function fullRender() {
-    const token = ++renderToken;   // invalida los lotes de un render anterior
-    // fullRender corre de nuevo con cada cambio de orden o de año. Sin esto los
-    // listeners delegados se irían apilando en el mismo #covers-grid y cada uno
-    // retendría la lista del render anterior.
-    if (imgSettledHandler) {
-      grid.removeEventListener('load', imgSettledHandler, true);
-      grid.removeEventListener('error', imgSettledHandler, true);
-      imgSettledHandler = null;
-    }
+  function renderGrid({ preserveRendered = false } = {}) {
     const t0 = performance.now();
-    const cellSize = parseInt(size, 10) || 28;
-    const rect = grid.getBoundingClientRect();
-    const hiCount = firstViewportCount(cellSize, Math.floor(rect.width || window.innerWidth), window.innerHeight, rect.top || 100);
-    const list = currentList;
-    const total = list.length;
-
-    grid.innerHTML = '';
+    const total = currentList.length;
     countEl.textContent = total.toLocaleString('es-ES');
-    window.__coversLastRender = null;
 
-    // Fade placeholder → img: apenas carga cada <img> le pongo .is-loaded.
-    // Delegado en el grid para no colgar 2 listeners por imagen (con 2.400
-    // celdas eso son ~4.800 listeners y se nota).
-    let viewportDone = 0;
-    const viewportTarget = Math.min(hiCount, total);
-    let firstBatchMs = 0;
-    let cellsMs = 0;
-    let viewportMs = 0;
-
-    const onImgSettled = (e) => {
-      const img = e.target;
-      if (!img.classList || !img.classList.contains('cover-img')) return;
-      if (!img.classList.contains('is-loaded')) img.classList.add('is-loaded');
-      const idx = +(img.closest('.cover-cell')?.dataset.i ?? -1);
-      if (idx >= 0 && idx < viewportTarget) {
-        viewportDone++;
-        if (viewportDone === viewportTarget) {
-          viewportMs = performance.now() - t0;
-          console.log(`[covers] primer viewport (${viewportTarget} tapas) completo en ${viewportMs.toFixed(0)}ms`);
-          report();
-        }
-      }
-    };
-    imgSettledHandler = onImgSettled;
-    grid.addEventListener('load', onImgSettled, true);
-    grid.addEventListener('error', onImgSettled, true);
-
-    const report = () => {
-      window.__coversLastRender = {
-        firstBatchMs, cellsMs, viewportMs,
-        cells: total, batch: BATCH, viewportImgs: viewportTarget,
-      };
-    };
-
-    const inject = (from) => {
-      const to = Math.min(from + BATCH, total);
-      let html = '';
-      for (let i = from; i < to; i++) html += cellHtml(list[i], i, i < hiCount);
-      grid.insertAdjacentHTML('beforeend', html);
-      return to;
-    };
-
-    // Lote 0 sincrónico: contenido en pantalla en el primer frame.
-    let next = inject(0);
-    requestAnimationFrame(() => {
-      firstBatchMs = performance.now() - t0;
-      console.log(`[covers] primer frame interactivo en ${firstBatchMs.toFixed(1)}ms (${Math.min(BATCH, total)} de ${total} celdas, size=${size}px)`);
-      report();
-    });
-
-    // Un lote por frame sería lo más parejo, pero con 24 lotes eso son 24
-    // frames como mínimo — y si el navegador está decodificando tapas cada
-    // frame se alarga. En vez de eso, cada frame inyecta lotes hasta gastar
-    // FRAME_BUDGET_MS y devuelve el hilo. Así el mosaico se completa rápido en
-    // una máquina desahogada sin dejar de ceder el control entre medio.
-    const FRAME_BUDGET_MS = 8;
-    const step = () => {
-      if (token !== renderToken) return;          // render cancelado
-      const frameStart = performance.now();
-      while (next < total && performance.now() - frameStart < FRAME_BUDGET_MS) {
-        next = inject(next);
-      }
-      if (next >= total) {
-        cellsMs = performance.now() - t0;
-        console.log(`[covers] mosaico completo: ${total} celdas en ${cellsMs.toFixed(1)}ms`);
-        report();
-        return;
-      }
-      requestAnimationFrame(step);
-    };
-    if (next < total) requestAnimationFrame(step);
-    else requestAnimationFrame(() => { cellsMs = performance.now() - t0; report(); });
+    if (!list) {
+      lazyCovers = createLazyImages({ root: scrollRootOf(grid), rootMargin: '200px' });
+      window.__coversPerf = { batches: [], t0, firstBatchMs: 0 };
+      list = createIncrementalList({
+        container: grid,
+        items: currentList,
+        renderItem: cellHtml,
+        batchSize: BATCH,
+        rootMargin: '600px',
+        onBatch: ({ rendered, total: t, added, ms }) => {
+          if (!window.__coversPerf.firstBatchMs) {
+            window.__coversPerf.firstBatchMs = performance.now() - window.__coversPerf.t0;
+          }
+          window.__coversPerf.batches.push({ added, rendered, total: t, ms: +ms.toFixed(1) });
+          const nuevas = grid.querySelectorAll('.cover-cell:not([data-obs])');
+          nuevas.forEach(c => c.setAttribute('data-obs', '1'));
+          lazyCovers.observe(nuevas);
+        },
+      });
+    } else {
+      // setItems repinta el grid entero: los <img> viejos dejan de existir y
+      // el observer de tapas tiene que soltarlos antes de que lleguen los
+      // nuevos (mismo orden que en #skips).
+      lazyCovers.reset();
+      window.__coversPerf = { batches: [], t0, firstBatchMs: 0 };
+      list.setItems(currentList, { preserveRendered });
+    }
   }
 
-  fullRender();
+  renderGrid();
 
   function applyFit() {
     const rect = grid.getBoundingClientRect();
@@ -685,7 +618,7 @@ export async function render(container) {
     sort = e.target.value;
     setSort(sort);
     currentList = filterAndSort();
-    fullRender();
+    renderGrid();
     if (fitEnabled) applyFit();
   });
 
@@ -707,7 +640,7 @@ export async function render(container) {
       c.classList.toggle('is-on', on);
     });
     currentList = filterAndSort();
-    fullRender();
+    renderGrid();
     if (fitEnabled) applyFit();
   });
 
@@ -781,6 +714,14 @@ export async function render(container) {
     hideTooltip();
     openAlbumCard({ name: a.name, artist: a.artist, img: a.img, plays: a.plays, min: a.min });
   });
+
+  // Fade placeholder → imagen apenas carga (delegado en el grid: con miles de
+  // celdas no se cuelga un listener por <img>). Sin esto igual se ve — el CSS
+  // trae un fallback de 520ms (`.cover-img[src]:not(.is-loaded)`) — pero el
+  // 'load' real es instantáneo cuando la tapa viene del caché HTTP.
+  grid.addEventListener('load', (e) => {
+    if (e.target?.classList?.contains('cover-img')) e.target.classList.add('is-loaded');
+  }, true);
 
   // Si una tapa 404ea, sacamos la celda entera en vez de poner el cuadro con la
   // inicial: Ian quiere el collage sin huecos con letras (v=127).
@@ -922,15 +863,12 @@ export async function render(container) {
   });
 
   return () => {
-    renderToken++;                 // corta los lotes que quedaran en vuelo
+    if (list) { list.destroy(); list = null; }
+    if (lazyCovers) { lazyCovers.destroy(); lazyCovers = null; }
     hoverOut();                    // timer de hover-play pendiente, si lo había
     // Irse de la vista aborta el wallpaper: si no, sigue bajando tapas y
     // dibujando contra un canvas que ya no le sirve a nadie.
     wallCtrl?.abort();
-    if (imgSettledHandler) {
-      grid.removeEventListener('load', imgSettledHandler, true);
-      grid.removeEventListener('error', imgSettledHandler, true);
-    }
     window.removeEventListener('resize', onResize);
     document.removeEventListener('fullscreenchange', onFullscreenChange);
     document.body.classList.remove('covers-fs');
