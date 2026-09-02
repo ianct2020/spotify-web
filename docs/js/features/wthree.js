@@ -2,24 +2,24 @@
 // por álbum). Muestra qué álbumes ya tienen picks, cuántos, y cuáles te faltan.
 // Ordenado por álbumes más escuchados primero para priorizar tu tiempo.
 
-import { spotifyFetch, getAllPlaylistItems, getAllUserPlaylists, addTracksToPlaylist, removeTracksFromPlaylist, reorderPlaylistItems, getCachedPlaylistItems, updatePlaylistItemsCache, getBestAvailableLikes } from '../api.js?v=185';
-import { vigilarRuta } from '../util/vigencia-ruta.js?v=185';
-import { patchPlaylistItems, buildCachedItem } from '../util/playlist-cache-patch.js?v=185';
-import { loadHistoryStats, loadListenedAlbums, isOwner, ownerLockedMessage } from './history-data.js?v=185';
-import { escapeHtml, pageHeader } from '../ui/components.js?v=185';
-import { showToast } from '../ui/toast.js?v=185';
-import { activateMarquee, marqueeSpan } from '../ui/marquee.js?v=185';
-import { openModal, closeById, closeModal } from '../ui/modal-stack.js?v=185';
-import { getPreview } from '../api/preview-providers.js?v=185';
-import { togglePreview, playingKey } from '../ui/preview-player.js?v=185';
-import { openAlbumCard } from './album-card.js?v=185';
-import { albumKey } from '../util/album-key.js?v=185';
-import { computeUpdatedPickPositions } from '../util/reorder-shifts.js?v=185';
-import { createHiddenStore } from '../util/hidden-sync.js?v=185';
-import { mountBottom } from '../ui/bottom-layer.js?v=185';
-import { coverUrl } from '../util/cover-size.js?v=185';
-import { insercionPorPuntero, moverA, indicadorPara } from '../util/reorder-drop.js?v=185';
-import { prefKey, migratePrefKey } from '../storage.js?v=185';
+import { spotifyFetch, getAllPlaylistItems, getAllUserPlaylists, addTracksToPlaylist, removeTracksFromPlaylist, reorderPlaylistItems, getCachedPlaylistItems, updatePlaylistItemsCache, getBestAvailableLikes } from '../api.js?v=186';
+import { vigilarRuta } from '../util/vigencia-ruta.js?v=186';
+import { patchPlaylistItems, buildCachedItem } from '../util/playlist-cache-patch.js?v=186';
+import { loadHistoryStats, loadListenedAlbums, isOwner, ownerLockedMessage } from './history-data.js?v=186';
+import { escapeHtml, pageHeader } from '../ui/components.js?v=186';
+import { showToast } from '../ui/toast.js?v=186';
+import { activateMarquee, marqueeSpan } from '../ui/marquee.js?v=186';
+import { openModal, closeById, closeModal } from '../ui/modal-stack.js?v=186';
+import { getPreview } from '../api/preview-providers.js?v=186';
+import { togglePreview, playingKey } from '../ui/preview-player.js?v=186';
+import { openAlbumCard } from './album-card.js?v=186';
+import { albumKey } from '../util/album-key.js?v=186';
+import { computeUpdatedPickPositions } from '../util/reorder-shifts.js?v=186';
+import { createHiddenStore } from '../util/hidden-sync.js?v=186';
+import { mountBottom } from '../ui/bottom-layer.js?v=186';
+import { coverUrl } from '../util/cover-size.js?v=186';
+import { insercionPorPuntero, moverA, indicadorPara } from '../util/reorder-drop.js?v=186';
+import { prefKey, migratePrefKey } from '../storage.js?v=186';
 
 const LS_KEY_ID = 'wthree_playlist_id';
 const LS_KEY_NAME = 'wthree_playlist_name';
@@ -371,7 +371,10 @@ function renderBuckets(content) {
   // bandera el .then() volvería a llamarse en bucle.
   if (!hiddenSyncStarted) {
     hiddenSyncStarted = true;
-    hiddenStore.ready().then(() => renderBuckets(content));
+    hiddenStore.ready().then(() => {
+      const content = document.getElementById('wthree-content');
+      if (content) renderBuckets(content);
+    });
   }
 
   // El índice de likes llega asincrónico igual que los ocultos: se pide una vez
@@ -384,7 +387,10 @@ function renderBuckets(content) {
   // `hiddenSyncStarted` existe unas líneas más arriba).
   if (!likesFilterStarted) {
     likesFilterStarted = true;
-    ensureLikedIndex().then(() => renderBuckets(content));
+    ensureLikedIndex().then(() => {
+      const content = document.getElementById('wthree-content');
+      if (content) renderBuckets(content);
+    });
   }
 
   // "Ocultos" NO cuentan en los buckets normales — desaparecen de la vista y
@@ -485,7 +491,7 @@ function renderBuckets(content) {
     </div>
   `;
 
-  document.getElementById('wthree-change').onclick = reset;
+  document.getElementById('wthree-change')?.addEventListener('click', reset);
   document.getElementById('wthree-clear-filter')?.addEventListener('click', () => {
     selectedBucket = null;
     renderBuckets(content);
