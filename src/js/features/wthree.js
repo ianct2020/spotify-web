@@ -371,7 +371,10 @@ function renderBuckets(content) {
   // bandera el .then() volvería a llamarse en bucle.
   if (!hiddenSyncStarted) {
     hiddenSyncStarted = true;
-    hiddenStore.ready().then(() => renderBuckets(content));
+    hiddenStore.ready().then(() => {
+      const content = document.getElementById('wthree-content');
+      if (content) renderBuckets(content);
+    });
   }
 
   // El índice de likes llega asincrónico igual que los ocultos: se pide una vez
@@ -384,7 +387,10 @@ function renderBuckets(content) {
   // `hiddenSyncStarted` existe unas líneas más arriba).
   if (!likesFilterStarted) {
     likesFilterStarted = true;
-    ensureLikedIndex().then(() => renderBuckets(content));
+    ensureLikedIndex().then(() => {
+      const content = document.getElementById('wthree-content');
+      if (content) renderBuckets(content);
+    });
   }
 
   // "Ocultos" NO cuentan en los buckets normales — desaparecen de la vista y
@@ -485,7 +491,7 @@ function renderBuckets(content) {
     </div>
   `;
 
-  document.getElementById('wthree-change').onclick = reset;
+  document.getElementById('wthree-change')?.addEventListener('click', reset);
   document.getElementById('wthree-clear-filter')?.addEventListener('click', () => {
     selectedBucket = null;
     renderBuckets(content);
