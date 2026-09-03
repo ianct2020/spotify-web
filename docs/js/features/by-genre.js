@@ -1,12 +1,12 @@
-import { getAllLikedTracks, createPlaylist, addTracksToPlaylist, invalidatePlaylistsCache, exportAllData, importAllData, getCurrentUserId, getBestAvailableLikes } from '../api.js?v=190';
-import { hasKey, setKey, getArtistTopTags, getCachedTags, setCachedTags, mergeCachedTags } from '../api/lastfm.js?v=190';
-import * as statsfm from '../api/statsfm.js?v=190';
-import { getGenresForArtist as mbGetGenres } from '../api/musicbrainz.js?v=190';
-import { showProgress, hideProgress, progressController, isCancelled, promptPlaylistName, alertModal, confirmModal, escapeHtml, pageHeader } from '../ui/components.js?v=190';
-import { showToast } from '../ui/toast.js?v=190';
-import { openModal, closeTop } from '../ui/modal-stack.js?v=190';
-import { tagToGroup } from './genre-groups.js?v=190';
-import { prefKey, migratePrefKey } from '../storage.js?v=190';
+import { getAllLikedTracks, createPlaylist, addTracksToPlaylist, invalidatePlaylistsCache, exportAllData, importAllData, getCurrentUserId, getBestAvailableLikes } from '../api.js?v=191';
+import { hasKey, setKey, getArtistTopTags, getCachedTags, setCachedTags, mergeCachedTags } from '../api/lastfm.js?v=191';
+import * as statsfm from '../api/statsfm.js?v=191';
+import { getGenresForArtist as mbGetGenres } from '../api/musicbrainz.js?v=191';
+import { showProgress, hideProgress, progressController, isCancelled, promptPlaylistName, alertModal, confirmModal, escapeHtml, pageHeader } from '../ui/components.js?v=191';
+import { showToast } from '../ui/toast.js?v=191';
+import { openModal, closeTop } from '../ui/modal-stack.js?v=191';
+import { tagToGroup } from './genre-groups.js?v=191';
+import { prefKey, migratePrefKey } from '../storage.js?v=191';
 
 const NOISE_TAGS = new Set([
   'seen live', 'favorites', 'favorite', 'favourite', 'favourites',
@@ -112,7 +112,7 @@ export function render(container) {
 
 async function renderStartScreen() {
   const content = document.getElementById('genre-content');
-  content.innerHTML = `<div class="empty-state"><div class="spinner spinner-lg"></div><div style="margin-top:16px">Leyendo cache local...</div></div>`;
+  content.innerHTML = `<div class="empty-state"><div class="spinner spinner-lg"></div><div style="margin-top:16px">Leyendo caché local...</div></div>`;
 
   const cachedTagsCount = Object.keys(JSON.parse(localStorage.getItem('lastfm_artist_tags_cache') || '{}')).length;
   const { items: cachedLikes } = await getBestAvailableLikes();
@@ -216,7 +216,7 @@ async function start() {
           <button class="btn btn-secondary btn-sm" id="genre-statsfm-btn">${statsfm.hasUsername() ? 'Sync desde Stats.fm' : 'Conectar Stats.fm'}</button>
           <button class="btn btn-secondary btn-sm" id="genre-mb-btn" title="Consulta MusicBrainz para artistas sin género. Rate limit 1 req/seg — tarda ~1 min cada 60 artistas.">Enriquecer sin clasificar (MusicBrainz)</button>
           <span style="font-size:11px;color:var(--color-text-secondary);align-self:center;margin-left:4px">
-            Exporta el cache cada tanto. Stats.fm agrega géneros de Spotify sin gastar Last.fm. MusicBrainz completa los que ni Last.fm ni Stats.fm reconocen.
+            Exporta la caché cada tanto. Stats.fm agrega géneros de Spotify sin gastar Last.fm. MusicBrainz completa los que ni Last.fm ni Stats.fm reconocen.
           </span>
         </div>
       </div>
@@ -361,7 +361,7 @@ async function handleStatsfm() {
       return;
     }
 
-    textEl.textContent = `Mergeando ${artists.length} artistas con el cache local...`;
+    textEl.textContent = `Mergeando ${artists.length} artistas con la caché local...`;
 
     let merged = 0;
     let skipped = 0;
@@ -769,7 +769,7 @@ async function createPlaylistForUnclassified(tracks) {
   const suggested = `Sin clasificar (${uris.length})`;
   const name = await promptPlaylistName(suggested, {
     trackCount: uris.length,
-    subtitle: 'Tracks cuyos artistas no aparecen en el cache de tags. Puedes clasificarlos manual desde aquí.',
+    subtitle: 'Tracks cuyos artistas no aparecen en la caché de tags. Puedes clasificarlos manual desde aquí.',
   });
   if (!name) return;
 

@@ -10,14 +10,14 @@
 //   - Umbral de likes: 5+ / 10+ / 20+
 //   - Ventana temporal: 3 / 6 / 12 / 24 meses (default 12)
 
-import { escapeHtml, confirmModal, pageHeader } from '../ui/components.js?v=190';
-import { showToast } from '../ui/toast.js?v=190';
-import { buildAlbumHeardIndex } from '../util/album-heard.js?v=190';
-import { releaseKind } from '../util/release-size.js?v=190';
-import { loadFiltros, buildFilterContext, applyDiscoverFilters } from '../util/discover-filters.js?v=190';
-import { createIncrementalList, scrollRootOf } from '../ui/incremental-list.js?v=190';
-import { createLazyImages } from '../ui/lazy-img.js?v=190';
-import { prefKey, migratePrefKey } from '../storage.js?v=190';
+import { escapeHtml, confirmModal, pageHeader } from '../ui/components.js?v=191';
+import { showToast } from '../ui/toast.js?v=191';
+import { buildAlbumHeardIndex } from '../util/album-heard.js?v=191';
+import { releaseKind } from '../util/release-size.js?v=191';
+import { loadFiltros, buildFilterContext, applyDiscoverFilters } from '../util/discover-filters.js?v=191';
+import { createIncrementalList, scrollRootOf } from '../ui/incremental-list.js?v=191';
+import { createLazyImages } from '../ui/lazy-img.js?v=191';
+import { prefKey, migratePrefKey } from '../storage.js?v=191';
 import {
   getArtistIdCached,
   getArtistDiscoCached,
@@ -42,7 +42,7 @@ import {
   hiddenAlbums,
   cardKey,
   toggleHiddenAlbum,
-} from './discover-common.js?v=190';
+} from './discover-common.js?v=191';
 
 const SCAN_KEY = 'new_releases';
 
@@ -380,7 +380,7 @@ async function scanArtists(content) {
   // slice sobre lo que FALTA, no sobre el target entero: si 40 ya vinieron del
   // cache y el target son 100, hay que encolar 60, no 100.
   const queue = eligible.filter(a => !a.scanned).slice(0, Math.max(0, target - scanned));
-  if (!queue.length) return;   // todo servido del cache
+  if (!queue.length) return;   // todo servido de la caché
   progress.style.display = '';
 
   const workers = Array.from({ length: BATCH_PARALLEL }, () => (async () => {

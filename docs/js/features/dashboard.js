@@ -1,15 +1,15 @@
-import { getAllLikedTracks, getLikesPartialInfo, exportAllData, importAllData, getCurrentUserId, syncLikesIncremental, getLikesCacheTimestamp, getBestAvailableLikes, getAllPlaylistItems } from '../api.js?v=190';
-import { showProgress, hideProgress, alertModal, escapeHtml, pageHeader } from '../ui/components.js?v=190';
-import { openModal, closeTop } from '../ui/modal-stack.js?v=190';
-import { showToast } from '../ui/toast.js?v=190';
-import { openListenedAlbumsPicker, getListenedPlaylist } from './listened-shared.js?v=190';
-import { loadHistoryStats, loadListenedAlbums } from './history-data.js?v=190';
-import { getArtistLikePreview } from '../util/artist-preview.js?v=190';
-import { hoverIn, hoverOut } from '../ui/preview-player.js?v=190';
-import { armRevealAll } from '../ui/reveal.js?v=190';
-import { hasUsername, getUsername, setUsername } from '../api/statsfm.js?v=190';
-import { getKey as getLastfmKey, setKey as setLastfmKey, clearKey as clearLastfmKey, isDefaultKey as lastfmIsDefaultKey } from '../api/lastfm.js?v=190';
-import { prefKey, migratePrefKey } from '../storage.js?v=190';
+import { getAllLikedTracks, getLikesPartialInfo, exportAllData, importAllData, getCurrentUserId, syncLikesIncremental, getLikesCacheTimestamp, getBestAvailableLikes, getAllPlaylistItems } from '../api.js?v=191';
+import { showProgress, hideProgress, alertModal, escapeHtml, pageHeader } from '../ui/components.js?v=191';
+import { openModal, closeTop } from '../ui/modal-stack.js?v=191';
+import { showToast } from '../ui/toast.js?v=191';
+import { openListenedAlbumsPicker, getListenedPlaylist } from './listened-shared.js?v=191';
+import { loadHistoryStats, loadListenedAlbums } from './history-data.js?v=191';
+import { getArtistLikePreview } from '../util/artist-preview.js?v=191';
+import { hoverIn, hoverOut } from '../ui/preview-player.js?v=191';
+import { armRevealAll } from '../ui/reveal.js?v=191';
+import { hasUsername, getUsername, setUsername } from '../api/statsfm.js?v=191';
+import { getKey as getLastfmKey, setKey as setLastfmKey, clearKey as clearLastfmKey, isDefaultKey as lastfmIsDefaultKey } from '../api/lastfm.js?v=191';
+import { prefKey, migratePrefKey } from '../storage.js?v=191';
 
 // Tres estados posibles, no dos: puede haber una key propia, la del código, o
 // —si algún día la constante queda vacía— ninguna. El hint del ⚙ tiene que
@@ -19,11 +19,11 @@ function estadoLastfm() {
   if (localStorage.getItem(prefKey('lastfm_api_key'))) return 'propia';
   return lastfmIsDefaultKey() ? 'la del código' : 'sin configurar';
 }
-import { loadHistoryStats as _loadStatsForCounter } from './history-data.js?v=190';
-import { openArtistCard } from './artist-card.js?v=190';
-import { openAlbumCard } from './album-card.js?v=190';
-import { activateMarquee, marqueeSpan } from '../ui/marquee.js?v=190';
-import { isJunkTrack } from '../util/junk.js?v=190';
+import { loadHistoryStats as _loadStatsForCounter } from './history-data.js?v=191';
+import { openArtistCard } from './artist-card.js?v=191';
+import { openAlbumCard } from './album-card.js?v=191';
+import { activateMarquee, marqueeSpan } from '../ui/marquee.js?v=191';
+import { isJunkTrack } from '../util/junk.js?v=191';
 
 let charts = [];
 let _loadController = null;
@@ -307,7 +307,7 @@ async function handleRefresh() {
       return;
     }
     if (result.reconciled) {
-      showToast(`Reconciliado: ${result.removed} like(s) que borraste en Spotify se sacaron del cache (total: ${result.cachedCount.toLocaleString()})`, 'success');
+      showToast(`Reconciliado: ${result.removed} like(s) que borraste en Spotify se sacaron de la caché (total: ${result.cachedCount.toLocaleString()})`, 'success');
     } else if (result.added === 0) {
       showToast(`Sin cambios (${result.cachedCount.toLocaleString()} likes, coincide con Spotify)`, 'success');
     } else {
@@ -499,7 +499,7 @@ async function loadData(forceRefresh) {
   try {
     const likes = await getAllLikedTracks(({ loaded, total, cached }) => {
       if (cached) {
-        textEl.textContent = `Usando cache local (${loaded.toLocaleString()} likes)`;
+        textEl.textContent = `Usando caché local (${loaded.toLocaleString()} likes)`;
         etaEl.textContent = 'Listo desde cache.';
         barEl.style.width = '100%';
       } else {
@@ -788,9 +788,9 @@ async function hydrateHistorySection() {
   const totalDays = ((t.min || 0) / 60 / 24).toFixed(1);
   const tiles = document.getElementById('history-stat-tiles');
   if (tiles) tiles.innerHTML = `
-    <div class="stat-card"><div class="stat-value">${totalHours.toLocaleString('es-AR')}h</div><div class="stat-label">${totalDays} días de música</div></div>
-    <div class="stat-card"><div class="stat-value">${(t.plays_valid || 0).toLocaleString('es-AR')}</div><div class="stat-label">Plays (≥30s)</div></div>
-    <div class="stat-card"><div class="stat-value">${(t.days_active || 0).toLocaleString('es-AR')}</div><div class="stat-label">Días activos</div></div>
+    <div class="stat-card"><div class="stat-value">${totalHours.toLocaleString('es-ES')}h</div><div class="stat-label">${totalDays} días de música</div></div>
+    <div class="stat-card"><div class="stat-value">${(t.plays_valid || 0).toLocaleString('es-ES')}</div><div class="stat-label">Plays (≥30s)</div></div>
+    <div class="stat-card"><div class="stat-value">${(t.days_active || 0).toLocaleString('es-ES')}</div><div class="stat-label">Días activos</div></div>
     <div class="stat-card"><div class="stat-value">${t.longest_streak || 0}</div><div class="stat-label">Racha más larga (días)</div></div>
     <div class="stat-card"><div class="stat-value">${t.skip_pct || 0}%</div><div class="stat-label">Skips</div></div>
   `;
@@ -825,7 +825,7 @@ async function hydrateHistorySection() {
             ...CHART_DEFAULTS.plugins.tooltip,
             callbacks: {
               title: items => items[0]?.label || '',
-              label: ctx => `${Math.round(ctx.parsed.y).toLocaleString('es-AR')} min`,
+              label: ctx => `${Math.round(ctx.parsed.y).toLocaleString('es-ES')} min`,
             },
           },
         },
@@ -880,7 +880,7 @@ async function hydrateHistorySection() {
             ...CHART_DEFAULTS.plugins.tooltip,
             callbacks: {
               title: items => items[0]?.label || '',
-              label: ctx => `${Math.round(ctx.parsed.x).toLocaleString('es-AR')} min`,
+              label: ctx => `${Math.round(ctx.parsed.x).toLocaleString('es-ES')} min`,
             },
           },
         },
@@ -912,7 +912,7 @@ async function hydrateHistorySection() {
           <div class="track-name">${marqueeSpan(escapeHtml(a.name))}</div>
           <div class="track-artist">${escapeHtml(a.artist)}</div>
         </div>
-        <span class="badge badge-accent" style="flex-shrink:0">${Math.round(a.min).toLocaleString('es-AR')}m</span>
+        <span class="badge badge-accent" style="flex-shrink:0">${Math.round(a.min).toLocaleString('es-ES')}m</span>
       </div>
     `).join('');
     activateMarquee(listHolder);
@@ -1012,7 +1012,7 @@ function renderHeatmap(matrix) {
     rect.addEventListener('mouseenter', ev => {
       const d = +rect.dataset.d, h = +rect.dataset.h, v = +rect.dataset.v, p = +rect.dataset.p;
       const hourStr = String(h).padStart(2, '0') + ':00';
-      tip.innerHTML = `<strong>${dayLabels[d]} ${hourStr}</strong><br><span style="color:#a68cf0">${v.toLocaleString('es-AR')} min</span> · ${p}% del pico`;
+      tip.innerHTML = `<strong>${dayLabels[d]} ${hourStr}</strong><br><span style="color:#a68cf0">${v.toLocaleString('es-ES')} min</span> · ${p}% del pico`;
       tip.style.display = 'block';
     });
     rect.addEventListener('mousemove', ev => {
@@ -1063,7 +1063,7 @@ async function hydrateListenedYearTiles() {
     holder.innerHTML = years.map(y => `
       <button class="year-tile" data-year="${y.year}">
         <div class="year-tile-year">${y.year}</div>
-        <div class="year-tile-count">${y.count.toLocaleString('es-AR')}</div>
+        <div class="year-tile-count">${y.count.toLocaleString('es-ES')}</div>
       </button>
     `).join('');
     holder.querySelectorAll('.year-tile').forEach(tile => {
@@ -1086,7 +1086,7 @@ function openHistoryYearModal(year, bucket, criteria) {
     if (!iso) return '';
     const d = new Date(iso + 'T00:00:00');
     if (isNaN(d)) return iso;
-    return d.toLocaleDateString('es-AR', { day: '2-digit', month: 'short', year: 'numeric' });
+    return d.toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' });
   };
   openModal({
     id: `dashboard-listened-year:${year}`,
@@ -1094,7 +1094,7 @@ function openHistoryYearModal(year, bucket, criteria) {
     <div class="modal modal-picker" style="max-width:560px">
       <h2 style="margin-bottom:4px">Álbumes escuchados en ${year}</h2>
       <p style="color:var(--color-text-secondary);font-size:13px;margin-bottom:10px">
-        ${bucket.count.toLocaleString('es-AR')} álbum${bucket.count === 1 ? '' : 'es'} detectado${bucket.count === 1 ? '' : 's'} en ${year} (≥${criteria?.min_tracks_sameday || 4} tracks distintos o ≥${criteria?.min_min_sameday || 25} min en un mismo día).
+        ${bucket.count.toLocaleString('es-ES')} álbum${bucket.count === 1 ? '' : 'es'} detectado${bucket.count === 1 ? '' : 's'} en ${year} (≥${criteria?.min_tracks_sameday || 4} tracks distintos o ≥${criteria?.min_min_sameday || 25} min en un mismo día).
       </p>
       <div class="picker-scroll">
         <div style="border:1px solid var(--color-border);border-radius:var(--radius-sm)">
@@ -1155,7 +1155,7 @@ async function hydrateListenedAlbumsCard() {
   try {
     const listened = await loadListenedAlbums();
     if (listened?.totals?.albums) {
-      valueEl.textContent = listened.totals.albums.toLocaleString('es-AR');
+      valueEl.textContent = listened.totals.albums.toLocaleString('es-ES');
     } else {
       valueEl.textContent = '—';
     }
@@ -1171,7 +1171,7 @@ async function hydrateListenedAlbumsCard() {
       const albumId = it.item?.album?.id || it.track?.album?.id;
       if (albumId) albumIds.add(albumId);
     }
-    valueEl.textContent = albumIds.size.toLocaleString('es-AR');
+    valueEl.textContent = albumIds.size.toLocaleString('es-ES');
   } catch (e) {
     // dejamos el número del historial; no ensuciamos el UI con error acá
   }
@@ -1430,13 +1430,13 @@ async function pollStatsfmCount() {
 }
 
 function animateCount(el, from, to, ms = 800) {
-  if (from === to) { el.textContent = to.toLocaleString('es-AR'); return; }
+  if (from === to) { el.textContent = to.toLocaleString('es-ES'); return; }
   const start = performance.now();
   function step(t) {
     const p = Math.min(1, (t - start) / ms);
     const eased = 1 - Math.pow(1 - p, 3);
     const val = Math.round(from + (to - from) * eased);
-    el.textContent = val.toLocaleString('es-AR');
+    el.textContent = val.toLocaleString('es-ES');
     if (p < 1) requestAnimationFrame(step);
   }
   requestAnimationFrame(step);
@@ -1445,15 +1445,15 @@ function animateCount(el, from, to, ms = 800) {
 function renderStatsfmTicker(el, totalNow, exportPlays) {
   const deltaExport = exportPlays != null ? totalNow - exportPlays : null;
   const sessionBadge = (_statsfmSessionStart != null && totalNow > _statsfmSessionStart)
-    ? `<span class="statsfm-ticker-session">+${(totalNow - _statsfmSessionStart).toLocaleString('es-AR')} desde que abriste</span>`
+    ? `<span class="statsfm-ticker-session">+${(totalNow - _statsfmSessionStart).toLocaleString('es-ES')} desde que abriste</span>`
     : '';
   el.style.display = '';
   el.innerHTML = `
     <span class="statsfm-ticker-dot" aria-hidden="true"></span>
     <div class="statsfm-ticker-body">
-      <div class="statsfm-ticker-count"><span class="statsfm-ticker-num">${totalNow.toLocaleString('es-AR')}</span> <span class="statsfm-ticker-label">plays hoy · Stats.fm</span></div>
+      <div class="statsfm-ticker-count"><span class="statsfm-ticker-num">${totalNow.toLocaleString('es-ES')}</span> <span class="statsfm-ticker-label">plays hoy · Stats.fm</span></div>
       <div class="statsfm-ticker-meta">
-        ${deltaExport != null && deltaExport > 0 ? `<span>+${deltaExport.toLocaleString('es-AR')} desde el export</span>` : ''}
+        ${deltaExport != null && deltaExport > 0 ? `<span>+${deltaExport.toLocaleString('es-ES')} desde el export</span>` : ''}
         ${sessionBadge}
       </div>
     </div>

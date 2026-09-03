@@ -585,7 +585,7 @@ function showApp(profile) {
       const n = await idbClearAll(['all_liked_tracks', 'all_liked_tracks_partial']);
       showToast(`Cache limpiado (${n} entrada${n === 1 ? '' : 's'}). Tus likes se conservan.`, 'success');
     } catch (e) {
-      showToast('Cache local limpiado (IDB falló: ' + e.message + ')', 'info');
+      showToast('Caché local limpiada (IDB falló: ' + e.message + ')', 'info');
     }
     btn.textContent = orig;
     btn.disabled = false;

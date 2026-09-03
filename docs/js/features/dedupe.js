@@ -1,6 +1,6 @@
-import { getAllUserPlaylists, getAllPlaylistItems, removePlaylistItemsAtPositions, getCurrentUserId, getBestAvailableLikes } from '../api.js?v=190';
-import { showProgress, hideProgress, progressController, isCancelled, typeConfirmModal, renderTrackRow, escapeHtml, renderPlaylistGrid, bindPlaylistGrid, pageHeader } from '../ui/components.js?v=190';
-import { showToast } from '../ui/toast.js?v=190';
+import { getAllUserPlaylists, getAllPlaylistItems, removePlaylistItemsAtPositions, getCurrentUserId, getBestAvailableLikes } from '../api.js?v=191';
+import { showProgress, hideProgress, progressController, isCancelled, typeConfirmModal, renderTrackRow, escapeHtml, renderPlaylistGrid, bindPlaylistGrid, pageHeader } from '../ui/components.js?v=191';
+import { showToast } from '../ui/toast.js?v=191';
 
 let ownPlaylists = [];
 const LIKED_VIRTUAL_ID = '__liked_songs__';
@@ -163,7 +163,7 @@ async function analyzeLikedSongs() {
 
   try {
     const { items } = await getBestAvailableLikes();
-    document.getElementById('liked-header-count').textContent = `${items.length.toLocaleString('es-AR')} tracks`;
+    document.getElementById('liked-header-count').textContent = `${items.length.toLocaleString('es-ES')} tracks`;
 
     const groups = new Map();
     items.forEach(it => {

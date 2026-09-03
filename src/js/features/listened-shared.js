@@ -125,7 +125,7 @@ async function openListenedAlbumsPicker({ onSelect, onClear } = {}) {
     <div class="modal" style="max-width:560px">
       <h2 style="margin-bottom:8px">Elige tu playlist de álbumes escuchados</h2>
       <p style="color:var(--color-text-secondary);font-size:13px;margin-bottom:12px">
-        La app va a agrupar por álbum los tracks de la playlist que elijas. Se guarda en tu cache local (y en tu backup JSON si exportas).
+        La app va a agrupar por álbum los tracks de la playlist que elijas. Se guarda en tu caché local (y en tu backup JSON si exportas).
       </p>
       <input type="text" id="lap-search" placeholder="Buscar playlist..." autocomplete="off"
              style="width:100%;padding:10px;background:var(--color-elevated);border:1px solid var(--color-border);border-radius:var(--radius-sm);color:var(--color-text);font-size:14px;margin-bottom:12px">

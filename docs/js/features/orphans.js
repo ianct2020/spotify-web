@@ -1,6 +1,6 @@
-import { getAllLikedTracks, getAllUserPlaylists, getAllPlaylistItems, createPlaylist, addTracksToPlaylist } from '../api.js?v=190';
-import { showProgress, hideProgress, progressController, isCancelled, confirmModal, renderTrackRow, pageHeader } from '../ui/components.js?v=190';
-import { showToast } from '../ui/toast.js?v=190';
+import { getAllLikedTracks, getAllUserPlaylists, getAllPlaylistItems, createPlaylist, addTracksToPlaylist } from '../api.js?v=191';
+import { showProgress, hideProgress, progressController, isCancelled, confirmModal, renderTrackRow, pageHeader } from '../ui/components.js?v=191';
+import { showToast } from '../ui/toast.js?v=191';
 
 export function render(container) {
   container.innerHTML = `
@@ -130,7 +130,7 @@ async function saveToPlaylist(orphans) {
 
   try {
     showProgress('Creando playlist...', 0, orphans.length);
-    const pl = await createPlaylist('Likes Huérfanas', `${orphans.length} likes que no estaban en ninguna playlist. Generado ${new Date().toLocaleDateString('es-AR')}.`);
+    const pl = await createPlaylist('Likes Huérfanas', `${orphans.length} likes que no estaban en ninguna playlist. Generado ${new Date().toLocaleDateString('es-ES')}.`);
     const uris = orphans.map(item => item.track.uri);
     await addTracksToPlaylist(pl.id, uris);
     hideProgress();

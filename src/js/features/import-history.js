@@ -189,7 +189,7 @@ async function handleFiles(files) {
   hideProgress();
 
   const totals = result.stats.totals;
-  showToast(`Historial cargado: ${totals.plays_valid.toLocaleString('es-AR')} plays válidas · ${totals.days_active.toLocaleString('es-AR')} días activos`, 'success');
+  showToast(`Historial cargado: ${totals.plays_valid.toLocaleString('es-ES')} plays válidas · ${totals.days_active.toLocaleString('es-ES')} días activos`, 'success');
   setTimeout(() => location.reload(), 800);
 }
 

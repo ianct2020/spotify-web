@@ -130,7 +130,7 @@ async function saveToPlaylist(orphans) {
 
   try {
     showProgress('Creando playlist...', 0, orphans.length);
-    const pl = await createPlaylist('Likes Huérfanas', `${orphans.length} likes que no estaban en ninguna playlist. Generado ${new Date().toLocaleDateString('es-AR')}.`);
+    const pl = await createPlaylist('Likes Huérfanas', `${orphans.length} likes que no estaban en ninguna playlist. Generado ${new Date().toLocaleDateString('es-ES')}.`);
     const uris = orphans.map(item => item.track.uri);
     await addTracksToPlaylist(pl.id, uris);
     hideProgress();

@@ -1,9 +1,9 @@
-import { getValidToken, refreshAccessToken } from './auth.js?v=190';
-import { cacheGet, cacheGetRaw, cacheGetTimestamp, cacheSet, cacheClear, prefKey, migratePrefKey } from './storage.js?v=190';
-import { idbDel, idbDelByPrefix, idbGetCached, idbGetCachedRaw, idbGetTimestamp, idbSetCached } from './idb.js?v=190';
-import { OWNER_KEY_LIST } from './history-keys.js?v=190';
-import { showToast } from './ui/toast.js?v=190';
-import { artistIsSame, limpiaParaQuery } from './util/track-match.js?v=190';
+import { getValidToken, refreshAccessToken } from './auth.js?v=191';
+import { cacheGet, cacheGetRaw, cacheGetTimestamp, cacheSet, cacheClear, prefKey, migratePrefKey } from './storage.js?v=191';
+import { idbDel, idbDelByPrefix, idbGetCached, idbGetCachedRaw, idbGetTimestamp, idbSetCached } from './idb.js?v=191';
+import { OWNER_KEY_LIST } from './history-keys.js?v=191';
+import { showToast } from './ui/toast.js?v=191';
+import { artistIsSame, limpiaParaQuery } from './util/track-match.js?v=191';
 
 const BASE = 'https://api.spotify.com/v1';
 const MIN_RETRY_WAIT = 5000;
@@ -602,7 +602,7 @@ async function syncLikesIncremental(onProgress) {
   // para reconciliar — un incremental no sabe QUÉ desaparecieron.
   if (delta < 0) {
     const removed = -delta;
-    if (onProgress) onProgress({ phase: 'reconciling', message: `En Spotify hay ${removed.toLocaleString('es-AR')} likes menos que en cache. Re-bajando todo para reconciliar...` });
+    if (onProgress) onProgress({ phase: 'reconciling', message: `En Spotify hay ${removed.toLocaleString('es-ES')} likes menos que en caché. Re-bajando todo para reconciliar...` });
     // ⚠️ Antes acá se llamaba a `invalidateLikesCache()` ANTES de bajar nada: se
     // destruían las ~9.400 canciones y recién después se intentaba la descarga.
     // Si esa descarga pegaba 429 —lo normal, son ~190 requests— quedaba sin
@@ -610,7 +610,7 @@ async function syncLikesIncremental(onProgress) {
     // salta la lectura del caché y solo lo pisa cuando la carga nueva está
     // completa y confirmada (ver `saveLikes`). Si falla, el viejo sigue ahí.
     const fresh = await getAllLikedTracks(({ loaded, total }) => {
-      if (onProgress) onProgress({ phase: 'fetching-full', message: `Re-bajando likes (${loaded.toLocaleString('es-AR')} / ${(total || totalNow).toLocaleString('es-AR')})...`, loaded, total: total || totalNow });
+      if (onProgress) onProgress({ phase: 'fetching-full', message: `Re-bajando likes (${loaded.toLocaleString('es-ES')} / ${(total || totalNow).toLocaleString('es-ES')})...`, loaded, total: total || totalNow });
     }, { force: true });
     return { hadCache: true, added: 0, removed, totalNow, cachedCount: fresh.length, reconciled: true };
   }
@@ -1018,7 +1018,7 @@ async function getCurrentUserId() {
   try {
     const prev = localStorage.getItem(LAST_USER_KEY);
     if (prev && prev !== _cachedUserId) {
-      console.info(`Fonoteca: user cambió (${prev} → ${_cachedUserId}), limpiando cache local`);
+      console.info(`Fonoteca: user cambió (${prev} → ${_cachedUserId}), limpiando caché local`);
       invalidateLikesCache();
       invalidatePlaylistsCache();
       // Caches del historial del owner: si el nuevo user no es el owner, sobran;

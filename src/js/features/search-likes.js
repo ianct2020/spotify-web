@@ -55,7 +55,7 @@ export async function render(container) {
   const info = document.getElementById('search-likes-info');
   const results = document.getElementById('search-likes-results');
 
-  results.innerHTML = `<div class="empty-state"><div class="spinner spinner-lg"></div><div style="margin-top:16px">Cargando cache de likes…</div></div>`;
+  results.innerHTML = `<div class="empty-state"><div class="spinner spinner-lg"></div><div style="margin-top:16px">Cargando caché de me gusta…</div></div>`;
 
   const { items } = await getBestAvailableLikes();
   cachedItems = items;
@@ -71,9 +71,9 @@ export async function render(container) {
     return;
   }
 
-  info.innerHTML = `${items.length.toLocaleString('es-AR')} likes en cache`;
+  info.innerHTML = `${items.length.toLocaleString('es-ES')} likes en caché`;
 
-  results.innerHTML = `<div class="card"><p style="color:var(--color-text-secondary)">Empieza a tipear arriba — los resultados aparecen al toque.</p></div>`;
+  results.innerHTML = `<div class="card"><p style="color:var(--color-text-secondary)">Empieza a escribir arriba — los resultados aparecen al instante.</p></div>`;
 
   let lastQuery = '';
   let debounceTimer = null;
@@ -84,7 +84,7 @@ export async function render(container) {
     lastQuery = q;
     clearBtn.style.display = raw ? 'block' : 'none';
     if (!q) {
-      results.innerHTML = `<div class="card"><p style="color:var(--color-text-secondary)">Empieza a tipear arriba — los resultados aparecen al toque.</p></div>`;
+      results.innerHTML = `<div class="card"><p style="color:var(--color-text-secondary)">Empieza a escribir arriba — los resultados aparecen al instante.</p></div>`;
       return;
     }
     const tokens = q.split(' ').filter(Boolean);
@@ -115,14 +115,14 @@ function renderResults(holder, matches, query) {
     holder.innerHTML = `
       <div class="card">
         <p><strong>No hay coincidencias</strong> para "${escapeHtml(query)}".</p>
-        <p style="color:var(--color-text-secondary);font-size:13px;margin-top:6px">Si estás seguro que la tienes likeada, tal vez tu cache está desactualizado. Ve al Dashboard y haz "Actualizar datos".</p>
+        <p style="color:var(--color-text-secondary);font-size:13px;margin-top:6px">Si estás seguro que la tienes likeada, tal vez tu caché está desactualizado. Ve al Dashboard y haz "Actualizar datos".</p>
       </div>
     `;
     return;
   }
   const truncated = matches.length > MAX_RESULTS;
   const shown = matches.slice(0, MAX_RESULTS);
-  const countLabel = truncated ? `+${MAX_RESULTS}` : shown.length.toLocaleString('es-AR');
+  const countLabel = truncated ? `+${MAX_RESULTS}` : shown.length.toLocaleString('es-ES');
 
   holder.innerHTML = `
     <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:10px;flex-wrap:wrap;gap:8px">

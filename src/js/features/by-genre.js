@@ -112,7 +112,7 @@ export function render(container) {
 
 async function renderStartScreen() {
   const content = document.getElementById('genre-content');
-  content.innerHTML = `<div class="empty-state"><div class="spinner spinner-lg"></div><div style="margin-top:16px">Leyendo cache local...</div></div>`;
+  content.innerHTML = `<div class="empty-state"><div class="spinner spinner-lg"></div><div style="margin-top:16px">Leyendo caché local...</div></div>`;
 
   const cachedTagsCount = Object.keys(JSON.parse(localStorage.getItem('lastfm_artist_tags_cache') || '{}')).length;
   const { items: cachedLikes } = await getBestAvailableLikes();
@@ -216,7 +216,7 @@ async function start() {
           <button class="btn btn-secondary btn-sm" id="genre-statsfm-btn">${statsfm.hasUsername() ? 'Sync desde Stats.fm' : 'Conectar Stats.fm'}</button>
           <button class="btn btn-secondary btn-sm" id="genre-mb-btn" title="Consulta MusicBrainz para artistas sin género. Rate limit 1 req/seg — tarda ~1 min cada 60 artistas.">Enriquecer sin clasificar (MusicBrainz)</button>
           <span style="font-size:11px;color:var(--color-text-secondary);align-self:center;margin-left:4px">
-            Exporta el cache cada tanto. Stats.fm agrega géneros de Spotify sin gastar Last.fm. MusicBrainz completa los que ni Last.fm ni Stats.fm reconocen.
+            Exporta la caché cada tanto. Stats.fm agrega géneros de Spotify sin gastar Last.fm. MusicBrainz completa los que ni Last.fm ni Stats.fm reconocen.
           </span>
         </div>
       </div>
@@ -361,7 +361,7 @@ async function handleStatsfm() {
       return;
     }
 
-    textEl.textContent = `Mergeando ${artists.length} artistas con el cache local...`;
+    textEl.textContent = `Mergeando ${artists.length} artistas con la caché local...`;
 
     let merged = 0;
     let skipped = 0;
@@ -769,7 +769,7 @@ async function createPlaylistForUnclassified(tracks) {
   const suggested = `Sin clasificar (${uris.length})`;
   const name = await promptPlaylistName(suggested, {
     trackCount: uris.length,
-    subtitle: 'Tracks cuyos artistas no aparecen en el cache de tags. Puedes clasificarlos manual desde aquí.',
+    subtitle: 'Tracks cuyos artistas no aparecen en la caché de tags. Puedes clasificarlos manual desde aquí.',
   });
   if (!name) return;
 

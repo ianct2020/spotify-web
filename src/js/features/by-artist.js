@@ -31,7 +31,7 @@ export async function render(container) {
   container.innerHTML = `
     ${pageHeader({ title: 'Por artista' })}
     <div id="by-artist-content">
-      <div class="empty-state"><div class="spinner spinner-lg"></div><div style="margin-top:16px">Leyendo cache local...</div></div>
+      <div class="empty-state"><div class="spinner spinner-lg"></div><div style="margin-top:16px">Leyendo caché local...</div></div>
     </div>
   `;
 
@@ -50,7 +50,7 @@ function renderStart() {
     <div class="card" style="max-width:520px">
       <h3 style="margin-bottom:8px">Necesitamos tus likes cacheados</h3>
       <p style="color:var(--color-text-secondary);font-size:13px;margin-bottom:16px">
-        No hay likes en el cache local. Puedes cargarlos ahora (usa el cache si existe, si no baja todo desde Spotify).
+        No hay likes en la caché local. Puedes cargarlos ahora (usa la caché si existe, si no baja todo desde Spotify).
       </p>
       <button class="btn btn-primary" id="artist-load-btn">Cargar likes</button>
     </div>

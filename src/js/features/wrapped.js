@@ -56,7 +56,7 @@ function fmtMinutes(min) {
   if (min >= 60) {
     const h = Math.floor(min / 60);
     const m = Math.round(min % 60);
-    return `${h.toLocaleString('es-AR')}h ${m}m`;
+    return `${h.toLocaleString('es-ES')}h ${m}m`;
   }
   return `${Math.round(min)}m`;
 }
@@ -116,7 +116,7 @@ export async function render(container) {
 
   const dataFrom = fmtDate(stats.totals?.first_play || stats.years[0].first_play);
   const dataTo = fmtDate(stats.totals?.last_play || yearsDesc[0].last_play);
-  const dataPlays = stats.totals.plays_valid.toLocaleString('es-AR');
+  const dataPlays = stats.totals.plays_valid.toLocaleString('es-ES');
 
   content.innerHTML = `
     <div class="wrapped-year-bar">
@@ -168,7 +168,7 @@ function renderYearCard() {
       <div class="wrapped-hero">
         <div class="wrapped-hero-year">${y.year}</div>
         <div class="wrapped-hero-min">${fmtMinutes(y.min)}</div>
-        <div class="wrapped-hero-sub">${fmtDays(y.min)} · ${y.plays.toLocaleString('es-AR')} plays</div>
+        <div class="wrapped-hero-sub">${fmtDays(y.min)} · ${y.plays.toLocaleString('es-ES')} plays</div>
       </div>
 
       <div class="wrapped-year-layout">
@@ -176,7 +176,7 @@ function renderYearCard() {
           <div class="wrapped-tile compact" data-hover="y-tile-art:0" style="grid-area:art">
             <div class="wrapped-tile-label">Artista del año</div>
             <div class="wrapped-tile-value">${escapeHtml(topArtist.name)}</div>
-            <div class="wrapped-tile-hint">${fmtMinutes(topArtist.min)} · ${topArtist.plays.toLocaleString('es-AR')} plays</div>
+            <div class="wrapped-tile-hint">${fmtMinutes(topArtist.min)} · ${topArtist.plays.toLocaleString('es-ES')} plays</div>
           </div>
         ` : `<div style="grid-area:art"></div>`}
         ${topTrack ? `
@@ -195,7 +195,7 @@ function renderYearCard() {
               : `<div class="wrapped-album-hero-cover" style="background:var(--color-elevated);display:flex;align-items:center;justify-content:center;color:var(--color-text-muted);font-size:44px">♪</div>`}
             <div class="wrapped-album-hero-name">${escapeHtml(topAlbum.name)}</div>
             <div class="wrapped-album-hero-artist">${escapeHtml(topAlbum.artist)}</div>
-            <div class="wrapped-album-hero-meta">${fmtMinutes(topAlbum.min)} · ${topAlbum.plays.toLocaleString('es-AR')} plays</div>
+            <div class="wrapped-album-hero-meta">${fmtMinutes(topAlbum.min)} · ${topAlbum.plays.toLocaleString('es-ES')} plays</div>
           </div>
         ` : `<div style="grid-area:alb"></div>`}
 
@@ -476,7 +476,7 @@ function renderAllTime() {
           <div class="wrapped-tile compact" data-hover="at-tile-art:0" style="grid-area:art">
             <div class="wrapped-tile-label">Artista de siempre</div>
             <div class="wrapped-tile-value">${escapeHtml(topArtist.name)}</div>
-            <div class="wrapped-tile-hint">${fmtMinutes(topArtist.min)} · ${(topArtist.plays || 0).toLocaleString('es-AR')} plays</div>
+            <div class="wrapped-tile-hint">${fmtMinutes(topArtist.min)} · ${(topArtist.plays || 0).toLocaleString('es-ES')} plays</div>
           </div>
         ` : `<div style="grid-area:art"></div>`}
         ${topTrack ? `
@@ -495,34 +495,34 @@ function renderAllTime() {
               : `<div class="wrapped-album-hero-cover" style="background:var(--color-elevated);display:flex;align-items:center;justify-content:center;color:var(--color-text-muted);font-size:44px">♪</div>`}
             <div class="wrapped-album-hero-name">${escapeHtml(topAlbum.name)}</div>
             <div class="wrapped-album-hero-artist">${escapeHtml(topAlbum.artist)}</div>
-            <div class="wrapped-album-hero-meta">${fmtMinutes(topAlbum.min)} · ${(topAlbum.plays || 0).toLocaleString('es-AR')} plays</div>
+            <div class="wrapped-album-hero-meta">${fmtMinutes(topAlbum.min)} · ${(topAlbum.plays || 0).toLocaleString('es-ES')} plays</div>
           </div>
         ` : `<div style="grid-area:alb"></div>`}
 
         <div class="wrapped-tile compact" style="grid-area:day">
           <div class="wrapped-tile-label">Artistas únicos</div>
-          <div class="wrapped-tile-value">${(t.unique_artists || 0).toLocaleString('es-AR')}</div>
+          <div class="wrapped-tile-value">${(t.unique_artists || 0).toLocaleString('es-ES')}</div>
           <div class="wrapped-tile-hint">con al menos una play ≥30s</div>
         </div>
         <div class="wrapped-tile compact" style="grid-area:days">
           <div class="wrapped-tile-label">Álbumes únicos</div>
-          <div class="wrapped-tile-value">${(t.unique_albums || 0).toLocaleString('es-AR')}</div>
+          <div class="wrapped-tile-value">${(t.unique_albums || 0).toLocaleString('es-ES')}</div>
           <div class="wrapped-tile-hint">con al menos una play ≥30s</div>
         </div>
 
         <div class="wrapped-tile compact" style="grid-area:disc">
           <div class="wrapped-tile-label">Plays válidas</div>
-          <div class="wrapped-tile-value">${(t.plays_valid || 0).toLocaleString('es-AR')}</div>
-          <div class="wrapped-tile-hint">de ${(t.plays_raw || 0).toLocaleString('es-AR')} crudas · ${t.skip_pct}% skips</div>
+          <div class="wrapped-tile-value">${(t.plays_valid || 0).toLocaleString('es-ES')}</div>
+          <div class="wrapped-tile-hint">de ${(t.plays_raw || 0).toLocaleString('es-ES')} crudas · ${t.skip_pct}% skips</div>
         </div>
         <div class="wrapped-tile compact" style="grid-area:mes">
           <div class="wrapped-tile-label">Días activos</div>
-          <div class="wrapped-tile-value">${daysActive.toLocaleString('es-AR')}</div>
-          <div class="wrapped-tile-hint">${totalPossibleDays ? `de ${totalPossibleDays.toLocaleString('es-AR')} totales · ` : ''}racha ${t.longest_streak || 0} d</div>
+          <div class="wrapped-tile-value">${daysActive.toLocaleString('es-ES')}</div>
+          <div class="wrapped-tile-hint">${totalPossibleDays ? `de ${totalPossibleDays.toLocaleString('es-ES')} totales · ` : ''}racha ${t.longest_streak || 0} d</div>
         </div>
         <div class="wrapped-tile compact" style="grid-area:skp">
           <div class="wrapped-tile-label">Tracks únicos</div>
-          <div class="wrapped-tile-value">${(t.unique_tracks || 0).toLocaleString('es-AR')}</div>
+          <div class="wrapped-tile-value">${(t.unique_tracks || 0).toLocaleString('es-ES')}</div>
           <div class="wrapped-tile-hint">con al menos una play ≥30s</div>
         </div>
         <div class="wrapped-tile compact" style="grid-area:fst">

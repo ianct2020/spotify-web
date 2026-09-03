@@ -1,13 +1,13 @@
-import { getAllPlaylistItems, getBestAvailableLikes, addTracksToPlaylist, removeTracksFromPlaylist, getAllUserPlaylists } from '../api.js?v=190';
-import { esEPoAlbum } from '../util/release-size.js?v=190';
-import { idbGetCached, idbSetCached, idbGetTimestamp } from '../idb.js?v=190';
-import { escapeHtml, confirmModal, pageHeader } from '../ui/components.js?v=190';
-import { showToast } from '../ui/toast.js?v=190';
-import { isJunkTrack } from '../util/junk.js?v=190';
-import { openModal, closeTop } from '../ui/modal-stack.js?v=190';
-import { getListenedPlaylist, groupItemsByAlbum, openListenedAlbumsPicker, albumKey, baseName, norm } from './listened-shared.js?v=190';
-import { openAlbumCard } from './album-card.js?v=190';
-import { prefKey, migratePrefKey } from '../storage.js?v=190';
+import { getAllPlaylistItems, getBestAvailableLikes, addTracksToPlaylist, removeTracksFromPlaylist, getAllUserPlaylists } from '../api.js?v=191';
+import { esEPoAlbum } from '../util/release-size.js?v=191';
+import { idbGetCached, idbSetCached, idbGetTimestamp } from '../idb.js?v=191';
+import { escapeHtml, confirmModal, pageHeader } from '../ui/components.js?v=191';
+import { showToast } from '../ui/toast.js?v=191';
+import { isJunkTrack } from '../util/junk.js?v=191';
+import { openModal, closeTop } from '../ui/modal-stack.js?v=191';
+import { getListenedPlaylist, groupItemsByAlbum, openListenedAlbumsPicker, albumKey, baseName, norm } from './listened-shared.js?v=191';
+import { openAlbumCard } from './album-card.js?v=191';
+import { prefKey, migratePrefKey } from '../storage.js?v=191';
 
 const SORT_KEY = 'listened_sort_mode';
 const VALID_SORTS = new Set(['recent', 'year-desc', 'year-asc', 'artist-asc', 'likes-desc', 'name-asc']);
@@ -757,7 +757,7 @@ function sortAlbums(list) {
 
 function timeAgo(ts) {
   const mins = Math.max(0, Math.round((Date.now() - ts) / 60000));
-  if (mins < 1) return 'recién';
+  if (mins < 1) return 'ahora mismo';
   if (mins < 60) return `hace ${mins} min`;
   const hrs = Math.round(mins / 60);
   if (hrs < 24) return `hace ${hrs} h`;
@@ -866,7 +866,7 @@ function openYearAlbums(year) {
   const fmt = ts => {
     if (!ts) return '';
     const d = new Date(ts);
-    return d.toLocaleDateString('es-AR', { day: '2-digit', month: 'short', year: 'numeric' });
+    return d.toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' });
   };
   const overlay = openModal({
     id: `listened-year:${year}`,
