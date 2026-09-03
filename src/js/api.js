@@ -474,9 +474,17 @@ function startLikesLoad({ force }) {
       const guardado = await saveLikes(items, { complete: meta.complete, total: meta.total });
 
       if (!meta.complete || !guardado.ok) {
-        const detalle = `${items.length}${meta.total != null ? ` de ${meta.total}` : ''}`;
-        console.info(`[likes] carga no consolidada (${detalle}) — conservo el parcial para retomar`);
-        throw new Error(`Carga de likes incompleta (${detalle}). No se guardó nada para no corromper el caché; el progreso quedó guardado para retomar.`);
+        // Dos fallos distintos, y confundirlos manda a buscar donde no es:
+        //  - la descarga no llegó al final → faltan canciones
+        //  - la descarga cuadró pero NO SE PUDO ESCRIBIR (IDB lleno, cuota,
+        //    modo incógnito) → no falta nada, falla el navegador
+        const detalle = `${items.length.toLocaleString('es-ES')}${meta.total != null ? ` de ${meta.total.toLocaleString('es-ES')}` : ''}`;
+        const motivo = !meta.complete
+          ? `La descarga se ha cortado antes de acabar (${detalle}).`
+          : `Se han descargado las ${detalle}, pero el navegador no ha podido guardarlas`
+            + `${guardado.error ? ` (${guardado.error.message})` : ''}.`;
+        console.info(`[likes] carga no consolidada — ${motivo} Conservo el parcial para retomar.`);
+        throw new Error(`${motivo} No se ha tocado la caché anterior, y el progreso queda guardado para retomarlo.`);
       }
 
       await clearPartial(LIKES_CACHE_KEY);
