@@ -6,21 +6,21 @@
 //     (util/album-heard.js: historial completo + likes + listened + w-three)
 //   - permiten "+ Biblioteca" y "Crear playlist con lo elegido"
 
-import { idbGetCached, idbSetCached, idbDel } from '../idb.js?v=193';
-import { getArtistAlbums, searchArtistByName, getAlbumTracks, saveToLibrary, saveAlbumsToLibrary, createPlaylist, addTracksToPlaylist } from '../api.js?v=193';
-import { albumKey } from '../util/album-key.js?v=193';
-import { escapeHtml } from '../ui/components.js?v=193';
-import { showToast } from '../ui/toast.js?v=193';
-import { openPlaylistPicker } from '../ui/playlist-picker.js?v=193';
-import { getOwnPlaylists, addUrisToPlaylists, toastAddResult } from '../util/playlist-add.js?v=193';
-import { openArtistCard } from './artist-card.js?v=193';
-import { openAlbumCard } from './album-card.js?v=193';
-import { createHiddenStore, createLocalStore } from '../util/hidden-sync.js?v=193';
-import { getPreview } from '../api/preview-providers.js?v=193';
-import { togglePreview, playingKey, attachHover } from '../ui/preview-player.js?v=193';
-import { coverUrl } from '../util/cover-size.js?v=193';
-import { FILTROS as FILTROS_DEF, saveFiltros } from '../util/discover-filters.js?v=193';
-import { esEPoAlbum } from '../util/release-size.js?v=193';
+import { idbGetCached, idbSetCached, idbDel } from '../idb.js?v=194';
+import { getArtistAlbums, searchArtistByName, getAlbumTracks, saveToLibrary, saveAlbumsToLibrary, createPlaylist, addTracksToPlaylist } from '../api.js?v=194';
+import { albumKey } from '../util/album-key.js?v=194';
+import { escapeHtml } from '../ui/components.js?v=194';
+import { showToast } from '../ui/toast.js?v=194';
+import { openPlaylistPicker } from '../ui/playlist-picker.js?v=194';
+import { getOwnPlaylists, addUrisToPlaylists, toastAddResult } from '../util/playlist-add.js?v=194';
+import { openArtistCard } from './artist-card.js?v=194';
+import { openAlbumCard } from './album-card.js?v=194';
+import { createHiddenStore, createLocalStore } from '../util/hidden-sync.js?v=194';
+import { getPreview } from '../api/preview-providers.js?v=194';
+import { togglePreview, playingKey, attachHover } from '../ui/preview-player.js?v=194';
+import { coverUrl } from '../util/cover-size.js?v=194';
+import { FILTROS as FILTROS_DEF, saveFiltros } from '../util/discover-filters.js?v=194';
+import { esEPoAlbum } from '../util/release-size.js?v=194';
 
 const DISCO_TTL_MIN = 30 * 24 * 60;       // 30 días
 const ARTIST_ID_TTL_MIN = 60 * 24 * 60;   // 60 días — los ids no cambian

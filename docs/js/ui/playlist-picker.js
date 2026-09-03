@@ -28,11 +28,11 @@
 // El resultado sigue contándolo el caller con su toast de siempre, que es el
 // único que sabe qué se añadió, qué ya estaba y qué falló.
 
-import { openModal, closeModal } from './modal-stack.js?v=193';
-import { escapeHtml, showProgress, hideProgress } from './components.js?v=193';
-import { showToast } from './toast.js?v=193';
-import { normText } from '../util/track-match.js?v=193';
-import { isHiddenPlaylistName } from '../util/hidden-sync.js?v=193';
+import { openModal, closeModal } from './modal-stack.js?v=194';
+import { escapeHtml, showProgress, hideProgress } from './components.js?v=194';
+import { showToast } from './toast.js?v=194';
+import { normText } from '../util/track-match.js?v=194';
+import { isHiddenPlaylistName } from '../util/hidden-sync.js?v=194';
 
 function filasHtml(playlists, marcadas = new Set()) {
   return playlists.map(p => `

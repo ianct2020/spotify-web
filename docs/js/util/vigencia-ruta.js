@@ -38,7 +38,7 @@
 // Un `await` cuyo resultado solo se guarda en una variable de módulo no
 // necesita check: lo necesita el primer punto que toque el documento.
 
-import { generacionActual, rutaVigente } from '../router.js?v=193';
+import { generacionActual, rutaVigente } from '../router.js?v=194';
 
 /**
  * Captura la generación de ruta actual y devuelve con qué preguntarla después.
