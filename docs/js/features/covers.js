@@ -9,23 +9,23 @@
 // placeholder→img. Botón "Pantalla completa" (Fullscreen API) que oculta
 // sidebar/header/toolbar y recalcula el lado.
 
-import { loadListenedAlbums, isOwner, ownerLockedMessage } from './history-data.js?v=192';
-import { isJunkTrack } from '../util/junk.js?v=192';
-import { vigilarRuta } from '../util/vigencia-ruta.js?v=192';
-import { createIncrementalList, scrollRootOf } from '../ui/incremental-list.js?v=192';
-import { createLazyImages } from '../ui/lazy-img.js?v=192';
-import { getAllPlaylistItems, getBestAvailableLikes } from '../api.js?v=192';
-import { escapeHtml, pageHeader, showProgress, hideProgress } from '../ui/components.js?v=192';
-import { showToast } from '../ui/toast.js?v=192';
-import { openAlbumCard } from './album-card.js?v=192';
-import { openArtistCard } from './artist-card.js?v=192';
-import { albumKey, coverId } from '../util/album-key.js?v=192';
-import { generarWallpaper, descargarBlob, WALLPAPER_PRESETS } from './covers-wallpaper.js?v=192';
-import { buildAlbumStatsIndex } from '../util/album-stats.js?v=192';
-import { getPreview } from '../api/preview-providers.js?v=192';
-import { hoverIn, hoverOut } from '../ui/preview-player.js?v=192';
-import { coverUrl } from '../util/cover-size.js?v=192';
-import { prefKey, migratePrefKey } from '../storage.js?v=192';
+import { loadListenedAlbums, isOwner, ownerLockedMessage } from './history-data.js?v=193';
+import { isJunkTrack } from '../util/junk.js?v=193';
+import { vigilarRuta } from '../util/vigencia-ruta.js?v=193';
+import { createIncrementalList, scrollRootOf } from '../ui/incremental-list.js?v=193';
+import { createLazyImages } from '../ui/lazy-img.js?v=193';
+import { getAllPlaylistItems, getBestAvailableLikes } from '../api.js?v=193';
+import { escapeHtml, pageHeader, showProgress, hideProgress } from '../ui/components.js?v=193';
+import { showToast } from '../ui/toast.js?v=193';
+import { openAlbumCard } from './album-card.js?v=193';
+import { openArtistCard } from './artist-card.js?v=193';
+import { albumKey, coverId } from '../util/album-key.js?v=193';
+import { generarWallpaper, descargarBlob, WALLPAPER_PRESETS } from './covers-wallpaper.js?v=193';
+import { buildAlbumStatsIndex } from '../util/album-stats.js?v=193';
+import { getPreview } from '../api/preview-providers.js?v=193';
+import { hoverIn, hoverOut } from '../ui/preview-player.js?v=193';
+import { coverUrl, tapaParaCelda } from '../util/cover-size.js?v=193';
+import { prefKey, migratePrefKey } from '../storage.js?v=193';
 
 const LS_KEY_SIZE = 'covers_cell_size';
 const LS_KEY_SORT = 'covers_sort_mode';
@@ -297,8 +297,14 @@ function fitCellSize(N, W, H, gap = GRID_GAP) {
 // frame interactivo** y **24,6 s hasta que el mosaico terminaba de pintar**.
 // Ver ui/lazy-img.js: ahora solo se pide `src` a lo que entra en el
 // `rootMargin` real (200px), y lo que se aleja se suelta.
-function cellHtml(a, i) {
-  return `<button type="button" class="cover-cell" data-i="${i}"><img class="cover-img" data-src="${a.img}" alt="" decoding="async"></button>`;
+
+// `data-full` guarda la original: si la variante chica no existiera, el handler
+// de `error` reintenta con esta antes de sacar la celda. Ver más abajo — la
+// regla es que una tapa que no carga sea un hueco, nunca una celda menos.
+function cellHtml(a, i, lado) {
+  const src = tapaParaCelda(a.img, lado);
+  const full = src === a.img ? '' : ` data-full="${escapeHtml(a.img)}"`;
+  return `<button type="button" class="cover-cell" data-i="${i}"><img class="cover-img" data-src="${escapeHtml(src)}"${full} alt="" decoding="async"></button>`;
 }
 
 export async function render(container) {
@@ -515,11 +521,20 @@ export async function render(container) {
   const BATCH = 200;
   let list = null;
   let lazyCovers = null;
+  // Qué variante de tapa (64 o 300) está pintada ahora mismo en el DOM. Cambiar
+  // de tamaño solo toca el CSS, así que el repintado hay que pedirlo a mano —
+  // y solo cuando la variante cambia de verdad (ver `sincronizarVariante`).
+  let variantePintada = null;
+
+  function varianteDe(lado) {
+    return (lado || 0) * (globalThis.devicePixelRatio || 1) <= 64 ? 64 : 300;
+  }
 
   function renderGrid({ preserveRendered = false } = {}) {
     const t0 = performance.now();
     const total = currentList.length;
     countEl.textContent = total.toLocaleString('es-ES');
+    variantePintada = varianteDe(Number(size) || 28);
 
     if (!list) {
       lazyCovers = createLazyImages({ root: scrollRootOf(grid), rootMargin: '200px' });
@@ -527,7 +542,9 @@ export async function render(container) {
       list = createIncrementalList({
         container: grid,
         items: currentList,
-        renderItem: cellHtml,
+        // Lee `size` en cada celda, no una vez: así un cambio de tamaño no
+        // obliga a reconfigurar la lista incremental.
+        renderItem: (a, i) => cellHtml(a, i, Number(size) || 28),
         batchSize: BATCH,
         rootMargin: '600px',
         onBatch: ({ rendered, total: t, added, ms }) => {
@@ -550,6 +567,14 @@ export async function render(container) {
     }
   }
 
+  // Se cambió el lado de la celda. Si la variante de tapa que corresponde sigue
+  // siendo la misma (28→48→64 en pantalla 1×, todas de 64), no hay nada que
+  // repintar y alcanza con el CSS. Si cambia, se repinta conservando el scroll.
+  function sincronizarVariante() {
+    if (!list || varianteDe(Number(size) || 28) === variantePintada) return;
+    renderGrid({ preserveRendered: true });
+  }
+
   renderGrid();
 
   function applyFit() {
@@ -563,6 +588,7 @@ export async function render(container) {
     grid.style.setProperty('--cover-min', `${s}px`);
     content.querySelectorAll('[data-size]').forEach(b => b.classList.toggle('is-on', b.dataset.size === size));
     fitBtn.classList.add('is-on');
+    sincronizarVariante();
     console.log(`[covers] ajustar: N=${N} W=${W} H=${H} → lado=${s}px (cols=${Math.floor((W+GRID_GAP)/(s+GRID_GAP))} rows=${Math.ceil(N/Math.floor((W+GRID_GAP)/(s+GRID_GAP)))})`);
   }
 
@@ -636,6 +662,7 @@ export async function render(container) {
       grid.dataset.size = size;
       grid.style.setProperty('--cover-min', `${size}px`);
       content.querySelectorAll('[data-size]').forEach(b => b.classList.toggle('is-on', b === btn));
+      sincronizarVariante();
     });
   });
 
@@ -752,10 +779,23 @@ export async function render(container) {
 
   // Si una tapa 404ea, sacamos la celda entera en vez de poner el cuadro con la
   // inicial: Ian quiere el collage sin huecos con letras (v=127).
+  //
+  // v=193: antes de sacarla, UN reintento con la URL original. Desde que la
+  // celda pide la variante del tamaño que necesita (`tapaParaCelda`), un fallo
+  // puede querer decir «esa variante no existe» y no «este álbum no tiene
+  // tapa» — el prefijo del CDN es una convención no documentada. Sin el
+  // reintento, un cambio del lado de Spotify borraría álbumes del mosaico en
+  // silencio, que es exactamente lo que no queremos que pase nunca.
   grid.addEventListener('error', (e) => {
-    if (e.target?.classList?.contains('cover-img')) {
-      e.target.closest('.cover-cell')?.remove();
+    const img = e.target;
+    if (!img?.classList?.contains('cover-img')) return;
+    const full = img.dataset.full;
+    if (full && img.src !== full) {
+      delete img.dataset.full;
+      img.src = full;
+      return;
     }
+    img.closest('.cover-cell')?.remove();
   }, true);
 
   // ── Tooltip clickeable (v=151) ──────────────────────────────────────────
