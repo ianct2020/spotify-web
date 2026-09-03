@@ -568,11 +568,28 @@ export async function render(container) {
   }
 
   // Se cambió el lado de la celda. Si la variante de tapa que corresponde sigue
-  // siendo la misma (28→48→64 en pantalla 1×, todas de 64), no hay nada que
-  // repintar y alcanza con el CSS. Si cambia, se repinta conservando el scroll.
+  // siendo la misma (28→48→64 en una pantalla 1×, las tres de 64), no hay nada
+  // que hacer y alcanza con el CSS.
+  //
+  // Cuando SÍ cambia, se actualiza cada <img> EN EL SITIO y no se repinta la
+  // grilla: `setItems` destruye los nodos y los nuevos nacen sin `src`, o sea
+  // mosaico gris hasta que bajan las 429 tapas del tamaño nuevo. Asignando el
+  // `src` sobre la <img> que ya está, el navegador sigue mostrando la tapa
+  // vieja hasta que decodifica la nueva — el cambio no se nota.
   function sincronizarVariante() {
-    if (!list || varianteDe(Number(size) || 28) === variantePintada) return;
-    renderGrid({ preserveRendered: true });
+    const v = varianteDe(Number(size) || 28);
+    if (!list || v === variantePintada) return;
+    variantePintada = v;
+    const lado = Number(size) || 28;
+    grid.querySelectorAll('.cover-cell').forEach(cell => {
+      const a = currentList[Number(cell.dataset.i)];
+      const img = cell.querySelector('img.cover-img');
+      if (!a || !img) return;
+      const nueva = tapaParaCelda(a.img, lado);
+      if (nueva === a.img) delete img.dataset.full;
+      else img.dataset.full = a.img;
+      lazyCovers.cambiarFuente(img, nueva);
+    });
   }
 
   renderGrid();

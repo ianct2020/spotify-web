@@ -242,6 +242,30 @@ export function createLazyImages({
       }
     },
 
+    /**
+     * La misma <img>, otra URL — `#covers` al cambiar de tamaño de celda pide
+     * la variante de 64 o la de 300 (`util/cover-size.js`).
+     *
+     * Se asigna el `src` DIRECTAMENTE, sin pasar por `data-src`: el navegador
+     * sigue pintando la imagen vieja hasta que decodifica la nueva, así que el
+     * cambio no parpadea. Repintar la grilla entera sí parpadea —los nodos
+     * nuevos nacen sin `src`— y una grilla gris mientras bajan 429 tapas es
+     * justo lo que esta vista no puede hacer.
+     */
+    cambiarFuente(img, url) {
+      if (destroyed || !img || !url) return;
+      // Todavía no cargó: alcanza con cambiarle el pendiente.
+      if (img.dataset.src) { img.dataset.src = url; return; }
+      if (cargadas.get(img) === url) return;
+      yaCargadas.add(url);
+      img.src = url;
+      cargadas.delete(img);      // delete + set = refresca su lugar en la LRU
+      cargadas.set(img, url);
+      cargas++;
+      podar();
+      traza();
+    },
+
     /** Se repintó la lista entera: los nodos viejos ya no existen. */
     reset() {
       if (destroyed) return;

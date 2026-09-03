@@ -236,5 +236,36 @@ const { createLazyImages } = await import('../src/js/ui/lazy-img.js');
   lazy.destroy();
 }
 
+// ───────────────────────────────────────────────────────────────────────────
+// 7. `cambiarFuente`: la misma <img> con otra URL (cambio de tamaño de celda en
+//    `#covers`). Lo que importa es que NO pase por `data-src`: si pasara, la
+//    tapa se blanquearía hasta que baje la nueva, y con 429 celdas eso es la
+//    grilla gris otra vez.
+// ───────────────────────────────────────────────────────────────────────────
+{
+  observers.length = 0;
+  instalarIO(() => true);
+  const lazy = createLazyImages({ maxLoaded: 100 });
+  const cargada = img('https://cdn/ab67616d00004851aaa');
+  const pendiente = img('https://cdn/ab67616d00004851bbb');
+  lazy.observe([cargada]);
+  eq(cargada.src, 'https://cdn/ab67616d00004851aaa', 'la primera queda cargada');
+
+  lazy.cambiarFuente(cargada, 'https://cdn/ab67616d00001e02aaa');
+  eq(cargada.src, 'https://cdn/ab67616d00001e02aaa', 'la <img> cargada recibe la URL nueva DIRECTO');
+  eq(cargada.dataset.src, undefined, 'y NO vuelve a data-src: no hay parpadeo a gris');
+
+  // Una que todavía no cargó sí cambia por `data-src`, que es su pendiente.
+  pendiente.dataset.src = 'https://cdn/ab67616d00004851bbb';
+  lazy.cambiarFuente(pendiente, 'https://cdn/ab67616d00001e02bbb');
+  eq(pendiente.dataset.src, 'https://cdn/ab67616d00001e02bbb', 'la que no cargó cambia su pendiente');
+  eq(pendiente.src, '', 'y sigue sin src, como corresponde');
+
+  const antes = lazy.stats.cargas;
+  lazy.cambiarFuente(cargada, 'https://cdn/ab67616d00001e02aaa');
+  eq(lazy.stats.cargas - antes, 0, 'repetir la misma URL no vuelve a cargar');
+  lazy.destroy();
+}
+
 console.log(`\n${pasaron} pasaron, ${fallaron} fallaron\n`);
 process.exit(fallaron ? 1 : 0);
