@@ -74,12 +74,20 @@ async function idbGetTimestamp(key) {
   return typeof wrapped.storedAt === 'number' ? wrapped.storedAt : null;
 }
 
+// `ttlMinutes` null / undefined / no finito = SIN caducidad, y se guarda
+// `expiry: null` para que se vea en el volcado que es a propósito.
+//
+// ⚠️ Antes cualquier llamada sin ttl escribía `expiry: NaN`, que NO caducaba
+// —`Date.now() > NaN` es false— pero por accidente, no por decisión. Un caché
+// que se borra solo garantiza el peor caso: cuanto más viejo, más caro es
+// rehacerlo. Ver PENDIENTES.md, «Riesgos abiertos» ítem 0.
 async function idbSetCached(key, value, ttlMinutes) {
   const now = Date.now();
+  const caduca = Number.isFinite(ttlMinutes);
   const wrapped = {
     value,
     storedAt: now,
-    expiry: now + (ttlMinutes * 60 * 1000),
+    expiry: caduca ? now + (ttlMinutes * 60 * 1000) : null,
   };
   return idbSet(key, wrapped);
 }

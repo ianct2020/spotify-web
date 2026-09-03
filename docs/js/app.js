@@ -1,41 +1,41 @@
-import { isLoggedIn, loginWithSpotify, logout } from './auth.js?v=186';
-import { spotifyFetch, tryAutoLoadUserBackup } from './api.js?v=186';
-import { getValidToken } from './auth.js?v=186';
-import { cacheClearAll } from './storage.js?v=186';
-import { idbClearAll } from './idb.js?v=186';
-import { registerRoute, initRouter, rutasRegistradas } from './router.js?v=186';
-import { showToast } from './ui/toast.js?v=186';
-import { pageHeader, escapeHtml } from './ui/components.js?v=186';
-import { installCrashGuard } from './ui/crash-guard.js?v=186';
-import { getStack } from './ui/modal-stack.js?v=186';
-import { installBackToTop } from './ui/back-to-top.js?v=186';
-import { applyStoredTheme, openThemePanel } from './ui/theme-panel.js?v=186';
+import { isLoggedIn, loginWithSpotify, logout } from './auth.js?v=187';
+import { spotifyFetch, tryAutoLoadUserBackup, onRateLimit } from './api.js?v=187';
+import { getValidToken } from './auth.js?v=187';
+import { cacheClearAll } from './storage.js?v=187';
+import { idbClearAll } from './idb.js?v=187';
+import { registerRoute, initRouter, rutasRegistradas } from './router.js?v=187';
+import { showToast } from './ui/toast.js?v=187';
+import { pageHeader, escapeHtml } from './ui/components.js?v=187';
+import { installCrashGuard } from './ui/crash-guard.js?v=187';
+import { getStack } from './ui/modal-stack.js?v=187';
+import { installBackToTop } from './ui/back-to-top.js?v=187';
+import { applyStoredTheme, openThemePanel } from './ui/theme-panel.js?v=187';
 
-import { render as renderSync } from './features/sync.js?v=186';
-import { render as renderDedupe } from './features/dedupe.js?v=186';
-import { render as renderDupalbums } from './features/duplicate-albums.js?v=186';
-import { render as renderZombies } from './features/zombies.js?v=186';
-import { render as renderVersions } from './features/versions.js?v=186';
-import { render as renderDashboard } from './features/dashboard.js?v=186';
-import { render as renderSmart } from './features/smart.js?v=186';
-import { render as renderSimilar } from './features/similar-artists.js?v=186';
-import { render as renderRabbit } from './features/rabbit-hole.js?v=186';
-import { render as renderByGenre } from './features/by-genre.js?v=186';
-import { render as renderByArtist } from './features/by-artist.js?v=186';
-import { render as renderRecs } from './features/recommendations.js?v=186';
-import { render as renderListened } from './features/listened.js?v=186';
-import { render as renderWrapped } from './features/wrapped.js?v=186';
-import { render as renderRecords } from './features/records.js?v=186';
-import { openImportHistory } from './features/import-history.js?v=186';
-import { bindOwnerLockedButtons } from './features/history-data.js?v=186';
-import { render as renderZeroPlays } from './features/zero-plays.js?v=186';
-import { render as renderSkips } from './features/skips.js?v=186';
-import { render as renderSearchLikes } from './features/search-likes.js?v=186';
-import { render as renderWthree } from './features/wthree.js?v=186';
-import { render as renderCovers } from './features/covers.js?v=186';
-import { render as renderDiscoverArtists } from './features/discover-artists.js?v=186';
-import { render as renderNewReleases } from './features/new-releases.js?v=186';
-import { render as renderSinClasificar } from './features/sin-clasificar.js?v=186';
+import { render as renderSync } from './features/sync.js?v=187';
+import { render as renderDedupe } from './features/dedupe.js?v=187';
+import { render as renderDupalbums } from './features/duplicate-albums.js?v=187';
+import { render as renderZombies } from './features/zombies.js?v=187';
+import { render as renderVersions } from './features/versions.js?v=187';
+import { render as renderDashboard } from './features/dashboard.js?v=187';
+import { render as renderSmart } from './features/smart.js?v=187';
+import { render as renderSimilar } from './features/similar-artists.js?v=187';
+import { render as renderRabbit } from './features/rabbit-hole.js?v=187';
+import { render as renderByGenre } from './features/by-genre.js?v=187';
+import { render as renderByArtist } from './features/by-artist.js?v=187';
+import { render as renderRecs } from './features/recommendations.js?v=187';
+import { render as renderListened } from './features/listened.js?v=187';
+import { render as renderWrapped } from './features/wrapped.js?v=187';
+import { render as renderRecords } from './features/records.js?v=187';
+import { openImportHistory } from './features/import-history.js?v=187';
+import { bindOwnerLockedButtons } from './features/history-data.js?v=187';
+import { render as renderZeroPlays } from './features/zero-plays.js?v=187';
+import { render as renderSkips } from './features/skips.js?v=187';
+import { render as renderSearchLikes } from './features/search-likes.js?v=187';
+import { render as renderWthree } from './features/wthree.js?v=187';
+import { render as renderCovers } from './features/covers.js?v=187';
+import { render as renderDiscoverArtists } from './features/discover-artists.js?v=187';
+import { render as renderNewReleases } from './features/new-releases.js?v=187';
+import { render as renderSinClasificar } from './features/sin-clasificar.js?v=187';
 
 // ── Arranque degradado cuando /me está rate-limiteado (v=173) ────────────────
 //
@@ -53,6 +53,68 @@ import { render as renderSinClasificar } from './features/sin-clasificar.js?v=18
 //
 // La pantalla de bloqueo queda SOLO para el caso en que no hay identidad
 // ninguna (primerísima carga de este navegador): ahí sí no hay con qué seguir.
+// ── Aviso global de espera por 429 ──────────────────────────────────────────
+//
+// REGLA: si la app está esperando a Spotify, tiene que decirlo. Hasta ahora la
+// espera era muda —un `console.warn` que la extensión ni captura— y el spinner
+// de la vista de turno seguía diciendo «Leyendo cache local…» durante toda la
+// siesta. No hay forma de distinguir «bajando» de «dormido» de «colgado».
+//
+// Va acá y no en cada vista a propósito: `spotifyFetch` es el único sitio por
+// el que pasan TODAS las llamadas, así que un solo oyente cubre las 25 rutas.
+// Si mañana alguien escribe una vista nueva, ya está avisada sin hacer nada.
+function montarAvisoDeEspera() {
+  let el = null;
+  let timer = null;
+  let quedan = 0;
+
+  const quitar = () => {
+    clearInterval(timer);
+    timer = null;
+    el?.remove();
+    el = null;
+  };
+
+  onRateLimit(({ wait, intento, maxRetries, pedidos }) => {
+    if (!el) {
+      el = document.createElement('div');
+      el.className = 'aviso-espera';
+      el.id = 'aviso-espera';
+      el.innerHTML = `
+        <span class="aviso-espera-punto" aria-hidden="true"></span>
+        <span class="aviso-espera-texto"></span>
+        <span class="aviso-espera-cuenta"></span>
+      `;
+      document.body.appendChild(el);
+    }
+    const textoEl = el.querySelector('.aviso-espera-texto');
+    const cuentaEl = el.querySelector('.aviso-espera-cuenta');
+
+    // Honestidad sobre de dónde sale el número: si Spotify no lo dice, no
+    // inventamos precisión. Mismo criterio que el banner de modo degradado.
+    const fuente = pedidos
+      ? `Spotify pidió esperar ${pedidos} s.`
+      : 'Spotify no dice cuánto hay que esperar.';
+    textoEl.innerHTML = `<strong>Esperando a Spotify.</strong> Ha limitado las peticiones (429). `
+      + `${fuente} Reintento ${intento} de ${maxRetries}. Lo que ya estaba cargado sigue en pantalla.`;
+
+    quedan = Math.ceil(wait / 1000);
+    clearInterval(timer);
+    const pintar = () => {
+      cuentaEl.textContent = quedan > 0 ? `${quedan} s` : 'reintentando…';
+      if (quedan <= 0) { clearInterval(timer); timer = null; }
+      quedan--;
+    };
+    pintar();
+    timer = setInterval(pintar, 1000);
+
+    // Si no llega otra espera, damos por hecho que Spotify volvió y el aviso se
+    // va solo. `wait + 8 s` cubre la request siguiente sin dejarlo pegado.
+    clearTimeout(el._limpieza);
+    el._limpieza = setTimeout(quitar, wait + 8000);
+  });
+}
+
 const PERFIL_CACHE_KEY = 'fonoteca_perfil_v1';
 const LAST_USER_KEY = 'fonoteca_last_user_id';
 
@@ -272,6 +334,9 @@ async function init() {
     showLogin();
     return;
   }
+
+  // Antes que nada: que cualquier espera por 429 se vea, en la ruta que sea.
+  montarAvisoDeEspera();
 
   document.getElementById('app').innerHTML = `
     <div class="login-screen">
