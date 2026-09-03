@@ -1,13 +1,13 @@
-import { getAllPlaylistItems, getBestAvailableLikes, addTracksToPlaylist, removeTracksFromPlaylist, getAllUserPlaylists } from '../api.js?v=186';
-import { esEPoAlbum } from '../util/release-size.js?v=186';
-import { idbGetCached, idbSetCached, idbGetTimestamp } from '../idb.js?v=186';
-import { escapeHtml, confirmModal, pageHeader } from '../ui/components.js?v=186';
-import { showToast } from '../ui/toast.js?v=186';
-import { isJunkTrack } from '../util/junk.js?v=186';
-import { openModal, closeTop } from '../ui/modal-stack.js?v=186';
-import { getListenedPlaylist, groupItemsByAlbum, openListenedAlbumsPicker, albumKey, baseName, norm } from './listened-shared.js?v=186';
-import { openAlbumCard } from './album-card.js?v=186';
-import { prefKey, migratePrefKey } from '../storage.js?v=186';
+import { getAllPlaylistItems, getBestAvailableLikes, addTracksToPlaylist, removeTracksFromPlaylist, getAllUserPlaylists } from '../api.js?v=187';
+import { esEPoAlbum } from '../util/release-size.js?v=187';
+import { idbGetCached, idbSetCached, idbGetTimestamp } from '../idb.js?v=187';
+import { escapeHtml, confirmModal, pageHeader } from '../ui/components.js?v=187';
+import { showToast } from '../ui/toast.js?v=187';
+import { isJunkTrack } from '../util/junk.js?v=187';
+import { openModal, closeTop } from '../ui/modal-stack.js?v=187';
+import { getListenedPlaylist, groupItemsByAlbum, openListenedAlbumsPicker, albumKey, baseName, norm } from './listened-shared.js?v=187';
+import { openAlbumCard } from './album-card.js?v=187';
+import { prefKey, migratePrefKey } from '../storage.js?v=187';
 
 const SORT_KEY = 'listened_sort_mode';
 const VALID_SORTS = new Set(['recent', 'year-desc', 'year-asc', 'artist-asc', 'likes-desc', 'name-asc']);

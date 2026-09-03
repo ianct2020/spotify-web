@@ -1,15 +1,15 @@
-import { getAllLikedTracks, invalidateLikesCache, exportAllData, importAllData, getCurrentUserId, syncLikesIncremental, getLikesCacheTimestamp, getBestAvailableLikes, getAllPlaylistItems } from '../api.js?v=186';
-import { showProgress, hideProgress, alertModal, escapeHtml, pageHeader } from '../ui/components.js?v=186';
-import { openModal, closeTop } from '../ui/modal-stack.js?v=186';
-import { showToast } from '../ui/toast.js?v=186';
-import { openListenedAlbumsPicker, getListenedPlaylist } from './listened-shared.js?v=186';
-import { loadHistoryStats, loadListenedAlbums } from './history-data.js?v=186';
-import { getArtistLikePreview } from '../util/artist-preview.js?v=186';
-import { hoverIn, hoverOut } from '../ui/preview-player.js?v=186';
-import { armRevealAll } from '../ui/reveal.js?v=186';
-import { hasUsername, getUsername, setUsername } from '../api/statsfm.js?v=186';
-import { getKey as getLastfmKey, setKey as setLastfmKey, clearKey as clearLastfmKey, isDefaultKey as lastfmIsDefaultKey } from '../api/lastfm.js?v=186';
-import { prefKey, migratePrefKey } from '../storage.js?v=186';
+import { getAllLikedTracks, getLikesPartialInfo, exportAllData, importAllData, getCurrentUserId, syncLikesIncremental, getLikesCacheTimestamp, getBestAvailableLikes, getAllPlaylistItems } from '../api.js?v=187';
+import { showProgress, hideProgress, alertModal, escapeHtml, pageHeader } from '../ui/components.js?v=187';
+import { openModal, closeTop } from '../ui/modal-stack.js?v=187';
+import { showToast } from '../ui/toast.js?v=187';
+import { openListenedAlbumsPicker, getListenedPlaylist } from './listened-shared.js?v=187';
+import { loadHistoryStats, loadListenedAlbums } from './history-data.js?v=187';
+import { getArtistLikePreview } from '../util/artist-preview.js?v=187';
+import { hoverIn, hoverOut } from '../ui/preview-player.js?v=187';
+import { armRevealAll } from '../ui/reveal.js?v=187';
+import { hasUsername, getUsername, setUsername } from '../api/statsfm.js?v=187';
+import { getKey as getLastfmKey, setKey as setLastfmKey, clearKey as clearLastfmKey, isDefaultKey as lastfmIsDefaultKey } from '../api/lastfm.js?v=187';
+import { prefKey, migratePrefKey } from '../storage.js?v=187';
 
 // Tres estados posibles, no dos: puede haber una key propia, la del código, o
 // —si algún día la constante queda vacía— ninguna. El hint del ⚙ tiene que
@@ -19,11 +19,11 @@ function estadoLastfm() {
   if (localStorage.getItem(prefKey('lastfm_api_key'))) return 'propia';
   return lastfmIsDefaultKey() ? 'la del código' : 'sin configurar';
 }
-import { loadHistoryStats as _loadStatsForCounter } from './history-data.js?v=186';
-import { openArtistCard } from './artist-card.js?v=186';
-import { openAlbumCard } from './album-card.js?v=186';
-import { activateMarquee, marqueeSpan } from '../ui/marquee.js?v=186';
-import { isJunkTrack } from '../util/junk.js?v=186';
+import { loadHistoryStats as _loadStatsForCounter } from './history-data.js?v=187';
+import { openArtistCard } from './artist-card.js?v=187';
+import { openAlbumCard } from './album-card.js?v=187';
+import { activateMarquee, marqueeSpan } from '../ui/marquee.js?v=187';
+import { isJunkTrack } from '../util/junk.js?v=187';
 
 let charts = [];
 let _loadController = null;
@@ -101,29 +101,55 @@ export function render(container) {
   };
 }
 
+// ⚠️ `allowFetch: false` — y es EL arreglo del cuelgue, no un detalle.
+//
+// Esta pantalla solo pregunta «¿cómo quieres arrancar?». Hasta ahora llamaba a
+// `getBestAvailableLikes()` con el `allowFetch: true` por defecto, así que
+// cuando no había caché completo NO se limitaba a mirar: se ponía a descargar
+// la biblioteca entera (~190 peticiones, 2-4 minutos) para decidir qué texto
+// poner en una tarjeta. Y como el `await` estaba delante del `innerHTML`, el
+// spinner se quedaba diciendo «Leyendo cache local…» durante toda la descarga.
+// Eso es lo que se veía como «el dashboard está colgado» desde el 30/08: no
+// estaba colgado, estaba bajando 9.400 canciones sin decirlo.
+//
+// Leer el caché es instantáneo. Descargar es una decisión del usuario, y se
+// toma con los botones de abajo.
 async function renderStartScreen() {
   const content = document.getElementById('dash-content');
   if (!content) return;
-  content.innerHTML = `<div class="empty-state"><div class="spinner spinner-lg"></div><div style="margin-top:16px">Leyendo cache local...</div></div>`;
+  content.innerHTML = `<div class="empty-state"><div class="spinner spinner-lg"></div><div style="margin-top:16px">Leyendo la caché local…</div></div>`;
 
-  const { items: cachedItems, source: cacheSource } = await getBestAvailableLikes();
+  const { items: cachedItems, source: cacheSource } = await getBestAvailableLikes({ allowFetch: false });
   const cachedCount = cachedItems.length;
   const hasFull = cachedCount > 0 && cacheSource === 'full';
   const timestamp = await getLikesCacheTimestamp();
   const lastSyncLabel = timestamp ? formatRelativeTime(timestamp) : null;
+  // Una descarga cortada por un 429 deja un parcial. Decirlo cambia la decisión:
+  // retomar cuesta las peticiones que faltan, no las 190 del principio.
+  const parcial = hasFull ? null : await getLikesPartialInfo();
 
-  // Desde v=130 getBestAvailableLikes devuelve la biblioteca entera o nada
-  // ('full' | 'empty'): nunca sirve un parcial. Los dos estados de acá son los
-  // únicos que existen.
-  const intro = hasFull
-    ? `Tenés <strong>${cachedCount.toLocaleString()}</strong> likes cacheados${lastSyncLabel ? ` · última sync <strong>${lastSyncLabel}</strong>` : ''}. Podés usarlos directo o importar un JSON previo.`
-    : `No hay likes cacheados. Podés cargar todo desde Spotify (~190 requests, tarda ~2-4 min) o importar un JSON previo (1 request, mucho más rápido).`;
-
-  const primaryLabel = hasFull ? 'Usar los cacheados' : 'Cargar desde Spotify';
+  let intro;
+  let primaryLabel;
+  if (hasFull) {
+    intro = `Tienes <strong>${cachedCount.toLocaleString('es-ES')}</strong> me gusta en la caché`
+      + `${lastSyncLabel ? ` · última sincronización <strong>${lastSyncLabel}</strong>` : ''}.`
+      + ` Puedes usarlos directamente o importar un JSON anterior.`;
+    primaryLabel = 'Usar los de la caché';
+  } else if (parcial) {
+    intro = `Hay una descarga a medias: <strong>${parcial.items.toLocaleString('es-ES')}</strong> canciones`
+      + ` guardadas. Se puede retomar desde ahí, así que faltan pocas peticiones`
+      + ` en lugar de las ~190 de empezar de cero.`;
+    primaryLabel = 'Retomar la descarga';
+  } else {
+    intro = `No hay me gusta en la caché. Puedes descargarlos de Spotify`
+      + ` (~190 peticiones, 2-4 minutos) o importar un JSON anterior, que es`
+      + ` 1 petición y mucho más rápido.`;
+    primaryLabel = 'Descargar de Spotify';
+  }
 
   content.innerHTML = `
     <div class="card dash-state-card">
-      <h3 style="margin-bottom:8px">¿Cómo querés arrancar?</h3>
+      <h3 style="margin-bottom:8px">¿Cómo quieres empezar?</h3>
       <p style="color:var(--color-text-secondary);font-size:13px;margin-bottom:16px">${intro}</p>
       <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:center">
         <button class="btn btn-primary" id="dash-start-btn">${primaryLabel}</button>
@@ -434,7 +460,10 @@ async function loadData(forceRefresh) {
   const content = document.getElementById('dash-content');
   if (!content) return;
 
-  if (forceRefresh) invalidateLikesCache();
+  // ⚠️ Antes: `if (forceRefresh) invalidateLikesCache();` — borraba las ~9.400
+  // canciones ANTES de bajar el reemplazo, así que un 429 a mitad de camino
+  // dejaba al usuario sin nada. `force` se pasa a getAllLikedTracks, que se
+  // salta la lectura del caché pero solo lo pisa con una carga completa.
 
   _loadController = new AbortController();
   const startTime = Date.now();
@@ -484,7 +513,7 @@ async function loadData(forceRefresh) {
           etaEl.textContent = formatEta(remaining);
         }
       }
-    }, { signal: _loadController.signal });
+    }, { signal: _loadController.signal, force: !!forceRefresh });
 
     charts.forEach(c => c.destroy());
     charts = [];
@@ -493,16 +522,50 @@ async function loadData(forceRefresh) {
     renderDashboard(content, stats);
     refreshLastSyncLabel();
   } catch (e) {
+    // REGLA: si algo falla, el contenido queda VISIBLE.
+    //
+    // Antes esto pintaba un cartel de error y un botón «Volver», borrando de
+    // paso cualquier cosa que hubiera en pantalla: un 429 a mitad de camino te
+    // dejaba mirando un callejón sin salida. Ahora el error se cuenta, pero
+    // debajo se pinta lo que SÍ hay — la caché completa si existe, y si no la
+    // pantalla de arranque con el parcial y sus botones.
     const cancelled = e.message.includes('cancelada');
+    const { items: rescatados } = await getBestAvailableLikes({ allowFetch: false });
+
     content.innerHTML = `
-      <div class="card dash-state-card dash-state-card-center" style="padding:40px">
-        <p style="color:${cancelled ? 'var(--color-warning)' : 'var(--color-error)'};margin-bottom:12px">
-          ${cancelled ? 'Carga cancelada.' : e.message}
+      <div class="card" style="border-left:3px solid var(--color-${cancelled ? 'warning' : 'error'});margin-bottom:16px">
+        <p style="margin:0 0 6px;font-weight:500">
+          ${cancelled ? 'Descarga cancelada.' : 'No se han podido descargar los me gusta.'}
         </p>
-        <button class="btn btn-primary" id="dash-back-btn">Volver</button>
+        <p style="margin:0;font-size:13px;color:var(--color-text-secondary)">${escapeHtml(e.message)}</p>
+        <p style="margin:8px 0 0;font-size:13px;color:var(--color-text-secondary)">
+          El progreso descargado se conserva: al reintentar se retoma donde se quedó.
+        </p>
+        <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap">
+          <button class="btn btn-primary btn-sm" id="dash-retry-btn">Reintentar</button>
+          <button class="btn btn-secondary btn-sm" id="dash-back-btn">Volver a empezar</button>
+        </div>
       </div>
+      <div id="dash-rescate"></div>
     `;
+    document.getElementById('dash-retry-btn').onclick = () => loadData(false);
     document.getElementById('dash-back-btn').onclick = renderStartScreen;
+
+    // Lo que sobrevivió al fallo se pinta igual. Un dashboard con datos de ayer
+    // es infinitamente más útil que un cartel de error.
+    const hueco = document.getElementById('dash-rescate');
+    if (rescatados.length > 0) {
+      try {
+        charts.forEach(c => c.destroy());
+        charts = [];
+        renderDashboard(hueco, computeStats(rescatados));
+      } catch (err) {
+        console.info('[dashboard] no pude pintar la caché de rescate:', err.message);
+      }
+    }
+    // Sin caché no hay nada que rescatar, pero tampoco queda un callejón sin
+    // salida: los dos botones de arriba siguen ahí, y «Volver a empezar» lleva
+    // a la pantalla de arranque, que ya sabe contar el parcial.
   } finally {
     _loadController = null;
   }

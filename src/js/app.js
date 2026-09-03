@@ -1,5 +1,5 @@
 import { isLoggedIn, loginWithSpotify, logout } from './auth.js';
-import { spotifyFetch, tryAutoLoadUserBackup } from './api.js';
+import { spotifyFetch, tryAutoLoadUserBackup, onRateLimit } from './api.js';
 import { getValidToken } from './auth.js';
 import { cacheClearAll } from './storage.js';
 import { idbClearAll } from './idb.js';
@@ -53,6 +53,68 @@ import { render as renderSinClasificar } from './features/sin-clasificar.js';
 //
 // La pantalla de bloqueo queda SOLO para el caso en que no hay identidad
 // ninguna (primerísima carga de este navegador): ahí sí no hay con qué seguir.
+// ── Aviso global de espera por 429 ──────────────────────────────────────────
+//
+// REGLA: si la app está esperando a Spotify, tiene que decirlo. Hasta ahora la
+// espera era muda —un `console.warn` que la extensión ni captura— y el spinner
+// de la vista de turno seguía diciendo «Leyendo cache local…» durante toda la
+// siesta. No hay forma de distinguir «bajando» de «dormido» de «colgado».
+//
+// Va acá y no en cada vista a propósito: `spotifyFetch` es el único sitio por
+// el que pasan TODAS las llamadas, así que un solo oyente cubre las 25 rutas.
+// Si mañana alguien escribe una vista nueva, ya está avisada sin hacer nada.
+function montarAvisoDeEspera() {
+  let el = null;
+  let timer = null;
+  let quedan = 0;
+
+  const quitar = () => {
+    clearInterval(timer);
+    timer = null;
+    el?.remove();
+    el = null;
+  };
+
+  onRateLimit(({ wait, intento, maxRetries, pedidos }) => {
+    if (!el) {
+      el = document.createElement('div');
+      el.className = 'aviso-espera';
+      el.id = 'aviso-espera';
+      el.innerHTML = `
+        <span class="aviso-espera-punto" aria-hidden="true"></span>
+        <span class="aviso-espera-texto"></span>
+        <span class="aviso-espera-cuenta"></span>
+      `;
+      document.body.appendChild(el);
+    }
+    const textoEl = el.querySelector('.aviso-espera-texto');
+    const cuentaEl = el.querySelector('.aviso-espera-cuenta');
+
+    // Honestidad sobre de dónde sale el número: si Spotify no lo dice, no
+    // inventamos precisión. Mismo criterio que el banner de modo degradado.
+    const fuente = pedidos
+      ? `Spotify pidió esperar ${pedidos} s.`
+      : 'Spotify no dice cuánto hay que esperar.';
+    textoEl.innerHTML = `<strong>Esperando a Spotify.</strong> Ha limitado las peticiones (429). `
+      + `${fuente} Reintento ${intento} de ${maxRetries}. Lo que ya estaba cargado sigue en pantalla.`;
+
+    quedan = Math.ceil(wait / 1000);
+    clearInterval(timer);
+    const pintar = () => {
+      cuentaEl.textContent = quedan > 0 ? `${quedan} s` : 'reintentando…';
+      if (quedan <= 0) { clearInterval(timer); timer = null; }
+      quedan--;
+    };
+    pintar();
+    timer = setInterval(pintar, 1000);
+
+    // Si no llega otra espera, damos por hecho que Spotify volvió y el aviso se
+    // va solo. `wait + 8 s` cubre la request siguiente sin dejarlo pegado.
+    clearTimeout(el._limpieza);
+    el._limpieza = setTimeout(quitar, wait + 8000);
+  });
+}
+
 const PERFIL_CACHE_KEY = 'fonoteca_perfil_v1';
 const LAST_USER_KEY = 'fonoteca_last_user_id';
 
@@ -272,6 +334,9 @@ async function init() {
     showLogin();
     return;
   }
+
+  // Antes que nada: que cualquier espera por 429 se vea, en la ruta que sea.
+  montarAvisoDeEspera();
 
   document.getElementById('app').innerHTML = `
     <div class="login-screen">

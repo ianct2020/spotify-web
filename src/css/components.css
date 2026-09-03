@@ -1792,3 +1792,43 @@ body.con-banner-degradado { padding-top: 44px; }
   .banner-degradado { flex-wrap: wrap; font-size: 12px; }
   body.con-banner-degradado { padding-top: 72px; }
 }
+
+/* ── Aviso de espera por rate limit (429) ───────────────────────────────────
+   Franja fija abajo, para no pelearse con `.banner-degradado`, que ocupa
+   arriba. Aparece cuando `spotifyFetch` se duerme esperando a Spotify y se va
+   sola cuando la API vuelve a responder. Reutiliza los tokens de color del
+   banner degradado: es el mismo problema visto desde otra altura. */
+.aviso-espera {
+  position: fixed;
+  bottom: 0; left: 0; right: 0;
+  z-index: 899;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 16px;
+  background: var(--color-elevated);
+  border-top: 1px solid var(--color-warning);
+  color: var(--color-text);
+  font-size: 13px;
+  line-height: 1.4;
+}
+.aviso-espera-punto {
+  flex: 0 0 auto;
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: var(--color-warning);
+  animation: banner-degradado-latido 2s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .aviso-espera-punto { animation: none; }
+}
+.aviso-espera-texto { flex: 1 1 auto; min-width: 0; }
+.aviso-espera-cuenta {
+  flex: 0 0 auto;
+  color: var(--color-text-secondary);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+@media (max-width: 768px) {
+  .aviso-espera { flex-wrap: wrap; font-size: 12px; }
+}

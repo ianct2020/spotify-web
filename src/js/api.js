@@ -6,6 +6,14 @@ import { artistIsSame, limpiaParaQuery } from './util/track-match.js';
 
 const BASE = 'https://api.spotify.com/v1';
 const MIN_RETRY_WAIT = 5000;
+// Techo de la espera por 429. `MIN_RETRY_WAIT` es un PISO; sin un tope, la
+// cuenta `Retry-After * 1000` no tiene límite superior y un `Retry-After: 36000`
+// duerme la pestaña DIEZ HORAS dentro de un `await`, sin error, sin banner y sin
+// tocar la red. Hoy no pasa porque el header no es legible (ver abajo), pero era
+// un bug latente esperando a que Spotify lo expusiera. 60 s: `paginateAll`
+// reintenta 2 veces, así que el peor caso queda en ~2 min — por encima de las
+// ráfagas cortas de Spotify y por debajo de donde uno da la app por muerta.
+const MAX_RETRY_WAIT = 60000;
 const DEFAULT_MAX_RETRIES = 5;
 // NO cambiar este nombre para forzar recargas. Se probó en v=127 ponerle _v2
 // (para que la caché vieja, guardada con un slimTrack sin album_type, dejara de
@@ -17,6 +25,28 @@ const DEFAULT_MAX_RETRIES = 5;
 const LIKES_CACHE_KEY = 'all_liked_tracks';
 const PLAYLISTS_CACHE_KEY = 'all_user_playlists';
 const CACHE_TTL_MIN = 60 * 24;
+
+// ── Aviso de que estamos esperando a Spotify ────────────────────────────────
+//
+// Un `console.info` solo lo ve quien tenga la consola abierta. Cuando la app se
+// duerme por un 429, la interfaz tiene que DECIRLO: si no, un spinner que dice
+// «Leyendo cache local…» miente durante toda la espera y no hay forma de
+// distinguir «bajando» de «dormido». Esto lo emite `spotifyFetch` una vez por
+// cada espera y lo escucha `app.js`, que pinta un aviso global — así vale para
+// TODAS las vistas de una, sin que cada una tenga que acordarse.
+const oyentesRateLimit = new Set();
+
+/** Devuelve la función para desuscribirse. */
+function onRateLimit(fn) {
+  oyentesRateLimit.add(fn);
+  return () => oyentesRateLimit.delete(fn);
+}
+
+function avisarRateLimit(info) {
+  for (const fn of oyentesRateLimit) {
+    try { fn(info); } catch (e) { console.info('[rate-limit] oyente falló:', e.message); }
+  }
+}
 
 async function spotifyFetch(endpoint, options = {}) {
   const url = endpoint.startsWith('http') ? endpoint : `${BASE}${endpoint}`;
@@ -69,10 +99,23 @@ async function spotifyFetch(endpoint, options = {}) {
         err.status = 429;
         throw err;
       }
+      // ⚠️ `Retry-After` NO es legible desde el navegador: Spotify no lo incluye
+      // en `Access-Control-Expose-Headers`, así que `headers.get()` devuelve
+      // null aunque el header viaje. `app.js` lo sabe desde v=173 y lo maneja;
+      // acá se hacía `parseInt(header || '5')`, que INVENTABA un 5 y lo hacía
+      // pasar por dato de Spotify. Ahora, si no viene, se dice que no viene.
       const retryAfterHeader = response.headers.get('Retry-After');
-      const retryAfterSecs = parseInt(retryAfterHeader || '5');
-      const wait = Math.max(MIN_RETRY_WAIT, retryAfterSecs * 1000);
-      console.warn(`429 rate limited, waiting ${(wait / 1000).toFixed(0)}s (retry ${rateLimitRetries}/${maxRetries}, Retry-After: ${retryAfterHeader})`);
+      const pedidos = parseInt(retryAfterHeader, 10);
+      const loDijoSpotify = Number.isFinite(pedidos) && pedidos > 0;
+      const wait = loDijoSpotify
+        ? Math.min(MAX_RETRY_WAIT, Math.max(MIN_RETRY_WAIT, pedidos * 1000))
+        : MIN_RETRY_WAIT;
+      // console.info y no console.warn: la extensión de Chrome solo captura
+      // INFO/LOG, así que un warn acá es lo mismo que no avisar (v=163).
+      console.info(`[rate-limit] 429 en ${endpoint} — espero ${(wait / 1000).toFixed(0)}s `
+        + `(intento ${rateLimitRetries}/${maxRetries}, `
+        + `${loDijoSpotify ? `Spotify pidió ${pedidos}s` : 'Spotify no dice cuánto (header oculto por CORS)'})`);
+      avisarRateLimit({ endpoint, wait, intento: rateLimitRetries, maxRetries, pedidos: loDijoSpotify ? pedidos : null });
       await sleep(wait);
       continue;
     }
@@ -126,9 +169,22 @@ function sleep(ms) {
 
 const LIKES_PARTIAL_KEY = LIKES_CACHE_KEY + '_partial';
 
+// ⚠️ El parcial NO caduca (antes: TTL de 24 h) y se lee con `idbGetCachedRaw`.
+//
+// El 2026-09-02 el caché de likes llevaba tres días sin poder completarse: la
+// Puerta 6 del 30/08 borró IndexedDB, el resync de ~190 requests pegaba 429 y
+// dejaba un parcial, y el parcial se moría a las 24 h. Al morirse, la carga
+// siguiente arrancaba de `offset 0` — o sea las 190 requests otra vez, que es
+// justo lo que dispara el 429. Un parcial que caduca GARANTIZA el peor caso:
+// cuanto más tiempo lleva sin completarse, más caro es el intento siguiente.
+//
+// Un parcial viejo no puede corromper nada: `paginateAll` lo valida contra
+// `startOffset` antes de retomarlo, y si la lista final no cuadra con el total
+// que declara Spotify, `saveLikes()` la descarta igual. El TTL no protegía de
+// nada. Ver PENDIENTES.md, «Riesgos abiertos» ítem 0.
 async function savePartial(key, payload) {
   if (key === LIKES_CACHE_KEY || key === LIKES_PARTIAL_KEY) {
-    try { await idbSetCached(LIKES_PARTIAL_KEY, payload, 24 * 60); } catch (e) { console.warn('savePartial IDB:', e); }
+    try { await idbSetCached(LIKES_PARTIAL_KEY, payload, null); } catch (e) { console.warn('savePartial IDB:', e); }
   } else {
     cacheSet(key + '_partial', payload, 60);
   }
@@ -136,7 +192,7 @@ async function savePartial(key, payload) {
 
 async function loadPartial(key) {
   if (key === LIKES_CACHE_KEY || key === LIKES_PARTIAL_KEY) {
-    try { return await idbGetCached(LIKES_PARTIAL_KEY); } catch { return null; }
+    try { return await idbGetCachedRaw(LIKES_PARTIAL_KEY); } catch { return null; }
   }
   return cacheGet(key + '_partial');
 }
@@ -154,7 +210,10 @@ async function clearPartial(key) {
 // medios (sin abortos ni errores) Y la cantidad de items cuadra con el `total`
 // que reportó Spotify. Sirve para que el caller sepa si lo que tiene en la mano
 // es la lista entera o un pedazo — ver saveLikes().
-async function paginateAll(endpoint, { limit = 50, onProgress, partialCacheKey, transform, maxItems, startOffset = 0, signal, meta } = {}) {
+// `keepPartial: true` → paginateAll NO borra el parcial al terminar y deja esa
+// decisión al caller. Ver el porqué en `startLikesLoad()`: el parcial es la red
+// de seguridad y no se puede soltar antes de saber que hay suelo.
+async function paginateAll(endpoint, { limit = 50, onProgress, partialCacheKey, transform, maxItems, startOffset = 0, signal, meta, keepPartial = false } = {}) {
   let items = [];
   let offset = startOffset;
   const initialOffset = startOffset;
@@ -222,7 +281,7 @@ async function paginateAll(endpoint, { limit = 50, onProgress, partialCacheKey, 
     meta.complete = !!ended && (meta.total == null || items.length + initialOffset >= meta.total);
   }
 
-  if (partialCacheKey) {
+  if (partialCacheKey && !keepPartial) {
     await clearPartial(partialCacheKey);
   }
 
@@ -289,7 +348,7 @@ async function migrateLikesFromLocalStorage() {
   const legacy = cacheGetRaw(LIKES_CACHE_KEY);
   if (Array.isArray(legacy) && legacy.length > 0) {
     try {
-      await idbSetCached(LIKES_CACHE_KEY, legacy, CACHE_TTL_MIN);
+      await idbSetCached(LIKES_CACHE_KEY, legacy, null);   // sin caducidad, igual que saveLikes()
       cacheClear(LIKES_CACHE_KEY);
       console.log(`Migrated ${legacy.length} likes from localStorage to IndexedDB`);
     } catch (e) {
@@ -299,12 +358,42 @@ async function migrateLikesFromLocalStorage() {
   const legacyPartial = cacheGetRaw(LIKES_CACHE_KEY + '_partial');
   if (legacyPartial && legacyPartial.items?.length > 0) {
     try {
-      await idbSetCached(LIKES_PARTIAL_KEY, legacyPartial, CACHE_TTL_MIN);
+      await idbSetCached(LIKES_PARTIAL_KEY, legacyPartial, null);  // sin caducidad, igual que savePartial()
       cacheClear(LIKES_CACHE_KEY + '_partial');
     } catch (e) {
       console.warn('Partial migration failed:', e);
     }
   }
+}
+
+// ── La ÚNICA forma de leer el caché completo de likes ───────────────────────
+//
+// Antes había CUATRO lecturas de `LIKES_CACHE_KEY` repartidas por el archivo y
+// no se comportaban igual: `getBestAvailableLikes()` usaba `idbGetCachedRaw()`
+// (ignora la caducidad) y las otras tres —`getAllLikedTracks()`,
+// `syncLikesIncremental()` y `tryAutoLoadUserBackup()`— usaban
+// `idbGetCached()`, que además de devolver null BORRA la clave vencida
+// (`idb.js`). Con el TTL de 24 h que tenía el caché, eso significaba que un día
+// después de una carga buena la primera de nueve vistas que pasara por acá
+// DESTRUÍA las ~9.400 canciones y forzaba el resync entero de ~190 requests,
+// que es lo que dispara el 429. Ese era el motor del círculo del 30/08.
+//
+// Ahora el caché se escribe sin caducidad (ver `saveLikes`) y se lee siempre
+// por acá. Que quede UNA sola función es la mitad importante del arreglo: con
+// dos formas de leer lo mismo, en tres meses vuelven a divergir.
+//
+// Nunca borra nada. Si el caché no sirve, se rehace; no se destruye.
+async function leerLikesCacheados() {
+  try {
+    const full = await idbGetCachedRaw(LIKES_CACHE_KEY);
+    if (Array.isArray(full) && full.length > 0) return full;
+  } catch (e) {
+    console.info('[likes] no pude leer el caché de IDB:', e.message);
+  }
+  // Caché heredado de localStorage (pre-v=86). Mismo criterio: entero o nada.
+  const legacy = cacheGetRaw(LIKES_CACHE_KEY);
+  if (Array.isArray(legacy) && legacy.length > 0) return legacy;
+  return null;
 }
 
 // El caché de likes es o completo o nada. Antes cualquier paginación cortada
@@ -318,7 +407,13 @@ async function saveLikes(items, { complete = true, total = null } = {}) {
     return { ok: false, skipped: true };
   }
   try {
-    await idbSetCached(LIKES_CACHE_KEY, items, CACHE_TTL_MIN);
+    // ⚠️ SIN caducidad (antes: CACHE_TTL_MIN, 24 h). Ver `leerLikesCacheados()`
+    // arriba: con TTL, el día siguiente a una carga buena cualquier vista que
+    // leyera con `idbGetCached()` borraba la biblioteca entera y forzaba el
+    // resync de ~190 requests. La frescura NO se resuelve caducando 9.400
+    // canciones: la resuelve `syncLikesIncremental()`, que compara el total con
+    // Spotify en UNA request y trae solo el delta.
+    await idbSetCached(LIKES_CACHE_KEY, items, null);
     return { ok: true };
   } catch (e) {
     console.error('IDB saveLikes failed:', e);
@@ -359,11 +454,33 @@ function startLikesLoad({ force }) {
         transform: item => ({ added_at: item.added_at, track: slimTrack(item.track) }),
         signal: state.controller.signal,
         meta,
+        // La red de seguridad no se suelta acá — ver abajo.
+        keepPartial: true,
       });
-      await saveLikes(items, { complete: meta.complete, total: meta.total });
-      if (!meta.complete) {
-        throw new Error(`Carga de likes incompleta (${items.length}${meta.total != null ? ` de ${meta.total}` : ''}). No se guardó nada para no corromper el caché.`);
+
+      // ⚠️ ORDEN, y es lo importante de este bloque.
+      //
+      // Antes `paginateAll` borraba el parcial al terminar el bucle y RECIÉN
+      // DESPUÉS se llamaba a `saveLikes()`, que descarta la escritura entera si
+      // la cuenta no cuadra con el total de Spotify. O sea que una carga que
+      // terminaba pero no cuadraba dejaba las dos manos vacías: sin parcial y
+      // sin completo, y la vista siguiente arrancaba de `offset 0` con las ~190
+      // requests que disparan el 429. Bastaba con que una página volviera con
+      // menos de 50 items.
+      //
+      // Ahora el parcial se borra SOLO después de que el completo esté escrito
+      // y confirmado. Si algo falla, se conserva el progreso: siempre es mejor
+      // retomar en 8.500 que volver a empezar de 0.
+      const guardado = await saveLikes(items, { complete: meta.complete, total: meta.total });
+
+      if (!meta.complete || !guardado.ok) {
+        const detalle = `${items.length}${meta.total != null ? ` de ${meta.total}` : ''}`;
+        console.info(`[likes] carga no consolidada (${detalle}) — conservo el parcial para retomar`);
+        throw new Error(`Carga de likes incompleta (${detalle}). No se guardó nada para no corromper el caché; el progreso quedó guardado para retomar.`);
       }
+
+      await clearPartial(LIKES_CACHE_KEY);
+      console.log(`[likes] caché consolidado: ${items.length.toLocaleString()} canciones, sin caducidad`);
       return items;
     } finally {
       if (likesInFlight === state) likesInFlight = null;
@@ -405,8 +522,8 @@ async function getAllLikedTracks(onProgress, { force = false, signal } = {}) {
   await migrateLikesFromLocalStorage();
 
   if (!force) {
-    const cached = await idbGetCached(LIKES_CACHE_KEY);
-    if (cached && Array.isArray(cached)) {
+    const cached = await leerLikesCacheados();
+    if (cached) {
       if (onProgress) onProgress({ loaded: cached.length, total: cached.length, page: 1, cached: true });
       return cached;
     }
@@ -458,7 +575,7 @@ async function getRecentLikes(count) {
 
 async function syncLikesIncremental(onProgress) {
   await migrateLikesFromLocalStorage();
-  const cached = await idbGetCached(LIKES_CACHE_KEY);
+  const cached = await leerLikesCacheados();
   if (!cached || cached.length === 0) {
     return { hadCache: false };
   }
@@ -477,10 +594,15 @@ async function syncLikesIncremental(onProgress) {
   if (delta < 0) {
     const removed = -delta;
     if (onProgress) onProgress({ phase: 'reconciling', message: `En Spotify hay ${removed.toLocaleString('es-AR')} likes menos que en cache. Re-bajando todo para reconciliar...` });
-    invalidateLikesCache();
+    // ⚠️ Antes acá se llamaba a `invalidateLikesCache()` ANTES de bajar nada: se
+    // destruían las ~9.400 canciones y recién después se intentaba la descarga.
+    // Si esa descarga pegaba 429 —lo normal, son ~190 requests— quedaba sin
+    // caché y sin reemplazo. `force: true` hace lo mismo sin el estropicio: se
+    // salta la lectura del caché y solo lo pisa cuando la carga nueva está
+    // completa y confirmada (ver `saveLikes`). Si falla, el viejo sigue ahí.
     const fresh = await getAllLikedTracks(({ loaded, total }) => {
       if (onProgress) onProgress({ phase: 'fetching-full', message: `Re-bajando likes (${loaded.toLocaleString('es-AR')} / ${(total || totalNow).toLocaleString('es-AR')})...`, loaded, total: total || totalNow });
-    });
+    }, { force: true });
     return { hadCache: true, added: 0, removed, totalNow, cachedCount: fresh.length, reconciled: true };
   }
 
@@ -524,6 +646,21 @@ async function getBestAvailableLikes({ onProgress, signal, allowFetch = true } =
     console.warn('[likes] no pude completar la carga:', e.message);
     return { items: [], source: 'empty', error: e };
   }
+}
+
+/**
+ * Qué hay a medias, sin bajar nada. La pantalla de arranque necesita saber si
+ * quedó una descarga cortada para poder DECIRLO en vez de fingir que no hay
+ * nada — y para ofrecer «retomar», que cuesta 18 requests en vez de 190.
+ */
+async function getLikesPartialInfo() {
+  try {
+    const p = await loadPartial(LIKES_CACHE_KEY);
+    if (p && Array.isArray(p.items) && p.items.length > 0) {
+      return { items: p.items.length, offset: p.offset ?? p.items.length };
+    }
+  } catch { /* sin IDB: como si no hubiera parcial */ }
+  return null;
 }
 
 async function getLikesCacheTimestamp() {
@@ -648,7 +785,7 @@ async function tryAutoLoadUserBackup(spotifyUserId) {
   if (!spotifyUserId) return { loaded: false };
   await migrateLikesFromLocalStorage();
 
-  const cachedLikes = await idbGetCached(LIKES_CACHE_KEY);
+  const cachedLikes = await leerLikesCacheados();
   if (cachedLikes && cachedLikes.length > 0) {
     return { loaded: false, reason: 'ya-hay-cache-local' };
   }
@@ -985,14 +1122,20 @@ async function removePlaylistItemsAtPositions(playlistId, itemsWithPositions) {
 async function removeFromLikesCache(ids) {
   const idSet = new Set(ids);
   try {
-    const cached = await idbGetCached(LIKES_CACHE_KEY);
+    const cached = await leerLikesCacheados();
     if (Array.isArray(cached)) {
       const filtered = cached.filter(it => !idSet.has(it?.track?.id));
-      await idbSetCached(LIKES_CACHE_KEY, filtered, CACHE_TTL_MIN);
+      await saveLikes(filtered, { complete: true, total: filtered.length });
     }
   } catch (e) {
-    console.warn('removeFromLikesCache falló, invalidando cache entero:', e.message);
-    invalidateLikesCache();
+    // ⚠️ Antes acá había un `invalidateLikesCache()`: si quitar 3 ids del caché
+    // fallaba, se BORRABAN las ~9.400 canciones enteras y la vista siguiente se
+    // comía el resync de ~190 requests → 429 → parcial → el círculo del 30/08.
+    // Destruir el caché nunca es la respuesta correcta a un problema: un caché
+    // con 3 canciones de más es infinitamente mejor que ninguno, y el borrado
+    // real en Spotify ya se hizo igual. Se deja como está y se avisa.
+    console.info('[likes] no pude actualizar el caché tras el borrado (queda con los ids viejos):', e.message);
+    showToast('Los borré en Spotify, pero el caché local quedó desactualizado. Se corrige en la próxima sincronización.', 'info');
   }
   cacheClear(LIKES_CACHE_KEY); // limpia copia legacy en localStorage si existiera
 }
@@ -1389,6 +1532,7 @@ export {
   getAlbumTracks,
   searchArtistByName,
   invalidateLikesCache,
+  onRateLimit,
   invalidatePlaylistsCache,
   onPlaylistsInvalidated,
   getLikesTotal,
@@ -1398,6 +1542,7 @@ export {
   importAllData,
   tryAutoLoadUserBackup,
   getBestAvailableLikes,
+  getLikesPartialInfo,
   getLikesCacheTimestamp,
   readLocalConfig,
   applyLocalConfig,
