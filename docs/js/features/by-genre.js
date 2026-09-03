@@ -1,12 +1,12 @@
-import { getAllLikedTracks, createPlaylist, addTracksToPlaylist, invalidatePlaylistsCache, exportAllData, importAllData, getCurrentUserId, getBestAvailableLikes } from '../api.js?v=189';
-import { hasKey, setKey, getArtistTopTags, getCachedTags, setCachedTags, mergeCachedTags } from '../api/lastfm.js?v=189';
-import * as statsfm from '../api/statsfm.js?v=189';
-import { getGenresForArtist as mbGetGenres } from '../api/musicbrainz.js?v=189';
-import { showProgress, hideProgress, progressController, isCancelled, promptPlaylistName, alertModal, confirmModal, escapeHtml, pageHeader } from '../ui/components.js?v=189';
-import { showToast } from '../ui/toast.js?v=189';
-import { openModal, closeTop } from '../ui/modal-stack.js?v=189';
-import { tagToGroup } from './genre-groups.js?v=189';
-import { prefKey, migratePrefKey } from '../storage.js?v=189';
+import { getAllLikedTracks, createPlaylist, addTracksToPlaylist, invalidatePlaylistsCache, exportAllData, importAllData, getCurrentUserId, getBestAvailableLikes } from '../api.js?v=190';
+import { hasKey, setKey, getArtistTopTags, getCachedTags, setCachedTags, mergeCachedTags } from '../api/lastfm.js?v=190';
+import * as statsfm from '../api/statsfm.js?v=190';
+import { getGenresForArtist as mbGetGenres } from '../api/musicbrainz.js?v=190';
+import { showProgress, hideProgress, progressController, isCancelled, promptPlaylistName, alertModal, confirmModal, escapeHtml, pageHeader } from '../ui/components.js?v=190';
+import { showToast } from '../ui/toast.js?v=190';
+import { openModal, closeTop } from '../ui/modal-stack.js?v=190';
+import { tagToGroup } from './genre-groups.js?v=190';
+import { prefKey, migratePrefKey } from '../storage.js?v=190';
 
 const NOISE_TAGS = new Set([
   'seen live', 'favorites', 'favorite', 'favourite', 'favourites',
@@ -119,14 +119,14 @@ async function renderStartScreen() {
   const hasLikes = cachedLikes.length > 0;
 
   const intro = hasLikes
-    ? `Tenés <strong>${cachedLikes.length.toLocaleString()}</strong> likes y <strong>${cachedTagsCount.toLocaleString()}</strong> artistas con tags cacheados. Ya podés ver tus géneros.`
-    : `Tenés <strong>${cachedTagsCount.toLocaleString()}</strong> artistas con tags pero <strong>0 likes</strong> cacheados. Cargá los likes desde Spotify o importá un JSON previo que los tenga.`;
+    ? `Tienes <strong>${cachedLikes.length.toLocaleString()}</strong> likes y <strong>${cachedTagsCount.toLocaleString()}</strong> artistas con tags cacheados. Ya puedes ver tus géneros.`
+    : `Tienes <strong>${cachedTagsCount.toLocaleString()}</strong> artistas con tags pero <strong>0 likes</strong> cacheados. Carga los likes desde Spotify o importa un JSON previo que los tenga.`;
 
   const primaryLabel = hasLikes ? 'Ver mis géneros' : 'Cargar mis likes desde Spotify';
 
   content.innerHTML = `
     <div class="card" style="max-width:640px">
-      <h3 style="margin-bottom:8px">¿Cómo querés arrancar?</h3>
+      <h3 style="margin-bottom:8px">¿Cómo quieres arrancar?</h3>
       <p style="color:var(--color-text-secondary);font-size:13px;margin-bottom:16px">${intro}</p>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
         <button class="btn btn-primary" id="genre-begin-btn">${primaryLabel}</button>
@@ -153,7 +153,7 @@ function renderKeySetup() {
   const content = document.getElementById('genre-content');
   content.innerHTML = `
     <div class="card" style="max-width:480px">
-      <h3 style="margin-bottom:8px">Configurá tu Last.fm API key</h3>
+      <h3 style="margin-bottom:8px">Configura tu Last.fm API key</h3>
       <input type="text" id="lastfm-key-input" placeholder="API key"
              style="width:100%;padding:10px;background:var(--color-elevated);border:1px solid var(--color-border);border-radius:var(--radius-sm);color:var(--color-text);font-family:monospace;font-size:14px;margin-bottom:12px">
       <button class="btn btn-primary" id="lastfm-key-save" style="width:100%">Guardar</button>
@@ -216,7 +216,7 @@ async function start() {
           <button class="btn btn-secondary btn-sm" id="genre-statsfm-btn">${statsfm.hasUsername() ? 'Sync desde Stats.fm' : 'Conectar Stats.fm'}</button>
           <button class="btn btn-secondary btn-sm" id="genre-mb-btn" title="Consulta MusicBrainz para artistas sin género. Rate limit 1 req/seg — tarda ~1 min cada 60 artistas.">Enriquecer sin clasificar (MusicBrainz)</button>
           <span style="font-size:11px;color:var(--color-text-secondary);align-self:center;margin-left:4px">
-            Exportá el cache cada tanto. Stats.fm agrega géneros de Spotify sin gastar Last.fm. MusicBrainz completa los que ni Last.fm ni Stats.fm reconocen.
+            Exporta el cache cada tanto. Stats.fm agrega géneros de Spotify sin gastar Last.fm. MusicBrainz completa los que ni Last.fm ni Stats.fm reconocen.
           </span>
         </div>
       </div>
@@ -239,7 +239,7 @@ async function start() {
   } catch (e) {
     hideProgress();
     const msg = isCancelled(e)
-      ? 'Carga detenida. Lo que se bajó quedó guardado — entrá de nuevo para retomar.'
+      ? 'Carga detenida. Lo que se bajó quedó guardado — entra de nuevo para retomar.'
       : escapeHtml(e.message);
     content.innerHTML = `<div class="card"><p style="color:var(--color-${isCancelled(e) ? 'warning' : 'error'})">${msg}</p></div>`;
   }
@@ -288,7 +288,7 @@ async function handleMusicBrainz() {
     'Enriquecer con MusicBrainz',
     `<p>Se van a consultar <strong>${artistList.length}</strong> artistas sin género en MusicBrainz.</p>
      <p>Rate limit: <strong>1 request/seg</strong>. Tiempo estimado: <strong>~${etaMin} min</strong>.</p>
-     <p>Podés cerrar esta pestaña — el proceso se corta solo. Los resultados se van guardando cada 10 artistas.</p>`,
+     <p>Puedes cerrar esta pestaña — el proceso se corta solo. Los resultados se van guardando cada 10 artistas.</p>`,
     { variant: 'info', confirmText: 'Empezar', cancelText: 'Cancelar' }
   );
   if (!ok) return;
@@ -391,7 +391,7 @@ function promptStatsfmUsername() {
       <div class="modal" style="max-width:480px">
         <h3 style="margin-bottom:8px">Conectar Stats.fm</h3>
         <p style="color:var(--color-text-secondary);font-size:13px;margin-bottom:12px">
-          Ingresá tu username de Stats.fm (el slug de tu URL de perfil, ej: <code>i.an.iam</code> si tu perfil es <code>stats.fm/i.an.iam</code>). No hace falta API key.
+          Introduce tu username de Stats.fm (el slug de tu URL de perfil, ej: <code>i.an.iam</code> si tu perfil es <code>stats.fm/i.an.iam</code>). No hace falta API key.
         </p>
         <input type="text" id="statsfm-user-input" placeholder="username"
                style="width:100%;padding:10px;background:var(--color-elevated);border:1px solid var(--color-border);border-radius:var(--radius-sm);color:var(--color-text);font-family:monospace;font-size:14px;margin-bottom:12px">
@@ -739,7 +739,7 @@ function renderGrid() {
       h.add(tag);
       saveHiddenTags(h);
       selectedTags.delete(tag);
-      showToast(`"${tag}" oculto — lo restaurás desde el link de arriba`, 'info');
+      showToast(`"${tag}" oculto — lo restauras desde el link de arriba`, 'info');
       renderGrid();
       updateActionBar();
     };
@@ -769,7 +769,7 @@ async function createPlaylistForUnclassified(tracks) {
   const suggested = `Sin clasificar (${uris.length})`;
   const name = await promptPlaylistName(suggested, {
     trackCount: uris.length,
-    subtitle: 'Tracks cuyos artistas no aparecen en el cache de tags. Podés clasificarlos manual desde acá.',
+    subtitle: 'Tracks cuyos artistas no aparecen en el cache de tags. Puedes clasificarlos manual desde aquí.',
   });
   if (!name) return;
 

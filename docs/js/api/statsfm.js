@@ -1,5 +1,5 @@
-import { idbGetCached, idbSetCached } from '../idb.js?v=189';
-import { prefKey, migratePrefKey } from '../storage.js?v=189';
+import { idbGetCached, idbSetCached } from '../idb.js?v=190';
+import { prefKey, migratePrefKey } from '../storage.js?v=190';
 
 const STATSFM_USER_STORAGE = 'statsfm_username';
 const BASE = 'https://api.stats.fm/api/v1';
@@ -125,7 +125,17 @@ async function getTrackCurrentStats(trackId) {
 // que sirve a Ficha / Skips / Sin plays. Cualquier tema con menos plays que el
 // del puesto 1000 no está en el mapa (fallback: per-track live).
 
-const TOP_LIFETIME_KEY = 'statsfm_top_lifetime_v1';
+// ⚠️ v=190: la clave lleva el usuario de Stats.fm delante.
+//
+// Antes era una sola clave global (`statsfm_top_lifetime_v1`) para cualquiera
+// que usara este navegador. No llegaba a ser una fuga visible —la lectura de
+// abajo comprueba `cached.username === u`, y `getUsername()` ya va prefijado
+// por usuario de Spotify, así que otra persona no tenía ni username con el que
+// pedirlo— pero los 1.000 temas más escuchados de la anterior se quedaban en
+// IndexedDB igual. Con el usuario en la clave, cada uno tiene la suya y el
+// guarda multiusuario de `api.js` barre la vieja.
+const TOP_LIFETIME_KEY_BASE = 'statsfm_top_lifetime_v1';
+const topLifetimeKey = (u) => `${TOP_LIFETIME_KEY_BASE}__${u}`;
 const TOP_LIFETIME_TTL_MIN = 24 * 60;
 const TOP_LIFETIME_LIMIT = 1000;
 
@@ -140,7 +150,7 @@ async function loadTopLifetime({ force = false } = {}) {
 
   if (!force) {
     try {
-      const cached = await idbGetCached(TOP_LIFETIME_KEY);
+      const cached = await idbGetCached(topLifetimeKey(u));
       if (cached && cached.username === u && Array.isArray(cached.entries)) {
         _topMemCache = rehydrate(cached);
         return _topMemCache;
@@ -173,7 +183,7 @@ async function loadTopLifetime({ force = false } = {}) {
   }
   const generatedAt = Date.now();
   try {
-    await idbSetCached(TOP_LIFETIME_KEY, { username: u, entries, generatedAt }, TOP_LIFETIME_TTL_MIN);
+    await idbSetCached(topLifetimeKey(u), { username: u, entries, generatedAt }, TOP_LIFETIME_TTL_MIN);
   } catch { /* ignora */ }
   _topMemCache = rehydrate({ entries, generatedAt });
   return _topMemCache;

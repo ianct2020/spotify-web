@@ -2,21 +2,21 @@
 // primer/último año, top tracks del artista, hover-play, y plays actuales
 // vía Stats.fm si aplica. Se abre desde cualquier feature con openArtistCard({ name }).
 
-import { loadHistoryStats, loadArtistTracks, isOwner } from './history-data.js?v=189';
-import { escapeHtml } from '../ui/components.js?v=189';
-import { getPreview } from '../api/preview-providers.js?v=189';
-import { togglePreview, playingKey, attachHover } from '../ui/preview-player.js?v=189';
-import { hasUsername, loadTopLifetime } from '../api/statsfm.js?v=189';
-import { openTrackCard } from './track-card.js?v=189';
-import { spotifyFetch, getBestAvailableLikes } from '../api.js?v=189';
-import { openModal, closeTop } from '../ui/modal-stack.js?v=189';
-import { firstArtistName, artistNames, resolveArtistName, looksLikeArtistChain } from '../util/artist-name.js?v=189';
-import { coverUrl } from '../util/cover-size.js?v=189';
-import { getArtistLikePreview } from '../util/artist-preview.js?v=189';
-import { skelCardBody, skelTrackRows, skelBox } from '../ui/skeleton.js?v=189';
-import { fmtDia, fmtDiaCorto } from '../util/fecha.js?v=189';
-import { albumsDeArtista } from '../util/artist-albums.js?v=189';
-import { openAlbumCard } from './album-card.js?v=189';
+import { loadHistoryStats, loadArtistTracks, isOwner } from './history-data.js?v=190';
+import { escapeHtml } from '../ui/components.js?v=190';
+import { getPreview } from '../api/preview-providers.js?v=190';
+import { togglePreview, playingKey, attachHover } from '../ui/preview-player.js?v=190';
+import { hasUsername, loadTopLifetime } from '../api/statsfm.js?v=190';
+import { openTrackCard } from './track-card.js?v=190';
+import { spotifyFetch, getBestAvailableLikes } from '../api.js?v=190';
+import { openModal, closeTop } from '../ui/modal-stack.js?v=190';
+import { firstArtistName, artistNames, resolveArtistName, looksLikeArtistChain } from '../util/artist-name.js?v=190';
+import { coverUrl } from '../util/cover-size.js?v=190';
+import { getArtistLikePreview } from '../util/artist-preview.js?v=190';
+import { skelCardBody, skelTrackRows, skelBox } from '../ui/skeleton.js?v=190';
+import { fmtDia, fmtDiaCorto } from '../util/fecha.js?v=190';
+import { albumsDeArtista } from '../util/artist-albums.js?v=190';
+import { openAlbumCard } from './album-card.js?v=190';
 
 // Cache de imágenes de artistas resueltas por Spotify search. TTL 30 días.
 // Se persiste el hit y la falta (null) para no reintentar contra tracks
@@ -317,7 +317,7 @@ async function openArtistCard(entrada) {
   // El corte por "no está en ningún top" se hace DESPUÉS de mirar el historial
   // completo: un artista puede no entrar en ningún top y aun así tener plays.
   if (!totalPlays && !allTime && !topTracks.length) {
-    body.innerHTML = `<p style="color:var(--color-text-secondary);font-size:13px;margin:0">No aparece en tu historial (o no está en los tops de ningún año). Igual podés escucharlo en Spotify y ver el preview arriba.</p>`;
+    body.innerHTML = `<p style="color:var(--color-text-secondary);font-size:13px;margin:0">No aparece en tu historial (o no está en los tops de ningún año). Igual puedes escucharlo en Spotify y ver el preview arriba.</p>`;
     return;
   }
 
@@ -557,7 +557,7 @@ async function openArtistLikesModal(artistName) {
 
   if (!likes.length) {
     countEl.textContent = '';
-    scroll.innerHTML = `<p style="color:var(--color-text-secondary);padding:16px;text-align:center">Todavía no bajaste tus likes. Andá al Dashboard y apretá "Actualizar" para sincronizarlos.</p>`;
+    scroll.innerHTML = `<p style="color:var(--color-text-secondary);padding:16px;text-align:center">Todavía no bajaste tus likes. Ve al Dashboard y pulsa "Actualizar" para sincronizarlos.</p>`;
     return;
   }
 
@@ -571,7 +571,7 @@ async function openArtistLikesModal(artistName) {
 
   if (!filtered.length) {
     countEl.textContent = '0 likes';
-    scroll.innerHTML = `<p style="color:var(--color-text-secondary);padding:24px 16px;text-align:center">No tenés likes de ${escapeHtml(artistName)}. Todavía.</p>`;
+    scroll.innerHTML = `<p style="color:var(--color-text-secondary);padding:24px 16px;text-align:center">No tienes likes de ${escapeHtml(artistName)}. Todavía.</p>`;
     return;
   }
 

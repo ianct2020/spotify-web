@@ -2,24 +2,24 @@
 // por álbum). Muestra qué álbumes ya tienen picks, cuántos, y cuáles te faltan.
 // Ordenado por álbumes más escuchados primero para priorizar tu tiempo.
 
-import { spotifyFetch, getAllPlaylistItems, getAllUserPlaylists, addTracksToPlaylist, removeTracksFromPlaylist, reorderPlaylistItems, getCachedPlaylistItems, updatePlaylistItemsCache, getBestAvailableLikes } from '../api.js?v=189';
-import { vigilarRuta } from '../util/vigencia-ruta.js?v=189';
-import { patchPlaylistItems, buildCachedItem } from '../util/playlist-cache-patch.js?v=189';
-import { loadHistoryStats, loadListenedAlbums, isOwner, ownerLockedMessage } from './history-data.js?v=189';
-import { escapeHtml, pageHeader } from '../ui/components.js?v=189';
-import { showToast } from '../ui/toast.js?v=189';
-import { activateMarquee, marqueeSpan } from '../ui/marquee.js?v=189';
-import { openModal, closeById, closeModal } from '../ui/modal-stack.js?v=189';
-import { getPreview } from '../api/preview-providers.js?v=189';
-import { togglePreview, playingKey } from '../ui/preview-player.js?v=189';
-import { openAlbumCard } from './album-card.js?v=189';
-import { albumKey } from '../util/album-key.js?v=189';
-import { computeUpdatedPickPositions } from '../util/reorder-shifts.js?v=189';
-import { createHiddenStore } from '../util/hidden-sync.js?v=189';
-import { mountBottom } from '../ui/bottom-layer.js?v=189';
-import { coverUrl } from '../util/cover-size.js?v=189';
-import { insercionPorPuntero, moverA, indicadorPara } from '../util/reorder-drop.js?v=189';
-import { prefKey, migratePrefKey } from '../storage.js?v=189';
+import { spotifyFetch, getAllPlaylistItems, getAllUserPlaylists, addTracksToPlaylist, removeTracksFromPlaylist, reorderPlaylistItems, getCachedPlaylistItems, updatePlaylistItemsCache, getBestAvailableLikes } from '../api.js?v=190';
+import { vigilarRuta } from '../util/vigencia-ruta.js?v=190';
+import { patchPlaylistItems, buildCachedItem } from '../util/playlist-cache-patch.js?v=190';
+import { loadHistoryStats, loadListenedAlbums, isOwner, ownerLockedMessage } from './history-data.js?v=190';
+import { escapeHtml, pageHeader } from '../ui/components.js?v=190';
+import { showToast } from '../ui/toast.js?v=190';
+import { activateMarquee, marqueeSpan } from '../ui/marquee.js?v=190';
+import { openModal, closeById, closeModal } from '../ui/modal-stack.js?v=190';
+import { getPreview } from '../api/preview-providers.js?v=190';
+import { togglePreview, playingKey } from '../ui/preview-player.js?v=190';
+import { openAlbumCard } from './album-card.js?v=190';
+import { albumKey } from '../util/album-key.js?v=190';
+import { computeUpdatedPickPositions } from '../util/reorder-shifts.js?v=190';
+import { createHiddenStore } from '../util/hidden-sync.js?v=190';
+import { mountBottom } from '../ui/bottom-layer.js?v=190';
+import { coverUrl } from '../util/cover-size.js?v=190';
+import { insercionPorPuntero, moverA, indicadorPara } from '../util/reorder-drop.js?v=190';
+import { prefKey, migratePrefKey } from '../storage.js?v=190';
 
 const LS_KEY_ID = 'wthree_playlist_id';
 const LS_KEY_NAME = 'wthree_playlist_name';
@@ -201,15 +201,15 @@ async function showSetup(content, ruta = vigilarRuta()) {
 
   content.innerHTML = `
     <div class="card">
-      <h3 style="margin:0 0 6px;font-size:16px">Elegí tu playlist "w three"</h3>
-      <p style="color:var(--color-text-muted);font-size:13px;margin:0 0 14px">La que usás para juntar las mejores 3 canciones de cada álbum. Se guarda local — podés cambiarla después.</p>
+      <h3 style="margin:0 0 6px;font-size:16px">Elige tu playlist "w three"</h3>
+      <p style="color:var(--color-text-muted);font-size:13px;margin:0 0 14px">La que usas para juntar las mejores 3 canciones de cada álbum. Se guarda local — puedes cambiarla después.</p>
       ${guessed.length ? `
         <div style="font-size:11px;color:var(--color-text-muted);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:8px">Sugerencias</div>
         <div class="wthree-choice-list">
           ${guessed.slice(0, 4).map(p => `
             <button class="wthree-choice" data-id="${p.id}" data-name="${escapeHtml(p.name)}">
               <div class="wthree-choice-name">${escapeHtml(p.name)}</div>
-              <div class="wthree-choice-meta">${p.owner?.display_name || 'vos'}${p.public === false ? ' · privada' : ''}${p.collaborative ? ' · colaborativa' : ''}</div>
+              <div class="wthree-choice-meta">${p.owner?.display_name || 'tú'}${p.public === false ? ' · privada' : ''}${p.collaborative ? ' · colaborativa' : ''}</div>
             </button>
           `).join('')}
         </div>
@@ -221,7 +221,7 @@ async function showSetup(content, ruta = vigilarRuta()) {
           ${playlists.map(p => `
             <button class="wthree-choice" data-id="${p.id}" data-name="${escapeHtml(p.name)}">
               <div class="wthree-choice-name">${escapeHtml(p.name)}</div>
-              <div class="wthree-choice-meta">${p.owner?.display_name || 'vos'}${p.public === false ? ' · privada' : ''}${p.collaborative ? ' · colaborativa' : ''}</div>
+              <div class="wthree-choice-meta">${p.owner?.display_name || 'tú'}${p.public === false ? ' · privada' : ''}${p.collaborative ? ' · colaborativa' : ''}</div>
             </button>
           `).join('')}
         </div>

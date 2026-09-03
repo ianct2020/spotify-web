@@ -10,14 +10,14 @@
 //   - Umbral de likes: 5+ / 10+ / 20+
 //   - Ventana temporal: 3 / 6 / 12 / 24 meses (default 12)
 
-import { escapeHtml, confirmModal, pageHeader } from '../ui/components.js?v=189';
-import { showToast } from '../ui/toast.js?v=189';
-import { buildAlbumHeardIndex } from '../util/album-heard.js?v=189';
-import { releaseKind } from '../util/release-size.js?v=189';
-import { loadFiltros, buildFilterContext, applyDiscoverFilters } from '../util/discover-filters.js?v=189';
-import { createIncrementalList, scrollRootOf } from '../ui/incremental-list.js?v=189';
-import { createLazyImages } from '../ui/lazy-img.js?v=189';
-import { prefKey, migratePrefKey } from '../storage.js?v=189';
+import { escapeHtml, confirmModal, pageHeader } from '../ui/components.js?v=190';
+import { showToast } from '../ui/toast.js?v=190';
+import { buildAlbumHeardIndex } from '../util/album-heard.js?v=190';
+import { releaseKind } from '../util/release-size.js?v=190';
+import { loadFiltros, buildFilterContext, applyDiscoverFilters } from '../util/discover-filters.js?v=190';
+import { createIncrementalList, scrollRootOf } from '../ui/incremental-list.js?v=190';
+import { createLazyImages } from '../ui/lazy-img.js?v=190';
+import { prefKey, migratePrefKey } from '../storage.js?v=190';
 import {
   getArtistIdCached,
   getArtistDiscoCached,
@@ -42,7 +42,7 @@ import {
   hiddenAlbums,
   cardKey,
   toggleHiddenAlbum,
-} from './discover-common.js?v=189';
+} from './discover-common.js?v=190';
 
 const SCAN_KEY = 'new_releases';
 
@@ -299,7 +299,7 @@ function renderShell(content, totalCandidates) {
   content.querySelector('#newrel-load-more').addEventListener('click', () => {
     const eligible = eligibleArtists().length;
     if (!eligible) {
-      showToast(`No hay ningún artista con ${state.minLikes} o más likes. Probá bajando el umbral.`, 'warning');
+      showToast(`No hay ningún artista con ${state.minLikes} o más likes. Prueba bajando el umbral.`, 'warning');
       return;
     }
     if (state.loadedMore >= eligible && state.artists.every(a => a.likes < state.minLikes || a.scanned)) {
@@ -503,14 +503,14 @@ function refreshList(content) {
     const scanned = eligibleArtists().filter(a => a.scanned).length;
     let msg;
     if (!state.artists.length) {
-      msg = 'Todavía no tengo tus likes cargados. Abrí el Dashboard para descargarlos y volvé.';
+      msg = 'Todavía no tengo tus likes cargados. Abre el Dashboard para descargarlos y vuelve.';
     } else if (!eligible) {
       // El caso que veía Ian con 10+ y 20+: cero elegibles, y encima con los
       // botones sin decir nada. Ahora se explica y se ofrece la salida.
       const max = Math.max(...state.artists.map(a => a.likes));
-      msg = `Ningún artista llega a ${state.minLikes} likes (el que más tiene llega a ${max}). Bajá el umbral con los chips de arriba.`;
+      msg = `Ningún artista llega a ${state.minLikes} likes (el que más tiene llega a ${max}). Descarga el umbral con los chips de arriba.`;
     } else if (!scanned) {
-      msg = `${eligible.toLocaleString('es-ES')} artistas con ≥${state.minLikes} likes, ninguno escaneado todavía. Tocá «Actualizar» para consultarle a Spotify.`;
+      msg = `${eligible.toLocaleString('es-ES')} artistas con ≥${state.minLikes} likes, ninguno escaneado todavía. Toca «Actualizar» para consultarle a Spotify.`;
     } else if (state.mode === 'hidden') {
       msg = `No ocultaste ninguna novedad de los últimos ${state.months} meses.`;
     } else {
@@ -519,7 +519,7 @@ function refreshList(content) {
       // está guardado entre sesiones (y compartido con #discover-artists), así
       // que podés llegar acá con un filtro puesto que no recordás haber tocado.
       const porTipo = state.filterKind !== 'all'
-        ? ` filtrando por ${KIND_LABEL[state.filterKind].toLowerCase()} — probá con «Todo»`
+        ? ` filtrando por ${KIND_LABEL[state.filterKind].toLowerCase()} — prueba con «Todo»`
         : '';
       msg = `No hay novedades sin escuchar en los últimos ${state.months} meses para tus artistas con ≥${state.minLikes} likes${porTipo}.`;
     }
@@ -659,7 +659,7 @@ async function saveAlbum(albumId, artistName, btn) {
       // avisa una sola vez, cuando se acaba de crear.
       if (r.playlistCreada) {
         showToast(
-          `Creé la playlist «${PLAYLIST_SINGLES}». Spotify la crea PÚBLICA y no se puede cambiar por API: pasala a privada a mano desde la app.`,
+          `Creé la playlist «${PLAYLIST_SINGLES}». Spotify la crea PÚBLICA y no se puede cambiar por API: pásala a privada a mano desde la app.`,
           'info',
         );
       }
@@ -702,7 +702,7 @@ async function likearPistasDelAlbum(albumId, artistName, btn) {
     `Vas a añadir ${cuantas} de «${escapeHtml(al.name)}» a tus me gusta, una por una. ` +
     'Esto NO guarda el álbum: te deja las canciones sueltas entre tus likes, y para ' +
     'deshacerlo hay que sacarle el corazón a cada una a mano. ' +
-    'Si lo que querés es el disco entero, usá «Guardar álbum».',
+    'Si lo que quieres es el disco entero, usa «Guardar álbum».',
     n === 1 ? 'Añadir la pista' : `Añadir ${n || 'las'} pistas`,
   );
   if (!ok) return;

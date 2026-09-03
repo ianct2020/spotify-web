@@ -32,9 +32,9 @@ function renderKeySetup() {
   const content = document.getElementById('rabbit-content');
   content.innerHTML = `
     <div class="card" style="max-width:480px">
-      <h3 style="margin-bottom:8px">Configurá tu Last.fm API key</h3>
+      <h3 style="margin-bottom:8px">Configura tu Last.fm API key</h3>
       <p style="color:var(--color-text-secondary);font-size:14px;margin-bottom:16px">
-        Sacala en <a href="https://www.last.fm/api/account/create" target="_blank" style="color:var(--color-accent)">last.fm/api/account/create</a>.
+        Sácala en <a href="https://www.last.fm/api/account/create" target="_blank" style="color:var(--color-accent)">last.fm/api/account/create</a>.
       </p>
       <input type="text" id="lastfm-key-input" placeholder="API key" autocomplete="off"
              style="width:100%;padding:10px;background:var(--color-elevated);border:1px solid var(--color-border);border-radius:var(--radius-sm);color:var(--color-text);font-family:monospace;font-size:14px;margin-bottom:12px">
@@ -78,7 +78,7 @@ function renderTagInput() {
   const go = () => {
     const t = input.value.trim();
     if (!t) {
-      showToast('Escribí un género', 'error');
+      showToast('Escribe un género', 'error');
       return;
     }
     loadTag(t);
@@ -135,7 +135,7 @@ async function loadTag(tag) {
   try {
     artistList = await getTopArtistsByTag(tag, 50);
     if (artistList.length === 0) {
-      panel.innerHTML = `<div class="card"><p>Last.fm no tiene artistas para el tag "${escapeHtml(tag)}". Probá con otro nombre.</p></div>`;
+      panel.innerHTML = `<div class="card"><p>Last.fm no tiene artistas para el tag "${escapeHtml(tag)}". Prueba con otro nombre.</p></div>`;
       return;
     }
     renderArtistGrid();
@@ -169,7 +169,7 @@ function renderArtistGrid() {
   const panel = document.getElementById('rabbit-panel');
   panel.innerHTML = `
     <div style="margin-bottom:8px;color:var(--color-text-secondary);font-size:14px">
-      Top ${artistList.length} artistas del género <strong>${escapeHtml(currentTag)}</strong>. Elegí uno para ver sus top tracks.
+      Top ${artistList.length} artistas del género <strong>${escapeHtml(currentTag)}</strong>. Elige uno para ver sus top tracks.
     </div>
     <div id="rabbit-related-holder" style="margin-bottom:16px">
       ${relatedTags.length > 0 ? `

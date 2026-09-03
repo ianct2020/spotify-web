@@ -468,7 +468,7 @@ export async function render(container) {
     <!-- v=151: el título y el artista son botones de verdad. Ver el bloque de
          "tooltip clickeable" más abajo para por qué el tooltip deja de seguir
          al cursor. El role="tooltip" se va: esto ya no es un tooltip pasivo.
-         (Sin acentos graves acá adentro: esto vive en un template literal.) -->
+         (Sin acentos graves aquí adentro: esto vive en un template literal.) -->
     <div class="covers-tooltip" id="covers-tooltip" aria-hidden="true">
       <button type="button" class="ct-name ct-link" title="Abrir la ficha del álbum"></button>
       <button type="button" class="ct-artist ct-link" title="Abrir la ficha del artista"></button>

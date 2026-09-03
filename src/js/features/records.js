@@ -39,7 +39,7 @@ export async function render(container) {
   const content = document.getElementById('records-content');
   if (!r || !r.top_days?.length) {
     content.innerHTML = (await isOwner())
-      ? `<div class="card"><p>No pude cargar los récords. Reintentá.</p></div>`
+      ? `<div class="card"><p>No pude cargar los récords. Vuelve a intentarlo.</p></div>`
       : ownerLockedMessage('Récords');
     return;
   }
@@ -155,7 +155,7 @@ function wireHovers(content) {
     const h = hoverTargets[+el.dataset.recHover];
     if (!h) return;
     el.classList.add('tc-clickable');
-    el.title = 'Mantené el mouse para escuchar un preview · click para ficha';
+    el.title = 'Mantén el mouse para escuchar un preview · click para ficha';
     const getter = h.kind === 'artist'
       ? async () => await getArtistLikePreview(h.name)
       : async () => await getPreview({ name: h.name, artist: h.artist || '', spotifyId: h.id });

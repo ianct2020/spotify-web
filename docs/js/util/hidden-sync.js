@@ -26,11 +26,11 @@ import {
   createPlaylist,
   getCurrentUserId,
   spotifyFetch,
-} from '../api.js?v=189';
-import { prefKey, migratePrefKey } from '../storage.js?v=189';
-import { invalidateOwnPlaylists } from './playlist-add.js?v=189';
+} from '../api.js?v=190';
+import { prefKey, migratePrefKey } from '../storage.js?v=190';
+import { invalidateOwnPlaylists } from './playlist-add.js?v=190';
 
-const PLAYLIST_DESC = 'Lista interna de Fonoteca: lo que ocultaste en esta vista. Si la borrás, se pierden los ocultos.';
+const PLAYLIST_DESC = 'Lista interna de Fonoteca: lo que ocultaste en esta vista. Si la borras, se pierden los ocultos.';
 
 // ── Claves de preferencia por usuario (v=183) ───────────────────────────────
 //

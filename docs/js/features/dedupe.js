@@ -1,6 +1,6 @@
-import { getAllUserPlaylists, getAllPlaylistItems, removePlaylistItemsAtPositions, getCurrentUserId, getBestAvailableLikes } from '../api.js?v=189';
-import { showProgress, hideProgress, progressController, isCancelled, typeConfirmModal, renderTrackRow, escapeHtml, renderPlaylistGrid, bindPlaylistGrid, pageHeader } from '../ui/components.js?v=189';
-import { showToast } from '../ui/toast.js?v=189';
+import { getAllUserPlaylists, getAllPlaylistItems, removePlaylistItemsAtPositions, getCurrentUserId, getBestAvailableLikes } from '../api.js?v=190';
+import { showProgress, hideProgress, progressController, isCancelled, typeConfirmModal, renderTrackRow, escapeHtml, renderPlaylistGrid, bindPlaylistGrid, pageHeader } from '../ui/components.js?v=190';
+import { showToast } from '../ui/toast.js?v=190';
 
 let ownPlaylists = [];
 const LIKED_VIRTUAL_ID = '__liked_songs__';
@@ -22,7 +22,7 @@ async function loadAndShowGrid() {
     const [playlists, userId] = await Promise.all([getAllUserPlaylists(), getCurrentUserId()]);
     ownPlaylists = playlists.filter(p => p.owner?.id === userId);
     if (ownPlaylists.length === 0) {
-      content.innerHTML = `<div class="card"><p>No tenés playlists propias.</p></div>`;
+      content.innerHTML = `<div class="card"><p>No tienes playlists propias.</p></div>`;
       return;
     }
     // Tile virtual "Liked Songs" al principio del grid.
@@ -33,7 +33,7 @@ async function loadAndShowGrid() {
       tracks: { total: '?' },
     };
     content.innerHTML = `
-      <div style="margin-bottom:8px;color:var(--color-text-secondary)">${ownPlaylists.length} playlists propias · también podés analizar tus Liked Songs</div>
+      <div style="margin-bottom:8px;color:var(--color-text-secondary)">${ownPlaylists.length} playlists propias · también puedes analizar tus Liked Songs</div>
       ${renderPlaylistGrid([likedVirtual, ...ownPlaylists])}
     `;
     bindPlaylistGrid(content, (id) => {
@@ -138,7 +138,7 @@ async function analyzePlaylist(playlistId) {
   } catch (e) {
     hideProgress();
     const msg = isCancelled(e)
-      ? 'Carga detenida. Volvé a entrar para retomar.'
+      ? 'Carga detenida. Vuelve a entrar para retomar.'
       : escapeHtml(e.message);
     document.getElementById('dedupe-analysis').innerHTML = `<div class="card"><p style="color:var(--color-${isCancelled(e) ? 'warning' : 'error'})">${msg}</p></div>`;
   }
@@ -184,9 +184,9 @@ async function analyzeLikedSongs() {
           </div>
           <div style="color:var(--color-text-muted);font-size:13px">
             Spotify no permite likear el mismo track dos veces, así que este análisis siempre debería salir limpio.
-            Si querés detectar el mismo tema en distintos álbumes (deluxe, remaster, live), usá
+            Si quieres detectar el mismo tema en distintos álbumes (deluxe, remaster, live), usa
             <a href="#versions" style="color:var(--color-accent)">Versiones</a>. Y para álbumes con varios tracks
-            repetidos en tus likes, mirá <a href="#listened" style="color:var(--color-accent)">Álbumes escuchados</a>.
+            repetidos en tus likes, mira <a href="#listened" style="color:var(--color-accent)">Álbumes escuchados</a>.
           </div>
         </div>
       `;
@@ -201,7 +201,7 @@ async function analyzeLikedSongs() {
           <span>Tracks con más de una copia en tus Liked Songs.</span>
         </div>
         <div style="color:var(--color-text-muted);font-size:13px">
-          Esto es raro (Spotify no lo permite normalmente). Podés reportarlo o intentar limpiarlo desde acá.
+          Esto es raro (Spotify no lo permite normalmente). Puedes reportarlo o intentar limpiarlo desde aquí.
         </div>
       </div>
       <div class="card">

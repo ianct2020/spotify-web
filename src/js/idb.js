@@ -119,8 +119,37 @@ async function idbClearAll(keepKeys = []) {
   return toDel.length;
 }
 
+/**
+ * Borra todas las claves que empiecen por `prefix`. Devuelve cuántas borró.
+ *
+ * Hace falta para el guarda multiusuario: los caches con el CONTENIDO de las
+ * playlists son una clave por playlist (`playlist_items_{id}`), así que no se
+ * pueden nombrar de antemano. Hasta v=189 no los borraba nadie —
+ * `invalidatePlaylistsCache()` solo limpiaba la LISTA— y quedaban en el
+ * navegador para el usuario siguiente.
+ */
+async function idbDelByPrefix(prefix) {
+  const db = await openDb();
+  const keys = await new Promise((res, rej) => {
+    const t = db.transaction(STORE, 'readonly');
+    const r = t.objectStore(STORE).getAllKeys();
+    r.onsuccess = () => res(r.result);
+    r.onerror = () => rej(r.error);
+  });
+  const toDel = keys.filter(k => typeof k === 'string' && k.startsWith(prefix));
+  if (toDel.length === 0) return 0;
+  await new Promise((res, rej) => {
+    const t = db.transaction(STORE, 'readwrite');
+    const store = t.objectStore(STORE);
+    toDel.forEach(k => store.delete(k));
+    t.oncomplete = () => res();
+    t.onerror = () => rej(t.error);
+  });
+  return toDel.length;
+}
+
 export {
   idbGet, idbSet, idbDel,
   idbGetCached, idbGetCachedRaw, idbGetTimestamp, idbSetCached,
-  idbAvailable, idbClearAll,
+  idbAvailable, idbClearAll, idbDelByPrefix,
 };

@@ -98,7 +98,7 @@ function mostrarFalloEnPill(motivo) {
   const provEl = p.querySelector('.preview-pill-provider');
   if (provEl) {
     provEl.textContent = `no se pudo reproducir — ${motivo}`;
-    provEl.title = 'La URL del preview no respondió. Probá con otro tema o recargá: los enlaces de preview caducan.';
+    provEl.title = 'La URL del preview no respondió. Prueba con otro tema o recarga: los enlaces de preview caducan.';
   }
   const eq = p.querySelector('.preview-eq');
   if (eq) eq.style.display = 'none';
@@ -206,7 +206,7 @@ function playAudio(key, { url, label, provider }) {
     // Política de autoplay del browser: audio con sonido necesita al menos un
     // click previo en la página. Pasa solo si entraste directo por URL sin tocar nada.
     if (err && err.name === 'NotAllowedError') {
-      showToast('El browser bloqueó el audio: hacé un click en cualquier lado y probá de nuevo', 'info');
+      showToast('El navegador bloqueó el audio: haz un click en cualquier lado y prueba de nuevo', 'info');
     }
     stopPreview();
   });

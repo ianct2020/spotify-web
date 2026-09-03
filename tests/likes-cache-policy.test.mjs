@@ -174,5 +174,52 @@ ok(OWNER_KEY_LIST.includes('history_track_plays_v5') && OWNER_KEY_LIST.includes(
 ok(OWNER_KEY_LIST.includes('history_artist_tracks_v2'),
   'incluye history_artist_tracks_v2, que la copia vieja se olvidaba');
 
+// ── La identidad sin confirmar no concede acceso al historial ───────────────
+//
+// Con /me en 429, resolvedUserId() cae a fonoteca_last_user_id, que es el id
+// del ÚLTIMO que usó el navegador. Hasta v=189 eso bastaba para que isOwner()
+// dijera «sí» y, peor, para que loadOne() sirviera los JSON del owner — las
+// vistas piden los datos ANTES de preguntar por el owner, así que el candado
+// tiene que estar donde se entregan los datos.
+const hd = sinComentarios(readFileSync(new URL('../src/js/features/history-data.js', import.meta.url), 'utf8'));
+
+const isOwnerSrc = hd.slice(hd.indexOf('async function isOwner'), hd.indexOf('async function isOwner') + 400);
+ok(/if \(degradado\)/.test(isOwnerSrc) && /return false;/.test(isOwnerSrc),
+  'isOwner() devuelve false cuando la identidad viene del fallback');
+ok(!/const owner = id === HISTORY_OWNER_ID;[\s\S]{0,120}return owner;/.test(isOwnerSrc),
+  'ya no hay un camino que devuelva owner:true con identidad degradada');
+
+const loadOneSrc = hd.slice(hd.indexOf('async function loadOne'), hd.indexOf('async function loadOne') + 900);
+const iGuardia = loadOneSrc.indexOf('identidadSinConfirmar()');
+const iOwnerChk = loadOneSrc.indexOf('uid === HISTORY_OWNER_ID');
+const iLocal = loadOneSrc.indexOf('localKey(uid');
+ok(iGuardia > -1, 'loadOne() consulta si la identidad está sin confirmar');
+ok(iOwnerChk === -1 || iGuardia < iOwnerChk,
+  'y corta ANTES de decidir si sos el owner');
+ok(iLocal === -1 || iGuardia < iLocal,
+  'y también antes de servir el historial BYOH local del usuario anterior');
+
+ok(/function identidadSinConfirmar/.test(hd) && /identidadSinConfirmar,/.test(hd),
+  'identidadSinConfirmar() existe y se exporta');
+ok(/if \(identidadSinConfirmar\(\)\) return identityLockedMessage/.test(hd),
+  'ownerLockedMessage() explica el caso «no sabemos quién sos» aparte del «sos otro»');
+ok(/data-recargar-identidad/.test(hd),
+  'el cartel de identidad ofrece volver a intentarlo');
+
+// ── El guarda multiusuario barre también playlists y Stats.fm ───────────────
+const guarda = api.slice(api.indexOf('for (const k of OWNER_KEY_LIST)'), api.indexOf('for (const k of OWNER_KEY_LIST)') + 900);
+ok(/idbDelByPrefix\('playlist_items_'\)/.test(guarda),
+  'borra el CONTENIDO de las playlists, no solo la lista');
+ok(/idbDelByPrefix\('statsfm_top_lifetime_v1'\)/.test(guarda),
+  'y el top de Stats.fm del usuario anterior');
+
+const statsfm = sinComentarios(readFileSync(new URL('../src/js/api/statsfm.js', import.meta.url), 'utf8'));
+ok(/topLifetimeKey = \(u\)/.test(statsfm) && !/idbGetCached\(TOP_LIFETIME_KEY\)/.test(statsfm),
+  'la clave de Stats.fm lleva el usuario delante');
+
+const idbSrc = readFileSync(new URL('../src/js/idb.js', import.meta.url), 'utf8');
+ok(/async function idbDelByPrefix/.test(idbSrc) && /idbDelByPrefix,/.test(idbSrc),
+  'idbDelByPrefix() existe y se exporta');
+
 console.log(`\n  ${pasaron} pasaron, ${fallaron} fallaron`);
 process.exit(fallaron ? 1 : 0);

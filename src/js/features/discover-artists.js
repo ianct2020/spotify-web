@@ -273,7 +273,7 @@ function renderShell(content, totalCandidates) {
           <option value="5" ${state.filterYears === 5 ? 'selected' : ''}>Últimos 5 años</option>
           <option value="10" ${state.filterYears === 10 ? 'selected' : ''}>Últimos 10 años</option>
         </select>
-        <button class="btn btn-secondary btn-sm ${state.mode === 'heard' ? 'sc-on' : ''}" id="disco-mode-heard" title="Los que marcaste como escuchados. Desde ahí podés devolverlos a la lista.">Escuchados <span id="disco-heard-n">${heardAlbums.size}</span></button>
+        <button class="btn btn-secondary btn-sm ${state.mode === 'heard' ? 'sc-on' : ''}" id="disco-mode-heard" title="Los que marcaste como escuchados. Desde ahí puedes devolverlos a la lista.">Escuchados <span id="disco-heard-n">${heardAlbums.size}</span></button>
         <button class="btn btn-secondary btn-sm ${state.mode === 'hidden' ? 'sc-on' : ''}" id="disco-mode-hidden" title="Los que ocultaste. Se sincronizan con la playlist «fonoteca · ocultos (descubrir)».">Ocultos <span id="disco-hidden-n">${hiddenAlbums.size}</span></button>
         <button class="btn btn-secondary btn-sm" id="disco-refresh" title="${state.scannedAt ? 'Último escaneo ' + agoLabel(state.scannedAt) + '. Volver a consultar Spotify.' : 'Volver a consultar Spotify'}">Actualizar</button>
       </div>
@@ -707,7 +707,7 @@ async function saveAlbumToLibrary(albumId, artistName, btn) {
       // avisa una sola vez, cuando se acaba de crear.
       if (r.playlistCreada) {
         showToast(
-          `Creé la playlist «${PLAYLIST_SINGLES}». Spotify la crea PÚBLICA y no se puede cambiar por API: pasala a privada a mano desde la app.`,
+          `Creé la playlist «${PLAYLIST_SINGLES}». Spotify la crea PÚBLICA y no se puede cambiar por API: pásala a privada a mano desde la app.`,
           'info',
         );
       }
@@ -750,7 +750,7 @@ async function likearPistasDelAlbum(albumId, artistName, btn) {
     `Vas a añadir ${cuantas} de «${escapeHtml(al.name)}» a tus me gusta, una por una. ` +
     'Esto NO guarda el álbum: te deja las canciones sueltas entre tus likes, y para ' +
     'deshacerlo hay que sacarle el corazón a cada una a mano. ' +
-    'Si lo que querés es el disco entero, usá «Guardar álbum».',
+    'Si lo que quieres es el disco entero, usa «Guardar álbum».',
     n === 1 ? 'Añadir la pista' : `Añadir ${n || 'las'} pistas`,
   );
   if (!ok) return;

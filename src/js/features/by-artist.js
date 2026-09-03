@@ -50,7 +50,7 @@ function renderStart() {
     <div class="card" style="max-width:520px">
       <h3 style="margin-bottom:8px">Necesitamos tus likes cacheados</h3>
       <p style="color:var(--color-text-secondary);font-size:13px;margin-bottom:16px">
-        No hay likes en el cache local. Podés cargarlos ahora (usa el cache si existe, si no baja todo desde Spotify).
+        No hay likes en el cache local. Puedes cargarlos ahora (usa el cache si existe, si no baja todo desde Spotify).
       </p>
       <button class="btn btn-primary" id="artist-load-btn">Cargar likes</button>
     </div>
@@ -70,7 +70,7 @@ async function loadLikes() {
   } catch (e) {
     hideProgress();
     const msg = isCancelled(e)
-      ? 'Carga detenida. Lo que se bajó quedó guardado — entrá de nuevo para retomar.'
+      ? 'Carga detenida. Lo que se bajó quedó guardado — entra de nuevo para retomar.'
       : escapeHtml(e.message);
     content.innerHTML = `<div class="card"><p style="color:var(--color-${isCancelled(e) ? 'warning' : 'error'})">${msg}</p></div>`;
   }
@@ -167,7 +167,7 @@ function renderGrid() {
   if (filterText) {
     summary.textContent = `${sorted.length} de ${all.length} artistas coinciden con "${filterText}"${sorted.length > 400 ? ' — mostrando primeros 400' : ''}`;
   } else {
-    summary.textContent = `${all.length} artistas${all.length > 400 ? ' — mostrando primeros 400, usá el buscador para acotar' : ''}. Click para seleccionar uno o varios.`;
+    summary.textContent = `${all.length} artistas${all.length > 400 ? ' — mostrando primeros 400, usa el buscador para acotar' : ''}. Click para seleccionar uno o varios.`;
   }
 
   if (sorted.length === 0) {

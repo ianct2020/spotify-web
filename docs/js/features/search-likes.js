@@ -2,12 +2,12 @@
 // Sirve para cuando la búsqueda de Spotify tarda o no encuentra bien:
 // tipeás, filtra en memoria por título/artista/álbum, sin pegarle a la API.
 
-import { getBestAvailableLikes } from '../api.js?v=189';
-import { renderTrackRow, escapeHtml, pageHeader } from '../ui/components.js?v=189';
-import { firstArtistName, artistNames } from '../util/artist-name.js?v=189';
-import { openTrackCard } from './track-card.js?v=189';
-import { coverUrl } from '../util/cover-size.js?v=189';
-import { fmtDiaCorto } from '../util/fecha.js?v=189';
+import { getBestAvailableLikes } from '../api.js?v=190';
+import { renderTrackRow, escapeHtml, pageHeader } from '../ui/components.js?v=190';
+import { firstArtistName, artistNames } from '../util/artist-name.js?v=190';
+import { openTrackCard } from './track-card.js?v=190';
+import { coverUrl } from '../util/cover-size.js?v=190';
+import { fmtDiaCorto } from '../util/fecha.js?v=190';
 
 const MAX_RESULTS = 300;
 let cachedItems = [];
@@ -64,7 +64,7 @@ export async function render(container) {
     results.innerHTML = `
       <div class="card">
         <p>No hay likes cacheados todavía.</p>
-        <p style="color:var(--color-text-secondary);font-size:13px;margin-top:6px">Andá al <a href="#dashboard" style="color:var(--color-accent)">Dashboard</a> y hacé "Cargar desde Spotify" o "Actualizar datos" primero.</p>
+        <p style="color:var(--color-text-secondary);font-size:13px;margin-top:6px">Ve al <a href="#dashboard" style="color:var(--color-accent)">Dashboard</a> y haz "Cargar desde Spotify" o "Actualizar datos" primero.</p>
       </div>
     `;
     info.textContent = '';
@@ -73,7 +73,7 @@ export async function render(container) {
 
   info.innerHTML = `${items.length.toLocaleString('es-AR')} likes en cache`;
 
-  results.innerHTML = `<div class="card"><p style="color:var(--color-text-secondary)">Empezá a tipear arriba — los resultados aparecen al toque.</p></div>`;
+  results.innerHTML = `<div class="card"><p style="color:var(--color-text-secondary)">Empieza a tipear arriba — los resultados aparecen al toque.</p></div>`;
 
   let lastQuery = '';
   let debounceTimer = null;
@@ -84,7 +84,7 @@ export async function render(container) {
     lastQuery = q;
     clearBtn.style.display = raw ? 'block' : 'none';
     if (!q) {
-      results.innerHTML = `<div class="card"><p style="color:var(--color-text-secondary)">Empezá a tipear arriba — los resultados aparecen al toque.</p></div>`;
+      results.innerHTML = `<div class="card"><p style="color:var(--color-text-secondary)">Empieza a tipear arriba — los resultados aparecen al toque.</p></div>`;
       return;
     }
     const tokens = q.split(' ').filter(Boolean);
@@ -115,7 +115,7 @@ function renderResults(holder, matches, query) {
     holder.innerHTML = `
       <div class="card">
         <p><strong>No hay coincidencias</strong> para "${escapeHtml(query)}".</p>
-        <p style="color:var(--color-text-secondary);font-size:13px;margin-top:6px">Si estás seguro que la tenés likeada, tal vez tu cache está desactualizado. Andá al Dashboard y hacé "Actualizar datos".</p>
+        <p style="color:var(--color-text-secondary);font-size:13px;margin-top:6px">Si estás seguro que la tienes likeada, tal vez tu cache está desactualizado. Ve al Dashboard y haz "Actualizar datos".</p>
       </div>
     `;
     return;
@@ -129,7 +129,7 @@ function renderResults(holder, matches, query) {
       <div style="font-size:13px;color:var(--color-text-muted)">
         <strong style="color:var(--color-text)">${countLabel}</strong> resultado${shown.length === 1 && !truncated ? '' : 's'} para "${escapeHtml(query)}"
       </div>
-      ${truncated ? `<div style="font-size:12px;color:var(--color-warning)">Mostrando los primeros ${MAX_RESULTS} — refiná la búsqueda para ver más</div>` : ''}
+      ${truncated ? `<div style="font-size:12px;color:var(--color-warning)">Mostrando los primeros ${MAX_RESULTS} — afina la búsqueda para ver más</div>` : ''}
     </div>
     <div class="card" style="padding:4px 8px">
       ${shown.map(item => {

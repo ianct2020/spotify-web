@@ -1,13 +1,13 @@
-import { spotifyFetch, createPlaylist, addTracksToPlaylist, invalidatePlaylistsCache, getAllLikedTracks } from '../api.js?v=189';
-import { hasKey, setKey, hasUsername, getUsername, setUsername, getUserTopArtists, getSimilarArtists, getArtistTopTracks } from '../api/lastfm.js?v=189';
-import { showProgress, hideProgress, promptPlaylistName, escapeHtml, pageHeader } from '../ui/components.js?v=189';
-import { showToast } from '../ui/toast.js?v=189';
-import { getPreview } from '../api/preview-providers.js?v=189';
-import { togglePreview, playingKey, isPlayingAudio } from '../ui/preview-player.js?v=189';
-import { paintPlayingCard } from '../ui/track-card-row.js?v=189';
-import { openTrackCard } from './track-card.js?v=189';
-import { openAlbumCard } from './album-card.js?v=189';
-import { limpiaParaQuery, titleMatches, artistMatches } from '../util/track-match.js?v=189';
+import { spotifyFetch, createPlaylist, addTracksToPlaylist, invalidatePlaylistsCache, getAllLikedTracks } from '../api.js?v=190';
+import { hasKey, setKey, hasUsername, getUsername, setUsername, getUserTopArtists, getSimilarArtists, getArtistTopTracks } from '../api/lastfm.js?v=190';
+import { showProgress, hideProgress, promptPlaylistName, escapeHtml, pageHeader } from '../ui/components.js?v=190';
+import { showToast } from '../ui/toast.js?v=190';
+import { getPreview } from '../api/preview-providers.js?v=190';
+import { togglePreview, playingKey, isPlayingAudio } from '../ui/preview-player.js?v=190';
+import { paintPlayingCard } from '../ui/track-card-row.js?v=190';
+import { openTrackCard } from './track-card.js?v=190';
+import { openAlbumCard } from './album-card.js?v=190';
+import { limpiaParaQuery, titleMatches, artistMatches } from '../util/track-match.js?v=190';
 
 // Iconos de las dos fichas. Los mismos trazos que usa la tarjeta compartida.
 const ICONO_PLAY = `<svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14"><path d="M8 5v14l11-7z"/></svg>`;
@@ -48,7 +48,7 @@ export function render(container) {
 function renderKeySetup() {
   document.getElementById('recs-content').innerHTML = `
     <div class="card" style="max-width:480px">
-      <h3 style="margin-bottom:8px">Configurá tu Last.fm API key</h3>
+      <h3 style="margin-bottom:8px">Configura tu Last.fm API key</h3>
       <input type="text" id="lastfm-key-input" placeholder="API key"
              style="width:100%;padding:10px;background:var(--color-elevated);border:1px solid var(--color-border);border-radius:var(--radius-sm);color:var(--color-text);font-family:monospace;font-size:14px;margin-bottom:12px">
       <button class="btn btn-primary" id="lastfm-key-save" style="width:100%">Guardar</button>
@@ -67,7 +67,7 @@ function renderUserSetup() {
     <div class="card" style="max-width:480px">
       <h3 style="margin-bottom:8px">Tu usuario de Last.fm</h3>
       <p style="color:var(--color-text-secondary);font-size:14px;margin-bottom:16px">
-        El username que usás para scrobblear. Se guarda en tu navegador.
+        El username que usas para scrobblear. Se guarda en tu navegador.
       </p>
       <input type="text" id="lastfm-user-input" placeholder="username" autocomplete="off"
              style="width:100%;padding:10px;background:var(--color-elevated);border:1px solid var(--color-border);border-radius:var(--radius-sm);color:var(--color-text);font-size:14px;margin-bottom:12px">
@@ -169,12 +169,12 @@ function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 function renderRecommendations() {
   const panel = document.getElementById('recs-panel');
   if (recommendations.length === 0) {
-    panel.innerHTML = `<div class="card"><p>No hay recomendaciones nuevas — parece que ya tenés a todos los similares de tus top artists.</p></div>`;
+    panel.innerHTML = `<div class="card"><p>No hay recomendaciones nuevas — parece que ya tienes a todos los similares de tus top artists.</p></div>`;
     return;
   }
   panel.innerHTML = `
     <div style="margin-bottom:8px;color:var(--color-text-secondary);font-size:14px">
-      ${recommendations.length} artistas recomendados (filtrados los que ya tenés en likes). Click para ver top tracks.
+      ${recommendations.length} artistas recomendados (filtrados los que ya tienes en likes). Click para ver top tracks.
     </div>
     <div class="smart-grid smart-grid-compact">
       ${recommendations.map((a, i) => `
@@ -380,7 +380,7 @@ function renderResolvedTracks() {
       </div>
     </div>
     ${matched.length === 0 ? `
-      <div class="card" style="margin-bottom:16px"><p>Todos los top tracks de este artista ya están en tus likes. Volvé y probá con otro.</p></div>
+      <div class="card" style="margin-bottom:16px"><p>Todos los top tracks de este artista ya están en tus likes. Vuelve y prueba con otro.</p></div>
     ` : ''}
 
     <div style="position:sticky;top:0;z-index:50;background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-md);padding:12px 16px;margin-bottom:16px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;box-shadow:0 2px 8px rgba(0,0,0,0.2)">

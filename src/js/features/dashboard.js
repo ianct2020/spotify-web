@@ -223,7 +223,7 @@ function promptStatsfm() {
     const hint = document.getElementById('dash-cog-statsfm-hint');
     if (hint) hint.textContent = v;
     closeTop();
-    showToast(`Stats.fm configurado como «${v}». Volvé a entrar a las vistas que lo usan para que aparezca la línea.`, 'success');
+    showToast(`Stats.fm configurado como «${v}». Vuelve a entrar a las vistas que lo usan para que aparezca la línea.`, 'success');
   };
   input.onkeydown = e => { if (e.key === 'Enter') overlay.querySelector('#dash-statsfm-save').click(); };
 }
@@ -242,7 +242,7 @@ function promptLastfm() {
         <h3 style="margin-bottom:8px">API key de Last.fm</h3>
         <p style="color:var(--color-text-secondary);font-size:13px;margin-bottom:12px">
           ${lastfmIsDefaultKey() || propia
-            ? `La app trae una key horneada en el código, de solo lectura, así que <strong>no hace falta configurar nada</strong>. Cargá una acá solo si querés usar la tuya.`
+            ? `La app trae una key horneada en el código, de solo lectura, así que <strong>no hace falta configurar nada</strong>. Carga una aquí solo si quieres usar la tuya.`
             : `La key del código está vacía, así que hace falta cargar una para que anden «Por género», «Artistas similares», «Recomendaciones» y «Rabbit hole».`}
           Se saca de <code>last.fm/api/accounts</code>.
         </p>
@@ -329,7 +329,7 @@ function csvEscape(val) {
 async function handleExportCsv() {
   const { items } = await getBestAvailableLikes();
   if (items.length === 0) {
-    showToast('No hay likes cacheados para exportar. Cargalos primero.', 'error');
+    showToast('No hay likes cacheados para exportar. Cárgalos primero.', 'error');
     return;
   }
   const header =['added_at', 'artist', 'title', 'album', 'release_date', 'year', 'popularity', 'duration_ms', 'explicit', 'isrc', 'uri'];
@@ -376,7 +376,7 @@ async function handleExportAll() {
   const tagsCount = Object.keys(data.tags.entries).length;
 
   if (likesCount === 0 && tagsCount === 0) {
-    showToast('No hay datos para exportar. Cargá likes desde el Dashboard o corré "Por género" primero.', 'error');
+    showToast('No hay datos para exportar. Carga likes desde el Dashboard o ejecuta "Por género" primero.', 'error');
     return;
   }
 
@@ -412,8 +412,8 @@ async function handleImportAll(e) {
       const ok = await alertModal(
         'Este archivo no tiene likes',
         `<p>El JSON trae <strong>0 tracks</strong> en likes pero sí <strong>${inspection.tagsCount.toLocaleString()} artistas con tags</strong>.</p>
-         <p>Si buscabas cargar tu biblioteca de Liked Songs, este archivo <strong>no sirve</strong> — cargala desde el botón "Cargar desde Spotify" y después exportá con la versión actual (v=39+).</p>
-         <p>Si solo querías los tags para clasificar en Por género, seguí.</p>`,
+         <p>Si buscabas cargar tu biblioteca de Liked Songs, este archivo <strong>no sirve</strong> — cárgala desde el botón "Cargar desde Spotify" y después exporta con la versión actual (v=39+).</p>
+         <p>Si solo querías los tags para clasificar en Por género, sigue.</p>`,
         { variant: 'warning', confirmText: 'Importar solo los tags', cancelText: 'Cancelar' }
       );
       if (!ok) return;
@@ -477,7 +477,7 @@ async function loadData(forceRefresh) {
         <div id="dash-load-bar" style="height:100%;background:var(--color-accent);width:0%;transition:width 0.2s"></div>
       </div>
       <button class="btn btn-danger" id="dash-cancel-btn" style="min-width:180px">Detener carga</button>
-      <div style="font-size:12px;color:var(--color-text-muted);margin-top:12px">Podés detener sin problema — la próxima vez retoma desde donde quedó.</div>
+      <div style="font-size:12px;color:var(--color-text-muted);margin-top:12px">Puedes detener sin problema — la próxima vez retoma desde donde quedó.</div>
     </div>
   `;
 
@@ -734,7 +734,7 @@ function renderDashboard(container, stats) {
           <p class="chart-note">Minutos que escuchaste cada mes, contando solo las reproducciones de 30 segundos o más.</p>
         </div>
         <div class="card dash-chart-card dash-chart-wide">
-          <h3>Heatmap — cuándo escuchás <span style="font-weight:400;color:var(--color-text-muted);font-size:13px">· min / día × hora</span></h3>
+          <h3>Heatmap — cuándo escuchas <span style="font-weight:400;color:var(--color-text-muted);font-size:13px">· min / día × hora</span></h3>
           <div id="history-heatmap" style="display:flex;justify-content:center;align-items:center;padding:8px 0"></div>
           <p class="chart-note">Cada celda son los minutos acumulados en ese día de la semana y esa hora, en horario UTC. Cuanto más intenso el violeta, más escucha.</p>
         </div>
@@ -1457,7 +1457,7 @@ function renderStatsfmTicker(el, totalNow, exportPlays) {
         ${sessionBadge}
       </div>
     </div>
-    <span class="statsfm-ticker-hint" title="Se actualiza solo cada 15 segundos mientras mirás esta pantalla">actualiza cada 15s</span>
+    <span class="statsfm-ticker-hint" title="Se actualiza solo cada 15 segundos mientras miras esta pantalla">actualiza cada 15s</span>
   `;
 }
 

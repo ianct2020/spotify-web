@@ -158,7 +158,7 @@ export function pantallaDeError(container, err, { titulo = 'Se rompió algo al c
       <div class="crash-card">
         <h2>${esc(titulo)}</h2>
         <p class="crash-msg">${esc(mensajeDe(err))}</p>
-        <p class="crash-hint">Recargar suele alcanzar. Si vuelve a pasar, cerrá sesión y volvé a entrar: puede ser el token de Spotify.</p>
+        <p class="crash-hint">Recargar suele alcanzar. Si vuelve a pasar, cierra sesión y vuelve a entrar: puede ser el token de Spotify.</p>
         <div class="crash-actions">
           <button class="btn btn-primary" data-crash-reload>Recargar la página</button>
           <a class="btn btn-secondary" href="#home" data-crash-home>Ir al inicio</a>

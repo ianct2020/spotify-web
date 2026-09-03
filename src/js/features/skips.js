@@ -179,7 +179,7 @@ async function analyze() {
     const propio = await isOwner();
     if (!ruta.vigente()) return;
     content.innerHTML = propio
-      ? `<div class="card"><p>No pude cargar el historial de skips. Reintentá.</p></div>`
+      ? `<div class="card"><p>No pude cargar el historial de skips. Vuelve a intentarlo.</p></div>`
       : ownerLockedMessage('Skips crónicos');
     return;
   }
@@ -502,7 +502,7 @@ function renderResults() {
     </div>
 
     ${rows.length === 0 ? `
-      <div class="card"><p style="text-align:center;color:var(--color-text-muted);margin:0">${showingHidden ? 'No hay tracks ocultos que cumplan los umbrales actuales.' : 'Ningún like cumple los umbrales. Bajá los filtros para ver más candidatos.'}</p></div>
+      <div class="card"><p style="text-align:center;color:var(--color-text-muted);margin:0">${showingHidden ? 'No hay tracks ocultos que cumplan los umbrales actuales.' : 'Ningún like cumple los umbrales. Descarga los filtros para ver más candidatos.'}</p></div>
     ` : `
       <div class="skips-grid sc-grid" id="skips-list" role="listbox" aria-multiselectable="true" aria-label="Skips crónicos"></div>
     `}
@@ -700,7 +700,7 @@ function wireRows() {
       : '';
     const ok = await confirmModal(
       'Sacar de tus Liked Songs',
-      `Vas a sacar <strong>${sel.length}</strong> ${sel.length === 1 ? 'canción' : 'canciones'} de tus Liked Songs${extra}. Son las que casi siempre skipeás — podés recuperarlas después si te arrepentís.`,
+      `Vas a sacar <strong>${sel.length}</strong> ${sel.length === 1 ? 'canción' : 'canciones'} de tus Liked Songs${extra}. Son las que casi siempre saltas — puedes recuperarlas después si te arrepientes.`,
       'Sacar'
     );
     if (!ok) return;

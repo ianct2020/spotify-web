@@ -8,10 +8,10 @@
 // Otro user cualquiera sin historial local ve el ownerLockedMessage que
 // invita a subir su ZIP.
 
-import { idbGetCached, idbSetCached, idbDel } from '../idb.js?v=189';
-import { getCurrentUserId } from '../api.js?v=189';
-import { OWNER_KEYS, STATS_VERSION, PLAYS_VERSION, LISTENED_VERSION, SKIP_VERSION, DETAIL_VERSION, RECORDS_VERSION, ARTIST_TRACKS_VERSION } from '../history-keys.js?v=189';
-import { mostrarBannerDegradadoVista } from '../ui/degraded-banner.js?v=189';
+import { idbGetCached, idbSetCached, idbDel } from '../idb.js?v=190';
+import { getCurrentUserId } from '../api.js?v=190';
+import { OWNER_KEYS, STATS_VERSION, PLAYS_VERSION, LISTENED_VERSION, SKIP_VERSION, DETAIL_VERSION, RECORDS_VERSION, ARTIST_TRACKS_VERSION } from '../history-keys.js?v=190';
+import { mostrarBannerDegradadoVista } from '../ui/degraded-banner.js?v=190';
 
 const HISTORY_OWNER_ID = 'orhs6wu5ykk7ql80u92ujn74o';
 
@@ -57,13 +57,40 @@ async function resolvedUserId() {
   }
 }
 
-// El fallback NUNCA decide solo "sí": compara igual que el camino normal.
-// Si además el resultado vino del fallback, avisa — no degradar en silencio.
+/**
+ * ¿La identidad de esta carga vino del fallback en vez de `/me`?
+ *
+ * Vale para toda la carga de página, igual que `meFalloEnEstaCarga`. Se usa
+ * para decidir si se puede servir historial y para explicar por qué no.
+ */
+function identidadSinConfirmar() {
+  return meFalloEnEstaCarga;
+}
+
+// ⚠️ REGLA (v=190): CON LA IDENTIDAD SIN CONFIRMAR, `isOwner()` DICE QUE NO.
+//
+// Hasta v=189 el fallback podía decir «sí sos el owner»: si `/me` daba 429,
+// `resolvedUserId()` caía a `fonoteca_last_user_id`, que es el id del ÚLTIMO
+// que usó este navegador. O sea que la persona siguiente heredaba la identidad
+// de la anterior mientras durase el bloqueo —y hay precedente de `/me` en 429
+// más de diez horas (28/08)—, y veía Wrapped, Récords, #covers, #skips y
+// #zeroplays con el historial de escuchas ajeno presentado como suyo.
+//
+// El fallback se hizo en v=178/v=180 para que el owner no se quedara fuera de
+// su propia app con `/me` caído. Se conserva para todo lo que NO depende de ser
+// owner (arrancar, la biblioteca, las playlists, las preferencias); lo único
+// que pierde es el poder de CONCEDER acceso al historial. El intercambio es
+// deliberado: es preferible no ver el historial propio con Spotify caído que
+// arriesgarse a enseñárselo a otro.
 async function isOwner() {
   const { id, degradado } = await resolvedUserId();
-  const owner = id === HISTORY_OWNER_ID;
-  if (owner && degradado) mostrarBannerDegradadoVista();
-  return owner;
+  if (degradado) {
+    // Se avisa siempre, no solo cuando el id guardado coincide: la persona
+    // tiene que saber por qué la vista no le muestra lo de siempre.
+    mostrarBannerDegradadoVista();
+    return false;
+  }
+  return id === HISTORY_OWNER_ID;
 }
 
 // Las versiones y las claves viven en `history-keys.js`, que no importa nada.
@@ -127,6 +154,22 @@ const OWNER_PREV_KEYS = {
 
 async function loadOne(kind, cacheField, sanityCheck, fetchUrlForOwner) {
   const uid = await ensureFreshMem();
+
+  // ⚠️ Y ACÁ ESTÁ LA MITAD QUE IMPORTA DE LA REGLA DE `isOwner()`.
+  //
+  // Arreglar solo `isOwner()` no cerraba nada: las vistas piden los datos
+  // PRIMERO y preguntan por el owner solo si vienen vacíos (mirá `records.js`:
+  // `const r = await loadRecords(); if (!r || !r.top_days?.length) { …
+  // isOwner() … }`). Como el `owner` de más abajo se decidía con el MISMO uid
+  // del fallback, `loadOne()` servía los JSON del owner igual y la vista los
+  // pintaba sin llegar a preguntar. El candado tiene que estar donde se
+  // entregan los datos, no donde se dibuja el cartel.
+  //
+  // Sin identidad confirmada no se sirve historial de NADIE: ni el del owner ni
+  // el BYOH local, que también se busca por `localKey(uid, …)` y sería el del
+  // usuario anterior.
+  if (identidadSinConfirmar()) return null;
+
   if (memCache[cacheField]) return memCache[cacheField];
 
   // 1) local del user (cualquier user — owner o no)
@@ -253,7 +296,46 @@ function playsFor(uri, index) {
 
 // HTML para el estado "el user no tiene historial disponible". Antes solo mostraba
 // el mensaje "esto es de Ian"; ahora ofrece subir el propio ZIP como alternativa.
+/**
+ * Por qué esta vista no muestra el historial cuando NO se pudo confirmar quién
+ * sos. Es un caso distinto del de «sos otra persona»: acá puede que seas el
+ * owner, así que decirte «necesito tu historial» y ofrecerte importarlo sería
+ * mentira — el historial está, lo que falta es la confirmación de identidad.
+ */
+function identityLockedMessage(featureName = 'esta vista') {
+  return `<div class="olm-card">
+    <div class="olm-header">
+      <div class="olm-header-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="20" height="20">
+          <rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+        </svg>
+      </div>
+      <div style="flex:1;min-width:0">
+        <h3 style="margin:0;font-size:16px">No hemos podido confirmar tu identidad</h3>
+        <div style="color:var(--color-text-muted);font-size:12px;margin-top:2px">${escapeHtmlLite(featureName)} necesita saber de quién es el historial</div>
+      </div>
+    </div>
+    <div style="padding:14px 16px;font-size:13px;line-height:1.5;color:var(--color-text-secondary)">
+      <p style="margin:0 0 10px">
+        Spotify está limitando las peticiones (429) y no responde a quién
+        corresponde esta sesión. Este navegador recuerda al último usuario que
+        entró, pero <strong>no basta</strong>: si el historial no es tuyo, se lo
+        estaríamos enseñando a quien no es.
+      </p>
+      <p style="margin:0 0 12px">
+        Por eso queda oculto hasta que Spotify vuelva a responder. No se ha
+        perdido nada: sigue guardado en este navegador.
+      </p>
+      <button class="btn btn-secondary btn-sm" data-recargar-identidad>Volver a intentarlo</button>
+    </div>
+  </div>`;
+}
+
 function ownerLockedMessage(featureName = 'esta vista') {
+  // Dos motivos muy distintos para no enseñar el historial, y confundirlos
+  // manda al usuario a hacer algo que no le sirve: si sos el owner y lo que
+  // falla es `/me`, importar un historial que ya tenés no arregla nada.
+  if (identidadSinConfirmar()) return identityLockedMessage(featureName);
   return `<div class="olm-card">
     <div class="olm-header">
       <div class="olm-header-icon">
@@ -277,7 +359,7 @@ function ownerLockedMessage(featureName = 'esta vista') {
         </div>
         <div class="olm-option-body">
           <div class="olm-option-title">Ya tengo mi ZIP</div>
-          <div class="olm-option-sub">Subilo y en ~5s tenés todo funcionando</div>
+          <div class="olm-option-sub">Súbelo y en ~5s tienes todo funcionando</div>
         </div>
       </button>
       <button class="olm-option" data-open-spotify-privacy>
@@ -313,6 +395,11 @@ function bindOwnerLockedButtons(openImportFn) {
   document.addEventListener('click', (e) => {
     const importBtn = e.target.closest('[data-open-import]');
     if (importBtn) { e.preventDefault(); openImportFn(); return; }
+    // Botón del cartel de identidad sin confirmar: `meFalloEnEstaCarga` muere
+    // con la pestaña a propósito, así que recargar es exactamente lo que hay
+    // que hacer para volver a preguntarle a `/me`.
+    const idBtn = e.target.closest('[data-recargar-identidad]');
+    if (idBtn) { e.preventDefault(); location.reload(); return; }
     const privBtn = e.target.closest('[data-open-spotify-privacy]');
     if (privBtn) {
       e.preventDefault();
@@ -327,4 +414,5 @@ export {
   loadHistoryStats, loadTrackPlays, loadListenedAlbums, loadSkipStats, loadTrackDetail, loadRecords, loadArtistTracks,
   playsFor, trackIdOf, isOwner, HISTORY_OWNER_ID, ownerLockedMessage,
   hasLocalHistory, saveMyHistory, clearMyHistory, bindOwnerLockedButtons,
+  identidadSinConfirmar,
 };

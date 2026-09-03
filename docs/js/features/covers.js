@@ -9,23 +9,23 @@
 // placeholder→img. Botón "Pantalla completa" (Fullscreen API) que oculta
 // sidebar/header/toolbar y recalcula el lado.
 
-import { loadListenedAlbums, isOwner, ownerLockedMessage } from './history-data.js?v=189';
-import { isJunkTrack } from '../util/junk.js?v=189';
-import { vigilarRuta } from '../util/vigencia-ruta.js?v=189';
-import { createIncrementalList, scrollRootOf } from '../ui/incremental-list.js?v=189';
-import { createLazyImages } from '../ui/lazy-img.js?v=189';
-import { getAllPlaylistItems, getBestAvailableLikes } from '../api.js?v=189';
-import { escapeHtml, pageHeader, showProgress, hideProgress } from '../ui/components.js?v=189';
-import { showToast } from '../ui/toast.js?v=189';
-import { openAlbumCard } from './album-card.js?v=189';
-import { openArtistCard } from './artist-card.js?v=189';
-import { albumKey, coverId } from '../util/album-key.js?v=189';
-import { generarWallpaper, descargarBlob, WALLPAPER_PRESETS } from './covers-wallpaper.js?v=189';
-import { buildAlbumStatsIndex } from '../util/album-stats.js?v=189';
-import { getPreview } from '../api/preview-providers.js?v=189';
-import { hoverIn, hoverOut } from '../ui/preview-player.js?v=189';
-import { coverUrl } from '../util/cover-size.js?v=189';
-import { prefKey, migratePrefKey } from '../storage.js?v=189';
+import { loadListenedAlbums, isOwner, ownerLockedMessage } from './history-data.js?v=190';
+import { isJunkTrack } from '../util/junk.js?v=190';
+import { vigilarRuta } from '../util/vigencia-ruta.js?v=190';
+import { createIncrementalList, scrollRootOf } from '../ui/incremental-list.js?v=190';
+import { createLazyImages } from '../ui/lazy-img.js?v=190';
+import { getAllPlaylistItems, getBestAvailableLikes } from '../api.js?v=190';
+import { escapeHtml, pageHeader, showProgress, hideProgress } from '../ui/components.js?v=190';
+import { showToast } from '../ui/toast.js?v=190';
+import { openAlbumCard } from './album-card.js?v=190';
+import { openArtistCard } from './artist-card.js?v=190';
+import { albumKey, coverId } from '../util/album-key.js?v=190';
+import { generarWallpaper, descargarBlob, WALLPAPER_PRESETS } from './covers-wallpaper.js?v=190';
+import { buildAlbumStatsIndex } from '../util/album-stats.js?v=190';
+import { getPreview } from '../api/preview-providers.js?v=190';
+import { hoverIn, hoverOut } from '../ui/preview-player.js?v=190';
+import { coverUrl } from '../util/cover-size.js?v=190';
+import { prefKey, migratePrefKey } from '../storage.js?v=190';
 
 const LS_KEY_SIZE = 'covers_cell_size';
 const LS_KEY_SORT = 'covers_sort_mode';
@@ -468,7 +468,7 @@ export async function render(container) {
     <!-- v=151: el título y el artista son botones de verdad. Ver el bloque de
          "tooltip clickeable" más abajo para por qué el tooltip deja de seguir
          al cursor. El role="tooltip" se va: esto ya no es un tooltip pasivo.
-         (Sin acentos graves acá adentro: esto vive en un template literal.) -->
+         (Sin acentos graves aquí adentro: esto vive en un template literal.) -->
     <div class="covers-tooltip" id="covers-tooltip" aria-hidden="true">
       <button type="button" class="ct-name ct-link" title="Abrir la ficha del álbum"></button>
       <button type="button" class="ct-artist ct-link" title="Abrir la ficha del artista"></button>

@@ -36,13 +36,13 @@ export const FILTROS = [
     key: 'artista',
     corto: 'Solo del artista',
     ayuda: 'Descarta lanzamientos de OTRO artista que se llama igual. Hay dos ' +
-           '«Steve Lacy» distintos en Spotify: el que escuchás y un saxofonista ' +
+           '«Steve Lacy» distintos en Spotify: el que escuchas y un saxofonista ' +
            'de jazz con 17 discos.',
   },
   {
     key: 'biblioteca',
     corto: 'Fuera los guardados',
-    ayuda: 'Descarta los álbumes que ya tenés guardados en tu biblioteca, ' +
+    ayuda: 'Descarta los álbumes que ya tienes guardados en tu biblioteca, ' +
            'aunque todavía no los hayas puesto.',
   },
   {
@@ -55,7 +55,7 @@ export const FILTROS = [
     key: 'edicion',
     corto: 'Fuera otra edición de uno tuyo',
     ayuda: 'Descarta el lanzamiento cuyo título es el de un álbum que ya ' +
-           'escuchaste (o que ya tenés guardado) MÁS un agregado: Deluxe, ' +
+           'escuchaste (o que ya tienes guardado) MÁS un agregado: Deluxe, ' +
            'Expanded, Bonus, Anniversary, Remastered, Complete Edition… y al ' +
            'revés. Es el mismo disco con otra tapa.',
   },
@@ -83,7 +83,7 @@ export const FILTROS = [
     key: 'sinescuchar',
     corto: 'Fuera los que ya guardaste',
     ayuda: 'Descarta lo que ya pusiste en la playlist «fonoteca · sin ' +
-           'escuchar». Si lo guardaste ahí, ya lo tenés resuelto.',
+           'escuchar». Si lo guardaste ahí, ya lo tienes resuelto.',
   },
 ];
 

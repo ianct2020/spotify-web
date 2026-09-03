@@ -19,14 +19,14 @@
 // Normalizar más agresivamente `albumKey` fusionaría American Football LP3/LP4,
 // Crystal Castles I/II y Ed Sheeran ÷ vs =, que ya costó caro dos veces.
 
-import { albumKey } from './album-key.js?v=189';
-import { songKey, songKeysCandidatas, songKeyBase } from './song-identity.js?v=189';
-import { baseDeEdicion } from './edition-suffix.js?v=189';
-import { EP_MIN_TRACKS } from './release-size.js?v=189';
-import { getSavedAlbums, getBestAvailableLikes, getAllPlaylistItems } from '../api.js?v=189';
-import { getOwnPlaylists } from './playlist-add.js?v=189';
-import { loadListenedAlbums } from '../features/history-data.js?v=189';
-import { prefKey, migratePrefKey } from '../storage.js?v=189';
+import { albumKey } from './album-key.js?v=190';
+import { songKey, songKeysCandidatas, songKeyBase } from './song-identity.js?v=190';
+import { baseDeEdicion } from './edition-suffix.js?v=190';
+import { EP_MIN_TRACKS } from './release-size.js?v=190';
+import { getSavedAlbums, getBestAvailableLikes, getAllPlaylistItems } from '../api.js?v=190';
+import { getOwnPlaylists } from './playlist-add.js?v=190';
+import { loadListenedAlbums } from '../features/history-data.js?v=190';
+import { prefKey, migratePrefKey } from '../storage.js?v=190';
 
 const LS_KEY = 'discover_filtros_v1';
 
@@ -36,13 +36,13 @@ export const FILTROS = [
     key: 'artista',
     corto: 'Solo del artista',
     ayuda: 'Descarta lanzamientos de OTRO artista que se llama igual. Hay dos ' +
-           '«Steve Lacy» distintos en Spotify: el que escuchás y un saxofonista ' +
+           '«Steve Lacy» distintos en Spotify: el que escuchas y un saxofonista ' +
            'de jazz con 17 discos.',
   },
   {
     key: 'biblioteca',
     corto: 'Fuera los guardados',
-    ayuda: 'Descarta los álbumes que ya tenés guardados en tu biblioteca, ' +
+    ayuda: 'Descarta los álbumes que ya tienes guardados en tu biblioteca, ' +
            'aunque todavía no los hayas puesto.',
   },
   {
@@ -55,7 +55,7 @@ export const FILTROS = [
     key: 'edicion',
     corto: 'Fuera otra edición de uno tuyo',
     ayuda: 'Descarta el lanzamiento cuyo título es el de un álbum que ya ' +
-           'escuchaste (o que ya tenés guardado) MÁS un agregado: Deluxe, ' +
+           'escuchaste (o que ya tienes guardado) MÁS un agregado: Deluxe, ' +
            'Expanded, Bonus, Anniversary, Remastered, Complete Edition… y al ' +
            'revés. Es el mismo disco con otra tapa.',
   },
@@ -83,7 +83,7 @@ export const FILTROS = [
     key: 'sinescuchar',
     corto: 'Fuera los que ya guardaste',
     ayuda: 'Descarta lo que ya pusiste en la playlist «fonoteca · sin ' +
-           'escuchar». Si lo guardaste ahí, ya lo tenés resuelto.',
+           'escuchar». Si lo guardaste ahí, ya lo tienes resuelto.',
   },
 ];
 

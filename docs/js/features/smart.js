@@ -1,7 +1,7 @@
-import { getAllLikedTracks, createPlaylist, addTracksToPlaylist, getAllUserPlaylists, invalidatePlaylistsCache } from '../api.js?v=189';
-import { showProgress, hideProgress, progressController, isCancelled, promptPlaylistName, escapeHtml, pageHeader } from '../ui/components.js?v=189';
-import { showToast } from '../ui/toast.js?v=189';
-import { isZombieItem } from '../util/zombie.js?v=189';
+import { getAllLikedTracks, createPlaylist, addTracksToPlaylist, getAllUserPlaylists, invalidatePlaylistsCache } from '../api.js?v=190';
+import { showProgress, hideProgress, progressController, isCancelled, promptPlaylistName, escapeHtml, pageHeader } from '../ui/components.js?v=190';
+import { showToast } from '../ui/toast.js?v=190';
+import { isZombieItem } from '../util/zombie.js?v=190';
 
 // `likes` es SIEMPRE el pool ya limpio de zombis: todo lo que se agrupa por
 // año, por década o se sortea sale de acá, así que ninguna de las tres pestañas
@@ -74,7 +74,7 @@ async function loadLikes() {
   } catch (e) {
     hideProgress();
     const msg = isCancelled(e)
-      ? 'Carga detenida. Lo que se bajó quedó guardado — entrá de nuevo para retomar.'
+      ? 'Carga detenida. Lo que se bajó quedó guardado — entra de nuevo para retomar.'
       : escapeHtml(e.message);
     document.getElementById('smart-content').innerHTML = `<div class="card"><p style="color:var(--color-${isCancelled(e) ? 'warning' : 'error'})">${msg}</p></div>`;
   }
@@ -214,7 +214,7 @@ function updateSelectBar(kind, groups) {
   picked.sort((a, b) => a - b);
 
   if (selected.size === 0) {
-    bar.innerHTML = `<div class="smart-selectbar-empty">Tocá uno o más ${label}${suffix} para armar una playlist.</div>`;
+    bar.innerHTML = `<div class="smart-selectbar-empty">Toca uno o más ${label}${suffix} para armar una playlist.</div>`;
     return;
   }
   const listLabel = picked.map(p => `${p}${kind === 'decade' ? 's' : ''}`).join(' + ');
