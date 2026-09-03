@@ -299,10 +299,11 @@ mosaico (`rgba(20,20,28,.95)` con texto blanco, que trae su propio fondo).
   bugs abiertos y pendientes que existe. (En la tanda 8 se pidió borrarlos y
   después Ian retiró el pedido: seguí actualizándolos.)
 - ~~**#covers congela el renderer** con 2.449 tapas (viene de la tanda 7).~~
-  ✅ **Cerrado en v=181 (2026-09-01)**: pasó a `createIncrementalList` +
-  `createLazyImages`, el mismo patrón de `#skips`/`#sin-clasificar`. Medido en
-  la app real: 21,5 s → 3,7 ms hasta el primer frame interactivo con las 2.451
-  tapas reales. Detalle en `fonoteca-migracion/PENDIENTES.md`.
+  ✅ Cerrado en v=181 (2026-09-01) — **y REABIERTO el 2026-09-03**: el arreglo
+  de v=181 metió un bucle de carga/descarga que dejaba la grilla vacía en Mini y
+  Chico. ✅ **Cerrado de verdad en v=193/194**, ver la sección «El tope de
+  `lazy-img` no puede blanquear lo que se está viendo». Tabla completa
+  antes/después en `/home/ian/MEDICION-COVERS-2026-09-03.txt`.
 - **La playlist «fonoteca · sin escuchar» no existe en la cuenta de Ian**
   (verificado 2026-08-28 contra sus 39 propias). El criterio `sinescuchar` de
   v=165 la cruza igual y descarta 0 hasta que aparezca. Falta saber dónde
@@ -1069,6 +1070,73 @@ Comparar con `#listened` y `#wthree`, que en las MISMAS condiciones de 429
 pintan una tarjeta de error: la vista renderiza y dice qué pasa. El arreglo
 natural es un timeout en el cruce y soltar el lock pase lo que pase. Sin hacer.
 
+## El tope de `lazy-img` no puede blanquear lo que se está viendo (v=193/194)
+
+Regresión de v=181, en producción hasta v=192: `#covers` con celdas Mini o Chico
+dejaba la grilla vacía, las tapas titilaban y no terminaba de cargar nunca.
+
+`podar()` (`ui/lazy-img.js`) soltaba la `<img>` más vieja de la LRU **sin mirar
+dónde estaba**, y `unload()` la volvía a observar en el observer de carga. Si esa
+`<img>` seguía dentro de la zona de carga —lo normal apenas entran más de
+`maxLoaded` (250) tapas en una pantalla, que a 28 px son **cientos**— el observer
+la reportaba intersectando en el frame siguiente, se recargaba, el tope se pasaba
+otra vez y volvía a podar. **Bucle cerrado, un ciclo entero por frame, para
+siempre.** Medido en producción con el filtro 2020-2023 (429 tapas), sin tocar
+nada: **1.253 cargas y 1.253 descargas POR FRAME** en Mini, 5.639 sin filtro.
+
+**La regla, y es de estructura, no de cuidado: lo que está a la vista no se
+poda.** `enVista` sale del propio observer de carga, que desde v=193 **sigue
+observando después de cargar** (antes se desobservaba ahí y se re-observaba en
+`unload()` — esa vuelta ERA el bucle). Si con esa regla no se llega al tope, **el
+tope no se honra** y queda anotado en `sobreCupo`. Quedarse por encima del cupo
+cuesta memoria; blanquear lo que el usuario está mirando cuesta la vista entera,
+y entre los dos gana el primero.
+
+⚠️ **Y la métrica que lo tapó**: v=181 midió `firstBatchMs` —el primer lote
+sincrónico— y dio 3,7 ms. Ese número **seguía dando 3,8 ms con la vista rota**,
+porque termina de tomarse antes de que el bucle arranque. Para una vista que
+pinta de a lotes y carga en diferido, un número de arranque no describe nada:
+hay que contar **ciclos de carga/descarga con la geometría quieta**, que tiene
+que ser 0. Es la misma familia que la regla del `curl`: medir la capa
+equivocada da la misma cara que un resultado limpio.
+
+Tests: `tests/lazy-img-poda.test.mjs` (26 asserts, sin navegador, con un doble de
+`IntersectionObserver` que cuenta ciclos en vez de medir tiempo — **contra el
+módulo viejo desborda la pila**, que es el bucle en su forma sincrónica).
+
+### La celda pide la tapa de SU tamaño (`tapaParaCelda`, util/cover-size.js)
+Como consecuencia de lo de arriba, en Mini pueden quedar 656 tapas cargadas a la
+vez. A 300×300 eso son 339 MB de bitmap decodificado — el pozo de memoria que
+documenta `ui/lazy-img.js`. `tapaParaCelda(url, ladoCss)` pide la variante de 64
+cuando `lado × devicePixelRatio <= 64`, y la de 300 si no. Medido: 2,5 KB por
+tapa en vez de 25 KB, y el renderer queda en **322 MB** con las 2.451 celdas en
+el DOM y 943 tapas cargadas.
+
+⚠️ **El cambio de tamaño NO repinta**: `setItems` destruye los nodos y los nuevos
+nacen sin `src`, o sea mosaico gris mientras bajan las tapas del tamaño nuevo —
+la misma grilla vacía por otro camino (pisado y corregido dentro de esta misma
+tanda). Se usa `lazy.cambiarFuente(img, url)`, que asigna el `src` **directo**
+sobre la `<img>` ya pintada: el navegador sigue mostrando la tapa vieja hasta que
+decodifica la nueva.
+
+⚠️ **Y el `onerror` de `#covers` reintenta con la original antes de sacar la
+celda.** El prefijo de tamaño del CDN es una convención **no documentada**: sin
+el reintento, un cambio del lado de Spotify borraría álbumes del mosaico en
+silencio. Una tapa que no carga es un hueco, nunca un álbum menos.
+
+## ⛔ Cada despliegue, su propio `?v=` — dos contenidos no pueden compartir versión
+Pisado el 2026-09-03. El arreglo del cambio de variante salió como un **segundo
+commit encima de v=193 sin bumpear**, así que `covers.js?v=193` pasó a servir dos
+contenidos distintos y el navegador se quedó con el primero. Se detectó midiendo:
+al pasar de Medio a Grande `__coversPerf.t0` seguía moviéndose, o sea que
+repintaba — el camino viejo, con el arreglo ya desplegado.
+
+⚠️ **Y la comprobación que lo tapaba**: un `fetch()` del módulo con cache-buster
+devolvía los bytes NUEVOS. Eso prueba lo que sirve GitHub Pages, **no lo que la
+página importó al arrancar**. Es la regla del `curl` en otra forma. Para saber
+qué corre de verdad hay que preguntarle a un EFECTO del código nuevo (acá:
+«¿repintó o no?»), no al servidor.
+
 ## ⛔ NUNCA `git add -A` ni `git add .` — archivo por archivo
 **Este repo es PÚBLICO.** El 2026-07-28 se filtraron datos personales y hubo que
 hacer `filter-branch` + force push. Desde entonces la regla es `git add` **con
@@ -1085,6 +1153,8 @@ al trabajar en este repo. Ver el porqué en `fonoteca-migracion/CONTEXTO-TECNICO
 Deploy completo: bumpear los **cuatro** `?v=` de `src/index.html` → `bash build.sh`
 → `git add` archivo por archivo → commit → push. Y **el `curl` no verifica el
 despliegue**: ver la regla del service worker en `CONTEXTO-TECNICO.md`.
+**Un arreglo encima de un despliegue lleva su propio `?v=`**, aunque sean dos
+líneas: ver la sección de arriba.
 
 ## Copy de la interfaz: castellano de España `[v=190-192]`
 
