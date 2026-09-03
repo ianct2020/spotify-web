@@ -84,7 +84,7 @@ async function loadLikes() {
 // likes cuando hay zombis, en vez de que los números bailen sin explicación.
 function notaZombis() {
   if (!zombiesFuera) return '';
-  return ` · <span style="color:var(--color-warning)">${zombiesFuera.toLocaleString()} zombi${zombiesFuera === 1 ? '' : 's'} fuera</span> (Spotify los sacó del catálogo)`;
+  return ` · <span style="color:var(--color-warning)">${zombiesFuera.toLocaleString('es-ES')} zombi${zombiesFuera === 1 ? '' : 's'} fuera</span> (Spotify los sacó del catálogo)`;
 }
 
 function renderTab() {
@@ -136,14 +136,14 @@ function renderYearTab() {
 
   content.innerHTML = `
     <div style="margin-bottom:12px;color:var(--color-text-secondary);font-size:14px">
-      ${likes.length.toLocaleString()} likes analizados · ${groups.length} años distintos${notaZombis()}
+      ${likes.length.toLocaleString('es-ES')} likes analizados · ${groups.length} años distintos${notaZombis()}
     </div>
     <div class="smart-selectbar" id="smart-selectbar-year"></div>
     <div class="smart-grid">
       ${groups.map(([year, tracks]) => `
         <button class="smart-card${selectedYears.has(year) ? ' selected' : ''}" data-year="${year}">
           <div class="smart-card-title">${year}</div>
-          <div class="smart-card-meta">${tracks.length.toLocaleString()} likes</div>
+          <div class="smart-card-meta">${tracks.length.toLocaleString('es-ES')} likes</div>
         </button>
       `).join('')}
     </div>
@@ -172,14 +172,14 @@ function renderDecadeTab() {
 
   content.innerHTML = `
     <div style="margin-bottom:12px;color:var(--color-text-secondary);font-size:14px">
-      ${likes.length.toLocaleString()} likes analizados · ${groups.length} décadas${notaZombis()}
+      ${likes.length.toLocaleString('es-ES')} likes analizados · ${groups.length} décadas${notaZombis()}
     </div>
     <div class="smart-selectbar" id="smart-selectbar-decade"></div>
     <div class="smart-grid">
       ${groups.map(([decade, tracks]) => `
         <button class="smart-card${selectedDecades.has(decade) ? ' selected' : ''}" data-decade="${decade}">
           <div class="smart-card-title">${decade}s</div>
-          <div class="smart-card-meta">${tracks.length.toLocaleString()} likes</div>
+          <div class="smart-card-meta">${tracks.length.toLocaleString('es-ES')} likes</div>
         </button>
       `).join('')}
     </div>
@@ -220,7 +220,7 @@ function updateSelectBar(kind, groups) {
   const listLabel = picked.map(p => `${p}${kind === 'decade' ? 's' : ''}`).join(' + ');
   bar.innerHTML = `
     <div class="smart-selectbar-info">
-      <strong>${tracks.toLocaleString()}</strong> tracks · ${selected.size} ${label}${selected.size === 1 ? '' : (kind === 'year' ? 's' : '')} · <span style="color:var(--color-text-muted)">${escapeHtml(listLabel)}</span>
+      <strong>${tracks.toLocaleString('es-ES')}</strong> tracks · ${selected.size} ${label}${selected.size === 1 ? '' : (kind === 'year' ? 's' : '')} · <span style="color:var(--color-text-muted)">${escapeHtml(listLabel)}</span>
     </div>
     <div class="smart-selectbar-actions">
       <button class="btn btn-secondary btn-sm" id="smart-clear-sel">Limpiar</button>
@@ -248,7 +248,7 @@ function renderRandomTab() {
   const validTracks = likes.filter(i => i.track?.uri).length;
   content.innerHTML = `
     <div style="margin-bottom:16px;color:var(--color-text-secondary);font-size:14px">
-      ${validTracks.toLocaleString()} likes disponibles para mezcla random${notaZombis()}.
+      ${validTracks.toLocaleString('es-ES')} likes disponibles para mezcla random${notaZombis()}.
     </div>
     <div class="card" style="max-width:420px">
       <label style="display:block;margin-bottom:8px;font-weight:500">Cantidad de tracks</label>

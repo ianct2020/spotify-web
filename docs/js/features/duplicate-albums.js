@@ -1,7 +1,7 @@
-import { getAllUserPlaylists, getAllPlaylistItems, removePlaylistItemsAtPositions, getCurrentUserId } from '../api.js?v=191';
-import { showProgress, hideProgress, typeConfirmModal, escapeHtml, renderPlaylistGrid, bindPlaylistGrid, pageHeader } from '../ui/components.js?v=191';
-import { showToast } from '../ui/toast.js?v=191';
-import { coverUrl } from '../util/cover-size.js?v=191';
+import { getAllUserPlaylists, getAllPlaylistItems, removePlaylistItemsAtPositions, getCurrentUserId } from '../api.js?v=192';
+import { showProgress, hideProgress, typeConfirmModal, escapeHtml, renderPlaylistGrid, bindPlaylistGrid, pageHeader } from '../ui/components.js?v=192';
+import { showToast } from '../ui/toast.js?v=192';
+import { coverUrl } from '../util/cover-size.js?v=192';
 
 let ownPlaylists = [];
 const keepUris = new Set();
@@ -51,7 +51,7 @@ async function analyzePlaylist(playlistId) {
         : `<div style="width:80px;height:80px;border-radius:var(--radius-sm);background:var(--color-elevated);display:flex;align-items:center;justify-content:center;font-size:32px;color:var(--color-text-muted)">♪</div>`}
       <div style="flex:1">
         <h2 style="margin-bottom:4px">${escapeHtml(playlist.name)}</h2>
-        <div style="color:var(--color-text-secondary)">${(playlist.tracks?.total ?? '?').toLocaleString()} tracks</div>
+        <div style="color:var(--color-text-secondary)">${(playlist.tracks?.total ?? '?').toLocaleString('es-ES')} tracks</div>
       </div>
     </div>
     <div id="dupalbums-analysis"><div class="empty-state"><div class="spinner spinner-lg"></div><div style="margin-top:16px">Buscando álbumes repetidos...</div></div></div>

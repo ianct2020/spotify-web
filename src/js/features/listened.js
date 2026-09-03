@@ -256,7 +256,7 @@ async function loadAlbums({ force = false } = {}) {
     if (albums.length === 0) {
       content.innerHTML = `
         <div class="card" style="max-width:560px">
-          <p style="margin-bottom:12px">La playlist <strong>${escapeHtml(playlistInfo.name)}</strong> no tiene tracks con álbum reconocible (${totalTracks.toLocaleString()} items).</p>
+          <p style="margin-bottom:12px">La playlist <strong>${escapeHtml(playlistInfo.name)}</strong> no tiene tracks con álbum reconocible (${totalTracks.toLocaleString('es-ES')} items).</p>
           <button class="btn btn-secondary" id="listened-change-btn">Cambiar playlist</button>
         </div>
       `;
@@ -609,7 +609,7 @@ function buildUI(totalTracks, ts) {
   content.innerHTML = `
     <div class="card" style="margin-bottom:16px;display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
       <div style="font-size:14px">
-        <strong>${albums.length.toLocaleString()}</strong> álbumes · <strong>${totalTracks.toLocaleString()}</strong> tracks${totalLikes ? ` · <span style="color:var(--color-accent)">♥ ${totalLikes.toLocaleString()} en tus likes</span>` : ''} en <strong>${escapeHtml(playlistInfo.name)}</strong>
+        <strong>${albums.length.toLocaleString('es-ES')}</strong> álbumes · <strong>${totalTracks.toLocaleString('es-ES')}</strong> tracks${totalLikes ? ` · <span style="color:var(--color-accent)">♥ ${totalLikes.toLocaleString('es-ES')} en tus likes</span>` : ''} en <strong>${escapeHtml(playlistInfo.name)}</strong>
         ${ts ? `<div style="font-size:12px;color:var(--color-text-muted);margin-top:2px">Actualizado ${timeAgo(ts)}</div>` : ''}
       </div>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
@@ -635,7 +635,7 @@ function buildUI(totalTracks, ts) {
           <div style="display:grid;grid-template-columns:${years.length <= 12 ? `repeat(${years.length}, minmax(0, 1fr))` : 'repeat(auto-fit, minmax(110px, 1fr))'};gap:10px">
             ${years.map(y => `
               <button class="year-tile" data-year="${escapeHtml(y.year)}" style="background:var(--color-elevated);border:1px solid var(--color-border);border-radius:var(--radius-sm);padding:10px 12px;text-align:left;cursor:pointer;transition:border-color .15s,transform .05s;min-width:0">
-                <div style="font-size:19px;font-weight:700;color:var(--color-text);line-height:1.1">${y.count.toLocaleString()}</div>
+                <div style="font-size:19px;font-weight:700;color:var(--color-text);line-height:1.1">${y.count.toLocaleString('es-ES')}</div>
                 <div style="font-size:11px;color:var(--color-text-muted);margin-top:3px">${escapeHtml(y.year)}</div>
               </button>
             `).join('')}
@@ -652,7 +652,7 @@ function buildUI(totalTracks, ts) {
           <div style="display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin-bottom:10px;flex-wrap:wrap">
             <h3 style="margin:0;font-size:15px">Por género</h3>
             <span style="font-size:12px;color:var(--color-text-muted)">
-              Género principal del artista (Last.fm) · ${gd.cached.toLocaleString()} clasificados${gd.uncached ? ` · ${gd.uncached.toLocaleString()} sin clasificar` : ''}
+              Género principal del artista (Last.fm) · ${gd.cached.toLocaleString('es-ES')} clasificados${gd.uncached ? ` · ${gd.uncached.toLocaleString('es-ES')} sin clasificar` : ''}
             </span>
           </div>
           <div style="display:flex;gap:8px;flex-wrap:wrap">
@@ -874,7 +874,7 @@ function openYearAlbums(year) {
     <div class="modal modal-picker" style="max-width:560px">
       <h2 style="margin-bottom:4px">Álbumes escuchados en ${escapeHtml(year)}</h2>
       <p style="color:var(--color-text-secondary);font-size:13px;margin-bottom:10px">
-        ${bucket.count.toLocaleString()} álbum${bucket.count === 1 ? '' : 'es'} registrado${bucket.count === 1 ? '' : 's'} en <strong>${escapeHtml(playlistInfo.name)}</strong> durante ${escapeHtml(year)}.
+        ${bucket.count.toLocaleString('es-ES')} álbum${bucket.count === 1 ? '' : 'es'} registrado${bucket.count === 1 ? '' : 's'} en <strong>${escapeHtml(playlistInfo.name)}</strong> durante ${escapeHtml(year)}.
       </p>
       <div class="picker-scroll">
         <div style="border:1px solid var(--color-border);border-radius:var(--radius-sm)">
@@ -913,7 +913,7 @@ function openGenreAlbums(genre) {
     <div class="modal modal-picker" style="max-width:560px">
       <h2 style="margin-bottom:4px">Género: ${escapeHtml(genre)}</h2>
       <p style="color:var(--color-text-secondary);font-size:13px;margin-bottom:10px">
-        ${bucket.count.toLocaleString()} álbum${bucket.count === 1 ? '' : 'es'} cuyo artista principal tiene este género en Last.fm.
+        ${bucket.count.toLocaleString('es-ES')} álbum${bucket.count === 1 ? '' : 'es'} cuyo artista principal tiene este género en Last.fm.
       </p>
       <div class="picker-scroll">
         <div style="border:1px solid var(--color-border);border-radius:var(--radius-sm)">
@@ -1344,7 +1344,7 @@ function openQueueCleaner() {
              style="display:flex;align-items:center;gap:10px;padding:9px 12px;cursor:pointer;border-top:1px solid var(--color-border)">
           ${p.image ? `<img src="${p.image}" style="width:34px;height:34px;border-radius:var(--radius-sm);object-fit:cover">` : `<div style="width:34px;height:34px;background:var(--color-elevated);border-radius:var(--radius-sm)"></div>`}
           <div style="flex:1;min-width:0"><div style="font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(p.name)}</div>
-          <div style="font-size:12px;color:var(--color-text-muted)">${(p.tracks?.total ?? '?').toLocaleString()} tracks</div></div>
+          <div style="font-size:12px;color:var(--color-text-muted)">${(p.tracks?.total ?? '?').toLocaleString('es-ES')} tracks</div></div>
         </div>`).join('') || `<div style="padding:16px;color:var(--color-text-muted);font-size:13px">Sin resultados</div>`;
       plsEl.querySelectorAll('.queue-pl').forEach(el => {
         el.onmouseenter = () => { el.style.background = 'var(--color-surface)'; };
@@ -1490,7 +1490,7 @@ function openHistory() {
         keys: [...getDismissedHistory()],
         lookup: k => {
           const h = historyAlbums.find(x => albumKey(x.a, x.ar) === k);
-          return h ? { name: h.a, artist: h.ar, extra: `${h.dt} temas · ${h.min.toLocaleString()} min` } : null;
+          return h ? { name: h.a, artist: h.ar, extra: `${h.dt} temas · ${h.min.toLocaleString('es-ES')} min` } : null;
         },
         onRestore: k => { const s = getDismissedHistory(); s.delete(k); localStorage.setItem(prefKey(HISTORY_DISMISS_KEY), JSON.stringify([...s])); },
         onChange: () => { refreshHeaderCounts(); renderList(); },
@@ -1533,7 +1533,7 @@ function openHistory() {
             </div>
             <div style="display:flex;flex-direction:column;align-items:flex-end;gap:2px;flex-shrink:0">
               <span class="pick-pill">🎵 ${h.dt}</span>
-              <span style="color:var(--color-text-muted);font-size:11px;font-variant-numeric:tabular-nums">${h.min.toLocaleString()} min</span>
+              <span style="color:var(--color-text-muted);font-size:11px;font-variant-numeric:tabular-nums">${h.min.toLocaleString('es-ES')} min</span>
             </div>
             ${url ? `<a href="${url}" target="_blank" rel="noopener" title="Abrir en Spotify" style="color:var(--color-text-muted);font-size:15px;flex-shrink:0;text-decoration:none">↗</a>` : ''}
             <button class="hist-hide pick-x" data-key="${h.key}" title="No me interesa, ocultar">✕</button>

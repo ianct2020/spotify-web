@@ -1,9 +1,9 @@
-import { getAllUserPlaylists } from '../api.js?v=191';
-import { escapeHtml } from '../ui/components.js?v=191';
-import { showToast } from '../ui/toast.js?v=191';
-import { isJunkTrack } from '../util/junk.js?v=191';
-import { openModal, closeTop } from '../ui/modal-stack.js?v=191';
-import { prefKey, migratePrefKey } from '../storage.js?v=191';
+import { getAllUserPlaylists } from '../api.js?v=192';
+import { escapeHtml } from '../ui/components.js?v=192';
+import { showToast } from '../ui/toast.js?v=192';
+import { isJunkTrack } from '../util/junk.js?v=192';
+import { openModal, closeTop } from '../ui/modal-stack.js?v=192';
+import { prefKey, migratePrefKey } from '../storage.js?v=192';
 
 const PID_KEY = 'listened_albums_playlist_id';
 const PNAME_KEY = 'listened_albums_playlist_name';
@@ -149,7 +149,7 @@ async function openListenedAlbumsPicker({ onSelect, onClear } = {}) {
         ${p.image ? `<img src="${p.image}" style="width:36px;height:36px;border-radius:var(--radius-sm);object-fit:cover">` : `<div style="width:36px;height:36px;background:var(--color-surface);border-radius:var(--radius-sm);display:flex;align-items:center;justify-content:center">♪</div>`}
         <div style="flex:1;min-width:0">
           <div style="font-size:14px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(p.name)}</div>
-          <div style="font-size:12px;color:var(--color-text-muted)">${(p.tracks?.total ?? '?').toLocaleString()} tracks</div>
+          <div style="font-size:12px;color:var(--color-text-muted)">${(p.tracks?.total ?? '?').toLocaleString('es-ES')} tracks</div>
         </div>
         ${current === p.id ? '<span style="color:var(--color-accent);font-size:12px">actual</span>' : ''}
       </div>

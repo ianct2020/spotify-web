@@ -85,7 +85,7 @@ async function analyze() {
             <span>La playlist "${escapeHtml(target.name)}" ya es espejo exacto de tus Likes.</span>
           </div>
           <div style="margin-top:12px;color:var(--color-text-secondary)">
-            ${likes.length.toLocaleString()} tracks en ambas.
+            ${likes.length.toLocaleString('es-ES')} tracks en ambas.
           </div>
         </div>
       `;
@@ -108,19 +108,19 @@ async function analyze() {
     results.innerHTML = `
       <div class="results-summary">
         <div class="stat-card">
-          <div class="stat-value">${likes.length.toLocaleString()}</div>
+          <div class="stat-value">${likes.length.toLocaleString('es-ES')}</div>
           <div class="stat-label">Liked Songs</div>
         </div>
         <div class="stat-card">
-          <div class="stat-value">${playlistItems.length.toLocaleString()}</div>
+          <div class="stat-value">${playlistItems.length.toLocaleString('es-ES')}</div>
           <div class="stat-label">En playlist</div>
         </div>
         <div class="stat-card">
-          <div class="stat-value" style="color:var(--color-success)">+${toAdd.length.toLocaleString()}</div>
+          <div class="stat-value" style="color:var(--color-success)">+${toAdd.length.toLocaleString('es-ES')}</div>
           <div class="stat-label">Para añadir</div>
         </div>
         <div class="stat-card">
-          <div class="stat-value" style="color:var(--color-error)">-${toRemove.length.toLocaleString()}</div>
+          <div class="stat-value" style="color:var(--color-error)">-${toRemove.length.toLocaleString('es-ES')}</div>
           <div class="stat-label">Para quitar</div>
         </div>
       </div>
@@ -130,7 +130,7 @@ async function analyze() {
           <div style="display:flex;align-items:flex-start;gap:10px">
             <span class="badge badge-error">LÍMITE 10K</span>
             <div>
-              La playlist quedaría con <strong>${newSize.toLocaleString()}</strong> tracks, pero Spotify limita a <strong>${SPOTIFY_PLAYLIST_MAX.toLocaleString()}</strong> por playlist.
+              La playlist quedaría con <strong>${newSize.toLocaleString('es-ES')}</strong> tracks, pero Spotify limita a <strong>${SPOTIFY_PLAYLIST_MAX.toLocaleString('es-ES')}</strong> por playlist.
               Puedes <strong>vaciar la playlist primero</strong> y llenarla desde cero con tus likes.
             </div>
           </div>
@@ -276,7 +276,7 @@ async function executeWipeAndFill(playlist, playlistItems, likes) {
     }
     await updatePlaylistItemsCache(playlist.id, likes.filter(i => i.track).map(i => ({ item: i.track })), snapshot);
     hideProgress();
-    showToast(`Playlist rehecha con ${likeUris.length.toLocaleString()} tracks`, 'success');
+    showToast(`Playlist rehecha con ${likeUris.length.toLocaleString('es-ES')} tracks`, 'success');
     document.getElementById('sync-results').innerHTML = `
       <div class="card">
         <div style="display:flex;align-items:center;gap:10px">
@@ -322,13 +322,13 @@ function renderMissingPlaylistUI(nameOrId, playlists) {
 function renderFullPlaylistUI(target, playlists, targetTotal) {
   const results = document.getElementById('sync-results');
   const nextName = nextPlaylistName(target.name, playlists);
-  const totalStr = (targetTotal ?? 0).toLocaleString();
+  const totalStr = (targetTotal ?? 0).toLocaleString('es-ES');
   results.innerHTML = `
     <div class="card" style="margin-bottom:16px;border-color:var(--color-error);background:rgba(239,68,68,0.06)">
       <div style="display:flex;align-items:flex-start;gap:10px">
         <span class="badge badge-error">LLENA</span>
         <div style="flex:1">
-          <strong>"${escapeHtml(target.name)}"</strong> tiene <strong>${totalStr}</strong> tracks — Spotify no deja pasar de ${SPOTIFY_PLAYLIST_MAX.toLocaleString()}.<br>
+          <strong>"${escapeHtml(target.name)}"</strong> tiene <strong>${totalStr}</strong> tracks — Spotify no deja pasar de ${SPOTIFY_PLAYLIST_MAX.toLocaleString('es-ES')}.<br>
           No se puede sincronizar directo. Elige una opción:
         </div>
       </div>
@@ -375,7 +375,7 @@ async function fillPlaylistWithUris(playlistId, uris, playlistName) {
 }
 
 async function rebuildInPlace(target, targetTotal) {
-  const totalStr = (targetTotal ?? 0).toLocaleString();
+  const totalStr = (targetTotal ?? 0).toLocaleString('es-ES');
   const confirmed = await typeConfirmModal(
     'Rehacer playlist desde cero',
     `Se va a <strong>borrar</strong> "${escapeHtml(target.name)}" (${totalStr} tracks) y crear una vacía con el mismo nombre poblada con todos tus likes.<br><br>Spotify guarda backup ~90 días en <em>spotify.com/account/recover-playlists</em>, pero desde la app la vieja se pierde.`,
@@ -401,12 +401,12 @@ async function rebuildInPlace(target, targetTotal) {
     await fillPlaylistWithUris(fresh.id, uris, fresh.name);
 
     hideProgress();
-    showToast(`"${fresh.name}" rehecha con ${uris.length.toLocaleString()} tracks`, 'success');
+    showToast(`"${fresh.name}" rehecha con ${uris.length.toLocaleString('es-ES')} tracks`, 'success');
     document.getElementById('sync-results').innerHTML = `
       <div class="card">
         <div style="display:flex;align-items:center;gap:10px">
           <span class="badge badge-success">Rehecha</span>
-          <span>"${escapeHtml(fresh.name)}" quedó con ${uris.length.toLocaleString()} tracks.</span>
+          <span>"${escapeHtml(fresh.name)}" quedó con ${uris.length.toLocaleString('es-ES')} tracks.</span>
         </div>
       </div>
     `;
@@ -439,12 +439,12 @@ async function rebuildFreshPlaylist(name) {
     await fillPlaylistWithUris(fresh.id, uris, fresh.name);
 
     hideProgress();
-    showToast(`"${fresh.name}" creada con ${uris.length.toLocaleString()} tracks`, 'success');
+    showToast(`"${fresh.name}" creada con ${uris.length.toLocaleString('es-ES')} tracks`, 'success');
     document.getElementById('sync-results').innerHTML = `
       <div class="card">
         <div style="display:flex;align-items:center;gap:10px">
           <span class="badge badge-success">Creada</span>
-          <span>"${escapeHtml(fresh.name)}" quedó con ${uris.length.toLocaleString()} tracks. Cambia el input al nombre nuevo si quieres seguir sincronizando esta.</span>
+          <span>"${escapeHtml(fresh.name)}" quedó con ${uris.length.toLocaleString('es-ES')} tracks. Cambia el input al nombre nuevo si quieres seguir sincronizando esta.</span>
         </div>
       </div>
     `;

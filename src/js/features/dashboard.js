@@ -174,7 +174,7 @@ async function refreshLastSyncLabel() {
     el.textContent = '';
     return;
   }
-  el.textContent = `Última sync: ${formatRelativeTime(ts)} — ${items.length.toLocaleString()} likes cacheados`;
+  el.textContent = `Última sync: ${formatRelativeTime(ts)} — ${items.length.toLocaleString('es-ES')} likes cacheados`;
   el.style.color = 'var(--color-text-muted)';
 }
 
@@ -307,11 +307,11 @@ async function handleRefresh() {
       return;
     }
     if (result.reconciled) {
-      showToast(`Reconciliado: ${result.removed} like(s) que borraste en Spotify se sacaron de la caché (total: ${result.cachedCount.toLocaleString()})`, 'success');
+      showToast(`Reconciliado: ${result.removed} like(s) que borraste en Spotify se sacaron de la caché (total: ${result.cachedCount.toLocaleString('es-ES')})`, 'success');
     } else if (result.added === 0) {
-      showToast(`Sin cambios (${result.cachedCount.toLocaleString()} likes, coincide con Spotify)`, 'success');
+      showToast(`Sin cambios (${result.cachedCount.toLocaleString('es-ES')} likes, coincide con Spotify)`, 'success');
     } else {
-      showToast(`+${result.added} likes nuevos traídos (total: ${result.totalNow.toLocaleString()})`, 'success');
+      showToast(`+${result.added} likes nuevos traídos (total: ${result.totalNow.toLocaleString('es-ES')})`, 'success');
     }
     loadData(false);
   } catch (e) {
@@ -365,7 +365,7 @@ async function handleExportCsv() {
   a.click();
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
-  showToast(`CSV exportado: ${items.length.toLocaleString()} likes`, 'success');
+  showToast(`CSV exportado: ${items.length.toLocaleString('es-ES')} likes`, 'success');
 }
 
 async function handleExportAll() {
@@ -391,7 +391,7 @@ async function handleExportAll() {
   a.click();
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
-  showToast(`Exportado: ${likesCount.toLocaleString()} likes + ${tagsCount.toLocaleString()} artistas con tags`, 'success');
+  showToast(`Exportado: ${likesCount.toLocaleString('es-ES')} likes + ${tagsCount.toLocaleString('es-ES')} artistas con tags`, 'success');
 }
 
 async function handleImportAll(e) {
@@ -411,7 +411,7 @@ async function handleImportAll(e) {
     if (!inspection.hasLikes) {
       const ok = await alertModal(
         'Este archivo no tiene likes',
-        `<p>El JSON trae <strong>0 tracks</strong> en likes pero sí <strong>${inspection.tagsCount.toLocaleString()} artistas con tags</strong>.</p>
+        `<p>El JSON trae <strong>0 tracks</strong> en likes pero sí <strong>${inspection.tagsCount.toLocaleString('es-ES')} artistas con tags</strong>.</p>
          <p>Si buscabas cargar tu biblioteca de Liked Songs, este archivo <strong>no sirve</strong> — cárgala desde el botón "Cargar desde Spotify" y después exporta con la versión actual (v=39+).</p>
          <p>Si solo querías los tags para clasificar en Por género, sigue.</p>`,
         { variant: 'warning', confirmText: 'Importar solo los tags', cancelText: 'Cancelar' }
@@ -427,7 +427,7 @@ async function handleImportAll(e) {
     }, { currentUserId });
     hideProgress();
     const parts = [];
-    if (result.likesImported > 0) parts.push(`${result.likesImported.toLocaleString()} likes`);
+    if (result.likesImported > 0) parts.push(`${result.likesImported.toLocaleString('es-ES')} likes`);
     if (result.likesAdded > 0) parts.push(`+${result.likesAdded} nuevos traídos`);
     if (result.tagsImported > 0) parts.push(`${result.tagsImported} artistas nuevos`);
     if (result.tagsUpdated > 0) parts.push(`${result.tagsUpdated} actualizados`);
@@ -499,12 +499,12 @@ async function loadData(forceRefresh) {
   try {
     const likes = await getAllLikedTracks(({ loaded, total, cached }) => {
       if (cached) {
-        textEl.textContent = `Usando caché local (${loaded.toLocaleString()} likes)`;
+        textEl.textContent = `Usando caché local (${loaded.toLocaleString('es-ES')} likes)`;
         etaEl.textContent = 'Listo desde cache.';
         barEl.style.width = '100%';
       } else {
         const pct = total > 0 ? Math.min(100, (loaded / total) * 100) : 0;
-        textEl.textContent = `${loaded.toLocaleString()} / ${(total || '?').toLocaleString()} likes`;
+        textEl.textContent = `${loaded.toLocaleString('es-ES')} / ${(total || '?').toLocaleString('es-ES')} likes`;
         barEl.style.width = `${pct}%`;
         const elapsed = (Date.now() - startTime) / 1000;
         if (loaded > 0 && total > 0 && elapsed > 2) {
@@ -656,19 +656,19 @@ function renderDashboard(container, stats) {
   container.innerHTML = `
     <div class="dash-stats-row">
       <div class="stat-card">
-        <div class="stat-value">${stats.total.toLocaleString()}</div>
+        <div class="stat-value">${stats.total.toLocaleString('es-ES')}</div>
         <div class="stat-label">Liked Songs</div>
       </div>
       <div class="stat-card">
-        <div class="stat-value">${stats.uniqueArtists.toLocaleString()}</div>
+        <div class="stat-value">${stats.uniqueArtists.toLocaleString('es-ES')}</div>
         <div class="stat-label" title="Cuenta a TODOS los artistas acreditados en cada like, colaboraciones y «feat.» incluidos. «Por artista» agrupa por el artista principal de cada canción, así que da bastante menos.">Artistas acreditados</div>
       </div>
       <div class="stat-card">
-        <div class="stat-value">${stats.uniqueAlbums.toLocaleString()}</div>
+        <div class="stat-value">${stats.uniqueAlbums.toLocaleString('es-ES')}</div>
         <div class="stat-label">Álbumes</div>
       </div>
       <div class="stat-card">
-        <div class="stat-value">${hours.toLocaleString()}h</div>
+        <div class="stat-value">${hours.toLocaleString('es-ES')}h</div>
         <div class="stat-label">${days} días de música</div>
       </div>
       <div class="stat-card">

@@ -60,7 +60,7 @@ async function analyzePlaylist(playlistId) {
         : `<div style="width:80px;height:80px;border-radius:var(--radius-sm);background:var(--color-elevated);display:flex;align-items:center;justify-content:center;font-size:32px;color:var(--color-text-muted)">♪</div>`}
       <div style="flex:1">
         <h2 style="margin-bottom:4px">${escapeHtml(playlist.name)}</h2>
-        <div style="color:var(--color-text-secondary)">${(playlist.tracks?.total ?? '?').toLocaleString()} tracks</div>
+        <div style="color:var(--color-text-secondary)">${(playlist.tracks?.total ?? '?').toLocaleString('es-ES')} tracks</div>
       </div>
     </div>
     <div id="dedupe-analysis"><div class="empty-state"><div class="spinner spinner-lg"></div><div style="margin-top:16px">Analizando duplicados...</div></div></div>
