@@ -129,3 +129,26 @@ export function coverUrl(images, tamano = 'grande') {
 export function coverPair(images) {
   return { grande: coverUrl(images, 'grande'), chica: coverUrl(images, 'chica') };
 }
+
+/**
+ * La URL de tapa que corresponde a una celda de `ladoCss` píxeles CSS (v=193).
+ *
+ * `#covers` pinta celdas de 28 px y hasta v=192 bajaba la variante de 300×300
+ * para todas: 115 veces los píxeles que se ven. A 28 px entran cientos de tapas
+ * en una pantalla, y desde que `ui/lazy-img.js` no blanquea nada de lo que está
+ * a la vista, esas cientos se quedan decodificadas a la vez — el pozo de
+ * memoria que documenta ese módulo. Con la variante de 64 son ~2,5 KB por tapa
+ * en vez de ~25 KB, y 64×64 en vez de 300×300 decodificados.
+ *
+ * El umbral va por píxeles REALES (lado × devicePixelRatio), no por el lado
+ * CSS: en una pantalla 2× una celda de 48 necesita 96 px y la de 64 se vería
+ * blanda. Es best-effort como todo `coverAtSize`: si la URL no es de un CDN
+ * conocido vuelve igual, así que lo peor que puede pasar es seguir como antes.
+ *
+ * @param {string} url     la tapa tal como viene del dato
+ * @param {number} ladoCss lado de la celda en píxeles CSS
+ * @param {number} [dpr]   para testear sin navegador
+ */
+export function tapaParaCelda(url, ladoCss, dpr = globalThis.devicePixelRatio || 1) {
+  return coverAtSize(url, (ladoCss || 0) * dpr <= 64 ? 64 : 300);
+}

@@ -36,6 +36,12 @@ const DEFAULT_UNLOAD_ROOT_MARGIN = '2000px';
 // Backstop por si la geometría falla (un scroller mal detectado, un root que
 // deja de tener tamaño): tope duro de imágenes con `src` puesto, con descarte
 // LRU de las menos recientes.
+//
+// ⚠️ El tope SOLO puede soltar lo que está fuera de la zona de carga. Lo que se
+// ve NO se blanquea nunca, aunque haya más en pantalla que `maxLoaded` — ver
+// `podar()`. Que el tope se quede corto es un problema de memoria; blanquear lo
+// que el usuario está mirando es un problema de que la vista no funciona, y
+// entre los dos gana el primero.
 const DEFAULT_MAX_LOADED = 250;
 
 // GIF transparente de 1×1. Ocupa nada y, a diferencia de `src=""`, no dispara
@@ -65,19 +71,29 @@ export function createLazyImages({
   // <img> con `src` puesto ahora mismo, en orden de carga (Map = insertion
   // order): es la lista LRU que usa el tope duro.
   const cargadas = new Map();
+  // Las que el observer de carga reporta DENTRO de su zona ahora mismo. Es lo
+  // que hace que `podar()` no pueda blanquear una tapa que se está viendo.
+  const enVista = new Set();
+  // Las que el observer ya evaluó al menos una vez. Una <img> recién
+  // registrada todavía no tiene veredicto: `enVista` no la tiene porque el
+  // callback no corrió, no porque esté fuera de pantalla. Podarla ahí sería
+  // exactamente el parpadeo que estamos sacando.
+  const evaluados = new Set();
   let cargas = 0;
   let descargas = 0;
+  let sobreCupo = 0;   // veces que el tope no se pudo honrar (todo estaba a la vista)
 
   function traza() {
     if (!window.__lazyImgDebug) return;
-    window.__lazyImgStats = { cargadas: cargadas.size, cargas, descargas, memo: yaCargadas.size, maxLoaded };
+    window.__lazyImgStats = { cargadas: cargadas.size, cargas, descargas, memo: yaCargadas.size, maxLoaded, enVista: enVista.size, sobreCupo };
   }
 
-  function load(img, { observado = true } = {}) {
+  // La <img> se queda observada por `loadObs` DESPUÉS de cargar, a propósito:
+  // ese observer es la única fuente de `enVista`, y sin él `podar()` no sabe
+  // qué se está viendo. Antes se desobservaba acá y se volvía a observar en
+  // `unload()`; esa vuelta es la que cerraba el bucle de titileo (ver `podar`).
+  function load(img) {
     const src = img.dataset.src;
-    // Desobservar SIEMPRE, aunque no haya src: si no, un <img> sin data-src se
-    // queda en el observer para siempre y lo mantiene vivo junto con su tarjeta.
-    if (observado && loadObs) loadObs.unobserve(img);
     if (!src) return;
     delete img.dataset.src;
     yaCargadas.add(src);
@@ -87,7 +103,6 @@ export function createLazyImages({
     cargadas.delete(img);
     cargadas.set(img, src);
     keepObs?.observe(img);
-    podar();
     traza();
   }
 
@@ -99,25 +114,77 @@ export function createLazyImages({
     img.dataset.src = src;
     img.src = BLANK;
     descargas++;
-    if (!destroyed) loadObs?.observe(img);
+    // No hace falta re-observar: `loadObs` nunca la soltó. Cuando vuelva a
+    // entrar en la zona de carga el callback la reasigna sola.
     traza();
   }
 
   // Tope duro: si la geometría no descargó lo suficiente, se sueltan las más
-  // viejas. El orden de carga sigue al del scroll (y volver hacia arriba
+  // viejas de la BANDA DE RETENCIÓN — lo que ya salió de la zona de carga pero
+  // todavía no salió de la zona de retención (`unloadRootMargin`, mucho más
+  // ancha). El orden de carga sigue al del scroll (y volver hacia arriba
   // recarga, o sea que refresca su posición), así que la más vieja es casi
   // siempre la más lejana de la pantalla.
+  //
+  // ── Por qué `enVista` no es un adorno (regresión de v=181, arreglada acá) ──
+  //
+  // Hasta v=192 `podar()` soltaba la más vieja SIN mirar dónde estaba, y
+  // `unload()` la volvía a observar en el observer de carga. Si esa <img>
+  // seguía dentro de la zona de carga —que es lo normal cuando entran más de
+  // `maxLoaded` tapas en una pantalla— el observer la reportaba intersectando
+  // en el frame siguiente, se recargaba, el tope se pasaba otra vez y volvía a
+  // podar: bucle cerrado, un ciclo completo por frame y para siempre.
+  //
+  // Medido en producción (v=192, `#covers`, filtro 2020-2023, 429 tapas):
+  //
+  //   Mini  (28px) — 429 celdas, las 429 dentro de la zona de carga:
+  //                  1.253 cargas y 1.253 descargas POR FRAME, sin tocar nada.
+  //                  250 tapas pintadas de 429; cuáles cambiaba cada frame.
+  //   Mini, sin filtro (2.451 tapas): 5.639 ciclos por frame, 168 tapas
+  //                  pintadas de 656 en pantalla.
+  //   Chico (48px):    900 ciclos por frame.
+  //   Medio (64px):  0 quieto, pero después de un scroll rápido la grilla
+  //                  quedaba vacía y seguía a 64 ciclos por frame.
+  //
+  // Eso es el titileo, la grilla vacía y la lentitud: cada ciclo reasigna un
+  // `src` y vuelve a decodificar. El `firstBatchMs` seguía marcando 3,8 ms
+  // porque mide el primer lote sincrónico y nada de lo que pasa después.
+  //
+  // La regla que cierra el bucle: **lo que está a la vista no se poda**. Si con
+  // eso no se llega al tope, el tope no se honra y se anota en `sobreCupo`.
+  // Quedarse por encima del cupo cuesta memoria; blanquear lo que el usuario
+  // está mirando cuesta la vista entera.
   function podar() {
     if (cargadas.size <= maxLoaded) return;
-    for (const img of cargadas.keys()) {
+    // Copia: `unload()` muta `cargadas` mientras recorremos.
+    for (const img of [...cargadas.keys()]) {
       if (cargadas.size <= maxLoaded) break;
+      // Todavía sin veredicto del observer, o dentro de la zona de carga.
+      if (!evaluados.has(img) || enVista.has(img)) continue;
       unload(img);
     }
+    if (cargadas.size > maxLoaded) sobreCupo++;
+    traza();
+  }
+
+  // Una <img> que ya no está en el documento: la soltamos de los dos observers
+  // y de los índices. Pasa cuando `#covers` saca la celda entera porque la tapa
+  // 404eó — antes de v=193 `load()` desobservaba y el nodo suelto se iba solo,
+  // ahora hay que soltarlo a mano o queda retenido hasta el próximo `reset()`.
+  function olvidar(img) {
+    loadObs?.unobserve(img);
+    keepObs?.unobserve(img);
+    cargadas.delete(img);
+    enVista.delete(img);
+    evaluados.delete(img);
   }
 
   function onLoadZone(entries) {
     for (const e of entries) {
-      if (!e.isIntersecting) continue;
+      if (!e.target.isConnected) { olvidar(e.target); continue; }
+      evaluados.add(e.target);
+      if (!e.isIntersecting) { enVista.delete(e.target); continue; }
+      enVista.add(e.target);
       // Traza para el testeo con la extensión: el reloj de pared y los evals por
       // CDP no sirven (no llega ni un frame mientras se evalúa JS), así que el
       // módulo va anotando qué cargó y desde qué posición del scroller.
@@ -129,13 +196,18 @@ export function createLazyImages({
       }
       load(e.target);
     }
+    // Al final del lote, no dentro de `load()`: acá `enVista` ya está al día
+    // con lo que el observer acaba de reportar.
+    podar();
   }
 
   function onKeepZone(entries) {
     for (const e of entries) {
+      if (!e.target.isConnected) { olvidar(e.target); continue; }
       if (e.isIntersecting) continue;
       unload(e.target);
     }
+    podar();
   }
 
   function build() {
@@ -154,9 +226,14 @@ export function createLazyImages({
       if (destroyed || !loadObs) return;
       const nodes = scope == null ? [] : (scope.nodeType ? [scope] : [...scope]);
       const registrar = (img) => {
+        // Observar SIEMPRE, aun cuando la carguemos de una: `loadObs` es la
+        // fuente de `enVista`, y una <img> que nunca se observa no tendría
+        // veredicto y `podar()` no la podría soltar jamás.
+        loadObs.observe(img);
         // Ya la vio el usuario antes del repintado: está en caché, va directo.
-        if (yaCargadas.has(img.dataset.src)) load(img, { observado: false });
-        else loadObs.observe(img);
+        // Sin esto la grilla entera parpadea a placeholder gris en cada
+        // repintado, esperando una vuelta del observer.
+        if (yaCargadas.has(img.dataset.src)) load(img);
       };
       for (const node of nodes) {
         if (!node || node.nodeType !== 1) continue;
@@ -171,6 +248,8 @@ export function createLazyImages({
       loadObs?.disconnect();
       keepObs?.disconnect();
       cargadas.clear();
+      enVista.clear();
+      evaluados.clear();
       build();
       traza();
     },
@@ -182,11 +261,13 @@ export function createLazyImages({
       keepObs?.disconnect();
       loadObs = keepObs = null;
       cargadas.clear();
+      enVista.clear();
+      evaluados.clear();
     },
 
     /** Para el testeo y las mediciones: cuántas tapas hay cargadas ahora. */
     get stats() {
-      return { cargadas: cargadas.size, cargas, descargas, memo: yaCargadas.size, maxLoaded };
+      return { cargadas: cargadas.size, cargas, descargas, memo: yaCargadas.size, maxLoaded, enVista: enVista.size, sobreCupo };
     },
   };
 }
