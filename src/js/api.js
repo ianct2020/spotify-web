@@ -1,6 +1,7 @@
 import { getValidToken, refreshAccessToken } from './auth.js';
 import { cacheGet, cacheGetRaw, cacheGetTimestamp, cacheSet, cacheClear, prefKey, migratePrefKey } from './storage.js';
 import { idbDel, idbGetCached, idbGetCachedRaw, idbGetTimestamp, idbSetCached } from './idb.js';
+import { OWNER_KEY_LIST } from './history-keys.js';
 import { showToast } from './ui/toast.js';
 import { artistIsSame, limpiaParaQuery } from './util/track-match.js';
 
@@ -1022,7 +1023,12 @@ async function getCurrentUserId() {
       invalidatePlaylistsCache();
       // Caches del historial del owner: si el nuevo user no es el owner, sobran;
       // si es el owner de vuelta, los re-baja del JSON del repo.
-      for (const k of ['history_stats_v2','history_track_plays_v2','history_listened_albums_v2','history_skip_stats_v1','history_albums_v2','history_track_detail_v1','history_records_v2']) {
+      // ⚠️ Esta lista era una copia escrita a mano y se quedó vieja: borraba
+      // `history_track_plays_v2` y `history_skip_stats_v1` cuando las reales ya
+      // eran la v5 y la v2, así que al entrar otra persona en este navegador NO
+      // se limpiaba el historial del owner y lo veía como suyo. Ahora sale de
+      // `history-keys.js`, que es de donde salen también las que se escriben.
+      for (const k of OWNER_KEY_LIST) {
         idbDel(k).catch(() => {});
       }
     }

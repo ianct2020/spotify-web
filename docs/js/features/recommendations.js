@@ -1,13 +1,13 @@
-import { spotifyFetch, createPlaylist, addTracksToPlaylist, invalidatePlaylistsCache, getAllLikedTracks } from '../api.js?v=188';
-import { hasKey, setKey, hasUsername, getUsername, setUsername, getUserTopArtists, getSimilarArtists, getArtistTopTracks } from '../api/lastfm.js?v=188';
-import { showProgress, hideProgress, promptPlaylistName, escapeHtml, pageHeader } from '../ui/components.js?v=188';
-import { showToast } from '../ui/toast.js?v=188';
-import { getPreview } from '../api/preview-providers.js?v=188';
-import { togglePreview, playingKey, isPlayingAudio } from '../ui/preview-player.js?v=188';
-import { paintPlayingCard } from '../ui/track-card-row.js?v=188';
-import { openTrackCard } from './track-card.js?v=188';
-import { openAlbumCard } from './album-card.js?v=188';
-import { limpiaParaQuery, titleMatches, artistMatches } from '../util/track-match.js?v=188';
+import { spotifyFetch, createPlaylist, addTracksToPlaylist, invalidatePlaylistsCache, getAllLikedTracks } from '../api.js?v=189';
+import { hasKey, setKey, hasUsername, getUsername, setUsername, getUserTopArtists, getSimilarArtists, getArtistTopTracks } from '../api/lastfm.js?v=189';
+import { showProgress, hideProgress, promptPlaylistName, escapeHtml, pageHeader } from '../ui/components.js?v=189';
+import { showToast } from '../ui/toast.js?v=189';
+import { getPreview } from '../api/preview-providers.js?v=189';
+import { togglePreview, playingKey, isPlayingAudio } from '../ui/preview-player.js?v=189';
+import { paintPlayingCard } from '../ui/track-card-row.js?v=189';
+import { openTrackCard } from './track-card.js?v=189';
+import { openAlbumCard } from './album-card.js?v=189';
+import { limpiaParaQuery, titleMatches, artistMatches } from '../util/track-match.js?v=189';
 
 // Iconos de las dos fichas. Los mismos trazos que usa la tarjeta compartida.
 const ICONO_PLAY = `<svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14"><path d="M8 5v14l11-7z"/></svg>`;

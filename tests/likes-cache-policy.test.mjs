@@ -150,5 +150,29 @@ const startScreen = dash.slice(dash.indexOf('async function renderStartScreen'),
 ok(/getBestAvailableLikes\(\{ allowFetch: false \}\)/.test(startScreen),
   'renderStartScreen lee la caché sin disparar la descarga de ~190 peticiones');
 
+// ── El guarda multiusuario borra las claves QUE EXISTEN ─────────────────────
+//
+// Tenía una copia a mano de los nombres y se quedó vieja: borraba
+// history_track_plays_v2 y history_skip_stats_v1 cuando las reales ya eran la
+// v5 y la v2. Resultado: al entrar otra persona en el mismo navegador, el
+// historial del owner seguía ahí y lo veía como suyo.
+const { OWNER_KEY_LIST, OWNER_KEYS } = await import('../src/js/history-keys.js');
+const histData = readFileSync(new URL('../src/js/features/history-data.js', import.meta.url), 'utf8');
+
+ok(/for \(const k of OWNER_KEY_LIST\)/.test(api),
+  'el guarda multiusuario recorre la lista compartida, no una copia a mano');
+ok(!/'history_track_plays_v2'/.test(api) && !/'history_skip_stats_v1'/.test(api),
+  'api.js ya no menciona las versiones viejas de las claves de historial');
+ok(!/const OWNER_KEYS = \{/.test(histData),
+  'history-data.js ya no define su propia copia de OWNER_KEYS');
+ok(/from '\.\.\/history-keys\.js'/.test(histData),
+  'history-data.js las toma del módulo compartido');
+ok(OWNER_KEY_LIST.length === Object.keys(OWNER_KEYS).length && OWNER_KEY_LIST.length === 7,
+  'la lista cubre las siete claves del owner');
+ok(OWNER_KEY_LIST.includes('history_track_plays_v5') && OWNER_KEY_LIST.includes('history_skip_stats_v2'),
+  'y son las versiones que se escriben de verdad (plays v5, skips v2)');
+ok(OWNER_KEY_LIST.includes('history_artist_tracks_v2'),
+  'incluye history_artist_tracks_v2, que la copia vieja se olvidaba');
+
 console.log(`\n  ${pasaron} pasaron, ${fallaron} fallaron`);
 process.exit(fallaron ? 1 : 0);
