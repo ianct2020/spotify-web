@@ -1086,6 +1086,32 @@ Deploy completo: bumpear los **cuatro** `?v=` de `src/index.html` → `bash buil
 → `git add` archivo por archivo → commit → push. Y **el `curl` no verifica el
 despliegue**: ver la regla del service worker en `CONTEXTO-TECNICO.md`.
 
+## Copy de la interfaz: castellano de España `[v=190-192]`
+
+Los textos que ve el usuario van en **castellano peninsular**, formas de «tú».
+Los **comentarios del código NO** — esos siguen en rioplatense, que es la voz de
+quien escribe. El pase de v=190 cambió 191 sitios de copy y dejó los ~142 de
+comentarios intactos a propósito.
+
+Reglas al escribir copy nuevo:
+
+- «solo» **sin tilde**, siempre.
+- Nada de voseo: «tienes», no «tenés»; «puedes», no «podés»; «aquí», no «acá».
+- Ojo con los imperativos con pronombre pegado: «cárgala», no «cargala».
+- Léxico: «escribir» y no «tipear», «al instante» y no «al toque», «navegador» y
+  no «browser», «caché» (femenino) y no «cache» cuando es prosa — pero **no
+  renombrar identificadores**, que ahí `cache` es código.
+- Formateo de números: **`toLocaleString('es-ES')` explícito**. Sin el locale se
+  usa el del NAVEGADOR (es-AR en las máquinas de Ian) y salen «9.357» y «9357»
+  en la misma pantalla. En español los números de cuatro cifras van sin
+  separador de millares.
+
+⚠️ **Trampa de un reemplazo masivo, ya pisada una vez**: «pedí» puede ser
+primera persona («yo pedí 3 ids»), que en España se dice igual. Convertirlo a
+«pide» rompe la frase — lo cazó `tests/borrado-verificado.test.mjs`. Mismo caso
+con «creé», «borré», «encontré», «marqué». Revisar el diff, no confiar en el
+`sed`.
+
 ## Client ID
 0c8c92ad128e4b89be7097c6b8082797
 
