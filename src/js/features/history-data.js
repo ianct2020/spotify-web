@@ -10,6 +10,7 @@
 
 import { idbGetCached, idbSetCached, idbDel } from '../idb.js';
 import { getCurrentUserId } from '../api.js';
+import { OWNER_KEYS, STATS_VERSION, PLAYS_VERSION, LISTENED_VERSION, SKIP_VERSION, DETAIL_VERSION, RECORDS_VERSION, ARTIST_TRACKS_VERSION } from '../history-keys.js';
 import { mostrarBannerDegradadoVista } from '../ui/degraded-banner.js';
 
 const HISTORY_OWNER_ID = 'orhs6wu5ykk7ql80u92ujn74o';
@@ -65,24 +66,9 @@ async function isOwner() {
   return owner;
 }
 
-const STATS_VERSION = 2;
-const PLAYS_VERSION = 5;   // v5: cada álbum de `albums` lleva además el día de la primera play válida
-const LISTENED_VERSION = 2;
-const SKIP_VERSION = 2;    // v2: [ok, skip, fwd_ms, close_ms, gid] — el veredicto lo arma features/skips.js
-const DETAIL_VERSION = 1;
-const RECORDS_VERSION = 2;
-const ARTIST_TRACKS_VERSION = 2;  // v2: `totals` lleva el día de la primera play válida del artista
-
-// Claves del cache del owner (repo → IDB)
-const OWNER_KEYS = {
-  stats: `history_stats_v${STATS_VERSION}`,
-  plays: `history_track_plays_v${PLAYS_VERSION}`,
-  listened: `history_listened_albums_v${LISTENED_VERSION}`,
-  skip: `history_skip_stats_v${SKIP_VERSION}`,
-  detail: `history_track_detail_v${DETAIL_VERSION}`,
-  records: `history_records_v${RECORDS_VERSION}`,
-  artistTracks: `history_artist_tracks_v${ARTIST_TRACKS_VERSION}`,
-};
+// Las versiones y las claves viven en `history-keys.js`, que no importa nada.
+// Ahí está el porqué: `api.js` también las necesita para el guarda multiusuario
+// y tenía una copia a mano que se quedó vieja (v=188).
 
 // Claves para historial local por user (BYOH). No usan TTL porque los subió el
 // user a mano — se borran solo cuando pide "borrar mi historial".
