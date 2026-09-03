@@ -1,6 +1,6 @@
-import { getAllLikedTracks, getAllPlaylistItems, updatePlaylistItemsCache, getAllUserPlaylists, addTracksToPlaylist, removeTracksFromPlaylist, createPlaylist, unfollowPlaylist, spotifyFetch } from '../api.js?v=189';
-import { showProgress, hideProgress, progressController, isCancelled, typeConfirmModal, renderTrackRow, escapeHtml, pageHeader } from '../ui/components.js?v=189';
-import { showToast } from '../ui/toast.js?v=189';
+import { getAllLikedTracks, getAllPlaylistItems, updatePlaylistItemsCache, getAllUserPlaylists, addTracksToPlaylist, removeTracksFromPlaylist, createPlaylist, unfollowPlaylist, spotifyFetch } from '../api.js?v=190';
+import { showProgress, hideProgress, progressController, isCancelled, typeConfirmModal, renderTrackRow, escapeHtml, pageHeader } from '../ui/components.js?v=190';
+import { showToast } from '../ui/toast.js?v=190';
 
 const TARGET_PLAYLIST_NAME = 'anothertwo';
 const SPOTIFY_PLAYLIST_MAX = 10000;
@@ -27,7 +27,7 @@ export function render(container) {
 
 async function analyze() {
   const nameOrId = document.getElementById('sync-playlist-name').value.trim();
-  if (!nameOrId) return showToast('Ingresá el nombre o ID de la playlist', 'warning');
+  if (!nameOrId) return showToast('Introduce el nombre o ID de la playlist', 'warning');
 
   const results = document.getElementById('sync-results');
   const btn = document.getElementById('sync-analyze-btn');
@@ -131,7 +131,7 @@ async function analyze() {
             <span class="badge badge-error">LÍMITE 10K</span>
             <div>
               La playlist quedaría con <strong>${newSize.toLocaleString()}</strong> tracks, pero Spotify limita a <strong>${SPOTIFY_PLAYLIST_MAX.toLocaleString()}</strong> por playlist.
-              Podés <strong>vaciar la playlist primero</strong> y llenarla desde cero con tus likes.
+              Puedes <strong>vaciar la playlist primero</strong> y llenarla desde cero con tus likes.
             </div>
           </div>
         </div>
@@ -241,7 +241,7 @@ async function executeSync(playlist, toAdd, toRemove, { mode = 'full', playlistI
   } catch (e) {
     hideProgress();
     const msg = /playlist size limit/i.test(e.message)
-      ? `Playlist llena (${SPOTIFY_PLAYLIST_MAX} máx). Usá "Vaciar y llenar" o quitá tracks primero.`
+      ? `Playlist llena (${SPOTIFY_PLAYLIST_MAX} máx). Usa "Vaciar y llenar" o quita tracks primero.`
       : 'Error durante sync: ' + e.message;
     showToast(msg, 'error');
     console.error(e);
@@ -253,7 +253,7 @@ async function executeWipeAndFill(playlist, playlistItems, likes) {
   const likeUris = likes.map(item => item.track?.uri).filter(Boolean);
 
   if (likeUris.length > SPOTIFY_PLAYLIST_MAX) {
-    showToast(`Tenés ${likeUris.length} likes, no caben en una playlist (máx ${SPOTIFY_PLAYLIST_MAX})`, 'error');
+    showToast(`Tienes ${likeUris.length} likes, no caben en una playlist (máx ${SPOTIFY_PLAYLIST_MAX})`, 'error');
     return;
   }
 
@@ -311,7 +311,7 @@ function renderMissingPlaylistUI(nameOrId, playlists) {
   results.innerHTML = `
     <div class="card" style="margin-bottom:16px;border-color:var(--color-warning)">
       <p style="color:var(--color-warning);margin-bottom:6px"><strong>No se encontró</strong> la playlist "${escapeHtml(nameOrId)}".</p>
-      <p style="color:var(--color-text-secondary);margin-bottom:16px">Podés crearla vacía y llenarla desde cero con todos tus likes reales.</p>
+      <p style="color:var(--color-text-secondary);margin-bottom:16px">Puedes crearla vacía y llenarla desde cero con todos tus likes reales.</p>
       <button class="btn btn-primary" id="sync-create-fresh-btn">Crear "${escapeHtml(nameOrId)}" y poblar con Likes</button>
     </div>
   `;
@@ -329,7 +329,7 @@ function renderFullPlaylistUI(target, playlists, targetTotal) {
         <span class="badge badge-error">LLENA</span>
         <div style="flex:1">
           <strong>"${escapeHtml(target.name)}"</strong> tiene <strong>${totalStr}</strong> tracks — Spotify no deja pasar de ${SPOTIFY_PLAYLIST_MAX.toLocaleString()}.<br>
-          No se puede sincronizar directo. Elegí una opción:
+          No se puede sincronizar directo. Elige una opción:
         </div>
       </div>
     </div>
@@ -387,7 +387,7 @@ async function rebuildInPlace(target, targetTotal) {
     const uris = await loadAllRealLikes();
     if (uris.length > SPOTIFY_PLAYLIST_MAX) {
       hideProgress();
-      showToast(`Tenés ${uris.length} likes, no caben (máx ${SPOTIFY_PLAYLIST_MAX}). No se ejecutó nada.`, 'error');
+      showToast(`Tienes ${uris.length} likes, no caben (máx ${SPOTIFY_PLAYLIST_MAX}). No se ejecutó nada.`, 'error');
       return;
     }
 
@@ -429,7 +429,7 @@ async function rebuildFreshPlaylist(name) {
     const uris = await loadAllRealLikes();
     if (uris.length > SPOTIFY_PLAYLIST_MAX) {
       hideProgress();
-      showToast(`Tenés ${uris.length} likes, no caben (máx ${SPOTIFY_PLAYLIST_MAX}). No se ejecutó nada.`, 'error');
+      showToast(`Tienes ${uris.length} likes, no caben (máx ${SPOTIFY_PLAYLIST_MAX}). No se ejecutó nada.`, 'error');
       return;
     }
 
@@ -444,7 +444,7 @@ async function rebuildFreshPlaylist(name) {
       <div class="card">
         <div style="display:flex;align-items:center;gap:10px">
           <span class="badge badge-success">Creada</span>
-          <span>"${escapeHtml(fresh.name)}" quedó con ${uris.length.toLocaleString()} tracks. Cambiá el input al nombre nuevo si querés seguir sincronizando esta.</span>
+          <span>"${escapeHtml(fresh.name)}" quedó con ${uris.length.toLocaleString()} tracks. Cambia el input al nombre nuevo si quieres seguir sincronizando esta.</span>
         </div>
       </div>
     `;

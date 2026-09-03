@@ -389,7 +389,7 @@ function renderClusterList() {
   holder.innerHTML = `
     ${shown.map(({ cluster, idx }) => renderCluster(cluster, idx)).join('')}
     ${rest > 0 ? `<div class="versions-more-wrap"><button class="btn btn-secondary" id="versions-more-btn">Ver ${Math.min(SHOWN_STEP, rest)} grupos más (${rest} restantes)</button></div>` : ''}
-    ${visibles.length === 0 ? `<div class="versions-more-wrap" style="color:var(--color-text-muted)">Resolviste los ${allClusters.length} grupos. Desmarcá el filtro para volver a verlos.</div>` : ''}
+    ${visibles.length === 0 ? `<div class="versions-more-wrap" style="color:var(--color-text-muted)">Resolviste los ${allClusters.length} grupos. Desmarca el filtro para volver a verlos.</div>` : ''}
   `;
   updateResolvedFilter();
   holder.querySelectorAll('.keep-check').forEach(box => {
@@ -456,9 +456,9 @@ function renderFantasmas() {
       </div>
       <p style="color:var(--color-text-secondary);font-size:13px;margin-bottom:12px">
         Están en tus me gusta y Spotify las reconoce, pero devuelve el título, el artista
-        y el álbum vacíos: no hay nombre que mostrar, ni acá ni en la propia Spotify.
-        No tienen relación entre sí, así que no se pueden borrar como sobrantes desde acá.
-        Mandalas a una playlist para poder verlas desde la app de Spotify, o quitalas de tus
+        y el álbum vacíos: no hay nombre que mostrar, ni aquí ni en la propia Spotify.
+        No tienen relación entre sí, así que no se pueden borrar como sobrantes desde aquí.
+        Mándalas a una playlist para poder verlas desde la app de Spotify, o quítalas de tus
         me gusta una por una desde ahí.
       </p>
       <div class="results-list" style="margin-bottom:12px">
@@ -733,7 +733,7 @@ function openHiddenManager() {
     html: `
     <div class="modal modal-picker" style="max-width:520px">
       <h2 style="margin-bottom:4px">Clusters ocultos</h2>
-      <p style="color:var(--color-text-secondary);font-size:13px;margin-bottom:10px">Cluster(s) que marcaste como "no es duplicado". Podés restaurarlos y van a aparecer en el próximo Analizar.</p>
+      <p style="color:var(--color-text-secondary);font-size:13px;margin-bottom:10px">Cluster(s) que marcaste como "no es duplicado". Puedes restaurarlos y van a aparecer en el próximo Analizar.</p>
       <div id="hm-list" class="picker-scroll" style="border:1px solid var(--color-border);border-radius:var(--radius-sm)"></div>
       <div class="modal-actions" style="margin-top:12px">
         <button class="btn btn-secondary" id="hm-restore-all" ${keys.length === 0 ? 'disabled' : ''}>Restaurar todos</button>

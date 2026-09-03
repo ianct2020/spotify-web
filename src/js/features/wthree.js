@@ -201,15 +201,15 @@ async function showSetup(content, ruta = vigilarRuta()) {
 
   content.innerHTML = `
     <div class="card">
-      <h3 style="margin:0 0 6px;font-size:16px">Elegí tu playlist "w three"</h3>
-      <p style="color:var(--color-text-muted);font-size:13px;margin:0 0 14px">La que usás para juntar las mejores 3 canciones de cada álbum. Se guarda local — podés cambiarla después.</p>
+      <h3 style="margin:0 0 6px;font-size:16px">Elige tu playlist "w three"</h3>
+      <p style="color:var(--color-text-muted);font-size:13px;margin:0 0 14px">La que usas para juntar las mejores 3 canciones de cada álbum. Se guarda local — puedes cambiarla después.</p>
       ${guessed.length ? `
         <div style="font-size:11px;color:var(--color-text-muted);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:8px">Sugerencias</div>
         <div class="wthree-choice-list">
           ${guessed.slice(0, 4).map(p => `
             <button class="wthree-choice" data-id="${p.id}" data-name="${escapeHtml(p.name)}">
               <div class="wthree-choice-name">${escapeHtml(p.name)}</div>
-              <div class="wthree-choice-meta">${p.owner?.display_name || 'vos'}${p.public === false ? ' · privada' : ''}${p.collaborative ? ' · colaborativa' : ''}</div>
+              <div class="wthree-choice-meta">${p.owner?.display_name || 'tú'}${p.public === false ? ' · privada' : ''}${p.collaborative ? ' · colaborativa' : ''}</div>
             </button>
           `).join('')}
         </div>
@@ -221,7 +221,7 @@ async function showSetup(content, ruta = vigilarRuta()) {
           ${playlists.map(p => `
             <button class="wthree-choice" data-id="${p.id}" data-name="${escapeHtml(p.name)}">
               <div class="wthree-choice-name">${escapeHtml(p.name)}</div>
-              <div class="wthree-choice-meta">${p.owner?.display_name || 'vos'}${p.public === false ? ' · privada' : ''}${p.collaborative ? ' · colaborativa' : ''}</div>
+              <div class="wthree-choice-meta">${p.owner?.display_name || 'tú'}${p.public === false ? ' · privada' : ''}${p.collaborative ? ' · colaborativa' : ''}</div>
             </button>
           `).join('')}
         </div>

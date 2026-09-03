@@ -142,7 +142,7 @@ async function analyze() {
     const propio = await isOwner();
     if (!ruta.vigente()) return;
     content.innerHTML = propio
-      ? `<div class="card"><p>No pude cargar el historial. Volvé a probar.</p></div>`
+      ? `<div class="card"><p>No pude cargar el historial. Vuelve a intentarlo.</p></div>`
       : ownerLockedMessage('Sin plays');
     return;
   }
@@ -349,7 +349,7 @@ function renderResults() {
     ${currentRows.length === 0 ? `
       <div class="card"><p>${showingHidden
         ? 'No hay nada oculto en esta vista.'
-        : (zeros.length ? 'Ocultaste todos los likes sin plays. Mirá «Ocultos» para devolver alguno.' : 'No hay likes sin plays. Todos tus likes se escucharon al menos una vez ≥30s.')}</p></div>
+        : (zeros.length ? 'Ocultaste todos los likes sin plays. Mira «Ocultos» para devolver alguno.' : 'No hay likes sin plays. Todos tus likes se escucharon al menos una vez ≥30s.')}</p></div>
     ` : `
       <div class="sc-grid" id="zp-list" role="listbox" aria-multiselectable="true" aria-label="Likes sin plays"></div>
     `}

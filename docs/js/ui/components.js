@@ -1,6 +1,6 @@
-import { openModal, closeTop } from './modal-stack.js?v=189';
-import { mountBottomHtml } from './bottom-layer.js?v=189';
-import { coverUrl } from '../util/cover-size.js?v=189';
+import { openModal, closeTop } from './modal-stack.js?v=190';
+import { mountBottomHtml } from './bottom-layer.js?v=190';
+import { coverUrl } from '../util/cover-size.js?v=190';
 
 function renderTrackRow(track, extra = '') {
   const art = coverUrl(track.album?.images, 'grande') || '';
@@ -63,7 +63,7 @@ function renderProgressOverlay(text, loaded, total, cancellable, minimized) {
       ${cancellable ? `
         <button class="btn btn-danger" id="progress-cancel-btn" style="min-width:180px;margin-top:6px">Detener carga</button>
         <button class="btn btn-secondary" id="progress-min-btn" style="min-width:180px">Minimizar — seguir usando la app</button>
-        <div class="progress-note">Podés detener sin problema — la próxima vez retoma desde donde quedó.</div>
+        <div class="progress-note">Puedes detener sin problema — la próxima vez retoma desde donde quedó.</div>
       ` : ''}
     </div>
   `;
@@ -192,7 +192,7 @@ function typeConfirmModal(title, message, requiredText = 'BORRAR') {
         <h2>${escapeHtml(title)}</h2>
         <p>${message}</p>
         <div class="confirm-input">
-          <label>Escribí <strong>${escapeHtml(requiredText)}</strong> para confirmar:</label>
+          <label>Escribe <strong>${escapeHtml(requiredText)}</strong> para confirmar:</label>
           <input class="input" id="confirm-text-input" autocomplete="off">
         </div>
         <div class="modal-actions" style="margin-top:16px">
@@ -288,7 +288,7 @@ function promptPlaylistName(defaultName, opts = {}) {
         <input type="text" id="playlist-name-input" maxlength="${PLAYLIST_NAME_MAX}"
                style="width:100%;padding:10px;background:var(--color-elevated);border:1px solid var(--color-border);border-radius:var(--radius-sm);color:var(--color-text);font-size:14px;margin-bottom:6px">
         <div style="display:flex;justify-content:space-between;align-items:center;font-size:12px;color:var(--color-text-muted);margin-bottom:14px">
-          <span id="playlist-name-hint">Podés editarlo antes de crear.</span>
+          <span id="playlist-name-hint">Puedes editarlo antes de crear.</span>
           <span id="playlist-name-counter">0/${PLAYLIST_NAME_MAX}</span>
         </div>
         <div class="modal-actions">

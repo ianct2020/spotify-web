@@ -27,9 +27,9 @@ function renderKeySetup() {
   const content = document.getElementById('similar-content');
   content.innerHTML = `
     <div class="card" style="max-width:480px">
-      <h3 style="margin-bottom:8px">Configurá tu Last.fm API key</h3>
+      <h3 style="margin-bottom:8px">Configura tu Last.fm API key</h3>
       <p style="color:var(--color-text-secondary);font-size:14px;margin-bottom:16px">
-        Sacala gratis en <a href="https://www.last.fm/api/account/create" target="_blank" style="color:var(--color-accent)">last.fm/api/account/create</a>. Se guarda solo en tu navegador (localStorage), nunca sale de tu equipo.
+        Sácala gratis en <a href="https://www.last.fm/api/account/create" target="_blank" style="color:var(--color-accent)">last.fm/api/account/create</a>. Se guarda solo en tu navegador (localStorage), nunca sale de tu equipo.
       </p>
       <input type="text" id="lastfm-key-input" placeholder="API key" autocomplete="off"
              style="width:100%;padding:10px;background:var(--color-elevated);border:1px solid var(--color-border);border-radius:var(--radius-sm);color:var(--color-text);font-family:monospace;font-size:14px;margin-bottom:12px">
@@ -119,7 +119,7 @@ async function pickSourceArtist(name) {
   try {
     similarList = await getSimilarArtists(name, 50);
     if (similarList.length === 0) {
-      panel.innerHTML = `<div class="card"><p>Last.fm no tiene similares para "${escapeHtml(name)}". Probá con otra grafía.</p></div>`;
+      panel.innerHTML = `<div class="card"><p>Last.fm no tiene similares para "${escapeHtml(name)}". Prueba con otra grafía.</p></div>`;
       return;
     }
     renderSimilarGrid();
@@ -132,7 +132,7 @@ function renderSimilarGrid() {
   const panel = document.getElementById('similar-panel');
   panel.innerHTML = `
     <div style="margin-bottom:8px;color:var(--color-text-secondary);font-size:14px">
-      ${similarList.length} artistas similares a <strong>${escapeHtml(sourceArtist)}</strong>. Elegí uno para ver sus top tracks.
+      ${similarList.length} artistas similares a <strong>${escapeHtml(sourceArtist)}</strong>. Elige uno para ver sus top tracks.
     </div>
     <div class="smart-grid smart-grid-compact">
       ${similarList.map((a, i) => `

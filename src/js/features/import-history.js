@@ -52,19 +52,19 @@ async function openImportHistory() {
             <line x1="15" y1="15" x2="12" y2="12"/>
           </svg>
         </div>
-        <div class="ih-drop-title">Arrastrá tu ZIP acá</div>
-        <div class="ih-drop-sub">o hacé click para elegir · ZIP entero o JSONs sueltos</div>
+        <div class="ih-drop-title">Arrastra tu ZIP aquí</div>
+        <div class="ih-drop-sub">o haz click para elegir · ZIP entero o JSONs sueltos</div>
       </label>
 
       <div id="ih-status" class="ih-status" aria-live="polite"></div>
 
       <details class="ih-howto">
-        <summary>Cómo conseguir el ZIP <span class="ih-howto-hint">(si todavía no lo tenés)</span></summary>
+        <summary>Cómo conseguir el ZIP <span class="ih-howto-hint">(si todavía no lo tienes)</span></summary>
         <ol>
-          <li>Andá a <a href="https://www.spotify.com/account/privacy/" target="_blank" rel="noopener">spotify.com/account/privacy</a> con tu cuenta.</li>
-          <li>Bajá hasta <strong>«Descargar tus datos»</strong>.</li>
-          <li>Marcá <strong>Historial de reproducción ampliado</strong> y confirmá.</li>
-          <li>Esperá el mail (unos días). Cuando llegue, descargás el ZIP y lo subís acá.</li>
+          <li>Ve a <a href="https://www.spotify.com/account/privacy/" target="_blank" rel="noopener">spotify.com/account/privacy</a> con tu cuenta.</li>
+          <li>Descarga hasta <strong>«Descargar tus datos»</strong>.</li>
+          <li>Marca <strong>Historial de reproducción ampliado</strong> y confirma.</li>
+          <li>Espera el mail (unos días). Cuando llegue, descargas el ZIP y lo subes aquí.</li>
         </ol>
         <button class="btn btn-secondary btn-sm" data-open-spotify-privacy>Abrir Privacidad de Spotify ↗</button>
       </details>
@@ -72,7 +72,7 @@ async function openImportHistory() {
       ${alreadyHas ? `
         <div class="ih-clear-section">
           <div style="font-size:12px;color:var(--color-text-muted)">
-            Ya tenés historial cargado en este browser
+            Ya tienes historial cargado en este navegador
           </div>
           <button class="btn btn-danger btn-sm" id="ih-clear">Borrarlo</button>
         </div>
@@ -95,7 +95,7 @@ async function openImportHistory() {
 
   const clearBtn = overlay.querySelector('#ih-clear');
   if (clearBtn) clearBtn.onclick = async () => {
-    const ok = await confirmModal('Borrar tu historial local', 'Vas a borrar los agregados de tu Extended Streaming History guardados en este browser. No afecta tu cuenta de Spotify ni el ZIP que descargaste — podés volver a subirlo cuando quieras.', 'Borrar');
+    const ok = await confirmModal('Borrar tu historial local', 'Vas a borrar los agregados de tu Extended Streaming History guardados en este navegador. No afecta tu cuenta de Spotify ni el ZIP que descargaste — puedes volver a subirlo cuando quieras.', 'Borrar');
     if (!ok) return;
     await clearMyHistory();
     showToast('Historial local borrado', 'success');
@@ -134,7 +134,7 @@ async function handleFiles(files) {
 
   const useful = jsonFiles.filter(f => /Streaming_History_Audio.*\.json$/i.test(f.name || ''));
   if (!useful.length) {
-    setStatus('No encontré ningún <code>Streaming_History_Audio_*.json</code>. Necesitás el <em>Extended Streaming History</em> (el que tarda días), no el Account Data básico.', 'error');
+    setStatus('No encontré ningún <code>Streaming_History_Audio_*.json</code>. Necesitas el <em>Extended Streaming History</em> (el que tarda días), no el Account Data básico.', 'error');
     return;
   }
 
@@ -247,7 +247,7 @@ async function extractHistoryJsons(zipFile) {
     const base = name.split('/').pop();
     if (!/Streaming_History_Audio.*\.json$/i.test(base)) continue;
     if (compressedSize === 0xffffffff || uncompressedSize === 0xffffffff) {
-      throw new Error('ZIP64 no soportado (el export es demasiado grande para descomprimir en el browser). Probá desempaquetar y subir los .json sueltos.');
+      throw new Error('ZIP64 no soportado (el export es demasiado grande para descomprimir en el navegador). Prueba desempaquetar y subir los .json sueltos.');
     }
 
     // 2. Local File Header: saltar name+extra locales para llegar a los datos

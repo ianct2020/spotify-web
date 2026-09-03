@@ -1,7 +1,7 @@
-import { getAllUserPlaylists, getAllPlaylistItems, removePlaylistItemsAtPositions, getCurrentUserId } from '../api.js?v=189';
-import { showProgress, hideProgress, typeConfirmModal, escapeHtml, renderPlaylistGrid, bindPlaylistGrid, pageHeader } from '../ui/components.js?v=189';
-import { showToast } from '../ui/toast.js?v=189';
-import { coverUrl } from '../util/cover-size.js?v=189';
+import { getAllUserPlaylists, getAllPlaylistItems, removePlaylistItemsAtPositions, getCurrentUserId } from '../api.js?v=190';
+import { showProgress, hideProgress, typeConfirmModal, escapeHtml, renderPlaylistGrid, bindPlaylistGrid, pageHeader } from '../ui/components.js?v=190';
+import { showToast } from '../ui/toast.js?v=190';
+import { coverUrl } from '../util/cover-size.js?v=190';
 
 let ownPlaylists = [];
 const keepUris = new Set();
@@ -22,7 +22,7 @@ async function loadAndShowGrid() {
     const [playlists, userId] = await Promise.all([getAllUserPlaylists(), getCurrentUserId()]);
     ownPlaylists = playlists.filter(p => p.owner?.id === userId);
     if (ownPlaylists.length === 0) {
-      content.innerHTML = `<div class="card"><p>No tenés playlists propias.</p></div>`;
+      content.innerHTML = `<div class="card"><p>No tienes playlists propias.</p></div>`;
       return;
     }
     content.innerHTML = `
@@ -116,7 +116,7 @@ async function analyzePlaylist(playlistId) {
 
       <div id="dupalbums-batch-bar" style="position:sticky;top:0;z-index:50;background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-md);padding:12px 16px;margin-bottom:16px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;box-shadow:0 2px 8px rgba(0,0,0,0.2)">
         <div style="font-size:13px;color:var(--color-text-secondary)">
-          Marcá el track que querés <strong>quedarte</strong> por cada álbum. Los álbumes sin marca no se tocan.
+          Marca el track que quieres <strong>quedarte</strong> por cada álbum. Los álbumes sin marca no se tocan.
         </div>
         <button class="btn btn-danger" id="dupalbums-delete-btn" disabled>Quitar sobrantes</button>
       </div>

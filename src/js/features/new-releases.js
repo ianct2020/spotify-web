@@ -299,7 +299,7 @@ function renderShell(content, totalCandidates) {
   content.querySelector('#newrel-load-more').addEventListener('click', () => {
     const eligible = eligibleArtists().length;
     if (!eligible) {
-      showToast(`No hay ningún artista con ${state.minLikes} o más likes. Probá bajando el umbral.`, 'warning');
+      showToast(`No hay ningún artista con ${state.minLikes} o más likes. Prueba bajando el umbral.`, 'warning');
       return;
     }
     if (state.loadedMore >= eligible && state.artists.every(a => a.likes < state.minLikes || a.scanned)) {
@@ -503,14 +503,14 @@ function refreshList(content) {
     const scanned = eligibleArtists().filter(a => a.scanned).length;
     let msg;
     if (!state.artists.length) {
-      msg = 'Todavía no tengo tus likes cargados. Abrí el Dashboard para descargarlos y volvé.';
+      msg = 'Todavía no tengo tus likes cargados. Abre el Dashboard para descargarlos y vuelve.';
     } else if (!eligible) {
       // El caso que veía Ian con 10+ y 20+: cero elegibles, y encima con los
       // botones sin decir nada. Ahora se explica y se ofrece la salida.
       const max = Math.max(...state.artists.map(a => a.likes));
-      msg = `Ningún artista llega a ${state.minLikes} likes (el que más tiene llega a ${max}). Bajá el umbral con los chips de arriba.`;
+      msg = `Ningún artista llega a ${state.minLikes} likes (el que más tiene llega a ${max}). Descarga el umbral con los chips de arriba.`;
     } else if (!scanned) {
-      msg = `${eligible.toLocaleString('es-ES')} artistas con ≥${state.minLikes} likes, ninguno escaneado todavía. Tocá «Actualizar» para consultarle a Spotify.`;
+      msg = `${eligible.toLocaleString('es-ES')} artistas con ≥${state.minLikes} likes, ninguno escaneado todavía. Toca «Actualizar» para consultarle a Spotify.`;
     } else if (state.mode === 'hidden') {
       msg = `No ocultaste ninguna novedad de los últimos ${state.months} meses.`;
     } else {
@@ -519,7 +519,7 @@ function refreshList(content) {
       // está guardado entre sesiones (y compartido con #discover-artists), así
       // que podés llegar acá con un filtro puesto que no recordás haber tocado.
       const porTipo = state.filterKind !== 'all'
-        ? ` filtrando por ${KIND_LABEL[state.filterKind].toLowerCase()} — probá con «Todo»`
+        ? ` filtrando por ${KIND_LABEL[state.filterKind].toLowerCase()} — prueba con «Todo»`
         : '';
       msg = `No hay novedades sin escuchar en los últimos ${state.months} meses para tus artistas con ≥${state.minLikes} likes${porTipo}.`;
     }
@@ -659,7 +659,7 @@ async function saveAlbum(albumId, artistName, btn) {
       // avisa una sola vez, cuando se acaba de crear.
       if (r.playlistCreada) {
         showToast(
-          `Creé la playlist «${PLAYLIST_SINGLES}». Spotify la crea PÚBLICA y no se puede cambiar por API: pasala a privada a mano desde la app.`,
+          `Creé la playlist «${PLAYLIST_SINGLES}». Spotify la crea PÚBLICA y no se puede cambiar por API: pásala a privada a mano desde la app.`,
           'info',
         );
       }
@@ -702,7 +702,7 @@ async function likearPistasDelAlbum(albumId, artistName, btn) {
     `Vas a añadir ${cuantas} de «${escapeHtml(al.name)}» a tus me gusta, una por una. ` +
     'Esto NO guarda el álbum: te deja las canciones sueltas entre tus likes, y para ' +
     'deshacerlo hay que sacarle el corazón a cada una a mano. ' +
-    'Si lo que querés es el disco entero, usá «Guardar álbum».',
+    'Si lo que quieres es el disco entero, usa «Guardar álbum».',
     n === 1 ? 'Añadir la pista' : `Añadir ${n || 'las'} pistas`,
   );
   if (!ok) return;

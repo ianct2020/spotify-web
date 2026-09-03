@@ -93,7 +93,7 @@ export function guardaUltimoEjemplar(toRemove, libraryByKey) {
     }
     const copias = libraryByKey.get(key);
     if (!copias || copias.size === 0) {
-      violaciones.push({ track, motivo: 'no figura en el análisis actual (re-analizá antes de borrar)' });
+      violaciones.push({ track, motivo: 'no figura en el análisis actual (re-analiza antes de borrar)' });
       continue;
     }
     const sobreviven = [...copias].filter(id => !idsABorrar.has(id));

@@ -16,25 +16,25 @@
 // Preview 30s instantáneo vía iTunes (arranca en el estribillo, no suma plays
 // en tu historial de Spotify). Fallback: iframe embed oficial si iTunes no lo tiene.
 
-import { getBestAvailableLikes, removeLikedTracks, checkLibraryContains } from '../api.js?v=189';
-import { borrarLikesVerificado } from '../util/borrado-verificado.js?v=189';
-import { loadSkipStats, trackIdOf, isOwner, ownerLockedMessage } from './history-data.js?v=189';
-import { escapeHtml, confirmModal, pageHeader } from '../ui/components.js?v=189';
-import { showToast } from '../ui/toast.js?v=189';
-import { getPreview } from '../api/preview-providers.js?v=189';
-import { togglePreview, playingKey } from '../ui/preview-player.js?v=189';
-import { openTrackCard } from './track-card.js?v=189';
-import { firstArtistName, artistNames } from '../util/artist-name.js?v=189';
-import { activateMarquee } from '../ui/marquee.js?v=189';
-import { hasUsername, loadTopLifetime } from '../api/statsfm.js?v=189';
-import { createHiddenStore } from '../util/hidden-sync.js?v=189';
-import { prefKey, migratePrefKey } from '../storage.js?v=189';
-import { vigilarRuta } from '../util/vigencia-ruta.js?v=189';
-import { createIncrementalList, scrollRootOf } from '../ui/incremental-list.js?v=189';
-import { createLazyImages } from '../ui/lazy-img.js?v=189';
-import { renderTrackCardRow, wireTrackCardGrid, paintCardSelection, paintPlayingCard, paintEmbedCard } from '../ui/track-card-row.js?v=189';
-import { coverAtSize } from '../util/cover-size.js?v=189';
-import { coverUrl } from '../util/cover-size.js?v=189';
+import { getBestAvailableLikes, removeLikedTracks, checkLibraryContains } from '../api.js?v=190';
+import { borrarLikesVerificado } from '../util/borrado-verificado.js?v=190';
+import { loadSkipStats, trackIdOf, isOwner, ownerLockedMessage } from './history-data.js?v=190';
+import { escapeHtml, confirmModal, pageHeader } from '../ui/components.js?v=190';
+import { showToast } from '../ui/toast.js?v=190';
+import { getPreview } from '../api/preview-providers.js?v=190';
+import { togglePreview, playingKey } from '../ui/preview-player.js?v=190';
+import { openTrackCard } from './track-card.js?v=190';
+import { firstArtistName, artistNames } from '../util/artist-name.js?v=190';
+import { activateMarquee } from '../ui/marquee.js?v=190';
+import { hasUsername, loadTopLifetime } from '../api/statsfm.js?v=190';
+import { createHiddenStore } from '../util/hidden-sync.js?v=190';
+import { prefKey, migratePrefKey } from '../storage.js?v=190';
+import { vigilarRuta } from '../util/vigencia-ruta.js?v=190';
+import { createIncrementalList, scrollRootOf } from '../ui/incremental-list.js?v=190';
+import { createLazyImages } from '../ui/lazy-img.js?v=190';
+import { renderTrackCardRow, wireTrackCardGrid, paintCardSelection, paintPlayingCard, paintEmbedCard } from '../ui/track-card-row.js?v=190';
+import { coverAtSize } from '../util/cover-size.js?v=190';
+import { coverUrl } from '../util/cover-size.js?v=190';
 
 let cache = null;
 // Filas visibles con los filtros actuales, en el mismo orden que las tarjetas
@@ -179,7 +179,7 @@ async function analyze() {
     const propio = await isOwner();
     if (!ruta.vigente()) return;
     content.innerHTML = propio
-      ? `<div class="card"><p>No pude cargar el historial de skips. Reintentá.</p></div>`
+      ? `<div class="card"><p>No pude cargar el historial de skips. Vuelve a intentarlo.</p></div>`
       : ownerLockedMessage('Skips crónicos');
     return;
   }
@@ -502,7 +502,7 @@ function renderResults() {
     </div>
 
     ${rows.length === 0 ? `
-      <div class="card"><p style="text-align:center;color:var(--color-text-muted);margin:0">${showingHidden ? 'No hay tracks ocultos que cumplan los umbrales actuales.' : 'Ningún like cumple los umbrales. Bajá los filtros para ver más candidatos.'}</p></div>
+      <div class="card"><p style="text-align:center;color:var(--color-text-muted);margin:0">${showingHidden ? 'No hay tracks ocultos que cumplan los umbrales actuales.' : 'Ningún like cumple los umbrales. Descarga los filtros para ver más candidatos.'}</p></div>
     ` : `
       <div class="skips-grid sc-grid" id="skips-list" role="listbox" aria-multiselectable="true" aria-label="Skips crónicos"></div>
     `}
@@ -700,7 +700,7 @@ function wireRows() {
       : '';
     const ok = await confirmModal(
       'Sacar de tus Liked Songs',
-      `Vas a sacar <strong>${sel.length}</strong> ${sel.length === 1 ? 'canción' : 'canciones'} de tus Liked Songs${extra}. Son las que casi siempre skipeás — podés recuperarlas después si te arrepentís.`,
+      `Vas a sacar <strong>${sel.length}</strong> ${sel.length === 1 ? 'canción' : 'canciones'} de tus Liked Songs${extra}. Son las que casi siempre saltas — puedes recuperarlas después si te arrepientes.`,
       'Sacar'
     );
     if (!ok) return;

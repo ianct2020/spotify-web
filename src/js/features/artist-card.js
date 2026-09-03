@@ -317,7 +317,7 @@ async function openArtistCard(entrada) {
   // El corte por "no está en ningún top" se hace DESPUÉS de mirar el historial
   // completo: un artista puede no entrar en ningún top y aun así tener plays.
   if (!totalPlays && !allTime && !topTracks.length) {
-    body.innerHTML = `<p style="color:var(--color-text-secondary);font-size:13px;margin:0">No aparece en tu historial (o no está en los tops de ningún año). Igual podés escucharlo en Spotify y ver el preview arriba.</p>`;
+    body.innerHTML = `<p style="color:var(--color-text-secondary);font-size:13px;margin:0">No aparece en tu historial (o no está en los tops de ningún año). Igual puedes escucharlo en Spotify y ver el preview arriba.</p>`;
     return;
   }
 
@@ -557,7 +557,7 @@ async function openArtistLikesModal(artistName) {
 
   if (!likes.length) {
     countEl.textContent = '';
-    scroll.innerHTML = `<p style="color:var(--color-text-secondary);padding:16px;text-align:center">Todavía no bajaste tus likes. Andá al Dashboard y apretá "Actualizar" para sincronizarlos.</p>`;
+    scroll.innerHTML = `<p style="color:var(--color-text-secondary);padding:16px;text-align:center">Todavía no bajaste tus likes. Ve al Dashboard y pulsa "Actualizar" para sincronizarlos.</p>`;
     return;
   }
 
@@ -571,7 +571,7 @@ async function openArtistLikesModal(artistName) {
 
   if (!filtered.length) {
     countEl.textContent = '0 likes';
-    scroll.innerHTML = `<p style="color:var(--color-text-secondary);padding:24px 16px;text-align:center">No tenés likes de ${escapeHtml(artistName)}. Todavía.</p>`;
+    scroll.innerHTML = `<p style="color:var(--color-text-secondary);padding:24px 16px;text-align:center">No tienes likes de ${escapeHtml(artistName)}. Todavía.</p>`;
     return;
   }
 

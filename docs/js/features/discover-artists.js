@@ -10,17 +10,17 @@
 // 100 artistas en lugar de 20. Lógica de fetch/cache/playlist compartida en
 // features/discover-common.js con #new-releases.
 
-import { escapeHtml, confirmModal, pageHeader } from '../ui/components.js?v=189';
-import { showToast } from '../ui/toast.js?v=189';
-import { openArtistCard } from './artist-card.js?v=189';
-import { createIncrementalList, scrollRootOf } from '../ui/incremental-list.js?v=189';
-import { createLazyImages } from '../ui/lazy-img.js?v=189';
-import { isJunkTrack } from '../util/junk.js?v=189';
-import { buildAlbumHeardIndex } from '../util/album-heard.js?v=189';
-import { loadFiltros, buildFilterContext, applyDiscoverFilters } from '../util/discover-filters.js?v=189';
-import { releaseKind } from '../util/release-size.js?v=189';
-import { vigilarRuta } from '../util/vigencia-ruta.js?v=189';
-import { prefKey, migratePrefKey } from '../storage.js?v=189';
+import { escapeHtml, confirmModal, pageHeader } from '../ui/components.js?v=190';
+import { showToast } from '../ui/toast.js?v=190';
+import { openArtistCard } from './artist-card.js?v=190';
+import { createIncrementalList, scrollRootOf } from '../ui/incremental-list.js?v=190';
+import { createLazyImages } from '../ui/lazy-img.js?v=190';
+import { isJunkTrack } from '../util/junk.js?v=190';
+import { buildAlbumHeardIndex } from '../util/album-heard.js?v=190';
+import { loadFiltros, buildFilterContext, applyDiscoverFilters } from '../util/discover-filters.js?v=190';
+import { releaseKind } from '../util/release-size.js?v=190';
+import { vigilarRuta } from '../util/vigencia-ruta.js?v=190';
+import { prefKey, migratePrefKey } from '../storage.js?v=190';
 import {
   getArtistIdCached,
   getArtistDiscoCached,
@@ -47,7 +47,7 @@ import {
   cardKey,
   toggleHeardAlbum,
   toggleHiddenAlbum,
-} from './discover-common.js?v=189';
+} from './discover-common.js?v=190';
 
 const SCAN_KEY = 'discover_artists';
 
@@ -273,7 +273,7 @@ function renderShell(content, totalCandidates) {
           <option value="5" ${state.filterYears === 5 ? 'selected' : ''}>Últimos 5 años</option>
           <option value="10" ${state.filterYears === 10 ? 'selected' : ''}>Últimos 10 años</option>
         </select>
-        <button class="btn btn-secondary btn-sm ${state.mode === 'heard' ? 'sc-on' : ''}" id="disco-mode-heard" title="Los que marcaste como escuchados. Desde ahí podés devolverlos a la lista.">Escuchados <span id="disco-heard-n">${heardAlbums.size}</span></button>
+        <button class="btn btn-secondary btn-sm ${state.mode === 'heard' ? 'sc-on' : ''}" id="disco-mode-heard" title="Los que marcaste como escuchados. Desde ahí puedes devolverlos a la lista.">Escuchados <span id="disco-heard-n">${heardAlbums.size}</span></button>
         <button class="btn btn-secondary btn-sm ${state.mode === 'hidden' ? 'sc-on' : ''}" id="disco-mode-hidden" title="Los que ocultaste. Se sincronizan con la playlist «fonoteca · ocultos (descubrir)».">Ocultos <span id="disco-hidden-n">${hiddenAlbums.size}</span></button>
         <button class="btn btn-secondary btn-sm" id="disco-refresh" title="${state.scannedAt ? 'Último escaneo ' + agoLabel(state.scannedAt) + '. Volver a consultar Spotify.' : 'Volver a consultar Spotify'}">Actualizar</button>
       </div>
@@ -707,7 +707,7 @@ async function saveAlbumToLibrary(albumId, artistName, btn) {
       // avisa una sola vez, cuando se acaba de crear.
       if (r.playlistCreada) {
         showToast(
-          `Creé la playlist «${PLAYLIST_SINGLES}». Spotify la crea PÚBLICA y no se puede cambiar por API: pasala a privada a mano desde la app.`,
+          `Creé la playlist «${PLAYLIST_SINGLES}». Spotify la crea PÚBLICA y no se puede cambiar por API: pásala a privada a mano desde la app.`,
           'info',
         );
       }
@@ -750,7 +750,7 @@ async function likearPistasDelAlbum(albumId, artistName, btn) {
     `Vas a añadir ${cuantas} de «${escapeHtml(al.name)}» a tus me gusta, una por una. ` +
     'Esto NO guarda el álbum: te deja las canciones sueltas entre tus likes, y para ' +
     'deshacerlo hay que sacarle el corazón a cada una a mano. ' +
-    'Si lo que querés es el disco entero, usá «Guardar álbum».',
+    'Si lo que quieres es el disco entero, usa «Guardar álbum».',
     n === 1 ? 'Añadir la pista' : `Añadir ${n || 'las'} pistas`,
   );
   if (!ok) return;

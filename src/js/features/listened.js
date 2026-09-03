@@ -217,8 +217,8 @@ function renderNotConfigured() {
     <div class="card" style="max-width:560px">
       <h3 style="margin-bottom:8px">Todavía no configuraste tu playlist</h3>
       <p style="color:var(--color-text-secondary);font-size:13px;margin-bottom:16px">
-        Elegí la playlist que usás como registro de álbumes escuchados. La app la va a agrupar por álbum.
-        También podés configurarla desde la stat card del Dashboard.
+        Elige la playlist que usas como registro de álbumes escuchados. La app la va a agrupar por álbum.
+        También puedes configurarla desde la stat card del Dashboard.
       </p>
       <button class="btn btn-primary" id="listened-config-btn">Elegir playlist</button>
     </div>
@@ -277,7 +277,7 @@ async function loadAlbums({ force = false } = {}) {
       <div class="card" style="max-width:560px">
         <p style="color:var(--color-error);margin-bottom:6px">Error: ${escapeHtml(e.message)}</p>
         <p style="color:var(--color-text-secondary);font-size:13px;margin-bottom:16px">
-          Suele ser un bache de conexión o un límite temporal de Spotify. Probá de nuevo.
+          Suele ser un bache de conexión o un límite temporal de Spotify. Prueba de nuevo.
         </p>
         <button class="btn btn-primary" id="listened-retry-btn">Reintentar</button>
       </div>
@@ -521,7 +521,7 @@ function clavesDe(e) {
 // Se llama desde la consola: `await window.__unregDiag()`.
 if (typeof window !== 'undefined') {
   window.__unregDiag = () => {
-    if (!likesByKey) return 'Abrí #listened y esperá a que cargue.';
+    if (!likesByKey) return 'Abre #listened y espera a que cargue.';
     const registeredKeys = new Set();
     const soloArtistaDelAlbum = new Set();
     for (const a of albums) {
@@ -613,10 +613,10 @@ function buildUI(totalTracks, ts) {
         ${ts ? `<div style="font-size:12px;color:var(--color-text-muted);margin-top:2px">Actualizado ${timeAgo(ts)}</div>` : ''}
       </div>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
-        <button class="btn btn-secondary btn-sm" id="listened-unreg-btn" title="Álbumes con varias canciones tuyas en likes que no están en tu registro (ajustás el mínimo adentro)">🎧 Sin registrar (${unregistered.length})</button>
-        <button class="btn btn-secondary btn-sm" id="listened-dupes-btn" title="Álbumes registrados dos veces (deluxe Y normal): sacás la sobrante y queda una sola versión">💿 Duplicados (${dupes.length})</button>
-        <button class="btn btn-secondary btn-sm" id="listened-repeated-btn" title="Álbumes con varios tracks en la playlist: dejás 1 track por álbum y sacás los demás">🎵 Repetidos (${computeRepeatedAlbums().length})</button>
-        <button class="btn btn-secondary btn-sm" id="listened-history-btn" title="Álbumes que ESCUCHASTE de verdad (según tu historial de reproducción) y no tenés registrados">📊 Del historial (${computeHistoryUnregistered().length})</button>
+        <button class="btn btn-secondary btn-sm" id="listened-unreg-btn" title="Álbumes con varias canciones tuyas en likes que no están en tu registro (ajustas el mínimo adentro)">🎧 Sin registrar (${unregistered.length})</button>
+        <button class="btn btn-secondary btn-sm" id="listened-dupes-btn" title="Álbumes registrados dos veces (deluxe Y normal): sacas la sobrante y queda una sola versión">💿 Duplicados (${dupes.length})</button>
+        <button class="btn btn-secondary btn-sm" id="listened-repeated-btn" title="Álbumes con varios tracks en la playlist: dejas 1 track por álbum y sacas los demás">🎵 Repetidos (${computeRepeatedAlbums().length})</button>
+        <button class="btn btn-secondary btn-sm" id="listened-history-btn" title="Álbumes que ESCUCHASTE de verdad (según tu historial de reproducción) y no tienes registrados">📊 Del historial (${computeHistoryUnregistered().length})</button>
         <button class="btn btn-secondary btn-sm" id="listened-queue-btn" title="Saca de tu playlist-cola (ej: para cuando termine los actuales) los álbumes que ya escuchaste">🎯 Limpiar cola</button>
         <button class="btn btn-secondary btn-sm" id="listened-refresh-btn" title="Vuelve a leer la playlist desde Spotify (si no, se refresca solo una vez por día)">Actualizar</button>
         <button class="btn btn-secondary btn-sm" id="listened-change-btn">Cambiar playlist</button>
@@ -679,7 +679,7 @@ function buildUI(totalTracks, ts) {
         <button class="btn btn-secondary btn-sm sort-btn ${mode === 'year-desc' ? 'sort-active' : ''}" data-sort="year-desc" title="Año de salida, más nuevos arriba">Año ↓</button>
         <button class="btn btn-secondary btn-sm sort-btn ${mode === 'year-asc' ? 'sort-active' : ''}" data-sort="year-asc" title="Año de salida, más viejos arriba">Año ↑</button>
         <button class="btn btn-secondary btn-sm sort-btn ${mode === 'artist-asc' ? 'sort-active' : ''}" data-sort="artist-asc" title="Artista alfabético">Artista</button>
-        <button class="btn btn-secondary btn-sm sort-btn ${mode === 'likes-desc' ? 'sort-active' : ''}" data-sort="likes-desc" title="Ordena por cuántas canciones de cada álbum tenés en tus Liked Songs">Más likeados ♥</button>
+        <button class="btn btn-secondary btn-sm sort-btn ${mode === 'likes-desc' ? 'sort-active' : ''}" data-sort="likes-desc" title="Ordena por cuántas canciones de cada álbum tienes en tus Liked Songs">Más likeados ♥</button>
         <button class="btn btn-secondary btn-sm sort-btn ${mode === 'name-asc' ? 'sort-active' : ''}" data-sort="name-asc" title="Nombre del álbum alfabético">A-Z</button>
       </div>
     </div>
@@ -778,7 +778,7 @@ function renderGrid() {
   if (filterText) {
     summary.textContent = `${sorted.length} de ${albums.length} álbumes coinciden con "${filterText}"`;
   } else {
-    summary.textContent = `${albums.length} álbumes únicos. Click en uno para ver los tracks que tenés de él.`;
+    summary.textContent = `${albums.length} álbumes únicos. Click en uno para ver los tracks que tienes de él.`;
   }
 
   if (sorted.length === 0) {
@@ -847,7 +847,7 @@ function openAlbumDetail(albumId) {
             </div>
           </div>
         `).join('')}
-      </div>` : `<div style="color:var(--color-text-muted);font-size:13px">No tenés canciones de este álbum en tus likes.</div>`}
+      </div>` : `<div style="color:var(--color-text-muted);font-size:13px">No tienes canciones de este álbum en tus likes.</div>`}
       <div class="modal-actions" style="margin-top:16px">
         ${album.url ? `<a class="btn btn-secondary" href="${album.url}" target="_blank" rel="noopener">Ver álbum en Spotify</a>` : ''}
         <button class="btn btn-primary" data-close-modal>Cerrar</button>
@@ -947,7 +947,7 @@ function openUnregistered() {
     <div class="modal modal-picker" style="max-width:560px">
       <h2 style="margin-bottom:4px">🎧 Quizás escuchaste y no registraste</h2>
       <p style="color:var(--color-text-secondary);font-size:13px;margin-bottom:10px">
-        Álbumes que no están en <strong>${escapeHtml(playlistInfo.name)}</strong> pero de los que tenés varias canciones en Liked Songs.
+        Álbumes que no están en <strong>${escapeHtml(playlistInfo.name)}</strong> pero de los que tienes varias canciones en Liked Songs.
         Muchos likes de un mismo álbum suele indicar que lo escuchaste bastante. (Deluxe y normal cuentan como uno solo.)
       </p>
       <div style="display:flex;gap:6px;align-items:center;margin-bottom:8px;flex-wrap:wrap;flex-shrink:0">
@@ -1169,8 +1169,8 @@ function openDupes() {
     <div class="modal modal-picker" style="max-width:560px">
       <h2 style="margin-bottom:4px">💿 Duplicados por edición</h2>
       <p style="color:var(--color-text-secondary);font-size:13px;margin-bottom:10px;flex-shrink:0">
-        Álbumes que tenés registrados <strong>dos veces</strong> en <strong>${escapeHtml(playlistInfo.name)}</strong> (deluxe Y normal, etc.).
-        Ya marqué la sobrante para sacar (queda la normal / la de más tracks). Si alguno <strong>no</strong> es duplicado (LP3, II, Vol. 2…), tocá la ✕ para ignorarlo.
+        Álbumes que tienes registrados <strong>dos veces</strong> en <strong>${escapeHtml(playlistInfo.name)}</strong> (deluxe Y normal, etc.).
+        Ya marqué la sobrante para sacar (queda la normal / la de más tracks). Si alguno <strong>no</strong> es duplicado (LP3, II, Vol. 2…), toca la ✕ para ignorarlo.
       </p>
       <div id="dup-scroll" class="picker-scroll" style="border:1px solid var(--color-border);border-radius:var(--radius-sm)"></div>
       <div id="dup-hidden-note" style="font-size:12px;color:var(--color-text-muted);margin-top:8px;flex-shrink:0"></div>
@@ -1327,7 +1327,7 @@ function openQueueCleaner() {
 
   async function renderPicker() {
     delBtn.style.display = 'none';
-    sub.textContent = 'Elegí tu playlist-cola (ej: "para cuando termine los actuales").';
+    sub.textContent = 'Elige tu playlist-cola (ej: "para cuando termine los actuales").';
     body.innerHTML = `<div style="padding:16px;text-align:center"><div class="spinner spinner-lg"></div></div>`;
     let pls;
     try { pls = await getAllUserPlaylists(); }
@@ -1655,7 +1655,7 @@ function openRepeated() {
     <div class="modal modal-picker" style="max-width:560px">
       <h2 style="margin-bottom:4px">🎵 Álbumes repetidos (varios tracks)</h2>
       <p style="color:var(--color-text-secondary);font-size:13px;margin-bottom:10px;flex-shrink:0">
-        Álbumes de los que tenés <strong>más de un track</strong> en <strong>${escapeHtml(playlistInfo.name)}</strong>. Para tener <strong>1 track por álbum</strong>, dejo el primero y saco el resto.
+        Álbumes de los que tienes <strong>más de un track</strong> en <strong>${escapeHtml(playlistInfo.name)}</strong>. Para tener <strong>1 track por álbum</strong>, dejo el primero y saco el resto.
       </p>
       <div id="rep-selall" style="flex-shrink:0;margin-bottom:6px"></div>
       <div id="rep-list" class="picker-scroll"></div>
@@ -1682,7 +1682,7 @@ function openRepeated() {
     const selall = overlay.querySelector('#rep-selall');
     if (list.length === 0) {
       selall.innerHTML = '';
-      holder.innerHTML = `<div style="color:var(--color-text-muted);font-size:13px;padding:12px">Ningún álbum tiene más de un track. 👌 Ya tenés 1 por álbum.</div>`;
+      holder.innerHTML = `<div style="color:var(--color-text-muted);font-size:13px;padding:12px">Ningún álbum tiene más de un track. 👌 Ya tienes 1 por álbum.</div>`;
       update();
       return;
     }

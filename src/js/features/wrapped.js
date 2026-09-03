@@ -101,7 +101,7 @@ export async function render(container) {
   const content = document.getElementById('wrapped-content');
   if (!stats || !stats.years || !stats.years.length) {
     if (await isOwner()) {
-      content.innerHTML = `<div class="card"><p>No pude cargar el historial de reproducción. Volvé a probar.</p></div>`;
+      content.innerHTML = `<div class="card"><p>No pude cargar el historial de reproducción. Vuelve a intentarlo.</p></div>`;
     } else {
       await renderLite(content);
     }
@@ -120,7 +120,7 @@ export async function render(container) {
 
   content.innerHTML = `
     <div class="wrapped-year-bar">
-      <div class="wrapped-year-bar-label">Elegí el año</div>
+      <div class="wrapped-year-bar-label">Elige el año</div>
       <div class="wrapped-year-bar-tabs" id="wrapped-year-tabs">
         ${yearsDesc.map(y => `
           <button class="wrapped-year-tab${y.year === selectedYear ? ' active' : ''}" data-year="${y.year}">${y.year}</button>
@@ -337,7 +337,7 @@ function wireTopHover(holder, cardKey, items, kind) {
     const i = +el.dataset.hover.split(':')[1];
     const it = items[i];
     if (!it) return;
-    el.title = 'Mantené el mouse para escuchar un preview';
+    el.title = 'Mantén el mouse para escuchar un preview';
     // Los tracks del historial traen uri → click abre la ficha de canción.
     // Los artistas → ficha de artista.
     if (kind === 'track' && it.uri) {
@@ -578,7 +578,7 @@ async function renderLite(content) {
   }
 
   if (!artists.length && !tracks.length) {
-    content.innerHTML = `<div class="card"><p>Spotify todavía no tiene tops tuyos para este período — escuchá un poco más y volvé.</p></div>` + ownerLockedMessage('El Wrapped completo');
+    content.innerHTML = `<div class="card"><p>Spotify todavía no tiene tops tuyos para este período — escucha un poco más y vuelve.</p></div>` + ownerLockedMessage('El Wrapped completo');
     return;
   }
 

@@ -1,19 +1,19 @@
 // Wrapped propio: mini-resumen tuyo por año, hecho con el Extended Streaming History.
 // A diferencia del Wrapped oficial (que corre oct-sept), este es del año calendario completo.
 
-import { loadHistoryStats, isOwner, ownerLockedMessage } from './history-data.js?v=189';
-import { escapeHtml, pageHeader } from '../ui/components.js?v=189';
-import { getPreview } from '../api/preview-providers.js?v=189';
-import { getArtistLikePreview, getAlbumLikePreview } from '../util/artist-preview.js?v=189';
-import { attachHover } from '../ui/preview-player.js?v=189';
-import { openTrackCard } from './track-card.js?v=189';
-import { openArtistCard } from './artist-card.js?v=189';
-import { openAlbumCard } from './album-card.js?v=189';
-import { getMyTop } from '../api.js?v=189';
-import { activateMarquee, marqueeSpan } from '../ui/marquee.js?v=189';
-import { openModal } from '../ui/modal-stack.js?v=189';
-import { armReveal, armRevealAll, releaseReveal } from '../ui/reveal.js?v=189';
-import { coverUrl } from '../util/cover-size.js?v=189';
+import { loadHistoryStats, isOwner, ownerLockedMessage } from './history-data.js?v=190';
+import { escapeHtml, pageHeader } from '../ui/components.js?v=190';
+import { getPreview } from '../api/preview-providers.js?v=190';
+import { getArtistLikePreview, getAlbumLikePreview } from '../util/artist-preview.js?v=190';
+import { attachHover } from '../ui/preview-player.js?v=190';
+import { openTrackCard } from './track-card.js?v=190';
+import { openArtistCard } from './artist-card.js?v=190';
+import { openAlbumCard } from './album-card.js?v=190';
+import { getMyTop } from '../api.js?v=190';
+import { activateMarquee, marqueeSpan } from '../ui/marquee.js?v=190';
+import { openModal } from '../ui/modal-stack.js?v=190';
+import { armReveal, armRevealAll, releaseReveal } from '../ui/reveal.js?v=190';
+import { coverUrl } from '../util/cover-size.js?v=190';
 
 let stats = null;
 let selectedYear = null;
@@ -101,7 +101,7 @@ export async function render(container) {
   const content = document.getElementById('wrapped-content');
   if (!stats || !stats.years || !stats.years.length) {
     if (await isOwner()) {
-      content.innerHTML = `<div class="card"><p>No pude cargar el historial de reproducción. Volvé a probar.</p></div>`;
+      content.innerHTML = `<div class="card"><p>No pude cargar el historial de reproducción. Vuelve a intentarlo.</p></div>`;
     } else {
       await renderLite(content);
     }
@@ -120,7 +120,7 @@ export async function render(container) {
 
   content.innerHTML = `
     <div class="wrapped-year-bar">
-      <div class="wrapped-year-bar-label">Elegí el año</div>
+      <div class="wrapped-year-bar-label">Elige el año</div>
       <div class="wrapped-year-bar-tabs" id="wrapped-year-tabs">
         ${yearsDesc.map(y => `
           <button class="wrapped-year-tab${y.year === selectedYear ? ' active' : ''}" data-year="${y.year}">${y.year}</button>
@@ -337,7 +337,7 @@ function wireTopHover(holder, cardKey, items, kind) {
     const i = +el.dataset.hover.split(':')[1];
     const it = items[i];
     if (!it) return;
-    el.title = 'Mantené el mouse para escuchar un preview';
+    el.title = 'Mantén el mouse para escuchar un preview';
     // Los tracks del historial traen uri → click abre la ficha de canción.
     // Los artistas → ficha de artista.
     if (kind === 'track' && it.uri) {
@@ -578,7 +578,7 @@ async function renderLite(content) {
   }
 
   if (!artists.length && !tracks.length) {
-    content.innerHTML = `<div class="card"><p>Spotify todavía no tiene tops tuyos para este período — escuchá un poco más y volvé.</p></div>` + ownerLockedMessage('El Wrapped completo');
+    content.innerHTML = `<div class="card"><p>Spotify todavía no tiene tops tuyos para este período — escucha un poco más y vuelve.</p></div>` + ownerLockedMessage('El Wrapped completo');
     return;
   }
 

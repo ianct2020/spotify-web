@@ -150,7 +150,7 @@ export async function borrarLikesVerificado(ids, {
     // único honesto es decirlo con el número de pistas en juego.
     throw new Error(
       `El borrado se mandó pero NO se pudo verificar (${verr.message}). `
-      + `Comprobá a mano qué quedó: ${pedidos.length} pista(s) en juego, origen ${origen}.`
+      + `Comprueba a mano qué quedó: ${pedidos.length} pista(s) en juego, origen ${origen}.`
     );
   }
 
@@ -159,7 +159,7 @@ export async function borrarLikesVerificado(ids, {
     console.error(`[${origen}] ids que NO salieron:`, siguenDentro);
     throw new Error(
       `Verificación fallida: ${siguenDentro.length} de ${pedidos.length} pista(s) siguen en tu biblioteca. `
-      + `El borrado quedó a medias — recargá y comprobá antes de volver a intentar.`
+      + `El borrado quedó a medias — recarga y comprueba antes de volver a intentar.`
     );
   }
 
@@ -169,7 +169,7 @@ export async function borrarLikesVerificado(ids, {
   if (contains.size !== pedidos.length) {
     throw new Error(
       `Verificación incompleta: pedí ${pedidos.length} ids y volvieron ${contains.size}. `
-      + `El borrado se mandó; comprobá a mano (origen ${origen}).`
+      + `El borrado se mandó; comprueba a mano (origen ${origen}).`
     );
   }
 

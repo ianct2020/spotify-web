@@ -74,7 +74,7 @@ async function loadLikes() {
   } catch (e) {
     hideProgress();
     const msg = isCancelled(e)
-      ? 'Carga detenida. Lo que se bajó quedó guardado — entrá de nuevo para retomar.'
+      ? 'Carga detenida. Lo que se bajó quedó guardado — entra de nuevo para retomar.'
       : escapeHtml(e.message);
     document.getElementById('smart-content').innerHTML = `<div class="card"><p style="color:var(--color-${isCancelled(e) ? 'warning' : 'error'})">${msg}</p></div>`;
   }
@@ -214,7 +214,7 @@ function updateSelectBar(kind, groups) {
   picked.sort((a, b) => a - b);
 
   if (selected.size === 0) {
-    bar.innerHTML = `<div class="smart-selectbar-empty">Tocá uno o más ${label}${suffix} para armar una playlist.</div>`;
+    bar.innerHTML = `<div class="smart-selectbar-empty">Toca uno o más ${label}${suffix} para armar una playlist.</div>`;
     return;
   }
   const listLabel = picked.map(p => `${p}${kind === 'decade' ? 's' : ''}`).join(' + ');

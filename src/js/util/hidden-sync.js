@@ -30,7 +30,7 @@ import {
 import { prefKey, migratePrefKey } from '../storage.js';
 import { invalidateOwnPlaylists } from './playlist-add.js';
 
-const PLAYLIST_DESC = 'Lista interna de Fonoteca: lo que ocultaste en esta vista. Si la borrás, se pierden los ocultos.';
+const PLAYLIST_DESC = 'Lista interna de Fonoteca: lo que ocultaste en esta vista. Si la borras, se pierden los ocultos.';
 
 // ── Claves de preferencia por usuario (v=183) ───────────────────────────────
 //

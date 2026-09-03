@@ -1,6 +1,6 @@
 import { getValidToken, refreshAccessToken } from './auth.js';
 import { cacheGet, cacheGetRaw, cacheGetTimestamp, cacheSet, cacheClear, prefKey, migratePrefKey } from './storage.js';
-import { idbDel, idbGetCached, idbGetCachedRaw, idbGetTimestamp, idbSetCached } from './idb.js';
+import { idbDel, idbDelByPrefix, idbGetCached, idbGetCachedRaw, idbGetTimestamp, idbSetCached } from './idb.js';
 import { OWNER_KEY_LIST } from './history-keys.js';
 import { showToast } from './ui/toast.js';
 import { artistIsSame, limpiaParaQuery } from './util/track-match.js';
@@ -76,7 +76,7 @@ async function spotifyFetch(endpoint, options = {}) {
       // rate-limit enmascarado como CORS, etc. Reintentamos con backoff.
       networkRetries++;
       if (networkRetries > maxRetries) {
-        throw new Error(`No se pudo conectar con Spotify (${netErr.message}). Revisá tu conexión y reintentá.`);
+        throw new Error(`No se pudo conectar con Spotify (${netErr.message}). Revisa tu conexión y vuelve a intentarlo.`);
       }
       const wait = Math.min(4000, 800 * networkRetries);
       console.warn(`fetch de red falló en ${endpoint} (${netErr.message}), reintento ${networkRetries}/${maxRetries} en ${(wait / 1000).toFixed(1)}s`);
@@ -96,7 +96,7 @@ async function spotifyFetch(endpoint, options = {}) {
     if (response.status === 429) {
       rateLimitRetries++;
       if (rateLimitRetries > maxRetries) {
-        const err = new Error(`Rate limited después de ${maxRetries} reintentos. Esperá unos minutos y recargá.`);
+        const err = new Error(`Rate limited después de ${maxRetries} reintentos. Espera unos minutos y recarga.`);
         err.status = 429;
         throw err;
       }
@@ -125,7 +125,7 @@ async function spotifyFetch(endpoint, options = {}) {
     if ([500, 502, 503, 504].includes(response.status)) {
       networkRetries++;
       if (networkRetries > maxRetries) {
-        throw new Error(`Spotify ${response.status}: el servicio no responde después de ${maxRetries} reintentos. Probá de nuevo en un rato.`);
+        throw new Error(`Spotify ${response.status}: el servicio no responde después de ${maxRetries} reintentos. Prueba de nuevo en un rato.`);
       }
       const wait = Math.min(8000, 500 * Math.pow(2, networkRetries - 1));
       console.warn(`Spotify ${response.status} en ${endpoint}, backoff ${(wait / 1000).toFixed(1)}s (retry ${networkRetries}/${maxRetries})`);
@@ -418,7 +418,7 @@ async function saveLikes(items, { complete = true, total = null } = {}) {
     return { ok: true };
   } catch (e) {
     console.error('IDB saveLikes failed:', e);
-    showToast(`Error guardando ${items.length.toLocaleString()} likes en el navegador: ${e.message}. Exportá el JSON YA para no perderlos.`, 'error');
+    showToast(`Error guardando ${items.length.toLocaleString()} likes en el navegador: ${e.message}. Exporta el JSON YA para no perderlos.`, 'error');
     return { ok: false, error: e };
   }
 }
@@ -867,7 +867,7 @@ async function importLikesData(parsed, onProgress) {
 
   if (delta > 0) {
     if (delta > 1000) {
-      if (onProgress) onProgress({ phase: 'skip-big', message: `El archivo tiene ${imported.length} likes pero Spotify tiene ${totalNow} (delta ${delta}). Se importa solo lo del archivo. Para sincronizar todo usá "Actualizar datos".` });
+      if (onProgress) onProgress({ phase: 'skip-big', message: `El archivo tiene ${imported.length} likes pero Spotify tiene ${totalNow} (delta ${delta}). Se importa solo lo del archivo. Para sincronizar todo usa "Actualizar datos".` });
     } else {
       if (onProgress) onProgress({ phase: 'fetching', message: `Trayendo ${delta} likes nuevos...`, delta });
       const knownUris = new Set(imported.map(i => i?.track?.uri).filter(Boolean));
@@ -1031,6 +1031,17 @@ async function getCurrentUserId() {
       for (const k of OWNER_KEY_LIST) {
         idbDel(k).catch(() => {});
       }
+      // Contenido de las playlists: una clave por playlist, así que no se
+      // pueden nombrar de antemano. `invalidatePlaylistsCache()` solo limpia la
+      // LISTA; hasta v=189 los items —que son las canciones de las playlists de
+      // la otra persona— se quedaban acá hasta caducar.
+      idbDelByPrefix('playlist_items_')
+        .then(n => { if (n) console.info(`Fonoteca: ${n} caches de items de playlist borrados al cambiar de usuario`); })
+        .catch(() => {});
+      // Top de Stats.fm: clave global, sin el user delante. Desde v=190 la
+      // clave lleva el usuario de Stats.fm, pero puede quedar la vieja de una
+      // sesión anterior a la actualización.
+      idbDelByPrefix('statsfm_top_lifetime_v1').catch(() => {});
     }
     localStorage.setItem(LAST_USER_KEY, _cachedUserId);
   } catch { /* ignora si no hay localStorage */ }

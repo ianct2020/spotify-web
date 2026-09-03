@@ -2,12 +2,12 @@
 // maratones de un artista, temas en loop, rachas e hitos. Todo sale de
 // history-records.json (gen-stats.py) ya calculado, acá es solo UI.
 
-import { loadRecords, isOwner, ownerLockedMessage } from './history-data.js?v=189';
-import { escapeHtml, pageHeader } from '../ui/components.js?v=189';
-import { getPreview } from '../api/preview-providers.js?v=189';
-import { getArtistLikePreview } from '../util/artist-preview.js?v=189';
-import { attachHover } from '../ui/preview-player.js?v=189';
-import { openArtistCard } from './artist-card.js?v=189';
+import { loadRecords, isOwner, ownerLockedMessage } from './history-data.js?v=190';
+import { escapeHtml, pageHeader } from '../ui/components.js?v=190';
+import { getPreview } from '../api/preview-providers.js?v=190';
+import { getArtistLikePreview } from '../util/artist-preview.js?v=190';
+import { attachHover } from '../ui/preview-player.js?v=190';
+import { openArtistCard } from './artist-card.js?v=190';
 
 const MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
 const DIAS = ['lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado', 'domingo'];
@@ -39,7 +39,7 @@ export async function render(container) {
   const content = document.getElementById('records-content');
   if (!r || !r.top_days?.length) {
     content.innerHTML = (await isOwner())
-      ? `<div class="card"><p>No pude cargar los récords. Reintentá.</p></div>`
+      ? `<div class="card"><p>No pude cargar los récords. Vuelve a intentarlo.</p></div>`
       : ownerLockedMessage('Récords');
     return;
   }
@@ -155,7 +155,7 @@ function wireHovers(content) {
     const h = hoverTargets[+el.dataset.recHover];
     if (!h) return;
     el.classList.add('tc-clickable');
-    el.title = 'Mantené el mouse para escuchar un preview · click para ficha';
+    el.title = 'Mantén el mouse para escuchar un preview · click para ficha';
     const getter = h.kind === 'artist'
       ? async () => await getArtistLikePreview(h.name)
       : async () => await getPreview({ name: h.name, artist: h.artist || '', spotifyId: h.id });
