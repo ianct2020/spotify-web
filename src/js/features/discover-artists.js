@@ -380,7 +380,7 @@ async function scanArtists(content, ruta = vigilarRuta()) {
   document.getElementById('disco-count').textContent = scanned;
 
   const queue = state.artists.filter(a => !a.scanned).slice(0, target - scanned);
-  if (!queue.length) return;   // todo servido del cache: ni barra ni requests
+  if (!queue.length) return;   // todo servido de la caché: ni barra ni requests
   progress.style.display = '';
 
   const workers = Array.from({ length: BATCH_PARALLEL }, () => (async () => {

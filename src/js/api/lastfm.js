@@ -150,7 +150,7 @@ function saveTagsCache(cache) {
   try {
     localStorage.setItem(TAGS_CACHE_KEY, JSON.stringify(cache));
   } catch (e) {
-    console.warn('No se pudo guardar cache de tags:', e.message);
+    console.warn('No se pudo guardar caché de etiquetas:', e.message);
   }
 }
 

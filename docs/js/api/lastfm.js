@@ -1,4 +1,4 @@
-import { prefKey, migratePrefKey } from '../storage.js?v=190';
+import { prefKey, migratePrefKey } from '../storage.js?v=191';
 
 const LASTFM_KEY_STORAGE = 'lastfm_api_key';
 const LASTFM_USER_STORAGE = 'lastfm_username';
@@ -150,7 +150,7 @@ function saveTagsCache(cache) {
   try {
     localStorage.setItem(TAGS_CACHE_KEY, JSON.stringify(cache));
   } catch (e) {
-    console.warn('No se pudo guardar cache de tags:', e.message);
+    console.warn('No se pudo guardar caché de etiquetas:', e.message);
   }
 }
 

@@ -31,7 +31,7 @@ function saveCache() {
   while (cache.size > MAX_CACHE) cache.delete(cache.keys().next().value);
   try {
     localStorage.setItem(LS_KEY, JSON.stringify(Object.fromEntries(cache)));
-  } catch { /* storage lleno: el cache en memoria alcanza */ }
+  } catch { /* storage lleno: la caché en memoria alcanza */ }
 }
 
 // Normaliza para comparar: sin acentos, sin (feat. X) ni [Remaster], solo alfanumérico

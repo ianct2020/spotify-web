@@ -112,7 +112,7 @@ function fmtMinutes(min) {
   // Redondear PRIMERO y después partir en h/m. Al revés, 419,6 min daba
   // "6h 60m" (floor 6 + round(59,6) = 60) en vez de "7h 0m".
   const total = Math.round(min);
-  if (total >= 60) return `${Math.floor(total / 60).toLocaleString('es-AR')}h ${total % 60}m`;
+  if (total >= 60) return `${Math.floor(total / 60).toLocaleString('es-ES')}h ${total % 60}m`;
   return `${total}m`;
 }
 
@@ -327,7 +327,7 @@ async function openArtistCard(entrada) {
     <div class="ac-main">
     <div class="tc-stats ac-stats">
       <div class="tc-stat"><div class="tc-stat-v">${fmtMinutes(totalMin)}</div><div class="tc-stat-l">minutos totales</div></div>
-      <div class="tc-stat"><div class="tc-stat-v">${totalPlays.toLocaleString('es-AR')}</div><div class="tc-stat-l">plays</div></div>
+      <div class="tc-stat"><div class="tc-stat-v">${totalPlays.toLocaleString('es-ES')}</div><div class="tc-stat-l">plays</div></div>
       <div class="tc-stat" title="${firstDay ? 'El primer día que lo escuchaste al menos 30 segundos' : ''}"><div class="tc-stat-v${firstDay ? ' tc-stat-v-fecha' : ''}">${firstDay ? escapeHtml(fmtDia(firstDay)) : (firstYear || '—')}</div><div class="tc-stat-l">${firstDay ? 'primera vez' : 'primer año'}</div></div>
       <div class="tc-stat"><div class="tc-stat-v">${lastYear || '—'}</div><div class="tc-stat-l">último año</div></div>
     </div>
@@ -485,7 +485,7 @@ async function fillStatsfmArtist(name, fillEmptyTracks = false) {
       holder.innerHTML = `
         <div style="display:flex;align-items:center;gap:8px;margin-top:14px;padding:8px 12px;background:var(--color-elevated);border:1px solid var(--color-border);border-radius:var(--radius-sm,6px);font-size:12.5px;color:var(--color-text-secondary)">
           <strong style="color:var(--color-text)">Stats.fm hoy:</strong>
-          ${plays.toLocaleString('es-AR')} plays · ${Math.round(ms / 60000).toLocaleString('es-AR')}m
+          ${plays.toLocaleString('es-ES')} plays · ${Math.round(ms / 60000).toLocaleString('es-ES')}m
           <span style="color:var(--color-text-muted)">(${tracks} track${tracks === 1 ? '' : 's'} en tu top-1000)</span>
         </div>`;
     }
@@ -502,7 +502,7 @@ async function fillStatsfmArtist(name, fillEmptyTracks = false) {
                 <div class="wrapped-top-name">${escapeHtml(t.name || '(sin nombre)')}</div>
                 <div class="wrapped-top-artist" style="font-size:10px;color:var(--color-text-muted)">Stats.fm</div>
               </div>
-              <span class="wrapped-top-meta">${min.toLocaleString('es-AR')}m · ${t.streams} plays</span>
+              <span class="wrapped-top-meta">${min.toLocaleString('es-ES')}m · ${t.streams} plays</span>
             </div>`;
         }).join('');
         tracksHolder.querySelectorAll('[data-uri]').forEach(el => {

@@ -757,7 +757,7 @@ function sortAlbums(list) {
 
 function timeAgo(ts) {
   const mins = Math.max(0, Math.round((Date.now() - ts) / 60000));
-  if (mins < 1) return 'recién';
+  if (mins < 1) return 'ahora mismo';
   if (mins < 60) return `hace ${mins} min`;
   const hrs = Math.round(mins / 60);
   if (hrs < 24) return `hace ${hrs} h`;
@@ -866,7 +866,7 @@ function openYearAlbums(year) {
   const fmt = ts => {
     if (!ts) return '';
     const d = new Date(ts);
-    return d.toLocaleDateString('es-AR', { day: '2-digit', month: 'short', year: 'numeric' });
+    return d.toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' });
   };
   const overlay = openModal({
     id: `listened-year:${year}`,

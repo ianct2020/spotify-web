@@ -8,19 +8,19 @@
 // acá y no se propaga: ver `util/artist-name.js`. Los nombres se pintan como
 // **enlaces separados** y cada uno abre SU ficha de artista.
 
-import { loadTrackPlays, loadTrackDetail, loadHistoryStats, isOwner } from './history-data.js?v=190';
-import { escapeHtml } from '../ui/components.js?v=190';
-import { getPreview } from '../api/preview-providers.js?v=190';
-import { togglePreview, playingKey } from '../ui/preview-player.js?v=190';
-import { hasUsername, findTrackId, getTrackCurrentStats, loadTopLifetime } from '../api/statsfm.js?v=190';
-import { openAlbumCard } from './album-card.js?v=190';
-import { openArtistCard, knownArtist } from './artist-card.js?v=190';
-import { openModal, closeTop } from '../ui/modal-stack.js?v=190';
-import { getBestAvailableLikes } from '../api.js?v=190';
-import { showToast } from '../ui/toast.js?v=190';
-import { skelCardBody, skelBox } from '../ui/skeleton.js?v=190';
-import { resolveArtistList } from '../util/artist-name.js?v=190';
-import { coverUrl } from '../util/cover-size.js?v=190';
+import { loadTrackPlays, loadTrackDetail, loadHistoryStats, isOwner } from './history-data.js?v=191';
+import { escapeHtml } from '../ui/components.js?v=191';
+import { getPreview } from '../api/preview-providers.js?v=191';
+import { togglePreview, playingKey } from '../ui/preview-player.js?v=191';
+import { hasUsername, findTrackId, getTrackCurrentStats, loadTopLifetime } from '../api/statsfm.js?v=191';
+import { openAlbumCard } from './album-card.js?v=191';
+import { openArtistCard, knownArtist } from './artist-card.js?v=191';
+import { openModal, closeTop } from '../ui/modal-stack.js?v=191';
+import { getBestAvailableLikes } from '../api.js?v=191';
+import { showToast } from '../ui/toast.js?v=191';
+import { skelCardBody, skelBox } from '../ui/skeleton.js?v=191';
+import { resolveArtistList } from '../util/artist-name.js?v=191';
+import { coverUrl } from '../util/cover-size.js?v=191';
 
 const MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
 
@@ -237,8 +237,8 @@ async function openTrackCard(t) {
 
   body.innerHTML = `
     <div class="tc-stats">
-      <div class="tc-stat"><div class="tc-stat-v">${totalPlays.toLocaleString('es-AR')}</div><div class="tc-stat-l">${partial ? 'plays cortas (<30s)' : 'plays válidas'}</div></div>
-      <div class="tc-stat"><div class="tc-stat-v">${totalMin.toLocaleString('es-AR')}m</div><div class="tc-stat-l">minutos totales</div></div>
+      <div class="tc-stat"><div class="tc-stat-v">${totalPlays.toLocaleString('es-ES')}</div><div class="tc-stat-l">${partial ? 'plays cortas (<30s)' : 'plays válidas'}</div></div>
+      <div class="tc-stat"><div class="tc-stat-v">${totalMin.toLocaleString('es-ES')}m</div><div class="tc-stat-l">minutos totales</div></div>
       <div class="tc-stat"><div class="tc-stat-v">${det ? det.d : '—'}</div><div class="tc-stat-l">días distintos</div></div>
       <div class="tc-stat"><div class="tc-stat-v">${det ? det.x : '—'}</div><div class="tc-stat-l">récord en un día</div></div>
     </div>
@@ -328,13 +328,13 @@ async function fillStatsfmLine(t, exportPlays = null) {
       const min = Math.round(hit.playedMs / 60000);
       const delta = exportPlays != null
         ? (hit.streams > exportPlays
-            ? ` <span style="color:var(--color-accent)">(+${(hit.streams - exportPlays).toLocaleString('es-AR')} desde el export)</span>`
+            ? ` <span style="color:var(--color-accent)">(+${(hit.streams - exportPlays).toLocaleString('es-ES')} desde el export)</span>`
             : (hit.streams < exportPlays ? ` <span style="color:var(--color-text-muted)">(export tenía ${exportPlays})</span>` : ''))
         : '';
       holder.innerHTML = `
         <div style="display:flex;align-items:center;gap:8px;margin-top:12px;padding:8px 12px;background:var(--color-elevated);border:1px solid var(--color-border);border-radius:var(--radius-sm,6px);font-size:12.5px;color:var(--color-text-secondary)">
           <strong style="color:var(--color-text)">Stats.fm hoy:</strong>
-          ${hit.streams.toLocaleString('es-AR')} plays · ${min.toLocaleString('es-AR')}m${delta}
+          ${hit.streams.toLocaleString('es-ES')} plays · ${min.toLocaleString('es-ES')}m${delta}
           <span style="color:var(--color-text-muted);margin-left:auto" title="Total real actual según tu Top de todos los tiempos (incluye lo importado + lo trackeado en vivo)">total actual</span>
         </div>`;
       return;
@@ -354,7 +354,7 @@ async function fillStatsfmLine(t, exportPlays = null) {
     holder.innerHTML = `
       <div style="display:flex;align-items:center;gap:8px;margin-top:12px;padding:8px 12px;background:var(--color-elevated);border:1px solid var(--color-border);border-radius:var(--radius-sm,6px);font-size:12.5px;color:var(--color-text-secondary)">
         <strong style="color:var(--color-text)">Stats.fm en vivo:</strong>
-        ${stats.count.toLocaleString('es-AR')} plays · ${min.toLocaleString('es-AR')}m
+        ${stats.count.toLocaleString('es-ES')} plays · ${min.toLocaleString('es-ES')}m
         <span style="color:var(--color-text-muted);margin-left:auto" title="Solo lo trackeado desde que conectaste Stats.fm (sin lo importado del export)">solo post-conexión</span>
       </div>`;
   } catch {

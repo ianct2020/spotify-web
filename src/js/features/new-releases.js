@@ -380,7 +380,7 @@ async function scanArtists(content) {
   // slice sobre lo que FALTA, no sobre el target entero: si 40 ya vinieron del
   // cache y el target son 100, hay que encolar 60, no 100.
   const queue = eligible.filter(a => !a.scanned).slice(0, Math.max(0, target - scanned));
-  if (!queue.length) return;   // todo servido del cache
+  if (!queue.length) return;   // todo servido de la caché
   progress.style.display = '';
 
   const workers = Array.from({ length: BATCH_PARALLEL }, () => (async () => {

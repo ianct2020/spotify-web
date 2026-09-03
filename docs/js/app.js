@@ -1,41 +1,41 @@
-import { isLoggedIn, loginWithSpotify, logout } from './auth.js?v=190';
-import { spotifyFetch, tryAutoLoadUserBackup, onRateLimit } from './api.js?v=190';
-import { getValidToken } from './auth.js?v=190';
-import { cacheClearAll } from './storage.js?v=190';
-import { idbClearAll } from './idb.js?v=190';
-import { registerRoute, initRouter, rutasRegistradas } from './router.js?v=190';
-import { showToast } from './ui/toast.js?v=190';
-import { pageHeader, escapeHtml } from './ui/components.js?v=190';
-import { installCrashGuard } from './ui/crash-guard.js?v=190';
-import { getStack } from './ui/modal-stack.js?v=190';
-import { installBackToTop } from './ui/back-to-top.js?v=190';
-import { applyStoredTheme, openThemePanel } from './ui/theme-panel.js?v=190';
+import { isLoggedIn, loginWithSpotify, logout } from './auth.js?v=191';
+import { spotifyFetch, tryAutoLoadUserBackup, onRateLimit } from './api.js?v=191';
+import { getValidToken } from './auth.js?v=191';
+import { cacheClearAll } from './storage.js?v=191';
+import { idbClearAll } from './idb.js?v=191';
+import { registerRoute, initRouter, rutasRegistradas } from './router.js?v=191';
+import { showToast } from './ui/toast.js?v=191';
+import { pageHeader, escapeHtml } from './ui/components.js?v=191';
+import { installCrashGuard } from './ui/crash-guard.js?v=191';
+import { getStack } from './ui/modal-stack.js?v=191';
+import { installBackToTop } from './ui/back-to-top.js?v=191';
+import { applyStoredTheme, openThemePanel } from './ui/theme-panel.js?v=191';
 
-import { render as renderSync } from './features/sync.js?v=190';
-import { render as renderDedupe } from './features/dedupe.js?v=190';
-import { render as renderDupalbums } from './features/duplicate-albums.js?v=190';
-import { render as renderZombies } from './features/zombies.js?v=190';
-import { render as renderVersions } from './features/versions.js?v=190';
-import { render as renderDashboard } from './features/dashboard.js?v=190';
-import { render as renderSmart } from './features/smart.js?v=190';
-import { render as renderSimilar } from './features/similar-artists.js?v=190';
-import { render as renderRabbit } from './features/rabbit-hole.js?v=190';
-import { render as renderByGenre } from './features/by-genre.js?v=190';
-import { render as renderByArtist } from './features/by-artist.js?v=190';
-import { render as renderRecs } from './features/recommendations.js?v=190';
-import { render as renderListened } from './features/listened.js?v=190';
-import { render as renderWrapped } from './features/wrapped.js?v=190';
-import { render as renderRecords } from './features/records.js?v=190';
-import { openImportHistory } from './features/import-history.js?v=190';
-import { bindOwnerLockedButtons } from './features/history-data.js?v=190';
-import { render as renderZeroPlays } from './features/zero-plays.js?v=190';
-import { render as renderSkips } from './features/skips.js?v=190';
-import { render as renderSearchLikes } from './features/search-likes.js?v=190';
-import { render as renderWthree } from './features/wthree.js?v=190';
-import { render as renderCovers } from './features/covers.js?v=190';
-import { render as renderDiscoverArtists } from './features/discover-artists.js?v=190';
-import { render as renderNewReleases } from './features/new-releases.js?v=190';
-import { render as renderSinClasificar } from './features/sin-clasificar.js?v=190';
+import { render as renderSync } from './features/sync.js?v=191';
+import { render as renderDedupe } from './features/dedupe.js?v=191';
+import { render as renderDupalbums } from './features/duplicate-albums.js?v=191';
+import { render as renderZombies } from './features/zombies.js?v=191';
+import { render as renderVersions } from './features/versions.js?v=191';
+import { render as renderDashboard } from './features/dashboard.js?v=191';
+import { render as renderSmart } from './features/smart.js?v=191';
+import { render as renderSimilar } from './features/similar-artists.js?v=191';
+import { render as renderRabbit } from './features/rabbit-hole.js?v=191';
+import { render as renderByGenre } from './features/by-genre.js?v=191';
+import { render as renderByArtist } from './features/by-artist.js?v=191';
+import { render as renderRecs } from './features/recommendations.js?v=191';
+import { render as renderListened } from './features/listened.js?v=191';
+import { render as renderWrapped } from './features/wrapped.js?v=191';
+import { render as renderRecords } from './features/records.js?v=191';
+import { openImportHistory } from './features/import-history.js?v=191';
+import { bindOwnerLockedButtons } from './features/history-data.js?v=191';
+import { render as renderZeroPlays } from './features/zero-plays.js?v=191';
+import { render as renderSkips } from './features/skips.js?v=191';
+import { render as renderSearchLikes } from './features/search-likes.js?v=191';
+import { render as renderWthree } from './features/wthree.js?v=191';
+import { render as renderCovers } from './features/covers.js?v=191';
+import { render as renderDiscoverArtists } from './features/discover-artists.js?v=191';
+import { render as renderNewReleases } from './features/new-releases.js?v=191';
+import { render as renderSinClasificar } from './features/sin-clasificar.js?v=191';
 
 // ── Arranque degradado cuando /me está rate-limiteado (v=173) ────────────────
 //
@@ -585,7 +585,7 @@ function showApp(profile) {
       const n = await idbClearAll(['all_liked_tracks', 'all_liked_tracks_partial']);
       showToast(`Cache limpiado (${n} entrada${n === 1 ? '' : 's'}). Tus likes se conservan.`, 'success');
     } catch (e) {
-      showToast('Cache local limpiado (IDB falló: ' + e.message + ')', 'info');
+      showToast('Caché local limpiada (IDB falló: ' + e.message + ')', 'info');
     }
     btn.textContent = orig;
     btn.disabled = false;

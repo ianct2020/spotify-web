@@ -4,7 +4,7 @@
 // (preview_url de Spotify murió en la migración feb 2026; el embed iframe
 // queda como fallback para lo que iTunes no tenga.)
 
-import { pickBestMatch, artistMatches, artistList, preferredQueryArtists } from '../util/track-match.js?v=190';
+import { pickBestMatch, artistMatches, artistList, preferredQueryArtists } from '../util/track-match.js?v=191';
 
 // v3: la key sube de v2 porque hasta v=141 se comparaba contra UN solo artista
 // (el del álbum). En los discos acreditados a un alias —«¥$» = Kanye West + Ty
@@ -31,7 +31,7 @@ function saveCache() {
   while (cache.size > MAX_CACHE) cache.delete(cache.keys().next().value);
   try {
     localStorage.setItem(LS_KEY, JSON.stringify(Object.fromEntries(cache)));
-  } catch { /* storage lleno: el cache en memoria alcanza */ }
+  } catch { /* storage lleno: la caché en memoria alcanza */ }
 }
 
 // Normaliza para comparar: sin acentos, sin (feat. X) ni [Remaster], solo alfanumérico

@@ -2,12 +2,12 @@
 // maratones de un artista, temas en loop, rachas e hitos. Todo sale de
 // history-records.json (gen-stats.py) ya calculado, acá es solo UI.
 
-import { loadRecords, isOwner, ownerLockedMessage } from './history-data.js?v=190';
-import { escapeHtml, pageHeader } from '../ui/components.js?v=190';
-import { getPreview } from '../api/preview-providers.js?v=190';
-import { getArtistLikePreview } from '../util/artist-preview.js?v=190';
-import { attachHover } from '../ui/preview-player.js?v=190';
-import { openArtistCard } from './artist-card.js?v=190';
+import { loadRecords, isOwner, ownerLockedMessage } from './history-data.js?v=191';
+import { escapeHtml, pageHeader } from '../ui/components.js?v=191';
+import { getPreview } from '../api/preview-providers.js?v=191';
+import { getArtistLikePreview } from '../util/artist-preview.js?v=191';
+import { attachHover } from '../ui/preview-player.js?v=191';
+import { openArtistCard } from './artist-card.js?v=191';
 
 const MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
 const DIAS = ['lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado', 'domingo'];
@@ -104,7 +104,7 @@ export async function render(container) {
       <div class="records-milestones">
         ${r.milestones.map(m => `
           <div class="records-milestone">
-            <div class="records-milestone-n">#${m.n.toLocaleString('es-AR')}</div>
+            <div class="records-milestone-n">#${m.n.toLocaleString('es-ES')}</div>
             <div class="records-milestone-info">
               <div class="records-milestone-track">${escapeHtml(m.name)}</div>
               <div class="records-milestone-meta">${escapeHtml(m.artist)} · ${fmtDayShort(m.date)}</div>

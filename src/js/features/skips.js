@@ -449,7 +449,7 @@ function renderResults() {
   const hiddenCount = hiddenTracks.size;
 
   const sfLabel = cache.statsfmUsed
-    ? `Cruzando con Stats.fm — ${cache.statsfmUpdated.toLocaleString('es-AR')} ajustados con plays post-export`
+    ? `Cruzando con Stats.fm — ${cache.statsfmUpdated.toLocaleString('es-ES')} ajustados con plays post-export`
     : (hasUsername() ? 'Cruzar con Stats.fm' : '');
 
   // Topbar en UNA sola fila (v=121): stats mini + chips + toggle Stats.fm + acciones

@@ -163,7 +163,7 @@ async function analyzeLikedSongs() {
 
   try {
     const { items } = await getBestAvailableLikes();
-    document.getElementById('liked-header-count').textContent = `${items.length.toLocaleString('es-AR')} tracks`;
+    document.getElementById('liked-header-count').textContent = `${items.length.toLocaleString('es-ES')} tracks`;
 
     const groups = new Map();
     items.forEach(it => {

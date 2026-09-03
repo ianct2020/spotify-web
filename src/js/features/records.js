@@ -104,7 +104,7 @@ export async function render(container) {
       <div class="records-milestones">
         ${r.milestones.map(m => `
           <div class="records-milestone">
-            <div class="records-milestone-n">#${m.n.toLocaleString('es-AR')}</div>
+            <div class="records-milestone-n">#${m.n.toLocaleString('es-ES')}</div>
             <div class="records-milestone-info">
               <div class="records-milestone-track">${escapeHtml(m.name)}</div>
               <div class="records-milestone-meta">${escapeHtml(m.artist)} · ${fmtDayShort(m.date)}</div>

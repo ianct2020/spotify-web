@@ -32,7 +32,7 @@
 // La guarda del último ejemplar NO se aplica en cuatro de las cinco vistas, y no
 // es un olvido. Ver el parámetro `guarda` más abajo.
 
-import { guardaUltimoEjemplar } from './versions-guard.js?v=190';
+import { guardaUltimoEjemplar } from './versions-guard.js?v=191';
 
 // El único número: `/me/library/contains` admite 40 uris por request (medido en
 // vivo el 2026-08-28: 40 → 200, 41 → 400, 100 → 414). api.js ya chunkea de a 40

@@ -2,11 +2,11 @@
 // Acepta ZIP del export de Spotify o los Streaming_History_Audio_*.json sueltos.
 // Extrae + procesa + guarda todo en el IDB del user (nada sale de su compu).
 
-import { processStreamingHistory } from '../history-processor.js?v=190';
-import { saveMyHistory, clearMyHistory, hasLocalHistory } from './history-data.js?v=190';
-import { escapeHtml, showProgress, hideProgress, confirmModal, alertModal } from '../ui/components.js?v=190';
-import { showToast } from '../ui/toast.js?v=190';
-import { openModal, closeTop, closeById } from '../ui/modal-stack.js?v=190';
+import { processStreamingHistory } from '../history-processor.js?v=191';
+import { saveMyHistory, clearMyHistory, hasLocalHistory } from './history-data.js?v=191';
+import { escapeHtml, showProgress, hideProgress, confirmModal, alertModal } from '../ui/components.js?v=191';
+import { showToast } from '../ui/toast.js?v=191';
+import { openModal, closeTop, closeById } from '../ui/modal-stack.js?v=191';
 
 const OVERLAY_ID = 'import-history-overlay';
 let overlay = null;
@@ -189,7 +189,7 @@ async function handleFiles(files) {
   hideProgress();
 
   const totals = result.stats.totals;
-  showToast(`Historial cargado: ${totals.plays_valid.toLocaleString('es-AR')} plays válidas · ${totals.days_active.toLocaleString('es-AR')} días activos`, 'success');
+  showToast(`Historial cargado: ${totals.plays_valid.toLocaleString('es-ES')} plays válidas · ${totals.days_active.toLocaleString('es-ES')} días activos`, 'success');
   setTimeout(() => location.reload(), 800);
 }
 

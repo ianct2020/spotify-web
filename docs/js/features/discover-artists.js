@@ -10,17 +10,17 @@
 // 100 artistas en lugar de 20. Lógica de fetch/cache/playlist compartida en
 // features/discover-common.js con #new-releases.
 
-import { escapeHtml, confirmModal, pageHeader } from '../ui/components.js?v=190';
-import { showToast } from '../ui/toast.js?v=190';
-import { openArtistCard } from './artist-card.js?v=190';
-import { createIncrementalList, scrollRootOf } from '../ui/incremental-list.js?v=190';
-import { createLazyImages } from '../ui/lazy-img.js?v=190';
-import { isJunkTrack } from '../util/junk.js?v=190';
-import { buildAlbumHeardIndex } from '../util/album-heard.js?v=190';
-import { loadFiltros, buildFilterContext, applyDiscoverFilters } from '../util/discover-filters.js?v=190';
-import { releaseKind } from '../util/release-size.js?v=190';
-import { vigilarRuta } from '../util/vigencia-ruta.js?v=190';
-import { prefKey, migratePrefKey } from '../storage.js?v=190';
+import { escapeHtml, confirmModal, pageHeader } from '../ui/components.js?v=191';
+import { showToast } from '../ui/toast.js?v=191';
+import { openArtistCard } from './artist-card.js?v=191';
+import { createIncrementalList, scrollRootOf } from '../ui/incremental-list.js?v=191';
+import { createLazyImages } from '../ui/lazy-img.js?v=191';
+import { isJunkTrack } from '../util/junk.js?v=191';
+import { buildAlbumHeardIndex } from '../util/album-heard.js?v=191';
+import { loadFiltros, buildFilterContext, applyDiscoverFilters } from '../util/discover-filters.js?v=191';
+import { releaseKind } from '../util/release-size.js?v=191';
+import { vigilarRuta } from '../util/vigencia-ruta.js?v=191';
+import { prefKey, migratePrefKey } from '../storage.js?v=191';
 import {
   getArtistIdCached,
   getArtistDiscoCached,
@@ -47,7 +47,7 @@ import {
   cardKey,
   toggleHeardAlbum,
   toggleHiddenAlbum,
-} from './discover-common.js?v=190';
+} from './discover-common.js?v=191';
 
 const SCAN_KEY = 'discover_artists';
 
@@ -380,7 +380,7 @@ async function scanArtists(content, ruta = vigilarRuta()) {
   document.getElementById('disco-count').textContent = scanned;
 
   const queue = state.artists.filter(a => !a.scanned).slice(0, target - scanned);
-  if (!queue.length) return;   // todo servido del cache: ni barra ni requests
+  if (!queue.length) return;   // todo servido de la caché: ni barra ni requests
   progress.style.display = '';
 
   const workers = Array.from({ length: BATCH_PARALLEL }, () => (async () => {

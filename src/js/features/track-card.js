@@ -237,8 +237,8 @@ async function openTrackCard(t) {
 
   body.innerHTML = `
     <div class="tc-stats">
-      <div class="tc-stat"><div class="tc-stat-v">${totalPlays.toLocaleString('es-AR')}</div><div class="tc-stat-l">${partial ? 'plays cortas (<30s)' : 'plays válidas'}</div></div>
-      <div class="tc-stat"><div class="tc-stat-v">${totalMin.toLocaleString('es-AR')}m</div><div class="tc-stat-l">minutos totales</div></div>
+      <div class="tc-stat"><div class="tc-stat-v">${totalPlays.toLocaleString('es-ES')}</div><div class="tc-stat-l">${partial ? 'plays cortas (<30s)' : 'plays válidas'}</div></div>
+      <div class="tc-stat"><div class="tc-stat-v">${totalMin.toLocaleString('es-ES')}m</div><div class="tc-stat-l">minutos totales</div></div>
       <div class="tc-stat"><div class="tc-stat-v">${det ? det.d : '—'}</div><div class="tc-stat-l">días distintos</div></div>
       <div class="tc-stat"><div class="tc-stat-v">${det ? det.x : '—'}</div><div class="tc-stat-l">récord en un día</div></div>
     </div>
@@ -328,13 +328,13 @@ async function fillStatsfmLine(t, exportPlays = null) {
       const min = Math.round(hit.playedMs / 60000);
       const delta = exportPlays != null
         ? (hit.streams > exportPlays
-            ? ` <span style="color:var(--color-accent)">(+${(hit.streams - exportPlays).toLocaleString('es-AR')} desde el export)</span>`
+            ? ` <span style="color:var(--color-accent)">(+${(hit.streams - exportPlays).toLocaleString('es-ES')} desde el export)</span>`
             : (hit.streams < exportPlays ? ` <span style="color:var(--color-text-muted)">(export tenía ${exportPlays})</span>` : ''))
         : '';
       holder.innerHTML = `
         <div style="display:flex;align-items:center;gap:8px;margin-top:12px;padding:8px 12px;background:var(--color-elevated);border:1px solid var(--color-border);border-radius:var(--radius-sm,6px);font-size:12.5px;color:var(--color-text-secondary)">
           <strong style="color:var(--color-text)">Stats.fm hoy:</strong>
-          ${hit.streams.toLocaleString('es-AR')} plays · ${min.toLocaleString('es-AR')}m${delta}
+          ${hit.streams.toLocaleString('es-ES')} plays · ${min.toLocaleString('es-ES')}m${delta}
           <span style="color:var(--color-text-muted);margin-left:auto" title="Total real actual según tu Top de todos los tiempos (incluye lo importado + lo trackeado en vivo)">total actual</span>
         </div>`;
       return;
@@ -354,7 +354,7 @@ async function fillStatsfmLine(t, exportPlays = null) {
     holder.innerHTML = `
       <div style="display:flex;align-items:center;gap:8px;margin-top:12px;padding:8px 12px;background:var(--color-elevated);border:1px solid var(--color-border);border-radius:var(--radius-sm,6px);font-size:12.5px;color:var(--color-text-secondary)">
         <strong style="color:var(--color-text)">Stats.fm en vivo:</strong>
-        ${stats.count.toLocaleString('es-AR')} plays · ${min.toLocaleString('es-AR')}m
+        ${stats.count.toLocaleString('es-ES')} plays · ${min.toLocaleString('es-ES')}m
         <span style="color:var(--color-text-muted);margin-left:auto" title="Solo lo trackeado desde que conectaste Stats.fm (sin lo importado del export)">solo post-conexión</span>
       </div>`;
   } catch {
