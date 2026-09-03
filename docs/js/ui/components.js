@@ -1,6 +1,6 @@
-import { openModal, closeTop } from './modal-stack.js?v=191';
-import { mountBottomHtml } from './bottom-layer.js?v=191';
-import { coverUrl } from '../util/cover-size.js?v=191';
+import { openModal, closeTop } from './modal-stack.js?v=192';
+import { mountBottomHtml } from './bottom-layer.js?v=192';
+import { coverUrl } from '../util/cover-size.js?v=192';
 
 function renderTrackRow(track, extra = '') {
   const art = coverUrl(track.album?.images, 'grande') || '';
@@ -34,7 +34,7 @@ const PROGRESS_IDLE_TIMEOUT_MS = 10000;
 
 function renderProgressOverlay(text, loaded, total, cancellable, minimized) {
   const pct = total > 0 ? Math.round((loaded / total) * 100) : 0;
-  const count = `${loaded.toLocaleString()}${total ? ` / ${total.toLocaleString()}` : ''}`;
+  const count = `${loaded.toLocaleString('es-ES')}${total ? ` / ${total.toLocaleString('es-ES')}` : ''}`;
   if (minimized) {
     return `
       <div class="progress-mini" id="progress-overlay" data-mode="mini" data-cancellable="${cancellable ? 1 : 0}" title="Click para ver el progreso completo">
@@ -124,7 +124,7 @@ function showProgress(text, loaded = 0, total = 0, opts = {}) {
   overlay.querySelector('#progress-label').textContent = text;
   overlay.querySelector('#progress-fill').style.width = `${pct}%`;
   overlay.querySelector('#progress-count').textContent =
-    `${loaded.toLocaleString()}${total ? ` / ${total.toLocaleString()}` : ''}`;
+    `${loaded.toLocaleString('es-ES')}${total ? ` / ${total.toLocaleString('es-ES')}` : ''}`;
 }
 
 function resetProgressIdleTimer() {
@@ -343,7 +343,7 @@ function renderPlaylistGrid(playlists) {
               : `<div class="playlist-card-cover-placeholder">♪</div>`}
           </div>
           <div class="playlist-card-name">${escapeHtml(p.name)}</div>
-          <div class="playlist-card-meta">${(p.tracks?.total ?? '?').toLocaleString()} tracks</div>
+          <div class="playlist-card-meta">${(p.tracks?.total ?? '?').toLocaleString('es-ES')} tracks</div>
         </button>
       `).join('')}
     </div>

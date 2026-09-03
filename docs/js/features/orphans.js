@@ -1,6 +1,6 @@
-import { getAllLikedTracks, getAllUserPlaylists, getAllPlaylistItems, createPlaylist, addTracksToPlaylist } from '../api.js?v=191';
-import { showProgress, hideProgress, progressController, isCancelled, confirmModal, renderTrackRow, pageHeader } from '../ui/components.js?v=191';
-import { showToast } from '../ui/toast.js?v=191';
+import { getAllLikedTracks, getAllUserPlaylists, getAllPlaylistItems, createPlaylist, addTracksToPlaylist } from '../api.js?v=192';
+import { showProgress, hideProgress, progressController, isCancelled, confirmModal, renderTrackRow, pageHeader } from '../ui/components.js?v=192';
+import { showToast } from '../ui/toast.js?v=192';
 
 export function render(container) {
   container.innerHTML = `
@@ -78,7 +78,7 @@ async function analyze() {
     results.innerHTML = `
       <div class="results-summary">
         <div class="stat-card">
-          <div class="stat-value">${likes.length.toLocaleString()}</div>
+          <div class="stat-value">${likes.length.toLocaleString('es-ES')}</div>
           <div class="stat-label">Liked Songs</div>
         </div>
         <div class="stat-card">
@@ -86,7 +86,7 @@ async function analyze() {
           <div class="stat-label">Playlists</div>
         </div>
         <div class="stat-card">
-          <div class="stat-value" style="color:var(--color-warning)">${orphans.length.toLocaleString()}</div>
+          <div class="stat-value" style="color:var(--color-warning)">${orphans.length.toLocaleString('es-ES')}</div>
           <div class="stat-label">Huérfanas</div>
         </div>
       </div>

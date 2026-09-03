@@ -1,10 +1,10 @@
-import { getAllLikedTracks, createPlaylist, addTracksToPlaylist, invalidatePlaylistsCache, getBestAvailableLikes } from '../api.js?v=191';
-import { showProgress, hideProgress, progressController, isCancelled, promptPlaylistName, escapeHtml, pageHeader } from '../ui/components.js?v=191';
-import { showToast } from '../ui/toast.js?v=191';
-import { getArtistLikePreview } from '../util/artist-preview.js?v=191';
-import { attachHover } from '../ui/preview-player.js?v=191';
-import { openArtistCard } from './artist-card.js?v=191';
-import { prefKey, migratePrefKey } from '../storage.js?v=191';
+import { getAllLikedTracks, createPlaylist, addTracksToPlaylist, invalidatePlaylistsCache, getBestAvailableLikes } from '../api.js?v=192';
+import { showProgress, hideProgress, progressController, isCancelled, promptPlaylistName, escapeHtml, pageHeader } from '../ui/components.js?v=192';
+import { showToast } from '../ui/toast.js?v=192';
+import { getArtistLikePreview } from '../util/artist-preview.js?v=192';
+import { attachHover } from '../ui/preview-player.js?v=192';
+import { openArtistCard } from './artist-card.js?v=192';
+import { prefKey, migratePrefKey } from '../storage.js?v=192';
 
 const SORT_KEY = 'artist_sort_mode';
 const VALID_SORTS = new Set(['count-desc', 'count-asc', 'name-asc']);
@@ -93,7 +93,7 @@ function build() {
   content.innerHTML = `
     <div class="card" style="margin-bottom:16px">
       <div style="font-size:14px">
-        <strong>${likes.length.toLocaleString()}</strong> likes · <strong>${artistMap.size.toLocaleString()}</strong> artistas principales
+        <strong>${likes.length.toLocaleString('es-ES')}</strong> likes · <strong>${artistMap.size.toLocaleString('es-ES')}</strong> artistas principales
         <span style="color:var(--color-text-muted);font-weight:400" title="Cada canción cuenta una sola vez, por su primer artista. El Dashboard cuenta a todos los acreditados (colaboraciones y «feat.» aparte), y por eso su número es mayor.">· cuenta el primer artista de cada canción</span>
       </div>
     </div>
@@ -182,7 +182,7 @@ function renderGrid() {
         <button class="smart-card artist-card ${selectedArtists.has(name) ? 'selected' : ''}" data-artist="${escapeHtml(name)}">
           <span class="artist-card-ficha" title="Ver ficha del artista">ⓘ</span>
           <div class="smart-card-title" style="font-size:15px">${escapeHtml(name)}</div>
-          <div class="smart-card-meta">${tracks.length.toLocaleString()} tracks</div>
+          <div class="smart-card-meta">${tracks.length.toLocaleString('es-ES')} tracks</div>
         </button>
       `).join('')}
     </div>
@@ -234,7 +234,7 @@ function updateActionBar() {
   bar.innerHTML = `
     <div class="action-bar">
       <div class="action-bar-info">
-        <strong>${escapeHtml(label)}</strong> — ${uniqueUris.size.toLocaleString()} tracks únicos
+        <strong>${escapeHtml(label)}</strong> — ${uniqueUris.size.toLocaleString('es-ES')} tracks únicos
       </div>
       <div style="display:flex;gap:8px">
         <button class="btn btn-secondary" id="artist-clear-btn">Limpiar</button>

@@ -696,7 +696,7 @@ function showApp(profile) {
   tryAutoLoadUserBackup(profile.id).then(result => {
     if (result.loaded) {
       const parts = [];
-      if (result.likesCount > 0) parts.push(`${result.likesCount.toLocaleString()} likes`);
+      if (result.likesCount > 0) parts.push(`${result.likesCount.toLocaleString('es-ES')} likes`);
       if (result.delta > 0) parts.push(`+${result.delta} nuevos`);
       if (result.tagsCount > 0) parts.push(`${result.tagsCount} artistas con tags`);
       if (parts.length > 0) {

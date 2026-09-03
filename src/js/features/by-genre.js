@@ -119,8 +119,8 @@ async function renderStartScreen() {
   const hasLikes = cachedLikes.length > 0;
 
   const intro = hasLikes
-    ? `Tienes <strong>${cachedLikes.length.toLocaleString()}</strong> likes y <strong>${cachedTagsCount.toLocaleString()}</strong> artistas con tags cacheados. Ya puedes ver tus géneros.`
-    : `Tienes <strong>${cachedTagsCount.toLocaleString()}</strong> artistas con tags pero <strong>0 likes</strong> cacheados. Carga los likes desde Spotify o importa un JSON previo que los tenga.`;
+    ? `Tienes <strong>${cachedLikes.length.toLocaleString('es-ES')}</strong> likes y <strong>${cachedTagsCount.toLocaleString('es-ES')}</strong> artistas con tags cacheados. Ya puedes ver tus géneros.`
+    : `Tienes <strong>${cachedTagsCount.toLocaleString('es-ES')}</strong> artistas con tags pero <strong>0 likes</strong> cacheados. Carga los likes desde Spotify o importa un JSON previo que los tenga.`;
 
   const primaryLabel = hasLikes ? 'Ver mis géneros' : 'Cargar mis likes desde Spotify';
 
@@ -201,8 +201,8 @@ async function start() {
       <div class="card" style="margin-bottom:16px">
         <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
           <div>
-            <div style="font-size:14px;margin-bottom:4px">${likes.length.toLocaleString()} likes · ${artistNames.length} artistas únicos</div>
-            <div style="font-size:12px;color:var(--color-text-secondary)">${cachedCount.toLocaleString()} ya cacheados · ${uncached.length.toLocaleString()} por analizar</div>
+            <div style="font-size:14px;margin-bottom:4px">${likes.length.toLocaleString('es-ES')} likes · ${artistNames.length} artistas únicos</div>
+            <div style="font-size:12px;color:var(--color-text-secondary)">${cachedCount.toLocaleString('es-ES')} ya cacheados · ${uncached.length.toLocaleString('es-ES')} por analizar</div>
           </div>
           <div style="display:flex;gap:8px;flex-wrap:wrap">
             ${uncached.length > 0 ? `<button class="btn btn-primary" id="genre-fetch-btn">Analizar ${uncached.length}</button>` : ''}
@@ -266,7 +266,7 @@ async function handleExport() {
   a.click();
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
-  showToast(`Exportado: ${likesCount.toLocaleString()} likes + ${tagsCount.toLocaleString()} artistas`, 'success');
+  showToast(`Exportado: ${likesCount.toLocaleString('es-ES')} likes + ${tagsCount.toLocaleString('es-ES')} artistas`, 'success');
 }
 
 async function handleMusicBrainz() {
@@ -445,7 +445,7 @@ async function handleImport(e, { skipRefresh = false, returnResult = false } = {
     if (!inspection.hasLikes && inspection.hasTags) {
       const ok = await alertModal(
         'Este archivo no tiene likes',
-        `<p>El JSON trae <strong>0 tracks</strong> pero sí <strong>${inspection.tagsCount.toLocaleString()} artistas con tags</strong>.</p>
+        `<p>El JSON trae <strong>0 tracks</strong> pero sí <strong>${inspection.tagsCount.toLocaleString('es-ES')} artistas con tags</strong>.</p>
          <p>Los tags sirven para clasificar en Por género. Los likes vas a tener que cargarlos aparte desde el Dashboard.</p>`,
         { variant: 'warning', confirmText: 'Importar solo tags', cancelText: 'Cancelar' }
       );
@@ -454,7 +454,7 @@ async function handleImport(e, { skipRefresh = false, returnResult = false } = {
 
     const result = await importAllData(parsed);
     const parts = [];
-    if (result.likesImported > 0) parts.push(`${result.likesImported.toLocaleString()} likes`);
+    if (result.likesImported > 0) parts.push(`${result.likesImported.toLocaleString('es-ES')} likes`);
     if (result.tagsImported > 0) parts.push(`${result.tagsImported} artistas nuevos`);
     if (result.tagsUpdated > 0) parts.push(`${result.tagsUpdated} actualizados`);
     showToast(parts.length > 0 ? `Importado: ${parts.join(' · ')}` : 'Sin cambios', 'success');
@@ -476,7 +476,7 @@ function refreshHeaderAndGenres() {
   if (header) {
     const statusLine = header.querySelector('div > div > div:nth-child(2)');
     if (statusLine) {
-      statusLine.innerHTML = `${cachedCount.toLocaleString()} ya cacheados · ${uncached.length.toLocaleString()} por analizar`;
+      statusLine.innerHTML = `${cachedCount.toLocaleString('es-ES')} ya cacheados · ${uncached.length.toLocaleString('es-ES')} por analizar`;
     }
     const fetchBtn = document.getElementById('genre-fetch-btn');
     if (fetchBtn) {
@@ -716,13 +716,13 @@ function renderGrid() {
         <button class="smart-card genre-card ${selectedTags.has(tag) ? 'selected' : ''}" data-tag="${escapeHtml(tag)}">
           <span class="genre-hide-btn" title="Ocultar este género para siempre">✕</span>
           <div class="smart-card-title" style="font-size:15px;text-transform:capitalize">${escapeHtml(tag)}</div>
-          <div class="smart-card-meta">${tracks.length.toLocaleString()} tracks</div>
+          <div class="smart-card-meta">${tracks.length.toLocaleString('es-ES')} tracks</div>
         </button>
       `).join('')}
       ${showUnclassified ? `
         <button class="smart-card genre-card" id="unclassified-card" style="border-color:var(--color-warning);border-style:dashed">
           <div class="smart-card-title" style="font-size:15px;color:var(--color-warning)">Sin clasificar</div>
-          <div class="smart-card-meta">${cachedUnclassified.length.toLocaleString()} tracks</div>
+          <div class="smart-card-meta">${cachedUnclassified.length.toLocaleString('es-ES')} tracks</div>
         </button>
       ` : ''}
     </div>
@@ -820,7 +820,7 @@ function updateActionBar() {
   bar.innerHTML = `
     <div class="action-bar">
       <div class="action-bar-info">
-        <strong>${escapeHtml(label)}</strong> — ${uniqueUris.size.toLocaleString()} tracks únicos
+        <strong>${escapeHtml(label)}</strong> — ${uniqueUris.size.toLocaleString('es-ES')} tracks únicos
       </div>
       <div style="display:flex;gap:8px">
         <button class="btn btn-secondary" id="genre-clear-btn">Limpiar</button>

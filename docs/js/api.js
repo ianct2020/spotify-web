@@ -1,9 +1,9 @@
-import { getValidToken, refreshAccessToken } from './auth.js?v=191';
-import { cacheGet, cacheGetRaw, cacheGetTimestamp, cacheSet, cacheClear, prefKey, migratePrefKey } from './storage.js?v=191';
-import { idbDel, idbDelByPrefix, idbGetCached, idbGetCachedRaw, idbGetTimestamp, idbSetCached } from './idb.js?v=191';
-import { OWNER_KEY_LIST } from './history-keys.js?v=191';
-import { showToast } from './ui/toast.js?v=191';
-import { artistIsSame, limpiaParaQuery } from './util/track-match.js?v=191';
+import { getValidToken, refreshAccessToken } from './auth.js?v=192';
+import { cacheGet, cacheGetRaw, cacheGetTimestamp, cacheSet, cacheClear, prefKey, migratePrefKey } from './storage.js?v=192';
+import { idbDel, idbDelByPrefix, idbGetCached, idbGetCachedRaw, idbGetTimestamp, idbSetCached } from './idb.js?v=192';
+import { OWNER_KEY_LIST } from './history-keys.js?v=192';
+import { showToast } from './ui/toast.js?v=192';
+import { artistIsSame, limpiaParaQuery } from './util/track-match.js?v=192';
 
 const BASE = 'https://api.spotify.com/v1';
 const MIN_RETRY_WAIT = 5000;
@@ -418,7 +418,7 @@ async function saveLikes(items, { complete = true, total = null } = {}) {
     return { ok: true };
   } catch (e) {
     console.error('IDB saveLikes failed:', e);
-    showToast(`Error guardando ${items.length.toLocaleString()} likes en el navegador: ${e.message}. Exporta el JSON YA para no perderlos.`, 'error');
+    showToast(`Error guardando ${items.length.toLocaleString('es-ES')} likes en el navegador: ${e.message}. Exporta el JSON YA para no perderlos.`, 'error');
     return { ok: false, error: e };
   }
 }
@@ -489,7 +489,7 @@ function startLikesLoad({ force }) {
       }
 
       await clearPartial(LIKES_CACHE_KEY);
-      console.log(`[likes] caché consolidado: ${items.length.toLocaleString()} canciones, sin caducidad`);
+      console.log(`[likes] caché consolidado: ${items.length.toLocaleString('es-ES')} canciones, sin caducidad`);
       return items;
     } finally {
       if (likesInFlight === state) likesInFlight = null;
