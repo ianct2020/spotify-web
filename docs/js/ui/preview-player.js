@@ -17,9 +17,9 @@
 // como está (marcado como el preview actual, pero con el ▶), que es lo honesto:
 // no sabemos si Spotify está sonando dentro del iframe.
 
-import { escapeHtml } from './components.js?v=198';
-import { showToast } from './toast.js?v=198';
-import { mountBottom } from './bottom-layer.js?v=198';
+import { escapeHtml } from './components.js?v=199';
+import { showToast } from './toast.js?v=199';
+import { mountBottom } from './bottom-layer.js?v=199';
 
 const audio = new Audio();
 audio.preload = 'none';
@@ -115,13 +115,19 @@ function showPillAudio(label, provider, loading) {
   p.querySelector('.preview-pill-embed').innerHTML = '';
   p.querySelector('.preview-pill-label').innerHTML = escapeHtml(label || '');
   const provEl = p.querySelector('.preview-pill-provider');
-  provEl.textContent = loading ? 'buscando…' : '';
+  provEl.textContent = loading ? 'buscando…' : (PROVIDER_LABEL[provider] || '');
   p.classList.toggle('loading', !!loading);
   // Quietas hasta que el <audio> avise que está sonando de verdad.
   p.classList.remove('is-playing');
   p.classList.add('show');
 }
 
+// El track de Spotify sin preview propio no puede autoarrancar (política de
+// autoplay del navegador) ni avisarnos si suena: por eso el botón de la
+// tarjeta se queda tintado en ▶ (ver `paintPlayingCard`) y acá el aviso deja
+// claro que ARRANCAR es cosa del propio widget de Spotify, con una salida
+// directa por si el play de adentro no responde (pasa con las cookies de
+// terceros bloqueadas: el iframe no ve la sesión logueada de Spotify).
 function showPillEmbed(url, label) {
   const p = ensurePill();
   p.classList.add('preview-pill-embedded');
@@ -130,9 +136,11 @@ function showPillEmbed(url, label) {
   p.querySelector('.preview-pill-main').style.display = 'none';
   const box = p.querySelector('.preview-pill-embed');
   box.hidden = false;
+  const trackUrl = url.replace('/embed/track/', '/track/');
   box.innerHTML = `
-    <iframe src="${url}" allow="encrypted-media" title="${escapeHtml(label || '')}" style="border:0;width:100%;height:80px;border-radius:8px" loading="lazy"></iframe>
-    <div class="preview-pill-provider preview-pill-provider-embed">${escapeHtml(label || '')}</div>
+    <div class="preview-pill-embed-note">Sin preview propio: te ofrecemos el reproductor de Spotify. Si el play de aquí abajo no arranca, ábrelo directamente:</div>
+    <iframe src="${url}" allow="autoplay; encrypted-media; clipboard-write; fullscreen" title="${escapeHtml(label || '')}" style="border:0;width:100%;height:80px;border-radius:8px" loading="lazy"></iframe>
+    <a class="preview-pill-embed-link" href="${trackUrl}" target="_blank" rel="noopener">Abrir en Spotify ↗</a>
   `;
   p.classList.add('show');
 }

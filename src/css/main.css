@@ -1818,7 +1818,20 @@ h3 { font-size: 18px; font-weight: 600; }
 }
 .preview-pill-embed { display: block; }
 .preview-pill-embed[hidden] { display: none; }
-.preview-pill-provider-embed { margin-top: 4px; }
+.preview-pill-embed-note {
+  font-size: 11px;
+  color: var(--color-text-muted);
+  line-height: 1.4;
+  margin-bottom: 6px;
+  /* El ✕ de cerrar es `position: absolute` en el pill embebido (arriba), así
+     que sin este hueco el texto se mete debajo de su chip circular. */
+  padding-right: 22px;
+}
+.preview-pill-embed-link {
+  display: block;
+  font-size: 11px;
+  margin-top: 6px;
+}
 .preview-pill.preview-pill-embedded .preview-pill-close {
   position: absolute;
   top: 6px;
