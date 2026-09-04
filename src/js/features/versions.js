@@ -1,7 +1,7 @@
 import { getAllLikedTracks, removeLikedTracks, checkLibraryContains } from '../api.js';
 import { borrarLikesVerificado } from '../util/borrado-verificado.js';
 import { normalizeKey, esFantasma, guardaUltimoEjemplar, indexarBiblioteca } from '../util/versions-guard.js';
-import { showProgress, hideProgress, progressController, isCancelled, typeConfirmModal, renderTrackRow, escapeHtml, pageHeader } from '../ui/components.js';
+import { showProgress, hideProgress, progressController, isCancelled, typeConfirmModal, infoModal, renderTrackRow, escapeHtml, pageHeader } from '../ui/components.js';
 import { showToast } from '../ui/toast.js';
 import { openModal, closeTop } from '../ui/modal-stack.js';
 import { coverUrl } from '../util/cover-size.js';
@@ -79,7 +79,7 @@ function dryRunActivo() {
 }
 
 // El doble. Devuelve la entrada registrada para que el llamador la muestre.
-function borradoSimulado(ids, { meta = null } = {}) {
+function borradoSimulado(ids, { meta = null, supervivientes = null } = {}) {
   const entrada = {
     fecha: new Date().toISOString(),
     simulacro: true,
@@ -87,6 +87,10 @@ function borradoSimulado(ids, { meta = null } = {}) {
     ids,
     marcadas: [...keepIds],
     borradas: meta,
+    // Las que se quedan, con nombre y grupo. El simulacro no llega al helper,
+    // así que no las comprueba contra Spotify; sí deja escrito qué habría
+    // comprobado, que es lo que hace útil al doble.
+    supervivientes,
   };
   window.__versionsDryLog = window.__versionsDryLog || [];
   window.__versionsDryLog.push(entrada);
@@ -529,21 +533,54 @@ function updateSummaryCounts() {
   if (dupes) dupes.textContent = totalDupes;
 }
 
-// Devuelve los ITEMS a borrar, no solo los ids: la confirmación tiene que poder
-// listar nombre y artista de cada uno, y el registro local guardarlos.
-function computeRemovals() {
-  const toRemove = [];
+// Los grupos que participan del borrado, con las dos mitades separadas: lo que
+// se va y lo que se queda. Antes esto devolvía solo la mitad que se va, y por
+// eso la que se queda no tenía a dónde agarrarse para comprobarla después.
+function computeGrupos() {
+  const grupos = [];
   document.querySelectorAll('.cluster-group').forEach(clusterEl => {
     const idx = parseInt(clusterEl.dataset.clusterIdx);
     const cluster = allClusters[idx];
     if (!cluster) return;
-    const hasKeep = cluster.some(item => keepIds.has(item.track.id));
-    if (!hasKeep) return;
-    cluster.forEach(item => {
-      if (!keepIds.has(item.track.id)) toRemove.push(item);
-    });
+    const seQuedan = cluster.filter(item => keepIds.has(item.track.id));
+    if (seQuedan.length === 0) return;
+    const seVan = cluster.filter(item => !keepIds.has(item.track.id));
+    if (seVan.length === 0) return;
+    grupos.push({ idx, cluster, seQuedan, seVan });
   });
-  return toRemove;
+  return grupos;
+}
+
+// Devuelve los ITEMS a borrar, no solo los ids: la confirmación tiene que poder
+// listar nombre y artista de cada uno, y el registro local guardarlos.
+function computeRemovals() {
+  return computeGrupos().flatMap(g => g.seVan);
+}
+
+// Cómo se llama el grupo, para poder decir DE DÓNDE se perdió algo. Es el mismo
+// texto de la cabecera del grupo, así se puede buscar a ojo en la pantalla.
+function nombreDelGrupo(cluster) {
+  const t = cluster[0]?.track;
+  if (!t) return '(grupo vacío)';
+  const artista = t.artists?.map(a => a.name).join(', ') || 'Artista desconocido';
+  return `${t.name || '(sin nombre)'} — ${artista}`;
+}
+
+// Las que se quedan, con nombre y grupo. Un mismo id no se repite: aparece una
+// vez por lote aunque estuviera marcado en dos sitios.
+function computeSupervivientes(grupos) {
+  const vistos = new Set();
+  const out = [];
+  for (const g of grupos) {
+    const grupo = nombreDelGrupo(g.cluster);
+    for (const item of g.seQuedan) {
+      const d = describirPista(item.track);
+      if (vistos.has(d.id)) continue;
+      vistos.add(d.id);
+      out.push({ id: d.id, nombre: d.nombre, artista: d.artista, album: d.album, grupo });
+    }
+  }
+  return out;
 }
 
 function describirPista(track) {
@@ -571,9 +608,13 @@ async function batchDelete() {
     showToast(MOTIVO_BLOQUEO, 'warning');
     return;
   }
-  const toRemove = computeRemovals();
+  const grupos = computeGrupos();
+  const toRemove = grupos.flatMap(g => g.seVan);
   if (toRemove.length === 0) return;
   const toRemoveIds = toRemove.map(item => item.track.id);
+  // Se calcula ANTES del borrado: después, `allClusters` ya está mutado y los
+  // grupos que se van a comprobar no existen con esa forma.
+  const supervivientes = computeSupervivientes(grupos);
   const detalle = toRemove.map(item => describirPista(item.track));
 
   // La confirmación lista una por una lo que se va a borrar. Un número no deja
@@ -620,7 +661,7 @@ async function batchDelete() {
     const meta = detalle.map(d => ({ ...d, marcadasEnEsteBorrado: [...keepIds] }));
     let verifyLine = '';
     if (simulacro) {
-      borradoSimulado(toRemoveIds, { meta });
+      borradoSimulado(toRemoveIds, { meta, supervivientes });
     } else {
       // Borrado + verificación + guarda, en `util/borrado-verificado.js`: la
       // misma secuencia que usan las otras cuatro vistas que borran me gusta.
@@ -641,10 +682,17 @@ async function batchDelete() {
         guarda: 'ultimo-ejemplar',
         items: toRemove,
         libraryByKey,
+        // La otra mitad de la guarda: la guarda dice que queda una copia viva,
+        // y esto lo comprueba contra Spotify DESPUÉS de borrar. Sin esto, el
+        // «✓ verificado» de abajo solo hablaba de las que se iban.
+        supervivientes,
         onProgress: (fase, hechas, total) => showProgress(
-          fase === 'verificando' ? 'Verificando con Spotify...' : 'Borrando sobrantes...', hechas, total),
+          fase === 'verificando' ? 'Verificando con Spotify...'
+          : fase === 'verificando-supervivientes' ? 'Comprobando las que se quedan...'
+          : 'Borrando sobrantes...', hechas, total),
       });
-      verifyLine = ` · ✓ verificado: ${toRemoveIds.length} de ${toRemoveIds.length} salieron`;
+      verifyLine = ` · ✓ verificado: ${toRemoveIds.length} de ${toRemoveIds.length} salieron`
+        + ` y ${supervivientes.length} que se queda(n) sigue(n) ahí`;
     }
     hideProgress();
     showToast(simulacro
@@ -667,8 +715,48 @@ async function batchDelete() {
     updateBatchBar();
   } catch (e) {
     hideProgress();
-    showToast('Error: ' + e.message, 'error');
+    if (e.supervivientesPerdidas) {
+      // Un toast se va solo a los pocos segundos y esto hay que poder leerlo,
+      // anotarlo y volver a añadir los temas a mano. Modal, y encima queda el
+      // registro por si se cierra sin copiarlo.
+      avisarSupervivientesPerdidas(e.supervivientesPerdidas, toRemoveIds.length);
+    } else {
+      showToast('Error: ' + e.message, 'error');
+    }
   }
+}
+
+// Clave del registro de supervivientes perdidas. Aparte del log de borrados
+// (`likes_borrados_log_v1`), que registra lo que se MANDÓ a borrar y por tanto
+// no puede contener nunca a la que se queda.
+const PERDIDAS_KEY = 'versions_supervivientes_perdidas_v1';
+
+function avisarSupervivientesPerdidas(perdidas, totalBorradas) {
+  console.error('[versions] SUPERVIVIENTES PERDIDAS:', perdidas);
+  try {
+    migratePrefKey(PERDIDAS_KEY);
+    const previo = JSON.parse(localStorage.getItem(prefKey(PERDIDAS_KEY)) || '[]');
+    const entrada = { fecha: new Date().toISOString(), totalBorradas, perdidas };
+    localStorage.setItem(prefKey(PERDIDAS_KEY), JSON.stringify([entrada, ...previo].slice(0, 20)));
+  } catch { /* el registro es una red, no un requisito: el modal ya avisó */ }
+
+  const filas = perdidas.map(p => `
+    <li style="margin-bottom:10px">
+      <strong>${escapeHtml(p.nombre || '(sin nombre)')}</strong> — ${escapeHtml(p.artista || 'Artista desconocido')}
+      <div style="font-size:12px;color:var(--color-text-secondary)">${escapeHtml(p.album || 'Sin álbum')}</div>
+      <div style="font-size:12px;color:var(--color-text-secondary)">Grupo: ${escapeHtml(p.grupo || '(desconocido)')}</div>
+    </li>`).join('');
+
+  infoModal(
+    `${perdidas.length} de las que ibas a conservar ya no está${perdidas.length === 1 ? '' : 'n'}`,
+    `<p>Las ${totalBorradas} versiones sobrantes salieron bien. Pero al comprobarlo contra Spotify,
+        esto que ibas a conservar <strong>no está en tus me gusta</strong>:</p>
+     <ul style="margin:10px 0;padding-left:20px;max-height:280px;overflow-y:auto">${filas}</ul>
+     <p style="font-size:13px;color:var(--color-text-secondary)">
+       Este borrado no las quitó: nunca se mandaron a borrar. Ya faltaban antes, así que el análisis
+       estaba mirando una foto vieja. Vuelve a añadirlas a mano y re-analiza antes de seguir borrando.</p>`,
+    { variant: 'danger', cancelText: 'Cerrar', confirmText: 'Entendido' }
+  );
 }
 
 function renderCluster(cluster, idx) {
