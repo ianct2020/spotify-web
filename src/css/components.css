@@ -770,6 +770,35 @@ input[type="checkbox"].keep-check:checked::after {
   padding: 14px 8px;
 }
 
+/* Tarjeta de artista de Recomendaciones (scrobbles): el ojo de ocultar vive en
+   la esquina, así que la tarjeta deja de ser un único <button> — un botón
+   dentro de otro es HTML inválido (mismo gotcha que `.dcard-cover-wrap`) — y
+   pasa a ser un contenedor con dos botones HERMANOS: `.recs-artist-pick` (todo
+   el contenido, elige el artista) y `.recs-artist-hide` (el ojo). */
+.recs-artist-card {
+  position: relative;
+  padding-top: 26px;
+  cursor: default;
+}
+.recs-artist-pick {
+  all: unset;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  text-align: center;
+  cursor: pointer;
+}
+.recs-artist-hide {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  opacity: .55;
+}
+.recs-artist-hide:hover { opacity: 1; }
+
 .smart-card.selected {
   border-color: var(--color-accent);
   background: var(--color-elevated);
@@ -923,6 +952,26 @@ input[type="checkbox"].keep-check:checked::after {
 
 .pretty-check-row:last-child {
   border-bottom: none;
+}
+
+/* Grilla adaptable para listas de `.pretty-check-row` que hoy son una sola
+   columna a lo ancho de la página (Recomendaciones y Artistas similares: cada
+   fila mide 40px de tapa + texto corto, y a 1366px sobraba para 2-3).
+   `auto-fill` decide solo cuántas entran y cae a 1 columna en mobile — no hace
+   falta ninguna media query. Dentro de la grilla cada fila deja de ser un
+   renglón de una lista (borde solo abajo) y pasa a ser su propia tarjeta,
+   porque ya no hay "renglón siguiente" debajo con el que compartir el borde. */
+.tracks-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 10px;
+}
+.tracks-grid .pretty-check-row {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+}
+.tracks-grid .pretty-check-row:last-child {
+  border: 1px solid var(--color-border);
 }
 
 .pretty-check {

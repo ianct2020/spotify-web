@@ -2,24 +2,24 @@
 // por álbum). Muestra qué álbumes ya tienen picks, cuántos, y cuáles te faltan.
 // Ordenado por álbumes más escuchados primero para priorizar tu tiempo.
 
-import { spotifyFetch, getAllPlaylistItems, getAllUserPlaylists, addTracksToPlaylist, removeTracksFromPlaylist, reorderPlaylistItems, getCachedPlaylistItems, updatePlaylistItemsCache, getBestAvailableLikes } from '../api.js?v=200';
-import { vigilarRuta } from '../util/vigencia-ruta.js?v=200';
-import { patchPlaylistItems, buildCachedItem } from '../util/playlist-cache-patch.js?v=200';
-import { loadHistoryStats, loadListenedAlbums, isOwner, ownerLockedMessage } from './history-data.js?v=200';
-import { escapeHtml, pageHeader } from '../ui/components.js?v=200';
-import { showToast } from '../ui/toast.js?v=200';
-import { activateMarquee, marqueeSpan } from '../ui/marquee.js?v=200';
-import { openModal, closeById, closeModal } from '../ui/modal-stack.js?v=200';
-import { getPreview } from '../api/preview-providers.js?v=200';
-import { togglePreview, playingKey } from '../ui/preview-player.js?v=200';
-import { openAlbumCard } from './album-card.js?v=200';
-import { albumKey } from '../util/album-key.js?v=200';
-import { computeUpdatedPickPositions } from '../util/reorder-shifts.js?v=200';
-import { createHiddenStore } from '../util/hidden-sync.js?v=200';
-import { mountBottom } from '../ui/bottom-layer.js?v=200';
-import { coverUrl } from '../util/cover-size.js?v=200';
-import { insercionPorPuntero, moverA, indicadorPara } from '../util/reorder-drop.js?v=200';
-import { prefKey, migratePrefKey } from '../storage.js?v=200';
+import { spotifyFetch, getAllPlaylistItems, getAllUserPlaylists, addTracksToPlaylist, removeTracksFromPlaylist, reorderPlaylistItems, getCachedPlaylistItems, updatePlaylistItemsCache, getBestAvailableLikes } from '../api.js?v=201';
+import { vigilarRuta } from '../util/vigencia-ruta.js?v=201';
+import { patchPlaylistItems, buildCachedItem } from '../util/playlist-cache-patch.js?v=201';
+import { loadHistoryStats, loadListenedAlbums, isOwner, ownerLockedMessage } from './history-data.js?v=201';
+import { escapeHtml, pageHeader } from '../ui/components.js?v=201';
+import { showToast } from '../ui/toast.js?v=201';
+import { activateMarquee, marqueeSpan } from '../ui/marquee.js?v=201';
+import { openModal, closeById, closeModal } from '../ui/modal-stack.js?v=201';
+import { getPreview } from '../api/preview-providers.js?v=201';
+import { togglePreview, playingKey } from '../ui/preview-player.js?v=201';
+import { openAlbumCard } from './album-card.js?v=201';
+import { albumKey } from '../util/album-key.js?v=201';
+import { computeUpdatedPickPositions } from '../util/reorder-shifts.js?v=201';
+import { createHiddenStore } from '../util/hidden-sync.js?v=201';
+import { mountBottom } from '../ui/bottom-layer.js?v=201';
+import { coverUrl } from '../util/cover-size.js?v=201';
+import { insercionPorPuntero, moverA, indicadorPara } from '../util/reorder-drop.js?v=201';
+import { prefKey, migratePrefKey } from '../storage.js?v=201';
 
 const LS_KEY_ID = 'wthree_playlist_id';
 const LS_KEY_NAME = 'wthree_playlist_name';
@@ -480,11 +480,11 @@ function renderBuckets(content) {
       </div>
     ` : ''}
 
-    ${!selectedBucket || selectedBucket === '0' ? renderBucket('🔴 Sin picks — priorizados por tiempo escuchado', buckets['0'], 'danger', selectedBucket === '0' ? 999 : 20) : ''}
-    ${!selectedBucket || selectedBucket === '1' ? renderBucket('🟠 Con 1 pick — completar', buckets['1'], '', selectedBucket === '1' ? 999 : 15) : ''}
-    ${!selectedBucket || selectedBucket === '2' ? renderBucket('🟡 Con 2 picks — falta uno', buckets['2'], '', selectedBucket === '2' ? 999 : 15) : ''}
-    ${!selectedBucket || selectedBucket === '3' ? renderBucket('✅ Ya con 3', buckets['3'], 'ok', selectedBucket === '3' ? 999 : 10) : ''}
-    ${buckets['4+'].length && (!selectedBucket || selectedBucket === '4+') ? renderBucket('⚠️ Más de 3 picks — sacar alguno?', buckets['4+'], 'warn', selectedBucket === '4+' ? 999 : 10) : ''}
+    ${!selectedBucket || selectedBucket === '0' ? renderBucket('🔴 Sin picks — priorizados por tiempo escuchado', buckets['0'], 'danger', selectedBucket === '0' ? 999 : 20, '0') : ''}
+    ${!selectedBucket || selectedBucket === '1' ? renderBucket('🟠 Con 1 pick — completar', buckets['1'], '', selectedBucket === '1' ? 999 : 15, '1') : ''}
+    ${!selectedBucket || selectedBucket === '2' ? renderBucket('🟡 Con 2 picks — falta uno', buckets['2'], '', selectedBucket === '2' ? 999 : 15, '2') : ''}
+    ${!selectedBucket || selectedBucket === '3' ? renderBucket('✅ Ya con 3', buckets['3'], 'ok', selectedBucket === '3' ? 999 : 10, '3') : ''}
+    ${buckets['4+'].length && (!selectedBucket || selectedBucket === '4+') ? renderBucket('⚠️ Más de 3 picks — sacar alguno?', buckets['4+'], 'warn', selectedBucket === '4+' ? 999 : 10, '4+') : ''}
 
     <div style="font-size:11px;color:var(--color-text-muted);margin-top:14px;text-align:center">
       ${historyCount} álbumes del top historial${listenedCount ? ` · ${listenedCount} más detectados en tu historial de escucha` : ''} · ${picksByAlbum.size} álbumes en la playlist${hiddenCount && !showingHidden ? ` · ${hiddenCount} oculto${hiddenCount === 1 ? '' : 's'}` : ''}${sinLikesCount && !showNoLikes ? ` · ${sinLikesCount} sin ningún like, fuera de la lista` : ''}
@@ -523,7 +523,7 @@ function renderBuckets(content) {
   activateMarquee(content);
 }
 
-function renderBucket(title, albums, kind, limit) {
+function renderBucket(title, albums, kind, limit, bucketKey) {
   if (!albums.length) return '';
   const items = albums.slice(0, limit);
   const rest = albums.length - items.length;
@@ -536,7 +536,7 @@ function renderBucket(title, albums, kind, limit) {
       <div class="wthree-album-list">
         ${items.map((a, i) => renderAlbumRow(a, kind)).join('')}
       </div>
-      ${rest > 0 ? `<button class="btn btn-secondary btn-sm" style="margin-top:10px" data-more="${title}">Ver ${rest} más</button>` : ''}
+      ${rest > 0 ? `<button class="btn btn-secondary btn-sm" style="margin-top:10px" data-more-bucket="${bucketKey}">Ver ${rest} más</button>` : ''}
     </div>
   `;
 }
@@ -605,10 +605,15 @@ function wireAlbumClicks(root) {
       renderBuckets(root);
     });
   });
-  // "Ver N más" buttons — no implementado por ahora (MVP)
-  root.querySelectorAll('[data-more]').forEach(btn => {
+  // "Ver N más" — el mismo mecanismo que los chips de arriba: seleccionar ESE
+  // bucket muestra sus 999 (todos) en vez del recorte de la vista con todos
+  // juntos. No hace falta paginar de verdad: `renderBucket` ya sabe mostrar el
+  // bucket entero cuando `selectedBucket` coincide con su clave.
+  root.querySelectorAll('[data-more-bucket]').forEach(btn => {
     btn.onclick = () => {
-      showToast('Próximamente: ver todos los álbumes del bucket', 'info');
+      selectedBucket = btn.dataset.moreBucket;
+      renderBuckets(root);
+      root.querySelector('.wthree-bucket')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     };
   });
 }
