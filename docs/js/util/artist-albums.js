@@ -15,11 +15,11 @@
 //      «¥$», medido en producción).
 // Ninguna de las dos pide nada a la red: las dos ya están en el navegador.
 
-import { albumKey } from './album-key.js?v=195';
-import { loadTrackPlays, loadListenedAlbums } from '../features/history-data.js?v=195';
-import { lookupAlbumStats } from './album-stats.js?v=195';
-import { getBestAvailableLikes } from '../api.js?v=195';
-import { coverUrl } from './cover-size.js?v=195';
+import { albumKey } from './album-key.js?v=196';
+import { loadTrackPlays, loadListenedAlbums } from '../features/history-data.js?v=196';
+import { lookupAlbumStats } from './album-stats.js?v=196';
+import { getBestAvailableLikes } from '../api.js?v=196';
+import { coverUrl } from './cover-size.js?v=196';
 
 let _imgs = null;   // albumKey(name, artist) → url   +   albumKey(name, '') → url
 

@@ -21,10 +21,10 @@
 // texto blanco: los dos siguen legibles en claro, pero no acompañan al tema.
 // Anotado en la doc.
 
-import { openModal, closeTop } from './modal-stack.js?v=195';
-import { showToast } from './toast.js?v=195';
-import { prefKey, migratePrefKey } from '../storage.js?v=195';
-import { MODOS, getAnimMode, setAnimMode } from './reveal.js?v=195';
+import { openModal, closeTop } from './modal-stack.js?v=196';
+import { showToast } from './toast.js?v=196';
+import { prefKey, migratePrefKey } from '../storage.js?v=196';
+import { getAnimMode, setAnimMode } from './reveal.js?v=196';
 
 // La clave lleva prefijo por usuario desde v=159 (antes era global y dos
 // personas en el mismo navegador compartían paleta). El prefijo sale de
@@ -182,21 +182,28 @@ export function applyStoredTheme() {
 
 // ── el panel ────────────────────────────────────────────────────────────────
 
-// El toggle de animaciones vive ACÁ y no en un icono propio del menú: esto ya
+// El control de animaciones vive ACÁ y no en un icono propio del menú: esto ya
 // es «cómo se ve la app», y el menú no necesita otra entrada.
+//
 // v=162: dos estados, encendidas de fábrica. El modo «Sigue al sistema» se
 // quitó — las animaciones de entrada ya no miran `prefers-reduced-motion`. El
 // resto de las animaciones de la aplicación sí lo sigue respetando.
-const ANIM_OPCIONES = [
-  { id: 'siempre', label: 'Encendidas', title: 'Las secciones entran al llegar a ellas scrolleando' },
-  { id: 'nunca', label: 'Apagadas', title: 'Sin animaciones de entrada: el contenido aparece ya colocado' },
-];
+//
+// v=196: los dos botones grandes pasaron a un SWITCH, y el tercer modo
+// —«repetir»— es una casilla debajo, no una opción escondida. El motivo es de
+// alto: con los dos botones, el panel entero no entraba en una pantalla de
+// 1366x768 y había que scrollear dentro del modal para llegar hasta acá.
+//
+// Los tres modos con dos controles: apagado = `nunca`; encendido con la casilla
+// suelta = `siempre`; encendido con la casilla marcada = `repetir`. Se eligió
+// así y no un selector de tres posiciones porque `repetir` no es un tercer
+// nivel de intensidad: es el MISMO encendido, en modo de prueba.
 
-/** El cartel de debajo del toggle. */
+/** El cartel de debajo del control. Una línea, que es lo que hay de alto. */
 function animNotaHtml(modo) {
-  return modo === 'nunca'
-    ? 'Sin animaciones de entrada. El contenido aparece ya colocado.'
-    : 'Las secciones del Dashboard y del Wrapped entran al llegar a ellas scrolleando. No depende del ajuste de movimiento reducido del sistema.';
+  if (modo === 'nunca') return 'El contenido aparece ya colocado.';
+  if (modo === 'repetir') return 'Modo de prueba: la entrada se repite cada vez que el elemento vuelve a asomar.';
+  return 'Las secciones del Dashboard y del Wrapped entran al llegar a ellas scrolleando.';
 }
 
 function swatchesHtml(colors) {
@@ -213,12 +220,13 @@ export function openThemePanel() {
   const overlay = openModal({
     id: 'theme-panel',
     html: `
-    <div class="modal card-modal" style="max-width:560px;width:min(560px,94vw)">
+    <div class="modal card-modal theme-modal" style="max-width:640px;width:min(640px,94vw)">
       <div class="card-modal-head-simple">
         <div class="card-modal-eyebrow">Paleta de colores</div>
         <button class="btn btn-secondary btn-sm card-modal-close" data-close-modal>✕</button>
       </div>
       <p class="theme-help">Los cambios se ven al instante y quedan guardados en este navegador.</p>
+      <div class="theme-title">Predefinidas</div>
       <div class="theme-presets" id="theme-presets">
         ${PRESETS.map(p => `
           <button type="button" class="theme-preset" data-preset="${p.id}">
@@ -237,15 +245,23 @@ export function openThemePanel() {
           </label>
         `).join('')}
       </div>
-      <div class="theme-title">Animaciones</div>
-      <div class="theme-anim-row" id="theme-anim-row">
-        ${ANIM_OPCIONES.map(o => `
-          <button type="button" class="theme-anim-opt" data-anim="${o.id}" title="${o.title}">${o.label}</button>
-        `).join('')}
+      <div class="theme-anim">
+        <div class="theme-anim-row">
+          <span class="theme-anim-label">Animaciones de entrada</span>
+          <label class="theme-switch" title="Las secciones entran al llegar a ellas scrolleando">
+            <input type="checkbox" id="theme-anim-on">
+            <span class="theme-switch-track"><span class="theme-switch-knob"></span></span>
+          </label>
+        </div>
+        <label class="theme-anim-rep" id="theme-anim-rep-wrap"
+               title="Para detectar qué elementos no se animan: con la entrada una sola vez, «ya se animó» y «no se anima» se ven igual">
+          <input type="checkbox" id="theme-anim-rep">
+          <span>Repetir cada vez que el elemento vuelve a entrar <em>(para probar)</em></span>
+        </label>
+        <p class="theme-anim-nota" id="theme-anim-nota"></p>
       </div>
-      <p class="theme-anim-nota" id="theme-anim-nota"></p>
 
-      <div class="card-modal-actions" style="margin-top:16px">
+      <div class="card-modal-actions" style="margin-top:12px">
         <button class="btn btn-secondary btn-sm" id="theme-reset">Volver al original</button>
         <button class="btn btn-primary btn-sm" id="theme-done">Listo</button>
       </div>
@@ -286,27 +302,37 @@ export function openThemePanel() {
   });
 
   // ── animaciones ──
+  //
+  // Los dos controles se PINTAN desde el modo guardado y se LEEN juntos para
+  // volver a un modo: así no hay un estado intermedio posible (por ejemplo
+  // «apagadas + repetir»), que es lo que pasaría si cada casilla escribiera su
+  // propia clave.
   const notaEl = overlay.querySelector('#theme-anim-nota');
+  const onEl = overlay.querySelector('#theme-anim-on');
+  const repEl = overlay.querySelector('#theme-anim-rep');
+  const repWrap = overlay.querySelector('#theme-anim-rep-wrap');
+
   const pintarAnim = () => {
     const modo = getAnimMode();
-    overlay.querySelectorAll('.theme-anim-opt').forEach(el => {
-      el.classList.toggle('is-on', el.dataset.anim === modo);
-      el.setAttribute('aria-pressed', String(el.dataset.anim === modo));
-    });
-    if (notaEl) notaEl.innerHTML = animNotaHtml(modo);
+    onEl.checked = modo !== 'nunca';
+    repEl.checked = modo === 'repetir';
+    // Con las animaciones apagadas, «repetir» no tiene qué repetir.
+    repEl.disabled = modo === 'nunca';
+    repWrap.classList.toggle('is-off', modo === 'nunca');
+    if (notaEl) notaEl.textContent = animNotaHtml(modo);
   };
   pintarAnim();
 
-  overlay.querySelectorAll('.theme-anim-opt').forEach(el => {
-    el.onclick = () => {
-      if (!MODOS.includes(el.dataset.anim)) return;
-      setAnimMode(el.dataset.anim);
-      pintarAnim();
-      // Lo elegido se nota la próxima vez que se entra a una vista con
-      // animaciones: acá no hay nada armado que re-animar.
-      showToast('Se aplica al volver a entrar al Dashboard o al Wrapped', 'info');
-    };
-  });
+  const aplicarAnim = () => {
+    const modo = !onEl.checked ? 'nunca' : (repEl.checked ? 'repetir' : 'siempre');
+    setAnimMode(modo);
+    pintarAnim();
+    // Lo elegido se nota la próxima vez que se entra a una vista con
+    // animaciones: acá no hay nada armado que re-animar.
+    showToast('Se aplica al volver a entrar al Dashboard o al Wrapped', 'info');
+  };
+  onEl.onchange = aplicarAnim;
+  repEl.onchange = aplicarAnim;
 
   overlay.querySelector('#theme-reset').onclick = () => {
     try { localStorage.removeItem(LS_KEY()); } catch { /* noop */ }
