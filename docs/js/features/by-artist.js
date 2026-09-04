@@ -1,10 +1,10 @@
-import { getAllLikedTracks, createPlaylist, addTracksToPlaylist, invalidatePlaylistsCache, getBestAvailableLikes } from '../api.js?v=199';
-import { showProgress, hideProgress, progressController, isCancelled, promptPlaylistName, escapeHtml, pageHeader } from '../ui/components.js?v=199';
-import { showToast } from '../ui/toast.js?v=199';
-import { getArtistLikePreview } from '../util/artist-preview.js?v=199';
-import { attachHover } from '../ui/preview-player.js?v=199';
-import { openArtistCard } from './artist-card.js?v=199';
-import { prefKey, migratePrefKey } from '../storage.js?v=199';
+import { getAllLikedTracks, createPlaylist, addTracksToPlaylist, invalidatePlaylistsCache, getBestAvailableLikes } from '../api.js?v=200';
+import { showProgress, hideProgress, progressController, isCancelled, promptPlaylistName, escapeHtml, pageHeader } from '../ui/components.js?v=200';
+import { showToast } from '../ui/toast.js?v=200';
+import { getArtistLikePreview } from '../util/artist-preview.js?v=200';
+import { attachHover } from '../ui/preview-player.js?v=200';
+import { openArtistCard } from './artist-card.js?v=200';
+import { prefKey, migratePrefKey } from '../storage.js?v=200';
 
 const SORT_KEY = 'artist_sort_mode';
 const VALID_SORTS = new Set(['count-desc', 'count-asc', 'name-asc']);

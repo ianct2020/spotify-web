@@ -26,6 +26,7 @@ import { EP_MIN_TRACKS } from './release-size.js';
 import { getSavedAlbums, getBestAvailableLikes, getAllPlaylistItems } from '../api.js';
 import { getOwnPlaylists } from './playlist-add.js';
 import { loadListenedAlbums } from '../features/history-data.js';
+import { buildAlbumHeardIndex } from './album-heard.js';
 import { prefKey, migratePrefKey } from '../storage.js';
 
 const LS_KEY = 'discover_filtros_v1';
@@ -199,6 +200,22 @@ export async function buildFilterContext({ force = false } = {}) {
     }
   } catch { /* sin historial: el criterio no descarta nada */ }
 
+  // 2b) El índice COMPLETO de escuchados (util/album-heard.js: historial
+  //     entero de plays + likes + W-Three), no solo lo de arriba —biblioteca
+  //     guardada y el JSON de «listened», que es un SUBSET por umbral de 4
+  //     pistas/25 min el mismo día—. Sin esto, un disco que Ian escuchó pero
+  //     nunca guardó ni cruzó ese umbral no protegía a sus propias ediciones
+  //     (Taylor's Version, Deluxe…) del criterio 'edicion': el disco base ya
+  //     era candidato a "unheard" con una clave exacta de sobra (albumIsUnheard
+  //     usa el MISMO índice), pero el cruce por edición miraba un universo más
+  //     chico y las variantes se colaban como si fueran nuevas. Memoizado, así
+  //     que reusarlo acá no cuesta una llamada de más — ya se calculó al
+  //     entrar a la vista.
+  try {
+    const idx = await buildAlbumHeardIndex();
+    for (const k of idx.heardBases) basesTuyas.add(k);
+  } catch { /* sin índice: esta fuente no suma cobertura, las otras siguen */ }
+
   // 3) Temas que ya salieron dentro de un álbum escuchado. Sale de los likes,
   //    que traen el álbum de cada canción: es local y gratis. Pedirle a Spotify
   //    el tracklist de cada candidato serían cientos de llamadas.
@@ -305,12 +322,20 @@ export function motivosDeDescarte(al, artista, artistaId, ctx) {
   // C5 — edición en vivo o de aniversario (los deluxe se quedan).
   if (esEnVivoOAniversario(al.name)) out.push('vivo');
 
-  // C6 — single corto cuyo tema ya salió dentro de un álbum escuchado.
+  // C6 — lanzamiento corto cuyo tema ya salió dentro de un álbum escuchado.
   //
   // El cruce va por el tema BASE, no por el título: «Timeless (Remix)»,
   // «Timeless - DEVAULT Remix» y «Timeless Sped Up» tienen que dar todos con
   // «Timeless». De eso se ocupa `songKeysCandidatas` (util/song-identity.js).
-  if (al.type === 'single' && (al.total || 1) < EP_MIN_TRACKS
+  //
+  // ⚠️ Ya NO exige `al.type === 'single'` (v=196). El criterio compara por
+  // CANTIDAD de pistas, que es lo que de verdad determina si el nombre del
+  // lanzamiento puede ser el nombre de una sola canción; el `type` que manda
+  // Spotify es el mismo dato que ya volvió `releaseKind()` en tres cubetas
+  // (álbum/EP/single) en vez de dos, y una compilación corta de remixes —
+  // «Timeless (Remixes)», typeada 'compilation' o 'single' según el catálogo—
+  // quedaba afuera de este cruce por una etiqueta, no por su contenido.
+  if ((al.total || 1) < EP_MIN_TRACKS
       && songKeysCandidatas(al.name, artista).some(k => ctx.temaEnAlbum.has(k))) {
     out.push('single');
   }
