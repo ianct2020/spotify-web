@@ -33,6 +33,8 @@ import { firstArtistName } from '../util/artist-name.js';
 import { createHiddenStore } from '../util/hidden-sync.js';
 import { fmtDiaCorto } from '../util/fecha.js';
 import { prefKey, migratePrefKey } from '../storage.js';
+import { openPlaylistPicker } from '../ui/playlist-picker.js';
+import { getOwnPlaylists, addUrisToPlaylists, toastAddResult } from '../util/playlist-add.js';
 
 let cache = null;
 
@@ -355,6 +357,7 @@ function renderResults() {
     `}
     <div class="sc-actionbar" id="zp-actionbar" style="display:none">
       <span id="zp-sel-count">0 seleccionadas</span>
+      <button class="btn btn-primary btn-sm" id="zp-add">Añadir a playlist…</button>
       <button class="btn btn-danger btn-sm" id="zp-remove">Sacar de likes</button>
       <button class="btn btn-secondary btn-sm" id="zp-sel-clear">Limpiar selección</button>
     </div>
@@ -397,6 +400,7 @@ function renderResults() {
       onToggle: (id, o) => toggleSelection(id, o),
       onPlay: (r) => onPlayClick(r),
       onCard: (r) => openTrackCard({ id: r.trackId, name: r.name, artists: r.artistList || [r.artist], album: r.album, img: r.coverSmall || r.cover }),
+      onAdd: (r) => openAddModal([r]),
       onHide: (r) => onHideClick(r),
       onUnlike: (r) => sacarDeLikes([r]),
     });
@@ -421,6 +425,20 @@ function renderResults() {
     repaintSelection();
     updateSelectionUi();
   };
+  const addBtn = content.querySelector('#zp-add');
+  if (addBtn) addBtn.onclick = () => {
+    const filas = currentRows.filter(r => selected.has(r.id));
+    if (filas.length) {
+      openAddModal(filas, {
+        onDone: () => {
+          selected.clear();
+          lastClickedId = null;
+          repaintSelection();
+          updateSelectionUi();
+        },
+      });
+    }
+  };
   const rm = content.querySelector('#zp-remove');
   if (rm) rm.onclick = () => {
     const filas = currentRows.filter(r => selected.has(r.id));
@@ -441,6 +459,7 @@ function renderCard(r) {
     {
       selected: selected.has(r.id),
       playing: playingKey() === `zp:${r.id}`,
+      showAdd: true,
       showUnlike: true,
       // Desde v=149 sí hay lista de ocultos: para los que Ian sí escuchó pero
       // aparecen acá igual (el historial no los tiene), ocultar es la salida
@@ -502,6 +521,46 @@ function updateSelectionUi() {
     selAll.textContent = todas ? 'Quitar selección' : 'Seleccionar todos';
     selAll.disabled = total === 0;
   }
+}
+
+// ── Modal "Añadir a…" ────────────────────────────────────────────────────────
+// El mismo modal compartido de #sin-clasificar y #new-releases (ui/playlist-picker.js,
+// con el pill de progreso de la capa de abajo). `rows` es una sola canción (el
+// botón de la tarjeta) o la selección múltiple. A diferencia de #sin-clasificar,
+// acá añadir a una playlist no cambia si el like «tiene plays»: la fila no sale
+// de la lista, solo se limpia la selección en el caso múltiple.
+function openAddModal(rows, { onDone } = {}) {
+  const conUri = rows.filter(r => r.uri);
+  const sinUri = rows.length - conUri.length;
+  if (!conUri.length) {
+    showToast('Ninguna de las canciones seleccionadas tiene URI de Spotify', 'error');
+    return;
+  }
+  const subtitulo = rows.length === 1
+    ? `${rows[0].name} — ${rows[0].artists}`
+    : `${conUri.length} canciones${sinUri ? ` (${sinUri} sin URI de Spotify quedan fuera)` : ''}`;
+
+  getOwnPlaylists().then(playlists => {
+    openPlaylistPicker({
+      id: 'zp-add',
+      title: rows.length === 1 ? 'Añadir a playlists' : 'Añadir la selección a playlists',
+      subtitle: subtitulo,
+      playlists,
+      onReload: () => getOwnPlaylists({ force: true }),
+      onConfirm: async (elegidas, { setStatus } = {}) => {
+        const res = await addUrisToPlaylists(conUri.map(r => r.uri), elegidas, {
+          appendItems: conUri.map(r => ({ id: r.trackId, uri: r.uri, name: r.name, artists: r.artistList || [] })),
+          namesByUri: new Map(conUri.map(r => [r.uri, r.name])),
+          onStatus: setStatus,
+        });
+        toastAddResult(res, {
+          what: rows.length === 1 ? `«${rows[0].name}»` : `${conUri.length} canciones`,
+          plural: rows.length !== 1,
+        });
+        if (onDone) onDone();
+      },
+    });
+  }).catch(e => showToast('No se pudieron cargar tus playlists: ' + e.message, 'error'));
 }
 
 // ── Preview ──────────────────────────────────────────────────────────────────
