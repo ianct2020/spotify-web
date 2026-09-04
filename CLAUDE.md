@@ -1124,6 +1124,61 @@ celda.** El prefijo de tamaño del CDN es una convención **no documentada**: si
 el reintento, un cambio del lado de Spotify borraría álbumes del mosaico en
 silencio. Una tapa que no carga es un hueco, nunca un álbum menos.
 
+## Las tres vistas que faltaban de la vigencia de ruta (v=195)
+
+`recommendations.js`, `sync.js` y `rabbit-hole.js` eran las tres que nunca
+pasaron por `util/vigencia-ruta.js` — la lista de sospechosos que dejó anotada
+el cierre de la investigación del crash de `#covers`/`album-card`. Ian lo vio en
+producción **en `#recs`**: «Algo falló por detrás: Cannot set properties of null
+(setting 'innerHTML')».
+
+**Reproducido antes de tocar nada**, con un arnés headless que carga los módulos
+reales de `src/` con los `import` desviados a dobles por **import map** (queda en
+`/home/ian/REPRO-VIGENCIA-2026-09-03/`: `node serve.mjs` y
+`google-chrome --headless=new --virtual-time-budget=40000 --dump-dom
+http://127.0.0.1:5599/repro.html`). No necesita token ni extensión: el zapeo se
+simula subiendo la generación de ruta y reemplazando `#main-content`, que es
+exactamente lo que hace `handleRoute()`.
+
+| escenario | v=194 | v=195 |
+|---|---|---|
+| `#recs` · clic en un artista y salir mientras busca sus top tracks | `Cannot set properties of null (setting 'innerHTML')` | limpio |
+| `#recs` · salir mientras resuelve los temas en Spotify | `Cannot set properties of null (setting 'innerHTML')` | limpio |
+| `#recs` · salir mientras baja los similares | silencioso (lo come el `catch`) | limpio |
+| `#rabbit` · clic en un artista y salir mientras busca sus top tracks | `Cannot set properties of null (setting 'innerHTML')` | limpio |
+| `#sync` · salir mientras baja los likes | `Cannot set properties of null (setting 'onclick')` | limpio |
+
+Y tres controles **sin** zapear (las tres vistas resuelven y pintan su lista):
+pasan igual antes y después, o sea que la guarda no toca el camino normal.
+
+**Lo que rompía en `#recs` es la mitad que el cierre de la investigación había
+dado por inofensiva**: escribir sobre un nodo *capturado* que quedó desconectado
+no tira —y por eso `panel.innerHTML` pasa desapercibido—, pero
+`document.getElementById('recs-tracks').innerHTML` **vuelve a preguntar por el
+id** y en la ruta nueva devuelve `null`. `pickArtist()` lo hace en las dos
+ramas, la del `try` y la del `catch`, así que la del `catch` tira **sin nadie
+que la agarre**: llega al `unhandledrejection` y de ahí al banner.
+
+⚠️ **En `#sync` los tres crashes estaban TAPADOS por el `catch` de `analyze()`**,
+que los convertía en un toast rojo con el mensaje del navegador —
+«Cannot set properties of null (setting 'onclick')» como si fuera un error de
+Spotify, y encima pintado sobre la ruta a la que te acabás de ir. Un `catch`
+ancho no arregla una escritura tardía: la disfraza de error de dominio. Misma
+familia que el `catch` de `resolveAlbumId` de v=154.
+
+⚠️ **Y la trampa de este cambio**: `renderRecommendations` y `renderArtistGrid`
+pasaron a recibir `ruta` con `= vigilarRuta()` por defecto (el idiom de
+`showSetup`/`loadAndRender` en `wthree.js`), y las dos estaban enchufadas
+**directo** como `onclick` — o sea que el primer argumento habría sido el
+`Event` y `ruta.vigente` no existe. Van envueltas en una flecha. Si le ponés el
+parámetro `ruta` a una función, mirá quién la usa de handler.
+
+Los bucles cortan entre ítems, como `scanArtists()` de `#discover-artists`: las
+30 búsquedas en Spotify de `#recs` (120 ms entre cada una), su barrido de
+similares (150 ms), las 20 de `#rabbit` y los 8 artistas de `computeRelatedTags`
+(200 ms). En `#sync`, en cambio, **la escritura en Spotify se termina igual** y
+el toast la anuncia — lo único que se saltea es pintar el resumen.
+
 ## ⛔ Cada despliegue, su propio `?v=` — dos contenidos no pueden compartir versión
 Pisado el 2026-09-03. El arreglo del cambio de variante salió como un **segundo
 commit encima de v=193 sin bumpear**, así que `covers.js?v=193` pasó a servir dos

@@ -1,13 +1,14 @@
-import { spotifyFetch, createPlaylist, addTracksToPlaylist, invalidatePlaylistsCache, getAllLikedTracks } from '../api.js?v=194';
-import { hasKey, setKey, hasUsername, getUsername, setUsername, getUserTopArtists, getSimilarArtists, getArtistTopTracks } from '../api/lastfm.js?v=194';
-import { showProgress, hideProgress, promptPlaylistName, escapeHtml, pageHeader } from '../ui/components.js?v=194';
-import { showToast } from '../ui/toast.js?v=194';
-import { getPreview } from '../api/preview-providers.js?v=194';
-import { togglePreview, playingKey, isPlayingAudio } from '../ui/preview-player.js?v=194';
-import { paintPlayingCard } from '../ui/track-card-row.js?v=194';
-import { openTrackCard } from './track-card.js?v=194';
-import { openAlbumCard } from './album-card.js?v=194';
-import { limpiaParaQuery, titleMatches, artistMatches } from '../util/track-match.js?v=194';
+import { spotifyFetch, createPlaylist, addTracksToPlaylist, invalidatePlaylistsCache, getAllLikedTracks } from '../api.js?v=195';
+import { hasKey, setKey, hasUsername, getUsername, setUsername, getUserTopArtists, getSimilarArtists, getArtistTopTracks } from '../api/lastfm.js?v=195';
+import { showProgress, hideProgress, promptPlaylistName, escapeHtml, pageHeader } from '../ui/components.js?v=195';
+import { showToast } from '../ui/toast.js?v=195';
+import { getPreview } from '../api/preview-providers.js?v=195';
+import { togglePreview, playingKey, isPlayingAudio } from '../ui/preview-player.js?v=195';
+import { paintPlayingCard } from '../ui/track-card-row.js?v=195';
+import { openTrackCard } from './track-card.js?v=195';
+import { openAlbumCard } from './album-card.js?v=195';
+import { limpiaParaQuery, titleMatches, artistMatches } from '../util/track-match.js?v=195';
+import { vigilarRuta } from '../util/vigencia-ruta.js?v=195';
 
 // Iconos de las dos fichas. Los mismos trazos que usa la tarjeta compartida.
 const ICONO_PLAY = `<svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14"><path d="M8 5v14l11-7z"/></svg>`;
@@ -101,18 +102,24 @@ function renderControls() {
 }
 
 async function run() {
+  // Las esperas de acá son largas de verdad: 30 top artistas de Last.fm, los
+  // ~9.500 me gusta, y después una llamada de similares por artista con 150 ms
+  // de pausa. Sobra tiempo para irse de la ruta. Ver util/vigencia-ruta.js.
+  const ruta = vigilarRuta();
   const panel = document.getElementById('recs-panel');
   const username = getUsername();
   panel.innerHTML = `<div class="empty-state"><div class="spinner spinner-lg"></div><div style="margin-top:16px">Bajando tus top artistas de Last.fm...</div></div>`;
 
   try {
     const top = await getUserTopArtists(username, '6month', 30);
+    if (!ruta.vigente()) return;
     if (top.length === 0) {
       panel.innerHTML = `<div class="card"><p>No hay scrobbles para ${escapeHtml(username)} en los últimos 6 meses. ¿Es correcto el usuario?</p></div>`;
       return;
     }
 
     const [likes] = await Promise.all([getAllLikedTracks(() => {}).catch(() => [])]);
+    if (!ruta.vigente()) return;
     const knownArtists = new Set();
     likedUris.clear();
     likes.forEach(i => {
@@ -148,6 +155,10 @@ async function run() {
         }
       } catch {}
       processed++;
+      // Corta entre artistas, igual que `scanArtists()` de `#discover-artists`:
+      // seguir son 30 llamadas más a Last.fm para pintar una barra que ya no
+      // está en el documento.
+      if (!ruta.vigente()) return;
       const pct = (processed / top.length) * 100;
       document.getElementById('recs-bar').style.width = `${pct}%`;
       document.getElementById('recs-progress-text').textContent = `${processed}/${top.length}`;
@@ -158,15 +169,17 @@ async function run() {
       .sort((a, b) => b.score - a.score)
       .slice(0, 50);
 
-    renderRecommendations();
+    renderRecommendations(ruta);
   } catch (e) {
+    if (!ruta.vigente()) return;
     panel.innerHTML = `<div class="card"><p style="color:var(--color-error)">${escapeHtml(e.message)}</p></div>`;
   }
 }
 
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
-function renderRecommendations() {
+function renderRecommendations(ruta = vigilarRuta()) {
+  if (!ruta.vigente()) return;
   const panel = document.getElementById('recs-panel');
   if (recommendations.length === 0) {
     panel.innerHTML = `<div class="card"><p>No hay recomendaciones nuevas — parece que ya tienes a todos los similares de tus top artists.</p></div>`;
@@ -191,6 +204,7 @@ function renderRecommendations() {
 }
 
 async function pickArtist(artist) {
+  const ruta = vigilarRuta();
   currentPick = artist;
   resolvedTracks = [];
   pickedUris.clear();
@@ -208,16 +222,18 @@ async function pickArtist(artist) {
     </div>
     <div id="recs-tracks"><div class="empty-state"><div class="spinner spinner-lg"></div><div style="margin-top:16px">Buscando top tracks...</div></div></div>
   `;
-  document.getElementById('recs-back-btn').onclick = renderRecommendations;
+  document.getElementById('recs-back-btn').onclick = () => renderRecommendations();
 
   try {
     const topTracks = await getArtistTopTracks(artist.name, TOP_TRACKS_POR_ARTISTA);
+    if (!ruta.vigente()) return;
     if (topTracks.length === 0) {
       document.getElementById('recs-tracks').innerHTML = `<div class="card"><p>Sin top tracks en Last.fm.</p></div>`;
       return;
     }
-    await resolveTracksOnSpotify(topTracks);
+    await resolveTracksOnSpotify(topTracks, ruta);
   } catch (e) {
+    if (!ruta.vigente()) return;
     document.getElementById('recs-tracks').innerHTML = `<div class="card"><p style="color:var(--color-error)">${escapeHtml(e.message)}</p></div>`;
   }
 }
@@ -233,7 +249,8 @@ async function pickArtist(artist) {
 // antes de darlo por bueno: sin esa verificación, aflojar la query es lo que
 // traía a Nick Drake buscando Drake (v=124). Por eso también `limit=5` y no 1:
 // con la query laxa el primer resultado puede no ser el que corresponde.
-async function resolveTracksOnSpotify(topTracks) {
+async function resolveTracksOnSpotify(topTracks, ruta = vigilarRuta()) {
+  if (!ruta.vigente()) return;
   const tracksEl = document.getElementById('recs-tracks');
   tracksEl.innerHTML = `<div class="empty-state"><div class="spinner spinner-lg"></div><div style="margin-top:16px">Buscando en Spotify (0/${topTracks.length})...</div></div>`;
 
@@ -268,6 +285,9 @@ async function resolveTracksOnSpotify(topTracks) {
     } catch {
       raw.push({ uri: null, name: t.name, artist: t.artist, matched: false });
     }
+    // 30 búsquedas con 120 ms de pausa entre cada una: el corte va acá, antes
+    // de tocar el contador, y no solo al final del bucle.
+    if (!ruta.vigente()) return;
     tracksEl.querySelector('.empty-state div:last-child').textContent = `Buscando en Spotify (${i + 1}/${topTracks.length})...`;
     if (i < topTracks.length - 1) await sleep(PAUSA_ENTRE_BUSQUEDAS);
   }
@@ -275,7 +295,7 @@ async function resolveTracksOnSpotify(topTracks) {
   alreadyLikedInResolution = raw.filter(t => t.matched && likedUris.has(t.uri)).length;
   resolvedTracks = raw.filter(t => !(t.matched && likedUris.has(t.uri)));
 
-  renderResolvedTracks();
+  renderResolvedTracks(ruta);
 }
 
 function filaPorId(id) {
@@ -359,7 +379,8 @@ function filaHtml(t) {
     </label>`;
 }
 
-function renderResolvedTracks() {
+function renderResolvedTracks(ruta = vigilarRuta()) {
+  if (!ruta.vigente()) return;
   const tracksEl = document.getElementById('recs-tracks');
   const matched = resolvedTracks.filter(t => t.matched);
   matched.forEach(t => pickedUris.add(t.uri));
