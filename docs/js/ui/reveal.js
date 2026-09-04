@@ -25,7 +25,12 @@
 //     QUITAN. El elemento vuelve a su estado limpio, así que `.reveal-in` no le
 //     pisa las transiciones propias (`.year-tile` tiene la suya para el
 //     `:active`, y una regla suelta con la misma especificidad le ganaría por
-//     orden de hoja).
+//     orden de hoja). **Menos en modo `repetir`**, donde tienen que quedarse
+//     para poder volver a esconder el elemento: ese modo es para probar.
+//
+//   · Ni siquiera en modo `repetir` un elemento puede quedar invisible sin un
+//     observer que lo mire: lo que hace ese modo es NO llamar a `unobserve`,
+//     no soltar la vigilancia.
 //
 // El fallo por defecto es «sin animación», nunca «sin contenido».
 //
@@ -44,7 +49,7 @@
 // shimmer de los esqueletos se ajustó en la tanda 7 para ATENUARSE en vez de
 // apagarse, y eso sigue igual.
 
-import { prefKey } from '../storage.js?v=195';
+import { prefKey } from '../storage.js?v=196';
 
 const ARMED = 'reveal-armed';
 const IN = 'reveal-in';
@@ -57,7 +62,9 @@ const IN = 'reveal-in';
 const DUR_MS = 520;
 
 const KEY_BASE = 'fonoteca_anim_v1';
-export const MODOS = ['siempre', 'nunca'];
+
+// Tres modos. `repetir` es el modo de PRUEBA: ver más abajo, en `alEntrar`.
+export const MODOS = ['siempre', 'repetir', 'nunca'];
 
 // ── la preferencia ──────────────────────────────────────────────────────────
 //
@@ -75,11 +82,12 @@ export const MODOS = ['siempre', 'nunca'];
 // eligió nada tenía el de fábrica, y el de fábrica ahora es encendido.
 const MODO_POR_DEFECTO = 'siempre';
 
-/** 'siempre' (por defecto) · 'nunca'. */
+/** 'siempre' (por defecto) · 'repetir' · 'nunca'. */
 export function getAnimMode() {
   try {
     const v = localStorage.getItem(prefKey(KEY_BASE));
     if (v === 'nunca') return 'nunca';
+    if (v === 'repetir') return 'repetir';
     return MODO_POR_DEFECTO;
   } catch {
     return MODO_POR_DEFECTO;
@@ -107,16 +115,40 @@ export function animationsEnabled() {
   return getAnimMode() !== 'nunca';
 }
 
+/**
+ * Modo de prueba: la entrada se repite cada vez que el elemento vuelve a
+ * asomar, en vez de dispararse una sola vez por elemento.
+ *
+ * Para qué existe: con el modo normal, un elemento que NO se anima es
+ * indistinguible de uno que ya se animó — al volver a subir y bajar no pasa
+ * nada en ninguno de los dos casos, así que barrer una vista buscando lo que
+ * quedó sin animar obliga a recargarla entera por cada tramo. En `repetir` la
+ * comparación es directa: lo que se anima parpadea en cada pasada, lo que no,
+ * no lo hace nunca.
+ */
+export function repeatReveal() {
+  return getAnimMode() === 'repetir';
+}
+
 // ── el observer ─────────────────────────────────────────────────────────────
 
 let io = null;
 
 function alEntrar(entries) {
+  // Se lee UNA vez por tanda y no por elemento: dentro de la misma tanda todos
+  // los elementos tienen que decidir igual, aunque el toggle cambie a mitad.
+  const repetir = repeatReveal();
   for (const e of entries) {
-    if (!e.isIntersecting) continue;
-    // Una sola vez: al volver a scrollear no se re-anima.
-    try { io.unobserve(e.target); } catch { /* ya no está */ }
-    revelar(e.target);
+    if (e.isIntersecting) {
+      // Modo normal: una sola vez, al volver a scrollear no se re-anima. En
+      // `repetir` el elemento SIGUE observado, que es todo el truco.
+      if (!repetir) {
+        try { io.unobserve(e.target); } catch { /* ya no está */ }
+      }
+      revelar(e.target, repetir);
+    } else if (repetir) {
+      rearmar(e.target);
+    }
   }
 }
 
@@ -137,8 +169,39 @@ function desarmar(el) {
   el.style.transitionDelay = '';
 }
 
-function revelar(el) {
+/**
+ * Vuelve a dejar el elemento en su estado inicial (invisible) al salir de
+ * pantalla, SOLO en modo repetir.
+ *
+ * El `transition: none` inline no es cosmético: sin él, el elemento se
+ * desvanecería durante 520 ms mientras se va, y con un scroll de vuelta
+ * inmediato lo que se ve es un elemento a medio camino en vez de la entrada
+ * limpia. Va inline porque así le gana a cualquier regla de la hoja sin
+ * necesidad de un `!important`. El `offsetHeight` fuerza el reflujo: sin él,
+ * el navegador junta el quitar la clase y el devolver la transición en el
+ * mismo estilo calculado y la transición se dispara igual.
+ */
+function rearmar(el) {
+  if (!el.classList.contains(IN)) return;   // ya estaba rearmado
+  el.style.transition = 'none';
+  el.classList.remove(IN);
+  el.classList.add(ARMED);
+  void el.offsetHeight;
+  el.style.transition = '';
+}
+
+/**
+ * `mantenerArmado` (modo repetir) deja las clases puestas al terminar: el
+ * elemento tiene que poder volver a `.reveal-armed` sin `.reveal-in` cuando
+ * salga de pantalla, y para eso la clase que esconde no se puede haber ido.
+ *
+ * El precio es que en ese modo el elemento se queda con `will-change` y con la
+ * transición de la entrada encima de las suyas — por eso `repetir` es un modo
+ * para probar y no el de fábrica.
+ */
+function revelar(el, mantenerArmado = false) {
   el.classList.add(IN);
+  if (mantenerArmado) return;
 
   let backstop = 0;
   const limpiar = (ev) => {

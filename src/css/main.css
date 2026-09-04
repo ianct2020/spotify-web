@@ -4420,18 +4420,31 @@ body.covers-fs .main {
 .theme-help {
   font-size: 12px;
   color: var(--color-text-secondary);
-  margin: 0 0 14px;
+  margin: 0 0 10px;
+}
+
+/* El panel de paleta entero tiene que entrar SIN scroll interno en 1366x768
+   (v=196). El `.modal` genérico trae 28px de padding y 80vh de tope: en una
+   ventana de ~640px de alto útil eso deja ~455px de contenido, y el panel pide
+   más. Acá el padding baja a 20 y el tope sube a 92vh — con el contenido ya
+   comprimido (presets en UNA fila, pastillas de 28px, el control de
+   animaciones en dos líneas) el panel mide menos que el hueco, así que el
+   `overflow-y: auto` heredado no llega a activarse nunca.
+   Si algún día se agrega una sección más, esta es la cuenta que hay que rehacer. */
+.theme-modal {
+  padding: 20px;
+  max-height: 92vh;
 }
 .theme-presets {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
 }
 .theme-preset {
   background: var(--color-elevated);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
-  padding: 10px;
+  padding: 8px 9px;
   cursor: pointer;
   text-align: left;
   color: var(--color-text);
@@ -4444,10 +4457,10 @@ body.covers-fs .main {
   border-color: var(--color-accent);
   background: var(--color-accent-tint);
 }
-.theme-preset-swatches { display: flex; gap: 3px; margin-bottom: 8px; }
+.theme-preset-swatches { display: flex; gap: 2px; margin-bottom: 6px; }
 .theme-swatch {
-  width: 14px;
-  height: 14px;
+  width: 12px;
+  height: 12px;
   border-radius: 3px;
   border: 1px solid rgba(128, 128, 128, 0.35);
 }
@@ -4455,14 +4468,15 @@ body.covers-fs .main {
 .theme-preset-desc { display: block; font-size: 11px; color: var(--color-text-muted); }
 
 .theme-title {
-  font-size: 12px;
+  font-size: 11px;
   color: var(--color-text-muted);
-  margin: 18px 0 8px;
+  margin: 12px 0 6px;
 }
+.theme-title:first-of-type { margin-top: 0; }
 .theme-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 10px;
+  gap: 8px 10px;
 }
 .theme-field {
   display: flex;
@@ -4475,7 +4489,7 @@ body.covers-fs .main {
    color con forma de sello: se lo saca para que la pastilla SEA el color. */
 .theme-field input[type="color"] {
   width: 100%;
-  height: 34px;
+  height: 28px;
   padding: 0;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-sm);
@@ -4493,8 +4507,9 @@ body.covers-fs .main {
 }
 
 @media (max-width: 600px) {
-  .theme-presets { grid-template-columns: minmax(0, 1fr); }
+  .theme-presets { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .theme-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .theme-modal { padding: 16px; }
 }
 
 /* ══════════════════════════════════════════════════════════════════════════
@@ -4531,38 +4546,95 @@ body.covers-fs .main {
   transform: none;
 }
 
-/* ── El toggle de animaciones del panel de paleta (v=159) ── */
+/* ── El control de animaciones del panel de paleta (v=196) ──
+   Antes eran dos botones grandes en fila («Encendidas» / «Apagadas»): 70px de
+   alto para un sí/no, y con eso el panel no entraba en 1366x768. Ahora es un
+   switch en la misma línea del rótulo, y debajo la casilla del modo repetir. */
+.theme-anim {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--color-border);
+}
 .theme-anim-row {
   display: flex;
-  gap: 6px;
-  margin-top: 6px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
 }
-.theme-anim-opt {
-  flex: 1 1 0;
-  min-width: 0;
-  padding: 7px 8px;
-  font-family: inherit;
-  font-size: 12.5px;
-  color: var(--color-text-secondary);
+.theme-anim-label {
+  font-size: 13px;
+  color: var(--color-text);
+}
+
+/* El switch. La casilla real queda debajo del dibujo, no escondida con
+   `display: none`: así sigue recibiendo el foco del teclado y el `:focus-visible`
+   se puede pintar sobre la pista. */
+.theme-switch {
+  position: relative;
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  cursor: pointer;
+}
+.theme-switch input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+.theme-switch-track {
+  width: 36px;
+  height: 20px;
+  border-radius: 999px;
   background: var(--color-elevated);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-  transition: border-color .15s, color .15s, background .15s;
+  display: block;
+  position: relative;
+  transition: background .15s ease, border-color .15s ease;
 }
-.theme-anim-opt:hover { border-color: var(--color-accent); color: var(--color-text); }
-.theme-anim-opt.is-on {
+.theme-switch-knob {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--color-text-muted);
+  transition: transform .15s ease, background .15s ease;
+}
+.theme-switch input:checked + .theme-switch-track {
+  background: var(--color-accent);
   border-color: var(--color-accent);
-  background: var(--color-accent-soft);
-  color: var(--color-text);
-  font-weight: 600;
 }
-/* El cartel que explica por qué «Sigue al sistema» no mueve nada. Sin esto, un
-   toggle encendido que no anima se lee como roto. */
+.theme-switch input:checked + .theme-switch-track .theme-switch-knob {
+  transform: translateX(16px);
+  background: #FFFFFF;
+}
+.theme-switch input:focus-visible + .theme-switch-track {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+/* La tercera opción. Va a la vista, debajo del switch, y no escondida en un
+   menú: es el modo con el que se barre una vista buscando lo que no se anima. */
+.theme-anim-rep {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+}
+.theme-anim-rep em { font-style: normal; color: var(--color-text-muted); }
+.theme-anim-rep.is-off { opacity: .45; cursor: default; }
+
 .theme-anim-nota {
-  margin: 8px 0 0;
+  margin: 6px 0 0;
   font-size: 11.5px;
-  line-height: 1.45;
+  line-height: 1.4;
   color: var(--color-text-muted);
 }
-.theme-anim-nota strong { color: var(--color-text-secondary); font-weight: 600; }

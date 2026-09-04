@@ -11,26 +11,26 @@
 // tus me gusta" en cada fila y previews que prueban contra TODOS los artistas
 // del track.
 
-import { escapeHtml } from '../ui/components.js?v=195';
-import { openArtistCard, knownArtist } from './artist-card.js?v=195';
-import { openModal, closeTop } from '../ui/modal-stack.js?v=195';
-import { getBestAvailableLikes, getAlbumTracks, spotifyFetch } from '../api.js?v=195';
-import { albumKey, coverId } from '../util/album-key.js?v=195';
+import { escapeHtml } from '../ui/components.js?v=196';
+import { openArtistCard, knownArtist } from './artist-card.js?v=196';
+import { openModal, closeTop } from '../ui/modal-stack.js?v=196';
+import { getBestAvailableLikes, getAlbumTracks, spotifyFetch } from '../api.js?v=196';
+import { albumKey, coverId } from '../util/album-key.js?v=196';
 // ⚠️ `limpiaParaQuery` FALTABA acá hasta v=153 y el síntoma era mudo: la usa
 // `resolveAlbumId` en el `try`, así que cada ficha tiraba un ReferenceError que
 // el catch convertía en «no pude resolver el álbum», la ficha se caía al camino
 // degradado de v=142 (solo tus likes, todos con el ♥ lleno) y el tracklist
 // completo de v=144 no se pedía NUNCA. Verificado en producción el 2026-08-23:
 // 6 fichas abiertas, 6 warnings «limpiaParaQuery is not defined» en consola.
-import { artistMatches, normText, limpiaParaQuery } from '../util/track-match.js?v=195';
-import { skelTracklist } from '../ui/skeleton.js?v=195';
-import { firstArtistName, artistNames, resolveArtistName } from '../util/artist-name.js?v=195';
-import { coverUrl } from '../util/cover-size.js?v=195';
-import { lookupAlbumStats } from '../util/album-stats.js?v=195';
-import { fmtDia } from '../util/fecha.js?v=195';
-import { getPreview } from '../api/preview-providers.js?v=195';
-import { togglePreview, playingKey } from '../ui/preview-player.js?v=195';
-import { openTrackCard } from './track-card.js?v=195';
+import { artistMatches, normText, limpiaParaQuery } from '../util/track-match.js?v=196';
+import { skelTracklist } from '../ui/skeleton.js?v=196';
+import { firstArtistName, artistNames, resolveArtistName } from '../util/artist-name.js?v=196';
+import { coverUrl } from '../util/cover-size.js?v=196';
+import { lookupAlbumStats } from '../util/album-stats.js?v=196';
+import { fmtDia } from '../util/fecha.js?v=196';
+import { getPreview } from '../api/preview-providers.js?v=196';
+import { togglePreview, playingKey } from '../ui/preview-player.js?v=196';
+import { openTrackCard } from './track-card.js?v=196';
 
 const PLAY_SVG = `<svg viewBox="0 0 24 24" width="10" height="10" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>`;
 const PAUSE_SVG = `<svg viewBox="0 0 24 24" width="10" height="10" fill="currentColor" aria-hidden="true"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>`;

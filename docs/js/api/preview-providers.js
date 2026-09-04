@@ -16,8 +16,8 @@
 // pasado el TTL. Los URLs de audio los cachea cada proveedor por su cuenta
 // (itunes.js ya lo hace; Deezer usa el suyo interno más abajo).
 
-import { findTrackPreview } from './itunes.js?v=195';
-import { pickBestMatch, artistMatches, artistList, preferredQueryArtists } from '../util/track-match.js?v=195';
+import { findTrackPreview } from './itunes.js?v=196';
+import { pickBestMatch, artistMatches, artistList, preferredQueryArtists } from '../util/track-match.js?v=196';
 
 // v5 (v=185): la clave sube otra vez por lo mismo que subió a v4 —cambió
 // la COMPARACIÓN de títulos, no el proveedor— así que un 'none' o
