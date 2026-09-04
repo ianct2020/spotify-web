@@ -23,7 +23,7 @@
 
 import { escapeHtml } from './components.js';
 import { marqueeSpan } from './marquee.js';
-import { isPlayingAudio } from './preview-player.js';
+import { isPlayingAudio, playingProvider } from './preview-player.js';
 
 const OJO_ABIERTO = `<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>`;
 const OJO_TACHADO = `<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>`;
@@ -72,6 +72,10 @@ export function renderTrackCardRow(r, opts = {}) {
   // player en vez de recibirlo por parámetro para que una tarjeta repintada a
   // mitad de reproducción (setItems) nazca con el icono correcto.
   const sonando = playing && isPlayingAudio();
+  // Sin preview propio, lo que se abrió es el reproductor de Spotify (no
+  // nuestro <audio>): el título tiene que decir eso, no repetir "Preview" como
+  // si el clic fuera a arrancar algo acá mismo.
+  const esEmbed = playing && !sonando && playingProvider() === 'spotify-embed';
 
   const id = escapeHtml(r.id);
   const nombre = escapeHtml(r.name || '(sin nombre)');
@@ -103,7 +107,7 @@ export function renderTrackCardRow(r, opts = {}) {
         </div>
         <div class="sc-actions">
           ${badge}
-          <button type="button" class="sc-btn sc-play${playing ? ' playing' : ''}" title="${sonando ? TITULO_PAUSA : TITULO_PLAY}" aria-label="${sonando ? 'Parar preview' : 'Preview'}">${sonando ? PAUSE : PLAY}</button>
+          <button type="button" class="sc-btn sc-play${playing ? ' playing' : ''}" title="${sonando ? TITULO_PAUSA : (esEmbed ? TITULO_EMBED : TITULO_PLAY)}" aria-label="${sonando ? 'Parar preview' : (esEmbed ? 'Reproductor de Spotify abierto abajo' : 'Preview')}">${sonando ? PAUSE : PLAY}</button>
           ${showCard && r.trackId
             ? `<button type="button" class="sc-btn sc-card-btn" title="Ver la ficha del tema" aria-label="Ver ficha">${FICHA}</button>`
             : ''}
@@ -186,13 +190,18 @@ export function wireTrackCardGrid(grid, { rowById, onToggle, onPlay, onCard, onA
 
 const TITULO_PLAY = 'Preview de 30 s — no suma reproducciones';
 const TITULO_PAUSA = 'Parar el preview';
+// Sin preview propio (ni iTunes ni Deezer lo tienen): lo que se abrió es el
+// reproductor de Spotify, no nuestro <audio>. Sin este título el botón se ve
+// activo pero mudo y no dice por qué.
+const TITULO_EMBED = 'Sin preview propio — se abrió el reproductor de Spotify aquí abajo';
 
-function pintarBoton(btn, actual, sonando) {
+function pintarBoton(btn, actual, sonando, provider) {
   btn.classList.toggle('playing', !!actual);
+  const esEmbed = !!actual && !sonando && provider === 'spotify-embed';
   const pausa = !!actual && !!sonando;
   btn.innerHTML = pausa ? PAUSE : PLAY;
-  btn.title = pausa ? TITULO_PAUSA : TITULO_PLAY;
-  btn.setAttribute('aria-label', pausa ? 'Parar preview' : 'Preview');
+  btn.title = pausa ? TITULO_PAUSA : (esEmbed ? TITULO_EMBED : TITULO_PLAY);
+  btn.setAttribute('aria-label', pausa ? 'Parar preview' : (esEmbed ? 'Reproductor de Spotify abierto abajo' : 'Preview'));
 }
 
 /**
@@ -211,9 +220,9 @@ function pintarBoton(btn, actual, sonando) {
  *
  * @param {HTMLElement} grid
  * @param {string} prefix
- * @param {{key: string|null, playing: boolean}} detail
+ * @param {{key: string|null, playing: boolean, provider?: string|null}} detail
  */
-export function paintPlayingCard(grid, prefix, { key = null, playing = false } = {}) {
+export function paintPlayingCard(grid, prefix, { key = null, playing = false, provider = null } = {}) {
   if (!grid) return;
   const p = `${prefix}:`;
   const id = key && key.startsWith(p) ? key.slice(p.length) : null;
@@ -225,11 +234,11 @@ export function paintPlayingCard(grid, prefix, { key = null, playing = false } =
     ? grid.querySelector(`[data-id="${CSS.escape(id)}"] .sc-play`)
     : null;
   grid.querySelectorAll('.sc-play.playing').forEach(btn => {
-    if (btn !== actual) pintarBoton(btn, false, false);
+    if (btn !== actual) pintarBoton(btn, false, false, null);
   });
   // El lote de esa fila puede no estar pintado todavía: nace con el icono
   // correcto igual, porque `renderTrackCardRow` le pregunta al player.
-  if (actual) pintarBoton(actual, true, playing);
+  if (actual) pintarBoton(actual, true, playing, provider);
 }
 
 /**
@@ -238,7 +247,7 @@ export function paintPlayingCard(grid, prefix, { key = null, playing = false } =
  * que queda tintado con el ▶ y se apaga al cerrar el embed.
  */
 export function paintEmbedCard(btn, activo) {
-  pintarBoton(btn, !!activo, false);
+  pintarBoton(btn, !!activo, false, activo ? 'spotify-embed' : null);
 }
 
 /** Refleja el estado de selección en una tarjeta ya pintada. */
