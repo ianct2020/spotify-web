@@ -12,7 +12,7 @@
 // Un caller puede forzar el comportamiento pasando `duration`: un número de ms
 // para que se cierre solo, o 0 / Infinity para que se quede.
 
-import { mountBottom } from './bottom-layer.js?v=202';
+import { mountBottom } from './bottom-layer.js?v=203';
 
 const WRITE_DURATION_MS = 30000;
 const INFO_DURATION_MS = 8000;
