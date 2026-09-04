@@ -1704,30 +1704,45 @@ h3 { font-size: 18px; font-weight: 600; }
   flex-shrink: 0;
 }
 
-/* Fade-in stagger para cards del dashboard y wrapped */
-@keyframes dashFadeIn {
-  from { opacity: 0; transform: translateY(6px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-.dash-stats-row .stat-card,
-.dash-grid > .card,
-.wrapped-top-card,
-#listened-year-card,
-.wrapped-card {
-  animation: dashFadeIn 0.4s ease-out both;
-}
-.dash-stats-row .stat-card:nth-child(1) { animation-delay: 0.00s; }
-.dash-stats-row .stat-card:nth-child(2) { animation-delay: 0.04s; }
-.dash-stats-row .stat-card:nth-child(3) { animation-delay: 0.08s; }
-.dash-stats-row .stat-card:nth-child(4) { animation-delay: 0.12s; }
-.dash-stats-row .stat-card:nth-child(5) { animation-delay: 0.16s; }
-.dash-stats-row .stat-card:nth-child(6) { animation-delay: 0.20s; }
-.dash-grid > .card:nth-child(1) { animation-delay: 0.05s; }
-.dash-grid > .card:nth-child(2) { animation-delay: 0.10s; }
-.dash-grid > .card:nth-child(3) { animation-delay: 0.15s; }
-.dash-grid > .card:nth-child(4) { animation-delay: 0.20s; }
-.dash-grid > .card:nth-child(5) { animation-delay: 0.25s; }
-.dash-grid > .card:nth-child(6) { animation-delay: 0.30s; }
+/* `dashFadeIn` VIVIÓ ACÁ y se sacó el 2026-09-04. Queda escrito por qué, que es
+   lo único que impide que vuelva:
+
+   Era `animation: dashFadeIn 0.4s ease-out both` sobre `.dash-stats-row
+   .stat-card`, `.dash-grid > .card`, `.wrapped-top-card`, `#listened-year-card`
+   y `.wrapped-card`, con doce `animation-delay` de escalonado. Es de v=126 y
+   larga; el reveal al scrollear (v=159) llegó después e hizo lo mismo mejor.
+
+   El problema es el `both`: una animación con fill hacia adelante deja clavado
+   el fotograma final y **le gana a cualquier declaración de la hoja** para las
+   propiedades que anima. Con `opacity` y `transform` clavadas en su valor final
+   para siempre, `.reveal-armed { opacity: 0 }` no tenía ningún efecto: los
+   elementos nunca llegaban a esconderse y el reveal no se veía. Tres de esos
+   cinco selectores son exactamente los que arman `dashboard.js` y `wrapped.js`.
+
+   ⚠️ Y lo que lo tapaba: el bloque `@media (prefers-reduced-motion: reduce)` de
+   acá abajo apagaba `dashFadeIn`. Ian tiene `enable-animations = false` en
+   GNOME, así que en su máquina la animación no corría y el reveal se veía
+   perfecto. Encendiendo las animaciones del sistema se apagaba el reveal del
+   Dashboard entero menos los `.year-tile`, que eran los únicos armados que
+   `dashFadeIn` no tocaba. Un fallo que solo existía en las máquinas donde no se
+   miraba. (Hermana de la regla de v=141: antes de dar por rota una animación,
+   mirar `prefers-reduced-motion` — acá al revés, la preferencia ESCONDÍA el
+   fallo en vez de causarlo.)
+
+   Qué se perdió al sacarla: el fundido del contenedor `.wrapped-card` al
+   cambiar de año —lo reemplaza la cascada del reveal, que `armarWrapped()`
+   re-arma en cada repintado— y el de `#listened-year-card`, cuyos `.year-tile`
+   ya entran solos. Y que estos elementos dejan de respetar
+   `prefers-reduced-motion`, que es la decisión de v=162 aplicada parejo: la
+   entrada al scrollear la manda el toggle, no el sistema.
+
+   Lo que se ganó de yapa: con el toggle en «Apagadas» `dashFadeIn` corría
+   igual, porque el toggle es de JS y ella no pasaba por ahí. Ahora «Apagadas»
+   apaga de verdad.
+
+   NO volver a poner una animación con `fill-mode` hacia adelante sobre algo que
+   `ui/reveal.js` pueda armar: no se ve como un conflicto, se ve como que el
+   reveal «no anda». */
 
 /* Heatmap: rects que aparecen con leve escala */
 @keyframes heatmapPop {
@@ -1739,11 +1754,6 @@ h3 { font-size: 18px; font-weight: 600; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .dash-stats-row .stat-card,
-  .dash-grid > .card,
-  .wrapped-top-card,
-  #listened-year-card,
-  .wrapped-card,
   #history-heatmap svg rect.heatmap-cell { animation: none; }
 }
 
@@ -1913,10 +1923,32 @@ h3 { font-size: 18px; font-weight: 600; }
 }
 
 /* Affordance de hover-play en filas/tiles del Wrapped */
+/* ⚠️ ACÁ VIVIÓ UN FALLO, y es de CASCADA, no de JS (medido el 2026-09-04).
+   `transition` es un atajo: la declaración más específica que gane NO se suma a
+   la otra, la REEMPLAZA entera. `.wrapped-tile[data-hover]` es (0,2,1) y
+   `.reveal-armed` (0,1,0), así que estos tiles se quedaban con
+   `transition: background` y sin las de `opacity`/`transform`: la clase
+   `.reveal-armed` les seguía poniendo `opacity: 0`, y `.reveal-in` los pasaba a
+   1 DE GOLPE. O sea que no eran cinco tiles «que no se animan»: eran cinco
+   tiles que sí se revelaban, pero sin transición. Las cinco: Artista del año,
+   Track del año, Descubrimiento (tarjeta del año) y Artista/Track de siempre —
+   exactamente los cinco `.wrapped-tile` que llevan `data-hover`.
+
+   LA REGLA, que es general: un elemento que puede ser armado por `ui/reveal.js`
+   y que declara su PROPIA `transition` tiene que declarar también las del
+   reveal. Por eso la duración y la curva salen de `--reveal-dur` y
+   `--reveal-ease` (definidas con `.reveal-armed`, más abajo en esta hoja) y no
+   están copiadas a mano: si se cambian allá, cambian acá.
+
+   Se arregla así y no subiendo la especificidad de `.reveal-armed` porque el
+   hover-play necesita SU transición también mientras el tile está armado — en
+   modo `repetir` las clases del reveal no se quitan nunca. */
 .wrapped-top-row[data-hover],
 .wrapped-tile[data-hover] {
   cursor: pointer;
-  transition: background 0.12s ease;
+  transition: background 0.12s ease,
+              opacity var(--reveal-dur) var(--reveal-ease),
+              transform var(--reveal-dur) var(--reveal-ease);
   border-radius: var(--radius-sm, 6px);
 }
 .wrapped-top-row[data-hover]:hover,
@@ -4545,11 +4577,19 @@ body.covers-fs .main {
    animar o no la toma `animationsEnabled()` en JS, porque hay un toggle que
    puede forzar «siempre» por encima del sistema. Los diez bloques de
    reduced-motion que ya existían en las hojas se quedan como están. */
+/* La duración y la curva viven en variables porque hay elementos que declaran
+   su propia `transition` y tienen que repetir las del reveal para no pisarlas
+   (ver `.wrapped-tile[data-hover]`, más arriba). Un solo sitio donde tocarlas.
+   `--reveal-dur` tiene que seguir coincidiendo con `DUR_MS` de `ui/reveal.js`. */
+:root {
+  --reveal-dur: 520ms;
+  --reveal-ease: cubic-bezier(.22, .61, .36, 1);
+}
 .reveal-armed {
   opacity: 0;
   transform: translateY(16px);
-  transition: opacity 520ms cubic-bezier(.22, .61, .36, 1),
-              transform 520ms cubic-bezier(.22, .61, .36, 1);
+  transition: opacity var(--reveal-dur) var(--reveal-ease),
+              transform var(--reveal-dur) var(--reveal-ease);
   /* El navegador puede promover la capa mientras dure la entrada. Se va con la
      clase, así que no queda una capa de composición viva por elemento. */
   will-change: opacity, transform;
