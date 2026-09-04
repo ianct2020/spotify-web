@@ -19,6 +19,7 @@
 // con strip diacríticos + sufijos de edición.
 
 import { albumKey } from './album-key.js';
+import { baseDeEdicion } from './edition-suffix.js';
 import { loadTrackPlays, isOwner } from '../features/history-data.js';
 import { getBestAvailableLikes, getAllPlaylistItems } from '../api.js';
 import { coverUrl } from './cover-size.js';
@@ -33,6 +34,16 @@ export async function buildAlbumHeardIndex({ force = false } = {}) {
   if (cache && !force) return cache;
 
   const heard = new Set();
+  // Las mismas entradas de `heard`, pero con el título SIN su agregado de
+  // edición (util/edition-suffix.js) — v=196. `heard` sigue con clave EXACTA
+  // (albumKey ya saca los sufijos más comunes, pero no «Taylor's Version»,
+  // «Chapter»…), así que el consumidor que decide QUÉ es candidato a "sin
+  // escuchar" (albumIsUnheard) no cambia de comportamiento. Este set aparte es
+  // lo que reutiliza `util/discover-filters.js` para su criterio 'edicion',
+  // que hasta ahora solo miraba biblioteca guardada + el JSON de umbral: un
+  // disco escuchado por historial completo o por like, sin guardarlo, no
+  // protegía a sus propias reediciones.
+  const heardBases = new Set();
   const likedIds = new Set();
   const likesByArtist = new Map();       // artistNameLower -> Set<track.id>
   const artistDisplay = new Map();       // artistNameLower -> display name
@@ -54,7 +65,10 @@ export async function buildAlbumHeardIndex({ force = false } = {}) {
     const artistName = a0?.name || '';
     const nameLower = artistName.toLowerCase().trim();
     const albName = t.album?.name || '';
-    if (albName && artistName) heard.add(albumKey(albName, artistName));
+    if (albName && artistName) {
+      heard.add(albumKey(albName, artistName));
+      heardBases.add(albumKey(baseDeEdicion(albName), artistName));
+    }
     if (nameLower) {
       let s = likesByArtist.get(nameLower);
       if (!s) { s = new Set(); likesByArtist.set(nameLower, s); }
@@ -73,7 +87,10 @@ export async function buildAlbumHeardIndex({ force = false } = {}) {
       const plays = await loadTrackPlays();
       if (plays && Array.isArray(plays.albums)) {
         for (const [name, artist] of plays.albums) {
-          if (name || artist) heard.add(albumKey(name, artist));
+          if (name || artist) {
+            heard.add(albumKey(name, artist));
+            heardBases.add(albumKey(baseDeEdicion(name), artist));
+          }
         }
       }
     }
@@ -100,13 +117,17 @@ export async function buildAlbumHeardIndex({ force = false } = {}) {
         if (!t) continue;
         const albName = t.album?.name || '';
         const artistName = t.artists?.[0]?.name || '';
-        if (albName && artistName) heard.add(albumKey(albName, artistName));
+        if (albName && artistName) {
+          heard.add(albumKey(albName, artistName));
+          heardBases.add(albumKey(baseDeEdicion(albName), artistName));
+        }
       }
     }
   } catch { /* ignora */ }
 
   cache = {
     heard,
+    heardBases,
     likedIds,
     likesByArtist,
     artistDisplay,

@@ -45,6 +45,15 @@ const RELLENO = new Set([
 const ANIO = /^(19|20)\d{2}$/;
 const ORDINAL = /^\d{1,3}(st|nd|rd|th|º|ª|o|a)?$/i;
 
+// «(Taylor's Version)», «(Artist's Version)» — el nombre propio no está en
+// NUCLEO ni en RELLENO (es cualquier palabra), así que el chequeo por lista
+// nunca lo hubiera reconocido. Es el mismo mecanismo de «X's Version» que usa
+// Taylor Swift para sus re-grabaciones: un trozo que es SOLO esta forma, sin
+// nada más, se trata como agregado de edición. Exige el trozo COMPLETO para no
+// tragarse un paréntesis que diga algo más («Love Story (Taylor's Version)
+// [Live]» sigue entrando en dos vueltas de baseDeEdicion igual).
+const VERSION_POSESIVA = /^[\p{L}\p{N}]+['’]s\s+version$/iu;
+
 function tokens(s) {
   return String(s || '')
     .normalize('NFD').replace(/[̀-ͯ]/g, '')
@@ -59,6 +68,7 @@ function tokens(s) {
  * guion— es un agregado de edición y nada más?
  */
 export function esAgregadoDeEdicion(trozo) {
+  if (VERSION_POSESIVA.test(String(trozo || '').trim())) return true;
   const ts = tokens(trozo);
   if (!ts.length) return false;
   let hayNucleo = false;

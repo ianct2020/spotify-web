@@ -32,6 +32,9 @@ eq(baseDeEdicion('Igor Deluxe'), 'Igor', 'cola pelada de una palabra');
 eq(baseDeEdicion('Sombras Complete Edition'), 'Sombras', 'cola pelada de dos palabras');
 eq(baseDeEdicion('Stoney (Complete Edition)'), 'Stoney', 'complete edition, caso real');
 eq(baseDeEdicion('I Love You. (10th Anniversary Edition)'), 'I Love You.', 'caso real de Ian');
+eq(baseDeEdicion('Fearless (Taylor\'s Version)'), 'Fearless', 'reedición «X\'s Version» (v=196)');
+eq(baseDeEdicion('1989 (Taylor’s Version)'), '1989', 'apóstrofo tipográfico también');
+eq(baseDeEdicion('Speak Now (Taylor\'s Version) [Deluxe]'), 'Speak Now', 'dos trozos, uno de cada forma');
 
 // ⚠️ Lo que NO se toca. Estos son los que rompen si alguien «normaliza un poco más».
 eq(baseDeEdicion('American Football (LP2)'), 'American Football (LP2)', 'LP2 no es una edición');
@@ -44,6 +47,8 @@ eq(baseDeEdicion('eternal sunshine (slightly deluxe and also live)'),
    'eternal sunshine (slightly deluxe and also live)', 'una palabra fuera de lista salva el trozo entero');
 eq(baseDeEdicion('Deluxe'), 'Deluxe', 'si sacar el agregado deja vacío, no se saca');
 eq(baseDeEdicion('OK Computer OKNOTOK 1997 2017'), 'OK Computer OKNOTOK 1997 2017', 'años sueltos sin núcleo');
+eq(baseDeEdicion('Director\'s Cut'), 'Director\'s Cut', '«Version» exacto, no «Cut»: no generaliza de más');
+eq(baseDeEdicion('The Versions'), 'The Versions', 'plural, no es el patrón exacto');
 
 eq(tieneAgregadoDeEdicion('Nevermind (Deluxe)'), true, 'detecta el agregado');
 eq(tieneAgregadoDeEdicion('Nevermind'), false, 'no inventa agregados');
