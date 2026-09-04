@@ -1,14 +1,14 @@
-import { spotifyFetch, createPlaylist, addTracksToPlaylist, invalidatePlaylistsCache, getAllLikedTracks } from '../api.js?v=197';
-import { hasKey, setKey, hasUsername, getUsername, setUsername, getUserTopArtists, getSimilarArtists, getArtistTopTracks } from '../api/lastfm.js?v=197';
-import { showProgress, hideProgress, promptPlaylistName, escapeHtml, pageHeader } from '../ui/components.js?v=197';
-import { showToast } from '../ui/toast.js?v=197';
-import { getPreview } from '../api/preview-providers.js?v=197';
-import { togglePreview, playingKey, isPlayingAudio } from '../ui/preview-player.js?v=197';
-import { paintPlayingCard } from '../ui/track-card-row.js?v=197';
-import { openTrackCard } from './track-card.js?v=197';
-import { openAlbumCard } from './album-card.js?v=197';
-import { limpiaParaQuery, titleMatches, artistMatches } from '../util/track-match.js?v=197';
-import { vigilarRuta } from '../util/vigencia-ruta.js?v=197';
+import { spotifyFetch, createPlaylist, addTracksToPlaylist, invalidatePlaylistsCache, getAllLikedTracks } from '../api.js?v=198';
+import { hasKey, setKey, hasUsername, getUsername, setUsername, getUserTopArtists, getSimilarArtists, getArtistTopTracks } from '../api/lastfm.js?v=198';
+import { showProgress, hideProgress, promptPlaylistName, escapeHtml, pageHeader } from '../ui/components.js?v=198';
+import { showToast } from '../ui/toast.js?v=198';
+import { getPreview } from '../api/preview-providers.js?v=198';
+import { togglePreview, playingKey, isPlayingAudio } from '../ui/preview-player.js?v=198';
+import { paintPlayingCard } from '../ui/track-card-row.js?v=198';
+import { openTrackCard } from './track-card.js?v=198';
+import { openAlbumCard } from './album-card.js?v=198';
+import { limpiaParaQuery, titleMatches, artistMatches } from '../util/track-match.js?v=198';
+import { vigilarRuta } from '../util/vigencia-ruta.js?v=198';
 
 // Iconos de las dos fichas. Los mismos trazos que usa la tarjeta compartida.
 const ICONO_PLAY = `<svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14"><path d="M8 5v14l11-7z"/></svg>`;
