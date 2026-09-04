@@ -22,7 +22,9 @@
 //      eso este helper NUNCA pega a `/me/library` por su cuenta.
 //   2. El borrado se manda.
 //   3. Se verifica contra Spotify que las pistas SALIERON de verdad.
-//   4. Si la verificación no se puede hacer, o se hace y no cuadra, esto TIRA.
+//   4. Y, cuando corre la guarda del último ejemplar, se verifica contra
+//      Spotify que las que SE QUEDAN siguen ahí. Ver `supervivientes`.
+//   5. Si alguna verificación no se puede hacer, o se hace y no cuadra, TIRA.
 //      No hay camino silencioso, no hay valor de retorno «a medias», no hay
 //      `console.warn`. El llamador tiene un catch que pinta toast rojo, y como
 //      esto tira, se salta su camino de éxito entero.
@@ -78,10 +80,28 @@ const CONTAINS_MAX = 40;
  *   guarda === 'ultimo-ejemplar'.
  * @param {Map|null} [opts.libraryByKey]  índice clave-de-canción → Set(ids) de
  *   la biblioteca entera (`indexarBiblioteca`). Obligatorio ídem.
+ * @param {Array|null} [opts.supervivientes]  las que SE QUEDAN: `{id, nombre,
+ *   artista, grupo}`. Obligatorio —y no vacío— si guarda === 'ultimo-ejemplar';
+ *   prohibido si guarda === 'ninguna'.
+ *
+ *   Va atado a la guarda a propósito, y no es un parámetro suelto más. La guarda
+ *   AFIRMA que después del borrado queda una copia viva, y hasta el 2026-09-03
+ *   esa afirmación no se comprobaba nunca: se apoyaba en `libraryByKey`, que es
+ *   un índice en memoria armado en el análisis, o sea una FOTO. Entre la foto y
+ *   el DELETE la marcada se puede haber ido —por otra vista de Fonoteca de las
+ *   que borran con guarda «ninguna», por la app de Spotify, o porque el caché de
+ *   likes ya venía viejo— y el grupo se queda en cero con el toast en verde.
+ *
+ *   Así que quien declara la guarda tiene que decir QUÉ tiene que sobrevivir, y
+ *   esto lo comprueba contra Spotify después del borrado. Declarar la guarda y
+ *   no pasar supervivientes tira, por lo mismo que tira no pasar `items`.
  * @param {Function|null} [opts.onProgress]  (fase, hechas, total) para la barra.
  *
- * @returns {Promise<{pedidos:number, salieron:number}>}
- * @throws  si no se pudo verificar, o si alguna pista sigue en la biblioteca.
+ * @returns {Promise<{pedidos:number, salieron:number, supervivientes:number}>}
+ * @throws  si no se pudo verificar, si alguna pista sigue en la biblioteca, o si
+ *   alguna superviviente ya NO está. En este último caso el error lleva
+ *   `err.supervivientesPerdidas` con nombre y grupo de cada una, para que el
+ *   llamador pueda avisar con detalle y no solo con un número.
  */
 export async function borrarLikesVerificado(ids, {
   origen,
@@ -92,6 +112,7 @@ export async function borrarLikesVerificado(ids, {
   motivoSinGuarda = '',
   items = null,
   libraryByKey = null,
+  supervivientes = null,
   onProgress = null,
 } = {}) {
   if (typeof removeLikedTracks !== 'function' || typeof checkLibraryContains !== 'function') {
@@ -111,6 +132,20 @@ export async function borrarLikesVerificado(ids, {
     // declararla: deja el código con cara de protegido. Tira.
     throw new Error('borrarLikesVerificado: guarda «ultimo-ejemplar» exige items y libraryByKey');
   }
+  if (guarda === 'ultimo-ejemplar' && (!Array.isArray(supervivientes) || supervivientes.length === 0)) {
+    // Mismo criterio que arriba: la guarda promete que algo sobrevive, así que
+    // hay que decir qué, o la promesa no se puede comprobar.
+    throw new Error('borrarLikesVerificado: guarda «ultimo-ejemplar» exige «supervivientes» (las que se quedan)');
+  }
+  if (guarda === 'ninguna' && Array.isArray(supervivientes) && supervivientes.length) {
+    // Ahí se borra PORQUE no se quiere la canción: no hay superviviente que
+    // verificar, y aceptarlo en silencio sería fingir una garantía.
+    throw new Error('borrarLikesVerificado: guarda «ninguna» no admite «supervivientes»');
+  }
+  const seQuedan = (supervivientes || []).filter(s => s && s.id);
+  if (guarda === 'ultimo-ejemplar' && seQuedan.length !== supervivientes.length) {
+    throw new Error('borrarLikesVerificado: hay supervivientes sin id, no se pueden verificar');
+  }
 
   // Deduplicar acá y no más adelante: si la vista manda el mismo id dos veces
   // (en #skips pasa, porque expande a todas las versiones del tema y dos filas
@@ -118,6 +153,20 @@ export async function borrarLikesVerificado(ids, {
   // verificación acusaría un fallo que no existe.
   const pedidos = [...new Set((ids || []).filter(Boolean))];
   if (pedidos.length === 0) return { pedidos: 0, salieron: 0 };
+
+  // Una superviviente en la lista de borrado es una contradicción en los
+  // términos, y es exactamente el susto del 26/08. `#versions` ya lo comprueba
+  // por su cuenta, pero acá se afirma sobre las dos listas definitivas y para
+  // las cinco vistas: si se cruzan, no se llama a nadie.
+  const pedidosSet = new Set(pedidos);
+  const cruzadas = seQuedan.filter(s => pedidosSet.has(s.id));
+  if (cruzadas.length) {
+    console.error(`[${origen}] ABORTADO: supervivientes dentro de la lista de borrado:`, cruzadas);
+    throw new Error(
+      `Borrado abortado: ${cruzadas.length} pista(s) marcadas para quedarse estaban en la lista de borrado `
+      + `(${cruzadas.slice(0, 3).map(s => `«${s.nombre || s.id}»`).join('; ')}). No se tocó nada.`
+    );
+  }
 
   // Última instrucción antes del DELETE: ninguna pista puede quedar en cero
   // copias vivas. Corre acá, sobre la lista definitiva, y no sobre la que se
@@ -173,7 +222,55 @@ export async function borrarLikesVerificado(ids, {
     );
   }
 
-  return { pedidos: pedidos.length, salieron: pedidos.length };
+  // ── Lo que se quedó, ¿se quedó? (2026-09-03) ───────────────────────────────
+  //
+  // Hasta acá está probado que las marcadas para borrar SALIERON. Eso no dice
+  // nada de la que se queda, y el toast verde se leía como si lo dijera. Esta
+  // es la única comprobación de todo el flujo que mira la biblioteca real en
+  // busca de algo que TIENE que estar; las demás buscan ausencias.
+  //
+  // Va DESPUÉS del borrado y contra Spotify, no contra el caché: el caché lo
+  // acaba de tocar `removeLikedTracks` y, además, un caché viejo es una de las
+  // formas de llegar hasta acá con una superviviente que ya no existía.
+  if (seQuedan.length) {
+    if (onProgress) onProgress('verificando-supervivientes', 0, seQuedan.length);
+    const idsQueQuedan = [...new Set(seQuedan.map(s => s.id))];
+    let vivas;
+    try {
+      vivas = await checkLibraryContains(idsQueQuedan);
+    } catch (verr) {
+      // No se puede dar por buena la operación: puede que la superviviente esté
+      // y puede que no, y justamente eso es lo que había que saber.
+      throw new Error(
+        `Las ${pedidos.length} pista(s) sobrantes salieron bien, pero NO se pudo comprobar que `
+        + `la(s) que se queda(n) siga(n) en tus me gusta (${verr.message}). Compruébalo a mano (origen ${origen}).`
+      );
+    }
+    if (vivas.size !== idsQueQuedan.length) {
+      throw new Error(
+        `Comprobación incompleta de las que se quedan: pregunté por ${idsQueQuedan.length} y volvieron ${vivas.size}. `
+        + `El borrado ya se mandó; compruébalo a mano (origen ${origen}).`
+      );
+    }
+    const perdidas = seQuedan.filter(s => vivas.get(s.id) !== true);
+    if (perdidas.length) {
+      console.error(`[${origen}] SUPERVIVIENTES PERDIDAS:`, perdidas);
+      const detalle = perdidas
+        .map(s => `«${s.nombre || '(sin nombre)'}»${s.artista ? ` — ${s.artista}` : ''}${s.grupo ? ` (grupo: ${s.grupo})` : ''}`);
+      const err = new Error(
+        `Se borraron ${pedidos.length} pista(s), pero ${perdidas.length} de las que ibas a conservar YA NO ESTÁN `
+        + `en tus me gusta: ${detalle.join(' · ')}. `
+        + `No las quitó este borrado (nunca se mandaron a borrar): ya faltaban antes. Vuelve a añadirlas a mano.`
+      );
+      // Estructurado además del texto: el llamador avisa con nombre y grupo, y
+      // no tiene que volver a parsear la frase para hacerlo.
+      err.supervivientesPerdidas = perdidas;
+      err.origen = origen;
+      throw err;
+    }
+  }
+
+  return { pedidos: pedidos.length, salieron: pedidos.length, supervivientes: seQuedan.length };
 }
 
 export const CONTAINS_URIS_MAX = CONTAINS_MAX;
