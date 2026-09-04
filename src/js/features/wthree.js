@@ -480,11 +480,11 @@ function renderBuckets(content) {
       </div>
     ` : ''}
 
-    ${!selectedBucket || selectedBucket === '0' ? renderBucket('🔴 Sin picks — priorizados por tiempo escuchado', buckets['0'], 'danger', selectedBucket === '0' ? 999 : 20) : ''}
-    ${!selectedBucket || selectedBucket === '1' ? renderBucket('🟠 Con 1 pick — completar', buckets['1'], '', selectedBucket === '1' ? 999 : 15) : ''}
-    ${!selectedBucket || selectedBucket === '2' ? renderBucket('🟡 Con 2 picks — falta uno', buckets['2'], '', selectedBucket === '2' ? 999 : 15) : ''}
-    ${!selectedBucket || selectedBucket === '3' ? renderBucket('✅ Ya con 3', buckets['3'], 'ok', selectedBucket === '3' ? 999 : 10) : ''}
-    ${buckets['4+'].length && (!selectedBucket || selectedBucket === '4+') ? renderBucket('⚠️ Más de 3 picks — sacar alguno?', buckets['4+'], 'warn', selectedBucket === '4+' ? 999 : 10) : ''}
+    ${!selectedBucket || selectedBucket === '0' ? renderBucket('🔴 Sin picks — priorizados por tiempo escuchado', buckets['0'], 'danger', selectedBucket === '0' ? 999 : 20, '0') : ''}
+    ${!selectedBucket || selectedBucket === '1' ? renderBucket('🟠 Con 1 pick — completar', buckets['1'], '', selectedBucket === '1' ? 999 : 15, '1') : ''}
+    ${!selectedBucket || selectedBucket === '2' ? renderBucket('🟡 Con 2 picks — falta uno', buckets['2'], '', selectedBucket === '2' ? 999 : 15, '2') : ''}
+    ${!selectedBucket || selectedBucket === '3' ? renderBucket('✅ Ya con 3', buckets['3'], 'ok', selectedBucket === '3' ? 999 : 10, '3') : ''}
+    ${buckets['4+'].length && (!selectedBucket || selectedBucket === '4+') ? renderBucket('⚠️ Más de 3 picks — sacar alguno?', buckets['4+'], 'warn', selectedBucket === '4+' ? 999 : 10, '4+') : ''}
 
     <div style="font-size:11px;color:var(--color-text-muted);margin-top:14px;text-align:center">
       ${historyCount} álbumes del top historial${listenedCount ? ` · ${listenedCount} más detectados en tu historial de escucha` : ''} · ${picksByAlbum.size} álbumes en la playlist${hiddenCount && !showingHidden ? ` · ${hiddenCount} oculto${hiddenCount === 1 ? '' : 's'}` : ''}${sinLikesCount && !showNoLikes ? ` · ${sinLikesCount} sin ningún like, fuera de la lista` : ''}
@@ -523,7 +523,7 @@ function renderBuckets(content) {
   activateMarquee(content);
 }
 
-function renderBucket(title, albums, kind, limit) {
+function renderBucket(title, albums, kind, limit, bucketKey) {
   if (!albums.length) return '';
   const items = albums.slice(0, limit);
   const rest = albums.length - items.length;
@@ -536,7 +536,7 @@ function renderBucket(title, albums, kind, limit) {
       <div class="wthree-album-list">
         ${items.map((a, i) => renderAlbumRow(a, kind)).join('')}
       </div>
-      ${rest > 0 ? `<button class="btn btn-secondary btn-sm" style="margin-top:10px" data-more="${title}">Ver ${rest} más</button>` : ''}
+      ${rest > 0 ? `<button class="btn btn-secondary btn-sm" style="margin-top:10px" data-more-bucket="${bucketKey}">Ver ${rest} más</button>` : ''}
     </div>
   `;
 }
@@ -605,10 +605,15 @@ function wireAlbumClicks(root) {
       renderBuckets(root);
     });
   });
-  // "Ver N más" buttons — no implementado por ahora (MVP)
-  root.querySelectorAll('[data-more]').forEach(btn => {
+  // "Ver N más" — el mismo mecanismo que los chips de arriba: seleccionar ESE
+  // bucket muestra sus 999 (todos) en vez del recorte de la vista con todos
+  // juntos. No hace falta paginar de verdad: `renderBucket` ya sabe mostrar el
+  // bucket entero cuando `selectedBucket` coincide con su clave.
+  root.querySelectorAll('[data-more-bucket]').forEach(btn => {
     btn.onclick = () => {
-      showToast('Próximamente: ver todos los álbumes del bucket', 'info');
+      selectedBucket = btn.dataset.moreBucket;
+      renderBuckets(root);
+      root.querySelector('.wthree-bucket')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     };
   });
 }

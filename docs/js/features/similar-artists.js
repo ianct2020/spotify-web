@@ -1,8 +1,20 @@
-import { spotifyFetch, createPlaylist, addTracksToPlaylist, invalidatePlaylistsCache } from '../api.js?v=200';
-import { hasKey, setKey, getSimilarArtists, getArtistTopTracks } from '../api/lastfm.js?v=200';
-import { showProgress, hideProgress, promptPlaylistName, escapeHtml, pageHeader } from '../ui/components.js?v=200';
-import { showToast } from '../ui/toast.js?v=200';
-import { limpiaParaQuery, titleMatches, artistMatches } from '../util/track-match.js?v=200';
+import { spotifyFetch, createPlaylist, addTracksToPlaylist, invalidatePlaylistsCache } from '../api.js?v=201';
+import { hasKey, setKey, getSimilarArtists, getArtistTopTracks } from '../api/lastfm.js?v=201';
+import { showProgress, hideProgress, promptPlaylistName, escapeHtml, pageHeader } from '../ui/components.js?v=201';
+import { showToast } from '../ui/toast.js?v=201';
+import { getPreview } from '../api/preview-providers.js?v=201';
+import { togglePreview, playingKey, isPlayingAudio } from '../ui/preview-player.js?v=201';
+import { paintPlayingCard } from '../ui/track-card-row.js?v=201';
+import { openTrackCard } from './track-card.js?v=201';
+import { openAlbumCard } from './album-card.js?v=201';
+import { limpiaParaQuery, titleMatches, artistMatches } from '../util/track-match.js?v=201';
+
+// Mismo componente que #recs (recommendations.js): preview, ficha y ficha de
+// álbum sobre la fila resuelta. Los iconos son idénticos a los de esa vista.
+const ICONO_PLAY = `<svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14"><path d="M8 5v14l11-7z"/></svg>`;
+const ICONO_PAUSA = `<svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14"><path d="M7 5h3.5v14H7zM13.5 5H17v14h-3.5z"/></svg>`;
+const ICONO_FICHA = `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><line x1="12" y1="11" x2="12" y2="16"/><line x1="12" y1="8" x2="12" y2="8"/></svg>`;
+const ICONO_DISCO = `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="2.6"/></svg>`;
 
 let sourceArtist = null;
 let similarList = [];
@@ -200,12 +212,19 @@ async function resolveTracksOnSpotify(topTracks) {
       const hit = (data.tracks?.items || []).find(c =>
         titleMatches(t.name, c.name) && artistMatches(t.artist, (c.artists || []).map(a => a.name).join(', ')));
       if (hit) {
+        const artistas = (hit.artists || []).map(a => a.name).filter(Boolean);
         resolvedTracks.push({
           uri: hit.uri,
+          trackId: hit.id,
           name: hit.name,
-          artist: (hit.artists || []).map(a => a.name).join(', '),
+          artist: artistas.join(', '),
+          // La lista entera, no el string unido — la cadena de proveedores de
+          // preview acepta el match si coincide CUALQUIER artista (v=142).
+          artistList: artistas,
           album: hit.album?.name,
+          albumId: hit.album?.id,
           image: hit.album?.images?.[hit.album.images.length - 1]?.url,
+          imageBig: hit.album?.images?.[0]?.url,
           playcount: t.playcount,
           matched: true,
         });
@@ -219,6 +238,84 @@ async function resolveTracksOnSpotify(topTracks) {
   }
 
   renderResolvedTracks();
+}
+
+function filaPorId(id) {
+  return resolvedTracks.find(t => t.matched && t.trackId === id) || null;
+}
+
+// ── Preview ──────────────────────────────────────────────────────────────────
+// La misma cadena de proveedores que #recs (iTunes → Deezer → embed de
+// Spotify), con el mismo componente global de audio.
+async function onPlayClick(r) {
+  const res = await togglePreview(`similar:${r.trackId}`, () => getPreview({
+    name: r.name,
+    artists: r.artistList,
+    spotifyId: r.trackId || undefined,
+  }));
+  if (res === null) showToast(`Sin preview disponible de «${r.name}»`, 'info');
+}
+
+document.addEventListener('previewchange', (e) => {
+  paintPlayingCard(document.getElementById('similar-tracks'), 'similar', e.detail);
+});
+
+// Una fila es un `<label>` que ENVUELVE el checkbox, así que un click en
+// cualquier descendiente lo tilda aunque el descendiente tenga su propio
+// handler. Para las acciones que NO son marcar hace falta `preventDefault()`
+// ADEMÁS de `stopPropagation()` (v=164, mismo gotcha que #recs).
+function accionesDeFila(tracksEl) {
+  tracksEl.addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-accion]');
+    if (!btn || !tracksEl.contains(btn)) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const fila = e.target.closest('[data-id]');
+    const r = fila && filaPorId(fila.dataset.id);
+    if (!r) return;
+    if (btn.dataset.accion === 'play') { onPlayClick(r); return; }
+    if (btn.dataset.accion === 'ficha') {
+      openTrackCard({ id: r.trackId, name: r.name, artists: r.artistList, album: r.album, img: r.imageBig || r.image });
+      return;
+    }
+    if (btn.dataset.accion === 'album') {
+      openAlbumCard({ name: r.album, artist: r.artistList?.[0] || r.artist, albumId: r.albumId, img: r.imageBig || r.image });
+    }
+  });
+}
+
+function filaHtml(t) {
+  if (!t.matched) {
+    return `
+      <div class="pretty-check-row" style="opacity:0.5">
+        <div style="width:40px;height:40px;background:var(--color-elevated);border-radius:var(--radius-sm);display:flex;align-items:center;justify-content:center;font-size:12px;color:var(--color-text-muted)">?</div>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:14px">${escapeHtml(t.name)}</div>
+          <div style="font-size:12px;color:var(--color-text-muted)">${escapeHtml(t.artist)} — sin match en Spotify</div>
+        </div>
+      </div>`;
+  }
+  const sonando = playingKey() === `similar:${t.trackId}`;
+  const pausa = sonando && isPlayingAudio();
+  return `
+    <label class="pretty-check-row" data-id="${escapeHtml(t.trackId)}">
+      <input type="checkbox" class="pretty-check similar-track-check" data-uri="${t.uri}" checked>
+      <span class="pretty-check-box"></span>
+      ${t.image
+        ? `<img src="${t.image}" style="width:40px;height:40px;border-radius:var(--radius-sm);object-fit:cover">`
+        : `<div style="width:40px;height:40px;background:var(--color-elevated);border-radius:var(--radius-sm)"></div>`}
+      <div style="flex:1;min-width:0">
+        <div style="font-size:14px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(t.name)}</div>
+        <div style="font-size:12px;color:var(--color-text-secondary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(t.artist)}${t.album ? ` · ${escapeHtml(t.album)}` : ''}</div>
+      </div>
+      <div class="recs-row-actions">
+        <button type="button" class="sc-btn sc-play${sonando ? ' playing' : ''}" data-accion="play"
+                title="${pausa ? 'Parar el preview' : 'Preview de 30 s — no suma reproducciones'}"
+                aria-label="${pausa ? 'Parar preview' : 'Preview'}">${pausa ? ICONO_PAUSA : ICONO_PLAY}</button>
+        <button type="button" class="sc-btn" data-accion="ficha" title="Ver la ficha del tema" aria-label="Ficha del tema">${ICONO_FICHA}</button>
+        ${t.album ? `<button type="button" class="sc-btn" data-accion="album" title="Ver la ficha del álbum" aria-label="Ficha del álbum">${ICONO_DISCO}</button>` : ''}
+      </div>
+    </label>`;
 }
 
 function renderResolvedTracks() {
@@ -255,27 +352,13 @@ function renderResolvedTracks() {
     ` : ''}
 
     <div class="card">
-      ${resolvedTracks.map((t, i) => t.matched ? `
-        <label class="pretty-check-row">
-          <input type="checkbox" class="pretty-check similar-track-check" data-uri="${t.uri}" checked>
-          <span class="pretty-check-box"></span>
-          ${t.image ? `<img src="${t.image}" style="width:40px;height:40px;border-radius:var(--radius-sm);object-fit:cover">` : `<div style="width:40px;height:40px;background:var(--color-elevated);border-radius:var(--radius-sm)"></div>`}
-          <div style="flex:1;min-width:0">
-            <div style="font-size:14px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(t.name)}</div>
-            <div style="font-size:12px;color:var(--color-text-secondary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(t.artist)}${t.album ? ` · ${escapeHtml(t.album)}` : ''}</div>
-          </div>
-        </label>
-      ` : `
-        <div class="pretty-check-row" style="opacity:0.5">
-          <div style="width:40px;height:40px;background:var(--color-elevated);border-radius:var(--radius-sm);display:flex;align-items:center;justify-content:center;font-size:12px;color:var(--color-text-muted)">?</div>
-          <div style="flex:1;min-width:0">
-            <div style="font-size:14px">${escapeHtml(t.name)}</div>
-            <div style="font-size:12px;color:var(--color-text-muted)">${escapeHtml(t.artist)} — sin match en Spotify</div>
-          </div>
-        </div>
-      `).join('')}
+      <div class="tracks-grid">
+        ${resolvedTracks.map(filaHtml).join('')}
+      </div>
     </div>
   `;
+
+  accionesDeFila(tracksEl);
 
   tracksEl.querySelectorAll('.similar-track-check').forEach(box => {
     box.onchange = () => {

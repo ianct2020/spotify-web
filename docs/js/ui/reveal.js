@@ -49,7 +49,7 @@
 // shimmer de los esqueletos se ajustó en la tanda 7 para ATENUARSE en vez de
 // apagarse, y eso sigue igual.
 
-import { prefKey } from '../storage.js?v=200';
+import { prefKey } from '../storage.js?v=201';
 
 const ARMED = 'reveal-armed';
 const IN = 'reveal-in';

@@ -9,12 +9,76 @@ import { openTrackCard } from './track-card.js';
 import { openAlbumCard } from './album-card.js';
 import { limpiaParaQuery, titleMatches, artistMatches } from '../util/track-match.js';
 import { vigilarRuta } from '../util/vigencia-ruta.js';
+import { createHiddenStore } from '../util/hidden-sync.js';
 
 // Iconos de las dos fichas. Los mismos trazos que usa la tarjeta compartida.
 const ICONO_PLAY = `<svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14"><path d="M8 5v14l11-7z"/></svg>`;
 const ICONO_PAUSA = `<svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14"><path d="M7 5h3.5v14H7zM13.5 5H17v14h-3.5z"/></svg>`;
 const ICONO_FICHA = `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><line x1="12" y1="11" x2="12" y2="16"/><line x1="12" y1="8" x2="12" y2="8"/></svg>`;
 const ICONO_DISCO = `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="2.6"/></svg>`;
+// Mismos trazos que el ojo de discover-common.js (v=165), acá con 14px para
+// que entre en el botón redondo `.sc-hide` de las tarjetas de esta vista.
+const ICONO_OJO_TACHADO = `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>`;
+const ICONO_OJO_ABIERTO = `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>`;
+
+// Ocultar un artista recomendado: el MISMO mecanismo que discover-common.js
+// usa para álbumes (hidden-sync.js — playlist privada + reconciliación por
+// unión, ver PENDIENTES.md sobre el hueco de `uriByKey`). La clave es el
+// artista, no una pista, así que se guarda una pista representativa suya y al
+// leer se reconstruye el nombre desde el artista de esa pista — igual que
+// W-Three reconstruye `albumKey` desde su pista representativa.
+const hiddenArtists = createHiddenStore({
+  lsKey: 'recs_ocultos',
+  playlistName: 'fonoteca · ocultos (recomendados)',
+  label: 'recomendados',
+  keyOfTrack: (t) => {
+    const n = t?.artists?.[0]?.name;
+    return n ? n.toLowerCase() : null;
+  },
+});
+
+// Pista representativa por artista, para poder ocultarlo con una uri real sin
+// tener que resolver sus tracks de nuevo si ya se hizo en esta sesión.
+const artistUriMemo = new Map();   // nameLower → uri | null
+
+async function representativeArtistUri(artist) {
+  const k = artist.name.toLowerCase();
+  if (artistUriMemo.has(k)) return artistUriMemo.get(k);
+  // Camino rápido: si ya resolvimos sus tracks en esta sesión (el usuario
+  // entró a este artista antes de ocultarlo), reusar el primer match en vez
+  // de gastar otra vuelta a Last.fm + Spotify.
+  if (currentPick === artist) {
+    const rep = resolvedTracks.find(t => t.matched && (t.artistList || []).some(n => n.toLowerCase() === k));
+    if (rep) { artistUriMemo.set(k, rep.uri); return rep.uri; }
+  }
+  let uri = null;
+  try {
+    const top = await getArtistTopTracks(artist.name, 5);
+    for (const t of top) {
+      const q = `track:"${limpiaParaQuery(t.name)}" artist:"${limpiaParaQuery(artist.name)}"`;
+      const data = await spotifyFetch(`/search?q=${encodeURIComponent(q)}&type=track&limit=5`);
+      const hit = (data.tracks?.items || []).find(c =>
+        titleMatches(t.name, c.name)
+        && artistMatches(artist.name, (c.artists || []).map(x => x.name).join(', '))
+        // El artists[0] del candidato tiene que ser ESTE artista: si no,
+        // `keyOfTrack` reconstruiría un nombre distinto al sincronizar.
+        && (c.artists?.[0]?.name || '').toLowerCase() === k);
+      if (hit) { uri = hit.uri; break; }
+    }
+  } catch (e) {
+    console.warn(`[recs] no pude resolver una pista representativa de "${artist.name}":`, e.message);
+  }
+  artistUriMemo.set(k, uri);
+  return uri;
+}
+
+/** @returns {Promise<boolean>} true si quedó oculto */
+async function toggleHiddenArtist(artist) {
+  const key = artist.name.toLowerCase();
+  let uri = null;
+  try { uri = await representativeArtistUri(artist); } catch { /* sin uri: queda local, se reintenta en el próximo sync */ }
+  return hiddenArtists.toggle(key, uri);
+}
 
 // Cuántos top tracks se le piden a Last.fm por artista. Eran 20 hasta v=167.
 // Cada uno cuesta una búsqueda en Spotify, así que subirlo sube el riesgo de
@@ -28,6 +92,8 @@ let resolvedTracks = [];
 let alreadyLikedInResolution = 0;
 const pickedUris = new Set();
 const likedUris = new Set();
+// 'normal' = lo que queda por descubrir · 'hidden' = los que ocultaste.
+let viewMode = 'normal';
 
 export function render(container) {
   container.innerHTML = `
@@ -108,6 +174,7 @@ async function run() {
   const ruta = vigilarRuta();
   const panel = document.getElementById('recs-panel');
   const username = getUsername();
+  viewMode = 'normal';
   panel.innerHTML = `<div class="empty-state"><div class="spinner spinner-lg"></div><div style="margin-top:16px">Bajando tus top artistas de Last.fm...</div></div>`;
 
   try {
@@ -165,9 +232,18 @@ async function run() {
       await sleep(150);
     }
 
-    recommendations = [...scoreMap.values()]
-      .sort((a, b) => b.score - a.score)
-      .slice(0, 50);
+    // Sin recortar a 50 acá: el recorte se aplica al RENDERIZAR (ver
+    // renderRecommendations), después de sacar los ocultos — si se cortara
+    // antes, ocultar uno de los 50 no lo reemplazaría por el 51.
+    recommendations = [...scoreMap.values()].sort((a, b) => b.score - a.score);
+
+    // Ocultos desde la playlist de Spotify. En segundo plano: la vista arranca
+    // con el caché local y se repinta cuando llega la reconciliación (unión),
+    // igual que hiddenAlbums en discover-common.js.
+    hiddenArtists.ready().then(() => {
+      if (!ruta.vigente()) return;
+      renderRecommendations(ruta);
+    }).catch(() => {});
 
     renderRecommendations(ruta);
   } catch (e) {
@@ -185,22 +261,83 @@ function renderRecommendations(ruta = vigilarRuta()) {
     panel.innerHTML = `<div class="card"><p>No hay recomendaciones nuevas — parece que ya tienes a todos los similares de tus top artists.</p></div>`;
     return;
   }
+
+  const pool = viewMode === 'hidden'
+    ? recommendations.filter(a => hiddenArtists.has(a.name.toLowerCase()))
+    : recommendations.filter(a => !hiddenArtists.has(a.name.toLowerCase()));
+  const shown = pool.slice(0, 50);
+
+  const hiddenToggleBtn = (hiddenArtists.size > 0 || viewMode === 'hidden')
+    ? `<button class="btn btn-secondary btn-sm ${viewMode === 'hidden' ? 'sc-on' : ''}" id="recs-mode-hidden" title="Los que ocultaste. Se sincronizan con la playlist «fonoteca · ocultos (recomendados)».">Ocultos <span id="recs-hidden-n">${hiddenArtists.size}</span></button>`
+    : '';
+
+  if (shown.length === 0) {
+    panel.innerHTML = `
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:8px">
+        <div style="color:var(--color-text-secondary);font-size:14px">
+          ${viewMode === 'hidden' ? 'No ocultaste ningún artista.' : 'No hay recomendaciones nuevas — parece que ya tienes a todos los similares de tus top artists.'}
+        </div>
+        ${hiddenToggleBtn}
+      </div>
+    `;
+    document.getElementById('recs-mode-hidden')?.addEventListener('click', () => {
+      viewMode = viewMode === 'hidden' ? 'normal' : 'hidden';
+      renderRecommendations();
+    });
+    return;
+  }
+
   panel.innerHTML = `
-    <div style="margin-bottom:8px;color:var(--color-text-secondary);font-size:14px">
-      ${recommendations.length} artistas recomendados (filtrados los que ya tienes en likes). Click para ver top tracks.
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:8px">
+      <div style="color:var(--color-text-secondary);font-size:14px">
+        ${viewMode === 'hidden'
+          ? `${shown.length} artista${shown.length === 1 ? '' : 's'} oculto${shown.length === 1 ? '' : 's'}.`
+          : `${shown.length} artistas recomendados (filtrados los que ya tienes en likes). Click para ver top tracks.`}
+      </div>
+      ${hiddenToggleBtn}
     </div>
     <div class="smart-grid smart-grid-compact">
-      ${recommendations.map((a, i) => `
-        <button class="smart-card recs-artist-card" data-idx="${i}">
-          <div class="smart-card-title" style="font-size:15px">${escapeHtml(a.name)}</div>
-          <div class="smart-card-meta">${a.sources.length} match${a.sources.length > 1 ? 'es' : ''}</div>
-        </button>
-      `).join('')}
+      ${shown.map((a, i) => renderArtistCard(a, i)).join('')}
     </div>
   `;
-  panel.querySelectorAll('.recs-artist-card').forEach(el => {
-    el.onclick = () => pickArtist(recommendations[parseInt(el.dataset.idx)]);
+  panel.querySelectorAll('.recs-artist-pick').forEach(el => {
+    el.onclick = () => pickArtist(shown[parseInt(el.dataset.idx)]);
   });
+  panel.querySelectorAll('.recs-artist-hide').forEach(el => {
+    el.onclick = async () => {
+      const artist = shown[parseInt(el.dataset.idx)];
+      if (!artist) return;
+      el.disabled = true;
+      try {
+        const oculto = await toggleHiddenArtist(artist);
+        showToast(oculto ? `«${artist.name}» oculto — no vuelve a aparecer` : `«${artist.name}» vuelve a la lista`, 'success');
+      } catch (e) {
+        showToast('No se pudo ocultar: ' + e.message, 'error');
+      } finally {
+        el.disabled = false;
+      }
+      renderRecommendations();
+    };
+  });
+  document.getElementById('recs-mode-hidden')?.addEventListener('click', () => {
+    viewMode = viewMode === 'hidden' ? 'normal' : 'hidden';
+    renderRecommendations();
+  });
+}
+
+function renderArtistCard(a, i) {
+  const hidden = hiddenArtists.has(a.name.toLowerCase());
+  return `
+    <div class="smart-card recs-artist-card">
+      <button type="button" class="recs-artist-pick" data-idx="${i}" title="Ver top tracks">
+        <div class="smart-card-title" style="font-size:15px">${escapeHtml(a.name)}</div>
+        <div class="smart-card-meta">${a.sources.length} match${a.sources.length > 1 ? 'es' : ''}</div>
+      </button>
+      <button type="button" class="sc-btn sc-hide recs-artist-hide" data-idx="${i}"
+              title="${hidden ? 'Devolver a la lista' : 'No te interesa: ocultar (no vuelve a aparecer)'}"
+              aria-label="${hidden ? 'Devolver a la lista' : 'Ocultar'}">${hidden ? ICONO_OJO_ABIERTO : ICONO_OJO_TACHADO}</button>
+    </div>
+  `;
 }
 
 async function pickArtist(artist) {
@@ -210,9 +347,11 @@ async function pickArtist(artist) {
   pickedUris.clear();
 
   const panel = document.getElementById('recs-panel');
+  const yaOculto = hiddenArtists.has(artist.name.toLowerCase());
   panel.innerHTML = `
-    <div style="margin-bottom:12px">
+    <div style="margin-bottom:12px;display:flex;gap:8px;flex-wrap:wrap">
       <button class="btn btn-secondary btn-sm" id="recs-back-btn">← Volver</button>
+      <button class="btn btn-secondary btn-sm" id="recs-hide-btn">${yaOculto ? 'Devolver a la lista' : 'Ocultar este artista'}</button>
     </div>
     <div class="card" style="margin-bottom:16px">
       <h2 style="margin-bottom:2px">${escapeHtml(artist.name)}</h2>
@@ -223,6 +362,19 @@ async function pickArtist(artist) {
     <div id="recs-tracks"><div class="empty-state"><div class="spinner spinner-lg"></div><div style="margin-top:16px">Buscando top tracks...</div></div></div>
   `;
   document.getElementById('recs-back-btn').onclick = () => renderRecommendations();
+  document.getElementById('recs-hide-btn').onclick = async (e) => {
+    const btn = e.currentTarget;
+    btn.disabled = true;
+    try {
+      const oculto = await toggleHiddenArtist(artist);
+      showToast(oculto ? `«${artist.name}» oculto — no vuelve a aparecer` : `«${artist.name}» vuelve a la lista`, 'success');
+      btn.textContent = oculto ? 'Devolver a la lista' : 'Ocultar este artista';
+    } catch (err) {
+      showToast('No se pudo ocultar: ' + err.message, 'error');
+    } finally {
+      btn.disabled = false;
+    }
+  };
 
   try {
     const topTracks = await getArtistTopTracks(artist.name, TOP_TRACKS_POR_ARTISTA);
@@ -415,7 +567,9 @@ function renderResolvedTracks(ruta = vigilarRuta()) {
     </div>
 
     <div class="card">
-      ${resolvedTracks.map(filaHtml).join('')}
+      <div class="tracks-grid">
+        ${resolvedTracks.map(filaHtml).join('')}
+      </div>
     </div>
   `;
 
