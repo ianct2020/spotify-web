@@ -17,9 +17,9 @@
 // como está (marcado como el preview actual, pero con el ▶), que es lo honesto:
 // no sabemos si Spotify está sonando dentro del iframe.
 
-import { escapeHtml } from './components.js?v=202';
-import { showToast } from './toast.js?v=202';
-import { mountBottom } from './bottom-layer.js?v=202';
+import { escapeHtml } from './components.js?v=203';
+import { showToast } from './toast.js?v=203';
+import { mountBottom } from './bottom-layer.js?v=203';
 
 const audio = new Audio();
 audio.preload = 'none';
@@ -38,6 +38,13 @@ let pill = null;
 let hoverKey = null;
 let hoverTimer = null;
 let hoverStartedKey = null;
+// ¿El preview actual sigue sonando aunque el mouse se vaya? Lo pone un click
+// explícito en el botón ▶ (togglePreview), nunca el hover. Es lo que separa
+// las dos acciones en una tarjeta donde conviven las dos (botón apoyado sobre
+// la zona de hover-play, v=202): apoyar el mouse reproduce mientras esté
+// encima; apretar el botón FIJA lo que esté sonando —lo haya arrancado el
+// hover o el propio click— y a partir de ahí `hoverOut` ya no lo corta.
+let lockedKey = null;
 
 const PROVIDER_LABEL = {
   'itunes': 'vía iTunes',
@@ -156,10 +163,12 @@ function hidePill() {
 }
 
 audio.addEventListener('ended', () => {
+  clearStallTimer();
   currentKey = null;
   currentProvider = null;
   audioPlaying = false;
   hoverStartedKey = null;
+  lockedKey = null;
   hidePill();
   emit();
 });
@@ -167,11 +176,10 @@ audio.addEventListener('ended', () => {
 // Arranque y parada de las barritas, enganchados al audio real.
 // `playing` es el que avisa de que efectivamente está SONANDO (`play` solo
 // dice que se pidió reproducir); `waiting` es que se quedó sin buffer.
-audio.addEventListener('playing', () => setAudioPlaying(true));
+audio.addEventListener('playing', () => { clearStallTimer(); setAudioPlaying(true); });
 audio.addEventListener('play', () => setAudioPlaying(!audio.paused));
 audio.addEventListener('pause', () => setAudioPlaying(false));
 audio.addEventListener('waiting', () => setAudioPlaying(false));
-audio.addEventListener('stalled', () => setAudioPlaying(false));
 audio.addEventListener('emptied', () => setAudioPlaying(false));
 
 // ── Una URL muerta tiene que decirlo (v=173) ─────────────────────────────────
@@ -192,19 +200,84 @@ const MOTIVO_MEDIA = {
   4: 'el formato no se puede reproducir o la URL ya no existe',
 };
 
+// Cuánto esperar en 'stalled' antes de dar el intento por muerto (v=203). Ver
+// el porqué en el comentario de `fail()` — un servidor que contesta pero no
+// con audio puede dejar al <audio> en `stalled` PARA SIEMPRE, sin disparar
+// nunca un `error`. 8 s de margen: los 59/59 de v=173 cargaban en menos.
+const STALL_TIMEOUT_MS = 8000;
+let stallTimer = null;
+function clearStallTimer() {
+  if (stallTimer) { clearTimeout(stallTimer); stallTimer = null; }
+}
+
+// ── El aviso no le llegaba al botón que se apretó, y a veces no llegaba nunca
+//    (v=203) ───────────────────────────────────────────────────────────────
+//
+// Caso real: «munni & drugs» (bleood) resuelve a Deezer, pero esa URL
+// concreta devuelve **403 con un cuerpo HTML** — no es que falte el
+// proveedor, es que la que encontramos no sirve. Medido en vivo contra esa
+// URL: el `<audio>` nunca dispara `error` — se queda en `stalled` para
+// siempre, sin avanzar y sin rendirse, así que el listener de `error` de acá
+// abajo (que sí existe desde v=173) directamente no corre.
+//
+// Y aunque corriera, tenía un segundo problema: como el audio nunca llegó a
+// `playing`, `audioPlaying` ya era `false`, así que el viejo
+// `setAudioPlaying(false)` no cambiaba nada y su propio guarda (`if (val ===
+// audioPlaying) return`) se comía el `emit()` — CERO `previewchange`. El pill
+// de abajo SÍ avisaba, pero el botón ▶ que se apretó quedaba pintado en ⏸
+// para siempre, como si siguiera sonando: la única señal que el usuario mira
+// de cerca decía justo lo contrario de lo que pasó.
+//
+// `fail()` junta las dos arreglos: corta la reproducción DE VERDAD (mismo
+// criterio que `stopPreview`, sin volver a mostrar el pill de "parado") y
+// emite siempre, para que todos los botones de todas las vistas vuelvan a ▶.
+// La llaman dos caminos — el `error` real (cuando SÍ llega) y un timeout de
+// `STALL_TIMEOUT_MS` colgado de `stalled` (para cuando no llega nunca) — y el
+// aviso se repite por toast, la misma vía que ya usan las vistas para "sin
+// preview en iTunes ni en Deezer", con la etiqueta y el proveedor que sí
+// encontramos: no dejar la explicación enterrada en un pill chico abajo a la
+// derecha.
+function fail(motivo) {
+  const proveedor = currentProvider ? (PROVIDER_LABEL[currentProvider] || currentProvider) : null;
+  const label = pill?.querySelector('.preview-pill-label')?.textContent || '';
+  console.warn(`[preview] no se pudo reproducir (${currentProvider || 'sin proveedor'}): ${motivo}`);
+  mostrarFalloEnPill(motivo);
+  clearStallTimer();
+  audio.pause();
+  audio.removeAttribute('src');
+  currentKey = null;
+  currentProvider = null;
+  audioPlaying = false;
+  hoverStartedKey = null;
+  lockedKey = null;
+  emit();
+  if (label) {
+    showToast(`No se pudo reproducir «${label}»${proveedor ? ` (${proveedor})` : ''} — ${motivo}`, 'info');
+  }
+}
+
+audio.addEventListener('stalled', () => {
+  setAudioPlaying(false);
+  const key = currentKey;
+  clearStallTimer();
+  stallTimer = setTimeout(() => {
+    // Puede que para cuando dispare ya haya arrancado (rearmado por otro
+    // 'stalled' intermedio) o que el usuario ya haya pedido otra cosa.
+    if (currentKey === key && !audioPlaying) fail('no respondió a tiempo — puede que el enlace ya no esté disponible');
+  }, STALL_TIMEOUT_MS);
+});
+
 audio.addEventListener('error', () => {
   // `emptied` dispara un `error` espurio cuando limpiamos el src a propósito
-  // (stopPreview hace removeAttribute('src')). Sin este filtro, cerrar el pill
-  // mostraría un cartel de fallo cada vez.
+  // (stopPreview y el propio `fail()` hacen removeAttribute('src')). Sin este
+  // filtro, cerrar el pill mostraría un cartel de fallo cada vez.
   if (!audio.getAttribute('src')) return;
-  const code = audio.error?.code;
-  const motivo = MOTIVO_MEDIA[code] || 'motivo desconocido';
-  console.warn(`[preview] no se pudo reproducir (${currentProvider || 'sin proveedor'}): ${motivo}`, audio.error);
-  mostrarFalloEnPill(motivo);
-  setAudioPlaying(false);
+  const motivo = MOTIVO_MEDIA[audio.error?.code] || 'motivo desconocido';
+  fail(motivo);
 });
 
 function playAudio(key, { url, label, provider }) {
+  clearStallTimer();
   currentKey = key;
   currentProvider = provider || null;
   audio.src = url;
@@ -223,6 +296,7 @@ function playAudio(key, { url, label, provider }) {
 function playEmbed(key, { url, label, provider }) {
   // Con embed, el <audio> nuestro no juega — Spotify reproduce dentro del iframe.
   // Cortamos cualquier audio previo antes de mostrar el embed.
+  clearStallTimer();
   audio.pause();
   audio.removeAttribute('src');
   currentKey = key;
@@ -240,12 +314,14 @@ function playPreview(key, result) {
 }
 
 function stopPreview() {
+  clearStallTimer();
   audio.pause();
   audio.removeAttribute('src');
   currentKey = null;
   currentProvider = null;
   audioPlaying = false;
   hoverStartedKey = null;
+  lockedKey = null;
   hidePill();
   emit();
 }
@@ -266,9 +342,22 @@ function isPlayingAudio() {
 
 // Toggle por click. `getter` es async y devuelve { url, label, provider, type }
 // o null (compatible con la firma vieja { url, label } — asume type='audio').
-// Devuelve: true = arrancó, false = lo paró (ya estaba), null = no hay preview.
+// Devuelve: true = arrancó (o quedó fijado), false = lo paró (ya estaba), null
+// = no hay preview.
+//
+// Si lo que está sonando es ESTE mismo `key` pero todavía no está fijado
+// —llegó por hover, no por un click anterior—, el click no lo para: lo fija.
+// Es la mitad que hace posible que hover-play y el botón ▶ convivan sobre la
+// misma tarjeta sin pisarse (v=202): sin esto, clickear el botón mientras el
+// hover ya venía sonando ejecutaba la rama de abajo (mismo key → parar), que
+// es exactamente lo que el botón NO debería hacer.
 async function togglePreview(key, getter) {
-  if (currentKey === key) { stopPreview(); return false; }
+  if (currentKey === key) {
+    if (lockedKey === key) { stopPreview(); return false; }
+    lockedKey = key;
+    hoverStartedKey = null;
+    return true;
+  }
   currentKey = key;
   currentProvider = null;
   showPillAudio('Buscando preview…', null, true);
@@ -276,6 +365,7 @@ async function togglePreview(key, getter) {
   const p = await getter();
   if (currentKey !== key) return false; // mientras buscaba, el user tocó otra cosa
   if (!p) { stopPreview(); return null; }
+  lockedKey = key;
   playPreview(key, p);
   return true;
 }
@@ -289,6 +379,12 @@ function hoverIn(key, getter, delay = 400) {
   hoverKey = key;
   clearTimeout(hoverTimer);
   hoverTimer = setTimeout(async () => {
+    if (hoverKey !== key) return;
+    // Ya está sonando ESTE key —fijado por un click, o por un hover que
+    // arrancó un instante antes por otra vía—: no lo reinicies. Reintentar acá
+    // reemplazaría `audio.src` y cortaría el audio fijado justo cuando el
+    // mouse vuelve a pasar por la tapa (v=202).
+    if (currentKey === key) return;
     const p = await getter();
     if (hoverKey !== key || !p) return;
     if (p.type === 'embed') return; // hover no dispara embeds — muy invasivo
