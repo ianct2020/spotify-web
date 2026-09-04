@@ -2,6 +2,7 @@ import { spotifyFetch, createPlaylist, addTracksToPlaylist, invalidatePlaylistsC
 import { hasKey, setKey, getTopArtistsByTag, getArtistTopTracks, getArtistTopTags } from '../api/lastfm.js';
 import { showProgress, hideProgress, promptPlaylistName, escapeHtml, pageHeader } from '../ui/components.js';
 import { showToast } from '../ui/toast.js';
+import { vigilarRuta } from '../util/vigencia-ruta.js';
 
 const SUGGESTED_TAGS = [
   'rock', 'indie', 'hip-hop', 'electronic', 'pop', 'metal',
@@ -103,7 +104,7 @@ const RABBIT_NOISE_TAGS = new Set([
 
 function tagSleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
-async function computeRelatedTags(currentTagName, artists) {
+async function computeRelatedTags(currentTagName, artists, ruta = vigilarRuta()) {
   const currentLower = currentTagName.toLowerCase();
   const tagCounts = new Map();
   const sample = artists.slice(0, 8);
@@ -117,6 +118,9 @@ async function computeRelatedTags(currentTagName, artists) {
         tagCounts.set(key, (tagCounts.get(key) || 0) + 1);
       });
     } catch {}
+    // Ocho artistas con 200 ms de pausa: corta entre uno y otro, igual que
+    // `scanArtists()` de `#discover-artists`.
+    if (!ruta.vigente()) return [];
     await tagSleep(200);
   }
   return [...tagCounts.entries()]
@@ -127,6 +131,9 @@ async function computeRelatedTags(currentTagName, artists) {
 }
 
 async function loadTag(tag) {
+  // Ver util/vigencia-ruta.js: el `teardown` del router no puede interrumpir un
+  // `await` en vuelo, hay que preguntar al volver de cada espera.
+  const ruta = vigilarRuta();
   currentTag = tag;
   relatedTags = [];
   const panel = document.getElementById('rabbit-panel');
@@ -134,13 +141,15 @@ async function loadTag(tag) {
 
   try {
     artistList = await getTopArtistsByTag(tag, 50);
+    if (!ruta.vigente()) return;
     if (artistList.length === 0) {
       panel.innerHTML = `<div class="card"><p>Last.fm no tiene artistas para el tag "${escapeHtml(tag)}". Prueba con otro nombre.</p></div>`;
       return;
     }
-    renderArtistGrid();
-    computeRelatedTags(tag, artistList).then(rt => {
+    renderArtistGrid(ruta);
+    computeRelatedTags(tag, artistList, ruta).then(rt => {
       relatedTags = rt;
+      if (!ruta.vigente()) return;
       const holder = document.getElementById('rabbit-related-holder');
       if (holder && rt.length > 0) {
         holder.innerHTML = `
@@ -161,11 +170,13 @@ async function loadTag(tag) {
       }
     });
   } catch (e) {
+    if (!ruta.vigente()) return;
     panel.innerHTML = `<div class="card"><p style="color:var(--color-error)">${escapeHtml(e.message)}</p></div>`;
   }
 }
 
-function renderArtistGrid() {
+function renderArtistGrid(ruta = vigilarRuta()) {
+  if (!ruta.vigente()) return;
   const panel = document.getElementById('rabbit-panel');
   panel.innerHTML = `
     <div style="margin-bottom:8px;color:var(--color-text-secondary);font-size:14px">
@@ -203,6 +214,7 @@ function renderArtistGrid() {
 }
 
 async function pickArtist(artist) {
+  const ruta = vigilarRuta();
   currentArtistPick = artist;
   resolvedTracks = [];
   pickedUris.clear();
@@ -218,21 +230,24 @@ async function pickArtist(artist) {
     </div>
     <div id="rabbit-tracks"><div class="empty-state"><div class="spinner spinner-lg"></div><div style="margin-top:16px">Buscando top tracks...</div></div></div>
   `;
-  document.getElementById('rabbit-back-btn').onclick = renderArtistGrid;
+  document.getElementById('rabbit-back-btn').onclick = () => renderArtistGrid();
 
   try {
     const topTracks = await getArtistTopTracks(artist.name, 20);
+    if (!ruta.vigente()) return;
     if (topTracks.length === 0) {
       document.getElementById('rabbit-tracks').innerHTML = `<div class="card"><p>Sin top tracks para este artista.</p></div>`;
       return;
     }
-    await resolveTracksOnSpotify(topTracks);
+    await resolveTracksOnSpotify(topTracks, ruta);
   } catch (e) {
+    if (!ruta.vigente()) return;
     document.getElementById('rabbit-tracks').innerHTML = `<div class="card"><p style="color:var(--color-error)">${escapeHtml(e.message)}</p></div>`;
   }
 }
 
-async function resolveTracksOnSpotify(topTracks) {
+async function resolveTracksOnSpotify(topTracks, ruta = vigilarRuta()) {
+  if (!ruta.vigente()) return;
   const tracksEl = document.getElementById('rabbit-tracks');
   tracksEl.innerHTML = `<div class="empty-state"><div class="spinner spinner-lg"></div><div style="margin-top:16px">Buscando en Spotify (0/${topTracks.length})...</div></div>`;
 
@@ -258,13 +273,17 @@ async function resolveTracksOnSpotify(topTracks) {
     } catch {
       resolvedTracks.push({ uri: null, name: t.name, artist: t.artist, matched: false });
     }
+    // Veinte búsquedas seguidas contra Spotify: el corte va acá, antes de tocar
+    // el contador, y no solo al final del bucle.
+    if (!ruta.vigente()) return;
     tracksEl.querySelector('.empty-state div:last-child').textContent = `Buscando en Spotify (${i + 1}/${topTracks.length})...`;
   }
 
-  renderResolvedTracks();
+  renderResolvedTracks(ruta);
 }
 
-function renderResolvedTracks() {
+function renderResolvedTracks(ruta = vigilarRuta()) {
+  if (!ruta.vigente()) return;
   const tracksEl = document.getElementById('rabbit-tracks');
   const matched = resolvedTracks.filter(t => t.matched);
   matched.forEach(t => pickedUris.add(t.uri));

@@ -1,6 +1,7 @@
-import { getAllLikedTracks, getAllPlaylistItems, updatePlaylistItemsCache, getAllUserPlaylists, addTracksToPlaylist, removeTracksFromPlaylist, createPlaylist, unfollowPlaylist, spotifyFetch } from '../api.js?v=194';
-import { showProgress, hideProgress, progressController, isCancelled, typeConfirmModal, renderTrackRow, escapeHtml, pageHeader } from '../ui/components.js?v=194';
-import { showToast } from '../ui/toast.js?v=194';
+import { getAllLikedTracks, getAllPlaylistItems, updatePlaylistItemsCache, getAllUserPlaylists, addTracksToPlaylist, removeTracksFromPlaylist, createPlaylist, unfollowPlaylist, spotifyFetch } from '../api.js?v=195';
+import { showProgress, hideProgress, progressController, isCancelled, typeConfirmModal, renderTrackRow, escapeHtml, pageHeader } from '../ui/components.js?v=195';
+import { showToast } from '../ui/toast.js?v=195';
+import { vigilarRuta } from '../util/vigencia-ruta.js?v=195';
 
 const TARGET_PLAYLIST_NAME = 'anothertwo';
 const SPOTIFY_PLAYLIST_MAX = 10000;
@@ -26,6 +27,10 @@ export function render(container) {
 }
 
 async function analyze() {
+  // `render()` la dispara sola, así que entrar a la vista ya arranca la bajada
+  // de los ~9.500 me gusta más las 97 playlists: irse antes de que termine es
+  // el caso normal, no el raro. Ver util/vigencia-ruta.js.
+  const ruta = vigilarRuta();
   const nameOrId = document.getElementById('sync-playlist-name').value.trim();
   if (!nameOrId) return showToast('Introduce el nombre o ID de la playlist', 'warning');
 
@@ -38,11 +43,13 @@ async function analyze() {
     const likes = await getAllLikedTracks(({ loaded, total }) => {
       prog.update(loaded, total);
     }, { randomize: false, signal: prog.signal });
+    if (!ruta.vigente()) return;
 
     prog.update(0, 0, 'Cargando playlists...');
     const playlists = await getAllUserPlaylists(({ loaded, total }) => {
       prog.update(loaded, total, 'Cargando playlists...');
     }, { signal: prog.signal });
+    if (!ruta.vigente()) return;
 
     let target = playlists.find(p =>
       p.id === nameOrId || p.name.toLowerCase() === nameOrId.toLowerCase()
@@ -50,17 +57,18 @@ async function analyze() {
 
     if (!target) {
       hideProgress();
-      renderMissingPlaylistUI(nameOrId, playlists);
+      renderMissingPlaylistUI(nameOrId, playlists, ruta);
       return;
     }
 
     // Post-migración feb 2026: /me/playlists NO devuelve tracks.total, así
     // que pedimos el total real con /items?limit=1 (barato, 1 request).
     const meta = await spotifyFetch(`/playlists/${target.id}/items?limit=1`);
+    if (!ruta.vigente()) return;
     const targetTotal = meta?.total ?? 0;
     if (targetTotal >= SPOTIFY_PLAYLIST_MAX) {
       hideProgress();
-      renderFullPlaylistUI(target, playlists, targetTotal);
+      renderFullPlaylistUI(target, playlists, targetTotal, ruta);
       return;
     }
 
@@ -69,6 +77,7 @@ async function analyze() {
     const playlistItems = await getAllPlaylistItems(target.id, ({ loaded, total }) => {
       prog.update(loaded, total, itemsMsg);
     }, { signal: prog.signal });
+    if (!ruta.vigente()) return;
     prog.done();
 
     const likeUris = new Set(likes.map(item => item.track?.uri).filter(Boolean));
@@ -165,6 +174,9 @@ async function analyze() {
     `;
 
     const ctx = { playlistItems, likeMap };
+    // Los tres cableados de abajo son `getElementById(...).onclick` sobre nodos
+    // que acaban de nacer: si la ruta cambió, `results` está desconectado y el
+    // primero de ellos es null. Es el crash de v=174, acá tapado por el catch.
     document.getElementById('sync-execute-btn').onclick = () => executeSync(target, toAdd, toRemove, ctx);
     const addOnlyBtn = document.getElementById('sync-add-only-btn');
     if (addOnlyBtn) addOnlyBtn.onclick = () => executeSync(target, toAdd, [], { ...ctx, mode: 'add-only' });
@@ -173,6 +185,7 @@ async function analyze() {
 
   } catch (e) {
     hideProgress();
+    if (!ruta.vigente()) return;
     if (isCancelled(e)) {
       results.innerHTML = `
         <div class="card dash-state-card dash-state-card-center">
@@ -191,6 +204,7 @@ async function analyze() {
 }
 
 async function executeSync(playlist, toAdd, toRemove, { mode = 'full', playlistItems = [], likeMap = new Map() } = {}) {
+  const ruta = vigilarRuta();
   const label = mode === 'add-only' ? 'Solo añadir' : 'Sincronizar playlist';
   const confirmed = await typeConfirmModal(
     label,
@@ -230,6 +244,9 @@ async function executeSync(playlist, toAdd, toRemove, { mode = 'full', playlistI
     hideProgress();
     showToast(`Sync completo: +${toAdd.length} / -${toRemove.length}`, 'success');
 
+    // La escritura en Spotify ya se hizo y el toast la anuncia igual; lo único
+    // que se saltea al haber cambiado de ruta es pintar el resumen.
+    if (!ruta.vigente()) return;
     document.getElementById('sync-results').innerHTML = `
       <div class="card">
         <div style="display:flex;align-items:center;gap:10px">
@@ -249,6 +266,7 @@ async function executeSync(playlist, toAdd, toRemove, { mode = 'full', playlistI
 }
 
 async function executeWipeAndFill(playlist, playlistItems, likes) {
+  const ruta = vigilarRuta();
   const currentUris = playlistItems.map(item => (item.track || item.item)?.uri).filter(Boolean);
   const likeUris = likes.map(item => item.track?.uri).filter(Boolean);
 
@@ -277,6 +295,7 @@ async function executeWipeAndFill(playlist, playlistItems, likes) {
     await updatePlaylistItemsCache(playlist.id, likes.filter(i => i.track).map(i => ({ item: i.track })), snapshot);
     hideProgress();
     showToast(`Playlist rehecha con ${likeUris.length.toLocaleString('es-ES')} tracks`, 'success');
+    if (!ruta.vigente()) return;
     document.getElementById('sync-results').innerHTML = `
       <div class="card">
         <div style="display:flex;align-items:center;gap:10px">
@@ -306,7 +325,8 @@ function nextPlaylistName(baseName, playlists) {
   return `${baseName} ${next}`;
 }
 
-function renderMissingPlaylistUI(nameOrId, playlists) {
+function renderMissingPlaylistUI(nameOrId, playlists, ruta = vigilarRuta()) {
+  if (!ruta.vigente()) return;
   const results = document.getElementById('sync-results');
   results.innerHTML = `
     <div class="card" style="margin-bottom:16px;border-color:var(--color-warning)">
@@ -319,7 +339,8 @@ function renderMissingPlaylistUI(nameOrId, playlists) {
     rebuildFreshPlaylist(nameOrId);
 }
 
-function renderFullPlaylistUI(target, playlists, targetTotal) {
+function renderFullPlaylistUI(target, playlists, targetTotal, ruta = vigilarRuta()) {
+  if (!ruta.vigente()) return;
   const results = document.getElementById('sync-results');
   const nextName = nextPlaylistName(target.name, playlists);
   const totalStr = (targetTotal ?? 0).toLocaleString('es-ES');
@@ -375,6 +396,7 @@ async function fillPlaylistWithUris(playlistId, uris, playlistName) {
 }
 
 async function rebuildInPlace(target, targetTotal) {
+  const ruta = vigilarRuta();
   const totalStr = (targetTotal ?? 0).toLocaleString('es-ES');
   const confirmed = await typeConfirmModal(
     'Rehacer playlist desde cero',
@@ -402,6 +424,7 @@ async function rebuildInPlace(target, targetTotal) {
 
     hideProgress();
     showToast(`"${fresh.name}" rehecha con ${uris.length.toLocaleString('es-ES')} tracks`, 'success');
+    if (!ruta.vigente()) return;
     document.getElementById('sync-results').innerHTML = `
       <div class="card">
         <div style="display:flex;align-items:center;gap:10px">
@@ -418,6 +441,7 @@ async function rebuildInPlace(target, targetTotal) {
 }
 
 async function rebuildFreshPlaylist(name) {
+  const ruta = vigilarRuta();
   const confirmed = await typeConfirmModal(
     'Crear playlist nueva',
     `Se va a crear la playlist "<strong>${escapeHtml(name)}</strong>" vacía y llenarla con todos tus likes (tarda unos minutos).`,
@@ -440,6 +464,7 @@ async function rebuildFreshPlaylist(name) {
 
     hideProgress();
     showToast(`"${fresh.name}" creada con ${uris.length.toLocaleString('es-ES')} tracks`, 'success');
+    if (!ruta.vigente()) return;
     document.getElementById('sync-results').innerHTML = `
       <div class="card">
         <div style="display:flex;align-items:center;gap:10px">
