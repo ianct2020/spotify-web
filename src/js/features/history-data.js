@@ -133,13 +133,20 @@ async function hasLocalHistory() {
 // Evita el re-fetch cuando bumpeamos una _VERSION del pipeline pero el JSON
 // remoto no cambió estructuralmente.
 const OWNER_PREV_KEYS = {
-  stats: ['history_stats_v1'],
+  // Vacía A PROPÓSITO desde v3 (2026-09-04). El bump a v3 existe SOLO para que
+  // el navegador vuelva a bajar el JSON con las tapas horneadas por
+  // `scripts/bake-covers.py`; migrar el v2 —o peor, el v1— desde IDB
+  // devolvería exactamente el archivo sin tapas que el bump quiere reemplazar,
+  // y la vista se pintaría igual que antes sin fallar, o sea EN SILENCIO.
+  stats: [],
   // Ninguna versión anterior sirve: v1/v2 no traen `albums`, v3 lo trae sin
   // plays ni ms (que es lo que necesita la ficha de álbum) y v4 sin el día de
   // la primera play (v=157). Lista vacía a propósito, para forzar el refetch
   // del JSON nuevo.
   plays: [],
-  listened: ['history_listened_albums_v1', 'history_albums_v1'],
+  // Vacía A PROPÓSITO desde v3, por el mismo motivo que `stats`: cualquier
+  // versión anterior es el JSON con los 91 `img` en null.
+  listened: [],
   // Vacía A PROPÓSITO, igual que `plays` en v=140: v1 era {id: [ok, skip]} y v2
   // es {id: [ok, skip, fwd_ms, close_ms, gid]}. Un v1 reciclado dejaría a
   // skips.js sin los ms de cada play y sin el agrupado, y los tres toggles

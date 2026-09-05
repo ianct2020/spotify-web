@@ -35,6 +35,11 @@ from datetime import datetime, date, timedelta
 HISTORY_DIR = "/home/ian/spotify-web/my_spotify_data/Spotify Extended Streaming History"
 OUT_DIR = "/home/ian/spotify-web/src/data"
 OLD_IMG_JSON = "/home/ian/spotify-web/src/data/listening-history.json"
+# Tapas horneadas DESPUÉS, por scripts/bake-covers.py, para los álbumes que
+# entraron con un export posterior al horneado del 2026-07-25. Es un complemento:
+# `listening-history.json` no se toca nunca y siempre gana. Ver PENDIENTES.md
+# ítem 1 (el horneador original no existe) e ítem 11.
+EXTRA_IMG_JSON = "/home/ian/spotify-web/src/data/covers-extra.json"
 
 MIN_MS = 30000  # trigger warning: ignoramos plays de menos de 30s
 SKIP_MIN_MS = 5000  # skip "consciente": si le dio next después de 5s+ es deliberado
@@ -233,6 +238,31 @@ def load_album_images():
                 idx[k] = img
     except Exception as e:
         print("no pude cargar tapas viejas:", e)
+
+    # Complemento de bake-covers.py: entra SOLO donde la clave no existía.
+    # El `if k in idx: continue` no es una optimización, es el guarda: lo
+    # horneado el 25/07 incluye correcciones hechas a mano sobre el dato
+    # («Birds In The Trap Sing McKnight», v=151) que no están en ningún script
+    # y que un merge que pise las pisaría en silencio.
+    sumadas = 0
+    try:
+        with open(EXTRA_IMG_JSON) as fh:
+            extra = json.load(fh).get("covers", {})
+        for clave, img in extra.items():
+            if not img or "||" not in clave:
+                continue
+            nombre, _, artista = clave.partition("||")
+            k = (nombre, artista)
+            if k in idx:
+                continue  # ⛔ nunca pisar una tapa horneada
+            idx[k] = img
+            sumadas += 1
+        print(f"  tapas extra (covers-extra.json): {sumadas:,} de {len(extra):,}")
+    except FileNotFoundError:
+        pass  # todavía no se corrió bake-covers.py
+    except Exception as e:
+        print("no pude cargar covers-extra.json:", e)
+
     return idx
 
 # ---------------------------------------------------------------------------

@@ -1031,6 +1031,18 @@ async function getCurrentUserId() {
       for (const k of OWNER_KEY_LIST) {
         idbDel(k).catch(() => {});
       }
+      // ⚠️ Y las de versiones ANTERIORES, que `OWNER_KEY_LIST` no puede nombrar:
+      // solo lleva la versión vigente, así que cada bump deja huérfana la clave
+      // que acaba de dejar de usarse — `history_listened_albums_v2` y
+      // `history_stats_v2` al subir a v3 el 2026-09-04, y lo mismo cada vez
+      // antes. Esas huérfanas son historial de escuchas del owner y quedaban en
+      // el navegador de la otra persona: el mismo agujero que arregló v=189 con
+      // la lista escrita a mano, por el otro lado. El prefijo las cubre todas,
+      // incluidas las de bumps futuros; el BYOH local va bajo `local_` y no lo
+      // toca.
+      idbDelByPrefix('history_')
+        .then(n => { if (n) console.info(`Fonoteca: ${n} caches de historial borrados al cambiar de usuario`); })
+        .catch(() => {});
       // Contenido de las playlists: una clave por playlist, así que no se
       // pueden nombrar de antemano. `invalidatePlaylistsCache()` solo limpia la
       // LISTA; hasta v=189 los items —que son las canciones de las playlists de
