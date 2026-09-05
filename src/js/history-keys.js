@@ -23,7 +23,7 @@ const PLAYS_VERSION = 5;   // v5: cada álbum de `albums` lleva además el día 
 const LISTENED_VERSION = 3;  // v3: las 91 tapas que faltaban (ítem 11) — mismo contenido, campo `img` ya no nulo
 const SKIP_VERSION = 2;    // v2: [ok, skip, fwd_ms, close_ms, gid] — el veredicto lo arma features/skips.js
 const DETAIL_VERSION = 1;
-const RECORDS_VERSION = 2;
+const RECORDS_VERSION = 3;  // v3: seis récords nuevos (día con más artistas, tema en más años, artista con más días, abandonado, crecimiento, racha de artista)
 const ARTIST_TRACKS_VERSION = 2;  // v2: `totals` lleva el día de la primera play válida del artista
 
 const OWNER_KEYS = {

@@ -2,12 +2,12 @@
 // maratones de un artista, temas en loop, rachas e hitos. Todo sale de
 // history-records.json (gen-stats.py) ya calculado, acá es solo UI.
 
-import { loadRecords, isOwner, ownerLockedMessage } from './history-data.js?v=207';
-import { escapeHtml, pageHeader } from '../ui/components.js?v=207';
-import { getPreview } from '../api/preview-providers.js?v=207';
-import { getArtistLikePreview } from '../util/artist-preview.js?v=207';
-import { attachHover } from '../ui/preview-player.js?v=207';
-import { openArtistCard } from './artist-card.js?v=207';
+import { loadRecords, isOwner, ownerLockedMessage } from './history-data.js?v=208';
+import { escapeHtml, pageHeader } from '../ui/components.js?v=208';
+import { getPreview } from '../api/preview-providers.js?v=208';
+import { getArtistLikePreview } from '../util/artist-preview.js?v=208';
+import { attachHover } from '../ui/preview-player.js?v=208';
+import { openArtistCard } from './artist-card.js?v=208';
 
 const MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
 const DIAS = ['lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado', 'domingo'];
@@ -22,6 +22,13 @@ function fmtDayShort(iso) {
   if (!iso) return '—';
   const [y, m, d] = iso.split('-');
   return `${+d} ${MESES[+m - 1]} ${y}`;
+}
+
+// Los decimales van con coma: `toLocaleString('es-ES')` explícito, que sin el
+// locale se usa el del navegador (es-AR acá) y salen dos formatos en la misma
+// pantalla.
+function fmtNum(n, dec = 0) {
+  return Number(n || 0).toLocaleString('es-ES', { minimumFractionDigits: dec, maximumFractionDigits: dec });
 }
 
 function fmtHours(min) {
@@ -96,6 +103,48 @@ export async function render(container) {
         `${d.days} días`,
         { kind: 'track', name: d.name, artist: d.artist }
       )))}
+
+      ${cardSi(r.day_most_artists, 'Días de todo un poco', 'Los días en que sonaron más artistas distintos', d => [
+        fmtDayShort(d.date),
+        `${d.plays} plays · ${fmtHours(d.min)}${d.top_artist ? ` · mandó ${escapeHtml(d.top_artist)}` : ''}`,
+        `${d.artists} artistas`,
+        { kind: 'artist', name: d.top_artist },
+      ])}
+
+      ${cardSi(r.track_most_years, 'Los que nunca se van', 'Temas que sonaron en más años distintos', d => [
+        escapeHtml(d.name),
+        `${escapeHtml(d.artist)} · de ${d.first_year} a ${d.last_year} · ${d.plays} plays`,
+        `${d.years} años`,
+        { kind: 'track', name: d.name, artist: d.artist },
+      ])}
+
+      ${cardSi(r.artist_most_days, 'Los más constantes', 'Artistas que sonaron en más días distintos, que no es lo mismo que más plays', d => [
+        escapeHtml(d.artist),
+        `${fmtNum(d.plays)} plays · ${fmtHours(d.min)}`,
+        `${fmtNum(d.days)} días`,
+        { kind: 'artist', name: d.artist },
+      ])}
+
+      ${cardSi(r.artist_dropped, 'Los que dejaste', 'Los escuchaste mucho un año, nada al siguiente y nunca más', d => [
+        escapeHtml(d.artist),
+        `${fmtHours(d.min)} en ${d.year} · ${d.plays} plays`,
+        `nada desde ${d.since}`,
+        { kind: 'artist', name: d.artist },
+      ])}
+
+      ${cardSi(r.artist_growth, 'Los que despegaron', 'El salto más grande de un año al siguiente, sobre lo que ya escuchabas', d => [
+        escapeHtml(d.artist),
+        `${d.from_year}: ${fmtHours(d.from_min)} → ${d.to_year}: ${fmtHours(d.to_min)}`,
+        `×${fmtNum(d.factor, 1)}`,
+        { kind: 'artist', name: d.artist },
+      ])}
+
+      ${cardSi(r.artist_runs, 'Sin soltarlo', 'Plays seguidas del mismo artista, sin colar ninguno más', d => [
+        escapeHtml(d.artist),
+        `${fmtDayShort(d.date)} · ${fmtHours(d.min)} en ${fmtNum(d.hours, 1)} h`,
+        `${d.plays} seguidas`,
+        { kind: 'artist', name: d.artist },
+      ])}
     </div>
 
     <div class="card" style="margin-top:20px">
@@ -119,6 +168,19 @@ export async function render(container) {
 }
 
 let hoverTargets = [];
+
+// Pinta la tarjeta SOLO si el récord viene en el JSON. El historial que sube
+// otra persona (BYOH) lo calcula `history-processor.js`, que es el puerto a JS
+// de `gen-stats.py` y todavía NO tiene estos seis: sin esta guarda, la vista
+// entera reventaría con un `.map` sobre `undefined` para cualquiera que no sea
+// el owner. Con ella, esa persona ve los récords que sí tiene y nada roto.
+function cardSi(lista, title, subtitle, fila) {
+  if (!Array.isArray(lista) || !lista.length) return '';
+  return card(title, subtitle, lista.slice(0, 10).map((d, i) => {
+    const [main, sub, meta, hover] = fila(d);
+    return row(i, main, sub, meta, hover);
+  }));
+}
 
 function card(title, subtitle, rowsHtml) {
   return `

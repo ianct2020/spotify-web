@@ -8,10 +8,10 @@
 // Otro user cualquiera sin historial local ve el ownerLockedMessage que
 // invita a subir su ZIP.
 
-import { idbGetCached, idbSetCached, idbDel } from '../idb.js?v=207';
-import { getCurrentUserId } from '../api.js?v=207';
-import { OWNER_KEYS, STATS_VERSION, PLAYS_VERSION, LISTENED_VERSION, SKIP_VERSION, DETAIL_VERSION, RECORDS_VERSION, ARTIST_TRACKS_VERSION } from '../history-keys.js?v=207';
-import { mostrarBannerDegradadoVista } from '../ui/degraded-banner.js?v=207';
+import { idbGetCached, idbSetCached, idbDel } from '../idb.js?v=208';
+import { getCurrentUserId } from '../api.js?v=208';
+import { OWNER_KEYS, STATS_VERSION, PLAYS_VERSION, LISTENED_VERSION, SKIP_VERSION, DETAIL_VERSION, RECORDS_VERSION, ARTIST_TRACKS_VERSION } from '../history-keys.js?v=208';
+import { mostrarBannerDegradadoVista } from '../ui/degraded-banner.js?v=208';
 
 const HISTORY_OWNER_ID = 'orhs6wu5ykk7ql80u92ujn74o';
 
@@ -153,7 +153,14 @@ const OWNER_PREV_KEYS = {
   // nuevos no harían nada en silencio. Que refetchee.
   skip: [],
   detail: [],
-  records: ['history_records_v1'],
+  // Vacía A PROPÓSITO desde v3 (2026-09-05), por el mismo motivo que `stats` y
+  // `listened`. Acá estaba armada la trampa exacta que describe PENDIENTES:
+  // el v1 pasa el `sanityCheck` de records (`!!d.top_days`, que v1 ya traía),
+  // así que un navegador con `history_records_v1` en IDB habría MIGRADO ese
+  // JSON a la clave v3 y pintado Récords con los seis récords nuevos
+  // ausentes — sin fallar, sin fetch y sin un solo aviso. El bump del JSON no
+  // habría llegado nunca. Que refetchee.
+  records: [],
   // Vacía por el mismo motivo: el v1 de `totals` no trae el día de la primera
   // play y la ficha de artista se quedaría sin «primera vez», en silencio.
   artistTracks: [],

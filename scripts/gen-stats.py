@@ -64,7 +64,7 @@ TRACK_PLAYS_VERSION = 5      # v5: cada entrada de `albums` lleva además el DÍ
 SKIP_STATS_VERSION = 2      # v2: dato crudo (ms de cada skip/cierre) + gid de agrupado; el veredicto pasó a skips.js
 LISTENED_VERSION = 2         # bump: excluye "Sonido Para Sacar Agua Del Movil"
 TRACK_DETAIL_VERSION = 1     # ficha de canción: plays por mes + primera/última + récords del track
-RECORDS_VERSION = 2          # v2: excluye todas las variantes del sonido saca-agua
+RECORDS_VERSION = 3          # v3: seis récords nuevos (día con más artistas, tema en más años, artista con más días, abandonado, crecimiento, racha de artista). v2: excluye todas las variantes del sonido saca-agua
 ARTIST_TRACKS_VERSION = 2    # v2: `totals` lleva un 6º campo con el DÍA de la primera play válida del artista (ficha de artista: «primera vez»). v=126: top de tracks por artista desde el historial COMPLETO (ficha de artista)
 ARTIST_TRACKS_TOP_N = 6      # la ficha muestra 5; guardamos 6 de colchón
 DETAIL_MIN_PLAYS = 5         # solo tracks con >=N plays válidas entran al detalle (controla peso)
@@ -191,6 +191,19 @@ def song_key(name, artist):
 # O >=MIN_MIN_SAMEDAY minutos acumulados (lo que se cumpla primero).
 MIN_TRACKS_SAMEDAY = 4
 MIN_MIN_SAMEDAY = 25
+
+# Récords v3 -----------------------------------------------------------------
+# Corte de sesión de la racha de un artista (#18). Sin él, la racha "sin
+# intercalar otro artista" sobrevive a que te vayas a dormir: la ganadora sin
+# corte eran 69 plays de Taylor Swift repartidas en 59,6 horas y tres días
+# distintos, que no es una racha de escucha sino una coincidencia de que no
+# hubo nada más en medio. Con 3 h el récord pasa a ser una sesión real.
+RUN_GAP_S = 3 * 3600
+# Base mínima para el crecimiento año a año (#16). Sin ella el récord se lo
+# lleva siempre alguien que pasó de 0, y eso es un DESCUBRIMIENTO — que el
+# Wrapped ya muestra como tal, año por año. Con base >= 60 min el récord mide
+# lo que dice medir: que alguien que ya escuchabas pasó a escucharse mucho más.
+GROWTH_MIN_BASE = 60
 
 # ---------------------------------------------------------------------------
 # 1. Cargar y dedupear
@@ -357,6 +370,14 @@ def build_stats(plays, img_idx):
     day_track_plays = defaultdict(Counter)     # day -> Counter(tk -> plays)
     week_track_plays = Counter()               # (tk, lunes de la semana) -> plays
     tk_days = defaultdict(set)                 # tk -> set de días en que sonó
+    # Récords v3.
+    artist_days = defaultdict(set)             # artista -> días distintos en que sonó (#14)
+    song_years = defaultdict(set)              # song_key -> años distintos en que sonó (#10)
+    song_meta = {}                             # song_key -> (nombre, artista) de la primera vez
+    song_plays = Counter()                     # song_key -> plays
+    song_days = defaultdict(set)               # song_key -> días distintos
+    artist_runs = []                           # rachas cerradas del mismo artista (#18)
+    run = None                                 # la racha en curso
     milestones = []
     valid_seq = 0
 
@@ -508,9 +529,38 @@ def build_stats(plays, img_idx):
         day_track_plays[day][tk] += 1
         week_track_plays[(tk, (dt.date() - timedelta(days=dt.weekday())).isoformat())] += 1
         tk_days[tk].add(day)
+        artist_days[artist].add(day)
+        # #10 va por `song_key` y no por (nombre, artista): el remaster, el
+        # single y la versión del álbum son EL MISMO TEMA, que es justo lo que
+        # el récord quiere contar. Por (nombre, artista) el mismo tema se parte
+        # en varias filas y ninguna llega a los años que le corresponden.
+        sk = song_key(track, artist)
+        song_years[sk].add(y)
+        song_days[sk].add(day)
+        song_plays[sk] += 1
+        if sk not in song_meta:
+            song_meta[sk] = (track, artist)
+        # #18: la racha corta si cambia el artista O si pasan más de RUN_GAP_S
+        # entre dos plays. `plays` viene ordenado ascendente por ts al entrar a
+        # build_stats, así que esto es la secuencia real de escucha.
+        if run is not None and run["artist"] == artist and (dt - run["last_dt"]).total_seconds() <= RUN_GAP_S:
+            run["plays"] += 1
+            run["ms"] += ms
+            run["end"] = ts_str
+            run["last_dt"] = dt
+        else:
+            if run is not None:
+                artist_runs.append(run)
+            run = {"artist": artist, "plays": 1, "ms": ms,
+                   "start": ts_str, "end": ts_str, "last_dt": dt}
         valid_seq += 1
         if valid_seq in MILESTONE_TARGETS:
             milestones.append({"n": valid_seq, "date": day, "name": track, "artist": artist})
+
+    # La última racha se queda abierta al salir del bucle: hay que cerrarla o
+    # se pierde, y podría ser la ganadora.
+    if run is not None:
+        artist_runs.append(run)
 
     # racha global histórica
     all_days_sorted = sorted(active_days_all)
@@ -884,6 +934,130 @@ def build_stats(plays, img_idx):
         for tk, ds in sorted(tk_days.items(), key=lambda kv: len(kv[1]), reverse=True)[:15]
     ]
 
+    # ── Récords v3 ──────────────────────────────────────────────────────────
+    # #4 — el día que sonaron más artistas distintos. `day_artist_ms` ya está
+    # indexado por artista, así que la cuenta sale de su tamaño; no hace falta
+    # un acumulador aparte.
+    day_most_artists_out = [
+        {
+            "date": day,
+            "artists": len(arts),
+            "plays": day_plays[day],
+            "min": round(day_ms_global[day] / 60000, 1),
+            "top_artist": arts.most_common(1)[0][0] if arts else "",
+        }
+        for day, arts in sorted(day_artist_ms.items(),
+                                key=lambda kv: (-len(kv[1]), -day_ms_global[kv[0]]))[:10]
+    ]
+
+    # #10 — el tema que aparece en más años distintos.
+    track_most_years_out = []
+    for sk, ys in sorted(song_years.items(),
+                         key=lambda kv: (-len(kv[1]), -song_plays[kv[0]]))[:10]:
+        nombre, artista = song_meta[sk]
+        track_most_years_out.append({
+            "name": nombre,
+            "artist": artista,
+            "years": len(ys),
+            "first_year": min(ys),
+            "last_year": max(ys),
+            "plays": song_plays[sk],
+            "days": len(song_days[sk]),
+        })
+
+    # #14 — el artista que sonó en más días distintos. NO es el de más plays, y
+    # esa es la gracia: Kanye tiene más plays que Drake y menos días, y Pugliese
+    # es cuarto en plays con 51 días.
+    artist_most_days_out = [
+        {
+            "artist": a,
+            "days": len(ds),
+            "plays": artist_plays[a],
+            "min": round(artist_ms[a] / 60000, 1),
+        }
+        for a, ds in sorted(artist_days.items(),
+                            key=lambda kv: (-len(kv[1]), -artist_plays[kv[0]]))[:10]
+    ]
+
+    # #15 y #16 salen de la misma curva: artista -> {año: minutos}. `years` ya
+    # la tiene indexada al revés, acá se le da la vuelta.
+    anios_datos = sorted(years.keys())
+    curva = defaultdict(dict)
+    for y_ in anios_datos:
+        for a, a_ms in years[y_]["artist_ms"].items():
+            if a_ms:
+                curva[a][y_] = a_ms / 60000
+
+    # ⚠️ EL ÚLTIMO AÑO CON DATOS NO PUEDE SER AÑO DESTINO. El export corta a
+    # mitad de año (27/08/2026), así que contra 2026 cualquiera se ve caído a
+    # cero o encogido solo porque el año no terminó: sin esto, "abandonados"
+    # se llenaba de gente escuchada en 2025 que simplemente todavía no volvió.
+    anio_incompleto = anios_datos[-1] if anios_datos else None
+
+    # #15 — el artista abandonado: mucho un año, cero al siguiente y NUNCA MÁS.
+    # Sin el "nunca más" el récord se lo lleva Pugliese (2.550 min en 2021 → 0
+    # en 2022), que volvió en 2026 — o sea que no lo abandonó.
+    abandonados = []
+    for a, c in curva.items():
+        for i in range(len(anios_datos) - 1):
+            y_, nxt = anios_datos[i], anios_datos[i + 1]
+            if nxt == anio_incompleto:
+                continue
+            if c.get(y_, 0) > 0 and c.get(nxt, 0) == 0:
+                if any(c.get(post, 0) > 0 for post in anios_datos if post > nxt):
+                    continue  # volvió más adelante: no es un abandono
+                abandonados.append((c[y_], a, y_, nxt))
+    abandonados.sort(key=lambda t: (-t[0], t[1]))
+    artist_dropped_out = [
+        {
+            "artist": a,
+            "year": y_,
+            "min": round(m, 1),
+            "plays": years[y_]["artist_plays"][a],
+            "since": nxt,
+        }
+        for m, a, y_, nxt in abandonados[:10]
+    ]
+
+    # #16 — el que más creció de un año al otro, por MULTIPLICADOR y con base de
+    # al menos GROWTH_MIN_BASE minutos.
+    crecidos = []
+    for a, c in curva.items():
+        for i in range(len(anios_datos) - 1):
+            y_, nxt = anios_datos[i], anios_datos[i + 1]
+            if nxt == anio_incompleto:
+                continue
+            base, despues = c.get(y_, 0), c.get(nxt, 0)
+            if base >= GROWTH_MIN_BASE and despues > base:
+                crecidos.append((despues / base, a, y_, nxt, base, despues))
+    crecidos.sort(key=lambda t: (-t[0], t[1]))
+    artist_growth_out = [
+        {
+            "artist": a,
+            "from_year": y_,
+            "to_year": nxt,
+            "from_min": round(b, 1),
+            "to_min": round(d, 1),
+            "factor": round(f, 1),
+        }
+        for f, a, y_, nxt, b, d in crecidos[:10]
+    ]
+
+    # #18 — la racha más larga del mismo artista sin intercalar otro, en plays
+    # válidas. Se ordena por plays y no por minutos a propósito: por minutos
+    # sería otra manera de escribir "Maratones de un artista", que ya existe.
+    artist_runs.sort(key=lambda c: (-c["plays"], -c["ms"]))
+    artist_runs_out = [
+        {
+            "artist": c["artist"],
+            "plays": c["plays"],
+            "min": round(c["ms"] / 60000, 1),
+            "date": c["start"][:10],
+            "hours": round((parse_ts(c["end"]) - parse_ts(c["start"])).total_seconds() / 3600, 1),
+        }
+        for c in artist_runs[:10]
+    ]
+
     records_payload = {
         "version": RECORDS_VERSION,
         "generated_at": stats["generated_at"],
@@ -893,6 +1067,12 @@ def build_stats(plays, img_idx):
         "top_track_weeks": top_track_weeks_out,
         "top_streaks": top_streaks_out,
         "track_most_days": track_most_days_out,
+        "day_most_artists": day_most_artists_out,
+        "track_most_years": track_most_years_out,
+        "artist_most_days": artist_most_days_out,
+        "artist_dropped": artist_dropped_out,
+        "artist_growth": artist_growth_out,
+        "artist_runs": artist_runs_out,
         "milestones": milestones,
     }
 

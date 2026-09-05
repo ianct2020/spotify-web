@@ -153,7 +153,14 @@ const OWNER_PREV_KEYS = {
   // nuevos no harían nada en silencio. Que refetchee.
   skip: [],
   detail: [],
-  records: ['history_records_v1'],
+  // Vacía A PROPÓSITO desde v3 (2026-09-05), por el mismo motivo que `stats` y
+  // `listened`. Acá estaba armada la trampa exacta que describe PENDIENTES:
+  // el v1 pasa el `sanityCheck` de records (`!!d.top_days`, que v1 ya traía),
+  // así que un navegador con `history_records_v1` en IDB habría MIGRADO ese
+  // JSON a la clave v3 y pintado Récords con los seis récords nuevos
+  // ausentes — sin fallar, sin fetch y sin un solo aviso. El bump del JSON no
+  // habría llegado nunca. Que refetchee.
+  records: [],
   // Vacía por el mismo motivo: el v1 de `totals` no trae el día de la primera
   // play y la ficha de artista se quedaría sin «primera vez», en silencio.
   artistTracks: [],
