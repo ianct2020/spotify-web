@@ -1192,6 +1192,37 @@ página importó al arrancar**. Es la regla del `curl` en otra forma. Para saber
 qué corre de verdad hay que preguntarle a un EFECTO del código nuevo (acá:
 «¿repintó o no?»), no al servidor.
 
+## 🔁 Tapas: `gen-stats.py` NO las hornea, hay que hornearlas aparte (2026-09-04)
+`load_album_images()` **solo hace lookup** contra el índice de
+`src/data/listening-history.json`, que está congelado en el **2026-07-25** y
+**no se puede regenerar** (el horneador original no existe y no está en git).
+Todo álbum que entre con un export posterior sale con **`img: null`** — eran 91,
+82 de ellos de 2026, y se veían como ♪ en `#wthree`.
+
+`scripts/bake-covers.py` resuelve **solo las que faltan** por
+`open.spotify.com/oembed`, usando la URI del track **más escuchado** de cada
+álbum (estas filas no traen `albumId`; el horneado original tampoco lo usó), y
+las escribe en `src/data/covers-extra.json`. `gen-stats.py` lo mergea **solo
+donde la clave no existía**.
+
+⚠️ **`listening-history.json` NO SE TOCA NUNCA.** Es el único de los tres JSON
+que es irreemplazable —los otros dos son salida de `gen-stats.py`— y lleva
+correcciones hechas a mano sobre el dato que no están en ningún script («Birds
+In The Trap Sing McKnight», v=151). `bake-covers.py` lo abre en modo lectura y
+nada más; el `if k in idx: continue` del merge es lo que impide pisarlas.
+Al terminar, comprobar que su `sha256` no se movió.
+
+⚠️ **Si cambian `history-listened-albums.json` o `history-stats.json`, subí
+`LISTENED_VERSION` / `STATS_VERSION` en `src/js/history-keys.js` y dejá sus
+`OWNER_PREV_KEYS` VACÍAS**. Esa versión es el cache-buster de la URL **y** la
+clave de IndexedDB: sin el bump el navegador sirve el JSON viejo del caché **sin
+fallar y sin avisar**, y con las `PREV` pobladas el fallback migra justo el
+archivo que el bump venía a reemplazar.
+
+El procedimiento completo con el próximo export (los DOS `gen-stats.py`, y qué
+verificar) está en `fonoteca-migracion/CONTEXTO-TECNICO.md`, sección «Con cada
+export nuevo: hornear las tapas que falten».
+
 ## ⛔ NUNCA `git add -A` ni `git add .` — archivo por archivo
 **Este repo es PÚBLICO.** El 2026-07-28 se filtraron datos personales y hubo que
 hacer `filter-branch` + force push. Desde entonces la regla es `git add` **con
