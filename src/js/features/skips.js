@@ -27,7 +27,7 @@ import { openTrackCard } from './track-card.js';
 import { firstArtistName, artistNames } from '../util/artist-name.js';
 import { activateMarquee } from '../ui/marquee.js';
 import { hasUsername, loadTopLifetime } from '../api/statsfm.js';
-import { createHiddenStore } from '../util/hidden-sync.js';
+import { createHiddenStore, uriDeTrackId } from '../util/hidden-sync.js';
 import { prefKey, migratePrefKey } from '../storage.js';
 import { vigilarRuta } from '../util/vigencia-ruta.js';
 import { createIncrementalList, scrollRootOf } from '../ui/incremental-list.js';
@@ -69,6 +69,9 @@ const hiddenTracks = createHiddenStore({
   playlistName: 'fonoteca · ocultos (skips)',
   label: 'skips',
   keyOfTrack: (t) => t?.id || null,
+  // La clave ES el id de la pista, así que la uri sale de la propia clave: este
+  // store no depende de que nadie la recuerde en la sesión (v=205).
+  uriFromKey: uriDeTrackId,
 });
 let showingHidden = false;
 

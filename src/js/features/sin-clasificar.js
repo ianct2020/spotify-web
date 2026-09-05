@@ -20,7 +20,7 @@ import {
 import { borrarLikesVerificado } from '../util/borrado-verificado.js';
 import { vigilarRuta } from '../util/vigencia-ruta.js';
 import { idbGetCached, idbSetCached, idbDel } from '../idb.js';
-import { createHiddenStore } from '../util/hidden-sync.js';
+import { createHiddenStore, uriDeTrackId } from '../util/hidden-sync.js';
 import { prefKey, migratePrefKey } from '../storage.js';
 import { addUrisToPlaylists, toastAddResult, getOwnPlaylists } from '../util/playlist-add.js';
 import { escapeHtml, pageHeader, showProgress, hideProgress, isCancelled, confirmModal } from '../ui/components.js';
@@ -116,6 +116,8 @@ const hidden = createHiddenStore({
   playlistName: 'fonoteca · ocultos (sin clasificar)',
   label: 'sin-clasificar',
   keyOfTrack: (t) => t?.id || null,
+  // La clave ES el id de la pista: la uri se deduce, no hace falta recordarla.
+  uriFromKey: uriDeTrackId,
 });
 
 // null = todavía no se configuró nunca (hay que presembrar con los defaults).

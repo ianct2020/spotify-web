@@ -30,7 +30,7 @@ import { createLazyImages } from '../ui/lazy-img.js';
 import { activateMarquee } from '../ui/marquee.js';
 import { coverAtSize } from '../util/cover-size.js';
 import { firstArtistName } from '../util/artist-name.js';
-import { createHiddenStore } from '../util/hidden-sync.js';
+import { createHiddenStore, uriDeTrackId } from '../util/hidden-sync.js';
 import { fmtDiaCorto } from '../util/fecha.js';
 import { prefKey, migratePrefKey } from '../storage.js';
 import { openPlaylistPicker } from '../ui/playlist-picker.js';
@@ -50,6 +50,8 @@ const hiddenTracks = createHiddenStore({
   playlistName: 'fonoteca · ocultos (sin plays)',
   label: 'sin plays',
   keyOfTrack: (t) => t?.id || null,
+  // La clave ES el id de la pista: la uri se deduce, no hace falta recordarla.
+  uriFromKey: uriDeTrackId,
 });
 let showingHidden = false;
 

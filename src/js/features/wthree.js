@@ -16,6 +16,7 @@ import { openAlbumCard } from './album-card.js';
 import { albumKey } from '../util/album-key.js';
 import { computeUpdatedPickPositions } from '../util/reorder-shifts.js';
 import { createHiddenStore } from '../util/hidden-sync.js';
+import { recuperarUriDeAlbumKey } from '../util/hidden-recover.js';
 import { mountBottom } from '../ui/bottom-layer.js';
 import { coverUrl } from '../util/cover-size.js';
 import { insercionPorPuntero, moverA, indicadorPara } from '../util/reorder-drop.js';
@@ -129,6 +130,9 @@ const hiddenStore = createHiddenStore({
     if (!albumName) return null;
     return albumKey(albumName, t.artists?.[0]?.name || '');
   },
+  // La clave es un álbum normalizado, así que la uri NO se puede deducir de
+  // ella: se busca y se confirma recalculando la clave (v=205).
+  recoverUri: recuperarUriDeAlbumKey,
 });
 
 function loadHidden() {

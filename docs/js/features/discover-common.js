@@ -6,21 +6,22 @@
 //     (util/album-heard.js: historial completo + likes + listened + w-three)
 //   - permiten "+ Biblioteca" y "Crear playlist con lo elegido"
 
-import { idbGetCached, idbSetCached, idbDel } from '../idb.js?v=204';
-import { getArtistAlbums, searchArtistByName, getAlbumTracks, saveToLibrary, saveAlbumsToLibrary, createPlaylist, addTracksToPlaylist } from '../api.js?v=204';
-import { albumKey } from '../util/album-key.js?v=204';
-import { escapeHtml } from '../ui/components.js?v=204';
-import { showToast } from '../ui/toast.js?v=204';
-import { openPlaylistPicker } from '../ui/playlist-picker.js?v=204';
-import { getOwnPlaylists, addUrisToPlaylists, toastAddResult } from '../util/playlist-add.js?v=204';
-import { openArtistCard } from './artist-card.js?v=204';
-import { openAlbumCard } from './album-card.js?v=204';
-import { createHiddenStore, createLocalStore } from '../util/hidden-sync.js?v=204';
-import { getPreview } from '../api/preview-providers.js?v=204';
-import { togglePreview, playingKey, attachHover } from '../ui/preview-player.js?v=204';
-import { coverUrl } from '../util/cover-size.js?v=204';
-import { FILTROS as FILTROS_DEF, saveFiltros } from '../util/discover-filters.js?v=204';
-import { esEPoAlbum } from '../util/release-size.js?v=204';
+import { idbGetCached, idbSetCached, idbDel } from '../idb.js?v=205';
+import { getArtistAlbums, searchArtistByName, getAlbumTracks, saveToLibrary, saveAlbumsToLibrary, createPlaylist, addTracksToPlaylist } from '../api.js?v=205';
+import { albumKey } from '../util/album-key.js?v=205';
+import { escapeHtml } from '../ui/components.js?v=205';
+import { showToast } from '../ui/toast.js?v=205';
+import { openPlaylistPicker } from '../ui/playlist-picker.js?v=205';
+import { getOwnPlaylists, addUrisToPlaylists, toastAddResult } from '../util/playlist-add.js?v=205';
+import { openArtistCard } from './artist-card.js?v=205';
+import { openAlbumCard } from './album-card.js?v=205';
+import { createHiddenStore, createLocalStore } from '../util/hidden-sync.js?v=205';
+import { recuperarUriDeAlbumKey } from '../util/hidden-recover.js?v=205';
+import { getPreview } from '../api/preview-providers.js?v=205';
+import { togglePreview, playingKey, attachHover } from '../ui/preview-player.js?v=205';
+import { coverUrl } from '../util/cover-size.js?v=205';
+import { FILTROS as FILTROS_DEF, saveFiltros } from '../util/discover-filters.js?v=205';
+import { esEPoAlbum } from '../util/release-size.js?v=205';
 
 const DISCO_TTL_MIN = 30 * 24 * 60;       // 30 días
 const ARTIST_ID_TTL_MIN = 60 * 24 * 60;   // 60 días — los ids no cambian
@@ -171,6 +172,9 @@ export const hiddenAlbums = createHiddenStore({
     if (!albumName) return null;
     return albumKey(albumName, t.artists?.[0]?.name || '');
   },
+  // La clave es un álbum normalizado: la uri no se deduce, se busca y se
+  // confirma recalculando la clave (v=205).
+  recoverUri: recuperarUriDeAlbumKey,
 });
 
 // "Escuchado" alcanza con localStorage, pero con la MISMA forma que el store
@@ -534,7 +538,7 @@ export async function toggleHiddenAlbum(al, artistName) {
   let uri = null;
   try {
     uri = await albumRepresentativeUri(al, artistName);
-  } catch { /* sin uri: queda local, el store lo reintenta en cada sync */ }
+  } catch { /* sin uri: el store avisa, la anota y la intenta recuperar en el sync */ }
   return hiddenAlbums.toggle(key, uri);
 }
 

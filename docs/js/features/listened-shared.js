@@ -1,9 +1,9 @@
-import { getAllUserPlaylists } from '../api.js?v=204';
-import { escapeHtml } from '../ui/components.js?v=204';
-import { showToast } from '../ui/toast.js?v=204';
-import { isJunkTrack } from '../util/junk.js?v=204';
-import { openModal, closeTop } from '../ui/modal-stack.js?v=204';
-import { prefKey, migratePrefKey } from '../storage.js?v=204';
+import { getAllUserPlaylists } from '../api.js?v=205';
+import { escapeHtml } from '../ui/components.js?v=205';
+import { showToast } from '../ui/toast.js?v=205';
+import { isJunkTrack } from '../util/junk.js?v=205';
+import { openModal, closeTop } from '../ui/modal-stack.js?v=205';
+import { prefKey, migratePrefKey } from '../storage.js?v=205';
 
 const PID_KEY = 'listened_albums_playlist_id';
 const PNAME_KEY = 'listened_albums_playlist_name';

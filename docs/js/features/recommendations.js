@@ -1,15 +1,16 @@
-import { spotifyFetch, createPlaylist, addTracksToPlaylist, invalidatePlaylistsCache, getAllLikedTracks } from '../api.js?v=204';
-import { hasKey, setKey, hasUsername, getUsername, setUsername, getUserTopArtists, getSimilarArtists, getArtistTopTracks } from '../api/lastfm.js?v=204';
-import { showProgress, hideProgress, promptPlaylistName, escapeHtml, pageHeader } from '../ui/components.js?v=204';
-import { showToast } from '../ui/toast.js?v=204';
-import { getPreview } from '../api/preview-providers.js?v=204';
-import { togglePreview, playingKey, isPlayingAudio } from '../ui/preview-player.js?v=204';
-import { paintPlayingCard } from '../ui/track-card-row.js?v=204';
-import { openTrackCard } from './track-card.js?v=204';
-import { openAlbumCard } from './album-card.js?v=204';
-import { limpiaParaQuery, titleMatches, artistMatches } from '../util/track-match.js?v=204';
-import { vigilarRuta } from '../util/vigencia-ruta.js?v=204';
-import { createHiddenStore } from '../util/hidden-sync.js?v=204';
+import { spotifyFetch, createPlaylist, addTracksToPlaylist, invalidatePlaylistsCache, getAllLikedTracks } from '../api.js?v=205';
+import { hasKey, setKey, hasUsername, getUsername, setUsername, getUserTopArtists, getSimilarArtists, getArtistTopTracks } from '../api/lastfm.js?v=205';
+import { showProgress, hideProgress, promptPlaylistName, escapeHtml, pageHeader } from '../ui/components.js?v=205';
+import { showToast } from '../ui/toast.js?v=205';
+import { getPreview } from '../api/preview-providers.js?v=205';
+import { togglePreview, playingKey, isPlayingAudio } from '../ui/preview-player.js?v=205';
+import { paintPlayingCard } from '../ui/track-card-row.js?v=205';
+import { openTrackCard } from './track-card.js?v=205';
+import { openAlbumCard } from './album-card.js?v=205';
+import { limpiaParaQuery, titleMatches, artistMatches } from '../util/track-match.js?v=205';
+import { vigilarRuta } from '../util/vigencia-ruta.js?v=205';
+import { createHiddenStore } from '../util/hidden-sync.js?v=205';
+import { recuperarUriDeArtistaKey } from '../util/hidden-recover.js?v=205';
 
 // Iconos de las dos fichas. Los mismos trazos que usa la tarjeta compartida.
 const ICONO_PLAY = `<svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14"><path d="M8 5v14l11-7z"/></svg>`;
@@ -35,6 +36,9 @@ const hiddenArtists = createHiddenStore({
     const n = t?.artists?.[0]?.name;
     return n ? n.toLowerCase() : null;
   },
+  // La clave es el nombre del artista: la uri no se deduce, se busca una pista
+  // suya y se confirma que su `artists[0]` sea ese artista (v=205).
+  recoverUri: recuperarUriDeArtistaKey,
 });
 
 // Pista representativa por artista, para poder ocultarlo con una uri real sin
@@ -76,7 +80,7 @@ async function representativeArtistUri(artist) {
 async function toggleHiddenArtist(artist) {
   const key = artist.name.toLowerCase();
   let uri = null;
-  try { uri = await representativeArtistUri(artist); } catch { /* sin uri: queda local, se reintenta en el próximo sync */ }
+  try { uri = await representativeArtistUri(artist); } catch { /* sin uri: el store avisa, la anota y la intenta recuperar en el sync */ }
   return hiddenArtists.toggle(key, uri);
 }
 

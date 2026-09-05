@@ -1,41 +1,42 @@
-import { isLoggedIn, loginWithSpotify, logout } from './auth.js?v=204';
-import { spotifyFetch, tryAutoLoadUserBackup, onRateLimit } from './api.js?v=204';
-import { getValidToken } from './auth.js?v=204';
-import { cacheClearAll } from './storage.js?v=204';
-import { idbClearAll } from './idb.js?v=204';
-import { registerRoute, initRouter, rutasRegistradas } from './router.js?v=204';
-import { showToast } from './ui/toast.js?v=204';
-import { pageHeader, escapeHtml } from './ui/components.js?v=204';
-import { installCrashGuard } from './ui/crash-guard.js?v=204';
-import { getStack } from './ui/modal-stack.js?v=204';
-import { installBackToTop } from './ui/back-to-top.js?v=204';
-import { applyStoredTheme, openThemePanel } from './ui/theme-panel.js?v=204';
+import { isLoggedIn, loginWithSpotify, logout } from './auth.js?v=205';
+import { spotifyFetch, tryAutoLoadUserBackup, onRateLimit } from './api.js?v=205';
+import { getValidToken } from './auth.js?v=205';
+import { cacheClearAll } from './storage.js?v=205';
+import { idbClearAll } from './idb.js?v=205';
+import { registerRoute, initRouter, rutasRegistradas } from './router.js?v=205';
+import { showToast } from './ui/toast.js?v=205';
+import { pageHeader, escapeHtml } from './ui/components.js?v=205';
+import { installCrashGuard } from './ui/crash-guard.js?v=205';
+import { auditarOcultos, leerIncidencias } from './util/hidden-sync.js?v=205';
+import { getStack } from './ui/modal-stack.js?v=205';
+import { installBackToTop } from './ui/back-to-top.js?v=205';
+import { applyStoredTheme, openThemePanel } from './ui/theme-panel.js?v=205';
 
-import { render as renderSync } from './features/sync.js?v=204';
-import { render as renderDedupe } from './features/dedupe.js?v=204';
-import { render as renderDupalbums } from './features/duplicate-albums.js?v=204';
-import { render as renderZombies } from './features/zombies.js?v=204';
-import { render as renderVersions } from './features/versions.js?v=204';
-import { render as renderDashboard } from './features/dashboard.js?v=204';
-import { render as renderSmart } from './features/smart.js?v=204';
-import { render as renderSimilar } from './features/similar-artists.js?v=204';
-import { render as renderRabbit } from './features/rabbit-hole.js?v=204';
-import { render as renderByGenre } from './features/by-genre.js?v=204';
-import { render as renderByArtist } from './features/by-artist.js?v=204';
-import { render as renderRecs } from './features/recommendations.js?v=204';
-import { render as renderListened } from './features/listened.js?v=204';
-import { render as renderWrapped } from './features/wrapped.js?v=204';
-import { render as renderRecords } from './features/records.js?v=204';
-import { openImportHistory } from './features/import-history.js?v=204';
-import { bindOwnerLockedButtons } from './features/history-data.js?v=204';
-import { render as renderZeroPlays } from './features/zero-plays.js?v=204';
-import { render as renderSkips } from './features/skips.js?v=204';
-import { render as renderSearchLikes } from './features/search-likes.js?v=204';
-import { render as renderWthree } from './features/wthree.js?v=204';
-import { render as renderCovers } from './features/covers.js?v=204';
-import { render as renderDiscoverArtists } from './features/discover-artists.js?v=204';
-import { render as renderNewReleases } from './features/new-releases.js?v=204';
-import { render as renderSinClasificar } from './features/sin-clasificar.js?v=204';
+import { render as renderSync } from './features/sync.js?v=205';
+import { render as renderDedupe } from './features/dedupe.js?v=205';
+import { render as renderDupalbums } from './features/duplicate-albums.js?v=205';
+import { render as renderZombies } from './features/zombies.js?v=205';
+import { render as renderVersions } from './features/versions.js?v=205';
+import { render as renderDashboard } from './features/dashboard.js?v=205';
+import { render as renderSmart } from './features/smart.js?v=205';
+import { render as renderSimilar } from './features/similar-artists.js?v=205';
+import { render as renderRabbit } from './features/rabbit-hole.js?v=205';
+import { render as renderByGenre } from './features/by-genre.js?v=205';
+import { render as renderByArtist } from './features/by-artist.js?v=205';
+import { render as renderRecs } from './features/recommendations.js?v=205';
+import { render as renderListened } from './features/listened.js?v=205';
+import { render as renderWrapped } from './features/wrapped.js?v=205';
+import { render as renderRecords } from './features/records.js?v=205';
+import { openImportHistory } from './features/import-history.js?v=205';
+import { bindOwnerLockedButtons } from './features/history-data.js?v=205';
+import { render as renderZeroPlays } from './features/zero-plays.js?v=205';
+import { render as renderSkips } from './features/skips.js?v=205';
+import { render as renderSearchLikes } from './features/search-likes.js?v=205';
+import { render as renderWthree } from './features/wthree.js?v=205';
+import { render as renderCovers } from './features/covers.js?v=205';
+import { render as renderDiscoverArtists } from './features/discover-artists.js?v=205';
+import { render as renderNewReleases } from './features/new-releases.js?v=205';
+import { render as renderSinClasificar } from './features/sin-clasificar.js?v=205';
 
 // ── Arranque degradado cuando /me está rate-limiteado (v=173) ────────────────
 //
@@ -923,6 +924,65 @@ function tablaDelBarrido(informe) {
     </div>`;
 }
 
+// ── Salud de los ocultos (v=205) ─────────────────────────────────────────────
+//
+// El mecanismo de ocultos podía perder un oculto sin dejar rastro: la clave
+// quedaba solo en el caché local, sin poder subir a la playlist, y el día que
+// ese navegador perdiera sus datos desaparecía del todo. Los avisos nuevos van
+// por `console.warn`, que la extensión de Chrome NO captura — así que la única
+// forma de mirarlo de verdad es desde la propia app. Esto lo hace.
+//
+// Una fila por playlist de ocultos. «Huérfanas» son las claves que están en
+// este navegador y NO en la playlist: si son 0, no hay nada que se pueda perder.
+function tablaDeOcultos(filas) {
+  const cuerpo = filas.map(f => {
+    const mal = f.error || f.huerfanas.length;
+    const icono = f.error ? '❌' : (f.huerfanas.length ? '⚠️' : '✅');
+    const detalle = f.error
+      ? escapeHtml(f.error)
+      : (f.huerfanas.length
+        ? escapeHtml(f.huerfanas.join(' · '))
+        : '<span style="color:var(--color-text-muted)">nada suelto</span>');
+    return `
+      <tr${mal ? '' : ''}>
+        <td style="padding:4px 10px">${icono}</td>
+        <td style="padding:4px 10px">${escapeHtml(f.label)}</td>
+        <td style="padding:4px 10px;text-align:right">${f.local}</td>
+        <td style="padding:4px 10px;text-align:right">${f.enPlaylist}</td>
+        <td style="padding:4px 10px;text-align:right">${f.huerfanas.length}</td>
+        <td style="padding:4px 10px;text-align:right">${f.sinUri.length}</td>
+        <td style="padding:4px 10px;color:var(--color-text-secondary);font-size:12px">${detalle}</td>
+      </tr>`;
+  }).join('');
+
+  const totalHuerfanas = filas.reduce((a, f) => a + f.huerfanas.length, 0);
+  const totalSinUri = filas.reduce((a, f) => a + f.sinUri.length, 0);
+  const inc = leerIncidencias().slice(0, 12).map(i => `
+    <li><code>${escapeHtml(i.fecha)}</code> · <strong>${escapeHtml(i.tipo)}</strong> ·
+    ${escapeHtml(i.label || i.store)} · ${escapeHtml((i.claves || []).join(' · '))}</li>`).join('');
+
+  return `
+    <div class="card" style="margin-top:20px">
+      <p style="margin:0 0 10px">
+        <strong>${totalHuerfanas === 0 ? 'Ningún oculto suelto' : `${totalHuerfanas} ocultos solo en este navegador`}</strong>
+        ${totalSinUri ? ` · <span style="color:var(--color-error)">${totalSinUri} sin forma de subirlos a Spotify</span>` : ''}
+      </p>
+      <div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:13px">
+        <tr style="text-align:left;color:var(--color-text-muted)">
+          <th style="padding:4px 10px"></th><th style="padding:4px 10px">vista</th>
+          <th style="padding:4px 10px;text-align:right">aquí</th>
+          <th style="padding:4px 10px;text-align:right">playlist</th>
+          <th style="padding:4px 10px;text-align:right">huérfanas</th>
+          <th style="padding:4px 10px;text-align:right">sin uri</th>
+          <th style="padding:4px 10px">cuáles</th>
+        </tr>
+        ${cuerpo}
+      </table></div>
+      ${inc ? `<p style="margin:14px 0 4px"><strong>Últimas incidencias</strong></p>
+        <ul style="margin:0;padding-left:18px;font-size:12px;color:var(--color-text-secondary)">${inc}</ul>` : ''}
+    </div>`;
+}
+
 async function renderDebug(container) {
   container.innerHTML = `
     <div class="page-header">
@@ -932,7 +992,9 @@ async function renderDebug(container) {
     <div style="display:flex;gap:10px;flex-wrap:wrap">
       <button class="btn btn-primary" id="debug-run-btn">Correr tests</button>
       <button class="btn btn-secondary" id="debug-barrido-btn" title="Entra a todas las rutas registradas y comprueba que cada una pinta contenido. Tarda unos minutos.">Barrer vistas (${rutasRegistradas().length} rutas)</button>
+      <button class="btn btn-secondary" id="debug-ocultos-btn" title="Compara, vista por vista, lo que este navegador cree que está oculto contra la playlist de ocultos de Spotify.">Salud de los ocultos</button>
     </div>
+    <div id="debug-ocultos"></div>
     <div id="debug-barrido"></div>
     <pre id="debug-log" style="margin-top:20px;background:var(--color-surface);padding:20px;border-radius:var(--radius-md);font-size:13px;overflow-x:auto;white-space:pre-wrap;word-break:break-all;max-height:70vh;overflow-y:auto"></pre>
   `;
@@ -942,6 +1004,23 @@ async function renderDebug(container) {
   let ultimo = null;
   try { ultimo = JSON.parse(localStorage.getItem(BARRIDO_KEY) || 'null'); } catch { /* nada */ }
   if (ultimo) document.getElementById('debug-barrido').innerHTML = tablaDelBarrido(ultimo);
+
+  document.getElementById('debug-ocultos-btn').onclick = async (e) => {
+    const btn = e.currentTarget;
+    btn.disabled = true;
+    const caja = document.getElementById('debug-ocultos');
+    caja.innerHTML = '<p style="margin-top:20px">Comparando las playlists de ocultos con este navegador…</p>';
+    try {
+      const filas = await auditarOcultos();
+      caja.innerHTML = tablaDeOcultos(filas);
+      const sueltas = filas.reduce((a, f) => a + f.huerfanas.length, 0);
+      showToast(sueltas
+        ? `${sueltas} ocultos están solo en este navegador`
+        : 'Los ocultos coinciden con sus playlists', sueltas ? 'warning' : 'success');
+    } catch (err) {
+      caja.innerHTML = `<p style="margin-top:20px;color:var(--color-error)">No he podido auditar: ${escapeHtml(err.message)}</p>`;
+    } finally { btn.disabled = false; }
+  };
 
   document.getElementById('debug-barrido-btn').onclick = async (e) => {
     const btn = e.currentTarget;
