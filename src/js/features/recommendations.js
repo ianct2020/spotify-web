@@ -10,6 +10,7 @@ import { openAlbumCard } from './album-card.js';
 import { limpiaParaQuery, titleMatches, artistMatches } from '../util/track-match.js';
 import { vigilarRuta } from '../util/vigencia-ruta.js';
 import { createHiddenStore } from '../util/hidden-sync.js';
+import { recuperarUriDeArtistaKey } from '../util/hidden-recover.js';
 
 // Iconos de las dos fichas. Los mismos trazos que usa la tarjeta compartida.
 const ICONO_PLAY = `<svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14"><path d="M8 5v14l11-7z"/></svg>`;
@@ -35,6 +36,9 @@ const hiddenArtists = createHiddenStore({
     const n = t?.artists?.[0]?.name;
     return n ? n.toLowerCase() : null;
   },
+  // La clave es el nombre del artista: la uri no se deduce, se busca una pista
+  // suya y se confirma que su `artists[0]` sea ese artista (v=205).
+  recoverUri: recuperarUriDeArtistaKey,
 });
 
 // Pista representativa por artista, para poder ocultarlo con una uri real sin
@@ -76,7 +80,7 @@ async function representativeArtistUri(artist) {
 async function toggleHiddenArtist(artist) {
   const key = artist.name.toLowerCase();
   let uri = null;
-  try { uri = await representativeArtistUri(artist); } catch { /* sin uri: queda local, se reintenta en el próximo sync */ }
+  try { uri = await representativeArtistUri(artist); } catch { /* sin uri: el store avisa, la anota y la intenta recuperar en el sync */ }
   return hiddenArtists.toggle(key, uri);
 }
 

@@ -16,6 +16,7 @@ import { getOwnPlaylists, addUrisToPlaylists, toastAddResult } from '../util/pla
 import { openArtistCard } from './artist-card.js';
 import { openAlbumCard } from './album-card.js';
 import { createHiddenStore, createLocalStore } from '../util/hidden-sync.js';
+import { recuperarUriDeAlbumKey } from '../util/hidden-recover.js';
 import { getPreview } from '../api/preview-providers.js';
 import { togglePreview, playingKey, attachHover } from '../ui/preview-player.js';
 import { coverUrl } from '../util/cover-size.js';
@@ -171,6 +172,9 @@ export const hiddenAlbums = createHiddenStore({
     if (!albumName) return null;
     return albumKey(albumName, t.artists?.[0]?.name || '');
   },
+  // La clave es un álbum normalizado: la uri no se deduce, se busca y se
+  // confirma recalculando la clave (v=205).
+  recoverUri: recuperarUriDeAlbumKey,
 });
 
 // "Escuchado" alcanza con localStorage, pero con la MISMA forma que el store
@@ -534,7 +538,7 @@ export async function toggleHiddenAlbum(al, artistName) {
   let uri = null;
   try {
     uri = await albumRepresentativeUri(al, artistName);
-  } catch { /* sin uri: queda local, el store lo reintenta en cada sync */ }
+  } catch { /* sin uri: el store avisa, la anota y la intenta recuperar en el sync */ }
   return hiddenAlbums.toggle(key, uri);
 }
 

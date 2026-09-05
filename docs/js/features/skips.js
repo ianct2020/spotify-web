@@ -16,25 +16,25 @@
 // Preview 30s instantáneo vía iTunes (arranca en el estribillo, no suma plays
 // en tu historial de Spotify). Fallback: iframe embed oficial si iTunes no lo tiene.
 
-import { getBestAvailableLikes, removeLikedTracks, checkLibraryContains } from '../api.js?v=204';
-import { borrarLikesVerificado } from '../util/borrado-verificado.js?v=204';
-import { loadSkipStats, trackIdOf, isOwner, ownerLockedMessage } from './history-data.js?v=204';
-import { escapeHtml, confirmModal, pageHeader } from '../ui/components.js?v=204';
-import { showToast } from '../ui/toast.js?v=204';
-import { getPreview } from '../api/preview-providers.js?v=204';
-import { togglePreview, playingKey } from '../ui/preview-player.js?v=204';
-import { openTrackCard } from './track-card.js?v=204';
-import { firstArtistName, artistNames } from '../util/artist-name.js?v=204';
-import { activateMarquee } from '../ui/marquee.js?v=204';
-import { hasUsername, loadTopLifetime } from '../api/statsfm.js?v=204';
-import { createHiddenStore } from '../util/hidden-sync.js?v=204';
-import { prefKey, migratePrefKey } from '../storage.js?v=204';
-import { vigilarRuta } from '../util/vigencia-ruta.js?v=204';
-import { createIncrementalList, scrollRootOf } from '../ui/incremental-list.js?v=204';
-import { createLazyImages } from '../ui/lazy-img.js?v=204';
-import { renderTrackCardRow, wireTrackCardGrid, paintCardSelection, paintPlayingCard, paintEmbedCard } from '../ui/track-card-row.js?v=204';
-import { coverAtSize } from '../util/cover-size.js?v=204';
-import { coverUrl } from '../util/cover-size.js?v=204';
+import { getBestAvailableLikes, removeLikedTracks, checkLibraryContains } from '../api.js?v=205';
+import { borrarLikesVerificado } from '../util/borrado-verificado.js?v=205';
+import { loadSkipStats, trackIdOf, isOwner, ownerLockedMessage } from './history-data.js?v=205';
+import { escapeHtml, confirmModal, pageHeader } from '../ui/components.js?v=205';
+import { showToast } from '../ui/toast.js?v=205';
+import { getPreview } from '../api/preview-providers.js?v=205';
+import { togglePreview, playingKey } from '../ui/preview-player.js?v=205';
+import { openTrackCard } from './track-card.js?v=205';
+import { firstArtistName, artistNames } from '../util/artist-name.js?v=205';
+import { activateMarquee } from '../ui/marquee.js?v=205';
+import { hasUsername, loadTopLifetime } from '../api/statsfm.js?v=205';
+import { createHiddenStore, uriDeTrackId } from '../util/hidden-sync.js?v=205';
+import { prefKey, migratePrefKey } from '../storage.js?v=205';
+import { vigilarRuta } from '../util/vigencia-ruta.js?v=205';
+import { createIncrementalList, scrollRootOf } from '../ui/incremental-list.js?v=205';
+import { createLazyImages } from '../ui/lazy-img.js?v=205';
+import { renderTrackCardRow, wireTrackCardGrid, paintCardSelection, paintPlayingCard, paintEmbedCard } from '../ui/track-card-row.js?v=205';
+import { coverAtSize } from '../util/cover-size.js?v=205';
+import { coverUrl } from '../util/cover-size.js?v=205';
 
 let cache = null;
 // Filas visibles con los filtros actuales, en el mismo orden que las tarjetas
@@ -69,6 +69,9 @@ const hiddenTracks = createHiddenStore({
   playlistName: 'fonoteca · ocultos (skips)',
   label: 'skips',
   keyOfTrack: (t) => t?.id || null,
+  // La clave ES el id de la pista, así que la uri sale de la propia clave: este
+  // store no depende de que nadie la recuerde en la sesión (v=205).
+  uriFromKey: uriDeTrackId,
 });
 let showingHidden = false;
 
