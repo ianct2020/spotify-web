@@ -957,9 +957,16 @@ function tablaDeOcultos(filas) {
 
   const totalHuerfanas = filas.reduce((a, f) => a + f.huerfanas.length, 0);
   const totalSinUri = filas.reduce((a, f) => a + f.sinUri.length, 0);
-  const inc = leerIncidencias().slice(0, 12).map(i => `
-    <li><code>${escapeHtml(i.fecha)}</code> · <strong>${escapeHtml(i.tipo)}</strong> ·
-    ${escapeHtml(i.label || i.store)} · ${escapeHtml((i.claves || []).join(' · '))}</li>`).join('');
+  const inc = leerIncidencias().slice(0, 12).map(i => {
+    // El motivo es la mitad útil de una incidencia «sin-uri»: sin él el panel
+    // dice que algo no se pudo y no dice por qué, que es medio silencio.
+    const claves = (i.claves || []).map(k => (i.motivos && i.motivos[k])
+      ? `${escapeHtml(k)} <span style="color:var(--color-text-muted)">— ${escapeHtml(i.motivos[k])}</span>`
+      : escapeHtml(k));
+    return `
+      <li><code>${escapeHtml(i.fecha)}</code> · <strong>${escapeHtml(i.tipo)}</strong> · ${escapeHtml(i.label || i.store)}
+      <ul style="margin:2px 0 6px;padding-left:16px">${claves.map(c => `<li>${c}</li>`).join('')}</ul></li>`;
+  }).join('');
 
   return `
     <div class="card" style="margin-top:20px">

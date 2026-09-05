@@ -18,6 +18,12 @@
 // subiría a la playlist una pista que, al releerla, reconstruiría OTRA clave: el
 // oculto seguiría perdido y encima la playlist quedaría sucia. Acá, o coincide
 // exacto, o se devuelve null y el que llama tiene que avisar — nunca adivinar.
+//
+// Por eso devuelven `{ uri, motivo }` y no una uri suelta: cuando no se puede,
+// el POR QUÉ es la mitad útil de la respuesta. Medido en los ocultos reales de
+// Ian el 2026-09-05, los dos motivos que aparecen de verdad son «el álbum no
+// existe con ese nombre» y «existe, pero su artista principal no es el que puso
+// la clave» — el segundo es un agujero aparte, anotado en `PENDIENTES.md`.
 
 import { spotifyFetch } from '../api.js';
 import { albumKey } from './album-key.js';
@@ -38,36 +44,65 @@ function partirClaveDeAlbum(key) {
  *
  * Dos pasos: `/search` para dar con el álbum (verificando la clave) y
  * `/albums/{id}/tracks` para sacar una pista suya. La pista tiene que volver a
- * dar la misma clave con el artista del ÁLBUM, que es lo que `keyOfTrack` va a
+ * dar la misma clave con SU artista principal, que es lo que `keyOfTrack` va a
  * leer de la playlist: `t.album.name` + `t.artists[0].name`.
  *
- * @returns {Promise<string|null>} uri, o null si no se puede confirmar
+ * ⚠️ Por eso se piden las 50 pistas y se recorren todas, no las primeras. En un
+ * disco con colaboraciones las primeras pistas pueden estar acreditadas a otro
+ * artista y la única que sirve estar en la mitad: con `limit=5` «Michael: Songs
+ * From The Motion Picture» daba un fallo que parecía «el álbum no existe».
+ *
+ * Se busca dos veces: con el filtro de artista y, si no aparece nada, solo por
+ * nombre. Aflojar la QUERY no afloja nada, porque el candidato se acepta o se
+ * rechaza por la clave recalculada, no por cómo se lo encontró.
+ *
+ * @returns {Promise<{uri: string|null, motivo: string|null}>}
  */
 export async function recuperarUriDeAlbumKey(key) {
   const partes = partirClaveDeAlbum(key);
-  if (!partes) return null;
+  if (!partes) return { uri: null, motivo: 'la clave no tiene forma de álbum' };
 
-  const q = partes.artist
-    ? `album:"${limpiaParaQuery(partes.name)}" artist:"${limpiaParaQuery(partes.artist)}"`
-    : `album:"${limpiaParaQuery(partes.name)}"`;
+  const queries = [];
+  if (partes.artist) queries.push(`album:"${limpiaParaQuery(partes.name)}" artist:"${limpiaParaQuery(partes.artist)}"`);
+  queries.push(`album:"${limpiaParaQuery(partes.name)}"`);
 
-  const r = await spotifyFetch(`/search?q=${encodeURIComponent(q)}&type=album&limit=10`);
-  const candidatos = r?.albums?.items || [];
+  const vistos = new Set();
+  const otrosArtistas = new Set();
+  let algunCandidato = false;
 
-  for (const al of candidatos) {
-    const artistaAlbum = al?.artists?.[0]?.name || '';
-    if (!al?.id || albumKey(al.name || '', artistaAlbum) !== key) continue;
+  for (const q of queries) {
+    const r = await spotifyFetch(`/search?q=${encodeURIComponent(q)}&type=album&limit=10`);
+    for (const al of (r?.albums?.items || [])) {
+      if (!al?.id || vistos.has(al.id)) continue;
+      vistos.add(al.id);
+      algunCandidato = true;
 
-    const tr = await spotifyFetch(`/albums/${al.id}/tracks?limit=5`);
-    for (const t of (tr?.items || [])) {
-      // La pista de la playlist trae el álbum embebido; acá viene suelto, así
-      // que se comprueba con los datos con los que se va a releer.
-      if (!t?.uri) continue;
-      if (albumKey(al.name || '', t.artists?.[0]?.name || artistaAlbum) !== key) continue;
-      return t.uri;
+      const artistaAlbum = al?.artists?.[0]?.name || '';
+      if (albumKey(al.name || '', artistaAlbum) !== key) {
+        // Mismo disco, otro artista principal: el dato que hace falta para
+        // entender por qué esta clave no se puede reconciliar nunca.
+        if (albumKey(al.name || '', partes.artist) === key) otrosArtistas.add(artistaAlbum);
+        continue;
+      }
+
+      const tr = await spotifyFetch(`/albums/${al.id}/tracks?limit=50`);
+      for (const t of (tr?.items || [])) {
+        if (!t?.uri) continue;
+        if (albumKey(al.name || '', t.artists?.[0]?.name || '') !== key) continue;
+        return { uri: t.uri, motivo: null };
+      }
+      otrosArtistas.add(`${artistaAlbum} (ninguna de sus pistas está acreditada a él)`);
     }
+    if (vistos.size) break;
   }
-  return null;
+
+  if (otrosArtistas.size) {
+    return {
+      uri: null,
+      motivo: `el álbum existe pero su artista principal en Spotify es ${[...otrosArtistas].join(' / ')}, no «${partes.artist}»: al releer la playlist daría otra clave`,
+    };
+  }
+  return { uri: null, motivo: algunCandidato ? 'ningún candidato da la misma clave' : 'Spotify no devuelve ningún álbum con ese nombre' };
 }
 
 /**
@@ -78,19 +113,25 @@ export async function recuperarUriDeAlbumKey(key) {
  * el `artists[0]` del candidato tiene que ser ESTE artista, porque si no
  * `keyOfTrack` reconstruiría otro nombre al sincronizar.
  *
- * @returns {Promise<string|null>} uri, o null si no se puede confirmar
+ * @returns {Promise<{uri: string|null, motivo: string|null}>}
  */
 export async function recuperarUriDeArtistaKey(key) {
   const nombre = String(key || '').trim();
-  if (!nombre) return null;
+  if (!nombre) return { uri: null, motivo: 'la clave está vacía' };
 
   const q = `artist:"${limpiaParaQuery(nombre)}"`;
   const r = await spotifyFetch(`/search?q=${encodeURIComponent(q)}&type=track&limit=20`);
+  const items = r?.tracks?.items || [];
 
-  for (const t of (r?.tracks?.items || [])) {
+  for (const t of items) {
     if (!t?.uri) continue;
     if ((t.artists?.[0]?.name || '').toLowerCase() !== key) continue;
-    return t.uri;
+    return { uri: t.uri, motivo: null };
   }
-  return null;
+  return {
+    uri: null,
+    motivo: items.length
+      ? 'ninguna de las pistas encontradas tiene a ese artista como principal'
+      : 'Spotify no devuelve ninguna pista de ese artista',
+  };
 }

@@ -1,42 +1,42 @@
-import { isLoggedIn, loginWithSpotify, logout } from './auth.js?v=205';
-import { spotifyFetch, tryAutoLoadUserBackup, onRateLimit } from './api.js?v=205';
-import { getValidToken } from './auth.js?v=205';
-import { cacheClearAll } from './storage.js?v=205';
-import { idbClearAll } from './idb.js?v=205';
-import { registerRoute, initRouter, rutasRegistradas } from './router.js?v=205';
-import { showToast } from './ui/toast.js?v=205';
-import { pageHeader, escapeHtml } from './ui/components.js?v=205';
-import { installCrashGuard } from './ui/crash-guard.js?v=205';
-import { auditarOcultos, leerIncidencias } from './util/hidden-sync.js?v=205';
-import { getStack } from './ui/modal-stack.js?v=205';
-import { installBackToTop } from './ui/back-to-top.js?v=205';
-import { applyStoredTheme, openThemePanel } from './ui/theme-panel.js?v=205';
+import { isLoggedIn, loginWithSpotify, logout } from './auth.js?v=206';
+import { spotifyFetch, tryAutoLoadUserBackup, onRateLimit } from './api.js?v=206';
+import { getValidToken } from './auth.js?v=206';
+import { cacheClearAll } from './storage.js?v=206';
+import { idbClearAll } from './idb.js?v=206';
+import { registerRoute, initRouter, rutasRegistradas } from './router.js?v=206';
+import { showToast } from './ui/toast.js?v=206';
+import { pageHeader, escapeHtml } from './ui/components.js?v=206';
+import { installCrashGuard } from './ui/crash-guard.js?v=206';
+import { auditarOcultos, leerIncidencias } from './util/hidden-sync.js?v=206';
+import { getStack } from './ui/modal-stack.js?v=206';
+import { installBackToTop } from './ui/back-to-top.js?v=206';
+import { applyStoredTheme, openThemePanel } from './ui/theme-panel.js?v=206';
 
-import { render as renderSync } from './features/sync.js?v=205';
-import { render as renderDedupe } from './features/dedupe.js?v=205';
-import { render as renderDupalbums } from './features/duplicate-albums.js?v=205';
-import { render as renderZombies } from './features/zombies.js?v=205';
-import { render as renderVersions } from './features/versions.js?v=205';
-import { render as renderDashboard } from './features/dashboard.js?v=205';
-import { render as renderSmart } from './features/smart.js?v=205';
-import { render as renderSimilar } from './features/similar-artists.js?v=205';
-import { render as renderRabbit } from './features/rabbit-hole.js?v=205';
-import { render as renderByGenre } from './features/by-genre.js?v=205';
-import { render as renderByArtist } from './features/by-artist.js?v=205';
-import { render as renderRecs } from './features/recommendations.js?v=205';
-import { render as renderListened } from './features/listened.js?v=205';
-import { render as renderWrapped } from './features/wrapped.js?v=205';
-import { render as renderRecords } from './features/records.js?v=205';
-import { openImportHistory } from './features/import-history.js?v=205';
-import { bindOwnerLockedButtons } from './features/history-data.js?v=205';
-import { render as renderZeroPlays } from './features/zero-plays.js?v=205';
-import { render as renderSkips } from './features/skips.js?v=205';
-import { render as renderSearchLikes } from './features/search-likes.js?v=205';
-import { render as renderWthree } from './features/wthree.js?v=205';
-import { render as renderCovers } from './features/covers.js?v=205';
-import { render as renderDiscoverArtists } from './features/discover-artists.js?v=205';
-import { render as renderNewReleases } from './features/new-releases.js?v=205';
-import { render as renderSinClasificar } from './features/sin-clasificar.js?v=205';
+import { render as renderSync } from './features/sync.js?v=206';
+import { render as renderDedupe } from './features/dedupe.js?v=206';
+import { render as renderDupalbums } from './features/duplicate-albums.js?v=206';
+import { render as renderZombies } from './features/zombies.js?v=206';
+import { render as renderVersions } from './features/versions.js?v=206';
+import { render as renderDashboard } from './features/dashboard.js?v=206';
+import { render as renderSmart } from './features/smart.js?v=206';
+import { render as renderSimilar } from './features/similar-artists.js?v=206';
+import { render as renderRabbit } from './features/rabbit-hole.js?v=206';
+import { render as renderByGenre } from './features/by-genre.js?v=206';
+import { render as renderByArtist } from './features/by-artist.js?v=206';
+import { render as renderRecs } from './features/recommendations.js?v=206';
+import { render as renderListened } from './features/listened.js?v=206';
+import { render as renderWrapped } from './features/wrapped.js?v=206';
+import { render as renderRecords } from './features/records.js?v=206';
+import { openImportHistory } from './features/import-history.js?v=206';
+import { bindOwnerLockedButtons } from './features/history-data.js?v=206';
+import { render as renderZeroPlays } from './features/zero-plays.js?v=206';
+import { render as renderSkips } from './features/skips.js?v=206';
+import { render as renderSearchLikes } from './features/search-likes.js?v=206';
+import { render as renderWthree } from './features/wthree.js?v=206';
+import { render as renderCovers } from './features/covers.js?v=206';
+import { render as renderDiscoverArtists } from './features/discover-artists.js?v=206';
+import { render as renderNewReleases } from './features/new-releases.js?v=206';
+import { render as renderSinClasificar } from './features/sin-clasificar.js?v=206';
 
 // ── Arranque degradado cuando /me está rate-limiteado (v=173) ────────────────
 //
@@ -957,9 +957,16 @@ function tablaDeOcultos(filas) {
 
   const totalHuerfanas = filas.reduce((a, f) => a + f.huerfanas.length, 0);
   const totalSinUri = filas.reduce((a, f) => a + f.sinUri.length, 0);
-  const inc = leerIncidencias().slice(0, 12).map(i => `
-    <li><code>${escapeHtml(i.fecha)}</code> · <strong>${escapeHtml(i.tipo)}</strong> ·
-    ${escapeHtml(i.label || i.store)} · ${escapeHtml((i.claves || []).join(' · '))}</li>`).join('');
+  const inc = leerIncidencias().slice(0, 12).map(i => {
+    // El motivo es la mitad útil de una incidencia «sin-uri»: sin él el panel
+    // dice que algo no se pudo y no dice por qué, que es medio silencio.
+    const claves = (i.claves || []).map(k => (i.motivos && i.motivos[k])
+      ? `${escapeHtml(k)} <span style="color:var(--color-text-muted)">— ${escapeHtml(i.motivos[k])}</span>`
+      : escapeHtml(k));
+    return `
+      <li><code>${escapeHtml(i.fecha)}</code> · <strong>${escapeHtml(i.tipo)}</strong> · ${escapeHtml(i.label || i.store)}
+      <ul style="margin:2px 0 6px;padding-left:16px">${claves.map(c => `<li>${c}</li>`).join('')}</ul></li>`;
+  }).join('');
 
   return `
     <div class="card" style="margin-top:20px">
