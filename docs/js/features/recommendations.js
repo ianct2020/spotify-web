@@ -1,16 +1,16 @@
-import { spotifyFetch, createPlaylist, addTracksToPlaylist, invalidatePlaylistsCache, getAllLikedTracks } from '../api.js?v=205';
-import { hasKey, setKey, hasUsername, getUsername, setUsername, getUserTopArtists, getSimilarArtists, getArtistTopTracks } from '../api/lastfm.js?v=205';
-import { showProgress, hideProgress, promptPlaylistName, escapeHtml, pageHeader } from '../ui/components.js?v=205';
-import { showToast } from '../ui/toast.js?v=205';
-import { getPreview } from '../api/preview-providers.js?v=205';
-import { togglePreview, playingKey, isPlayingAudio } from '../ui/preview-player.js?v=205';
-import { paintPlayingCard } from '../ui/track-card-row.js?v=205';
-import { openTrackCard } from './track-card.js?v=205';
-import { openAlbumCard } from './album-card.js?v=205';
-import { limpiaParaQuery, titleMatches, artistMatches } from '../util/track-match.js?v=205';
-import { vigilarRuta } from '../util/vigencia-ruta.js?v=205';
-import { createHiddenStore } from '../util/hidden-sync.js?v=205';
-import { recuperarUriDeArtistaKey } from '../util/hidden-recover.js?v=205';
+import { spotifyFetch, createPlaylist, addTracksToPlaylist, invalidatePlaylistsCache, getAllLikedTracks } from '../api.js?v=206';
+import { hasKey, setKey, hasUsername, getUsername, setUsername, getUserTopArtists, getSimilarArtists, getArtistTopTracks } from '../api/lastfm.js?v=206';
+import { showProgress, hideProgress, promptPlaylistName, escapeHtml, pageHeader } from '../ui/components.js?v=206';
+import { showToast } from '../ui/toast.js?v=206';
+import { getPreview } from '../api/preview-providers.js?v=206';
+import { togglePreview, playingKey, isPlayingAudio } from '../ui/preview-player.js?v=206';
+import { paintPlayingCard } from '../ui/track-card-row.js?v=206';
+import { openTrackCard } from './track-card.js?v=206';
+import { openAlbumCard } from './album-card.js?v=206';
+import { limpiaParaQuery, titleMatches, artistMatches } from '../util/track-match.js?v=206';
+import { vigilarRuta } from '../util/vigencia-ruta.js?v=206';
+import { createHiddenStore } from '../util/hidden-sync.js?v=206';
+import { recuperarUriDeArtistaKey } from '../util/hidden-recover.js?v=206';
 
 // Iconos de las dos fichas. Los mismos trazos que usa la tarjeta compartida.
 const ICONO_PLAY = `<svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14"><path d="M8 5v14l11-7z"/></svg>`;

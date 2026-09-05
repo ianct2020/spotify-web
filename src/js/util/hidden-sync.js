@@ -585,7 +585,9 @@ export function createHiddenStore({ lsKey, playlistName, keyOfTrack, label, uriF
       );
       anotarIncidencia({ store: lsKey, label, tipo: 'resubida', claves: perdidas });
       avisar(
-        `«${label}»: ${perdidas.length} ${perdidas.length === 1 ? 'oculto había desaparecido' : 'ocultos habían desaparecido'} de la playlist. Los he vuelto a subir.`,
+        perdidas.length === 1
+          ? `«${label}»: un oculto había desaparecido de la playlist. Lo he vuelto a subir.`
+          : `«${label}»: ${perdidas.length} ocultos habían desaparecido de la playlist. Los he vuelto a subir.`,
         'warning'
       );
     }
@@ -595,23 +597,29 @@ export function createHiddenStore({ lsKey, playlistName, keyOfTrack, label, uriF
     //    `porSubir`— y con tope, que cada una cuesta 1-2 requests.
     const recuperadas = [];
     const irrecuperables = [];
+    // El POR QUÉ de cada una que no se pudo. Sin esto el aviso dice «no puedo» y
+    // se queda ahí, que es medio silencio: no se sabe si es un fallo de red, un
+    // álbum que ya no existe o una clave que no se puede reconciliar nunca.
+    const motivos = {};
     if (sinUri.length) {
       marcarSinUri(sinUri);
       let gastadas = 0;
       for (const k of sinUri) {
-        if (!recoverUri || gastadas >= MAX_RECUPERACIONES_POR_SYNC || !tocaReintentar(k)) {
-          irrecuperables.push(k);
-          continue;
-        }
+        if (!recoverUri) { motivos[k] = 'esta vista no sabe reconstruir uris'; irrecuperables.push(k); continue; }
+        if (gastadas >= MAX_RECUPERACIONES_POR_SYNC) { motivos[k] = 'sin cupo de búsquedas en este sync, se reintenta en el próximo'; irrecuperables.push(k); continue; }
+        if (!tocaReintentar(k)) { motivos[k] = 'ya se intentó hace menos de 24 h'; irrecuperables.push(k); continue; }
         gastadas++;
         anotarIntento(k);
         try {
           if (gastadas > 1) await new Promise(r => setTimeout(r, PAUSA_ENTRE_BUSQUEDAS));
-          const uri = await recoverUri(k);
+          // `recoverUri` puede devolver `{ uri, motivo }` o una uri suelta.
+          const res = await recoverUri(k);
+          const uri = (res && typeof res === 'object') ? res.uri : res;
           if (uri) { recordarUri(k, uri); recuperadas.push(k); }
-          else irrecuperables.push(k);
+          else { motivos[k] = (res && typeof res === 'object' && res.motivo) || 'no se pudo confirmar ningún candidato'; irrecuperables.push(k); }
         } catch (e) {
           console.warn(`[ocultos:${label}] la búsqueda para recuperar «${k}» falló: ${e.message}`);
+          motivos[k] = `la búsqueda falló: ${e.message}`;
           irrecuperables.push(k);
         }
       }
@@ -628,11 +636,14 @@ export function createHiddenStore({ lsKey, playlistName, keyOfTrack, label, uriF
       console.warn(
         `[ocultos:${label}] ${irrecuperables.length} oculto(s) siguen SIN poder representarse en la playlist: ` +
         `viven solo en este navegador y se perderían si borras sus datos. ` +
-        `Quedan anotados en localStorage['${prefKey(SIN_URI_KEY)}'] y NO se descarta ninguno: ${irrecuperables.join(', ')}`
+        `Quedan anotados en localStorage['${prefKey(SIN_URI_KEY)}'] y NO se descarta ninguno:\n` +
+        irrecuperables.map(k => `  · ${k} — ${motivos[k] || 'sin motivo'}`).join('\n')
       );
-      anotarIncidencia({ store: lsKey, label, tipo: 'sin-uri', claves: irrecuperables });
+      anotarIncidencia({ store: lsKey, label, tipo: 'sin-uri', claves: irrecuperables, motivos });
       avisar(
-        `«${label}»: ${irrecuperables.length} ${irrecuperables.length === 1 ? 'oculto vive' : 'ocultos viven'} solo en este navegador y no se ${irrecuperables.length === 1 ? 'ha' : 'han'} podido subir a la playlist. Mira la consola: ninguno se ha descartado.`,
+        irrecuperables.length === 1
+          ? `«${label}»: un oculto vive solo en este navegador y no se ha podido subir a la playlist. Míralo en #debug → «Salud de los ocultos»: no se ha descartado.`
+          : `«${label}»: ${irrecuperables.length} ocultos viven solo en este navegador y no se han podido subir a la playlist. Míralos en #debug → «Salud de los ocultos»: no se ha descartado ninguno.`,
         'warning'
       );
     }

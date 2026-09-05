@@ -182,7 +182,7 @@ console.log('\nRecuperar la uri por búsqueda');
   montar({ local: [CLAVE], uris: {}, enPlaylist: [] });
   const s = store({
     keyOfTrack: t => t?.album?.name || null,
-    recoverUri: async () => 'spotify:track:RECUPERADAxxxxxxxxxxxx',
+    recoverUri: async () => ({ uri: 'spotify:track:RECUPERADAxxxxxxxxxxxx', motivo: null }),
   });
   await s.ready();
   eq(subidas(), ['spotify:track:RECUPERADAxxxxxxxxxxxx'], 'la uri recuperada se sube');
@@ -194,12 +194,17 @@ console.log('\nUna recuperación que NO confirma no inventa nada');
 {
   const CLAVE = 'ausencia||osvaldo pugliese';
   montar({ local: [CLAVE], uris: {}, enPlaylist: [] });
-  const s = store({ keyOfTrack: t => t?.album?.name || null, recoverUri: async () => null });
+  const s = store({
+    keyOfTrack: t => t?.album?.name || null,
+    recoverUri: async () => ({ uri: null, motivo: 'el álbum existe pero su artista principal es otro' }),
+  });
   await s.ready();
   eq(subidas(), [], 'no sube nada');
   ok(localGuardado().includes(CLAVE), 'y tampoco descarta el oculto');
   ok(`${LS}::${CLAVE}` in sinUriGuardado(), 'lo deja anotado con su intento');
   ok(sinUriGuardado()[`${LS}::${CLAVE}`].intentos === 1, 'contando el intento gastado');
+  eq(leerIncidencias()[0]?.motivos?.[CLAVE], 'el álbum existe pero su artista principal es otro',
+    'y la incidencia guarda el POR QUÉ, no solo que no se pudo');
 }
 
 console.log('\nUna búsqueda que revienta no rompe el sync');
@@ -292,8 +297,9 @@ console.log('\nrecuperarUriDeAlbumKey()');
     }
     return { items: [] };
   };
-  const uri = await recuperarUriDeAlbumKey('ausencia||osvaldo pugliese');
-  eq(uri, 'spotify:track:BUENA', 'acepta el candidato cuya clave recalculada coincide');
+  const r = await recuperarUriDeAlbumKey('ausencia||osvaldo pugliese');
+  eq(r.uri, 'spotify:track:BUENA', 'acepta el candidato cuya clave recalculada coincide');
+  eq(r.motivo, null, 'y no da ningún motivo de fallo');
   ok(!globalThis.__DOBLE.llamadas.some(p => p.startsWith('/albums/a1/')), 'y ni le pide las pistas al que no coincide');
 }
 
@@ -303,8 +309,8 @@ console.log('\nrecuperarUriDeAlbumKey() sin coincidencia exacta');
   globalThis.__DOBLE.buscar = () => ({ albums: { items: [
     { id: 'a1', name: 'Ausencia (En Vivo)', artists: [{ name: 'Osvaldo Pugliese' }] },
   ] } });
-  eq(await recuperarUriDeAlbumKey('ausencia||osvaldo pugliese'), null, 'un «parecido» no vale: devuelve null');
-  eq(await recuperarUriDeAlbumKey('sin separador'), null, 'una clave que no es de álbum devuelve null sin buscar');
+  eq((await recuperarUriDeAlbumKey('ausencia||osvaldo pugliese')).uri, null, 'un «parecido» no vale: devuelve null');
+  eq((await recuperarUriDeAlbumKey('sin separador')).uri, null, 'una clave que no es de álbum devuelve null sin buscar');
 }
 
 console.log('\nrecuperarUriDeArtistaKey()');
@@ -315,8 +321,60 @@ console.log('\nrecuperarUriDeArtistaKey()');
     { uri: 'spotify:track:MALA', artists: [{ name: 'Drake' }, { name: 'Nick Drake' }] },
     { uri: 'spotify:track:BUENA', artists: [{ name: 'Nick Drake' }] },
   ] } });
-  eq(await recuperarUriDeArtistaKey('nick drake'), 'spotify:track:BUENA', 'solo vale si el artists[0] es ese artista');
-  eq(await recuperarUriDeArtistaKey(''), null, 'sin nombre no busca');
+  eq((await recuperarUriDeArtistaKey('nick drake')).uri, 'spotify:track:BUENA', 'solo vale si el artists[0] es ese artista');
+  eq((await recuperarUriDeArtistaKey('')).uri, null, 'sin nombre no busca');
+}
+
+console.log('\nEl agujero HERMANO: la clave la escribió otro artista');
+{
+  // Medido en los ocultos reales de Ian el 2026-09-05. #discover-artists arma la
+  // clave con el artista que estás explorando, no con el `artists[0]` del álbum
+  // en Spotify. Para un soundtrack o una colaboración las dos no coinciden, y
+  // entonces la clave NO se puede reconciliar por ningún camino: aunque se
+  // subiera una pista, al releerla `keyOfTrack` daría otra clave.
+  //
+  // Lo que se prueba acá es que eso se DICE, no que se arregle: el arreglo es
+  // otro y vive en la vista que escribe la clave.
+  montar();
+  globalThis.__DOBLE.buscar = () => ({ albums: { items: [
+    { id: 'a1', name: 'K-Pop (Chopped and Screwed)', artists: [{ name: 'Travis Scott' }] },
+  ] } });
+  const r = await recuperarUriDeAlbumKey('k-pop (chopped and screwed)||the weeknd');
+  eq(r.uri, null, 'no se sube una pista que se releería con otra clave');
+  ok(/Travis Scott/.test(r.motivo || ''), 'y el motivo nombra al artista real');
+  ok(/otra clave/.test(r.motivo || ''), 'diciendo por qué no se puede reconciliar');
+}
+
+console.log('\nUn álbum que no existe se distingue de uno que existe con otro artista');
+{
+  montar();
+  globalThis.__DOBLE.buscar = () => ({ albums: { items: [] } });
+  const r = await recuperarUriDeAlbumKey('the j-strokes||the strokes');
+  eq(r.uri, null, 'sin candidatos no hay uri');
+  ok(/no devuelve ningún álbum/.test(r.motivo || ''), 'y el motivo lo dice con esas palabras');
+}
+
+console.log('\nLas pistas del álbum se miran TODAS, no las primeras');
+{
+  // Con `limit=5` «Michael: Songs From The Motion Picture» fallaba como si el
+  // álbum no existiera: las primeras pistas están acreditadas a los invitados.
+  montar();
+  globalThis.__DOBLE.buscar = (path) => {
+    if (path.startsWith('/search')) {
+      return { albums: { items: [{ id: 'a1', name: 'Michael', artists: [{ name: 'Michael Jackson' }] }] } };
+    }
+    ok(/limit=50/.test(path), 'se piden las 50 pistas, no 5');
+    return { items: [
+      { uri: 'spotify:track:FEAT1', artists: [{ name: 'Akon' }] },
+      { uri: 'spotify:track:FEAT2', artists: [{ name: '50 Cent' }] },
+      { uri: 'spotify:track:FEAT3', artists: [{ name: 'Lenny Kravitz' }] },
+      { uri: 'spotify:track:FEAT4', artists: [{ name: 'Dave Grohl' }] },
+      { uri: 'spotify:track:FEAT5', artists: [{ name: 'Freddie Mercury' }] },
+      { uri: 'spotify:track:BUENA', artists: [{ name: 'Michael Jackson' }] },
+    ] };
+  };
+  const r = await recuperarUriDeAlbumKey('michael||michael jackson');
+  eq(r.uri, 'spotify:track:BUENA', 'encuentra la pista buena aunque sea la sexta');
 }
 
 console.log(`\n${pasaron} asserts OK, ${fallaron} fallos`);
