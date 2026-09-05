@@ -1223,6 +1223,44 @@ El procedimiento completo con el próximo export (los DOS `gen-stats.py`, y qué
 verificar) está en `fonoteca-migracion/CONTEXTO-TECNICO.md`, sección «Con cada
 export nuevo: hornear las tapas que falten».
 
+## Los ocultos: la uri va GUARDADA con la clave (v=205)
+`util/hidden-sync.js` reconcilia el caché local con una playlist de Spotify por
+unión, y para re-subir una clave necesita la **uri** de la pista que la
+representa. Hasta v=204 esa uri vivía en un `Map` **en memoria** que nacía vacío
+en cada carga: una clave huérfana que nadie volviera a tocar **no se podía subir
+nunca**, se quedaba en un `pendingNoUri` que tampoco se guardaba, y el día que
+ese navegador perdiera sus datos el oculto desaparecía **sin dejar rastro**.
+
+Desde v=205 la uri se persiste en `${lsKey}_uris`, y hay tres formas de
+conseguirla, en este orden: la guardada, la **deducida de la clave** cuando la
+clave ES el id de la pista (`uriDeTrackId`, para #skips / #zero-plays /
+#sin-clasificar) y la **buscada y confirmada** (`util/hidden-recover.js`, para
+las claves de álbum y de artista).
+
+Las reglas que hay que respetar al tocar ese archivo:
+
+- **Un oculto que no se puede sincronizar NUNCA se descarta.** Ante la duda,
+  gana lo que preserve el dato: se anota en `ocultos_sin_uri_v1`, se avisa, y se
+  queda donde está.
+- **Un candidato solo vale si su clave RECALCULADA coincide exacto.** Subir un
+  «parecido» deja en la playlist una pista que al releerla da otra clave: el
+  oculto sigue perdido y encima la playlist queda sucia.
+- **Nada en silencio.** Cada montón (la playlist perdió algo / nunca subió /
+  no se puede representar) lleva `console.warn`, toast y línea en
+  `ocultos_incidencias_v1`. Ese registro es la versión de `likes_borrados_log_v1`
+  para ocultos, y existe porque de «La La La» no quedó **ninguna** huella.
+- **Y `console.warn` no alcanza**: la extensión de Chrome no lo captura (v=163).
+  Por eso está `#debug` → «Salud de los ocultos», que compara las seis playlists
+  contra el navegador y nombra cada huérfana con su motivo. Si agregás un aviso
+  nuevo a este mecanismo, que se pueda mirar desde ahí.
+
+⚠️ **El agujero hermano, ABIERTO**: `#discover-artists` escribe la clave con el
+artista **que estás explorando** y `keyOfTrack` la relee con el `artists[0]`
+**del álbum en Spotify**. En colaboraciones y soundtracks no coinciden («CARNIVAL
+Pack» es de **¥$**, no de Kanye West) y esa clave no se puede reconciliar por
+ningún camino. Son 7 de 189 medidos el 2026-09-05. Detalle en
+`fonoteca-migracion/PENDIENTES.md`.
+
 ## ⛔ NUNCA `git add -A` ni `git add .` — archivo por archivo
 **Este repo es PÚBLICO.** El 2026-07-28 se filtraron datos personales y hubo que
 hacer `filter-branch` + force push. Desde entonces la regla es `git add` **con

@@ -25,9 +25,9 @@
 // existe con ese nombre» y «existe, pero su artista principal no es el que puso
 // la clave» — el segundo es un agujero aparte, anotado en `PENDIENTES.md`.
 
-import { spotifyFetch } from '../api.js?v=206';
-import { albumKey } from './album-key.js?v=206';
-import { limpiaParaQuery } from './track-match.js?v=206';
+import { spotifyFetch } from '../api.js?v=207';
+import { albumKey } from './album-key.js?v=207';
+import { limpiaParaQuery } from './track-match.js?v=207';
 
 /** Las claves de álbum son `nombre||artista` (ver `util/album-key.js`). */
 function partirClaveDeAlbum(key) {
@@ -68,6 +68,7 @@ export async function recuperarUriDeAlbumKey(key) {
 
   const vistos = new Set();
   const otrosArtistas = new Set();
+  const sinRepresentante = new Set();
   let algunCandidato = false;
 
   for (const q of queries) {
@@ -91,11 +92,21 @@ export async function recuperarUriDeAlbumKey(key) {
         if (albumKey(al.name || '', t.artists?.[0]?.name || '') !== key) continue;
         return { uri: t.uri, motivo: null };
       }
-      otrosArtistas.add(`${artistaAlbum} (ninguna de sus pistas está acreditada a él)`);
+      // Subcaso distinto: la clave del ÁLBUM coincide, pero ninguna de sus
+      // pistas está acreditada al mismo artista principal (un disco de remixes
+      // firmado por otros). No es «otro artista»: es que no hay ninguna pista
+      // que sirva de representante. «USB002 Remixes» de Fred again.., medido.
+      sinRepresentante.add(artistaAlbum);
     }
     if (vistos.size) break;
   }
 
+  if (sinRepresentante.size) {
+    return {
+      uri: null,
+      motivo: `el álbum es el correcto, pero ninguna de sus pistas está acreditada a «${[...sinRepresentante].join(' / ')}» como artista principal: no hay ninguna que sirva de representante`,
+    };
+  }
   if (otrosArtistas.size) {
     return {
       uri: null,

@@ -68,6 +68,7 @@ export async function recuperarUriDeAlbumKey(key) {
 
   const vistos = new Set();
   const otrosArtistas = new Set();
+  const sinRepresentante = new Set();
   let algunCandidato = false;
 
   for (const q of queries) {
@@ -91,11 +92,21 @@ export async function recuperarUriDeAlbumKey(key) {
         if (albumKey(al.name || '', t.artists?.[0]?.name || '') !== key) continue;
         return { uri: t.uri, motivo: null };
       }
-      otrosArtistas.add(`${artistaAlbum} (ninguna de sus pistas está acreditada a él)`);
+      // Subcaso distinto: la clave del ÁLBUM coincide, pero ninguna de sus
+      // pistas está acreditada al mismo artista principal (un disco de remixes
+      // firmado por otros). No es «otro artista»: es que no hay ninguna pista
+      // que sirva de representante. «USB002 Remixes» de Fred again.., medido.
+      sinRepresentante.add(artistaAlbum);
     }
     if (vistos.size) break;
   }
 
+  if (sinRepresentante.size) {
+    return {
+      uri: null,
+      motivo: `el álbum es el correcto, pero ninguna de sus pistas está acreditada a «${[...sinRepresentante].join(' / ')}» como artista principal: no hay ninguna que sirva de representante`,
+    };
+  }
   if (otrosArtistas.size) {
     return {
       uri: null,
