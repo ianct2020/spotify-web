@@ -1,6 +1,27 @@
 // Port a JS de scripts/gen-stats.py — dado un array de arrays de plays crudas
 // del Extended Streaming History, calcula los 6 payloads (stats, trackPlays,
-// listened, skipStats, detail, records) con la MISMA lógica que el Python.
+// listened, skipStats, detail, records).
+//
+// ⚠️ DESDE v=208 YA NO ES LA MISMA LÓGICA QUE EL PYTHON, y decirlo importa:
+// esta cabecera decía «con la MISMA lógica» y era en lo que se confiaba para
+// dar por hecho que las dos ramas emiten lo mismo.
+//
+// Lo que falta acá son los SEIS récords que `gen-stats.py` agregó en v=208 y
+// este puerto NO calcula:
+//   day_most_artists   el día con más artistas distintos
+//   track_most_years   el tema que suena en más años distintos
+//   artist_most_days   el artista que suena en más días distintos
+//   artist_dropped     mucho un año, cero al siguiente y nunca más
+//   artist_growth      el mayor multiplicador de un año al siguiente
+//   artist_runs        plays seguidas del mismo artista, corte de sesión 3 h
+//
+// Consecuencia: el owner ve 12 récords y quien importa su propio ZIP ve 6.
+// La vista NO se rompe — `cardSi()` en `features/records.js` pinta cada
+// tarjeta solo si el récord viene en el JSON, justamente por esto. Si portás
+// alguno, sacalo de esta lista; cuando la lista quede vacía, la frase de
+// arriba vuelve a ser verdad. Anotado en `fonoteca-migracion/PENDIENTES.md`.
+//
+// El resto de los payloads SÍ sigue línea a línea al Python.
 //
 // Uso desde el UI de upload:
 //   const raw = await Promise.all(files.map(readJson));   // File[] → array[array_plays]

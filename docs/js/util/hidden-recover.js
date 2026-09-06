@@ -25,9 +25,9 @@
 // existe con ese nombre» y «existe, pero su artista principal no es el que puso
 // la clave» — el segundo es un agujero aparte, anotado en `PENDIENTES.md`.
 
-import { spotifyFetch } from '../api.js?v=208';
-import { albumKey } from './album-key.js?v=208';
-import { limpiaParaQuery } from './track-match.js?v=208';
+import { spotifyFetch } from '../api.js?v=209';
+import { albumKey } from './album-key.js?v=209';
+import { limpiaParaQuery } from './track-match.js?v=209';
 
 /** Las claves de álbum son `nombre||artista` (ver `util/album-key.js`). */
 function partirClaveDeAlbum(key) {

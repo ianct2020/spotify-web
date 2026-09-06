@@ -2,21 +2,21 @@
 // primer/último año, top tracks del artista, hover-play, y plays actuales
 // vía Stats.fm si aplica. Se abre desde cualquier feature con openArtistCard({ name }).
 
-import { loadHistoryStats, loadArtistTracks, isOwner } from './history-data.js?v=208';
-import { escapeHtml } from '../ui/components.js?v=208';
-import { getPreview } from '../api/preview-providers.js?v=208';
-import { togglePreview, playingKey, attachHover } from '../ui/preview-player.js?v=208';
-import { hasUsername, loadTopLifetime } from '../api/statsfm.js?v=208';
-import { openTrackCard } from './track-card.js?v=208';
-import { spotifyFetch, getBestAvailableLikes } from '../api.js?v=208';
-import { openModal, closeTop } from '../ui/modal-stack.js?v=208';
-import { firstArtistName, artistNames, resolveArtistName, looksLikeArtistChain } from '../util/artist-name.js?v=208';
-import { coverUrl } from '../util/cover-size.js?v=208';
-import { getArtistLikePreview } from '../util/artist-preview.js?v=208';
-import { skelCardBody, skelTrackRows, skelBox } from '../ui/skeleton.js?v=208';
-import { fmtDia, fmtDiaCorto } from '../util/fecha.js?v=208';
-import { albumsDeArtista } from '../util/artist-albums.js?v=208';
-import { openAlbumCard } from './album-card.js?v=208';
+import { loadHistoryStats, loadArtistTracks, isOwner } from './history-data.js?v=209';
+import { escapeHtml } from '../ui/components.js?v=209';
+import { getPreview } from '../api/preview-providers.js?v=209';
+import { togglePreview, playingKey, attachHover } from '../ui/preview-player.js?v=209';
+import { hasUsername, loadTopLifetime } from '../api/statsfm.js?v=209';
+import { openTrackCard } from './track-card.js?v=209';
+import { spotifyFetch, getBestAvailableLikes } from '../api.js?v=209';
+import { openModal, closeTop } from '../ui/modal-stack.js?v=209';
+import { firstArtistName, artistNames, resolveArtistName, looksLikeArtistChain } from '../util/artist-name.js?v=209';
+import { coverUrl } from '../util/cover-size.js?v=209';
+import { getArtistLikePreview } from '../util/artist-preview.js?v=209';
+import { skelCardBody, skelTrackRows, skelBox } from '../ui/skeleton.js?v=209';
+import { fmtDia, fmtDiaCorto } from '../util/fecha.js?v=209';
+import { albumsDeArtista } from '../util/artist-albums.js?v=209';
+import { openAlbumCard } from './album-card.js?v=209';
 
 // Cache de imágenes de artistas resueltas por Spotify search. TTL 30 días.
 // Se persiste el hit y la falta (null) para no reintentar contra tracks

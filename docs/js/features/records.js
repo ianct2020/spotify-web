@@ -2,12 +2,12 @@
 // maratones de un artista, temas en loop, rachas e hitos. Todo sale de
 // history-records.json (gen-stats.py) ya calculado, acá es solo UI.
 
-import { loadRecords, isOwner, ownerLockedMessage } from './history-data.js?v=208';
-import { escapeHtml, pageHeader } from '../ui/components.js?v=208';
-import { getPreview } from '../api/preview-providers.js?v=208';
-import { getArtistLikePreview } from '../util/artist-preview.js?v=208';
-import { attachHover } from '../ui/preview-player.js?v=208';
-import { openArtistCard } from './artist-card.js?v=208';
+import { loadRecords, isOwner, ownerLockedMessage } from './history-data.js?v=209';
+import { escapeHtml, pageHeader } from '../ui/components.js?v=209';
+import { getPreview } from '../api/preview-providers.js?v=209';
+import { getArtistLikePreview } from '../util/artist-preview.js?v=209';
+import { attachHover } from '../ui/preview-player.js?v=209';
+import { openArtistCard } from './artist-card.js?v=209';
 
 const MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
 const DIAS = ['lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado', 'domingo'];
@@ -31,9 +31,14 @@ function fmtNum(n, dec = 0) {
   return Number(n || 0).toLocaleString('es-ES', { minimumFractionDigits: dec, maximumFractionDigits: dec });
 }
 
+// ⚠️ Los minutos se redondean ANTES de partir en horas. Al revés
+// —`floor(min/60)` y `round(min % 60)` por separado, que es como estaba— un
+// resto de 59,8 redondea a 60 y sale «30h 60m»: visto en producción el
+// 2026-09-05 con Playboi Carti (1.859,8 min) en «Los más constantes».
 function fmtHours(min) {
-  if (min >= 60) return `${Math.floor(min / 60)}h ${Math.round(min % 60)}m`;
-  return `${Math.round(min)}m`;
+  const total = Math.round(min || 0);
+  if (total >= 60) return `${Math.floor(total / 60)}h ${total % 60}m`;
+  return `${total}m`;
 }
 
 export async function render(container) {
