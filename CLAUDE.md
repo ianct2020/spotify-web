@@ -1254,12 +1254,60 @@ Las reglas que hay que respetar al tocar ese archivo:
   contra el navegador y nombra cada huérfana con su motivo. Si agregás un aviso
   nuevo a este mecanismo, que se pueda mirar desde ahí.
 
-⚠️ **El agujero hermano, ABIERTO**: `#discover-artists` escribe la clave con el
-artista **que estás explorando** y `keyOfTrack` la relee con el `artists[0]`
-**del álbum en Spotify**. En colaboraciones y soundtracks no coinciden («CARNIVAL
-Pack» es de **¥$**, no de Kanye West) y esa clave no se puede reconciliar por
-ningún camino. Son 7 de 189 medidos el 2026-09-05. Detalle en
-`fonoteca-migracion/PENDIENTES.md`.
+## La clave de descubrir: las dos direcciones, juntas (v=210/v=211)
+
+✅ **El agujero hermano del de la uri, CERRADO.** `#discover-artists` escribía la
+clave con el artista **que estás explorando** y `keyOfTrack` la releía con el
+`artists[0]` **de la pista**. En colaboraciones, soundtracks y discos de remixes
+no coinciden («CARNIVAL Pack» es de **¥$**, no de Kanye West) y esa clave no se
+podía reconciliar por ningún camino. Eran 7 de 189.
+
+Las dos direcciones viven ahora **en un archivo propio, `util/discover-key.js`**,
+y las dos van por **el artista que FIRMA el álbum**: es el único dato que las dos
+puntas tienen y que no depende de por dónde llegaste al disco. Si alguna vez hay
+que tocar una, la otra está tres líneas más abajo — que es el punto del archivo.
+
+⚠️ **NO es la convención de `#wthree`**, que va por el artista de la PISTA en las
+dos direcciones (su índice de álbumes se arma desde las pistas de la playlist de
+picks). Las dos son consistentes consigo mismas; lo que no puede pasar es
+mezclarlas dentro de una misma vista. Por eso `recuperarUriDeAlbumKey` lleva
+`porFirmaDelAlbum` y `#wthree` sigue con el default.
+
+**Las siete no estaban rotas por la misma mitad, y eso decidió el arreglo**: seis
+rompían al ESCRIBIR y «USB002 Remixes» rompía al LEER, porque ninguna de sus 50
+pistas tiene a Fred again.. como `artists[0]`. Tocar solo `cardKey` habría dejado
+esa séptima igual de rota.
+
+⚠️ **Cambiar cómo se escribe una clave SIN migrar es una regresión, no un
+arreglo**: los álbumes marcados con la forma vieja vuelven a la lista como si
+nunca se hubieran tocado. Hay dos migraciones y hacen falta las dos:
+- `migrarClavesViejas` (la vista), que necesita que el álbum aparezca en la
+  discografía escaneada del artista;
+- **el saneo por uri de `sync()`** (v=211), que no necesita ninguna tarjeta: si
+  una clave local no está en la playlist pero su uri sí —y ahí dentro
+  reconstruye otra clave—, la clave está vieja y se renombra. Es la prueba más
+  dura de que dos claves son el mismo disco, porque una pista pertenece a un
+  álbum y a uno solo, y no cuesta ni una petición.
+
+⚠️ **El saneo por uri no es un lujo: sin él la playlist acumula duplicados sin
+fin.** v=210 salió sin él y `reconciliar` leía esas claves como «la playlist
+perdió un oculto del que conozco la uri»: **4 pistas duplicadas en la playlist de
+descubrir, una más por cada sync**, hasta que lo cazó la verificación en la app.
+Al cambiar cómo se lee una clave, preguntarse siempre qué pasa con las claves
+que YA están escritas de la otra forma.
+
+⚠️ **Y el renombrado es LOCAL a propósito.** Un `toggle` de la clave vieja haría
+un `removeTracksFromPlaylist` con la uri que tuviera guardada — que es la misma
+que representa a la clave nueva: se llevaría por delante justo el oculto que
+venía a salvar. La uri se hereda y la pista no se mueve.
+
+**Medido en la app real, con el ritual del SW** (2026-09-08): las huérfanas de
+`#discover-artists` pasan de **7 a 1**, y de las 7 hay **6 con uri y viajando**.
+La que queda es `3vil reflection||osamason`: el disco está firmado por
+Glokk40Spaz y **ya no aparece en la discografía de Osamason**, así que ninguna
+tarjeta la puede migrar y no tiene uri con la que sanearla. Queda anotada, con
+su motivo a la vista en `#debug` — que es la regla: un oculto que no se puede
+sincronizar nunca se descarta.
 
 ## ⛔ NUNCA `git add -A` ni `git add .` — archivo por archivo
 **Este repo es PÚBLICO.** El 2026-07-28 se filtraron datos personales y hubo que
