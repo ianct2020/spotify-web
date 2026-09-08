@@ -28,7 +28,7 @@
   - ⚠️ **VA RETRASADO respecto a nuestras propias escrituras** (medido 2026-08-13). Justo después de un POST devuelve el snapshot **anterior**. Aquella medición decía 5-10 s, pero **re-medido el 2026-08-16 seguía viejo 40 SEGUNDOS después del PUT**: el retraso **no tiene cota conocida**. `/items` es correcto al instante. Por eso: (1) para cachear tras escribir, usar el snapshot que devolvió el POST, **nunca re-leerlo** (re-leerlo guarda el snapshot viejo con los items nuevos y corrompe el cache); (2) **no confiar en el cache validado por snapshot de una playlist recién escrita** — dentro de esa ventana valida contra contenido que ya cambió. `util/playlist-add.js` lleva un `escritasEnEstaSesion` por esto: sin ello el chequeo de duplicados daba por repetida una canción que ya no estaba y no la añadía; (3) **para saber si tus posiciones siguen válidas, no preguntes el snapshot: preguntá por las posiciones** con un `GET /items?offset=minPos&limit=N` dirigido (~600 ms, lo mismo que costaba el snapshot, y encima detecta ediciones de otro cliente). Es lo que hace W-Three desde v=147.
 - **Cache de items: parchear, no borrar (v=147).** `updatePlaylistItemsCache(id, null, null)` hace `idbDel`. Llamarlo "para invalidar" al final de un flujo que se repite deja el cache borrado para siempre, y la operación siguiente se come un refetch entero — era el bug del guardado de W-Three (41 s el segundo guardado de la sesión, 39,6 s de ellos en 31 páginas). `util/playlist-cache-patch.js` aplica al array cacheado el mismo diff que se le mandó a Spotify: `patchPlaylistItems(items, { addItems, addInsertPos, removeUris, moves })`, en ese orden, y se guarda con el snapshot de la ÚLTIMA escritura. `applyMoveToItems` replica la semántica de `PUT /items` (`insert_before` exclusivo, corregido solo si el destino está después del origen). Para los items nuevos, `buildCachedItem(track, album)` arma la forma de la API — los campos que los lectores consumen de verdad son `uri`/`id`/`name`, `album.name` + `artists[0].name` (`util/album-heard.js`) y `album.images` (`features/covers.js`). Tests en `tests/wthree-cache-patch.test.mjs`.
 - **`GET /me/top/{artists|tracks}?time_range=short|medium|long_term`**: **CONFIRMADO vivo (2026-07-29, 200 con token real)**. Usado en el Wrapped lite para users sin Extended Streaming History (wrapped.js `renderLite`). Scope `user-top-read` ya pedido.
-- **Stats.fm API** (`api.stats.fm/api/v1`, CORS abierto, sin key): usada en Por género. Más endpoints investigados en /home/ian/STATSFM-API-2026-07-29.md (per-track stats actuales posibles vía `/search/elastic` → id interno → `/users/{u}/streams/tracks/{id}/stats`).
+- **Stats.fm API** (`api.stats.fm/api/v1`, CORS abierto, sin key): usada en Por género. Más endpoints investigados en /home/ian/fonoteca/consumido/STATSFM-API-2026-07-29.md (per-track stats actuales posibles vía `/search/elastic` → id interno → `/users/{u}/streams/tracks/{id}/stats`).
 - **`/me/library/contains?uris=…`** (post-migración): CONFIRMADO vivo (2026-07-28). Devuelve `[bool, ...]`. El clásico `/me/tracks/contains?ids=…` está 403. **El máximo son 40 uris por request** (re-verificado en vivo 2026-08-28 con token real: 40 → 200; **41, 42, 43, 44, 45, 48, 49, 50 y 60 → 400 «Too many uris requested»**; 100 ni llega, da **414** porque se pasa del largo de URL). Mismo tope para `spotify:track:` y para `spotify:album:` — el 41 falla igual en los dos. O sea que es el mismo 40 que ya usan el PUT y el DELETE de `/me/library`: **`/me/library` entero va de a 40**. Decía «chunks de 50» y era falso — con 50 el request fallaba **siempre**. Usado en features/versions.js para verificación de borrados y en `albumsInLibrary()`. **CORREGIDO el 2026-08-28**: el número vive ahora en una sola constante, `LIBRARY_URIS_POR_REQUEST` (api.js), que usan los seis puntos que pegan a `/me/library` (los dos `contains`, el PUT y el DELETE de pistas, y el PUT y el DELETE de álbumes). **Lo que estuvo roto y por qué importa**: hasta esa fecha los dos `contains` iban de a 50, o sea que **fallaban siempre**, y el único llamador (`versions.js`) atrapaba la excepción y la reportaba con `console.warn` — que la extensión de Chrome no captura. Resultado: **todo borrado de más de 40 versiones se dio por verificado sin haberse verificado**, con toast verde. Ese es el patrón a no repetir: una verificación con un `catch` que deja seguir el flujo es peor que no tener verificación, porque da la misma cara que un resultado limpio. Ahora `checkLibraryContains()` tira también si la respuesta no trae exactamente un booleano por id, y `versions.js` aborta con toast rojo en vez de degradar.
 - DELETE playlist items: body `{ items: [{uri}] }` (NO `{ tracks: [...] }` → da 400 "No uris provided")
 - Campo `popularity` en `/me/tracks`: **removido en la migración feb 2026**. Confirmado 2026-07-17 con 9548 tracks reales → 100% null. No usar más. Chart de popularidad sacado del Dashboard en v=41.
@@ -303,7 +303,7 @@ mosaico (`rgba(20,20,28,.95)` con texto blanco, que trae su propio fondo).
   de v=181 metió un bucle de carga/descarga que dejaba la grilla vacía en Mini y
   Chico. ✅ **Cerrado de verdad en v=193/194**, ver la sección «El tope de
   `lazy-img` no puede blanquear lo que se está viendo». Tabla completa
-  antes/después en `/home/ian/MEDICION-COVERS-2026-09-03.txt`.
+  antes/después en `/home/ian/fonoteca/consumido/mediciones/MEDICION-COVERS-2026-09-03.txt`.
 - **La playlist «fonoteca · sin escuchar» no existe en la cuenta de Ian**
   (verificado 2026-08-28 contra sus 39 propias). El criterio `sinescuchar` de
   v=165 la cruza igual y descarta 0 hasta que aparezca. Falta saber dónde
@@ -1042,7 +1042,7 @@ al re-entrar muestra «24 de 25 pintan» sin repetir el barrido.
 ## Resultado del primer barrido (2026-08-30, v=177) — 25 rutas, no 23
 Después de que `#covers` estuviera muerta nueve versiones, se comprobaron **las
 25 rutas una por una, entrando y mirando que PINTEN**. Resultado completo en
-`/home/ian/BARRIDO-VISTAS-2026-08-30.txt`.
+`/home/ian/fonoteca/consumido/mediciones/BARRIDO-VISTAS-2026-08-30.txt`.
 
 **24 pintan · 1 colgada · 0 rotas.** `#covers` era la única muerta.
 
@@ -1134,7 +1134,7 @@ producción **en `#recs`**: «Algo falló por detrás: Cannot set properties of 
 
 **Reproducido antes de tocar nada**, con un arnés headless que carga los módulos
 reales de `src/` con los `import` desviados a dobles por **import map** (queda en
-`/home/ian/REPRO-VIGENCIA-2026-09-03/`: `node serve.mjs` y
+`/home/ian/fonoteca/consumido/mediciones/REPRO-VIGENCIA-2026-09-03/`: `node serve.mjs` y
 `google-chrome --headless=new --virtual-time-budget=40000 --dump-dom
 http://127.0.0.1:5599/repro.html`). No necesita token ni extensión: el zapeo se
 simula subiendo la generación de ruta y reemplazando `#main-content`, que es
