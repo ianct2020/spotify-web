@@ -10,14 +10,14 @@
 //   - Umbral de likes: 5+ / 10+ / 20+
 //   - Ventana temporal: 3 / 6 / 12 / 24 meses (default 12)
 
-import { escapeHtml, confirmModal, pageHeader } from '../ui/components.js?v=209';
-import { showToast } from '../ui/toast.js?v=209';
-import { buildAlbumHeardIndex } from '../util/album-heard.js?v=209';
-import { releaseKind } from '../util/release-size.js?v=209';
-import { loadFiltros, buildFilterContext, applyDiscoverFilters } from '../util/discover-filters.js?v=209';
-import { createIncrementalList, scrollRootOf } from '../ui/incremental-list.js?v=209';
-import { createLazyImages } from '../ui/lazy-img.js?v=209';
-import { prefKey, migratePrefKey } from '../storage.js?v=209';
+import { escapeHtml, confirmModal, pageHeader } from '../ui/components.js?v=210';
+import { showToast } from '../ui/toast.js?v=210';
+import { buildAlbumHeardIndex } from '../util/album-heard.js?v=210';
+import { releaseKind } from '../util/release-size.js?v=210';
+import { loadFiltros, buildFilterContext, applyDiscoverFilters } from '../util/discover-filters.js?v=210';
+import { createIncrementalList, scrollRootOf } from '../ui/incremental-list.js?v=210';
+import { createLazyImages } from '../ui/lazy-img.js?v=210';
+import { prefKey, migratePrefKey } from '../storage.js?v=210';
 import {
   getArtistIdCached,
   getArtistDiscoCached,
@@ -41,8 +41,9 @@ import {
   addAlbumsToPlaylists,
   hiddenAlbums,
   cardKey,
+  migrarClavesDeArtista,
   toggleHiddenAlbum,
-} from './discover-common.js?v=209';
+} from './discover-common.js?v=210';
 
 const SCAN_KEY = 'new_releases';
 
@@ -197,6 +198,7 @@ export async function render(container) {
       const c = byName.get(a.nameLower);
       if (!c) continue;
       Object.assign(a, { id: c.id, disco: c.disco || [], scanned: true, error: null });
+      migrarClavesDeArtista(a);   // el caché de 7 días no pasa por processArtist
       restored++;
     }
     if (restored) state.scannedAt = cached.ts || null;
@@ -434,6 +436,7 @@ async function processArtist(artist) {
   artist.id = id;
   const disco = await getArtistDiscoCached(id, artist.name);
   artist.disco = dedupDisco(disco);
+  migrarClavesDeArtista(artist);   // claves viejas → firma del álbum (v=210)
   artist.scanned = true;
 }
 

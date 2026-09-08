@@ -16,25 +16,25 @@
 // Preview 30s instantáneo vía iTunes (arranca en el estribillo, no suma plays
 // en tu historial de Spotify). Fallback: iframe embed oficial si iTunes no lo tiene.
 
-import { getBestAvailableLikes, removeLikedTracks, checkLibraryContains } from '../api.js?v=209';
-import { borrarLikesVerificado } from '../util/borrado-verificado.js?v=209';
-import { loadSkipStats, trackIdOf, isOwner, ownerLockedMessage } from './history-data.js?v=209';
-import { escapeHtml, confirmModal, pageHeader } from '../ui/components.js?v=209';
-import { showToast } from '../ui/toast.js?v=209';
-import { getPreview } from '../api/preview-providers.js?v=209';
-import { togglePreview, playingKey } from '../ui/preview-player.js?v=209';
-import { openTrackCard } from './track-card.js?v=209';
-import { firstArtistName, artistNames } from '../util/artist-name.js?v=209';
-import { activateMarquee } from '../ui/marquee.js?v=209';
-import { hasUsername, loadTopLifetime } from '../api/statsfm.js?v=209';
-import { createHiddenStore, uriDeTrackId } from '../util/hidden-sync.js?v=209';
-import { prefKey, migratePrefKey } from '../storage.js?v=209';
-import { vigilarRuta } from '../util/vigencia-ruta.js?v=209';
-import { createIncrementalList, scrollRootOf } from '../ui/incremental-list.js?v=209';
-import { createLazyImages } from '../ui/lazy-img.js?v=209';
-import { renderTrackCardRow, wireTrackCardGrid, paintCardSelection, paintPlayingCard, paintEmbedCard } from '../ui/track-card-row.js?v=209';
-import { coverAtSize } from '../util/cover-size.js?v=209';
-import { coverUrl } from '../util/cover-size.js?v=209';
+import { getBestAvailableLikes, removeLikedTracks, checkLibraryContains } from '../api.js?v=210';
+import { borrarLikesVerificado } from '../util/borrado-verificado.js?v=210';
+import { loadSkipStats, trackIdOf, isOwner, ownerLockedMessage } from './history-data.js?v=210';
+import { escapeHtml, confirmModal, pageHeader } from '../ui/components.js?v=210';
+import { showToast } from '../ui/toast.js?v=210';
+import { getPreview } from '../api/preview-providers.js?v=210';
+import { togglePreview, playingKey } from '../ui/preview-player.js?v=210';
+import { openTrackCard } from './track-card.js?v=210';
+import { firstArtistName, artistNames } from '../util/artist-name.js?v=210';
+import { activateMarquee } from '../ui/marquee.js?v=210';
+import { hasUsername, loadTopLifetime } from '../api/statsfm.js?v=210';
+import { createHiddenStore, uriDeTrackId } from '../util/hidden-sync.js?v=210';
+import { prefKey, migratePrefKey } from '../storage.js?v=210';
+import { vigilarRuta } from '../util/vigencia-ruta.js?v=210';
+import { createIncrementalList, scrollRootOf } from '../ui/incremental-list.js?v=210';
+import { createLazyImages } from '../ui/lazy-img.js?v=210';
+import { renderTrackCardRow, wireTrackCardGrid, paintCardSelection, paintPlayingCard, paintEmbedCard } from '../ui/track-card-row.js?v=210';
+import { coverAtSize } from '../util/cover-size.js?v=210';
+import { coverUrl } from '../util/cover-size.js?v=210';
 
 let cache = null;
 // Filas visibles con los filtros actuales, en el mismo orden que las tarjetas

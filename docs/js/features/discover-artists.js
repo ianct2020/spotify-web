@@ -10,22 +10,23 @@
 // 100 artistas en lugar de 20. Lógica de fetch/cache/playlist compartida en
 // features/discover-common.js con #new-releases.
 
-import { escapeHtml, confirmModal, pageHeader } from '../ui/components.js?v=209';
-import { showToast } from '../ui/toast.js?v=209';
-import { openArtistCard } from './artist-card.js?v=209';
-import { createIncrementalList, scrollRootOf } from '../ui/incremental-list.js?v=209';
-import { createLazyImages } from '../ui/lazy-img.js?v=209';
-import { isJunkTrack } from '../util/junk.js?v=209';
-import { buildAlbumHeardIndex } from '../util/album-heard.js?v=209';
-import { loadFiltros, buildFilterContext, applyDiscoverFilters } from '../util/discover-filters.js?v=209';
-import { releaseKind } from '../util/release-size.js?v=209';
-import { vigilarRuta } from '../util/vigencia-ruta.js?v=209';
-import { prefKey, migratePrefKey } from '../storage.js?v=209';
+import { escapeHtml, confirmModal, pageHeader } from '../ui/components.js?v=210';
+import { showToast } from '../ui/toast.js?v=210';
+import { openArtistCard } from './artist-card.js?v=210';
+import { createIncrementalList, scrollRootOf } from '../ui/incremental-list.js?v=210';
+import { createLazyImages } from '../ui/lazy-img.js?v=210';
+import { isJunkTrack } from '../util/junk.js?v=210';
+import { buildAlbumHeardIndex } from '../util/album-heard.js?v=210';
+import { loadFiltros, buildFilterContext, applyDiscoverFilters } from '../util/discover-filters.js?v=210';
+import { releaseKind } from '../util/release-size.js?v=210';
+import { vigilarRuta } from '../util/vigencia-ruta.js?v=210';
+import { prefKey, migratePrefKey } from '../storage.js?v=210';
 import {
   getArtistIdCached,
   getArtistDiscoCached,
   dedupDisco,
   albumIsUnheard,
+  migrarClavesDeArtista,
   yearOf,
   createDiscoverPlaylist,
   guardarLanzamiento,
@@ -47,7 +48,7 @@ import {
   cardKey,
   toggleHeardAlbum,
   toggleHiddenAlbum,
-} from './discover-common.js?v=209';
+} from './discover-common.js?v=210';
 
 const SCAN_KEY = 'discover_artists';
 
@@ -237,6 +238,9 @@ export async function render(container) {
       restored++;
     }
     if (restored) state.scannedAt = cached.ts || null;
+    // Lo restaurado del caché de 7 días no pasa por `processArtist`, así que la
+    // migración de claves (v=210) tiene que correr también acá.
+    for (const a of state.artists) if (a.scanned) migrarClavesDeArtista(a);
     console.log(`[discover] cache de escaneo: ${restored} artistas restaurados (${agoLabel(cached.ts)})`);
   }
 
@@ -449,6 +453,10 @@ async function processArtist(artist) {
   artist.id = id;
   const disco = await getArtistDiscoCached(id, artist.name);
   artist.disco = dedupDisco(disco);
+  // Antes de leer ningún estado: las claves viejas de este artista pasan a la
+  // firma del álbum (v=210). Es local y no cuesta nada cuando no hay nada que
+  // migrar, que es lo normal.
+  migrarClavesDeArtista(artist);
   const unheard = artist.disco.filter(al => albumIsUnheard(al, artist.name, state.heard));
   // `unheard` entero, y no solo la partición en dos (v=165): el reparto por
   // `al.type` tiraba los RECOPILATORIOS al piso — no eran ni 'album' ni

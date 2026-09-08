@@ -26,6 +26,7 @@ import {
   getArtistDiscoCached,
   dedupDisco,
   albumIsUnheard,
+  migrarClavesDeArtista,
   yearOf,
   createDiscoverPlaylist,
   guardarLanzamiento,
@@ -237,6 +238,9 @@ export async function render(container) {
       restored++;
     }
     if (restored) state.scannedAt = cached.ts || null;
+    // Lo restaurado del caché de 7 días no pasa por `processArtist`, así que la
+    // migración de claves (v=210) tiene que correr también acá.
+    for (const a of state.artists) if (a.scanned) migrarClavesDeArtista(a);
     console.log(`[discover] cache de escaneo: ${restored} artistas restaurados (${agoLabel(cached.ts)})`);
   }
 
@@ -449,6 +453,10 @@ async function processArtist(artist) {
   artist.id = id;
   const disco = await getArtistDiscoCached(id, artist.name);
   artist.disco = dedupDisco(disco);
+  // Antes de leer ningún estado: las claves viejas de este artista pasan a la
+  // firma del álbum (v=210). Es local y no cuesta nada cuando no hay nada que
+  // migrar, que es lo normal.
+  migrarClavesDeArtista(artist);
   const unheard = artist.disco.filter(al => albumIsUnheard(al, artist.name, state.heard));
   // `unheard` entero, y no solo la partición en dos (v=165): el reparto por
   // `al.type` tiraba los RECOPILATORIOS al piso — no eran ni 'album' ni

@@ -9,6 +9,7 @@
 import { idbGetCached, idbSetCached, idbDel } from '../idb.js';
 import { getArtistAlbums, searchArtistByName, getAlbumTracks, saveToLibrary, saveAlbumsToLibrary, createPlaylist, addTracksToPlaylist } from '../api.js';
 import { albumKey } from '../util/album-key.js';
+import { cardKey, cardKeyLegacy, albumCreditName, keyOfPlaylistTrack } from '../util/discover-key.js';
 import { escapeHtml } from '../ui/components.js';
 import { showToast } from '../ui/toast.js';
 import { openPlaylistPicker } from '../ui/playlist-picker.js';
@@ -167,14 +168,14 @@ export const hiddenAlbums = createHiddenStore({
   lsKey: 'discover_ocultos',
   playlistName: 'fonoteca · ocultos (descubrir)',
   label: 'descubrir',
-  keyOfTrack: (t) => {
-    const albumName = t?.album?.name;
-    if (!albumName) return null;
-    return albumKey(albumName, t.artists?.[0]?.name || '');
-  },
+  // Las dos direcciones de la clave viven juntas en `util/discover-key.js`:
+  // si no dan lo mismo, el oculto no se puede reconciliar por ningún camino.
+  keyOfTrack: keyOfPlaylistTrack,
   // La clave es un álbum normalizado: la uri no se deduce, se busca y se
-  // confirma recalculando la clave (v=205).
-  recoverUri: recuperarUriDeAlbumKey,
+  // confirma recalculando la clave (v=205). `porFirmaDelAlbum` porque acá la
+  // clave de vuelta sale del álbum y no de la pista (v=210) — ver el comentario
+  // de `keyOfTrack` de arriba y el de `util/hidden-recover.js`.
+  recoverUri: (key) => recuperarUriDeAlbumKey(key, { porFirmaDelAlbum: true }),
 });
 
 // "Escuchado" alcanza con localStorage, pero con la MISMA forma que el store
@@ -185,17 +186,68 @@ export const heardAlbums = createLocalStore({
   label: 'descubrir-escuchados',
 });
 
-/** La clave con la que se identifica una tarjeta en los dos stores. */
-export function cardKey(al, artistName) {
-  return albumKey(al.name, artistName);
+// `cardKey`, `cardKeyLegacy`, `albumCreditName` y `keyOfPlaylistTrack` viven en
+// `util/discover-key.js` — las dos direcciones de la clave juntas, que es la
+// única forma de que no se vuelvan a separar (v=210). Se re-exportan porque las
+// dos vistas ya las importaban de acá.
+export { cardKey, cardKeyLegacy, albumCreditName, keyOfPlaylistTrack };
+
+/**
+ * Pasa a la clave nueva los ocultos y los escuchados que se escribieron con la
+ * vieja (v=210).
+ *
+ * Sin esto el arreglo de `cardKey` sería una regresión, no un arreglo: los
+ * álbumes marcados con la clave vieja volverían a la lista como si nunca se
+ * hubieran tocado, y la clave vieja quedaría en `localStorage` para siempre,
+ * huérfana, sin que ninguna vista la pueda alcanzar.
+ *
+ * Solo mira los álbumes cuya firma NO coincide con el artista explorado — en la
+ * medición del 05/09 eran 7 de 189 — así que en la práctica no recorre nada:
+ * las dos claves son idénticas y se sale en la primera comparación.
+ *
+ * Es local y sincrónico: `renameKey` no toca la playlist. Lo que reconcilia con
+ * Spotify es el `sync()` de después, que ahora sí puede resolver estas claves
+ * porque el `recoverUri` de arriba acepta cualquier pista del álbum correcto.
+ *
+ * @param {Array<{al: object, artistName: string}>} tarjetas
+ * @returns {{ocultos: number, escuchados: number}}
+ */
+export function migrarClavesDeArtista(artist) {
+  return migrarClavesViejas((artist?.disco || []).map(al => ({ al, artistName: artist.name })));
+}
+
+export function migrarClavesViejas(tarjetas) {
+  let ocultos = 0;
+  let escuchados = 0;
+  const vistas = new Set();
+  for (const { al, artistName } of tarjetas) {
+    if (!al?.name || !artistName) continue;
+    const vieja = cardKeyLegacy(al, artistName);
+    const nueva = cardKey(al, artistName);
+    if (vieja === nueva) continue;          // el caso normal: nada que migrar
+    const marca = `${vieja}»${nueva}`;
+    if (vistas.has(marca)) continue;        // el mismo disco en dos artistas
+    vistas.add(marca);
+    if (hiddenAlbums.renameKey(vieja, nueva)) ocultos++;
+    if (heardAlbums.renameKey(vieja, nueva)) escuchados++;
+  }
+  if (ocultos || escuchados) {
+    console.info(`[discover] claves migradas a la firma del álbum (v=210): ${ocultos} oculto(s), ${escuchados} escuchado(s).`);
+  }
+  return { ocultos, escuchados };
 }
 
 // El índice de escuchados de util/album-heard.js manda igual que antes; encima
 // se suma lo que Ian resolvió a mano —«Escuchado», «Guardar álbum», «Añadir
 // pistas a mis likes»—, que persiste entre sesiones en `heardAlbums`.
 export function albumIsUnheard(al, artistName, heardSet) {
-  const k = albumKey(al.name, artistName);
-  return !heardSet.has(k) && !heardAlbums.has(k);
+  // Dos espacios de claves distintos, a propósito (v=210). `heardSet` lo arma
+  // `util/album-heard.js` con el artista de las PISTAS (likes, W-Three,
+  // historial), así que se consulta con la clave de siempre — cambiarlo movería
+  // lo que la vista considera «escuchado» para todo el mundo, y eso es otra
+  // tanda. `heardAlbums` es el store de esta vista y desde v=210 va por la
+  // firma del álbum, igual que `hiddenAlbums`.
+  return !heardSet.has(cardKeyLegacy(al, artistName)) && !heardAlbums.has(cardKey(al, artistName));
 }
 
 // ── Preview de un álbum ──────────────────────────────────────────────────────

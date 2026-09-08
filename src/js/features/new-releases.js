@@ -41,6 +41,7 @@ import {
   addAlbumsToPlaylists,
   hiddenAlbums,
   cardKey,
+  migrarClavesDeArtista,
   toggleHiddenAlbum,
 } from './discover-common.js';
 
@@ -197,6 +198,7 @@ export async function render(container) {
       const c = byName.get(a.nameLower);
       if (!c) continue;
       Object.assign(a, { id: c.id, disco: c.disco || [], scanned: true, error: null });
+      migrarClavesDeArtista(a);   // el caché de 7 días no pasa por processArtist
       restored++;
     }
     if (restored) state.scannedAt = cached.ts || null;
@@ -434,6 +436,7 @@ async function processArtist(artist) {
   artist.id = id;
   const disco = await getArtistDiscoCached(id, artist.name);
   artist.disco = dedupDisco(disco);
+  migrarClavesDeArtista(artist);   // claves viejas → firma del álbum (v=210)
   artist.scanned = true;
 }
 

@@ -29,6 +29,21 @@ import { spotifyFetch } from '../api.js';
 import { albumKey } from './album-key.js';
 import { limpiaParaQuery } from './track-match.js';
 
+/**
+ * ⚠️ `porFirmaDelAlbum` (v=210). Los dos stores de álbumes NO leen la playlist
+ * igual, así que tampoco pueden aceptar el mismo representante:
+ *
+ *   - `#wthree` reconstruye la clave con el `artists[0]` de la PISTA (su índice
+ *     de álbumes se arma igual, desde las pistas de la playlist de picks), así
+ *     que la pista representativa tiene que estar acreditada a ese artista.
+ *   - `#discover-artists` la reconstruye desde el ÁLBUM (`t.album.artists[0]`,
+ *     v=210), que es lo mismo con lo que la escribe: ahí cualquier pista del
+ *     álbum correcto sirve, y por eso «USB002 Remixes» —cuyas 50 pistas están
+ *     acreditadas a otros— pasa a tener representante.
+ *
+ * El default es el comportamiento de siempre, el de `#wthree`.
+ */
+
 /** Las claves de álbum son `nombre||artista` (ver `util/album-key.js`). */
 function partirClaveDeAlbum(key) {
   const i = String(key || '').indexOf('||');
@@ -58,7 +73,7 @@ function partirClaveDeAlbum(key) {
  *
  * @returns {Promise<{uri: string|null, motivo: string|null}>}
  */
-export async function recuperarUriDeAlbumKey(key) {
+export async function recuperarUriDeAlbumKey(key, { porFirmaDelAlbum = false } = {}) {
   const partes = partirClaveDeAlbum(key);
   if (!partes) return { uri: null, motivo: 'la clave no tiene forma de álbum' };
 
@@ -89,7 +104,11 @@ export async function recuperarUriDeAlbumKey(key) {
       const tr = await spotifyFetch(`/albums/${al.id}/tracks?limit=50`);
       for (const t of (tr?.items || [])) {
         if (!t?.uri) continue;
-        if (albumKey(al.name || '', t.artists?.[0]?.name || '') !== key) continue;
+        // Con `porFirmaDelAlbum` la clave de vuelta sale del ÁLBUM, no de la
+        // pista: si el álbum ya coincidió, CUALQUIERA de sus pistas sirve de
+        // representante. Sin la opción hace falta que la pista misma dé la
+        // clave, que es lo que lee el `keyOfTrack` de `#wthree`.
+        if (!porFirmaDelAlbum && albumKey(al.name || '', t.artists?.[0]?.name || '') !== key) continue;
         return { uri: t.uri, motivo: null };
       }
       // Subcaso distinto: la clave del ÁLBUM coincide, pero ninguna de sus
