@@ -169,7 +169,53 @@ console.log('\n4. renameKey es LOCAL: no toca la playlist');
   eq(store.size, 1, 'y el tamaño no se movió');
 }
 
-console.log('\n5. renameKey cuando la clave nueva YA existía');
+console.log('\n5. sync() sanea la clave vieja cuya pista ya está en la playlist');
+{
+  // El caso real de la playlist de descubrir de Ian: el MISMO disco oculto
+  // desde las páginas de dos artistas distintos, o sea dos claves para una sola
+  // pista. Con la clave nueva la playlist reconstruye una de las dos, y la otra
+  // se ve como «la playlist perdió un oculto del que conozco la uri»: se
+  // re-sube en CADA sync y la playlist acumula duplicados sin fin.
+  const LS = 'test_saneo';
+  const PL = 'pl-saneo';
+  const NOMBRE = 'fonoteca · ocultos (descubrir)';
+  const URI = 'spotify:track:REP';
+  const vieja = 'michael: songs from the motion picture||the jackson 5';
+  const real  = 'michael: songs from the motion picture||michael jackson';
+
+  globalThis.localStorage = fakeLocalStorage({
+    fonoteca_last_user_id: UID,
+    [P(LS)]: JSON.stringify([vieja]),
+    [P(`${LS}_uris`)]: JSON.stringify({ [vieja]: URI }),
+    [P(`fonoteca_hidden_pl_${LS}`)]: PL,
+  });
+  const pista = {
+    uri: URI,
+    artists: [{ name: 'The Jackson 5' }],
+    album: { name: 'Michael: Songs From The Motion Picture', artists: [{ name: 'Michael Jackson' }] },
+  };
+  globalThis.__DOBLE = {
+    me: UID,
+    playlists: [{ id: PL, name: NOMBRE, owner: UID, items: [pista] }],
+    añadidas: [], quitadas: [], creadas: [], llamadas: [], toasts: [],
+    pistaDeUri: () => pista,
+  };
+
+  const store = createHiddenStore({
+    lsKey: LS, playlistName: NOMBRE, label: 'test-saneo',
+    keyOfTrack: keyOfPlaylistTrack,
+  });
+  await store.ready();
+
+  eq(store.values(), [real], 'la clave vieja se renombra a la que reconstruye la playlist');
+  eq(globalThis.__DOBLE.añadidas, [], 'y NO se re-sube nada: la pista ya estaba');
+  eq(globalThis.__DOBLE.quitadas, [], 'ni se quita nada de la playlist');
+  eq(globalThis.__DOBLE.playlists[0].items.length, 1, 'la playlist queda con una sola copia');
+  eq(globalThis.__DOBLE.toasts, [], 'y sin molestar al usuario: no perdió nada');
+  eq(store.size, 1, 'un disco, una clave');
+}
+
+console.log('\n6. renameKey cuando la clave nueva YA existía');
 {
   const LS = 'test_dup';
   localStorage.setItem(P(LS), JSON.stringify(['a||uno', 'a||dos']));

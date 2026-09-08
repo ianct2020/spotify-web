@@ -26,10 +26,10 @@ import {
   createPlaylist,
   getCurrentUserId,
   spotifyFetch,
-} from '../api.js?v=210';
-import { prefKey, migratePrefKey } from '../storage.js?v=210';
-import { invalidateOwnPlaylists } from './playlist-add.js?v=210';
-import { showToast } from '../ui/toast.js?v=210';
+} from '../api.js?v=211';
+import { prefKey, migratePrefKey } from '../storage.js?v=211';
+import { invalidateOwnPlaylists } from './playlist-add.js?v=211';
+import { showToast } from '../ui/toast.js?v=211';
 
 const PLAYLIST_DESC = 'Lista interna de Fonoteca: lo que ocultaste en esta vista. Si la borras, se pierden los ocultos.';
 
@@ -403,6 +403,33 @@ export function createHiddenStore({ lsKey, playlistName, keyOfTrack, label, uriF
     return true;
   }
 
+  function renombrarLocal(from, to, motivo = null) {
+    if (!from || !to || from === to) return false;
+    ensureKeys();
+    if (!keys.has(from)) return false;
+    ensureUris();
+    const yaEstaba = keys.has(to);
+    keys.delete(from);
+    keys.add(to);
+    saveLocal(lsKey, keys);
+
+    const u = uriByKey.get(from);
+    uriByKey.delete(from);
+    if (u && !uriByKey.has(to)) uriByKey.set(to, u);
+    saveUris(lsKey, uriByKey);
+
+    // La vieja deja de existir: sacarla del registro de pendientes o quedaría
+    // ahí para siempre. La nueva hereda el estado real — si no tiene uri,
+    // sigue sin poder subir y el `sync()` la va a reintentar con `recoverUri`.
+    olvidarSinUri([from]);
+    if (!uriByKey.has(to)) marcarSinUri([to]);
+
+    const nota = motivo || (yaEstaba ? 'la nueva ya existía: la vieja era un duplicado' : null);
+    anotarIncidencia({ store: lsKey, label, tipo: 'clave-renombrada', claves: [from, to], nota });
+    console.info(`[ocultos:${label}] clave renombrada: «${from}» → «${to}»${nota ? ` (${nota})` : ''}`);
+    return true;
+  }
+
   function marcarSinUri(claves) {
     if (!claves.length) return;
     const reg = leerSinUri();
@@ -547,6 +574,7 @@ export function createHiddenStore({ lsKey, playlistName, keyOfTrack, label, uriF
     const items = await getAllPlaylistItems(playlistId, null, { useCache: false });
 
     const remote = new Set();
+    const claveDeUri = new Map();   // uri → la clave que esa pista reconstruye
     let sinClave = 0;
     for (const it of items) {
       const t = it?.item || it?.track;
@@ -555,7 +583,31 @@ export function createHiddenStore({ lsKey, playlistName, keyOfTrack, label, uriF
       if (!k) { sinClave++; continue; }
       remote.add(k);
       const uri = t.uri || (t.id ? `spotify:track:${t.id}` : null);
-      if (uri) recordarUri(k, uri);
+      if (uri) { recordarUri(k, uri); if (!claveDeUri.has(uri)) claveDeUri.set(uri, k); }
+    }
+
+    // ── Claves viejas: la pista ya está, con OTRO nombre (v=210) ──────────────
+    //
+    // Si una clave local no está en la playlist pero su uri representativa SÍ
+    // —y ahí dentro reconstruye otra clave—, entonces esa clave local está
+    // vieja: el oculto ya viaja, solo que bajo el nombre que `keyOfTrack` da
+    // hoy. Es la prueba más dura que hay de que dos claves son el mismo disco,
+    // porque una pista pertenece a un álbum y a uno solo.
+    //
+    // ⚠️ Sin esto se re-sube la pista en CADA sync y la playlist acumula
+    // duplicados sin fin: `reconciliar` la ve como «la playlist perdió un
+    // oculto del que conozco la uri» y la vuelve a añadir, y al sync siguiente
+    // la clave vieja sigue sin coincidir. Medido en la playlist de descubrir de
+    // Ian al desplegar v=210: 4 pistas duplicadas, una más por sync.
+    //
+    // Renombrar y no borrar, por la regla de siempre: un oculto no se descarta.
+    for (const k of [...ensureKeys()]) {
+      if (remote.has(k)) continue;
+      const u = uriDe(k);
+      if (!u) continue;
+      const real = claveDeUri.get(u);
+      if (!real || real === k) continue;
+      renombrarLocal(k, real, 'su pista ya estaba en la playlist con otra clave');
     }
     if (sinClave) {
       // Una pista en la playlist de la que no sale ninguna clave es un oculto
@@ -839,31 +891,7 @@ export function createHiddenStore({ lsKey, playlistName, keyOfTrack, label, uriF
      *
      * @returns {boolean} true si `from` estaba en el caché local y quedó como `to`
      */
-    renameKey(from, to) {
-      if (!from || !to || from === to) return false;
-      ensureKeys();
-      if (!keys.has(from)) return false;
-      ensureUris();
-      const yaEstaba = keys.has(to);
-      keys.delete(from);
-      keys.add(to);
-      saveLocal(lsKey, keys);
-
-      const u = uriByKey.get(from);
-      uriByKey.delete(from);
-      if (u && !uriByKey.has(to)) uriByKey.set(to, u);
-      saveUris(lsKey, uriByKey);
-
-      // La vieja deja de existir: sacarla del registro de pendientes o quedaría
-      // ahí para siempre. La nueva hereda el estado real — si no tiene uri,
-      // sigue sin poder subir y el `sync()` la va a reintentar con `recoverUri`.
-      olvidarSinUri([from]);
-      if (!uriByKey.has(to)) marcarSinUri([to]);
-
-      anotarIncidencia({ store: lsKey, label, tipo: 'clave-renombrada', claves: [from, to], nota: yaEstaba ? 'la nueva ya existía: la vieja era un duplicado' : null });
-      console.info(`[ocultos:${label}] clave renombrada: «${from}» → «${to}»${yaEstaba ? ' (la nueva ya existía)' : ''}`);
-      return true;
-    },
+    renameKey: renombrarLocal,
 
     /**
      * Vacía la lista, local y en la playlist.
