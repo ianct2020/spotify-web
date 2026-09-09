@@ -239,7 +239,12 @@ async function run() {
     // Sin recortar a 50 acá: el recorte se aplica al RENDERIZAR (ver
     // renderRecommendations), después de sacar los ocultos — si se cortara
     // antes, ocultar uno de los 50 no lo reemplazaría por el 51.
-    recommendations = [...scoreMap.values()].sort((a, b) => b.score - a.score);
+    // Orden: por cantidad de matches (sources.length), que es lo que la
+    // tarjeta muestra y lo que Ian mira. A igualdad de matches, desempata el
+    // `score` (afinidad de Last.fm ponderada por plays del artista fuente) —
+    // ya estaba calculado, así que el desempate no es arbitrario: es la
+    // fuerza real de esos mismos matches.
+    recommendations = [...scoreMap.values()].sort((a, b) => b.sources.length - a.sources.length || b.score - a.score);
 
     // Ocultos desde la playlist de Spotify. En segundo plano: la vista arranca
     // con el caché local y se repinta cuando llega la reconciliación (unión),
@@ -335,11 +340,13 @@ function renderArtistCard(a, i) {
     <div class="smart-card recs-artist-card">
       <button type="button" class="recs-artist-pick" data-idx="${i}" title="Ver top tracks">
         <div class="smart-card-title" style="font-size:15px">${escapeHtml(a.name)}</div>
-        <div class="smart-card-meta">${a.sources.length} match${a.sources.length > 1 ? 'es' : ''}</div>
       </button>
-      <button type="button" class="sc-btn sc-hide recs-artist-hide" data-idx="${i}"
-              title="${hidden ? 'Devolver a la lista' : 'No te interesa: ocultar (no vuelve a aparecer)'}"
-              aria-label="${hidden ? 'Devolver a la lista' : 'Ocultar'}">${hidden ? ICONO_OJO_ABIERTO : ICONO_OJO_TACHADO}</button>
+      <div class="recs-artist-footer">
+        <span class="smart-card-meta">${a.sources.length} match${a.sources.length > 1 ? 'es' : ''}</span>
+        <button type="button" class="sc-btn sc-hide recs-artist-hide" data-idx="${i}"
+                title="${hidden ? 'Devolver a la lista' : 'No te interesa: ocultar (no vuelve a aparecer)'}"
+                aria-label="${hidden ? 'Devolver a la lista' : 'Ocultar'}">${hidden ? ICONO_OJO_ABIERTO : ICONO_OJO_TACHADO}</button>
+      </div>
     </div>
   `;
 }

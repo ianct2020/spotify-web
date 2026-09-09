@@ -773,11 +773,13 @@ input[type="checkbox"].keep-check:checked::after {
 /* Tarjeta de artista de Recomendaciones (scrobbles): el ojo de ocultar vive en
    la esquina, así que la tarjeta deja de ser un único <button> — un botón
    dentro de otro es HTML inválido (mismo gotcha que `.dcard-cover-wrap`) — y
-   pasa a ser un contenedor con dos botones HERMANOS: `.recs-artist-pick` (todo
-   el contenido, elige el artista) y `.recs-artist-hide` (el ojo). */
+   pasa a ser un contenedor con dos botones HERMANOS: `.recs-artist-pick` (el
+   nombre, elige el artista) y `.recs-artist-hide` (el ojo).
+   ⚠️ El ojo NO va superpuesto arriba del nombre (así estaba hasta v=211): con
+   nombres largos («UnoTheActivist», «AGUSFORTNITE2008») tapaba letras. Vive en
+   la línea de «N matches», como fila propia (`.recs-artist-footer`), corriendo
+   el texto al costado para que entren los dos. */
 .recs-artist-card {
-  position: relative;
-  padding-top: 26px;
   cursor: default;
 }
 .recs-artist-pick {
@@ -791,11 +793,16 @@ input[type="checkbox"].keep-check:checked::after {
   text-align: center;
   cursor: pointer;
 }
+.recs-artist-footer {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+}
 .recs-artist-hide {
-  position: absolute;
-  top: 6px;
-  right: 6px;
   opacity: .55;
+  flex-shrink: 0;
 }
 .recs-artist-hide:hover { opacity: 1; }
 

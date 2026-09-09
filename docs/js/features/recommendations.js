@@ -1,16 +1,16 @@
-import { spotifyFetch, createPlaylist, addTracksToPlaylist, invalidatePlaylistsCache, getAllLikedTracks } from '../api.js?v=211';
-import { hasKey, setKey, hasUsername, getUsername, setUsername, getUserTopArtists, getSimilarArtists, getArtistTopTracks } from '../api/lastfm.js?v=211';
-import { showProgress, hideProgress, promptPlaylistName, escapeHtml, pageHeader } from '../ui/components.js?v=211';
-import { showToast } from '../ui/toast.js?v=211';
-import { getPreview } from '../api/preview-providers.js?v=211';
-import { togglePreview, playingKey, isPlayingAudio } from '../ui/preview-player.js?v=211';
-import { paintPlayingCard } from '../ui/track-card-row.js?v=211';
-import { openTrackCard } from './track-card.js?v=211';
-import { openAlbumCard } from './album-card.js?v=211';
-import { limpiaParaQuery, titleMatches, artistMatches } from '../util/track-match.js?v=211';
-import { vigilarRuta } from '../util/vigencia-ruta.js?v=211';
-import { createHiddenStore } from '../util/hidden-sync.js?v=211';
-import { recuperarUriDeArtistaKey } from '../util/hidden-recover.js?v=211';
+import { spotifyFetch, createPlaylist, addTracksToPlaylist, invalidatePlaylistsCache, getAllLikedTracks } from '../api.js?v=212';
+import { hasKey, setKey, hasUsername, getUsername, setUsername, getUserTopArtists, getSimilarArtists, getArtistTopTracks } from '../api/lastfm.js?v=212';
+import { showProgress, hideProgress, promptPlaylistName, escapeHtml, pageHeader } from '../ui/components.js?v=212';
+import { showToast } from '../ui/toast.js?v=212';
+import { getPreview } from '../api/preview-providers.js?v=212';
+import { togglePreview, playingKey, isPlayingAudio } from '../ui/preview-player.js?v=212';
+import { paintPlayingCard } from '../ui/track-card-row.js?v=212';
+import { openTrackCard } from './track-card.js?v=212';
+import { openAlbumCard } from './album-card.js?v=212';
+import { limpiaParaQuery, titleMatches, artistMatches } from '../util/track-match.js?v=212';
+import { vigilarRuta } from '../util/vigencia-ruta.js?v=212';
+import { createHiddenStore } from '../util/hidden-sync.js?v=212';
+import { recuperarUriDeArtistaKey } from '../util/hidden-recover.js?v=212';
 
 // Iconos de las dos fichas. Los mismos trazos que usa la tarjeta compartida.
 const ICONO_PLAY = `<svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14"><path d="M8 5v14l11-7z"/></svg>`;
@@ -239,7 +239,12 @@ async function run() {
     // Sin recortar a 50 acá: el recorte se aplica al RENDERIZAR (ver
     // renderRecommendations), después de sacar los ocultos — si se cortara
     // antes, ocultar uno de los 50 no lo reemplazaría por el 51.
-    recommendations = [...scoreMap.values()].sort((a, b) => b.score - a.score);
+    // Orden: por cantidad de matches (sources.length), que es lo que la
+    // tarjeta muestra y lo que Ian mira. A igualdad de matches, desempata el
+    // `score` (afinidad de Last.fm ponderada por plays del artista fuente) —
+    // ya estaba calculado, así que el desempate no es arbitrario: es la
+    // fuerza real de esos mismos matches.
+    recommendations = [...scoreMap.values()].sort((a, b) => b.sources.length - a.sources.length || b.score - a.score);
 
     // Ocultos desde la playlist de Spotify. En segundo plano: la vista arranca
     // con el caché local y se repinta cuando llega la reconciliación (unión),
@@ -335,11 +340,13 @@ function renderArtistCard(a, i) {
     <div class="smart-card recs-artist-card">
       <button type="button" class="recs-artist-pick" data-idx="${i}" title="Ver top tracks">
         <div class="smart-card-title" style="font-size:15px">${escapeHtml(a.name)}</div>
-        <div class="smart-card-meta">${a.sources.length} match${a.sources.length > 1 ? 'es' : ''}</div>
       </button>
-      <button type="button" class="sc-btn sc-hide recs-artist-hide" data-idx="${i}"
-              title="${hidden ? 'Devolver a la lista' : 'No te interesa: ocultar (no vuelve a aparecer)'}"
-              aria-label="${hidden ? 'Devolver a la lista' : 'Ocultar'}">${hidden ? ICONO_OJO_ABIERTO : ICONO_OJO_TACHADO}</button>
+      <div class="recs-artist-footer">
+        <span class="smart-card-meta">${a.sources.length} match${a.sources.length > 1 ? 'es' : ''}</span>
+        <button type="button" class="sc-btn sc-hide recs-artist-hide" data-idx="${i}"
+                title="${hidden ? 'Devolver a la lista' : 'No te interesa: ocultar (no vuelve a aparecer)'}"
+                aria-label="${hidden ? 'Devolver a la lista' : 'Ocultar'}">${hidden ? ICONO_OJO_ABIERTO : ICONO_OJO_TACHADO}</button>
+      </div>
     </div>
   `;
 }

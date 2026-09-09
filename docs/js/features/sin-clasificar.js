@@ -16,27 +16,27 @@
 import {
   getAllUserPlaylists, getAllPlaylistItems, getBestAvailableLikes,
   getCurrentUserId, removeLikedTracks, checkLibraryContains,
-} from '../api.js?v=211';
-import { borrarLikesVerificado } from '../util/borrado-verificado.js?v=211';
-import { vigilarRuta } from '../util/vigencia-ruta.js?v=211';
-import { idbGetCached, idbSetCached, idbDel } from '../idb.js?v=211';
-import { createHiddenStore, uriDeTrackId } from '../util/hidden-sync.js?v=211';
-import { prefKey, migratePrefKey } from '../storage.js?v=211';
-import { addUrisToPlaylists, toastAddResult, getOwnPlaylists } from '../util/playlist-add.js?v=211';
-import { escapeHtml, pageHeader, showProgress, hideProgress, isCancelled, confirmModal } from '../ui/components.js?v=211';
-import { openModal, closeTop } from '../ui/modal-stack.js?v=211';
-import { openPlaylistPicker } from '../ui/playlist-picker.js?v=211';
-import { showToast } from '../ui/toast.js?v=211';
-import { getPreview } from '../api/preview-providers.js?v=211';
-import { togglePreview, playingKey } from '../ui/preview-player.js?v=211';
-import { openTrackCard } from './track-card.js?v=211';
-import { normText } from '../util/track-match.js?v=211';
-import { activateMarquee } from '../ui/marquee.js?v=211';
-import { renderTrackCardRow, wireTrackCardGrid, paintCardSelection, paintPlayingCard } from '../ui/track-card-row.js?v=211';
-import { createIncrementalList, scrollRootOf } from '../ui/incremental-list.js?v=211';
-import { createLazyImages } from '../ui/lazy-img.js?v=211';
-import { coverAtSize } from '../util/cover-size.js?v=211';
-import { fmtDiaCorto } from '../util/fecha.js?v=211';
+} from '../api.js?v=212';
+import { borrarLikesVerificado } from '../util/borrado-verificado.js?v=212';
+import { vigilarRuta } from '../util/vigencia-ruta.js?v=212';
+import { idbGetCached, idbSetCached, idbDel } from '../idb.js?v=212';
+import { createHiddenStore, uriDeTrackId } from '../util/hidden-sync.js?v=212';
+import { prefKey, migratePrefKey } from '../storage.js?v=212';
+import { addUrisToPlaylists, toastAddResult, getOwnPlaylists } from '../util/playlist-add.js?v=212';
+import { escapeHtml, pageHeader, showProgress, hideProgress, isCancelled, confirmModal } from '../ui/components.js?v=212';
+import { openModal, closeTop } from '../ui/modal-stack.js?v=212';
+import { openPlaylistPicker } from '../ui/playlist-picker.js?v=212';
+import { showToast } from '../ui/toast.js?v=212';
+import { getPreview } from '../api/preview-providers.js?v=212';
+import { togglePreview, playingKey } from '../ui/preview-player.js?v=212';
+import { openTrackCard } from './track-card.js?v=212';
+import { normText } from '../util/track-match.js?v=212';
+import { activateMarquee } from '../ui/marquee.js?v=212';
+import { renderTrackCardRow, wireTrackCardGrid, paintCardSelection, paintPlayingCard } from '../ui/track-card-row.js?v=212';
+import { createIncrementalList, scrollRootOf } from '../ui/incremental-list.js?v=212';
+import { createLazyImages } from '../ui/lazy-img.js?v=212';
+import { coverAtSize } from '../util/cover-size.js?v=212';
+import { fmtDiaCorto } from '../util/fecha.js?v=212';
 
 const HIDDEN_KEY = 'sin_clasificar_ocultas';
 const EXCLUDED_KEY = 'sin_clasificar_excluidas';
