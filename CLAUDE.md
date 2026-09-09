@@ -974,7 +974,7 @@ prueba que GitHub Pages publicó; no prueba qué está ejecutando el cliente.
 ## `#covers` estuvo ROTA nueve versiones — `a.sources.has is not a function` (RESUELTO en v=176)
 > ⚠️ **Corregido el 2026-08-30**: esta sección decía «PENDIENTE... sin
 > arreglar, a la espera del OK de Ian». El fix está en el commit siguiente
-> (`14f3f9d`, v=176, 80 minutos después del commit que escribió esta
+> (`72914fc`, v=176, 80 minutos después del commit que escribió esta
 > sección) — quedó desactualizada desde entonces. Verificado hoy contra
 > `features/covers.js`: `sources` sigue siendo `Set` en todo el archivo, sin
 > ninguna conversión a array.
