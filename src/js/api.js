@@ -790,63 +790,6 @@ async function importAllData(parsed, onProgress, { currentUserId = null } = {}) 
   return result;
 }
 
-async function tryAutoLoadUserBackup(spotifyUserId) {
-  if (!spotifyUserId) return { loaded: false };
-  await migrateLikesFromLocalStorage();
-
-  const cachedLikes = await leerLikesCacheados();
-  if (cachedLikes && cachedLikes.length > 0) {
-    return { loaded: false, reason: 'ya-hay-cache-local' };
-  }
-
-  const safeId = spotifyUserId.replace(/[^A-Za-z0-9._-]/g, '');
-  const url = `data/user-${safeId}.json`;
-  try {
-    const res = await fetch(url, { cache: 'no-store' });
-    if (res.status === 404) return { loaded: false, reason: 'sin-archivo' };
-    if (!res.ok) return { loaded: false, reason: `http-${res.status}` };
-    const parsed = await res.json();
-
-    let likesCount = 0;
-    let tagsCount = 0;
-    let delta = 0;
-
-    if (parsed.likes?.items && Array.isArray(parsed.likes.items)) {
-      const result = await importLikesData(parsed.likes);
-      likesCount = result.imported;
-      delta = result.added;
-    } else if (Array.isArray(parsed.items) && parsed._format === 'spotify-tools-likes') {
-      const result = await importLikesData(parsed);
-      likesCount = result.imported;
-      delta = result.added;
-    }
-
-    if (parsed.tags?.entries || parsed._format === 'spotify-tools-genres') {
-      const cache = JSON.parse(localStorage.getItem('lastfm_artist_tags_cache') || '{}');
-      const entries = parsed.tags?.entries || parsed.entries || {};
-      let merged = 0;
-      for (const [key, entry] of Object.entries(entries)) {
-        if (entry && Array.isArray(entry.tags) && !cache[key]) {
-          cache[key] = entry;
-          merged++;
-        }
-      }
-      localStorage.setItem('lastfm_artist_tags_cache', JSON.stringify(cache));
-      tagsCount = merged;
-    }
-
-    let configApplied = 0;
-    if (parsed._config && typeof parsed._config === 'object' && parsed.spotifyUserId === spotifyUserId) {
-      configApplied = applyLocalConfig(parsed._config, { overwrite: false });
-    }
-
-    return { loaded: true, likesCount, tagsCount, delta, configApplied };
-  } catch (e) {
-    console.warn('Auto-load falló:', e.message);
-    return { loaded: false, reason: e.message };
-  }
-}
-
 async function importLikesData(parsed, onProgress) {
   if (!parsed || typeof parsed !== 'object') throw new Error('Archivo inválido');
   const imported = Array.isArray(parsed.items) ? parsed.items : (Array.isArray(parsed) ? parsed : null);
@@ -1577,7 +1520,6 @@ export {
   importLikesData,
   exportAllData,
   importAllData,
-  tryAutoLoadUserBackup,
   getBestAvailableLikes,
   getLikesPartialInfo,
   getLikesCacheTimestamp,

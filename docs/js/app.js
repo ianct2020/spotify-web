@@ -1,42 +1,42 @@
-import { isLoggedIn, loginWithSpotify, logout } from './auth.js?v=212';
-import { spotifyFetch, tryAutoLoadUserBackup, onRateLimit } from './api.js?v=212';
-import { getValidToken } from './auth.js?v=212';
-import { cacheClearAll } from './storage.js?v=212';
-import { idbClearAll } from './idb.js?v=212';
-import { registerRoute, initRouter, rutasRegistradas } from './router.js?v=212';
-import { showToast } from './ui/toast.js?v=212';
-import { pageHeader, escapeHtml } from './ui/components.js?v=212';
-import { installCrashGuard } from './ui/crash-guard.js?v=212';
-import { auditarOcultos, leerIncidencias } from './util/hidden-sync.js?v=212';
-import { getStack } from './ui/modal-stack.js?v=212';
-import { installBackToTop } from './ui/back-to-top.js?v=212';
-import { applyStoredTheme, openThemePanel } from './ui/theme-panel.js?v=212';
+import { isLoggedIn, loginWithSpotify, logout } from './auth.js?v=213';
+import { spotifyFetch, onRateLimit } from './api.js?v=213';
+import { getValidToken } from './auth.js?v=213';
+import { cacheClearAll } from './storage.js?v=213';
+import { idbClearAll } from './idb.js?v=213';
+import { registerRoute, initRouter, rutasRegistradas } from './router.js?v=213';
+import { showToast } from './ui/toast.js?v=213';
+import { pageHeader, escapeHtml } from './ui/components.js?v=213';
+import { installCrashGuard } from './ui/crash-guard.js?v=213';
+import { auditarOcultos, leerIncidencias } from './util/hidden-sync.js?v=213';
+import { getStack } from './ui/modal-stack.js?v=213';
+import { installBackToTop } from './ui/back-to-top.js?v=213';
+import { applyStoredTheme, openThemePanel } from './ui/theme-panel.js?v=213';
 
-import { render as renderSync } from './features/sync.js?v=212';
-import { render as renderDedupe } from './features/dedupe.js?v=212';
-import { render as renderDupalbums } from './features/duplicate-albums.js?v=212';
-import { render as renderZombies } from './features/zombies.js?v=212';
-import { render as renderVersions } from './features/versions.js?v=212';
-import { render as renderDashboard } from './features/dashboard.js?v=212';
-import { render as renderSmart } from './features/smart.js?v=212';
-import { render as renderSimilar } from './features/similar-artists.js?v=212';
-import { render as renderRabbit } from './features/rabbit-hole.js?v=212';
-import { render as renderByGenre } from './features/by-genre.js?v=212';
-import { render as renderByArtist } from './features/by-artist.js?v=212';
-import { render as renderRecs } from './features/recommendations.js?v=212';
-import { render as renderListened } from './features/listened.js?v=212';
-import { render as renderWrapped } from './features/wrapped.js?v=212';
-import { render as renderRecords } from './features/records.js?v=212';
-import { openImportHistory } from './features/import-history.js?v=212';
-import { bindOwnerLockedButtons } from './features/history-data.js?v=212';
-import { render as renderZeroPlays } from './features/zero-plays.js?v=212';
-import { render as renderSkips } from './features/skips.js?v=212';
-import { render as renderSearchLikes } from './features/search-likes.js?v=212';
-import { render as renderWthree } from './features/wthree.js?v=212';
-import { render as renderCovers } from './features/covers.js?v=212';
-import { render as renderDiscoverArtists } from './features/discover-artists.js?v=212';
-import { render as renderNewReleases } from './features/new-releases.js?v=212';
-import { render as renderSinClasificar } from './features/sin-clasificar.js?v=212';
+import { render as renderSync } from './features/sync.js?v=213';
+import { render as renderDedupe } from './features/dedupe.js?v=213';
+import { render as renderDupalbums } from './features/duplicate-albums.js?v=213';
+import { render as renderZombies } from './features/zombies.js?v=213';
+import { render as renderVersions } from './features/versions.js?v=213';
+import { render as renderDashboard } from './features/dashboard.js?v=213';
+import { render as renderSmart } from './features/smart.js?v=213';
+import { render as renderSimilar } from './features/similar-artists.js?v=213';
+import { render as renderRabbit } from './features/rabbit-hole.js?v=213';
+import { render as renderByGenre } from './features/by-genre.js?v=213';
+import { render as renderByArtist } from './features/by-artist.js?v=213';
+import { render as renderRecs } from './features/recommendations.js?v=213';
+import { render as renderListened } from './features/listened.js?v=213';
+import { render as renderWrapped } from './features/wrapped.js?v=213';
+import { render as renderRecords } from './features/records.js?v=213';
+import { openImportHistory } from './features/import-history.js?v=213';
+import { bindOwnerLockedButtons } from './features/history-data.js?v=213';
+import { render as renderZeroPlays } from './features/zero-plays.js?v=213';
+import { render as renderSkips } from './features/skips.js?v=213';
+import { render as renderSearchLikes } from './features/search-likes.js?v=213';
+import { render as renderWthree } from './features/wthree.js?v=213';
+import { render as renderCovers } from './features/covers.js?v=213';
+import { render as renderDiscoverArtists } from './features/discover-artists.js?v=213';
+import { render as renderNewReleases } from './features/new-releases.js?v=213';
+import { render as renderSinClasificar } from './features/sin-clasificar.js?v=213';
 
 // ── Arranque degradado cuando /me está rate-limiteado (v=173) ────────────────
 //
@@ -693,18 +693,6 @@ function showApp(profile) {
       overlay.classList.remove('open');
     });
   });
-
-  tryAutoLoadUserBackup(profile.id).then(result => {
-    if (result.loaded) {
-      const parts = [];
-      if (result.likesCount > 0) parts.push(`${result.likesCount.toLocaleString('es-ES')} likes`);
-      if (result.delta > 0) parts.push(`+${result.delta} nuevos`);
-      if (result.tagsCount > 0) parts.push(`${result.tagsCount} artistas con tags`);
-      if (parts.length > 0) {
-        showToast(`Backup del repo cargado: ${parts.join(' · ')}`, 'success');
-      }
-    }
-  }).catch(e => console.warn('Auto-load error:', e));
 
   registerRoute('home', renderHome);
   registerRoute('dashboard', renderDashboard);
