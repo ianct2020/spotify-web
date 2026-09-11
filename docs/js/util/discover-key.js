@@ -26,7 +26,7 @@
 // de picks). Las dos son consistentes consigo mismas; lo que no puede pasar es
 // mezclarlas dentro de una misma vista, que es justo lo que pasaba acá.
 
-import { albumKey } from './album-key.js?v=213';
+import { albumKey } from './album-key.js?v=214';
 
 /** El artista que firma el álbum en Spotify, o '' si el objeto no lo trae. */
 export function albumCreditName(al) {

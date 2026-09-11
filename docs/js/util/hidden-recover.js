@@ -25,9 +25,9 @@
 // existe con ese nombre» y «existe, pero su artista principal no es el que puso
 // la clave» — el segundo es un agujero aparte, anotado en `PENDIENTES.md`.
 
-import { spotifyFetch } from '../api.js?v=213';
-import { albumKey } from './album-key.js?v=213';
-import { limpiaParaQuery } from './track-match.js?v=213';
+import { spotifyFetch } from '../api.js?v=214';
+import { albumKey } from './album-key.js?v=214';
+import { limpiaParaQuery } from './track-match.js?v=214';
 
 /**
  * ⚠️ `porFirmaDelAlbum` (v=210). Los dos stores de álbumes NO leen la playlist

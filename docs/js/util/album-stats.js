@@ -24,8 +24,8 @@
 // álbum. Eso fusiona American Football LP3/LP4, Crystal Castles I/II y Ed
 // Sheeran `-` vs `÷`. Está decidido desde v=127.
 
-import { albumKey, coverId } from './album-key.js?v=213';
-import { loadTrackPlays, loadListenedAlbums } from '../features/history-data.js?v=213';
+import { albumKey, coverId } from './album-key.js?v=214';
+import { loadTrackPlays, loadListenedAlbums } from '../features/history-data.js?v=214';
 
 let cache = null;
 let porTapa = null;

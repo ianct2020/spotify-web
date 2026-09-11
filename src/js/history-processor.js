@@ -1,27 +1,6 @@
 // Port a JS de scripts/gen-stats.py — dado un array de arrays de plays crudas
 // del Extended Streaming History, calcula los 6 payloads (stats, trackPlays,
-// listened, skipStats, detail, records).
-//
-// ⚠️ DESDE v=208 YA NO ES LA MISMA LÓGICA QUE EL PYTHON, y decirlo importa:
-// esta cabecera decía «con la MISMA lógica» y era en lo que se confiaba para
-// dar por hecho que las dos ramas emiten lo mismo.
-//
-// Lo que falta acá son los SEIS récords que `gen-stats.py` agregó en v=208 y
-// este puerto NO calcula:
-//   day_most_artists   el día con más artistas distintos
-//   track_most_years   el tema que suena en más años distintos
-//   artist_most_days   el artista que suena en más días distintos
-//   artist_dropped     mucho un año, cero al siguiente y nunca más
-//   artist_growth      el mayor multiplicador de un año al siguiente
-//   artist_runs        plays seguidas del mismo artista, corte de sesión 3 h
-//
-// Consecuencia: el owner ve 12 récords y quien importa su propio ZIP ve 6.
-// La vista NO se rompe — `cardSi()` en `features/records.js` pinta cada
-// tarjeta solo si el récord viene en el JSON, justamente por esto. Si portás
-// alguno, sacalo de esta lista; cuando la lista quede vacía, la frase de
-// arriba vuelve a ser verdad. Anotado en `fonoteca-migracion/PENDIENTES.md`.
-//
-// El resto de los payloads SÍ sigue línea a línea al Python.
+// listened, skipStats, detail, records), con la MISMA lógica que el Python.
 //
 // Uso desde el UI de upload:
 //   const raw = await Promise.all(files.map(readJson));   // File[] → array[array_plays]
@@ -54,7 +33,19 @@ const TRACK_PLAYS_VERSION = 5;   // v5: cada álbum de `albums` lleva además el
 const SKIP_STATS_VERSION = 2;    // v2: dato crudo (ms de cada skip/cierre) + gid; el veredicto pasó a features/skips.js
 const LISTENED_VERSION = 2;
 const TRACK_DETAIL_VERSION = 1;
-const RECORDS_VERSION = 2;
+const RECORDS_VERSION = 3;
+// Récords v3 — espejo de gen-stats.py.
+// Corte de sesión de la racha de un artista (#18). Sin él, la racha "sin
+// intercalar otro artista" sobrevive a que te vayas a dormir: la ganadora sin
+// corte eran 69 plays repartidas en 59,6 horas y tres días distintos, que no
+// es una racha de escucha sino una coincidencia de que no hubo nada más en
+// medio. Con 3h el récord pasa a ser una sesión real.
+const RUN_GAP_S = 3 * 3600;
+// Base mínima para el crecimiento año a año (#16). Sin ella el récord se lo
+// lleva siempre alguien que pasó de 0, y eso es un DESCUBRIMIENTO — que el
+// Wrapped ya muestra como tal. Con base >= 60 min el récord mide lo que dice
+// medir: que alguien que ya escuchabas pasó a escucharse mucho más.
+const GROWTH_MIN_BASE = 60;
 const ARTIST_TRACKS_VERSION = 2;  // v2: `totals` lleva el día de la primera play válida del artista
 const ARTIST_TRACKS_TOP_N = 6;
 const DETAIL_MIN_PLAYS = 5;
@@ -204,6 +195,14 @@ function processStreamingHistory(fileArrays, { onProgress } = {}) {
   const dayTrackPlays = new Map(); // day → Map<tk, plays>
   const weekTrackPlays = new Map(); // "tk|weekStart" → count
   const tkDays = new Map(); // tk → Set<day>
+  // Récords v3.
+  const artistDays = new Map();    // artista → Set<día> (#14)
+  const songYears = new Map();     // song_key → Set<año> (#10)
+  const songDays = new Map();      // song_key → Set<día>
+  const songPlays = new Map();     // song_key → plays
+  const songMeta = new Map();      // song_key → {name, artist} de la primera vez
+  const artistRuns = [];           // rachas cerradas del mismo artista (#18)
+  let run = null;                  // la racha en curso
   const milestones = [];
   let validSeq = 0;
 
@@ -346,6 +345,28 @@ function processStreamingHistory(fileArrays, { onProgress } = {}) {
     let tds = tkDays.get(tk);
     if (!tds) { tds = new Set(); tkDays.set(tk, tds); }
     tds.add(day);
+    let ad = artistDays.get(artist);
+    if (!ad) { ad = new Set(); artistDays.set(artist, ad); }
+    ad.add(day);
+    // #10 va por `song_key` y no por (nombre, artista): el remaster, el single
+    // y la versión del álbum son EL MISMO TEMA, que es justo lo que el récord
+    // quiere contar. Por (nombre, artista) el mismo tema se parte en varias
+    // filas y ninguna llega a los años que le corresponden.
+    const sk = songKey(track, artist);
+    let sy = songYears.get(sk); if (!sy) { sy = new Set(); songYears.set(sk, sy); } sy.add(y);
+    let sd = songDays.get(sk); if (!sd) { sd = new Set(); songDays.set(sk, sd); } sd.add(day);
+    songPlays.set(sk, (songPlays.get(sk) || 0) + 1);
+    if (!songMeta.has(sk)) songMeta.set(sk, { name: track, artist });
+    // #18: la racha corta si cambia el artista O si pasan más de RUN_GAP_S
+    // entre dos plays. `plays` viene ordenado ascendente por ts, así que esto
+    // es la secuencia real de escucha.
+    const tsMs = Date.parse(r.ts);
+    if (run && run.artist === artist && (tsMs - run.lastMs) / 1000 <= RUN_GAP_S) {
+      run.plays++; run.ms += ms; run.end = r.ts; run.lastMs = tsMs;
+    } else {
+      if (run) artistRuns.push(run);
+      run = { artist, plays: 1, ms, start: r.ts, end: r.ts, lastMs: tsMs };
+    }
     validSeq++;
     if (MILESTONE_TARGETS.has(validSeq)) {
       milestones.push({ n: validSeq, date: day, name: track, artist });
@@ -592,7 +613,11 @@ function processStreamingHistory(fileArrays, { onProgress } = {}) {
       if (n >= 5) trackDayRecords.push([n, day, tk]);
     }
   }
-  trackDayRecords.sort((a, b) => b[0] - a[0]);
+  // Python ordena la tupla (n, day, tk) entera en reversa: desempata por día y
+  // después por clave, las dos descendentes. Ordenar solo por `n` deja el
+  // resto en orden de iteración del Map, que no coincide con el Python.
+  const desc = (x, y) => (x < y ? 1 : x > y ? -1 : 0);
+  trackDayRecords.sort((a, b) => (b[0] - a[0]) || desc(a[1], b[1]) || desc(a[2], b[2]));
   const topTrackDaysOut = trackDayRecords.slice(0, 15).map(([n, day, tk]) => ({ ...tkName(tk), date: day, plays: n }));
 
   const artistDayRecords = [];
@@ -636,6 +661,88 @@ function processStreamingHistory(fileArrays, { onProgress } = {}) {
   const trackMostDaysArr = [...tkDays.entries()].sort((a, b) => b[1].size - a[1].size).slice(0, 15);
   const trackMostDaysOut = trackMostDaysArr.map(([tk, ds]) => ({ ...tkName(tk), days: ds.size }));
 
+  // La última racha queda abierta al salir del bucle: hay que cerrarla o se
+  // pierde, y podría ser la ganadora.
+  if (run) artistRuns.push(run);
+
+  // #4 — el día que sonaron más artistas distintos. `dayArtistMs` ya está
+  // indexado por artista, así que la cuenta sale de su tamaño.
+  const dayMostArtistsOut = [...dayArtistMs.entries()]
+    .sort((a, b) => (b[1].size - a[1].size) || ((dayMsGlobal.get(b[0]) || 0) - (dayMsGlobal.get(a[0]) || 0)))
+    .slice(0, 10)
+    .map(([day, arts]) => ({
+      date: day, artists: arts.size, plays: dayPlaysCount.get(day) || 0,
+      min: round1((dayMsGlobal.get(day) || 0) / 60000),
+      top_artist: arts.size ? mostCommon(arts, 1)[0][0] : '',
+    }));
+
+  // #10 — el tema que aparece en más años distintos.
+  const trackMostYearsOut = [...songYears.entries()]
+    .sort((a, b) => (b[1].size - a[1].size) || ((songPlays.get(b[0]) || 0) - (songPlays.get(a[0]) || 0)))
+    .slice(0, 10)
+    .map(([sk, ys]) => {
+      const m = songMeta.get(sk);
+      const arr = [...ys];
+      return {
+        name: m.name, artist: m.artist, years: ys.size,
+        first_year: Math.min(...arr), last_year: Math.max(...arr),
+        plays: songPlays.get(sk) || 0, days: (songDays.get(sk) || new Set()).size,
+      };
+    });
+
+  // #14 — el artista que sonó en más días distintos. NO es el de más plays, y
+  // esa es la gracia: Kanye tiene más plays que Drake y menos días.
+  const artistMostDaysOut = [...artistDays.entries()]
+    .sort((a, b) => (b[1].size - a[1].size) || ((artistPlays.get(b[0]) || 0) - (artistPlays.get(a[0]) || 0)))
+    .slice(0, 10)
+    .map(([a, ds]) => ({ artist: a, days: ds.size, plays: artistPlays.get(a) || 0, min: round1((artistMs.get(a) || 0) / 60000) }));
+
+  // #15 y #16 salen de la misma curva: artista → {año: minutos}.
+  const aniosDatos = [...years.keys()].sort((a, b) => a - b);
+  const anioIncompleto = aniosDatos.length ? aniosDatos[aniosDatos.length - 1] : null;
+  const curva = new Map();
+  for (const y_ of aniosDatos) {
+    for (const [a, aMs] of years.get(y_).artistMs) {
+      if (!aMs) continue;
+      let c = curva.get(a); if (!c) { c = new Map(); curva.set(a, c); }
+      c.set(y_, aMs / 60000);
+    }
+  }
+  // ⚠️ EL ÚLTIMO AÑO CON DATOS NO PUEDE SER AÑO DESTINO: el export corta a
+  // mitad de año, así que contra ese año cualquiera se ve caído a cero solo
+  // porque el año no terminó.
+  const abandonados = [], crecidos = [];
+  for (const [a, c] of curva) {
+    for (let i = 0; i < aniosDatos.length - 1; i++) {
+      const y_ = aniosDatos[i], nxt = aniosDatos[i + 1];
+      if (nxt === anioIncompleto) continue;
+      const base = c.get(y_) || 0, desp = c.get(nxt) || 0;
+      // #15 — abandonado: mucho un año, cero al siguiente y NUNCA MÁS.
+      if (base > 0 && desp === 0 && !aniosDatos.some(p => p > nxt && (c.get(p) || 0) > 0)) {
+        abandonados.push([base, a, y_, nxt]);
+      }
+      // #16 — el que más creció, por MULTIPLICADOR y con base ≥ GROWTH_MIN_BASE.
+      if (base >= GROWTH_MIN_BASE && desp > base) crecidos.push([desp / base, a, y_, nxt, base, desp]);
+    }
+  }
+  abandonados.sort((x, y2) => (y2[0] - x[0]) || (x[1] < y2[1] ? -1 : x[1] > y2[1] ? 1 : 0));
+  crecidos.sort((x, y2) => (y2[0] - x[0]) || (x[1] < y2[1] ? -1 : x[1] > y2[1] ? 1 : 0));
+  const artistDroppedOut = abandonados.slice(0, 10).map(([m, a, y_, nxt]) => ({
+    artist: a, year: y_, min: round1(m), plays: years.get(y_).artistPlays.get(a) || 0, since: nxt,
+  }));
+  const artistGrowthOut = crecidos.slice(0, 10).map(([f, a, y_, nxt, b, d]) => ({
+    artist: a, from_year: y_, to_year: nxt, from_min: round1(b), to_min: round1(d), factor: round1(f),
+  }));
+
+  // #18 — la racha más larga del mismo artista sin intercalar otro, en plays
+  // válidas. Se ordena por plays y no por minutos a propósito: por minutos
+  // sería otra forma de escribir "Maratones de un artista", que ya existe.
+  artistRuns.sort((a, b) => (b.plays - a.plays) || (b.ms - a.ms));
+  const artistRunsOut = artistRuns.slice(0, 10).map(c => ({
+    artist: c.artist, plays: c.plays, min: round1(c.ms / 60000), date: c.start.slice(0, 10),
+    hours: round1((Date.parse(c.end) - Date.parse(c.start)) / 3600000),
+  }));
+
   const records = {
     version: RECORDS_VERSION,
     generated_at: generatedAt,
@@ -645,6 +752,12 @@ function processStreamingHistory(fileArrays, { onProgress } = {}) {
     top_track_weeks: topTrackWeeksOut,
     top_streaks: topStreaksOut,
     track_most_days: trackMostDaysOut,
+    day_most_artists: dayMostArtistsOut,
+    track_most_years: trackMostYearsOut,
+    artist_most_days: artistMostDaysOut,
+    artist_dropped: artistDroppedOut,
+    artist_growth: artistGrowthOut,
+    artist_runs: artistRunsOut,
     milestones,
   };
 
