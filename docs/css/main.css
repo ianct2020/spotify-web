@@ -2873,30 +2873,90 @@ h3 { font-size: 18px; font-weight: 600; }
   .marquee-wrap.marquee > .marquee-text { animation: none; }
 }
 
+/* Marquesina EN HOVER, para listas densas (v=215). Ver `ui/hover-marquee.js`.
+   Se diferencia de la de arriba en tres cosas:
+
+   1. Solo se mueve la fila que el mouse está tocando. Con cinco columnas y
+      cientos de filas, todo moviéndose a la vez marea.
+   2. En reposo hay ELIPSIS. La de arriba clippea a mitad de letra, que es lo
+      que se veía en `#wthree`.
+   3. ⚠️ **No mira `prefers-reduced-motion`** (decisión de Ian, v=215, el mismo
+      criterio de v=162). Ian tiene `enable-animations = false` en GNOME, así
+      que `reduce` le da `true` y respetarlo dejaba esto apagado justo en la
+      pantalla donde se mira. El único control es el toggle de animaciones de
+      la app, que se consulta desde el JS: sin animaciones no se pone `mq-on` y
+      el nombre entero queda en un `title`. */
+.mq {
+  display: block;
+  overflow: hidden;
+  min-width: 0;
+  max-width: 100%;
+}
+.mq > .mq-t {
+  display: block;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* `mq-on` la pone y la SACA el JS al entrar y salir de la fila, así que la
+   regla no necesita colgar de ningún `:hover` de un ancestro concreto y el
+   mecanismo sirve para cualquier lista, no solo para `#wthree`.
+
+   `width: max-content` es lo que le deja desbordar el wrap para poder
+   trasladarse; sin él, `translateX` negativo solo escondería texto. */
+.mq.mq-on > .mq-t {
+  width: max-content;
+  max-width: none;
+  overflow: visible;
+  text-overflow: clip;
+  will-change: transform;
+  animation: mq-slide var(--mq-dur, 6s) ease-in-out infinite;
+}
+/* Ida y vuelta, no loop con salto: al soltar el hover el texto tiene que poder
+   quedar donde estaba. Las pausas de los extremos suman 2,4s y están
+   replicadas en `PAUSAS_S` de `ui/hover-marquee.js`. */
+@keyframes mq-slide {
+  0%, 12%   { transform: translateX(0); }
+  50%, 62%  { transform: translateX(var(--mq-shift, 0)); }
+  100%      { transform: translateX(0); }
+}
+
 /* ============ W-Three helper (v=102) ============ */
 .wthree-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  margin-bottom: 12px;
-  padding: 12px 16px;
+  margin-bottom: 6px;
+  padding: 6px 8px;
   background: var(--color-surface);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
 }
 .wthree-header-name { min-width: 0; }
+/* Eran estilos inline en `wthree.js`; salieron de ahí al pasar a la vista
+   ultracompacta, que los achica (v=215). */
+.wthree-header-label {
+  font-size: 9px;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.wthree-header-title { font-size: 12px; font-weight: 600; }
+/* Los botones de la cabecera de esta vista son más chicos que los `.btn-sm` de
+   la app. Scopeado a propósito: `.btn-sm` es global y lo usa media aplicación. */
+.wthree-header .btn-sm { padding: 3px 7px; font-size: 9.5px; }
 .wthree-summary {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 8px;
-  margin-bottom: 16px;
+  gap: 3px;
+  margin-bottom: 6px;
 }
 .wthree-stat {
   background: var(--color-surface);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
-  padding: 10px 8px;
+  padding: 4px 2px;
   text-align: center;
   min-width: 0;
   cursor: pointer;
@@ -2908,8 +2968,8 @@ h3 { font-size: 18px; font-weight: 600; }
 .wthree-stat:active { transform: scale(0.97); }
 .wthree-stat-active {
   border-color: var(--color-accent) !important;
-  background: rgba(124, 58, 237, 0.12);
-  box-shadow: 0 0 0 2px rgba(124, 58, 237, 0.25) inset;
+  background: var(--color-accent-soft);
+  box-shadow: 0 0 0 2px var(--color-accent-glow) inset;
 }
 .wthree-filter-active {
   display: flex;
@@ -2918,8 +2978,8 @@ h3 { font-size: 18px; font-weight: 600; }
   gap: 10px;
   padding: 10px 14px;
   margin-bottom: 12px;
-  background: rgba(124, 58, 237, 0.08);
-  border: 1px solid rgba(124, 58, 237, 0.35);
+  background: var(--color-accent-soft);
+  border: 1px solid color-mix(in srgb, var(--color-accent) 35%, transparent);
   border-radius: var(--radius-sm);
   font-size: 13px;
   color: var(--color-text-secondary);
@@ -2935,50 +2995,55 @@ h3 { font-size: 18px; font-weight: 600; }
   padding: 4px 8px;
 }
 .wthree-clear-filter:hover { text-decoration: underline; }
-.wthree-stat-v { font-size: 20px; font-weight: 700; color: var(--color-text); line-height: 1.1; font-variant-numeric: tabular-nums; }
-.wthree-stat-l { font-size: 11px; color: var(--color-text-muted); margin-top: 3px; line-height: 1.2; }
-.wthree-stat-danger .wthree-stat-v { color: var(--color-error, #ef4444); }
-.wthree-stat-ok .wthree-stat-v { color: #10b981; }
-.wthree-stat-warn .wthree-stat-v { color: var(--color-warning, #f59e0b); }
+.wthree-stat-v { font-size: 13px; font-weight: 700; color: var(--color-text); line-height: 1.1; font-variant-numeric: tabular-nums; }
+.wthree-stat-l { font-size: 7.5px; color: var(--color-text-muted); margin-top: 1px; line-height: 1.2; }
+.wthree-stat-danger .wthree-stat-v { color: var(--color-error); }
+.wthree-stat-ok .wthree-stat-v { color: var(--color-success); }
+.wthree-stat-warn .wthree-stat-v { color: var(--color-warning); }
 
-.wthree-bucket { margin-bottom: 16px; min-width: 0; }
-.wthree-bucket-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-bottom: 12px; }
-.wthree-bucket-head h3 { font-size: 15px; margin: 0; }
-.wthree-bucket-count { font-size: 12px; color: var(--color-text-muted); font-variant-numeric: tabular-nums; }
-.wthree-bucket-danger { border-left: 3px solid var(--color-error, #ef4444); }
-.wthree-bucket-ok { border-left: 3px solid #10b981; opacity: 0.85; }
-.wthree-bucket-warn { border-left: 3px solid var(--color-warning, #f59e0b); }
+/* El `padding` le gana al de `.card` sin `!important` porque `main.css` se
+   carga después de `components.css` y las dos son de una sola clase. */
+.wthree-bucket { margin-bottom: 6px; padding: 6px; min-width: 0; }
+.wthree-bucket-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-bottom: 4px; }
+.wthree-bucket-head h3 { font-size: 10.5px; margin: 0; }
+.wthree-bucket-count { font-size: 9px; color: var(--color-text-muted); font-variant-numeric: tabular-nums; }
+.wthree-bucket-danger { border-left: 3px solid var(--color-error); }
+.wthree-bucket-ok { border-left: 3px solid var(--color-success); opacity: 0.85; }
+.wthree-bucket-warn { border-left: 3px solid var(--color-warning); }
 
 .wthree-album-list {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 6px 10px;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 2px 4px;
   min-width: 0;
 }
 .wthree-album-row {
   display: grid;
-  grid-template-columns: 40px minmax(0, 1fr) auto auto;
-  gap: 8px;
+  grid-template-columns: 18px minmax(0, 1fr) auto auto;
+  gap: 3px;
   align-items: center;
-  padding: 6px 8px;
-  border-radius: var(--radius-sm);
+  padding: 2px 3px;
+  border-radius: 3px;
   background: var(--color-elevated);
   cursor: pointer;
   transition: background .1s;
   min-width: 0;
 }
 @media (max-width: 900px) {
-  .wthree-album-list { grid-template-columns: minmax(0, 1fr); }
+  .wthree-album-list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
-.wthree-album-row:hover { background: rgba(124, 58, 237, 0.08); }
-.wthree-album-cover { width: 40px; height: 40px; border-radius: 4px; object-fit: cover; flex-shrink: 0; }
+.wthree-album-row:hover { background: var(--color-accent-soft); }
+.wthree-album-cover { width: 18px; height: 18px; border-radius: 2px; object-fit: cover; flex-shrink: 0; }
 .wthree-album-cover-empty {
+  width: 18px;
+  height: 18px;
+  border-radius: 2px;
   background: var(--color-surface);
   display: flex;
   align-items: center;
   justify-content: center;
   color: var(--color-text-muted);
-  font-size: 18px;
+  font-size: 9px;
 }
 .wthree-album-info { min-width: 0; overflow: hidden; }
 /* Botón chico "ocultar / restaurar" por fila del W-Three (v=110). */
@@ -2986,13 +3051,13 @@ h3 { font-size: 18px; font-weight: 600; }
   background: none;
   border: 1px solid transparent;
   color: var(--color-text-muted);
-  font-size: 14px;
+  font-size: 9px;
   line-height: 1;
-  padding: 4px 6px;
+  padding: 1px 3px;
   border-radius: var(--radius-sm, 6px);
   cursor: pointer;
   flex-shrink: 0;
-  opacity: 0.55;
+  opacity: 0.45;
   transition: opacity .12s, background .12s, border-color .12s;
   display: inline-flex;
   align-items: center;
@@ -3000,25 +3065,46 @@ h3 { font-size: 18px; font-weight: 600; }
 }
 .wthree-album-row:hover .wthree-hide-btn { opacity: 1; }
 .wthree-hide-btn:hover { background: var(--color-elevated); border-color: var(--color-border); }
-.wthree-album-name { font-size: 12.5px; font-weight: 500; }
-.wthree-album-artist { font-size: 10.5px; color: var(--color-text-muted); }
-.wthree-album-meta { font-size: 10px; color: var(--color-text-muted); margin-top: 1px; }
+/* El SVG trae width/height 16 por atributo: al lado de una tapa de 18px el ojo
+   quedaba del tamaño del álbum. El CSS le gana al atributo. */
+.wthree-hide-btn svg { width: 12px; height: 12px; }
+.wthree-album-name { font-size: 9px; font-weight: 500; line-height: 1.1; }
+.wthree-album-artist { font-size: 7.5px; color: var(--color-text-muted); line-height: 1.1; }
+/* Las filas sin minutos ni plays dicen de dónde salió el álbum; se atenúan para
+   que no compitan con las que traen el dato de verdad. */
+.wthree-album-artist.is-weak { opacity: 0.6; }
+
+/* «Ver N más»: link liviano, no un `.btn` entero (v=215). */
+.wthree-ver-mas {
+  display: inline-block;
+  margin-top: 5px;
+  font-size: 10px;
+  color: var(--color-accent);
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 2px 0;
+  font-family: var(--font-sans);
+}
+.wthree-ver-mas:hover { text-decoration: underline; }
 
 .wthree-pill {
   display: inline-flex;
   align-items: center;
-  padding: 4px 10px;
+  padding: 0 5px;
   border-radius: 100px;
-  font-size: 11px;
+  font-size: 8px;
   font-weight: 600;
-  background: rgba(124, 58, 237, 0.14);
+  background: var(--color-accent-tint);
   color: var(--color-accent);
   flex-shrink: 0;
   white-space: nowrap;
 }
-.wthree-pill-danger { background: rgba(239, 68, 68, 0.14); color: var(--color-error, #ef4444); }
-.wthree-pill-ok { background: rgba(16, 185, 129, 0.14); color: #10b981; }
-.wthree-pill-warn { background: rgba(245, 158, 11, 0.14); color: var(--color-warning, #f59e0b); }
+/* Tintes de los estados: mismo 14 % de alpha que `--color-accent-tint`, sobre
+   los colores semánticos del tema en vez de un rgba() fijo. */
+.wthree-pill-danger { background: color-mix(in srgb, var(--color-error) 14%, transparent); color: var(--color-error); }
+.wthree-pill-ok { background: color-mix(in srgb, var(--color-success) 14%, transparent); color: var(--color-success); }
+.wthree-pill-warn { background: color-mix(in srgb, var(--color-warning) 14%, transparent); color: var(--color-warning); }
 
 /* Setup: elegir playlist */
 .wthree-choice-list { display: flex; flex-direction: column; gap: 6px; }

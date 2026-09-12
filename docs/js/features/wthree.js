@@ -2,25 +2,25 @@
 // por álbum). Muestra qué álbumes ya tienen picks, cuántos, y cuáles te faltan.
 // Ordenado por álbumes más escuchados primero para priorizar tu tiempo.
 
-import { spotifyFetch, getAllPlaylistItems, getAllUserPlaylists, addTracksToPlaylist, removeTracksFromPlaylist, reorderPlaylistItems, getCachedPlaylistItems, updatePlaylistItemsCache, getBestAvailableLikes } from '../api.js?v=214';
-import { vigilarRuta } from '../util/vigencia-ruta.js?v=214';
-import { patchPlaylistItems, buildCachedItem } from '../util/playlist-cache-patch.js?v=214';
-import { loadHistoryStats, loadListenedAlbums, isOwner, ownerLockedMessage } from './history-data.js?v=214';
-import { escapeHtml, pageHeader } from '../ui/components.js?v=214';
-import { showToast } from '../ui/toast.js?v=214';
-import { activateMarquee, marqueeSpan } from '../ui/marquee.js?v=214';
-import { openModal, closeById, closeModal } from '../ui/modal-stack.js?v=214';
-import { getPreview } from '../api/preview-providers.js?v=214';
-import { togglePreview, playingKey } from '../ui/preview-player.js?v=214';
-import { openAlbumCard } from './album-card.js?v=214';
-import { albumKey } from '../util/album-key.js?v=214';
-import { computeUpdatedPickPositions } from '../util/reorder-shifts.js?v=214';
-import { createHiddenStore } from '../util/hidden-sync.js?v=214';
-import { recuperarUriDeAlbumKey } from '../util/hidden-recover.js?v=214';
-import { mountBottom } from '../ui/bottom-layer.js?v=214';
-import { coverUrl } from '../util/cover-size.js?v=214';
-import { insercionPorPuntero, moverA, indicadorPara } from '../util/reorder-drop.js?v=214';
-import { prefKey, migratePrefKey } from '../storage.js?v=214';
+import { spotifyFetch, getAllPlaylistItems, getAllUserPlaylists, addTracksToPlaylist, removeTracksFromPlaylist, reorderPlaylistItems, getCachedPlaylistItems, updatePlaylistItemsCache, getBestAvailableLikes } from '../api.js?v=215';
+import { vigilarRuta } from '../util/vigencia-ruta.js?v=215';
+import { patchPlaylistItems, buildCachedItem } from '../util/playlist-cache-patch.js?v=215';
+import { loadHistoryStats, loadListenedAlbums, isOwner, ownerLockedMessage } from './history-data.js?v=215';
+import { escapeHtml, pageHeader } from '../ui/components.js?v=215';
+import { showToast } from '../ui/toast.js?v=215';
+import { wireHoverMarquee, hoverMarqueeSpan } from '../ui/hover-marquee.js?v=215';
+import { openModal, closeById, closeModal } from '../ui/modal-stack.js?v=215';
+import { getPreview } from '../api/preview-providers.js?v=215';
+import { togglePreview, playingKey } from '../ui/preview-player.js?v=215';
+import { openAlbumCard } from './album-card.js?v=215';
+import { albumKey } from '../util/album-key.js?v=215';
+import { computeUpdatedPickPositions } from '../util/reorder-shifts.js?v=215';
+import { createHiddenStore } from '../util/hidden-sync.js?v=215';
+import { recuperarUriDeAlbumKey } from '../util/hidden-recover.js?v=215';
+import { mountBottom } from '../ui/bottom-layer.js?v=215';
+import { coverUrl } from '../util/cover-size.js?v=215';
+import { insercionPorPuntero, moverA, indicadorPara } from '../util/reorder-drop.js?v=215';
+import { prefKey, migratePrefKey } from '../storage.js?v=215';
 
 const LS_KEY_ID = 'wthree_playlist_id';
 const LS_KEY_NAME = 'wthree_playlist_name';
@@ -451,8 +451,8 @@ function renderBuckets(content) {
   content.innerHTML = `
     <div class="wthree-header">
       <div class="wthree-header-name">
-        <div style="font-size:11px;color:var(--color-text-muted);text-transform:uppercase;letter-spacing:0.06em">Playlist activa</div>
-        <div style="font-size:15px;font-weight:600">${escapeHtml(playlistName || 'w three')}</div>
+        <div class="wthree-header-label">Playlist activa</div>
+        <div class="wthree-header-title">${escapeHtml(playlistName || 'w three')}</div>
       </div>
       <div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end">
         ${noLikesToggle}
@@ -524,7 +524,10 @@ function renderBuckets(content) {
     };
   });
   wireAlbumClicks(content);
-  activateMarquee(content);
+  // La marquesina se mide en el hover de cada fila, no acá: ver
+  // `ui/hover-marquee.js`. Medir `scrollWidth` sobre cientos de filas × 2
+  // líneas al pintar es justo lo que esta vista no puede pagar.
+  wireHoverMarquee(content, '.wthree-album-row');
 }
 
 function renderBucket(title, albums, kind, limit, bucketKey) {
@@ -540,7 +543,7 @@ function renderBucket(title, albums, kind, limit, bucketKey) {
       <div class="wthree-album-list">
         ${items.map((a, i) => renderAlbumRow(a, kind)).join('')}
       </div>
-      ${rest > 0 ? `<button class="btn btn-secondary btn-sm" style="margin-top:10px" data-more-bucket="${bucketKey}">Ver ${rest} más</button>` : ''}
+      ${rest > 0 ? `<button class="wthree-ver-mas" data-more-bucket="${bucketKey}">Ver ${rest} más</button>` : ''}
     </div>
   `;
 }
@@ -563,6 +566,13 @@ function renderAlbumRow(a, kind) {
   // ningún pick todavía no tienen ninguna: esos quedan ocultos solo en local
   // hasta que se los abra en el modal, donde sí hay tracklist.
   const hideUri = a.picks?.[0]?.uri || '';
+  // La fila tiene DOS líneas: nombre, y artista + tiempo + plays juntos. Hasta
+  // v=214 el tiempo iba en un tercer renglón propio (`.wthree-album-meta`); con
+  // cinco columnas y la tapa a 18px no hay alto para un tercero.
+  const meta = a.min > 0
+    ? `${fmtMinutesShort(a.min)} · ${a.plays}`
+    : (a.detectedIn ? `escuchado en ${escapeHtml(a.detectedIn)} · fuera del top 1000` : 'fuera del top / de la playlist');
+
   const hideBtn = `<button class="wthree-hide-btn" data-hide-key="${escapeHtml(key)}" data-hide-uri="${escapeHtml(hideUri)}" title="${isHidden ? 'Restaurar en la lista' : 'Ocultar este álbum'}" aria-label="${isHidden ? 'Restaurar' : 'Ocultar'}">${isHidden ? eyeOpen : eyeOff}</button>`;
 
   return `
@@ -571,9 +581,8 @@ function renderAlbumRow(a, kind) {
         ? `<img src="${a.img}" alt="" class="wthree-album-cover" loading="lazy">`
         : `<div class="wthree-album-cover wthree-album-cover-empty">♪</div>`}
       <div class="wthree-album-info">
-        <div class="wthree-album-name">${marqueeSpan(escapeHtml(a.name))}</div>
-        <div class="wthree-album-artist">${marqueeSpan(escapeHtml(a.artist))}</div>
-        ${a.min > 0 ? `<div class="wthree-album-meta">${fmtMinutesShort(a.min)} · ${a.plays} plays</div>` : `<div class="wthree-album-meta" style="opacity:0.6">${a.detectedIn ? `escuchado en ${a.detectedIn} · fuera del top 1000` : 'fuera del top / de la playlist'}</div>`}
+        <div class="wthree-album-name">${hoverMarqueeSpan(escapeHtml(a.name))}</div>
+        <div class="wthree-album-artist${a.min > 0 ? '' : ' is-weak'}">${hoverMarqueeSpan(escapeHtml(a.artist) + ' · ' + meta)}</div>
       </div>
       ${badge}
       ${hideBtn}
@@ -581,8 +590,12 @@ function renderAlbumRow(a, kind) {
   `;
 }
 
+// Formato del boceto elegido: `20h47`, sin espacio ni la `m`. A 7,5px quedan
+// ~166 px de texto por columna (medido en la app, 1366×768, DPR 1), así que
+// cada carácter cuenta; al lado del número de plays la «h» ya dice qué es cada
+// mitad.
 function fmtMinutesShort(min) {
-  if (min >= 60) return `${Math.floor(min / 60)}h ${Math.round(min % 60)}m`;
+  if (min >= 60) return `${Math.floor(min / 60)}h${Math.round(min % 60)}`;
   return `${Math.round(min)}m`;
 }
 
