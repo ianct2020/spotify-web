@@ -1,13 +1,13 @@
-import { spotifyFetch, createPlaylist, addTracksToPlaylist, invalidatePlaylistsCache } from '../api.js?v=216';
-import { hasKey, setKey, getSimilarArtists, getArtistTopTracks } from '../api/lastfm.js?v=216';
-import { showProgress, hideProgress, promptPlaylistName, escapeHtml, pageHeader } from '../ui/components.js?v=216';
-import { showToast } from '../ui/toast.js?v=216';
-import { getPreview } from '../api/preview-providers.js?v=216';
-import { togglePreview, playingKey, isPlayingAudio } from '../ui/preview-player.js?v=216';
-import { paintPlayingCard } from '../ui/track-card-row.js?v=216';
-import { openTrackCard } from './track-card.js?v=216';
-import { openAlbumCard } from './album-card.js?v=216';
-import { limpiaParaQuery, titleMatches, artistMatches } from '../util/track-match.js?v=216';
+import { spotifyFetch, createPlaylist, addTracksToPlaylist, invalidatePlaylistsCache } from '../api.js?v=217';
+import { hasKey, setKey, getSimilarArtists, getArtistTopTracks } from '../api/lastfm.js?v=217';
+import { showProgress, hideProgress, promptPlaylistName, escapeHtml, pageHeader } from '../ui/components.js?v=217';
+import { showToast } from '../ui/toast.js?v=217';
+import { getPreview } from '../api/preview-providers.js?v=217';
+import { togglePreview, playingKey, isPlayingAudio } from '../ui/preview-player.js?v=217';
+import { paintPlayingCard } from '../ui/track-card-row.js?v=217';
+import { openTrackCard } from './track-card.js?v=217';
+import { openAlbumCard } from './album-card.js?v=217';
+import { limpiaParaQuery, titleMatches, artistMatches } from '../util/track-match.js?v=217';
 
 // Mismo componente que #recs (recommendations.js): preview, ficha y ficha de
 // álbum sobre la fila resuelta. Los iconos son idénticos a los de esa vista.

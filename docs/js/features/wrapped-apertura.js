@@ -71,7 +71,7 @@
 // antiguo de alguien con un solo año de datos no tiene contra qué compararse.
 // Con menos de dos pasos la apertura no se monta: no hay recorrido que hacer.
 
-import { animationsEnabled } from '../ui/reveal.js?v=216';
+import { animationsEnabled } from '../ui/reveal.js?v=217';
 
 // ── un solo recorrido vivo por vez ──────────────────────────────────────────
 //
@@ -474,6 +474,23 @@ export function montarApertura(host, ctx) {
 
   const pasoDentro = pasos.find(p => p.id === 'dentro');
 
+  // La barra de años se queda pegada arriba MIENTRAS dura el recorrido, y solo
+  // entonces: la clase la pone y la quita este módulo, así que un Wrapped sin
+  // apertura —animaciones apagadas, fallo del módulo, usuario sin historial—
+  // se comporta exactamente igual que antes de v=216.
+  //
+  // El motivo no es estético. Sin esto, cambiar de año a mitad del recorrido
+  // obliga a subir seis pantallas hasta los chips: medido en la app, estando en
+  // el paso 5 los chips quedaban a 5.185 px por encima del viewport. El control
+  // de la vista no puede estar enterrado debajo de su propia portada.
+  const contenedor = host.parentElement;
+  const barra = contenedor?.querySelector('.wrapped-year-bar');
+
+  function medirBarra() {
+    if (!barra || !raiz) return;
+    raiz.style.setProperty('--wr-ap-top', Math.round(barra.getBoundingClientRect().height) + 'px');
+  }
+
   let io = null;
   let ioPista = null;
   let disparos = [];
@@ -570,6 +587,7 @@ export function montarApertura(host, ctx) {
     disparos.forEach(d => d.remove());
     disparos = [];
     window.removeEventListener('resize', alRedimensionar);
+    contenedor?.classList.remove('wr-con-apertura');
     raiz?.classList.remove('js');
     paneles.forEach(p => p.classList.remove('on', 'ido'));
     if (prog) { prog.hidden = true; prog.innerHTML = ''; }
@@ -581,6 +599,9 @@ export function montarApertura(host, ctx) {
   function alRedimensionar() {
     clearTimeout(remedir);
     remedir = setTimeout(() => {
+      // La barra de años se parte en dos líneas abajo de cierto ancho: su alto
+      // no es una constante que se pueda escribir en el CSS.
+      medirBarra();
       if (activo >= 0) paneles[activo].querySelectorAll('.wr-ap-lienzo').forEach(pintarLienzo);
       else lienzos.forEach(pintarLienzo);
     }, 160);
@@ -698,6 +719,8 @@ export function montarApertura(host, ctx) {
     prog.hidden = false;
     saltar.hidden = false;
     raiz.classList.add('js');
+    contenedor?.classList.add('wr-con-apertura');
+    medirBarra();
     activar(0);
 
     obsTema = new MutationObserver(() => {

@@ -4965,12 +4965,27 @@ body.covers-fs .main {
 .wr-ap-leg-c.n3 { background: var(--color-accent); }
 
 /* ══ A PARTIR DE ACÁ, SOLO CON `.js` ══════════════════════════════════════
-   La clase la pone `montarApertura()` cuando ya observó los disparadores. */
+   Las clases las pone `montarApertura()` cuando ya observó los disparadores.
+
+   `.wr-con-apertura` va en `#wrapped-content` y deja la barra de años pegada
+   arriba MIENTRAS dura el recorrido. Sin ella —Wrapped sin apertura, por
+   animaciones apagadas o porque el módulo no montó— la barra se comporta
+   exactamente como antes de v=216, que es el punto de que la clase exista.
+
+   El alto lo publica el JS en `--wr-ap-top`, porque la barra se parte en dos
+   líneas abajo de cierto ancho y no es una constante. El bloque clavado empieza
+   justo debajo, así que la barra no tapa nada del panel. */
+.wr-con-apertura .wrapped-year-bar {
+  position: sticky;
+  top: 0;
+  z-index: 41;
+  background: var(--color-bg);
+}
 .wr-ap.js .wr-ap-pista { position: relative; }
 .wr-ap.js .wr-ap-clavado {
   position: sticky;
-  top: 0;
-  height: 100vh;
+  top: var(--wr-ap-top, 0px);
+  height: calc(100vh - var(--wr-ap-top, 0px));
   display: flex;
   align-items: center;
   justify-content: center;
@@ -5019,7 +5034,7 @@ body.covers-fs .main {
   position: fixed;
   z-index: 40;
   right: 16px;
-  top: 20px;
+  top: calc(var(--wr-ap-top, 0px) + 12px);
   font-family: var(--font-sans);
   font-size: 12px;
   padding: 6px 11px;
@@ -5049,5 +5064,5 @@ body.covers-fs .main {
   .wr-ap-cal { gap: 2px; }
   .wr-ap-fila { grid-template-columns: 16px 1fr 66px; }
   .wr-ap-tapa { width: min(180px, 30vh); }
-  .wr-ap-saltar { right: 10px; top: 10px; }
+  .wr-ap-saltar { right: 10px; top: calc(var(--wr-ap-top, 0px) + 8px); }
 }
