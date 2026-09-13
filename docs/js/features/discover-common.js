@@ -6,23 +6,23 @@
 //     (util/album-heard.js: historial completo + likes + listened + w-three)
 //   - permiten "+ Biblioteca" y "Crear playlist con lo elegido"
 
-import { idbGetCached, idbSetCached, idbDel } from '../idb.js?v=217';
-import { getArtistAlbums, searchArtistByName, getAlbumTracks, saveToLibrary, saveAlbumsToLibrary, createPlaylist, addTracksToPlaylist } from '../api.js?v=217';
-import { albumKey } from '../util/album-key.js?v=217';
-import { cardKey, cardKeyLegacy, albumCreditName, keyOfPlaylistTrack } from '../util/discover-key.js?v=217';
-import { escapeHtml } from '../ui/components.js?v=217';
-import { showToast } from '../ui/toast.js?v=217';
-import { openPlaylistPicker } from '../ui/playlist-picker.js?v=217';
-import { getOwnPlaylists, addUrisToPlaylists, toastAddResult } from '../util/playlist-add.js?v=217';
-import { openArtistCard } from './artist-card.js?v=217';
-import { openAlbumCard } from './album-card.js?v=217';
-import { createHiddenStore, createLocalStore } from '../util/hidden-sync.js?v=217';
-import { recuperarUriDeAlbumKey } from '../util/hidden-recover.js?v=217';
-import { getPreview } from '../api/preview-providers.js?v=217';
-import { togglePreview, playingKey, attachHover } from '../ui/preview-player.js?v=217';
-import { coverUrl } from '../util/cover-size.js?v=217';
-import { FILTROS as FILTROS_DEF, saveFiltros } from '../util/discover-filters.js?v=217';
-import { esEPoAlbum } from '../util/release-size.js?v=217';
+import { idbGetCached, idbSetCached, idbDel } from '../idb.js?v=218';
+import { getArtistAlbums, searchArtistByName, getAlbumTracks, saveToLibrary, saveAlbumsToLibrary, createPlaylist, addTracksToPlaylist } from '../api.js?v=218';
+import { albumKey } from '../util/album-key.js?v=218';
+import { cardKey, cardKeyLegacy, albumCreditName, keyOfPlaylistTrack } from '../util/discover-key.js?v=218';
+import { escapeHtml } from '../ui/components.js?v=218';
+import { showToast } from '../ui/toast.js?v=218';
+import { openPlaylistPicker } from '../ui/playlist-picker.js?v=218';
+import { getOwnPlaylists, addUrisToPlaylists, toastAddResult } from '../util/playlist-add.js?v=218';
+import { openArtistCard } from './artist-card.js?v=218';
+import { openAlbumCard } from './album-card.js?v=218';
+import { createHiddenStore, createLocalStore } from '../util/hidden-sync.js?v=218';
+import { recuperarUriDeAlbumKey } from '../util/hidden-recover.js?v=218';
+import { getPreview } from '../api/preview-providers.js?v=218';
+import { togglePreview, playingKey, attachHover } from '../ui/preview-player.js?v=218';
+import { coverUrl } from '../util/cover-size.js?v=218';
+import { FILTROS as FILTROS_DEF, saveFiltros } from '../util/discover-filters.js?v=218';
+import { esEPoAlbum } from '../util/release-size.js?v=218';
 
 const DISCO_TTL_MIN = 30 * 24 * 60;       // 30 días
 const ARTIST_ID_TTL_MIN = 60 * 24 * 60;   // 60 días — los ids no cambian

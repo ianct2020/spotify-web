@@ -4847,11 +4847,17 @@ body.covers-fs .main {
   font-size: 16px;
   color: var(--color-text-secondary);
 }
+/* `--color-text-secondary` y NO `--color-text-muted`, aunque por tamaño parezca
+   un pie de tarjeta. Medido en la app con las cuatro paletas: contra el fondo,
+   `muted` da 2,72 (violeta), 3,33 (ámbar), 3,29 (aguamarina) y 3,24 (papel) —
+   por debajo del 4,5 de AA, y esto no es un pie: es el texto que CUENTA el
+   dato, lo único que separa una pantalla de una etiqueta grande. Con
+   `secondary` sube a 5,71 · 6,87 · 6,82 · 6,51, o sea AA en las cuatro. */
 .wr-ap-cuerpo {
   margin-top: 14px;
   font-size: 13.5px;
   line-height: 1.6;
-  color: var(--color-text-muted);
+  color: var(--color-text-secondary);
   max-width: 580px;
 }
 .wr-ap-tapa {
