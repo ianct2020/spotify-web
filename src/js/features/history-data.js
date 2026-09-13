@@ -133,11 +133,21 @@ async function hasLocalHistory() {
 // Evita el re-fetch cuando bumpeamos una _VERSION del pipeline pero el JSON
 // remoto no cambió estructuralmente.
 const OWNER_PREV_KEYS = {
-  // Vacía A PROPÓSITO desde v3 (2026-09-04). El bump a v3 existe SOLO para que
-  // el navegador vuelva a bajar el JSON con las tapas horneadas por
+  // Vacía A PROPÓSITO desde v3 (2026-09-04). El bump a v3 existía SOLO para que
+  // el navegador volviera a bajar el JSON con las tapas horneadas por
   // `scripts/bake-covers.py`; migrar el v2 —o peor, el v1— desde IDB
   // devolvería exactamente el archivo sin tapas que el bump quiere reemplazar,
   // y la vista se pintaría igual que antes sin fallar, o sea EN SILENCIO.
+  //
+  // ⚠️ SIGUE VACÍA EN v4 (2026-09-13), y acá la regla de v=208 se aplica en su
+  // forma más peligrosa. La pregunta no es «¿cambió el formato?» —no cambió:
+  // `years[].days` es un campo AÑADIDO— sino **¿el contenido viejo PASA el
+  // `sanityCheck` de hoy?**. El de stats es `d => !!d.years`, y el v3 trae
+  // `years` igual de bien que el v4. O sea que listar `history_stats_v3` acá
+  // haría que un navegador con el JSON viejo en IDB lo migrara a la clave v4 y
+  // pintara la apertura SIN el paso del calendario: sin fetch, sin fallar y sin
+  // un solo aviso. Es literalmente el caso de `history_records_v1` de v=208.
+  // Que refetchee: son 26 KB una vez.
   stats: [],
   // Ninguna versión anterior sirve: v1/v2 no traen `albums`, v3 lo trae sin
   // plays ni ms (que es lo que necesita la ficha de álbum) y v4 sin el día de

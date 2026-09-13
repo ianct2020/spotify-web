@@ -1,9 +1,9 @@
-import { getValidToken, refreshAccessToken } from './auth.js?v=215';
-import { cacheGet, cacheGetRaw, cacheGetTimestamp, cacheSet, cacheClear, prefKey, migratePrefKey } from './storage.js?v=215';
-import { idbDel, idbDelByPrefix, idbGetCached, idbGetCachedRaw, idbGetTimestamp, idbSetCached } from './idb.js?v=215';
-import { OWNER_KEY_LIST } from './history-keys.js?v=215';
-import { showToast } from './ui/toast.js?v=215';
-import { artistIsSame, limpiaParaQuery } from './util/track-match.js?v=215';
+import { getValidToken, refreshAccessToken } from './auth.js?v=216';
+import { cacheGet, cacheGetRaw, cacheGetTimestamp, cacheSet, cacheClear, prefKey, migratePrefKey } from './storage.js?v=216';
+import { idbDel, idbDelByPrefix, idbGetCached, idbGetCachedRaw, idbGetTimestamp, idbSetCached } from './idb.js?v=216';
+import { OWNER_KEY_LIST } from './history-keys.js?v=216';
+import { showToast } from './ui/toast.js?v=216';
+import { artistIsSame, limpiaParaQuery } from './util/track-match.js?v=216';
 
 const BASE = 'https://api.spotify.com/v1';
 const MIN_RETRY_WAIT = 5000;

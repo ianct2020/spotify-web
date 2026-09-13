@@ -9,8 +9,8 @@
 //
 // Devuelve la misma forma que los JSONs del repo (mismos `version` numbers).
 
-import { isJunkTrack } from './util/junk.js?v=215';
-import { songKey } from './util/song-identity.js?v=215';
+import { isJunkTrack } from './util/junk.js?v=216';
+import { songKey } from './util/song-identity.js?v=216';
 
 // ---- Configuración (igual a gen-stats.py) ----
 const MIN_MS = 30000;
@@ -407,6 +407,31 @@ function processStreamingHistory(fileArrays, { onProgress } = {}) {
     return { name: m.name || '', artist: m.artist || '', min: round1(ms / 60000), plays: plays_, uri: m.uri || null };
   }
 
+  // ── ventana de días con datos de un año (v=216) ──────────────────────────
+  //
+  // PUERTO EXACTO de `ventana_del_anio()` de scripts/gen-stats.py. ⚠️ Si se toca
+  // una, se toca la otra: es la misma regla que ya vale para `song_key` y para
+  // `junk`. Sin este espejo, quien sube su propio ZIP (BYOH) se quedaría sin el
+  // calendario de la apertura y el owner no — y sin fallar en ningún lado.
+  //
+  // Mismo criterio que `daysCovered()` de features/wrapped.js: del 1 de enero
+  // (o de la primera play global, si el historial empieza a mitad de año) al 31
+  // de diciembre (o al último día con datos). El tope es el último día
+  // REGISTRADO y no «hoy», porque el export llega con semanas de atraso.
+  const primeraGlobal = allDaysSorted[0] || null;
+  const ultimaGlobal = allDaysSorted[allDaysSorted.length - 1] || null;
+
+  function ventanaDelAnio(y) {
+    if (!primeraGlobal || !ultimaGlobal) return null;
+    const pri = +primeraGlobal.slice(0, 4);
+    const ult = +ultimaGlobal.slice(0, 4);
+    if (pri > y || ult < y) return null;
+    return {
+      desde: pri === y ? primeraGlobal : `${y}-01-01`,
+      hasta: ult === y ? ultimaGlobal : `${y}-12-31`,
+    };
+  }
+
   // ---- Ensamblar year_out ----
   const yearOut = [];
   const yearsSorted = [...years.keys()].sort((a, b) => a - b);
@@ -443,6 +468,23 @@ function processStreamingHistory(fileArrays, { onProgress } = {}) {
         prev = yearDaysSorted[i];
       }
     }
+    // ── el detalle por día (v=216) ───────────────────────────────────────
+    // `yb.days` ya se acumulaba y solo se usaba para el día pico. Contrato:
+    // `min` contiguo, un valor por día desde `from`. Un 0 es un día sin una
+    // sola play válida, no un día sin datos — la ventana ya recortó eso.
+    let daysOut = null;
+    const ventana = ventanaDelAnio(y);
+    if (ventana) {
+      const serie = [];
+      const pasos = daysBetween(ventana.desde, ventana.hasta);
+      const base = Date.UTC(+ventana.desde.slice(0, 4), +ventana.desde.slice(5, 7) - 1, +ventana.desde.slice(8, 10));
+      for (let k = 0; k <= pasos; k++) {
+        const dia = new Date(base + k * 86400000).toISOString().slice(0, 10);
+        serie.push(round1((yb.days.get(dia) || 0) / 60000));
+      }
+      daysOut = { from: ventana.desde, min: serie };
+    }
+
     let totalMsYear = 0;
     for (const m of yb.artistMs.values()) totalMsYear += m;
     yearOut.push({
@@ -457,6 +499,7 @@ function processStreamingHistory(fileArrays, { onProgress } = {}) {
       peak_day: peakDay,
       peak_month: peakMonth,
       discovery,
+      days: daysOut,
       top_artists: mostCommon(yb.artistMs, TOP_N_YEAR).map(([a, ms]) => ({ name: a, min: round1(ms / 60000), plays: yb.artistPlays.get(a) })),
       top_albums: mostCommon(yb.albumMs, TOP_N_YEAR).map(([ak, ms]) => albumEntry(ak, ms, yb.albumPlays.get(ak))),
       top_tracks: mostCommon(yb.trackMs, TOP_N_YEAR).map(([tk, ms]) => trackEntry(tk, ms, yb.trackPlays.get(tk))),

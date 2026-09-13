@@ -18,7 +18,7 @@
 // datos que aparece en PENDIENTES.md §2.
 //
 // Si se sube una versión, se sube ACÁ y los dos lados se enteran solos.
-const STATS_VERSION = 3;   // v3: los 4 `img` que faltaban en `years[].top_albums` (horneado por scripts/bake-covers.py)
+const STATS_VERSION = 4;   // v4: `years[].days` — el detalle por día que dibuja el calendario de la apertura del Wrapped
 const PLAYS_VERSION = 5;   // v5: cada álbum de `albums` lleva además el día de la primera play válida
 const LISTENED_VERSION = 3;  // v3: las 91 tapas que faltaban (ítem 11) — mismo contenido, campo `img` ya no nulo
 const SKIP_VERSION = 2;    // v2: [ok, skip, fwd_ms, close_ms, gid] — el veredicto lo arma features/skips.js

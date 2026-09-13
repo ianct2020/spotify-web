@@ -16,12 +16,32 @@ html {
   overflow-x: hidden;
   max-width: 100vw;
 }
+/* ⚠️ `clip` y no `hidden`, y es la línea que hace posible `position: sticky` en
+   toda la app (v=216).
+
+   Con `overflow-x: hidden` y `overflow-y` sin declarar, el CSS obliga a que ese
+   `visible` se COMPUTE como `auto` — y con eso `body` pasa a ser un contenedor
+   de scroll propio. Un `sticky` hijo de `body` se pega entonces al scrollport
+   de `body`, que no es el que scrollea, así que se va con la página como si
+   fuera `static`. Es lo que documentaba el comentario de `.blayer` («sticky NO
+   sirve en esta app, por eso la capa es fixed»).
+
+   `clip` recorta exactamente igual que `hidden` pero NO crea contenedor de
+   scroll, y `clip` + `visible` sí es un par válido, así que `overflow-y` se
+   queda en `visible` y el sticky vuelve a mirar al viewport.
+
+   Medido con el `main.css` real, scroll de rueda real, 1280x880:
+     overflow-x: hidden → el bloque clavado en top: -1960px (se fue con la página)
+     overflow-x: clip   → top: 0px, pegado, y scrollWidth - clientWidth sigue en 0
+
+   `html` NO se toca: es el scroller del documento y su `hidden/auto` es lo
+   normal ahí. Lo que sobraba era el de `body`. */
 body {
   font-family: var(--font-sans);
   background: var(--color-bg);
   color: var(--color-text);
   min-height: 100vh;
-  overflow-x: hidden;
+  overflow-x: clip;
   max-width: 100vw;
 }
 
@@ -652,8 +672,10 @@ h3 { font-size: 18px; font-weight: 600; }
    Orden de la columna derecha, de ABAJO hacia arriba:
      player → volver arriba → progreso → toasts
 
-   `position: sticky` NO sirve en esta app (html lleva `overflow-x: hidden`),
-   por eso la capa es `fixed`. La zona izquierda copia la geometría de .main:
+   `position: sticky` no servía en esta app hasta v=216 (`body` llevaba
+   `overflow-x: hidden` y eso lo convertía en contenedor de scroll); esta capa
+   es `fixed` porque tiene que anclarse al viewport pase lo que pase, no por
+   aquella limitación. Ver el comentario de `body`, arriba del todo. La zona izquierda copia la geometría de .main:
    left 312px con sidebar, 72px sin. La derecha va anclada al viewport, que es
    donde el pill ya vivía.
 
@@ -4776,4 +4798,256 @@ body.covers-fs .main {
   font-size: 11.5px;
   line-height: 1.4;
   color: var(--color-text-muted);
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Apertura del Wrapped (v=216) — ver src/js/features/wrapped-apertura.js
+   ══════════════════════════════════════════════════════════════════════════
+
+   ⚠️ ACÁ NO SE ESCONDE NADA POR DEFECTO, igual que en el bloque del reveal.
+   Todo lo de abajo del separador `.wr-ap.js` solo aplica cuando el JS ya armó
+   el IntersectionObserver y puso esa clase. Sin JS —o con las animaciones
+   apagadas— lo que queda es la lista de arriba: los paneles uno debajo del
+   otro, compactos, con los gráficos en su estado final y los números escritos.
+
+   NO escribir nunca una regla `.wr-ap-paso { opacity: 0 }` fuera de `.js`.
+
+   Este bloque depende de que `body` lleve `overflow-x: clip` y no `hidden`
+   (ver el comentario de `body`, arriba del todo): con `hidden`, `.wr-ap-clavado`
+   no se pega a nada y el recorrido se ve como seis pantallas pasando de largo. */
+
+/* ── estado base: lista compacta y legible, sin clavar ─────────────────── */
+.wr-ap-paso {
+  max-width: 860px;
+  margin: 0 auto;
+  padding: 40px 8px;
+  text-align: center;
+  border-bottom: 1px solid var(--color-border);
+}
+.wr-ap-paso > * { margin-left: auto; margin-right: auto; }
+.wr-ap-label {
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--color-accent);
+  font-weight: 700;
+  margin-bottom: 12px;
+}
+.wr-ap-dato {
+  font-size: clamp(36px, 7.5vw, 88px);
+  line-height: 1.03;
+  font-weight: 800;
+  color: var(--color-text);
+  letter-spacing: -0.03em;
+  font-variant-numeric: tabular-nums;
+}
+.wr-ap-dato.chico { font-size: clamp(25px, 4.6vw, 48px); }
+.wr-ap-bajada {
+  margin-top: 12px;
+  font-size: 16px;
+  color: var(--color-text-secondary);
+}
+.wr-ap-cuerpo {
+  margin-top: 14px;
+  font-size: 13.5px;
+  line-height: 1.6;
+  color: var(--color-text-muted);
+  max-width: 580px;
+}
+.wr-ap-tapa {
+  width: min(240px, 38vh);
+  aspect-ratio: 1;
+  border-radius: var(--radius-md);
+  object-fit: cover;
+  display: block;
+  margin-bottom: 18px;
+  box-shadow: var(--shadow-lg);
+}
+.wr-ap-cierre {
+  text-align: center;
+  padding: 40px 16px 8px;
+  color: var(--color-text-secondary);
+  font-size: 15px;
+}
+
+/* ── los dibujos, siempre DENTRO del panel ─────────────────────────────── */
+.wr-ap-visual { width: 100%; max-width: 660px; margin: 20px auto 4px; }
+
+.wr-ap-meses { display: flex; align-items: flex-end; gap: 9px; height: min(190px, 24vh); }
+.wr-ap-mes {
+  flex: 1; min-width: 0; height: 100%;
+  display: flex; flex-direction: column; align-items: center; justify-content: flex-end;
+}
+.wr-ap-mes-val {
+  font-size: 11px; color: var(--color-text-secondary);
+  margin-bottom: 5px; font-variant-numeric: tabular-nums;
+}
+.wr-ap-barra {
+  width: 100%; height: 0;
+  background: var(--color-accent);
+  border-radius: 4px 4px 0 0;
+  transition: height 800ms cubic-bezier(.2, .8, .2, 1);
+}
+.wr-ap-mes.pico .wr-ap-barra { box-shadow: 0 0 18px var(--color-accent-glow); }
+.wr-ap-mes-lbl { font-size: 11px; color: var(--color-text-muted); margin-top: 6px; }
+
+.wr-ap-ranking { display: grid; gap: 7px; text-align: left; }
+.wr-ap-fila { display: grid; grid-template-columns: 18px 1fr 80px; gap: 10px; align-items: center; }
+.wr-ap-fila .pos { font-size: 11px; color: var(--color-text-muted); font-variant-numeric: tabular-nums; }
+.wr-ap-fila .pista {
+  height: 22px; position: relative; overflow: hidden;
+  background: var(--color-elevated); border-radius: 5px;
+}
+.wr-ap-fila .b {
+  position: absolute; inset: 0 auto 0 0; width: 0;
+  background: var(--color-accent-tint);
+  transition: width 800ms cubic-bezier(.2, .8, .2, 1);
+}
+.wr-ap-fila .nom {
+  position: absolute; left: 9px; right: 9px; top: 0;
+  line-height: 22px; font-size: 12px; color: var(--color-text);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.wr-ap-fila.uno .b { background: var(--color-accent); }
+.wr-ap-fila.uno .nom { color: #fff; font-weight: 600; }
+.wr-ap-fila .val {
+  text-align: right; font-size: 12px;
+  color: var(--color-text-secondary); font-variant-numeric: tabular-nums;
+}
+
+/* El calendario. Las dos rejillas comparten columnas: si la fila de meses se
+   auto-dimensiona por el ancho del texto, «ene» empuja a «feb» y ninguna
+   etiqueta cae sobre su semana. */
+.wr-ap-cal,
+.wr-ap-cal-meses {
+  display: grid;
+  gap: 3px;
+  grid-template-columns: repeat(var(--semanas), 1fr);
+}
+.wr-ap-cal { grid-template-rows: repeat(7, 1fr); grid-auto-flow: column; }
+.wr-ap-cal i {
+  display: block;
+  aspect-ratio: 1;
+  border-radius: 2px;
+  background: var(--color-border);
+  transition: opacity 420ms ease;
+}
+.wr-ap-cal i.n1 { background: color-mix(in srgb, var(--color-accent) 32%, var(--color-elevated)); }
+.wr-ap-cal i.n2 { background: color-mix(in srgb, var(--color-accent) 62%, var(--color-elevated)); }
+.wr-ap-cal i.n3 { background: var(--color-accent); }
+.wr-ap-cal i.pico { box-shadow: 0 0 0 2px var(--color-text), 0 0 14px var(--color-accent-glow); }
+.wr-ap-cal i.hueco { background: transparent; }
+.wr-ap-cal.apagado i { opacity: 0; }
+.wr-ap-cal-meses {
+  margin-bottom: 5px;
+  font-size: 10px;
+  line-height: 1;
+  color: var(--color-text-muted);
+  text-align: left;
+}
+.wr-ap-cal-meses span { white-space: nowrap; overflow: visible; }
+
+.wr-ap-lienzo { display: block; width: 100%; height: min(220px, 28vh); }
+
+.wr-ap-leyenda {
+  display: flex; gap: 16px; justify-content: center; flex-wrap: wrap;
+  margin-top: 11px;
+}
+.wr-ap-leg {
+  display: flex; align-items: center; gap: 7px;
+  font-size: 12px; color: var(--color-text-secondary);
+}
+.wr-ap-leg b { color: var(--color-text); font-variant-numeric: tabular-nums; }
+.wr-ap-leg-c { display: block; width: 11px; height: 11px; border-radius: 3px; }
+.wr-ap-leg-c.n0 { background: var(--color-border); }
+.wr-ap-leg-c.n1 { background: color-mix(in srgb, var(--color-accent) 32%, var(--color-elevated)); }
+.wr-ap-leg-c.n2 { background: color-mix(in srgb, var(--color-accent) 62%, var(--color-elevated)); }
+.wr-ap-leg-c.n3 { background: var(--color-accent); }
+
+/* ══ A PARTIR DE ACÁ, SOLO CON `.js` ══════════════════════════════════════
+   La clase la pone `montarApertura()` cuando ya observó los disparadores. */
+.wr-ap.js .wr-ap-pista { position: relative; }
+.wr-ap.js .wr-ap-clavado {
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.wr-ap.js .wr-ap-paso {
+  position: absolute;
+  inset: 0;
+  border-bottom: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transform: translateY(20px);
+  pointer-events: none;
+  overflow: hidden;
+  transition: opacity var(--reveal-dur) var(--reveal-ease),
+              transform var(--reveal-dur) var(--reveal-ease);
+}
+.wr-ap.js .wr-ap-paso.on { opacity: 1; transform: none; pointer-events: auto; }
+.wr-ap.js .wr-ap-paso.ido { opacity: 0; transform: translateY(-20px); }
+.wr-ap-disparo { height: 100vh; }
+
+/* Cuántos pasos quedan, que es lo que se pregunta cualquiera en cuanto la
+   página se le clava. */
+.wr-ap-prog {
+  position: fixed;
+  z-index: 40;
+  right: 16px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+.wr-ap-prog i {
+  display: block;
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  background: var(--color-border);
+  transition: background var(--transition-normal), transform var(--transition-normal);
+}
+.wr-ap-prog i.on { background: var(--color-accent); transform: scale(1.55); }
+
+.wr-ap-saltar {
+  position: fixed;
+  z-index: 40;
+  right: 16px;
+  top: 20px;
+  font-family: var(--font-sans);
+  font-size: 12px;
+  padding: 6px 11px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-text-secondary);
+  cursor: pointer;
+}
+.wr-ap-saltar:hover { color: var(--color-text); border-color: var(--color-accent); }
+
+/* Pasado el recorrido, los dos controles fijos se van. `visibility` y no
+   `display` para que la transición tenga algo que animar, y `pointer-events`
+   para que no roben clicks mientras se desvanecen. */
+.wr-ap.fuera .wr-ap-prog,
+.wr-ap.fuera .wr-ap-saltar {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: opacity var(--transition-normal), visibility var(--transition-normal);
+}
+
+@media (max-width: 900px) {
+  .wr-ap-prog { display: none; }
+}
+@media (max-width: 720px) {
+  .wr-ap-cal { gap: 2px; }
+  .wr-ap-fila { grid-template-columns: 16px 1fr 66px; }
+  .wr-ap-tapa { width: min(180px, 30vh); }
+  .wr-ap-saltar { right: 10px; top: 10px; }
 }

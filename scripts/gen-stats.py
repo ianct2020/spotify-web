@@ -59,7 +59,7 @@ COMPLETE_CLOSES = {
     "unexpected-exit-while-paused",
     "backbtn",
 }
-STATS_VERSION = 2            # bump: excluye "Sonido Para Sacar Agua Del Movil"
+STATS_VERSION = 3            # v3: years[].days — el detalle por dia (la apertura del Wrapped)
 TRACK_PLAYS_VERSION = 5      # v5: cada entrada de `albums` lleva además el DÍA de la primera play válida (ficha de álbum: «primera vez»). v4: cada entrada de `albums` lleva plays y ms además de name/artist (la ficha de álbum decía "0 plays"). v3: agregó `albums`. v2: incluía entries "partial" para tracks solo con plays <30s
 SKIP_STATS_VERSION = 2      # v2: dato crudo (ms de cada skip/cierre) + gid de agrupado; el veredicto pasó a skips.js
 LISTENED_VERSION = 2         # bump: excluye "Sonido Para Sacar Agua Del Movil"
@@ -599,6 +599,34 @@ def build_stats(plays, img_idx):
             "uri": m.get("uri"),
         }
 
+    # ── ventana de días con datos de un año (v=216) ────────────────────────
+    #
+    # Mismo criterio que `daysCovered()` de features/wrapped.js, y a propósito:
+    # el denominador que ya muestra la baldosa «Días activos» tiene que ser
+    # exactamente la longitud del array que emitimos acá, o el calendario de la
+    # apertura contaría una historia distinta de la baldosa que tiene debajo.
+    #
+    # Del 1 de enero (o de la primera play global, si el historial empieza a
+    # mitad de año — el caso de 2018) al 31 de diciembre (o al último día con
+    # datos). El tope es el último día REGISTRADO y no «hoy»: el export se pide
+    # a mano y llega con semanas de atraso, así que contra «hoy» los días que el
+    # archivo no cubre contarían como días sin escuchar, y no lo son.
+    dias_todos = sorted(active_days_all)
+    primera_global = dias_todos[0] if dias_todos else None
+    ultima_global = dias_todos[-1] if dias_todos else None
+
+    def ventana_del_anio(y):
+        """(desde, hasta) como date, o None si el año queda fuera del rango."""
+        if not primera_global or not ultima_global:
+            return None
+        pri = date.fromisoformat(primera_global)
+        ult = date.fromisoformat(ultima_global)
+        if pri.year > y or ult.year < y:
+            return None
+        desde = pri if pri.year == y else date(y, 1, 1)
+        hasta = ult if ult.year == y else date(y, 12, 31)
+        return (desde, hasta)
+
     year_out = []
     for y in sorted(years.keys()):
         yb = years[y]
@@ -635,6 +663,30 @@ def build_stats(plays, img_idx):
                     cur = 1
                 prev = d
 
+        # ── el detalle por día (v=216) ─────────────────────────────────────
+        #
+        # El dato YA se acumulaba acá dentro (`yb["days"]`) desde siempre y solo
+        # se usaba para sacar el día pico. Emitirlo es lo que le permite a la
+        # apertura del Wrapped dibujar un calendario de verdad en vez de una
+        # proporción con el orden inventado.
+        #
+        # Contrato: `min` es contiguo, un valor por día, desde `from` hasta
+        # `from + len(min) - 1`. Un 0 es un día SIN una sola play válida — no es
+        # un día sin datos, porque la ventana ya recorta lo que el export no
+        # cubre. Por eso `len(min)` tiene que dar el mismo número que el
+        # denominador de «Días activos», y los no-cero tienen que ser
+        # exactamente `days_active`.
+        days_out = None
+        ventana = ventana_del_anio(y)
+        if ventana:
+            desde, hasta = ventana
+            serie = []
+            d = desde
+            while d <= hasta:
+                serie.append(round(yb["days"].get(d.isoformat(), 0) / 60000, 1))
+                d += timedelta(days=1)
+            days_out = {"from": desde.isoformat(), "min": serie}
+
         year_out.append({
             "year": y,
             "min": round(sum(yb["artist_ms"].values())/60000, 1),
@@ -647,6 +699,7 @@ def build_stats(plays, img_idx):
             "peak_day": peak_day,
             "peak_month": peak_month,
             "discovery": discovery,
+            "days": days_out,
             "top_artists": [
                 {"name": a, "min": round(ms/60000, 1), "plays": yb["artist_plays"][a]}
                 for a, ms in yb["artist_ms"].most_common(TOP_N_YEAR)

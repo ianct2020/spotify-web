@@ -14,6 +14,7 @@ import { activateMarquee, marqueeSpan } from '../ui/marquee.js';
 import { openModal } from '../ui/modal-stack.js';
 import { armReveal, armRevealAll, releaseReveal } from '../ui/reveal.js';
 import { coverUrl } from '../util/cover-size.js';
+import { vigilarRuta } from '../util/vigencia-ruta.js';
 
 let stats = null;
 let selectedYear = null;
@@ -92,13 +93,23 @@ function openWrappedInfoModal(dataFrom, dataTo, dataPlays) {
 }
 
 export async function render(container) {
+  // v=216: la apertura vive mientras el usuario scrollea, así que salirse de
+  // #wrapped a mitad del recorrido es un caso normal, no raro. `loadHistoryStats()`
+  // puede tardar (fetch del JSON + IDB) y al volver escribía en el DOM sin
+  // preguntar nada. El recorrido en sí se desmonta solo con `routeteardown`
+  // (ver wrapped-apertura.js), pero eso no sirve si el render que lo monta
+  // llega DESPUÉS del cambio de ruta: ahí lo que hay que hacer es no montarlo.
+  const ruta = vigilarRuta();
+
   container.innerHTML = `
     ${pageHeader({ title: 'Wrapped tuyo, por año' })}
     <div id="wrapped-content"><div class="empty-state"><div class="spinner spinner-lg"></div><div style="margin-top:16px">Cargando historial…</div></div></div>
   `;
 
   stats = await loadHistoryStats();
+  if (!ruta.vigente()) return;
   const content = document.getElementById('wrapped-content');
+  if (!content) return;
   if (!stats || !stats.years || !stats.years.length) {
     if (await isOwner()) {
       content.innerHTML = `<div class="card"><p>No pude cargar el historial de reproducción. Vuelve a intentarlo.</p></div>`;
@@ -128,6 +139,7 @@ export async function render(container) {
       </div>
       <button class="wrapped-info-btn" id="wrapped-info-btn" aria-label="Ver rango de datos">ⓘ</button>
     </div>
+    <div id="wrapped-apertura"></div>
     <div id="wrapped-year-card"></div>
     <div id="wrapped-alltime" style="margin-top:20px"></div>
   `;
@@ -144,8 +156,50 @@ export async function render(container) {
     };
   });
 
+  // ⚠️ EL ORDEN ES LA GARANTÍA, no un detalle de estilo.
+  //
+  // El Wrapped de siempre se pinta ENTERO primero. La apertura se monta después,
+  // en su propio hueco, con `import()` dinámico y dentro de un `try`. Así, si el
+  // módulo no está desplegado, si tira al evaluarse o si `montarApertura()`
+  // revienta con datos raros, lo único que queda es un hueco vacío: los chips,
+  // el hero, las ocho baldosas y las tres columnas de tops ya están en el DOM y
+  // cableadas. No hay ninguna forma de que un fallo de la apertura se lleve
+  // puesto lo que hoy funciona.
+  //
+  // Con un `import` estático esto NO sería cierto: un módulo que no carga se
+  // lleva el módulo que lo importa, o sea la vista entera.
   renderYearCard();
   renderAllTime();
+  montarAperturaSiSePuede(ruta);
+}
+
+async function montarAperturaSiSePuede(ruta) {
+  const host = document.getElementById('wrapped-apertura');
+  if (!host) return;
+  try {
+    const mod = await import('../features/wrapped-apertura.js');
+    // Entre el `await` del import y acá el usuario pudo cambiar de año (que
+    // repinta el hueco) o irse de la vista. Las dos cosas dejan este `host`
+    // fuera del documento: montar ahí sería pintar un recorrido que nadie ve y
+    // dejar un observer colgado.
+    if (!ruta.vigente() || !host.isConnected) return;
+    const y = stats.years.find(yy => yy.year === selectedYear);
+    if (!y) return;
+    mod.montarApertura(host, {
+      stats,
+      y,
+      MESES,
+      fmtMinutes,
+      fmtDate,
+      daysCovered: (anio) => daysCovered(anio, stats),
+      ultimoDia: (stats.years[stats.years.length - 1]?.last_play || '').slice(0, 10) || null,
+    });
+  } catch (e) {
+    // Cualquier fallo: se borra el hueco y el Wrapped sigue exactamente igual
+    // que antes de v=216.
+    console.warn('[wrapped] la apertura no se montó, el resumen queda entero:', e);
+    try { host.innerHTML = ''; } catch { /* el hueco ya no está */ }
+  }
 }
 
 function renderYearCard() {
