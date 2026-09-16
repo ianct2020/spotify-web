@@ -71,7 +71,7 @@
 // antiguo de alguien con un solo año de datos no tiene contra qué compararse.
 // Con menos de dos pasos la apertura no se monta: no hay recorrido que hacer.
 
-import { animationsEnabled } from '../ui/reveal.js?v=222';
+import { animationsEnabled } from '../ui/reveal.js?v=223';
 
 // ── un solo recorrido vivo por vez ──────────────────────────────────────────
 //

@@ -5137,6 +5137,7 @@ body.covers-fs .main {
   display: flex;
   gap: 4px;
   overflow-x: auto;
+  overscroll-behavior: contain;
   padding-bottom: 2px;
   scrollbar-width: thin;
 }
@@ -5165,6 +5166,12 @@ body.covers-fs .main {
 .gd-list {
   min-height: 0;
   overflow-y: auto;
+  /* v=223 — medido en la app: al llegar al final de las 3.759 filas la rueda se
+     le escapaba a #genre y la ruta de atrás scrolleaba hasta y=1000 con el
+     modal abierto. Es el mismo candado de `.picker-scroll`, `.ac-albums-scroll`
+     y `.sidebar-nav` (v=221); lo que lo hace necesario acá es que este modal
+     tiene UNA lista larguísima y el borde se toca todo el rato. */
+  overscroll-behavior: contain;
   display: flex;
   flex-direction: column;
   gap: 3px;
