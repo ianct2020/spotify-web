@@ -173,6 +173,11 @@ h3 { font-size: 18px; font-weight: 600; }
   flex: 1;
   padding: 12px;
   overflow-y: auto;
+  /* El footer (avatar + acciones) vive adentro, como su último bloque — ver el
+     comentario en app.js. `contain` es el mismo candado que ya usan
+     `.picker-scroll` y `.ac-albums-scroll`: al llegar al final, la rueda no se
+     le escapa a la ruta de atrás. */
+  overscroll-behavior: contain;
 }
 
 .sidebar-section {
