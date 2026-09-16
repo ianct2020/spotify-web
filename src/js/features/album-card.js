@@ -14,17 +14,18 @@
 import { escapeHtml } from '../ui/components.js';
 import { openArtistCard, knownArtist } from './artist-card.js';
 import { openModal, closeTop } from '../ui/modal-stack.js';
-import { getBestAvailableLikes, getAlbumTracks, spotifyFetch } from '../api.js';
+import { getBestAvailableLikes, getAlbumTracks } from '../api.js';
 import { albumKey, coverId } from '../util/album-key.js';
-// ⚠️ `limpiaParaQuery` FALTABA acá hasta v=153 y el síntoma era mudo: la usa
-// `resolveAlbumId` en el `try`, así que cada ficha tiraba un ReferenceError que
-// el catch convertía en «no pude resolver el álbum», la ficha se caía al camino
-// degradado de v=142 (solo tus likes, todos con el ♥ lleno) y el tracklist
-// completo de v=144 no se pedía NUNCA. Verificado en producción el 2026-08-23:
-// 6 fichas abiertas, 6 warnings «limpiaParaQuery is not defined» en consola.
-import { artistMatches, normText, limpiaParaQuery } from '../util/track-match.js';
+import { artistMatches } from '../util/track-match.js';
+// `limpiaParaQuery` ya no se importa acá: desde v=219 la aplica el resolutor,
+// que es quien arma la query. Es a propósito — cuando la limpieza era tarea del
+// llamador, `wthree.js` se olvidaba del apóstrofo y nadie se enteraba. El
+// antecedente: hasta v=153 el import FALTABA en este archivo y cada ficha
+// tiraba un ReferenceError que el catch convertía en «no pude resolver el
+// álbum», o sea un error de programación con cara de resultado normal.
+import { resolveAlbumId } from '../util/album-resolver.js';
 import { skelTracklist } from '../ui/skeleton.js';
-import { firstArtistName, artistNames, resolveArtistName } from '../util/artist-name.js';
+import { firstArtistName, resolveArtistName } from '../util/artist-name.js';
 import { coverUrl } from '../util/cover-size.js';
 import { lookupAlbumStats } from '../util/album-stats.js';
 import { fmtDia } from '../util/fecha.js';
@@ -42,6 +43,31 @@ const HEART_SVG = `<svg viewBox="0 0 24 24" width="11" height="11" fill="current
 // como un botón roto, no como una respuesta.
 const SIN_PREVIEW_HTML = '<span class="sin-preview-txt">Sin preview</span>';
 const HEART_OUTLINE_SVG = `<svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round" aria-hidden="true"><path d="M12 21s-7.5-4.6-9.5-9A5 5 0 0 1 12 6.5 5 5 0 0 1 21.5 12c-2 4.4-9.5 9-9.5 9z"/></svg>`;
+
+// Cada módulo pinta SOLO sus propios botones (v=219).
+//
+// Hasta v=218 la ficha marcaba su ▶ con `class="wt-play-btn album-modal-like-play"`
+// para heredar el look, y el efecto no era estético: `features/wthree.js` tiene
+// un listener de `previewchange` a nivel `document` que recorre TODOS los
+// `.wt-play-btn` y les pone ▶ salvo a los que matcheen `wt:${playId}`. La clave
+// de esta ficha es `alb:${id}`, así que NINGÚN botón de acá matcheaba nunca y
+// cada evento del <audio> —playing, pause, waiting, ended— le borraba el ⏸ a la
+// ficha abierta mientras la pista seguía sonando.
+//
+// El arreglo es de propiedad, no una excepción en el listener ajeno: la ficha
+// tiene su clase, W-Three tiene la suya, el look se comparte en la hoja de
+// estilos y cada uno escucha lo suyo. Agregarle un `:not()` al listener de
+// W-Three habría dejado la clase compartida en pie, esperando al tercer módulo.
+//
+// El `btn.disabled` se respeta igual que en W-Three: una fila que ya dijo «Sin
+// preview» no vuelve a ▶.
+document.addEventListener('previewchange', (e) => {
+  const key = e.detail?.key || '';
+  document.querySelectorAll('.album-modal-like-play').forEach(btn => {
+    if (btn.disabled) return;
+    btn.innerHTML = (key === `alb:${btn.dataset.playId}`) ? PAUSE_SVG : PLAY_SVG;
+  });
+});
 
 // Cache del último set de likes en memoria (evita re-fetch del cache al
 // abrir varias fichas seguidas dentro de la misma sesión).
@@ -134,82 +160,14 @@ function likesInAlbum(likes, a) {
 // usan W-Three y #discover-artists). Igual va con degradación: si falla, la
 // ficha vuelve a mostrar solo los likes, como antes.
 //
-// El problema real es el `albumId`: casi ningún llamador lo trae (el mosaico, el
-// dashboard y el Wrapped mandan nombre + artista y nada más). Para esos se
-// resuelve con /search, que sí está vivo, y se memoiza por clave de álbum: abrir
-// la misma ficha diez veces es una sola búsqueda.
-const _albumIdMemo = new Map();   // albumKey → id | null
-
-// ⚠️ **El apóstrofo dentro de las comillas rompe la query de Spotify** (medido
-// en vivo el 2026-08-19 contra la API real, con la sesión de Ian):
-//
-//   album:"Don't Be Dumb" artist:"A$AP Rocky"  →  0 resultados
-//   album:"Dont Be Dumb"  artist:"A$AP Rocky"  →  2 resultados ✅
-//
-// No es cosa de este disco: afecta a **cualquier** álbum o artista con
-// apóstrofo. El síntoma era mudo — `resolveAlbumId` devolvía null, la ficha se
-// caía al camino degradado de v=142 y en vez de «10 de 15 pistas en tus me
-// gusta» decía «10 pistas», sin que nada avisara.
-//
-// El arreglo: se **relaja la query** (fuera el apóstrofo) y se **aprieta la
-// comparación** después, contra el nombre REAL. Es la lección de v=124 al
-// derecho: aflojar el filtro de resultados es lo que traía a Nick Drake cuando
-// se buscaba Drake, así que la comparación posterior no se toca — al contrario,
-// antes no había ninguna (se agarraba `items[0]` a ciegas con `limit=1`).
-// ⚠️ El apóstrofo se **BORRA**, no se cambia por un espacio. Medido contra la
-// API real el 2026-08-19, y la diferencia es total:
-//
-//   album:"Don t Be Dumb"  →  0 resultados
-//   album:"Dont Be Dumb"   →  2 resultados ✅
-//   album:"1989 (Taylor s Version)"  →  1 resultado
-//   album:"1989 (Taylors Version)"   →  3 resultados ✅
-//
-// O sea que Spotify indexa «don't» como el token `dont`, no como `don t`.
-// Partirlo en dos palabras es otra forma de no encontrar nada.
-// `limpiaParaQuery` vive en util/track-match.js: la misma regla la necesita
-// `getArtistAlbums` en api.js para el fallback por /search.
-
-async function resolveAlbumId(a) {
-  const directo = a.albumId || a.id || null;
-  if (directo) return directo;
-  const artista = firstArtistName(resolveArtistName(a.artist || '', knownArtist));
-  const k = albumKey(a.name, artista);
-  if (_albumIdMemo.has(k)) return _albumIdMemo.get(k);
-  let id = null;
-  try {
-    const q = `album:"${limpiaParaQuery(a.name)}" artist:"${limpiaParaQuery(artista)}"`;
-    // limit=5, no 1: sacado el apóstrofo la búsqueda es más laxa, así que puede
-    // devolver vecinos. El que decide es el filtro de abajo, no el orden.
-    const res = await spotifyFetch(`/search?q=${encodeURIComponent(q)}&type=album&limit=5`);
-    const items = res?.albums?.items || [];
-
-    // Comparación contra el nombre REAL (con apóstrofo y todo). `normText` ya
-    // tira la puntuación, así que «Don't Be Dumb» y «Dont Be Dumb» caen en la
-    // misma clave sin aflojar nada más.
-    // El apóstrofo se saca a los DOS lados antes de normalizar: `normText` lo
-    // convierte en espacio, así que «Don't Be Dumb» daría «don t be dumb» y
-    // «Dont Be Dumb» daría «dont be dumb» — distintos. Sacándolo primero, las
-    // dos escrituras del mismo disco caen en la misma clave.
-    const clave = (s) => normText(String(s || '').replace(/['‘’ʼ`´]/g, ''));
-    const nombreOk = clave(a.name);
-    const artistaOk = clave(artista);
-    const elegido = items.find(it => {
-      if (clave(it.name) !== nombreOk) return false;
-      if (!artistaOk) return true;
-      // El artista pedido tiene que estar de verdad entre los del álbum.
-      return artistNames(it).some(n => clave(n) === artistaOk);
-    }) || null;
-
-    id = elegido?.id || null;
-    if (!id && items.length) {
-      console.warn(`[album-card] «${a.name}» — ${artista}: ${items.length} resultados y ninguno coincide; sigo sin tracklist`);
-    }
-  } catch (e) {
-    console.warn('[album-card] no pude resolver el álbum:', e.message);
-  }
-  _albumIdMemo.set(k, id);
-  return id;
-}
+// El problema real es el `albumId`: casi ningún llamador lo trae — el mosaico,
+// el Dashboard y el Wrapped mandan nombre + artista y nada más. Resolverlo es
+// trabajo de `util/album-resolver.js`: EL resolutor, el único del repo desde
+// v=219. Antes vivía acá, y tenía un gemelo peor dentro de `wthree.js` que
+// agarraba `items[0]` a ciegas. Todo el criterio vive allá —el `limit=5`, el
+// apóstrofo, la comparación contra el nombre real, el artista de verdad entre
+// los del álbum y el rechazo del candidato que trae versión de más— junto con
+// el memo, que desde v=219 guarda SOLO los éxitos.
 
 // Clave "misma canción aunque sea otra edición": el id no sirve para cruzar un
 // like del deluxe contra el tracklist del original. Es la misma normalización
@@ -218,12 +176,17 @@ function trackNameKey(name) {
   return (name || '').toLowerCase().replace(/\s*[([].*?[)\]]/g, '').trim();
 }
 
+// Devuelve `{ tracks, motivo }`. El `motivo` NO es decorativo: es lo único que
+// separa «este disco no se pudo identificar» de «este disco no tiene pistas», y
+// desde v=219 se pinta en la ficha. Antes salía por `console.warn`, que la
+// extensión de Chrome no captura: el fallo era invisible salvo que alguien
+// abriera las DevTools a mano, y así estuvo nueve versiones.
 async function loadAlbumTracklist(a) {
-  const albumId = await resolveAlbumId(a);
-  if (!albumId) return [];
+  const { id: albumId, motivo } = await resolveAlbumId(a, { esArtistaConocido: knownArtist });
+  if (!albumId) return { tracks: [], motivo: motivo || 'no se pudo identificar el álbum' };
   try {
     const items = await getAlbumTracks(albumId, { limit: 50 });
-    return (items || [])
+    const tracks = (items || [])
       .filter(t => t && t.name)
       .map(t => ({
         id: t.id || null,
@@ -233,9 +196,9 @@ async function loadAlbumTracklist(a) {
         disc: t.disc_number || 1,
       }))
       .sort((x, y) => (x.disc - y.disc) || (x.trackNumber - y.trackNumber));
+    return { tracks, motivo: null };
   } catch (e) {
-    console.warn('[album-card] tracklist:', e.message);
-    return [];
+    return { tracks: [], motivo: `el tracklist no cargó (${e.message})` };
   }
 }
 
@@ -416,7 +379,7 @@ async function hydrateLikes(overlay, a) {
 
   // Los likes salen de caché (o del memo del módulo); el tracklist es la única
   // ida a la red de esta función.
-  const tracklist = await loadAlbumTracklist(a);
+  const { tracks: tracklist, motivo: motivoFallo } = await loadAlbumTracklist(a);
 
   // Índices de "está en tus me gusta": por id y por nombre normalizado, porque
   // un like puede venir de otra edición del disco y ahí el id no coincide.
@@ -462,10 +425,21 @@ async function hydrateLikes(overlay, a) {
   // separa de verdad: lleno en las que están en me gusta, hueco en las que no.
   // Cuando no se pudo traer el tracklist se cae a la lista vieja (solo likes) y
   // ahí sí van todas llenas, porque todas lo son.
+  // ⚠️ El fallo de resolución se VE (v=219). Hasta v=218 salía por
+  // `console.warn`, que la extensión de Chrome no captura: el usuario veía una
+  // ficha que decía «10 pistas» en vez de «10 de 17», sin nada que indicara que
+  // faltaba el tracklist. Un fallo que solo se cuenta a la consola es un fallo
+  // que no se cuenta. El motivo técnico va en el `title` para no ensuciar la
+  // línea, pero queda a un hover de distancia.
+  const avisoHtml = !completo && motivoFallo
+    ? `<div class="album-modal-aviso" role="status" title="${escapeHtml(motivoFallo)}">No se ha podido identificar este álbum en Spotify: se muestran solo tus me gusta.</div>`
+    : '';
+
   holder.innerHTML = `
     <div class="album-modal-likes-head">
       <div class="album-modal-likes-title">${escapeHtml(countLine)}</div>
     </div>
+    ${avisoHtml}
     ${matched.length === 0 ? '' : `
       <div class="album-modal-likes-list">
         ${matched.map(t => `
@@ -473,7 +447,7 @@ async function hydrateLikes(overlay, a) {
             <span class="album-modal-like-heart${t.liked ? '' : ' is-off'}" title="${t.liked ? 'Está en tus me gusta' : 'No está en tus me gusta'}" aria-label="${t.liked ? 'En tus me gusta' : 'Fuera de tus me gusta'}">${t.liked ? HEART_SVG : HEART_OUTLINE_SVG}</span>
             <span class="album-modal-like-num">${t.trackNumber || ''}</span>
             <span class="album-modal-like-name">${escapeHtml(t.name)}</span>
-            <button type="button" class="wt-play-btn album-modal-like-play" data-play-id="${escapeHtml(t.id || '')}" data-play-name="${escapeHtml(t.name)}" title="Preview 30s" aria-label="Preview">${PLAY_SVG}</button>
+            <button type="button" class="album-modal-like-play" data-play-id="${escapeHtml(t.id || '')}" data-play-name="${escapeHtml(t.name)}" title="Preview 30s" aria-label="Preview">${PLAY_SVG}</button>
           </div>
         `).join('')}
       </div>

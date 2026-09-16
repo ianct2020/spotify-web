@@ -1339,6 +1339,20 @@ h3 { font-size: 18px; font-weight: 600; }
   width: 24px;
   height: 24px;
 }
+/* Aviso de «no pude identificar el álbum» (v=219). Va donde iba el tracklist,
+   que es donde se nota la falta. Sobrio a propósito: es informativo, no un
+   error rojo — la ficha sigue mostrando los me gusta. */
+.album-modal-aviso {
+  margin: 6px 0 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--color-border);
+  border-left: 3px solid var(--color-accent);
+  border-radius: 6px;
+  background: var(--color-surface);
+  color: var(--color-text-secondary);
+  font-size: 12px;
+  line-height: 1.4;
+}
 
 /* Estilo "estándar" del header de modal — reutilizable en modales chicos
    (títulos con ✕ arriba a la derecha, padding respirable, ✕ alineada). */
@@ -3541,8 +3555,16 @@ h3 { font-size: 18px; font-weight: 600; }
   justify-content: center;
 }
 
-/* Botón ▶ chico por fila — 26×26 con look de píldora */
-.wt-play-btn {
+/* Botón ▶ chico por fila — 26×26 con look de píldora.
+   ⚠️ Dos MÓDULOS lo usan y cada uno tiene su propia clase desde v=219:
+   `.wt-play-btn` es de `features/wthree.js` y `.album-modal-like-play` es de
+   `features/album-card.js`. Hasta v=218 la ficha de álbum pedía prestada la
+   clase de W-Three para heredar este look, y eso la metía dentro del
+   `document.querySelectorAll('.wt-play-btn')` del listener de `previewchange`
+   de W-Three, que le reescribía el icono en cada evento del <audio>. El look se
+   comparte acá, en la hoja; la identidad no. */
+.wt-play-btn,
+.album-modal-like-play {
   width: 26px;
   height: 26px;
   border-radius: 50%;
@@ -3559,13 +3581,16 @@ h3 { font-size: 18px; font-weight: 600; }
   flex-shrink: 0;
   transition: background .12s, border-color .12s, transform .1s;
 }
-.wt-play-btn:hover:not(:disabled) {
+.wt-play-btn:hover:not(:disabled),
+.album-modal-like-play:hover:not(:disabled) {
   background: var(--color-accent);
   border-color: var(--color-accent);
   color: white;
 }
-.wt-play-btn:disabled { opacity: 0.35; cursor: default; }
-.wt-play-btn:active { transform: scale(0.94); }
+.wt-play-btn:disabled,
+.album-modal-like-play:disabled { opacity: 0.35; cursor: default; }
+.wt-play-btn:active,
+.album-modal-like-play:active { transform: scale(0.94); }
 
 /* Filas del tracklist más bajas dentro del modal compacto */
 .wt-tracklist .wthree-track { padding: 6px 10px; font-size: 12.5px; }

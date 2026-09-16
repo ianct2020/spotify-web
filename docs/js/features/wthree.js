@@ -2,25 +2,26 @@
 // por álbum). Muestra qué álbumes ya tienen picks, cuántos, y cuáles te faltan.
 // Ordenado por álbumes más escuchados primero para priorizar tu tiempo.
 
-import { spotifyFetch, getAllPlaylistItems, getAllUserPlaylists, addTracksToPlaylist, removeTracksFromPlaylist, reorderPlaylistItems, getCachedPlaylistItems, updatePlaylistItemsCache, getBestAvailableLikes } from '../api.js?v=218';
-import { vigilarRuta } from '../util/vigencia-ruta.js?v=218';
-import { patchPlaylistItems, buildCachedItem } from '../util/playlist-cache-patch.js?v=218';
-import { loadHistoryStats, loadListenedAlbums, isOwner, ownerLockedMessage } from './history-data.js?v=218';
-import { escapeHtml, pageHeader } from '../ui/components.js?v=218';
-import { showToast } from '../ui/toast.js?v=218';
-import { wireHoverMarquee, hoverMarqueeSpan } from '../ui/hover-marquee.js?v=218';
-import { openModal, closeById, closeModal } from '../ui/modal-stack.js?v=218';
-import { getPreview } from '../api/preview-providers.js?v=218';
-import { togglePreview, playingKey } from '../ui/preview-player.js?v=218';
-import { openAlbumCard } from './album-card.js?v=218';
-import { albumKey } from '../util/album-key.js?v=218';
-import { computeUpdatedPickPositions } from '../util/reorder-shifts.js?v=218';
-import { createHiddenStore } from '../util/hidden-sync.js?v=218';
-import { recuperarUriDeAlbumKey } from '../util/hidden-recover.js?v=218';
-import { mountBottom } from '../ui/bottom-layer.js?v=218';
-import { coverUrl } from '../util/cover-size.js?v=218';
-import { insercionPorPuntero, moverA, indicadorPara } from '../util/reorder-drop.js?v=218';
-import { prefKey, migratePrefKey } from '../storage.js?v=218';
+import { spotifyFetch, getAllPlaylistItems, getAllUserPlaylists, addTracksToPlaylist, removeTracksFromPlaylist, reorderPlaylistItems, getCachedPlaylistItems, updatePlaylistItemsCache, getBestAvailableLikes } from '../api.js?v=219';
+import { vigilarRuta } from '../util/vigencia-ruta.js?v=219';
+import { patchPlaylistItems, buildCachedItem } from '../util/playlist-cache-patch.js?v=219';
+import { loadHistoryStats, loadListenedAlbums, isOwner, ownerLockedMessage } from './history-data.js?v=219';
+import { escapeHtml, pageHeader } from '../ui/components.js?v=219';
+import { showToast } from '../ui/toast.js?v=219';
+import { wireHoverMarquee, hoverMarqueeSpan } from '../ui/hover-marquee.js?v=219';
+import { openModal, closeById, closeModal } from '../ui/modal-stack.js?v=219';
+import { getPreview } from '../api/preview-providers.js?v=219';
+import { togglePreview, playingKey } from '../ui/preview-player.js?v=219';
+import { openAlbumCard } from './album-card.js?v=219';
+import { albumKey } from '../util/album-key.js?v=219';
+import { resolveAlbumId } from '../util/album-resolver.js?v=219';
+import { computeUpdatedPickPositions } from '../util/reorder-shifts.js?v=219';
+import { createHiddenStore } from '../util/hidden-sync.js?v=219';
+import { recuperarUriDeAlbumKey } from '../util/hidden-recover.js?v=219';
+import { mountBottom } from '../ui/bottom-layer.js?v=219';
+import { coverUrl } from '../util/cover-size.js?v=219';
+import { insercionPorPuntero, moverA, indicadorPara } from '../util/reorder-drop.js?v=219';
+import { prefKey, migratePrefKey } from '../storage.js?v=219';
 
 const LS_KEY_ID = 'wthree_playlist_id';
 const LS_KEY_NAME = 'wthree_playlist_name';
@@ -149,6 +150,14 @@ const DOTS_SVG = `<svg viewBox="0 0 24 24" width="12" height="12" fill="currentC
 
 // Cuando el preview global cambia, resetear los ▶/⏸ de la tracklist abierta.
 // Los que corresponden al key sonando quedan como ⏸, el resto vuelve a ▶.
+//
+// ⚠️ `.wt-play-btn` es la clase de ESTE módulo y de ninguno más. Hasta v=218 la
+// ficha de álbum (`features/album-card.js`) la llevaba puesta para heredar el
+// look del botón, así que este bucle le pisaba el icono: sus claves son
+// `alb:${id}`, nunca matchean el `wt:${id}` de acá, y cada evento del <audio>
+// le devolvía el ▶ a una pista que seguía sonando. Desde v=219 la ficha tiene
+// su propia clase y su propio listener, y el look se comparte en `main.css`.
+// Si algún día otro módulo quiere este botón, que copie el CSS, no la clase.
 document.addEventListener('previewchange', (e) => {
   const key = e.detail?.key || '';
   document.querySelectorAll('.wt-play-btn').forEach(btn => {
@@ -693,8 +702,12 @@ async function openAlbumModal(a) {
   });
 
   // C1: clic en tapa o nombre del álbum → ficha de álbum APILADA encima.
+  // El `albumId` se pasa cuando lo tenemos (v=219): cuando el álbum tiene picks
+  // en la playlist, `a.albumId` está a mano acá y no se estaba mandando, así que
+  // la ficha se comía una búsqueda entera de `/search` para averiguar un id que
+  // el llamador ya sabía. Es gratis y ahorra ~600-780 ms por apertura.
   const openAlbumFicha = () => openAlbumCard({
-    name: a.name, artist: a.artist, img: a.img,
+    name: a.name, artist: a.artist, img: a.img, albumId: a.albumId || null,
     plays: a.plays || 0, min: a.min || 0,
   });
   overlay.querySelector('#wt-open-album').onclick = openAlbumFicha;
@@ -1030,16 +1043,18 @@ async function fetchAlbumTracks(a) {
   const key = albumKey(a.name, a.artist);
   if (albumTracksCache.has(key)) return albumTracksCache.get(key);
 
-  let albumId = a.albumId;
-  // Si no tenemos albumId (álbum sólo estaba en historial, no en playlist), buscar en Spotify
-  if (!albumId) {
-    try {
-      const q = `album:"${a.name.replace(/"/g, '')}" artist:"${a.artist.replace(/"/g, '')}"`;
-      const res = await spotifyFetch(`/search?q=${encodeURIComponent(q)}&type=album&limit=1`);
-      albumId = res?.albums?.items?.[0]?.id;
-    } catch { /* noop */ }
-  }
-  if (!albumId) { albumTracksCache.set(key, []); return []; }
+  // Si no tenemos albumId (el álbum estaba solo en el historial, no en la
+  // playlist) lo resuelve `util/album-resolver.js` — EL resolutor, el mismo que
+  // usa la ficha de álbum. Acá había un gemelo suyo mucho peor: `limit=1`,
+  // `items[0]` a ciegas, sin limpiar el apóstrofo y sin comparar nada después,
+  // o sea que el tracklist de este modal salía del primer resultado que Spotify
+  // quisiera devolver. Dos resolutores del mismo problema, y el que no
+  // verificaba era el que rompía.
+  const { id: albumId } = await resolveAlbumId(a);
+  // Un fracaso de resolución NO se cachea: cachearlo lo convierte en «este
+  // álbum no tiene pistas» para el resto de la sesión, que es la misma trampa
+  // que tenía el memo de ids en la ficha de álbum.
+  if (!albumId) return [];
 
   try {
     const res = await spotifyFetch(`/albums/${albumId}/tracks?limit=50`);
