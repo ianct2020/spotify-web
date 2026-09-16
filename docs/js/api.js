@@ -1,9 +1,9 @@
-import { getValidToken, refreshAccessToken } from './auth.js?v=224';
-import { cacheGet, cacheGetRaw, cacheGetTimestamp, cacheSet, cacheClear, prefKey, migratePrefKey } from './storage.js?v=224';
-import { idbDel, idbDelByPrefix, idbGetCached, idbGetCachedRaw, idbGetTimestamp, idbSetCached } from './idb.js?v=224';
-import { OWNER_KEY_LIST } from './history-keys.js?v=224';
-import { showToast } from './ui/toast.js?v=224';
-import { artistIsSame, limpiaParaQuery } from './util/track-match.js?v=224';
+import { getValidToken, refreshAccessToken } from './auth.js?v=225';
+import { cacheGet, cacheGetRaw, cacheGetTimestamp, cacheSet, cacheClear, prefKey, migratePrefKey } from './storage.js?v=225';
+import { idbDel, idbDelByPrefix, idbGetCached, idbGetCachedRaw, idbGetTimestamp, idbSetCached } from './idb.js?v=225';
+import { OWNER_KEY_LIST } from './history-keys.js?v=225';
+import { showToast } from './ui/toast.js?v=225';
+import { artistIsSame, limpiaParaQuery } from './util/track-match.js?v=225';
 
 const BASE = 'https://api.spotify.com/v1';
 const MIN_RETRY_WAIT = 5000;
@@ -116,7 +116,7 @@ async function spotifyFetch(endpoint, options = {}) {
       console.info(`[rate-limit] 429 en ${endpoint} — espero ${(wait / 1000).toFixed(0)}s `
         + `(intento ${rateLimitRetries}/${maxRetries}, `
         + `${loDijoSpotify ? `Spotify pidió ${pedidos}s` : 'Spotify no dice cuánto (header oculto por CORS)'})`);
-      avisarRateLimit({ endpoint, wait, intento: rateLimitRetries, maxRetries, pedidos: loDijoSpotify ? pedidos : null });
+      avisarRateLimit({ endpoint, wait, intento: rateLimitRetries, maxRetries, pedidos: loDijoSpotify ? pedidos : null, retryAfterCrudo: retryAfterHeader });
       await sleep(wait);
       continue;
     }
@@ -1355,6 +1355,40 @@ async function albumsInLibrary(albumIds) {
 // la sesión. Si Spotify revive el endpoint, el probe de la próxima carga lo
 // detecta solo.
 let _artistAlbumsEndpoint = null; // 'native' | 'search'
+
+// ── Diagnóstico del endpoint de discografía (v=225) ─────────────────────────
+// El cambio a /search se avisaba con `console.warn`, que la extensión de Chrome
+// no captura: en tres semanas nadie supo si era 400, 403 o 429. Ahora cada
+// evento del nativo queda en este objeto (exportado) y en sessionStorage, para
+// leerlo desde dentro de la pestaña. Es por pestaña y por carga, a propósito:
+// lo que interesa es la historia de UNA sesión de escaneo.
+const ARTIST_ALBUMS_DIAG_KEY = 'fonoteca_artist_albums_diag';
+const artistAlbumsDiag = {
+  inicio: null,            // ms del primer request al nativo
+  nativoArtistasOk: 0,     // artistas cuya discografía vino entera del nativo
+  nativoRequests: 0,       // requests al nativo que devolvieron 200
+  busquedaArtistas: 0,     // artistas servidos por /search
+  esperas429: [],          // cada 429 del nativo, con lo que se pudo leer del header
+  cambios: [],             // cada paso a /search, con el motivo
+};
+function guardarDiag() {
+  try { sessionStorage.setItem(ARTIST_ALBUMS_DIAG_KEY, JSON.stringify(artistAlbumsDiag)); } catch { /* ignora */ }
+}
+onRateLimit((info) => {
+  if (!/^\/artists\/[^/]+\/albums/.test(info.endpoint || '')) return;
+  artistAlbumsDiag.esperas429.push({
+    t: Date.now(),
+    endpoint: String(info.endpoint).slice(0, 120),
+    intento: info.intento,
+    maxRetries: info.maxRetries,
+    // null = el header no es legible (CORS) o no vino; no se distingue desde acá.
+    retryAfterCrudo: info.retryAfterCrudo ?? null,
+    nativoArtistasOk: artistAlbumsDiag.nativoArtistasOk,
+    nativoRequests: artistAlbumsDiag.nativoRequests,
+  });
+  if (artistAlbumsDiag.esperas429.length > 200) artistAlbumsDiag.esperas429.shift();
+  guardarDiag();
+});
 const SEARCH_PAGE = 10;           // máximo que acepta hoy /search
 // 4 páginas = 40 resultados por artista. Con 6 el escaneo de 100 artistas
 // disparaba 429 en cadena (medido en vivo: artistas enteros caían por rate
@@ -1375,7 +1409,16 @@ async function getArtistAlbums(artistId, artistName, { includeSingles = true, li
     for (let i = 0; i < 25; i++) {
       // El primer request es el probe: sin reintentos, para que un endpoint
       // muerto no cueste 25 segundos por artista.
-      const res = await spotifyFetch(url, i === 0 && _artistAlbumsEndpoint == null ? { _maxRetries: 0 } : {});
+      if (artistAlbumsDiag.inicio == null) artistAlbumsDiag.inicio = Date.now();
+      let res;
+      try {
+        res = await spotifyFetch(url, i === 0 && _artistAlbumsEndpoint == null ? { _maxRetries: 0 } : {});
+      } catch (e) {
+        e.paginaNativa = i;
+        e.itemsHastaAhora = items.length;
+        throw e;
+      }
+      artistAlbumsDiag.nativoRequests++;
       if (!res) break;
       const batch = res.items || [];
       items.push(...batch);
@@ -1434,10 +1477,16 @@ async function getArtistAlbums(artistId, artistName, { includeSingles = true, li
     return items.filter(al => includeSingles || al.album_type === 'album');
   };
 
-  if (_artistAlbumsEndpoint === 'search') return trySearch();
+  if (_artistAlbumsEndpoint === 'search') {
+    artistAlbumsDiag.busquedaArtistas++;
+    guardarDiag();
+    return trySearch();
+  }
 
   try {
     const items = await tryNative();
+    artistAlbumsDiag.nativoArtistasOk++;
+    guardarDiag();
     if (_artistAlbumsEndpoint == null) {
       _artistAlbumsEndpoint = 'native';
       console.log('[api] getArtistAlbums: /artists/{id}/albums OK — usando nativo');
@@ -1448,9 +1497,27 @@ async function getArtistAlbums(artistId, artistName, { includeSingles = true, li
     const status = e.status || (e.message.match(/\b(400|403|429)\b/) || [])[1];
     if (status && [400, 403, 429, '400', '403', '429'].includes(status)) {
       _artistAlbumsEndpoint = 'search';
+      artistAlbumsDiag.cambios.push({
+        t: Date.now(),
+        status: Number(status),
+        mensaje: String(e.message).slice(0, 200),
+        artista: artistName,
+        artistaId: artistId,
+        pagina: e.paginaNativa ?? null,
+        itemsHastaAhora: e.itemsHastaAhora ?? null,
+        nativoArtistasOk: artistAlbumsDiag.nativoArtistasOk,
+        nativoRequests: artistAlbumsDiag.nativoRequests,
+        msDesdeInicio: artistAlbumsDiag.inicio ? Date.now() - artistAlbumsDiag.inicio : null,
+      });
+      artistAlbumsDiag.busquedaArtistas++;
+      guardarDiag();
       console.warn('[api] getArtistAlbums: /artists/{id}/albums →', String(e.message).slice(0, 60), '· fallback a /search');
       return trySearch();
     }
+    // Cualquier otro fallo del nativo no cambia de endpoint, pero también queda.
+    artistAlbumsDiag.otrosErrores = (artistAlbumsDiag.otrosErrores || []).slice(-49);
+    artistAlbumsDiag.otrosErrores.push({ t: Date.now(), status: e.status ?? null, mensaje: String(e.message).slice(0, 200), artista: artistName });
+    guardarDiag();
     throw e;
   }
 }
@@ -1509,6 +1576,7 @@ export {
   albumsInLibrary,
   getSavedAlbums,
   getArtistAlbums,
+  artistAlbumsDiag,
   getAlbumTracks,
   searchArtistByName,
   invalidateLikesCache,
