@@ -6,23 +6,23 @@
 //     (util/album-heard.js: historial completo + likes + listened + w-three)
 //   - permiten "+ Biblioteca" y "Crear playlist con lo elegido"
 
-import { idbGetCached, idbSetCached, idbDel } from '../idb.js?v=225';
-import { getArtistAlbums, searchArtistByName, getAlbumTracks, saveToLibrary, saveAlbumsToLibrary, createPlaylist, addTracksToPlaylist } from '../api.js?v=225';
-import { albumKey } from '../util/album-key.js?v=225';
-import { cardKey, cardKeyLegacy, albumCreditName, keyOfPlaylistTrack } from '../util/discover-key.js?v=225';
-import { escapeHtml } from '../ui/components.js?v=225';
-import { showToast } from '../ui/toast.js?v=225';
-import { openPlaylistPicker } from '../ui/playlist-picker.js?v=225';
-import { getOwnPlaylists, addUrisToPlaylists, toastAddResult } from '../util/playlist-add.js?v=225';
-import { openArtistCard } from './artist-card.js?v=225';
-import { openAlbumCard } from './album-card.js?v=225';
-import { createHiddenStore, createLocalStore } from '../util/hidden-sync.js?v=225';
-import { recuperarUriDeAlbumKey } from '../util/hidden-recover.js?v=225';
-import { getPreview } from '../api/preview-providers.js?v=225';
-import { togglePreview, playingKey, attachHover } from '../ui/preview-player.js?v=225';
-import { coverUrl } from '../util/cover-size.js?v=225';
-import { FILTROS as FILTROS_DEF, saveFiltros } from '../util/discover-filters.js?v=225';
-import { esEPoAlbum } from '../util/release-size.js?v=225';
+import { idbGetCached, idbSetCached, idbDel } from '../idb.js?v=226';
+import { getArtistAlbumsConFuente, searchArtistByName, getAlbumTracks, saveToLibrary, saveAlbumsToLibrary, createPlaylist, addTracksToPlaylist } from '../api.js?v=226';
+import { albumKey } from '../util/album-key.js?v=226';
+import { cardKey, cardKeyLegacy, albumCreditName, keyOfPlaylistTrack } from '../util/discover-key.js?v=226';
+import { escapeHtml } from '../ui/components.js?v=226';
+import { showToast } from '../ui/toast.js?v=226';
+import { openPlaylistPicker } from '../ui/playlist-picker.js?v=226';
+import { getOwnPlaylists, addUrisToPlaylists, toastAddResult } from '../util/playlist-add.js?v=226';
+import { openArtistCard } from './artist-card.js?v=226';
+import { openAlbumCard } from './album-card.js?v=226';
+import { createHiddenStore, createLocalStore } from '../util/hidden-sync.js?v=226';
+import { recuperarUriDeAlbumKey } from '../util/hidden-recover.js?v=226';
+import { getPreview } from '../api/preview-providers.js?v=226';
+import { togglePreview, playingKey, attachHover } from '../ui/preview-player.js?v=226';
+import { coverUrl } from '../util/cover-size.js?v=226';
+import { FILTROS as FILTROS_DEF, saveFiltros } from '../util/discover-filters.js?v=226';
+import { esEPoAlbum } from '../util/release-size.js?v=226';
 
 const DISCO_TTL_MIN = 30 * 24 * 60;       // 30 días
 const ARTIST_ID_TTL_MIN = 60 * 24 * 60;   // 60 días — los ids no cambian
@@ -54,7 +54,7 @@ export async function getArtistDiscoCached(artistId, artistName) {
   } catch { /* ignora */ }
   // Sin limit explícito: api.js sabe cuál es el máximo que acepta Spotify hoy
   // (10 desde 2026-08-11) y pagina hasta el final igual.
-  const items = await getArtistAlbums(artistId, artistName, { includeSingles: true });
+  const { items, fuente, cortada } = await getArtistAlbumsConFuente(artistId, artistName, { includeSingles: true });
   const slim = items.map(al => ({
     id: al.id,
     name: al.name,
@@ -65,9 +65,73 @@ export async function getArtistDiscoCached(artistId, artistName) {
     artists: (al.artists || []).map(a => ({ id: a.id, name: a.name })),
   }));
   if (slim.length) {
-    try { await idbSetCached(key, slim, DISCO_TTL_MIN); } catch { /* ignora */ }
+    try {
+      await idbSetCached(key, slim, DISCO_TTL_MIN);
+      // Aparte y con el mismo TTL, para no cambiarle la forma al array que ya
+      // leen las dos vistas. Sin esto no hay forma de saber después si la
+      // discografía está entera.
+      await idbSetCached(`${FUENTE_PREFIX}${artistId}`, { fuente, cortada, n: slim.length }, DISCO_TTL_MIN);
+    } catch { /* ignora */ }
+    _estadoDisco.set(artistId, { fuente, cortada, estimada: false });
   }
   return slim;
+}
+
+// ── ¿La discografía cacheada está entera? (v=226) ───────────────────────────
+// Hasta v=225 no se guardaba de dónde salía, y 215 de 250 habían entrado por
+// /search, que corta en 40 por relevancia (o sea: faltan justo los viejos).
+const FUENTE_PREFIX = 'discover_artist_disco_fuente_';
+const _estadoDisco = new Map();
+
+// Orden del nativo: primero los `album`, después los `single`, cada bloque por
+// fecha descendente. /search ordena por relevancia. Validado el 2026-09-16
+// contra el diagnóstico de v=225: de 300 discografías, las 55 con este orden
+// son exactamente las 35 + 20 que el diagnóstico contó por el nativo.
+function tieneOrdenNativo(disco) {
+  let fase = 'album';
+  let prev = Infinity;
+  for (const al of disco) {
+    const t = al.type === 'album' ? 'album' : 'single';
+    if (t !== fase) {
+      if (fase === 'album' && t === 'single') { fase = 'single'; prev = Infinity; }
+      else return false;
+    }
+    const ts = releaseTs(al.release);
+    // Un mes de tolerancia: las fechas de solo año caen a mitad de año.
+    if (ts > prev + 31 * 24 * 60 * 60 * 1000) return false;
+    prev = ts;
+  }
+  return true;
+}
+
+/**
+ * { fuente: 'nativo'|'busqueda', cortada, estimada } o null si no hay caché.
+ * `estimada` = discografía de antes de v=226, sin fuente guardada: se deduce
+ * del orden, y «cortada» es solo el caso seguro (/search con 40 exactos). Una
+ * de /search con 37 puede estar cortada igual, así que ahí es un PISO.
+ */
+export async function estadoDiscografia(artistId) {
+  if (!artistId) return null;
+  if (_estadoDisco.has(artistId)) return _estadoDisco.get(artistId);
+  let estado = null;
+  try {
+    const meta = await idbGetCached(`${FUENTE_PREFIX}${artistId}`);
+    if (meta && meta.fuente) {
+      estado = { fuente: meta.fuente, cortada: !!meta.cortada, estimada: false };
+    } else {
+      const raw = await idbGetCached(`discover_artist_disco_v2_${artistId}`);
+      if (Array.isArray(raw) && raw.length) {
+        const nativo = tieneOrdenNativo(raw);
+        estado = {
+          fuente: nativo ? 'nativo' : 'busqueda',
+          cortada: nativo ? raw.length >= 200 : raw.length >= 40,
+          estimada: true,
+        };
+      }
+    }
+  } catch { /* ignora */ }
+  if (estado) _estadoDisco.set(artistId, estado);
+  return estado;
 }
 
 // ── Cache del escaneo COMPLETO (no solo de la discografía por artista) ──
@@ -96,6 +160,8 @@ export async function clearScanCache(viewKey, artistIds = []) {
   for (const id of artistIds) {
     if (!id) continue;
     try { await idbDel(`discover_artist_disco_v2_${id}`); } catch { /* ignora */ }
+    try { await idbDel(`${FUENTE_PREFIX}${id}`); } catch { /* ignora */ }
+    _estadoDisco.delete(id);
   }
 }
 

@@ -43,7 +43,9 @@ import {
   cardKey,
   migrarClavesDeArtista,
   toggleHiddenAlbum,
+  estadoDiscografia,
 } from './discover-common.js';
+import { estadoNativoDiscografia } from '../api.js';
 
 const SCAN_KEY = 'new_releases';
 
@@ -55,8 +57,9 @@ const LS_LOADED_MORE = 'newrel_loaded_more';
 // motivo — si en una estás mirando sólo EPs y saltás a la otra y ves álbumes,
 // el filtro parece que no se aplicó.
 const LS_FILTER_KIND = 'discoverart_filter_kind';  // 'all' | 'album' | 'ep' | 'single'
-// 2 y no 3: la discografía sale de /search y con 3 en paralelo Spotify tira
-// 429 en cadena (ver api.js getArtistAlbums).
+// 2 y no 3: con 3 en paralelo /search tiraba 429 en cadena. El nativo tiene
+// su propia cuota (100 requests y 429 durante minutos, medido en v=225): eso lo
+// maneja la pausa de api.js getArtistAlbumsConFuente, no este número.
 const BATCH_PARALLEL = 2;
 const RATE_RETRIES = 2;
 const DEFAULT_INITIAL = 100;
@@ -245,6 +248,7 @@ function renderShell(content, totalCandidates) {
       </div>
     </div>
     ${renderFiltroChips(state.filtros, state.conteosFiltro)}
+    <div class="disco-aviso" id="newrel-aviso-cortadas" role="status" hidden></div>
     <div class="disco-progress" id="newrel-progress" style="display:none">
       <div class="disco-progress-bar"><div class="disco-progress-fill" id="newrel-progress-fill" style="width:0%"></div></div>
       <div class="disco-progress-label" id="newrel-progress-label"></div>
@@ -493,9 +497,57 @@ function pintarConteosFiltro(conteos) {
   });
 }
 
+// ── Aviso de discografías cortadas (v=226) ──────────────────────────────────
+// La vista pintaba un catálogo truncado como si fuera completo: 93 de 300
+// discografías habían entrado por /search con el tope de 40 (medido el
+// 2026-09-16), y lo que queda fuera de esos 40 son justo los lanzamientos
+// viejos. Va en pantalla porque un aviso por consola no lo ve nadie.
+let _avisoEnCurso = false;
+let _avisoPendiente = false;
+async function pintarAvisoCortadas() {
+  if (_avisoEnCurso) { _avisoPendiente = true; return; }
+  _avisoEnCurso = true;
+  try {
+    do {
+      _avisoPendiente = false;
+      const artistas = eligibleArtists().filter(a => a.scanned && !a.error && a.id);
+      let cortadas = 0;
+      let porBusqueda = 0;
+      let esPiso = false;
+      for (const a of artistas) {
+        const e = await estadoDiscografia(a.id);
+        if (!e) continue;
+        if (e.fuente === 'busqueda') porBusqueda++;
+        if (e.cortada) cortadas++;
+        // Discografía de antes de v=226 por /search con menos de 40: puede
+        // estar cortada igual (el filtro de artista descarta ajenos), no se sabe.
+        else if (e.estimada && e.fuente === 'busqueda') esPiso = true;
+      }
+      const el = document.getElementById('newrel-aviso-cortadas');
+      if (!el) return;
+      if (!cortadas) { el.hidden = true; el.textContent = ''; continue; }
+      const nat = estadoNativoDiscografia();
+      const n = cortadas.toLocaleString('es-ES');
+      const total = artistas.length.toLocaleString('es-ES');
+      el.textContent = `Discografía incompleta en ${esPiso ? 'al menos ' : ''}${n} de ${total} artistas: `
+        + 'Spotify no dejó pedir el catálogo entero y pueden faltar lanzamientos antiguos.';
+      const detalle = [
+        `${porBusqueda.toLocaleString('es-ES')} de ${total} discografías salieron de la búsqueda de Spotify, que devuelve 40 lanzamientos como mucho y ordenados por relevancia.`,
+      ];
+      if (nat.denegado) detalle.push(`El catálogo de artista respondió ${nat.denegado.status} en esta sesión: ${nat.denegado.mensaje}`);
+      else if (nat.pausaHasta) detalle.push(`Spotify ha frenado las consultas de catálogo; se vuelve a intentar a partir de las ${new Date(nat.pausaHasta).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}.`);
+      el.title = detalle.join(' ');
+      el.hidden = false;
+    } while (_avisoPendiente);
+  } finally {
+    _avisoEnCurso = false;
+  }
+}
+
 function refreshList(content) {
   const listEl = document.getElementById('newrel-list');
   if (!listEl) return;
+  pintarAvisoCortadas().catch(err => console.info('[newrel] aviso de cortadas:', err.message));
   const rows = releasesInWindow();
   document.getElementById('newrel-unheard-count').textContent = rows.length.toLocaleString('es-ES');
   const nHidden = document.getElementById('newrel-hidden-n');

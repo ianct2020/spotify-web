@@ -1,9 +1,9 @@
-import { getValidToken, refreshAccessToken } from './auth.js?v=225';
-import { cacheGet, cacheGetRaw, cacheGetTimestamp, cacheSet, cacheClear, prefKey, migratePrefKey } from './storage.js?v=225';
-import { idbDel, idbDelByPrefix, idbGetCached, idbGetCachedRaw, idbGetTimestamp, idbSetCached } from './idb.js?v=225';
-import { OWNER_KEY_LIST } from './history-keys.js?v=225';
-import { showToast } from './ui/toast.js?v=225';
-import { artistIsSame, limpiaParaQuery } from './util/track-match.js?v=225';
+import { getValidToken, refreshAccessToken } from './auth.js?v=226';
+import { cacheGet, cacheGetRaw, cacheGetTimestamp, cacheSet, cacheClear, prefKey, migratePrefKey } from './storage.js?v=226';
+import { idbDel, idbDelByPrefix, idbGetCached, idbGetCachedRaw, idbGetTimestamp, idbSetCached } from './idb.js?v=226';
+import { OWNER_KEY_LIST } from './history-keys.js?v=226';
+import { showToast } from './ui/toast.js?v=226';
+import { artistIsSame, limpiaParaQuery } from './util/track-match.js?v=226';
 
 const BASE = 'https://api.spotify.com/v1';
 const MIN_RETRY_WAIT = 5000;
@@ -1350,11 +1350,29 @@ async function albumsInLibrary(albumIds) {
 //   - `total` de /search viene igual a los items devueltos, así que no sirve
 //     para paginar: hay que ir hasta una página corta.
 //
-// Estrategia: un probe barato al nativo (sin reintentos, para no comerse 25s
-// de esperas por 429) y, ante 400/403/429, pasamos a /search para el resto de
-// la sesión. Si Spotify revive el endpoint, el probe de la próxima carga lo
-// detecta solo.
-let _artistAlbumsEndpoint = null; // 'native' | 'search'
+// Estrategia hasta v=225: un probe barato al nativo y, ante 400/403/429, a
+// /search PARA EL RESTO DE LA SESIÓN. Eso era memoizar un fracaso como si fuera
+// un hecho (la misma forma que `_albumIdMemo` en v=219).
+//
+// Medido en vivo el 2026-09-16 (v=225, escaneo real de 50 artistas, diagnóstico
+// leído desde la pestaña): el nativo da **429 `QUOTA_EXCEEDED` después de
+// exactamente 100 requests en ~33 s** (20 artistas), `Retry-After` ilegible por
+// CORS, y el bloqueo es **del endpoint, no de la app**: en el mismo momento
+// `/artists/{id}`, `/albums/{id}/tracks`, `/search` y `/me` daban 200. Duración
+// del bloqueo: ver `NATIVO_PAUSA_*` más abajo.
+//
+// Estrategia desde v=226:
+//   - 429 → el nativo entra en PAUSA (no se abandona). Mientras dura, /search, y
+//     la discografía queda marcada con su fuente. Pasada la pausa, el siguiente
+//     artista vuelve a probar el nativo; si vuelve a dar 429, la pausa se dobla.
+//   - 400/403 → sí se abandona para la sesión (reintentar lo mismo no cambia la
+//     respuesta), pero queda en `estadoNativoDiscografia()` para decirlo en
+//     pantalla, no en la consola.
+//   - Los requests al nativo van SIN reintentos: con una cuota que dura minutos,
+//     5 × 5 s de espera por worker solo retrasaban el mismo 429.
+let _nativoPausaHasta = 0;        // ms epoch; 0 = sin pausa
+let _nativoPausaMs = 0;           // última pausa aplicada (para doblarla)
+let _nativoDenegado = null;       // { status, mensaje } si dio 400/403
 
 // ── Diagnóstico del endpoint de discografía (v=225) ─────────────────────────
 // El cambio a /search se avisaba con `console.warn`, que la extensión de Chrome
@@ -1401,7 +1419,14 @@ const SEARCH_MAX_PAGES = 4;
 // /search, que es más lento y trae artistas ajenos que hay que filtrar a mano.
 const ARTIST_ALBUMS_MAX_LIMIT = 10;
 
-async function getArtistAlbums(artistId, artistName, { includeSingles = true, limit = ARTIST_ALBUMS_MAX_LIMIT } = {}) {
+// Pausa del nativo tras un 429. PROVISIONAL hasta medir cuánto dura la cuota:
+// ver el comentario de arriba y ULTIMO-CAMBIO.md.
+const NATIVO_PAUSA_MIN_MS = 5 * 60 * 1000;
+const NATIVO_PAUSA_MAX_MS = 60 * 60 * 1000;
+
+// Devuelve { items, fuente: 'nativo' | 'busqueda', cortada, motivo }.
+// `cortada` = Spotify tenía más lanzamientos y no se pidieron.
+async function getArtistAlbumsConFuente(artistId, artistName, { includeSingles = true, limit = ARTIST_ALBUMS_MAX_LIMIT } = {}) {
   const groups = includeSingles ? 'album,single' : 'album';
   const tryNative = async () => {
     const items = [];
@@ -1412,7 +1437,7 @@ async function getArtistAlbums(artistId, artistName, { includeSingles = true, li
       if (artistAlbumsDiag.inicio == null) artistAlbumsDiag.inicio = Date.now();
       let res;
       try {
-        res = await spotifyFetch(url, i === 0 && _artistAlbumsEndpoint == null ? { _maxRetries: 0 } : {});
+        res = await spotifyFetch(url, { _maxRetries: 0 });
       } catch (e) {
         e.paginaNativa = i;
         e.itemsHastaAhora = items.length;
@@ -1424,9 +1449,11 @@ async function getArtistAlbums(artistId, artistName, { includeSingles = true, li
       items.push(...batch);
       if (!res.next) break;
       url = res.next.replace('https://api.spotify.com/v1', '');
-      if (items.length >= 200) break; // límite razonable — nadie tiene 200 lanzamientos
+      // Límite razonable. Casi nadie llega (el máximo medido son 209, con la
+      // última página entera), pero si se corta acá, se DICE: cortada.
+      if (items.length >= 200) return { items, cortada: true };
     }
-    return items;
+    return { items, cortada: false };
   };
 
   const trySearch = async () => {
@@ -1435,7 +1462,7 @@ async function getArtistAlbums(artistId, artistName, { includeSingles = true, li
     // **id** del artista (lo tenemos) y, si el álbum no lo trae, por nombre
     // exacto. Sin esto la vista de "sin escuchar" se llena de artistas ajenos.
     const wanted = (artistName || '').trim();
-    if (!wanted) return [];
+    if (!wanted) return { items: [], cortada: false };
     const isMine = (al) => (al.artists || []).some(a =>
       (artistId && a.id === artistId) || artistIsSame(wanted, a.name));
     // ⚠️ Este `||` deja pasar a los HOMÓNIMOS EXACTOS: hay dos artistas
@@ -1462,6 +1489,11 @@ async function getArtistAlbums(artistId, artistName, { includeSingles = true, li
     const q = `artist:"${limpiaParaQuery(wanted)}"`;
     const items = [];
     let emptyPages = 0;
+    // Cortada = se gastaron las SEARCH_MAX_PAGES páginas y la última vino
+    // llena: Spotify tenía más y no se pidió. Ojo, no es lo mismo que «40
+    // lanzamientos»: el filtro de `isMine` puede dejar 37 de 40 y seguir
+    // cortada. Si el bucle termina por una página corta, /search no tenía más.
+    let cortada = false;
     for (let page = 0; page < SEARCH_MAX_PAGES; page++) {
       const offset = page * SEARCH_PAGE;
       const res = await spotifyFetch(`/search?q=${encodeURIComponent(q)}&type=album&limit=${SEARCH_PAGE}&offset=${offset}`);
@@ -1473,33 +1505,44 @@ async function getArtistAlbums(artistId, artistName, { includeSingles = true, li
       // nada del artista, lo que sigue es ruido.
       emptyPages = mine.length ? 0 : emptyPages + 1;
       if (emptyPages >= 2) break;
+      if (page === SEARCH_MAX_PAGES - 1) cortada = true;
     }
-    return items.filter(al => includeSingles || al.album_type === 'album');
+    return { items: items.filter(al => includeSingles || al.album_type === 'album'), cortada };
   };
 
-  if (_artistAlbumsEndpoint === 'search') {
+  const porBusqueda = async (motivo) => {
     artistAlbumsDiag.busquedaArtistas++;
     guardarDiag();
-    return trySearch();
-  }
+    const r = await trySearch();
+    return { ...r, fuente: 'busqueda', motivo };
+  };
+
+  if (_nativoDenegado) return porBusqueda('denegado');
+  if (Date.now() < _nativoPausaHasta) return porBusqueda('pausa');
 
   try {
-    const items = await tryNative();
+    const r = await tryNative();
     artistAlbumsDiag.nativoArtistasOk++;
+    // Salió bien: la próxima pausa vuelve a empezar desde el mínimo.
+    _nativoPausaMs = 0;
     guardarDiag();
-    if (_artistAlbumsEndpoint == null) {
-      _artistAlbumsEndpoint = 'native';
-      console.log('[api] getArtistAlbums: /artists/{id}/albums OK — usando nativo');
-    }
-    return items;
+    return { ...r, fuente: 'nativo', motivo: null };
   } catch (e) {
-    // 400 (params inválidos), 403 (denegado) o 429 permanente → a /search.
-    const status = e.status || (e.message.match(/\b(400|403|429)\b/) || [])[1];
-    if (status && [400, 403, 429, '400', '403', '429'].includes(status)) {
-      _artistAlbumsEndpoint = 'search';
+    const status = Number(e.status || (String(e.message).match(/\b(400|403|429)\b/) || [])[1]) || null;
+    if (status === 429 || status === 400 || status === 403) {
+      // Con dos workers en paralelo los dos se comen el mismo 429 casi a la
+      // vez: el segundo no tiene que doblar la pausa que acaba de poner el primero.
+      if (status === 429 && Date.now() >= _nativoPausaHasta) {
+        _nativoPausaMs = _nativoPausaMs
+          ? Math.min(NATIVO_PAUSA_MAX_MS, _nativoPausaMs * 2)
+          : NATIVO_PAUSA_MIN_MS;
+        _nativoPausaHasta = Date.now() + _nativoPausaMs;
+      } else if (status !== 429) {
+        _nativoDenegado = { status, mensaje: String(e.message).slice(0, 200) };
+      }
       artistAlbumsDiag.cambios.push({
         t: Date.now(),
-        status: Number(status),
+        status,
         mensaje: String(e.message).slice(0, 200),
         artista: artistName,
         artistaId: artistId,
@@ -1508,11 +1551,12 @@ async function getArtistAlbums(artistId, artistName, { includeSingles = true, li
         nativoArtistasOk: artistAlbumsDiag.nativoArtistasOk,
         nativoRequests: artistAlbumsDiag.nativoRequests,
         msDesdeInicio: artistAlbumsDiag.inicio ? Date.now() - artistAlbumsDiag.inicio : null,
+        pausaMs: status === 429 ? _nativoPausaMs : null,
       });
-      artistAlbumsDiag.busquedaArtistas++;
-      guardarDiag();
-      console.warn('[api] getArtistAlbums: /artists/{id}/albums →', String(e.message).slice(0, 60), '· fallback a /search');
-      return trySearch();
+      console.info(`[api] getArtistAlbums: /artists/{id}/albums → ${status} en «${artistName}»`
+        + (status === 429 ? ` · nativo en pausa ${Math.round(_nativoPausaMs / 1000)} s, mientras tanto /search`
+          : ' · nativo denegado para esta sesión, se usa /search'));
+      return porBusqueda(status === 429 ? 'pausa' : 'denegado');
     }
     // Cualquier otro fallo del nativo no cambia de endpoint, pero también queda.
     artistAlbumsDiag.otrosErrores = (artistAlbumsDiag.otrosErrores || []).slice(-49);
@@ -1520,6 +1564,18 @@ async function getArtistAlbums(artistId, artistName, { includeSingles = true, li
     guardarDiag();
     throw e;
   }
+}
+
+async function getArtistAlbums(artistId, artistName, opts) {
+  return (await getArtistAlbumsConFuente(artistId, artistName, opts)).items;
+}
+
+/** Para la interfaz: si el nativo está en pausa o denegado, y desde cuándo. */
+function estadoNativoDiscografia() {
+  return {
+    pausaHasta: _nativoPausaHasta > Date.now() ? _nativoPausaHasta : 0,
+    denegado: _nativoDenegado,
+  };
 }
 
 // GET /albums/{id}/tracks (los items traen name, uri, track_number, duration_ms).
@@ -1576,6 +1632,8 @@ export {
   albumsInLibrary,
   getSavedAlbums,
   getArtistAlbums,
+  getArtistAlbumsConFuente,
+  estadoNativoDiscografia,
   artistAlbumsDiag,
   getAlbumTracks,
   searchArtistByName,
