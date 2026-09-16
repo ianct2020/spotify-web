@@ -87,19 +87,31 @@ const _estadoDisco = new Map();
 // fecha descendente. /search ordena por relevancia. Validado el 2026-09-16
 // contra el diagnóstico de v=225: de 300 discografías, las 55 con este orden
 // son exactamente las 35 + 20 que el diagnóstico contó por el nativo.
+//
+// Las fechas se comparan como RANGOS: «2019» es cualquier día de 2019. Con
+// `releaseTs` (que pone «2019» el 15 de junio) Prince, Bee Gees, Charly García
+// y Pharrell salían como /search en v=226 — «2019-03» seguido de «2019» parecía
+// desordenado.
+function rangoDeFecha(release) {
+  const s = release || '';
+  const y = parseInt(s.slice(0, 4), 10);
+  if (!Number.isFinite(y)) return [0, Infinity];
+  const m = parseInt(s.slice(5, 7), 10);
+  const d = parseInt(s.slice(8, 10), 10);
+  return [Date.UTC(y, m ? m - 1 : 0, d || 1), Date.UTC(y, m ? m - 1 : 11, d || 28)];
+}
 function tieneOrdenNativo(disco) {
   let fase = 'album';
-  let prev = Infinity;
+  let prevHasta = Infinity;
   for (const al of disco) {
     const t = al.type === 'album' ? 'album' : 'single';
     if (t !== fase) {
-      if (fase === 'album' && t === 'single') { fase = 'single'; prev = Infinity; }
+      if (fase === 'album' && t === 'single') { fase = 'single'; prevHasta = Infinity; }
       else return false;
     }
-    const ts = releaseTs(al.release);
-    // Un mes de tolerancia: las fechas de solo año caen a mitad de año.
-    if (ts > prev + 31 * 24 * 60 * 60 * 1000) return false;
-    prev = ts;
+    const [desde, hasta] = rangoDeFecha(al.release);
+    if (desde > prevHasta) return false;
+    prevHasta = hasta;
   }
   return true;
 }
@@ -121,7 +133,8 @@ export async function estadoDiscografia(artistId) {
     } else {
       const raw = await idbGetCached(`discover_artist_disco_v2_${artistId}`);
       if (Array.isArray(raw) && raw.length) {
-        const nativo = tieneOrdenNativo(raw);
+        // Más de 40 no puede venir de /search, que corta ahí.
+        const nativo = raw.length > 40 || tieneOrdenNativo(raw);
         estado = {
           fuente: nativo ? 'nativo' : 'busqueda',
           cortada: nativo ? raw.length >= 200 : raw.length >= 40,
