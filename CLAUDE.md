@@ -34,7 +34,7 @@
 - Campo `popularity` en `/me/tracks`: **removido en la migración feb 2026**. Confirmado 2026-07-17 con 9548 tracks reales → 100% null. No usar más. Chart de popularidad sacado del Dashboard en v=41.
 - **Búsqueda** (`/search?type=album|track|artist`, con filtros `artist:"..."`): CONFIRMADO vivo (se usa en Similar y en Álbum similar v=45).
 - `GET /artists/{id}/albums`: **el limit máximo bajó a 10** (re-verificado en vivo 2026-08-11: `limit` 11..20 devuelven 400 "Invalid limit", `limit=10` devuelve 200 y pagina bien con `next`/`offset` — Taylor Swift, `total: 112`). Antes (2026-08-05) 20 andaba. Nunca mandar `market=from_token`. Usado en `#discover-artists` y `#new-releases`. `getArtistAlbums()` (api.js) capea con `ARTIST_ALBUMS_MAX_LIMIT = 10` y cae a `/search?q=artist:"X"&type=album` si el nativo devuelve 400 o 403. **Ojo**: cuando el limit hardcodeado se queda viejo el nativo falla siempre y todo pasa en silencio por el fallback de `/search`, que es más lento y trae artistas ajenos — si ves `[api] getArtistAlbums: … fallback a /search` en consola, re-probá el limit.
-- `GET /albums/{id}/tracks?limit=50`: **CONFIRMADO vivo (2026-08-16, 200 con token real)**. Lo usan W-Three (tracklist del modal por álbum), `#discover-artists` / `#new-releases` (pista representativa para el preview y para «+ Biblioteca») y, desde v=144, la **ficha de álbum**: sin el tracklist completo el ♥ marcaba todas las filas por igual, porque la lista eran solo los likes de ese disco. Ojo con el `albumId`: casi ningún llamador de `openAlbumCard()` lo trae (el mosaico, el Dashboard y el Wrapped mandan nombre + artista), así que `album-card.js` lo resuelve con `/search?q=album:"…" artist:"…"&type=album&limit=1` y memoiza por `albumKey`. Sigue envuelto en try/catch: si el endpoint cae, la ficha degrada a la lista vieja (solo likes, todos con ♥).
+- `GET /albums/{id}/tracks?limit=50`: **CONFIRMADO vivo (2026-08-16, 200 con token real)**. Lo usan W-Three (tracklist del modal por álbum), `#discover-artists` / `#new-releases` (pista representativa para el preview y para «+ Biblioteca») y, desde v=144, la **ficha de álbum**: sin el tracklist completo el ♥ marcaba todas las filas por igual, porque la lista eran solo los likes de ese disco. Ojo con el `albumId`: casi ningún llamador de `openAlbumCard()` lo trae (el mosaico, el Dashboard y el Wrapped mandan nombre + artista), así que hay que resolverlo. **Desde v=219 eso lo hace `util/album-resolver.js` y nadie más** — ver su sección más abajo; antes vivía en `album-card.js` y tenía un gemelo con `limit=1` dentro de `wthree.js`. Si no se resuelve, la ficha degrada a la lista vieja (solo likes, todos con ♥) **y ahora lo DICE en pantalla**, en vez de por `console.warn`.
 
 ## Skips crónicos: el veredicto NO va en el pipeline (v=146)
 `scripts/gen-stats.py` emite **dato crudo**, no decisiones:
@@ -80,6 +80,84 @@ un SVG centrado con `inset: 0` + `background-position: center` en vez de una L
 rotada con offsets a mano. **Si agregás otro checkbox custom por clase, acordate
 de la especificidad del genérico**, y si le pisás el `::after` anulá también su
 `width`/`height`/`border`/`transform` o `inset: 0` queda sobre-restringido.
+
+## Un solo resolutor de id de álbum (v=219)
+
+`src/js/util/album-resolver.js` es **EL** resolutor. Hasta v=218 había dos: el de
+`features/album-card.js` (`limit=5`, `limpiaParaQuery`, comparaba el resultado) y
+la búsqueda de adentro de `fetchAlbumTracks()` en `features/wthree.js`
+(`limit=1`, `items[0]` a ciegas, sin limpiar el apóstrofo, sin comparar nada).
+El que no verificaba era el que rompía: el tracklist del modal de W-Three salía
+del primer resultado que Spotify quisiera devolver.
+
+⚠️ **Si escribís el criterio dos veces, vuelve a divergir.** El caso es
+didáctico: el resolutor bueno llevaba treinta líneas de comentario explicando
+por qué el apóstrofo rompe la query y por qué hay que comparar después, y a diez
+archivos de distancia vivía la copia que no había aprendido nada.
+
+El criterio, entero: `limit=5` como mínimo (nunca 1), `limpiaParaQuery` aplicado
+por el resolutor —no por el llamador, que es como `wthree.js` se lo olvidaba—, y
+el candidato se acepta solo si el nombre normalizado es igual, el artista pedido
+está de verdad entre los del álbum, y **no trae marcadores de versión que el
+pedido no traía**.
+
+### La regla de versión va al REVÉS que la de las pistas
+
+`util/album-version-guard.js`. Es la **simétrica** de `versionesCompatibles()`
+de `util/track-match.js`, a propósito:
+
+| | pedido SIN versión |
+|---|---|
+| **pistas** (`versionesCompatibles`, v=185) | acepta cualquier versión del candidato |
+| **álbumes** (`candidatoTraeVersionDeMas`, v=219) | **rechaza** al candidato con versión |
+
+**No importes aquella función ni la inviertas con un flag.** Los dos asserts
+están consecutivos en `tests/album-resolver.test.mjs` para que quien las
+«unifique» rompa las dos juntas.
+
+Hace falta porque **`normText` borra los paréntesis enteros**: «Harry's House» y
+«Harry's House (Piano Version)» normalizan las dos a `harrys house`, así que la
+igualdad de nombre no las distingue. La regla mira el nombre **crudo** del
+candidato.
+
+Vocabulario: `VERSION_MARKERS` de `util/versions-guard.js` (la lista más
+completa del repo — ya trae «piano version», «instrumental» y «karaoke») más el
+de tributo, que no existía: tribute, tributo, covers, cover version, made famous
+by, performed by, in the style of, homenaje.
+
+⚠️ **Esto NO afloja `albumKey`.** El cambio es a qué id apunta la clave, no la
+clave. Cuatro asserts comprueban que American Football LP2/LP3, Crystal Castles
+I/II y el ÷/=/+ de Ed Sheeran siguen separados.
+
+⚠️ **Los fracasos no se memoizan.** Un `null` guardado en el memo se lee después
+como «este álbum no existe» y se queda pegado hasta recargar: un rate limit o un
+corte de red condenaba la ficha a degradar el resto de la sesión. El memo guarda
+solo los éxitos, y `albumTracksCache` de W-Three ya no cachea `[]` cuando la
+resolución falla.
+
+⚠️ **Pasá el `albumId` si lo tenés.** `wthree.js` lo tiene a mano cuando el
+álbum tiene picks (sale de `picksByAlbum`) y hasta v=218 no se lo pasaba a
+`openAlbumCard`: la ficha se comía un `/search` entero (~590-780 ms) para
+averiguar algo que el llamador ya sabía. `#discover-artists` sí lo pasaba
+siempre, y por eso ese camino nunca estuvo roto.
+
+## `.wt-play-btn` es de W-Three y de nadie más (v=219)
+Dos módulos no pueden ser dueños de la misma clase. `album-card.js` pintaba su
+botón con `class="wt-play-btn album-modal-like-play"` para heredar el look, y
+eso lo metía dentro del `document.querySelectorAll('.wt-play-btn')` del listener
+de `previewchange` de `wthree.js`. Las claves de ese listener son `wt:${id}` y
+**nunca** matchean el `alb:${id}` de la ficha, así que cada evento del `<audio>`
+—playing, pause, waiting, ended— le borraba el ⏸ a una pista que seguía sonando.
+
+**El look se comparte en `main.css`; la identidad no.** Si otro módulo quiere
+este botón, que copie el selector en la hoja, no la clase en el HTML. Y el
+arreglo va en la propiedad, **nunca** en un `:not()` dentro del listener ajeno:
+eso deja la clase compartida en pie, esperando al tercer módulo.
+
+Revisados los diez listeners de `previewchange` del repo: los otros nueve están
+acotados a su contenedor por id, o barren una clase de la que su módulo es dueño
+único (`.dcard-play`, que solo pinta `discover-common.js`). Este era el único
+choque.
 
 ## La ficha de álbum nunca pidió el tracklist (v=154)
 `resolveAlbumId()` en `features/album-card.js` usa `limpiaParaQuery`, y el
