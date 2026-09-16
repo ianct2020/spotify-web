@@ -1,42 +1,42 @@
-import { isLoggedIn, loginWithSpotify, logout } from './auth.js?v=219';
-import { spotifyFetch, onRateLimit } from './api.js?v=219';
-import { getValidToken } from './auth.js?v=219';
-import { cacheClearAll } from './storage.js?v=219';
-import { idbClearAll } from './idb.js?v=219';
-import { registerRoute, initRouter, rutasRegistradas } from './router.js?v=219';
-import { showToast } from './ui/toast.js?v=219';
-import { pageHeader, escapeHtml } from './ui/components.js?v=219';
-import { installCrashGuard } from './ui/crash-guard.js?v=219';
-import { auditarOcultos, leerIncidencias } from './util/hidden-sync.js?v=219';
-import { getStack } from './ui/modal-stack.js?v=219';
-import { installBackToTop } from './ui/back-to-top.js?v=219';
-import { applyStoredTheme, openThemePanel } from './ui/theme-panel.js?v=219';
+import { isLoggedIn, loginWithSpotify, logout } from './auth.js?v=220';
+import { spotifyFetch, onRateLimit } from './api.js?v=220';
+import { getValidToken } from './auth.js?v=220';
+import { cacheClearAll } from './storage.js?v=220';
+import { idbClearAll } from './idb.js?v=220';
+import { registerRoute, initRouter, rutasRegistradas } from './router.js?v=220';
+import { showToast } from './ui/toast.js?v=220';
+import { pageHeader, escapeHtml } from './ui/components.js?v=220';
+import { installCrashGuard } from './ui/crash-guard.js?v=220';
+import { auditarOcultos, leerIncidencias } from './util/hidden-sync.js?v=220';
+import { getStack } from './ui/modal-stack.js?v=220';
+import { installBackToTop } from './ui/back-to-top.js?v=220';
+import { applyStoredTheme, openThemePanel } from './ui/theme-panel.js?v=220';
 
-import { render as renderSync } from './features/sync.js?v=219';
-import { render as renderDedupe } from './features/dedupe.js?v=219';
-import { render as renderDupalbums } from './features/duplicate-albums.js?v=219';
-import { render as renderZombies } from './features/zombies.js?v=219';
-import { render as renderVersions } from './features/versions.js?v=219';
-import { render as renderDashboard } from './features/dashboard.js?v=219';
-import { render as renderSmart } from './features/smart.js?v=219';
-import { render as renderSimilar } from './features/similar-artists.js?v=219';
-import { render as renderRabbit } from './features/rabbit-hole.js?v=219';
-import { render as renderByGenre } from './features/by-genre.js?v=219';
-import { render as renderByArtist } from './features/by-artist.js?v=219';
-import { render as renderRecs } from './features/recommendations.js?v=219';
-import { render as renderListened } from './features/listened.js?v=219';
-import { render as renderWrapped } from './features/wrapped.js?v=219';
-import { render as renderRecords } from './features/records.js?v=219';
-import { openImportHistory } from './features/import-history.js?v=219';
-import { bindOwnerLockedButtons } from './features/history-data.js?v=219';
-import { render as renderZeroPlays } from './features/zero-plays.js?v=219';
-import { render as renderSkips } from './features/skips.js?v=219';
-import { render as renderSearchLikes } from './features/search-likes.js?v=219';
-import { render as renderWthree } from './features/wthree.js?v=219';
-import { render as renderCovers } from './features/covers.js?v=219';
-import { render as renderDiscoverArtists } from './features/discover-artists.js?v=219';
-import { render as renderNewReleases } from './features/new-releases.js?v=219';
-import { render as renderSinClasificar } from './features/sin-clasificar.js?v=219';
+import { render as renderSync } from './features/sync.js?v=220';
+import { render as renderDedupe } from './features/dedupe.js?v=220';
+import { render as renderDupalbums } from './features/duplicate-albums.js?v=220';
+import { render as renderZombies } from './features/zombies.js?v=220';
+import { render as renderVersions } from './features/versions.js?v=220';
+import { render as renderDashboard } from './features/dashboard.js?v=220';
+import { render as renderSmart } from './features/smart.js?v=220';
+import { render as renderSimilar } from './features/similar-artists.js?v=220';
+import { render as renderRabbit } from './features/rabbit-hole.js?v=220';
+import { render as renderByGenre } from './features/by-genre.js?v=220';
+import { render as renderByArtist } from './features/by-artist.js?v=220';
+import { render as renderRecs } from './features/recommendations.js?v=220';
+import { render as renderListened } from './features/listened.js?v=220';
+import { render as renderWrapped } from './features/wrapped.js?v=220';
+import { render as renderRecords } from './features/records.js?v=220';
+import { openImportHistory } from './features/import-history.js?v=220';
+import { bindOwnerLockedButtons } from './features/history-data.js?v=220';
+import { render as renderZeroPlays } from './features/zero-plays.js?v=220';
+import { render as renderSkips } from './features/skips.js?v=220';
+import { render as renderSearchLikes } from './features/search-likes.js?v=220';
+import { render as renderWthree } from './features/wthree.js?v=220';
+import { render as renderCovers } from './features/covers.js?v=220';
+import { render as renderDiscoverArtists } from './features/discover-artists.js?v=220';
+import { render as renderNewReleases } from './features/new-releases.js?v=220';
+import { render as renderSinClasificar } from './features/sin-clasificar.js?v=220';
 
 // ── Arranque degradado cuando /me está rate-limiteado (v=173) ────────────────
 //
@@ -543,8 +543,13 @@ function showApp(profile) {
             <span class="nav-link-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 4 15 12 5 20 5 4"/><line x1="19" y1="5" x2="19" y2="19"/></svg></span> Skips crónicos
           </a>
         </div>
-      </nav>
-      <div class="sidebar-footer">
+        <!-- El footer (avatar + acciones) vive DENTRO de .sidebar-nav, no como
+             hermano después de </nav>: así los dos comparten el mismo
+             overflow-y:auto y el scroll de esta zona nunca se le escapa a la
+             ruta de atrás. Antes de v=220 tenía su propio bloque sin overflow
+             y el wheel sobre "Paleta"/"Cerrar sesión" scrolleaba la página de
+             detrás del drawer, no el menú. -->
+        <div class="sidebar-footer">
         <div class="sidebar-user">
           ${avatarHtml}
           <span class="sidebar-username" id="sidebar-user-name">${profile.display_name || profile.id}</span>
@@ -568,6 +573,7 @@ function showApp(profile) {
           </button>
         </div>
       </div>
+      </nav>
     </aside>
     <main class="main" id="main-content"></main>
   `;

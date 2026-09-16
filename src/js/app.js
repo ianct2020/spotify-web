@@ -543,8 +543,13 @@ function showApp(profile) {
             <span class="nav-link-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 4 15 12 5 20 5 4"/><line x1="19" y1="5" x2="19" y2="19"/></svg></span> Skips crónicos
           </a>
         </div>
-      </nav>
-      <div class="sidebar-footer">
+        <!-- El footer (avatar + acciones) vive DENTRO de .sidebar-nav, no como
+             hermano después de </nav>: así los dos comparten el mismo
+             overflow-y:auto y el scroll de esta zona nunca se le escapa a la
+             ruta de atrás. Antes de v=220 tenía su propio bloque sin overflow
+             y el wheel sobre "Paleta"/"Cerrar sesión" scrolleaba la página de
+             detrás del drawer, no el menú. -->
+        <div class="sidebar-footer">
         <div class="sidebar-user">
           ${avatarHtml}
           <span class="sidebar-username" id="sidebar-user-name">${profile.display_name || profile.id}</span>
@@ -568,6 +573,7 @@ function showApp(profile) {
           </button>
         </div>
       </div>
+      </nav>
     </aside>
     <main class="main" id="main-content"></main>
   `;
