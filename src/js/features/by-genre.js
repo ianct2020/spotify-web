@@ -5,7 +5,8 @@ import { getGenresForArtist as mbGetGenres } from '../api/musicbrainz.js';
 import { showProgress, hideProgress, progressController, isCancelled, promptPlaylistName, alertModal, confirmModal, escapeHtml, pageHeader } from '../ui/components.js';
 import { showToast } from '../ui/toast.js';
 import { openModal, closeTop } from '../ui/modal-stack.js';
-import { tagToGroup } from './genre-groups.js';
+import { bucketFor } from '../util/genre-reason.js';
+import { openGenreAudit } from './genre-detail.js';
 import { prefKey, migratePrefKey } from '../storage.js';
 
 const NOISE_TAGS = new Set([
@@ -569,11 +570,10 @@ function buildGenreMap() {
 
     const buckets = new Set();
     tags.forEach(tag => {
-      let bucket = tag;
-      if (groupsMode) {
-        const grp = tagToGroup(tag);
-        if (grp) bucket = grp;
-      }
+      // El criterio de reparto vive en util/genre-reason.js, que es el mismo
+      // que usa la auditoría para reconstruir por qué entró cada track. Estaba
+      // escrito acá a mano; se movió sin cambiarlo (v=222).
+      const bucket = bucketFor(tag, groupsMode);
       if (buckets.has(bucket)) return;
       buckets.add(bucket);
       if (!map.has(bucket)) map.set(bucket, []);
@@ -716,7 +716,7 @@ function renderGrid() {
         <button class="smart-card genre-card ${selectedTags.has(tag) ? 'selected' : ''}" data-tag="${escapeHtml(tag)}">
           <span class="genre-hide-btn" title="Ocultar este género para siempre">✕</span>
           <div class="smart-card-title" style="font-size:15px;text-transform:capitalize">${escapeHtml(tag)}</div>
-          <div class="smart-card-meta">${tracks.length.toLocaleString('es-ES')} tracks</div>
+          <div class="smart-card-meta">${tracks.length.toLocaleString('es-ES')} tracks · <span class="genre-audit-btn" title="Ver qué canciones metió adentro y por qué">auditar</span></div>
         </button>
       `).join('')}
       ${showUnclassified ? `
@@ -730,6 +730,22 @@ function renderGrid() {
 
   holder.querySelectorAll('.genre-card:not(#unclassified-card)').forEach(el => {
     el.onclick = () => toggleTag(el);
+  });
+  // «auditar» vive DENTRO de la tarjeta, que ya es un botón de selección: el
+  // click se para acá antes de llegar a `toggleTag`. Mismo trato que el ✕ de
+  // ocultar. Va siempre visible y no en hover porque es la acción nueva y la
+  // tarjeta no da ninguna otra pista de que se pueda abrir.
+  holder.querySelectorAll('.genre-audit-btn').forEach(btn => {
+    btn.onclick = (e) => {
+      e.stopPropagation();
+      const tag = btn.closest('.genre-card').dataset.tag;
+      openGenreAudit({
+        bucket: tag,
+        tracks: genreMap.get(tag) || [],
+        artistToTags,
+        groupsMode,
+      });
+    };
   });
   holder.querySelectorAll('.genre-hide-btn').forEach(btn => {
     btn.onclick = (e) => {

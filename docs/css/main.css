@@ -5102,3 +5102,116 @@ body.covers-fs .main {
   .wr-ap-tapa { width: min(180px, 30vh); }
   .wr-ap-saltar { right: 10px; top: calc(var(--wr-ap-top, 0px) + 8px); }
 }
+
+/* ============ #genre — auditoría de un grupo (v=222) ============ */
+/* El chasis (alto fijo, modal que no scrollea, scroll interno) lo pone
+   `.wt-modal` de W-Three; acá solo se cambia lo que difiere: el body es de UNA
+   columna en vez de dos, y el footer es una línea de texto en vez de un botón
+   de ancho completo. Todo lo demás —paddings, altos, breakpoints— sale de las
+   reglas de `.wt-*` de arriba y no se repite ningún número suyo. */
+.gd-body {
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: auto auto minmax(0, 1fr);
+}
+.gd-title { cursor: default; text-transform: capitalize; }
+.gd-title:hover { color: var(--color-text); }
+.gd-footer { display: flex; align-items: center; }
+.gd-hint { font-size: 11px; color: var(--color-text-muted); line-height: 1.35; }
+
+.gd-tools { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.gd-search {
+  width: 100%;
+  padding: 7px 10px;
+  background: var(--color-elevated);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  color: var(--color-text);
+  font-size: 13px;
+}
+
+/* Los tags que alimentan el grupo. Son la herramienta de auditoría de verdad:
+   «Rock ← psychedelic 112» ya señala el error sin abrir una sola canción. La
+   fila scrollea sola —hay grupos con 40 tags— y nunca le roba alto a la lista,
+   que es el recurso escaso del modal. */
+.gd-tags {
+  display: flex;
+  gap: 4px;
+  overflow-x: auto;
+  padding-bottom: 2px;
+  scrollbar-width: thin;
+}
+.gd-tag {
+  flex-shrink: 0;
+  background: var(--color-elevated);
+  border: 1px solid var(--color-border);
+  border-radius: 100px;
+  color: var(--color-text-secondary);
+  font-size: 11px;
+  padding: 3px 9px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background .12s, border-color .12s, color .12s;
+}
+.gd-tag b { color: var(--color-text-muted); font-weight: 600; }
+.gd-tag:hover { border-color: var(--color-accent); color: var(--color-text); }
+.gd-tag-on {
+  background: rgba(124, 58, 237, 0.18);
+  border-color: var(--color-accent);
+  color: var(--color-text);
+}
+.gd-tag-on b { color: var(--color-accent); }
+
+.gd-count { font-size: 11px; color: var(--color-text-muted); }
+.gd-list {
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding-right: 2px;
+}
+.gd-row {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) minmax(0, auto);
+  gap: 8px;
+  align-items: center;
+  padding: 5px 9px;
+  border-radius: var(--radius-sm);
+  background: var(--color-elevated);
+  font-size: 12.5px;
+  min-width: 0;
+}
+.gd-row:hover { background: rgba(124, 58, 237, 0.08); }
+.gd-num { color: var(--color-text-muted); font-size: 10px; text-align: right; font-variant-numeric: tabular-nums; }
+.gd-txt { min-width: 0; display: flex; flex-direction: column; }
+.gd-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gd-artist { font-size: 11px; color: var(--color-text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gd-otros { color: var(--color-text-muted); margin-left: 5px; }
+
+/* Los chips reusan `.wthree-track-tag` entero y solo le sacan el versalitas:
+   un tag de Last.fm es texto normal («jazz rap», no «JAZZ RAP») y en mayúsculas
+   tres seguidos no se leen. */
+.gd-chips { display: flex; gap: 4px; flex-wrap: wrap; justify-content: flex-end; }
+.wthree-track-tag.gd-chip { text-transform: none; letter-spacing: 0; font-weight: 500; }
+.wthree-track-tag.gd-chip-none {
+  background: rgba(245, 158, 11, 0.16);
+  color: var(--color-warning);
+}
+
+/* «auditar» dentro de la meta de la tarjeta: no cambia el alto de las ~98
+   tarjetas y está siempre visible, al revés que el ✕ de ocultar, que es
+   destructivo y por eso se esconde en hover. */
+.genre-audit-btn {
+  color: var(--color-accent);
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.genre-audit-btn:hover { color: var(--color-text); }
+
+@media (max-width: 900px) {
+  .gd-list { flex: none; max-height: 50vh; }
+  .gd-chips { justify-content: flex-start; }
+  .gd-row { grid-template-columns: 24px minmax(0, 1fr); }
+  .gd-row .gd-chips { grid-column: 2; }
+}
