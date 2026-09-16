@@ -1,7 +1,7 @@
 const GROUPS = {
   'Rock': [
     'rock', 'indie rock', 'alternative rock', 'classic rock', 'pop rock',
-    'hard rock', 'punk rock', 'funk rock', 'blues rock', 'rap rock',
+    'hard rock', 'punk rock', 'funk rock', 'blues rock',
     'glam rock', 'garage rock', 'southern rock', 'progressive rock',
     'psychedelic rock', 'art rock', 'acoustic rock', 'folk rock',
     'math rock', 'piano rock', 'stoner rock', 'desert rock', 'surf rock',
@@ -21,7 +21,7 @@ const GROUPS = {
     'hardcore punk', 'old school hardcore', 'post-metal',
   ],
   'Hip-Hop / Rap': [
-    'hip-hop', 'hip hop', 'hiphop', 'rap',
+    'hip-hop', 'hip hop', 'hiphop', 'rap', 'rap rock',
     'underground hip-hop', 'underground hip hop', 'underground rap',
     'uk hip hop', 'southern hip hop', 'southern rap', 'east coast hip hop',
     'east coast rap', 'east coast', 'west coast hip hop', 'west coast rap',
