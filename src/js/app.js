@@ -3,6 +3,7 @@ import { spotifyFetch, onRateLimit } from './api.js';
 import { getValidToken } from './auth.js';
 import { cacheClearAll } from './storage.js';
 import { idbClearAll } from './idb.js';
+import { DISCO_BASE_PREFIX } from './util/disco-base.js';
 import { registerRoute, initRouter, rutasRegistradas } from './router.js';
 import { showToast } from './ui/toast.js';
 import { pageHeader, escapeHtml } from './ui/components.js';
@@ -588,9 +589,11 @@ function showApp(profile) {
     btn.textContent = 'Limpiando...';
     cacheClearAll(); // localStorage
     try {
-      // Vacía IndexedDB (grouped de playlists, análisis, etc.) menos tus likes (caros de re-bajar).
-      const n = await idbClearAll(['all_liked_tracks', 'all_liked_tracks_partial']);
-      showToast(`Cache limpiado (${n} entrada${n === 1 ? '' : 's'}). Tus likes se conservan.`, 'success');
+      // Vacía IndexedDB (grouped de playlists, análisis, etc.) menos tus likes
+      // y la base de discografías (v=229): las dos son caras de rehacer, y la
+      // base cuesta cuotas de Spotify que dejan la búsqueda caída más de una hora.
+      const n = await idbClearAll(['all_liked_tracks', 'all_liked_tracks_partial'], [DISCO_BASE_PREFIX]);
+      showToast(`Caché limpiada (${n} entrada${n === 1 ? '' : 's'}). Tus likes y la base de discografías se conservan.`, 'success');
     } catch (e) {
       showToast('Caché local limpiada (IDB falló: ' + e.message + ')', 'info');
     }

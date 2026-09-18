@@ -1,42 +1,43 @@
-import { isLoggedIn, loginWithSpotify, logout } from './auth.js?v=228';
-import { spotifyFetch, onRateLimit } from './api.js?v=228';
-import { getValidToken } from './auth.js?v=228';
-import { cacheClearAll } from './storage.js?v=228';
-import { idbClearAll } from './idb.js?v=228';
-import { registerRoute, initRouter, rutasRegistradas } from './router.js?v=228';
-import { showToast } from './ui/toast.js?v=228';
-import { pageHeader, escapeHtml } from './ui/components.js?v=228';
-import { installCrashGuard } from './ui/crash-guard.js?v=228';
-import { auditarOcultos, leerIncidencias } from './util/hidden-sync.js?v=228';
-import { getStack } from './ui/modal-stack.js?v=228';
-import { installBackToTop } from './ui/back-to-top.js?v=228';
-import { applyStoredTheme, openThemePanel } from './ui/theme-panel.js?v=228';
+import { isLoggedIn, loginWithSpotify, logout } from './auth.js?v=229';
+import { spotifyFetch, onRateLimit } from './api.js?v=229';
+import { getValidToken } from './auth.js?v=229';
+import { cacheClearAll } from './storage.js?v=229';
+import { idbClearAll } from './idb.js?v=229';
+import { DISCO_BASE_PREFIX } from './util/disco-base.js?v=229';
+import { registerRoute, initRouter, rutasRegistradas } from './router.js?v=229';
+import { showToast } from './ui/toast.js?v=229';
+import { pageHeader, escapeHtml } from './ui/components.js?v=229';
+import { installCrashGuard } from './ui/crash-guard.js?v=229';
+import { auditarOcultos, leerIncidencias } from './util/hidden-sync.js?v=229';
+import { getStack } from './ui/modal-stack.js?v=229';
+import { installBackToTop } from './ui/back-to-top.js?v=229';
+import { applyStoredTheme, openThemePanel } from './ui/theme-panel.js?v=229';
 
-import { render as renderSync } from './features/sync.js?v=228';
-import { render as renderDedupe } from './features/dedupe.js?v=228';
-import { render as renderDupalbums } from './features/duplicate-albums.js?v=228';
-import { render as renderZombies } from './features/zombies.js?v=228';
-import { render as renderVersions } from './features/versions.js?v=228';
-import { render as renderDashboard } from './features/dashboard.js?v=228';
-import { render as renderSmart } from './features/smart.js?v=228';
-import { render as renderSimilar } from './features/similar-artists.js?v=228';
-import { render as renderRabbit } from './features/rabbit-hole.js?v=228';
-import { render as renderByGenre } from './features/by-genre.js?v=228';
-import { render as renderByArtist } from './features/by-artist.js?v=228';
-import { render as renderRecs } from './features/recommendations.js?v=228';
-import { render as renderListened } from './features/listened.js?v=228';
-import { render as renderWrapped } from './features/wrapped.js?v=228';
-import { render as renderRecords } from './features/records.js?v=228';
-import { openImportHistory } from './features/import-history.js?v=228';
-import { bindOwnerLockedButtons } from './features/history-data.js?v=228';
-import { render as renderZeroPlays } from './features/zero-plays.js?v=228';
-import { render as renderSkips } from './features/skips.js?v=228';
-import { render as renderSearchLikes } from './features/search-likes.js?v=228';
-import { render as renderWthree } from './features/wthree.js?v=228';
-import { render as renderCovers } from './features/covers.js?v=228';
-import { render as renderDiscoverArtists } from './features/discover-artists.js?v=228';
-import { render as renderNewReleases } from './features/new-releases.js?v=228';
-import { render as renderSinClasificar } from './features/sin-clasificar.js?v=228';
+import { render as renderSync } from './features/sync.js?v=229';
+import { render as renderDedupe } from './features/dedupe.js?v=229';
+import { render as renderDupalbums } from './features/duplicate-albums.js?v=229';
+import { render as renderZombies } from './features/zombies.js?v=229';
+import { render as renderVersions } from './features/versions.js?v=229';
+import { render as renderDashboard } from './features/dashboard.js?v=229';
+import { render as renderSmart } from './features/smart.js?v=229';
+import { render as renderSimilar } from './features/similar-artists.js?v=229';
+import { render as renderRabbit } from './features/rabbit-hole.js?v=229';
+import { render as renderByGenre } from './features/by-genre.js?v=229';
+import { render as renderByArtist } from './features/by-artist.js?v=229';
+import { render as renderRecs } from './features/recommendations.js?v=229';
+import { render as renderListened } from './features/listened.js?v=229';
+import { render as renderWrapped } from './features/wrapped.js?v=229';
+import { render as renderRecords } from './features/records.js?v=229';
+import { openImportHistory } from './features/import-history.js?v=229';
+import { bindOwnerLockedButtons } from './features/history-data.js?v=229';
+import { render as renderZeroPlays } from './features/zero-plays.js?v=229';
+import { render as renderSkips } from './features/skips.js?v=229';
+import { render as renderSearchLikes } from './features/search-likes.js?v=229';
+import { render as renderWthree } from './features/wthree.js?v=229';
+import { render as renderCovers } from './features/covers.js?v=229';
+import { render as renderDiscoverArtists } from './features/discover-artists.js?v=229';
+import { render as renderNewReleases } from './features/new-releases.js?v=229';
+import { render as renderSinClasificar } from './features/sin-clasificar.js?v=229';
 
 // ── Arranque degradado cuando /me está rate-limiteado (v=173) ────────────────
 //
@@ -588,9 +589,11 @@ function showApp(profile) {
     btn.textContent = 'Limpiando...';
     cacheClearAll(); // localStorage
     try {
-      // Vacía IndexedDB (grouped de playlists, análisis, etc.) menos tus likes (caros de re-bajar).
-      const n = await idbClearAll(['all_liked_tracks', 'all_liked_tracks_partial']);
-      showToast(`Cache limpiado (${n} entrada${n === 1 ? '' : 's'}). Tus likes se conservan.`, 'success');
+      // Vacía IndexedDB (grouped de playlists, análisis, etc.) menos tus likes
+      // y la base de discografías (v=229): las dos son caras de rehacer, y la
+      // base cuesta cuotas de Spotify que dejan la búsqueda caída más de una hora.
+      const n = await idbClearAll(['all_liked_tracks', 'all_liked_tracks_partial'], [DISCO_BASE_PREFIX]);
+      showToast(`Caché limpiada (${n} entrada${n === 1 ? '' : 's'}). Tus likes y la base de discografías se conservan.`, 'success');
     } catch (e) {
       showToast('Caché local limpiada (IDB falló: ' + e.message + ')', 'info');
     }

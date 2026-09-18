@@ -45,6 +45,11 @@ import {
   toggleHiddenAlbum,
   wireLoteOcultos,
   estadoDiscografia,
+  nuevaRondaDeRefresco,
+  migrarDiscografiasViejas,
+  avisarRonda,
+  botonesBaseHtml,
+  conectarBotonesBase,
 } from './discover-common.js';
 import { estadoNativoDiscografia } from '../api.js';
 
@@ -194,6 +199,11 @@ export async function render(container) {
   }));
 
   state.scannedAt = null;
+  // Una ronda por carga: mira lo reciente de las bases que tocan (30 días), con
+  // presupuesto. «Actualizar» la cambia por una forzada.
+  state.ronda = nuevaRondaDeRefresco();
+  // Antes que nada, las discografías de antes de v=229 pasan a la base: 0 requests.
+  await migrarDiscografiasViejas();
   const cached = await loadScanCache(SCAN_KEY);
   if (cached) {
     const byName = new Map(cached.artists.map(a => [a.nameLower, a]));
@@ -245,7 +255,8 @@ function renderShell(content, totalCandidates) {
           ${KINDS.map(k => `<button class="disco-chip ${state.filterKind === k ? 'is-on' : ''}" data-kind="${k}">${KIND_LABEL[k]}</button>`).join('')}
         </div>
         <button class="btn btn-secondary btn-sm ${state.mode === 'hidden' ? 'sc-on' : ''}" id="newrel-mode-hidden" title="Las novedades que ocultaste. Se sincronizan con la playlist «fonoteca · ocultos (descubrir)».">Ocultos <span id="newrel-hidden-n">${hiddenAlbums.size}</span></button>
-        <button class="btn btn-secondary btn-sm" id="newrel-refresh" title="${state.scannedAt ? 'Último escaneo ' + agoLabel(state.scannedAt) + '. Volver a consultar Spotify.' : 'Volver a consultar Spotify'}">Actualizar</button>
+        <button class="btn btn-secondary btn-sm" id="newrel-refresh" title="${state.scannedAt ? 'Último escaneo ' + agoLabel(state.scannedAt) + '. ' : ''}Busca lanzamientos nuevos de tus artistas. No borra las discografías que ya tienes.">Actualizar</button>
+        ${botonesBaseHtml('newrel')}
       </div>
     </div>
     ${renderFiltroChips(state.filtros, state.conteosFiltro)}
@@ -326,17 +337,16 @@ function renderShell(content, totalCandidates) {
     const btn = e.currentTarget;
     btn.disabled = true;
     btn.textContent = 'Actualizando…';
-    await clearScanCache(SCAN_KEY, state.artists.map(a => a.id).filter(Boolean));
-    for (const a of state.artists) {
-      Object.assign(a, { disco: [], scanned: false, error: null });
-    }
-    state.scannedAt = null;
-    document.getElementById('newrel-count').textContent = '0';
-    refreshList(content);
-    try { await scanArtists(content); } catch (err) { console.warn('[newrel] scan:', err); }
+    // v=229: tira el caché del escaneo y NADA MÁS. Las discografías viven en la
+    // base (sin caducidad) y la ronda forzada mira solo lo reciente de cada una.
+    state.ronda = nuevaRondaDeRefresco({ forzar: true });
+    await reescanearDesdeLaBase(content);
+    avisarRonda(state.ronda);
+    state.ronda = nuevaRondaDeRefresco();
     btn.disabled = false;
     btn.textContent = 'Actualizar';
   };
+  conectarBotonesBase(content, 'newrel', () => reescanearDesdeLaBase(content));
   content.querySelector('#newrel-mode-hidden').onclick = () => {
     state.mode = state.mode === 'hidden' ? 'normal' : 'hidden';
     renderShell(content, totalCandidates);
@@ -382,6 +392,19 @@ function renderShell(content, totalCandidates) {
 function setCount(n) {
   const el = document.getElementById('newrel-count');
   if (el) el.textContent = n;
+}
+
+// Vuelve a armar la lista desde la base (0 requests, salvo lo reciente que le
+// toque a la ronda en curso). Lo usan «Actualizar» e «Importar base».
+async function reescanearDesdeLaBase(content) {
+  await clearScanCache(SCAN_KEY);
+  for (const a of state.artists) {
+    Object.assign(a, { disco: [], scanned: false, error: null });
+  }
+  state.scannedAt = null;
+  setCount(0);
+  refreshList(content);
+  try { await scanArtists(content); } catch (err) { console.warn('[newrel] scan:', err); }
 }
 
 async function scanArtists(content) {
@@ -448,7 +471,7 @@ async function processArtist(artist) {
   const id = await getArtistIdCached(artist.nameLower, artist.name, artist.seedId);
   if (!id) { artist.scanned = true; artist.error = 'no encontrado en Spotify'; return; }
   artist.id = id;
-  const disco = await getArtistDiscoCached(id, artist.name);
+  const disco = await getArtistDiscoCached(id, artist.name, state.ronda);
   artist.disco = dedupDisco(disco);
   migrarClavesDeArtista(artist);   // claves viejas → firma del álbum (v=210)
   artist.scanned = true;

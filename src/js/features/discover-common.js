@@ -6,8 +6,8 @@
 //     (util/album-heard.js: historial completo + likes + listened + w-three)
 //   - permiten "+ Biblioteca" y "Crear playlist con lo elegido"
 
-import { idbGetCached, idbSetCached, idbDel } from '../idb.js';
-import { getArtistAlbumsConFuente, searchArtistByName, getAlbumTracks, saveToLibrary, saveAlbumsToLibrary, createPlaylist, addTracksToPlaylist } from '../api.js';
+import { idbGet, idbGetCached, idbSetCached, idbDel, idbEntriesByPrefix } from '../idb.js';
+import { getArtistAlbumsConFuente, buscarDiscografiaPorNombre, searchArtistByName, getAlbumTracks, saveToLibrary, saveAlbumsToLibrary, createPlaylist, addTracksToPlaylist } from '../api.js';
 import { albumKey } from '../util/album-key.js';
 import { cardKey, cardKeyLegacy, albumCreditName, keyOfPlaylistTrack } from '../util/discover-key.js';
 import { escapeHtml } from '../ui/components.js';
@@ -23,6 +23,11 @@ import { togglePreview, playingKey, attachHover } from '../ui/preview-player.js'
 import { coverUrl } from '../util/cover-size.js';
 import { FILTROS as FILTROS_DEF, saveFiltros } from '../util/discover-filters.js';
 import { esEPoAlbum } from '../util/release-size.js';
+import {
+  DISCO_BASE_PREFIX, PRESUPUESTO_REFRESCO, RECIENTE_MAX_PAGINAS,
+  crearBase, sumarCompleta, sumarReciente, tocaReciente, rangoReciente,
+  fusionarBases, armarExportacion, leerImportacion,
+} from '../util/disco-base.js';
 
 const DISCO_TTL_MIN = 30 * 24 * 60;       // 30 días
 const ARTIST_ID_TTL_MIN = 60 * 24 * 60;   // 60 días — los ids no cambian
@@ -43,19 +48,25 @@ export async function getArtistIdCached(nameLower, displayName, seedId) {
   return found.id;
 }
 
-// v2 en la key: la v1 guardó discografías VACÍAS durante 30 días cuando el
-// endpoint fallaba, y esas entradas vacías se seguían sirviendo aunque el
-// fetch ya estuviera arreglado. Además ahora no cacheamos resultados vacíos.
-export async function getArtistDiscoCached(artistId, artistName) {
-  const key = `discover_artist_disco_v2_${artistId}`;
-  try {
-    const cached = await idbGetCached(key);
-    if (Array.isArray(cached) && cached.length) return cached;
-  } catch { /* ignora */ }
-  // Sin limit explícito: api.js sabe cuál es el máximo que acepta Spotify hoy
-  // (10 desde 2026-08-11) y pagina hasta el final igual.
-  const { items, fuente, cortada } = await getArtistAlbumsConFuente(artistId, artistName, { includeSingles: true });
-  const slim = items.map(al => ({
+// ── La discografía de un artista: base permanente (v=229) ──────────────────
+//
+// Hasta v=228 vivía en `discover_artist_disco_v2_{id}` con 30 días de TTL, y
+// `idbGetCached` la borraba al leerla vencida: lo conseguido se volvía a pagar
+// cada mes con una cuota de 100 requests. Desde v=229 vive en
+// `discover_disco_base_v1_{id}` SIN caducidad, como UNIÓN por id de todo lo
+// visto (ver `util/disco-base.js`), y lo reciente se mira aparte con un
+// `/search` `year:` cada 30 días.
+//
+// La clave es COMPARTIDA por #new-releases y #discover-artists, igual que la
+// vieja: esta función es la única puerta de las dos.
+//
+// `ronda` (de `nuevaRondaDeRefresco`) decide si se mira lo reciente y con qué
+// presupuesto. Sin ronda no se refresca nada: se sirve la base.
+
+const DISCO_V2_PREFIX = 'discover_artist_disco_v2_';
+
+function slimDe(al) {
+  return {
     id: al.id,
     name: al.name,
     type: al.album_type,          // 'album' | 'single' | 'compilation'
@@ -63,18 +74,278 @@ export async function getArtistDiscoCached(artistId, artistName) {
     release: al.release_date || '',
     total: al.total_tracks || 0,
     artists: (al.artists || []).map(a => ({ id: a.id, name: a.name })),
-  }));
+  };
+}
+
+async function leerBase(artistId) {
+  try {
+    const w = await idbGet(`${DISCO_BASE_PREFIX}${artistId}`);
+    const b = w?.value;
+    return b && Array.isArray(b.items) ? b : null;
+  } catch { return null; }
+}
+
+async function guardarBase(artistId, base) {
+  // `ttl` null = sin caducidad (idb.js).
+  await idbSetCached(`${DISCO_BASE_PREFIX}${artistId}`, base, null);
+  _estadoDisco.set(artistId, { fuente: base.fuente, cortada: !!base.cortada, estimada: !!base.estimada });
+}
+
+/**
+ * Una ronda de escaneo: cuánto puede gastar en mirar lo reciente. Cada vista
+ * crea una por escaneo; «Actualizar» la crea con `forzar`.
+ */
+export function nuevaRondaDeRefresco({ forzar = false } = {}) {
+  return {
+    forzar,
+    presupuesto: PRESUPUESTO_REFRESCO,
+    gastado: 0,
+    refrescados: 0,
+    nuevos: 0,
+    pendientes: 0,      // les tocaba y no entraron en el presupuesto
+    fallos: 0,
+    parada: null,       // motivo si se dejó de refrescar en esta ronda (p. ej. 429)
+  };
+}
+
+async function refrescarReciente(artistId, artistName, base, ronda) {
+  if (!ronda || !tocaReciente(base, { forzar: ronda.forzar })) return base;
+  if (ronda.parada || ronda.gastado >= ronda.presupuesto) { ronda.pendientes++; return base; }
+  const year = rangoReciente(base);
+  try {
+    const r = await buscarDiscografiaPorNombre(artistId, artistName, { year, maxPages: RECIENTE_MAX_PAGINAS });
+    ronda.gastado += r.paginas || 1;
+    const nueva = sumarReciente(base, r.items.map(slimDe), { year });
+    const agregados = nueva.items.length - base.items.length;
+    ronda.refrescados++;
+    ronda.nuevos += agregados;
+    await guardarBase(artistId, nueva);
+    return nueva;
+  } catch (e) {
+    ronda.fallos++;
+    ronda.gastado++;
+    // Un 429 de /search es la cuota de TODA la app: se deja de refrescar en
+    // esta ronda. La base se sigue sirviendo igual — nada se pierde.
+    if (e.status === 429 || /rate limit/i.test(e.message)) ronda.parada = `Spotify limitó la búsqueda (${e.message})`;
+    console.info(`[disco-base] no se pudo mirar lo reciente de «${artistName}»: ${e.message}`);
+    return base;
+  }
+}
+
+export async function getArtistDiscoCached(artistId, artistName, ronda = null) {
+  await migrarDiscografiasViejas();
+  let base = await leerBase(artistId);
+  if (base) {
+    base = await refrescarReciente(artistId, artistName, base, ronda);
+    return base.items;
+  }
+  // Sin base: la discografía entera, como siempre. Sin limit explícito: api.js
+  // sabe cuál es el máximo que acepta Spotify hoy (10 desde 2026-08-11) y
+  // pagina hasta el final igual.
+  const { items, fuente, cortada } = await getArtistAlbumsConFuente(artistId, artistName, { includeSingles: true });
+  const slim = items.map(slimDe);
+  // Una discografía VACÍA no se guarda (la v1 guardó vacías 30 días cuando el
+  // endpoint fallaba y se siguieron sirviendo con el fetch ya arreglado).
   if (slim.length) {
-    try {
-      await idbSetCached(key, slim, DISCO_TTL_MIN);
-      // Aparte y con el mismo TTL, para no cambiarle la forma al array que ya
-      // leen las dos vistas. Sin esto no hay forma de saber después si la
-      // discografía está entera.
-      await idbSetCached(`${FUENTE_PREFIX}${artistId}`, { fuente, cortada, n: slim.length }, DISCO_TTL_MIN);
-    } catch { /* ignora */ }
-    _estadoDisco.set(artistId, { fuente, cortada, estimada: false });
+    try { await guardarBase(artistId, crearBase(slim, { fuente, cortada })); } catch { /* ignora */ }
   }
   return slim;
+}
+
+// ── Migración a la base: sin un solo request (v=229) ────────────────────────
+//
+// Las discografías de antes de v=229 (`discover_artist_disco_v2_{id}`, 30 días)
+// pasan a la base la primera vez que se abre cualquiera de las dos vistas. Se
+// leen CRUDAS, sin mirar `expiry`: si alguna ya venció y nadie la leyó todavía,
+// se rescata igual. Se suma además la copia que guardan los dos cachés de
+// escaneo (7 días), que puede tener lanzamientos que la otra no. Las claves
+// viejas NO se borran: caducan solas, y hasta entonces son una copia de más.
+//
+// La fuente: si hay `discover_artist_disco_fuente_{id}` (v=226) se usa tal cual;
+// si no, se estima como hasta ahora (orden del nativo), y queda `estimada`.
+// La hora de la base es el `storedAt` de la vieja, no «ahora»: así lo reciente
+// se refresca escalonado (hoy son tres tandas: 03/09, 15/09 y 16/09) y no las
+// 300 el mismo día.
+const MIGRACION_LOG_KEY = 'disco_base_migracion_v1';
+let _migracion = null;
+
+export function migrarDiscografiasViejas() {
+  if (!_migracion) _migracion = hacerMigracion().catch(e => {
+    console.warn('[disco-base] la migración falló:', e);
+    _migracion = null;   // no se memoiza un fracaso: la próxima entrada lo reintenta
+    return { error: e.message };
+  });
+  return _migracion;
+}
+
+async function hacerMigracion() {
+  const [viejas, fuentes, bases, scanNR, scanDA] = await Promise.all([
+    idbEntriesByPrefix(DISCO_V2_PREFIX),
+    idbEntriesByPrefix(FUENTE_PREFIX),
+    idbEntriesByPrefix(DISCO_BASE_PREFIX),
+    idbGet('discover_scan_new_releases'),
+    idbGet('discover_scan_discover_artists'),
+  ]);
+  const yaBase = new Set(bases.map(([k]) => k.slice(DISCO_BASE_PREFIX.length)));
+  const fuentePorId = new Map(fuentes.map(([k, w]) => [k.slice(FUENTE_PREFIX.length), w?.value]));
+  const copias = new Map();   // id → [items de los cachés de escaneo]
+  for (const w of [scanNR, scanDA]) {
+    for (const a of (w?.value?.artists || [])) {
+      if (!a?.id || !Array.isArray(a.disco) || !a.disco.length) continue;
+      if (!copias.has(a.id)) copias.set(a.id, []);
+      copias.get(a.id).push(...a.disco);
+    }
+  }
+  const informe = { t: Date.now(), viejas: viejas.length, yaEstaban: 0, migradas: 0, lanzamientos: 0, sumadosDeEscaneo: 0, vacias: 0 };
+  const ids = new Set([...viejas.map(([k]) => k.slice(DISCO_V2_PREFIX.length)), ...copias.keys()]);
+  const porId = new Map(viejas.map(([k, w]) => [k.slice(DISCO_V2_PREFIX.length), w]));
+  for (const id of ids) {
+    if (yaBase.has(id)) { informe.yaEstaban++; continue; }
+    const w = porId.get(id);
+    const items = Array.isArray(w?.value) ? w.value : [];
+    const t = w?.storedAt || copias.has(id) && (scanNR?.storedAt || scanDA?.storedAt) || Date.now();
+    const meta = fuentePorId.get(id);
+    const ref = items.length ? items : (copias.get(id) || []);
+    if (!ref.length) { informe.vacias++; continue; }
+    let fuente, cortada, estimada;
+    if (meta && meta.fuente) {
+      ({ fuente } = meta); cortada = !!meta.cortada; estimada = false;
+    } else {
+      // La misma estimación que hacía `estadoDiscografia` hasta v=228.
+      const nativo = ref.length > 40 || tieneOrdenNativo(ref);
+      fuente = nativo ? 'nativo' : 'busqueda';
+      cortada = nativo ? ref.length >= 200 : ref.length >= 40;
+      estimada = true;
+    }
+    let base = crearBase(ref, { fuente, cortada, estimada, t, via: 'migracion' });
+    const extra = copias.get(id) || [];
+    if (extra.length) {
+      const antes = base.items.length;
+      base = sumarReciente(base, extra, { t });   // `t` viejo: no cuenta como refresco
+      base.historial = base.historial.slice(0, 1);
+      informe.sumadosDeEscaneo += base.items.length - antes;
+    }
+    await guardarBase(id, base);
+    informe.migradas++;
+    informe.lanzamientos += base.items.length;
+  }
+  try { localStorage.setItem(MIGRACION_LOG_KEY, JSON.stringify(informe)); } catch { /* lleno */ }
+  if (informe.migradas) console.info(`[disco-base] migradas ${informe.migradas} discografías a la base (${informe.lanzamientos} lanzamientos, ${informe.sumadosDeEscaneo} sumados de los cachés de escaneo), 0 requests`);
+  return informe;
+}
+
+// ── Exportar / importar la base (v=229) ─────────────────────────────────────
+// El mismo patrón que «Exportar cache» / «Importar cache» de #genre: un JSON
+// que se baja con un <a download> y se sube con un <input type=file>. La base
+// vive en la IndexedDB de UN navegador y Ian trabaja en dos máquinas.
+//
+// Importar es UNIÓN, nunca reemplazo: por artista, `fusionarBases` junta lo de
+// este navegador con lo del archivo. Importar dos veces el mismo archivo no
+// cambia nada; importar uno viejo no borra nada nuevo.
+
+export async function exportarBase() {
+  await migrarDiscografiasViejas();
+  const bases = {};
+  for (const [k, w] of await idbEntriesByPrefix(DISCO_BASE_PREFIX)) {
+    const b = w?.value;
+    if (b && Array.isArray(b.items)) bases[k.slice(DISCO_BASE_PREFIX.length)] = b;
+  }
+  return armarExportacion(bases);
+}
+
+export async function importarBase(parsed) {
+  const leido = leerImportacion(parsed);
+  if (!leido.ok) throw new Error(leido.error);
+  await migrarDiscografiasViejas();
+  const r = { nuevas: 0, ampliadas: 0, iguales: 0, lanzamientosNuevos: 0, descartadas: leido.descartadas };
+  for (const [id, suya] of Object.entries(leido.bases)) {
+    const mia = await leerBase(id);
+    if (!mia) {
+      await guardarBase(id, suya);
+      r.nuevas++;
+      r.lanzamientosNuevos += suya.items.length;
+      continue;
+    }
+    const junta = fusionarBases(mia, suya);
+    const suma = junta.items.length - mia.items.length;
+    if (suma > 0 || junta.cortada !== mia.cortada || junta.recienteAt !== mia.recienteAt) {
+      await guardarBase(id, junta);
+      if (suma > 0) { r.ampliadas++; r.lanzamientosNuevos += suma; } else r.iguales++;
+    } else r.iguales++;
+  }
+  // Los cachés de escaneo (7 días) guardan su propia copia de cada discografía:
+  // sin tirarlos, lo importado no se vería hasta que caduquen. Se tiran SOLO
+  // ellos; la base no se toca.
+  for (const k of ['discover_scan_new_releases', 'discover_scan_discover_artists']) {
+    try { await idbDel(k); } catch { /* ignora */ }
+  }
+  return r;
+}
+
+/** Botones de la base para la topbar de una vista (`pfx` = prefijo de ids). */
+export function botonesBaseHtml(pfx) {
+  return `
+    <button class="btn btn-secondary btn-sm" id="${pfx}-base-export" title="Baja un JSON con la base de discografías de este navegador, para llevarla a otra máquina. La comparten «Sin escuchar» y «Novedades».">Exportar base</button>
+    <button class="btn btn-secondary btn-sm" id="${pfx}-base-import" title="Suma a la base de este navegador la de otro. No borra nada: junta las dos.">Importar base</button>
+    <input type="file" id="${pfx}-base-input" accept="application/json,.json" hidden>`;
+}
+
+/** Engancha los botones. `alImportar` se llama después de importar, para repintar. */
+export function conectarBotonesBase(content, pfx, alImportar) {
+  const exp = content.querySelector(`#${pfx}-base-export`);
+  const imp = content.querySelector(`#${pfx}-base-import`);
+  const input = content.querySelector(`#${pfx}-base-input`);
+  if (exp) exp.onclick = async () => {
+    exp.disabled = true;
+    try {
+      const data = await exportarBase();
+      if (!data.artistas) { showToast('La base de discografías está vacía: no hay nada que exportar.', 'error'); return; }
+      const blob = new Blob([JSON.stringify(data)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `fonoteca-discografias-${new Date().toISOString().slice(0, 10)}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      showToast(`Exportada la base: ${data.artistas.toLocaleString('es-ES')} artistas, ${data.lanzamientos.toLocaleString('es-ES')} lanzamientos.`, 'success');
+    } catch (e) {
+      showToast('No se ha podido exportar la base: ' + e.message, 'error');
+    } finally { exp.disabled = false; }
+  };
+  if (imp && input) {
+    imp.onclick = () => input.click();
+    input.onchange = async (e) => {
+      const file = e.target.files?.[0];
+      e.target.value = '';
+      if (!file) return;
+      imp.disabled = true;
+      try {
+        const r = await importarBase(JSON.parse(await file.text()));
+        const partes = [];
+        if (r.nuevas) partes.push(`${r.nuevas.toLocaleString('es-ES')} artistas nuevos`);
+        if (r.ampliadas) partes.push(`${r.ampliadas.toLocaleString('es-ES')} ampliados`);
+        partes.push(`${r.lanzamientosNuevos.toLocaleString('es-ES')} lanzamientos sumados`);
+        if (r.descartadas) partes.push(`${r.descartadas} entradas mal formadas descartadas`);
+        showToast(`Base importada: ${partes.join(' · ')}.`, r.descartadas ? 'warning' : 'success');
+        if (alImportar) await alImportar(r);
+      } catch (err) {
+        showToast('No se ha podido importar la base: ' + err.message, 'error');
+      } finally { imp.disabled = false; }
+    };
+  }
+}
+
+/** El toast de cierre de una ronda de «Actualizar». */
+export function avisarRonda(ronda) {
+  if (!ronda) return;
+  const partes = [`Novedades revisadas en ${ronda.refrescados.toLocaleString('es-ES')} artistas`];
+  if (ronda.nuevos) partes.push(`${ronda.nuevos.toLocaleString('es-ES')} lanzamientos nuevos`);
+  let msg = partes.join(' · ') + '.';
+  if (ronda.parada) msg += ` Se paró antes: ${ronda.parada}.`;
+  if (ronda.pendientes) msg += ` Quedan ${ronda.pendientes.toLocaleString('es-ES')} para la próxima: se reparten para no agotar la búsqueda de Spotify.`;
+  showToast(msg, ronda.parada ? 'warning' : 'success');
 }
 
 // ── ¿La discografía cacheada está entera? (v=226) ───────────────────────────
@@ -127,6 +398,14 @@ export async function estadoDiscografia(artistId) {
   if (_estadoDisco.has(artistId)) return _estadoDisco.get(artistId);
   let estado = null;
   try {
+    // Desde v=229 la fuente vive en la base; lo de abajo es para lo que todavía
+    // no se migró (no debería quedar nada después de la primera entrada).
+    const base = await leerBase(artistId);
+    if (base) {
+      estado = { fuente: base.fuente, cortada: !!base.cortada, estimada: !!base.estimada };
+      _estadoDisco.set(artistId, estado);
+      return estado;
+    }
     const meta = await idbGetCached(`${FUENTE_PREFIX}${artistId}`);
     if (meta && meta.fuente) {
       estado = { fuente: meta.fuente, cortada: !!meta.cortada, estimada: false };
@@ -149,7 +428,8 @@ export async function estadoDiscografia(artistId) {
 
 // ── Cache del escaneo COMPLETO (no solo de la discografía por artista) ──
 // Sin esto, entrar a la vista dispara 150 escaneos cada vez. Guardamos el
-// resultado ya cruzado con TTL de 7 días; el botón "Actualizar" lo tira.
+// resultado ya cruzado con TTL de 7 días; el botón "Actualizar" lo tira (y
+// solo a él: la base de discografías no se toca, ver `clearScanCache`).
 
 const SCAN_TTL_MIN = 7 * 24 * 60;   // 7 días
 
@@ -166,16 +446,15 @@ export async function saveScanCache(viewKey, artists) {
   } catch { /* ignora */ }
 }
 
-export async function clearScanCache(viewKey, artistIds = []) {
+// ⚠️ Desde v=229 tira SOLO el caché del escaneo, NUNCA las discografías.
+// Hasta v=228 «Actualizar» borraba también `discover_artist_disco_v2_{id}` de
+// cada artista escaneado: un click volvía a pedir las 300 enteras, que con la
+// cuota de 100 del nativo metía ~280 por `/search` cortadas en 40. Ahora lo
+// fresco lo trae la ronda forzada (`nuevaRondaDeRefresco({ forzar: true })`),
+// que mira solo lo reciente y con presupuesto. Ya no recibe la lista de ids, a
+// propósito: no hay nada por artista que borrar.
+export async function clearScanCache(viewKey) {
   try { await idbDel(`discover_scan_${viewKey}`); } catch { /* ignora */ }
-  // "Actualizar" tiene que traer datos frescos de verdad: también tiramos las
-  // discografías cacheadas de los artistas ya escaneados.
-  for (const id of artistIds) {
-    if (!id) continue;
-    try { await idbDel(`discover_artist_disco_v2_${id}`); } catch { /* ignora */ }
-    try { await idbDel(`${FUENTE_PREFIX}${id}`); } catch { /* ignora */ }
-    _estadoDisco.delete(id);
-  }
 }
 
 // "hace 3 días" / "hoy" para el sub-texto del botón Actualizar.

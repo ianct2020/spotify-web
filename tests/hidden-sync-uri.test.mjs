@@ -450,5 +450,19 @@ console.log('\nfijarVarios(devolver): si la playlist falla, sigue oculto');
   ok(s.has(OTRO), 'y sigue oculta: si se sacara del local, el sync la traería de vuelta sin decir nada');
 }
 
+console.log('\navisar(): dos avisos distintos no comparten cupo (v=229)');
+{
+  // Hasta v=228 el dedupe era por TIPO: el primer 'warning' de la sesión se
+  // comía el cupo y el segundo quedaba solo en consola. Acá, en el mismo sync,
+  // una resubida (La La La) y un irrecuperable (clave de álbum sin forma de
+  // reconstruir su uri — el caso de `3vil reflection||osamason`).
+  montar({ local: [LALALA, 'ausencia||osvaldo pugliese'], uris: { [LALALA]: `spotify:track:${LALALA}` }, enPlaylist: [] });
+  const s = store();
+  await s.ready();
+  const avisos = globalThis.__DOBLE.toasts.filter(t => t.type === 'warning').map(t => t.msg || t.message || t.text || JSON.stringify(t));
+  eq(avisos.length, 2, 'salen los DOS avisos amarillos, no solo el primero');
+  ok(avisos.some(m => /vuelto a subir/.test(m)) && avisos.some(m => /solo en este navegador/.test(m)), 'uno por la resubida y otro por la que vive solo aquí');
+}
+
 console.log(`\n${pasaron} asserts OK, ${fallaron} fallos`);
 process.exit(fallaron ? 1 : 0);

@@ -1,13 +1,13 @@
-import { getAllPlaylistItems, getBestAvailableLikes, addTracksToPlaylist, removeTracksFromPlaylist, getAllUserPlaylists } from '../api.js?v=228';
-import { esEPoAlbum } from '../util/release-size.js?v=228';
-import { idbGetCached, idbSetCached, idbGetTimestamp } from '../idb.js?v=228';
-import { escapeHtml, confirmModal, pageHeader } from '../ui/components.js?v=228';
-import { showToast } from '../ui/toast.js?v=228';
-import { isJunkTrack } from '../util/junk.js?v=228';
-import { openModal, closeTop } from '../ui/modal-stack.js?v=228';
-import { getListenedPlaylist, groupItemsByAlbum, openListenedAlbumsPicker, albumKey, baseName, norm } from './listened-shared.js?v=228';
-import { openAlbumCard } from './album-card.js?v=228';
-import { prefKey, migratePrefKey } from '../storage.js?v=228';
+import { getAllPlaylistItems, getBestAvailableLikes, addTracksToPlaylist, removeTracksFromPlaylist, getAllUserPlaylists } from '../api.js?v=229';
+import { esEPoAlbum } from '../util/release-size.js?v=229';
+import { idbGetCached, idbSetCached, idbGetTimestamp } from '../idb.js?v=229';
+import { escapeHtml, confirmModal, pageHeader } from '../ui/components.js?v=229';
+import { showToast } from '../ui/toast.js?v=229';
+import { isJunkTrack } from '../util/junk.js?v=229';
+import { openModal, closeTop } from '../ui/modal-stack.js?v=229';
+import { getListenedPlaylist, groupItemsByAlbum, openListenedAlbumsPicker, albumKey, baseName, norm } from './listened-shared.js?v=229';
+import { openAlbumCard } from './album-card.js?v=229';
+import { prefKey, migratePrefKey } from '../storage.js?v=229';
 
 const SORT_KEY = 'listened_sort_mode';
 const VALID_SORTS = new Set(['recent', 'year-desc', 'year-asc', 'artist-asc', 'likes-desc', 'name-asc']);
@@ -66,7 +66,7 @@ function dismissHistory(key) {
 // Solo lo bajamos si el user logueado es el dueño (Ian): son sus datos personales.
 async function loadHistoryData() {
   if (historyAlbums) return historyAlbums;
-  const { isOwner } = await import('./history-data.js?v=228');
+  const { isOwner } = await import('./history-data.js?v=229');
   if (!(await isOwner())) { historyAlbums = []; return historyAlbums; }
   try {
     const cached = await idbGetCached(HISTORY_CACHE_KEY);

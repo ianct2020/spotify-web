@@ -26,10 +26,10 @@ import {
   createPlaylist,
   getCurrentUserId,
   spotifyFetch,
-} from '../api.js?v=228';
-import { prefKey, migratePrefKey } from '../storage.js?v=228';
-import { invalidateOwnPlaylists } from './playlist-add.js?v=228';
-import { showToast } from '../ui/toast.js?v=228';
+} from '../api.js?v=229';
+import { prefKey, migratePrefKey } from '../storage.js?v=229';
+import { invalidateOwnPlaylists } from './playlist-add.js?v=229';
+import { showToast } from '../ui/toast.js?v=229';
 
 const PLAYLIST_DESC = 'Lista interna de Fonoteca: lo que ocultaste en esta vista. Si la borras, se pierden los ocultos.';
 
@@ -377,13 +377,22 @@ export function createHiddenStore({ lsKey, playlistName, keyOfTrack, label, uriF
   // pierden NUNCA: se reintenta subirlas en cada sync, se anotan en disco
   // (`ocultos_sin_uri_v1`) y se avisan. Lo que no se hace jamás es descartarlas.
   const pendingNoUri = new Set();
-  // Un aviso por tipo y por sesión: `sync()` corre en cada entrada a la vista y
-  // tres toasts iguales seguidos son ruido, no información.
+  // Un aviso por MENSAJE y por sesión: `sync()` corre en cada entrada a la
+  // vista y tres toasts iguales seguidos son ruido, no información.
+  //
+  // ⚠️ Hasta v=228 deduplicaba por TIPO (`'warning'`), así que todos los avisos
+  // amarillos de este store compartían UN solo cupo por sesión. El de
+  // `3vil reflection||osamason` (irrecuperable, sale en cada carga) se lo comía
+  // al entrar, y cualquier otro fallo —una resubida, un sync que no llegó a
+  // Spotify— quedaba solo en `console.warn`, que la extensión no captura y no ve
+  // nadie. El mismo patrón de siempre: un aviso que existe pero no sale da la
+  // misma cara que no tener nada que avisar.
   const avisados = new Set();
 
   function avisar(mensaje, tipo) {
-    if (avisados.has(tipo)) return;
-    avisados.add(tipo);
+    const clave = `${tipo}\u0000${mensaje}`;
+    if (avisados.has(clave)) return;
+    avisados.add(clave);
     try { showToast(mensaje, tipo); } catch { /* sin DOM (tests) */ }
   }
 

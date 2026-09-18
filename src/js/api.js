@@ -1424,6 +1424,78 @@ const ARTIST_ALBUMS_MAX_LIMIT = 10;
 const NATIVO_PAUSA_MIN_MS = 5 * 60 * 1000;
 const NATIVO_PAUSA_MAX_MS = 60 * 60 * 1000;
 
+// La discografía por `/search?q=artist:"X"&type=album`, filtrada al artista.
+// Es la ÚNICA copia de este filtro: la usan el fallback de
+// `getArtistAlbumsConFuente` (4 páginas, sin año) y el refresco de lo reciente
+// de la base de discografías (`year:`, v=229). Si se escribiera dos veces
+// divergiría, que es lo que pasó con los dos resolutores de álbum de v=219.
+//
+// `year` = 'AAAA-AAAA' o null. `maxPages` corta el paginado; `cortada` dice si
+// se cortó con la última página llena (Spotify tenía más y no se pidió).
+async function buscarDiscografiaPorNombre(artistId, artistName, { includeSingles = true, year = null, maxPages = SEARCH_MAX_PAGES } = {}) {
+  // /search devuelve cualquier cosa que matchee el texto: buscando
+  // artist:"Drake" aparecen Nick Drake, Drake Bell y "draken". Filtramos por
+  // **id** del artista (lo tenemos) y, si el álbum no lo trae, por nombre
+  // exacto. Sin esto la vista de "sin escuchar" se llena de artistas ajenos.
+  const wanted = (artistName || '').trim();
+  if (!wanted) return { items: [], cortada: false };
+  const isMine = (al) => (al.artists || []).some(a =>
+    (artistId && a.id === artistId) || artistIsSame(wanted, a.name));
+  // ⚠️ Este `||` deja pasar a los HOMÓNIMOS EXACTOS: hay dos artistas
+  // llamados literalmente «Steve Lacy» y el de jazz metía 17 discos. No se
+  // aprieta acá a propósito — la identidad se decide al PINTAR, en
+  // `util/discover-filters.js` (criterio 'artista'), para que el toggle de la
+  // topbar pueda mostrarlos y esconderlos sin tirar el caché de IDB. Este
+  // filtro queda como red gruesa contra el ruido de /search (Nick Drake).
+  //
+  // ⚠️ **El apóstrofo dentro de las comillas rompe la query** — el mismo bug
+  // que ya se arregló en `features/album-card.js`. Medido en vivo el
+  // 2026-08-22 contra la API real:
+  //
+  //   artist:"Sinéad O'Connor"  →  0 resultados
+  //   artist:"Sinéad OConnor"   →  10 ✅
+  //   artist:"Sinead O'Connor"  →  0 resultados
+  //   artist:"Guns N' Roses"    →  10 (este NO se rompe)
+  //
+  // O sea que no falla siempre —parece necesitar el apóstrofo en mitad de una
+  // palabra que no es la primera— pero BORRARLO no empeora ningún caso y
+  // arregla los rotos, así que se borra siempre. Y se borra, no se cambia por
+  // un espacio: Spotify indexa «don't» como el token `dont`, y «don t» no
+  // encuentra nada. `isMine` compara después contra el nombre REAL.
+  //
+  // `year:` medido el 2026-09-18: `artist:"Maroon 5" year:2025-2026` trae en 1
+  // request los 4 lanzamientos 2025+ que da el nativo, y el de Lana Del Rey trae
+  // 4 singles de 2025-2026 que el nativo NO devuelve.
+  const q = `artist:"${limpiaParaQuery(wanted)}"` + (year ? ` year:${year}` : '');
+  const items = [];
+  let emptyPages = 0;
+  // Cortada = se gastaron las `maxPages` páginas y la última vino llena:
+  // Spotify tenía más y no se pidió. Ojo, no es lo mismo que «40
+  // lanzamientos»: el filtro de `isMine` puede dejar 37 de 40 y seguir
+  // cortada. Si el bucle termina por una página corta, /search no tenía más.
+  // ⚠️ El 40 NO es de la API (medido 2026-09-18): el tope real es
+  // `limit + offset ≤ 1000` y con `artist:` los resultados se acaban solos.
+  let cortada = false;
+  let paginas = 0;   // requests gastados: el presupuesto de la base los cuenta
+  for (let page = 0; page < maxPages; page++) {
+    const offset = page * SEARCH_PAGE;
+    paginas++;
+    const res = await spotifyFetch(`/search?q=${encodeURIComponent(q)}&type=album&limit=${SEARCH_PAGE}&offset=${offset}`);
+    const batch = res?.albums?.items || [];
+    const mine = batch.filter(isMine);
+    items.push(...mine);
+    if (batch.length < SEARCH_PAGE) break;
+    // Los resultados vienen por relevancia: si dos páginas seguidas no traen
+    // nada del artista, lo que sigue es ruido. (Medido 2026-09-18 sobre 56
+    // artistas paginados sin tope: esta regla corta antes de tiempo en 3 y
+    // pierde 1-2 lanzamientos en cada uno.)
+    emptyPages = mine.length ? 0 : emptyPages + 1;
+    if (emptyPages >= 2) break;
+    if (page === maxPages - 1) cortada = true;
+  }
+  return { items: items.filter(al => includeSingles || al.album_type === 'album'), cortada, paginas };
+}
+
 // Devuelve { items, fuente: 'nativo' | 'busqueda', cortada, motivo }.
 // `cortada` = Spotify tenía más lanzamientos y no se pidieron.
 async function getArtistAlbumsConFuente(artistId, artistName, { includeSingles = true, limit = ARTIST_ALBUMS_MAX_LIMIT } = {}) {
@@ -1456,59 +1528,7 @@ async function getArtistAlbumsConFuente(artistId, artistName, { includeSingles =
     return { items, cortada: false };
   };
 
-  const trySearch = async () => {
-    // /search devuelve cualquier cosa que matchee el texto: buscando
-    // artist:"Drake" aparecen Nick Drake, Drake Bell y "draken". Filtramos por
-    // **id** del artista (lo tenemos) y, si el álbum no lo trae, por nombre
-    // exacto. Sin esto la vista de "sin escuchar" se llena de artistas ajenos.
-    const wanted = (artistName || '').trim();
-    if (!wanted) return { items: [], cortada: false };
-    const isMine = (al) => (al.artists || []).some(a =>
-      (artistId && a.id === artistId) || artistIsSame(wanted, a.name));
-    // ⚠️ Este `||` deja pasar a los HOMÓNIMOS EXACTOS: hay dos artistas
-    // llamados literalmente «Steve Lacy» y el de jazz metía 17 discos. No se
-    // aprieta acá a propósito — la identidad se decide al PINTAR, en
-    // `util/discover-filters.js` (criterio 'artista'), para que el toggle de la
-    // topbar pueda mostrarlos y esconderlos sin tirar el caché de IDB. Este
-    // filtro queda como red gruesa contra el ruido de /search (Nick Drake).
-    //
-    // ⚠️ **El apóstrofo dentro de las comillas rompe la query** — el mismo bug
-    // que ya se arregló en `features/album-card.js`. Medido en vivo el
-    // 2026-08-22 contra la API real:
-    //
-    //   artist:"Sinéad O'Connor"  →  0 resultados
-    //   artist:"Sinéad OConnor"   →  10 ✅
-    //   artist:"Sinead O'Connor"  →  0 resultados
-    //   artist:"Guns N' Roses"    →  10 (este NO se rompe)
-    //
-    // O sea que no falla siempre —parece necesitar el apóstrofo en mitad de una
-    // palabra que no es la primera— pero BORRARLO no empeora ningún caso y
-    // arregla los rotos, así que se borra siempre. Y se borra, no se cambia por
-    // un espacio: Spotify indexa «don't» como el token `dont`, y «don t» no
-    // encuentra nada. `isMine` compara después contra el nombre REAL.
-    const q = `artist:"${limpiaParaQuery(wanted)}"`;
-    const items = [];
-    let emptyPages = 0;
-    // Cortada = se gastaron las SEARCH_MAX_PAGES páginas y la última vino
-    // llena: Spotify tenía más y no se pidió. Ojo, no es lo mismo que «40
-    // lanzamientos»: el filtro de `isMine` puede dejar 37 de 40 y seguir
-    // cortada. Si el bucle termina por una página corta, /search no tenía más.
-    let cortada = false;
-    for (let page = 0; page < SEARCH_MAX_PAGES; page++) {
-      const offset = page * SEARCH_PAGE;
-      const res = await spotifyFetch(`/search?q=${encodeURIComponent(q)}&type=album&limit=${SEARCH_PAGE}&offset=${offset}`);
-      const batch = res?.albums?.items || [];
-      const mine = batch.filter(isMine);
-      items.push(...mine);
-      if (batch.length < SEARCH_PAGE) break;
-      // Los resultados vienen por relevancia: si dos páginas seguidas no traen
-      // nada del artista, lo que sigue es ruido.
-      emptyPages = mine.length ? 0 : emptyPages + 1;
-      if (emptyPages >= 2) break;
-      if (page === SEARCH_MAX_PAGES - 1) cortada = true;
-    }
-    return { items: items.filter(al => includeSingles || al.album_type === 'album'), cortada };
-  };
+  const trySearch = () => buscarDiscografiaPorNombre(artistId, artistName, { includeSingles });
 
   const porBusqueda = async (motivo) => {
     artistAlbumsDiag.busquedaArtistas++;
@@ -1633,6 +1653,7 @@ export {
   getSavedAlbums,
   getArtistAlbums,
   getArtistAlbumsConFuente,
+  buscarDiscografiaPorNombre,
   estadoNativoDiscografia,
   artistAlbumsDiag,
   getAlbumTracks,

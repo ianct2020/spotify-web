@@ -97,9 +97,15 @@ function idbAvailable() {
 }
 
 // Borra TODO el cache de IndexedDB (grouped de playlists, análisis, etc.),
-// menos las keys en keepKeys (por defecto no se conserva nada). Devuelve cuántas borró.
-async function idbClearAll(keepKeys = []) {
-  const keep = new Set(keepKeys);
+// menos las keys en keepKeys y las que empiezan por algún `keepPrefixes` (por
+// defecto no se conserva nada). Devuelve cuántas borró.
+//
+// `keepPrefixes` existe por la base de discografías (v=229): una clave por
+// artista, así que no se pueden nombrar de antemano, y rehacerla cuesta dos
+// cuotas de Spotify quemadas.
+async function idbClearAll(keepKeys = [], keepPrefixes = []) {
+  const keepSet = new Set(keepKeys);
+  const keep = { has: (k) => keepSet.has(k) || (typeof k === 'string' && keepPrefixes.some(p => k.startsWith(p))) };
   const db = await openDb();
   const keys = await new Promise((res, rej) => {
     const t = db.transaction(STORE, 'readonly');
@@ -148,7 +154,30 @@ async function idbDelByPrefix(prefix) {
   return toDel.length;
 }
 
+/**
+ * Todas las entradas cuya clave empieza por `prefix`, como `[clave, envoltorio]`
+ * CRUDAS: sin mirar `expiry` y sin borrar nada. `idbGetCached` borra lo
+ * caducado al leerlo; esto no, porque lo usa la migración a la base de
+ * discografías (v=229), que tiene que rescatar incluso lo que ya venció.
+ */
+async function idbEntriesByPrefix(prefix) {
+  const db = await openDb();
+  return new Promise((res, rej) => {
+    const out = [];
+    const t = db.transaction(STORE, 'readonly');
+    const r = t.objectStore(STORE).openCursor();
+    r.onsuccess = () => {
+      const cur = r.result;
+      if (!cur) { res(out); return; }
+      if (typeof cur.key === 'string' && cur.key.startsWith(prefix)) out.push([cur.key, cur.value]);
+      cur.continue();
+    };
+    r.onerror = () => rej(r.error);
+  });
+}
+
 export {
+  idbEntriesByPrefix,
   idbGet, idbSet, idbDel,
   idbGetCached, idbGetCachedRaw, idbGetTimestamp, idbSetCached,
   idbAvailable, idbClearAll, idbDelByPrefix,
