@@ -6,23 +6,23 @@
 //     (util/album-heard.js: historial completo + likes + listened + w-three)
 //   - permiten "+ Biblioteca" y "Crear playlist con lo elegido"
 
-import { idbGetCached, idbSetCached, idbDel } from '../idb.js?v=227';
-import { getArtistAlbumsConFuente, searchArtistByName, getAlbumTracks, saveToLibrary, saveAlbumsToLibrary, createPlaylist, addTracksToPlaylist } from '../api.js?v=227';
-import { albumKey } from '../util/album-key.js?v=227';
-import { cardKey, cardKeyLegacy, albumCreditName, keyOfPlaylistTrack } from '../util/discover-key.js?v=227';
-import { escapeHtml } from '../ui/components.js?v=227';
-import { showToast } from '../ui/toast.js?v=227';
-import { openPlaylistPicker } from '../ui/playlist-picker.js?v=227';
-import { getOwnPlaylists, addUrisToPlaylists, toastAddResult } from '../util/playlist-add.js?v=227';
-import { openArtistCard } from './artist-card.js?v=227';
-import { openAlbumCard } from './album-card.js?v=227';
-import { createHiddenStore, createLocalStore } from '../util/hidden-sync.js?v=227';
-import { recuperarUriDeAlbumKey } from '../util/hidden-recover.js?v=227';
-import { getPreview } from '../api/preview-providers.js?v=227';
-import { togglePreview, playingKey, attachHover } from '../ui/preview-player.js?v=227';
-import { coverUrl } from '../util/cover-size.js?v=227';
-import { FILTROS as FILTROS_DEF, saveFiltros } from '../util/discover-filters.js?v=227';
-import { esEPoAlbum } from '../util/release-size.js?v=227';
+import { idbGetCached, idbSetCached, idbDel } from '../idb.js?v=228';
+import { getArtistAlbumsConFuente, searchArtistByName, getAlbumTracks, saveToLibrary, saveAlbumsToLibrary, createPlaylist, addTracksToPlaylist } from '../api.js?v=228';
+import { albumKey } from '../util/album-key.js?v=228';
+import { cardKey, cardKeyLegacy, albumCreditName, keyOfPlaylistTrack } from '../util/discover-key.js?v=228';
+import { escapeHtml } from '../ui/components.js?v=228';
+import { showToast } from '../ui/toast.js?v=228';
+import { openPlaylistPicker } from '../ui/playlist-picker.js?v=228';
+import { getOwnPlaylists, addUrisToPlaylists, toastAddResult } from '../util/playlist-add.js?v=228';
+import { openArtistCard } from './artist-card.js?v=228';
+import { openAlbumCard } from './album-card.js?v=228';
+import { createHiddenStore, createLocalStore } from '../util/hidden-sync.js?v=228';
+import { recuperarUriDeAlbumKey } from '../util/hidden-recover.js?v=228';
+import { getPreview } from '../api/preview-providers.js?v=228';
+import { togglePreview, playingKey, attachHover } from '../ui/preview-player.js?v=228';
+import { coverUrl } from '../util/cover-size.js?v=228';
+import { FILTROS as FILTROS_DEF, saveFiltros } from '../util/discover-filters.js?v=228';
+import { esEPoAlbum } from '../util/release-size.js?v=228';
 
 const DISCO_TTL_MIN = 30 * 24 * 60;       // 30 días
 const ARTIST_ID_TTL_MIN = 60 * 24 * 60;   // 60 días — los ids no cambian
@@ -344,21 +344,32 @@ export function albumIsUnheard(al, artistName, heardSet) {
 const trackMemo = new Map();   // albumId → { name, artists, uri } | null
 
 export async function representativeTrack(al, artistName) {
+  try {
+    return await resolverPistaRepresentativa(al, artistName);
+  } catch (e) {
+    console.warn(`[discover] tracklist de «${al?.name}»:`, e.message);
+    return null;
+  }
+}
+
+// La misma resolución, pero que LANZA si la red falla. La usa el lote de
+// ocultar, que tiene que poder decir por qué no pudo con un álbum.
+//
+// ⚠️ Hasta v=227 un fallo (un 429, un corte) se memoizaba como `null` para toda
+// la sesión: ese álbum quedaba «sin pista» hasta recargar, y ocultarlo lo dejaba
+// solo en este navegador. Ahora se memoiza solo lo que Spotify contestó.
+async function resolverPistaRepresentativa(al, artistName) {
   if (!al?.id) return null;
   if (trackMemo.has(al.id)) return trackMemo.get(al.id);
   let out = null;
-  try {
-    const tracks = await getAlbumTracks(al.id, { limit: 50 });
-    const t = tracks.find(x => x?.name) || null;
-    if (t) {
-      out = {
-        name: t.name,
-        artists: (t.artists || []).map(a => a?.name).filter(Boolean),
-        uri: t.uri || (t.id ? `spotify:track:${t.id}` : null),
-      };
-    }
-  } catch (e) {
-    console.warn(`[discover] tracklist de «${al.name}»:`, e.message);
+  const tracks = await getAlbumTracks(al.id, { limit: 50 });
+  const t = tracks.find(x => x?.name) || null;
+  if (t) {
+    out = {
+      name: t.name,
+      artists: (t.artists || []).map(a => a?.name).filter(Boolean),
+      uri: t.uri || (t.id ? `spotify:track:${t.id}` : null),
+    };
   }
   if (out && !out.artists.length) out.artists = [artistName].filter(Boolean);
   trackMemo.set(al.id, out);
@@ -671,6 +682,155 @@ export async function toggleHiddenAlbum(al, artistName) {
     uri = await albumRepresentativeUri(al, artistName);
   } catch { /* sin uri: el store avisa, la anota y la intenta recuperar en el sync */ }
   return hiddenAlbums.toggle(key, uri);
+}
+
+// ── «Ocultar» / «Devolver» de la barra de selección (v=228) ─────────────────
+//
+// Compartido por las dos vistas. La acción es EXPLÍCITA, no un toggle: en el
+// modo «Ocultos» un lote mezclado con `toggle` devolvería unos y ocultaría
+// otros. El botón dice «Ocultar» en la lista y «Devolver a la lista» en el modo
+// «Ocultos», y en los dos casos lo que ya está como se pide no se toca.
+//
+// Coste de ocultar N: hasta N `GET /albums/{id}/tracks` (0 por cada álbum al
+// que ya se le dio ▶, está memoizado) + 1 POST por cada 100 a la playlist.
+// Devolver no pide pistas: la uri ya está guardada con el oculto.
+
+/**
+ * @param {Array<{al: object, artistName: string}>} entradas
+ * @param {boolean} ocultar
+ * @param {{onProgress?: (p: {fase: 'pistas'|'playlist', hechos?: number, total?: number}) => void}} [opts]
+ * @returns {Promise<{hechas: Array, yaEstaban: Array, fallidas: Array<{al, artistName, motivo}>}>}
+ */
+export async function fijarOcultosDeAlbumes(entradas, ocultar, { onProgress } = {}) {
+  // Dos tarjetas pueden dar la misma clave (el mismo disco en dos artistas):
+  // se opera una vez por clave y el resultado vuelve a todas sus tarjetas.
+  const porClave = new Map();
+  for (const e of entradas) {
+    const key = cardKey(e.al, e.artistName);
+    if (!porClave.has(key)) porClave.set(key, []);
+    porClave.get(key).push(e);
+  }
+  await hiddenAlbums.ready();
+
+  const paraStore = [];
+  const motivoDe = new Map();   // clave → por qué no se intentó
+  const aResolver = [...porClave.keys()].filter(k => hiddenAlbums.has(k) !== ocultar);
+  let cortado = null;
+  if (ocultar) {
+    let i = 0;
+    for (const key of aResolver) {
+      onProgress?.({ fase: 'pistas', hechos: i, total: aResolver.length });
+      i++;
+      if (cortado) { motivoDe.set(key, cortado); continue; }
+      const { al, artistName } = porClave.get(key)[0];
+      try {
+        const rep = await resolverPistaRepresentativa(al, artistName);
+        if (rep?.uri) paraStore.push({ key, uri: rep.uri });
+        else motivoDe.set(key, 'Spotify no devuelve ninguna pista de este lanzamiento');
+      } catch (e) {
+        motivoDe.set(key, `no he podido leer sus pistas: ${e.message}`);
+        // Un 429 aquí es la cuota, no un álbum raro: seguir sería esperar
+        // minutos por cada uno para acabar igual. Los que quedan se dicen.
+        if (e.status === 429 || /\b429\b|rate limit/i.test(e.message)) {
+          cortado = 'no lo he intentado: Spotify ha cortado por exceso de peticiones (429). Vuelve a probar en un rato';
+        }
+      }
+    }
+    onProgress?.({ fase: 'pistas', hechos: aResolver.length, total: aResolver.length });
+  } else {
+    for (const key of aResolver) paraStore.push({ key });
+  }
+
+  onProgress?.({ fase: 'playlist' });
+  // Las que ya están como se pide también van al store: así el recuento de
+  // «ya lo estaban» sale de un solo sitio.
+  const yaDeAntes = [...porClave.keys()].filter(k => hiddenAlbums.has(k) === ocultar).map(key => ({ key }));
+  const res = await hiddenAlbums.fijarVarios([...yaDeAntes, ...paraStore], ocultar);
+
+  const expandir = (claves) => claves.flatMap(k => porClave.get(k) || []);
+  const fallidas = [
+    ...[...motivoDe].map(([key, motivo]) => ({ key, motivo })),
+    ...res.fallidas,
+  ].flatMap(({ key, motivo }) => (porClave.get(key) || []).map(e => ({ ...e, motivo })));
+  return { hechas: expandir(res.hechas), yaEstaban: expandir(res.yaEstaban), fallidas };
+}
+
+/**
+ * Cablea el botón «Ocultar»/«Devolver» de la barra de una vista. `prefix` es el
+ * de sus ids (`newrel`, `disco`): la barra tiene `#{prefix}-sel-hide` y
+ * `#{prefix}-lote-fallos`.
+ *
+ * Lo que falla queda SELECCIONADO y listado con su motivo debajo de la barra:
+ * volver a pulsar el botón reintenta justo esos.
+ */
+export function wireLoteOcultos(content, { prefix, selection, findEntrada, isHiddenMode, onFin }) {
+  const btn = content.querySelector(`#${prefix}-sel-hide`);
+  const caja = content.querySelector(`#${prefix}-lote-fallos`);
+  if (!btn) return;
+  btn.onclick = async () => {
+    const ids = [...selection];
+    if (!ids.length) return;
+    const ocultar = !isHiddenMode();
+    const botones = [...content.querySelectorAll(`#${prefix}-actionbar button`)];
+    const texto = btn.textContent;
+    botones.forEach(b => { b.disabled = true; });
+    if (caja) { caja.hidden = true; caja.innerHTML = ''; }
+
+    const entradas = [];
+    const perdidas = [];
+    for (const id of ids) {
+      const e = findEntrada(id);
+      if (e) entradas.push(e);
+      else perdidas.push({ al: { id, name: id }, artistName: '', motivo: 'ya no está en la discografía escaneada' });
+    }
+
+    let res;
+    try {
+      res = await fijarOcultosDeAlbumes(entradas, ocultar, {
+        onProgress: (p) => {
+          btn.textContent = p.fase === 'pistas'
+            ? `Buscando pistas ${p.hechos}/${p.total}…`
+            : (ocultar ? 'Guardando en la playlist…' : 'Quitando de la playlist…');
+        },
+      });
+    } catch (e) {
+      // No debería pasar (todo lo de dentro se recoge como fallida), pero si
+      // pasa la selección se queda tal cual y se dice.
+      showToast(`No se ha podido ${ocultar ? 'ocultar' : 'devolver'} la selección: ${e.message}`, 'error');
+      botones.forEach(b => { b.disabled = false; });
+      btn.textContent = texto;
+      return;
+    }
+    const fallidas = [...res.fallidas, ...perdidas];
+
+    selection.clear();
+    for (const f of fallidas) selection.add(f.al.id);
+
+    const n = res.hechas.length;
+    const partes = [];
+    if (n) partes.push(ocultar
+      ? `${n} ${n === 1 ? 'oculto' : 'ocultos'} — no vuelven a aparecer`
+      : `${n} ${n === 1 ? 'devuelto' : 'devueltos'} a la lista`);
+    if (res.yaEstaban.length) partes.push(`${res.yaEstaban.length} ya lo ${res.yaEstaban.length === 1 ? 'estaba' : 'estaban'}`);
+    if (partes.length) showToast(partes.join(' · '), fallidas.length ? 'info' : 'success');
+    if (fallidas.length) {
+      showToast(
+        `${fallidas.length} de ${ids.length} no se ${fallidas.length === 1 ? 'ha' : 'han'} podido ${ocultar ? 'ocultar' : 'devolver'}. ` +
+        `Siguen seleccionados y el motivo está en la barra.`,
+        'warning',
+      );
+      if (caja) {
+        caja.innerHTML = `
+          <div class="disco-lote-fallos-titulo">No se ${fallidas.length === 1 ? 'ha' : 'han'} podido ${ocultar ? 'ocultar' : 'devolver'} (${fallidas.length}). Vuelve a pulsar «${escapeHtml(texto)}» para reintentarlo:</div>
+          <ul>${fallidas.map(f => `<li><strong>${escapeHtml(f.al.name || '')}</strong>${f.artistName ? ` · ${escapeHtml(f.artistName)}` : ''} — ${escapeHtml(f.motivo)}</li>`).join('')}</ul>`;
+        caja.hidden = false;
+      }
+    }
+
+    botones.forEach(b => { b.disabled = false; });
+    btn.textContent = texto;
+    onFin?.();
+  };
 }
 
 // Abre el modal multi-selección y añade TODAS las pistas de los álbumes

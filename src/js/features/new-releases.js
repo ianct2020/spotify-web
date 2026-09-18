@@ -43,6 +43,7 @@ import {
   cardKey,
   migrarClavesDeArtista,
   toggleHiddenAlbum,
+  wireLoteOcultos,
   estadoDiscografia,
 } from './discover-common.js';
 import { estadoNativoDiscografia } from '../api.js';
@@ -262,6 +263,8 @@ function renderShell(content, totalCandidates) {
       <button class="btn btn-secondary btn-sm" id="newrel-sel-clear">Limpiar selección</button>
       <button class="btn btn-secondary btn-sm" id="newrel-sel-addpl">Añadir a playlist…</button>
       <button class="btn btn-primary btn-sm" id="newrel-sel-playlist">Crear playlist con lo seleccionado</button>
+      <button class="btn btn-secondary btn-sm" id="newrel-sel-hide" title="${state.mode === 'hidden' ? 'Los saca de «fonoteca · ocultos (descubrir)» y vuelven a la lista.' : 'Los guarda en «fonoteca · ocultos (descubrir)»: dejan de aparecer aquí y en la otra vista de descubrir.'}">${state.mode === 'hidden' ? 'Devolver a la lista' : 'Ocultar'}</button>
+      <div class="disco-lote-fallos" id="newrel-lote-fallos" role="status" hidden></div>
     </div>
   `;
 
@@ -347,6 +350,13 @@ function renderShell(content, totalCandidates) {
     refreshList(content);
   };
   content.querySelector('#newrel-sel-playlist').onclick = () => onCreatePlaylist(content);
+  wireLoteOcultos(content, {
+    prefix: 'newrel',
+    selection: state.selection,
+    findEntrada,
+    isHiddenMode: () => state.mode === 'hidden',
+    onFin: () => { updateSelectionUi(content); refreshList(content); },
+  });
   content.querySelector('#newrel-sel-addpl').onclick = async (e) => {
     const btn = e.currentTarget;
     const ids = [...state.selection];
@@ -672,6 +682,16 @@ function findAlbum(albumId) {
   for (const a of state.artists) {
     const found = a.disco?.find(al => al.id === albumId);
     if (found) return found;
+  }
+  return null;
+}
+
+// Como `findAlbum`, pero con el artista: la clave de ocultos lo usa de reserva
+// cuando el álbum no trae firma.
+function findEntrada(albumId) {
+  for (const a of state.artists) {
+    const al = a.disco?.find(x => x.id === albumId);
+    if (al) return { al, artistName: a.name };
   }
   return null;
 }

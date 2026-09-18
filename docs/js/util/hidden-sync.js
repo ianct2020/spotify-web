@@ -26,10 +26,10 @@ import {
   createPlaylist,
   getCurrentUserId,
   spotifyFetch,
-} from '../api.js?v=227';
-import { prefKey, migratePrefKey } from '../storage.js?v=227';
-import { invalidateOwnPlaylists } from './playlist-add.js?v=227';
-import { showToast } from '../ui/toast.js?v=227';
+} from '../api.js?v=228';
+import { prefKey, migratePrefKey } from '../storage.js?v=228';
+import { invalidateOwnPlaylists } from './playlist-add.js?v=228';
+import { showToast } from '../ui/toast.js?v=228';
 
 const PLAYLIST_DESC = 'Lista interna de Fonoteca: lo que ocultaste en esta vista. Si la borras, se pierden los ocultos.';
 
@@ -800,6 +800,103 @@ export function createHiddenStore({ lsKey, playlistName, keyOfTrack, label, uriF
 
   REGISTRO.push({ lsKey, label, auditar });
 
+  function ready() {
+    if (!syncPromise) {
+      syncPromise = sync().catch(e => {
+        console.warn(`[ocultos:${label}] sync falló, sigo con el caché local:`, e.message);
+        syncPromise = null;   // que se pueda reintentar
+      });
+    }
+    return syncPromise;
+  }
+
+  /**
+   * Oculta (o devuelve) varias claves de una, con la acción DICHA y no con
+   * `toggle` (v=228).
+   *
+   * `toggle` invierte: sobre un lote mezclado devolvería unos y ocultaría
+   * otros. Acá una clave que ya está en el estado pedido no se toca y sale en
+   * `yaEstaban`, así que el lote es idempotente: repetirlo no deshace nada.
+   *
+   * Y a diferencia de `toggle`, **espera a Spotify y no marca en local lo que no
+   * llegó a la playlist**. En un lote el usuario está mirando el resultado: lo
+   * que falla se le devuelve con su motivo en vez de quedarse oculto solo en
+   * este navegador, que es de donde sale el aviso de «Salud de los ocultos».
+   *
+   * Las uris van en UN request por tanda de 100 (no uno por clave, como
+   * `toggle`). Si una tanda falla, fallan todas las suyas, con el mismo motivo.
+   *
+   * @param {Array<{key: string, uri?: string|null}>} entradas
+   * @param {boolean} ocultar  true = ocultar, false = devolver
+   * @returns {Promise<{hechas: string[], yaEstaban: string[], fallidas: Array<{key: string, motivo: string}>}>}
+   */
+  async function fijarVarios(entradas, ocultar) {
+    // Sin el sync, `uriDe` no conoce las uris de lo que ya está en la playlist y
+    // «devolver» dejaría la pista allí: volvería en el sync siguiente.
+    await ready();
+    ensureKeys();
+    ensureUris();
+    const hechas = [];
+    const yaEstaban = [];
+    const fallidas = [];
+    const conUri = [];   // [{key, uri}]
+    const vistas = new Set();
+
+    for (const { key, uri } of entradas) {
+      if (!key || vistas.has(key)) continue;
+      vistas.add(key);
+      if (keys.has(key) === ocultar) { yaEstaban.push(key); continue; }
+      const u = ocultar ? (uri || uriDe(key)) : uriDe(key);
+      if (u) { conUri.push({ key, uri: u }); continue; }
+      if (ocultar) {
+        fallidas.push({ key, motivo: 'no hay ninguna pista con la que representarlo en la playlist' });
+      } else {
+        // Oculto que nunca llegó a la playlist: no hay nada que quitar allí.
+        keys.delete(key);
+        olvidarSinUri([key]);
+        hechas.push(key);
+      }
+    }
+
+    if (conUri.length) {
+      let id = null;
+      try {
+        id = await ensurePlaylist();
+      } catch (e) {
+        for (const { key } of conUri) fallidas.push({ key, motivo: `no he podido abrir «${playlistName}»: ${e.message}` });
+      }
+      for (let i = 0; id && i < conUri.length; i += 100) {
+        const tanda = conUri.slice(i, i + 100);
+        const uris = [...new Set(tanda.map(t => t.uri))];
+        try {
+          if (ocultar) await addTracksToPlaylist(id, uris);
+          else await removeTracksFromPlaylist(id, uris);
+        } catch (e) {
+          for (const { key } of tanda) fallidas.push({ key, motivo: e.message });
+          continue;
+        }
+        for (const { key, uri } of tanda) {
+          if (ocultar) { keys.add(key); recordarUri(key, uri); }
+          else { keys.delete(key); uriByKey.delete(key); }
+          hechas.push(key);
+        }
+        olvidarSinUri(tanda.map(t => t.key));
+      }
+    }
+
+    saveLocal(lsKey, keys);
+    saveUris(lsKey, uriByKey);
+    if (hechas.length || fallidas.length) {
+      anotarIncidencia({
+        store: lsKey, label, tipo: ocultar ? 'lote-ocultar' : 'lote-devolver',
+        claves: hechas,
+        ...(fallidas.length ? { motivos: Object.fromEntries(fallidas.map(f => [f.key, f.motivo])) } : {}),
+      });
+    }
+    console.info(`[ocultos:${label}] lote ${ocultar ? 'ocultar' : 'devolver'}: ${hechas.length} hechas, ${yaEstaban.length} ya estaban, ${fallidas.length} fallidas`);
+    return { hechas, yaEstaban, fallidas };
+  }
+
   return {
     /** Lectura instantánea desde el caché local. */
     has(key) { return ensureKeys().has(key); },
@@ -817,15 +914,9 @@ export function createHiddenStore({ lsKey, playlistName, keyOfTrack, label, uriF
      * misma promesa. Nunca lanza — si Spotify falla, la vista sigue andando con
      * el caché local.
      */
-    ready() {
-      if (!syncPromise) {
-        syncPromise = sync().catch(e => {
-          console.warn(`[ocultos:${label}] sync falló, sigo con el caché local:`, e.message);
-          syncPromise = null;   // que se pueda reintentar
-        });
-      }
-      return syncPromise;
-    },
+    ready,
+
+    fijarVarios,
 
     /**
      * Oculta o desoculta. Actualiza local al instante (para que la UI responda)

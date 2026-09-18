@@ -32,6 +32,7 @@ export async function getAllPlaylistItems(id) {
 }
 
 export async function addTracksToPlaylist(id, uris) {
+  if (d().fallarAdd) throw new Error(d().fallarAdd);
   d().añadidas.push({ id, uris: [...uris] });
   const pl = d().playlists.find(p => p.id === id);
   for (const uri of uris) pl.items.push(d().pistaDeUri(uri));
@@ -39,6 +40,7 @@ export async function addTracksToPlaylist(id, uris) {
 }
 
 export async function removeTracksFromPlaylist(id, uris) {
+  if (d().fallarRemove) throw new Error(d().fallarRemove);
   d().quitadas.push({ id, uris: [...uris] });
   const pl = d().playlists.find(p => p.id === id);
   pl.items = pl.items.filter(t => !uris.includes(t.uri));

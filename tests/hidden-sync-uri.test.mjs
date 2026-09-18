@@ -377,5 +377,78 @@ console.log('\nLas pistas del álbum se miran TODAS, no las primeras');
   eq(r.uri, 'spotify:track:BUENA', 'encuentra la pista buena aunque sea la sexta');
 }
 
+
+// ── 7. El lote de «Ocultar»/«Devolver» (v=228): acción dicha, no toggle ──────
+
+const TERCERO = '9ZyXwVuTsRqPoNmLkJiHgF';
+
+console.log('\nfijarVarios(ocultar): un lote mezclado no devuelve nada');
+{
+  // Con `toggle`, LALALA (ya oculto) volvería a la lista. Acá tiene que quedarse.
+  montar({ local: [LALALA], uris: { [LALALA]: `spotify:track:${LALALA}` }, enPlaylist: [LALALA] });
+  const s = store();
+  const r = await s.fijarVarios([
+    { key: LALALA, uri: `spotify:track:${LALALA}` },
+    { key: OTRO, uri: `spotify:track:${OTRO}` },
+    { key: TERCERO, uri: `spotify:track:${TERCERO}` },
+  ], true);
+  eq(r.hechas, [OTRO, TERCERO], 'oculta las dos que faltaban');
+  eq(r.yaEstaban, [LALALA], 'y la que ya estaba sale como «ya estaba»');
+  eq(r.fallidas, [], 'sin fallos');
+  ok(s.has(LALALA) && s.has(OTRO) && s.has(TERCERO), 'las tres quedan ocultas');
+  eq(globalThis.__DOBLE.quitadas, [], 'no se quita NADA de la playlist');
+  eq(globalThis.__DOBLE.añadidas.length, 1, 'un solo POST para el lote, no uno por clave');
+  eq(subidas(), [`spotify:track:${OTRO}`, `spotify:track:${TERCERO}`], 'con las dos uris nuevas');
+  eq(urisGuardadas()[OTRO], `spotify:track:${OTRO}`, 'la uri se guarda con la clave');
+  eq(s.fijarVarios.length, 2, 'la firma es (entradas, ocultar)');
+}
+
+console.log('\nfijarVarios(ocultar): si la playlist falla, NO queda oculto a medias');
+{
+  montar({ local: [], enPlaylist: [] });
+  const s = store();
+  await s.ready();
+  globalThis.__DOBLE.fallarAdd = 'Spotify 502';
+  const r = await s.fijarVarios([
+    { key: OTRO, uri: `spotify:track:${OTRO}` },
+    { key: TERCERO, uri: null },
+  ], true);
+  eq(r.hechas, [], 'nada hecho');
+  eq(r.fallidas.map(f => f.key).sort(), [OTRO, TERCERO].sort(), 'las dos vuelven como fallidas');
+  ok(r.fallidas.find(f => f.key === OTRO)?.motivo === 'Spotify 502', 'con el error crudo de Spotify');
+  ok(/ninguna pista/.test(r.fallidas.find(f => f.key === TERCERO)?.motivo || ''), 'y la sin uri, con el suyo');
+  ok(!s.has(OTRO) && !s.has(TERCERO), 'ninguna queda oculta solo en este navegador');
+  eq(sinUriGuardado(), {}, 'ni anotada como «sin uri»: no es un oculto, es un intento fallido');
+  eq(localGuardado(), [], 'el caché local no cambió');
+}
+
+console.log('\nfijarVarios(devolver): quita de la playlist y del local, y solo lo pedido');
+{
+  montar({
+    local: [LALALA, OTRO, TERCERO],
+    uris: { [LALALA]: `spotify:track:${LALALA}`, [OTRO]: `spotify:track:${OTRO}` },
+    enPlaylist: [LALALA, OTRO],
+  });
+  const s = store();
+  const NO_OCULTA = 'zzzzzzzzzzzzzzzzzzzzzz';
+  const r = await s.fijarVarios([{ key: OTRO }, { key: TERCERO }, { key: NO_OCULTA }], false);
+  eq(r.hechas.sort(), [OTRO, TERCERO].sort(), 'devuelve las dos ocultas');
+  eq(r.yaEstaban, [NO_OCULTA], 'la que no estaba oculta no se oculta (no es toggle)');
+  eq(globalThis.__DOBLE.quitadas.flatMap(q => q.uris), [`spotify:track:${OTRO}`], 'quita de la playlist solo la que estaba allí');
+  eq(localGuardado(), [LALALA], 'en local queda solo la que no se tocó');
+  ok(!(OTRO in urisGuardadas()), 'y la uri de la devuelta se olvida');
+}
+
+console.log('\nfijarVarios(devolver): si la playlist falla, sigue oculto');
+{
+  montar({ local: [OTRO], uris: { [OTRO]: `spotify:track:${OTRO}` }, enPlaylist: [OTRO] });
+  const s = store();
+  await s.ready();
+  globalThis.__DOBLE.fallarRemove = 'Spotify 500';
+  const r = await s.fijarVarios([{ key: OTRO }], false);
+  eq(r.fallidas, [{ key: OTRO, motivo: 'Spotify 500' }], 'vuelve como fallida con el motivo');
+  ok(s.has(OTRO), 'y sigue oculta: si se sacara del local, el sync la traería de vuelta sin decir nada');
+}
+
 console.log(`\n${pasaron} asserts OK, ${fallaron} fallos`);
 process.exit(fallaron ? 1 : 0);

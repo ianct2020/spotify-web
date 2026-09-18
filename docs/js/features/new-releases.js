@@ -10,14 +10,14 @@
 //   - Umbral de likes: 5+ / 10+ / 20+
 //   - Ventana temporal: 3 / 6 / 12 / 24 meses (default 12)
 
-import { escapeHtml, confirmModal, pageHeader } from '../ui/components.js?v=227';
-import { showToast } from '../ui/toast.js?v=227';
-import { buildAlbumHeardIndex } from '../util/album-heard.js?v=227';
-import { releaseKind } from '../util/release-size.js?v=227';
-import { loadFiltros, buildFilterContext, applyDiscoverFilters } from '../util/discover-filters.js?v=227';
-import { createIncrementalList, scrollRootOf } from '../ui/incremental-list.js?v=227';
-import { createLazyImages } from '../ui/lazy-img.js?v=227';
-import { prefKey, migratePrefKey } from '../storage.js?v=227';
+import { escapeHtml, confirmModal, pageHeader } from '../ui/components.js?v=228';
+import { showToast } from '../ui/toast.js?v=228';
+import { buildAlbumHeardIndex } from '../util/album-heard.js?v=228';
+import { releaseKind } from '../util/release-size.js?v=228';
+import { loadFiltros, buildFilterContext, applyDiscoverFilters } from '../util/discover-filters.js?v=228';
+import { createIncrementalList, scrollRootOf } from '../ui/incremental-list.js?v=228';
+import { createLazyImages } from '../ui/lazy-img.js?v=228';
+import { prefKey, migratePrefKey } from '../storage.js?v=228';
 import {
   getArtistIdCached,
   getArtistDiscoCached,
@@ -43,9 +43,10 @@ import {
   cardKey,
   migrarClavesDeArtista,
   toggleHiddenAlbum,
+  wireLoteOcultos,
   estadoDiscografia,
-} from './discover-common.js?v=227';
-import { estadoNativoDiscografia } from '../api.js?v=227';
+} from './discover-common.js?v=228';
+import { estadoNativoDiscografia } from '../api.js?v=228';
 
 const SCAN_KEY = 'new_releases';
 
@@ -262,6 +263,8 @@ function renderShell(content, totalCandidates) {
       <button class="btn btn-secondary btn-sm" id="newrel-sel-clear">Limpiar selección</button>
       <button class="btn btn-secondary btn-sm" id="newrel-sel-addpl">Añadir a playlist…</button>
       <button class="btn btn-primary btn-sm" id="newrel-sel-playlist">Crear playlist con lo seleccionado</button>
+      <button class="btn btn-secondary btn-sm" id="newrel-sel-hide" title="${state.mode === 'hidden' ? 'Los saca de «fonoteca · ocultos (descubrir)» y vuelven a la lista.' : 'Los guarda en «fonoteca · ocultos (descubrir)»: dejan de aparecer aquí y en la otra vista de descubrir.'}">${state.mode === 'hidden' ? 'Devolver a la lista' : 'Ocultar'}</button>
+      <div class="disco-lote-fallos" id="newrel-lote-fallos" role="status" hidden></div>
     </div>
   `;
 
@@ -347,6 +350,13 @@ function renderShell(content, totalCandidates) {
     refreshList(content);
   };
   content.querySelector('#newrel-sel-playlist').onclick = () => onCreatePlaylist(content);
+  wireLoteOcultos(content, {
+    prefix: 'newrel',
+    selection: state.selection,
+    findEntrada,
+    isHiddenMode: () => state.mode === 'hidden',
+    onFin: () => { updateSelectionUi(content); refreshList(content); },
+  });
   content.querySelector('#newrel-sel-addpl').onclick = async (e) => {
     const btn = e.currentTarget;
     const ids = [...state.selection];
@@ -672,6 +682,16 @@ function findAlbum(albumId) {
   for (const a of state.artists) {
     const found = a.disco?.find(al => al.id === albumId);
     if (found) return found;
+  }
+  return null;
+}
+
+// Como `findAlbum`, pero con el artista: la clave de ocultos lo usa de reserva
+// cuando el álbum no trae firma.
+function findEntrada(albumId) {
+  for (const a of state.artists) {
+    const al = a.disco?.find(x => x.id === albumId);
+    if (al) return { al, artistName: a.name };
   }
   return null;
 }
