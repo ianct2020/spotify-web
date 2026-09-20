@@ -10,14 +10,14 @@
 //   - Umbral de likes: 5+ / 10+ / 20+
 //   - Ventana temporal: 3 / 6 / 12 / 24 meses (default 12)
 
-import { escapeHtml, confirmModal, pageHeader } from '../ui/components.js?v=229';
-import { showToast } from '../ui/toast.js?v=229';
-import { buildAlbumHeardIndex } from '../util/album-heard.js?v=229';
-import { releaseKind } from '../util/release-size.js?v=229';
-import { loadFiltros, buildFilterContext, applyDiscoverFilters } from '../util/discover-filters.js?v=229';
-import { createIncrementalList, scrollRootOf } from '../ui/incremental-list.js?v=229';
-import { createLazyImages } from '../ui/lazy-img.js?v=229';
-import { prefKey, migratePrefKey } from '../storage.js?v=229';
+import { escapeHtml, confirmModal, pageHeader } from '../ui/components.js?v=230';
+import { showToast } from '../ui/toast.js?v=230';
+import { buildAlbumHeardIndex } from '../util/album-heard.js?v=230';
+import { releaseKind } from '../util/release-size.js?v=230';
+import { loadFiltros, buildFilterContext, applyDiscoverFilters } from '../util/discover-filters.js?v=230';
+import { createIncrementalList, scrollRootOf } from '../ui/incremental-list.js?v=230';
+import { createLazyImages } from '../ui/lazy-img.js?v=230';
+import { prefKey, migratePrefKey } from '../storage.js?v=230';
 import {
   getArtistIdCached,
   getArtistDiscoCached,
@@ -50,8 +50,8 @@ import {
   avisarRonda,
   botonesBaseHtml,
   conectarBotonesBase,
-} from './discover-common.js?v=229';
-import { estadoNativoDiscografia } from '../api.js?v=229';
+} from './discover-common.js?v=230';
+import { estadoNativoDiscografia } from '../api.js?v=230';
 
 const SCAN_KEY = 'new_releases';
 

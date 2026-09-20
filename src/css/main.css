@@ -4019,12 +4019,24 @@ body.covers-fs .main {
 .disco-chip.is-on { background: var(--color-accent); color: white; }
 .disco-chip + .disco-chip { border-left: 1px solid var(--color-border); }
 
-/* ── Los cinco filtros de descubrimiento (v=152) ──────────────────────────
+/* ── Los ocho filtros de descubrimiento (v=152, a iconos en v=230) ────────
    Chips independientes, no un grupo excluyente: cada uno enciende y apaga su
    criterio por separado, como los tres toggles del veredicto de #skips. El
    número de la derecha dice cuántos lanzamientos descarta ESE criterio, y se
    muestra también cuando está apagado — apagado dice cuántos está dejando
-   entrar. */
+   entrar.
+
+   Con los ocho rótulos puestos ocupaban dos filas. Desde v=230 el rótulo se
+   tapa (`.disco-filtro-txt`, que sigue en el DOM para el lector de pantalla) y
+   queda icono + contador: los ocho entran en UNA fila bastante antes de los
+   1366 px del monitor de Ian. El `flex-wrap` se deja igual, como red para
+   ventanas angostas y para el zoom del navegador.
+
+   Encendido/apagado NO se distingue solo por color: apagado va con el borde
+   PUNTEADO y encendido con el borde entero más un anillo interior. Se ve en
+   escala de grises y con cualquier daltonismo. El anillo va por `box-shadow`
+   y no por `border-width` a propósito: cambiar el grosor del borde movería el
+   chip un pixel al encenderlo y la fila entera bailaría. */
 .disco-filtros {
   display: flex;
   flex-wrap: wrap;
@@ -4034,23 +4046,41 @@ body.covers-fs .main {
 .disco-filtro {
   display: inline-flex;
   align-items: center;
-  gap: 7px;
+  /* Ancla del rótulo tapado, que va en `position:absolute`. */
+  position: relative;
+  gap: 6px;
   background: var(--color-surface);
   color: var(--color-text-muted);
-  border: 1px solid var(--color-border);
+  border: 1px dashed var(--color-border);
   border-radius: 999px;
-  padding: 5px 8px 5px 12px;
+  padding: 5px 8px 5px 9px;
   font-family: inherit;
   font-size: 12px;
   line-height: 1;
   cursor: pointer;
-  transition: background .12s, color .12s, border-color .12s;
+  transition: background .12s, color .12s, border-color .12s, box-shadow .12s;
 }
 .disco-filtro:hover { background: var(--color-elevated); color: var(--color-text); }
 .disco-filtro.is-on {
   background: var(--color-accent-tint, rgba(124,58,237,0.12));
+  border-style: solid;
   border-color: var(--color-accent);
+  box-shadow: inset 0 0 0 1px var(--color-accent);
   color: var(--color-text);
+}
+.disco-filtro-ico { flex: none; display: block; }
+/* El rótulo se saca de la vista pero NO del DOM: es el nombre accesible del
+   botón. Con `display:none` el lector de pantalla leería solo el número. */
+.disco-filtro-txt {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
 }
 .disco-filtro:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
 /* El contador va en su propia píldora para que se lea como dato, no como

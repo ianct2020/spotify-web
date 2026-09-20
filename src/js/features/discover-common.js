@@ -1291,6 +1291,9 @@ export function renderFiltroChips(estado, conteos) {
       ${FILTROS_DEF.map(f => `
         <button type="button" class="disco-filtro ${estado[f.key] ? 'is-on' : ''}"
                 data-filtro="${f.key}" aria-pressed="${!!estado[f.key]}" title="${escapeHtml(f.ayuda)}">
+          <svg class="disco-filtro-ico" viewBox="0 0 24 24" width="15" height="15" fill="none"
+               stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"
+               aria-hidden="true">${f.icono}</svg>
           <span class="disco-filtro-txt">${escapeHtml(f.corto)}</span>
           <span class="disco-filtro-n">${(conteos?.[f.key] ?? 0).toLocaleString('es-ES')}</span>
         </button>

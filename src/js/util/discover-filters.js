@@ -31,10 +31,27 @@ import { prefKey, migratePrefKey } from '../storage.js';
 
 const LS_KEY = 'discover_filtros_v1';
 
-// El orden es el de la topbar. `corto` es lo que se ve en el chip.
+// El orden es el de la topbar.
+//
+// `corto` YA NO se ve en el chip (v=230): los ocho chips con texto ocupaban dos
+// filas. Ahora el chip pinta `icono` + el contador, y `corto` queda como el
+// nombre accesible del botón — sigue en el DOM, tapado por CSS, así que el
+// lector de pantalla lo lee igual. La `ayuda` sigue yendo al `title`: sin
+// texto a la vista, es lo único que explica qué hace cada chip.
+//
+// ⚠️ Los iconos se definen ACÁ, una sola vez, no en cada vista. Los ▶/⏸ ya
+// están copiados en tres archivos (album-card, wthree, discover-common) y esa
+// duplicación no se repite. Todos con el mismo trazo que el ojo de
+// `discover-common.js`: viewBox de 24, stroke en currentColor, ancho 1.8.
+//
+// Son SOLO el `<path>`/`<line>` de adentro: el `<svg>` que los envuelve lo
+// pone `renderFiltroChips()`, así que el tamaño y el trazo se tocan en un
+// lugar solo.
 export const FILTROS = [
   {
     key: 'artista',
+    // Una persona: la identidad del artista, que no es su nombre.
+    icono: '<path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8z"/><path d="M4 21a8 8 0 0 1 16 0"/>',
     corto: 'Solo del artista',
     ayuda: 'Descarta lanzamientos de OTRO artista que se llama igual. Hay dos ' +
            '«Steve Lacy» distintos en Spotify: el que escuchas y un saxofonista ' +
@@ -42,18 +59,24 @@ export const FILTROS = [
   },
   {
     key: 'biblioteca',
-    corto: 'Fuera los guardados',
+    // Un marcador: lo que ya está guardado en la biblioteca.
+    icono: '<path d="M6 3h12a1 1 0 0 1 1 1v17l-7-5-7 5V4a1 1 0 0 1 1-1z"/>',
+    corto: 'Fuera los de tu biblioteca',
     ayuda: 'Descarta los álbumes que ya tienes guardados en tu biblioteca, ' +
            'aunque todavía no los hayas puesto.',
   },
   {
     key: 'listened',
+    // Auriculares: lo que ya sonó.
+    icono: '<path d="M4 14v-2a8 8 0 0 1 16 0v2"/><rect x="2" y="14" width="5" height="7" rx="1.5"/><rect x="17" y="14" width="5" height="7" rx="1.5"/>',
     corto: 'Fuera los escuchados',
     ayuda: 'Descarta los álbumes que figuran en tu historial de escuchas ' +
            '(el umbral de 4 pistas o 25 minutos en un mismo día).',
   },
   {
     key: 'edicion',
+    // Dos rectangulos superpuestos: el mismo disco con otra tapa.
+    icono: '<rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1"/>',
     corto: 'Fuera otra edición de uno tuyo',
     ayuda: 'Descarta el lanzamiento cuyo título es el de un álbum que ya ' +
            'escuchaste (o que ya tienes guardado) MÁS un agregado: Deluxe, ' +
@@ -62,12 +85,16 @@ export const FILTROS = [
   },
   {
     key: 'vivo',
+    // Un micrófono de mano: el directo.
+    icono: '<rect x="9" y="2" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0"/><line x1="12" y1="18" x2="12" y2="22"/>',
     corto: 'Fuera vivo y aniversario',
     ayuda: 'Descarta ediciones en directo y de aniversario. Los DELUXE se ' +
            'quedan: traen pistas nuevas.',
   },
   {
     key: 'single',
+    // Una nota suelta: el single de una o dos pistas.
+    icono: '<path d="M9 18V5l11-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="17" cy="16" r="3"/>',
     corto: 'Fuera singles ya en un álbum',
     ayuda: 'Descarta el single de 1 o 2 pistas cuyo tema ya salió dentro de un ' +
            'álbum que escuchaste. Mismos temas, otro id: compara el tema BASE, ' +
@@ -75,6 +102,8 @@ export const FILTROS = [
   },
   {
     key: 'repetido',
+    // Flechas de repetición: el mismo tema una y otra vez.
+    icono: '<path d="M17 2l4 4-4 4"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><path d="M7 22l-4-4 4-4"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/>',
     corto: 'Fuera el mismo tema repetido',
     ayuda: 'El mismo tema puede aparecer cuatro veces con cuatro títulos ' +
            'distintos (remix, sped up, edit…). Deja UNO: el lanzamiento más ' +
@@ -82,7 +111,9 @@ export const FILTROS = [
   },
   {
     key: 'sinescuchar',
-    corto: 'Fuera los que ya guardaste',
+    // Una lista con un tilde: la playlist «fonoteca · sin escuchar».
+    icono: '<line x1="3" y1="6" x2="14" y2="6"/><line x1="3" y1="12" x2="11" y2="12"/><line x1="3" y1="18" x2="9" y2="18"/><path d="M14 16l2.5 2.5L22 13"/>',
+    corto: 'Fuera los de «sin escuchar»',
     ayuda: 'Descarta lo que ya pusiste en la playlist «fonoteca · sin ' +
            'escuchar». Si lo guardaste ahí, ya lo tienes resuelto.',
   },

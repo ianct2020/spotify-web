@@ -6,28 +6,28 @@
 //     (util/album-heard.js: historial completo + likes + listened + w-three)
 //   - permiten "+ Biblioteca" y "Crear playlist con lo elegido"
 
-import { idbGet, idbGetCached, idbSetCached, idbDel, idbEntriesByPrefix } from '../idb.js?v=229';
-import { getArtistAlbumsConFuente, buscarDiscografiaPorNombre, searchArtistByName, getAlbumTracks, saveToLibrary, saveAlbumsToLibrary, createPlaylist, addTracksToPlaylist } from '../api.js?v=229';
-import { albumKey } from '../util/album-key.js?v=229';
-import { cardKey, cardKeyLegacy, albumCreditName, keyOfPlaylistTrack } from '../util/discover-key.js?v=229';
-import { escapeHtml } from '../ui/components.js?v=229';
-import { showToast } from '../ui/toast.js?v=229';
-import { openPlaylistPicker } from '../ui/playlist-picker.js?v=229';
-import { getOwnPlaylists, addUrisToPlaylists, toastAddResult } from '../util/playlist-add.js?v=229';
-import { openArtistCard } from './artist-card.js?v=229';
-import { openAlbumCard } from './album-card.js?v=229';
-import { createHiddenStore, createLocalStore } from '../util/hidden-sync.js?v=229';
-import { recuperarUriDeAlbumKey } from '../util/hidden-recover.js?v=229';
-import { getPreview } from '../api/preview-providers.js?v=229';
-import { togglePreview, playingKey, attachHover } from '../ui/preview-player.js?v=229';
-import { coverUrl } from '../util/cover-size.js?v=229';
-import { FILTROS as FILTROS_DEF, saveFiltros } from '../util/discover-filters.js?v=229';
-import { esEPoAlbum } from '../util/release-size.js?v=229';
+import { idbGet, idbGetCached, idbSetCached, idbDel, idbEntriesByPrefix } from '../idb.js?v=230';
+import { getArtistAlbumsConFuente, buscarDiscografiaPorNombre, searchArtistByName, getAlbumTracks, saveToLibrary, saveAlbumsToLibrary, createPlaylist, addTracksToPlaylist } from '../api.js?v=230';
+import { albumKey } from '../util/album-key.js?v=230';
+import { cardKey, cardKeyLegacy, albumCreditName, keyOfPlaylistTrack } from '../util/discover-key.js?v=230';
+import { escapeHtml } from '../ui/components.js?v=230';
+import { showToast } from '../ui/toast.js?v=230';
+import { openPlaylistPicker } from '../ui/playlist-picker.js?v=230';
+import { getOwnPlaylists, addUrisToPlaylists, toastAddResult } from '../util/playlist-add.js?v=230';
+import { openArtistCard } from './artist-card.js?v=230';
+import { openAlbumCard } from './album-card.js?v=230';
+import { createHiddenStore, createLocalStore } from '../util/hidden-sync.js?v=230';
+import { recuperarUriDeAlbumKey } from '../util/hidden-recover.js?v=230';
+import { getPreview } from '../api/preview-providers.js?v=230';
+import { togglePreview, playingKey, attachHover } from '../ui/preview-player.js?v=230';
+import { coverUrl } from '../util/cover-size.js?v=230';
+import { FILTROS as FILTROS_DEF, saveFiltros } from '../util/discover-filters.js?v=230';
+import { esEPoAlbum } from '../util/release-size.js?v=230';
 import {
   DISCO_BASE_PREFIX, PRESUPUESTO_REFRESCO, RECIENTE_MAX_PAGINAS,
   crearBase, sumarCompleta, sumarReciente, tocaReciente, rangoReciente,
   fusionarBases, armarExportacion, leerImportacion,
-} from '../util/disco-base.js?v=229';
+} from '../util/disco-base.js?v=230';
 
 const DISCO_TTL_MIN = 30 * 24 * 60;       // 30 días
 const ARTIST_ID_TTL_MIN = 60 * 24 * 60;   // 60 días — los ids no cambian
@@ -1291,6 +1291,9 @@ export function renderFiltroChips(estado, conteos) {
       ${FILTROS_DEF.map(f => `
         <button type="button" class="disco-filtro ${estado[f.key] ? 'is-on' : ''}"
                 data-filtro="${f.key}" aria-pressed="${!!estado[f.key]}" title="${escapeHtml(f.ayuda)}">
+          <svg class="disco-filtro-ico" viewBox="0 0 24 24" width="15" height="15" fill="none"
+               stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"
+               aria-hidden="true">${f.icono}</svg>
           <span class="disco-filtro-txt">${escapeHtml(f.corto)}</span>
           <span class="disco-filtro-n">${(conteos?.[f.key] ?? 0).toLocaleString('es-ES')}</span>
         </button>
