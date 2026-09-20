@@ -1,56 +1,39 @@
 // Wrapped propio: mini-resumen tuyo por año, hecho con el Extended Streaming History.
 // A diferencia del Wrapped oficial (que corre oct-sept), este es del año calendario completo.
 
-import { loadHistoryStats, isOwner, ownerLockedMessage } from './history-data.js?v=230';
-import { escapeHtml, pageHeader } from '../ui/components.js?v=230';
-import { getPreview } from '../api/preview-providers.js?v=230';
-import { getArtistLikePreview, getAlbumLikePreview } from '../util/artist-preview.js?v=230';
-import { attachHover } from '../ui/preview-player.js?v=230';
-import { openTrackCard } from './track-card.js?v=230';
-import { openArtistCard } from './artist-card.js?v=230';
-import { openAlbumCard } from './album-card.js?v=230';
-import { getMyTop } from '../api.js?v=230';
-import { activateMarquee, marqueeSpan } from '../ui/marquee.js?v=230';
-import { openModal } from '../ui/modal-stack.js?v=230';
-import { armReveal, armRevealAll, releaseReveal } from '../ui/reveal.js?v=230';
-import { coverUrl } from '../util/cover-size.js?v=230';
-import { vigilarRuta } from '../util/vigencia-ruta.js?v=230';
+import { loadHistoryStats, isOwner, ownerLockedMessage } from './history-data.js?v=231';
+import { escapeHtml, pageHeader } from '../ui/components.js?v=231';
+import { getPreview } from '../api/preview-providers.js?v=231';
+import { getArtistLikePreview, getAlbumLikePreview } from '../util/artist-preview.js?v=231';
+import { attachHover } from '../ui/preview-player.js?v=231';
+import { openTrackCard } from './track-card.js?v=231';
+import { openArtistCard } from './artist-card.js?v=231';
+import { openAlbumCard } from './album-card.js?v=231';
+import { getMyTop } from '../api.js?v=231';
+import { activateMarquee, marqueeSpan } from '../ui/marquee.js?v=231';
+import { openModal } from '../ui/modal-stack.js?v=231';
+import { armReveal, armRevealAll, releaseReveal } from '../ui/reveal.js?v=231';
+import { coverUrl } from '../util/cover-size.js?v=231';
+import { vigilarRuta } from '../util/vigencia-ruta.js?v=231';
+import { fmtDia } from '../util/fecha.js?v=231';
 
 let stats = null;
 let selectedYear = null;
 
 const MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
 
-// ── «9 de enero» en Récords y «8 de enero» en Wrapped (arreglado en v=154) ──
+// ── «9 de enero» en Récords y «8 de enero» en Wrapped (v=154), y «31 dic 2025»
+// en la baldosa «Primera play» de 2026 (v=231) ────────────────────────────────
 //
-// NO era zona horaria en el pipeline ni dos criterios de agrupación: los dos
-// leen EL MISMO valor. Verificado en producción el 2026-08-23:
-// `history-records.json` y `history-stats.json` traen los dos `"2026-01-09"`.
-// La diferencia era de FORMATEO, y de esta función.
+// Las dos son el MISMO bug por dos caminos, y esta vista tenía los dos porque
+// se había hecho su propia copia de la función. El arreglo de v=154 vivía
+// aquí, en una `fmtDia()` local; `util/fecha.js` nació después para que no
+// hubiera que repetir el criterio, y la copia de aquí se quedó. Fue la copia
+// la que siguió mintiendo.
 //
-// `new Date("2026-01-09")` — la forma date-only — la parsea el estándar como
-// medianoche **UTC**. Después `getDate()` la lee en hora **local**, y en
-// Argentina (UTC−3) esa medianoche cae a las 21:00 del 8. Un día para atrás,
-// siempre, para cualquier offset negativo. `records.js` no se comía esto porque
-// parte el string a mano (`fmtDayShort`) y nunca construye un Date.
-//
-// El arreglo tiene que distinguir DOS formas, porque acá entran las dos:
-//   · "2026-01-09"            → un DÍA del calendario. Sin zona: se parte.
-//   · "2026-01-09T04:12:33Z"  → un INSTANTE. Ahí convertir a local es lo
-//                               correcto y no hay que tocarlo (es lo que hacen
-//                               first_play / last_play).
-const SOLO_FECHA = /^\d{4}-\d{2}-\d{2}$/;
-
-function fmtDate(iso) {
-  if (!iso) return '';
-  if (SOLO_FECHA.test(iso)) {
-    const [y, m, d] = iso.split('-');
-    return `${+d} ${MESES[+m - 1]} ${y}`;
-  }
-  const d = new Date(iso);
-  if (isNaN(d)) return iso;
-  return `${d.getDate()} ${MESES[d.getMonth()]} ${d.getFullYear()}`;
-}
+// Ya no hay copia: el formateo de fechas es `fmtDia()` de `util/fecha.js`, y
+// el porqué de las dos formas está explicado allí. Lección 4: cuando aparece
+// el segundo ejemplar no se arregla, se borra.
 
 function fmtMinutes(min) {
   if (!min && min !== 0) return '—';
@@ -125,8 +108,8 @@ export async function render(container) {
     selectedYear = yearsDesc[0].year;
   }
 
-  const dataFrom = fmtDate(stats.totals?.first_play || stats.years[0].first_play);
-  const dataTo = fmtDate(stats.totals?.last_play || yearsDesc[0].last_play);
+  const dataFrom = fmtDia(stats.totals?.first_play || stats.years[0].first_play);
+  const dataTo = fmtDia(stats.totals?.last_play || yearsDesc[0].last_play);
   const dataPlays = stats.totals.plays_valid.toLocaleString('es-ES');
 
   content.innerHTML = `
@@ -177,7 +160,7 @@ async function montarAperturaSiSePuede(ruta) {
   const host = document.getElementById('wrapped-apertura');
   if (!host) return;
   try {
-    const mod = await import('../features/wrapped-apertura.js?v=230');
+    const mod = await import('../features/wrapped-apertura.js?v=231');
     // Entre el `await` del import y acá el usuario pudo cambiar de año (que
     // repinta el hueco) o irse de la vista. Las dos cosas dejan este `host`
     // fuera del documento: montar ahí sería pintar un recorrido que nadie ve y
@@ -190,7 +173,7 @@ async function montarAperturaSiSePuede(ruta) {
       y,
       MESES,
       fmtMinutes,
-      fmtDate,
+      fmtDia,
       daysCovered: (anio) => daysCovered(anio, stats),
       ultimoDia: (stats.years[stats.years.length - 1]?.last_play || '').slice(0, 10) || null,
     });
@@ -256,7 +239,7 @@ function renderYearCard() {
         ${y.peak_day ? `
           <div class="wrapped-tile compact" style="grid-area:day">
             <div class="wrapped-tile-label">Día más largo</div>
-            <div class="wrapped-tile-value" style="font-size:15px">${fmtDate(y.peak_day.date)}</div>
+            <div class="wrapped-tile-value" style="font-size:15px">${fmtDia(y.peak_day.date)}</div>
             <div class="wrapped-tile-hint">${fmtMinutes(y.peak_day.min)}</div>
           </div>
         ` : `<div style="grid-area:day"></div>`}
@@ -285,8 +268,8 @@ function renderYearCard() {
         </div>
         <div class="wrapped-tile compact" style="grid-area:fst">
           <div class="wrapped-tile-label">Primera play</div>
-          <div class="wrapped-tile-value" style="font-size:14px">${fmtDate(y.first_play)}</div>
-          <div class="wrapped-tile-hint">Última registrada: ${fmtDate(y.last_play)}${isLatest ? `
+          <div class="wrapped-tile-value" style="font-size:14px">${fmtDia(y.first_play)}</div>
+          <div class="wrapped-tile-hint">Última registrada: ${fmtDia(y.last_play)}${isLatest ? `
             <button type="button" class="wrapped-hint-info" id="wrapped-lastplay-info"
               title="Por qué esta fecha" aria-label="Por qué esta fecha">ⓘ</button>` : ''}</div>
         </div>
@@ -315,7 +298,7 @@ function renderYearCard() {
   // engañaba, así que ahora dice "Última registrada" y el ⓘ lo explica.
   const lastPlayInfo = holder.querySelector('#wrapped-lastplay-info');
   if (lastPlayInfo) {
-    lastPlayInfo.onclick = () => openLastPlayModal(fmtDate(y.last_play));
+    lastPlayInfo.onclick = () => openLastPlayModal(fmtDia(y.last_play));
   }
 
   activateMarquee(holder);
@@ -522,7 +505,7 @@ function renderAllTime() {
       <div class="wrapped-hero">
         <div class="wrapped-hero-year">DE SIEMPRE</div>
         <div class="wrapped-hero-min">${fmtMinutes(t.min)}</div>
-        <div class="wrapped-hero-sub">${fmtDays(t.min || 0)} · desde ${fmtDate(stats.years[0].first_play)} hasta ${fmtDate(stats.years[stats.years.length-1].last_play)}</div>
+        <div class="wrapped-hero-sub">${fmtDays(t.min || 0)} · desde ${fmtDia(stats.years[0].first_play)} hasta ${fmtDia(stats.years[stats.years.length-1].last_play)}</div>
       </div>
 
       <div class="wrapped-year-layout">

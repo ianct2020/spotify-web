@@ -32,14 +32,15 @@
 // ───────────────────────────────────────────────────────────────────────────
 // POR QUÉ LOS FORMATEADORES LLEGAN POR PARÁMETRO
 //
-// `fmtDate`, `fmtMinutes` y `daysCovered` viven en `features/wrapped.js` y se
-// pasan en `ctx`. Copiarlos acá sería reintroducir el bug de v=154 por la
-// puerta de atrás: `fmtDate` distingue a mano las fechas sin hora ("2026-01-09",
-// que se PARTEN) de los instantes ("2026-01-01T00:00:28Z", que sí van por
-// `new Date`), y dos copias de esa distinción se despegan la primera vez que
-// alguien toca una. Lo mismo con `daysCovered`, que es el denominador que la
-// baldosa «Días activos» ya muestra: el calendario de acá tiene que contar
-// exactamente los mismos días o dice otra cosa que la tarjeta que tiene debajo.
+// `fmtMinutes` y `daysCovered` viven en `features/wrapped.js` y se pasan en
+// `ctx`; `fmtDia` viene de `util/fecha.js` y llega por el mismo camino.
+// Copiarlos acá sería reintroducir el bug de las fechas por la puerta de atrás,
+// y no es hipotético: `wrapped.js` tenía su propia copia del formateo —la
+// `fmtDate()` de v=154— y fue la copia la que enseñó «31 dic 2025» en la
+// baldosa de 2026 durante 27 versiones. Lo mismo con `daysCovered`, que es el
+// denominador que la baldosa «Días activos» ya muestra: el calendario de acá
+// tiene que contar exactamente los mismos días o dice otra cosa que la tarjeta
+// que tiene debajo.
 //
 // ───────────────────────────────────────────────────────────────────────────
 // CUÁNTOS PASOS Y POR QUÉ
@@ -175,7 +176,7 @@ function pasoMeses(ctx) {
               `entre uno y otro hay ${fmtMinutes(pico.min - flojo.min)} de diferencia.`;
   }
   if (esUltimoAnio && ctx.ultimoDia) {
-    cuerpo += ` Ojo con la última barra: está cortada el ${ctx.fmtDate(ctx.ultimoDia)}, ` +
+    cuerpo += ` Ojo con la última barra: está cortada el ${ctx.fmtDia(ctx.ultimoDia)}, ` +
               `que es donde termina el export.`;
   }
 
@@ -245,7 +246,7 @@ function pasoAlbum(ctx) {
 }
 
 function pasoDias(ctx) {
-  const { y, fmtMinutes, fmtDate } = ctx;
+  const { y, fmtMinutes, fmtDia } = ctx;
   const D = y.days;
   // Sin `days` no hay calendario y punto: antes que dibujar 232 cuadraditos
   // seguidos con el orden inventado y aclararlo en el pie, no se dibuja.
@@ -263,7 +264,7 @@ function pasoDias(ctx) {
   cuerpo += huecos === 0
     ? `No hay un solo día en blanco en todo el tramo.`
     : `Los ${num(huecos)} apagados son los días en los que no sonó nada.`;
-  cuerpo += ` El del borde marcado es el ${fmtDate(fechaPico)}, con ${fmtMinutes(D.min[iPico])}: ` +
+  cuerpo += ` El del borde marcado es el ${fmtDia(fechaPico)}, con ${fmtMinutes(D.min[iPico])}: ` +
             `casi ${coma(D.min[iPico] / Math.max(1, media))} veces un día normal tuyo. ` +
             `La racha más larga fue de ${num(y.longest_streak)} días seguidos.`;
 
@@ -371,7 +372,7 @@ function visualCalendario(D, iPico, ctx) {
     const n = nivel(D.min[i]);
     const iso = isoDesde(aMs(D.from) + i * 86400000);
     celdas += `<i class="${n ? 'n' + n : ''}${i === iPico ? ' pico' : ''}" ` +
-              `title="${ctx.fmtDate(iso)} · ${D.min[i] > 0 ? ctx.fmtMinutes(D.min[i]) : 'nada'}"></i>`;
+              `title="${ctx.fmtDia(iso)} · ${D.min[i] > 0 ? ctx.fmtMinutes(D.min[i]) : 'nada'}"></i>`;
   }
 
   // Una etiqueta por mes, en la columna donde cae su día 1. Van sobre las
@@ -418,7 +419,7 @@ const FMT = {
 
 /**
  * @param {HTMLElement} host  el hueco vacío que dejó `render()`
- * @param {object} ctx        { stats, y, MESES, fmtMinutes, fmtDate, ultimoDia }
+ * @param {object} ctx        { stats, y, MESES, fmtMinutes, fmtDia, ultimoDia }
  * @returns {{destruir:()=>void}|null}  null si no hay recorrido que hacer
  */
 export function montarApertura(host, ctx) {

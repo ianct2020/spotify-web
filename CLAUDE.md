@@ -187,33 +187,43 @@ arreglado el import):
   álbum de `#listened` (otro código) o la vista entera de `#covers`, que con
   2.449 tapas tarda bastante más.
 
-## Zona horaria: la fecha suelta se parsea en UTC (v=154)
-Récords decía «9 ene 2026» y Wrapped «8 ene 2026» **para el mismo récord**. No
-era el pipeline: los dos leen `"2026-01-09"`, verificado contra
-`history-records.json` y `history-stats.json` en producción.
+## Zona horaria: las fechas del historial NO se pasan a local (v=154 + v=231)
 
-`new Date("2026-01-09")` — la forma **date-only** — la parsea el estándar como
-medianoche **UTC**. `getDate()` después la lee en hora **local**, y en Argentina
-(UTC−3) esa medianoche cae a las 21:00 del día 8. Un día para atrás, siempre,
-para cualquier offset negativo. `records.js` no se lo comía porque parte el
-string a mano (`fmtDayShort`) y nunca construye un `Date`.
+**Medio arreglo en v=154.** Récords decía «9 ene 2026» y Wrapped «8 ene 2026»
+para el mismo récord. No era el pipeline: los dos leen `"2026-01-09"`.
+`new Date("2026-01-09")` —la forma **date-only**— la parsea el estándar como
+medianoche **UTC**, y `getDate()` la lee en local: en Argentina (UTC−3) cae a
+las 21:00 del día 8. `records.js` no se lo comía porque parte el string a mano.
 
-⚠️ La regla, para cualquier fecha que venga de `gen-stats.py`:
-- `"2026-01-09"` es un **DÍA del calendario**. Se parte, o se le pega
-  `T12:00:00` (lo que hace `records.js fmtDay`). **Nunca** `new Date(iso)` pelado.
-- `"2026-01-09T04:12:33Z"` es un **INSTANTE**. Ahí `new Date()` y la conversión
-  a local es lo correcto (es lo que hacen `first_play` / `last_play`).
+Aquel arreglo dejó escrito que el timestamp completo «es un INSTANTE y
+convertirlo a local es lo correcto». **Esa premisa era falsa, y costó 27
+versiones.** La baldosa «Primera play» del Wrapped 2026 decía **31 dic 2025**:
+la primera play del año es `"2026-01-01T00:00:28Z"` y en UTC−3 se va al año
+anterior. Con el dato del repo mentían también 2018, 2023 y 2025.
 
-`wrapped.js` distingue las dos formas con `SOLO_FECHA = /^\d{4}-\d{2}-\d{2}$/`.
+⚠️ **La regla, para CUALQUIER fecha que venga de `gen-stats.py` o de
+`history-processor.js`, sea del largo que sea:**
 
-**Los cuatro sitios que quedaban señalados NO tenían el bug** (revisados en
-v=157): `sin-clasificar.js`, `artist-card.js`, `zero-plays.js` y
-`search-likes.js` formateaban `added_at` de los likes, que es un **INSTANTE**
-(`"2024-05-01T12:33:00Z"`), y para un instante `new Date(iso)` + hora local es
-justamente lo correcto. Lo que sí estaba mal era menor: dos usaban `es-AR` y dos
-`es-ES` para la misma fecha. Los cuatro pasaron igual al helper compartido
-`util/fecha.js` (`fmtDia` / `fmtDiaCorto`), que aplica el criterio de Wrapped a
-las dos formas — así el próximo llamador no tiene que acordarse de la regla.
+**Se enseña el día que dice el dato, y no se mueve de zona nunca.** El pipeline
+agrupa todo en **UTC** (`getUTCDate`/`getUTCHours`; `peak_day`, `days.from`, el
+mapa de calor y las rachas son cadenas `YYYY-MM-DD` en UTC). Pasar `first_play`
+a hora local le da a esa única fecha un criterio que no usa ninguna otra fecha
+de la app, y el resultado es una baldosa de un año enseñando otro año.
+
+- `fmtDia(iso)` de **`util/fecha.js`** es la única función para esto. Lee los
+  10 primeros caracteres y no construye un `Date`. Vale para las dos formas.
+- `fmtDiaCorto(iso)` sigue convirtiendo a local, y es correcto: lo usan los
+  cuatro sitios que formatean **`added_at`** de los me gusta
+  (`sin-clasificar.js`, `artist-card.js`, `zero-plays.js`, `search-likes.js`),
+  que sí es un instante — el momento en que le diste al corazón.
+- **No escribas un tercer formateador.** `wrapped.js` tenía su propia
+  `fmtDate()` —copia de esta, con el mismo regex— y fue la copia la que mintió;
+  se borró en v=231 y la vista importa `fmtDia`. `records.js fmtDayShort` y
+  `track-card.js fmtDay` parten el string y reciben solo días sueltos: no
+  tienen el bug, pero son ejemplares de lo mismo y el día que se toquen, que
+  sea para borrarlos.
+- Guarda: **`tests/fecha-dia-del-dato.test.mjs`**, contra el JSON real del repo
+  y con `TZ` fijada a Buenos Aires (en una máquina en UTC el bug no se ve).
 
 ## `stats.totals` NO trae first_play ni last_play
 `gen-stats.py` las emite **solo por año**. `totals` tiene `plays_valid`,
