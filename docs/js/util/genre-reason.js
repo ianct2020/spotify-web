@@ -13,7 +13,7 @@
 // respondiendo la misma pregunta y divergiendo. Si el reparto cambia, cambia
 // acá y la auditoría lo sigue sola.
 
-import { tagToGroup } from '../features/genre-groups.js?v=231';
+import { tagToGroup } from '../features/genre-groups.js?v=232';
 
 // A qué bucket manda este tag. Sin agrupar, el bucket ES el tag.
 function bucketFor(tag, groupsMode) {

@@ -1309,8 +1309,14 @@ h3 { font-size: 18px; font-weight: 600; }
   transition: background .1s, color .1s;
   min-width: 0;
 }
+/* ⚠️ Estos dos hover iban con el violeta ESCRITO A MANO —rgba(124,58,237,…)—,
+   o sea el acento de fábrica clavado en la hoja. Con cualquier paleta que no
+   fuera la violeta la fila se encendía de un color que no estaba en el tema:
+   medido con el preset Ámbar (acento #FF6B2C), la página entera cálida y estas
+   filas resaltando en violeta frío. El acento sale ahora de la paleta, que es
+   lo que hacen las otras 40 reglas de este archivo. */
 .album-modal-like-row:hover {
-  background: rgba(124, 58, 237, 0.1);
+  background: var(--color-accent-soft);
 }
 .album-modal-like-row:hover .album-modal-like-name {
   color: var(--color-accent);
@@ -1334,7 +1340,12 @@ h3 { font-size: 18px; font-weight: 600; }
 .album-modal-like-heart.is-off { color: var(--color-text-muted); opacity: 0.55; }
 .album-modal-like-row-off { background: transparent; }
 .album-modal-like-row-off .album-modal-like-name { color: var(--color-text-secondary); }
-.album-modal-like-row-off:hover { background: rgba(124, 58, 237, 0.08); }
+/* Dos puntos por debajo del hover de una fila tuya, a propósito: esta pista
+   no está en tus me gusta. `--color-accent-soft` es el 10 %, así que el 8 %
+   se mezcla a mano con el mismo idiom que ya usa `.wthree-filter-active`. */
+.album-modal-like-row-off:hover {
+  background: color-mix(in srgb, var(--color-accent) 8%, transparent);
+}
 .album-modal-like-name {
   overflow: hidden;
   text-overflow: ellipsis;
@@ -3012,6 +3023,13 @@ h3 { font-size: 18px; font-weight: 600; }
   background: var(--color-accent-soft);
   box-shadow: 0 0 0 2px var(--color-accent-glow) inset;
 }
+/* ⚠️ La frase va dentro de `.wthree-filter-texto`, y NO suelta. Sin ese span,
+   cada trozo de texto y cada <strong> es un item de flex propio, así que el
+   `space-between` los repartía a lo ancho del banner y el `gap: 10px` se metía
+   ENTRE LAS PALABRAS. Medido a 590 px: «Mostrando» · 87 px · «solo los
+   ocultos» · 87 px · «(3)» · 87 px · el botón. No se leía como una frase
+   porque tipográficamente no lo era. Agrupada, los items son dos —frase y
+   botón— y el `space-between` hace lo que se le pedía: el botón a la derecha. */
 .wthree-filter-active {
   display: flex;
   align-items: center;
@@ -3026,6 +3044,9 @@ h3 { font-size: 18px; font-weight: 600; }
   color: var(--color-text-secondary);
 }
 .wthree-filter-active strong { color: var(--color-text); }
+/* `min-width: 0` para que la frase pueda encoger y partirse en dos renglones
+   en vez de empujar el botón fuera de la caja en una ventana angosta. */
+.wthree-filter-texto { min-width: 0; }
 .wthree-clear-filter {
   background: none;
   border: none;

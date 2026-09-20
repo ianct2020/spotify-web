@@ -472,7 +472,7 @@ function renderBuckets(content) {
 
     ${showingHidden ? `
       <div class="wthree-filter-active">
-        Mostrando <strong>solo los ocultos</strong> (${hiddenCount})
+        <span class="wthree-filter-texto">Mostrando <strong>solo los ocultos</strong> (${hiddenCount})</span>
         <button class="wthree-clear-filter" id="wthree-back-to-all">✕ Volver a la lista</button>
       </div>
     ` : ''}
@@ -488,7 +488,7 @@ function renderBuckets(content) {
 
     ${selectedBucket ? `
       <div class="wthree-filter-active">
-        Mostrando solo: <strong>${bucketDef.find(b => b.key === selectedBucket)?.label}</strong>
+        <span class="wthree-filter-texto">Mostrando solo: <strong>${bucketDef.find(b => b.key === selectedBucket)?.label}</strong></span>
         <button class="wthree-clear-filter" id="wthree-clear-filter">✕ Ver todos</button>
       </div>
     ` : ''}

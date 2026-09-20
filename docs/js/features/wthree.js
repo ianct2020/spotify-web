@@ -2,26 +2,26 @@
 // por álbum). Muestra qué álbumes ya tienen picks, cuántos, y cuáles te faltan.
 // Ordenado por álbumes más escuchados primero para priorizar tu tiempo.
 
-import { spotifyFetch, getAllPlaylistItems, getAllUserPlaylists, addTracksToPlaylist, removeTracksFromPlaylist, reorderPlaylistItems, getCachedPlaylistItems, updatePlaylistItemsCache, getBestAvailableLikes } from '../api.js?v=231';
-import { vigilarRuta } from '../util/vigencia-ruta.js?v=231';
-import { patchPlaylistItems, buildCachedItem } from '../util/playlist-cache-patch.js?v=231';
-import { loadHistoryStats, loadListenedAlbums, isOwner, ownerLockedMessage } from './history-data.js?v=231';
-import { escapeHtml, pageHeader } from '../ui/components.js?v=231';
-import { showToast } from '../ui/toast.js?v=231';
-import { wireHoverMarquee, hoverMarqueeSpan } from '../ui/hover-marquee.js?v=231';
-import { openModal, closeById, closeModal } from '../ui/modal-stack.js?v=231';
-import { getPreview } from '../api/preview-providers.js?v=231';
-import { togglePreview, playingKey } from '../ui/preview-player.js?v=231';
-import { openAlbumCard } from './album-card.js?v=231';
-import { albumKey } from '../util/album-key.js?v=231';
-import { resolveAlbumId } from '../util/album-resolver.js?v=231';
-import { computeUpdatedPickPositions } from '../util/reorder-shifts.js?v=231';
-import { createHiddenStore } from '../util/hidden-sync.js?v=231';
-import { recuperarUriDeAlbumKey } from '../util/hidden-recover.js?v=231';
-import { mountBottom } from '../ui/bottom-layer.js?v=231';
-import { coverUrl } from '../util/cover-size.js?v=231';
-import { insercionPorPuntero, moverA, indicadorPara } from '../util/reorder-drop.js?v=231';
-import { prefKey, migratePrefKey } from '../storage.js?v=231';
+import { spotifyFetch, getAllPlaylistItems, getAllUserPlaylists, addTracksToPlaylist, removeTracksFromPlaylist, reorderPlaylistItems, getCachedPlaylistItems, updatePlaylistItemsCache, getBestAvailableLikes } from '../api.js?v=232';
+import { vigilarRuta } from '../util/vigencia-ruta.js?v=232';
+import { patchPlaylistItems, buildCachedItem } from '../util/playlist-cache-patch.js?v=232';
+import { loadHistoryStats, loadListenedAlbums, isOwner, ownerLockedMessage } from './history-data.js?v=232';
+import { escapeHtml, pageHeader } from '../ui/components.js?v=232';
+import { showToast } from '../ui/toast.js?v=232';
+import { wireHoverMarquee, hoverMarqueeSpan } from '../ui/hover-marquee.js?v=232';
+import { openModal, closeById, closeModal } from '../ui/modal-stack.js?v=232';
+import { getPreview } from '../api/preview-providers.js?v=232';
+import { togglePreview, playingKey } from '../ui/preview-player.js?v=232';
+import { openAlbumCard } from './album-card.js?v=232';
+import { albumKey } from '../util/album-key.js?v=232';
+import { resolveAlbumId } from '../util/album-resolver.js?v=232';
+import { computeUpdatedPickPositions } from '../util/reorder-shifts.js?v=232';
+import { createHiddenStore } from '../util/hidden-sync.js?v=232';
+import { recuperarUriDeAlbumKey } from '../util/hidden-recover.js?v=232';
+import { mountBottom } from '../ui/bottom-layer.js?v=232';
+import { coverUrl } from '../util/cover-size.js?v=232';
+import { insercionPorPuntero, moverA, indicadorPara } from '../util/reorder-drop.js?v=232';
+import { prefKey, migratePrefKey } from '../storage.js?v=232';
 
 const LS_KEY_ID = 'wthree_playlist_id';
 const LS_KEY_NAME = 'wthree_playlist_name';
@@ -472,7 +472,7 @@ function renderBuckets(content) {
 
     ${showingHidden ? `
       <div class="wthree-filter-active">
-        Mostrando <strong>solo los ocultos</strong> (${hiddenCount})
+        <span class="wthree-filter-texto">Mostrando <strong>solo los ocultos</strong> (${hiddenCount})</span>
         <button class="wthree-clear-filter" id="wthree-back-to-all">✕ Volver a la lista</button>
       </div>
     ` : ''}
@@ -488,7 +488,7 @@ function renderBuckets(content) {
 
     ${selectedBucket ? `
       <div class="wthree-filter-active">
-        Mostrando solo: <strong>${bucketDef.find(b => b.key === selectedBucket)?.label}</strong>
+        <span class="wthree-filter-texto">Mostrando solo: <strong>${bucketDef.find(b => b.key === selectedBucket)?.label}</strong></span>
         <button class="wthree-clear-filter" id="wthree-clear-filter">✕ Ver todos</button>
       </div>
     ` : ''}
