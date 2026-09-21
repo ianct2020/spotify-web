@@ -24,7 +24,7 @@
 import { escapeHtml } from './components.js';
 import { marqueeSpan } from './marquee.js';
 import { isPlayingAudio, playingProvider } from './preview-player.js';
-import { iconoPlay, iconoPausaFina, iconoOjo, iconoOjoTachado, iconoFicha } from './icons.js';
+import { iconoPlay, iconoPausa, iconoOjo, iconoOjoTachado, iconoFicha } from './icons.js';
 
 const CHECK = `<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>`;
 // Corazón tachado: sacar de tus me gusta. Es la ÚNICA acción de la tarjeta que
@@ -103,7 +103,7 @@ export function renderTrackCardRow(r, opts = {}) {
         </div>
         <div class="sc-actions">
           ${badge}
-          <button type="button" class="sc-btn sc-play${playing ? ' playing' : ''}" title="${sonando ? TITULO_PAUSA : (esEmbed ? TITULO_EMBED : TITULO_PLAY)}" aria-label="${sonando ? 'Parar preview' : (esEmbed ? 'Reproductor de Spotify abierto abajo' : 'Preview')}">${sonando ? iconoPausaFina(14) : iconoPlay(14)}</button>
+          <button type="button" class="sc-btn sc-play${playing ? ' playing' : ''}" title="${sonando ? TITULO_PAUSA : (esEmbed ? TITULO_EMBED : TITULO_PLAY)}" aria-label="${sonando ? 'Parar preview' : (esEmbed ? 'Reproductor de Spotify abierto abajo' : 'Preview')}">${sonando ? iconoPausa(14) : iconoPlay(14)}</button>
           ${showCard && r.trackId
             ? `<button type="button" class="sc-btn sc-card-btn" title="Ver la ficha del tema" aria-label="Ver ficha">${iconoFicha(14)}</button>`
             : ''}
@@ -195,7 +195,7 @@ function pintarBoton(btn, actual, sonando, provider) {
   btn.classList.toggle('playing', !!actual);
   const esEmbed = !!actual && !sonando && provider === 'spotify-embed';
   const pausa = !!actual && !!sonando;
-  btn.innerHTML = pausa ? iconoPausaFina(14) : iconoPlay(14);
+  btn.innerHTML = pausa ? iconoPausa(14) : iconoPlay(14);
   btn.title = pausa ? TITULO_PAUSA : (esEmbed ? TITULO_EMBED : TITULO_PLAY);
   btn.setAttribute('aria-label', pausa ? 'Parar preview' : (esEmbed ? 'Reproductor de Spotify abierto abajo' : 'Preview'));
 }

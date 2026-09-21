@@ -1,4 +1,4 @@
-// Los iconos en línea, en un solo sitio (v=233).
+// Los iconos en línea, en un solo sitio (v=233; el ⏸ unificado en v=234).
 //
 // POR QUÉ ESTA SUITE EXISTE: unificar seis copias de un glifo es un cambio que
 // **no puede fallar ruidosamente**. Si `iconoPlay(10)` devolviera un carácter
@@ -8,7 +8,10 @@
 // contra los literales exactos que había antes de la migración, copiados a
 // mano en este archivo desde el `git show` de v=232.
 //
-// Y la segunda mitad: que no vuelva a aparecer un séptimo ejemplar suelto.
+// Y la segunda mitad: que no vuelva a aparecer un séptimo ejemplar suelto —
+// ni un segundo ⏸. En v=234 el ⏸ pasó a tener una sola geometría (decisión de
+// Ian) y lo que se vigila desde entonces es que no vuelva a haber dos: eso es
+// lo que nadie ve a ojo, porque no rompe nada.
 //
 // Corre sin navegador y sin token.
 // Correr con: node tests/icons.test.mjs
@@ -17,9 +20,10 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import {
-  iconoPlay, iconoPausa, iconoPausaFina, iconoPuntos,
+  iconoPlay, iconoPausa, iconoPuntos,
   iconoOjo, iconoOjoTachado, iconoFicha, iconoDisco,
 } from '../src/js/ui/icons.js';
+import * as ICONOS from '../src/js/ui/icons.js';
 
 const raiz = join(dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -55,8 +59,10 @@ igual('discover ⏸ (15)', iconoPausa(15),
 
 igual('fila de canción ▶ (14)', iconoPlay(14),
   '<svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>');
-igual('fila de canción ⏸ fina (14)', iconoPausaFina(14),
-  '<svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor" aria-hidden="true"><path d="M7 5h3.5v14H7zM13.5 5H17v14h-3.5z"/></svg>');
+// v=234: la fila de canción, #similar y #recs dibujaban la geometría FINA a
+// 14 px. Ian eligió la ancha y ahora las tres piden la misma, al mismo tamaño.
+igual('fila de canción ⏸ (14)', iconoPausa(14),
+  '<svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor" aria-hidden="true"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>');
 
 igual('ojo abierto (14)', iconoOjo(14),
   '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>');
@@ -70,7 +76,7 @@ igual('⊙ disco (14)', iconoDisco(14),
 
 // ── 2. el tamaño es lo ÚNICO que cambia ────────────────────────────────────
 // Es la propiedad que justifica que sean funciones y no constantes.
-for (const f of [iconoPlay, iconoPausa, iconoPausaFina, iconoPuntos, iconoOjo, iconoOjoTachado, iconoFicha, iconoDisco]) {
+for (const f of [iconoPlay, iconoPausa, iconoPuntos, iconoOjo, iconoOjoTachado, iconoFicha, iconoDisco]) {
   const a = f(10), b = f(15);
   comprobar(`${f.name}: cambiar el lado no toca la geometría`,
     a.replace(/"10"/g, '"15"') === b);
@@ -79,19 +85,27 @@ for (const f of [iconoPlay, iconoPausa, iconoPausaFina, iconoPuntos, iconoOjo, i
   comprobar(`${f.name}: el color lo hereda (currentColor)`, a.includes('currentColor'));
 }
 
-// ── 3. los dos ⏸ son distintos, y eso está documentado ─────────────────────
-// Si alguien los unifica sin decidirlo, este assert lo obliga a pasar por el
-// comentario de `icons.js` y por esta línea.
-comprobar('los dos ⏸ siguen siendo dos dibujos distintos',
-  iconoPausa(14) !== iconoPausaFina(14));
+// ── 3. el ⏸ es UNO, y no puede volver a ser dos ────────────────────────────
+//
+// Hasta v=233 había dos geometrías conviviendo en producción y nadie lo había
+// notado, porque tener dos dibujos del mismo botón **no rompe nada**: las
+// vistas simplemente dejan de parecerse. En v=234 Ian decidió quedarse con la
+// ancha. Lo que se vigila acá no es que el dibujo elegido sea ese —eso ya lo
+// afirma el bloque 1, byte a byte— sino que **no vuelva a haber dos**, que es
+// el estado que el ojo no caza.
+//
+// Se mira el módulo por fuera, no una lista escrita a mano: cualquier
+// `iconoPausaLoQueSea` nuevo cae acá aunque nadie toque este archivo.
+const pausas = Object.keys(ICONOS).filter(k => /^icono.*pausa/i.test(k));
+comprobar('de ⏸ se exporta exactamente una función', pausas.length === 1,
+  `exportadas: ${pausas.join(', ') || '(ninguna)'}`);
 
 // ── 4. que no aparezca un séptimo ejemplar suelto ──────────────────────────
 // El bug que esta suite previene no es que el icono salga mal: es que alguien
 // escriba el suyo al lado y las vistas dejen de parecerse EN SILENCIO.
 const GLIFOS = {
   '▶': 'M8 5v14l11-7z',
-  '⏸ ancho': '<rect x="6" y="4" width="4" height="16"/>',
-  '⏸ fino': 'M7 5h3.5v14H7z',
+  '⏸': '<rect x="6" y="4" width="4" height="16"/>',
   '···': '<circle cx="5" cy="12" r="2"/>',
   'ojo abierto': 'M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z',
   'ojo tachado': 'M17.94 17.94A10.07',
@@ -113,6 +127,20 @@ for (const [nombre, marca] of Object.entries(GLIFOS)) {
     .map(p => p.slice(raiz.length + 1));
   comprobar(`el ${nombre} vive solo en ui/icons.js`, donde.length === 0, donde.join(', '));
 }
+
+// ── 5. la geometría fina del ⏸ no vuelve, NI SIQUIERA en icons.js ──────────
+//
+// Este barrido es el único que incluye `ui/icons.js`, y es a propósito: el
+// resto vigila que un glifo no se copie fuera del módulo, y este vigila que
+// el dibujo descartado no vuelva a entrar por ningún lado — tampoco por la
+// puerta de casa, que es por donde volvería (alguien reponiendo el
+// `iconoPausaFina` «porque a 14 px se veía mejor», que además es cierto).
+const FINA = 'M7 5h3.5v14H7z';
+const conLaFina = archivosJs(join(raiz, 'src/js'))
+  .filter(p => readFileSync(p, 'utf8').includes(FINA))
+  .map(p => p.slice(raiz.length + 1));
+comprobar('la geometría fina del ⏸ no está en ningún archivo', conLaFina.length === 0,
+  conLaFina.join(', '));
 
 console.log(`\n  ${ok} asserts OK, ${fallos} fallos`);
 process.exit(fallos ? 1 : 0);

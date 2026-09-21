@@ -18,6 +18,11 @@ import { stat } from 'node:fs/promises';
 import { extname, join, normalize, resolve } from 'node:path';
 
 const ROOT = resolve(import.meta.dirname, '..', 'src');
+// Los bancos visuales viven FUERA de `src/` a propósito: `build.sh` hace
+// `cp -r src/*`, así que cualquier banco dentro de `src/` se publicaría en
+// `docs/` y acabaría en producción. Se montan acá, en dev y nada más.
+const BANCOS = resolve(import.meta.dirname, '..', 'tests', 'banco');
+const PREFIJO_BANCO = '/banco/';
 const PORT = Number(process.env.PORT) || 5500;
 const HOST = process.env.HOST || '127.0.0.1';
 
@@ -39,9 +44,14 @@ const TIPOS = {
 
 function rutaSegura(urlPath) {
   const limpio = normalize(decodeURIComponent(urlPath.split('?')[0])).replace(/^(\.\.[/\\])+/, '');
-  const destino = join(ROOT, limpio);
-  // Nada fuera de src/, ni con ../ ni con symlinks raros en la URL.
-  return destino.startsWith(ROOT) ? destino : null;
+  // `/banco/…` sale de `tests/banco/`; todo lo demás, de `src/`. Los bancos
+  // importan `/js/…` y `/css/…` con ruta absoluta y siguen cayendo en `src/`,
+  // que es lo que los hace probar el código REAL y no una copia.
+  const base = limpio.startsWith(PREFIJO_BANCO) ? BANCOS : ROOT;
+  const resto = limpio.startsWith(PREFIJO_BANCO) ? limpio.slice(PREFIJO_BANCO.length) : limpio;
+  const destino = join(base, resto);
+  // Nada fuera de las dos raíces, ni con ../ ni con symlinks raros en la URL.
+  return destino.startsWith(base) ? destino : null;
 }
 
 createServer(async (req, res) => {
@@ -51,7 +61,7 @@ createServer(async (req, res) => {
   };
 
   let destino = rutaSegura(req.url || '/');
-  if (!destino) return enviar(403, 'Fuera de src/');
+  if (!destino) return enviar(403, 'Fuera de src/ y de tests/banco/');
 
   try {
     let info = await stat(destino).catch(() => null);
@@ -74,4 +84,5 @@ createServer(async (req, res) => {
   }
 }).listen(PORT, HOST, () => {
   console.log(`dev → http://${HOST}:${PORT}  (sin caché, sirviendo ${ROOT})`);
+  console.log(`      bancos visuales en http://${HOST}:${PORT}/banco/  (${BANCOS})`);
 });

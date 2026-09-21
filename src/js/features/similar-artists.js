@@ -8,7 +8,7 @@ import { paintPlayingCard } from '../ui/track-card-row.js';
 import { openTrackCard } from './track-card.js';
 import { openAlbumCard } from './album-card.js';
 import { limpiaParaQuery, titleMatches, artistMatches } from '../util/track-match.js';
-import { iconoPlay, iconoPausaFina, iconoFicha, iconoDisco } from '../ui/icons.js';
+import { iconoPlay, iconoPausa, iconoFicha, iconoDisco } from '../ui/icons.js';
 
 // Mismo componente que #recs (recommendations.js): preview, ficha y ficha de
 // álbum sobre la fila resuelta. Los iconos son idénticos a los de esa vista.
@@ -308,7 +308,7 @@ function filaHtml(t) {
       <div class="recs-row-actions">
         <button type="button" class="sc-btn sc-play${sonando ? ' playing' : ''}" data-accion="play"
                 title="${pausa ? 'Parar el preview' : 'Preview de 30 s — no suma reproducciones'}"
-                aria-label="${pausa ? 'Parar preview' : 'Preview'}">${pausa ? iconoPausaFina(14) : iconoPlay(14)}</button>
+                aria-label="${pausa ? 'Parar preview' : 'Preview'}">${pausa ? iconoPausa(14) : iconoPlay(14)}</button>
         <button type="button" class="sc-btn" data-accion="ficha" title="Ver la ficha del tema" aria-label="Ficha del tema">${iconoFicha(14)}</button>
         ${t.album ? `<button type="button" class="sc-btn" data-accion="album" title="Ver la ficha del álbum" aria-label="Ficha del álbum">${iconoDisco(14)}</button>` : ''}
       </div>

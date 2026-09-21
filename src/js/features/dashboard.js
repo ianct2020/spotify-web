@@ -10,6 +10,7 @@ import { armRevealAll } from '../ui/reveal.js';
 import { hasUsername, getUsername, setUsername } from '../api/statsfm.js';
 import { getKey as getLastfmKey, setKey as setLastfmKey, clearKey as clearLastfmKey, isDefaultKey as lastfmIsDefaultKey } from '../api/lastfm.js';
 import { prefKey, migratePrefKey } from '../storage.js';
+import { alpha } from '../ui/theme-panel.js';
 
 // Tres estados posibles, no dos: puede haber una key propia, la del código, o
 // —si algún día la constante queda vacía— ninguna. El hint del ⚙ tiene que
@@ -778,6 +779,9 @@ function renderDashboard(container, stats) {
 async function hydrateHistorySection() {
   const section = document.getElementById('history-section');
   if (!section) return;
+  // Se lee acá, una vez por armado de la sección, y no al importar el módulo:
+  // ver el aviso de `coloresAcento()`.
+  const ac = coloresAcento();
   const h = await loadHistoryStats();
   if (!h || !h.years?.length) { section.style.display = 'none'; return; }
   section.style.display = '';
@@ -808,8 +812,8 @@ async function hydrateHistorySection() {
         labels: h.monthly.map(m => m.m),
         datasets: [{
           data: h.monthly.map(m => m.min),
-          borderColor: CHART_COLORS.accent,
-          backgroundColor: CHART_COLORS.accentSoft,
+          borderColor: ac.accent,
+          backgroundColor: ac.accentSoft,
           fill: true,
           borderWidth: 2,
           pointRadius: 0,
@@ -861,7 +865,7 @@ async function hydrateHistorySection() {
         labels: topArtists.map(a => a.name),
         datasets: [{
           data: topArtists.map(a => a.min),
-          backgroundColor: CHART_COLORS.accent,
+          backgroundColor: ac.accent,
           borderRadius: 4,
           borderSkipped: false,
         }],
@@ -925,7 +929,13 @@ async function hydrateHistorySection() {
   }
 }
 
+// El blanco de «esta celda no tiene nada» NO sigue el acento a propósito: es el
+// hueco, igual que los ~55 negros y blancos con alfa que v=233 dejó quietos.
+const VACIA = 'rgba(255,255,255,0.03)';
+
 function renderHeatmap(matrix) {
+  // El acento, una vez por heatmap: son 168 celdas y cada una lo necesita.
+  const ac = coloresAcento();
   const holder = document.getElementById('history-heatmap');
   if (!holder || !matrix || !matrix.length) return;
 
@@ -960,9 +970,11 @@ function renderHeatmap(matrix) {
       for (let d = 0; d < 7; d++) {
         const x = labelWidth + d * (cellSize + cellGap);
         const val = matrix[d][h] || 0;
-        const alpha = val / max;
-        const fill = alpha === 0 ? 'rgba(255,255,255,0.03)' : `rgba(124,58,237,${0.15 + alpha * 0.85})`;
-        const pctOfMax = Math.round(alpha * 100);
+        // `intensidad`, no `alpha`: `alpha` es ahora la función de theme-panel
+        // que fabrica el rgba, y tenerlas con el mismo nombre acá sería pedirlo.
+        const intensidad = val / max;
+        const fill = intensidad === 0 ? VACIA : alpha(ac.accent, 0.15 + intensidad * 0.85);
+        const pctOfMax = Math.round(intensidad * 100);
         const delay = (h * 7 + d) * 4;
         svg += `<rect class="heatmap-cell" x="${x}" y="${y}" width="${cellSize}" height="${cellSize}" rx="2" fill="${fill}" data-d="${d}" data-h="${h}" data-v="${Math.round(val)}" data-p="${pctOfMax}" style="animation-delay:${delay}ms"></rect>`;
       }
@@ -988,9 +1000,11 @@ function renderHeatmap(matrix) {
       for (let h = 0; h < 24; h++) {
         const x = labelWidth + h * (cellSize + cellGap);
         const val = matrix[d][h] || 0;
-        const alpha = val / max;
-        const fill = alpha === 0 ? 'rgba(255,255,255,0.03)' : `rgba(124,58,237,${0.15 + alpha * 0.85})`;
-        const pctOfMax = Math.round(alpha * 100);
+        // `intensidad`, no `alpha`: `alpha` es ahora la función de theme-panel
+        // que fabrica el rgba, y tenerlas con el mismo nombre acá sería pedirlo.
+        const intensidad = val / max;
+        const fill = intensidad === 0 ? VACIA : alpha(ac.accent, 0.15 + intensidad * 0.85);
+        const pctOfMax = Math.round(intensidad * 100);
         const delay = (d * 24 + h) * 4;
         svg += `<rect class="heatmap-cell" x="${x}" y="${y}" width="${cellSize}" height="${cellSize}" rx="2" fill="${fill}" data-d="${d}" data-h="${h}" data-v="${Math.round(val)}" data-p="${pctOfMax}" style="animation-delay:${delay}ms"></rect>`;
       }
@@ -1177,14 +1191,56 @@ async function hydrateListenedAlbumsCard() {
   }
 }
 
+// Los grises NO salen de la paleta y eso es deliberado: son los ejes, la
+// rejilla y el fondo del tooltip, que no siguen el acento en ninguna paleta.
+// Los del acento se fueron de acá en v=234 — ver `coloresAcento()`.
 const CHART_COLORS = {
-  accent: '#7C3AED',
-  accentLight: 'rgba(124, 58, 237, 0.3)',
-  accentSoft: 'rgba(124, 58, 237, 0.1)',
   text: '#8888A0',
   grid: 'rgba(42, 42, 58, 0.5)',
   surface: '#16161F',
 };
+
+// ── el acento de los gráficos ───────────────────────────────────────────────
+//
+// Hasta v=233 el violeta de fábrica estaba escrito a mano acá, así que con
+// cualquier otra paleta el Dashboard entero seguía el tema y los seis gráficos
+// y el heatmap se quedaban en violeta frío. Con Ámbar se ve de una.
+//
+// No se puede arreglar con un `sed` a `var(--color-accent)`: esto termina en
+// `fillStyle` de un lienzo, y **el lienzo no resuelve variables CSS** — medido,
+// el píxel sale negro. Hay que resolver el valor en JS, que es lo que ya hacen
+// `track-card.js` y `artist-card.js` con el mismo `getComputedStyle`.
+//
+// ⚠️ ES UNA FUNCIÓN, NO UNA CONSTANTE, y ahí está todo el asunto. Una
+// constante de módulo se evalúa al importar, o sea antes de que nadie haya
+// pintado nada; una función se lee en el momento de construir el gráfico, que
+// es cuando el tema ya está aplicado con seguridad.
+//
+// ⚠️ LO QUE ESTO **NO** ARREGLA, y está medido: Chart.js lee el color **una
+// sola vez, al construir**. Con el gráfico ya vivo se cambió la paleta a Ámbar
+// y se forzó `update('none')` + `draw()`: el píxel siguió violeta. O sea que
+// cambiar de paleta **con el Dashboard abierto deja los gráficos con el color
+// viejo** hasta que se sale de la vista y se vuelve a entrar (`render()` los
+// destruye y los rehace). Es el mismo comportamiento que ya tienen la ficha de
+// pista y la de artista, donde se disimula porque son modales: se cierran y se
+// abren. Arreglarlo de verdad pide avisar del cambio de paleta y re-renderizar,
+// y eso es otra tanda y una decisión de Ian.
+function coloresAcento() {
+  // El mismo idiom que `track-card.js` y `artist-card.js`, con el mismo
+  // respaldo por si algún día la variable no estuviera.
+  const accent = getComputedStyle(document.documentElement)
+    .getPropertyValue('--color-accent').trim() || '#7C3AED';
+  return {
+    accent,
+    // Los mismos alfas de antes (0.3, 0.1 y 0.4), ahora sobre el acento real.
+    // `alpha()` es la de `theme-panel.js`, la que fabrica `--color-accent-soft`
+    // y compañía: acá hace falta la versión de JS porque el destino es un
+    // lienzo, pero es la MISMA función, no una copia.
+    accentLight: alpha(accent, 0.3),
+    accentSoft: alpha(accent, 0.1),
+    accentBorde: alpha(accent, 0.4),
+  };
+}
 
 const CHART_DEFAULTS = {
   responsive: true,
@@ -1269,6 +1325,7 @@ function wireChartHoverExit(id) {
 }
 
 function buildCharts(stats) {
+  const ac = coloresAcento();   // ver el aviso de `coloresAcento()`
   const sortedDecades = Object.entries(stats.decades).sort((a, b) => a[0].localeCompare(b[0]));
 
   makeChart('chart-decades', {
@@ -1277,7 +1334,7 @@ function buildCharts(stats) {
       labels: sortedDecades.map(d => d[0]),
       datasets: [{
         data: sortedDecades.map(d => d[1]),
-        backgroundColor: CHART_COLORS.accent,
+        backgroundColor: ac.accent,
         borderRadius: 6,
         borderSkipped: false,
       }],
@@ -1291,7 +1348,7 @@ function buildCharts(stats) {
       labels: stats.topArtists.map(a => a[0]),
       datasets: [{
         data: stats.topArtists.map(a => a[1]),
-        backgroundColor: CHART_COLORS.accent,
+        backgroundColor: ac.accent,
         borderRadius: 4,
         borderSkipped: false,
       }],
@@ -1323,7 +1380,7 @@ function buildCharts(stats) {
       labels: dowLabels,
       datasets: [{
         data: stats.addedByDow,
-        backgroundColor: CHART_COLORS.accent,
+        backgroundColor: ac.accent,
         borderRadius: 6,
         borderSkipped: false,
       }],
@@ -1338,8 +1395,8 @@ function buildCharts(stats) {
       labels: hourLabels,
       datasets: [{
         data: stats.addedByHour,
-        backgroundColor: CHART_COLORS.accentLight,
-        borderColor: CHART_COLORS.accent,
+        backgroundColor: ac.accentLight,
+        borderColor: ac.accent,
         borderWidth: 1,
         borderRadius: 3,
         borderSkipped: false,
@@ -1362,8 +1419,8 @@ function buildCharts(stats) {
         {
           label: 'Total acumulado',
           data: stats.addedByMonth.map(m => m.total),
-          borderColor: CHART_COLORS.accent,
-          backgroundColor: CHART_COLORS.accentSoft,
+          borderColor: ac.accent,
+          backgroundColor: ac.accentSoft,
           fill: true,
           tension: 0.3,
           pointRadius: 0,
@@ -1373,7 +1430,7 @@ function buildCharts(stats) {
         {
           label: 'Agregadas por mes',
           data: stats.addedByMonth.map(m => m.added),
-          borderColor: 'rgba(124, 58, 237, 0.4)',
+          borderColor: ac.accentBorde,
           backgroundColor: 'transparent',
           borderWidth: 1,
           tension: 0.3,

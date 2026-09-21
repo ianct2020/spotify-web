@@ -21,10 +21,10 @@
 // texto blanco: los dos siguen legibles en claro, pero no acompañan al tema.
 // Anotado en la doc.
 
-import { openModal, closeTop } from './modal-stack.js?v=233';
-import { showToast } from './toast.js?v=233';
-import { prefKey, migratePrefKey } from '../storage.js?v=233';
-import { getAnimMode, setAnimMode } from './reveal.js?v=233';
+import { openModal, closeTop } from './modal-stack.js?v=234';
+import { showToast } from './toast.js?v=234';
+import { prefKey, migratePrefKey } from '../storage.js?v=234';
+import { getAnimMode, setAnimMode } from './reveal.js?v=234';
 
 // La clave lleva prefijo por usuario desde v=159 (antes era global y dos
 // personas en el mismo navegador compartían paleta). El prefijo sale de
@@ -104,7 +104,15 @@ export const PRESETS = [
 
 // ── color helpers ───────────────────────────────────────────────────────────
 function hex2rgb(hex) {
-  const h = String(hex || '').trim().replace('#', '');
+  const t = String(hex || '').trim();
+  // También `rgb(r, g, b)` / `rgba(...)`, y NO es un adorno: es el formato en
+  // que `getComputedStyle(...).color` devuelve un color, o sea justo lo que
+  // tiene a mano quien va a pintar el acento fuera del CSS. Sin esto `alpha()`
+  // devolvía el color entero sin tocar y el degradado salía **de un solo
+  // color, sin avisar** — pasó en el banco del acento al escribir v=234.
+  const rgb = t.match(/^rgba?\(\s*([\d.]+)[\s,]+([\d.]+)[\s,]+([\d.]+)/i);
+  if (rgb) return [1, 2, 3].map(i => Math.round(Number(rgb[i])));
+  const h = t.replace('#', '');
   const full = h.length === 3 ? h.split('').map(c => c + c).join('') : h;
   if (!/^[0-9a-fA-F]{6}$/.test(full)) return null;
   return [parseInt(full.slice(0, 2), 16), parseInt(full.slice(2, 4), 16), parseInt(full.slice(4, 6), 16)];
@@ -117,7 +125,16 @@ function mix(a, b, t) {
   if (!ra || !rb) return a;
   return rgb2hex([0, 1, 2].map(i => ra[i] + (rb[i] - ra[i]) * t));
 }
-function alpha(hex, a) {
+/**
+ * Un hex con alfa. **Exportada a propósito** (v=234): es la función que fabrica
+ * `--color-accent-soft`, `-tint` y `-glow` acá abajo, y es la que necesita
+ * cualquiera que tenga que pintar el acento con transparencia FUERA del CSS
+ * —los gráficos de Chart.js y el heatmap del Dashboard, que van a un lienzo y
+ * no entienden `var()` ni `color-mix()`—. Si esto no se exportara, ese código
+ * se escribiría su propio hex→rgba y tendríamos dos, que es exactamente el
+ * problema que v=233 vino a cerrar con los iconos.
+ */
+export function alpha(hex, a) {
   const r = hex2rgb(hex);
   return r ? `rgba(${r[0]}, ${r[1]}, ${r[2]}, ${a})` : hex;
 }

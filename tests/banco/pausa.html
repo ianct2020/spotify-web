@@ -1,0 +1,98 @@
+<!doctype html><html lang="es"><head><meta charset="utf-8"><title>banco ⏸</title>
+<link rel="stylesheet" href="/css/theme.css">
+<style>
+ body{font-family:var(--font-sans),system-ui;background:var(--color-bg);color:var(--color-text);margin:0;padding:18px;font-size:13px}
+ h1{font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--color-text-muted);margin:0 0 14px}
+ table{border-collapse:collapse}
+ th{font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--color-text-muted);font-weight:600;padding:0 16px 8px;text-align:center}
+ th.lado,td.lado{text-align:right;padding-right:10px}
+ td{padding:8px 16px;text-align:center;vertical-align:middle}
+ td.lado{color:var(--color-text-secondary);font-variant-numeric:tabular-nums}
+ /* El botón real: el mismo fondo y el mismo color que en la app. */
+ .bot{display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;
+      border-radius:50%;border:1px solid var(--color-border);background:var(--color-surface);color:var(--color-accent)}
+ canvas{display:block;background:var(--color-surface);border:1px solid var(--color-border);border-radius:4px}
+ .nota{color:var(--color-text-muted);font-size:11px;margin-top:16px;max-width:620px;line-height:1.7}
+ b{color:var(--color-text-secondary)}
+</style></head><body>
+<h1 id="tit">…</h1>
+<table id="t"></table>
+<p class="nota">Las columnas «rasterizado ×10» son el icono dibujado <b>al tamaño real de su
+fila</b> y recién después ampliado sin suavizado: es lo que el monitor pinta de verdad, no el
+vector. El zoom por CSS no sirve acá — reescala el SVG y esconde justo el empaste que se
+viene a mirar.</p>
+<script type="module">
+import * as iconos from '/js/ui/icons.js';
+import { esperarA, varAplicada, fallar, listo } from '/banco/esperar.mjs';
+
+const ZOOM = 10;
+// Los cuatro tamaños que la app usa de verdad. Si alguien agrega un quinto en
+// un módulo, esta lista se queda corta y hay que sumarlo acá a mano.
+const TAMANOS = [10, 12, 14, 15];
+
+/** Dibuja el SVG a `lado` px reales y lo amplía ×10 con el suavizado apagado. */
+function rasterizar(svgTexto, lado, acento) {
+  // Dos retoques para que el SVG cargue como imagen: `currentColor` no existe
+  // fuera del documento (se fija el acento a mano) y un SVG en `data:` SIN
+  // `xmlns` no carga — el navegador lo descarta EN SILENCIO, que es como se
+  // perdió la primera tanda de capturas de este banco.
+  const svg = svgTexto
+    .replace(/currentColor/g, acento)
+    .replace('<svg ', '<svg xmlns="http://www.w3.org/2000/svg" ');
+  return new Promise((resolver, rechazar) => {
+    const img = new Image();
+    img.onerror = () => rechazar(new Error(`el SVG no cargó como imagen: ${svg.slice(0, 80)}`));
+    img.onload = () => {
+      const chico = document.createElement('canvas');
+      chico.width = chico.height = lado;
+      chico.getContext('2d').drawImage(img, 0, 0, lado, lado);
+      const grande = document.createElement('canvas');
+      grande.width = grande.height = lado * ZOOM;
+      const cx = grande.getContext('2d');
+      cx.imageSmoothingEnabled = false;
+      cx.drawImage(chico, 0, 0, lado, lado, 0, 0, lado * ZOOM, lado * ZOOM);
+      resolver(grande);
+    };
+    img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+  });
+}
+
+try {
+  // Espera por CONDICIÓN, no por reloj: `theme.css` entra por `<link>` y carga
+  // sola. Hasta que `--color-accent` no valga el violeta de fábrica, el
+  // rasterizado saldría en negro y la captura mentiría sin avisar.
+  const acento = await varAplicada('--color-accent', '#7C3AED');
+
+  // Las dos pausas se buscan por nombre: si mañana vuelve a haber dos, el
+  // banco las enseña solo. Ese es justo el estado que no tiene que volver.
+  const pausas = Object.keys(iconos).filter(k => /^icono.*Pausa/i.test(k)).sort();
+  if (!pausas.length) throw new Error('ui/icons.js no exporta ninguna función de pausa');
+
+  const t = document.getElementById('t');
+  t.innerHTML =
+    `<tr><th class="lado">px</th>${pausas.map(n => `<th>${n}</th>`).join('')}` +
+    `${pausas.map(n => `<th>${n} · rasterizado ×${ZOOM}</th>`).join('')}</tr>` +
+    TAMANOS.map(px => `<tr data-px="${px}"><td class="lado">${px}</td>` +
+      pausas.map(n => `<td><span class="bot">${iconos[n](px)}</span></td>`).join('') +
+      pausas.map(n => `<td class="rast" data-icono="${n}"></td>`).join('') + '</tr>').join('');
+
+  for (const fila of t.querySelectorAll('tr[data-px]')) {
+    const px = Number(fila.dataset.px);
+    for (const celda of fila.querySelectorAll('.rast'))
+      celda.append(await rasterizar(iconos[celda.dataset.icono](px), px, acento));
+  }
+
+  // Y la última condición: que los lienzos estén realmente en el documento y
+  // medidos. Sin esto la captura puede salir con la tabla a medio componer.
+  await esperarA(() => t.querySelectorAll('canvas').length === TAMANOS.length * pausas.length
+    && [...t.querySelectorAll('canvas')].every(c => c.getBoundingClientRect().width > 0),
+    { que: 'que los lienzos estén pintados y medidos' });
+
+  document.getElementById('tit').textContent =
+    `el ⏸ a los ${TAMANOS.length} tamaños en uso (${TAMANOS.join(', ')} px) — ` +
+    (pausas.length === 1 ? 'una sola geometría' : `${pausas.length} geometrías: ${pausas.join(' vs. ')}`);
+  listo(`${pausas.length} geometría(s) de pausa · acento ${acento}`);
+} catch (e) {
+  fallar(e);
+}
+</script></body></html>

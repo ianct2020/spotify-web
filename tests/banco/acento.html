@@ -1,0 +1,128 @@
+<!doctype html><html lang="es"><head><meta charset="utf-8"><title>banco acento</title>
+<link rel="stylesheet" href="/css/theme.css">
+<style>
+ body{font-family:var(--font-sans),system-ui;background:var(--color-bg);color:var(--color-text);padding:16px;margin:0;font-size:13px}
+ h2{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--color-text-muted);margin:16px 0 6px}
+ .tira{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+ #tit{font-size:12px;color:var(--color-text-secondary);margin:0 0 6px}
+ canvas{border:1px solid var(--color-border);border-radius:4px;background:var(--color-surface)}
+ .hm{display:grid;grid-template-columns:repeat(12,14px);gap:2px}
+ .hm i{display:block;width:14px;height:14px;border-radius:2px}
+</style></head><body>
+<p id="tit">…</p>
+<h2>login</h2><div class="tira"><button class="btn login-btn">Entrar con Spotify</button></div>
+<h2>chips y etiquetas</h2><div class="tira">
+  <button class="pill-toggle active">Activo</button>
+  <button class="disco-filtro is-on">Filtro encendido</button>
+  <span class="gd-tag gd-tag-on">rock</span>
+  <span class="wthree-track-tag">pick</span>
+</div>
+<h2>filas con hover (forzado por clase, regla clonada del CSSOM)</h2><div class="tira" style="flex-direction:column;align-items:stretch;width:420px">
+  <div class="wthree-track h-wthree-track">Runaway</div>
+  <div class="gd-row h-gd-row" style="padding:6px 10px">Kanye West</div>
+  <button class="wthree-choice h-wthree-choice" style="padding:6px 10px;text-align:left">Elegir álbum</button>
+</div>
+<h2>aviso y ticker</h2>
+<div class="modal-alert-info" style="width:420px"><span class="modal-alert-icon">i</span> Un aviso</div>
+<div class="statsfm-ticker" style="width:420px;margin-top:8px"><span class="statsfm-ticker-dot"></span> Stats.fm</div>
+<h2>dashboard — el acento que termina en un LIENZO</h2>
+<p style="margin:0 0 8px;color:var(--color-text-muted);font-size:11px;max-width:520px;line-height:1.6">
+La tira del heatmap y los tres rellenos de los gráficos. Hasta v=233 iban con el violeta
+escrito a mano, así que <b>no cambiaban con la paleta</b>: el lienzo no entiende
+<code>var()</code> ni <code>color-mix()</code>, y por eso esto no se arreglaba con un sed.</p>
+<table style="border-collapse:collapse"><tbody id="cmp"></tbody></table>
+<script type="module">
+import { expandTheme, PRESETS, alpha } from '/js/ui/theme-panel.js';
+import { esperarA, hojasLegibles, varAplicada, fallar, listo } from '/banco/esperar.mjs';
+
+const q = new URLSearchParams(location.search);
+const idp = q.get('preset') || 'ambar';
+
+try {
+  const preset = PRESETS.find(p => p.id === idp);
+  if (!preset) throw new Error(`no existe el preset «${idp}» — hay: ${PRESETS.map(p => p.id).join(', ')}`);
+
+  // Las hojas van SIEMPRE las reales: en v=234 `main.css` y `components.css`
+  // no se tocaron —el cambio es todo de JS—, así que cargar una copia vieja
+  // sería fingir que se mide algo que no cambió. El antes/después de esta
+  // tanda está abajo, en la tira del Dashboard, dentro de la misma captura.
+  const hojas = ['main', 'components'].map(h => `/css/${h}.css`);
+  for (const href of hojas)
+    document.head.insertAdjacentHTML('beforeend', `<link rel="stylesheet" href="${href}">`);
+
+  // ── LAS DOS ESPERAS, Y NINGUNA ES UN RELOJ ────────────────────────────────
+  //
+  // Hasta v=233 acá había `setTimeout(1200)`. Andaba, pero no comprobaba nada:
+  // con 500 ms la captura salía con tres filas pintadas de oscuro sobre el tema
+  // claro y parecía un bug del CSS. No lo era — era el clon de los `:hover`
+  // armándose sobre un CSSOM que todavía no existía.
+  //
+  // 1) que las hojas estén CARGADAS y su CSSOM sea legible.
+  await hojasLegibles(hojas);
+
+  // 2) que la variable del tema esté aplicada y valga lo que tiene que valer.
+  const vars = expandTheme(preset.colors);
+  for (const [k, v] of Object.entries(vars)) document.documentElement.style.setProperty(k, v);
+  const acento = await varAplicada('--color-accent', preset.colors['--color-accent']);
+
+  document.getElementById('tit').textContent =
+    `preset ${preset.name} · acento ${vars['--color-accent']} (${acento})`;
+
+  // El :hover no se dispara sin ratón: se clona la regla desde el CSSOM real.
+  const quiero = { '.wthree-track:hover': 'h-wthree-track', '.gd-row:hover': 'h-gd-row', '.wthree-choice:hover': 'h-wthree-choice' };
+  let css = '', clonadas = 0;
+  for (const h of document.styleSheets) {
+    let rs; try { rs = h.cssRules; } catch { continue; }
+    for (const r of rs) if (r.selectorText && quiero[r.selectorText]) {
+      css += r.cssText.replace(r.selectorText, '.' + quiero[r.selectorText]) + '\n';
+      clonadas++;
+    }
+  }
+  document.head.insertAdjacentHTML('beforeend', `<style>${css}</style>`);
+  // Y se comprueba que el clon llegó: este assert es el que faltaba en v=233.
+  if (clonadas < Object.keys(quiero).length)
+    throw new Error(`solo se clonaron ${clonadas} de ${Object.keys(quiero).length} reglas :hover — ` +
+                    `el CSSOM no tenía todo. La captura habría mentido justo en las filas del hover.`);
+  await esperarA(() => getComputedStyle(document.querySelector('.h-wthree-track')).backgroundColor
+    !== getComputedStyle(document.body).backgroundColor,
+    { que: 'que la fila con :hover clonado pinte distinto del fondo' });
+
+  // El antes y el después, uno encima del otro. El «antes» es el literal
+  // exacto que tenía `dashboard.js` hasta v=233; el «después» sale de la MISMA
+  // `alpha()` que usa ahora, sobre el acento resuelto del preset.
+  const VIOLETA_CLAVADO = '#7C3AED';
+  const tira = (base) => Array.from({ length: 12 }, (_, i) =>
+    `<i style="background:${alpha(base, 0.15 + (i / 11) * 0.85)}"></i>`).join('');
+  const rellenos = (base) => [0.3, 0.1, 0.4]
+    .map(a => `<i style="background:${alpha(base, a)};width:34px"></i>`).join('');
+  document.getElementById('cmp').innerHTML = [
+    ['v=233 — violeta clavado', VIOLETA_CLAVADO],
+    ['v=234 — sigue la paleta', acento],
+  ].map(([etiqueta, base]) => `<tr>
+      <td style="padding:5px 12px 5px 0;color:var(--color-text-muted);font-size:11px;white-space:nowrap">${etiqueta}</td>
+      <td style="padding:5px 0"><div class="hm">${tira(base)}</div></td>
+      <td style="padding:5px 0 5px 14px"><div class="hm" style="grid-template-columns:repeat(3,34px)">${rellenos(base)}</div></td>
+    </tr>`).join('');
+
+  // ⚠️ Que el degradado sea de VERDAD un degradado. Sin este assert, `alpha()`
+  // devolviendo el color sin tocar pinta 12 celdas idénticas y la captura sale
+  // preciosa y falsa — que es exactamente lo que pasó al escribir este banco.
+  const tonos = new Set([...document.querySelectorAll('#cmp .hm i')]
+    .map(e => getComputedStyle(e).backgroundColor));
+  if (tonos.size < 12)
+    throw new Error(`el degradado tiene ${tonos.size} tonos distintos y debería tener 24 ` +
+                    `(12 por fila): alpha() no está aplicando el alfa. La captura mentiría.`);
+
+  // Y lo que de verdad importa del lado de la app: que lo que `dashboard.js`
+  // lee con getComputedStyle sea algo que `alpha()` sepa descomponer.
+  const leidoComoLoLeeDashboard = getComputedStyle(document.documentElement)
+    .getPropertyValue('--color-accent').trim();
+  const prueba = alpha(leidoComoLoLeeDashboard, 0.3);
+  if (!/^rgba\(/.test(prueba))
+    throw new Error(`dashboard.js lee "${leidoComoLoLeeDashboard}" y alpha() devuelve ` +
+                    `"${prueba}" en vez de un rgba(): los gráficos saldrían opacos.`);
+  console.log('[BANCO] dashboard.js leería', leidoComoLoLeeDashboard, '→', prueba);
+
+  listo(`preset ${idp} · acento ${acento} · ${clonadas} hover clonados · ${tonos.size} tonos`);
+} catch (e) { fallar(e); }
+</script></body></html>

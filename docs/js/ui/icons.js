@@ -43,30 +43,35 @@ const trazo = (lado, cuerpo, extra = ' stroke-linecap="round" stroke-linejoin="r
 /** ▶ — el triángulo de reproducir. */
 export const iconoPlay = (lado) => relleno(lado, '<path d="M8 5v14l11-7z"/>');
 
-// ⚠️ EL ⏸ TIENE DOS GEOMETRÍAS EN PRODUCCIÓN, Y NO ES UN DESCUIDO DE HOY: ya
-// estaban las dos antes de esta tanda, repartidas tres y tres.
+// ⚠️ EL ⏸ TUVO DOS GEOMETRÍAS, Y HAY UNA SOLA A PROPÓSITO. NO AGREGUES OTRA.
 //
-//   · `iconoPausa`     — dos rectángulos de 4 de ancho en x=6 y x=14 (hueco 4).
-//     Lo usan la ficha de álbum, W-Three y las tarjetas de descubrir.
-//   · `iconoPausaFina` — dos barras de 3.5 en x=7 y x=13.5 (hueco 3).
-//     Lo usan la fila de canción compartida, #similar y #recs.
+// Hasta v=233 convivían en producción, repartidas tres vistas y tres:
 //
-// **Son dos dibujos distintos**: más angostas y más juntas las segundas. En la
-// app conviven, y según la vista el ⏸ se ve de una forma o de otra.
+//   · la ancha — dos rectángulos de 4 en x=6 y x=14 (hueco 4), a 10, 12 y 15 px.
+//   · la fina  — dos barras de 3.5 en x=7 y x=13.5 (hueco 3), a 14 px.
 //
-// Se dejan las dos, juntas y con esta nota, a propósito: unificarlas cambia el
-// aspecto de tres vistas y esa es una decisión de Ian, no un arreglo. Lo que sí
-// cambia es que ahora la decisión está a tres líneas de distancia y no a seis
-// archivos — antes no se podía ni ver que había algo que decidir.
-// Cuando se decida: borrar la que sobre y cambiar los tres llamadores.
+// Eran dos dibujos distintos y según la vista el botón se veía de una forma o
+// de otra. Nadie lo había notado justamente porque no rompe nada: es la deriva
+// silenciosa que este archivo viene a cerrar.
+//
+// **Decisión de Ian (2026-09-20, v=234): se queda la ancha.** El motivo es el
+// tamaño chico, no el grande: el icono se usa a 10, 12, 14 y 15 px, y a 10 px
+// las barras finas pierden el hueco y ninguna columna de píxeles llega a
+// saturar — sale un borrón pálido. La que tiene que aguantar es la chica.
+//
+// Lo que se pagó por esto, medido y dicho: a **14 px** —el tamaño de las tres
+// vistas que cambiaron— la fina caía justo en píxeles enteros y era la más
+// nítida de las dos. El ⏸ de la fila de canción, #similar y #recs queda un
+// punto más blando y más pesado que antes. A 15 px la ancha NO se ve tosca:
+// el hueco mide lo mismo que cada barra y el conjunto lee equilibrado.
+//
+// `tests/icons.test.mjs` vigila que no vuelva a haber dos: la geometría fina
+// no puede reaparecer en ningún archivo —ni acá— y de `icono*Pausa*` tiene que
+// exportarse exactamente una.
 
-/** ⏸ — pausa, la forma ancha (ficha de álbum, W-Three, descubrir). */
+/** ⏸ — pausa. Una sola geometría en toda la app: ver el aviso de arriba. */
 export const iconoPausa = (lado) =>
   relleno(lado, '<rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/>');
-
-/** ⏸ — pausa, la forma fina (fila de canción, #similar, #recs). Ver el aviso. */
-export const iconoPausaFina = (lado) =>
-  relleno(lado, '<path d="M7 5h3.5v14H7zM13.5 5H17v14h-3.5z"/>');
 
 /** ··· — «estoy buscando el preview». Va en el mismo botón que el ▶. */
 export const iconoPuntos = (lado) =>
