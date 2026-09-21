@@ -24,12 +24,8 @@
 import { escapeHtml } from './components.js';
 import { marqueeSpan } from './marquee.js';
 import { isPlayingAudio, playingProvider } from './preview-player.js';
+import { iconoPlay, iconoPausaFina, iconoOjo, iconoOjoTachado, iconoFicha } from './icons.js';
 
-const OJO_ABIERTO = `<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>`;
-const OJO_TACHADO = `<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>`;
-const PLAY = `<svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14"><path d="M8 5v14l11-7z"/></svg>`;
-const PAUSE = `<svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14"><path d="M7 5h3.5v14H7zM13.5 5H17v14h-3.5z"/></svg>`;
-const FICHA = `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><line x1="12" y1="11" x2="12" y2="16"/><line x1="12" y1="8" x2="12" y2="8"/></svg>`;
 const CHECK = `<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>`;
 // Corazón tachado: sacar de tus me gusta. Es la ÚNICA acción de la tarjeta que
 // escribe en Spotify y no se puede deshacer desde acá, así que va con su propia
@@ -107,9 +103,9 @@ export function renderTrackCardRow(r, opts = {}) {
         </div>
         <div class="sc-actions">
           ${badge}
-          <button type="button" class="sc-btn sc-play${playing ? ' playing' : ''}" title="${sonando ? TITULO_PAUSA : (esEmbed ? TITULO_EMBED : TITULO_PLAY)}" aria-label="${sonando ? 'Parar preview' : (esEmbed ? 'Reproductor de Spotify abierto abajo' : 'Preview')}">${sonando ? PAUSE : PLAY}</button>
+          <button type="button" class="sc-btn sc-play${playing ? ' playing' : ''}" title="${sonando ? TITULO_PAUSA : (esEmbed ? TITULO_EMBED : TITULO_PLAY)}" aria-label="${sonando ? 'Parar preview' : (esEmbed ? 'Reproductor de Spotify abierto abajo' : 'Preview')}">${sonando ? iconoPausaFina(14) : iconoPlay(14)}</button>
           ${showCard && r.trackId
-            ? `<button type="button" class="sc-btn sc-card-btn" title="Ver la ficha del tema" aria-label="Ver ficha">${FICHA}</button>`
+            ? `<button type="button" class="sc-btn sc-card-btn" title="Ver la ficha del tema" aria-label="Ver ficha">${iconoFicha(14)}</button>`
             : ''}
           ${showAdd ? `<button type="button" class="sc-btn sc-add" title="Añadir a una playlist">Añadir a…</button>` : ''}
           ${showUnlike && r.trackId
@@ -119,7 +115,7 @@ export function renderTrackCardRow(r, opts = {}) {
             ? `<a class="sc-btn sc-open" href="https://open.spotify.com/track/${escapeHtml(r.trackId)}" target="_blank" rel="noopener" title="Abrir en Spotify" aria-label="Abrir en Spotify">↗</a>`
             : ''}
           ${showHide ? `<button type="button" class="sc-btn sc-hide" title="${hidden ? 'Devolver a la lista' : 'Ocultar de la lista (no toca Spotify)'}" aria-label="${hidden ? 'Devolver' : 'Ocultar'}">
-            ${hidden ? OJO_ABIERTO : OJO_TACHADO}
+            ${hidden ? iconoOjo(15) : iconoOjoTachado(15)}
           </button>` : ''}
         </div>
       </div>
@@ -199,7 +195,7 @@ function pintarBoton(btn, actual, sonando, provider) {
   btn.classList.toggle('playing', !!actual);
   const esEmbed = !!actual && !sonando && provider === 'spotify-embed';
   const pausa = !!actual && !!sonando;
-  btn.innerHTML = pausa ? PAUSE : PLAY;
+  btn.innerHTML = pausa ? iconoPausaFina(14) : iconoPlay(14);
   btn.title = pausa ? TITULO_PAUSA : (esEmbed ? TITULO_EMBED : TITULO_PLAY);
   btn.setAttribute('aria-label', pausa ? 'Parar preview' : (esEmbed ? 'Reproductor de Spotify abierto abajo' : 'Preview'));
 }

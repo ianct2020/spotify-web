@@ -22,6 +22,7 @@ import { mountBottom } from '../ui/bottom-layer.js';
 import { coverUrl } from '../util/cover-size.js';
 import { insercionPorPuntero, moverA, indicadorPara } from '../util/reorder-drop.js';
 import { prefKey, migratePrefKey } from '../storage.js';
+import { iconoPlay, iconoPausa, iconoPuntos, iconoOjo, iconoOjoTachado } from '../ui/icons.js';
 
 const LS_KEY_ID = 'wthree_playlist_id';
 const LS_KEY_NAME = 'wthree_playlist_name';
@@ -144,9 +145,6 @@ function toggleHidden(key, uri) {
   hiddenStore.toggle(key, uri);
 }
 
-const PLAY_SVG = `<svg viewBox="0 0 24 24" width="12" height="12" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>`;
-const PAUSE_SVG = `<svg viewBox="0 0 24 24" width="12" height="12" fill="currentColor" aria-hidden="true"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>`;
-const DOTS_SVG = `<svg viewBox="0 0 24 24" width="12" height="12" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>`;
 
 // Cuando el preview global cambia, resetear los ▶/⏸ de la tracklist abierta.
 // Los que corresponden al key sonando quedan como ⏸, el resto vuelve a ▶.
@@ -162,7 +160,7 @@ document.addEventListener('previewchange', (e) => {
   const key = e.detail?.key || '';
   document.querySelectorAll('.wt-play-btn').forEach(btn => {
     if (btn.disabled) return;
-    btn.innerHTML = (key === `wt:${btn.dataset.playId}`) ? PAUSE_SVG : PLAY_SVG;
+    btn.innerHTML = (key === `wt:${btn.dataset.playId}`) ? iconoPausa(12) : iconoPlay(12);
   });
 });
 
@@ -569,8 +567,6 @@ function renderAlbumRow(a, kind) {
         : `<span class="wthree-pill">${a.picks.length} / 3</span>`;
 
   // Ojo tachado = ocultar; ojo normal = mostrar de vuelta (en la vista invertida).
-  const eyeOpen = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>`;
-  const eyeOff = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>`;
   // La pista representativa que va a la playlist de ocultos. Los álbumes sin
   // ningún pick todavía no tienen ninguna: esos quedan ocultos solo en local
   // hasta que se los abra en el modal, donde sí hay tracklist.
@@ -582,7 +578,7 @@ function renderAlbumRow(a, kind) {
     ? `${fmtMinutesShort(a.min)} · ${a.plays}`
     : (a.detectedIn ? `escuchado en ${escapeHtml(a.detectedIn)} · fuera del top 1000` : 'fuera del top / de la playlist');
 
-  const hideBtn = `<button class="wthree-hide-btn" data-hide-key="${escapeHtml(key)}" data-hide-uri="${escapeHtml(hideUri)}" title="${isHidden ? 'Restaurar en la lista' : 'Ocultar este álbum'}" aria-label="${isHidden ? 'Restaurar' : 'Ocultar'}">${isHidden ? eyeOpen : eyeOff}</button>`;
+  const hideBtn = `<button class="wthree-hide-btn" data-hide-key="${escapeHtml(key)}" data-hide-uri="${escapeHtml(hideUri)}" title="${isHidden ? 'Restaurar en la lista' : 'Ocultar este álbum'}" aria-label="${isHidden ? 'Restaurar' : 'Ocultar'}">${isHidden ? iconoOjo(16) : iconoOjoTachado(16)}</button>`;
 
   return `
     <div class="wthree-album-row" data-album-key="${escapeHtml(key)}">
@@ -677,7 +673,7 @@ async function openAlbumModal(a) {
           <div class="card-modal-eyebrow">W-Three · álbum</div>
           <div style="display:flex;gap:6px;align-items:center">
             <button class="btn btn-secondary btn-sm" id="wt-hide-album" title="Ocultar este álbum de la lista" aria-label="Ocultar álbum">
-              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+              ${iconoOjoTachado(14)}
             </button>
             <button class="btn btn-secondary btn-sm card-modal-close" data-close-modal>✕</button>
           </div>
@@ -806,7 +802,7 @@ async function openAlbumModal(a) {
             <span class="wthree-track-name">${escapeHtml(t.name)}</span>
             <span class="wthree-track-like" ${t.liked ? `title="Ya está en tus me gusta" aria-label="En me gusta"` : 'aria-hidden="true"'}>${t.liked ? HEART_SVG : ''}</span>
             <span class="wthree-track-plays">${t.plays > 0 ? t.plays : ''}</span>
-            <button type="button" class="wt-play-btn" data-play-id="${t.id}" data-play-name="${escapeHtml(t.name)}" title="Preview 30s" aria-label="Preview de ${escapeHtml(t.name)}">${PLAY_SVG}</button>
+            <button type="button" class="wt-play-btn" data-play-id="${t.id}" data-play-name="${escapeHtml(t.name)}" title="Preview 30s" aria-label="Preview de ${escapeHtml(t.name)}">${iconoPlay(12)}</button>
           </label>
         `).join('')}
       </div>
@@ -1005,22 +1001,22 @@ async function openAlbumModal(a) {
     const id = btn.dataset.playId;
     const name = btn.dataset.playName;
     const setLabel = () => {
-      btn.innerHTML = playingKey() === `wt:${id}` ? PAUSE_SVG : PLAY_SVG;
+      btn.innerHTML = playingKey() === `wt:${id}` ? iconoPausa(12) : iconoPlay(12);
     };
     setLabel();
     btn.addEventListener('click', async (e) => {
       e.preventDefault();
       e.stopPropagation();
-      btn.innerHTML = DOTS_SVG;
+      btn.innerHTML = iconoPuntos(12);
       const res = await togglePreview(`wt:${id}`, async () => {
         return await getPreview({ name, artist: a.artist, spotifyId: id });
       });
-      if (res === true) btn.innerHTML = PAUSE_SVG;
+      if (res === true) btn.innerHTML = iconoPausa(12);
       // Sin preview: LO DICE. Hasta v=149 esto ponía un «—» pelado y gris, que
       // desde la fila se lee como «a esta canción le falta el ▶» — fue el
       // reporte de Ian sobre «Love$ick (feat. A$AP Rocky)».
       else if (res === null) { btn.innerHTML = SIN_PREVIEW_HTML; btn.classList.add('sin-preview'); btn.title = 'Sin preview en iTunes ni en Deezer'; btn.disabled = true; }
-      else btn.innerHTML = PLAY_SVG;
+      else btn.innerHTML = iconoPlay(12);
     });
   });
 

@@ -8,13 +8,10 @@ import { paintPlayingCard } from '../ui/track-card-row.js';
 import { openTrackCard } from './track-card.js';
 import { openAlbumCard } from './album-card.js';
 import { limpiaParaQuery, titleMatches, artistMatches } from '../util/track-match.js';
+import { iconoPlay, iconoPausaFina, iconoFicha, iconoDisco } from '../ui/icons.js';
 
 // Mismo componente que #recs (recommendations.js): preview, ficha y ficha de
 // álbum sobre la fila resuelta. Los iconos son idénticos a los de esa vista.
-const ICONO_PLAY = `<svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14"><path d="M8 5v14l11-7z"/></svg>`;
-const ICONO_PAUSA = `<svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14"><path d="M7 5h3.5v14H7zM13.5 5H17v14h-3.5z"/></svg>`;
-const ICONO_FICHA = `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><line x1="12" y1="11" x2="12" y2="16"/><line x1="12" y1="8" x2="12" y2="8"/></svg>`;
-const ICONO_DISCO = `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="2.6"/></svg>`;
 
 let sourceArtist = null;
 let similarList = [];
@@ -311,9 +308,9 @@ function filaHtml(t) {
       <div class="recs-row-actions">
         <button type="button" class="sc-btn sc-play${sonando ? ' playing' : ''}" data-accion="play"
                 title="${pausa ? 'Parar el preview' : 'Preview de 30 s — no suma reproducciones'}"
-                aria-label="${pausa ? 'Parar preview' : 'Preview'}">${pausa ? ICONO_PAUSA : ICONO_PLAY}</button>
-        <button type="button" class="sc-btn" data-accion="ficha" title="Ver la ficha del tema" aria-label="Ficha del tema">${ICONO_FICHA}</button>
-        ${t.album ? `<button type="button" class="sc-btn" data-accion="album" title="Ver la ficha del álbum" aria-label="Ficha del álbum">${ICONO_DISCO}</button>` : ''}
+                aria-label="${pausa ? 'Parar preview' : 'Preview'}">${pausa ? iconoPausaFina(14) : iconoPlay(14)}</button>
+        <button type="button" class="sc-btn" data-accion="ficha" title="Ver la ficha del tema" aria-label="Ficha del tema">${iconoFicha(14)}</button>
+        ${t.album ? `<button type="button" class="sc-btn" data-accion="album" title="Ver la ficha del álbum" aria-label="Ficha del álbum">${iconoDisco(14)}</button>` : ''}
       </div>
     </label>`;
 }

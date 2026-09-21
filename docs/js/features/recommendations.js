@@ -1,26 +1,21 @@
-import { spotifyFetch, createPlaylist, addTracksToPlaylist, invalidatePlaylistsCache, getAllLikedTracks } from '../api.js?v=232';
-import { hasKey, setKey, hasUsername, getUsername, setUsername, getUserTopArtists, getSimilarArtists, getArtistTopTracks } from '../api/lastfm.js?v=232';
-import { showProgress, hideProgress, promptPlaylistName, escapeHtml, pageHeader } from '../ui/components.js?v=232';
-import { showToast } from '../ui/toast.js?v=232';
-import { getPreview } from '../api/preview-providers.js?v=232';
-import { togglePreview, playingKey, isPlayingAudio } from '../ui/preview-player.js?v=232';
-import { paintPlayingCard } from '../ui/track-card-row.js?v=232';
-import { openTrackCard } from './track-card.js?v=232';
-import { openAlbumCard } from './album-card.js?v=232';
-import { limpiaParaQuery, titleMatches, artistMatches } from '../util/track-match.js?v=232';
-import { vigilarRuta } from '../util/vigencia-ruta.js?v=232';
-import { createHiddenStore } from '../util/hidden-sync.js?v=232';
-import { recuperarUriDeArtistaKey } from '../util/hidden-recover.js?v=232';
+import { spotifyFetch, createPlaylist, addTracksToPlaylist, invalidatePlaylistsCache, getAllLikedTracks } from '../api.js?v=233';
+import { hasKey, setKey, hasUsername, getUsername, setUsername, getUserTopArtists, getSimilarArtists, getArtistTopTracks } from '../api/lastfm.js?v=233';
+import { showProgress, hideProgress, promptPlaylistName, escapeHtml, pageHeader } from '../ui/components.js?v=233';
+import { showToast } from '../ui/toast.js?v=233';
+import { getPreview } from '../api/preview-providers.js?v=233';
+import { togglePreview, playingKey, isPlayingAudio } from '../ui/preview-player.js?v=233';
+import { paintPlayingCard } from '../ui/track-card-row.js?v=233';
+import { openTrackCard } from './track-card.js?v=233';
+import { openAlbumCard } from './album-card.js?v=233';
+import { limpiaParaQuery, titleMatches, artistMatches } from '../util/track-match.js?v=233';
+import { vigilarRuta } from '../util/vigencia-ruta.js?v=233';
+import { createHiddenStore } from '../util/hidden-sync.js?v=233';
+import { recuperarUriDeArtistaKey } from '../util/hidden-recover.js?v=233';
+import { iconoPlay, iconoPausaFina, iconoFicha, iconoDisco, iconoOjo, iconoOjoTachado } from '../ui/icons.js?v=233';
 
 // Iconos de las dos fichas. Los mismos trazos que usa la tarjeta compartida.
-const ICONO_PLAY = `<svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14"><path d="M8 5v14l11-7z"/></svg>`;
-const ICONO_PAUSA = `<svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14"><path d="M7 5h3.5v14H7zM13.5 5H17v14h-3.5z"/></svg>`;
-const ICONO_FICHA = `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><line x1="12" y1="11" x2="12" y2="16"/><line x1="12" y1="8" x2="12" y2="8"/></svg>`;
-const ICONO_DISCO = `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="2.6"/></svg>`;
 // Mismos trazos que el ojo de discover-common.js (v=165), acá con 14px para
 // que entre en el botón redondo `.sc-hide` de las tarjetas de esta vista.
-const ICONO_OJO_TACHADO = `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>`;
-const ICONO_OJO_ABIERTO = `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>`;
 
 // Ocultar un artista recomendado: el MISMO mecanismo que discover-common.js
 // usa para álbumes (hidden-sync.js — playlist privada + reconciliación por
@@ -345,7 +340,7 @@ function renderArtistCard(a, i) {
         <span class="smart-card-meta">${a.sources.length} match${a.sources.length > 1 ? 'es' : ''}</span>
         <button type="button" class="sc-btn sc-hide recs-artist-hide" data-idx="${i}"
                 title="${hidden ? 'Devolver a la lista' : 'No te interesa: ocultar (no vuelve a aparecer)'}"
-                aria-label="${hidden ? 'Devolver a la lista' : 'Ocultar'}">${hidden ? ICONO_OJO_ABIERTO : ICONO_OJO_TACHADO}</button>
+                aria-label="${hidden ? 'Devolver a la lista' : 'Ocultar'}">${hidden ? iconoOjo(14) : iconoOjoTachado(14)}</button>
       </div>
     </div>
   `;
@@ -535,9 +530,9 @@ function filaHtml(t) {
       <div class="recs-row-actions">
         <button type="button" class="sc-btn sc-play${sonando ? ' playing' : ''}" data-accion="play"
                 title="${pausa ? 'Parar el preview' : 'Preview de 30 s — no suma reproducciones'}"
-                aria-label="${pausa ? 'Parar preview' : 'Preview'}">${pausa ? ICONO_PAUSA : ICONO_PLAY}</button>
-        <button type="button" class="sc-btn" data-accion="ficha" title="Ver la ficha del tema" aria-label="Ficha del tema">${ICONO_FICHA}</button>
-        ${t.album ? `<button type="button" class="sc-btn" data-accion="album" title="Ver la ficha del álbum" aria-label="Ficha del álbum">${ICONO_DISCO}</button>` : ''}
+                aria-label="${pausa ? 'Parar preview' : 'Preview'}">${pausa ? iconoPausaFina(14) : iconoPlay(14)}</button>
+        <button type="button" class="sc-btn" data-accion="ficha" title="Ver la ficha del tema" aria-label="Ficha del tema">${iconoFicha(14)}</button>
+        ${t.album ? `<button type="button" class="sc-btn" data-accion="album" title="Ver la ficha del álbum" aria-label="Ficha del álbum">${iconoDisco(14)}</button>` : ''}
       </div>
     </label>`;
 }

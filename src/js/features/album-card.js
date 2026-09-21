@@ -32,10 +32,8 @@ import { fmtDia } from '../util/fecha.js';
 import { getPreview } from '../api/preview-providers.js';
 import { togglePreview, playingKey } from '../ui/preview-player.js';
 import { openTrackCard } from './track-card.js';
+import { iconoPlay, iconoPausa, iconoPuntos } from '../ui/icons.js';
 
-const PLAY_SVG = `<svg viewBox="0 0 24 24" width="10" height="10" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>`;
-const PAUSE_SVG = `<svg viewBox="0 0 24 24" width="10" height="10" fill="currentColor" aria-hidden="true"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>`;
-const DOTS_SVG = `<svg viewBox="0 0 24 24" width="10" height="10" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>`;
 // Mismo corazón que la tracklist de W-Three (features/wthree.js).
 const HEART_SVG = `<svg viewBox="0 0 24 24" width="11" height="11" fill="currentColor" aria-hidden="true"><path d="M12 21s-7.5-4.6-9.5-9A5 5 0 0 1 12 6.5 5 5 0 0 1 21.5 12c-2 4.4-9.5 9-9.5 9z"/></svg>`;
 // El mismo trazo, hueco: "esta pista del disco NO está en tus me gusta".
@@ -65,7 +63,7 @@ document.addEventListener('previewchange', (e) => {
   const key = e.detail?.key || '';
   document.querySelectorAll('.album-modal-like-play').forEach(btn => {
     if (btn.disabled) return;
-    btn.innerHTML = (key === `alb:${btn.dataset.playId}`) ? PAUSE_SVG : PLAY_SVG;
+    btn.innerHTML = (key === `alb:${btn.dataset.playId}`) ? iconoPausa(10) : iconoPlay(10);
   });
 });
 
@@ -447,7 +445,7 @@ async function hydrateLikes(overlay, a) {
             <span class="album-modal-like-heart${t.liked ? '' : ' is-off'}" title="${t.liked ? 'Está en tus me gusta' : 'No está en tus me gusta'}" aria-label="${t.liked ? 'En tus me gusta' : 'Fuera de tus me gusta'}">${t.liked ? HEART_SVG : HEART_OUTLINE_SVG}</span>
             <span class="album-modal-like-num">${t.trackNumber || ''}</span>
             <span class="album-modal-like-name">${escapeHtml(t.name)}</span>
-            <button type="button" class="album-modal-like-play" data-play-id="${escapeHtml(t.id || '')}" data-play-name="${escapeHtml(t.name)}" title="Preview 30s" aria-label="Preview">${PLAY_SVG}</button>
+            <button type="button" class="album-modal-like-play" data-play-id="${escapeHtml(t.id || '')}" data-play-name="${escapeHtml(t.name)}" title="Preview 30s" aria-label="Preview">${iconoPlay(10)}</button>
           </div>
         `).join('')}
       </div>
@@ -474,22 +472,22 @@ async function hydrateLikes(overlay, a) {
     const name = btn.dataset.playName;
     const t = matched.find(x => x.id === id);
     const setLabel = () => {
-      btn.innerHTML = playingKey() === `alb:${id}` ? PAUSE_SVG : PLAY_SVG;
+      btn.innerHTML = playingKey() === `alb:${id}` ? iconoPausa(10) : iconoPlay(10);
     };
     setLabel();
     btn.addEventListener('click', async (e) => {
       e.preventDefault();
       e.stopPropagation();
-      btn.innerHTML = DOTS_SVG;
+      btn.innerHTML = iconoPuntos(10);
       const res = await togglePreview(`alb:${id}`, async () => {
         return await getPreview({ name, artists: t?.artists, artist: a.artist, spotifyId: id });
       });
-      if (res === true) btn.innerHTML = PAUSE_SVG;
+      if (res === true) btn.innerHTML = iconoPausa(10);
       // Sin preview: LO DICE. Hasta v=149 esto ponía un «—» pelado y gris, que
       // desde la fila se lee como «a esta canción le falta el ▶» — fue el
       // reporte de Ian sobre «Love$ick (feat. A$AP Rocky)».
       else if (res === null) { btn.innerHTML = SIN_PREVIEW_HTML; btn.classList.add('sin-preview'); btn.title = 'Sin preview en iTunes ni en Deezer'; btn.disabled = true; }
-      else btn.innerHTML = PLAY_SVG;
+      else btn.innerHTML = iconoPlay(10);
     });
   });
 

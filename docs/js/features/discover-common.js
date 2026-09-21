@@ -6,28 +6,29 @@
 //     (util/album-heard.js: historial completo + likes + listened + w-three)
 //   - permiten "+ Biblioteca" y "Crear playlist con lo elegido"
 
-import { idbGet, idbGetCached, idbSetCached, idbDel, idbEntriesByPrefix } from '../idb.js?v=232';
-import { getArtistAlbumsConFuente, buscarDiscografiaPorNombre, searchArtistByName, getAlbumTracks, saveToLibrary, saveAlbumsToLibrary, createPlaylist, addTracksToPlaylist } from '../api.js?v=232';
-import { albumKey } from '../util/album-key.js?v=232';
-import { cardKey, cardKeyLegacy, albumCreditName, keyOfPlaylistTrack } from '../util/discover-key.js?v=232';
-import { escapeHtml } from '../ui/components.js?v=232';
-import { showToast } from '../ui/toast.js?v=232';
-import { openPlaylistPicker } from '../ui/playlist-picker.js?v=232';
-import { getOwnPlaylists, addUrisToPlaylists, toastAddResult } from '../util/playlist-add.js?v=232';
-import { openArtistCard } from './artist-card.js?v=232';
-import { openAlbumCard } from './album-card.js?v=232';
-import { createHiddenStore, createLocalStore } from '../util/hidden-sync.js?v=232';
-import { recuperarUriDeAlbumKey } from '../util/hidden-recover.js?v=232';
-import { getPreview } from '../api/preview-providers.js?v=232';
-import { togglePreview, playingKey, attachHover } from '../ui/preview-player.js?v=232';
-import { coverUrl } from '../util/cover-size.js?v=232';
-import { FILTROS as FILTROS_DEF, saveFiltros } from '../util/discover-filters.js?v=232';
-import { esEPoAlbum } from '../util/release-size.js?v=232';
+import { idbGet, idbGetCached, idbSetCached, idbDel, idbEntriesByPrefix } from '../idb.js?v=233';
+import { getArtistAlbumsConFuente, buscarDiscografiaPorNombre, searchArtistByName, getAlbumTracks, saveToLibrary, saveAlbumsToLibrary, createPlaylist, addTracksToPlaylist } from '../api.js?v=233';
+import { albumKey } from '../util/album-key.js?v=233';
+import { cardKey, cardKeyLegacy, albumCreditName, keyOfPlaylistTrack } from '../util/discover-key.js?v=233';
+import { escapeHtml } from '../ui/components.js?v=233';
+import { showToast } from '../ui/toast.js?v=233';
+import { openPlaylistPicker } from '../ui/playlist-picker.js?v=233';
+import { getOwnPlaylists, addUrisToPlaylists, toastAddResult } from '../util/playlist-add.js?v=233';
+import { openArtistCard } from './artist-card.js?v=233';
+import { openAlbumCard } from './album-card.js?v=233';
+import { createHiddenStore, createLocalStore } from '../util/hidden-sync.js?v=233';
+import { recuperarUriDeAlbumKey } from '../util/hidden-recover.js?v=233';
+import { getPreview } from '../api/preview-providers.js?v=233';
+import { togglePreview, playingKey, attachHover } from '../ui/preview-player.js?v=233';
+import { coverUrl } from '../util/cover-size.js?v=233';
+import { FILTROS as FILTROS_DEF, saveFiltros } from '../util/discover-filters.js?v=233';
+import { esEPoAlbum } from '../util/release-size.js?v=233';
+import { iconoPlay, iconoPausa, iconoPuntos, iconoOjo, iconoOjoTachado } from '../ui/icons.js?v=233';
 import {
   DISCO_BASE_PREFIX, PRESUPUESTO_REFRESCO, RECIENTE_MAX_PAGINAS,
   crearBase, sumarCompleta, sumarReciente, tocaReciente, rangoReciente,
   fusionarBases, armarExportacion, leerImportacion,
-} from '../util/disco-base.js?v=232';
+} from '../util/disco-base.js?v=233';
 
 const DISCO_TTL_MIN = 30 * 24 * 60;       // 30 días
 const ARTIST_ID_TTL_MIN = 60 * 24 * 60;   // 60 días — los ids no cambian
@@ -710,14 +711,9 @@ export function fmtRelease(release) {
   return y ? String(y) : '—';
 }
 
-const PLAY_SVG = `<svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>`;
-const PAUSE_SVG = `<svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor" aria-hidden="true"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>`;
-const DOTS_SVG = `<svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>`;
 // «Sin preview» dicho con todas las letras (v=150): el «—» de antes se leía
 // como un botón roto, no como una respuesta.
 const SIN_PREVIEW_HTML = '<span class="sin-preview-txt">Sin preview</span>';
-const OJO_TACHADO = `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>`;
-const OJO_ABIERTO = `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>`;
 
 /** La key del player global para una tarjeta. Una sola, para las dos vistas. */
 export function previewKeyOf(albumId) {
@@ -731,7 +727,7 @@ document.addEventListener('previewchange', (e) => {
   const key = e.detail?.key || '';
   document.querySelectorAll('.dcard-play').forEach(btn => {
     if (btn.disabled) return;
-    btn.innerHTML = (key === previewKeyOf(btn.dataset.previewAlbum)) ? PAUSE_SVG : PLAY_SVG;
+    btn.innerHTML = (key === previewKeyOf(btn.dataset.previewAlbum)) ? iconoPausa(15) : iconoPlay(15);
     btn.classList.toggle('is-playing', key === previewKeyOf(btn.dataset.previewAlbum));
   });
 });
@@ -785,7 +781,7 @@ export function renderAlbumCard(al, artistName, {
               : `<span class="dcard-img dcard-img-empty">♪</span>`}
           </button>
           <button type="button" class="dcard-play${sonando ? ' is-playing' : ''}" data-preview-album="${id}"
-                  title="Preview de 30 s — no suma reproducciones" aria-label="Preview">${sonando ? PAUSE_SVG : PLAY_SVG}</button>
+                  title="Preview de 30 s — no suma reproducciones" aria-label="Preview">${sonando ? iconoPausa(15) : iconoPlay(15)}</button>
         </div>
         <div class="dcard-info">
           <button type="button" class="dcard-name" data-open-album="${id}" data-open-artist="${artista}">${escapeHtml(al.name)}</button>
@@ -801,7 +797,7 @@ export function renderAlbumCard(al, artistName, {
         ${showHeard ? `<button class="btn btn-secondary btn-sm" data-heard-album="${id}" title="Ya lo escuchaste y lo evaluaste: deja de aparecer">Escuchado</button>` : ''}
         <button class="btn btn-secondary btn-sm dcard-hide" data-hide-album="${id}"
                 title="${hiddenMode ? 'Devolver a la lista' : 'No me interesa: no volver a mostrarlo (no toca tu biblioteca)'}"
-                aria-label="${hiddenMode ? 'Devolver' : 'Ocultar'}">${hiddenMode ? OJO_ABIERTO : OJO_TACHADO}</button>
+                aria-label="${hiddenMode ? 'Devolver' : 'Ocultar'}">${hiddenMode ? iconoOjo(14) : iconoOjoTachado(14)}</button>
       </div>
     </div>
   `;
@@ -853,16 +849,16 @@ export function wireAlbumCards(list, findAlbumById, {
       e.preventDefault();
       e.stopPropagation();
       const previo = btn.innerHTML;
-      btn.innerHTML = DOTS_SVG;
+      btn.innerHTML = iconoPuntos(15);
       const res = await togglePreview(previewKeyOf(al.id), () => getAlbumPreview(al, artista));
-      if (res === true) btn.innerHTML = PAUSE_SVG;
+      if (res === true) btn.innerHTML = iconoPausa(15);
       else if (res === null) {
         btn.innerHTML = SIN_PREVIEW_HTML;
         btn.classList.add('sin-preview');
         btn.title = 'Sin preview en iTunes ni en Deezer';
         btn.disabled = true;
         showToast(`Sin preview disponible de «${al.name}»`, 'info');
-      } else btn.innerHTML = previo === DOTS_SVG ? PLAY_SVG : previo;
+      } else btn.innerHTML = previo === iconoPuntos(15) ? iconoPlay(15) : previo;
     };
   });
   list.querySelectorAll('[data-hover-album]').forEach(wrap => {
