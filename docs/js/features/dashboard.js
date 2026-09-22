@@ -1,16 +1,16 @@
-import { getAllLikedTracks, getLikesPartialInfo, exportAllData, importAllData, getCurrentUserId, syncLikesIncremental, getLikesCacheTimestamp, getBestAvailableLikes, getAllPlaylistItems } from '../api.js?v=235';
-import { showProgress, hideProgress, alertModal, escapeHtml, pageHeader } from '../ui/components.js?v=235';
-import { openModal, closeTop } from '../ui/modal-stack.js?v=235';
-import { showToast } from '../ui/toast.js?v=235';
-import { openListenedAlbumsPicker, getListenedPlaylist } from './listened-shared.js?v=235';
-import { loadHistoryStats, loadListenedAlbums } from './history-data.js?v=235';
-import { getArtistLikePreview } from '../util/artist-preview.js?v=235';
-import { hoverIn, hoverOut } from '../ui/preview-player.js?v=235';
-import { armRevealAll } from '../ui/reveal.js?v=235';
-import { hasUsername, getUsername, setUsername } from '../api/statsfm.js?v=235';
-import { getKey as getLastfmKey, setKey as setLastfmKey, clearKey as clearLastfmKey, isDefaultKey as lastfmIsDefaultKey } from '../api/lastfm.js?v=235';
-import { prefKey, migratePrefKey } from '../storage.js?v=235';
-import { alpha } from '../ui/theme-panel.js?v=235';
+import { getAllLikedTracks, getLikesPartialInfo, exportAllData, importAllData, getCurrentUserId, syncLikesIncremental, getLikesCacheTimestamp, getBestAvailableLikes, getAllPlaylistItems } from '../api.js?v=236';
+import { showProgress, hideProgress, alertModal, escapeHtml, pageHeader } from '../ui/components.js?v=236';
+import { openModal, closeTop } from '../ui/modal-stack.js?v=236';
+import { showToast } from '../ui/toast.js?v=236';
+import { openListenedAlbumsPicker, getListenedPlaylist } from './listened-shared.js?v=236';
+import { loadHistoryStats, loadListenedAlbums } from './history-data.js?v=236';
+import { getArtistLikePreview } from '../util/artist-preview.js?v=236';
+import { hoverIn, hoverOut } from '../ui/preview-player.js?v=236';
+import { armRevealAll } from '../ui/reveal.js?v=236';
+import { hasUsername, getUsername, setUsername } from '../api/statsfm.js?v=236';
+import { getKey as getLastfmKey, setKey as setLastfmKey, clearKey as clearLastfmKey, isDefaultKey as lastfmIsDefaultKey } from '../api/lastfm.js?v=236';
+import { prefKey, migratePrefKey } from '../storage.js?v=236';
+import { alpha } from '../ui/theme-panel.js?v=236';
 
 // Tres estados posibles, no dos: puede haber una key propia, la del código, o
 // —si algún día la constante queda vacía— ninguna. El hint del ⚙ tiene que
@@ -20,14 +20,25 @@ function estadoLastfm() {
   if (localStorage.getItem(prefKey('lastfm_api_key'))) return 'propia';
   return lastfmIsDefaultKey() ? 'la del código' : 'sin configurar';
 }
-import { loadHistoryStats as _loadStatsForCounter } from './history-data.js?v=235';
-import { openArtistCard } from './artist-card.js?v=235';
-import { openAlbumCard } from './album-card.js?v=235';
-import { activateMarquee, marqueeSpan } from '../ui/marquee.js?v=235';
-import { isJunkTrack } from '../util/junk.js?v=235';
+import { loadHistoryStats as _loadStatsForCounter } from './history-data.js?v=236';
+import { openArtistCard } from './artist-card.js?v=236';
+import { openAlbumCard } from './album-card.js?v=236';
+import { activateMarquee, marqueeSpan } from '../ui/marquee.js?v=236';
+import { isJunkTrack } from '../util/junk.js?v=236';
 
 let charts = [];
 let _loadController = null;
+// Los dos últimos, para re-renderizar al cambiar de paleta (v=236) sin
+// recalcular `computeStats()`: el dato no cambió, solo el color.
+let _lastStats = null;
+let _lastContainer = null;
+
+function onThemeChange() {
+  if (!_lastStats || !_lastContainer || !_lastContainer.isConnected) return;
+  charts.forEach(c => c.destroy());
+  charts = [];
+  renderDashboard(_lastContainer, _lastStats);
+}
 
 export function render(container) {
   // Header nuevo (v=108): título + pill del contador Stats.fm inline, botón ⚙
@@ -94,11 +105,16 @@ export function render(container) {
   });
   importInput.onchange = handleImportAll;
 
+  document.addEventListener('themechange', onThemeChange);
+
   renderStartScreen();
 
   return () => {
+    document.removeEventListener('themechange', onThemeChange);
     charts.forEach(c => c.destroy());
     charts = [];
+    _lastStats = null;
+    _lastContainer = null;
   };
 }
 
@@ -521,6 +537,8 @@ async function loadData(forceRefresh) {
 
     const stats = computeStats(likes);
     renderDashboard(content, stats);
+    _lastStats = stats;
+    _lastContainer = content;
     refreshLastSyncLabel();
   } catch (e) {
     // REGLA: si algo falla, el contenido queda VISIBLE.
@@ -559,7 +577,10 @@ async function loadData(forceRefresh) {
       try {
         charts.forEach(c => c.destroy());
         charts = [];
-        renderDashboard(hueco, computeStats(rescatados));
+        const statsRescate = computeStats(rescatados);
+        renderDashboard(hueco, statsRescate);
+        _lastStats = statsRescate;
+        _lastContainer = hueco;
       } catch (err) {
         console.info('[dashboard] no pude pintar la caché de rescate:', err.message);
       }
@@ -737,7 +758,7 @@ function renderDashboard(container, stats) {
         <div class="card dash-chart-card dash-chart-wide">
           <h3>Heatmap — cuándo escuchas <span style="font-weight:400;color:var(--color-text-muted);font-size:13px">· min / día × hora</span></h3>
           <div id="history-heatmap" style="display:flex;justify-content:center;align-items:center;padding:8px 0"></div>
-          <p class="chart-note">Cada celda son los minutos acumulados en ese día de la semana y esa hora, en horario UTC. Cuanto más intenso el violeta, más escucha.</p>
+          <p class="chart-note">Cada celda son los minutos acumulados en ese día de la semana y esa hora, en horario UTC. Cuanto más intenso el color, más escucha.</p>
         </div>
         <div class="card dash-chart-card dash-chart-wide">
           <h3>Top 20 artistas <span style="font-weight:400;color:var(--color-text-muted);font-size:13px">· por tiempo escuchado real</span></h3>
@@ -929,10 +950,6 @@ async function hydrateHistorySection() {
   }
 }
 
-// El blanco de «esta celda no tiene nada» NO sigue el acento a propósito: es el
-// hueco, igual que los ~55 negros y blancos con alfa que v=233 dejó quietos.
-const VACIA = 'rgba(255,255,255,0.03)';
-
 function renderHeatmap(matrix) {
   // El acento, una vez por heatmap: son 168 celdas y cada una lo necesita.
   const ac = coloresAcento();
@@ -973,7 +990,7 @@ function renderHeatmap(matrix) {
         // `intensidad`, no `alpha`: `alpha` es ahora la función de theme-panel
         // que fabrica el rgba, y tenerlas con el mismo nombre acá sería pedirlo.
         const intensidad = val / max;
-        const fill = intensidad === 0 ? VACIA : alpha(ac.accent, 0.15 + intensidad * 0.85);
+        const fill = intensidad === 0 ? ac.celdaVacia : alpha(ac.accent, 0.15 + intensidad * 0.85);
         const pctOfMax = Math.round(intensidad * 100);
         const delay = (h * 7 + d) * 4;
         svg += `<rect class="heatmap-cell" x="${x}" y="${y}" width="${cellSize}" height="${cellSize}" rx="2" fill="${fill}" data-d="${d}" data-h="${h}" data-v="${Math.round(val)}" data-p="${pctOfMax}" style="animation-delay:${delay}ms"></rect>`;
@@ -1003,7 +1020,7 @@ function renderHeatmap(matrix) {
         // `intensidad`, no `alpha`: `alpha` es ahora la función de theme-panel
         // que fabrica el rgba, y tenerlas con el mismo nombre acá sería pedirlo.
         const intensidad = val / max;
-        const fill = intensidad === 0 ? VACIA : alpha(ac.accent, 0.15 + intensidad * 0.85);
+        const fill = intensidad === 0 ? ac.celdaVacia : alpha(ac.accent, 0.15 + intensidad * 0.85);
         const pctOfMax = Math.round(intensidad * 100);
         const delay = (d * 24 + h) * 4;
         svg += `<rect class="heatmap-cell" x="${x}" y="${y}" width="${cellSize}" height="${cellSize}" rx="2" fill="${fill}" data-d="${d}" data-h="${h}" data-v="${Math.round(val)}" data-p="${pctOfMax}" style="animation-delay:${delay}ms"></rect>`;
@@ -1228,8 +1245,8 @@ const CHART_COLORS = {
 function coloresAcento() {
   // El mismo idiom que `track-card.js` y `artist-card.js`, con el mismo
   // respaldo por si algún día la variable no estuviera.
-  const accent = getComputedStyle(document.documentElement)
-    .getPropertyValue('--color-accent').trim() || '#7C3AED';
+  const style = getComputedStyle(document.documentElement);
+  const accent = style.getPropertyValue('--color-accent').trim() || '#7C3AED';
   return {
     accent,
     // Los mismos alfas de antes (0.3, 0.1 y 0.4), ahora sobre el acento real.
@@ -1239,6 +1256,12 @@ function coloresAcento() {
     accentLight: alpha(accent, 0.3),
     accentSoft: alpha(accent, 0.1),
     accentBorde: alpha(accent, 0.4),
+    // La celda vacía del heatmap (v=236, antes `VACIA` acá abajo, un blanco
+    // fijo al 3 % que con Papel es invisible sobre fondo claro — ver
+    // PENDIENTES.md). `--color-border` ya está pensado para notarse sobre
+    // `--color-surface` en las cuatro paletas de fábrica sin ser el acento:
+    // es la misma marca que separa cualquier tarjeta, aplicada acá al hueco.
+    celdaVacia: style.getPropertyValue('--color-border').trim() || '#2A2A3A',
   };
 }
 

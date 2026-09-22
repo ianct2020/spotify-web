@@ -8,19 +8,19 @@
 // acá y no se propaga: ver `util/artist-name.js`. Los nombres se pintan como
 // **enlaces separados** y cada uno abre SU ficha de artista.
 
-import { loadTrackPlays, loadTrackDetail, loadHistoryStats, isOwner } from './history-data.js?v=235';
-import { escapeHtml } from '../ui/components.js?v=235';
-import { getPreview } from '../api/preview-providers.js?v=235';
-import { togglePreview, playingKey } from '../ui/preview-player.js?v=235';
-import { hasUsername, findTrackId, getTrackCurrentStats, loadTopLifetime } from '../api/statsfm.js?v=235';
-import { openAlbumCard } from './album-card.js?v=235';
-import { openArtistCard, knownArtist } from './artist-card.js?v=235';
-import { openModal, closeTop } from '../ui/modal-stack.js?v=235';
-import { getBestAvailableLikes } from '../api.js?v=235';
-import { showToast } from '../ui/toast.js?v=235';
-import { skelCardBody, skelBox } from '../ui/skeleton.js?v=235';
-import { resolveArtistList } from '../util/artist-name.js?v=235';
-import { coverUrl } from '../util/cover-size.js?v=235';
+import { loadTrackPlays, loadTrackDetail, loadHistoryStats, isOwner } from './history-data.js?v=236';
+import { escapeHtml } from '../ui/components.js?v=236';
+import { getPreview } from '../api/preview-providers.js?v=236';
+import { togglePreview, playingKey } from '../ui/preview-player.js?v=236';
+import { hasUsername, findTrackId, getTrackCurrentStats, loadTopLifetime } from '../api/statsfm.js?v=236';
+import { openAlbumCard } from './album-card.js?v=236';
+import { openArtistCard, knownArtist } from './artist-card.js?v=236';
+import { openModal, closeTop } from '../ui/modal-stack.js?v=236';
+import { getBestAvailableLikes } from '../api.js?v=236';
+import { showToast } from '../ui/toast.js?v=236';
+import { skelCardBody, skelBox } from '../ui/skeleton.js?v=236';
+import { resolveArtistList } from '../util/artist-name.js?v=236';
+import { coverUrl } from '../util/cover-size.js?v=236';
 
 const MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
 

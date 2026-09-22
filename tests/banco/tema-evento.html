@@ -1,0 +1,75 @@
+<!doctype html><html lang="es"><head><meta charset="utf-8"><title>banco tema-evento</title>
+<link rel="stylesheet" href="/css/theme.css">
+<style>
+ body{font-family:var(--font-sans),system-ui;background:var(--color-bg);color:var(--color-text);padding:16px;margin:0;font-size:13px}
+ h2{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--color-text-muted);margin:16px 0 6px}
+ table{border-collapse:collapse}
+ td{padding:4px 12px 4px 0;vertical-align:middle}
+ i.sw{display:inline-block;width:16px;height:16px;border-radius:3px;vertical-align:middle;border:1px solid rgba(128,128,128,.3);margin-right:4px}
+</style></head><body>
+<p id="tit">…</p>
+<h2>evento «themechange» (v=236) — cuenta de disparos por applyTheme()</h2>
+<table id="eventos"></table>
+<h2>--color-border por preset — de acá sale «celdaVacia» de dashboard.js</h2>
+<table id="bordes"></table>
+<script type="module">
+import { applyTheme, PRESETS } from '/js/ui/theme-panel.js';
+import { esperarA, fallar, listo } from '/banco/esperar.mjs';
+
+try {
+  let disparos = 0;
+  document.addEventListener('themechange', () => { disparos++; });
+
+  const filas = [];
+
+  // 1) Cada preset dispara el evento — el mismo camino que un click en el panel.
+  for (const p of PRESETS) {
+    const antes = disparos;
+    applyTheme(p.colors);
+    await esperarA(() => disparos > antes, { que: `que aplicar ${p.name} dispare themechange` });
+    filas.push([`preset ${p.name}`, disparos - antes]);
+  }
+
+  // 2) Un cambio a mano (un solo color, como el input de color del panel).
+  const antesManual = disparos;
+  applyTheme({ ...PRESETS[0].colors, '--color-accent': '#123456' });
+  await esperarA(() => disparos > antesManual, { que: 'que un cambio a mano dispare themechange' });
+  filas.push(['cambio a mano', disparos - antesManual]);
+
+  // 3) «Volver al original» (applyTheme sin argumento) también avisa.
+  const antesReset = disparos;
+  applyTheme(null);
+  await esperarA(() => disparos > antesReset, { que: 'que applyTheme(null) dispare themechange' });
+  filas.push(['volver al original', disparos - antesReset]);
+
+  document.getElementById('eventos').innerHTML = filas.map(([etiqueta, n]) =>
+    `<tr><td>${etiqueta}</td><td>${n === 1 ? '1 disparo ✓' : `${n} disparos ⚠️`}</td></tr>`).join('');
+
+  if (filas.some(([, n]) => n !== 1))
+    throw new Error('algún cambio de paleta disparó themechange una cantidad de veces distinta de 1 — ver la tabla');
+
+  // 4) --color-border por preset, que es de donde dashboard.js saca `celdaVacia`
+  // desde v=236 (antes era un blanco fijo al 3 %, invisible con Papel — ver
+  // PENDIENTES.md, «Con Papel las celdas vacías del heatmap no se ven»).
+  const filasBorde = [];
+  for (const p of PRESETS) {
+    applyTheme(p.colors);
+    await esperarA(() => getComputedStyle(document.documentElement)
+      .getPropertyValue('--color-border').trim() === p.colors['--color-border'],
+      { que: `que --color-border quede en ${p.colors['--color-border']} con ${p.name}` });
+    const leido = getComputedStyle(document.documentElement).getPropertyValue('--color-border').trim();
+    filasBorde.push([p.name, p.colors['--color-surface'], leido]);
+  }
+  document.getElementById('bordes').innerHTML = filasBorde.map(([nombre, surface, borde]) => `
+    <tr>
+      <td>${nombre}</td>
+      <td><i class="sw" style="background:${surface}"></i>superficie</td>
+      <td><i class="sw" style="background:${borde}"></i>celdaVacia (${borde})</td>
+    </tr>`).join('');
+
+  document.getElementById('tit').textContent =
+    `${disparos} disparos de themechange en total · celdaVacia leída de --color-border en las ${PRESETS.length} paletas`;
+
+  listo(`${disparos} disparos, 1 por cambio · celdaVacia = --color-border en las ${PRESETS.length} paletas`);
+} catch (e) { fallar(e); }
+</script></body></html>

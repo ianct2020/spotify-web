@@ -6,29 +6,29 @@
 //     (util/album-heard.js: historial completo + likes + listened + w-three)
 //   - permiten "+ Biblioteca" y "Crear playlist con lo elegido"
 
-import { idbGet, idbGetCached, idbSetCached, idbDel, idbEntriesByPrefix } from '../idb.js?v=235';
-import { getArtistAlbumsConFuente, buscarDiscografiaPorNombre, searchArtistByName, getAlbumTracks, saveToLibrary, saveAlbumsToLibrary, createPlaylist, addTracksToPlaylist } from '../api.js?v=235';
-import { albumKey } from '../util/album-key.js?v=235';
-import { cardKey, cardKeyLegacy, albumCreditName, keyOfPlaylistTrack } from '../util/discover-key.js?v=235';
-import { escapeHtml } from '../ui/components.js?v=235';
-import { showToast } from '../ui/toast.js?v=235';
-import { openPlaylistPicker } from '../ui/playlist-picker.js?v=235';
-import { getOwnPlaylists, addUrisToPlaylists, toastAddResult } from '../util/playlist-add.js?v=235';
-import { openArtistCard } from './artist-card.js?v=235';
-import { openAlbumCard } from './album-card.js?v=235';
-import { createHiddenStore, createLocalStore } from '../util/hidden-sync.js?v=235';
-import { recuperarUriDeAlbumKey } from '../util/hidden-recover.js?v=235';
-import { getPreview } from '../api/preview-providers.js?v=235';
-import { togglePreview, playingKey, attachHover } from '../ui/preview-player.js?v=235';
-import { coverUrl } from '../util/cover-size.js?v=235';
-import { FILTROS as FILTROS_DEF, saveFiltros } from '../util/discover-filters.js?v=235';
-import { esEPoAlbum } from '../util/release-size.js?v=235';
-import { iconoPlay, iconoPausa, iconoPuntos, iconoOjo, iconoOjoTachado } from '../ui/icons.js?v=235';
+import { idbGet, idbGetCached, idbSetCached, idbDel, idbEntriesByPrefix } from '../idb.js?v=236';
+import { getArtistAlbumsConFuente, buscarDiscografiaPorNombre, searchArtistByName, getAlbumTracks, saveToLibrary, saveAlbumsToLibrary, createPlaylist, addTracksToPlaylist } from '../api.js?v=236';
+import { albumKey } from '../util/album-key.js?v=236';
+import { cardKey, cardKeyLegacy, albumCreditName, keyOfPlaylistTrack } from '../util/discover-key.js?v=236';
+import { escapeHtml } from '../ui/components.js?v=236';
+import { showToast } from '../ui/toast.js?v=236';
+import { openPlaylistPicker } from '../ui/playlist-picker.js?v=236';
+import { getOwnPlaylists, addUrisToPlaylists, toastAddResult } from '../util/playlist-add.js?v=236';
+import { openArtistCard } from './artist-card.js?v=236';
+import { openAlbumCard } from './album-card.js?v=236';
+import { createHiddenStore, createLocalStore } from '../util/hidden-sync.js?v=236';
+import { recuperarUriDeAlbumKey } from '../util/hidden-recover.js?v=236';
+import { getPreview } from '../api/preview-providers.js?v=236';
+import { togglePreview, playingKey, attachHover } from '../ui/preview-player.js?v=236';
+import { coverUrl } from '../util/cover-size.js?v=236';
+import { FILTROS as FILTROS_DEF, saveFiltros } from '../util/discover-filters.js?v=236';
+import { esEPoAlbum } from '../util/release-size.js?v=236';
+import { iconoPlay, iconoPausa, iconoPuntos, iconoOjo, iconoOjoTachado } from '../ui/icons.js?v=236';
 import {
   DISCO_BASE_PREFIX, PRESUPUESTO_REFRESCO, RECIENTE_MAX_PAGINAS,
   crearBase, sumarCompleta, sumarReciente, tocaReciente, rangoReciente,
   fusionarBases, armarExportacion, leerImportacion,
-} from '../util/disco-base.js?v=235';
+} from '../util/disco-base.js?v=236';
 
 const DISCO_TTL_MIN = 30 * 24 * 60;       // 30 días
 const ARTIST_ID_TTL_MIN = 60 * 24 * 60;   // 60 días — los ids no cambian

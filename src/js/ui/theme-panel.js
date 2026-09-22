@@ -169,15 +169,27 @@ function write(colors, presetId) {
   catch { /* lleno */ }
 }
 
-/** Pinta un tema en `:root`. Sin argumento, saca todo y vuelve a theme.css. */
+/**
+ * Pinta un tema en `:root`. Sin argumento, saca todo y vuelve a theme.css.
+ *
+ * Único punto por el que pasa CUALQUIER cambio de paleta (preset, campo a
+ * mano o «Volver al original»), así que es también el único punto donde hace
+ * falta avisar que el tema cambió — mismo idiom que `routeteardown` o
+ * `modalstackempty`: se avisa por evento y no importando al revés. Lo
+ * necesita el Dashboard (v=236) para re-renderizar sus charts y el heatmap,
+ * que Chart.js y el SVG resuelven el color en JS al construir y no se
+ * enteran de un cambio posterior (ver `dashboard.js` `coloresAcento()`).
+ */
 export function applyTheme(colors) {
   const root = document.documentElement;
   if (!colors) {
     for (const k of Object.keys(expandTheme(ORIGINAL))) root.style.removeProperty(k);
+    document.dispatchEvent(new CustomEvent('themechange'));
     return;
   }
   const full = expandTheme(colors);
   for (const [k, v] of Object.entries(full)) root.style.setProperty(k, v);
+  document.dispatchEvent(new CustomEvent('themechange'));
 }
 
 /**

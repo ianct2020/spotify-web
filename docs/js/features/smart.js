@@ -1,7 +1,7 @@
-import { getAllLikedTracks, createPlaylist, addTracksToPlaylist, getAllUserPlaylists, invalidatePlaylistsCache } from '../api.js?v=235';
-import { showProgress, hideProgress, progressController, isCancelled, promptPlaylistName, escapeHtml, pageHeader } from '../ui/components.js?v=235';
-import { showToast } from '../ui/toast.js?v=235';
-import { isZombieItem } from '../util/zombie.js?v=235';
+import { getAllLikedTracks, createPlaylist, addTracksToPlaylist, getAllUserPlaylists, invalidatePlaylistsCache } from '../api.js?v=236';
+import { showProgress, hideProgress, progressController, isCancelled, promptPlaylistName, escapeHtml, pageHeader } from '../ui/components.js?v=236';
+import { showToast } from '../ui/toast.js?v=236';
+import { isZombieItem } from '../util/zombie.js?v=236';
 
 // `likes` es SIEMPRE el pool ya limpio de zombis: todo lo que se agrupa por
 // año, por década o se sortea sale de acá, así que ninguna de las tres pestañas
