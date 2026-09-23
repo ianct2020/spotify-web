@@ -1,17 +1,17 @@
-import { spotifyFetch, createPlaylist, addTracksToPlaylist, invalidatePlaylistsCache, getAllLikedTracks } from '../api.js?v=236';
-import { hasKey, setKey, hasUsername, getUsername, setUsername, getUserTopArtists, getSimilarArtists, getArtistTopTracks } from '../api/lastfm.js?v=236';
-import { showProgress, hideProgress, promptPlaylistName, escapeHtml, pageHeader } from '../ui/components.js?v=236';
-import { showToast } from '../ui/toast.js?v=236';
-import { getPreview } from '../api/preview-providers.js?v=236';
-import { togglePreview, playingKey, isPlayingAudio } from '../ui/preview-player.js?v=236';
-import { paintPlayingCard } from '../ui/track-card-row.js?v=236';
-import { openTrackCard } from './track-card.js?v=236';
-import { openAlbumCard } from './album-card.js?v=236';
-import { limpiaParaQuery, titleMatches, artistMatches } from '../util/track-match.js?v=236';
-import { vigilarRuta } from '../util/vigencia-ruta.js?v=236';
-import { createHiddenStore } from '../util/hidden-sync.js?v=236';
-import { recuperarUriDeArtistaKey } from '../util/hidden-recover.js?v=236';
-import { iconoPlay, iconoPausa, iconoFicha, iconoDisco, iconoOjo, iconoOjoTachado } from '../ui/icons.js?v=236';
+import { spotifyFetch, createPlaylist, addTracksToPlaylist, invalidatePlaylistsCache, getAllLikedTracks } from '../api.js?v=237';
+import { hasKey, setKey, hasUsername, getUsername, setUsername, getUserTopArtists, getSimilarArtists, getArtistTopTracks } from '../api/lastfm.js?v=237';
+import { showProgress, hideProgress, promptPlaylistName, escapeHtml, pageHeader } from '../ui/components.js?v=237';
+import { showToast } from '../ui/toast.js?v=237';
+import { getPreview } from '../api/preview-providers.js?v=237';
+import { togglePreview, playingKey, isPlayingAudio } from '../ui/preview-player.js?v=237';
+import { paintPlayingCard } from '../ui/track-card-row.js?v=237';
+import { openTrackCard } from './track-card.js?v=237';
+import { openAlbumCard } from './album-card.js?v=237';
+import { limpiaParaQuery, titleMatches, artistMatches } from '../util/track-match.js?v=237';
+import { vigilarRuta } from '../util/vigencia-ruta.js?v=237';
+import { createHiddenStore } from '../util/hidden-sync.js?v=237';
+import { recuperarUriDeArtistaKey } from '../util/hidden-recover.js?v=237';
+import { iconoPlay, iconoPausa, iconoFicha, iconoDisco, iconoOjo, iconoOjoTachado } from '../ui/icons.js?v=237';
 
 // Iconos de las dos fichas. Los mismos trazos que usa la tarjeta compartida.
 // Mismos trazos que el ojo de discover-common.js (v=165), acá con 14px para

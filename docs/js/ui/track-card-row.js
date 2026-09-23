@@ -21,10 +21,10 @@
 //   - Cada tarjeta se resuelve por `data-id` contra un Map, nunca por índice.
 //   - La selección vive en un Set del feature, no en el DOM.
 
-import { escapeHtml } from './components.js?v=236';
-import { marqueeSpan } from './marquee.js?v=236';
-import { isPlayingAudio, playingProvider } from './preview-player.js?v=236';
-import { iconoPlay, iconoPausa, iconoOjo, iconoOjoTachado, iconoFicha } from './icons.js?v=236';
+import { escapeHtml } from './components.js?v=237';
+import { marqueeSpan } from './marquee.js?v=237';
+import { isPlayingAudio, playingProvider } from './preview-player.js?v=237';
+import { iconoPlay, iconoPausa, iconoOjo, iconoOjoTachado, iconoFicha } from './icons.js?v=237';
 
 const CHECK = `<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>`;
 // Corazón tachado: sacar de tus me gusta. Es la ÚNICA acción de la tarjeta que

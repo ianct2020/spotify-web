@@ -6,29 +6,30 @@
 //     (util/album-heard.js: historial completo + likes + listened + w-three)
 //   - permiten "+ Biblioteca" y "Crear playlist con lo elegido"
 
-import { idbGet, idbGetCached, idbSetCached, idbDel, idbEntriesByPrefix } from '../idb.js?v=236';
-import { getArtistAlbumsConFuente, buscarDiscografiaPorNombre, searchArtistByName, getAlbumTracks, saveToLibrary, saveAlbumsToLibrary, createPlaylist, addTracksToPlaylist } from '../api.js?v=236';
-import { albumKey } from '../util/album-key.js?v=236';
-import { cardKey, cardKeyLegacy, albumCreditName, keyOfPlaylistTrack } from '../util/discover-key.js?v=236';
-import { escapeHtml } from '../ui/components.js?v=236';
-import { showToast } from '../ui/toast.js?v=236';
-import { openPlaylistPicker } from '../ui/playlist-picker.js?v=236';
-import { getOwnPlaylists, addUrisToPlaylists, toastAddResult } from '../util/playlist-add.js?v=236';
-import { openArtistCard } from './artist-card.js?v=236';
-import { openAlbumCard } from './album-card.js?v=236';
-import { createHiddenStore, createLocalStore } from '../util/hidden-sync.js?v=236';
-import { recuperarUriDeAlbumKey } from '../util/hidden-recover.js?v=236';
-import { getPreview } from '../api/preview-providers.js?v=236';
-import { togglePreview, playingKey, attachHover } from '../ui/preview-player.js?v=236';
-import { coverUrl } from '../util/cover-size.js?v=236';
-import { FILTROS as FILTROS_DEF, saveFiltros } from '../util/discover-filters.js?v=236';
-import { esEPoAlbum } from '../util/release-size.js?v=236';
-import { iconoPlay, iconoPausa, iconoPuntos, iconoOjo, iconoOjoTachado } from '../ui/icons.js?v=236';
+import { idbGet, idbGetCached, idbSetCached, idbDel, idbEntriesByPrefix } from '../idb.js?v=237';
+import { getArtistAlbumsConFuente, buscarDiscografiaPorNombre, searchArtistByName, getAlbumTracks, saveToLibrary, saveAlbumsToLibrary, createPlaylist, addTracksToPlaylist } from '../api.js?v=237';
+import { albumKey } from '../util/album-key.js?v=237';
+import { cardKey, cardKeyLegacy, albumCreditName, keyOfPlaylistTrack } from '../util/discover-key.js?v=237';
+import { escapeHtml } from '../ui/components.js?v=237';
+import { openModal, closeTop } from '../ui/modal-stack.js?v=237';
+import { showToast } from '../ui/toast.js?v=237';
+import { openPlaylistPicker } from '../ui/playlist-picker.js?v=237';
+import { getOwnPlaylists, addUrisToPlaylists, toastAddResult } from '../util/playlist-add.js?v=237';
+import { openArtistCard } from './artist-card.js?v=237';
+import { openAlbumCard } from './album-card.js?v=237';
+import { createHiddenStore, createLocalStore } from '../util/hidden-sync.js?v=237';
+import { recuperarUriDeAlbumKey } from '../util/hidden-recover.js?v=237';
+import { getPreview } from '../api/preview-providers.js?v=237';
+import { togglePreview, playingKey, attachHover } from '../ui/preview-player.js?v=237';
+import { coverUrl } from '../util/cover-size.js?v=237';
+import { FILTROS as FILTROS_DEF, saveFiltros } from '../util/discover-filters.js?v=237';
+import { esEPoAlbum } from '../util/release-size.js?v=237';
+import { iconoPlay, iconoPausa, iconoPuntos, iconoOjo, iconoOjoTachado } from '../ui/icons.js?v=237';
 import {
   DISCO_BASE_PREFIX, PRESUPUESTO_REFRESCO, RECIENTE_MAX_PAGINAS,
   crearBase, sumarCompleta, sumarReciente, tocaReciente, rangoReciente,
   fusionarBases, armarExportacion, leerImportacion,
-} from '../util/disco-base.js?v=236';
+} from '../util/disco-base.js?v=237';
 
 const DISCO_TTL_MIN = 30 * 24 * 60;       // 30 días
 const ARTIST_ID_TTL_MIN = 60 * 24 * 60;   // 60 días — los ids no cambian
@@ -283,21 +284,67 @@ export async function importarBase(parsed) {
   return r;
 }
 
-/** Botones de la base para la topbar de una vista (`pfx` = prefijo de ids). */
+/** El control de la base para la topbar de una vista (`pfx` = prefijo de ids). */
+//
+// ── Por qué UN botón y no dos (v=235) ────────────────────────────────────────
+//
+// v=229 metió «Exportar base» e «Importar base» en una barra que ya venía
+// cargada, y en #new-releases dejó de entrar: esa vista tiene tres grupos de
+// chips (likes, meses y tipo) contra el grupo único de #discover-artists, así
+// que «Importar base» caía sola a una segunda fila a 1366 px. Medido en
+// `tests/banco/barra.html`, que lee el marcado del fuente de las dos vistas.
+//
+// Los dos rótulos ocupaban ~250 px y sobraba por poco más de 120: con acortar
+// uno no alcanzaba. Y ninguna de las dos operaciones es de uso diario —son las
+// de mudar el navegador a otra máquina—, mientras que lo que las rodea son los
+// filtros que se tocan a cada rato. Un botón que abre las dos deja la fila
+// entera y pone la jerarquía donde va.
+//
+// De paso se gana algo: lo que explicaba cada botón vivía en un `title`, que no
+// se lee sin dejar el ratón quieto encima. Ahora está escrito en el modal,
+// donde se decide.
 export function botonesBaseHtml(pfx) {
   return `
-    <button class="btn btn-secondary btn-sm" id="${pfx}-base-export" title="Baja un JSON con la base de discografías de este navegador, para llevarla a otra máquina. La comparten «Sin escuchar» y «Novedades».">Exportar base</button>
-    <button class="btn btn-secondary btn-sm" id="${pfx}-base-import" title="Suma a la base de este navegador la de otro. No borra nada: junta las dos.">Importar base</button>
+    <button class="btn btn-secondary btn-sm" id="${pfx}-base" title="Exportar o importar la base de discografías de este navegador. La comparten «Sin escuchar» y «Novedades».">Base…</button>
     <input type="file" id="${pfx}-base-input" accept="application/json,.json" hidden>`;
+}
+
+function abrirModalBase(pfx, onExportar, onImportar) {
+  const overlay = openModal({
+    id: `disco-base:${pfx}`,
+    html: `
+    <div class="modal" style="max-width:460px">
+      <div class="modal-hdr">
+        <h3 class="modal-hdr-title">Base de discografías</h3>
+        <button class="btn btn-secondary btn-sm" data-close-modal title="Cerrar" aria-label="Cerrar">✕</button>
+      </div>
+      <p style="color:var(--color-text-secondary);font-size:13px;line-height:1.55;margin:0 0 16px">
+        Los catálogos de tus artistas que este navegador ya ha pedido a Spotify. La comparten «Sin escuchar» y «Novedades», y rehacerla cuesta cuotas, así que vale la pena llevársela de una máquina a otra.
+      </p>
+      <div style="display:grid;grid-template-columns:auto 1fr;gap:10px 12px;align-items:center">
+        <button class="btn btn-secondary" id="disco-base-export" style="white-space:nowrap">Exportar base</button>
+        <span style="font-size:12px;color:var(--color-text-muted);line-height:1.5">Baja un JSON con la base de este navegador.</span>
+        <button class="btn btn-secondary" id="disco-base-import" style="white-space:nowrap">Importar base</button>
+        <span style="font-size:12px;color:var(--color-text-muted);line-height:1.5">Suma la base de otro navegador a la de este. No borra nada: junta las dos.</span>
+      </div>
+    </div>
+  `,
+  });
+  const exp = overlay.querySelector('#disco-base-export');
+  const imp = overlay.querySelector('#disco-base-import');
+  if (exp) exp.onclick = () => onExportar(exp);
+  if (imp) imp.onclick = () => onImportar();
+  return overlay;
 }
 
 /** Engancha los botones. `alImportar` se llama después de importar, para repintar. */
 export function conectarBotonesBase(content, pfx, alImportar) {
-  const exp = content.querySelector(`#${pfx}-base-export`);
-  const imp = content.querySelector(`#${pfx}-base-import`);
+  const btn = content.querySelector(`#${pfx}-base`);
   const input = content.querySelector(`#${pfx}-base-input`);
-  if (exp) exp.onclick = async () => {
-    exp.disabled = true;
+  if (!btn || !input) return;
+
+  const exportar = async (boton) => {
+    boton.disabled = true;
     try {
       const data = await exportarBase();
       if (!data.artistas) { showToast('La base de discografías está vacía: no hay nada que exportar.', 'error'); return; }
@@ -313,29 +360,33 @@ export function conectarBotonesBase(content, pfx, alImportar) {
       showToast(`Exportada la base: ${data.artistas.toLocaleString('es-ES')} artistas, ${data.lanzamientos.toLocaleString('es-ES')} lanzamientos.`, 'success');
     } catch (e) {
       showToast('No se ha podido exportar la base: ' + e.message, 'error');
-    } finally { exp.disabled = false; }
+    } finally { boton.disabled = false; }
   };
-  if (imp && input) {
-    imp.onclick = () => input.click();
-    input.onchange = async (e) => {
-      const file = e.target.files?.[0];
-      e.target.value = '';
-      if (!file) return;
-      imp.disabled = true;
-      try {
-        const r = await importarBase(JSON.parse(await file.text()));
-        const partes = [];
-        if (r.nuevas) partes.push(`${r.nuevas.toLocaleString('es-ES')} artistas nuevos`);
-        if (r.ampliadas) partes.push(`${r.ampliadas.toLocaleString('es-ES')} ampliados`);
-        partes.push(`${r.lanzamientosNuevos.toLocaleString('es-ES')} lanzamientos sumados`);
-        if (r.descartadas) partes.push(`${r.descartadas} entradas mal formadas descartadas`);
-        showToast(`Base importada: ${partes.join(' · ')}.`, r.descartadas ? 'warning' : 'success');
-        if (alImportar) await alImportar(r);
-      } catch (err) {
-        showToast('No se ha podido importar la base: ' + err.message, 'error');
-      } finally { imp.disabled = false; }
-    };
-  }
+
+  // El `<input type=file>` vive en la topbar y NO en el modal a propósito: el
+  // modal se cierra al elegir el archivo y con él se iría el input, que es
+  // quien dispara el `change`. Así el diálogo del sistema puede tardar lo que
+  // quiera.
+  input.onchange = async (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    btn.disabled = true;
+    try {
+      const r = await importarBase(JSON.parse(await file.text()));
+      const partes = [];
+      if (r.nuevas) partes.push(`${r.nuevas.toLocaleString('es-ES')} artistas nuevos`);
+      if (r.ampliadas) partes.push(`${r.ampliadas.toLocaleString('es-ES')} ampliados`);
+      partes.push(`${r.lanzamientosNuevos.toLocaleString('es-ES')} lanzamientos sumados`);
+      if (r.descartadas) partes.push(`${r.descartadas} entradas mal formadas descartadas`);
+      showToast(`Base importada: ${partes.join(' · ')}.`, r.descartadas ? 'warning' : 'success');
+      if (alImportar) await alImportar(r);
+    } catch (err) {
+      showToast('No se ha podido importar la base: ' + err.message, 'error');
+    } finally { btn.disabled = false; }
+  };
+
+  btn.onclick = () => abrirModalBase(pfx, exportar, () => { closeTop(); input.click(); });
 }
 
 /** El toast de cierre de una ronda de «Actualizar». */

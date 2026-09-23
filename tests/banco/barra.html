@@ -1,0 +1,151 @@
+<!doctype html><html lang="es"><head><meta charset="utf-8"><title>banco barra</title>
+<link rel="stylesheet" href="/css/theme.css">
+<link rel="stylesheet" href="/css/components.css">
+<link rel="stylesheet" href="/css/main.css">
+<style>
+ html,body{margin:0;background:var(--color-bg);color:var(--color-text);font-family:var(--font-sans),system-ui}
+ /* La caja de contenido de la app, con las MISMAS medidas que `.main`
+    (main.css): 72px de padding a la izquierda por el hamburguesa y 32 a la
+    derecha. El ancho se fija por query para poder medir a 1366 con y sin
+    barra de scroll, que son 15px de diferencia y justo el margen en disputa. */
+ .caja{padding:32px 32px 32px 72px;max-width:1400px;box-sizing:border-box}
+ h2{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--color-text-muted);margin:18px 0 8px}
+ #tit{font-size:12px;color:var(--color-text-secondary);margin:0;padding:10px 0 0 72px}
+ .regla{height:1px;background:var(--color-accent);opacity:.5}
+</style></head><body>
+<p id="tit">…</p>
+<div class="caja" id="caja"></div>
+<script type="module">
+import { esperarA, hojasLegibles, fallar, listo } from '/banco/esperar.mjs';
+import { botonesBaseHtml } from '/js/features/discover-common.js';
+
+// ── Qué mide este banco ──────────────────────────────────────────────────────
+//
+// «¿La barra superior de #new-releases entra en UNA fila a 1366 px?». Es una
+// pregunta de layout puro: no hace falta Spotify, ni token, ni datos. Lo que sí
+// hace falta es que el marcado sea el DE VERDAD — un banco que copie a mano el
+// `<div class="disco-topbar">` mide su propia copia y sigue diciendo que todo
+// entra mucho después de que la app haya cambiado.
+//
+// Por eso el marcado no se transcribe: se LEE del fuente. Se busca el bloque
+// `<div class="disco-topbar">…</div>` dentro de `renderShell()` contando divs, y
+// se evalúa como la plantilla que es, con datos de mentira pero con los rótulos
+// y los botones reales. Si mañana alguien mueve la barra a otro sitio o le
+// cambia la clase, este banco no mide de menos: falla.
+async function topbarDe(ruta, ambito) {
+  const fuente = await fetch(ruta).then(r => {
+    if (!r.ok) throw new Error(`no pude leer ${ruta}: HTTP ${r.status}`);
+    return r.text();
+  });
+  const ini = fuente.indexOf('<div class="disco-topbar">');
+  if (ini < 0) throw new Error(`${ruta} no tiene ningún <div class="disco-topbar"> — ¿cambió la clase?`);
+  // Cierre por conteo: dentro de la barra solo hay divs y botones literales;
+  // las interpolaciones que quedan (`botonesBaseHtml`) no traen divs.
+  let i = ini, abiertos = 0, fin = -1;
+  while (i < fuente.length) {
+    const a = fuente.indexOf('<div', i), c = fuente.indexOf('</div>', i);
+    if (c < 0) break;
+    if (a >= 0 && a < c) { abiertos++; i = a + 4; continue; }
+    abiertos--; i = c + 6;
+    if (abiertos === 0) { fin = i; break; }
+  }
+  if (fin < 0) throw new Error(`${ruta}: no encontré el cierre del .disco-topbar`);
+  const plantilla = fuente.slice(ini, fin);
+  const nombres = Object.keys(ambito);
+  return new Function(...nombres, 'return `' + plantilla + '`')(...nombres.map(n => ambito[n]));
+}
+
+const KINDS = ['all', 'album', 'ep', 'single'];
+const KIND_LABEL = { all: 'Todo', album: 'Álbumes', ep: 'EPs', single: 'Singles' };
+const agoLabel = () => 'hace 2 h';
+
+// Los números son los de la captura `15-new-releases-8-chips-encendidos.jpg`:
+// 439 ocultos, 300 artistas, 5+ likes y «últimos 24m». Los rótulos largos son
+// lo que ocupa, así que se miden los reales, no unos de juguete.
+const AMBITO_NEWREL = {
+  state: { minLikes: 5, months: 24, filterKind: 'all', scannedAt: Date.now() },
+  KINDS, KIND_LABEL, agoLabel, botonesBaseHtml,
+  hiddenAlbums: new Set(Array.from({ length: 439 }, (_, i) => i)),
+  targetToScan: () => 300,
+  eligibleArtists: () => ({ length: 485 }),
+};
+const AMBITO_DISCO = {
+  state: { loadedMore: 150, filterKind: 'all', filterYears: 0, mode: null, scannedAt: Date.now() },
+  KINDS, KIND_LABEL, agoLabel, botonesBaseHtml,
+  hiddenAlbums: new Set(Array.from({ length: 439 }, (_, i) => i)),
+  heardAlbums: new Set(Array.from({ length: 49 }, (_, i) => i)),
+  MIN_LIKES: 5,
+  totalCandidates: 485,
+};
+
+// Cuántas filas ocupan los controles: los hijos directos de `.disco-controls`
+// agrupados por el CENTRO vertical, no por `offsetTop`.
+//
+// Por qué el centro: `.disco-controls` es `align-items: center` y sus hijos no
+// miden todos lo mismo —el `<select>` de #discover-artists es un pixel más alto
+// que los botones—, así que dos controles de la MISMA fila tienen `offsetTop`
+// distinto. Contando tops, la barra de #discover-artists daba 2 filas cuando en
+// pantalla está en una sola: el banco habría «encontrado» un desborde que no
+// existe y el arreglo habría ido a perseguirlo.
+//
+// Se corta en filas cuando el salto entre centros pasa de 8 px; una fila entera
+// mide ~29, así que no hay forma de confundir un redondeo con un renglón.
+function filasDe(controles) {
+  const centros = [];
+  for (const hijo of controles.children) {
+    if (getComputedStyle(hijo).display === 'none') continue;   // el <input type=file> oculto
+    const r = hijo.getBoundingClientRect();
+    if (!r.height) continue;
+    centros.push(r.top + r.height / 2);
+  }
+  centros.sort((a, b) => a - b);
+  const filas = [];
+  for (const c of centros) {
+    if (!filas.length || c - filas[filas.length - 1] > 8) filas.push(c);
+    else filas[filas.length - 1] = c;
+  }
+  return filas;
+}
+
+try {
+  await hojasLegibles(['/css/main.css', '/css/components.css']);
+
+  const q = new URLSearchParams(location.search);
+  // 1366 es el monitor de Ian. Con barra de scroll vertical quedan ~1351 px de
+  // viewport, y ese es el caso estrecho: se mide ese salvo que se pida otro.
+  const ancho = +(q.get('ancho') || 1351);
+  const caja = document.getElementById('caja');
+  caja.style.width = ancho + 'px';
+
+  const vistas = [
+    ['#new-releases', '/js/features/new-releases.js', AMBITO_NEWREL],
+    ['#discover-artists', '/js/features/discover-artists.js', AMBITO_DISCO],
+  ];
+
+  const resultados = [];
+  for (const [rotulo, ruta, ambito] of vistas) {
+    const html = await topbarDe(ruta, ambito);
+    caja.insertAdjacentHTML('beforeend', `<h2>${rotulo} — ${ancho} px de viewport</h2>${html}<div class="regla"></div>`);
+    const barra = caja.querySelector('.disco-topbar:last-of-type') || [...caja.querySelectorAll('.disco-topbar')].pop();
+    const controles = barra.querySelector('.disco-controls');
+    if (!controles) throw new Error(`${rotulo}: la barra no tiene .disco-controls`);
+    // Que los botones de la base estén de verdad ahí dentro: sin este assert,
+    // un `botonesBaseHtml` que devolviera vacío haría que todo «entre» y la
+    // captura saldría preciosa midiendo una barra que no existe.
+    const dela = controles.querySelectorAll('[id$="-base"],[id$="-base-export"],[id$="-base-import"]');
+    if (!dela.length) throw new Error(`${rotulo}: no hay ningún control de la base en la barra`);
+    // Y que el ancho medido sea el que se pidió, no el que el navegador quiso.
+    await esperarA(() => Math.abs(caja.getBoundingClientRect().width - ancho) < 1,
+      { que: `que la caja mida ${ancho} px` });
+    const filas = filasDe(controles);
+    resultados.push({ rotulo, filas: filas.length, controles: controles.children.length, dela: dela.length });
+  }
+
+  const mal = resultados.filter(r => r.filas > 1);
+  const resumen = resultados.map(r => `${r.rotulo}: ${r.filas} fila${r.filas === 1 ? '' : 's'} (${r.dela} de la base)`).join(' · ');
+  document.getElementById('tit').textContent = `${ancho} px · ${resumen}`;
+  if (mal.length) throw new Error(`se desborda en: ${mal.map(r => `${r.rotulo} (${r.filas} filas)`).join(', ')} — ${resumen}`);
+
+  listo(resumen);
+} catch (e) { fallar(e); }
+</script></body></html>
