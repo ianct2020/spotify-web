@@ -637,12 +637,6 @@ function computeStats(likes) {
   });
 
   const sortedArtists = Object.entries(artists).sort((a, b) => b[1] - a[1]);
-  const sortedAlbums = Object.entries(albums)
-    .map(([key, count]) => {
-      const [album, artist] = key.split('|||');
-      return { album, artist, count };
-    })
-    .sort((a, b) => b.count - a.count);
 
   const sortedMonths = Object.keys(addedByMonth).sort();
   const cumulativeByMonth = [];
@@ -659,7 +653,6 @@ function computeStats(likes) {
     total: likes.length,
     decades,
     topArtists: sortedArtists.slice(0, 15),
-    topAlbums: sortedAlbums.slice(0, 10),
     uniqueArtists,
     uniqueAlbums,
     addedByMonth: cumulativeByMonth,
