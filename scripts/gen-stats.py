@@ -59,6 +59,14 @@ COMPLETE_CLOSES = {
     "unexpected-exit-while-paused",
     "backbtn",
 }
+# ⚠️ Estos números son el campo `version` que se escribe DENTRO de cada JSON
+# (describen el formato del archivo). NO son los de `src/js/history-keys.js`,
+# que tienen los mismos nombres pero arman la clave de IndexedDB y el `?v=` de
+# la URL del JSON: son contadores distintos e independientes. Al 2026-09-23 van
+# desfasados en uno en STATS (acá 3, JS 4) y en LISTENED (acá 2, JS 3): v=204
+# (a94e43a) subió solo los del JS, para forzar el refetch de las tapas nuevas.
+# Ningún código de `src/js` lee el `version` de stats ni el de listened (el
+# único lector de `.version` es el de skips, en `history-data.js`).
 STATS_VERSION = 3            # v3: years[].days — el detalle por dia (la apertura del Wrapped)
 TRACK_PLAYS_VERSION = 5      # v5: cada entrada de `albums` lleva además el DÍA de la primera play válida (ficha de álbum: «primera vez»). v4: cada entrada de `albums` lleva plays y ms además de name/artist (la ficha de álbum decía "0 plays"). v3: agregó `albums`. v2: incluía entries "partial" para tracks solo con plays <30s
 SKIP_STATS_VERSION = 2      # v2: dato crudo (ms de cada skip/cierre) + gid de agrupado; el veredicto pasó a skips.js

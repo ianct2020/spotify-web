@@ -18,6 +18,15 @@
 // datos que aparece en PENDIENTES.md §2.
 //
 // Si se sube una versión, se sube ACÁ y los dos lados se enteran solos.
+//
+// ⚠️ Estos números solo arman la clave de IndexedDB y el `?v=` de la URL del
+// JSON (`dataUrl` en `history-data.js`). NO son el campo `version` que viaja
+// dentro de cada JSON: ese lo escribe `scripts/gen-stats.py` con constantes del
+// mismo nombre, y son contadores distintos e independientes. Al 2026-09-23 van
+// desfasados en uno en STATS (acá 4, JSON 3) y en LISTENED (acá 3, JSON 2):
+// v=204 (a94e43a) subió solo los de acá, para forzar el refetch de las tapas
+// nuevas. Ningún código lee el `version` de stats ni el de listened; el único
+// lector de `.version` es el de skips.
 const STATS_VERSION = 4;   // v4: `years[].days` — el detalle por día que dibuja el calendario de la apertura del Wrapped
 const PLAYS_VERSION = 5;   // v5: cada álbum de `albums` lleva además el día de la primera play válida
 const LISTENED_VERSION = 3;  // v3: las 91 tapas que faltaban (ítem 11) — mismo contenido, campo `img` ya no nulo

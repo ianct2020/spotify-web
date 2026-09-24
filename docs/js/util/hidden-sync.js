@@ -26,10 +26,10 @@ import {
   createPlaylist,
   getCurrentUserId,
   spotifyFetch,
-} from '../api.js?v=238';
-import { prefKey, migratePrefKey } from '../storage.js?v=238';
-import { invalidateOwnPlaylists } from './playlist-add.js?v=238';
-import { showToast } from '../ui/toast.js?v=238';
+} from '../api.js?v=239';
+import { prefKey, migratePrefKey } from '../storage.js?v=239';
+import { invalidateOwnPlaylists } from './playlist-add.js?v=239';
+import { showToast } from '../ui/toast.js?v=239';
 
 const PLAYLIST_DESC = 'Lista interna de Fonoteca: lo que ocultaste en esta vista. Si la borras, se pierden los ocultos.';
 

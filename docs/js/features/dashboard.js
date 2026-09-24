@@ -1,16 +1,16 @@
-import { getAllLikedTracks, getLikesPartialInfo, exportAllData, importAllData, getCurrentUserId, syncLikesIncremental, getLikesCacheTimestamp, getBestAvailableLikes, getAllPlaylistItems } from '../api.js?v=238';
-import { showProgress, hideProgress, alertModal, escapeHtml, pageHeader } from '../ui/components.js?v=238';
-import { openModal, closeTop } from '../ui/modal-stack.js?v=238';
-import { showToast } from '../ui/toast.js?v=238';
-import { openListenedAlbumsPicker, getListenedPlaylist } from './listened-shared.js?v=238';
-import { loadHistoryStats, loadListenedAlbums } from './history-data.js?v=238';
-import { getArtistLikePreview } from '../util/artist-preview.js?v=238';
-import { hoverIn, hoverOut } from '../ui/preview-player.js?v=238';
-import { armRevealAll } from '../ui/reveal.js?v=238';
-import { hasUsername, getUsername, setUsername } from '../api/statsfm.js?v=238';
-import { getKey as getLastfmKey, setKey as setLastfmKey, clearKey as clearLastfmKey, isDefaultKey as lastfmIsDefaultKey } from '../api/lastfm.js?v=238';
-import { prefKey, migratePrefKey } from '../storage.js?v=238';
-import { alpha } from '../ui/theme-panel.js?v=238';
+import { getAllLikedTracks, getLikesPartialInfo, exportAllData, importAllData, getCurrentUserId, syncLikesIncremental, getLikesCacheTimestamp, getBestAvailableLikes, getAllPlaylistItems } from '../api.js?v=239';
+import { showProgress, hideProgress, alertModal, escapeHtml, pageHeader } from '../ui/components.js?v=239';
+import { openModal, closeTop } from '../ui/modal-stack.js?v=239';
+import { showToast } from '../ui/toast.js?v=239';
+import { openListenedAlbumsPicker, getListenedPlaylist } from './listened-shared.js?v=239';
+import { loadHistoryStats, loadListenedAlbums } from './history-data.js?v=239';
+import { getArtistLikePreview } from '../util/artist-preview.js?v=239';
+import { hoverIn, hoverOut } from '../ui/preview-player.js?v=239';
+import { armRevealAll } from '../ui/reveal.js?v=239';
+import { hasUsername, getUsername, setUsername } from '../api/statsfm.js?v=239';
+import { getKey as getLastfmKey, setKey as setLastfmKey, clearKey as clearLastfmKey, isDefaultKey as lastfmIsDefaultKey } from '../api/lastfm.js?v=239';
+import { prefKey, migratePrefKey } from '../storage.js?v=239';
+import { alpha } from '../ui/theme-panel.js?v=239';
 
 // Tres estados posibles, no dos: puede haber una key propia, la del código, o
 // —si algún día la constante queda vacía— ninguna. El hint del ⚙ tiene que
@@ -20,24 +20,38 @@ function estadoLastfm() {
   if (localStorage.getItem(prefKey('lastfm_api_key'))) return 'propia';
   return lastfmIsDefaultKey() ? 'la del código' : 'sin configurar';
 }
-import { loadHistoryStats as _loadStatsForCounter } from './history-data.js?v=238';
-import { openArtistCard } from './artist-card.js?v=238';
-import { openAlbumCard } from './album-card.js?v=238';
-import { activateMarquee, marqueeSpan } from '../ui/marquee.js?v=238';
-import { isJunkTrack } from '../util/junk.js?v=238';
+import { loadHistoryStats as _loadStatsForCounter } from './history-data.js?v=239';
+import { openArtistCard } from './artist-card.js?v=239';
+import { openAlbumCard } from './album-card.js?v=239';
+import { activateMarquee, marqueeSpan } from '../ui/marquee.js?v=239';
+import { isJunkTrack } from '../util/junk.js?v=239';
 
 let charts = [];
 let _loadController = null;
-// Los dos últimos, para re-renderizar al cambiar de paleta (v=236) sin
-// recalcular `computeStats()`: el dato no cambió, solo el color.
+// Lo último que se pintó, para repintar al cambiar de paleta (v=236) sin
+// recalcular `computeStats()` ni volver a leer el historial: el dato no
+// cambió, solo el color.
 let _lastStats = null;
 let _lastContainer = null;
+let _lastHistory = null;
 
+// v=239: repinta SOLO lo que resuelve el color en JS (los 7 gráficos y el
+// heatmap) y con lo que ya está en memoria. Hasta v=238 llamaba a
+// `renderDashboard()` entero, y eso rehacía también la tarjeta «Álbumes
+// escuchados», que valida su caché con `GET /playlists/{id}?fields=snapshot_id`
+// (api.js, `getAllPlaylistItems`). Medido en producción el 2026-09-23: 1
+// request por click en un preset y 109 en un arrastre de ~5 s del selector de
+// color, que dispara `input` ~20 veces por segundo. Acá no hay ningún `await`
+// ni ninguna llamada a la red: el resto de la vista ya sigue la paleta solo,
+// por CSS.
 function onThemeChange() {
   if (!_lastStats || !_lastContainer || !_lastContainer.isConnected) return;
   charts.forEach(c => c.destroy());
   charts = [];
-  renderDashboard(_lastContainer, _lastStats);
+  buildCharts(_lastStats);
+  // Si el historial todavía no llegó, `hydrateHistorySection` lo pinta al
+  // llegar con el color de ese momento: lee el acento después del `await`.
+  if (_lastHistory) pintarGraficosHistorial(_lastHistory);
 }
 
 export function render(container) {
@@ -115,6 +129,7 @@ export function render(container) {
     charts = [];
     _lastStats = null;
     _lastContainer = null;
+    _lastHistory = null;
   };
 }
 
@@ -793,12 +808,10 @@ function renderDashboard(container, stats) {
 async function hydrateHistorySection() {
   const section = document.getElementById('history-section');
   if (!section) return;
-  // Se lee acá, una vez por armado de la sección, y no al importar el módulo:
-  // ver el aviso de `coloresAcento()`.
-  const ac = coloresAcento();
   const h = await loadHistoryStats();
   if (!h || !h.years?.length) { section.style.display = 'none'; return; }
   section.style.display = '';
+  _lastHistory = h;
 
   // Stat tiles arriba (5)
   const t = h.totals || {};
@@ -817,6 +830,41 @@ async function hydrateHistorySection() {
   // medias: los 4 charts de abajo se animaban y la fila de tiles de arriba
   // aparecía de golpe. Verificado en producción con v=159.
   if (tiles) armRevealAll('.stat-card', tiles, { stagger: 20 });
+
+  pintarGraficosHistorial(h);
+
+  // Top 20 álbumes por minutos (lista simple). Cada fila abre la ficha de álbum.
+  const topAlbums = (h.top_albums_all_time || []).slice(0, 20);
+  const listHolder = document.getElementById('history-top-albums');
+  if (listHolder) {
+    listHolder.innerHTML = topAlbums.map((a, i) => `
+      <div class="track-row tc-clickable" data-alb-i="${i}" title="Click para ver la ficha del álbum">
+        <span style="width:24px;text-align:center;color:var(--color-text-muted);font-weight:700;flex-shrink:0">${i + 1}</span>
+        ${a.img ? `<img src="${a.img}" alt="" style="width:36px;height:36px;border-radius:4px;object-fit:cover;flex-shrink:0" loading="lazy">` : ''}
+        <div class="track-info" style="min-width:0;overflow:hidden">
+          <div class="track-name">${marqueeSpan(escapeHtml(a.name))}</div>
+          <div class="track-artist">${escapeHtml(a.artist)}</div>
+        </div>
+        <span class="badge badge-accent" style="flex-shrink:0">${Math.round(a.min).toLocaleString('es-ES')}m</span>
+      </div>
+    `).join('');
+    activateMarquee(listHolder);
+    listHolder.querySelectorAll('[data-alb-i]').forEach(el => {
+      el.onclick = () => {
+        const a = topAlbums[+el.dataset.albI];
+        if (a) openAlbumCard({ name: a.name, artist: a.artist, plays: a.plays, min: a.min, img: a.img });
+      };
+    });
+  }
+}
+
+// Lo del historial que resuelve el color en JS: los dos gráficos y el heatmap.
+// Aparte de `hydrateHistorySection` para que el cambio de paleta (v=239) los
+// repinte sin tocar tiles ni Top 20 y sin volver a pedir el historial.
+function pintarGraficosHistorial(h) {
+  // Se lee acá, en cada pintada, y no al importar el módulo: ver el aviso de
+  // `coloresAcento()`.
+  const ac = coloresAcento();
 
   // Evolución mensual (line)
   if (h.monthly?.length) {
@@ -916,30 +964,6 @@ async function hydrateHistorySection() {
       },
     });
     wireChartHoverExit('chart-history-artists');
-  }
-
-  // Top 20 álbumes por minutos (lista simple). Cada fila abre la ficha de álbum.
-  const topAlbums = (h.top_albums_all_time || []).slice(0, 20);
-  const listHolder = document.getElementById('history-top-albums');
-  if (listHolder) {
-    listHolder.innerHTML = topAlbums.map((a, i) => `
-      <div class="track-row tc-clickable" data-alb-i="${i}" title="Click para ver la ficha del álbum">
-        <span style="width:24px;text-align:center;color:var(--color-text-muted);font-weight:700;flex-shrink:0">${i + 1}</span>
-        ${a.img ? `<img src="${a.img}" alt="" style="width:36px;height:36px;border-radius:4px;object-fit:cover;flex-shrink:0" loading="lazy">` : ''}
-        <div class="track-info" style="min-width:0;overflow:hidden">
-          <div class="track-name">${marqueeSpan(escapeHtml(a.name))}</div>
-          <div class="track-artist">${escapeHtml(a.artist)}</div>
-        </div>
-        <span class="badge badge-accent" style="flex-shrink:0">${Math.round(a.min).toLocaleString('es-ES')}m</span>
-      </div>
-    `).join('');
-    activateMarquee(listHolder);
-    listHolder.querySelectorAll('[data-alb-i]').forEach(el => {
-      el.onclick = () => {
-        const a = topAlbums[+el.dataset.albI];
-        if (a) openAlbumCard({ name: a.name, artist: a.artist, plays: a.plays, min: a.min, img: a.img });
-      };
-    });
   }
 }
 
@@ -1228,13 +1252,12 @@ const CHART_COLORS = {
 //
 // ⚠️ LO QUE ESTO **NO** ARREGLA, y está medido: Chart.js lee el color **una
 // sola vez, al construir**. Con el gráfico ya vivo se cambió la paleta a Ámbar
-// y se forzó `update('none')` + `draw()`: el píxel siguió violeta. O sea que
-// cambiar de paleta **con el Dashboard abierto deja los gráficos con el color
-// viejo** hasta que se sale de la vista y se vuelve a entrar (`render()` los
-// destruye y los rehace). Es el mismo comportamiento que ya tienen la ficha de
-// pista y la de artista, donde se disimula porque son modales: se cierran y se
-// abren. Arreglarlo de verdad pide avisar del cambio de paleta y re-renderizar,
-// y eso es otra tanda y una decisión de Ian.
+// y se forzó `update('none')` + `draw()`: el píxel siguió violeta. Por eso,
+// desde v=236, `applyTheme()` avisa con el evento `themechange` y el Dashboard
+// destruye y rehace los gráficos y el heatmap (`onThemeChange`, arriba de todo;
+// desde v=239 sin re-renderizar la vista entera). La ficha de pista y la de
+// artista NO escuchan ese evento: siguen con el color con que se abrieron hasta
+// que se cierran.
 function coloresAcento() {
   // El mismo idiom que `track-card.js` y `artist-card.js`, con el mismo
   // respaldo por si algún día la variable no estuviera.

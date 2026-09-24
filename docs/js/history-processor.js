@@ -9,8 +9,8 @@
 //
 // Devuelve la misma forma que los JSONs del repo (mismos `version` numbers).
 
-import { isJunkTrack } from './util/junk.js?v=238';
-import { songKey } from './util/song-identity.js?v=238';
+import { isJunkTrack } from './util/junk.js?v=239';
+import { songKey } from './util/song-identity.js?v=239';
 
 // ---- Configuración (igual a gen-stats.py) ----
 const MIN_MS = 30000;
@@ -28,6 +28,12 @@ const COMPLETE_CLOSES = new Set([
   'unexpected-exit-while-paused',
   'backbtn',
 ]);
+// ⚠️ Estos números van al campo `version` DENTRO de lo que produce el BYOH. Son
+// un tercer juego de contadores, distinto del de `scripts/gen-stats.py` (el
+// `version` de los JSON del owner) y del de `history-keys.js` (clave de
+// IndexedDB y `?v=`). Al 2026-09-23 este STATS_VERSION dice 2 aunque la salida
+// ya lleva `years[].days` (que en gen-stats.py es la v3). Ningún código lee el
+// `version` de stats ni el de listened; el único lector es el de skips.
 const STATS_VERSION = 2;
 const TRACK_PLAYS_VERSION = 5;   // v5: cada álbum de `albums` lleva además el día de la primera play válida (espejo de gen-stats.py)
 const SKIP_STATS_VERSION = 2;    // v2: dato crudo (ms de cada skip/cierre) + gid; el veredicto pasó a features/skips.js
