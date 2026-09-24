@@ -44,7 +44,28 @@ let _lastHistory = null;
 // color, que dispara `input` ~20 veces por segundo. Acá no hay ningún `await`
 // ni ninguna llamada a la red: el resto de la vista ya sigue la paleta solo,
 // por CSS.
+//
+// Y como mucho un repintado cada REPINTE_MIN_MS. Medido el mismo día en v=239:
+// cada repintado cuesta ~55 ms de hilo principal y el arrastre manda un evento
+// cada ~38 ms, así que repintar en cada uno saturaba el hilo y la vista se
+// colgaba mientras durara el arrastre. El repintado lee el color en el momento
+// en que corre (`coloresAcento()`), así que el último siempre sale con el
+// color final aunque se hayan salteado los intermedios.
+const REPINTE_MIN_MS = 150;
+let _repintePendiente = null;
+let _ultimoRepinte = 0;
+
 function onThemeChange() {
+  if (_repintePendiente) return;
+  const espera = Math.max(0, _ultimoRepinte + REPINTE_MIN_MS - performance.now());
+  _repintePendiente = setTimeout(() => {
+    _repintePendiente = null;
+    _ultimoRepinte = performance.now();
+    repintarColores();
+  }, espera);
+}
+
+function repintarColores() {
   if (!_lastStats || !_lastContainer || !_lastContainer.isConnected) return;
   charts.forEach(c => c.destroy());
   charts = [];
@@ -125,6 +146,8 @@ export function render(container) {
 
   return () => {
     document.removeEventListener('themechange', onThemeChange);
+    clearTimeout(_repintePendiente);
+    _repintePendiente = null;
     charts.forEach(c => c.destroy());
     charts = [];
     _lastStats = null;

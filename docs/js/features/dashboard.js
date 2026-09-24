@@ -1,16 +1,16 @@
-import { getAllLikedTracks, getLikesPartialInfo, exportAllData, importAllData, getCurrentUserId, syncLikesIncremental, getLikesCacheTimestamp, getBestAvailableLikes, getAllPlaylistItems } from '../api.js?v=239';
-import { showProgress, hideProgress, alertModal, escapeHtml, pageHeader } from '../ui/components.js?v=239';
-import { openModal, closeTop } from '../ui/modal-stack.js?v=239';
-import { showToast } from '../ui/toast.js?v=239';
-import { openListenedAlbumsPicker, getListenedPlaylist } from './listened-shared.js?v=239';
-import { loadHistoryStats, loadListenedAlbums } from './history-data.js?v=239';
-import { getArtistLikePreview } from '../util/artist-preview.js?v=239';
-import { hoverIn, hoverOut } from '../ui/preview-player.js?v=239';
-import { armRevealAll } from '../ui/reveal.js?v=239';
-import { hasUsername, getUsername, setUsername } from '../api/statsfm.js?v=239';
-import { getKey as getLastfmKey, setKey as setLastfmKey, clearKey as clearLastfmKey, isDefaultKey as lastfmIsDefaultKey } from '../api/lastfm.js?v=239';
-import { prefKey, migratePrefKey } from '../storage.js?v=239';
-import { alpha } from '../ui/theme-panel.js?v=239';
+import { getAllLikedTracks, getLikesPartialInfo, exportAllData, importAllData, getCurrentUserId, syncLikesIncremental, getLikesCacheTimestamp, getBestAvailableLikes, getAllPlaylistItems } from '../api.js?v=240';
+import { showProgress, hideProgress, alertModal, escapeHtml, pageHeader } from '../ui/components.js?v=240';
+import { openModal, closeTop } from '../ui/modal-stack.js?v=240';
+import { showToast } from '../ui/toast.js?v=240';
+import { openListenedAlbumsPicker, getListenedPlaylist } from './listened-shared.js?v=240';
+import { loadHistoryStats, loadListenedAlbums } from './history-data.js?v=240';
+import { getArtistLikePreview } from '../util/artist-preview.js?v=240';
+import { hoverIn, hoverOut } from '../ui/preview-player.js?v=240';
+import { armRevealAll } from '../ui/reveal.js?v=240';
+import { hasUsername, getUsername, setUsername } from '../api/statsfm.js?v=240';
+import { getKey as getLastfmKey, setKey as setLastfmKey, clearKey as clearLastfmKey, isDefaultKey as lastfmIsDefaultKey } from '../api/lastfm.js?v=240';
+import { prefKey, migratePrefKey } from '../storage.js?v=240';
+import { alpha } from '../ui/theme-panel.js?v=240';
 
 // Tres estados posibles, no dos: puede haber una key propia, la del código, o
 // —si algún día la constante queda vacía— ninguna. El hint del ⚙ tiene que
@@ -20,11 +20,11 @@ function estadoLastfm() {
   if (localStorage.getItem(prefKey('lastfm_api_key'))) return 'propia';
   return lastfmIsDefaultKey() ? 'la del código' : 'sin configurar';
 }
-import { loadHistoryStats as _loadStatsForCounter } from './history-data.js?v=239';
-import { openArtistCard } from './artist-card.js?v=239';
-import { openAlbumCard } from './album-card.js?v=239';
-import { activateMarquee, marqueeSpan } from '../ui/marquee.js?v=239';
-import { isJunkTrack } from '../util/junk.js?v=239';
+import { loadHistoryStats as _loadStatsForCounter } from './history-data.js?v=240';
+import { openArtistCard } from './artist-card.js?v=240';
+import { openAlbumCard } from './album-card.js?v=240';
+import { activateMarquee, marqueeSpan } from '../ui/marquee.js?v=240';
+import { isJunkTrack } from '../util/junk.js?v=240';
 
 let charts = [];
 let _loadController = null;
@@ -44,7 +44,28 @@ let _lastHistory = null;
 // color, que dispara `input` ~20 veces por segundo. Acá no hay ningún `await`
 // ni ninguna llamada a la red: el resto de la vista ya sigue la paleta solo,
 // por CSS.
+//
+// Y como mucho un repintado cada REPINTE_MIN_MS. Medido el mismo día en v=239:
+// cada repintado cuesta ~55 ms de hilo principal y el arrastre manda un evento
+// cada ~38 ms, así que repintar en cada uno saturaba el hilo y la vista se
+// colgaba mientras durara el arrastre. El repintado lee el color en el momento
+// en que corre (`coloresAcento()`), así que el último siempre sale con el
+// color final aunque se hayan salteado los intermedios.
+const REPINTE_MIN_MS = 150;
+let _repintePendiente = null;
+let _ultimoRepinte = 0;
+
 function onThemeChange() {
+  if (_repintePendiente) return;
+  const espera = Math.max(0, _ultimoRepinte + REPINTE_MIN_MS - performance.now());
+  _repintePendiente = setTimeout(() => {
+    _repintePendiente = null;
+    _ultimoRepinte = performance.now();
+    repintarColores();
+  }, espera);
+}
+
+function repintarColores() {
   if (!_lastStats || !_lastContainer || !_lastContainer.isConnected) return;
   charts.forEach(c => c.destroy());
   charts = [];
@@ -125,6 +146,8 @@ export function render(container) {
 
   return () => {
     document.removeEventListener('themechange', onThemeChange);
+    clearTimeout(_repintePendiente);
+    _repintePendiente = null;
     charts.forEach(c => c.destroy());
     charts = [];
     _lastStats = null;
