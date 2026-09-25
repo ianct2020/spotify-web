@@ -15,13 +15,20 @@
 // Y las dos son de la CUENTA de Spotify, no del navegador: escanear en la
 // netbook puede dejar sin discografías al escritorio.
 //
-// Peor todavía, las dos están encadenadas: cuando el nativo devuelve 429,
-// `getArtistAlbumsConFuente` (api.js) se pasa a `/search` por su cuenta. O sea
-// que agotar la primera cuota empieza a gastar la segunda — que es exactamente
-// lo que pasó el 24/09, cuando la tanda costó 805 requests.
+// Peor todavía, las dos están encadenadas: ante un 429/400/403 del nativo,
+// `getArtistAlbumsConFuente` (api.js:1532-1560) se pasa a `/search` por su
+// cuenta, y la pausa del nativo manda a `/search` toda su ventana. O sea que
+// agotar la primera cuota empieza a gastar la segunda, y el supuesto de que
+// son independientes es falso.
+//
+// ⚠️ Ese encadenamiento NO es lo que pasó el 24/09. Aquella noche los 702
+// requests de `/search` fueron el paso 2 del plan, pedidos a propósito, y el
+// paso 3 (el nativo, 82 requests) corrió después sin un solo 429 — paró al
+// llegar al tope de la ventana, no por cuota. El camino existe en el código
+// pero todavía no se lo vio correr.
 
-import { idbEntriesByPrefix, idbGetCached } from '../idb.js?v=242';
-import { DISCO_BASE_PREFIX, RECIENTE_TTL_MS, RECIENTE_FORZADO_MIN_MS, PRESUPUESTO_REFRESCO } from './disco-base.js?v=242';
+import { idbEntriesByPrefix, idbGetCached } from '../idb.js?v=243';
+import { DISCO_BASE_PREFIX, RECIENTE_TTL_MS, RECIENTE_FORZADO_MIN_MS, PRESUPUESTO_REFRESCO } from './disco-base.js?v=243';
 
 // Requests de `/artists/{id}/albums` que cuesta UN artista sin base.
 //

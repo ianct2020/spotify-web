@@ -18,7 +18,7 @@
 // York», «MTV Unplugged»), el candidato con ese mismo marcador pasa, porque el
 // conjunto del candidato queda contenido en el del pedido.
 
-import { VERSION_MARKERS } from './versions-guard.js?v=242';
+import { VERSION_MARKERS } from './versions-guard.js?v=243';
 
 // `VERSION_MARKERS` (util/versions-guard.js) es la lista más completa del repo
 // —ya trae «piano version», «instrumental» y «karaoke»— y es la que decide qué
