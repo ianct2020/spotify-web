@@ -30,6 +30,7 @@ import {
   crearBase, sumarCompleta, sumarReciente, tocaReciente, rangoReciente,
   fusionarBases, armarExportacion, leerImportacion,
 } from '../util/disco-base.js';
+import { estimarCostoDeEscaneo, superaUmbral, PAGINAS_POR_ARTISTA } from '../util/costo-escaneo.js';
 
 const DISCO_TTL_MIN = 30 * 24 * 60;       // 30 días
 const ARTIST_ID_TTL_MIN = 60 * 24 * 60;   // 60 días — los ids no cambian
@@ -335,6 +336,114 @@ function abrirModalBase(pfx, onExportar, onImportar) {
   if (exp) exp.onclick = () => onExportar(exp);
   if (imp) imp.onclick = () => onImportar();
   return overlay;
+}
+
+// ── El aviso de coste, antes de gastar (v=242) ─────────────────────────────
+//
+// Las dos vistas escanean al ABRIRSE (el `render()` de las dos termina en
+// `scanArtists()`), así que el gasto puede arrancar sin que nadie lo haya
+// pedido. La regla es: si el escaneo supera el umbral, NO EMPIEZA hasta que se
+// confirme. Avisar mientras ya está corriendo no sirve — la cuota se gasta
+// durante el escaneo, no al final.
+//
+// El diálogo se arma con el número YA calculado (`util/costo-escaneo.js`, todo
+// local, 0 requests), así que decir que no cuesta exactamente lo mismo que no
+// haber abierto la vista.
+
+/**
+ * Pide permiso para gastar. Devuelve `true` si se confirma y `false` en
+ * cualquier otra salida (botón «Cancelar», ✕, Escape o clic en el fondo).
+ */
+export function confirmarCostoDeEscaneo(est, { motivo = 'automatico' } = {}) {
+  return new Promise((resolve) => {
+    let decidido = false;
+    const cerrar = (ok) => { if (!decidido) { decidido = true; resolve(ok); } };
+
+    const n = (x) => x.toLocaleString('es-ES');
+    // El titular cambia según quién disparó el escaneo: «Actualizar» es algo
+    // que el usuario pidió, abrir la vista no.
+    const titulo = motivo === 'pedido'
+      ? 'Esto va a pedir datos a Spotify'
+      : 'Esta vista quiere pedir datos a Spotify';
+    const entradilla = motivo === 'pedido'
+      ? 'Antes de empezar, lo que va a costar:'
+      : 'No se ha pedido nada todavía. Al abrirse, esta vista busca lanzamientos nuevos, y hoy eso sale caro:';
+
+    const lineas = [];
+    if (est.sinBase) {
+      lineas.push(`<li><b>${n(est.sinBase)}</b> ${est.sinBase === 1 ? 'artista no tiene' : 'artistas no tienen'} la discografía guardada, así que hay que pedirla entera: unas <b>${n(est.nativos)} peticiones</b>.</li>`);
+    }
+    if (est.aRefrescar) {
+      lineas.push(`<li><b>${n(est.aRefrescar)}</b> ${est.aRefrescar === 1 ? 'discografía' : 'discografías'} ya guardadas, solo para mirar si ha salido algo nuevo: <b>${n(est.aRefrescar)} ${est.aRefrescar === 1 ? 'búsqueda' : 'búsquedas'}</b>.</li>`);
+    }
+    if (est.sinId) {
+      lineas.push(`<li><b>${n(est.sinId)}</b> ${est.sinId === 1 ? 'artista sin identificar' : 'artistas sin identificar'}: <b>${n(est.sinId)} ${est.sinId === 1 ? 'búsqueda' : 'búsquedas'}</b> más.</li>`);
+    }
+
+    // Honestidad sobre el número: con artistas sin base no se puede saber de
+    // antemano, porque depende de cuántos lanzamientos tenga cada uno.
+    const precision = est.exacto
+      ? `<p style="margin:0 0 14px;font-size:12px;color:var(--color-text-muted);line-height:1.5">Este número es exacto: una petición por discografía.</p>`
+      : `<p style="margin:0 0 14px;font-size:12px;color:var(--color-text-muted);line-height:1.5">El total es una estimación: no se puede saber exacto hasta preguntarle a Spotify cuántos lanzamientos tiene cada artista. El mínimo son ${n(est.minimo)} peticiones; la media medida sobre las discografías que ya tienes son ${n(PAGINAS_POR_ARTISTA)} por artista.</p>`;
+
+    // Las consecuencias, que son lo que de verdad importa: cuánto dura el
+    // bloqueo y qué deja de funcionar mientras tanto.
+    const consecuencias = [];
+    if (est.nativos) {
+      consecuencias.push(`<li>El límite de Spotify para discografías son <b>100 peticiones</b>. Si se agota, durante <b>hora y media</b> no se puede descargar ninguna discografía nueva. Lo ya guardado se sigue viendo.</li>`);
+    }
+    if (est.busquedas || est.nativos) {
+      consecuencias.push(`<li>Al agotarse ese límite, la app pasa a usar la búsqueda, que es <b>el mismo cupo que usa el buscador de toda la aplicación</b>. Si también se agota, <b>buscar deja de funcionar unas 3 horas</b>.</li>`);
+    }
+    consecuencias.push(`<li>Los dos límites son <b>de tu cuenta de Spotify, no de este navegador</b>: gastarlos aquí los gasta también en el otro ordenador.</li>`);
+
+    const overlay = openModal({
+      id: 'costo-escaneo',
+      onClose: () => cerrar(false),
+      html: `
+      <div class="modal" style="max-width:520px">
+        <div class="modal-hdr">
+          <h3 class="modal-hdr-title">${titulo}</h3>
+          <button class="btn btn-secondary btn-sm" data-close-modal title="Cerrar" aria-label="Cerrar">✕</button>
+        </div>
+        <p style="color:var(--color-text-secondary);font-size:13px;line-height:1.55;margin:0 0 12px">${entradilla}</p>
+        <div style="background:var(--color-elevated);border-radius:8px;padding:12px 14px;margin:0 0 12px">
+          <div style="font-size:22px;font-weight:600;line-height:1.2">${est.exacto ? '' : '~'}${n(est.total)} peticiones</div>
+          <div style="font-size:12px;color:var(--color-text-muted);margin-top:2px">para escanear ${n(est.artistas)} ${est.artistas === 1 ? 'artista' : 'artistas'}</div>
+        </div>
+        <ul style="margin:0 0 12px;padding-left:18px;font-size:13px;line-height:1.6;color:var(--color-text-secondary)">${lineas.join('')}</ul>
+        ${precision}
+        <p style="margin:0 0 6px;font-size:13px;font-weight:600">Si se agota la cuota</p>
+        <ul style="margin:0 0 18px;padding-left:18px;font-size:12.5px;line-height:1.6;color:var(--color-text-secondary)">${consecuencias.join('')}</ul>
+        <div class="modal-actions" style="display:flex;gap:10px;justify-content:flex-end">
+          <button class="btn btn-secondary" id="costo-cancelar">Cancelar</button>
+          <button class="btn btn-primary" id="costo-seguir">Sí, pedirlo</button>
+        </div>
+      </div>
+    `,
+    });
+
+    const seguir = overlay.querySelector('#costo-seguir');
+    const cancelar = overlay.querySelector('#costo-cancelar');
+    if (seguir) seguir.onclick = () => { cerrar(true); closeTop(); };
+    if (cancelar) cancelar.onclick = () => { cerrar(false); closeTop(); };
+  });
+}
+
+/**
+ * La guarda completa: estima, y si supera el umbral pide permiso.
+ *
+ * Devuelve `true` si el escaneo puede arrancar. Cuenta ANTES de cualquier
+ * `await` que gaste: la estimación es toda local (IndexedDB `readonly`) y el
+ * diálogo se resuelve antes de que se cree un solo worker. Una guarda que
+ * cuenta DESPUÉS del `await` deja pasar la ráfaga entera — pasó el 23/09, con
+ * 109 requests de golpe.
+ */
+export async function autorizarEscaneo(artistas, { forzar = false, motivo = 'automatico' } = {}) {
+  if (!artistas.length) return true;
+  const est = await estimarCostoDeEscaneo(artistas, { forzar });
+  if (!superaUmbral(est)) return true;
+  return confirmarCostoDeEscaneo(est, { motivo });
 }
 
 /** Engancha los botones. `alImportar` se llama después de importar, para repintar. */

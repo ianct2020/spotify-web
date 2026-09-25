@@ -10,14 +10,14 @@
 //   - Umbral de likes: 5+ / 10+ / 20+
 //   - Ventana temporal: 3 / 6 / 12 / 24 meses, 5 años y «todo» (default 12)
 
-import { escapeHtml, confirmModal, pageHeader } from '../ui/components.js?v=241';
-import { showToast } from '../ui/toast.js?v=241';
-import { buildAlbumHeardIndex } from '../util/album-heard.js?v=241';
-import { releaseKind } from '../util/release-size.js?v=241';
-import { loadFiltros, buildFilterContext, applyDiscoverFilters } from '../util/discover-filters.js?v=241';
-import { createIncrementalList, scrollRootOf } from '../ui/incremental-list.js?v=241';
-import { createLazyImages } from '../ui/lazy-img.js?v=241';
-import { prefKey, migratePrefKey } from '../storage.js?v=241';
+import { escapeHtml, confirmModal, pageHeader } from '../ui/components.js?v=242';
+import { showToast } from '../ui/toast.js?v=242';
+import { buildAlbumHeardIndex } from '../util/album-heard.js?v=242';
+import { releaseKind } from '../util/release-size.js?v=242';
+import { loadFiltros, buildFilterContext, applyDiscoverFilters } from '../util/discover-filters.js?v=242';
+import { createIncrementalList, scrollRootOf } from '../ui/incremental-list.js?v=242';
+import { createLazyImages } from '../ui/lazy-img.js?v=242';
+import { prefKey, migratePrefKey } from '../storage.js?v=242';
 import {
   getArtistIdCached,
   getArtistDiscoCached,
@@ -46,12 +46,13 @@ import {
   wireLoteOcultos,
   estadoDiscografia,
   nuevaRondaDeRefresco,
+  autorizarEscaneo,
   migrarDiscografiasViejas,
   avisarRonda,
   botonesBaseHtml,
   conectarBotonesBase,
-} from './discover-common.js?v=241';
-import { estadoNativoDiscografia } from '../api.js?v=241';
+} from './discover-common.js?v=242';
+import { estadoNativoDiscografia } from '../api.js?v=242';
 
 const SCAN_KEY = 'new_releases';
 
@@ -359,10 +360,20 @@ function renderShell(content, totalCandidates) {
     }
     // Sin clampear contra eligibleArtists(): ese número cambia con el chip de
     // umbral y persistirlo dejaba la vista trabada en 6 artistas.
+    const antes = state.loadedMore;
     state.loadedMore += 50;
     localStorage.setItem(prefKey(LS_LOADED_MORE), String(state.loadedMore));
     document.getElementById('newrel-total-scan').textContent = targetToScan();
-    scanArtists(content).catch(err => console.warn('[newrel] scan:', err));
+    scanArtists(content, { motivo: 'pedido' }).then((r) => {
+      // Si se cancela el aviso, el +50 se deshace: dejarlo subido (y
+      // persistido) dejaría la vista pidiendo 50 artistas que nadie escaneó,
+      // y el próximo render volvería a intentarlo solo.
+      if (r !== 'cancelado') return;
+      state.loadedMore = antes;
+      localStorage.setItem(prefKey(LS_LOADED_MORE), String(antes));
+      const t = document.getElementById('newrel-total-scan');
+      if (t) t.textContent = targetToScan();
+    }).catch(err => console.warn('[newrel] scan:', err));
   });
   content.querySelector('#newrel-refresh').onclick = async (e) => {
     const btn = e.currentTarget;
@@ -371,8 +382,10 @@ function renderShell(content, totalCandidates) {
     // v=229: tira el caché del escaneo y NADA MÁS. Las discografías viven en la
     // base (sin caducidad) y la ronda forzada mira solo lo reciente de cada una.
     state.ronda = nuevaRondaDeRefresco({ forzar: true });
-    await reescanearDesdeLaBase(content);
-    avisarRonda(state.ronda);
+    const r = await reescanearDesdeLaBase(content, { motivo: 'pedido' });
+    // Cancelado: la vista quedó intacta (ni caché borrada ni `scanned`
+    // tocados) y la ronda forzada se descarta sin haber gastado nada.
+    if (r !== 'cancelado') avisarRonda(state.ronda);
     state.ronda = nuevaRondaDeRefresco();
     btn.disabled = false;
     btn.textContent = 'Actualizar';
@@ -427,7 +440,15 @@ function setCount(n) {
 
 // Vuelve a armar la lista desde la base (0 requests, salvo lo reciente que le
 // toque a la ronda en curso). Lo usan «Actualizar» e «Importar base».
-async function reescanearDesdeLaBase(content) {
+async function reescanearDesdeLaBase(content, { motivo = 'pedido' } = {}) {
+  // La autorización va ANTES del `clearScanCache`: este camino tira la caché
+  // del escaneo y pone los 300 en `scanned: false`, así que preguntar después
+  // dejaría la vista vaciada si se cancela. Se estima sobre la cola que HABRÍA
+  // —los elegibles hasta el target, que es justo lo que quedaría por escanear
+  // tras el reset— y recién entonces se toca algo.
+  const prospecto = eligibleArtists().slice(0, targetToScan());
+  if (!await autorizarEscaneo(prospecto, { forzar: state.ronda?.forzar, motivo })) return 'cancelado';
+
   await clearScanCache(SCAN_KEY);
   for (const a of state.artists) {
     Object.assign(a, { disco: [], scanned: false, error: null });
@@ -435,10 +456,11 @@ async function reescanearDesdeLaBase(content) {
   state.scannedAt = null;
   setCount(0);
   refreshList(content);
-  try { await scanArtists(content); } catch (err) { console.warn('[newrel] scan:', err); }
+  // Ya autorizado arriba: el escaneo de acá no vuelve a preguntar.
+  try { await scanArtists(content, { motivo: 'autorizado' }); } catch (err) { console.warn('[newrel] scan:', err); }
 }
 
-async function scanArtists(content) {
+async function scanArtists(content, { motivo = 'automatico' } = {}) {
   const progress = document.getElementById('newrel-progress');
   const progressLabel = document.getElementById('newrel-progress-label');
   const progressFill = document.getElementById('newrel-progress-fill');
@@ -451,6 +473,14 @@ async function scanArtists(content) {
   // cache y el target son 100, hay que encolar 60, no 100.
   const queue = eligible.filter(a => !a.scanned).slice(0, Math.max(0, target - scanned));
   if (!queue.length) return;   // todo servido de la caché
+
+  // Antes de gastar nada: si esto supera el umbral, no arranca hasta que se
+  // confirme. La cuenta es local (0 requests) y se hace ANTES de crear un solo
+  // worker — si se cancela, no se ha pedido nada y no queda nada a medias: ni
+  // un `scanned` tocado, ni la barra de progreso, ni la caché del escaneo.
+  if (motivo !== 'autorizado'
+      && !await autorizarEscaneo(queue, { forzar: state.ronda?.forzar, motivo })) return 'cancelado';
+
   progress.style.display = '';
 
   const workers = Array.from({ length: BATCH_PARALLEL }, () => (async () => {

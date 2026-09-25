@@ -50,6 +50,7 @@ import {
   toggleHiddenAlbum,
   wireLoteOcultos,
   nuevaRondaDeRefresco,
+  autorizarEscaneo,
   migrarDiscografiasViejas,
   avisarRonda,
   botonesBaseHtml,
@@ -330,10 +331,19 @@ function renderShell(content, totalCandidates) {
     refreshList(content);
   });
   content.querySelector('#disco-load-more').addEventListener('click', () => {
+    const antes = state.loadedMore;
     state.loadedMore = Math.min(state.loadedMore + 50, state.artists.length);
     localStorage.setItem(prefKey(LS_LOADED_MORE), String(state.loadedMore));
     document.getElementById('disco-total-scan').textContent = state.loadedMore;
-    scanArtists(content).catch(err => console.warn('[discover] scan:', err));
+    scanArtists(content, vigilarRuta(), { motivo: 'pedido' }).then((r) => {
+      // Cancelado: se deshace el +50, que si no dejaría la vista pidiendo 50
+      // artistas que nadie escaneó y el próximo render los reintentaría solo.
+      if (r !== 'cancelado') return;
+      state.loadedMore = antes;
+      localStorage.setItem(prefKey(LS_LOADED_MORE), String(antes));
+      const t = document.getElementById('disco-total-scan');
+      if (t) t.textContent = antes;
+    }).catch(err => console.warn('[discover] scan:', err));
   });
   content.querySelector('#disco-refresh').onclick = async (e) => {
     const btn = e.currentTarget;
@@ -342,8 +352,10 @@ function renderShell(content, totalCandidates) {
     // v=229: tira el caché del escaneo y NADA MÁS. Las discografías viven en la
     // base (sin caducidad) y la ronda forzada mira solo lo reciente de cada una.
     state.ronda = nuevaRondaDeRefresco({ forzar: true });
-    await reescanearDesdeLaBase(content);
-    avisarRonda(state.ronda);
+    const r = await reescanearDesdeLaBase(content, { motivo: 'pedido' });
+    // Cancelado: la vista quedó intacta y la ronda forzada se descarta sin
+    // haber gastado nada.
+    if (r !== 'cancelado') avisarRonda(state.ronda);
     state.ronda = nuevaRondaDeRefresco();
     btn.disabled = false;
     btn.textContent = 'Actualizar';
@@ -394,7 +406,13 @@ function renderShell(content, totalCandidates) {
 
 // Vuelve a armar la lista desde la base (0 requests, salvo lo reciente que le
 // toque a la ronda en curso). Lo usan «Actualizar» e «Importar base».
-async function reescanearDesdeLaBase(content) {
+async function reescanearDesdeLaBase(content, { motivo = 'pedido' } = {}) {
+  // La autorización va ANTES del `clearScanCache`: este camino tira la caché y
+  // pone todo en `scanned: false`, así que preguntar después dejaría la vista
+  // vaciada si se cancela.
+  const prospecto = state.artists.slice(0, Math.min(state.loadedMore, state.artists.length));
+  if (!await autorizarEscaneo(prospecto, { forzar: state.ronda?.forzar, motivo })) return 'cancelado';
+
   await clearScanCache(SCAN_KEY);
   for (const a of state.artists) {
     Object.assign(a, { disco: [], unheard: null, unheardAlbums: [], unheardSingles: [], scanned: false, error: null });
@@ -403,10 +421,11 @@ async function reescanearDesdeLaBase(content) {
   const n = document.getElementById('disco-count');
   if (n) n.textContent = '0';
   refreshList(content);
-  try { await scanArtists(content); } catch (err) { console.warn('[discover] scan:', err); }
+  // Ya autorizado arriba: el escaneo de acá no vuelve a preguntar.
+  try { await scanArtists(content, vigilarRuta(), { motivo: 'autorizado' }); } catch (err) { console.warn('[discover] scan:', err); }
 }
 
-async function scanArtists(content, ruta = vigilarRuta()) {
+async function scanArtists(content, ruta = vigilarRuta(), { motivo = 'automatico' } = {}) {
   // El bucle de abajo hace hasta 150 llamadas y puede correr minutos. Sin la
   // vigencia, cada vuelta escribía en `#disco-count` — que en la ruta nueva no
   // existe— y repintaba una lista desconectada del documento.
@@ -420,6 +439,13 @@ async function scanArtists(content, ruta = vigilarRuta()) {
 
   const queue = state.artists.filter(a => !a.scanned).slice(0, target - scanned);
   if (!queue.length) return;   // todo servido de la caché: ni barra ni requests
+
+  // Antes de gastar nada: si esto supera el umbral, no arranca hasta que se
+  // confirme. La cuenta es local (0 requests) y se hace ANTES de crear un solo
+  // worker — si se cancela, no se ha pedido nada y no queda nada a medias.
+  if (motivo !== 'autorizado'
+      && !await autorizarEscaneo(queue, { forzar: state.ronda?.forzar, motivo })) return 'cancelado';
+
   progress.style.display = '';
 
   const workers = Array.from({ length: BATCH_PARALLEL }, () => (async () => {
