@@ -10,17 +10,17 @@
 // 100 artistas en lugar de 20. Lógica de fetch/cache/playlist compartida en
 // features/discover-common.js con #new-releases.
 
-import { escapeHtml, confirmModal, pageHeader } from '../ui/components.js?v=240';
-import { showToast } from '../ui/toast.js?v=240';
-import { openArtistCard } from './artist-card.js?v=240';
-import { createIncrementalList, scrollRootOf } from '../ui/incremental-list.js?v=240';
-import { createLazyImages } from '../ui/lazy-img.js?v=240';
-import { isJunkTrack } from '../util/junk.js?v=240';
-import { buildAlbumHeardIndex } from '../util/album-heard.js?v=240';
-import { loadFiltros, buildFilterContext, applyDiscoverFilters } from '../util/discover-filters.js?v=240';
-import { releaseKind } from '../util/release-size.js?v=240';
-import { vigilarRuta } from '../util/vigencia-ruta.js?v=240';
-import { prefKey, migratePrefKey } from '../storage.js?v=240';
+import { escapeHtml, confirmModal, pageHeader } from '../ui/components.js?v=241';
+import { showToast } from '../ui/toast.js?v=241';
+import { openArtistCard } from './artist-card.js?v=241';
+import { createIncrementalList, scrollRootOf } from '../ui/incremental-list.js?v=241';
+import { createLazyImages } from '../ui/lazy-img.js?v=241';
+import { isJunkTrack } from '../util/junk.js?v=241';
+import { buildAlbumHeardIndex } from '../util/album-heard.js?v=241';
+import { loadFiltros, buildFilterContext, applyDiscoverFilters } from '../util/discover-filters.js?v=241';
+import { releaseKind } from '../util/release-size.js?v=241';
+import { vigilarRuta } from '../util/vigencia-ruta.js?v=241';
+import { prefKey, migratePrefKey } from '../storage.js?v=241';
 import {
   getArtistIdCached,
   getArtistDiscoCached,
@@ -54,7 +54,7 @@ import {
   avisarRonda,
   botonesBaseHtml,
   conectarBotonesBase,
-} from './discover-common.js?v=240';
+} from './discover-common.js?v=241';
 
 const SCAN_KEY = 'discover_artists';
 

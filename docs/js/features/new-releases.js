@@ -8,16 +8,16 @@
 //
 // Chips:
 //   - Umbral de likes: 5+ / 10+ / 20+
-//   - Ventana temporal: 3 / 6 / 12 / 24 meses (default 12)
+//   - Ventana temporal: 3 / 6 / 12 / 24 meses, 5 años y «todo» (default 12)
 
-import { escapeHtml, confirmModal, pageHeader } from '../ui/components.js?v=240';
-import { showToast } from '../ui/toast.js?v=240';
-import { buildAlbumHeardIndex } from '../util/album-heard.js?v=240';
-import { releaseKind } from '../util/release-size.js?v=240';
-import { loadFiltros, buildFilterContext, applyDiscoverFilters } from '../util/discover-filters.js?v=240';
-import { createIncrementalList, scrollRootOf } from '../ui/incremental-list.js?v=240';
-import { createLazyImages } from '../ui/lazy-img.js?v=240';
-import { prefKey, migratePrefKey } from '../storage.js?v=240';
+import { escapeHtml, confirmModal, pageHeader } from '../ui/components.js?v=241';
+import { showToast } from '../ui/toast.js?v=241';
+import { buildAlbumHeardIndex } from '../util/album-heard.js?v=241';
+import { releaseKind } from '../util/release-size.js?v=241';
+import { loadFiltros, buildFilterContext, applyDiscoverFilters } from '../util/discover-filters.js?v=241';
+import { createIncrementalList, scrollRootOf } from '../ui/incremental-list.js?v=241';
+import { createLazyImages } from '../ui/lazy-img.js?v=241';
+import { prefKey, migratePrefKey } from '../storage.js?v=241';
 import {
   getArtistIdCached,
   getArtistDiscoCached,
@@ -50,8 +50,8 @@ import {
   avisarRonda,
   botonesBaseHtml,
   conectarBotonesBase,
-} from './discover-common.js?v=240';
-import { estadoNativoDiscografia } from '../api.js?v=240';
+} from './discover-common.js?v=241';
+import { estadoNativoDiscografia } from '../api.js?v=241';
 
 const SCAN_KEY = 'new_releases';
 
@@ -71,7 +71,38 @@ const RATE_RETRIES = 2;
 const DEFAULT_INITIAL = 100;
 
 const VALID_LIKES = new Set([5, 10, 20]);
-const VALID_MONTHS = new Set([3, 6, 12, 24]);
+
+// Las ventanas del chip, y ÚNICA fuente de la verdad: de acá sale tanto el Set
+// que valida lo que hay guardado como los botones de la topbar. Antes el
+// literal `[3,6,12,24]` vivía suelto en el HTML de `renderShell`, o sea dos
+// listas separadas que había que acordarse de tocar juntas.
+//
+// `n: 0` es «sin ventana». Existe porque la base de discografías tiene el
+// **82 % de sus lanzamientos fuera de los 24 meses** (10.639 de 13.006, medido
+// el 2026-09-24 sobre el export de la base): de los 2.609 que entraron esa
+// noche, 2.315 —el 88,7 %— no se podían pintar por la ventana, no por falta de
+// datos. Los 24 meses eran el techo, y el techo tapaba casi todo.
+//
+// El default sigue siendo 12 A PROPÓSITO: esta vista se llama «Novedades» y es
+// lo que Ian ve al entrar todos los días. Las ventanas anchas son un destino al
+// que se va tocando un chip, no el sitio donde te deja la app.
+const MONTHS_CHIPS = [
+  { n: 3, label: 'últimos 3m' },
+  { n: 6, label: 'últimos 6m' },
+  { n: 12, label: 'últimos 12m' },
+  { n: 24, label: 'últimos 24m' },
+  { n: 60, label: 'últimos 5 años' },
+  { n: 0, label: 'todo' },
+];
+const VALID_MONTHS = new Set(MONTHS_CHIPS.map(c => c.n));
+
+// A partir de los 24 meses lo que hay en pantalla ya no son «novedades» sino el
+// catálogo sin escuchar, y el rótulo del conteo tiene que decirlo: con «todo»
+// puesto son miles de fichas, y llamarlas novedades es mentir en la cabecera.
+function ventanaEsAncha(m = state.months) { return m === 0 || m > 24; }
+function ventanaTexto(m = state.months) {
+  return m === 0 ? 'toda la discografía' : `los últimos ${m} meses`;
+}
 
 // Los mismos cuatro que #discover-artists, y por el mismo criterio: Spotify no
 // tiene tipo «EP» (marca los de 5 temas como 'single'), así que quien decide es
@@ -241,7 +272,7 @@ function renderShell(content, totalCandidates) {
     <div class="disco-topbar">
       <div class="disco-summary">
         <span id="newrel-count">0</span>/<span id="newrel-total-scan">${targetToScan()}</span> artistas escaneados
-        · <span id="newrel-unheard-count">0</span> novedades sin escuchar
+        · <span id="newrel-unheard-count">0</span> <span id="newrel-unheard-label">${ventanaEsAncha() ? 'lanzamientos sin escuchar' : 'novedades sin escuchar'}</span>
         <span class="disco-summary-sub" id="newrel-summary-sub">${eligibleArtists().length.toLocaleString('es-ES')} artistas con ≥${state.minLikes} likes</span>
       </div>
       <div class="disco-controls">
@@ -249,7 +280,7 @@ function renderShell(content, totalCandidates) {
           ${[5,10,20].map(n => `<button class="disco-chip ${state.minLikes === n ? 'is-on' : ''}" data-min="${n}">${n}+ likes</button>`).join('')}
         </div>
         <div class="disco-chip-group" id="newrel-months">
-          ${[3,6,12,24].map(n => `<button class="disco-chip ${state.months === n ? 'is-on' : ''}" data-months="${n}">últimos ${n}m</button>`).join('')}
+          ${MONTHS_CHIPS.map(({ n, label }) => `<button class="disco-chip ${state.months === n ? 'is-on' : ''}" data-months="${n}">${label}</button>`).join('')}
         </div>
         <div class="disco-chip-group" id="newrel-kind">
           ${KINDS.map(k => `<button class="disco-chip ${state.filterKind === k ? 'is-on' : ''}" data-kind="${k}">${KIND_LABEL[k]}</button>`).join('')}
@@ -478,7 +509,11 @@ async function processArtist(artist) {
 }
 
 function releasesInWindow() {
-  const cutoff = Date.now() - state.months * 30 * 24 * 60 * 60 * 1000;
+  // `months === 0` es sin ventana. Ojo con el atajo: `0 * 30 * ...` da un
+  // cutoff de AHORA MISMO, que no deja pasar nada en vez de dejar pasar todo.
+  const cutoff = state.months === 0
+    ? -Infinity
+    : Date.now() - state.months * 30 * 24 * 60 * 60 * 1000;
   const modoOcultos = state.mode === 'hidden';
   const out = [];
   for (const a of state.artists) {
@@ -583,6 +618,10 @@ function refreshList(content) {
   pintarAvisoCortadas().catch(err => console.info('[newrel] aviso de cortadas:', err.message));
   const rows = releasesInWindow();
   document.getElementById('newrel-unheard-count').textContent = rows.length.toLocaleString('es-ES');
+  // El chip de ventana no repinta la topbar (perdería el foco), así que el
+  // rótulo se actualiza acá o se queda diciendo «novedades» con «todo» puesto.
+  const lbl = document.getElementById('newrel-unheard-label');
+  if (lbl) lbl.textContent = ventanaEsAncha() ? 'lanzamientos sin escuchar' : 'novedades sin escuchar';
   const nHidden = document.getElementById('newrel-hidden-n');
   if (nHidden) nHidden.textContent = hiddenAlbums.size;
 
@@ -600,7 +639,9 @@ function refreshList(content) {
     } else if (!scanned) {
       msg = `${eligible.toLocaleString('es-ES')} artistas con ≥${state.minLikes} likes, ninguno escaneado todavía. Toca «Actualizar» para consultarle a Spotify.`;
     } else if (state.mode === 'hidden') {
-      msg = `No ocultaste ninguna novedad de los últimos ${state.months} meses.`;
+      msg = state.months === 0
+        ? 'No ocultaste ningún lanzamiento de tus artistas.'
+        : `No ocultaste ninguna novedad de los últimos ${state.months} meses.`;
     } else {
       // El chip de tipo se nombra aparte: una lista vacía por «sólo EPs» se
       // parece demasiado a una lista vacía por no haber novedades, y el chip
@@ -609,7 +650,7 @@ function refreshList(content) {
       const porTipo = state.filterKind !== 'all'
         ? ` filtrando por ${KIND_LABEL[state.filterKind].toLowerCase()} — prueba con «Todo»`
         : '';
-      msg = `No hay novedades sin escuchar en los últimos ${state.months} meses para tus artistas con ≥${state.minLikes} likes${porTipo}.`;
+      msg = `No hay ${ventanaEsAncha() ? 'lanzamientos' : 'novedades'} sin escuchar en ${ventanaTexto()} para tus artistas con ≥${state.minLikes} likes${porTipo}.`;
     }
     teardown();
     listEl.innerHTML = `<div class="card"><p style="text-align:center;color:var(--color-text-muted);margin:0">${escapeHtml(msg)}</p></div>`;

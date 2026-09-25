@@ -1,21 +1,21 @@
 // Wrapped propio: mini-resumen tuyo por año, hecho con el Extended Streaming History.
 // A diferencia del Wrapped oficial (que corre oct-sept), este es del año calendario completo.
 
-import { loadHistoryStats, isOwner, ownerLockedMessage } from './history-data.js?v=240';
-import { escapeHtml, pageHeader } from '../ui/components.js?v=240';
-import { getPreview } from '../api/preview-providers.js?v=240';
-import { getArtistLikePreview, getAlbumLikePreview } from '../util/artist-preview.js?v=240';
-import { attachHover } from '../ui/preview-player.js?v=240';
-import { openTrackCard } from './track-card.js?v=240';
-import { openArtistCard } from './artist-card.js?v=240';
-import { openAlbumCard } from './album-card.js?v=240';
-import { getMyTop } from '../api.js?v=240';
-import { activateMarquee, marqueeSpan } from '../ui/marquee.js?v=240';
-import { openModal } from '../ui/modal-stack.js?v=240';
-import { armReveal, armRevealAll, releaseReveal } from '../ui/reveal.js?v=240';
-import { coverUrl } from '../util/cover-size.js?v=240';
-import { vigilarRuta } from '../util/vigencia-ruta.js?v=240';
-import { fmtDia } from '../util/fecha.js?v=240';
+import { loadHistoryStats, isOwner, ownerLockedMessage } from './history-data.js?v=241';
+import { escapeHtml, pageHeader } from '../ui/components.js?v=241';
+import { getPreview } from '../api/preview-providers.js?v=241';
+import { getArtistLikePreview, getAlbumLikePreview } from '../util/artist-preview.js?v=241';
+import { attachHover } from '../ui/preview-player.js?v=241';
+import { openTrackCard } from './track-card.js?v=241';
+import { openArtistCard } from './artist-card.js?v=241';
+import { openAlbumCard } from './album-card.js?v=241';
+import { getMyTop } from '../api.js?v=241';
+import { activateMarquee, marqueeSpan } from '../ui/marquee.js?v=241';
+import { openModal } from '../ui/modal-stack.js?v=241';
+import { armReveal, armRevealAll, releaseReveal } from '../ui/reveal.js?v=241';
+import { coverUrl } from '../util/cover-size.js?v=241';
+import { vigilarRuta } from '../util/vigencia-ruta.js?v=241';
+import { fmtDia } from '../util/fecha.js?v=241';
 
 let stats = null;
 let selectedYear = null;
@@ -160,7 +160,7 @@ async function montarAperturaSiSePuede(ruta) {
   const host = document.getElementById('wrapped-apertura');
   if (!host) return;
   try {
-    const mod = await import('../features/wrapped-apertura.js?v=240');
+    const mod = await import('../features/wrapped-apertura.js?v=241');
     // Entre el `await` del import y acá el usuario pudo cambiar de año (que
     // repinta el hueco) o irse de la vista. Las dos cosas dejan este `host`
     // fuera del documento: montar ahí sería pintar un recorrido que nadie ve y

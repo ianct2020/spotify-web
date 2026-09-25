@@ -1,13 +1,13 @@
-import { getAllLikedTracks, removeLikedTracks, checkLibraryContains } from '../api.js?v=240';
-import { borrarLikesVerificado } from '../util/borrado-verificado.js?v=240';
-import { normalizeKey, esFantasma, guardaUltimoEjemplar, indexarBiblioteca } from '../util/versions-guard.js?v=240';
-import { showProgress, hideProgress, progressController, isCancelled, typeConfirmModal, infoModal, renderTrackRow, escapeHtml, pageHeader } from '../ui/components.js?v=240';
-import { showToast } from '../ui/toast.js?v=240';
-import { openModal, closeTop } from '../ui/modal-stack.js?v=240';
-import { coverUrl } from '../util/cover-size.js?v=240';
-import { openPlaylistPicker } from '../ui/playlist-picker.js?v=240';
-import { getOwnPlaylists, addUrisToPlaylists, toastAddResult } from '../util/playlist-add.js?v=240';
-import { prefKey, migratePrefKey } from '../storage.js?v=240';
+import { getAllLikedTracks, removeLikedTracks, checkLibraryContains } from '../api.js?v=241';
+import { borrarLikesVerificado } from '../util/borrado-verificado.js?v=241';
+import { normalizeKey, esFantasma, guardaUltimoEjemplar, indexarBiblioteca } from '../util/versions-guard.js?v=241';
+import { showProgress, hideProgress, progressController, isCancelled, typeConfirmModal, infoModal, renderTrackRow, escapeHtml, pageHeader } from '../ui/components.js?v=241';
+import { showToast } from '../ui/toast.js?v=241';
+import { openModal, closeTop } from '../ui/modal-stack.js?v=241';
+import { coverUrl } from '../util/cover-size.js?v=241';
+import { openPlaylistPicker } from '../ui/playlist-picker.js?v=241';
+import { getOwnPlaylists, addUrisToPlaylists, toastAddResult } from '../util/playlist-add.js?v=241';
+import { prefKey, migratePrefKey } from '../storage.js?v=241';
 
 // ── «Borrar sobrantes» REHABILITADO (2026-08-28) ─────────────────────────────
 //
