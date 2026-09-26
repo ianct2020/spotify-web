@@ -92,10 +92,10 @@ try {
 
   const alturas = `modal ${Math.round(mr.height)}px de ${innerHeight}px de ventana`;
   const cartel = document.getElementById('cartel');
-  const zonas = scrolleables.length ? scrolleables.join(', ') : 'ninguna (no desborda)';
-  cartel.innerHTML = `${caso} · ${n} filas · ${ulViejo ? 'lista con scroll inline (como en v=245)' : 'lista sin scroll inline'} · ventana ${innerWidth}×${innerHeight} · `
+  const zonas = scrolleables.length ? scrolleables.join(', ') : 'ninguna';
+  cartel.innerHTML = `${caso} ${n} filas · ${ulViejo ? 'scroll inline (v=245)' : 'sin scroll inline'} · ${innerWidth}×${innerHeight} · `
     + `pie a la vista: <b class="${pieVisible ? 'si' : 'no'}">${pieVisible ? 'SÍ' : 'NO'}</b> · `
-    + `zonas con scroll: <b>${scrolleables.length}</b> [${zonas}] · ${alturas}`;
+    + `scrolls: <b>${scrolleables.length}</b> [${zonas.replace('.modal (el modal ENTERO)', '.modal ENTERO')}] · modal ${Math.round(mr.height)}/${innerHeight}px`;
 
   const esperado = espera === 'dentro';
   if (pieVisible !== esperado) {
