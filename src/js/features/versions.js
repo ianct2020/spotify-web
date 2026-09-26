@@ -630,7 +630,7 @@ async function batchDelete() {
     `${simulacro ? '<div style="background:var(--color-elevated);border:1px solid var(--color-warning);border-radius:var(--radius-sm);padding:8px 10px;margin-bottom:10px">Modo <strong>simulacro</strong>: se registran los ids y no se borra ni un me gusta.</div>' : ''}
      Se mantienen las ${keepIds.size} versión(es) marcadas en verde.
      Se ${simulacro ? 'registrarían' : 'van a borrar de los me gusta'} estas ${toRemove.length}:
-     <ul style="margin:10px 0 0;padding-left:20px;max-height:320px;overflow-y:auto">${lista}</ul>`,
+     <ul style="margin:10px 0 0;padding-left:20px">${lista}</ul>`,
     'BORRAR'
   );
   if (!ok) return;
@@ -751,7 +751,7 @@ function avisarSupervivientesPerdidas(perdidas, totalBorradas) {
     `${perdidas.length} de las que ibas a conservar ya no está${perdidas.length === 1 ? '' : 'n'}`,
     `<p>Las ${totalBorradas} versiones sobrantes salieron bien. Pero al comprobarlo contra Spotify,
         esto que ibas a conservar <strong>no está en tus me gusta</strong>:</p>
-     <ul style="margin:10px 0;padding-left:20px;max-height:280px;overflow-y:auto">${filas}</ul>
+     <ul style="margin:10px 0;padding-left:20px">${filas}</ul>
      <p style="font-size:13px;color:var(--color-text-secondary)">
        Este borrado no las quitó: nunca se mandaron a borrar. Ya faltaban antes, así que el análisis
        estaba mirando una foto vieja. Vuelve a añadirlas a mano y re-analiza antes de seguir borrando.</p>`,

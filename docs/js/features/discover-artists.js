@@ -10,17 +10,18 @@
 // 100 artistas en lugar de 20. Lógica de fetch/cache/playlist compartida en
 // features/discover-common.js con #new-releases.
 
-import { escapeHtml, confirmModal, pageHeader } from '../ui/components.js?v=245';
-import { showToast } from '../ui/toast.js?v=245';
-import { openArtistCard } from './artist-card.js?v=245';
-import { createIncrementalList, scrollRootOf } from '../ui/incremental-list.js?v=245';
-import { createLazyImages } from '../ui/lazy-img.js?v=245';
-import { isJunkTrack } from '../util/junk.js?v=245';
-import { buildAlbumHeardIndex } from '../util/album-heard.js?v=245';
-import { loadFiltros, buildFilterContext, applyDiscoverFilters } from '../util/discover-filters.js?v=245';
-import { releaseKind } from '../util/release-size.js?v=245';
-import { vigilarRuta } from '../util/vigencia-ruta.js?v=245';
-import { prefKey, migratePrefKey } from '../storage.js?v=245';
+import { escapeHtml, confirmModal, pageHeader } from '../ui/components.js?v=246';
+import { showToast } from '../ui/toast.js?v=246';
+import { openArtistCard } from './artist-card.js?v=246';
+import { createIncrementalList, scrollRootOf } from '../ui/incremental-list.js?v=246';
+import { createLazyImages } from '../ui/lazy-img.js?v=246';
+import { isJunkTrack } from '../util/junk.js?v=246';
+import { buildAlbumHeardIndex } from '../util/album-heard.js?v=246';
+import { loadFiltros, buildFilterContext, applyDiscoverFilters } from '../util/discover-filters.js?v=246';
+import { releaseKind } from '../util/release-size.js?v=246';
+import { masNuevoPrimero } from '../util/release-date.js?v=246';
+import { vigilarRuta } from '../util/vigencia-ruta.js?v=246';
+import { prefKey, migratePrefKey } from '../storage.js?v=246';
 import {
   getArtistIdCached,
   getArtistDiscoCached,
@@ -55,7 +56,7 @@ import {
   avisarRonda,
   botonesBaseHtml,
   conectarBotonesBase,
-} from './discover-common.js?v=245';
+} from './discover-common.js?v=246';
 
 const SCAN_KEY = 'discover_artists';
 
@@ -570,9 +571,21 @@ function refreshList(content) {
   // Los filtros solo mandan en el modo normal: en «Ocultos» y
   // «Escuchados» Ian está revisando lo que descartó a mano, y esconderle ahí la
   // mitad por un criterio automático sería justo lo contrario de lo que busca.
+  //
+  // Dentro de cada artista, el lanzamiento más nuevo primero (v=246). Hasta
+  // v=245 no había ningún orden: cada bloque salía en el orden en que la base
+  // recibió los lanzamientos (lo del endpoint nativo o de `/search`, y lo
+  // reciente AÑADIDO AL FINAL) — medido sobre la base de Ian, 296 de 300
+  // discografías salían mezcladas. Los bloques siguen en el orden de los likes
+  // del artista: el orden cronológico ENTRE artistas es lo que aporta
+  // `#new-releases`.
+  //
+  // `poolDe(a).filter(...)` ya es una copia, así que el sort no toca `a.disco`
+  // ni `a.unheard`, que son lo que se guarda (y de cuyo orden `tieneOrdenNativo`
+  // deduce la fuente de una discografía).
   let artists = state.artists
     .filter(a => a.scanned && !a.error)
-    .map(a => ({ ...a, filtered: poolDe(a).filter(passesFilter) }));
+    .map(a => ({ ...a, filtered: poolDe(a).filter(passesFilter).sort(masNuevoPrimero) }));
 
   if (state.mode === 'normal' && state.filterCtx) {
     const items = [];

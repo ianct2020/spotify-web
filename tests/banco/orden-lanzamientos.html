@@ -1,0 +1,76 @@
+<!doctype html><html lang="es"><head><meta charset="utf-8"><title>banco orden de lanzamientos</title>
+<!--
+  Banco del orden «más nuevo primero» de `#discover-artists` (v=246).
+
+  Pinta las tarjetas REALES (`renderAlbumCard` de discover-common.js) con el
+  CSS real, y las ordena con `masNuevoPrimero` REAL. Lo que NO es real: la vista
+  entera (arrastra la API y los ocultos) y los datos. Las FECHAS son las
+  secuencias que se leyeron del DOM de producción (v=245) el 26/09/2026, con el
+  orden en que salían; los nombres son inventados (este repo es público).
+
+    ?orden=despues   ordena con masNuevoPrimero (v=246)  [por defecto]
+    ?orden=antes     deja el orden de llegada, que es lo que hacía v=245
+
+  Comprueba con el DOM pintado que, de arriba abajo y de izquierda a derecha, la
+  fecha no crece nunca (o que sí crece, con ?orden=antes: documenta el desorden).
+-->
+<link rel="stylesheet" href="/css/theme.css">
+<link rel="stylesheet" href="/css/components.css">
+<link rel="stylesheet" href="/css/main.css">
+<style>
+  #cartel { position: fixed; top: 0; left: 0; right: 0; z-index: 99999; padding: 4px 10px; white-space: nowrap; overflow: hidden;
+            font: 11px/1.4 ui-monospace, monospace; background: #111; color: #e5e5e5; border-bottom: 1px solid #444; }
+  #cartel b.si { color: #4ade80; } #cartel b.no { color: #f87171; }
+  #contenido { padding: 40px 24px 24px; max-width: 1100px; margin: 0 auto; }
+</style></head><body>
+<div id="cartel">preparando…</div>
+<div id="contenido"><div class="disco-list" id="disco-list"></div></div>
+<script type="module">
+import { esperarA, hojasLegibles, fallar, listo } from '/banco/esperar.mjs';
+
+const q = new URLSearchParams(location.search);
+const antes = q.get('orden') === 'antes';
+
+try {
+  await hojasLegibles(['theme.css', 'components.css', 'main.css']);
+  const { renderAlbumCard } = await import('/js/features/discover-common.js');
+  const { masNuevoPrimero } = await import('/js/util/release-date.js');
+
+  // Las fechas, tal cual salían en producción.
+  const artistas = [
+    { nombre: 'Artista de ejemplo A', likes: 27, fechas: ['2020-07-03', '2020-10-02', '2018-06-08'] },
+    { nombre: 'Artista de ejemplo B', likes: 22, fechas: ['2010-05-18', '1988-01-01', '2006-11-14', '2009-04-07', '2002-01-01', '1994', '1997-01-01', '1996-07-22'] },
+  ];
+  const lanzamientos = (a) => a.fechas.map((release, i) => ({
+    id: `banco-${a.nombre}-${i}`, name: `Disco de ejemplo ${i + 1}`, type: i % 4 === 3 ? 'single' : 'album',
+    img: null, release, total: i % 4 === 3 ? 1 : 10 + i, artists: [{ id: 'x', name: a.nombre }],
+  }));
+
+  // Mismo esqueleto que `renderArtistBlock` de discover-artists.js.
+  document.getElementById('disco-list').innerHTML = artistas.map(a => {
+    const filtered = antes ? lanzamientos(a) : lanzamientos(a).sort(masNuevoPrimero);
+    return `
+    <div class="disco-artist">
+      <div class="disco-artist-head">
+        <button class="disco-artist-name">${a.nombre}</button>
+        <span class="disco-artist-meta">${a.likes} likes · ${filtered.length} sin escuchar</span>
+      </div>
+      <div class="dcard-grid">${filtered.map(al => renderAlbumCard(al, a.nombre, { checkClass: 'disco-check', showHeard: true })).join('')}</div>
+    </div>`;
+  }).join('');
+
+  const ts = f => (f.length === 4 ? Date.UTC(+f, 5, 15) : Date.parse(f));
+  const orden = [...document.querySelectorAll('.disco-artist')].map(b => {
+    const f = [...b.querySelectorAll('.dcard .dcard-meta:first-of-type')].map(m => m.textContent.split(' · ')[0]);
+    const t = f.map(ts);
+    return { f, desc: t.every((x, i) => i === 0 || x <= t[i - 1]) };
+  });
+  const todoDesc = orden.every(o => o.desc);
+  const esperado = !antes;
+  document.getElementById('cartel').innerHTML =
+    `orden: ${antes ? 'de llegada (v=245)' : 'masNuevoPrimero (v=246)'} · bloques ordenados de más nuevo a más viejo: `
+    + `<b class="${todoDesc === esperado ? 'si' : 'no'}">${orden.map(o => o.desc ? 'SÍ' : 'NO').join(' / ')}</b> · fechas de arriba abajo, sin tocar nada más`;
+  if (todoDesc !== esperado) throw new Error(`BANCO: se esperaba ${esperado ? 'orden descendente' : 'desorden'} y salió ${JSON.stringify(orden)}`);
+  listo(`orden=${antes ? 'antes' : 'despues'} ${JSON.stringify(orden)}`);
+} catch (e) { fallar(e); }
+</script></body></html>

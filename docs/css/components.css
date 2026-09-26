@@ -104,7 +104,15 @@ input[type="checkbox"]:disabled {
 }
 
 /* Modal con lista larga: header/footer fijos, lista scrollea adentro.
-   .modal.modal-picker (0,2,0) para ganarle a .modal de main.css que carga después. */
+   .modal.modal-picker (0,2,0) para ganarle a .modal de main.css que carga después.
+
+   ES LA ÚNICA regla de este tipo y la comparten todos: los selectores de
+   `listened`, `artist-card`, `dashboard` y `versions` y, desde v=246, los tres
+   constructores genéricos de `ui/components.js` (`confirmModal`,
+   `typeConfirmModal`, `alertModal`). Hasta v=245 esos tres iban sin ella y el
+   pie de «Borrar versiones sobrantes» se salía de la pantalla. Un modal nuevo
+   con una lista larga se apunta acá con `modal-picker` + `picker-scroll`; no se
+   escribe otra regla. */
 .modal.modal-picker {
   display: flex;
   flex-direction: column;

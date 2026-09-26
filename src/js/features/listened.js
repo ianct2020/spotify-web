@@ -813,7 +813,7 @@ function openAlbumDetail(albumId) {
   const overlay = openModal({
     id: `listened-album:${album.id}`,
     html: `
-    <div class="modal" style="max-width:520px">
+    <div class="modal modal-picker" style="max-width:520px">
       <div style="display:flex;gap:14px;align-items:center;margin-bottom:16px">
         ${album.cover ? `<img src="${album.cover}" style="width:72px;height:72px;border-radius:var(--radius-sm);object-fit:cover">` : `<div style="width:72px;height:72px;background:var(--color-elevated);border-radius:var(--radius-sm)"></div>`}
         <div style="min-width:0">
@@ -822,8 +822,9 @@ function openAlbumDetail(albumId) {
           <div style="color:var(--color-text-muted);font-size:12px;margin-top:2px">${album.tracks.length} track${album.tracks.length === 1 ? '' : 's'} tuyos en la playlist</div>
         </div>
       </div>
+      <div class="picker-scroll">
       <div style="font-size:12px;color:var(--color-text-muted);margin-bottom:6px">En la playlist (${album.tracks.length})</div>
-      <div style="max-height:220px;overflow-y:auto;border:1px solid var(--color-border);border-radius:var(--radius-sm)">
+      <div style="border:1px solid var(--color-border);border-radius:var(--radius-sm)">
         ${album.tracks.map((t, i) => `
           <div style="display:flex;align-items:center;gap:10px;padding:9px 12px;border-bottom:1px solid var(--color-border)">
             <span style="width:22px;text-align:center;color:var(--color-text-muted);font-size:12px;flex-shrink:0">${i + 1}</span>
@@ -837,7 +838,7 @@ function openAlbumDetail(albumId) {
 
       <div style="font-size:12px;color:var(--color-accent);margin:16px 0 6px">♥ De este álbum en tus Liked Songs (${album.likes?.length || 0})</div>
       ${album.likes?.length ? `
-      <div style="max-height:220px;overflow-y:auto;border:1px solid var(--color-border);border-radius:var(--radius-sm)">
+      <div style="border:1px solid var(--color-border);border-radius:var(--radius-sm)">
         ${album.likes.map((t, i) => `
           <div style="display:flex;align-items:center;gap:10px;padding:9px 12px;border-bottom:1px solid var(--color-border)">
             <span style="width:22px;text-align:center;color:var(--color-accent);font-size:12px;flex-shrink:0">♥</span>
@@ -848,6 +849,7 @@ function openAlbumDetail(albumId) {
           </div>
         `).join('')}
       </div>` : `<div style="color:var(--color-text-muted);font-size:13px">No tienes canciones de este álbum en tus likes.</div>`}
+      </div>
       <div class="modal-actions" style="margin-top:16px">
         ${album.url ? `<a class="btn btn-secondary" href="${album.url}" target="_blank" rel="noopener">Ver álbum en Spotify</a>` : ''}
         <button class="btn btn-primary" data-close-modal>Cerrar</button>

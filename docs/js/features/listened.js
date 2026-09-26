@@ -1,13 +1,13 @@
-import { getAllPlaylistItems, getBestAvailableLikes, addTracksToPlaylist, removeTracksFromPlaylist, getAllUserPlaylists } from '../api.js?v=245';
-import { esEPoAlbum } from '../util/release-size.js?v=245';
-import { idbGetCached, idbSetCached, idbGetTimestamp } from '../idb.js?v=245';
-import { escapeHtml, confirmModal, pageHeader } from '../ui/components.js?v=245';
-import { showToast } from '../ui/toast.js?v=245';
-import { isJunkTrack } from '../util/junk.js?v=245';
-import { openModal, closeTop } from '../ui/modal-stack.js?v=245';
-import { getListenedPlaylist, groupItemsByAlbum, openListenedAlbumsPicker, albumKey, baseName, norm } from './listened-shared.js?v=245';
-import { openAlbumCard } from './album-card.js?v=245';
-import { prefKey, migratePrefKey } from '../storage.js?v=245';
+import { getAllPlaylistItems, getBestAvailableLikes, addTracksToPlaylist, removeTracksFromPlaylist, getAllUserPlaylists } from '../api.js?v=246';
+import { esEPoAlbum } from '../util/release-size.js?v=246';
+import { idbGetCached, idbSetCached, idbGetTimestamp } from '../idb.js?v=246';
+import { escapeHtml, confirmModal, pageHeader } from '../ui/components.js?v=246';
+import { showToast } from '../ui/toast.js?v=246';
+import { isJunkTrack } from '../util/junk.js?v=246';
+import { openModal, closeTop } from '../ui/modal-stack.js?v=246';
+import { getListenedPlaylist, groupItemsByAlbum, openListenedAlbumsPicker, albumKey, baseName, norm } from './listened-shared.js?v=246';
+import { openAlbumCard } from './album-card.js?v=246';
+import { prefKey, migratePrefKey } from '../storage.js?v=246';
 
 const SORT_KEY = 'listened_sort_mode';
 const VALID_SORTS = new Set(['recent', 'year-desc', 'year-asc', 'artist-asc', 'likes-desc', 'name-asc']);
@@ -66,7 +66,7 @@ function dismissHistory(key) {
 // Solo lo bajamos si el user logueado es el dueño (Ian): son sus datos personales.
 async function loadHistoryData() {
   if (historyAlbums) return historyAlbums;
-  const { isOwner } = await import('./history-data.js?v=245');
+  const { isOwner } = await import('./history-data.js?v=246');
   if (!(await isOwner())) { historyAlbums = []; return historyAlbums; }
   try {
     const cached = await idbGetCached(HISTORY_CACHE_KEY);
@@ -813,7 +813,7 @@ function openAlbumDetail(albumId) {
   const overlay = openModal({
     id: `listened-album:${album.id}`,
     html: `
-    <div class="modal" style="max-width:520px">
+    <div class="modal modal-picker" style="max-width:520px">
       <div style="display:flex;gap:14px;align-items:center;margin-bottom:16px">
         ${album.cover ? `<img src="${album.cover}" style="width:72px;height:72px;border-radius:var(--radius-sm);object-fit:cover">` : `<div style="width:72px;height:72px;background:var(--color-elevated);border-radius:var(--radius-sm)"></div>`}
         <div style="min-width:0">
@@ -822,8 +822,9 @@ function openAlbumDetail(albumId) {
           <div style="color:var(--color-text-muted);font-size:12px;margin-top:2px">${album.tracks.length} track${album.tracks.length === 1 ? '' : 's'} tuyos en la playlist</div>
         </div>
       </div>
+      <div class="picker-scroll">
       <div style="font-size:12px;color:var(--color-text-muted);margin-bottom:6px">En la playlist (${album.tracks.length})</div>
-      <div style="max-height:220px;overflow-y:auto;border:1px solid var(--color-border);border-radius:var(--radius-sm)">
+      <div style="border:1px solid var(--color-border);border-radius:var(--radius-sm)">
         ${album.tracks.map((t, i) => `
           <div style="display:flex;align-items:center;gap:10px;padding:9px 12px;border-bottom:1px solid var(--color-border)">
             <span style="width:22px;text-align:center;color:var(--color-text-muted);font-size:12px;flex-shrink:0">${i + 1}</span>
@@ -837,7 +838,7 @@ function openAlbumDetail(albumId) {
 
       <div style="font-size:12px;color:var(--color-accent);margin:16px 0 6px">♥ De este álbum en tus Liked Songs (${album.likes?.length || 0})</div>
       ${album.likes?.length ? `
-      <div style="max-height:220px;overflow-y:auto;border:1px solid var(--color-border);border-radius:var(--radius-sm)">
+      <div style="border:1px solid var(--color-border);border-radius:var(--radius-sm)">
         ${album.likes.map((t, i) => `
           <div style="display:flex;align-items:center;gap:10px;padding:9px 12px;border-bottom:1px solid var(--color-border)">
             <span style="width:22px;text-align:center;color:var(--color-accent);font-size:12px;flex-shrink:0">♥</span>
@@ -848,6 +849,7 @@ function openAlbumDetail(albumId) {
           </div>
         `).join('')}
       </div>` : `<div style="color:var(--color-text-muted);font-size:13px">No tienes canciones de este álbum en tus likes.</div>`}
+      </div>
       <div class="modal-actions" style="margin-top:16px">
         ${album.url ? `<a class="btn btn-secondary" href="${album.url}" target="_blank" rel="noopener">Ver álbum en Spotify</a>` : ''}
         <button class="btn btn-primary" data-close-modal>Cerrar</button>

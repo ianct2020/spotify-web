@@ -401,11 +401,12 @@ export function confirmarCostoDeEscaneo(est, { motivo = 'automatico' } = {}) {
       id: 'costo-escaneo',
       onClose: () => cerrar(false),
       html: `
-      <div class="modal" style="max-width:520px">
+      <div class="modal modal-picker" style="max-width:520px">
         <div class="modal-hdr">
           <h3 class="modal-hdr-title">${titulo}</h3>
           <button class="btn btn-secondary btn-sm" data-close-modal title="Cerrar" aria-label="Cerrar">✕</button>
         </div>
+        <div class="picker-scroll">
         <p style="color:var(--color-text-secondary);font-size:13px;line-height:1.55;margin:0 0 12px">${entradilla}</p>
         <div style="background:var(--color-elevated);border-radius:8px;padding:12px 14px;margin:0 0 12px">
           <div style="font-size:22px;font-weight:600;line-height:1.2">${est.exacto ? '' : '~'}${n(est.total)} peticiones</div>
@@ -415,6 +416,7 @@ export function confirmarCostoDeEscaneo(est, { motivo = 'automatico' } = {}) {
         ${precision}
         <p style="margin:0 0 6px;font-size:13px;font-weight:600">Si se agota la cuota</p>
         <ul style="margin:0 0 18px;padding-left:18px;font-size:12.5px;line-height:1.6;color:var(--color-text-secondary)">${consecuencias.join('')}</ul>
+        </div>
         <div class="modal-actions" style="display:flex;gap:10px;justify-content:flex-end">
           <button class="btn btn-secondary" id="costo-cancelar">Cancelar</button>
           <button class="btn btn-primary" id="costo-seguir">Sí, pedirlo</button>
@@ -632,15 +634,10 @@ export function yearOf(release) {
   return Number.isFinite(y) ? y : 0;
 }
 
-export function releaseTs(release) {
-  // "YYYY", "YYYY-MM", "YYYY-MM-DD" → ms epoch (UTC, día 15 si falta día)
-  const s = release || '';
-  const y = parseInt(s.slice(0, 4), 10);
-  if (!Number.isFinite(y)) return 0;
-  const m = parseInt(s.slice(5, 7), 10) || 6;
-  const d = parseInt(s.slice(8, 10), 10) || 15;
-  return Date.UTC(y, m - 1, d);
-}
+// `releaseTs` vive ahora en `util/release-date.js` (v=246), junto al comparador
+// «más nuevo primero» de `#discover-artists`; se re-exporta acá para que
+// `#new-releases` siga importándolo de este archivo.
+export { releaseTs } from '../util/release-date.js';
 
 // Deduplica ediciones del mismo álbum (deluxe, remaster, etc). Nos quedamos
 // con la primera edición (release date más antiguo).

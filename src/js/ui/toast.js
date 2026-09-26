@@ -9,14 +9,34 @@
 //   - info (avisos menores) → 8 s.
 //   - TODOS llevan ✕ visible.
 //   - Como mucho 3 en pantalla: al llegar el cuarto se va el más viejo.
+//
+// v=246: el tope pasa a 4 (al llegar el quinto se va el más viejo), y el
+// retiro de un toast descartado ya no cuelga de `animationend`. Hasta v=245
+// `dismiss()` solo ponía `.toast-exit` y esperaba ese evento para quitar el
+// nodo; si la animación no corre —pestaña oculta o en segundo plano, que es
+// donde corre la extensión con la que se prueba— el evento no llega nunca y el
+// toast se quedaba en pantalla con opacidad 1. Y como el tope solo cuenta los
+// que NO están en `.toast-exit`, esos zombis no ocupaban cupo: cada toast que
+// caducaba dejaba un cadáver y los nuevos se apilaban encima sin techo.
+//
 // Un caller puede forzar el comportamiento pasando `duration`: un número de ms
 // para que se cierre solo, o 0 / Infinity para que se quede.
+//
+// ⚠️ La deduplicación de los avisos NO vive acá: la hace cada llamador
+// (`avisar()` de `util/hidden-sync.js`, por tipo + mensaje). Este módulo solo
+// pone el techo de lo que hay a la vez. Un aviso que el techo expulsa ya no
+// vuelve a salir esa sesión si su llamador lo deduplica, y es a propósito:
+// `avisar()` sigue mandando cada mensaje distinto una vez, que es lo que arregló
+// v=229.
 
 import { mountBottom } from './bottom-layer.js';
 
 const WRITE_DURATION_MS = 30000;
 const INFO_DURATION_MS = 8000;
-const MAX_VISIBLE = 3;
+const MAX_VISIBLE = 4;
+// Lo que dura `toast-out` en main.css (0.2 s), más margen. Es la red de
+// seguridad del retiro, no la animación.
+const EXIT_SAFETY_MS = 450;
 const WRITE_TYPES = new Set(['error', 'success', 'warning']);
 
 function ensureContainer() {
@@ -43,10 +63,19 @@ function showToast(message, type = 'info', duration) {
   toast.appendChild(text);
 
   let timer = null;
+  let saliendo = false;
   const dismiss = () => {
+    if (saliendo) return;
+    saliendo = true;
     if (timer) clearTimeout(timer);
     toast.classList.add('toast-exit');
-    toast.addEventListener('animationend', () => toast.remove());
+    const quitar = () => toast.remove();
+    // Con la pestaña oculta nadie va a ver la salida y el navegador no la
+    // corre: se quita ya, sin esperar un evento que no va a llegar.
+    if (document.visibilityState === 'hidden') { quitar(); return; }
+    toast.addEventListener('animationend', quitar, { once: true });
+    // Y aunque esté visible, la salida no puede ser la única forma de irse.
+    setTimeout(quitar, EXIT_SAFETY_MS);
   };
 
   // El texto de cualquier toast se puede seleccionar para copiarlo (antes solo
@@ -70,7 +99,7 @@ function showToast(message, type = 'info', duration) {
 
   container.appendChild(toast);
 
-  // Techo de 3. El contenedor es column-reverse (el más nuevo abajo), así que
+  // Techo de MAX_VISIBLE. El contenedor es column-reverse (el más nuevo abajo), así que
   // los más viejos son los primeros hijos del DOM. Se sacan sin animación de
   // salida para que el hueco no quede colgando mientras entra el nuevo.
   const live = [...container.querySelectorAll('.toast:not(.toast-exit)')];

@@ -1,0 +1,66 @@
+<!doctype html><html lang="es"><head><meta charset="utf-8"><title>banco toasts</title>
+<!--
+  Banco del techo de toasts (v=246).
+
+  Carga el CSS, `ui/toast.js` y `ui/bottom-layer.js` REALES: la capa de abajo, el
+  apilado en columna y las clases de cada tipo son los de la app. Dispara varios
+  toasts de golpe y cuenta cuántos hay a la vez.
+
+    ?n=7               cuántos toasts se disparan
+    ?espera=4          cuántos tiene que haber a la vez al final (3 documenta v=245)
+
+  Los textos son de ejemplo: este repo es público.
+-->
+<link rel="stylesheet" href="/css/theme.css">
+<link rel="stylesheet" href="/css/components.css">
+<link rel="stylesheet" href="/css/main.css">
+<style>
+  #cartel { position: fixed; top: 0; left: 0; right: 0; z-index: 99999; padding: 4px 10px; white-space: nowrap; overflow: hidden;
+            font: 11px/1.4 ui-monospace, monospace; background: #111; color: #e5e5e5; border-bottom: 1px solid #444; }
+  #cartel b.si { color: #4ade80; } #cartel b.no { color: #f87171; }
+  p.fondo { max-width: 560px; margin: 70px auto 0; color: var(--color-text-muted); font-size: 13px; line-height: 1.6; }
+</style></head><body>
+<div id="cartel">preparando…</div>
+<p class="fondo">Fondo de la app: los toasts salen abajo a la derecha, en la capa de abajo, apilados en columna.</p>
+<script type="module">
+import { esperarA, hojasLegibles, fallar, listo } from '/banco/esperar.mjs';
+
+const q = new URLSearchParams(location.search);
+const n = Math.max(1, parseInt(q.get('n') || '7', 10));
+const espera = parseInt(q.get('espera') || '4', 10);
+
+try {
+  await hojasLegibles(['theme.css', 'components.css', 'main.css']);
+  const { showToast } = await import('/js/ui/toast.js');
+
+  const mensajes = [
+    ['success', '«Disco de ejemplo 1» guardado en tu biblioteca de álbumes'],
+    ['warning', 'Aviso de ejemplo 2: esto se ha ocultado solo en este navegador, no en la playlist de Spotify.'],
+    ['error', 'Error de ejemplo 3: no he podido sincronizar el cambio con Spotify.'],
+    ['info', 'Info de ejemplo 4: ya lo tenías en la lista'],
+    ['success', '«Disco de ejemplo 5» marcado como escuchado'],
+    ['warning', 'Aviso de ejemplo 6: quedan 12 para la próxima ronda'],
+    ['success', '«Disco de ejemplo 7» vuelve a la lista'],
+    ['info', 'Info de ejemplo 8'],
+    ['error', 'Error de ejemplo 9'],
+  ];
+  // `duration: 0` = se quedan (sin temporizador): lo que se mide es el TECHO.
+  for (let i = 0; i < n; i++) { const [tipo, txt] = mensajes[i % mensajes.length]; showToast(txt, tipo, 0); }
+
+  // Sin esperar animaciones (en headless su reloj se para): se las lleva al final.
+  document.getAnimations().forEach(a => { try { a.finish(); } catch { /* ninguna infinita */ } });
+  await esperarA(() => document.getAnimations().length === 0, { que: 'que no quede ninguna animación viva tras finish()' });
+
+  const enDom = document.querySelectorAll('.toast').length;
+  const vivos = document.querySelectorAll('.toast:not(.toast-exit)').length;
+  const textos = [...document.querySelectorAll('.toast > span')].map(s => s.textContent.slice(0, 22));
+  const cont = document.querySelector('.toast-container').getBoundingClientRect();
+  const cabe = cont.top >= 0 && cont.bottom <= innerHeight;
+  const cumple = enDom === espera && vivos === espera;
+  document.getElementById('cartel').innerHTML =
+    `${n} toasts disparados · a la vez: <b class="${cumple ? 'si' : 'no'}">${enDom}</b> (vivos ${vivos}) · se esperaban ${espera} · `
+    + `caben en la ventana ${innerWidth}×${innerHeight}: <b class="${cabe ? 'si' : 'no'}">${cabe ? 'SÍ' : 'NO'}</b> · pila ocupa ${Math.round(cont.height)}px`;
+  if (!cumple) throw new Error(`BANCO: se esperaban ${espera} toasts a la vez y hay ${enDom} (vivos ${vivos}): ${JSON.stringify(textos)}`);
+  listo(`n=${n} enDom=${enDom} vivos=${vivos} espera=${espera} cabe=${cabe} pila=${Math.round(cont.height)}px textos=${JSON.stringify(textos)}`);
+} catch (e) { fallar(e); }
+</script></body></html>

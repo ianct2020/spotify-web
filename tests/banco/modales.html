@@ -1,0 +1,111 @@
+<!doctype html><html lang="es"><head><meta charset="utf-8"><title>banco modales</title>
+<!--
+  Banco de los modales genéricos con lista larga (v=246).
+
+  QUÉ MIRA: que el pie del modal —el campo de confirmación y los botones— quede
+  DENTRO del modal y DENTRO de la pantalla aunque la lista sea larga, y que haya
+  UNA sola zona con scroll. Es el fallo del «Borrar versiones sobrantes» de
+  `#versions`: hasta v=245 el modal entero scrolleaba y el pie se iba fuera.
+
+  Carga el CSS y `ui/components.js` REALES. Lo único que no es real es el
+  mensaje: replica la estructura del de `features/versions.js` (que no se puede
+  importar acá porque arrastra la API) con nombres INVENTADOS — este repo es
+  público.
+
+    ?caso=type|info|confirm     qué constructor de `ui/components.js` se abre
+    ?n=40                       cuántas filas trae la lista
+    ?ul=nuevo|viejo             `viejo` = la lista con `max-height:320px;overflow-y:auto`
+                                inline, como la llevaba versions.js hasta v=245
+    ?espera=dentro|fuera        `fuera` es para documentar el defecto sobre el código
+                                viejo: el banco da OK si el pie SE SALE
+
+  Sirve `npm run dev` (scripts/dev-server.mjs): `/` sale de src/ y `/banco/` de
+  tests/banco/. Se fotografía con `tests/banco/correr.sh modales …`.
+-->
+<link rel="stylesheet" href="/css/theme.css">
+<link rel="stylesheet" href="/css/components.css">
+<link rel="stylesheet" href="/css/main.css">
+<style>
+  #cartel { position: fixed; top: 0; left: 0; right: 0; z-index: 99999; padding: 4px 10px; white-space: nowrap; overflow: hidden;
+            font: 11px/1.4 ui-monospace, monospace; background: #111; color: #e5e5e5; border-bottom: 1px solid #444; }
+  #cartel b.si { color: #4ade80; } #cartel b.no { color: #f87171; }
+</style></head><body>
+<div id="cartel">preparando…</div>
+<script type="module">
+import { typeConfirmModal, infoModal, confirmModal } from '/js/ui/components.js';
+import { esperarA, hojasLegibles, fallar, listo } from '/banco/esperar.mjs';
+
+const q = new URLSearchParams(location.search);
+const caso = q.get('caso') || 'type';
+const n = Math.max(1, parseInt(q.get('n') || '40', 10));
+const ulViejo = (q.get('ul') || 'nuevo') === 'viejo';
+const espera = q.get('espera') || 'dentro';
+
+try {
+  await hojasLegibles(['theme.css', 'components.css', 'main.css']);
+
+  // Mismo esqueleto que el mensaje de `batchDelete()` en versions.js.
+  const filas = Array.from({ length: n }, (_, i) => `
+    <li style="margin-bottom:6px">
+      <strong>Tema de ejemplo ${i + 1}</strong> — Artista ${(i % 7) + 1}
+      <div style="font-size:12px;color:var(--color-text-secondary)">Álbum ${(i % 5) + 1}</div>
+    </li>`).join('');
+  const ulStyle = 'margin:10px 0 0;padding-left:20px' + (ulViejo ? ';max-height:320px;overflow-y:auto' : '');
+  const mensaje = `Se mantienen las 12 versión(es) marcadas en verde.
+     Se van a borrar de los me gusta estas ${n}:
+     <ul style="${ulStyle}">${filas}</ul>`;
+
+  if (caso === 'type') typeConfirmModal('Borrar versiones sobrantes', mensaje, 'BORRAR');
+  else if (caso === 'info') infoModal('3 de las que ibas a conservar ya no están', mensaje, { variant: 'danger', cancelText: 'Cerrar', confirmText: 'Entendido' });
+  else if (caso === 'confirm') confirmModal('Quitar de la playlist', mensaje, 'Quitar');
+  else throw new Error(`caso desconocido: ${caso}`);
+
+  const modal = await esperarA(() => document.querySelector('.modal-overlay .modal'), { que: 'que el modal esté en el DOM' });
+  // El modal entra con `scale(.95)` y el overlay con un fundido. NO se espera a
+  // que terminen: en headless el reloj de las animaciones se para cuando no hay
+  // nada que repintar (`modal-in` se quedaba en `running@0ms` para siempre, a
+  // veces sí y a veces no: la intermitencia que `esperar.mjs` describe para
+  // `rAF`). Se las lleva a su estado final y se mide sobre eso, que es
+  // determinista: ninguna de las dos tiene `fill`, así que el final es el CSS
+  // en reposo, que es lo que interesa medir.
+  document.getAnimations().forEach(a => { try { a.finish(); } catch { /* infinita: no hay ninguna acá */ } });
+  await esperarA(() => document.getAnimations().length === 0, { que: 'que no quede ninguna animación viva tras finish()' });
+
+  const mr = modal.getBoundingClientRect();
+  const pieId = caso === 'type' ? ['#confirm-text-input', '#modal-cancel', '#modal-confirm'] : ['#modal-cancel', '#modal-confirm'];
+  const dentro = (sel) => {
+    const el = modal.querySelector(sel);
+    if (!el) return { sel, ok: false, motivo: 'no existe' };
+    const r = el.getBoundingClientRect();
+    const enModal = r.top >= mr.top - 1 && r.bottom <= mr.bottom + 1;
+    const enPantalla = r.top >= 0 && r.bottom <= innerHeight;
+    return { sel, ok: enModal && enPantalla, enModal, enPantalla, bottom: Math.round(r.bottom) };
+  };
+  const pie = pieId.map(dentro);
+  const pieVisible = pie.every(p => p.ok);
+
+  // Zonas con scroll: todo lo que tiene overflow-y auto/scroll Y desborda de verdad.
+  const scrolleables = [modal, ...modal.querySelectorAll('*')].filter(el => {
+    const oy = getComputedStyle(el).overflowY;
+    return (oy === 'auto' || oy === 'scroll') && el.scrollHeight > el.clientHeight + 1;
+  }).map(el => el === modal ? '.modal (el modal ENTERO)' : (el.className ? '.' + String(el.className).split(' ')[0] : el.tagName.toLowerCase()));
+
+  const alturas = `modal ${Math.round(mr.height)}px de ${innerHeight}px de ventana`;
+  const cartel = document.getElementById('cartel');
+  const zonas = scrolleables.length ? scrolleables.join(', ') : 'ninguna (no desborda)';
+  cartel.innerHTML = `${caso} · ${n} filas · ${ulViejo ? 'v=245 (lista con scroll inline)' : 'v=246'} · ventana ${innerWidth}×${innerHeight} · `
+    + `pie a la vista: <b class="${pieVisible ? 'si' : 'no'}">${pieVisible ? 'SÍ' : 'NO'}</b> · `
+    + `zonas con scroll: <b>${scrolleables.length}</b> [${zonas}] · ${alturas}`;
+
+  const esperado = espera === 'dentro';
+  if (pieVisible !== esperado) {
+    throw new Error(`BANCO: se esperaba el pie ${esperado ? 'DENTRO' : 'FUERA'} y salió ${pieVisible ? 'dentro' : 'fuera'}.\n${JSON.stringify(pie)}`);
+  }
+  // A lo sumo UNA zona con scroll, y nunca el modal entero. Con una lista corta no
+  // desborda nada y 0 es lo correcto; lo que no puede haber es un scroll anidado.
+  if (esperado && (scrolleables.length > 1 || scrolleables.some(z => z.startsWith('.modal ')))) {
+    throw new Error(`BANCO: se esperaba a lo sumo UNA zona con scroll (que no sea el modal entero) y hay ${scrolleables.length}: ${scrolleables.join(', ')}`);
+  }
+  listo(`caso=${caso} n=${n} ul=${ulViejo ? 'viejo' : 'nuevo'} pie=${pieVisible ? 'dentro' : 'fuera'} scrolls=${scrolleables.length} ${alturas} pie=${JSON.stringify(pie)}`);
+} catch (e) { fallar(e); }
+</script></body></html>
