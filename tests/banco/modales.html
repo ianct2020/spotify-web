@@ -93,7 +93,7 @@ try {
   const alturas = `modal ${Math.round(mr.height)}px de ${innerHeight}px de ventana`;
   const cartel = document.getElementById('cartel');
   const zonas = scrolleables.length ? scrolleables.join(', ') : 'ninguna (no desborda)';
-  cartel.innerHTML = `${caso} · ${n} filas · ${ulViejo ? 'v=245 (lista con scroll inline)' : 'v=246'} · ventana ${innerWidth}×${innerHeight} · `
+  cartel.innerHTML = `${caso} · ${n} filas · ${ulViejo ? 'lista con scroll inline (como en v=245)' : 'lista sin scroll inline'} · ventana ${innerWidth}×${innerHeight} · `
     + `pie a la vista: <b class="${pieVisible ? 'si' : 'no'}">${pieVisible ? 'SÍ' : 'NO'}</b> · `
     + `zonas con scroll: <b>${scrolleables.length}</b> [${zonas}] · ${alturas}`;
 

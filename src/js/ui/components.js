@@ -161,11 +161,11 @@ function isCancelled(err) {
 
 // Los tres constructores de abajo (`confirmModal`, `typeConfirmModal`,
 // `alertModal`) llevan `modal-picker` + `picker-scroll`: la MISMA regla que ya
-// usan los doce modales con lista larga de `listened`, `artist-card`,
+// usan los once modales con lista larga de `listened`, `artist-card`,
 // `dashboard` y `versions` (components.css). Cabecera y pie quedan fijos y solo
 // el cuerpo scrollea, con el modal limitado a la altura de la ventana.
 //
-// ⚠️ Hasta v=246 el mensaje iba suelto dentro de `.modal`, que scrollea ENTERO
+// ⚠️ Hasta v=245 el mensaje iba suelto dentro de `.modal`, que scrollea ENTERO
 // (`max-height: 80vh; overflow-y: auto`): con una lista larga —el «Borrar
 // versiones sobrantes» de `#versions`— el campo de confirmación y los botones
 // se iban fuera de la pantalla dentro del propio modal. Como estos tres son la
@@ -174,6 +174,12 @@ function isCancelled(err) {
 //
 // El mensaje entra dentro de un <p> aunque traiga <ul>/<div>: el parser cierra
 // el <p> solo, pero todo lo que sale queda DENTRO del contenedor con scroll.
+//
+// Y el margen de abajo de ese <p> (20 px) queda dentro del scroll también: con
+// la lista desbordando ya no separa el texto de los botones, y la última fila
+// cortada se pegaba a ellos (visto en el banco). Por eso `confirmModal` lleva su
+// propio `margin-top` en el pie, como el de `typeConfirmModal` (16 px) y el
+// `margin-bottom` del cuerpo de `alertModal`.
 function confirmModal(title, message, confirmText = 'Confirmar') {
   return new Promise(resolve => {
     let resolved = false;
@@ -184,7 +190,7 @@ function confirmModal(title, message, confirmText = 'Confirmar') {
       <div class="modal modal-picker">
         <h2>${escapeHtml(title)}</h2>
         <div class="picker-scroll"><p>${message}</p></div>
-        <div class="modal-actions">
+        <div class="modal-actions" style="margin-top:12px">
           <button class="btn btn-secondary" id="modal-cancel">Cancelar</button>
           <button class="btn btn-danger" id="modal-confirm">${escapeHtml(confirmText)}</button>
         </div>
