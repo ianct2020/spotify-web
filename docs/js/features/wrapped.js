@@ -1,26 +1,77 @@
 // Wrapped propio: mini-resumen tuyo por año, hecho con el Extended Streaming History.
 // A diferencia del Wrapped oficial (que corre oct-sept), este es del año calendario completo.
 
-import { loadHistoryStats, isOwner, ownerLockedMessage } from './history-data.js?v=243';
-import { escapeHtml, pageHeader } from '../ui/components.js?v=243';
-import { getPreview } from '../api/preview-providers.js?v=243';
-import { getArtistLikePreview, getAlbumLikePreview } from '../util/artist-preview.js?v=243';
-import { attachHover } from '../ui/preview-player.js?v=243';
-import { openTrackCard } from './track-card.js?v=243';
-import { openArtistCard } from './artist-card.js?v=243';
-import { openAlbumCard } from './album-card.js?v=243';
-import { getMyTop } from '../api.js?v=243';
-import { activateMarquee, marqueeSpan } from '../ui/marquee.js?v=243';
-import { openModal } from '../ui/modal-stack.js?v=243';
-import { armReveal, armRevealAll, releaseReveal } from '../ui/reveal.js?v=243';
-import { coverUrl } from '../util/cover-size.js?v=243';
-import { vigilarRuta } from '../util/vigencia-ruta.js?v=243';
-import { fmtDia } from '../util/fecha.js?v=243';
+import { loadHistoryStats, isOwner, ownerLockedMessage } from './history-data.js?v=244';
+import { escapeHtml, pageHeader } from '../ui/components.js?v=244';
+import { getPreview } from '../api/preview-providers.js?v=244';
+import { getArtistLikePreview, getAlbumLikePreview } from '../util/artist-preview.js?v=244';
+import { attachHover } from '../ui/preview-player.js?v=244';
+import { openTrackCard } from './track-card.js?v=244';
+import { openArtistCard } from './artist-card.js?v=244';
+import { openAlbumCard } from './album-card.js?v=244';
+import { getMyTop } from '../api.js?v=244';
+import { activateMarquee, marqueeSpan } from '../ui/marquee.js?v=244';
+import { openModal } from '../ui/modal-stack.js?v=244';
+import { armReveal, armRevealAll, releaseReveal, animationsEnabled } from '../ui/reveal.js?v=244';
+import { coverUrl } from '../util/cover-size.js?v=244';
+import { vigilarRuta } from '../util/vigencia-ruta.js?v=244';
+import { fmtDia } from '../util/fecha.js?v=244';
 
 let stats = null;
 let selectedYear = null;
 
 const MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
+
+// Los mismos doce, enteros. La apertura los usa en las dos filas de meses (el
+// gráfico mes a mes y el calendario) y en sus textos; la baldosa «Mes pico» de
+// la grilla de abajo sigue con los cortos, que es donde el ancho aprieta.
+// MEDIDO a 1366px con 2025 (53 semanas, el año más largo): con el visual a
+// 844px la holgura mínima entre etiquetas es 17,9px en el gráfico de barras y
+// 10,8px en el calendario. A los 660px de antes, «septiembre» pisaba a
+// «octubre» por 3,0px en el calendario.
+const MESES_LARGOS = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio',
+                      'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
+
+// ── El flash de entrada (v=244) ─────────────────────────────────────────────
+//
+// MEDIDO en producción (v=243, pestaña real, MutationObserver): entre que el
+// Wrapped de siempre quedaba pintado y que la apertura entraba en el DOM
+// pasaban 342,5 ms. En esa ventana se veía el Wrapped entero, y después la
+// apertura se metía ARRIBA y lo empujaba seis pantallas hacia abajo.
+//
+// ⚠️ NO era lo que parecía. La sospecha razonable era que los paneles se
+// pintaban visibles y que la clase que los esconde (`.js`) llegaba un frame
+// tarde. La medición dice que no: `apertura-en-dom` y `apertura-con-clase-js`
+// cayeron en el MISMO timestamp (342,5 ms), o sea en el mismo task, sin paint
+// entre medias — `montarApertura()` hace el `innerHTML` y el `armar()` de
+// corrido. Durante la ventana no había ningún panel a medio vestir: no había
+// panel ninguno. Armar el estado inicial en CSS no habría cambiado nada.
+//
+// Lo que abría la ventana era el `await` del `import()` dinámico: el módulo se
+// pedía DESPUÉS de pintar. Ahora se pide al principio, en paralelo con
+// `loadHistoryStats()` —que es el que manda, porque trae un JSON de 156 KB— y
+// se espera a los dos antes de pintar nada. La ventana pasa a ser cero por
+// construcción: cuando el primer pixel del Wrapped se pinta, el módulo de la
+// apertura ya está en la mano y se monta en el mismo task.
+//
+// ⚠️ Esto NO relaja la regla dura de v=216. El `import()` sigue siendo
+// dinámico y sigue dentro de un `try`: si el archivo no está desplegado o
+// revienta al evaluarse, `cargarApertura()` devuelve `null` y el Wrapped se
+// pinta igual de entero que antes. Lo único que cambia es CUÁNDO se pide.
+const ESPERA_APERTURA_MS = 3000;
+
+// Una red lenta no puede dejar la vista en el spinner: pasado el tope se pinta
+// el Wrapped sin apertura y no se monta más, ni aunque el módulo llegue
+// después — montarlo tarde sería justo el flash que se está arreglando.
+function cargarApertura() {
+  return Promise.race([
+    import('../features/wrapped-apertura.js?v=244').catch(e => {
+      console.warn('[wrapped] la apertura no cargó, el resumen queda entero:', e);
+      return null;
+    }),
+    new Promise(res => setTimeout(() => res(null), ESPERA_APERTURA_MS)),
+  ]);
+}
 
 // ── «9 de enero» en Récords y «8 de enero» en Wrapped (v=154), y «31 dic 2025»
 // en la baldosa «Primera play» de 2026 (v=231) ────────────────────────────────
@@ -89,7 +140,10 @@ export async function render(container) {
     <div id="wrapped-content"><div class="empty-state"><div class="spinner spinner-lg"></div><div style="margin-top:16px">Cargando historial…</div></div></div>
   `;
 
-  stats = await loadHistoryStats();
+  // Las dos esperas, en paralelo. Ver «El flash de entrada» arriba: el módulo
+  // de la apertura tiene que estar en la mano ANTES de pintar, no después.
+  const [statsCargadas, modApertura] = await Promise.all([loadHistoryStats(), cargarApertura()]);
+  stats = statsCargadas;
   if (!ruta.vigente()) return;
   const content = document.getElementById('wrapped-content');
   if (!content) return;
@@ -122,9 +176,11 @@ export async function render(container) {
       </div>
       <button class="wrapped-info-btn" id="wrapped-info-btn" aria-label="Ver rango de datos">ⓘ</button>
     </div>
-    <div id="wrapped-apertura"></div>
-    <div id="wrapped-year-card"></div>
-    <div id="wrapped-alltime" style="margin-top:20px"></div>
+    <div id="wrapped-slide">
+      <div id="wrapped-apertura"></div>
+      <div id="wrapped-year-card"></div>
+      <div id="wrapped-alltime" style="margin-top:20px"></div>
+    </div>
   `;
 
   const infoBtn = document.getElementById('wrapped-info-btn');
@@ -134,7 +190,14 @@ export async function render(container) {
 
   content.querySelectorAll('.wrapped-year-tab').forEach(btn => {
     btn.onclick = () => {
+      const anterior = selectedYear;
       selectedYear = Number(btn.dataset.year);
+      // La fila de chips va de más nuevo (izquierda) a más viejo (derecha), así
+      // que irse a un año más viejo es moverse hacia la DERECHA de la fila y lo
+      // que entra tiene que venir de la izquierda. Ver `deslizar()`.
+      deseado = anterior === null || selectedYear === anterior
+        ? null
+        : (selectedYear < anterior ? 'izquierda' : 'derecha');
       render(container);
     };
   });
@@ -142,47 +205,82 @@ export async function render(container) {
   // ⚠️ EL ORDEN ES LA GARANTÍA, no un detalle de estilo.
   //
   // El Wrapped de siempre se pinta ENTERO primero. La apertura se monta después,
-  // en su propio hueco, con `import()` dinámico y dentro de un `try`. Así, si el
-  // módulo no está desplegado, si tira al evaluarse o si `montarApertura()`
-  // revienta con datos raros, lo único que queda es un hueco vacío: los chips,
-  // el hero, las ocho baldosas y las tres columnas de tops ya están en el DOM y
-  // cableadas. No hay ninguna forma de que un fallo de la apertura se lleve
-  // puesto lo que hoy funciona.
+  // en su propio hueco, con el módulo que llegó por `import()` dinámico y
+  // dentro de un `try`. Así, si el módulo no está desplegado, si tira al
+  // evaluarse o si `montarApertura()` revienta con datos raros, lo único que
+  // queda es un hueco vacío: los chips, el hero, las ocho baldosas y las tres
+  // columnas de tops ya están en el DOM y cableadas. No hay ninguna forma de
+  // que un fallo de la apertura se lleve puesto lo que hoy funciona.
   //
   // Con un `import` estático esto NO sería cierto: un módulo que no carga se
   // lleva el módulo que lo importa, o sea la vista entera.
+  //
+  // Lo que v=244 cambió es CUÁNDO se pide el módulo, no este orden: se pide
+  // arriba, junto con las stats, y acá ya está resuelto. Las tres líneas de
+  // abajo corren en el MISMO task, que es lo que cierra la ventana de 342,5 ms
+  // en la que se veía el Wrapped sin la apertura.
   renderYearCard();
   renderAllTime();
-  montarAperturaSiSePuede(ruta);
+  montarApertura(modApertura);
+  deslizar(document.getElementById('wrapped-slide'));
 }
 
-async function montarAperturaSiSePuede(ruta) {
+/**
+ * Monta el recorrido con el módulo que `render()` ya esperó.
+ *
+ * ⚠️ Sincrónico A PROPÓSITO, y es la mitad del arreglo del flash: entre el
+ * `innerHTML` del Wrapped de siempre y el de la apertura no puede haber un
+ * `await`, o el navegador tiene ocasión de pintar el estado intermedio. Lo
+ * único que se hereda de la versión vieja es el `try`: un fallo acá deja el
+ * hueco vacío y el resumen entero.
+ */
+function montarApertura(mod) {
   const host = document.getElementById('wrapped-apertura');
-  if (!host) return;
+  if (!host || !mod || typeof mod.montarApertura !== 'function') return;
   try {
-    const mod = await import('../features/wrapped-apertura.js?v=243');
-    // Entre el `await` del import y acá el usuario pudo cambiar de año (que
-    // repinta el hueco) o irse de la vista. Las dos cosas dejan este `host`
-    // fuera del documento: montar ahí sería pintar un recorrido que nadie ve y
-    // dejar un observer colgado.
-    if (!ruta.vigente() || !host.isConnected) return;
     const y = stats.years.find(yy => yy.year === selectedYear);
     if (!y) return;
     mod.montarApertura(host, {
       stats,
       y,
       MESES,
+      MESES_LARGOS,
       fmtMinutes,
       fmtDia,
       daysCovered: (anio) => daysCovered(anio, stats),
       ultimoDia: (stats.years[stats.years.length - 1]?.last_play || '').slice(0, 10) || null,
     });
   } catch (e) {
-    // Cualquier fallo: se borra el hueco y el Wrapped sigue exactamente igual
-    // que antes de v=216.
     console.warn('[wrapped] la apertura no se montó, el resumen queda entero:', e);
     try { host.innerHTML = ''; } catch { /* el hueco ya no está */ }
   }
+}
+
+// ── El cambio de año, un deslizamiento y no un corte (v=244) ────────────────
+//
+// La fila de chips ya es una línea de tiempo: 2026 a la izquierda, 2018 a la
+// derecha. El movimiento repite eso — irse a un año más viejo es irse a la
+// derecha de la fila, así que lo que entra viene de la izquierda.
+//
+// `deseado` lo escribe el click del chip y lo consume el `deslizar()` del
+// final de `render()`. Se pone en `null` después de usarlo para que un
+// repintado que no venga de un chip (volver a la vista, un cambio de tema) no
+// arrastre la dirección del click anterior.
+let deseado = null;
+
+/**
+ * Pone la clase y se aparta. La animación, su duración y su apagado bajo
+ * `prefers-reduced-motion` viven en `css/main.css` — ver el bloque
+ * `wr-desliza-*`, que explica por qué no se maneja desde acá.
+ *
+ * Con el toggle de animaciones en «nunca» no se pone nada: el contenido del
+ * año nuevo aparece y ya.
+ */
+function deslizar(caja) {
+  const dir = deseado;
+  deseado = null;
+  if (!caja || !dir || !animationsEnabled()) return;
+  caja.classList.add(dir === 'izquierda' ? 'wr-desliza-izq' : 'wr-desliza-der');
 }
 
 function renderYearCard() {

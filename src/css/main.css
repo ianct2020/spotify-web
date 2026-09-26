@@ -4997,6 +4997,24 @@ body.covers-fs .main {
 /* ── los dibujos, siempre DENTRO del panel ─────────────────────────────── */
 .wr-ap-visual { width: 100%; max-width: 660px; margin: 20px auto 4px; }
 
+/* Los dos dibujos que llevan una fila de meses ENTEROS («enero», no «ene»)
+   necesitan más ancho que el resto, y el panel ya lo tenía sin usar: mide
+   844px útiles (860 de `.wr-ap-paso` menos 8+8 de padding) y el visual se
+   quedaba en 660.
+
+   MEDIDO a 1366px sobre 2025, el año más largo (53 semanas, los doce meses):
+
+   | fila                | a 660px                      | a 844px  |
+   |---------------------|------------------------------|----------|
+   | gráfico mes a mes   | holgura mínima 2,5px         | 17,9px   |
+   | meses del calendario| -3,0px («septiembre» pisaba  | 10,8px   |
+   |                     |  a «octubre»)                |          |
+
+   El alto no se resiente: el paso del calendario mide 593px de contenido en
+   un viewport de 647px y no cambia de alto al ensanchar (`scrollHeight`
+   idéntico al `clientHeight` en los dos anchos). */
+.wr-ap-visual.ancho { max-width: 844px; }
+
 .wr-ap-meses { display: flex; align-items: flex-end; gap: 9px; height: min(190px, 24vh); }
 .wr-ap-mes {
   flex: 1; min-width: 0; height: 100%;
@@ -5013,7 +5031,15 @@ body.covers-fs .main {
   transition: height 800ms cubic-bezier(.2, .8, .2, 1);
 }
 .wr-ap-mes.pico .wr-ap-barra { box-shadow: 0 0 18px var(--color-accent-glow); }
-.wr-ap-mes-lbl { font-size: 11px; color: var(--color-text-muted); margin-top: 6px; }
+/* El nombre entero es más ancho que su columna (62,1px con doce meses) en
+   «septiembre», y no puede partirse porque es una sola palabra. Centrado
+   desborda por los dos lados a partes iguales y los vecinos le dejan sitio:
+   con el visual a 844px la holgura mínima medida es de 17,9px. El `nowrap` es
+   para que no lo intente partir un fallback de fuente más ancho que Inter. */
+.wr-ap-mes-lbl {
+  font-size: 11px; color: var(--color-text-muted); margin-top: 6px;
+  white-space: nowrap;
+}
 
 .wr-ap-ranking { display: grid; gap: 7px; text-align: left; }
 .wr-ap-fila { display: grid; grid-template-columns: 18px 1fr 80px; gap: 10px; align-items: center; }
@@ -5039,14 +5065,24 @@ body.covers-fs .main {
   color: var(--color-text-secondary); font-variant-numeric: tabular-nums;
 }
 
-/* El calendario. Las dos rejillas comparten columnas: si la fila de meses se
-   auto-dimensiona por el ancho del texto, «ene» empuja a «feb» y ninguna
-   etiqueta cae sobre su semana. */
+/* El calendario. Las dos rejillas comparten columnas.
+
+   ⚠️ `minmax(0, 1fr)` y no `1fr`, y la diferencia NO es teórica. Un `1fr` es
+   `minmax(auto, 1fr)`, o sea que la columna nunca baja del min-content de lo
+   que lleve dentro: cada etiqueta de mes se ensanchaba a su propio texto y
+   corría a todas las de su derecha. MEDIDO en producción v=243 (2025, 1366px,
+   53 semanas, con las abreviaturas de entonces): la peor etiqueta caía 13,8px
+   fuera de la semana que nombraba, más de una columna entera (12,52px). Con
+   `minmax(0, 1fr)` el desfase máximo es de 0,3px.
+
+   La rejilla de los cuadraditos no lo necesitaba —un `<i>` vacío no tiene
+   min-content— pero va en la misma regla para que las dos no puedan volver a
+   separarse. */
 .wr-ap-cal,
 .wr-ap-cal-meses {
   display: grid;
   gap: 3px;
-  grid-template-columns: repeat(var(--semanas), 1fr);
+  grid-template-columns: repeat(var(--semanas), minmax(0, 1fr));
 }
 .wr-ap-cal { grid-template-rows: repeat(7, 1fr); grid-auto-flow: column; }
 .wr-ap-cal i {
@@ -5179,6 +5215,42 @@ body.covers-fs .main {
   visibility: hidden;
   pointer-events: none;
   transition: opacity var(--transition-normal), visibility var(--transition-normal);
+}
+
+/* ── Cambiar de año: un deslizamiento, no un corte (v=244) ───────────────────
+
+   La fila de chips va de 2026 (izquierda) a 2018 (derecha), o sea que ya es
+   una línea de tiempo. El contenido nuevo entra por el lado del que viene: a
+   un año más viejo se va hacia la derecha de la fila, así que lo que entra
+   viene de la izquierda.
+
+   ⚠️ Va con `animation` y no con una transición manejada desde el JS por el
+   `position: sticky`. Un `transform` en un ancestro crea un containing block
+   y mientras esté puesto deja sin clavarse a `.wr-ap-clavado` y a la barra de
+   años. Una `animation` sin `fill-mode` devuelve el elemento a su estado
+   normal en cuanto termina, sin que nadie tenga que acordarse de limpiar: si
+   el `animationend` no llegara, el transform se va igual.
+
+   ⚠️ Y va en CSS para que este media query pueda apagarla. `animationsEnabled()`
+   mira SOLO el toggle del usuario (desde v=162 las entradas al scrollear no
+   consultan la preferencia del sistema), así que un deslizamiento montado
+   entero desde el JS se saltaría `prefers-reduced-motion`. Repartido: el
+   toggle en «nunca» hace que el JS no ponga la clase, y la preferencia del
+   sistema la neutraliza acá. */
+@keyframes wr-desliza-izq {
+  from { transform: translateX(-28px); opacity: 0; }
+  to   { transform: translateX(0);     opacity: 1; }
+}
+@keyframes wr-desliza-der {
+  from { transform: translateX(28px); opacity: 0; }
+  to   { transform: translateX(0);    opacity: 1; }
+}
+.wr-desliza-izq { animation: wr-desliza-izq 320ms cubic-bezier(.2, .8, .2, 1); }
+.wr-desliza-der { animation: wr-desliza-der 320ms cubic-bezier(.2, .8, .2, 1); }
+
+@media (prefers-reduced-motion: reduce) {
+  .wr-desliza-izq,
+  .wr-desliza-der { animation: none; }
 }
 
 @media (max-width: 900px) {

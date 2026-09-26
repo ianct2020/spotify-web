@@ -45,7 +45,7 @@
 // ───────────────────────────────────────────────────────────────────────────
 // CUÁNTOS PASOS Y POR QUÉ
 //
-// Hasta seis, y el criterio es uno solo: **un dato se gana una pantalla si
+// Hasta siete, y el criterio es uno solo: **un dato se gana una pantalla si
 // necesita un dibujo para entenderse, o si es una comparación que la grilla de
 // abajo no puede hacer.** El dato suelto que se lee de un vistazo se queda de
 // baldosa, que es donde además se compara con las de al lado.
@@ -60,19 +60,23 @@
 //                          entra a 92 px.
 //   5 · los días           CUÁNDO paraste. La baldosa da 232 de 239; el
 //                          calendario dice en qué semanas están los huecos.
-//   6 · el año dentro de   la grilla mira UN AÑO POR VEZ. Este dato no existe
+//   6 · la racha          el número que hace falta para la meta de un álbum
+//                          por día: cuántos días seguidos llevas al final del
+//                          historial. No lo calculaba nadie (v=244).
+//   7 · el año dentro de   la grilla mira UN AÑO POR VEZ. Este dato no existe
 //       todo tu historial  en ninguna de sus baldosas.
 //
 // Se quedan de baldosa: track del año, descubrimiento, día más largo, primera
 // play, mes pico y skips.
 //
-// Los seis son CONDICIONALES: cada paso se construye solo si su dato está. Un
+// Los siete son CONDICIONALES: cada paso se construye solo si su dato está. Un
 // año con dos meses de datos no dibuja la curva, un año sin `days` (historial
 // propio subido con un pipeline viejo) no dibuja el calendario, y el año más
-// antiguo de alguien con un solo año de datos no tiene contra qué compararse.
+// antiguo de alguien con un solo año de datos no tiene contra qué compararse,
+// y un año que acabó con el último día en blanco no tiene racha que enseñar.
 // Con menos de dos pasos la apertura no se monta: no hay recorrido que hacer.
 
-import { animationsEnabled } from '../ui/reveal.js?v=243';
+import { animationsEnabled } from '../ui/reveal.js?v=244';
 
 // ── un solo recorrido vivo por vez ──────────────────────────────────────────
 //
@@ -113,6 +117,15 @@ function isoDesde(ms) {
 /** 0 = lunes, igual que `weekday()` de Python y que el heatmap del pipeline. */
 function diaSemanaLunes(iso) {
   return (new Date(aMs(iso)).getUTCDay() + 6) % 7;
+}
+
+// Los meses van ENTEROS en las dos filas y en los textos: «enero», no «ene».
+// El ancho está medido, no supuesto — ver el bloque de `MESES_LARGOS` en
+// `features/wrapped.js` y la clase `.ancho` en `css/main.css`. El `||` es por
+// si llega un `ctx` de una versión vieja de `wrapped.js`: antes que tirar,
+// abrevia.
+function mes(ctx, i) {
+  return (ctx.MESES_LARGOS || ctx.MESES)[i];
 }
 
 function esc(s) {
@@ -167,12 +180,12 @@ function pasoMeses(ctx) {
   const despues = meses.slice(meses.indexOf(pico));
   const enCaida = despues.length >= 3 && despues.every((m, i) => i === 0 || m.min <= despues[i - 1].min);
 
-  let cuerpo = `${ctx.MESES[pico.i - 1]} fue tu mes más alto, con ${fmtMinutes(pico.min)}. `;
+  let cuerpo = `${mes(ctx, pico.i - 1)} fue tu mes más alto, con ${fmtMinutes(pico.min)}. `;
   if (enCaida) {
-    cuerpo += `Desde ahí bajas todos los meses hasta ${ctx.MESES[ultimo.i - 1]}, que se queda en ` +
+    cuerpo += `Desde ahí bajas todos los meses hasta ${mes(ctx, ultimo.i - 1)}, que se queda en ` +
               `${fmtMinutes(ultimo.min)} — menos de la mitad.`;
   } else {
-    cuerpo += `El más flojo fue ${ctx.MESES[flojo.i - 1]}, con ${fmtMinutes(flojo.min)}: ` +
+    cuerpo += `El más flojo fue ${mes(ctx, flojo.i - 1)}, con ${fmtMinutes(flojo.min)}: ` +
               `entre uno y otro hay ${fmtMinutes(pico.min - flojo.min)} de diferencia.`;
   }
   if (esUltimoAnio && ctx.ultimoDia) {
@@ -183,7 +196,7 @@ function pasoMeses(ctx) {
   return {
     id: 'meses',
     etiqueta: `${y.year}, mes a mes`,
-    titular: `${ctx.MESES[pico.i - 1]} fue el pico`,
+    titular: `${mes(ctx, pico.i - 1)} fue el pico`,
     chico: true,
     bajada: fmtMinutes(pico.min),
     visual: visualMeses(meses, max, ctx),
@@ -278,6 +291,123 @@ function pasoDias(ctx) {
   };
 }
 
+// ── La racha (v=244) ────────────────────────────────────────────────────────
+//
+// QUÉ RACHAS HABÍA ANTES DE ESTA, porque son cuatro y ninguna es esta:
+//
+//   1. `years[].longest_streak` — la más larga DENTRO de un año. Sale de
+//      `gen-stats.py:659`. Se enseña en la baldosa «Días activos» del Wrapped
+//      («racha 74 d») y en el cuerpo del paso del calendario, acá al lado.
+//   2. `totals.longest_streak` — la más larga de todo el historial (312 días).
+//      Está en el Dashboard («Racha más larga (días)») y en la tarjeta «de
+//      siempre» del Wrapped.
+//   3. `records.top_streaks` — las diez más largas con fecha de principio y
+//      fin, en Récords.
+//   4. La racha de un mismo artista sin intercalar otro (#18), que es otra
+//      cosa: se cuenta en plays, no en días.
+//
+// Las cuatro miran al pasado. La que Ian quiere para el año del álbum por día
+// —cuántos días seguidos lleva HASTA el final— no estaba calculada en ninguna
+// parte, ni en el pipeline ni en el puerto BYOH. Esta la calcula acá, de los
+// mismos `days` que dibuja el calendario, sin pedir nada a la red.
+//
+// ⚠️ EL CORTE NO ES HOY, Y EL PANEL LO DICE. El historial se acaba donde se
+// acaba el export: el último día con datos es el último de la serie del año
+// más nuevo, no la fecha de hoy. Decir «llevas N días seguidos» a secas sería
+// mentir en cuanto el export se quede atrás, que es lo normal. MEDIDO contra
+// `docs/data/history-stats.json` del 25/09/2026: la serie termina el
+// 2026-08-27 y la racha viva ahí es de 4 días (24 a 27 de agosto; el 22 y el
+// 23 están en cero). Hoy no se sabe: entre el 27 de agosto y ahora el
+// historial no tiene nada que decir.
+//
+// El mismo cálculo, con el corte en el último día de la ventana de un año
+// cerrado, da «con cuántos días seguidos cerraste ese año» — que tampoco
+// estaba, y es el número con el que el paso tiene sentido en 2018-2025.
+
+/**
+ * Días seguidos con música que terminan en el último día de la ventana de `y`.
+ *
+ * Encadena con los años anteriores: una racha que cruza el 31 de diciembre es
+ * una sola racha, no dos. El contrato de `days` lo permite — `min` es contiguo
+ * desde `from`, un valor por día — y las ventanas de años consecutivos se
+ * tocan (comprobado sobre los 9 años del historial: 2.935 días sin un hueco).
+ *
+ * VERIFICADO: recorriendo esta misma serie concatenada, la racha más larga da
+ * 312 y los días activos 1.856, exactamente los `totals.longest_streak` y
+ * `totals.days_active` que emite `gen-stats.py`. El método reproduce los
+ * números del pipeline por un camino independiente.
+ *
+ * Se exporta solo para que `tests/wrapped-racha.test.mjs` corra ESTA función y
+ * no una copia suya: un error de borde acá no rompe nada, pinta un número
+ * equivocado a pantalla completa.
+ */
+export function rachaVigente(y, stats) {
+  const anios = [...(stats.years || [])]
+    .filter(a => a.days && Array.isArray(a.days.min) && a.days.min.length)
+    .sort((a, b) => a.year - b.year);
+  const hasta = anios.findIndex(a => a.year === y.year);
+  if (hasta < 0) return null;
+
+  let n = 0;
+  for (let i = hasta; i >= 0; i--) {
+    const d = anios[i].days;
+    // Solo se sigue contando hacia atrás si el año de al lado PEGA con este.
+    // Un hueco entre ventanas no es un día sin música, es un día sin datos, y
+    // encadenar por encima de él inventaría una racha.
+    if (i < hasta) {
+      const finAnterior = aMs(d.from) + (d.min.length - 1) * 86400000;
+      if (finAnterior + 86400000 !== aMs(anios[i + 1].days.from)) break;
+    }
+    let j = d.min.length - 1;
+    while (j >= 0 && d.min[j] > 0) { n++; j--; }
+    if (j >= 0) break;   // se cortó dentro de este año: no hay que mirar más atrás
+  }
+
+  const dCorte = anios[hasta].days;
+  return { dias: n, corte: isoDesde(aMs(dCorte.from) + (dCorte.min.length - 1) * 86400000) };
+}
+
+function pasoRacha(ctx) {
+  const { y, stats, fmtDia } = ctx;
+  const r = rachaVigente(y, stats);
+  // Sin racha viva en el corte no hay panel: un «0 días seguidos» a pantalla
+  // completa no es un dato, es un reproche. Pasa de verdad — 2020 y 2021
+  // cerraron con el 31 de diciembre en blanco.
+  if (!r || r.dias < 1) return null;
+
+  const esUltimoAnio = y.year === Math.max(...stats.years.map(a => a.year));
+  const desde = isoDesde(aMs(r.corte) - (r.dias - 1) * 86400000);
+  const masLarga = y.longest_streak || 0;
+
+  let cuerpo = esUltimoAnio
+    ? `Son los días seguidos con los que llegas al final del historial: desde el ` +
+      `${fmtDia(desde)} hasta el ${fmtDia(r.corte)}, sin fallar uno. `
+    : `Así cerraste ${y.year}: desde el ${fmtDia(desde)} hasta el ${fmtDia(r.corte)}, ` +
+      `sin fallar un día. `;
+
+  if (masLarga > r.dias) {
+    cuerpo += `La más larga del año fue de ${num(masLarga)} días. `;
+  } else if (masLarga === r.dias) {
+    cuerpo += `Es la más larga del año. `;
+  }
+
+  if (esUltimoAnio) {
+    cuerpo += `⚠️ El corte es el ${fmtDia(r.corte)} porque ahí se acaba el historial ` +
+              `importado, no porque ahí hayas parado: de ese día en adelante este ` +
+              `Wrapped no tiene datos. Para que el número siga a tu día de hoy hay ` +
+              `que volver a importar el historial.`;
+  }
+
+  return {
+    id: 'racha',
+    etiqueta: esUltimoAnio ? 'Racha en curso' : `Con lo que cerraste ${y.year}`,
+    num: [r.dias, 'ent'],
+    bajada: r.dias === 1 ? 'día seguido con música' : 'días seguidos con música',
+    cuerpo,
+    extra: { desde, corte: r.corte, longest_streak: masLarga },
+  };
+}
+
 function pasoDentroDeTodo(ctx) {
   const { y, stats, fmtMinutes } = ctx;
   const t = stats.totals || {};
@@ -319,12 +449,12 @@ function pasoDentroDeTodo(ctx) {
 // ═══════════════════════════════════════════════════════════════════════════
 
 function visualMeses(meses, max, ctx) {
-  return `<div class="wr-ap-visual"><div class="wr-ap-meses">` +
+  return `<div class="wr-ap-visual ancho"><div class="wr-ap-meses">` +
     meses.map(m => `
       <div class="wr-ap-mes${m.min === max ? ' pico' : ''}">
         <div class="wr-ap-mes-val"><span class="wr-ap-num" data-num="${m.min / 60}" data-fmt="pl">${Math.round(m.min / 60)}</span>h</div>
         <div class="wr-ap-barra" data-alto="${(m.min / max * 100).toFixed(2)}"></div>
-        <div class="wr-ap-mes-lbl">${ctx.MESES[m.i - 1]}</div>
+        <div class="wr-ap-mes-lbl">${mes(ctx, m.i - 1)}</div>
       </div>`).join('') +
     `</div></div>`;
 }
@@ -376,17 +506,24 @@ function visualCalendario(D, iPico, ctx) {
   }
 
   // Una etiqueta por mes, en la columna donde cae su día 1. Van sobre las
-  // MISMAS columnas que la rejilla: si la fila de meses se auto-dimensiona por
-  // el ancho del texto, «ene» empuja a «feb» y ninguna cae sobre su semana.
+  // MISMAS columnas que la rejilla.
+  //
+  // ⚠️ Eso es lo que el CSS TIENE que garantizar, y hasta v=243 no lo hacía: el
+  // `1fr` de la fila de meses trae un `min-width: auto`, así que cada etiqueta
+  // ensanchaba su propia columna y corría a las de su derecha. MEDIDO en
+  // producción v=243, 2025 a 1366px: la etiqueta peor puesta caía **13,8 px**
+  // fuera de su semana, más de una columna entera (12,52 px) — y eso YA
+  // pasaba con «ene», antes de alargar ningún nombre. El arreglo es
+  // `minmax(0, 1fr)` en `css/main.css`; con él el desfase máximo baja a 0,3 px.
   const etiquetas = new Array(semanas).fill('');
   for (let i = 0; i < D.min.length; i++) {
     const ms = aMs(D.from) + i * 86400000;
     const f = new Date(ms);
-    if (f.getUTCDate() === 1) etiquetas[Math.floor((offset + i) / 7)] = ctx.MESES[f.getUTCMonth()];
+    if (f.getUTCDate() === 1) etiquetas[Math.floor((offset + i) / 7)] = mes(ctx, f.getUTCMonth());
   }
 
   const muestra = (n) => `<i class="wr-ap-leg-c ${n}"></i>`;
-  return `<div class="wr-ap-visual" style="--semanas:${semanas}">
+  return `<div class="wr-ap-visual ancho" style="--semanas:${semanas}">
     <div class="wr-ap-cal-meses">${etiquetas.map(e => `<span>${e}</span>`).join('')}</div>
     <div class="wr-ap-cal">${celdas}</div>
     <div class="wr-ap-leyenda">
@@ -426,7 +563,7 @@ export function montarApertura(host, ctx) {
   destruirVivo();
   if (!host || !ctx || !ctx.y || !ctx.stats) return null;
 
-  const pasos = [pasoHoras, pasoMeses, pasoArtista, pasoAlbum, pasoDias, pasoDentroDeTodo]
+  const pasos = [pasoHoras, pasoMeses, pasoArtista, pasoAlbum, pasoDias, pasoRacha, pasoDentroDeTodo]
     .map(f => { try { return f(ctx); } catch (e) { console.warn('[apertura] paso descartado:', e); return null; } })
     .filter(Boolean);
 
