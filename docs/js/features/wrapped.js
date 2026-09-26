@@ -1,21 +1,21 @@
 // Wrapped propio: mini-resumen tuyo por año, hecho con el Extended Streaming History.
 // A diferencia del Wrapped oficial (que corre oct-sept), este es del año calendario completo.
 
-import { loadHistoryStats, isOwner, ownerLockedMessage } from './history-data.js?v=244';
-import { escapeHtml, pageHeader } from '../ui/components.js?v=244';
-import { getPreview } from '../api/preview-providers.js?v=244';
-import { getArtistLikePreview, getAlbumLikePreview } from '../util/artist-preview.js?v=244';
-import { attachHover } from '../ui/preview-player.js?v=244';
-import { openTrackCard } from './track-card.js?v=244';
-import { openArtistCard } from './artist-card.js?v=244';
-import { openAlbumCard } from './album-card.js?v=244';
-import { getMyTop } from '../api.js?v=244';
-import { activateMarquee, marqueeSpan } from '../ui/marquee.js?v=244';
-import { openModal } from '../ui/modal-stack.js?v=244';
-import { armReveal, armRevealAll, releaseReveal, animationsEnabled } from '../ui/reveal.js?v=244';
-import { coverUrl } from '../util/cover-size.js?v=244';
-import { vigilarRuta } from '../util/vigencia-ruta.js?v=244';
-import { fmtDia } from '../util/fecha.js?v=244';
+import { loadHistoryStats, isOwner, ownerLockedMessage } from './history-data.js?v=245';
+import { escapeHtml, pageHeader } from '../ui/components.js?v=245';
+import { getPreview } from '../api/preview-providers.js?v=245';
+import { getArtistLikePreview, getAlbumLikePreview } from '../util/artist-preview.js?v=245';
+import { attachHover } from '../ui/preview-player.js?v=245';
+import { openTrackCard } from './track-card.js?v=245';
+import { openArtistCard } from './artist-card.js?v=245';
+import { openAlbumCard } from './album-card.js?v=245';
+import { getMyTop } from '../api.js?v=245';
+import { activateMarquee, marqueeSpan } from '../ui/marquee.js?v=245';
+import { openModal } from '../ui/modal-stack.js?v=245';
+import { armReveal, armRevealAll, releaseReveal, animationsEnabled } from '../ui/reveal.js?v=245';
+import { coverUrl } from '../util/cover-size.js?v=245';
+import { vigilarRuta } from '../util/vigencia-ruta.js?v=245';
+import { fmtDia } from '../util/fecha.js?v=245';
 
 let stats = null;
 let selectedYear = null;
@@ -65,7 +65,7 @@ const ESPERA_APERTURA_MS = 3000;
 // después — montarlo tarde sería justo el flash que se está arreglando.
 function cargarApertura() {
   return Promise.race([
-    import('../features/wrapped-apertura.js?v=244').catch(e => {
+    import('../features/wrapped-apertura.js?v=245').catch(e => {
       console.warn('[wrapped] la apertura no cargó, el resumen queda entero:', e);
       return null;
     }),
@@ -269,12 +269,14 @@ function montarApertura(mod) {
 let deseado = null;
 
 /**
- * Pone la clase y se aparta. La animación, su duración y su apagado bajo
- * `prefers-reduced-motion` viven en `css/main.css` — ver el bloque
- * `wr-desliza-*`, que explica por qué no se maneja desde acá.
+ * Pone la clase y se aparta. La animación y su duración viven en
+ * `css/main.css` — ver el bloque `wr-desliza-*`, que explica por qué no se
+ * maneja con un transform desde acá (el `position: sticky` del recorrido) y
+ * por qué no lleva un `@media (prefers-reduced-motion)` propio.
  *
- * Con el toggle de animaciones en «nunca» no se pone nada: el contenido del
- * año nuevo aparece y ya.
+ * Quien la apaga es el toggle, igual que el resto de las entradas del Wrapped
+ * desde v=162: con las animaciones en «nunca» no se pone nada y el contenido
+ * del año nuevo aparece y ya.
  */
 function deslizar(caja) {
   const dir = deseado;

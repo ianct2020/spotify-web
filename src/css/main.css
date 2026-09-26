@@ -5231,12 +5231,18 @@ body.covers-fs .main {
    normal en cuanto termina, sin que nadie tenga que acordarse de limpiar: si
    el `animationend` no llegara, el transform se va igual.
 
-   ⚠️ Y va en CSS para que este media query pueda apagarla. `animationsEnabled()`
-   mira SOLO el toggle del usuario (desde v=162 las entradas al scrollear no
-   consultan la preferencia del sistema), así que un deslizamiento montado
-   entero desde el JS se saltaría `prefers-reduced-motion`. Repartido: el
-   toggle en «nunca» hace que el JS no ponga la clase, y la preferencia del
-   sistema la neutraliza acá. */
+   ⚠️ QUIÉN LA APAGA: el toggle de animaciones, vía `animationsEnabled()` — el
+   mismo criterio que el resto de las entradas del Wrapped. **Acá NO va un
+   bloque `@media (prefers-reduced-motion: reduce)`**, y no es un olvido.
+
+   Se probó con uno en v=244 y el computed `animation-name` daba `none` en la
+   máquina de Ian: tiene `enable-animations = false` en GNOME, así que el
+   deslizamiento que acababa de pedir no se habría movido nunca justo donde se
+   mira. Es el mismo fallo que documenta el bloque de `dashFadeIn` más arriba
+   en esta hoja — «un fallo que solo existía en las máquinas donde no se
+   miraba»— y la misma decisión de v=162: la entrada la manda el toggle, no el
+   sistema. Los diez bloques `@media (prefers-reduced-motion)` que ya existían
+   siguen sin tocarse. */
 @keyframes wr-desliza-izq {
   from { transform: translateX(-28px); opacity: 0; }
   to   { transform: translateX(0);     opacity: 1; }
@@ -5247,11 +5253,6 @@ body.covers-fs .main {
 }
 .wr-desliza-izq { animation: wr-desliza-izq 320ms cubic-bezier(.2, .8, .2, 1); }
 .wr-desliza-der { animation: wr-desliza-der 320ms cubic-bezier(.2, .8, .2, 1); }
-
-@media (prefers-reduced-motion: reduce) {
-  .wr-desliza-izq,
-  .wr-desliza-der { animation: none; }
-}
 
 @media (max-width: 900px) {
   .wr-ap-prog { display: none; }

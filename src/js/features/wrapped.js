@@ -269,12 +269,14 @@ function montarApertura(mod) {
 let deseado = null;
 
 /**
- * Pone la clase y se aparta. La animación, su duración y su apagado bajo
- * `prefers-reduced-motion` viven en `css/main.css` — ver el bloque
- * `wr-desliza-*`, que explica por qué no se maneja desde acá.
+ * Pone la clase y se aparta. La animación y su duración viven en
+ * `css/main.css` — ver el bloque `wr-desliza-*`, que explica por qué no se
+ * maneja con un transform desde acá (el `position: sticky` del recorrido) y
+ * por qué no lleva un `@media (prefers-reduced-motion)` propio.
  *
- * Con el toggle de animaciones en «nunca» no se pone nada: el contenido del
- * año nuevo aparece y ya.
+ * Quien la apaga es el toggle, igual que el resto de las entradas del Wrapped
+ * desde v=162: con las animaciones en «nunca» no se pone nada y el contenido
+ * del año nuevo aparece y ya.
  */
 function deslizar(caja) {
   const dir = deseado;
