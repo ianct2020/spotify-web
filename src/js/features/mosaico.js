@@ -224,13 +224,21 @@ export async function render(container) {
     repintarTinte();
   });
 
-  $('mos-cien').addEventListener('change', (e) => {
+  // Dos vistas y no una escala intermedia: **entera** (lo primero que se quiere
+  // ver es si el mosaico salió bien) y **al 100 %** (para que se vean las
+  // portadas una a una). Entera se ajusta al ALTO de la caja, no al ancho: con
+  // 60×80 celdas el mosaico mide 3.840×5.120 px y ajustado al ancho se sale de
+  // la caja por abajo, o sea que no se ve entero, que era el punto.
+  function aplicarZoom(cien) {
     const c = ultimo?.canvas;
     if (!c) return;
-    const cien = e.currentTarget.checked;
-    c.style.width = cien ? `${c.width}px` : '100%';
-    c.style.maxWidth = cien ? 'none' : '100%';
-  });
+    c.style.width = cien ? `${c.width}px` : 'auto';
+    c.style.height = cien ? `${c.height}px` : 'auto';
+    c.style.maxWidth = '100%';
+    c.style.maxHeight = cien ? 'none' : '76vh';
+    c.style.margin = cien ? '0' : '0 auto';
+  }
+  $('mos-cien').addEventListener('change', (e) => aplicarZoom(e.currentTarget.checked));
 
   // ── Componer ──────────────────────────────────────────────────────────────
   async function componer() {
@@ -323,21 +331,26 @@ export async function render(container) {
       const cien = document.getElementById('mos-cien')?.checked;
       caja.innerHTML = '';
       ultimo.canvas.style.display = 'block';
-      ultimo.canvas.style.width = cien ? `${ancho}px` : '100%';
-      ultimo.canvas.style.maxWidth = cien ? 'none' : '100%';
-      ultimo.canvas.style.height = 'auto';
+      aplicarZoom(cien);
       caja.appendChild(ultimo.canvas);
     }
   }
 
-  // Mover el deslizador solo repinta: ni red, ni emparejado. Con 4.800 celdas
-  // son unos pocos ms, pero el `input` de un `range` dispara por píxel movido,
-  // así que se junta en el frame siguiente.
+  // Mover el deslizador solo repinta: ni red, ni emparejado. El `input` de un
+  // `range` dispara por píxel movido, así que se juntan los disparos seguidos.
+  //
+  // ⚠️ **`setTimeout` y NO `requestAnimationFrame`**, que es la misma regla que
+  // ya tiene escrita `covers-wallpaper.js` y que este archivo se saltó en v=250:
+  // en una pestaña oculta Chrome no dispara los rAF, así que el repintado no
+  // llegaba nunca. Medido en producción el 27/09 con la pestaña de la extensión
+  // (que corre oculta): el píxel del mosaico daba el mismo valor con el tinte a
+  // 0, a 45 y a 100. Se ve solo en una pestaña de fondo, o sea justo donde no
+  // hay nadie mirando para notarlo.
   let pendiente = 0;
   function repintarTinte() {
     if (!ultimo) return;
-    cancelAnimationFrame(pendiente);
-    pendiente = requestAnimationFrame(() => { if (ultimo) pintar(); });
+    clearTimeout(pendiente);
+    pendiente = setTimeout(() => { if (ultimo) pintar(); }, 16);
   }
 
   $('mos-generar').addEventListener('click', componer);
@@ -364,7 +377,7 @@ export async function render(container) {
   // final, los bitmaps de las portadas y la imagen del usuario.
   return () => {
     ctrl?.abort();
-    cancelAnimationFrame(pendiente);
+    clearTimeout(pendiente);
     soltarSalida();
     bitmapObjetivo?.close?.();
     bitmapObjetivo = null;

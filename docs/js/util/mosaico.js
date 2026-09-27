@@ -26,7 +26,7 @@
 //    las mismas unidades que la distancia (ΔE), así que es legible: «esta
 //    portada tiene que ser ΔE 25 mejor que la siguiente para repetirse al lado».
 
-import { REJILLA, BYTES_POR_PORTADA, srgb8ALab, mediaDeRejilla, rejilla3x3Rect } from './cover-color.js?v=250';
+import { REJILLA, BYTES_POR_PORTADA, srgb8ALab, mediaDeRejilla, rejilla3x3Rect } from './cover-color.js?v=251';
 
 const SUBCELDAS = REJILLA * REJILLA;   // 9
 
