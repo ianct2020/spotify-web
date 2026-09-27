@@ -28,7 +28,7 @@
 // Los límites de Chrome quedan lejos: dimensión máxima 16.384 px y unos 268 MP
 // de área total (16.384²); el preset más grande son 8,3 MP.
 
-import { coverVariant } from '../util/album-key.js?v=249';
+import { coverVariant } from '../util/album-key.js?v=250';
 
 // Presets. `nombre` es lo que se ve en el botón; `archivo` va en la descarga.
 export const WALLPAPER_PRESETS = {
@@ -102,13 +102,23 @@ export function variantePara(ladoCelda) {
   return 640;
 }
 
-// Una tapa, dibujada y liberada. Devuelve true si se dibujó.
-//
-// `createImageBitmap` sobre el blob evita el `<img>` entero: no toca el DOM, no
-// deja nada en un caché de elementos y `close()` libera el mapa de píxeles en
-// el acto. El fallback con `<img>` es para navegadores sin la API (ninguno de
-// los que usa Ian, pero la vista no puede quedar rota por eso).
-async function dibujarTapa(ctx, url, x, y, w, h, signal) {
+/**
+ * Baja UNA tapa, se la presta a `usar(dibujable)` y la libera. Devuelve lo que
+ * devolvió `usar`, o `false` si la tapa no se pudo traer (una tapa caída es un
+ * hueco, nunca un mosaico abortado).
+ *
+ * `createImageBitmap` sobre el blob evita el `<img>` entero: no toca el DOM, no
+ * deja nada en un caché de elementos y `close()` libera el mapa de píxeles en
+ * el acto. El fallback con `<img>` es para navegadores sin la API (ninguno de
+ * los que usa Ian, pero la vista no puede quedar rota por eso).
+ *
+ * ⚠️ El bitmap **está cerrado cuando `conTapa` devuelve**: `usar` tiene que
+ * dibujarlo, no guardárselo. Quien necesite quedárselo (el photomosaic, que
+ * repite la misma portada en decenas de celdas) pasa `conservar: true` y se
+ * hace cargo de cerrarlo él. Es la regla 2 de arriba, y el único motivo para
+ * saltársela es que el que conserva ya sepa cuántos MB está conservando.
+ */
+export async function conTapa(url, signal, usar, { conservar = false } = {}) {
   let bitmap = null;
   try {
     const res = await fetch(url, { mode: 'cors', signal, cache: 'force-cache' });
@@ -117,8 +127,7 @@ async function dibujarTapa(ctx, url, x, y, w, h, signal) {
     if (signal?.aborted) return false;
     if (typeof createImageBitmap === 'function') {
       bitmap = await createImageBitmap(blob);
-      ctx.drawImage(bitmap, x, y, w, h);
-      return true;
+      return usar(bitmap, blob.size);
     }
     const url2 = URL.createObjectURL(blob);
     try {
@@ -128,15 +137,20 @@ async function dibujarTapa(ctx, url, x, y, w, h, signal) {
         img.onerror = () => fail(new Error('img'));
         img.src = url2;
       });
-      ctx.drawImage(img, x, y, w, h);
-      img.src = '';
-      return true;
-    } finally { URL.revokeObjectURL(url2); }
+      const r = usar(img, blob.size);
+      if (!conservar) img.src = '';
+      return r;
+    } finally { if (!conservar) URL.revokeObjectURL(url2); }
   } catch {
     return false;   // tapa caída: queda el fondo, no se aborta el mosaico
   } finally {
-    bitmap?.close();
+    if (!conservar) bitmap?.close();
   }
+}
+
+// Una tapa, dibujada y liberada. Devuelve true si se dibujó.
+function dibujarTapa(ctx, url, x, y, w, h, signal) {
+  return conTapa(url, signal, (dib) => { ctx.drawImage(dib, x, y, w, h); return true; });
 }
 
 // Cede el hilo entre lotes. `setTimeout` y NO `requestAnimationFrame`: la

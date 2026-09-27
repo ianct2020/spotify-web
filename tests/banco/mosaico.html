@@ -1,0 +1,174 @@
+<!doctype html><html lang="es"><head><meta charset="utf-8"><title>banco mosaico</title>
+<!--
+  Banco del photomosaic (v=250).
+
+  Genera mosaicos DE VERDAD con los módulos reales de `src/`
+  (`util/mosaico.js` para el emparejado y el tinte, `features/mosaico-lienzo.js`
+  para el dibujo y la bajada de portadas), sin la app, sin token y sin la
+  extensión de Chrome. Sirve para comparar tintes y rejillas sobre el MISMO
+  emparejamiento y para fotografiar el resultado.
+
+  ⚠️ **La base de colores NO vive acá.** Este repo es público y la base son los
+  identificadores de las 5.715 portadas de la biblioteca de Ian, o sea el
+  catálogo de lo que escucha. La inyecta quien conduce el banco, en
+  `window.__baseMosaico = { ids, datos (base64), host (base64), hosts, rarasUrl }`,
+  antes de llamar a `window.__banco.generar()`. Sin base, el banco lo dice y no
+  fotografía nada.
+
+  Parámetros por query, todos opcionales:
+    ?img=/banco/…        la imagen objetivo (por defecto, la que inyecten en
+                         window.__imgMosaico como dataURL o URL)
+    ?largo=80            celdas del lado más largo
+    ?tinte=45            escala del tinte, 0-100
+    ?modo=adaptativo     adaptativo | plano
+
+  La marca `data-banco="listo"` en el <html> aparece cuando el mosaico está
+  dibujado, y `data-banco="error"` si algo falló. Igual que el resto de los
+  bancos: primero se pregunta, después se fotografía.
+-->
+<style>
+  html, body { margin: 0; background: #0A0A0F; color: #e5e5e5; font: 13px/1.5 ui-monospace, monospace; }
+  #cartel { padding: 6px 10px; background: #111; border-bottom: 1px solid #444; white-space: pre-wrap; }
+  #caja { overflow: auto; }
+  canvas { display: block; }
+</style></head><body>
+<div id="cartel">preparando…</div>
+<div id="caja"></div>
+<script type="module">
+import { esperarA } from '/banco/esperar.mjs';
+import { grillaPara, rejillaDelObjetivo, tilesALab, emparejar, mapaDeTinte, resumenDeEmparejado } from '/js/util/mosaico.js';
+import { bajarPortadas, soltarBitmaps, pintarMosaico } from '/js/features/mosaico-lienzo.js';
+
+const LADO_CELDA = 64;
+const PREFIJO_64 = 'ab67616d00004851';
+const q = new URLSearchParams(location.search);
+const cartel = document.getElementById('cartel');
+const di = (t) => { cartel.textContent = t; };
+
+const b64aU8 = (s) => { const bin = atob(s); const u = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i); return u; };
+
+// Estado compartido entre llamadas: el emparejado se hace UNA vez por rejilla y
+// se reusa para todos los tintes. Es lo que hace comparable la comparación.
+let base = null, tilesLab = null, lienzoLectura = null, cacheEmp = new Map(), salida = null;
+
+async function prepararBase() {
+  if (base) return base;
+  const b = await esperarA(() => window.__baseMosaico, { que: 'la base de colores inyectada', tope: 30000 });
+  base = { ids: b.ids, datos: b64aU8(b.datos), host: b64aU8(b.host), hosts: b.hosts, rarasUrl: b.rarasUrl || {} };
+  tilesLab = tilesALab(base.datos, base.ids.length);
+  return base;
+}
+
+const urlDeTile = (i) => base.rarasUrl[base.ids[i]] || `https://${base.hosts[base.host[i]]}/image/${PREFIJO_64}${base.ids[i]}`;
+
+async function prepararImagen() {
+  if (lienzoLectura) return;
+  const src = q.get('img') || await esperarA(() => window.__imgMosaico, { que: 'la imagen objetivo', tope: 30000 });
+  const res = await fetch(src);
+  const bmp = await createImageBitmap(await res.blob());
+  const w = bmp.width, h = bmp.height;      // ⚠️ después de close() valen 0
+  lienzoLectura = document.createElement('canvas');
+  lienzoLectura.width = w; lienzoLectura.height = h;
+  const c = lienzoLectura.getContext('2d', { alpha: false, willReadFrequently: true });
+  c.drawImage(bmp, 0, 0);
+  bmp.close();
+  lienzoLectura.__pixeles = c.getImageData(0, 0, w, h).data;
+}
+
+async function emparejado(largo) {
+  if (cacheEmp.has(largo)) return cacheEmp.get(largo);
+  const { width: w, height: h } = lienzoLectura;
+  const { cols, filas } = grillaPara(w, h, largo);
+  const t0 = performance.now();
+  const objetivo = rejillaDelObjetivo(lienzoLectura.__pixeles, w, h, cols, filas);
+  const tObj = performance.now();
+  const { indice, de } = emparejar({ objetivo, tilesLab, nTiles: base.ids.length });
+  const tEmp = performance.now();
+  const bajada = await bajarPortadas({ indice, urlDeTile, onProgress: (n, t) => di(`bajando portadas… ${n}/${t}`) });
+  const r = { cols, filas, indice, de, ...bajada, ms: { obj: tObj - t0, emp: tEmp - tObj, red: performance.now() - tEmp } };
+  cacheEmp.set(largo, r);
+  return r;
+}
+
+/** Genera y dibuja. Devuelve los números, que es lo que lee el conductor. */
+async function generar({ largo = Number(q.get('largo') || 80), tinte = Number(q.get('tinte') ?? 45), modo = q.get('modo') || 'adaptativo' } = {}) {
+  document.documentElement.removeAttribute('data-banco');
+  await prepararBase();
+  await prepararImagen();
+  const e = await emparejado(largo);
+  const ancho = e.cols * LADO_CELDA, alto = e.filas * LADO_CELDA;
+
+  if (salida) { salida.width = salida.height = 0; salida.remove(); }
+  salida = document.createElement('canvas');
+  salida.width = ancho; salida.height = alto;
+  const ctx = salida.getContext('2d', { alpha: false });
+  const t0 = performance.now();
+  pintarMosaico({
+    ctx, cols: e.cols, filas: e.filas, ladoCelda: LADO_CELDA,
+    porPortada: e.porPortada, bitmaps: e.bitmaps, fuenteTinte: lienzoLectura,
+    alfa: mapaDeTinte({ de: e.de, cols: e.cols, filas: e.filas, escala: tinte / 100, modo }),
+    plano: modo === 'plano', fondo: '#0A0A0F',
+  });
+  const msPintar = performance.now() - t0;
+  document.getElementById('caja').replaceChildren(salida);
+  salida.style.width = '100%';
+
+  const r = resumenDeEmparejado({ indice: e.indice, de: e.de, cols: e.cols, filas: e.filas });
+  const info = {
+    cols: e.cols, filas: e.filas, ancho, alto, celdas: r.celdas, tinte, modo,
+    portadas: e.portadas, distintas: r.distintas, masRepetida: r.masRepetida, pegadas: r.pegadas,
+    fallidas: e.fallidas, bytes: e.bytes,
+    deMedio: +r.deMedio.toFixed(2), deMediana: +r.deMediana.toFixed(2), deP90: +r.deP90.toFixed(2),
+    bienEmparejadas: r.bienEmparejadas, malEmparejadas: r.malEmparejadas,
+    ms: { obj: Math.round(e.ms.obj), emp: Math.round(e.ms.emp), red: Math.round(e.ms.red), pintar: Math.round(msPintar) },
+  };
+  di(`${e.cols}×${e.filas} celdas · ${ancho}×${alto} px · tinte ${tinte} % ${modo} · ${r.distintas} portadas distintas, máx ${r.masRepetida} · pegadas ${r.pegadas} · ΔE med ${info.deMedio} · ${e.fallidas} fallidas`);
+  document.documentElement.setAttribute('data-banco', 'listo');
+  return info;
+}
+
+// ── Sacar la imagen de la página ────────────────────────────────────────────
+//
+// ⚠️ **Se entrega TROCEADA, y no es un adorno.** Un mosaico de 3.840×5.120 px en
+// JPEG son ~5 MB, o ~7 MB como dataURL, y devolver eso en un solo
+// `Runtime.evaluate` **mata la conexión de CDP sin decir nada**: el conductor
+// se queda esperando una respuesta que no llega y el proceso termina con código
+// 0, o sea que parece que salió bien y no hay archivo. Medido acá el 27/09.
+// Por eso se prepara una vez y se pide de a trozos de 1 MB.
+let listoParaSacar = '';
+const TROZO = 1e6;
+function prepararSalida(tipo = 'image/jpeg', calidad = 0.92) {
+  listoParaSacar = salida.toDataURL(tipo, calidad);
+  return { largo: listoParaSacar.length, trozos: Math.ceil(listoParaSacar.length / TROZO) };
+}
+const trozo = (i) => listoParaSacar.slice(i * TROZO, (i + 1) * TROZO);
+
+/** El mosaico entero reducido, para mirarlo de un vistazo sin abrir 7 MB. */
+function vista(maxLado = 900) {
+  const k = Math.min(1, maxLado / Math.max(salida.width, salida.height));
+  const c = document.createElement('canvas');
+  c.width = Math.round(salida.width * k); c.height = Math.round(salida.height * k);
+  const cx = c.getContext('2d');
+  cx.imageSmoothingEnabled = true; cx.imageSmoothingQuality = 'high';
+  cx.drawImage(salida, 0, 0, c.width, c.height);
+  listoParaSacar = c.toDataURL('image/png');
+  c.width = c.height = 0;
+  return { largo: listoParaSacar.length, trozos: Math.ceil(listoParaSacar.length / TROZO) };
+}
+
+/** Un recorte al 100 %, para que se vean las portadas una a una. */
+function recorte(x, y, w, h) {
+  const c = document.createElement('canvas');
+  c.width = w; c.height = h;
+  c.getContext('2d').drawImage(salida, x, y, w, h, 0, 0, w, h);
+  listoParaSacar = c.toDataURL('image/png');
+  c.width = c.height = 0;
+  return { largo: listoParaSacar.length, trozos: Math.ceil(listoParaSacar.length / TROZO) };
+}
+
+window.__banco = { generar, prepararSalida, trozo, vista, recorte, soltar: () => { if (salida) { salida.width = salida.height = 0; } for (const e of cacheEmp.values()) soltarBitmaps(e.bitmaps); cacheEmp.clear(); } };
+window.addEventListener('error', (e) => { di(`BANCO ERROR: ${e.message}`); document.documentElement.setAttribute('data-banco', 'error'); });
+window.addEventListener('unhandledrejection', (e) => { di(`BANCO ERROR: ${e.reason?.message || e.reason}`); document.documentElement.setAttribute('data-banco', 'error'); });
+di('listo para generar: window.__banco.generar({ largo, tinte, modo })');
+document.documentElement.setAttribute('data-banco', 'esperando');
+</script></body></html>

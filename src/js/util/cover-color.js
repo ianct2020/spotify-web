@@ -61,20 +61,41 @@ export function rejilla3x3(rgba, ancho, alto) {
   if (!rgba || ancho < REJILLA || alto < REJILLA || rgba.length < ancho * alto * 4) {
     throw new Error(`rejilla3x3: imagen inválida (${ancho}×${alto}, ${rgba?.length ?? 0} bytes)`);
   }
+  return rejilla3x3Rect(rgba, ancho, 0, 0, ancho, alto);
+}
+
+/**
+ * Lo mismo, pero de un RECTÁNGULO dentro de un buffer más grande: `[x0, x1)` ×
+ * `[y0, y1)` de una imagen de `anchoBuffer` px de ancho. Escribe en `out` (27
+ * bytes desde `offset`) si se le pasa uno, y lo devuelve.
+ *
+ * Existe para la imagen objetivo del photomosaic (v=250): cada celda de la
+ * grilla es un rectángulo del bitmap que subió el usuario, y tiene que
+ * promediarse con ESTA convención —luz lineal— y no con la del canvas, que
+ * promedia en sRGB al escalar. Si el objetivo se promediara en sRGB y los tiles
+ * en lineal, todo el mosaico se desplazaría (ΔE 8,3 de media, medido el 26/09).
+ *
+ * El rectángulo se subdivide en 3×3 con los mismos `cortes()` que una portada,
+ * así que un lado que no es múltiplo de 3 reparte el resto igual que allí.
+ */
+export function rejilla3x3Rect(rgba, anchoBuffer, x0, y0, x1, y1, out = new Uint8Array(BYTES_POR_PORTADA), offset = 0) {
+  const ancho = x1 - x0, alto = y1 - y0;
+  if (!rgba || ancho < REJILLA || alto < REJILLA) {
+    throw new Error(`rejilla3x3Rect: rectángulo inválido (${ancho}×${alto})`);
+  }
   const cx = cortes(ancho, REJILLA);
   const cy = cortes(alto, REJILLA);
-  const out = new Uint8Array(BYTES_POR_PORTADA);
   const L = SRGB_A_LINEAL;
   for (let fy = 0; fy < REJILLA; fy++) {
     for (let fx = 0; fx < REJILLA; fx++) {
       let r = 0, g = 0, b = 0, n = 0;
-      for (let y = cy[fy]; y < cy[fy + 1]; y++) {
-        let i = (y * ancho + cx[fx]) * 4;
+      for (let y = y0 + cy[fy]; y < y0 + cy[fy + 1]; y++) {
+        let i = (y * anchoBuffer + x0 + cx[fx]) * 4;
         for (let x = cx[fx]; x < cx[fx + 1]; x++, i += 4) {
           r += L[rgba[i]]; g += L[rgba[i + 1]]; b += L[rgba[i + 2]]; n++;
         }
       }
-      const o = (fy * REJILLA + fx) * 3;
+      const o = offset + (fy * REJILLA + fx) * 3;
       out[o] = linealASrgb8(r / n);
       out[o + 1] = linealASrgb8(g / n);
       out[o + 2] = linealASrgb8(b / n);

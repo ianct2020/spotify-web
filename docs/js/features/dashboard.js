@@ -1,16 +1,16 @@
-import { getAllLikedTracks, getLikesPartialInfo, exportAllData, importAllData, getCurrentUserId, syncLikesIncremental, getLikesCacheTimestamp, getBestAvailableLikes, getAllPlaylistItems } from '../api.js?v=249';
-import { showProgress, hideProgress, alertModal, escapeHtml, pageHeader } from '../ui/components.js?v=249';
-import { openModal, closeTop } from '../ui/modal-stack.js?v=249';
-import { showToast } from '../ui/toast.js?v=249';
-import { openListenedAlbumsPicker, getListenedPlaylist } from './listened-shared.js?v=249';
-import { loadHistoryStats, loadListenedAlbums } from './history-data.js?v=249';
-import { getArtistLikePreview } from '../util/artist-preview.js?v=249';
-import { hoverIn, hoverOut } from '../ui/preview-player.js?v=249';
-import { armRevealAll } from '../ui/reveal.js?v=249';
-import { hasUsername, getUsername, setUsername } from '../api/statsfm.js?v=249';
-import { getKey as getLastfmKey, setKey as setLastfmKey, clearKey as clearLastfmKey, isDefaultKey as lastfmIsDefaultKey } from '../api/lastfm.js?v=249';
-import { prefKey, migratePrefKey } from '../storage.js?v=249';
-import { alpha } from '../ui/theme-panel.js?v=249';
+import { getAllLikedTracks, getLikesPartialInfo, exportAllData, importAllData, getCurrentUserId, syncLikesIncremental, getLikesCacheTimestamp, getBestAvailableLikes, getAllPlaylistItems } from '../api.js?v=250';
+import { showProgress, hideProgress, alertModal, escapeHtml, pageHeader } from '../ui/components.js?v=250';
+import { openModal, closeTop } from '../ui/modal-stack.js?v=250';
+import { showToast } from '../ui/toast.js?v=250';
+import { openListenedAlbumsPicker, getListenedPlaylist } from './listened-shared.js?v=250';
+import { loadHistoryStats, loadListenedAlbums } from './history-data.js?v=250';
+import { getArtistLikePreview } from '../util/artist-preview.js?v=250';
+import { hoverIn, hoverOut } from '../ui/preview-player.js?v=250';
+import { armRevealAll } from '../ui/reveal.js?v=250';
+import { hasUsername, getUsername, setUsername } from '../api/statsfm.js?v=250';
+import { getKey as getLastfmKey, setKey as setLastfmKey, clearKey as clearLastfmKey, isDefaultKey as lastfmIsDefaultKey } from '../api/lastfm.js?v=250';
+import { prefKey, migratePrefKey } from '../storage.js?v=250';
+import { alpha } from '../ui/theme-panel.js?v=250';
 
 // Tres estados posibles, no dos: puede haber una key propia, la del código, o
 // —si algún día la constante queda vacía— ninguna. El hint del ⚙ tiene que
@@ -20,11 +20,11 @@ function estadoLastfm() {
   if (localStorage.getItem(prefKey('lastfm_api_key'))) return 'propia';
   return lastfmIsDefaultKey() ? 'la del código' : 'sin configurar';
 }
-import { loadHistoryStats as _loadStatsForCounter } from './history-data.js?v=249';
-import { openArtistCard } from './artist-card.js?v=249';
-import { openAlbumCard } from './album-card.js?v=249';
-import { activateMarquee, marqueeSpan } from '../ui/marquee.js?v=249';
-import { isJunkTrack } from '../util/junk.js?v=249';
+import { loadHistoryStats as _loadStatsForCounter } from './history-data.js?v=250';
+import { openArtistCard } from './artist-card.js?v=250';
+import { openAlbumCard } from './album-card.js?v=250';
+import { activateMarquee, marqueeSpan } from '../ui/marquee.js?v=250';
+import { isJunkTrack } from '../util/junk.js?v=250';
 
 let charts = [];
 let _loadController = null;

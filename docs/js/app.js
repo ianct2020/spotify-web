@@ -1,43 +1,44 @@
-import { isLoggedIn, loginWithSpotify, logout } from './auth.js?v=249';
-import { spotifyFetch, onRateLimit } from './api.js?v=249';
-import { getValidToken } from './auth.js?v=249';
-import { cacheClearAll } from './storage.js?v=249';
-import { idbClearAll } from './idb.js?v=249';
-import { CONSERVAR_CLAVES, CONSERVAR_PREFIJOS } from './util/limpiar-cache.js?v=249';
-import { registerRoute, initRouter, rutasRegistradas } from './router.js?v=249';
-import { showToast } from './ui/toast.js?v=249';
-import { pageHeader, escapeHtml } from './ui/components.js?v=249';
-import { installCrashGuard } from './ui/crash-guard.js?v=249';
-import { auditarOcultos, leerIncidencias } from './util/hidden-sync.js?v=249';
-import { getStack } from './ui/modal-stack.js?v=249';
-import { installBackToTop } from './ui/back-to-top.js?v=249';
-import { applyStoredTheme, openThemePanel } from './ui/theme-panel.js?v=249';
+import { isLoggedIn, loginWithSpotify, logout } from './auth.js?v=250';
+import { spotifyFetch, onRateLimit } from './api.js?v=250';
+import { getValidToken } from './auth.js?v=250';
+import { cacheClearAll } from './storage.js?v=250';
+import { idbClearAll } from './idb.js?v=250';
+import { CONSERVAR_CLAVES, CONSERVAR_PREFIJOS } from './util/limpiar-cache.js?v=250';
+import { registerRoute, initRouter, rutasRegistradas } from './router.js?v=250';
+import { showToast } from './ui/toast.js?v=250';
+import { pageHeader, escapeHtml } from './ui/components.js?v=250';
+import { installCrashGuard } from './ui/crash-guard.js?v=250';
+import { auditarOcultos, leerIncidencias } from './util/hidden-sync.js?v=250';
+import { getStack } from './ui/modal-stack.js?v=250';
+import { installBackToTop } from './ui/back-to-top.js?v=250';
+import { applyStoredTheme, openThemePanel } from './ui/theme-panel.js?v=250';
 
-import { render as renderSync } from './features/sync.js?v=249';
-import { render as renderDedupe } from './features/dedupe.js?v=249';
-import { render as renderDupalbums } from './features/duplicate-albums.js?v=249';
-import { render as renderZombies } from './features/zombies.js?v=249';
-import { render as renderVersions } from './features/versions.js?v=249';
-import { render as renderDashboard } from './features/dashboard.js?v=249';
-import { render as renderSmart } from './features/smart.js?v=249';
-import { render as renderSimilar } from './features/similar-artists.js?v=249';
-import { render as renderRabbit } from './features/rabbit-hole.js?v=249';
-import { render as renderByGenre } from './features/by-genre.js?v=249';
-import { render as renderByArtist } from './features/by-artist.js?v=249';
-import { render as renderRecs } from './features/recommendations.js?v=249';
-import { render as renderListened } from './features/listened.js?v=249';
-import { render as renderWrapped } from './features/wrapped.js?v=249';
-import { render as renderRecords } from './features/records.js?v=249';
-import { openImportHistory } from './features/import-history.js?v=249';
-import { bindOwnerLockedButtons } from './features/history-data.js?v=249';
-import { render as renderZeroPlays } from './features/zero-plays.js?v=249';
-import { render as renderSkips } from './features/skips.js?v=249';
-import { render as renderSearchLikes } from './features/search-likes.js?v=249';
-import { render as renderWthree } from './features/wthree.js?v=249';
-import { render as renderCovers } from './features/covers.js?v=249';
-import { render as renderDiscoverArtists } from './features/discover-artists.js?v=249';
-import { render as renderNewReleases } from './features/new-releases.js?v=249';
-import { render as renderSinClasificar } from './features/sin-clasificar.js?v=249';
+import { render as renderSync } from './features/sync.js?v=250';
+import { render as renderDedupe } from './features/dedupe.js?v=250';
+import { render as renderDupalbums } from './features/duplicate-albums.js?v=250';
+import { render as renderZombies } from './features/zombies.js?v=250';
+import { render as renderVersions } from './features/versions.js?v=250';
+import { render as renderDashboard } from './features/dashboard.js?v=250';
+import { render as renderSmart } from './features/smart.js?v=250';
+import { render as renderSimilar } from './features/similar-artists.js?v=250';
+import { render as renderRabbit } from './features/rabbit-hole.js?v=250';
+import { render as renderByGenre } from './features/by-genre.js?v=250';
+import { render as renderByArtist } from './features/by-artist.js?v=250';
+import { render as renderRecs } from './features/recommendations.js?v=250';
+import { render as renderListened } from './features/listened.js?v=250';
+import { render as renderWrapped } from './features/wrapped.js?v=250';
+import { render as renderRecords } from './features/records.js?v=250';
+import { openImportHistory } from './features/import-history.js?v=250';
+import { bindOwnerLockedButtons } from './features/history-data.js?v=250';
+import { render as renderZeroPlays } from './features/zero-plays.js?v=250';
+import { render as renderSkips } from './features/skips.js?v=250';
+import { render as renderSearchLikes } from './features/search-likes.js?v=250';
+import { render as renderWthree } from './features/wthree.js?v=250';
+import { render as renderCovers } from './features/covers.js?v=250';
+import { render as renderMosaico } from './features/mosaico.js?v=250';
+import { render as renderDiscoverArtists } from './features/discover-artists.js?v=250';
+import { render as renderNewReleases } from './features/new-releases.js?v=250';
+import { render as renderSinClasificar } from './features/sin-clasificar.js?v=250';
 
 // ── Arranque degradado cuando /me está rate-limiteado (v=173) ────────────────
 //
@@ -480,6 +481,9 @@ function showApp(profile) {
           <a class="nav-link" data-route="covers" href="#covers">
             <span class="nav-link-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg></span> Mis tapas
           </a>
+          <a class="nav-link" data-route="mosaico" href="#mosaico">
+            <span class="nav-link-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18M15 3v18M3 9h18M3 15h18"/></svg></span> Mosaico
+          </a>
           <a class="nav-link" data-route="search" href="#search">
             <span class="nav-link-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></span> Buscar likes
           </a>
@@ -726,6 +730,7 @@ function showApp(profile) {
   registerRoute('search', renderSearchLikes);
   registerRoute('wthree', renderWthree);
   registerRoute('covers', renderCovers);
+  registerRoute('mosaico', renderMosaico);
   registerRoute('discover-artists', renderDiscoverArtists);
   registerRoute('new-releases', renderNewReleases);
   registerRoute('sin-clasificar', renderSinClasificar);
@@ -756,6 +761,7 @@ const ICONS = {
   zeroplays: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="4.9" y1="4.9" x2="19.1" y2="19.1"/></svg>',
   skips: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 4 15 12 5 20 5 4"/><line x1="19" y1="5" x2="19" y2="19"/></svg>',
   search: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>',
+  mosaico: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18M15 3v18M3 9h18M3 15h18"/></svg>',
   sinclasificar: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h13"/><path d="M3 12h9"/><path d="M3 18h7"/><circle cx="18" cy="16" r="3"/><path d="M18 10.5v1.5"/></svg>',
 };
 
@@ -768,6 +774,7 @@ const HOME_SECTIONS = [
       { hash: 'records', icon: ICONS.records, name: 'Récords', desc: 'Días épicos, maratones, temas en loop, rachas e hitos de tu historial.' },
       { hash: 'search', icon: ICONS.search, name: 'Buscar likes', desc: 'Buscador instantáneo en tus Liked Songs (local, sin ir a Spotify).' },
       { hash: 'listened', icon: ICONS.listened, name: 'Álbumes escuchados', desc: 'Los álbumes de tu playlist de registro, agrupados.' },
+      { hash: 'mosaico', icon: ICONS.mosaico, name: 'Mosaico', desc: 'Sube una imagen y la reconstruyo con las portadas de tu biblioteca.' },
     ],
   },
   {
@@ -1002,7 +1009,7 @@ async function montarBaseMosaico() {
   const parar = document.getElementById('debug-mosaico-parar');
   let mod;
   try {
-    mod = await import('./features/mosaico-colores.js?v=249');
+    mod = await import('./features/mosaico-colores.js?v=250');
   } catch (err) {
     estado.textContent = `No he podido cargar el módulo: ${err.message}`;
     return;

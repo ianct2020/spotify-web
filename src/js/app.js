@@ -35,6 +35,7 @@ import { render as renderSkips } from './features/skips.js';
 import { render as renderSearchLikes } from './features/search-likes.js';
 import { render as renderWthree } from './features/wthree.js';
 import { render as renderCovers } from './features/covers.js';
+import { render as renderMosaico } from './features/mosaico.js';
 import { render as renderDiscoverArtists } from './features/discover-artists.js';
 import { render as renderNewReleases } from './features/new-releases.js';
 import { render as renderSinClasificar } from './features/sin-clasificar.js';
@@ -480,6 +481,9 @@ function showApp(profile) {
           <a class="nav-link" data-route="covers" href="#covers">
             <span class="nav-link-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg></span> Mis tapas
           </a>
+          <a class="nav-link" data-route="mosaico" href="#mosaico">
+            <span class="nav-link-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18M15 3v18M3 9h18M3 15h18"/></svg></span> Mosaico
+          </a>
           <a class="nav-link" data-route="search" href="#search">
             <span class="nav-link-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></span> Buscar likes
           </a>
@@ -726,6 +730,7 @@ function showApp(profile) {
   registerRoute('search', renderSearchLikes);
   registerRoute('wthree', renderWthree);
   registerRoute('covers', renderCovers);
+  registerRoute('mosaico', renderMosaico);
   registerRoute('discover-artists', renderDiscoverArtists);
   registerRoute('new-releases', renderNewReleases);
   registerRoute('sin-clasificar', renderSinClasificar);
@@ -756,6 +761,7 @@ const ICONS = {
   zeroplays: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="4.9" y1="4.9" x2="19.1" y2="19.1"/></svg>',
   skips: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 4 15 12 5 20 5 4"/><line x1="19" y1="5" x2="19" y2="19"/></svg>',
   search: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>',
+  mosaico: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18M15 3v18M3 9h18M3 15h18"/></svg>',
   sinclasificar: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h13"/><path d="M3 12h9"/><path d="M3 18h7"/><circle cx="18" cy="16" r="3"/><path d="M18 10.5v1.5"/></svg>',
 };
 
@@ -768,6 +774,7 @@ const HOME_SECTIONS = [
       { hash: 'records', icon: ICONS.records, name: 'Récords', desc: 'Días épicos, maratones, temas en loop, rachas e hitos de tu historial.' },
       { hash: 'search', icon: ICONS.search, name: 'Buscar likes', desc: 'Buscador instantáneo en tus Liked Songs (local, sin ir a Spotify).' },
       { hash: 'listened', icon: ICONS.listened, name: 'Álbumes escuchados', desc: 'Los álbumes de tu playlist de registro, agrupados.' },
+      { hash: 'mosaico', icon: ICONS.mosaico, name: 'Mosaico', desc: 'Sube una imagen y la reconstruyo con las portadas de tu biblioteca.' },
     ],
   },
   {
