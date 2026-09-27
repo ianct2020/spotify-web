@@ -993,7 +993,8 @@ function tablaDeOcultos(filas) {
 // El módulo se carga al entrar a `#debug`, no en el arranque. Leer lo guardado
 // no hace requests; «Construir» solo pide miniaturas al CDN de imágenes.
 const fmtN = (n) => n.toLocaleString('es-ES');
-const fmtMB = (b) => (b / 1048576).toLocaleString('es-ES', { maximumFractionDigits: 1 });
+const fmtMB = (b) => (b / 1e6).toLocaleString('es-ES', { maximumFractionDigits: 1 });
+const fmtFallidas = (n) => `${fmtN(n)} fallida${n === 1 ? '' : 's'}`;
 
 async function montarBaseMosaico() {
   const estado = document.getElementById('debug-mosaico-estado');
@@ -1015,7 +1016,7 @@ async function montarBaseMosaico() {
     const faltan = cat.cuentas.total - hechas;
     estado.innerHTML = `<strong>${fmtN(hechas)} de ${fmtN(cat.cuentas.total)}</strong> portadas con color`
       + ` (${fmtN(cat.cuentas.escuchadas)} de álbumes escuchados, ${fmtN(cat.cuentas.soloLikes)} más solo de tus likes)`
-      + (fallidas ? ` · <span style="color:var(--color-error)">${fmtN(fallidas)} fallidas</span>` : '')
+      + (fallidas ? ` · <span style="color:var(--color-error)">${fmtFallidas(fallidas)}</span>` : '')
       + (reg ? ` · bajados ${fmtMB(reg.bytes)} MB en total · guardada ${escapeHtml(new Date(reg.actualizado).toLocaleString('es-ES'))}` : ' · todavía no hay nada guardado');
     btn.textContent = !reg || hechas === 0 ? 'Construir' : faltan ? `Continuar (faltan ${fmtN(faltan)})` : 'Completa · repasar';
     btn.disabled = mod.construyendo();
@@ -1032,7 +1033,7 @@ async function montarBaseMosaico() {
       r = await mod.construirColores({
         signal: ctrl.signal,
         onProgress: (p) => {
-          estado.textContent = `${fmtN(p.hechas)} de ${fmtN(p.total)} · ${fmtN(p.fallidas)} fallidas · ${fmtMB(p.bytes)} MB en esta tanda · ${(p.ms / 1000).toFixed(0)} s`;
+          estado.textContent = `${fmtN(p.hechas)} de ${fmtN(p.total)} · ${fmtFallidas(p.fallidas)} · ${fmtMB(p.bytes)} MB en esta tanda · ${(p.ms / 1000).toFixed(0)} s`;
         },
       });
     } catch (err) {
@@ -1043,7 +1044,7 @@ async function montarBaseMosaico() {
     if (r) {
       const tanda = `${fmtN(r.nuevas)} nuevas en ${(r.ms / 1000).toFixed(0)} s, ${fmtMB(r.bytes)} MB`;
       if (r.corte) showToast(`Base de colores cortada: ${r.corte}. ${tanda}. Faltan ${fmtN(r.faltan)}.`, r.corte === 'detenida a mano' ? 'info' : 'error');
-      else showToast(`Base de colores: ${tanda}. Faltan ${fmtN(r.faltan)}${r.fallidas ? `, ${fmtN(r.fallidas)} fallidas` : ''}.`, r.faltan ? 'warning' : 'success');
+      else showToast(`Base de colores: ${tanda}. Faltan ${fmtN(r.faltan)}${r.fallidas ? `, ${fmtFallidas(r.fallidas)}` : ''}.`, r.faltan ? 'warning' : 'success');
     }
     if (document.getElementById('debug-mosaico-estado') === estado) await pintarGuardado();
   };

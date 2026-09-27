@@ -1,43 +1,43 @@
-import { isLoggedIn, loginWithSpotify, logout } from './auth.js?v=248';
-import { spotifyFetch, onRateLimit } from './api.js?v=248';
-import { getValidToken } from './auth.js?v=248';
-import { cacheClearAll } from './storage.js?v=248';
-import { idbClearAll } from './idb.js?v=248';
-import { CONSERVAR_CLAVES, CONSERVAR_PREFIJOS } from './util/limpiar-cache.js?v=248';
-import { registerRoute, initRouter, rutasRegistradas } from './router.js?v=248';
-import { showToast } from './ui/toast.js?v=248';
-import { pageHeader, escapeHtml } from './ui/components.js?v=248';
-import { installCrashGuard } from './ui/crash-guard.js?v=248';
-import { auditarOcultos, leerIncidencias } from './util/hidden-sync.js?v=248';
-import { getStack } from './ui/modal-stack.js?v=248';
-import { installBackToTop } from './ui/back-to-top.js?v=248';
-import { applyStoredTheme, openThemePanel } from './ui/theme-panel.js?v=248';
+import { isLoggedIn, loginWithSpotify, logout } from './auth.js?v=249';
+import { spotifyFetch, onRateLimit } from './api.js?v=249';
+import { getValidToken } from './auth.js?v=249';
+import { cacheClearAll } from './storage.js?v=249';
+import { idbClearAll } from './idb.js?v=249';
+import { CONSERVAR_CLAVES, CONSERVAR_PREFIJOS } from './util/limpiar-cache.js?v=249';
+import { registerRoute, initRouter, rutasRegistradas } from './router.js?v=249';
+import { showToast } from './ui/toast.js?v=249';
+import { pageHeader, escapeHtml } from './ui/components.js?v=249';
+import { installCrashGuard } from './ui/crash-guard.js?v=249';
+import { auditarOcultos, leerIncidencias } from './util/hidden-sync.js?v=249';
+import { getStack } from './ui/modal-stack.js?v=249';
+import { installBackToTop } from './ui/back-to-top.js?v=249';
+import { applyStoredTheme, openThemePanel } from './ui/theme-panel.js?v=249';
 
-import { render as renderSync } from './features/sync.js?v=248';
-import { render as renderDedupe } from './features/dedupe.js?v=248';
-import { render as renderDupalbums } from './features/duplicate-albums.js?v=248';
-import { render as renderZombies } from './features/zombies.js?v=248';
-import { render as renderVersions } from './features/versions.js?v=248';
-import { render as renderDashboard } from './features/dashboard.js?v=248';
-import { render as renderSmart } from './features/smart.js?v=248';
-import { render as renderSimilar } from './features/similar-artists.js?v=248';
-import { render as renderRabbit } from './features/rabbit-hole.js?v=248';
-import { render as renderByGenre } from './features/by-genre.js?v=248';
-import { render as renderByArtist } from './features/by-artist.js?v=248';
-import { render as renderRecs } from './features/recommendations.js?v=248';
-import { render as renderListened } from './features/listened.js?v=248';
-import { render as renderWrapped } from './features/wrapped.js?v=248';
-import { render as renderRecords } from './features/records.js?v=248';
-import { openImportHistory } from './features/import-history.js?v=248';
-import { bindOwnerLockedButtons } from './features/history-data.js?v=248';
-import { render as renderZeroPlays } from './features/zero-plays.js?v=248';
-import { render as renderSkips } from './features/skips.js?v=248';
-import { render as renderSearchLikes } from './features/search-likes.js?v=248';
-import { render as renderWthree } from './features/wthree.js?v=248';
-import { render as renderCovers } from './features/covers.js?v=248';
-import { render as renderDiscoverArtists } from './features/discover-artists.js?v=248';
-import { render as renderNewReleases } from './features/new-releases.js?v=248';
-import { render as renderSinClasificar } from './features/sin-clasificar.js?v=248';
+import { render as renderSync } from './features/sync.js?v=249';
+import { render as renderDedupe } from './features/dedupe.js?v=249';
+import { render as renderDupalbums } from './features/duplicate-albums.js?v=249';
+import { render as renderZombies } from './features/zombies.js?v=249';
+import { render as renderVersions } from './features/versions.js?v=249';
+import { render as renderDashboard } from './features/dashboard.js?v=249';
+import { render as renderSmart } from './features/smart.js?v=249';
+import { render as renderSimilar } from './features/similar-artists.js?v=249';
+import { render as renderRabbit } from './features/rabbit-hole.js?v=249';
+import { render as renderByGenre } from './features/by-genre.js?v=249';
+import { render as renderByArtist } from './features/by-artist.js?v=249';
+import { render as renderRecs } from './features/recommendations.js?v=249';
+import { render as renderListened } from './features/listened.js?v=249';
+import { render as renderWrapped } from './features/wrapped.js?v=249';
+import { render as renderRecords } from './features/records.js?v=249';
+import { openImportHistory } from './features/import-history.js?v=249';
+import { bindOwnerLockedButtons } from './features/history-data.js?v=249';
+import { render as renderZeroPlays } from './features/zero-plays.js?v=249';
+import { render as renderSkips } from './features/skips.js?v=249';
+import { render as renderSearchLikes } from './features/search-likes.js?v=249';
+import { render as renderWthree } from './features/wthree.js?v=249';
+import { render as renderCovers } from './features/covers.js?v=249';
+import { render as renderDiscoverArtists } from './features/discover-artists.js?v=249';
+import { render as renderNewReleases } from './features/new-releases.js?v=249';
+import { render as renderSinClasificar } from './features/sin-clasificar.js?v=249';
 
 // ── Arranque degradado cuando /me está rate-limiteado (v=173) ────────────────
 //
@@ -993,7 +993,8 @@ function tablaDeOcultos(filas) {
 // El módulo se carga al entrar a `#debug`, no en el arranque. Leer lo guardado
 // no hace requests; «Construir» solo pide miniaturas al CDN de imágenes.
 const fmtN = (n) => n.toLocaleString('es-ES');
-const fmtMB = (b) => (b / 1048576).toLocaleString('es-ES', { maximumFractionDigits: 1 });
+const fmtMB = (b) => (b / 1e6).toLocaleString('es-ES', { maximumFractionDigits: 1 });
+const fmtFallidas = (n) => `${fmtN(n)} fallida${n === 1 ? '' : 's'}`;
 
 async function montarBaseMosaico() {
   const estado = document.getElementById('debug-mosaico-estado');
@@ -1001,7 +1002,7 @@ async function montarBaseMosaico() {
   const parar = document.getElementById('debug-mosaico-parar');
   let mod;
   try {
-    mod = await import('./features/mosaico-colores.js?v=248');
+    mod = await import('./features/mosaico-colores.js?v=249');
   } catch (err) {
     estado.textContent = `No he podido cargar el módulo: ${err.message}`;
     return;
@@ -1015,7 +1016,7 @@ async function montarBaseMosaico() {
     const faltan = cat.cuentas.total - hechas;
     estado.innerHTML = `<strong>${fmtN(hechas)} de ${fmtN(cat.cuentas.total)}</strong> portadas con color`
       + ` (${fmtN(cat.cuentas.escuchadas)} de álbumes escuchados, ${fmtN(cat.cuentas.soloLikes)} más solo de tus likes)`
-      + (fallidas ? ` · <span style="color:var(--color-error)">${fmtN(fallidas)} fallidas</span>` : '')
+      + (fallidas ? ` · <span style="color:var(--color-error)">${fmtFallidas(fallidas)}</span>` : '')
       + (reg ? ` · bajados ${fmtMB(reg.bytes)} MB en total · guardada ${escapeHtml(new Date(reg.actualizado).toLocaleString('es-ES'))}` : ' · todavía no hay nada guardado');
     btn.textContent = !reg || hechas === 0 ? 'Construir' : faltan ? `Continuar (faltan ${fmtN(faltan)})` : 'Completa · repasar';
     btn.disabled = mod.construyendo();
@@ -1032,7 +1033,7 @@ async function montarBaseMosaico() {
       r = await mod.construirColores({
         signal: ctrl.signal,
         onProgress: (p) => {
-          estado.textContent = `${fmtN(p.hechas)} de ${fmtN(p.total)} · ${fmtN(p.fallidas)} fallidas · ${fmtMB(p.bytes)} MB en esta tanda · ${(p.ms / 1000).toFixed(0)} s`;
+          estado.textContent = `${fmtN(p.hechas)} de ${fmtN(p.total)} · ${fmtFallidas(p.fallidas)} · ${fmtMB(p.bytes)} MB en esta tanda · ${(p.ms / 1000).toFixed(0)} s`;
         },
       });
     } catch (err) {
@@ -1043,7 +1044,7 @@ async function montarBaseMosaico() {
     if (r) {
       const tanda = `${fmtN(r.nuevas)} nuevas en ${(r.ms / 1000).toFixed(0)} s, ${fmtMB(r.bytes)} MB`;
       if (r.corte) showToast(`Base de colores cortada: ${r.corte}. ${tanda}. Faltan ${fmtN(r.faltan)}.`, r.corte === 'detenida a mano' ? 'info' : 'error');
-      else showToast(`Base de colores: ${tanda}. Faltan ${fmtN(r.faltan)}${r.fallidas ? `, ${fmtN(r.fallidas)} fallidas` : ''}.`, r.faltan ? 'warning' : 'success');
+      else showToast(`Base de colores: ${tanda}. Faltan ${fmtN(r.faltan)}${r.fallidas ? `, ${fmtFallidas(r.fallidas)}` : ''}.`, r.faltan ? 'warning' : 'success');
     }
     if (document.getElementById('debug-mosaico-estado') === estado) await pintarGuardado();
   };

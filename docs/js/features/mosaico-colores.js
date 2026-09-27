@@ -26,11 +26,11 @@
 // temporizadores encadenados hasta uno por minuto. El bucle solo espera a la
 // red y a la decodificación, que no se frenan.
 
-import { idbGetCachedRaw, idbSetCached } from '../idb.js?v=248';
-import { loadListenedAlbums } from './history-data.js?v=248';
-import { getBestAvailableLikes } from '../api.js?v=248';
-import { coverId, coverVariant } from '../util/album-key.js?v=248';
-import { MOSAICO_COLORES_KEY, BYTES_POR_PORTADA, rejilla3x3 } from '../util/cover-color.js?v=248';
+import { idbGetCachedRaw, idbSetCached } from '../idb.js?v=249';
+import { loadListenedAlbums } from './history-data.js?v=249';
+import { getBestAvailableLikes } from '../api.js?v=249';
+import { coverId, coverVariant } from '../util/album-key.js?v=249';
+import { MOSAICO_COLORES_KEY, BYTES_POR_PORTADA, rejilla3x3 } from '../util/cover-color.js?v=249';
 
 const FORMATO = 1;
 // Descargas a la vez. Es el lote de `covers-wallpaper.js`, medido allí contra
@@ -111,9 +111,14 @@ export async function armarCatalogo() {
 //   ids: [coverId, …], host: Uint8Array (índice en `hosts`, uno por id),
 //   datos: Uint8Array(ids.length × 27),
 //   fallidas: { coverId: 'motivo' },
+//   rarasUrl: { coverId: url },
 //   bytes, msRed (sumados entre tandas), creado, actualizado }
 //
 // La URL de 64 px se rehace con `urlDe()`: host + prefijo de 64 px + id.
+// `rarasUrl` guarda la URL entera de las portadas cuyo nombre no lleva el
+// prefijo de álbum (`ab67616d…`) y por tanto no tienen variante de 64 px que
+// se pueda derivar: se bajan tal cual vienen. En la base de Ian del 27/09 era
+// UNA de 5.715 (`i.scdn.co/image/533bd544…`, un id de 40 hex).
 
 const PREFIJO_64 = 'ab67616d00004851';
 
@@ -124,6 +129,8 @@ export async function leerColores() {
 }
 
 export function urlDe(registro, i) {
+  const rara = registro.rarasUrl?.[registro.ids[i]];
+  if (rara) return rara;
   return `https://${registro.hosts[registro.host[i]]}/image/${PREFIJO_64}${registro.ids[i]}`;
 }
 
@@ -136,6 +143,7 @@ function estadoDesde(reg) {
     host: reg ? [...reg.host] : [],
     datos: reg ? [reg.datos] : [],   // trozos de Uint8Array, se juntan al guardar
     fallidas: reg ? { ...reg.fallidas } : {},
+    rarasUrl: reg?.rarasUrl ? { ...reg.rarasUrl } : {},
     bytes: reg?.bytes || 0,
     msRed: reg?.msRed || 0,
     creado: reg?.creado || Date.now(),
@@ -152,7 +160,7 @@ function compactar(st) {
   return {
     formato: FORMATO, rejilla: '3x3', espacio: 'lineal→srgb8', lado: 64,
     hosts: st.hosts, ids: st.ids, host: Uint8Array.from(st.host), datos,
-    fallidas: st.fallidas, bytes: st.bytes, msRed: st.msRed,
+    fallidas: st.fallidas, rarasUrl: st.rarasUrl, bytes: st.bytes, msRed: st.msRed,
     creado: st.creado, actualizado: Date.now(),
   };
 }
@@ -243,11 +251,12 @@ async function correr({ onProgress, signal }) {
       if (signal?.aborted) { corte = corte || 'detenida a mano'; break; }
       const it = pendientes[cursor++];
       const m = RE_TAPA.exec(it.url64);
-      if (!m || !it.url64.includes(`/image/${PREFIJO_64}`)) {
-        st.fallidas[it.id] = 'no es una portada de álbum del CDN';
+      if (!m) {
+        st.fallidas[it.id] = 'la URL no tiene la forma de una portada del CDN';
         fallidasTanda++;
         continue;
       }
+      const rara = !it.url64.includes(`/image/${PREFIJO_64}`);
       let r;
       try {
         r = await colorDe(it.url64, lienzo, signal);
@@ -257,6 +266,7 @@ async function correr({ onProgress, signal }) {
         r = { error: `${e.name}: ${e.message}` };
       }
       bytesTanda += r.bytes || 0;
+      st.bytes += r.bytes || 0;   // aquí y no al final: una tanda cortada también bajó lo suyo
       if (r.error) {
         st.fallidas[it.id] = r.error;
         fallidasTanda++;
@@ -268,6 +278,7 @@ async function correr({ onProgress, signal }) {
         st.ids.push(it.id);
         st.host.push(h);
         st.datos.push(r.rejilla);
+        if (rara) st.rarasUrl[it.id] = it.url64;
         st.hechas.add(it.id);
         delete st.fallidas[it.id];
         nuevas++;
@@ -280,7 +291,6 @@ async function correr({ onProgress, signal }) {
   await Promise.all(Array.from({ length: Math.min(EN_PARALELO, pendientes.length) }, obrero));
 
   const ms = performance.now() - t0;
-  st.bytes += bytesTanda;
   st.msRed += ms;
   await guardar();
 
