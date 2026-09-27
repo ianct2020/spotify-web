@@ -103,17 +103,28 @@ function idbAvailable() {
 // `keepPrefixes` existe por la base de discografías (v=229): una clave por
 // artista, así que no se pueden nombrar de antemano, y rehacerla cuesta dos
 // cuotas de Spotify quemadas.
-async function idbClearAll(keepKeys = [], keepPrefixes = []) {
+//
+// El filtro está aparte (`clavesABorrar`) para poder mirar qué borraría sin
+// borrar nada: lo usan el test de «Limpiar caché» y la comprobación en vivo.
+function clavesABorrar(keys, keepKeys = [], keepPrefixes = []) {
   const keepSet = new Set(keepKeys);
-  const keep = { has: (k) => keepSet.has(k) || (typeof k === 'string' && keepPrefixes.some(p => k.startsWith(p))) };
+  const keep = (k) => keepSet.has(k) || (typeof k === 'string' && keepPrefixes.some(p => k.startsWith(p)));
+  return keys.filter(k => !keep(k));
+}
+
+async function idbAllKeys() {
   const db = await openDb();
-  const keys = await new Promise((res, rej) => {
+  return new Promise((res, rej) => {
     const t = db.transaction(STORE, 'readonly');
     const r = t.objectStore(STORE).getAllKeys();
     r.onsuccess = () => res(r.result);
     r.onerror = () => rej(r.error);
   });
-  const toDel = keys.filter(k => !keep.has(k));
+}
+
+async function idbClearAll(keepKeys = [], keepPrefixes = []) {
+  const db = await openDb();
+  const toDel = clavesABorrar(await idbAllKeys(), keepKeys, keepPrefixes);
   if (toDel.length === 0) return 0;
   await new Promise((res, rej) => {
     const t = db.transaction(STORE, 'readwrite');
@@ -181,4 +192,5 @@ export {
   idbGet, idbSet, idbDel,
   idbGetCached, idbGetCachedRaw, idbGetTimestamp, idbSetCached,
   idbAvailable, idbClearAll, idbDelByPrefix,
+  idbAllKeys, clavesABorrar,
 };

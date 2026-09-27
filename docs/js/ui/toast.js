@@ -10,8 +10,10 @@
 //   - TODOS llevan ✕ visible.
 //   - Como mucho 3 en pantalla: al llegar el cuarto se va el más viejo.
 //
-// v=246: el tope pasa a 4 (al llegar el quinto se va el más viejo), y el
-// retiro de un toast descartado ya no cuelga de `animationend`. Hasta v=245
+// v=246: el tope pasó a 4 por un encargo que partía de una premisa falsa
+// («los toasts se apilan sin tope»: el de 3 existía desde v=130 y funcionaba).
+// v=248 lo devuelve a 3. Lo que sí estaba roto, y v=246 arregló, es el retiro:
+// quitar un toast descartado ya no cuelga de `animationend`. Hasta v=245
 // `dismiss()` solo ponía `.toast-exit` y esperaba ese evento para quitar el
 // nodo; si la animación no corre —pestaña oculta o en segundo plano, que es
 // donde corre la extensión con la que se prueba— el evento no llega nunca y el
@@ -29,11 +31,11 @@
 // `avisar()` sigue mandando cada mensaje distinto una vez, que es lo que arregló
 // v=229.
 
-import { mountBottom } from './bottom-layer.js?v=247';
+import { mountBottom } from './bottom-layer.js?v=248';
 
 const WRITE_DURATION_MS = 30000;
 const INFO_DURATION_MS = 8000;
-const MAX_VISIBLE = 4;
+const MAX_VISIBLE = 3;
 // Lo que dura `toast-out` en main.css (0.2 s), más margen. Es la red de
 // seguridad del retiro, no la animación.
 const EXIT_SAFETY_MS = 450;

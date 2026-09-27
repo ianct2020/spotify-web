@@ -3,7 +3,7 @@ import { spotifyFetch, onRateLimit } from './api.js';
 import { getValidToken } from './auth.js';
 import { cacheClearAll } from './storage.js';
 import { idbClearAll } from './idb.js';
-import { DISCO_BASE_PREFIX } from './util/disco-base.js';
+import { CONSERVAR_CLAVES, CONSERVAR_PREFIJOS } from './util/limpiar-cache.js';
 import { registerRoute, initRouter, rutasRegistradas } from './router.js';
 import { showToast } from './ui/toast.js';
 import { pageHeader, escapeHtml } from './ui/components.js';
@@ -589,11 +589,12 @@ function showApp(profile) {
     btn.textContent = 'Limpiando...';
     cacheClearAll(); // localStorage
     try {
-      // Vacía IndexedDB (grouped de playlists, análisis, etc.) menos tus likes
-      // y la base de discografías (v=229): las dos son caras de rehacer, y la
-      // base cuesta cuotas de Spotify que dejan la búsqueda caída más de una hora.
-      const n = await idbClearAll(['all_liked_tracks', 'all_liked_tracks_partial'], [DISCO_BASE_PREFIX]);
-      showToast(`Caché limpiada (${n} entrada${n === 1 ? '' : 's'}). Tus likes y la base de discografías se conservan.`, 'success');
+      // Vacía IndexedDB (grouped de playlists, análisis, etc.) menos lo que
+      // lista `util/limpiar-cache.js`: tus likes, la base de discografías
+      // (v=229) y la base de colores del mosaico (v=248). El porqué de cada
+      // una está en ese módulo.
+      const n = await idbClearAll(CONSERVAR_CLAVES, CONSERVAR_PREFIJOS);
+      showToast(`Caché limpiada (${n} entrada${n === 1 ? '' : 's'}). Tus likes, la base de discografías y la de colores del mosaico se conservan.`, 'success');
     } catch (e) {
       showToast('Caché local limpiada (IDB falló: ' + e.message + ')', 'info');
     }
@@ -987,6 +988,70 @@ function tablaDeOcultos(filas) {
     </div>`;
 }
 
+// ── Base de colores del mosaico (v=248) ─────────────────────────────────────
+//
+// El módulo se carga al entrar a `#debug`, no en el arranque. Leer lo guardado
+// no hace requests; «Construir» solo pide miniaturas al CDN de imágenes.
+const fmtN = (n) => n.toLocaleString('es-ES');
+const fmtMB = (b) => (b / 1048576).toLocaleString('es-ES', { maximumFractionDigits: 1 });
+
+async function montarBaseMosaico() {
+  const estado = document.getElementById('debug-mosaico-estado');
+  const btn = document.getElementById('debug-mosaico-btn');
+  const parar = document.getElementById('debug-mosaico-parar');
+  let mod;
+  try {
+    mod = await import('./features/mosaico-colores.js');
+  } catch (err) {
+    estado.textContent = `No he podido cargar el módulo: ${err.message}`;
+    return;
+  }
+
+  const pintarGuardado = async () => {
+    const [reg, cat] = await Promise.all([mod.leerColores(), mod.armarCatalogo()]);
+    const enCat = new Set(cat.items.map(x => x.id));
+    const hechas = reg ? reg.ids.filter(id => enCat.has(id)).length : 0;
+    const fallidas = reg ? Object.keys(reg.fallidas).filter(id => enCat.has(id)).length : 0;
+    const faltan = cat.cuentas.total - hechas;
+    estado.innerHTML = `<strong>${fmtN(hechas)} de ${fmtN(cat.cuentas.total)}</strong> portadas con color`
+      + ` (${fmtN(cat.cuentas.escuchadas)} de álbumes escuchados, ${fmtN(cat.cuentas.soloLikes)} más solo de tus likes)`
+      + (fallidas ? ` · <span style="color:var(--color-error)">${fmtN(fallidas)} fallidas</span>` : '')
+      + (reg ? ` · bajados ${fmtMB(reg.bytes)} MB en total · guardada ${escapeHtml(new Date(reg.actualizado).toLocaleString('es-ES'))}` : ' · todavía no hay nada guardado');
+    btn.textContent = !reg || hechas === 0 ? 'Construir' : faltan ? `Continuar (faltan ${fmtN(faltan)})` : 'Completa · repasar';
+    btn.disabled = mod.construyendo();
+  };
+
+  let ctrl = null;
+  btn.onclick = async () => {
+    btn.disabled = true;
+    parar.disabled = false;
+    ctrl = new AbortController();
+    estado.textContent = 'Armando el catálogo…';
+    let r;
+    try {
+      r = await mod.construirColores({
+        signal: ctrl.signal,
+        onProgress: (p) => {
+          estado.textContent = `${fmtN(p.hechas)} de ${fmtN(p.total)} · ${fmtN(p.fallidas)} fallidas · ${fmtMB(p.bytes)} MB en esta tanda · ${(p.ms / 1000).toFixed(0)} s`;
+        },
+      });
+    } catch (err) {
+      showToast(`La base de colores falló: ${err.message}`, 'error');
+      r = null;
+    }
+    parar.disabled = true;
+    if (r) {
+      const tanda = `${fmtN(r.nuevas)} nuevas en ${(r.ms / 1000).toFixed(0)} s, ${fmtMB(r.bytes)} MB`;
+      if (r.corte) showToast(`Base de colores cortada: ${r.corte}. ${tanda}. Faltan ${fmtN(r.faltan)}.`, r.corte === 'detenida a mano' ? 'info' : 'error');
+      else showToast(`Base de colores: ${tanda}. Faltan ${fmtN(r.faltan)}${r.fallidas ? `, ${fmtN(r.fallidas)} fallidas` : ''}.`, r.faltan ? 'warning' : 'success');
+    }
+    if (document.getElementById('debug-mosaico-estado') === estado) await pintarGuardado();
+  };
+  parar.onclick = () => { ctrl?.abort(); parar.disabled = true; };
+
+  try { await pintarGuardado(); } catch (err) { estado.textContent = `No he podido leer lo guardado: ${err.message}`; }
+}
+
 async function renderDebug(container) {
   container.innerHTML = `
     <div class="page-header">
@@ -998,6 +1063,15 @@ async function renderDebug(container) {
       <button class="btn btn-secondary" id="debug-barrido-btn" title="Entra a todas las rutas registradas y comprueba que cada una pinta contenido. Tarda unos minutos.">Barrer vistas (${rutasRegistradas().length} rutas)</button>
       <button class="btn btn-secondary" id="debug-ocultos-btn" title="Compara, vista por vista, lo que este navegador cree que está oculto contra la playlist de ocultos de Spotify.">Salud de los ocultos</button>
     </div>
+    <div class="card" id="debug-mosaico" style="margin-top:20px">
+      <p style="margin:0 0 10px"><strong>Base de colores del mosaico</strong>
+        <span style="color:var(--color-text-muted);font-size:12px"> · baja la miniatura de 64 px de cada portada del CDN de imágenes (no gasta cuota de Spotify) y guarda su rejilla de colores</span></p>
+      <p id="debug-mosaico-estado" style="margin:0 0 10px;font-size:13px">Leyendo lo guardado…</p>
+      <div style="display:flex;gap:10px;flex-wrap:wrap">
+        <button class="btn btn-secondary" id="debug-mosaico-btn" disabled>Construir</button>
+        <button class="btn btn-secondary" id="debug-mosaico-parar" disabled>Detener</button>
+      </div>
+    </div>
     <div id="debug-ocultos"></div>
     <div id="debug-barrido"></div>
     <pre id="debug-log" style="margin-top:20px;background:var(--color-surface);padding:20px;border-radius:var(--radius-md);font-size:13px;overflow-x:auto;white-space:pre-wrap;word-break:break-all;max-height:70vh;overflow-y:auto"></pre>
@@ -1008,6 +1082,8 @@ async function renderDebug(container) {
   let ultimo = null;
   try { ultimo = JSON.parse(localStorage.getItem(BARRIDO_KEY) || 'null'); } catch { /* nada */ }
   if (ultimo) document.getElementById('debug-barrido').innerHTML = tablaDelBarrido(ultimo);
+
+  montarBaseMosaico();
 
   document.getElementById('debug-ocultos-btn').onclick = async (e) => {
     const btn = e.currentTarget;

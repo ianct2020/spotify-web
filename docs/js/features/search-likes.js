@@ -2,12 +2,12 @@
 // Sirve para cuando la búsqueda de Spotify tarda o no encuentra bien:
 // tipeás, filtra en memoria por título/artista/álbum, sin pegarle a la API.
 
-import { getBestAvailableLikes } from '../api.js?v=247';
-import { renderTrackRow, escapeHtml, pageHeader } from '../ui/components.js?v=247';
-import { firstArtistName, artistNames } from '../util/artist-name.js?v=247';
-import { openTrackCard } from './track-card.js?v=247';
-import { coverUrl } from '../util/cover-size.js?v=247';
-import { fmtDiaCorto } from '../util/fecha.js?v=247';
+import { getBestAvailableLikes } from '../api.js?v=248';
+import { renderTrackRow, escapeHtml, pageHeader } from '../ui/components.js?v=248';
+import { firstArtistName, artistNames } from '../util/artist-name.js?v=248';
+import { openTrackCard } from './track-card.js?v=248';
+import { coverUrl } from '../util/cover-size.js?v=248';
+import { fmtDiaCorto } from '../util/fecha.js?v=248';
 
 const MAX_RESULTS = 300;
 let cachedItems = [];

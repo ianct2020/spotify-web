@@ -28,11 +28,11 @@
 // que mantiene separados American Football LP2/LP3, Crystal Castles I/II y el
 // ÷/=/+ de Ed Sheeran. Lo que cambia es a QUÉ id de Spotify apunta esa clave.
 
-import { spotifyFetch } from '../api.js?v=247';
-import { limpiaParaQuery, normText } from './track-match.js?v=247';
-import { albumKey } from './album-key.js?v=247';
-import { firstArtistName, artistNames, resolveArtistName } from './artist-name.js?v=247';
-import { candidatoTraeVersionDeMas } from './album-version-guard.js?v=247';
+import { spotifyFetch } from '../api.js?v=248';
+import { limpiaParaQuery, normText } from './track-match.js?v=248';
+import { albumKey } from './album-key.js?v=248';
+import { firstArtistName, artistNames, resolveArtistName } from './artist-name.js?v=248';
+import { candidatoTraeVersionDeMas } from './album-version-guard.js?v=248';
 
 // ⚠️ SOLO ÉXITOS. Un fracaso memoizado se lee después como un éxito de que «no
 // hay álbum» y se queda pegado hasta recargar la página: si Spotify estaba

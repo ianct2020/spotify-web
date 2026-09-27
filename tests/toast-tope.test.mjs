@@ -18,7 +18,8 @@
 //     `util/hidden-sync.js`, por tipo + mensaje, v=229). Meterla acá, por tipo,
 //     es exactamente el bug que arregló v=229, así que el caso 2 lo pone a la
 //     vista.
-//   - El techo es 4: al llegar el quinto se va el más viejo.
+//   - El techo es 3: al llegar el cuarto se va el más viejo. (v=246 lo subió a
+//     4 por un encargo que partía de una premisa falsa; v=248 lo devuelve a 3.)
 
 import { register } from 'node:module';
 import { pathToFileURL } from 'node:url';
@@ -106,24 +107,24 @@ function resetear() {
   globalThis.document.visibilityState = 'visible';
 }
 
-// ── 1. El techo: 4 a la vez, al quinto se va el más viejo ────────────────────
-console.log('El techo: 4 a la vez');
+// ── 1. El techo: 3 a la vez, al cuarto se va el más viejo ────────────────────
+console.log('El techo: 3 a la vez');
 resetear();
-for (let i = 1; i <= 4; i++) showToast(`aviso ${i}`, 'info', 0);
-eq(vivos().length, 4, 'con cuatro caben los cuatro');
-eq(textos(), ['aviso 1', 'aviso 2', 'aviso 3', 'aviso 4'], 'y sigue el primero: nadie se ha ido todavía');
-showToast('aviso 5', 'info', 0);
-eq(vivos().length, 4, 'al llegar el quinto siguen cuatro');
-eq(textos(), ['aviso 2', 'aviso 3', 'aviso 4', 'aviso 5'], 'y el que se fue es el más viejo');
-for (let i = 6; i <= 8; i++) showToast(`aviso ${i}`, 'info', 0);
-eq(textos(), ['aviso 5', 'aviso 6', 'aviso 7', 'aviso 8'], 'ocho toasts: quedan los cuatro últimos');
-eq(enDom().length, 4, 'y los expulsados están fuera del DOM, no escondidos');
+for (let i = 1; i <= 3; i++) showToast(`aviso ${i}`, 'info', 0);
+eq(vivos().length, 3, 'con tres caben los tres');
+eq(textos(), ['aviso 1', 'aviso 2', 'aviso 3'], 'y sigue el primero: nadie se ha ido todavía');
+showToast('aviso 4', 'info', 0);
+eq(vivos().length, 3, 'al llegar el cuarto siguen tres');
+eq(textos(), ['aviso 2', 'aviso 3', 'aviso 4'], 'y el que se fue es el más viejo');
+for (let i = 5; i <= 8; i++) showToast(`aviso ${i}`, 'info', 0);
+eq(textos(), ['aviso 6', 'aviso 7', 'aviso 8'], 'ocho toasts: quedan los tres últimos');
+eq(enDom().length, 3, 'y los expulsados están fuera del DOM, no escondidos');
 
 // ── 2. El techo cuenta todos los tipos, y `showToast` no deduplica ───────────
 console.log('\nEl techo no mira el tipo; la dedup no es de acá');
 resetear();
 ['error', 'success', 'warning', 'info', 'warning', 'error'].forEach((tipo, i) => showToast(`mixto ${i}`, tipo, 0));
-eq(textos(), ['mixto 2', 'mixto 3', 'mixto 4', 'mixto 5'], 'seis de tipos mezclados: quedan los cuatro últimos, sea cual sea el tipo');
+eq(textos(), ['mixto 3', 'mixto 4', 'mixto 5'], 'seis de tipos mezclados: quedan los tres últimos, sea cual sea el tipo');
 resetear();
 showToast('el mismo texto', 'warning', 0);
 showToast('el mismo texto', 'warning', 0);
@@ -159,7 +160,7 @@ globalThis.document.visibilityState = 'hidden';
 for (let i = 0; i < 10; i++) { showToast(`efímero ${i}`, 'warning', 1000); correrTemporizadores(); }
 eq(enDom().length, 0, 'diez caducidades seguidas no dejan ni un cadáver');
 for (let i = 0; i < 6; i++) showToast(`nuevo ${i}`, 'info', 0);
-eq(enDom().length, 4, 'y los seis siguientes se quedan en cuatro, no en dieciséis');
+eq(enDom().length, 3, 'y los seis siguientes se quedan en tres, no en dieciséis');
 
 // El ✕ con la pestaña oculta (una prueba automatizada lo pulsa así).
 resetear();
