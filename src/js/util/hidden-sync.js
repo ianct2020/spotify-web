@@ -141,6 +141,19 @@ export function leerIncidencias() {
 // búsqueda por clave irrecuperable en CADA carga de página (ver `REINTENTO_MS`).
 const SIN_URI_KEY = 'ocultos_sin_uri_v1';
 const REINTENTO_MS = 24 * 60 * 60 * 1000;
+// (v=252) Los motivos DEFINITIVOS no se reintentan: ver el encabezado de
+// `util/hidden-recover.js`, que es donde vive el criterio. Acá solo se obedece.
+// Cada entrada de `ocultos_sin_uri_v1` guarda desde v=252 tres campos más:
+//   · `definitivo` + `motivo` + `reglas` — el veredicto y con qué reglas se dictó
+//   · `avisadoMotivo` + `avisadoEn`      — qué se le dijo a Ian y cuándo
+// Los dos pares son independientes a propósito: uno decide si se GASTA una
+// búsqueda, el otro si se MOLESTA a Ian. Un huérfano congelado no gasta nada y
+// tampoco avisa, pero sigue entero en el panel de `#debug`.
+//
+// ⚠️ Y por eso hay recordatorio: un definitivo callado para siempre es un oculto
+// que vive solo en este navegador y del que Ian se olvida. Cada 7 días se
+// reanuncia (sin volver a buscar).
+const RECORDATORIO_MS = 7 * 24 * 60 * 60 * 1000;
 // Tope de búsquedas de recuperación por sync. Cada una son 1-2 requests, y hay
 // que dejar sitio a lo que la vista está pidiendo de verdad.
 const MAX_RECUPERACIONES_POR_SYNC = 10;
@@ -363,8 +376,15 @@ export function createLocalStore({ lsKey, label }) {
  *        Último recurso para las claves cuya uri no se puede deducir (álbumes,
  *        artistas): la busca y la CONFIRMA recalculando la clave. Devuelve null
  *        si no la puede confirmar — ver `util/hidden-recover.js`.
+ * @param {number} [opts.reglasRecuperador]
+ *        (v=252) Versión de las reglas de ese `recoverUri`. Este módulo congela
+ *        las claves cuyo motivo el recuperador declaró definitivo, y las
+ *        descongela en cuanto este número se mueve. Va por la puerta de entrada
+ *        y no por un `import` a propósito: `hidden-sync` no tiene que saber
+ *        QUIÉN recupera, solo con qué reglas se dictó el veredicto que guardó.
  */
-export function createHiddenStore({ lsKey, playlistName, keyOfTrack, label, uriFromKey, recoverUri }) {
+export function createHiddenStore({ lsKey, playlistName, keyOfTrack, label, uriFromKey, recoverUri, reglasRecuperador = null }) {
+  const reglasDelRecuperador = reglasRecuperador;
   let keys = null;   // perezoso — ver el comentario de `loadLocal`
   let uriByKey = null;   // clave → uri de la pista que la representa (persistido)
   let playlistId = null;
@@ -462,10 +482,46 @@ export function createHiddenStore({ lsKey, playlistName, keyOfTrack, label, uriF
     if (tocado) guardarSinUri(reg);
   }
 
+  /** El veredicto guardado de una clave, o `{}` si no tiene ninguno. */
+  function veredictoDe(key) {
+    return leerSinUri()[`${lsKey}::${key}`] || {};
+  }
+
+  /**
+   * ¿Está congelada esta clave? Solo si el recuperador dijo «definitivo» Y lo
+   * dijo con las MISMAS reglas que corren hoy. En cuanto el recuperador sube su
+   * `reglas`, el sello deja de valer y la clave se vuelve a mirar una vez: un
+   * arreglo de código puede destrabar lo que Spotify no iba a destrabar nunca.
+   */
+  function congelada(key) {
+    const r = veredictoDe(key);
+    return !!(r.definitivo && r.reglas != null && r.reglas === reglasDelRecuperador);
+  }
+
   function tocaReintentar(key) {
-    const r = leerSinUri()[`${lsKey}::${key}`];
-    if (!r || !r.ultimoIntento) return true;
+    const r = veredictoDe(key);
+    if (!r.ultimoIntento) return true;
+    if (congelada(key)) return false;
+    // Venía congelada, pero con reglas VIEJAS: se reevalúa ya, sin esperar la
+    // ventana de 24 h. El sentido del descongelado es que el arreglo se pruebe
+    // cuando llega, no al día siguiente. (Sin sello no entra acá: eso cae en la
+    // ventana normal, que es el comportamiento de siempre y no gasta de más.)
+    if (r.definitivo && r.reglas != null) return true;
     return Date.now() - Date.parse(r.ultimoIntento) > REINTENTO_MS;
+  }
+
+  /**
+   * El texto con el que se nombra un fracaso, y **el mismo en todas las cargas**.
+   *
+   * ⚠️ Esto no es cosmética: `tocaAvisar` compara el texto de hoy con el del
+   * último aviso, así que si la carga que dicta el veredicto lo escribiera de una
+   * forma y las siguientes de otra, cada carga parecería una noticia nueva y el
+   * ruido volvería intacto. Por eso el sufijo se decide por el ESTADO guardado, y
+   * no por qué rama del `if` estamos.
+   */
+  function textoDelMotivo(key, motivo) {
+    const base = motivo || 'no se pudo confirmar ningún candidato';
+    return congelada(key) ? `${base} (motivo definitivo: no se vuelve a buscar)` : base;
   }
 
   function anotarIntento(key) {
@@ -473,6 +529,63 @@ export function createHiddenStore({ lsKey, playlistName, keyOfTrack, label, uriF
     const id = `${lsKey}::${key}`;
     const prev = reg[id] || { desde: new Date().toISOString(), intentos: 0 };
     reg[id] = { ...prev, intentos: (prev.intentos || 0) + 1, ultimoIntento: new Date().toISOString() };
+    guardarSinUri(reg);
+  }
+
+  /**
+   * Guarda el veredicto de un intento que no dio uri. `res` es lo que devolvió
+   * `recoverUri`: si trae `definitivo` y `reglas`, esta clave queda congelada.
+   *
+   * ⚠️ Se guarda el `motivo` además del flag porque es lo que el panel de
+   * `#debug` va a mostrar en las cargas siguientes, cuando ya no se busque nada:
+   * sin él, un huérfano congelado diría «no se pudo» y se callaría el por qué.
+   */
+  function anotarVeredicto(key, res) {
+    if (!res || typeof res !== 'object') return;
+    const reg = leerSinUri();
+    const id = `${lsKey}::${key}`;
+    const prev = reg[id];
+    if (!prev) return;
+    reg[id] = {
+      ...prev,
+      motivo: res.motivo || null,
+      definitivo: !!res.definitivo,
+      reglas: res.definitivo ? (res.reglas ?? null) : null,
+    };
+    if (res.definitivo && res.reglas == null) {
+      // El recuperador dice «definitivo» pero no sella con qué reglas. Sin sello
+      // no se congela: es preferible gastar una búsqueda al día que dejar una
+      // clave muda para siempre por un descuido de quien la clasificó.
+      console.warn(`[ocultos:${label}] «${key}» vino marcada como definitiva SIN \`reglas\`: no la congelo.`);
+    }
+    guardarSinUri(reg);
+  }
+
+  /**
+   * ¿Hay que avisarle a Ian de esta clave, o es la misma noticia de ayer?
+   *
+   * Se avisa cuando el motivo CAMBIA (incluida la primera vez, que es cuando no
+   * hay ninguno guardado) y, si no cambió, cada `RECORDATORIO_MS`. Esto es lo
+   * que mata el ruido: para una clave congelada el texto del motivo es el MISMO
+   * en cada carga, así que no vuelve a avisar. Hasta v=251 el texto alternaba
+   * entre el motivo real y «ya se intentó hace menos de 24 h», y por eso
+   * `3vil reflection` generó 20 incidencias y 20 toasts.
+   */
+  function tocaAvisar(key, motivo) {
+    const r = veredictoDe(key);
+    if (r.avisadoMotivo !== motivo) return true;
+    if (!r.avisadoEn) return true;
+    return Date.now() - Date.parse(r.avisadoEn) > RECORDATORIO_MS;
+  }
+
+  function marcarAvisado(claves, motivos) {
+    if (!claves.length) return;
+    const reg = leerSinUri();
+    const ahora = new Date().toISOString();
+    for (const k of claves) {
+      const id = `${lsKey}::${k}`;
+      if (reg[id]) reg[id] = { ...reg[id], avisadoMotivo: motivos[k] || null, avisadoEn: ahora };
+    }
     guardarSinUri(reg);
   }
 
@@ -694,18 +807,40 @@ export function createHiddenStore({ lsKey, playlistName, keyOfTrack, label, uriF
       for (const k of sinUri) {
         if (!recoverUri) { motivos[k] = 'esta vista no sabe reconstruir uris'; irrecuperables.push(k); continue; }
         if (gastadas >= MAX_RECUPERACIONES_POR_SYNC) { motivos[k] = 'sin cupo de búsquedas en este sync, se reintenta en el próximo'; irrecuperables.push(k); continue; }
-        if (!tocaReintentar(k)) { motivos[k] = 'ya se intentó hace menos de 24 h'; irrecuperables.push(k); continue; }
+        if (!tocaReintentar(k)) {
+          // (v=252) Dos razones distintas para no buscar, y se dicen distinto:
+          // la ventana de 24 h es una espera; un motivo definitivo es un punto
+          // final. Y el texto del definitivo es el motivo REAL guardado, no
+          // «ya se intentó»: así el panel de `#debug` sigue diciendo por qué, y
+          // `tocaAvisar` ve el mismo texto que ayer y se calla.
+          motivos[k] = congelada(k)
+            ? textoDelMotivo(k, veredictoDe(k).motivo)
+            : 'ya se intentó hace menos de 24 h';
+          irrecuperables.push(k);
+          continue;
+        }
         gastadas++;
         anotarIntento(k);
         try {
           if (gastadas > 1) await new Promise(r => setTimeout(r, PAUSA_ENTRE_BUSQUEDAS));
-          // `recoverUri` puede devolver `{ uri, motivo }` o una uri suelta.
+          // `recoverUri` puede devolver `{ uri, motivo, definitivo, reglas }` o
+          // una uri suelta.
           const res = await recoverUri(k);
           const uri = (res && typeof res === 'object') ? res.uri : res;
           if (uri) { recordarUri(k, uri); recuperadas.push(k); }
-          else { motivos[k] = (res && typeof res === 'object' && res.motivo) || 'no se pudo confirmar ningún candidato'; irrecuperables.push(k); }
+          else {
+            // El veredicto PRIMERO: `textoDelMotivo` pregunta por el estado ya
+            // guardado, así que el texto de esta carga sale idéntico al de las
+            // siguientes y el aviso no se repite.
+            anotarVeredicto(k, res);
+            motivos[k] = textoDelMotivo(k, res && typeof res === 'object' ? res.motivo : null);
+            irrecuperables.push(k);
+          }
         } catch (e) {
           console.warn(`[ocultos:${label}] la búsqueda para recuperar «${k}» falló: ${e.message}`);
+          // ⚠️ Un fallo de búsqueda NO sella nada: un 429 o un corte de red no
+          // dicen nada del catálogo. Si la clave venía congelada de antes, el
+          // sello viejo se queda; si no, mañana se reintenta.
           motivos[k] = `la búsqueda falló: ${e.message}`;
           irrecuperables.push(k);
         }
@@ -720,19 +855,34 @@ export function createHiddenStore({ lsKey, playlistName, keyOfTrack, label, uriF
     if (subir.length) await pushMissing(subir);
 
     if (irrecuperables.length) {
+      // El `console.warn` lista SIEMPRE los dos grupos: es gratis y es el rastro
+      // en papel del mecanismo. Lo que se recorta es la incidencia y el toast.
+      const nuevas = irrecuperables.filter(k => tocaAvisar(k, motivos[k]));
+      const calladas = irrecuperables.filter(k => !nuevas.includes(k));
       console.warn(
         `[ocultos:${label}] ${irrecuperables.length} oculto(s) siguen SIN poder representarse en la playlist: ` +
         `viven solo en este navegador y se perderían si borras sus datos. ` +
-        `Quedan anotados en localStorage['${prefKey(SIN_URI_KEY)}'] y NO se descarta ninguno:\n` +
+        `Quedan anotados en localStorage['${prefKey(SIN_URI_KEY)}'] y NO se descarta ninguno` +
+        (calladas.length ? ` (${calladas.length} sin novedad desde el último aviso: no vuelven a avisar)` : '') + ':\n' +
         irrecuperables.map(k => `  · ${k} — ${motivos[k] || 'sin motivo'}`).join('\n')
       );
-      anotarIncidencia({ store: lsKey, label, tipo: 'sin-uri', claves: irrecuperables, motivos });
-      avisar(
-        irrecuperables.length === 1
-          ? `«${label}»: un oculto vive solo en este navegador y no se ha podido subir a la playlist. Míralo en #debug → «Salud de los ocultos»: no se ha descartado.`
-          : `«${label}»: ${irrecuperables.length} ocultos viven solo en este navegador y no se han podido subir a la playlist. Míralos en #debug → «Salud de los ocultos»: no se ha descartado ninguno.`,
-        'warning'
-      );
+      // (v=252) Incidencia y toast SOLO por lo que cambió de estado. Con el
+      // registro de Ian del 27/09 esto saca 20 de las 41 incidencias: las de
+      // `3vil reflection||osamason`, que decía lo mismo desde el 05/09.
+      if (nuevas.length) {
+        anotarIncidencia({
+          store: lsKey, label, tipo: 'sin-uri', claves: nuevas,
+          motivos: Object.fromEntries(nuevas.map(k => [k, motivos[k]])),
+          ...(calladas.length ? { silenciados: calladas.length } : {}),
+        });
+        avisar(
+          nuevas.length === 1
+            ? `«${label}»: un oculto vive solo en este navegador y no se ha podido subir a la playlist. Míralo en #debug → «Salud de los ocultos»: no se ha descartado.`
+            : `«${label}»: ${nuevas.length} ocultos viven solo en este navegador y no se han podido subir a la playlist. Míralos en #debug → «Salud de los ocultos»: no se ha descartado ninguno.`,
+          'warning'
+        );
+        marcarAvisado(nuevas, motivos);
+      }
     }
   }
 
@@ -804,6 +954,19 @@ export function createHiddenStore({ lsKey, playlistName, keyOfTrack, label, uriF
       }
     } catch (e) { fila.error = e.message; }
     fila.sinUri = fila.huerfanas.filter(k => !uriDe(k));
+    // (v=252) El panel tiene que poder distinguir «esto se sigue intentando» de
+    // «esto no se va a poder nunca y ya dejé de intentarlo». Si no se ve la
+    // diferencia, congelar en silencio es peor que el ruido que vino a arreglar.
+    fila.detalleSinUri = fila.sinUri.map(k => {
+      const r = veredictoDe(k);
+      return {
+        key: k,
+        motivo: r.motivo || null,
+        definitivo: congelada(k),
+        intentos: r.intentos || 0,
+        desde: r.desde || null,
+      };
+    });
     return fila;
   }
 

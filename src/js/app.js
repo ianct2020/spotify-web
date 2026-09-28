@@ -943,10 +943,21 @@ function tablaDeOcultos(filas) {
   const cuerpo = filas.map(f => {
     const mal = f.error || f.huerfanas.length;
     const icono = f.error ? '❌' : (f.huerfanas.length ? '⚠️' : '✅');
+    // (v=252) Una huérfana congelada (motivo definitivo: ya no se busca más) se
+    // tiene que VER congelada. Si no, «dejar de reintentar» es un silencio, y el
+    // silencio es lo que este panel existe para romper.
+    const porClave = new Map((f.detalleSinUri || []).map(d => [d.key, d]));
     const detalle = f.error
       ? escapeHtml(f.error)
       : (f.huerfanas.length
-        ? escapeHtml(f.huerfanas.join(' · '))
+        ? f.huerfanas.map(k => {
+          const d = porClave.get(k);
+          if (!d) return escapeHtml(k);
+          const sello = d.definitivo
+            ? '<span style="color:var(--color-text-muted)">· definitivo, ya no se busca</span>'
+            : '<span style="color:var(--color-text-muted)">· se reintenta cada 24 h</span>';
+          return `${escapeHtml(k)} ${sello}${d.motivo ? `<br><span style="color:var(--color-text-muted)">&nbsp;&nbsp;${escapeHtml(d.motivo)}</span>` : ''}`;
+        }).join('<br>')
         : '<span style="color:var(--color-text-muted)">nada suelto</span>');
     return `
       <tr${mal ? '' : ''}>
@@ -962,6 +973,7 @@ function tablaDeOcultos(filas) {
 
   const totalHuerfanas = filas.reduce((a, f) => a + f.huerfanas.length, 0);
   const totalSinUri = filas.reduce((a, f) => a + f.sinUri.length, 0);
+  const totalDefinitivos = filas.reduce((a, f) => a + (f.detalleSinUri || []).filter(d => d.definitivo).length, 0);
   const inc = leerIncidencias().slice(0, 12).map(i => {
     // El motivo es la mitad útil de una incidencia «sin-uri»: sin él el panel
     // dice que algo no se pudo y no dice por qué, que es medio silencio.
@@ -978,6 +990,7 @@ function tablaDeOcultos(filas) {
       <p style="margin:0 0 10px">
         <strong>${totalHuerfanas === 0 ? 'Ningún oculto suelto' : `${totalHuerfanas} ocultos solo en este navegador`}</strong>
         ${totalSinUri ? ` · <span style="color:var(--color-error)">${totalSinUri} sin forma de subirlos a Spotify</span>` : ''}
+        ${totalDefinitivos ? ` · <span style="color:var(--color-text-muted)">${totalDefinitivos} con motivo definitivo: no se vuelven a buscar</span>` : ''}
       </p>
       <div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:13px">
         <tr style="text-align:left;color:var(--color-text-muted)">

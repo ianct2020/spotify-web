@@ -10,7 +10,7 @@ import { openAlbumCard } from './album-card.js';
 import { limpiaParaQuery, titleMatches, artistMatches } from '../util/track-match.js';
 import { vigilarRuta } from '../util/vigencia-ruta.js';
 import { createHiddenStore } from '../util/hidden-sync.js';
-import { recuperarUriDeArtistaKey } from '../util/hidden-recover.js';
+import { recuperarUriDeArtistaKey, REGLAS_VERSION } from '../util/hidden-recover.js';
 import { iconoPlay, iconoPausa, iconoFicha, iconoDisco, iconoOjo, iconoOjoTachado } from '../ui/icons.js';
 
 // Iconos de las dos fichas. Los mismos trazos que usa la tarjeta compartida.
@@ -34,6 +34,7 @@ const hiddenArtists = createHiddenStore({
   // La clave es el nombre del artista: la uri no se deduce, se busca una pista
   // suya y se confirma que su `artists[0]` sea ese artista (v=205).
   recoverUri: recuperarUriDeArtistaKey,
+  reglasRecuperador: REGLAS_VERSION,
 });
 
 // Pista representativa por artista, para poder ocultarlo con una uri real sin

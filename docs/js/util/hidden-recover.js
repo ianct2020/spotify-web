@@ -25,9 +25,40 @@
 // existe con ese nombre» y «existe, pero su artista principal no es el que puso
 // la clave» — el segundo es un agujero aparte, anotado en `PENDIENTES.md`.
 
-import { spotifyFetch } from '../api.js?v=251';
-import { albumKey } from './album-key.js?v=251';
-import { limpiaParaQuery } from './track-match.js?v=251';
+// ── Motivos definitivos y motivos transitorios (v=252) ──────────────────────
+//
+// `hidden-sync.js` reintenta cada clave sin uri una vez por día. Para algunas eso
+// no tiene ningún sentido: `3vil reflection||osamason` es un disco que en Spotify
+// firma Glokk40Spaz, así que la clave no se va a poder reconciliar nunca por este
+// camino. Hasta v=251 se buscaba igual y, peor, se avisaba igual: **20 de las 41
+// incidencias del registro de Ian (48,8 %) eran esa única clave**, y Ian se comía
+// su toast cada vez que abría la vista. El gasto era despreciable (menos de 1
+// request por día, medido); el ruido no, porque empuja fuera del registro —que
+// guarda 100— a las incidencias que sí importan.
+//
+// EL CRITERIO, en una línea: es **definitivo** cuando Spotify ya contestó, trajo
+// candidatos, y lo que los descalifica es un dato de SU catálogo que no depende
+// de nosotros ni de la red — la acreditación del artista. Buscar mañana da lo
+// mismo.
+//
+// Es **transitorio** todo lo demás, y a propósito: 0 resultados (el catálogo de
+// Spotify crece), un error de red, un 429. **Ante la duda, transitorio.**
+// Reintentar de más cuesta ~1 request por día; congelar de más es un oculto que
+// se queda callado para siempre, que es justo lo que este archivo existe para
+// evitar.
+//
+// ⚠️ El veredicto vale SOLO para las reglas de ESTE archivo. Si cambian —una
+// query nueva, un control nuevo, otro `limit`— hay que subir `REGLAS_VERSION`:
+// si no, las claves ya congeladas no se vuelven a mirar nunca y un arreglo que
+// las destrabaría no llega a probarse. **Ya pasó**: «USB002 Remixes» de Fred
+// again.. estuvo atascado en «ninguna de sus pistas está acreditada a…» y lo
+// destrabó un cambio de CÓDIGO (`porFirmaDelAlbum`, v=210), no un cambio de
+// Spotify. Con la congelación y sin este número, ese arreglo no habría servido.
+export const REGLAS_VERSION = 1;
+
+import { spotifyFetch } from '../api.js?v=252';
+import { albumKey } from './album-key.js?v=252';
+import { limpiaParaQuery } from './track-match.js?v=252';
 
 /**
  * ⚠️ `porFirmaDelAlbum` (v=210). Los dos stores de álbumes NO leen la playlist
@@ -75,7 +106,8 @@ function partirClaveDeAlbum(key) {
  */
 export async function recuperarUriDeAlbumKey(key, { porFirmaDelAlbum = false } = {}) {
   const partes = partirClaveDeAlbum(key);
-  if (!partes) return { uri: null, motivo: 'la clave no tiene forma de álbum' };
+  // Definitivo: una clave mal formada no se arregla esperando.
+  if (!partes) return { uri: null, motivo: 'la clave no tiene forma de álbum', definitivo: true, reglas: REGLAS_VERSION };
 
   const queries = [];
   if (partes.artist) queries.push(`album:"${limpiaParaQuery(partes.name)}" artist:"${limpiaParaQuery(partes.artist)}"`);
@@ -109,7 +141,7 @@ export async function recuperarUriDeAlbumKey(key, { porFirmaDelAlbum = false } =
         // representante. Sin la opción hace falta que la pista misma dé la
         // clave, que es lo que lee el `keyOfTrack` de `#wthree`.
         if (!porFirmaDelAlbum && albumKey(al.name || '', t.artists?.[0]?.name || '') !== key) continue;
-        return { uri: t.uri, motivo: null };
+        return { uri: t.uri, motivo: null, definitivo: false };
       }
       // Subcaso distinto: la clave del ÁLBUM coincide, pero ninguna de sus
       // pistas está acreditada al mismo artista principal (un disco de remixes
@@ -124,15 +156,28 @@ export async function recuperarUriDeAlbumKey(key, { porFirmaDelAlbum = false } =
     return {
       uri: null,
       motivo: `el álbum es el correcto, pero ninguna de sus pistas está acreditada a «${[...sinRepresentante].join(' / ')}» como artista principal: no hay ninguna que sirva de representante`,
+      // Acreditación de Spotify: mañana da lo mismo. (Lo que SÍ lo destrabó una
+      // vez fue código nuestro, y para eso está `REGLAS_VERSION`.)
+      definitivo: true,
+      reglas: REGLAS_VERSION,
     };
   }
   if (otrosArtistas.size) {
     return {
       uri: null,
       motivo: `el álbum existe pero su artista principal en Spotify es ${[...otrosArtistas].join(' / ')}, no «${partes.artist}»: al releer la playlist daría otra clave`,
+      // El caso `3vil reflection||osamason`. Acreditación de Spotify: definitivo.
+      definitivo: true,
+      reglas: REGLAS_VERSION,
     };
   }
-  return { uri: null, motivo: algunCandidato ? 'ningún candidato da la misma clave' : 'Spotify no devuelve ningún álbum con ese nombre' };
+  // Los dos transitorios de esta función: acá lo que no cuadra es el NOMBRE, no
+  // la acreditación, y el catálogo de Spotify crece. Se sigue reintentando.
+  return {
+    uri: null,
+    motivo: algunCandidato ? 'ningún candidato da la misma clave' : 'Spotify no devuelve ningún álbum con ese nombre',
+    definitivo: false,
+  };
 }
 
 /**
@@ -147,21 +192,35 @@ export async function recuperarUriDeAlbumKey(key, { porFirmaDelAlbum = false } =
  */
 export async function recuperarUriDeArtistaKey(key) {
   const nombre = String(key || '').trim();
-  if (!nombre) return { uri: null, motivo: 'la clave está vacía' };
+  if (!nombre) return { uri: null, motivo: 'la clave está vacía', definitivo: true, reglas: REGLAS_VERSION };
 
   const q = `artist:"${limpiaParaQuery(nombre)}"`;
-  const r = await spotifyFetch(`/search?q=${encodeURIComponent(q)}&type=track&limit=20`);
+  // ⚠️ `limit=10`, no 20: el máximo de `/search` bajó a 10 en la migración de
+  // agosto de 2026 (`CONTEXTO-TECNICO.md`), y con 20 la respuesta es
+  // «Spotify 400: Invalid limit». Esta función nació en v=205, un mes después
+  // del tope, o sea que NUNCA recuperó nada: toda clave de `#recs` sin uri
+  // moría en un 400 que encima parecía un fallo pasajero de red. Medido en los
+  // ocultos de Ian el 27/09: 3 de las 4 incidencias de `travi$ scott` eran ese
+  // 400. El test no lo cazaba porque el doble de `api.js` no validaba el
+  // `limit`; ahora sí (`tests/dobles/api-doble.mjs`).
+  const r = await spotifyFetch(`/search?q=${encodeURIComponent(q)}&type=track&limit=10`);
   const items = r?.tracks?.items || [];
 
   for (const t of items) {
     if (!t?.uri) continue;
     if ((t.artists?.[0]?.name || '').toLowerCase() !== key) continue;
-    return { uri: t.uri, motivo: null };
+    return { uri: t.uri, motivo: null, definitivo: false };
   }
   return {
     uri: null,
     motivo: items.length
       ? 'ninguna de las pistas encontradas tiene a ese artista como principal'
       : 'Spotify no devuelve ninguna pista de ese artista',
+    // `travi$ scott`: Spotify trajo 7 pistas y las 7 dicen «Travis Scott». La
+    // clave la escribió Last.fm con el `$` y se relee con el nombre de Spotify,
+    // así que no coinciden nunca. Definitivo. Con 0 items, en cambio, es que
+    // Spotify no trajo nada: transitorio.
+    definitivo: items.length > 0,
+    reglas: REGLAS_VERSION,
   };
 }

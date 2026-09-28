@@ -37,7 +37,7 @@ const P = b => `${b}__${UID}`;
 globalThis.localStorage = fakeLocalStorage({ fonoteca_last_user_id: UID });
 
 register('./dobles/loader.mjs', pathToFileURL(import.meta.filename));
-const { createHiddenStore, uriDeTrackId, leerIncidencias } =
+const { createHiddenStore, uriDeTrackId, leerIncidencias, auditarOcultos } =
   await import('../src/js/util/hidden-sync.js');
 const { recuperarUriDeAlbumKey, recuperarUriDeArtistaKey } =
   await import('../src/js/util/hidden-recover.js');
@@ -323,6 +323,41 @@ console.log('\nrecuperarUriDeArtistaKey()');
   ] } });
   eq((await recuperarUriDeArtistaKey('nick drake')).uri, 'spotify:track:BUENA', 'solo vale si el artists[0] es ese artista');
   eq((await recuperarUriDeArtistaKey('')).uri, null, 'sin nombre no busca');
+  // ⚠️ Este assert es el que faltaba, y es el corazón del arreglo de v=252. La
+  // función pidió `limit=20` desde v=205 y el máximo de `/search` es 10: no
+  // recuperó NADA en 22 días, con el test en verde. El verde era falso porque el
+  // doble contestaba sin mirar el `path` — fingía justo la parte que fallaba.
+  //
+  // Lo que se pide acá no es «que el limit sea 10», que sería copiar el número a
+  // un segundo sitio del que puede divergir. Es que la petición REAL que sale de
+  // esta función sea una que el Spotify de verdad acepte: el doble ya la valida
+  // (`tests/dobles/api-doble.mjs`, con los topes medidos), así que si vuelve a
+  // subir el `limit` el `await` de arriba tira «Spotify 400: Invalid limit» y el
+  // archivo entero se pone rojo en esta línea.
+  const pedido = globalThis.__DOBLE.llamadas.find(p => p.startsWith('/search'));
+  ok(/[?&]limit=(\d+)/.test(pedido || ''), 'la búsqueda de artista manda un limit');
+  ok(Number(/[?&]limit=(\d+)/.exec(pedido)[1]) <= 10, 'y ese limit lo acepta /search (tope real: 10)');
+}
+
+console.log('\nEl doble hace cumplir el contrato de la API, no solo el contenido');
+{
+  // La lección de v=252, con guarda propia: un doble que acepta una petición que
+  // el servicio real rechazaría certifica código muerto. Estos dos asserts fallan
+  // si alguien «simplifica» el doble sacándole la validación, que es el único
+  // camino por el que el bug del `limit` podría volver a pasar inadvertido.
+  montar();
+  globalThis.__DOBLE.buscar = () => ({ tracks: { items: [] } });
+  const { spotifyFetch } = await import('../tests/dobles/api-doble.mjs');
+  let e1 = null;
+  try { await spotifyFetch('/search?q=x&type=track&limit=20'); } catch (e) { e1 = e; }
+  eq(e1 && e1.message, 'Spotify 400: Invalid limit', 'un /search con limit=20 es un 400, igual que en Spotify');
+  let e2 = null;
+  try { await spotifyFetch('/search?q=x&type=track&limit=10'); } catch (e) { e2 = e; }
+  ok(e2 === null, 'y con limit=10 pasa');
+  // `/albums/{id}/tracks` sí acepta 50: el tope es por endpoint, no uno global.
+  let e3 = null;
+  try { await spotifyFetch('/albums/a1/tracks?limit=50'); } catch (e) { e3 = e; }
+  ok(e3 === null, 'el tope es por endpoint: /albums/{id}/tracks acepta 50');
 }
 
 console.log('\nEl agujero HERMANO: la clave la escribió otro artista');
@@ -462,6 +497,142 @@ console.log('\navisar(): dos avisos distintos no comparten cupo (v=229)');
   const avisos = globalThis.__DOBLE.toasts.filter(t => t.type === 'warning').map(t => t.msg || t.message || t.text || JSON.stringify(t));
   eq(avisos.length, 2, 'salen los DOS avisos amarillos, no solo el primero');
   ok(avisos.some(m => /vuelto a subir/.test(m)) && avisos.some(m => /solo en este navegador/.test(m)), 'uno por la resubida y otro por la que vive solo aquí');
+}
+
+// ── 7. Motivos definitivos: no se reintentan y no vuelven a avisar (v=252) ──
+//
+// El caso de Ian, medido el 27/09 en su localStorage: `3vil reflection||osamason`
+// llevaba 20 de las 41 incidencias del registro (48,8 %) y 9 intentos de
+// búsqueda, diciendo siempre lo mismo — que el álbum lo firma Glokk40Spaz, que
+// es un dato de Spotify que no va a cambiar. Cada carga de la vista: un toast.
+
+const CLAVE_DEF = '3vil reflection||osamason';
+const MOTIVO_DEF = 'el álbum existe pero su artista principal en Spotify es Glokk40Spaz, no «osamason»: al releer la playlist daría otra clave';
+
+/** Un `recoverUri` que falla siempre con el motivo y la definitividad dados. */
+function recuperadorQueFalla(motivo, definitivo, reglas = 1) {
+  const f = async () => { f.veces++; return { uri: null, motivo, definitivo, reglas }; };
+  f.veces = 0;
+  return f;
+}
+
+const avisosAmarillos = () => globalThis.__DOBLE.toasts.filter(t => t.type === 'warning');
+
+console.log('\nUn motivo DEFINITIVO se busca una vez y nunca más');
+{
+  montar({ local: [CLAVE_DEF], enPlaylist: [] });
+  const rec = recuperadorQueFalla(MOTIVO_DEF, true);
+  // Primera carga: se busca, falla, queda el veredicto.
+  await store({ recoverUri: rec, reglasRecuperador: 1 }).ready();
+  eq(rec.veces, 1, 'la primera carga sí gasta la búsqueda');
+  const v = sinUriGuardado()[`${LS}::${CLAVE_DEF}`];
+  eq(v?.definitivo, true, 'y queda marcada como definitiva');
+  eq(v?.reglas, 1, 'sellada con la versión de reglas que dictó el veredicto');
+  ok(/Glokk40Spaz/.test(v?.motivo || ''), 'con el motivo guardado, que es lo que el panel va a seguir mostrando');
+
+  // Segunda carga, con el mismo localStorage: NO se busca de nuevo.
+  await store({ recoverUri: rec, reglasRecuperador: 1 }).ready();
+  eq(rec.veces, 1, 'la segunda carga NO gasta ninguna búsqueda más');
+  // Y una tercera, para que no sea «una de gracia».
+  await store({ recoverUri: rec, reglasRecuperador: 1 }).ready();
+  eq(rec.veces, 1, 'ni la tercera');
+}
+
+console.log('\nY tampoco vuelve a avisar: el toast sale UNA vez');
+{
+  montar({ local: [CLAVE_DEF], enPlaylist: [] });
+  const rec = recuperadorQueFalla(MOTIVO_DEF, true);
+  await store({ recoverUri: rec, reglasRecuperador: 1 }).ready();
+  eq(avisosAmarillos().length, 1, 'la primera carga avisa');
+  eq(leerIncidencias().filter(i => i.tipo === 'sin-uri').length, 1, 'y deja una incidencia');
+
+  // El dedupe de v=229 es por sesión; acá lo que se prueba es entre CARGAS, así
+  // que se vacía la lista de toasts como haría una recarga de la página.
+  globalThis.__DOBLE.toasts.length = 0;
+  await store({ recoverUri: rec, reglasRecuperador: 1 }).ready();
+  eq(avisosAmarillos().length, 0, 'la segunda carga NO avisa: la noticia es la misma de ayer');
+  eq(leerIncidencias().filter(i => i.tipo === 'sin-uri').length, 1, 'y no ensucia el registro con una segunda incidencia');
+  ok(localGuardado().includes(CLAVE_DEF), '⚠️ y el oculto SIGUE ENTERO: callar no es descartar');
+}
+
+console.log('\nUn motivo TRANSITORIO se sigue reintentando y sigue avisando');
+{
+  // La contracara, que es lo que hace segura la distinción: 0 resultados puede
+  // cambiar mañana (el catálogo de Spotify crece), así que no se congela.
+  montar({ local: ['the j-strokes||the strokes'], enPlaylist: [] });
+  const rec = recuperadorQueFalla('Spotify no devuelve ningún álbum con ese nombre', false);
+  await store({ recoverUri: rec, reglasRecuperador: 1 }).ready();
+  eq(rec.veces, 1, 'primera búsqueda');
+  const v = sinUriGuardado()[`${LS}::the j-strokes||the strokes`];
+  eq(v?.definitivo, false, 'no queda marcada como definitiva');
+  // Se vence la ventana de 24 h a mano, que es lo único que lo frena.
+  const reg = JSON.parse(globalThis.localStorage.getItem(P('ocultos_sin_uri_v1')));
+  reg[`${LS}::the j-strokes||the strokes`].ultimoIntento = new Date(Date.now() - 25 * 3600e3).toISOString();
+  globalThis.localStorage.setItem(P('ocultos_sin_uri_v1'), JSON.stringify(reg));
+  await store({ recoverUri: rec, reglasRecuperador: 1 }).ready();
+  eq(rec.veces, 2, 'pasadas 24 h se vuelve a buscar');
+}
+
+console.log('\nSi el motivo CAMBIA, se avisa de nuevo aunque siga sin poder subirse');
+{
+  montar({ local: [CLAVE_DEF], enPlaylist: [] });
+  await store({ recoverUri: recuperadorQueFalla('la búsqueda falló: Rate limited', false), reglasRecuperador: 1 }).ready();
+  eq(avisosAmarillos().length, 1, 'el 429 avisa');
+  globalThis.__DOBLE.toasts.length = 0;
+  // Mismo día, pero el motivo es otro: hay noticia. (La ventana de 24 h frena la
+  // BÚSQUEDA, no el aviso — y el motivo nuevo llega igual porque el recuperador
+  // anterior no dejó sello y el de ahora sí.)
+  const reg = JSON.parse(globalThis.localStorage.getItem(P('ocultos_sin_uri_v1')));
+  reg[`${LS}::${CLAVE_DEF}`].ultimoIntento = new Date(Date.now() - 25 * 3600e3).toISOString();
+  globalThis.localStorage.setItem(P('ocultos_sin_uri_v1'), JSON.stringify(reg));
+  await store({ recoverUri: recuperadorQueFalla(MOTIVO_DEF, true), reglasRecuperador: 1 }).ready();
+  eq(avisosAmarillos().length, 1, 'el motivo nuevo SÍ avisa: es una noticia distinta');
+}
+
+console.log('\nSi suben las reglas del recuperador, lo congelado se vuelve a mirar');
+{
+  // ⚠️ Esta es la red de seguridad de toda la idea, y viene de un caso real:
+  // «USB002 Remixes» estuvo atascado en un motivo que HOY se clasifica como
+  // definitivo, y lo destrabó un cambio de código nuestro (v=210), no un cambio
+  // de Spotify. Sin este descongelado, ese arreglo no habría llegado a probarse.
+  montar({ local: [CLAVE_DEF], enPlaylist: [] });
+  const rec1 = recuperadorQueFalla(MOTIVO_DEF, true, 1);
+  await store({ recoverUri: rec1, reglasRecuperador: 1 }).ready();
+  eq(rec1.veces, 1, 'se dicta el veredicto con reglas v1');
+  const rec2 = recuperadorQueFalla(MOTIVO_DEF, true, 2);
+  await store({ recoverUri: rec2, reglasRecuperador: 2 }).ready();
+  eq(rec2.veces, 1, 'con reglas v2 se vuelve a mirar, aunque estuviera congelada');
+  eq(sinUriGuardado()[`${LS}::${CLAVE_DEF}`]?.reglas, 2, 'y el sello se actualiza a las reglas nuevas');
+}
+
+console.log('\nUn «definitivo» sin sello de reglas NO congela');
+{
+  // Preferimos gastar una búsqueda por día a dejar una clave muda para siempre
+  // por un descuido de quien la clasificó.
+  montar({ local: [CLAVE_DEF], enPlaylist: [] });
+  const rec = async () => { rec.veces++; return { uri: null, motivo: MOTIVO_DEF, definitivo: true }; };
+  rec.veces = 0;
+  await store({ recoverUri: rec, reglasRecuperador: 1 }).ready();
+  const reg = JSON.parse(globalThis.localStorage.getItem(P('ocultos_sin_uri_v1')));
+  reg[`${LS}::${CLAVE_DEF}`].ultimoIntento = new Date(Date.now() - 25 * 3600e3).toISOString();
+  globalThis.localStorage.setItem(P('ocultos_sin_uri_v1'), JSON.stringify(reg));
+  await store({ recoverUri: rec, reglasRecuperador: 1 }).ready();
+  eq(rec.veces, 2, 'sin `reglas` se sigue reintentando');
+}
+
+console.log('\nEl panel de #debug puede distinguir congelado de reintentable');
+{
+  montar({ local: [CLAVE_DEF], enPlaylist: [] });
+  const s = store({ recoverUri: recuperadorQueFalla(MOTIVO_DEF, true), reglasRecuperador: 1 });
+  await s.ready();
+  // `auditar` no es método del store: se llega por `auditarOcultos()`, que es el
+  // camino real de `#debug`. El REGISTRO acumula un store por cada `montar()` de
+  // este archivo, así que se busca la fila que tiene la clave.
+  const filas = await auditarOcultos();
+  const d = filas.flatMap(f => f.detalleSinUri || []).find(x => x.key === CLAVE_DEF);
+  ok(!!d, 'la auditoría trae el detalle de la huérfana');
+  eq(d.definitivo, true, 'y dice que está congelada');
+  ok(/Glokk40Spaz/.test(d.motivo || ''), 'con el motivo a la vista: congelar en silencio sería peor que el ruido');
 }
 
 console.log(`\n${pasaron} asserts OK, ${fallaron} fallos`);

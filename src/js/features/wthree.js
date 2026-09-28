@@ -17,7 +17,7 @@ import { albumKey } from '../util/album-key.js';
 import { resolveAlbumId } from '../util/album-resolver.js';
 import { computeUpdatedPickPositions } from '../util/reorder-shifts.js';
 import { createHiddenStore } from '../util/hidden-sync.js';
-import { recuperarUriDeAlbumKey } from '../util/hidden-recover.js';
+import { recuperarUriDeAlbumKey, REGLAS_VERSION } from '../util/hidden-recover.js';
 import { mountBottom } from '../ui/bottom-layer.js';
 import { coverUrl } from '../util/cover-size.js';
 import { insercionPorPuntero, moverA, indicadorPara } from '../util/reorder-drop.js';
@@ -135,6 +135,7 @@ const hiddenStore = createHiddenStore({
   // La clave es un álbum normalizado, así que la uri NO se puede deducir de
   // ella: se busca y se confirma recalculando la clave (v=205).
   recoverUri: recuperarUriDeAlbumKey,
+  reglasRecuperador: REGLAS_VERSION,
 });
 
 function loadHidden() {

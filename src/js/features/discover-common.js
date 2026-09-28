@@ -18,7 +18,7 @@ import { getOwnPlaylists, addUrisToPlaylists, toastAddResult } from '../util/pla
 import { openArtistCard } from './artist-card.js';
 import { openAlbumCard } from './album-card.js';
 import { createHiddenStore, createLocalStore } from '../util/hidden-sync.js';
-import { recuperarUriDeAlbumKey } from '../util/hidden-recover.js';
+import { recuperarUriDeAlbumKey, REGLAS_VERSION } from '../util/hidden-recover.js';
 import { getPreview } from '../api/preview-providers.js';
 import { togglePreview, playingKey, attachHover } from '../ui/preview-player.js';
 import { coverUrl } from '../util/cover-size.js';
@@ -692,6 +692,7 @@ export const hiddenAlbums = createHiddenStore({
   // clave de vuelta sale del álbum y no de la pista (v=210) — ver el comentario
   // de `keyOfTrack` de arriba y el de `util/hidden-recover.js`.
   recoverUri: (key) => recuperarUriDeAlbumKey(key, { porFirmaDelAlbum: true }),
+  reglasRecuperador: REGLAS_VERSION,
 });
 
 // "Escuchado" alcanza con localStorage, pero con la MISMA forma que el store

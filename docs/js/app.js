@@ -1,44 +1,44 @@
-import { isLoggedIn, loginWithSpotify, logout } from './auth.js?v=251';
-import { spotifyFetch, onRateLimit } from './api.js?v=251';
-import { getValidToken } from './auth.js?v=251';
-import { cacheClearAll } from './storage.js?v=251';
-import { idbClearAll } from './idb.js?v=251';
-import { CONSERVAR_CLAVES, CONSERVAR_PREFIJOS } from './util/limpiar-cache.js?v=251';
-import { registerRoute, initRouter, rutasRegistradas } from './router.js?v=251';
-import { showToast } from './ui/toast.js?v=251';
-import { pageHeader, escapeHtml } from './ui/components.js?v=251';
-import { installCrashGuard } from './ui/crash-guard.js?v=251';
-import { auditarOcultos, leerIncidencias } from './util/hidden-sync.js?v=251';
-import { getStack } from './ui/modal-stack.js?v=251';
-import { installBackToTop } from './ui/back-to-top.js?v=251';
-import { applyStoredTheme, openThemePanel } from './ui/theme-panel.js?v=251';
+import { isLoggedIn, loginWithSpotify, logout } from './auth.js?v=252';
+import { spotifyFetch, onRateLimit } from './api.js?v=252';
+import { getValidToken } from './auth.js?v=252';
+import { cacheClearAll } from './storage.js?v=252';
+import { idbClearAll } from './idb.js?v=252';
+import { CONSERVAR_CLAVES, CONSERVAR_PREFIJOS } from './util/limpiar-cache.js?v=252';
+import { registerRoute, initRouter, rutasRegistradas } from './router.js?v=252';
+import { showToast } from './ui/toast.js?v=252';
+import { pageHeader, escapeHtml } from './ui/components.js?v=252';
+import { installCrashGuard } from './ui/crash-guard.js?v=252';
+import { auditarOcultos, leerIncidencias } from './util/hidden-sync.js?v=252';
+import { getStack } from './ui/modal-stack.js?v=252';
+import { installBackToTop } from './ui/back-to-top.js?v=252';
+import { applyStoredTheme, openThemePanel } from './ui/theme-panel.js?v=252';
 
-import { render as renderSync } from './features/sync.js?v=251';
-import { render as renderDedupe } from './features/dedupe.js?v=251';
-import { render as renderDupalbums } from './features/duplicate-albums.js?v=251';
-import { render as renderZombies } from './features/zombies.js?v=251';
-import { render as renderVersions } from './features/versions.js?v=251';
-import { render as renderDashboard } from './features/dashboard.js?v=251';
-import { render as renderSmart } from './features/smart.js?v=251';
-import { render as renderSimilar } from './features/similar-artists.js?v=251';
-import { render as renderRabbit } from './features/rabbit-hole.js?v=251';
-import { render as renderByGenre } from './features/by-genre.js?v=251';
-import { render as renderByArtist } from './features/by-artist.js?v=251';
-import { render as renderRecs } from './features/recommendations.js?v=251';
-import { render as renderListened } from './features/listened.js?v=251';
-import { render as renderWrapped } from './features/wrapped.js?v=251';
-import { render as renderRecords } from './features/records.js?v=251';
-import { openImportHistory } from './features/import-history.js?v=251';
-import { bindOwnerLockedButtons } from './features/history-data.js?v=251';
-import { render as renderZeroPlays } from './features/zero-plays.js?v=251';
-import { render as renderSkips } from './features/skips.js?v=251';
-import { render as renderSearchLikes } from './features/search-likes.js?v=251';
-import { render as renderWthree } from './features/wthree.js?v=251';
-import { render as renderCovers } from './features/covers.js?v=251';
-import { render as renderMosaico } from './features/mosaico.js?v=251';
-import { render as renderDiscoverArtists } from './features/discover-artists.js?v=251';
-import { render as renderNewReleases } from './features/new-releases.js?v=251';
-import { render as renderSinClasificar } from './features/sin-clasificar.js?v=251';
+import { render as renderSync } from './features/sync.js?v=252';
+import { render as renderDedupe } from './features/dedupe.js?v=252';
+import { render as renderDupalbums } from './features/duplicate-albums.js?v=252';
+import { render as renderZombies } from './features/zombies.js?v=252';
+import { render as renderVersions } from './features/versions.js?v=252';
+import { render as renderDashboard } from './features/dashboard.js?v=252';
+import { render as renderSmart } from './features/smart.js?v=252';
+import { render as renderSimilar } from './features/similar-artists.js?v=252';
+import { render as renderRabbit } from './features/rabbit-hole.js?v=252';
+import { render as renderByGenre } from './features/by-genre.js?v=252';
+import { render as renderByArtist } from './features/by-artist.js?v=252';
+import { render as renderRecs } from './features/recommendations.js?v=252';
+import { render as renderListened } from './features/listened.js?v=252';
+import { render as renderWrapped } from './features/wrapped.js?v=252';
+import { render as renderRecords } from './features/records.js?v=252';
+import { openImportHistory } from './features/import-history.js?v=252';
+import { bindOwnerLockedButtons } from './features/history-data.js?v=252';
+import { render as renderZeroPlays } from './features/zero-plays.js?v=252';
+import { render as renderSkips } from './features/skips.js?v=252';
+import { render as renderSearchLikes } from './features/search-likes.js?v=252';
+import { render as renderWthree } from './features/wthree.js?v=252';
+import { render as renderCovers } from './features/covers.js?v=252';
+import { render as renderMosaico } from './features/mosaico.js?v=252';
+import { render as renderDiscoverArtists } from './features/discover-artists.js?v=252';
+import { render as renderNewReleases } from './features/new-releases.js?v=252';
+import { render as renderSinClasificar } from './features/sin-clasificar.js?v=252';
 
 // ── Arranque degradado cuando /me está rate-limiteado (v=173) ────────────────
 //
@@ -943,10 +943,21 @@ function tablaDeOcultos(filas) {
   const cuerpo = filas.map(f => {
     const mal = f.error || f.huerfanas.length;
     const icono = f.error ? '❌' : (f.huerfanas.length ? '⚠️' : '✅');
+    // (v=252) Una huérfana congelada (motivo definitivo: ya no se busca más) se
+    // tiene que VER congelada. Si no, «dejar de reintentar» es un silencio, y el
+    // silencio es lo que este panel existe para romper.
+    const porClave = new Map((f.detalleSinUri || []).map(d => [d.key, d]));
     const detalle = f.error
       ? escapeHtml(f.error)
       : (f.huerfanas.length
-        ? escapeHtml(f.huerfanas.join(' · '))
+        ? f.huerfanas.map(k => {
+          const d = porClave.get(k);
+          if (!d) return escapeHtml(k);
+          const sello = d.definitivo
+            ? '<span style="color:var(--color-text-muted)">· definitivo, ya no se busca</span>'
+            : '<span style="color:var(--color-text-muted)">· se reintenta cada 24 h</span>';
+          return `${escapeHtml(k)} ${sello}${d.motivo ? `<br><span style="color:var(--color-text-muted)">&nbsp;&nbsp;${escapeHtml(d.motivo)}</span>` : ''}`;
+        }).join('<br>')
         : '<span style="color:var(--color-text-muted)">nada suelto</span>');
     return `
       <tr${mal ? '' : ''}>
@@ -962,6 +973,7 @@ function tablaDeOcultos(filas) {
 
   const totalHuerfanas = filas.reduce((a, f) => a + f.huerfanas.length, 0);
   const totalSinUri = filas.reduce((a, f) => a + f.sinUri.length, 0);
+  const totalDefinitivos = filas.reduce((a, f) => a + (f.detalleSinUri || []).filter(d => d.definitivo).length, 0);
   const inc = leerIncidencias().slice(0, 12).map(i => {
     // El motivo es la mitad útil de una incidencia «sin-uri»: sin él el panel
     // dice que algo no se pudo y no dice por qué, que es medio silencio.
@@ -978,6 +990,7 @@ function tablaDeOcultos(filas) {
       <p style="margin:0 0 10px">
         <strong>${totalHuerfanas === 0 ? 'Ningún oculto suelto' : `${totalHuerfanas} ocultos solo en este navegador`}</strong>
         ${totalSinUri ? ` · <span style="color:var(--color-error)">${totalSinUri} sin forma de subirlos a Spotify</span>` : ''}
+        ${totalDefinitivos ? ` · <span style="color:var(--color-text-muted)">${totalDefinitivos} con motivo definitivo: no se vuelven a buscar</span>` : ''}
       </p>
       <div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:13px">
         <tr style="text-align:left;color:var(--color-text-muted)">
@@ -1009,7 +1022,7 @@ async function montarBaseMosaico() {
   const parar = document.getElementById('debug-mosaico-parar');
   let mod;
   try {
-    mod = await import('./features/mosaico-colores.js?v=251');
+    mod = await import('./features/mosaico-colores.js?v=252');
   } catch (err) {
     estado.textContent = `No he podido cargar el módulo: ${err.message}`;
     return;
