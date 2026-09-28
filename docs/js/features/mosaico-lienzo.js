@@ -9,7 +9,7 @@
 // fotografiaría OTRO código que el que usa Ian. Es la lección del resolutor
 // duplicado de v=219 aplicada antes de tiempo.
 
-import { conTapa } from './covers-wallpaper.js?v=253';
+import { conTapa } from './covers-wallpaper.js?v=254';
 
 /**
  * Baja las portadas que hacen falta y las deja en un `Map` índice → bitmap.
@@ -26,12 +26,18 @@ import { conTapa } from './covers-wallpaper.js?v=253';
  * volver a la red. **Quien llama es el dueño y tiene que cerrarlos**
  * (`soltarBitmaps`).
  *
- * ⚠️ **La perilla de variedad de v=253 mueve este número, y mucho.** Medido el
- * 28/09 con 4.800 celdas: 233 portadas distintas con la variedad en «Fiel»
- * (3,8 MB de bitmaps) y **1.863** con «Máxima» (**30,5 MB**). La cuenta de
- * arriba decía «320 portadas son ~5 MB» y con el reparto nuevo se queda corta
- * por un factor de seis, así que si algún día se sube el tope de variedad, este
- * comentario es lo primero que hay que volver a medir.
+ * ⚠️ **La perilla de variedad de v=253 mueve este número, y mucho.** Con 4.800
+ * celdas: 271 portadas distintas en «Fiel» (4,4 MB de bitmaps) y **1.863** en
+ * «Máxima» (**30,5 MB**). La cuenta de arriba decía «320 portadas son ~5 MB» y
+ * con el reparto nuevo se queda corta por un factor de seis.
+ *
+ * **El peor caso real está medido** (28/09, en producción, navegador de Ian):
+ * rejilla **Fina + Máxima**, o sea 10.800 celdas, da **2.964 portadas distintas**
+ * (≈49 MB de bitmaps) más un lienzo de 5.760×7.680 = 44 MP. El **RSS del
+ * renderer**, muestreado desde `/proc` —`performance.memory` no ve ni los
+ * bitmaps ni el canvas—, fue **239 MB antes, 350 MB en el pico y 251 MB al
+ * salir de la ruta**. O sea: **+111 MB en el pico**, y el teardown suelta 75.
+ * Tarda 14 s y no baja un byte de la red (las 2.964 salen de la caché HTTP).
  */
 export async function bajarPortadas({ indice, urlDeTile, signal, lote = 24, onProgress }) {
   const porPortada = new Map();

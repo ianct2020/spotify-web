@@ -10,18 +10,18 @@
 // 100 artistas en lugar de 20. Lógica de fetch/cache/playlist compartida en
 // features/discover-common.js con #new-releases.
 
-import { escapeHtml, confirmModal, pageHeader } from '../ui/components.js?v=253';
-import { showToast } from '../ui/toast.js?v=253';
-import { openArtistCard } from './artist-card.js?v=253';
-import { createIncrementalList, scrollRootOf } from '../ui/incremental-list.js?v=253';
-import { createLazyImages } from '../ui/lazy-img.js?v=253';
-import { isJunkTrack } from '../util/junk.js?v=253';
-import { buildAlbumHeardIndex } from '../util/album-heard.js?v=253';
-import { loadFiltros, buildFilterContext, applyDiscoverFilters } from '../util/discover-filters.js?v=253';
-import { releaseKind } from '../util/release-size.js?v=253';
-import { masNuevoPrimero } from '../util/release-date.js?v=253';
-import { vigilarRuta } from '../util/vigencia-ruta.js?v=253';
-import { prefKey, migratePrefKey } from '../storage.js?v=253';
+import { escapeHtml, confirmModal, pageHeader } from '../ui/components.js?v=254';
+import { showToast } from '../ui/toast.js?v=254';
+import { openArtistCard } from './artist-card.js?v=254';
+import { createIncrementalList, scrollRootOf } from '../ui/incremental-list.js?v=254';
+import { createLazyImages } from '../ui/lazy-img.js?v=254';
+import { isJunkTrack } from '../util/junk.js?v=254';
+import { buildAlbumHeardIndex } from '../util/album-heard.js?v=254';
+import { loadFiltros, buildFilterContext, applyDiscoverFilters } from '../util/discover-filters.js?v=254';
+import { releaseKind } from '../util/release-size.js?v=254';
+import { masNuevoPrimero } from '../util/release-date.js?v=254';
+import { vigilarRuta } from '../util/vigencia-ruta.js?v=254';
+import { prefKey, migratePrefKey } from '../storage.js?v=254';
 import {
   getArtistIdCached,
   getArtistDiscoCached,
@@ -56,7 +56,7 @@ import {
   avisarRonda,
   botonesBaseHtml,
   conectarBotonesBase,
-} from './discover-common.js?v=253';
+} from './discover-common.js?v=254';
 
 const SCAN_KEY = 'discover_artists';
 

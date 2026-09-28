@@ -1,5 +1,5 @@
-import { idbGetCached, idbSetCached } from '../idb.js?v=253';
-import { prefKey, migratePrefKey } from '../storage.js?v=253';
+import { idbGetCached, idbSetCached } from '../idb.js?v=254';
+import { prefKey, migratePrefKey } from '../storage.js?v=254';
 
 const STATSFM_USER_STORAGE = 'statsfm_username';
 const BASE = 'https://api.stats.fm/api/v1';
