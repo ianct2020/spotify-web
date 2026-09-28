@@ -19,6 +19,7 @@
     ?img=/banco/…        la imagen objetivo (por defecto, la que inyecten en
                          window.__imgMosaico como dataURL o URL)
     ?largo=80            celdas del lado más largo
+    ?uso=3               penalización por uso, en ΔE (0 = el reparto de v=252)
     ?tinte=45            escala del tinte, 0-100
     ?modo=adaptativo     adaptativo | plano
 
@@ -75,27 +76,32 @@ async function prepararImagen() {
   lienzoLectura.__pixeles = c.getImageData(0, 0, w, h).data;
 }
 
-async function emparejado(largo) {
-  if (cacheEmp.has(largo)) return cacheEmp.get(largo);
+async function emparejado(largo, uso) {
+  // La clave del caché lleva las DOS cosas que cambian el emparejamiento. Con
+  // solo `largo` —como hasta v=252, cuando no había otra perilla— pedir dos
+  // niveles de variedad seguidos devolvía el primero y las capturas salían
+  // idénticas sin que nada avisara.
+  const clave = `${largo}|${uso}`;
+  if (cacheEmp.has(clave)) return cacheEmp.get(clave);
   const { width: w, height: h } = lienzoLectura;
   const { cols, filas } = grillaPara(w, h, largo);
   const t0 = performance.now();
   const objetivo = rejillaDelObjetivo(lienzoLectura.__pixeles, w, h, cols, filas);
   const tObj = performance.now();
-  const { indice, de } = emparejar({ objetivo, tilesLab, nTiles: base.ids.length });
+  const { indice, de } = emparejar({ objetivo, tilesLab, nTiles: base.ids.length, ...(uso === null ? {} : { penalUsoDE: uso }) });
   const tEmp = performance.now();
   const bajada = await bajarPortadas({ indice, urlDeTile, onProgress: (n, t) => di(`bajando portadas… ${n}/${t}`) });
   const r = { cols, filas, indice, de, ...bajada, ms: { obj: tObj - t0, emp: tEmp - tObj, red: performance.now() - tEmp } };
-  cacheEmp.set(largo, r);
+  cacheEmp.set(clave, r);
   return r;
 }
 
 /** Genera y dibuja. Devuelve los números, que es lo que lee el conductor. */
-async function generar({ largo = Number(q.get('largo') || 80), tinte = Number(q.get('tinte') ?? 45), modo = q.get('modo') || 'adaptativo' } = {}) {
+async function generar({ largo = Number(q.get('largo') || 80), tinte = Number(q.get('tinte') ?? 45), modo = q.get('modo') || 'adaptativo', uso = q.has('uso') ? Number(q.get('uso')) : null } = {}) {
   document.documentElement.removeAttribute('data-banco');
   await prepararBase();
   await prepararImagen();
-  const e = await emparejado(largo);
+  const e = await emparejado(largo, uso);
   const ancho = e.cols * LADO_CELDA, alto = e.filas * LADO_CELDA;
 
   if (salida) { salida.width = salida.height = 0; salida.remove(); }
@@ -115,14 +121,14 @@ async function generar({ largo = Number(q.get('largo') || 80), tinte = Number(q.
 
   const r = resumenDeEmparejado({ indice: e.indice, de: e.de, cols: e.cols, filas: e.filas });
   const info = {
-    cols: e.cols, filas: e.filas, ancho, alto, celdas: r.celdas, tinte, modo,
+    cols: e.cols, filas: e.filas, ancho, alto, celdas: r.celdas, tinte, modo, uso,
     portadas: e.portadas, distintas: r.distintas, masRepetida: r.masRepetida, pegadas: r.pegadas,
     fallidas: e.fallidas, bytes: e.bytes,
     deMedio: +r.deMedio.toFixed(2), deMediana: +r.deMediana.toFixed(2), deP90: +r.deP90.toFixed(2),
     bienEmparejadas: r.bienEmparejadas, malEmparejadas: r.malEmparejadas,
     ms: { obj: Math.round(e.ms.obj), emp: Math.round(e.ms.emp), red: Math.round(e.ms.red), pintar: Math.round(msPintar) },
   };
-  di(`${e.cols}×${e.filas} celdas · ${ancho}×${alto} px · tinte ${tinte} % ${modo} · ${r.distintas} portadas distintas, máx ${r.masRepetida} · pegadas ${r.pegadas} · ΔE med ${info.deMedio} · ${e.fallidas} fallidas`);
+  di(`${e.cols}×${e.filas} celdas · ${ancho}×${alto} px · tinte ${tinte} % ${modo} · uso ΔE ${uso === null ? '(por defecto)' : uso} · ${r.distintas} portadas distintas, máx ${r.masRepetida} · pegadas ${r.pegadas} · ΔE med ${info.deMedio} · ${e.fallidas} fallidas`);
   document.documentElement.setAttribute('data-banco', 'listo');
   return info;
 }

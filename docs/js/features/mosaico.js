@@ -24,15 +24,15 @@
 // salir de la ruta se cierra. La única salida es la descarga que pide el
 // usuario, que es un `<a download>` local.
 
-import { pageHeader, escapeHtml } from '../ui/components.js?v=252';
-import { showToast } from '../ui/toast.js?v=252';
-import { generacionActual, rutaVigente } from '../router.js?v=252';
-import { descargarBlob } from './covers-wallpaper.js?v=252';
-import { bajarPortadas, soltarBitmaps, pintarMosaico } from './mosaico-lienzo.js?v=252';
-import { leerColores, urlDe } from './mosaico-colores.js?v=252';
+import { pageHeader, escapeHtml } from '../ui/components.js?v=253';
+import { showToast } from '../ui/toast.js?v=253';
+import { generacionActual, rutaVigente } from '../router.js?v=253';
+import { descargarBlob } from './covers-wallpaper.js?v=253';
+import { bajarPortadas, soltarBitmaps, pintarMosaico } from './mosaico-lienzo.js?v=253';
+import { leerColores, urlDe } from './mosaico-colores.js?v=253';
 import {
   grillaPara, rejillaDelObjetivo, tilesALab, emparejar, mapaDeTinte, resumenDeEmparejado,
-} from '../util/mosaico.js?v=252';
+} from '../util/mosaico.js?v=253';
 
 // El lado de cada celda en el mosaico final, en píxeles. 64 es **la variante
 // que la caché de colores garantiza**: las 5.715 portadas se bajaron a 64 px
@@ -49,6 +49,28 @@ const GRILLAS = [
   { n: 120, etiqueta: 'Fina' },
 ];
 const GRILLA_DEFECTO = 80;
+
+// Cuántas portadas distintas entran, y qué cuesta en parecido. El número es la
+// penalización por uso en ΔE que va a `emparejar()`; la curva entera está en el
+// comentario de `PENAL_USO_DE` (`util/mosaico.js`) y el detalle en
+// `RESUMEN-MOSAICO-VARIEDAD-2026-09-28.md`.
+//
+// ⚠️ **«Fiel» es 1 y no 0 a propósito.** Con 0 —el reparto de v=250/252— una
+// zona de cielo plano se hace con 14 portadas puestas en una retícula periódica
+// que se lee como un empapelado. El 1 la rompe por 0,10 de ΔE final (9,69 →
+// 9,79 en la imagen de prueba): es gratis y no hay motivo para ofrecer el
+// defecto como opción.
+//
+// Los números de la etiqueta salen de la imagen de prueba con 4.800 celdas: en
+// otra imagen cambian, así que se dicen como orden de magnitud y la vista
+// muestra los de verdad en el resumen cuando termina.
+const VARIEDADES = [
+  { n: 1, etiqueta: 'Fiel', ayuda: 'La portada más parecida a cada celda. Con la imagen de prueba: ~270 portadas distintas.' },
+  { n: 3, etiqueta: 'Normal', ayuda: 'Reparte el catálogo sin que se note en el parecido. Con la imagen de prueba: ~530 portadas distintas.' },
+  { n: 6, etiqueta: 'Variada', ayuda: 'El doble de portadas. El tinte tapa un poco más. Con la imagen de prueba: ~1.100 portadas distintas.' },
+  { n: 10, etiqueta: 'Máxima', ayuda: 'Todas las portadas que quepan. Aquí el parecido ya se resiente. Con la imagen de prueba: ~1.900 portadas distintas.' },
+];
+const VARIEDAD_DEFECTO = 3;
 
 // El tinte por defecto, y por qué ESTE número. El informe de color del catálogo
 // (27/09) midió que el 38 % de sRGB no tiene ninguna portada a ΔE 10, así que
@@ -99,6 +121,12 @@ export async function render(container) {
               Tinte del color original: <strong id="mos-tinte-val">${TINTE_DEFECTO} %</strong>
             </div>
             <input type="range" id="mos-tinte" min="0" max="100" step="5" value="${TINTE_DEFECTO}" style="width:100%">
+          </div>
+          <div>
+            <div style="font-size:12px;color:var(--color-text-muted);margin-bottom:6px">Variedad de portadas</div>
+            <div style="display:flex;gap:6px">
+              ${VARIEDADES.map(v => `<button class="btn btn-secondary${v.n === VARIEDAD_DEFECTO ? ' is-on' : ''}" data-variedad="${v.n}" title="${escapeHtml(v.ayuda)}" style="padding:6px 12px;font-size:13px">${v.etiqueta}</button>`).join('')}
+            </div>
           </div>
           <div>
             <div style="font-size:12px;color:var(--color-text-muted);margin-bottom:6px">Reparto del tinte</div>
@@ -152,6 +180,7 @@ export async function render(container) {
   let lienzoLectura = null;     // canvas con la imagen a tamaño de lectura
   let pixelesObjetivo = null;   // { rgba, ancho, alto }
   let ladoLargo = GRILLA_DEFECTO;
+  let variedad = VARIEDAD_DEFECTO;
   let modo = MODO_DEFECTO;
   let tinte = TINTE_DEFECTO;
   let ultimo = null;            // { canvas, ctx, cols, filas, indice, de, objetivo, ms, bitmaps }
@@ -206,6 +235,17 @@ export async function render(container) {
         const g = grillaPara(pixelesObjetivo.ancho, pixelesObjetivo.alto, ladoLargo);
         di(`Rejilla ${g.cols}×${g.filas} = ${fmtN(g.cols * g.filas)} celdas → ${fmtN(g.cols * LADO_CELDA)}×${fmtN(g.filas * LADO_CELDA)} px. Pulsa «Generar».`);
       }
+    });
+  });
+
+  // Cambiar la variedad rehace el emparejado (y baja las portadas nuevas), así
+  // que pide «Generar» igual que la rejilla; el deslizador del tinte, en cambio,
+  // solo repinta. Son dos costos distintos y por eso dos comportamientos.
+  container.querySelectorAll('[data-variedad]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      variedad = Number(btn.dataset.variedad);
+      container.querySelectorAll('[data-variedad]').forEach(b => b.classList.toggle('is-on', b === btn));
+      if (pixelesObjetivo) di(`Variedad «${VARIEDADES.find(v => v.n === variedad).etiqueta}». Pulsa «Generar».`);
     });
   });
 
@@ -265,7 +305,7 @@ export async function render(container) {
       di(`Buscando la portada de cada celda (${fmtN(cols * filas)} celdas × ${fmtN(nTiles)} portadas)…`);
       await new Promise(r => setTimeout(r, 0));
       const { indice, de } = emparejar({
-        objetivo, tilesLab, nTiles, signal: ctrl.signal,
+        objetivo, tilesLab, nTiles, penalUsoDE: variedad, signal: ctrl.signal,
         onProgress: (hechas, total) => { if (hechas % (cols * 8) === 0) di(`Emparejando… ${Math.round((100 * hechas) / total)} %`); },
       });
       if (ctrl.signal.aborted) { di('Detenido.'); return; }
@@ -297,6 +337,7 @@ export async function render(container) {
       $('mos-salida').hidden = false;
       $('mos-resumen').textContent = `${fmtN(cols)}×${fmtN(filas)} celdas · ${fmtN(ancho)}×${fmtN(alto)} px`
         + ` · ${fmtN(r.distintas)} portadas distintas, la más repetida ${fmtN(r.masRepetida)} veces`
+        + ` · ${fmt1(r.distintasPorVentana)} distintas por cada ${fmt1(r.celdasPorVentana)} celdas vecinas`
         + ` · parecido medio ΔE ${fmt1(r.deMedio)}`
         + (fallidas ? ` · ${fmtN(fallidas)} portadas no han cargado` : '')
         + ` · ${fmt1(ultimo.ms.total / 1000)} s`;

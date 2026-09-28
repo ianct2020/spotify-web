@@ -15,13 +15,17 @@
 // 4. **Que el tinte adaptativo no sea plano disfrazado**: una celda que empareja
 //    bien recibe menos alfa que una que empareja mal, y el suavizado quita los
 //    escalones en vez de aplanar el mapa.
+// 5. **Que la penalización por USO reparta el catálogo** (v=253) y que siga
+//    siendo una penalización y no un tope: con un solo tile decente, repetirlo
+//    tiene que ganarle a un tile catastrófico por muchas veces que ya haya
+//    salido.
 //
 // Corre sin navegador y sin token.
 // Correr con: node tests/mosaico.test.mjs
 
 import {
   grillaPara, rejillaDelObjetivo, tilesALab, emparejar, mapaDeTinte,
-  resumenDeEmparejado, PENAL_DE, RADIO_REPETICION, DE_LIMPIO, DE_SUCIO,
+  resumenDeEmparejado, trama, PENAL_DE, RADIO_REPETICION, PENAL_USO_DE, DE_LIMPIO, DE_SUCIO,
 } from '../src/js/util/mosaico.js';
 import { BYTES_POR_PORTADA, srgb8ALab, mediaDeRejilla } from '../src/js/util/cover-color.js';
 
@@ -125,12 +129,17 @@ console.log('\nRepetición: sin tope global, con penalización por cercanía');
   const datos = catalogo(grises);
   const tl = tilesALab(datos, grises.length);
   const objetivo = rejillaDelObjetivo(imagen(18, 18, () => [130, 130, 130]), 18, 18, 6, 6);
-  const sin = emparejar({ objetivo, tilesLab: tl, nTiles: grises.length, penalDE: 0 });
+  // ⚠️ Hay que apagar las DOS penalizaciones: desde v=253 `emparejar` trae
+  // también la de uso, y con ella puesta este caso reparte y el assert de «un
+  // solo tile» deja de medir lo que dice. Apagar una y llamarlo «sin
+  // penalización» es exactamente el error que este test existe para no cometer.
+  const sin = emparejar({ objetivo, tilesLab: tl, nTiles: grises.length, penalDE: 0, penalUsoDE: 0 });
   const rSin = resumenDeEmparejado({ indice: sin.indice, de: sin.de, cols: 6, filas: 6 });
-  eq(rSin.distintas, 1, 'sin penalización se usa un solo tile en las 36 celdas');
+  eq(rSin.distintas, 1, 'sin ninguna penalización se usa un solo tile en las 36 celdas');
   ok(rSin.pegadas > 0, 'y hay vecinas iguales');
 
-  const con = emparejar({ objetivo, tilesLab: tl, nTiles: grises.length });
+  // Solo la de cercanía, para que este bloque siga midiendo ESA.
+  const con = emparejar({ objetivo, tilesLab: tl, nTiles: grises.length, penalUsoDE: 0 });
   const rCon = resumenDeEmparejado({ indice: con.indice, de: con.de, cols: 6, filas: 6 });
   ok(rCon.distintas > 4, `con penalización entran muchos tiles (${rCon.distintas} de ${grises.length})…`);
   ok(rCon.masRepetida > 1, '…sin ningún tope global (el más usado se repite)');
@@ -140,7 +149,7 @@ console.log('\nRepetición: sin tope global, con penalización por cercanía');
   // se elige el menos penalizado y se sigue. Un mosaico con repeticiones es
   // peor que uno sin ellas; uno que se niegue a existir es mucho peor.
   const pocos = catalogo([[130, 130, 130], [133, 131, 129]]);
-  const apretado = emparejar({ objetivo, tilesLab: tilesALab(pocos, 2), nTiles: 2 });
+  const apretado = emparejar({ objetivo, tilesLab: tilesALab(pocos, 2), nTiles: 2, penalUsoDE: 0 });
   const rAp = resumenDeEmparejado({ indice: apretado.indice, de: apretado.de, cols: 6, filas: 6 });
   eq(rAp.distintas, 2, 'con dos tiles para 36 celdas usa los dos…');
   ok(rAp.pegadas > 0, '…y acepta repetir en el radio en vez de no emparejar');
@@ -211,6 +220,71 @@ console.log('\nEl resumen cuenta lo que dice contar');
   eq(r.masRepetida, 3, 'la más repetida');
   eq(r.malEmparejadas, 1, `celdas por encima de ΔE ${DE_SUCIO}`);
   ok(r.pegadas >= 3, 'y cuenta los pares de vecinas iguales');
+}
+
+
+console.log('\nLa penalización por USO reparta el catálogo, no solo el vecindario');
+{
+  // Doce tiles casi iguales para 100 celdas lisas. El vecindario de radio 2 se
+  // cumple con unos pocos, así que la penalización LOCAL se conforma con
+  // turnarse entre ellos: es exactamente el caso que produjo la retícula
+  // periódica del cielo. La de uso es la que obliga a bajar por la lista.
+  const grises = Array.from({ length: 12 }, (_, i) => [126 + i, 128 + (i % 3), 130 - (i % 4)]);
+  const datos = catalogo(grises);
+  const tl = tilesALab(datos, grises.length);
+  const objetivo = rejillaDelObjetivo(imagen(30, 30, () => [130, 130, 130]), 30, 30, 10, 10);
+
+  const soloLocal = emparejar({ objetivo, tilesLab: tl, nTiles: grises.length, penalUsoDE: 0 });
+  const rLocal = resumenDeEmparejado({ indice: soloLocal.indice, de: soloLocal.de, cols: 10, filas: 10 });
+  const conUso = emparejar({ objetivo, tilesLab: tl, nTiles: grises.length, penalUsoDE: PENAL_USO_DE });
+  const rUso = resumenDeEmparejado({ indice: conUso.indice, de: conUso.de, cols: 10, filas: 10 });
+
+  ok(rUso.distintas >= rLocal.distintas, `con la penalización por uso entran al menos tantos tiles (${rLocal.distintas} → ${rUso.distintas})`);
+  ok(rUso.masRepetida < rLocal.masRepetida, `y el más repetido baja (${rLocal.masRepetida} → ${rUso.masRepetida})`);
+  // Lo que de verdad se ve: cuántos tiles distintos hay en cada ventana de 5×5.
+  ok(rUso.distintasPorVentana > rLocal.distintasPorVentana, `el vecindario de 5×5 se hace con más tiles distintos (${rLocal.distintasPorVentana.toFixed(1)} → ${rUso.distintasPorVentana.toFixed(1)} de ${rUso.celdasPorVentana.toFixed(1)})`);
+  eq(rUso.pegadas, 0, 'y la penalización local sigue haciendo su trabajo: cero vecinas iguales');
+
+  // El reparto es MONÓTONO: más penalización, nunca menos variedad.
+  let previo = 0;
+  for (const u of [0, 1, 3, 6, 10]) {
+    const e = emparejar({ objetivo, tilesLab: tl, nTiles: grises.length, penalUsoDE: u });
+    const d = resumenDeEmparejado({ indice: e.indice, de: e.de, cols: 10, filas: 10 }).distintas;
+    ok(d >= previo, `uso ΔE ${u}: ${d} tiles distintos, no menos que el nivel anterior (${previo})`);
+    previo = d;
+  }
+}
+
+console.log('\nLa penalización por uso SIGUE siendo penalización, no tope');
+{
+  // Un gris exacto y un rojo a ΔE ~60, 36 celdas. Aunque el gris se haya usado
+  // 35 veces, repetirlo tiene que salir más barato que poner el rojo: si esto
+  // falla, alguien convirtió la penalización en un cupo y el mosaico se llena
+  // de manchas para cumplir una cuota.
+  const datos = catalogo([[130, 130, 130], [200, 40, 40]]);
+  const objetivo = rejillaDelObjetivo(imagen(18, 18, () => [130, 130, 130]), 18, 18, 6, 6);
+  const { indice } = emparejar({ objetivo, tilesLab: tilesALab(datos, 2), nTiles: 2, penalUsoDE: PENAL_USO_DE });
+  ok([...indice].every(i => i === 0), `con la variedad en ${PENAL_USO_DE} se sigue repitiendo el gris antes que poner un rojo a ΔE 60`);
+}
+
+console.log('\nLa métrica de trama mide las dos cosas que hay que mirar');
+{
+  // Un empapelado perfecto de 2×2 tiles: NINGUNA vecina inmediata igual (el
+  // mismo tile vuelve recién a distancia 2) y aun así es una retícula. Esto es
+  // lo que el porcentaje de repetición solo, sin la cuenta de distintas por
+  // ventana, no ve — y es el defecto real que se arregló en v=253.
+  const cols = 8, filas = 8;
+  const damero = new Int32Array(cols * filas);
+  for (let f = 0; f < filas; f++) for (let c = 0; c < cols; c++) damero[f * cols + c] = (f % 2) * 2 + (c % 2);
+  const t = trama({ indice: damero, cols, filas, radio: 2 });
+  ok(t.pctConRepeticion > 90, `el empapelado SÍ repite dentro de 5×5 (${t.pctConRepeticion.toFixed(0)} %)`);
+  ok(t.distintasPorVentana <= 4.001, `y se hace con 4 tiles por ventana (${t.distintasPorVentana.toFixed(1)}) sobre ${t.celdasPorVentana.toFixed(1)} celdas`);
+
+  // Todas distintas: el techo.
+  const todas = Int32Array.from({ length: cols * filas }, (_, i) => i);
+  const t2 = trama({ indice: todas, cols, filas, radio: 2 });
+  eq(t2.pctConRepeticion, 0, 'con todas distintas no hay ninguna repetición');
+  ok(Math.abs(t2.distintasPorVentana - t2.celdasPorVentana) < 1e-6, 'y las distintas por ventana llegan al techo, que es la ventana entera');
 }
 
 console.log(`\n${pasaron} bien, ${fallaron} mal`);

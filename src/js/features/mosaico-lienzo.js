@@ -20,10 +20,18 @@ import { conTapa } from './covers-wallpaper.js';
  *
  * ⚠️ Los bitmaps se **conservan**, contra la regla 1 de `covers-wallpaper.js`
  * («nunca más de LOTE tapas vivas»), y el motivo es que acá el número se
- * conoce: a 64 px cada bitmap son 16 KB, así que 320 portadas son ~5 MB y 500
- * son ~8 MB. Allí el pozo eran 2.449 tapas de 300 px, o sea 880 MB. Conservarlos
- * es lo que permite mover el deslizador del tinte sin volver a la red.
- * **Quien llama es el dueño y tiene que cerrarlos** (`soltarBitmaps`).
+ * conoce: a 64 px cada bitmap son **16 KB**, y el tope lo pone el catálogo
+ * entero (5.715 portadas = 94 MB). Allí el pozo eran 2.449 tapas de 300 px, o
+ * sea 880 MB. Conservarlos es lo que permite mover el deslizador del tinte sin
+ * volver a la red. **Quien llama es el dueño y tiene que cerrarlos**
+ * (`soltarBitmaps`).
+ *
+ * ⚠️ **La perilla de variedad de v=253 mueve este número, y mucho.** Medido el
+ * 28/09 con 4.800 celdas: 233 portadas distintas con la variedad en «Fiel»
+ * (3,8 MB de bitmaps) y **1.863** con «Máxima» (**30,5 MB**). La cuenta de
+ * arriba decía «320 portadas son ~5 MB» y con el reparto nuevo se queda corta
+ * por un factor de seis, así que si algún día se sube el tope de variedad, este
+ * comentario es lo primero que hay que volver a medir.
  */
 export async function bajarPortadas({ indice, urlDeTile, signal, lote = 24, onProgress }) {
   const porPortada = new Map();

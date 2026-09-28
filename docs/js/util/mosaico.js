@@ -25,8 +25,10 @@
 //    candidatas usadas en el vecindario inmediato, y la penalización se mide en
 //    las mismas unidades que la distancia (ΔE), así que es legible: «esta
 //    portada tiene que ser ΔE 25 mejor que la siguiente para repetirse al lado».
+//    **Y desde v=253 hay una segunda penalización, por USO TOTAL** (`PENAL_USO_DE`),
+//    porque la local no alcanzaba: ver su comentario.
 
-import { REJILLA, BYTES_POR_PORTADA, srgb8ALab, mediaDeRejilla, rejilla3x3Rect } from './cover-color.js?v=252';
+import { REJILLA, BYTES_POR_PORTADA, srgb8ALab, mediaDeRejilla, rejilla3x3Rect } from './cover-color.js?v=253';
 
 const SUBCELDAS = REJILLA * REJILLA;   // 9
 
@@ -37,6 +39,38 @@ export const PENAL_DE = 25;
 // Hasta qué distancia en celdas se considera «pegada». 2 son las 12 celdas
 // ya colocadas alrededor (la fila de arriba entera y dos a la izquierda).
 export const RADIO_REPETICION = 2;
+
+// Cuánto encarece a una portada CADA vez que ya se usó, en ΔE, en TODO el
+// mosaico (no solo al lado): la n-ésima repetición cuesta `n × ΔE²` de más, así
+// que la celda siguiente de ese color baja a la segunda candidata, a la
+// tercera, a la décima. 0 es el reparto de v=250/252.
+//
+// ⚠️ **No es lo mismo que subir `RADIO_REPETICION`, y la diferencia está
+// medida** (28/09, imagen de prueba de 60×80 celdas, base real de 5.715
+// portadas). El radio prohíbe repetir CERCA; con radio 2 y sin esto, una franja
+// de 480 celdas de cielo plano se hace con **14 portadas** y las mismas ocho
+// caen en una **retícula periódica** que se lee como un empapelado: no hay
+// vecinas iguales (la métrica de repetición a 5×5 da 5,4 %) y aun así el patrón
+// se ve. El motivo es que en una zona plana todas las celdas tienen la misma
+// ganadora y la penalización local solo las obliga a turnarse entre un puñado.
+//
+// El valor por defecto sale de la curva de `RESUMEN-MOSAICO-VARIEDAD-2026-09-28.md`:
+//
+//   ΔE uso │ portadas │ ΔE del  │ ΔE FINAL │ tinte
+//          │ distintas│ emparej.│ con tinte│ medio
+//   ───────┼──────────┼─────────┼──────────┼──────
+//        0 │      233 │   13,39 │     9,69 │ 26,3 %
+//        1 │      271 │   13,67 │     9,79 │ 27,1 %
+//        3 │      528 │   16,82 │    10,64 │ 34,9 %
+//        6 │    1.123 │   20,42 │    11,95 │ 39,8 %
+//       10 │    1.863 │   23,48 │    13,40 │ 41,6 %
+//
+// El codo NO está en «portadas distintas por ΔE del emparejado» —esa sube casi
+// recta— sino en que **el tinte adaptativo se queda sin margen**: hasta ΔE 4 el
+// tinte sube (26 % → 37 %) y recompra casi toda la pérdida; de 6 en adelante ya
+// está casi al tope (40 % → 42 %) y cada portada nueva se paga entera en
+// parecido. Por eso 3 por defecto, con el resto a un clic en la vista.
+export const PENAL_USO_DE = 3;
 
 // ── El objetivo ─────────────────────────────────────────────────────────────
 
@@ -117,7 +151,7 @@ export function tilesALab(datos, n = datos.length / BYTES_POR_PORTADA) {
  * `onProgress(hechas, total)` se llama una vez por fila — con 5.715 candidatas
  * y 27 componentes, una fila de 60 celdas son 9,3 M multiplicaciones.
  */
-export function emparejar({ objetivo, tilesLab, nTiles, penalDE = PENAL_DE, radio = RADIO_REPETICION, onProgress, signal }) {
+export function emparejar({ objetivo, tilesLab, nTiles, penalDE = PENAL_DE, radio = RADIO_REPETICION, penalUsoDE = PENAL_USO_DE, onProgress, signal }) {
   const { cols, filas, datos } = objetivo;
   const nCeldas = cols * filas;
   const indice = new Int32Array(nCeldas).fill(-1);
@@ -127,6 +161,10 @@ export function emparejar({ objetivo, tilesLab, nTiles, penalDE = PENAL_DE, radi
   // se escriben ~12 posiciones antes de cada celda y se limpian después.
   const penal = new Float32Array(nTiles);
   const penalMax = penalDE * penalDE;
+  // Cuántas veces salió ya cada portada en TODO el mosaico. A diferencia de
+  // `penal`, esto no se limpia nunca: es el reparto del catálogo.
+  const usos = new Int32Array(nTiles);
+  const penalUso = penalUsoDE * penalUsoDE;
   const objLab = new Float32Array(27);
 
   for (let f = 0; f < filas; f++) {
@@ -161,11 +199,12 @@ export function emparejar({ objetivo, tilesLab, nTiles, penalDE = PENAL_DE, radi
         let s = 0;
         for (let j = 0; j < 27; j++) { const t = objLab[j] - tilesLab[p + j]; s += t * t; }
         const d = s / SUBCELDAS;
-        const conPenal = d + penal[i];
+        const conPenal = d + penal[i] + penalUso * usos[i];
         if (conPenal < mejor) { mejor = conPenal; mejorI = i; mejorD = d; }
       }
       indice[k] = mejorI;
       de[k] = Math.sqrt(mejorD);
+      usos[mejorI]++;
       for (const i of tocados) penal[i] = 0;
     }
     onProgress?.((f + 1) * cols, nCeldas);
@@ -230,6 +269,46 @@ export function mapaDeTinte({ de, cols, filas, escala, modo = 'adaptativo', suav
 
 // ── Diagnóstico ─────────────────────────────────────────────────────────────
 
+/**
+ * La TRAMA: qué porcentaje de celdas tiene su misma portada otra vez dentro de
+ * la ventana de `radio` celdas a la redonda (5×5 con el radio en 2), y cuántas
+ * portadas distintas hay de media en esa ventana.
+ *
+ * ⚠️ **Hacen falta las dos, y el 28/09 se midió por qué.** El porcentaje de
+ * repetición puede dar 0 y la trama verse igual: lo que se ve en una zona plana
+ * no es una portada repetida al lado, es un puñado de portadas turnándose en
+ * una retícula. Esa la caza la segunda, comparándola con el techo — la ventana
+ * media de una rejilla de 60×80 son 24,1 celdas, así que «9,8 distintas» es un
+ * empapelado y «21,8» es ruido.
+ */
+export function trama({ indice, cols, filas, radio = RADIO_REPETICION }) {
+  const n = cols * filas;
+  const vistos = new Set();
+  let conRepeticion = 0, sumaDistintas = 0, sumaVentana = 0;
+  for (let f = 0; f < filas; f++) {
+    for (let c = 0; c < cols; c++) {
+      const yo = indice[f * cols + c];
+      vistos.clear();
+      let repe = false;
+      for (let ff = Math.max(0, f - radio); ff <= Math.min(filas - 1, f + radio); ff++) {
+        for (let cc = Math.max(0, c - radio); cc <= Math.min(cols - 1, c + radio); cc++) {
+          const i = indice[ff * cols + cc];
+          vistos.add(i);
+          sumaVentana++;
+          if (i === yo && !(ff === f && cc === c)) repe = true;
+        }
+      }
+      if (repe) conRepeticion++;
+      sumaDistintas += vistos.size;
+    }
+  }
+  return {
+    pctConRepeticion: (100 * conRepeticion) / n,
+    distintasPorVentana: sumaDistintas / n,
+    celdasPorVentana: sumaVentana / n,
+  };
+}
+
 /** Repartos y repeticiones de un emparejamiento, para contarlo en pantalla. */
 export function resumenDeEmparejado({ indice, de, cols, filas, radio = RADIO_REPETICION }) {
   const n = indice.length;
@@ -259,5 +338,6 @@ export function resumenDeEmparejado({ indice, de, cols, filas, radio = RADIO_REP
     deP90: pct(90),
     bienEmparejadas: [...de].filter(d => d <= DE_LIMPIO).length,
     malEmparejadas: [...de].filter(d => d >= DE_SUCIO).length,
+    ...trama({ indice, cols, filas, radio }),
   };
 }

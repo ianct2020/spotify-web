@@ -6,31 +6,31 @@
 //     (util/album-heard.js: historial completo + likes + listened + w-three)
 //   - permiten "+ Biblioteca" y "Crear playlist con lo elegido"
 
-import { idbGet, idbGetCached, idbSetCached, idbDel, idbEntriesByPrefix } from '../idb.js?v=252';
-import { getArtistAlbumsConFuente, buscarDiscografiaPorNombre, searchArtistByName, getAlbumTracks, saveToLibrary, saveAlbumsToLibrary, createPlaylist, addTracksToPlaylist } from '../api.js?v=252';
-import { albumKey } from '../util/album-key.js?v=252';
-import { cardKey, cardKeyLegacy, albumCreditName, keyOfPlaylistTrack } from '../util/discover-key.js?v=252';
-import { escapeHtml } from '../ui/components.js?v=252';
-import { openModal, closeTop } from '../ui/modal-stack.js?v=252';
-import { showToast } from '../ui/toast.js?v=252';
-import { openPlaylistPicker } from '../ui/playlist-picker.js?v=252';
-import { getOwnPlaylists, addUrisToPlaylists, toastAddResult } from '../util/playlist-add.js?v=252';
-import { openArtistCard } from './artist-card.js?v=252';
-import { openAlbumCard } from './album-card.js?v=252';
-import { createHiddenStore, createLocalStore } from '../util/hidden-sync.js?v=252';
-import { recuperarUriDeAlbumKey, REGLAS_VERSION } from '../util/hidden-recover.js?v=252';
-import { getPreview } from '../api/preview-providers.js?v=252';
-import { togglePreview, playingKey, attachHover } from '../ui/preview-player.js?v=252';
-import { coverUrl } from '../util/cover-size.js?v=252';
-import { FILTROS as FILTROS_DEF, saveFiltros } from '../util/discover-filters.js?v=252';
-import { esEPoAlbum } from '../util/release-size.js?v=252';
-import { iconoPlay, iconoPausa, iconoPuntos, iconoOjo, iconoOjoTachado } from '../ui/icons.js?v=252';
+import { idbGet, idbGetCached, idbSetCached, idbDel, idbEntriesByPrefix } from '../idb.js?v=253';
+import { getArtistAlbumsConFuente, buscarDiscografiaPorNombre, searchArtistByName, getAlbumTracks, saveToLibrary, saveAlbumsToLibrary, createPlaylist, addTracksToPlaylist } from '../api.js?v=253';
+import { albumKey } from '../util/album-key.js?v=253';
+import { cardKey, cardKeyLegacy, albumCreditName, keyOfPlaylistTrack } from '../util/discover-key.js?v=253';
+import { escapeHtml } from '../ui/components.js?v=253';
+import { openModal, closeTop } from '../ui/modal-stack.js?v=253';
+import { showToast } from '../ui/toast.js?v=253';
+import { openPlaylistPicker } from '../ui/playlist-picker.js?v=253';
+import { getOwnPlaylists, addUrisToPlaylists, toastAddResult } from '../util/playlist-add.js?v=253';
+import { openArtistCard } from './artist-card.js?v=253';
+import { openAlbumCard } from './album-card.js?v=253';
+import { createHiddenStore, createLocalStore } from '../util/hidden-sync.js?v=253';
+import { recuperarUriDeAlbumKey, REGLAS_VERSION } from '../util/hidden-recover.js?v=253';
+import { getPreview } from '../api/preview-providers.js?v=253';
+import { togglePreview, playingKey, attachHover } from '../ui/preview-player.js?v=253';
+import { coverUrl } from '../util/cover-size.js?v=253';
+import { FILTROS as FILTROS_DEF, saveFiltros } from '../util/discover-filters.js?v=253';
+import { esEPoAlbum } from '../util/release-size.js?v=253';
+import { iconoPlay, iconoPausa, iconoPuntos, iconoOjo, iconoOjoTachado } from '../ui/icons.js?v=253';
 import {
   DISCO_BASE_PREFIX, PRESUPUESTO_REFRESCO, RECIENTE_MAX_PAGINAS,
   crearBase, sumarCompleta, sumarReciente, tocaReciente, rangoReciente,
   fusionarBases, armarExportacion, leerImportacion,
-} from '../util/disco-base.js?v=252';
-import { estimarCostoDeEscaneo, superaUmbral, PAGINAS_POR_ARTISTA } from '../util/costo-escaneo.js?v=252';
+} from '../util/disco-base.js?v=253';
+import { estimarCostoDeEscaneo, superaUmbral, PAGINAS_POR_ARTISTA } from '../util/costo-escaneo.js?v=253';
 
 const DISCO_TTL_MIN = 30 * 24 * 60;       // 30 días
 const ARTIST_ID_TTL_MIN = 60 * 24 * 60;   // 60 días — los ids no cambian
@@ -637,7 +637,7 @@ export function yearOf(release) {
 // `releaseTs` vive ahora en `util/release-date.js` (v=246), junto al comparador
 // «más nuevo primero» de `#discover-artists`; se re-exporta acá para que
 // `#new-releases` siga importándolo de este archivo.
-export { releaseTs } from '../util/release-date.js?v=252';
+export { releaseTs } from '../util/release-date.js?v=253';
 
 // Deduplica ediciones del mismo álbum (deluxe, remaster, etc). Nos quedamos
 // con la primera edición (release date más antiguo).
