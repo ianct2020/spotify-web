@@ -18,7 +18,7 @@ import { getBestAvailableLikes, removeLikedTracks, checkLibraryContains } from '
 import { borrarLikesVerificado } from '../util/borrado-verificado.js';
 import { vigilarRuta } from '../util/vigencia-ruta.js';
 import { loadTrackPlays, trackIdOf, isOwner, ownerLockedMessage } from './history-data.js';
-import { escapeHtml, confirmModal, pageHeader } from '../ui/components.js';
+import { escapeHtml, confirmModal, pageHeader, tarjetaSinLikes } from '../ui/components.js';
 import { showToast } from '../ui/toast.js';
 import { openTrackCard } from './track-card.js';
 import { hasUsername, loadTopLifetime } from '../api/statsfm.js';
@@ -140,6 +140,12 @@ async function analyze() {
   } catch (e) {
     if (!ruta.vigente()) return;
     content.innerHTML = `<div class="card"><p style="color:var(--color-error)">Error: ${escapeHtml(e.message)}</p></div>`;
+    return;
+  }
+  // Sin likes en caché el cruce daría «0 canciones sin reproducir» con la
+  // biblioteca entera en Spotify. Ver `tarjetaSinLikes()`.
+  if (likes.length === 0) {
+    content.innerHTML = tarjetaSinLikes('tu historial de reproducción');
     return;
   }
   if (!plays || !plays.tracks) {

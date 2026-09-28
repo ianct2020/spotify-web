@@ -10,7 +10,8 @@
 // `covers.js` porque ese contesta otra pregunta (qué ÁLBUMES pintar, fusionando
 // por nombre antes que por imagen) y además mete W-Three, que costaría pedir la
 // playlist a la API. Armar el catálogo no hace ningún request a
-// `api.spotify.com`: los likes se leen con `allowFetch: false`.
+// `api.spotify.com`: `getBestAvailableLikes()` solo lee el caché. Hasta v=254
+// eso se conseguía pasándole `allowFetch: false`; desde v=255 es su defecto.
 //
 // Lo que se baja sale del CDN de imágenes (`image-cdn-*.spotifycdn.com`,
 // `i.scdn.co`), que no es la API ni gasta su cuota. Manda
@@ -26,11 +27,11 @@
 // temporizadores encadenados hasta uno por minuto. El bucle solo espera a la
 // red y a la decodificación, que no se frenan.
 
-import { idbGetCachedRaw, idbSetCached } from '../idb.js?v=254';
-import { loadListenedAlbums } from './history-data.js?v=254';
-import { getBestAvailableLikes } from '../api.js?v=254';
-import { coverId, coverVariant } from '../util/album-key.js?v=254';
-import { MOSAICO_COLORES_KEY, BYTES_POR_PORTADA, rejilla3x3 } from '../util/cover-color.js?v=254';
+import { idbGetCachedRaw, idbSetCached } from '../idb.js?v=255';
+import { loadListenedAlbums } from './history-data.js?v=255';
+import { getBestAvailableLikes } from '../api.js?v=255';
+import { coverId, coverVariant } from '../util/album-key.js?v=255';
+import { MOSAICO_COLORES_KEY, BYTES_POR_PORTADA, rejilla3x3 } from '../util/cover-color.js?v=255';
 
 const FORMATO = 1;
 // Descargas a la vez. Es el lote de `covers-wallpaper.js`, medido allí contra
@@ -76,7 +77,7 @@ export async function armarCatalogo() {
   }
   const escuchadas = mapa.size;
 
-  const { items } = await getBestAvailableLikes({ allowFetch: false });
+  const { items } = await getBestAvailableLikes();
   for (const it of (items || [])) {
     const t = it?.track || it;
     const imgs = t?.album?.images || [];

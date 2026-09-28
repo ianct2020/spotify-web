@@ -23,7 +23,7 @@ import { idbGetCached, idbSetCached, idbDel } from '../idb.js';
 import { createHiddenStore, uriDeTrackId } from '../util/hidden-sync.js';
 import { prefKey, migratePrefKey } from '../storage.js';
 import { addUrisToPlaylists, toastAddResult, getOwnPlaylists } from '../util/playlist-add.js';
-import { escapeHtml, pageHeader, showProgress, hideProgress, isCancelled, confirmModal } from '../ui/components.js';
+import { escapeHtml, pageHeader, showProgress, hideProgress, isCancelled, confirmModal, tarjetaSinLikes } from '../ui/components.js';
 import { openModal, closeTop } from '../ui/modal-stack.js';
 import { openPlaylistPicker } from '../ui/playlist-picker.js';
 import { showToast } from '../ui/toast.js';
@@ -218,22 +218,23 @@ async function load({ force }) {
   // playlists propias: es de las más largas que hay.
   const ruta = vigilarRuta();
   try {
-    // getBestAvailableLikes completa la descarga sola si el caché no está entero
-    // (y se cuelga de la carga de otra vista si ya hay una en curso), así que
-    // solo hay que darle dónde mostrar el progreso.
-    let shownLikesProgress = false;
-    const { items: likes } = await getBestAvailableLikes({
-      onProgress: ({ loaded, total, cached }) => {
-        if (cached) return;
-        if (!shownLikesProgress) {
-          showProgress('Cargando tus Liked Songs…', 0, 0, { minimized: true });
-          shownLikesProgress = true;
-        }
-        showProgress('Cargando tus Liked Songs…', loaded, total);
-      },
-    });
-    if (shownLikesProgress) hideProgress();
+    // ⚠️ Esta vista se carga sola desde `render()`, sin pantalla de arranque ni
+    // botón: no hay ningún click del usuario detrás. Hasta v=254 el
+    // `onProgress` que había acá servía para mostrar la barra MIENTRAS
+    // `getBestAvailableLikes()` bajaba la biblioteca entera con el caché frío
+    // —~190 peticiones a `/me/tracks`—, así que entrar a `#sin-clasificar` era
+    // una de las formas de pegar el 429 sin haber pedido nada. Desde v=255 la
+    // función solo lee el caché (ver `api.js`), y acá no se le pide otra cosa.
+    const { items: likes } = await getBestAvailableLikes();
     if (!ruta.vigente()) return;
+
+    // Sin likes en caché no hay cruce posible, y seguir costaría carísimo: lo
+    // que viene abajo es `getAllUserPlaylists()` + `scanPlaylists()` sobre
+    // TODAS las playlists propias, para terminar pintando una lista vacía.
+    if (likes.length === 0) {
+      document.getElementById('sc-content').innerHTML = tarjetaSinLikes('tus listas de reproducción');
+      return;
+    }
 
     // Ocultas desde la playlist de Spotify. En segundo plano: si tarda, la vista
     // arranca con el caché local y se repinta al llegar.

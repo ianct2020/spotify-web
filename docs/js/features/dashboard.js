@@ -1,16 +1,16 @@
-import { getAllLikedTracks, getLikesPartialInfo, exportAllData, importAllData, getCurrentUserId, syncLikesIncremental, getLikesCacheTimestamp, getBestAvailableLikes, getAllPlaylistItems } from '../api.js?v=254';
-import { showProgress, hideProgress, alertModal, escapeHtml, pageHeader } from '../ui/components.js?v=254';
-import { openModal, closeTop } from '../ui/modal-stack.js?v=254';
-import { showToast } from '../ui/toast.js?v=254';
-import { openListenedAlbumsPicker, getListenedPlaylist } from './listened-shared.js?v=254';
-import { loadHistoryStats, loadListenedAlbums } from './history-data.js?v=254';
-import { getArtistLikePreview } from '../util/artist-preview.js?v=254';
-import { hoverIn, hoverOut } from '../ui/preview-player.js?v=254';
-import { armRevealAll } from '../ui/reveal.js?v=254';
-import { hasUsername, getUsername, setUsername } from '../api/statsfm.js?v=254';
-import { getKey as getLastfmKey, setKey as setLastfmKey, clearKey as clearLastfmKey, isDefaultKey as lastfmIsDefaultKey } from '../api/lastfm.js?v=254';
-import { prefKey, migratePrefKey } from '../storage.js?v=254';
-import { alpha } from '../ui/theme-panel.js?v=254';
+import { getAllLikedTracks, getLikesPartialInfo, exportAllData, importAllData, getCurrentUserId, syncLikesIncremental, getLikesCacheTimestamp, getBestAvailableLikes, getAllPlaylistItems } from '../api.js?v=255';
+import { showProgress, hideProgress, alertModal, escapeHtml, pageHeader } from '../ui/components.js?v=255';
+import { openModal, closeTop } from '../ui/modal-stack.js?v=255';
+import { showToast } from '../ui/toast.js?v=255';
+import { openListenedAlbumsPicker, getListenedPlaylist } from './listened-shared.js?v=255';
+import { loadHistoryStats, loadListenedAlbums } from './history-data.js?v=255';
+import { getArtistLikePreview } from '../util/artist-preview.js?v=255';
+import { hoverIn, hoverOut } from '../ui/preview-player.js?v=255';
+import { armRevealAll } from '../ui/reveal.js?v=255';
+import { hasUsername, getUsername, setUsername } from '../api/statsfm.js?v=255';
+import { getKey as getLastfmKey, setKey as setLastfmKey, clearKey as clearLastfmKey, isDefaultKey as lastfmIsDefaultKey } from '../api/lastfm.js?v=255';
+import { prefKey, migratePrefKey } from '../storage.js?v=255';
+import { alpha } from '../ui/theme-panel.js?v=255';
 
 // Tres estados posibles, no dos: puede haber una key propia, la del código, o
 // —si algún día la constante queda vacía— ninguna. El hint del ⚙ tiene que
@@ -20,11 +20,11 @@ function estadoLastfm() {
   if (localStorage.getItem(prefKey('lastfm_api_key'))) return 'propia';
   return lastfmIsDefaultKey() ? 'la del código' : 'sin configurar';
 }
-import { loadHistoryStats as _loadStatsForCounter } from './history-data.js?v=254';
-import { openArtistCard } from './artist-card.js?v=254';
-import { openAlbumCard } from './album-card.js?v=254';
-import { activateMarquee, marqueeSpan } from '../ui/marquee.js?v=254';
-import { isJunkTrack } from '../util/junk.js?v=254';
+import { loadHistoryStats as _loadStatsForCounter } from './history-data.js?v=255';
+import { openArtistCard } from './artist-card.js?v=255';
+import { openAlbumCard } from './album-card.js?v=255';
+import { activateMarquee, marqueeSpan } from '../ui/marquee.js?v=255';
+import { isJunkTrack } from '../util/junk.js?v=255';
 
 let charts = [];
 let _loadController = null;
@@ -156,16 +156,19 @@ export function render(container) {
   };
 }
 
-// ⚠️ `allowFetch: false` — y es EL arreglo del cuelgue, no un detalle.
+// Esta pantalla solo pregunta «¿cómo quieres arrancar?». Hasta v=195 llamaba a
+// `getBestAvailableLikes()` cuando el defecto era `allowFetch: true`, así que
+// sin caché completo NO se limitaba a mirar: descargaba la biblioteca entera
+// (~190 peticiones, 2-4 minutos) para decidir qué texto poner en una tarjeta. Y
+// como el `await` estaba delante del `innerHTML`, el spinner se quedaba
+// diciendo «Leyendo cache local…» durante toda la descarga. Eso es lo que se
+// veía como «el dashboard está colgado» desde el 30/08: no estaba colgado,
+// estaba bajando 9.400 canciones sin decirlo.
 //
-// Esta pantalla solo pregunta «¿cómo quieres arrancar?». Hasta ahora llamaba a
-// `getBestAvailableLikes()` con el `allowFetch: true` por defecto, así que
-// cuando no había caché completo NO se limitaba a mirar: se ponía a descargar
-// la biblioteca entera (~190 peticiones, 2-4 minutos) para decidir qué texto
-// poner en una tarjeta. Y como el `await` estaba delante del `innerHTML`, el
-// spinner se quedaba diciendo «Leyendo cache local…» durante toda la descarga.
-// Eso es lo que se veía como «el dashboard está colgado» desde el 30/08: no
-// estaba colgado, estaba bajando 9.400 canciones sin decirlo.
+// Se arregló pasando `allowFetch: false` acá, y el parámetro explícito ya no
+// está porque desde v=255 ES el defecto. ⚠️ Ese arreglo por llamador tapó ESTA
+// pantalla y dejó el agujero abierto en `refreshLastSyncLabel()`, que corre
+// antes: el detalle, abajo, en su comentario.
 //
 // Leer el caché es instantáneo. Descargar es una decisión del usuario, y se
 // toma con los botones de abajo.
@@ -174,7 +177,7 @@ async function renderStartScreen() {
   if (!content) return;
   content.innerHTML = `<div class="empty-state"><div class="spinner spinner-lg"></div><div style="margin-top:16px">Leyendo la caché local…</div></div>`;
 
-  const { items: cachedItems, source: cacheSource } = await getBestAvailableLikes({ allowFetch: false });
+  const { items: cachedItems, source: cacheSource } = await getBestAvailableLikes();
   const cachedCount = cachedItems.length;
   const hasFull = cachedCount > 0 && cacheSource === 'full';
   const timestamp = await getLikesCacheTimestamp();
@@ -220,12 +223,28 @@ async function renderStartScreen() {
   preInput.onchange = handleImportAll;
 }
 
+// ⚠️ Esta función era EL agujero que se cerró en v=255, y estaba a cincuenta
+// líneas del comentario de arriba que celebraba haberlo tapado.
+//
+// `render()` la llama en la línea 103, ANTES de `renderStartScreen()`, y acá se
+// pedía `getBestAvailableLikes()` a secas. Con el defecto de entonces
+// (`allowFetch: true`) eso bajaba la biblioteca entera —~190 peticiones a
+// `/me/tracks`— para escribir el renglón «Última sync: … likes cacheados» al
+// pie. O sea: `renderStartScreen()` no descargaba, pero entrar al Dashboard sí.
+//
+// Y el `!ts` se miraba DESPUÉS de esperar los likes, así que ni siquiera hacía
+// falta que hubiera una sync previa: sin timestamp bajaba igual y recién
+// entonces decidía no pintar nada. Ahora el timestamp corta primero.
 async function refreshLastSyncLabel() {
   const el = document.getElementById('dash-last-sync');
   if (!el) return;
   const ts = await getLikesCacheTimestamp();
+  if (!ts) {
+    el.textContent = '';
+    return;
+  }
   const { items } = await getBestAvailableLikes();
-  if (!ts || items.length === 0) {
+  if (items.length === 0) {
     el.textContent = '';
     return;
   }
@@ -587,7 +606,7 @@ async function loadData(forceRefresh) {
     // debajo se pinta lo que SÍ hay — la caché completa si existe, y si no la
     // pantalla de arranque con el parcial y sus botones.
     const cancelled = e.message.includes('cancelada');
-    const { items: rescatados } = await getBestAvailableLikes({ allowFetch: false });
+    const { items: rescatados } = await getBestAvailableLikes();
 
     content.innerHTML = `
       <div class="card" style="border-left:3px solid var(--color-${cancelled ? 'warning' : 'error'});margin-bottom:16px">

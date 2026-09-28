@@ -19,7 +19,7 @@
 import { getBestAvailableLikes, removeLikedTracks, checkLibraryContains } from '../api.js';
 import { borrarLikesVerificado } from '../util/borrado-verificado.js';
 import { loadSkipStats, trackIdOf, isOwner, ownerLockedMessage } from './history-data.js';
-import { escapeHtml, confirmModal, pageHeader } from '../ui/components.js';
+import { escapeHtml, confirmModal, pageHeader, tarjetaSinLikes } from '../ui/components.js';
 import { showToast } from '../ui/toast.js';
 import { getPreview } from '../api/preview-providers.js';
 import { togglePreview, playingKey } from '../ui/preview-player.js';
@@ -176,6 +176,12 @@ async function analyze() {
   } catch (e) {
     if (!ruta.vigente()) return;
     content.innerHTML = `<div class="card"><p style="color:var(--color-error)">Error: ${escapeHtml(e.message)}</p></div>`;
+    return;
+  }
+  // Sin likes en caché no hay nada que cruzar, y la lista vacía se leería como
+  // «no tienes skips crónicos». Ver `tarjetaSinLikes()`.
+  if (likes.length === 0) {
+    content.innerHTML = tarjetaSinLikes('tu historial de skips');
     return;
   }
   if (!stats || !stats.tracks) {

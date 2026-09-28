@@ -16,27 +16,27 @@
 import {
   getAllUserPlaylists, getAllPlaylistItems, getBestAvailableLikes,
   getCurrentUserId, removeLikedTracks, checkLibraryContains,
-} from '../api.js?v=254';
-import { borrarLikesVerificado } from '../util/borrado-verificado.js?v=254';
-import { vigilarRuta } from '../util/vigencia-ruta.js?v=254';
-import { idbGetCached, idbSetCached, idbDel } from '../idb.js?v=254';
-import { createHiddenStore, uriDeTrackId } from '../util/hidden-sync.js?v=254';
-import { prefKey, migratePrefKey } from '../storage.js?v=254';
-import { addUrisToPlaylists, toastAddResult, getOwnPlaylists } from '../util/playlist-add.js?v=254';
-import { escapeHtml, pageHeader, showProgress, hideProgress, isCancelled, confirmModal } from '../ui/components.js?v=254';
-import { openModal, closeTop } from '../ui/modal-stack.js?v=254';
-import { openPlaylistPicker } from '../ui/playlist-picker.js?v=254';
-import { showToast } from '../ui/toast.js?v=254';
-import { getPreview } from '../api/preview-providers.js?v=254';
-import { togglePreview, playingKey } from '../ui/preview-player.js?v=254';
-import { openTrackCard } from './track-card.js?v=254';
-import { normText } from '../util/track-match.js?v=254';
-import { activateMarquee } from '../ui/marquee.js?v=254';
-import { renderTrackCardRow, wireTrackCardGrid, paintCardSelection, paintPlayingCard } from '../ui/track-card-row.js?v=254';
-import { createIncrementalList, scrollRootOf } from '../ui/incremental-list.js?v=254';
-import { createLazyImages } from '../ui/lazy-img.js?v=254';
-import { coverAtSize } from '../util/cover-size.js?v=254';
-import { fmtDiaCorto } from '../util/fecha.js?v=254';
+} from '../api.js?v=255';
+import { borrarLikesVerificado } from '../util/borrado-verificado.js?v=255';
+import { vigilarRuta } from '../util/vigencia-ruta.js?v=255';
+import { idbGetCached, idbSetCached, idbDel } from '../idb.js?v=255';
+import { createHiddenStore, uriDeTrackId } from '../util/hidden-sync.js?v=255';
+import { prefKey, migratePrefKey } from '../storage.js?v=255';
+import { addUrisToPlaylists, toastAddResult, getOwnPlaylists } from '../util/playlist-add.js?v=255';
+import { escapeHtml, pageHeader, showProgress, hideProgress, isCancelled, confirmModal, tarjetaSinLikes } from '../ui/components.js?v=255';
+import { openModal, closeTop } from '../ui/modal-stack.js?v=255';
+import { openPlaylistPicker } from '../ui/playlist-picker.js?v=255';
+import { showToast } from '../ui/toast.js?v=255';
+import { getPreview } from '../api/preview-providers.js?v=255';
+import { togglePreview, playingKey } from '../ui/preview-player.js?v=255';
+import { openTrackCard } from './track-card.js?v=255';
+import { normText } from '../util/track-match.js?v=255';
+import { activateMarquee } from '../ui/marquee.js?v=255';
+import { renderTrackCardRow, wireTrackCardGrid, paintCardSelection, paintPlayingCard } from '../ui/track-card-row.js?v=255';
+import { createIncrementalList, scrollRootOf } from '../ui/incremental-list.js?v=255';
+import { createLazyImages } from '../ui/lazy-img.js?v=255';
+import { coverAtSize } from '../util/cover-size.js?v=255';
+import { fmtDiaCorto } from '../util/fecha.js?v=255';
 
 const HIDDEN_KEY = 'sin_clasificar_ocultas';
 const EXCLUDED_KEY = 'sin_clasificar_excluidas';
@@ -218,22 +218,23 @@ async function load({ force }) {
   // playlists propias: es de las más largas que hay.
   const ruta = vigilarRuta();
   try {
-    // getBestAvailableLikes completa la descarga sola si el caché no está entero
-    // (y se cuelga de la carga de otra vista si ya hay una en curso), así que
-    // solo hay que darle dónde mostrar el progreso.
-    let shownLikesProgress = false;
-    const { items: likes } = await getBestAvailableLikes({
-      onProgress: ({ loaded, total, cached }) => {
-        if (cached) return;
-        if (!shownLikesProgress) {
-          showProgress('Cargando tus Liked Songs…', 0, 0, { minimized: true });
-          shownLikesProgress = true;
-        }
-        showProgress('Cargando tus Liked Songs…', loaded, total);
-      },
-    });
-    if (shownLikesProgress) hideProgress();
+    // ⚠️ Esta vista se carga sola desde `render()`, sin pantalla de arranque ni
+    // botón: no hay ningún click del usuario detrás. Hasta v=254 el
+    // `onProgress` que había acá servía para mostrar la barra MIENTRAS
+    // `getBestAvailableLikes()` bajaba la biblioteca entera con el caché frío
+    // —~190 peticiones a `/me/tracks`—, así que entrar a `#sin-clasificar` era
+    // una de las formas de pegar el 429 sin haber pedido nada. Desde v=255 la
+    // función solo lee el caché (ver `api.js`), y acá no se le pide otra cosa.
+    const { items: likes } = await getBestAvailableLikes();
     if (!ruta.vigente()) return;
+
+    // Sin likes en caché no hay cruce posible, y seguir costaría carísimo: lo
+    // que viene abajo es `getAllUserPlaylists()` + `scanPlaylists()` sobre
+    // TODAS las playlists propias, para terminar pintando una lista vacía.
+    if (likes.length === 0) {
+      document.getElementById('sc-content').innerHTML = tarjetaSinLikes('tus listas de reproducción');
+      return;
+    }
 
     // Ocultas desde la playlist de Spotify. En segundo plano: si tarda, la vista
     // arranca con el caché local y se repinta al llegar.

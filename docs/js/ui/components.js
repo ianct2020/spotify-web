@@ -1,6 +1,6 @@
-import { openModal, closeTop } from './modal-stack.js?v=254';
-import { mountBottomHtml } from './bottom-layer.js?v=254';
-import { coverUrl } from '../util/cover-size.js?v=254';
+import { openModal, closeTop } from './modal-stack.js?v=255';
+import { mountBottomHtml } from './bottom-layer.js?v=255';
+import { coverUrl } from '../util/cover-size.js?v=255';
 
 function renderTrackRow(track, extra = '') {
   const art = coverUrl(track.album?.images, 'grande') || '';
@@ -395,4 +395,23 @@ function pageHeader({ title, right = '' } = {}) {
   `;
 }
 
-export { renderTrackRow, showProgress, hideProgress, progressController, isCancelled, confirmModal, typeConfirmModal, promptPlaylistName, alertModal, infoModal, PLAYLIST_NAME_MAX, escapeHtml, renderPlaylistGrid, bindPlaylistGrid, pageHeader };
+// La tarjeta que ve una vista cuando no hay me gusta en la caché local.
+//
+// ⚠️ Existe por lo que cambió v=255. Antes, con la caché fría,
+// `getBestAvailableLikes()` descargaba la biblioteca entera sola (~190
+// peticiones a `/me/tracks`), así que estas vistas nunca llegaban a tener cero
+// likes: esperaban minutos y después pintaban. Ahora la función solo lee, y sin
+// esta tarjeta el cruce daría una lista VACÍA con cara de respuesta buena
+// —«0 canciones sin reproducir» con 9.500 likes en Spotify—, que es peor que
+// tardar. La descarga sigue existiendo; se pide en el Dashboard.
+function tarjetaSinLikes(queCruza) {
+  return `
+    <div class="card" style="max-width:560px">
+      <p style="margin-bottom:12px">No hay me gusta en la caché local${queCruza ? `, y esta vista los cruza con ${escapeHtml(queCruza)}` : ''}.</p>
+      <p style="color:var(--color-text-secondary);font-size:13px;margin-bottom:16px">Cárgalos desde el Dashboard (o importa un JSON anterior) y vuelve aquí.</p>
+      <a class="btn btn-primary" href="#dashboard">Ir al Dashboard</a>
+    </div>
+  `;
+}
+
+export { renderTrackRow, showProgress, hideProgress, progressController, isCancelled, confirmModal, typeConfirmModal, promptPlaylistName, alertModal, infoModal, PLAYLIST_NAME_MAX, escapeHtml, renderPlaylistGrid, bindPlaylistGrid, pageHeader, tarjetaSinLikes };

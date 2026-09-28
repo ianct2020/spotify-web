@@ -1,6 +1,6 @@
-import { getAllUserPlaylists, getAllPlaylistItems, removePlaylistItemsAtPositions, getCurrentUserId, getBestAvailableLikes } from '../api.js?v=254';
-import { showProgress, hideProgress, progressController, isCancelled, typeConfirmModal, renderTrackRow, escapeHtml, renderPlaylistGrid, bindPlaylistGrid, pageHeader } from '../ui/components.js?v=254';
-import { showToast } from '../ui/toast.js?v=254';
+import { getAllUserPlaylists, getAllPlaylistItems, removePlaylistItemsAtPositions, getCurrentUserId, getBestAvailableLikes } from '../api.js?v=255';
+import { showProgress, hideProgress, progressController, isCancelled, typeConfirmModal, renderTrackRow, escapeHtml, renderPlaylistGrid, bindPlaylistGrid, pageHeader, tarjetaSinLikes } from '../ui/components.js?v=255';
+import { showToast } from '../ui/toast.js?v=255';
 
 let ownPlaylists = [];
 const LIKED_VIRTUAL_ID = '__liked_songs__';
@@ -164,6 +164,14 @@ async function analyzeLikedSongs() {
   try {
     const { items } = await getBestAvailableLikes();
     document.getElementById('liked-header-count').textContent = `${items.length.toLocaleString('es-ES')} tracks`;
+
+    // Sin caché, el análisis de abajo encuentra 0 URIs repetidos y pinta la
+    // insignia verde «Limpia»: la misma cara que una biblioteca sana. Ver
+    // `tarjetaSinLikes()`.
+    if (items.length === 0) {
+      document.getElementById('dedupe-analysis').innerHTML = tarjetaSinLikes('');
+      return;
+    }
 
     const groups = new Map();
     items.forEach(it => {

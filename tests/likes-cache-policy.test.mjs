@@ -15,7 +15,7 @@
 //   2. El parcial se lee con `idbGetCachedRaw` (no caduca).
 //   3. `clearPartial()` va DESPUÉS de que `saveLikes()` confirme `ok: true`.
 
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 
 let pasaron = 0, fallaron = 0;
 function ok(cond, nombre) {
@@ -144,11 +144,108 @@ ok(/console\.info\(`\[rate-limit\]/.test(espera),
   'el aviso del 429 sale por console.info (la extensión no captura warn)');
 ok(/avisarRateLimit\(/.test(espera), 'y se emite para que la interfaz lo pueda mostrar');
 
-// ── La pantalla de arranque no descarga nada ────────────────────────────────
+// ── Ninguna vista puede disparar la descarga de likes ───────────────────────
+//
+// ⚠️ ACÁ VIVÍA UN VERDE QUE CERTIFICABA LO CONTRARIO DE LO QUE PASABA, y vale
+// la pena dejar escrito cómo era, porque el error es fácil de repetir:
+//
+//   const startScreen = dash.slice(dash.indexOf('async function renderStartScreen'),
+//                                  dash.indexOf('async function refreshLastSyncLabel'));
+//   ok(/getBestAvailableLikes\(\{ allowFetch: false \}\)/.test(startScreen), …);
+//
+// El corte terminaba EXACTAMENTE en el nombre de la función que tenía el bug.
+// `renderStartScreen` no descargaba y el assert pasaba; tres líneas más abajo,
+// `refreshLastSyncLabel` —que `render()` llama ANTES— pedía
+// `getBestAvailableLikes()` a secas y se bajaba la biblioteca entera. El test
+// vigilaba a la vecina. Misma familia que el doble de la API que aceptaba
+// `limit=20` (v=252): el verde tapaba justo la parte que fallaba.
+//
+// Por eso ahora NO se recorta ninguna función. Se barre `src/js` entero y se
+// mira cada llamada, venga de donde venga. Una vista nueva entra al barrido por
+// el solo hecho de llamar a la función, igual que «Barrer vistas» saca su lista
+// de `rutasRegistradas()` en vez de un array a mano.
+const raiz = new URL('../src/js/', import.meta.url);
+function jsDeSrc(dir = raiz) {
+  const fuera = [];
+  for (const e of readdirSync(dir, { withFileTypes: true })) {
+    const u = new URL(e.name + (e.isDirectory() ? '/' : ''), dir);
+    if (e.isDirectory()) fuera.push(...jsDeSrc(u));
+    else if (e.name.endsWith('.js')) fuera.push([e.name, u]);
+  }
+  return fuera;
+}
+
+// El defecto. Invertirlo es lo único que cierra la clase entera: con
+// `allowFetch = true` los 21 llamadores que no pasan nada vuelven a descargar.
+const firma = /async function getBestAvailableLikes\(\{[^}]*allowFetch = (true|false)/.exec(api);
+ok(!!firma, 'getBestAvailableLikes sigue teniendo el parámetro allowFetch');
+ok(firma && firma[1] === 'false',
+  'getBestAvailableLikes NO descarga por defecto (allowFetch = false)');
+
+// Y que la lectura del caché vaya por el lector único, no por una cuarta copia.
+const gbal = api.slice(api.indexOf('async function getBestAvailableLikes'),
+                       api.indexOf('async function getLikesPartialInfo'));
+ok(/await leerLikesCacheados\(\)/.test(gbal),
+  'getBestAvailableLikes lee el caché por leerLikesCacheados(), no a mano');
+ok(!/idbGetCachedRaw\(LIKES_CACHE_KEY\)/.test(gbal),
+  'y ya no repite el idbGetCachedRaw() que la volvía la cuarta lectura del caché');
+
+// El barrido: nadie pide la descarga por esta puerta. Quien quiere bajar likes
+// de verdad usa getAllLikedTracks() (sync, versions, smart, zombies, orphans,
+// recs y los botones del Dashboard / by-genre / by-artist), siempre tras un
+// click y con barra de progreso.
+let llamadas = 0, archivosConLlamada = 0;
+const culpables = [];
+for (const [nombre, url] of jsDeSrc()) {
+  const src = sinComentarios(readFileSync(url, 'utf8'));
+  const aqui = [...src.matchAll(/getBestAvailableLikes\(([^)]*)/g)]
+    .filter(m => !/^async function/.test(m[0]));
+  if (!aqui.length) continue;
+  archivosConLlamada++;
+  for (const m of aqui) {
+    if (/allowFetch = /.test(m[1])) continue;   // la definición, no una llamada
+    llamadas++;
+    if (/allowFetch\s*:\s*true/.test(m[1])) culpables.push(`${nombre}: ${m[0].slice(0, 60)}`);
+  }
+}
+ok(culpables.length === 0,
+  `ningún llamador de src/js pide allowFetch: true${culpables.length ? ' — ' + culpables.join(' · ') : ''}`);
+
+// ⚠️ Guarda del guarda. Sin esto, el día que alguien "optimice" el barrido a un
+// archivo o a un recorte, los asserts de arriba pasan a mirar casi nada y
+// siguen dando verde — que es la falla que este bloque vino a corregir.
+ok(archivosConLlamada >= 15,
+  `el barrido llega a los archivos que llaman (${archivosConLlamada}, se esperan 15 o más)`);
+ok(llamadas >= 20,
+  `y a las llamadas de verdad (${llamadas}, se esperan 20 o más)`);
+
+// El agujero concreto, nombrado: `render()` de #dashboard llama a
+// refreshLastSyncLabel() ANTES de renderStartScreen, así que esa función es la
+// que decide si entrar al Dashboard descarga o no.
 const dash = sinComentarios(readFileSync(new URL('../src/js/features/dashboard.js', import.meta.url), 'utf8'));
-const startScreen = dash.slice(dash.indexOf('async function renderStartScreen'), dash.indexOf('async function refreshLastSyncLabel'));
-ok(/getBestAvailableLikes\(\{ allowFetch: false \}\)/.test(startScreen),
-  'renderStartScreen lee la caché sin disparar la descarga de ~190 peticiones');
+const iRefresh = dash.indexOf('refreshLastSyncLabel()');
+const iStart = dash.indexOf('renderStartScreen()');
+ok(iRefresh > -1 && iStart > -1 && iRefresh < iStart,
+  'render() sigue llamando a refreshLastSyncLabel ANTES que a renderStartScreen');
+const etiqueta = dash.slice(dash.indexOf('async function refreshLastSyncLabel'),
+                            dash.indexOf('function formatRelativeTime'));
+// ⚠️ El `>= 0` no es ruido: sin él, restaurar el bug —volver al
+// `if (!ts || items.length === 0)` de después del await— hace que `indexOf`
+// devuelva -1, y -1 es MENOR que cualquier posición, así que el assert pasaba
+// con el bug puesto. Comprobado restaurándolo. Un orden entre dos posiciones no
+// dice nada hasta que las dos existen.
+const posTs = etiqueta.indexOf('if (!ts)');
+const posLikes = etiqueta.indexOf('getBestAvailableLikes');
+ok(posTs >= 0 && posLikes >= 0 && posTs < posLikes,
+  'refreshLastSyncLabel corta por el timestamp ANTES de pedir los likes');
+
+// #sin-clasificar era el único llamador cableado para la descarga (le pasaba un
+// onProgress), y se carga sola desde render(), sin ningún click detrás.
+const sc = sinComentarios(readFileSync(new URL('../src/js/features/sin-clasificar.js', import.meta.url), 'utf8'));
+ok(/const \{ items: likes \} = await getBestAvailableLikes\(\);/.test(sc),
+  '#sin-clasificar ya no le pide a getBestAvailableLikes que descargue');
+ok(/if \(likes\.length === 0\)/.test(sc),
+  'y con la caché vacía corta antes del escaneo de todas las playlists propias');
 
 // ── El guarda multiusuario borra las claves QUE EXISTEN ─────────────────────
 //

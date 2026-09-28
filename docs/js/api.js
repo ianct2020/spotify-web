@@ -1,9 +1,9 @@
-import { getValidToken, refreshAccessToken } from './auth.js?v=254';
-import { cacheGet, cacheGetRaw, cacheGetTimestamp, cacheSet, cacheClear, prefKey, migratePrefKey } from './storage.js?v=254';
-import { idbDel, idbDelByPrefix, idbGetCached, idbGetCachedRaw, idbGetTimestamp, idbSetCached } from './idb.js?v=254';
-import { OWNER_KEY_LIST } from './history-keys.js?v=254';
-import { showToast } from './ui/toast.js?v=254';
-import { artistIsSame, limpiaParaQuery } from './util/track-match.js?v=254';
+import { getValidToken, refreshAccessToken } from './auth.js?v=255';
+import { cacheGet, cacheGetRaw, cacheGetTimestamp, cacheSet, cacheClear, prefKey, migratePrefKey } from './storage.js?v=255';
+import { idbDel, idbDelByPrefix, idbGetCached, idbGetCachedRaw, idbGetTimestamp, idbSetCached } from './idb.js?v=255';
+import { OWNER_KEY_LIST } from './history-keys.js?v=255';
+import { showToast } from './ui/toast.js?v=255';
+import { artistIsSame, limpiaParaQuery } from './util/track-match.js?v=255';
 
 const BASE = 'https://api.spotify.com/v1';
 const MIN_RETRY_WAIT = 5000;
@@ -20,9 +20,12 @@ const DEFAULT_MAX_RETRIES = 5;
 // (para que la caché vieja, guardada con un slimTrack sin album_type, dejara de
 // usarse) y el resultado fue que getBestAvailableLikes devolvía source:"empty":
 // la clave nueva no existía y nada dispara un fetch desde #listened, así que la
-// vista quedaba con 0 likes y "Sin registrar (0)". La caché ya tiene TTL de 24h
-// y se renueva sola; hasta entonces releaseKind() en listened.js deduce el tipo
-// y lo avisa con "tipo estimado".
+// vista quedaba con 0 likes y "Sin registrar (0)". ⚠️ Este comentario decía
+// hasta v=255 que «la caché ya tiene TTL de 24 h y se renueva sola»: es falso
+// desde v=187, cuando `saveLikes()` pasó a escribirla SIN caducidad (ver ahí).
+// La frescura la da `syncLikesIncremental()`, que compara el total en UNA
+// petición. Mientras tanto releaseKind() en listened.js deduce el tipo y lo
+// avisa con "tipo estimado".
 const LIKES_CACHE_KEY = 'all_liked_tracks';
 const PLAYLISTS_CACHE_KEY = 'all_user_playlists';
 const CACHE_TTL_MIN = 60 * 24;
@@ -631,17 +634,33 @@ async function syncLikesIncremental(onProgress) {
 // mostraba como "100 likes" — el bug que vio Ian al abrir #skips mientras
 // #sin-clasificar escaneaba. Ahora el parcial no se sirve nunca: solo existe
 // para que paginateAll pueda retomar la descarga donde la dejó.
-async function getBestAvailableLikes({ onProgress, signal, allowFetch = true } = {}) {
+//
+// ⚠️ `allowFetch` es `false` POR DEFECTO, y la razón es el censo de v=255.
+//
+// Hasta v=254 el defecto era `true`: 24 llamadores, 21 de ellos sin pasar nada,
+// y CERO de esos 21 querían una descarga. Se comprobó uno por uno. Las vistas
+// que bajan la biblioteca a propósito ya no pasan por acá: usan
+// `getAllLikedTracks()` (sync.js, versions.js, smart.js, zombies.js,
+// orphans.js, recommendations.js, y los botones de by-genre, by-artist y el
+// Dashboard), siempre detrás de un click y con barra de progreso.
+//
+// Los 21 estaban escritos dando por sentado lo contrario de lo que pasaba:
+// `by-artist.js` pinta «Leyendo caché local…» y después decide, `search-likes`
+// contesta «No hay likes cacheados todavía», `handleExportCsv` dice «Cárgalos
+// primero». Con el defecto en `true` ninguno leía: los tres disparaban ~190
+// peticiones a `/me/tracks` con la caché fría, que es lo que pega el 429.
+//
+// Invertir el defecto es lo único que cierra la clase entera. Parchear llamador
+// por llamador deja armada la trampa para la vista número 25, que se va a
+// escribir igual que las otras 21: sin pasar nada.
+async function getBestAvailableLikes({ onProgress, signal, allowFetch = false } = {}) {
   await migrateLikesFromLocalStorage();
 
-  const full = await idbGetCachedRaw(LIKES_CACHE_KEY);
-  if (Array.isArray(full) && full.length > 0) {
-    return { items: full, source: 'full' };
-  }
-  const legacyFull = cacheGetRaw(LIKES_CACHE_KEY);
-  if (Array.isArray(legacyFull) && legacyFull.length > 0) {
-    return { items: legacyFull, source: 'full' };
-  }
+  // Por `leerLikesCacheados()` y no a mano: esta función era la CUARTA copia de
+  // esa lectura, justo lo que el comentario de esa otra advertía que volvería a
+  // pasar. Ver arriba.
+  const full = await leerLikesCacheados();
+  if (full) return { items: full, source: 'full' };
 
   if (!allowFetch) return { items: [], source: 'empty' };
 
