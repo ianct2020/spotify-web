@@ -1052,12 +1052,32 @@ ver los avisos del router.
 
 ⚠️ **El `curl` del despliegue NO prueba que el navegador tenga la versión
 nueva.** Mordió el 2026-08-29: `curl` devolvía `app.js?v=174` y la pestaña
-seguía corriendo v=173, con los caches y la IndexedDB ya borrados. El culpable
-es el **service worker** (`fonoteca-sw-v1`), que sirve `index.html` de su propio
-cache y se re-registra en cada carga. Para verificar de verdad en el navegador:
-`navigator.serviceWorker.getRegistrations()` → `unregister()` en todas, borrar
-`caches`, y recargar **con un query distinto** (`index.html?frio=1`). El `curl`
-prueba que GitHub Pages publicó; no prueba qué está ejecutando el cliente.
+seguía corriendo v=173, con los caches y la IndexedDB ya borrados.
+⚠️ **La causa que se escribió entonces —«el service worker sirve `index.html` de
+su propio cache»— estaba MAL** (corregido el 2026-09-29, v=257). El SW navega
+red-primero, pero ese `fetch` pasa por la **caché HTTP del navegador**, y GitHub
+Pages manda `cache-control: max-age=600` en `index.html`. Medido en Chrome contra
+un servidor con esas cabeceras **y en producción**: tras un deploy, una
+navegación normal muestra el index VIEJO con 0 peticiones al servidor
+(`transferSize: 0`, `deliveryType: "cache"`), **con service worker o sin él**; F5
+lo revalida. Para verificar de verdad en el navegador: recargar con **F5** o con
+un query distinto (`index.html?frio=N`, URL nueva = otra clave de caché HTTP) y
+leer `app.js?v=` desde dentro de la página. Desregistrar el SW y borrar la Cache
+API **no hace falta para eso** (en v=257 un F5 sin desregistrar trajo la versión
+nueva); hasta que un segundo despliegue lo confirme, hacerlo no daña. Lo que
+nunca se toca es la IndexedDB. El `curl` prueba que GitHub Pages publicó; no
+prueba qué está ejecutando el cliente.
+
+Aparte, desde v=257 el nombre de la caché del SW lleva la versión
+(`fonoteca-sw-v<N>`, lo estampa `build.sh`) y su `activate` limpia las de los
+despliegues anteriores: hasta v=256 valía siempre `fonoteca-sw-v1` y esa limpieza
+no corrió nunca. Eso arregla la acumulación, **no** el `index.html` viejo de arriba.
+
+**Tests y antes de pushear**: `npm test` corre las 33 suites de `tests/*.test.mjs`
+(un proceso por suite, sale con 1 si alguna falla; `-- --orden=inverso|azar:N` y
+`-- --paralelo` para cazar dependencias de orden) y `npm run prepush` comprueba,
+sin modificar nada, sintaxis, tests, `docs/` al día, versiones parejas y que no
+haya nada personal en el staging.
 
 ## `#covers` estuvo ROTA nueve versiones — `a.sources.has is not a function` (RESUELTO en v=176)
 > ⚠️ **Corregido el 2026-08-30**: esta sección decía «PENDIENTE... sin
