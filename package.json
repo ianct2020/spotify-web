@@ -6,6 +6,8 @@
   "scripts": {
     "dev": "node scripts/dev-server.mjs",
     "build": "bash build.sh",
+    "test": "node scripts/correr-tests.mjs",
+    "prepush": "bash scripts/antes-de-pushear.sh",
     "deploy": "npm run build && cd ~/spotify-web && git add docs/ && git commit -m 'chore: rebuild docs' && git push"
   }
 }

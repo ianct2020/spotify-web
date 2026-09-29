@@ -24,7 +24,7 @@
 // trunca él mismo, y solo al desbordar en hover pasa a `width: max-content`
 // para poder trasladarse.
 
-import { animationsEnabled } from './reveal.js?v=256';
+import { animationsEnabled } from './reveal.js?v=257';
 
 // Velocidad del recorrido, en píxeles por segundo. El ciclo dura lo que tarde
 // el texto en recorrer su propio sobrante a esta velocidad, más las pausas de

@@ -9,7 +9,9 @@ cp -r src/* docs/
 touch docs/.nojekyll
 
 # Sacar el número de versión desde index.html (ej: app.js?v=52 -> 52)
-V=$(grep -oE 'app\.js\?v=[0-9]+' docs/index.html | head -1 | grep -oE '[0-9]+$')
+# `|| true`: con `set -e` un grep sin resultado mataba el script acá, en silencio,
+# y la rama de WARN de más abajo era código muerto.
+V=$(grep -oE 'app\.js\?v=[0-9]+' docs/index.html | head -1 | grep -oE '[0-9]+$') || true
 
 if [ -n "$V" ]; then
   # Reescribe:  from './x.js'  ->  from './x.js?v=V'   (y ../, y comillas simples/dobles)
@@ -27,15 +29,16 @@ if [ -n "$V" ]; then
   # No era teórico: `callback.html`, la vuelta del login de Spotify, arrastró
   # `?v=25` hasta v=234, unas 200 versiones. Sus cuatro URLs quedaban
   # congeladas, y el service worker las sirve con stale-while-revalidate: la
-  # nota de arriba de `sw.js` («cada deploy son URLs nuevas y nunca se sirve JS
-  # viejo») valía para todo MENOS para esa página.
+  # nota que había entonces arriba de `sw.js` («cada deploy son URLs nuevas y
+  # nunca se sirve JS viejo») valía para todo MENOS para esa página.
   #
   # Se versiona `.css` y `.js` (lo mismo que hace `index.html` a mano), tanto en
   # `href=`/`src=` como en los `import`/`from` de los <script type="module">
   # inline. Queda fuera lo externo (el `https://` del CDN lleva `:`, que el
-  # patrón excluye), el favicon y el manifest. `sw.js` no se toca acá: se
-  # registra desde `app.js` sin `?v=` a propósito, porque el navegador lo
-  # actualiza comparando bytes.
+  # patrón excluye), el favicon y el manifest. `sw.js` no lleva `?v=` en su URL:
+  # se registra desde `app.js` sin él a propósito, porque el navegador lo
+  # actualiza comparando bytes. Lo que sí se le estampa es el nombre de su
+  # caché, más abajo.
   #
   # `index.html` entra también, y es idempotente: la V sale de su propio
   # `app.js?v=`, ya leída más arriba. El efecto es que bumpear ese número a mano
@@ -49,5 +52,29 @@ if [ -n "$V" ]; then
 else
   echo "WARN: no pude detectar la versión en index.html — imports sin versionar"
 fi
+
+# El service worker: se le estampa la versión en el NOMBRE de su caché.
+#
+# Hasta v=256 `sw.js` tenía `const CACHE = 'fonoteca-sw-v1'` fijo, y su
+# `activate` limpia "las cachés que no sean CACHE": como CACHE nunca cambió, esa
+# limpieza no corrió jamás y las copias de cada despliegue se acumularon en la
+# Cache API de cada navegador. Con el nombre atado al `?v=` cada deploy cambia
+# los bytes de sw.js, el navegador instala el SW nuevo y su `activate` borra las
+# cachés anteriores.
+#
+# En `src/sw.js` la constante vale 'fonoteca-sw-dev' (marcador). Acá se
+# reemplaza, y el build FALLA si no pudo: un sw.js que saliera con el marcador
+# no bumpearía nunca, que es exactamente el bug que esto viene a cerrar. Por eso
+# tampoco hay rama de WARN como la de los imports: sin versión no se publica.
+if [ -z "$V" ]; then
+  echo "ERROR: sin versión en index.html no puedo estampar el service worker" >&2
+  exit 1
+fi
+sed -i -E "s#^(const CACHE = 'fonoteca-sw-)[^']*(';)#\1v$V\2#" docs/sw.js
+if ! grep -qE "^const CACHE = 'fonoteca-sw-v$V';" docs/sw.js; then
+  echo "ERROR: no encontré 'const CACHE = ...' en sw.js para estampar v$V" >&2
+  exit 1
+fi
+echo "Service worker: CACHE = fonoteca-sw-v$V"
 
 echo "Build OK → docs/"
