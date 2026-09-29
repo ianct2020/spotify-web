@@ -1071,8 +1071,13 @@ lo revalida. Para verificar de verdad en el navegador: recargar con **F5** o con
 un query distinto (`index.html?frio=N`, URL nueva = otra clave de caché HTTP) y
 leer `app.js?v=` desde dentro de la página. Desregistrar el SW y borrar la Cache
 API **no hace falta para eso** (en v=257 un F5 sin desregistrar trajo la versión
-nueva); hasta que un segundo despliegue lo confirme, hacerlo no daña. Lo que
-nunca se toca es la IndexedDB. El `curl` prueba que GitHub Pages publicó; no
+nueva). **Confirmado en el deploy de v=258** (2026-09-29, pestaña de Ian):
+navegación normal a los 17 s de publicar → v=257; otra pasados 10 min desde la
+última descarga del index → v=258 sin F5 ni `?frio`, y el SW nuevo limpió solo la
+Cache API vieja. O sea: **F5, `?frio=N` o esperar 10 min**; nada más. Lo que
+nunca se toca es la IndexedDB. ⚠️ Y **Pages ignora el query**: `x.js?v=257`
+devuelve el archivo ACTUAL, así que una pestaña vieja mezcla módulos nuevos con
+viejos en vez de dar 404. El `curl` prueba que GitHub Pages publicó; no
 prueba qué está ejecutando el cliente.
 
 Aparte, desde v=257 el nombre de la caché del SW lleva la versión
