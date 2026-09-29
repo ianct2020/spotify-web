@@ -182,6 +182,13 @@ arreglado el import):
 - Las pistas de verdad: **750-1.220 ms** para un álbum frío — `/search` (~590-780 ms)
   para resolver el id + `/albums/{id}/tracks` (~460-500 ms). Con el id ya
   memoizado y los tracks en IDB baja a **60-90 ms**.
+  ⚠️ **Corregido el 2026-09-29**: ningún tracklist de álbum vive en IndexedDB,
+  ni el de esta ficha (se pide cada vez) ni el de W-Three (un `Map` en memoria,
+  `albumTracksCache`, que se vacía al recargar). Comprobado sobre las 1.049
+  claves de `kv`: no hay ningún prefijo de tracklist. Los 60-90 ms de arriba no
+  pueden venir de ahí; no se volvieron a medir.
+  **Y W-Three ya no resuelve por `/search` los álbumes sin picks** (v=258): el
+  id sale del caché de me gusta (`util/album-id-local.js`).
 - O sea que la espera real que tapa el esqueleto es **~1 segundo**, no 5. Lo de
   «5 segundos mostrando nada» que reportó Ian no es esta ficha: es el modal de
   álbum de `#listened` (otro código) o la vista entera de `#covers`, que con
@@ -1430,8 +1437,13 @@ no depender de auditar después). Por eso está copiada acá, que sí se carga s
 al trabajar en este repo. Ver el porqué en `fonoteca-migracion/CONTEXTO-TECNICO.md`,
 «una regla que no está donde se lee, no existe».
 
-Deploy completo: bumpear los **cuatro** `?v=` de `src/index.html` → `bash build.sh`
-→ `git add` archivo por archivo → commit → push. Y **el `curl` no verifica el
+Deploy completo: bumpear **`app.js?v=`** de `src/index.html` (desde v=235
+`build.sh` reescribe con ese número los demás `?v=`, las hojas incluidas, en
+todas las páginas de `docs/`, y desde v=257 también el nombre de caché de
+`sw.js`; los otros tres `?v=` de `src/index.html` pueden quedar atrasados) →
+`bash build.sh` → `npm test` → `git add` archivo por archivo → `npm run prepush`
+→ commit → push. **`npm run deploy` está desactivado a propósito** (v=258: hacía
+`git add docs/`). Y **el `curl` no verifica el
 despliegue**: ver la regla del service worker en `CONTEXTO-TECNICO.md`.
 **Un arreglo encima de un despliegue lleva su propio `?v=`**, aunque sean dos
 líneas: ver la sección de arriba.
