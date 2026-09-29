@@ -37,7 +37,7 @@ function ok(cond, nombre) {
 }
 
 // ── Un navegador de mentira, lo mínimo que usa sw.js ─────────────────────────
-function montarSW(codigoSW, cachesIniciales) {
+function montarSW(codigoSW, cachesIniciales, red = async () => { throw new Error('sin red'); }) {
   const almacen = new Map(cachesIniciales.map(n => [n, new Map([['/x', 'cuerpo']])]));
   const registro = { borradas: [], abiertas: [], claimed: 0, skipWaiting: 0, idb: 0 };
   const handlers = {};
@@ -56,7 +56,7 @@ function montarSW(codigoSW, cachesIniciales) {
   const indexedDB = new Proxy({}, { get: () => { registro.idb++; throw new Error('sw.js tocó indexedDB'); } });
   const ctx = vm.createContext({
     self, caches, indexedDB, location: { origin: 'https://ianct2020.github.io' },
-    URL, Response: class {}, fetch: async () => { throw new Error('sin red'); },
+    URL, Response: class {}, fetch: red,
   });
   vm.runInContext(codigoSW, ctx);
   return { handlers, almacen, registro, ctx };
@@ -181,6 +181,29 @@ ok(/self\.skipWaiting\(\)/.test(swFuente), 'install sigue llamando a skipWaiting
   ok(respondio === 0, 'la API de Spotify (cross-origin) y los que no son GET no se interceptan');
   sw.handlers.fetch(ev('https://ianct2020.github.io/spotify-web/js/app.js?v=257'));
   ok(respondio === 1, 'un estático same-origin sí lo atiende el SW');
+}
+
+// ── 4. Las navegaciones con query no se guardan (v=258) ───────────────────────
+console.log('\nUna navegación con query no se guarda en la Cache API');
+{
+  const respuesta = { ok: true, clone() { return { copia: true }; } };
+  const sw = montarSW(swV257, [], async () => respuesta);
+  const puts = [];
+  sw.ctx.caches.open = async () => ({ put: (req) => { puts.push(req.url); } });
+  const navegar = async (url) => {
+    let p;
+    sw.handlers.fetch({ request: { url, method: 'GET', mode: 'navigate' }, respondWith: (x) => { p = x; } });
+    return await p;
+  };
+  const cb = 'https://ianct2020.github.io/spotify-web/callback.html?code=AQB-secreto&state=xyz';
+  const r1 = await navegar(cb);
+  ok(r1 === respuesta, 'la navegación a callback.html?code=… se contesta igual, desde la red');
+  ok(!puts.includes(cb), 'pero NO se guarda: el código PKCE no queda en la Cache API');
+  await navegar('https://ianct2020.github.io/spotify-web/index.html?frio=3');
+  ok(puts.length === 0, 'tampoco el ?frio=N del ritual');
+  await navegar('https://ianct2020.github.io/spotify-web/');
+  ok(puts.length === 1 && puts[0] === 'https://ianct2020.github.io/spotify-web/',
+    'sin query sí se guarda (el modo offline sigue teniendo su copia)');
 }
 
 console.log(`\n  ${pasaron} asserts OK, ${fallaron} fallos`);

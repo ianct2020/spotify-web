@@ -2,11 +2,11 @@
 // por álbum). Muestra qué álbumes ya tienen picks, cuántos, y cuáles te faltan.
 // Ordenado por álbumes más escuchados primero para priorizar tu tiempo.
 
-import { spotifyFetch, getAllPlaylistItems, getAllUserPlaylists, addTracksToPlaylist, removeTracksFromPlaylist, reorderPlaylistItems, getCachedPlaylistItems, updatePlaylistItemsCache, getBestAvailableLikes } from '../api.js';
+import { spotifyFetch, getAllPlaylistItems, getAllUserPlaylists, addTracksToPlaylist, removeTracksFromPlaylist, reorderPlaylistItems, getCachedPlaylistItems, updatePlaylistItemsCache, getBestAvailableLikes, removeLikedTracks, checkLibraryContains } from '../api.js';
 import { vigilarRuta } from '../util/vigencia-ruta.js';
 import { patchPlaylistItems, buildCachedItem } from '../util/playlist-cache-patch.js';
 import { loadHistoryStats, loadListenedAlbums, isOwner, ownerLockedMessage } from './history-data.js';
-import { escapeHtml, pageHeader } from '../ui/components.js';
+import { escapeHtml, pageHeader, confirmModal } from '../ui/components.js';
 import { showToast } from '../ui/toast.js';
 import { wireHoverMarquee, hoverMarqueeSpan } from '../ui/hover-marquee.js';
 import { openModal, closeById, closeModal } from '../ui/modal-stack.js';
@@ -24,6 +24,10 @@ import { insercionPorPuntero, moverA, indicadorPara } from '../util/reorder-drop
 import { prefKey, migratePrefKey } from '../storage.js';
 import { iconoPlay, iconoPausa, iconoPuntos, iconoOjo, iconoOjoTachado } from '../ui/icons.js';
 import { pedirYCachear, SOLO_CON_CONTENIDO } from '../util/cache-solo-exitos.js';
+import { indiceIdsDeAlbum, idLocalDelAlbum } from '../util/album-id-local.js';
+import { openPlaylistPicker } from '../ui/playlist-picker.js';
+import { getOwnPlaylists, addUrisToPlaylists, toastAddResult, listaNombres } from '../util/playlist-add.js';
+import { borrarLikesVerificado } from '../util/borrado-verificado.js';
 
 const LS_KEY_ID = 'wthree_playlist_id';
 const LS_KEY_NAME = 'wthree_playlist_name';
@@ -89,8 +93,12 @@ function ensureLikedIndex() {
     const ids = new Set();
     const nameKeys = new Set();
     const albumKeys = new Set();
+    let albumIds = new Map();
     try {
       const { items } = await getBestAvailableLikes();
+      // albumKey → id de Spotify: lo que evita `/search` al abrir un álbum sin
+      // picks (ver util/album-id-local.js).
+      albumIds = indiceIdsDeAlbum(items);
       for (const it of (items || [])) {
         const t = it?.track;
         if (!t) continue;
@@ -108,9 +116,9 @@ function ensureLikedIndex() {
     // los viera nunca.
     if (ids.size === 0) {
       likedIndexPromise = null;
-      return { ids, nameKeys, albumKeys };
+      return { ids, nameKeys, albumKeys, albumIds };
     }
-    likedIndex = { ids, nameKeys, albumKeys };
+    likedIndex = { ids, nameKeys, albumKeys, albumIds };
     return likedIndex;
   })();
   return likedIndexPromise;
@@ -693,6 +701,7 @@ async function openAlbumModal(a) {
         <div style="text-align:center;padding:24px;grid-column:1/-1"><div class="spinner"></div></div>
       </div>
       <div class="wt-footer">
+        <button class="btn btn-danger" id="wt-unlike" hidden></button>
         <button class="btn btn-primary" id="wt-save" disabled>Cargando…</button>
       </div>
     </div>
@@ -728,10 +737,12 @@ async function openAlbumModal(a) {
   const saveBtn = overlay.querySelector('#wt-save');
   const metaEl = overlay.querySelector('#wt-meta');
 
-  const tracks = await fetchAlbumTracks(a);
+  const { tracks, motivo } = await fetchAlbumTracks(a);
   if (!tracks.length) {
     metaEl.textContent = `${a.picks.length} en w-three`;
-    body.innerHTML = `<p style="color:var(--color-text-muted);text-align:center;padding:16px;grid-column:1/-1">No pude cargar las pistas del álbum desde Spotify. Ya está: ${a.picks.length} pick${a.picks.length === 1 ? '' : 's'}.</p>`;
+    // El motivo va EN PANTALLA, con el error crudo: la extensión de Chrome no
+    // captura `console.warn` y un «no pude» a secas no se puede diagnosticar.
+    body.innerHTML = `<p style="color:var(--color-text-muted);text-align:center;padding:16px;grid-column:1/-1">No pude cargar las pistas del álbum: ${escapeHtml(motivo || 'sin motivo')}. Ya está: ${a.picks.length} pick${a.picks.length === 1 ? '' : 's'}.</p>`;
     saveBtn.textContent = 'Cerrar';
     saveBtn.disabled = false;
     saveBtn.onclick = () => closeById(modalId);
@@ -772,6 +783,12 @@ async function openAlbumModal(a) {
       plays: playsByTrackName.get(norm) || 0,
       picked: pickIds.has(t.id),
       liked: liked.ids.has(t.id) || liked.nameKeys.has(likeNameKey(t.name, t.artists?.[0]?.name || a.artist)),
+      // Solo ESTE id se puede quitar de me gusta. El ♥ de arriba también se
+      // enciende cuando lo likeado es otra versión del tema (cruce por nombre),
+      // y borrar este id ahí no borraría nada: el DELETE pasa, la verificación
+      // dice «no está» y el like de verdad sigue en la cuenta.
+      likedById: liked.ids.has(t.id),
+      artists: (t.artists || []).map(x => x?.name).filter(Boolean),
     };
   });
   const likedCount = trackData.filter(t => t.liked).length;
@@ -802,9 +819,10 @@ async function openAlbumModal(a) {
             <input type="checkbox" class="wthree-track-check" data-id="${t.id}" data-uri="${t.uri}" data-name="${escapeHtml(t.name)}" ${t.picked ? 'checked' : ''}>
             <span class="wthree-track-num">${i + 1}</span>
             <span class="wthree-track-name">${escapeHtml(t.name)}</span>
-            <span class="wthree-track-like" ${t.liked ? `title="Ya está en tus me gusta" aria-label="En me gusta"` : 'aria-hidden="true"'}>${t.liked ? HEART_SVG : ''}</span>
+            ${celdaCorazon(t)}
             <span class="wthree-track-plays">${t.plays > 0 ? t.plays : ''}</span>
             <button type="button" class="wt-play-btn" data-play-id="${t.id}" data-play-name="${escapeHtml(t.name)}" title="Preview 30s" aria-label="Preview de ${escapeHtml(t.name)}">${iconoPlay(12)}</button>
+            <button type="button" class="wt-add-btn" data-add-id="${t.id}" title="Añadir a una playlist" aria-label="Añadir «${escapeHtml(t.name)}» a una playlist">+</button>
           </label>
         `).join('')}
       </div>
@@ -817,6 +835,9 @@ async function openAlbumModal(a) {
 
   saveBtn.textContent = 'Guardar cambios';
   saveBtn.disabled = false;
+
+  wireAnadirAPlaylist(body, trackData, a);
+  wireQuitarLikes(overlay, body, trackData, a, metaEl);
 
   const orderPanel = overlay.querySelector('#wt-order-panel');
 
@@ -1037,34 +1058,199 @@ async function openAlbumModal(a) {
   };
 }
 
+// ── Filas del tracklist: añadir a playlist y quitar de me gusta (v=258) ─────
+
+// El ♥ de la fila. Hasta v=257 era un <span> que solo pintaba el SVG: no
+// escribía nada. Ahora, si el like es de ESTA pista, es un botón que la MARCA
+// para quitarla; el borrado se confirma al final, en lote, con el número en el
+// cartel. No es un toggle instantáneo a propósito: esto borra el like de la
+// cuenta de Spotify y no hay papelera.
+function celdaCorazon(t) {
+  if (t.likedById) {
+    return `<button type="button" class="wthree-track-like wt-unlike-btn" data-unlike-id="${t.id}" title="En tus me gusta · haz clic para marcarla y quitarla" aria-label="Marcar «${escapeHtml(t.name)}» para quitarla de me gusta" aria-pressed="false">${HEART_SVG}</button>`;
+  }
+  if (t.liked) {
+    return `<span class="wthree-track-like" title="Tienes otra versión de este tema en me gusta" aria-label="Otra versión en me gusta">${HEART_SVG}</span>`;
+  }
+  return '<span class="wthree-track-like" aria-hidden="true"></span>';
+}
+
+// «+» → el picker compartido (`ui/playlist-picker.js`), el mismo de
+// #zero-plays, #sin-clasificar, #versions y descubrir. NO se escribe otro:
+// cuando este repo duplica algo, diverge en silencio.
+function wireAnadirAPlaylist(body, trackData, a) {
+  body.querySelectorAll('.wt-add-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      // La fila es un <label>: sin preventDefault el clic tilda el pick (v=164).
+      e.preventDefault();
+      e.stopPropagation();
+      const t = trackData.find(x => x.id === btn.dataset.addId);
+      if (!t?.uri) { showToast('Esta pista no tiene URI de Spotify', 'error'); return; }
+      getOwnPlaylists().then(todas => {
+        // La playlist de picks NO se ofrece: un pick entra por la casilla y
+        // «Guardar cambios», que es quien sabe de posiciones y de orden. Por el
+        // picker entraría al final, sin orden, y el modal no se enteraría.
+        const playlists = todas.filter(p => p.id !== playlistId);
+        openPlaylistPicker({
+          id: 'wt-add-picker',
+          subtitle: `${t.name} — ${a.artist}`,
+          playlists,
+          onReload: async () => (await getOwnPlaylists({ force: true })).filter(p => p.id !== playlistId),
+          onConfirm: async (elegidas, { setStatus } = {}) => {
+            const res = await addUrisToPlaylists([t.uri], elegidas, {
+              appendItems: [{ id: t.id, uri: t.uri, name: t.name, artists: t.artists.map(name => ({ name })) }],
+              namesByUri: new Map([[t.uri, t.name]]),
+              onStatus: setStatus,
+            });
+            toastAddResult(res, { what: `«${t.name}»` });
+            marcarAnadida(btn, t, res);
+          },
+        });
+      }).catch(err => showToast('No se pudieron cargar tus playlists: ' + err.message, 'error'));
+    });
+  });
+}
+
+// La fila dice dónde está, sin recargar nada: lo que entró y lo que ya estaba
+// cuentan igual (la canción ESTÁ en esa playlist); lo que falló, no.
+function marcarAnadida(btn, t, res) {
+  if (!btn.isConnected) return;
+  const nombres = [...(res.ok || []), ...(res.skipped || []).map(x => x.playlist)]
+    .map(p => p?.name).filter(Boolean);
+  if (!nombres.length) return;
+  t.anadidaA = [...new Set([...(t.anadidaA || []), ...nombres])];
+  btn.classList.add('is-anadida');
+  btn.textContent = '✓';
+  btn.title = `En ${listaNombres(t.anadidaA)} · añadir a otra playlist`;
+  btn.closest('.wthree-track')?.classList.add('wthree-track-anadida');
+}
+
+function wireQuitarLikes(overlay, body, trackData, a, metaEl) {
+  const boton = overlay.querySelector('#wt-unlike');
+  const marcadas = new Set();
+
+  const pintarBoton = () => {
+    const n = marcadas.size;
+    boton.hidden = n === 0;
+    boton.disabled = false;
+    boton.textContent = n === 1 ? 'Quitar 1 de me gusta' : `Quitar ${n} de me gusta`;
+  };
+
+  body.querySelectorAll('.wt-unlike-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const id = btn.dataset.unlikeId;
+      if (marcadas.has(id)) marcadas.delete(id); else marcadas.add(id);
+      const on = marcadas.has(id);
+      btn.setAttribute('aria-pressed', String(on));
+      btn.title = on
+        ? 'Marcada para quitar de me gusta · haz clic para desmarcarla'
+        : 'En tus me gusta · haz clic para marcarla y quitarla';
+      btn.closest('.wthree-track')?.classList.toggle('wthree-track-sacar', on);
+      pintarBoton();
+    });
+  });
+
+  boton.onclick = async () => {
+    const filas = trackData.filter(t => marcadas.has(t.id));
+    const n = filas.length;
+    if (!n) return;
+    const detalle = n === 1
+      ? `«${escapeHtml(filas[0].name)}» — ${escapeHtml(a.artist)}`
+      : `${n} canciones de «${escapeHtml(a.name)}»`;
+    const ok = await confirmModal(
+      'Quitar de tus me gusta',
+      `Vas a quitar <strong>${detalle}</strong> de tus me gusta en Spotify. Esto BORRA el like: para recuperarlo hay que volver a darle al corazón a mano.`,
+      n === 1 ? 'Quitar de me gusta' : `Quitar las ${n}`,
+    );
+    if (!ok) return;
+    boton.disabled = true;
+    boton.textContent = 'Quitando…';
+    const ids = filas.map(t => t.id);
+    try {
+      // Borra Y verifica contra Spotify; si no se puede verificar, tira y no se
+      // dice «hecho» (util/borrado-verificado.js).
+      await borrarLikesVerificado(ids, {
+        origen: '#wthree',
+        removeLikedTracks,
+        checkLibraryContains,
+        guarda: 'ninguna',
+        motivoSinGuarda: 'no es un dedup: Ian quita de me gusta pistas concretas de un álbum que está clasificando, y quedarse sin ninguna copia es lo pedido',
+      });
+    } catch (err) {
+      showToast('No se pudieron quitar de me gusta: ' + err.message, 'error');
+      pintarBoton();
+      return;
+    }
+    showToast(n === 1 ? `«${filas[0].name}» ya no está en tus me gusta` : `${n} canciones fuera de tus me gusta`, 'success');
+
+    // La fila lo refleja al instante: sin corazón y sin botón.
+    for (const t of filas) {
+      t.liked = false;
+      t.likedById = false;
+      marcadas.delete(t.id);
+      const btn = body.querySelector(`.wt-unlike-btn[data-unlike-id="${t.id}"]`);
+      const fila = btn?.closest('.wthree-track');
+      fila?.classList.remove('wthree-track-sacar');
+      btn?.replaceWith(Object.assign(document.createElement('span'), { className: 'wthree-track-like' }));
+    }
+    pintarBoton();
+    const quedan = trackData.filter(t => t.liked).length;
+    metaEl.textContent = metaEl.textContent.replace(/ · ♥ \d+ en me gusta/, quedan ? ` · ♥ ${quedan} en me gusta` : '');
+
+    // `removeLikedTracks` ya sacó los ids del caché de likes; el índice en
+    // memoria se rearma desde ahí (sin red) y la lista de atrás se repinta:
+    // un álbum que se queda sin ningún like sale de la lista, como manda el
+    // filtro de siempre.
+    likedIndex = null;
+    likedIndexPromise = null;
+    await ensureLikedIndex();
+    const content = document.getElementById('wthree-content');
+    if (content) renderBuckets(content);
+  };
+}
+
+// Devuelve `{ tracks, motivo }`. `motivo` es null si hay pistas; si no, dice POR
+// QUÉ con el error crudo adentro, y el modal lo enseña (v=258). Hasta v=257 el
+// motivo del resolutor se tiraba en la desestructuración y el modal decía
+// «No pude cargar las pistas» a secas: un fallo de cuota y un «Spotify no tiene
+// ese disco» se veían idénticos.
 async function fetchAlbumTracks(a) {
   const key = albumKey(a.name, a.artist);
-  if (albumTracksCache.has(key)) return albumTracksCache.get(key);
+  if (albumTracksCache.has(key)) return { tracks: albumTracksCache.get(key), motivo: null };
 
-  // Si no tenemos albumId (el álbum estaba solo en el historial, no en la
-  // playlist) lo resuelve `util/album-resolver.js` — EL resolutor, el mismo que
-  // usa la ficha de álbum. Acá había un gemelo suyo mucho peor: `limit=1`,
-  // `items[0]` a ciegas, sin limpiar el apóstrofo y sin comparar nada después,
-  // o sea que el tracklist de este modal salía del primer resultado que Spotify
-  // quisiera devolver. Dos resolutores del mismo problema, y el que no
-  // verificaba era el que rompía.
-  const { id: albumId } = await resolveAlbumId(a);
+  // ⚠️ El id se busca PRIMERO en local (v=258). Los álbumes «Sin picks» no
+  // traen `albumId` y hasta v=257 iban siempre a `resolveAlbumId()`, o sea a
+  // `/search`: con esa cuota agotada —la de Ian, 24-27/09— el modal se quedaba
+  // 12-30 s en «Cargando…», gastaba 6 peticiones más de la cuota agotada y
+  // terminaba sin pistas. Todo álbum visible en la lista tiene al menos un me
+  // gusta (los que no, se esconden por defecto), y el me gusta trae el id.
+  // Ver util/album-id-local.js.
+  const liked = await ensureLikedIndex();
+  let albumId = idLocalDelAlbum(a, liked.albumIds);
+  let motivo = null;
+
+  // Si no está en local (un álbum sin likes, con el toggle «Mostrar los que no
+  // tienen likes» encendido), lo resuelve `util/album-resolver.js` — EL
+  // resolutor, el mismo que usa la ficha de álbum. Acá había un gemelo suyo
+  // mucho peor (`limit=1`, `items[0]` a ciegas): dos resolutores del mismo
+  // problema, y el que no verificaba era el que rompía (v=219).
   // Un fracaso de resolución NO se cachea: cachearlo lo convierte en «este
-  // álbum no tiene pistas» para el resto de la sesión, que es la misma trampa
-  // que tenía el memo de ids en la ficha de álbum.
-  if (!albumId) return [];
+  // álbum no tiene pistas» para el resto de la sesión.
+  if (!albumId) ({ id: albumId, motivo } = await resolveAlbumId(a));
+  if (!albumId) return { tracks: [], motivo: `no encontré el álbum en Spotify: ${motivo}` };
 
-  // ⚠️ Un fallo del tracklist tampoco se cachea (v=256). La nota de v=219 dice
-  // que «el fracaso no se memoiza», y era verdad **solo para la resolución del
-  // id**: tres líneas más abajo, el `catch` de este `fetch` hacía
-  // `albumTracksCache.set(key, [])`, así que un 429 o un corte de red dejaba el
-  // modal de este álbum sin pistas para el resto de la sesión, con la misma
-  // cara que un disco vacío.
+  // ⚠️ Un fallo del tracklist tampoco se cachea (v=256): el `catch` de este
+  // `fetch` hacía `albumTracksCache.set(key, [])`, así que un 429 o un corte de
+  // red dejaba el modal sin pistas el resto de la sesión. (Era una caché EN
+  // MEMORIA: nunca vivió en IndexedDB, así que recargar la página la vaciaba.)
   //
   // Un `[]` que Spotify conteste con un 200 tampoco se guarda: un álbum sin
   // pistas no existe, y volver a preguntarlo cuesta una petición como mucho,
   // una vez por álbum y por sesión.
-  return await pedirYCachear({
+  let fallo = null;
+  const tracks = await pedirYCachear({
     pedir: async () => {
       const res = await spotifyFetch(`/albums/${albumId}/tracks?limit=50`);
       return res?.items || [];
@@ -1072,8 +1258,16 @@ async function fetchAlbumTracks(a) {
     esResultado: SOLO_CON_CONTENIDO,
     guardar: items => albumTracksCache.set(key, items),
     siFalla: [],
-    alFallar: e => console.warn(`[wthree] no pude bajar el tracklist de «${a?.name}»:`, e.message),
+    alFallar: e => {
+      fallo = e.message;
+      console.warn(`[wthree] no pude bajar el tracklist de «${a?.name}»:`, e.message);
+    },
   });
+  if (tracks.length) return { tracks, motivo: null };
+  return {
+    tracks,
+    motivo: fallo ? `Spotify no devolvió las pistas (${fallo})` : 'Spotify devolvió el álbum sin ninguna pista',
+  };
 }
 
 // Reorder mínimo (v=112): en vez de borrar todos los picks y re-insertar el

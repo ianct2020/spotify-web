@@ -4,7 +4,8 @@
 // - Cross-origin (Spotify API, iTunes, Last.fm, tapas): no se toca, va directo a
 //   la red.
 // - Navegaciones: `fetch(req)` primero y, solo si falla, la copia guardada
-//   (modo offline). OJO: ese `fetch` pasa por la caché HTTP del navegador, y
+//   (modo offline). Las que llevan query no se guardan nunca (v=258: la de
+//   `callback.html?code=…` es el código PKCE del login). OJO: ese `fetch` pasa por la caché HTTP del navegador, y
 //   GitHub Pages manda `cache-control: max-age=600`, así que hasta 10 minutos
 //   después de un deploy puede salir el `index.html` VIEJO sin haber tocado la
 //   red. «Red primero» es red-primero-salvo-caché-HTTP, no «siempre fresco».
@@ -43,7 +44,7 @@
 // En src/ vale 'dev' a propósito: es un marcador. build.sh lo reemplaza por
 // `v<N>` al copiar a docs/ y falla si no puede. En dev el SW ni se registra
 // (ver ES_DEV en app.js).
-const CACHE = 'fonoteca-sw-v257';
+const CACHE = 'fonoteca-sw-v258';
 const PREFIJO = 'fonoteca-sw-';
 
 self.addEventListener('install', () => {
@@ -70,8 +71,16 @@ self.addEventListener('fetch', (e) => {
     e.respondWith((async () => {
       try {
         const res = await fetch(req);
-        const c = await caches.open(CACHE);
-        c.put(req, res.clone());
+        // Una navegación CON query no se guarda (v=258). La clave de la caché
+        // es la URL entera, y `callback.html?code=…&state=…` lleva el código
+        // PKCE del login: quedaba escrito en la Cache API hasta el despliegue
+        // siguiente. Tampoco sirve de nada guardarla: el `?frio=N` del ritual y
+        // el `?code=` son de un solo uso, y el modo offline cae igual a
+        // `index.html` por el `ignoreSearch` de abajo.
+        if (!url.search) {
+          const c = await caches.open(CACHE);
+          c.put(req, res.clone());
+        }
         return res;
       } catch {
         return (await caches.match(req))
