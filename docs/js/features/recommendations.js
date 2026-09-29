@@ -1,17 +1,18 @@
-import { spotifyFetch, createPlaylist, addTracksToPlaylist, invalidatePlaylistsCache, getAllLikedTracks } from '../api.js?v=255';
-import { hasKey, setKey, hasUsername, getUsername, setUsername, getUserTopArtists, getSimilarArtists, getArtistTopTracks } from '../api/lastfm.js?v=255';
-import { showProgress, hideProgress, promptPlaylistName, escapeHtml, pageHeader } from '../ui/components.js?v=255';
-import { showToast } from '../ui/toast.js?v=255';
-import { getPreview } from '../api/preview-providers.js?v=255';
-import { togglePreview, playingKey, isPlayingAudio } from '../ui/preview-player.js?v=255';
-import { paintPlayingCard } from '../ui/track-card-row.js?v=255';
-import { openTrackCard } from './track-card.js?v=255';
-import { openAlbumCard } from './album-card.js?v=255';
-import { limpiaParaQuery, titleMatches, artistMatches } from '../util/track-match.js?v=255';
-import { vigilarRuta } from '../util/vigencia-ruta.js?v=255';
-import { createHiddenStore } from '../util/hidden-sync.js?v=255';
-import { recuperarUriDeArtistaKey, REGLAS_VERSION } from '../util/hidden-recover.js?v=255';
-import { iconoPlay, iconoPausa, iconoFicha, iconoDisco, iconoOjo, iconoOjoTachado } from '../ui/icons.js?v=255';
+import { spotifyFetch, createPlaylist, addTracksToPlaylist, invalidatePlaylistsCache, getAllLikedTracks } from '../api.js?v=256';
+import { hasKey, setKey, hasUsername, getUsername, setUsername, getUserTopArtists, getSimilarArtists, getArtistTopTracks } from '../api/lastfm.js?v=256';
+import { showProgress, hideProgress, promptPlaylistName, escapeHtml, pageHeader } from '../ui/components.js?v=256';
+import { showToast } from '../ui/toast.js?v=256';
+import { getPreview } from '../api/preview-providers.js?v=256';
+import { togglePreview, playingKey, isPlayingAudio } from '../ui/preview-player.js?v=256';
+import { paintPlayingCard } from '../ui/track-card-row.js?v=256';
+import { openTrackCard } from './track-card.js?v=256';
+import { openAlbumCard } from './album-card.js?v=256';
+import { limpiaParaQuery, titleMatches, artistMatches } from '../util/track-match.js?v=256';
+import { vigilarRuta } from '../util/vigencia-ruta.js?v=256';
+import { createHiddenStore } from '../util/hidden-sync.js?v=256';
+import { recuperarUriDeArtistaKey, REGLAS_VERSION } from '../util/hidden-recover.js?v=256';
+import { iconoPlay, iconoPausa, iconoFicha, iconoDisco, iconoOjo, iconoOjoTachado } from '../ui/icons.js?v=256';
+import { pedirYCachear, CUALQUIER_RESPUESTA } from '../util/cache-solo-exitos.js?v=256';
 
 // Iconos de las dos fichas. Los mismos trazos que usa la tarjeta compartida.
 // Mismos trazos que el ojo de discover-common.js (v=165), acá con 14px para
@@ -51,25 +52,43 @@ async function representativeArtistUri(artist) {
     const rep = resolvedTracks.find(t => t.matched && (t.artistList || []).some(n => n.toLowerCase() === k));
     if (rep) { artistUriMemo.set(k, rep.uri); return rep.uri; }
   }
-  let uri = null;
-  try {
-    const top = await getArtistTopTracks(artist.name, 5);
-    for (const t of top) {
-      const q = `track:"${limpiaParaQuery(t.name)}" artist:"${limpiaParaQuery(artist.name)}"`;
-      const data = await spotifyFetch(`/search?q=${encodeURIComponent(q)}&type=track&limit=5`);
-      const hit = (data.tracks?.items || []).find(c =>
-        titleMatches(t.name, c.name)
-        && artistMatches(artist.name, (c.artists || []).map(x => x.name).join(', '))
-        // El artists[0] del candidato tiene que ser ESTE artista: si no,
-        // `keyOfTrack` reconstruiría un nombre distinto al sincronizar.
-        && (c.artists?.[0]?.name || '').toLowerCase() === k);
-      if (hit) { uri = hit.uri; break; }
-    }
-  } catch (e) {
-    console.warn(`[recs] no pude resolver una pista representativa de "${artist.name}":`, e.message);
+  // ⚠️ Un fallo NO se memoiza (v=256). Hasta v=255 el `catch` hacía
+  // `artistUriMemo.set(k, null)`, así que un 429 o un corte de red dejaba a ese
+  // artista sin uri para TODA la sesión: ocultarlo lo dejaba solo en este
+  // navegador y `util/hidden-sync.js` lo anotaba como huérfano — justo lo que
+  // la doc del 27/09 (B2) clasifica como **transitorio**, o sea lo contrario de
+  // congelarlo.
+  //
+  // Un `null` que sí se memoiza es el de una pasada LIMPIA: Spotify contestó,
+  // trajo candidatos y ninguno acredita a este artista como `artists[0]`. Eso
+  // es «pregunté y no hay», es un resultado, y no repetirlo ahorra 5 búsquedas
+  // por artista. Es el mismo criterio de `resolverPistaRepresentativa`
+  // (`discover-common.js:796`, v=228) y la misma frontera que dicta B2: lo que
+  // descalifica es la acreditación del artista, no la red.
+  return await pedirYCachear({
+    pedir: () => buscarUriRepresentativa(artist, k),
+    esResultado: CUALQUIER_RESPUESTA,
+    guardar: uri => artistUriMemo.set(k, uri),
+    alFallar: e => console.warn(`[recs] no pude resolver una pista representativa de "${artist.name}":`, e.message),
+  });
+}
+
+// La búsqueda sola, y TIRA si la red falla: es lo que le deja a
+// `pedirYCachear` distinguir «fallé al preguntar» de «pregunté y no hay».
+async function buscarUriRepresentativa(artist, k) {
+  const top = await getArtistTopTracks(artist.name, 5);
+  for (const t of top) {
+    const q = `track:"${limpiaParaQuery(t.name)}" artist:"${limpiaParaQuery(artist.name)}"`;
+    const data = await spotifyFetch(`/search?q=${encodeURIComponent(q)}&type=track&limit=5`);
+    const hit = (data.tracks?.items || []).find(c =>
+      titleMatches(t.name, c.name)
+      && artistMatches(artist.name, (c.artists || []).map(x => x.name).join(', '))
+      // El artists[0] del candidato tiene que ser ESTE artista: si no,
+      // `keyOfTrack` reconstruiría un nombre distinto al sincronizar.
+      && (c.artists?.[0]?.name || '').toLowerCase() === k);
+    if (hit) return hit.uri;
   }
-  artistUriMemo.set(k, uri);
-  return uri;
+  return null;
 }
 
 /** @returns {Promise<boolean>} true si quedó oculto */

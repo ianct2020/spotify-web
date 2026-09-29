@@ -23,6 +23,7 @@ import { coverUrl } from '../util/cover-size.js';
 import { insercionPorPuntero, moverA, indicadorPara } from '../util/reorder-drop.js';
 import { prefKey, migratePrefKey } from '../storage.js';
 import { iconoPlay, iconoPausa, iconoPuntos, iconoOjo, iconoOjoTachado } from '../ui/icons.js';
+import { pedirYCachear, SOLO_CON_CONTENIDO } from '../util/cache-solo-exitos.js';
 
 const LS_KEY_ID = 'wthree_playlist_id';
 const LS_KEY_NAME = 'wthree_playlist_name';
@@ -1053,15 +1054,26 @@ async function fetchAlbumTracks(a) {
   // que tenía el memo de ids en la ficha de álbum.
   if (!albumId) return [];
 
-  try {
-    const res = await spotifyFetch(`/albums/${albumId}/tracks?limit=50`);
-    const items = res?.items || [];
-    albumTracksCache.set(key, items);
-    return items;
-  } catch {
-    albumTracksCache.set(key, []);
-    return [];
-  }
+  // ⚠️ Un fallo del tracklist tampoco se cachea (v=256). La nota de v=219 dice
+  // que «el fracaso no se memoiza», y era verdad **solo para la resolución del
+  // id**: tres líneas más abajo, el `catch` de este `fetch` hacía
+  // `albumTracksCache.set(key, [])`, así que un 429 o un corte de red dejaba el
+  // modal de este álbum sin pistas para el resto de la sesión, con la misma
+  // cara que un disco vacío.
+  //
+  // Un `[]` que Spotify conteste con un 200 tampoco se guarda: un álbum sin
+  // pistas no existe, y volver a preguntarlo cuesta una petición como mucho,
+  // una vez por álbum y por sesión.
+  return await pedirYCachear({
+    pedir: async () => {
+      const res = await spotifyFetch(`/albums/${albumId}/tracks?limit=50`);
+      return res?.items || [];
+    },
+    esResultado: SOLO_CON_CONTENIDO,
+    guardar: items => albumTracksCache.set(key, items),
+    siFalla: [],
+    alFallar: e => console.warn(`[wthree] no pude bajar el tracklist de «${a?.name}»:`, e.message),
+  });
 }
 
 // Reorder mínimo (v=112): en vez de borrar todos los picks y re-insertar el

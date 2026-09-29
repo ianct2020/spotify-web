@@ -1,13 +1,14 @@
-import { getAllPlaylistItems, getBestAvailableLikes, addTracksToPlaylist, removeTracksFromPlaylist, getAllUserPlaylists } from '../api.js?v=255';
-import { esEPoAlbum } from '../util/release-size.js?v=255';
-import { idbGetCached, idbSetCached, idbGetTimestamp } from '../idb.js?v=255';
-import { escapeHtml, confirmModal, pageHeader } from '../ui/components.js?v=255';
-import { showToast } from '../ui/toast.js?v=255';
-import { isJunkTrack } from '../util/junk.js?v=255';
-import { openModal, closeTop } from '../ui/modal-stack.js?v=255';
-import { getListenedPlaylist, groupItemsByAlbum, openListenedAlbumsPicker, albumKey, baseName, norm } from './listened-shared.js?v=255';
-import { openAlbumCard } from './album-card.js?v=255';
-import { prefKey, migratePrefKey } from '../storage.js?v=255';
+import { getAllPlaylistItems, getBestAvailableLikes, addTracksToPlaylist, removeTracksFromPlaylist, getAllUserPlaylists } from '../api.js?v=256';
+import { esEPoAlbum } from '../util/release-size.js?v=256';
+import { idbGetCached, idbSetCached, idbGetTimestamp } from '../idb.js?v=256';
+import { escapeHtml, confirmModal, pageHeader } from '../ui/components.js?v=256';
+import { showToast } from '../ui/toast.js?v=256';
+import { isJunkTrack } from '../util/junk.js?v=256';
+import { openModal, closeTop } from '../ui/modal-stack.js?v=256';
+import { getListenedPlaylist, groupItemsByAlbum, openListenedAlbumsPicker, albumKey, baseName, norm } from './listened-shared.js?v=256';
+import { openAlbumCard } from './album-card.js?v=256';
+import { prefKey, migratePrefKey } from '../storage.js?v=256';
+import { pedirYCachear, SOLO_CON_CONTENIDO } from '../util/cache-solo-exitos.js?v=256';
 
 const SORT_KEY = 'listened_sort_mode';
 const VALID_SORTS = new Set(['recent', 'year-desc', 'year-asc', 'artist-asc', 'likes-desc', 'name-asc']);
@@ -66,24 +67,43 @@ function dismissHistory(key) {
 // Solo lo bajamos si el user logueado es el dueño (Ian): son sus datos personales.
 async function loadHistoryData() {
   if (historyAlbums) return historyAlbums;
-  const { isOwner } = await import('./history-data.js?v=255');
+  const { isOwner } = await import('./history-data.js?v=256');
   if (!(await isOwner())) { historyAlbums = []; return historyAlbums; }
   try {
     const cached = await idbGetCached(HISTORY_CACHE_KEY);
     if (Array.isArray(cached)) { historyAlbums = cached; return historyAlbums; }
   } catch { /* ignora */ }
-  try {
-    const url = new URL(`../../data/listening-history.json?v=${HISTORY_VERSION}`, import.meta.url);
-    const res = await fetch(url);
-    if (!res.ok) throw new Error('HTTP ' + res.status);
-    const doc = await res.json();
-    historyAlbums = Array.isArray(doc.albums) ? doc.albums : [];
+  // ⚠️ Un fallo de descarga NO se memoiza (v=256). El `catch` de acá hacía
+  // `historyAlbums = []`, y `[]` es **truthy**: el `if (historyAlbums)` del
+  // principio lo daba por bueno, así que un corte de red o un 404 del JSON
+  // dejaba «Quizás escuchaste y no registraste» vacío para TODA la sesión, con
+  // la misma cara que un historial sin nada que sugerir.
+  //
+  // Es el mismo bug de `album-card.js` y el mismo de `covers.js`, en el sexto
+  // sitio: este no estaba en el informe, lo encontró la guarda de
+  // `tests/cache-solo-exitos.test.mjs` cuando dejó de mirar los nombres con
+  // «cache» o «memo» adentro y pasó a mirar las asignaciones a variables de
+  // módulo desde un `catch`.
+  //
+  // El `historyAlbums = []` de arriba, el de «no sos el dueño», se queda: ese sí
+  // es una respuesta, y no cambia en lo que dure la sesión.
+  const albums = await pedirYCachear({
+    pedir: async () => {
+      const url = new URL(`../../data/listening-history.json?v=${HISTORY_VERSION}`, import.meta.url);
+      const res = await fetch(url);
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const doc = await res.json();
+      return Array.isArray(doc.albums) ? doc.albums : [];
+    },
+    esResultado: SOLO_CON_CONTENIDO,
+    guardar: a => { historyAlbums = a; },
+    siFalla: [],
+    alFallar: e => console.warn('No se pudo cargar el historial:', e.message),
+  });
+  if (historyAlbums) {
     try { await idbSetCached(HISTORY_CACHE_KEY, historyAlbums, 30 * 24 * 60); } catch { /* ignora */ }
-  } catch (e) {
-    console.warn('No se pudo cargar el historial:', e.message);
-    historyAlbums = [];
   }
-  return historyAlbums;
+  return historyAlbums || albums;
 }
 
 // trackId a partir de una uri "spotify:track:XXXX".

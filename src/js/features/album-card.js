@@ -24,6 +24,7 @@ import { artistMatches } from '../util/track-match.js';
 // tiraba un ReferenceError que el catch convertía en «no pude resolver el
 // álbum», o sea un error de programación con cara de resultado normal.
 import { resolveAlbumId } from '../util/album-resolver.js';
+import { pedirYCachear } from '../util/cache-solo-exitos.js';
 import { skelTracklist } from '../ui/skeleton.js';
 import { firstArtistName, resolveArtistName } from '../util/artist-name.js';
 import { coverUrl } from '../util/cover-size.js';
@@ -69,14 +70,32 @@ document.addEventListener('previewchange', (e) => {
 
 // Cache del último set de likes en memoria (evita re-fetch del cache al
 // abrir varias fichas seguidas dentro de la misma sesión).
+//
+// ⚠️ Un vacío NO se memoiza (v=256). Hasta v=255 el `catch` hacía
+// `_likesMemo = []`, y `[]` es **truthy**: el `if (_likesMemo)` de la línea de
+// arriba lo daba por bueno y todas las fichas de la sesión quedaban sin
+// corazones. Y no hacía falta ningún fallo para envenenarlo: alcanzaba con
+// abrir una ficha ANTES de la primera sincronización.
+//
+// El criterio no es «está vacío» sino el `source` que ya devuelve la API
+// (`api.js:663-665`), que es la única cosa que distingue las dos preguntas:
+//   `source: 'full'`  → contestó con la caché → es un resultado.
+//   `source: 'empty'` → la caché todavía no está → NO es un resultado.
+// Es el mismo pozo que tapaba los corazones de W-Three, y la misma regla que
+// `features/covers.js:245` y `util/artist-preview.js:66`, dicha con el campo
+// que la API ya trae en vez de con el tamaño del array.
 let _likesMemo = null;
 async function loadLikesMemo() {
   if (_likesMemo) return _likesMemo;
-  try {
-    const res = await getBestAvailableLikes();
-    _likesMemo = Array.isArray(res?.items) ? res.items : (Array.isArray(res) ? res : []);
-  } catch { _likesMemo = []; }
-  return _likesMemo;
+  const res = await pedirYCachear({
+    pedir: () => getBestAvailableLikes(),
+    esResultado: r => r?.source === 'full',
+    guardar: r => { _likesMemo = Array.isArray(r.items) ? r.items : []; },
+    siFalla: { items: [], source: 'empty' },
+    alFallar: e => console.warn('[album-card] no pude leer los me gusta:', e.message),
+  });
+  if (_likesMemo) return _likesMemo;
+  return Array.isArray(res?.items) ? res.items : (Array.isArray(res) ? res : []);
 }
 
 function fmtMinutes(min) {

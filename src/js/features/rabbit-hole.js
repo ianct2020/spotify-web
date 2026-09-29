@@ -3,6 +3,7 @@ import { hasKey, setKey, getTopArtistsByTag, getArtistTopTracks, getArtistTopTag
 import { showProgress, hideProgress, promptPlaylistName, escapeHtml, pageHeader } from '../ui/components.js';
 import { showToast } from '../ui/toast.js';
 import { vigilarRuta } from '../util/vigencia-ruta.js';
+import { limpiaParaQuery, titleMatches, artistMatches } from '../util/track-match.js';
 
 const SUGGESTED_TAGS = [
   'rock', 'indie', 'hip-hop', 'electronic', 'pop', 'metal',
@@ -255,9 +256,21 @@ async function resolveTracksOnSpotify(topTracks, ruta = vigilarRuta()) {
   for (let i = 0; i < topTracks.length; i++) {
     const t = topTracks[i];
     try {
-      const q = `track:"${t.name}" artist:"${t.artist}"`;
-      const data = await spotifyFetch(`/search?q=${encodeURIComponent(q)}&type=track&limit=1`);
-      const hit = data.tracks?.items?.[0];
+      // ⚠️ La misma limpieza y la misma verificación que `#recs` y `#similar`
+      // (v=167): el apóstrofo dentro de las comillas rompe la búsqueda de
+      // Spotify (`limpiaParaQuery`, `util/track-match.js`), así que cualquier
+      // tema con apóstrofo caía en «sin match», que se lee como «Spotify no lo
+      // tiene» y no como un bug. Aquella tanda arregló dos de las TRES vistas
+      // con esta forma y esta quedó afuera.
+      //
+      // Y como la query queda más laxa, el resultado se verifica contra el
+      // nombre real antes de darlo por bueno — por eso `limit=5` y no 1, que
+      // además era `items[0]` a ciegas: el resolutor que no verificaba nada era
+      // el que rompía (v=219). No cuesta ninguna petición más.
+      const q = `track:"${limpiaParaQuery(t.name)}" artist:"${limpiaParaQuery(t.artist)}"`;
+      const data = await spotifyFetch(`/search?q=${encodeURIComponent(q)}&type=track&limit=5`);
+      const hit = (data.tracks?.items || []).find(c =>
+        titleMatches(t.name, c.name) && artistMatches(t.artist, (c.artists || []).map(a => a.name).join(', ')));
       if (hit) {
         resolvedTracks.push({
           uri: hit.uri,

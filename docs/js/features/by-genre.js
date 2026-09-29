@@ -1,13 +1,14 @@
-import { getAllLikedTracks, createPlaylist, addTracksToPlaylist, invalidatePlaylistsCache, exportAllData, importAllData, getCurrentUserId, getBestAvailableLikes } from '../api.js?v=255';
-import { hasKey, setKey, getArtistTopTags, getCachedTags, setCachedTags, mergeCachedTags } from '../api/lastfm.js?v=255';
-import * as statsfm from '../api/statsfm.js?v=255';
-import { getGenresForArtist as mbGetGenres } from '../api/musicbrainz.js?v=255';
-import { showProgress, hideProgress, progressController, isCancelled, promptPlaylistName, alertModal, confirmModal, escapeHtml, pageHeader } from '../ui/components.js?v=255';
-import { showToast } from '../ui/toast.js?v=255';
-import { openModal, closeTop } from '../ui/modal-stack.js?v=255';
-import { bucketFor } from '../util/genre-reason.js?v=255';
-import { openGenreAudit } from './genre-detail.js?v=255';
-import { prefKey, migratePrefKey } from '../storage.js?v=255';
+import { getAllLikedTracks, createPlaylist, addTracksToPlaylist, invalidatePlaylistsCache, exportAllData, importAllData, getCurrentUserId, getBestAvailableLikes } from '../api.js?v=256';
+import { hasKey, setKey, getArtistTopTags, getCachedTags, setCachedTags, mergeCachedTags } from '../api/lastfm.js?v=256';
+import * as statsfm from '../api/statsfm.js?v=256';
+import { getGenresForArtist as mbGetGenres } from '../api/musicbrainz.js?v=256';
+import { showProgress, hideProgress, progressController, isCancelled, promptPlaylistName, alertModal, confirmModal, escapeHtml, pageHeader } from '../ui/components.js?v=256';
+import { showToast } from '../ui/toast.js?v=256';
+import { openModal, closeTop } from '../ui/modal-stack.js?v=256';
+import { bucketFor } from '../util/genre-reason.js?v=256';
+import { openGenreAudit } from './genre-detail.js?v=256';
+import { prefKey, migratePrefKey } from '../storage.js?v=256';
+import { pedirYCachear, CUALQUIER_RESPUESTA } from '../util/cache-solo-exitos.js?v=256';
 
 const NOISE_TAGS = new Set([
   'seen live', 'favorites', 'favorite', 'favourite', 'favourites',
@@ -520,13 +521,25 @@ async function fetchAllTags(artistNames) {
   const start = Date.now();
 
   for (const name of artistNames) {
-    try {
-      const tags = await getArtistTopTags(name);
-      setCachedTags(name, tags);
-    } catch (e) {
-      errors++;
-      setCachedTags(name, []);
-    }
+    // Un 429 o un corte de red NO se cachea (v=256). Antes el `catch` escribía
+    // `setCachedTags(name, [])`, y la caché de etiquetas tiene **30 días de
+    // TTL**: un corte a mitad del barrido dejaba a todo el resto de los
+    // artistas en «Sin género» por un mes, sin forma de distinguirlo de un
+    // artista que de verdad no tiene etiquetas.
+    //
+    // Una lista VACÍA sí se cachea, y es correcto: `getArtistTopTags` tira si
+    // Last.fm no pudo contestar (`lastfmFetch` mira `data.error`), así que un
+    // `[]` solo puede querer decir «este artista no tiene etiquetas con 5 usos
+    // o más». Eso es un resultado.
+    await pedirYCachear({
+      pedir: () => getArtistTopTags(name),
+      esResultado: CUALQUIER_RESPUESTA,
+      guardar: tags => setCachedTags(name, tags),
+      alFallar: e => {
+        errors++;
+        console.warn(`[genre] etiquetas de «${name}»:`, e.message);
+      },
+    });
     done++;
     const pct = ((done / artistNames.length) * 100).toFixed(1);
     const elapsed = (Date.now() - start) / 1000;

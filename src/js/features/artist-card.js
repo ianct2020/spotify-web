@@ -17,6 +17,8 @@ import { skelCardBody, skelTrackRows, skelBox } from '../ui/skeleton.js';
 import { fmtDia, fmtDiaCorto } from '../util/fecha.js';
 import { albumsDeArtista } from '../util/artist-albums.js';
 import { openAlbumCard } from './album-card.js';
+import { limpiaParaQuery, artistIsSame } from '../util/track-match.js';
+import { pedirYCachear, CUALQUIER_RESPUESTA } from '../util/cache-solo-exitos.js';
 
 // Cache de imágenes de artistas resueltas por Spotify search. TTL 30 días.
 // Se persiste el hit y la falta (null) para no reintentar contra tracks
@@ -46,21 +48,43 @@ async function fetchArtistImage(name) {
   const cache = loadImgCache();
   const hit = cache[key];
   if (hit && (Date.now() - hit.t) < IMG_TTL_MS) return hit.u;
-  try {
-    const data = await spotifyFetch(`/search?q=${encodeURIComponent(`artist:"${name}"`)}&type=artist&limit=3`);
-    const artists = data?.artists?.items || [];
-    // Match exacto por nombre normalizado, preferido; si no, el primer resultado
-    const norm = s => (s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-    const na = norm(name);
-    const exact = artists.find(a => norm(a.name) === na);
-    const pick = exact || artists[0];
-    const img = coverUrl(pick?.images, 'grande');
-    cache[key] = { u: img, t: Date.now() };
-    saveImgCache(cache);
-    return img;
-  } catch {
-    return null;
-  }
+  // ⚠️ Lo que se cachea 30 días es lo que Spotify CONTESTÓ (v=256).
+  //
+  // El `catch` de acá ya devolvía `null` sin escribir, y eso estaba bien. Lo que
+  // estaba mal es que **la query no se podía contestar**: `artist:"Guns N' Roses"`
+  // con el apóstrofo crudo rompe la sintaxis `campo:"…"` de Spotify y devuelve 0
+  // resultados (medido y documentado en `limpiaParaQuery`,
+  // `util/track-match.js:340`). O sea que el 0 no era «Spotify no tiene a este
+  // artista» sino «pregunté mal», y se guardaba como `null` por un mes: los
+  // artistas con apóstrofo no tenían foto NUNCA. Era el único `artist:"…"` del
+  // repo sin limpiar — `hidden-recover.js:197` y `api.js:1488` ya lo hacían.
+  //
+  // ⚠️ Y limpiar la query obliga a comparar: la regla de `limpiaParaQuery` dice
+  // que el que llama tiene que verificar el resultado contra el nombre real,
+  // porque la query queda más laxa (es lo que traía a Nick Drake cuando se
+  // buscaba Drake, v=124). El `|| artists[0]` a ciegas de antes era tolerable
+  // con una query estricta; con esta, no. Va por `artistIsSame`, la versión
+  // ESTRICTA que el repo ya tiene justo para esto.
+  return await pedirYCachear({
+    pedir: async () => {
+      const q = `artist:"${limpiaParaQuery(name)}"`;
+      const data = await spotifyFetch(`/search?q=${encodeURIComponent(q)}&type=artist&limit=3`);
+      const artists = data?.artists?.items || [];
+      // Match exacto por nombre normalizado, preferido; si no, el que `artistIsSame`
+      // dé por el mismo artista. Un `null` acá es «Spotify contestó y no está».
+      const norm = s => (s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+      const na = norm(name);
+      const pick = artists.find(a => norm(a.name) === na)
+        || artists.find(a => artistIsSame(name, a.name))
+        || null;
+      return coverUrl(pick?.images, 'grande') || null;
+    },
+    // `spotifyFetch` tira si no pudo contestar, así que un `null` que llegue
+    // hasta acá ya es una respuesta: este artista no está, o no tiene foto.
+    esResultado: CUALQUIER_RESPUESTA,
+    guardar: img => { cache[key] = { u: img, t: Date.now() }; saveImgCache(cache); },
+    alFallar: e => console.warn(`[artist-card] no pude resolver la foto de «${name}»:`, e.message),
+  });
 }
 
 let chart = null;

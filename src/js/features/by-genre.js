@@ -8,6 +8,7 @@ import { openModal, closeTop } from '../ui/modal-stack.js';
 import { bucketFor } from '../util/genre-reason.js';
 import { openGenreAudit } from './genre-detail.js';
 import { prefKey, migratePrefKey } from '../storage.js';
+import { pedirYCachear, CUALQUIER_RESPUESTA } from '../util/cache-solo-exitos.js';
 
 const NOISE_TAGS = new Set([
   'seen live', 'favorites', 'favorite', 'favourite', 'favourites',
@@ -520,13 +521,25 @@ async function fetchAllTags(artistNames) {
   const start = Date.now();
 
   for (const name of artistNames) {
-    try {
-      const tags = await getArtistTopTags(name);
-      setCachedTags(name, tags);
-    } catch (e) {
-      errors++;
-      setCachedTags(name, []);
-    }
+    // Un 429 o un corte de red NO se cachea (v=256). Antes el `catch` escribía
+    // `setCachedTags(name, [])`, y la caché de etiquetas tiene **30 días de
+    // TTL**: un corte a mitad del barrido dejaba a todo el resto de los
+    // artistas en «Sin género» por un mes, sin forma de distinguirlo de un
+    // artista que de verdad no tiene etiquetas.
+    //
+    // Una lista VACÍA sí se cachea, y es correcto: `getArtistTopTags` tira si
+    // Last.fm no pudo contestar (`lastfmFetch` mira `data.error`), así que un
+    // `[]` solo puede querer decir «este artista no tiene etiquetas con 5 usos
+    // o más». Eso es un resultado.
+    await pedirYCachear({
+      pedir: () => getArtistTopTags(name),
+      esResultado: CUALQUIER_RESPUESTA,
+      guardar: tags => setCachedTags(name, tags),
+      alFallar: e => {
+        errors++;
+        console.warn(`[genre] etiquetas de «${name}»:`, e.message);
+      },
+    });
     done++;
     const pct = ((done / artistNames.length) * 100).toFixed(1);
     const elapsed = (Date.now() - start) / 1000;

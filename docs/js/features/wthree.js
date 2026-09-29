@@ -2,27 +2,28 @@
 // por álbum). Muestra qué álbumes ya tienen picks, cuántos, y cuáles te faltan.
 // Ordenado por álbumes más escuchados primero para priorizar tu tiempo.
 
-import { spotifyFetch, getAllPlaylistItems, getAllUserPlaylists, addTracksToPlaylist, removeTracksFromPlaylist, reorderPlaylistItems, getCachedPlaylistItems, updatePlaylistItemsCache, getBestAvailableLikes } from '../api.js?v=255';
-import { vigilarRuta } from '../util/vigencia-ruta.js?v=255';
-import { patchPlaylistItems, buildCachedItem } from '../util/playlist-cache-patch.js?v=255';
-import { loadHistoryStats, loadListenedAlbums, isOwner, ownerLockedMessage } from './history-data.js?v=255';
-import { escapeHtml, pageHeader } from '../ui/components.js?v=255';
-import { showToast } from '../ui/toast.js?v=255';
-import { wireHoverMarquee, hoverMarqueeSpan } from '../ui/hover-marquee.js?v=255';
-import { openModal, closeById, closeModal } from '../ui/modal-stack.js?v=255';
-import { getPreview } from '../api/preview-providers.js?v=255';
-import { togglePreview, playingKey } from '../ui/preview-player.js?v=255';
-import { openAlbumCard } from './album-card.js?v=255';
-import { albumKey } from '../util/album-key.js?v=255';
-import { resolveAlbumId } from '../util/album-resolver.js?v=255';
-import { computeUpdatedPickPositions } from '../util/reorder-shifts.js?v=255';
-import { createHiddenStore } from '../util/hidden-sync.js?v=255';
-import { recuperarUriDeAlbumKey, REGLAS_VERSION } from '../util/hidden-recover.js?v=255';
-import { mountBottom } from '../ui/bottom-layer.js?v=255';
-import { coverUrl } from '../util/cover-size.js?v=255';
-import { insercionPorPuntero, moverA, indicadorPara } from '../util/reorder-drop.js?v=255';
-import { prefKey, migratePrefKey } from '../storage.js?v=255';
-import { iconoPlay, iconoPausa, iconoPuntos, iconoOjo, iconoOjoTachado } from '../ui/icons.js?v=255';
+import { spotifyFetch, getAllPlaylistItems, getAllUserPlaylists, addTracksToPlaylist, removeTracksFromPlaylist, reorderPlaylistItems, getCachedPlaylistItems, updatePlaylistItemsCache, getBestAvailableLikes } from '../api.js?v=256';
+import { vigilarRuta } from '../util/vigencia-ruta.js?v=256';
+import { patchPlaylistItems, buildCachedItem } from '../util/playlist-cache-patch.js?v=256';
+import { loadHistoryStats, loadListenedAlbums, isOwner, ownerLockedMessage } from './history-data.js?v=256';
+import { escapeHtml, pageHeader } from '../ui/components.js?v=256';
+import { showToast } from '../ui/toast.js?v=256';
+import { wireHoverMarquee, hoverMarqueeSpan } from '../ui/hover-marquee.js?v=256';
+import { openModal, closeById, closeModal } from '../ui/modal-stack.js?v=256';
+import { getPreview } from '../api/preview-providers.js?v=256';
+import { togglePreview, playingKey } from '../ui/preview-player.js?v=256';
+import { openAlbumCard } from './album-card.js?v=256';
+import { albumKey } from '../util/album-key.js?v=256';
+import { resolveAlbumId } from '../util/album-resolver.js?v=256';
+import { computeUpdatedPickPositions } from '../util/reorder-shifts.js?v=256';
+import { createHiddenStore } from '../util/hidden-sync.js?v=256';
+import { recuperarUriDeAlbumKey, REGLAS_VERSION } from '../util/hidden-recover.js?v=256';
+import { mountBottom } from '../ui/bottom-layer.js?v=256';
+import { coverUrl } from '../util/cover-size.js?v=256';
+import { insercionPorPuntero, moverA, indicadorPara } from '../util/reorder-drop.js?v=256';
+import { prefKey, migratePrefKey } from '../storage.js?v=256';
+import { iconoPlay, iconoPausa, iconoPuntos, iconoOjo, iconoOjoTachado } from '../ui/icons.js?v=256';
+import { pedirYCachear, SOLO_CON_CONTENIDO } from '../util/cache-solo-exitos.js?v=256';
 
 const LS_KEY_ID = 'wthree_playlist_id';
 const LS_KEY_NAME = 'wthree_playlist_name';
@@ -1053,15 +1054,26 @@ async function fetchAlbumTracks(a) {
   // que tenía el memo de ids en la ficha de álbum.
   if (!albumId) return [];
 
-  try {
-    const res = await spotifyFetch(`/albums/${albumId}/tracks?limit=50`);
-    const items = res?.items || [];
-    albumTracksCache.set(key, items);
-    return items;
-  } catch {
-    albumTracksCache.set(key, []);
-    return [];
-  }
+  // ⚠️ Un fallo del tracklist tampoco se cachea (v=256). La nota de v=219 dice
+  // que «el fracaso no se memoiza», y era verdad **solo para la resolución del
+  // id**: tres líneas más abajo, el `catch` de este `fetch` hacía
+  // `albumTracksCache.set(key, [])`, así que un 429 o un corte de red dejaba el
+  // modal de este álbum sin pistas para el resto de la sesión, con la misma
+  // cara que un disco vacío.
+  //
+  // Un `[]` que Spotify conteste con un 200 tampoco se guarda: un álbum sin
+  // pistas no existe, y volver a preguntarlo cuesta una petición como mucho,
+  // una vez por álbum y por sesión.
+  return await pedirYCachear({
+    pedir: async () => {
+      const res = await spotifyFetch(`/albums/${albumId}/tracks?limit=50`);
+      return res?.items || [];
+    },
+    esResultado: SOLO_CON_CONTENIDO,
+    guardar: items => albumTracksCache.set(key, items),
+    siFalla: [],
+    alFallar: e => console.warn(`[wthree] no pude bajar el tracklist de «${a?.name}»:`, e.message),
+  });
 }
 
 // Reorder mínimo (v=112): en vez de borrar todos los picks y re-insertar el

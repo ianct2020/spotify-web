@@ -8,6 +8,7 @@ import { openModal, closeTop } from '../ui/modal-stack.js';
 import { getListenedPlaylist, groupItemsByAlbum, openListenedAlbumsPicker, albumKey, baseName, norm } from './listened-shared.js';
 import { openAlbumCard } from './album-card.js';
 import { prefKey, migratePrefKey } from '../storage.js';
+import { pedirYCachear, SOLO_CON_CONTENIDO } from '../util/cache-solo-exitos.js';
 
 const SORT_KEY = 'listened_sort_mode';
 const VALID_SORTS = new Set(['recent', 'year-desc', 'year-asc', 'artist-asc', 'likes-desc', 'name-asc']);
@@ -72,18 +73,37 @@ async function loadHistoryData() {
     const cached = await idbGetCached(HISTORY_CACHE_KEY);
     if (Array.isArray(cached)) { historyAlbums = cached; return historyAlbums; }
   } catch { /* ignora */ }
-  try {
-    const url = new URL(`../../data/listening-history.json?v=${HISTORY_VERSION}`, import.meta.url);
-    const res = await fetch(url);
-    if (!res.ok) throw new Error('HTTP ' + res.status);
-    const doc = await res.json();
-    historyAlbums = Array.isArray(doc.albums) ? doc.albums : [];
+  // ⚠️ Un fallo de descarga NO se memoiza (v=256). El `catch` de acá hacía
+  // `historyAlbums = []`, y `[]` es **truthy**: el `if (historyAlbums)` del
+  // principio lo daba por bueno, así que un corte de red o un 404 del JSON
+  // dejaba «Quizás escuchaste y no registraste» vacío para TODA la sesión, con
+  // la misma cara que un historial sin nada que sugerir.
+  //
+  // Es el mismo bug de `album-card.js` y el mismo de `covers.js`, en el sexto
+  // sitio: este no estaba en el informe, lo encontró la guarda de
+  // `tests/cache-solo-exitos.test.mjs` cuando dejó de mirar los nombres con
+  // «cache» o «memo» adentro y pasó a mirar las asignaciones a variables de
+  // módulo desde un `catch`.
+  //
+  // El `historyAlbums = []` de arriba, el de «no sos el dueño», se queda: ese sí
+  // es una respuesta, y no cambia en lo que dure la sesión.
+  const albums = await pedirYCachear({
+    pedir: async () => {
+      const url = new URL(`../../data/listening-history.json?v=${HISTORY_VERSION}`, import.meta.url);
+      const res = await fetch(url);
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const doc = await res.json();
+      return Array.isArray(doc.albums) ? doc.albums : [];
+    },
+    esResultado: SOLO_CON_CONTENIDO,
+    guardar: a => { historyAlbums = a; },
+    siFalla: [],
+    alFallar: e => console.warn('No se pudo cargar el historial:', e.message),
+  });
+  if (historyAlbums) {
     try { await idbSetCached(HISTORY_CACHE_KEY, historyAlbums, 30 * 24 * 60); } catch { /* ignora */ }
-  } catch (e) {
-    console.warn('No se pudo cargar el historial:', e.message);
-    historyAlbums = [];
   }
-  return historyAlbums;
+  return historyAlbums || albums;
 }
 
 // trackId a partir de una uri "spotify:track:XXXX".

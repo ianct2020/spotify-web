@@ -1633,15 +1633,31 @@ async function getAlbumTracks(albumId, { limit = 50 } = {}) {
 }
 
 // Búsqueda de artista por nombre — devuelve el mejor match (id + name + image).
+//
+// ⚠️ La query va por `limpiaParaQuery` (v=256). Sacaba las comillas pero NO el
+// apóstrofo, que es el que rompe la sintaxis `campo:"…"` de Spotify: era el
+// mismo fallo que dejaba sin foto a los artistas con apóstrofo en
+// `features/artist-card.js`, acá en la resolución del id. Su único llamador es
+// `getArtistIdCached` (`discover-common.js:48`), o sea que un artista con
+// apóstrofo podía no tener id resoluble nunca y quedarse sin discografía.
+// `buscarDiscografiaPorNombre`, treinta líneas más arriba en este mismo archivo,
+// ya lo limpiaba desde v=229.
+//
+// ⚠️ Y limpiar obliga a comparar: la query queda más laxa, así que el `items[0]`
+// a ciegas de antes pasa a verificarse con `artistIsSame` —la versión ESTRICTA,
+// la que existe justo para filtrar discografías (el «Drake» que traía a Nick
+// Drake, v=124)—. Sin eso, aflojar la query es cambiar «no lo encuentro» por
+// «encontré a otro», y este id se cachea 60 días.
 async function searchArtistByName(name) {
   if (!name) return null;
-  const q = `artist:"${name.replace(/"/g, '')}"`;
+  const q = `artist:"${limpiaParaQuery(name)}"`;
   const res = await spotifyFetch(`/search?q=${encodeURIComponent(q)}&type=artist&limit=5`);
   const items = res?.artists?.items || [];
-  // El mejor match por exact name (case insensitive), si no el primero.
+  // El mejor match por exact name (case insensitive), si no el que `artistIsSame`
+  // dé por el mismo artista.
   const lc = name.toLowerCase();
   const exact = items.find(a => (a.name || '').toLowerCase() === lc);
-  return exact || items[0] || null;
+  return exact || items.find(a => artistIsSame(name, a.name)) || null;
 }
 
 export {
