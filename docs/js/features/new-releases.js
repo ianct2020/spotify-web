@@ -10,14 +10,14 @@
 //   - Umbral de likes: 5+ / 10+ / 20+
 //   - Ventana temporal: 3 / 6 / 12 / 24 meses, 5 años y «todo» (default 12)
 
-import { escapeHtml, confirmModal, pageHeader } from '../ui/components.js?v=261';
-import { showToast } from '../ui/toast.js?v=261';
-import { buildAlbumHeardIndex } from '../util/album-heard.js?v=261';
-import { releaseKind } from '../util/release-size.js?v=261';
-import { loadFiltros, buildFilterContext, applyDiscoverFilters } from '../util/discover-filters.js?v=261';
-import { createIncrementalList, scrollRootOf } from '../ui/incremental-list.js?v=261';
-import { createLazyImages } from '../ui/lazy-img.js?v=261';
-import { prefKey, migratePrefKey } from '../storage.js?v=261';
+import { escapeHtml, confirmModal, pageHeader } from '../ui/components.js?v=262';
+import { showToast } from '../ui/toast.js?v=262';
+import { buildAlbumHeardIndex } from '../util/album-heard.js?v=262';
+import { releaseKind } from '../util/release-size.js?v=262';
+import { loadFiltros, buildFilterContext, applyDiscoverFilters } from '../util/discover-filters.js?v=262';
+import { createIncrementalList, scrollRootOf } from '../ui/incremental-list.js?v=262';
+import { createLazyImages } from '../ui/lazy-img.js?v=262';
+import { prefKey, migratePrefKey } from '../storage.js?v=262';
 import {
   getArtistIdCached,
   getArtistDiscoCached,
@@ -30,7 +30,12 @@ import {
   saveAlbumTracksToLibrary,
   albumTrackCount,
   markAlbumResolved,
-  loadScanCache,
+  leerEscaneoGuardado,
+  restaurarDesdeLaBase,
+  fijarFrescuraVencida,
+  avisoFrescuraHtml,
+  conectarAvisoFrescura,
+  repintarAvisoFrescura,
   saveScanCache,
   clearScanCache,
   agoLabel,
@@ -53,11 +58,12 @@ import {
   avisarRonda,
   botonesBaseHtml,
   conectarBotonesBase,
-} from './discover-common.js?v=261';
-import { estadoNativoDiscografia } from '../api.js?v=261';
-import { leerElegidos, sumarElegidos, artistasBuscados, colaAutomatica } from '../util/cola-escaneo.js?v=261';
-import { leerFallos, marcarFallo, limpiarFallo, sinFallosMarcados } from '../util/escaneo-fallos.js?v=261';
-import { contarSinEscanear, sufijoSinEscanear, notaSinEscanear } from '../util/sin-escanear.js?v=261';
+} from './discover-common.js?v=262';
+import { estadoNativoDiscografia } from '../api.js?v=262';
+import { leerElegidos, sumarElegidos, artistasBuscados, colaAutomatica } from '../util/cola-escaneo.js?v=262';
+import { leerFallos, marcarFallo, limpiarFallo, sinFallosMarcados } from '../util/escaneo-fallos.js?v=262';
+import { contarSinEscanear, sufijoSinEscanear, notaSinEscanear } from '../util/sin-escanear.js?v=262';
+import { estadoFrescura } from '../util/frescura-escaneo.js?v=262';
 
 const SCAN_KEY = 'new_releases';
 
@@ -253,7 +259,16 @@ export async function render(container) {
   state.ronda = nuevaRondaDeRefresco();
   // Antes que nada, las discografías de antes de v=229 pasan a la base: 0 requests.
   await migrarDiscografiasViejas();
-  const cached = await loadScanCache(SCAN_KEY);
+  // La frescura NO son los datos (v=262). El caché del escaneo (7 días) es la
+  // marca de «cuándo miré si salió algo nuevo»; las discografías viven en la
+  // base, sin caducidad. Se lee CRUDO (sin borrar lo vencido) y:
+  //   - vigente → se restaura de él, como siempre;
+  //   - vencido o perdido → no se restaura de él, pero la vista se pinta igual
+  //     desde la base (`restaurarDesdeLaBase`, 0 peticiones) y dice que puede
+  //     estar desactualizada. Con el caché vencido abría VACÍA con las 351 bases
+  //     intactas (v=261 sacó el escaneo automático que la repoblaba).
+  const guardado = await leerEscaneoGuardado(SCAN_KEY);
+  const cached = guardado && !guardado.vencido ? guardado : null;
   if (cached) {
     const byName = new Map(cached.artists.map(a => [a.nameLower, a]));
     let restored = 0;
@@ -267,6 +282,11 @@ export async function render(container) {
     if (restored) state.scannedAt = cached.ts || null;
     console.log(`[newrel] cache de escaneo: ${restored} artistas restaurados (${agoLabel(cached.ts)})`);
   }
+  const deLaBase = await restaurarDesdeLaBase(state.artists);
+  const frescura = estadoFrescura({ guardado, nConBase: deLaBase.n, recienteMax: deLaBase.recienteMax });
+  fijarFrescuraVencida(SCAN_KEY, frescura.estado === 'vencida' ? frescura.ts : null);
+  if (frescura.estado === 'vencida') state.scannedAt = frescura.ts;
+  console.log(`[newrel] desde la base, sin red: ${deLaBase.n} artistas · frescura: ${frescura.estado}`);
 
   renderShell(content, candidates.length);
   pintarCuenta();
@@ -327,7 +347,7 @@ function renderShell(content, totalCandidates) {
         · <span id="newrel-unheard-count">0</span> <span id="newrel-unheard-label">${ventanaEsAncha() ? 'lanzamientos sin escuchar' : 'novedades sin escuchar'}</span>
         <span class="disco-summary-sub" id="newrel-summary-sub">${textoSub()}</span>
       </div>
-      <div class="disco-controls">
+      <div class="disco-controls disco-controls-denso">
         <div class="disco-chip-group" id="newrel-likes">
           ${[5,10,20].map(n => `<button class="disco-chip ${state.minLikes === n ? 'is-on' : ''}" data-min="${n}">${n}+ likes</button>`).join('')}
         </div>
@@ -342,6 +362,7 @@ function renderShell(content, totalCandidates) {
         ${botonesBaseHtml('newrel')}
       </div>
     </div>
+    ${avisoFrescuraHtml('newrel', SCAN_KEY)}
     ${renderFiltroChips(state.filtros, state.conteosFiltro)}
     <div class="disco-aviso" id="newrel-aviso-cortadas" role="status" hidden></div>
     <div class="disco-progress" id="newrel-progress" style="display:none">
@@ -363,6 +384,7 @@ function renderShell(content, totalCandidates) {
   `;
 
   wireFiltroChips(content, state.filtros, () => refreshList(content));
+  conectarAvisoFrescura(content, 'newrel', 'newrel-refresh');
 
   content.querySelector('#newrel-likes').addEventListener('click', (e) => {
     const btn = e.target.closest('[data-min]');
@@ -733,6 +755,7 @@ function refreshList(content) {
   const lbl = document.getElementById('newrel-unheard-label');
   if (lbl) lbl.textContent = ventanaEsAncha() ? 'lanzamientos sin escuchar' : 'novedades sin escuchar';
   pintarSub();
+  repintarAvisoFrescura(content, 'newrel', SCAN_KEY);   // tras «Actualizar» la línea se va sola
   const nHidden = document.getElementById('newrel-hidden-n');
   if (nHidden) nHidden.textContent = hiddenAlbums.size;
 

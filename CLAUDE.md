@@ -1085,7 +1085,7 @@ Aparte, desde v=257 el nombre de la caché del SW lleva la versión
 despliegues anteriores: hasta v=256 valía siempre `fonoteca-sw-v1` y esa limpieza
 no corrió nunca. Eso arregla la acumulación, **no** el `index.html` viejo de arriba.
 
-**Tests y antes de pushear**: `npm test` corre las 36 suites de `tests/*.test.mjs`
+**Tests y antes de pushear**: `npm test` corre las 37 suites de `tests/*.test.mjs`
 (un proceso por suite, sale con 1 si alguna falla; `-- --orden=inverso|azar:N` y
 `-- --paralelo` para cazar dependencias de orden) y `npm run prepush` comprueba,
 sin modificar nada, sintaxis, tests, `docs/` al día, versiones parejas y que no
@@ -1439,6 +1439,18 @@ vuelve a llamar a `scanArtists()`. ⚠️ **No toques la cola** (`util/cola-esca
 `colaAutomatica`) «porque parece un bug»: v=259 lo hizo y gastó cuota de Ian sin preguntar.
 Si ves algo raro ahí, anótalo en `PENDIENTES.md`. Un artista cuyo escaneo falló queda
 marcado con el día (`util/escaneo-fallos.js`); un acto explícito lo reintenta igual.
+
+## La vista pinta lo guardado, con el caché del escaneo vencido (v=262)
+El caché del escaneo (`discover_scan_*`, 7 días) es la MARCA de «cuándo miré si salió algo nuevo»,
+no los datos: las discografías viven en la base (`discover_disco_base_v1_*`, sin caducidad). Las dos
+vistas de descubrir leen la marca CRUDA (`leerEscaneoGuardado`: sin `idbGetCached`, que borra lo
+vencido al leerlo y se llevaba la fecha) y pintan desde la base con `restaurarDesdeLaBase` (0
+peticiones, `leerBase`). Tres estados (`util/frescura-escaneo.js`): al día, **vencida** (se pinta lo
+guardado y una línea con su botón dice cuándo fue la última comprobación y que puede faltar lo
+reciente) y sin base. ⚠️ `saveScanCache` no adelanta la fecha mientras la vista muestre lo guardado
+(`crearMarcasDeFrescura`): un escaneo PARCIAL la rejuvenecería y la próxima apertura diría «al día»
+con 350 artistas sin mirar. No metas en ese camino nada que llame a `getArtistIdCached` o a
+`getArtistDiscoCached`: pueden ir a `/search`. `tests/frescura-escaneo.test.mjs` lo vigila.
 
 ## ⛔ NUNCA `git add -A` ni `git add .` — archivo por archivo
 **Este repo es PÚBLICO.** El 2026-07-28 se filtraron datos personales y hubo que

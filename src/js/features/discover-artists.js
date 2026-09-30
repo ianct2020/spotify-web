@@ -24,6 +24,7 @@ import { vigilarRuta } from '../util/vigencia-ruta.js';
 import { leerElegidos, sumarElegidos, artistasBuscados, colaAutomatica } from '../util/cola-escaneo.js';
 import { leerFallos, marcarFallo, limpiarFallo, sinFallosMarcados } from '../util/escaneo-fallos.js';
 import { contarSinEscanear, sufijoSinEscanear, notaSinEscanear } from '../util/sin-escanear.js';
+import { estadoFrescura } from '../util/frescura-escaneo.js';
 import { prefKey, migratePrefKey } from '../storage.js';
 import {
   getArtistIdCached,
@@ -38,7 +39,12 @@ import {
   saveAlbumTracksToLibrary,
   albumTrackCount,
   markAlbumResolved,
-  loadScanCache,
+  leerEscaneoGuardado,
+  restaurarDesdeLaBase,
+  fijarFrescuraVencida,
+  avisoFrescuraHtml,
+  conectarAvisoFrescura,
+  repintarAvisoFrescura,
   saveScanCache,
   clearScanCache,
   agoLabel,
@@ -247,10 +253,19 @@ export async function render(container) {
   });
 
   // Escaneo cacheado (7 días): entrar a la vista no puede costar 150 llamadas
-  // cada vez. Lo que ya está escaneado se pinta al instante; si el cache cubre
-  // menos artistas de los pedidos, el scan solo completa los que faltan.
-  const cached = await loadScanCache(SCAN_KEY);
+  // cada vez. Lo que ya está escaneado se pinta al instante.
+  //
+  // La frescura NO son los datos (v=262). El caché del escaneo es la marca de
+  // «cuándo miré si salió algo nuevo»; las discografías viven en la base, sin
+  // caducidad. Se lee CRUDO (sin borrar lo vencido) y:
+  //   - vigente → se restaura de él, como siempre;
+  //   - vencido o perdido → no se restaura de él, pero la vista se pinta igual
+  //     desde la base (`restaurarDesdeLaBase`, 0 peticiones) y dice que puede
+  //     estar desactualizada. Con el caché vencido abría VACÍA con las 351 bases
+  //     intactas (v=261 sacó el escaneo automático que la repoblaba).
+  const guardado = await leerEscaneoGuardado(SCAN_KEY);
   if (!ruta.vigente()) return teardown;
+  const cached = guardado && !guardado.vencido ? guardado : null;
   if (cached) {
     const byName = new Map(cached.artists.map(a => [a.nameLower, a]));
     let restored = 0;
@@ -271,6 +286,21 @@ export async function render(container) {
     for (const a of state.artists) if (a.scanned) migrarClavesDeArtista(a);
     console.log(`[discover] cache de escaneo: ${restored} artistas restaurados (${agoLabel(cached.ts)})`);
   }
+  // Lo que viene de la base no trae `unheard` calculado (no pasó por
+  // `processArtist`): se parte acá con la misma cuenta, contra los escuchados de AHORA.
+  const deLaBase = await restaurarDesdeLaBase(state.artists, {
+    alRestaurar: (a) => {
+      const unheard = a.disco.filter(al => albumIsUnheard(al, a.name, state.heard));
+      a.unheard = unheard;
+      a.unheardAlbums = unheard.filter(al => al.type === 'album');
+      a.unheardSingles = unheard.filter(al => al.type === 'single');
+    },
+  });
+  if (!ruta.vigente()) return teardown;
+  const frescura = estadoFrescura({ guardado, nConBase: deLaBase.n, recienteMax: deLaBase.recienteMax });
+  fijarFrescuraVencida(SCAN_KEY, frescura.estado === 'vencida' ? frescura.ts : null);
+  if (frescura.estado === 'vencida') state.scannedAt = frescura.ts;
+  console.log(`[discover] desde la base, sin red: ${deLaBase.n} artistas · frescura: ${frescura.estado}`);
 
   renderShell(content, candidates.length);
   pintarCuenta();
@@ -316,6 +346,7 @@ function renderShell(content, totalCandidates) {
         <button class="btn btn-secondary btn-sm" id="disco-load-more" title="Abre la lista de artistas sin escanear para elegir cuáles. Abrirla no pide nada a Spotify.">Elegir más artistas para escanear…</button>
       </div>
     </div>
+    ${avisoFrescuraHtml('disco', SCAN_KEY)}
     ${renderFiltroChips(state.filtros, state.conteosFiltro)}
     <div class="disco-progress" id="disco-progress" style="display:none">
       <div class="disco-progress-bar"><div class="disco-progress-fill" id="disco-progress-fill" style="width:0%"></div></div>
@@ -333,6 +364,7 @@ function renderShell(content, totalCandidates) {
   `;
 
   wireFiltroChips(content, state.filtros, () => refreshList(content));
+  conectarAvisoFrescura(content, 'disco', 'disco-refresh');
 
   content.querySelector('#disco-kind').addEventListener('click', (e) => {
     const btn = e.target.closest('[data-kind]');
@@ -684,6 +716,7 @@ function refreshList(content) {
   const nHidden = document.getElementById('disco-hidden-n');
   if (nHidden) nHidden.textContent = hiddenAlbums.size;
   pintarSub();
+  repintarAvisoFrescura(content, 'disco', SCAN_KEY);   // tras «Actualizar» la línea se va sola
 
   if (!artists.length) {
     teardown();

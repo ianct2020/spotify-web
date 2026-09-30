@@ -21,10 +21,10 @@
 // texto blanco: los dos siguen legibles en claro, pero no acompañan al tema.
 // Anotado en la doc.
 
-import { openModal, closeTop } from './modal-stack.js?v=261';
-import { showToast } from './toast.js?v=261';
-import { prefKey, migratePrefKey } from '../storage.js?v=261';
-import { getAnimMode, setAnimMode } from './reveal.js?v=261';
+import { openModal, closeTop } from './modal-stack.js?v=262';
+import { showToast } from './toast.js?v=262';
+import { prefKey, migratePrefKey } from '../storage.js?v=262';
+import { getAnimMode, setAnimMode } from './reveal.js?v=262';
 
 // La clave lleva prefijo por usuario desde v=159 (antes era global y dos
 // personas en el mismo navegador compartían paleta). El prefijo sale de

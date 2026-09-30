@@ -4070,6 +4070,15 @@ body.covers-fs .main {
   line-height: 1.4;
 }
 .disco-aviso[hidden] { display: none; }
+/* La línea «lo que ves puede estar desactualizado» (v=262): el texto y, al lado,
+   el botón que aprieta el «Actualizar» de la vista. */
+.disco-aviso-frescura {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px 14px;
+  flex-wrap: wrap;
+}
 .disco-controls { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
 .disco-chip-group {
   display: inline-flex;
@@ -4087,6 +4096,12 @@ body.covers-fs .main {
 }
 .disco-chip:hover { background: var(--color-elevated); color: var(--color-text); }
 .disco-chip.is-on { background: var(--color-accent); color: white; }
+/* La barra de #new-releases lleva seis controles y trece chips; desde v=241
+   (los chips «últimos 5 años» y «todo») sumaban 1.223 px más 5 huecos contra 1.252
+   px de barra a 1366, y «Base…» caía a una segunda fila. Dos píxeles menos de
+   relleno por lado, solo ahí, devuelven la fila sin tocar ningún rótulo: 13 chips
+   × 4 px = 52 px. El 12 de `.disco-chip` sigue mandando en el resto de la app. */
+.disco-controls-denso .disco-chip { padding: 6px 10px; }
 .disco-chip + .disco-chip { border-left: 1px solid var(--color-border); }
 
 /* ── Los ocho filtros de descubrimiento (v=152, a iconos en v=230) ────────

@@ -6,34 +6,35 @@
 //     (util/album-heard.js: historial completo + likes + listened + w-three)
 //   - permiten "+ Biblioteca" y "Crear playlist con lo elegido"
 
-import { idbGet, idbGetCached, idbSetCached, idbDel, idbEntriesByPrefix } from '../idb.js?v=261';
-import { getArtistAlbumsConFuente, buscarDiscografiaPorNombre, searchArtistByName, getAlbumTracks, saveToLibrary, saveAlbumsToLibrary, createPlaylist, addTracksToPlaylist } from '../api.js?v=261';
-import { albumKey } from '../util/album-key.js?v=261';
-import { cardKey, cardKeyLegacy, albumCreditName, keyOfPlaylistTrack } from '../util/discover-key.js?v=261';
-import { escapeHtml } from '../ui/components.js?v=261';
-import { openModal, closeTop } from '../ui/modal-stack.js?v=261';
-import { showToast } from '../ui/toast.js?v=261';
-import { openPlaylistPicker } from '../ui/playlist-picker.js?v=261';
-import { getOwnPlaylists, addUrisToPlaylists, toastAddResult } from '../util/playlist-add.js?v=261';
-import { openArtistCard } from './artist-card.js?v=261';
-import { openAlbumCard } from './album-card.js?v=261';
-import { createHiddenStore, createLocalStore } from '../util/hidden-sync.js?v=261';
-import { recuperarUriDeAlbumKey, REGLAS_VERSION } from '../util/hidden-recover.js?v=261';
-import { getPreview } from '../api/preview-providers.js?v=261';
-import { togglePreview, playingKey, attachHover } from '../ui/preview-player.js?v=261';
-import { coverUrl } from '../util/cover-size.js?v=261';
-import { fechaDelFallo } from '../util/escaneo-fallos.js?v=261';
-import { FILTROS as FILTROS_DEF, saveFiltros } from '../util/discover-filters.js?v=261';
-import { esEPoAlbum } from '../util/release-size.js?v=261';
-import { iconoPlay, iconoPausa, iconoPuntos, iconoOjo, iconoOjoTachado } from '../ui/icons.js?v=261';
+import { idbGet, idbGetCached, idbSetCached, idbDel, idbEntriesByPrefix, idbAllKeys } from '../idb.js?v=262';
+import { getArtistAlbumsConFuente, buscarDiscografiaPorNombre, searchArtistByName, getAlbumTracks, saveToLibrary, saveAlbumsToLibrary, createPlaylist, addTracksToPlaylist } from '../api.js?v=262';
+import { albumKey } from '../util/album-key.js?v=262';
+import { cardKey, cardKeyLegacy, albumCreditName, keyOfPlaylistTrack } from '../util/discover-key.js?v=262';
+import { escapeHtml } from '../ui/components.js?v=262';
+import { openModal, closeTop } from '../ui/modal-stack.js?v=262';
+import { showToast } from '../ui/toast.js?v=262';
+import { openPlaylistPicker } from '../ui/playlist-picker.js?v=262';
+import { getOwnPlaylists, addUrisToPlaylists, toastAddResult } from '../util/playlist-add.js?v=262';
+import { openArtistCard } from './artist-card.js?v=262';
+import { openAlbumCard } from './album-card.js?v=262';
+import { createHiddenStore, createLocalStore } from '../util/hidden-sync.js?v=262';
+import { recuperarUriDeAlbumKey, REGLAS_VERSION } from '../util/hidden-recover.js?v=262';
+import { getPreview } from '../api/preview-providers.js?v=262';
+import { togglePreview, playingKey, attachHover } from '../ui/preview-player.js?v=262';
+import { coverUrl } from '../util/cover-size.js?v=262';
+import { fechaDelFallo } from '../util/escaneo-fallos.js?v=262';
+import { SCAN_TTL_MS, escaneoVencido, textoFrescura, crearMarcasDeFrescura } from '../util/frescura-escaneo.js?v=262';
+import { FILTROS as FILTROS_DEF, saveFiltros } from '../util/discover-filters.js?v=262';
+import { esEPoAlbum } from '../util/release-size.js?v=262';
+import { iconoPlay, iconoPausa, iconoPuntos, iconoOjo, iconoOjoTachado } from '../ui/icons.js?v=262';
 import {
   DISCO_BASE_PREFIX, PRESUPUESTO_REFRESCO, RECIENTE_MAX_PAGINAS,
   crearBase, sumarCompleta, sumarReciente, tocaReciente, rangoReciente,
   fusionarBases, armarExportacion, leerImportacion,
-} from '../util/disco-base.js?v=261';
+} from '../util/disco-base.js?v=262';
 import {
   estimarCostoDeEscaneo, clasificarArtistas, totalizarCosto, costoDeUno, superaUmbral, PAGINAS_POR_ARTISTA,
-} from '../util/costo-escaneo.js?v=261';
+} from '../util/costo-escaneo.js?v=262';
 
 const DISCO_TTL_MIN = 30 * 24 * 60;       // 30 días
 const ARTIST_ID_TTL_MIN = 60 * 24 * 60;   // 60 días — los ids no cambian
@@ -798,7 +799,7 @@ export async function estadoDiscografia(artistId) {
 // resultado ya cruzado con TTL de 7 días; el botón "Actualizar" lo tira (y
 // solo a él: la base de discografías no se toca, ver `clearScanCache`).
 
-const SCAN_TTL_MIN = 7 * 24 * 60;   // 7 días
+const SCAN_TTL_MIN = SCAN_TTL_MS / 60000;   // 7 días
 
 export async function loadScanCache(viewKey) {
   try {
@@ -807,9 +808,84 @@ export async function loadScanCache(viewKey) {
   } catch { return null; }
 }
 
+// ── La frescura NO son los datos (v=262) ─────────────────────────────────────
+//
+// `loadScanCache` usa `idbGetCached`, que BORRA la clave al leerla vencida: con
+// el caché de 7 días vencido la vista abría vacía (v=261 sacó el escaneo
+// automático, que era lo que la repoblaba) y además perdía hasta la fecha de la
+// última comprobación. Las vistas leen ahora con `leerEscaneoGuardado`: CRUDO,
+// sin mirar el vencimiento y sin borrar nada. Lo vencido solo cambia lo que la
+// cabecera DICE; los datos salen de la base (`restaurarDesdeLaBase`).
+
+/**
+ * El caché del escaneo tal como está en disco: { artists, ts, vencido } o null
+ * si no existe. No borra nada, ni siquiera lo vencido. 0 requests.
+ */
+export async function leerEscaneoGuardado(viewKey) {
+  try {
+    const w = await idbGet(`discover_scan_${viewKey}`);
+    const v = w?.value;
+    if (!v || !Array.isArray(v.artists)) return null;
+    const ts = Number.isFinite(v.ts) ? v.ts : (Number.isFinite(w.storedAt) ? w.storedAt : null);
+    return { artists: v.artists, ts, vencido: escaneoVencido({ ts, expiry: w.expiry }) };
+  } catch { return null; }
+}
+
+/**
+ * Pinta lo que ya está pagado: a cada artista sin escanear que tenga base
+ * guardada le pone su discografía (la misma `dedupDisco(base.items)` que hace
+ * `processArtist`) y lo marca `scanned`. **0 peticiones**: lee IndexedDB con
+ * `leerBase` y nada más. El id sale de lo que el artista ya trae (`id`, `seedId`)
+ * o de `discover_artist_id_*` leído CRUDO; si no hay ninguno, el artista se
+ * queda sin escanear (buscarlo costaría un `/search`, y eso NO se hace acá).
+ *
+ * `alRestaurar(a)`: lo que cada vista calcula de más por artista (la de
+ * `#discover-artists` parte lo no escuchado, como hace su `processArtist`).
+ *
+ * Devuelve { n, recienteMax }: cuántos artistas se pintaron y la fecha más nueva
+ * en que se miró lo reciente de alguna de esas bases.
+ */
+export async function restaurarDesdeLaBase(artistas, { alRestaurar = null } = {}) {
+  let n = 0;
+  let recienteMax = 0;
+  let claves;
+  try { claves = new Set(await idbAllKeys()); } catch { return { n: 0, recienteMax: null }; }
+  for (const a of artistas) {
+    if (a.scanned) continue;
+    let id = a.id || a.seedId || null;
+    if (!id && claves.has(`discover_artist_id_${a.nameLower}`)) {
+      try { id = (await idbGet(`discover_artist_id_${a.nameLower}`))?.value || null; } catch { id = null; }
+    }
+    if (!id || !claves.has(`${DISCO_BASE_PREFIX}${id}`)) continue;
+    const base = await leerBase(id);
+    if (!base || !base.items.length) continue;
+    a.id = id;
+    a.disco = dedupDisco(base.items);
+    a.scanned = true;
+    a.error = null;
+    migrarClavesDeArtista(a);   // lo que no pasa por `processArtist` tiene que migrar igual (v=210)
+    if (alRestaurar) alRestaurar(a);
+    n++;
+    if (Number.isFinite(base.recienteAt) && base.recienteAt > recienteMax) recienteMax = base.recienteAt;
+  }
+  return { n, recienteMax: recienteMax || null };
+}
+
+// La fecha de la última comprobación cuando lo que se ve viene de la base y no
+// de un escaneo vigente. Ver `crearMarcasDeFrescura` (util/frescura-escaneo.js):
+// sin esto, guardar un escaneo PARCIAL re-estamparía el caché con la hora de
+// ahora y la próxima apertura diría «al día» con 350 artistas sin mirar.
+const marcasFrescura = crearMarcasDeFrescura();
+
+/** `ts` null/undefined = la frescura está al día (se suelta la marca). */
+export function fijarFrescuraVencida(viewKey, ts) { marcasFrescura.fijar(viewKey, ts); }
+
+/** El ts de la última comprobación si la frescura está vencida, o null. */
+export function frescuraVencidaDe(viewKey) { return marcasFrescura.de(viewKey); }
+
 export async function saveScanCache(viewKey, artists) {
   try {
-    await idbSetCached(`discover_scan_${viewKey}`, { ts: Date.now(), artists }, SCAN_TTL_MIN);
+    await idbSetCached(`discover_scan_${viewKey}`, { ts: marcasFrescura.tsAlGuardar(viewKey), artists }, SCAN_TTL_MIN);
   } catch { /* ignora */ }
 }
 
@@ -821,7 +897,36 @@ export async function saveScanCache(viewKey, artists) {
 // que mira solo lo reciente y con presupuesto. Ya no recibe la lista de ids, a
 // propósito: no hay nada por artista que borrar.
 export async function clearScanCache(viewKey) {
+  marcasFrescura.soltar(viewKey);   // quien tira el caché va a comprobar de verdad
   try { await idbDel(`discover_scan_${viewKey}`); } catch { /* ignora */ }
+}
+
+/**
+ * La línea «lo que ves está desactualizado» con su botón, para la cabecera de
+ * una vista (`pfx` = prefijo de ids). Vacía si la frescura está al día. El botón
+ * NO hace nada propio: aprieta el «Actualizar» de la vista, que trae su cartel
+ * de costo; así hay un solo camino que gasta.
+ */
+export function avisoFrescuraHtml(pfx, viewKey) {
+  const ts = frescuraVencidaDe(viewKey);
+  if (ts == null) return '';
+  return `<div class="disco-aviso disco-aviso-frescura" id="${pfx}-aviso-frescura" role="status">
+      <span id="${pfx}-aviso-frescura-txt">${escapeHtml(textoFrescura(ts))}</span>
+      <button class="btn btn-secondary btn-sm" id="${pfx}-aviso-frescura-btn" title="Es el mismo «Actualizar» de arriba: antes de pedir nada te dice cuántas peticiones cuesta.">Actualizar</button>
+    </div>`;
+}
+
+/** Conecta el botón del aviso con el «Actualizar» de la vista (`refreshId`). */
+export function conectarAvisoFrescura(content, pfx, refreshId) {
+  const btn = content.querySelector(`#${pfx}-aviso-frescura-btn`);
+  if (!btn) return;
+  btn.onclick = () => content.querySelector(`#${refreshId}`)?.click();
+}
+
+/** Quita o muestra la línea según la marca actual (tras un «Actualizar» se va sola). */
+export function repintarAvisoFrescura(content, pfx, viewKey) {
+  const el = content.querySelector(`#${pfx}-aviso-frescura`);
+  if (frescuraVencidaDe(viewKey) == null && el) el.remove();
 }
 
 // "hace 3 días" / "hoy" para el sub-texto del botón Actualizar.
@@ -841,7 +946,7 @@ export function yearOf(release) {
 // `releaseTs` vive ahora en `util/release-date.js` (v=246), junto al comparador
 // «más nuevo primero» de `#discover-artists`; se re-exporta acá para que
 // `#new-releases` siga importándolo de este archivo.
-export { releaseTs } from '../util/release-date.js?v=261';
+export { releaseTs } from '../util/release-date.js?v=262';
 
 // Deduplica ediciones del mismo álbum (deluxe, remaster, etc). Nos quedamos
 // con la primera edición (release date más antiguo).
