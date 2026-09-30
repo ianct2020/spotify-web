@@ -14,6 +14,7 @@ register('./dobles/loader-costo.mjs', pathToFileURL(import.meta.filename));
 
 const {
   estimarCostoDeEscaneo, superaUmbral, UMBRAL_AVISO, PAGINAS_POR_ARTISTA,
+  clasificarArtistas, totalizarCosto, costoDeUno,
 } = await import('../src/js/util/costo-escaneo.js');
 const { PRESUPUESTO_REFRESCO, RECIENTE_TTL_MS, RECIENTE_FORZADO_MIN_MS } =
   await import('../src/js/util/disco-base.js');
@@ -183,6 +184,47 @@ const artistas = (cuantos, desde = 0) =>
   eq(est.busquedas, 1, 'y la búsqueda del refresco');
   eq(est.total, est.nativos + est.busquedas, 'el total es la suma de las partes');
   eq(est.artistas, 4, 'y los artistas son los de la cola');
+}
+
+// ── 7. El selector de artistas (v=259) usa ESTA cuenta, partida en dos ──────
+//
+// `clasificarArtistas` + `totalizarCosto` tienen que dar exactamente lo mismo
+// que `estimarCostoDeEscaneo`, para cualquier subconjunto: el selector
+// recalcula con ellas en cada casilla, y si divergen del aviso de sí/no, uno de
+// los dos le miente a Ian.
+
+{
+  const kv = new Map();
+  kv.set(`${PREFIJO}a0`, { value: { items: [{ id: 'x' }], recienteAt: Date.now() - 40 * DIA } });  // vencida
+  kv.set(`${PREFIJO}a1`, { value: { items: [{ id: 'x' }], recienteAt: Date.now() } });             // fresca
+  globalThis.__IDB = { kv, ids: new Map() };
+  const lista = [...artistas(4), { name: 'Sin id', nameLower: 'sinid', seedId: null }];
+  const clas = await clasificarArtistas(lista);
+  eq(clas.map(c => c.artista), lista, 'la clasificación conserva el orden y los objetos');
+  eq(totalizarCosto(clas), await estimarCostoDeEscaneo(lista), 'lista entera: igual que el estimador');
+  // Todos los subconjuntos de 5 (32): mismo número por los dos caminos.
+  let iguales = 0;
+  for (let m = 0; m < 32; m++) {
+    const sub = lista.filter((_, i) => m & (1 << i));
+    const a = totalizarCosto(clas.filter((_, i) => m & (1 << i)));
+    const b = await estimarCostoDeEscaneo(sub);
+    if (JSON.stringify(a) === JSON.stringify(b)) iguales++;
+  }
+  eq(iguales, 32, 'los 32 subconjuntos dan lo mismo por los dos caminos');
+  eq(clas.map(costoDeUno), [1, 0, PAGINAS_POR_ARTISTA, PAGINAS_POR_ARTISTA, PAGINAS_POR_ARTISTA + 1],
+    'por artista: vencida 1, fresca 0 (gratis), sin base 5, sin id ni base 6');
+  eq(totalizarCosto([]).total, 0, 'nada marcado: 0 peticiones');
+  eq(totalizarCosto([]).exacto, true, 'y el cero es exacto (sin «~»)');
+}
+
+// El tope de la ronda solo existe en un lote: con más refrescos que
+// presupuesto, la suma de las filas se pasa y el total no.
+{
+  montarBases(Array(PRESUPUESTO_REFRESCO + 10).fill(40));
+  const clas = await clasificarArtistas(artistas(PRESUPUESTO_REFRESCO + 10));
+  const suma = clas.reduce((s, c) => s + costoDeUno(c), 0);
+  eq(suma, PRESUPUESTO_REFRESCO + 10, 'cada fila vencida dice 1');
+  eq(totalizarCosto(clas).total, PRESUPUESTO_REFRESCO, 'el total respeta el presupuesto de la ronda');
 }
 
 console.log(`OK costo-escaneo: ${n} asserts`);

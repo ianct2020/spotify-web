@@ -6,31 +6,33 @@
 //     (util/album-heard.js: historial completo + likes + listened + w-three)
 //   - permiten "+ Biblioteca" y "Crear playlist con lo elegido"
 
-import { idbGet, idbGetCached, idbSetCached, idbDel, idbEntriesByPrefix } from '../idb.js?v=258';
-import { getArtistAlbumsConFuente, buscarDiscografiaPorNombre, searchArtistByName, getAlbumTracks, saveToLibrary, saveAlbumsToLibrary, createPlaylist, addTracksToPlaylist } from '../api.js?v=258';
-import { albumKey } from '../util/album-key.js?v=258';
-import { cardKey, cardKeyLegacy, albumCreditName, keyOfPlaylistTrack } from '../util/discover-key.js?v=258';
-import { escapeHtml } from '../ui/components.js?v=258';
-import { openModal, closeTop } from '../ui/modal-stack.js?v=258';
-import { showToast } from '../ui/toast.js?v=258';
-import { openPlaylistPicker } from '../ui/playlist-picker.js?v=258';
-import { getOwnPlaylists, addUrisToPlaylists, toastAddResult } from '../util/playlist-add.js?v=258';
-import { openArtistCard } from './artist-card.js?v=258';
-import { openAlbumCard } from './album-card.js?v=258';
-import { createHiddenStore, createLocalStore } from '../util/hidden-sync.js?v=258';
-import { recuperarUriDeAlbumKey, REGLAS_VERSION } from '../util/hidden-recover.js?v=258';
-import { getPreview } from '../api/preview-providers.js?v=258';
-import { togglePreview, playingKey, attachHover } from '../ui/preview-player.js?v=258';
-import { coverUrl } from '../util/cover-size.js?v=258';
-import { FILTROS as FILTROS_DEF, saveFiltros } from '../util/discover-filters.js?v=258';
-import { esEPoAlbum } from '../util/release-size.js?v=258';
-import { iconoPlay, iconoPausa, iconoPuntos, iconoOjo, iconoOjoTachado } from '../ui/icons.js?v=258';
+import { idbGet, idbGetCached, idbSetCached, idbDel, idbEntriesByPrefix } from '../idb.js?v=259';
+import { getArtistAlbumsConFuente, buscarDiscografiaPorNombre, searchArtistByName, getAlbumTracks, saveToLibrary, saveAlbumsToLibrary, createPlaylist, addTracksToPlaylist } from '../api.js?v=259';
+import { albumKey } from '../util/album-key.js?v=259';
+import { cardKey, cardKeyLegacy, albumCreditName, keyOfPlaylistTrack } from '../util/discover-key.js?v=259';
+import { escapeHtml } from '../ui/components.js?v=259';
+import { openModal, closeTop } from '../ui/modal-stack.js?v=259';
+import { showToast } from '../ui/toast.js?v=259';
+import { openPlaylistPicker } from '../ui/playlist-picker.js?v=259';
+import { getOwnPlaylists, addUrisToPlaylists, toastAddResult } from '../util/playlist-add.js?v=259';
+import { openArtistCard } from './artist-card.js?v=259';
+import { openAlbumCard } from './album-card.js?v=259';
+import { createHiddenStore, createLocalStore } from '../util/hidden-sync.js?v=259';
+import { recuperarUriDeAlbumKey, REGLAS_VERSION } from '../util/hidden-recover.js?v=259';
+import { getPreview } from '../api/preview-providers.js?v=259';
+import { togglePreview, playingKey, attachHover } from '../ui/preview-player.js?v=259';
+import { coverUrl } from '../util/cover-size.js?v=259';
+import { FILTROS as FILTROS_DEF, saveFiltros } from '../util/discover-filters.js?v=259';
+import { esEPoAlbum } from '../util/release-size.js?v=259';
+import { iconoPlay, iconoPausa, iconoPuntos, iconoOjo, iconoOjoTachado } from '../ui/icons.js?v=259';
 import {
   DISCO_BASE_PREFIX, PRESUPUESTO_REFRESCO, RECIENTE_MAX_PAGINAS,
   crearBase, sumarCompleta, sumarReciente, tocaReciente, rangoReciente,
   fusionarBases, armarExportacion, leerImportacion,
-} from '../util/disco-base.js?v=258';
-import { estimarCostoDeEscaneo, superaUmbral, PAGINAS_POR_ARTISTA } from '../util/costo-escaneo.js?v=258';
+} from '../util/disco-base.js?v=259';
+import {
+  estimarCostoDeEscaneo, clasificarArtistas, totalizarCosto, costoDeUno, superaUmbral, PAGINAS_POR_ARTISTA,
+} from '../util/costo-escaneo.js?v=259';
 
 const DISCO_TTL_MIN = 30 * 24 * 60;       // 30 días
 const ARTIST_ID_TTL_MIN = 60 * 24 * 60;   // 60 días — los ids no cambian
@@ -350,16 +352,65 @@ function abrirModalBase(pfx, onExportar, onImportar) {
 // local, 0 requests), así que decir que no cuesta exactamente lo mismo que no
 // haber abierto la vista.
 
+const nES = (x) => x.toLocaleString('es-ES');
+
+// Las piezas del aviso, compartidas por los dos diálogos (el de sí/no y el
+// selector de artistas). Se arman desde el objeto de `totalizarCosto()`, así que
+// el selector las vuelve a llamar en cada casilla y el texto sigue al número.
+
+function lineasDeCostoHtml(est) {
+  const lineas = [];
+  if (est.sinBase) {
+    lineas.push(`<li><b>${nES(est.sinBase)}</b> ${est.sinBase === 1 ? 'artista no tiene' : 'artistas no tienen'} la discografía guardada, así que hay que pedirla entera: unas <b>${nES(est.nativos)} peticiones</b>.</li>`);
+  }
+  if (est.aRefrescar) {
+    lineas.push(`<li><b>${nES(est.aRefrescar)}</b> ${est.aRefrescar === 1 ? 'discografía' : 'discografías'} ya guardadas, solo para mirar si ha salido algo nuevo: <b>${nES(est.aRefrescar)} ${est.aRefrescar === 1 ? 'búsqueda' : 'búsquedas'}</b>.</li>`);
+  }
+  if (est.sinId) {
+    lineas.push(`<li><b>${nES(est.sinId)}</b> ${est.sinId === 1 ? 'artista sin identificar' : 'artistas sin identificar'}: <b>${nES(est.sinId)} ${est.sinId === 1 ? 'búsqueda' : 'búsquedas'}</b> más.</li>`);
+  }
+  return lineas.join('');
+}
+
+// Honestidad sobre el número: con artistas sin base no se puede saber de
+// antemano, porque depende de cuántos lanzamientos tenga cada uno.
+function precisionHtml(est) {
+  if (!est.total) return '';
+  return est.exacto
+    ? `<p style="margin:0 0 14px;font-size:12px;color:var(--color-text-muted);line-height:1.5">Este número es exacto: una petición por discografía.</p>`
+    : `<p style="margin:0 0 14px;font-size:12px;color:var(--color-text-muted);line-height:1.5">El total es una estimación: no se puede saber exacto hasta preguntarle a Spotify cuántos lanzamientos tiene cada artista. El mínimo son ${nES(est.minimo)} peticiones; la media medida sobre las discografías que ya tienes son ${nES(PAGINAS_POR_ARTISTA)} por artista.</p>`;
+}
+
+// Las consecuencias, que son lo que de verdad importa: cuánto dura el bloqueo y
+// qué deja de funcionar mientras tanto.
+function consecuenciasHtml(est) {
+  const consecuencias = [];
+  if (est.nativos) {
+    consecuencias.push(`<li>El límite de Spotify para discografías son <b>100 peticiones</b>. Si se agota, durante <b>hora y media</b> no se puede descargar ninguna discografía nueva. Lo ya guardado se sigue viendo.</li>`);
+  }
+  if (est.busquedas || est.nativos) {
+    consecuencias.push(`<li>Al agotarse ese límite, la app pasa a usar la búsqueda, que es <b>el mismo cupo que usa el buscador de toda la aplicación</b>. Si también se agota, <b>buscar deja de funcionar unas 3 horas</b>.</li>`);
+  }
+  consecuencias.push(`<li>Los dos límites son <b>de tu cuenta de Spotify, no de este navegador</b>: gastarlos aquí los gasta también en el otro ordenador.</li>`);
+  return consecuencias.join('');
+}
+
+function numeroGrandeHtml(est) {
+  return `${est.exacto ? '' : '~'}${nES(est.total)} ${est.total === 1 ? 'petición' : 'peticiones'}`;
+}
+
 /**
  * Pide permiso para gastar. Devuelve `true` si se confirma y `false` en
  * cualquier otra salida (botón «Cancelar», ✕, Escape o clic en el fondo).
+ *
+ * Desde v=259 lo usa solo «Actualizar» (e «Importar base»): las puertas que
+ * dejan elegir artistas van por `elegirArtistasAEscanear()`.
  */
 export function confirmarCostoDeEscaneo(est, { motivo = 'automatico' } = {}) {
   return new Promise((resolve) => {
     let decidido = false;
     const cerrar = (ok) => { if (!decidido) { decidido = true; resolve(ok); } };
 
-    const n = (x) => x.toLocaleString('es-ES');
     // El titular cambia según quién disparó el escaneo: «Actualizar» es algo
     // que el usuario pidió, abrir la vista no.
     const titulo = motivo === 'pedido'
@@ -368,34 +419,6 @@ export function confirmarCostoDeEscaneo(est, { motivo = 'automatico' } = {}) {
     const entradilla = motivo === 'pedido'
       ? 'Antes de empezar, lo que va a costar:'
       : 'No se ha pedido nada todavía. Al abrirse, esta vista busca lanzamientos nuevos, y hoy eso sale caro:';
-
-    const lineas = [];
-    if (est.sinBase) {
-      lineas.push(`<li><b>${n(est.sinBase)}</b> ${est.sinBase === 1 ? 'artista no tiene' : 'artistas no tienen'} la discografía guardada, así que hay que pedirla entera: unas <b>${n(est.nativos)} peticiones</b>.</li>`);
-    }
-    if (est.aRefrescar) {
-      lineas.push(`<li><b>${n(est.aRefrescar)}</b> ${est.aRefrescar === 1 ? 'discografía' : 'discografías'} ya guardadas, solo para mirar si ha salido algo nuevo: <b>${n(est.aRefrescar)} ${est.aRefrescar === 1 ? 'búsqueda' : 'búsquedas'}</b>.</li>`);
-    }
-    if (est.sinId) {
-      lineas.push(`<li><b>${n(est.sinId)}</b> ${est.sinId === 1 ? 'artista sin identificar' : 'artistas sin identificar'}: <b>${n(est.sinId)} ${est.sinId === 1 ? 'búsqueda' : 'búsquedas'}</b> más.</li>`);
-    }
-
-    // Honestidad sobre el número: con artistas sin base no se puede saber de
-    // antemano, porque depende de cuántos lanzamientos tenga cada uno.
-    const precision = est.exacto
-      ? `<p style="margin:0 0 14px;font-size:12px;color:var(--color-text-muted);line-height:1.5">Este número es exacto: una petición por discografía.</p>`
-      : `<p style="margin:0 0 14px;font-size:12px;color:var(--color-text-muted);line-height:1.5">El total es una estimación: no se puede saber exacto hasta preguntarle a Spotify cuántos lanzamientos tiene cada artista. El mínimo son ${n(est.minimo)} peticiones; la media medida sobre las discografías que ya tienes son ${n(PAGINAS_POR_ARTISTA)} por artista.</p>`;
-
-    // Las consecuencias, que son lo que de verdad importa: cuánto dura el
-    // bloqueo y qué deja de funcionar mientras tanto.
-    const consecuencias = [];
-    if (est.nativos) {
-      consecuencias.push(`<li>El límite de Spotify para discografías son <b>100 peticiones</b>. Si se agota, durante <b>hora y media</b> no se puede descargar ninguna discografía nueva. Lo ya guardado se sigue viendo.</li>`);
-    }
-    if (est.busquedas || est.nativos) {
-      consecuencias.push(`<li>Al agotarse ese límite, la app pasa a usar la búsqueda, que es <b>el mismo cupo que usa el buscador de toda la aplicación</b>. Si también se agota, <b>buscar deja de funcionar unas 3 horas</b>.</li>`);
-    }
-    consecuencias.push(`<li>Los dos límites son <b>de tu cuenta de Spotify, no de este navegador</b>: gastarlos aquí los gasta también en el otro ordenador.</li>`);
 
     const overlay = openModal({
       id: 'costo-escaneo',
@@ -409,13 +432,13 @@ export function confirmarCostoDeEscaneo(est, { motivo = 'automatico' } = {}) {
         <div class="picker-scroll">
         <p style="color:var(--color-text-secondary);font-size:13px;line-height:1.55;margin:0 0 12px">${entradilla}</p>
         <div style="background:var(--color-elevated);border-radius:8px;padding:12px 14px;margin:0 0 12px">
-          <div style="font-size:22px;font-weight:600;line-height:1.2">${est.exacto ? '' : '~'}${n(est.total)} peticiones</div>
-          <div style="font-size:12px;color:var(--color-text-muted);margin-top:2px">para escanear ${n(est.artistas)} ${est.artistas === 1 ? 'artista' : 'artistas'}</div>
+          <div style="font-size:22px;font-weight:600;line-height:1.2">${numeroGrandeHtml(est)}</div>
+          <div style="font-size:12px;color:var(--color-text-muted);margin-top:2px">para escanear ${nES(est.artistas)} ${est.artistas === 1 ? 'artista' : 'artistas'}</div>
         </div>
-        <ul style="margin:0 0 12px;padding-left:18px;font-size:13px;line-height:1.6;color:var(--color-text-secondary)">${lineas.join('')}</ul>
-        ${precision}
+        <ul style="margin:0 0 12px;padding-left:18px;font-size:13px;line-height:1.6;color:var(--color-text-secondary)">${lineasDeCostoHtml(est)}</ul>
+        ${precisionHtml(est)}
         <p style="margin:0 0 6px;font-size:13px;font-weight:600">Si se agota la cuota</p>
-        <ul style="margin:0 0 18px;padding-left:18px;font-size:12.5px;line-height:1.6;color:var(--color-text-secondary)">${consecuencias.join('')}</ul>
+        <ul style="margin:0 0 18px;padding-left:18px;font-size:12.5px;line-height:1.6;color:var(--color-text-secondary)">${consecuenciasHtml(est)}</ul>
         </div>
         <div class="modal-actions" style="display:flex;gap:10px;justify-content:flex-end">
           <button class="btn btn-secondary" id="costo-cancelar">Cancelar</button>
@@ -433,13 +456,17 @@ export function confirmarCostoDeEscaneo(est, { motivo = 'automatico' } = {}) {
 }
 
 /**
- * La guarda completa: estima, y si supera el umbral pide permiso.
+ * La guarda de sí/no: estima, y si supera el umbral pide permiso.
  *
  * Devuelve `true` si el escaneo puede arrancar. Cuenta ANTES de cualquier
  * `await` que gaste: la estimación es toda local (IndexedDB `readonly`) y el
  * diálogo se resuelve antes de que se cree un solo worker. Una guarda que
  * cuenta DESPUÉS del `await` deja pasar la ráfaga entera — pasó el 23/09, con
  * 109 requests de golpe.
+ *
+ * La usan «Actualizar» e «Importar base», que rehacen la vista ENTERA desde la
+ * base: elegir un subconjunto ahí dejaría el resto de la vista vacía (el caché
+ * del escaneo ya se tiró), así que no pasan por el selector.
  */
 export async function autorizarEscaneo(artistas, { forzar = false, motivo = 'automatico' } = {}) {
   if (!artistas.length) return true;
@@ -448,7 +475,169 @@ export async function autorizarEscaneo(artistas, { forzar = false, motivo = 'aut
   return confirmarCostoDeEscaneo(est, { motivo });
 }
 
-/** Engancha los botones. `alImportar` se llama después de importar, para repintar. */
+// ── Artistas a la carta: el selector (v=259) ───────────────────────────────
+//
+// «Cargar más artistas +50» metía 50 artistas en la cola de una: ~250
+// peticiones, más que la cuota entera de discografías (100). Ahora se ve la
+// lista y se marca cuáles; el número grande sigue a las casillas.
+//
+// Tres reglas que no son de estilo:
+//   - El default es NINGUNO marcado y el botón de escanear está apagado con
+//     cero: lo que se aprieta sin pensar tiene que ser lo barato.
+//   - Abrir el selector cuesta 0 peticiones (la clasificación es IndexedDB
+//     `readonly`), y cerrarlo por cualquier salida devuelve `null` sin haber
+//     tocado nada: ni `scanned`, ni el caché del escaneo, ni la base.
+//   - El costo sale de `util/costo-escaneo.js` y de ningún otro sitio. No
+//     escribas otra cuenta acá: `costoDeUno` y `totalizarCosto` son las mismas
+//     que usa el aviso de sí/no.
+
+const SEL_TITULO = {
+  pedido: 'Elige qué artistas escanear',
+  automatico: 'Esta vista quiere pedir datos a Spotify',
+  filtro: 'El umbral nuevo añade artistas sin escanear',
+};
+const SEL_ENTRADILLA = {
+  pedido: 'No hay ninguno marcado y abrir esta lista no ha costado nada. Cada artista que marques suma lo que cuesta pedir su discografía a Spotify.',
+  automatico: 'No se ha pedido nada todavía. Al abrirse, esta vista busca lanzamientos nuevos de estos artistas, y hoy eso sale caro. Marca solo los que quieras escanear.',
+  filtro: 'No se ha pedido nada todavía. Con el umbral nuevo entran artistas que aún no se han escaneado. Marca solo los que quieras escanear; la lista se filtra igual.',
+};
+
+function etiquetaCosto(c) {
+  const n = costoDeUno(c);
+  if (!n) return { texto: 'gratis', titulo: 'Su discografía ya está guardada y al día: no pide nada a Spotify.' };
+  if (c.sinBase) return { texto: `~${nES(n)} pet.`, titulo: 'Sin discografía guardada: hay que pedirla entera. La media medida son 5 peticiones por artista.' };
+  return { texto: `${nES(n)} ${n === 1 ? 'búsqueda' : 'búsquedas'}`, titulo: c.sinId ? 'Hay que buscar su id en Spotify.' : 'Discografía guardada: solo se mira si ha salido algo nuevo.' };
+}
+
+/**
+ * El selector. `clasificados` sale de `clasificarArtistas()`, en el orden en
+ * que se van a mostrar. Resuelve con los artistas marcados, o `null` si se
+ * cierra sin escanear.
+ */
+function abrirSelectorDeArtistas(clasificados, { motivo = 'pedido' } = {}) {
+  return new Promise((resolve) => {
+    let decidido = false;
+    const cerrar = (v) => { if (!decidido) { decidido = true; resolve(v); } };
+    const total = clasificados.length;
+    const gratis = clasificados.filter(c => costoDeUno(c) === 0).length;
+    const primerosDefault = Math.min(5, total);
+
+    const filas = clasificados.map((c, i) => {
+      const a = c.artista;
+      const et = etiquetaCosto(c);
+      const likes = a.likes ?? 0;
+      return `
+        <label class="sc-ex-item sel-art-item">
+          <input type="checkbox" data-i="${i}">
+          <span class="sel-art-name">${escapeHtml(a.name || a.nameLower || '')}</span>
+          <span class="sel-art-likes">${nES(likes)} me gusta</span>
+          <span class="sel-art-costo${costoDeUno(c) ? '' : ' is-gratis'}" title="${escapeHtml(et.titulo)}">${et.texto}</span>
+        </label>`;
+    }).join('');
+
+    const overlay = openModal({
+      id: 'selector-artistas',
+      onClose: () => cerrar(null),
+      html: `
+      <div class="modal modal-picker sel-art" style="max-width:560px">
+        <div class="modal-hdr">
+          <h3 class="modal-hdr-title">${SEL_TITULO[motivo] || SEL_TITULO.pedido}</h3>
+          <button class="btn btn-secondary btn-sm" data-close-modal title="Cerrar" aria-label="Cerrar">✕</button>
+        </div>
+        <p style="color:var(--color-text-secondary);font-size:13px;line-height:1.55;margin:0 0 12px">${SEL_ENTRADILLA[motivo] || SEL_ENTRADILLA.pedido}</p>
+        <div style="background:var(--color-elevated);border-radius:8px;padding:12px 14px;margin:0 0 10px">
+          <div style="font-size:22px;font-weight:600;line-height:1.2" id="sel-art-total"></div>
+          <div style="font-size:12px;color:var(--color-text-muted);margin-top:2px" id="sel-art-sub"></div>
+        </div>
+        <div class="sel-art-lote">
+          <label class="sel-art-primeros">Los primeros
+            <input type="number" class="input" id="sel-art-n" min="1" max="${total}" value="${primerosDefault}" inputmode="numeric">
+          </label>
+          <button class="btn btn-secondary btn-sm" id="sel-art-marcar">Marcar</button>
+          ${gratis ? `<button class="btn btn-secondary btn-sm" id="sel-art-gratis" title="Los que ya tienen la discografía guardada y al día">Solo los gratis (${nES(gratis)})</button>` : ''}
+          <button class="btn btn-secondary btn-sm" id="sel-art-ninguno">Ninguno</button>
+        </div>
+        <p class="sel-art-orden">Ordenados por canciones que te gustan de cada artista.</p>
+        <div class="picker-scroll sel-art-lista">${filas}
+          <div id="sel-art-detalle" style="margin-top:12px"></div>
+        </div>
+        <div class="modal-actions" style="display:flex;gap:10px;justify-content:flex-end;margin-top:12px">
+          <button class="btn btn-secondary" id="sel-art-cancelar">Cancelar</button>
+          <button class="btn btn-primary" id="sel-art-seguir" disabled>Escanear</button>
+        </div>
+      </div>
+    `,
+    });
+
+    const cajas = [...overlay.querySelectorAll('.sel-art-lista input[type="checkbox"]')];
+    const $ = (sel) => overlay.querySelector(sel);
+    const marcados = () => cajas.filter(x => x.checked).map(x => clasificados[+x.dataset.i]);
+
+    const pintar = () => {
+      const sel = marcados();
+      const est = totalizarCosto(sel);
+      $('#sel-art-total').textContent = numeroGrandeHtml(est);
+      $('#sel-art-sub').textContent = `para escanear ${nES(sel.length)} de ${nES(total)} ${total === 1 ? 'artista' : 'artistas'}`;
+      $('#sel-art-detalle').innerHTML = sel.length && est.total
+        ? `<ul style="margin:0 0 10px;padding-left:18px;font-size:13px;line-height:1.6;color:var(--color-text-secondary)">${lineasDeCostoHtml(est)}</ul>
+           ${precisionHtml(est)}
+           <p style="margin:0 0 6px;font-size:13px;font-weight:600">Si se agota la cuota</p>
+           <ul style="margin:0;padding-left:18px;font-size:12.5px;line-height:1.6;color:var(--color-text-secondary)">${consecuenciasHtml(est)}</ul>`
+        : '';
+      const seguir = $('#sel-art-seguir');
+      seguir.disabled = sel.length === 0;
+      seguir.textContent = sel.length
+        ? `Escanear ${nES(sel.length)} ${sel.length === 1 ? 'artista' : 'artistas'}`
+        : 'Escanear';
+    };
+
+    overlay.querySelector('.sel-art-lista').addEventListener('change', pintar);
+    $('#sel-art-marcar').onclick = () => {
+      const n = Math.max(0, Math.min(total, parseInt($('#sel-art-n').value, 10) || 0));
+      cajas.forEach((x, i) => { x.checked = i < n; });
+      pintar();
+    };
+    const btnGratis = $('#sel-art-gratis');
+    if (btnGratis) btnGratis.onclick = () => {
+      cajas.forEach((x) => { x.checked = costoDeUno(clasificados[+x.dataset.i]) === 0; });
+      pintar();
+    };
+    $('#sel-art-ninguno').onclick = () => { cajas.forEach((x) => { x.checked = false; }); pintar(); };
+    $('#sel-art-cancelar').onclick = () => { cerrar(null); closeTop(); };
+    $('#sel-art-seguir').onclick = () => {
+      const sel = marcados();
+      if (!sel.length) return;
+      cerrar(sel.map(c => c.artista));
+      closeTop();
+    };
+    pintar();
+  });
+}
+
+/**
+ * Puerta explícita («Escanear más artistas…»): el selector se abre SIEMPRE,
+ * cueste lo que cueste, porque el botón existe para elegir. Resuelve con los
+ * artistas marcados o `null`.
+ */
+export async function elegirArtistasAEscanear(artistas, { forzar = false, motivo = 'pedido' } = {}) {
+  if (!artistas.length) return null;
+  const clasificados = await clasificarArtistas(artistas, { forzar });
+  return abrirSelectorDeArtistas(clasificados, { motivo });
+}
+
+/**
+ * Puertas automáticas (abrir la vista, el chip de umbral de likes): por debajo
+ * del umbral de aviso se escanea la cola entera sin preguntar, como desde
+ * v=242; por encima, en vez del sí/no, el selector con la cola. Resuelve con lo
+ * que hay que escanear (la cola, o lo marcado) o `null` si se cerró.
+ */
+export async function acotarEscaneo(artistas, { forzar = false, motivo = 'automatico' } = {}) {
+  if (!artistas.length) return artistas;
+  const clasificados = await clasificarArtistas(artistas, { forzar });
+  if (!superaUmbral(totalizarCosto(clasificados))) return artistas;
+  return abrirSelectorDeArtistas(clasificados, { motivo });
+}
+
 export function conectarBotonesBase(content, pfx, alImportar) {
   const btn = content.querySelector(`#${pfx}-base`);
   const input = content.querySelector(`#${pfx}-base-input`);
@@ -637,7 +826,7 @@ export function yearOf(release) {
 // `releaseTs` vive ahora en `util/release-date.js` (v=246), junto al comparador
 // «más nuevo primero» de `#discover-artists`; se re-exporta acá para que
 // `#new-releases` siga importándolo de este archivo.
-export { releaseTs } from '../util/release-date.js?v=258';
+export { releaseTs } from '../util/release-date.js?v=259';
 
 // Deduplica ediciones del mismo álbum (deluxe, remaster, etc). Nos quedamos
 // con la primera edición (release date más antiguo).

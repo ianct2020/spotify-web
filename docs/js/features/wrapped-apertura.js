@@ -76,7 +76,7 @@
 // y un año que acabó con el último día en blanco no tiene racha que enseñar.
 // Con menos de dos pasos la apertura no se monta: no hay recorrido que hacer.
 
-import { animationsEnabled } from '../ui/reveal.js?v=258';
+import { animationsEnabled } from '../ui/reveal.js?v=259';
 
 // ── un solo recorrido vivo por vez ──────────────────────────────────────────
 //

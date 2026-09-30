@@ -47,18 +47,24 @@ import {
   estadoDiscografia,
   nuevaRondaDeRefresco,
   autorizarEscaneo,
+  elegirArtistasAEscanear,
+  acotarEscaneo,
   migrarDiscografiasViejas,
   avisarRonda,
   botonesBaseHtml,
   conectarBotonesBase,
 } from './discover-common.js';
 import { estadoNativoDiscografia } from '../api.js';
+import { leerElegidos, sumarElegidos, artistasBuscados } from '../util/cola-escaneo.js';
 
 const SCAN_KEY = 'new_releases';
 
 const LS_MIN_LIKES = 'newrel_min_likes';   // 5 / 10 / 20
 const LS_MONTHS = 'newrel_months';         // 3 / 6 / 12 / 24
 const LS_LOADED_MORE = 'newrel_loaded_more';
+// Los artistas elegidos a mano en el selector (v=259), además de los primeros
+// `loadedMore`. Ver util/cola-escaneo.js.
+const LS_ELEGIDOS = 'newrel_elegidos';
 // COMPARTIDA con #discover-artists a propósito (2026-08-29): la clave es la
 // suya, no una nueva. Las dos vistas ya comparten `filtros` por el mismo
 // motivo — si en una estás mirando sólo EPs y saltás a la otra y ves álbumes,
@@ -141,6 +147,7 @@ const state = {
   months: 12,
   filterKind: 'all',
   loadedMore: DEFAULT_INITIAL,
+  elegidos: new Set(),
   scannedAt: null,
   // 'normal' | 'hidden'. Acá no hay modo «escuchados»: marcar como escuchado es
   // una acción de #discover-artists (evaluar la discografía vieja). Los que Ian
@@ -175,6 +182,7 @@ export async function render(container) {
   // cualquiera de las dos vistas migra la MISMA clave prefijada.
   migratePrefKey(LS_FILTER_KIND);
   migratePrefKey(LS_LOADED_MORE);
+  migratePrefKey(LS_ELEGIDOS);
   container.innerHTML = `
     ${pageHeader({ title: 'Novedades de tus artistas' })}
     <div id="newrel-content"><div class="empty-state"><div class="spinner spinner-lg"></div><div style="margin-top:14px">Cargando tus likes…</div></div></div>
@@ -199,6 +207,7 @@ export async function render(container) {
   state.months = getMonths();
   state.filterKind = getFilterKind();
   state.loadedMore = getLoadedMore();
+  state.elegidos = leerElegidos(LS_ELEGIDOS);
   state.mode = 'normal';
 
   // Ocultos desde la playlist de Spotify, en segundo plano: la vista arranca
@@ -261,8 +270,14 @@ function eligibleArtists() {
   return state.artists.filter(a => a.likes >= state.minLikes);
 }
 
+// Los que la vista quiere tener escaneados: los primeros `loadedMore` más los
+// elegidos a mano (v=259). Un conjunto, no un número: ver util/cola-escaneo.js.
+function buscados() {
+  return artistasBuscados(eligibleArtists(), state.loadedMore, state.elegidos);
+}
+
 function targetToScan() {
-  return Math.min(state.loadedMore, eligibleArtists().length);
+  return buscados().length;
 }
 
 function renderShell(content, totalCandidates) {
@@ -299,7 +314,7 @@ function renderShell(content, totalCandidates) {
     </div>
     <div class="disco-list newrel-list" id="newrel-list"></div>
     <div class="disco-load-more" style="text-align:center;margin:20px 0">
-      <button class="btn btn-secondary" id="newrel-load-more">Cargar más artistas +50</button>
+      <button class="btn btn-secondary" id="newrel-load-more" title="Abre la lista de artistas sin escanear para elegir cuáles. Abrirla no pide nada a Spotify.">Elegir más artistas para escanear…</button>
     </div>
     <div class="disco-actionbar" id="newrel-actionbar" style="display:none">
       <span id="newrel-sel-count">0 seleccionados</span>
@@ -325,7 +340,12 @@ function renderShell(content, totalCandidates) {
     document.getElementById('newrel-total-scan').textContent = targetToScan();
     const sub = document.getElementById('newrel-summary-sub');
     if (sub) sub.textContent = `${eligibleArtists().length.toLocaleString('es-ES')} artistas con ≥${state.minLikes} likes`;
-    scanArtists(content).catch(err => console.warn('[newrel] scan:', err));
+    // Parece un filtro de visualización, pero bajar el umbral mete artistas
+    // nuevos en la cola: pasa por el selector si supera el aviso (v=259).
+    scanArtists(content, { motivo: 'filtro' }).then(() => {
+      const t = document.getElementById('newrel-total-scan');
+      if (t) t.textContent = targetToScan();
+    }).catch(err => console.warn('[newrel] scan:', err));
     refreshList(content);
   });
   content.querySelector('#newrel-months').addEventListener('click', (e) => {
@@ -348,32 +368,35 @@ function renderShell(content, totalCandidates) {
     // hay que pedirle la discografía (a diferencia del umbral de likes).
     refreshList(content);
   });
-  content.querySelector('#newrel-load-more').addEventListener('click', () => {
-    const eligible = eligibleArtists().length;
-    if (!eligible) {
+  content.querySelector('#newrel-load-more').addEventListener('click', async (e) => {
+    const eligible = eligibleArtists();
+    if (!eligible.length) {
       showToast(`No hay ningún artista con ${state.minLikes} o más likes. Prueba bajando el umbral.`, 'warning');
       return;
     }
-    if (state.loadedMore >= eligible && state.artists.every(a => a.likes < state.minLikes || a.scanned)) {
-      showToast(`Ya están escaneados los ${eligible.toLocaleString('es-ES')} artistas con ≥${state.minLikes} likes.`, 'info');
+    const pendientes = eligible.filter(a => !a.scanned);
+    if (!pendientes.length) {
+      showToast(`Ya están escaneados los ${eligible.length.toLocaleString('es-ES')} artistas con ≥${state.minLikes} likes.`, 'info');
       return;
     }
-    // Sin clampear contra eligibleArtists(): ese número cambia con el chip de
-    // umbral y persistirlo dejaba la vista trabada en 6 artistas.
-    const antes = state.loadedMore;
-    state.loadedMore += 50;
-    localStorage.setItem(prefKey(LS_LOADED_MORE), String(state.loadedMore));
-    document.getElementById('newrel-total-scan').textContent = targetToScan();
-    scanArtists(content, { motivo: 'pedido' }).then((r) => {
-      // Si se cancela el aviso, el +50 se deshace: dejarlo subido (y
-      // persistido) dejaría la vista pidiendo 50 artistas que nadie escaneó,
-      // y el próximo render volvería a intentarlo solo.
-      if (r !== 'cancelado') return;
-      state.loadedMore = antes;
-      localStorage.setItem(prefKey(LS_LOADED_MORE), String(antes));
-      const t = document.getElementById('newrel-total-scan');
-      if (t) t.textContent = targetToScan();
-    }).catch(err => console.warn('[newrel] scan:', err));
+    // v=259: ya no suma 50 a ciegas. Se abre el selector con TODOS los que
+    // faltan (por likes) y se escanean solo los marcados. Cerrarlo por
+    // cualquier salida devuelve null: no se toca `loadedMore`, ni los
+    // elegidos, ni el caché del escaneo.
+    const btn = e.currentTarget;
+    btn.disabled = true;
+    let elegidos;
+    try {
+      elegidos = await elegirArtistasAEscanear(pendientes, { forzar: state.ronda?.forzar, motivo: 'pedido' });
+    } finally {
+      btn.disabled = false;
+    }
+    if (!elegidos || !content.isConnected) return;
+    state.elegidos = sumarElegidos(LS_ELEGIDOS, elegidos);
+    const t = document.getElementById('newrel-total-scan');
+    if (t) t.textContent = targetToScan();
+    scanArtists(content, { motivo: 'autorizado', artistas: elegidos })
+      .catch(err => console.warn('[newrel] scan:', err));
   });
   content.querySelector('#newrel-refresh').onclick = async (e) => {
     const btn = e.currentTarget;
@@ -446,7 +469,7 @@ async function reescanearDesdeLaBase(content, { motivo = 'pedido' } = {}) {
   // dejaría la vista vaciada si se cancela. Se estima sobre la cola que HABRÍA
   // —los elegibles hasta el target, que es justo lo que quedaría por escanear
   // tras el reset— y recién entonces se toca algo.
-  const prospecto = eligibleArtists().slice(0, targetToScan());
+  const prospecto = buscados();
   if (!await autorizarEscaneo(prospecto, { forzar: state.ronda?.forzar, motivo })) return 'cancelado';
 
   await clearScanCache(SCAN_KEY);
@@ -460,26 +483,30 @@ async function reescanearDesdeLaBase(content, { motivo = 'pedido' } = {}) {
   try { await scanArtists(content, { motivo: 'autorizado' }); } catch (err) { console.warn('[newrel] scan:', err); }
 }
 
-async function scanArtists(content, { motivo = 'automatico' } = {}) {
+// `artistas`: la cola explícita que sale del selector (v=259). Sin ella, la cola
+// son los buscados que faltan escanear.
+async function scanArtists(content, { motivo = 'automatico', artistas = null } = {}) {
   const progress = document.getElementById('newrel-progress');
   const progressLabel = document.getElementById('newrel-progress-label');
   const progressFill = document.getElementById('newrel-progress-fill');
 
   const eligible = eligibleArtists();
-  const target = Math.min(state.loadedMore, eligible.length);
   let scanned = eligible.filter(a => a.scanned).length;
   setCount(scanned);
-  // slice sobre lo que FALTA, no sobre el target entero: si 40 ya vinieron del
-  // cache y el target son 100, hay que encolar 60, no 100.
-  const queue = eligible.filter(a => !a.scanned).slice(0, Math.max(0, target - scanned));
+  // Sobre lo que FALTA: si 40 ya vinieron del caché, se encolan los otros.
+  let queue = (artistas || buscados()).filter(a => !a.scanned);
   if (!queue.length) return;   // todo servido de la caché
 
   // Antes de gastar nada: si esto supera el umbral, no arranca hasta que se
-  // confirme. La cuenta es local (0 requests) y se hace ANTES de crear un solo
-  // worker — si se cancela, no se ha pedido nada y no queda nada a medias: ni
-  // un `scanned` tocado, ni la barra de progreso, ni la caché del escaneo.
-  if (motivo !== 'autorizado'
-      && !await autorizarEscaneo(queue, { forzar: state.ronda?.forzar, motivo })) return 'cancelado';
+  // elija qué escanear. La cuenta es local (0 requests) y se hace ANTES de
+  // crear un solo worker — si se cierra, no se ha pedido nada y no queda nada
+  // a medias: ni un `scanned` tocado, ni la barra de progreso, ni la caché.
+  if (motivo !== 'autorizado') {
+    const elegidos = await acotarEscaneo(queue, { forzar: state.ronda?.forzar, motivo });
+    if (!elegidos) return 'cancelado';
+    queue = [...elegidos];
+  }
+  const target = scanned + queue.length;
 
   progress.style.display = '';
 

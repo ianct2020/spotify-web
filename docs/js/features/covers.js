@@ -9,23 +9,23 @@
 // placeholder→img. Botón "Pantalla completa" (Fullscreen API) que oculta
 // sidebar/header/toolbar y recalcula el lado.
 
-import { loadListenedAlbums, isOwner, ownerLockedMessage } from './history-data.js?v=258';
-import { isJunkTrack } from '../util/junk.js?v=258';
-import { vigilarRuta } from '../util/vigencia-ruta.js?v=258';
-import { createIncrementalList, scrollRootOf } from '../ui/incremental-list.js?v=258';
-import { createLazyImages } from '../ui/lazy-img.js?v=258';
-import { getAllPlaylistItems, getBestAvailableLikes } from '../api.js?v=258';
-import { escapeHtml, pageHeader, showProgress, hideProgress } from '../ui/components.js?v=258';
-import { showToast } from '../ui/toast.js?v=258';
-import { openAlbumCard } from './album-card.js?v=258';
-import { openArtistCard } from './artist-card.js?v=258';
-import { albumKey, coverId } from '../util/album-key.js?v=258';
-import { generarWallpaper, descargarBlob, WALLPAPER_PRESETS } from './covers-wallpaper.js?v=258';
-import { buildAlbumStatsIndex } from '../util/album-stats.js?v=258';
-import { getPreview } from '../api/preview-providers.js?v=258';
-import { hoverIn, hoverOut } from '../ui/preview-player.js?v=258';
-import { coverUrl, tapaParaCelda } from '../util/cover-size.js?v=258';
-import { prefKey, migratePrefKey } from '../storage.js?v=258';
+import { loadListenedAlbums, isOwner, ownerLockedMessage } from './history-data.js?v=259';
+import { isJunkTrack } from '../util/junk.js?v=259';
+import { vigilarRuta } from '../util/vigencia-ruta.js?v=259';
+import { createIncrementalList, scrollRootOf } from '../ui/incremental-list.js?v=259';
+import { createLazyImages } from '../ui/lazy-img.js?v=259';
+import { getAllPlaylistItems, getBestAvailableLikes } from '../api.js?v=259';
+import { escapeHtml, pageHeader, showProgress, hideProgress } from '../ui/components.js?v=259';
+import { showToast } from '../ui/toast.js?v=259';
+import { openAlbumCard } from './album-card.js?v=259';
+import { openArtistCard } from './artist-card.js?v=259';
+import { albumKey, coverId } from '../util/album-key.js?v=259';
+import { generarWallpaper, descargarBlob, WALLPAPER_PRESETS } from './covers-wallpaper.js?v=259';
+import { buildAlbumStatsIndex } from '../util/album-stats.js?v=259';
+import { getPreview } from '../api/preview-providers.js?v=259';
+import { hoverIn, hoverOut } from '../ui/preview-player.js?v=259';
+import { coverUrl, tapaParaCelda } from '../util/cover-size.js?v=259';
+import { prefKey, migratePrefKey } from '../storage.js?v=259';
 
 const LS_KEY_SIZE = 'covers_cell_size';
 const LS_KEY_SORT = 'covers_sort_mode';

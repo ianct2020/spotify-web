@@ -68,35 +68,53 @@ async function leerIndiceDeBases() {
 }
 
 /**
- * Qué va a costar escanear estos artistas. Todo local: 0 requests.
+ * Qué le cuesta a cada artista, uno por uno. Todo local: 0 requests.
  *
- * `artistas` son los de la cola del escaneo, tal como la arma `scanArtists()`
- * — o sea los que TODAVÍA no están escaneados, no los de la vista entera.
+ * Es la mitad asíncrona del estimador (lee la IndexedDB) y se corre UNA vez:
+ * el selector de artistas (v=259) la llama al abrirse y después recalcula el
+ * total con `totalizarCosto()`, que es síncrona, en cada casilla que se tilda.
+ *
+ * Cada entrada: `{ artista, sinBase, sinId, aRefrescar }`. Un artista sin base
+ * nunca cuenta como `aRefrescar` (se pide entero, no se mira lo reciente).
+ */
+export async function clasificarArtistas(artistas, { forzar = false } = {}) {
+  const idx = await leerIndiceDeBases();
+  const ahora = Date.now();
+  const umbralEdad = forzar ? RECIENTE_FORZADO_MIN_MS : RECIENTE_TTL_MS;
+
+  const out = [];
+  for (const a of artistas) {
+    let id = a.id || a.seedId || null;
+    let sinId = false;
+    if (!id) {
+      // El id puede estar cacheado de antes (60 días) y entonces es gratis.
+      try { id = await idbGetCached(`discover_artist_id_${a.nameLower}`); } catch { /* ignora */ }
+      if (!id) sinId = true;
+    }
+    const recienteAt = id ? idx.get(id) : undefined;
+    const sinBase = recienteAt === undefined;
+    const aRefrescar = !sinBase && ahora - recienteAt > umbralEdad;
+    out.push({ artista: a, sinBase, sinId, aRefrescar });
+  }
+  return out;
+}
+
+/**
+ * El total de una lista ya clasificada. Síncrona y sin IndexedDB.
  *
  * Devuelve, además de los totales, `exacto`: si hay artistas sin base, el
  * número de requests NO se puede saber de antemano, porque depende de cuántos
  * lanzamientos tenga cada discografía, y eso solo lo sabe Spotify. En ese caso
  * `nativos` es una estimación y `minimo` es el piso real (1 página por artista).
  */
-export async function estimarCostoDeEscaneo(artistas, { forzar = false } = {}) {
-  const idx = await leerIndiceDeBases();
-  const ahora = Date.now();
-  const umbralEdad = forzar ? RECIENTE_FORZADO_MIN_MS : RECIENTE_TTL_MS;
-
+export function totalizarCosto(clasificados) {
   let sinBase = 0;      // hay que pedir la discografía ENTERA (endpoint caro)
   let sinId = 0;        // ni siquiera sabemos el id: 1 `/search` para buscarlo
   let aRefrescar = 0;   // tienen base; solo se mira lo reciente (1 `/search`)
-
-  for (const a of artistas) {
-    let id = a.id || a.seedId || null;
-    if (!id) {
-      // El id puede estar cacheado de antes (60 días) y entonces es gratis.
-      try { id = await idbGetCached(`discover_artist_id_${a.nameLower}`); } catch { /* ignora */ }
-      if (!id) sinId++;
-    }
-    const recienteAt = id ? idx.get(id) : undefined;
-    if (recienteAt === undefined) { sinBase++; continue; }
-    if (ahora - recienteAt > umbralEdad) aRefrescar++;
+  for (const c of clasificados) {
+    if (c.sinId) sinId++;
+    if (c.sinBase) sinBase++;
+    else if (c.aRefrescar) aRefrescar++;
   }
 
   // Lo reciente está acotado por el presupuesto de la ronda: lo que no entra
@@ -106,7 +124,7 @@ export async function estimarCostoDeEscaneo(artistas, { forzar = false } = {}) {
   const busquedas = sinId + refrescos;
 
   return {
-    artistas: artistas.length,
+    artistas: clasificados.length,
     sinBase,
     sinId,
     aRefrescar: refrescos,
@@ -117,6 +135,25 @@ export async function estimarCostoDeEscaneo(artistas, { forzar = false } = {}) {
     minimo: sinBase + busquedas,   // piso: 1 página por discografía
     exacto: sinBase === 0,
   };
+}
+
+/**
+ * Lo que cuesta UN artista suelto, para la etiqueta de su fila. Es la misma
+ * cuenta que `totalizarCosto([c]).total` (sin el tope de la ronda, que solo
+ * existe en un lote), escrita con esa función para que no diverja.
+ */
+export function costoDeUno(c) {
+  return totalizarCosto([c]).total;
+}
+
+/**
+ * Qué va a costar escanear estos artistas. Todo local: 0 requests.
+ *
+ * `artistas` son los de la cola del escaneo, tal como la arma `scanArtists()`
+ * — o sea los que TODAVÍA no están escaneados, no los de la vista entera.
+ */
+export async function estimarCostoDeEscaneo(artistas, opciones = {}) {
+  return totalizarCosto(await clasificarArtistas(artistas, opciones));
 }
 
 /** ¿Hace falta pedir permiso para este escaneo? */

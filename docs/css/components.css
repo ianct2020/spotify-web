@@ -1529,6 +1529,19 @@ input[type="checkbox"].keep-check:checked::after {
 }
 .sc-pl-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
+/* Selector de artistas a escanear (v=259, `discover-common.js`). Reusa la fila
+   de `.sc-ex-item` y solo cambia las columnas: casilla, nombre, likes, costo. */
+.sel-art-item { grid-template-columns: 18px minmax(0, 1fr) auto auto; }
+.sel-art-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sel-art-likes { font-size: 12px; color: var(--color-text-muted); white-space: nowrap; }
+.sel-art-costo { font-size: 12px; font-variant-numeric: tabular-nums; white-space: nowrap; min-width: 72px; text-align: right; color: var(--color-text-secondary); }
+.sel-art-costo.is-gratis { color: var(--color-accent); }
+.sel-art-lista { display: flex; flex-direction: column; gap: 4px; padding: 2px; }
+.sel-art-lote { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0 0 6px; }
+.sel-art-primeros { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--color-text-secondary); }
+.sel-art-primeros input { width: 64px; padding: 4px 6px; }
+.sel-art-orden { margin: 0 0 8px; font-size: 12px; color: var(--color-text-muted); }
+
 /* Modal compartido de multi-selección de playlists (ui/playlist-picker.js) */
 .pp-item input[type=checkbox] { cursor: pointer; accent-color: var(--color-accent); margin: 0; }
 .pp-item[hidden] { display: none; }
