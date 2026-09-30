@@ -1085,7 +1085,7 @@ Aparte, desde v=257 el nombre de la caché del SW lleva la versión
 despliegues anteriores: hasta v=256 valía siempre `fonoteca-sw-v1` y esa limpieza
 no corrió nunca. Eso arregla la acumulación, **no** el `index.html` viejo de arriba.
 
-**Tests y antes de pushear**: `npm test` corre las 33 suites de `tests/*.test.mjs`
+**Tests y antes de pushear**: `npm test` corre las 35 suites de `tests/*.test.mjs`
 (un proceso por suite, sale con 1 si alguna falla; `-- --orden=inverso|azar:N` y
 `-- --paralelo` para cazar dependencias de orden) y `npm run prepush` comprueba,
 sin modificar nada, sintaxis, tests, `docs/` al día, versiones parejas y que no
