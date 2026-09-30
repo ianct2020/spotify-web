@@ -55,7 +55,7 @@ import {
   conectarBotonesBase,
 } from './discover-common.js';
 import { estadoNativoDiscografia } from '../api.js';
-import { leerElegidos, sumarElegidos, artistasBuscados } from '../util/cola-escaneo.js';
+import { leerElegidos, sumarElegidos, artistasBuscados, colaAutomatica } from '../util/cola-escaneo.js';
 
 const SCAN_KEY = 'new_releases';
 
@@ -494,7 +494,9 @@ async function scanArtists(content, { motivo = 'automatico', artistas = null } =
   let scanned = eligible.filter(a => a.scanned).length;
   setCount(scanned);
   // Sobre lo que FALTA: si 40 ya vinieron del caché, se encolan los otros.
-  let queue = (artistas || buscados()).filter(a => !a.scanned);
+  // Explícita (selector): lo marcado. Automática: la cuenta de v=258, ver
+  // `colaAutomatica` — no vuelve a pagar por los huecos de los primeros.
+  let queue = artistas ? artistas.filter(a => !a.scanned) : colaAutomatica(buscados(), scanned);
   if (!queue.length) return;   // todo servido de la caché
 
   // Antes de gastar nada: si esto supera el umbral, no arranca hasta que se

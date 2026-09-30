@@ -10,19 +10,19 @@
 // 100 artistas en lugar de 20. Lógica de fetch/cache/playlist compartida en
 // features/discover-common.js con #new-releases.
 
-import { escapeHtml, confirmModal, pageHeader } from '../ui/components.js?v=259';
-import { showToast } from '../ui/toast.js?v=259';
-import { openArtistCard } from './artist-card.js?v=259';
-import { createIncrementalList, scrollRootOf } from '../ui/incremental-list.js?v=259';
-import { createLazyImages } from '../ui/lazy-img.js?v=259';
-import { isJunkTrack } from '../util/junk.js?v=259';
-import { buildAlbumHeardIndex } from '../util/album-heard.js?v=259';
-import { loadFiltros, buildFilterContext, applyDiscoverFilters } from '../util/discover-filters.js?v=259';
-import { releaseKind } from '../util/release-size.js?v=259';
-import { masNuevoPrimero } from '../util/release-date.js?v=259';
-import { vigilarRuta } from '../util/vigencia-ruta.js?v=259';
-import { leerElegidos, sumarElegidos, artistasBuscados } from '../util/cola-escaneo.js?v=259';
-import { prefKey, migratePrefKey } from '../storage.js?v=259';
+import { escapeHtml, confirmModal, pageHeader } from '../ui/components.js?v=260';
+import { showToast } from '../ui/toast.js?v=260';
+import { openArtistCard } from './artist-card.js?v=260';
+import { createIncrementalList, scrollRootOf } from '../ui/incremental-list.js?v=260';
+import { createLazyImages } from '../ui/lazy-img.js?v=260';
+import { isJunkTrack } from '../util/junk.js?v=260';
+import { buildAlbumHeardIndex } from '../util/album-heard.js?v=260';
+import { loadFiltros, buildFilterContext, applyDiscoverFilters } from '../util/discover-filters.js?v=260';
+import { releaseKind } from '../util/release-size.js?v=260';
+import { masNuevoPrimero } from '../util/release-date.js?v=260';
+import { vigilarRuta } from '../util/vigencia-ruta.js?v=260';
+import { leerElegidos, sumarElegidos, artistasBuscados, colaAutomatica } from '../util/cola-escaneo.js?v=260';
+import { prefKey, migratePrefKey } from '../storage.js?v=260';
 import {
   getArtistIdCached,
   getArtistDiscoCached,
@@ -59,7 +59,7 @@ import {
   avisarRonda,
   botonesBaseHtml,
   conectarBotonesBase,
-} from './discover-common.js?v=259';
+} from './discover-common.js?v=260';
 
 const SCAN_KEY = 'discover_artists';
 
@@ -462,7 +462,9 @@ async function scanArtists(content, ruta = vigilarRuta(), { motivo = 'automatico
   let scanned = state.artists.filter(a => a.scanned).length;
   document.getElementById('disco-count').textContent = scanned;
 
-  let queue = (artistas || buscados()).filter(a => !a.scanned);
+  // Explícita (selector): lo marcado. Automática: la cuenta de v=258, ver
+  // `colaAutomatica` — no vuelve a pagar por los huecos de los primeros.
+  let queue = artistas ? artistas.filter(a => !a.scanned) : colaAutomatica(buscados(), scanned);
   if (!queue.length) return;   // todo servido de la caché: ni barra ni requests
 
   // Antes de gastar nada: si esto supera el umbral, no arranca hasta que se

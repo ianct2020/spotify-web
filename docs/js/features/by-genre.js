@@ -1,14 +1,14 @@
-import { getAllLikedTracks, createPlaylist, addTracksToPlaylist, invalidatePlaylistsCache, exportAllData, importAllData, getCurrentUserId, getBestAvailableLikes } from '../api.js?v=259';
-import { hasKey, setKey, getArtistTopTags, getCachedTags, setCachedTags, mergeCachedTags } from '../api/lastfm.js?v=259';
-import * as statsfm from '../api/statsfm.js?v=259';
-import { getGenresForArtist as mbGetGenres } from '../api/musicbrainz.js?v=259';
-import { showProgress, hideProgress, progressController, isCancelled, promptPlaylistName, alertModal, confirmModal, escapeHtml, pageHeader } from '../ui/components.js?v=259';
-import { showToast } from '../ui/toast.js?v=259';
-import { openModal, closeTop } from '../ui/modal-stack.js?v=259';
-import { bucketFor } from '../util/genre-reason.js?v=259';
-import { openGenreAudit } from './genre-detail.js?v=259';
-import { prefKey, migratePrefKey } from '../storage.js?v=259';
-import { pedirYCachear, CUALQUIER_RESPUESTA } from '../util/cache-solo-exitos.js?v=259';
+import { getAllLikedTracks, createPlaylist, addTracksToPlaylist, invalidatePlaylistsCache, exportAllData, importAllData, getCurrentUserId, getBestAvailableLikes } from '../api.js?v=260';
+import { hasKey, setKey, getArtistTopTags, getCachedTags, setCachedTags, mergeCachedTags } from '../api/lastfm.js?v=260';
+import * as statsfm from '../api/statsfm.js?v=260';
+import { getGenresForArtist as mbGetGenres } from '../api/musicbrainz.js?v=260';
+import { showProgress, hideProgress, progressController, isCancelled, promptPlaylistName, alertModal, confirmModal, escapeHtml, pageHeader } from '../ui/components.js?v=260';
+import { showToast } from '../ui/toast.js?v=260';
+import { openModal, closeTop } from '../ui/modal-stack.js?v=260';
+import { bucketFor } from '../util/genre-reason.js?v=260';
+import { openGenreAudit } from './genre-detail.js?v=260';
+import { prefKey, migratePrefKey } from '../storage.js?v=260';
+import { pedirYCachear, CUALQUIER_RESPUESTA } from '../util/cache-solo-exitos.js?v=260';
 
 const NOISE_TAGS = new Set([
   'seen live', 'favorites', 'favorite', 'favourite', 'favourites',

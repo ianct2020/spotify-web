@@ -497,7 +497,7 @@ const SEL_TITULO = {
   filtro: 'El umbral nuevo añade artistas sin escanear',
 };
 const SEL_ENTRADILLA = {
-  pedido: 'No hay ninguno marcado y abrir esta lista no ha costado nada. Cada artista que marques suma lo que cuesta pedir su discografía a Spotify.',
+  pedido: 'Abrir esta lista no ha costado nada. Cada artista que marques suma lo que cuesta pedir su discografía a Spotify.',
   automatico: 'No se ha pedido nada todavía. Al abrirse, esta vista busca lanzamientos nuevos de estos artistas, y hoy eso sale caro. Marca solo los que quieras escanear.',
   filtro: 'No se ha pedido nada todavía. Con el umbral nuevo entran artistas que aún no se han escaneado. Marca solo los que quieras escanear; la lista se filtra igual.',
 };

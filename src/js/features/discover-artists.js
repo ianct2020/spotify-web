@@ -21,7 +21,7 @@ import { loadFiltros, buildFilterContext, applyDiscoverFilters } from '../util/d
 import { releaseKind } from '../util/release-size.js';
 import { masNuevoPrimero } from '../util/release-date.js';
 import { vigilarRuta } from '../util/vigencia-ruta.js';
-import { leerElegidos, sumarElegidos, artistasBuscados } from '../util/cola-escaneo.js';
+import { leerElegidos, sumarElegidos, artistasBuscados, colaAutomatica } from '../util/cola-escaneo.js';
 import { prefKey, migratePrefKey } from '../storage.js';
 import {
   getArtistIdCached,
@@ -462,7 +462,9 @@ async function scanArtists(content, ruta = vigilarRuta(), { motivo = 'automatico
   let scanned = state.artists.filter(a => a.scanned).length;
   document.getElementById('disco-count').textContent = scanned;
 
-  let queue = (artistas || buscados()).filter(a => !a.scanned);
+  // Explícita (selector): lo marcado. Automática: la cuenta de v=258, ver
+  // `colaAutomatica` — no vuelve a pagar por los huecos de los primeros.
+  let queue = artistas ? artistas.filter(a => !a.scanned) : colaAutomatica(buscados(), scanned);
   if (!queue.length) return;   // todo servido de la caché: ni barra ni requests
 
   // Antes de gastar nada: si esto supera el umbral, no arranca hasta que se

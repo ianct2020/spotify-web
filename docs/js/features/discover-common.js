@@ -6,33 +6,33 @@
 //     (util/album-heard.js: historial completo + likes + listened + w-three)
 //   - permiten "+ Biblioteca" y "Crear playlist con lo elegido"
 
-import { idbGet, idbGetCached, idbSetCached, idbDel, idbEntriesByPrefix } from '../idb.js?v=259';
-import { getArtistAlbumsConFuente, buscarDiscografiaPorNombre, searchArtistByName, getAlbumTracks, saveToLibrary, saveAlbumsToLibrary, createPlaylist, addTracksToPlaylist } from '../api.js?v=259';
-import { albumKey } from '../util/album-key.js?v=259';
-import { cardKey, cardKeyLegacy, albumCreditName, keyOfPlaylistTrack } from '../util/discover-key.js?v=259';
-import { escapeHtml } from '../ui/components.js?v=259';
-import { openModal, closeTop } from '../ui/modal-stack.js?v=259';
-import { showToast } from '../ui/toast.js?v=259';
-import { openPlaylistPicker } from '../ui/playlist-picker.js?v=259';
-import { getOwnPlaylists, addUrisToPlaylists, toastAddResult } from '../util/playlist-add.js?v=259';
-import { openArtistCard } from './artist-card.js?v=259';
-import { openAlbumCard } from './album-card.js?v=259';
-import { createHiddenStore, createLocalStore } from '../util/hidden-sync.js?v=259';
-import { recuperarUriDeAlbumKey, REGLAS_VERSION } from '../util/hidden-recover.js?v=259';
-import { getPreview } from '../api/preview-providers.js?v=259';
-import { togglePreview, playingKey, attachHover } from '../ui/preview-player.js?v=259';
-import { coverUrl } from '../util/cover-size.js?v=259';
-import { FILTROS as FILTROS_DEF, saveFiltros } from '../util/discover-filters.js?v=259';
-import { esEPoAlbum } from '../util/release-size.js?v=259';
-import { iconoPlay, iconoPausa, iconoPuntos, iconoOjo, iconoOjoTachado } from '../ui/icons.js?v=259';
+import { idbGet, idbGetCached, idbSetCached, idbDel, idbEntriesByPrefix } from '../idb.js?v=260';
+import { getArtistAlbumsConFuente, buscarDiscografiaPorNombre, searchArtistByName, getAlbumTracks, saveToLibrary, saveAlbumsToLibrary, createPlaylist, addTracksToPlaylist } from '../api.js?v=260';
+import { albumKey } from '../util/album-key.js?v=260';
+import { cardKey, cardKeyLegacy, albumCreditName, keyOfPlaylistTrack } from '../util/discover-key.js?v=260';
+import { escapeHtml } from '../ui/components.js?v=260';
+import { openModal, closeTop } from '../ui/modal-stack.js?v=260';
+import { showToast } from '../ui/toast.js?v=260';
+import { openPlaylistPicker } from '../ui/playlist-picker.js?v=260';
+import { getOwnPlaylists, addUrisToPlaylists, toastAddResult } from '../util/playlist-add.js?v=260';
+import { openArtistCard } from './artist-card.js?v=260';
+import { openAlbumCard } from './album-card.js?v=260';
+import { createHiddenStore, createLocalStore } from '../util/hidden-sync.js?v=260';
+import { recuperarUriDeAlbumKey, REGLAS_VERSION } from '../util/hidden-recover.js?v=260';
+import { getPreview } from '../api/preview-providers.js?v=260';
+import { togglePreview, playingKey, attachHover } from '../ui/preview-player.js?v=260';
+import { coverUrl } from '../util/cover-size.js?v=260';
+import { FILTROS as FILTROS_DEF, saveFiltros } from '../util/discover-filters.js?v=260';
+import { esEPoAlbum } from '../util/release-size.js?v=260';
+import { iconoPlay, iconoPausa, iconoPuntos, iconoOjo, iconoOjoTachado } from '../ui/icons.js?v=260';
 import {
   DISCO_BASE_PREFIX, PRESUPUESTO_REFRESCO, RECIENTE_MAX_PAGINAS,
   crearBase, sumarCompleta, sumarReciente, tocaReciente, rangoReciente,
   fusionarBases, armarExportacion, leerImportacion,
-} from '../util/disco-base.js?v=259';
+} from '../util/disco-base.js?v=260';
 import {
   estimarCostoDeEscaneo, clasificarArtistas, totalizarCosto, costoDeUno, superaUmbral, PAGINAS_POR_ARTISTA,
-} from '../util/costo-escaneo.js?v=259';
+} from '../util/costo-escaneo.js?v=260';
 
 const DISCO_TTL_MIN = 30 * 24 * 60;       // 30 días
 const ARTIST_ID_TTL_MIN = 60 * 24 * 60;   // 60 días — los ids no cambian
@@ -497,7 +497,7 @@ const SEL_TITULO = {
   filtro: 'El umbral nuevo añade artistas sin escanear',
 };
 const SEL_ENTRADILLA = {
-  pedido: 'No hay ninguno marcado y abrir esta lista no ha costado nada. Cada artista que marques suma lo que cuesta pedir su discografía a Spotify.',
+  pedido: 'Abrir esta lista no ha costado nada. Cada artista que marques suma lo que cuesta pedir su discografía a Spotify.',
   automatico: 'No se ha pedido nada todavía. Al abrirse, esta vista busca lanzamientos nuevos de estos artistas, y hoy eso sale caro. Marca solo los que quieras escanear.',
   filtro: 'No se ha pedido nada todavía. Con el umbral nuevo entran artistas que aún no se han escaneado. Marca solo los que quieras escanear; la lista se filtra igual.',
 };
@@ -826,7 +826,7 @@ export function yearOf(release) {
 // `releaseTs` vive ahora en `util/release-date.js` (v=246), junto al comparador
 // «más nuevo primero» de `#discover-artists`; se re-exporta acá para que
 // `#new-releases` siga importándolo de este archivo.
-export { releaseTs } from '../util/release-date.js?v=259';
+export { releaseTs } from '../util/release-date.js?v=260';
 
 // Deduplica ediciones del mismo álbum (deluxe, remaster, etc). Nos quedamos
 // con la primera edición (release date más antiguo).

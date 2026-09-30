@@ -10,14 +10,14 @@
 //   - Umbral de likes: 5+ / 10+ / 20+
 //   - Ventana temporal: 3 / 6 / 12 / 24 meses, 5 años y «todo» (default 12)
 
-import { escapeHtml, confirmModal, pageHeader } from '../ui/components.js?v=259';
-import { showToast } from '../ui/toast.js?v=259';
-import { buildAlbumHeardIndex } from '../util/album-heard.js?v=259';
-import { releaseKind } from '../util/release-size.js?v=259';
-import { loadFiltros, buildFilterContext, applyDiscoverFilters } from '../util/discover-filters.js?v=259';
-import { createIncrementalList, scrollRootOf } from '../ui/incremental-list.js?v=259';
-import { createLazyImages } from '../ui/lazy-img.js?v=259';
-import { prefKey, migratePrefKey } from '../storage.js?v=259';
+import { escapeHtml, confirmModal, pageHeader } from '../ui/components.js?v=260';
+import { showToast } from '../ui/toast.js?v=260';
+import { buildAlbumHeardIndex } from '../util/album-heard.js?v=260';
+import { releaseKind } from '../util/release-size.js?v=260';
+import { loadFiltros, buildFilterContext, applyDiscoverFilters } from '../util/discover-filters.js?v=260';
+import { createIncrementalList, scrollRootOf } from '../ui/incremental-list.js?v=260';
+import { createLazyImages } from '../ui/lazy-img.js?v=260';
+import { prefKey, migratePrefKey } from '../storage.js?v=260';
 import {
   getArtistIdCached,
   getArtistDiscoCached,
@@ -53,9 +53,9 @@ import {
   avisarRonda,
   botonesBaseHtml,
   conectarBotonesBase,
-} from './discover-common.js?v=259';
-import { estadoNativoDiscografia } from '../api.js?v=259';
-import { leerElegidos, sumarElegidos, artistasBuscados } from '../util/cola-escaneo.js?v=259';
+} from './discover-common.js?v=260';
+import { estadoNativoDiscografia } from '../api.js?v=260';
+import { leerElegidos, sumarElegidos, artistasBuscados, colaAutomatica } from '../util/cola-escaneo.js?v=260';
 
 const SCAN_KEY = 'new_releases';
 
@@ -494,7 +494,9 @@ async function scanArtists(content, { motivo = 'automatico', artistas = null } =
   let scanned = eligible.filter(a => a.scanned).length;
   setCount(scanned);
   // Sobre lo que FALTA: si 40 ya vinieron del caché, se encolan los otros.
-  let queue = (artistas || buscados()).filter(a => !a.scanned);
+  // Explícita (selector): lo marcado. Automática: la cuenta de v=258, ver
+  // `colaAutomatica` — no vuelve a pagar por los huecos de los primeros.
+  let queue = artistas ? artistas.filter(a => !a.scanned) : colaAutomatica(buscados(), scanned);
   if (!queue.length) return;   // todo servido de la caché
 
   // Antes de gastar nada: si esto supera el umbral, no arranca hasta que se

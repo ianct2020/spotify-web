@@ -14,7 +14,7 @@
 // Todo local. Las dos vistas (#new-releases y #discover-artists) usan esto; no
 // lo copies en ninguna de las dos.
 
-import { prefKey } from '../storage.js?v=259';
+import { prefKey } from '../storage.js?v=260';
 
 /** Los `nameLower` que se eligieron a mano en el selector. */
 export function leerElegidos(lsKey) {
@@ -38,9 +38,8 @@ export function sumarElegidos(lsKey, artistas) {
  * elegidos a mano que estén más abajo. Un elegido que ya cae dentro de los
  * primeros no se repite.
  *
- * Es un conjunto y no un número a propósito: con la cuenta vieja
- * (`target - escaneados`) un artista elegido al fondo de la lista le quitaba el
- * sitio a uno de los primeros, que se quedaba sin escanear.
+ * ⚠️ Esto dice QUÉ artistas quiere la vista, no cuántos hay que escanear al
+ * abrirla: eso es `colaAutomatica()`, abajo.
  */
 export function artistasBuscados(elegibles, loadedMore, elegidos = new Set()) {
   const n = Math.max(0, Math.min(loadedMore, elegibles.length));
@@ -49,4 +48,22 @@ export function artistasBuscados(elegibles, loadedMore, elegidos = new Set()) {
     if (elegidos.has(elegibles[i].nameLower)) out.push(elegibles[i]);
   }
   return out;
+}
+
+/**
+ * La cola de las puertas AUTOMÁTICAS (abrir la vista, el chip de umbral): la
+ * misma cuenta que v=258, `objetivo - escaneados`, tomada de los buscados que
+ * faltan. `escaneados` son TODOS los elegibles ya escaneados, estén donde estén.
+ *
+ * ⚠️ No la cambies por «todos los buscados sin escanear». Parece más correcta y
+ * lo pagó producción el 30/09 (v=259): Ian tenía 350 escaneados con objetivo 350,
+ * uno de ellos fuera de los 350 primeros, y un hueco adentro (un artista que
+ * había fallado). La cuenta vieja daba 0 y no pedía nada; la de conjunto encoló
+ * el hueco al abrir la vista y gastó 2 peticiones del nativo (429 en la segunda)
+ * y 4 de `/search`, sin preguntar, porque 5 está por debajo del aviso. Un hueco
+ * que falló una vez vuelve a costar en CADA apertura. Lo que se elige a mano va
+ * por la cola explícita del selector, no por acá.
+ */
+export function colaAutomatica(buscados, escaneados) {
+  return buscados.filter(a => !a.scanned).slice(0, Math.max(0, buscados.length - escaneados));
 }
