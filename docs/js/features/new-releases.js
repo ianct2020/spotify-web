@@ -10,14 +10,14 @@
 //   - Umbral de likes: 5+ / 10+ / 20+
 //   - Ventana temporal: 3 / 6 / 12 / 24 meses, 5 años y «todo» (default 12)
 
-import { escapeHtml, confirmModal, pageHeader } from '../ui/components.js?v=260';
-import { showToast } from '../ui/toast.js?v=260';
-import { buildAlbumHeardIndex } from '../util/album-heard.js?v=260';
-import { releaseKind } from '../util/release-size.js?v=260';
-import { loadFiltros, buildFilterContext, applyDiscoverFilters } from '../util/discover-filters.js?v=260';
-import { createIncrementalList, scrollRootOf } from '../ui/incremental-list.js?v=260';
-import { createLazyImages } from '../ui/lazy-img.js?v=260';
-import { prefKey, migratePrefKey } from '../storage.js?v=260';
+import { escapeHtml, confirmModal, pageHeader } from '../ui/components.js?v=261';
+import { showToast } from '../ui/toast.js?v=261';
+import { buildAlbumHeardIndex } from '../util/album-heard.js?v=261';
+import { releaseKind } from '../util/release-size.js?v=261';
+import { loadFiltros, buildFilterContext, applyDiscoverFilters } from '../util/discover-filters.js?v=261';
+import { createIncrementalList, scrollRootOf } from '../ui/incremental-list.js?v=261';
+import { createLazyImages } from '../ui/lazy-img.js?v=261';
+import { prefKey, migratePrefKey } from '../storage.js?v=261';
 import {
   getArtistIdCached,
   getArtistDiscoCached,
@@ -53,9 +53,11 @@ import {
   avisarRonda,
   botonesBaseHtml,
   conectarBotonesBase,
-} from './discover-common.js?v=260';
-import { estadoNativoDiscografia } from '../api.js?v=260';
-import { leerElegidos, sumarElegidos, artistasBuscados, colaAutomatica } from '../util/cola-escaneo.js?v=260';
+} from './discover-common.js?v=261';
+import { estadoNativoDiscografia } from '../api.js?v=261';
+import { leerElegidos, sumarElegidos, artistasBuscados, colaAutomatica } from '../util/cola-escaneo.js?v=261';
+import { leerFallos, marcarFallo, limpiarFallo, sinFallosMarcados } from '../util/escaneo-fallos.js?v=261';
+import { contarSinEscanear, sufijoSinEscanear, notaSinEscanear } from '../util/sin-escanear.js?v=261';
 
 const SCAN_KEY = 'new_releases';
 
@@ -65,6 +67,8 @@ const LS_LOADED_MORE = 'newrel_loaded_more';
 // Los artistas elegidos a mano en el selector (v=259), además de los primeros
 // `loadedMore`. Ver util/cola-escaneo.js.
 const LS_ELEGIDOS = 'newrel_elegidos';
+// Los artistas cuyo escaneo falló, con el día (v=261). Ver util/escaneo-fallos.js.
+const LS_FALLOS = 'newrel_fallos';
 // COMPARTIDA con #discover-artists a propósito (2026-08-29): la clave es la
 // suya, no una nueva. Las dos vistas ya comparten `filtros` por el mismo
 // motivo — si en una estás mirando sólo EPs y saltás a la otra y ves álbumes,
@@ -148,6 +152,7 @@ const state = {
   filterKind: 'all',
   loadedMore: DEFAULT_INITIAL,
   elegidos: new Set(),
+  fallos: new Map(),   // nameLower → { t, motivo } de los escaneos que fallaron (v=261)
   scannedAt: null,
   // 'normal' | 'hidden'. Acá no hay modo «escuchados»: marcar como escuchado es
   // una acción de #discover-artists (evaluar la discografía vieja). Los que Ian
@@ -183,6 +188,7 @@ export async function render(container) {
   migratePrefKey(LS_FILTER_KIND);
   migratePrefKey(LS_LOADED_MORE);
   migratePrefKey(LS_ELEGIDOS);
+  migratePrefKey(LS_FALLOS);
   container.innerHTML = `
     ${pageHeader({ title: 'Novedades de tus artistas' })}
     <div id="newrel-content"><div class="empty-state"><div class="spinner spinner-lg"></div><div style="margin-top:14px">Cargando tus likes…</div></div></div>
@@ -208,6 +214,7 @@ export async function render(container) {
   state.filterKind = getFilterKind();
   state.loadedMore = getLoadedMore();
   state.elegidos = leerElegidos(LS_ELEGIDOS);
+  state.fallos = leerFallos(LS_FALLOS);
   state.mode = 'normal';
 
   // Ocultos desde la playlist de Spotify, en segundo plano: la vista arranca
@@ -237,6 +244,7 @@ export async function render(container) {
     disco: [],
     scanned: false,
     error: null,
+    falloT: state.fallos.get(c.nameLower)?.t || null,   // el selector lo enseña (v=261)
   }));
 
   state.scannedAt = null;
@@ -261,8 +269,16 @@ export async function render(container) {
   }
 
   renderShell(content, candidates.length);
+  pintarCuenta();
   refreshList(content);
-  scanArtists(content).catch(err => console.warn('[newrel] scan:', err));
+  // ⚠️ Abrir la vista NO escanea (v=261). Se pinta con lo que ya hay —el caché
+  // del escaneo— y lo que falta se pide con «Elegir más artistas para
+  // escanear…». Hasta v=260 esto terminaba en `scanArtists(content)` y escaneaba
+  // solo si la cola quedaba por debajo del aviso de 40 peticiones: el 30/09 eso
+  // gastó cuota de Ian sin preguntar (un artista que había fallado volvió a la
+  // cola en cada apertura). Ningún camino automático pide discografías; los
+  // actos explícitos son el selector, «Actualizar» y «Base…», y cada uno trae su
+  // cartel. `tests/sin-escaneo-automatico.test.mjs` cuida que no vuelva.
   return teardown;
 }
 
@@ -280,6 +296,26 @@ function targetToScan() {
   return buscados().length;
 }
 
+// El renglón de debajo del conteo. Desde v=261 nada escanea solo, así que dice
+// cuántos artistas de los que pasan el umbral siguen SIN escanear: «351/350
+// escaneados» solo, con el umbral bajado, parecía un escaneo en marcha.
+function textoSub() {
+  const el = eligibleArtists();
+  return `${el.length.toLocaleString('es-ES')} artistas con ≥${state.minLikes} likes${sufijoSinEscanear(contarSinEscanear(el))}`;
+}
+function pintarSub() {
+  const sub = document.getElementById('newrel-summary-sub');
+  if (sub) sub.textContent = textoSub();
+}
+// El numerador del conteo. Hasta v=260 lo escribía `scanArtists()` al arrancar
+// (`setCount(scanned)`), y como ahora abrir la vista no lo llama, quedaba en el
+// «0» del marcado con 350 artistas restaurados del caché: un número falso con
+// cara de bueno. Se escribe al abrir y al cambiar el umbral; durante un escaneo
+// lo lleva el propio escaneo.
+function pintarCuenta() {
+  setCount(eligibleArtists().filter(a => a.scanned).length);
+}
+
 function renderShell(content, totalCandidates) {
   // El shell se repinta entero: el #newrel-list de antes queda desconectado y
   // con él la grilla que estaba observando la lista incremental.
@@ -289,7 +325,7 @@ function renderShell(content, totalCandidates) {
       <div class="disco-summary">
         <span id="newrel-count">0</span>/<span id="newrel-total-scan">${targetToScan()}</span> artistas escaneados
         · <span id="newrel-unheard-count">0</span> <span id="newrel-unheard-label">${ventanaEsAncha() ? 'lanzamientos sin escuchar' : 'novedades sin escuchar'}</span>
-        <span class="disco-summary-sub" id="newrel-summary-sub">${eligibleArtists().length.toLocaleString('es-ES')} artistas con ≥${state.minLikes} likes</span>
+        <span class="disco-summary-sub" id="newrel-summary-sub">${textoSub()}</span>
       </div>
       <div class="disco-controls">
         <div class="disco-chip-group" id="newrel-likes">
@@ -338,14 +374,12 @@ function renderShell(content, totalCandidates) {
     content.querySelectorAll('#newrel-likes [data-min]').forEach(b => b.classList.toggle('is-on', b === btn));
     // Al cambiar el umbral se puede haber vaciado la cola — reprobamos + actualizo sub.
     document.getElementById('newrel-total-scan').textContent = targetToScan();
-    const sub = document.getElementById('newrel-summary-sub');
-    if (sub) sub.textContent = `${eligibleArtists().length.toLocaleString('es-ES')} artistas con ≥${state.minLikes} likes`;
-    // Parece un filtro de visualización, pero bajar el umbral mete artistas
-    // nuevos en la cola: pasa por el selector si supera el aviso (v=259).
-    scanArtists(content, { motivo: 'filtro' }).then(() => {
-      const t = document.getElementById('newrel-total-scan');
-      if (t) t.textContent = targetToScan();
-    }).catch(err => console.warn('[newrel] scan:', err));
+    // Cambiar el umbral es un filtro y nada más (v=261): no escanea, ni solo ni
+    // preguntando. Bajarlo mete artistas sin escanear en la lista, y la cabecera
+    // dice cuántos son; escanearlos es cosa de «Elegir más artistas…». Hasta
+    // v=260 esto llamaba a `scanArtists(…, { motivo: 'filtro' })`.
+    pintarSub();
+    pintarCuenta();
     refreshList(content);
   });
   content.querySelector('#newrel-months').addEventListener('click', (e) => {
@@ -496,7 +530,15 @@ async function scanArtists(content, { motivo = 'automatico', artistas = null } =
   // Sobre lo que FALTA: si 40 ya vinieron del caché, se encolan los otros.
   // Explícita (selector): lo marcado. Automática: la cuenta de v=258, ver
   // `colaAutomatica` — no vuelve a pagar por los huecos de los primeros.
-  let queue = artistas ? artistas.filter(a => !a.scanned) : colaAutomatica(buscados(), scanned);
+  //
+  // Los que fallaron antes (v=261) no se reintentan SOLOS: la cola automática los
+  // saltea. Lo explícito —el selector y «Actualizar», que llegan con
+  // `motivo: 'autorizado'`— los reintenta igual, y el que salga bien pierde la marca.
+  let queue = artistas
+    ? artistas.filter(a => !a.scanned)
+    : (motivo === 'autorizado'
+        ? colaAutomatica(buscados(), scanned)
+        : sinFallosMarcados(colaAutomatica(buscados(), scanned), state.fallos));
   if (!queue.length) return;   // todo servido de la caché
 
   // Antes de gastar nada: si esto supera el umbral, no arranca hasta que se
@@ -537,6 +579,15 @@ async function scanArtists(content, { motivo = 'automatico', artistas = null } =
         }
       } finally {
         if (!requeued) {
+          // Falló de verdad (no un reintento por 429 que sigue en cola): se anota
+          // el día. Salió bien: se borra la marca si la había.
+          if (artist.error) {
+            state.fallos = marcarFallo(LS_FALLOS, artist.nameLower, artist.error);
+            artist.falloT = state.fallos.get(artist.nameLower)?.t || null;
+          } else if (state.fallos.has(artist.nameLower)) {
+            state.fallos = limpiarFallo(LS_FALLOS, artist.nameLower);
+            artist.falloT = null;
+          }
           scanned++;
           if (progressLabel) progressLabel.textContent = `${artist.name} (${scanned}/${target})`;
           if (progressFill) progressFill.style.width = `${Math.min(100, (scanned / target) * 100)}%`;
@@ -681,12 +732,16 @@ function refreshList(content) {
   // rótulo se actualiza acá o se queda diciendo «novedades» con «todo» puesto.
   const lbl = document.getElementById('newrel-unheard-label');
   if (lbl) lbl.textContent = ventanaEsAncha() ? 'lanzamientos sin escuchar' : 'novedades sin escuchar';
+  pintarSub();
   const nHidden = document.getElementById('newrel-hidden-n');
   if (nHidden) nHidden.textContent = hiddenAlbums.size;
 
   if (!rows.length) {
     const eligible = eligibleArtists().length;
     const scanned = eligibleArtists().filter(a => a.scanned).length;
+    // Con artistas sin escanear, «no hay novedades» sería falso: hay que decir
+    // que faltan (v=261, cuando dejó de escanearse solo).
+    const nota = notaSinEscanear(eligible - scanned);
     let msg;
     if (!state.artists.length) {
       msg = 'Todavía no tengo tus likes cargados. Abre el Dashboard para descargarlos y vuelve.';
@@ -696,11 +751,13 @@ function refreshList(content) {
       const max = Math.max(...state.artists.map(a => a.likes));
       msg = `Ningún artista llega a ${state.minLikes} likes (el que más tiene llega a ${max}). Descarga el umbral con los chips de arriba.`;
     } else if (!scanned) {
-      msg = `${eligible.toLocaleString('es-ES')} artistas con ≥${state.minLikes} likes, ninguno escaneado todavía. Toca «Actualizar» para consultarle a Spotify.`;
+      // Antes mandaba a «Actualizar», que es lo CARO (hasta 100 peticiones); el
+      // camino barato es el selector, que además enseña el costo de cada uno.
+      msg = `${eligible.toLocaleString('es-ES')} artistas con ≥${state.minLikes} likes, ninguno escaneado todavía. Elige cuáles con «Elegir más artistas para escanear…»: abrir esa lista no cuesta nada y cada artista dice lo que vale.`;
     } else if (state.mode === 'hidden') {
       msg = state.months === 0
-        ? 'No ocultaste ningún lanzamiento de tus artistas.'
-        : `No ocultaste ninguna novedad de los últimos ${state.months} meses.`;
+        ? `No ocultaste ningún lanzamiento de tus artistas.${nota}`
+        : `No ocultaste ninguna novedad de los últimos ${state.months} meses.${nota}`;
     } else {
       // El chip de tipo se nombra aparte: una lista vacía por «sólo EPs» se
       // parece demasiado a una lista vacía por no haber novedades, y el chip
@@ -709,7 +766,7 @@ function refreshList(content) {
       const porTipo = state.filterKind !== 'all'
         ? ` filtrando por ${KIND_LABEL[state.filterKind].toLowerCase()} — prueba con «Todo»`
         : '';
-      msg = `No hay ${ventanaEsAncha() ? 'lanzamientos' : 'novedades'} sin escuchar en ${ventanaTexto()} para tus artistas con ≥${state.minLikes} likes${porTipo}.`;
+      msg = `No hay ${ventanaEsAncha() ? 'lanzamientos' : 'novedades'} sin escuchar en ${ventanaTexto()} para tus artistas ${nota ? 'escaneados ' : ''}con ≥${state.minLikes} likes${porTipo}.${nota}`;
     }
     teardown();
     listEl.innerHTML = `<div class="card"><p style="text-align:center;color:var(--color-text-muted);margin:0">${escapeHtml(msg)}</p></div>`;

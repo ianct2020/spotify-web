@@ -22,6 +22,7 @@ import { recuperarUriDeAlbumKey, REGLAS_VERSION } from '../util/hidden-recover.j
 import { getPreview } from '../api/preview-providers.js';
 import { togglePreview, playingKey, attachHover } from '../ui/preview-player.js';
 import { coverUrl } from '../util/cover-size.js';
+import { fechaDelFallo } from '../util/escaneo-fallos.js';
 import { FILTROS as FILTROS_DEF, saveFiltros } from '../util/discover-filters.js';
 import { esEPoAlbum } from '../util/release-size.js';
 import { iconoPlay, iconoPausa, iconoPuntos, iconoOjo, iconoOjoTachado } from '../ui/icons.js';
@@ -342,11 +343,17 @@ function abrirModalBase(pfx, onExportar, onImportar) {
 
 // ── El aviso de coste, antes de gastar (v=242) ─────────────────────────────
 //
-// Las dos vistas escanean al ABRIRSE (el `render()` de las dos termina en
-// `scanArtists()`), así que el gasto puede arrancar sin que nadie lo haya
-// pedido. La regla es: si el escaneo supera el umbral, NO EMPIEZA hasta que se
+// Las dos vistas escaneaban al ABRIRSE (el `render()` de las dos terminaba en
+// `scanArtists()`), así que el gasto arrancaba sin que nadie lo hubiera pedido.
+// La regla era: si el escaneo supera el umbral, NO EMPIEZA hasta que se
 // confirme. Avisar mientras ya está corriendo no sirve — la cuota se gasta
 // durante el escaneo, no al final.
+//
+// ⚠️ v=261: abrir la vista y el chip de umbral YA NO ESCANEAN, ni preguntando
+// (tests/sin-escaneo-automatico.test.mjs). Este aviso y el selector sobreviven
+// para los actos explícitos —«Actualizar», «Base…» y el botón «Elegir más
+// artistas…»— y como defensa: quien llegue a `scanArtists()` sin el motivo
+// 'autorizado' pasa por `acotarEscaneo()`. Hoy nadie lo hace.
 //
 // El diálogo se arma con el número YA calculado (`util/costo-escaneo.js`, todo
 // local, 0 requests), así que decir que no cuesta exactamente lo mismo que no
@@ -526,11 +533,16 @@ function abrirSelectorDeArtistas(clasificados, { motivo = 'pedido' } = {}) {
       const a = c.artista;
       const et = etiquetaCosto(c);
       const likes = a.likes ?? 0;
+      // Si el último intento de escanearlo falló, se dice y con el día (v=261):
+      // marcarlo lo reintenta, y Ian tiene que saber que ya se probó.
+      const fallo = a.falloT
+        ? ` · <span class="sel-art-fallo" title="El último intento de escanearlo falló. Marcarlo lo vuelve a intentar.">falló el ${escapeHtml(fechaDelFallo(a.falloT))}</span>`
+        : '';
       return `
         <label class="sc-ex-item sel-art-item">
           <input type="checkbox" data-i="${i}">
           <span class="sel-art-name">${escapeHtml(a.name || a.nameLower || '')}</span>
-          <span class="sel-art-likes">${nES(likes)} me gusta</span>
+          <span class="sel-art-likes">${nES(likes)} me gusta${fallo}</span>
           <span class="sel-art-costo${costoDeUno(c) ? '' : ' is-gratis'}" title="${escapeHtml(et.titulo)}">${et.texto}</span>
         </label>`;
     }).join('');
@@ -626,7 +638,10 @@ export async function elegirArtistasAEscanear(artistas, { forzar = false, motivo
 }
 
 /**
- * Puertas automáticas (abrir la vista, el chip de umbral de likes): por debajo
+ * Puerta de DEFENSA (v=261): desde v=261 ninguna puerta automática la usa —abrir
+ * la vista y el chip de umbral de likes ya no escanean—, pero `scanArtists()` de
+ * las dos vistas la deja puesta para quien llegue sin el motivo 'autorizado'.
+ * Antes eran las puertas automáticas (abrir la vista, el chip de umbral): por debajo
  * del umbral de aviso se escanea la cola entera sin preguntar, como desde
  * v=242; por encima, en vez del sí/no, el selector con la cola. Resuelve con lo
  * que hay que escanear (la cola, o lo marcado) o `null` si se cerró.

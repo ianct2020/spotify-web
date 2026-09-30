@@ -1909,3 +1909,4 @@ body.con-banner-degradado { padding-top: 44px; }
 @media (max-width: 768px) {
   .aviso-espera { flex-wrap: wrap; font-size: 12px; }
 }
+.sel-art-fallo { color: var(--color-warning); }

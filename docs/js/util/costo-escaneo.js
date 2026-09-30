@@ -1,9 +1,10 @@
 // Cuánto va a costar un escaneo, ANTES de empezarlo.
 //
-// Las dos vistas que escanean (`#new-releases` y `#discover-artists`) pueden
-// gastar cuotas caras de Spotify sin que el usuario lo haya pedido: el
-// `render()` de las dos termina en `scanArtists()`, o sea que ABRIR LA VISTA
-// escanea solo. Este módulo calcula el número que hace falta para avisar.
+// Las dos vistas que escanean (`#new-releases` y `#discover-artists`) gastan
+// cuotas caras de Spotify. Hasta v=260 lo podían hacer sin que el usuario lo
+// hubiera pedido (el `render()` de las dos terminaba en `scanArtists()`); desde
+// v=261 solo escanean por un acto explícito. Este módulo calcula el número que
+// hace falta para avisar en ese acto.
 //
 // Las dos cuotas, medidas (no estimadas):
 //
@@ -27,8 +28,8 @@
 // llegar al tope de la ventana, no por cuota. El camino existe en el código
 // pero todavía no se lo vio correr.
 
-import { idbEntriesByPrefix, idbGetCached } from '../idb.js?v=260';
-import { DISCO_BASE_PREFIX, RECIENTE_TTL_MS, RECIENTE_FORZADO_MIN_MS, PRESUPUESTO_REFRESCO } from './disco-base.js?v=260';
+import { idbEntriesByPrefix, idbGetCached } from '../idb.js?v=261';
+import { DISCO_BASE_PREFIX, RECIENTE_TTL_MS, RECIENTE_FORZADO_MIN_MS, PRESUPUESTO_REFRESCO } from './disco-base.js?v=261';
 
 // Requests de `/artists/{id}/albums` que cuesta UN artista sin base.
 //

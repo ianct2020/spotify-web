@@ -1,9 +1,10 @@
 // Cuánto va a costar un escaneo, ANTES de empezarlo.
 //
-// Las dos vistas que escanean (`#new-releases` y `#discover-artists`) pueden
-// gastar cuotas caras de Spotify sin que el usuario lo haya pedido: el
-// `render()` de las dos termina en `scanArtists()`, o sea que ABRIR LA VISTA
-// escanea solo. Este módulo calcula el número que hace falta para avisar.
+// Las dos vistas que escanean (`#new-releases` y `#discover-artists`) gastan
+// cuotas caras de Spotify. Hasta v=260 lo podían hacer sin que el usuario lo
+// hubiera pedido (el `render()` de las dos terminaba en `scanArtists()`); desde
+// v=261 solo escanean por un acto explícito. Este módulo calcula el número que
+// hace falta para avisar en ese acto.
 //
 // Las dos cuotas, medidas (no estimadas):
 //

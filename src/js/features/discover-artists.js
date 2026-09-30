@@ -22,6 +22,8 @@ import { releaseKind } from '../util/release-size.js';
 import { masNuevoPrimero } from '../util/release-date.js';
 import { vigilarRuta } from '../util/vigencia-ruta.js';
 import { leerElegidos, sumarElegidos, artistasBuscados, colaAutomatica } from '../util/cola-escaneo.js';
+import { leerFallos, marcarFallo, limpiarFallo, sinFallosMarcados } from '../util/escaneo-fallos.js';
+import { contarSinEscanear, sufijoSinEscanear, notaSinEscanear } from '../util/sin-escanear.js';
 import { prefKey, migratePrefKey } from '../storage.js';
 import {
   getArtistIdCached,
@@ -67,6 +69,7 @@ const LS_FILTER_KIND = 'discoverart_filter_kind';    // 'all' | 'album' | 'ep' |
 const LS_FILTER_YEARS = 'discoverart_filter_years';  // 0 = todo, o número de años
 const LS_LOADED_MORE = 'discoverart_loaded_more';    // cuántos artistas cargar (default 100)
 const LS_ELEGIDOS = 'discoverart_elegidos';          // elegidos a mano en el selector (v=259)
+const LS_FALLOS = 'discoverart_fallos';              // escaneos que fallaron, con el día (v=261)
 const MIN_LIKES = 5;
 // 2 y no 3: la discografía sale de /search (el endpoint nativo está muerto) y
 // con 3 en paralelo Spotify tira 429 en cadena.
@@ -104,6 +107,7 @@ const state = {
   filterYears: 0,
   loadedMore: DEFAULT_INITIAL,
   elegidos: new Set(),   // util/cola-escaneo.js
+  fallos: new Map(),     // nameLower → { t, motivo } de los escaneos que fallaron (v=261)
   scannedAt: null,       // ts del escaneo cacheado que estamos mostrando
   // 'normal' = lo que queda por descubrir · 'hidden' = los que ocultaste ·
   // 'heard' = los que marcaste como escuchados. Los dos últimos son la única
@@ -159,6 +163,7 @@ export async function render(container) {
   migratePrefKey(LS_FILTER_YEARS);
   migratePrefKey(LS_LOADED_MORE);
   migratePrefKey(LS_ELEGIDOS);
+  migratePrefKey(LS_FALLOS);
   container.innerHTML = `
     ${pageHeader({ title: 'Sin escuchar de tus artistas' })}
     <div id="disco-content"><div class="empty-state"><div class="spinner spinner-lg"></div><div style="margin-top:14px">Cargando tus likes…</div></div></div>
@@ -205,6 +210,7 @@ export async function render(container) {
     return teardown;
   }
 
+  state.fallos = leerFallos(LS_FALLOS);   // antes de armar los artistas: cada uno lleva su `falloT`
   state.artists = candidates.map(c => ({
     id: null,
     name: c.name,
@@ -217,6 +223,7 @@ export async function render(container) {
     unheardSingles: [],
     scanned: false,
     error: null,
+    falloT: state.fallos.get(c.nameLower)?.t || null,   // el selector lo enseña (v=261)
   }));
   state.filterKind = getFilterKind();
   state.filterYears = getFilterYears();
@@ -266,12 +273,16 @@ export async function render(container) {
   }
 
   renderShell(content, candidates.length);
+  pintarCuenta();
   refreshList(content);
-  // La vigencia del RENDER, no una nueva: este escaneo pertenece a esta carga
-  // de la vista, y si el usuario se va antes de que arranque tiene que cortarse
-  // igual. Los dos llamadores de abajo son handlers (el usuario está en la
-  // vista al tocar el botón), así que ahí sí vale capturarla en el momento.
-  scanArtists(content, ruta).catch(err => console.warn('[discover] scan:', err));
+  // ⚠️ Abrir la vista NO escanea (v=261). Se pinta con lo que ya hay —el caché
+  // del escaneo— y lo que falta se pide con «Elegir más artistas para
+  // escanear…». Hasta v=260 esto terminaba en `scanArtists(content, ruta)` y
+  // escaneaba solo si la cola quedaba por debajo del aviso de 40 peticiones: el
+  // 30/09 eso gastó cuota de Ian sin preguntar. Ningún camino automático pide
+  // discografías; los actos explícitos son el selector, «Actualizar» y «Base…»,
+  // y cada uno trae su cartel. `tests/sin-escaneo-automatico.test.mjs` cuida que
+  // no vuelva.
   return teardown;
 }
 
@@ -285,7 +296,7 @@ function renderShell(content, totalCandidates) {
       <div class="disco-summary">
         <span id="disco-count">0</span>/<span id="disco-total-scan">${buscados().length}</span> artistas escaneados
         · <span id="disco-unheard-count">0</span> sin escuchar
-        <span class="disco-summary-sub">${totalCandidates.toLocaleString('es-ES')} artistas con ≥${MIN_LIKES} likes</span>
+        <span class="disco-summary-sub" id="disco-summary-sub">${textoSub()}</span>
       </div>
       <div class="disco-controls">
         <div class="disco-chip-group" id="disco-kind">
@@ -302,6 +313,7 @@ function renderShell(content, totalCandidates) {
         <button class="btn btn-secondary btn-sm ${state.mode === 'hidden' ? 'sc-on' : ''}" id="disco-mode-hidden" title="Los que ocultaste. Se sincronizan con la playlist «fonoteca · ocultos (descubrir)».">Ocultos <span id="disco-hidden-n">${hiddenAlbums.size}</span></button>
         <button class="btn btn-secondary btn-sm" id="disco-refresh" title="${state.scannedAt ? 'Último escaneo ' + agoLabel(state.scannedAt) + '. ' : ''}Busca lanzamientos nuevos de tus artistas. No borra las discografías que ya tienes.">Actualizar</button>
         ${botonesBaseHtml('disco')}
+        <button class="btn btn-secondary btn-sm" id="disco-load-more" title="Abre la lista de artistas sin escanear para elegir cuáles. Abrirla no pide nada a Spotify.">Elegir más artistas para escanear…</button>
       </div>
     </div>
     ${renderFiltroChips(state.filtros, state.conteosFiltro)}
@@ -310,9 +322,6 @@ function renderShell(content, totalCandidates) {
       <div class="disco-progress-label" id="disco-progress-label"></div>
     </div>
     <div class="disco-list" id="disco-list"></div>
-    <div class="disco-load-more" style="text-align:center;margin:20px 0">
-      <button class="btn btn-secondary" id="disco-load-more" title="Abre la lista de artistas sin escanear para elegir cuáles. Abrirla no pide nada a Spotify.">Elegir más artistas para escanear…</button>
-    </div>
     <div class="disco-actionbar" id="disco-actionbar" style="display:none">
       <span id="disco-sel-count">0 seleccionados</span>
       <button class="btn btn-secondary btn-sm" id="disco-sel-clear">Limpiar selección</button>
@@ -449,6 +458,23 @@ function buscados() {
   return artistasBuscados(state.artists, state.loadedMore, state.elegidos);
 }
 
+// El renglón de debajo del conteo. Desde v=261 nada escanea solo, así que dice
+// cuántos artistas siguen SIN escanear.
+function textoSub() {
+  return `${state.artists.length.toLocaleString('es-ES')} artistas con ≥${MIN_LIKES} likes${sufijoSinEscanear(contarSinEscanear(state.artists))}`;
+}
+function pintarSub() {
+  const sub = document.getElementById('disco-summary-sub');
+  if (sub) sub.textContent = textoSub();
+}
+// El numerador del conteo. Hasta v=260 lo escribía `scanArtists()` al arrancar, y
+// como ahora abrir la vista no lo llama, quedaba en el «0» del marcado con los
+// artistas restaurados del caché: un número falso con cara de bueno.
+function pintarCuenta() {
+  const n = document.getElementById('disco-count');
+  if (n) n.textContent = state.artists.filter(a => a.scanned).length;
+}
+
 // `artistas`: la cola explícita que sale del selector (v=259). Sin ella, la cola
 // son los buscados que faltan escanear.
 async function scanArtists(content, ruta = vigilarRuta(), { motivo = 'automatico', artistas = null } = {}) {
@@ -464,7 +490,15 @@ async function scanArtists(content, ruta = vigilarRuta(), { motivo = 'automatico
 
   // Explícita (selector): lo marcado. Automática: la cuenta de v=258, ver
   // `colaAutomatica` — no vuelve a pagar por los huecos de los primeros.
-  let queue = artistas ? artistas.filter(a => !a.scanned) : colaAutomatica(buscados(), scanned);
+  //
+  // Los que fallaron antes (v=261) no se reintentan SOLOS: la cola automática los
+  // saltea. Lo explícito —el selector y «Actualizar», que llegan con
+  // `motivo: 'autorizado'`— los reintenta igual, y el que salga bien pierde la marca.
+  let queue = artistas
+    ? artistas.filter(a => !a.scanned)
+    : (motivo === 'autorizado'
+        ? colaAutomatica(buscados(), scanned)
+        : sinFallosMarcados(colaAutomatica(buscados(), scanned), state.fallos));
   if (!queue.length) return;   // todo servido de la caché: ni barra ni requests
 
   // Antes de gastar nada: si esto supera el umbral, no arranca hasta que se
@@ -507,7 +541,18 @@ async function scanArtists(content, ruta = vigilarRuta(), { motivo = 'automatico
           console.warn(`[discover] "${artist.name}":`, e.message);
         }
       } finally {
-        if (!requeued) scanned++;
+        if (!requeued) {
+          // Falló de verdad (no un reintento por 429 que sigue en cola): se anota
+          // el día. Salió bien: se borra la marca si la había.
+          if (artist.error) {
+            state.fallos = marcarFallo(LS_FALLOS, artist.nameLower, artist.error);
+            artist.falloT = state.fallos.get(artist.nameLower)?.t || null;
+          } else if (state.fallos.has(artist.nameLower)) {
+            state.fallos = limpiarFallo(LS_FALLOS, artist.nameLower);
+            artist.falloT = null;
+          }
+          scanned++;
+        }
         // Los contadores y la lista SOLO si seguimos en la vista. `processArtist`
         // puede tardar y la ruta pudo cambiar dentro del try.
         if (ruta.vigente()) {
@@ -638,14 +683,21 @@ function refreshList(content) {
   if (nHeard) nHeard.textContent = heardAlbums.size;
   const nHidden = document.getElementById('disco-hidden-n');
   if (nHidden) nHidden.textContent = hiddenAlbums.size;
+  pintarSub();
 
   if (!artists.length) {
     teardown();
+    // Con artistas sin escanear, «nada por descubrir» sería falso (v=261, cuando
+    // dejó de escanearse solo): hay que decir que faltan.
+    const sinEscanear = contarSinEscanear(state.artists);
+    const nota = notaSinEscanear(sinEscanear);
     const msg = state.mode === 'heard'
-      ? 'No marcaste ningún lanzamiento como escuchado.'
+      ? `No marcaste ningún lanzamiento como escuchado.${nota}`
       : state.mode === 'hidden'
-        ? 'No ocultaste ningún lanzamiento.'
-        : 'Nada por descubrir con los filtros actuales.';
+        ? `No ocultaste ningún lanzamiento.${nota}`
+        : sinEscanear === state.artists.length
+          ? `Todavía no hay ningún artista escaneado. Elige cuáles con «Elegir más artistas para escanear…»: abrir esa lista no cuesta nada y cada artista dice lo que vale.`
+          : `Nada por descubrir con los filtros actuales${sinEscanear ? ' entre los artistas escaneados' : ''}.${nota}`;
     listEl.innerHTML = `<div class="card"><p style="text-align:center;color:var(--color-text-muted);margin:0">${msg}</p></div>`;
     updateSelectionUi(content);
     return;

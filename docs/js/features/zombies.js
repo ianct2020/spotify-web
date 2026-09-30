@@ -1,9 +1,9 @@
-import { getAllLikedTracks, getAllPlaylistItems, removeLikedTracks, removeTracksFromPlaylist, checkLibraryContains } from '../api.js?v=260';
-import { borrarLikesVerificado } from '../util/borrado-verificado.js?v=260';
-import { showProgress, hideProgress, progressController, isCancelled, typeConfirmModal, renderTrackRow, escapeHtml, pageHeader } from '../ui/components.js?v=260';
-import { showToast } from '../ui/toast.js?v=260';
-import { isZombieItem } from '../util/zombie.js?v=260';
-import { getOwnPlaylists } from '../util/playlist-add.js?v=260';
+import { getAllLikedTracks, getAllPlaylistItems, removeLikedTracks, removeTracksFromPlaylist, checkLibraryContains } from '../api.js?v=261';
+import { borrarLikesVerificado } from '../util/borrado-verificado.js?v=261';
+import { showProgress, hideProgress, progressController, isCancelled, typeConfirmModal, renderTrackRow, escapeHtml, pageHeader } from '../ui/components.js?v=261';
+import { showToast } from '../ui/toast.js?v=261';
+import { isZombieItem } from '../util/zombie.js?v=261';
+import { getOwnPlaylists } from '../util/playlist-add.js?v=261';
 
 const FADE_DURATION_MS = 15000;
 const STAGGER_PER_ROW_MS = 80;

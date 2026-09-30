@@ -44,7 +44,7 @@
 // En src/ vale 'dev' a propósito: es un marcador. build.sh lo reemplaza por
 // `v<N>` al copiar a docs/ y falla si no puede. En dev el SW ni se registra
 // (ver ES_DEV en app.js).
-const CACHE = 'fonoteca-sw-v260';
+const CACHE = 'fonoteca-sw-v261';
 const PREFIJO = 'fonoteca-sw-';
 
 self.addEventListener('install', () => {

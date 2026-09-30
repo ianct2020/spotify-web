@@ -51,7 +51,10 @@ export function artistasBuscados(elegibles, loadedMore, elegidos = new Set()) {
 }
 
 /**
- * La cola de las puertas AUTOMÁTICAS (abrir la vista, el chip de umbral): la
+ * La cola de `scanArtists()` cuando no le llega una lista explícita. Desde v=261
+ * ya no la pide ninguna apertura de vista ni el chip de umbral (no escanean);
+ * la usa «Actualizar», con todo en `scanned: false`. Hasta v=260 era la de las
+ * puertas AUTOMÁTICAS (abrir la vista, el chip de umbral): la
  * misma cuenta que v=258, `objetivo - escaneados`, tomada de los buscados que
  * faltan. `escaneados` son TODOS los elegibles ya escaneados, estén donde estén.
  *

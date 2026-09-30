@@ -1085,7 +1085,7 @@ Aparte, desde v=257 el nombre de la caché del SW lleva la versión
 despliegues anteriores: hasta v=256 valía siempre `fonoteca-sw-v1` y esa limpieza
 no corrió nunca. Eso arregla la acumulación, **no** el `index.html` viejo de arriba.
 
-**Tests y antes de pushear**: `npm test` corre las 35 suites de `tests/*.test.mjs`
+**Tests y antes de pushear**: `npm test` corre las 36 suites de `tests/*.test.mjs`
 (un proceso por suite, sale con 1 si alguna falla; `-- --orden=inverso|azar:N` y
 `-- --paralelo` para cazar dependencias de orden) y `npm run prepush` comprueba,
 sin modificar nada, sintaxis, tests, `docs/` al día, versiones parejas y que no
@@ -1428,6 +1428,17 @@ Glokk40Spaz y **ya no aparece en la discografía de Osamason**, así que ninguna
 tarjeta la puede migrar y no tiene uri con la que sanearla. Queda anotada, con
 su motivo a la vista en `#debug` — que es la regla: un oculto que no se puede
 sincronizar nunca se descarta.
+
+## Ninguna apertura de vista gasta cuota (v=261)
+`#new-releases` y `#discover-artists` **no escanean al abrirse ni al cambiar el chip de
+umbral de likes**, ni solas ni preguntando: se pintan con el caché del escaneo y lo que
+falta se pide con «Elegir más artistas para escanear…». Los únicos caminos que piden
+discografías son actos explícitos con su cartel: ese botón, «Actualizar» y «Base…».
+`tests/sin-escaneo-automatico.test.mjs` lee el fuente y falla si un `render()` o un chip
+vuelve a llamar a `scanArtists()`. ⚠️ **No toques la cola** (`util/cola-escaneo.js`,
+`colaAutomatica`) «porque parece un bug»: v=259 lo hizo y gastó cuota de Ian sin preguntar.
+Si ves algo raro ahí, anótalo en `PENDIENTES.md`. Un artista cuyo escaneo falló queda
+marcado con el día (`util/escaneo-fallos.js`); un acto explícito lo reintenta igual.
 
 ## ⛔ NUNCA `git add -A` ni `git add .` — archivo por archivo
 **Este repo es PÚBLICO.** El 2026-07-28 se filtraron datos personales y hubo que

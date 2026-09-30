@@ -62,16 +62,30 @@ const agoLabel = () => 'hace 2 h';
 // Los números son los de la captura `15-new-releases-8-chips-encendidos.jpg`:
 // 439 ocultos, 300 artistas, 5+ likes y «últimos 24m». Los rótulos largos son
 // lo que ocupa, así que se miden los reales, no unos de juguete.
+// v=261: se agregaron `MONTHS_CHIPS`, `ventanaEsAncha` y `textoSub`. El banco
+// estaba ROTO desde v=241 (`ventanaEsAncha is not defined`): nadie lo corrió
+// desde que #new-releases ganó los chips de 5 años y «todo», y por eso el «entra
+// en una fila» de esta barra no se había vuelto a medir. Cuando el marcado de una
+// vista gane una función nueva, hay que sumarla acá o el banco no mide de menos:
+// falla, y hay que mirar el mensaje.
+const MONTHS_CHIPS = [
+  { n: 3, label: 'últimos 3m' }, { n: 6, label: 'últimos 6m' }, { n: 12, label: 'últimos 12m' },
+  { n: 24, label: 'últimos 24m' }, { n: 60, label: 'últimos 5 años' }, { n: 0, label: 'todo' },
+];
+// El peor caso del renglón de debajo del conteo: con artistas sin escanear.
+const SUB_PEOR_CASO = '485 artistas con ≥5 likes · 129 sin escanear';
 const AMBITO_NEWREL = {
   state: { minLikes: 5, months: 24, filterKind: 'all', scannedAt: Date.now() },
-  KINDS, KIND_LABEL, agoLabel, botonesBaseHtml,
+  KINDS, KIND_LABEL, agoLabel, botonesBaseHtml, MONTHS_CHIPS,
+  ventanaEsAncha: () => false, textoSub: () => SUB_PEOR_CASO,
   hiddenAlbums: new Set(Array.from({ length: 439 }, (_, i) => i)),
   targetToScan: () => 300,
   eligibleArtists: () => ({ length: 485 }),
 };
 const AMBITO_DISCO = {
   state: { loadedMore: 150, filterKind: 'all', filterYears: 0, mode: null, scannedAt: Date.now() },
-  KINDS, KIND_LABEL, agoLabel, botonesBaseHtml,
+  KINDS, KIND_LABEL, agoLabel, botonesBaseHtml, textoSub: () => SUB_PEOR_CASO,
+  buscados: () => ({ length: 150 }),
   hiddenAlbums: new Set(Array.from({ length: 439 }, (_, i) => i)),
   heardAlbums: new Set(Array.from({ length: 49 }, (_, i) => i)),
   MIN_LIKES: 5,
