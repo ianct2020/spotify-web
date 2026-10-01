@@ -3061,7 +3061,9 @@ h3 { font-size: 18px; font-weight: 600; }
 }
 .wthree-clear-filter:hover { text-decoration: underline; }
 .wthree-stat-v { font-size: 13px; font-weight: 700; color: var(--color-text); line-height: 1.1; font-variant-numeric: tabular-nums; }
-.wthree-stat-l { font-size: 7.5px; color: var(--color-text-muted); margin-top: 1px; line-height: 1.2; }
+/* v=266: de 7,5 a 10 px, como el subtítulo de las tarjetas: era una etiqueta ilegible
+   debajo de un número grande. Las cinco tarjetas son `repeat(5, 1fr)`, así que no pelean por el ancho. */
+.wthree-stat-l { font-size: 10px; color: var(--color-text-muted); margin-top: 1px; line-height: 1.2; }
 .wthree-stat-danger .wthree-stat-v { color: var(--color-error); }
 .wthree-stat-ok .wthree-stat-v { color: var(--color-success); }
 .wthree-stat-warn .wthree-stat-v { color: var(--color-warning); }
@@ -3133,7 +3135,9 @@ h3 { font-size: 18px; font-weight: 600; }
 /* El SVG trae width/height 16 por atributo: al lado de una tapa de 18px el ojo
    quedaba del tamaño del álbum. El CSS le gana al atributo. */
 .wthree-hide-btn svg { width: 12px; height: 12px; }
-.wthree-album-name { font-size: 9px; font-weight: 500; line-height: 1.1; }
+/* v=266: de 9 a 12 px. El nombre es el dato primario de la tarjeta y estaba MÁS CHICO que su
+   propio subtítulo (10 px). Las columnas son `repeat(5, …)` a mano: siguen siendo cinco. */
+.wthree-album-name { font-size: 12px; font-weight: 500; line-height: 1.1; }
 /* v=264: el subtítulo (artista · tiempo · plays) es el dato con el que Ian
    reconoce el álbum, y estaba en `--color-text-muted` sobre `--color-elevated`:
    2,27:1 de contraste medido en el DOM, y 1,60:1 en las filas `is-weak` (que le

@@ -2,32 +2,32 @@
 // por álbum). Muestra qué álbumes ya tienen picks, cuántos, y cuáles te faltan.
 // Ordenado por álbumes más escuchados primero para priorizar tu tiempo.
 
-import { spotifyFetch, getAllPlaylistItems, getAllUserPlaylists, addTracksToPlaylist, removeTracksFromPlaylist, reorderPlaylistItems, getCachedPlaylistItems, updatePlaylistItemsCache, getBestAvailableLikes, removeLikedTracks, checkLibraryContains } from '../api.js?v=265';
-import { vigilarRuta } from '../util/vigencia-ruta.js?v=265';
-import { patchPlaylistItems, buildCachedItem } from '../util/playlist-cache-patch.js?v=265';
-import { loadHistoryStats, loadListenedAlbums, isOwner, ownerLockedMessage } from './history-data.js?v=265';
-import { escapeHtml, pageHeader, confirmModal } from '../ui/components.js?v=265';
-import { showToast } from '../ui/toast.js?v=265';
-import { wireHoverMarquee, hoverMarqueeSpan } from '../ui/hover-marquee.js?v=265';
-import { openModal, closeById, closeModal } from '../ui/modal-stack.js?v=265';
-import { getPreview } from '../api/preview-providers.js?v=265';
-import { togglePreview, playingKey } from '../ui/preview-player.js?v=265';
-import { openAlbumCard } from './album-card.js?v=265';
-import { albumKey } from '../util/album-key.js?v=265';
-import { resolveAlbumId } from '../util/album-resolver.js?v=265';
-import { computeUpdatedPickPositions } from '../util/reorder-shifts.js?v=265';
-import { createHiddenStore } from '../util/hidden-sync.js?v=265';
-import { recuperarUriDeAlbumKey, REGLAS_VERSION } from '../util/hidden-recover.js?v=265';
-import { mountBottom } from '../ui/bottom-layer.js?v=265';
-import { coverUrl } from '../util/cover-size.js?v=265';
-import { insercionPorPuntero, moverA, indicadorPara } from '../util/reorder-drop.js?v=265';
-import { prefKey, migratePrefKey } from '../storage.js?v=265';
-import { iconoPlay, iconoPausa, iconoPuntos, iconoOjo, iconoOjoTachado } from '../ui/icons.js?v=265';
-import { pedirYCachear, SOLO_CON_CONTENIDO } from '../util/cache-solo-exitos.js?v=265';
-import { indiceIdsDeAlbum, idLocalDelAlbum } from '../util/album-id-local.js?v=265';
-import { openPlaylistPicker } from '../ui/playlist-picker.js?v=265';
-import { getOwnPlaylists, addUrisToPlaylists, toastAddResult, listaNombres } from '../util/playlist-add.js?v=265';
-import { borrarLikesVerificado } from '../util/borrado-verificado.js?v=265';
+import { spotifyFetch, getAllPlaylistItems, getAllUserPlaylists, addTracksToPlaylist, removeTracksFromPlaylist, reorderPlaylistItems, getCachedPlaylistItems, updatePlaylistItemsCache, getBestAvailableLikes, removeLikedTracks, checkLibraryContains } from '../api.js?v=266';
+import { vigilarRuta } from '../util/vigencia-ruta.js?v=266';
+import { patchPlaylistItems, buildCachedItem } from '../util/playlist-cache-patch.js?v=266';
+import { loadHistoryStats, loadListenedAlbums, isOwner, ownerLockedMessage } from './history-data.js?v=266';
+import { escapeHtml, pageHeader, confirmModal } from '../ui/components.js?v=266';
+import { showToast } from '../ui/toast.js?v=266';
+import { wireHoverMarquee, hoverMarqueeSpan } from '../ui/hover-marquee.js?v=266';
+import { openModal, closeById, closeModal } from '../ui/modal-stack.js?v=266';
+import { getPreview } from '../api/preview-providers.js?v=266';
+import { togglePreview, playingKey } from '../ui/preview-player.js?v=266';
+import { openAlbumCard } from './album-card.js?v=266';
+import { albumKey } from '../util/album-key.js?v=266';
+import { resolveAlbumId } from '../util/album-resolver.js?v=266';
+import { computeUpdatedPickPositions } from '../util/reorder-shifts.js?v=266';
+import { createHiddenStore } from '../util/hidden-sync.js?v=266';
+import { recuperarUriDeAlbumKey, REGLAS_VERSION } from '../util/hidden-recover.js?v=266';
+import { mountBottom } from '../ui/bottom-layer.js?v=266';
+import { coverUrl } from '../util/cover-size.js?v=266';
+import { insercionPorPuntero, moverA, indicadorPara } from '../util/reorder-drop.js?v=266';
+import { prefKey, migratePrefKey } from '../storage.js?v=266';
+import { iconoPlay, iconoPausa, iconoPuntos, iconoOjo, iconoOjoTachado } from '../ui/icons.js?v=266';
+import { pedirYCachear, SOLO_CON_CONTENIDO } from '../util/cache-solo-exitos.js?v=266';
+import { indiceIdsDeAlbum, idLocalDelAlbum } from '../util/album-id-local.js?v=266';
+import { openPlaylistPicker } from '../ui/playlist-picker.js?v=266';
+import { getOwnPlaylists, addUrisToPlaylists, toastAddResult, listaNombres } from '../util/playlist-add.js?v=266';
+import { borrarLikesVerificado } from '../util/borrado-verificado.js?v=266';
 
 const LS_KEY_ID = 'wthree_playlist_id';
 const LS_KEY_NAME = 'wthree_playlist_name';
@@ -584,14 +584,23 @@ function renderAlbumRow(a, kind) {
   // La fila tiene DOS líneas: nombre, y artista + tiempo + plays juntos. Hasta
   // v=214 el tiempo iba en un tercer renglón propio (`.wthree-album-meta`); con
   // cinco columnas y la tapa a 18px no hay alto para un tercero.
+  //
+  // v=266: las filas débiles (sin minutos ni plays) llevaban «escuchado en 2026 ·
+  // fuera del top 1000», que es casi todo lo que se corta por la derecha (48 de las
+  // 60 primeras) y mientras se clasifica no aporta: lo que se lee es artista y
+  // álbum. En el renglón queda solo el año; el texto entero va al `title` de la fila.
+  const detalleDebil = a.detectedIn
+    ? `escuchado en ${a.detectedIn} · fuera del top 1000`
+    : 'fuera del top / de la playlist';
   const meta = a.min > 0
     ? `${fmtMinutesShort(a.min)} · ${a.plays}`
-    : (a.detectedIn ? `escuchado en ${escapeHtml(a.detectedIn)} · fuera del top 1000` : 'fuera del top / de la playlist');
+    : (a.detectedIn ? escapeHtml(a.detectedIn) : detalleDebil);
+  const tituloFila = a.min > 0 ? '' : ` title="${escapeHtml(`${a.artist} · ${detalleDebil}`)}"`;
 
   const hideBtn = `<button class="wthree-hide-btn" data-hide-key="${escapeHtml(key)}" data-hide-uri="${escapeHtml(hideUri)}" title="${isHidden ? 'Restaurar en la lista' : 'Ocultar este álbum'}" aria-label="${isHidden ? 'Restaurar' : 'Ocultar'}">${isHidden ? iconoOjo(16) : iconoOjoTachado(16)}</button>`;
 
   return `
-    <div class="wthree-album-row" data-album-key="${escapeHtml(key)}">
+    <div class="wthree-album-row" data-album-key="${escapeHtml(key)}"${tituloFila}>
       ${a.img
         ? `<img src="${a.img}" alt="" class="wthree-album-cover" loading="lazy">`
         : `<div class="wthree-album-cover wthree-album-cover-empty">♪</div>`}

@@ -56,9 +56,9 @@
 // Spotify. Con la congelación y sin este número, ese arreglo no habría servido.
 export const REGLAS_VERSION = 1;
 
-import { spotifyFetch } from '../api.js?v=265';
-import { albumKey } from './album-key.js?v=265';
-import { limpiaParaQuery } from './track-match.js?v=265';
+import { spotifyFetch } from '../api.js?v=266';
+import { albumKey } from './album-key.js?v=266';
+import { limpiaParaQuery } from './track-match.js?v=266';
 
 /**
  * ⚠️ `porFirmaDelAlbum` (v=210). Los dos stores de álbumes NO leen la playlist

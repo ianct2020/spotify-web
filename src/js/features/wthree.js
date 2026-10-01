@@ -584,14 +584,23 @@ function renderAlbumRow(a, kind) {
   // La fila tiene DOS líneas: nombre, y artista + tiempo + plays juntos. Hasta
   // v=214 el tiempo iba en un tercer renglón propio (`.wthree-album-meta`); con
   // cinco columnas y la tapa a 18px no hay alto para un tercero.
+  //
+  // v=266: las filas débiles (sin minutos ni plays) llevaban «escuchado en 2026 ·
+  // fuera del top 1000», que es casi todo lo que se corta por la derecha (48 de las
+  // 60 primeras) y mientras se clasifica no aporta: lo que se lee es artista y
+  // álbum. En el renglón queda solo el año; el texto entero va al `title` de la fila.
+  const detalleDebil = a.detectedIn
+    ? `escuchado en ${a.detectedIn} · fuera del top 1000`
+    : 'fuera del top / de la playlist';
   const meta = a.min > 0
     ? `${fmtMinutesShort(a.min)} · ${a.plays}`
-    : (a.detectedIn ? `escuchado en ${escapeHtml(a.detectedIn)} · fuera del top 1000` : 'fuera del top / de la playlist');
+    : (a.detectedIn ? escapeHtml(a.detectedIn) : detalleDebil);
+  const tituloFila = a.min > 0 ? '' : ` title="${escapeHtml(`${a.artist} · ${detalleDebil}`)}"`;
 
   const hideBtn = `<button class="wthree-hide-btn" data-hide-key="${escapeHtml(key)}" data-hide-uri="${escapeHtml(hideUri)}" title="${isHidden ? 'Restaurar en la lista' : 'Ocultar este álbum'}" aria-label="${isHidden ? 'Restaurar' : 'Ocultar'}">${isHidden ? iconoOjo(16) : iconoOjoTachado(16)}</button>`;
 
   return `
-    <div class="wthree-album-row" data-album-key="${escapeHtml(key)}">
+    <div class="wthree-album-row" data-album-key="${escapeHtml(key)}"${tituloFila}>
       ${a.img
         ? `<img src="${a.img}" alt="" class="wthree-album-cover" loading="lazy">`
         : `<div class="wthree-album-cover wthree-album-cover-empty">♪</div>`}

@@ -1464,6 +1464,16 @@ y pie fijos); no se unificaron. El subtítulo de las tarjetas (`.wthree-album-ar
 2,27:1 y 1,60:1; ahora 4,77:1 en Violeta). `tests/wthree-ancho-modal.test.mjs` lee la hoja y vigila las
 dos decisiones.
 
+## Tipografía de las tarjetas de #wthree (v=266)
+Nombre del álbum a **12 px** (era 9: quedaba MÁS CHICO que su subtítulo de 10), etiquetas de los contadores
+(`.wthree-stat-l`) a **10 px** (eran 7,5; en el `@media` de 600 px siguen en 9 a propósito: a 420 px «✅ completos»
+con 10 px sobra 0,4 px). Las columnas son `repeat(5, …)` a mano y no se movieron. Las filas `is-weak` ya no dicen
+«escuchado en 2026 · fuera del top 1000» en el renglón: solo el año, y el texto entero va al `title` de la fila
+(`tituloFila` en `renderAlbumRow`; las filas normales no llevan `title`). Medido en el DOM de la copia, 1366 px:
+alto de fila 24,9 → 28,2; tarjetas enteras a 591 px de alto 45 → 40; nombres cortados de 60: 3 → 5; subtítulos
+cortados: 48 → 0. ⚠️ **40 es el piso**: la fila siguiente no entra y cualquier pixel más de alto de fila
+(o de los contadores) baja ese número. `tests/wthree-ancho-modal.test.mjs` vigila el tamaño y el renglón.
+
 ## ⛔ NUNCA `git add -A` ni `git add .` — archivo por archivo
 **Este repo es PÚBLICO.** El 2026-07-28 se filtraron datos personales y hubo que
 hacer `filter-branch` + force push. Desde entonces la regla es `git add` **con

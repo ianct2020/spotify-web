@@ -28,8 +28,8 @@
 // llegar al tope de la ventana, no por cuota. El camino existe en el código
 // pero todavía no se lo vio correr.
 
-import { idbEntriesByPrefix, idbGetCached } from '../idb.js?v=265';
-import { DISCO_BASE_PREFIX, RECIENTE_TTL_MS, RECIENTE_FORZADO_MIN_MS, PRESUPUESTO_REFRESCO } from './disco-base.js?v=265';
+import { idbEntriesByPrefix, idbGetCached } from '../idb.js?v=266';
+import { DISCO_BASE_PREFIX, RECIENTE_TTL_MS, RECIENTE_FORZADO_MIN_MS, PRESUPUESTO_REFRESCO } from './disco-base.js?v=266';
 
 // Requests de `/artists/{id}/albums` que cuesta UN artista sin base.
 //

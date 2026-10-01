@@ -1,5 +1,6 @@
 // Suite «W-Three a lo ancho» (v=264): el reparto del modal por álbum y el subtítulo
-// de las tarjetas.
+// de las tarjetas. Desde v=266 también la tipografía de las tarjetas (nombre a 12 px,
+// etiquetas de los contadores a 10 px) y el renglón de las filas débiles (solo el año).
 //
 // Hasta v=263 el modal partía el ancho en dos `1fr`: la mitad (437 px) iba al panel
 // «Orden dentro del álbum», una lista de COMO MUCHO tres ítems y casi siempre vacía,
@@ -96,5 +97,37 @@ ok(fs >= 10, `el subtítulo se lee: 10 px o más (v=215 lo dejó en 7,5 para que
 const rejilla = regla('.wthree-album-list');
 ok(rejilla && /grid-template-columns:\s*repeat\(5,\s*minmax\(0,\s*1fr\)\)/.test(rejilla),
   'las columnas de tarjetas siguen siendo cinco, a mano: no salen del tamaño de la letra (subirlo no las quita)');
+
+// v=266: tipografía de las tarjetas. El nombre del álbum es el dato primario y estaba a 9 px,
+// MÁS CHICO que su subtítulo (10 px); las etiquetas de los contadores de arriba seguían a 7,5 px.
+const nombre = regla('.wthree-album-name');
+const etiqueta = regla('.wthree-stat-l');
+ok(nombre, 'existe la regla .wthree-album-name');
+ok(etiqueta, 'existe la regla .wthree-stat-l');
+const fsNombre = Number((prop(nombre, 'font-size') || '').replace('px', ''));
+ok(fsNombre >= 12, `el nombre del álbum mide 12 px o más — dice ${fsNombre}`);
+ok(fsNombre > fs, `la jerarquía no está invertida: el nombre (${fsNombre}) es mayor que el subtítulo (${fs})`);
+const fsEtiqueta = Number((prop(etiqueta, 'font-size') || '').replace('px', ''));
+ok(fsEtiqueta >= 10, `las etiquetas de los contadores miden 10 px o más — dicen ${fsEtiqueta}`);
+// En móvil (@media de 600 px, la segunda `.wthree-stat-l`) se queda en 9 px a propósito: con 10 px
+// «✅ completos» ocupa 64,6 de los 65 px que tiene la caja a 420 px (medido) y a 360 px partiría en dos.
+const etiquetaMovil = regla('.wthree-stat-l', 1);
+ok(etiquetaMovil, 'hay una segunda regla .wthree-stat-l (la del @media de 600 px) — guarda del guarda');
+ok(Number((prop(etiquetaMovil, 'font-size') || '').replace('px', '')) === 9, 'en móvil la etiqueta sigue en 9 px (a 10 no cabe «completos» a 420 px)');
+ok(!/#[0-9a-fA-F]{3,8}\b|rgba?\(/.test(nombre + etiqueta), 'ni el nombre ni la etiqueta llevan un color escrito a mano');
+
+// v=266: el renglón de las filas débiles dice solo el año; el resto va al `title` de la fila.
+const js = readFileSync(new URL('../src/js/features/wthree.js', import.meta.url), 'utf8');
+const sinComentarios = js.split('\n').filter(l => !/^\s*\/\//.test(l)).join('\n');
+ok(/const detalleDebil = a\.detectedIn\s*\?\s*`escuchado en \$\{a\.detectedIn\} · fuera del top 1000`/.test(sinComentarios),
+  'el texto largo de las débiles sigue existiendo (va al title, no se pierde)');
+ok(/:\s*\(a\.detectedIn \? escapeHtml\(a\.detectedIn\) : detalleDebil\)/.test(sinComentarios),
+  'el renglón de una débil con año lleva SOLO el año');
+ok(!/escuchado en \$\{escapeHtml\(a\.detectedIn\)\}/.test(sinComentarios), 'el renglón ya no dice «escuchado en … fuera del top 1000»');
+ok(/const tituloFila = a\.min > 0 \? '' : ` title="\$\{escapeHtml\(`\$\{a\.artist\} · \$\{detalleDebil\}`\)\}"`/.test(sinComentarios),
+  'el title de la fila (escapado) lleva artista + el detalle completo, y solo en las débiles');
+ok(/class="wthree-album-row" data-album-key="\$\{escapeHtml\(key\)\}"\$\{tituloFila\}>/.test(sinComentarios), 'la fila lleva el title');
+ok(/hoverMarqueeSpan\(escapeHtml\(a\.artist\) \+ ' · ' \+ meta\)/.test(sinComentarios),
+  'las filas normales siguen siendo «artista · tiempo · plays» (meta sin tocar)');
 
 console.log(`wthree-ancho-modal: ${n} asserts OK`);
