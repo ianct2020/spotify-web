@@ -10,14 +10,14 @@
 //   - Umbral de likes: 5+ / 10+ / 20+
 //   - Ventana temporal: 3 / 6 / 12 / 24 meses, 5 años y «todo» (default 12)
 
-import { escapeHtml, confirmModal, pageHeader } from '../ui/components.js?v=263';
-import { showToast } from '../ui/toast.js?v=263';
-import { buildAlbumHeardIndex } from '../util/album-heard.js?v=263';
-import { releaseKind } from '../util/release-size.js?v=263';
-import { loadFiltros, buildFilterContext, applyDiscoverFilters } from '../util/discover-filters.js?v=263';
-import { createIncrementalList, scrollRootOf } from '../ui/incremental-list.js?v=263';
-import { createLazyImages } from '../ui/lazy-img.js?v=263';
-import { prefKey, migratePrefKey } from '../storage.js?v=263';
+import { escapeHtml, confirmModal, pageHeader } from '../ui/components.js?v=264';
+import { showToast } from '../ui/toast.js?v=264';
+import { buildAlbumHeardIndex } from '../util/album-heard.js?v=264';
+import { releaseKind } from '../util/release-size.js?v=264';
+import { loadFiltros, buildFilterContext, applyDiscoverFilters } from '../util/discover-filters.js?v=264';
+import { createIncrementalList, scrollRootOf } from '../ui/incremental-list.js?v=264';
+import { createLazyImages } from '../ui/lazy-img.js?v=264';
+import { prefKey, migratePrefKey } from '../storage.js?v=264';
 import {
   getArtistIdCached,
   getArtistDiscoCached,
@@ -58,12 +58,12 @@ import {
   avisarRonda,
   botonesBaseHtml,
   conectarBotonesBase,
-} from './discover-common.js?v=263';
-import { estadoNativoDiscografia } from '../api.js?v=263';
-import { leerElegidos, sumarElegidos, artistasBuscados, colaAutomatica } from '../util/cola-escaneo.js?v=263';
-import { leerFallos, marcarFallo, limpiarFallo, sinFallosMarcados } from '../util/escaneo-fallos.js?v=263';
-import { contarSinEscanear, sufijoSinEscanear, notaSinEscanear } from '../util/sin-escanear.js?v=263';
-import { estadoFrescura } from '../util/frescura-escaneo.js?v=263';
+} from './discover-common.js?v=264';
+import { estadoNativoDiscografia } from '../api.js?v=264';
+import { leerElegidos, sumarElegidos, artistasBuscados, colaAutomatica } from '../util/cola-escaneo.js?v=264';
+import { leerFallos, marcarFallo, limpiarFallo, sinFallosMarcados } from '../util/escaneo-fallos.js?v=264';
+import { contarSinEscanear, sufijoSinEscanear, notaSinEscanear } from '../util/sin-escanear.js?v=264';
+import { estadoFrescura } from '../util/frescura-escaneo.js?v=264';
 
 const SCAN_KEY = 'new_releases';
 

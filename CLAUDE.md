@@ -1085,7 +1085,7 @@ Aparte, desde v=257 el nombre de la caché del SW lleva la versión
 despliegues anteriores: hasta v=256 valía siempre `fonoteca-sw-v1` y esa limpieza
 no corrió nunca. Eso arregla la acumulación, **no** el `index.html` viejo de arriba.
 
-**Tests y antes de pushear**: `npm test` corre las 37 suites de `tests/*.test.mjs`
+**Tests y antes de pushear**: `npm test` corre las 38 suites de `tests/*.test.mjs`
 (un proceso por suite, sale con 1 si alguna falla; `-- --orden=inverso|azar:N` y
 `-- --paralelo` para cazar dependencias de orden) y `npm run prepush` comprueba,
 sin modificar nada, sintaxis, tests, `docs/` al día, versiones parejas y que no
@@ -1451,6 +1451,18 @@ reciente) y sin base. ⚠️ `saveScanCache` no adelanta la fecha mientras la vi
 (`crearMarcasDeFrescura`): un escaneo PARCIAL la rejuvenecería y la próxima apertura diría «al día»
 con 350 artistas sin mirar. No metas en ese camino nada que llame a `getArtistIdCached` o a
 `getArtistDiscoCached`: pueden ir a `/search`. `tests/frescura-escaneo.test.mjs` lo vigila.
+
+## El modal de W-Three reparte el ancho a favor de las pistas (v=264)
+`.wt-modal` mide 1140 px (antes 920) y `.wt-body` es `minmax(0, 1fr) 280px`: el panel «Orden dentro del
+álbum» —una lista de COMO MUCHO tres ítems— tiene ancho fijo y las pistas se llevan lo que sobra
+(nombre de pista de 74 a 262 px, medido en el DOM con 4SZNZ y «BLING BØI EP 2»). ⚠️ **Con 240 px el
+corte se MUDABA al panel de orden** (2 de 3 nombres con «…»): por eso 280 px y los nombres del orden en
+dos renglones (`.wt-col-right .wthree-order-name`, solo dentro del modal). ⚠️ **#wthree NO usa
+`.modal-picker`/`.picker-scroll`**: tiene su propia `.wt-modal` (flex column + overflow hidden, cabecera
+y pie fijos); no se unificaron. El subtítulo de las tarjetas (`.wthree-album-artist`) va en
+`--color-text-secondary` y **sin `opacity`** (antes muted + `opacity: .6` en las filas `is-weak`:
+2,27:1 y 1,60:1; ahora 4,77:1 en Violeta). `tests/wthree-ancho-modal.test.mjs` lee la hoja y vigila las
+dos decisiones.
 
 ## ⛔ NUNCA `git add -A` ni `git add .` — archivo por archivo
 **Este repo es PÚBLICO.** El 2026-07-28 se filtraron datos personales y hubo que

@@ -1,6 +1,6 @@
-import { openModal, closeTop } from './modal-stack.js?v=263';
-import { mountBottomHtml } from './bottom-layer.js?v=263';
-import { coverUrl } from '../util/cover-size.js?v=263';
+import { openModal, closeTop } from './modal-stack.js?v=264';
+import { mountBottomHtml } from './bottom-layer.js?v=264';
+import { coverUrl } from '../util/cover-size.js?v=264';
 
 function renderTrackRow(track, extra = '') {
   const art = coverUrl(track.album?.images, 'grande') || '';

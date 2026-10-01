@@ -3134,10 +3134,19 @@ h3 { font-size: 18px; font-weight: 600; }
    quedaba del tamaño del álbum. El CSS le gana al atributo. */
 .wthree-hide-btn svg { width: 12px; height: 12px; }
 .wthree-album-name { font-size: 9px; font-weight: 500; line-height: 1.1; }
-.wthree-album-artist { font-size: 7.5px; color: var(--color-text-muted); line-height: 1.1; }
-/* Las filas sin minutos ni plays dicen de dónde salió el álbum; se atenúan para
-   que no compitan con las que traen el dato de verdad. */
-.wthree-album-artist.is-weak { opacity: 0.6; }
+/* v=264: el subtítulo (artista · tiempo · plays) es el dato con el que Ian
+   reconoce el álbum, y estaba en `--color-text-muted` sobre `--color-elevated`:
+   2,27:1 de contraste medido en el DOM, y 1,60:1 en las filas `is-weak` (que le
+   sumaban `opacity: 0.6` encima — 48 de las 60 primeras tarjetas). Pasa a
+   `--color-text-secondary`, la variable del tema que ya existe para esto; no se
+   escribe ningún color a mano. */
+.wthree-album-artist { font-size: 7.5px; color: var(--color-text-secondary); line-height: 1.1; }
+/* Las filas sin minutos ni plays dicen de dónde salió el álbum. Hasta v=263 se
+   atenuaban con `opacity: 0.6` para no competir con las que traen el dato de
+   verdad; ningún color de la paleta aguanta eso con 7,5 px de letra (con la
+   opacidad puesta, el secundario baja de 4,77:1 a 2,59:1 en Violeta). Ya se distinguen solas:
+   su texto dice «escuchado en 2026 · fuera del top 1000», no minutos ni plays. */
+.wthree-album-artist.is-weak { color: var(--color-text-secondary); }
 
 /* «Ver N más»: link liviano, no un `.btn` entero (v=215). */
 .wthree-ver-mas {
@@ -3408,10 +3417,16 @@ h3 { font-size: 18px; font-weight: 600; }
    64 → 48 aporta 10 px de la cabecera; más abajo no sirve porque el piso lo
    pone .wt-head-info. Nada de esto toca `align-content: start` ni el reparto
    columna-por-columna: ver el bloque de .wt-tracklist-cols. */
+/* v=264 — A LO ANCHO. El modal pasa de 920 a 1140 px y el panel de orden deja de
+   llevarse la mitad: ver `.wt-body`. A 1366 px de viewport sigue entrando (94vw
+   = 1284) y sin scroll horizontal; con menos, manda el 94vw como siempre. Los
+   1140 no son redondos: son los 920 de antes + los 220 que el panel de orden
+   (280 px) le suma al ancho útil de las pistas, que así quedan en ~262 px por
+   nombre (medido) — lo justo para «TATTØØS ALL SUMMER (feat. Pradabagshawty)». */
 .wt-modal {
   padding: 0 !important;
-  max-width: 920px;
-  width: min(920px, 94vw);
+  max-width: 1140px;
+  width: min(1140px, 94vw);
   height: min(85vh, 620px);
   max-height: 85vh;
   display: flex;
@@ -3493,7 +3508,14 @@ h3 { font-size: 18px; font-weight: 600; }
   flex: 1;
   min-height: 0;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  /* v=264: la columna de orden es una lista de COMO MUCHO tres ítems arrastrables:
+     280 px fijos le alcanzan (el nombre de cada uno puede partirse en dos
+     renglones, ver `.wt-col-right .wthree-order-name`), y las pistas se quedan
+     con todo lo demás. Hasta v=263 eran dos `1fr` y la mitad del modal (437 px)
+     iba a una lista casi siempre vacía mientras el nombre de la pista se cortaba
+     a 74 px. (Con 240 px el corte se mudaba al panel de orden: 2 de 3 nombres con
+     «…» en 4SZNZ — por eso 280 y dos renglones.) */
+  grid-template-columns: minmax(0, 1fr) 280px;
   gap: 12px;
   /* v=147: 12 → 8 en vertical. Son 8 px de los 19 que faltaban para meter 20
      pistas sin scroll en 1366×768 (ver el bloque de .wt-modal). */
@@ -3559,6 +3581,18 @@ h3 { font-size: 18px; font-weight: 600; }
      movimiento que Ian no podía hacer— se queda sin ninguna señal.
      Lo mismo abajo para el `::after` de la última. */
   padding: 4px 2px 4px 0;
+}
+/* v=264: con el panel angosto, el nombre del pick pasa a poder ocupar dos
+   renglones antes del «…» (en una sola línea, «Rolling Stone - Demo» se cortaba
+   a 146 px). Solo dentro del modal: la regla base de `.wthree-order-name` queda. */
+.wt-col-right .wthree-order-name {
+  white-space: normal;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow-wrap: anywhere;
+  line-height: 1.25;
 }
 .wt-order-empty {
   font-size: 12px;
