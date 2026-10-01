@@ -90,4 +90,11 @@ for (const [nombre, cuerpo] of [['.wthree-album-artist', subt], ['.wthree-album-
 }
 ok(!/--color-text-muted/.test(subt + weak), 'ya no usa --color-text-muted');
 
+// v=265: el tamaño. 7,5 px pasaba el contraste y seguía siendo ilegible.
+const fs = Number((prop(subt, 'font-size') || '').replace('px', ''));
+ok(fs >= 10, `el subtítulo se lee: 10 px o más (v=215 lo dejó en 7,5 para que entraran cinco columnas) — dice ${fs}`);
+const rejilla = regla('.wthree-album-list');
+ok(rejilla && /grid-template-columns:\s*repeat\(5,\s*minmax\(0,\s*1fr\)\)/.test(rejilla),
+  'las columnas de tarjetas siguen siendo cinco, a mano: no salen del tamaño de la letra (subirlo no las quita)');
+
 console.log(`wthree-ancho-modal: ${n} asserts OK`);

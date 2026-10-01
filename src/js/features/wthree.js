@@ -605,10 +605,10 @@ function renderAlbumRow(a, kind) {
   `;
 }
 
-// Formato del boceto elegido: `20h47`, sin espacio ni la `m`. A 7,5px quedan
-// ~166 px de texto por columna (medido en la app, 1366×768, DPR 1), así que
-// cada carácter cuenta; al lado del número de plays la «h» ya dice qué es cada
-// mitad.
+// Formato del boceto elegido: `20h47`, sin espacio ni la `m`. La columna deja
+// ~164 px de texto (medido en la app, 1366×768, DPR 1) y el subtítulo va a
+// 10 px desde v=265, así que cada carácter cuenta; al lado del número de plays
+// la «h» ya dice qué es cada mitad.
 function fmtMinutesShort(min) {
   if (min >= 60) return `${Math.floor(min / 60)}h${Math.round(min % 60)}`;
   return `${Math.round(min)}m`;

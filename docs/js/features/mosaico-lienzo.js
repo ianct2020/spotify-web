@@ -9,7 +9,7 @@
 // fotografiaría OTRO código que el que usa Ian. Es la lección del resolutor
 // duplicado de v=219 aplicada antes de tiempo.
 
-import { conTapa } from './covers-wallpaper.js?v=264';
+import { conTapa } from './covers-wallpaper.js?v=265';
 
 /**
  * Baja las portadas que hacen falta y las deja en un `Map` índice → bitmap.

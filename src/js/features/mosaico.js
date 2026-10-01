@@ -70,7 +70,12 @@ const VARIEDADES = [
   { n: 6, etiqueta: 'Variada', ayuda: 'El doble de portadas. El tinte tapa un poco más. Con la imagen de prueba: ~1.100 portadas distintas.' },
   { n: 10, etiqueta: 'Máxima', ayuda: 'Todas las portadas que quepan. Aquí el parecido ya se resiente. Con la imagen de prueba: ~1.900 portadas distintas.' },
 ];
-const VARIEDAD_DEFECTO = 3;
+// El defecto es «Variada» (6) desde v=265. Medido el 28/09 sobre la imagen de
+// prueba: con «Normal» (3) quedaba una trama de damero (1,8 % de celdas con su
+// misma portada a la vista) y con «Variada» desaparece (0 %), a cambio de más
+// tinte medio (26 % → 40 %): el tinte adaptativo recompra lo que pierde el
+// parecido. Decisión de Ian; la curva entera sigue en `PENAL_USO_DE`.
+const VARIEDAD_DEFECTO = 6;
 
 // El tinte por defecto, y por qué ESTE número. El informe de color del catálogo
 // (27/09) midió que el 38 % de sRGB no tiene ninguna portada a ΔE 10, así que
@@ -104,37 +109,40 @@ export async function render(container) {
       </p>
       <p id="mos-base" style="margin:0 0 14px;font-size:13px">Leyendo la base de colores…</p>
       <div id="mos-controles" hidden>
-        <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin-bottom:14px">
-          <input type="file" id="mos-file" accept="image/*" style="font-size:13px">
-          <button class="btn btn-primary" id="mos-generar" disabled>Generar</button>
-          <button class="btn btn-secondary" id="mos-parar" disabled>Detener</button>
+        <div class="mos-accion">
+          <input type="file" id="mos-file" accept="image/*" hidden>
+          <button type="button" class="btn btn-secondary" id="mos-elegir">Elegir imagen…</button>
+          <span class="mos-archivo" id="mos-archivo">Ninguna imagen elegida</span>
+          <span class="mos-acciones">
+            <button class="btn btn-primary" id="mos-generar" disabled>Generar</button>
+            <button class="btn btn-secondary" id="mos-parar" disabled>Detener</button>
+          </span>
         </div>
-        <div style="display:flex;gap:20px;flex-wrap:wrap;align-items:flex-end">
-          <div>
-            <div style="font-size:12px;color:var(--color-text-muted);margin-bottom:6px">Tamaño de la rejilla</div>
-            <div style="display:flex;gap:6px">
-              ${GRILLAS.map(g => `<button class="btn btn-secondary${g.n === GRILLA_DEFECTO ? ' is-on' : ''}" data-grilla="${g.n}" style="padding:6px 12px;font-size:13px">${g.etiqueta} · ${g.n}</button>`).join('')}
+        <div class="mos-ajustes">
+          <section class="mos-grupo" aria-labelledby="mos-t-grilla">
+            <h3 class="mos-grupo-t" id="mos-t-grilla">Tamaño de la rejilla</h3>
+            <div class="mos-seg" role="group" aria-labelledby="mos-t-grilla">
+              ${GRILLAS.map(g => `<button type="button" class="${g.n === GRILLA_DEFECTO ? 'is-on' : ''}" aria-pressed="${g.n === GRILLA_DEFECTO}" data-grilla="${g.n}">${g.etiqueta} · ${g.n}</button>`).join('')}
             </div>
-          </div>
-          <div style="min-width:240px">
-            <div style="font-size:12px;color:var(--color-text-muted);margin-bottom:6px">
-              Tinte del color original: <strong id="mos-tinte-val">${TINTE_DEFECTO} %</strong>
+          </section>
+          <section class="mos-grupo" aria-labelledby="mos-t-tinte">
+            <h3 class="mos-grupo-t" id="mos-t-tinte">Tinte del color original <output class="mos-valor" id="mos-tinte-val" for="mos-tinte">${TINTE_DEFECTO} %</output></h3>
+            <input type="range" id="mos-tinte" class="mos-rango" min="0" max="100" step="5" value="${TINTE_DEFECTO}" style="--p:${TINTE_DEFECTO}%" aria-labelledby="mos-t-tinte">
+            <div class="mos-escala" aria-hidden="true"><span>0 % · sin tinte</span><span>100 % · color de tu imagen</span></div>
+          </section>
+          <section class="mos-grupo" aria-labelledby="mos-t-variedad">
+            <h3 class="mos-grupo-t" id="mos-t-variedad">Variedad de portadas</h3>
+            <div class="mos-seg" role="group" aria-labelledby="mos-t-variedad">
+              ${VARIEDADES.map(v => `<button type="button" class="${v.n === VARIEDAD_DEFECTO ? 'is-on' : ''}" aria-pressed="${v.n === VARIEDAD_DEFECTO}" data-variedad="${v.n}" title="${escapeHtml(v.ayuda)}">${v.etiqueta}</button>`).join('')}
             </div>
-            <input type="range" id="mos-tinte" min="0" max="100" step="5" value="${TINTE_DEFECTO}" style="width:100%">
-          </div>
-          <div>
-            <div style="font-size:12px;color:var(--color-text-muted);margin-bottom:6px">Variedad de portadas</div>
-            <div style="display:flex;gap:6px">
-              ${VARIEDADES.map(v => `<button class="btn btn-secondary${v.n === VARIEDAD_DEFECTO ? ' is-on' : ''}" data-variedad="${v.n}" title="${escapeHtml(v.ayuda)}" style="padding:6px 12px;font-size:13px">${v.etiqueta}</button>`).join('')}
+          </section>
+          <section class="mos-grupo" aria-labelledby="mos-t-modo">
+            <h3 class="mos-grupo-t" id="mos-t-modo">Reparto del tinte</h3>
+            <div class="mos-seg" role="group" aria-labelledby="mos-t-modo">
+              <button type="button" class="is-on" aria-pressed="true" data-modo="adaptativo" title="Más tinte donde la portada se parece poco al color que tocaba, y nada donde se parece mucho.">Adaptativo</button>
+              <button type="button" aria-pressed="false" data-modo="plano" title="El mismo tinte en todas las celdas.">Plano</button>
             </div>
-          </div>
-          <div>
-            <div style="font-size:12px;color:var(--color-text-muted);margin-bottom:6px">Reparto del tinte</div>
-            <div style="display:flex;gap:6px">
-              <button class="btn btn-secondary is-on" data-modo="adaptativo" title="Más tinte donde la portada se parece poco al color que tocaba, y nada donde se parece mucho." style="padding:6px 12px;font-size:13px">Adaptativo</button>
-              <button class="btn btn-secondary" data-modo="plano" title="El mismo tinte en todas las celdas." style="padding:6px 12px;font-size:13px">Plano</button>
-            </div>
-          </div>
+          </section>
         </div>
       </div>
       <p id="mos-estado" style="margin:14px 0 0;font-size:13px;color:var(--color-text-secondary)"></p>
@@ -152,6 +160,13 @@ export async function render(container) {
   `;
 
   const $ = (id) => document.getElementById(id);
+  // Un grupo de botones es un grupo de opciones EXCLUSIVAS: se marca una y se
+  // desmarcan las otras, con la clase que pinta `main.css` y con `aria-pressed`,
+  // que es lo que lee un lector de pantalla (la clase sola no dice nada).
+  const marcar = (attr, btn) => container.querySelectorAll(`[${attr}]`).forEach(b => {
+    b.classList.toggle('is-on', b === btn);
+    b.setAttribute('aria-pressed', String(b === btn));
+  });
   const estado = $('mos-estado');
   const di = (txt) => { if (estado.isConnected) estado.textContent = txt; };
 
@@ -196,11 +211,20 @@ export async function render(container) {
   };
 
   // ── La imagen que sube el usuario ─────────────────────────────────────────
+  // El `<input type=file>` nativo va escondido (sigue siendo el que recibe el
+  // archivo y el que dispara `change`) y este botón le hace `click()`. El nombre
+  // se enseña ENTERO: el nativo lo recorta con «…» y con 40 caracteres ya no se
+  // sabía qué imagen estaba elegida.
+  $('mos-elegir').addEventListener('click', () => $('mos-file').click());
   $('mos-file').addEventListener('change', async (e) => {
     const file = e.currentTarget.files?.[0];
     if (!file) return;
+    const lugar = $('mos-archivo');
+    lugar.textContent = file.name;
+    lugar.title = file.name;
+    lugar.classList.add('is-set');
     $('mos-generar').disabled = true;
-    di(`Leyendo ${file.name}…`);
+    di('Leyendo la imagen…');
     try {
       bitmapObjetivo?.close?.();
       bitmapObjetivo = await createImageBitmap(file);
@@ -217,10 +241,13 @@ export async function render(container) {
       cl.drawImage(bitmapObjetivo, 0, 0, w, h);
       pixelesObjetivo = { rgba: cl.getImageData(0, 0, w, h).data, ancho: w, alto: h };
       const g = grillaPara(w, h, ladoLargo);
-      di(`${file.name}: ${fmtN(w0)}×${fmtN(h0)} px${k < 1 ? ` (leída a ${fmtN(w)}×${fmtN(h)})` : ''} · rejilla ${g.cols}×${g.filas} = ${fmtN(g.cols * g.filas)} celdas → ${fmtN(g.cols * LADO_CELDA)}×${fmtN(g.filas * LADO_CELDA)} px`);
+      di(`Imagen de ${fmtN(w0)}×${fmtN(h0)} px${k < 1 ? ` (leída a ${fmtN(w)}×${fmtN(h)})` : ''} · rejilla ${g.cols}×${g.filas} = ${fmtN(g.cols * g.filas)} celdas → ${fmtN(g.cols * LADO_CELDA)}×${fmtN(g.filas * LADO_CELDA)} px`);
       $('mos-generar').disabled = false;
     } catch (err) {
       pixelesObjetivo = null;
+      lugar.textContent = 'Ninguna imagen elegida';
+      lugar.title = '';
+      lugar.classList.remove('is-set');
       di('');
       showToast(`No he podido leer la imagen: ${err.message}`, 'error');
     }
@@ -230,7 +257,7 @@ export async function render(container) {
   container.querySelectorAll('[data-grilla]').forEach(btn => {
     btn.addEventListener('click', () => {
       ladoLargo = Number(btn.dataset.grilla);
-      container.querySelectorAll('[data-grilla]').forEach(b => b.classList.toggle('is-on', b === btn));
+      marcar('data-grilla', btn);
       if (pixelesObjetivo) {
         const g = grillaPara(pixelesObjetivo.ancho, pixelesObjetivo.alto, ladoLargo);
         di(`Rejilla ${g.cols}×${g.filas} = ${fmtN(g.cols * g.filas)} celdas → ${fmtN(g.cols * LADO_CELDA)}×${fmtN(g.filas * LADO_CELDA)} px. Pulsa «Generar».`);
@@ -244,7 +271,7 @@ export async function render(container) {
   container.querySelectorAll('[data-variedad]').forEach(btn => {
     btn.addEventListener('click', () => {
       variedad = Number(btn.dataset.variedad);
-      container.querySelectorAll('[data-variedad]').forEach(b => b.classList.toggle('is-on', b === btn));
+      marcar('data-variedad', btn);
       if (pixelesObjetivo) di(`Variedad «${VARIEDADES.find(v => v.n === variedad).etiqueta}». Pulsa «Generar».`);
     });
   });
@@ -252,7 +279,7 @@ export async function render(container) {
   container.querySelectorAll('[data-modo]').forEach(btn => {
     btn.addEventListener('click', () => {
       modo = btn.dataset.modo;
-      container.querySelectorAll('[data-modo]').forEach(b => b.classList.toggle('is-on', b === btn));
+      marcar('data-modo', btn);
       repintarTinte();
     });
   });
@@ -261,6 +288,7 @@ export async function render(container) {
   slider.addEventListener('input', () => {
     tinte = Number(slider.value);
     $('mos-tinte-val').textContent = `${tinte} %`;
+    slider.style.setProperty('--p', `${tinte}%`);   // el tramo relleno de la pista
     repintarTinte();
   });
 

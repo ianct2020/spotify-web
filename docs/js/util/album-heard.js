@@ -18,12 +18,12 @@
 // Todas las claves pasan por `albumKey()` (util/album-key.js) — normalizado
 // con strip diacríticos + sufijos de edición.
 
-import { albumKey } from './album-key.js?v=264';
-import { baseDeEdicion } from './edition-suffix.js?v=264';
-import { loadTrackPlays, isOwner } from '../features/history-data.js?v=264';
-import { getBestAvailableLikes, getAllPlaylistItems } from '../api.js?v=264';
-import { coverUrl } from './cover-size.js?v=264';
-import { prefKey, migratePrefKey } from '../storage.js?v=264';
+import { albumKey } from './album-key.js?v=265';
+import { baseDeEdicion } from './edition-suffix.js?v=265';
+import { loadTrackPlays, isOwner } from '../features/history-data.js?v=265';
+import { getBestAvailableLikes, getAllPlaylistItems } from '../api.js?v=265';
+import { coverUrl } from './cover-size.js?v=265';
+import { prefKey, migratePrefKey } from '../storage.js?v=265';
 
 const LS_WTHREE_ID = 'wthree_playlist_id';
 

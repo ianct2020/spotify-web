@@ -3140,7 +3140,14 @@ h3 { font-size: 18px; font-weight: 600; }
    sumaban `opacity: 0.6` encima — 48 de las 60 primeras tarjetas). Pasa a
    `--color-text-secondary`, la variable del tema que ya existe para esto; no se
    escribe ningún color a mano. */
-.wthree-album-artist { font-size: 7.5px; color: var(--color-text-secondary); line-height: 1.1; }
+/* v=265: de 7,5 a 10 px. 7,5 salió de v=215 («que entren cinco columnas») y era
+   ilegible aunque el contraste ya pasara. Lo que NO hace falta tocar para que
+   entre: las columnas son `repeat(5, minmax(0, 1fr))` a mano, no salen del tamaño
+   de la letra, así que siguen siendo cinco. Lo que cambia es el alto de la fila
+   (22,1 → 24,9 px) y cuánto se corta por la derecha (ver `PENDIENTES.md`); el
+   texto entero sigue saliendo con la marquesina al pasar el ratón. El nombre del
+   álbum (9 px) queda MÁS CHICO que su subtítulo; se anotó como decisión de Ian. */
+.wthree-album-artist { font-size: 10px; color: var(--color-text-secondary); line-height: 1.1; }
 /* Las filas sin minutos ni plays dicen de dónde salió el álbum. Hasta v=263 se
    atenuaban con `opacity: 0.6` para no competir con las que traen el dato de
    verdad; ningún color de la paleta aguanta eso con 7,5 px de letra (con la
@@ -5477,4 +5484,148 @@ body.covers-fs .main {
   .gd-chips { justify-content: flex-start; }
   .gd-row { grid-template-columns: 24px minmax(0, 1fr); }
   .gd-row .gd-chips { grid-column: 2; }
+}
+
+/* ── #mosaico: la barra de controles (v=265) ─────────────────────────────────
+   Hasta v=264 la barra era una fila de botones sueltos y el botón apretado no se
+   distinguía del resto: `.is-on` no tenía NINGUNA regla sobre `.btn-secondary`
+   (el JS la ponía y la hoja no la pintaba), así que mirando la pantalla no se
+   sabía qué rejilla ni qué variedad estaban puestas. Ahora son cuatro ajustes
+   independientes, cada uno en su caja con su rótulo, repartidos a todo el ancho.
+
+   Solo variables de tema: ningún color escrito a mano (el violeta clavado en 26
+   sitios es deuda anotada y esta barra no suma otro). El seleccionado usa el
+   mismo lenguaje que `.disco-filtro.is-on`: fondo `--color-accent-tint`, borde
+   del acento y texto pleno, contra el texto atenuado de las opciones sin elegir.
+   Se distingue por tres señales y no solo por el tono (fondo + aro + peso). */
+#mos-controles { container-type: inline-size; }
+.mos-accion {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 14px;
+  margin-bottom: 14px;
+}
+.mos-archivo {
+  flex: 1 1 200px;
+  min-width: 0;
+  font-size: 13px;
+  color: var(--color-text-secondary);
+  overflow-wrap: anywhere;   /* el nombre se lee ENTERO, aunque ocupe dos líneas */
+}
+.mos-archivo.is-set { color: var(--color-text); font-weight: 600; }
+.mos-acciones { display: flex; gap: 10px; margin-left: auto; }
+
+.mos-ajustes {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 12px;
+}
+@container (min-width: 560px) { .mos-ajustes { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@container (min-width: 1180px) { .mos-ajustes { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+
+.mos-grupo {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+  padding: 12px 14px 14px;
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+.mos-grupo-t {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: .02em;
+  color: var(--color-text-secondary);
+}
+.mos-valor {
+  font-size: 13px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text);
+}
+
+.mos-seg {
+  display: flex;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+.mos-seg button {
+  flex: 1 1 auto;
+  padding: 9px 10px;
+  border: 0;
+  background: transparent;
+  color: var(--color-text-secondary);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background var(--transition-fast), color var(--transition-fast);
+}
+.mos-seg button + button { border-left: 1px solid var(--color-border); }
+.mos-seg button:hover { background: var(--color-elevated); color: var(--color-text); }
+.mos-seg button:focus-visible { outline: 2px solid var(--color-accent); outline-offset: -2px; }
+.mos-seg button.is-on {
+  background: var(--color-accent-tint);
+  box-shadow: inset 0 0 0 2px var(--color-accent);
+  color: var(--color-text);
+  font-weight: 700;
+}
+
+/* El deslizador del tinte: pista con el tramo recorrido en el acento (`--p` lo
+   pone el JS en cada `input`), pulgar propio y los dos extremos rotulados debajo. */
+.mos-rango {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 22px;
+  margin: 0;
+  background: transparent;
+  cursor: pointer;
+}
+.mos-rango::-webkit-slider-runnable-track {
+  height: 6px;
+  border-radius: 3px;
+  background: linear-gradient(to right, var(--color-accent) var(--p, 0%), var(--color-border) var(--p, 0%));
+}
+.mos-rango::-moz-range-track { height: 6px; border-radius: 3px; background: var(--color-border); }
+.mos-rango::-moz-range-progress { height: 6px; border-radius: 3px; background: var(--color-accent); }
+.mos-rango::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 18px;
+  height: 18px;
+  margin-top: -6px;   /* centra el pulgar sobre la pista de 6 px */
+  border-radius: 50%;
+  background: var(--color-accent);
+  border: 3px solid var(--color-surface);
+  box-shadow: 0 0 0 1px var(--color-accent);
+}
+.mos-rango::-moz-range-thumb {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--color-accent);
+  border: 3px solid var(--color-surface);
+  box-shadow: 0 0 0 1px var(--color-accent);
+}
+.mos-rango:hover::-webkit-slider-thumb { box-shadow: 0 0 0 1px var(--color-accent), var(--shadow-glow); }
+.mos-rango:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 3px; border-radius: 4px; }
+.mos-escala {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 11px;
+  color: var(--color-text-secondary);
 }
