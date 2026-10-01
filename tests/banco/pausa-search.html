@@ -1,0 +1,129 @@
+<!doctype html><html lang="es"><head><meta charset="utf-8"><title>banco pausa /search</title>
+<style>body{font:14px/1.5 ui-monospace,monospace;background:#111;color:#eee;padding:16px}
+ table{border-collapse:collapse;margin:12px 0}td,th{padding:4px 10px;border:1px solid #333;text-align:left}
+ .ok{color:#5fd}.mal{color:#f66}</style></head><body>
+<h1 id="t">corriendo…</h1>
+<div id="r"></div>
+<script type="module">
+// ── Qué prueba este banco ────────────────────────────────────────────────────
+//
+// La pausa de `/search` de v=263, los cuatro puntos del encargo:
+//   1. Un 429 en /search tira SIN reintentar (antes: 5 reintentos con backoff).
+//   2. La petición siguiente a /search la corta la guarda ANTES de salir a la
+//      red, y eso se ve en el conteo (`fetch` no se llama otra vez).
+//   3. Un endpoint que NO es /search sigue reintentando con el 429.
+//   4. Nada de la pausa va a localStorage ni a sessionStorage (muere al cerrar
+//      la pestaña): se mira sobre el fuente, en runtime no se puede probar.
+//
+// POR QUÉ ES UN BANCO Y NO UN TEST DE NODE: `src/js/api.js` depende de
+// `auth.js` (window.location, crypto.subtle), `storage.js` (localStorage),
+// `ui/toast.js` (DOM), etc. Reconstruir un ámbito que lo cargue en Node sin
+// cambiar `src/` sería tanto o más código que esto, y encima no mediría al
+// módulo real: mediría una copia. En un navegador basta un `localStorage`
+// precargado con un token-sombra y un `fetch` espía.
+
+import { esperarA, listo, fallar } from '/banco/esperar.mjs';
+
+try {
+  // 1. Token-sombra para que `getValidToken()` no vaya a la red.
+  localStorage.setItem('sp_access_token', 'tok-del-banco');
+  localStorage.setItem('sp_token_expiry', String(Date.now() + 60 * 60 * 1000));
+
+  // 2. `MIN_RETRY_WAIT = 5000` haría que cada 429 esperara 5 s. Para que la
+  //    prueba no tarde 30 s, se acorta la espera cuando se la pide una. OJO:
+  //    es un acelerador para el banco; en producción `sleep` va a sus 5 s.
+  //    Un reemplazo global de setTimeout a 0 corre otros riesgos (fetch,
+  //    rAF, etc. tienen sus propios tiempos); se intercepta SOLO el rango
+  //    típico del backoff (3 s a 60 s).
+  const _st = window.setTimeout;
+  window.setTimeout = (fn, ms, ...a) => _st(fn, (ms >= 3000 && ms <= 60000 ? 0 : ms), ...a);
+
+  // 3. Espía de `fetch` que contesta como pida el escenario.
+  let modo = 'idle';         // qué servir
+  let callas = [];           // cada url que llegó a fetch
+  const miFetch = async (url) => {
+    const u = typeof url === 'string' ? url : url.url;
+    callas.push(u);
+    const nuevo = (status, body = '{}') => new Response(body, { status });
+    if (modo === 'search429') return nuevo(429, '{"error":{"status":429,"message":"QUOTA_EXCEEDED"}}');
+    if (modo === 'me429-429-200') {
+      const n = callas.filter(x => x.includes('/me/tracks')).length;
+      if (n <= 2) return nuevo(429, '{"error":{"status":429}}');
+      return nuevo(200, '{"items":[],"total":0}');
+    }
+    throw new Error('fetch sin modo');
+  };
+  const _fetch = window.fetch;
+  window.fetch = miFetch;
+
+  // Importar DESPUÉS de poner los stubs — spotifyFetch cierra sobre `fetch`
+  // vigente en el momento de llamarlo, no de importarlo, así que esto es
+  // precaución más que necesidad.
+  const { spotifyFetch } = await import('/js/api.js');
+
+  const r = [];
+  const nota = (nombre, cond, detalle) => r.push({ nombre, ok: !!cond, detalle });
+
+  // ── Escenario 1 — un 429 en /search tira sin reintentar ────────────────
+  modo = 'search429';
+  callas = [];
+  let e1 = null;
+  try { await spotifyFetch('/search?q=prueba&type=album&limit=10'); } catch (e) { e1 = e; }
+  nota('1. /search 429 → tira', e1 && e1.status === 429, `error: ${e1 && e1.message}`);
+  nota('1. ...y se llamó UNA sola vez a fetch', callas.length === 1, `fetch llamado ${callas.length} veces`);
+
+  // ── Escenario 2 — la petición siguiente la corta la guarda sin red ─────
+  const antes = callas.length;
+  let e2 = null;
+  try { await spotifyFetch('/search?q=otra&type=track&limit=10'); } catch (e) { e2 = e; }
+  nota('2. segunda /search también tira', e2 && e2.status === 429, `error: ${e2 && e2.message}`);
+  nota('2. ...SIN pegar a fetch (conteo intacto)', callas.length === antes, `fetch pasó de ${antes} a ${callas.length}`);
+  nota('2. ...y la señala la guarda', !!e2 && e2.searchEnPausa === true, `searchEnPausa: ${e2 && e2.searchEnPausa}`);
+
+  // ── Escenario 3 — un endpoint que NO es /search sigue reintentando ─────
+  //
+  // Mismo retry loop, con 429 dos veces y 200 a la tercera: tiene que llegar
+  // a la tercera llamada y volver con `items: []`. Si el cambio hubiera
+  // tocado los reintentos en general, acá se vería que se tira a la primera.
+  modo = 'me429-429-200';
+  callas = [];
+  let r3 = null, e3 = null;
+  try { r3 = await spotifyFetch('/me/tracks?limit=1', { _maxRetries: 3 }); } catch (e) { e3 = e; }
+  const n3 = callas.filter(u => u.includes('/me/tracks')).length;
+  nota('3. /me/tracks reintenta y resuelve', r3 && Array.isArray(r3.items), `respuesta: ${JSON.stringify(r3).slice(0,80)} · err: ${e3 && e3.message}`);
+  nota('3. ...con 3 llamadas a fetch (1 + 2 reintentos)', n3 === 3, `/me/tracks llamado ${n3} veces`);
+
+  // ── Escenario 4 — nada de la pausa va a storage (muere al cerrar) ──────
+  //
+  // En runtime no se puede probar: cerrar la pestaña destruye el ámbito. Lo
+  // que SÍ se puede comprobar acá es la condición que lo garantiza — que
+  // ninguna rama de la pausa escribe en localStorage ni sessionStorage.
+  // Ojo: para LEER el fuente hay que saltearse el espía (está servido por
+  // `/js/api.js` y lo contestaría el stub con `items:[]`).
+  const api = await _fetch('/js/api.js').then(r => r.text());
+  // El bloque entero de la pausa: desde `_searchPausaHasta` hasta el próximo
+  // `//` en línea nueva (los comentarios DURAN mientras existe el bloque).
+  const regionPausa = api.match(/_searchPausaHasta[\s\S]{0,800}/g)?.join('\n') || '';
+  const tocaStorage = /_searchPausa[^\n]*(localStorage|sessionStorage)/.test(api)
+    || /(localStorage|sessionStorage)[^\n]*_searchPausa/.test(api);
+  nota('4. _searchPausa no toca localStorage ni sessionStorage',
+    !tocaStorage, 'si la condición es falsa, la pausa sobreviviría a recargas');
+  nota('4. _searchPausaHasta se declara con `let` a nivel módulo',
+    /\blet _searchPausaHasta\b/.test(api) && !/\bwindow\._searchPausaHasta\b/.test(api),
+    'un `var` global al window también sobreviviría; `let` del módulo muere al cerrar');
+
+  // ── Resumen y marca para el runner ─────────────────────────────────────
+  const malas = r.filter(x => !x.ok);
+  const html = '<table><tr><th>#</th><th>comprobación</th><th>detalle</th></tr>'
+    + r.map((x, i) => `<tr class="${x.ok ? 'ok' : 'mal'}"><td>${i+1}</td><td>${x.nombre}</td><td>${x.detalle || ''}</td></tr>`).join('')
+    + '</table>';
+  document.getElementById('r').innerHTML = html;
+  document.getElementById('t').textContent = malas.length ? `${malas.length} de ${r.length} FALLA` : `${r.length} de ${r.length} verde`;
+
+  window.fetch = _fetch;
+  window.setTimeout = _st;
+
+  if (malas.length) throw new Error(malas.map(x => x.nombre).join(' · '));
+  listo(`${r.length} comprobaciones, todas verdes`);
+} catch (e) { fallar(e); }
+</script></body></html>

@@ -1,9 +1,9 @@
-import { getValidToken, refreshAccessToken } from './auth.js?v=262';
-import { cacheGet, cacheGetRaw, cacheGetTimestamp, cacheSet, cacheClear, prefKey, migratePrefKey } from './storage.js?v=262';
-import { idbDel, idbDelByPrefix, idbGetCached, idbGetCachedRaw, idbGetTimestamp, idbSetCached } from './idb.js?v=262';
-import { OWNER_KEY_LIST } from './history-keys.js?v=262';
-import { showToast } from './ui/toast.js?v=262';
-import { artistIsSame, limpiaParaQuery } from './util/track-match.js?v=262';
+import { getValidToken, refreshAccessToken } from './auth.js?v=263';
+import { cacheGet, cacheGetRaw, cacheGetTimestamp, cacheSet, cacheClear, prefKey, migratePrefKey } from './storage.js?v=263';
+import { idbDel, idbDelByPrefix, idbGetCached, idbGetCachedRaw, idbGetTimestamp, idbSetCached } from './idb.js?v=263';
+import { OWNER_KEY_LIST } from './history-keys.js?v=263';
+import { showToast } from './ui/toast.js?v=263';
+import { artistIsSame, limpiaParaQuery } from './util/track-match.js?v=263';
 
 const BASE = 'https://api.spotify.com/v1';
 const MIN_RETRY_WAIT = 5000;
@@ -56,6 +56,19 @@ async function spotifyFetch(endpoint, options = {}) {
   const url = endpoint.startsWith('http') ? endpoint : `${BASE}${endpoint}`;
   const method = (options.method || 'GET').toUpperCase();
   const maxRetries = options._maxRetries ?? DEFAULT_MAX_RETRIES;
+  const esSearch = endpoint.startsWith('/search') || endpoint.includes('/v1/search');
+
+  // ⚠️ Puerta cerrada: si `/search` ya dio 429 hace poco, ni siquiera se pega
+  // al servidor. Los 5 reintentos del retry loop, aplicados a un endpoint cuya
+  // cuota va POR PETICIONES ACUMULADAS (429 en el request 697), son 5
+  // peticiones más contra el mismo tope: agravan lo que intentan sobrellevar.
+  // El idiom es el mismo que `_nativoPausaHasta` usa para el nativo de discos.
+  if (esSearch && Date.now() < _searchPausaHasta) {
+    const err = new Error(`Spotify 429: /search en pausa hasta ${new Date(_searchPausaHasta).toISOString()} (cuota agotada).`);
+    err.status = 429;
+    err.searchEnPausa = true;
+    throw err;
+  }
 
   let rateLimitRetries = 0;
   let networkRetries = 0;
@@ -97,6 +110,24 @@ async function spotifyFetch(endpoint, options = {}) {
     }
 
     if (response.status === 429) {
+      // ⚠️ Un 429 en `/search` cierra la puerta y sale: la cuota va por
+      // peticiones ACUMULADAS y reintentar 5 veces son 5 peticiones más contra
+      // el mismo tope. Se marca la pausa (mismo idiom que el nativo, doblándose)
+      // y las llamadas siguientes de este mismo endpoint las corta la guarda
+      // de arriba SIN pegar al servidor. Ver `_searchPausaHasta`.
+      if (esSearch) {
+        if (Date.now() >= _searchPausaHasta) {
+          _searchPausaMs = _searchPausaMs
+            ? Math.min(SEARCH_PAUSA_MAX_MS, _searchPausaMs * 2)
+            : SEARCH_PAUSA_MIN_MS;
+          _searchPausaHasta = Date.now() + _searchPausaMs;
+        }
+        console.info(`[rate-limit] 429 en /search — pausa ${Math.round(_searchPausaMs / 1000)} s (endpoint: ${endpoint})`);
+        const err = new Error(`Spotify 429: /search agotó su cuota; pausa ${Math.round(_searchPausaMs / 1000)} s.`);
+        err.status = 429;
+        err.searchEnPausa = true;
+        throw err;
+      }
       rateLimitRetries++;
       if (rateLimitRetries > maxRetries) {
         const err = new Error(`Rate limited después de ${maxRetries} reintentos. Espera unos minutos y recarga.`);
@@ -1392,6 +1423,19 @@ async function albumsInLibrary(albumIds) {
 let _nativoPausaHasta = 0;        // ms epoch; 0 = sin pausa
 let _nativoPausaMs = 0;           // última pausa aplicada (para doblarla)
 let _nativoDenegado = null;       // { status, mensaje } si dio 400/403
+
+// ── Pausa de `/search` (v=263) ──────────────────────────────────────────────
+// La cuota de `/search` es POR PETICIONES ACUMULADAS (429 en el request 697,
+// horas de bloqueo) y la comparte toda la app. Antes, un 429 en `/search`
+// disparaba los 5 reintentos del retry loop de `spotifyFetch`: cinco
+// peticiones más contra el mismo tope, cada tarjeta abierta costaba 6
+// peticiones de una cuota agotada. Ahora el primer 429 cierra la puerta y las
+// llamadas siguientes las corta la guarda de `spotifyFetch` sin pegar al
+// servidor. Doblado como el nativo, con los mismos topes (5 a 60 min).
+const SEARCH_PAUSA_MIN_MS = 5 * 60 * 1000;
+const SEARCH_PAUSA_MAX_MS = 60 * 60 * 1000;
+let _searchPausaHasta = 0;
+let _searchPausaMs = 0;
 
 // ── Diagnóstico del endpoint de discografía (v=225) ─────────────────────────
 // El cambio a /search se avisaba con `console.warn`, que la extensión de Chrome

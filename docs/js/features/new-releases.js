@@ -10,14 +10,14 @@
 //   - Umbral de likes: 5+ / 10+ / 20+
 //   - Ventana temporal: 3 / 6 / 12 / 24 meses, 5 años y «todo» (default 12)
 
-import { escapeHtml, confirmModal, pageHeader } from '../ui/components.js?v=262';
-import { showToast } from '../ui/toast.js?v=262';
-import { buildAlbumHeardIndex } from '../util/album-heard.js?v=262';
-import { releaseKind } from '../util/release-size.js?v=262';
-import { loadFiltros, buildFilterContext, applyDiscoverFilters } from '../util/discover-filters.js?v=262';
-import { createIncrementalList, scrollRootOf } from '../ui/incremental-list.js?v=262';
-import { createLazyImages } from '../ui/lazy-img.js?v=262';
-import { prefKey, migratePrefKey } from '../storage.js?v=262';
+import { escapeHtml, confirmModal, pageHeader } from '../ui/components.js?v=263';
+import { showToast } from '../ui/toast.js?v=263';
+import { buildAlbumHeardIndex } from '../util/album-heard.js?v=263';
+import { releaseKind } from '../util/release-size.js?v=263';
+import { loadFiltros, buildFilterContext, applyDiscoverFilters } from '../util/discover-filters.js?v=263';
+import { createIncrementalList, scrollRootOf } from '../ui/incremental-list.js?v=263';
+import { createLazyImages } from '../ui/lazy-img.js?v=263';
+import { prefKey, migratePrefKey } from '../storage.js?v=263';
 import {
   getArtistIdCached,
   getArtistDiscoCached,
@@ -58,12 +58,12 @@ import {
   avisarRonda,
   botonesBaseHtml,
   conectarBotonesBase,
-} from './discover-common.js?v=262';
-import { estadoNativoDiscografia } from '../api.js?v=262';
-import { leerElegidos, sumarElegidos, artistasBuscados, colaAutomatica } from '../util/cola-escaneo.js?v=262';
-import { leerFallos, marcarFallo, limpiarFallo, sinFallosMarcados } from '../util/escaneo-fallos.js?v=262';
-import { contarSinEscanear, sufijoSinEscanear, notaSinEscanear } from '../util/sin-escanear.js?v=262';
-import { estadoFrescura } from '../util/frescura-escaneo.js?v=262';
+} from './discover-common.js?v=263';
+import { estadoNativoDiscografia } from '../api.js?v=263';
+import { leerElegidos, sumarElegidos, artistasBuscados, colaAutomatica } from '../util/cola-escaneo.js?v=263';
+import { leerFallos, marcarFallo, limpiarFallo, sinFallosMarcados } from '../util/escaneo-fallos.js?v=263';
+import { contarSinEscanear, sufijoSinEscanear, notaSinEscanear } from '../util/sin-escanear.js?v=263';
+import { estadoFrescura } from '../util/frescura-escaneo.js?v=263';
 
 const SCAN_KEY = 'new_releases';
 
@@ -103,12 +103,16 @@ const VALID_LIKES = new Set([5, 10, 20]);
 // El default sigue siendo 12 A PROPÓSITO: esta vista se llama «Novedades» y es
 // lo que Ian ve al entrar todos los días. Las ventanas anchas son un destino al
 // que se va tocando un chip, no el sitio donde te deja la app.
-const MONTHS_CHIPS = [
-  { n: 3, label: 'últimos 3m' },
-  { n: 6, label: 'últimos 6m' },
-  { n: 12, label: 'últimos 12m' },
-  { n: 24, label: 'últimos 24m' },
-  { n: 60, label: 'últimos 5 años' },
+// Sin «últimos» delante de cada chip (v=263): la barra se aprieta ~230 px y el
+// quiebre a dos filas baja de ~1.336 a ~1.100 px de viewport. La ventana la
+// sigue diciendo el conteo debajo («novedades de los últimos 12 meses»), así
+// que no hace falta repetirla en los cinco chips.
+export const MONTHS_CHIPS = [
+  { n: 3, label: '3m' },
+  { n: 6, label: '6m' },
+  { n: 12, label: '12m' },
+  { n: 24, label: '24m' },
+  { n: 60, label: '5 años' },
   { n: 0, label: 'todo' },
 ];
 const VALID_MONTHS = new Set(MONTHS_CHIPS.map(c => c.n));

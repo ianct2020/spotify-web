@@ -36,6 +36,10 @@ if [ -z "$MALOS" ]; then ok "$N archivos parsean"; else mal "errores de sintaxis
 echo "2. npm test"
 if npm test --silent 2>&1 | tail -4 | sed 's/^/      /'; [ "${PIPESTATUS[0]}" -eq 0 ]; then ok "todas las suites"; else mal "hay suites que fallan (correr npm test para el detalle)"; fi
 
+echo "2b. bancos (barra · pausa-search)"
+if node scripts/correr-banco.mjs barra 2>&1 | sed 's/^/      /'; [ "${PIPESTATUS[0]}" -eq 0 ]; then ok "banco barra en verde"; else mal "banco barra falló (node scripts/correr-banco.mjs barra para el detalle)"; fi
+if node scripts/correr-banco.mjs pausa-search 2>&1 | sed 's/^/      /'; [ "${PIPESTATUS[0]}" -eq 0 ]; then ok "banco pausa-search en verde"; else mal "banco pausa-search falló (node scripts/correr-banco.mjs pausa-search para el detalle)"; fi
+
 echo "3. docs/ está al día con src/"
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT

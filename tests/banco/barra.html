@@ -18,6 +18,7 @@
 <script type="module">
 import { esperarA, hojasLegibles, fallar, listo } from '/banco/esperar.mjs';
 import { botonesBaseHtml } from '/js/features/discover-common.js';
+import { MONTHS_CHIPS } from '/js/features/new-releases.js';
 
 // ── Qué mide este banco ──────────────────────────────────────────────────────
 //
@@ -68,10 +69,12 @@ const agoLabel = () => 'hace 2 h';
 // en una fila» de esta barra no se había vuelto a medir. Cuando el marcado de una
 // vista gane una función nueva, hay que sumarla acá o el banco no mide de menos:
 // falla, y hay que mirar el mensaje.
-const MONTHS_CHIPS = [
-  { n: 3, label: 'últimos 3m' }, { n: 6, label: 'últimos 6m' }, { n: 12, label: 'últimos 12m' },
-  { n: 24, label: 'últimos 24m' }, { n: 60, label: 'últimos 5 años' }, { n: 0, label: 'todo' },
-];
+// v=263: `MONTHS_CHIPS` lo importa el banco desde la vista real; antes vivía
+// duplicado acá y en el fuente, con un comentario que decía «cuando se toque
+// uno, tocá el otro». En este repo cuando algo se duplica, diverge en silencio
+// — y acá la copia estaba justo dentro del banco que existe para cazar que la
+// barra se rompa. Si la vista gana un chip o le cambia el rótulo, el banco mide
+// la barra REAL sin tocar este archivo.
 // El peor caso del renglón de debajo del conteo: con artistas sin escanear.
 const SUB_PEOR_CASO = '485 artistas con ≥5 likes · 129 sin escanear';
 const AMBITO_NEWREL = {

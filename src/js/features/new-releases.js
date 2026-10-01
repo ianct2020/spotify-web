@@ -103,12 +103,16 @@ const VALID_LIKES = new Set([5, 10, 20]);
 // El default sigue siendo 12 A PROPÓSITO: esta vista se llama «Novedades» y es
 // lo que Ian ve al entrar todos los días. Las ventanas anchas son un destino al
 // que se va tocando un chip, no el sitio donde te deja la app.
-const MONTHS_CHIPS = [
-  { n: 3, label: 'últimos 3m' },
-  { n: 6, label: 'últimos 6m' },
-  { n: 12, label: 'últimos 12m' },
-  { n: 24, label: 'últimos 24m' },
-  { n: 60, label: 'últimos 5 años' },
+// Sin «últimos» delante de cada chip (v=263): la barra se aprieta ~230 px y el
+// quiebre a dos filas baja de ~1.336 a ~1.100 px de viewport. La ventana la
+// sigue diciendo el conteo debajo («novedades de los últimos 12 meses»), así
+// que no hace falta repetirla en los cinco chips.
+export const MONTHS_CHIPS = [
+  { n: 3, label: '3m' },
+  { n: 6, label: '6m' },
+  { n: 12, label: '12m' },
+  { n: 24, label: '24m' },
+  { n: 60, label: '5 años' },
   { n: 0, label: 'todo' },
 ];
 const VALID_MONTHS = new Set(MONTHS_CHIPS.map(c => c.n));

@@ -24,6 +24,7 @@ import { artistMatches } from '../util/track-match.js';
 // tiraba un ReferenceError que el catch convertía en «no pude resolver el
 // álbum», o sea un error de programación con cara de resultado normal.
 import { resolveAlbumId } from '../util/album-resolver.js';
+import { indiceIdsDeAlbum, idLocalDelAlbum } from '../util/album-id-local.js';
 import { pedirYCachear } from '../util/cache-solo-exitos.js';
 import { skelTracklist } from '../ui/skeleton.js';
 import { firstArtistName, resolveArtistName } from '../util/artist-name.js';
@@ -85,6 +86,17 @@ document.addEventListener('previewchange', (e) => {
 // `features/covers.js:245` y `util/artist-preview.js:66`, dicha con el campo
 // que la API ya trae en vez de con el tamaño del array.
 let _likesMemo = null;
+// El índice albumKey → id de Spotify, memoizado. Ver util/album-id-local.js.
+// Con esto abrir una ficha sin `albumId` (Wrapped, mosaico, Dashboard...) sale
+// GRATIS si el álbum tiene al menos una pista en tus me gusta, en vez de gastar
+// un `/search` por el resolutor.
+let _idsMemo = null;
+async function loadAlbumIdsMemo() {
+  if (_idsMemo) return _idsMemo;
+  const likes = await loadLikesMemo();
+  _idsMemo = indiceIdsDeAlbum(likes);
+  return _idsMemo;
+}
 async function loadLikesMemo() {
   if (_likesMemo) return _likesMemo;
   const res = await pedirYCachear({
@@ -199,7 +211,18 @@ function trackNameKey(name) {
 // extensión de Chrome no captura: el fallo era invisible salvo que alguien
 // abriera las DevTools a mano, y así estuvo nueve versiones.
 async function loadAlbumTracklist(a) {
-  const { id: albumId, motivo } = await resolveAlbumId(a, { esArtistaConocido: knownArtist });
+  // El id se busca PRIMERO en local (v=263). Casi ningún llamador de esta ficha
+  // trae `albumId` (el mosaico, el Dashboard y el Wrapped mandan nombre +
+  // artista) y hasta v=262 todos iban directo a `resolveAlbumId()`, o sea a
+  // `/search`, la cuota cara de la cuenta (429 en el request 697). Es el
+  // mismo arreglo que #wthree recibió en v=258, con el mismo módulo:
+  // `util/album-id-local.js`.
+  let albumId = a.albumId || a.id || null;
+  if (!albumId) {
+    try { albumId = idLocalDelAlbum(a, await loadAlbumIdsMemo()); } catch { /* ignora */ }
+  }
+  let motivo = null;
+  if (!albumId) ({ id: albumId, motivo } = await resolveAlbumId(a, { esArtistaConocido: knownArtist }));
   if (!albumId) return { tracks: [], motivo: motivo || 'no se pudo identificar el álbum' };
   try {
     const items = await getAlbumTracks(albumId, { limit: 50 });

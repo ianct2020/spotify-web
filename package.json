@@ -7,6 +7,7 @@
     "dev": "node scripts/dev-server.mjs",
     "build": "bash build.sh",
     "test": "node scripts/correr-tests.mjs",
+    "banco": "node scripts/correr-banco.mjs",
     "prepush": "bash scripts/antes-de-pushear.sh",
     "deploy": "echo 'npm run deploy está desactivado: hacía git add docs/ (un directorio entero) y este repo es PÚBLICO. El staging va archivo por archivo, por nombre: npm run build, git add <archivo> uno a uno, npm run prepush, commit y push.' >&2 && exit 1"
   }
