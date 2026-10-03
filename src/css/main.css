@@ -1351,6 +1351,69 @@ h3 { font-size: 18px; font-weight: 600; }
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/* ── Marcar pistas para añadir a me gusta (v=267) ──────────────────────────
+   La celda del corazón, cuando la pista NO está en tus me gusta, es un BOTÓN.
+   Hereda el tamaño y el color apagado de `.album-modal-like-heart.is-off` —el
+   mismo sitio de la grilla, para que la lista no se mueva al marcar— y se
+   enciende en el acento al marcarla.
+   Sin `background` ni `border` propios: es un corazón que se pulsa, no una
+   caja. El área de click la da el `padding`, no un tamaño mayor. */
+.album-modal-like-add {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--color-text-muted);
+  opacity: 0.55;
+  cursor: pointer;
+  transition: color .1s, opacity .1s, transform .1s;
+}
+.album-modal-like-add:hover {
+  color: var(--color-accent);
+  opacity: 1;
+}
+.album-modal-like-add.is-marcada {
+  color: var(--color-accent);
+  opacity: 1;
+}
+.album-modal-like-add:active { transform: scale(0.88); }
+/* La fila marcada se ve sin leer el corazón: el mismo tinte del acento que usa
+   el hover de una fila tuya, más una marca lateral de 2 px que no gasta alto
+   (el idiom de `.wthree-track-suggested`, v=170). */
+.album-modal-like-row-marcada {
+  background: var(--color-accent-soft);
+  box-shadow: inset 2px 0 0 var(--color-accent);
+}
+.album-modal-like-row-marcada .album-modal-like-name { color: var(--color-text); }
+
+/* La barra de confirmación. Aparece solo con algo marcado (`hidden` lo pone el
+   JS) y vive al pie de la columna de pistas, pegada a la lista.
+   ⚠️ Nada de `position: sticky` acá: la columna de pistas scrollea DENTRO del
+   modal y una barra pegada taparía la última fila justo cuando se la está
+   marcando. Con el tracklist de un disco (hasta 50 filas) el pie queda a un
+   scroll corto, y el número ya está en el botón. */
+/* ⚠️ La barra vacía se vuelve INVISIBLE, no se saca del layout: con
+   `display: none` el modal crecía al marcar la primera pista y, al estar
+   centrado en vertical, la lista entera saltaba hacia arriba — el segundo clic
+   caía en otra pista. Ver el comentario de `pintarBarra()` en
+   `features/album-card.js`.
+   ⚠️ Y el primer intento fue el atributo `hidden`, que NO alcanza solo: vale
+   `display: none` desde la hoja del navegador (especificidad 0,0,1) y la clase
+   de abajo (0,1,0) le gana, así que la barra se veía SIEMPRE diciendo «Añadir 0
+   a me gusta». Eso no se vio leyendo el DOM —`el.hidden` contestaba `true`, que
+   es la verdad del atributo y no la del layout— sino MIRANDO la captura. */
+.album-modal-anadir.is-vacia { visibility: hidden; }
+.album-modal-anadir {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  align-items: center;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--color-border);
+}
 /* El tamaño de `.album-modal-like-play` NO va acá. Hasta v=232 esta regla
    declaraba 24×24 y **estaba muerta**: la regla que comparte el look con
    `.wt-play-btn` —más abajo en esta misma hoja, buscá «Botón ▶ chico por

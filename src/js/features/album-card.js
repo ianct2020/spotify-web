@@ -11,10 +11,11 @@
 // tus me gusta" en cada fila y previews que prueban contra TODOS los artistas
 // del track.
 
-import { escapeHtml } from '../ui/components.js';
+import { escapeHtml, confirmModal } from '../ui/components.js';
+import { showToast } from '../ui/toast.js';
 import { openArtistCard, knownArtist } from './artist-card.js';
 import { openModal, closeTop } from '../ui/modal-stack.js';
-import { getBestAvailableLikes, getAlbumTracks } from '../api.js';
+import { getBestAvailableLikes, getAlbumTracks, anadirLikes } from '../api.js';
 import { albumKey, coverId } from '../util/album-key.js';
 import { artistMatches } from '../util/track-match.js';
 // `limpiaParaQuery` ya no se importa acá: desde v=219 la aplica el resolutor,
@@ -109,6 +110,25 @@ async function loadLikesMemo() {
   if (_likesMemo) return _likesMemo;
   return Array.isArray(res?.items) ? res.items : (Array.isArray(res) ? res : []);
 }
+
+// ¿Sabemos de verdad qué hay en me gusta? (v=267)
+//
+// `loadLikesMemo()` devuelve `[]` en dos situaciones que NO son la misma: la
+// caché está y este disco no tiene ninguna pista likeada, o la caché todavía
+// no está. Hasta v=266 la ficha las pintaba IGUAL —todos los corazones huecos
+// y «no tienes ninguna en tus me gusta»— y eso era tolerable mientras el ♥
+// fuera un adorno. Con «Añadir a me gusta» ya no lo es: el sentido de la vista
+// es repasar las que FALTAN, y repasar contra una pizarra en blanco no es
+// repasar, es volver a empezar.
+//
+// ⚠️ No se arregla bajando la biblioteca. Eso es exactamente lo que cerró
+// v=255: `getBestAvailableLikes()` no va a la red por defecto, acá se la llama
+// sin `allowFetch`, y así se queda. Se arregla DICIÉNDOLO en pantalla.
+//
+// El criterio es el mismo de v=256 y por el mismo motivo: `_likesMemo` solo se
+// escribe cuando `pedirYCachear` dio por bueno el `source: 'full'`, así que
+// «no es null» es «la caché contestó», no «el array tiene algo».
+function likesConocidos() { return _likesMemo !== null; }
 
 function fmtMinutes(min) {
   if (!min && min !== 0) return '—';
@@ -448,13 +468,20 @@ async function hydrateLikes(overlay, a) {
     })
     : enLikes.map(t => ({ ...t, liked: true }));
 
+  // ⚠️ Con la caché de me gusta fría NO se sabe nada: ver `likesConocidos()`.
+  // El contador y los corazones tienen que decir eso y no «ninguna».
+  const conocidos = likesConocidos();
   const nLiked = matched.filter(t => t.liked).length;
   const total = completo ? matched.length : (a.totalTracks || null);
-  const countLine = total
-    ? `${nLiked} de ${total} pista${total === 1 ? '' : 's'} en tus me gusta`
-    : nLiked > 0
-      ? `${nLiked} pista${nLiked === 1 ? '' : 's'} en tus me gusta`
-      : 'no tienes ninguna en tus me gusta';
+  const countLine = !conocidos
+    ? (total
+      ? `No sé cuáles de las ${total.toLocaleString('es-ES')} pistas tienes en me gusta`
+      : 'No sé qué pistas tienes en me gusta')
+    : total
+      ? `${nLiked} de ${total} pista${total === 1 ? '' : 's'} en tus me gusta`
+      : nLiked > 0
+        ? `${nLiked} pista${nLiked === 1 ? '' : 's'} en tus me gusta`
+        : 'no tienes ninguna en tus me gusta';
 
   // El ♥ marca "está en tus me gusta", igual que en la tracklist de W-Three.
   // Antes ahí había un punto: era el NÚMERO DE PISTA, que nunca se llegó a ver
@@ -475,16 +502,46 @@ async function hydrateLikes(overlay, a) {
     ? `<div class="album-modal-aviso" role="status" title="${escapeHtml(motivoFallo)}">No se ha podido identificar este álbum en Spotify: se muestran solo tus me gusta.</div>`
     : '';
 
+  // El aviso de la caché fría. Es el que convierte «ninguna» en «no lo sé», y
+  // dice CÓMO se arregla —sincronizar, que cuesta una petición si el
+  // incremental acierta— en vez de arreglarlo solo a 190 peticiones de Ian.
+  const avisoLikesHtml = conocidos
+    ? ''
+    : `<div class="album-modal-aviso" role="status">Tus me gusta no están cargados en este navegador, así que no sé cuáles de estas pistas ya tienes. Sincronízalos para verlo; puedes añadir igualmente, y lo que ya estuviera no se duplica.</div>`;
+
+  // La celda del corazón, en sus cuatro casos (v=267). Era un `<span>` pasivo y
+  // ahora, cuando la pista NO está en me gusta y tiene id, es un BOTÓN que la
+  // marca. Las que ya están siguen siendo un span: quitar likes no es trabajo
+  // de esta ficha —lo hace #wthree, con su verificación (v=258)— y un corazón
+  // que quita en un sitio y añade en otro es la clase de botón que borra algo
+  // sin querer.
+  const celdaCorazon = (t) => {
+    if (t.liked) {
+      return `<span class="album-modal-like-heart" title="Está en tus me gusta" aria-label="En tus me gusta">${HEART_SVG}</span>`;
+    }
+    if (!t.id) {
+      // Sin id no hay nada que mandarle a Spotify. Se dice, en vez de ofrecer
+      // un botón que no puede funcionar.
+      return `<span class="album-modal-like-heart is-off" title="Sin id de Spotify: no puedo añadirla" aria-label="Sin id">${HEART_OUTLINE_SVG}</span>`;
+    }
+    const tit = conocidos
+      ? 'No está en tus me gusta · haz clic para marcarla y añadirla'
+      : 'Haz clic para marcarla y añadirla · no sé si ya la tienes';
+    return `<button type="button" class="album-modal-like-add" data-add-id="${escapeHtml(t.id)}"
+            aria-pressed="false" title="${tit}" aria-label="Marcar para añadir a me gusta">${HEART_OUTLINE_SVG}</button>`;
+  };
+
   holder.innerHTML = `
     <div class="album-modal-likes-head">
       <div class="album-modal-likes-title">${escapeHtml(countLine)}</div>
     </div>
     ${avisoHtml}
+    ${avisoLikesHtml}
     ${matched.length === 0 ? '' : `
       <div class="album-modal-likes-list">
         ${matched.map(t => `
-          <div class="album-modal-like-row${t.liked ? '' : ' album-modal-like-row-off'}" data-tid="${escapeHtml(t.id || '')}">
-            <span class="album-modal-like-heart${t.liked ? '' : ' is-off'}" title="${t.liked ? 'Está en tus me gusta' : 'No está en tus me gusta'}" aria-label="${t.liked ? 'En tus me gusta' : 'Fuera de tus me gusta'}">${t.liked ? HEART_SVG : HEART_OUTLINE_SVG}</span>
+          <div class="album-modal-like-row${t.liked || !conocidos ? '' : ' album-modal-like-row-off'}" data-tid="${escapeHtml(t.id || '')}">
+            ${celdaCorazon(t)}
             <span class="album-modal-like-num">${t.trackNumber || ''}</span>
             <span class="album-modal-like-name">${escapeHtml(t.name)}</span>
             <button type="button" class="album-modal-like-play" data-play-id="${escapeHtml(t.id || '')}" data-play-name="${escapeHtml(t.name)}" title="Preview 30s" aria-label="Preview">${iconoPlay(10)}</button>
@@ -492,12 +549,23 @@ async function hydrateLikes(overlay, a) {
         `).join('')}
       </div>
     `}
+    ${!matched.some(t => t.id && !t.liked) ? '' : `
+      <div class="album-modal-anadir is-vacia" id="alb-anadir-barra">
+        <button type="button" class="btn btn-secondary btn-sm" id="alb-anadir-cancelar">Cancelar</button>
+        <button type="button" class="btn btn-primary btn-sm" id="alb-anadir-confirmar">Añadir a me gusta</button>
+      </div>
+    `}
   `;
+
+  wireAnadirLikes(holder, matched, a, { conocidos, completo });
 
   // Click en una fila → ficha de canción apilada.
   holder.querySelectorAll('.album-modal-like-row').forEach(row => {
     row.addEventListener('click', (e) => {
+      // El ▶ y el ♥ de marcar tienen su propio handler: desde la fila no se
+      // abre la ficha de canción al apretarlos.
       if (e.target.closest('.album-modal-like-play')) return;
+      if (e.target.closest('.album-modal-like-add')) return;
       const tid = row.dataset.tid;
       const t = matched.find(x => x.id === tid);
       if (!t) return;
@@ -548,6 +616,197 @@ async function hydrateLikes(overlay, a) {
     console.log(`[album-card] ${a.name} — ${filas.length} pistas:`, cuenta);
     return { album: a.name, total: filas.length, cuenta, filas };
   };
+}
+
+// ── Marcar varias y confirmar al final (v=267) ──────────────────────────────
+//
+// Es el ESPEJO de `wireQuitarLikes()` de `features/wthree.js` (v=258), y a
+// propósito: añadir a me gusta escribe en la cuenta de Spotify de Ian, así que
+// no puede ser un toggle instantáneo por fila. Se marcan las que quiera, el
+// cartel dice CUÁNTAS son, y se confirman en UNA sola acción. Cancelar no
+// escribe nada.
+//
+// El caso de uso que lo pide, en palabras de Ian: escuchó un disco entero, no
+// le puso like a ninguna, y quiere repasarlas para elegir cuáles van. O sea
+// que lo normal son varias de una vez, no una.
+//
+// ⚠️ UNA sola petición, no una por pista. La ruta es `PUT /me/library?uris=` y
+// el lote son 40 uris —lo sabe `api.js` y nadie más, ver `anadirLikes()`—, así
+// que un disco entero entra en una. El «Añadir pistas a mis likes» de
+// `#new-releases` y `#discover-common` dice en su comentario «una por una»: eso
+// describe el efecto (quedan canciones sueltas entre los likes, no el álbum
+// guardado), no el número de peticiones, que ahí también van en lotes de 40.
+function wireAnadirLikes(holder, matched, a, { conocidos, completo }) {
+  const barra = holder.querySelector('#alb-anadir-barra');
+  const btnOk = holder.querySelector('#alb-anadir-confirmar');
+  const btnNo = holder.querySelector('#alb-anadir-cancelar');
+  // Guardas de null como las del resto del archivo: `routeteardown` cierra la
+  // pila de modales y una ficha a medio hidratar se queda sin nodos.
+  if (!barra || !btnOk || !btnNo) return;
+
+  const marcadas = new Set();
+
+  // ⚠️ La barra RESERVA su sitio desde el principio y solo se vuelve invisible
+  // (`is-vacia` → `visibility: hidden`), nunca `display: none`.
+  //
+  // Con `hidden` la barra entraba y salía del layout, el modal crecía ~45 px y,
+  // como está centrado en vertical, TODAS las filas saltaban hacia arriba al
+  // marcar la primera. O sea: marcabas una, la lista se movía, y el segundo
+  // clic caía en OTRA pista. En una función que escribe en la cuenta de Spotify
+  // de Ian, marcar la canción equivocada es exactamente el fallo que importa.
+  // Reproducido en la copia del perfil: tres clics seguidos sobre coordenadas
+  // medidas con la ficha abierta terminaron cerrando el modal, porque el
+  // tercero ya caía fuera.
+  //
+  // Por eso la barra tampoco se pinta cuando el disco no tiene ninguna pista
+  // marcable (todas en me gusta o sin id): ahí no puede aparecer nunca y su
+  // hueco sería un hueco a secas.
+  const pintarBarra = () => {
+    const n = marcadas.size;
+    barra.classList.toggle('is-vacia', n === 0);
+    btnOk.disabled = false;
+    btnOk.textContent = n === 1 ? 'Añadir 1 a me gusta' : `Añadir ${n.toLocaleString('es-ES')} a me gusta`;
+  };
+
+  const pintarFila = (btn, on) => {
+    // ⚠️ El corazón LLENO significa una sola cosa: «esta ya está en tus me
+    // gusta». Una marcada se enciende en el color de acento pero se queda
+    // HUECA, porque todavía no es tuya. El primer intento la llenaba y en la
+    // captura una fila marcada y una ya tuya se leían igual: el único rastro
+    // era la marca lateral de 2 px. Si el relleno dice dos cosas distintas, no
+    // dice ninguna — y acá la diferencia es «ya la tienes» contra «se la vas a
+    // mandar a Spotify».
+    btn.setAttribute('aria-pressed', String(on));
+    btn.classList.toggle('is-marcada', on);
+    btn.title = on
+      ? 'Marcada para añadir a me gusta · haz clic para desmarcarla'
+      : (conocidos
+        ? 'No está en tus me gusta · haz clic para marcarla y añadirla'
+        : 'Haz clic para marcarla y añadirla · no sé si ya la tienes');
+    btn.closest('.album-modal-like-row')?.classList.toggle('album-modal-like-row-marcada', on);
+  };
+
+  const desmarcarTodas = () => {
+    holder.querySelectorAll('.album-modal-like-add').forEach(btn => {
+      if (marcadas.has(btn.dataset.addId)) pintarFila(btn, false);
+    });
+    marcadas.clear();
+    pintarBarra();
+  };
+
+  holder.querySelectorAll('.album-modal-like-add').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const id = btn.dataset.addId;
+      if (!id) return;
+      if (marcadas.has(id)) marcadas.delete(id); else marcadas.add(id);
+      pintarFila(btn, marcadas.has(id));
+      pintarBarra();
+    });
+  });
+
+  btnNo.onclick = (e) => { e.preventDefault(); e.stopPropagation(); desmarcarTodas(); };
+
+  btnOk.onclick = async (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const filas = matched.filter(t => t.id && marcadas.has(t.id));
+    const n = filas.length;
+    if (!n) return;
+
+    // Dice qué va a pasar ANTES de pasar, con el número a la vista. El modo en
+    // que Ian se enteró la otra vez de que un disco le había metido 12
+    // canciones sueltas en los me gusta fue DESPUÉS (ver `#new-releases`).
+    const detalle = n === 1
+      ? `«${escapeHtml(filas[0].name)}»`
+      : `${n.toLocaleString('es-ES')} pistas de «${escapeHtml(a.name)}»`;
+    const dudaHtml = conocidos
+      ? ''
+      : ' Tus me gusta no están cargados, así que puede que alguna ya estuviera: añadirla de nuevo no la duplica.';
+    const ok = await confirmModal(
+      'Añadir a tus me gusta',
+      `Vas a añadir <strong>${detalle}</strong> a tus me gusta en Spotify. Esto NO guarda el álbum: te deja ` +
+      'las canciones sueltas entre tus likes, y para deshacerlo hay que quitarles el corazón a mano.' + dudaHtml,
+      n === 1 ? 'Añadir la pista' : `Añadir las ${n.toLocaleString('es-ES')}`,
+    );
+    if (!ok) return;
+
+    btnOk.disabled = true;
+    btnOk.textContent = 'Añadiendo…';
+    const entradas = filas.map(t => ({
+      added_at: new Date().toISOString(),
+      // La forma de la caché de me gusta, con el álbum adentro: sin `album`
+      // las vistas que agrupan likes por disco lo verían como un huérfano.
+      // `a.img` es la tapa que ya está pintada en esta misma ficha.
+      track: {
+        id: t.id,
+        uri: `spotify:track:${t.id}`,
+        name: t.name,
+        track_number: t.trackNumber || undefined,
+        artists: (t.artists && t.artists.length ? t.artists : [t.artist || a.artist || ''])
+          .filter(Boolean).map(nombre => ({ id: null, name: nombre })),
+        album: {
+          id: a.albumId || a.id || null,
+          name: a.name,
+          images: a.img ? [{ url: a.img }] : [],
+        },
+      },
+    }));
+    try {
+      await anadirLikes(entradas, { origen: 'ficha de álbum' });
+    } catch (err) {
+      showToast('No se pudieron añadir a me gusta: ' + err.message, 'error');
+      pintarBarra();
+      return;
+    }
+    showToast(
+      n === 1
+        ? `«${filas[0].name}» ya está en tus me gusta`
+        : `${n.toLocaleString('es-ES')} pistas añadidas a tus me gusta`,
+      'success',
+    );
+
+    // La ficha lo refleja al instante, sin recargar y sin pedir nada: la fila
+    // pasa a corazón lleno y pierde su botón, igual que #wthree al revés.
+    for (const t of filas) {
+      t.liked = true;
+      marcadas.delete(t.id);
+      const btn = holder.querySelector(`.album-modal-like-add[data-add-id="${t.id}"]`);
+      const fila = btn?.closest('.album-modal-like-row');
+      fila?.classList.remove('album-modal-like-row-marcada', 'album-modal-like-row-off');
+      const span = document.createElement('span');
+      span.className = 'album-modal-like-heart';
+      span.title = 'Está en tus me gusta';
+      span.setAttribute('aria-label', 'En tus me gusta');
+      span.innerHTML = HEART_SVG;
+      btn?.replaceWith(span);
+    }
+    pintarBarra();
+
+    // El contador de arriba. Después de añadir SÍ se sabe algo de este disco
+    // —estas pistas— aunque la caché siguiera fría, así que el renglón pasa a
+    // contar lo que se acaba de hacer en vez de seguir diciendo «no sé».
+    const nLikedAhora = matched.filter(t => t.liked).length;
+    const totalAhora = completo ? matched.length : (a.totalTracks || null);
+    const titulo = holder.querySelector('.album-modal-likes-title');
+    if (titulo) {
+      titulo.textContent = totalAhora
+        ? `${nLikedAhora} de ${totalAhora} pista${totalAhora === 1 ? '' : 's'} en tus me gusta`
+        : `${nLikedAhora} pista${nLikedAhora === 1 ? '' : 's'} en tus me gusta`;
+    }
+
+    // ⚠️ El memo del módulo queda VIEJO: `anadirLikes` ya metió las pistas en
+    // la caché de IndexedDB, pero `_likesMemo` es la copia en memoria que leyó
+    // esta sesión. Sin esto, abrir otra ficha del mismo disco volvería a
+    // pintar los corazones huecos. Se tira para que la próxima lo relea de la
+    // caché —GRATIS, `getBestAvailableLikes()` no va a la red— en vez de
+    // parchearlo a mano, que es lo que vuelve a divergir en tres meses.
+    _likesMemo = null;
+    _idsMemo = null;
+  };
+
+  pintarBarra();
 }
 
 // Reset del cache al cambiar de user u otro invalidador (no lo enganchamos

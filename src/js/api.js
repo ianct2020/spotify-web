@@ -1302,6 +1302,64 @@ async function saveToLibrary(ids) {
     await spotifyFetch(`/me/library?uris=${uris}`, { method: 'PUT' });
   }
 }
+// ── Añadir a me gusta, con la caché al día (v=267) ──────────────────────────
+//
+// `addToLikesCache` es el GEMELO de `removeFromLikesCache`. Hasta v=266 el lado
+// de quitar tenía el suyo —desde v=162— y el de añadir no: después de un
+// «+ Biblioteca» o un «Añadir pistas a mis likes», la caché seguía diciendo que
+// la pista no estaba, así que la ficha de al lado pintaba el corazón hueco
+// hasta la próxima sincronización. Y la sincronización no es barata: o un
+// incremental que acierta, o ~190 peticiones a `/me/tracks`.
+//
+// Las entradas van con la MISMA forma que guarda `getAllLikedTracks`
+// (`{ added_at, track }`, con la pista ya adelgazada). Si se guardara el objeto
+// crudo de `/albums/{id}/tracks` —al que le falta `album`— las vistas que
+// agrupan likes por disco lo verían como un like huérfano, que es justo el
+// bicho que persigue #orphans.
+//
+// Nunca destruye: si no puede actualizar, lo dice y deja la caché como estaba.
+// El mismo criterio que su gemelo, por la misma razón (una caché con pistas de
+// menos es infinitamente mejor que ninguna, y la escritura en Spotify ya se
+// hizo igual).
+async function addToLikesCache(items) {
+  const nuevos = (items || []).filter(it => it?.track?.id);
+  if (nuevos.length === 0) return;
+  try {
+    const cached = await leerLikesCacheados();
+    if (!Array.isArray(cached)) return; // caché fría: no se inventa una
+    const conocidos = new Set(cached.map(it => it?.track?.id).filter(Boolean));
+    const faltantes = nuevos.filter(it => !conocidos.has(it.track.id));
+    if (faltantes.length === 0) return;
+    // Al frente, como `syncLikesIncremental`: la caché está ordenada por
+    // `added_at` descendente y lo recién añadido es lo más nuevo.
+    const final = [...faltantes, ...cached];
+    await saveLikes(final, { complete: true, total: final.length });
+  } catch (e) {
+    console.info('[likes] no pude meter lo añadido en la caché (queda sin ellos):', e.message);
+    showToast('Los añadí en Spotify, pero la caché local quedó sin ellos. Se corrige en la próxima sincronización.', 'info');
+  }
+}
+
+/**
+ * Añade pistas a me gusta y deja la caché al día, en lote.
+ *
+ * Mismo reparto que `removeLikedTracks`: la ruta y el tamaño del lote los sabe
+ * `api.js` y nadie más. Post-migración la ruta es `PUT /me/library?uris=` —
+ * `PUT /me/tracks` no es la de esta app— y el tope son 40 uris por petición,
+ * medido en vivo el 2026-08-28 (41 y en adelante dan 400 «Too many uris
+ * requested»). Un disco entero entra en UNA petición.
+ *
+ * @param {Array} tracks  pistas con forma de caché (`{ added_at, track }`).
+ * @returns {Promise<{anadidos:number}>}
+ */
+async function anadirLikes(tracks, opciones = {}) {
+  const limpios = (tracks || []).filter(it => it?.track?.id);
+  if (limpios.length === 0) return { anadidos: 0 };
+  const ids = [...new Set(limpios.map(it => it.track.id))];
+  await saveToLibrary(ids);
+  await addToLikesCache(limpios);
+  return { anadidos: ids.length, origen: opciones.origen || null };
+}
 
 // Guardar un ÁLBUM en la biblioteca (el disco entero como unidad, que es lo que
 // hace el ♥ del álbum en la app de Spotify). NO es lo mismo que likear sus
@@ -1726,6 +1784,7 @@ export {
   createPlaylist,
   unfollowPlaylist,
   saveToLibrary,
+  anadirLikes,
   saveAlbumsToLibrary,
   removeAlbumsFromLibrary,
   albumsInLibrary,

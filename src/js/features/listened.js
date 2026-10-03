@@ -822,7 +822,47 @@ function renderGrid() {
   `;
 
   holder.querySelectorAll('.playlist-card').forEach(el => {
-    el.onclick = () => openAlbumDetail(el.dataset.id);
+    el.onclick = () => abrirFichaDeAlbum(el.dataset.id);
+  });
+}
+
+// ── Click en un álbum → LA ficha de álbum (v=267) ───────────────────────────
+//
+// Hasta v=266 esto abría `openAlbumDetail()`, un modal propio de esta vista con
+// dos listas: las pistas del disco que están en la playlist de registro y las
+// que están en me gusta. Lo que NO tenía es lo que Ian pedía para repasar un
+// disco: el tracklist COMPLETO, los previews y poder añadir a me gusta. Todo
+// eso ya existía, en `features/album-card.js`, y lo usan otras nueve vistas.
+//
+// ⚠️ Se reusa, no se copia. Este repo ya tiene dos resolutores de álbum y una
+// docena de normalizadores de texto por haber escrito la segunda versión «solo
+// esta vez», y la segunda versión siempre es la que no aprendió nada (ver el
+// resolutor de v=219 y su gemelo de `wthree.js`).
+//
+// ✅ Y sale BARATO: acá el `id` es el id de álbum de Spotify de verdad —lo pone
+// `groupItemsByAlbum()` desde `album.id`— así que la ficha no gasta ningún
+// `/search` para resolverlo. Es la regla de v=218: pasá el `albumId` si lo
+// tenés. Cuesta un `GET /albums/{id}/tracks` y nada más.
+//
+// El modal viejo NO se borra: es el único sitio donde se ve qué pistas de este
+// disco están en la playlist de registro, que es dato de esta vista y de
+// ninguna otra. Pasa a ser una acción de la ficha, por el punto de extensión
+// `acciones` que ya usa `#discover-artists`.
+function abrirFichaDeAlbum(albumId) {
+  const album = albums.find(a => a.id === albumId);
+  if (!album) return;
+  openAlbumCard({
+    name: album.name,
+    artist: album.artist,
+    img: album.cover || album.image,
+    albumId: album.id,
+    plays: 0,
+    min: 0,
+    acciones: [{
+      label: 'Mis pistas en la playlist',
+      title: `Las ${album.tracks.length} pistas de este álbum que tienes en «${playlistInfo?.name || 'tu playlist de registro'}»`,
+      onClick: () => openAlbumDetail(album.id),
+    }],
   });
 }
 

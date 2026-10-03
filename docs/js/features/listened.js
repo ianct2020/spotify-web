@@ -1,14 +1,14 @@
-import { getAllPlaylistItems, getBestAvailableLikes, addTracksToPlaylist, removeTracksFromPlaylist, getAllUserPlaylists } from '../api.js?v=266';
-import { esEPoAlbum } from '../util/release-size.js?v=266';
-import { idbGetCached, idbSetCached, idbGetTimestamp } from '../idb.js?v=266';
-import { escapeHtml, confirmModal, pageHeader } from '../ui/components.js?v=266';
-import { showToast } from '../ui/toast.js?v=266';
-import { isJunkTrack } from '../util/junk.js?v=266';
-import { openModal, closeTop } from '../ui/modal-stack.js?v=266';
-import { getListenedPlaylist, groupItemsByAlbum, openListenedAlbumsPicker, albumKey, baseName, norm } from './listened-shared.js?v=266';
-import { openAlbumCard } from './album-card.js?v=266';
-import { prefKey, migratePrefKey } from '../storage.js?v=266';
-import { pedirYCachear, SOLO_CON_CONTENIDO } from '../util/cache-solo-exitos.js?v=266';
+import { getAllPlaylistItems, getBestAvailableLikes, addTracksToPlaylist, removeTracksFromPlaylist, getAllUserPlaylists } from '../api.js?v=267';
+import { esEPoAlbum } from '../util/release-size.js?v=267';
+import { idbGetCached, idbSetCached, idbGetTimestamp } from '../idb.js?v=267';
+import { escapeHtml, confirmModal, pageHeader } from '../ui/components.js?v=267';
+import { showToast } from '../ui/toast.js?v=267';
+import { isJunkTrack } from '../util/junk.js?v=267';
+import { openModal, closeTop } from '../ui/modal-stack.js?v=267';
+import { getListenedPlaylist, groupItemsByAlbum, openListenedAlbumsPicker, albumKey, baseName, norm } from './listened-shared.js?v=267';
+import { openAlbumCard } from './album-card.js?v=267';
+import { prefKey, migratePrefKey } from '../storage.js?v=267';
+import { pedirYCachear, SOLO_CON_CONTENIDO } from '../util/cache-solo-exitos.js?v=267';
 
 const SORT_KEY = 'listened_sort_mode';
 const VALID_SORTS = new Set(['recent', 'year-desc', 'year-asc', 'artist-asc', 'likes-desc', 'name-asc']);
@@ -67,7 +67,7 @@ function dismissHistory(key) {
 // Solo lo bajamos si el user logueado es el dueño (Ian): son sus datos personales.
 async function loadHistoryData() {
   if (historyAlbums) return historyAlbums;
-  const { isOwner } = await import('./history-data.js?v=266');
+  const { isOwner } = await import('./history-data.js?v=267');
   if (!(await isOwner())) { historyAlbums = []; return historyAlbums; }
   try {
     const cached = await idbGetCached(HISTORY_CACHE_KEY);
@@ -822,7 +822,47 @@ function renderGrid() {
   `;
 
   holder.querySelectorAll('.playlist-card').forEach(el => {
-    el.onclick = () => openAlbumDetail(el.dataset.id);
+    el.onclick = () => abrirFichaDeAlbum(el.dataset.id);
+  });
+}
+
+// ── Click en un álbum → LA ficha de álbum (v=267) ───────────────────────────
+//
+// Hasta v=266 esto abría `openAlbumDetail()`, un modal propio de esta vista con
+// dos listas: las pistas del disco que están en la playlist de registro y las
+// que están en me gusta. Lo que NO tenía es lo que Ian pedía para repasar un
+// disco: el tracklist COMPLETO, los previews y poder añadir a me gusta. Todo
+// eso ya existía, en `features/album-card.js`, y lo usan otras nueve vistas.
+//
+// ⚠️ Se reusa, no se copia. Este repo ya tiene dos resolutores de álbum y una
+// docena de normalizadores de texto por haber escrito la segunda versión «solo
+// esta vez», y la segunda versión siempre es la que no aprendió nada (ver el
+// resolutor de v=219 y su gemelo de `wthree.js`).
+//
+// ✅ Y sale BARATO: acá el `id` es el id de álbum de Spotify de verdad —lo pone
+// `groupItemsByAlbum()` desde `album.id`— así que la ficha no gasta ningún
+// `/search` para resolverlo. Es la regla de v=218: pasá el `albumId` si lo
+// tenés. Cuesta un `GET /albums/{id}/tracks` y nada más.
+//
+// El modal viejo NO se borra: es el único sitio donde se ve qué pistas de este
+// disco están en la playlist de registro, que es dato de esta vista y de
+// ninguna otra. Pasa a ser una acción de la ficha, por el punto de extensión
+// `acciones` que ya usa `#discover-artists`.
+function abrirFichaDeAlbum(albumId) {
+  const album = albums.find(a => a.id === albumId);
+  if (!album) return;
+  openAlbumCard({
+    name: album.name,
+    artist: album.artist,
+    img: album.cover || album.image,
+    albumId: album.id,
+    plays: 0,
+    min: 0,
+    acciones: [{
+      label: 'Mis pistas en la playlist',
+      title: `Las ${album.tracks.length} pistas de este álbum que tienes en «${playlistInfo?.name || 'tu playlist de registro'}»`,
+      onClick: () => openAlbumDetail(album.id),
+    }],
   });
 }
 
