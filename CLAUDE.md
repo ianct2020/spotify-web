@@ -1591,3 +1591,28 @@ user-library-read user-library-modify playlist-read-private playlist-read-collab
 No hay forma de crear ni convertir una playlist a privada por API
 post-migración. Si una feature necesita privacidad, el usuario tiene que
 pasarla a privada a mano desde la app de Spotify.
+
+## Seguir artistas en Spotify (v=268, 2026-10-03)
+
+`#follow-artists`, en el menú Descubrir, trabaja sobre las discografías guardadas
+(en esta tanda: 351), ordenadas por likes locales. Seguir NO cambia los datos de
+Novedades ni Sin escuchar: el beneficio es en Spotify. La vista lo dice.
+
+- `/me/following/contains` y `PUT /me/following` están retirados para Development
+  Mode. Se usan `GET /me/library/contains?uris=spotify:artist:…` y
+  `PUT /me/library?uris=spotify:artist:…`, de a **40**, con la constante compartida.
+  351 necesitan **9 consultas**, no 7. `GET /me/following?type=artist&limit=50`
+  sigue vigente: se usó para obtener el censo completo con el presupuesto de esta tanda.
+- Lectura actual contrastada en vivo: 40 booleanos, todos coincidentes con la lista
+  completa de seguidos. Escritura: **solo simulada**, la prueba real le toca a Ian.
+  La guía oficial incluye `spotify:artist` en el ejemplo de escritura aunque la
+  referencia de `save-library-items` lo omite: inconsistencia documentada, no prueba real.
+- Hace falta `user-follow-modify`: auth lo pide y guarda los scopes concedidos en
+  `sp_granted_scopes`. Para sesiones anteriores se ofrece reconectar; no se sigue
+  automáticamente a nadie. El permiso no se concede por código.
+- Los controles «Los primeros N / Marcar / Ninguno» se comparten desde
+  `discover-common.js`. Abrir deja todo sin marcar, confirmar muestra la cantidad,
+  y los lotes confirmados se retiran de la lista sin recargar. Fallo parcial:
+  conservar éxitos, dejar pendientes y mostrar el error; sin reintentos automáticos.
+- Referencias: https://developer.spotify.com/documentation/web-api/tutorials/february-2026-migration-guide
+  y https://developer.spotify.com/documentation/web-api/reference/check-library-contains

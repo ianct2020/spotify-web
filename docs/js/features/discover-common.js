@@ -6,35 +6,35 @@
 //     (util/album-heard.js: historial completo + likes + listened + w-three)
 //   - permiten "+ Biblioteca" y "Crear playlist con lo elegido"
 
-import { idbGet, idbGetCached, idbSetCached, idbDel, idbEntriesByPrefix, idbAllKeys } from '../idb.js?v=267';
-import { getArtistAlbumsConFuente, buscarDiscografiaPorNombre, searchArtistByName, getAlbumTracks, saveToLibrary, saveAlbumsToLibrary, createPlaylist, addTracksToPlaylist } from '../api.js?v=267';
-import { albumKey } from '../util/album-key.js?v=267';
-import { cardKey, cardKeyLegacy, albumCreditName, keyOfPlaylistTrack } from '../util/discover-key.js?v=267';
-import { escapeHtml } from '../ui/components.js?v=267';
-import { openModal, closeTop } from '../ui/modal-stack.js?v=267';
-import { showToast } from '../ui/toast.js?v=267';
-import { openPlaylistPicker } from '../ui/playlist-picker.js?v=267';
-import { getOwnPlaylists, addUrisToPlaylists, toastAddResult } from '../util/playlist-add.js?v=267';
-import { openArtistCard } from './artist-card.js?v=267';
-import { openAlbumCard } from './album-card.js?v=267';
-import { createHiddenStore, createLocalStore } from '../util/hidden-sync.js?v=267';
-import { recuperarUriDeAlbumKey, REGLAS_VERSION } from '../util/hidden-recover.js?v=267';
-import { getPreview } from '../api/preview-providers.js?v=267';
-import { togglePreview, playingKey, attachHover } from '../ui/preview-player.js?v=267';
-import { coverUrl } from '../util/cover-size.js?v=267';
-import { fechaDelFallo } from '../util/escaneo-fallos.js?v=267';
-import { SCAN_TTL_MS, escaneoVencido, textoFrescura, crearMarcasDeFrescura } from '../util/frescura-escaneo.js?v=267';
-import { FILTROS as FILTROS_DEF, saveFiltros } from '../util/discover-filters.js?v=267';
-import { esEPoAlbum } from '../util/release-size.js?v=267';
-import { iconoPlay, iconoPausa, iconoPuntos, iconoOjo, iconoOjoTachado } from '../ui/icons.js?v=267';
+import { idbGet, idbGetCached, idbSetCached, idbDel, idbEntriesByPrefix, idbAllKeys } from '../idb.js?v=268';
+import { getArtistAlbumsConFuente, buscarDiscografiaPorNombre, searchArtistByName, getAlbumTracks, saveToLibrary, saveAlbumsToLibrary, createPlaylist, addTracksToPlaylist } from '../api.js?v=268';
+import { albumKey } from '../util/album-key.js?v=268';
+import { cardKey, cardKeyLegacy, albumCreditName, keyOfPlaylistTrack } from '../util/discover-key.js?v=268';
+import { escapeHtml } from '../ui/components.js?v=268';
+import { openModal, closeTop } from '../ui/modal-stack.js?v=268';
+import { showToast } from '../ui/toast.js?v=268';
+import { openPlaylistPicker } from '../ui/playlist-picker.js?v=268';
+import { getOwnPlaylists, addUrisToPlaylists, toastAddResult } from '../util/playlist-add.js?v=268';
+import { openArtistCard } from './artist-card.js?v=268';
+import { openAlbumCard } from './album-card.js?v=268';
+import { createHiddenStore, createLocalStore } from '../util/hidden-sync.js?v=268';
+import { recuperarUriDeAlbumKey, REGLAS_VERSION } from '../util/hidden-recover.js?v=268';
+import { getPreview } from '../api/preview-providers.js?v=268';
+import { togglePreview, playingKey, attachHover } from '../ui/preview-player.js?v=268';
+import { coverUrl } from '../util/cover-size.js?v=268';
+import { fechaDelFallo } from '../util/escaneo-fallos.js?v=268';
+import { SCAN_TTL_MS, escaneoVencido, textoFrescura, crearMarcasDeFrescura } from '../util/frescura-escaneo.js?v=268';
+import { FILTROS as FILTROS_DEF, saveFiltros } from '../util/discover-filters.js?v=268';
+import { esEPoAlbum } from '../util/release-size.js?v=268';
+import { iconoPlay, iconoPausa, iconoPuntos, iconoOjo, iconoOjoTachado } from '../ui/icons.js?v=268';
 import {
   DISCO_BASE_PREFIX, PRESUPUESTO_REFRESCO, RECIENTE_MAX_PAGINAS,
   crearBase, sumarCompleta, sumarReciente, tocaReciente, rangoReciente,
   fusionarBases, armarExportacion, leerImportacion,
-} from '../util/disco-base.js?v=267';
+} from '../util/disco-base.js?v=268';
 import {
   estimarCostoDeEscaneo, clasificarArtistas, totalizarCosto, costoDeUno, superaUmbral, PAGINAS_POR_ARTISTA,
-} from '../util/costo-escaneo.js?v=267';
+} from '../util/costo-escaneo.js?v=268';
 
 const DISCO_TTL_MIN = 30 * 24 * 60;       // 30 días
 const ARTIST_ID_TTL_MIN = 60 * 24 * 60;   // 60 días — los ids no cambian
@@ -517,6 +517,31 @@ function etiquetaCosto(c) {
   return { texto: `${nES(n)} ${n === 1 ? 'búsqueda' : 'búsquedas'}`, titulo: c.sinId ? 'Hay que buscar su id en Spotify.' : 'Discografía guardada: solo se mira si ha salido algo nuevo.' };
 }
 
+// Controles compartidos por el escaneo y el seguimiento. La selección empieza
+// vacía; ambos consumidores deciden qué significa confirmar, nunca las casillas.
+export function controlesSeleccionArtistasHtml(total, extra = '') {
+  return `<div class="sel-art-lote">
+    <label class="sel-art-primeros">Los primeros
+      <input type="number" class="input" id="sel-art-n" min="1" max="${total}" value="${Math.min(5, total)}" inputmode="numeric">
+    </label>
+    <button class="btn btn-secondary btn-sm" id="sel-art-marcar">Marcar</button>
+    ${extra}
+    <button class="btn btn-secondary btn-sm" id="sel-art-ninguno">Ninguno</button>
+  </div>`;
+}
+
+export function conectarSeleccionArtistas(root, cajas, pintar) {
+  root.querySelector('#sel-art-marcar').onclick = () => {
+    const n = Math.max(0, Math.min(cajas.length, parseInt(root.querySelector('#sel-art-n').value, 10) || 0));
+    cajas.forEach((x, i) => { x.checked = i < n; });
+    pintar();
+  };
+  root.querySelector('#sel-art-ninguno').onclick = () => {
+    cajas.forEach(x => { x.checked = false; });
+    pintar();
+  };
+}
+
 /**
  * El selector. `clasificados` sale de `clasificarArtistas()`, en el orden en
  * que se van a mostrar. Resuelve con los artistas marcados, o `null` si se
@@ -528,7 +553,6 @@ function abrirSelectorDeArtistas(clasificados, { motivo = 'pedido' } = {}) {
     const cerrar = (v) => { if (!decidido) { decidido = true; resolve(v); } };
     const total = clasificados.length;
     const gratis = clasificados.filter(c => costoDeUno(c) === 0).length;
-    const primerosDefault = Math.min(5, total);
 
     const filas = clasificados.map((c, i) => {
       const a = c.artista;
@@ -562,14 +586,7 @@ function abrirSelectorDeArtistas(clasificados, { motivo = 'pedido' } = {}) {
           <div style="font-size:22px;font-weight:600;line-height:1.2" id="sel-art-total"></div>
           <div style="font-size:12px;color:var(--color-text-muted);margin-top:2px" id="sel-art-sub"></div>
         </div>
-        <div class="sel-art-lote">
-          <label class="sel-art-primeros">Los primeros
-            <input type="number" class="input" id="sel-art-n" min="1" max="${total}" value="${primerosDefault}" inputmode="numeric">
-          </label>
-          <button class="btn btn-secondary btn-sm" id="sel-art-marcar">Marcar</button>
-          ${gratis ? `<button class="btn btn-secondary btn-sm" id="sel-art-gratis" title="Los que ya tienen la discografía guardada y al día">Solo los gratis (${nES(gratis)})</button>` : ''}
-          <button class="btn btn-secondary btn-sm" id="sel-art-ninguno">Ninguno</button>
-        </div>
+        ${controlesSeleccionArtistasHtml(total, gratis ? `<button class="btn btn-secondary btn-sm" id="sel-art-gratis" title="Los que ya tienen la discografía guardada y al día">Solo los gratis (${nES(gratis)})</button>` : '')}
         <p class="sel-art-orden">Ordenados por canciones que te gustan de cada artista.</p>
         <div class="picker-scroll sel-art-lista">${filas}
           <div id="sel-art-detalle" style="margin-top:12px"></div>
@@ -605,17 +622,12 @@ function abrirSelectorDeArtistas(clasificados, { motivo = 'pedido' } = {}) {
     };
 
     overlay.querySelector('.sel-art-lista').addEventListener('change', pintar);
-    $('#sel-art-marcar').onclick = () => {
-      const n = Math.max(0, Math.min(total, parseInt($('#sel-art-n').value, 10) || 0));
-      cajas.forEach((x, i) => { x.checked = i < n; });
-      pintar();
-    };
+    conectarSeleccionArtistas(overlay, cajas, pintar);
     const btnGratis = $('#sel-art-gratis');
     if (btnGratis) btnGratis.onclick = () => {
       cajas.forEach((x) => { x.checked = costoDeUno(clasificados[+x.dataset.i]) === 0; });
       pintar();
     };
-    $('#sel-art-ninguno').onclick = () => { cajas.forEach((x) => { x.checked = false; }); pintar(); };
     $('#sel-art-cancelar').onclick = () => { cerrar(null); closeTop(); };
     $('#sel-art-seguir').onclick = () => {
       const sel = marcados();
@@ -946,7 +958,7 @@ export function yearOf(release) {
 // `releaseTs` vive ahora en `util/release-date.js` (v=246), junto al comparador
 // «más nuevo primero» de `#discover-artists`; se re-exporta acá para que
 // `#new-releases` siga importándolo de este archivo.
-export { releaseTs } from '../util/release-date.js?v=267';
+export { releaseTs } from '../util/release-date.js?v=268';
 
 // Deduplica ediciones del mismo álbum (deluxe, remaster, etc). Nos quedamos
 // con la primera edición (release date más antiguo).

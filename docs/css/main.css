@@ -5696,3 +5696,18 @@ body.covers-fs .main {
   font-size: 11px;
   color: var(--color-text-secondary);
 }
+
+/* Seguimiento: lista propia, sin cargar la barra de Descubrir. */
+.follow-artists { max-width: 820px; }
+.follow-explanation { padding: 16px; border: 1px solid var(--color-border); border-radius: 12px; color: var(--color-text-secondary); line-height: 1.6; }
+.follow-summary { margin-top: 22px; font-size: 18px; }
+.follow-artists p { line-height: 1.6; }
+.follow-permission { padding: 12px 16px; background: var(--color-elevated); border-radius: 10px; margin: 16px 0; }
+.follow-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin: 12px 0; }
+.follow-actions > span { color: var(--color-text-secondary); font-size: 13px; }
+.follow-selection { border: 0; padding: 0; margin: 20px 0 0; min-width: 0; }
+.follow-selection legend { font-weight: 600; margin-bottom: 12px; }
+.follow-list { max-height: 45vh; overflow-y: auto; }
+.follow-save { justify-content: space-between; min-height: 42px; }
+.follow-selection:disabled { opacity: .65; }
+#follow-notice { min-height: 1.6em; }

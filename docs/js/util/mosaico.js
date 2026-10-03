@@ -28,7 +28,7 @@
 //    **Y desde v=253 hay una segunda penalización, por USO TOTAL** (`PENAL_USO_DE`),
 //    porque la local no alcanzaba: ver su comentario.
 
-import { REJILLA, BYTES_POR_PORTADA, srgb8ALab, mediaDeRejilla, rejilla3x3Rect } from './cover-color.js?v=267';
+import { REJILLA, BYTES_POR_PORTADA, srgb8ALab, mediaDeRejilla, rejilla3x3Rect } from './cover-color.js?v=268';
 
 const SUBCELDAS = REJILLA * REJILLA;   // 9
 

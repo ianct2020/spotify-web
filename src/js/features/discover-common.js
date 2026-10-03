@@ -517,6 +517,31 @@ function etiquetaCosto(c) {
   return { texto: `${nES(n)} ${n === 1 ? 'búsqueda' : 'búsquedas'}`, titulo: c.sinId ? 'Hay que buscar su id en Spotify.' : 'Discografía guardada: solo se mira si ha salido algo nuevo.' };
 }
 
+// Controles compartidos por el escaneo y el seguimiento. La selección empieza
+// vacía; ambos consumidores deciden qué significa confirmar, nunca las casillas.
+export function controlesSeleccionArtistasHtml(total, extra = '') {
+  return `<div class="sel-art-lote">
+    <label class="sel-art-primeros">Los primeros
+      <input type="number" class="input" id="sel-art-n" min="1" max="${total}" value="${Math.min(5, total)}" inputmode="numeric">
+    </label>
+    <button class="btn btn-secondary btn-sm" id="sel-art-marcar">Marcar</button>
+    ${extra}
+    <button class="btn btn-secondary btn-sm" id="sel-art-ninguno">Ninguno</button>
+  </div>`;
+}
+
+export function conectarSeleccionArtistas(root, cajas, pintar) {
+  root.querySelector('#sel-art-marcar').onclick = () => {
+    const n = Math.max(0, Math.min(cajas.length, parseInt(root.querySelector('#sel-art-n').value, 10) || 0));
+    cajas.forEach((x, i) => { x.checked = i < n; });
+    pintar();
+  };
+  root.querySelector('#sel-art-ninguno').onclick = () => {
+    cajas.forEach(x => { x.checked = false; });
+    pintar();
+  };
+}
+
 /**
  * El selector. `clasificados` sale de `clasificarArtistas()`, en el orden en
  * que se van a mostrar. Resuelve con los artistas marcados, o `null` si se
@@ -528,7 +553,6 @@ function abrirSelectorDeArtistas(clasificados, { motivo = 'pedido' } = {}) {
     const cerrar = (v) => { if (!decidido) { decidido = true; resolve(v); } };
     const total = clasificados.length;
     const gratis = clasificados.filter(c => costoDeUno(c) === 0).length;
-    const primerosDefault = Math.min(5, total);
 
     const filas = clasificados.map((c, i) => {
       const a = c.artista;
@@ -562,14 +586,7 @@ function abrirSelectorDeArtistas(clasificados, { motivo = 'pedido' } = {}) {
           <div style="font-size:22px;font-weight:600;line-height:1.2" id="sel-art-total"></div>
           <div style="font-size:12px;color:var(--color-text-muted);margin-top:2px" id="sel-art-sub"></div>
         </div>
-        <div class="sel-art-lote">
-          <label class="sel-art-primeros">Los primeros
-            <input type="number" class="input" id="sel-art-n" min="1" max="${total}" value="${primerosDefault}" inputmode="numeric">
-          </label>
-          <button class="btn btn-secondary btn-sm" id="sel-art-marcar">Marcar</button>
-          ${gratis ? `<button class="btn btn-secondary btn-sm" id="sel-art-gratis" title="Los que ya tienen la discografía guardada y al día">Solo los gratis (${nES(gratis)})</button>` : ''}
-          <button class="btn btn-secondary btn-sm" id="sel-art-ninguno">Ninguno</button>
-        </div>
+        ${controlesSeleccionArtistasHtml(total, gratis ? `<button class="btn btn-secondary btn-sm" id="sel-art-gratis" title="Los que ya tienen la discografía guardada y al día">Solo los gratis (${nES(gratis)})</button>` : '')}
         <p class="sel-art-orden">Ordenados por canciones que te gustan de cada artista.</p>
         <div class="picker-scroll sel-art-lista">${filas}
           <div id="sel-art-detalle" style="margin-top:12px"></div>
@@ -605,17 +622,12 @@ function abrirSelectorDeArtistas(clasificados, { motivo = 'pedido' } = {}) {
     };
 
     overlay.querySelector('.sel-art-lista').addEventListener('change', pintar);
-    $('#sel-art-marcar').onclick = () => {
-      const n = Math.max(0, Math.min(total, parseInt($('#sel-art-n').value, 10) || 0));
-      cajas.forEach((x, i) => { x.checked = i < n; });
-      pintar();
-    };
+    conectarSeleccionArtistas(overlay, cajas, pintar);
     const btnGratis = $('#sel-art-gratis');
     if (btnGratis) btnGratis.onclick = () => {
       cajas.forEach((x) => { x.checked = costoDeUno(clasificados[+x.dataset.i]) === 0; });
       pintar();
     };
-    $('#sel-art-ninguno').onclick = () => { cajas.forEach((x) => { x.checked = false; }); pintar(); };
     $('#sel-art-cancelar').onclick = () => { cerrar(null); closeTop(); };
     $('#sel-art-seguir').onclick = () => {
       const sel = marcados();

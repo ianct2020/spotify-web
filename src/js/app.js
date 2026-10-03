@@ -37,6 +37,7 @@ import { render as renderWthree } from './features/wthree.js';
 import { render as renderCovers } from './features/covers.js';
 import { render as renderMosaico } from './features/mosaico.js';
 import { render as renderDiscoverArtists } from './features/discover-artists.js';
+import { render as renderFollowArtists } from './features/follow-artists.js';
 import { render as renderNewReleases } from './features/new-releases.js';
 import { render as renderSinClasificar } from './features/sin-clasificar.js';
 
@@ -520,6 +521,9 @@ function showApp(profile) {
           <a class="nav-link" data-route="discover-artists" href="#discover-artists">
             <span class="nav-link-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.35-4.35"/></svg></span> Sin escuchar de tus artistas
           </a>
+          <a class="nav-link" data-route="follow-artists" href="#follow-artists">
+            <span class="nav-link-icon">＋</span> Seguir artistas
+          </a>
           <a class="nav-link" data-route="new-releases" href="#new-releases">
             <span class="nav-link-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></span> Novedades de tus artistas
           </a>
@@ -733,6 +737,7 @@ function showApp(profile) {
   registerRoute('mosaico', renderMosaico);
   registerRoute('discover-artists', renderDiscoverArtists);
   registerRoute('new-releases', renderNewReleases);
+  registerRoute('follow-artists', renderFollowArtists);
   registerRoute('sin-clasificar', renderSinClasificar);
 
   // «Volver arriba»: se instala una sola vez para toda la app y descubre solo
@@ -792,6 +797,7 @@ const HOME_SECTIONS = [
       { hash: 'rabbit', icon: ICONS.rabbit, name: 'Rabbit hole', desc: 'Navega artistas y tracks encadenados por género.' },
       { hash: 'recs', icon: ICONS.recs, name: 'Recomendaciones', desc: 'Basadas en tus scrobbles de Last.fm.' },
       { hash: 'discover-artists', icon: ICONS.search, name: 'Sin escuchar de tus artistas', desc: 'Discografía de tus artistas favoritos que aún no escuchaste.' },
+      { hash: 'follow-artists', icon: ICONS.search, name: 'Seguir artistas', desc: 'Elige a quién seguir en Spotify para sus recomendaciones y avisos.' },
       { hash: 'new-releases', icon: ICONS.records, name: 'Novedades de tus artistas', desc: 'Lanzamientos recientes de tus artistas favoritos, filtrando lo que ya oíste.' },
     ],
   },

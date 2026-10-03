@@ -915,6 +915,50 @@ function invalidatePlaylistsCache() {
 // número viva en un solo sitio y no se pueda volver a desincronizar.
 const LIBRARY_URIS_POR_REQUEST = 40;
 
+// Seguir artistas usa la API unificada post-migración: 40 URIs, no los
+// antiguos endpoints following. Sin reintentos ocultos: cada lote se informa.
+export const ARTISTAS_POR_LOTE = LIBRARY_URIS_POR_REQUEST;
+function idsDeArtistas(ids) {
+  if (!Array.isArray(ids) || ids.some(id => typeof id !== 'string' || !/^[a-zA-Z0-9]{22}$/.test(id))) {
+    throw new Error('Hay un artista sin un id válido de Spotify.');
+  }
+  return [...new Set(ids)];
+}
+
+export async function consultarSeguimientoArtistas(ids, { signal, onBatch = () => {} } = {}) {
+  const unicos = idsDeArtistas(ids);
+  const estado = new Map();
+  for (let i = 0; i < unicos.length; i += ARTISTAS_POR_LOTE) {
+    const lote = unicos.slice(i, i + ARTISTAS_POR_LOTE);
+    const uris = lote.map(id => `spotify:artist:${id}`).join(',');
+    const respuesta = await spotifyFetch(`/me/library/contains?uris=${encodeURIComponent(uris)}`, { signal, _maxRetries: 0 });
+    if (!Array.isArray(respuesta) || respuesta.length !== lote.length || respuesta.some(v => typeof v !== 'boolean')) {
+      throw new Error('Spotify no ha devuelto un estado válido para cada artista.');
+    }
+    lote.forEach((id, j) => estado.set(id, respuesta[j]));
+    onBatch(new Map(lote.map((id, j) => [id, respuesta[j]])));
+  }
+  return estado;
+}
+
+export async function seguirArtistas(ids, { onBatch = () => {} } = {}) {
+  const unicos = idsDeArtistas(ids);
+  const seguidos = [];
+  for (let i = 0; i < unicos.length; i += ARTISTAS_POR_LOTE) {
+    const lote = unicos.slice(i, i + ARTISTAS_POR_LOTE);
+    const uris = lote.map(id => `spotify:artist:${id}`).join(',');
+    try {
+      await spotifyFetch(`/me/library?uris=${encodeURIComponent(uris)}`, { method: 'PUT', _maxRetries: 0 });
+    } catch (error) {
+      return { seguidos, pendientes: unicos.slice(i), error };
+    }
+    seguidos.push(...lote);
+    onBatch(lote);
+  }
+  return { seguidos, pendientes: [], error: null };
+}
+
+
 // Confirma cuáles ids siguen en la biblioteca. Post-migración feb 2026:
 // GET /me/tracks/contains → 403; el que vive es GET /me/library/contains con URIs.
 // Devuelve Map<id, bool>.

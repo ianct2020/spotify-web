@@ -10,6 +10,7 @@ const AUTH = {
     'user-top-read',
     'user-read-recently-played',
     'user-follow-read',
+    'user-follow-modify',
   ].join(' '),
   TOKEN_KEY: 'sp_access_token',
   REFRESH_KEY: 'sp_refresh_token',
@@ -141,6 +142,7 @@ async function refreshAccessToken() {
 }
 
 function saveTokens(data) {
+  if (typeof data.scope === 'string') localStorage.setItem('sp_granted_scopes', data.scope);
   localStorage.setItem(AUTH.TOKEN_KEY, data.access_token);
   if (data.refresh_token) {
     localStorage.setItem(AUTH.REFRESH_KEY, data.refresh_token);
@@ -171,7 +173,12 @@ function isLoggedIn() {
   return !!localStorage.getItem(AUTH.TOKEN_KEY);
 }
 
+function hasSpotifyScope(scope) {
+  return (localStorage.getItem('sp_granted_scopes') || '').split(/\s+/).includes(scope);
+}
+
 function logout() {
+  localStorage.removeItem('sp_granted_scopes');
   localStorage.removeItem(AUTH.TOKEN_KEY);
   localStorage.removeItem(AUTH.REFRESH_KEY);
   localStorage.removeItem(AUTH.EXPIRY_KEY);
@@ -180,4 +187,4 @@ function logout() {
   window.location.reload();
 }
 
-export { loginWithSpotify, handleCallback, getValidToken, refreshAccessToken, isLoggedIn, logout };
+export { hasSpotifyScope, loginWithSpotify, handleCallback, getValidToken, refreshAccessToken, isLoggedIn, logout };
