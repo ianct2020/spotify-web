@@ -1528,7 +1528,13 @@ con «creé», «borré», «encontré», «marqué». Revisar el diff, no confi
 0c8c92ad128e4b89be7097c6b8082797
 
 ## Scopes usados
-user-library-read user-library-modify playlist-read-private playlist-read-collaborative playlist-modify-public playlist-modify-private user-top-read user-read-recently-played user-follow-read
+user-library-read user-library-modify playlist-read-private playlist-read-collaborative playlist-modify-public playlist-modify-private user-top-read user-read-recently-played user-follow-read user-follow-modify
+
+⚠️ `user-follow-modify` se añadió en v=268 y **no lo tienen las sesiones
+anteriores**: el `scope` que devuelve el refresh es el de la concesión vieja.
+Comprobado el 03/10 en una copia del perfil real: `sp_granted_scopes` existía ya
+y **venía sin `user-follow-modify`**. Por eso `#follow-artists` enseña «Dar
+permiso en Spotify» y deja el botón de guardar apagado hasta reconectar.
 
 ## Redirect URIs
 - Dev: http://127.0.0.1:5500/callback.html
@@ -1616,3 +1622,18 @@ Novedades ni Sin escuchar: el beneficio es en Spotify. La vista lo dice.
   conservar éxitos, dejar pendientes y mostrar el error; sin reintentos automáticos.
 - Referencias: https://developer.spotify.com/documentation/web-api/tutorials/february-2026-migration-guide
   y https://developer.spotify.com/documentation/web-api/reference/check-library-contains
+
+### Por qué es una vista propia y no un botón en la barra de `#discover-artists`
+
+Medido el 03/10 sobre el DOM real (copia del perfil, 1366×768, `.disco-controls`
+con sus ocho hijos y `gap: 10px`):
+
+| | ancho que necesita la barra | debajo de ese ancho de ventana pasa a dos filas |
+|---|---:|---:|
+| hoy | **1.100 px** | **1.214 px** |
+| con un botón «Seguir artistas…» más (**134 px** + 10 de hueco) | **1.234 px** | **1.348 px** |
+
+En la pantalla de 1.366 px quedarían **18 px** de margen: una etiqueta un poco
+más larga, un paso de zoom o un contador más y rompe. ⚠️ El «~1.190 px» que se
+venía diciendo era aproximado; el número medido es **1.214**. La barra lateral
+**no quita ancho** (va por encima, `main` mide 1.356 con ella abierta o cerrada).
