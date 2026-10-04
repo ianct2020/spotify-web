@@ -2,32 +2,32 @@
 // por álbum). Muestra qué álbumes ya tienen picks, cuántos, y cuáles te faltan.
 // Ordenado por álbumes más escuchados primero para priorizar tu tiempo.
 
-import { spotifyFetch, getAllPlaylistItems, getAllUserPlaylists, addTracksToPlaylist, removeTracksFromPlaylist, reorderPlaylistItems, getCachedPlaylistItems, updatePlaylistItemsCache, getBestAvailableLikes, removeLikedTracks, checkLibraryContains } from '../api.js?v=271';
-import { vigilarRuta } from '../util/vigencia-ruta.js?v=271';
-import { patchPlaylistItems, buildCachedItem } from '../util/playlist-cache-patch.js?v=271';
-import { loadHistoryStats, loadListenedAlbums, isOwner, ownerLockedMessage } from './history-data.js?v=271';
-import { escapeHtml, pageHeader, confirmModal } from '../ui/components.js?v=271';
-import { showToast } from '../ui/toast.js?v=271';
-import { wireHoverMarquee, hoverMarqueeSpan } from '../ui/hover-marquee.js?v=271';
-import { openModal, closeById, closeModal } from '../ui/modal-stack.js?v=271';
-import { getPreview } from '../api/preview-providers.js?v=271';
-import { togglePreview, playingKey } from '../ui/preview-player.js?v=271';
-import { openAlbumCard } from './album-card.js?v=271';
-import { albumKey } from '../util/album-key.js?v=271';
-import { resolveAlbumId } from '../util/album-resolver.js?v=271';
-import { computeUpdatedPickPositions } from '../util/reorder-shifts.js?v=271';
-import { createHiddenStore } from '../util/hidden-sync.js?v=271';
-import { recuperarUriDeAlbumKey, REGLAS_VERSION } from '../util/hidden-recover.js?v=271';
-import { mountBottom } from '../ui/bottom-layer.js?v=271';
-import { coverUrl } from '../util/cover-size.js?v=271';
-import { insercionPorPuntero, moverA, indicadorPara } from '../util/reorder-drop.js?v=271';
-import { prefKey, migratePrefKey } from '../storage.js?v=271';
-import { iconoPlay, iconoPausa, iconoPuntos, iconoOjo, iconoOjoTachado } from '../ui/icons.js?v=271';
-import { pedirYCachear, SOLO_CON_CONTENIDO } from '../util/cache-solo-exitos.js?v=271';
-import { indiceIdsDeAlbum, idLocalDelAlbum } from '../util/album-id-local.js?v=271';
-import { openPlaylistPicker } from '../ui/playlist-picker.js?v=271';
-import { getOwnPlaylists, addUrisToPlaylists, toastAddResult, listaNombres } from '../util/playlist-add.js?v=271';
-import { borrarLikesVerificado } from '../util/borrado-verificado.js?v=271';
+import { spotifyFetch, getAllPlaylistItems, getAllUserPlaylists, addTracksToPlaylist, removeTracksFromPlaylist, reorderPlaylistItems, getCachedPlaylistItems, updatePlaylistItemsCache, getBestAvailableLikes, removeLikedTracks, checkLibraryContains } from '../api.js?v=272';
+import { vigilarRuta } from '../util/vigencia-ruta.js?v=272';
+import { patchPlaylistItems, buildCachedItem } from '../util/playlist-cache-patch.js?v=272';
+import { loadHistoryStats, loadListenedAlbums, isOwner, ownerLockedMessage } from './history-data.js?v=272';
+import { escapeHtml, pageHeader, confirmModal } from '../ui/components.js?v=272';
+import { showToast } from '../ui/toast.js?v=272';
+import { wireHoverMarquee, hoverMarqueeSpan } from '../ui/hover-marquee.js?v=272';
+import { openModal, closeById, closeModal } from '../ui/modal-stack.js?v=272';
+import { getPreview } from '../api/preview-providers.js?v=272';
+import { togglePreview, playingKey } from '../ui/preview-player.js?v=272';
+import { openAlbumCard } from './album-card.js?v=272';
+import { albumKey } from '../util/album-key.js?v=272';
+import { resolveAlbumId } from '../util/album-resolver.js?v=272';
+import { computeUpdatedPickPositions } from '../util/reorder-shifts.js?v=272';
+import { createHiddenStore } from '../util/hidden-sync.js?v=272';
+import { recuperarUriDeAlbumKey, REGLAS_VERSION } from '../util/hidden-recover.js?v=272';
+import { mountBottom } from '../ui/bottom-layer.js?v=272';
+import { coverUrl } from '../util/cover-size.js?v=272';
+import { insercionPorPuntero, moverA, indicadorPara } from '../util/reorder-drop.js?v=272';
+import { prefKey, migratePrefKey } from '../storage.js?v=272';
+import { iconoPlay, iconoPausa, iconoPuntos, iconoOjo, iconoOjoTachado } from '../ui/icons.js?v=272';
+import { pedirYCachear, SOLO_CON_CONTENIDO } from '../util/cache-solo-exitos.js?v=272';
+import { indiceIdsDeAlbum, idLocalDelAlbum } from '../util/album-id-local.js?v=272';
+import { openPlaylistPicker } from '../ui/playlist-picker.js?v=272';
+import { getOwnPlaylists, addUrisToPlaylists, toastAddResult, listaNombres } from '../util/playlist-add.js?v=272';
+import { borrarLikesVerificado } from '../util/borrado-verificado.js?v=272';
 
 const LS_KEY_ID = 'wthree_playlist_id';
 const LS_KEY_NAME = 'wthree_playlist_name';
@@ -82,28 +82,37 @@ let likedIndexPromise = null;
 
 // Minúsculas y sin el agregado entre paréntesis o corchetes: «Tema (Live)» y
 // «Tema» caen en la misma clave. Estaba escrito CUATRO veces en este archivo
-// (paso 3 del plan de normalizadores)… pero no eran cuatro copias.
+// (paso 3 del plan de normalizadores)… pero no eran cuatro copias: eran DOS
+// regex distintos, y el informe los daba por iguales.
 //
-// ⚠️ SON DOS REGEX DISTINTOS, y el informe los daba por iguales:
+//   el que quedó  → /\s*\(.*?\)|\s*\[.*?\]/   exige delimitadores que COINCIDEN
+//   el que se fue → /\s*[([].*?[)\]]/           aceptaba «(Live]» y «[Live)»
 //
-//   sinParentesis          → /\s*\(.*?\)|\s*\[.*?\]/   delimitadores que COINCIDEN
-//   sinParentesisMezclados → /\s*[([].*?[)\]]/           acepta «(Live]» y «[Live)»
+// ⚠️ **El mezclado estaba MAL, y había un caso real en la biblioteca.** Como
+// abre con `(` y puede cerrar con `]`, en «Body (Remix) [feat. ArrDee, E1 (3x3),
+// ZT (3x3), Bugzy Malone, Buni, Fivio Foreign & Darkoo]» (Tion Wayne) el primer
+// match se come desde el `(` de «(Remix)» hasta el `]` de «E1 (3x3]»… y la clave
+// quedaba «body, zt, bugzy malone, buni, fivio foreign & darkoo]»: un corchete
+// de cierre suelto incluido. O sea que el ♥ de ese tema NO se encendía aunque
+// estuviera likeado. Es la misma familia que el corte de feat que se llevaba el
+// «)» por delante (`util/track-match.js`, v=270).
 //
-// El segundo es el que usaba `likeNameKey`. Unificarlos en uno cambiaría
-// salidas —medido: 2 entradas del corpus real de 39.247—, así que quedan dos
-// funciones con el nombre que dice en qué se diferencian, en vez de un regex
-// repetido cuatro veces del que nadie podía ver que no era el mismo.
+// Desde v=272 `likeNameKey` usa el de delimitadores que coinciden, que lo deja
+// en «body», y el mezclado se borró: era su único llamador. Cambiar esto CAMBIA
+// una clave de ♥, así que fue con contrato escrito antes y la foto regenerada en
+// un commit aparte. Lo que se paga: tres casos a mano de la foto con
+// delimitadores a propósito desbalanceados («Tema (Live]») dejan de perder su
+// cola. En el corpus real de 39.247 pares ese caso aparece UNA vez, y es
+// justamente el de arriba, donde recortar era el error.
 //
-// ⚠️ Y el mezclado es el PEOR de los dos en un caso real de la biblioteca:
-// «Body (Remix) [feat. ArrDee, E1 (3x3), ZT (3x3), …]» le queda como
-// «body, zt, bugzy malone, buni, fivio foreign & darkoo]», mientras que
-// `sinParentesis` lo deja en «body». Arreglarlo CAMBIA una clave de ♥, así que
-// no entra en esta tanda: está anotado en PENDIENTES.md.
+// ⚠️ `likeNameKey` no persiste NADA: alimenta el `Set` en memoria de
+// `ensureLikedIndex()` y se consulta en el mismo render. `wthree.js` no escribe
+// en IndexedDB (0 llamadas) y lo único que pone en localStorage es el id y el
+// nombre de la playlist. Verificado antes de tocarlo.
 const sinParentesis = (s) => (s || '').toLowerCase().replace(/\s*\(.*?\)|\s*\[.*?\]/g, '').trim();
-const sinParentesisMezclados = (s) => (s || '').toLowerCase().replace(/\s*[([].*?[)\]]/g, '').trim();
 
 function likeNameKey(name, artist) {
-  const n = sinParentesisMezclados(name);
+  const n = sinParentesis(name);
   const ar = (artist || '').toLowerCase().trim();
   return `${n}||${ar}`;
 }

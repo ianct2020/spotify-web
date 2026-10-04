@@ -10,14 +10,14 @@
 //   - Umbral de likes: 5+ / 10+ / 20+
 //   - Ventana temporal: 3 / 6 / 12 / 24 meses, 5 años y «todo» (default 12)
 
-import { escapeHtml, confirmModal, pageHeader } from '../ui/components.js?v=271';
-import { showToast } from '../ui/toast.js?v=271';
-import { buildAlbumHeardIndex } from '../util/album-heard.js?v=271';
-import { releaseKind } from '../util/release-size.js?v=271';
-import { loadFiltros, buildFilterContext, applyDiscoverFilters } from '../util/discover-filters.js?v=271';
-import { createIncrementalList, scrollRootOf } from '../ui/incremental-list.js?v=271';
-import { createLazyImages } from '../ui/lazy-img.js?v=271';
-import { prefKey, migratePrefKey } from '../storage.js?v=271';
+import { escapeHtml, confirmModal, pageHeader } from '../ui/components.js?v=272';
+import { showToast } from '../ui/toast.js?v=272';
+import { buildAlbumHeardIndex } from '../util/album-heard.js?v=272';
+import { releaseKind } from '../util/release-size.js?v=272';
+import { loadFiltros, buildFilterContext, applyDiscoverFilters } from '../util/discover-filters.js?v=272';
+import { createIncrementalList, scrollRootOf } from '../ui/incremental-list.js?v=272';
+import { createLazyImages } from '../ui/lazy-img.js?v=272';
+import { prefKey, migratePrefKey } from '../storage.js?v=272';
 import {
   getArtistIdCached,
   getArtistDiscoCached,
@@ -58,12 +58,13 @@ import {
   avisarRonda,
   botonesBaseHtml,
   conectarBotonesBase,
-} from './discover-common.js?v=271';
-import { estadoNativoDiscografia } from '../api.js?v=271';
-import { leerElegidos, sumarElegidos, artistasBuscados, colaAutomatica } from '../util/cola-escaneo.js?v=271';
-import { leerFallos, marcarFallo, limpiarFallo, sinFallosMarcados } from '../util/escaneo-fallos.js?v=271';
-import { contarSinEscanear, sufijoSinEscanear, notaSinEscanear } from '../util/sin-escanear.js?v=271';
-import { estadoFrescura } from '../util/frescura-escaneo.js?v=271';
+} from './discover-common.js?v=272';
+import { masNuevoPrimero } from '../util/release-date.js?v=272';
+import { estadoNativoDiscografia } from '../api.js?v=272';
+import { leerElegidos, sumarElegidos, artistasBuscados, colaAutomatica } from '../util/cola-escaneo.js?v=272';
+import { leerFallos, marcarFallo, limpiarFallo, sinFallosMarcados } from '../util/escaneo-fallos.js?v=272';
+import { contarSinEscanear, sufijoSinEscanear, notaSinEscanear } from '../util/sin-escanear.js?v=272';
+import { estadoFrescura } from '../util/frescura-escaneo.js?v=272';
 
 const SCAN_KEY = 'new_releases';
 
@@ -684,12 +685,11 @@ function releasesInWindow() {
     lista = visibles.map(v => v._o);
   }
 
-  // Más nuevo primero. Empate → alfabético por artista.
-  lista.sort((x, y) => {
-    const dt = releaseTs(y.al.release) - releaseTs(x.al.release);
-    if (dt !== 0) return dt;
-    return x.artist.name.localeCompare(y.artist.name, 'es');
-  });
+  // Más nuevo primero. Empate → alfabético por artista. El comparador es el
+  // compartido de `util/release-date.js` (paso 6, v=272): acá va `'artista'`
+  // porque esta vista ordena ENTRE artistas, mientras `#discover-artists`
+  // ordena DENTRO de uno y desempata por el nombre del álbum.
+  lista.sort((x, y) => masNuevoPrimero(x, y, { desempate: 'artista' }));
   return lista;
 }
 
