@@ -266,8 +266,8 @@ ok(/from '\.\.\/history-keys\.js'/.test(histData),
   'history-data.js las toma del módulo compartido');
 ok(OWNER_KEY_LIST.length === Object.keys(OWNER_KEYS).length && OWNER_KEY_LIST.length === 7,
   'la lista cubre las siete claves del owner');
-ok(OWNER_KEY_LIST.includes('history_track_plays_v5') && OWNER_KEY_LIST.includes('history_skip_stats_v2'),
-  'y son las versiones que se escriben de verdad (plays v5, skips v2)');
+ok(OWNER_KEY_LIST.includes('history_track_plays_v5') && OWNER_KEY_LIST.includes('history_skip_stats_v3'),
+  'y son las versiones que se escriben de verdad (plays v5, skips v3)');
 ok(OWNER_KEY_LIST.includes('history_artist_tracks_v2'),
   'incluye history_artist_tracks_v2, que la copia vieja se olvidaba');
 

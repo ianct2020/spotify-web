@@ -24,15 +24,15 @@
 // salir de la ruta se cierra. La única salida es la descarga que pide el
 // usuario, que es un `<a download>` local.
 
-import { pageHeader, escapeHtml } from '../ui/components.js?v=269';
-import { showToast } from '../ui/toast.js?v=269';
-import { generacionActual, rutaVigente } from '../router.js?v=269';
-import { descargarBlob } from './covers-wallpaper.js?v=269';
-import { bajarPortadas, soltarBitmaps, pintarMosaico } from './mosaico-lienzo.js?v=269';
-import { leerColores, urlDe } from './mosaico-colores.js?v=269';
+import { pageHeader, escapeHtml } from '../ui/components.js?v=270';
+import { showToast } from '../ui/toast.js?v=270';
+import { generacionActual, rutaVigente } from '../router.js?v=270';
+import { descargarBlob } from './covers-wallpaper.js?v=270';
+import { bajarPortadas, soltarBitmaps, pintarMosaico } from './mosaico-lienzo.js?v=270';
+import { leerColores, urlDe } from './mosaico-colores.js?v=270';
 import {
   grillaPara, rejillaDelObjetivo, tilesALab, emparejar, mapaDeTinte, resumenDeEmparejado,
-} from '../util/mosaico.js?v=269';
+} from '../util/mosaico.js?v=270';
 
 // El lado de cada celda en el mosaico final, en píxeles. 64 es **la variante
 // que la caché de colores garantiza**: las 5.715 portadas se bajaron a 64 px
