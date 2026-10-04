@@ -265,10 +265,16 @@ async function loadListenedAlbums() {
   return loadOne('listened', 'listened', d => !!d.years, () => dataUrl('history-listened-albums.json', LISTENED_VERSION));
 }
 async function loadSkipStats() {
-  // Exijo `version >= 2`: un BYOH viejo guardado en IDB (que no lleva versión en
+  // Exijo `version >= 3`: un BYOH viejo guardado en IDB (que no lleva versión en
   // la key, a diferencia del cache del owner) traería el formato v1 y pasaría
   // el `!!d.tracks` de antes. Así se descarta y el user reimporta su ZIP.
-  return loadOne('skip', 'skip', d => !!d.tracks && (d.version || 1) >= 2, () => dataUrl('history-skip-stats.json', SKIP_VERSION));
+  //
+  // ⚠️ Subido de 2 a 3 en v=270 y NO es cosmético: el v2 tiene el mismo FORMATO
+  // que el v3, así que un BYOH v2 en IDB pasaba el `>= 2` sin chistar y se
+  // pintaba con el `gid` viejo —el del corte de feat sin `\b`, donde todas las
+  // pistas «With…» de un artista son el mismo tema—. Sin fallar y sin aviso,
+  // que es el modo exacto que PENDIENTES viene marcando desde v=208.
+  return loadOne('skip', 'skip', d => !!d.tracks && (d.version || 1) >= 3, () => dataUrl('history-skip-stats.json', SKIP_VERSION));
 }
 async function loadTrackDetail() {
   return loadOne('detail', 'detail', d => !!d.tracks, () => dataUrl('history-track-detail.json', DETAIL_VERSION));
