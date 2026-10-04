@@ -1,5 +1,5 @@
-import { guardRoute, marcarCambioDeRuta, abrirRender, cerrarRender } from './ui/crash-guard.js?v=272';
-import { skelPage } from './ui/skeleton.js?v=272';
+import { guardRoute, marcarCambioDeRuta, abrirRender, cerrarRender } from './ui/crash-guard.js?v=273';
+import { skelPage } from './ui/skeleton.js?v=273';
 
 const routes = {};
 
