@@ -32,14 +32,29 @@ import unicodedata
 from collections import defaultdict, Counter
 from datetime import datetime, date, timedelta
 
-HISTORY_DIR = "/home/ian/spotify-web/my_spotify_data/Spotify Extended Streaming History"
-OUT_DIR = "/home/ian/spotify-web/src/data"
-OLD_IMG_JSON = "/home/ian/spotify-web/src/data/listening-history.json"
+# ⚠️ Rutas RELATIVAS al propio script, no absolutas. Hasta v=271 estas cuatro
+# eran absolutas al home del autor, y este repo es PÚBLICO: no es un secreto,
+# pero publica el nombre de usuario y el árbol de carpetas, que es exactamente
+# el tipo de dato que la regla de julio vino a evitar. `_RAIZ` sale
+# de `__file__`, así que el script funciona desde cualquier directorio y para
+# cualquiera que clone el repo. Las dos variables de entorno son un escape para
+# correrlo contra otra copia (medir un cambio sin tocar `src/data`, que es lo
+# que pide el método del contrato) y su valor por defecto es el relativo.
+_RAIZ = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+_DATA_DIR = os.path.join(_RAIZ, "src", "data")
+
+HISTORY_DIR = os.environ.get("FONOTECA_HISTORY_DIR") or os.path.join(
+    _RAIZ, "my_spotify_data", "Spotify Extended Streaming History")
+OUT_DIR = os.environ.get("FONOTECA_OUT_DIR") or _DATA_DIR
+# ⚠️ Las dos ENTRADAS van a `_DATA_DIR`, NO a `OUT_DIR`: si no, overridear
+# `FONOTECA_OUT_DIR` para escribir en otro lado haría que el script buscara las
+# tapas ahí y las perdiera en silencio. Se LEEN del repo siempre.
+OLD_IMG_JSON = os.path.join(_DATA_DIR, "listening-history.json")
 # Tapas horneadas DESPUÉS, por scripts/bake-covers.py, para los álbumes que
 # entraron con un export posterior al horneado del 2026-07-25. Es un complemento:
 # `listening-history.json` no se toca nunca y siempre gana. Ver PENDIENTES.md
 # ítem 1 (el horneador original no existe) e ítem 11.
-EXTRA_IMG_JSON = "/home/ian/spotify-web/src/data/covers-extra.json"
+EXTRA_IMG_JSON = os.path.join(_DATA_DIR, "covers-extra.json")
 
 MIN_MS = 30000  # trigger warning: ignoramos plays de menos de 30s
 SKIP_MIN_MS = 5000  # skip "consciente": si le dio next después de 5s+ es deliberado

@@ -47,8 +47,14 @@ import urllib.request
 import urllib.error
 from collections import defaultdict
 
-HISTORY_DIR = "/home/ian/spotify-web/my_spotify_data/Spotify Extended Streaming History"
-OUT_DIR = "/home/ian/spotify-web/src/data"
+# ⚠️ Relativas al propio script, como en `gen-stats.py` y por el mismo motivo:
+# el repo es PÚBLICO y las absolutas publicaban el usuario y el árbol de
+# carpetas. Mismo par de variables de entorno, mismo valor por defecto relativo.
+_RAIZ = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+HISTORY_DIR = os.environ.get("FONOTECA_HISTORY_DIR") or os.path.join(
+    _RAIZ, "my_spotify_data", "Spotify Extended Streaming History")
+OUT_DIR = os.environ.get("FONOTECA_OUT_DIR") or os.path.join(_RAIZ, "src", "data")
 LISTENED_JSON = os.path.join(OUT_DIR, "history-listened-albums.json")
 BAKED_JSON = os.path.join(OUT_DIR, "listening-history.json")   # SOLO LECTURA
 EXTRA_JSON = os.path.join(OUT_DIR, "covers-extra.json")
