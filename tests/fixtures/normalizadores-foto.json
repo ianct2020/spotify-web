@@ -4585,9 +4585,9 @@
    "tema   con   espacios||artista",
    "||",
    "||",
-   "tema||artista",
-   "tema||artista",
-   "tema||artista"
+   "tema (live]||artista",
+   "tema [live)||artista",
+   "(live] tema||artista"
   ],
   "history-processor.albumKey": [
    "get lucky||daft punk",
@@ -5866,12 +5866,12 @@
   "wthree.likeNameKey": {
    "albums": {
     "n": 16017,
-    "sha256": "7e4153fae5d0a976d495875467560a4ff98fccb6b1acf49aa3002be13eef0dc6",
+    "sha256": "533438e0e42310cb7165aef9784fe41ec0b3b8015ac1b3dcbf0b7788a4a60c9f",
     "bloques": [
      "2380bc5ed0f5bb81603b34b2f104de256b8a71da8f315bf9fe9bda03a80fa808",
      "00393efe7e9f2a0a161b8c5f9edad12ea02b69e7d0cf79975460b2b88d99fbf6",
      "abca732195f1044e0067bcebf7e834deb8bff97ffaed1165c532a1d8849759e5",
-     "d18462175ddd1bfc94a727aab9549a240a2835a111074bcb9b511495b8c4d19e",
+     "f63cb9f090b9369cc041577086a391ccd6791993f06c7c9aa97ed549f95c54ea",
      "b2f65d1858da03e0baa94ff310329aefa7f64eb29ac6fd2d3160c3cd8acef8ff",
      "cfe514377c69d6ae80e2213cec2f803e1813c2b6ec7baca29d1eaa18c6665d4b",
      "6ec6ec687f88d70d6a7155296c70963142841cc83037bc7c34cec1e35b35e6ef",
@@ -5891,13 +5891,13 @@
    },
    "pistas": {
     "n": 16304,
-    "sha256": "22840218bb7bc54abfc636f560f9fd8da945bbce70b7131c34413660482b5cd7",
+    "sha256": "d30f46ddda860457ebca12df2b241914101ecdeb90466d7182077ec9284aba27",
     "bloques": [
      "db836e06802305b14fa577083518f980daba475fab872349dd5dccede4733a15",
      "8935b1c85f6ca89c6320560173abca5f144f1a5828b1ba72d2e1bdd491507cdb",
      "f7b4a348a24b3bed8e2574dddb4ddeefc582bdb4c15a3854ce2f096bee6dfd51",
      "86f82cf421b848827a8365fe2084b7102fc7812f179612b72a593c0ab3d4c3dc",
-     "432230e864633793bff9a4ce2aa13825553e56236de7aabe8395740fdae8efbf",
+     "d9a9d7e0608ea6bc657be664cd4f9c5436e3cfee3d825796371a69939a8acd87",
      "1f11a4fd5df179511d3852d6887db6c1df9268a0da1a5708b068610175287f80",
      "12a0d3deb6a322b29fce2023569727c4585709a3054219091201241d1a099c14",
      "664762de22c62a042ffda359ccc5757fdf6404f3517834c8dda6e1cb336bbeb3",
