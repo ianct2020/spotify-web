@@ -69,7 +69,7 @@ COMPLETE_CLOSES = {
 # único lector de `.version` es el de skips, en `history-data.js`).
 STATS_VERSION = 3            # v3: years[].days — el detalle por dia (la apertura del Wrapped)
 TRACK_PLAYS_VERSION = 5      # v5: cada entrada de `albums` lleva además el DÍA de la primera play válida (ficha de álbum: «primera vez»). v4: cada entrada de `albums` lleva plays y ms además de name/artist (la ficha de álbum decía "0 plays"). v3: agregó `albums`. v2: incluía entries "partial" para tracks solo con plays <30s
-SKIP_STATS_VERSION = 3      # v3: igual que v2, pero el `gid` se recalculó con el corte de feat/ft/with CON `\b` (v=270)
+SKIP_STATS_VERSION = 4      # v4: igual que v3, pero el `gid` se recalculó con la cola de versión tras el guion (v=271)
 LISTENED_VERSION = 2         # bump: excluye "Sonido Para Sacar Agua Del Movil"
 TRACK_DETAIL_VERSION = 1     # ficha de canción: plays por mes + primera/última + récords del track
 RECORDS_VERSION = 3          # v3: seis récords nuevos (día con más artistas, tema en más años, artista con más días, abandonado, crecimiento, racha de artista). v2: excluye todas las variantes del sonido saca-agua

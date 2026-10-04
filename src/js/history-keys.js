@@ -30,7 +30,7 @@
 const STATS_VERSION = 4;   // v4: `years[].days` — el detalle por día que dibuja el calendario de la apertura del Wrapped
 const PLAYS_VERSION = 5;   // v5: cada álbum de `albums` lleva además el día de la primera play válida
 const LISTENED_VERSION = 3;  // v3: las 91 tapas que faltaban (ítem 11) — mismo contenido, campo `img` ya no nulo
-const SKIP_VERSION = 3;    // v3: mismo formato que v2, pero el `gid` se recalculó con el corte de feat/ft/with CON `\b` (v=270): «With You» y «With Somebody Else» ya no son el mismo tema
+const SKIP_VERSION = 4;    // v4: mismo formato que v3, pero el `gid` se recalculó con la cola de versión tras el guion (v=271): «X - Sped Up», «- Piano», «- reimagined», «- Raw Rhymes», «- Refix» y «- Music From …» vuelven a ser el mismo tema que su base
 const DETAIL_VERSION = 1;
 const RECORDS_VERSION = 3;  // v3: seis récords nuevos (día con más artistas, tema en más años, artista con más días, abandonado, crecimiento, racha de artista)
 const ARTIST_TRACKS_VERSION = 2;  // v2: `totals` lleva el día de la primera play válida del artista

@@ -36,7 +36,7 @@ const COMPLETE_CLOSES = new Set([
 // `version` de stats ni el de listened; el único lector es el de skips.
 const STATS_VERSION = 2;
 const TRACK_PLAYS_VERSION = 5;   // v5: cada álbum de `albums` lleva además el día de la primera play válida (espejo de gen-stats.py)
-const SKIP_STATS_VERSION = 3;    // v3: dato crudo (ms de cada skip/cierre) + gid; el veredicto pasó a features/skips.js. El bump a v3 es por el `gid`: el corte de feat/ft/with pasó a tener `\b` en v=270 y reagrupa
+const SKIP_STATS_VERSION = 4;    // v4: dato crudo (ms de cada skip/cierre) + gid; el veredicto pasó a features/skips.js. El bump a v4 es por el `gid`: la cola de versión tras el guion («- Sped Up», «- Piano»…) reagrupa en v=271. ⚠️ Tiene que ir a la par del guarda `>= N` de features/history-data.js: si se queda atrás, el BYOH recién importado se RECHAZA
 const LISTENED_VERSION = 2;
 const TRACK_DETAIL_VERSION = 1;
 const RECORDS_VERSION = 3;
