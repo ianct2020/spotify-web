@@ -82,28 +82,37 @@ let likedIndexPromise = null;
 
 // Minúsculas y sin el agregado entre paréntesis o corchetes: «Tema (Live)» y
 // «Tema» caen en la misma clave. Estaba escrito CUATRO veces en este archivo
-// (paso 3 del plan de normalizadores)… pero no eran cuatro copias.
+// (paso 3 del plan de normalizadores)… pero no eran cuatro copias: eran DOS
+// regex distintos, y el informe los daba por iguales.
 //
-// ⚠️ SON DOS REGEX DISTINTOS, y el informe los daba por iguales:
+//   el que quedó  → /\s*\(.*?\)|\s*\[.*?\]/   exige delimitadores que COINCIDEN
+//   el que se fue → /\s*[([].*?[)\]]/           aceptaba «(Live]» y «[Live)»
 //
-//   sinParentesis          → /\s*\(.*?\)|\s*\[.*?\]/   delimitadores que COINCIDEN
-//   sinParentesisMezclados → /\s*[([].*?[)\]]/           acepta «(Live]» y «[Live)»
+// ⚠️ **El mezclado estaba MAL, y había un caso real en la biblioteca.** Como
+// abre con `(` y puede cerrar con `]`, en «Body (Remix) [feat. ArrDee, E1 (3x3),
+// ZT (3x3), Bugzy Malone, Buni, Fivio Foreign & Darkoo]» (Tion Wayne) el primer
+// match se come desde el `(` de «(Remix)» hasta el `]` de «E1 (3x3]»… y la clave
+// quedaba «body, zt, bugzy malone, buni, fivio foreign & darkoo]»: un corchete
+// de cierre suelto incluido. O sea que el ♥ de ese tema NO se encendía aunque
+// estuviera likeado. Es la misma familia que el corte de feat que se llevaba el
+// «)» por delante (`util/track-match.js`, v=270).
 //
-// El segundo es el que usaba `likeNameKey`. Unificarlos en uno cambiaría
-// salidas —medido: 2 entradas del corpus real de 39.247—, así que quedan dos
-// funciones con el nombre que dice en qué se diferencian, en vez de un regex
-// repetido cuatro veces del que nadie podía ver que no era el mismo.
+// Desde v=272 `likeNameKey` usa el de delimitadores que coinciden, que lo deja
+// en «body», y el mezclado se borró: era su único llamador. Cambiar esto CAMBIA
+// una clave de ♥, así que fue con contrato escrito antes y la foto regenerada en
+// un commit aparte. Lo que se paga: tres casos a mano de la foto con
+// delimitadores a propósito desbalanceados («Tema (Live]») dejan de perder su
+// cola. En el corpus real de 39.247 pares ese caso aparece UNA vez, y es
+// justamente el de arriba, donde recortar era el error.
 //
-// ⚠️ Y el mezclado es el PEOR de los dos en un caso real de la biblioteca:
-// «Body (Remix) [feat. ArrDee, E1 (3x3), ZT (3x3), …]» le queda como
-// «body, zt, bugzy malone, buni, fivio foreign & darkoo]», mientras que
-// `sinParentesis` lo deja en «body». Arreglarlo CAMBIA una clave de ♥, así que
-// no entra en esta tanda: está anotado en PENDIENTES.md.
+// ⚠️ `likeNameKey` no persiste NADA: alimenta el `Set` en memoria de
+// `ensureLikedIndex()` y se consulta en el mismo render. `wthree.js` no escribe
+// en IndexedDB (0 llamadas) y lo único que pone en localStorage es el id y el
+// nombre de la playlist. Verificado antes de tocarlo.
 const sinParentesis = (s) => (s || '').toLowerCase().replace(/\s*\(.*?\)|\s*\[.*?\]/g, '').trim();
-const sinParentesisMezclados = (s) => (s || '').toLowerCase().replace(/\s*[([].*?[)\]]/g, '').trim();
 
 function likeNameKey(name, artist) {
-  const n = sinParentesisMezclados(name);
+  const n = sinParentesis(name);
   const ar = (artist || '').toLowerCase().trim();
   return `${n}||${ar}`;
 }

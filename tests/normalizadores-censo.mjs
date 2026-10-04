@@ -136,8 +136,11 @@ const searchLikesNormalize = extraer('features/search-likes.js', 'normalize', { 
 const hiddenSyncNormName = normPlaylistName;
 const sinClasificarNormName = extraer('features/sin-clasificar.js', 'normName', { deps: { normPlaylistName: hiddenSyncNormName } });
 // PASO 3: likeNameKey ya no lleva el regex adentro; usa el helper del archivo.
-const sinParentesisMezclados = extraer('features/wthree.js', 'sinParentesisMezclados');
-const wthreeLikeNameKey = extraer('features/wthree.js', 'likeNameKey', { deps: { sinParentesisMezclados } });
+// v=272: y ese helper es `sinParentesis`, el de delimitadores que COINCIDEN. El
+// mezclado se borró de `wthree.js` al quedarse sin llamadores, así que acá ya no
+// hay nada que extraer con ese nombre.
+const sinParentesis = extraer('features/wthree.js', 'sinParentesis');
+const wthreeLikeNameKey = extraer('features/wthree.js', 'likeNameKey', { deps: { sinParentesis } });
 const historyAlbumKey = extraer('history-processor.js', 'albumKey');
 
 // ── El censo ─────────────────────────────────────────────────────────────────

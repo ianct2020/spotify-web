@@ -227,21 +227,22 @@ ok(!/function normName\(s\) \{\s*\n\s*return \(s \|\| ''\)\.trim\(\)\.toLowerCas
 
 const cuantasDefiniciones = (rel, re) => (leerSrc(rel).match(re) || []).length;
 
-// PASO 3: los cuatro regex de wthree.js eran DOS regex distintos repetidos, no
-// cuatro copias de uno. Ahora cada uno está una sola vez y con nombre; lo que
-// hay que impedir es que vuelvan a escribirse inline, y que alguien los
-// «unifique» creyendo que son el mismo (cambia salidas: medido, 2 entradas del
-// corpus real).
+// PASO 3 + v=272: los cuatro regex de wthree.js eran DOS regex distintos
+// repetidos, no cuatro copias de uno. El paso 3 les puso nombre; v=272 descubrió
+// que el MEZCLADO estaba mal —se comía el cierre equivocado en «Body (Remix)
+// [feat. …]» y ese ♥ no se encendía— y lo borró, porque `likeNameKey` era su
+// único llamador. Ahora queda UN solo helper en el archivo, y lo que hay que
+// impedir es que vuelva a aparecer el mezclado o que el regex se escriba inline.
 const wthree = leerSrc('features/wthree.js');
-eq(cuantasDefiniciones('features/wthree.js', /\.toLowerCase\(\)\.replace\(\/\\s\*\[\(\[\]/g), 1,
-  'wthree: el regex de delimitadores MEZCLADOS está una sola vez');
 eq(cuantasDefiniciones('features/wthree.js', /\.toLowerCase\(\)\.replace\(\/\\s\*\\\(\.\*\?\\\)\|/g), 1,
   'wthree: el regex de delimitadores que COINCIDEN está una sola vez');
-ok(/const sinParentesis = /.test(wthree) && /const sinParentesisMezclados = /.test(wthree),
-  'wthree: los dos helpers existen, con nombres que dicen en qué difieren');
+eq(cuantasDefiniciones('features/wthree.js', /\.toLowerCase\(\)\.replace\(\/\\s\*\[\(\[\]/g), 0,
+  'wthree: el regex de delimitadores MEZCLADOS ya no está (se comía el cierre equivocado)');
+ok(/const sinParentesis = /.test(wthree) && !/sinParentesisMezclados/.test(wthree),
+  'wthree: queda un solo helper y del mezclado no quedó ni el nombre');
 eq((wthree.match(/\bsinParentesis\(t\.name\)/g) || []).length, 3,
   'wthree: las tres copias idénticas (antes :765, :772, :787) usan el helper');
-ok(!/sinParentesisMezclados\(t\.name\)/.test(wthree),
-  'wthree: la tracklist NO pasó al regex mezclado (eso cambiaría claves de ♥)');
+ok(/const n = sinParentesis\(name\);/.test(wthree),
+  'wthree: likeNameKey usa el helper de delimitadores que coinciden (el ♥ de «Body (Remix)»)');
 
 console.log(`\nOK normalizadores-foto: ${n} asserts`);
