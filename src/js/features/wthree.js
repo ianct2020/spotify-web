@@ -80,8 +80,30 @@ let lastLocalSnapshot = null;
 let likedIndex = null;      // { ids:Set, nameKeys:Set, albumKeys:Set } | null
 let likedIndexPromise = null;
 
+// Minúsculas y sin el agregado entre paréntesis o corchetes: «Tema (Live)» y
+// «Tema» caen en la misma clave. Estaba escrito CUATRO veces en este archivo
+// (paso 3 del plan de normalizadores)… pero no eran cuatro copias.
+//
+// ⚠️ SON DOS REGEX DISTINTOS, y el informe los daba por iguales:
+//
+//   sinParentesis          → /\s*\(.*?\)|\s*\[.*?\]/   delimitadores que COINCIDEN
+//   sinParentesisMezclados → /\s*[([].*?[)\]]/           acepta «(Live]» y «[Live)»
+//
+// El segundo es el que usaba `likeNameKey`. Unificarlos en uno cambiaría
+// salidas —medido: 2 entradas del corpus real de 39.247—, así que quedan dos
+// funciones con el nombre que dice en qué se diferencian, en vez de un regex
+// repetido cuatro veces del que nadie podía ver que no era el mismo.
+//
+// ⚠️ Y el mezclado es el PEOR de los dos en un caso real de la biblioteca:
+// «Body (Remix) [feat. ArrDee, E1 (3x3), ZT (3x3), …]» le queda como
+// «body, zt, bugzy malone, buni, fivio foreign & darkoo]», mientras que
+// `sinParentesis` lo deja en «body». Arreglarlo CAMBIA una clave de ♥, así que
+// no entra en esta tanda: está anotado en PENDIENTES.md.
+const sinParentesis = (s) => (s || '').toLowerCase().replace(/\s*\(.*?\)|\s*\[.*?\]/g, '').trim();
+const sinParentesisMezclados = (s) => (s || '').toLowerCase().replace(/\s*[([].*?[)\]]/g, '').trim();
+
 function likeNameKey(name, artist) {
-  const n = (name || '').toLowerCase().replace(/\s*[([].*?[)\]]/g, '').trim();
+  const n = sinParentesisMezclados(name);
   const ar = (artist || '').toLowerCase().trim();
   return `${n}||${ar}`;
 }
@@ -762,14 +784,14 @@ async function openAlbumModal(a) {
   const playsByTrackName = new Map();
   for (const t of (historyStats?.top_tracks_all_time || [])) {
     if ((t.artist || '').toLowerCase() === (a.artist || '').toLowerCase()) {
-      const norm = (t.name || '').toLowerCase().replace(/\s*\(.*?\)|\s*\[.*?\]/g, '').trim();
+      const norm = sinParentesis(t.name);
       playsByTrackName.set(norm, (playsByTrackName.get(norm) || 0) + (t.plays || 0));
     }
   }
   for (const y of (historyStats?.years || [])) {
     for (const t of (y.top_tracks || [])) {
       if ((t.artist || '').toLowerCase() !== (a.artist || '').toLowerCase()) continue;
-      const norm = (t.name || '').toLowerCase().replace(/\s*\(.*?\)|\s*\[.*?\]/g, '').trim();
+      const norm = sinParentesis(t.name);
       if (!playsByTrackName.has(norm)) playsByTrackName.set(norm, t.plays || 0);
     }
   }
@@ -784,7 +806,7 @@ async function openAlbumModal(a) {
 
   const pickIds = new Set(a.picks.map(p => p.id));
   const trackData = tracks.map(t => {
-    const norm = (t.name || '').toLowerCase().replace(/\s*\(.*?\)|\s*\[.*?\]/g, '').trim();
+    const norm = sinParentesis(t.name);
     return {
       id: t.id,
       uri: t.uri,

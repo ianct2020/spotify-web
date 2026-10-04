@@ -135,7 +135,9 @@ const searchLikesNormalize = extraer('features/search-likes.js', 'normalize', { 
 // PASO 2: hidden-sync lo exporta como `normPlaylistName`, así que se importa.
 const hiddenSyncNormName = normPlaylistName;
 const sinClasificarNormName = extraer('features/sin-clasificar.js', 'normName', { deps: { normPlaylistName: hiddenSyncNormName } });
-const wthreeLikeNameKey = extraer('features/wthree.js', 'likeNameKey');
+// PASO 3: likeNameKey ya no lleva el regex adentro; usa el helper del archivo.
+const sinParentesisMezclados = extraer('features/wthree.js', 'sinParentesisMezclados');
+const wthreeLikeNameKey = extraer('features/wthree.js', 'likeNameKey', { deps: { sinParentesisMezclados } });
 const historyAlbumKey = extraer('history-processor.js', 'albumKey');
 
 // ── El censo ─────────────────────────────────────────────────────────────────

@@ -226,7 +226,22 @@ ok(!/function normName\(s\) \{\s*\n\s*return \(s \|\| ''\)\.trim\(\)\.toLowerCas
   'sin-clasificar no se copió el cuerpo de hidden-sync');
 
 const cuantasDefiniciones = (rel, re) => (leerSrc(rel).match(re) || []).length;
+
+// PASO 3: los cuatro regex de wthree.js eran DOS regex distintos repetidos, no
+// cuatro copias de uno. Ahora cada uno está una sola vez y con nombre; lo que
+// hay que impedir es que vuelvan a escribirse inline, y que alguien los
+// «unifique» creyendo que son el mismo (cambia salidas: medido, 2 entradas del
+// corpus real).
+const wthree = leerSrc('features/wthree.js');
 eq(cuantasDefiniciones('features/wthree.js', /\.toLowerCase\(\)\.replace\(\/\\s\*\[\(\[\]/g), 1,
-  'wthree: el regex de delimitadores MEZCLADOS de likeNameKey está una sola vez');
+  'wthree: el regex de delimitadores MEZCLADOS está una sola vez');
+eq(cuantasDefiniciones('features/wthree.js', /\.toLowerCase\(\)\.replace\(\/\\s\*\\\(\.\*\?\\\)\|/g), 1,
+  'wthree: el regex de delimitadores que COINCIDEN está una sola vez');
+ok(/const sinParentesis = /.test(wthree) && /const sinParentesisMezclados = /.test(wthree),
+  'wthree: los dos helpers existen, con nombres que dicen en qué difieren');
+eq((wthree.match(/\bsinParentesis\(t\.name\)/g) || []).length, 3,
+  'wthree: las tres copias idénticas (antes :765, :772, :787) usan el helper');
+ok(!/sinParentesisMezclados\(t\.name\)/.test(wthree),
+  'wthree: la tracklist NO pasó al regex mezclado (eso cambiaría claves de ♥)');
 
 console.log(`\nOK normalizadores-foto: ${n} asserts`);
