@@ -1,13 +1,21 @@
 <!doctype html><html lang="es"><head><meta charset="utf-8"><title>banco toasts</title>
 <!--
-  Banco del techo de toasts (v=246).
+  Banco del techo de toasts (v=246 · el tope corregido a 3 en v=273).
 
   Carga el CSS, `ui/toast.js` y `ui/bottom-layer.js` REALES: la capa de abajo, el
   apilado en columna y las clases de cada tipo son los de la app. Dispara varios
   toasts de golpe y cuenta cuántos hay a la vez.
 
-    ?n=7               cuántos toasts se disparan
-    ?espera=4          cuántos tiene que haber a la vez al final (3 documenta v=245)
+  ⚠️ **El que estaba mal era ESTE BANCO, no el codigo.** Esperaba 4 porque v=246
+  subio `MAX_VISIBLE` a 4 por un encargo que partia de una premisa falsa; **v=248
+  lo devolvio a 3** y nadie volvio a tocar el banco, asi que quedo en rojo desde
+  entonces. El tope de 3 es deliberado y esta documentado en dos lugares mas:
+  `ui/toast.js:38` (`MAX_VISIBLE = 3`) y el encabezado de
+  `tests/toast-tope.test.mjs` («El techo es 3: al llegar el cuarto se va el mas
+  viejo»). O sea que el banco contradecia al codigo Y a su propio test unitario.
+
+    ?n=7               cuantos toasts se disparan
+    ?espera=3          cuantos tiene que haber a la vez al final (= MAX_VISIBLE)
 
   Los textos son de ejemplo: este repo es público.
 -->
@@ -27,7 +35,7 @@ import { esperarA, hojasLegibles, fallar, listo } from '/banco/esperar.mjs';
 
 const q = new URLSearchParams(location.search);
 const n = Math.max(1, parseInt(q.get('n') || '7', 10));
-const espera = parseInt(q.get('espera') || '4', 10);
+const espera = parseInt(q.get('espera') || '3', 10);   // = MAX_VISIBLE de ui/toast.js
 
 try {
   await hojasLegibles(['theme.css', 'components.css', 'main.css']);

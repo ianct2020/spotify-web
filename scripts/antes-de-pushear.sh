@@ -9,7 +9,7 @@
 # entero de una vez, y sale con 1 si falló alguna.
 #
 #   1. node --check sobre todo src/ (la sintaxis, sin ejecutar nada)
-#   2. npm test (todas las suites)
+#   2. npm test (todas las suites) y los bancos que se autocomprueban
 #   3. docs/ está al día: un build de src/ en un directorio temporal da EXACTAMENTE
 #      lo que hay en docs/ (el olvido más fácil: editar src/ y no correr build.sh)
 #   4. el mismo ?v= en index.html (src y docs), en docs/callback.html y en el
@@ -36,9 +36,17 @@ if [ -z "$MALOS" ]; then ok "$N archivos parsean"; else mal "errores de sintaxis
 echo "2. npm test"
 if npm test --silent 2>&1 | tail -4 | sed 's/^/      /'; [ "${PIPESTATUS[0]}" -eq 0 ]; then ok "todas las suites"; else mal "hay suites que fallan (correr npm test para el detalle)"; fi
 
-echo "2b. bancos (barra · pausa-search)"
-if node scripts/correr-banco.mjs barra 2>&1 | sed 's/^/      /'; [ "${PIPESTATUS[0]}" -eq 0 ]; then ok "banco barra en verde"; else mal "banco barra falló (node scripts/correr-banco.mjs barra para el detalle)"; fi
-if node scripts/correr-banco.mjs pausa-search 2>&1 | sed 's/^/      /'; [ "${PIPESTATUS[0]}" -eq 0 ]; then ok "banco pausa-search en verde"; else mal "banco pausa-search falló (node scripts/correr-banco.mjs pausa-search para el detalle)"; fi
+# Los bancos que se autocomprueban. `mosaico` y `toasts` entraron en v=273:
+# estaban en rojo desde antes del 04/10 y justamente por no estar acá nadie los
+# miraba, igual que le había pasado a `barra` entre v=241 y v=261.
+echo "2b. bancos (barra · pausa-search · toasts · mosaico)"
+for B in barra pausa-search toasts mosaico; do
+  if node scripts/correr-banco.mjs "$B" 2>&1 | sed 's/^/      /'; [ "${PIPESTATUS[0]}" -eq 0 ]; then
+    ok "banco $B en verde"
+  else
+    mal "banco $B falló (node scripts/correr-banco.mjs $B para el detalle)"
+  fi
+done
 
 echo "3. docs/ está al día con src/"
 TMP="$(mktemp -d)"

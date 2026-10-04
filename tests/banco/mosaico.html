@@ -32,6 +32,17 @@
   La marca `data-banco="listo"` en el <html> aparece cuando el mosaico está
   dibujado, y `data-banco="error"` si algo falló. Igual que el resto de los
   bancos: primero se pregunta, después se fotografía.
+
+  ⚠️ **Dos modos, y el de la puerta es el segundo:**
+
+    (1) INSTRUMENTO (sin `?auto`): queda en `data-banco="esperando"` hasta que un
+        conductor externo inyecte `window.__baseMosaico` y llame a
+        `window.__banco.generar()`. Es el de las capturas y las comparaciones de
+        tinte. `scripts/correr-banco.mjs` NO puede hacerlo pasar: no hay quien
+        inyecte la base y este modo no emite `ok`.
+    (2) AUTOCOMPROBACIÓN (`?auto=1`, v=273): se fabrica una base SINTÉTICA, se
+        conduce solo y emite `data-banco="ok"` por `listo()`, como el resto de
+        los bancos. Sin datos privados y sin red. Es el que corre en `prepush`.
 -->
 <style>
   html, body { margin: 0; background: #0A0A0F; color: #e5e5e5; font: 13px/1.5 ui-monospace, monospace; }
@@ -42,7 +53,7 @@
 <div id="cartel">preparando…</div>
 <div id="caja"></div>
 <script type="module">
-import { esperarA } from '/banco/esperar.mjs';
+import { esperarA, listo, fallar } from '/banco/esperar.mjs';
 import { grillaPara, rejillaDelObjetivo, tilesALab, emparejar, mapaDeTinte, resumenDeEmparejado } from '/js/util/mosaico.js';
 import { bajarPortadas, soltarBitmaps, pintarMosaico } from '/js/features/mosaico-lienzo.js';
 
@@ -82,7 +93,7 @@ async function prepararImagen() {
   lienzoLectura.__pixeles = c.getImageData(0, 0, w, h).data;
 }
 
-async function emparejado(largo, uso) {
+async function emparejado(largo, uso, bajar = bajarPortadas) {
   // La clave del caché lleva las DOS cosas que cambian el emparejamiento. Con
   // solo `largo` —como hasta v=252, cuando no había otra perilla— pedir dos
   // niveles de variedad seguidos devolvía el primero y las capturas salían
@@ -96,18 +107,18 @@ async function emparejado(largo, uso) {
   const tObj = performance.now();
   const { indice, de } = emparejar({ objetivo, tilesLab, nTiles: base.ids.length, ...(uso === null ? {} : { penalUsoDE: uso }) });
   const tEmp = performance.now();
-  const bajada = await bajarPortadas({ indice, urlDeTile, onProgress: (n, t) => di(`bajando portadas… ${n}/${t}`) });
+  const bajada = await bajar({ indice, urlDeTile, onProgress: (n, t) => di(`bajando portadas… ${n}/${t}`) });
   const r = { cols, filas, indice, de, ...bajada, ms: { obj: tObj - t0, emp: tEmp - tObj, red: performance.now() - tEmp } };
   cacheEmp.set(clave, r);
   return r;
 }
 
 /** Genera y dibuja. Devuelve los números, que es lo que lee el conductor. */
-async function generar({ largo = Number(q.get('largo') || 80), tinte = Number(q.get('tinte') ?? 45), modo = q.get('modo') || 'adaptativo', uso = q.has('uso') ? Number(q.get('uso')) : null } = {}) {
+async function generar({ largo = Number(q.get('largo') || 80), tinte = Number(q.get('tinte') ?? 45), modo = q.get('modo') || 'adaptativo', uso = q.has('uso') ? Number(q.get('uso')) : null, bajar = bajarPortadas } = {}) {
   document.documentElement.removeAttribute('data-banco');
   await prepararBase();
   await prepararImagen();
-  const e = await emparejado(largo, uso);
+  const e = await emparejado(largo, uso, bajar);
   const ancho = e.cols * LADO_CELDA, alto = e.filas * LADO_CELDA;
 
   if (salida) { salida.width = salida.height = 0; salida.remove(); }
@@ -181,6 +192,231 @@ function recorte(x, y, w, h) {
 window.__banco = { generar, prepararSalida, trozo, vista, recorte, soltar: () => { if (salida) { salida.width = salida.height = 0; } for (const e of cacheEmp.values()) soltarBitmaps(e.bitmaps); cacheEmp.clear(); } };
 window.addEventListener('error', (e) => { di(`BANCO ERROR: ${e.message}`); document.documentElement.setAttribute('data-banco', 'error'); });
 window.addEventListener('unhandledrejection', (e) => { di(`BANCO ERROR: ${e.reason?.message || e.reason}`); document.documentElement.setAttribute('data-banco', 'error'); });
-di('listo para generar: window.__banco.generar({ largo, tinte, modo })');
-document.documentElement.setAttribute('data-banco', 'esperando');
+
+// ── Modo autocomprobacion: `?auto=1` ────────────────────────────────────────
+//
+// POR QUE EXISTE: hasta v=272 este archivo era SOLO un instrumento. Se quedaba
+// en `data-banco="esperando"` esperando a que un conductor externo (un driver
+// CDP) le inyectara la base de colores y llamara a `generar()`. O sea que
+// `scripts/correr-banco.mjs`, que abre la pagina y busca `data-banco="ok"`,
+// **no podia hacerlo pasar nunca**: ni habia quien inyectara la base, ni este
+// banco emitia `ok` (ponia `listo`, que el runner no mira). Por eso figuraba en
+// rojo con `estado="esperando"` y por eso no estaba en la puerta de `prepush`.
+// No era un defecto del codigo del mosaico: era un banco que no se podia correr.
+//
+// El modo `auto` lo arregla sin tocar el modo instrumento: se fabrica una base
+// SINTETICA en la propia pagina y se conduce solo. Dos cosas que lo hacen apto
+// para la puerta:
+//
+//   - **No hay datos privados.** La base real son los identificadores de las
+//     5.715 portadas de la biblioteca de Ian, o sea el catalogo de lo que
+//     escucha, y este repo es PUBLICO. La sintetica es un recorrido
+//     determinista del cubo RGB: no sale de ninguna cuenta.
+//   - **No toca la red NI decodifica imagenes.** El objetivo se dibuja en la
+//     pagina y las tapas tambien (ver `bajarDibujando` y `objetivoDibujado`).
+//     Las dos cosas son por determinismo, no por comodidad: el decodificado de
+//     imagenes no respeta el reloj virtual del runner y hacia que el banco
+//     saliera a medias 2 de cada 5 corridas. Cada una lo explica en su sitio.
+//     Las tapas sinteticas igual traen su `data:` URL en `rarasUrl`, asi que la
+//     base sirve tambien para conducirla con el bajador real.
+//
+// Lo que comprueba son INVARIANTES de estructura, no las cifras del mosaico de
+// Ian: esas dependen de la base real y no se pueden versionar acá. Y lo que NO
+// cubre es la bajada de tapas: eso queda para el modo instrumento.
+
+// Cuantas tapas sinteticas. Y cuantas celdas, abajo. Los dos numeros estan
+// elegidos para que el modo auto termine MUY dentro del presupuesto de tiempo
+// virtual del runner: con 180 tapas y 18×24 celdas el banco pasaba, pero una
+// mutacion que agregaba una columna ya lo dejaba a medias y el runner leia
+// `data-banco="listo"` —generar() habia terminado, las comprobaciones no— en vez
+// de un rojo con su mensaje. Un banco al borde del presupuesto miente en el modo
+// mas caro, que es justo cuando algo esta mal.
+const N_TAPAS = 96;
+const LARGO_AUTO = 16;
+
+const u8aB64 = (u) => { let s = ''; for (const x of u) s += String.fromCharCode(x); return btoa(s); };
+
+/**
+ * Una base de tapas falsa pero coherente: los 27 bytes de cada tapa y el PNG
+ * que se baja de ella pintan LOS MISMOS nueve colores, asi que el ΔE que mide
+ * `emparejar` es honesto y el dibujo se corresponde con el emparejamiento.
+ */
+function baseSintetica(n) {
+  const ids = [], datos = new Uint8Array(n * 27), rarasUrl = {};
+  const lienzo = document.createElement('canvas');
+  lienzo.width = lienzo.height = 64;
+  const cx = lienzo.getContext('2d', { alpha: false });
+  let k = 0;
+  for (let i = 0; i < n; i++) {
+    // 6 niveles por canal = 216 combinaciones; nos quedamos con las primeras n.
+    const r = (i % 6) * 51, g = (Math.floor(i / 6) % 6) * 51, b = (Math.floor(i / 36) % 6) * 51;
+    const id = i.toString(16).padStart(24, '0');   // sintetico: NO es una tapa real
+    ids.push(id);
+    for (let c = 0; c < 9; c++) {
+      const d = c * 6;   // las nueve subceldas se aclaran un poco: algo que distinguir
+      const rr = Math.min(255, r + d), gg = Math.min(255, g + d), bb = Math.min(255, b + d);
+      datos[k++] = rr; datos[k++] = gg; datos[k++] = bb;
+      cx.fillStyle = `rgb(${rr},${gg},${bb})`;
+      cx.fillRect((c % 3) * 21, Math.floor(c / 3) * 21, 22, 22);
+    }
+    rarasUrl[id] = lienzo.toDataURL('image/png');
+  }
+  // `host`/`hosts` no se usan: `rarasUrl` cubre las n, asi que `urlDeTile`
+  // nunca llega a armar una URL de CDN. El host va a un dominio invalido a
+  // proposito: si alguna vez se escapara una, falla en vez de salir a la red.
+  return { ids, datos: u8aB64(datos), host: u8aB64(new Uint8Array(n)), hosts: ['no-se-usa.invalid'], rarasUrl };
+}
+
+/**
+ * El objetivo, DIBUJADO en la pagina en vez de bajado y decodificado.
+ *
+ * ⚠️ Y no es por comodidad: `createImageBitmap()` sobre
+ * `/banco/atardecer-prueba.png` (1.200×1.600) **se cuelga** en
+ * `--headless=new` con `--virtual-time-budget`. Medido el 04/10 con una sonda
+ * minima: el `fetch` resuelve y el blob llega entero (116.065 bytes,
+ * `image/png`), y la promesa de `createImageBitmap` no se resuelve nunca, asi
+ * que `prepararImagen()` no vuelve y el banco se queda clavado. Con un PNG de
+ * 8×8 en `data:` la misma llamada resuelve bien, asi que no es la API: es el
+ * decodificado de la imagen grande bajo reloj virtual. Es la MISMA familia que
+ * el `requestAnimationFrame` que documenta `esperar.mjs`: en headless, lo que
+ * no se pinta no existe.
+ *
+ * Por eso el modo auto no pasa por `prepararImagen()`: le deja `lienzoLectura`
+ * ya puesto —el guarda `if (lienzoLectura) return` lo respeta— con un objetivo
+ * dibujado a mano. Sale mas chico y mas rapido, es determinista, y no depende
+ * de ningun archivo. El modo INSTRUMENTO sigue usando la imagen canonica: ahi
+ * corre un Chrome de verdad por CDP y el decodificado funciona.
+ */
+function objetivoDibujado(ancho = 240, alto = 320) {
+  const cv = document.createElement('canvas');
+  cv.width = ancho; cv.height = alto;
+  const c = cv.getContext('2d', { alpha: false, willReadFrequently: true });
+  // Un degradado diagonal con bandas: zonas planas (ΔE bajo) y bordes duros
+  // (ΔE alto), que es lo que hace que el tinte adaptativo tenga algo que hacer.
+  for (let y = 0; y < alto; y++) {
+    for (let x = 0; x < ancho; x += 8) {
+      const t = (x / ancho + y / alto) / 2;
+      const banda = (Math.floor(y / 40) % 2) ? 1 : 0.55;
+      c.fillStyle = `rgb(${Math.round(255 * t * banda)},${Math.round(255 * (1 - t) * banda)},${Math.round(160 + 80 * Math.sin(t * 6))})`;
+      c.fillRect(x, y, 8, 1);
+    }
+  }
+  cv.__pixeles = c.getImageData(0, 0, ancho, alto).data;
+  return cv;
+}
+
+/**
+ * El mismo contrato que `bajarPortadas`, pero DIBUJANDO cada tapa en un canvas
+ * en vez de bajarla y decodificarla.
+ *
+ * ⚠️ **Por que no se usa el bajador real acá, que seria mas cobertura.** Porque
+ * no se puede hacer determinista bajo el runner. `conTapa` hace
+ * `createImageBitmap()`, y el decodificado NO respeta el reloj virtual de
+ * `--virtual-time-budget`: el reloj se adelanta solo mientras los decodificados
+ * reales siguen en curso, asi que el `--dump-dom` cae en medio de
+ * `bajarPortadas`. Medido el 04/10: con 29 tapas de 64×64, **2 de 5 corridas**
+ * salieron a medias («bajando portadas… 24/29»), y subir el presupuesto de 20 s
+ * a 45 s no cambio nada —el reloj virtual se adelanta igual—. Con tapas mas
+ * chicas la carrera tiene mas margen y sigue siendo una carrera, que es
+ * exactamente lo que `esperar.mjs` existe para no volver a hacer.
+ *
+ * Asi que el modo auto cubre el MOSAICO (`grillaPara`, `rejillaDelObjetivo`,
+ * `tilesALab`, `emparejar`, `mapaDeTinte`, `pintarMosaico`,
+ * `resumenDeEmparejado`) y deja fuera la BAJADA (`bajarPortadas`, `conTapa`).
+ * Eso queda sin puerta y hay que decirlo: lo cubre el modo instrumento, donde
+ * corre un Chrome de verdad por CDP y el decodificado funciona.
+ *
+ * `pintarMosaico` hace `ctx.drawImage(dib, …)` y un `<canvas>` es dibujable,
+ * asi que el camino de dibujo que se ejercita sigue siendo el real.
+ */
+async function bajarDibujando({ indice, onProgress }) {
+  const porPortada = new Map();
+  for (let k = 0; k < indice.length; k++) {
+    const i = indice[k];
+    if (!porPortada.has(i)) porPortada.set(i, []);
+    porPortada.get(i).push(k);
+  }
+  const bitmaps = new Map();
+  let bytes = 0;
+  for (const i of porPortada.keys()) {
+    const cv = document.createElement('canvas');
+    cv.width = cv.height = 64;
+    const cx = cv.getContext('2d', { alpha: false });
+    for (let c = 0; c < 9; c++) {
+      const o = i * 27 + c * 3;
+      cx.fillStyle = `rgb(${base.datos[o]},${base.datos[o + 1]},${base.datos[o + 2]})`;
+      cx.fillRect((c % 3) * 21, Math.floor(c / 3) * 21, 22, 22);
+    }
+    bitmaps.set(i, cv);
+    bytes += 64 * 64 * 4;
+  }
+  onProgress?.(porPortada.size, porPortada.size);
+  return { porPortada, bitmaps, portadas: porPortada.size, bajadas: porPortada.size, fallidas: 0, bytes };
+}
+
+async function auto() {
+  const largo = Number(q.get('largo') || LARGO_AUTO);
+  const nTapas = Number(q.get('tapas') || N_TAPAS);
+  di('auto: fabricando la base sintetica…');
+  window.__baseMosaico = baseSintetica(nTapas);
+  lienzoLectura = objetivoDibujado();
+  di('auto: base y objetivo listos, generando…');
+
+  const info = await generar({ largo, tinte: 45, modo: 'adaptativo', uso: 3, bajar: bajarDibujando });
+  di('auto: generado, comprobando…');
+
+  // La rejilla que TIENE que salir, calculada acá y NO con `grillaPara`.
+  //
+  // ⚠️ Es a proposito y esta probado: cuando el oraculo era `grillaPara` misma,
+  // mutarla para que devolviera una columna de mas **pasaba la puerta** —el
+  // banco y el codigo coincidian en el error—. El objetivo es vertical, asi que
+  // `largo` manda en filas y las columnas salen de la proporcion.
+  const esperadas = {
+    filas: largo,
+    cols: Math.max(2, Math.round((largo * lienzoLectura.width) / lienzoLectura.height)),
+  };
+
+  // ¿Se dibujo algo de verdad, o quedo el fondo? Se muestrea el lienzo y se
+  // cuentan colores distintos: el fondo solo daria uno.
+  const px = salida.getContext('2d', { alpha: false }).getImageData(0, 0, salida.width, salida.height).data;
+  const colores = new Set();
+  for (let i = 0; i < px.length; i += 4 * 97) colores.add((px[i] << 16) | (px[i + 1] << 8) | px[i + 2]);
+
+  const N = nTapas;
+  const checks = [
+    [info.filas === esperadas.filas && info.cols === esperadas.cols,
+      `la rejilla es ${info.cols}×${info.filas} y para este objetivo tendria que ser ${esperadas.cols}×${esperadas.filas}`],
+    [info.celdas === info.cols * info.filas,
+      `las celdas emparejadas son ${info.celdas} y la rejilla tiene ${info.cols * info.filas}`],
+    [info.fallidas === 0,
+      `${info.fallidas} tapas sinteticas quedaron sin dibujar`],
+    [info.portadas === info.distintas,
+      `se bajaron ${info.portadas} tapas pero el emparejado usa ${info.distintas} distintas`],
+    [info.distintas > 1 && info.distintas <= N,
+      `el emparejado usa ${info.distintas} tapas distintas de ${N}: no esta discriminando`],
+    [info.masRepetida < info.celdas,
+      `una sola tapa se repite en las ${info.masRepetida} celdas: el emparejado colapso`],
+    [colores.size > 1,
+      `el lienzo tiene ${colores.size} color(es) distintos en el muestreo: no se dibujo nada`],
+    [info.ancho === info.cols * 64 && info.alto === info.filas * 64,
+      `el lienzo es ${info.ancho}×${info.alto} y la rejilla pide ${info.cols * 64}×${info.filas * 64}`],
+  ];
+
+  const malas = checks.filter(([ok]) => !ok).map(([, frase]) => frase);
+  if (malas.length) throw new Error('BANCO: ' + malas.join(' · '));
+
+  const resumen = `auto: ${info.cols}×${info.filas} celdas · ${info.distintas} tapas distintas de ${N} `
+    + `(max ${info.masRepetida}, pegadas ${info.pegadas}) · ${info.fallidas} fallidas · `
+    + `ΔE med ${info.deMedio} p90 ${info.deP90} · lienzo ${info.ancho}×${info.alto} · `
+    + `${colores.size} colores en el muestreo`;
+  di(resumen);
+  listo(resumen);
+}
+
+if (q.get('auto') === '1') {
+  try { await auto(); } catch (e) { fallar(e); }
+} else {
+  di('listo para generar: window.__banco.generar({ largo, tinte, modo })');
+  document.documentElement.setAttribute('data-banco', 'esperando');
+}
 </script></body></html>
