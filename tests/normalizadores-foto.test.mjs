@@ -199,6 +199,32 @@ for (const rel of ['api/itunes.js', 'api/preview-providers.js', 'api/statsfm.js'
 ok(/export function normProveedor/.test(leerSrc('util/texto.js')),
   'util/texto.js exporta normProveedor (la única copia del cuerpo)');
 
+// PASO 2a: el tronco lower+NFD está una sola vez, y cada llamador le pone SU
+// final encima. Lo que hay que impedir es que el final se cuele hacia abajo:
+// `junk.js` no recorta, `artist-card.js` recorta y `search-likes.js` recorta y
+// colapsa. Si alguien le mete un trim a `sinTildes`, las tres cambian.
+ok(/export function sinTildes/.test(leerSrc('util/texto.js')),
+  'util/texto.js exporta sinTildes');
+ok(!/export function sinTildes[\s\S]{0,240}?\.trim\(\)/.test(leerSrc('util/texto.js')),
+  'sinTildes NO recorta: el trim es de cada llamador (junk.js no lleva ninguno)');
+ok(/const normalize = sinTildes;/.test(leerSrc('util/junk.js')),
+  'junk.js usa sinTildes sin nada encima (es el que no recorta)');
+ok(/const normName = s => sinTildes\(s\)\.trim\(\);/.test(leerSrc('features/artist-card.js')),
+  'artist-card.js le pone el trim encima');
+ok(/return sinTildes\(s\)\s*\n\s*\.replace\(\/\\s\+\/g, ' '\)\s*\n\s*\.trim\(\);/.test(leerSrc('features/search-likes.js')),
+  'search-likes.js le pone el colapso y el trim encima');
+for (const rel of ['util/junk.js', 'features/artist-card.js', 'features/search-likes.js']) {
+  ok(!/normalize\('NFD'\)/.test(leerSrc(rel)), `${rel} ya no normaliza NFD por su cuenta`);
+}
+
+// PASO 2b: el nombre de playlist tiene UN dueño, el módulo que lo escribe.
+ok(/export \{ normName as normPlaylistName \}/.test(leerSrc('util/hidden-sync.js')),
+  'hidden-sync exporta normPlaylistName (es quien escribe esos nombres)');
+ok(/normPlaylistName/.test(leerSrc('features/sin-clasificar.js')),
+  'sin-clasificar usa el de hidden-sync y no una copia');
+ok(!/function normName\(s\) \{\s*\n\s*return \(s \|\| ''\)\.trim\(\)\.toLowerCase\(\);/.test(leerSrc('features/sin-clasificar.js')),
+  'sin-clasificar no se copió el cuerpo de hidden-sync');
+
 const cuantasDefiniciones = (rel, re) => (leerSrc(rel).match(re) || []).length;
 eq(cuantasDefiniciones('features/wthree.js', /\.toLowerCase\(\)\.replace\(\/\\s\*\[\(\[\]/g), 1,
   'wthree: el regex de delimitadores MEZCLADOS de likeNameKey está una sola vez');

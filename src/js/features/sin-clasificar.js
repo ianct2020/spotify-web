@@ -20,7 +20,7 @@ import {
 import { borrarLikesVerificado } from '../util/borrado-verificado.js';
 import { vigilarRuta } from '../util/vigencia-ruta.js';
 import { idbGetCached, idbSetCached, idbDel } from '../idb.js';
-import { createHiddenStore, uriDeTrackId } from '../util/hidden-sync.js';
+import { createHiddenStore, uriDeTrackId, normPlaylistName } from '../util/hidden-sync.js';
 import { prefKey, migratePrefKey } from '../storage.js';
 import { addUrisToPlaylists, toastAddResult, getOwnPlaylists } from '../util/playlist-add.js';
 import { escapeHtml, pageHeader, showProgress, hideProgress, isCancelled, confirmModal, tarjetaSinLikes } from '../ui/components.js';
@@ -139,8 +139,14 @@ function esPlaylistDeOcultos(nombre) {
   return normName(nombre).startsWith(PREFIJO_OCULTOS);
 }
 
+// El colapso de espacios va ENCIMA del normalizador de hidden-sync, que es
+// quien escribe estos nombres. Antes esto era una copia con su propio criterio
+// (paso 2 del plan de normalizadores): dos funciones para comparar un dato que
+// tiene un solo dueño. El colapso no se empujó hacia abajo porque cambiaría la
+// salida de `findPlaylist`, y el `String()` se conserva porque el de allá
+// asume que ya le llega un string.
 function normName(s) {
-  return String(s || '').toLowerCase().replace(/\s+/g, ' ').trim();
+  return normPlaylistName(String(s || '')).replace(/\s+/g, ' ').trim();
 }
 
 // Clave de respaldo cuando un track no tiene id de Spotify.

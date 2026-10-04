@@ -103,14 +103,19 @@ import { songKey, songKeysCandidatas, songKeyBase } from '../src/js/util/song-id
 import { normalizeName, normalizeKey } from '../src/js/util/versions-guard.js';
 import { baseDeEdicion } from '../src/js/util/edition-suffix.js';
 import { marcadoresDeVersion } from '../src/js/util/album-version-guard.js';
-import { normProveedor } from '../src/js/util/texto.js';
+import { normProveedor, sinTildes } from '../src/js/util/texto.js';
+import { normPlaylistName } from '../src/js/util/hidden-sync.js';
 
 // ── Las no exportadas, extraídas ─────────────────────────────────────────────
 const stripDiacritics = extraer('util/track-match.js', 'stripDiacritics');
 const rawName = extraer('util/track-match.js', 'rawName', { deps: { stripDiacritics } });
 const claveResolver = extraer('util/album-resolver.js', 'clave', { deps: { normText } });
 const canon = extraer('util/album-version-guard.js', 'canon');
-const junkNormalize = extraer('util/junk.js', 'normalize');
+// PASO 2: `junk.js` ya no tiene cuerpo propio — su normalize ES `sinTildes`,
+// sin nada encima (es el único de los tres que no recorta). No se extrae porque
+// no hay nada que extraer; que siga siendo así lo verifica el assert de
+// estructura del test.
+const junkNormalize = sinTildes;
 // PASO 1 del plan: los tres `norm` de proveedores eran el mismo cuerpo y ahora
 // son UNA sola función exportada. Las tres entradas del censo siguen acá, y a
 // propósito: apuntan a la misma `normProveedor`, así que el fixture compara que
@@ -120,15 +125,16 @@ const junkNormalize = extraer('util/junk.js', 'normalize');
 const itunesNorm = normProveedor;
 const previewNorm = normProveedor;
 const statsfmNormName = normProveedor;
-const artistCardNormName = extraer('features/artist-card.js', 'normName');
+const artistCardNormName = extraer('features/artist-card.js', 'normName', { deps: { sinTildes } });
 const listenedNorm = extraer('features/listened-shared.js', 'norm');
 const listenedBaseName = extraer('features/listened-shared.js', 'baseName');
 const listenedAlbumKey = extraer('features/listened-shared.js', 'albumKey', {
   deps: { norm: listenedNorm, baseName: listenedBaseName },
 });
-const searchLikesNormalize = extraer('features/search-likes.js', 'normalize');
-const sinClasificarNormName = extraer('features/sin-clasificar.js', 'normName');
-const hiddenSyncNormName = extraer('util/hidden-sync.js', 'normName');
+const searchLikesNormalize = extraer('features/search-likes.js', 'normalize', { deps: { sinTildes } });
+// PASO 2: hidden-sync lo exporta como `normPlaylistName`, así que se importa.
+const hiddenSyncNormName = normPlaylistName;
+const sinClasificarNormName = extraer('features/sin-clasificar.js', 'normName', { deps: { normPlaylistName: hiddenSyncNormName } });
 const wthreeLikeNameKey = extraer('features/wthree.js', 'likeNameKey');
 const historyAlbumKey = extraer('history-processor.js', 'albumKey');
 
@@ -154,7 +160,7 @@ export const CENSO = [
   { n: 9,  id: 'edition-suffix.baseDeEdicion',    fn: baseDeEdicion,         aridad: 'texto', origen: 'import' },
   { n: 10, id: 'album-version-guard.canon',       fn: canon,                 aridad: 'texto', origen: 'extraído' },
   { n: 10.1,id:'album-version-guard.marcadores',  fn: s => [...marcadoresDeVersion(s)].sort().join(','), aridad: 'texto', origen: 'import' },
-  { n: 11, id: 'junk.normalize',                  fn: junkNormalize,         aridad: 'texto', origen: 'extraído' },
+  { n: 11, id: 'junk.normalize',                  fn: junkNormalize,         aridad: 'texto', origen: 'import' },
   { n: 12, id: 'itunes.norm',                     fn: itunesNorm,            aridad: 'texto', origen: 'import' },
   { n: 13, id: 'preview-providers.norm',          fn: previewNorm,           aridad: 'texto', origen: 'import' },
   { n: 14, id: 'statsfm.normName',                fn: statsfmNormName,       aridad: 'texto', origen: 'import' },
@@ -164,7 +170,7 @@ export const CENSO = [
   { n: 16.2,id:'listened-shared.albumKey',        fn: listenedAlbumKey,      aridad: 'par',   origen: 'extraído' },
   { n: 17, id: 'search-likes.normalize',          fn: searchLikesNormalize,  aridad: 'texto', origen: 'extraído' },
   { n: 18, id: 'sin-clasificar.normName',         fn: sinClasificarNormName, aridad: 'texto', origen: 'extraído' },
-  { n: 19, id: 'hidden-sync.normName',            fn: hiddenSyncNormName,    aridad: 'texto', origen: 'extraído' },
+  { n: 19, id: 'hidden-sync.normName',            fn: hiddenSyncNormName,    aridad: 'texto', origen: 'import' },
   { n: 20, id: 'wthree.likeNameKey',              fn: wthreeLikeNameKey,     aridad: 'par',   origen: 'extraído' },
   { n: 21, id: 'history-processor.albumKey',      fn: historyAlbumKey,       aridad: 'par',   origen: 'extraído' },
 ];

@@ -46,3 +46,27 @@ export function normProveedor(s) {
     .replace(/\s+/g, ' ')
     .trim();
 }
+
+// Minúsculas y sin tildes, y NADA MÁS: ni trim, ni colapso de espacios.
+//
+// Es la base de una familia que estaba escrita tres veces con tres finales
+// distintos, y los finales son el punto: `util/junk.js` no recorta (compara
+// con `includes`, así que un espacio al borde no le molesta),
+// `features/artist-card.js` recorta, y `features/search-likes.js` recorta Y
+// colapsa. Confundirlos cambiaría salidas, así que lo compartido es solo el
+// tronco y cada llamador le pone SU final ENCIMA:
+//
+//   junk.js          → sinTildes(s)
+//   artist-card.js   → sinTildes(s).trim()
+//   search-likes.js  → sinTildes(s).replace(/\s+/g, ' ').trim()
+//
+// `String(s || '')` y no `(s || '')`: dos de las tres ya lo hacían, y para un
+// string el resultado es el mismo. La diferencia es que un número o un objeto
+// no tira — y `s || ''` se conserva en vez de `s ?? ''` porque con `??` un 0
+// pasaría a ser «0» en vez de la cadena vacía.
+export function sinTildes(s) {
+  return String(s || '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '');
+}

@@ -12,6 +12,11 @@
 // vienen filtrados desde el pipeline; esto es la red de contención en runtime
 // (y lo que usa el historial BYOH procesado en el navegador).
 
+// El único import de este módulo: el tronco lower+NFD que abajo era un cuerpo
+// escrito a mano, repetido en artist-card.js y search-likes.js (paso 2 del
+// plan de normalizadores).
+import { sinTildes } from './texto.js';
+
 // Artistas que solo publican sonidos funcionales — se van enteros.
 // Comparación exacta sobre el nombre normalizado.
 const EXCLUDED_ARTISTS = new Set([
@@ -59,12 +64,11 @@ const EXCLUDED_TRACK_SUBSTRINGS = [
 ];
 
 // Minúsculas + sin tildes, para que "Teléfono" y "Telefono" caigan igual.
-function normalize(s) {
-  return String(s || '')
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '');
-}
+// ⚠️ SIN trim a propósito: las comparaciones de abajo son `has` y `includes`,
+// y el `isJunkTrack` de hoy no depende de los bordes. Agregarle un trim
+// cambiaría la salida de este normalizador, que es lo que la foto del paso 0
+// no deja pasar.
+const normalize = sinTildes;
 
 // ¿Esta entrada es basura funcional en vez de música?
 function isJunkTrack(trackName, artistName) {

@@ -8,15 +8,16 @@ import { firstArtistName, artistNames } from '../util/artist-name.js';
 import { openTrackCard } from './track-card.js';
 import { coverUrl } from '../util/cover-size.js';
 import { fmtDiaCorto } from '../util/fecha.js';
+import { sinTildes } from '../util/texto.js';
 
 const MAX_RESULTS = 300;
 let cachedItems = [];
 
+// El colapso de espacios y el trim van ENCIMA del tronco compartido: `junk.js`
+// no lleva ninguno de los dos y `artist-card.js` solo el trim. Es justo ahí
+// donde las tres difieren (paso 2 del plan de normalizadores).
 function normalize(s) {
-  return (s || '')
-    .toString()
-    .toLowerCase()
-    .normalize('NFD').replace(/[̀-ͯ]/g, '') // sacar acentos
+  return sinTildes(s)
     .replace(/\s+/g, ' ')
     .trim();
 }
