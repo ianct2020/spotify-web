@@ -83,6 +83,37 @@ for (const [a, b] of pares) {
   eq(Math.sign(yo), Math.sign(nr), `«${a}» contra «${b}»: mismo sentido que #new-releases`);
 }
 
+// ── 4bis. El desempate por ARTISTA: #new-releases, que ordena ENTRE artistas ──
+// Paso 6 del plan de normalizadores (v=272). Las líneas 688-692 de
+// `new-releases.js` eran una copia de este comparador con otro desempate; ahora
+// lo llaman con `{ desempate: 'artista' }`. ⚠️ No difieren solo en el desempate:
+// difieren también en la FORMA del item, así que cada modo trae su lector.
+console.log('\nEl desempate por artista');
+const par = (release, artista, id) => ({ al: { release, name: `Disco de ${artista}` }, artist: { name: artista }, id });
+const entreArtistas = [
+  par('2020-05-01', 'Charlie', 'c'),
+  par('2021-01-01', 'Zulu', 'z'),
+  par('2020-05-01', 'alfa', 'a'),
+  par('2020-05-01', 'Bravo', 'b'),
+];
+eq([...entreArtistas].sort((x, y) => masNuevoPrimero(x, y, { desempate: 'artista' })).map(p => p.id),
+  ['z', 'a', 'b', 'c'],
+  'desempate artista: primero el más nuevo, y a igual fecha alfabético por ARTISTA');
+// El mismo lote con el desempate de la otra vista NO se ordena: la forma es otra
+// (el lanzamiento va envuelto en `.al`), que es justo por lo que el modo existe.
+ok([...entreArtistas].sort((x, y) => masNuevoPrimero(x, y, { desempate: 'album' })).map(p => p.id).join('') !== 'zabc',
+  'y el desempate por álbum no sabe leer esa forma: los dos modos no son intercambiables');
+// El valor por defecto es el de #discover-artists, para que `.sort(masNuevoPrimero)`
+// siga siendo exactamente el comparador de v=271.
+eq(Math.sign(masNuevoPrimero({ release: '2020', name: 'a' }, { release: '2019', name: 'b' })),
+  Math.sign(masNuevoPrimero({ release: '2020', name: 'a' }, { release: '2019', name: 'b' }, { desempate: 'album' })),
+  'el desempate por defecto es «album»');
+// Un desempate mal escrito tiene que TIRAR: devolviendo 0 dejaría la lista en el
+// orden de llegada, sin fallar y sin avisar.
+assert.throws(() => masNuevoPrimero({ release: '2020' }, { release: '2019' }, { desempate: 'artsita' }),
+  /desempate desconocido/, 'un desempate mal escrito tira, no ordena por orden de llegada');
+n++;
+
 // ── 5. La estructura: un solo criterio y se ordena una copia ─────────────────
 console.log('\nLa estructura');
 const leer = ruta => readFileSync(new URL(ruta, import.meta.url), 'utf8');
@@ -92,6 +123,11 @@ ok(/export\s*\{\s*releaseTs\s*\}\s*from\s*'\.\.\/util\/release-date\.js'/.test(c
 ok(!/function\s+releaseTs\s*\(/.test(common), 'y NO tiene su propia releaseTs: no hay un segundo criterio de fecha');
 const nuevas = leer('../src/js/features/new-releases.js');
 ok(/releaseTs,/.test(nuevas.split("} from './discover-common.js'")[0]), '#new-releases sigue importando releaseTs de discover-common.js');
+
+ok(/masNuevoPrimero\(x, y, \{ desempate: 'artista' \}\)/.test(nuevas),
+  '#new-releases ordena con masNuevoPrimero, no con una copia del comparador');
+ok(!/releaseTs\(y\.al\.release\)\s*-\s*releaseTs\(x\.al\.release\)/.test(nuevas),
+  'y ya no tiene el comparador escrito a mano: no hay un segundo desempate suelto');
 
 const vista = leer('../src/js/features/discover-artists.js');
 ok(/\.sort\(masNuevoPrimero\)/.test(vista), '#discover-artists ordena con masNuevoPrimero');

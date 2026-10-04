@@ -59,6 +59,7 @@ import {
   botonesBaseHtml,
   conectarBotonesBase,
 } from './discover-common.js';
+import { masNuevoPrimero } from '../util/release-date.js';
 import { estadoNativoDiscografia } from '../api.js';
 import { leerElegidos, sumarElegidos, artistasBuscados, colaAutomatica } from '../util/cola-escaneo.js';
 import { leerFallos, marcarFallo, limpiarFallo, sinFallosMarcados } from '../util/escaneo-fallos.js';
@@ -684,12 +685,11 @@ function releasesInWindow() {
     lista = visibles.map(v => v._o);
   }
 
-  // Más nuevo primero. Empate → alfabético por artista.
-  lista.sort((x, y) => {
-    const dt = releaseTs(y.al.release) - releaseTs(x.al.release);
-    if (dt !== 0) return dt;
-    return x.artist.name.localeCompare(y.artist.name, 'es');
-  });
+  // Más nuevo primero. Empate → alfabético por artista. El comparador es el
+  // compartido de `util/release-date.js` (paso 6, v=272): acá va `'artista'`
+  // porque esta vista ordena ENTRE artistas, mientras `#discover-artists`
+  // ordena DENTRO de uno y desempata por el nombre del álbum.
+  lista.sort((x, y) => masNuevoPrimero(x, y, { desempate: 'artista' }));
   return lista;
 }
 
