@@ -183,9 +183,18 @@ PARENS_RE = re.compile(r"\(.*?\)|\[.*?\]")
 # Decisión de Ian (2026-08-16): un remix ES el mismo tema. Sin esto, "A Different
 # Way - DEVAULT Remix" (ok=20, skip=4) y "A Different Way (with Lauv)" (ok=1,
 # skip=6) quedan en grupos distintos y el segundo sigue apareciendo al 86 %.
+# ⚠️ El guion es lo ÚNICO que separa una cola de versión de un título que usa la
+# misma palabra: «The One with the Piano» y «The One With The Wurlitzer»
+# (American Football) son temas DISTINTOS, no llevan guion y esta regex no los
+# ve. v=271 suma siete colas que el paso 4 destapó al dejar de cortar en «with»
+# («- Sped Up», «- Piano», «- reimagined», «- Raw Rhymes», «- Refix»,
+# «- Music From …»): 47.926 → 47.862 grupos, 59 fusiones y 0 particiones.
+# `raw rhymes` y `music from` van como FRASE a propósito — las palabras sueltas
+# «rhymes» y «from» son más anchas de lo que se pidió.
 REMIX_TAIL_RE = re.compile(
     r"\s*[-–—]\s*.*\b(remix|version|edit|mix|rework|flip|bootleg|"
-    r"instrumental|acoustic)\b.*$", re.I)
+    r"instrumental|acoustic|sped|slowed|piano|reimagined|refix|"
+    r"raw rhymes|music from)\b.*$", re.I)
 
 
 def _strip_diacritics(s):
