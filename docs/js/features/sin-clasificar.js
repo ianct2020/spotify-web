@@ -16,27 +16,27 @@
 import {
   getAllUserPlaylists, getAllPlaylistItems, getBestAvailableLikes,
   getCurrentUserId, removeLikedTracks, checkLibraryContains,
-} from '../api.js?v=268';
-import { borrarLikesVerificado } from '../util/borrado-verificado.js?v=268';
-import { vigilarRuta } from '../util/vigencia-ruta.js?v=268';
-import { idbGetCached, idbSetCached, idbDel } from '../idb.js?v=268';
-import { createHiddenStore, uriDeTrackId } from '../util/hidden-sync.js?v=268';
-import { prefKey, migratePrefKey } from '../storage.js?v=268';
-import { addUrisToPlaylists, toastAddResult, getOwnPlaylists } from '../util/playlist-add.js?v=268';
-import { escapeHtml, pageHeader, showProgress, hideProgress, isCancelled, confirmModal, tarjetaSinLikes } from '../ui/components.js?v=268';
-import { openModal, closeTop } from '../ui/modal-stack.js?v=268';
-import { openPlaylistPicker } from '../ui/playlist-picker.js?v=268';
-import { showToast } from '../ui/toast.js?v=268';
-import { getPreview } from '../api/preview-providers.js?v=268';
-import { togglePreview, playingKey } from '../ui/preview-player.js?v=268';
-import { openTrackCard } from './track-card.js?v=268';
-import { normText } from '../util/track-match.js?v=268';
-import { activateMarquee } from '../ui/marquee.js?v=268';
-import { renderTrackCardRow, wireTrackCardGrid, paintCardSelection, paintPlayingCard } from '../ui/track-card-row.js?v=268';
-import { createIncrementalList, scrollRootOf } from '../ui/incremental-list.js?v=268';
-import { createLazyImages } from '../ui/lazy-img.js?v=268';
-import { coverAtSize } from '../util/cover-size.js?v=268';
-import { fmtDiaCorto } from '../util/fecha.js?v=268';
+} from '../api.js?v=269';
+import { borrarLikesVerificado } from '../util/borrado-verificado.js?v=269';
+import { vigilarRuta } from '../util/vigencia-ruta.js?v=269';
+import { idbGetCached, idbSetCached, idbDel } from '../idb.js?v=269';
+import { createHiddenStore, uriDeTrackId, normPlaylistName } from '../util/hidden-sync.js?v=269';
+import { prefKey, migratePrefKey } from '../storage.js?v=269';
+import { addUrisToPlaylists, toastAddResult, getOwnPlaylists } from '../util/playlist-add.js?v=269';
+import { escapeHtml, pageHeader, showProgress, hideProgress, isCancelled, confirmModal, tarjetaSinLikes } from '../ui/components.js?v=269';
+import { openModal, closeTop } from '../ui/modal-stack.js?v=269';
+import { openPlaylistPicker } from '../ui/playlist-picker.js?v=269';
+import { showToast } from '../ui/toast.js?v=269';
+import { getPreview } from '../api/preview-providers.js?v=269';
+import { togglePreview, playingKey } from '../ui/preview-player.js?v=269';
+import { openTrackCard } from './track-card.js?v=269';
+import { normText } from '../util/track-match.js?v=269';
+import { activateMarquee } from '../ui/marquee.js?v=269';
+import { renderTrackCardRow, wireTrackCardGrid, paintCardSelection, paintPlayingCard } from '../ui/track-card-row.js?v=269';
+import { createIncrementalList, scrollRootOf } from '../ui/incremental-list.js?v=269';
+import { createLazyImages } from '../ui/lazy-img.js?v=269';
+import { coverAtSize } from '../util/cover-size.js?v=269';
+import { fmtDiaCorto } from '../util/fecha.js?v=269';
 
 const HIDDEN_KEY = 'sin_clasificar_ocultas';
 const EXCLUDED_KEY = 'sin_clasificar_excluidas';
@@ -139,8 +139,14 @@ function esPlaylistDeOcultos(nombre) {
   return normName(nombre).startsWith(PREFIJO_OCULTOS);
 }
 
+// El colapso de espacios va ENCIMA del normalizador de hidden-sync, que es
+// quien escribe estos nombres. Antes esto era una copia con su propio criterio
+// (paso 2 del plan de normalizadores): dos funciones para comparar un dato que
+// tiene un solo dueño. El colapso no se empujó hacia abajo porque cambiaría la
+// salida de `findPlaylist`, y el `String()` se conserva porque el de allá
+// asume que ya le llega un string.
 function normName(s) {
-  return String(s || '').toLowerCase().replace(/\s+/g, ' ').trim();
+  return normPlaylistName(String(s || '')).replace(/\s+/g, ' ').trim();
 }
 
 // Clave de respaldo cuando un track no tiene id de Spotify.

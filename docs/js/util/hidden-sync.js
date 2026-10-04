@@ -26,10 +26,10 @@ import {
   createPlaylist,
   getCurrentUserId,
   spotifyFetch,
-} from '../api.js?v=268';
-import { prefKey, migratePrefKey } from '../storage.js?v=268';
-import { invalidateOwnPlaylists } from './playlist-add.js?v=268';
-import { showToast } from '../ui/toast.js?v=268';
+} from '../api.js?v=269';
+import { prefKey, migratePrefKey } from '../storage.js?v=269';
+import { invalidateOwnPlaylists } from './playlist-add.js?v=269';
+import { showToast } from '../ui/toast.js?v=269';
 
 const PLAYLIST_DESC = 'Lista interna de Fonoteca: lo que ocultaste en esta vista. Si la borras, se pierden los ocultos.';
 
@@ -182,9 +182,20 @@ export function leerSinUriPorStore() {
   return out;
 }
 
+// Normalizador de NOMBRE DE PLAYLIST. Recorta y baja a minúscula, nada más:
+// los nombres los escribe este mismo módulo, así que no hay que defenderse de
+// dobles espacios acá adentro.
+//
+// Se exporta como `normPlaylistName` (paso 2 del plan de normalizadores)
+// porque `features/sin-clasificar.js` tenía su propia copia para comparar los
+// nombres que ESTE módulo escribe: dos criterios para un solo dato. El de allá
+// además colapsa espacios, y ese colapso quedó ENCIMA, no acá dentro — meterlo
+// acá cambiaría la salida de `findPlaylist`, que la foto del paso 0 vigila.
 function normName(s) {
   return (s || '').trim().toLowerCase();
 }
+
+export { normName as normPlaylistName };
 
 // ── El registro de stores, para poder auditarlos todos juntos (v=205) ────────
 //

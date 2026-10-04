@@ -2,23 +2,24 @@
 // primer/último año, top tracks del artista, hover-play, y plays actuales
 // vía Stats.fm si aplica. Se abre desde cualquier feature con openArtistCard({ name }).
 
-import { loadHistoryStats, loadArtistTracks, isOwner } from './history-data.js?v=268';
-import { escapeHtml } from '../ui/components.js?v=268';
-import { getPreview } from '../api/preview-providers.js?v=268';
-import { togglePreview, playingKey, attachHover } from '../ui/preview-player.js?v=268';
-import { hasUsername, loadTopLifetime } from '../api/statsfm.js?v=268';
-import { openTrackCard } from './track-card.js?v=268';
-import { spotifyFetch, getBestAvailableLikes } from '../api.js?v=268';
-import { openModal, closeTop } from '../ui/modal-stack.js?v=268';
-import { firstArtistName, artistNames, resolveArtistName, looksLikeArtistChain } from '../util/artist-name.js?v=268';
-import { coverUrl } from '../util/cover-size.js?v=268';
-import { getArtistLikePreview } from '../util/artist-preview.js?v=268';
-import { skelCardBody, skelTrackRows, skelBox } from '../ui/skeleton.js?v=268';
-import { fmtDia, fmtDiaCorto } from '../util/fecha.js?v=268';
-import { albumsDeArtista } from '../util/artist-albums.js?v=268';
-import { openAlbumCard } from './album-card.js?v=268';
-import { limpiaParaQuery, artistIsSame } from '../util/track-match.js?v=268';
-import { pedirYCachear, CUALQUIER_RESPUESTA } from '../util/cache-solo-exitos.js?v=268';
+import { loadHistoryStats, loadArtistTracks, isOwner } from './history-data.js?v=269';
+import { escapeHtml } from '../ui/components.js?v=269';
+import { getPreview } from '../api/preview-providers.js?v=269';
+import { togglePreview, playingKey, attachHover } from '../ui/preview-player.js?v=269';
+import { hasUsername, loadTopLifetime } from '../api/statsfm.js?v=269';
+import { openTrackCard } from './track-card.js?v=269';
+import { spotifyFetch, getBestAvailableLikes } from '../api.js?v=269';
+import { openModal, closeTop } from '../ui/modal-stack.js?v=269';
+import { firstArtistName, artistNames, resolveArtistName, looksLikeArtistChain } from '../util/artist-name.js?v=269';
+import { coverUrl } from '../util/cover-size.js?v=269';
+import { getArtistLikePreview } from '../util/artist-preview.js?v=269';
+import { skelCardBody, skelTrackRows, skelBox } from '../ui/skeleton.js?v=269';
+import { fmtDia, fmtDiaCorto } from '../util/fecha.js?v=269';
+import { albumsDeArtista } from '../util/artist-albums.js?v=269';
+import { openAlbumCard } from './album-card.js?v=269';
+import { limpiaParaQuery, artistIsSame } from '../util/track-match.js?v=269';
+import { sinTildes } from '../util/texto.js?v=269';
+import { pedirYCachear, CUALQUIER_RESPUESTA } from '../util/cache-solo-exitos.js?v=269';
 
 // Cache de imágenes de artistas resueltas por Spotify search. TTL 30 días.
 // Se persiste el hit y la falta (null) para no reintentar contra tracks
@@ -72,9 +73,12 @@ async function fetchArtistImage(name) {
       const artists = data?.artists?.items || [];
       // Match exacto por nombre normalizado, preferido; si no, el que `artistIsSame`
       // dé por el mismo artista. Un `null` acá es «Spotify contestó y no está».
-      const norm = s => (s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-      const na = norm(name);
-      const pick = artists.find(a => norm(a.name) === na)
+      // ⚠️ Este `norm` local era un CUARTO miembro de la familia lower+NFD que
+      // el censo del informe no listaba (contaba tres: junk, el normName de
+      // abajo y search-likes). Comprobado sobre las 78.766 cadenas del corpus
+      // y 8 bordes —incluidos no-strings—: `sinTildes` da lo mismo, 0 difs.
+      const na = sinTildes(name);
+      const pick = artists.find(a => sinTildes(a.name) === na)
         || artists.find(a => artistIsSame(name, a.name))
         || null;
       return coverUrl(pick?.images, 'grande') || null;
@@ -546,7 +550,9 @@ async function fillStatsfmArtist(name, fillEmptyTracks = false) {
 // Filtra el cache de likes en IDB por nombre de artista normalizado y muestra
 // las canciones con tapa chica, álbum y fecha de like.
 // Click en una fila → ficha canción encima (tercer nivel de la pila).
-const normName = s => (s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+// El trim va ENCIMA del tronco compartido, no dentro: `junk.js` no lo lleva
+// y `search-likes.js` además colapsa (paso 2 del plan de normalizadores).
+const normName = s => sinTildes(s).trim();
 
 async function openArtistLikesModal(artistName) {
   const overlay = openModal({

@@ -1,5 +1,8 @@
-import { idbGetCached, idbSetCached } from '../idb.js?v=268';
-import { prefKey, migratePrefKey } from '../storage.js?v=268';
+import { idbGetCached, idbSetCached } from '../idb.js?v=269';
+import { prefKey, migratePrefKey } from '../storage.js?v=269';
+// `normName` era idéntica a los `norm` de itunes.js y preview-providers.js.
+// Desde el paso 1 del plan de normalizadores las tres son una sola.
+import { normProveedor as normName } from '../util/texto.js?v=269';
 
 const STATSFM_USER_STORAGE = 'statsfm_username';
 const BASE = 'https://api.stats.fm/api/v1';
@@ -56,16 +59,6 @@ async function getTopArtists(username, { range = 'lifetime', limit = 1000 } = {}
 
 const TRACK_ID_CACHE_KEY = 'statsfm_track_ids_v1';
 const TRACK_ID_CACHE_MAX = 600;
-
-function normName(s) {
-  return (s || '')
-    .toLowerCase()
-    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
-    .replace(/\(.*?\)|\[.*?\]/g, '')
-    .replace(/[^a-z0-9 ]/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
-}
 
 function loadIdCache() {
   try { return JSON.parse(localStorage.getItem(TRACK_ID_CACHE_KEY)) || {}; } catch { return {}; }

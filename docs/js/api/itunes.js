@@ -4,7 +4,10 @@
 // (preview_url de Spotify murió en la migración feb 2026; el embed iframe
 // queda como fallback para lo que iTunes no tenga.)
 
-import { pickBestMatch, artistMatches, artistList, preferredQueryArtists } from '../util/track-match.js?v=268';
+import { pickBestMatch, artistMatches, artistList, preferredQueryArtists } from '../util/track-match.js?v=269';
+// `norm` vivía acá y estaba copiada en preview-providers.js y statsfm.js con el
+// mismo comportamiento. Desde el paso 1 del plan de normalizadores es una sola.
+import { normProveedor as norm } from '../util/texto.js?v=269';
 
 // v3: la key sube de v2 porque hasta v=141 se comparaba contra UN solo artista
 // (el del álbum). En los discos acreditados a un alias —«¥$» = Kanye West + Ty
@@ -32,17 +35,6 @@ function saveCache() {
   try {
     localStorage.setItem(LS_KEY, JSON.stringify(Object.fromEntries(cache)));
   } catch { /* storage lleno: la caché en memoria alcanza */ }
-}
-
-// Normaliza para comparar: sin acentos, sin (feat. X) ni [Remaster], solo alfanumérico
-function norm(s) {
-  return (s || '')
-    .toLowerCase()
-    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
-    .replace(/\(.*?\)|\[.*?\]/g, '')
-    .replace(/[^a-z0-9 ]/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
 }
 
 async function search(term, limit) {

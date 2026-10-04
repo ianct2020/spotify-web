@@ -1,18 +1,18 @@
-import { spotifyFetch, createPlaylist, addTracksToPlaylist, invalidatePlaylistsCache, getAllLikedTracks } from '../api.js?v=268';
-import { hasKey, setKey, hasUsername, getUsername, setUsername, getUserTopArtists, getSimilarArtists, getArtistTopTracks } from '../api/lastfm.js?v=268';
-import { showProgress, hideProgress, promptPlaylistName, escapeHtml, pageHeader } from '../ui/components.js?v=268';
-import { showToast } from '../ui/toast.js?v=268';
-import { getPreview } from '../api/preview-providers.js?v=268';
-import { togglePreview, playingKey, isPlayingAudio } from '../ui/preview-player.js?v=268';
-import { paintPlayingCard } from '../ui/track-card-row.js?v=268';
-import { openTrackCard } from './track-card.js?v=268';
-import { openAlbumCard } from './album-card.js?v=268';
-import { limpiaParaQuery, titleMatches, artistMatches } from '../util/track-match.js?v=268';
-import { vigilarRuta } from '../util/vigencia-ruta.js?v=268';
-import { createHiddenStore } from '../util/hidden-sync.js?v=268';
-import { recuperarUriDeArtistaKey, REGLAS_VERSION } from '../util/hidden-recover.js?v=268';
-import { iconoPlay, iconoPausa, iconoFicha, iconoDisco, iconoOjo, iconoOjoTachado } from '../ui/icons.js?v=268';
-import { pedirYCachear, CUALQUIER_RESPUESTA } from '../util/cache-solo-exitos.js?v=268';
+import { spotifyFetch, createPlaylist, addTracksToPlaylist, invalidatePlaylistsCache, getAllLikedTracks } from '../api.js?v=269';
+import { hasKey, setKey, hasUsername, getUsername, setUsername, getUserTopArtists, getSimilarArtists, getArtistTopTracks } from '../api/lastfm.js?v=269';
+import { showProgress, hideProgress, promptPlaylistName, escapeHtml, pageHeader } from '../ui/components.js?v=269';
+import { showToast } from '../ui/toast.js?v=269';
+import { getPreview } from '../api/preview-providers.js?v=269';
+import { togglePreview, playingKey, isPlayingAudio } from '../ui/preview-player.js?v=269';
+import { paintPlayingCard } from '../ui/track-card-row.js?v=269';
+import { openTrackCard } from './track-card.js?v=269';
+import { openAlbumCard } from './album-card.js?v=269';
+import { limpiaParaQuery, titleMatches, artistMatches } from '../util/track-match.js?v=269';
+import { vigilarRuta } from '../util/vigencia-ruta.js?v=269';
+import { createHiddenStore } from '../util/hidden-sync.js?v=269';
+import { recuperarUriDeArtistaKey, REGLAS_VERSION } from '../util/hidden-recover.js?v=269';
+import { iconoPlay, iconoPausa, iconoFicha, iconoDisco, iconoOjo, iconoOjoTachado } from '../ui/icons.js?v=269';
+import { pedirYCachear, CUALQUIER_RESPUESTA } from '../util/cache-solo-exitos.js?v=269';
 
 // Iconos de las dos fichas. Los mismos trazos que usa la tarjeta compartida.
 // Mismos trazos que el ojo de discover-common.js (v=165), acá con 14px para
