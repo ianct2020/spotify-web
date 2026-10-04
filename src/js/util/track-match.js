@@ -50,12 +50,42 @@ function stripDiacritics(s) {
   return s.normalize('NFD').replace(/[̀-ͯ]/g, '');
 }
 
+// El corte de la atribución de invitados, con límite de palabra (v=270).
+//
+// Hasta v=269 esto era UN regex sin `\b`, `/\s*(feat\.?|ft\.?|featuring|with)\s+.*$/i`,
+// y partía palabras por la mitad: «Daft Punk» → «da», «Lift Off» → «li», «Soft
+// Cell» → «so». Medido sobre los JSON del repo: 9 artistas, 130 álbumes y 148
+// pistas salían mal, y 16 nombres quedaban en la cadena VACÍA («With You»,
+// «With Or Without You») — o sea que para `songKey` todas las pistas «With…»
+// de un artista eran el mismo tema en #skips y en el filtro de singles.
+//
+// ⚠️ El `\b` va pegado a la palabra y ANTES del punto opcional, no después:
+// `/\b(feat\.?|ft\.?)\b/` no matchea nunca «feat.» ni «ft.» —las formas más
+// comunes— porque entre «.» y el espacio no hay límite de palabra. Con
+// `\b(?:feat|ft|featuring)\b\.?` sí.
+//
+// `with` NO entra acá: es palabra corriente de título («With You», «Stay With
+// Me»). Solo se corta donde es atribución: detrás de ` - `, o dentro de
+// paréntesis/corchetes.
+//
+// ⚠️ Y la rama de paréntesis NO es redundante, aunque lo parezca: la regla de
+// «( )» de más abajo borraría «(with Lauv)» igual. Hace falta porque FEAT_TAIL
+// corta hasta el final de la cadena y se come el cierre, así que en
+// «11 Minutes (with Halsey feat. Travis Barker)» el «)» desaparece antes de
+// que la regla de «( )» pueda verlo y quedaría «11 minutes with halsey». Por
+// eso va PRIMERO. Son 14 nombres reales del corpus (5 álbumes, 9 pistas).
+const CON_ENTRE_PARENTESIS = /\s*[([]\s*with\b\s+[^)\]]*[)\]]?/ig;
+const FEAT_TAIL = /\s*\b(?:feat|ft|featuring)\b\.?\s+.*$/i;
+const CON_TRAS_GUION = /\s*[-\u2013\u2014]\s+with\b\s+.*$/i;
+
 // Normalización compartida: minúsculas, sin diacríticos, sin paréntesis ni
 // corchetes (ahí viven "(feat. X)", "[Explicit]", "(Remastered)"), sin
 // puntuación y con espacios colapsados.
 export function normText(s) {
   let out = stripDiacritics(String(s || '').toLowerCase());
-  out = out.replace(/\s*(feat\.?|ft\.?|featuring|with)\s+.*$/i, ' ');
+  out = out.replace(CON_ENTRE_PARENTESIS, ' ');
+  out = out.replace(FEAT_TAIL, ' ');
+  out = out.replace(CON_TRAS_GUION, ' ');
   out = out.replace(EDITION_TAIL, '');
   out = out.replace(/\(.*?\)|\[.*?\]/g, ' ');
   out = out.replace(/[^a-z0-9 ]/g, ' ');

@@ -159,11 +159,26 @@ def is_junk_track(track, artist):
 # es por id, así que los trackdone se acumulaban en un id y los skips en otro.
 # ---------------------------------------------------------------------------
 
+# ⚠️ La rama `from…` faltaba acá y SÍ está en el JS desde v=185 («Honest - From
+# The Amazing Spider-Man 2 Soundtrack»): eran 37 discrepancias JS/Python que el
+# corte de feat sin `\b` tapaba —«Lift Me Up - From Black Panther…» se cortaba
+# en «li» de los dos lados, igual de mal pero igual—. Al arreglar el corte
+# quedaron a la vista. Espejo exacto de EDITION_TAIL en track-match.js.
 EDITION_TAIL_RE = re.compile(
-    r"\s*[-–—]\s*(remaster(ed)?|\d{4} remaster(ed)?|remaster(ed)? \d{4}|"
+    r"\s*[-–—]\s*((remaster(ed)?|\d{4} remaster(ed)?|remaster(ed)? \d{4}|"
     r"single version|album version|radio edit|mono|stereo|live|bonus track|"
-    r"deluxe|extended|original mix)\b.*$", re.I)
-FEAT_RE = re.compile(r"\s*(feat\.?|ft\.?|featuring|with)\s+.*$", re.I)
+    r"deluxe|extended|original mix)\b.*|from\b.*)$", re.I)
+# Corte de la atribución de invitados, con límite de palabra (v=270).
+# ESPEJO EXACTO de normText() en src/js/util/track-match.js: los tres regex,
+# en este orden. Si tocás uno, tocá el otro, o el gid horneado agrupa distinto
+# que BYOH en el navegador.
+# Ojo: el \b va ANTES del punto opcional. `\b(feat\.?)\b` no matchea «feat.».
+# Y `with` solo se corta como atribución: entre paréntesis (que va PRIMERO,
+# porque si no FEAT_RE se come el «)» de «(with Halsey feat. Travis Barker)»)
+# o detrás de « - ». Nunca como palabra suelta: «With You» es un título.
+CON_ENTRE_PARENTESIS_RE = re.compile(r"\s*[([]\s*with\b\s+[^)\]]*[)\]]?", re.I)
+FEAT_RE = re.compile(r"\s*\b(?:feat|ft|featuring)\b\.?\s+.*$", re.I)
+CON_TRAS_GUION_RE = re.compile(r"\s*[-\u2013\u2014]\s+with\b\s+.*$", re.I)
 PARENS_RE = re.compile(r"\(.*?\)|\[.*?\]")
 # Decisión de Ian (2026-08-16): un remix ES el mismo tema. Sin esto, "A Different
 # Way - DEVAULT Remix" (ok=20, skip=4) y "A Different Way (with Lauv)" (ok=1,
@@ -181,7 +196,9 @@ def _strip_diacritics(s):
 def norm_text(s):
     """Espejo de normText() de src/js/util/track-match.js."""
     out = _strip_diacritics(str(s or "").lower())
+    out = CON_ENTRE_PARENTESIS_RE.sub(" ", out)
     out = FEAT_RE.sub(" ", out)
+    out = CON_TRAS_GUION_RE.sub(" ", out)
     out = EDITION_TAIL_RE.sub("", out)
     out = PARENS_RE.sub(" ", out)
     out = re.sub(r"[^a-z0-9 ]", " ", out)
