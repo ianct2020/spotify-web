@@ -8,10 +8,10 @@
 // Otro user cualquiera sin historial local ve el ownerLockedMessage que
 // invita a subir su ZIP.
 
-import { idbGetCached, idbSetCached, idbDel } from '../idb.js?v=270';
-import { getCurrentUserId } from '../api.js?v=270';
-import { OWNER_KEYS, STATS_VERSION, PLAYS_VERSION, LISTENED_VERSION, SKIP_VERSION, DETAIL_VERSION, RECORDS_VERSION, ARTIST_TRACKS_VERSION } from '../history-keys.js?v=270';
-import { mostrarBannerDegradadoVista } from '../ui/degraded-banner.js?v=270';
+import { idbGetCached, idbSetCached, idbDel } from '../idb.js?v=271';
+import { getCurrentUserId } from '../api.js?v=271';
+import { OWNER_KEYS, STATS_VERSION, PLAYS_VERSION, LISTENED_VERSION, SKIP_VERSION, DETAIL_VERSION, RECORDS_VERSION, ARTIST_TRACKS_VERSION } from '../history-keys.js?v=271';
+import { mostrarBannerDegradadoVista } from '../ui/degraded-banner.js?v=271';
 
 const HISTORY_OWNER_ID = 'orhs6wu5ykk7ql80u92ujn74o';
 
@@ -265,16 +265,23 @@ async function loadListenedAlbums() {
   return loadOne('listened', 'listened', d => !!d.years, () => dataUrl('history-listened-albums.json', LISTENED_VERSION));
 }
 async function loadSkipStats() {
-  // Exijo `version >= 3`: un BYOH viejo guardado en IDB (que no lleva versión en
+  // Exijo `version >= 4`: un BYOH viejo guardado en IDB (que no lleva versión en
   // la key, a diferencia del cache del owner) traería el formato v1 y pasaría
   // el `!!d.tracks` de antes. Así se descarta y el user reimporta su ZIP.
   //
-  // ⚠️ Subido de 2 a 3 en v=270 y NO es cosmético: el v2 tiene el mismo FORMATO
-  // que el v3, así que un BYOH v2 en IDB pasaba el `>= 2` sin chistar y se
-  // pintaba con el `gid` viejo —el del corte de feat sin `\b`, donde todas las
-  // pistas «With…» de un artista son el mismo tema—. Sin fallar y sin aviso,
-  // que es el modo exacto que PENDIENTES viene marcando desde v=208.
-  return loadOne('skip', 'skip', d => !!d.tracks && (d.version || 1) >= 3, () => dataUrl('history-skip-stats.json', SKIP_VERSION));
+  // ⚠️ Este número hay que subirlo CADA VEZ que se re-hornea el `gid`, y es un
+  // chequeo APARTE de `SKIP_VERSION`: la clave del owner lleva la versión en el
+  // nombre, pero la del BYOH no, así que lo único que descarta un BYOH viejo es
+  // esta comparación. v2, v3 y v4 tienen el MISMO formato —solo cambió cómo se
+  // calcula el `gid`—, así que un BYOH de la versión anterior pasa cualquier
+  // guarda más floja sin chistar y se pinta con el agrupado viejo: sin fallar y
+  // sin aviso, que es el modo exacto que PENDIENTES viene marcando desde v=208.
+  //
+  // 2→3 en v=270 (el corte de feat/ft/with con `\b`); 3→4 en v=271 (la cola de
+  // versión tras el guion: «- Sped Up», «- Piano», «- reimagined»…). En v=270
+  // se descubrió que este chequeo existía aparte y que un BYOH viejo pasaba sin
+  // avisar; si volvés a tocar el `gid`, subí los DOS números.
+  return loadOne('skip', 'skip', d => !!d.tracks && (d.version || 1) >= 4, () => dataUrl('history-skip-stats.json', SKIP_VERSION));
 }
 async function loadTrackDetail() {
   return loadOne('detail', 'detail', d => !!d.tracks, () => dataUrl('history-track-detail.json', DETAIL_VERSION));

@@ -19,13 +19,30 @@
 // tienen que dar la misma clave o el historial importado a mano (BYOH)
 // agruparía distinto que el horneado del repo.
 
-import { normText } from './track-match.js?v=270';
+import { normText } from './track-match.js?v=271';
 
 // Cola de versión: "Tema - X Remix", "Tema - Sped Up Version", "Tema - Acoustic".
 // Pide un guion separador, así que no se come un título que simplemente
 // contenga la palabra ("Remix" a secas, o "Radio Mix Tape").
+//
+// ⚠️ El guion es lo ÚNICO que separa una cola de versión de un título que usa
+// la misma palabra, y por eso no se toca: «The One with the Piano» y «The One
+// With The Wurlitzer» (American Football) son temas DISTINTOS, no llevan guion,
+// y esta regex no los ve. Hasta v=269 agrupaban juntos por el corte de «with»
+// sin `\b`; el paso 4 los separó y eso fue una MEJORA. `tests/song-identity-
+// cola.test.mjs` lo fija con un assert.
+//
+// v=271 suma siete colas que el paso 4 destapó: al dejar de cortar en «with»
+// sobrevive la cola, y «In A Perfect World (with Julia Michaels) - Sped Up»
+// dejó de ser el mismo tema que su base. Medido sobre los 52.704 ids del
+// horneado: 47.926 → 47.862 grupos, 59 fusiones nuevas y CERO particiones
+// nuevas (la regla solo puede juntar). Dos van como FRASE y no como palabra
+// suelta, a propósito:
+//   · `raw rhymes` y no `rhymes` — mismo efecto hoy, más angosto mañana;
+//   · `music from` y no `from`  — `from` suelto se llevaba además «This Is Me -
+//     Alan Walker Relift; from "The Greatest Showman"», que nadie pidió.
 const REMIX_TAIL =
-  /\s*[-–—]\s*.*\b(remix|version|edit|mix|rework|flip|bootleg|instrumental|acoustic)\b.*$/i;
+  /\s*[-–—]\s*.*\b(remix|version|edit|mix|rework|flip|bootleg|instrumental|acoustic|sped|slowed|piano|reimagined|refix|raw rhymes|music from)\b.*$/i;
 
 function stripDiacritics(s) {
   return String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '');

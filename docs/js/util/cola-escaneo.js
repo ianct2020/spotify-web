@@ -14,7 +14,7 @@
 // Todo local. Las dos vistas (#new-releases y #discover-artists) usan esto; no
 // lo copies en ninguna de las dos.
 
-import { prefKey } from '../storage.js?v=270';
+import { prefKey } from '../storage.js?v=271';
 
 /** Los `nameLower` que se eligieron a mano en el selector. */
 export function leerElegidos(lsKey) {
