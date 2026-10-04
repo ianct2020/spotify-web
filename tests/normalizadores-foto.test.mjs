@@ -188,6 +188,17 @@ ok(/export function normText/.test(leerSrc('util/track-match.js')),
 ok(/export \{ normPart as _normPart \}/.test(leerSrc('util/album-key.js')),
   'album-key sigue exportando _normPart para que la foto lo mire sin duplicarlo');
 
+// PASO 1: los tres proveedores no pueden volver a tener un `norm` propio. El
+// censo los apunta a `normProveedor`, así que una copia nueva pasaría inadvertida
+// para la foto; esto es lo que la ve.
+for (const rel of ['api/itunes.js', 'api/preview-providers.js', 'api/statsfm.js']) {
+  const txt = leerSrc(rel);
+  ok(/from '\.\.\/util\/texto\.js'/.test(txt), `${rel} importa el normalizador de util/texto.js`);
+  ok(!/^\s*function (norm|normName)\s*\(/m.test(txt), `${rel} no volvió a definir su propio norm`);
+}
+ok(/export function normProveedor/.test(leerSrc('util/texto.js')),
+  'util/texto.js exporta normProveedor (la única copia del cuerpo)');
+
 const cuantasDefiniciones = (rel, re) => (leerSrc(rel).match(re) || []).length;
 eq(cuantasDefiniciones('features/wthree.js', /\.toLowerCase\(\)\.replace\(\/\\s\*\[\(\[\]/g), 1,
   'wthree: el regex de delimitadores MEZCLADOS de likeNameKey está una sola vez');

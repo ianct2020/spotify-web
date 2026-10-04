@@ -18,6 +18,9 @@
 
 import { findTrackPreview } from './itunes.js';
 import { pickBestMatch, artistMatches, artistList, preferredQueryArtists } from '../util/track-match.js';
+// El `norm` de acá era una copia, cuerpo por cuerpo, del de iTunes. Desde el
+// paso 1 del plan de normalizadores los dos son el mismo.
+import { normProveedor as norm } from '../util/texto.js';
 
 // v5 (v=185): la clave sube otra vez por lo mismo que subió a v4 —cambió
 // la COMPARACIÓN de títulos, no el proveedor— así que un 'none' o
@@ -126,15 +129,6 @@ function deezerSearchJsonp(query, limit = 1) {
   });
 }
 
-function norm(s) {
-  return (s || '')
-    .toLowerCase()
-    .normalize('NFD').replace(/[̀-ͯ]/g, '')
-    .replace(/\(.*?\)|\[.*?\]/g, '')
-    .replace(/[^a-z0-9 ]/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
-}
 // Igual que iTunes: el candidato tiene que coincidir en TÍTULO Y ARTISTA
 // (util/track-match.js), y con varios artistas alcanza con que pase uno. Si no,
 // devolvemos null y la cadena sigue de largo. Hasta 2 búsquedas: el alias del

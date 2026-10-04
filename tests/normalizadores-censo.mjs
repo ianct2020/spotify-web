@@ -103,6 +103,7 @@ import { songKey, songKeysCandidatas, songKeyBase } from '../src/js/util/song-id
 import { normalizeName, normalizeKey } from '../src/js/util/versions-guard.js';
 import { baseDeEdicion } from '../src/js/util/edition-suffix.js';
 import { marcadoresDeVersion } from '../src/js/util/album-version-guard.js';
+import { normProveedor } from '../src/js/util/texto.js';
 
 // ── Las no exportadas, extraídas ─────────────────────────────────────────────
 const stripDiacritics = extraer('util/track-match.js', 'stripDiacritics');
@@ -110,9 +111,15 @@ const rawName = extraer('util/track-match.js', 'rawName', { deps: { stripDiacrit
 const claveResolver = extraer('util/album-resolver.js', 'clave', { deps: { normText } });
 const canon = extraer('util/album-version-guard.js', 'canon');
 const junkNormalize = extraer('util/junk.js', 'normalize');
-const itunesNorm = extraer('api/itunes.js', 'norm');
-const previewNorm = extraer('api/preview-providers.js', 'norm');
-const statsfmNormName = extraer('api/statsfm.js', 'normName');
+// PASO 1 del plan: los tres `norm` de proveedores eran el mismo cuerpo y ahora
+// son UNA sola función exportada. Las tres entradas del censo siguen acá, y a
+// propósito: apuntan a la misma `normProveedor`, así que el fixture compara que
+// las tres salidas sigan siendo las de antes de unificarlas.
+// ⚠️ Si alguien le vuelve a escribir un `norm` propio a uno de los tres
+// archivos, esto NO lo ve. Lo ve el assert de estructura del test.
+const itunesNorm = normProveedor;
+const previewNorm = normProveedor;
+const statsfmNormName = normProveedor;
 const artistCardNormName = extraer('features/artist-card.js', 'normName');
 const listenedNorm = extraer('features/listened-shared.js', 'norm');
 const listenedBaseName = extraer('features/listened-shared.js', 'baseName');
@@ -148,9 +155,9 @@ export const CENSO = [
   { n: 10, id: 'album-version-guard.canon',       fn: canon,                 aridad: 'texto', origen: 'extraído' },
   { n: 10.1,id:'album-version-guard.marcadores',  fn: s => [...marcadoresDeVersion(s)].sort().join(','), aridad: 'texto', origen: 'import' },
   { n: 11, id: 'junk.normalize',                  fn: junkNormalize,         aridad: 'texto', origen: 'extraído' },
-  { n: 12, id: 'itunes.norm',                     fn: itunesNorm,            aridad: 'texto', origen: 'extraído' },
-  { n: 13, id: 'preview-providers.norm',          fn: previewNorm,           aridad: 'texto', origen: 'extraído' },
-  { n: 14, id: 'statsfm.normName',                fn: statsfmNormName,       aridad: 'texto', origen: 'extraído' },
+  { n: 12, id: 'itunes.norm',                     fn: itunesNorm,            aridad: 'texto', origen: 'import' },
+  { n: 13, id: 'preview-providers.norm',          fn: previewNorm,           aridad: 'texto', origen: 'import' },
+  { n: 14, id: 'statsfm.normName',                fn: statsfmNormName,       aridad: 'texto', origen: 'import' },
   { n: 15, id: 'artist-card.normName',            fn: artistCardNormName,    aridad: 'texto', origen: 'extraído' },
   { n: 16, id: 'listened-shared.norm',            fn: listenedNorm,          aridad: 'texto', origen: 'extraído' },
   { n: 16.1,id:'listened-shared.baseName',        fn: listenedBaseName,      aridad: 'texto', origen: 'extraído' },
