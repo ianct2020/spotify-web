@@ -823,15 +823,17 @@ const HOME_SECTIONS = [
 ];
 
 function renderHome(container) {
+  // La descripción va recortada a una línea por CSS, pero entera en el `title`:
+  // el recorte es visual y no se pierde texto (ver `.home-card-desc`).
   const sections = HOME_SECTIONS.map(sec => `
-    <div style="margin-bottom:28px">
+    <div class="home-section">
       <div class="sidebar-section-title" style="margin-bottom:12px">${sec.title}</div>
       <div class="home-grid">
         ${sec.items.map(it => `
-          <a href="#${it.hash}" class="card home-card" data-route="${it.hash}">
+          <a href="#${it.hash}" class="card home-card" data-route="${it.hash}" title="${escapeHtml(it.desc)}">
             <div class="home-card-icon">${it.icon}</div>
-            <h3 style="margin-bottom:6px">${it.name}</h3>
-            <p style="color:var(--color-text-secondary);font-size:14px">${it.desc}</p>
+            <h3 class="home-card-name">${it.name}</h3>
+            <p class="home-card-desc">${it.desc}</p>
           </a>
         `).join('')}
       </div>

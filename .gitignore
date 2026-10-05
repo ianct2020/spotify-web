@@ -23,3 +23,8 @@ deleted-clusters.json
 # Basura compilada de Python
 __pycache__/
 *.pyc
+
+# El banco del inicio se GENERA desde src/js/app.js con
+# scripts/generar-banco-inicio.mjs. Commitearlo sería tener una copia que
+# puede quedar vieja — justo el defecto que la tanda del inicio vino a cerrar.
+tests/banco/inicio.html
