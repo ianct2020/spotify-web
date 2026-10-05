@@ -471,85 +471,85 @@ function showApp(profile) {
         <div class="sidebar-section">
           <div class="sidebar-section-title">General</div>
           <a class="nav-link" data-route="dashboard" href="#dashboard">
-            <span class="nav-link-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg></span> Dashboard
+            <span class="nav-link-icon">${ICONS.dashboard}</span> Dashboard
           </a>
           <a class="nav-link" data-route="wrapped" href="#wrapped">
-            <span class="nav-link-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 12 20 22 4 22 4 12"/><rect x="2" y="7" width="20" height="5"/><line x1="12" y1="22" x2="12" y2="7"/><path d="M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7z"/><path d="M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z"/></svg></span> Wrapped
+            <span class="nav-link-icon">${ICONS.wrapped}</span> Wrapped
           </a>
           <a class="nav-link" data-route="records" href="#records">
-            <span class="nav-link-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/></svg></span> Récords
+            <span class="nav-link-icon">${ICONS.records}</span> Récords
           </a>
           <a class="nav-link" data-route="covers" href="#covers">
-            <span class="nav-link-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg></span> Mis tapas
+            <span class="nav-link-icon">${ICONS.covers}</span> Mis tapas
           </a>
           <a class="nav-link" data-route="mosaico" href="#mosaico">
-            <span class="nav-link-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18M15 3v18M3 9h18M3 15h18"/></svg></span> Mosaico
+            <span class="nav-link-icon">${ICONS.mosaico}</span> Mosaico
           </a>
           <a class="nav-link" data-route="search" href="#search">
-            <span class="nav-link-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></span> Buscar likes
+            <span class="nav-link-icon">${ICONS.search}</span> Buscar likes
           </a>
           <a class="nav-link" data-route="listened" href="#listened">
-            <span class="nav-link-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/></svg></span> Álbumes escuchados
+            <span class="nav-link-icon">${ICONS.listened}</span> Álbumes escuchados
           </a>
         </div>
         <div class="sidebar-section">
           <div class="sidebar-section-title">Crear</div>
           <a class="nav-link" data-route="smart" href="#smart">
-            <span class="nav-link-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1"/><circle cx="12" cy="12" r="3"/></svg></span> Smart Playlists
+            <span class="nav-link-icon">${ICONS.smart}</span> Smart Playlists
           </a>
           <a class="nav-link" data-route="byartist" href="#byartist">
-            <span class="nav-link-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg></span> Por artista
+            <span class="nav-link-icon">${ICONS.byartist}</span> Por artista
           </a>
           <a class="nav-link" data-route="wthree" href="#wthree">
-            <span class="nav-link-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16"/><path d="M4 12h10"/><path d="M4 18h16"/><path d="M18 12l3 3-3 3"/></svg></span> W-Three helper
+            <span class="nav-link-icon">${ICONS.wthree}</span> W-Three helper
           </a>
           <a class="nav-link" data-route="genre" href="#genre">
-            <span class="nav-link-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20.6 13.4l-7.2 7.2a2 2 0 0 1-2.8 0L2 12V2h10l8.6 8.6a2 2 0 0 1 0 2.8z"/><circle cx="7" cy="7" r="1.5"/></svg></span> Por género
+            <span class="nav-link-icon">${ICONS.genre}</span> Por género
           </a>
         </div>
         <div class="sidebar-section">
           <div class="sidebar-section-title">Descubrir</div>
           <a class="nav-link" data-route="similar" href="#similar">
-            <span class="nav-link-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg></span> Artistas similares
+            <span class="nav-link-icon">${ICONS.similar}</span> Artistas similares
           </a>
           <a class="nav-link" data-route="rabbit" href="#rabbit">
-            <span class="nav-link-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22C6.5 22 2 17.5 2 12S6.5 2 12 2s10 4.5 10 10c0 3-2 5-4.5 5S13 15 13 13s1.5-3.5 3.5-3.5"/></svg></span> Rabbit hole
+            <span class="nav-link-icon">${ICONS.rabbit}</span> Rabbit hole
           </a>
           <a class="nav-link" data-route="recs" href="#recs">
-            <span class="nav-link-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 22h4M15 14a5 5 0 1 0-6 0c.5.5 1 1 1 2v2h4v-2c0-1 .5-1.5 1-2z"/></svg></span> Recomendaciones
+            <span class="nav-link-icon">${ICONS.recs}</span> Recomendaciones
           </a>
           <a class="nav-link" data-route="discover-artists" href="#discover-artists">
-            <span class="nav-link-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.35-4.35"/></svg></span> Sin escuchar de tus artistas
+            <span class="nav-link-icon">${ICONS.discoverartists}</span> Sin escuchar de tus artistas
           </a>
           <a class="nav-link" data-route="follow-artists" href="#follow-artists">
-            <span class="nav-link-icon">＋</span> Seguir artistas
+            <span class="nav-link-icon">${ICONS.followartists}</span> Seguir artistas
           </a>
           <a class="nav-link" data-route="new-releases" href="#new-releases">
-            <span class="nav-link-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></span> Novedades de tus artistas
+            <span class="nav-link-icon">${ICONS.newreleases}</span> Novedades de tus artistas
           </a>
         </div>
         <div class="sidebar-section">
           <div class="sidebar-section-title">Limpieza</div>
           <a class="nav-link" data-route="sync" href="#sync">
-            <span class="nav-link-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg></span> Sync Mirror
+            <span class="nav-link-icon">${ICONS.sync}</span> Sync Mirror
           </a>
           <a class="nav-link" data-route="dedupe" href="#dedupe">
-            <span class="nav-link-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/></svg></span> Dedupe
+            <span class="nav-link-icon">${ICONS.dedupe}</span> Dedupe
           </a>
           <a class="nav-link" data-route="zombies" href="#zombies">
-            <span class="nav-link-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 9h.01M15 9h.01M9 15c1.5-.5 4.5-.5 6 0"/><circle cx="12" cy="12" r="10"/></svg></span> Zombis
+            <span class="nav-link-icon">${ICONS.zombies}</span> Zombis
           </a>
           <a class="nav-link" data-route="versions" href="#versions">
-            <span class="nav-link-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/></svg></span> Versiones
+            <span class="nav-link-icon">${ICONS.versions}</span> Versiones
           </a>
           <a class="nav-link" data-route="zeroplays" href="#zeroplays">
-            <span class="nav-link-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="4.9" y1="4.9" x2="19.1" y2="19.1"/></svg></span> Sin plays
+            <span class="nav-link-icon">${ICONS.zeroplays}</span> Sin plays
           </a>
           <a class="nav-link" data-route="sin-clasificar" href="#sin-clasificar">
-            <span class="nav-link-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h13"/><path d="M3 12h9"/><path d="M3 18h7"/><circle cx="18" cy="16" r="3"/><path d="M18 10.5v1.5"/></svg></span> Sin clasificar
+            <span class="nav-link-icon">${ICONS.sinclasificar}</span> Sin clasificar
           </a>
           <a class="nav-link" data-route="skips" href="#skips">
-            <span class="nav-link-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 4 15 12 5 20 5 4"/><line x1="19" y1="5" x2="19" y2="19"/></svg></span> Skips crónicos
+            <span class="nav-link-icon">${ICONS.skips}</span> Skips crónicos
           </a>
         </div>
         <!-- El footer (avatar + acciones) vive DENTRO de .sidebar-nav, no como
@@ -768,6 +768,11 @@ const ICONS = {
   search: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>',
   mosaico: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18M15 3v18M3 9h18M3 15h18"/></svg>',
   sinclasificar: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h13"/><path d="M3 12h9"/><path d="M3 18h7"/><circle cx="18" cy="16" r="3"/><path d="M18 10.5v1.5"/></svg>',
+  covers: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>',
+  wthree: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>',
+  discoverartists: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>',
+  followartists: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" y1="8" x2="19" y2="14"/><line x1="22" y1="11" x2="16" y2="11"/></svg>',
+  newreleases: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>',
 };
 
 const HOME_SECTIONS = [
@@ -796,9 +801,9 @@ const HOME_SECTIONS = [
       { hash: 'similar', icon: ICONS.similar, name: 'Artistas similares', desc: 'Artistas parecidos a los que te gustan, vía Last.fm.' },
       { hash: 'rabbit', icon: ICONS.rabbit, name: 'Rabbit hole', desc: 'Navega artistas y tracks encadenados por género.' },
       { hash: 'recs', icon: ICONS.recs, name: 'Recomendaciones', desc: 'Basadas en tus scrobbles de Last.fm.' },
-      { hash: 'discover-artists', icon: ICONS.search, name: 'Sin escuchar de tus artistas', desc: 'Discografía de tus artistas favoritos que aún no escuchaste.' },
-      { hash: 'follow-artists', icon: ICONS.search, name: 'Seguir artistas', desc: 'Elige a quién seguir en Spotify para sus recomendaciones y avisos.' },
-      { hash: 'new-releases', icon: ICONS.records, name: 'Novedades de tus artistas', desc: 'Lanzamientos recientes de tus artistas favoritos, filtrando lo que ya oíste.' },
+      { hash: 'discover-artists', icon: ICONS.discoverartists, name: 'Sin escuchar de tus artistas', desc: 'Discografía de tus artistas favoritos que aún no escuchaste.' },
+      { hash: 'follow-artists', icon: ICONS.followartists, name: 'Seguir artistas', desc: 'Elige a quién seguir en Spotify para sus recomendaciones y avisos.' },
+      { hash: 'new-releases', icon: ICONS.newreleases, name: 'Novedades de tus artistas', desc: 'Lanzamientos recientes de tus artistas favoritos, filtrando lo que ya oíste.' },
     ],
   },
   {
