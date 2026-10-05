@@ -265,14 +265,14 @@ h3 { font-size: 18px; font-weight: 600; }
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 32px;
-  height: 32px;
+  width: 26px;
+  height: 26px;
   color: var(--color-accent);
-  margin-bottom: 12px;
+  margin-bottom: 8px;
 }
 .home-card-icon svg {
-  width: 32px;
-  height: 32px;
+  width: 26px;
+  height: 26px;
 }
 
 .sidebar-footer {
@@ -392,10 +392,76 @@ h3 { font-size: 18px; font-weight: 600; }
   .page-header-title { font-size: 19px; }
 }
 
+/* ── La grilla del inicio (v=274) ──────────────────────────────────────────
+   CUATRO columnas, no `auto-fill`. El motivo es la aritmética de los grupos,
+   no el gusto: son de 7, 4, 6 y 7 tarjetas, y con tres columnas los impares
+   dejan una tarjeta sola en su renglón. Medido con las 24 tarjetas a 1366 px,
+   que es la pantalla de Ian:
+
+       3 columnas → 3 huérfanas · 1.909 px de alto
+       4 columnas → 0 huérfanas · 1.557 px   ← ésta
+       5 columnas → 1 huérfana  · 1.680 px
+
+   Con cuatro, 7 da 4+3, 4 da 4 y 6 da 4+2: ningún grupo termina en una sola.
+   Y sale la página más corta de las tres, aun con DOS tarjetas más que antes.
+
+   `minmax(0, 1fr)` y no `minmax(250px, 1fr)`: el mínimo de 250 px era lo que
+   hacía que el número de columnas dependiera del ancho sobrante, así que la
+   misma pantalla daba 3 o 4 según el sidebar estuviera o no. Con 0 el número
+   de columnas lo manda el breakpoint y nunca hay scroll horizontal, que es lo
+   que el mínimo rígido provoca cuando no entra.
+
+   Cada grupo es su propia `.home-grid`, así que ya arranca en renglón nuevo.
+   ────────────────────────────────────────────────────────────────────────── */
 .home-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
-  gap: 16px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+}
+
+/* A 1024 y 768 el contenido útil baja de 1.012 px a 670 y 726: cuatro columnas
+   darían tarjetas de ~160 px y el nombre empezaría a partirse. Dos columnas
+   dejan 2 huérfanas (los dos grupos de 7 son impares, no hay forma de evitarlo)
+   contra las 3 que dejarían tres columnas. */
+@media (max-width: 1199px) {
+  .home-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+/* Teléfono (<= 600 px): una sola columna. No hace falta regla acá — la pone
+   el bloque de «interfaz chica» de más abajo, que ya la fuerza con
+   `!important` y además baja el gap a 10 px. Duplicarla sería tener dos
+   sitios que decir lo mismo, que es justo lo que esta tanda vino a cerrar. */
+
+/* Tarjeta compacta: icono, nombre y UNA línea de descripción. Antes la
+   descripción corría hasta cuatro líneas y era lo que estiraba el renglón
+   entero, porque en una grilla todas las tarjetas de una fila miden lo que la
+   más alta. Con una línea el alto es el mismo para todas por construcción.
+
+   El recorte es visual (`line-clamp`), no del texto: el `title` lleva la
+   descripción entera, así que al pasar el ratón sigue estando completa y los
+   lectores de pantalla la leen igual. */
+.home-card {
+  padding: 16px 18px;
+}
+.home-card .home-card-name {
+  font-size: 15px;
+  margin-bottom: 4px;
+}
+.home-card .home-card-desc {
+  color: var(--color-text-secondary);
+  font-size: 13px;
+  line-height: 1.4;
+  margin: 0;
+  display: -webkit-box;
+  -webkit-line-clamp: 1;
+  line-clamp: 1;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.home-section {
+  margin-bottom: 28px;
 }
 
 .home-card {
@@ -417,7 +483,7 @@ h3 { font-size: 18px; font-weight: 600; }
   background: var(--color-accent-soft);
   border-color: var(--color-accent);
 }
-.home-card.active h3 {
+.home-card.active .home-card-name {
   color: var(--color-accent);
 }
 
@@ -1231,9 +1297,6 @@ h3 { font-size: 18px; font-weight: 600; }
     grid-template-columns: minmax(0, 1fr);
   }
 
-  .home-grid {
-    grid-template-columns: 1fr;
-  }
 }
 
 .year-tile {
