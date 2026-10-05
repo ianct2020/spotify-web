@@ -780,12 +780,12 @@ const HOME_SECTIONS = [
     title: 'General',
     items: [
       { hash: 'dashboard', icon: ICONS.dashboard, name: 'Dashboard', desc: 'Stats de tu biblioteca de Liked Songs.' },
-      { hash: 'wrapped', icon: ICONS.wrapped, name: 'Wrapped', desc: 'Tu resumen del año — año calendario completo, hecho con el streaming history.' },
-      { hash: 'records', icon: ICONS.records, name: 'Récords', desc: 'Días épicos, maratones, temas en loop, rachas e hitos de tu historial.' },
+      { hash: 'wrapped', icon: ICONS.wrapped, name: 'Wrapped', desc: 'Tu resumen del año calendario, del streaming history.' },
+      { hash: 'records', icon: ICONS.records, name: 'Récords', desc: 'Días épicos, maratones, rachas e hitos de tu historial.' },
       { hash: 'covers', icon: ICONS.covers, name: 'Mis tapas', desc: 'El mosaico de las portadas que escuchaste de verdad.' },
-      { hash: 'search', icon: ICONS.search, name: 'Buscar likes', desc: 'Buscador instantáneo en tus Liked Songs (local, sin ir a Spotify).' },
+      { hash: 'search', icon: ICONS.search, name: 'Buscar likes', desc: 'Buscador instantáneo en tus likes, sin ir a Spotify.' },
       { hash: 'listened', icon: ICONS.listened, name: 'Álbumes escuchados', desc: 'Los álbumes de tu playlist de registro, agrupados.' },
-      { hash: 'mosaico', icon: ICONS.mosaico, name: 'Mosaico', desc: 'Sube una imagen y la reconstruyo con las portadas de tu biblioteca.' },
+      { hash: 'mosaico', icon: ICONS.mosaico, name: 'Mosaico', desc: 'Sube una imagen y la reconstruyo con tus portadas.' },
     ],
   },
   {
@@ -804,8 +804,8 @@ const HOME_SECTIONS = [
       { hash: 'rabbit', icon: ICONS.rabbit, name: 'Rabbit hole', desc: 'Navega artistas y tracks encadenados por género.' },
       { hash: 'recs', icon: ICONS.recs, name: 'Recomendaciones', desc: 'Basadas en tus scrobbles de Last.fm.' },
       { hash: 'discover-artists', icon: ICONS.discoverartists, name: 'Sin escuchar de tus artistas', desc: 'Discografía de tus artistas favoritos que aún no escuchaste.' },
-      { hash: 'follow-artists', icon: ICONS.followartists, name: 'Seguir artistas', desc: 'Elige a quién seguir en Spotify para sus recomendaciones y avisos.' },
-      { hash: 'new-releases', icon: ICONS.newreleases, name: 'Novedades de tus artistas', desc: 'Lanzamientos recientes de tus artistas favoritos, filtrando lo que ya oíste.' },
+      { hash: 'follow-artists', icon: ICONS.followartists, name: 'Seguir artistas', desc: 'Elige a quién seguir para sus recomendaciones y avisos.' },
+      { hash: 'new-releases', icon: ICONS.newreleases, name: 'Novedades de tus artistas', desc: 'Lanzamientos recientes, filtrando lo que ya oíste.' },
     ],
   },
   {

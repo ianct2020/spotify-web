@@ -434,14 +434,26 @@ h3 { font-size: 18px; font-weight: 600; }
    `!important` y además baja el gap a 10 px. Duplicarla sería tener dos
    sitios que decir lo mismo, que es justo lo que esta tanda vino a cerrar. */
 
-/* Tarjeta compacta: icono, nombre y UNA línea de descripción. Antes la
-   descripción corría hasta cuatro líneas y era lo que estiraba el renglón
-   entero, porque en una grilla todas las tarjetas de una fila miden lo que la
-   más alta. Con una línea el alto es el mismo para todas por construcción.
+/* Tarjeta compacta: icono, nombre y DOS líneas de descripción.
 
-   El recorte es visual (`line-clamp`), no del texto: el `title` lleva la
-   descripción entera, así que al pasar el ratón sigue estando completa y los
-   lectores de pantalla la leen igual. */
+   v=274 las dejó en una sola y el resultado fue que se cortaban LAS 24, no
+   unas pocas: a 1366 px la caja de texto mide 205 px y en una línea entran
+   unos 30 caracteres, cuando la más corta de las descripciones tiene 35. Una
+   descripción cortada no informa, así que la de una línea era un recorte que
+   no servía a nadie.
+
+   Con dos líneas entran las 24 (se acortaron las seis más largas, que a dos
+   líneas tampoco entraban). El alto de la tarjeta pasa de 109 a 127 px y el
+   del inicio de 1.142 a 1.270 — sigue muy por debajo de los 1.568 px que
+   tenía el inicio de tres columnas antes de v=274.
+
+   Dos y no tres: con tres entrarían sin tocar el texto, pero el inicio sube a
+   1.324 px y las tarjetas dejan de medir todas lo mismo (146 y 127 según la
+   fila). En una grilla todas las de una fila miden lo que la más alta, así
+   que un alto único es lo que mantiene los renglones parejos.
+
+   El recorte sigue siendo visual (`line-clamp`), no del texto: el `title`
+   lleva la descripción entera. */
 .home-card {
   padding: 16px 18px;
 }
@@ -455,8 +467,8 @@ h3 { font-size: 18px; font-weight: 600; }
   line-height: 1.4;
   margin: 0;
   display: -webkit-box;
-  -webkit-line-clamp: 1;
-  line-clamp: 1;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
 }

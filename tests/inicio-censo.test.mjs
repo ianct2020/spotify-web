@@ -122,5 +122,35 @@ for (const [ruta, icono] of [...src.matchAll(/data-route="([^"]+)" href="#[^"]*"
     iconoDeInicio[ruta] === icono, `menú ICONS.${icono} · inicio ICONS.${iconoDeInicio[ruta]}`);
 }
 
+// ── 6. las descripciones entran en la tarjeta ──────────────────────────────
+//
+// v=274 dejó la descripción en UNA línea y el resultado fue que se cortaban
+// LAS 24, no unas pocas: a 1366 px la caja de texto mide 205 px y en una línea
+// entran unos 30 caracteres, cuando la más corta de las descripciones tiene 35.
+// Una descripción cortada no informa, así que ese recorte no servía a nadie.
+//
+// Ahora son dos líneas y se acortaron las seis que ni así entraban. Lo que se
+// vigila acá es que no vuelvan a crecer.
+//
+// ⚠️ EL LÍMITE ES UN PROXY, y a propósito. Lo que decide de verdad es el ANCHO
+// en píxeles, que depende de la tipografía y no se puede medir sin navegador.
+// El número sale de medirlo: a dos líneas entraron 60 caracteres y no entraron
+// 66, así que 62 deja margen sin dejar pasar ninguna de las que fallaban. Si
+// una descripción futura se queda justo, el banco del inicio lo dice con
+// píxeles — esto es sólo la red barata que corre en cada `npm test`.
+const LIMITE = 62;
+const descripciones = [...bloqueHome.matchAll(/name: '([^']+)', desc: '([^']*)' \}/g)]
+  .map(m => ({ nombre: m[1], desc: m[2] }));
+
+comprobar('se leyeron las descripciones de las 24 tarjetas',
+  descripciones.length === tarjetas.length,
+  `leídas ${descripciones.length} de ${tarjetas.length}`);
+
+for (const { nombre, desc } of descripciones) {
+  comprobar(`«${nombre}»: la descripción entra en dos líneas`, desc.length <= LIMITE,
+    `${desc.length} caracteres (tope ${LIMITE}): ${desc}`);
+  comprobar(`«${nombre}»: tiene descripción`, desc.trim().length > 0);
+}
+
 console.log(`\n  ${ok} asserts OK, ${fallos} fallos`);
 process.exit(fallos ? 1 : 0);
