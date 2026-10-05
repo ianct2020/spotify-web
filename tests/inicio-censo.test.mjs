@@ -88,5 +88,39 @@ for (const [k, g] of Object.entries(ICONS)) {
   comprobar(`ICONS.${k}: sin color escrito a mano`, !/#[0-9a-fA-F]{3,6}/.test(g), g.slice(0, 60));
 }
 
+// ── 5. el inicio muestra TODAS las funciones del menú ───────────────────────
+//
+// El 04/10 Ian no podía abrir «W-Three» ni «Mis tapas» desde el inicio: el
+// menú tenía 24 y el inicio 22. No era que la vista estuviera rota —las dos
+// andaban— sino que nadie las había listado ahí, y como son dos listas
+// escritas a mano no hay nada que avise.
+//
+// Esto es el hermano del «barrido de vistas vivas» de app.js: aquél comprueba
+// que cada ruta PINTA algo; éste, que a cada ruta se puede LLEGAR desde el
+// inicio. Una vista viva a la que no se llega está igual de muerta para Ian.
+const rutasMenu = [...src.matchAll(/data-route="([^"]+)" href="#/g)]
+  .map(m => m[1]).filter(r => r !== 'home');
+const rutasInicio = tarjetas.map(t => t.hash);
+
+const faltanEnInicio = rutasMenu.filter(r => !rutasInicio.includes(r));
+const sobranEnInicio = rutasInicio.filter(r => !rutasMenu.includes(r));
+
+comprobar('el inicio no se saltea ninguna función del menú', faltanEnInicio.length === 0,
+  `en el menú y NO en el inicio: ${faltanEnInicio.join(', ')}`);
+comprobar('el inicio no inventa funciones que el menú no tiene', sobranEnInicio.length === 0,
+  `en el inicio y NO en el menú: ${sobranEnInicio.join(', ')}`);
+comprobar('menú e inicio tienen la misma cuenta', rutasMenu.length === rutasInicio.length,
+  `menú ${rutasMenu.length} · inicio ${rutasInicio.length}`);
+
+// Y cada función se dibuja igual en los dos sitios. Como el menú ya lee de
+// ICONS (bloque 3), basta con que la ruta exista en los dos: si el inicio
+// apuntara a otra clave, el mismo botón tendría dos caras otra vez.
+const iconoDeInicio = Object.fromEntries(tarjetas.map(t => [t.hash, t.icono]));
+for (const [ruta, icono] of [...src.matchAll(/data-route="([^"]+)" href="#[^"]*">\s*<span class="nav-link-icon">\$\{ICONS\.([a-zA-Z0-9]+)\}/g)].map(m => [m[1], m[2]])) {
+  if (ruta === 'home') continue;
+  comprobar(`${ruta}: el menú y el inicio pintan el mismo icono`,
+    iconoDeInicio[ruta] === icono, `menú ICONS.${icono} · inicio ICONS.${iconoDeInicio[ruta]}`);
+}
+
 console.log(`\n  ${ok} asserts OK, ${fallos} fallos`);
 process.exit(fallos ? 1 : 0);

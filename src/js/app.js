@@ -782,6 +782,7 @@ const HOME_SECTIONS = [
       { hash: 'dashboard', icon: ICONS.dashboard, name: 'Dashboard', desc: 'Stats de tu biblioteca de Liked Songs.' },
       { hash: 'wrapped', icon: ICONS.wrapped, name: 'Wrapped', desc: 'Tu resumen del año — año calendario completo, hecho con el streaming history.' },
       { hash: 'records', icon: ICONS.records, name: 'Récords', desc: 'Días épicos, maratones, temas en loop, rachas e hitos de tu historial.' },
+      { hash: 'covers', icon: ICONS.covers, name: 'Mis tapas', desc: 'El mosaico de las portadas que escuchaste de verdad.' },
       { hash: 'search', icon: ICONS.search, name: 'Buscar likes', desc: 'Buscador instantáneo en tus Liked Songs (local, sin ir a Spotify).' },
       { hash: 'listened', icon: ICONS.listened, name: 'Álbumes escuchados', desc: 'Los álbumes de tu playlist de registro, agrupados.' },
       { hash: 'mosaico', icon: ICONS.mosaico, name: 'Mosaico', desc: 'Sube una imagen y la reconstruyo con las portadas de tu biblioteca.' },
@@ -792,6 +793,7 @@ const HOME_SECTIONS = [
     items: [
       { hash: 'smart', icon: ICONS.smart, name: 'Smart Playlists', desc: 'Playlists por año, década o random.' },
       { hash: 'byartist', icon: ICONS.byartist, name: 'Por artista', desc: 'Todos tus likes de uno o varios artistas.' },
+      { hash: 'wthree', icon: ICONS.wthree, name: 'W-Three helper', desc: 'Los tres mejores temas de cada álbum, y cuáles te faltan.' },
       { hash: 'genre', icon: ICONS.genre, name: 'Por género', desc: 'Agrupa tus likes por género y arma playlists.' },
     ],
   },
