@@ -1,0 +1,248 @@
+<!doctype html><html lang="es"><head><meta charset="utf-8"><title>banco escrituras simuladas</title>
+<link rel="stylesheet" href="/css/theme.css">
+<link rel="stylesheet" href="/css/components.css">
+<link rel="stylesheet" href="/css/main.css">
+<style>html,body{margin:0;background:var(--color-bg);color:var(--color-text);font-family:var(--font-sans),system-ui}</style>
+</head><body class="sidebar-hidden">
+<main class="main" id="main-content"></main>
+<script type="module">
+// ── Qué prueba este banco (v=275) ────────────────────────────────────────────
+//
+// Las dos ESCRITURAS de la tanda, con el código REAL de las vistas y una Spotify
+// de mentira (`simulado.mjs`): nada de esto sale a la red ni toca la cuenta.
+//
+//   F.1  `#sync`: la palabra SYNC se pide solo si hay tracks a QUITAR.
+//          caso 1  «añadir 4 y quitar 0»  → diálogo normal, sin campo de texto.
+//          caso 2  «añadir 4 y quitar 3»  → hay que escribir SYNC.
+//          «Solo añadir» nunca la pide. Se mira qué escrituras llegaron.
+//   F.3  La ficha de álbum de `#similar` ofrece «Guardar álbum»: pide
+//        confirmación, llama a lo MISMO que las otras dos vistas y la única
+//        escritura es `PUT /me/library?uris=spotify:album:…`.
+//
+// `?paso=<nombre>` detiene el banco en ese punto con la pantalla como queda
+// (para fotografiarla); sin `paso` corre todo y termina en `data-banco="ok"`.
+
+import { hojasLegibles, fallar, listo } from '/banco/esperar.mjs';
+import { instalarRedSimulada, crearLikes, pistaPlaylist, esperarReal } from '/banco/simulado.mjs';
+// Ver `esperarReal`: el reloj virtual de --virtual-time-budget corre más que IndexedDB.
+const esperarA = (cond, { que }) => esperarReal(cond, { que });
+
+window.__cons = [];
+for (const k of ['error', 'warn']) { const o = console[k].bind(console); console[k] = (...a) => { window.__cons.push(k + ': ' + a.map(x => x?.message || String(x)).join(' ')); o(...a); }; }
+window.addEventListener('unhandledrejection', e => window.__cons.push('rechazo: ' + (e.reason?.message || e.reason)));
+const q = new URLSearchParams(location.search);
+const PASO = q.get('paso');
+class Parada extends Error {}
+const punto = (nombre) => { if (PASO === nombre) throw new Parada(nombre); };
+const afirmar = (c, msg) => { if (!c) throw new Error('BANCO: ' + msg); };
+const $ = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+const esperarEl = (sel, que) => esperarA(() => $(sel), { que: que || sel });
+const clic = (el) => { afirmar(el, 'falta el botón a apretar'); el.click(); };
+const botonConTexto = (txt, raiz = document) => $$('button', raiz).find(b => b.textContent.trim() === txt);
+
+try {
+  await hojasLegibles(['/css/main.css', '/css/components.css']);
+  const sim = instalarRedSimulada();
+  window.__sim = sim;
+  const likes = crearLikes();                   // 48 me gusta
+  const aQuitarDe = (n) => likes.slice(0, likes.length - n);
+
+  // ── Spotify de mentira ──────────────────────────────────────────────────────
+  sim.ruta('GET', /^\/me$/, () => ({ id: 'usuario-banco', display_name: 'Banco' }));
+  sim.ruta('GET', /^\/me\/tracks/, ({ url }) => {
+    const off = +url.searchParams.get('offset') || 0, lim = +url.searchParams.get('limit') || 50;
+    return { items: likes.slice(off, off + lim), total: likes.length, next: off + lim < likes.length ? 'x' : null };
+  });
+  const dueno = { id: 'usuario-banco' };
+  const playlists = [
+    { id: 'pl-anade', name: 'anothertwo', owner: dueno, tracks: { total: 44 }, public: false, images: [] },
+    { id: 'pl-quita', name: 'espejo-quita', owner: dueno, tracks: { total: 47 }, public: false, images: [] },
+  ];
+  sim.ruta('GET', /^\/me\/playlists/, () => ({ items: playlists, total: playlists.length, next: null }));
+  // pl-anade = los me gusta MENOS 4  → añadir 4, quitar 0
+  // pl-quita = los me gusta MENOS 4, MÁS 3 que no están en los me gusta → añadir 4, quitar 3
+  const extras = [1, 2, 3].map(i => ({ added_at: '2025-01-01T00:00:00Z', item: {
+    id: `x${i}`, uri: `spotify:track:extra-${i}`, name: `Tema de más ${i}`, type: 'track',
+    artists: [{ id: 'z', name: 'Artista de más' }], album: { id: 'zz', name: 'Álbum de más', images: [] } } }));
+  const contenido = {
+    'pl-anade': aQuitarDe(4).map(pistaPlaylist),
+    'pl-quita': [...aQuitarDe(4).map(pistaPlaylist), ...extras],
+  };
+  sim.ruta('GET', /^\/playlists\/([^/?]+)\?fields=snapshot_id/, ({ ruta }) => ({ snapshot_id: 'snap-' + ruta.split('/')[2].split('?')[0] }));
+  sim.ruta('GET', /^\/playlists\/([^/?]+)\/items/, ({ ruta, url }) => {
+    const id = ruta.split('/')[2].split('?')[0];
+    const todo = contenido[id] || [];
+    const lim = +url.searchParams.get('limit') || 100, off = +url.searchParams.get('offset') || 0;
+    return { items: todo.slice(off, off + lim), total: todo.length, next: off + lim < todo.length ? 'x' : null };
+  });
+  sim.ruta('POST', /^\/playlists\/[^/]+\/items/, () => ({ snapshot_id: 'snap-despues' }));
+  sim.ruta('DELETE', /^\/playlists\/[^/]+\/items/, () => ({ snapshot_id: 'snap-despues' }));
+
+  const escrituras = () => sim.reg.escrituras;
+  const deItems = (m) => escrituras().filter(e => e.metodo === m && /\/playlists\/[^/]+\/items/.test(e.ruta));
+
+  // ═════════════════════════ F.1 — #sync ═════════════════════════════════════
+  const { render: renderSync } = await import('/js/features/sync.js');
+  const main = $('#main-content');
+  renderSync(main);                                         // se auto-analiza «anothertwo»
+  await esperarEl('#sync-results .results-summary', 'que #sync pinte el análisis');
+  const num = (i) => $$('.stat-value', main)[i].textContent.trim();
+  afirmar(num(2) === '+4' && num(3) === '-0', `caso 1: se esperaba +4 / -0 y dice ${num(2)} / ${num(3)}`);
+
+  // Caso 1: añadir 4 y quitar 0 — «Sincronizar»
+  clic($('#sync-execute-btn'));
+  await esperarEl('.modal', 'el diálogo del caso 1');
+  afirmar(!$('#confirm-text-input'), 'caso 1 («quitar 0»): NO debe haber campo para escribir SYNC');
+  afirmar(!/SYNC/.test($('.modal').textContent), 'caso 1: el diálogo ni siquiera nombra la palabra SYNC');
+  afirmar(/añadir <?.*4/.test($('.modal').textContent) || $('.modal').textContent.includes('4'), 'caso 1: el diálogo dice el número');
+  afirmar($('#modal-confirm') && !$('#modal-confirm').disabled, 'caso 1: «Añadir» está habilitado sin escribir nada');
+  afirmar($('#modal-confirm').textContent.trim() === 'Añadir', 'caso 1: el botón dice «Añadir»');
+  punto('sync-anade-modal');
+  clic($('#modal-cancel'));
+  await esperarA(() => !$('.modal'), { que: 'que se cierre el diálogo' });
+  afirmar(escrituras().length === 0, `cancelar no escribe nada (hay ${escrituras().length})`);
+
+  // «Solo añadir» tampoco la pide
+  clic($('#sync-add-only-btn'));
+  await esperarEl('.modal', 'el diálogo de «Solo añadir»');
+  afirmar(!$('#confirm-text-input'), '«Solo añadir» NO pide la palabra');
+  punto('sync-solo-anadir-modal');
+  clic($('#modal-cancel'));
+  await esperarA(() => !$('.modal'), { que: 'que se cierre el diálogo' });
+
+  // Confirmar el caso 1: la única escritura es UN POST con 4 uris y NINGÚN DELETE
+  clic($('#sync-execute-btn'));
+  await esperarEl('#modal-confirm');
+  clic($('#modal-confirm'));
+  await esperarA(() => deItems('POST').length === 1, { que: 'el POST simulado del caso 1' });
+  afirmar(deItems('POST')[0].cuerpo.uris.length === 4, 'el POST lleva las 4 uris que faltaban');
+  afirmar(deItems('DELETE').length === 0, 'caso 1: ningún DELETE');
+  afirmar(sim.reg.externas.length === 0, `nada salió a la red externa: ${sim.reg.externas.join(' | ')}`);
+
+  // Caso 2: añadir 4 y quitar 3 — hay que escribir SYNC
+  await esperarA(() => $('#sync-playlist-name') && !$('#sync-analyze-btn').disabled, { que: 'que #sync vuelva a poder analizar' });
+  $('#sync-playlist-name').value = 'espejo-quita';
+  clic($('#sync-analyze-btn'));
+  await esperarA(() => $('#sync-execute-btn') && num(3) === '-3', { que: 'el análisis del caso 2 (-3)' });
+  afirmar(num(2) === '+4', `caso 2: se esperaba +4 y dice ${num(2)}`);
+  const antesDelete = deItems('DELETE').length;
+
+  clic($('#sync-execute-btn'));
+  await esperarEl('.modal', 'el diálogo del caso 2');
+  const campo = $('#confirm-text-input');
+  afirmar(campo, 'caso 2 («quitar 3»): SÍ debe pedir la palabra');
+  afirmar(/SYNC/.test($('.modal').textContent), 'caso 2: dice cuál es la palabra');
+  afirmar($('#modal-confirm').disabled, 'caso 2: «Confirmar» arranca deshabilitado');
+  campo.value = 'sync'; campo.dispatchEvent(new Event('input'));
+  afirmar($('#modal-confirm').disabled, 'caso 2: «sync» en minúsculas no vale');
+  punto('sync-quita-modal');
+  campo.value = 'SYNC'; campo.dispatchEvent(new Event('input'));
+  afirmar(!$('#modal-confirm').disabled, 'caso 2: escrito SYNC se habilita');
+  // Cancelar: no borra nada
+  clic($('#modal-cancel'));
+  await esperarA(() => !$('.modal'), { que: 'que se cierre el diálogo' });
+  afirmar(deItems('DELETE').length === antesDelete, 'caso 2: cancelar no borra nada');
+
+  // «Solo añadir» con tracks para quitar: sin palabra y SIN DELETE
+  clic($('#sync-add-only-btn'));
+  await esperarEl('.modal', 'el diálogo de «Solo añadir» del caso 2');
+  afirmar(!$('#confirm-text-input'), 'caso 2: «Solo añadir» sigue sin pedir la palabra');
+  afirmar(/No se va a quitar nada/.test($('.modal').textContent), 'y dice que no se quita nada');
+  clic($('#modal-cancel'));
+  await esperarA(() => !$('.modal'), { que: 'que se cierre el diálogo' });
+
+  // Confirmar el caso 2: ahora sí, un DELETE con las 3 uris
+  clic($('#sync-execute-btn'));
+  await esperarEl('#confirm-text-input');
+  $('#confirm-text-input').value = 'SYNC'; $('#confirm-text-input').dispatchEvent(new Event('input'));
+  clic($('#modal-confirm'));
+  await esperarA(() => deItems('DELETE').length === antesDelete + 1, { que: 'el DELETE simulado del caso 2' });
+  const del = deItems('DELETE').at(-1);
+  afirmar(del.cuerpo.items.length === 3, `el DELETE lleva 3 uris y lleva ${del.cuerpo.items.length}`);
+  afirmar(del.cuerpo.items.every(i => i.uri.startsWith('spotify:track:extra-')), 'y son justo las 3 de más');
+
+  // ═════════════════════ F.3 — ficha de álbum de #similar ════════════════════
+  document.querySelectorAll('.modal-overlay').forEach(o => o.remove());
+  const { accionesDeAlbum } = await import('/js/features/similar-artists.js');
+  const { openAlbumCard } = await import('/js/features/album-card.js');
+  const pistas = (n) => Array.from({ length: n }, (_, i) => ({
+    id: `p${i + 1}`, uri: `spotify:track:p${i + 1}`, name: `Pista ${i + 1}`, track_number: i + 1, duration_ms: 180000,
+    artists: [{ id: 'art-a', name: 'Artista de ejemplo A' }] }));
+  sim.ruta('GET', /^\/albums\/alb-1\/tracks/, () => ({ items: pistas(10), total: 10, next: null }));
+  sim.ruta('PUT', /^\/me\/library/, () => ({}));
+  const antes = escrituras().length;
+
+  const fila = { album: 'Álbum de ejemplo', albumId: 'alb-1', albumTotal: 10, artist: 'Artista de ejemplo A',
+    artistList: ['Artista de ejemplo A'], image: null, imageBig: null };
+  const acciones = accionesDeAlbum(fila);
+  afirmar(acciones.length === 1 && acciones[0].label === 'Guardar álbum', 'la fila con albumId ofrece UNA acción: «Guardar álbum»');
+  afirmar(accionesDeAlbum({ ...fila, albumId: undefined }).length === 0, 'sin albumId no se ofrece nada (no hay a qué apuntar)');
+
+  openAlbumCard({ name: fila.album, artist: fila.artist, albumId: fila.albumId, img: null, acciones });
+  await esperarEl('.album-modal-acciones-extra', 'que la ficha pinte sus acciones');
+  const btn = botonConTexto('Guardar álbum', $('.album-modal-acciones-extra'));
+  afirmar(btn, 'la ficha muestra el botón «Guardar álbum»');
+  afirmar(botonConTexto('Ver ficha del artista') && $('#alb-spotify'), 'y siguen «Ver ficha del artista» y «Buscar en Spotify»');
+  punto('ficha');
+  clic(btn);
+  await esperarA(() => $$('.modal').some(m => /Guardar álbum/.test(m.querySelector('h2')?.textContent || '')), { que: 'la confirmación de guardar' });
+  const conf = $$('.modal').find(m => /Guardar álbum/.test(m.querySelector('h2')?.textContent || ''));
+  afirmar(/Álbum de ejemplo/.test(conf.textContent) && /biblioteca de álbumes/.test(conf.textContent), 'la confirmación dice qué se guarda y dónde');
+  afirmar(escrituras().length === antes, 'ANTES de confirmar no hay ninguna escritura');
+  punto('ficha-confirmar');
+  clic($('#modal-cancel', conf));
+  await esperarA(() => !$$('.modal').some(m => m.querySelector('h2')?.textContent === 'Guardar álbum'), { que: 'que cierre la confirmación' });
+  afirmar(escrituras().length === antes, 'cancelar no escribe nada');
+
+  clic(botonConTexto('Guardar álbum', $('.album-modal-acciones-extra')));
+  await esperarA(() => $$('.modal').some(m => m.querySelector('h2')?.textContent === 'Guardar álbum'), { que: 'la confirmación, otra vez' });
+  const conf2 = $$('.modal').find(m => m.querySelector('h2')?.textContent === 'Guardar álbum');
+  clic($('#modal-confirm', conf2));
+  await esperarA(() => escrituras().length === antes + 1, { que: 'la escritura simulada del guardado' });
+  const w = escrituras().at(-1);
+  afirmar(w.metodo === 'PUT' && w.ruta.startsWith('/me/library?uris=') && decodeURIComponent(w.ruta).includes('spotify:album:alb-1'),
+    `la ÚNICA escritura es PUT /me/library con la uri del álbum: ${w.metodo} ${w.ruta}`);
+  await esperarA(() => /guardado en tu biblioteca/.test(document.body.textContent), { que: 'el aviso de guardado (el de las otras vistas)' });
+  afirmar(sim.reg.externas.length === 0, 'nada salió a la red externa');
+  afirmar(sim.reg.desconocidas.length === 0, `ninguna ruta sin simular: ${sim.reg.desconocidas.join(' | ')}`);
+
+  // ── F.3 bis: un SINGLE (menos de 4 pistas) NO va a la biblioteca ──────────────
+  // Va a la playlist «fonoteca · sin escuchar», que si no existe SE CREA (y Spotify
+  // la crea pública). La confirmación tiene que decirlo ANTES, y el banco comprueba
+  // que no hay ningún PUT /me/library en este camino.
+  $$('.modal-overlay').forEach(o => o.remove());
+  sim.ruta('GET', /^\/albums\/alb-2\/tracks/, () => ({ items: pistas(1).map(p => ({ ...p, id: 's1', uri: 'spotify:track:s1' })), total: 1, next: null }));
+  sim.ruta('POST', /^\/me\/playlists/, ({ cuerpo }) => ({ id: 'pl-singles', name: cuerpo?.name || 'x', owner: dueno, public: true }));
+  const fila2 = { album: 'Single de ejemplo', albumId: 'alb-2', albumTotal: 1, artist: 'Artista de ejemplo A', artistList: ['Artista de ejemplo A'] };
+  const antes2 = escrituras().length;
+  openAlbumCard({ name: fila2.album, artist: fila2.artist, albumId: fila2.albumId, img: null, acciones: accionesDeAlbum(fila2) });
+  await esperarEl('.album-modal-acciones-extra', 'la ficha del single');
+  clic(botonConTexto('Guardar álbum', $('.album-modal-acciones-extra')));
+  await esperarA(() => $$('.modal').some(m => m.querySelector('h2')?.textContent === 'Guardar álbum'), { que: 'la confirmación del single' });
+  const conf3 = $$('.modal').find(m => m.querySelector('h2')?.textContent === 'Guardar álbum');
+  afirmar(/single/.test(conf3.textContent) && /fonoteca · sin escuchar/.test(conf3.textContent), 'la confirmación del single dice que va a la playlist «fonoteca · sin escuchar»');
+  afirmar(/no entra en tu biblioteca/.test(conf3.textContent) && !/Vas a guardar/.test(conf3.textContent), 'y NO promete guardarlo en la biblioteca: dice que no entra');
+  punto('single-confirmar');
+  clic($('#modal-confirm', conf3));
+  await esperarA(() => /es un single: /.test($('.toast-container')?.textContent || ''), { que: 'el aviso (toast) del single' });
+  const nuevas = escrituras().slice(antes2);
+  afirmar(!nuevas.some(w => w.ruta.startsWith('/me/library')), 'el single NO se guarda en la biblioteca: ningún PUT /me/library');
+  afirmar(nuevas.some(w => w.metodo === 'POST' && w.ruta === '/me/playlists'), 'se crea la playlist (simulada)');
+  afirmar(nuevas.some(w => w.metodo === 'POST' && /\/playlists\/pl-singles\/items/.test(w.ruta) && w.cuerpo.uris.includes('spotify:track:s1')), 'y se añade la pista del single a ella');
+  afirmar(/Creé la playlist/.test($('.toast-container')?.textContent || ''), 'se avisa de que la playlist nueva es pública');
+
+  document.getElementById('main-content').insertAdjacentHTML('beforeend', '');
+  afirmar(sim.reg.desconocidas.length === 0, `ninguna ruta sin simular: ${sim.reg.desconocidas.join(' | ')}`);
+  listo(`F.1: SYNC solo con quitar≥1 (POST ${deItems('POST').length}, DELETE ${deItems('DELETE').length}) · F.3: 1 PUT simulado · 0 peticiones reales`);
+} catch (e) {
+  if (e instanceof Parada) {
+    document.documentElement.dataset.banco = 'ok';
+    document.title = 'BANCO: detenido en ' + e.message;
+  } else {
+    const r = window.__sim?.reg;
+    if (r) e.message += `\n[llamadas ${r.llamadas.length}] desconocidas: ${r.desconocidas.join(' | ') || '—'} · externas: ${r.externas.join(' | ') || '—'}\navisos: ${(document.querySelector('.toast-container')?.textContent || '—').replace(/\\s+/g, ' ')}\nconsola: ${(window.__cons || []).join(' || ').slice(0, 600)}\nvisible: ${(document.querySelector('#main-content')?.textContent || '').replace(/\s+/g, ' ').slice(0, 300)}`;
+    fallar(e);
+  }
+}
+</script></body></html>

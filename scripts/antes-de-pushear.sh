@@ -36,11 +36,13 @@ if [ -z "$MALOS" ]; then ok "$N archivos parsean"; else mal "errores de sintaxis
 echo "2. npm test"
 if npm test --silent 2>&1 | tail -4 | sed 's/^/      /'; [ "${PIPESTATUS[0]}" -eq 0 ]; then ok "todas las suites"; else mal "hay suites que fallan (correr npm test para el detalle)"; fi
 
-# Los bancos que se autocomprueban. `mosaico` y `toasts` entraron en v=273:
+# Los bancos que se autocomprueban. `novedades` y `escrituras` entraron en v=275
+# (la vista REAL contra una Spotify simulada: tests/banco/simulado.mjs).
+# `mosaico` y `toasts` entraron en v=273:
 # estaban en rojo desde antes del 04/10 y justamente por no estar acá nadie los
 # miraba, igual que le había pasado a `barra` entre v=241 y v=261.
-echo "2b. bancos (barra · pausa-search · toasts · mosaico)"
-for B in barra pausa-search toasts mosaico; do
+echo "2b. bancos (barra · pausa-search · toasts · mosaico · novedades · escrituras)"
+for B in barra pausa-search toasts mosaico novedades escrituras; do
   if node scripts/correr-banco.mjs "$B" 2>&1 | sed 's/^/      /'; [ "${PIPESTATUS[0]}" -eq 0 ]; then
     ok "banco $B en verde"
   else

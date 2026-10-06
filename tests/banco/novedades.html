@@ -1,0 +1,137 @@
+<!doctype html><html lang="es"><head><meta charset="utf-8"><title>banco novedades — orden</title>
+<link rel="stylesheet" href="/css/theme.css">
+<link rel="stylesheet" href="/css/components.css">
+<link rel="stylesheet" href="/css/main.css">
+<style>html,body{margin:0;background:var(--color-bg);color:var(--color-text);font-family:var(--font-sans),system-ui}</style>
+</head><body class="sidebar-hidden">
+<div id="caja"><main class="main" id="main-content"></main></div>
+<script type="module">
+// ── Qué prueba este banco (v=275, F.2) ───────────────────────────────────────
+//
+// La vista REAL de `#new-releases` con datos de mentira sembrados en IndexedDB
+// y una Spotify simulada (`simulado.mjs`: 0 peticiones reales):
+//   · el control de orden tiene DOS opciones y nada más;
+//   · «Más viejo» da la lista de «Más nuevo» EXACTAMENTE al revés (en el DOM);
+//   · volver a «Más nuevo» restaura el original;
+//   · la elección se guarda (y un valor guardado raro cae en «nuevo»);
+//   · la barra sigue en UNA fila al ancho pedido (`?ancho=`, por defecto 1351).
+//
+// `?paso=viejo` deja la vista en «Más viejo» para fotografiarla.
+
+import { hojasLegibles, fallar, listo } from '/banco/esperar.mjs';
+import { instalarRedSimulada, crearLikes, ARTISTAS, esperarReal, anclar } from '/banco/simulado.mjs';
+const esperarA = (cond, { que }) => esperarReal(cond, { que });
+
+window.__cons = [];
+window.addEventListener('unhandledrejection', e => window.__cons.push('rechazo: ' + (e.reason?.message || e.reason)));
+const q = new URLSearchParams(location.search);
+const PASO = q.get('paso');
+const ANCHO = +(q.get('ancho') || 1351);
+const afirmar = (c, msg) => { if (!c) throw new Error('BANCO: ' + msg); };
+const $ = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+
+try {
+  await hojasLegibles(['/css/main.css', '/css/components.css']);
+  $('#caja').style.width = ANCHO + 'px';
+  const sim = instalarRedSimulada();
+  window.__sim = sim;
+  const likes = crearLikes();
+
+  // Spotify de mentira: lo mínimo que la vista pide al abrir (ocultos, perfil).
+  sim.ruta('GET', /^\/me$/, () => ({ id: 'usuario-banco', display_name: 'Banco' }));
+  sim.ruta('GET', /^\/me\/tracks/, ({ url }) => {
+    const off = +url.searchParams.get('offset') || 0, lim = +url.searchParams.get('limit') || 50;
+    return { items: likes.slice(off, off + lim), total: likes.length, next: off + lim < likes.length ? 'x' : null };
+  });
+  sim.ruta('GET', /^\/me\/playlists/, () => ({ items: [], total: 0, next: null }));
+  sim.ruta('POST', /^\/me\/playlists/, () => ({ id: 'pl-simulada', name: 'simulada', owner: { id: 'usuario-banco' } }));
+  sim.ruta('GET', /^\/playlists\/[^/]+\/items/, () => ({ items: [], total: 0, next: null }));
+  sim.ruta('POST', /^\/playlists\/[^/]+\/items/, () => ({ snapshot_id: 's' }));
+
+  // ── Sembrar IndexedDB como lo deja la app: me gusta y discografías ──────────
+  const { idbSetCached } = await import('/js/idb.js');
+  const { crearBase, DISCO_BASE_PREFIX } = await import('/js/util/disco-base.js');
+  await anclar(idbSetCached('all_liked_tracks', likes, null));
+  const dia = (n) => new Date(Date.now() - n * 86400000).toISOString().slice(0, 10);
+  // Empates a propósito: el mismo día en dos artistas distintos, para ver el desempate.
+  const lanz = { A: [12, 70, 200], B: [12, 33, 150], C: [33, 95, 260], D: [5, 70, 310] };
+  const esperadoNuevo = [];                       // [{ id, fecha, artista }]
+  for (const a of ARTISTAS) {
+    const k = a.name.slice(-1);
+    const items = lanz[k].map((d, i) => ({
+      id: `r-${k}-${i + 1}`, name: `Lanzamiento ${k}${i + 1}`, type: 'album', img: null,
+      release: dia(d), total: 9 + i, artists: [{ id: a.id, name: a.name }],
+    }));
+    items.forEach(it => esperadoNuevo.push({ id: it.id, fecha: it.release, artista: a.name }));
+    await anclar(idbSetCached(`${DISCO_BASE_PREFIX}${a.id}`, crearBase(items, { fuente: 'nativo', cortada: false }), null));
+  }
+  // El oráculo es independiente del código bajo prueba: fecha desc, artista A→Z.
+  esperadoNuevo.sort((x, y) => (y.fecha.localeCompare(x.fecha)) || x.artista.localeCompare(y.artista, 'es'));
+  const ids = (l) => l.map(x => x.id);
+
+  // Un valor guardado inválido tiene que caer en «nuevo».
+  const { prefKey } = await import('/js/storage.js');
+  localStorage.setItem(prefKey('newrel_orden'), 'cualquier-cosa');
+  localStorage.setItem(prefKey('newrel_months'), '12');
+  localStorage.setItem(prefKey('newrel_min_likes'), '10');
+
+  const { render } = await import('/js/features/new-releases.js');
+  render($('#main-content'));
+  await esperarA(() => $$('#newrel-list .dcard').length === 12, { que: 'las 12 tarjetas de novedades' });
+
+  const enPantalla = () => $$('#newrel-list [data-open-album].dcard-name').map(b => b.dataset.openAlbum);
+  const grupo = $('#newrel-orden');
+  afirmar(grupo, 'existe el control de orden');
+  const botones = $$('button', grupo);
+  afirmar(botones.length === 2, `el control tiene DOS opciones y nada más (hay ${botones.length})`);
+  afirmar(botones.map(b => b.textContent.trim()).join('|') === 'Más nuevo|Más viejo', `rótulos: ${botones.map(b => b.textContent.trim()).join('|')}`);
+  afirmar(botones[0].classList.contains('is-on'), 'un valor guardado raro cae en «Más nuevo»');
+  const nuevo = enPantalla();
+  afirmar(JSON.stringify(nuevo) === JSON.stringify(ids(esperadoNuevo)),
+    `«Más nuevo» no coincide con el oráculo:\n  pantalla  ${nuevo.join(' ')}\n  esperado  ${ids(esperadoNuevo).join(' ')}`);
+
+  botones[1].click();
+  await esperarA(() => enPantalla()[0] !== nuevo[0], { que: 'que la lista se invierta' });
+  const viejo = enPantalla();
+  afirmar(viejo.length === nuevo.length, 'misma cantidad de tarjetas en los dos órdenes');
+  afirmar(JSON.stringify(viejo) === JSON.stringify([...nuevo].reverse()), `«Más viejo» no es el reverso exacto:\n  viejo  ${viejo.join(' ')}\n  nuevo  ${nuevo.join(' ')}`);
+  afirmar(botones[1].classList.contains('is-on') && !botones[0].classList.contains('is-on'), 'el chip activo cambia');
+  afirmar(localStorage.getItem(prefKey('newrel_orden')) === 'viejo', 'la elección se guarda');
+
+  if (q.get('peor')) {   // los textos del peor caso real (los de barra.html): 300 artistas, 1.234 novedades, 439 ocultos
+    $('#newrel-count').textContent = '300'; $('#newrel-total-scan').textContent = '300';
+    $('#newrel-unheard-count').textContent = '1.234'; $('#newrel-hidden-n').textContent = '439';
+    $('#newrel-summary-sub').textContent = '485 artistas con ≥5 likes · 129 sin escanear';
+  }
+  if (q.get('sinorden')) document.getElementById('newrel-orden').style.display = 'none';
+  // La barra: UNA fila al ancho pedido (mismo criterio que barra.html: centros).
+  const centros = $$('.disco-controls > *').filter(e => getComputedStyle(e).display !== 'none' && e.getBoundingClientRect().height)
+    .map(e => { const r = e.getBoundingClientRect(); return r.top + r.height / 2; }).sort((a, b) => a - b);
+  const filas = centros.reduce((n, c, i) => (i === 0 || c - centros[i - 1] > 8) ? n + 1 : n, 0);
+  const geo = (sel) => { const r = $(sel).getBoundingClientRect(); return `${sel} x${Math.round(r.left)} w${Math.round(r.width)} y${Math.round(r.top)} h${Math.round(r.height)}`; };
+  afirmar(filas === 1, `la barra ocupa ${filas} filas a ${ANCHO} px (tiene que ser 1): ${geo('.disco-topbar')} ${geo('.disco-summary')} ${geo('.disco-controls')} · ` + $$('.disco-controls > *').map(e => { const r = e.getBoundingClientRect(); return `${(e.textContent || e.id).trim().slice(0, 12)}@${Math.round(r.left)},${Math.round(r.top)} w${Math.round(r.width)}`; }).join(' | '));
+  const barra = $('.disco-controls'), ultimo = [...barra.children].filter(e => e.getBoundingClientRect().height).at(-1);
+  const libres = Math.round(barra.getBoundingClientRect().right - ultimo.getBoundingClientRect().right);
+
+  if (PASO === 'nuevo') { botones[0].click(); await esperarA(() => enPantalla()[0] === nuevo[0], { que: 'volver a nuevo' }); throw Object.assign(new Error('nuevo'), { parada: true }); }
+  if (PASO === 'viejo') throw Object.assign(new Error('viejo'), { parada: true });
+
+  botones[0].click();
+  await esperarA(() => enPantalla()[0] === nuevo[0], { que: 'volver a «Más nuevo»' });
+  afirmar(JSON.stringify(enPantalla()) === JSON.stringify(nuevo), 'volver a «Más nuevo» restaura el orden original');
+  afirmar(sim.reg.externas.length === 0, 'nada salió a la red externa');
+  afirmar(sim.reg.escrituras.every(e => e.metodo === 'POST' && /\/me\/playlists$/.test(e.ruta)) || sim.reg.escrituras.length === 0,
+    `solo pudo haber escrituras simuladas de la playlist de ocultos: ${JSON.stringify(sim.reg.escrituras)}`);
+  listo(`12 tarjetas · viejo = reverso exacto de nuevo · ${filas} fila a ${ANCHO} px (${libres} px libres a la derecha) · 0 peticiones reales`);
+} catch (e) {
+  if (e.parada) {
+    document.documentElement.dataset.banco = 'ok';
+    document.title = 'BANCO: detenido en ' + e.message;
+  } else {
+    const r = window.__sim?.reg;
+    if (r) e.message += `\n[llamadas ${r.llamadas.length}] desconocidas: ${r.desconocidas.join(' | ') || '—'} · externas: ${r.externas.join(' | ') || '—'}\nconsola: ${window.__cons.join(' || ').slice(0, 500)}\nvisible: ${(document.querySelector('#main-content')?.textContent || '').replace(/\s+/g, ' ').slice(0, 300)}`;
+    fallar(e);
+  }
+}
+</script></body></html>

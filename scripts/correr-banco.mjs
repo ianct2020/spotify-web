@@ -29,6 +29,8 @@ const ANCHO = process.env.ANCHO || '1351';
 // desde antes del 04/10), y con `auto=1` se fabrica una base sintetica y se
 // conduce solo. El resto de los bancos se autocomprueban sin pedir nada.
 const EXTRA = { mosaico: 'auto=1' };
+// `XQ="&peor=1"` agrega parámetros a la URL del banco sin tocar este archivo: sirve
+// para medir (p. ej. el ancho mínimo en que la barra de novedades sigue en una fila).
 
 async function elegirPuerto() {
   return new Promise((res, rej) => {
@@ -76,7 +78,7 @@ process.on('exit', cerrarServer);
 // al listen). 250 ms es sobrado en Node moderno.
 await new Promise(r => setTimeout(r, 250));
 
-const URL = `http://127.0.0.1:${puerto}/banco/${BANCO}.html?ancho=${ANCHO}`
+const URL = `http://127.0.0.1:${puerto}/banco/${BANCO}.html?ancho=${ANCHO}${process.env.XQ || ''}`
   + (EXTRA[BANCO] ? '&' + EXTRA[BANCO] : '');
 const perfil = mkdtempSync(join(tmpdir(), 'banco-chrome-'));
 
