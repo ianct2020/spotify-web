@@ -1719,6 +1719,39 @@ export async function guardarLanzamiento(al) {
   return { destino: 'playlist', pistas: añadidas, yaEstaban, playlistCreada: creada };
 }
 
+/**
+ * «Guardar álbum» con su aviso: guarda donde corresponda (`guardarLanzamiento`)
+ * y cuenta qué pasó en un toast. Es lo que hacían, copiado palabra por palabra,
+ * `saveAlbum` de `#new-releases` y `saveAlbumToLibrary` de `#discover-artists`
+ * (v=275: se sacó acá para que la ficha de álbum de `#similar` no fuera la
+ * tercera copia). Cada vista conserva lo SUYO —buscar el lanzamiento en su
+ * estado, el texto del botón, marcarlo resuelto y repintar—; lo que comparten es
+ * esto. Devuelve lo mismo que `guardarLanzamiento`.
+ */
+export async function guardarLanzamientoConAviso(al) {
+  const r = await guardarLanzamiento(al);
+  if (r.destino === 'biblioteca') {
+    showToast(`«${al.name}» guardado en tu biblioteca de álbumes`, 'success');
+  } else {
+    const partes = [];
+    if (r.pistas) partes.push(`${r.pistas} ${r.pistas === 1 ? 'pista' : 'pistas'}`);
+    if (r.yaEstaban) partes.push(`${r.yaEstaban} ya ${r.yaEstaban === 1 ? 'estaba' : 'estaban'}`);
+    showToast(
+      `«${al.name}» es un single: ${partes.join(' · ') || 'sin pistas nuevas'} en «${PLAYLIST_SINGLES}»`,
+      'success',
+    );
+    // La playlist se crea PÚBLICA y no hay forma de evitarlo por API. Se
+    // avisa una sola vez, cuando se acaba de crear.
+    if (r.playlistCreada) {
+      showToast(
+        `Creé la playlist «${PLAYLIST_SINGLES}». Spotify la crea PÚBLICA y no se puede cambiar por API: pásala a privada a mano desde la app.`,
+        'info',
+      );
+    }
+  }
+  return r;
+}
+
 /** Likea UNA POR UNA todas las pistas del álbum. No guarda el álbum. */
 export async function saveAlbumTracksToLibrary(albumId) {
   const tracks = await getAlbumTracks(albumId);

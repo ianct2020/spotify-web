@@ -25,8 +25,7 @@ import {
   albumIsUnheard,
   releaseTs,
   createDiscoverPlaylist,
-  guardarLanzamiento,
-  PLAYLIST_SINGLES,
+  guardarLanzamientoConAviso,
   saveAlbumTracksToLibrary,
   albumTrackCount,
   markAlbumResolved,
@@ -946,28 +945,8 @@ async function saveAlbum(albumId, artistName, btn) {
   btn.disabled = true;
   btn.textContent = 'Guardando…';
   try {
-    const r = await guardarLanzamiento(al);
-    if (r.destino === 'biblioteca') {
-      btn.textContent = '✓ Guardado';
-      showToast(`«${al.name}» guardado en tu biblioteca de álbumes`, 'success');
-    } else {
-      btn.textContent = '✓ En la playlist';
-      const partes = [];
-      if (r.pistas) partes.push(`${r.pistas} ${r.pistas === 1 ? 'pista' : 'pistas'}`);
-      if (r.yaEstaban) partes.push(`${r.yaEstaban} ya ${r.yaEstaban === 1 ? 'estaba' : 'estaban'}`);
-      showToast(
-        `«${al.name}» es un single: ${partes.join(' · ') || 'sin pistas nuevas'} en «${PLAYLIST_SINGLES}»`,
-        'success',
-      );
-      // La playlist se crea PÚBLICA y no hay forma de evitarlo por API. Se
-      // avisa una sola vez, cuando se acaba de crear.
-      if (r.playlistCreada) {
-        showToast(
-          `Creé la playlist «${PLAYLIST_SINGLES}». Spotify la crea PÚBLICA y no se puede cambiar por API: pásala a privada a mano desde la app.`,
-          'info',
-        );
-      }
-    }
+    const r = await guardarLanzamientoConAviso(al);
+    btn.textContent = r.destino === 'biblioteca' ? '✓ Guardado' : '✓ En la playlist';
     markAlbumResolved(al, artistName);
     setTimeout(() => {
       const content = document.getElementById('newrel-content');

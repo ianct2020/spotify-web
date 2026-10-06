@@ -1,12 +1,14 @@
 import { spotifyFetch, createPlaylist, addTracksToPlaylist, invalidatePlaylistsCache } from '../api.js';
 import { hasKey, setKey, getSimilarArtists, getArtistTopTracks } from '../api/lastfm.js';
-import { showProgress, hideProgress, promptPlaylistName, escapeHtml, pageHeader } from '../ui/components.js';
+import { showProgress, hideProgress, promptPlaylistName, alertModal, escapeHtml, pageHeader } from '../ui/components.js';
 import { showToast } from '../ui/toast.js';
 import { getPreview } from '../api/preview-providers.js';
 import { togglePreview, playingKey, isPlayingAudio } from '../ui/preview-player.js';
 import { paintPlayingCard } from '../ui/track-card-row.js';
 import { openTrackCard } from './track-card.js';
 import { openAlbumCard } from './album-card.js';
+import { guardarLanzamientoConAviso, PLAYLIST_SINGLES } from './discover-common.js';
+import { esEPoAlbum, EP_MIN_TRACKS } from '../util/release-size.js';
 import { limpiaParaQuery, titleMatches, artistMatches } from '../util/track-match.js';
 import { iconoPlay, iconoPausa, iconoFicha, iconoDisco } from '../ui/icons.js';
 
@@ -220,6 +222,7 @@ async function resolveTracksOnSpotify(topTracks) {
           artistList: artistas,
           album: hit.album?.name,
           albumId: hit.album?.id,
+          albumTotal: hit.album?.total_tracks,
           image: hit.album?.images?.[hit.album.images.length - 1]?.url,
           imageBig: hit.album?.images?.[0]?.url,
           playcount: t.playcount,
@@ -276,9 +279,53 @@ function accionesDeFila(tracksEl) {
       return;
     }
     if (btn.dataset.accion === 'album') {
-      openAlbumCard({ name: r.album, artist: r.artistList?.[0] || r.artist, albumId: r.albumId, img: r.imageBig || r.image });
+      openAlbumCard({
+        name: r.album, artist: r.artistList?.[0] || r.artist, albumId: r.albumId, img: r.imageBig || r.image,
+        acciones: accionesDeAlbum(r),
+      });
     }
   });
+}
+
+// «Guardar álbum» dentro de la ficha (v=275). No reimplementa el guardado: llama
+// a `guardarLanzamientoConAviso`, el MISMO que usan `#new-releases` y
+// `#discover-artists`, así que el destino (biblioteca si tiene ≥4 pistas, la
+// playlist de singles si no) y los avisos son los de siempre.
+//
+// A diferencia de esas dos vistas, acá el botón no vive en una tarjeta de la
+// grilla —no hay nada que apretar detrás— y es una ESCRITURA en la cuenta de
+// Spotify: por eso pide confirmación antes y dice adónde va.
+export function accionesDeAlbum(r) {
+  if (!r.albumId || !r.album) return [];
+  return [{
+    label: 'Guardar álbum',
+    title: 'Guarda el álbum entero en tu biblioteca de Spotify (no toca tus me gusta)',
+    onClick: ({ cerrar }) => guardarAlbumDeFila(r, cerrar),
+  }];
+}
+
+function textoConfirmarGuardado(r) {
+  const nombre = `«${escapeHtml(r.album)}»`;
+  const quien = r.artistList?.[0] || r.artist;
+  const de = quien ? ` de ${escapeHtml(quien)}` : '';
+  const n = Number(r.albumTotal) || 0;
+  if (n && !esEPoAlbum(n)) {
+    return `${nombre}${de} es un single (${n} ${n === 1 ? 'pista' : 'pistas'}): no entra en tu biblioteca de álbumes, `
+      + `sus pistas van a la playlist «${PLAYLIST_SINGLES}».`;
+  }
+  const dest = `Vas a guardar ${nombre}${de} en tu biblioteca de álbumes de Spotify. No toca tus me gusta.`;
+  return n ? dest : `${dest} Si tiene menos de ${EP_MIN_TRACKS} pistas es un single, y entonces sus pistas van a la playlist «${PLAYLIST_SINGLES}».`;
+}
+
+async function guardarAlbumDeFila(r, cerrar) {
+  const ok = await alertModal('Guardar álbum', textoConfirmarGuardado(r), { confirmText: 'Guardar' });
+  if (!ok) return;
+  try {
+    await guardarLanzamientoConAviso({ id: r.albumId, name: r.album, total: Number(r.albumTotal) || 0 });
+    cerrar?.();
+  } catch (e) {
+    showToast('Error al guardar: ' + e.message, 'error');
+  }
 }
 
 function filaHtml(t) {
