@@ -32,6 +32,8 @@ for (const k of ['error', 'warn']) { const o = console[k].bind(console); console
 window.addEventListener('unhandledrejection', e => window.__cons.push('rechazo: ' + (e.reason?.message || e.reason)));
 const q = new URLSearchParams(location.search);
 const PASO = q.get('paso');
+// Para fotografiar: sin animaciones, así la captura no sale a mitad de una entrada.
+if (PASO) document.head.insertAdjacentHTML('beforeend', '<style>*,*::before,*::after{animation:none!important;transition:none!important}</style>');
 class Parada extends Error {}
 const punto = (nombre) => { if (PASO === nombre) throw new Parada(nombre); };
 const afirmar = (c, msg) => { if (!c) throw new Error('BANCO: ' + msg); };

@@ -26,6 +26,8 @@ window.__cons = [];
 window.addEventListener('unhandledrejection', e => window.__cons.push('rechazo: ' + (e.reason?.message || e.reason)));
 const q = new URLSearchParams(location.search);
 const PASO = q.get('paso');
+// Para fotografiar: sin animaciones, así la captura no sale a mitad de una entrada.
+if (PASO) document.head.insertAdjacentHTML('beforeend', '<style>*,*::before,*::after{animation:none!important;transition:none!important}</style>');
 const ANCHO = +(q.get('ancho') || 1351);
 const afirmar = (c, msg) => { if (!c) throw new Error('BANCO: ' + msg); };
 const $ = (s, r = document) => r.querySelector(s);
@@ -99,11 +101,13 @@ try {
   afirmar(botones[1].classList.contains('is-on') && !botones[0].classList.contains('is-on'), 'el chip activo cambia');
   afirmar(localStorage.getItem(prefKey('newrel_orden')) === 'viejo', 'la elección se guarda');
 
-  if (q.get('peor')) {   // los textos del peor caso real (los de barra.html): 300 artistas, 1.234 novedades, 439 ocultos
+  const aplicarPeor = () => {   // los textos del peor caso real (los de barra.html): 300 artistas, 1.234 novedades, 439 ocultos
+    if (!q.get('peor')) return;
     $('#newrel-count').textContent = '300'; $('#newrel-total-scan').textContent = '300';
     $('#newrel-unheard-count').textContent = '1.234'; $('#newrel-hidden-n').textContent = '439';
     $('#newrel-summary-sub').textContent = '485 artistas con ≥5 likes · 129 sin escanear';
-  }
+  };
+  aplicarPeor();
   if (q.get('sinorden')) document.getElementById('newrel-orden').style.display = 'none';
   // La barra: UNA fila al ancho pedido (mismo criterio que barra.html: centros).
   const centros = $$('.disco-controls > *').filter(e => getComputedStyle(e).display !== 'none' && e.getBoundingClientRect().height)
@@ -114,8 +118,8 @@ try {
   const barra = $('.disco-controls'), ultimo = [...barra.children].filter(e => e.getBoundingClientRect().height).at(-1);
   const libres = Math.round(barra.getBoundingClientRect().right - ultimo.getBoundingClientRect().right);
 
-  if (PASO === 'nuevo') { botones[0].click(); await esperarA(() => enPantalla()[0] === nuevo[0], { que: 'volver a nuevo' }); throw Object.assign(new Error('nuevo'), { parada: true }); }
-  if (PASO === 'viejo') throw Object.assign(new Error('viejo'), { parada: true });
+  if (PASO === 'nuevo') { botones[0].click(); await esperarA(() => enPantalla()[0] === nuevo[0], { que: 'volver a nuevo' }); aplicarPeor(); throw Object.assign(new Error('nuevo'), { parada: true }); }
+  if (PASO === 'viejo') { aplicarPeor(); throw Object.assign(new Error('viejo'), { parada: true }); }
 
   botones[0].click();
   await esperarA(() => enPantalla()[0] === nuevo[0], { que: 'volver a «Más nuevo»' });
