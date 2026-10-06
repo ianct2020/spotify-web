@@ -18,7 +18,8 @@
 <script type="module">
 import { esperarA, hojasLegibles, fallar, listo } from '/banco/esperar.mjs';
 import { botonesBaseHtml } from '/js/features/discover-common.js';
-import { MONTHS_CHIPS } from '/js/features/new-releases.js';
+import { MONTHS_CHIPS, ORDEN_ROTULO } from '/js/features/new-releases.js';
+import { ORDENES_LANZAMIENTO } from '/js/util/release-date.js';
 
 // ── Qué mide este banco ──────────────────────────────────────────────────────
 //
@@ -75,11 +76,14 @@ const agoLabel = () => 'hace 2 h';
 // — y acá la copia estaba justo dentro del banco que existe para cazar que la
 // barra se rompa. Si la vista gana un chip o le cambia el rótulo, el banco mide
 // la barra REAL sin tocar este archivo.
+// v=275: se sumaron `ORDENES_LANZAMIENTO` y `ORDEN_ROTULO` (el control de orden
+// de #new-releases), importados de la vista real por la misma razón que
+// `MONTHS_CHIPS`: si cambian los rótulos, el banco mide los nuevos.
 // El peor caso del renglón de debajo del conteo: con artistas sin escanear.
 const SUB_PEOR_CASO = '485 artistas con ≥5 likes · 129 sin escanear';
 const AMBITO_NEWREL = {
-  state: { minLikes: 5, months: 24, filterKind: 'all', scannedAt: Date.now() },
-  KINDS, KIND_LABEL, agoLabel, botonesBaseHtml, MONTHS_CHIPS,
+  state: { minLikes: 5, months: 24, filterKind: 'all', orden: 'nuevo', scannedAt: Date.now() },
+  KINDS, KIND_LABEL, agoLabel, botonesBaseHtml, MONTHS_CHIPS, ORDENES_LANZAMIENTO, ORDEN_ROTULO,
   ventanaEsAncha: () => false, textoSub: () => SUB_PEOR_CASO,
   hiddenAlbums: new Set(Array.from({ length: 439 }, (_, i) => i)),
   targetToScan: () => 300,

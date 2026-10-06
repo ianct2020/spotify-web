@@ -59,7 +59,7 @@ import {
   botonesBaseHtml,
   conectarBotonesBase,
 } from './discover-common.js';
-import { masNuevoPrimero } from '../util/release-date.js';
+import { compararLanzamientos, ORDENES_LANZAMIENTO } from '../util/release-date.js';
 import { estadoNativoDiscografia } from '../api.js';
 import { leerElegidos, sumarElegidos, artistasBuscados, colaAutomatica } from '../util/cola-escaneo.js';
 import { leerFallos, marcarFallo, limpiarFallo, sinFallosMarcados } from '../util/escaneo-fallos.js';
@@ -71,6 +71,8 @@ const SCAN_KEY = 'new_releases';
 const LS_MIN_LIKES = 'newrel_min_likes';   // 5 / 10 / 20
 const LS_MONTHS = 'newrel_months';         // 3 / 6 / 12 / 24
 const LS_LOADED_MORE = 'newrel_loaded_more';
+// El orden de la lista (v=275): 'nuevo' (default, el de siempre) | 'viejo'.
+const LS_ORDEN = 'newrel_orden';
 // Los artistas elegidos a mano en el selector (v=259), además de los primeros
 // `loadedMore`. Ver util/cola-escaneo.js.
 const LS_ELEGIDOS = 'newrel_elegidos';
@@ -140,6 +142,11 @@ function getMonths() {
   const n = parseInt(localStorage.getItem(prefKey(LS_MONTHS)) || '12', 10);
   return VALID_MONTHS.has(n) ? n : 12;
 }
+export const ORDEN_ROTULO = { nuevo: 'Más nuevo', viejo: 'Más viejo' };
+function getOrden() {
+  const v = localStorage.getItem(prefKey(LS_ORDEN));
+  return ORDENES_LANZAMIENTO.includes(v) ? v : 'nuevo';
+}
 function getFilterKind() {
   const v = localStorage.getItem(prefKey(LS_FILTER_KIND));
   return KINDS.includes(v) ? v : 'all';
@@ -161,6 +168,7 @@ const state = {
   minLikes: 10,
   months: 12,
   filterKind: 'all',
+  orden: 'nuevo',
   loadedMore: DEFAULT_INITIAL,
   elegidos: new Set(),
   fallos: new Map(),   // nameLower → { t, motivo } de los escaneos que fallaron (v=261)
@@ -223,6 +231,7 @@ export async function render(container) {
   state.minLikes = getMinLikes();
   state.months = getMonths();
   state.filterKind = getFilterKind();
+  state.orden = getOrden();
   state.loadedMore = getLoadedMore();
   state.elegidos = leerElegidos(LS_ELEGIDOS);
   state.fallos = leerFallos(LS_FALLOS);
@@ -362,6 +371,9 @@ function renderShell(content, totalCandidates) {
         <div class="disco-chip-group" id="newrel-kind">
           ${KINDS.map(k => `<button class="disco-chip ${state.filterKind === k ? 'is-on' : ''}" data-kind="${k}">${KIND_LABEL[k]}</button>`).join('')}
         </div>
+        <div class="disco-chip-group" id="newrel-orden" role="group" aria-label="Orden de la lista">
+          ${ORDENES_LANZAMIENTO.map(o => `<button class="disco-chip ${state.orden === o ? 'is-on' : ''}" data-orden="${o}" title="${o === 'nuevo' ? 'El lanzamiento más reciente primero' : 'El lanzamiento más antiguo primero'}">${ORDEN_ROTULO[o]}</button>`).join('')}
+        </div>
         <button class="btn btn-secondary btn-sm ${state.mode === 'hidden' ? 'sc-on' : ''}" id="newrel-mode-hidden" title="Las novedades que ocultaste. Se sincronizan con la playlist «fonoteca · ocultos (descubrir)».">Ocultos <span id="newrel-hidden-n">${hiddenAlbums.size}</span></button>
         <button class="btn btn-secondary btn-sm" id="newrel-refresh" title="${state.scannedAt ? 'Último escaneo ' + agoLabel(state.scannedAt) + '. ' : ''}Busca lanzamientos nuevos de tus artistas. No borra las discografías que ya tienes.">Actualizar</button>
         ${botonesBaseHtml('newrel')}
@@ -427,6 +439,15 @@ function renderShell(content, totalCandidates) {
     content.querySelectorAll('#newrel-kind [data-kind]').forEach(b => b.classList.toggle('is-on', b === btn));
     // Sólo repinta: el tipo filtra lo YA escaneado, no cambia a qué artistas
     // hay que pedirle la discografía (a diferencia del umbral de likes).
+    refreshList(content);
+  });
+  content.querySelector('#newrel-orden').addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-orden]');
+    if (!btn || !ORDENES_LANZAMIENTO.includes(btn.dataset.orden)) return;
+    state.orden = btn.dataset.orden;
+    localStorage.setItem(prefKey(LS_ORDEN), state.orden);
+    content.querySelectorAll('#newrel-orden [data-orden]').forEach(b => b.classList.toggle('is-on', b === btn));
+    // Solo reordena lo que ya se escaneó: no pide nada a Spotify.
     refreshList(content);
   });
   content.querySelector('#newrel-load-more').addEventListener('click', async (e) => {
@@ -685,11 +706,12 @@ function releasesInWindow() {
     lista = visibles.map(v => v._o);
   }
 
-  // Más nuevo primero. Empate → alfabético por artista. El comparador es el
-  // compartido de `util/release-date.js` (paso 6, v=272): acá va `'artista'`
-  // porque esta vista ordena ENTRE artistas, mientras `#discover-artists`
-  // ordena DENTRO de uno y desempata por el nombre del álbum.
-  lista.sort((x, y) => masNuevoPrimero(x, y, { desempate: 'artista' }));
+  // Más nuevo primero (o más viejo, v=275). Empate → alfabético por artista. El
+  // comparador es el compartido de `util/release-date.js` (paso 6, v=272): acá
+  // va `'artista'` porque esta vista ordena ENTRE artistas, mientras
+  // `#discover-artists` ordena DENTRO de uno y desempata por el nombre del
+  // álbum. «Más viejo» es ese mismo comparador con los items cambiados.
+  lista.sort(compararLanzamientos(state.orden, { desempate: 'artista' }));
   return lista;
 }
 

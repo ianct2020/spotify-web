@@ -19,7 +19,7 @@
 
 import assert from 'node:assert';
 import { readFileSync } from 'node:fs';
-import { releaseTs, masNuevoPrimero } from '../src/js/util/release-date.js';
+import { releaseTs, masNuevoPrimero, compararLanzamientos, ORDENES_LANZAMIENTO } from '../src/js/util/release-date.js';
 
 let n = 0;
 const eq = (a, b, msg) => { n++; assert.deepStrictEqual(a, b, `${msg} — dio ${JSON.stringify(a)}`); };
@@ -124,8 +124,9 @@ ok(!/function\s+releaseTs\s*\(/.test(common), 'y NO tiene su propia releaseTs: n
 const nuevas = leer('../src/js/features/new-releases.js');
 ok(/releaseTs,/.test(nuevas.split("} from './discover-common.js'")[0]), '#new-releases sigue importando releaseTs de discover-common.js');
 
-ok(/masNuevoPrimero\(x, y, \{ desempate: 'artista' \}\)/.test(nuevas),
-  '#new-releases ordena con masNuevoPrimero, no con una copia del comparador');
+ok(/compararLanzamientos\(state\.orden, \{ desempate: 'artista' \}\)/.test(nuevas),
+  '#new-releases ordena con compararLanzamientos (que envuelve a masNuevoPrimero), no con una copia');
+ok(!/masNuevoPrimero/.test(nuevas.replace(/\/\/.*$/gm, '')), 'y no llama a masNuevoPrimero por su cuenta ni escribe otro comparador');
 ok(!/releaseTs\(y\.al\.release\)\s*-\s*releaseTs\(x\.al\.release\)/.test(nuevas),
   'y ya no tiene el comparador escrito a mano: no hay un segundo desempate suelto');
 
@@ -133,5 +134,34 @@ const vista = leer('../src/js/features/discover-artists.js');
 ok(/\.sort\(masNuevoPrimero\)/.test(vista), '#discover-artists ordena con masNuevoPrimero');
 ok(!/\b(disco|unheard|unheardAlbums|unheardSingles)\s*\.sort\s*\(/.test(vista),
   'y nadie ordena EN SITIO lo que se guarda (disco / unheard): se ordena la copia que se pinta');
+
+// ── v=275: los dos órdenes de #new-releases ──────────────────────────────────
+console.log('\nLos dos órdenes de #new-releases');
+const parNR = (release, artista) => ({ al: { release, name: 'x' }, artist: { name: artista } });
+const paresNR = [parNR('2024-05-01', 'Beta'), parNR('2026-01-10', 'Zeta'), parNR('2026-01-10', 'Alfa'),
+  parNR('2019', 'Gamma'), parNR('2024-05-01', 'Alfa'), parNR('2026-03', 'Delta')];
+const nuevoPrimero = [...paresNR].sort(compararLanzamientos('nuevo', { desempate: 'artista' }));
+const viejoPrimero = [...paresNR].sort(compararLanzamientos('viejo', { desempate: 'artista' }));
+const fa = l => l.map(p => `${p.al.release}|${p.artist.name}`);
+eq(ORDENES_LANZAMIENTO, ['nuevo', 'viejo'], 'son DOS órdenes y nada más');
+eq(fa(viejoPrimero), fa(nuevoPrimero).reverse(), 'más viejo primero es EXACTAMENTE la lista de más nuevo al revés');
+eq(fa(nuevoPrimero), ['2026-03|Delta', '2026-01-10|Alfa', '2026-01-10|Zeta', '2024-05-01|Alfa', '2024-05-01|Beta', '2019|Gamma'],
+  'más nuevo primero, empate por artista A→Z (el de siempre)');
+eq(fa(viejoPrimero)[0], '2019|Gamma', 'más viejo primero arranca por lo más antiguo');
+eq(fa(viejoPrimero).slice(-1)[0], '2026-03|Delta', '…y termina en lo más nuevo');
+eq([...paresNR].sort(compararLanzamientos('nuevo', { desempate: 'artista' })).map(p => p.artist.name),
+  [...paresNR].sort((x, y) => masNuevoPrimero(x, y, { desempate: 'artista' })).map(p => p.artist.name),
+  'el orden «nuevo» es idéntico a llamar a masNuevoPrimero directo (no cambió lo de v=274)');
+eq(fa([...paresNR].sort(compararLanzamientos(undefined, { desempate: 'artista' }))), fa(nuevoPrimero), 'sin orden → el de siempre');
+eq(fa([...paresNR].sort(compararLanzamientos('cualquier cosa', { desempate: 'artista' }))), fa(nuevoPrimero), 'un valor raro guardado → el de siempre');
+// El desempate por álbum (la otra vista) también se invierte entero.
+const lns = lanz(['2020', '2020', '2018']);
+eq([...lns].sort(compararLanzamientos('viejo')).map(l => l.id), [...lns].sort(masNuevoPrimero).map(l => l.id).reverse(),
+  'con el desempate por álbum, también es el reverso exacto');
+let tiro = false;
+try { [...paresNR].sort(compararLanzamientos('viejo', { desempate: 'nada' })); } catch { tiro = true; }
+ok(tiro, 'un desempate desconocido sigue tirando, también en «más viejo»');
+ok(/LS_ORDEN = 'newrel_orden'/.test(nuevas) && /prefKey\(LS_ORDEN\)/.test(nuevas), 'el orden se guarda con prefKey, como los otros chips');
+ok(/ORDENES_LANZAMIENTO\.includes\(v\) \? v : 'nuevo'/.test(nuevas), 'y un valor guardado inválido cae en «nuevo»');
 
 console.log(`\nOK release-date: ${n} asserts`);
