@@ -1,7 +1,8 @@
-import { getAllLikedTracks, getAllPlaylistItems, updatePlaylistItemsCache, getAllUserPlaylists, addTracksToPlaylist, removeTracksFromPlaylist, createPlaylist, unfollowPlaylist, spotifyFetch } from '../api.js?v=274';
-import { showProgress, hideProgress, progressController, isCancelled, typeConfirmModal, renderTrackRow, escapeHtml, pageHeader } from '../ui/components.js?v=274';
-import { showToast } from '../ui/toast.js?v=274';
-import { vigilarRuta } from '../util/vigencia-ruta.js?v=274';
+import { getAllLikedTracks, getAllPlaylistItems, updatePlaylistItemsCache, getAllUserPlaylists, addTracksToPlaylist, removeTracksFromPlaylist, createPlaylist, unfollowPlaylist, spotifyFetch } from '../api.js?v=275';
+import { showProgress, hideProgress, progressController, isCancelled, typeConfirmModal, alertModal, renderTrackRow, escapeHtml, pageHeader } from '../ui/components.js?v=275';
+import { showToast } from '../ui/toast.js?v=275';
+import { vigilarRuta } from '../util/vigencia-ruta.js?v=275';
+import { confirmacionDeSync } from '../util/confirmar-sync.js?v=275';
 
 const TARGET_PLAYLIST_NAME = 'anothertwo';
 const SPOTIFY_PLAYLIST_MAX = 10000;
@@ -205,14 +206,25 @@ async function analyze() {
 
 async function executeSync(playlist, toAdd, toRemove, { mode = 'full', playlistItems = [], likeMap = new Map() } = {}) {
   const ruta = vigilarRuta();
+  // «Solo añadir» no quita nada aunque alguien le pase una lista: la confirmación
+  // sin palabra de abajo se apoya en eso.
+  if (mode === 'add-only') toRemove = [];
   const label = mode === 'add-only' ? 'Solo añadir' : 'Sincronizar playlist';
-  const confirmed = await typeConfirmModal(
-    label,
-    mode === 'add-only'
-      ? `Se van a añadir <strong>${toAdd.length}</strong> tracks a "${escapeHtml(playlist.name)}". No se va a quitar nada.`
-      : `Se van a añadir <strong>${toAdd.length}</strong> y quitar <strong>${toRemove.length}</strong> tracks de "${escapeHtml(playlist.name)}".`,
-    'SYNC'
-  );
+  // La palabra SYNC se pide solo si hay algo que QUITAR (util/confirmar-sync.js).
+  // Si solo se añade, un diálogo normal con el número.
+  const pide = confirmacionDeSync({ modo: mode, aAnadir: toAdd.length, aQuitar: toRemove.length });
+  const nombre = escapeHtml(playlist.name);
+  const confirmed = pide.tipo === 'escritura'
+    ? await typeConfirmModal(
+        label,
+        `Se van a añadir <strong>${toAdd.length}</strong> y quitar <strong>${toRemove.length}</strong> tracks de "${nombre}".`,
+        pide.palabra
+      )
+    : await alertModal(
+        label,
+        `Se van a añadir <strong>${toAdd.length.toLocaleString('es-ES')}</strong> ${toAdd.length === 1 ? 'track' : 'tracks'} a "${nombre}". No se va a quitar nada.`,
+        { confirmText: 'Añadir' }
+      );
 
   if (!confirmed) return;
 

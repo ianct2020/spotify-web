@@ -6,35 +6,35 @@
 //     (util/album-heard.js: historial completo + likes + listened + w-three)
 //   - permiten "+ Biblioteca" y "Crear playlist con lo elegido"
 
-import { idbGet, idbGetCached, idbSetCached, idbDel, idbEntriesByPrefix, idbAllKeys } from '../idb.js?v=274';
-import { getArtistAlbumsConFuente, buscarDiscografiaPorNombre, searchArtistByName, getAlbumTracks, saveToLibrary, saveAlbumsToLibrary, createPlaylist, addTracksToPlaylist } from '../api.js?v=274';
-import { albumKey } from '../util/album-key.js?v=274';
-import { cardKey, cardKeyLegacy, albumCreditName, keyOfPlaylistTrack } from '../util/discover-key.js?v=274';
-import { escapeHtml } from '../ui/components.js?v=274';
-import { openModal, closeTop } from '../ui/modal-stack.js?v=274';
-import { showToast } from '../ui/toast.js?v=274';
-import { openPlaylistPicker } from '../ui/playlist-picker.js?v=274';
-import { getOwnPlaylists, addUrisToPlaylists, toastAddResult } from '../util/playlist-add.js?v=274';
-import { openArtistCard } from './artist-card.js?v=274';
-import { openAlbumCard } from './album-card.js?v=274';
-import { createHiddenStore, createLocalStore } from '../util/hidden-sync.js?v=274';
-import { recuperarUriDeAlbumKey, REGLAS_VERSION } from '../util/hidden-recover.js?v=274';
-import { getPreview } from '../api/preview-providers.js?v=274';
-import { togglePreview, playingKey, attachHover } from '../ui/preview-player.js?v=274';
-import { coverUrl } from '../util/cover-size.js?v=274';
-import { fechaDelFallo } from '../util/escaneo-fallos.js?v=274';
-import { SCAN_TTL_MS, escaneoVencido, textoFrescura, crearMarcasDeFrescura } from '../util/frescura-escaneo.js?v=274';
-import { FILTROS as FILTROS_DEF, saveFiltros } from '../util/discover-filters.js?v=274';
-import { esEPoAlbum } from '../util/release-size.js?v=274';
-import { iconoPlay, iconoPausa, iconoPuntos, iconoOjo, iconoOjoTachado } from '../ui/icons.js?v=274';
+import { idbGet, idbGetCached, idbSetCached, idbDel, idbEntriesByPrefix, idbAllKeys } from '../idb.js?v=275';
+import { getArtistAlbumsConFuente, buscarDiscografiaPorNombre, searchArtistByName, getAlbumTracks, saveToLibrary, saveAlbumsToLibrary, createPlaylist, addTracksToPlaylist } from '../api.js?v=275';
+import { albumKey } from '../util/album-key.js?v=275';
+import { cardKey, cardKeyLegacy, albumCreditName, keyOfPlaylistTrack } from '../util/discover-key.js?v=275';
+import { escapeHtml } from '../ui/components.js?v=275';
+import { openModal, closeTop } from '../ui/modal-stack.js?v=275';
+import { showToast } from '../ui/toast.js?v=275';
+import { openPlaylistPicker } from '../ui/playlist-picker.js?v=275';
+import { getOwnPlaylists, addUrisToPlaylists, toastAddResult } from '../util/playlist-add.js?v=275';
+import { openArtistCard } from './artist-card.js?v=275';
+import { openAlbumCard } from './album-card.js?v=275';
+import { createHiddenStore, createLocalStore } from '../util/hidden-sync.js?v=275';
+import { recuperarUriDeAlbumKey, REGLAS_VERSION } from '../util/hidden-recover.js?v=275';
+import { getPreview } from '../api/preview-providers.js?v=275';
+import { togglePreview, playingKey, attachHover } from '../ui/preview-player.js?v=275';
+import { coverUrl } from '../util/cover-size.js?v=275';
+import { fechaDelFallo } from '../util/escaneo-fallos.js?v=275';
+import { SCAN_TTL_MS, escaneoVencido, textoFrescura, crearMarcasDeFrescura } from '../util/frescura-escaneo.js?v=275';
+import { FILTROS as FILTROS_DEF, saveFiltros } from '../util/discover-filters.js?v=275';
+import { esEPoAlbum } from '../util/release-size.js?v=275';
+import { iconoPlay, iconoPausa, iconoPuntos, iconoOjo, iconoOjoTachado } from '../ui/icons.js?v=275';
 import {
   DISCO_BASE_PREFIX, PRESUPUESTO_REFRESCO, RECIENTE_MAX_PAGINAS,
   crearBase, sumarCompleta, sumarReciente, tocaReciente, rangoReciente,
   fusionarBases, armarExportacion, leerImportacion,
-} from '../util/disco-base.js?v=274';
+} from '../util/disco-base.js?v=275';
 import {
   estimarCostoDeEscaneo, clasificarArtistas, totalizarCosto, costoDeUno, superaUmbral, PAGINAS_POR_ARTISTA,
-} from '../util/costo-escaneo.js?v=274';
+} from '../util/costo-escaneo.js?v=275';
 
 const DISCO_TTL_MIN = 30 * 24 * 60;       // 30 días
 const ARTIST_ID_TTL_MIN = 60 * 24 * 60;   // 60 días — los ids no cambian
@@ -958,7 +958,7 @@ export function yearOf(release) {
 // `releaseTs` vive ahora en `util/release-date.js` (v=246), junto al comparador
 // «más nuevo primero» de `#discover-artists`; se re-exporta acá para que
 // `#new-releases` siga importándolo de este archivo.
-export { releaseTs } from '../util/release-date.js?v=274';
+export { releaseTs } from '../util/release-date.js?v=275';
 
 // Deduplica ediciones del mismo álbum (deluxe, remaster, etc). Nos quedamos
 // con la primera edición (release date más antiguo).
@@ -1717,6 +1717,39 @@ export async function guardarLanzamiento(al) {
   const yaEstaban = (res.detail || []).reduce((n, d) => n + (d.dup || 0), 0)
     + (res.skipped || []).reduce((n, sk) => n + (sk.uris?.length || 0), 0);
   return { destino: 'playlist', pistas: añadidas, yaEstaban, playlistCreada: creada };
+}
+
+/**
+ * «Guardar álbum» con su aviso: guarda donde corresponda (`guardarLanzamiento`)
+ * y cuenta qué pasó en un toast. Es lo que hacían, copiado palabra por palabra,
+ * `saveAlbum` de `#new-releases` y `saveAlbumToLibrary` de `#discover-artists`
+ * (v=275: se sacó acá para que la ficha de álbum de `#similar` no fuera la
+ * tercera copia). Cada vista conserva lo SUYO —buscar el lanzamiento en su
+ * estado, el texto del botón, marcarlo resuelto y repintar—; lo que comparten es
+ * esto. Devuelve lo mismo que `guardarLanzamiento`.
+ */
+export async function guardarLanzamientoConAviso(al) {
+  const r = await guardarLanzamiento(al);
+  if (r.destino === 'biblioteca') {
+    showToast(`«${al.name}» guardado en tu biblioteca de álbumes`, 'success');
+  } else {
+    const partes = [];
+    if (r.pistas) partes.push(`${r.pistas} ${r.pistas === 1 ? 'pista' : 'pistas'}`);
+    if (r.yaEstaban) partes.push(`${r.yaEstaban} ya ${r.yaEstaban === 1 ? 'estaba' : 'estaban'}`);
+    showToast(
+      `«${al.name}» es un single: ${partes.join(' · ') || 'sin pistas nuevas'} en «${PLAYLIST_SINGLES}»`,
+      'success',
+    );
+    // La playlist se crea PÚBLICA y no hay forma de evitarlo por API. Se
+    // avisa una sola vez, cuando se acaba de crear.
+    if (r.playlistCreada) {
+      showToast(
+        `Creé la playlist «${PLAYLIST_SINGLES}». Spotify la crea PÚBLICA y no se puede cambiar por API: pásala a privada a mano desde la app.`,
+        'info',
+      );
+    }
+  }
+  return r;
 }
 
 /** Likea UNA POR UNA todas las pistas del álbum. No guarda el álbum. */

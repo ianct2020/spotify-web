@@ -67,3 +67,22 @@ export function masNuevoPrimero(x, y, { desempate = 'album' } = {}) {
   if (dt !== 0) return dt;
   return (leer.nombre(x) || '').localeCompare(leer.nombre(y) || '', 'es');
 }
+
+// Los dos órdenes que ofrece `#new-releases` (v=275): «más nuevo primero» (el de
+// siempre) y «más viejo primero». Ian pidió dos y nada más.
+//
+// ⚠️ El segundo NO es un comparador nuevo: es `masNuevoPrimero` con los dos
+// items INTERCAMBIADOS. Así «más viejo primero» es exactamente la lista de
+// «más nuevo primero» al revés —desempate incluido: a igual fecha, el artista
+// de la Z a la A—, y el criterio de fecha y el de desempate siguen siendo UNO.
+export const ORDENES_LANZAMIENTO = ['nuevo', 'viejo'];
+
+/**
+ * Comparador de lanzamientos según el orden elegido. Cualquier valor que no sea
+ * `'viejo'` cae en `'nuevo'`, que es el de siempre.
+ */
+export function compararLanzamientos(orden, opciones = {}) {
+  return orden === 'viejo'
+    ? (x, y) => masNuevoPrimero(y, x, opciones)
+    : (x, y) => masNuevoPrimero(x, y, opciones);
+}

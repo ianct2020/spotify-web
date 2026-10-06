@@ -10,22 +10,22 @@
 // 100 artistas en lugar de 20. Lógica de fetch/cache/playlist compartida en
 // features/discover-common.js con #new-releases.
 
-import { escapeHtml, confirmModal, pageHeader } from '../ui/components.js?v=274';
-import { showToast } from '../ui/toast.js?v=274';
-import { openArtistCard } from './artist-card.js?v=274';
-import { createIncrementalList, scrollRootOf } from '../ui/incremental-list.js?v=274';
-import { createLazyImages } from '../ui/lazy-img.js?v=274';
-import { isJunkTrack } from '../util/junk.js?v=274';
-import { buildAlbumHeardIndex } from '../util/album-heard.js?v=274';
-import { loadFiltros, buildFilterContext, applyDiscoverFilters } from '../util/discover-filters.js?v=274';
-import { releaseKind } from '../util/release-size.js?v=274';
-import { masNuevoPrimero } from '../util/release-date.js?v=274';
-import { vigilarRuta } from '../util/vigencia-ruta.js?v=274';
-import { leerElegidos, sumarElegidos, artistasBuscados, colaAutomatica } from '../util/cola-escaneo.js?v=274';
-import { leerFallos, marcarFallo, limpiarFallo, sinFallosMarcados } from '../util/escaneo-fallos.js?v=274';
-import { contarSinEscanear, sufijoSinEscanear, notaSinEscanear } from '../util/sin-escanear.js?v=274';
-import { estadoFrescura } from '../util/frescura-escaneo.js?v=274';
-import { prefKey, migratePrefKey } from '../storage.js?v=274';
+import { escapeHtml, confirmModal, pageHeader } from '../ui/components.js?v=275';
+import { showToast } from '../ui/toast.js?v=275';
+import { openArtistCard } from './artist-card.js?v=275';
+import { createIncrementalList, scrollRootOf } from '../ui/incremental-list.js?v=275';
+import { createLazyImages } from '../ui/lazy-img.js?v=275';
+import { isJunkTrack } from '../util/junk.js?v=275';
+import { buildAlbumHeardIndex } from '../util/album-heard.js?v=275';
+import { loadFiltros, buildFilterContext, applyDiscoverFilters } from '../util/discover-filters.js?v=275';
+import { releaseKind } from '../util/release-size.js?v=275';
+import { masNuevoPrimero } from '../util/release-date.js?v=275';
+import { vigilarRuta } from '../util/vigencia-ruta.js?v=275';
+import { leerElegidos, sumarElegidos, artistasBuscados, colaAutomatica } from '../util/cola-escaneo.js?v=275';
+import { leerFallos, marcarFallo, limpiarFallo, sinFallosMarcados } from '../util/escaneo-fallos.js?v=275';
+import { contarSinEscanear, sufijoSinEscanear, notaSinEscanear } from '../util/sin-escanear.js?v=275';
+import { estadoFrescura } from '../util/frescura-escaneo.js?v=275';
+import { prefKey, migratePrefKey } from '../storage.js?v=275';
 import {
   getArtistIdCached,
   getArtistDiscoCached,
@@ -34,8 +34,7 @@ import {
   migrarClavesDeArtista,
   yearOf,
   createDiscoverPlaylist,
-  guardarLanzamiento,
-  PLAYLIST_SINGLES,
+  guardarLanzamientoConAviso,
   saveAlbumTracksToLibrary,
   albumTrackCount,
   markAlbumResolved,
@@ -67,7 +66,7 @@ import {
   avisarRonda,
   botonesBaseHtml,
   conectarBotonesBase,
-} from './discover-common.js?v=274';
+} from './discover-common.js?v=275';
 
 const SCAN_KEY = 'discover_artists';
 
@@ -899,28 +898,8 @@ async function saveAlbumToLibrary(albumId, artistName, btn) {
   btn.disabled = true;
   btn.textContent = 'Guardando…';
   try {
-    const r = await guardarLanzamiento(al);
-    if (r.destino === 'biblioteca') {
-      btn.textContent = '✓ Guardado';
-      showToast(`«${al.name}» guardado en tu biblioteca de álbumes`, 'success');
-    } else {
-      btn.textContent = '✓ En la playlist';
-      const partes = [];
-      if (r.pistas) partes.push(`${r.pistas} ${r.pistas === 1 ? 'pista' : 'pistas'}`);
-      if (r.yaEstaban) partes.push(`${r.yaEstaban} ya ${r.yaEstaban === 1 ? 'estaba' : 'estaban'}`);
-      showToast(
-        `«${al.name}» es un single: ${partes.join(' · ') || 'sin pistas nuevas'} en «${PLAYLIST_SINGLES}»`,
-        'success',
-      );
-      // La playlist se crea PÚBLICA y no hay forma de evitarlo por API. Se
-      // avisa una sola vez, cuando se acaba de crear.
-      if (r.playlistCreada) {
-        showToast(
-          `Creé la playlist «${PLAYLIST_SINGLES}». Spotify la crea PÚBLICA y no se puede cambiar por API: pásala a privada a mano desde la app.`,
-          'info',
-        );
-      }
-    }
+    const r = await guardarLanzamientoConAviso(al);
+    btn.textContent = r.destino === 'biblioteca' ? '✓ Guardado' : '✓ En la playlist';
     markAlbumResolved(al, artistName);
     setTimeout(() => {
       const content = document.getElementById('disco-content');
