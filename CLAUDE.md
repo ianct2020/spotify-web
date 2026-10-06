@@ -1637,3 +1637,256 @@ En la pantalla de 1.366 px quedarían **18 px** de margen: una etiqueta un poco
 más larga, un paso de zoom o un contador más y rompe. ⚠️ El «~1.190 px» que se
 venía diciendo era aproximado; el número medido es **1.214**. La barra lateral
 **no quita ancho** (va por encima, `main` mide 1.356 con ella abierta o cerrada).
+
+## 💰 Cuánto cuesta abrir cada vista (2026-10-06)
+
+Esta tabla **no existía** hasta hoy, y los cuatro encargos anteriores la daban por
+hecha: por eso los presupuestos se venían estimando a ojo y se pasaron cuatro
+veces (48 peticiones de un tope de 12, el 04/10). Construida **leyendo el
+código, 0 peticiones**. Cada fila dice de qué capa sale su número.
+
+⚠️ **«Abrirse» es lo que dispara `render()` solo**, sin tocar nada. Lo que cuesta
+un botón («Analizar», «Elegir más artistas…», «Actualizar») NO está acá: esa es
+otra tabla y nadie la pidió todavía.
+
+### Las constantes que mandan
+
+| símbolo | qué es | valor de la cuenta de Ian | capa |
+|---|---|---:|---|
+| `L` | me gusta | **9.548** → `ceil(L/50)` = **191** págs. | medida 2026-07-17 |
+| `P` | playlists que devuelve `/me/playlists` | **97** (42 propias) → `ceil(P/50)` = **2** | medida 2026-08-23 |
+| `W` | pistas de «w three» | **3.011** → `ceil(W/100)` = **31** págs. | medida 2026-08-16 |
+| `T` | pistas de la playlist espejo («anothertwo») | **~9.000** → **~90** págs. | medida (CLAUDE.md) |
+| `A` | discografías en `discover_disco_base_v1_*` | **351** → `ceil(A/40)` = **9** | medida 2026-10-03 |
+
+`paginateAll` corta con `!data.next`, así que son **exactamente `ceil(n/limit)`**
+peticiones, sin página vacía de más. `/me/tracks` y `/me/playlists` van de a 50;
+`/playlists/{id}/items` de a 100; `/me/library*` de a **40**
+(`LIBRARY_URIS_POR_REQUEST`).
+
+**Frío vs. caliente.** «Caliente» = mismo navegador, cachés puestos. Los tres
+cachés que deciden casi todo:
+
+- **Likes** (`idb`, **sin caducidad**): con el caché puesto, `getAllLikedTracks()`
+  son **0** peticiones.
+- **Playlists** (`localStorage`, TTL 24 h): `getAllUserPlaylists()` → **0**.
+- **Items de playlist** (`idb`, validado por `snapshot_id`): `getAllPlaylistItems()`
+  en caliente es **1** petición (`/playlists/{id}?fields=snapshot_id`), no 0.
+
+⚠️ **`getBestAvailableLikes()` es 0 peticiones SIEMPRE.** Su defecto es
+`allowFetch: false` y **nadie en todo el repo pasa `true`** (verificado con grep
+el 06/10). Si el caché está frío devuelve `source: 'empty'` y la vista pinta un
+cartel. Ésa es la razón de que la mitad de la tabla esté en 0 y la que hace que
+el costo NO escale con el tamaño de la biblioteca en esas vistas.
+
+### Las 24 vistas del menú
+
+| vista | en frío | en caliente | endpoints que dispara | de qué depende | capa |
+|---|---:|---:|---|---|---|
+| **General** | | | | | |
+| `#dashboard` | **0** | **0** | — (stats.fm/Last.fm no son Spotify) | — | leída del código |
+| `#wrapped` | **0** | **0** | — con historial | — | leída del código |
+| ↳ sin historial (`renderLite`) | **2** | **2** | 2 × `/me/top/{artists,tracks}` | fijo | leída del código |
+| `#records` | **0** | **0** | — | — | leída del código |
+| `#covers` | **1 + ceil(W/100)** = **32** | **1** | 1 `/playlists/{id}?fields=snapshot_id` + págs. de `/playlists/{id}/items` | nº de pistas de «w three» | leída del código |
+| `#mosaico` | **0** | **0** | **ninguno, a propósito** | — | leída del código |
+| `#search` | **0** | **0** | — | — | leída del código |
+| `#listened` | **26** `/items` + 3 `/me` | **0** | snapshot + págs. de `/items` | pistas de la playlist elegida | **medida en vivo el 2026-10-04** (caché vencido) |
+| ↳ lo que predice el código | 1 + ceil(n/100) | **0** (caché propio en IDB) | ídem | ídem | leída del código |
+| **Crear** | | | | | |
+| `#smart` | **ceil(L/50)** = **191** | **0** | `/me/tracks` paginado | **nº de me gusta** | leída del código |
+| `#byartist` | **0** | **0** | — | — | leída del código |
+| `#wthree` | **45** `/playlists/{id}/items` | **~15** | snapshot + págs. de «w three» + **la playlist de ocultos entera** | pistas de la playlist **y nº de ocultos** | **medida en vivo el 2026-10-04** |
+| ↳ y el código lo explica | 1 + ceil(W/100) **+ 2 + ceil(H/100)** | ídem | `31` de «w three» + **14 de ocultos** = los 45 medidos | ídem | leída del código |
+| `#genre` | **0** | **0** | — (stats.fm no es Spotify) | — | leída del código |
+| **Descubrir** | | | | | |
+| `#similar` | **0** | **0** | — (la búsqueda es un acto explícito) | — | leída del código |
+| `#rabbit` | **0** | **0** | — | — | leída del código |
+| `#recs` | **0** | **0** | — | — | leída del código |
+| `#discover-artists` | **32 + 2 + ceil(Hd/100)** | ídem que el frío menos «w three» | «w three» **+ la playlist de ocultos («descubrir»)** | pistas de «w three» **y nº de ocultos** | leída del código |
+| `#follow-artists` | **ceil(A/40)** = **9** | **0** | `/me/library/contains?uris=spotify:artist:…` | **nº de discografías en la base** | leída del código |
+| `#new-releases` | **12** `/items` + **5** `/me` | **1** | snapshot + págs. de `/items` de «w three» | pistas de «w three» | **medida en vivo el 2026-09-30** |
+| ↳ lo que predice el código | 1 + ceil(W/100) = **32** **+ 2 + ceil(Hd/100)** | ídem | «w three» + ocultos («descubrir»), el MISMO store que `#discover-artists` | ídem | leída del código |
+| **Limpieza** | | | | | |
+| `#sync` | **~285** | **2** | `ceil(L/50)` + `ceil(P/50)` + 1 `/items?limit=1` + 1 snapshot + `ceil(T/100)` | me gusta **y** pistas de la espejo | leída del código |
+| `#dedupe` | **ceil(P/50) + 1** = **3** | **0–1** | `/me/playlists` + 1 `/me` | nº de playlists | leída del código |
+| `#zombies` | **0** | **0** | — (todo detrás de «Analizar») | — | leída del código |
+| `#versions` | **0** | **0** | — (detrás de «Analizar») | — | leída del código |
+| `#zeroplays` | **2 + ceil(Hz/100)** | ídem | 1 `/me` + 1 `/playlists/{id}` + la playlist de ocultos («sin plays») | **nº de ocultos de esta vista** | leída del código |
+| `#sin-clasificar` | **1 + ceil(P/50) + Σ(1 + ceil(Tᵢ/100)) + ocultos** ≈ **170+** | **~45** | `/me` + `/me/playlists` + las **42 propias** una por una + su playlist de ocultos | nº de playlists propias **y** su tamaño | leída del código |
+| `#skips` | **2 + ceil(Hk/100)** | ídem | 1 `/me` + 1 `/playlists/{id}` + la playlist de ocultos («skips») | **nº de ocultos de esta vista** | leída del código |
+
+**Arrancar la app: 3 `/v1/me`** — *medido*. Leyendo el código, `init()` dispara
+**1** (`testConnection()`); las otras dos son `getCurrentUserId()` (memoizado por
+sesión de página) y el perfil, que la primera vista pide vía `isOwner()`.
+
+**0 escrituras en la cuenta en las 24.** Ninguna apertura hace `PUT`, `POST` ni
+`DELETE`: lo verifica `tests/sin-escaneo-automatico.test.mjs` para las dos de
+descubrir, y para el resto la escritura siempre cuelga de un botón con cartel.
+
+### ⚠️ Los dos costos escondidos — acá se fue el presupuesto del 04/10
+
+**1. `buildAlbumHeardIndex()`** (`util/album-heard.js`). Parece local y **pega a
+`getAllPlaylistItems(«w three»)`**. Es lo ÚNICO que gastan `#discover-artists` y
+`#new-releases` al abrirse — ni una petición de discografías, que es lo que
+arregló v=261. Tiene memo de módulo (`cache`), así que **la segunda vista de
+descubrir de la misma carga de página sale gratis**: abrir las dos cuesta lo que
+una.
+
+**2. `hiddenStore.ready()`** (`util/hidden-sync.js`), y éste es el que explica el
+desborde de 48 de 12. Al abrir `#wthree` (y `#skips`, `#zeroplays`,
+`#sin-clasificar`, `#recs`) se dispara una vez por sesión de página y cuesta:
+
+```
+1 /me  +  1 /playlists/{id}?fields=id,name,owner(id)  +  ceil(H/100) /items
+```
+
+🟥 **Y ese último va con `useCache: false`**, así que **re-pagina la playlist de
+ocultos ENTERA cada sesión de página, en frío y en caliente**: no mira el
+`snapshot_id` y no deja caché. Es el único camino de apertura de toda la app que
+no se abarata nunca. Si algún día hay que bajar el costo de `#wthree`, éste es
+el sitio — pero **ojo: `useCache:false` está puesto a propósito**, porque la
+reconciliación de ocultos necesita el estado real de la playlist, no uno
+cacheado. No lo cambies sin leer esa sección.
+
+⚠️ **Hay SEIS almacenes de ocultos y cada uno tiene su PROPIA playlist**
+(`descubrir`, `recomendados`, `sin clasificar`, `sin plays`, `álbumes` de W-Three,
+`skips`). No se comparten: **cada vista paga el suyo**. Los dos de descubrir sí
+comparten `hiddenAlbums`, así que entre `#discover-artists` y `#new-releases`
+solo paga la primera de la sesión de página. Los `H` de la tabla son el nº de
+ocultos **de ese almacén**, no un total: los **439 de novedades** y los **78 de
+`listened_unreg_dismissed`** viven en almacenes distintos.
+
+🟥 **Y ésta fue mi propia corrección a mitad de camino**: `#skips` y `#zeroplays`
+los tenía anotados en **0** por usar sólo `getBestAvailableLikes()`, y no lo son
+— `hiddenTracks.ready()` va en el mismo `Promise.all` que los likes. Leer los
+`import` de una vista NO alcanza para costearla: hay que leer el cuerpo de
+`render()`, y éste es exactamente el error que produce un presupuesto de 12.
+
+🟩 **Con esto, la fila medida de `#wthree` CUADRA con el código**: los **45**
+`/items` del 04/10 son **31 de «w three»** (3.011 pistas) **+ 14 de la playlist
+de ocultos**, exactamente como anotó `PENDIENTES.md` ese día («más las de
+ocultos»). No hay misterio ni número viejo: la cuenta cierra.
+
+⚠️ **La que NO cuadra es `#new-releases`: midió 12 `/items` y el código predice
+32.** Lo más probable es que ese día el caché de «w three» estuviera parcialmente
+puesto, pero **no se verificó y no se va a inventar**: para presupuestar
+`#new-releases` usá **32**, el número leído, que es el techo.
+
+### El ranking, para presupuestar
+
+**Las tres más caras de abrir** (en frío), y las tres por la MISMA razón —su
+`render()` arranca el análisis solo, sin que nadie apriete nada:
+
+1. `#sync` ≈ **285** — `#sync` lo dice en un comentario: «`render()` la dispara sola».
+2. `#sin-clasificar` ≈ **170+** — las 42 playlists propias, una por una.
+3. `#smart` = **191** — `ceil(L/50)`, la biblioteca entera.
+
+**Las tres más baratas**, y las **12 vistas que cuestan 0 en frío Y en caliente**:
+`#dashboard`, `#wrapped` (con historial), `#records`, `#mosaico`, `#search`,
+`#byartist`, `#genre`, `#similar`, `#rabbit`, `#recs`, `#zombies`, `#versions`.
+Lo son porque dejan el trabajo detrás de un botón, o porque leen con
+`getBestAvailableLikes()`. Entre ellas, las **gratis de verdad** —0 peticiones y
+sin depender de ningún caché remoto— son **`#mosaico`** (documentado: no pega a
+`api.spotify.com` ni una vez), **`#search`** y **`#byartist`**.
+
+⚠️ **Lo caro no es el tamaño de la biblioteca: es quién dispara el análisis.**
+`#zombies` y `#versions` recorren lo mismo que `#sync` y cuestan **0** al abrirse,
+porque esperan que aprietes «Analizar».
+
+
+## 🤝 Qué anda sin los datos de Ian — censo para compartir la app (2026-10-06)
+
+Para la pregunta de Ian: *«si le paso la app a un amigo, qué le funciona».*
+Censo **leído del código, 0 peticiones**. Nadie cambió de comportamiento acá.
+
+### Los cinco insumos
+
+| insumo | qué es | cómo lo consigue un amigo |
+|---|---|---|
+| **login** | el OAuth de Spotify | entra y listo |
+| **caché de likes** | `idb`, sin caducidad | abrir `#dashboard` y «Cargar desde Spotify» (`ceil(L/50)` peticiones, una vez) |
+| **historial extendido** | los `data/history-*.json` | **NO los hereda** (ver abajo): tiene que subir su propio ZIP por «Mi historial» |
+| **playlist «listened albums»** | la elige a mano | `#listened` → «Cambiar playlist» |
+| **playlist «w three»** | la elige a mano | `#wthree` → setup |
+
+⚠️ **El historial horneado es de Ian y está cerrado con llave.** `isOwner()`
+compara contra `HISTORY_OWNER_ID`, y el candado está en `loadOne()`
+(`features/history-data.js`), **donde se entregan los datos, no donde se dibuja
+el cartel** — arreglarlo solo en `isOwner()` no cerraba nada (v=190). Un amigo
+**no ve ni un dato de escucha de Ian**, y eso es deliberado.
+
+🟩 **Pero BYOH funciona para cualquiera.** Sube su *Extended Streaming History*
+(ZIP) y `processStreamingHistory()` le produce **los siete** juegos de datos
+(`stats`, `plays`, `listened`, `skip`, `detail`, `records`, `artistTracks`),
+guardados en `localKey(uid, …)` — su IDB, su navegador, nada sale de su compu.
+O sea que las vistas de historial **no están rotas para él: están vacías hasta
+que importe.**
+
+### Las 24 vistas, por lo que necesitan
+
+| vista | con solo login | necesita además | sin eso, qué pasa | capa |
+|---|:---:|---|---|---|
+| `#dashboard` | ✅ | — | anda entero; es la puerta para cargar los likes | leída del código |
+| `#smart` | ✅ | — | anda (se baja los likes solo) | leída del código |
+| `#sync` | ✅ | — | anda | leída del código |
+| `#dedupe` | ✅ | — | anda | leída del código |
+| `#zombies` | ✅ | — | anda | leída del código |
+| `#versions` | ✅ | — | anda | leída del código |
+| `#sin-clasificar` | ✅ | — | anda | leída del código |
+| `#mosaico` | — | **base de colores** (`mosaico_colores_v1`) | «Todavía no hay base de colores»; se construye en `#debug`, sin cuota de Spotify | leída del código |
+| `#search` | — | caché de likes | cartel: «No hay likes cacheados» + link al Dashboard | leída del código |
+| `#byartist` | — | caché de likes | cartel con botón de carga | leída del código |
+| `#genre` | — | caché de likes · stats.fm opcional | cartel | leída del código |
+| `#similar` | — | **API key de Last.fm** | pide la key en un input | leída del código |
+| `#rabbit` | — | **API key de Last.fm** | pide la key | leída del código |
+| `#recs` | — | **API key de Last.fm** + caché de likes | pide la key | leída del código |
+| `#discover-artists` | — | base de discografías (escaneo propio) | pinta vacío + «Elegir más artistas…» | leída del código |
+| `#new-releases` | — | base de discografías | ídem | leída del código |
+| `#follow-artists` | — | base + caché de likes + scope `user-follow-modify` | «No hay discografías guardadas en este navegador» | leída del código |
+| `#listened` | — | **playlist «listened albums»** elegida | pantalla de «no configurada» con selector | leída del código |
+| `#wthree` | — | **ser Ian** (candado por adelantado) + playlist «w three» | bloqueada SIEMPRE: ⚠️ **BYOH no la abre** (ver abajo) | leída del código |
+| `#covers` | — | **ser Ian** (candado por adelantado) | bloqueada SIEMPRE: ⚠️ **BYOH no la abre** (ver abajo) | leída del código |
+| `#wrapped` | — | **historial**; sin él cae a `renderLite` (2 × `/me/top`) | Wrapped lite, más pobre pero anda | leída del código |
+| `#records` | — | **historial** | cartel de bloqueo | leída del código |
+| `#zeroplays` | — | **historial** (`plays`) · stats.fm opcional | cartel de bloqueo | leída del código |
+| `#skips` | — | **historial** (`skip`, versión ≥ 4) · stats.fm opcional | cartel de bloqueo | leída del código |
+
+### ⚠️ Dos candados distintos, y la diferencia es la respuesta a la pregunta
+
+Las seis vistas de historial **no se cierran todas igual**, y mezclarlas daba una
+respuesta falsa:
+
+| forma del candado | vistas | ¿BYOH la abre? |
+|---|---|:---:|
+| **pide los DATOS primero**, y recién si vienen vacíos pregunta por el owner | `#wrapped`, `#records`, `#zeroplays`, `#skips` | **sí** |
+| **`isOwner()` por adelantado**, antes de tocar un solo dato, y `return` | `#covers`, `#wthree` | **NO** |
+
+En `#covers` (`covers.js:323`) y `#wthree` (`wthree.js:223`) lo primero que hace
+`render()` es `const propio = await isOwner(); if (!propio) { … return; }`. El
+amigo ve la tarjeta de bloqueo **aunque haya importado su ZIP entero**, porque la
+vista nunca llega a preguntar si hay datos. No es un bug declarado en ninguna
+parte: es el candado de v=190 aplicado un paso más arriba que en las otras cuatro.
+**Si Ian quiere que un amigo use «Mis tapas» o W-Three, hay que mover esas dos
+guardas de `isOwner()` a «¿hay datos?», como las otras cuatro.** No se tocó nada:
+esta tanda es un censo.
+
+### El resumen que Ian pidió
+
+- **7 de 24 andan con solo el login**: `#dashboard`, `#smart`, `#sync`, `#dedupe`,
+  `#zombies`, `#versions`, `#sin-clasificar`. Ninguna «sin determinar».
+- **3 más** con un paso de un minuto (cargar los likes): `#search`, `#byartist`, `#genre`.
+- **1** con un paso que no gasta cuota de Spotify: `#mosaico` (base de colores en `#debug`).
+- **4 se abren con BYOH**: `#wrapped`, `#records`, `#zeroplays`, `#skips`
+  — y `#wrapped` da algo (`renderLite`, 2 × `/me/top`) incluso sin nada.
+- **2 NO se abren con nada**: `#covers` y `#wthree`, por el candado de arriba.
+- **3 esperan una key de Last.fm** (`#similar`, `#rabbit`, `#recs`), gratis y ajena a Spotify.
+- **1 espera que elija una playlist**: `#listened`.
+- **3 esperan que escanee artistas** (`#discover-artists`, `#new-releases`,
+  `#follow-artists`), que es lo único que le cuesta cuota de verdad.
+
+🟩 **Ninguna vista se rompe sin los datos de Ian: las 24 degradan con un cartel
+que dice qué falta.** Eso no es casualidad, es la regla que v=190 y v=178 dejaron
+escrita, y conviene no aflojarla. 🟥 Pero «no se rompe» no es «se puede usar»:
+para `#covers` y `#wthree` el cartel es el techo.
+
