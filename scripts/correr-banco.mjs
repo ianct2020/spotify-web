@@ -29,6 +29,27 @@ const ANCHO = process.env.ANCHO || '1351';
 // desde antes del 04/10), y con `auto=1` se fabrica una base sintetica y se
 // conduce solo. El resto de los bancos se autocomprueban sin pedir nada.
 const EXTRA = { mosaico: 'auto=1' };
+
+// Tope de reloj VIRTUAL por banco, en ms. El defecto son 45 s (ver abajo).
+//
+// ⚠️ No es tiempo de pared ni una espera: es cuánto reloj simulado puede
+// consumir el banco antes de que Chrome lo corte a mitad de camino.
+//
+// `ocultar-artista` necesita MUCHO más que el resto porque abre TRES vistas
+// reales, y la que se lo lleva es `#discover-artists`: entre pedirle que pinte y
+// tener sus bloques en el DOM se van ~70 s de reloj virtual (medido el 06/10 con
+// hitos de `performance.now()`). No son temporizadores de la app —se buscaron y
+// no hay ninguno en ese camino, y apagar las animaciones de `ui/reveal.js` no
+// movió el número—: es que el reloj virtual ADELANTA en cada vuelta en que la
+// página queda ociosa, y una espera de las de `esperarReal` tiene muchas.
+//
+// El número está medido, no elegido, y la medición fue a tasa de acierto, que es
+// la única que importa acá: 45 s → 0 de 3 · 90 s → 2 de 3 · 180 s → 1 de 3 ·
+// 240 s → 5 de 5 · 300 s → 5 de 5. Se deja en 300 s, un escalón por encima del
+// primero que acertó siempre. Un banco que pasa a veces es peor que ninguno, y
+// este repo ya lo pagó dos veces (la barra entre v=241 y v=261, el mosaico hasta
+// v=273). No es tiempo de pared: la corrida real tarda unos 12 s.
+const PRESUPUESTO = { 'ocultar-artista': 300000 };
 // `XQ="&peor=1"` agrega parámetros a la URL del banco sin tocar este archivo: sirve
 // para medir (p. ej. el ancho mínimo en que la barra de novedades sigue en una fila).
 
@@ -93,7 +114,7 @@ try {
       // 20 s en v=273 porque el banco del mosaico hace trabajo de verdad
       // (empareja, baja 96 tapas y pinta) y a 20 s quedaba al borde: cuando
       // fallaba, el dump salia a medio camino y el rojo llegaba sin mensaje.
-      '--virtual-time-budget=45000',
+      `--virtual-time-budget=${PRESUPUESTO[BANCO] || 45000}`,
       '--dump-dom',
       URL,
     ], { stdio: ['ignore', 'pipe', 'ignore'] });

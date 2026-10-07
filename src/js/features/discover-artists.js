@@ -420,13 +420,31 @@ function renderShell(content, totalCandidates) {
         </select>
         <button class="btn btn-secondary btn-sm ${state.mode === 'heard' ? 'sc-on' : ''}" id="disco-mode-heard" title="Los que marcaste como escuchados. Desde ahí puedes devolverlos a la lista.">Escuchados <span id="disco-heard-n">${heardAlbums.size}</span></button>
         <button class="btn btn-secondary btn-sm ${state.mode === 'hidden' ? 'sc-on' : ''}" id="disco-mode-hidden" title="Los que ocultaste. Se sincronizan con la playlist «fonoteca · ocultos (descubrir)».">Ocultos <span id="disco-hidden-n">${hiddenAlbums.size}</span></button>
-        ${botonArtistasOcultosHtml('disco-mode-artistas', { mirando: state.mode === 'artistas' })}
         <button class="btn btn-secondary btn-sm" id="disco-refresh" title="${state.scannedAt ? 'Último escaneo ' + agoLabel(state.scannedAt) + '. ' : ''}Busca lanzamientos nuevos de tus artistas. No borra las discografías que ya tienes.">Actualizar</button>
         ${botonesBaseHtml('disco')}
         <button class="btn btn-secondary btn-sm" id="disco-load-more" title="Abre la lista de artistas sin escanear para elegir cuáles. Abrirla no pide nada a Spotify.">Elegir más artistas para escanear…</button>
       </div>
     </div>
     ${avisoFrescuraHtml('disco', SCAN_KEY)}
+    ${(() => {
+      // ⚠️ EL CONTROL DE ARTISTAS OCULTOS NO VA EN `.disco-controls`, Y ESTÁ
+      // MEDIDO.
+      //
+      // Esa barra ya estaba al límite: el 03/10 se midió que un botón más
+      // (134 px) mueve su punto de rotura de 1.214 a 1.348 px de ventana, y en
+      // la pantalla de 1.366 de Ian quedaban 18 px. Este botón mide 143 px con
+      // el contador de una cifra y **159 px con tres** («Artistas ocultos 183»,
+      // que es el techo plausible: son los que Ian quiere podar). Medido en
+      // `tests/banco/ocultar-artista.html` el 06/10: metido en la barra, a
+      // **1.356 px** —el ancho real de `main` en su pantalla— la barra pasaba a
+      // **DOS FILAS** en ese peor caso. Sin el botón: una.
+      //
+      // Así que vive en su propia línea, que es un bloque aparte y no compite
+      // con nada. Y sale VACÍA cuando no hay ningún artista oculto: una línea
+      // que no dice nada no se cobra el alto.
+      const b = botonArtistasOcultosHtml('disco-mode-artistas', { mirando: state.mode === 'artistas' });
+      return b ? `<div class="disco-linea-artistas">${b}</div>` : '';
+    })()}
     ${renderFiltroChips(state.filtros, state.conteosFiltro)}
     <div class="disco-progress" id="disco-progress" style="display:none">
       <div class="disco-progress-bar"><div class="disco-progress-fill" id="disco-progress-fill" style="width:0%"></div></div>

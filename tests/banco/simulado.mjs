@@ -29,6 +29,7 @@ export function instalarRedSimulada() {
     externas: [],        // fuera de api.spotify.com, que ni siquiera se intentan
   };
   const rutas = [];      // [{ metodo, patron:RegExp, responder:(m, url, cuerpo)=>objeto|{status,body} }]
+  const externas = [];   // dobles de hosts que NO son Spotify (Last.fm), declarados a mano
   const original = window.fetch.bind(window);
   window.__fetchOriginal = original;
 
@@ -47,6 +48,16 @@ export function instalarRedSimulada() {
     if (abs.origin === location.origin) return original(entrada, opciones);
 
     if (abs.hostname !== 'api.spotify.com') {
+      // Un host externo DECLARADO por el escenario (Last.fm, para #similar) se
+      // contesta de mentira igual que Spotify. Lo que no se declaró sigue
+      // bloqueado y anotado: la regla de «esto no tiene camino a la red real»
+      // no cambia, solo se le pueden agregar dobles explícitos.
+      for (const r of externas) {
+        if (r.patron.test(abs.href)) {
+          reg.llamadas.push({ metodo, ruta: abs.href });
+          return json(await r.responder({ url: abs, metodo }) ?? {});
+        }
+      }
       reg.externas.push(`${metodo} ${abs.href}`);
       return json({ error: { status: 599, message: 'banco: red externa bloqueada' } }, 599);
     }
@@ -75,6 +86,8 @@ export function instalarRedSimulada() {
     reg,
     /** Declara una ruta: `ruta('GET', /^\/me$/, () => ({...}))`. La última declarada gana. */
     ruta(metodo, patron, responder) { rutas.unshift({ metodo, patron, responder }); },
+    /** Declara un doble de un host externo por URL completa (p. ej. Last.fm). */
+    rutaExterna(patron, responder) { externas.unshift({ patron, responder }); },
     sinSimular: (status = 404) => ({ __status: status, body: { error: { status, message: 'banco' } } }),
     restaurar() { window.fetch = original; },
   };
@@ -82,11 +95,18 @@ export function instalarRedSimulada() {
 
 // ── Los datos de mentira (el repo es público: nada de esto es de nadie) ───────
 
+// ⚠️ Los ids son de 22 caracteres alfanuméricos, como los de Spotify de verdad.
+// Eran `art-a`…`art-d` hasta v=276 y eso ROMPÍA el contrato del doble: hay código
+// que valida la forma del id (`artistasDeBases` descarta con
+// `/^[a-zA-Z0-9]{22}$/` lo que no la cumple, para no mandarle basura a
+// `/me/library/contains`), así que con los ids viejos #follow-artists salía
+// vacía en el banco por una razón que la app real nunca tendría. Un doble que no
+// cumple el contrato del servicio que reemplaza prueba otra cosa.
 export const ARTISTAS = [
-  { id: 'art-a', name: 'Artista de ejemplo A' },
-  { id: 'art-b', name: 'Artista de ejemplo B' },
-  { id: 'art-c', name: 'Artista de ejemplo C' },
-  { id: 'art-d', name: 'Artista de ejemplo D' },
+  { id: '0aAaAaAaAaAaAaAaAaAaAa', name: 'Artista de ejemplo A' },
+  { id: '1bBbBbBbBbBbBbBbBbBbBb', name: 'Artista de ejemplo B' },
+  { id: '2cCcCcCcCcCcCcCcCcCcCc', name: 'Artista de ejemplo C' },
+  { id: '3dDdDdDdDdDdDdDdDdDdDd', name: 'Artista de ejemplo D' },
 ];
 
 /** 12 me gusta por artista (48): pasan el umbral de 10+ likes de #new-releases. */
