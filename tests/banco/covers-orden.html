@@ -85,14 +85,16 @@ try {
     if (/history-listened-albums\.json/.test(url)) return new Response(JSON.stringify(historial), { status: 200, headers: { 'content-type': 'application/json' } });
     return pasa(u, o);
   };
-  sim.ruta('GET', /^\/me$/, () => ({ id: 'orhs6wu5ykk7ql80u92ujn74o', display_name: 'Banco' }));
-  sim.ruta('GET', /^\/playlists\/[^/?]+\?/, () => ({ id: 'pl-wthree', name: 'w three', owner: { id: 'orhs6wu5ykk7ql80u92ujn74o' }, snapshot_id: 's1' }));
+  // `isOwner()` solo concede el historial al dueño: el id sale de donde ya vive, no se repite acá.
+  const { HISTORY_OWNER_ID } = await import('/js/features/history-data.js');
+  sim.ruta('GET', /^\/me$/, () => ({ id: HISTORY_OWNER_ID, display_name: 'Banco' }));
+  sim.ruta('GET', /^\/playlists\/[^/?]+\?/, () => ({ id: 'pl-wthree', name: 'w three', owner: { id: HISTORY_OWNER_ID }, snapshot_id: 's1' }));
   sim.ruta('GET', /^\/playlists\/[^/]+\/items/, () => ({ items: sinFechaItems, total: sinFechaItems.length, next: null }));
   sim.ruta('GET', /^\/me\/playlists/, () => ({ items: [], total: 0, next: null }));
   sim.ruta('GET', /^\/me\/tracks/, () => ({ items: [], total: 0, next: null }));
 
   const { prefKey } = await import('/js/storage.js');
-  localStorage.setItem('fonoteca_last_user_id', 'orhs6wu5ykk7ql80u92ujn74o');
+  localStorage.setItem('fonoteca_last_user_id', HISTORY_OWNER_ID);
   localStorage.setItem(prefKey('wthree_playlist_id'), 'pl-wthree');
   localStorage.setItem(prefKey('covers_cell_size'), PASO ? '96' : '48');
   localStorage.removeItem(prefKey('covers_sort_mode'));

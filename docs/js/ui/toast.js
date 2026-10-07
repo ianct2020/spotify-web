@@ -31,7 +31,7 @@
 // `avisar()` sigue mandando cada mensaje distinto una vez, que es lo que arregló
 // v=229.
 
-import { mountBottom } from './bottom-layer.js?v=279';
+import { mountBottom } from './bottom-layer.js?v=280';
 
 const WRITE_DURATION_MS = 30000;
 const INFO_DURATION_MS = 8000;
