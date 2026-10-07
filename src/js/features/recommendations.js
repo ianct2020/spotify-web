@@ -9,8 +9,12 @@ import { openTrackCard } from './track-card.js';
 import { openAlbumCard } from './album-card.js';
 import { limpiaParaQuery, titleMatches, artistMatches } from '../util/track-match.js';
 import { vigilarRuta } from '../util/vigencia-ruta.js';
-import { createHiddenStore } from '../util/hidden-sync.js';
-import { recuperarUriDeArtistaKey, REGLAS_VERSION } from '../util/hidden-recover.js';
+import { recuperarUriDeArtistaKey } from '../util/hidden-recover.js';
+import {
+  artistasOcultos as hiddenArtists,
+  alternarArtistaOculto,
+  artistaEstaOculto,
+} from './artistas-ocultos.js';
 import { iconoPlay, iconoPausa, iconoFicha, iconoDisco, iconoOjo, iconoOjoTachado } from '../ui/icons.js';
 import { pedirYCachear, CUALQUIER_RESPUESTA } from '../util/cache-solo-exitos.js';
 
@@ -18,25 +22,11 @@ import { pedirYCachear, CUALQUIER_RESPUESTA } from '../util/cache-solo-exitos.js
 // Mismos trazos que el ojo de discover-common.js (v=165), acá con 14px para
 // que entre en el botón redondo `.sc-hide` de las tarjetas de esta vista.
 
-// Ocultar un artista recomendado: el MISMO mecanismo que discover-common.js
-// usa para álbumes (hidden-sync.js — playlist privada + reconciliación por
-// unión, ver PENDIENTES.md sobre el hueco de `uriByKey`). La clave es el
-// artista, no una pista, así que se guarda una pista representativa suya y al
-// leer se reconstruye el nombre desde el artista de esa pista — igual que
-// W-Three reconstruye `albumKey` desde su pista representativa.
-const hiddenArtists = createHiddenStore({
-  lsKey: 'recs_ocultos',
-  playlistName: 'fonoteca · ocultos (recomendados)',
-  label: 'recomendados',
-  keyOfTrack: (t) => {
-    const n = t?.artists?.[0]?.name;
-    return n ? n.toLowerCase() : null;
-  },
-  // La clave es el nombre del artista: la uri no se deduce, se busca una pista
-  // suya y se confirma que su `artists[0]` sea ese artista (v=205).
-  recoverUri: recuperarUriDeArtistaKey,
-  reglasRecuperador: REGLAS_VERSION,
-});
+// El almacén de artistas ocultos se MUDÓ a `features/artistas-ocultos.js` en
+// v=276, sin cambiarle el `lsKey` ni el `playlistName`: desde ahí lo comparten
+// esta vista, `#similar`, `#discover-artists` y `#follow-artists`, que son el
+// mismo gesto («este artista no me interesa») en cuatro sitios. Acá se importa
+// con el nombre de siempre para no reescribir el resto del archivo.
 
 // Pista representativa por artista, para poder ocultarlo con una uri real sin
 // tener que resolver sus tracks de nuevo si ya se hizo en esta sesión.
@@ -91,12 +81,20 @@ async function buscarUriRepresentativa(artist, k) {
   return null;
 }
 
-/** @returns {Promise<boolean>} true si quedó oculto */
+/**
+ * Ocultar/mostrar desde esta vista.
+ *
+ * La decisión de ocultar es de `alternarArtistaOculto` (una sola definición en
+ * toda la app, `features/artistas-ocultos.js`). Lo único que aporta esta vista
+ * es la uri representativa que ya tiene a mano: si el usuario entró a este
+ * artista, su primer match resuelto sirve y no hay que buscar nada.
+ *
+ * @returns {Promise<boolean>} true si quedó oculto
+ */
 async function toggleHiddenArtist(artist) {
-  const key = artist.name.toLowerCase();
-  let uri = null;
-  try { uri = await representativeArtistUri(artist); } catch { /* sin uri: el store avisa, la anota y la intenta recuperar en el sync */ }
-  return hiddenArtists.toggle(key, uri);
+  let uriSugerida = null;
+  try { uriSugerida = await representativeArtistUri(artist); } catch { /* sin uri: la compartida la busca, y si no hay el store avisa */ }
+  return alternarArtistaOculto(artist, { uriSugerida });
 }
 
 // Cuántos top tracks se le piden a Last.fm por artista. Eran 20 hasta v=167.
@@ -287,8 +285,8 @@ function renderRecommendations(ruta = vigilarRuta()) {
   }
 
   const pool = viewMode === 'hidden'
-    ? recommendations.filter(a => hiddenArtists.has(a.name.toLowerCase()))
-    : recommendations.filter(a => !hiddenArtists.has(a.name.toLowerCase()));
+    ? recommendations.filter(a => artistaEstaOculto(a.name))
+    : recommendations.filter(a => !artistaEstaOculto(a.name));
   const shown = pool.slice(0, 50);
 
   const hiddenToggleBtn = (hiddenArtists.size > 0 || viewMode === 'hidden')
@@ -324,7 +322,7 @@ function renderRecommendations(ruta = vigilarRuta()) {
       ${shown.map((a, i) => renderArtistCard(a, i)).join('')}
     </div>
   `;
-  panel.querySelectorAll('.recs-artist-pick').forEach(el => {
+  panel.querySelectorAll('.art-card-pick').forEach(el => {
     el.onclick = () => pickArtist(shown[parseInt(el.dataset.idx)]);
   });
   panel.querySelectorAll('.recs-artist-hide').forEach(el => {
@@ -350,13 +348,13 @@ function renderRecommendations(ruta = vigilarRuta()) {
 }
 
 function renderArtistCard(a, i) {
-  const hidden = hiddenArtists.has(a.name.toLowerCase());
+  const hidden = artistaEstaOculto(a.name);
   return `
-    <div class="smart-card recs-artist-card">
-      <button type="button" class="recs-artist-pick" data-idx="${i}" title="Ver top tracks">
+    <div class="smart-card art-card-pick-wrap">
+      <button type="button" class="art-card-pick" data-idx="${i}" title="Ver top tracks">
         <div class="smart-card-title" style="font-size:15px">${escapeHtml(a.name)}</div>
       </button>
-      <div class="recs-artist-footer">
+      <div class="art-card-footer">
         <span class="smart-card-meta">${a.sources.length} match${a.sources.length > 1 ? 'es' : ''}</span>
         <button type="button" class="sc-btn sc-hide recs-artist-hide" data-idx="${i}"
                 title="${hidden ? 'Devolver a la lista' : 'No te interesa: ocultar (no vuelve a aparecer)'}"
@@ -373,7 +371,7 @@ async function pickArtist(artist) {
   pickedUris.clear();
 
   const panel = document.getElementById('recs-panel');
-  const yaOculto = hiddenArtists.has(artist.name.toLowerCase());
+  const yaOculto = artistaEstaOculto(artist.name);
   panel.innerHTML = `
     <div style="margin-bottom:12px;display:flex;gap:8px;flex-wrap:wrap">
       <button class="btn btn-secondary btn-sm" id="recs-back-btn">← Volver</button>

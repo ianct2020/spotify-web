@@ -778,19 +778,24 @@ input[type="checkbox"].keep-check:checked::after {
   padding: 14px 8px;
 }
 
-/* Tarjeta de artista de Recomendaciones (scrobbles): el ojo de ocultar vive en
-   la esquina, así que la tarjeta deja de ser un único <button> — un botón
+/* Tarjeta de artista de una rejilla (#recs y #similar): el ojo de ocultar vive
+   en la esquina, así que la tarjeta deja de ser un único <button> — un botón
    dentro de otro es HTML inválido (mismo gotcha que `.dcard-cover-wrap`) — y
-   pasa a ser un contenedor con dos botones HERMANOS: `.recs-artist-pick` (el
-   nombre, elige el artista) y `.recs-artist-hide` (el ojo).
+   pasa a ser un contenedor con botones HERMANOS: `.art-card-pick` (el nombre,
+   elige el artista) y los de la fila de abajo (el ojo, el ⋮).
    ⚠️ El ojo NO va superpuesto arriba del nombre (así estaba hasta v=211): con
    nombres largos («UnoTheActivist», «AGUSFORTNITE2008») tapaba letras. Vive en
-   la línea de «N matches», como fila propia (`.recs-artist-footer`), corriendo
-   el texto al costado para que entren los dos. */
-.recs-artist-card {
+   la línea de «N matches», como fila propia (`.art-card-footer`), corriendo
+   el texto al costado para que entren los dos.
+   ⚠️ Se llamaban `.recs-artist-*` hasta v=276. El cambio de nombre es el punto:
+   #similar necesitaba exactamente esta tarjeta, y con el nombre viejo la copia
+   iba a ser literal — que es cómo el menú lateral terminó con su propio juego
+   de SVG divergido (04/10). Un nombre que no nombra una vista no invita a
+   copiarse. */
+.art-card-pick-wrap {
   cursor: default;
 }
-.recs-artist-pick {
+.art-card-pick {
   all: unset;
   box-sizing: border-box;
   display: flex;
@@ -801,18 +806,87 @@ input[type="checkbox"].keep-check:checked::after {
   text-align: center;
   cursor: pointer;
 }
-.recs-artist-footer {
+.art-card-footer {
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 8px;
   width: 100%;
 }
-.recs-artist-hide {
+.art-card-footer .sc-btn {
   opacity: .55;
   flex-shrink: 0;
 }
-.recs-artist-hide:hover { opacity: 1; }
+.art-card-footer .sc-btn:hover { opacity: 1; }
+
+/* ── El menú de ocultar un artista (v=276) ──────────────────────────────────
+   Un botón ⋮ VISIBLE por fila y UN menú flotante para toda la app.
+   ⚠️ El menú vive en el <body>, no en la fila: dentro de la tarjeta lo
+   recortaría el overflow, y uno por fila serían 183 menús escondidos en
+   #follow-artists. Por eso la posición la calcula el JS y acá solo va el
+   `position: absolute`.
+   Solo variables de tema: este menú tiene que seguir la paleta del usuario sin
+   enterarse, igual que los iconos con `currentColor`. */
+.art-oc-menu-btn {
+  all: unset;
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: var(--radius-sm);
+  color: var(--color-text-muted);
+  cursor: pointer;
+  flex-shrink: 0;
+  opacity: .7;
+}
+.art-oc-menu-btn:hover,
+.art-oc-menu-btn[aria-expanded="true"] {
+  opacity: 1;
+  color: var(--color-text);
+  background: var(--color-elevated);
+}
+.art-oc-menu-btn:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 1px;
+}
+.art-oc-menu {
+  position: absolute;
+  z-index: 60;
+  min-width: 190px;
+  max-width: 280px;
+  padding: 4px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, .35);
+}
+.art-oc-menu[hidden] { display: none; }
+.art-oc-menu-titulo {
+  padding: 6px 10px 4px;
+  font-size: 11px;
+  color: var(--color-text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.art-oc-menu-item {
+  all: unset;
+  box-sizing: border-box;
+  display: block;
+  width: 100%;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  color: var(--color-text);
+  font-size: 13px;
+  cursor: pointer;
+}
+.art-oc-menu-item:hover,
+.art-oc-menu-item:focus-visible {
+  background: var(--color-elevated);
+  outline: none;
+}
 
 .smart-card.selected {
   border-color: var(--color-accent);

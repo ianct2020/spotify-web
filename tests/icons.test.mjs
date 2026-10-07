@@ -20,7 +20,7 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import {
-  iconoPlay, iconoPausa, iconoPuntos,
+  iconoPlay, iconoPausa, iconoPuntos, iconoPuntosVertical,
   iconoOjo, iconoOjoTachado, iconoFicha, iconoDisco,
 } from '../src/js/ui/icons.js';
 import * as ICONOS from '../src/js/ui/icons.js';
@@ -64,6 +64,11 @@ igual('fila de canción ▶ (14)', iconoPlay(14),
 igual('fila de canción ⏸ (14)', iconoPausa(14),
   '<svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor" aria-hidden="true"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>');
 
+// v=276: el ⋮ del menú de ocultar un artista. NO reemplaza al ··· horizontal,
+// que significa «buscando preview» y vive dentro del botón de play.
+igual('menú de fila ⋮ (14)', iconoPuntosVertical(14),
+  '<svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor" aria-hidden="true"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg>');
+
 igual('ojo abierto (14)', iconoOjo(14),
   '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>');
 igual('ojo tachado (14)', iconoOjoTachado(14),
@@ -76,7 +81,7 @@ igual('⊙ disco (14)', iconoDisco(14),
 
 // ── 2. el tamaño es lo ÚNICO que cambia ────────────────────────────────────
 // Es la propiedad que justifica que sean funciones y no constantes.
-for (const f of [iconoPlay, iconoPausa, iconoPuntos, iconoOjo, iconoOjoTachado, iconoFicha, iconoDisco]) {
+for (const f of [iconoPlay, iconoPausa, iconoPuntos, iconoPuntosVertical, iconoOjo, iconoOjoTachado, iconoFicha, iconoDisco]) {
   const a = f(10), b = f(15);
   comprobar(`${f.name}: cambiar el lado no toca la geometría`,
     a.replace(/"10"/g, '"15"') === b);
@@ -107,6 +112,7 @@ const GLIFOS = {
   '▶': 'M8 5v14l11-7z',
   '⏸': '<rect x="6" y="4" width="4" height="16"/>',
   '···': '<circle cx="5" cy="12" r="2"/>',
+  '⋮': '<circle cx="12" cy="5" r="2"/>',
   'ojo abierto': 'M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z',
   'ojo tachado': 'M17.94 17.94A10.07',
   'ⓘ ficha': '<line x1="12" y1="11" x2="12" y2="16"/>',
@@ -141,6 +147,20 @@ const conLaFina = archivosJs(join(raiz, 'src/js'))
   .map(p => p.slice(raiz.length + 1));
 comprobar('la geometría fina del ⏸ no está en ningún archivo', conLaFina.length === 0,
   conLaFina.join(', '));
+
+// ── 6. el ⋮ y el ··· son DOS, y cada uno con su significado (v=276) ────────
+//
+// El ··· horizontal quiere decir «estoy buscando el preview» y vive dentro del
+// botón de play; el ⋮ vertical quiere decir «menú de esta fila». En #similar
+// los dos conviven a centímetros, así que si alguien los unifica «porque son
+// tres puntos» el mismo glifo pasa a querer decir dos cosas — y no rompe nada,
+// que es la forma en que esto se cuela.
+comprobar('el ⋮ y el ··· son dibujos distintos',
+  iconoPuntos(14) !== iconoPuntosVertical(14));
+comprobar('el ⋮ es vertical (los tres círculos en x=12)',
+  (iconoPuntosVertical(14).match(/cx="12"/g) || []).length === 3);
+comprobar('el ··· sigue siendo horizontal (los tres círculos en y=12)',
+  (iconoPuntos(14).match(/cy="12"/g) || []).length === 3);
 
 console.log(`\n  ${ok} asserts OK, ${fallos} fallos`);
 process.exit(fallos ? 1 : 0);

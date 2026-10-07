@@ -77,6 +77,24 @@ export const iconoPausa = (lado) =>
 export const iconoPuntos = (lado) =>
   relleno(lado, '<circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/>');
 
+// ⚠️ EL ⋮ ES VERTICAL Y EL ··· ES HORIZONTAL, Y NO SON INTERCAMBIABLES.
+//
+// `iconoPuntos` (horizontal) ya tiene un significado tomado en toda la app:
+// «estoy buscando el preview», y vive DENTRO del botón de play, donde alterna
+// con el ▶ y el ⏸. Si el menú de ocultar usara ese mismo dibujo, el mismo glifo
+// querría decir dos cosas distintas en la misma tarjeta — en `#similar` las dos
+// cosas conviven a centímetros.
+//
+// El ⋮ vertical es además el gesto que la gente ya conoce como «menú de esta
+// fila», que es justo lo que hace falta para que el control se descubra solo
+// (por eso es un botón visible y no el click derecho).
+//
+// Mismo envoltorio relleno y mismo radio que el ···: son la misma familia.
+
+/** ⋮ — el menú de una fila (ocultar un artista). NO es el ··· de preview. */
+export const iconoPuntosVertical = (lado) =>
+  relleno(lado, '<circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/>');
+
 /** 👁 — ojo abierto: «esto está oculto, click para mostrarlo». */
 export const iconoOjo = (lado) =>
   trazo(lado, '<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>');
