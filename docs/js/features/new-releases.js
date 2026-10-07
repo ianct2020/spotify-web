@@ -10,14 +10,14 @@
 //   - Umbral de likes: 5+ / 10+ / 20+
 //   - Ventana temporal: 3 / 6 / 12 / 24 meses, 5 años y «todo» (default 12)
 
-import { escapeHtml, confirmModal, pageHeader } from '../ui/components.js?v=277';
-import { showToast } from '../ui/toast.js?v=277';
-import { buildAlbumHeardIndex } from '../util/album-heard.js?v=277';
-import { releaseKind } from '../util/release-size.js?v=277';
-import { loadFiltros, buildFilterContext, applyDiscoverFilters } from '../util/discover-filters.js?v=277';
-import { createIncrementalList, scrollRootOf } from '../ui/incremental-list.js?v=277';
-import { createLazyImages } from '../ui/lazy-img.js?v=277';
-import { prefKey, migratePrefKey } from '../storage.js?v=277';
+import { escapeHtml, confirmModal, pageHeader } from '../ui/components.js?v=278';
+import { showToast } from '../ui/toast.js?v=278';
+import { buildAlbumHeardIndex } from '../util/album-heard.js?v=278';
+import { releaseKind } from '../util/release-size.js?v=278';
+import { loadFiltros, buildFilterContext, applyDiscoverFilters } from '../util/discover-filters.js?v=278';
+import { createIncrementalList, scrollRootOf } from '../ui/incremental-list.js?v=278';
+import { createLazyImages } from '../ui/lazy-img.js?v=278';
+import { prefKey, migratePrefKey } from '../storage.js?v=278';
 import {
   getArtistIdCached,
   getArtistDiscoCached,
@@ -57,13 +57,17 @@ import {
   avisarRonda,
   botonesBaseHtml,
   conectarBotonesBase,
-} from './discover-common.js?v=277';
-import { compararLanzamientos, ORDENES_LANZAMIENTO } from '../util/release-date.js?v=277';
-import { estadoNativoDiscografia } from '../api.js?v=277';
-import { leerElegidos, sumarElegidos, artistasBuscados, colaAutomatica } from '../util/cola-escaneo.js?v=277';
-import { leerFallos, marcarFallo, limpiarFallo, sinFallosMarcados } from '../util/escaneo-fallos.js?v=277';
-import { contarSinEscanear, sufijoSinEscanear, notaSinEscanear } from '../util/sin-escanear.js?v=277';
-import { estadoFrescura } from '../util/frescura-escaneo.js?v=277';
+} from './discover-common.js?v=278';
+import { compararLanzamientos, ORDENES_LANZAMIENTO } from '../util/release-date.js?v=278';
+import { estadoNativoDiscografia } from '../api.js?v=278';
+import { leerElegidos, sumarElegidos, artistasBuscados, colaAutomatica } from '../util/cola-escaneo.js?v=278';
+import { leerFallos, marcarFallo, limpiarFallo, sinFallosMarcados } from '../util/escaneo-fallos.js?v=278';
+import { contarSinEscanear, sufijoSinEscanear, notaSinEscanear } from '../util/sin-escanear.js?v=278';
+import { estadoFrescura } from '../util/frescura-escaneo.js?v=278';
+import {
+  artistasOcultos, artistaEstaOculto, alternarArtistaOculto,
+  botonMenuArtistaHtml, botonArtistasOcultosHtml, conectarMenuArtista, cerrarMenuArtista,
+} from './artistas-ocultos.js?v=278';
 
 const SCAN_KEY = 'new_releases';
 
@@ -172,10 +176,14 @@ const state = {
   elegidos: new Set(),
   fallos: new Map(),   // nameLower → { t, motivo } de los escaneos que fallaron (v=261)
   scannedAt: null,
-  // 'normal' | 'hidden'. Acá no hay modo «escuchados»: marcar como escuchado es
-  // una acción de #discover-artists (evaluar la discografía vieja). Los que Ian
-  // marque allá igual desaparecen de acá, porque el filtro es compartido.
+  // 'normal' | 'hidden' | 'artistas'. Acá no hay modo «escuchados»: marcar como
+  // escuchado es una acción de #discover-artists (evaluar la discografía vieja).
+  // Los que Ian marque allá igual desaparecen de acá, porque el filtro es
+  // compartido. 'hidden' son los ÁLBUMES ocultos; 'artistas', las novedades de
+  // los ARTISTAS ocultos (v=278) — desde ahí se los devuelve a la lista.
   mode: 'normal',
+  likesByArtist: null,   // nameLower → Set de ids de pista: la uri GRATIS al ocultar
+  totalCandidates: 0,
   // Mismos filtros que #discover-artists, mismo módulo y mismo estado
   // guardado: las dos vistas muestran el mismo objeto y tienen que coincidir.
   filtros: loadFiltros(),
@@ -195,7 +203,35 @@ let lazyCovers = null;
 function teardown() {
   if (list) { list.destroy(); list = null; }
   if (lazyCovers) { lazyCovers.destroy(); lazyCovers = null; }
+  // Solo cierra el menú ⋮ si estaba abierto; NO suelta el listener. `renderShell()`
+  // llama a este teardown en cada repintado, y soltarlo desde acá mataba el ⋮ en
+  // el primer click de la barra, sin un error en consola (le pasó a
+  // #discover-artists en v=276).
+  cerrarMenuArtista();
 }
+
+// Repintar la vista entera después de ocultar o mostrar un ARTISTA (v=278).
+//
+// Es la cabecera MÁS la lista, no solo la lista: el botón «Artistas ocultos N»
+// puede pasar de no existir a existir (sale vacío con el contador en 0) y su
+// número cambia. Vive fuera de `render()` porque lo llaman dos sitios —el menú ⋮
+// y la reconciliación con la playlist— y porque nombrar `renderShell` dentro de
+// `render()` antes de `restaurarDesdeLaBase(` rompe el orden que
+// `tests/frescura-escaneo.test.mjs` afirma. `renderShell` pone el contador de
+// escaneados a 0, y acá no hay escaneo en marcha que se lo devuelva: se lo
+// devolvemos nosotros.
+function repintarPorArtistas() {
+  const c = document.getElementById('newrel-content');
+  if (!c || !c.isConnected) return;
+  renderShell(c, state.totalCandidates);
+  pintarCuenta();
+  refreshList(c);
+}
+
+// El ⋮ de cada tarjeta. Se engancha UNA vez por `render()` sobre `#newrel-content`,
+// el nodo que sobrevive a `renderShell` y a `refreshList`: las tarjetas se
+// repintan por lotes y un listener por botón se perdería.
+let sueltaMenuArtista = null;
 
 export async function render(container) {
   teardown();
@@ -212,6 +248,32 @@ export async function render(container) {
     <div id="newrel-content"><div class="empty-state"><div class="spinner spinner-lg"></div><div style="margin-top:14px">Cargando tus likes…</div></div></div>
   `;
   const content = document.getElementById('newrel-content');
+  // El `content` de antes se fue con el `container.innerHTML` de arriba, y su
+  // listener con él; esto solo evita quedarse con el handle viejo.
+  if (sueltaMenuArtista) sueltaMenuArtista();
+  sueltaMenuArtista = conectarMenuArtista(content, {
+    // El click derecho abre el mismo menú SOLO sobre la línea del artista: en el
+    // resto de la tarjeta (la tapa, sobre todo) sigue siendo el de Chrome.
+    selectorFila: '.dcard-artista-fila',
+    onCambio: async (nombre) => {
+      const a = state.artists.find(x => x.name === nombre);
+      if (!a) return;
+      try {
+        // GRATIS: esta vista arma sus artistas DESDE los me gusta, así que ya
+        // tiene en memoria ids de pistas de cada uno. Sin esto habría que buscar
+        // una con `/search` por cada artista que se oculta.
+        const ids = state.likesByArtist?.get(a.nameLower);
+        const rep = ids && ids.size ? ids.values().next().value : null;
+        const oculto = await alternarArtistaOculto(a, { uriSugerida: rep ? `spotify:track:${rep}` : null });
+        showToast(oculto
+          ? `«${a.name}» oculto: no vuelve a aparecer en esta vista`
+          : `«${a.name}» vuelve a la lista`, 'success');
+      } catch (e) {
+        showToast('No se ha podido ocultar: ' + e.message, 'error');
+      }
+      repintarPorArtistas();
+    },
+  });
 
   let idx;
   try {
@@ -221,6 +283,7 @@ export async function render(container) {
     return teardown;
   }
   state.heard = idx.heard;
+  state.likesByArtist = idx.likesByArtist;
 
   // No bloquea el pintado: hasta que llega, no se descarta nada.
   buildFilterContext()
@@ -252,6 +315,7 @@ export async function render(container) {
       image: idx.artistImage.get(nameLower) || null,
     }))
     .sort((a, b) => b.likes - a.likes);
+  state.totalCandidates = candidates.length;
 
   state.artists = candidates.map(c => ({
     id: null,
@@ -304,6 +368,16 @@ export async function render(container) {
   renderShell(content, candidates.length);
   pintarCuenta();
   refreshList(content);
+
+  // Y los ARTISTAS ocultos (v=278). Es OTRO almacén que el de álbumes —el mismo
+  // que usan #similar, #discover-artists, #follow-artists y #recs—, así que
+  // cuesta aparte: `1 /playlists/{id}` + `ceil(12/100)` = **2 peticiones más** al
+  // abrir (el `/me` ya lo pagó `hiddenAlbums.ready()`). En segundo plano y con el
+  // mismo criterio que los álbumes: la vista arranca con el caché local —0
+  // peticiones— y se repinta cuando llega la reconciliación, que es lo que trae
+  // lo que Ian ocultó desde la otra máquina. Va DESPUÉS del primer pintado por la
+  // misma razón que en #discover-artists (ver `repintarPorArtistas`).
+  artistasOcultos.ready().then(repintarPorArtistas).catch(() => {});
   // ⚠️ Abrir la vista NO escanea (v=261). Se pinta con lo que ya hay —el caché
   // del escaneo— y lo que falta se pide con «Elegir más artistas para
   // escanear…». Hasta v=260 esto terminaba en `scanArtists(content)` y escaneaba
@@ -379,6 +453,15 @@ function renderShell(content, totalCandidates) {
       </div>
     </div>
     ${avisoFrescuraHtml('newrel', SCAN_KEY)}
+    ${(() => {
+      // ⚠️ EL CONTROL DE ARTISTAS OCULTOS NO VA EN `.disco-controls`, Y ESTÁ
+      // MEDIDO. Esa barra quedó con 69 px libres el 05/10 y este botón mide
+      // 143 px con el contador en una cifra y 159 con tres: dentro, la barra
+      // pasaría a dos filas. Vive en su propia línea —la misma que en
+      // #discover-artists— y sale VACÍA cuando no hay ningún artista oculto.
+      const b = botonArtistasOcultosHtml('newrel-mode-artistas', { mirando: state.mode === 'artistas' });
+      return b ? `<div class="disco-linea-artistas">${b}</div>` : '';
+    })()}
     ${renderFiltroChips(state.filtros, state.conteosFiltro)}
     <div class="disco-aviso" id="newrel-aviso-cortadas" role="status" hidden></div>
     <div class="disco-progress" id="newrel-progress" style="display:none">
@@ -495,12 +578,17 @@ function renderShell(content, totalCandidates) {
     btn.textContent = 'Actualizar';
   };
   conectarBotonesBase(content, 'newrel', () => reescanearDesdeLaBase(content));
-  content.querySelector('#newrel-mode-hidden').onclick = () => {
-    state.mode = state.mode === 'hidden' ? 'normal' : 'hidden';
+  // Los dos modos son excluyentes y se apagan tocándolos de nuevo.
+  const setMode = (m) => {
+    state.mode = state.mode === m ? 'normal' : m;
     renderShell(content, totalCandidates);
     setCount(eligibleArtists().filter(a => a.scanned).length);
     refreshList(content);
   };
+  content.querySelector('#newrel-mode-hidden').onclick = () => setMode('hidden');
+  // Puede no estar: `botonArtistasOcultosHtml` devuelve '' cuando no hay ninguno.
+  const btnArtistas = content.querySelector('#newrel-mode-artistas');
+  if (btnArtistas) btnArtistas.onclick = () => setMode('artistas');
 
   content.querySelector('#newrel-sel-clear').onclick = () => {
     state.selection.clear();
@@ -676,6 +764,14 @@ function releasesInWindow() {
   for (const a of state.artists) {
     if (!a.scanned || a.error) continue;
     if (a.likes < state.minLikes) continue;
+    // La poda de ARTISTAS (v=278): un artista oculto saca todas sus novedades de
+    // una vez, no álbum por álbum. Es un filtro aparte del de `hiddenAlbums`:
+    // «este disco no» y «este artista no» son cosas distintas. En el modo
+    // «Artistas ocultos» se invierte —es desde donde se los devuelve— y ahí las
+    // novedades pasan por el resto de los filtros como en el modo normal.
+    // Va ANTES del recorrido de los álbumes: no hay por qué descartar uno a uno
+    // los de alguien que ya no se muestra.
+    if ((state.mode === 'artistas') !== artistaEstaOculto(a.name)) continue;
     for (const al of a.disco) {
       const ts = releaseTs(al.release);
       if (!ts || ts < cutoff) continue;
@@ -802,6 +898,10 @@ function refreshList(content) {
       // Antes mandaba a «Actualizar», que es lo CARO (hasta 100 peticiones); el
       // camino barato es el selector, que además enseña el costo de cada uno.
       msg = `${eligible.toLocaleString('es-ES')} artistas con ≥${state.minLikes} likes, ninguno escaneado todavía. Elige cuáles con «Elegir más artistas para escanear…»: abrir esa lista no cuesta nada y cada artista dice lo que vale.`;
+    } else if (state.mode === 'artistas') {
+      msg = artistasOcultos.size
+        ? `Ninguno de los artistas que ocultaste tiene ${ventanaEsAncha() ? 'lanzamientos' : 'novedades'} sin escuchar en ${ventanaTexto()}.${nota}`
+        : `No has ocultado ningún artista.${nota}`;
     } else if (state.mode === 'hidden') {
       msg = state.months === 0
         ? `No ocultaste ningún lanzamiento de tus artistas.${nota}`
@@ -891,6 +991,7 @@ function refreshList(content) {
         checkClass: 'newrel-check',
         selected: state.selection.has(r.al.id),
         hiddenMode: state.mode === 'hidden',
+        menuArtistaHtml: botonMenuArtistaHtml(r.artist.name),
       }),
       batchSize: BATCH,
       rootMargin: '600px',
