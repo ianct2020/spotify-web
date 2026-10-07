@@ -9,7 +9,7 @@
 // fotografiaría OTRO código que el que usa Ian. Es la lección del resolutor
 // duplicado de v=219 aplicada antes de tiempo.
 
-import { conTapa } from './covers-wallpaper.js?v=280';
+import { conTapa } from './covers-wallpaper.js?v=281';
 
 // El lado, en píxeles, de la miniatura que se baja de cada portada. Es el tamaño
 // con el que se construyó `mosaico_colores_v1`, así que las 5.715 ya están en la

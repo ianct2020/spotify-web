@@ -169,7 +169,13 @@ ok(/for \(const g of guardados\) if \(g\.url\) URL\.revokeObjectURL\(g\.url\)/.t
 ok(/m\.width = m\.height = 0;/.test(vista), 'el lienzo de la miniatura también se pone a 0×0');
 ok(/const CALIDAD_JPEG = 0\.92;/.test(vista)
   && (vista.match(/toBlob\(r?e?s?, 'image\/jpeg', CALIDAD_JPEG\)/g) || []).length >= 2,
-  'lo que se guarda y lo que se descarga son el MISMO JPEG: una sola calidad, usada en los dos sitios');
+  'lo que se guarda y lo que se descarga son el MISMO JPEG: una calidad, usada en los dos sitios');
+// v=281: hay una SEGUNDA calidad, la de «Descargar para compartir», y es a
+// propósito. Lo que este assert sigue protegiendo es que la descarga de arriba y
+// la galería no se separen entre sí. Lo de la comprimida lo vigila
+// `tests/mosaico-comprimida.test.mjs`.
+ok(/const CALIDAD_JPEG_COMPRIMIDA = /.test(vista),
+  'y la segunda calidad (la de compartir) está declarada aparte, no mezclada con ésta');
 ok(/ultimo\.tinte = tinte; ultimo\.modo = modo;/.test(vista),
   'el tinte de la ficha es el que se está pintando, no el que había al generar (el deslizador repinta sin regenerar)');
 ok(/yaGuardado\(ultimo\)/.test(vista), '«Guardar esta» no deja el mismo mosaico dos veces');

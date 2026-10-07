@@ -109,6 +109,30 @@ const MAX_PIXELES_OBJETIVO = 8e6;
 // la galería: lo que Ian ve guardado es byte por byte lo que se va a descargar.
 const CALIDAD_JPEG = 0.92;
 
+// La SEGUNDA descarga, la de compartir. WhatsApp corta en 15 MB y un mosaico de
+// «Fina» a 0,92 pesa 14-17 MB según el tinte: justo en el filo.
+//
+// ⚠️ **0,85 está elegido MIRANDO, no por el tamaño.** Medido el 07/10 con las
+// 5.715 portadas reales (lienzo de 5.760×7.680, recortes al 100 % y una lupa de
+// 4×, capturas en `~/Escritorio/2026-10-07 comprimir y censar el mosaico/`):
+//
+//   - con celdas de **64 px** («Fina»), a 0,85 el texto chico de las portadas y
+//     la textura fina siguen leyéndose; **a 0,80 se emborronan** — la diferencia
+//     se ve, y se ve en las portadas, que es donde Ian mira.
+//   - con celdas de **32 px** («Finísima»), a 0,85 los negros planos quedan
+//     limpios; a 0,80 y a 0,75 se llenan de manchas.
+//
+// Y el peso cae mucho más rápido que la calidad, porque un mosaico es detalle
+// fino en todas partes y el JPEG ya se rinde en el primer escalón: medido sobre
+// una franja de 5.760×640, el PSNR va de **31,5 dB a 0,92** a **30,2 a 0,85**
+// (1,3 dB) mientras el archivo baja de 14,1 a 9,4 MB. Bajar de 0,85 cuesta
+// nitidez visible y ahorra poco: 0,80 son 8,3 MB y 29,5 dB.
+const CALIDAD_JPEG_COMPRIMIDA = 0.85;
+
+// Lo que acepta WhatsApp. No es un tope que la app imponga —si se pasa, se
+// descarga igual— sino el número que hay que PODER decir en el toast.
+const TOPE_COMPARTIR = 15e6;
+
 // El lado largo de la miniatura de cada resultado guardado. 768 px porque la
 // tarjeta mide ~260 px y una pantalla puede tener el doble de densidad; medido
 // el 06/10, la miniatura de un mosaico de Fina pesa **146 KB** a este lado (21
@@ -178,6 +202,7 @@ export async function render(container) {
     <div class="card" id="mos-salida" hidden style="margin-top:20px">
       <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin-bottom:12px">
         <button class="btn btn-primary" id="mos-descargar">Descargar</button>
+        <button class="btn btn-secondary" id="mos-descargar-chica" title="El mismo mosaico, al mismo tamaño, con más compresión: pesa alrededor de la mitad y entra en los 15 MB que admite WhatsApp. El archivo lleva otro nombre, así que no pisa al de arriba.">Descargar para compartir</button>
         <button class="btn btn-secondary" id="mos-guardar" title="Deja una copia de este mosaico en «Los que ya has hecho», sin volver a generarlo. Sirve para comparar dos tintes del mismo emparejado.">Guardar esta</button>
         <label style="display:flex;align-items:center;gap:8px;font-size:13px">
           <input type="checkbox" id="mos-cien"> Ver al 100 %
@@ -269,12 +294,18 @@ export async function render(container) {
   const firmaDe = (u) => `${nombreImagen}|${u.ladoLargo}|${u.variedad}|${u.tinte}|${u.modo}`;
   const yaGuardado = (u) => guardados.some(g => g.firma === firmaDe(u));
 
-  /** El nombre del archivo que se descarga. Lleva de qué imagen salió y con qué ajustes. */
-  function nombreDescarga(f) {
+  /**
+   * El nombre del archivo que se descarga. Lleva de qué imagen salió y con qué
+   * ajustes. `comprimida` le mete su propio sufijo: las dos descargas del mismo
+   * mosaico tienen que poder convivir en la carpeta de descargas sin que el
+   * navegador le cuelgue un «(1)» a una de ellas y ya no se sepa cuál es cuál.
+   */
+  function nombreDescarga(f, { comprimida = false } = {}) {
     const base = (f.nombreImagen || 'mosaico').replace(/\.[^.]+$/, '').replace(/[^\p{L}\p{N}]+/gu, '-').replace(/^-|-$/g, '').slice(0, 40).toLowerCase();
     const et = GRILLAS.find(g => g.n === f.ladoLargo)?.etiqueta.toLowerCase().replace(/\s+/g, '') || f.ladoLargo;
     const ev = VARIEDADES.find(v => v.n === f.variedad)?.etiqueta.toLowerCase() || f.variedad;
-    return `fonoteca-mosaico-${base || 'imagen'}-${et}-${ev}-tinte${f.tinte}-${f.ancho}x${f.alto}.jpg`;
+    const cola = comprimida ? `-comprimida-q${String(CALIDAD_JPEG_COMPRIMIDA).replace('.', '')}` : '';
+    return `fonoteca-mosaico-${base || 'imagen'}-${et}-${ev}-tinte${f.tinte}-${f.ancho}x${f.alto}${cola}.jpg`;
   }
 
   /** La miniatura de un lienzo, como blob. Reduce con suavizado: es una foto, no un recorte. */
@@ -653,6 +684,42 @@ export async function render(container) {
       const nombre = nombreDescarga({ ...ultimo, nombreImagen });
       descargarBlob(blob, nombre);
       showToast(`${nombre} — ${fmtN(ultimo.ancho)}×${fmtN(ultimo.alto)} px, ${fmtMB(blob.size)} MB`, 'success');
+    } catch (err) {
+      showToast(`No he podido preparar la descarga: ${err.message}`, 'error');
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
+  // «Descargar para compartir»: el MISMO lienzo, el mismo tamaño en píxeles, solo
+  // con más compresión. No toca la descarga de arriba ni lo que guarda la galería
+  // —los dos siguen en `CALIDAD_JPEG`— y por eso no hay ningún caso en que Ian
+  // crea que se bajó el original y se haya bajado éste: son dos botones y dos
+  // nombres de archivo.
+  //
+  // ⚠️ **Puede pasarse de los 15 MB y entonces lo DICE.** No se baja la calidad
+  // sola hasta que entre: eso es elegir por el tamaño, y en un mosaico el tamaño
+  // es justo lo que no manda (ver `CALIDAD_JPEG_COMPRIMIDA`). El caso medido que
+  // no entra es «Finísima» + «Máxima» con el tinte a 0: 17,2 MB a 0,85. Lo que
+  // sobra ahí es resolución, no calidad, y eso no lo decide la app.
+  $('mos-descargar-chica').addEventListener('click', async () => {
+    if (!ultimo) return;
+    const btn = $('mos-descargar-chica');
+    btn.disabled = true;
+    try {
+      const blob = await new Promise(res => ultimo.canvas.toBlob(res, 'image/jpeg', CALIDAD_JPEG_COMPRIMIDA));
+      if (!blob) throw new Error('el navegador no ha podido generar el archivo');
+      const nombre = nombreDescarga({ ...ultimo, nombreImagen }, { comprimida: true });
+      descargarBlob(blob, nombre);
+      const cabe = blob.size <= TOPE_COMPARTIR;
+      showToast(
+        `${nombre} — ${fmtN(ultimo.ancho)}×${fmtN(ultimo.alto)} px, ${fmtMB(blob.size)} MB`
+        + (cabe
+          ? ` (entra en los ${Math.round(TOPE_COMPARTIR / 1e6)} MB de WhatsApp).`
+          : `. ⚠️ Se pasa de los ${Math.round(TOPE_COMPARTIR / 1e6)} MB de WhatsApp.`
+            + ` Con esta rejilla lo que sobra es resolución, no calidad: prueba una rejilla más gruesa o menos variedad.`),
+        cabe ? 'success' : 'warning',
+      );
     } catch (err) {
       showToast(`No he podido preparar la descarga: ${err.message}`, 'error');
     } finally {
