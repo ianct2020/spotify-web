@@ -67,6 +67,10 @@ import {
   botonesBaseHtml,
   conectarBotonesBase,
 } from './discover-common.js';
+import {
+  artistasOcultos, artistaEstaOculto, alternarArtistaOculto,
+  botonMenuArtistaHtml, botonArtistasOcultosHtml, conectarMenuArtista, cerrarMenuArtista,
+} from './artistas-ocultos.js';
 
 const SCAN_KEY = 'discover_artists';
 
@@ -114,6 +118,11 @@ const state = {
   elegidos: new Set(),   // util/cola-escaneo.js
   fallos: new Map(),     // nameLower → { t, motivo } de los escaneos que fallaron (v=261)
   scannedAt: null,       // ts del escaneo cacheado que estamos mostrando
+  // Cuántos candidatos hay en total. Era solo el parámetro de `renderShell`, y
+  // los repintados de fuera (la reconciliación de ocultos, el menú ⋮) no lo
+  // tenían en el closure: pasarles `artists.length` habría cambiado el número de
+  // la cabecera al ocultar un artista.
+  totalCandidates: 0,
   // 'normal' = lo que queda por descubrir · 'hidden' = los que ocultaste ·
   // 'heard' = los que marcaste como escuchados. Los dos últimos son la única
   // forma de deshacer, así que no son opcionales.
@@ -160,7 +169,35 @@ function batchSizeFor(artists) {
 function teardown() {
   if (list) { list.destroy(); list = null; }
   if (lazyCovers) { lazyCovers.destroy(); lazyCovers = null; }
+  // Solo cierra el menú si estaba abierto; NO suelta el listener.
+  //
+  // ⚠️ Acá estuvo el bug que casi se fue en v=276: `renderShell()` llama a este
+  // teardown en CADA repintado (cambiar de modo, de filtro), así que soltar el
+  // listener desde acá lo mataba en el primer click de la barra — y el ⋮ dejaba
+  // de abrir nada sin un solo error en consola.
+  cerrarMenuArtista();
 }
+
+// Repintar la vista entera después de ocultar o mostrar un ARTISTA.
+//
+// Es la cabecera MÁS la lista, no solo la lista: el botón «Artistas ocultos N»
+// puede pasar de no existir a existir (sale vacío cuando el contador está en 0),
+// y su número cambia. Vive fuera de `render()` porque lo llaman dos sitios —el
+// menú ⋮ y la reconciliación con la playlist— y porque dentro de `render()` la
+// mención a `renderShell` caía antes de `restaurarDesdeLaBase(`, que es un orden
+// que `tests/frescura-escaneo.test.mjs` afirma a propósito.
+function repintarPorArtistas() {
+  const c = document.getElementById('disco-content');
+  if (!c || !c.isConnected) return;
+  renderShell(c, state.totalCandidates);
+  refreshList(c);
+}
+
+// El ⋮ de la cabecera de cada artista. Se engancha UNA vez por `render()` sobre
+// `#disco-content`, que es el nodo que sobrevive a `renderShell` y a
+// `refreshList` (los dos repintan por dentro). Enganchar por botón no serviría:
+// los bloques se repintan en cada filtro y en cada lote appendeado.
+let sueltaMenuArtista = null;
 
 export async function render(container) {
   teardown();
@@ -174,6 +211,30 @@ export async function render(container) {
     <div id="disco-content"><div class="empty-state"><div class="spinner spinner-lg"></div><div style="margin-top:14px">Cargando tus likes…</div></div></div>
   `;
   const content = document.getElementById('disco-content');
+  // El `content` de antes se fue con el `container.innerHTML` de arriba, así que
+  // su listener se fue con él; esto solo evita quedarse con el handle viejo.
+  if (sueltaMenuArtista) sueltaMenuArtista();
+  sueltaMenuArtista = conectarMenuArtista(content, {
+    selectorFila: '.disco-artist-head',
+    onCambio: async (nombre) => {
+      const a = state.artists.find(x => x.name === nombre);
+      if (!a) return;
+      try {
+        // GRATIS: esta vista arma su lista DESDE los me gusta, así que ya tiene
+        // en memoria ids de pistas de este artista. Sin esto habría que buscarle
+        // una con `/search`, y acá hay cientos de artistas.
+        const ids = state.likesByArtist?.get(a.nameLower);
+        const rep = ids && ids.size ? ids.values().next().value : null;
+        const oculto = await alternarArtistaOculto(a, { uriSugerida: rep ? `spotify:track:${rep}` : null });
+        showToast(oculto
+          ? `«${a.name}» oculto — no vuelve a aparecer en esta vista`
+          : `«${a.name}» vuelve a la lista`, 'success');
+      } catch (e) {
+        showToast('No se ha podido ocultar: ' + e.message, 'error');
+      }
+      repintarPorArtistas();
+    },
+  });
   // Ver util/vigencia-ruta.js: era la vista con más renders huérfanos (90).
   const ruta = vigilarRuta();
 
@@ -215,6 +276,10 @@ export async function render(container) {
     return teardown;
   }
 
+  // Se fija ACÁ, no justo antes de `renderShell`: entre medio hay awaits y dos
+  // `.then()` de reconciliación que repintan la cabecera, y con el 0 de arranque
+  // la cabecera habría dicho «de 0 artistas» durante ese hueco.
+  state.totalCandidates = candidates.length;
   state.fallos = leerFallos(LS_FALLOS);   // antes de armar los artistas: cada uno lleva su `falloT`
   state.artists = candidates.map(c => ({
     id: null,
@@ -304,6 +369,21 @@ export async function render(container) {
   renderShell(content, candidates.length);
   pintarCuenta();
   refreshList(content);
+
+  // Y los ARTISTAS ocultos (v=276). Es un almacén distinto del de álbumes, así
+  // que cuesta aparte: `1 /playlists/{id}` + `ceil(12/100)` = 2 peticiones más
+  // al abrir (el `/me` ya lo pagó `hiddenAlbums.ready()`). En segundo plano, con
+  // el mismo criterio que los álbumes: la vista arranca con el caché local —0
+  // peticiones— y se repinta cuando llega la reconciliación, que es lo que trae
+  // lo que Ian ocultó desde la otra máquina.
+  //
+  // ⚠️ Va DESPUÉS del primer `renderShell`, no antes como el de álbumes, y por
+  // una razón que `tests/frescura-escaneo.test.mjs` vigila: este `.then()`
+  // repinta la cabecera entera (el botón «Artistas ocultos N» puede pasar de no
+  // existir a existir), y nombrar `renderShell` antes de `restaurarDesdeLaBase`
+  // rompía el orden que ese test afirma. Acá además es su sitio correcto:
+  // reconciliar después de haber pintado, no antes.
+  artistasOcultos.ready().then(repintarPorArtistas).catch(() => {});
   // ⚠️ Abrir la vista NO escanea (v=261). Se pinta con lo que ya hay —el caché
   // del escaneo— y lo que falta se pide con «Elegir más artistas para
   // escanear…». Hasta v=260 esto terminaba en `scanArtists(content, ruta)` y
@@ -340,6 +420,7 @@ function renderShell(content, totalCandidates) {
         </select>
         <button class="btn btn-secondary btn-sm ${state.mode === 'heard' ? 'sc-on' : ''}" id="disco-mode-heard" title="Los que marcaste como escuchados. Desde ahí puedes devolverlos a la lista.">Escuchados <span id="disco-heard-n">${heardAlbums.size}</span></button>
         <button class="btn btn-secondary btn-sm ${state.mode === 'hidden' ? 'sc-on' : ''}" id="disco-mode-hidden" title="Los que ocultaste. Se sincronizan con la playlist «fonoteca · ocultos (descubrir)».">Ocultos <span id="disco-hidden-n">${hiddenAlbums.size}</span></button>
+        ${botonArtistasOcultosHtml('disco-mode-artistas', { mirando: state.mode === 'artistas' })}
         <button class="btn btn-secondary btn-sm" id="disco-refresh" title="${state.scannedAt ? 'Último escaneo ' + agoLabel(state.scannedAt) + '. ' : ''}Busca lanzamientos nuevos de tus artistas. No borra las discografías que ya tienes.">Actualizar</button>
         ${botonesBaseHtml('disco')}
         <button class="btn btn-secondary btn-sm" id="disco-load-more" title="Abre la lista de artistas sin escanear para elegir cuáles. Abrirla no pide nada a Spotify.">Elegir más artistas para escanear…</button>
@@ -431,6 +512,10 @@ function renderShell(content, totalCandidates) {
   };
   content.querySelector('#disco-mode-heard').onclick = () => setMode('heard');
   content.querySelector('#disco-mode-hidden').onclick = () => setMode('hidden');
+  // Puede no estar: `botonArtistasOcultosHtml` devuelve '' cuando no hay ninguno
+  // oculto, para no gastar sitio de barra en un contador de cero.
+  const btnArtistas = content.querySelector('#disco-mode-artistas');
+  if (btnArtistas) btnArtistas.onclick = () => setMode('artistas');
 
   content.querySelector('#disco-sel-clear').onclick = () => {
     state.selection.clear();
@@ -668,6 +753,9 @@ function refreshList(content) {
   const poolDe = (a) => {
     if (state.mode === 'heard') return (a.disco || []).filter(al => heardAlbums.has(cardKey(al, a.name)));
     if (state.mode === 'hidden') return (a.disco || []).filter(al => hiddenAlbums.has(cardKey(al, a.name)));
+    // En «Artistas ocultos» el bloque se enseña entero, sin filtrar por álbum:
+    // lo que Ian está revisando es a QUIÉN descartó, no qué disco de quién.
+    if (state.mode === 'artistas') return a.disco || [];
     // `unheard` es lo nuevo; los dos arrays sueltos son lo que trae un caché
     // de escaneo viejo (ahí faltan los recopilatorios, pero no se pierde nada
     // de lo que ya se mostraba).
@@ -691,8 +779,21 @@ function refreshList(content) {
   // `poolDe(a).filter(...)` ya es una copia, así que el sort no toca `a.disco`
   // ni `a.unheard`, que son lo que se guarda (y de cuyo orden `tieneOrdenNativo`
   // deduce la fuente de una discografía).
+  // La poda de ARTISTAS (v=276, punto 12 del feedback del 04/10): ocultar un
+  // artista saca su bloque ENTERO, no álbum por álbum. Es un filtro aparte del
+  // de `hiddenAlbums` porque son dos cosas distintas: «este disco no» y «este
+  // artista no». En el modo «Artistas ocultos» se invierte, que es desde donde
+  // se los devuelve a la lista.
+  //
+  // ⚠️ Va ANTES del filtro de álbumes: si un artista está oculto no hay por qué
+  // recorrer su discografía para descartarla pieza por pieza.
+  const visibleSegunArtista = (a) => state.mode === 'artistas'
+    ? artistaEstaOculto(a.name)
+    : !artistaEstaOculto(a.name);
+
   let artists = state.artists
     .filter(a => a.scanned && !a.error)
+    .filter(visibleSegunArtista)
     .map(a => ({ ...a, filtered: poolDe(a).filter(passesFilter).sort(masNuevoPrimero) }));
 
   if (state.mode === 'normal' && state.filterCtx) {
@@ -846,6 +947,7 @@ function renderArtistBlock(a) {
       <div class="disco-artist-head">
         <button class="disco-artist-name" data-artist="${escapeHtml(a.name)}">${escapeHtml(a.name)}</button>
         <span class="disco-artist-meta">${a.likes} likes · ${a.filtered.length} sin escuchar</span>
+        ${botonMenuArtistaHtml(a.name)}
       </div>
       <div class="dcard-grid">
         ${a.filtered.map(al => renderAlbumCard(al, a.name, {

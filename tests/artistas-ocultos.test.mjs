@@ -46,10 +46,10 @@ const PIEZA = 'src/js/features/artistas-ocultos.js';
 const pieza = leer(PIEZA);
 
 // Las cuatro vistas que comparten la pieza.
-// ⚠️ Las tres vistas nuevas se suman en el commit siguiente, cuando ya usan la
-// pieza. Un assert que afirma algo que todavía no es verdad no es un test: es un
-// rojo que hay que recordar ignorar, y a los dos días nadie mira la suite.
 const VISTAS = {
+  '#similar': 'src/js/features/similar-artists.js',
+  '#discover-artists': 'src/js/features/discover-artists.js',
+  '#follow-artists': 'src/js/features/follow-artists.js',
   '#recs': 'src/js/features/recommendations.js',
 };
 

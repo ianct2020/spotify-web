@@ -819,6 +819,18 @@ input[type="checkbox"].keep-check:checked::after {
 }
 .art-card-footer .sc-btn:hover { opacity: 1; }
 
+/* La cabecera de la rejilla de #similar: el texto a la izquierda y el botón de
+   «Artistas ocultos» a la derecha. Envuelve a propósito: en pantalla chica el
+   botón baja solo en vez de empujar el texto fuera. */
+.similar-grid-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+
 /* ── El menú de ocultar un artista (v=276) ──────────────────────────────────
    Un botón ⋮ VISIBLE por fila y UN menú flotante para toda la app.
    ⚠️ El menú vive en el <body>, no en la fila: dentro de la tarjeta lo
