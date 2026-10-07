@@ -1,0 +1,203 @@
+<!doctype html><html lang="es"><head><meta charset="utf-8"><title>banco ocultar artista — #discover-artists y la barra</title>
+<link rel="stylesheet" href="/css/theme.css">
+<link rel="stylesheet" href="/css/components.css">
+<link rel="stylesheet" href="/css/main.css">
+<style>html,body{margin:0;background:var(--color-bg);color:var(--color-text);font-family:var(--font-sans),system-ui}</style>
+</head><body class="sidebar-hidden">
+<div id="caja"><main class="main" id="main-content"></main></div>
+<script type="module">
+// ── Qué prueba este banco (v=276) ────────────────────────────────────────────
+//
+// `#discover-artists` ocultando un ARTISTA, contra una Spotify simulada
+// (`escenario-ocultos.mjs`): **0 peticiones reales y 0 escrituras reales**.
+//
+//   · el contador antes y después, y que el BLOQUE del artista se va ENTERO —no
+//     álbum por álbum, que es lo que la vista ya sabía hacer y no era lo pedido;
+//   · que la uri representativa sale GRATIS de los me gusta que la vista ya tiene
+//     en memoria, sin pasar por `/search`;
+//   · el modo «Artistas ocultos», que es desde donde se devuelve a la lista;
+//   · que lo ocultado desde acá se ve en `#follow-artists`: EL MISMO ALMACÉN.
+//     Eso un test estático no lo puede afirmar, y si cada vista tuviera su copia
+//     los contadores irían por separado sin que nadie lo notara.
+//
+// ⚠️ Y LA AFIRMACIÓN QUE MANDA: QUE EL CONTROL NO ROMPA LA BARRA.
+//
+// Es el freno que el encargo del 06/10 nombraba por su nombre, y la primera
+// versión de esto lo tocaba. El botón «Artistas ocultos N» mide 143 px con el
+// contador en una cifra y 159 con tres («Artistas ocultos 183», el techo
+// plausible). Metido en `.disco-controls`, a **1.356 px** —el ancho real de
+// `main` en la pantalla de 1.366 de Ian, medido el 03/10— la barra pasaba a DOS
+// FILAS. Sin él: una. Por eso el control vive en su propia línea.
+//
+// No se afirma «la barra entra en una fila» (eso ya lo vigila `barra.html` para
+// #new-releases): se afirma que es la MISMA barra antes y después del control, y
+// con el contador en su peor caso. Un botón nuevo ahí vuelve a fallar esto.
+//
+// ⚠️ Está separado de `ocultar-artista.html` por una razón medida: entre pedirle
+// a esta vista que pinte y tener sus bloques en el DOM se van ~70 s de RELOJ
+// VIRTUAL, y con las tres vistas en un solo banco pasaba 7 de cada 8 veces. Un
+// banco que pasa a veces es peor que ninguno. El escenario no se copió: vive en
+// `escenario-ocultos.mjs`.
+//
+// `?paso=oculto` / `?vista=disco` dejan la vista con un artista oculto, para
+// fotografiarla. `?ancho=` cambia el ancho de la caja (por defecto 1351).
+import { hojasLegibles, fallar, listo } from '/banco/esperar.mjs';
+import { crearLikes, ARTISTAS, esperarReal } from '/banco/simulado.mjs';
+import { montarEscenarioOcultos } from '/banco/escenario-ocultos.mjs';
+const esperarA = (cond, { que }) => esperarReal(cond, { que });
+
+window.__cons = [];
+const consola = console.warn.bind(console);
+console.warn = (...a) => { window.__cons.push(a.join(' ')); consola(...a); };
+window.addEventListener('unhandledrejection', e => window.__cons.push('rechazo: ' + (e.reason?.message || e.reason)));
+
+const q = new URLSearchParams(location.search);
+const PASO = q.get('paso');
+const VISTA = q.get('vista');
+if (PASO || VISTA) document.head.insertAdjacentHTML('beforeend', '<style>*,*::before,*::after{animation:none!important;transition:none!important}</style>');
+const ANCHO = +(q.get('ancho') || 1351);
+const afirmar = (c, msg) => { if (!c) throw new Error('BANCO: ' + msg); };
+const $ = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+const main = () => $('#main-content');
+const limpiarVista = (suelta) => { if (typeof suelta === 'function') suelta(); main().innerHTML = ''; };
+const medidas = [];
+
+// Cuántas FILAS ocupa una barra: mismo criterio que barra.html y novedades.html
+// (los centros verticales de los hijos visibles, agrupados con 8 px de holgura).
+function filasDe(sel) {
+  const hijos = $$(`${sel} > *`).filter(e => getComputedStyle(e).display !== 'none' && e.getBoundingClientRect().height);
+  const centros = hijos.map(e => { const r = e.getBoundingClientRect(); return r.top + r.height / 2; }).sort((a, b) => a - b);
+  const filas = centros.reduce((n, c, i) => (i === 0 || c - centros[i - 1] > 8) ? n + 1 : n, 0);
+  const barra = $(sel).getBoundingClientRect();
+  const ultimo = hijos.at(-1)?.getBoundingClientRect();
+  return { filas, libres: ultimo ? Math.round(barra.right - ultimo.right) : null,
+    detalle: hijos.map(e => { const r = e.getBoundingClientRect(); return `${(e.id || e.textContent || '?').trim().slice(0, 14)}@${Math.round(r.left)},${Math.round(r.top)} w${Math.round(r.width)}`; }).join(' | ') };
+}
+
+try {
+  await hojasLegibles(['/css/main.css', '/css/components.css']);
+  $('#caja').style.width = ANCHO + 'px';
+  const { sim, likes, porUri, playlistOcultos } = await montarEscenarioOcultos();
+  const { prefKey } = await import('/js/storage.js');
+  const tienda = await import('/js/features/artistas-ocultos.js');
+  afirmar(tienda.artistasOcultos.size === 0, `el banco arranca sin ocultos (hay ${tienda.artistasOcultos.size})`);
+
+  // El menú ⋮ se abre y se elige «Ocultar este artista» / «Devolver a la lista».
+  // Se usa el BOTÓN, como lo usaría Ian: si el botón no estuviera o no abriera,
+  // esto falla — que es exactamente lo que hay que vigilar.
+  async function porElMenu(raiz, nombre) {
+    const btn = $$('.art-oc-menu-btn', raiz).find(b => b.dataset.artOc === nombre);
+    afirmar(btn, `hay un botón ⋮ para «${nombre}» (los que hay: ${$$('.art-oc-menu-btn', raiz).map(b => b.dataset.artOc).join(', ') || 'ninguno'})`);
+    afirmar(getComputedStyle(btn).display !== 'none' && btn.getBoundingClientRect().width > 0,
+      `el botón ⋮ de «${nombre}» se VE sin pasar el ratón`);
+    btn.click();
+    const item = await esperarA(() => $('.art-oc-menu:not([hidden]) .art-oc-menu-item'), { que: 'que el menú ⋮ se abra' });
+    const rotulo = item.textContent.trim();
+    item.click();
+    return rotulo;
+  }
+
+  // ══ 1. #discover-artists — el bloque entero (punto 12) ═════════════════════
+  const disco = await import('/js/features/discover-artists.js');
+  let suelta = await disco.render(main());
+  await esperarA(() => $$('.disco-artist').length === ARTISTAS.length, { que: 'los 4 bloques de #discover-artists' });
+
+  const bloques = () => $$('.disco-artist-name').map(e => e.textContent.trim());
+  afirmar(bloques().length === 4, `#discover-artists pinta 4 bloques (pinta ${bloques().length})`);
+
+  // LA BARRA, sin el botón y con él. Es la medición que el encargo pedía.
+  const barraSin = filasDe('.disco-controls');
+  afirmar(!$('#disco-mode-artistas'), 'sin ocultos no hay botón de artistas en la barra');
+
+  const victima = ARTISTAS[0].name;
+  const rotulo3 = await porElMenu(main(), victima);
+  afirmar(rotulo3 === 'Ocultar este artista', `#discover-artists ofrece ocultar (dice «${rotulo3}»)`);
+  await esperarA(() => bloques().length === 3, { que: `que el BLOQUE de «${victima}» desaparezca` });
+  afirmar(!bloques().includes(victima), `el bloque de «${victima}» se fue entero, no álbum por álbum`);
+  afirmar(tienda.artistasOcultos.size === 1, `contador: 1 (hay ${tienda.artistasOcultos.size})`);
+  const btnOcDisco = await esperarA(() => $('#disco-mode-artistas'), { que: 'el botón «Artistas ocultos» de la barra' });
+  const barraCon = filasDe('.disco-controls');
+  medidas.push(`#discover-artists: 4 → 3 bloques · barra ${barraSin.filas} fila a ${ANCHO} px antes Y después del control (y con el contador en 183)`);
+  // ⚠️ LA AFIRMACIÓN QUE MANDA: el control NO puede cambiar la barra.
+  //
+  // Es el freno que el encargo del 06/10 nombraba, y la primera versión lo
+  // tocaba: con el botón dentro de `.disco-controls`, a **1.356 px** —el ancho
+  // real de `main` en la pantalla de 1.366 de Ian— la barra pasaba a DOS FILAS
+  // con el contador de tres cifras. Por eso el control vive en su propia línea.
+  //
+  // No se afirma «la barra entra en una fila» (eso ya lo vigila barra.html para
+  // #new-releases): se afirma que es la MISMA barra antes y después, con el
+  // contador en su peor caso. Un botón nuevo en esa barra hace fallar esto.
+  btnOcDisco.querySelector('.art-oc-n').textContent = '183';
+  const barraPeor = filasDe('.disco-controls');
+  afirmar(barraCon.filas === barraSin.filas && barraPeor.filas === barraSin.filas,
+    `el control de artistas ocultos cambió la barra de #discover-artists a ${ANCHO} px: `
+    + `${barraSin.filas} fila(s) sin él, ${barraCon.filas} con él, ${barraPeor.filas} con el contador en 183. `
+    + `Tiene que vivir FUERA de .disco-controls.\n  ${barraPeor.detalle}`);
+  afirmar($('.disco-linea-artistas')?.contains(btnOcDisco),
+    'el control vive en su propia línea, no en .disco-controls');
+  afirmar(!$('.disco-controls')?.contains(btnOcDisco),
+    'el control NO está dentro de .disco-controls (ahí rompe la barra a 1.356 px)');
+  btnOcDisco.querySelector('.art-oc-n').textContent = '1';
+
+  if (PASO === 'oculto' || VISTA === 'disco') throw Object.assign(new Error('disco oculto'), { parada: true });
+
+  // El modo «Artistas ocultos» es desde donde se devuelve
+  btnOcDisco.click();
+  await esperarA(() => bloques().length === 1 && bloques()[0] === victima, { que: 'el modo de artistas ocultos' });
+  const rotulo4 = await porElMenu(main(), victima);
+  afirmar(rotulo4 === 'Devolver a la lista', `#discover-artists ofrece devolver (dice «${rotulo4}»)`);
+  await esperarA(() => tienda.artistasOcultos.size === 0, { que: 'que el contador vuelva a 0' });
+  medidas.push('#discover-artists: devolver → contador 1 → 0');
+
+  // ══ 3. EL MISMO ALMACÉN: lo ocultado acá se ve en #follow-artists ══════════
+  //
+  // Esto es lo que un test estático no puede afirmar. Si cada vista tuviera su
+  // copia del almacén —o su propia clave— los contadores irían por separado y
+  // nadie lo notaría hasta usar dos vistas seguidas.
+  // Al devolverlo quedamos DENTRO del modo «Artistas ocultos», que ahora está
+  // vacío: ahí no hay ninguna fila ni, por lo tanto, ningún ⋮. Hay que salir del
+  // modo antes de volver a ocultar. (Que el botón siga existiendo con el
+  // contador en 0 es a propósito: es la única salida del modo.)
+  const volver = await esperarA(() => $('#disco-mode-artistas'), { que: 'el botón para salir del modo' });
+  volver.click();
+  await esperarA(() => bloques().length === ARTISTAS.length, { que: 'que vuelvan los 4 bloques' });
+
+  const rotulo5 = await porElMenu(main(), victima);
+  afirmar(rotulo5 === 'Ocultar este artista', `vuelve a ofrecer ocultar (dice «${rotulo5}»)`);
+  await esperarA(() => tienda.artistasOcultos.size === 1, { que: 'ocultarlo otra vez' });
+  limpiarVista(suelta);
+
+  const follow = await import('/js/features/follow-artists.js');
+  suelta = follow.render(main());
+  await esperarA(() => $$('.sel-art-item').length > 0, { que: 'la lista de #follow-artists' });
+  const nombresFollow = $$('.sel-art-name').map(e => e.textContent.trim());
+  afirmar(!nombresFollow.includes(victima),
+    `lo oculto en #discover-artists («${victima}») NO aparece en #follow-artists — lista: ${nombresFollow.join(', ')}`);
+  afirmar(nombresFollow.length === ARTISTAS.length - 1,
+    `#follow-artists lista ${ARTISTAS.length - 1} (lista ${nombresFollow.length})`);
+  const nFollow = $('#follow-ocultos')?.textContent || '';
+  afirmar(/\b1\b/.test(nFollow), `#follow-artists lee el mismo contador: «${nFollow.trim()}»`);
+  medidas.push('las dos comparten el almacén: ocultado en #discover-artists, filtrado en #follow-artists');
+
+  // ══ 4. 0 reales ═══════════════════════════════════════════════════════════
+  afirmar(sim.reg.externas.length === 0, `nada salió a la red sin doble: ${sim.reg.externas.join(' | ')}`);
+  afirmar(sim.reg.desconocidas.length === 0, `ninguna ruta quedó sin simular: ${sim.reg.desconocidas.join(' | ')}`);
+  const escrituras = sim.reg.escrituras.map(e => `${e.metodo} ${e.ruta.split('?')[0]}`);
+  const permitidas = /^(POST|DELETE) \/playlists\/[^/]+\/items$|^POST \/me\/playlists$/;
+  afirmar(sim.reg.escrituras.every(e => permitidas.test(`${e.metodo} ${e.ruta.split('?')[0]}`)),
+    `solo se escribió en la playlist de ocultos: ${JSON.stringify(escrituras)}`);
+
+  listo(`${medidas.join(' · ')} · ${sim.reg.llamadas.length} peticiones simuladas, 0 reales`);
+} catch (e) {
+  if (e.parada) {
+    document.documentElement.dataset.banco = 'ok';
+    document.title = 'BANCO: detenido en ' + e.message;
+  } else {
+    const r = window.__sim?.reg;
+    if (r) e.message += `\n[llamadas ${r.llamadas.length}] desconocidas: ${r.desconocidas.join(' | ') || '—'} · externas: ${r.externas.join(' | ') || '—'}\nmedido: ${medidas.join(' · ') || '—'}\nconsola: ${window.__cons.join(' || ').slice(0, 600)}\nvisible: ${(document.querySelector('#main-content')?.textContent || '').replace(/\s+/g, ' ').slice(0, 300)}`;
+    fallar(e);
+  }
+}
+</script></body></html>

@@ -50,7 +50,7 @@ export function render(container) {
       <p class="follow-summary"><strong>${viendoOcultos
         ? `${noSeguidos.length} ${noSeguidos.length === 1 ? 'artista oculto' : 'artistas ocultos'}`
         : `${noSeguidos.length} sin seguir${conocidos < artistas.length ? ' de momento' : ''}`}</strong>
-        · ${conocidos} de ${artistas.length} comprobados${ocultos.length && !viendoOcultos ? ` · ${ocultos.length} ocultos fuera de la lista` : ''}</p>
+        · ${conocidos} de ${artistas.length} comprobados${ocultos.length && !viendoOcultos ? ` · ${ocultos.length} ${ocultos.length === 1 ? 'oculto' : 'ocultos'} fuera de la lista` : ''}</p>
       <p>Artistas con discografía guardada en este navegador, ordenados por canciones que te gustan. No es toda tu biblioteca de artistas.</p>
       ${!permiso ? `<div class="follow-permission"><p>Para seguir artistas, Spotify necesita tu permiso. Reconecta tu cuenta; después vuelve aquí y elige a quién seguir. Reconectar no sigue a nadie.</p><button class="btn btn-secondary" id="follow-connect">Dar permiso en Spotify</button></div>` : ''}
       <p id="follow-notice" role="status">${escapeHtml(notice || (checking ? 'Comprobando a quién sigues…' : ''))}</p>

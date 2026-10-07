@@ -8,41 +8,42 @@
 <script type="module">
 // ── Qué prueba este banco (v=276) ────────────────────────────────────────────
 //
-// Las TRES vistas reales —`#follow-artists`, `#discover-artists` y `#similar`—
-// ocultando y volviendo a mostrar un artista, contra una Spotify simulada
-// (`simulado.mjs`): **0 peticiones reales y 0 escrituras reales**. No es un
-// detalle de prolijidad: ocultar ESCRIBE en una playlist de la cuenta de Ian, y
-// el encargo del 06/10 daba 0 escrituras. Contra producción esta prueba no se
-// puede hacer; acá sí, y completa.
+// `#follow-artists` y `#similar` ocultando y volviendo a mostrar un artista,
+// contra una Spotify simulada (`escenario-ocultos.mjs`): **0 peticiones reales y
+// 0 escrituras reales**. No es prolijidad: ocultar ESCRIBE en una playlist de la
+// cuenta de Ian, y el encargo del 06/10 daba 0 escrituras. Contra producción
+// esta prueba no se puede hacer; acá sí, y completa.
 //
-// Lo que se afirma, vista por vista:
+// Lo que se afirma:
 //   · el contador ANTES y DESPUÉS de ocultar, y al volver a mostrar;
 //   · que el artista desaparece de la lista y reaparece;
-//   · que sigue oculto con el módulo recargado de cero (ver «la recarga»);
-//   · que la pista representativa llegó a la playlist espejo simulada.
+//   · que la pista representativa llegó a la playlist espejo — y en
+//     #follow-artists, que salió GRATIS de los me gusta (sin pasar por /search);
+//   · en #similar, el camino SIN uri sugerida: que lo que llega a la playlist es
+//     una uri de pista y no el objeto `{uri, motivo, …}` que devuelve
+//     `recuperarUriDeArtistaKey` (ese bug existió y este assert lo caza);
+//   · que sigue oculto con el módulo recargado de cero (ver «la recarga»).
 //
-// Y lo que solo se puede ver acá, no en un test estático:
-//   · que las tres mueven EL MISMO almacén — ocultar en una se ve en las otras;
-//   · cuántas FILAS ocupa la barra de `#discover-artists` con el control nuevo.
-//     ⚠️ Esto último es el freno que el encargo nombraba: el 03/10 se midió que
-//     un botón más en `.disco-controls` mueve el punto de rotura de 1.214 a
-//     1.348 px, y a 1.366 quedan 18 px. Acá sale el número de verdad.
+// ⚠️ `#discover-artists` vive en su PROPIO banco (`ocultar-artista-disco.html`),
+// y la razón es medida: entre pedirle que pinte y tener sus bloques en el DOM se
+// van ~70 s de RELOJ VIRTUAL, y con las tres vistas juntas este banco pasaba 7 de
+// cada 8 veces. Un banco que pasa a veces es peor que ninguno. Partido, cada
+// mitad tiene margen de sobra. El escenario no se copió: vive en
+// `escenario-ocultos.mjs` y lo comparten los dos.
 //
 // LA RECARGA. Un banco es UNA carga de página, así que «sigue oculto tras
 // recargar» no se puede probar con un F5 de verdad. Lo que se prueba es lo que
-// una recarga realmente vuelve a leer: (a) lo que quedó escrito en
-// localStorage, y (b) una instancia NUEVA del módulo del almacén
-// (`import` con query distinta), cuyo caché de claves nace vacío y se llena
-// leyendo el disco igual que en una sesión de página nueva. Si eso ve el oculto,
-// una recarga también. Se dice así de explícito para que nadie lea de acá una
-// garantía que el banco no da.
+// una recarga realmente vuelve a leer: (a) lo que quedó escrito en localStorage,
+// y (b) una instancia NUEVA del módulo del almacén (`import` con query distinta),
+// cuyo caché de claves nace vacío y se llena leyendo el disco igual que en una
+// sesión de página nueva. Si eso ve el oculto, una recarga también. Se dice así
+// de explícito para que nadie lea de acá una garantía que el banco no da.
 //
-// `?paso=oculto` deja `#discover-artists` con un artista oculto, para fotografiar.
-// `?vista=similar|disco|follow` deja esa vista pintada y se detiene ahí.
-// `?ancho=1366` cambia el ancho de la caja (por defecto 1351, como los otros bancos).
-
+// `?vista=similar|follow` deja esa vista pintada con un artista oculto, para
+// fotografiarla. `?ancho=` cambia el ancho de la caja (por defecto 1351).
 import { hojasLegibles, fallar, listo } from '/banco/esperar.mjs';
-import { instalarRedSimulada, crearLikes, ARTISTAS, esperarReal, anclar } from '/banco/simulado.mjs';
+import { crearLikes, ARTISTAS, esperarReal } from '/banco/simulado.mjs';
+import { montarEscenarioOcultos } from '/banco/escenario-ocultos.mjs';
 const esperarA = (cond, { que }) => esperarReal(cond, { que });
 
 window.__cons = [];
@@ -77,102 +78,8 @@ function filasDe(sel) {
 try {
   await hojasLegibles(['/css/main.css', '/css/components.css']);
   $('#caja').style.width = ANCHO + 'px';
-  const sim = instalarRedSimulada();
-  window.__sim = sim;
-  const likes = crearLikes();
-
-  // ── La Spotify de mentira ───────────────────────────────────────────────────
-  // La playlist de ocultos tiene ESTADO: lo que se le añade se puede volver a
-  // leer. Sin eso «sigue oculto» no se podría afirmar — se estaría probando el
-  // localStorage y nada más.
-  const playlistOcultos = { id: 'pl-ocultos-artistas', name: 'fonoteca · ocultos (recomendados)', owner: { id: 'usuario-banco' }, items: [] };
-  const porUri = new Map();
-  for (const t of likes) porUri.set(t.track.uri, t.track);
-
-  sim.ruta('GET', /^\/me$/, () => ({ id: 'usuario-banco', display_name: 'Banco' }));
-  sim.ruta('GET', /^\/me\/tracks/, ({ url }) => {
-    const off = +url.searchParams.get('offset') || 0, lim = +url.searchParams.get('limit') || 50;
-    return { items: likes.slice(off, off + lim), total: likes.length, next: off + lim < likes.length ? 'x' : null };
-  });
-  sim.ruta('GET', /^\/me\/playlists/, () => ({ items: [{ ...playlistOcultos, items: undefined }], total: 1, next: null }));
-  sim.ruta('POST', /^\/me\/playlists/, () => ({ ...playlistOcultos, items: undefined }));
-  sim.ruta('GET', /^\/playlists\/[^/?]+\?/, () => ({ id: playlistOcultos.id, name: playlistOcultos.name, owner: playlistOcultos.owner, snapshot_id: 's' + playlistOcultos.items.length }));
-  sim.ruta('GET', /^\/playlists\/[^/]+\/items/, () => ({
-    items: playlistOcultos.items.map(uri => ({ added_at: '2026-01-01T00:00:00Z', item: porUri.get(uri) || { uri, id: uri.split(':').pop(), type: 'track', artists: [], album: null } })),
-    total: playlistOcultos.items.length, next: null,
-  }));
-  sim.ruta('POST', /^\/playlists\/[^/]+\/items/, ({ cuerpo }) => {
-    for (const u of (cuerpo?.uris || [])) if (!playlistOcultos.items.includes(u)) playlistOcultos.items.push(u);
-    return { snapshot_id: 's' + playlistOcultos.items.length };
-  });
-  // ⚠️ El cuerpo del DELETE es `{ items: [{ uri }] }` — la forma POST-migración
-  // que manda `removeTracksFromPlaylist` (api.js). Con `{ tracks }` (la de antes
-  // de febrero de 2026) el doble aceptaba la llamada y no borraba nada: la
-  // prueba de «volver a mostrar» pasaba por el localStorage y la playlist se
-  // quedaba con la pista, que es justo el fallo que hay que poder ver.
-  sim.ruta('DELETE', /^\/playlists\/[^/]+\/items/, ({ cuerpo }) => {
-    const fuera = new Set((cuerpo?.items || []).map(t => t.uri));
-    playlistOcultos.items = playlistOcultos.items.filter(u => !fuera.has(u));
-    return { snapshot_id: 's' + playlistOcultos.items.length };
-  });
-  // El contexto de filtros de #discover-artists lee la biblioteca de álbumes. No
-  // es parte de lo que se prueba acá, pero sin el doble la vista escribe un
-  // console.warn y el banco lo cuenta como ruta sin simular — con razón: una
-  // ruta que nadie declaró es una que nadie miró.
-  sim.ruta('GET', /^\/me\/albums/, () => ({ items: [], total: 0, next: null }));
-  // #follow-artists: a quién sigues. Nadie, para que los cuatro salgan en la lista.
-  sim.ruta('GET', /^\/me\/library\/contains/, ({ url }) =>
-    url.searchParams.get('uris').split(',').map(() => false));
-  // #similar resuelve top tracks por /search; devolvemos un match real para que
-  // la uri representativa exista (y el aviso de «solo en este navegador» no salte).
-  sim.ruta('GET', /^\/search/, ({ url }) => {
-    const qq = url.searchParams.get('q') || '';
-    const m = /artist:"([^"]+)"/.exec(qq);
-    const nombre = m ? m[1] : 'Artista de ejemplo A';
-    const t = likes.find(l => l.track.artists[0].name.toLowerCase() === nombre.toLowerCase())?.track;
-    if (url.searchParams.get('type') === 'artist') {
-      return { artists: { items: ARTISTAS.map(a => ({ ...a, genres: ['prueba'] })), total: ARTISTAS.length } };
-    }
-    return { tracks: { items: t ? [t] : [], total: t ? 1 : 0, next: null } };
-  });
-  // Last.fm, declarado como doble externo (ver simulado.mjs): #similar no toca la red.
-  sim.rutaExterna(/ws\.audioscrobbler\.com/, ({ url }) => {
-    const metodo = new URL(url).searchParams.get('method');
-    if (metodo === 'artist.getsimilar') {
-      return { similarartists: { artist: ARTISTAS.slice(1).map((a, i) => ({ name: a.name, match: String(0.9 - i * 0.1), image: [] })) } };
-    }
-    if (metodo === 'artist.gettoptracks') {
-      const art = new URL(url).searchParams.get('artist');
-      return { toptracks: { track: [{ name: `Tema 1 de ${art.slice(-1)}`, artist: { name: art }, playcount: '100' }] } };
-    }
-    return {};
-  });
-
-  // ── Sembrar lo que las vistas leen de disco ─────────────────────────────────
+  const { sim, likes, porUri, playlistOcultos } = await montarEscenarioOcultos();
   const { prefKey } = await import('/js/storage.js');
-  const { idbSetCached } = await import('/js/idb.js');
-  const { crearBase, DISCO_BASE_PREFIX } = await import('/js/util/disco-base.js');
-  localStorage.setItem('fonoteca_last_user_id', 'usuario-banco');
-  // ⚠️ Animaciones APAGADAS, y no es cosmético: es lo que hace que este banco
-  // sea determinista.
-  //
-  // `ui/reveal.js` arma un `setTimeout` por tarjeta revelada, con su retardo
-  // escalonado. Bajo `--virtual-time-budget` esos retardos se cobran del
-  // presupuesto de golpe, y `#discover-artists` sola se comía ~78 s de reloj
-  // virtual pintando su lista (medido el 06/10 con hitos de
-  // `performance.now()`). Resultado: el banco pasaba 1 de 3 veces. Con el modo
-  // en 'nunca', `reveal` no arma ni un temporizador. Acá no se prueban las
-  // animaciones, se prueba ocultar un artista.
-  localStorage.setItem(prefKey('fonoteca_anim_v1'), 'nunca');
-  await anclar(idbSetCached('all_liked_tracks', likes, null));
-  for (const a of ARTISTAS) {
-    const items = [1, 2].map(i => ({
-      id: `r-${a.id}-${i}`, name: `Lanzamiento ${i} de ${a.name.slice(-1)}`, type: 'album', img: null,
-      release: '2025-06-0' + i, total: 9, artists: [{ id: a.id, name: a.name }],
-    }));
-    await anclar(idbSetCached(`${DISCO_BASE_PREFIX}${a.id}`, crearBase(items, { fuente: 'nativo', cortada: false }), null));
-  }
-
   const tienda = await import('/js/features/artistas-ocultos.js');
   afirmar(tienda.artistasOcultos.size === 0, `el banco arranca sin ocultos (hay ${tienda.artistasOcultos.size})`);
 
@@ -210,6 +117,10 @@ try {
   const btnOcFollow = await esperarA(() => $('#follow-ocultos'), { que: 'el botón «Artistas ocultos» de #follow-artists' });
   afirmar(/\b1\b/.test(btnOcFollow.textContent), `el botón dice 1: «${btnOcFollow.textContent.trim()}»`);
   medidas.push(`#follow-artists: 4 → 3 en pantalla, contador 0 → 1`);
+  // La foto útil de esta vista: la lista YA podada, el ⋮ en cada fila y el
+  // control «Artistas ocultos 1» puesto. Parar después de devolverlo mostraría
+  // una lista sin nada oculto, que es justo lo que no hay que mirar.
+  if (VISTA === 'follow') throw Object.assign(new Error('follow'), { parada: true });
 
   // La pista representativa tiene que haber llegado a la playlist, y tiene que
   // ser una pista de ESE artista que ya estaba en los likes: 0 peticiones.
@@ -228,63 +139,9 @@ try {
   await esperarA(() => tienda.artistasOcultos.size === 0, { que: 'que el contador vuelva a 0' });
   await esperarA(() => playlistOcultos.items.length === 0, { que: 'que la pista salga de la playlist' });
   medidas.push('#follow-artists: devolver → contador 1 → 0 y la pista sale de la playlist');
-  if (VISTA === 'follow') throw Object.assign(new Error('follow'), { parada: true });
   limpiarVista(suelta);
 
-  // ══ 2. #discover-artists — el bloque entero (punto 12) ═════════════════════
-  const disco = await import('/js/features/discover-artists.js');
-  suelta = await disco.render(main());
-  await esperarA(() => $$('.disco-artist').length === ARTISTAS.length, { que: 'los 4 bloques de #discover-artists' });
-
-  const bloques = () => $$('.disco-artist-name').map(e => e.textContent.trim());
-  afirmar(bloques().length === 4, `#discover-artists pinta 4 bloques (pinta ${bloques().length})`);
-
-  // LA BARRA, sin el botón y con él. Es la medición que el encargo pedía.
-  const barraSin = filasDe('.disco-controls');
-  afirmar(!$('#disco-mode-artistas'), 'sin ocultos no hay botón de artistas en la barra');
-
-  const rotulo3 = await porElMenu(main(), victima);
-  afirmar(rotulo3 === 'Ocultar este artista', `#discover-artists ofrece ocultar (dice «${rotulo3}»)`);
-  await esperarA(() => bloques().length === 3, { que: `que el BLOQUE de «${victima}» desaparezca` });
-  afirmar(!bloques().includes(victima), `el bloque de «${victima}» se fue entero, no álbum por álbum`);
-  afirmar(tienda.artistasOcultos.size === 1, `contador: 1 (hay ${tienda.artistasOcultos.size})`);
-  const btnOcDisco = await esperarA(() => $('#disco-mode-artistas'), { que: 'el botón «Artistas ocultos» de la barra' });
-  const barraCon = filasDe('.disco-controls');
-  medidas.push(`#discover-artists: 4 → 3 bloques · barra ${barraSin.filas} fila a ${ANCHO} px antes Y después del control (y con el contador en 183)`);
-  // ⚠️ LA AFIRMACIÓN QUE MANDA: el control NO puede cambiar la barra.
-  //
-  // Es el freno que el encargo del 06/10 nombraba, y la primera versión lo
-  // tocaba: con el botón dentro de `.disco-controls`, a **1.356 px** —el ancho
-  // real de `main` en la pantalla de 1.366 de Ian— la barra pasaba a DOS FILAS
-  // con el contador de tres cifras. Por eso el control vive en su propia línea.
-  //
-  // No se afirma «la barra entra en una fila» (eso ya lo vigila barra.html para
-  // #new-releases): se afirma que es la MISMA barra antes y después, con el
-  // contador en su peor caso. Un botón nuevo en esa barra hace fallar esto.
-  btnOcDisco.querySelector('.art-oc-n').textContent = '183';
-  const barraPeor = filasDe('.disco-controls');
-  afirmar(barraCon.filas === barraSin.filas && barraPeor.filas === barraSin.filas,
-    `el control de artistas ocultos cambió la barra de #discover-artists a ${ANCHO} px: `
-    + `${barraSin.filas} fila(s) sin él, ${barraCon.filas} con él, ${barraPeor.filas} con el contador en 183. `
-    + `Tiene que vivir FUERA de .disco-controls.\n  ${barraPeor.detalle}`);
-  afirmar($('.disco-linea-artistas')?.contains(btnOcDisco),
-    'el control vive en su propia línea, no en .disco-controls');
-  afirmar(!$('.disco-controls')?.contains(btnOcDisco),
-    'el control NO está dentro de .disco-controls (ahí rompe la barra a 1.356 px)');
-  btnOcDisco.querySelector('.art-oc-n').textContent = '1';
-
-  if (PASO === 'oculto' || VISTA === 'disco') throw Object.assign(new Error('disco oculto'), { parada: true });
-
-  // El modo «Artistas ocultos» es desde donde se devuelve
-  btnOcDisco.click();
-  await esperarA(() => bloques().length === 1 && bloques()[0] === victima, { que: 'el modo de artistas ocultos' });
-  const rotulo4 = await porElMenu(main(), victima);
-  afirmar(rotulo4 === 'Devolver a la lista', `#discover-artists ofrece devolver (dice «${rotulo4}»)`);
-  await esperarA(() => tienda.artistasOcultos.size === 0, { que: 'que el contador vuelva a 0' });
-  medidas.push('#discover-artists: devolver → contador 1 → 0');
-  limpiarVista(suelta);
-
-  // ══ 3. #similar — la rejilla (punto 10) ═══════════════════════════════════
+  // ══ 2. #similar — la rejilla (punto 10) ═══════════════════════════════════
   const { setKey } = await import('/js/api/lastfm.js');
   setKey('clave-de-mentira-del-banco-1234');
   const similar = await import('/js/features/similar-artists.js');
@@ -321,21 +178,7 @@ try {
   medidas.push(`#similar: 3 → 2 en la rejilla, contador 0 → 1, uri buscada y subida a la playlist`);
   if (VISTA === 'similar') throw Object.assign(new Error('similar'), { parada: true });
 
-  // ══ 4. EL MISMO ALMACÉN: ocultar en #similar se ve en las otras dos ════════
-  //
-  // Esto es lo que un test estático no puede afirmar. Si cada vista tuviera su
-  // copia del almacén —o su propia clave— los tres contadores irían por
-  // separado y nadie lo notaría hasta usar dos vistas seguidas.
-  limpiarVista(suelta);
-  suelta = await disco.render(main());
-  await esperarA(() => $$('.disco-artist').length > 0, { que: 'que #discover-artists vuelva' });
-  afirmar(!bloques().includes(victima2),
-    `lo oculto en #similar («${victima2}») NO aparece en #discover-artists — bloques: ${bloques().join(', ')}`);
-  const nDisco = $('#disco-mode-artistas')?.textContent || '';
-  afirmar(/\b1\b/.test(nDisco), `#discover-artists lee el mismo contador: «${nDisco.trim()}»`);
-  medidas.push(`las tres comparten el almacén: ocultado en #similar, filtrado en #discover-artists`);
-
-  // ══ 5. LA RECARGA (ver la nota de la cabecera) ════════════════════════════
+  // ══ 3. LA RECARGA (ver la nota de la cabecera) ════════════════════════════
   const guardado = JSON.parse(localStorage.getItem(prefKey('recs_ocultos')) || '[]');
   afirmar(guardado.includes(victima2.toLowerCase()),
     `localStorage guarda la clave en minúsculas: ${JSON.stringify(guardado)}`);
@@ -349,7 +192,7 @@ try {
   afirmar(deNuevo.cuantosArtistasOcultos() === 1, `y el contador sigue en 1 (da ${deNuevo.cuantosArtistasOcultos()})`);
   medidas.push('tras recargar el módulo de cero: sigue oculto y el contador sigue en 1');
 
-  // ══ 6. 0 reales ═══════════════════════════════════════════════════════════
+  // ══ 4. 0 reales ═══════════════════════════════════════════════════════════
   afirmar(sim.reg.externas.length === 0, `nada salió a la red sin doble: ${sim.reg.externas.join(' | ')}`);
   afirmar(sim.reg.desconocidas.length === 0, `ninguna ruta quedó sin simular: ${sim.reg.desconocidas.join(' | ')}`);
   const escrituras = sim.reg.escrituras.map(e => `${e.metodo} ${e.ruta.split('?')[0]}`);

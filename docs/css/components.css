@@ -851,11 +851,15 @@ input[type="checkbox"].keep-check:checked::after {
   color: var(--color-text-muted);
   cursor: pointer;
   flex-shrink: 0;
-  opacity: .7;
 }
+/* ⚠️ SIN `opacity` en reposo, a propósito. Con `.7` encima del color atenuado
+   el ⋮ quedaba más apagado que el «12 me gusta» de su misma fila —mirado en la
+   captura del 06/10— y este control tiene que DESCUBRIRSE SOLO: ésa es toda la
+   razón por la que es un botón visible y no el click derecho. Un control que
+   hay que buscar con la vista no es mejor que uno escondido. Queda al mismo
+   nivel que el texto vecino, y el realce va en el hover. */
 .art-oc-menu-btn:hover,
 .art-oc-menu-btn[aria-expanded="true"] {
-  opacity: 1;
   color: var(--color-text);
   background: var(--color-elevated);
 }

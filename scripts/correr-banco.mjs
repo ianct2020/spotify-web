@@ -35,7 +35,7 @@ const EXTRA = { mosaico: 'auto=1' };
 // ⚠️ No es tiempo de pared ni una espera: es cuánto reloj simulado puede
 // consumir el banco antes de que Chrome lo corte a mitad de camino.
 //
-// `ocultar-artista` necesita MUCHO más que el resto porque abre TRES vistas
+// Los dos de `ocultar-artista` necesitan más que el resto porque abren vistas
 // reales, y la que se lo lleva es `#discover-artists`: entre pedirle que pinte y
 // tener sus bloques en el DOM se van ~70 s de reloj virtual (medido el 06/10 con
 // hitos de `performance.now()`). No son temporizadores de la app —se buscaron y
@@ -43,13 +43,20 @@ const EXTRA = { mosaico: 'auto=1' };
 // movió el número—: es que el reloj virtual ADELANTA en cada vuelta en que la
 // página queda ociosa, y una espera de las de `esperarReal` tiene muchas.
 //
-// El número está medido, no elegido, y la medición fue a tasa de acierto, que es
-// la única que importa acá: 45 s → 0 de 3 · 90 s → 2 de 3 · 180 s → 1 de 3 ·
-// 240 s → 5 de 5 · 300 s → 5 de 5. Se deja en 300 s, un escalón por encima del
-// primero que acertó siempre. Un banco que pasa a veces es peor que ninguno, y
-// este repo ya lo pagó dos veces (la barra entre v=241 y v=261, el mosaico hasta
-// v=273). No es tiempo de pared: la corrida real tarda unos 12 s.
-const PRESUPUESTO = { 'ocultar-artista': 300000 };
+// ⚠️ Por eso están PARTIDOS en dos. Con las tres vistas en un solo banco, ni
+// subiendo el tope se estabilizaba: a 300 s pasaba 7 de cada 8 veces. Un banco
+// que pasa a veces es peor que ninguno, y este repo ya lo pagó dos veces (la
+// barra entre v=241 y v=261, el mosaico hasta v=273). Partido, cada mitad tiene
+// margen de sobra y el tope vuelve a ser un tope y no una apuesta.
+//
+// Los números están medidos a TASA DE ACIERTO, que es la única que vale acá.
+// Medidos a tasa de acierto el 06/10, en corridas de 6 u 8:
+//   · los tres juntos, 300 s → 7/8   ← por esto están partidos
+//   · `ocultar-artista` (follow + similar), 90 s → 8/8
+//   · `ocultar-artista-disco`, 180 s → 7/8 · 300 s → 6/6 · 450 s → 6/6
+// El de disco queda en 450 s, un escalón por encima del primero que acertó
+// siempre. No es tiempo de pared: las dos corridas juntas tardan ~15 s.
+const PRESUPUESTO = { 'ocultar-artista': 90000, 'ocultar-artista-disco': 450000 };
 // `XQ="&peor=1"` agrega parámetros a la URL del banco sin tocar este archivo: sirve
 // para medir (p. ej. el ancho mínimo en que la barra de novedades sigue en una fila).
 
