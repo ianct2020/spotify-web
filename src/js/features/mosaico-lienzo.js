@@ -11,6 +11,11 @@
 
 import { conTapa } from './covers-wallpaper.js';
 
+// El lado, en píxeles, de la miniatura que se baja de cada portada. Es el tamaño
+// con el que se construyó `mosaico_colores_v1`, así que las 5.715 ya están en la
+// caché HTTP del navegador: el mosaico se compone sin pedir un byte nuevo.
+export const LADO_NATIVO_TAPA = 64;
+
 /**
  * Baja las portadas que hacen falta y las deja en un `Map` índice → bitmap.
  *
@@ -86,12 +91,21 @@ export function soltarBitmaps(bitmaps) {
  * No toca la red: se puede llamar cien veces mientras el usuario mueve el
  * deslizador.
  */
-export function pintarMosaico({ ctx, cols, filas, ladoCelda, porPortada, bitmaps, fuenteTinte, alfa, fondo, plano = false }) {
+export function pintarMosaico({ ctx, cols, filas, ladoCelda, porPortada, bitmaps, fuenteTinte, alfa, fondo, plano = false, ladoNativo = LADO_NATIVO_TAPA }) {
   const ancho = cols * ladoCelda, alto = filas * ladoCelda;
   if (fondo) { ctx.fillStyle = fondo; ctx.fillRect(0, 0, ancho, alto); }
 
   ctx.globalAlpha = 1;
-  ctx.imageSmoothingEnabled = false;   // a 64 px la portada va 1:1
+  // ⚠️ El suavizado se apaga SOLO cuando la celda mide lo que la miniatura: ahí
+  // la portada va 1:1 y suavizarla la ablandaría por nada. En las rejillas finas
+  // la celda es más chica que los 64 px que se bajaron (48 y 32 px), y dibujar
+  // sin suavizado un 64→32 **tira tres de cada cuatro píxeles**: la portada deja
+  // de ser una portada reducida y pasa a ser un muestreo al azar de ella, con el
+  // color medio corrido. No es un matiz estético: es lo único que sostiene que
+  // una rejilla más fina se parezca MÁS a la imagen y no menos.
+  const nativo = ladoCelda === ladoNativo;
+  ctx.imageSmoothingEnabled = !nativo;
+  if (!nativo) ctx.imageSmoothingQuality = 'high';
   for (const [idx, celdas] of porPortada) {
     const dib = bitmaps.get(idx);
     if (!dib) continue;

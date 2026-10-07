@@ -72,6 +72,132 @@ export const RADIO_REPETICION = 2;
 // parecido. Por eso 3 por defecto, con el resto a un clic en la vista.
 export const PENAL_USO_DE = 3;
 
+// ── Cuántos resultados se guardan, y por qué ESOS números ───────────────────
+//
+// La vista acumula los mosaicos que se van generando. Un resultado VIVO —el que
+// está arriba, con el deslizador del tinte funcionando— es carísimo: el lienzo y
+// los bitmaps de sus portadas. Un resultado GUARDADO es solo su JPEG más una
+// miniatura. Medido el 06/10 en la copia del perfil de Ian, con la base real de
+// 5.715 portadas y la imagen canónica de 1.200×1.600:
+//
+//   rejilla       │ lienzo vivo │ bitmaps │ VIVO    │ JPEG (guardado) │ miniatura
+//   ──────────────┼─────────────┼─────────┼─────────┼─────────────────┼──────────
+//   Gruesa 60     │   44,2 MB   │ 12,4 MB │  57 MB  │    4,02 MB      │  139 KB
+//   Normal 80     │   78,6 MB   │ 18,4 MB │  97 MB  │    7,15 MB      │  146 KB
+//   Fina 120      │  176,9 MB   │ 30,5 MB │ 207 MB  │   16,06 MB      │  146 KB
+//   Fina + Máxima │  176,9 MB   │ 48,6 MB │ 226 MB  │   16,05 MB      │  151 KB
+//
+// O sea: **guardar un resultado cuesta 14 veces menos que mantenerlo vivo.** Y
+// eso es lo que decide el diseño: vivo hay UNO, los demás se congelan a JPEG.
+//
+// El RSS de todo el Chrome, muestreado desde /proc (`performance.memory` no ve
+// ni los bitmaps ni el lienzo), confirma las dos cosas:
+//
+//   - **un lienzo entero de más = +168 MB de RSS**, medido tres veces seguidas
+//     sobre el resultado de Fina (176,9 MB de backing). Dos resultados vivos no
+//     entran: por eso no se guardan lienzos.
+//   - **siete JPEG de 16 MB de más = +64 MB de RSS**, o sea que un blob cuesta
+//     ~0,5 × sus bytes.
+//   - **diez miniaturas de 768 px en `<img>` = +31 MB** al margen (la primera
+//     dispara ~190 MB de andamio de Skia para reducir un lienzo de 44 MP, y ese
+//     andamio no crece con las siguientes).
+//
+// De ahí los dos topes. Son DOS y no uno porque el peso de un resultado depende
+// de la rejilla por un factor de cuatro: un tope de 6 a secas son 24 MB en
+// Gruesa y 96 MB en Fina, y con una rejilla más fina todavía serían más.
+//
+//   - `TOPE_GUARDADOS = 6`: cinco anteriores más el vivo. Es lo que hace falta
+//     para comparar variantes de una imagen y sigue siendo UN número que se
+//     puede tener en la cabeza. En el peor caso medido son 6 × 16 MB = 96 MB de
+//     datos ≈ 50 MB de RSS: **menos de un tercio de lo que cuesta un solo
+//     lienzo vivo de más**, y menos que los +111 MB que ya cuesta generar uno en
+//     Fina + Máxima en el navegador de Ian.
+//   - `TOPE_BYTES_GUARDADOS = 120 MB`: el que manda si los JPEG son grandes.
+//     Impide que una rejilla más fina convierta «6 resultados» en 180 MB sin que
+//     nadie lo decida. En Gruesa no se activa nunca (6 × 4 MB = 24 MB).
+//
+// ⚠️ **Nada de esto va a IndexedDB, y es una decisión, no un olvido.** Seis
+// mosaicos de Fina son 96 MB: casi siete veces la base de colores entera (14,6
+// MB, que son las 5.715 portadas) y de lejos lo más grande que tendría la base
+// del navegador de Ian. Y son datos DERIVADOS: la misma imagen con los mismos
+// ajustes los vuelve a dar. Se guardan mientras la vista está abierta y se
+// sueltan al salir, como ya hacía el único resultado que había.
+export const TOPE_GUARDADOS = 6;
+export const TOPE_BYTES_GUARDADOS = 120e6;
+
+/**
+ * Qué resultados sobreviven en la galería y cuáles se tiran, del más nuevo al
+ * más viejo. `guardados` viene ordenado del más NUEVO al más viejo y cada uno
+ * tiene `bytes`.
+ *
+ * ⚠️ **El más nuevo se queda siempre**, aunque él solo pase el tope de bytes: si
+ * no, generar un mosaico enorme lo borraría a él mismo y la vista se quedaría
+ * vacía justo después de haber trabajado un minuto. El tope de bytes recorta a
+ * los ANTERIORES, que es de lo que protege.
+ */
+export function podarGaleria(guardados, { tope = TOPE_GUARDADOS, topeBytes = TOPE_BYTES_GUARDADOS } = {}) {
+  const quedan = [], tirados = [];
+  let bytes = 0;
+  for (const g of guardados) {
+    const esElNuevo = quedan.length === 0;
+    if (!esElNuevo && (quedan.length >= tope || bytes + (g.bytes || 0) > topeBytes)) { tirados.push(g); continue; }
+    quedan.push(g);
+    bytes += g.bytes || 0;
+  }
+  return { quedan, tirados, bytes };
+}
+
+// ── El tamaño del lienzo de salida ──────────────────────────────────────────
+//
+// Dos topes, y de ellos sale el lado de celda de CADA rejilla.
+//
+// `LADO_CELDA_MAX` es 64 porque **es la variante que la caché de colores
+// garantiza**: las 5.715 portadas se bajaron a 64 px para calcularles el color,
+// así que ya están en la caché HTTP del navegador y el mosaico se compone sin
+// pedir un byte nuevo. A 64 px la portada se dibuja 1:1, sin remuestrear.
+//
+// `LARGO_SALIDA_MAX` es lo que hace posible una rejilla MÁS FINA. Con el lado
+// clavado en 64, pasar de 120 a 240 celdas multiplica por cuatro el área del
+// lienzo: 11.520×15.360 px son 177 MP y **708 MB** de backing store, y además
+// roza el tope de 16.384 px por lado de Chrome. Con el largo topado en 7.680 px
+// las tres rejillas finas dan **el mismo lienzo** (120×64 = 160×48 = 240×32 =
+// 7.680) y lo único que crece es de cuántas portadas está hecha la imagen, que
+// es justo lo que se pidió. Medido el 06/10 en la copia del perfil, imagen de
+// 1.200×1.600 y base real de 5.715 portadas:
+//
+//   rejilla │ celdas │  lienzo     │ backing │ JPEG 0,92 │ portadas distintas
+//   ────────┼────────┼─────────────┼─────────┼───────────┼───────────────────
+//      60   │  2.700 │ 2.880×3.840 │ 44,2 MB │  4,02 MB  │   755
+//      80   │  4.800 │ 3.840×5.120 │ 78,6 MB │  7,15 MB  │ 1.123
+//     120   │ 10.800 │ 5.760×7.680 │ 176,9 MB│ 16,06 MB  │ 1.860  (2.964 con «Máxima»)
+//
+// 7.680 px de largo son esos 176,9 MB, que es lo que la rejilla Fina **ya
+// costaba** antes de esta tanda: las dos rejillas nuevas no suben el techo de
+// memoria del lienzo ni un byte. Lo que suben es el TIEMPO del emparejado, que
+// es lineal en celdas — y por eso existe `emparejarCediendo`.
+export const LADO_CELDA_MAX = 64;
+export const LARGO_SALIDA_MAX = 7680;
+
+/** El lado de celda, en píxeles, que le toca a una rejilla de `n` celdas de lado largo. */
+export function ladoDeCelda(n) {
+  const celdas = Math.max(2, Math.round(n));
+  return Math.max(8, Math.min(LADO_CELDA_MAX, Math.floor(LARGO_SALIDA_MAX / celdas)));
+}
+
+/**
+ * Todo lo que define la salida para una imagen de `w`×`h` px y `n` celdas de
+ * lado largo: la rejilla, el lado de celda y el lienzo en píxeles.
+ *
+ * Es la ÚNICA cuenta de «cuánto va a medir esto» que hay en el proyecto: la
+ * vista la usa para la línea de estado y para crear el lienzo, así que lo que
+ * anuncia y lo que crea no pueden separarse.
+ */
+export function salidaPara(w, h, n) {
+  const { cols, filas } = grillaPara(w, h, n);
+  const lado = ladoDeCelda(n);
+  return { cols, filas, lado, celdas: cols * filas, ancho: cols * lado, alto: filas * lado };
+}
+
 // ── El objetivo ─────────────────────────────────────────────────────────────
 
 /**
@@ -152,23 +278,108 @@ export function tilesALab(datos, n = datos.length / BYTES_POR_PORTADA) {
  * y 27 componentes, una fila de 60 celdas son 9,3 M multiplicaciones.
  */
 export function emparejar({ objetivo, tilesLab, nTiles, penalDE = PENAL_DE, radio = RADIO_REPETICION, penalUsoDE = PENAL_USO_DE, onProgress, signal }) {
-  const { cols, filas, datos } = objetivo;
-  const nCeldas = cols * filas;
-  const indice = new Int32Array(nCeldas).fill(-1);
-  const de = new Float32Array(nCeldas);
-  // Penalizaciones vivas, en ΔE² medio (las mismas unidades que la distancia).
-  // Es un array de nTiles y no un Set porque se consulta en el bucle interno:
-  // se escriben ~12 posiciones antes de cada celda y se limpian después.
-  const penal = new Float32Array(nTiles);
-  const penalMax = penalDE * penalDE;
-  // Cuántas veces salió ya cada portada en TODO el mosaico. A diferencia de
-  // `penal`, esto no se limpia nunca: es el reparto del catálogo.
-  const usos = new Int32Array(nTiles);
-  const penalUso = penalUsoDE * penalUsoDE;
-  const objLab = new Float32Array(27);
-
-  for (let f = 0; f < filas; f++) {
+  const e = emparejadoNuevo({ objetivo, tilesLab, nTiles, penalDE, radio, penalUsoDE });
+  const { cols, filas } = objetivo;
+  while (e.fila < filas) {
     if (signal?.aborted) break;
+    emparejarHasta(e, e.fila + 1);
+    onProgress?.(e.fila * cols, cols * filas);
+  }
+  return { indice: e.indice, de: e.de };
+}
+
+/**
+ * Lo mismo, pero **cediéndole el hilo al navegador** cada `msPorTanda` para que
+ * la línea de progreso se pinte y «Detener» llegue a procesarse.
+ *
+ * ⚠️ **Por qué hace falta, y por qué recién ahora.** `emparejar()` es un bucle
+ * síncrono: mientras corre, el hilo principal no procesa NADA, así que el texto
+ * de progreso no se pinta y un clic en «Detener» no se entrega hasta que el
+ * bucle termina — el `signal?.aborted` de cada fila no puede volverse `true`
+ * porque el evento del clic está esperando en la cola. Con 10.800 celdas eso
+ * eran ~14 s en el navegador de Ian: molesto y nada más. Con las rejillas nuevas
+ * son 19.200 y 43.200 celdas, o sea del orden del minuto, y un minuto de
+ * pestaña congelada con un botón de «Detener» que no hace nada no es una
+ * función: es un cuelgue.
+ *
+ * Devuelve además `filasHechas`, que es cómo se sabe si se cortó a medias.
+ */
+export async function emparejarCediendo({
+  objetivo, tilesLab, nTiles, penalDE = PENAL_DE, radio = RADIO_REPETICION, penalUsoDE = PENAL_USO_DE,
+  onProgress, signal, msPorTanda = 60, ceder = cederAlNavegador, ahora = () => Date.now(),
+}) {
+  const e = emparejadoNuevo({ objetivo, tilesLab, nTiles, penalDE, radio, penalUsoDE });
+  const { cols, filas } = objetivo;
+  while (e.fila < filas) {
+    if (signal?.aborted) break;
+    const t0 = ahora();
+    // Por TIEMPO y no por un número fijo de filas: una fila de 180 celdas contra
+    // 5.715 portadas cuesta diez veces lo que una de 45, así que «cada 8 filas»
+    // daría tandas de 5 ms en la rejilla gruesa y de medio segundo en la fina.
+    do { emparejarHasta(e, e.fila + 1); } while (e.fila < filas && ahora() - t0 < msPorTanda);
+    onProgress?.(e.fila * cols, cols * filas);
+    await ceder();
+  }
+  return { indice: e.indice, de: e.de, filasHechas: e.fila };
+}
+
+/**
+ * Cede el hilo de forma que el navegador lo retome **también con la pestaña
+ * oculta**.
+ *
+ * ⚠️ **`setTimeout` no sirve acá, y no es teórico**: Chrome clampea los timers
+ * de una pestaña de fondo a **uno por minuto**, y la pestaña de la extensión de
+ * testeo corre oculta. Un emparejado de 60 tandas con `setTimeout(0)` tardaría
+ * una hora en esa pestaña. Un `postMessage` de `MessageChannel` es una tarea de
+ * la cola de macrotareas que ese clampeo no toca. Es la misma familia que la
+ * regla del `requestAnimationFrame` que ya tienen escritas `covers-wallpaper.js`
+ * y `features/mosaico.js`: en una pestaña de fondo, lo que depende del reloj o
+ * del pintado no llega.
+ */
+export function cederAlNavegador() {
+  if (typeof MessageChannel !== 'function') return new Promise(r => setTimeout(r, 0));
+  return new Promise((res) => {
+    const c = new MessageChannel();
+    c.port1.onmessage = () => { c.port1.close(); c.port2.close(); res(); };
+    c.port2.postMessage(0);
+  });
+}
+
+/**
+ * El estado vivo de un emparejado, para poder seguirlo por tandas.
+ *
+ * Vive aparte del bucle a propósito: `emparejar()` y `emparejarCediendo()` son
+ * dos formas de recorrer ESTE estado con `emparejarHasta()`, y el bucle interno
+ * —el que cuesta `celdas × portadas × 27` multiplicaciones— está escrito **una
+ * sola vez**. Dos copias del emparejado es exactamente el defecto que dejó el
+ * resolutor duplicado de v=219.
+ */
+export function emparejadoNuevo({ objetivo, tilesLab, nTiles, penalDE = PENAL_DE, radio = RADIO_REPETICION, penalUsoDE = PENAL_USO_DE }) {
+  const nCeldas = objetivo.cols * objetivo.filas;
+  return {
+    objetivo, tilesLab, nTiles, radio,
+    indice: new Int32Array(nCeldas).fill(-1),
+    de: new Float32Array(nCeldas),
+    // Penalizaciones vivas, en ΔE² medio (las mismas unidades que la distancia).
+    // Es un array de nTiles y no un Set porque se consulta en el bucle interno:
+    // se escriben ~12 posiciones antes de cada celda y se limpian después.
+    penal: new Float32Array(nTiles),
+    penalMax: penalDE * penalDE,
+    // Cuántas veces salió ya cada portada en TODO el mosaico. A diferencia de
+    // `penal`, esto no se limpia nunca: es el reparto del catálogo.
+    usos: new Int32Array(nTiles),
+    penalUso: penalUsoDE * penalUsoDE,
+    objLab: new Float32Array(27),
+    fila: 0,
+  };
+}
+
+/** Empareja las filas que falten de `e` hasta la `hasta` (sin incluirla). */
+export function emparejarHasta(e, hasta) {
+  const { objetivo, tilesLab, nTiles, radio, indice, de, penal, penalMax, usos, penalUso, objLab } = e;
+  const { cols, filas, datos } = objetivo;
+  const tope = Math.min(filas, hasta);
+  for (let f = e.fila; f < tope; f++) {
     for (let c = 0; c < cols; c++) {
       const k = f * cols + c;
       const o = k * BYTES_POR_PORTADA;
@@ -207,9 +418,9 @@ export function emparejar({ objetivo, tilesLab, nTiles, penalDE = PENAL_DE, radi
       usos[mejorI]++;
       for (const i of tocados) penal[i] = 0;
     }
-    onProgress?.((f + 1) * cols, nCeldas);
   }
-  return { indice, de };
+  e.fila = tope;
+  return e;
 }
 
 // ── El tinte ────────────────────────────────────────────────────────────────

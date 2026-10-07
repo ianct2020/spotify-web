@@ -31,22 +31,34 @@ import { descargarBlob } from './covers-wallpaper.js';
 import { bajarPortadas, soltarBitmaps, pintarMosaico } from './mosaico-lienzo.js';
 import { leerColores, urlDe } from './mosaico-colores.js';
 import {
-  grillaPara, rejillaDelObjetivo, tilesALab, emparejar, mapaDeTinte, resumenDeEmparejado,
+  salidaPara, rejillaDelObjetivo, tilesALab, emparejarCediendo, mapaDeTinte, resumenDeEmparejado,
+  podarGaleria, TOPE_GUARDADOS, TOPE_BYTES_GUARDADOS,
 } from '../util/mosaico.js';
-
-// El lado de cada celda en el mosaico final, en píxeles. 64 es **la variante
-// que la caché de colores garantiza**: las 5.715 portadas se bajaron a 64 px
-// para calcularles el color, así que ya están en la caché HTTP del navegador y
-// el mosaico se compone sin pedir un byte nuevo. Y a 64 px la portada se dibuja
-// 1:1, sin remuestrear. Con 60×80 celdas el resultado son 3.840×5.120 px.
-const LADO_CELDA = 64;
 
 // Tamaños de grilla que ofrece la vista: celdas del lado MÁS LARGO de la
 // imagen. 80 da las 60×80 que pidió Ian con una imagen 3:4.
+//
+// ⚠️ **El lado de cada celda NO es fijo**: lo da `ladoDeCelda()`, que topa el
+// largo del lienzo en 7.680 px (ver su comentario en `util/mosaico.js`). De 120
+// en adelante las tres rejillas dan el MISMO lienzo de 5.760×7.680 px con una
+// imagen 3:4, y lo único que crece es de cuántas portadas está hecha. Por eso
+// las dos finas nuevas no suben el techo de memoria del lienzo: lo que suben es
+// el tiempo del emparejado, que es lineal en celdas.
+//
+// Los números de la ayuda son para una imagen 3:4 y la base de 5.715 portadas;
+// con otra proporción cambian y la línea de estado dice los de verdad.
+//
+// ⚠️ **La etiqueta del botón NO lleva el número**, y es por el ancho: la caja del
+// grupo mide 294 px en la pantalla de Ian (1.356 px de `main`, medido el 01/10) y
+// cinco veces «Gruesa · 60» no entra — la barra se partiría en dos filas, que es
+// exactamente el freno que paró la tanda de ocultar artistas. El número exacto
+// vive en el `title`, y la rejilla de verdad en la línea de estado.
 const GRILLAS = [
-  { n: 60, etiqueta: 'Gruesa' },
-  { n: 80, etiqueta: 'Normal' },
-  { n: 120, etiqueta: 'Fina' },
+  { n: 60, etiqueta: 'Gruesa', ayuda: '45×60 = 2.700 celdas de 64 px. La más rápida.' },
+  { n: 80, etiqueta: 'Normal', ayuda: '60×80 = 4.800 celdas de 64 px.' },
+  { n: 120, etiqueta: 'Fina', ayuda: '90×120 = 10.800 celdas de 64 px. Desde aquí el lienzo ya no crece: 5.760×7.680 px.' },
+  { n: 160, etiqueta: 'Muy fina', ayuda: '120×160 = 19.200 celdas de 48 px. El mismo lienzo que «Fina» hecho con un 78 % más de portadas; tarda casi el doble.' },
+  { n: 240, etiqueta: 'Finísima', ayuda: '180×240 = 43.200 celdas de 32 px. El mismo lienzo con CUATRO veces más portadas; puede tardar un minuto. Se puede detener.' },
 ];
 const GRILLA_DEFECTO = 80;
 
@@ -93,6 +105,22 @@ const MODO_DEFECTO = 'adaptativo';
 // este escalado, que solo ocurre con imágenes de más de 8 MP.
 const MAX_PIXELES_OBJETIVO = 8e6;
 
+// La calidad del JPEG, la misma con la que se descarga y con la que se guarda en
+// la galería: lo que Ian ve guardado es byte por byte lo que se va a descargar.
+const CALIDAD_JPEG = 0.92;
+
+// El lado largo de la miniatura de cada resultado guardado. 768 px porque la
+// tarjeta mide ~260 px y una pantalla puede tener el doble de densidad; medido
+// el 06/10, la miniatura de un mosaico de Fina pesa **146 KB** a este lado (21
+// KB a 320, 54 KB a 480). Al margen, diez de estas en `<img>` costaron +31 MB de
+// RSS: es lo barato de la galería, y lo que pesa son los JPEG enteros.
+const LADO_MINIATURA = 768;
+
+// Píxeles mínimos del objetivo por celda y por lado. Es el mismo 3 que exige
+// `rejillaDelObjetivo` (su rejilla interna es 3×3); se comprueba ANTES de
+// generar para poder decirlo en la línea de estado en vez de tirar al final.
+const PX_MINIMOS_POR_CELDA = 3;
+
 const fmtN = (n) => n.toLocaleString('es-ES');
 const fmtMB = (b) => (b / 1e6).toLocaleString('es-ES', { maximumFractionDigits: 1 });
 const fmt1 = (n) => n.toLocaleString('es-ES', { maximumFractionDigits: 1 });
@@ -122,7 +150,7 @@ export async function render(container) {
           <section class="mos-grupo" aria-labelledby="mos-t-grilla">
             <h3 class="mos-grupo-t" id="mos-t-grilla">Tamaño de la rejilla</h3>
             <div class="mos-seg" role="group" aria-labelledby="mos-t-grilla">
-              ${GRILLAS.map(g => `<button type="button" class="${g.n === GRILLA_DEFECTO ? 'is-on' : ''}" aria-pressed="${g.n === GRILLA_DEFECTO}" data-grilla="${g.n}">${g.etiqueta} · ${g.n}</button>`).join('')}
+              ${GRILLAS.map(g => `<button type="button" class="${g.n === GRILLA_DEFECTO ? 'is-on' : ''}" aria-pressed="${g.n === GRILLA_DEFECTO}" data-grilla="${g.n}" title="${escapeHtml(`${g.n} celdas en el lado largo. ${g.ayuda}`)}">${g.etiqueta}</button>`).join('')}
             </div>
           </section>
           <section class="mos-grupo" aria-labelledby="mos-t-tinte">
@@ -150,12 +178,22 @@ export async function render(container) {
     <div class="card" id="mos-salida" hidden style="margin-top:20px">
       <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin-bottom:12px">
         <button class="btn btn-primary" id="mos-descargar">Descargar</button>
+        <button class="btn btn-secondary" id="mos-guardar" title="Deja una copia de este mosaico en «Los que ya has hecho», sin volver a generarlo. Sirve para comparar dos tintes del mismo emparejado.">Guardar esta</button>
         <label style="display:flex;align-items:center;gap:8px;font-size:13px">
           <input type="checkbox" id="mos-cien"> Ver al 100 %
         </label>
         <span id="mos-resumen" style="font-size:12px;color:var(--color-text-secondary)"></span>
       </div>
       <div id="mos-lienzo" style="overflow:auto;max-height:78vh;background:var(--color-bg);border-radius:var(--radius-md)"></div>
+    </div>
+    <div class="card" id="mos-galeria" hidden style="margin-top:20px">
+      <h2 style="margin:0 0 4px;font-size:16px">Los que ya has hecho <span id="mos-galeria-n" class="mos-valor"></span></h2>
+      <p style="margin:0 0 14px;color:var(--color-text-secondary);font-size:13px">
+        Cada vez que generas uno, el anterior se guarda aquí con su imagen y sus ajustes, y lo puedes descargar.
+        Se quedan los <strong>${TOPE_GUARDADOS}</strong> últimos (o ${Math.round(TOPE_BYTES_GUARDADOS / 1e6)} MB, lo que llegue primero)
+        y <strong>mientras no salgas de esta vista</strong>: no se guardan en el disco.
+      </p>
+      <ul class="mos-galeria" id="mos-galeria-lista"></ul>
     </div>
   `;
 
@@ -200,15 +238,146 @@ export async function render(container) {
   let tinte = TINTE_DEFECTO;
   let ultimo = null;            // { canvas, ctx, cols, filas, indice, de, objetivo, ms, bitmaps }
   let ctrl = null;
+  let nombreImagen = '';        // el nombre del archivo que subió Ian
+  // Los mosaicos ya hechos, del más NUEVO al más viejo. Cada uno es su JPEG
+  // (`blob`), la miniatura que se ve (`url`, un object URL) y su ficha. Ningún
+  // lienzo y ningún bitmap: ver `TOPE_GUARDADOS` en `util/mosaico.js`.
+  const guardados = [];
+  let proximoId = 1;
 
   const soltarSalida = () => {
     if (!ultimo) return;
     soltarBitmaps(ultimo.bitmaps);
     // Soltar la referencia no alcanza: el backing store del canvas (78 MB con
-    // 60×80 celdas de 64 px) sigue vivo hasta que el canvas mide 0×0.
+    // 60×80 celdas de 64 px, 177 MB con 90×120) sigue vivo hasta que el canvas
+    // mide 0×0.
     ultimo.canvas.width = ultimo.canvas.height = 0;
     ultimo = null;
   };
+
+  // ── La galería: congelar, podar, pintar ───────────────────────────────────
+  //
+  // Congelar es pasar un resultado de VIVO (lienzo + bitmaps: 57 a 226 MB según
+  // la rejilla) a GUARDADO (su JPEG y una miniatura: 4 a 16 MB). El factor es 14,
+  // y es lo que hace que se puedan acumular varios. Las dos cifras están medidas
+  // y la tabla está en `util/mosaico.js`, al lado de los topes que salen de ella.
+
+  // La firma de un resultado: imagen y ajustes. Se guarda en la ficha para que
+  // «Guardar esta» y el congelado automático de «Generar» no dejen el mismo
+  // mosaico dos veces en la galería. Se mira la LISTA y no una variable aparte:
+  // así quitar una tarjeta a mano vuelve a habilitar su firma sin código extra.
+  const firmaDe = (u) => `${nombreImagen}|${u.ladoLargo}|${u.variedad}|${u.tinte}|${u.modo}`;
+  const yaGuardado = (u) => guardados.some(g => g.firma === firmaDe(u));
+
+  /** El nombre del archivo que se descarga. Lleva de qué imagen salió y con qué ajustes. */
+  function nombreDescarga(f) {
+    const base = (f.nombreImagen || 'mosaico').replace(/\.[^.]+$/, '').replace(/[^\p{L}\p{N}]+/gu, '-').replace(/^-|-$/g, '').slice(0, 40).toLowerCase();
+    const et = GRILLAS.find(g => g.n === f.ladoLargo)?.etiqueta.toLowerCase().replace(/\s+/g, '') || f.ladoLargo;
+    const ev = VARIEDADES.find(v => v.n === f.variedad)?.etiqueta.toLowerCase() || f.variedad;
+    return `fonoteca-mosaico-${base || 'imagen'}-${et}-${ev}-tinte${f.tinte}-${f.ancho}x${f.alto}.jpg`;
+  }
+
+  /** La miniatura de un lienzo, como blob. Reduce con suavizado: es una foto, no un recorte. */
+  async function miniaturaDe(canvas, lado) {
+    const k = Math.min(1, lado / Math.max(canvas.width, canvas.height));
+    const m = document.createElement('canvas');
+    m.width = Math.max(1, Math.round(canvas.width * k));
+    m.height = Math.max(1, Math.round(canvas.height * k));
+    const cx = m.getContext('2d', { alpha: false });
+    cx.imageSmoothingEnabled = true; cx.imageSmoothingQuality = 'high';
+    cx.drawImage(canvas, 0, 0, m.width, m.height);
+    const blob = await new Promise(r => m.toBlob(r, 'image/jpeg', 0.85));
+    const salida = blob ? { blob, ancho: m.width, alto: m.height } : null;
+    // El lienzo de la miniatura también tiene backing store: a 0×0 antes de salir.
+    m.width = m.height = 0;
+    return salida;
+  }
+
+  /**
+   * Pasa `ultimo` a la galería. No lo destruye: el que llama decide si además lo
+   * suelta (al generar otro) o lo deja vivo («Guardar esta»).
+   */
+  async function congelarUltimo() {
+    if (!ultimo || yaGuardado(ultimo)) return false;
+    const antes = estado.textContent;
+    di('Guardando este mosaico…');
+    try {
+      const blob = await new Promise(r => ultimo.canvas.toBlob(r, 'image/jpeg', CALIDAD_JPEG));
+      if (!blob) throw new Error('el navegador no ha podido generar el JPEG');
+      const mini = await miniaturaDe(ultimo.canvas, LADO_MINIATURA);
+      const ficha = {
+        id: proximoId++, nombreImagen,
+        ladoLargo: ultimo.ladoLargo, variedad: ultimo.variedad, tinte: ultimo.tinte, modo: ultimo.modo,
+        cols: ultimo.cols, filas: ultimo.filas, ancho: ultimo.ancho, alto: ultimo.alto, lado: ultimo.lado,
+        distintas: ultimo.distintas, deMedio: ultimo.deMedio, cuando: Date.now(),
+      };
+      guardados.unshift({ ...ficha, firma: firmaDe(ultimo), blob, bytes: blob.size, nombre: nombreDescarga(ficha), mini });
+      podar();
+      pintarGaleria();
+      di(antes);
+      return true;
+    } catch (err) {
+      di(antes);
+      showToast(`No he podido guardar este mosaico: ${err.message}`, 'error');
+      return false;
+    }
+  }
+
+  /** Aplica los topes y suelta de verdad lo que se tira (los object URL no se liberan solos). */
+  function podar() {
+    const { quedan, tirados } = podarGaleria(guardados);
+    if (!tirados.length) return;
+    for (const t of tirados) if (t.url) URL.revokeObjectURL(t.url);
+    guardados.length = 0;
+    guardados.push(...quedan);
+  }
+
+  function pintarGaleria() {
+    const caja = $('mos-galeria');
+    const lista = $('mos-galeria-lista');
+    if (!caja || !lista) return;
+    caja.hidden = guardados.length === 0;
+    const bytes = guardados.reduce((a, g) => a + g.bytes, 0);
+    $('mos-galeria-n').textContent = guardados.length ? `${fmtN(guardados.length)} · ${fmtMB(bytes)} MB` : '';
+    lista.innerHTML = guardados.map(g => {
+      // El object URL se crea aquí, una vez por resultado, y se guarda en la
+      // ficha: crearlo en cada repintado dejaría uno colgado por repintado.
+      if (!g.url && g.mini) g.url = URL.createObjectURL(g.mini.blob);
+      const et = GRILLAS.find(x => x.n === g.ladoLargo)?.etiqueta || g.ladoLargo;
+      const ev = VARIEDADES.find(x => x.n === g.variedad)?.etiqueta || g.variedad;
+      return `<li class="mos-tarjeta">
+        <img class="mos-tarjeta-img" src="${g.url}" width="${g.mini?.ancho || ''}" height="${g.mini?.alto || ''}" alt="${escapeHtml(`Mosaico de ${g.nombreImagen}, rejilla ${et}, variedad ${ev}`)}" loading="lazy">
+        <p class="mos-tarjeta-n" title="${escapeHtml(g.nombreImagen)}">${escapeHtml(g.nombreImagen)}</p>
+        <p class="mos-tarjeta-d">${escapeHtml(et)} · ${escapeHtml(String(ev))} · tinte ${g.tinte} % ${g.modo === 'plano' ? 'plano' : 'adaptativo'}</p>
+        <p class="mos-tarjeta-d">${fmtN(g.cols)}×${fmtN(g.filas)} celdas de ${g.lado} px · ${fmtN(g.ancho)}×${fmtN(g.alto)} px</p>
+        <p class="mos-tarjeta-d">${fmtN(g.distintas)} portadas distintas · ΔE ${fmt1(g.deMedio)} · ${fmtMB(g.bytes)} MB</p>
+        <div class="mos-tarjeta-acciones">
+          <button type="button" class="btn btn-secondary" data-bajar="${g.id}">Descargar</button>
+          <button type="button" class="mos-quitar" data-quitar="${g.id}" title="Quitar este de la lista y soltar su memoria">Quitar</button>
+        </div>
+      </li>`;
+    }).join('');
+  }
+
+  // Un solo escuchador para toda la galería: las tarjetas se redibujan enteras en
+  // cada cambio, así que colgarle escuchadores a cada botón los multiplicaría.
+  $('mos-galeria-lista').addEventListener('click', (e) => {
+    const bajar = e.target.closest('[data-bajar]');
+    if (bajar) {
+      const g = guardados.find(x => x.id === Number(bajar.dataset.bajar));
+      if (!g) return;
+      descargarBlob(g.blob, g.nombre);
+      showToast(`${g.nombre} — ${fmtN(g.ancho)}×${fmtN(g.alto)} px, ${fmtMB(g.bytes)} MB`, 'success');
+      return;
+    }
+    const quitar = e.target.closest('[data-quitar]');
+    if (!quitar) return;
+    const i = guardados.findIndex(x => x.id === Number(quitar.dataset.quitar));
+    if (i < 0) return;
+    if (guardados[i].url) URL.revokeObjectURL(guardados[i].url);
+    guardados.splice(i, 1);
+    pintarGaleria();
+  });
 
   // ── La imagen que sube el usuario ─────────────────────────────────────────
   // El `<input type=file>` nativo va escondido (sigue siendo el que recibe el
@@ -220,6 +389,7 @@ export async function render(container) {
     const file = e.currentTarget.files?.[0];
     if (!file) return;
     const lugar = $('mos-archivo');
+    nombreImagen = file.name;
     lugar.textContent = file.name;
     lugar.title = file.name;
     lugar.classList.add('is-set');
@@ -240,11 +410,10 @@ export async function render(container) {
       cl.imageSmoothingEnabled = true; cl.imageSmoothingQuality = 'high';
       cl.drawImage(bitmapObjetivo, 0, 0, w, h);
       pixelesObjetivo = { rgba: cl.getImageData(0, 0, w, h).data, ancho: w, alto: h };
-      const g = grillaPara(w, h, ladoLargo);
-      di(`Imagen de ${fmtN(w0)}×${fmtN(h0)} px${k < 1 ? ` (leída a ${fmtN(w)}×${fmtN(h)})` : ''} · rejilla ${g.cols}×${g.filas} = ${fmtN(g.cols * g.filas)} celdas → ${fmtN(g.cols * LADO_CELDA)}×${fmtN(g.filas * LADO_CELDA)} px`);
-      $('mos-generar').disabled = false;
+      decirLaRejilla(`Imagen de ${fmtN(w0)}×${fmtN(h0)} px${k < 1 ? ` (leída a ${fmtN(w)}×${fmtN(h)})` : ''} · `);
     } catch (err) {
       pixelesObjetivo = null;
+      nombreImagen = '';
       lugar.textContent = 'Ninguna imagen elegida';
       lugar.title = '';
       lugar.classList.remove('is-set');
@@ -254,14 +423,38 @@ export async function render(container) {
   });
 
   // ── Controles ─────────────────────────────────────────────────────────────
+  /**
+   * La línea de estado con lo que va a salir, y el único sitio que decide si
+   * «Generar» se puede pulsar.
+   *
+   * ⚠️ **Avisa ANTES si la imagen es demasiado chica para la rejilla.** Las dos
+   * rejillas nuevas lo hacen posible de verdad: con 240 celdas de lado largo
+   * `rejillaDelObjetivo` exige 720 px de lado largo en la imagen, y una foto de
+   * 600 px tiraba recién al final de «Generar», con un toast rojo y después de
+   * haber hecho LAB. Decirlo en la línea de estado cuesta una resta.
+   */
+  function decirLaRejilla(prefijo = '') {
+    if (!pixelesObjetivo) return;
+    const { ancho: w, alto: h } = pixelesObjetivo;
+    const sal = salidaPara(w, h, ladoLargo);
+    const pxPorCelda = Math.min(Math.floor(w / sal.cols), Math.floor(h / sal.filas));
+    const cabe = pxPorCelda >= PX_MINIMOS_POR_CELDA;
+    $('mos-generar').disabled = !cabe;
+    if (!cabe) {
+      di(`${prefijo}Esta imagen es demasiado chica para la rejilla «${GRILLAS.find(g => g.n === ladoLargo)?.etiqueta}»:`
+        + ` ${fmtN(sal.cols)}×${fmtN(sal.filas)} celdas le dejan ${pxPorCelda} px por celda y hacen falta ${PX_MINIMOS_POR_CELDA}.`
+        + ` Elige una rejilla más gruesa o una imagen más grande.`);
+      return;
+    }
+    di(`${prefijo}rejilla ${fmtN(sal.cols)}×${fmtN(sal.filas)} = ${fmtN(sal.celdas)} celdas de ${sal.lado} px`
+      + ` → ${fmtN(sal.ancho)}×${fmtN(sal.alto)} px${prefijo ? '' : '. Pulsa «Generar».'}`);
+  }
+
   container.querySelectorAll('[data-grilla]').forEach(btn => {
     btn.addEventListener('click', () => {
       ladoLargo = Number(btn.dataset.grilla);
       marcar('data-grilla', btn);
-      if (pixelesObjetivo) {
-        const g = grillaPara(pixelesObjetivo.ancho, pixelesObjetivo.alto, ladoLargo);
-        di(`Rejilla ${g.cols}×${g.filas} = ${fmtN(g.cols * g.filas)} celdas → ${fmtN(g.cols * LADO_CELDA)}×${fmtN(g.filas * LADO_CELDA)} px. Pulsa «Generar».`);
-      }
+      decirLaRejilla();
     });
   });
 
@@ -312,6 +505,10 @@ export async function render(container) {
   async function componer() {
     const t0 = performance.now();
     if (!pixelesObjetivo) return;
+    // El que había NO se pierde: se congela a JPEG + miniatura y queda en la
+    // galería. Es el bug que abre esta tanda: Ian generaba uno, subía otra
+    // imagen, y el primero desaparecía sin dejar nada.
+    await congelarUltimo();
     soltarSalida();
     ctrl = new AbortController();
     $('mos-generar').disabled = true;
@@ -326,23 +523,28 @@ export async function render(container) {
       }
       const tLab = performance.now();
 
-      const { cols, filas } = grillaPara(pixelesObjetivo.ancho, pixelesObjetivo.alto, ladoLargo);
+      const { cols, filas, lado, ancho, alto } = salidaPara(pixelesObjetivo.ancho, pixelesObjetivo.alto, ladoLargo);
       const objetivo = rejillaDelObjetivo(pixelesObjetivo.rgba, pixelesObjetivo.ancho, pixelesObjetivo.alto, cols, filas);
       const tObj = performance.now();
 
       di(`Buscando la portada de cada celda (${fmtN(cols * filas)} celdas × ${fmtN(nTiles)} portadas)…`);
-      await new Promise(r => setTimeout(r, 0));
-      const { indice, de } = emparejar({
+      // ⚠️ **`emparejarCediendo` y no `emparejar`**: con 43.200 celdas el
+      // emparejado es del orden del minuto, y el síncrono lo hace sin devolver el
+      // hilo ni una vez — el texto de progreso no se pinta y el clic en «Detener»
+      // se queda en la cola hasta que termina, o sea que no detiene nada. El
+      // porqué entero está en su comentario, en `util/mosaico.js`.
+      const { indice, de } = await emparejarCediendo({
         objetivo, tilesLab, nTiles, penalUsoDE: variedad, signal: ctrl.signal,
-        onProgress: (hechas, total) => { if (hechas % (cols * 8) === 0) di(`Emparejando… ${Math.round((100 * hechas) / total)} %`); },
+        onProgress: (hechas, total) => di(`Emparejando… ${Math.round((100 * hechas) / total)} % (${fmtN(hechas)} de ${fmtN(total)} celdas)`),
       });
       if (ctrl.signal.aborted) { di('Detenido.'); return; }
       const tEmp = performance.now();
 
-      // Un canvas del tamaño final. Los límites de Chrome quedan lejos:
-      // dimensión máxima 16.384 px y ~268 MP de área; 120 celdas de lado largo
-      // con una imagen 3:4 son 7.680×10.240 = 78,6 MP.
-      const ancho = cols * LADO_CELDA, alto = filas * LADO_CELDA;
+      // Un canvas del tamaño final. Los límites de Chrome quedan lejos porque
+      // `ladoDeCelda()` topa el largo en 7.680 px: con una imagen 3:4 el peor
+      // caso son 5.760×7.680 = 44,2 MP, contra una dimensión máxima de 16.384 px
+      // y ~268 MP de área. Sin ese tope, 240 celdas de lado largo a 64 px serían
+      // 11.520×15.360 = 177 MP y 708 MB de backing store.
       const canvas = document.createElement('canvas');
       canvas.width = ancho; canvas.height = alto;
       const ctx = canvas.getContext('2d', { alpha: false });
@@ -355,15 +557,24 @@ export async function render(container) {
       if (ctrl.signal.aborted) { soltarBitmaps(bitmaps); canvas.width = canvas.height = 0; di('Detenido.'); return; }
       const tRed = performance.now();
 
-      ultimo = { canvas, ctx, cols, filas, indice, de, bitmaps, porPortada, portadas, ancho, alto, fallidas, bytes, ms: { lab: tLab - t0, obj: tObj - tLab, emp: tEmp - tObj, red: tRed - tEmp } };
+      const r = resumenDeEmparejado({ indice, de, cols, filas });
+      // `ladoLargo`, `variedad`, `tinte` y `modo` se copian AQUÍ, en el resultado:
+      // los cuatro controles se pueden mover después de generar sin volver a
+      // generar, y la ficha que va a la galería tiene que decir con qué ajustes
+      // se hizo ESTE mosaico, no cómo están los botones ahora. (El tinte y el
+      // reparto los actualiza `pintar()`, que es quien de verdad los aplica.)
+      ultimo = {
+        canvas, ctx, cols, filas, lado, indice, de, bitmaps, porPortada, portadas, ancho, alto, fallidas, bytes,
+        ladoLargo, variedad, tinte, modo, distintas: r.distintas, deMedio: r.deMedio,
+        ms: { lab: tLab - t0, obj: tObj - tLab, emp: tEmp - tObj, red: tRed - tEmp },
+      };
       pintar();
       const tFin = performance.now();
       ultimo.ms.pintar = tFin - tRed;
       ultimo.ms.total = tFin - t0;
 
-      const r = resumenDeEmparejado({ indice, de, cols, filas });
       $('mos-salida').hidden = false;
-      $('mos-resumen').textContent = `${fmtN(cols)}×${fmtN(filas)} celdas · ${fmtN(ancho)}×${fmtN(alto)} px`
+      $('mos-resumen').textContent = `${fmtN(cols)}×${fmtN(filas)} celdas de ${lado} px · ${fmtN(ancho)}×${fmtN(alto)} px`
         + ` · ${fmtN(r.distintas)} portadas distintas, la más repetida ${fmtN(r.masRepetida)} veces`
         + ` · ${fmt1(r.distintasPorVentana)} distintas por cada ${fmt1(r.celdasPorVentana)} celdas vecinas`
         + ` · parecido medio ΔE ${fmt1(r.deMedio)}`
@@ -372,7 +583,7 @@ export async function render(container) {
       di(`Listo en ${fmt1(ultimo.ms.total / 1000)} s`
         + ` (LAB ${Math.round(ultimo.ms.lab)} ms · rejilla del objetivo ${Math.round(ultimo.ms.obj)} ms`
         + ` · emparejado ${Math.round(ultimo.ms.emp)} ms · portadas ${fmt1(ultimo.ms.red / 1000)} s · dibujo ${Math.round(ultimo.ms.pintar)} ms).`);
-      console.log('[mosaico]', { cols, filas, ancho, alto, ...r, ms: ultimo.ms, bytes });
+      console.log('[mosaico]', { cols, filas, lado, ancho, alto, ...r, ms: ultimo.ms, bytes });
     } catch (err) {
       console.error('[mosaico]', err);
       di('');
@@ -386,9 +597,13 @@ export async function render(container) {
 
   /** Dibuja las portadas y el tinte encima. Sin red: usa los bitmaps guardados. */
   function pintar() {
-    const { ctx, cols, filas, porPortada, bitmaps, de, ancho, alto } = ultimo;
+    const { ctx, cols, filas, lado, porPortada, bitmaps, de } = ultimo;
+    // El tinte y el reparto de ESTE lienzo son los que se están aplicando ahora:
+    // el deslizador repinta sin regenerar, así que la verdad de lo que se ve
+    // (y de lo que se va a guardar en la galería) se anota acá.
+    ultimo.tinte = tinte; ultimo.modo = modo;
     pintarMosaico({
-      ctx, cols, filas, ladoCelda: LADO_CELDA, porPortada, bitmaps,
+      ctx, cols, filas, ladoCelda: lado, porPortada, bitmaps,
       fuenteTinte: lienzoLectura,
       alfa: mapaDeTinte({ de, cols, filas, escala: tinte / 100, modo }),
       plano: modo === 'plano',
@@ -430,13 +645,32 @@ export async function render(container) {
     const btn = $('mos-descargar');
     btn.disabled = true;
     try {
-      const blob = await new Promise(res => ultimo.canvas.toBlob(res, 'image/jpeg', 0.92));
+      // Se genera de nuevo y no se reusa el de la galería: el deslizador del
+      // tinte pudo moverse después de guardarlo, y lo que se descarga tiene que
+      // ser lo que está en pantalla.
+      const blob = await new Promise(res => ultimo.canvas.toBlob(res, 'image/jpeg', CALIDAD_JPEG));
       if (!blob) throw new Error('el navegador no ha podido generar el archivo');
-      const nombre = `fonoteca-mosaico-${ultimo.ancho}x${ultimo.alto}-tinte${tinte}.jpg`;
+      const nombre = nombreDescarga({ ...ultimo, nombreImagen });
       descargarBlob(blob, nombre);
       showToast(`${nombre} — ${fmtN(ultimo.ancho)}×${fmtN(ultimo.alto)} px, ${fmtMB(blob.size)} MB`, 'success');
     } catch (err) {
       showToast(`No he podido preparar la descarga: ${err.message}`, 'error');
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
+  // «Guardar esta»: congela una copia del que está vivo SIN destruirlo. Es lo que
+  // permite comparar dos tintes del mismo emparejado, que es la comparación más
+  // barata que hay (el deslizador solo repinta) y la que de otra forma obligaría
+  // a pagar el emparejado entero otra vez — hasta un minuto en la rejilla más fina.
+  $('mos-guardar').addEventListener('click', async () => {
+    const btn = $('mos-guardar');
+    if (!ultimo) return;
+    btn.disabled = true;
+    try {
+      if (await congelarUltimo()) showToast(`Guardado. Son ${fmtN(guardados.length)} de ${TOPE_GUARDADOS}.`, 'success');
+      else showToast('Este mosaico, con estos ajustes, ya está guardado.', 'info');
     } finally {
       btn.disabled = false;
     }
@@ -448,6 +682,10 @@ export async function render(container) {
     ctrl?.abort();
     clearTimeout(pendiente);
     soltarSalida();
+    // La galería: los object URL NO se liberan solos, y cada uno retiene su blob.
+    // Los JPEG enteros (hasta 16 MB cada uno) se van con el array.
+    for (const g of guardados) if (g.url) URL.revokeObjectURL(g.url);
+    guardados.length = 0;
     bitmapObjetivo?.close?.();
     bitmapObjetivo = null;
     if (lienzoLectura) { lienzoLectura.width = lienzoLectura.height = 0; lienzoLectura = null; }
