@@ -1245,10 +1245,22 @@ h3 { font-size: 18px; font-weight: 600; }
   height: 280px;
 }
 
-/* Top 20 artistas del historial: 20 barras horizontales necesitan más alto.
-   Va después de la regla wide para ganarle. */
+/* Top 20 artistas del historial: 20 barras horizontales necesitan más alto que
+   los demás charts. Va después de la regla wide para ganarle.
+
+   ⚠️ 440 px no es un número al azar: es el alto más chico que deja los 20
+   nombres legibles. Con 62 px de eje X y título, 440 da una banda de 18,9 px
+   por barra contra los 16,8 px de línea de la tipografía del eje (Inter 14) —
+   2,1 px de aire. A 420 la banda baja a 17,9 y el aire se vuelve 1,1.
+
+   ⚠️ Y el alto SOLO es seguro porque el eje Y lleva `autoSkip: false` (ver
+   `dashboard.js`). Sin eso, Chart.js decide por su cuenta y a partir de una
+   banda de 19,6 px pinta DIEZ etiquetas en vez de veinte: se come la mitad de
+   los nombres sin fallar y sin avisar. El escalón está entre 455 y 460 px, o
+   sea que el 620 de antes tenía margen de sobra y cualquier recorte caía justo
+   del otro lado. Medido el 2026-10-07 en el navegador, 1366×768. */
 .dash-chart-wide .chart-box.chart-box-tall {
-  height: 620px;
+  height: 440px;
 }
 
 /* ── Mobile ── */
@@ -2947,7 +2959,7 @@ h3 { font-size: 18px; font-weight: 600; }
   canvas { max-width: 100% !important; }
   .chart-box { height: 220px !important; }
   .dash-chart-wide .chart-box { height: 260px !important; }
-  .dash-chart-wide .chart-box.chart-box-tall { height: 520px !important; }
+  .dash-chart-wide .chart-box.chart-box-tall { height: 440px !important; }
   /* Top 20 álbumes: 1 columna en mobile (era 2 hardcoded inline)
      minmax(0, 1fr) es CRÍTICO — con solo "1fr" el content-based min-width
      hace que la columna se expanda a lo ancho del texto más largo. */

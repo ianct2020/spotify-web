@@ -1000,7 +1000,19 @@ function pintarGraficosHistorial(h) {
           },
           y: {
             ...CHART_DEFAULTS.scales.y,
-            ticks: { ...CHART_DEFAULTS.scales.y.ticks, font: { family: 'Inter', size: 14, weight: '500' } },
+            // ⚠️ `autoSkip: false` es lo que sostiene el alto de `.chart-box-tall`.
+            //
+            // Por defecto Chart.js decide solo cuántas etiquetas de categoría
+            // caben, y cuando la banda por barra baja de ~19,6 px pinta DIEZ en
+            // vez de veinte: la mitad de los artistas desaparece del eje sin
+            // fallar, sin avisar y sin que el DOM cambie de tamaño. Medido el
+            // 2026-10-07: a 460 px de caja salen 20 etiquetas, a 455 salen 10.
+            //
+            // Con el skip apagado siempre se pintan las veinte y el único límite
+            // pasa a ser el solape, que es visible y se puede medir: la banda
+            // tiene que quedar por encima de la línea de la tipografía (16,8 px
+            // con Inter 14). Ésa es la cuenta que fija el 440 px de la hoja.
+            ticks: { ...CHART_DEFAULTS.scales.y.ticks, autoSkip: false, font: { family: 'Inter', size: 14, weight: '500' } },
           },
         },
       },
