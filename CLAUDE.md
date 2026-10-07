@@ -1801,12 +1801,38 @@ el 06/10). Si el caché está frío devuelve `source: 'empty'` y la vista pinta 
 cartel. Ésa es la razón de que la mitad de la tabla esté en 0 y la que hace que
 el costo NO escale con el tamaño de la biblioteca en esas vistas.
 
+### ⚠️ `#dashboard` NO es 0 peticiones (medido 2026-10-07)
+
+La fila de la tabla decía **0 en frío y 0 en caliente** y estaba marcada «leída del
+código». Medido en el navegador con la red cortada y los topes en cero, `#dashboard`
+dispara dos cosas que esa lectura no vio:
+
+1. **Un `/v1/me` de más.** Arrancar la app en `#home` cuesta **1** —el gate de
+   `testConnection()` en `app.js:257`, que es lo que dice la nota del arranque—, pero
+   arrancar en `#dashboard` cuesta **2**: el segundo lo pide `getCurrentUserId()`
+   (`api.js:1050`), al que llega `loadOne()` de `history-data.js` para resolver si el
+   user es el owner antes de servir el historial. Sale 11 ms después del primero, en la
+   misma ráfaga de arranque. Los dos GET se contaron uno por uno en ocho cargas: **2 por
+   carga, siempre**, contra **1 por carga** en `#home`.
+2. **La playlist del espejo de sync**, al elegir «Usar los de la caché»: `/playlists/{id}`
+   y `/playlists/{id}/items`. Es `refreshLastSyncLabel()`, que `render()` llama en la
+   línea 103 — ya anotado en `PENDIENTES.md` desde antes, pero nunca llevado a la tabla.
+
+⚠️ **Del punto 2 no se sabe el número exacto.** Lo que se vio fueron los **preflight
+OPTIONS** (6 y 3 en una apertura), y un preflight que falla se reintenta, así que ese 6
+y ese 3 traen reintentos adentro. Lo que sí queda firme es que **no es cero**: el piso es
+1 + 1. Para el número de verdad hace falta dejar pasar los preflight y contar los GET.
+
+La moraleja es la de siempre y se repite: **«leída del código» no es una medición.** La
+fila sobrevivió así desde que se armó la tabla.
+
 ### Las 24 vistas del menú
 
 | vista | en frío | en caliente | endpoints que dispara | de qué depende | capa |
 |---|---:|---:|---|---|---|
 | **General** | | | | | |
-| `#dashboard` | **0** | **0** | — (stats.fm/Last.fm no son Spotify) | — | leída del código |
+| `#dashboard` | **1 `/me` + 1 `/playlists/{id}` + 1 `/items`** | ídem | `/v1/me` de `getCurrentUserId()` + la playlist del espejo de sync | fijo | **medida en vivo el 2026-10-07** |
+| ↳ y lo que decía antes (**0/0**) era FALSO | | | | | ver la nota de abajo |
 | `#wrapped` | **0** | **0** | — con historial | — | leída del código |
 | ↳ sin historial (`renderLite`) | **2** | **2** | 2 × `/me/top/{artists,tracks}` | fijo | leída del código |
 | `#records` | **0** | **0** | — | — | leída del código |
