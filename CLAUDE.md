@@ -1984,6 +1984,94 @@ guardados en `localKey(uid, …)` — su IDB, su navegador, nada sale de su comp
 O sea que las vistas de historial **no están rotas para él: están vacías hasta
 que importe.**
 
+### 🖼️ De dónde salen las 5.715 portadas de `mosaico_colores_v1` (censo del 2026-10-07)
+
+M.4 del encargo del 07/10, para la pregunta de Ian: *«¿un amigo puede armar su
+propio mosaico?»*. **Censo: no se cambió ni una línea.** Leído de
+`armarCatalogo()` (`features/mosaico-colores.js`) y cotejado en el navegador de
+Ian contra la base guardada. **0 peticiones a `api.spotify.com`**; el censo de
+IndexedDB dio el MISMO SHA-256 antes y después (`17ef5bb6…`, 1.055 claves).
+
+**El catálogo tiene DOS patas, y solo dos:**
+
+| pata | de dónde sale | filas | `coverId` únicos |
+|---|---|---:|---:|
+| **álbumes escuchados** | `loadListenedAlbums()` → `data/history-listened-albums.json` | **2.492** | **2.475** |
+| **me gusta** | `getBestAvailableLikes()` → el caché `all_liked_tracks` | **9.176** | **4.739** (6 sin tapa) |
+| | en las dos a la vez | | **1.498** |
+| | **unión** | | **5.716** |
+
+🟥 **NO entran las discografías escaneadas.** `discover_disco_base_v1_*` (353 en
+el navegador de Ian) no se lee en ningún punto de `armarCatalogo()`. Tampoco
+«w three»: está descartado a propósito, porque pedir esa playlist costaría
+peticiones a la API y el mosaico vale **0**. Y no se pasa por el `buildList()` de
+`covers.js`, que contesta otra pregunta (qué ÁLBUMES pintar, fusionando por
+nombre antes que por imagen).
+
+**«Única» es por `coverId`** (`util/album-key.js`): los 24 hex del final de la
+URL de la tapa, o sea el hash de la imagen. Dos álbumes distintos con la misma
+portada son UNA tesela, que para un mosaico es lo correcto.
+
+#### El 5.715 contra el 5.716, y el 2.543 que no es de aquí
+
+- **5.716 − 5.715 = 1.** La que falta es `lostrushi — REAL DILLA`
+  (`8c4a0027…`), **un me gusta del 05/10**: la base se construyó el **27/09** y
+  no se ha vuelto a pasar. Es el único `added_at` posterior a esa fecha en el
+  caché de likes, y la base es reanudable — una tanda más en `#debug` la deja en
+  5.716. `fallidas` está en **0**: no falló nada, sencillamente llegó después.
+- 🟥 **Los «2.543 álbumes escuchados» NO son de esta vista.** Ése es el total de
+  **`#covers`** (historial ∪ «w three», fusionado por nombre de álbum: 2.469 + 74
+  sin fecha, medido en M.5 el 07/10). Lo que el mosaico come del historial son
+  **2.492 filas → 2.475 tapas únicas**. Los dos números describen cosas
+  distintas y no hay que cuadrarlos.
+
+#### La prueba empírica: el host de cada portada parte el catálogo en dos
+
+La base guarda de qué host bajó cada miniatura, y el reparto **coincide exacto**
+con las dos patas, sin que nadie lo haya programado así:
+
+| host | portadas | qué es |
+|---|---:|---|
+| `image-cdn-ak.spotifycdn.com` | 1.997 | las URL que trae el JSON del historial |
+| `image-cdn-fa.spotifycdn.com` | 478 | ídem · **1.997 + 478 = 2.475 = la pata «escuchadas»** |
+| `i.scdn.co` | 3.240 | las URL que devuelve la API en vivo · **= 3.241 solo-likes − la que falta** |
+
+Las 1.498 compartidas caen del lado de `image-cdn-*` porque `armarCatalogo()`
+recorre **primero** el historial y `anotar()` conserva la primera URL que vio.
+
+#### Qué ve alguien que solo tiene login
+
+🟥 **Nada: el catálogo le da CERO portadas**, y las dos patas se le caen por
+motivos distintos.
+
+1. **El historial no lo hereda.** `loadListenedAlbums()` pasa por `loadOne()`,
+   que con `uid !== HISTORY_OWNER_ID` y sin BYOH hace `return null` **antes** de
+   mirar ningún dato. Es el candado de v=190, y es deliberado.
+2. **El caché de likes nace vacío.** `getBestAvailableLikes()` tiene
+   `allowFetch: false` por defecto y **nadie en el repo pasa `true`**: en frío
+   devuelve `{ items: [], source: 'empty' }` sin pedir nada.
+
+Así que `#mosaico` le enseña **«Todavía no hay base de colores»** y los controles
+ni se muestran (`features/mosaico.js`, la guarda de `reg.ids?.length`).
+
+**Lo que sí puede hacer, en dos pasos y sin trampa:**
+
+- **Cargar sus likes** (`#dashboard` → «Cargar desde Spotify», `ceil(L/50)`
+  peticiones, una vez) y **construir la base en `#debug`** → «Base de colores del
+  mosaico». Ese botón **no tiene candado de owner**, y lo que baja va al CDN de
+  imágenes, que no gasta cuota. Su mosaico sale hecho **solo con las tapas de sus
+  me gusta**.
+  ⚠️ `#debug` **no está en el menú**: hay que escribir el hash en la URL.
+- **Sumar la pata de escuchados** importando su propio ZIP de *Extended Streaming
+  History* («Mi historial» → `openImportHistory`). `loadOne()` busca
+  `localKey(uid, 'listened')` **para cualquier usuario** antes de preguntar por el
+  owner, así que con BYOH el mosaico de un amigo gana sus álbumes escuchados.
+  🟩 Es, de hecho, la única vista de las dos de tapas que BYOH sí abre: `#covers`
+  y `#wthree` quedan bloqueadas igual (ver los dos candados, más abajo).
+
+🟩 **Respuesta corta para Ian: sí, un amigo puede armar su propio mosaico, y le
+cuesta una carga de likes.** Lo que no puede es usar las tuyas.
+
 ### Las 24 vistas, por lo que necesitan
 
 | vista | con solo login | necesita además | sin eso, qué pasa | capa |
@@ -1995,7 +2083,7 @@ que importe.**
 | `#zombies` | ✅ | — | anda | leída del código |
 | `#versions` | ✅ | — | anda | leída del código |
 | `#sin-clasificar` | ✅ | — | anda | leída del código |
-| `#mosaico` | — | **base de colores** (`mosaico_colores_v1`) | «Todavía no hay base de colores»; se construye en `#debug`, sin cuota de Spotify | leída del código |
+| `#mosaico` | — | **base de colores** (`mosaico_colores_v1`), y antes **el caché de likes**: sin él el catálogo da **0 portadas** (ver el censo de arriba) | «Todavía no hay base de colores»; se construye en `#debug` (que no está en el menú), sin cuota de Spotify | leída del código **y medida el 2026-10-07** |
 | `#search` | — | caché de likes | cartel: «No hay likes cacheados» + link al Dashboard | leída del código |
 | `#byartist` | — | caché de likes | cartel con botón de carga | leída del código |
 | `#genre` | — | caché de likes · stats.fm opcional | cartel | leída del código |
