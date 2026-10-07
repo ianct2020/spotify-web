@@ -1233,6 +1233,7 @@ document.addEventListener('previewchange', (e) => {
  */
 export function renderAlbumCard(al, artistName, {
   checkClass = 'dcard-check', selected = false, showHeard = false, hiddenMode = false,
+  menuArtistaHtml = '',
 } = {}) {
   const tipo = al.type === 'single' ? 'single' : (al.type === 'compilation' ? 'recopilatorio' : 'álbum');
   // El botón dice a dónde va DE VERDAD. Un single suelto no se guarda en la
@@ -1247,6 +1248,14 @@ export function renderAlbumCard(al, artistName, {
   const id = escapeHtml(al.id);
   const artista = escapeHtml(artistName);
   const sonando = playingKey() === previewKeyOf(al.id);
+  // `menuArtistaHtml` es el ⋮ de «ocultar este artista» (v=278), que pone la VISTA
+  // —`#new-releases`, no la tarjeta: la tarjeta es de dos vistas y en
+  // `#discover-artists` el artista ya tiene su cabecera con su propio ⋮. Acá solo
+  // se le hace sitio al lado del nombre; de dónde sale el botón no es asunto suyo.
+  const nombreArtista = `<button type="button" class="dcard-artist" data-open-artist-card="${artista}">${artista}</button>`;
+  const botonArtista = menuArtistaHtml
+    ? `<div class="dcard-artista-fila">${nombreArtista}${menuArtistaHtml}</div>`
+    : nombreArtista;
   return `
     <div class="dcard${selected ? ' is-sel' : ''}" data-id="${id}" data-artist="${artista}">
       <label class="dcard-check-wrap" title="Seleccionar">
@@ -1264,7 +1273,7 @@ export function renderAlbumCard(al, artistName, {
         </div>
         <div class="dcard-info">
           <button type="button" class="dcard-name" data-open-album="${id}" data-open-artist="${artista}">${escapeHtml(al.name)}</button>
-          <button type="button" class="dcard-artist" data-open-artist-card="${artista}">${artista}</button>
+          ${botonArtista}
           <div class="dcard-meta">${escapeHtml(fmtRelease(al.release))} · ${tipo}</div>
           <div class="dcard-meta">${al.total ? `${al.total} pista${al.total === 1 ? '' : 's'}` : 'pistas: sin dato'}</div>
         </div>

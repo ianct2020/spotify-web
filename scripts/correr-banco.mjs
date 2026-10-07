@@ -56,7 +56,10 @@ const EXTRA = { mosaico: 'auto=1' };
 //   · `ocultar-artista-disco`, 180 s → 7/8 · 300 s → 6/6 · 450 s → 6/6
 // El de disco queda en 450 s, un escalón por encima del primero que acertó
 // siempre. No es tiempo de pared: las dos corridas juntas tardan ~15 s.
-const PRESUPUESTO = { 'ocultar-artista': 90000, 'ocultar-artista-disco': 450000 };
+// `ocultar-artista-novedades` (v=278) abre #new-releases —barata— y TAMBIÉN
+// #discover-artists, para probar que comparten el almacén en las dos direcciones:
+// hereda su presupuesto. Medido a tasa de acierto, igual que los otros (ver abajo).
+const PRESUPUESTO = { 'ocultar-artista': 90000, 'ocultar-artista-disco': 450000, 'ocultar-artista-novedades': 900000 };
 // `XQ="&peor=1"` agrega parámetros a la URL del banco sin tocar este archivo: sirve
 // para medir (p. ej. el ancho mínimo en que la barra de novedades sigue en una fila).
 

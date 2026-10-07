@@ -41,14 +41,16 @@ if npm test --silent 2>&1 | tail -4 | sed 's/^/      /'; [ "${PIPESTATUS[0]}" -e
 # `mosaico` y `toasts` entraron en v=273:
 # estaban en rojo desde antes del 04/10 y justamente por no estar acá nadie los
 # miraba, igual que le había pasado a `barra` entre v=241 y v=261.
-echo "2b. bancos (barra · pausa-search · toasts · mosaico · novedades · escrituras · ocultar-artista ×2)"
+echo "2b. bancos (barra · pausa-search · toasts · mosaico · novedades · escrituras · ocultar-artista ×3)"
 # Los dos de `ocultar-artista` entraron en v=276: las TRES vistas que ocultan
 # artistas, reales, contra una Spotify simulada. Es el único sitio donde se puede
 # probar ocultar sin escribir en la cuenta de Ian, y el de `-disco` es el que
 # vigila que el control no rompa la barra de #discover-artists a dos filas (que a
 # 1.356 px la rompía). Van separados porque juntos no se estabilizaban: ver el
 # comentario de PRESUPUESTO en scripts/correr-banco.mjs.
-for B in barra pausa-search toasts mosaico novedades escrituras ocultar-artista ocultar-artista-disco; do
+# `ocultar-artista-novedades` entró en v=278: la quinta vista, #new-releases, y que
+# comparte el almacén con #discover-artists en las dos direcciones.
+for B in barra pausa-search toasts mosaico novedades escrituras ocultar-artista ocultar-artista-disco ocultar-artista-novedades; do
   if node scripts/correr-banco.mjs "$B" 2>&1 | sed 's/^/      /'; [ "${PIPESTATUS[0]}" -eq 0 ]; then
     ok "banco $B en verde"
   else

@@ -1598,7 +1598,7 @@ No hay forma de crear ni convertir una playlist a privada por API
 post-migración. Si una feature necesita privacidad, el usuario tiene que
 pasarla a privada a mano desde la app de Spotify.
 
-## Ocultar un ARTISTA, en cuatro vistas y con un solo almacén (v=276, 2026-10-06)
+## Ocultar un ARTISTA, en cinco vistas y con un solo almacén (v=276, 2026-10-06; la quinta, #new-releases, v=278)
 
 `#similar`, `#discover-artists` y `#follow-artists` no dejaban ocultar artistas
 (puntos 10, 12 y 13 del feedback de Ian del 04/10). Ahora las tres lo hacen, y
@@ -1609,7 +1609,7 @@ oculto un artista» sino «dónde vive», porque cada almacén re-pagina su play
 entera en cada sesión de página (`useCache:false`). La respuesta: **`recs_ocultos`
 ya ES un almacén de artistas** —clave = nombre en minúsculas, con su playlist
 espejo y su `recuperarUriDeArtistaKey`—, así que se mudó de `recommendations.js` a
-`features/artistas-ocultos.js` y lo comparten las cuatro. Un séptimo habría
+`features/artistas-ocultos.js` y lo comparten las cinco (cuatro en v=276, `#new-releases` en v=278). Un séptimo habría
 costado **lo mismo al abrir** (`1 /playlists/{id}` + `ceil(Ha/100)`) **más** una
 playlist nueva en la cuenta, y encima habría dejado que un artista oculto en
 `#similar` siguiera saliendo en `#recs` — el mismo bug que `discover-common.js`
@@ -1671,12 +1671,33 @@ bloque aparte que no compite con nada, y sale vacía cuando no hay ningún artis
 oculto. El banco afirma que la barra tiene las **mismas filas** antes y después
 del control y con el contador en 183, así que un botón nuevo ahí vuelve a fallar.
 
+### La quinta vista: `#new-releases` (v=278, 2026-10-07)
+
+Se reusó la pieza SIN tocarla: `alternarArtistaOculto`, `claveDeArtista`,
+`artistaEstaOculto`, `botonMenuArtistaHtml` y `conectarMenuArtista` siguen con
+**una sola definición** y `tests/artistas-ocultos.test.mjs` cuenta cinco vistas.
+
+- **No hay cabecera de artista**: la grilla es plana, una tarjeta por lanzamiento.
+  El ⋮ va **en cada tarjeta, al lado del nombre del artista**, y `renderAlbumCard`
+  recibe el botón ya hecho por la vista (`menuArtistaHtml`, opt-in: `#discover-artists`
+  no lo pasa y su tarjeta no cambia). El click derecho solo abre el menú sobre esa
+  línea (`.dcard-artista-fila`), nunca sobre la tapa.
+- **El control NO está en `.disco-controls`** (quedó con 69 px libres el 05/10 y el
+  botón mide 143/159): va en `.disco-linea-artistas`, igual que en
+  `#discover-artists`, y sale vacío con 0 ocultos. El banco
+  `ocultar-artista-novedades` afirma que la barra tiene las mismas filas y la
+  misma altura antes y después, a 1.351 y a 1.356 px.
+- **Modo «Artistas ocultos»** (`state.mode === 'artistas'`): invierte el filtro y es
+  desde donde se devuelve. Los modos son excluyentes con «Ocultos» (álbumes).
+- **Costo: +2** peticiones al abrir (`1 /playlists/{id}` + `ceil(Ha/100)`), medido
+  contra una Spotify simulada con la forma de Ian: 5 → 7. La fila de la tabla lo dice.
+
 ### Lo que NO se hizo
 
-- **`#new-releases` no poda artistas.** Comparte `hiddenAlbums` con
-  `#discover-artists`, así que ocultar un ÁLBUM vale en las dos, pero ocultar un
-  ARTISTA hoy solo vale en `#discover-artists`. Sumarlo son **+2** peticiones al
-  abrir esa vista; nadie lo pidió en esta tanda y no se metió de prestado.
+- ~~**`#new-releases` no poda artistas.**~~ **Hecho en v=278 (07/10):** es la quinta
+  vista de la misma pieza y costó los **+2** peticiones al abrir que decía acá
+  (ver la tabla de costos). Ocultar un álbum **y** ocultar un artista valen ya en
+  las dos vistas de descubrir.
 - **El `useCache:false` sigue tal cual** (ver más arriba). Lo que costaría tocarlo
   está medido, pero es su propio encargo.
 
@@ -1792,6 +1813,7 @@ el costo NO escale con el tamaño de la biblioteca en esas vistas.
 | ↳ **+2 desde v=276** (ocultar artistas) → **11** | **2** | **+ la playlist de ocultos («recomendados»)** | ídem que arriba | nº de artistas ocultos | leída del código |
 | `#new-releases` | **12** `/items` + **5** `/me` | **1** | snapshot + págs. de `/items` de «w three» | pistas de «w three» | **medida en vivo el 2026-09-30** |
 | ↳ lo que predice el código | 1 + ceil(W/100) = **32** **+ 2 + ceil(Hd/100)** | ídem | «w three» + ocultos («descubrir»), el MISMO store que `#discover-artists` | ídem | leída del código |
+| ↳ **+2 desde v=278** (ocultar artistas) → **45** | **45** | ídem | **+ la playlist de ocultos («recomendados»)**: `1 /playlists/{id}` + `ceil(Ha/100)`; el `/me` ya lo pagó `hiddenAlbums` | nº de artistas ocultos (**12** el 06/10) | **medida el 2026-10-07 contra una Spotify simulada** con la forma de Ian (ids de playlist guardados, 12 dentro): 5 → 7 peticiones, **+2 exactos**. En vivo, no |
 | **Limpieza** | | | | | |
 | `#sync` | **~285** | **2** | `ceil(L/50)` + `ceil(P/50)` + 1 `/items?limit=1` + 1 snapshot + `ceil(T/100)` | me gusta **y** pistas de la espejo | leída del código |
 | `#dedupe` | **ceil(P/50) + 1** = **3** | **0–1** | `/me/playlists` + 1 `/me` | nº de playlists | leída del código |
@@ -1855,7 +1877,7 @@ medido en el navegador de Ian el **06/10** (`localStorage`, solo lectura):
 | `lsKey` | vista(s) | la clave es | playlist (id) | ocultos | `ready()` en frío |
 |---|---|---|---|---:|---:|
 | `discover_ocultos` | `#discover-artists`, `#new-releases` | **álbum** (`cardKey`) | `… (descubrir)` `6WqWZy4GVLnsirTTZdRePF` | **900** | 2 + 9 = **11** |
-| `recs_ocultos` | `#recs` y, desde v=276, `#similar` · `#discover-artists` · `#follow-artists` | **nombre de ARTISTA en minúsculas** | `… (recomendados)` `6mOmj0KG72NmSluJCEx1Uf` | **12** | 2 + 1 = **3** |
+| `recs_ocultos` | `#recs` y, desde v=276, `#similar` · `#discover-artists` · `#follow-artists`; desde v=278 también `#new-releases` | **nombre de ARTISTA en minúsculas** | `… (recomendados)` `6mOmj0KG72NmSluJCEx1Uf` | **12** | 2 + 1 = **3** |
 | `wthree_hidden_albums` | `#wthree` | **álbum** (`albumKey`) | `… (álbumes)` `22e2RS9m2FYXajjDM3v7W9` | 17 | **3** |
 | `skips_hidden_tracks` | `#skips` | **id de pista** | `… (skips)` `7rJDSnMWX5ag5NWxsG7Y3B` | 88 | **3** |
 | `zeroplays_hidden_tracks` | `#zeroplays` | **id de pista** | `… (sin plays)` `6hviqLfTsqOpyWtod2Eg0P` | 25 | **3** |

@@ -1,4 +1,4 @@
-// Ocultar un artista: UNA pieza para las cuatro vistas (v=276).
+// Ocultar un artista: UNA pieza para las cinco vistas (v=276; la quinta, #new-releases, v=278).
 //
 // POR QUÉ ESTA SUITE EXISTE
 //
@@ -45,12 +45,13 @@ const fuentes = archivosJs(join(raiz, 'src/js'));
 const PIEZA = 'src/js/features/artistas-ocultos.js';
 const pieza = leer(PIEZA);
 
-// Las cuatro vistas que comparten la pieza.
+// Las cinco vistas que comparten la pieza.
 const VISTAS = {
   '#similar': 'src/js/features/similar-artists.js',
   '#discover-artists': 'src/js/features/discover-artists.js',
   '#follow-artists': 'src/js/features/follow-artists.js',
   '#recs': 'src/js/features/recommendations.js',
+  '#new-releases': 'src/js/features/new-releases.js',   // v=278
 };
 
 // ── 1. LAS DEFINICIONES SE CUENTAN ─────────────────────────────────────────
@@ -141,6 +142,26 @@ for (const [vista, ruta] of Object.entries(VISTAS)) {
   comprobar(`${vista} pinta el botón ⋮`,
     leer(ruta).includes('botonMenuArtistaHtml('), ruta);
 }
+
+// ── 4b. #new-releases (v=278): el control en SU línea, no en la barra ──────
+//
+// La barra de #new-releases quedó con 69 px libres el 05/10 y el botón mide 143
+// (159 con tres cifras). Dentro de `.disco-controls` la rompería a dos filas, y
+// eso lo prueba el banco `ocultar-artista-novedades`; acá se vigila lo que se
+// puede leer sin navegador: que el marcado no vuelva a meterlo en la barra.
+const nr = leer(VISTAS['#new-releases']);
+const barraNr = nr.slice(nr.indexOf('<div class="disco-controls'), nr.indexOf('${avisoFrescuraHtml('));
+comprobar('#new-releases: el botón «Artistas ocultos» NO está en `.disco-controls`',
+  barraNr.length > 200 && !barraNr.includes('botonArtistasOcultosHtml') && !barraNr.includes('newrel-mode-artistas'),
+  'el marcado de la barra nombra el botón de artistas ocultos');
+comprobar('#new-releases: el botón va en `.disco-linea-artistas`, la línea propia',
+  /disco-linea-artistas[\s\S]{0,40}\$\{b\}|botonArtistasOcultosHtml\('newrel-mode-artistas'[\s\S]{0,300}disco-linea-artistas/.test(nr));
+comprobar('#new-releases: reusa `artistaEstaOculto` para podar (no una clave a mano)',
+  nr.includes('artistaEstaOculto(a.name)') && !/recs_ocultos/.test(nr));
+// La tarjeta es de dos vistas: solo le hace sitio al botón, no lo define.
+const comun = leer('src/js/features/discover-common.js');
+comprobar('renderAlbumCard recibe el ⋮ de la vista (`menuArtistaHtml`) y no lo construye',
+  comun.includes('menuArtistaHtml') && !comun.includes('botonMenuArtistaHtml'));
 
 // ── 5. los SVG viven en ui/icons.js, no en la pieza ────────────────────────
 // El 04/10 el menú lateral tenía su propia copia de los SVG y ya había

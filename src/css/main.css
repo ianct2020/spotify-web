@@ -4595,6 +4595,18 @@ body.covers-fs .main {
   max-width: 100%;
 }
 .dcard-artist:hover { color: var(--color-accent); }
+/* El nombre del artista con su ⋮ al lado (v=278, `#new-releases`). Solo existe
+   cuando la vista le pasa `menuArtistaHtml` a la tarjeta. El margen negativo
+   absorbe los 24 px del botón para que la tarjeta no crezca por tenerlo; el
+   nombre se corta con elipsis ANTES que el botón, que no encoge. */
+.dcard-artista-fila {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+  margin: -4px 0;
+}
+.dcard-artista-fila .dcard-artist { flex: 0 1 auto; min-width: 0; }
 .dcard-meta {
   font-size: 11px;
   color: var(--color-text-muted);
