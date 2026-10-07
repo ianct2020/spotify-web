@@ -9,23 +9,24 @@
 // placeholder→img. Botón "Pantalla completa" (Fullscreen API) que oculta
 // sidebar/header/toolbar y recalcula el lado.
 
-import { loadListenedAlbums, isOwner, ownerLockedMessage } from './history-data.js?v=278';
-import { isJunkTrack } from '../util/junk.js?v=278';
-import { vigilarRuta } from '../util/vigencia-ruta.js?v=278';
-import { createIncrementalList, scrollRootOf } from '../ui/incremental-list.js?v=278';
-import { createLazyImages } from '../ui/lazy-img.js?v=278';
-import { getAllPlaylistItems, getBestAvailableLikes } from '../api.js?v=278';
-import { escapeHtml, pageHeader, showProgress, hideProgress } from '../ui/components.js?v=278';
-import { showToast } from '../ui/toast.js?v=278';
-import { openAlbumCard } from './album-card.js?v=278';
-import { openArtistCard } from './artist-card.js?v=278';
-import { albumKey, coverId } from '../util/album-key.js?v=278';
-import { generarWallpaper, descargarBlob, WALLPAPER_PRESETS } from './covers-wallpaper.js?v=278';
-import { buildAlbumStatsIndex } from '../util/album-stats.js?v=278';
-import { getPreview } from '../api/preview-providers.js?v=278';
-import { hoverIn, hoverOut } from '../ui/preview-player.js?v=278';
-import { coverUrl, tapaParaCelda } from '../util/cover-size.js?v=278';
-import { prefKey, migratePrefKey } from '../storage.js?v=278';
+import { loadListenedAlbums, isOwner, ownerLockedMessage } from './history-data.js?v=279';
+import { isJunkTrack } from '../util/junk.js?v=279';
+import { vigilarRuta } from '../util/vigencia-ruta.js?v=279';
+import { createIncrementalList, scrollRootOf } from '../ui/incremental-list.js?v=279';
+import { createLazyImages } from '../ui/lazy-img.js?v=279';
+import { getAllPlaylistItems, getBestAvailableLikes } from '../api.js?v=279';
+import { escapeHtml, pageHeader, showProgress, hideProgress } from '../ui/components.js?v=279';
+import { showToast } from '../ui/toast.js?v=279';
+import { openAlbumCard } from './album-card.js?v=279';
+import { openArtistCard } from './artist-card.js?v=279';
+import { albumKey, coverId } from '../util/album-key.js?v=279';
+import { generarWallpaper, descargarBlob, WALLPAPER_PRESETS } from './covers-wallpaper.js?v=279';
+import { buildAlbumStatsIndex } from '../util/album-stats.js?v=279';
+import { sortList, ORDENES_TAPAS } from '../util/orden-tapas.js?v=279';
+import { getPreview } from '../api/preview-providers.js?v=279';
+import { hoverIn, hoverOut } from '../ui/preview-player.js?v=279';
+import { coverUrl, tapaParaCelda } from '../util/cover-size.js?v=279';
+import { prefKey, migratePrefKey } from '../storage.js?v=279';
 
 const LS_KEY_SIZE = 'covers_cell_size';
 const LS_KEY_SORT = 'covers_sort_mode';
@@ -33,7 +34,7 @@ const LS_KEY_YEARS = 'covers_years_selected_v2';
 const LS_WTHREE_ID = 'wthree_playlist_id';
 
 const VALID_SIZES = new Set(['28', '48', '64', '96']);
-const VALID_SORTS = new Set(['date-asc', 'min-desc', 'artist-asc']);
+const VALID_SORTS = new Set(ORDENES_TAPAS);
 const GRID_GAP = 2;
 
 function getSize() {
@@ -261,17 +262,6 @@ async function pistaAlAzarDelAlbum(a) {
   return cands[Math.floor(Math.random() * cands.length)];
 }
 
-function sortList(list, mode) {
-  const copy = list.slice();
-  if (mode === 'min-desc') copy.sort((x, y) => y.min - x.min);
-  else if (mode === 'artist-asc') copy.sort((x, y) =>
-    (x.artist || '').localeCompare(y.artist || '', 'es', { sensitivity: 'base' })
-    || (x.name || '').localeCompare(y.name || '', 'es', { sensitivity: 'base' })
-  );
-  else copy.sort((x, y) => (x.date || '9999').localeCompare(y.date || '9999'));
-  return copy;
-}
-
 function fitCellSize(N, W, H, gap = GRID_GAP) {
   if (!N || W <= 0 || H <= 0) return 96;
   const wPlus = W + gap;
@@ -446,6 +436,7 @@ export async function render(container) {
         <div class="covers-control-group covers-select-wrap">
           <select class="covers-select" id="covers-sort" aria-label="Ordenar por">
             <option value="date-asc" ${sort === 'date-asc' ? 'selected' : ''}>Más antiguas primero</option>
+            <option value="date-desc" ${sort === 'date-desc' ? 'selected' : ''}>Más nuevas primero</option>
             <option value="min-desc" ${sort === 'min-desc' ? 'selected' : ''}>Más minutos primero</option>
             <option value="artist-asc" ${sort === 'artist-asc' ? 'selected' : ''}>Artista (A–Z)</option>
           </select>

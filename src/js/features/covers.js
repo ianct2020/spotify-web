@@ -22,6 +22,7 @@ import { openArtistCard } from './artist-card.js';
 import { albumKey, coverId } from '../util/album-key.js';
 import { generarWallpaper, descargarBlob, WALLPAPER_PRESETS } from './covers-wallpaper.js';
 import { buildAlbumStatsIndex } from '../util/album-stats.js';
+import { sortList, ORDENES_TAPAS } from '../util/orden-tapas.js';
 import { getPreview } from '../api/preview-providers.js';
 import { hoverIn, hoverOut } from '../ui/preview-player.js';
 import { coverUrl, tapaParaCelda } from '../util/cover-size.js';
@@ -33,7 +34,7 @@ const LS_KEY_YEARS = 'covers_years_selected_v2';
 const LS_WTHREE_ID = 'wthree_playlist_id';
 
 const VALID_SIZES = new Set(['28', '48', '64', '96']);
-const VALID_SORTS = new Set(['date-asc', 'min-desc', 'artist-asc']);
+const VALID_SORTS = new Set(ORDENES_TAPAS);
 const GRID_GAP = 2;
 
 function getSize() {
@@ -261,17 +262,6 @@ async function pistaAlAzarDelAlbum(a) {
   return cands[Math.floor(Math.random() * cands.length)];
 }
 
-function sortList(list, mode) {
-  const copy = list.slice();
-  if (mode === 'min-desc') copy.sort((x, y) => y.min - x.min);
-  else if (mode === 'artist-asc') copy.sort((x, y) =>
-    (x.artist || '').localeCompare(y.artist || '', 'es', { sensitivity: 'base' })
-    || (x.name || '').localeCompare(y.name || '', 'es', { sensitivity: 'base' })
-  );
-  else copy.sort((x, y) => (x.date || '9999').localeCompare(y.date || '9999'));
-  return copy;
-}
-
 function fitCellSize(N, W, H, gap = GRID_GAP) {
   if (!N || W <= 0 || H <= 0) return 96;
   const wPlus = W + gap;
@@ -446,6 +436,7 @@ export async function render(container) {
         <div class="covers-control-group covers-select-wrap">
           <select class="covers-select" id="covers-sort" aria-label="Ordenar por">
             <option value="date-asc" ${sort === 'date-asc' ? 'selected' : ''}>Más antiguas primero</option>
+            <option value="date-desc" ${sort === 'date-desc' ? 'selected' : ''}>Más nuevas primero</option>
             <option value="min-desc" ${sort === 'min-desc' ? 'selected' : ''}>Más minutos primero</option>
             <option value="artist-asc" ${sort === 'artist-asc' ? 'selected' : ''}>Artista (A–Z)</option>
           </select>

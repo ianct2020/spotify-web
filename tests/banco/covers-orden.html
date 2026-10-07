@@ -1,0 +1,166 @@
+<!doctype html><html lang="es"><head><meta charset="utf-8"><title>banco #covers — el orden por fecha</title>
+<link rel="stylesheet" href="/css/theme.css">
+<link rel="stylesheet" href="/css/components.css">
+<link rel="stylesheet" href="/css/main.css">
+<style>html,body{margin:0;background:var(--color-bg);color:var(--color-text);font-family:var(--font-sans),system-ui}</style>
+</head><body class="sidebar-hidden">
+<div id="caja"><main class="main" id="main-content"></main></div>
+<script type="module">
+// ── Qué prueba este banco (v=278) ────────────────────────────────────────────
+//
+// La vista REAL de `#covers` (Mis tapas) con datos de mentira y una Spotify
+// simulada (`simulado.mjs`): 0 peticiones reales.
+//
+//   · el selector ofrece «Más antiguas primero» y «Más nuevas primero»;
+//   · «Más nuevas primero» da la lista de «Más antiguas primero» al revés ENTRE LOS
+//     QUE TIENEN FECHA, y los álbumes SIN fecha van al final en los DOS órdenes
+//     (decisión de Ian, 07/10: un álbum sin fecha es desconocido, no el más nuevo);
+//   · la elección se guarda;
+//   · la barra de controles sigue en UNA fila al ancho pedido (`?ancho=`, 1351).
+//
+// El orden se lee del DOM, de las tapas que de verdad hay en pantalla. Cada tapa es un
+// SVG en una URI de datos —así no sale nada a la red y la captura enseña algo—, con un
+// color que va de azul (la más antigua) a ámbar (la más nueva) y gris con «?» para las
+// que no tienen fecha: el orden se VE, no solo se mide.
+//
+// `?paso=asc` / `?paso=desc` dejan la vista en ese orden, con tapas grandes, para
+// fotografiarla.
+import { hojasLegibles, fallar, listo } from '/banco/esperar.mjs';
+import { instalarRedSimulada, esperarReal } from '/banco/simulado.mjs';
+const esperarA = (cond, { que }) => esperarReal(cond, { que });
+
+window.__cons = [];
+for (const k of ['error', 'warn']) { const o = console[k].bind(console); console[k] = (...a) => { window.__cons.push(k + ': ' + a.map(x => x?.message || String(x)).join(' ')); o(...a); }; }
+window.addEventListener('unhandledrejection', e => window.__cons.push('rechazo: ' + (e.reason?.message || e.reason)));
+const q = new URLSearchParams(location.search);
+const PASO = q.get('paso');
+if (PASO) document.head.insertAdjacentHTML('beforeend', '<style>*,*::before,*::after{animation:none!important;transition:none!important}</style>');
+const ANCHO = +(q.get('ancho') || 1351);
+const afirmar = (c, msg) => { if (!c) throw new Error('BANCO: ' + msg); };
+const $ = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+
+// ── Los datos de mentira ────────────────────────────────────────────────────
+const NOMBRES = ['Aurora', 'Bruma', 'Cobre', 'Duna', 'Eco', 'Fiordo', 'Gala', 'Hielo', 'Isla', 'Jade', 'Kilim', 'Lluvia'];
+const tapa = (etiqueta, tono, sinFecha = false) => 'data:image/svg+xml;utf8,' + encodeURIComponent(
+  `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect width="100" height="100" fill="${sinFecha ? 'hsl(0,0%,38%)' : `hsl(${tono},70%,45%)`}"/>`
+  + (sinFecha
+    ? `<text x="50" y="58" font-size="52" text-anchor="middle" fill="white" font-family="sans-serif" font-weight="700">?</text><text x="50" y="86" font-size="20" text-anchor="middle" fill="white" font-family="sans-serif">${etiqueta}</text></svg>`
+    : `<text x="50" y="62" font-size="30" text-anchor="middle" fill="white" font-family="sans-serif" font-weight="700">${etiqueta}</text></svg>`));
+// 36 con fecha (de 2021 a 2024; las dos primeras parejas COMPARTEN día, para ver los
+// empates) y 6 sin fecha, que llegan solo por la playlist «w three».
+const fechas = [];
+for (let i = 0; i < 36; i++) {
+  const mes = 1 + Math.floor(i / 3), dia = 1 + (i % 3) * 9;
+  fechas.push(`${2021 + Math.floor((mes - 1) / 12)}-${String(((mes - 1) % 12) + 1).padStart(2, '0')}-${String(dia).padStart(2, '0')}`);
+}
+fechas[1] = fechas[0]; fechas[4] = fechas[3];                 // dos empates
+const meta = new Map();                                       // uri de la tapa → { id, fecha }
+const porAnio = new Map();
+fechas.forEach((f, i) => {
+  const id = `${i + 1}`.padStart(2, '0');
+  const img = tapa(id, 220 - Math.round(i * 5));              // azul (220) → ámbar (~40)
+  meta.set(img, { id, fecha: f });
+  const y = +f.slice(0, 4);
+  if (!porAnio.has(y)) porAnio.set(y, []);
+  porAnio.get(y).push({ name: `${NOMBRES[i % 12]} ${id}`, artist: `Artista ${String.fromCharCode(65 + (i % 7))}`, date: f, tracks_that_day: 5, min_that_day: 20, img });
+});
+const historial = { version: 1, criteria: 'banco', generated_at: '2026-10-07', totals: {}, years: [...porAnio].map(([year, albums]) => ({ year, albums })) };
+const sinFechaItems = [1, 2, 3, 4, 5, 6].map(n => {
+  const img = tapa(`S${n}`, 0, true);
+  meta.set(img, { id: `S${n}`, fecha: '' });
+  return { added_at: '2026-01-01T00:00:00Z', item: { id: `t-s${n}`, uri: `spotify:track:t-s${n}`, name: `Tema sin fecha ${n}`, type: 'track', artists: [{ id: `ar${n}`, name: `Solo playlist ${n}` }], album: { id: `al-s${n}`, name: `Disco sin fecha ${n}`, images: [{ url: img, width: 640, height: 640 }] } } };
+});
+
+try {
+  await hojasLegibles(['/css/main.css', '/css/components.css']);
+  $('#caja').style.width = ANCHO + 'px';
+  const sim = instalarRedSimulada();
+  window.__sim = sim;
+  // El historial de mentira reemplaza al archivo real (que es de Ian): se intercepta
+  // SOLO esa URL, el resto de lo del propio origen pasa.
+  const pasa = window.fetch;
+  window.fetch = async (u, o) => {
+    const url = String(u?.url || u);   // un URL a secas no tiene .url: history-data.js le pasa un objeto URL
+    if (/history-listened-albums\.json/.test(url)) return new Response(JSON.stringify(historial), { status: 200, headers: { 'content-type': 'application/json' } });
+    return pasa(u, o);
+  };
+  sim.ruta('GET', /^\/me$/, () => ({ id: 'orhs6wu5ykk7ql80u92ujn74o', display_name: 'Banco' }));
+  sim.ruta('GET', /^\/playlists\/[^/?]+\?/, () => ({ id: 'pl-wthree', name: 'w three', owner: { id: 'orhs6wu5ykk7ql80u92ujn74o' }, snapshot_id: 's1' }));
+  sim.ruta('GET', /^\/playlists\/[^/]+\/items/, () => ({ items: sinFechaItems, total: sinFechaItems.length, next: null }));
+  sim.ruta('GET', /^\/me\/playlists/, () => ({ items: [], total: 0, next: null }));
+  sim.ruta('GET', /^\/me\/tracks/, () => ({ items: [], total: 0, next: null }));
+
+  const { prefKey } = await import('/js/storage.js');
+  localStorage.setItem('fonoteca_last_user_id', 'orhs6wu5ykk7ql80u92ujn74o');
+  localStorage.setItem(prefKey('wthree_playlist_id'), 'pl-wthree');
+  localStorage.setItem(prefKey('covers_cell_size'), PASO ? '96' : '48');
+  localStorage.removeItem(prefKey('covers_sort_mode'));
+
+  const { render } = await import('/js/features/covers.js');
+  render($('#main-content'));
+  await esperarA(() => $$('.cover-cell').length === 42, { que: 'las 42 tapas (36 con fecha + 6 sin)' });
+
+  const urlDe = (c) => { const i = $('img', c); return i.getAttribute('data-src') || i.getAttribute('src'); };
+  const enPantalla = () => $$('.cover-cell').map(c => {
+    const m = meta.get(urlDe(c));
+    afirmar(m, `una tapa que no es de este banco: ${String(urlDe(c)).slice(0, 80)}`);
+    return m;
+  });
+  const ids = (l) => l.map(m => m.id);
+  const conFecha = (l) => l.filter(m => m.fecha);
+  const sinFecha = (l) => l.filter(m => !m.fecha);
+
+  // El selector.
+  const sel = $('#covers-sort');
+  const rotulos = [...sel.options].map(o => `${o.value}=${o.textContent.trim()}`).join(' | ');
+  afirmar(rotulos === 'date-asc=Más antiguas primero | date-desc=Más nuevas primero | min-desc=Más minutos primero | artist-asc=Artista (A–Z)',
+    `el selector: ${rotulos}`);
+  afirmar(sel.value === 'date-asc', `el defecto sigue siendo «Más antiguas primero» (es ${sel.value})`);
+
+  // La barra de controles: UNA fila.
+  const hijos = $$('.covers-controls > *').filter(e => getComputedStyle(e).display !== 'none' && e.getBoundingClientRect().height);
+  const centros = hijos.map(e => { const r = e.getBoundingClientRect(); return r.top + r.height / 2; }).sort((a, b) => a - b);
+  const filas = centros.reduce((n, c, i) => (i === 0 || c - centros[i - 1] > 8) ? n + 1 : n, 0);
+  const detalle = hijos.map(e => { const r = e.getBoundingClientRect(); return `${(e.className || '?').toString().slice(0, 22)}@${Math.round(r.left)},${Math.round(r.top)} w${Math.round(r.width)}`; }).join(' | ');
+  afirmar(filas === 1, `la barra de #covers ocupa ${filas} filas a ${ANCHO} px (tiene que ser 1): ${detalle}`);
+  const anchoSel = Math.round($('.covers-select-wrap').getBoundingClientRect().width);
+
+  const asc = enPantalla();
+  afirmar(ids(conFecha(asc)).join() === [...Array(36)].map((_, i) => `${i + 1}`.padStart(2, '0')).join(),
+    `«Más antiguas primero»: las que tienen fecha, de la 01 a la 36 — pantalla: ${ids(asc).join(' ')}`);
+  afirmar(asc.slice(-6).every(m => !m.fecha) && sinFecha(asc).length === 6, `«Más antiguas»: las 6 sin fecha, al final — ${ids(asc).join(' ')}`);
+  if (PASO === 'asc') throw Object.assign(new Error('asc'), { parada: true });
+
+  const cambiar = async (v) => { sel.value = v; sel.dispatchEvent(new Event('change', { bubbles: true })); };
+  await cambiar('date-desc');
+  await esperarA(() => enPantalla()[0].id !== asc[0].id, { que: 'que la lista cambie de orden' });
+  const desc = enPantalla();
+  afirmar(desc.length === asc.length, 'misma cantidad de tapas en los dos órdenes');
+  afirmar(JSON.stringify(ids(conFecha(desc))) === JSON.stringify(ids(conFecha(asc)).reverse()),
+    `«Más nuevas primero» no es el reverso EXACTO entre las que tienen fecha:\n  desc ${ids(desc).join(' ')}\n  asc  ${ids(asc).join(' ')}`);
+  afirmar(desc.slice(-6).every(m => !m.fecha), `«Más nuevas»: las 6 sin fecha, AL FINAL también — ${ids(desc).join(' ')}`);
+  afirmar(JSON.stringify(ids(sinFecha(desc))) === JSON.stringify(ids(sinFecha(asc))), 'las sin fecha quedan en el mismo orden en los dos');
+  afirmar(desc[0].fecha, 'en «Más nuevas» lo primero NO es una tapa sin fecha');
+  afirmar(localStorage.getItem(prefKey('covers_sort_mode')) === 'date-desc', 'la elección se guarda');
+  if (PASO === 'desc') throw Object.assign(new Error('desc'), { parada: true });
+
+  await cambiar('date-asc');
+  await esperarA(() => enPantalla()[0].id === asc[0].id, { que: 'volver a «Más antiguas»' });
+  afirmar(JSON.stringify(ids(enPantalla())) === JSON.stringify(ids(asc)), 'volver a «Más antiguas» restaura el orden original');
+
+  afirmar(sim.reg.externas.length === 0, `nada salió a la red sin doble: ${sim.reg.externas.join(' | ')}`);
+  afirmar(sim.reg.escrituras.length === 0, `0 escrituras: ${JSON.stringify(sim.reg.escrituras)}`);
+  afirmar(sim.reg.desconocidas.length === 0, `ninguna ruta quedó sin simular: ${sim.reg.desconocidas.join(' | ')}`);
+  listo(`42 tapas (36 con fecha, 6 sin) · «más nuevas» = reverso exacto de «más antiguas» entre las 36 · las 6 sin fecha al final en los dos · barra ${filas} fila a ${ANCHO} px (selector ${anchoSel} px) · ${sim.reg.llamadas.length} peticiones simuladas, 0 reales`);
+} catch (e) {
+  if (e.parada) {
+    document.documentElement.dataset.banco = 'ok';
+    document.title = 'BANCO: detenido en ' + e.message;
+  } else {
+    const r = window.__sim?.reg;
+    if (r) e.message += `\n[llamadas ${r.llamadas.length}] desconocidas: ${r.desconocidas.join(' | ') || '—'} · externas: ${r.externas.join(' | ') || '—'}\nconsola: ${window.__cons.join(' || ').slice(0, 600)}\nvisible: ${(document.querySelector('#main-content')?.textContent || '').replace(/\s+/g, ' ').slice(0, 300)}`;
+    fallar(e);
+  }
+}
+</script></body></html>

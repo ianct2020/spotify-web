@@ -1701,6 +1701,25 @@ Se reusó la pieza SIN tocarla: `alternarArtistaOculto`, `claveDeArtista`,
 - **El `useCache:false` sigue tal cual** (ver más arriba). Lo que costaría tocarlo
   está medido, pero es su propio encargo.
 
+## El orden de `#covers`: «Más nuevas primero» y los sin fecha al final (v=278, 2026-10-07)
+
+`util/orden-tapas.js` (puro, testeable en Node) tiene el orden de la vista; `covers.js` ya
+no tiene `sortList`. Cuatro órdenes: `date-asc` (defecto), `date-desc`, `min-desc`,
+`artist-asc`.
+
+- ⚠️ **La fecha de una tapa es la de su PRIMERA ESCUCHA**, no la de lanzamiento (sale de
+  `history-listened-albums.json`). Un álbum que solo viene de «w three» y nunca se escuchó
+  entero **no tiene fecha** (`date: ''`).
+- ⚠️ **Los sin fecha van al final en los DOS órdenes** (decisión de Ian, 07/10): un álbum sin
+  fecha es desconocido, no el más nuevo. Hasta v=278 quedaban al final en ascendente **por
+  accidente** (`x.date || '9999'`), así que invertir el comparador habría puesto lo
+  desconocido arriba de todo. Se separan, se ordenan los que tienen fecha y se pegan al final.
+- El descendente es el ascendente **dado vuelta** (empates incluidos), no un comparador
+  invertido: con dos álbumes del mismo día, el invertido los deja en el orden de entrada.
+- `util/release-date.js` no se tocó ni sirve acá: compara `.release` de lanzamientos.
+- Banco `covers-orden` (en `prepush`) y `tests/orden-tapas.test.mjs`. 🟥 **Cuántos álbumes
+  reales no tienen fecha NO está medido** (ver `RESUMEN-CERRAR-C2-2026-10-07.md`).
+
 ## Seguir artistas en Spotify (v=268, 2026-10-03)
 
 `#follow-artists`, en el menú Descubrir, trabaja sobre las discografías guardadas
