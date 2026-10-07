@@ -54,10 +54,14 @@
 <div id="caja"></div>
 <script type="module">
 import { esperarA, listo, fallar } from '/banco/esperar.mjs';
-import { grillaPara, rejillaDelObjetivo, tilesALab, emparejar, mapaDeTinte, resumenDeEmparejado } from '/js/util/mosaico.js';
+import { salidaPara, rejillaDelObjetivo, tilesALab, emparejar, emparejarCediendo, mapaDeTinte, resumenDeEmparejado } from '/js/util/mosaico.js';
 import { bajarPortadas, soltarBitmaps, pintarMosaico } from '/js/features/mosaico-lienzo.js';
 
-const LADO_CELDA = 64;
+// ⚠️ El lado de celda ya NO es 64 fijo: desde v=277 lo da `salidaPara()`, que topa
+// el largo del lienzo en 7.680 px para que las rejillas finas (160 y 240 celdas de
+// lado largo) no pidan un lienzo de 177 MP. El banco lo lee de ahí para dibujar
+// —si no, dibujaría OTRO mosaico que el de la app— y comprueba el número contra
+// una tabla propia, nunca contra la misma función (ver el oráculo de `auto()`).
 const PREFIJO_64 = 'ab67616d00004851';
 const q = new URLSearchParams(location.search);
 const cartel = document.getElementById('cartel');
@@ -101,7 +105,7 @@ async function emparejado(largo, uso, bajar = bajarPortadas) {
   const clave = `${largo}|${uso}`;
   if (cacheEmp.has(clave)) return cacheEmp.get(clave);
   const { width: w, height: h } = lienzoLectura;
-  const { cols, filas } = grillaPara(w, h, largo);
+  const { cols, filas } = salidaPara(w, h, largo);
   const t0 = performance.now();
   const objetivo = rejillaDelObjetivo(lienzoLectura.__pixeles, w, h, cols, filas);
   const tObj = performance.now();
@@ -119,7 +123,8 @@ async function generar({ largo = Number(q.get('largo') || 80), tinte = Number(q.
   await prepararBase();
   await prepararImagen();
   const e = await emparejado(largo, uso, bajar);
-  const ancho = e.cols * LADO_CELDA, alto = e.filas * LADO_CELDA;
+  const { lado } = salidaPara(lienzoLectura.width, lienzoLectura.height, largo);
+  const ancho = e.cols * lado, alto = e.filas * lado;
 
   if (salida) { salida.width = salida.height = 0; salida.remove(); }
   salida = document.createElement('canvas');
@@ -127,7 +132,7 @@ async function generar({ largo = Number(q.get('largo') || 80), tinte = Number(q.
   const ctx = salida.getContext('2d', { alpha: false });
   const t0 = performance.now();
   pintarMosaico({
-    ctx, cols: e.cols, filas: e.filas, ladoCelda: LADO_CELDA,
+    ctx, cols: e.cols, filas: e.filas, ladoCelda: lado,
     porPortada: e.porPortada, bitmaps: e.bitmaps, fuenteTinte: lienzoLectura,
     alfa: mapaDeTinte({ de: e.de, cols: e.cols, filas: e.filas, escala: tinte / 100, modo }),
     plano: modo === 'plano', fondo: '#0A0A0F',
@@ -138,14 +143,14 @@ async function generar({ largo = Number(q.get('largo') || 80), tinte = Number(q.
 
   const r = resumenDeEmparejado({ indice: e.indice, de: e.de, cols: e.cols, filas: e.filas });
   const info = {
-    cols: e.cols, filas: e.filas, ancho, alto, celdas: r.celdas, tinte, modo, uso,
+    cols: e.cols, filas: e.filas, lado, ancho, alto, celdas: r.celdas, tinte, modo, uso,
     portadas: e.portadas, distintas: r.distintas, masRepetida: r.masRepetida, pegadas: r.pegadas,
     fallidas: e.fallidas, bytes: e.bytes,
     deMedio: +r.deMedio.toFixed(2), deMediana: +r.deMediana.toFixed(2), deP90: +r.deP90.toFixed(2),
     bienEmparejadas: r.bienEmparejadas, malEmparejadas: r.malEmparejadas,
     ms: { obj: Math.round(e.ms.obj), emp: Math.round(e.ms.emp), red: Math.round(e.ms.red), pintar: Math.round(msPintar) },
   };
-  di(`${e.cols}×${e.filas} celdas · ${ancho}×${alto} px · tinte ${tinte} % ${modo} · uso ΔE ${uso === null ? '(por defecto)' : uso} · ${r.distintas} portadas distintas, máx ${r.masRepetida} · pegadas ${r.pegadas} · ΔE med ${info.deMedio} · ${e.fallidas} fallidas`);
+  di(`${e.cols}×${e.filas} celdas de ${lado} px · ${ancho}×${alto} px · tinte ${tinte} % ${modo} · uso ΔE ${uso === null ? '(por defecto)' : uso} · ${r.distintas} portadas distintas, máx ${r.masRepetida} · pegadas ${r.pegadas} · ΔE med ${info.deMedio} · ${e.fallidas} fallidas`);
   document.documentElement.setAttribute('data-banco', 'listo');
   return info;
 }
@@ -233,6 +238,14 @@ window.addEventListener('unhandledrejection', (e) => { di(`BANCO ERROR: ${e.reas
 // mas caro, que es justo cuando algo esta mal.
 const N_TAPAS = 96;
 const LARGO_AUTO = 16;
+// La segunda pasada del modo auto: una rejilla FINA, o sea con la celda más chica
+// que la miniatura que se baja (48 px contra 64). Es el único camino que prueba
+// que `pintarMosaico` remuestrea en vez de tirar tres de cada cuatro píxeles, y no
+// existía antes de v=277 porque antes el lado era 64 siempre. 160 y no 240 por el
+// presupuesto de reloj virtual: 120×160 son 19.200 celdas contra 96 tapas (50 M
+// multiplicaciones) y 180×240 serían 43.200 (112 M). El 32 lo cubre la copia del
+// perfil con portadas de verdad, que es donde se puede MIRAR el resultado.
+const LARGO_FINO = 160;
 
 const u8aB64 = (u) => { let s = ''; for (const x of u) s += String.fromCharCode(x); return btoa(s); };
 
@@ -288,6 +301,11 @@ function baseSintetica(n) {
  * corre un Chrome de verdad por CDP y el decodificado funciona.
  */
 function objetivoDibujado(ancho = 240, alto = 320) {
+  // ⚠️ El objetivo tiene que darle al menos 3 px de lado a cada celda, que es lo
+  // que exige `rejillaDelObjetivo` (su rejilla interna es 3×3). Con la rejilla
+  // fina del segundo paso (160 filas) hacen falta 480 px de alto: con los 320 de
+  // la primera pasada tiraría, y lo haría con un error de aritmética en vez de
+  // decir «el banco no preparó bien su objetivo».
   const cv = document.createElement('canvas');
   cv.width = ancho; cv.height = alto;
   const c = cv.getContext('2d', { alpha: false, willReadFrequently: true });
@@ -359,7 +377,10 @@ async function auto() {
   const nTapas = Number(q.get('tapas') || N_TAPAS);
   di('auto: fabricando la base sintetica…');
   window.__baseMosaico = baseSintetica(nTapas);
-  lienzoLectura = objetivoDibujado();
+  // El objetivo se dimensiona a la rejilla MÁS FINA de las dos pasadas: 3 px por
+  // celda es el mínimo de `rejillaDelObjetivo` y acá se le dan 4.
+  const altoObjetivo = 4 * Math.max(largo, LARGO_FINO);
+  lienzoLectura = objetivoDibujado(Math.round(altoObjetivo * 0.75), altoObjetivo);
   di('auto: base y objetivo listos, generando…');
 
   const info = await generar({ largo, tinte: 45, modo: 'adaptativo', uso: 3, bajar: bajarDibujando });
@@ -374,6 +395,12 @@ async function auto() {
   const esperadas = {
     filas: largo,
     cols: Math.max(2, Math.round((largo * lienzoLectura.width) / lienzoLectura.height)),
+    // Y el lado de celda, de una TABLA escrita a mano, no de `ladoDeCelda()`. Es
+    // la misma precaución que con `grillaPara`: con la función como oráculo, una
+    // mutación que devolviera 63 en vez de 64 pasaría la puerta porque el banco y
+    // el código coincidirían en el error. La tabla sale de los dos topes
+    // documentados (lado ≤ 64 y largo del lienzo ≤ 7.680 px).
+    lado: ({ 16: 64, 60: 64, 80: 64, 120: 64, 160: 48, 240: 32 })[largo] ?? Math.min(64, Math.floor(7680 / largo)),
   };
 
   // ¿Se dibujo algo de verdad, o quedo el fondo? Se muestrea el lienzo y se
@@ -398,17 +425,49 @@ async function auto() {
       `una sola tapa se repite en las ${info.masRepetida} celdas: el emparejado colapso`],
     [colores.size > 1,
       `el lienzo tiene ${colores.size} color(es) distintos en el muestreo: no se dibujo nada`],
-    [info.ancho === info.cols * 64 && info.alto === info.filas * 64,
-      `el lienzo es ${info.ancho}×${info.alto} y la rejilla pide ${info.cols * 64}×${info.filas * 64}`],
+    [info.lado === esperadas.lado,
+      `la celda mide ${info.lado} px y para una rejilla de ${largo} tendria que medir ${esperadas.lado}`],
+    [info.ancho === info.cols * esperadas.lado && info.alto === info.filas * esperadas.lado,
+      `el lienzo es ${info.ancho}×${info.alto} y la rejilla pide ${info.cols * esperadas.lado}×${info.filas * esperadas.lado}`],
+    [info.alto <= 7680 && info.ancho <= 7680,
+      `el lienzo mide ${info.ancho}×${info.alto} y el tope del lado largo es 7.680 px`],
   ];
+
+  // ── Segunda pasada: la rejilla FINA, con la celda más chica que la miniatura ──
+  di('auto: segunda pasada, rejilla fina…');
+  const fino = await generar({ largo: LARGO_FINO, tinte: 45, modo: 'adaptativo', uso: 3, bajar: bajarDibujando });
+  const ladoFinoEsperado = ({ 160: 48, 240: 32 })[LARGO_FINO] ?? Math.min(64, Math.floor(7680 / LARGO_FINO));
+  // ¿Se dibujó de verdad con celdas de 48 px? Sin remuestreo la portada reducida
+  // seria un muestreo al azar de ella, asi que lo que se mira es que haya dibujo:
+  // colores distintos en el muestreo y mas de una tapa en juego.
+  const pxF = salida.getContext('2d', { alpha: false }).getImageData(0, 0, salida.width, salida.height).data;
+  const coloresF = new Set();
+  for (let i = 0; i < pxF.length; i += 4 * 97) coloresF.add((pxF[i] << 16) | (pxF[i + 1] << 8) | pxF[i + 2]);
+  checks.push(
+    [fino.lado === ladoFinoEsperado,
+      `con rejilla ${LARGO_FINO} la celda mide ${fino.lado} px y tendria que medir ${ladoFinoEsperado}`],
+    [fino.lado < 64,
+      `la segunda pasada tendria que usar una celda MAS CHICA que la miniatura de 64 px y usa ${fino.lado}`],
+    [fino.ancho === fino.cols * ladoFinoEsperado && fino.alto === fino.filas * ladoFinoEsperado,
+      `el lienzo fino es ${fino.ancho}×${fino.alto} y la rejilla pide ${fino.cols * ladoFinoEsperado}×${fino.filas * ladoFinoEsperado}`],
+    [fino.alto <= 7680 && fino.ancho <= 7680,
+      `el lienzo fino mide ${fino.ancho}×${fino.alto} y el tope del lado largo es 7.680 px`],
+    [fino.celdas > info.celdas,
+      `la rejilla fina tiene ${fino.celdas} celdas y la gruesa ${info.celdas}: no es mas fina`],
+    [coloresF.size > 1,
+      `el lienzo fino tiene ${coloresF.size} color(es) en el muestreo: no se dibujo nada`],
+    [fino.fallidas === 0, `${fino.fallidas} tapas sin dibujar en la pasada fina`],
+  );
 
   const malas = checks.filter(([ok]) => !ok).map(([, frase]) => frase);
   if (malas.length) throw new Error('BANCO: ' + malas.join(' · '));
 
-  const resumen = `auto: ${info.cols}×${info.filas} celdas · ${info.distintas} tapas distintas de ${N} `
+  const resumen = `auto: ${info.cols}×${info.filas} celdas de ${info.lado} px · ${info.distintas} tapas distintas de ${N} `
     + `(max ${info.masRepetida}, pegadas ${info.pegadas}) · ${info.fallidas} fallidas · `
     + `ΔE med ${info.deMedio} p90 ${info.deP90} · lienzo ${info.ancho}×${info.alto} · `
-    + `${colores.size} colores en el muestreo`;
+    + `${colores.size} colores en el muestreo`
+    + ` ‖ fina ${fino.cols}×${fino.filas} celdas de ${fino.lado} px · lienzo ${fino.ancho}×${fino.alto}`
+    + ` · ${fino.distintas} tapas distintas · ${coloresF.size} colores`;
   di(resumen);
   listo(resumen);
 }

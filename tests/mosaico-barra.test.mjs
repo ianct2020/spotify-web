@@ -60,7 +60,17 @@ ok((js.match(/<section class="mos-grupo"/g) || []).length === 4, 'el marcado tie
 ok((js.match(/class="mos-grupo-t"/g) || []).length === 4, 'cada uno con su rótulo');
 ok(/role="group"/.test(js), 'y los botones agrupados con role="group"');
 ok(/container-type:\s*inline-size/.test(css), 'las columnas se reparten por el ancho de la barra, no del viewport');
-ok(/@container\s*\(min-width:\s*1180px\)\s*\{\s*\.mos-ajustes\s*\{[^}]*repeat\(4,/.test(css), 'a partir de 1180 px, cuatro columnas a todo el ancho');
+// ⚠️ **Las cuatro columnas ya NO son iguales** (v=277). Lo eran hasta v=276 y con
+// las cinco rejillas nuevas eso dejaba el grupo de la rejilla en 292 px para 332
+// de botones: «Finísima» se veía CORTADA por el `overflow: hidden` del grupo —en
+// la captura, no en el DOM, que decía «una fila» y tenía razón—. Los mínimos del
+// `minmax` están medidos en la copia del perfil, sumando el texto de cada botón.
+const cuatro = /@container\s*\(min-width:\s*1180px\)\s*\{\s*\.mos-ajustes\s*\{([^}]*)\}/.exec(css);
+ok(cuatro, 'a partir de 1180 px hay una regla de columnas para .mos-ajustes');
+const cols = (cuatro && cuatro[1].match(/minmax\((\d+)px/g)) || [];
+ok(cols.length === 4, `son cuatro columnas — dice «${cuatro && cuatro[1].trim()}»`);
+ok(Number((cols[0] || '').replace(/\D/g, '')) >= 332 + 30,
+  `y la primera —la de las cinco rejillas— tiene un mínimo que las deja entrar (332 px de botones + 30 de caja): ${cols[0]}`);
 ok(/@container\s*\(min-width:\s*560px\)\s*\{\s*\.mos-ajustes\s*\{[^}]*repeat\(2,/.test(css), 'entre 560 y 1179, dos');
 ok(!/class="btn btn-secondary[^"]*"[^>]*data-(grilla|variedad|modo)/.test(js), 'los botones de opción ya no son .btn-secondary sueltos');
 ok(/aria-pressed/.test(js) && /setAttribute\('aria-pressed'/.test(js), 'aria-pressed en el marcado y al cambiar');
@@ -83,5 +93,18 @@ ok(def && Number(def[1]) === 6, `la variedad por defecto es «Variada» (6) — 
 ok(/\{ n: 6, etiqueta: 'Variada'/.test(js), 'y 6 es «Variada»');
 const grilla = js.match(/const GRILLA_DEFECTO = (\d+);/);
 ok(grilla && Number(grilla[1]) === 80, 'la rejilla por defecto sigue siendo Normal · 80');
+
+// ── E. un grupo de opciones no puede recortar una opción (v=277) ──────────────
+// Es lo que pasó con la quinta rejilla: el grupo recortaba en silencio. Con los
+// botones sin encoger y el grupo envolviendo, lo que no entra BAJA y se ve.
+const seg = regla('.mos-seg');
+ok(/flex-wrap:\s*wrap/.test(seg), 'el grupo de opciones envuelve en vez de recortar la última');
+ok(/flex:\s*1 0 auto/.test(off), 'y los botones no encogen por debajo de su texto');
+ok(!/\.mos-seg button \+ button \{ border-left/.test(css),
+  'el separador ya no es un border-left (con el envuelto deja un filo suelto al principio de la segunda fila)');
+ok(/gap:\s*1px/.test(seg) && prop(seg, 'background') === 'var(--color-border)',
+  'sino el fondo del grupo asomando por un hueco de 1 px, que funciona en las dos direcciones');
+ok(prop(off, 'background') === 'var(--color-surface)',
+  'y por eso el botón trae su propio fondo, en vez de ser transparente');
 
 console.log(`mosaico-barra: ${n} asserts OK`);
