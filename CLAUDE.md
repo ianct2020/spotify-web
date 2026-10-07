@@ -1842,9 +1842,36 @@ el costo NO escale con el tamaño de la biblioteca en esas vistas.
 | `#sin-clasificar` | **1 + ceil(P/50) + Σ(1 + ceil(Tᵢ/100)) + ocultos** ≈ **170+** | **~45** | `/me` + `/me/playlists` + las **42 propias** una por una + su playlist de ocultos | nº de playlists propias **y** su tamaño | leída del código |
 | `#skips` | **2 + ceil(Hk/100)** | ídem | 1 `/me` + 1 `/playlists/{id}` + la playlist de ocultos («skips») | **nº de ocultos de esta vista** | leída del código |
 
-**Arrancar la app: 3 `/v1/me`** — *medido*. Leyendo el código, `init()` dispara
-**1** (`testConnection()`); las otras dos son `getCurrentUserId()` (memoizado por
-sesión de página) y el perfil, que la primera vista pide vía `isOwner()`.
+**Arrancar la app: 1 `/v1/me`** — *medido dos veces en producción el 07/10, y
+confirmado leyendo el código el 07/10*. **Es 1 a secas**: ni 3 que se deduplican
+ni 3 de los que dos salen más tarde.
+
+🟥 **Hasta hoy esta línea decía 3, y las tres razones que daba eran falsas.**
+Corregido leyendo el camino entero de `init()`:
+
+| lo que decía | qué pasa de verdad |
+|---|---|
+| `init()` dispara 1 (`testConnection()`) | ✅ cierto, y es la única. `app.js:257` hace un `fetch` crudo a `https://api.spotify.com/v1/me` |
+| «otra es `getCurrentUserId()`» | 🟥 **no está en el camino de arranque.** `init()` reusa el perfil de esa misma respuesta (`await res.json()` → `showApp(profile)`); no la vuelve a pedir |
+| «otra es el perfil, que la primera vista pide vía `isOwner()`» | 🟥 **doblemente falso.** (a) La primera vista es `#home` (`router.js`: `hash.slice(1) \|\| 'home'`) y `renderHome()` es HTML puro, **0 peticiones**. (b) `isOwner()` no pide el perfil: llama a `getCurrentUserId()`, que quiere el **id**, no el perfil |
+
+⚠️ **Y `getUserProfile()` (`api.js:1042`), que sería el tercer `/me`, NO LA LLAMA
+NADIE.** Está exportada y no tiene un solo llamador en todo el repo —src, docs,
+tests y bancos— (verificado con grep el 07/10). Es código muerto, y es
+probablemente de donde salió el 3.
+
+**Dónde aparece el segundo `/me`, que existe pero no es del arranque.** La
+primera vista que necesite el id del usuario llama a `getCurrentUserId()`, que
+hace su propio `GET /me` y lo **memoiza** en `_cachedUserId` (`api.js:1046`). O
+sea:
+
+- arrancar y quedarse en `#home` → **1** y nada más;
+- arrancar y entrar a una vista que pregunte quién sos (`#covers`, `#wthree`,
+  `#listened`, cualquier almacén de ocultos…) → **2 en total**, y de ahí en
+  adelante **ningún `/me` más en esa carga de página**, por la memoización.
+
+Por eso la medición del 07/10 dio 1: se comprobó que la app arranca y que el
+inicio pinta sus 24 tarjetas, que es exactamente el caso de `#home`.
 
 **0 escrituras en la cuenta en las 24.** Ninguna apertura hace `PUT`, `POST` ni
 `DELETE`: lo verifica `tests/sin-escaneo-automatico.test.mjs` para las dos de
