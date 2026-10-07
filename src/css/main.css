@@ -1263,6 +1263,50 @@ h3 { font-size: 18px; font-weight: 600; }
   height: 440px;
 }
 
+/* Top 20 álbumes del historial: las columnas que entren, nunca más angostas
+   que 390 px.
+
+   Estuvo en un `style=` inline dentro de `dashboard.js` con DOS columnas fijas,
+   y por eso la regla de mobile de más abajo necesitaba `!important` para
+   ganarle. Al venirse a la hoja el inline desaparece y el `!important` sobra.
+
+   ⚠️ El 390 no es un gusto, es el ancho mínimo en que entra el título más largo.
+   Medido el 2026-10-07 a 1366×768: la fila gasta 161 px en el puesto, la tapa,
+   los huecos y la chapa de minutos, y «My Beautiful Dark Twisted Fantasy» pide
+   228 px de texto en Inter 14. 161 + 228 = 389.
+
+   ⚠️ Y por eso es `auto-fit` y no `repeat(3, …)`. Con tres columnas clavadas la
+   rejilla baja de 614 a 400 px a 1366, que es lo que se buscaba, pero a 768 px
+   de ventana las columnas quedan en 196 px y se cortan NUEVE títulos de veinte
+   —dos de los que ya se cortaban con las dos columnas de antes—. Con `auto-fit`
+   el navegador pone tres desde 1.360 px de ventana, dos entre 1.000 y 1.350, y
+   una por debajo: barrido de 24 anchos entre 400 y 1920, CERO títulos cortados
+   en todos. El corte se mide con `scrollWidth > clientWidth` y el ratón aparcado
+   fuera de las filas: el hover enciende la marquesina, le saca la elipsis y hace
+   creer que el nombre entra. */
+.dash-top-albums-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(390px, 1fr));
+  gap: 6px 12px;
+}
+
+/* El relleno propio de estas filas, que es lo que hace entrar la tercera
+   columna sin tocar la tipografía.
+
+   A tres columnas el hueco del título queda en 206 px y «My Beautiful Dark
+   Twisted Fantasy» pide 228: se pasa por 22 px, UN solo título de los veinte.
+   Bajar la letra habría sido lo fácil y lo malo —los nombres de al lado son el
+   mismo cuerpo 14 que el eje del Top 20 artistas—, así que lo que se recorta es
+   el relleno: 10px 14px → 8px 10px y el hueco interno 12 → 8 px. Eso devuelve
+   25 px al título (206 → 231) y deja los veinte enteros, con 3 px de sobra.
+
+   Va acotado a esta rejilla a propósito: `.track-row` lo usan muchas vistas y
+   acá no se decide por ellas. */
+.dash-top-albums-grid .track-row {
+  padding: 8px 10px;
+  gap: 8px;
+}
+
 /* ── Mobile ── */
 @media (max-width: 768px) {
   .hamburger {
@@ -2960,10 +3004,12 @@ h3 { font-size: 18px; font-weight: 600; }
   .chart-box { height: 220px !important; }
   .dash-chart-wide .chart-box { height: 260px !important; }
   .dash-chart-wide .chart-box.chart-box-tall { height: 440px !important; }
-  /* Top 20 álbumes: 1 columna en mobile (era 2 hardcoded inline)
+  /* Top 20 álbumes: 1 columna en mobile (en desktop son tres).
      minmax(0, 1fr) es CRÍTICO — con solo "1fr" el content-based min-width
-     hace que la columna se expanda a lo ancho del texto más largo. */
-  .dash-top-albums-grid { grid-template-columns: minmax(0, 1fr) !important; gap: 4px 0 !important; }
+     hace que la columna se expanda a lo ancho del texto más largo.
+     Ya no lleva `!important`: lo pedía el `style=` inline, que se fue a la
+     hoja. Gana por ser más abajo en el archivo, misma especificidad. */
+  .dash-top-albums-grid { grid-template-columns: minmax(0, 1fr); gap: 4px 0; }
   /* Listened year tiles: 3 columnas en vez de flex sin control */
   .listened-year-grid { grid-template-columns: repeat(3, 1fr) !important; gap: 6px; }
   /* Heatmap: contenedor sin padding extra */
