@@ -5676,7 +5676,24 @@ body.covers-fs .main {
   gap: 12px;
 }
 @container (min-width: 560px) { .mos-ajustes { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-@container (min-width: 1180px) { .mos-ajustes { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+/* ⚠️ Las cuatro columnas NO son iguales desde v=277: la primera —«Tamaño de la
+   rejilla»— tiene CINCO opciones y las otras dos, cuatro y dos. Con cuatro
+   columnas iguales a 1.366 px el grupo de la rejilla mide 292 px, sus cinco
+   botones piden 326 y el quinto («Finísima») se veía cortado por la mitad.
+   Medido en la copia del perfil el 06/10 y MIRADO en la captura, que es donde
+   se ve: el DOM decía `filasDeBotones: 1` y era verdad, porque lo que pasaba no
+   era que se partiera en dos filas sino que el quinto desaparecía.
+   Los mínimos están MEDIDOS en la copia, sumando el texto de cada botón (con
+   `Range.getBoundingClientRect`, no a ojo) más su relleno, más los 30 px de la
+   caja del grupo: rejilla **362**, variedad **281**, tinte **286** (por debajo de
+   ahí se parte en dos líneas la escala «100 % · color de tu imagen»), reparto
+   **178**. Suman 1.107 y hay 1.165, así que entran los cuatro con holgura y el
+   sobrante se reparte por los `fr`. Los mínimos van escritos como `minmax` y no
+   como anchos fijos para que el sobrante siga siendo elástico.
+   El alto de la zona de ajustes NO cambia: 100 px antes y después. */
+@container (min-width: 1180px) {
+  .mos-ajustes { grid-template-columns: minmax(366px, 1.25fr) minmax(286px, 1fr) minmax(286px, 1fr) minmax(182px, .7fr); }
+}
 
 .mos-grupo {
   display: flex;
@@ -5706,18 +5723,30 @@ body.covers-fs .main {
   color: var(--color-text);
 }
 
+/* ⚠️ **Un grupo de opciones no puede recortar una opción.** Hasta v=276 esto era
+   `flex` a secas con los botones en `flex: 1 1 auto` y `white-space: nowrap`:
+   cuando no entraban, el último se CORTABA —el `overflow: hidden` que redondea
+   las esquinas se lo comía— y no había ninguna señal de que faltara una opción.
+   Con cuatro opciones nunca se notó; con las cinco rejillas de v=277 «Finísima»
+   desapareció entera. Ahora los botones no encogen (`flex: 1 0 auto`) y el grupo
+   ENVUELVE: si no entran, bajan a otra fila, que se ve. El separador ya no es un
+   `border-left` —que con el envuelto deja un filo suelto al principio de la
+   segunda fila— sino el fondo del grupo asomando por un `gap` de 1 px, que
+   funciona igual en horizontal y en vertical. */
 .mos-seg {
   display: flex;
-  background: var(--color-surface);
+  flex-wrap: wrap;
+  gap: 1px;
+  background: var(--color-border);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-sm);
   overflow: hidden;
 }
 .mos-seg button {
-  flex: 1 1 auto;
+  flex: 1 0 auto;
   padding: 9px 10px;
   border: 0;
-  background: transparent;
+  background: var(--color-surface);
   color: var(--color-text-secondary);
   font-family: var(--font-sans);
   font-size: 13px;
@@ -5727,7 +5756,6 @@ body.covers-fs .main {
   cursor: pointer;
   transition: background var(--transition-fast), color var(--transition-fast);
 }
-.mos-seg button + button { border-left: 1px solid var(--color-border); }
 .mos-seg button:hover { background: var(--color-elevated); color: var(--color-text); }
 .mos-seg button:focus-visible { outline: 2px solid var(--color-accent); outline-offset: -2px; }
 .mos-seg button.is-on {
@@ -5783,6 +5811,80 @@ body.covers-fs .main {
   font-size: 11px;
   color: var(--color-text-secondary);
 }
+
+/* La galería del mosaico: los que ya se hicieron (v=277).
+   Una tarjeta por resultado guardado — su miniatura, de qué imagen salió, con qué
+   ajustes, y «Descargar»/«Quitar». Las tarjetas se redibujan enteras en cada
+   cambio, así que la hoja no puede depender de ningún estado que ponga el JS.
+   Solo variables de tema: ningún color escrito a mano (lo vigila el test). */
+.mos-galeria {
+  display: grid;
+  /* 180 y no 200: con 200 px y 14 de hueco entran CINCO tarjetas en los 1.202 px
+     de la galería en la pantalla de Ian, y seis guardados —que es el tope— caían
+     en 5 + 1, o sea una fila huérfana y el doble de alto (unos 700 px contra 350)
+     en una pantalla de 591 px útiles. Con 180 entran las seis en una fila. */
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 14px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.mos-tarjeta {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  padding: 10px;
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+.mos-tarjeta-img {
+  display: block;
+  width: 100%;
+  height: auto;
+  /* Topado en alto: una imagen 3:4 a 200 px de ancho mide 267 px y seis
+     tarjetas en fila dejarían la galería más alta que la pantalla de Ian (591 px
+     útiles). `contain` para que una horizontal y una vertical se vean las dos
+     bien sin recortar nada de lo que generó. */
+  max-height: 220px;
+  object-fit: contain;
+  background: var(--color-surface);
+  border-radius: var(--radius-sm);
+}
+.mos-tarjeta-n {
+  margin: 6px 0 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-text);
+  overflow-wrap: anywhere;   /* el nombre entero, como en .mos-archivo */
+}
+.mos-tarjeta-d {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--color-text-secondary);
+  overflow-wrap: anywhere;
+}
+.mos-tarjeta-acciones {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+}
+.mos-tarjeta-acciones .btn { padding: 6px 10px; font-size: 12px; }
+.mos-quitar {
+  padding: 6px 4px;
+  border: 0;
+  background: transparent;
+  color: var(--color-text-secondary);
+  font-family: var(--font-sans);
+  font-size: 12px;
+  cursor: pointer;
+  text-decoration: underline;
+}
+.mos-quitar:hover { color: var(--color-text); }
+.mos-quitar:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; border-radius: 4px; }
 
 /* Seguimiento: lista propia, sin cargar la barra de Descubrir. */
 .follow-artists { max-width: 820px; }
