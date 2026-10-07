@@ -841,7 +841,7 @@ function renderDashboard(container, stats) {
   // en `display: none`: el observer no los ve hasta que `hydrateHistorySection`
   // la muestra, y ahí entran solos.
   //
-  // Los 5 tiles del historial NO se arman acá porque todavía no existen: los
+  // Los 6 tiles del historial NO se arman acá porque todavía no existen: los
   // pinta `hydrateHistorySection`, que los arma por su cuenta.
   armRevealAll('.dash-stats-row .stat-card', container, { stagger: 20 });
   armRevealAll('.dash-chart-card', container, { stagger: 28, maxStagger: 4 });
@@ -855,10 +855,24 @@ async function hydrateHistorySection() {
   section.style.display = '';
   _lastHistory = h;
 
-  // Stat tiles arriba (5)
+  // Stat tiles arriba (6)
+  //
+  // Eran CINCO en la grilla de seis columnas de `.dash-stats-row`, así que
+  // quedaba un hueco a la derecha. Las dos salidas eran estirar las cinco a
+  // cinco columnas o agregar una sexta métrica, y la sexta gana con el número
+  // delante (medido el 2026-10-07): a 1366 px las dos dan 0 huecos y el mismo
+  // alto de 67 px, pero las columnas las fijan dos media queries —tres a 768 px
+  // y dos a 600 px—, y cinco tiles no son divisibles por tres ni por dos: dejan
+  // un hueco en CADA uno de esos dos anchos. Seis no deja ninguno en los tres.
+  //
+  // ⚠️ Y cuesta 0 peticiones: `unique_artists` ya viene en `totals` del mismo
+  // `history-stats.json` que esta función ya tiene cargado para los otros cinco.
   const t = h.totals || {};
   const totalHours = Math.round((t.min || 0) / 60);
-  const totalDays = ((t.min || 0) / 60 / 24).toFixed(1);
+  // `toFixed(1)` da «185.6» con punto, y el copy de la app es español de España:
+  // el separador decimal es la COMA. Se formatea con `toLocaleString('es-ES')`
+  // como los otros cinco tiles, en vez de dejar el punto del inglés.
+  const totalDays = ((t.min || 0) / 60 / 24).toLocaleString('es-ES', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
   const tiles = document.getElementById('history-stat-tiles');
   if (tiles) tiles.innerHTML = `
     <div class="stat-card"><div class="stat-value">${totalHours.toLocaleString('es-ES')}h</div><div class="stat-label">${totalDays} días de música</div></div>
@@ -866,8 +880,9 @@ async function hydrateHistorySection() {
     <div class="stat-card"><div class="stat-value">${(t.days_active || 0).toLocaleString('es-ES')}</div><div class="stat-label">Días activos</div></div>
     <div class="stat-card"><div class="stat-value">${t.longest_streak || 0}</div><div class="stat-label">Racha más larga (días)</div></div>
     <div class="stat-card"><div class="stat-value">${t.skip_pct || 0}%</div><div class="stat-label">Skips</div></div>
+    <div class="stat-card"><div class="stat-value">${(t.unique_artists || 0).toLocaleString('es-ES')}</div><div class="stat-label">Artistas distintos</div></div>
   `;
-  // Estos 5 tiles NACEN ACÁ, después de que `renderDashboard` ya armó lo suyo,
+  // Estos 6 tiles NACEN ACÁ, después de que `renderDashboard` ya armó lo suyo,
   // así que hay que armarlos aparte. Sin esto la sección del historial entraba a
   // medias: los 4 charts de abajo se animaban y la fila de tiles de arriba
   // aparecía de golpe. Verificado en producción con v=159.
