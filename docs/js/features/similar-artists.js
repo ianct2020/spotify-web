@@ -1,16 +1,20 @@
-import { spotifyFetch, createPlaylist, addTracksToPlaylist, invalidatePlaylistsCache } from '../api.js?v=275';
-import { hasKey, setKey, getSimilarArtists, getArtistTopTracks } from '../api/lastfm.js?v=275';
-import { showProgress, hideProgress, promptPlaylistName, alertModal, escapeHtml, pageHeader } from '../ui/components.js?v=275';
-import { showToast } from '../ui/toast.js?v=275';
-import { getPreview } from '../api/preview-providers.js?v=275';
-import { togglePreview, playingKey, isPlayingAudio } from '../ui/preview-player.js?v=275';
-import { paintPlayingCard } from '../ui/track-card-row.js?v=275';
-import { openTrackCard } from './track-card.js?v=275';
-import { openAlbumCard } from './album-card.js?v=275';
-import { guardarLanzamientoConAviso, PLAYLIST_SINGLES } from './discover-common.js?v=275';
-import { esEPoAlbum, EP_MIN_TRACKS } from '../util/release-size.js?v=275';
-import { limpiaParaQuery, titleMatches, artistMatches } from '../util/track-match.js?v=275';
-import { iconoPlay, iconoPausa, iconoFicha, iconoDisco } from '../ui/icons.js?v=275';
+import { spotifyFetch, createPlaylist, addTracksToPlaylist, invalidatePlaylistsCache } from '../api.js?v=276';
+import { hasKey, setKey, getSimilarArtists, getArtistTopTracks } from '../api/lastfm.js?v=276';
+import { showProgress, hideProgress, promptPlaylistName, alertModal, escapeHtml, pageHeader } from '../ui/components.js?v=276';
+import { showToast } from '../ui/toast.js?v=276';
+import { getPreview } from '../api/preview-providers.js?v=276';
+import { togglePreview, playingKey, isPlayingAudio } from '../ui/preview-player.js?v=276';
+import { paintPlayingCard } from '../ui/track-card-row.js?v=276';
+import { openTrackCard } from './track-card.js?v=276';
+import { openAlbumCard } from './album-card.js?v=276';
+import { guardarLanzamientoConAviso, PLAYLIST_SINGLES } from './discover-common.js?v=276';
+import { esEPoAlbum, EP_MIN_TRACKS } from '../util/release-size.js?v=276';
+import { limpiaParaQuery, titleMatches, artistMatches } from '../util/track-match.js?v=276';
+import { iconoPlay, iconoPausa, iconoFicha, iconoDisco } from '../ui/icons.js?v=276';
+import {
+  artistasOcultos, artistaEstaOculto, alternarArtistaOculto,
+  botonMenuArtistaHtml, botonArtistasOcultosHtml, conectarMenuArtista, cerrarMenuArtista,
+} from './artistas-ocultos.js?v=276';
 
 // Mismo componente que #recs (recommendations.js): preview, ficha y ficha de
 // álbum sobre la fila resuelta. Los iconos son idénticos a los de esa vista.
@@ -20,6 +24,11 @@ let similarList = [];
 let currentSimilarPick = null;
 let resolvedTracks = [];
 const pickedUris = new Set();
+// Mirando los artistas ocultos en vez de los similares.
+let viendoOcultos = false;
+// El ⋮ de la rejilla. Se engancha una vez sobre `#similar-panel`, que es el nodo
+// que sobrevive a los repintados de la rejilla, y se suelta al salir.
+let sueltaMenuArtista = null;
 
 export function render(container) {
   container.innerHTML = `
@@ -27,11 +36,41 @@ export function render(container) {
     <div id="similar-content"></div>
   `;
 
+  if (sueltaMenuArtista) sueltaMenuArtista();
+  sueltaMenuArtista = conectarMenuArtista(container, {
+    selectorFila: '.art-card-pick-wrap',
+    onCambio: async (nombre) => {
+      const artista = similarList.find(a => a.name === nombre) || { name: nombre };
+      try {
+        // ⚠️ Acá la uri NO sale gratis, y es inevitable: un similar de Last.fm
+        // es por definición alguien que NO está en tus me gusta, así que no hay
+        // ninguna pista suya en memoria. Si ya se resolvieron sus top tracks en
+        // esta sesión se reusa el primero; si no, la pieza compartida lo busca.
+        const rep = currentSimilarPick?.name === nombre
+          ? resolvedTracks.find(t => t.matched && (t.artistList || []).some(n => n.toLowerCase() === nombre.toLowerCase()))
+          : null;
+        const oculto = await alternarArtistaOculto(artista, { uriSugerida: rep?.uri || null });
+        showToast(oculto
+          ? `«${nombre}» oculto — no vuelve a aparecer entre los similares`
+          : `«${nombre}» vuelve a la lista`, 'success');
+      } catch (e) {
+        showToast('No se ha podido ocultar: ' + e.message, 'error');
+      }
+      if (similarList.length && document.getElementById('similar-panel')) renderSimilarGrid();
+    },
+  });
+
+  const suelta = () => {
+    if (sueltaMenuArtista) { sueltaMenuArtista(); sueltaMenuArtista = null; }
+    cerrarMenuArtista();
+  };
+
   if (!hasKey()) {
     renderKeySetup();
-    return;
+    return suelta;
   }
   renderSearch();
+  return suelta;
 }
 
 function renderKeySetup() {
@@ -127,6 +166,18 @@ async function pickSourceArtist(name) {
   const panel = document.getElementById('similar-panel');
   panel.innerHTML = `<div class="empty-state"><div class="spinner spinner-lg"></div><div style="margin-top:16px">Buscando similares vía Last.fm...</div></div>`;
 
+  // Los ocultos desde la playlist, recién ACÁ y no en `render()`.
+  //
+  // ⚠️ Es lo que mantiene a #similar en 0 peticiones al abrirse, que es lo que
+  // dice la tabla de costos de CLAUDE.md. Buscar un artista ya es un acto
+  // explícito del usuario (y ya cuesta un `/search`), así que es el momento
+  // correcto para reconciliar; en `render()` le habría puesto un coste fijo a
+  // una vista que hoy es gratis. Mismo criterio que #recs, que lo llama dentro
+  // de `run()` y no al pintar.
+  artistasOcultos.ready().then(() => {
+    if (similarList.length && document.getElementById('similar-panel')) renderSimilarGrid();
+  }).catch(() => {});
+
   try {
     similarList = await getSimilarArtists(name, 50);
     if (similarList.length === 0) {
@@ -141,22 +192,46 @@ async function pickSourceArtist(name) {
 
 function renderSimilarGrid() {
   const panel = document.getElementById('similar-panel');
+  // La poda que Ian pidió (04/10, punto 10): los artistas ocultos no vuelven a
+  // salir entre los similares, de ninguna búsqueda. `artistaEstaOculto` lee del
+  // caché local, así que filtrar acá cuesta 0 peticiones.
+  const visibles = similarList
+    .map((a, i) => ({ a, i }))
+    .filter(({ a }) => artistaEstaOculto(a.name) === viendoOcultos);
+
   panel.innerHTML = `
-    <div style="margin-bottom:8px;color:var(--color-text-secondary);font-size:14px">
-      ${similarList.length} artistas similares a <strong>${escapeHtml(sourceArtist)}</strong>. Elige uno para ver sus top tracks.
+    <div class="similar-grid-head">
+      <div style="color:var(--color-text-secondary);font-size:14px">
+        ${viendoOcultos
+          ? `${visibles.length} de los similares a <strong>${escapeHtml(sourceArtist)}</strong> están ocultos.`
+          : `${visibles.length} artistas similares a <strong>${escapeHtml(sourceArtist)}</strong>. Elige uno para ver sus top tracks.`}
+      </div>
+      ${botonArtistasOcultosHtml('similar-ocultos', { mirando: viendoOcultos })}
     </div>
-    <div class="smart-grid smart-grid-compact">
-      ${similarList.map((a, i) => `
-        <button class="smart-card similar-artist-card" data-idx="${i}">
-          <div class="smart-card-title" style="font-size:15px">${escapeHtml(a.name)}</div>
-          <div class="smart-card-meta">match ${(a.match * 100).toFixed(0)}%</div>
-        </button>
+    ${visibles.length ? `<div class="smart-grid smart-grid-compact">
+      ${visibles.map(({ a, i }) => `
+        <div class="smart-card art-card-pick-wrap">
+          <button type="button" class="art-card-pick" data-idx="${i}" title="Ver top tracks">
+            <div class="smart-card-title" style="font-size:15px">${escapeHtml(a.name)}</div>
+          </button>
+          <div class="art-card-footer">
+            <span class="smart-card-meta">match ${(a.match * 100).toFixed(0)}%</span>
+            ${botonMenuArtistaHtml(a.name)}
+          </div>
+        </div>
       `).join('')}
-    </div>
+    </div>` : `<div class="card"><p>${viendoOcultos
+      ? 'No has ocultado a ninguno de estos artistas.'
+      : 'Has ocultado a todos los similares de este artista. Mira «Artistas ocultos» para devolver a alguno.'}</p></div>`}
   `;
-  panel.querySelectorAll('.similar-artist-card').forEach(el => {
+  // ⚠️ La tarjeta ya NO es un <button> suelto: con el ⋮ dentro habría un botón
+  // dentro de otro, que es HTML inválido. Son hermanos, igual que en #recs — y
+  // comparten su CSS (`.art-card-*`) en vez de copiarlo.
+  panel.querySelectorAll('.art-card-pick').forEach(el => {
     el.onclick = () => pickSimilarArtist(similarList[parseInt(el.dataset.idx)]);
   });
+  const btnOcultos = panel.querySelector('#similar-ocultos');
+  if (btnOcultos) btnOcultos.onclick = () => { viendoOcultos = !viendoOcultos; renderSimilarGrid(); };
 }
 
 async function pickSimilarArtist(artist) {

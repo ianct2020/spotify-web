@@ -4436,6 +4436,18 @@ body.covers-fs .main {
   white-space: nowrap;
 }
 
+/* La línea del control de «Artistas ocultos» de #discover-artists (v=276). Es
+   una línea PROPIA y no un botón más de `.disco-controls`: esa barra pasaba a
+   dos filas a 1.356 px con este botón dentro (medido en
+   tests/banco/ocultar-artista.html). Solo se pinta si hay algo que enseñar. */
+.disco-linea-artistas {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+
 /* ── Tarjeta de lanzamiento compartida (#discover-artists y #new-releases) ──
    Grid fijo de 3 en escritorio (no auto-fill: Ian pidió 3 exactas), 2 en
    tablet y 1 en móvil. minmax(0, 1fr) en las tres, si no el nombre largo de

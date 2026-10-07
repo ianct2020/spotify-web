@@ -1598,6 +1598,88 @@ No hay forma de crear ni convertir una playlist a privada por API
 post-migración. Si una feature necesita privacidad, el usuario tiene que
 pasarla a privada a mano desde la app de Spotify.
 
+## Ocultar un ARTISTA, en cuatro vistas y con un solo almacén (v=276, 2026-10-06)
+
+`#similar`, `#discover-artists` y `#follow-artists` no dejaban ocultar artistas
+(puntos 10, 12 y 13 del feedback de Ian del 04/10). Ahora las tres lo hacen, y
+`#recs` —que ya lo hacía desde v=205— pasó a usar la misma pieza.
+
+**NINGÚN SÉPTIMO ALMACÉN, y la decisión está medida.** La pregunta no era «cómo
+oculto un artista» sino «dónde vive», porque cada almacén re-pagina su playlist
+entera en cada sesión de página (`useCache:false`). La respuesta: **`recs_ocultos`
+ya ES un almacén de artistas** —clave = nombre en minúsculas, con su playlist
+espejo y su `recuperarUriDeArtistaKey`—, así que se mudó de `recommendations.js` a
+`features/artistas-ocultos.js` y lo comparten las cuatro. Un séptimo habría
+costado **lo mismo al abrir** (`1 /playlists/{id}` + `ceil(Ha/100)`) **más** una
+playlist nueva en la cuenta, y encima habría dejado que un artista oculto en
+`#similar` siguiera saliendo en `#recs` — el mismo bug que `discover-common.js`
+evita compartiendo `hiddenAlbums` entre las dos de descubrir.
+
+⚠️ **El `lsKey` y el `playlistName` no se tocaron, y no es un detalle.** Ian tenía
+**12 artistas ocultos** el 06/10. Cambiarle la clave no los borraría: los dejaría
+**inalcanzables** —la vista preguntaría por una clave que nadie escribió— y eso
+pasa sin una sola excepción en consola. Por el mismo motivo la clave sigue siendo
+`name.toLowerCase()` **sin normalizar** (sin colapsar espacios, sin sacar
+acentos), aunque no sea la mejor clave: es la que escribieron esos 12.
+`tests/artistas-ocultos.test.mjs` lo afirma byte a byte.
+
+**El costo:** `#similar` **sigue en 0** al abrirse (el `ready()` va dentro de
+`pickSourceArtist`, detrás del acto del usuario, como el de `#recs` va dentro de
+`run()`); `#discover-artists` **+2** (43 → 45) y `#follow-artists` **+2** (9 → 11).
+
+**La uri representativa sale GRATIS en dos de las tres.** Una playlist solo guarda
+pistas y un artista no es una pista, así que hace falta una pista suya de
+representante. `#follow-artists` y `#discover-artists` arman su lista **desde los
+me gusta**, o sea que ya tienen ids de pistas de ese artista en memoria:
+`artistasDeBases()` devuelve el `repTrackId` que antes calculaba y tiraba, y
+`#discover-artists` lo saca de `state.likesByArtist`. Sin eso, podar los 183 de
+`#follow-artists` costaría **183 `/search`**. En `#similar` no hay forma —un
+similar de Last.fm es por definición alguien que NO está en tus likes— y ahí se
+paga 1 `/search` por ocultamiento, como `#recs` desde v=205.
+
+⚠️ **`recuperarUriDeArtistaKey` devuelve `{ uri, motivo, definitivo, reglas }`, no
+una cadena.** El almacén desenvuelve las dos formas, pero **solo dentro de
+`sync()`**: en el camino de `toggle()` hay que hacerlo en quien llama. Pasarle el
+objeto entero guardaría un objeto donde va un `spotify:track:…` y el oculto se
+subiría roto sin que nada se queje — `toggle` no valida la forma. El banco lo caza.
+
+### El control: un botón ⋮ VISIBLE, y FUERA de la barra de `#discover-artists`
+
+El click derecho **no** se reemplazó (Ian lo propuso): es el que trae copiar,
+abrir en pestaña nueva e inspeccionar, y un gesto que no se ve no se descubre
+solo. El botón se ve siempre; el click derecho sobre la fila abre el mismo menú
+como propina. El icono es `iconoPuntosVertical` (⋮) y **no** reusa `iconoPuntos`
+(···), que ya significa «buscando preview» y vive dentro del botón de play — en
+`#similar` los dos conviven a centímetros.
+
+⚠️ **El botón «Artistas ocultos N» NO va en `.disco-controls`, y está medido.**
+Mide **143 px** con el contador en una cifra y **159 px con tres** («Artistas
+ocultos 183», el techo plausible). Medido en `tests/banco/ocultar-artista.html`
+el 06/10, bisecando el ancho de `main`:
+
+| | con el botón DENTRO de `.disco-controls` |
+|---|---|
+| contador de 1 cifra (143 px) | dos filas por debajo de **1.317 px** |
+| contador de 3 cifras (159 px) | dos filas por debajo de **1.366 px** |
+
+O sea que a **1.356 px** —el ancho real de `main` en la pantalla de 1.366 de Ian,
+medido el 03/10— la barra pasaba a **DOS FILAS**. Sin el botón: una. Concuerda con
+lo que ya decía la sección de `#follow-artists`: esa barra tenía 18 px de margen.
+
+Así que el control vive en **su propia línea** (`.disco-linea-artistas`), un
+bloque aparte que no compite con nada, y sale vacía cuando no hay ningún artista
+oculto. El banco afirma que la barra tiene las **mismas filas** antes y después
+del control y con el contador en 183, así que un botón nuevo ahí vuelve a fallar.
+
+### Lo que NO se hizo
+
+- **`#new-releases` no poda artistas.** Comparte `hiddenAlbums` con
+  `#discover-artists`, así que ocultar un ÁLBUM vale en las dos, pero ocultar un
+  ARTISTA hoy solo vale en `#discover-artists`. Sumarlo son **+2** peticiones al
+  abrir esa vista; nadie lo pidió en esta tanda y no se metió de prestado.
+- **El `useCache:false` sigue tal cual** (ver más arriba). Lo que costaría tocarlo
+  está medido, pero es su propio encargo.
+
 ## Seguir artistas en Spotify (v=268, 2026-10-03)
 
 `#follow-artists`, en el menú Descubrir, trabaja sobre las discografías guardadas
@@ -1701,10 +1783,13 @@ el costo NO escale con el tamaño de la biblioteca en esas vistas.
 | `#genre` | **0** | **0** | — (stats.fm no es Spotify) | — | leída del código |
 | **Descubrir** | | | | | |
 | `#similar` | **0** | **0** | — (la búsqueda es un acto explícito) | — | leída del código |
+| ↳ y SIGUE en 0 con ocultar artistas (v=276) | **0** | **0** | el `ready()` del almacén de artistas va dentro de `pickSourceArtist`, no de `render()` | — | leída del código |
 | `#rabbit` | **0** | **0** | — | — | leída del código |
 | `#recs` | **0** | **0** | — | — | leída del código |
-| `#discover-artists` | **32 + 2 + ceil(Hd/100)** | ídem que el frío menos «w three» | «w three» **+ la playlist de ocultos («descubrir»)** | pistas de «w three» **y nº de ocultos** | leída del código |
+| `#discover-artists` | **32 + 2 + ceil(Hd/100)** = **43** | ídem que el frío menos «w three» | «w three» **+ la playlist de ocultos («descubrir»)** | pistas de «w three» **y nº de ocultos** | leída del código |
+| ↳ **+2 desde v=276** (ocultar artistas) → **45** | **45** | ídem | **+ la playlist de ocultos («recomendados»)**: `1 /playlists/{id}` + `ceil(Ha/100)` | nº de artistas ocultos (**12** el 06/10) | leída del código |
 | `#follow-artists` | **ceil(A/40)** = **9** | **0** | `/me/library/contains?uris=spotify:artist:…` | **nº de discografías en la base** | leída del código |
+| ↳ **+2 desde v=276** (ocultar artistas) → **11** | **2** | **+ la playlist de ocultos («recomendados»)** | ídem que arriba | nº de artistas ocultos | leída del código |
 | `#new-releases` | **12** `/items` + **5** `/me` | **1** | snapshot + págs. de `/items` de «w three» | pistas de «w three» | **medida en vivo el 2026-09-30** |
 | ↳ lo que predice el código | 1 + ceil(W/100) = **32** **+ 2 + ceil(Hd/100)** | ídem | «w three» + ocultos («descubrir»), el MISMO store que `#discover-artists` | ídem | leída del código |
 | **Limpieza** | | | | | |
@@ -1735,11 +1820,25 @@ una.
 
 **2. `hiddenStore.ready()`** (`util/hidden-sync.js`), y éste es el que explica el
 desborde de 48 de 12. Al abrir `#wthree` (y `#skips`, `#zeroplays`,
-`#sin-clasificar`, `#recs`) se dispara una vez por sesión de página y cuesta:
+`#sin-clasificar`) se dispara una vez por sesión de página y cuesta:
 
 ```
 1 /me  +  1 /playlists/{id}?fields=id,name,owner(id)  +  ceil(H/100) /items
 ```
+
+🟥 **Corrección del 06/10: `#recs` NO estaba en esa lista y acá decía que sí.**
+Su `hiddenArtists.ready()` vive dentro de `run()` —la función del botón «Buscar
+recomendaciones»—, no de `render()`, así que **abrir `#recs` cuesta 0**, como ya
+decía su fila de la tabla. Las dos mitades de este documento se contradecían y la
+fila era la que tenía razón. Y de paso dejó el patrón que v=276 copió: **el
+`ready()` de un almacén va detrás del acto del usuario**, y así una vista que
+cuesta 0 sigue costando 0 aunque gane ocultos. Es lo que mantiene `#similar` en 0.
+
+⚠️ **El `/me` es 1 solo por sesión de página, no uno por almacén**:
+`getCurrentUserId()` está memoizado. Así que el PRIMER almacén de una carga paga
+`1 + 1 + ceil(H/100)` y cada almacén siguiente paga `1 + ceil(H/100)`. Es por eso
+que sumarle a `#discover-artists` el almacén de artistas cuesta **+2** y no +3:
+el `/me` ya lo pagó `hiddenAlbums`.
 
 🟥 **Y ese último va con `useCache: false`**, así que **re-pagina la playlist de
 ocultos ENTERA cada sesión de página, en frío y en caliente**: no mira el
@@ -1749,13 +1848,34 @@ el sitio — pero **ojo: `useCache:false` está puesto a propósito**, porque la
 reconciliación de ocultos necesita el estado real de la playlist, no uno
 cacheado. No lo cambies sin leer esa sección.
 
-⚠️ **Hay SEIS almacenes de ocultos y cada uno tiene su PROPIA playlist**
-(`descubrir`, `recomendados`, `sin clasificar`, `sin plays`, `álbumes` de W-Three,
-`skips`). No se comparten: **cada vista paga el suyo**. Los dos de descubrir sí
+⚠️ **Hay SEIS almacenes de ocultos y cada uno tiene su PROPIA playlist.**
+No se comparten: **cada vista paga el suyo**. Censo completo, leído del código y
+medido en el navegador de Ian el **06/10** (`localStorage`, solo lectura):
+
+| `lsKey` | vista(s) | la clave es | playlist (id) | ocultos | `ready()` en frío |
+|---|---|---|---|---:|---:|
+| `discover_ocultos` | `#discover-artists`, `#new-releases` | **álbum** (`cardKey`) | `… (descubrir)` `6WqWZy4GVLnsirTTZdRePF` | **900** | 2 + 9 = **11** |
+| `recs_ocultos` | `#recs` y, desde v=276, `#similar` · `#discover-artists` · `#follow-artists` | **nombre de ARTISTA en minúsculas** | `… (recomendados)` `6mOmj0KG72NmSluJCEx1Uf` | **12** | 2 + 1 = **3** |
+| `wthree_hidden_albums` | `#wthree` | **álbum** (`albumKey`) | `… (álbumes)` `22e2RS9m2FYXajjDM3v7W9` | 17 | **3** |
+| `skips_hidden_tracks` | `#skips` | **id de pista** | `… (skips)` `7rJDSnMWX5ag5NWxsG7Y3B` | 88 | **3** |
+| `zeroplays_hidden_tracks` | `#zeroplays` | **id de pista** | `… (sin plays)` `6hviqLfTsqOpyWtod2Eg0P` | 25 | **3** |
+| `sin_clasificar_ocultas` | `#sin-clasificar` | **id de pista** | `… (sin clasificar)` `2zP8yXCfWmelwsOoYm8REz` | 0 | **2** |
+
+Y los dos que **no** son de éstos, para que nadie los cuente como séptimo ni
+octavo: `discover_escuchados` (**178**, `createLocalStore`, **0 peticiones**, solo
+navegador) y `listened_unreg_dismissed` (**78**, un `Set` crudo en
+`features/listened.js`, no pasa por `hidden-sync.js`). Los dos de descubrir sí
 comparten `hiddenAlbums`, así que entre `#discover-artists` y `#new-releases`
 solo paga la primera de la sesión de página. Los `H` de la tabla son el nº de
-ocultos **de ese almacén**, no un total: los **439 de novedades** y los **78 de
-`listened_unreg_dismissed`** viven en almacenes distintos.
+ocultos **de ese almacén**, no un total: los **78 de `listened_unreg_dismissed`**
+viven aparte y ni siquiera usan `hidden-sync.js` (es un `Set` crudo en
+`features/listened.js`).
+
+🟥 **Y el «439 de novedades» era un número viejo: son 900.** Censado en el
+navegador de Ian el **06/10**, leyendo `localStorage`: `discover_ocultos` tiene
+**900 claves** (899 con uri), que es el almacén que comparten
+`#discover-artists` y `#new-releases`. O sea `Hd = 900` → `ceil(899/100) = 9`
+páginas, no 5. Quien presupueste esas dos vistas tiene que usar **9**.
 
 🟥 **Y ésta fue mi propia corrección a mitad de camino**: `#skips` y `#zeroplays`
 los tenía anotados en **0** por usar sólo `getBestAvailableLikes()`, y no lo son

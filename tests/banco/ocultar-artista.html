@@ -305,7 +305,20 @@ try {
   afirmar(rotulo5 === 'Ocultar este artista', `#similar ofrece ocultar (dice «${rotulo5}»)`);
   await esperarA(() => rejilla().length === 2, { que: `que «${victima2}» salga de la rejilla` });
   afirmar(tienda.artistasOcultos.size === 1, `contador: 1 (hay ${tienda.artistasOcultos.size})`);
-  medidas.push(`#similar: 3 → 2 en la rejilla, contador 0 → 1`);
+  // ⚠️ El camino SIN uri sugerida, que es el de #similar: acá nadie resolvió los
+  // top tracks del artista todavía, así que la pieza compartida tiene que
+  // BUSCARLA. `recuperarUriDeArtistaKey` devuelve `{ uri, motivo, … }`, no una
+  // cadena, y pasar el objeto entero al `toggle` guardaría un objeto donde va un
+  // `spotify:track:…` sin que nada se queje. Este assert es el que lo caza.
+  await esperarA(() => playlistOcultos.items.length === 1, { que: 'que la uri buscada llegue a la playlist' });
+  const uriSimilar = playlistOcultos.items[0];
+  afirmar(typeof uriSimilar === 'string' && /^spotify:track:[A-Za-z0-9-]+$/.test(uriSimilar),
+    `lo que llegó a la playlist es una uri de pista, no un objeto: ${JSON.stringify(uriSimilar)}`);
+  afirmar(porUri.get(uriSimilar)?.artists?.[0]?.name?.toLowerCase() === victima2.toLowerCase(),
+    `y es una pista de «${victima2}» (es de «${porUri.get(uriSimilar)?.artists?.[0]?.name}»)`);
+  afirmar(!window.__cons.some(c => /no pude resolver una pista/.test(c)),
+    `#similar resolvió la uri: no saltó «queda oculto SOLO en este navegador» — ${window.__cons.join(' || ').slice(0, 300)}`);
+  medidas.push(`#similar: 3 → 2 en la rejilla, contador 0 → 1, uri buscada y subida a la playlist`);
   if (VISTA === 'similar') throw Object.assign(new Error('similar'), { parada: true });
 
   // ══ 4. EL MISMO ALMACÉN: ocultar en #similar se ve en las otras dos ════════
