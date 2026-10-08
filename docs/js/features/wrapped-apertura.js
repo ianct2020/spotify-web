@@ -76,7 +76,7 @@
 // y un año que acabó con el último día en blanco no tiene racha que enseñar.
 // Con menos de dos pasos la apertura no se monta: no hay recorrido que hacer.
 
-import { animationsEnabled } from '../ui/reveal.js?v=282';
+import { animationsEnabled } from '../ui/reveal.js?v=283';
 
 // ── un solo recorrido vivo por vez ──────────────────────────────────────────
 //
@@ -367,7 +367,18 @@ export function rachaVigente(y, stats) {
   return { dias: n, corte: isoDesde(aMs(dCorte.from) + (dCorte.min.length - 1) * 86400000) };
 }
 
-function pasoRacha(ctx) {
+/**
+ * Se exporta por la MISMA razón que `rachaVigente()`: para que
+ * `tests/wrapped-racha.test.mjs` corra ESTA función y no una copia.
+ *
+ * Lo que el banco cuida acá no es el número, es el TEXTO. Desde v=283 el
+ * párrafo no se pinta en la tarjeta: vive en `info`, dentro de un ⓘ. Un
+ * descuido que borrara `info` —o que volviera a llamarlo `cuerpo`— dejaría la
+ * tarjeta igual de linda y sin el aviso de que el número NO llega a hoy, que es
+ * la única forma de que ese `4` se lea como un dato falso. No tira, no deja
+ * hueco: miente. Por eso está declarado.
+ */
+export function pasoRacha(ctx) {
   const { y, stats, fmtDia } = ctx;
   const r = rachaVigente(y, stats);
   // Sin racha viva en el corte no hay panel: un «0 días seguidos» a pantalla
@@ -398,12 +409,23 @@ function pasoRacha(ctx) {
               `que volver a importar el historial.`;
   }
 
+  // ⚠️ `info` en vez de `cuerpo`: el texto NO se pierde, se MUEVE al ⓘ.
+  //
+  // Es el único paso que lo usa. El párrafo medía 108 px y cinco líneas —el más
+  // alto de los siete, y el único panel que no tiene dibujo—, así que era lo
+  // único que se veía debajo del número. Ian: «esa info que se meta en un signo
+  // de admiración, no es necesario arruinar el diseño diciendo eso».
+  //
+  // ⚠️ Lo que NO se puede perder es el aviso del corte: ese `4` no llega a hoy,
+  // y sin la explicación se lee como un dato del presente, que es FALSO. Por eso
+  // va a un ⓘ visible al lado del número y no a un `title=`, que no existe para
+  // un dedo. La prueba de que sigue estando es `tests/wrapped-racha.test.mjs`.
   return {
     id: 'racha',
     etiqueta: esUltimoAnio ? 'Racha en curso' : `Con lo que cerraste ${y.year}`,
     num: [r.dias, 'ent'],
     bajada: r.dias === 1 ? 'día seguido con música' : 'días seguidos con música',
-    cuerpo,
+    info: cuerpo,
     extra: { desde, corte: r.corte, longest_streak: masLarga },
   };
 }
@@ -580,14 +602,21 @@ export function montarApertura(host, ctx) {
               ${p.tapa ? `<img class="wr-ap-tapa" src="${esc(p.tapa)}" alt="" loading="lazy"
                    onerror="this.style.visibility='hidden'">` : ''}
               <div class="wr-ap-label">${esc(p.etiqueta)}</div>
+              ${p.info ? '<div class="wr-ap-dato-fila">' : ''}
               <div class="wr-ap-dato${p.chico ? ' chico' : ''}">${
                 p.num
                   ? `<span class="wr-ap-num" data-num="${p.num[0]}" data-fmt="${p.num[1]}">${FMT[p.num[1]](p.num[0], ctx)}</span>`
                   : esc(p.titular)
               }</div>
+              ${p.info ? `<button type="button" class="wr-ap-info" aria-expanded="false"
+                       aria-controls="wr-ap-globo-${i}" aria-label="Por qué este número">
+                   <span aria-hidden="true">ⓘ</span>
+                 </button>
+                 <div class="wr-ap-globo" id="wr-ap-globo-${i}" role="tooltip" hidden>${p.info}</div>
+               </div>` : ''}
               ${p.bajada ? `<div class="wr-ap-bajada">${esc(p.bajada)}</div>` : ''}
               ${p.visual || ''}
-              <p class="wr-ap-cuerpo">${p.cuerpo}</p>
+              ${p.cuerpo ? `<p class="wr-ap-cuerpo">${p.cuerpo}</p>` : ''}
             </article>`).join('')}
         </div>
       </div>
@@ -725,6 +754,9 @@ export function montarApertura(host, ctx) {
     disparos.forEach(d => d.remove());
     disparos = [];
     window.removeEventListener('resize', alRedimensionar);
+    // Estos dos son de DOCUMENTO: no se van solos cuando el host se repinta.
+    document.removeEventListener('keydown', alEscape);
+    document.removeEventListener('pointerdown', alTocarFuera);
     contenedor?.classList.remove('wr-con-apertura');
     raiz?.classList.remove('js');
     paneles.forEach(p => p.classList.remove('on', 'ido'));
@@ -867,6 +899,49 @@ export function montarApertura(host, ctx) {
     obsTema.observe(document.documentElement, { attributes: true, attributeFilter: ['style'] });
     window.addEventListener('resize', alRedimensionar);
     return true;
+  }
+
+  // ── el ⓘ: ratón, DEDO y teclado, los tres (W.1, v=283) ──────────────────
+  //
+  // ⚠️ El hover NO va en el CSS. Una regla `:hover` sobre un botón se queda
+  // PEGADA después de un toque —el navegador le da hover al último elemento
+  // tocado y no se lo saca hasta que tocás otra cosa—, así que el globo abierto
+  // con el dedo no se podría cerrar con el dedo. Acá el hover lo abre el JS y
+  // solo cuando el puntero es un ratón de verdad (`pointerType`), que es la
+  // única forma de que el dedo tenga el comportamiento de un dedo: abre y
+  // cierra por toque, como cualquier otro botón.
+  //
+  // El globo es `position: absolute`, así que **no ocupa alto**: la tarjeta mide
+  // lo mismo con el globo abierto que cerrado, que es justamente lo que pedía
+  // «no arruinar el diseño».
+  const infos = [...host.querySelectorAll('.wr-ap-info')].map(boton => {
+    const globo = host.querySelector('#' + boton.getAttribute('aria-controls'));
+    const poner = (v) => {
+      if (!globo) return;
+      globo.hidden = !v;
+      boton.setAttribute('aria-expanded', v ? 'true' : 'false');
+    };
+    const abierto = () => boton.getAttribute('aria-expanded') === 'true';
+    // Un solo `click` cubre el toque, el clic de ratón y el Enter/Espacio del
+    // teclado: el navegador sintetiza `click` para los tres sobre un <button>.
+    boton.addEventListener('click', (e) => { e.stopPropagation(); poner(!abierto()); });
+    boton.addEventListener('pointerenter', (e) => { if (e.pointerType === 'mouse') poner(true); });
+    boton.addEventListener('pointerleave', (e) => { if (e.pointerType === 'mouse') poner(false); });
+    // Tabular fuera del botón lo cierra; si no, queda un globo suelto en
+    // pantalla sin nada que lo haya abierto a la vista.
+    boton.addEventListener('blur', () => poner(false));
+    return { boton, poner, abierto };
+  });
+
+  // Escape cierra, y tocar/clicar en cualquier otro lado también. Los dos son
+  // de documento porque el globo puede quedar abierto con el foco en otra parte.
+  const alEscape = (e) => { if (e.key === 'Escape') infos.forEach(i => i.poner(false)); };
+  const alTocarFuera = (e) => {
+    infos.forEach(i => { if (i.abierto() && !i.boton.contains(e.target)) i.poner(false); });
+  };
+  if (infos.length) {
+    document.addEventListener('keydown', alEscape);
+    document.addEventListener('pointerdown', alTocarFuera);
   }
 
   saltar.onclick = () => {

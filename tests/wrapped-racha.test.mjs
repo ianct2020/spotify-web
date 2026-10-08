@@ -12,7 +12,7 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
-import { rachaVigente } from '../src/js/features/wrapped-apertura.js';
+import { rachaVigente, pasoRacha } from '../src/js/features/wrapped-apertura.js';
 
 const raiz = join(dirname(fileURLToPath(import.meta.url)), '..');
 const stats = JSON.parse(readFileSync(join(raiz, 'src/data/history-stats.json'), 'utf8'));
@@ -125,6 +125,39 @@ comprobar('dos ventanas que pegan encadenan la racha',
 
 comprobar('un año que no está en stats devuelve null',
   rachaVigente({ year: 1999, days: { from: '1999-01-01', min: [1] } }, { years: [] }) === null);
+
+// ── 6. El aviso del corte NO se puede perder (W.1, v=283) ───────────────────
+//
+// El párrafo salió de la tarjeta y se metió en un ⓘ. Lo que cambia es DÓNDE se
+// pinta; lo que NO puede cambiar es que el texto exista, porque sin él ese
+// número se lee como si llegara a hoy y no llega. Un `info` borrado, renombrado
+// o vaciado deja la tarjeta idéntica a la vista y el dato falso: no tira ni
+// deja hueco. Por eso se declara acá y no se confía en mirarlo.
+const fmtDiaTest = (iso) => iso;
+const pr = pasoRacha({ y: ultimo, stats, fmtDia: fmtDiaTest });
+
+comprobar('el paso de la racha existe', !!pr);
+comprobar('el texto va en `info`, no en `cuerpo`',
+  typeof pr.info === 'string' && pr.info.length > 0 && pr.cuerpo === undefined,
+  `info=${typeof pr.info} cuerpo=${typeof pr.cuerpo}`);
+comprobar('`info` trae el AVISO del corte del historial',
+  pr.info.includes('se acaba el historial') && pr.info.includes('volver a importar el historial'),
+  pr.info.slice(0, 80));
+comprobar('`info` marca el aviso con ⚠️', pr.info.includes('\u26a0\ufe0f'));
+comprobar('`info` dice la fecha del corte', pr.info.includes(r.corte), r.corte);
+comprobar('la tarjeta conserva número y rótulo',
+  Array.isArray(pr.num) && pr.num[0] === r.dias && typeof pr.bajada === 'string' && pr.bajada.length > 0);
+
+// Un año que NO es el último no lleva el aviso (no hay corte que explicar) y
+// tampoco tiene que llevar `info`: el ⓘ solo existe donde hay algo que decir.
+const anterior = anios[anios.length - 2];
+if (anterior) {
+  const prAnt = pasoRacha({ y: anterior, stats, fmtDia: fmtDiaTest });
+  if (prAnt) {
+    comprobar('un año pasado no trae el aviso del corte',
+      !prAnt.info || !prAnt.info.includes('se acaba el historial'));
+  }
+}
 
 console.log(`\nwrapped-racha: ${ok} asserts OK, ${fallos} fallos`);
 process.exit(fallos ? 1 : 0);

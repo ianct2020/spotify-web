@@ -5304,6 +5304,116 @@ body.covers-fs .main {
   color: var(--color-text-secondary);
   max-width: 580px;
 }
+/* ── el ⓘ de «Racha en curso» (W.1, v=283) ──────────────────────────────────
+
+   Qué resuelve: la tarjeta de la racha era la única sin dibujo y la que tenía
+   el párrafo MÁS LARGO de las siete (108 px y cinco líneas, contra 43 de la
+   más corta). Debajo del número no quedaba un dato, quedaba un ladrillo.
+
+   ⚠️ El aviso del corte del historial NO se borró, se metió acá dentro. Sin él
+   ese número se lee como si llegara a hoy, y no llega.
+
+   Tres decisiones y por qué:
+
+   1. **El globo es `position: absolute`.** Así la tarjeta mide EXACTAMENTE lo
+      mismo abierta que cerrada y abrirlo no empuja nada. Si ocupara alto, el
+      panel se recompondría al tocar el ⓘ, que es el defecto que el encargo
+      llama «romper el layout».
+
+   2. **El área de toque son 44 px, el círculo 26.** El `::after` estira el
+      blanco clicable sin cambiar ni un píxel de la caja, que es lo que deja
+      que un dedo le acierte sin que el ⓘ se vea como un botón gigante al lado
+      del número. 44 es el mínimo que recomiendan las dos guías de táctil.
+
+   3. **NO hay una sola regla `:hover` acá.** El hover lo abre el JS y solo si
+      `pointerType === 'mouse'`. Con `:hover` en CSS el globo abierto con el
+      dedo se queda pegado: el navegador le deja el hover al último elemento
+      tocado, y el segundo toque —el que tendría que cerrarlo— lo reabre. Es
+      exactamente el caso que el encargo manda probar con el dedo.
+
+   El ancho del globo se cierra contra el viewport (`100vw - 32px`), así que a
+   390 px no se sale por ningún lado: va centrado sobre la fila, que ya está
+   centrada, y no sobre el botón. */
+.wr-ap-dato-fila {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
+.wr-ap-info {
+  position: relative;
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  /* Mismos 26 px, mismo borde y mismo glifo que `.wrapped-info-btn`, que es el
+     ⓘ que el Wrapped ya tenía en la barra de años. Es el TERCER ⓘ de la vista:
+     no se inventa un aspecto nuevo para él.
+
+     ⚠️ Lo ÚNICO que se aparta de aquél es el color, y es a propósito.
+     `--color-text-muted` mide 2,72 (violeta), 3,33 (ámbar), 3,29 (aguamarina) y
+     3,24 (papel) contra el fondo — MEDIDO en los cuatro presets, y son los
+     mismos números que ya documenta el comentario de `.wr-ap-bajada` seis
+     reglas más arriba. `--color-text-secondary` los sube a 5,71 · 6,87 · 6,82 ·
+     6,51, o sea AA en los cuatro.
+     Y acá importa más que en un pie de tarjeta: este ⓘ es la ÚNICA pista de que
+     la explicación existe. Un ⓘ que no se ve es el aviso del corte del historial
+     perdido, que es justo lo que no se podía perder. */
+  border: 1px solid var(--color-border);
+  border-radius: 50%;
+  background: none;
+  color: var(--color-text-secondary);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+}
+/* El blanco clicable, que NO cambia la caja: 26 + 9 + 9 = 44. */
+.wr-ap-info::after {
+  content: '';
+  position: absolute;
+  inset: -9px;
+  border-radius: 50%;
+}
+.wr-ap-info[aria-expanded="true"] {
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+}
+.wr-ap-info:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 3px;
+}
+.wr-ap-globo {
+  position: absolute;
+  /* ⚠️ 44 y no 12. Con 12 el globo caía JUSTO encima de `.wr-ap-bajada` y tapaba
+     el rótulo del número —«días seguidos con música»—, que es lo único que el
+     encargo pedía dejar en la tarjeta. No lo delató ninguna medida: el globo es
+     `absolute`, así que el alto seguía dando 125 px igual. Se vio MIRANDO la
+     captura. La bajada cuelga 32 px bajo la fila (12 de margen + 20 de alto),
+     así que 44 la libra con 12 de aire. */
+  top: calc(100% + 44px);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 5;
+  width: min(420px, calc(100vw - 32px));
+  padding: 12px 14px;
+  background: var(--color-elevated);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+  color: var(--color-text-secondary);
+  font-size: 13.5px;
+  font-weight: 400;
+  line-height: 1.6;
+  text-align: left;
+  letter-spacing: normal;
+}
+.wr-ap-globo[hidden] { display: none; }
+
 .wr-ap-tapa {
   width: min(240px, 38vh);
   aspect-ratio: 1;
