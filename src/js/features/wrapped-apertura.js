@@ -76,7 +76,7 @@
 // y un año que acabó con el último día en blanco no tiene racha que enseñar.
 // Con menos de dos pasos la apertura no se monta: no hay recorrido que hacer.
 
-import { animationsEnabled } from '../ui/reveal.js';
+import { animationsEnabled, systemAsksReducedMotion } from '../ui/reveal.js';
 
 // ── un solo recorrido vivo por vez ──────────────────────────────────────────
 //
@@ -944,9 +944,35 @@ export function montarApertura(host, ctx) {
     document.addEventListener('pointerdown', alTocarFuera);
   }
 
+  // ── «Saltar al resumen» (W.2, v=283) ────────────────────────────────────
+  //
+  // ⚠️ LA PREMISA DEL ENCARGO ERA AL REVÉS. «Hoy salta seco» es FALSO: el
+  // `behavior: 'smooth'` está acá desde v=216 (`e017f3e`) y MIDE animado. Con
+  // Chrome 155 y este mismo historial, muestreando `scrollY` por `rAF` durante
+  // 1.200 ms hasta el cierre, el salto pasa por ~70 posiciones distintas, no
+  // por dos. Lo que faltaba era lo CONTRARIO de lo que decía el encargo.
+  //
+  // Porque Chrome **ignora `prefers-reduced-motion` para un `scrollIntoView`
+  // con `behavior: 'smooth'` pedido desde JS**. Medido en las tres condiciones:
+  // sin preferencia → 70 posiciones; con la preferencia EMULADA por CDP → 71;
+  // y con el navegador arrancado con `--force-prefers-reduced-motion`, que es
+  // la preferencia de verdad y no un media query pintado → 69. Anima siempre.
+  // O sea que el ⚠️ del encargo —«si está puesto, salto seco»— NO se cumplía, y
+  // el navegador no lo iba a cumplir solo: hay que escribirlo.
+  //
+  // ⚠️ Y ESTO LE CAMBIA EL SALTO A IAN, en contra de lo que el encargo busca.
+  // Su GNOME tiene `enable-animations = false` (verificado hoy con `gsettings`),
+  // así que su Chrome dice `prefers-reduced-motion: reduce` y con esta línea el
+  // salto le queda SECO — justo lo que pidió arreglar. Es el mismo choque que
+  // v=162 resolvió al revés («las animaciones ya NO miran la preferencia,
+  // porque el modo que la seguía las dejaba apagadas en la máquina donde se
+  // mira»), y que v=215 y v=244 reafirmaron. Acá se hace lo que dice el ⚠️ de
+  // HOY y se deja el conflicto anotado: sacar `!systemAsksReducedMotion()` es
+  // una línea, y la decisión es de Ian, no mía.
   saltar.onclick = () => {
     const fin = host.querySelector('.wr-ap-cierre');
-    if (fin) fin.scrollIntoView({ behavior: animationsEnabled() ? 'smooth' : 'auto', block: 'start' });
+    const anima = animationsEnabled() && !systemAsksReducedMotion();
+    if (fin) fin.scrollIntoView({ behavior: anima ? 'smooth' : 'auto', block: 'start' });
   };
 
   // Con el toggle en «apagadas» la apertura NO se clava: queda la misma lista
