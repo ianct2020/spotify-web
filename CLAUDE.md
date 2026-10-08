@@ -1814,26 +1814,73 @@ dispara dos cosas que esa lectura no vio:
    user es el owner antes de servir el historial. Sale 11 ms después del primero, en la
    misma ráfaga de arranque. Los dos GET se contaron uno por uno en ocho cargas: **2 por
    carga, siempre**, contra **1 por carga** en `#home`.
-2. **La playlist del espejo de sync**, al elegir «Usar los de la caché»: `/playlists/{id}`
-   y `/playlists/{id}/items`. Es `refreshLastSyncLabel()`, que `render()` llama en la
-   línea 103 — ya anotado en `PENDIENTES.md` desde antes, pero nunca llevado a la tabla.
+2. **Las peticiones de playlist NO son de abrir la vista y NO salen de donde se dijo.**
+   Corregido el 07/10 **leyendo el código**, que es lo que la medición anterior no hizo:
 
-⚠️ **Del punto 2 no se sabe el número exacto.** Lo que se vio fueron los **preflight
-OPTIONS** (6 y 3 en una apertura), y un preflight que falla se reintenta, así que ese 6
-y ese 3 traen reintentos adentro. Lo que sí queda firme es que **no es cero**: el piso es
-1 + 1. Para el número de verdad hace falta dejar pasar los preflight y contar los GET.
+   - 🟥 **No es `refreshLastSyncLabel()`** (`dashboard.js:238`, la que `render()` llama en
+     la línea 103). Esa función cuesta **0**: `getLikesCacheTimestamp()` (`api.js:725`)
+     solo mira IDB y `localStorage`, y `getBestAvailableLikes()` (`api.js:687`) tiene
+     `allowFetch = false` por defecto, así que devuelve el caché o `source: 'empty'` y
+     **no sale a la red por ningún camino**. La atribución del 07/10 era equivocada.
+   - 🟩 **Es `hydrateListenedAlbumsCard()`** (`dashboard.js:1241`), que llama a
+     `getAllPlaylistItems(P)` (`api.js:996`). Y **no corre al abrir la vista**: la llama
+     `renderDashboard()` en la línea 829, o sea **después de pulsar «Usar los de la
+     caché»** (`loadData()`). Abrir `#dashboard` y quedarse ahí cuesta **0 playlists**.
+
+   La fórmula, del código: **1** en caliente —el `GET /playlists/{P}?fields=snapshot_id`
+   que valida el caché de IDB y devuelve los items guardados— y **1 + ceil(n/100)** en
+   frío, con **n** = pistas de la playlist de álbumes escuchados. El 07/10, n = **2.509**
+   (la playlist de escuchados de Ian), o sea **27** en frío y **1** en caliente.
+
+⚠️ **De dónde salía el «no se sabe el número»**: de contar **preflight OPTIONS** con la
+red cortada (6 y 3 en una apertura), que se reintentan y traen reintentos adentro. Con el
+código delante el número sí se sabe, y además la pregunta estaba mal puesta: esas
+peticiones no son de abrir la vista.
+
+### ⚠️ `#wrapped` tampoco es 0 peticiones (medido 2026-10-07)
+
+La fila decía **0 en frío y 0 en caliente**, «leída del código». Medido con la red cortada
+y `/v1/me` contestado por el driver: **2 GET `/v1/me` por carga**, más un preflight
+OPTIONS. Es **el mismo par que `#dashboard`** y por la misma razón — el gate de
+`testConnection()` (`app.js:257`) y el `getCurrentUserId()` (`api.js:1050`) al que llega
+`loadOne()` de `history-data.js` para resolver si el user es el owner antes de servir el
+historial. **Cualquier vista que sirva el historial del owner paga ese segundo `/me`**, y
+eso es `#wrapped`, `#records`, `#zeroplays` y `#skips`: sus filas en **0** siguen sin
+medir y hay motivo para dudar de las cuatro.
 
 La moraleja es la de siempre y se repite: **«leída del código» no es una medición.** La
 fila sobrevivió así desde que se armó la tabla.
 
 ### Las 24 vistas del menú
 
+> ⚠️ **CÓMO LEER ESTA TABLA — la capa de cada fila no es decorativa.**
+>
+> La tabla **se construyó LEYENDO CÓDIGO**, no midiendo, y **se va corrigiendo a
+> medida que cada fila se mide en vivo**. Las dos cosas que eso implica:
+>
+> - **«leída del código» NO es una medición.** Es una predicción, y ya falló
+>   **tres veces**: `#home` decía 3 `/v1/me` y es **1** (06/10), `#dashboard`
+>   decía **0/0** y es **2** `/me` (07/10), y `#wrapped` decía **0** y también
+>   es **2** (07/10). Las tres fallaron hacia ARRIBA o hacia ABAJO sin avisar.
+>   Una fila sin medir es una hipótesis con formato de dato.
+> - **La columna «capa» dice cuál es cuál**: `leída del código` o
+>   `medida el <fecha>`. Al medir una fila **se cambia la capa en el mismo
+>   commit**, y si el número no coincide con lo que decía, se deja dicho qué
+>   decía antes — las filas `↳` de abajo son eso.
+>
+> ⚠️ **«En frío / en caliente» es ABRIR LA VISTA**, no usarla. Lo que cuesta un
+> clic dentro de la vista va en una fila `↳` aparte y **no se suma al tope** de
+> un encargo que solo abre la vista. Confundirlos fue el error de la fila de
+> `#dashboard`.
+
 | vista | en frío | en caliente | endpoints que dispara | de qué depende | capa |
 |---|---:|---:|---|---|---|
 | **General** | | | | | |
-| `#dashboard` | **1 `/me` + 1 `/playlists/{id}` + 1 `/items`** | ídem | `/v1/me` de `getCurrentUserId()` + la playlist del espejo de sync | fijo | **medida en vivo el 2026-10-07** |
-| ↳ y lo que decía antes (**0/0**) era FALSO | | | | | ver la nota de abajo |
-| `#wrapped` | **0** | **0** | — con historial | — | leída del código |
+| `#dashboard` | **2 `/me`** | **2 `/me`** | gate de `testConnection()` + `getCurrentUserId()` de `loadOne()` | **fijo**, no escala con la biblioteca | **medida en vivo el 2026-10-07** |
+| ↳ **al pulsar «Usar los de la caché»**: **1 + ceil(n/100)** = **27** | — | **1** | `1 /playlists/{P}?fields=snapshot_id` + págs. de `/playlists/{P}/items` | **n** = pistas de la playlist de álbumes escuchados (**2.509** el 07/10) | **leída del código 2026-10-07** |
+| ↳ lo que decía antes (**0/0**, y después **1 `/me` + 1 `/playlists` + 1 `/items`**) era FALSO | | | | | ver la nota de abajo |
+| `#wrapped` | **2 `/me`** | **2 `/me`** | gate de `testConnection()` + `getCurrentUserId()` de `loadOne()` | **fijo** | **medida en vivo el 2026-10-07** |
+| ↳ lo que decía antes (**0/0**) era FALSO: es el MISMO par que `#dashboard` | | | | | ver la nota de abajo |
 | ↳ sin historial (`renderLite`) | **2** | **2** | 2 × `/me/top/{artists,tracks}` | fijo | leída del código |
 | `#records` | **0** | **0** | — | — | leída del código |
 | `#covers` | **1 + ceil(W/100)** = **32** | **1** | 1 `/playlists/{id}?fields=snapshot_id` + págs. de `/playlists/{id}/items` | nº de pistas de «w three» | leída del código |
