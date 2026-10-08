@@ -1873,47 +1873,74 @@ fila sobrevivió así desde que se armó la tabla.
 > un encargo que solo abre la vista. Confundirlos fue el error de la fila de
 > `#dashboard`.
 
-| vista | en frío | en caliente | endpoints que dispara | de qué depende | capa |
+> 🔴 **LA CONVENCIÓN DEL `/me`, que es de donde salieron las tres filas malas
+> (auditoría del 08/10, leída del código, 0 peticiones).** Hay **dos** `/me` por
+> carga de página y la tabla los mezclaba:
+>
+> 1. **El del arranque**, 1 y solo 1: `app.js:257` (`testConnection()`) hace un
+>    `fetch` CRUDO a `https://api.spotify.com/v1/me`. Se paga una vez por carga,
+>    la pida la vista que sea.
+> 2. **El de la vista**, 0 o 1: la primera vista que necesite el *id* llama a
+>    `getCurrentUserId()` (`api.js:1048`), que hace su propio `spotifyFetch('/me')`
+>    y lo memoiza en `_cachedUserId` (`api.js:1046`). De ahí en adelante, 0.
+>
+> **Por qué el primero no cubre al segundo:** el del arranque va por `fetch` crudo
+> y su respuesta la consume `init()` (`app.js:380-382`, `showApp(profile)`); **nadie
+> siembra `_cachedUserId` con ella**. El memo solo se calienta desde dentro de
+> `getCurrentUserId()`. Son dos caminos que nunca se tocan.
+>
+> **Y sí, hay una caché que debería taparlo y no lo hace** — dos, de hecho:
+> `localStorage['fonoteca_perfil_v1']` (`app.js:122`, el perfil entero, lo escribe
+> `guardarPerfil()`) y `localStorage['fonoteca_last_user_id']` (`api.js:1095`), que
+> **`getCurrentUserId()` escribe pero nunca lee en el camino feliz**: solo lo lee
+> `resolvedUserId()` (`history-data.js`) y solo cuando `/me` ya falló. O sea que el
+> id está en disco y se vuelve a pedir igual.
+>
+> **A partir de acá la columna «en frío» NO incluye el `/me` del arranque.** Se suma
+> aparte, una vez. Las filas medidas en vivo que lo incluían quedan con el desglose
+> a la vista.
+
+| vista | en frío (sin el `/me` del arranque) | en caliente | endpoints que dispara | de qué depende | capa |
 |---|---:|---:|---|---|---|
 | **General** | | | | | |
-| `#dashboard` | **2 `/me`** | **2 `/me`** | gate de `testConnection()` + `getCurrentUserId()` de `loadOne()` | **fijo**, no escala con la biblioteca | **medida en vivo el 2026-10-07** |
+| `#dashboard` | **1 `/me`** (+1 del arranque = **2** medidos) | ídem | `getCurrentUserId()` de `loadOne()`, vía `loadHistoryStats()` en `render()` | **fijo**, no escala con la biblioteca | **medida en vivo el 2026-10-07** · desglose **leído del código el 2026-10-08** |
 | ↳ **al pulsar «Usar los de la caché»**: **1 + ceil(n/100)** = **27** | — | **1** | `1 /playlists/{P}?fields=snapshot_id` + págs. de `/playlists/{P}/items` | **n** = pistas de la playlist de álbumes escuchados (**2.509** el 07/10) | **leída del código 2026-10-07** |
 | ↳ lo que decía antes (**0/0**, y después **1 `/me` + 1 `/playlists` + 1 `/items`**) era FALSO | | | | | ver la nota de abajo |
-| `#wrapped` | **2 `/me`** | **2 `/me`** | gate de `testConnection()` + `getCurrentUserId()` de `loadOne()` | **fijo** | **medida en vivo el 2026-10-07** |
+| `#wrapped` | **1 `/me`** (+1 del arranque = **2** medidos) | ídem | `getCurrentUserId()` de `loadOne()`, vía `loadHistoryStats()` en `render()` | **fijo** | **medida en vivo el 2026-10-07** · desglose **leído del código el 2026-10-08** |
 | ↳ lo que decía antes (**0/0**) era FALSO: es el MISMO par que `#dashboard` | | | | | ver la nota de abajo |
 | ↳ sin historial (`renderLite`) | **2** | **2** | 2 × `/me/top/{artists,tracks}` | fijo | leída del código |
-| `#records` | **0** | **0** | — | — | leída del código |
-| `#covers` | **1 + ceil(W/100)** = **32** | **1** | 1 `/playlists/{id}?fields=snapshot_id` + págs. de `/playlists/{id}/items` | nº de pistas de «w three» | leída del código |
+| `#records` | **1 `/me`** (+1 del arranque = **2**) | ídem | `render()` → `loadRecords()` (`records.js:50`) → `loadOne` → `ensureFreshMem` → `resolvedUserId` → `getCurrentUserId` | **fijo** | 🔴 **corregida el 2026-10-08, leída del código.** Decía **0/0** y es la MISMA pieza que `#dashboard` y `#wrapped` |
+| `#covers` | **1 `/me` + 1 + ceil(W/100)** = **33** | **2** | `isOwner()`/`loadListenedAlbums()` → `getCurrentUserId` · + 1 `/playlists/{id}?fields=snapshot_id` + págs. de `/playlists/{id}/items` | nº de pistas de «w three» | 🔴 **corregida el 2026-10-08, leída del código.** Decía **32** y se le olvidaba el `/me` propio |
 | `#mosaico` | **0** | **0** | **ninguno, a propósito** | — | **medida en vivo el 2026-10-06**: 10 mosaicos generados (hasta 43.200 celdas), **0 peticiones y 0 cortadas** con los topes de la API en CERO. Lo que sí sale a la red es el CDN de imágenes, que no gasta cuota |
-| `#search` | **0** | **0** | — | — | leída del código |
+| `#search` | **0** | **0** | — | — | leída del código · **`/me` repasado el 2026-10-08**: su `render()` no llega a `getCurrentUserId()` |
 | `#listened` | **26** `/items` + 3 `/me` | **0** | snapshot + págs. de `/items` | pistas de la playlist elegida | **medida en vivo el 2026-10-04** (caché vencido) |
 | ↳ lo que predice el código | 1 + ceil(n/100) | **0** (caché propio en IDB) | ídem | ídem | leída del código |
 | **Crear** | | | | | |
-| `#smart` | **ceil(L/50)** = **191** | **0** | `/me/tracks` paginado | **nº de me gusta** | leída del código |
-| `#byartist` | **0** | **0** | — | — | leída del código |
+| `#smart` | **ceil(L/50)** = **191** | **0** | `/me/tracks` paginado | **nº de me gusta** | leída del código · **`/me` repasado el 2026-10-08**: su `render()` no llega a `getCurrentUserId()` |
+| `#byartist` | **0** | **0** | — | — | leída del código · **`/me` repasado el 2026-10-08**: su `render()` no llega a `getCurrentUserId()` |
 | `#wthree` | **45** `/playlists/{id}/items` | **~15** | snapshot + págs. de «w three» + **la playlist de ocultos entera** | pistas de la playlist **y nº de ocultos** | **medida en vivo el 2026-10-04** |
 | ↳ y el código lo explica | 1 + ceil(W/100) **+ 2 + ceil(H/100)** | ídem | `31` de «w three» + **14 de ocultos** = los 45 medidos | ídem | leída del código |
-| `#genre` | **0** | **0** | — (stats.fm no es Spotify) | — | leída del código |
+| `#genre` | **0** | **0** | — (stats.fm no es Spotify) | — | ✅ **confirmada el 2026-10-08**: su `getCurrentUserId()` está en `handleExport()` (`:252`), que cuelga de un botón |
 | **Descubrir** | | | | | |
-| `#similar` | **0** | **0** | — (la búsqueda es un acto explícito) | — | leída del código |
+| `#similar` | **0** | **0** | — (la búsqueda es un acto explícito) | — | ✅ **confirmada el 2026-10-08**: `artistasOcultos.ready()` está en `pickSourceArtist` (`:177`, declarada en `:161`), que cuelga de un clic — no de `render()` |
 | ↳ y SIGUE en 0 con ocultar artistas (v=276) | **0** | **0** | el `ready()` del almacén de artistas va dentro de `pickSourceArtist`, no de `render()` | — | leída del código |
-| `#rabbit` | **0** | **0** | — | — | leída del código |
-| `#recs` | **0** | **0** | — | — | leída del código |
-| `#discover-artists` | **32 + 2 + ceil(Hd/100)** = **43** | ídem que el frío menos «w three» | «w three» **+ la playlist de ocultos («descubrir»)** | pistas de «w three» **y nº de ocultos** | leída del código |
+| `#rabbit` | **0** | **0** | — | — | leída del código · **`/me` repasado el 2026-10-08**: su `render()` no llega a `getCurrentUserId()` |
+| `#recs` | **0** | **0** | — | — | ✅ **confirmada el 2026-10-08**: `hiddenArtists.ready()` está en `run()` (`:265`, declarada en `:187`), que cuelga de `#recs-run-btn` |
+| `#discover-artists` | **32 + 2 + ceil(Hd/100)** = **43** | ídem que el frío menos «w three» | «w three» **+ la playlist de ocultos («descubrir»)** | pistas de «w three» **y nº de ocultos** | leída del código · **`/me` repasado el 2026-10-08**: `hiddenAlbums.ready()` (`:314`) SÍ está en el camino de `render()` (`:202`) y paga **1 `/me` propio**, ya contado en el «+2»; `artistasOcultos.ready()` (`:386`) reusa el memo y suma 0 |
 | ↳ **+2 desde v=276** (ocultar artistas) → **45** | **45** | ídem | **+ la playlist de ocultos («recomendados»)**: `1 /playlists/{id}` + `ceil(Ha/100)` | nº de artistas ocultos (**12** el 06/10) | leída del código |
-| `#follow-artists` | **ceil(A/40)** = **9** | **0** | `/me/library/contains?uris=spotify:artist:…` | **nº de discografías en la base** | leída del código |
+| `#follow-artists` | **1 `/me` + ceil(A/40)** = **10** | **1** | **`artistasOcultos.ready()` está DENTRO de `render()`** (`follow-artists.js:175`, `render` en `:17`) → `getCurrentUserId` · + `/me/library/contains?uris=spotify:artist:…` | **nº de discografías en la base** | 🔴 **corregida el 2026-10-08, leída del código.** Decía **9** y se le olvidaba el `/me` propio |
 | ↳ **+2 desde v=276** (ocultar artistas) → **11** | **2** | **+ la playlist de ocultos («recomendados»)** | ídem que arriba | nº de artistas ocultos | leída del código |
 | `#new-releases` | **12** `/items` + **5** `/me` | **1** | snapshot + págs. de `/items` de «w three» | pistas de «w three» | **medida en vivo el 2026-09-30** |
 | ↳ lo que predice el código | 1 + ceil(W/100) = **32** **+ 2 + ceil(Hd/100)** | ídem | «w three» + ocultos («descubrir»), el MISMO store que `#discover-artists` | ídem | leída del código |
 | ↳ **+2 desde v=278** (ocultar artistas) → **45** | **45** | ídem | **+ la playlist de ocultos («recomendados»)**: `1 /playlists/{id}` + `ceil(Ha/100)`; el `/me` ya lo pagó `hiddenAlbums` | nº de artistas ocultos (**12** el 06/10) | **medida el 2026-10-07 contra una Spotify simulada** con la forma de Ian (ids de playlist guardados, 12 dentro): 5 → 7 peticiones, **+2 exactos**. En vivo, no |
 | **Limpieza** | | | | | |
-| `#sync` | **~285** | **2** | `ceil(L/50)` + `ceil(P/50)` + 1 `/items?limit=1` + 1 snapshot + `ceil(T/100)` | me gusta **y** pistas de la espejo | leída del código |
-| `#dedupe` | **ceil(P/50) + 1** = **3** | **0–1** | `/me/playlists` + 1 `/me` | nº de playlists | leída del código |
-| `#zombies` | **0** | **0** | — (todo detrás de «Analizar») | — | leída del código |
-| `#versions` | **0** | **0** | — (detrás de «Analizar») | — | leída del código |
-| `#zeroplays` | **2 + ceil(Hz/100)** | ídem | 1 `/me` + 1 `/playlists/{id}` + la playlist de ocultos («sin plays») | **nº de ocultos de esta vista** | leída del código |
-| `#sin-clasificar` | **1 + ceil(P/50) + Σ(1 + ceil(Tᵢ/100)) + ocultos** ≈ **170+** | **~45** | `/me` + `/me/playlists` + las **42 propias** una por una + su playlist de ocultos | nº de playlists propias **y** su tamaño | leída del código |
-| `#skips` | **2 + ceil(Hk/100)** | ídem | 1 `/me` + 1 `/playlists/{id}` + la playlist de ocultos («skips») | **nº de ocultos de esta vista** | leída del código |
+| `#sync` | **~285** | **2** | `ceil(L/50)` + `ceil(P/50)` + 1 `/items?limit=1` + 1 snapshot + `ceil(T/100)` | me gusta **y** pistas de la espejo | leída del código · **`/me` repasado el 2026-10-08**: su `render()` no llega a `getCurrentUserId()` |
+| `#dedupe` | **ceil(P/50) + 1** = **3** | **0–1** | `/me/playlists` + 1 `/me` | nº de playlists | leída del código · **`/me` repasado el 2026-10-08**: el `getCurrentUserId()` de `dedupe.js:22` está en `loadAndShowGrid()`, que cuelga de `render()`. **El 1 `/me` que la fila ya contaba es el propio**, y está bien |
+| `#zombies` | **0** | **0** | — (todo detrás de «Analizar») | — | leída del código · **`/me` repasado el 2026-10-08**: su `render()` no llega a `getCurrentUserId()` |
+| `#versions` | **0** | **0** | — (detrás de «Analizar») | — | leída del código · **`/me` repasado el 2026-10-08**: su `render()` no llega a `getCurrentUserId()` |
+| `#zeroplays` | **2 + ceil(Hz/100)** | ídem | **1 `/me` propio** + 1 `/playlists/{id}` + la playlist de ocultos («sin plays») | **nº de ocultos de esta vista** | ✅ **confirmada el 2026-10-08, leída del código**: `render()` → `analyze()` → `Promise.all([getBestAvailableLikes(), loadTrackPlays()])` + `hiddenTracks.ready()`. Los dos caminos llegan al `/me`, pero **comparten el memo**: es 1, no 2. La fila ya estaba bien |
+| `#sin-clasificar` | **1 + ceil(P/50) + Σ(1 + ceil(Tᵢ/100)) + ocultos** ≈ **170+** | **~45** | `/me` + `/me/playlists` + las **42 propias** una por una + su playlist de ocultos | nº de playlists propias **y** su tamaño | leída del código · **`/me` repasado el 2026-10-08**: `hidden.ready()` (`:247`) y el `getCurrentUserId()` de `:249` están en `load()`, que `render()` dispara sola. **El `/me` que la fila ya contaba es el propio**, y está bien |
+| `#skips` | **2 + ceil(Hk/100)** | ídem | **1 `/me` propio** + 1 `/playlists/{id}` + la playlist de ocultos («skips») | **nº de ocultos de esta vista** | ✅ **confirmada el 2026-10-08, leída del código**: `render()` → `analyze()` → `Promise.all([getBestAvailableLikes(), loadSkipStats()])` + `hiddenTracks.ready()`, mismo memo. La fila ya estaba bien |
 
 **Arrancar la app: 1 `/v1/me`** — *medido dos veces en producción el 07/10, y
 confirmado leyendo el código el 07/10*. **Es 1 a secas**: ni 3 que se deduplican
