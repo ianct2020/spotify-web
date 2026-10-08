@@ -76,7 +76,7 @@
 // y un año que acabó con el último día en blanco no tiene racha que enseñar.
 // Con menos de dos pasos la apertura no se monta: no hay recorrido que hacer.
 
-import { animationsEnabled } from '../ui/reveal.js?v=284';
+import { animationsEnabled } from '../ui/reveal.js?v=285';
 
 // ── un solo recorrido vivo por vez ──────────────────────────────────────────
 //
@@ -161,7 +161,14 @@ function pasoHoras(ctx) {
   };
 }
 
-function pasoMeses(ctx) {
+/**
+ * Se exporta por la MISMA razón que `pasoRacha()` y `rachaVigente()`: para que
+ * `tests/wrapped-meses.test.mjs` corra ESTA función y no una copia suya.
+ *
+ * Lo que el banco cuida acá no es el pico ni el mes flojo: es que el aviso del
+ * corte siga saliendo, y que salga en `info` (el ⓘ) y no diluido en `cuerpo`.
+ */
+export function pasoMeses(ctx) {
   const { y, stats, fmtMinutes } = ctx;
   const meses = (stats.monthly || [])
     .filter(m => m.m.slice(0, 4) === String(y.year))
@@ -188,9 +195,28 @@ function pasoMeses(ctx) {
     cuerpo += `El más flojo fue ${mes(ctx, flojo.i - 1)}, con ${fmtMinutes(flojo.min)}: ` +
               `entre uno y otro hay ${fmtMinutes(pico.min - flojo.min)} de diferencia.`;
   }
+  // ⚠️ El aviso del corte sale del párrafo y se va a `info`, o sea al ⓘ — el
+  // MISMO que estrenó v=283 para `racha`, sin un componente nuevo: alcanza con
+  // devolver el campo, que `montarApertura()` ya sabe pintar.
+  //
+  // Por qué se parte en dos y no se muda el párrafo entero como en `racha`:
+  // aquella tarjeta no tenía dibujo y su cuerpo ERA el aviso. Acá el cuerpo son
+  // dos datos legítimos —el pico y el mes flojo— y el problema que Ian señaló es
+  // otro: que el aviso quede SEPULTADO al final de un párrafo de 207 caracteres.
+  // Sacarlo lo vuelve explícito y deja el párrafo en los datos que describe.
+  //
+  // ⚠️ El aviso NO se puede perder: sin él la última barra se lee como un mes
+  // flojo y es FALSO — está cortada donde termina el export. Es su propio campo
+  // justamente para que no se pueda diluir otra vez, y `tests/wrapped-meses.test.mjs`
+  // lo declara: si alguien borra `info`, lo renombra o lo vuelve a meter en
+  // `cuerpo`, el banco se pone rojo.
+  //
+  // Sin `ultimoDia` —o en un año que no es el último— no hay corte que avisar y
+  // `info` queda `undefined`: la tarjeta sale sin ⓘ, que es lo correcto.
+  let info;
   if (esUltimoAnio && ctx.ultimoDia) {
-    cuerpo += ` Ojo con la última barra: está cortada el ${ctx.fmtDia(ctx.ultimoDia)}, ` +
-              `que es donde termina el export.`;
+    info = `⚠️ Ojo con la última barra: está cortada el ${ctx.fmtDia(ctx.ultimoDia)}, ` +
+           `que es donde termina el export, así que ese mes no está completo.`;
   }
 
   return {
@@ -201,6 +227,7 @@ function pasoMeses(ctx) {
     bajada: fmtMinutes(pico.min),
     visual: visualMeses(meses, max, ctx),
     cuerpo,
+    info,
   };
 }
 
@@ -593,12 +620,29 @@ export function montarApertura(host, ctx) {
   // grilla. Mejor no montar nada y que el Wrapped empiece donde siempre.
   if (pasos.length < 3) return null;
 
+  // ⚠️ `globo-abajo` (v=285) — por qué el ⓘ de una tarjeta CON dibujo no puede
+  // colgar del mismo sitio que el de `racha`.
+  //
+  // El globo va anclado a `.wr-ap-dato-fila` con `top: calc(100% + 44px)`, un
+  // número que v=283 calibró para `racha`, que NO tiene dibujo: debajo del dato
+  // solo estaba la bajada. En `meses` debajo hay el gráfico, y medido el 08/10 a
+  // 1366×768 el globo ocupaba 317-408 contra un gráfico de 325-509: tapaba
+  // cuatro barras, y encima el aviso que muestra habla justo de la última.
+  //
+  // ⚠️ El alto del panel daba IGUAL con el globo abierto y cerrado, porque es
+  // `absolute`: ninguna medida del alto lo delata. Lo caza la comprobación que
+  // dejó escrita CONTEXTO-TECNICO —`globo.top < vecino.bottom`— y se confirma
+  // MIRANDO la captura, que es como se vio en v=283.
+  //
+  // El modificador manda el globo al pie del panel, el único sitio que siempre
+  // está vacío. No es un componente nuevo ni cambia el JS del ⓘ: es una clase
+  // más sobre la misma pieza, y las tarjetas sin dibujo no se enteran.
   host.innerHTML = `
     <section class="wr-ap" aria-label="Recorrido del año ${ctx.y.year}">
       <div class="wr-ap-pista">
         <div class="wr-ap-clavado">
           ${pasos.map((p, i) => `
-            <article class="wr-ap-paso" data-i="${i}" data-id="${p.id}">
+            <article class="wr-ap-paso${p.info && p.visual ? ' globo-abajo' : ''}" data-i="${i}" data-id="${p.id}">
               ${p.tapa ? `<img class="wr-ap-tapa" src="${esc(p.tapa)}" alt="" loading="lazy"
                    onerror="this.style.visibility='hidden'">` : ''}
               <div class="wr-ap-label">${esc(p.etiqueta)}</div>

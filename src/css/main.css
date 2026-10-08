@@ -5414,6 +5414,35 @@ body.covers-fs .main {
 }
 .wr-ap-globo[hidden] { display: none; }
 
+/* ⚠️ El globo de una tarjeta CON dibujo va al PIE del panel, no bajo el dato.
+   Medido el 2026-10-08 en `meses` a 1366×768: anclado a `.wr-ap-dato-fila` el
+   globo ocupaba 317-408 y el gráfico 325-509, o sea que tapaba cuatro barras
+   —y el aviso que muestra habla justo de la última—. La comprobación que lo
+   caza es la de CONTEXTO-TECNICO: `globo.top < vecino.bottom`. El alto del
+   panel no se movía ni un píxel, porque el globo es `absolute`: no había
+   número que lo delatara, se vio MIRANDO la captura. Mismo camino que v=283.
+
+   El panel pasa a ser el bloque contenedor y el globo se cuelga de su pie, que
+   es el único sitio del panel que está siempre vacío. No cambia el JS ni el
+   componente: es un modificador de la misma pieza. */
+.wr-ap-paso.globo-abajo { position: relative; }
+/* ⚠️ `static` y no `relative`: el globo vive DENTRO de `.wr-ap-dato-fila`, que
+   también es `position: relative`, así que ésa —y no el panel— era su bloque
+   contenedor. Con la fila en `relative`, un `bottom: 24px` colocaba el globo
+   sobre el TITULAR (medido: globo 158-249 contra un dato de 224-273): se
+   cambiaba una tapadura por otra. Soltando la fila, el panel pasa a ser el
+   ancla y `top: calc(100% + 16px)` deja el globo bajo la tarjeta entera. */
+.wr-ap-paso.globo-abajo .wr-ap-dato-fila { position: static; }
+.wr-ap-paso.globo-abajo .wr-ap-globo {
+  /* ⚠️ `bottom` y no `top: 100%`: el panel ocupa la pantalla entera, así que
+     «debajo de la tarjeta» (`calc(100% + 16px)`) caía FUERA del viewport —medido
+     el 08/10: globo en 784-875 con 768 de alto—. No tapaba nada y no se veía:
+     las dos mitades del requisito se cumplen o no se cumple ninguna. El hueco
+     real está entre el final del párrafo y el pie del panel, y ahí va. */
+  top: auto;
+  bottom: 40px;
+}
+
 .wr-ap-tapa {
   width: min(240px, 38vh);
   aspect-ratio: 1;
