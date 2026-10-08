@@ -76,7 +76,7 @@
 // y un año que acabó con el último día en blanco no tiene racha que enseñar.
 // Con menos de dos pasos la apertura no se monta: no hay recorrido que hacer.
 
-import { animationsEnabled, systemAsksReducedMotion } from '../ui/reveal.js?v=283';
+import { animationsEnabled } from '../ui/reveal.js?v=284';
 
 // ── un solo recorrido vivo por vez ──────────────────────────────────────────
 //
@@ -958,20 +958,29 @@ export function montarApertura(host, ctx) {
   // y con el navegador arrancado con `--force-prefers-reduced-motion`, que es
   // la preferencia de verdad y no un media query pintado → 69. Anima siempre.
   // O sea que el ⚠️ del encargo —«si está puesto, salto seco»— NO se cumplía, y
-  // el navegador no lo iba a cumplir solo: hay que escribirlo.
+  // el navegador no lo iba a cumplir solo: había que escribirlo. v=283 lo
+  // escribió.
   //
-  // ⚠️ Y ESTO LE CAMBIA EL SALTO A IAN, en contra de lo que el encargo busca.
-  // Su GNOME tiene `enable-animations = false` (verificado hoy con `gsettings`),
-  // así que su Chrome dice `prefers-reduced-motion: reduce` y con esta línea el
-  // salto le queda SECO — justo lo que pidió arreglar. Es el mismo choque que
-  // v=162 resolvió al revés («las animaciones ya NO miran la preferencia,
-  // porque el modo que la seguía las dejaba apagadas en la máquina donde se
-  // mira»), y que v=215 y v=244 reafirmaron. Acá se hace lo que dice el ⚠️ de
-  // HOY y se deja el conflicto anotado: sacar `!systemAsksReducedMotion()` es
-  // una línea, y la decisión es de Ian, no mía.
+  // ✅ **Y v=284 lo SACÓ, por decisión de Ian (2026-10-07).** El pedido, textual:
+  // «animaciones siempre activadas forzando aunque el usuario las tenga
+  // desactivadas». Es el mismo choque que v=162 resolvió al revés («las
+  // animaciones ya NO miran la preferencia, porque el modo que la seguía las
+  // dejaba apagadas en la máquina donde se mira»), y que v=215 y v=244
+  // reafirmaron: su GNOME tiene `enable-animations = false` (verificado con
+  // `gsettings`), así que con la guarda puesta el salto le quedaba SECO a él —
+  // justo lo que pedía arreglar.
+  //
+  // ⚠️ Quien manda es `animationsEnabled()`, o sea el toggle de tres estados del
+  // panel de paleta, que NO consulta el sistema (ver `reveal.js`: el modo por
+  // defecto es «siempre» y lo único que apaga es «nunca»). Eso se respeta a
+  // propósito: apagarlas desde la app es un acto explícito del usuario, y es la
+  // misma autoridad que gobierna «Volver arriba» (v=170) y las animaciones de
+  // entrada (v=162). Lo que ya no se consulta es `prefers-reduced-motion`.
+  // **Si alguna vez vuelve la guarda, que sea con el visto de Ian: es la cuarta
+  // vez que esta línea cambia de lado.**
   saltar.onclick = () => {
     const fin = host.querySelector('.wr-ap-cierre');
-    const anima = animationsEnabled() && !systemAsksReducedMotion();
+    const anima = animationsEnabled();
     if (fin) fin.scrollIntoView({ behavior: anima ? 'smooth' : 'auto', block: 'start' });
   };
 
