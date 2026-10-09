@@ -1374,6 +1374,82 @@ Las reglas que hay que respetar al tocar ese archivo:
   contra el navegador y nombra cada huérfana con su motivo. Si agregás un aviso
   nuevo a este mecanismo, que se pueda mirar desde ahí.
 
+## `findPlaylist()`: «no existe» y «no pude preguntar» NO son lo mismo (v=287)
+
+`util/hidden-sync.js`. Hasta v=286 el camino del id guardado de la playlist
+espejo tenía **un solo `catch` para todos los fallos** y el `olvidarId(lsKey)`
+colgaba **FUERA del `try`**: se ejecutaba tanto si Spotify contestaba «esa
+playlist no es tuya» como si no contestaba nada.
+
+**Lo que eso costaba, y no es el atajo.** Sin id, la playlist se rebusca **por
+nombre**; si por nombre no aparece —la lista vino del caché de 24 h, o Ian la
+renombró en Spotify y entonces el nombre no la encuentra NUNCA y el id era el
+único vínculo—, `findPlaylist()` devolvía `null`, que es la señal que autoriza a
+`ensurePlaylist()` a **CREAR**. O sea: **un corte de red podía terminar en una
+playlist espejo DUPLICADA en la cuenta real**, con los ocultos repartidos entre
+las dos y la mitad invisible desde la app. Y las playlists **no se pueden borrar
+por API** post-migración, así que eso se limpia a mano.
+
+🟥 **Ya había pasado la mitad**: el 08/10, con el driver cortando
+`api.spotify.com`, abrir `#skips` y `#zeroplays` borró los dos
+`fonoteca_hidden_pl_*` de una copia del perfil. Los ocultos sobrevivieron; el id
+no. Lo que no se vio entonces es que la otra mitad del camino llega a `POST`.
+
+### La frontera, que ya existía y nadie miraba
+
+No hizo falta cambiar cómo se guarda el id —**ninguna migración**—: la
+información para distinguir los dos casos ya viajaba en el error.
+
+| el fallo | qué tira `api.js` | ¿confirma? |
+|---|---|:---:|
+| 404 | `err.status = 404` (`api.js:125-131`) | **sí** |
+| la respuesta dice que no es tuya | no tira: contesta | **sí** |
+| corte de red | `Error` PELADO, sin `status` (`api.js:84`) | no |
+| 5xx agotado | `Error` PELADO, sin `status` (`api.js:107`) | no |
+| 403 / 429 / 401 | `err.status` = ese código | **no** |
+
+⚠️ **Solo el 404 confirma.** En particular **403 NO**: post-migración un 403 es
+la respuesta normal de media docena de endpoints retirados (ver «Decisiones de
+API»), así que leerlo como «la playlist no existe» es justo el error que esto
+viene a evitar.
+
+### Las tres reglas que quedan
+
+1. **Un fallo sin respuesta NUNCA borra el id guardado.** Se conserva y se
+   avisa. Es el único atajo a la playlist espejo y lo único que la ata cuando el
+   nombre ya no coincide.
+2. **`null` significa «confirmo que no existe»**, y es lo único que habilita a
+   crear. Si el id quedó sin comprobar y por nombre tampoco aparece,
+   `findPlaylist()` **tira** (`err.ocultosIndeterminado = true`) en vez de
+   devolver `null`. `ensurePlaylist()` reintenta una relectura fresca y, si
+   sigue sin saber, propaga: **no crea**.
+3. **Un id guardado sin comprobar no se pisa** con el que salga del nombre. Las
+   dos playlists son reales y para esa sesión da igual cuál se use; lo que no da
+   igual es dejar escrito un puntero nuevo apoyado en que el viejo «no contestó».
+
+Arriba de `ensurePlaylist()` nada tira: `ready()` sigue sin lanzar nunca (la
+vista anda con el caché local), `toggle()`/`fijarVarios()` reportan la clave en
+`fallidas` **con el motivo**, y `auditar()` lo deja en `fila.error`, que es lo
+que enseña `#debug` → «Salud de los ocultos».
+
+⚠️ **Coste**: en el camino de fallo `ensurePlaylist()` vuelve a sondear el id
+guardado (antes no, porque ya lo había borrado). Es **+1 petición solo cuando
+algo ya está fallando**; en el camino feliz no cambia nada.
+
+🟥 **Lo que NO se hizo, a propósito**: un «no pude preguntar» **no** escribe en
+`ocultos_incidencias_v1`. Ese registro tiene 100 huecos y una red que parpadea
+los llenaría echando las pérdidas reales, que es para lo que existe. Queda en
+`console.warn` y en la fila de `#debug`.
+
+**Guardas**: `tests/hidden-sync-id-playlist.test.mjs` (36 asserts, los tres
+casos; comprobado que da **17 fallos** contra el módulo de v=286) y, en la app
+real con el driver, `fonoteca-migracion/driver-cdp-ocultos-sin-red-2026-10-08.mjs`.
+⚠️ Y de paso se arregló el doble: `tests/dobles/api-doble.mjs` tiraba
+`new Error('404 Not Found')` **sin `status`**, o sea que fingía un 404 que el
+código nuevo leería como «no pude preguntar». Un doble que no respeta el
+contrato del servicio es exactamente lo que su propia cabecera documenta que no
+hay que hacer.
+
 ## La clave de descubrir: las dos direcciones, juntas (v=210/v=211)
 
 ✅ **El agujero hermano del de la uri, CERRADO.** `#discover-artists` escribía la

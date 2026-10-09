@@ -26,10 +26,10 @@ import {
   createPlaylist,
   getCurrentUserId,
   spotifyFetch,
-} from '../api.js?v=286';
-import { prefKey, migratePrefKey } from '../storage.js?v=286';
-import { invalidateOwnPlaylists } from './playlist-add.js?v=286';
-import { showToast } from '../ui/toast.js?v=286';
+} from '../api.js?v=287';
+import { prefKey, migratePrefKey } from '../storage.js?v=287';
+import { invalidateOwnPlaylists } from './playlist-add.js?v=287';
+import { showToast } from '../ui/toast.js?v=287';
 
 const PLAYLIST_DESC = 'Lista interna de Fonoteca: lo que ocultaste en esta vista. Si la borras, se pierden los ocultos.';
 
@@ -266,6 +266,50 @@ function guardarId(lsKey, id) {
 
 function olvidarId(lsKey) {
   try { localStorage.removeItem(idKeyFor(lsKey)); } catch { /* sin localStorage */ }
+}
+
+// ── «No existe» contra «no pude preguntar» (v=287) ──────────────────────────
+//
+// EL FALLO QUE CIERRA ESTO. Hasta v=286 `findPlaylist()` tenía UN `catch` para
+// todo y el `olvidarId(lsKey)` colgaba FUERA del `try`: se ejecutaba tanto si
+// Spotify contestaba «esa playlist no es tuya» como si no contestaba nada. O
+// sea que **un corte de red borraba el id guardado de la playlist espejo**, y
+// de ahí salía el camino entero: sin id hay que rebuscarla por nombre, y si por
+// nombre no aparece —porque la lista venía del caché de 24 h, o porque Ian la
+// renombró en Spotify, donde el nombre ya no coincide y el id era el único
+// vínculo— `findPlaylist()` devolvía `null`, que es la señal que autoriza a
+// `ensurePlaylist()` a CREAR. Un fallo de infraestructura terminaba en una
+// playlist espejo DUPLICADA en la cuenta real, con los ocultos repartidos entre
+// las dos y la mitad invisible desde la app.
+//
+// No hizo falta cambiar cómo se guarda el id: la información para distinguir
+// los dos casos ya viajaba y nadie la miraba. `api.js` pone `err.status` cuando
+// hubo una RESPUESTA HTTP (`api.js:125-131`), y tira un `Error` pelado, SIN
+// `status`, cuando no la hubo: fallo de red (`api.js:84`) y 5xx agotado
+// (`api.js:107`). Es exactamente la frontera que hace falta.
+//
+// ⚠️ Solo el **404** confirma. En particular **403 NO**: post-migración un 403
+// es la respuesta normal de media docena de endpoints retirados (ver las
+// «Decisiones de API» de `CLAUDE.md`), así que leerlo como «la playlist no
+// existe» es justo el error que esta función viene a evitar. Un 429 y un 401
+// tampoco dicen nada del contenido. Ante la duda, gana lo que preserve el dato.
+function esRespuestaDeQueNoExiste(e) {
+  return e?.status === 404;
+}
+
+/**
+ * El fallo que NO se puede traducir a «no existe». Lleva bandera propia porque
+ * `ensurePlaylist()` necesita distinguirlo de un error cualquiera para decidir
+ * si vale la pena una relectura fresca — y, sobre todo, para NO crear nada.
+ */
+function errorIndeterminado(label, playlistName, causa) {
+  const err = new Error(
+    `[ocultos:${label}] no puedo confirmar si «${playlistName}» existe (${causa.message}): ` +
+    `no toco el id guardado y NO creo ninguna playlist.`
+  );
+  err.ocultosIndeterminado = true;
+  err.causa = causa;
+  return err;
 }
 
 /**
@@ -619,22 +663,49 @@ export function createHiddenStore({ lsKey, playlistName, keyOfTrack, label, uriF
     const me = await getCurrentUserId();
 
     const guardado = leerIdGuardado(lsKey);
+    // ¿Quedó CONFIRMADO que la playlist guardada no sirve? Es distinto de «no
+    // pude preguntar», y de esa distinción depende que no se cree una duplicada.
+    let confirmado = false;
+    let sinRespuesta = null;
     if (guardado) {
       try {
         const p = await spotifyFetch(`/playlists/${guardado}?fields=id,name,owner(id)`);
         if (p?.id && p.owner?.id === me) return p;
+        // Spotify CONTESTÓ y lo que contestó dice que no es tuya. Eso es una
+        // respuesta, no un fallo: el id guardado ya no vale y se tira.
         console.warn(`[ocultos:${label}] la playlist guardada ${guardado} ya no es tuya; vuelvo a buscarla por nombre`);
+        olvidarId(lsKey);
+        confirmado = true;
       } catch (e) {
-        console.warn(`[ocultos:${label}] la playlist guardada ${guardado} no responde (${e.message}); vuelvo a buscarla por nombre`);
+        if (esRespuestaDeQueNoExiste(e)) {
+          console.warn(`[ocultos:${label}] la playlist guardada ${guardado} ya no existe (404); vuelvo a buscarla por nombre`);
+          olvidarId(lsKey);
+          confirmado = true;
+        } else {
+          // No hubo respuesta: corte de red, 5xx agotado, 429, 401, 403… El id
+          // guardado SE CONSERVA. Es el único atajo a la playlist espejo y la
+          // única cosa que la ata cuando el nombre ya no coincide (si Ian la
+          // renombró en Spotify, el nombre no la encuentra y el id sí).
+          sinRespuesta = e;
+          console.warn(`[ocultos:${label}] no pude preguntar por la playlist guardada ${guardado} (${e.message}): CONSERVO el id y pruebo por nombre`);
+        }
       }
-      olvidarId(lsKey);
     }
 
     const playlists = await getAllUserPlaylists(null, { force });
     const target = normName(playlistName);
     // normName recorta: un nombre con espacios al final sigue coincidiendo.
     const candidatas = playlists.filter(p => p.owner?.id === me && normName(p.name) === target);
-    if (!candidatas.length) return null;
+    if (!candidatas.length) {
+      // ⚠️ `null` significa «CONFIRMO que no existe», y es lo que habilita a
+      // `ensurePlaylist()` a crearla. Si el id guardado quedó sin respuesta, no
+      // hay ninguna confirmación de nada: puede existir perfectamente y estar
+      // inalcanzable, o estar renombrada (y entonces el nombre no la encuentra
+      // NUNCA, con red o sin ella). Devolver `null` acá es lo que convertiría un
+      // corte de red en una playlist espejo DUPLICADA en la cuenta de Ian.
+      if (sinRespuesta) throw errorIndeterminado(label, playlistName, sinRespuesta);
+      return null;
+    }
 
     let elegida = candidatas[0];
     if (candidatas.length > 1) {
@@ -649,13 +720,31 @@ export function createHiddenStore({ lsKey, playlistName, keyOfTrack, label, uriF
         `lo que esté en las otras no se ve desde la app.`
       );
     }
-    guardarId(lsKey, elegida.id);
+    // ⚠️ El id guardado NO se pisa con el que salió del nombre si no se pudo
+    // comprobar el guardado. Las dos son playlists reales y tuyas, así que para
+    // ESTA sesión da igual cuál se use; lo que no da igual es dejar escrito un
+    // puntero nuevo apoyado en que el viejo «no contestó». Si el guardado estaba
+    // bien y había dos con el mismo nombre, pisarlo muda el almacén de playlist.
+    if (!guardado || confirmado || elegida.id === guardado) {
+      guardarId(lsKey, elegida.id);
+    } else {
+      console.warn(`[ocultos:${label}] encontré «${playlistName}» por nombre (${elegida.id}) pero el id guardado (${guardado}) quedó sin comprobar: lo dejo como está y uso la encontrada solo para esta sesión`);
+    }
     return elegida;
   }
 
   async function ensurePlaylist() {
     if (playlistId) return playlistId;
-    const found = await findPlaylist();
+    let found = null;
+    try {
+      found = await findPlaylist();
+    } catch (e) {
+      // Un indeterminado del primer intento no es el final del camino: la
+      // relectura fresca de abajo todavía puede confirmar. Lo que no se puede es
+      // seguir de largo hasta `createPlaylist` — y eso lo garantiza que el
+      // `findPlaylist({ force: true })` de abajo vuelva a tirar si sigue sin saber.
+      if (!e?.ocultosIndeterminado) throw e;
+    }
     if (found) { playlistId = found.id; return playlistId; }
 
     // Antes de crear, releer FRESCO. El cache de `getAllUserPlaylists` dura
@@ -667,6 +756,13 @@ export function createHiddenStore({ lsKey, playlistName, keyOfTrack, label, uriF
     const otraVez = await findPlaylist({ force: true });
     if (otraVez) { playlistId = otraVez.id; return playlistId; }
 
+    // ⚠️ Solo se llega acá con una CONFIRMACIÓN de que no existe: las dos
+    // llamadas de arriba devuelven `null` únicamente cuando pudieron preguntar
+    // —el 404 del id guardado o su ausencia, más una lista de playlists leída
+    // de verdad (`force: true` saltea el caché de 24 h)— y tiran en cuanto
+    // alguna de las dos cosas no se pudo averiguar. Crear una playlist espejo
+    // es irreversible desde la app (no se pueden borrar por API) y se ve en la
+    // cuenta real de Ian: es el último sitio del módulo donde vale adivinar.
     const created = await createPlaylist(playlistName, PLAYLIST_DESC, false);
     playlistId = created.id;
     guardarId(lsKey, created.id);
@@ -1098,6 +1194,14 @@ export function createHiddenStore({ lsKey, playlistName, keyOfTrack, label, uriF
      * el caché local.
      */
     ready,
+
+    /**
+     * La foto de ESTE almacén, la misma que `auditarOcultos()` devuelve para
+     * todos juntos. Se expone aparte porque el registro global es acumulativo
+     * (un `createHiddenStore` se apunta y no se da de baja), así que no hay
+     * forma de preguntarle por un almacén concreto. Solo lee.
+     */
+    auditar,
 
     fijarVarios,
 

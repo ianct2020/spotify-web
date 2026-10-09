@@ -65,8 +65,35 @@ export async function spotifyFetch(path) {
   validarPath(path);
   const m = path.match(/^\/playlists\/([^/?]+)\?/);
   if (m) {
+    // El fallo SIN respuesta HTTP, que es el que `hidden-sync.js` tiene que
+    // saber distinguir de un 404. `fallarPlaylist` imita las dos formas en que
+    // `api.js` se rinde sin haber hablado con Spotify: el corte de red
+    // (`api.js:84`) y el 5xx agotado (`api.js:107`). Las dos tiran un `Error`
+    // PELADO, sin `status` — y eso no es un detalle del doble, es la única
+    // señal que separa «no existe» de «no pude preguntar».
+    // Acepta una cadena (fallo pelado, SIN `status`: red o 5xx agotado) o
+    // `{ msg, status }`, para los fallos que sí vienen de una respuesta HTTP y
+    // que por tanto se distinguen — 403, 429, 401…
+    if (d().fallarPlaylist) {
+      const f = d().fallarPlaylist;
+      if (typeof f === 'string') throw new Error(f);
+      const err = new Error(f.msg);
+      if (f.status != null) err.status = f.status;
+      throw err;
+    }
     const pl = d().playlists.find(p => p.id === m[1]);
-    if (!pl) throw new Error('404 Not Found');
+    // ⚠️ `status` NO es decorativo: `api.js:125-131` lo pone en todo error que
+    // venga de una RESPUESTA, y desde v=287 `findPlaylist()` decide si puede
+    // tirar el id guardado mirando justo este número. Hasta esta versión el
+    // doble tiraba `new Error('404 Not Found')` sin `status`, o sea que fingía
+    // un 404 que el código nuevo leería como «no pude preguntar»: el doble se
+    // habría quedado con la mitad del contrato, que es el fallo que su propia
+    // cabecera documenta.
+    if (!pl) {
+      const err = new Error('Spotify 404: Resource not found');
+      err.status = 404;
+      throw err;
+    }
     return { id: pl.id, name: pl.name, owner: { id: pl.owner } };
   }
   const t = path.match(/^\/playlists\/([^/?]+)\/items\?limit=1$/);
@@ -79,7 +106,17 @@ export async function spotifyFetch(path) {
 }
 
 export async function getAllUserPlaylists() {
-  return d().playlists.map(p => ({ id: p.id, name: p.name, owner: { id: p.owner } }));
+  // `fallarListado` es la red cortada del OTRO lado: `getAllUserPlaylists()`
+  // tira pelado igual que `paginateAll`, que relanza lo que le dio `spotifyFetch`.
+  if (d().fallarListado) throw new Error(d().fallarListado);
+  // `listadoOculta` deja la playlist EXISTIENDO pero fuera de lo que devuelve
+  // `/me/playlists`: el caché de 24 h que todavía no la vio, o el nombre
+  // cambiado a mano en Spotify. Es la mitad sin la que el camino a la duplicada
+  // no se puede reproducir.
+  const fuera = new Set(d().listadoOculta || []);
+  return d().playlists
+    .filter(p => !fuera.has(p.id))
+    .map(p => ({ id: p.id, name: p.name, owner: { id: p.owner } }));
 }
 
 export async function getAllPlaylistItems(id) {
