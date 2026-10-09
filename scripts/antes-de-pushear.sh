@@ -13,7 +13,9 @@
 #   3. docs/ está al día: un build de src/ en un directorio temporal da EXACTAMENTE
 #      lo que hay en docs/ (el olvido más fácil: editar src/ y no correr build.sh)
 #   4. el mismo ?v= en index.html (src y docs), en docs/callback.html y en el
-#      nombre de la caché de docs/sw.js
+#      nombre de la caché de docs/sw.js; y (4b) que NINGÚN recurso de src/ haya
+#      quedado atrás del ?v= de app.js — no solo el de app.js, que es lo único
+#      que se vigilaba hasta v=286
 #   5. nada personal en lo que se va a subir: ni en el staging ni en los commits
 #      que todavía no están en el remoto, comparado contra las reglas del
 #      .gitignore (el repo es PÚBLICO; el 28/07/2026 se filtraron datos)
@@ -81,6 +83,39 @@ if [ -n "$V_SRC" ] && [ "$V_SRC" = "$V_DOCS" ] && [ "$V_SRC" = "$V_SW" ] && [ "$
 else mal "las versiones no coinciden"; fi
 CUANTOS=$(grep -rhoE '\.js\?v=[0-9]+' docs/js | grep -oE '[0-9]+$' | sort -u | tr '\n' ' ')
 [ "$CUANTOS" = "$V_SRC " ] && ok "un solo ?v= entre los imports de docs/js" || mal "hay ?v= mezclados en docs/js: $CUANTOS"
+
+# 4b. NINGÚN recurso de src/ puede quedarse atrás, no solo `app.js`.
+#
+# POR QUÉ ESTA COMPROBACIÓN EXISTE. Hasta v=286 el punto 4 miraba el `?v=` de
+# `app.js` y nada más, y eso dejaba un hueco con una forma muy particular:
+# `build.sh` REESCRIBE el `?v=` de todo el HTML de `docs/`, así que un recurso
+# atrasado en `src/` **sale bien en producción** y el fuente es el único que
+# miente. Nadie lo ve, porque lo que se mira es producción. Encontrados así:
+# las tres hojas de CSS de `src/index.html` en `?v=257` —29 versiones atrás— y
+# los CUATRO recursos de `src/callback.html` en `?v=25`, que son 261.
+#
+# Se compara contra el `app.js?v=` de `src/index.html`, que es el número que se
+# bumpea a mano y la única fuente de la verdad del despliegue. Falla solo con lo
+# que está DETRÁS: un número por delante no puede salir de un olvido.
+#
+# ⚠️ Y el corolario para bumpear: ahora un despliegue pide poner ese número en
+# los OCHO `?v=` de `src/` (los 4 de `index.html` y los 4 de `callback.html`),
+# no solo en `app.js`. El mensaje de error los nombra con archivo y línea para
+# que no haya que buscarlos.
+echo "4b. ningún ?v= de src/ se quedó atrás"
+if [ -z "$V_SRC" ]; then
+  mal "sin versión en src/index.html no puedo comparar los demás ?v="
+else
+  V_EN_SRC=$(grep -rnoE "[^\"'[:space:]]+\?v=[0-9]+" src/ || true)
+  N_SRC=$(printf '%s' "$V_EN_SRC" | grep -c . || true)
+  ATRAS=$(printf '%s\n' "$V_EN_SRC" \
+    | awk -v v="$V_SRC" '{ if (match($0, /\?v=[0-9]+$/)) { n = substr($0, RSTART + 3) + 0; if (n < v) print } }')
+  if [ -z "$ATRAS" ]; then ok "los $N_SRC recursos con ?v= de src/ están en v=$V_SRC"
+  else
+    mal "recursos de src/ con el ?v= ATRASADO respecto de app.js?v=$V_SRC (build.sh los tapa en docs/: producción sale bien y el fuente miente):"
+    echo "$ATRAS" | sed 's/^/      /'
+  fi
+fi
 
 echo "5. nada personal en lo que se va a subir"
 PERSONAL=$( { git diff --cached --name-only; git diff --name-only '@{u}..HEAD' 2>/dev/null; } | sort -u | git check-ignore --no-index --stdin 2>/dev/null || true)

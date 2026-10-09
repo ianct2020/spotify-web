@@ -1563,10 +1563,18 @@ no depender de auditar después). Por eso está copiada acá, que sí se carga s
 al trabajar en este repo. Ver el porqué en `fonoteca-migracion/CONTEXTO-TECNICO.md`,
 «una regla que no está donde se lee, no existe».
 
-Deploy completo: bumpear **`app.js?v=`** de `src/index.html` (desde v=235
-`build.sh` reescribe con ese número los demás `?v=`, las hojas incluidas, en
-todas las páginas de `docs/`, y desde v=257 también el nombre de caché de
-`sw.js`; los otros tres `?v=` de `src/index.html` pueden quedar atrasados) →
+Deploy completo: poner el `?v=` nuevo en **los OCHO `?v=` de `src/`** —los 4 de
+`src/index.html` y los 4 de `src/callback.html`— →
+
+⚠️ **Hasta v=286 acá decía que «los otros tres `?v=` de `src/index.html` pueden
+quedar atrasados», y eso era el bug de A.2 (v=287).** Es cierto que `build.sh`
+reescribe el `?v=` de todo el HTML de `docs/` desde v=235 (y el nombre de caché
+de `sw.js` desde v=257), así que **producción sale bien**. Pero el fuente queda
+mintiendo, y nadie lo ve porque lo que se mira es producción: las tres hojas de
+`src/index.html` llevaban **29 versiones** de atraso (`?v=257`) y los cuatro
+recursos de `src/callback.html`, **261** (`?v=25`). Ahora lo vigila el punto
+**4b** de `npm run prepush`, que falla con cualquier `?v=` de `src/` por detrás
+del de `app.js` y lo nombra con archivo y línea. →
 `bash build.sh` → `npm test` → `git add` archivo por archivo → `npm run prepush`
 → commit → push. **`npm run deploy` está desactivado a propósito** (v=258: hacía
 `git add docs/`). Y **el `curl` no verifica el
