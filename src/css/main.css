@@ -2975,11 +2975,35 @@ h3 { font-size: 18px; font-weight: 600; }
 @media (max-width: 600px) {
   /* Layout base: menos padding para aprovechar el ancho, sin overflow horizontal.
      El hamburguesa ya no está fixed (v=108), así que no hace falta padding-top extra. */
+  /* ⚠️ `clip` y no `hidden`, por el MISMO motivo que `body` arriba del todo
+     (v=216) — y acá tardó 184 versiones en salir a la luz.
+
+     `overflow-x: hidden` obliga a que `overflow-y`, que acá no se declara,
+     COMPUTE `auto`. Con eso `.main` se vuelve contenedor de scroll bajo 600 px,
+     y rompe DOS cosas que no se parecen entre sí:
+
+       1. El `sticky` se pega al scrollport de `.main`, que NO scrollea (su alto
+          es el del contenido), así que se va con la página como si fuera
+          `static`. Es la pantalla NEGRA del Wrapped en móvil: `.wr-ap-clavado`
+          nunca se clava. Medido a 390x844: con `hidden`, `clavadoTop` a y=1200
+          da -1002; con `clip`, da 0.
+       2. `scrollRootOf()` (ui/incremental-list.js) sube buscando el primer
+          ancestro con `overflow-y` en `auto`/`scroll`, y encontraba ESTE. O sea
+          que las siete vistas que pintan por lotes le pasaban `.main` como root
+          del observer: el centinela queda a la vista para siempre y entran
+          TODOS los ítems de una. Los comentarios de esas vistas dicen «en móvil
+          scrollea el documento, así que devuelve null» y era falso.
+
+     `clip` recorta exactamente igual —no aparece scroll horizontal por cambiar
+     esto— pero no crea contenedor de scroll, así que `overflow-y` se queda en
+     `visible`. Lo único que `clip` no hace y `hidden` sí es establecer un BFC;
+     acá no importa porque `.main` tiene relleno vertical propio (14 px) y los
+     márgenes de los hijos no pueden colapsar a través de él. */
   .main {
     padding: 14px 10px;
     max-width: 100vw;
     min-width: 0;
-    overflow-x: hidden;
+    overflow-x: clip;
   }
   /* Todos los cards y grids: shrink por debajo del contenido si hace falta */
   .card { min-width: 0; max-width: 100%; }
