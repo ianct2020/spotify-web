@@ -96,9 +96,14 @@ function fmtMinutes(min) {
   return `${Math.round(min)}m`;
 }
 
+// Los días van con COMA decimal, igual que los dos tiles de «días de música»
+// del Dashboard: es el mismo dato con el mismo copy y el castellano de España
+// no usa el punto. Esta copia se le había escapado a v=282 y al arreglo del
+// gemelo del Dashboard, así que `#wrapped` enseñaba «398.4 días equivalentes»
+// en sus dos héroes mientras el Dashboard ya decía «185,6».
 function fmtDays(minutes) {
-  const days = minutes / (60 * 24);
-  return `${days.toFixed(1)} días equivalentes`;
+  const days = (minutes / (60 * 24)).toLocaleString('es-ES', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+  return `${days} días equivalentes`;
 }
 
 // Modal chico con el rango de datos del historial (antes era un panel inline

@@ -1,16 +1,16 @@
-import { getAllLikedTracks, getLikesPartialInfo, exportAllData, importAllData, getCurrentUserId, syncLikesIncremental, getLikesCacheTimestamp, getBestAvailableLikes, getAllPlaylistItems } from '../api.js?v=286';
-import { showProgress, hideProgress, alertModal, escapeHtml, pageHeader } from '../ui/components.js?v=286';
-import { openModal, closeTop } from '../ui/modal-stack.js?v=286';
-import { showToast } from '../ui/toast.js?v=286';
-import { openListenedAlbumsPicker, getListenedPlaylist } from './listened-shared.js?v=286';
-import { loadHistoryStats, loadListenedAlbums } from './history-data.js?v=286';
-import { getArtistLikePreview } from '../util/artist-preview.js?v=286';
-import { hoverIn, hoverOut } from '../ui/preview-player.js?v=286';
-import { armRevealAll } from '../ui/reveal.js?v=286';
-import { hasUsername, getUsername, setUsername } from '../api/statsfm.js?v=286';
-import { getKey as getLastfmKey, setKey as setLastfmKey, clearKey as clearLastfmKey, isDefaultKey as lastfmIsDefaultKey } from '../api/lastfm.js?v=286';
-import { prefKey, migratePrefKey } from '../storage.js?v=286';
-import { alpha } from '../ui/theme-panel.js?v=286';
+import { getAllLikedTracks, getLikesPartialInfo, exportAllData, importAllData, getCurrentUserId, syncLikesIncremental, getLikesCacheTimestamp, getBestAvailableLikes, getAllPlaylistItems } from '../api.js?v=287';
+import { showProgress, hideProgress, alertModal, escapeHtml, pageHeader } from '../ui/components.js?v=287';
+import { openModal, closeTop } from '../ui/modal-stack.js?v=287';
+import { showToast } from '../ui/toast.js?v=287';
+import { openListenedAlbumsPicker, getListenedPlaylist } from './listened-shared.js?v=287';
+import { loadHistoryStats, loadListenedAlbums } from './history-data.js?v=287';
+import { getArtistLikePreview } from '../util/artist-preview.js?v=287';
+import { hoverIn, hoverOut } from '../ui/preview-player.js?v=287';
+import { armRevealAll } from '../ui/reveal.js?v=287';
+import { hasUsername, getUsername, setUsername } from '../api/statsfm.js?v=287';
+import { getKey as getLastfmKey, setKey as setLastfmKey, clearKey as clearLastfmKey, isDefaultKey as lastfmIsDefaultKey } from '../api/lastfm.js?v=287';
+import { prefKey, migratePrefKey } from '../storage.js?v=287';
+import { alpha } from '../ui/theme-panel.js?v=287';
 
 // Tres estados posibles, no dos: puede haber una key propia, la del código, o
 // —si algún día la constante queda vacía— ninguna. El hint del ⚙ tiene que
@@ -20,11 +20,11 @@ function estadoLastfm() {
   if (localStorage.getItem(prefKey('lastfm_api_key'))) return 'propia';
   return lastfmIsDefaultKey() ? 'la del código' : 'sin configurar';
 }
-import { loadHistoryStats as _loadStatsForCounter } from './history-data.js?v=286';
-import { openArtistCard } from './artist-card.js?v=286';
-import { openAlbumCard } from './album-card.js?v=286';
-import { activateMarquee, marqueeSpan } from '../ui/marquee.js?v=286';
-import { isJunkTrack } from '../util/junk.js?v=286';
+import { loadHistoryStats as _loadStatsForCounter } from './history-data.js?v=287';
+import { openArtistCard } from './artist-card.js?v=287';
+import { openAlbumCard } from './album-card.js?v=287';
+import { activateMarquee, marqueeSpan } from '../ui/marquee.js?v=287';
+import { isJunkTrack } from '../util/junk.js?v=287';
 
 let charts = [];
 let _loadController = null;
@@ -723,7 +723,14 @@ function computeStats(likes) {
 
 function renderDashboard(container, stats) {
   const hours = Math.floor(stats.totalDuration / 3600000);
-  const days = (hours / 24).toFixed(1);
+  // ⚠️ `toFixed(1)` da «398.4», con el PUNTO del inglés, y el copy de la app es
+  // castellano de España: el separador decimal es la COMA. v=282 arregló el
+  // gemelo de `hydrateHistorySection()` (el tile de «días de música» del
+  // historial) y dejó este, así que la misma pantalla enseñaba «398.4 días de
+  // música» en un tile y «185,6 días de música» en el otro. Mismo formateo que
+  // allá, que es el que manda `CLAUDE.md`: `toLocaleString('es-ES')` explícito,
+  // porque sin el locale se usa el del navegador (es-AR en las máquinas de Ian).
+  const days = (hours / 24).toLocaleString('es-ES', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
 
   container.innerHTML = `
     <div class="dash-stats-row">

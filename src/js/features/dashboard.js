@@ -723,7 +723,14 @@ function computeStats(likes) {
 
 function renderDashboard(container, stats) {
   const hours = Math.floor(stats.totalDuration / 3600000);
-  const days = (hours / 24).toFixed(1);
+  // ⚠️ `toFixed(1)` da «398.4», con el PUNTO del inglés, y el copy de la app es
+  // castellano de España: el separador decimal es la COMA. v=282 arregló el
+  // gemelo de `hydrateHistorySection()` (el tile de «días de música» del
+  // historial) y dejó este, así que la misma pantalla enseñaba «398.4 días de
+  // música» en un tile y «185,6 días de música» en el otro. Mismo formateo que
+  // allá, que es el que manda `CLAUDE.md`: `toLocaleString('es-ES')` explícito,
+  // porque sin el locale se usa el del navegador (es-AR en las máquinas de Ian).
+  const days = (hours / 24).toLocaleString('es-ES', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
 
   container.innerHTML = `
     <div class="dash-stats-row">

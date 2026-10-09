@@ -1,21 +1,21 @@
 // Wrapped propio: mini-resumen tuyo por año, hecho con el Extended Streaming History.
 // A diferencia del Wrapped oficial (que corre oct-sept), este es del año calendario completo.
 
-import { loadHistoryStats, isOwner, ownerLockedMessage } from './history-data.js?v=286';
-import { escapeHtml, pageHeader } from '../ui/components.js?v=286';
-import { getPreview } from '../api/preview-providers.js?v=286';
-import { getArtistLikePreview, getAlbumLikePreview } from '../util/artist-preview.js?v=286';
-import { attachHover } from '../ui/preview-player.js?v=286';
-import { openTrackCard } from './track-card.js?v=286';
-import { openArtistCard } from './artist-card.js?v=286';
-import { openAlbumCard } from './album-card.js?v=286';
-import { getMyTop } from '../api.js?v=286';
-import { activateMarquee, marqueeSpan } from '../ui/marquee.js?v=286';
-import { openModal } from '../ui/modal-stack.js?v=286';
-import { armReveal, armRevealAll, releaseReveal, animationsEnabled } from '../ui/reveal.js?v=286';
-import { coverUrl } from '../util/cover-size.js?v=286';
-import { vigilarRuta } from '../util/vigencia-ruta.js?v=286';
-import { fmtDia } from '../util/fecha.js?v=286';
+import { loadHistoryStats, isOwner, ownerLockedMessage } from './history-data.js?v=287';
+import { escapeHtml, pageHeader } from '../ui/components.js?v=287';
+import { getPreview } from '../api/preview-providers.js?v=287';
+import { getArtistLikePreview, getAlbumLikePreview } from '../util/artist-preview.js?v=287';
+import { attachHover } from '../ui/preview-player.js?v=287';
+import { openTrackCard } from './track-card.js?v=287';
+import { openArtistCard } from './artist-card.js?v=287';
+import { openAlbumCard } from './album-card.js?v=287';
+import { getMyTop } from '../api.js?v=287';
+import { activateMarquee, marqueeSpan } from '../ui/marquee.js?v=287';
+import { openModal } from '../ui/modal-stack.js?v=287';
+import { armReveal, armRevealAll, releaseReveal, animationsEnabled } from '../ui/reveal.js?v=287';
+import { coverUrl } from '../util/cover-size.js?v=287';
+import { vigilarRuta } from '../util/vigencia-ruta.js?v=287';
+import { fmtDia } from '../util/fecha.js?v=287';
 
 let stats = null;
 let selectedYear = null;
@@ -65,7 +65,7 @@ const ESPERA_APERTURA_MS = 3000;
 // después — montarlo tarde sería justo el flash que se está arreglando.
 function cargarApertura() {
   return Promise.race([
-    import('../features/wrapped-apertura.js?v=286').catch(e => {
+    import('../features/wrapped-apertura.js?v=287').catch(e => {
       console.warn('[wrapped] la apertura no cargó, el resumen queda entero:', e);
       return null;
     }),
@@ -96,9 +96,14 @@ function fmtMinutes(min) {
   return `${Math.round(min)}m`;
 }
 
+// Los días van con COMA decimal, igual que los dos tiles de «días de música»
+// del Dashboard: es el mismo dato con el mismo copy y el castellano de España
+// no usa el punto. Esta copia se le había escapado a v=282 y al arreglo del
+// gemelo del Dashboard, así que `#wrapped` enseñaba «398.4 días equivalentes»
+// en sus dos héroes mientras el Dashboard ya decía «185,6».
 function fmtDays(minutes) {
-  const days = minutes / (60 * 24);
-  return `${days.toFixed(1)} días equivalentes`;
+  const days = (minutes / (60 * 24)).toLocaleString('es-ES', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+  return `${days} días equivalentes`;
 }
 
 // Modal chico con el rango de datos del historial (antes era un panel inline

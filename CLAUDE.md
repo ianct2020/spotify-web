@@ -1608,6 +1608,44 @@ primera persona («yo pedí 3 ids»), que en España se dice igual. Convertirlo 
 con «creé», «borré», «encontré», «marqué». Revisar el diff, no confiar en el
 `sed`.
 
+## «días de música»: el punto y la coma (v=287)
+
+El mismo dato, con el mismo copy, formateado de dos maneras **en la misma
+pantalla del Dashboard**: `556h · 23.2 días de música` en el tile de los me
+gusta (`dashboard.js`, `renderDashboard`) y `4455h · 185,6 días de música` en el
+del historial (`hydrateHistorySection`), tres tiles más abajo. v=282 arregló el
+segundo y dejó el primero.
+
+**Se unificó a la COMA**, que es lo que corresponde: el copy visible es
+castellano de España (ver «Copy de la interfaz»), y ahí el separador decimal es
+la coma. `toFixed(1)` da «23.2» con el punto del inglés y **no falla nunca** —el
+número que imprime es correcto—, así que esto solo se ve mirando la pantalla.
+Va con `toLocaleString('es-ES', { minimumFractionDigits: 1, maximumFractionDigits: 1 })`,
+con el locale **explícito**: sin él se usa el del navegador, que en las máquinas
+de Ian es `es-AR`, o sea que el bug se ve en su Chrome y no en una máquina en
+inglés.
+
+⚠️ **Había una TERCERA copia**, y viva: `fmtDays()` de `features/wrapped.js`
+(`«398.4 días equivalentes»`), que pintan los dos héroes de `#wrapped`.
+Arreglada en el mismo commit — es el mismo dato con el mismo copy.
+
+🟥 **Lo que queda abierto, anotado en `PENDIENTES.md` y NO hecho acá:**
+- **`Skips 64.1%`**, en la MISMA fila de tiles (`dashboard.js`, `${t.skip_pct}%`
+  crudo del JSON). Mismo defecto, otra magnitud. Y `#wrapped` ya lo pinta con
+  coma (`fmtPct` de `wrapped-apertura.js`), así que las dos vistas enseñan el
+  mismo porcentaje de dos formas.
+- **Cuatro formateadores decimales privados, ninguno compartido**:
+  `records.js fmtNum()`, `mosaico.js fmt1()`, `app.js fmtMB()` y el
+  `toFixed(dec).replace('.', ',')` de `wrapped-apertura.js` —que además clava la
+  coma a mano en vez de pedirle el separador al locale—. Es la misma forma que
+  tenía `fmtDate()` cuando v=231 lo borró: **la copia fue la que mintió**.
+  Centralizarlos toca cuatro features y es su propio encargo.
+
+**Guarda**: `tests/dias-coma-decimal.test.mjs` (9 asserts). Afirma los tres
+sitios, comprueba que `Intl` tiene ICU de verdad —si no, la suite no significa
+nada— y lleva una regla ancha que caza cualquier `toFixed()` pegado a la palabra
+«días», que es la forma que tenían las tres. Comprobado que se pone roja.
+
 ## Client ID
 0c8c92ad128e4b89be7097c6b8082797
 
