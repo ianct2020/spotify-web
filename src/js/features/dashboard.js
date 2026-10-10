@@ -880,13 +880,28 @@ async function hydrateHistorySection() {
   // el separador decimal es la COMA. Se formatea con `toLocaleString('es-ES')`
   // como los otros cinco tiles, en vez de dejar el punto del inglés.
   const totalDays = ((t.min || 0) / 60 / 24).toLocaleString('es-ES', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+  // v=288: el QUINTO tile de ESTA MISMA fila decía «Skips 64.1%», con el punto
+  // del inglés, a cuatro tiles del «185,6 días» de arriba. Era `${t.skip_pct}`
+  // a secas: el número crudo del JSON (`totals.skip_pct = 64.1`), que
+  // interpolado sale con punto y **no falla nunca** — sólo se ve mirando la
+  // pantalla, igual que los «días» de v=287.
+  //
+  // ⚠️ Va con `toLocaleString('es-ES')` explícito y NO con un
+  // `.replace('.', ',')`: es el criterio que manda `CLAUDE.md` («Copy de la
+  // interfaz») y el mismo que usó v=287 para los días. Pedirle el separador al
+  // locale en vez de clavar la coma a mano es justo lo que `pct()` de
+  // `wrapped-apertura.js` hace mal, y no hay motivo para copiarlo.
+  //
+  // Sin locale explícito se usa el del NAVEGADOR, que en las máquinas de Ian es
+  // es-AR: o sea que el bug se ve en su Chrome y no en una máquina en inglés.
+  const skipPct = Number(t.skip_pct || 0).toLocaleString('es-ES', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
   const tiles = document.getElementById('history-stat-tiles');
   if (tiles) tiles.innerHTML = `
     <div class="stat-card"><div class="stat-value">${totalHours.toLocaleString('es-ES')}h</div><div class="stat-label">${totalDays} días de música</div></div>
     <div class="stat-card"><div class="stat-value">${(t.plays_valid || 0).toLocaleString('es-ES')}</div><div class="stat-label">Plays (≥30s)</div></div>
     <div class="stat-card"><div class="stat-value">${(t.days_active || 0).toLocaleString('es-ES')}</div><div class="stat-label">Días activos</div></div>
     <div class="stat-card"><div class="stat-value">${t.longest_streak || 0}</div><div class="stat-label">Racha más larga (días)</div></div>
-    <div class="stat-card"><div class="stat-value">${t.skip_pct || 0}%</div><div class="stat-label">Skips</div></div>
+    <div class="stat-card"><div class="stat-value">${skipPct}%</div><div class="stat-label">Skips</div></div>
     <div class="stat-card"><div class="stat-value">${(t.unique_artists || 0).toLocaleString('es-ES')}</div><div class="stat-label">Artistas distintos</div></div>
   `;
   // Estos 6 tiles NACEN ACÁ, después de que `renderDashboard` ya armó lo suyo,
