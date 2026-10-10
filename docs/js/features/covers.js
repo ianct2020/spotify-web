@@ -9,28 +9,32 @@
 // placeholder→img. Botón "Pantalla completa" (Fullscreen API) que oculta
 // sidebar/header/toolbar y recalcula el lado.
 
-import { loadListenedAlbums, isOwner, ownerLockedMessage } from './history-data.js?v=287';
-import { isJunkTrack } from '../util/junk.js?v=287';
-import { vigilarRuta } from '../util/vigencia-ruta.js?v=287';
-import { createIncrementalList, scrollRootOf } from '../ui/incremental-list.js?v=287';
-import { createLazyImages } from '../ui/lazy-img.js?v=287';
-import { getAllPlaylistItems, getBestAvailableLikes } from '../api.js?v=287';
-import { escapeHtml, pageHeader, showProgress, hideProgress } from '../ui/components.js?v=287';
-import { showToast } from '../ui/toast.js?v=287';
-import { openAlbumCard } from './album-card.js?v=287';
-import { openArtistCard } from './artist-card.js?v=287';
-import { albumKey, coverId } from '../util/album-key.js?v=287';
-import { generarWallpaper, descargarBlob, WALLPAPER_PRESETS } from './covers-wallpaper.js?v=287';
-import { buildAlbumStatsIndex } from '../util/album-stats.js?v=287';
-import { sortList, ORDENES_TAPAS } from '../util/orden-tapas.js?v=287';
-import { getPreview } from '../api/preview-providers.js?v=287';
-import { hoverIn, hoverOut } from '../ui/preview-player.js?v=287';
-import { coverUrl, tapaParaCelda } from '../util/cover-size.js?v=287';
-import { prefKey, migratePrefKey } from '../storage.js?v=287';
+import { loadListenedAlbums, isOwner, ownerLockedMessage } from './history-data.js?v=288';
+import { isJunkTrack } from '../util/junk.js?v=288';
+import { vigilarRuta } from '../util/vigencia-ruta.js?v=288';
+import { createIncrementalList, scrollRootOf } from '../ui/incremental-list.js?v=288';
+import { createLazyImages } from '../ui/lazy-img.js?v=288';
+import { getAllPlaylistItems, getBestAvailableLikes } from '../api.js?v=288';
+import { escapeHtml, pageHeader, showProgress, hideProgress } from '../ui/components.js?v=288';
+import { showToast } from '../ui/toast.js?v=288';
+import { openAlbumCard } from './album-card.js?v=288';
+import { openArtistCard } from './artist-card.js?v=288';
+import { albumKey, coverId, coverVariant } from '../util/album-key.js?v=288';
+import { generarWallpaper, descargarBlob, WALLPAPER_PRESETS } from './covers-wallpaper.js?v=288';
+import { buildAlbumStatsIndex } from '../util/album-stats.js?v=288';
+import { sortList, ORDENES_TAPAS } from '../util/orden-tapas.js?v=288';
+import { getPreview } from '../api/preview-providers.js?v=288';
+import { hoverIn, hoverOut } from '../ui/preview-player.js?v=288';
+import { coverUrl, tapaParaCelda } from '../util/cover-size.js?v=288';
+import { prefKey, migratePrefKey } from '../storage.js?v=288';
+import { leerColores, coloresAlVuelo } from './mosaico-colores.js?v=288';
+import { mediaDeRejilla, BYTES_POR_PORTADA } from '../util/cover-color.js?v=288';
+import { FAMILIAS, SIN_COLOR, SIN_COLOR_NOMBRE, familiaDeRgb } from '../util/familia-color.js?v=288';
 
 const LS_KEY_SIZE = 'covers_cell_size';
 const LS_KEY_SORT = 'covers_sort_mode';
 const LS_KEY_YEARS = 'covers_years_selected_v2';
+const LS_KEY_COLORS = 'covers_colors_selected_v1';
 const LS_WTHREE_ID = 'wthree_playlist_id';
 
 const VALID_SIZES = new Set(['28', '48', '64', '96']);
@@ -56,6 +60,27 @@ function getYearsSel() {
 }
 function setYearsSel(sel) {
   try { localStorage.setItem(prefKey(LS_KEY_YEARS), JSON.stringify([...sel])); } catch { /* full */ }
+}
+
+// ── El filtro por familia de color (v=288) ──────────────────────────────────
+//
+// Mismo contrato que el de año: un `Set` vacío significa «todas», y la
+// selección es MÚLTIPLE (apretar «rojos» y «azules» enseña las dos). Los dos
+// filtros se combinan con Y: año **y** color, como pidió el encargo.
+//
+// ⚠️ Se valida contra `IDS_FAMILIA`, no contra lo que haya en el localStorage:
+// una familia renombrada dejaría basura guardada que filtraría a cero tapas sin
+// que nada se queje. Lo que no se reconoce, se descarta.
+const IDS_VALIDOS = new Set([...FAMILIAS.map(f => f.id), SIN_COLOR]);
+function getColorsSel() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(prefKey(LS_KEY_COLORS)));
+    if (Array.isArray(raw)) return new Set(raw.filter(x => IDS_VALIDOS.has(x)));
+  } catch { /* vacío = todas */ }
+  return new Set();
+}
+function setColorsSel(sel) {
+  try { localStorage.setItem(prefKey(LS_KEY_COLORS), JSON.stringify([...sel])); } catch { /* full */ }
 }
 
 // Aplana history-listened-albums.json y mergea la playlist W-Three (si hay).
@@ -190,6 +215,56 @@ function buildList(data, wthreeItems, stats) {
   }));
 }
 
+// ── El índice coverId → familia de color (v=288) ────────────────────────────
+//
+// 🟩 **La unión es por `coverId` y no hace falta inventar ninguna clave.** La
+// base del mosaico (`mosaico_colores_v1`) está indexada por `coverId` —los 24
+// hex finales de la URL, o sea el hash de la imagen— y el 2.º pase de dedup de
+// `buildList()` (más arriba) también dedupica por `coverId`. Son la misma
+// clave, por los dos lados.
+//
+// 🟩 **Y por eso el filtro cuesta 0 peticiones para casi todo.** Medido el
+// 09/10 contra los datos reales: de las **2.469** celdas que `#covers` saca del
+// historial, **las 2.469 están en la base** — inclusión total comprobada, 0
+// fuera. El catálogo del mosaico mete el `coverId` de TODAS las filas de
+// `history-listened-albums.json` (2.475 únicos) y las 2.469 son un subconjunto.
+//
+// ⚠️ **Lo que la base NO cubre es «w three».** `armarCatalogo()` lo excluye a
+// propósito (pedir esa playlist cuesta cuota), así que un álbum que sólo venga
+// de ahí está en la base sólo si su tapa cae además en los me gusta. Esos se
+// calculan al vuelo desde el CDN —0 cuota de Spotify— MIENTRAS la grilla ya se
+// está dibujando, nunca antes.
+//
+// 🔴 **La regla que manda sobre todo lo demás** (decisión de Ian, 09/10): una
+// tapa cuyo color no se conoce —porque no está en la base y el cálculo al vuelo
+// falló— **sigue apareciendo en «Todos»**, en el cajón «Sin color». NUNCA
+// desaparece de la vista. «Una tapa que se esfuma al filtrar es peor que una
+// mal clasificada.» Por eso `familiaDeTapa()` devuelve `SIN_COLOR` y no
+// `null`: no hay ningún camino en el que una celda se quede sin cajón.
+
+/**
+ * Lee la base de colores y devuelve `Map<coverId, familiaId>`. Si la base no
+ * existe (un usuario que nunca la construyó en `#debug`), devuelve un mapa
+ * vacío y la vista entera sigue andando: todas las tapas caen en «Sin color» y
+ * el filtro se esconde. No es un error.
+ */
+async function leerIndiceDeColor() {
+  const mapa = new Map();
+  let reg = null;
+  try { reg = await leerColores(); }
+  catch (e) { console.warn('[covers] no pude leer la base de colores:', e.message); return { mapa, reg: null }; }
+  if (!reg?.ids?.length || !reg.datos) return { mapa, reg: null };
+  for (let i = 0; i < reg.ids.length; i++) {
+    const off = i * BYTES_POR_PORTADA;
+    if (off + BYTES_POR_PORTADA > reg.datos.length) break;   // base truncada
+    // La media 1×1 de la rejilla 3×3, que es lo que Ian decidió usar el 09/10
+    // para decidir la familia. La 3×3 no se toca.
+    const [r, g, b] = mediaDeRejilla(reg.datos, off);
+    mapa.set(reg.ids[i], familiaDeRgb(r, g, b));
+  }
+  return { mapa, reg };
+}
+
 // ── Hover-play sobre el mosaico (v=142) ─────────────────────────────────────
 //
 // Al parar el mouse sobre una tapa suena una pista al azar de ESE álbum que
@@ -301,6 +376,7 @@ export async function render(container) {
   migratePrefKey(LS_KEY_SIZE);
   migratePrefKey(LS_KEY_SORT);
   migratePrefKey(LS_KEY_YEARS);
+  migratePrefKey(LS_KEY_COLORS);
   container.innerHTML = `
     ${pageHeader({ title: 'Mis tapas' })}
     <div id="covers-content"><div class="empty-state"><div class="spinner spinner-lg"></div></div></div>
@@ -367,8 +443,19 @@ export async function render(container) {
   let size = getSize();
   let sort = getSort();
   let yearsSel = getYearsSel();
+  let colorsSel = getColorsSel();
   let fitEnabled = false;
   let isFullscreen = false;
+
+  // El índice de color. Se lee UNA vez por render y es un `Map` en memoria:
+  // ninguna celda vuelve a mirar la IndexedDB.
+  const { mapa: colorPorTapa, reg: regColores } = await leerIndiceDeColor();
+  if (!ruta.vigente()) return;
+  // La familia de un álbum. `SIN_COLOR` es un cajón de verdad, no un error.
+  const familiaDeTapa = (a) => colorPorTapa.get(coverId(a.img)) || SIN_COLOR;
+  // Las que habrá que calcular al vuelo: tienen tapa y no están en la base.
+  const sinColorAlEmpezar = allAlbums.filter(a => !colorPorTapa.has(coverId(a.img)));
+  const hayBaseDeColor = !!regColores;
 
   // ── De dónde salen las tapas (v=164) ────────────────────────────────────────
   //
@@ -401,9 +488,69 @@ export async function render(container) {
       : `Álbumes dados por escuchados (${escapeHtml(umbral)})${sinTapa}${avisoWthree}`;
   }
 
-  function albumsFiltered() {
+  // El filtro de año SOLO, sin el de color: es la base sobre la que se cuentan
+  // las pastillas de color, para que cada una diga cuántas tapas enseñaría si
+  // la apretaras AHORA (con el año puesto). Si se contara sobre la lista ya
+  // filtrada por color, apretar «rojos» dejaría todas las demás en 0.
+  function albumsPorAnio() {
     if (yearsSel.size === 0) return allAlbums;
     return allAlbums.filter(a => a.years.some(y => yearsSel.has(y)));
+  }
+
+  function pasaColor(a) {
+    return colorsSel.size === 0 || colorsSel.has(familiaDeTapa(a));
+  }
+
+  function albumsFiltered() {
+    return albumsPorAnio().filter(pasaColor);
+  }
+
+  // Cuántas tapas caen en cada familia, con el filtro de AÑO aplicado.
+  // Devuelve `Map<familiaId, n>` con una entrada por familia existente.
+  function cuentasDeColor() {
+    const c = new Map();
+    for (const a of albumsPorAnio()) {
+      const f = familiaDeTapa(a);
+      c.set(f, (c.get(f) || 0) + 1);
+    }
+    return c;
+  }
+
+  // Las pastillas de color. ⚠️ Una familia con 0 tapas NO se pinta: una
+  // pastilla que filtra a nada es una promesa vacía, y con el filtro de año
+  // puesto eso pasa a cada rato (el 09/10, «aguas» tiene 26 tapas en total, así
+  // que casi cualquier año la deja en cero). La de «Sin color» sale sólo si hay
+  // alguna, y va al final porque no es una familia de color.
+  //
+  // 🔴 **PERO UNA FAMILIA ELEGIDA SE PINTA SIEMPRE, aunque tenga 0.** Esto se
+  // rompió y se cazó probándolo el 09/10: la selección se guarda en el
+  // localStorage, así que al volver a la vista puede apuntar a una familia que
+  // ahora está vacía —porque cambió el filtro de año, o porque el cálculo al
+  // vuelo resolvió las que estaban en «Sin color»—. Con la regla de «0 no se
+  // pinta», esa pastilla desaparecía **con el filtro todavía puesto**: el
+  // mosaico quedaba VACÍO y no había ninguna pastilla encendida que apretar
+  // para salir. Es la versión total del defecto que el encargo prohíbe — no se
+  // esfumaba una tapa, se esfumaban todas, y sin decir por qué.
+  function pastillasDeColorHtml() {
+    const c = cuentasDeColor();
+    const total = albumsPorAnio().length;
+    const una = (id, nombre, estilo, extra = '') => {
+      const n = c.get(id) || 0;
+      if (!n && !colorsSel.has(id)) return '';
+      const on = colorsSel.has(id) ? ' is-on' : '';
+      return `<button type="button" class="covers-chip covers-chip-color${on}${extra}" data-color="${id}"${estilo}
+        aria-pressed="${colorsSel.has(id)}" title="${escapeHtml(nombre)}: ${n.toLocaleString('es-ES')} tapas">${escapeHtml(nombre)} <span class="covers-chip-n">${n.toLocaleString('es-ES')}</span></button>`;
+    };
+    const todas = `<button type="button" class="covers-chip${colorsSel.size === 0 ? ' is-on' : ''}" data-color="all"
+      aria-pressed="${colorsSel.size === 0}">Todos <span class="covers-chip-n">${total.toLocaleString('es-ES')}</span></button>`;
+    const familias = FAMILIAS
+      // El color propio de la pastilla va inline y no en la hoja: son doce
+      // valores que vienen del módulo, no del tema. Es la única excepción a la
+      // regla de «sólo variables de tema» del repo, y es por definición — una
+      // pastilla que filtra «rojos» tiene que ser roja en los cuatro presets.
+      .map(f => una(f.id, f.nombre, ` style="--chip-bg:${f.color};--chip-fg:${f.texto}"`))
+      .join('');
+    return todas + familias + una(SIN_COLOR, SIN_COLOR_NOMBRE, '', ' covers-chip-sincolor');
   }
 
   function noCoverFiltered() {
@@ -459,6 +606,13 @@ export async function render(container) {
       <button type="button" class="covers-chip ${yearsSel.size === 0 ? 'is-on' : ''}" data-year="all">Todos</button>
       ${yearsAvailable.map(y => `<button type="button" class="covers-chip ${yearsSel.has(y) ? 'is-on' : ''}" data-year="${y}">${y}</button>`).join('')}
     </div>
+    <!-- v=288: la segunda fila, por familia de color. Misma idea que la de
+         año y se combina con ella (año Y color). Sale sólo si hay base de
+         colores: sin ella todas caerían en «Sin color» y la fila no diría
+         nada. La base se construye en #debug → «Base de colores del mosaico»,
+         y no gasta cuota de Spotify. -->
+    ${hayBaseDeColor ? `<div class="covers-year-chips covers-color-chips" id="covers-color-chips" role="group" aria-label="Filtrar por color de la portada">${pastillasDeColorHtml()}</div>` : ''}
+    <p class="covers-vacio" id="covers-vacio" style="display:none" role="status"></p>
     <div class="covers-grid-wrap" id="covers-grid-wrap">
       <div class="covers-grid" id="covers-grid" data-size="${size}" style="--cover-min:${size}px;--cover-gap:${GRID_GAP}px"></div>
     </div>
@@ -484,11 +638,8 @@ export async function render(container) {
   let currentList = filterAndSort();
 
   function filterAndSort() {
-    let out = allAlbums;
-    if (yearsSel.size > 0) {
-      out = out.filter(a => a.years.some(y => yearsSel.has(y)));
-    }
-    return sortList(out, sort);
+    // Los dos filtros se combinan con Y: año **y** color (v=288).
+    return sortList(albumsFiltered(), sort);
   }
 
   // Lista incremental + tapas lazy (v=181), mismo patrón que #skips y
@@ -526,6 +677,24 @@ export async function render(container) {
     const total = currentList.length;
     countEl.textContent = total.toLocaleString('es-ES');
     variantePintada = varianteDe(Number(size) || 28);
+
+    // Si los filtros no dejan nada, DECIRLO. Un mosaico vacío y sin una palabra
+    // se lee como una vista rota —es lo que pasaba el 09/10 con una selección
+    // guardada que había quedado sin tapas—, y la regla de este repo es que
+    // ninguna vista degrada en silencio. El aviso nombra los dos filtros, que
+    // es lo que hace falta para saber cuál aflojar.
+    const vacio = document.getElementById('covers-vacio');
+    if (vacio) {
+      const hayFiltro = yearsSel.size > 0 || colorsSel.size > 0;
+      vacio.style.display = (total === 0 && hayFiltro) ? '' : 'none';
+      if (total === 0 && hayFiltro) {
+        const porAnio = yearsSel.size > 0 ? `año (${[...yearsSel].sort().join(', ')})` : '';
+        const porColor = colorsSel.size > 0
+          ? `color (${[...colorsSel].map(id => (FAMILIAS.find(f => f.id === id)?.nombre) || SIN_COLOR_NOMBRE).join(', ')})`
+          : '';
+        vacio.textContent = `Ninguna tapa cumple el filtro de ${[porAnio, porColor].filter(Boolean).join(' y ')}. Pulsa «Todos» para quitarlo.`;
+      }
+    }
 
     if (!list) {
       lazyCovers = createLazyImages({ root: scrollRootOf(grid), rootMargin: '200px' });
@@ -584,6 +753,44 @@ export async function render(container) {
   }
 
   renderGrid();
+
+  // ── Los colores que faltan, calculados al vuelo (v=288) ───────────────────
+  //
+  // ⚠️ **Va DESPUÉS de `renderGrid()`, y eso es el requisito, no un detalle.**
+  // El encargo lo pide así: «calculá al vuelo lo que falte mientras las tapas
+  // ya se están dibujando». La grilla no espera a esto ni un frame; cuando
+  // termina, las pastillas se repintan con los números nuevos.
+  //
+  // ⚠️ **0 peticiones a `api.spotify.com`**: sale del CDN de imágenes (ver
+  // `coloresAlVuelo` en `features/mosaico-colores.js`). Y **no escribe en la
+  // base**: es de usar y tirar.
+  //
+  // 🔴 Las que fallen se quedan en «Sin color» y **siguen apareciendo en
+  // «Todos»**. No se esconde ninguna.
+  const colorCtrl = new AbortController();
+  if (hayBaseDeColor && sinColorAlEmpezar.length) {
+    const pendientes = sinColorAlEmpezar.map(a => ({ id: coverId(a.img), url64: coverVariant(a.img, 64) }));
+    // Sin `await`: la vista ya está pintada y esto la alcanza cuando termine.
+    coloresAlVuelo(pendientes, {
+      signal: colorCtrl.signal,
+      onCada: ({ id, rejilla }) => {
+        const [r, g, b] = mediaDeRejilla(rejilla, 0);
+        colorPorTapa.set(id, familiaDeRgb(r, g, b));
+      },
+    }).then((res) => {
+      if (!ruta.vigente() || colorCtrl.signal.aborted) return;
+      console.log(`[covers] colores al vuelo: ${res.hechas} resueltas, ${res.fallidas} sin color, ${(res.bytes / 1024).toFixed(0)} KB del CDN en ${res.ms} ms`);
+      repintarPastillasDeColor();
+      // Si hay un filtro de color puesto, la lista cambia: las que acaban de
+      // ganar color pueden entrar o salir. Se repinta sólo en ese caso, para no
+      // mover el mosaico por debajo del cursor sin motivo.
+      if (colorsSel.size > 0) {
+        currentList = filterAndSort();
+        renderGrid();
+        if (fitEnabled) applyFit();
+      }
+    }).catch((e) => console.warn('[covers] los colores al vuelo fallaron:', e.message));
+  }
 
   function applyFit() {
     const rect = grid.getBoundingClientRect();
@@ -699,6 +906,37 @@ export async function render(container) {
       const on = cy === 'all' ? yearsSel.size === 0 : yearsSel.has(Number(cy));
       c.classList.toggle('is-on', on);
     });
+    currentList = filterAndSort();
+    renderGrid();
+    if (fitEnabled) applyFit();
+    const subEl = document.getElementById('covers-summary-sub');
+    if (subEl) subEl.innerHTML = buildSourcesLine(albumsFiltered(), noCoverFiltered());
+    // ⚠️ Las cuentas de las pastillas de color dependen del año, así que hay
+    // que repintarlas acá. Sin esto, cambiar de año dejaba los números de color
+    // del año anterior: un número viejo con cara de número bueno.
+    repintarPastillasDeColor();
+  });
+
+  // Repinta la fila de color entera (cuentas incluidas). Se llama al cambiar el
+  // año y cuando el cálculo al vuelo descubre colores nuevos.
+  function repintarPastillasDeColor() {
+    const el = document.getElementById('covers-color-chips');
+    if (el) el.innerHTML = pastillasDeColorHtml();
+  }
+
+  const colorChipsEl = document.getElementById('covers-color-chips');
+  // Delegado en el contenedor, no un listener por pastilla: la fila se repinta
+  // entera cada vez que cambia el año o entra un color nuevo, y un listener por
+  // botón se perdería en cada repintado.
+  colorChipsEl?.addEventListener('click', (e) => {
+    const chip = e.target.closest('.covers-chip');
+    if (!chip) return;
+    const id = chip.dataset.color;
+    if (id === 'all') colorsSel = new Set();
+    else if (colorsSel.has(id)) colorsSel.delete(id);
+    else colorsSel.add(id);
+    setColorsSel(colorsSel);
+    repintarPastillasDeColor();
     currentList = filterAndSort();
     renderGrid();
     if (fitEnabled) applyFit();
@@ -944,6 +1182,9 @@ export async function render(container) {
     // Irse de la vista aborta el wallpaper: si no, sigue bajando tapas y
     // dibujando contra un canvas que ya no le sirve a nadie.
     wallCtrl?.abort();
+    // Y aborta los colores al vuelo: si no, sigue bajando miniaturas del CDN
+    // para pintar unas pastillas que ya no están en pantalla.
+    colorCtrl.abort();
     window.removeEventListener('resize', onResize);
     document.removeEventListener('fullscreenchange', onFullscreenChange);
     document.body.classList.remove('covers-fs');

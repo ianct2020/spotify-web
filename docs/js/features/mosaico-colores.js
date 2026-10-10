@@ -27,11 +27,11 @@
 // temporizadores encadenados hasta uno por minuto. El bucle solo espera a la
 // red y a la decodificación, que no se frenan.
 
-import { idbGetCachedRaw, idbSetCached } from '../idb.js?v=287';
-import { loadListenedAlbums } from './history-data.js?v=287';
-import { getBestAvailableLikes } from '../api.js?v=287';
-import { coverId, coverVariant } from '../util/album-key.js?v=287';
-import { MOSAICO_COLORES_KEY, BYTES_POR_PORTADA, rejilla3x3 } from '../util/cover-color.js?v=287';
+import { idbGetCachedRaw, idbSetCached } from '../idb.js?v=288';
+import { loadListenedAlbums } from './history-data.js?v=288';
+import { getBestAvailableLikes } from '../api.js?v=288';
+import { coverId, coverVariant } from '../util/album-key.js?v=288';
+import { MOSAICO_COLORES_KEY, BYTES_POR_PORTADA, rejilla3x3 } from '../util/cover-color.js?v=288';
 
 const FORMATO = 1;
 // Descargas a la vez. Es el lote de `covers-wallpaper.js`, medido allí contra
@@ -207,6 +207,53 @@ function nuevoLienzo() {
     ? new OffscreenCanvas(64, 64)
     : Object.assign(document.createElement('canvas'), { width: 64, height: 64 });
   return c.getContext('2d', { willReadFrequently: true });
+}
+
+// ── Colores al vuelo, para las tapas que no están en la base (v=288) ────────
+//
+// El filtro por color de `#covers` (`util/familia-color.js`) necesita el color
+// de las tapas que la base NO tiene: las que sólo vienen de la playlist «w
+// three», que `armarCatalogo()` excluye a propósito porque pedirla costaría
+// cuota de la API. Eran ~74 de 2.543 el 09/10.
+//
+// ⚠️ **Esto NO escribe en `mosaico_colores_v1`.** Es un cálculo de usar y
+// tirar, para esta carga de página. La base es el producto de un acto
+// explícito en `#debug` con su cartel y su barra de progreso, y que una vista
+// la engorde por el solo hecho de abrirse rompería esa garantía — y encima
+// dejaría dentro tapas que el catálogo del mosaico no quiere.
+//
+// ⚠️ **0 peticiones a `api.spotify.com`.** Lo que se baja sale del CDN de
+// imágenes, igual que en la tanda de la base: ver la cabecera de este archivo
+// para por qué cada miniatura se pide aparte y nunca se reusa una `<img>` de
+// la página (sin `mode: 'cors'` el canvas queda contaminado).
+//
+// `onCada({ id, rejilla })` se llama por cada acierto y `onFallo({ id, error })`
+// por cada fallo, así que quien llama puede ir pintando en vez de esperar al
+// final. Devuelve `{ hechas, fallidas, bytes, ms }`.
+export async function coloresAlVuelo(items, { onCada, onFallo, signal, enParalelo = EN_PARALELO } = {}) {
+  const t0 = performance.now();
+  let hechas = 0, fallidas = 0, bytes = 0, cursor = 0;
+  const obrero = async () => {
+    const lienzo = nuevoLienzo();
+    while (cursor < items.length) {
+      if (signal?.aborted) return;
+      const it = items[cursor++];
+      let r;
+      try {
+        r = await colorDe(it.url64, lienzo, signal);
+      } catch (e) {
+        // Acá un `CorteTanda` no corta nada: es una tapa que no se pudo, y
+        // las que faltan se intentan igual. Esto no es la construcción de la
+        // base, es un adorno de una vista que ya se está dibujando.
+        r = { error: `${e.name}: ${e.message}` };
+      }
+      bytes += r.bytes || 0;
+      if (r.error) { fallidas++; onFallo?.({ id: it.id, error: r.error }); }
+      else { hechas++; onCada?.({ id: it.id, rejilla: r.rejilla }); }
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(enParalelo, items.length) }, obrero));
+  return { hechas, fallidas, bytes, ms: Math.round(performance.now() - t0) };
 }
 
 // ── La tanda ────────────────────────────────────────────────────────────────

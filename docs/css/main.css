@@ -4165,6 +4165,80 @@ h3 { font-size: 18px; font-weight: 600; }
   border-color: var(--color-accent);
 }
 
+/* ── Pastillas de familia de color de #covers (v=288) ──────────────────────
+   ⚠️ Son la ÚNICA excepción del repo a «sólo variables de tema»: el color de
+   cada pastilla lo pone `util/familia-color.js` inline, en `--chip-bg` y
+   `--chip-fg`. Es por definición — la pastilla que filtra «rojos» tiene que
+   ser roja en los cuatro presets, o deja de decir cuál es su familia.
+
+   🟩 Y por eso su contraste NO depende del preset: fondo y texto son los dos
+   fijos, así que el ratio es el mismo en los cuatro. Medido el 09/10: de 5,47
+   (verdes) a 18,90 (blancos), los doce por encima de AA 4,5:1. Lo recalcula
+   `tests/familia-color.test.mjs`. */
+.covers-color-chips { margin-top: -2px; }
+.covers-chip-color {
+  background: var(--chip-bg);
+  color: var(--chip-fg);
+  /* El borde sale del propio color, un poco más oscuro por el alpha del
+     texto encima: así la pastilla se despega del fondo de la página en los
+     presets claros sin tener que saber de qué color es ese fondo. */
+  border-color: color-mix(in srgb, var(--chip-bg) 72%, var(--chip-fg));
+  font-weight: 500;
+}
+.covers-chip-color:hover {
+  background: var(--chip-bg);
+  color: var(--chip-fg);
+  /* No se aclara el fondo —eso le cambiaría la familia a la vista— sino que se
+     marca el borde. */
+  border-color: var(--chip-fg);
+}
+/* La elegida no se pinta con el acento, como las de año: perdería su color, que
+   es justamente lo que la identifica. Se marca con un anillo. */
+.covers-chip-color.is-on {
+  background: var(--chip-bg);
+  color: var(--chip-fg);
+  border-color: var(--chip-fg);
+  box-shadow: 0 0 0 2px var(--color-accent);
+}
+/* El aviso de «los filtros no dejan nada». Variables de tema: esto NO es una
+   pastilla de familia, así que no lleva color propio. */
+.covers-vacio {
+  color: var(--color-text-secondary);
+  font-size: 13px;
+  margin: 10px 0 0;
+}
+.covers-chip-n {
+  opacity: .75;
+  font-variant-numeric: tabular-nums;
+  margin-left: 2px;
+}
+/* «Sin color» no es una familia de color, así que NO lleva color propio: va con
+   variables de tema y punteada. Su razón de existir es que una tapa cuyo color
+   no se pudo averiguar siga estando en «Todos» en vez de esfumarse. */
+.covers-chip-sincolor {
+  background: var(--color-surface);
+  color: var(--color-text-secondary);
+  border: 1px dashed var(--color-border);
+}
+.covers-chip-sincolor:hover { background: var(--color-elevated); color: var(--color-text); }
+/* 🔴 Elegida: el MISMO anillo que las de color, y NO el `background: accent;
+   color: white` de `.covers-chip.is-on`.
+   Medido en los cuatro presets el 09/10: blanco sobre `--color-accent` da
+   violeta 5,70 · **ámbar 2,84** · **aguamarina 1,89** · papel 7,10, o sea que
+   FALLA AA en dos de los cuatro. Y no se arregla poniendo texto negro: negro
+   sobre el acento da 3,32 · 6,65 · 10,02 · 2,66 y falla en los otros dos. Con
+   el anillo el texto no cambia y se queda en el 5,20-7,08 del estado normal,
+   que pasa AA en los cuatro.
+   ⚠️ Las pastillas de AÑO sí tienen ese problema, desde antes de v=288, y NO
+   se tocaron acá: está anotado en PENDIENTES.md. */
+.covers-chip-sincolor.is-on {
+  background: var(--color-surface);
+  color: var(--color-text);
+  border-style: solid;
+  border-color: var(--color-text-secondary);
+  box-shadow: 0 0 0 2px var(--color-accent);
+}
+
 .covers-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(var(--cover-min, 28px), 1fr));

@@ -1,21 +1,21 @@
 // Wrapped propio: mini-resumen tuyo por año, hecho con el Extended Streaming History.
 // A diferencia del Wrapped oficial (que corre oct-sept), este es del año calendario completo.
 
-import { loadHistoryStats, isOwner, ownerLockedMessage } from './history-data.js?v=287';
-import { escapeHtml, pageHeader } from '../ui/components.js?v=287';
-import { getPreview } from '../api/preview-providers.js?v=287';
-import { getArtistLikePreview, getAlbumLikePreview } from '../util/artist-preview.js?v=287';
-import { attachHover } from '../ui/preview-player.js?v=287';
-import { openTrackCard } from './track-card.js?v=287';
-import { openArtistCard } from './artist-card.js?v=287';
-import { openAlbumCard } from './album-card.js?v=287';
-import { getMyTop } from '../api.js?v=287';
-import { activateMarquee, marqueeSpan } from '../ui/marquee.js?v=287';
-import { openModal } from '../ui/modal-stack.js?v=287';
-import { armReveal, armRevealAll, releaseReveal, animationsEnabled } from '../ui/reveal.js?v=287';
-import { coverUrl } from '../util/cover-size.js?v=287';
-import { vigilarRuta } from '../util/vigencia-ruta.js?v=287';
-import { fmtDia } from '../util/fecha.js?v=287';
+import { loadHistoryStats, isOwner, ownerLockedMessage } from './history-data.js?v=288';
+import { escapeHtml, pageHeader } from '../ui/components.js?v=288';
+import { getPreview } from '../api/preview-providers.js?v=288';
+import { getArtistLikePreview, getAlbumLikePreview } from '../util/artist-preview.js?v=288';
+import { attachHover } from '../ui/preview-player.js?v=288';
+import { openTrackCard } from './track-card.js?v=288';
+import { openArtistCard } from './artist-card.js?v=288';
+import { openAlbumCard } from './album-card.js?v=288';
+import { getMyTop } from '../api.js?v=288';
+import { activateMarquee, marqueeSpan } from '../ui/marquee.js?v=288';
+import { openModal } from '../ui/modal-stack.js?v=288';
+import { armReveal, armRevealAll, releaseReveal, animationsEnabled } from '../ui/reveal.js?v=288';
+import { coverUrl } from '../util/cover-size.js?v=288';
+import { vigilarRuta } from '../util/vigencia-ruta.js?v=288';
+import { fmtDia } from '../util/fecha.js?v=288';
 
 let stats = null;
 let selectedYear = null;
@@ -65,7 +65,7 @@ const ESPERA_APERTURA_MS = 3000;
 // después — montarlo tarde sería justo el flash que se está arreglando.
 function cargarApertura() {
   return Promise.race([
-    import('../features/wrapped-apertura.js?v=287').catch(e => {
+    import('../features/wrapped-apertura.js?v=288').catch(e => {
       console.warn('[wrapped] la apertura no cargó, el resumen queda entero:', e);
       return null;
     }),

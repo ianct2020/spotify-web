@@ -1,14 +1,14 @@
-import { getAllPlaylistItems, getBestAvailableLikes, addTracksToPlaylist, removeTracksFromPlaylist, getAllUserPlaylists } from '../api.js?v=287';
-import { esEPoAlbum } from '../util/release-size.js?v=287';
-import { idbGetCached, idbSetCached, idbGetTimestamp } from '../idb.js?v=287';
-import { escapeHtml, confirmModal, pageHeader } from '../ui/components.js?v=287';
-import { showToast } from '../ui/toast.js?v=287';
-import { isJunkTrack } from '../util/junk.js?v=287';
-import { openModal, closeTop } from '../ui/modal-stack.js?v=287';
-import { getListenedPlaylist, groupItemsByAlbum, openListenedAlbumsPicker, albumKey, baseName, norm } from './listened-shared.js?v=287';
-import { openAlbumCard } from './album-card.js?v=287';
-import { prefKey, migratePrefKey } from '../storage.js?v=287';
-import { pedirYCachear, SOLO_CON_CONTENIDO } from '../util/cache-solo-exitos.js?v=287';
+import { getAllPlaylistItems, getBestAvailableLikes, addTracksToPlaylist, removeTracksFromPlaylist, getAllUserPlaylists } from '../api.js?v=288';
+import { esEPoAlbum } from '../util/release-size.js?v=288';
+import { idbGetCached, idbSetCached, idbGetTimestamp } from '../idb.js?v=288';
+import { escapeHtml, confirmModal, pageHeader } from '../ui/components.js?v=288';
+import { showToast } from '../ui/toast.js?v=288';
+import { isJunkTrack } from '../util/junk.js?v=288';
+import { openModal, closeTop } from '../ui/modal-stack.js?v=288';
+import { getListenedPlaylist, groupItemsByAlbum, openListenedAlbumsPicker, albumKey, baseName, norm } from './listened-shared.js?v=288';
+import { openAlbumCard } from './album-card.js?v=288';
+import { prefKey, migratePrefKey } from '../storage.js?v=288';
+import { pedirYCachear, SOLO_CON_CONTENIDO } from '../util/cache-solo-exitos.js?v=288';
 
 const SORT_KEY = 'listened_sort_mode';
 const VALID_SORTS = new Set(['recent', 'year-desc', 'year-asc', 'artist-asc', 'likes-desc', 'name-asc']);
@@ -67,7 +67,7 @@ function dismissHistory(key) {
 // Solo lo bajamos si el user logueado es el dueño (Ian): son sus datos personales.
 async function loadHistoryData() {
   if (historyAlbums) return historyAlbums;
-  const { isOwner } = await import('./history-data.js?v=287');
+  const { isOwner } = await import('./history-data.js?v=288');
   if (!(await isOwner())) { historyAlbums = []; return historyAlbums; }
   try {
     const cached = await idbGetCached(HISTORY_CACHE_KEY);
