@@ -19,6 +19,8 @@
 #   5. nada personal en lo que se va a subir: ni en el staging ni en los commits
 #      que todavía no están en el remoto, comparado contra las reglas del
 #      .gitignore (el repo es PÚBLICO; el 28/07/2026 se filtraron datos)
+#      (5b es un AVISO, no un fallo: los archivos sin seguimiento que el .gitignore
+#      no tapa, para que un volcado con otro nombre se vea antes de un `git add`)
 set -uo pipefail
 
 RAIZ="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -27,6 +29,9 @@ cd "$RAIZ"
 FALLOS=0
 ok()   { echo "  ✓ $1"; }
 mal()  { echo "  ✗ $1"; FALLOS=$((FALLOS + 1)); }
+# Un aviso se ve pero NO suma a FALLOS: un fallo bloquearía todo push mientras haya
+# cualquier borrador en el árbol de trabajo.
+aviso() { echo "  ! $1"; }
 
 echo "1. node --check sobre src/"
 MALOS=$(find src \( -name '*.js' -o -name '*.mjs' \) -print0 \
@@ -126,6 +131,15 @@ echo "5. nada personal en lo que se va a subir"
 PERSONAL=$( { git diff --cached --name-only; git diff --name-only '@{u}..HEAD' 2>/dev/null; } | sort -u | git check-ignore --no-index --stdin 2>/dev/null || true)
 if [ -z "$PERSONAL" ]; then ok "ningún archivo del staging ni de los commits sin subir cae en el .gitignore"
 else mal "archivos que el .gitignore marca como personales/no subir:"; echo "$PERSONAL" | sed 's/^/      /'; fi
+
+# 5b. El punto 5 mira lo que se va a subir; esto mira lo que TODAVÍA NO se agregó.
+# Un volcado nuevo con un nombre que el .gitignore no conoce no cae en el punto 5
+# hasta que alguien lo hace `git add`, y ese es justo el momento en que ya es tarde
+# para mirarlo con calma. Solo avisa.
+echo "5b. archivos sin seguimiento que el .gitignore NO tapa (aviso)"
+SUELTOS=$(git ls-files --others --exclude-standard 2>/dev/null || true)
+if [ -z "$SUELTOS" ]; then ok "ninguno"
+else aviso "revisá que ninguno sea un volcado personal antes de agregarlo (el repo es PÚBLICO):"; echo "$SUELTOS" | sed 's/^/      /'; fi
 
 echo
 if [ "$FALLOS" -eq 0 ]; then echo "Todo en orden para pushear."; else echo "✗ $FALLOS comprobación(es) fallaron: NO pushear."; fi

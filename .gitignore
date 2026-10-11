@@ -16,6 +16,13 @@ docs/data/user-*.json
 my_spotify_data/
 Descargas/
 
+# Volcados de medición: traen el detalle día por día de años de escucha (4 MB
+# en un solo archivo). El repo es PÚBLICO y no alcanza con acordarse de no hacer
+# `git add` de esto: el .gitignore también alimenta el punto 5 de `npm run prepush`.
+tmp-medicion/
+tmp-*/
+days-real*.json
+
 # Exports temporales de Fonoteca (data privada)
 *-export-*.json
 deleted-clusters.json

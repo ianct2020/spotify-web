@@ -59,7 +59,9 @@ const EXTRA = { mosaico: 'auto=1' };
 // `ocultar-artista-novedades` (v=278) abre #new-releases —barata— y TAMBIÉN
 // #discover-artists, para probar que comparten el almacén en las dos direcciones:
 // hereda su presupuesto. Medido a tasa de acierto, igual que los otros (ver abajo).
-const PRESUPUESTO = { 'ocultar-artista': 90000, 'ocultar-artista-disco': 450000, 'ocultar-artista-novedades': 900000 };
+// `calendario` (v=289) llegó SIN presupuesto y con el defecto de 45 s pasaba 7 de 10; medido a
+// tasa de acierto el 10/10 (tanda 39): 120 s → 11/12 · 300 s → 12/12 · 450 s → 16/16.
+const PRESUPUESTO = { 'calendario': 450000, 'ocultar-artista': 90000, 'ocultar-artista-disco': 450000, 'ocultar-artista-novedades': 900000 };
 // `XQ="&peor=1"` agrega parámetros a la URL del banco sin tocar este archivo: sirve
 // para medir (p. ej. el ancho mínimo en que la barra de novedades sigue en una fila).
 
