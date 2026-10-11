@@ -420,6 +420,19 @@ minúsculas, guardado corrupto, siete de ocho colores, idempotencia—. Antes de
 medía el contraste de los tokens del tema: `familia-color.test.mjs` mide las doce pastillas de
 `#covers`, que son colores fijos.
 
+## `.covers-chip.is-on`: el anillo en vez del blanco sobre el acento (v=290)
+
+Toda pastilla elegida de `#covers` pintaba `color: white` sobre `background: var(--color-accent)`:
+violeta 5,70 · **ámbar 2,84** · **aguamarina 1,89** · papel 7,10 — fallaba AA en dos de los
+cuatro presets. Ahora `.covers-chip.is-on` conserva el fondo y el texto (`--color-surface` y
+`--color-text`) y marca la selección con `border-color: var(--color-accent)` y
+`box-shadow: 0 0 0 2px var(--color-accent)`, igual que las pastillas de color desde v=288.
+Alcanza a TODA `.covers-chip.is-on`: las de año y el «Todos» de cada fila. `.covers-chip-color.is-on`
+y `.covers-chip-sincolor.is-on` la pisan (misma especificidad, van después: **si se reordenan
+dejan de pisarla**; lo vigila `tests/covers-chip-elegida.test.mjs`). El `:hover` de una elegida no
+hace nada, igual que antes de este cambio. **Solo esta regla**: hay ~30 `color: white`/`#fff` más en
+las hojas (inventario en `fonoteca-migracion/PENDIENTES.md`) que no se tocaron.
+
 ## PENDIENTES anotados en v=157
 - ~~**La clave del tema no tiene prefijo por usuario.**~~ ✅ **Resuelto en
   v=159**: `prefKey()` en `storage.js`, aplicado a `fonoteca_theme_v1` y

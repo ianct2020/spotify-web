@@ -4159,10 +4159,18 @@ h3 { font-size: 18px; font-weight: 600; }
   transition: background .12s, color .12s, border-color .12s;
 }
 .covers-chip:hover { background: var(--color-elevated); color: var(--color-text); }
+/* 🔴 La elegida se marca con un ANILLO, no con blanco sobre el acento (v=290).
+   `background: accent; color: white` daba violeta 5,70 · **ámbar 2,84** · **aguamarina 1,89** ·
+   papel 7,10: fallaba AA en dos de los cuatro presets. Es el mismo arreglo que ya tenían las
+   pastillas de color (v=288): se conserva el fondo y el texto, y la selección la dice el anillo.
+   Aplica a TODA `.covers-chip.is-on`: las de año Y el «Todos» de cada fila. `.covers-chip-color`
+   y `.covers-chip-sincolor` la pisan (misma especificidad, van después) y no cambian.
+   El hover de una elegida no hace nada, igual que antes: esta regla va después de `:hover`. */
 .covers-chip.is-on {
-  background: var(--color-accent);
-  color: white;
+  background: var(--color-surface);
+  color: var(--color-text);
   border-color: var(--color-accent);
+  box-shadow: 0 0 0 2px var(--color-accent);
 }
 
 /* ── Pastillas de familia de color de #covers (v=288) ──────────────────────
@@ -4222,15 +4230,15 @@ h3 { font-size: 18px; font-weight: 600; }
 }
 .covers-chip-sincolor:hover { background: var(--color-elevated); color: var(--color-text); }
 /* 🔴 Elegida: el MISMO anillo que las de color, y NO el `background: accent;
-   color: white` de `.covers-chip.is-on`.
+   color: white` que tenía `.covers-chip.is-on`.
    Medido en los cuatro presets el 09/10: blanco sobre `--color-accent` da
    violeta 5,70 · **ámbar 2,84** · **aguamarina 1,89** · papel 7,10, o sea que
    FALLA AA en dos de los cuatro. Y no se arregla poniendo texto negro: negro
    sobre el acento da 3,32 · 6,65 · 10,02 · 2,66 y falla en los otros dos. Con
    el anillo el texto no cambia y se queda en el 5,20-7,08 del estado normal,
    que pasa AA en los cuatro.
-   ⚠️ Las pastillas de AÑO sí tienen ese problema, desde antes de v=288, y NO
-   se tocaron acá: está anotado en PENDIENTES.md. */
+   ✅ Las pastillas de AÑO tenían ese problema y se arreglaron igual en v=290
+   (`.covers-chip.is-on`, arriba). */
 .covers-chip-sincolor.is-on {
   background: var(--color-surface);
   color: var(--color-text);
@@ -6225,9 +6233,9 @@ body.covers-fs .main {
 
 /* ── el selector de año ─────────────────────────────────────────────────────
    🔴 **El elegido se marca con un ANILLO, no con blanco sobre el acento.**
-   `.covers-chip.is-on` hace lo segundo y falla AA en dos de los cuatro
-   presets (ámbar 2,84 · aguamarina 1,89, medido el 09/10 y anotado en
-   PENDIENTES.md). Por eso esta clase es PROPIA y no reusa `.covers-chip`:
+   `.covers-chip.is-on` hacía lo segundo hasta v=289 y fallaba AA en dos de los
+   cuatro presets (ámbar 2,84 · aguamarina 1,89, medido el 09/10; arreglado en
+   v=290 con este mismo anillo). Esta clase es PROPIA y no reusa `.covers-chip`:
    reusarla habría heredado el defecto en una pantalla nueva. Con el anillo el
    texto no cambia de color y se queda en el contraste del estado normal. */
 .cal-anios {
