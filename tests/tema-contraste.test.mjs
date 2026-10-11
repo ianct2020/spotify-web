@@ -20,6 +20,9 @@
 //   4. (v=291) el secundario queda a AL MENOS 1,0 de contraste del atenuado contra los tres
 //      fondos, en los cuatro presets. En Violeta estaban a 0,23-0,27 —el mismo gris— y se subió el
 //      secundario de `#8888A0` a `#9494A9`; los otros tres ya daban 1,13-1,75 y no se tocaron.
+//   5. (v=293) `#9494A9` quedó a 1,01 del atenuado sobre `--color-elevated`: pasaba raspando.
+//      Sube a `#9898AD` (1,55 · 1,41 · 1,29) y SOLO para Violeta el piso pasa a 1,25; el piso
+//      general sigue en 1,0 (los otros tres dan 1,13 y no se tocaron).
 //
 // Segunda mitad — la migración del tema GUARDADO. `write()` guarda los OCHO colores y
 // `applyStoredTheme()` los vuelve a pintar tal cual, así que cambiar `PRESETS` no le cambia nada a
@@ -89,9 +92,19 @@ for (const p of PRESETS) {
 // Los tres que NO se tocaron en v=291, afirmados por su valor: el encargo era subir uno solo.
 {
   const sec = Object.fromEntries(PRESETS.map(p => [p.id, p.colors['--color-text-secondary']]));
-  af(sec.violeta === '#9494A9', `Violeta: el secundario es #9494A9 (es ${sec.violeta})`);
+  // v=293: afirmaba `#9494A9` (v=291).
+  af(sec.violeta === '#9898AD', `Violeta: el secundario es #9898AD (es ${sec.violeta})`);
   af(sec.ambar === '#A09880' && sec.aguamarina === '#80A098' && sec.papel === '#5A5570',
     `los secundarios de ámbar, aguamarina y papel no se tocaron (${sec.ambar} · ${sec.aguamarina} · ${sec.papel})`);
+}
+// v=293 · SOLO Violeta: con `#9494A9` la separación contra `--color-elevated` era 1,01, o sea que el
+// piso general de 1,0 lo dejaba pasar por una centésima. Violeta lleva su propio piso, 1,25.
+{
+  const c = PRESETS.find(p => p.id === 'violeta').colors;
+  for (const fk of FONDOS) {
+    const sep = contraste(c['--color-text-secondary'], c[fk]) - contraste(c['--color-text-muted'], c[fk]);
+    af(sep >= 1.25, `violeta: el secundario ${c['--color-text-secondary']} tiene que quedar a ≥ 1,25 del atenuado ${c['--color-text-muted']} sobre ${fk}; está a ${f2(sep)}`);
+  }
 }
 if (cercanos.length) {
   console.log('  ℹ muted y secondary a MENOS de 0,3 de contraste (se ven casi iguales; no es un fallo, lo decide otra tanda):');
@@ -127,6 +140,8 @@ const VIEJOS = {
 // El Violeta de v=290 (el atenuado ya nuevo, el secundario todavía viejo): quien abrió v=290
 // tiene ESTE guardado, y también tiene que terminar en el de hoy.
 const VIOLETA_290 = { ...VIEJOS.violeta, '--color-text-muted': '#858595' };
+// Y el de v=291-v=292 (el secundario ya en `#9494A9`): el tercero que tiene que terminar en el de hoy.
+const VIOLETA_291 = { ...VIOLETA_290, '--color-text-secondary': '#9494A9' };
 const NUEVO_MUTED = Object.fromEntries(PRESETS.map(p => [p.id, p.colors['--color-text-muted']]));
 const HOY = Object.fromEntries(PRESETS.map(p => [p.id, p.colors]));
 
@@ -161,14 +176,14 @@ for (const p of PRESETS) {
   af(dos.pintadoMuted === NUEVO_MUTED[p.id], `${p.id}: ya migrado, se pinta el nuevo`);
 }
 
-// 2a' · v=291: los DOS Violeta viejos terminan en el de hoy, en UNA sola carga
-for (const [cual, viejo] of [['v=288', VIEJOS.violeta], ['v=290', VIOLETA_290]]) {
+// 2a' · v=291 y v=293: los TRES Violeta viejos terminan en el de hoy, en UNA sola carga
+for (const [cual, viejo] of [['v=288', VIEJOS.violeta], ['v=290', VIOLETA_290], ['v=291', VIOLETA_291]]) {
   const r = correr({ colors: viejo, preset: 'violeta' });
   const st = JSON.parse(r.despues);
   af(r.escrituras === 1, `Violeta de ${cual}: se reescribe UNA vez, en una sola carga (${r.escrituras})`);
-  af(st.colors['--color-text-secondary'] === '#9494A9', `Violeta de ${cual}: el secundario guardado pasa a #9494A9 (quedó ${st.colors['--color-text-secondary']})`);
+  af(st.colors['--color-text-secondary'] === '#9898AD', `Violeta de ${cual}: el secundario guardado pasa a #9898AD (quedó ${st.colors['--color-text-secondary']})`);
   af(st.colors['--color-text-muted'] === '#858595', `Violeta de ${cual}: el atenuado queda en #858595 (quedó ${st.colors['--color-text-muted']})`);
-  af(pintado['--color-text-secondary'] === '#9494A9', `Violeta de ${cual}: y el secundario que se PINTA es el nuevo (${pintado['--color-text-secondary']})`);
+  af(pintado['--color-text-secondary'] === '#9898AD', `Violeta de ${cual}: y el secundario que se PINTA es el nuevo, #9898AD (${pintado['--color-text-secondary']})`);
   af(JSON.stringify(st.colors) === JSON.stringify(HOY.violeta), `Violeta de ${cual}: los ocho quedan exactamente en los de hoy`);
   const dos = correr(st);
   af(dos.escrituras === 0 && dos.despues === dos.antes, `Violeta de ${cual}: ya migrado, la segunda carga no escribe nada`);
@@ -179,6 +194,14 @@ for (const k of Object.keys(VIOLETA_290)) {
   const r = correr({ colors: tocada, preset: 'violeta' });
   af(r.despues === r.antes && r.escrituras === 0, `Violeta de v=290 con ${k} cambiado (preset: «violeta»): NO se reescribe`);
   af(pintado['--color-text-secondary'] === tocada['--color-text-secondary'], `Violeta de v=290 con ${k} cambiado: se pinta el secundario guardado (${pintado['--color-text-secondary']})`);
+}
+// v=293 · Y un Violeta de v=291 con UN SOLO color tocado a mano tampoco migra: queda todo como
+// estaba, el secundario `#9494A9` incluido (salvo cuando el color tocado es el propio secundario).
+for (const k of Object.keys(VIOLETA_291)) {
+  const tocada = { ...VIOLETA_291, [k]: k === '--color-accent' ? '#7C3AEE' : '#123456' };
+  const r = correr({ colors: tocada, preset: 'violeta' });
+  af(r.despues === r.antes && r.escrituras === 0, `Violeta de v=291 con ${k} cambiado (preset: «violeta»): NO se reescribe`);
+  af(pintado['--color-text-secondary'] === tocada['--color-text-secondary'], `Violeta de v=291 con ${k} cambiado: se pinta el secundario guardado (${pintado['--color-text-secondary']})`);
 }
 // El Violeta de HOY guardado tal cual no es «viejo»: no se escribe.
 {

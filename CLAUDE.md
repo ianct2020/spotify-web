@@ -439,6 +439,20 @@ DOS sitios (`css/theme.css` y `ORIGINAL` de `ui/theme-panel.js`). Los otros tres
 tocaron. ⚠️ Los `#8888A0` **hardcodeados** de los ticks de los charts (`dashboard.js`,
 `artist-card.js`, `track-card.js`) NO siguen al tema y no se tocaron.
 
+**v=293 (tanda 42): el secundario sube otra vez, a `#9898AD`.** El 1,01 contra `--color-elevated`
+pasaba raspando: el criterio de v=291 era «el más cercano al viejo que deje ≥ 1,0» y se quedó en
+el primer color que cumplía. `#9898AD` es el mismo tono (240°), sobre la misma recta de mezcla de
+`#8888A0` hacia `--color-text`:
+
+| Violeta | bg `#0A0A0F` · surface `#16161F` · elevated `#1E1E2A` | separación con el atenuado | hasta el texto `#F0F0F5` |
+|---|---|---|---|
+| secundario de v=291 `#9494A9` | 6,65 · 6,05 · 5,55 | 1,21 · 1,10 · **1,01** | 10,74 · 9,77 · 8,96 |
+| secundario de v=293 `#9898AD` | 6,99 · 6,36 · 5,83 | 1,55 · 1,41 · **1,29** | 10,40 · 9,46 · 8,68 |
+
+Mismos DOS sitios (`css/theme.css` y `ORIGINAL`). El piso general del test sigue en 1,0 (los otros
+tres presets dan 1,13 y no se tocaron); **solo Violeta** lleva además un piso de 1,25 contra los
+tres fondos. Los `#8888A0` hardcodeados de los charts siguen sin tocarse.
+
 🔴 **La migración ya no es «el muted de antes»: son las paletas viejas ENTERAS**
 (`PALETAS_ANTERIORES`, los ocho colores escritos a mano; `MUTED_ANTERIOR` ya no existe). Es la
 advertencia que dejó v=290, cumplida. Violeta tiene **dos**: la de v=157-v=288 (atenuado
@@ -449,8 +463,16 @@ tienen que coincidir exacto**, o no se toca. Probado en el navegador el 11/10 co
 (v=288, v=290 y uno con el borde tocado a mano, que no migró). ⚠️ **Al cambiar otro color de
 cualquier preset: agregar a esa tabla la paleta de HOY, entera, antes de tocar `PRESETS`.**
 
+🔴 **Desde v=293 Violeta tiene TRES paletas viejas**: a las dos de arriba se suma la de
+v=291-v=292 (secundario `#9494A9`, atenuado `#858595`, `hasta: 292`). Las tres terminan en la de
+hoy en una sola carga. Probado en el navegador el 11/10 con otros tres perfiles: la de v=290 y la
+de v=291 migran a `#9898AD`; la de v=291 con el borde tocado a mano no migra y conserva su
+`#9494A9`. La advertencia de arriba se cumplió otra vez, y sigue valiendo para el próximo cambio.
+
 `tests/tema-contraste.test.mjs` pasó de 89 a 161: la separación ≥ 1,0 en los cuatro presets, el
 secundario en AA y por debajo del texto, y los dos Violeta viejos. Visto fallar con `#8888A0`.
+En v=293, 186: el piso de 1,25 de Violeta y el tercer Violeta viejo. Visto fallar con `#9494A9`
+y sin la entrada `hasta: 292`.
 
 ## `.covers-chip.is-on`: el anillo en vez del blanco sobre el acento (v=290)
 

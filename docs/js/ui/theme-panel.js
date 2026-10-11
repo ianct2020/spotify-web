@@ -55,7 +55,7 @@ const ORIGINAL = {
   '--color-elevated': '#1E1E2A',
   '--color-border': '#2A2A3A',
   '--color-text': '#F0F0F5',
-  '--color-text-secondary': '#9494A9',   // v=291: era #8888A0 (a 0,23-0,27 del atenuado); ver PALETAS_ANTERIORES
+  '--color-text-secondary': '#9898AD',   // v=293: era #9494A9 (v=291, a 1,01 del atenuado sobre elevated) y antes #8888A0; ver PALETAS_ANTERIORES
   '--color-text-muted': '#858595',   // v=290: era #55556A (2,48:1 sobre surface); ver PALETAS_ANTERIORES
 };
 
@@ -227,6 +227,14 @@ export function applyTheme(colors) {
 // Violeta tiene DOS: la de v=157-v=288 y la de v=290. Quien todavía no abrió v=290 tiene la
 // primera guardada y quien la abrió, la segunda; las dos terminan en la de hoy EN UNA SOLA CARGA
 // (la migración no encadena pasos: va directo de cualquier paleta vieja a la actual).
+//
+// ── v=293: el secundario de Violeta, otra vez ───────────────────────────────────────────────
+//
+// `#9494A9` era «el más cercano al viejo que deja ≥ 1,0» y contra `--color-elevated` quedó a 1,01:
+// pasaba raspando. Sube a `#9898AD`, el mismo tono (240°) sobre la misma recta de mezcla hacia
+// `--color-text`: 6,99 · 6,36 · 5,83 de contraste, separación con el atenuado 1,55 · 1,41 · 1,29.
+// Violeta tiene ahora TRES paletas viejas (la de v=291-v=292 es la tercera), y las tres terminan
+// en la de hoy en una sola carga. Los otros tres presets no se tocaron.
 const V = (acento, fondo, superficie, elevado, borde, texto, secundario, atenuado) => ({
   '--color-accent': acento, '--color-bg': fondo, '--color-surface': superficie, '--color-elevated': elevado,
   '--color-border': borde, '--color-text': texto, '--color-text-secondary': secundario, '--color-text-muted': atenuado,
@@ -234,6 +242,7 @@ const V = (acento, fondo, superficie, elevado, borde, texto, secundario, atenuad
 const PALETAS_ANTERIORES = [
   { preset: 'violeta',    hasta: 288, colors: V('#7C3AED', '#0A0A0F', '#16161F', '#1E1E2A', '#2A2A3A', '#F0F0F5', '#8888A0', '#55556A') },
   { preset: 'violeta',    hasta: 290, colors: V('#7C3AED', '#0A0A0F', '#16161F', '#1E1E2A', '#2A2A3A', '#F0F0F5', '#8888A0', '#858595') },
+  { preset: 'violeta',    hasta: 292, colors: V('#7C3AED', '#0A0A0F', '#16161F', '#1E1E2A', '#2A2A3A', '#F0F0F5', '#9494A9', '#858595') },
   { preset: 'ambar',      hasta: 288, colors: V('#FF6B2C', '#0C0A08', '#1A1714', '#242018', '#332E25', '#F5F0E8', '#A09880', '#6B6353') },
   { preset: 'aguamarina', hasta: 288, colors: V('#06D6A0', '#080F0D', '#0F1A17', '#152420', '#1E3530', '#E8F5F0', '#80A098', '#4E6A63') },
   { preset: 'papel',      hasta: 288, colors: V('#6D28D9', '#F6F5F8', '#FFFFFF', '#EDEBF2', '#D6D3DE', '#1A1725', '#5A5570', '#8B85A0') },
@@ -276,7 +285,7 @@ export function applyStoredTheme() {
 
   let st = readStored();
   if (st) {
-    // v=290 y v=291: la paleta vieja de un preset se actualiza a la de hoy (ver arriba). SINCRÓNICO.
+    // v=290, v=291 y v=293: la paleta vieja de un preset se actualiza a la de hoy (ver arriba). SINCRÓNICO.
     const migrado = migrarTemaGuardado(st);
     if (migrado) { write(migrado.colors, migrado.preset); st = migrado; }
     applyTheme(st.colors);

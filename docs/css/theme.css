@@ -14,7 +14,7 @@
   --color-border: #2A2A3A;
 
   --color-text: #F0F0F5;
-  --color-text-secondary: #9494A9;   /* v=291: era #8888A0, a 0,23-0,27 de contraste del atenuado: el mismo gris. Ojo: el MISMO valor vive en ORIGINAL de ui/theme-panel.js */
+  --color-text-secondary: #9898AD;   /* v=293: era #9494A9 (v=291), a 1,01 de contraste del atenuado sobre elevated: pasaba raspando; ahora 1,29. Antes, #8888A0. Ojo: el MISMO valor vive en ORIGINAL de ui/theme-panel.js */
   --color-text-muted: #858595;   /* v=290: era #55556A (2,48:1 sobre surface; AA pide 4,5). Ojo: el MISMO valor vive en ORIGINAL de ui/theme-panel.js */
 
   --color-success: #22C55E;
