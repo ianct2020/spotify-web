@@ -408,17 +408,49 @@ tercer tono es otra decisión. Vive en DOS sitios para Violeta, que tienen que q
 🔴 **`write()` guarda los OCHO colores y `applyStoredTheme()` los repinta tal cual**, así que
 cambiar `PRESETS` no le cambia nada a quien ya eligió un preset. `migrarTemaGuardado()`
 (`theme-panel.js`) migra **solo si los ocho colores guardados coinciden exactamente** (hex
-sin distinguir mayúsculas) con los ocho VIEJOS de uno de los cuatro presets —tabla
-`MUTED_ANTERIOR`: los siete colores de hoy más el muted de antes—. Un solo color distinto es
+sin distinguir mayúsculas) con los ocho VIEJOS de uno de los cuatro presets —hasta v=290, la tabla
+`MUTED_ANTERIOR` (los siete colores de hoy más el muted de antes); desde v=291, `PALETAS_ANTERIORES`, ver abajo—. Un solo color distinto es
 una paleta tocada a mano: no se toca, **diga lo que diga el campo `preset`**. Es lo único de
 la tanda que escribe sobre un estado del usuario. Sigue siendo SINCRÓNICA. ⚠️ **Si alguna
 vez se cambia OTRO color de un preset, hay que ampliar esa tabla a los ocho viejos enteros.**
 
-`tests/tema-contraste.test.mjs` (89): la cuenta (WCAG 2.x) y las ramas de la migración —preset
+`tests/tema-contraste.test.mjs` (89 en v=290; 161 desde v=291): la cuenta (WCAG 2.x) y las ramas de la migración —preset
 intacto migra, un color distinto no, `preset: null` a mano no, sin tema no hace nada, hex en
 minúsculas, guardado corrupto, siete de ocho colores, idempotencia—. Antes de él ninguna puerta
 medía el contraste de los tokens del tema: `familia-color.test.mjs` mide las doce pastillas de
 `#covers`, que son colores fijos.
+
+### En Violeta el secundario sube a `#9494A9` (v=291)
+
+Con el atenuado de v=290, en Violeta los dos niveles quedaron a **0,27 · 0,25 · 0,23** de
+contraste: el mismo gris (en los otros tres presets, 1,13 a 1,75). Se **sube el secundario**, no
+se baja el atenuado: legible gana sobre bonito, y el atenuado acaba de llegar a AA.
+
+| Violeta | color | bg · surface · elevated | separación con el atenuado | hasta el texto `#F0F0F5` |
+|---|---|---|---|---|
+| secundario antes | `#8888A0` | 5,71 · 5,20 · 4,77 | 0,27 · 0,25 · 0,23 | 11,67 · 10,62 · 9,74 |
+| secundario ahora | `#9494A9` | 6,65 · 6,05 · 5,55 | **1,21 · 1,10 · 1,01** | 10,74 · 9,77 · 8,96 |
+| atenuado (no cambió) | `#858595` | 5,44 · 4,95 · 4,54 | — | — |
+
+El criterio es el de v=290: el mismo tono (240°, violáceo), mezclado hacia `--color-text`, **el
+más cercano al viejo que deja ≥ 1,0 de separación contra los tres fondos**. El margen contra
+`--color-elevated` es mínimo (1,01): el paso anterior (`#9393A9`) no llega. Vive en los mismos
+DOS sitios (`css/theme.css` y `ORIGINAL` de `ui/theme-panel.js`). Los otros tres presets no se
+tocaron. ⚠️ Los `#8888A0` **hardcodeados** de los ticks de los charts (`dashboard.js`,
+`artist-card.js`, `track-card.js`) NO siguen al tema y no se tocaron.
+
+🔴 **La migración ya no es «el muted de antes»: son las paletas viejas ENTERAS**
+(`PALETAS_ANTERIORES`, los ocho colores escritos a mano; `MUTED_ANTERIOR` ya no existe). Es la
+advertencia que dejó v=290, cumplida. Violeta tiene **dos**: la de v=157-v=288 (atenuado
+`#55556A`) y la de v=290 (atenuado `#858595`, secundario todavía `#8888A0`). Las dos terminan en
+la de hoy **en una sola carga** —la migración no encadena pasos, va directo de cualquier paleta
+vieja a la actual— y solo reescribe los colores que cambiaron. La regla no cambió: **los ocho
+tienen que coincidir exacto**, o no se toca. Probado en el navegador el 11/10 con tres perfiles
+(v=288, v=290 y uno con el borde tocado a mano, que no migró). ⚠️ **Al cambiar otro color de
+cualquier preset: agregar a esa tabla la paleta de HOY, entera, antes de tocar `PRESETS`.**
+
+`tests/tema-contraste.test.mjs` pasó de 89 a 161: la separación ≥ 1,0 en los cuatro presets, el
+secundario en AA y por debajo del texto, y los dos Violeta viejos. Visto fallar con `#8888A0`.
 
 ## `.covers-chip.is-on`: el anillo en vez del blanco sobre el acento (v=290)
 

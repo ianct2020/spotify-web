@@ -55,8 +55,8 @@ const ORIGINAL = {
   '--color-elevated': '#1E1E2A',
   '--color-border': '#2A2A3A',
   '--color-text': '#F0F0F5',
-  '--color-text-secondary': '#8888A0',
-  '--color-text-muted': '#858595',   // v=290: era #55556A (2,48:1 sobre surface); ver MUTED_ANTERIOR
+  '--color-text-secondary': '#9494A9',   // v=291: era #8888A0 (a 0,23-0,27 del atenuado); ver PALETAS_ANTERIORES
+  '--color-text-muted': '#858595',   // v=290: era #55556A (2,48:1 sobre surface); ver PALETAS_ANTERIORES
 };
 
 export const PRESETS = [
@@ -210,31 +210,53 @@ export function applyTheme(colors) {
 // paleta que alguien tocó a mano: no se toca nada, diga lo que diga el campo `preset`. Ante la
 // duda, gana no tocar.
 //
-// Los ocho viejos son los siete colores de hoy (que no cambiaron) más el muted de ANTES. Si
-// alguna vez se cambia OTRO color de un preset, esta tabla tiene que crecer a los ocho viejos
-// enteros, o la migración dejaría de reconocer a quien lo tenía guardado.
-const MUTED_ANTERIOR = {
-  violeta: '#55556A',
-  ambar: '#6B6353',
-  aguamarina: '#4E6A63',
-  papel: '#8B85A0',
-};
+// ── v=291: el secundario de Violeta ─────────────────────────────────────────────────────────
+//
+// Con el atenuado de v=290, en Violeta los dos niveles quedaron a 0,27 · 0,25 · 0,23 de
+// contraste (bg · surface · elevated): el mismo gris. En los otros tres presets la separación es
+// de 1,13 a 1,75. Se SUBE el secundario (no se baja el atenuado, que acaba de llegar a AA):
+// `#8888A0` → `#9494A9`, el mismo tono mezclado hacia `--color-text`, el más cercano al viejo que
+// deja ≥ 1,0 de separación contra los tres fondos (6,65 · 6,05 · 5,55; separación 1,21 · 1,10 ·
+// 1,01). Los otros tres presets no se tocaron.
+//
+// 🔴 Y con esto se cumplió la advertencia que dejó v=290: al cambiar OTRO color de un preset, la
+// tabla de «el muted de antes» ya no alcanza. Ahora son las paletas viejas ENTERAS, los ocho
+// colores, escritas a mano y fijas: no salen de `PRESETS`, porque entonces cambiar un preset
+// cambiaría también lo que la migración reconoce como «viejo».
+//
+// Violeta tiene DOS: la de v=157-v=288 y la de v=290. Quien todavía no abrió v=290 tiene la
+// primera guardada y quien la abrió, la segunda; las dos terminan en la de hoy EN UNA SOLA CARGA
+// (la migración no encadena pasos: va directo de cualquier paleta vieja a la actual).
+const V = (acento, fondo, superficie, elevado, borde, texto, secundario, atenuado) => ({
+  '--color-accent': acento, '--color-bg': fondo, '--color-surface': superficie, '--color-elevated': elevado,
+  '--color-border': borde, '--color-text': texto, '--color-text-secondary': secundario, '--color-text-muted': atenuado,
+});
+const PALETAS_ANTERIORES = [
+  { preset: 'violeta',    hasta: 288, colors: V('#7C3AED', '#0A0A0F', '#16161F', '#1E1E2A', '#2A2A3A', '#F0F0F5', '#8888A0', '#55556A') },
+  { preset: 'violeta',    hasta: 290, colors: V('#7C3AED', '#0A0A0F', '#16161F', '#1E1E2A', '#2A2A3A', '#F0F0F5', '#8888A0', '#858595') },
+  { preset: 'ambar',      hasta: 288, colors: V('#FF6B2C', '#0C0A08', '#1A1714', '#242018', '#332E25', '#F5F0E8', '#A09880', '#6B6353') },
+  { preset: 'aguamarina', hasta: 288, colors: V('#06D6A0', '#080F0D', '#0F1A17', '#152420', '#1E3530', '#E8F5F0', '#80A098', '#4E6A63') },
+  { preset: 'papel',      hasta: 288, colors: V('#6D28D9', '#F6F5F8', '#FFFFFF', '#EDEBF2', '#D6D3DE', '#1A1725', '#5A5570', '#8B85A0') },
+];
 
 /**
- * Si `guardado` ({ colors, preset }) es EXACTAMENTE la paleta vieja de algún preset, devuelve el
- * tema con el muted nuevo de ese preset; si no, `null` (= no tocar). Pura: no lee ni escribe nada.
+ * Si `guardado` ({ colors, preset }) es EXACTAMENTE una paleta vieja de algún preset, devuelve el
+ * tema con los colores de HOY de ese preset; si no, `null` (= no tocar). Pura: no lee ni escribe.
+ * Solo reescribe los colores que cambiaron: los demás quedan como estaban guardados, byte a byte.
  */
 export function migrarTemaGuardado(guardado) {
   const colores = guardado?.colors;
   if (!colores || typeof colores !== 'object') return null;
   const igual = (a, b) => typeof a === 'string' && typeof b === 'string' && a.toUpperCase() === b.toUpperCase();
-  for (const p of PRESETS) {
-    const viejo = MUTED_ANTERIOR[p.id];
-    if (!viejo) continue;
-    const coincide = VARS.every(({ k }) => igual(colores[k], k === '--color-text-muted' ? viejo : p.colors[k]));
-    if (coincide) {
-      return { ...guardado, colors: { ...colores, '--color-text-muted': p.colors['--color-text-muted'] } };
-    }
+  for (const vieja of PALETAS_ANTERIORES) {
+    if (!VARS.every(({ k }) => igual(colores[k], vieja.colors[k]))) continue;
+    const hoy = PRESETS.find(p => p.id === vieja.preset);
+    if (!hoy) return null;
+    const cambiados = {};
+    for (const { k } of VARS) if (!igual(colores[k], hoy.colors[k])) cambiados[k] = hoy.colors[k];
+    // Una paleta «vieja» que ya es igual a la de hoy no es vieja: no hay nada que escribir.
+    if (!Object.keys(cambiados).length) return null;
+    return { ...guardado, colors: { ...colores, ...cambiados } };
   }
   return null;
 }
@@ -254,7 +276,7 @@ export function applyStoredTheme() {
 
   let st = readStored();
   if (st) {
-    // v=290: la paleta vieja de un preset se actualiza al muted nuevo (ver arriba). SINCRÓNICO.
+    // v=290 y v=291: la paleta vieja de un preset se actualiza a la de hoy (ver arriba). SINCRÓNICO.
     const migrado = migrarTemaGuardado(st);
     if (migrado) { write(migrado.colors, migrado.preset); st = migrado; }
     applyTheme(st.colors);
