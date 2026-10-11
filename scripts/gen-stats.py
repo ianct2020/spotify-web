@@ -28,6 +28,7 @@ import json
 import glob
 import os
 import re
+import sys
 import unicodedata
 from collections import defaultdict, Counter
 from datetime import datetime, date, timedelta
@@ -258,8 +259,58 @@ GROWTH_MIN_BASE = 60
 # 1. Cargar y dedupear
 # ---------------------------------------------------------------------------
 
+# ⚠️ LA GUARDA DE LOS CEROS (tanda 41). Hasta acá, correr este script sin el
+# export —la carpeta no está, está vacía, o apunta a otro lado— no fallaba: el
+# `glob` de `load_all()` devuelve una lista vacía SIN error, `build_stats()` arma
+# todo en cero, y `main()` abría los siete JSON en modo "w" y los pisaba con
+# ceros, imprimía siete «OK →» y salía con código 0. Visto en vivo el 2026-08-06.
+# `scripts/verificar-rehorneado.py` lo detecta DESPUÉS, si alguien se acuerda de
+# correrlo; estas tres comprobaciones viven acá adentro y corren ANTES de
+# cualquier `open(…, "w")`. Las tres salen con código 2 y sin escribir nada.
+#
+# Es un PISO y no un número exacto, a propósito: el export extendido trae la
+# vida entera de la cuenta y solo crece, así que el próximo puede venir con 19
+# archivos de audio o con más, nunca con menos. Un `== 19` rompería el próximo
+# export; un `>= 19` solo rompe cuando faltan archivos. El mismo motivo vale
+# para la tercera comprobación (menos reproducciones que las ya horneadas).
+MIN_ARCHIVOS_AUDIO = 19
+
+
+def abortar_sin_escribir(mensaje):
+    print(f"✗ gen-stats.py: {mensaje}", file=sys.stderr)
+    print("  NO se escribió ningún archivo: los JSON de salida quedan como estaban.", file=sys.stderr)
+    sys.exit(2)
+
+
+def plays_ya_horneadas():
+    """`totals.plays_raw` del history-stats.json del REPO (no de OUT_DIR), o None.
+
+    Como las tapas, la referencia se lee siempre de `_DATA_DIR`. Si no está o no
+    se puede leer (un repo recién clonado, sin datos) no hay contra qué comparar:
+    se avisa y se sigue.
+    """
+    ruta = os.path.join(_DATA_DIR, "history-stats.json")
+    try:
+        with open(ruta) as fh:
+            n = json.load(fh)["totals"]["plays_raw"]
+        if isinstance(n, bool) or not isinstance(n, int):
+            raise ValueError(f"totals.plays_raw no es un entero: {n!r}")
+        return n
+    except Exception as e:
+        print(f"⚠ gen-stats.py: no pude leer las reproducciones ya horneadas de {ruta} "
+              f"({type(e).__name__}: {e}); se saltea esa comprobación.", file=sys.stderr)
+        return None
+
+
 def load_all():
     files = sorted(glob.glob(os.path.join(HISTORY_DIR, "Streaming_History_Audio_*.json")))
+    # Guarda 1: que estén los archivos. Una carpeta que no existe cae acá también
+    # (el `glob` da cero).
+    if len(files) < MIN_ARCHIVOS_AUDIO:
+        abortar_sin_escribir(
+            f"hay {len(files)} archivo(s) Streaming_History_Audio_*.json en «{HISTORY_DIR}» "
+            f"y hacen falta al menos {MIN_ARCHIVOS_AUDIO}"
+            + ("" if os.path.isdir(HISTORY_DIR) else " (la carpeta no existe)") + ".")
     seen = set()
     out = []
     for f in files:
@@ -1199,6 +1250,16 @@ def build_stats(plays, img_idx):
 def main():
     print("Cargando streaming history…")
     plays = load_all()
+    # Guarda 2: que haya reproducciones.
+    if not plays:
+        abortar_sin_escribir(
+            f"los archivos de «{HISTORY_DIR}» no traen ninguna reproducción con URI (0 reproducciones).")
+    # Guarda 3: que no haya menos que las ya horneadas (el export solo crece).
+    horneadas = plays_ya_horneadas()
+    if horneadas is not None and len(plays) < horneadas:
+        abortar_sin_escribir(
+            f"el export trae {len(plays)} reproducciones y el history-stats.json del repo ya tiene "
+            f"{horneadas} horneadas (totals.plays_raw): faltan {horneadas - len(plays)}.")
     print(f"  plays únicas (con URI): {len(plays):,}")
 
     print("Cargando tapas viejas para reciclar…")
