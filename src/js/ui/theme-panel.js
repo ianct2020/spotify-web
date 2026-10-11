@@ -56,7 +56,7 @@ const ORIGINAL = {
   '--color-border': '#2A2A3A',
   '--color-text': '#F0F0F5',
   '--color-text-secondary': '#8888A0',
-  '--color-text-muted': '#55556A',
+  '--color-text-muted': '#858595',   // v=290: era #55556A (2,48:1 sobre surface); ver MUTED_ANTERIOR
 };
 
 export const PRESETS = [
@@ -71,7 +71,7 @@ export const PRESETS = [
       '--color-border': '#332E25',
       '--color-text': '#F5F0E8',
       '--color-text-secondary': '#A09880',
-      '--color-text-muted': '#6B6353',
+      '--color-text-muted': '#8E8678',   // v=290: era #6B6353 (3,00:1)
     },
   },
   {
@@ -84,7 +84,7 @@ export const PRESETS = [
       '--color-border': '#1E3530',
       '--color-text': '#E8F5F0',
       '--color-text-secondary': '#80A098',
-      '--color-text-muted': '#4E6A63',
+      '--color-text-muted': '#748D86',   // v=290: era #4E6A63 (3,02:1)
     },
   },
   {
@@ -97,7 +97,7 @@ export const PRESETS = [
       '--color-border': '#D6D3DE',
       '--color-text': '#1A1725',
       '--color-text-secondary': '#5A5570',
-      '--color-text-muted': '#8B85A0',
+      '--color-text-muted': '#6D6880',   // v=290: era #8B85A0 (3,52:1)
     },
   },
 ];
@@ -192,6 +192,53 @@ export function applyTheme(colors) {
   document.dispatchEvent(new CustomEvent('themechange'));
 }
 
+// ── El muted de v=290 y qué hacer con los temas ya guardados ─────────────────
+//
+// `--color-text-muted` medía 2,48 · 3,00 · 3,02 · 3,52 (violeta, ámbar, aguamarina, papel) contra
+// `--color-surface` cuando AA pide 4,5:1. El criterio del valor nuevo: ≥ 4,5:1 contra los TRES
+// fondos (bg, surface, elevated), el MISMO tono que el viejo (solo se mueve la luminosidad,
+// mezclándolo hacia `--color-text`, igual que `expandTheme()` con el hover) y el más cercano al
+// viejo que cumpla. `tests/tema-contraste.test.mjs` hace la cuenta.
+//
+// 🔴 `write()` guarda los OCHO colores, y `applyStoredTheme()` los repinta tal cual: cambiar
+// `PRESETS` NO le cambia nada a quien ya eligió un preset (Ian incluido, que seguiría viendo el
+// muted viejo para siempre). Por eso hay una migración, y por eso es tan estricta: es lo único de
+// esta tanda que ESCRIBE sobre un estado del usuario.
+//
+// Se migra SOLO si los ocho colores guardados coinciden exactamente (mismo hex, sin distinguir
+// mayúsculas) con los ocho VIEJOS de uno de los cuatro presets. Un solo color distinto es una
+// paleta que alguien tocó a mano: no se toca nada, diga lo que diga el campo `preset`. Ante la
+// duda, gana no tocar.
+//
+// Los ocho viejos son los siete colores de hoy (que no cambiaron) más el muted de ANTES. Si
+// alguna vez se cambia OTRO color de un preset, esta tabla tiene que crecer a los ocho viejos
+// enteros, o la migración dejaría de reconocer a quien lo tenía guardado.
+const MUTED_ANTERIOR = {
+  violeta: '#55556A',
+  ambar: '#6B6353',
+  aguamarina: '#4E6A63',
+  papel: '#8B85A0',
+};
+
+/**
+ * Si `guardado` ({ colors, preset }) es EXACTAMENTE la paleta vieja de algún preset, devuelve el
+ * tema con el muted nuevo de ese preset; si no, `null` (= no tocar). Pura: no lee ni escribe nada.
+ */
+export function migrarTemaGuardado(guardado) {
+  const colores = guardado?.colors;
+  if (!colores || typeof colores !== 'object') return null;
+  const igual = (a, b) => typeof a === 'string' && typeof b === 'string' && a.toUpperCase() === b.toUpperCase();
+  for (const p of PRESETS) {
+    const viejo = MUTED_ANTERIOR[p.id];
+    if (!viejo) continue;
+    const coincide = VARS.every(({ k }) => igual(colores[k], k === '--color-text-muted' ? viejo : p.colors[k]));
+    if (coincide) {
+      return { ...guardado, colors: { ...colores, '--color-text-muted': p.colors['--color-text-muted'] } };
+    }
+  }
+  return null;
+}
+
 /**
  * Se llama al arrancar la app, ANTES de pintar nada. Es sincrónico a propósito:
  * si esto se hiciera después del primer render, el tema guardado entraría como
@@ -205,8 +252,13 @@ export function applyStoredTheme() {
   migratePrefKey(LS_BASE);
   migratePrefKey('fonoteca_anim_v1');
 
-  const st = readStored();
-  if (st) applyTheme(st.colors);
+  let st = readStored();
+  if (st) {
+    // v=290: la paleta vieja de un preset se actualiza al muted nuevo (ver arriba). SINCRÓNICO.
+    const migrado = migrarTemaGuardado(st);
+    if (migrado) { write(migrado.colors, migrado.preset); st = migrado; }
+    applyTheme(st.colors);
+  }
 }
 
 // ── el panel ────────────────────────────────────────────────────────────────

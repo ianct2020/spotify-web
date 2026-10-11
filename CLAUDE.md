@@ -382,6 +382,44 @@ Lo que NO acompaña al tema, y sigue legible igual: los ticks de los charts
 (`#8888A0` hardcodeado en `dashboard.js` y en las fichas) y el tooltip del
 mosaico (`rgba(20,20,28,.95)` con texto blanco, que trae su propio fondo).
 
+## `--color-text-muted` pasa AA en los cuatro presets, y los temas ya guardados se migran (v=290)
+
+La tanda 38 midió el muted contra `--color-surface` en **2,48 · 3,00 · 3,02 · 3,52**
+(violeta, ámbar, aguamarina, papel) y AA pide 4,5:1; contra `--color-elevated` era peor
+(2,27 · 2,73 · 2,73 · 2,98). Lo usan **116 reglas de CSS** (106 de `color`, 2 de `border-color`
+—`.cluster-dismiss:hover` y `.skips-chip:hover`—, 1 de `background` —la perilla de
+`.theme-switch-knob`—…) **y 173 estilos en línea de JS** (57 solo en `listened.js`).
+
+| preset | viejo | nuevo | bg · surface · elevated |
+|---|---|---|---|
+| violeta | `#55556A` | `#858595` | 5,44 · 4,95 · 4,54 |
+| ámbar | `#6B6353` | `#8E8678` | 5,49 · 4,96 · 4,50 |
+| aguamarina | `#4E6A63` | `#748D86` | 5,44 · 5,00 · 4,52 |
+| papel | `#8B85A0` | `#6D6880` | 4,90 · 5,33 · 4,51 |
+
+El criterio: ≥ 4,5:1 contra los TRES fondos, el mismo tono (solo se mueve la luminosidad,
+mezclando hacia `--color-text`, como `expandTheme()` con el hover), el más cercano al viejo
+que cumpla, y por debajo de `--color-text-secondary`. **En Violeta el margen es mínimo** —
+secondary da 5,71 · 5,20 · 4,77 — y los dos niveles quedan a 0,27 · 0,25 · 0,23 de contraste:
+casi iguales. Se pagó igual (la tarea era llegar a 4,5 y nada más); unificarlos o inventar un
+tercer tono es otra decisión. Vive en DOS sitios para Violeta, que tienen que quedar iguales
+(`css/theme.css` y `ORIGINAL` de `ui/theme-panel.js`; lo vigila el test).
+
+🔴 **`write()` guarda los OCHO colores y `applyStoredTheme()` los repinta tal cual**, así que
+cambiar `PRESETS` no le cambia nada a quien ya eligió un preset. `migrarTemaGuardado()`
+(`theme-panel.js`) migra **solo si los ocho colores guardados coinciden exactamente** (hex
+sin distinguir mayúsculas) con los ocho VIEJOS de uno de los cuatro presets —tabla
+`MUTED_ANTERIOR`: los siete colores de hoy más el muted de antes—. Un solo color distinto es
+una paleta tocada a mano: no se toca, **diga lo que diga el campo `preset`**. Es lo único de
+la tanda que escribe sobre un estado del usuario. Sigue siendo SINCRÓNICA. ⚠️ **Si alguna
+vez se cambia OTRO color de un preset, hay que ampliar esa tabla a los ocho viejos enteros.**
+
+`tests/tema-contraste.test.mjs` (89): la cuenta (WCAG 2.x) y las ramas de la migración —preset
+intacto migra, un color distinto no, `preset: null` a mano no, sin tema no hace nada, hex en
+minúsculas, guardado corrupto, siete de ocho colores, idempotencia—. Antes de él ninguna puerta
+medía el contraste de los tokens del tema: `familia-color.test.mjs` mide las doce pastillas de
+`#covers`, que son colores fijos.
+
 ## PENDIENTES anotados en v=157
 - ~~**La clave del tema no tiene prefijo por usuario.**~~ ✅ **Resuelto en
   v=159**: `prefKey()` en `storage.js`, aplicado a `fonoteca_theme_v1` y

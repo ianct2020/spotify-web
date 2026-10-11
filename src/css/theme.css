@@ -15,7 +15,7 @@
 
   --color-text: #F0F0F5;
   --color-text-secondary: #8888A0;
-  --color-text-muted: #55556A;
+  --color-text-muted: #858595;   /* v=290: era #55556A (2,48:1 sobre surface; AA pide 4,5). Ojo: el MISMO valor vive en ORIGINAL de ui/theme-panel.js */
 
   --color-success: #22C55E;
   --color-warning: #F59E0B;
