@@ -76,7 +76,8 @@
 // y un año que acabó con el último día en blanco no tiene racha que enseñar.
 // Con menos de dos pasos la apertura no se monta: no hay recorrido que hacer.
 
-import { animationsEnabled } from '../ui/reveal.js?v=288';
+import { animationsEnabled } from '../ui/reveal.js?v=289';
+import { calendarioAnual, aMs, isoDesde, diaSemanaLunes } from '../ui/calendario-anual.js?v=289';
 
 // ── un solo recorrido vivo por vez ──────────────────────────────────────────
 //
@@ -102,22 +103,9 @@ try {
 
 const DIAS_SEMANA = ['L', 'M', 'X', 'J', 'V', 'S', 'D'];
 
-// ── utilidades de fecha, todas en UTC ───────────────────────────────────────
-//
-// Un "YYYY-MM-DD" es un DÍA del calendario, no un instante: pasarlo por
-// `new Date()` lo pone a medianoche UTC y leerlo en local lo corre un día para
-// atrás en cualquier huso negativo. Es el bug de v=154. Acá nunca se sale de
-// UTC: se entra con `Date.UTC` y se lee con `getUTC*`.
-function aMs(iso) {
-  return Date.UTC(+iso.slice(0, 4), +iso.slice(5, 7) - 1, +iso.slice(8, 10));
-}
-function isoDesde(ms) {
-  return new Date(ms).toISOString().slice(0, 10);
-}
-/** 0 = lunes, igual que `weekday()` de Python y que el heatmap del pipeline. */
-function diaSemanaLunes(iso) {
-  return (new Date(aMs(iso)).getUTCDay() + 6) % 7;
-}
+// Las utilidades de fecha en UTC (`aMs`, `isoDesde`, `diaSemanaLunes`) viven
+// desde v=289 en `ui/calendario-anual.js`, con el calendario que las usa. El
+// porqué de no salir nunca de UTC está en su cabecera: es el bug de v=154.
 
 // Los meses van ENTEROS en las dos filas y en los textos: «enero», no «ene».
 // El ancho está medido, no supuesto — ver el bloque de `MESES_LARGOS` en
@@ -313,7 +301,7 @@ function pasoDias(ctx) {
     etiqueta: 'Días con música',
     num: [activos, 'ent'],
     bajada: `de los ${num(cubiertos)} que cubre el historial`,
-    visual: visualCalendario(D, iPico, ctx),
+    visual: calendarioAnual(D, iPico, ctx),
     cuerpo,
   };
 }
@@ -523,66 +511,6 @@ function visualRanking(items, fmtMinutes) {
     `</div></div>`;
 }
 
-/**
- * El calendario: columnas = semanas, filas = día de la semana.
- *
- * Los huecos del arranque no son decorativos. Si el año empieza un jueves y la
- * primera columna arrancara en la primera fila, las filas dejarían de ser días
- * de la semana y el dibujo mentiría — más fino que una rejilla con el orden
- * inventado, pero mentiría igual.
- *
- * Los tres tonos salen de los TERCILES de los días activos de ESE año, no de
- * umbrales fijos: con umbrales fijos, 2018 (68 días, mucho menos volumen) se
- * vería entero del tono más flojo y 2025 entero del más fuerte, y el gradiente
- * dejaría de decir nada dentro de cada año.
- */
-function visualCalendario(D, iPico, ctx) {
-  const activos = D.min.filter(v => v > 0).sort((a, b) => a - b);
-  const t1 = activos[Math.floor(activos.length / 3)] || 0;
-  const t2 = activos[Math.floor(activos.length * 2 / 3)] || 0;
-  const nivel = v => (v === 0 ? 0 : v < t1 ? 1 : v < t2 ? 2 : 3);
-
-  const offset = diaSemanaLunes(D.from);
-  const semanas = Math.ceil((offset + D.min.length) / 7);
-
-  let celdas = '';
-  for (let h = 0; h < offset; h++) celdas += '<i class="hueco" aria-hidden="true"></i>';
-  for (let i = 0; i < D.min.length; i++) {
-    const n = nivel(D.min[i]);
-    const iso = isoDesde(aMs(D.from) + i * 86400000);
-    celdas += `<i class="${n ? 'n' + n : ''}${i === iPico ? ' pico' : ''}" ` +
-              `title="${ctx.fmtDia(iso)} · ${D.min[i] > 0 ? ctx.fmtMinutes(D.min[i]) : 'nada'}"></i>`;
-  }
-
-  // Una etiqueta por mes, en la columna donde cae su día 1. Van sobre las
-  // MISMAS columnas que la rejilla.
-  //
-  // ⚠️ Eso es lo que el CSS TIENE que garantizar, y hasta v=243 no lo hacía: el
-  // `1fr` de la fila de meses trae un `min-width: auto`, así que cada etiqueta
-  // ensanchaba su propia columna y corría a las de su derecha. MEDIDO en
-  // producción v=243, 2025 a 1366px: la etiqueta peor puesta caía **13,8 px**
-  // fuera de su semana, más de una columna entera (12,52 px) — y eso YA
-  // pasaba con «ene», antes de alargar ningún nombre. El arreglo es
-  // `minmax(0, 1fr)` en `css/main.css`; con él el desfase máximo baja a 0,3 px.
-  const etiquetas = new Array(semanas).fill('');
-  for (let i = 0; i < D.min.length; i++) {
-    const ms = aMs(D.from) + i * 86400000;
-    const f = new Date(ms);
-    if (f.getUTCDate() === 1) etiquetas[Math.floor((offset + i) / 7)] = mes(ctx, f.getUTCMonth());
-  }
-
-  const muestra = (n) => `<i class="wr-ap-leg-c ${n}"></i>`;
-  return `<div class="wr-ap-visual ancho" style="--semanas:${semanas}">
-    <div class="wr-ap-cal-meses">${etiquetas.map(e => `<span>${e}</span>`).join('')}</div>
-    <div class="wr-ap-cal">${celdas}</div>
-    <div class="wr-ap-leyenda">
-      <span class="wr-ap-leg">${muestra('n0')}Nada</span>
-      <span class="wr-ap-leg">${muestra('n1')}Hasta ${ctx.fmtMinutes(t1)}</span>
-      <span class="wr-ap-leg">${muestra('n2')}Hasta ${ctx.fmtMinutes(t2)}</span>
-      <span class="wr-ap-leg">${muestra('n3')}Más de ${ctx.fmtMinutes(t2)}</span>
-    </div>
-  </div>`;
-}
 
 function visualPuntos(y, totalPlays) {
   return `<div class="wr-ap-visual">
