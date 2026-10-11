@@ -16,7 +16,7 @@ import { armReveal, armRevealAll, releaseReveal, animationsEnabled } from '../ui
 import { coverUrl } from '../util/cover-size.js';
 import { vigilarRuta } from '../util/vigencia-ruta.js';
 import { fmtDia } from '../util/fecha.js';
-import { anioSinCampoSkipped } from '../util/corte-saltos.js';
+import { anioSinCampoSkipped, esElAnioDelCorte } from '../util/corte-saltos.js';
 
 let stats = null;
 let selectedYear = null;
@@ -307,7 +307,13 @@ function renderYearCard() {
   // v=292: en los años sin el campo `skipped` (ver `util/corte-saltos.js`) el número se queda
   // —es una medida real— pero «por skip o <30s» era falso: ahí el export solo deja ver lo que se
   // pasó con «siguiente» antes de 30 s. Para el resto de los años la pista es la de siempre.
-  const pistaSkips = anioSinCampoSkipped(y.year) ? 'solo «siguiente» antes de 30 s' : 'por skip o &lt;30s';
+  // v=293: el año del corte lleva la suya. Desde mediados de octubre Spotify ya anotaba los
+  // saltos, así que su número junta las dos formas de contar y «solo «siguiente»» ahí era falso.
+  // La pista no da ninguna cifra de «cuánto habría sido»: el número del tile es el que es.
+  // ⚠️ El largo está medido: entra en UN renglón a 1.366 px (214,8 de 220 px; con dos, la fila
+  // del tile crece 8 px) y en dos a 390 px. Si la cambiás, volvé a medirla en los dos anchos.
+  const pistaSkips = esElAnioDelCorte(y.year) ? 'dos cuentas: Spotify anota desde oct.'
+    : anioSinCampoSkipped(y.year) ? 'solo «siguiente» antes de 30 s' : 'por skip o &lt;30s';
 
   const topArtist = y.top_artists?.[0];
   const topAlbum = y.top_albums?.[0];

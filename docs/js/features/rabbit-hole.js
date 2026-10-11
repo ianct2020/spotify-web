@@ -1,9 +1,9 @@
-import { spotifyFetch, createPlaylist, addTracksToPlaylist, invalidatePlaylistsCache } from '../api.js?v=292';
-import { hasKey, setKey, getTopArtistsByTag, getArtistTopTracks, getArtistTopTags } from '../api/lastfm.js?v=292';
-import { showProgress, hideProgress, promptPlaylistName, escapeHtml, pageHeader } from '../ui/components.js?v=292';
-import { showToast } from '../ui/toast.js?v=292';
-import { vigilarRuta } from '../util/vigencia-ruta.js?v=292';
-import { limpiaParaQuery, titleMatches, artistMatches } from '../util/track-match.js?v=292';
+import { spotifyFetch, createPlaylist, addTracksToPlaylist, invalidatePlaylistsCache } from '../api.js?v=293';
+import { hasKey, setKey, getTopArtistsByTag, getArtistTopTracks, getArtistTopTags } from '../api/lastfm.js?v=293';
+import { showProgress, hideProgress, promptPlaylistName, escapeHtml, pageHeader } from '../ui/components.js?v=293';
+import { showToast } from '../ui/toast.js?v=293';
+import { vigilarRuta } from '../util/vigencia-ruta.js?v=293';
+import { limpiaParaQuery, titleMatches, artistMatches } from '../util/track-match.js?v=293';
 
 const SUGGESTED_TAGS = [
   'rock', 'indie', 'hip-hop', 'electronic', 'pop', 'metal',

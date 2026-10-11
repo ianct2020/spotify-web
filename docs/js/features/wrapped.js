@@ -1,22 +1,22 @@
 // Wrapped propio: mini-resumen tuyo por año, hecho con el Extended Streaming History.
 // A diferencia del Wrapped oficial (que corre oct-sept), este es del año calendario completo.
 
-import { loadHistoryStats, isOwner, ownerLockedMessage } from './history-data.js?v=292';
-import { escapeHtml, pageHeader } from '../ui/components.js?v=292';
-import { getPreview } from '../api/preview-providers.js?v=292';
-import { getArtistLikePreview, getAlbumLikePreview } from '../util/artist-preview.js?v=292';
-import { attachHover } from '../ui/preview-player.js?v=292';
-import { openTrackCard } from './track-card.js?v=292';
-import { openArtistCard } from './artist-card.js?v=292';
-import { openAlbumCard } from './album-card.js?v=292';
-import { getMyTop } from '../api.js?v=292';
-import { activateMarquee, marqueeSpan } from '../ui/marquee.js?v=292';
-import { openModal } from '../ui/modal-stack.js?v=292';
-import { armReveal, armRevealAll, releaseReveal, animationsEnabled } from '../ui/reveal.js?v=292';
-import { coverUrl } from '../util/cover-size.js?v=292';
-import { vigilarRuta } from '../util/vigencia-ruta.js?v=292';
-import { fmtDia } from '../util/fecha.js?v=292';
-import { anioSinCampoSkipped } from '../util/corte-saltos.js?v=292';
+import { loadHistoryStats, isOwner, ownerLockedMessage } from './history-data.js?v=293';
+import { escapeHtml, pageHeader } from '../ui/components.js?v=293';
+import { getPreview } from '../api/preview-providers.js?v=293';
+import { getArtistLikePreview, getAlbumLikePreview } from '../util/artist-preview.js?v=293';
+import { attachHover } from '../ui/preview-player.js?v=293';
+import { openTrackCard } from './track-card.js?v=293';
+import { openArtistCard } from './artist-card.js?v=293';
+import { openAlbumCard } from './album-card.js?v=293';
+import { getMyTop } from '../api.js?v=293';
+import { activateMarquee, marqueeSpan } from '../ui/marquee.js?v=293';
+import { openModal } from '../ui/modal-stack.js?v=293';
+import { armReveal, armRevealAll, releaseReveal, animationsEnabled } from '../ui/reveal.js?v=293';
+import { coverUrl } from '../util/cover-size.js?v=293';
+import { vigilarRuta } from '../util/vigencia-ruta.js?v=293';
+import { fmtDia } from '../util/fecha.js?v=293';
+import { anioSinCampoSkipped, esElAnioDelCorte } from '../util/corte-saltos.js?v=293';
 
 let stats = null;
 let selectedYear = null;
@@ -66,7 +66,7 @@ const ESPERA_APERTURA_MS = 3000;
 // después — montarlo tarde sería justo el flash que se está arreglando.
 function cargarApertura() {
   return Promise.race([
-    import('../features/wrapped-apertura.js?v=292').catch(e => {
+    import('../features/wrapped-apertura.js?v=293').catch(e => {
       console.warn('[wrapped] la apertura no cargó, el resumen queda entero:', e);
       return null;
     }),
@@ -307,7 +307,13 @@ function renderYearCard() {
   // v=292: en los años sin el campo `skipped` (ver `util/corte-saltos.js`) el número se queda
   // —es una medida real— pero «por skip o <30s» era falso: ahí el export solo deja ver lo que se
   // pasó con «siguiente» antes de 30 s. Para el resto de los años la pista es la de siempre.
-  const pistaSkips = anioSinCampoSkipped(y.year) ? 'solo «siguiente» antes de 30 s' : 'por skip o &lt;30s';
+  // v=293: el año del corte lleva la suya. Desde mediados de octubre Spotify ya anotaba los
+  // saltos, así que su número junta las dos formas de contar y «solo «siguiente»» ahí era falso.
+  // La pista no da ninguna cifra de «cuánto habría sido»: el número del tile es el que es.
+  // ⚠️ El largo está medido: entra en UN renglón a 1.366 px (214,8 de 220 px; con dos, la fila
+  // del tile crece 8 px) y en dos a 390 px. Si la cambiás, volvé a medirla en los dos anchos.
+  const pistaSkips = esElAnioDelCorte(y.year) ? 'dos cuentas: Spotify anota desde oct.'
+    : anioSinCampoSkipped(y.year) ? 'solo «siguiente» antes de 30 s' : 'por skip o &lt;30s';
 
   const topArtist = y.top_artists?.[0];
   const topAlbum = y.top_albums?.[0];

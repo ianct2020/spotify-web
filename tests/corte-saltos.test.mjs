@@ -152,8 +152,30 @@ console.log('\n4. Ninguna de las dos vistas escribe el año a mano');
   }
   // El tile «Skips»: el número no cambia, la pista depende del corte.
   const wrapped = leer('src/js/features/wrapped.js');
-  ok(/const pistaSkips = anioSinCampoSkipped\(y\.year\) \? 'solo «siguiente» antes de 30 s' : 'por skip o &lt;30s';/.test(wrapped),
-     'wrapped.js: la pista del tile es «solo «siguiente» antes de 30 s» sin el campo y «por skip o <30s» con él');
+  // v=293 (tanda 42): la pista ya no se afirma con una regex sobre el fuente sino EVALUANDO la
+  // sentencia real de `wrapped.js` para cada año del JSON (el módulo entero no se importa sin
+  // DOM). Hasta v=292 este assert afirmaba que los cinco años sin el campo —2022 incluido—
+  // decían «solo «siguiente» antes de 30 s»; en 2022 eso era falso (desde el 15/10 Spotify ya
+  // anotaba los saltos) y ese año lleva ahora su propia pista.
+  const m = /\n  const pistaSkips = ([\s\S]*?);\n/.exec(wrapped);
+  ok(!!m, 'wrapped.js: se encuentra la sentencia `const pistaSkips = …;`');
+  const pistaDe = new Function('anioSinCampoSkipped', 'esElAnioDelCorte', 'y', `return (${m ? m[1] : "''"});`);
+  const pista = (anio) => pistaDe(anioSinCampoSkipped, esElAnioDelCorte, { year: anio });
+  const PISTA_SIN_CAMPO = 'solo «siguiente» antes de 30 s';   // la de la tanda 41, tal cual
+  const PISTA_CON_CAMPO = 'por skip o &lt;30s';               // la de siempre
+  for (const y of stats.years) {
+    if (y.year >= 2023) igual(pista(y.year), PISTA_CON_CAMPO, `${y.year}: la pista del tile sigue siendo «por skip o <30s»`);
+    else if (y.year <= 2021) igual(pista(y.year), PISTA_SIN_CAMPO, `${y.year}: la pista del tile sigue siendo EXACTAMENTE la de la tanda 41`);
+  }
+  const p22 = pista(2022);
+  ok(typeof p22 === 'string' && p22.trim().length > 0, '2022: tiene pista');
+  ok(p22 !== PISTA_SIN_CAMPO, '2022: la pista es DISTINTA de la de 2018-2021 (ese año no cuenta «solo «siguiente»»)');
+  ok(p22 !== PISTA_CON_CAMPO, '2022: y tampoco es la de 2023-2026');
+  ok(!p22.includes('43'), '2022: la pista no trae el 43 (ni ninguna estimación de «cuánto habría sido»)');
+  ok(!p22.includes('%'), '2022: la pista no trae ningún porcentaje');
+  ok(!/\d/.test(p22), '2022: la pista no trae ningún número');
+  ok(/Spotify/.test(p22) && /oct/.test(p22), '2022: nombra a Spotify y a octubre, que es cuando empezó a anotar los saltos');
+  ok(/\besElAnioDelCorte\(y\.year\)/.test(m ? m[1] : ''), 'wrapped.js: el año del corte sale de `esElAnioDelCorte(y.year)`, no de un año escrito a mano');
   ok(/<div class="wrapped-tile-label">Skips<\/div>\s*<div class="wrapped-tile-value">\$\{skipPctAnio\}%<\/div>\s*<div class="wrapped-tile-hint">\$\{pistaSkips\}<\/div>/.test(wrapped),
      'wrapped.js: el tile «Skips» pinta el mismo número de siempre y esa pista');
 }
