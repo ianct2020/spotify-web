@@ -106,7 +106,7 @@ function localKey(uid, kind) {
 }
 
 // Caches en memoria (por sesión de página). Se resetean al cambiar de user.
-let memCache = { uid: null, stats: null, plays: null, listened: null, skip: null, detail: null, records: null, artistTracks: null };
+let memCache = { uid: null, stats: null, plays: null, listened: null, skip: null, detail: null, records: null, artistTracks: null, days: null };
 
 async function ensureFreshMem() {
   // [v178] Mismo fallback que `isOwner()`: sin esto, con `/me` caído el uid
@@ -114,7 +114,7 @@ async function ensureFreshMem() {
   // fallaba igual que antes, y `isOwner()` podía decir "sí sos el owner"
   // mientras `loadOne()` seguía sirviendo `null` — banner sin contenido atrás.
   const { id: uid } = await resolvedUserId();
-  if (memCache.uid !== uid) memCache = { uid, stats: null, plays: null, listened: null, skip: null, detail: null, records: null, artistTracks: null };
+  if (memCache.uid !== uid) memCache = { uid, stats: null, plays: null, listened: null, skip: null, detail: null, records: null, artistTracks: null, days: null };
   return uid;
 }
 
@@ -174,6 +174,9 @@ const OWNER_PREV_KEYS = {
   // Vacía por el mismo motivo: el v1 de `totals` no trae el día de la primera
   // play y la ficha de artista se quedaría sin «primera vez», en silencio.
   artistTracks: [],
+  // `days` no tiene versiones anteriores porque no tiene versiones: nació en
+  // v=289 y **el owner no tiene URL** de donde bajarlo (ver `loadDays`).
+  days: [],
 };
 
 async function loadOne(kind, cacheField, sanityCheck, fetchUrlForOwner) {
@@ -295,6 +298,37 @@ async function loadRecords() {
   return loadOne('records', 'records', d => !!d.top_days, () => dataUrl('history-records.json', RECORDS_VERSION));
 }
 
+/**
+ * El detalle por día (`days`, el octavo payload) — v=289.
+ *
+ * ⚠️ **PARA EL OWNER NO HAY URL, Y ES LA DECISIÓN CENTRAL DE ESTA FEATURE.**
+ * No existe `src/data/history-days.json` y no se busca: todo lo que viva en
+ * `src/data/` se publica en GitHub Pages **y en un repo PÚBLICO**, y este dato
+ * es el diario de escucha de Ian día por día, con los temas de cada día. Es la
+ * única pieza del historial que no se hornea. `gen-stats.py` no lo emite.
+ *
+ * Así que el único camino es local: `localKey(uid, 'days')` en IndexedDB.
+ *  · un amigo con BYOH lo obtiene solo, porque `saveMyHistory()` lo guarda;
+ *  · el owner lo carga con la importación «solo el detalle» de
+ *    `features/import-history.js`, que NO corre `processStreamingHistory()`
+ *    (si lo corriera, las claves `local_…` le ganarían a sus JSON horneados en
+ *    `loadOne()` y le pisarían las siete vistas de historial).
+ *
+ * Sin dato local devuelve `null` y la vista lo dice. Pasa por `loadOne()`, así
+ * que respeta el candado: con la identidad sin confirmar devuelve `null` igual
+ * que los otros siete.
+ *
+ * El `fetchUrlForOwner` nunca se llama —`loadOne()` sale por el `return null`
+ * del `if (!owner)` o, siendo owner, por el `catch` del fetch—, pero igual
+ * tira en vez de devolver una URL inventada: si algún día alguien mete
+ * `history-days.json` en `src/data/`, que se note acá y no en producción.
+ */
+async function loadDays() {
+  return loadOne('days', 'days', d => !!d && !!d.dias, () => {
+    throw new Error('`days` es privado: no se publica en src/data/ ni se baja del repo');
+  });
+}
+
 // Guarda el historial procesado (BYOH) en IDB del user actual.
 // payload = { stats, trackPlays, listened, skipStats, detail, records }
 async function saveMyHistory(payload) {
@@ -308,16 +342,39 @@ async function saveMyHistory(payload) {
     idbSetCached(localKey(uid, 'detail'), payload.detail, LOCAL_TTL_MIN),
     idbSetCached(localKey(uid, 'records'), payload.records, LOCAL_TTL_MIN),
     idbSetCached(localKey(uid, 'artistTracks'), payload.artistTracks, LOCAL_TTL_MIN),
+    // El octavo (v=289). Un amigo que importa su ZIP lo obtiene solo.
+    idbSetCached(localKey(uid, 'days'), payload.days, LOCAL_TTL_MIN),
   ]);
   // Invalido memoria para que la próxima carga vaya al IDB fresco
-  memCache = { uid: null, stats: null, plays: null, listened: null, skip: null, detail: null, records: null, artistTracks: null };
+  memCache = { uid: null, stats: null, plays: null, listened: null, skip: null, detail: null, records: null, artistTracks: null, days: null };
+}
+
+/**
+ * Guarda ÚNICAMENTE el detalle por día — la importación del owner (v=289).
+ *
+ * ⚠️ **No puede pasar por `saveMyHistory()`, y el motivo es el orden de
+ * `loadOne()`**: la clave `local_{uid}_history_{kind}` se consulta ANTES que
+ * los JSON horneados del owner. Guardarle a Ian las ocho claves le pisaría las
+ * siete vistas de historial con datos recalculados en el navegador, sin las
+ * correcciones a mano que llevan los JSON del repo («Birds In The Trap Sing
+ * McKnight», v=151) ni las tapas horneadas por `bake-covers.py`. Y pasaría sin
+ * fallar, que es el modo que este repo viene marcando desde v=208.
+ *
+ * Así que esta función escribe UNA clave y ninguna más.
+ */
+async function guardarSoloDias(days) {
+  const uid = await getCurrentUserId();
+  if (!uid) throw new Error('No se pudo detectar tu user de Spotify');
+  if (!days || !days.dias) throw new Error('El detalle por día vino vacío');
+  await idbSetCached(localKey(uid, 'days'), days, LOCAL_TTL_MIN);
+  memCache.days = null;
 }
 
 async function clearMyHistory() {
   const uid = await getCurrentUserId().catch(() => null);
   if (!uid) return;
-  await Promise.all(['stats', 'plays', 'listened', 'skip', 'detail', 'records', 'artistTracks'].map(k => idbDel(localKey(uid, k)).catch(() => {})));
-  memCache = { uid: null, stats: null, plays: null, listened: null, skip: null, detail: null, records: null, artistTracks: null };
+  await Promise.all(['stats', 'plays', 'listened', 'skip', 'detail', 'records', 'artistTracks', 'days'].map(k => idbDel(localKey(uid, k)).catch(() => {})));
+  memCache = { uid: null, stats: null, plays: null, listened: null, skip: null, detail: null, records: null, artistTracks: null, days: null };
 }
 
 function trackIdOf(uri) {
@@ -449,6 +506,7 @@ function bindOwnerLockedButtons(openImportFn) {
 
 export {
   loadHistoryStats, loadTrackPlays, loadListenedAlbums, loadSkipStats, loadTrackDetail, loadRecords, loadArtistTracks,
+  loadDays, guardarSoloDias, localKey,
   playsFor, trackIdOf, isOwner, HISTORY_OWNER_ID, ownerLockedMessage,
   hasLocalHistory, saveMyHistory, clearMyHistory, bindOwnerLockedButtons,
   identidadSinConfirmar,

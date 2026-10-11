@@ -2,11 +2,11 @@
 // Acepta ZIP del export de Spotify o los Streaming_History_Audio_*.json sueltos.
 // Extrae + procesa + guarda todo en el IDB del user (nada sale de su compu).
 
-import { processStreamingHistory } from '../history-processor.js?v=288';
-import { saveMyHistory, clearMyHistory, hasLocalHistory } from './history-data.js?v=288';
-import { escapeHtml, showProgress, hideProgress, confirmModal, alertModal } from '../ui/components.js?v=288';
-import { showToast } from '../ui/toast.js?v=288';
-import { openModal, closeTop, closeById } from '../ui/modal-stack.js?v=288';
+import { processStreamingHistory, crearAcumuladorDeDias } from '../history-processor.js?v=289';
+import { saveMyHistory, clearMyHistory, hasLocalHistory, guardarSoloDias } from './history-data.js?v=289';
+import { escapeHtml, showProgress, hideProgress, confirmModal, alertModal } from '../ui/components.js?v=289';
+import { showToast } from '../ui/toast.js?v=289';
+import { openModal, closeTop, closeById } from '../ui/modal-stack.js?v=289';
 
 const OVERLAY_ID = 'import-history-overlay';
 let overlay = null;
@@ -291,4 +291,190 @@ async function extractHistoryJsons(zipFile) {
   }));
 }
 
-export { openImportHistory };
+// ════════════════════════════════════════════════════════════════════════════
+// LA IMPORTACIÓN «SOLO EL DETALLE POR DÍA» — v=289
+// ════════════════════════════════════════════════════════════════════════════
+//
+// ⚠️ **POR QUÉ EL OWNER NO PUEDE PASAR POR `handleFiles()`.**
+//
+// `saveMyHistory()` escribe las OCHO claves `local_{uid}_history_*`, y
+// `loadOne()` (history-data.js) las consulta **antes** que los JSON horneados
+// del repo. O sea que al owner un import completo le pisaría las siete vistas
+// de historial con datos recalculados en el navegador: sin las correcciones a
+// mano que llevan los JSON («Birds In The Trap Sing McKnight», v=151) y sin
+// las tapas de `bake-covers.py`. Y pasaría sin fallar y sin avisar, que es el
+// modo exacto que este repo viene marcando desde v=208.
+//
+// Así que este modo:
+//   · **NO corre `processStreamingHistory()`** — ni una vez;
+//   · guarda **ÚNICAMENTE** `days`, por `guardarSoloDias()`;
+//   · lee **archivo por archivo**: parsea uno, se lo pasa al acumulador y lo
+//     suelta, así los 19 nunca están juntos en memoria.
+//
+// ⚠️ **Y CEDE EL HILO CON `MessageChannel`, NO CON `setTimeout`.** Chrome
+// estrangula `setTimeout` a **uno por minuto** en una pestaña oculta, y en
+// este proyecto está medido (ver la sección «Medir con la pestaña de la
+// extensión» de `CLAUDE.md`): un bucle de 19 archivos con `setTimeout(0)`
+// entre cada uno tardaría 19 minutos en una pestaña de fondo y parecería
+// colgado. Un `MessageChannel` no se clampea.
+//
+// 🟥 **El progreso congelado del import COMPLETO no se arregla acá**, y está
+// anotado en `PENDIENTES.md`: su `onProgress` (`import-history.js`, el
+// `handleFiles()` de arriba) es `async` con un `await` adentro que nadie
+// espera, porque `processStreamingHistory()` lo llama sin `await`
+// (`history-processor.js`: `if (onProgress) onProgress({…})`). Este modo no
+// tiene ese defecto porque el bucle es suyo.
+
+/** Cede el hilo de verdad, también en una pestaña oculta. */
+function cederElHilo() {
+  return new Promise(resolve => {
+    const ch = new MessageChannel();
+    ch.port1.onmessage = () => { ch.port1.close(); resolve(); };
+    ch.port2.postMessage(0);
+  });
+}
+
+const SOLO_DIAS_ID = 'import-solo-dias-overlay';
+
+/**
+ * Abre el selector de archivos y carga ÚNICAMENTE el detalle por día.
+ *
+ * Acepta el ZIP entero o los `Streaming_History_Audio_*.json` sueltos — el
+ * mismo selector de siempre.
+ *
+ * @returns {Promise<{ok: boolean, days?: object, ms?: number, crudas?: number}>}
+ */
+function importarSoloElDetalle() {
+  return new Promise((resolve) => {
+    let resuelto = false;
+    const terminar = (v) => { if (resuelto) return; resuelto = true; resolve(v); };
+
+    const ov = openModal({
+      id: SOLO_DIAS_ID,
+      onClose: () => terminar({ ok: false }),
+      html: `
+      <div class="modal ih-modal" style="max-width:560px;width:min(560px,94vw)">
+        <div class="ih-header">
+          <div class="ih-header-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="22" height="22">
+              <rect x="3" y="4" width="18" height="18" rx="2"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>
+            </svg>
+          </div>
+          <div style="flex:1;min-width:0">
+            <h3 style="margin:0;font-size:17px">El detalle por día</h3>
+            <div style="font-size:12px;color:var(--color-text-muted);margin-top:2px">Solo qué sonó cada día — no toca el resto de tu historial</div>
+          </div>
+          <button class="btn btn-secondary btn-sm ih-close-btn" data-close-modal title="Cerrar" aria-label="Cerrar">✕</button>
+        </div>
+
+        <label id="isd-drop" class="ih-drop">
+          <input type="file" id="isd-file" accept=".zip,application/zip,.json,application/json" multiple style="display:none">
+          <div class="ih-drop-title">Arrastra tu ZIP aquí</div>
+          <div class="ih-drop-sub">o haz click para elegir · ZIP entero o JSONs sueltos</div>
+        </label>
+
+        <div id="isd-status" class="ih-status" aria-live="polite"></div>
+
+        <p class="olm-note">Se guarda <strong>en este navegador</strong> y no se publica en ningún sitio:
+        el detalle por día dice qué escuchaste cada día, y eso no viaja a ninguna parte.</p>
+      </div>
+    `,
+    });
+
+    const estado = ov.querySelector('#isd-status');
+    const poner = (html, mal = false) => {
+      estado.className = 'ih-status active' + (mal ? ' error' : '');
+      estado.innerHTML = html;
+    };
+    const drop = ov.querySelector('#isd-drop');
+    const input = ov.querySelector('#isd-file');
+    drop.onclick = () => input.click();
+    drop.ondragover = (e) => { e.preventDefault(); drop.classList.add('dragging'); };
+    drop.ondragleave = () => drop.classList.remove('dragging');
+    drop.ondrop = (e) => {
+      e.preventDefault();
+      drop.classList.remove('dragging');
+      if (e.dataTransfer.files?.length) correr([...e.dataTransfer.files]);
+    };
+    input.onchange = (e) => { if (e.target.files?.length) correr([...e.target.files]); };
+
+    async function correr(files) {
+      const t0 = Date.now();
+      let utiles;
+      try {
+        utiles = await archivosDeAudio(files, poner);
+      } catch (e) {
+        poner(`Error: ${escapeHtml(e.message)}`, true);
+        return;
+      }
+      if (!utiles) return;
+
+      const acu = crearAcumuladorDeDias();
+      let crudas = 0;
+      for (let i = 0; i < utiles.length; i++) {
+        poner(`<span class="spinner" style="width:12px;height:12px;display:inline-block;vertical-align:middle;margin-right:6px"></span> ` +
+              `Archivo ${i + 1} de ${utiles.length} · ${crudas.toLocaleString('es-ES')} reproducciones`);
+        // Ceder ANTES de bloquear: así el texto de arriba llega a pintarse.
+        await cederElHilo();
+        let arr;
+        try {
+          arr = JSON.parse(await readFileText(utiles[i]));
+        } catch (e) {
+          poner(`Error parseando ${escapeHtml(utiles[i].name)}: ${escapeHtml(e.message)}`, true);
+          return;
+        }
+        crudas += acu.agregarArchivo(arr).crudas;
+        arr = null;   // soltarlo antes de pedir el siguiente
+      }
+
+      poner(`<span class="spinner" style="width:12px;height:12px;display:inline-block;vertical-align:middle;margin-right:6px"></span> ` +
+            `Guardando ${crudas.toLocaleString('es-ES')} reproducciones…`);
+      await cederElHilo();
+
+      let days;
+      try {
+        days = acu.cerrar();
+        await guardarSoloDias(days);
+      } catch (e) {
+        poner(`Error guardando: ${escapeHtml(e.message)}`, true);
+        return;
+      }
+      const ms = Date.now() - t0;
+      closeById(SOLO_DIAS_ID);
+      showToast(`Detalle por día cargado · ${Object.keys(days.dias).length.toLocaleString('es-ES')} días en ${(ms / 1000).toFixed(1)} s`, 'success');
+      terminar({ ok: true, days, ms, crudas });
+    }
+  });
+}
+
+/**
+ * Los `Streaming_History_Audio_*.json` de lo que haya elegido el usuario, ya
+ * sea el ZIP o los sueltos. Es el MISMO filtro que el import completo — y por
+ * eso vive acá, al lado, en vez de en otro archivo.
+ */
+async function archivosDeAudio(files, poner) {
+  let jsonFiles = [];
+  const zip = files.find(f => f.name.toLowerCase().endsWith('.zip'));
+  const jsons = files.filter(f => f.name.toLowerCase().endsWith('.json'));
+  if (zip) {
+    poner(`<span class="spinner" style="width:12px;height:12px;display:inline-block;vertical-align:middle;margin-right:6px"></span> Descomprimiendo ZIP…`);
+    jsonFiles = await extractHistoryJsons(zip);
+  } else if (jsons.length) {
+    jsonFiles = jsons;
+  } else {
+    poner('Ningún archivo válido. Necesito el ZIP entero o los <code>Streaming_History_Audio_*.json</code>.', true);
+    return null;
+  }
+  const utiles = jsonFiles.filter(f => /Streaming_History_Audio.*\.json$/i.test(f.name || ''));
+  if (!utiles.length) {
+    poner('No encontré ningún <code>Streaming_History_Audio_*.json</code>. Necesitas el <em>Extended Streaming History</em>.', true);
+    return null;
+  }
+  // Por nombre, que es el orden en el que el export los numera. Da igual para
+  // el resultado —el acumulador se queda con el `ts` mínimo de cada tema— pero
+  // hace que el progreso avance de forma previsible.
+  utiles.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+  return utiles;
+}
+
+export { openImportHistory, importarSoloElDetalle };

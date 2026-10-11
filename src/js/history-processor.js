@@ -40,6 +40,7 @@ const SKIP_STATS_VERSION = 4;    // v4: dato crudo (ms de cada skip/cierre) + gi
 const LISTENED_VERSION = 2;
 const TRACK_DETAIL_VERSION = 1;
 const RECORDS_VERSION = 3;
+const DAYS_VERSION = 1;    // v1: el detalle por día — el octavo payload, el que alimenta `#calendario` (v=289)
 // Récords v3 — espejo de gen-stats.py.
 // Corte de sesión de la racha de un artista (#18). Sin él, la racha "sin
 // intercalar otro artista" sobrevive a que te vayas a dormir: la ganadora sin
@@ -110,6 +111,193 @@ function daysBetween(a, b) {
 
 function round1(x) { return Math.round(x * 10) / 10; }
 
+// ════════════════════════════════════════════════════════════════════════════
+// EL DETALLE POR DÍA (`days`, el octavo payload) — v=289
+// ════════════════════════════════════════════════════════════════════════════
+//
+// QUÉ PRODUCE, exactamente:
+//
+//   {
+//     version: 1,
+//     generated_at: "2026-10-10T…Z",
+//     temas: [ [trackId, nombre, artista], … ],     // diccionario ÚNICO
+//     dias: {
+//       "2026-01-09": {
+//         min:     412.5,   // minutos VÁLIDOS (≥30 s), redondeados a 1 decimal
+//         crudas:  118,     // reproducciones crudas (deduplicadas, con uri)
+//         validas: 96,      // reproducciones de ≥30 s
+//         saltos:  21,      // ver «la definición de salto», más abajo
+//         temas:   [ [i, min, veces], … ]  // i = índice en `temas`
+//       }, …
+//     }
+//   }
+//
+// Los temas de un día van en el orden de su **primera** reproducción de ese
+// día. Por eso NO hace falta el `sort` global de `processStreamingHistory()`:
+// alcanza con quedarse con el `ts` mínimo de cada tema dentro del día.
+//
+// ── POR QUÉ ES UNA FUNCIÓN APARTE E INCREMENTAL ────────────────────────────
+//
+// `processStreamingHistory()` junta los 19 archivos de audio del export EN
+// MEMORIA (`arrays.push(JSON.parse(text))` en `features/import-history.js`) y
+// después corre **sincrónica** de punta a punta, con un `sort` global de las
+// 212.491 plays. Su `onProgress` tiene un `await` adentro que no cede nada,
+// porque quien lo llama no lo espera (`if (onProgress) onProgress({…})`, sin
+// `await`): el cartel de progreso se congela durante todo el procesamiento.
+// Está anotado en `PENDIENTES.md` y NO se arregla acá.
+//
+// Este acumulador recibe **un archivo por vez**, lo acumula y lo suelta, así
+// los 19 nunca están juntos. Es lo que permite que la importación «solo el
+// detalle» del owner ceda el hilo entre archivo y archivo y mueva un progreso
+// de verdad.
+//
+// ── UNA SOLA IMPLEMENTACIÓN ────────────────────────────────────────────────
+//
+// `processStreamingHistory()` la usa por dentro para producir `days` en el
+// import completo de un amigo, alimentándola con los mismos arrays. No hay una
+// segunda copia de la agrupación por día: si hubiera, divergirían (el
+// resolutor de álbum de v=219, el `fmtDate()` de v=231).
+//
+// ── LAS TRES REGLAS QUE TIENE QUE COMPARTIR CON EL PIPELINE ────────────────
+//
+//   1. **La misma deduplicación**: clave `${ts}|${uri}|${ms_played || 0}`, y el
+//      `Set` es COMPARTIDO entre archivos, porque los `_N` se solapan.
+//   2. **El mismo descarte**: sin `spotify_track_uri` no entra (episodios y
+//      audiolibros), y sus minutos tampoco cuentan.
+//   3. **La misma agrupación por día, en UTC** (`parseTs`, que es `getUTC*`).
+//      Es lo que hace que `min` cuadre con `years[].days.min` día por día.
+//
+// ── LA DEFINICIÓN DE SALTO, Y UNA DISCREPANCIA DEL PIPELINE ────────────────
+//
+// `saltos` usa la definición de `totals.skip_pct`:
+//
+//     r.skipped === true   ||   (r.reason_end === 'fwdbtn' && ms_played < 30 s)
+//
+// contada sobre las reproducciones CRUDAS. Con eso, la suma de `saltos` sobre
+// la suma de `crudas` reproduce `totals.skip_pct` **exacto**.
+//
+// 🟥 **`years[].skip_pct` NO es esa cuenta, y no se puede cuadrar con ella.**
+// El pipeline usa dos definiciones distintas, en los dos lenguajes
+// (`gen-stats.py:458` y `:549`, `history-processor.js` acá al lado):
+//
+//   · `totals.skip_pct`  = `total_skipped / total_plays`, con la definición de
+//     arriba, sobre TODAS las plays deduplicadas.
+//   · `years[].skip_pct` = `yb.skipped / (yb.plays + yb.skipped)`, donde
+//     `yb.skipped` cuenta `fwdbtn || skipped` **SIN mirar los 30 s** y, lo que
+//     más pesa, **solo entre las plays de ≥30 s** — el `yb.skipped++` vive
+//     DENTRO del `if (ms < MIN_MS) continue`. Y el denominador suma dos veces
+//     los saltos, porque `yb.plays` ya los contiene.
+//
+// O sea que son dos magnitudes diferentes con el mismo nombre. Acá se
+// implementa la primera, que es la que el encargo define por escrito, y
+// `tests/calendario-dias.test.mjs` afirma las dos cosas: que `saltos/crudas`
+// da `totals.skip_pct`, y que `years[].skip_pct` responde a la otra fórmula.
+// Queda anotado en `PENDIENTES.md`.
+
+/**
+ * Acumulador incremental del detalle por día.
+ * @returns {{agregarArchivo: (arr: any[]) => {crudas: number, dedup: number}, cerrar: () => object, leidas: () => number}}
+ */
+function crearAcumuladorDeDias() {
+  // La deduplicación es COMPARTIDA entre archivos: los `_N` del export se
+  // solapan y la misma play aparece en dos archivos.
+  const vistas = new Set();
+  // dia -> { ms, crudas, validas, saltos, temas: Map(trackId -> {ms, veces, ts}) }
+  const dias = new Map();
+  // trackId -> { i, nombre, artista }. Un tema vive UNA vez, no una por día.
+  const temas = new Map();
+  let leidasTotal = 0;
+  let sinUri = 0;
+  let repetidas = 0;
+  let tsIlegible = 0;
+
+  function agregarArchivo(arr) {
+    if (!Array.isArray(arr)) return { crudas: 0, dedup: 0 };
+    let crudasArchivo = 0, dedupArchivo = 0;
+    for (const r of arr) {
+      leidasTotal++;
+      crudasArchivo++;
+      const uri = r.spotify_track_uri;
+      // Sin uri no es una pista: episodio de podcast o audiolibro. Fuera, y sus
+      // minutos tampoco cuentan — igual que el pipeline.
+      if (!uri) { sinUri++; continue; }
+      const clave = `${r.ts}|${uri}|${r.ms_played || 0}`;
+      if (vistas.has(clave)) { repetidas++; continue; }
+      vistas.add(clave);
+      dedupArchivo++;
+
+      const parsed = parseTs(r.ts);
+      if (!parsed) { tsIlegible++; continue; }
+      const dia = parsed.day;
+      const ms = Number(r.ms_played) || 0;
+      const track = r.master_metadata_track_name || '';
+      const artista = r.master_metadata_album_artist_name || '';
+
+      let d = dias.get(dia);
+      if (!d) { d = { ms: 0, crudas: 0, validas: 0, saltos: 0, temas: new Map() }; dias.set(dia, d); }
+      // `crudas` se cuenta ANTES del filtro de basura, porque es el mismo
+      // denominador que `totals.plays_raw` del pipeline (que tampoco la
+      // descuenta: el `continue` de la basura va después del contador).
+      d.crudas++;
+
+      // Basura funcional (sonidos saca-agua, lluvia para dormir, 432 Hz…). El
+      // pipeline la salta acá mismo, así que sus minutos no están en
+      // `years[].days.min` y tampoco pueden estar en el nuestro.
+      if (isJunkTrack(track, artista)) continue;
+
+      if (!!r.skipped || ((r.reason_end || '') === 'fwdbtn' && ms < MIN_MS)) d.saltos++;
+      if (ms < MIN_MS) continue;
+
+      d.ms += ms;
+      d.validas++;
+
+      const tid = uri.split(':').pop();
+      let t = d.temas.get(tid);
+      if (!t) { t = { ms: 0, veces: 0, ts: r.ts }; d.temas.set(tid, t); }
+      t.ms += ms;
+      t.veces++;
+      // El orden del día sale del `ts` MÍNIMO, así que no hace falta que los
+      // archivos lleguen ordenados ni que haya un `sort` global.
+      if (r.ts < t.ts) t.ts = r.ts;
+
+      if (!temas.has(tid)) temas.set(tid, { i: temas.size, nombre: track, artista });
+    }
+    return { crudas: crudasArchivo, dedup: dedupArchivo };
+  }
+
+  function cerrar() {
+    const temasOut = new Array(temas.size);
+    for (const [tid, m] of temas) temasOut[m.i] = [tid, m.nombre, m.artista];
+
+    const diasOut = {};
+    for (const dia of [...dias.keys()].sort()) {
+      const d = dias.get(dia);
+      const lista = [...d.temas.entries()]
+        .sort((a, b) => (a[1].ts < b[1].ts ? -1 : a[1].ts > b[1].ts ? 1 : 0))
+        .map(([tid, t]) => [temas.get(tid).i, round1(t.ms / 60000), t.veces]);
+      diasOut[dia] = {
+        min: round1(d.ms / 60000),
+        crudas: d.crudas,
+        validas: d.validas,
+        saltos: d.saltos,
+        temas: lista,
+      };
+    }
+    return {
+      version: DAYS_VERSION,
+      generated_at: new Date().toISOString(),
+      temas: temasOut,
+      dias: diasOut,
+      // Para el reporte del import: cuántas líneas se leyeron de verdad y qué
+      // se descartó. Un import que diga «listo» sin estos números no se puede
+      // comprobar contra `totals.plays_raw`.
+      conteo: { leidas: leidasTotal, sin_uri: sinUri, repetidas, ts_ilegible: tsIlegible },
+    };
+  }
+
+  return { agregarArchivo, cerrar, leidas: () => leidasTotal };
+}
+
 // ---- Función principal ----
 
 function processStreamingHistory(fileArrays, { onProgress } = {}) {
@@ -132,6 +320,13 @@ function processStreamingHistory(fileArrays, { onProgress } = {}) {
     }
     if (onProgress) onProgress({ phase: 'dedup', loaded: seenCount, total: totalRawPlays });
   }
+  // El octavo payload va por su propia función, incremental y con la MISMA
+  // deduplicación: una sola implementación de la agrupación por día. Se la
+  // alimenta con los mismos arrays, archivo por archivo.
+  const acuDias = crearAcumuladorDeDias();
+  for (const arr of fileArrays) acuDias.agregarArchivo(arr);
+  const days = acuDias.cerrar();
+
   // sort por ts asc (para first_year, discovery, milestones en orden real)
   plays.sort((a, b) => (a.ts < b.ts ? -1 : a.ts > b.ts ? 1 : 0));
 
@@ -875,7 +1070,9 @@ function processStreamingHistory(fileArrays, { onProgress } = {}) {
     totals: artistTotalsOut,
   };
 
-  return { stats, trackPlays, listened, skipStats, detail, records, artistTracks };
+  // ⚠️ `days` se AGREGA. Los siete de siempre no cambian ni un byte: lo
+  // afirma `tests/calendario-dias.test.mjs` con `JSON.stringify`.
+  return { stats, trackPlays, listened, skipStats, detail, records, artistTracks, days };
 }
 
-export { processStreamingHistory };
+export { processStreamingHistory, crearAcumuladorDeDias, DAYS_VERSION };
