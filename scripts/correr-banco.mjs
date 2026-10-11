@@ -68,7 +68,23 @@ const EXTRA = { mosaico: 'auto=1' };
 // gastaron 751-1.073 ms de reloj virtual. El tope es el doble de la más lenta, redondeado
 // hacia arriba a múltiplo de 15 s: 15 s. Con 15 s y SIN el `anclar`, el banco falla 3+ de 10.
 // ⚠️ Si otro banco «necesita» un tope enorme, buscá primero un `await` de IndexedDB sin anclar.
-const PRESUPUESTO = { 'calendario': 15000, 'ocultar-artista': 90000, 'ocultar-artista-disco': 450000, 'ocultar-artista-novedades': 900000 };
+//
+// 🟩 Y eso era, también en los dos de `ocultar-artista-*` (tanda 42, 11/10). Tenían cinco
+// `await vista.render(main)` pelados (uno en `-disco`, tres en `-novedades`, y `-novedades`
+// abre además #discover-artists). Medido en diez corridas seguidas por banco, reloj virtual:
+//   · `ocultar-artista-disco`:     antes 60.911-223.913 ms (10/10 con 450 s) · anclado 907-1.552 ms
+//     (10/10 con 450 s) · con el tope nuevo 908-1.564 ms (10/10) · tope nuevo y SIN anclar: 0/10
+//   · `ocultar-artista-novedades`: antes 162.890-518.886 ms (10/10 con 900 s) · anclado 1.229-1.720 ms
+//     (10/10 con 900 s) · con el tope nuevo 1.372-1.733 ms (10/10) · tope nuevo y SIN anclar: 0/10
+// El doble de la corrida más lenta, redondeado a 15 s, da 15 s en los dos: menos que el defecto
+// (45 s), así que los dos SALIERON de `PRESUPUESTO` y corren con el defecto.
+// ⚠️ O sea que los «~70 s entre pedirle que pinte y tener los bloques» de #discover-artists de
+// arriba (06/10) NO eran las vueltas ociosas de `esperarReal`: eran sus lecturas de IndexedDB
+// sin anclar. La explicación del 06/10 queda escrita porque es la que se creyó cinco días.
+// ⚠️ El `render()` de #follow-artists es SINCRÓNICO (devuelve el `teardown`): no hay promesa que
+// anclar, y `anclar()` sobre él tira «promesa.then is not a function». Lo ancla el `esperarReal`
+// que viene después. `ocultar-artista` (90 s) no se midió en la tanda 42: no se tocó.
+const PRESUPUESTO = { 'calendario': 15000, 'ocultar-artista': 90000 };
 // `XQ="&peor=1"` agrega parámetros a la URL del banco sin tocar este archivo: sirve
 // para medir (p. ej. el ancho mínimo en que la barra de novedades sigue en una fila).
 
@@ -160,7 +176,7 @@ try {
     console.log(`✓ banco/${BANCO}.html (ancho=${ANCHO}): ${mens || 'ok'}${reloj ? ` · reloj virtual ${reloj} ms` : ''}`);
     process.exit(0);
   }
-  console.error(`✗ banco/${BANCO}.html (ancho=${ANCHO}): estado="${estado || 'ausente'}"`);
+  console.error(`✗ banco/${BANCO}.html (ancho=${ANCHO}): estado="${estado || 'ausente'}"${reloj ? ` · reloj virtual ${reloj} ms` : ''}`);
   if (mens) console.error('  ' + mens);
   console.error('  URL: ' + URL);
   process.exit(1);

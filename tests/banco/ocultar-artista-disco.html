@@ -42,7 +42,7 @@
 // `?paso=oculto` / `?vista=disco` dejan la vista con un artista oculto, para
 // fotografiarla. `?ancho=` cambia el ancho de la caja (por defecto 1351).
 import { hojasLegibles, fallar, listo } from '/banco/esperar.mjs';
-import { crearLikes, ARTISTAS, esperarReal } from '/banco/simulado.mjs';
+import { crearLikes, ARTISTAS, esperarReal, anclar } from '/banco/simulado.mjs';
 import { montarEscenarioOcultos } from '/banco/escenario-ocultos.mjs';
 const esperarA = (cond, { que }) => esperarReal(cond, { que });
 
@@ -100,7 +100,9 @@ try {
 
   // ══ 1. #discover-artists — el bloque entero (punto 12) ═════════════════════
   const disco = await import('/js/features/discover-artists.js');
-  let suelta = await disco.render(main());
+  // ⚠️ `anclar`, y NO un `await` pelado (tanda 42): `render()` espera a IndexedDB y una lectura
+  // de IndexedDB no detiene el reloj virtual. El porqué entero está en `calendario.html`.
+  let suelta = await anclar(disco.render(main()));
   await esperarA(() => $$('.disco-artist').length === ARTISTAS.length, { que: 'los 4 bloques de #discover-artists' });
 
   const bloques = () => $$('.disco-artist-name').map(e => e.textContent.trim());
@@ -170,6 +172,9 @@ try {
   limpiarVista(suelta);
 
   const follow = await import('/js/features/follow-artists.js');
+  // SIN `anclar`, y a propósito (tanda 42): este `render()` es SINCRÓNICO —devuelve el `teardown`,
+  // no una promesa— y su lectura de IndexedDB va en una función interna que nadie puede esperar
+  // desde acá. Lo que la ancla es el `esperarA` de abajo, que es `esperarReal` (ver `calendario.html`).
   suelta = follow.render(main());
   await esperarA(() => $$('.sel-art-item').length > 0, { que: 'la lista de #follow-artists' });
   const nombresFollow = $$('.sel-art-name').map(e => e.textContent.trim());
@@ -189,6 +194,9 @@ try {
   afirmar(sim.reg.escrituras.every(e => permitidas.test(`${e.metodo} ${e.ruta.split('?')[0]}`)),
     `solo se escribió en la playlist de ocultos: ${JSON.stringify(escrituras)}`);
 
+  // El reloj virtual gastado, en el DOM y no solo en la consola: `correr-banco.mjs` lee el
+  // `--dump-dom` y es el número contra el que se fija su PRESUPUESTO (como en calendario.html).
+  document.documentElement.setAttribute('data-resumen', `reloj virtual=${Math.round(performance.now())} ms`);
   listo(`${medidas.join(' · ')} · ${sim.reg.llamadas.length} peticiones simuladas, 0 reales`);
 } catch (e) {
   if (e.parada) {
@@ -197,6 +205,7 @@ try {
   } else {
     const r = window.__sim?.reg;
     if (r) e.message += `\n[llamadas ${r.llamadas.length}] desconocidas: ${r.desconocidas.join(' | ') || '—'} · externas: ${r.externas.join(' | ') || '—'}\nmedido: ${medidas.join(' · ') || '—'}\nconsola: ${window.__cons.join(' || ').slice(0, 600)}\nvisible: ${(document.querySelector('#main-content')?.textContent || '').replace(/\s+/g, ' ').slice(0, 300)}`;
+    document.documentElement.setAttribute('data-resumen', `reloj virtual=${Math.round(performance.now())} ms`);
     fallar(e);
   }
 }

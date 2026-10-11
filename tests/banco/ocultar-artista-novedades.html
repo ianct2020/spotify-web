@@ -118,7 +118,9 @@ try {
 
   // ══ 1. #new-releases ocultando un artista ══════════════════════════════════
   const nr = await import('/js/features/new-releases.js');
-  let suelta = await nr.render(main());
+  // ⚠️ `anclar`, y NO un `await` pelado (tanda 42): `render()` espera a IndexedDB y una lectura
+  // de IndexedDB no detiene el reloj virtual. El porqué entero está en `calendario.html`.
+  let suelta = await anclar(nr.render(main()));
   await esperarA(() => tarjetas().length === 8, { que: 'las 8 tarjetas de novedades' });
   afirmar(artistasEnPantalla().length === 4, `4 artistas en pantalla (hay ${artistasEnPantalla().length})`);
 
@@ -178,7 +180,7 @@ try {
   limpiarVista(suelta);
 
   const disco = await import('/js/features/discover-artists.js');
-  suelta = await disco.render(main());
+  suelta = await anclar(disco.render(main()));   // anclado: ver `calendario.html`
   await esperarA(() => $$('.disco-artist').length === ARTISTAS.length - 1, { que: 'los 3 bloques de #discover-artists (el 4.º está oculto)' });
   const bloques = () => $$('.disco-artist-name').map(e => e.textContent.trim());
   afirmar(!bloques().includes(victima), `lo oculto en #new-releases («${victima}») NO aparece en #discover-artists: ${bloques().join(', ')}`);
@@ -196,7 +198,7 @@ try {
   await esperarA(() => tienda.artistasOcultos.size === 2, { que: 'ocultar «' + otra + '» desde #discover-artists' });
   limpiarVista(suelta);
 
-  suelta = await nr.render(main());
+  suelta = await anclar(nr.render(main()));   // anclado: ver `calendario.html`
   await esperarA(() => tarjetas().length === 4, { que: 'las 4 tarjetas que quedan (2 artistas ocultos)' });
   afirmar(artistasEnPantalla().join('|') === [ARTISTAS[2].name, ARTISTAS[3].name].sort().join('|'),
     `en #new-releases solo quedan C y D: ${artistasEnPantalla().join(', ')}`);
@@ -243,6 +245,9 @@ try {
   afirmar(sim.reg.escrituras.every(e => permitidas.test(`${e.metodo} ${e.ruta.split('?')[0]}`)),
     `solo se escribió en la playlist de ocultos: ${JSON.stringify(escrituras)}`);
 
+  // El reloj virtual gastado, en el DOM y no solo en la consola: `correr-banco.mjs` lee el
+  // `--dump-dom` y es el número contra el que se fija su PRESUPUESTO (como en calendario.html).
+  document.documentElement.setAttribute('data-resumen', `reloj virtual=${Math.round(performance.now())} ms`);
   listo(`${medidas.join(' · ')} · ${sim.reg.llamadas.length} peticiones simuladas, 0 reales`);
 } catch (e) {
   if (e.parada) {
@@ -251,6 +256,7 @@ try {
   } else {
     const r = window.__sim?.reg;
     if (r) e.message += `\n[llamadas ${r.llamadas.length}] desconocidas: ${r.desconocidas.join(' | ') || '—'} · externas: ${r.externas.join(' | ') || '—'}\nmedido: ${medidas.join(' · ') || '—'}\nconsola: ${window.__cons.join(' || ').slice(0, 600)}\nvisible: ${(document.querySelector('#main-content')?.textContent || '').replace(/\s+/g, ' ').slice(0, 300)}`;
+    document.documentElement.setAttribute('data-resumen', `reloj virtual=${Math.round(performance.now())} ms`);
     fallar(e);
   }
 }
