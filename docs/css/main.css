@@ -6207,3 +6207,164 @@ body.covers-fs .main {
 .follow-save { justify-content: space-between; min-height: 42px; }
 .follow-selection:disabled { opacity: .65; }
 #follow-notice { min-height: 1.6em; }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   #calendario (v=289)
+   ══════════════════════════════════════════════════════════════════════════
+
+   ⚠️ **TODO CUELGA DE `.cal-anual` Y NO SE REDEFINE NINGUNA REGLA DE
+   `.wr-ap-*`.** La grilla la pinta `ui/calendario-anual.js`, el mismo
+   componente que la apertura del Wrapped, con sus clases `.wr-ap-*` intactas
+   — esa es la condición para que el test byte a byte de
+   `tests/calendario-anual.test.mjs` signifique algo. Lo que esta vista
+   necesita de más va SIEMPRE con `.cal-anual` delante.
+
+   Es la regla de `.wt-play-btn` (v=219): el look se comparte en la hoja, la
+   identidad no. Una regla `.wr-ap-cal i { … }` escrita acá le cambiaría el
+   dibujo al Wrapped desde la hoja de otra vista. */
+
+/* ── el selector de año ─────────────────────────────────────────────────────
+   🔴 **El elegido se marca con un ANILLO, no con blanco sobre el acento.**
+   `.covers-chip.is-on` hace lo segundo y falla AA en dos de los cuatro
+   presets (ámbar 2,84 · aguamarina 1,89, medido el 09/10 y anotado en
+   PENDIENTES.md). Por eso esta clase es PROPIA y no reusa `.covers-chip`:
+   reusarla habría heredado el defecto en una pantalla nueva. Con el anillo el
+   texto no cambia de color y se queda en el contraste del estado normal. */
+.cal-anios {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 18px;
+}
+.cal-anio {
+  background: var(--color-surface);
+  color: var(--color-text-secondary);
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  padding: 5px 14px;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+  transition: background .12s, color .12s, border-color .12s;
+}
+.cal-anio:hover { background: var(--color-elevated); color: var(--color-text); }
+.cal-anio.is-on {
+  background: var(--color-accent-tint);
+  color: var(--color-text);
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 2px var(--color-accent);
+  font-weight: 600;
+}
+.cal-anio:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 3px; }
+
+/* ── los tres números del año ───────────────────────────────────────────── */
+.cal-resumen {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 18px;
+}
+.cal-tile {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: 14px 16px;
+  min-width: 0;
+}
+.cal-tile-n {
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--color-text);
+  font-variant-numeric: tabular-nums;
+}
+.cal-tile-l { font-size: 13px; color: var(--color-text-secondary); margin-top: 2px; }
+.cal-tile-h { font-size: 11px; color: var(--color-text-secondary); margin-top: 4px; }
+
+/* ── la grilla ──────────────────────────────────────────────────────────────
+   Las celdas son tocables, así que necesitan cursor y foco visible. El `.pico`
+   ya trae su propio `box-shadow` del componente; el día ELEGIDO usa un
+   `outline`, que no se pelea con ese shadow y se ve encima de los dos. */
+.cal-card { padding: 18px 20px 14px; }
+.cal-anual .wr-ap-cal i[data-dia] { cursor: pointer; }
+.cal-anual .wr-ap-cal i[data-dia]:hover { outline: 2px solid var(--color-text-secondary); outline-offset: 1px; }
+.cal-anual .wr-ap-cal i.elegido { outline: 2px solid var(--color-accent); outline-offset: 1px; }
+.cal-anual .wr-ap-cal i[data-dia]:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
+/* A 1366 px un año entero son 53 columnas: con las celdas a `aspect-ratio: 1`
+   la grilla mide ~12,5 px por celda y entra sin scroll horizontal. */
+.cal-anual { max-width: 100%; }
+/* 🔴 `--color-text-secondary` y NO `--color-text-muted`, y está medido: el
+   muted da **2,48 (violeta) · 3,00 (ámbar) · 3,02 (aguamarina) · 3,52 (papel)**,
+   o sea que FALLA AA 4,5:1 en los cuatro presets. Con secondary da 5,20 · 6,20 ·
+   6,27 · 7,08, que pasa en los cuatro. La jerarquía la hace el TAMAÑO (11 px
+   contra los 13 de la etiqueta), no el color. ⚠️ El resto de la app usa muted
+   para los textos de pista y arrastra el mismo problema: anotado en
+   `PENDIENTES.md`, no tocado acá. */
+.cal-pie {
+  margin: 14px 0 0;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--color-text-secondary);
+}
+
+/* ── el panel del día ───────────────────────────────────────────────────────
+   El scroll va DENTRO del panel (`.cal-panel-scroll`), no en la página: un día
+   de 150 temas no puede estirar el modal hasta sacar el pie de pantalla. */
+.cal-panel { display: flex; flex-direction: column; max-height: min(85vh, 680px); }
+.cal-panel-head { display: flex; align-items: flex-start; gap: 12px; margin-bottom: 12px; }
+.cal-panel-t { margin: 0; font-size: 18px; }
+.cal-panel-sub { font-size: 12px; color: var(--color-text-secondary); margin-top: 4px; line-height: 1.5; }
+.cal-panel-scroll { overflow-y: auto; flex: 1; min-height: 0; margin: 0 -4px; padding: 0 4px; }
+.cal-panel-pie {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--color-border);
+  display: flex;
+  justify-content: flex-end;
+}
+.cal-panel-h {
+  margin: 14px 0 6px;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  color: var(--color-text-secondary);
+}
+/* Sin `opacity`: bajarla es bajar el contraste sin decirlo, y es justo el
+   defecto que `.wthree-album-artist` arregló en v=264 (de 2,27 a 4,77). */
+.cal-panel-h-hint { text-transform: none; letter-spacing: 0; font-weight: 400; }
+.cal-lista { list-style: none; margin: 0; padding: 0; }
+.cal-fila {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  width: 100%;
+  padding: 6px 8px;
+  background: none;
+  border: 0;
+  border-radius: var(--radius-sm);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.cal-fila:hover { background: var(--color-surface-hover); }
+.cal-fila:focus-visible { outline: 2px solid var(--color-accent); outline-offset: -2px; }
+.cal-fila-n {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+  color: var(--color-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cal-fila-a { color: var(--color-text-secondary); font-size: 11px; margin-left: 8px; }
+.cal-fila-m {
+  flex: none;
+  font-size: 12px;
+  color: var(--color-text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+.cal-panel-vacio { font-size: 13px; line-height: 1.6; color: var(--color-text-secondary); }
+.cal-panel-vacio p { margin: 0 0 10px; }
+.cal-panel-vacio .btn { margin: 4px 6px 0 0; }
+.cal-panel-nota { color: var(--color-text-secondary); font-size: 12px; }

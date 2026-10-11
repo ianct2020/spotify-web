@@ -1,0 +1,350 @@
+<!doctype html><html lang="es"><head><meta charset="utf-8"><title>instrumento de capturas — #calendario</title>
+<link rel="stylesheet" href="/css/theme.css">
+<link rel="stylesheet" href="/css/components.css">
+<link rel="stylesheet" href="/css/main.css">
+<style>html,body{margin:0;background:var(--color-bg);color:var(--color-text);font-family:var(--font-sans),system-ui}
+  #caja{padding:0}
+  /* El host del paso del Wrapped: lo mínimo para que el componente mida igual
+     que dentro de la apertura (`.wr-ap-paso` le da el ancho y el centrado). */
+  #wrap-host{padding:24px}
+  #wrap-host .wr-ap-paso{max-width:none}
+</style>
+</head><body class="sidebar-hidden">
+<div id="caja"><main class="main" id="main-content"></main></div>
+<div id="wrap-host" hidden></div>
+<script type="module">
+// ── INSTRUMENTO DE CAPTURAS, no es un banco que se autocompruebe (v=289) ─────
+//
+// Las puertas de `#calendario` viven en `tests/banco/calendario.html` (puertas
+// 3 y 4) y en `tests/calendario-dias.test.mjs` y `tests/calendario-anual.test.mjs`.
+// Este archivo es otra cosa: el escenario desde el que se FOTOGRAFÍA la vista.
+// Por eso **NO está en la lista de `npm run prepush`** — igual que `mosaico.html`
+// sin `auto=1`, es un instrumento que espera a un conductor externo.
+//
+// ⚠️ **LOS DATOS SON REALES Y ESO ES EL PUNTO.** `stats` sale de
+// `src/data/history-stats.json`, el JSON del repo que horneó `gen-stats.py`; el
+// detalle por día lo inyecta el conductor desde el export de Ian (solo los
+// pocos días que salen en las fotos). Lo único sembrado es el **perfil de
+// Chrome** y el user id de la clave de IndexedDB. Así los números de las
+// capturas son los de Ian y no inventos.
+//
+// ⚠️ **LAS ANIMACIONES VAN EN «nunca», Y NO ES COMODIDAD.** `ui/reveal.js` deja
+// en `opacity: 0` lo que arma, y `captureBeyondViewport` **no dispara el
+// IntersectionObserver**: la captura saldría NEGRA y dos negras son idénticas
+// para `cmp`, o sea que mentiría sin fallar. Con el modo en «nunca»,
+// `animationsEnabled()` da `false` y la vista **no llama a `armRevealAll`**:
+// la clase que esconde no se pone nunca. Es la estructura la que garantiza que
+// se vea, no el cuidado.
+
+import { instalarRedSimulada, esperarReal, anclar } from '/banco/simulado.mjs';
+import { applyTheme, expandTheme, PRESETS } from '/js/ui/theme-panel.js';
+
+const q = new URLSearchParams(location.search);
+const UID = 'perfil-de-capturas';
+const SIN_DETALLE = q.get('sindetalle') === '1';
+
+window.__cons = [];
+window.addEventListener('unhandledrejection', e => window.__cons.push('rechazo: ' + (e.reason?.message || e.reason)));
+
+const $ = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+
+// ── el toggle de animaciones, ANTES de importar la vista ─────────────────────
+try {
+  localStorage.setItem('fonoteca_anim_v1', 'nunca');
+  localStorage.setItem(`fonoteca_anim_v1__${UID}`, 'nunca');
+  localStorage.removeItem('fonoteca_calendario_anio_v1');
+  localStorage.removeItem(`fonoteca_calendario_anio_v1__${UID}`);
+} catch { /* sin localStorage no hay nada que fijar */ }
+
+const sim = instalarRedSimulada();
+window.__sim = sim;
+sim.ruta('GET', /^\/me$/, () => ({ id: UID, display_name: 'Capturas' }));
+// Las dos del botón de playlist: el modal de confirmación se fotografía SIN
+// llegar a confirmarlo, pero si alguien lo aprieta no sale ninguna petición
+// real — este archivo no tiene camino a la red de Spotify.
+sim.ruta('POST', /^\/me\/playlists/, () => ({ id: 'pl-de-capturas', name: 'de capturas', owner: { id: UID } }));
+sim.ruta('POST', /^\/playlists\/[^/]+\/items/, () => ({ snapshot_id: 's1' }));
+
+// ── sembrar IndexedDB: stats REAL del repo + el detalle REAL inyectado ───────
+const statsReal = await fetch('/data/history-stats.json').then(r => r.json());
+const { idbSetCached } = await import('/js/idb.js');
+const TTL = 100 * 365 * 24 * 60;
+await anclar(idbSetCached(`local_${UID}_history_stats`, statsReal, TTL));
+if (!SIN_DETALLE && window.__diasReales) {
+  await anclar(idbSetCached(`local_${UID}_history_days`, window.__diasReales, TTL));
+} else {
+  // ⚠️ **BORRAR, no «no escribir».** IndexedDB sobrevive a la navegación dentro
+  // del mismo perfil, así que una carga anterior CON detalle lo deja puesto y el
+  // panel «sin detalle» saldría con los temas igual. Pisado al primer intento:
+  // las dos capturas pesaban los MISMOS 40.189 bytes.
+  const { idbDel } = await import('/js/idb.js');
+  await anclar(idbDel(`local_${UID}_history_days`));
+}
+
+const mod = await import('/js/features/calendario.js');
+const main = $('#main-content');
+
+async function pintarVista() {
+  mod.__reiniciarParaTests();
+  await mod.render(main);
+  await esperarReal(() => $('.cal-anual .wr-ap-cal i[data-dia]'), { que: 'la grilla' });
+}
+await pintarVista();
+
+// ════════════════════════════════════════════════════════════════════════════
+// LO QUE EL CONDUCTOR MANEJA
+// ════════════════════════════════════════════════════════════════════════════
+
+/**
+ * Congela las animaciones **del subárbol que se va a fotografiar**, no todas.
+ *
+ * ⚠️ **La guarda NO puede ser global**, y está medido (tanda del 09/10): hay
+ * animaciones INFINITAS en la app (`sidebarShimmer`, `iterations: null`) que
+ * no terminan jamás, así que exigir «0 animaciones corriendo» bloquea una
+ * captura que estaba perfecta. Y sin congelar las infinitas, dos capturas del
+ * MISMO estado salen distintas y `cmp` miente al revés.
+ */
+function congelar(raiz) {
+  const nodos = [raiz, ...raiz.querySelectorAll('*')];
+  let paradas = 0, infinitas = 0;
+  for (const n of nodos) {
+    for (const a of (n.getAnimations ? n.getAnimations() : [])) {
+      const inf = a.effect?.getComputedTiming?.().iterations === Infinity;
+      if (inf) infinitas++;
+      try { a.currentTime = a.effect?.getComputedTiming?.().activeDuration || 0; a.pause(); paradas++; }
+      catch { /* una animación que ya murió */ }
+    }
+  }
+  return { paradas, infinitas };
+}
+
+window.__fotos = {
+  presets: PRESETS.map(p => p.id),
+
+  async preset(id) {
+    const p = PRESETS.find(x => x.id === id);
+    if (!p) throw new Error('preset desconocido: ' + id);
+    applyTheme(expandTheme(p.colors));
+    await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+    return id;
+  },
+
+  async anio(n) {
+    const chip = $$('.cal-anio').find(c => c.dataset.anio === String(n));
+    if (!chip) throw new Error('no hay pastilla para el año ' + n);
+    chip.click();
+    await esperarReal(() => $('.cal-anio.is-on')?.dataset.anio === String(n), { que: 'el año ' + n });
+    await esperarReal(() => $$('.cal-anual .wr-ap-cal i[data-dia]').length > 0, { que: 'la grilla del año nuevo' });
+    return $$('.cal-anual .wr-ap-cal i[data-dia]').length;
+  },
+
+  /** Mueve el foco con FLECHAS de verdad, no poniendo la clase a mano. */
+  async enfocarConTeclado(pasos) {
+    const marcada = $('.cal-anual .wr-ap-cal i.elegido');
+    marcada.focus();
+    for (let i = 0; i < pasos; i++) {
+      document.activeElement.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true, cancelable: true }));
+    }
+    await new Promise(r => requestAnimationFrame(r));
+    const ahora = $('.cal-anual .wr-ap-cal i.elegido');
+    return { iso: ahora.dataset.iso, titulo: ahora.title };
+  },
+
+  /** Abre el panel del día con el ISO pedido, apretando su celda. */
+  async abrirDia(iso) {
+    const celda = $$('.cal-anual .wr-ap-cal i[data-dia]').find(c => c.dataset.iso === iso);
+    if (!celda) throw new Error('ese día no está en el año elegido: ' + iso);
+    celda.click();
+    await esperarReal(() => $('.cal-panel'), { que: 'el panel del día' });
+    const sub = $('.cal-panel-sub')?.textContent.trim() || '';
+    return {
+      titulo: $('.cal-panel-t').textContent,
+      sub,
+      artistas: $$('.cal-lista-art .cal-fila').length,
+      temas: $$('.cal-lista-temas .cal-fila').length,
+      botonPlaylist: $('[data-cal-playlist]')?.textContent || null,
+    };
+  },
+
+  /** Aprieta el botón de playlist y se queda en el modal de confirmación. */
+  async abrirConfirmacionPlaylist() {
+    $('[data-cal-playlist]').click();
+    await esperarReal(() => $('.modal-picker #modal-confirm'), { que: 'el cartel de confirmación' });
+    return $('.modal-picker .picker-scroll').textContent.replace(/\s+/g, ' ').trim();
+  },
+
+  cerrarModales() {
+    for (const b of $$('[data-close-modal], #modal-cancel')) { try { b.click(); } catch { /* ya se fue */ } }
+  },
+
+  /**
+   * El paso «Días con música» del Wrapped, en sus dos versiones:
+   *  · `antes`   = el HTML de la referencia byte a byte generada con v=288
+   *                (`tests/fixtures/calendario-apertura-2025.html`), que el
+   *                conductor inyecta en `window.__refWrapped2025`;
+   *  · `despues` = lo que emite HOY `ui/calendario-anual.js` SIN opciones.
+   * Se pintan en el MISMO host con las MISMAS hojas, así que la comparación de
+   * las dos capturas es la del marcado y nada más.
+   */
+  async pasoWrapped(cual) {
+    const { calendarioAnual } = await import('/js/ui/calendario-anual.js');
+    const { fmtDia } = await import('/js/util/fecha.js');
+    const MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
+    const MESES_LARGOS = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio',
+      'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
+    const fmtMinutes = (min) => {
+      if (!min && min !== 0) return '—';
+      if (min >= 60) return `${Math.floor(min / 60).toLocaleString('es-ES')}h ${Math.round(min % 60)}m`;
+      return `${Math.round(min)}m`;
+    };
+    const y = statsReal.years.find(yy => yy.year === 2025);
+    const D = y.days;
+    const iPico = D.min.reduce((m, v, i) => (v > D.min[m] ? i : m), 0);
+    const html = cual === 'antes'
+      ? window.__refWrapped2025
+      : calendarioAnual(D, iPico, { MESES, MESES_LARGOS, fmtMinutes, fmtDia });
+    if (!html) throw new Error('falta el HTML de referencia (window.__refWrapped2025)');
+    const host = $('#wrap-host');
+    host.hidden = false;
+    $('#caja').hidden = true;
+    host.innerHTML = `<div class="wr-ap"><article class="wr-ap-paso">
+      <div class="wr-ap-label">Días con música</div>
+      <div class="wr-ap-dato"><span class="wr-ap-num">${y.days.min.filter(v => v > 0).length}</span></div>
+      <div class="wr-ap-bajada">de los ${D.min.length} que cubre el historial</div>
+      ${html}
+    </article></div>`;
+    await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+    congelar(host);
+    const caja = host.getBoundingClientRect();
+    return { largo: html.length, alto: Math.round(caja.height) };
+  },
+
+  volverALaVista() {
+    $('#wrap-host').hidden = true;
+    $('#wrap-host').innerHTML = '';
+    $('#caja').hidden = false;
+  },
+
+  /**
+   * El rectángulo de lo que hay que fotografiar, en coordenadas de PÁGINA.
+   *
+   * ⚠️ El `clip` de `Page.captureScreenshot` va en coordenadas de página y
+   * `getBoundingClientRect()` las da del VIEWPORT: con la página scrolleada hay
+   * que sumar el scroll o el clip apunta a otro sitio y la captura sale NEGRA
+   * (y dos negras son idénticas para `cmp`). Acá se suma siempre.
+   */
+  rect(selector) {
+    const el = $(selector);
+    if (!el) throw new Error('no está en el DOM: ' + selector);
+    const r = el.getBoundingClientRect();
+    return {
+      x: Math.max(0, Math.floor(r.left + window.scrollX)),
+      y: Math.max(0, Math.floor(r.top + window.scrollY)),
+      width: Math.ceil(r.width),
+      height: Math.ceil(r.height),
+      scrollY: window.scrollY,
+    };
+  },
+
+  /** Congela lo que se va a fotografiar y dice cuántas animaciones paró. */
+  listoParaLaFoto(selector) {
+    const el = $(selector) || document.body;
+    const r = congelar(el);
+    // Y las de los ancestros, que lo arrastran.
+    let p = el.parentElement;
+    while (p) { congelar(p === document.body ? document.createElement('div') : p); p = p.parentElement; }
+    return r;
+  },
+
+  // ── CONTRASTE ─────────────────────────────────────────────────────────────
+  //
+  // Se mide con las transiciones YA TERMINADAS. ⚠️ En la tanda del 09/10 una
+  // medición a mitad de los 120 ms de `.covers-chip` dio 3,81 y casi se
+  // reportó un defecto inexistente: dos `requestAnimationFrame` NO alcanzan.
+  async contraste() {
+    await new Promise(r => setTimeout(r, 400));
+    const lum = (c) => {
+      const [r, g, b] = c.map(v => { const s = v / 255; return s <= 0.03928 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4); });
+      return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+    };
+    // ⚠️ Un color puede venir con ALFA, y leer sus tres primeros números como si
+    // fuera opaco da un ratio inventado. Pisado al primer intento: `.cal-anio.is-on`
+    // tiene `background: var(--color-accent-tint)` —el acento al 10 %— y medirlo
+    // como acento opaco daba **2,50 en ámbar y 1,68 en aguamarina**, o sea un
+    // defecto de accesibilidad que NO existe. Compuesto de verdad da 5,99 y 6,05.
+    // Es la misma familia que la medición a mitad de transición del 09/10: la
+    // métrica equivocada tiene la misma cara que un resultado limpio.
+    const rgba = (s) => {
+      const m = String(s).match(/[\d.]+/g);
+      if (!m) return null;
+      const [r, g, b] = m.slice(0, 3).map(Number);
+      const a = m.length > 3 ? Number(m[3]) : 1;
+      return [r, g, b, a];
+    };
+    const sobre = (frente, fondo) => frente.slice(0, 3).map((v, i) => v * frente[3] + fondo[i] * (1 - frente[3]));
+    /** El fondo EFECTIVO: se compone capa por capa hacia arriba hasta una opaca. */
+    const fondoDe = (el) => {
+      const capas = [];
+      let n = el;
+      while (n) {
+        const c = rgba(getComputedStyle(n).backgroundColor);
+        if (c && c[3] > 0) {
+          capas.push(c);
+          if (c[3] === 1) break;
+        }
+        n = n.parentElement;
+      }
+      // De la más honda a la más superficial.
+      let acum = capas.length && capas[capas.length - 1][3] === 1
+        ? capas.pop().slice(0, 3)
+        : [0, 0, 0];
+      for (const c of capas.reverse()) acum = sobre(c, acum);
+      return acum;
+    };
+    const rgb = (s) => { const c = rgba(s); return c ? c.slice(0, 3) : null; };
+    const ratio = (el) => {
+      const bg = fondoDe(el);
+      const fgc = rgba(getComputedStyle(el).color);
+      if (!fgc || !bg) return null;
+      // Y el TEXTO también puede llevar alfa (o una `opacity` heredada), así
+      // que se compone sobre su propio fondo antes de comparar.
+      const op = Number(getComputedStyle(el).opacity || 1);
+      const fg = sobre([fgc[0], fgc[1], fgc[2], fgc[3] * op], bg);
+      const a = lum(fg), b = lum(bg);
+      return Math.round(((Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05)) * 100) / 100;
+    };
+    const elegida = $('.cal-anio.is-on');
+    const panelAbierto = $('.cal-panel-sub');
+    return {
+      anioElegido: elegida ? ratio(elegida) : null,
+      anioNoElegido: ratio($$('.cal-anio').find(c => !c.classList.contains('is-on'))),
+      tileNumero: ratio($('.cal-tile-n')),
+      tileEtiqueta: ratio($('.cal-tile-l')),
+      pie: ratio($('.cal-pie')),
+      tileHint: ratio($('.cal-tile-h')),
+      panelH: $('.cal-panel-h') ? ratio($('.cal-panel-h')) : null,
+      panelArtistaDelTema: $('.cal-fila-a') ? ratio($('.cal-fila-a')) : null,
+      panelSub: panelAbierto ? ratio(panelAbierto) : null,
+      panelFila: $('.cal-fila-n') ? ratio($('.cal-fila-n')) : null,
+      panelMinutos: $('.cal-fila-m') ? ratio($('.cal-fila-m')) : null,
+    };
+  },
+
+  peticiones() {
+    return {
+      total: sim.reg.llamadas.length,
+      me: sim.reg.llamadas.filter(l => l.ruta === '/me').length,
+      otras: sim.reg.llamadas.filter(l => l.ruta !== '/me').map(l => `${l.metodo} ${l.ruta}`),
+      escrituras: sim.reg.escrituras.length,
+      desconocidas: sim.reg.desconocidas,
+      externas: sim.reg.externas,
+    };
+  },
+
+  consola: () => window.__cons,
+};
+
+document.documentElement.setAttribute('data-fotos', 'listo');
+</script>
+</body></html>

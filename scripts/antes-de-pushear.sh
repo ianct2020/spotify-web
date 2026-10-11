@@ -43,7 +43,7 @@ if npm test --silent 2>&1 | tail -4 | sed 's/^/      /'; [ "${PIPESTATUS[0]}" -e
 # `mosaico` y `toasts` entraron en v=273:
 # estaban en rojo desde antes del 04/10 y justamente por no estar acá nadie los
 # miraba, igual que le había pasado a `barra` entre v=241 y v=261.
-echo "2b. bancos (barra · pausa-search · toasts · mosaico · novedades · escrituras · ocultar-artista ×3 · covers-orden)"
+echo "2b. bancos (barra · pausa-search · toasts · mosaico · novedades · escrituras · ocultar-artista ×3 · covers-orden · calendario)"
 # Los dos de `ocultar-artista` entraron en v=276: las TRES vistas que ocultan
 # artistas, reales, contra una Spotify simulada. Es el único sitio donde se puede
 # probar ocultar sin escribir en la cuenta de Ian, y el de `-disco` es el que
@@ -53,7 +53,12 @@ echo "2b. bancos (barra · pausa-search · toasts · mosaico · novedades · esc
 # `ocultar-artista-novedades` entró en v=278: la quinta vista, #new-releases, y que
 # comparte el almacén con #discover-artists en las dos direcciones.
 # `covers-orden` entró en v=278: el orden por fecha de #covers, con los sin fecha al final.
-for B in barra pausa-search toasts mosaico novedades escrituras ocultar-artista ocultar-artista-disco ocultar-artista-novedades covers-orden; do
+# `calendario` entró en v=289: las puertas 3 y 4 de la vista nueva — que abrirla no haga
+# ninguna lectura que no sea `GET /me`, y que la playlist de un día cueste EXACTAMENTE
+# 1 + ceil(N/100) POST (2 con 30 temas, 3 con 150). Es el único sitio donde se puede probar
+# el botón de playlist sin crear una playlist real en la cuenta de Ian — y no se pueden
+# borrar por API.
+for B in barra pausa-search toasts mosaico novedades escrituras ocultar-artista ocultar-artista-disco ocultar-artista-novedades covers-orden calendario; do
   if node scripts/correr-banco.mjs "$B" 2>&1 | sed 's/^/      /'; [ "${PIPESTATUS[0]}" -eq 0 ]; then
     ok "banco $B en verde"
   else

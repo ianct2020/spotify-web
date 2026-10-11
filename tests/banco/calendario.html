@@ -1,0 +1,372 @@
+<!doctype html><html lang="es"><head><meta charset="utf-8"><title>banco calendario — cuota y playlist</title>
+<link rel="stylesheet" href="/css/theme.css">
+<link rel="stylesheet" href="/css/components.css">
+<link rel="stylesheet" href="/css/main.css">
+<style>html,body{margin:0;background:var(--color-bg);color:var(--color-text);font-family:var(--font-sans),system-ui}</style>
+</head><body class="sidebar-hidden">
+<div id="caja"><main class="main" id="main-content"></main></div>
+<script type="module">
+// ── Qué prueba este banco (v=289) ────────────────────────────────────────────
+//
+// La vista REAL de `#calendario` con un historial de mentira sembrado en
+// IndexedDB y una Spotify simulada (`simulado.mjs`: 0 peticiones reales, y el
+// archivo no tiene camino a la red de verdad).
+//
+// PUERTA 3 · **abrir no gasta**: abrir la vista, cambiar de año, abrir el
+//   detalle de un día y cerrarlo hace SOLO `GET /me` y nada más. Ni
+//   discografías, ni `/me/tracks`, ni playlists, ni likes.
+//
+// PUERTA 4 · **la playlist cuesta lo que dice**: un día de **30** temas son
+//   EXACTAMENTE **2** peticiones (`POST /me/playlists` + `POST
+//   /playlists/{id}/items`) y **0 GET**; un día de **150**, exactamente **3**.
+//   Acá el número es exacto, no un techo.
+//
+// Y de paso, porque sin esto las dos puertas de arriba no significan nada:
+// que la grilla se pinte, que el día elegido se marque, que las flechas muevan
+// el foco y que el panel de un día SIN detalle ofrezca cargarlo en vez de
+// inventar filas.
+//
+// ⚠️ **NO se crea ninguna playlist real.** El `POST` lo contesta este archivo.
+
+import { hojasLegibles, fallar, listo } from '/banco/esperar.mjs';
+import { instalarRedSimulada, esperarReal, anclar } from '/banco/simulado.mjs';
+const esperarA = (cond, { que }) => esperarReal(cond, { que });
+
+window.__cons = [];
+window.addEventListener('unhandledrejection', e => window.__cons.push('rechazo: ' + (e.reason?.message || e.reason)));
+const q = new URLSearchParams(location.search);
+const PASO = q.get('paso');
+if (PASO) document.head.insertAdjacentHTML('beforeend', '<style>*,*::before,*::after{animation:none!important;transition:none!important}</style>');
+const ANCHO = +(q.get('ancho') || 1351);
+const afirmar = (c, msg) => { if (!c) throw new Error('BANCO: ' + msg); };
+const $ = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+
+const UID = 'usuario-banco';
+
+try {
+  await hojasLegibles(['/css/main.css', '/css/components.css']);
+  $('#caja').style.width = ANCHO + 'px';
+  const sim = instalarRedSimulada();
+  window.__sim = sim;
+
+  // La ÚNICA ruta que esta vista tiene derecho a tocar.
+  sim.ruta('GET', /^\/me$/, () => ({ id: UID, display_name: 'Banco' }));
+  // Y las dos del botón de playlist. Si la vista pidiera cualquier otra cosa,
+  // `simulado.mjs` la anota en `desconocidas` y la puerta 3 se pone roja.
+  sim.ruta('POST', /^\/me\/playlists/, () => ({ id: 'pl-del-banco', name: 'del banco', owner: { id: UID } }));
+  sim.ruta('POST', /^\/playlists\/[^/]+\/items/, () => ({ snapshot_id: 's1' }));
+
+  // ── El historial de mentira, con la forma que produce el pipeline ──────────
+  //
+  // Dos años para que el selector tenga dos pastillas, y 2025 arrancando el 1
+  // de enero. El día 2 de marzo lleva 30 temas y el 3 lleva 150: son los dos
+  // números de la puerta 4.
+  const DIAS_2025 = 365, DIAS_2026 = 60;
+  const serie = (n, fn) => Array.from({ length: n }, (_, i) => fn(i));
+
+  const diasDetalle = {};
+  const temas = [];
+  const idDe = (n) => String(n).padStart(22, 'x' + n).slice(-22);
+  function sembrarDia(iso, cuantos, minPorTema) {
+    const lista = [];
+    for (let k = 0; k < cuantos; k++) {
+      const idx = temas.length;
+      temas.push([idDe(idx), `Tema ${k + 1} del ${iso}`, `Artista ${k % 4}`]);
+      lista.push([idx, minPorTema, k % 3 === 0 ? 2 : 1]);
+    }
+    diasDetalle[iso] = {
+      min: Math.round(cuantos * minPorTema * 10) / 10,
+      crudas: cuantos * 2,
+      validas: cuantos,
+      saltos: Math.floor(cuantos / 3),
+      temas: lista,
+    };
+  }
+  sembrarDia('2025-03-02', 30, 3);
+  sembrarDia('2025-03-03', 150, 2);
+  sembrarDia('2025-07-04', 12, 5);
+
+  const min2025 = serie(DIAS_2025, i => {
+    const iso = new Date(Date.UTC(2025, 0, 1 + i)).toISOString().slice(0, 10);
+    if (diasDetalle[iso]) return diasDetalle[iso].min;
+    // Un día de cada siete en blanco, para que haya huecos que mirar.
+    return i % 7 === 3 ? 0 : Math.round((20 + (i % 53) * 4) * 10) / 10;
+  });
+  const min2026 = serie(DIAS_2026, i => (i % 5 === 0 ? 0 : 30 + i));
+
+  const anio = (year, from, min, extra = {}) => ({
+    year,
+    min: Math.round(min.reduce((a, b) => a + b, 0) * 10) / 10,
+    plays: min.filter(v => v > 0).length * 7,
+    days_active: min.filter(v => v > 0).length,
+    longest_streak: 6,
+    skip_pct: 24.5,
+    first_play: `${year}-01-01T00:00:10Z`,
+    last_play: `${year}-12-01T00:00:10Z`,
+    peak_day: { date: '2025-03-03', min: 300 },
+    peak_month: { month: 3, min: 900 },
+    discovery: null,
+    days: { from, min },
+    top_artists: [], top_albums: [], top_tracks: [],
+    ...extra,
+  });
+
+  const stats = {
+    version: 4,
+    generated_at: '2026-10-10T00:00:00Z',
+    totals: {
+      plays_valid: 1000, plays_raw: 2000, min: 9999, days_active: 300,
+      longest_streak: 40, unique_artists: 50, unique_albums: 60, unique_tracks: 70,
+      skip_pct: 24.5, first_play: '2025-01-01T00:00:10Z', last_play: '2026-03-01T00:00:10Z',
+    },
+    years: [anio(2025, '2025-01-01', min2025), anio(2026, '2026-01-01', min2026)],
+    monthly: [], heatmap: [], top_artists_all_time: [], top_albums_all_time: [], top_tracks_all_time: [],
+  };
+
+  const days = { version: 1, generated_at: '2026-10-10T00:00:00Z', temas, dias: diasDetalle,
+                 conteo: { leidas: 2000, sin_uri: 0, repetidas: 0, ts_ilegible: 0 } };
+
+  const { idbSetCached } = await import('/js/idb.js');
+  const TTL = 100 * 365 * 24 * 60;
+  await anclar(idbSetCached(`local_${UID}_history_stats`, stats, TTL));
+  if (q.get('sindetalle') !== '1') {
+    await anclar(idbSetCached(`local_${UID}_history_days`, days, TTL));
+  }
+  // La preferencia de año tiene que arrancar limpia, o una corrida anterior
+  // elegiría el año por nosotros.
+  try { localStorage.removeItem(`${UID}__fonoteca_calendario_anio_v1`); } catch { /* da igual */ }
+
+  // ── Abrir la vista ─────────────────────────────────────────────────────────
+  const mod = await import('/js/features/calendario.js');
+  mod.__reiniciarParaTests();
+  const main = $('#main-content');
+  await mod.render(main);
+  await esperarA(() => $('.cal-anual .wr-ap-cal i[data-dia]'), { que: 'que la grilla se pinte' });
+
+  const llamadasTrasAbrir = sim.reg.llamadas.length;
+  const meTrasAbrir = sim.reg.llamadas.filter(l => l.ruta === '/me').length;
+
+  // ── Que esté pintado lo que tiene que estar ────────────────────────────────
+  const chips = $$('.cal-anio');
+  afirmar(chips.length === 2, `el selector tiene una pastilla por año con datos: esperaba 2 y hay ${chips.length}`);
+  // Por defecto, el ÚLTIMO año con datos.
+  const encendidas = $$('.cal-anio.is-on');
+  afirmar(encendidas.length === 1, `exactamente una pastilla encendida, hay ${encendidas.length}`);
+  afirmar(encendidas[0].dataset.anio === '2026', `por defecto manda el último año con datos, vino ${encendidas[0].dataset.anio}`);
+  // ⚠️ El elegido NO puede ir con texto blanco sobre el acento: `.covers-chip.is-on`
+  // hace eso y falla AA en ámbar (2,84) y aguamarina (1,89). Acá va con anillo.
+  const estilo = getComputedStyle(encendidas[0]);
+  afirmar(estilo.boxShadow && estilo.boxShadow !== 'none', 'el año elegido se marca con un ANILLO (box-shadow), no con blanco sobre el acento');
+  afirmar(!encendidas[0].classList.contains('covers-chip'), 'el selector de año NO reusa `.covers-chip`');
+
+  afirmar($$('.cal-tile').length === 3, 'arriba de la grilla van tres números');
+  const pie = $('.cal-pie');
+  afirmar(pie && /UTC/.test(pie.textContent), 'el pie dice que los días van en hora UTC');
+  // El historial termina el `from + min.length - 1` del ÚLTIMO año: 2026-01-01 + 59 días.
+  afirmar(/1 mar 2026/.test(pie.textContent), `el pie dice en qué día termina el historial; decía «${pie.textContent.trim().slice(0, 200)}»`);
+
+  // ── Teclado: las flechas mueven el foco ────────────────────────────────────
+  let celdas = $$('.cal-anual .wr-ap-cal i[data-dia]');
+  afirmar(celdas.length === DIAS_2026, `una celda por día del tramo: esperaba ${DIAS_2026} y hay ${celdas.length}`);
+  const marcadas = $$('.cal-anual .wr-ap-cal i.elegido');
+  afirmar(marcadas.length === 1, `un solo día marcado, hay ${marcadas.length}`);
+  afirmar($$('.cal-anual .wr-ap-cal i[tabindex="0"]').length === 1,
+    'un solo `tabindex="0"`: Tab entra una vez y de ahí manda el teclado de la vista');
+  // Cada celda dice qué día es y cuántos minutos, para quien no usa ratón.
+  afirmar(celdas.every(c => c.getAttribute('aria-label') && c.title), 'cada celda lleva su `title` y su `aria-label`');
+
+  const antes = Number(marcadas[0].dataset.dia);
+  marcadas[0].focus();
+  const flecha = (key) => $('.cal-anual .wr-ap-cal').dispatchEvent(
+    new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true }));
+  // El evento tiene que salir de la celda enfocada: el handler busca
+  // `e.target.closest('i[data-dia]')`.
+  const tecla = (key) => document.activeElement.dispatchEvent(
+    new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true }));
+  tecla('ArrowRight');
+  afirmar(Number($('.cal-anual .wr-ap-cal i.elegido').dataset.dia) === antes + 1,
+    '→ mueve un día');
+  tecla('ArrowDown');
+  afirmar(Number($('.cal-anual .wr-ap-cal i.elegido').dataset.dia) === antes + 8,
+    '↓ mueve una semana (7 días), que es la columna de al lado');
+  tecla('ArrowUp'); tecla('ArrowLeft');
+  afirmar(Number($('.cal-anual .wr-ap-cal i.elegido').dataset.dia) === antes,
+    '↑ y ← vuelven al punto de partida');
+
+  // ── Cambiar de año ─────────────────────────────────────────────────────────
+  chips.find(c => c.dataset.anio === '2025').click();
+  await esperarA(() => $$('.cal-anual .wr-ap-cal i[data-dia]').length === DIAS_2025,
+    { que: 'que la grilla se repinte con 2025' });
+  afirmar($('.cal-anio.is-on').dataset.anio === '2025', 'la pastilla de 2025 queda encendida');
+
+  // ── Abrir el detalle de un día, y cerrarlo ─────────────────────────────────
+  celdas = $$('.cal-anual .wr-ap-cal i[data-dia]');
+  // El 3 de marzo de 2025 es el índice 61 (1 de enero = 0).
+  const iDia150 = 61;
+  afirmar(celdas[iDia150].dataset.iso === '2025-03-03', `el índice ${iDia150} de 2025 es el 3 de marzo, vino ${celdas[iDia150].dataset.iso}`);
+  celdas[iDia150].click();
+  await esperarA(() => $('.cal-panel'), { que: 'que se abra el panel del día' });
+
+  const panel = $('.cal-panel');
+  afirmar(/3 mar 2025/.test($('.cal-panel-t').textContent), 'el título del panel es la fecha con `fmtDia`');
+  const sub = $('.cal-panel-sub').textContent;
+  afirmar(/150 reproducciones válidas/.test(sub), `el panel dice las reproducciones válidas; decía «${sub.trim()}»`);
+  afirmar(/50 saltadas de 300/.test(sub), `y «N saltadas de M»; decía «${sub.trim()}»`);
+  // Artistas del día por minutos, de mayor a menor.
+  const art = $$('.cal-lista-art .cal-fila');
+  afirmar(art.length === 4, `cuatro artistas distintos ese día, vinieron ${art.length}`);
+  const minDe = (el) => parseFloat($('.cal-fila-m', el).textContent.replace(/[^\d,.]/g, '').replace(',', '.'));
+  for (let i = 1; i < art.length; i++) {
+    afirmar(minDe(art[i - 1]) >= minDe(art[i]), 'los artistas van por minutos, de mayor a menor');
+  }
+  const filas = $$('.cal-lista-temas .cal-fila');
+  afirmar(filas.length === 150, `los 150 temas del día, vinieron ${filas.length}`);
+  // El scroll va DENTRO del panel: la página no crece.
+  const scroller = $('.cal-panel-scroll');
+  afirmar(scroller.scrollHeight > scroller.clientHeight, 'con 150 temas el scroll vive DENTRO del panel');
+  afirmar(panel.offsetHeight <= window.innerHeight, 'y el panel no se sale de la pantalla');
+
+  // ── PUERTA 4 · la playlist de 150 temas cuesta EXACTAMENTE 3 ───────────────
+  const antesDe150 = sim.reg.llamadas.length;
+  await crearPlaylist(150);
+  const de150 = sim.reg.llamadas.slice(antesDe150);
+  afirmar(de150.length === 3,
+    `PUERTA 4: un día de 150 temas tiene que costar 3 peticiones y costó ${de150.length}: ` +
+    de150.map(l => `${l.metodo} ${l.ruta}`).join(' · '));
+  afirmar(de150.every(l => l.metodo === 'POST'), 'PUERTA 4: las 3 son POST, ningún GET');
+  afirmar(de150.filter(l => /^\/me\/playlists/.test(l.ruta)).length === 1, 'PUERTA 4: un solo `POST /me/playlists`');
+  afirmar(de150.filter(l => /\/items/.test(l.ruta)).length === 2, 'PUERTA 4: dos lotes de items (150 → ceil(150/100) = 2)');
+
+  // ── La guarda contra el doble clic ─────────────────────────────────────────
+  // Dos clics NO pueden crear dos playlists: no se pueden borrar por API.
+  const botonOtraVez = $('[data-cal-playlist]');
+  afirmar(botonOtraVez && !botonOtraVez.disabled, 'al terminar, el botón vuelve a estar disponible');
+
+  // ── PUERTA 4 · y el de 30 temas, EXACTAMENTE 2 ─────────────────────────────
+  $('[data-close-modal]', panel).click();
+  await esperarA(() => !$('.cal-panel'), { que: 'que el panel se cierre' });
+
+  celdas = $$('.cal-anual .wr-ap-cal i[data-dia]');
+  const iDia30 = 60;
+  afirmar(celdas[iDia30].dataset.iso === '2025-03-02', 'el índice 60 de 2025 es el 2 de marzo');
+  celdas[iDia30].click();
+  await esperarA(() => $('.cal-panel'), { que: 'que se abra el panel del día de 30 temas' });
+  afirmar(/30 temas/.test($('[data-cal-playlist]').textContent),
+    `el botón dice cuántos temas; decía «${$('[data-cal-playlist]').textContent}»`);
+
+  const antesDe30 = sim.reg.llamadas.length;
+  await crearPlaylist(30);
+  const de30 = sim.reg.llamadas.slice(antesDe30);
+  afirmar(de30.length === 2,
+    `PUERTA 4: un día de 30 temas tiene que costar 2 peticiones y costó ${de30.length}: ` +
+    de30.map(l => `${l.metodo} ${l.ruta}`).join(' · '));
+  afirmar(de30.every(l => l.metodo === 'POST'), 'PUERTA 4: las 2 son POST, ningún GET');
+
+  // ── PUERTA 3 · abrir, cambiar de año, abrir un día y cerrarlo: SOLO /me ────
+  //
+  // Se mide sobre todo lo hecho hasta acá MENOS las 5 peticiones de las dos
+  // playlists, que son actos explícitos del usuario detrás de un cartel.
+  const soloLectura = sim.reg.llamadas.filter(l => l.metodo === 'GET');
+  const noMe = soloLectura.filter(l => l.ruta !== '/me');
+  afirmar(noMe.length === 0,
+    `PUERTA 3: abrir el calendario no puede hacer ninguna lectura que no sea \`GET /me\`, y hizo ${noMe.length}: ` +
+    noMe.map(l => `${l.metodo} ${l.ruta}`).join(' · '));
+  afirmar(meTrasAbrir <= 2, `PUERTA 3: como mucho 2 \`GET /me\` por carga, hubo ${meTrasAbrir}`);
+  afirmar(llamadasTrasAbrir === meTrasAbrir,
+    `PUERTA 3: abrir la vista hizo ${llamadasTrasAbrir} peticiones y ${meTrasAbrir} eran \`/me\`: ` +
+    sim.reg.llamadas.slice(0, llamadasTrasAbrir).map(l => `${l.metodo} ${l.ruta}`).join(' · '));
+  afirmar(sim.reg.desconocidas.length === 0,
+    'PUERTA 3: ninguna ruta sin simular (eso sería una petición que no esperábamos): ' + sim.reg.desconocidas.join(' · '));
+  afirmar(sim.reg.externas.length === 0, 'PUERTA 3: ninguna petición a un host externo: ' + sim.reg.externas.join(' · '));
+  // Las 5 escrituras son las dos playlists y nada más.
+  afirmar(sim.reg.escrituras.length === 5,
+    `las únicas escrituras son las 5 de las dos playlists, hubo ${sim.reg.escrituras.length}`);
+
+  // ── El panel SIN detalle cargado ───────────────────────────────────────────
+  //
+  // Ofrece cargarlo y NO inventa temas ni filas vacías. Se prueba quitando el
+  // detalle de la memoria del módulo y volviendo a abrir la vista.
+  $('[data-close-modal]', $('.cal-panel')).click();
+  await esperarA(() => !$('.cal-panel'), { que: 'que el panel se cierre' });
+  const { idbDel } = await import('/js/idb.js');
+  await anclar(idbDel(`local_${UID}_history_days`));
+  mod.__reiniciarParaTests();
+  await mod.render(main);
+  await esperarA(() => $('.cal-anual .wr-ap-cal i[data-dia]'), { que: 'que la grilla se repinte sin detalle' });
+  const sinDet = $$('.cal-anual .wr-ap-cal i[data-dia]');
+  // ⚠️ Un día CON minutos. El índice 10 de 2025 cae en un `i % 7 === 3`, o sea
+  // un día en blanco, y ésos abren el otro camino a propósito («Ese día no sonó
+  // nada», sin botón de cargar). Pisar ese caso acá daba un rojo que no era un
+  // defecto: los dos caminos se prueban por separado, más abajo.
+  const iConMinutos = sinDet.findIndex(c => !/nada/.test(c.title));
+  afirmar(iConMinutos >= 0, 'hay algún día con minutos en 2025');
+  sinDet[iConMinutos].click();
+  await esperarA(() => $('.cal-panel'), { que: 'que se abra el panel sin detalle' });
+  afirmar($('[data-cal-cargar]'), 'sin detalle, el panel ofrece cargarlo desde el export');
+  afirmar(!$('[data-cal-playlist]'), 'sin detalle NO hay botón de playlist: no hay temas que poner');
+  afirmar($$('.cal-lista-temas .cal-fila').length === 0, 'y no se inventa ninguna fila de tema');
+  afirmar(/de música/.test($('.cal-panel-sub').textContent),
+    `pero sí dice los minutos del día, que salen de \`years[].days\`; decía «${$('.cal-panel-sub').textContent.trim()}»`);
+
+  // ── Y el día SIN música se abre igual, y lo dice ───────────────────────────
+  $('[data-close-modal]', $('.cal-panel')).click();
+  await esperarA(() => !$('.cal-panel'), { que: 'que el panel se cierre' });
+  const iEnBlanco = sinDet.findIndex(c => /nada/.test(c.title));
+  afirmar(iEnBlanco >= 0, 'hay algún día en blanco en 2025');
+  $$('.cal-anual .wr-ap-cal i[data-dia]')[iEnBlanco].click();
+  await esperarA(() => $('.cal-panel'), { que: 'que se abra el panel de un día sin música' });
+  afirmar(/no son[óo] nada/.test($('.cal-panel-sub').textContent),
+    `un día de 0 minutos se abre igual y dice que no sonó nada; decía «${$('.cal-panel-sub').textContent.trim()}»`);
+  afirmar(!$('[data-cal-playlist]'), 'y no ofrece playlist');
+
+  if (window.__cons.length) throw new Error('BANCO: hubo rechazos sin atrapar: ' + window.__cons.join(' | '));
+
+  // Los números, en el DOM y no solo en la consola: `correr-banco.mjs` lee el
+  // `--dump-dom`, así que un `console.log` no llega al reporte.
+  const resumen = `abrir=${llamadasTrasAbrir} peticiones (${meTrasAbrir} × GET /me) · ` +
+    `cambiar de año y abrir/cerrar un día=0 más · playlist 30 temas=${de30.length} POST · ` +
+    `playlist 150 temas=${de150.length} POST · lecturas que no son /me=${noMe.length} · ` +
+    `escrituras totales=${sim.reg.escrituras.length}`;
+  document.documentElement.setAttribute('data-resumen', resumen);
+  console.log(`banco/calendario.html (ancho=${ANCHO}): ok · ${resumen}`);
+  listo();
+} catch (e) {
+  fallar(e);
+}
+
+/**
+ * Aprieta el botón de playlist y atraviesa los dos modales: el cartel que
+ * avisa de que Spotify la deja pública, y el del nombre.
+ *
+ * Los dos usan `#modal-confirm`, así que se distinguen por el input del
+ * nombre, que solo tiene el segundo.
+ */
+async function crearPlaylist(cuantos) {
+  const boton = $('[data-cal-playlist]');
+  afirmar(boton, 'hay botón de playlist');
+  afirmar(new RegExp(`${cuantos} temas`).test(boton.textContent),
+    `el botón anuncia ${cuantos} temas; decía «${boton.textContent}»`);
+  boton.click();
+
+  await esperarA(() => $('.modal-picker #modal-confirm'), { que: 'el cartel de confirmación' });
+  const aviso = $('.modal-picker .picker-scroll').textContent;
+  afirmar(/playlist nueva en tu cuenta de Spotify/.test(aviso),
+    'el cartel dice que se crea una playlist nueva en tu cuenta');
+  afirmar(/p[úu]blica/.test(aviso), 'y que Spotify la deja pública aunque se pida privada');
+  afirmar(new RegExp(`${cuantos}`).test(aviso), 'y cuántos temas va a llevar');
+  $('.modal-picker #modal-confirm').click();
+
+  await esperarA(() => $('#playlist-name-input'), { que: 'el modal del nombre' });
+  const input = $('#playlist-name-input');
+  afirmar(/^Lo que son[óo] el /.test(input.value), `el nombre por defecto; vino «${input.value}»`);
+  $('#modal-confirm').click();
+
+  await esperarA(() => !$('#playlist-name-input'), { que: 'que el modal del nombre se cierre' });
+  await esperarA(() => {
+    const b = $('[data-cal-playlist]');
+    return b && !b.disabled;
+  }, { que: 'que la creación termine y el botón se libere' });
+}
+</script>
+</body></html>
