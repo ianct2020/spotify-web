@@ -141,7 +141,14 @@ try {
   const mod = await import('/js/features/calendario.js');
   mod.__reiniciarParaTests();
   const main = $('#main-content');
-  await mod.render(main);
+  // ⚠️ `anclar`, y NO un `await` pelado (v=291, tanda 40). `render()` espera a IndexedDB
+  // (`loadHistoryStats()` y `loadDays()`), y una lectura de IndexedDB NO detiene el reloj
+  // virtual de Chrome: mientras está pendiente no hay ningún timer ni ninguna petición de red,
+  // así que el reloj corre suelto. Medido el 11/10 con una sonda: UNA lectura sin anclar
+  // costó entre 221 y 54.940 ms virtuales (unos pocos ms de pared). Con este `await` pelado
+  // el banco gastaba entre 0,3 y más de 44 s del tope acá adentro, según la corrida, y por
+  // eso con 45 s pasaba 7 de 10 y hubo que subirlo a 450. Anclado, termina siempre en ~1,1 s.
+  await anclar(mod.render(main));
   await esperarA(() => $('.cal-anual .wr-ap-cal i[data-dia]'), { que: 'que la grilla se pinte' });
 
   const llamadasTrasAbrir = sim.reg.llamadas.length;
@@ -299,7 +306,7 @@ try {
   const { idbDel } = await import('/js/idb.js');
   await anclar(idbDel(`local_${UID}_history_days`));
   mod.__reiniciarParaTests();
-  await mod.render(main);
+  await anclar(mod.render(main));   // mismo motivo que arriba
   await esperarA(() => $('.cal-anual .wr-ap-cal i[data-dia]'), { que: 'que la grilla se repinte sin detalle' });
   const sinDet = $$('.cal-anual .wr-ap-cal i[data-dia]');
   // ⚠️ Un día CON minutos. El índice 10 de 2025 cae en un `i % 7 === 3`, o sea
@@ -334,7 +341,7 @@ try {
   const resumen = `abrir=${llamadasTrasAbrir} peticiones (${meTrasAbrir} × GET /me) · ` +
     `cambiar de año y abrir/cerrar un día=0 más · playlist 30 temas=${de30.length} POST · ` +
     `playlist 150 temas=${de150.length} POST · lecturas que no son /me=${noMe.length} · ` +
-    `escrituras totales=${sim.reg.escrituras.length}`;
+    `escrituras totales=${sim.reg.escrituras.length} · reloj virtual=${Math.round(performance.now())} ms`;
   document.documentElement.setAttribute('data-resumen', resumen);
   console.log(`banco/calendario.html (ancho=${ANCHO}): ok · ${resumen}`);
   listo();

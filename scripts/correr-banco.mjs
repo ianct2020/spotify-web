@@ -61,7 +61,14 @@ const EXTRA = { mosaico: 'auto=1' };
 // hereda su presupuesto. Medido a tasa de acierto, igual que los otros (ver abajo).
 // `calendario` (v=289) llegó SIN presupuesto y con el defecto de 45 s pasaba 7 de 10; medido a
 // tasa de acierto el 10/10 (tanda 39): 120 s → 11/12 · 300 s → 12/12 · 450 s → 16/16.
-const PRESUPUESTO = { 'calendario': 450000, 'ocultar-artista': 90000, 'ocultar-artista-disco': 450000, 'ocultar-artista-novedades': 900000 };
+// ⚠️ Eso NO era un arreglo, y la causa se encontró el 11/10 (tanda 40): el banco hacía
+// `await mod.render(main)` sin anclar, y `render()` espera a IndexedDB, que no detiene el reloj
+// virtual. UNA lectura de IndexedDB sin anclar costó entre 221 y 54.940 ms virtuales. Con el
+// `anclar()` puesto (ver el comentario en `tests/banco/calendario.html`), diez corridas seguidas
+// gastaron 751-1.073 ms de reloj virtual. El tope es el doble de la más lenta, redondeado
+// hacia arriba a múltiplo de 15 s: 15 s. Con 15 s y SIN el `anclar`, el banco falla 3+ de 10.
+// ⚠️ Si otro banco «necesita» un tope enorme, buscá primero un `await` de IndexedDB sin anclar.
+const PRESUPUESTO = { 'calendario': 15000, 'ocultar-artista': 90000, 'ocultar-artista-disco': 450000, 'ocultar-artista-novedades': 900000 };
 // `XQ="&peor=1"` agrega parámetros a la URL del banco sin tocar este archivo: sirve
 // para medir (p. ej. el ancho mínimo en que la barra de novedades sigue en una fila).
 
@@ -146,8 +153,11 @@ try {
   const estado = m ? m[1] : null;
   const mens = (dom.match(/<pre[^>]*>([^<]*)<\/pre>/) || [])[1] || '';
 
+  // El reloj virtual que gastó, si el banco lo deja dicho en su `data-resumen`: es el número
+  // contra el que se fija el PRESUPUESTO de arriba.
+  const reloj = (dom.match(/<html[^>]*\sdata-resumen="[^"]*reloj virtual=(\d+) ms/) || [])[1];
   if (estado === 'ok') {
-    console.log(`✓ banco/${BANCO}.html (ancho=${ANCHO}): ${mens || 'ok'}`);
+    console.log(`✓ banco/${BANCO}.html (ancho=${ANCHO}): ${mens || 'ok'}${reloj ? ` · reloj virtual ${reloj} ms` : ''}`);
     process.exit(0);
   }
   console.error(`✗ banco/${BANCO}.html (ancho=${ANCHO}): estado="${estado || 'ausente'}"`);
