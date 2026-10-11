@@ -45,19 +45,19 @@
 
 import {
   loadHistoryStats, loadDays, isOwner, ownerLockedMessage,
-} from './history-data.js?v=294';
-import { escapeHtml, pageHeader, showProgress, hideProgress, promptPlaylistName, confirmModal } from '../ui/components.js?v=294';
-import { showToast } from '../ui/toast.js?v=294';
-import { openModal, closeModal } from '../ui/modal-stack.js?v=294';
-import { openTrackCard } from './track-card.js?v=294';
-import { attachArtistCard } from './artist-card.js?v=294';
-import { calendarioAnual, aMs, isoDelDia, ultimoDiaDelTramo } from '../ui/calendario-anual.js?v=294';
-import { fmtDia } from '../util/fecha.js?v=294';
-import { animationsEnabled, armRevealAll, releaseReveal } from '../ui/reveal.js?v=294';
-import { vigilarRuta } from '../util/vigencia-ruta.js?v=294';
-import { prefKey, migratePrefKey } from '../storage.js?v=294';
-import { createPlaylist, addTracksToPlaylist, invalidatePlaylistsCache } from '../api.js?v=294';
-import { openImportHistory, importarSoloElDetalle } from './import-history.js?v=294';
+} from './history-data.js?v=295';
+import { escapeHtml, pageHeader, showProgress, hideProgress, promptPlaylistName, confirmModal } from '../ui/components.js?v=295';
+import { showToast } from '../ui/toast.js?v=295';
+import { openModal, closeModal } from '../ui/modal-stack.js?v=295';
+import { openTrackCard } from './track-card.js?v=295';
+import { attachArtistCard } from './artist-card.js?v=295';
+import { calendarioAnual, aMs, isoDelDia, ultimoDiaDelTramo } from '../ui/calendario-anual.js?v=295';
+import { fmtDia } from '../util/fecha.js?v=295';
+import { animationsEnabled, armRevealAll, releaseReveal } from '../ui/reveal.js?v=295';
+import { vigilarRuta } from '../util/vigencia-ruta.js?v=295';
+import { prefKey, migratePrefKey } from '../storage.js?v=295';
+import { createPlaylist, addTracksToPlaylist, invalidatePlaylistsCache } from '../api.js?v=295';
+import { openImportHistory, importarSoloElDetalle } from './import-history.js?v=295';
 
 const PREF_ANIO = 'fonoteca_calendario_anio_v1';
 

@@ -153,6 +153,10 @@ const OWNER_PREV_KEYS = {
   // pasa el `sanityCheck`, pero sus `years[].skip_pct` son los de la fórmula vieja
   // (34,7 en 2023, donde hay 74,9). Migrarlo pintaría el número que el bump viene a
   // reemplazar, sin fallar.
+  //
+  // ⚠️ Y SIGUE VACÍA EN v6 (v=295, 2026-10-11), otra vez por lo mismo: el v5 pasa el
+  // `sanityCheck`, pero su `skip_pct` todavía tiene la basura funcional en el divisor (64,1
+  // donde hay 64,2) y no trae `plays_junk`.
   stats: [],
   // Ninguna versión anterior sirve: v1/v2 no traen `albums`, v3 lo trae sin
   // plays ni ms (que es lo que necesita la ficha de álbum) y v4 sin el día de

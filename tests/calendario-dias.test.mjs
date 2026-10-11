@@ -234,9 +234,14 @@ const resultado = processStreamingHistory(fileArrays);
 {
   let saltos = 0, crudas = 0;
   for (const d of Object.values(resultado.days.dias)) { saltos += d.saltos; crudas += d.crudas; }
-  const pct = Math.round(saltos / Math.max(1, crudas) * 1000) / 10;
+  // v=295: las crudas de los días SIGUEN contando la basura funcional (son el «N saltadas de
+  // M» del panel del día, y `#calendario` no se tocó); lo que cambió es el divisor de
+  // `skip_pct`, que ahora les resta `plays_junk`. Así que los días se comparan como
+  // saltos / (crudas − plays_junk), con el `plays_junk` que trae `stats`.
+  igual(crudas, resultado.stats.totals.plays_raw, 'PUERTA 2: las crudas de los días dan `totals.plays_raw` (con la basura dentro)');
+  const pct = Math.round(saltos / Math.max(1, crudas - resultado.stats.totals.plays_junk) * 1000) / 10;
   igual(pct, resultado.stats.totals.skip_pct,
-    'PUERTA 2: la suma de saltos sobre la de crudas da `totals.skip_pct` EXACTO');
+    'PUERTA 2: la suma de saltos sobre (crudas − `totals.plays_junk`) da `totals.skip_pct` EXACTO');
 
   // Desde v=291 hay UNA sola definición de salto: `years[].skip_pct` es la misma
   // cuenta que `totals.skip_pct`, partida por año. Se afirma año por año contra
@@ -252,19 +257,24 @@ const resultado = processStreamingHistory(fileArrays);
     const b = porAnio.get(y.year) || { saltos: 0, crudas: 0 };
     igual(b.crudas, y.plays_raw, `PUERTA 2: ${y.year} · las crudas de sus días dan \`years[].plays_raw\``);
     igual(b.saltos, y.skips, `PUERTA 2: ${y.year} · los saltos de sus días dan \`years[].skips\``);
-    igual(Math.round(b.saltos / Math.max(1, b.crudas) * 1000) / 10, y.skip_pct,
-      `PUERTA 2: ${y.year} · saltos/crudas de sus días da \`years[].skip_pct\` EXACTO (una sola definición)`);
+    igual(Math.round(b.saltos / Math.max(1, b.crudas - y.plays_junk) * 1000) / 10, y.skip_pct,
+      `PUERTA 2: ${y.year} · saltos/(crudas − plays_junk) de sus días da \`years[].skip_pct\` EXACTO (una sola definición)`);
   }
   // Y que el fixture distingue de verdad la definición nueva de la vieja. 2025,
   // contado a mano: 8 crudas (B, A, B, la corta de C, el `fwdbtn` corto, el
   // `fwdbtn` largo, el `skipped` y la basura; el podcast no tiene uri y la
   // duplicada del archivo 2 no cuenta) y 2 saltos (el `fwdbtn` corto y el
-  // `skipped`; el `fwdbtn` LARGO no es salto). 2 de 8 = 25,0. La fórmula de hasta
-  // v=290 daba 2 / (5 + 2) = 28,6: si esto vuelve a 28,6, volvió la fórmula vieja.
+  // `skipped`; el `fwdbtn` LARGO no es salto). v=295: la basura sale del divisor, así que
+  // son 2 de (8 − 1) = 2 de 7 = 28,6. Hasta v=294 eran 2 de 8 = 25,0.
+  // ⚠️ Ese 28,6 COINCIDE por casualidad con lo que daba la fórmula de hasta v=290
+  // (2 / (5 + 2)): acá este fixture ya no distingue la fórmula vieja de la nueva. Lo que la
+  // distingue son `plays_raw`, `skips` y `plays_junk` de abajo (la vieja no los emitía) y las
+  // diez reproducciones de `tests/skip-por-anio.test.mjs` (60,0 contra el 40,0 de la vieja).
   const a2025 = resultado.stats.years.find(y => y.year === 2025);
-  igual(a2025.plays_raw, 8, 'PUERTA 2: 2025 tiene 8 crudas (la basura cuenta en el divisor; el podcast y la duplicada, no)');
+  igual(a2025.plays_raw, 8, 'PUERTA 2: 2025 tiene 8 crudas (la basura sigue siendo una cruda; el podcast y la duplicada, no)');
+  igual(a2025.plays_junk, 1, 'PUERTA 2: 2025 tiene 1 de basura, contada aparte');
   igual(a2025.skips, 2, 'PUERTA 2: 2025 tiene 2 saltos (el fwdbtn corto y el skipped), no 3');
-  igual(a2025.skip_pct, 25, 'PUERTA 2: 2025 · 2 de 8 = 25,0 (y no el 28,6 de la fórmula vieja)');
+  igual(a2025.skip_pct, 28.6, 'PUERTA 2: 2025 · 2 de (8 − 1) = 28,6 (hasta v=294, con la basura en el divisor, 25,0)');
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -313,8 +323,12 @@ const resultado = processStreamingHistory(fileArrays);
     for (const d of Object.values(days.dias)) { crudas += d.crudas; validas += d.validas; saltos += d.saltos; }
     igual(crudas, stats.totals.plays_raw, 'PUERTA 2 (real): las crudas dan `totals.plays_raw`');
     igual(validas, stats.totals.plays_valid, 'PUERTA 2 (real): las válidas dan `totals.plays_valid` (104.147)');
-    igual(Math.round(saltos / Math.max(1, crudas) * 1000) / 10, stats.totals.skip_pct,
-      'PUERTA 2 (real): los saltos dan `totals.skip_pct` (64,1)');
+    // v=295: las crudas de los días siguen dando `plays_raw` (arriba, sin tocar); el
+    // porcentaje se compara sobre crudas − `plays_junk`, con el `plays_junk` del JSON.
+    igual(Math.round(saltos / Math.max(1, crudas - stats.totals.plays_junk) * 1000) / 10, stats.totals.skip_pct,
+      'PUERTA 2 (real): los saltos, sobre crudas − `totals.plays_junk`, dan `totals.skip_pct` (64,2)');
+    af(Math.round(saltos / Math.max(1, crudas) * 1000) / 10 !== stats.totals.skip_pct,
+      'PUERTA 2 (real): y sobre las crudas enteras NO lo dan (64,1): la puerta distingue los dos divisores');
     // Y año por año, contra el JSON que horneó el Python (v=291: una sola definición).
     const realPorAnio = new Map();
     for (const [dia, d] of Object.entries(days.dias)) {
@@ -325,9 +339,9 @@ const resultado = processStreamingHistory(fileArrays);
     for (const y of stats.years) {
       const b = realPorAnio.get(y.year) || { saltos: 0, crudas: 0 };
       af(b.crudas === y.plays_raw && b.saltos === y.skips &&
-         Math.round(b.saltos / Math.max(1, b.crudas) * 1000) / 10 === y.skip_pct,
-        `PUERTA 2 (real): ${y.year} · los días dan ${b.saltos}/${b.crudas} y el JSON del Python dice ` +
-        `${y.skips}/${y.plays_raw} = ${y.skip_pct}`);
+         Math.round(b.saltos / Math.max(1, b.crudas - y.plays_junk) * 1000) / 10 === y.skip_pct,
+        `PUERTA 2 (real): ${y.year} · los días dan ${b.saltos}/(${b.crudas} − ${y.plays_junk}) y el JSON del Python dice ` +
+        `${y.skips}/(${y.plays_raw} − ${y.plays_junk}) = ${y.skip_pct}`);
     }
     igual(Object.values(days.dias).filter(d => d.min > 0).length, stats.totals.days_active,
       'PUERTA 1 (real): los días con minutos dan `totals.days_active` (1.856)');

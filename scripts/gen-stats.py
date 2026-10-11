@@ -83,7 +83,7 @@ COMPLETE_CLOSES = {
 # (a94e43a) subió solo los del JS, para forzar el refetch de las tapas nuevas.
 # Ningún código de `src/js` lee el `version` de stats ni el de listened (el
 # único lector de `.version` es el de skips, en `history-data.js`).
-STATS_VERSION = 4            # v4: years[].skip_pct pasa a la definición de totals.skip_pct, y years[] gana plays_raw y skips (v=291). v3: years[].days
+STATS_VERSION = 5            # v5: la basura funcional sale también del DIVISOR de skip_pct (por año y en el total), y years[] y totals ganan plays_junk (v=295). v4: years[].skip_pct pasa a la definición de totals.skip_pct, y years[] gana plays_raw y skips (v=291). v3: years[].days
 TRACK_PLAYS_VERSION = 5      # v5: cada entrada de `albums` lleva además el DÍA de la primera play válida (ficha de álbum: «primera vez»). v4: cada entrada de `albums` lleva plays y ms además de name/artist (la ficha de álbum decía "0 plays"). v3: agregó `albums`. v2: incluía entries "partial" para tracks solo con plays <30s
 SKIP_STATS_VERSION = 4      # v4: igual que v3, pero el `gid` se recalculó con la cola de versión tras el guion (v=271)
 LISTENED_VERSION = 2         # bump: excluye "Sonido Para Sacar Agua Del Movil"
@@ -409,6 +409,13 @@ def build_stats(plays, img_idx):
     # crearía un año con solo reproducciones cortas.
     year_raw = Counter()      # año -> reproducciones crudas (el mismo criterio que total_plays)
     year_skips = Counter()    # año -> saltos (el mismo sitio y la misma condición que total_skipped)
+    # v=295: la basura funcional, contada en el MISMO sitio en que se saltea. Hasta v=294 esas
+    # reproducciones sumaban en el divisor de `skip_pct` (van dentro de `total_plays` y de
+    # `year_raw`) y nunca en el numerador (los saltos se cuentan después del `continue`).
+    # `plays_raw` NO cambia —sigue siendo «las crudas», que se muestran en pantalla y que suman
+    # los días de `#calendario`—: lo que cambia es que el divisor les resta estas.
+    total_junk = 0
+    year_junk = Counter()     # año -> reproducciones de basura funcional
     active_days_all = set()
 
     # global sums
@@ -510,11 +517,14 @@ def build_stats(plays, img_idx):
         end_reason = r.get("reason_end") or ""
 
         # Las crudas del año se cuentan ANTES del filtro de basura, igual que
-        # `total_plays = len(plays)`: el divisor del año y el del total son la misma cuenta.
+        # `total_plays = len(plays)`: son «las crudas» que se muestran, no el divisor.
         year_raw[dt.year] += 1
 
-        # Filtrar basura (sonidos funcionales que inflan tops sin ser música)
+        # Filtrar basura (sonidos funcionales que inflan tops sin ser música).
+        # v=295: se CUENTA acá mismo, para sacarla también del divisor de `skip_pct`.
         if is_junk_track(track, artist):
+            total_junk += 1
+            year_junk[dt.year] += 1
             continue
 
         # skip% cuenta contra el total de plays
@@ -804,7 +814,7 @@ def build_stats(plays, img_idx):
             "plays": yb["plays"],
             "days_active": len(yb["active_days"]),
             "longest_streak": year_streak,
-            "skip_pct": round(year_skips[y]/max(1, year_raw[y]) * 100, 1),
+            "skip_pct": round(year_skips[y]/max(1, year_raw[y] - year_junk[y]) * 100, 1),
             "first_play": yb["first_play"],
             "last_play": yb["last_play"],
             "peak_day": peak_day,
@@ -827,6 +837,8 @@ def build_stats(plays, img_idx):
             # años da el total sin rehacer la cuenta desde el export.
             "plays_raw": year_raw[y],
             "skips": year_skips[y],
+            # v5, al FINAL (append): lo que el divisor de `skip_pct` le resta a `plays_raw`.
+            "plays_junk": year_junk[y],
         })
 
     stats = {
@@ -841,7 +853,9 @@ def build_stats(plays, img_idx):
             "unique_artists": len([a for a in artist_ms if artist_ms[a] > 0]),
             "unique_albums": len(album_ms),
             "unique_tracks": len(track_ms),
-            "skip_pct": round(total_skipped/max(1, total_plays)*100, 1),
+            "skip_pct": round(total_skipped/max(1, total_plays - total_junk)*100, 1),
+            # v5, al FINAL (append): Σ de `years[].plays_junk`.
+            "plays_junk": total_junk,
         },
         "years": year_out,
         "monthly": [

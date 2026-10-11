@@ -8,10 +8,10 @@
 // Otro user cualquiera sin historial local ve el ownerLockedMessage que
 // invita a subir su ZIP.
 
-import { idbGetCached, idbSetCached, idbDel } from '../idb.js?v=294';
-import { getCurrentUserId } from '../api.js?v=294';
-import { OWNER_KEYS, STATS_VERSION, PLAYS_VERSION, LISTENED_VERSION, SKIP_VERSION, DETAIL_VERSION, RECORDS_VERSION, ARTIST_TRACKS_VERSION } from '../history-keys.js?v=294';
-import { mostrarBannerDegradadoVista } from '../ui/degraded-banner.js?v=294';
+import { idbGetCached, idbSetCached, idbDel } from '../idb.js?v=295';
+import { getCurrentUserId } from '../api.js?v=295';
+import { OWNER_KEYS, STATS_VERSION, PLAYS_VERSION, LISTENED_VERSION, SKIP_VERSION, DETAIL_VERSION, RECORDS_VERSION, ARTIST_TRACKS_VERSION } from '../history-keys.js?v=295';
+import { mostrarBannerDegradadoVista } from '../ui/degraded-banner.js?v=295';
 
 const HISTORY_OWNER_ID = 'orhs6wu5ykk7ql80u92ujn74o';
 
@@ -153,6 +153,10 @@ const OWNER_PREV_KEYS = {
   // pasa el `sanityCheck`, pero sus `years[].skip_pct` son los de la fórmula vieja
   // (34,7 en 2023, donde hay 74,9). Migrarlo pintaría el número que el bump viene a
   // reemplazar, sin fallar.
+  //
+  // ⚠️ Y SIGUE VACÍA EN v6 (v=295, 2026-10-11), otra vez por lo mismo: el v5 pasa el
+  // `sanityCheck`, pero su `skip_pct` todavía tiene la basura funcional en el divisor (64,1
+  // donde hay 64,2) y no trae `plays_junk`.
   stats: [],
   // Ninguna versión anterior sirve: v1/v2 no traen `albums`, v3 lo trae sin
   // plays ni ms (que es lo que necesita la ficha de álbum) y v4 sin el día de

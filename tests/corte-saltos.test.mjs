@@ -81,8 +81,36 @@ const conCampo = stats.years.filter(y => !anioSinCampoSkipped(y.year));
 const sinCampo = stats.years.filter(y => anioSinCampoSkipped(y.year));
 {
   igual(conCampo.map(y => y.year).join(','), '2023,2024,2025,2026', 'los años con el campo');
+  // v=295 (tanda 43): el rehorneado sacó la basura funcional del divisor de `skip_pct` y movió
+  // el porcentaje del total y el de tres de estos cuatro años. La referencia (v=291) trae los
+  // de antes y NO SE REGENERA: lo que se afirma es que el objeto de hoy es IDÉNTICO a la
+  // referencia después de reemplazar en ella EXACTAMENTE estos porcentajes, y nada más.
+  // Hasta v=294 este assert era `JSON.stringify(paso(y)) === referencia[y.year]` a secas.
+  //
+  //            viejo (v=291-v=294)   nuevo (v=295)
+  const MOVIDOS = {
+    total: ['64,1%', '64,2%'],
+    2023: null,                       // 74,9: la basura de 2023 son 2 de 34.315, no lo mueve
+    2024: ['71,8%', '71,9%'],
+    2025: ['66,7%', '66,8%'],
+    2026: ['58,4%', '58,5%'],
+  };
+  const reemplazarTodo = (s, [de, a]) => s.split(de).join(a);
+  const RAMA = (f) => /igual que siempre/.test(f) ? 'igual' : /aguantas más/.test(f) ? 'menos' : /más que de costumbre/.test(f) ? 'más' : '?';
+  igual(Object.keys(MOVIDOS).join(','), '2023,2024,2025,2026,total', 'la tabla viejo→nuevo cubre el total y los cuatro años con el campo');
+  igual(stats.totals.skip_pct.toFixed(1).replace('.', ',') + '%', MOVIDOS.total[1], 'el «nuevo» del total es el del JSON de hoy');
   for (const y of conCampo) {
-    ok(JSON.stringify(paso(y)) === referencia[y.year], `${y.year}: JSON.stringify idéntico al de la referencia`);
+    const m = MOVIDOS[y.year];
+    igual(y.skip_pct.toFixed(1).replace('.', ',') + '%', m ? m[1] : '74,9%', `${y.year}: el «nuevo» de la tabla es el porcentaje del JSON de hoy`);
+    let esperado = referencia[y.year];
+    ok(esperado.includes(MOVIDOS.total[0]), `${y.year}: la referencia trae el ${MOVIDOS.total[0]} del total`);
+    esperado = reemplazarTodo(esperado, MOVIDOS.total);
+    if (m) {
+      ok(esperado.includes(m[0]), `${y.year}: la referencia trae su ${m[0]}`);
+      esperado = reemplazarTodo(esperado, m);
+    }
+    ok(JSON.stringify(paso(y)) === esperado, `${y.year}: JSON.stringify idéntico al de la referencia con sus porcentajes movidos (y nada más)`);
+    igual(RAMA(paso(y).cuerpo), RAMA(JSON.parse(referencia[y.year]).cuerpo), `${y.year}: la rama de la comparación es la misma de la referencia`);
   }
   // Que la comparación de arriba mire algo: las tres ramas viejas siguen vivas ahí.
   const ramas = new Set(conCampo.map(y => {
@@ -98,7 +126,7 @@ console.log('\n3. 2018-2022: sin comparación de saltos');
 {
   igual(sinCampo.map(y => y.year).join(','), '2018,2019,2020,2021,2022', 'los años sin el campo');
   const pctTotal = stats.totals.skip_pct.toFixed(1).replace('.', ',');
-  igual(pctTotal, '64,1', 'el porcentaje del total, formateado como lo pinta la apertura');
+  igual(pctTotal, '64,2', 'el porcentaje del total, formateado como lo pinta la apertura');
   // El mes que nombra el copy de 2022 sale de la constante, no de la memoria.
   igual(MESES_LARGOS[Number(PRIMER_SKIPPED_TRUE.slice(5, 7)) - 1], 'octubre', 'el mes del corte');
   ok(Number(PRIMER_SKIPPED_TRUE.slice(8, 10)) >= 11 && Number(PRIMER_SKIPPED_TRUE.slice(8, 10)) <= 20, 'y el día cae «a mediados»');

@@ -2080,10 +2080,11 @@ r.skipped === true   ||   (r.reason_end === 'fwdbtn' && ms_played < 30 s)
 ```
 
 contado sobre las reproducciones **crudas** (todas las deduplicadas con uri), **antes** del
-corte de 30 s. Es la cuenta de `totals.skip_pct` (64,1), la de `days[].saltos` del
-`#calendario` y, **desde v=291, también la de `years[].skip_pct`**:
-`round(skips / max(1, plays_raw) * 100, 1)` con los dos contadores del año, que `years[]`
-lleva al final (`plays_raw`, `skips`). Σ de los años = el total, exacto, y la suma de los
+corte de 30 s. Es la cuenta de `totals.skip_pct` (64,1 hasta v=294; **64,2 desde v=295**, ver
+más abajo), la de `days[].saltos` del `#calendario` y, **desde v=291, también la de
+`years[].skip_pct`**: `round(skips / max(1, plays_raw) * 100, 1)` con los dos contadores del año,
+que `years[]` lleva al final (`plays_raw`, `skips`) —desde v=295 el divisor es
+`plays_raw − plays_junk`—. Σ de los años = el total, exacto, y la suma de los
 días de cada año da el porcentaje de ese año, exacto, los nueve.
 
 **Lo que había hasta v=290**: `years[].skip_pct` era `yb.skipped / (yb.plays + yb.skipped)`,
@@ -2098,10 +2099,38 @@ el paso «dentro de todo» del Wrapped decía en los nueve años «este año agu
 (`yearRaw` / `yearSkips`). Paridad medida el 11/10 sobre el export real: los nueve años
 idénticos en `skip_pct`, `plays_raw` y `skips`.
 
-⚠️ **El divisor cuenta la basura y el numerador no** (`total_plays = len(plays)` va antes de
-`is_junk_track`; los saltos, después). Es así también en el total y **no se tocó**: son 227
-reproducciones de 212.491 y, si el divisor las excluyera, el 64,1 pasaría a **64,2** (64,086 →
-64,154). Lo decide el planificador.
+🟩 **Desde v=295 numerador y divisor filtran lo mismo** (tanda 43). Hasta v=294 **el divisor
+contaba la basura funcional y el numerador no**: `total_plays = len(plays)` y `year_raw` cuentan
+antes de `is_junk_track` y los saltos después, así que esas reproducciones (sonidos que no son
+música) sumaban abajo y nunca arriba. Eran 227 de 212.491 (0 · 0 · 0 · 19 · 5 · 2 · 74 · 49 · 78
+de 2018 a 2026; 31 de ellas saltadas) y v=291 lo dejó anotado sin tocarlo porque era del
+planificador. Ahora:
+
+```
+years[].skip_pct = round(skips / max(1, plays_raw − plays_junk) × 100, 1)
+totals.skip_pct  = round(total_skipped / max(1, total_plays − total_junk) × 100, 1)
+```
+
+- `plays_junk` es un contador nuevo, por año y en `totals`, que sube **en el mismo sitio en que
+  la basura se saltea** (dentro del `if is_junk_track(…)` / `if (isJunkTrack(…))`, justo antes
+  del `continue`) y en ningún otro. Va **al final** (append) de cada `years[]` (detrás de
+  `skips`) y de `totals`. Σ de los años = el total (227).
+- ⚠️ **`plays_raw` NO cambió**: sigue siendo «las crudas» (212.491), que es lo que se enseña en
+  pantalla («de 212.491 crudas») y lo que suman las crudas por día de `#calendario`. **El
+  calendario no se tocó**: su «N saltadas de M» sigue contando la basura en M, y por eso los
+  tests que comparan los días contra el JSON lo hacen como `saltos / (crudas − plays_junk)`.
+- Lo que se movió: el total **64,1 → 64,2** (64,086 → 64,154) y **cinco años**: 2021
+  27,2 → 27,3 · 2022 60,0 → 60,1 · 2024 71,8 → 71,9 · 2025 66,7 → 66,8 · 2026 58,4 → 58,5.
+  2018, 2019, 2020 (sin basura) y 2023 (2 de 34.315) se quedan. Ninguna rama del paso «dentro
+  de todo» cambió.
+- Versiones, las tres a la vez: `STATS_VERSION` 4 → **5** en `gen-stats.py` y en
+  `history-processor.js`, 5 → **6** en `history-keys.js`; `OWNER_PREV_KEYS.stats` sigue vacía.
+- Rehorneado con la copia y `verificar-rehorneado.py` (18 rutas distintas, las 18 esperadas; los
+  otros seis JSON, idénticos). Paridad Python/JS sobre el export real: los nueve años y el total
+  idénticos en `skip_pct`, `plays_raw`, `skips` y `plays_junk`.
+- ⚠️ La referencia `tests/fixtures/dentro-de-todo-v291.json` trae los porcentajes de antes y **no
+  se regeneró**: `tests/corte-saltos.test.mjs` compara contra ella después de reemplazar
+  exactamente los porcentajes movidos, con la tabla viejo→nuevo escrita en el test.
 
 🔴 **Los años anteriores al 15/10/2022 salen bajos por el INSTRUMENTO.** El export trae
 `skipped: false` (no vacío) en todas las reproducciones anteriores a esa fecha —el primer
@@ -2126,8 +2155,9 @@ que se mira— y solo cuando N ≠ M. El umbral de 3 puntos no se tocó.
 (sale con código ≠ 0; probado en rojo contra un horneado de ceros). `gen-stats.py` sin el
 export sigue imprimiendo «OK» y escribiendo ceros.
 
-Guardas: `tests/skip-por-anio.test.mjs` (103) y `tests/calendario-dias.test.mjs` (73), que
-hasta v=290 afirmaba **las dos** fórmulas y ahora afirma que coinciden.
+Guardas: `tests/skip-por-anio.test.mjs` (103; 135 desde v=295) y
+`tests/calendario-dias.test.mjs` (73; 76 desde v=295), que hasta v=290 afirmaba **las dos**
+fórmulas y ahora afirma que coinciden.
 
 ### La importación «solo el detalle» (para el owner)
 

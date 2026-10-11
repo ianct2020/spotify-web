@@ -35,7 +35,9 @@ const COMPLETE_CLOSES = new Set([
 // único lector es el de skips. Desde v=291 este STATS_VERSION va PAREJO con el de
 // `gen-stats.py` (4: `years[].skip_pct` con la definición de `totals`, más `plays_raw`
 // y `skips` por año). Estuvo en 2 hasta v=290, con la salida ya en formato v3.
-const STATS_VERSION = 4;
+// v5 (v=295): la basura funcional sale también del DIVISOR de `skip_pct`, y `years[]` y
+// `totals` ganan `plays_junk`. Sigue parejo con `gen-stats.py`.
+const STATS_VERSION = 5;
 const TRACK_PLAYS_VERSION = 5;   // v5: cada álbum de `albums` lleva además el día de la primera play válida (espejo de gen-stats.py)
 const SKIP_STATS_VERSION = 4;    // v4: dato crudo (ms de cada skip/cierre) + gid; el veredicto pasó a features/skips.js. El bump a v4 es por el `gid`: la cola de versión tras el guion («- Sped Up», «- Piano»…) reagrupa en v=271. ⚠️ Tiene que ir a la par del guarda `>= N` de features/history-data.js: si se queda atrás, el BYOH recién importado se RECHAZA
 const LISTENED_VERSION = 2;
@@ -333,6 +335,11 @@ function processStreamingHistory(fileArrays, { onProgress } = {}) {
   // aparte y no en el cubo del año, que nace con la primera play válida.
   const yearRaw = new Map();     // año -> reproducciones crudas (el criterio de totalPlays)
   const yearSkips = new Map();   // año -> saltos (el sitio y la condición de totalSkipped)
+  // v=295 — espejo de `total_junk` / `year_junk` de `gen-stats.py`: la basura funcional,
+  // contada en el MISMO sitio en que se saltea, para restarla del divisor de `skip_pct`.
+  // `plays_raw` no cambia: sigue siendo «las crudas».
+  let totalJunk = 0;
+  const yearJunk = new Map();    // año -> reproducciones de basura funcional
   const activeDaysAll = new Set();
 
   const artistMs = new Map();
@@ -424,8 +431,13 @@ function processStreamingHistory(fileArrays, { onProgress } = {}) {
     // Las crudas del año, ANTES del filtro de basura: igual que `totalPlays`.
     yearRaw.set(parsed.year, (yearRaw.get(parsed.year) || 0) + 1);
 
-    // Basura funcional (sonidos saca-agua, lluvia para dormir, 432 Hz…)
-    if (isJunkTrack(track, artist)) continue;
+    // Basura funcional (sonidos saca-agua, lluvia para dormir, 432 Hz…).
+    // v=295: se CUENTA acá mismo, para sacarla también del divisor de `skip_pct`.
+    if (isJunkTrack(track, artist)) {
+      totalJunk++;
+      yearJunk.set(parsed.year, (yearJunk.get(parsed.year) || 0) + 1);
+      continue;
+    }
 
     // skip% (contra el total, sin filtro de ms)
     const isSkip = skipped || (endReason === 'fwdbtn' && ms < MIN_MS);
@@ -696,7 +708,7 @@ function processStreamingHistory(fileArrays, { onProgress } = {}) {
       plays: yb.plays,
       days_active: yb.activeDays.size,
       longest_streak: yearStreak,
-      skip_pct: round1((yearSkips.get(y) || 0) / Math.max(1, yearRaw.get(y) || 0) * 100),
+      skip_pct: round1((yearSkips.get(y) || 0) / Math.max(1, (yearRaw.get(y) || 0) - (yearJunk.get(y) || 0)) * 100),
       first_play: yb.firstPlay,
       last_play: yb.lastPlay,
       peak_day: peakDay,
@@ -709,6 +721,8 @@ function processStreamingHistory(fileArrays, { onProgress } = {}) {
       // v4, al FINAL (append): espejo de `gen-stats.py`.
       plays_raw: yearRaw.get(y) || 0,
       skips: yearSkips.get(y) || 0,
+      // v5, al FINAL (append): lo que el divisor de `skip_pct` le resta a `plays_raw`.
+      plays_junk: yearJunk.get(y) || 0,
     });
   }
 
@@ -728,9 +742,11 @@ function processStreamingHistory(fileArrays, { onProgress } = {}) {
       unique_artists: [...artistMs.entries()].filter(([, m]) => m > 0).length,
       unique_albums: albumMs.size,
       unique_tracks: trackMs.size,
-      skip_pct: round1(totalSkipped / Math.max(1, totalPlays) * 100),
+      skip_pct: round1(totalSkipped / Math.max(1, totalPlays - totalJunk) * 100),
       first_play: totalsFirstPlay,
       last_play: totalsLastPlay,
+      // v5, al FINAL (append): Σ de `years[].plays_junk`.
+      plays_junk: totalJunk,
     },
     years: yearOut,
     monthly: [...monthlyMs.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([m, ms]) => ({ m, min: round1(ms / 60000) })),
