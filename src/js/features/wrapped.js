@@ -310,9 +310,11 @@ function renderYearCard() {
   // v=293: el año del corte lleva la suya. Desde mediados de octubre Spotify ya anotaba los
   // saltos, así que su número junta las dos formas de contar y «solo «siguiente»» ahí era falso.
   // La pista no da ninguna cifra de «cuánto habría sido»: el número del tile es el que es.
-  // ⚠️ El largo está medido: entra en UN renglón a 1.366 px (214,8 de 220 px; con dos, la fila
-  // del tile crece 8 px) y en dos a 390 px. Si la cambiás, volvé a medirla en los dos anchos.
-  const pistaSkips = esElAnioDelCorte(y.year) ? 'dos cuentas: Spotify anota desde oct.'
+  // v=294: decía «dos cuentas: Spotify anota desde oct.», y «dos cuentas» se leía como dos cuentas
+  // DE SPOTIFY (dos usuarios), no como dos formas de contar los saltos.
+  // ⚠️ El largo está medido: entra en UN renglón a 1.366 px (con dos, la fila del tile crece
+  // 8 px) y en dos a 390 px. Si la cambiás, volvé a medirla en los dos anchos.
+  const pistaSkips = esElAnioDelCorte(y.year) ? 'mezcla dos formas de contar'
     : anioSinCampoSkipped(y.year) ? 'solo «siguiente» antes de 30 s' : 'por skip o &lt;30s';
 
   const topArtist = y.top_artists?.[0];

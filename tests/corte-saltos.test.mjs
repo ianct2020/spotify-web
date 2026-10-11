@@ -174,7 +174,10 @@ console.log('\n4. Ninguna de las dos vistas escribe el año a mano');
   ok(!p22.includes('43'), '2022: la pista no trae el 43 (ni ninguna estimación de «cuánto habría sido»)');
   ok(!p22.includes('%'), '2022: la pista no trae ningún porcentaje');
   ok(!/\d/.test(p22), '2022: la pista no trae ningún número');
-  ok(/Spotify/.test(p22) && /oct/.test(p22), '2022: nombra a Spotify y a octubre, que es cuando empezó a anotar los saltos');
+  // v=294 (tanda 43): este assert afirmaba que la pista «nombra a Spotify y a octubre». La pista
+  // era «dos cuentas: Spotify anota desde oct.», y «dos cuentas» se leía como dos usuarios.
+  ok(p22.includes('mezcla dos formas de contar'), '2022: dice que el año mezcla dos formas de contar');
+  ok(!/cuentas/.test(p22), '2022: y no dice «cuentas», que se leía como dos cuentas de Spotify');
   ok(/\besElAnioDelCorte\(y\.year\)/.test(m ? m[1] : ''), 'wrapped.js: el año del corte sale de `esElAnioDelCorte(y.year)`, no de un año escrito a mano');
   ok(/<div class="wrapped-tile-label">Skips<\/div>\s*<div class="wrapped-tile-value">\$\{skipPctAnio\}%<\/div>\s*<div class="wrapped-tile-hint">\$\{pistaSkips\}<\/div>/.test(wrapped),
      'wrapped.js: el tile «Skips» pinta el mismo número de siempre y esa pista');

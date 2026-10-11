@@ -1,4 +1,4 @@
-import { prefKey, migratePrefKey } from '../storage.js?v=293';
+import { prefKey, migratePrefKey } from '../storage.js?v=294';
 
 const LASTFM_KEY_STORAGE = 'lastfm_api_key';
 const LASTFM_USER_STORAGE = 'lastfm_username';
