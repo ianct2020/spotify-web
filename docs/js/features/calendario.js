@@ -45,19 +45,19 @@
 
 import {
   loadHistoryStats, loadDays, isOwner, ownerLockedMessage,
-} from './history-data.js?v=289';
-import { escapeHtml, pageHeader, showProgress, hideProgress, promptPlaylistName, confirmModal } from '../ui/components.js?v=289';
-import { showToast } from '../ui/toast.js?v=289';
-import { openModal, closeModal } from '../ui/modal-stack.js?v=289';
-import { openTrackCard } from './track-card.js?v=289';
-import { attachArtistCard } from './artist-card.js?v=289';
-import { calendarioAnual, aMs, isoDelDia, ultimoDiaDelTramo } from '../ui/calendario-anual.js?v=289';
-import { fmtDia } from '../util/fecha.js?v=289';
-import { animationsEnabled, armRevealAll, releaseReveal } from '../ui/reveal.js?v=289';
-import { vigilarRuta } from '../util/vigencia-ruta.js?v=289';
-import { prefKey, migratePrefKey } from '../storage.js?v=289';
-import { createPlaylist, addTracksToPlaylist, invalidatePlaylistsCache } from '../api.js?v=289';
-import { openImportHistory, importarSoloElDetalle } from './import-history.js?v=289';
+} from './history-data.js?v=290';
+import { escapeHtml, pageHeader, showProgress, hideProgress, promptPlaylistName, confirmModal } from '../ui/components.js?v=290';
+import { showToast } from '../ui/toast.js?v=290';
+import { openModal, closeModal } from '../ui/modal-stack.js?v=290';
+import { openTrackCard } from './track-card.js?v=290';
+import { attachArtistCard } from './artist-card.js?v=290';
+import { calendarioAnual, aMs, isoDelDia, ultimoDiaDelTramo } from '../ui/calendario-anual.js?v=290';
+import { fmtDia } from '../util/fecha.js?v=290';
+import { animationsEnabled, armRevealAll, releaseReveal } from '../ui/reveal.js?v=290';
+import { vigilarRuta } from '../util/vigencia-ruta.js?v=290';
+import { prefKey, migratePrefKey } from '../storage.js?v=290';
+import { createPlaylist, addTracksToPlaylist, invalidatePlaylistsCache } from '../api.js?v=290';
+import { openImportHistory, importarSoloElDetalle } from './import-history.js?v=290';
 
 const PREF_ANIO = 'fonoteca_calendario_anio_v1';
 
@@ -358,8 +358,8 @@ function abrirDia(i, ruta) {
         ? 'Ese día no sonó nada.'
         : `${fmtMinutes(d.minutos)} de música.`}</div>`
     : `<div class="cal-panel-sub">
-         ${fmtMinutes(d.detalle.min)} · ${num(d.detalle.validas)} reproducciones válidas ·
-         <span title="Un salto es una reproducción marcada como saltada, o un «siguiente» antes de los 30 segundos">${num(d.detalle.saltos)} saltadas de ${num(d.detalle.crudas)}</span>
+         ${fmtMinutes(d.detalle.min)} ·
+         <span title="Una reproducción puede durar más de 30 s y haber sido saltada, así que las dos cifras se solapan.">${num(d.detalle.crudas)} reproducciones · ${num(d.detalle.validas)} de más de 30 s · <span title="Un salto es una reproducción marcada como saltada, o un «siguiente» antes de los 30 segundos">${num(d.detalle.saltos)} saltadas</span></span>
        </div>`;
 
   const temasConVeces = sinDetalle ? [] : d.temas.filter(t => t.veces > 0 && t.id);

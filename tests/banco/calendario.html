@@ -211,8 +211,15 @@ try {
   const panel = $('.cal-panel');
   afirmar(/3 mar 2025/.test($('.cal-panel-t').textContent), 'el título del panel es la fecha con `fmtDia`');
   const sub = $('.cal-panel-sub').textContent;
-  afirmar(/150 reproducciones válidas/.test(sub), `el panel dice las reproducciones válidas; decía «${sub.trim()}»`);
-  afirmar(/50 saltadas de 300/.test(sub), `y «N saltadas de M»; decía «${sub.trim()}»`);
+  // v=290: el TOTAL primero y las otras dos cifras como partes de ese total. Hasta v=289 decía
+  // «150 reproducciones válidas · 50 saltadas de 300», que se lee como un error porque 150 + 50 no
+  // da 300 — y no lo es: una reproducción puede durar más de 30 s Y haber sido saltada.
+  // Los NÚMEROS no cambiaron (150 / 50 / 300): solo el texto.
+  afirmar(/300 reproducciones · 150 de más de 30 s · 50 saltadas/.test(sub.replace(/\s+/g, ' ')),
+    `el panel dice «total · de más de 30 s · saltadas», en ese orden; decía «${sub.trim()}»`);
+  const lineaCifras = [...$$('.cal-panel-sub [title]')].find(e => /300 reproducciones/.test(e.textContent));
+  afirmar(lineaCifras && lineaCifras.title === 'Una reproducción puede durar más de 30 s y haber sido saltada, así que las dos cifras se solapan.',
+    `la línea de las cifras lleva el title que explica el solape; el title era «${lineaCifras?.title}»`);
   // Artistas del día por minutos, de mayor a menor.
   const art = $$('.cal-lista-art .cal-fila');
   afirmar(art.length === 4, `cuatro artistas distintos ese día, vinieron ${art.length}`);
