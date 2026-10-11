@@ -298,6 +298,11 @@ function renderYearCard() {
   const y = stats.years.find(yy => yy.year === selectedYear);
   if (!y) { holder.innerHTML = ''; return; }
 
+  // v=291: con COMA, como el tile del Dashboard (`dashboard.js`, v=288) y con el locale
+  // EXPLÍCITO. Era el `skip_pct` del año interpolado tal cual: el crudo del JSON, con el punto del inglés, en la misma
+  // vista en la que la apertura dice «64,1%».
+  const skipPctAnio = Number(y.skip_pct || 0).toLocaleString('es-ES', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+
   const topArtist = y.top_artists?.[0];
   const topAlbum = y.top_albums?.[0];
   const topTrack = y.top_tracks?.[0];
@@ -368,7 +373,7 @@ function renderYearCard() {
         </div>
         <div class="wrapped-tile compact" style="grid-area:skp">
           <div class="wrapped-tile-label">Skips</div>
-          <div class="wrapped-tile-value">${y.skip_pct}%</div>
+          <div class="wrapped-tile-value">${skipPctAnio}%</div>
           <div class="wrapped-tile-hint">por skip o &lt;30s</div>
         </div>
         <div class="wrapped-tile compact" style="grid-area:fst">
@@ -592,6 +597,8 @@ function daysCovered(year, stats) {
 function renderAllTime() {
   const holder = document.getElementById('wrapped-alltime');
   const t = stats.totals || {};
+  // El mismo dato y el mismo formato que el tile «Skips» del Dashboard (64,1).
+  const skipPctTotal = Number(t.skip_pct || 0).toLocaleString('es-ES', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
 
   const topArtist = (stats.top_artists_all_time || [])[0];
   const topAlbum = (stats.top_albums_all_time || [])[0];
@@ -655,7 +662,7 @@ function renderAllTime() {
         <div class="wrapped-tile compact" style="grid-area:disc">
           <div class="wrapped-tile-label">Plays válidas</div>
           <div class="wrapped-tile-value">${(t.plays_valid || 0).toLocaleString('es-ES')}</div>
-          <div class="wrapped-tile-hint">de ${(t.plays_raw || 0).toLocaleString('es-ES')} crudas · ${t.skip_pct}% skips</div>
+          <div class="wrapped-tile-hint">de ${(t.plays_raw || 0).toLocaleString('es-ES')} crudas · ${skipPctTotal}% skips</div>
         </div>
         <div class="wrapped-tile compact" style="grid-area:mes">
           <div class="wrapped-tile-label">Días activos</div>

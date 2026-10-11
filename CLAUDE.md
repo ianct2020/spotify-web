@@ -2017,29 +2017,63 @@ el diccionario, 100.400 filas (día, tema), **4,05 MB** serializado, **2,7 s** y
 `plays_raw` 212.491 ✓, `plays_valid` 104.147 ✓, `skip_pct` 64,1 ✓,
 `days_active` 1.856 ✓, y **2.935 días comparados día por día con 0 diferencias**.
 
-### 🟥 La definición de salto: el pipeline tiene DOS y se llaman igual
+### 🟩 La definición de salto: UNA sola desde v=291 (hasta v=290 eran dos y se llamaban igual)
 
-`days[].saltos` usa la de `totals.skip_pct`:
+Un salto es
 
 ```
 r.skipped === true   ||   (r.reason_end === 'fwdbtn' && ms_played < 30 s)
 ```
 
-contada sobre las reproducciones **crudas**. Con eso `Σsaltos / Σcrudas`
-reproduce `totals.skip_pct` **exacto**.
+contado sobre las reproducciones **crudas** (todas las deduplicadas con uri), **antes** del
+corte de 30 s. Es la cuenta de `totals.skip_pct` (64,1), la de `days[].saltos` del
+`#calendario` y, **desde v=291, también la de `years[].skip_pct`**:
+`round(skips / max(1, plays_raw) * 100, 1)` con los dos contadores del año, que `years[]`
+lleva al final (`plays_raw`, `skips`). Σ de los años = el total, exacto, y la suma de los
+días de cada año da el porcentaje de ese año, exacto, los nueve.
 
-⚠️ **`years[].skip_pct` NO es esa cuenta y no se puede cuadrar con ella.** Es
-`yb.skipped / (yb.plays + yb.skipped)`, donde `yb.skipped` cuenta
-`fwdbtn || skipped` **sin mirar los 30 s** y —lo que más pesa— **solo entre las
-plays de ≥30 s**: el `yb.skipped++` vive DENTRO del `if (ms < MIN_MS) continue`
-(`gen-stats.py:549`, `history-processor.js`). Y el denominador suma los saltos
-dos veces, porque `yb.plays` ya los contiene.
+**Lo que había hasta v=290**: `years[].skip_pct` era `yb.skipped / (yb.plays + yb.skipped)`,
+con `yb.skipped` contando `fwdbtn || skipped` **después** del `if ms < MIN_MS: continue` (se
+perdía los saltos cortos, que son la mayoría) y el divisor sumando los saltos dos veces.
+Daba **9,3 · 6,1 · 16,5 · 11,2 · 35,5 · 34,7 · 26,8 · 25,2 · 21,9** (2018-2026) donde hay
+**10,6 · 7,2 · 35,8 · 27,2 · 60,0 · 74,9 · 71,8 · 66,7 · 58,4**. Ninguna puerta lo miraba, y
+el paso «dentro de todo» del Wrapped decía en los nueve años «este año aguantas mucho más».
 
-Medido sobre el export real: con la definición de `totals`, 2023 da **74,9 %** y
-`years[].skip_pct` dice **34,7 %**; **los nueve años difieren**. Con la otra
-fórmula se reproducen **9 de 9 exactos**. `tests/calendario-dias.test.mjs`
-afirma **las dos cosas**, para que nadie «arregle» el acumulador persiguiendo un
-número que mide otra cosa. Anotado en `PENDIENTES.md`.
+⚠️ **Vive en DOS sitios que tienen que quedar iguales**: `scripts/gen-stats.py`
+(`year_raw` / `year_skips`, al lado de `total_skipped`) y `src/js/history-processor.js`
+(`yearRaw` / `yearSkips`). Paridad medida el 11/10 sobre el export real: los nueve años
+idénticos en `skip_pct`, `plays_raw` y `skips`.
+
+⚠️ **El divisor cuenta la basura y el numerador no** (`total_plays = len(plays)` va antes de
+`is_junk_track`; los saltos, después). Es así también en el total y **no se tocó**: son 227
+reproducciones de 212.491 y, si el divisor las excluyera, el 64,1 pasaría a **64,2** (64,086 →
+64,154). Lo decide el planificador.
+
+🔴 **Los años anteriores al 15/10/2022 salen bajos por el INSTRUMENTO.** El export trae
+`skipped: false` (no vacío) en todas las reproducciones anteriores a esa fecha —el primer
+`true` es del `2022-10-15T01:06:42Z`—, así que hasta entonces un salto solo se ve si fue con
+el botón y antes de los 30 s. De 2023 en adelante `skipped: true` cubre todo lo anterior y
+además los saltos de más de 30 s (9.206 en 2023). O sea que 7,2 (2019) contra 74,9 (2023) **no
+es solo un cambio de costumbre**. El número de cada año es correcto para lo que el export
+registra; lo que no se puede es leerlo como una serie homogénea. Anotado en `PENDIENTES.md`.
+
+**Versiones, las tres a la vez** (misma lógica que el `gid`): `STATS_VERSION` 3 → 4 en
+`gen-stats.py` (el sello del JSON), 2 → 4 en `history-processor.js` (el BYOH; estaba
+desfasado) y 4 → 5 en `history-keys.js` (la clave de IndexedDB y el `?v=` del JSON), con
+`OWNER_PREV_KEYS.stats` **vacía**. Un BYOH ya importado conserva el número viejo en su
+IndexedDB hasta reimportar (anotado, no migrado).
+
+**El copy que nació del número malo** (`pasoDentroDeTodo`, `wrapped-apertura.js`): la rama del
+medio dice «aguantas más» (sin «mucho»: entra con 3 puntos) y «En todo tu historial cortas N de
+cada 10 canciones; este año, M» en vez de «Antes cortabas…; ahora…» —el total incluye el año
+que se mira— y solo cuando N ≠ M. El umbral de 3 puntos no se tocó.
+
+**Antes de hornear, la copia; después, `python3 scripts/verificar-rehorneado.py --respaldo …`**
+(sale con código ≠ 0; probado en rojo contra un horneado de ceros). `gen-stats.py` sin el
+export sigue imprimiendo «OK» y escribiendo ceros.
+
+Guardas: `tests/skip-por-anio.test.mjs` (103) y `tests/calendario-dias.test.mjs` (73), que
+hasta v=290 afirmaba **las dos** fórmulas y ahora afirma que coinciden.
 
 ### La importación «solo el detalle» (para el owner)
 
@@ -2115,7 +2149,8 @@ guarda de animaciones que no puede ser global) siguen valiendo y están en
 | qué | dónde | corre en |
 |---|---|---|
 | la apertura del Wrapped no cambió, byte a byte (2025; 2018 salvo su rótulo nuevo; 2019–2026 por hash) | `tests/calendario-anual.test.mjs` (77) | `npm test` |
-| los minutos cuadran día por día + los saltos | `tests/calendario-dias.test.mjs` (57) | `npm test` |
+| los minutos cuadran día por día + los saltos (año por año, una sola definición) | `tests/calendario-dias.test.mjs` (73) | `npm test` |
+| los años suman el total · diez reproducciones contadas a mano · el copy de «dentro de todo» | `tests/skip-por-anio.test.mjs` (103) | `npm test` |
 | abrir no gasta · la playlist cuesta 2 y 3 | `tests/banco/calendario.html` | `npm run prepush` |
 
 El instrumento de las capturas es `tests/banco/calendario-fotos.html` y **no va

@@ -21,20 +21,17 @@
 //     con menos de 30 s, sobre las crudas) reproduce `totals.skip_pct`
 //     EXACTO.
 //
-//     🟥 **Y acá hay una discrepancia del pipeline que esta suite afirma en vez
-//     de esconder.** `years[].skip_pct` **no** sale de esa cuenta: usa
-//     `yb.skipped / (yb.plays + yb.skipped)` con `yb.skipped` contando
-//     `fwdbtn || skipped` **sin mirar los 30 s** y **solo entre las plays de
-//     ≥30 s** (el `yb.skipped++` vive dentro del `if (ms < MIN_MS) continue`),
-//     y encima el denominador suma los saltos dos veces porque `yb.plays` ya
-//     los contiene. Son dos magnitudes distintas con el mismo nombre, en los
-//     dos lenguajes (`gen-stats.py:458` y `:549`).
-//
-//     Medido el 10/10 sobre el export real: con la definición de `totals` el
-//     año 2023 da **74,9 %** y `years[].skip_pct` dice **34,7 %**; los nueve
-//     años difieren. Con la otra fórmula se reproducen **9 de 9 exactos**.
-//     Las dos cosas se afirman abajo, para que nadie «arregle» el acumulador
-//     persiguiendo un número que mide otra cosa. Anotado en `PENDIENTES.md`.
+//     🟩 **Y desde v=291 `years[].skip_pct` es ESA MISMA cuenta, año por año.**
+//     Hasta v=290 el pipeline tenía dos definiciones con el mismo nombre: la de
+//     `totals` y otra para `years[]` (`fwdbtn || skipped` solo entre las plays
+//     de ≥30 s, dividido por `plays + skipped`, con los saltos sumados dos
+//     veces), y esta suite afirmaba LAS DOS para que nadie «arreglara» el
+//     acumulador persiguiendo el número equivocado. Medido el 10/10 sobre el
+//     export real: 2023 daba 34,7 % con aquélla y **74,9 %** con ésta.
+//     La tanda 40 dejó una sola, y ahora la suite afirma que las dos cuentas
+//     **coinciden**: la suma de `saltos` de los días de cada año sobre sus
+//     `crudas` da EXACTO el `years[].skip_pct` de ese año, y además sus
+//     `skips` y su `plays_raw`. No hay ningún número viejo que reproducir.
 //
 //  3. **Los otros SIETE payloads no cambian ni un byte.** `days` se AGREGA al
 //     resultado de `processStreamingHistory()`; los siete de siempre se
@@ -46,7 +43,6 @@ import { readFileSync, readdirSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { processStreamingHistory, crearAcumuladorDeDias, DAYS_VERSION } from '../src/js/history-processor.js';
-import { isJunkTrack } from '../src/js/util/junk.js';
 
 const raiz = join(dirname(fileURLToPath(import.meta.url)), '..');
 let ok = 0;
@@ -54,7 +50,6 @@ const fallos = [];
 const af = (c, m) => { if (c) ok++; else fallos.push(m); };
 const igual = (a, b, m) => af(a === b, `${m}: esperaba ${JSON.stringify(b)} y vino ${JSON.stringify(a)}`);
 
-const MIN_MS = 30000;
 const TOL = 0.1;
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -234,7 +229,7 @@ const resultado = processStreamingHistory(fileArrays);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// 4 · PUERTA 2 · los saltos, y las DOS fórmulas del pipeline
+// 4 · PUERTA 2 · los saltos: UNA sola definición, en el total y en cada año
 // ═══════════════════════════════════════════════════════════════════════════
 {
   let saltos = 0, crudas = 0;
@@ -243,45 +238,33 @@ const resultado = processStreamingHistory(fileArrays);
   igual(pct, resultado.stats.totals.skip_pct,
     'PUERTA 2: la suma de saltos sobre la de crudas da `totals.skip_pct` EXACTO');
 
-  // Y la otra fórmula, la de `years[].skip_pct`, es DISTINTA. Se afirma que lo
-  // es: si algún día el pipeline las unifica, esta suite se pone roja y hay que
-  // venir a leer el porqué en vez de descubrirlo en pantalla.
-  const anio = resultado.stats.years.find(y => y.year === 2025);
-  let s25 = 0, c25 = 0;
-  for (const [dia, d] of Object.entries(resultado.days.dias)) {
-    if (!dia.startsWith('2025')) continue;
-    s25 += d.saltos; c25 += d.crudas;
-  }
-  const pct25 = Math.round(s25 / Math.max(1, c25) * 1000) / 10;
-  af(pct25 !== anio.skip_pct,
-    'PUERTA 2: `years[].skip_pct` mide OTRA cosa que `saltos/crudas` — si esto se pone verde, ' +
-    'el pipeline cambió y hay que releer la nota de arriba');
-
-  // La fórmula de `years[].skip_pct`, reproducida desde las crudas: `fwdbtn ||
-  // skipped` SIN mirar los 30 s y SOLO entre las plays de ≥30 s, con el
-  // denominador sumando los saltos dos veces.
-  const vistas = new Set();
+  // Desde v=291 hay UNA sola definición de salto: `years[].skip_pct` es la misma
+  // cuenta que `totals.skip_pct`, partida por año. Se afirma año por año contra
+  // el detalle por día, que es una implementación aparte (`crearAcumuladorDeDias`).
   const porAnio = new Map();
-  for (const arr of fileArrays) {
-    for (const r of arr) {
-      const uri = r.spotify_track_uri;
-      if (!uri) continue;
-      const k = `${r.ts}|${uri}|${r.ms_played || 0}`;
-      if (vistas.has(k)) continue;
-      vistas.add(k);
-      if (isJunkTrack(r.master_metadata_track_name || '', r.master_metadata_album_artist_name || '')) continue;
-      if ((Number(r.ms_played) || 0) < MIN_MS) continue;
-      const y = +r.ts.slice(0, 4);
-      let b = porAnio.get(y); if (!b) { b = { plays: 0, skipped: 0 }; porAnio.set(y, b); }
-      b.plays++;
-      if ((r.reason_end || '') === 'fwdbtn' || !!r.skipped) b.skipped++;
-    }
+  for (const [dia, d] of Object.entries(resultado.days.dias)) {
+    const y = +dia.slice(0, 4);
+    let b = porAnio.get(y); if (!b) { b = { saltos: 0, crudas: 0 }; porAnio.set(y, b); }
+    b.saltos += d.saltos; b.crudas += d.crudas;
   }
+  af(resultado.stats.years.length >= 2, 'el fixture tiene al menos dos años');
   for (const y of resultado.stats.years) {
-    const b = porAnio.get(y.year) || { plays: 0, skipped: 0 };
-    const p = Math.round(b.skipped / Math.max(1, b.plays + b.skipped) * 1000) / 10;
-    igual(p, y.skip_pct, `PUERTA 2: ${y.year} · la OTRA fórmula reproduce \`years[].skip_pct\``);
+    const b = porAnio.get(y.year) || { saltos: 0, crudas: 0 };
+    igual(b.crudas, y.plays_raw, `PUERTA 2: ${y.year} · las crudas de sus días dan \`years[].plays_raw\``);
+    igual(b.saltos, y.skips, `PUERTA 2: ${y.year} · los saltos de sus días dan \`years[].skips\``);
+    igual(Math.round(b.saltos / Math.max(1, b.crudas) * 1000) / 10, y.skip_pct,
+      `PUERTA 2: ${y.year} · saltos/crudas de sus días da \`years[].skip_pct\` EXACTO (una sola definición)`);
   }
+  // Y que el fixture distingue de verdad la definición nueva de la vieja. 2025,
+  // contado a mano: 8 crudas (B, A, B, la corta de C, el `fwdbtn` corto, el
+  // `fwdbtn` largo, el `skipped` y la basura; el podcast no tiene uri y la
+  // duplicada del archivo 2 no cuenta) y 2 saltos (el `fwdbtn` corto y el
+  // `skipped`; el `fwdbtn` LARGO no es salto). 2 de 8 = 25,0. La fórmula de hasta
+  // v=290 daba 2 / (5 + 2) = 28,6: si esto vuelve a 28,6, volvió la fórmula vieja.
+  const a2025 = resultado.stats.years.find(y => y.year === 2025);
+  igual(a2025.plays_raw, 8, 'PUERTA 2: 2025 tiene 8 crudas (la basura cuenta en el divisor; el podcast y la duplicada, no)');
+  igual(a2025.skips, 2, 'PUERTA 2: 2025 tiene 2 saltos (el fwdbtn corto y el skipped), no 3');
+  igual(a2025.skip_pct, 25, 'PUERTA 2: 2025 · 2 de 8 = 25,0 (y no el 28,6 de la fórmula vieja)');
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -332,6 +315,20 @@ const resultado = processStreamingHistory(fileArrays);
     igual(validas, stats.totals.plays_valid, 'PUERTA 2 (real): las válidas dan `totals.plays_valid` (104.147)');
     igual(Math.round(saltos / Math.max(1, crudas) * 1000) / 10, stats.totals.skip_pct,
       'PUERTA 2 (real): los saltos dan `totals.skip_pct` (64,1)');
+    // Y año por año, contra el JSON que horneó el Python (v=291: una sola definición).
+    const realPorAnio = new Map();
+    for (const [dia, d] of Object.entries(days.dias)) {
+      const y = +dia.slice(0, 4);
+      let b = realPorAnio.get(y); if (!b) { b = { saltos: 0, crudas: 0 }; realPorAnio.set(y, b); }
+      b.saltos += d.saltos; b.crudas += d.crudas;
+    }
+    for (const y of stats.years) {
+      const b = realPorAnio.get(y.year) || { saltos: 0, crudas: 0 };
+      af(b.crudas === y.plays_raw && b.saltos === y.skips &&
+         Math.round(b.saltos / Math.max(1, b.crudas) * 1000) / 10 === y.skip_pct,
+        `PUERTA 2 (real): ${y.year} · los días dan ${b.saltos}/${b.crudas} y el JSON del Python dice ` +
+        `${y.skips}/${y.plays_raw} = ${y.skip_pct}`);
+    }
     igual(Object.values(days.dias).filter(d => d.min > 0).length, stats.totals.days_active,
       'PUERTA 1 (real): los días con minutos dan `totals.days_active` (1.856)');
 

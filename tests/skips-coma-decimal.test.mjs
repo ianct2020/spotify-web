@@ -28,6 +28,9 @@
 //    los de la misma fila; los de otras vistas, anotalos»). Quedan en
 //    `PENDIENTES.md`, y el de `:658` enseña EXACTAMENTE el mismo dato que el
 //    tile del Dashboard (`totals.skip_pct`, 64,1).
+//    ✅ **Arreglados en v=291 (tanda 40)**, con el mismo `toLocaleString('es-ES')`
+//    del Dashboard, y la guarda 6 ya no excluye `#wrapped`: cubre `wrapped.js`.
+//    Sigue SIN centralizarse el formateo (`pct()`, `fmtNum`, `fmt1`, `fmtMB`, `coma`).
 //
 // Corre sin navegador: lee el fuente y el JSON del repo.
 
@@ -45,6 +48,7 @@ function ok(cond, nombre) {
 }
 
 const dashboard = leer('src/js/features/dashboard.js');
+const wrapped = leer('src/js/features/wrapped.js');
 const apertura = leer('src/js/features/wrapped-apertura.js');
 
 // ── 1. El comportamiento, antes del fuente ─────────────────────────────────
@@ -124,8 +128,9 @@ console.log('\n5. `fmtPct` no existe; la función es `pct()` y clava la coma a m
 //
 // La forma que tenía el bug, para cazar la próxima copia. Se listan los sitios
 // que interpolan algo seguido de `%` sin pasar por un formateador ni por un
-// redondeo a entero. `#wrapped` queda EXCLUIDA a propósito: sus dos sitios
-// están abiertos y anotados, y si entraran acá la suite nacería roja.
+// redondeo a entero. Hasta v=290 `#wrapped` quedaba EXCLUIDA a propósito (sus dos
+// sitios estaban abiertos y anotados, y la suite habría nacido roja); desde v=291
+// los dos están arreglados y la guarda cubre `wrapped.js` igual que `dashboard.js`.
 
 console.log('\n6. Ninguna plantilla pega un `*_pct` del JSON a un `%`');
 {
@@ -139,16 +144,39 @@ console.log('\n6. Ninguna plantilla pega un `*_pct` del JSON a un `%`');
   // La forma REAL del bug es estrecha y se puede nombrar: un campo `*_pct` del
   // JSON interpolado **directo**, sin formateador en medio. Eso es lo que eran
   // los tres sitios (`t.skip_pct`, `y.skip_pct`) y es lo que va a ser el cuarto.
-  const sospechosas = [];
-  dashboard.split('\n').forEach((linea, i) => {
-    for (const m of linea.matchAll(/\$\{([^}]*)\}\s*%/g)) {
-      const dentro = m[1];
-      if (!/[A-Za-z0-9_$.]*_pct\b/.test(dentro)) continue;          // no es un `*_pct`
-      if (/toLocaleString|Math\.round|toFixed\(0\)/.test(dentro)) continue;  // ya formateado
-      sospechosas.push(`dashboard.js:${i + 1} ${linea.trim()}`);
-    }
-  });
-  ok(sospechosas.length === 0, `0 campos `+'`*_pct`'+` crudos pegados a un % en dashboard.js${sospechosas.length ? ' — ' + sospechosas.join(' · ') : ''}`);
+  for (const [archivo, fuente] of [['dashboard.js', dashboard], ['wrapped.js', wrapped]]) {
+    const sospechosas = [];
+    fuente.split('\n').forEach((linea, i) => {
+      for (const m of linea.matchAll(/\$\{([^}]*)\}\s*%/g)) {
+        const dentro = m[1];
+        if (!/[A-Za-z0-9_$.]*_pct\b/.test(dentro)) continue;          // no es un `*_pct`
+        if (/toLocaleString|Math\.round|toFixed\(0\)/.test(dentro)) continue;  // ya formateado
+        sospechosas.push(`${archivo}:${i + 1} ${linea.trim()}`);
+      }
+    });
+    ok(sospechosas.length === 0, `0 campos `+'`*_pct`'+` crudos pegados a un % en ${archivo}${sospechosas.length ? ' — ' + sospechosas.join(' · ') : ''}`);
+  }
+}
+
+// ── 6a. Los dos tiles de `#wrapped` (v=291) ────────────────────────────────
+//
+// `wrapped.js` tenía los dos sitios crudos: el tile «Skips» de cada año
+// (`${y.skip_pct}%`) y la pista del tile «Plays válidas» del total
+// (`${t.skip_pct}%`), que es EXACTAMENTE el dato del tile del Dashboard.
+
+console.log('\n6a. Los dos tiles de `#wrapped` van con coma');
+{
+  const FMT = /toLocaleString\('es-ES', \{ minimumFractionDigits: 1, maximumFractionDigits: 1 \}\)/;
+  const linea = (re) => wrapped.split('\n').find(l => re.test(l)) || '';
+  ok(FMT.test(linea(/const skipPctAnio = /)) && /y\.skip_pct/.test(linea(/const skipPctAnio = /)),
+     'wrapped.js: el del año (`y.skip_pct`) pasa por toLocaleString(«es-ES») con un decimal');
+  ok(FMT.test(linea(/const skipPctTotal = /)) && /t\.skip_pct/.test(linea(/const skipPctTotal = /)),
+     'wrapped.js: el del total (`t.skip_pct`) también');
+  ok(/wrapped-tile-value">\$\{skipPctAnio\}%</.test(wrapped), 'el tile «Skips» pinta `skipPctAnio`');
+  ok(/crudas · \$\{skipPctTotal\}% skips/.test(wrapped), 'y la pista de «Plays válidas» pinta `skipPctTotal`');
+  ok(!/\$\{[yt]\.skip_pct\}/.test(wrapped), 'wrapped.js: ya no interpola ningún `skip_pct` crudo');
+  ok(!/skipPct(Anio|Total) = [^\n]*replace\(\s*'\.'/.test(wrapped),
+     'y no clava la coma con .replace(«.», «,») como hace pct()');
 }
 
 // ── 6b. El censo de los `${…}%` del Dashboard, resuelto A MANO ─────────────

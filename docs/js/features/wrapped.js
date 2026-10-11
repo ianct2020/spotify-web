@@ -1,21 +1,21 @@
 // Wrapped propio: mini-resumen tuyo por año, hecho con el Extended Streaming History.
 // A diferencia del Wrapped oficial (que corre oct-sept), este es del año calendario completo.
 
-import { loadHistoryStats, isOwner, ownerLockedMessage } from './history-data.js?v=290';
-import { escapeHtml, pageHeader } from '../ui/components.js?v=290';
-import { getPreview } from '../api/preview-providers.js?v=290';
-import { getArtistLikePreview, getAlbumLikePreview } from '../util/artist-preview.js?v=290';
-import { attachHover } from '../ui/preview-player.js?v=290';
-import { openTrackCard } from './track-card.js?v=290';
-import { openArtistCard } from './artist-card.js?v=290';
-import { openAlbumCard } from './album-card.js?v=290';
-import { getMyTop } from '../api.js?v=290';
-import { activateMarquee, marqueeSpan } from '../ui/marquee.js?v=290';
-import { openModal } from '../ui/modal-stack.js?v=290';
-import { armReveal, armRevealAll, releaseReveal, animationsEnabled } from '../ui/reveal.js?v=290';
-import { coverUrl } from '../util/cover-size.js?v=290';
-import { vigilarRuta } from '../util/vigencia-ruta.js?v=290';
-import { fmtDia } from '../util/fecha.js?v=290';
+import { loadHistoryStats, isOwner, ownerLockedMessage } from './history-data.js?v=291';
+import { escapeHtml, pageHeader } from '../ui/components.js?v=291';
+import { getPreview } from '../api/preview-providers.js?v=291';
+import { getArtistLikePreview, getAlbumLikePreview } from '../util/artist-preview.js?v=291';
+import { attachHover } from '../ui/preview-player.js?v=291';
+import { openTrackCard } from './track-card.js?v=291';
+import { openArtistCard } from './artist-card.js?v=291';
+import { openAlbumCard } from './album-card.js?v=291';
+import { getMyTop } from '../api.js?v=291';
+import { activateMarquee, marqueeSpan } from '../ui/marquee.js?v=291';
+import { openModal } from '../ui/modal-stack.js?v=291';
+import { armReveal, armRevealAll, releaseReveal, animationsEnabled } from '../ui/reveal.js?v=291';
+import { coverUrl } from '../util/cover-size.js?v=291';
+import { vigilarRuta } from '../util/vigencia-ruta.js?v=291';
+import { fmtDia } from '../util/fecha.js?v=291';
 
 let stats = null;
 let selectedYear = null;
@@ -65,7 +65,7 @@ const ESPERA_APERTURA_MS = 3000;
 // después — montarlo tarde sería justo el flash que se está arreglando.
 function cargarApertura() {
   return Promise.race([
-    import('../features/wrapped-apertura.js?v=290').catch(e => {
+    import('../features/wrapped-apertura.js?v=291').catch(e => {
       console.warn('[wrapped] la apertura no cargó, el resumen queda entero:', e);
       return null;
     }),
@@ -298,6 +298,11 @@ function renderYearCard() {
   const y = stats.years.find(yy => yy.year === selectedYear);
   if (!y) { holder.innerHTML = ''; return; }
 
+  // v=291: con COMA, como el tile del Dashboard (`dashboard.js`, v=288) y con el locale
+  // EXPLÍCITO. Era el `skip_pct` del año interpolado tal cual: el crudo del JSON, con el punto del inglés, en la misma
+  // vista en la que la apertura dice «64,1%».
+  const skipPctAnio = Number(y.skip_pct || 0).toLocaleString('es-ES', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+
   const topArtist = y.top_artists?.[0];
   const topAlbum = y.top_albums?.[0];
   const topTrack = y.top_tracks?.[0];
@@ -368,7 +373,7 @@ function renderYearCard() {
         </div>
         <div class="wrapped-tile compact" style="grid-area:skp">
           <div class="wrapped-tile-label">Skips</div>
-          <div class="wrapped-tile-value">${y.skip_pct}%</div>
+          <div class="wrapped-tile-value">${skipPctAnio}%</div>
           <div class="wrapped-tile-hint">por skip o &lt;30s</div>
         </div>
         <div class="wrapped-tile compact" style="grid-area:fst">
@@ -592,6 +597,8 @@ function daysCovered(year, stats) {
 function renderAllTime() {
   const holder = document.getElementById('wrapped-alltime');
   const t = stats.totals || {};
+  // El mismo dato y el mismo formato que el tile «Skips» del Dashboard (64,1).
+  const skipPctTotal = Number(t.skip_pct || 0).toLocaleString('es-ES', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
 
   const topArtist = (stats.top_artists_all_time || [])[0];
   const topAlbum = (stats.top_albums_all_time || [])[0];
@@ -655,7 +662,7 @@ function renderAllTime() {
         <div class="wrapped-tile compact" style="grid-area:disc">
           <div class="wrapped-tile-label">Plays válidas</div>
           <div class="wrapped-tile-value">${(t.plays_valid || 0).toLocaleString('es-ES')}</div>
-          <div class="wrapped-tile-hint">de ${(t.plays_raw || 0).toLocaleString('es-ES')} crudas · ${t.skip_pct}% skips</div>
+          <div class="wrapped-tile-hint">de ${(t.plays_raw || 0).toLocaleString('es-ES')} crudas · ${skipPctTotal}% skips</div>
         </div>
         <div class="wrapped-tile compact" style="grid-area:mes">
           <div class="wrapped-tile-label">Días activos</div>

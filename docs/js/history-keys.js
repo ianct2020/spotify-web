@@ -27,7 +27,7 @@
 // v=204 (a94e43a) subió solo los de acá, para forzar el refetch de las tapas
 // nuevas. Ningún código lee el `version` de stats ni el de listened; el único
 // lector de `.version` es el de skips.
-const STATS_VERSION = 4;   // v4: `years[].days` — el detalle por día que dibuja el calendario de la apertura del Wrapped
+const STATS_VERSION = 5;   // v5 (v=291): `years[].skip_pct` con la definición de `totals.skip_pct`, más `plays_raw` y `skips` por año. OJO: es otro contador que el `version` de DENTRO del JSON (4). v4: `years[].days`
 const PLAYS_VERSION = 5;   // v5: cada álbum de `albums` lleva además el día de la primera play válida
 const LISTENED_VERSION = 3;  // v3: las 91 tapas que faltaban (ítem 11) — mismo contenido, campo `img` ya no nulo
 const SKIP_VERSION = 4;    // v4: mismo formato que v3, pero el `gid` se recalculó con la cola de versión tras el guion (v=271): «X - Sped Up», «- Piano», «- reimagined», «- Raw Rhymes», «- Refix» y «- Music From …» vuelven a ser el mismo tema que su base

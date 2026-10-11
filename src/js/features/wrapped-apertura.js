@@ -445,7 +445,7 @@ export function pasoRacha(ctx) {
   };
 }
 
-function pasoDentroDeTodo(ctx) {
+export function pasoDentroDeTodo(ctx) {
   const { y, stats, fmtMinutes } = ctx;
   const t = stats.totals || {};
   const totalPlays = t.plays_valid || 0;
@@ -459,13 +459,33 @@ function pasoDentroDeTodo(ctx) {
   let cuerpo = `De las ${num(totalPlays)} reproducciones válidas que Spotify tiene tuyas ` +
                `en ${anios} años, ${pct(parte)} son de ${y.year}.`;
   if (typeof y.skip_pct === 'number' && typeof t.skip_pct === 'number') {
+    // ⚠️ v=291: `years[].skip_pct` pasó a medir lo MISMO que `totals.skip_pct` (hasta v=290
+    // era otra cuenta con el mismo nombre y daba 6-36 % contra un total de 64,1: los nueve
+    // años caían en la rama de «aguantas mucho más», y era mentira). Con el dato bueno la
+    // rama del medio se reescribió en dos puntos, y el umbral de 3 puntos NO se tocó:
+    //
+    //   · «aguantas MUCHO más» → «aguantas más». La rama entra con 3 puntos de diferencia,
+    //     y 60,0 contra 64,1 (2022) no es «mucho».
+    //   · «Antes cortabas N de cada 10; ahora, M» llamaba «antes» al total del historial,
+    //     que INCLUYE el año que se está mirando (2025 es el 28 % de las reproducciones).
+    //     Ahora compara el total con el año, sin orden en el tiempo, y solo cuando los dos
+    //     redondeos difieren: «6 de cada 10; este año, 6» no dice nada (2022 y 2026).
+    //
+    // 🟥 Lo que este texto NO puede saber: el export de Spotify trae `skipped: false` en
+    // TODO lo anterior al 15/10/2022, así que en esos años un salto solo se ve si fue con
+    // el botón y antes de los 30 s. Sus cifras salen bajas por el instrumento, no (solo)
+    // por la costumbre. Anotado en `fonoteca-migracion/PENDIENTES.md`; es otra decisión.
     const mejor = t.skip_pct - y.skip_pct;
+    const deCada10Total = Math.round(t.skip_pct / 10);
+    const deCada10Anio = Math.round(y.skip_pct / 10);
     cuerpo += Math.abs(mejor) < 3
       ? ` Y escuchas igual que siempre: cortas el ${pct(y.skip_pct)} de lo que pones, contra el ${pct(t.skip_pct)} histórico.`
       : mejor > 0
-        ? ` Y este año aguantas mucho más: dejas a medias el ${pct(y.skip_pct)} de lo que pones, ` +
-          `cuando en el total de tu historial la cifra es ${pct(t.skip_pct)}. Antes cortabas ` +
-          `${Math.round(t.skip_pct / 10)} de cada 10 canciones; ahora, ${Math.round(y.skip_pct / 10)}.`
+        ? ` Y este año aguantas más: dejas a medias el ${pct(y.skip_pct)} de lo que pones, ` +
+          `cuando en el total de tu historial la cifra es ${pct(t.skip_pct)}.` +
+          (deCada10Total !== deCada10Anio
+            ? ` En todo tu historial cortas ${deCada10Total} de cada 10 canciones; este año, ${deCada10Anio}.`
+            : '')
         : ` Aunque este año cortas más que de costumbre: ${pct(y.skip_pct)} contra el ${pct(t.skip_pct)} histórico.`;
   }
   cuerpo += ` Ninguna tarjeta de las de abajo da este número: todas miran un año por vez.`;

@@ -82,7 +82,7 @@ COMPLETE_CLOSES = {
 # (a94e43a) subió solo los del JS, para forzar el refetch de las tapas nuevas.
 # Ningún código de `src/js` lee el `version` de stats ni el de listened (el
 # único lector de `.version` es el de skips, en `history-data.js`).
-STATS_VERSION = 3            # v3: years[].days — el detalle por dia (la apertura del Wrapped)
+STATS_VERSION = 4            # v4: years[].skip_pct pasa a la definición de totals.skip_pct, y years[] gana plays_raw y skips (v=291). v3: years[].days
 TRACK_PLAYS_VERSION = 5      # v5: cada entrada de `albums` lleva además el DÍA de la primera play válida (ficha de álbum: «primera vez»). v4: cada entrada de `albums` lleva plays y ms además de name/artist (la ficha de álbum decía "0 plays"). v3: agregó `albums`. v2: incluía entries "partial" para tracks solo con plays <30s
 SKIP_STATS_VERSION = 4      # v4: igual que v3, pero el `gid` se recalculó con la cola de versión tras el guion (v=271)
 LISTENED_VERSION = 2         # bump: excluye "Sonido Para Sacar Agua Del Movil"
@@ -349,6 +349,15 @@ def build_stats(plays, img_idx):
     total_plays = len(plays)
     total_valid_ms = 0
     total_skipped = 0
+    # Lo mismo que los dos de arriba, partido por año (v=291). UNA sola definición de
+    # salto para todo el pipeline: la de `totals.skip_pct`. Hasta v=290 `years[].skip_pct`
+    # era otra cuenta con el mismo nombre —contaba `fwdbtn || skipped` DESPUÉS del corte de
+    # 30 s y dividía por `plays + skipped`, sumando los saltos dos veces— y daba 34,7 en
+    # 2023, donde con esta definición hay 74,9. Van en contadores aparte y NO en el cubo
+    # del año (`years[y]`): el cubo nace con la primera play válida, y contar crudas ahí
+    # crearía un año con solo reproducciones cortas.
+    year_raw = Counter()      # año -> reproducciones crudas (el mismo criterio que total_plays)
+    year_skips = Counter()    # año -> saltos (el mismo sitio y la misma condición que total_skipped)
     active_days_all = set()
 
     # global sums
@@ -382,7 +391,6 @@ def build_stats(plays, img_idx):
         "days": {},              # 'YYYY-MM-DD' -> ms
         "active_days": set(),
         "plays": 0,
-        "skipped": 0,
         "first_play": None,
         "last_play": None,
     })
@@ -450,6 +458,10 @@ def build_stats(plays, img_idx):
         skipped = bool(r.get("skipped"))
         end_reason = r.get("reason_end") or ""
 
+        # Las crudas del año se cuentan ANTES del filtro de basura, igual que
+        # `total_plays = len(plays)`: el divisor del año y el del total son la misma cuenta.
+        year_raw[dt.year] += 1
+
         # Filtrar basura (sonidos funcionales que inflan tops sin ser música)
         if is_junk_track(track, artist):
             continue
@@ -458,6 +470,7 @@ def build_stats(plays, img_idx):
         is_skip = skipped or (end_reason == "fwdbtn" and ms < MIN_MS)
         if is_skip:
             total_skipped += 1
+            year_skips[dt.year] += 1
 
         # Skips por track: solo si tenemos URI. Contamos ok si terminó bien,
         # skip si el usuario le dio next después de escuchar al menos 5s
@@ -546,8 +559,6 @@ def build_stats(plays, img_idx):
         yb["days"][day] = yb["days"].get(day, 0) + ms
         yb["active_days"].add(day)
         yb["plays"] += 1
-        if end_reason == "fwdbtn" or skipped:
-            yb["skipped"] += 1
         if yb["first_play"] is None or ts_str < yb["first_play"]:
             yb["first_play"] = ts_str
         if yb["last_play"] is None or ts_str > yb["last_play"]:
@@ -742,7 +753,7 @@ def build_stats(plays, img_idx):
             "plays": yb["plays"],
             "days_active": len(yb["active_days"]),
             "longest_streak": year_streak,
-            "skip_pct": round(yb["skipped"]/max(1, yb["plays"] + yb["skipped"]) * 100, 1),
+            "skip_pct": round(year_skips[y]/max(1, year_raw[y]) * 100, 1),
             "first_play": yb["first_play"],
             "last_play": yb["last_play"],
             "peak_day": peak_day,
@@ -761,6 +772,10 @@ def build_stats(plays, img_idx):
                 track_entry(tk, ms, yb["track_plays"][tk])
                 for tk, ms in yb["track_ms"].most_common(TOP_N_YEAR)
             ],
+            # v4, al FINAL (append): con estos dos un test puede afirmar que la suma de los
+            # años da el total sin rehacer la cuenta desde el export.
+            "plays_raw": year_raw[y],
+            "skips": year_skips[y],
         })
 
     stats = {

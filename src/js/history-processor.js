@@ -31,10 +31,11 @@ const COMPLETE_CLOSES = new Set([
 // ⚠️ Estos números van al campo `version` DENTRO de lo que produce el BYOH. Son
 // un tercer juego de contadores, distinto del de `scripts/gen-stats.py` (el
 // `version` de los JSON del owner) y del de `history-keys.js` (clave de
-// IndexedDB y `?v=`). Al 2026-09-23 este STATS_VERSION dice 2 aunque la salida
-// ya lleva `years[].days` (que en gen-stats.py es la v3). Ningún código lee el
-// `version` de stats ni el de listened; el único lector es el de skips.
-const STATS_VERSION = 2;
+// IndexedDB y `?v=`). Ningún código lee el `version` de stats ni el de listened; el
+// único lector es el de skips. Desde v=291 este STATS_VERSION va PAREJO con el de
+// `gen-stats.py` (4: `years[].skip_pct` con la definición de `totals`, más `plays_raw`
+// y `skips` por año). Estuvo en 2 hasta v=290, con la salida ya en formato v3.
+const STATS_VERSION = 4;
 const TRACK_PLAYS_VERSION = 5;   // v5: cada álbum de `albums` lleva además el día de la primera play válida (espejo de gen-stats.py)
 const SKIP_STATS_VERSION = 4;    // v4: dato crudo (ms de cada skip/cierre) + gid; el veredicto pasó a features/skips.js. El bump a v4 es por el `gid`: la cola de versión tras el guion («- Sped Up», «- Piano»…) reagrupa en v=271. ⚠️ Tiene que ir a la par del guarda `>= N` de features/history-data.js: si se queda atrás, el BYOH recién importado se RECHAZA
 const LISTENED_VERSION = 2;
@@ -176,23 +177,14 @@ function round1(x) { return Math.round(x * 10) / 10; }
 // contada sobre las reproducciones CRUDAS. Con eso, la suma de `saltos` sobre
 // la suma de `crudas` reproduce `totals.skip_pct` **exacto**.
 //
-// 🟥 **`years[].skip_pct` NO es esa cuenta, y no se puede cuadrar con ella.**
-// El pipeline usa dos definiciones distintas, en los dos lenguajes
-// (`gen-stats.py:458` y `:549`, `history-processor.js` acá al lado):
-//
-//   · `totals.skip_pct`  = `total_skipped / total_plays`, con la definición de
-//     arriba, sobre TODAS las plays deduplicadas.
-//   · `years[].skip_pct` = `yb.skipped / (yb.plays + yb.skipped)`, donde
-//     `yb.skipped` cuenta `fwdbtn || skipped` **SIN mirar los 30 s** y, lo que
-//     más pesa, **solo entre las plays de ≥30 s** — el `yb.skipped++` vive
-//     DENTRO del `if (ms < MIN_MS) continue`. Y el denominador suma dos veces
-//     los saltos, porque `yb.plays` ya los contiene.
-//
-// O sea que son dos magnitudes diferentes con el mismo nombre. Acá se
-// implementa la primera, que es la que el encargo define por escrito, y
-// `tests/calendario-dias.test.mjs` afirma las dos cosas: que `saltos/crudas`
-// da `totals.skip_pct`, y que `years[].skip_pct` responde a la otra fórmula.
-// Queda anotado en `PENDIENTES.md`.
+// 🟩 **Desde v=291 `years[].skip_pct` ES esa misma cuenta.** Hasta v=290 el
+// pipeline tenía dos definiciones con el mismo nombre, en los dos lenguajes: la
+// de `totals` (la de arriba) y la de `years[]`, que contaba `fwdbtn || skipped`
+// SOLO entre las plays de ≥30 s y dividía por `plays + skipped`, sumando los
+// saltos dos veces (2023: 34,7 con aquélla, 74,9 con ésta). Ahora
+// `years[].skip_pct = skips / plays_raw` del año, y `tests/calendario-dias.test.mjs`
+// afirma que la suma de `saltos` de los días de un año sobre sus `crudas` da
+// exactamente ese número.
 
 /**
  * Acumulador incremental del detalle por día.
@@ -336,6 +328,11 @@ function processStreamingHistory(fileArrays, { onProgress } = {}) {
   // ---- Acumuladores globales ----
   let totalValidMs = 0;
   let totalSkipped = 0;
+  // Lo mismo, partido por año (v=291) — espejo de `year_raw` / `year_skips` de
+  // `gen-stats.py`. UNA sola definición de salto: la de `totals.skip_pct`. Van en mapas
+  // aparte y no en el cubo del año, que nace con la primera play válida.
+  const yearRaw = new Map();     // año -> reproducciones crudas (el criterio de totalPlays)
+  const yearSkips = new Map();   // año -> saltos (el sitio y la condición de totalSkipped)
   const activeDaysAll = new Set();
 
   const artistMs = new Map();
@@ -365,7 +362,7 @@ function processStreamingHistory(fileArrays, { onProgress } = {}) {
         trackMs: new Map(), trackPlays: new Map(),
         monthsMs: new Map(), days: new Map(),
         activeDays: new Set(),
-        plays: 0, skipped: 0,
+        plays: 0,
         firstPlay: null, lastPlay: null,
       };
       years.set(y, yb);
@@ -424,12 +421,18 @@ function processStreamingHistory(fileArrays, { onProgress } = {}) {
     const skipped = !!r.skipped;
     const endReason = r.reason_end || '';
 
+    // Las crudas del año, ANTES del filtro de basura: igual que `totalPlays`.
+    yearRaw.set(parsed.year, (yearRaw.get(parsed.year) || 0) + 1);
+
     // Basura funcional (sonidos saca-agua, lluvia para dormir, 432 Hz…)
     if (isJunkTrack(track, artist)) continue;
 
     // skip% (contra el total, sin filtro de ms)
     const isSkip = skipped || (endReason === 'fwdbtn' && ms < MIN_MS);
-    if (isSkip) totalSkipped++;
+    if (isSkip) {
+      totalSkipped++;
+      yearSkips.set(parsed.year, (yearSkips.get(parsed.year) || 0) + 1);
+    }
 
     // Skip stats por track (necesita uri, cualquier ms)
     if (uri) {
@@ -505,7 +508,6 @@ function processStreamingHistory(fileArrays, { onProgress } = {}) {
     yb.days.set(day, (yb.days.get(day) || 0) + ms);
     yb.activeDays.add(day);
     yb.plays++;
-    if (endReason === 'fwdbtn' || skipped) yb.skipped++;
     if (yb.firstPlay == null || r.ts < yb.firstPlay) yb.firstPlay = r.ts;
     if (yb.lastPlay == null || r.ts > yb.lastPlay) yb.lastPlay = r.ts;
 
@@ -694,7 +696,7 @@ function processStreamingHistory(fileArrays, { onProgress } = {}) {
       plays: yb.plays,
       days_active: yb.activeDays.size,
       longest_streak: yearStreak,
-      skip_pct: round1(yb.skipped / Math.max(1, yb.plays + yb.skipped) * 100),
+      skip_pct: round1((yearSkips.get(y) || 0) / Math.max(1, yearRaw.get(y) || 0) * 100),
       first_play: yb.firstPlay,
       last_play: yb.lastPlay,
       peak_day: peakDay,
@@ -704,6 +706,9 @@ function processStreamingHistory(fileArrays, { onProgress } = {}) {
       top_artists: mostCommon(yb.artistMs, TOP_N_YEAR).map(([a, ms]) => ({ name: a, min: round1(ms / 60000), plays: yb.artistPlays.get(a) })),
       top_albums: mostCommon(yb.albumMs, TOP_N_YEAR).map(([ak, ms]) => albumEntry(ak, ms, yb.albumPlays.get(ak))),
       top_tracks: mostCommon(yb.trackMs, TOP_N_YEAR).map(([tk, ms]) => trackEntry(tk, ms, yb.trackPlays.get(tk))),
+      // v4, al FINAL (append): espejo de `gen-stats.py`.
+      plays_raw: yearRaw.get(y) || 0,
+      skips: yearSkips.get(y) || 0,
     });
   }
 

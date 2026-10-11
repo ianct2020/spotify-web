@@ -14,27 +14,27 @@
 // `util/hidden-sync.js`, playlist como fuente de verdad y localStorage como
 // caché local para pintar al instante.
 
-import { getBestAvailableLikes, removeLikedTracks, checkLibraryContains } from '../api.js?v=290';
-import { borrarLikesVerificado } from '../util/borrado-verificado.js?v=290';
-import { vigilarRuta } from '../util/vigencia-ruta.js?v=290';
-import { loadTrackPlays, trackIdOf, isOwner, ownerLockedMessage } from './history-data.js?v=290';
-import { escapeHtml, confirmModal, pageHeader, tarjetaSinLikes } from '../ui/components.js?v=290';
-import { showToast } from '../ui/toast.js?v=290';
-import { openTrackCard } from './track-card.js?v=290';
-import { hasUsername, loadTopLifetime } from '../api/statsfm.js?v=290';
-import { getPreview } from '../api/preview-providers.js?v=290';
-import { togglePreview, playingKey } from '../ui/preview-player.js?v=290';
-import { renderTrackCardRow, wireTrackCardGrid, paintCardSelection, paintPlayingCard } from '../ui/track-card-row.js?v=290';
-import { createIncrementalList, scrollRootOf } from '../ui/incremental-list.js?v=290';
-import { createLazyImages } from '../ui/lazy-img.js?v=290';
-import { activateMarquee } from '../ui/marquee.js?v=290';
-import { coverAtSize } from '../util/cover-size.js?v=290';
-import { firstArtistName } from '../util/artist-name.js?v=290';
-import { createHiddenStore, uriDeTrackId } from '../util/hidden-sync.js?v=290';
-import { fmtDiaCorto } from '../util/fecha.js?v=290';
-import { prefKey, migratePrefKey } from '../storage.js?v=290';
-import { openPlaylistPicker } from '../ui/playlist-picker.js?v=290';
-import { getOwnPlaylists, addUrisToPlaylists, toastAddResult } from '../util/playlist-add.js?v=290';
+import { getBestAvailableLikes, removeLikedTracks, checkLibraryContains } from '../api.js?v=291';
+import { borrarLikesVerificado } from '../util/borrado-verificado.js?v=291';
+import { vigilarRuta } from '../util/vigencia-ruta.js?v=291';
+import { loadTrackPlays, trackIdOf, isOwner, ownerLockedMessage } from './history-data.js?v=291';
+import { escapeHtml, confirmModal, pageHeader, tarjetaSinLikes } from '../ui/components.js?v=291';
+import { showToast } from '../ui/toast.js?v=291';
+import { openTrackCard } from './track-card.js?v=291';
+import { hasUsername, loadTopLifetime } from '../api/statsfm.js?v=291';
+import { getPreview } from '../api/preview-providers.js?v=291';
+import { togglePreview, playingKey } from '../ui/preview-player.js?v=291';
+import { renderTrackCardRow, wireTrackCardGrid, paintCardSelection, paintPlayingCard } from '../ui/track-card-row.js?v=291';
+import { createIncrementalList, scrollRootOf } from '../ui/incremental-list.js?v=291';
+import { createLazyImages } from '../ui/lazy-img.js?v=291';
+import { activateMarquee } from '../ui/marquee.js?v=291';
+import { coverAtSize } from '../util/cover-size.js?v=291';
+import { firstArtistName } from '../util/artist-name.js?v=291';
+import { createHiddenStore, uriDeTrackId } from '../util/hidden-sync.js?v=291';
+import { fmtDiaCorto } from '../util/fecha.js?v=291';
+import { prefKey, migratePrefKey } from '../storage.js?v=291';
+import { openPlaylistPicker } from '../ui/playlist-picker.js?v=291';
+import { getOwnPlaylists, addUrisToPlaylists, toastAddResult } from '../util/playlist-add.js?v=291';
 
 let cache = null;
 
