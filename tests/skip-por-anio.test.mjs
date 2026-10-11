@@ -214,14 +214,17 @@ console.log('\n4. El paso «dentro de todo» de la apertura del Wrapped');
   });
   const con = (pct) => { const f = falso(pct); return frase(f.y, f.st); };
 
-  ok(/escuchas igual que siempre: cortas el 66,7% de lo que pones, contra el 64,1% histórico\./.test(con(66.7)),
+  // v=295 (T43.4): estas tres frases afirmaban el punto justo detrás del total («…histórico.» /
+  // «…la cifra es 64,1%.»). Ahora la mención del total lleva pegado «, que mezcla dos formas
+  // de contar» (el detalle lo vigila `tests/corte-saltos.test.mjs`, sección 5).
+  ok(/escuchas igual que siempre: cortas el 66,7% de lo que pones, contra el 64,1% histórico, que mezcla dos formas de contar\./.test(con(66.7)),
      'a menos de 3 puntos: «escuchas igual que siempre»');
   ok(/escuchas igual que siempre/.test(con(61.2)) && /escuchas igual que siempre/.test(con(67.0)),
      'el umbral sigue en 3 puntos, a los dos lados (61,2 y 67,0 entran)');
-  ok(/Aunque este año cortas más que de costumbre: 74,9% contra el 64,1% histórico\./.test(con(74.9)),
+  ok(/Aunque este año cortas más que de costumbre: 74,9% contra el 64,1% histórico, que mezcla dos formas de contar\./.test(con(74.9)),
      'por encima: «cortas más que de costumbre»');
   const baja = con(7.2);
-  ok(/Y este año aguantas más: dejas a medias el 7,2% de lo que pones, cuando en el total de tu historial la cifra es 64,1%\./.test(baja),
+  ok(/Y este año aguantas más: dejas a medias el 7,2% de lo que pones, cuando en el total de tu historial la cifra es 64,1%, que mezcla dos formas de contar\./.test(baja),
      'por debajo: «aguantas más»');
   ok(/En todo tu historial cortas 6 de cada 10 canciones; este año, 1\./.test(baja),
      'y la comparación «de cada 10» no dice «antes»: el total INCLUYE el año que se mira');

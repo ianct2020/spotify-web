@@ -2140,6 +2140,19 @@ además los saltos de más de 30 s (9.206 en 2023). O sea que 7,2 (2019) contra 
 es solo un cambio de costumbre**. El número de cada año es correcto para lo que el export
 registra; lo que no se puede es leerlo como una serie homogénea. Anotado en `PENDIENTES.md`.
 
+🟩 **Desde v=295 el TOTAL dice que mezcla dos formas de contar** (tanda 43). `totals.skip_pct`
+suma años sin el campo `skipped` con años que lo tienen. **El número no se recalcula sobre menos
+años** (se llama total): se avisa donde se muestra. La frase es `AVISO_MEZCLA` de
+`util/corte-saltos.js` («mezcla dos formas de contar»), la misma de la pista del tile «Skips» del
+año del corte, y **ningún sitio la escribe a mano** (lo vigila `tests/corte-saltos.test.mjs`,
+sección 5). Los tres sitios que muestran el total:
+
+| sitio | qué quedó | por qué |
+|---|---|---|
+| Dashboard, tile del historial | valor «64,2% skips», etiqueta «mezcla dos formas de contar» | la etiqueta va en un renglón con `nowrap` + elipsis (170 px a 1.366, 155 a 390): «Skips · mezcla dos formas de contar» mide 188,9 y se cortaba; la frase sola, 151,2 |
+| Wrapped, paso «dentro de todo», 2023-2026 | «…contra el 64,2% histórico, que mezcla dos formas de contar.» (las tres ramas) | pegada a la mención del total; 2018-2022 no nombran el total y no la llevan |
+| Wrapped «de siempre», tile «Plays válidas» | 🟥 **SIN CAMBIO** | la pista admite 220 px en un renglón; «de 212.491 crudas · 64,2% skips» ya mide 183,5 y la frase 165: con las tres cosas el tile y su fila crecen de 160,1 a 168,2 px. Los textos que entran tiran las crudas o la palabra «skips». No se tocó el CSS |
+
 **Versiones, las tres a la vez** (misma lógica que el `gid`): `STATS_VERSION` 3 → 4 en
 `gen-stats.py` (el sello del JSON), 2 → 4 en `history-processor.js` (el BYOH; estaba
 desfasado) y 4 → 5 en `history-keys.js` (la clave de IndexedDB y el `?v=` del JSON), con

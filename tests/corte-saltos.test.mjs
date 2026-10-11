@@ -7,7 +7,8 @@
 // años contra el total («este año aguantas más…»), y el tile «Skips» decía
 // «por skip o <30s» en años en los que el «skip» no existía en el dato.
 //
-// Afirma cuatro cosas:
+// Afirma cinco cosas (la quinta, desde v=295: el aviso de que el TOTAL mezcla dos formas de
+// contar sale de una sola constante y está en cada sitio donde entra):
 //   1. la función del corte;
 //   2. que para 2023-2026 `pasoDentroDeTodo()` devuelve EXACTAMENTE lo de v=291;
 //   3. que para 2018-2022 la comparación se fue entera y lo demás quedó igual;
@@ -21,11 +22,11 @@
 //
 // Corre sin navegador, sin token y sin el export, contra el JSON real del repo.
 
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { pasoDentroDeTodo } from '../src/js/features/wrapped-apertura.js';
-import { anioSinCampoSkipped, esElAnioDelCorte, PRIMER_SKIPPED_TRUE } from '../src/js/util/corte-saltos.js';
+import { anioSinCampoSkipped, esElAnioDelCorte, PRIMER_SKIPPED_TRUE, AVISO_MEZCLA } from '../src/js/util/corte-saltos.js';
 import { fmtDia } from '../src/js/util/fecha.js';
 
 const raiz = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -109,7 +110,18 @@ const sinCampo = stats.years.filter(y => anioSinCampoSkipped(y.year));
       ok(esperado.includes(m[0]), `${y.year}: la referencia trae su ${m[0]}`);
       esperado = reemplazarTodo(esperado, m);
     }
-    ok(JSON.stringify(paso(y)) === esperado, `${y.year}: JSON.stringify idéntico al de la referencia con sus porcentajes movidos (y nada más)`);
+    // v=295 (T43.4): además de los porcentajes, la comparación permite EXACTAMENTE la cláusula
+    // nueva, pegada a la mención del total, y nada más. Se afirma aparte (que está, una sola
+    // vez, y dónde) y después se le quita al objeto de hoy para compararlo con la referencia.
+    // Hasta T43.3 este assert comparaba `JSON.stringify(paso(y)) === esperado` sin quitar nada.
+    const CLAUSULA = `, que ${AVISO_MEZCLA}`;
+    const hoy = JSON.stringify(paso(y));
+    igual(hoy.split(CLAUSULA).length - 1, 1, `${y.year}: la cláusula «${CLAUSULA}» aparece UNA sola vez en el objeto`);
+    igual(paso(y).cuerpo.split(AVISO_MEZCLA).length - 1, 1, `${y.year}: y está en el cuerpo`);
+    const totalHoy = MOVIDOS.total[1].replace('%', '\\s?%');
+    ok(new RegExp(`(contra el ${totalHoy} histórico|en el total de tu historial la cifra es ${totalHoy}), que ${AVISO_MEZCLA}\\.`).test(paso(y).cuerpo),
+       `${y.year}: va PEGADA a la mención del total («…${MOVIDOS.total[1]}${/histórico/.test(paso(y).cuerpo) ? ' histórico' : ''}, que ${AVISO_MEZCLA}.»), en la misma frase`);
+    ok(hoy.split(CLAUSULA).join('') === esperado, `${y.year}: sin esa cláusula, JSON.stringify idéntico al de la referencia con sus porcentajes movidos (y nada más)`);
     igual(RAMA(paso(y).cuerpo), RAMA(JSON.parse(referencia[y.year]).cuerpo), `${y.year}: la rama de la comparación es la misma de la referencia`);
   }
   // Que la comparación de arriba mire algo: las tres ramas viejas siguen vivas ahí.
@@ -157,6 +169,8 @@ console.log('\n3. 2018-2022: sin comparación de saltos');
     const sinCuerpo = (o) => JSON.stringify({ ...o, cuerpo: null });
     ok(sinCuerpo(p) === sinCuerpo(ref), `${y.year}: el resto del objeto (etiqueta, número, bajada, dibujo) es el de v=291`);
     ok(c !== ref.cuerpo, `${y.year}: y el cuerpo SÍ cambió respecto de v=291`);
+    // v=295: el aviso del total va solo donde se nombra el total, y acá no se nombra.
+    ok(!JSON.stringify(p).includes(AVISO_MEZCLA), `${y.year}: el paso NO trae «${AVISO_MEZCLA}» (no compara con el total, así que no lo nombra)`);
   }
 }
 
@@ -187,8 +201,9 @@ console.log('\n4. Ninguna de las dos vistas escribe el año a mano');
   // anotaba los saltos) y ese año lleva ahora su propia pista.
   const m = /\n  const pistaSkips = ([\s\S]*?);\n/.exec(wrapped);
   ok(!!m, 'wrapped.js: se encuentra la sentencia `const pistaSkips = …;`');
-  const pistaDe = new Function('anioSinCampoSkipped', 'esElAnioDelCorte', 'y', `return (${m ? m[1] : "''"});`);
-  const pista = (anio) => pistaDe(anioSinCampoSkipped, esElAnioDelCorte, { year: anio });
+  // v=295: la sentencia lee además `AVISO_MEZCLA`, así que se le pasa la constante real.
+  const pistaDe = new Function('anioSinCampoSkipped', 'esElAnioDelCorte', 'AVISO_MEZCLA', 'y', `return (${m ? m[1] : "''"});`);
+  const pista = (anio) => pistaDe(anioSinCampoSkipped, esElAnioDelCorte, AVISO_MEZCLA, { year: anio });
   const PISTA_SIN_CAMPO = 'solo «siguiente» antes de 30 s';   // la de la tanda 41, tal cual
   const PISTA_CON_CAMPO = 'por skip o &lt;30s';               // la de siempre
   for (const y of stats.years) {
@@ -205,10 +220,72 @@ console.log('\n4. Ninguna de las dos vistas escribe el año a mano');
   // v=294 (tanda 43): este assert afirmaba que la pista «nombra a Spotify y a octubre». La pista
   // era «dos cuentas: Spotify anota desde oct.», y «dos cuentas» se leía como dos usuarios.
   ok(p22.includes('mezcla dos formas de contar'), '2022: dice que el año mezcla dos formas de contar');
+  igual(p22, AVISO_MEZCLA, '2022: y es la constante `AVISO_MEZCLA`, tal cual (el DOM del tile no cambia por leerla de ahí)');
   ok(!/cuentas/.test(p22), '2022: y no dice «cuentas», que se leía como dos cuentas de Spotify');
   ok(/\besElAnioDelCorte\(y\.year\)/.test(m ? m[1] : ''), 'wrapped.js: el año del corte sale de `esElAnioDelCorte(y.year)`, no de un año escrito a mano');
   ok(/<div class="wrapped-tile-label">Skips<\/div>\s*<div class="wrapped-tile-value">\$\{skipPctAnio\}%<\/div>\s*<div class="wrapped-tile-hint">\$\{pistaSkips\}<\/div>/.test(wrapped),
      'wrapped.js: el tile «Skips» pinta el mismo número de siempre y esa pista');
+}
+
+// ── 5. El total de saltos dice que mezcla dos formas de contar (v=295) ─────
+//
+// `totals.skip_pct` suma años en los que Spotify no anotaba los saltos con años en los que
+// sí. El número no se recalcula: se dice, en cada sitio donde se muestra el total. La frase
+// sale de UNA constante y ningún sitio la escribe a mano.
+
+console.log('\n5. El aviso del total: una sola constante, en cada sitio donde entra');
+{
+  const sinComentarios = (s) => s
+    .split('\n').map(l => l.replace(/(^|[^:'"`\\])\/\/.*$/, '$1')).join('\n')
+    .replace(/\/\*[\s\S]*?\*\//g, '');
+  igual(AVISO_MEZCLA, 'mezcla dos formas de contar', 'la constante `AVISO_MEZCLA` existe y vale «mezcla dos formas de contar»');
+  const def = sinComentarios(leer('src/js/util/corte-saltos.js'));
+  igual((def.match(/mezcla dos formas de contar/g) || []).length, 1, 'util/corte-saltos.js: la frase está escrita UNA vez, en la constante');
+  ok(/export const AVISO_MEZCLA = 'mezcla dos formas de contar';/.test(def), 'y es un `export const`');
+
+  const SITIOS = ['src/js/features/wrapped.js', 'src/js/features/dashboard.js', 'src/js/features/wrapped-apertura.js'];
+  const codigo = Object.fromEntries(SITIOS.map(f => [f, sinComentarios(leer(f))]));
+  for (const f of SITIOS) {
+    ok(new RegExp("import \\{[^}]*\\bAVISO_MEZCLA\\b[^}]*\\} from '\\.\\./util/corte-saltos\\.js'").test(codigo[f]), `${f}: IMPORTA \`AVISO_MEZCLA\` de util/corte-saltos.js`);
+    ok(!/mezcla dos formas/i.test(codigo[f]) && !/formas de contar/i.test(codigo[f]), `${f}: fuera de los comentarios NO escribe la frase a mano`);
+    ok((codigo[f].match(/\bAVISO_MEZCLA\b/g) || []).length >= 2, `${f}: y la usa (aparece además del import)`);
+  }
+  // Y nadie más en `src/js` la escribe (ni la copia con otro nombre).
+  // (`readdirSync` recursivo: Node 20.)
+  const todos = readdirSync(join(raiz, 'src/js'), { recursive: true }).filter(n => String(n).endsWith('.js')).map(n => 'src/js/' + String(n).split('\\').join('/'));
+  const conLaFrase = todos.filter(f => /mezcla dos formas de contar/.test(sinComentarios(leer(f))));
+  igual(conLaFrase.join(','), 'src/js/util/corte-saltos.js', `de los ${todos.length} archivos de src/js, el único que escribe la frase es el de la constante`);
+
+  // El tile «Skips» del Dashboard: la muestra. «skips» va en el valor porque la etiqueta
+  // (un renglón, `nowrap` + elipsis, 170 px a 1.366 y 155 a 390) no admite las dos cosas.
+  ok(/<div class="stat-card"><div class="stat-value">\$\{skipPct\}% skips<\/div><div class="stat-label">\$\{AVISO_MEZCLA\}<\/div><\/div>/.test(codigo['src/js/features/dashboard.js']),
+     'Dashboard: el tile del total de saltos MUESTRA el aviso (valor «N% skips», etiqueta `AVISO_MEZCLA`)');
+  igual((codigo['src/js/features/dashboard.js'].match(/\$\{AVISO_MEZCLA\}/g) || []).length, 1, 'Dashboard: y lo pinta una sola vez');
+
+  // El tile «Plays válidas» del Wrapped «de siempre»: NO la muestra, y el porqué va en el nombre.
+  const w = codigo['src/js/features/wrapped.js'];
+  const tileSiempre = (/<div class="wrapped-tile compact" style="grid-area:disc">\s*<div class="wrapped-tile-label">Plays válidas<\/div>[\s\S]*?<\/div>\s*<\/div>/.exec(w) || [''])[0];
+  ok(/crudas · \$\{skipPctTotal\}% skips<\/div>/.test(tileSiempre), 'Wrapped «de siempre»: se encuentra el tile «Plays válidas» con su pista «de N crudas · X% skips»');
+  ok(!/AVISO_MEZCLA/.test(tileSiempre),
+     'Wrapped «de siempre»: el tile «Plays válidas» QUEDÓ SIN EL AVISO POR EL ANCHO — la pista admite 220 px en un renglón a 1.366 px, ' +
+     '«de 212.491 crudas · 64,2% skips» mide 183,5 y la frase 165: con las tres cosas pasa a dos renglones y el tile y su fila crecen ' +
+     'de 160,1 a 168,2 px (a 390 px, de 85,8 a 102). Si este assert se pone rojo es que alguien lo metió: hay que volver a medirlo');
+  igual((w.match(/\bAVISO_MEZCLA\b/g) || []).length, 2, 'wrapped.js: `AVISO_MEZCLA` aparece dos veces, el import y la pista del año del corte');
+
+  // El paso «dentro de todo»: la trae pegada a la mención del total en las TRES ramas.
+  const ap = codigo['src/js/features/wrapped-apertura.js'];
+  ok(/const delTotal = `, que \$\{AVISO_MEZCLA\}`;/.test(ap), 'wrapped-apertura.js: la cláusula es `, que ${AVISO_MEZCLA}`');
+  igual((ap.match(/\$\{pct\(t\.skip_pct\)\}( histórico)?\$\{delTotal\}\./g) || []).length, 3, 'y va detrás de `pct(t.skip_pct)` en las tres ramas que nombran el total');
+  igual((ap.match(/pct\(t\.skip_pct\)/g) || []).length, 3, 'que son las únicas tres menciones del total en el archivo');
+  // Con números sintéticos, una frase por rama (el JSON real no garantiza las tres para siempre).
+  const sint = (pctAnio) => pasoDentroDeTodo({
+    y: { year: 2030, plays: 100, skip_pct: pctAnio }, fmtMinutes,
+    stats: { totals: { plays_valid: 1000, skip_pct: 64.2 }, years: [{ year: 2029 }, { year: 2030 }] },
+  }).cuerpo;
+  ok(sint(66.0).includes(`contra el 64,2% histórico, que ${AVISO_MEZCLA}.`), 'rama «igual que siempre»: «…contra el 64,2% histórico, que mezcla dos formas de contar.»');
+  ok(sint(75.0).includes(`contra el 64,2% histórico, que ${AVISO_MEZCLA}.`), 'rama «más que de costumbre»: ídem');
+  ok(sint(40.0).includes(`la cifra es 64,2%, que ${AVISO_MEZCLA}. En todo tu historial cortas 6 de cada 10 canciones; este año, 4.`), 'rama «aguantas más»: «…la cifra es 64,2%, que mezcla dos formas de contar.», y la frase «de cada 10» sigue detrás, igual');
+  ok(!/\d/.test(AVISO_MEZCLA) && !/%|habría|más|menos/.test(AVISO_MEZCLA), 'el aviso no trae ningún número, ni un «habría», ni una comparación');
 }
 
 console.log(`\n${fallaron === 0 ? '✓' : '✗'} corte-saltos: ${pasaron} asserts ok${fallaron ? `, ${fallaron} fallo(s)` : ''}`);

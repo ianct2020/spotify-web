@@ -16,7 +16,7 @@ import { armReveal, armRevealAll, releaseReveal, animationsEnabled } from '../ui
 import { coverUrl } from '../util/cover-size.js?v=295';
 import { vigilarRuta } from '../util/vigencia-ruta.js?v=295';
 import { fmtDia } from '../util/fecha.js?v=295';
-import { anioSinCampoSkipped, esElAnioDelCorte } from '../util/corte-saltos.js?v=295';
+import { anioSinCampoSkipped, esElAnioDelCorte, AVISO_MEZCLA } from '../util/corte-saltos.js?v=295';
 
 let stats = null;
 let selectedYear = null;
@@ -314,7 +314,8 @@ function renderYearCard() {
   // DE SPOTIFY (dos usuarios), no como dos formas de contar los saltos.
   // ⚠️ El largo está medido: entra en UN renglón a 1.366 px (con dos, la fila del tile crece
   // 8 px) y en dos a 390 px. Si la cambiás, volvé a medirla en los dos anchos.
-  const pistaSkips = esElAnioDelCorte(y.year) ? 'mezcla dos formas de contar'
+  // v=295: la frase ya no se escribe acá; es `AVISO_MEZCLA`, la misma que lleva el total.
+  const pistaSkips = esElAnioDelCorte(y.year) ? AVISO_MEZCLA
     : anioSinCampoSkipped(y.year) ? 'solo «siguiente» antes de 30 s' : 'por skip o &lt;30s';
 
   const topArtist = y.top_artists?.[0];
@@ -611,7 +612,17 @@ function daysCovered(year, stats) {
 function renderAllTime() {
   const holder = document.getElementById('wrapped-alltime');
   const t = stats.totals || {};
-  // El mismo dato y el mismo formato que el tile «Skips» del Dashboard (64,1).
+  // El mismo dato y el mismo formato que el tile «Skips» del Dashboard (64,1; 64,2 desde v=295).
+  //
+  // 🟥 v=295 (tanda 43): ESTE TILE NO LLEVA `AVISO_MEZCLA`, Y NO ES UN OLVIDO. El total de saltos
+  // mezcla dos formas de contar y los otros dos sitios que lo muestran (el tile «Skips» del
+  // Dashboard y el paso «dentro de todo») lo dicen. Acá no entra: la pista de este tile admite
+  // 220 px en UN renglón a 1.366 px, «de 212.491 crudas · 64,2% skips» ya ocupa 183,5 y la frase
+  // mide 165. Con cualquier texto que conserve las crudas, el porcentaje y el aviso la pista
+  // pasa a dos renglones y el tile y su fila crecen de 160,1 a 168,2 px (y a 390 px, de 85,8 a
+  // 102). Los únicos que entran tiran «de 212.491 crudas» o la palabra «skips», y esa es otra
+  // decisión. Medido con 15 textos; la tabla está en `fonoteca-migracion/ULTIMO-CAMBIO.md`
+  // (tanda 43). No se tocó el CSS. `tests/corte-saltos.test.mjs` lo afirma con su porqué.
   const skipPctTotal = Number(t.skip_pct || 0).toLocaleString('es-ES', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
 
   const topArtist = (stats.top_artists_all_time || [])[0];

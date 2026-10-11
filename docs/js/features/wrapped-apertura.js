@@ -78,7 +78,7 @@
 
 import { animationsEnabled } from '../ui/reveal.js?v=295';
 import { calendarioAnual, aMs, isoDesde, diaSemanaLunes } from '../ui/calendario-anual.js?v=295';
-import { anioSinCampoSkipped, esElAnioDelCorte } from '../util/corte-saltos.js?v=295';
+import { anioSinCampoSkipped, esElAnioDelCorte, AVISO_MEZCLA } from '../util/corte-saltos.js?v=295';
 
 // ── un solo recorrido vivo por vez ──────────────────────────────────────────
 //
@@ -491,18 +491,27 @@ export function pasoDentroDeTodo(ctx) {
     // ⚠️ v=292: estas tres ramas corren solo para los años CON el campo `skipped`. Su salida
     // tiene que seguir idéntica byte a byte a la de v=291: la referencia es
     // `tests/fixtures/dentro-de-todo-v291.json` y NO se regenera.
+    //
+    // v=295 (tanda 43): dos cosas se movieron respecto de esa referencia, y solo esas dos.
+    //   · los porcentajes, por el rehorneado (la basura funcional salió del divisor);
+    //   · la mención del TOTAL lleva pegado `, que ${AVISO_MEZCLA}`: el total suma años en
+    //     los que Spotify no anotaba los saltos con años en los que sí, y hasta acá no lo
+    //     decía en ningún lado. Va en la misma frase que nombra el total, en las tres ramas.
+    //     No da ninguna cifra de «cuánto habría sido» ni dice nada de cómo se escuchó.
+    // Las ramas, el umbral de 3 puntos y la frase «de cada 10» no se tocaron.
+    const delTotal = `, que ${AVISO_MEZCLA}`;
     const mejor = t.skip_pct - y.skip_pct;
     const deCada10Total = Math.round(t.skip_pct / 10);
     const deCada10Anio = Math.round(y.skip_pct / 10);
     cuerpo += Math.abs(mejor) < 3
-      ? ` Y escuchas igual que siempre: cortas el ${pct(y.skip_pct)} de lo que pones, contra el ${pct(t.skip_pct)} histórico.`
+      ? ` Y escuchas igual que siempre: cortas el ${pct(y.skip_pct)} de lo que pones, contra el ${pct(t.skip_pct)} histórico${delTotal}.`
       : mejor > 0
         ? ` Y este año aguantas más: dejas a medias el ${pct(y.skip_pct)} de lo que pones, ` +
-          `cuando en el total de tu historial la cifra es ${pct(t.skip_pct)}.` +
+          `cuando en el total de tu historial la cifra es ${pct(t.skip_pct)}${delTotal}.` +
           (deCada10Total !== deCada10Anio
             ? ` En todo tu historial cortas ${deCada10Total} de cada 10 canciones; este año, ${deCada10Anio}.`
             : '')
-        : ` Aunque este año cortas más que de costumbre: ${pct(y.skip_pct)} contra el ${pct(t.skip_pct)} histórico.`;
+        : ` Aunque este año cortas más que de costumbre: ${pct(y.skip_pct)} contra el ${pct(t.skip_pct)} histórico${delTotal}.`;
   }
   cuerpo += ` Ninguna tarjeta de las de abajo da este número: todas miran un año por vez.`;
 

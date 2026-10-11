@@ -25,6 +25,7 @@ import { openArtistCard } from './artist-card.js';
 import { openAlbumCard } from './album-card.js';
 import { activateMarquee, marqueeSpan } from '../ui/marquee.js';
 import { isJunkTrack } from '../util/junk.js';
+import { AVISO_MEZCLA } from '../util/corte-saltos.js';
 
 let charts = [];
 let _loadController = null;
@@ -894,6 +895,17 @@ async function hydrateHistorySection() {
   //
   // Sin locale explícito se usa el del NAVEGADOR, que en las máquinas de Ian es
   // es-AR: o sea que el bug se ve en su Chrome y no en una máquina en inglés.
+  //
+  // v=295 (tanda 43): el tile dice que EL TOTAL MEZCLA DOS FORMAS DE CONTAR. `totals.skip_pct`
+  // suma años en los que Spotify no anotaba los saltos (hasta el 15/10/2022 solo queda el
+  // rastro del botón «siguiente») con años en los que sí; el número no se recalcula, se avisa.
+  // La frase es `AVISO_MEZCLA` (`util/corte-saltos.js`), la misma del tile «Skips» del año del
+  // corte en `#wrapped`: no se escribe acá.
+  // ⚠️ Por eso «skips» subió al VALOR («64,2% skips») y la etiqueta es el aviso solo. La
+  // etiqueta (`.stat-label`) va en un renglón con `nowrap` + elipsis y mide 170 px a 1.366 y
+  // 155 a 390: «Skips · mezcla dos formas de contar» mide 188,9 y se cortaba con «…» en los
+  // dos anchos; la frase sola mide 151,2 y entra en los dos. El tile y su fila no cambian de
+  // alto (67,3 a 1.366; 61 a 390). Medido en el DOM, sin tocar el CSS.
   const skipPct = Number(t.skip_pct || 0).toLocaleString('es-ES', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
   const tiles = document.getElementById('history-stat-tiles');
   if (tiles) tiles.innerHTML = `
@@ -901,7 +913,7 @@ async function hydrateHistorySection() {
     <div class="stat-card"><div class="stat-value">${(t.plays_valid || 0).toLocaleString('es-ES')}</div><div class="stat-label">Plays (≥30s)</div></div>
     <div class="stat-card"><div class="stat-value">${(t.days_active || 0).toLocaleString('es-ES')}</div><div class="stat-label">Días activos</div></div>
     <div class="stat-card"><div class="stat-value">${t.longest_streak || 0}</div><div class="stat-label">Racha más larga (días)</div></div>
-    <div class="stat-card"><div class="stat-value">${skipPct}%</div><div class="stat-label">Skips</div></div>
+    <div class="stat-card"><div class="stat-value">${skipPct}% skips</div><div class="stat-label">${AVISO_MEZCLA}</div></div>
     <div class="stat-card"><div class="stat-value">${(t.unique_artists || 0).toLocaleString('es-ES')}</div><div class="stat-label">Artistas distintos</div></div>
   `;
   // Estos 6 tiles NACEN ACÁ, después de que `renderDashboard` ya armó lo suyo,

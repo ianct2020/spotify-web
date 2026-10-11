@@ -108,7 +108,9 @@ console.log('\n4. Los dos tiles de la misma fila, juntos');
 {
   const fila = dashboard.slice(dashboard.indexOf('history-stat-tiles'));
   ok(/días de música/.test(fila), 'la fila sigue teniendo el tile de «días de música»');
-  ok(/stat-label">Skips</.test(fila), 'y el tile de «Skips»');
+  // v=295 (tanda 43): afirmaba `stat-label">Skips<`. La etiqueta del tile pasó a ser el aviso
+  // de que el total mezcla dos formas de contar, y «skips» subió al valor («64,2% skips»).
+  ok(/stat-value">\$\{skipPct\}% skips</.test(fila), 'y el tile de «Skips» (desde v=295 la palabra va en el valor: «N% skips»)');
   ok(!/toFixed\(/.test(fila.slice(0, 1200)), 'y ninguno de los dos usa toFixed()');
 }
 
