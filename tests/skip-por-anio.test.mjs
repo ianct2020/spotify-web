@@ -29,6 +29,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { processStreamingHistory } from '../src/js/history-processor.js';
 import { pasoDentroDeTodo } from '../src/js/features/wrapped-apertura.js';
+import { anioSinCampoSkipped } from '../src/js/util/corte-saltos.js';
 
 const raiz = join(dirname(fileURLToPath(import.meta.url)), '..');
 const leer = p => readFileSync(join(raiz, p), 'utf8');
@@ -198,15 +199,29 @@ console.log('\n4. El paso «dentro de todo» de la apertura del Wrapped');
     ok(!/mucho más/.test(f), `${p}: ya no dice «mucho más» (la rama entra con 3 puntos)`);
   }
   // Y con el JSON real: los nueve años producen una frase, y ya no caen todos en la misma rama.
+  //
+  // v=292 (tanda 41): los años SIN el campo `skipped` (2018-2022, ver `util/corte-saltos.js`)
+  // ya no entran en ninguna de las tres ramas: ahí la comparación se fue entera. Lo que se
+  // afirma de ellos cambió (está marcado abajo); lo de 2023-2026 es lo de v=291, sin tocar.
+  // El detalle de la línea nueva lo vigila `tests/corte-saltos.test.mjs`.
   const ramas = new Set();
   for (const y of stats.years) {
     const f = frase(y);
     ok(typeof f === 'string' && f.length > 40, `${y.year}: el paso se arma con el JSON real`);
+    if (anioSinCampoSkipped(y.year)) {
+      // (antes: el año caía en una de las tres ramas y sumaba a `ramas`)
+      ok(/no se puede comparar/.test(f) && !/igual que siempre|aguantas más|más que de costumbre/.test(f),
+         `${y.year}: sin el campo \`skipped\` no cae en ninguna rama: dice que no se puede comparar`);
+      // (antes: «si sale "de cada 10", los dos números son distintos»)
+      ok(!/de cada 10/.test(f), `${y.year}: y la frase «de cada 10» no sale nunca`);
+      continue;
+    }
     ramas.add(/igual que siempre/.test(f) ? 'igual' : /aguantas más/.test(f) ? 'menos' : /más que de costumbre/.test(f) ? 'más' : '?');
     const d = Math.round(stats.totals.skip_pct / 10), a = Math.round(y.skip_pct / 10);
     ok(!/de cada 10/.test(f) || d !== a, `${y.year}: si sale «de cada 10», los dos números son distintos`);
   }
-  ok(!ramas.has('?'), 'todas las frases reales caen en una de las tres ramas');
+  // (antes: «todas las frases reales…», sobre los nueve años)
+  ok(!ramas.has('?'), 'todas las frases reales de los años con el campo caen en una de las tres ramas');
   ok(ramas.size >= 2, `los años reales ya no caen todos en la misma rama (${[...ramas].join(', ')})`);
 }
 

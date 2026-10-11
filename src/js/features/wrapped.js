@@ -16,6 +16,7 @@ import { armReveal, armRevealAll, releaseReveal, animationsEnabled } from '../ui
 import { coverUrl } from '../util/cover-size.js';
 import { vigilarRuta } from '../util/vigencia-ruta.js';
 import { fmtDia } from '../util/fecha.js';
+import { anioSinCampoSkipped } from '../util/corte-saltos.js';
 
 let stats = null;
 let selectedYear = null;
@@ -303,6 +304,11 @@ function renderYearCard() {
   // vista en la que la apertura dice «64,1%».
   const skipPctAnio = Number(y.skip_pct || 0).toLocaleString('es-ES', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
 
+  // v=292: en los años sin el campo `skipped` (ver `util/corte-saltos.js`) el número se queda
+  // —es una medida real— pero «por skip o <30s» era falso: ahí el export solo deja ver lo que se
+  // pasó con «siguiente» antes de 30 s. Para el resto de los años la pista es la de siempre.
+  const pistaSkips = anioSinCampoSkipped(y.year) ? 'solo «siguiente» antes de 30 s' : 'por skip o &lt;30s';
+
   const topArtist = y.top_artists?.[0];
   const topAlbum = y.top_albums?.[0];
   const topTrack = y.top_tracks?.[0];
@@ -374,7 +380,7 @@ function renderYearCard() {
         <div class="wrapped-tile compact" style="grid-area:skp">
           <div class="wrapped-tile-label">Skips</div>
           <div class="wrapped-tile-value">${skipPctAnio}%</div>
-          <div class="wrapped-tile-hint">por skip o &lt;30s</div>
+          <div class="wrapped-tile-hint">${pistaSkips}</div>
         </div>
         <div class="wrapped-tile compact" style="grid-area:fst">
           <div class="wrapped-tile-label">Primera play</div>

@@ -78,6 +78,7 @@
 
 import { animationsEnabled } from '../ui/reveal.js';
 import { calendarioAnual, aMs, isoDesde, diaSemanaLunes } from '../ui/calendario-anual.js';
+import { anioSinCampoSkipped, esElAnioDelCorte } from '../util/corte-saltos.js';
 
 // ── un solo recorrido vivo por vez ──────────────────────────────────────────
 //
@@ -458,23 +459,38 @@ export function pasoDentroDeTodo(ctx) {
 
   let cuerpo = `De las ${num(totalPlays)} reproducciones válidas que Spotify tiene tuyas ` +
                `en ${anios} años, ${pct(parte)} son de ${y.year}.`;
-  if (typeof y.skip_pct === 'number' && typeof t.skip_pct === 'number') {
+  if (anioSinCampoSkipped(y.year)) {
+    // v=292 — LOS AÑOS SIN EL CAMPO `skipped` NO SE COMPARAN (ver `util/corte-saltos.js`).
+    //
+    // Hasta v=291 estos años caían en las ramas de abajo («este año aguantas más: dejas a
+    // medias el 7,2 %…, cuando en el total de tu historial la cifra es 64,1 %»): un año
+    // medido con una regla contra un total medido mayormente con la otra, presentado como
+    // costumbre. Acá no va el porcentaje del total, ni una comparación con otros años, ni
+    // una estimación de «cuánto habría sido», ni nada sobre cómo se escuchó: con estos
+    // datos no se puede saber, y el texto no lo insinúa en ninguna dirección.
+    //
+    // El año lo decide `anioSinCampoSkipped()`; este archivo no lo escribe a mano. Lo único
+    // atado a la fecha que queda acá es la palabra «octubre», y el test la cruza con la constante.
+    cuerpo += esElAnioDelCorte(y.year)
+      ? ` Spotify empezó a anotar cuándo saltabas una canción a mediados de octubre de ${y.year}; ` +
+        `hasta entonces solo registraba si le dabas a «siguiente».`
+      : ` En ${y.year} Spotify no anotaba cuándo saltabas una canción, solo si le dabas a «siguiente».`;
+    cuerpo += ` Por eso el porcentaje de saltos de este año no se puede comparar con el total ni con los años siguientes.`;
+  } else if (typeof y.skip_pct === 'number' && typeof t.skip_pct === 'number') {
     // ⚠️ v=291: `years[].skip_pct` pasó a medir lo MISMO que `totals.skip_pct` (hasta v=290
     // era otra cuenta con el mismo nombre y daba 6-36 % contra un total de 64,1: los nueve
     // años caían en la rama de «aguantas mucho más», y era mentira). Con el dato bueno la
     // rama del medio se reescribió en dos puntos, y el umbral de 3 puntos NO se tocó:
     //
-    //   · «aguantas MUCHO más» → «aguantas más». La rama entra con 3 puntos de diferencia,
-    //     y 60,0 contra 64,1 (2022) no es «mucho».
+    //   · «aguantas MUCHO más» → «aguantas más». La rama entra con 3 puntos de diferencia.
     //   · «Antes cortabas N de cada 10; ahora, M» llamaba «antes» al total del historial,
     //     que INCLUYE el año que se está mirando (2025 es el 28 % de las reproducciones).
     //     Ahora compara el total con el año, sin orden en el tiempo, y solo cuando los dos
-    //     redondeos difieren: «6 de cada 10; este año, 6» no dice nada (2022 y 2026).
+    //     redondeos difieren: «6 de cada 10; este año, 6» no dice nada (2026).
     //
-    // 🟥 Lo que este texto NO puede saber: el export de Spotify trae `skipped: false` en
-    // TODO lo anterior al 15/10/2022, así que en esos años un salto solo se ve si fue con
-    // el botón y antes de los 30 s. Sus cifras salen bajas por el instrumento, no (solo)
-    // por la costumbre. Anotado en `fonoteca-migracion/PENDIENTES.md`; es otra decisión.
+    // ⚠️ v=292: estas tres ramas corren solo para los años CON el campo `skipped`. Su salida
+    // tiene que seguir idéntica byte a byte a la de v=291: la referencia es
+    // `tests/fixtures/dentro-de-todo-v291.json` y NO se regenera.
     const mejor = t.skip_pct - y.skip_pct;
     const deCada10Total = Math.round(t.skip_pct / 10);
     const deCada10Anio = Math.round(y.skip_pct / 10);
