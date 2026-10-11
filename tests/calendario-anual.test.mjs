@@ -23,6 +23,7 @@
 // (offset 2, 139 días). Un bug en el `offset` o en la cuenta de semanas se ve
 // en uno de los dos.
 import { readFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { calendarioAnual, aMs, isoDesde, diaSemanaLunes, ultimoDiaDelTramo, tercilesDelTramo }
@@ -73,7 +74,11 @@ function picoDe(D) {
 }
 
 // ── 1 · byte a byte contra la referencia de v=288 ───────────────────────────
-for (const anio of [2025, 2018]) {
+//
+// Solo 2025. **2018 salió de acá en v=290** (tanda 39): el año que arranca el 15/08 ahora lleva
+// el rótulo «agosto» que antes no tenía, así que ya NO es byte a byte la de v=288 — la sección 7
+// comprueba que lo ÚNICO que cambió es esa etiqueta. La referencia de 2018 no se tocó.
+for (const anio of [2025]) {
   const D = tramo(anio);
   const esperado = readFileSync(join(raiz, `tests/fixtures/calendario-apertura-${anio}.html`), 'utf8');
   const salida = calendarioAnual(D, picoDe(D), ctx);
@@ -182,6 +187,83 @@ for (const anio of [2025, 2018]) {
   igual(a.nivel(0), 0, 'un día sin música es nivel 0');
   igual(a.nivel(a.t2 + 1), 3, 'por encima del segundo tercil es nivel 3');
   igual(a.nivel(a.t1), 2, 'el corte es exclusivo por abajo (`v < t1` es nivel 1)');
+}
+
+// ── 7 · 2018 (el año parcial): la ÚNICA diferencia con v=288 es la etiqueta nueva ─────────────
+//
+// En v=290 el mes con el que ARRANCA la grilla se rotula en la columna 0 si hay al menos 2
+// columnas hasta la siguiente etiqueta (ver `calendarioAnual`). 2018 empieza el 15/08 y
+// «septiembre» cae en la columna 2: hasta v=289 la grilla arrancaba SIN rótulo y agosto no
+// aparecía en ningún sitio.
+//
+// La comprobación es la misma que la de la sección 1, con un solo retoque: a la salida NUEVA se
+// le quita esa etiqueta (`<span>agosto</span>` vuelve a ser `<span></span>`, que es lo que
+// había) y lo que queda tiene que ser la referencia de v=288 BYTE A BYTE. Así «es solo la
+// etiqueta» no es una frase sino una igualdad. La referencia NO se regenera.
+const meses = (html) => [...html.match(/<div class="wr-ap-cal-meses">(.*?)<\/div>/s)[1].matchAll(/<span>(.*?)<\/span>/g)].map(m => m[1]);
+{
+  const D = tramo(2018);
+  const esperado = readFileSync(join(raiz, 'tests/fixtures/calendario-apertura-2018.html'), 'utf8');
+  const salida = calendarioAnual(D, picoDe(D), ctx);
+  const ROTULO = '<div class="wr-ap-cal-meses"><span>agosto</span>';
+  af(salida.includes(ROTULO), '2018 arranca el 15/08: la columna 0 lleva «agosto»');
+  igual(meses(salida)[0], 'agosto', 'el primer rótulo de 2018 es agosto');
+  igual(meses(salida).filter(Boolean).join(','), 'agosto,septiembre,octubre,noviembre,diciembre',
+    '2018 rotula los CINCO meses que toca (antes solo cuatro: faltaba agosto)');
+  const sinLa = salida.replace(ROTULO, '<div class="wr-ap-cal-meses"><span></span>');
+  if (sinLa === esperado) ok++;
+  else {
+    let i = 0;
+    while (i < sinLa.length && i < esperado.length && sinLa[i] === esperado[i]) i++;
+    fallos.push(`2018 sin la etiqueta nueva NO es la referencia de v=288. Primer byte distinto en ${i}.\n` +
+      `  esperaba: …${JSON.stringify(esperado.slice(Math.max(0, i - 40), i + 40))}\n` +
+      `  vino:     …${JSON.stringify(sinLa.slice(Math.max(0, i - 40), i + 40))}`);
+  }
+}
+
+// ── 8 · los tres casos del primer mes (y los dos bordes) ───────────────────────────────────
+//
+// Con series sintéticas, para que el caso no dependa de qué año tenga Ian en su export.
+// `min` va en cero salvo un día: el rótulo no mira los minutos.
+{
+  const serie = (from, dias) => ({ from, min: Array.from({ length: dias }, (_, i) => (i % 3 === 0 ? 20 : 0)) });
+  const rot = (from, dias) => meses(calendarioAnual(serie(from, dias), 0, ctx));
+  const lista = (r) => r.map((e, i) => (e ? `${i}:${e}` : null)).filter(Boolean).join(' ');
+
+  // Arranca el 15 (miércoles, 2 huecos). El 1 de septiembre cae en la columna 2 → ⇒ 2 columnas
+  // de separación, que es JUSTO el mínimo: se rotula.
+  igual(lista(rot('2018-08-15', 139)), '0:agosto 2:septiembre 7:octubre 11:noviembre 15:diciembre',
+    'arranca el 15: se rotula el mes parcial (septiembre a 2 columnas, el mínimo)');
+  // Arranca el DÍA 1: el rótulo ya salía en la columna 0 y no puede duplicarse ni moverse.
+  igual(lista(rot('2026-04-01', 90)), '0:abril 4:mayo 9:junio',
+    'arranca el día 1: el rótulo de siempre, una sola vez');
+  // Arranca el 30 (jueves): el 1 de mayo es el día siguiente y cae en la columna 0 ⇒ el mes
+  // parcial (un día) NO se rotula, y su etiqueta no se pisa con la de mayo.
+  igual(lista(rot('2026-04-30', 60)), '0:mayo 5:junio',
+    'arranca el 30: el mes parcial no se rotula');
+  // Arranca el 26 (domingo, 6 huecos): el 1 de mayo cae en la columna 1 → 1 columna de separación,
+  // por debajo del mínimo ⇒ tampoco se rotula abril.
+  igual(lista(rot('2026-04-26', 60)), '1:mayo 6:junio',
+    'arranca un día que deja la siguiente etiqueta en la columna 1: no se rotula');
+  // Un tramo que no llega ni al mes siguiente: no hay «siguiente etiqueta» con la que pisarse.
+  igual(lista(rot('2026-03-15', 10)), '0:marzo', 'un tramo de 10 días dentro de un mes se rotula con ese mes');
+}
+
+// ── 9 · 2019–2026 siguen idénticos byte a byte a lo que emitía v=289 ───────────────────────
+//
+// Son los años que empiezan un día 1: el rótulo nuevo no puede tocarlos NI UN BYTE. Solo hay
+// fixtures HTML de 2018 y 2025; para el resto, el hash de la salida de v=289 (generado antes de
+// tocar el código; ver `tests/fixtures/calendario-apertura-hashes.json`). Si alguno cambia, es un
+// defecto del código nuevo — no un efecto esperado.
+{
+  const refs = JSON.parse(readFileSync(join(raiz, 'tests/fixtures/calendario-apertura-hashes.json'), 'utf8')).anios;
+  for (const [anio, ref] of Object.entries(refs)) {
+    const D = tramo(+anio);
+    igual(D.from, ref.from, `${anio}: el tramo empieza donde empezaba`);
+    const salida = calendarioAnual(D, picoDe(D), ctx);
+    igual(createHash('sha256').update(salida).digest('hex'), ref.sha256,
+      `${anio} (arranca el ${D.from}): el calendario sigue siendo BYTE A BYTE el de v=289`);
+  }
 }
 
 // ── salida ─────────────────────────────────────────────────────────────────

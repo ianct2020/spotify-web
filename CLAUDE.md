@@ -1906,6 +1906,20 @@ código viejo, antes de tocar nada**, sobre el `history-stats.json` real.
 `tests/calendario-anual.test.mjs` se pone rojo, se arregla el código. Regenerar
 el fixture convierte la puerta en un sello de goma.
 
+⚠️ **Desde v=290 ya no es «EXACTAMENTE» para un tramo que no arranca un día 1** (el rótulo
+del primer mes). Hasta v=289 una etiqueta de mes solo salía donde caía el día 1, así que
+2018 (arranca el 15/08) no rotulaba agosto, su primera columna. Ahora el mes de `D.from`
+se rotula en la columna 0 si hay **al menos 2 columnas** (`MIN_COLS_PRIMER_MES`) hasta la
+siguiente etiqueta; por debajo no, porque el mes visible tiene menos de dos semanas y su
+rótulo se pisaría con el siguiente. **Medido a 1.366 px con Inter cargada**: agosto termina
+en x=313,2 y septiembre empieza en x=361,7, o sea 48,5 px de aire, y no se pisan. A
+**340 px** de ancho de contenedor (un móvil), con columnas de 13,3 px, quedan a **0,5 px**:
+se rozan pero no se pisan. Es el límite; con un mínimo de 1 columna ya se pisarían. Cambia
+el Wrapped de 2018 y de ningún otro año: los que arrancan un día 1 (2019–2026) siguen
+idénticos byte a byte a v=289 (`tests/fixtures/calendario-apertura-hashes.json`) y 2018,
+quitándole la etiqueta nueva, es la referencia de la 38 (`tests/calendario-anual.test.mjs`,
+sección 7). **Por eso 2018 salió del byte a byte de la sección 1**: el fixture no se tocó.
+
 ⚠️ **`#calendario` NO redefine ninguna regla de `.wr-ap-*` desde su hoja.** Pide
 `claseContenedor: 'cal-anual'` y todo lo suyo cuelga de esa clase. Es la regla
 de `.wt-play-btn` (v=219): el look se comparte en `main.css`, la identidad no.
@@ -2049,7 +2063,7 @@ guarda de animaciones que no puede ser global) siguen valiendo y están en
 
 | qué | dónde | corre en |
 |---|---|---|
-| la apertura del Wrapped no cambió, byte a byte | `tests/calendario-anual.test.mjs` (45) | `npm test` |
+| la apertura del Wrapped no cambió, byte a byte (2025; 2018 salvo su rótulo nuevo; 2019–2026 por hash) | `tests/calendario-anual.test.mjs` (77) | `npm test` |
 | los minutos cuadran día por día + los saltos | `tests/calendario-dias.test.mjs` (57) | `npm test` |
 | abrir no gasta · la playlist cuesta 2 y 3 | `tests/banco/calendario.html` | `npm run prepush` |
 

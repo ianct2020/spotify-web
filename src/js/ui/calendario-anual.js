@@ -40,6 +40,10 @@
 // v=154/v=231 por la puerta de atrás. `ctx.MESES_LARGOS || ctx.MESES` para los
 // nombres de mes.
 
+// Cuántas columnas tienen que separar el rótulo del primer mes (cuando el tramo no arranca un
+// día 1) del siguiente. Medido a 1.366 px con la letra Inter ya cargada: ver tanda 39.
+const MIN_COLS_PRIMER_MES = 2;
+
 // ── utilidades de fecha, todas en UTC ───────────────────────────────────────
 //
 // Un "YYYY-MM-DD" es un DÍA del calendario, no un instante: pasarlo por
@@ -145,6 +149,26 @@ export function calendarioAnual(D, iPico, ctx, op = {}) {
     const ms = aMs(D.from) + i * 86400000;
     const f = new Date(ms);
     if (f.getUTCDate() === 1) etiquetas[Math.floor((offset + i) / 7)] = mes(ctx, f.getUTCMonth());
+  }
+
+  // ── El mes con el que ARRANCA la grilla (v=290) ───────────────────────────────────────────
+  //
+  // «Una etiqueta solo se pone donde cae el día 1 de un mes» dejaba sin rótulo a un tramo que
+  // NO empieza un día 1: 2018 arranca el 15/08 y la primera columna —agosto— quedaba muda, con
+  // septiembre, octubre, noviembre y diciembre rotulados a su derecha. Vale para cualquier año
+  // parcial, no solo 2018, y por eso se arregla acá y no en cada vista.
+  //
+  // El criterio (decidido, no calibrado a ojo): el mes de `D.from` se rotula en la columna 0 si
+  // hay AL MENOS `MIN_COLS_PRIMER_MES` columnas hasta la siguiente etiqueta. Por debajo, el mes
+  // visible es de menos de dos semanas y su rótulo se pisaría con el siguiente: no se rotula.
+  // Si no hay siguiente etiqueta (un tramo que no llega al mes que viene) no hay con qué
+  // pisarse y se rotula. Un tramo que ya empieza el día 1 trae su etiqueta en la columna 0 y
+  // no entra por acá, así que los años completos salen idénticos byte a byte a v=289.
+  if (!etiquetas[0]) {
+    const siguiente = etiquetas.findIndex((e, c) => c > 0 && e);
+    if (siguiente === -1 || siguiente >= MIN_COLS_PRIMER_MES) {
+      etiquetas[0] = mes(ctx, new Date(aMs(D.from)).getUTCMonth());
+    }
   }
 
   const muestra = (n) => `<i class="wr-ap-leg-c ${n}"></i>`;

@@ -1,0 +1,54 @@
+{
+ "_que_es": "sha256 de lo que emitía calendarioAnual() de v=289 (el código ANTERIOR al rótulo del primer mes parcial, tanda 39) para cada año completo del history-stats.json real, sin opciones. Generado el 2026-10-10 con el código viejo, ANTES de tocarlo. NO se regenera nunca con el código nuevo: si tests/calendario-anual.test.mjs se pone rojo, lo que está mal es el código.",
+ "_por_que_hashes": "Solo hay fixtures HTML completos de 2018 y 2025 (tanda 38). Para 2019–2026 alcanza con el hash: la pregunta es solo «¿cambió algún byte?», y 8 años más de HTML eran ~140 KB en un repo público.",
+ "anios": {
+  "2019": {
+   "from": "2019-01-01",
+   "dias": 365,
+   "largo": 17092,
+   "sha256": "b46fa4078d53a61a2354df933270b759a8638dfea5bb6406bf263f4d03338022"
+  },
+  "2020": {
+   "from": "2020-01-01",
+   "dias": 366,
+   "largo": 17169,
+   "sha256": "311a71e84c89502e171f8354b509de0027117da7f49d719045f7d79c489b2d8d"
+  },
+  "2021": {
+   "from": "2021-01-01",
+   "dias": 365,
+   "largo": 17312,
+   "sha256": "9926327016e04fc7b76e004bcdbc4428d733ade226b80f186fdb47ddc1f5a26a"
+  },
+  "2022": {
+   "from": "2022-01-01",
+   "dias": 365,
+   "largo": 17539,
+   "sha256": "391ae9fe0b5bdc86394e452cf1b7e927a26d7b44358e4abca17a98fb3ca26fb1"
+  },
+  "2023": {
+   "from": "2023-01-01",
+   "dias": 365,
+   "largo": 18140,
+   "sha256": "99753e6d2c8c4d1cb5075dde3f9409748cba08b562bf571477ffaeceb7771355"
+  },
+  "2024": {
+   "from": "2024-01-01",
+   "dias": 366,
+   "largo": 18071,
+   "sha256": "0d7aa078afd17623ccb8ccc6a3badd89783b667ab54ed81b11ed533554f18bbe"
+  },
+  "2025": {
+   "from": "2025-01-01",
+   "dias": 365,
+   "largo": 18215,
+   "sha256": "792f9e0a3155a28477ad2de7147bb670dfbd301a91ca0db3bab81021be507c34"
+  },
+  "2026": {
+   "from": "2026-01-01",
+   "dias": 239,
+   "largo": 12105,
+   "sha256": "e91ce37803d41e242279dcff9456e31d92f030af262d90e7619b135a0ff4e7e7"
+  }
+ }
+}
