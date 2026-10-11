@@ -1882,6 +1882,182 @@ más larga, un paso de zoom o un contador más y rompe. ⚠️ El «~1.190 px» 
 venía diciendo era aproximado; el número medido es **1.214**. La barra lateral
 **no quita ancho** (va por encima, `main` mide 1.356 con ella abierta o cerrada).
 
+## 📅 `#calendario`: el detalle por día, y por qué es PRIVADO (v=289, 2026-10-10)
+
+Cada día del historial, coloreado por los minutos que sonaron, con un panel por
+día que dice qué escuchaste. Ruta `calendario`, sección General, detrás de
+«Récords».
+
+### Un solo calendario: `ui/calendario-anual.js`
+
+El dibujo tipo GitHub era `visualCalendario()`, **privada** de
+`features/wrapped-apertura.js` (el paso «Días con música» de la apertura del
+Wrapped). Ahora vive en `src/js/ui/calendario-anual.js` y lo usan las DOS
+vistas. No se copió: en este repo hay un resolutor de álbum que se escribió dos
+veces y divergió (v=219) y un `fmtDate()` que se copió y fue la copia la que
+mintió durante 27 versiones (v=231).
+
+⚠️ **SIN OPCIONES, `calendarioAnual()` emite EXACTAMENTE el marcado de v=288**,
+clases `.wr-ap-*` incluidas. Eso no es pereza de nomenclatura: es lo que hace
+comprobable que la apertura no cambió. Las referencias de
+`tests/fixtures/calendario-apertura-{2025,2018}.html` se generaron **con el
+código viejo, antes de tocar nada**, sobre el `history-stats.json` real.
+**La referencia NO se regenera nunca con el código nuevo**: si
+`tests/calendario-anual.test.mjs` se pone rojo, se arregla el código. Regenerar
+el fixture convierte la puerta en un sello de goma.
+
+⚠️ **`#calendario` NO redefine ninguna regla de `.wr-ap-*` desde su hoja.** Pide
+`claseContenedor: 'cal-anual'` y todo lo suyo cuelga de esa clase. Es la regla
+de `.wt-play-btn` (v=219): el look se comparte en `main.css`, la identidad no.
+Una regla `.wr-ap-cal i { … }` escrita para la vista nueva le cambiaría el
+dibujo al Wrapped.
+
+Los formateadores siguen llegando por `ctx` (`fmtDia` de `util/fecha.js`,
+`fmtMinutes` de `wrapped.js`): importarlos ahí dentro sería reintroducir el bug
+de las fechas por la puerta de atrás.
+
+### El dato nuevo: `days`, el octavo payload, y NO se hornea
+
+🔴 **`src/data/history-days.json` NO EXISTE Y NO SE BUSCA, a propósito.** Todo
+lo que viva en `src/data/` se publica en GitHub Pages **y en un repo PÚBLICO**, y
+esto es el diario de escucha de Ian día por día con los temas de cada día.
+`scripts/gen-stats.py` **no se tocó** y no emite nada nuevo.
+
+El dato vive solo en `localKey(uid, 'days')` en IndexedDB, por `loadDays()`
+(`features/history-data.js`), que pasa por `loadOne()` y respeta el candado del
+owner igual que los otros siete. Sin dato local devuelve `null` y la vista lo
+dice.
+
+Lo produce `crearAcumuladorDeDias()` (`history-processor.js`), una función
+**propia e incremental**: `agregarArchivo(arr)` recibe **un archivo por vez**, lo
+acumula y lo suelta, y `cerrar()` arma el payload. Comparte con el pipeline las
+tres reglas que tienen que ser las mismas o los minutos no cuadran:
+
+1. la deduplicación (`` `${ts}|${uri}|${ms_played || 0}` ``, con el `Set`
+   **compartido entre archivos**, porque los `_N` del export se solapan);
+2. el descarte de lo que no tiene `spotify_track_uri` (episodios, audiolibros) y
+   de la basura funcional (`isJunkTrack`);
+3. la agrupación por día **en UTC**.
+
+El orden de los temas dentro del día sale del `ts` **mínimo** de cada uno, así
+que **no hace falta el `sort` global** de `processStreamingHistory()`. Y esa
+función la usa por dentro para producir `days` en el import de un amigo: **una
+sola implementación**. Los otros siete payloads no cambian ni un byte
+(`tests/calendario-dias.test.mjs`).
+
+**Medido sobre el export real de Ian** (19 archivos `Streaming_History_Audio_*`,
+158,3 MB, en Node, 2026-10-10): **1.950 días con detalle**, **46.260 temas** en
+el diccionario, 100.400 filas (día, tema), **4,05 MB** serializado, **2,7 s** y
+**369 MB de RSS** máximo. Contra el `history-stats.json` que horneó el Python:
+`plays_raw` 212.491 ✓, `plays_valid` 104.147 ✓, `skip_pct` 64,1 ✓,
+`days_active` 1.856 ✓, y **2.935 días comparados día por día con 0 diferencias**.
+
+### 🟥 La definición de salto: el pipeline tiene DOS y se llaman igual
+
+`days[].saltos` usa la de `totals.skip_pct`:
+
+```
+r.skipped === true   ||   (r.reason_end === 'fwdbtn' && ms_played < 30 s)
+```
+
+contada sobre las reproducciones **crudas**. Con eso `Σsaltos / Σcrudas`
+reproduce `totals.skip_pct` **exacto**.
+
+⚠️ **`years[].skip_pct` NO es esa cuenta y no se puede cuadrar con ella.** Es
+`yb.skipped / (yb.plays + yb.skipped)`, donde `yb.skipped` cuenta
+`fwdbtn || skipped` **sin mirar los 30 s** y —lo que más pesa— **solo entre las
+plays de ≥30 s**: el `yb.skipped++` vive DENTRO del `if (ms < MIN_MS) continue`
+(`gen-stats.py:549`, `history-processor.js`). Y el denominador suma los saltos
+dos veces, porque `yb.plays` ya los contiene.
+
+Medido sobre el export real: con la definición de `totals`, 2023 da **74,9 %** y
+`years[].skip_pct` dice **34,7 %**; **los nueve años difieren**. Con la otra
+fórmula se reproducen **9 de 9 exactos**. `tests/calendario-dias.test.mjs`
+afirma **las dos cosas**, para que nadie «arregle» el acumulador persiguiendo un
+número que mide otra cosa. Anotado en `PENDIENTES.md`.
+
+### La importación «solo el detalle» (para el owner)
+
+⚠️ **El owner no puede pasar por `saveMyHistory()`.** Escribe las ocho claves
+`local_{uid}_history_*`, y `loadOne()` las consulta **antes** que los JSON
+horneados del repo: a Ian le pisaría las siete vistas de historial con datos
+recalculados en el navegador, sin las correcciones a mano de los JSON («Birds In
+The Trap Sing McKnight», v=151) ni las tapas de `bake-covers.py`. Y pasaría sin
+fallar.
+
+Por eso `importarSoloElDetalle()` (`features/import-history.js`) **no corre
+`processStreamingHistory()`**, lee archivo por archivo y guarda **una sola
+clave** por `guardarSoloDias()`. Lo ofrece el panel del día cuando no hay
+detalle.
+
+⚠️ **Cede el hilo con `MessageChannel`, no con `setTimeout`**: Chrome estrangula
+`setTimeout` a **uno por minuto** en una pestaña oculta, así que 19 archivos con
+`setTimeout(0)` entre cada uno tardarían 19 minutos y parecerían colgados.
+
+🟥 **El progreso congelado del import COMPLETO no se arregló acá**, y está
+anotado en `PENDIENTES.md`: el `onProgress` que le pasa `handleFiles()` es
+`async` con un `await` adentro que **nadie espera**, porque
+`processStreamingHistory()` lo llama sin `await`. El cartel se congela durante
+todo el procesamiento.
+
+### El contraste del selector de año: anillo, no blanco sobre el acento
+
+🔴 **No reusa `.covers-chip`, y es deliberado.** Su `.is-on` pinta
+`color: white` sobre `background: var(--color-accent)` y da **violeta 5,70 ·
+ámbar 2,84 ✘ · aguamarina 1,89 ✘ · papel 7,10**: falla AA en dos de los cuatro
+presets desde hace versiones (anotado en `PENDIENTES.md`). `.cal-anio.is-on` usa
+un **anillo** (`box-shadow` del acento) con el texto en `--color-text`:
+**15,91 · 14,82 · 13,63 · 12,92**, medido el 10/10 con las transiciones
+terminadas.
+
+Y el pie y los textos de pista van en `--color-text-secondary` y **no** en
+`--color-text-muted`: el muted da **2,48 · 3,00 · 3,02 · 3,52**, o sea que falla
+AA en los cuatro. La jerarquía la hace el tamaño, no el color. ⚠️ El resto de la
+app usa muted para los textos de pista y arrastra el mismo problema: anotado, no
+tocado.
+
+### ⚠️ Medir contraste: componer el ALFA, o el número es inventado
+
+Pisado en esta tanda. `.cal-anio.is-on` tiene `background: var(--color-accent-tint)`
+—el acento al 10 %— y leer sus tres primeros números como si fuera opaco daba
+**2,50 en ámbar y 1,68 en aguamarina**: un defecto de accesibilidad que **no
+existe**. Compuesto de verdad sobre el fondo da 14,82 y 13,63. Hay que componer
+capa por capa hasta una opaca, y también el alfa (y la `opacity`) del texto.
+Es la misma familia que la medición a mitad de transición del 09/10.
+
+### 🔴 La CUARTA trampa de la captura: `setDeviceMetricsOverride` la congela
+
+Pisada en esta tanda y es la peor de las cuatro, porque la captura **sale bien**.
+El conductor llamaba a `Emulation.setDeviceMetricsOverride` antes de cada
+captura (para estirar el viewport al alto del recorte) y
+`clearDeviceMetricsOverride` después. Con eso, dos estados **visiblemente
+distintos** —el día pico con su anillo blanco y sin él— daban PNG **byte a byte
+idénticos**: 11.383 B los dos. Comprobado que la diferencia existía: el
+`box-shadow` computado era `rgb(240,240,245) 0 0 0 2px, …` en uno y `none` en el
+otro, con la celda en x=676 y=311, dentro del recorte. Sin el override, los
+mismos dos estados dan 12.959 B y 11.925 B y `cmp` los separa.
+
+**La regla: el viewport se fija UNA sola vez, al arrancar, con alto de sobra, y
+no se vuelve a tocar durante la corrida.** Y antes de disparar se comprueba que
+el recorte entre en el viewport y que `scrollY === 0`; si no, se para en vez de
+capturar algo dudoso. Las otras tres trampas (el `IntersectionObserver` que
+`captureBeyondViewport` no dispara, el `clip` en coordenadas de página y la
+guarda de animaciones que no puede ser global) siguen valiendo y están en
+`fonoteca-migracion/CONTEXTO-TECNICO.md`.
+
+### Las guardas
+
+| qué | dónde | corre en |
+|---|---|---|
+| la apertura del Wrapped no cambió, byte a byte | `tests/calendario-anual.test.mjs` (45) | `npm test` |
+| los minutos cuadran día por día + los saltos | `tests/calendario-dias.test.mjs` (57) | `npm test` |
+| abrir no gasta · la playlist cuesta 2 y 3 | `tests/banco/calendario.html` | `npm run prepush` |
+
+El instrumento de las capturas es `tests/banco/calendario-fotos.html` y **no va
+en `prepush`**: espera a un conductor externo, como `mosaico.html` sin `auto=1`.
+El conductor vive en el repo privado
+(`fonoteca-migracion/driver-capturas-calendario-2026-10-10.mjs`).
+
 ## 💰 Cuánto cuesta abrir cada vista (2026-10-06)
 
 Esta tabla **no existía** hasta hoy, y los cuatro encargos anteriores la daban por
@@ -2032,6 +2208,8 @@ fila sobrevivió así desde que se armó la tabla.
 | ↳ lo que decía antes (**0/0**) era FALSO: es el MISMO par que `#dashboard` | | | | | ver la nota de abajo |
 | ↳ sin historial (`renderLite`) | **2** | **2** | 2 × `/me/top/{artists,tracks}` | fijo | leída del código |
 | `#records` | **1 `/me`** (+1 del arranque = **2**) | ídem | `render()` → `loadRecords()` (`records.js:50`) → `loadOne` → `ensureFreshMem` → `resolvedUserId` → `getCurrentUserId` | **fijo** | 🔴 **corregida el 2026-10-08, leída del código.** Decía **0/0** y es la MISMA pieza que `#dashboard` y `#wrapped` |
+| `#calendario` | **1 `/me`** (+1 del arranque = **2**) | ídem | `render()` → `loadHistoryStats()` + `loadDays()` → `loadOne` → `getCurrentUserId` (memoizado: los dos comparten el `/me`, es 1 y no 2) | **fijo**, no escala con nada | **medida en la Spotify simulada el 2026-10-10** (`tests/banco/calendario.html`): abrir = **1** petición y es `/me`; cambiar de año y abrir y cerrar el detalle de un día = **0 más**; **0** lecturas que no sean `/me`, 0 rutas sin simular, 0 hosts externos. En vivo, no |
+| ↳ **al pulsar «Crear playlist con este día»**: **1 + ceil(N/100)** POST | — | ídem | `POST /me/playlists` + `POST /playlists/{id}/items` de a 100 | **N** = temas del día | **medida en la Spotify simulada el 2026-10-10**: **2** con 30 temas y **3** con 150, exactas y todas POST, **0 GET** |
 | `#covers` | **1 `/me` + 1 + ceil(W/100)** = **33** | **2** | `isOwner()`/`loadListenedAlbums()` → `getCurrentUserId` · + 1 `/playlists/{id}?fields=snapshot_id` + págs. de `/playlists/{id}/items` | nº de pistas de «w three» | 🔴 **corregida el 2026-10-08, leída del código.** Decía **32** y se le olvidaba el `/me` propio |
 | `#mosaico` | **0** | **0** | **ninguno, a propósito** | — | **medida en vivo el 2026-10-06**: 10 mosaicos generados (hasta 43.200 celdas), **0 peticiones y 0 cortadas** con los topes de la API en CERO. Lo que sí sale a la red es el CDN de imágenes, que no gasta cuota |
 | `#search` | **0** | **0** | — | — | leída del código · **`/me` repasado el 2026-10-08**: su `render()` no llega a `getCurrentUserId()` |
@@ -2347,6 +2525,7 @@ cuesta una carga de likes.** Lo que no puede es usar las tuyas.
 | `#covers` | — | **ser Ian** (candado por adelantado) | bloqueada SIEMPRE: ⚠️ **BYOH no la abre** (ver abajo) | leída del código |
 | `#wrapped` | — | **historial**; sin él cae a `renderLite` (2 × `/me/top`) | Wrapped lite, más pobre pero anda | leída del código |
 | `#records` | — | **historial** | cartel de bloqueo | leída del código |
+| `#calendario` | — | **historial** (`years[].days`) para la grilla · el **detalle por día** para el panel | cartel de bloqueo, el mismo de `#records` con su botón de importar. Con BYOH la grilla sale de SU `stats` y el detalle lo obtiene solo (`saveMyHistory()` guarda `days`). El owner carga el detalle con la importación «solo el detalle»; sin él, el panel enseña los minutos del día y ofrece cargarlo | **leída del código y probada en el banco el 2026-10-10** |
 | `#zeroplays` | — | **historial** (`plays`) · stats.fm opcional | cartel de bloqueo | leída del código |
 | `#skips` | — | **historial** (`skip`, versión ≥ 4) · stats.fm opcional | cartel de bloqueo | leída del código |
 
