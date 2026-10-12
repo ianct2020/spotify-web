@@ -2150,8 +2150,32 @@ sección 5). Los tres sitios que muestran el total:
 | sitio | qué quedó | por qué |
 |---|---|---|
 | Dashboard, tile del historial | valor «64,2% skips», etiqueta «mezcla dos formas de contar» | la etiqueta va en un renglón con `nowrap` + elipsis (170 px a 1.366, 155 a 390): «Skips · mezcla dos formas de contar» mide 188,9 y se cortaba; la frase sola, 151,2 |
-| Wrapped, paso «dentro de todo», 2023-2026 | «…contra el 64,2% histórico, que mezcla dos formas de contar.» (las tres ramas) | pegada a la mención del total; 2018-2022 no nombran el total y no la llevan |
-| Wrapped «de siempre», tile «Plays válidas» | 🟥 **SIN CAMBIO** | la pista admite 220 px en un renglón; «de 212.491 crudas · 64,2% skips» ya mide 183,5 y la frase 165: con las tres cosas el tile y su fila crecen de 160,1 a 168,2 px. Los textos que entran tiran las crudas o la palabra «skips». No se tocó el CSS |
+| Wrapped, paso «dentro de todo», 2023-2026 | «…contra el 64,2% histórico, que mezcla dos formas de contar.» (las tres ramas). 🟩 **Desde v=296 ya no compara contra el total**: ver «la línea base», abajo. El aviso queda solo en el camino de reserva | pegada a la mención del total; 2018-2022 no nombran el total y no la llevan |
+| Wrapped «de siempre», tile «Plays válidas» | 🟩 **desde v=296 (tanda 44)**: «de 212.491 crudas · 64,2% skips · mezcla dos formas de contar». En v=295 quedó **SIN CAMBIO** | la pista admite 220 px en un renglón; «de 212.491 crudas · 64,2% skips» ya mide 183,5 y la frase 165: con las tres cosas el tile y su fila crecen de 160,1 a 168,2 px. Los textos que entran tiran las crudas o la palabra «skips». No se tocó el CSS. **v=296**: el planificador levantó la regla del alto para este tile; a 1.366 su fila crece a 168,2 y la de ARRIBA baja de 161,3 a 153,2 (el disco ocupa las dos filas: la grilla sigue en 349,4); a 390, 3 renglones, tile 102, grilla +16,2 |
+
+🟩 **La LÍNEA BASE (v=296, tanda 44): los años con el campo se comparan contra esos años, no
+contra el total.** El paso «dentro de todo» de 2023-2026 decía «74,9% contra el 64,2% histórico»: un
+año bien medido contra un promedio que incluye cinco años (2018-2022) sin el campo, que lo bajan, así
+que la frase **exageraba** cuánto se corta de más. Ahora compara contra `lineaBaseSaltos(years)`
+(`util/corte-saltos.js`, la que sabe qué años tienen el campo):
+
+```
+base = round1( Σ skips / Σ (plays_raw − plays_junk) × 100 )   sobre los años con anioSinCampoSkipped(year) === false
+```
+
+- Es la misma cuenta que `totals.skip_pct` restringida a esos años (incluye el año que se mira, como
+  el total). **No es el promedio de los porcentajes**: los años no pesan lo mismo (2026 es medio año);
+  el promedio daría 68,0 y la base es **68,5** (119.278 / 174.241 = 68,456). Sin sacar la basura
+  daría 68,4: el divisor de hasta v=294.
+- **Se calcula en el navegador** con `skips`, `plays_raw` y `plays_junk` de `years[]`: no se
+  rehornea nada y ningún JSON cambió.
+- Texto: «…74,9% contra el 68,5% de 2023 a 2026, los años en que Spotify ya anotaba los saltos.» Sin
+  `AVISO_MEZCLA` (ya no mezcla nada). `desde`/`hasta` salen del dato. La frase «de cada 10» dice «En
+  esos años cortas N…» y con la base sale en 2026 (7 contra 6). Ramas, umbral y nombres, iguales.
+- Si `lineaBaseSaltos()` da `null` (menos de dos años con el campo, o un BYOH sin `plays_junk` /
+  `skips`), el paso queda **exactamente** como en v=295: contra el total, con el aviso.
+- Guardas: `tests/corte-saltos.test.mjs` secciones 2 (tabla de reemplazos sobre la referencia de
+  v=291, que no se regenera) y 6, y el «de cada 10» de `tests/skip-por-anio.test.mjs` sección 4.
 
 **Versiones, las tres a la vez** (misma lógica que el `gid`): `STATS_VERSION` 3 → 4 en
 `gen-stats.py` (el sello del JSON), 2 → 4 en `history-processor.js` (el BYOH; estaba

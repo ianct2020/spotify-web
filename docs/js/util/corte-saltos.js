@@ -72,3 +72,43 @@ export function anioSinCampoSkipped(year) {
 export function esElAnioDelCorte(year) {
   return Number(year) === ANIO_DEL_CORTE;
 }
+
+/**
+ * La LÍNEA BASE de saltos: el porcentaje de los años que SÍ anotan los saltos (v=296).
+ *
+ * Desde v=296 el paso «dentro de todo» de esos años (hoy 2023-2026) se compara contra esto y no
+ * contra `totals.skip_pct`: el total suma cinco años (2018-2022) en los que Spotify no anotaba
+ * los saltos, que lo bajan, así que la comparación exageraba cuánto se corta de más.
+ *
+ * Es la MISMA cuenta que el total desde v=295, restringida a los años con el campo:
+ *
+ *     round1( Σ skips / Σ (plays_raw − plays_junk) × 100 )
+ *
+ * ⚠️ Es el cociente de las SUMAS, no el promedio de los porcentajes: los años no pesan lo mismo
+ * (2026 es medio año). Incluye el año que se esté mirando, igual que lo incluye el total.
+ * ⚠️ Se calcula EN EL NAVEGADOR con lo que ya trae `years[]`: no se rehornea nada.
+ *
+ * Devuelve `{ pct, desde, hasta, saltos, crudas, anios }` (`pct` ya redondeado a un decimal,
+ * `crudas` ya sin la basura) o `null` si:
+ *   · menos de DOS años tienen el campo (un año contra sí mismo no dice nada), o
+ *   · a alguno de esos años le falta `skips`, `plays_raw` o `plays_junk` como número (un BYOH
+ *     importado antes de v=295 no trae `plays_junk`; uno anterior a v=291, tampoco `skips`).
+ * Con `null`, quien llama vuelve a comparar contra el total, con su aviso.
+ */
+export function lineaBaseSaltos(years) {
+  const con = (years || []).filter(y => !anioSinCampoSkipped(y.year));
+  if (con.length < 2) return null;
+  const esNum = (v) => typeof v === 'number' && Number.isFinite(v);
+  if (!con.every(y => esNum(y.skips) && esNum(y.plays_raw) && esNum(y.plays_junk))) return null;
+  const saltos = con.reduce((s, y) => s + y.skips, 0);
+  const crudas = con.reduce((s, y) => s + (y.plays_raw - y.plays_junk), 0);
+  const anios = con.map(y => Number(y.year)).sort((a, b) => a - b);
+  return {
+    pct: Math.round(saltos / Math.max(1, crudas) * 100 * 10) / 10,
+    desde: anios[0],
+    hasta: anios[anios.length - 1],
+    saltos,
+    crudas,
+    anios,
+  };
+}

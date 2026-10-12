@@ -35,7 +35,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { processStreamingHistory } from '../src/js/history-processor.js';
 import { pasoDentroDeTodo } from '../src/js/features/wrapped-apertura.js';
-import { anioSinCampoSkipped } from '../src/js/util/corte-saltos.js';
+import { anioSinCampoSkipped, lineaBaseSaltos } from '../src/js/util/corte-saltos.js';
 
 const raiz = join(dirname(fileURLToPath(import.meta.url)), '..');
 const leer = p => readFileSync(join(raiz, p), 'utf8');
@@ -255,8 +255,13 @@ console.log('\n4. El paso «dentro de todo» de la apertura del Wrapped');
       continue;
     }
     ramas.add(/igual que siempre/.test(f) ? 'igual' : /aguantas más/.test(f) ? 'menos' : /más que de costumbre/.test(f) ? 'más' : '?');
-    const d = Math.round(stats.totals.skip_pct / 10), a = Math.round(y.skip_pct / 10);
-    ok(!/de cada 10/.test(f) || d !== a, `${y.year}: si sale «de cada 10», los dos números son distintos`);
+    // v=296 (tanda 44): estos años se comparan contra la LÍNEA BASE de los años con el campo
+    // (`lineaBaseSaltos()`, 68,5), no contra el total. Hasta v=295 este assert comparaba contra
+    // `stats.totals.skip_pct`; con la base 2026 lo ponía rojo: la frase sale con 7 contra 6, y
+    // contra el total daría 6 contra 6. Ahora compara contra la base.
+    const B = lineaBaseSaltos(stats.years);
+    const d = Math.round(B.pct / 10), a = Math.round(y.skip_pct / 10);
+    ok(!/de cada 10/.test(f) || d !== a, `${y.year}: si sale «de cada 10», los dos números (base ${d}, año ${a}) son distintos`);
   }
   // (antes: «todas las frases reales…», sobre los nueve años)
   ok(!ramas.has('?'), 'todas las frases reales de los años con el campo caen en una de las tres ramas');

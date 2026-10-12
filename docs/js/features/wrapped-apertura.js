@@ -78,7 +78,7 @@
 
 import { animationsEnabled } from '../ui/reveal.js?v=296';
 import { calendarioAnual, aMs, isoDesde, diaSemanaLunes } from '../ui/calendario-anual.js?v=296';
-import { anioSinCampoSkipped, esElAnioDelCorte, AVISO_MEZCLA } from '../util/corte-saltos.js?v=296';
+import { anioSinCampoSkipped, esElAnioDelCorte, AVISO_MEZCLA, lineaBaseSaltos } from '../util/corte-saltos.js?v=296';
 
 // ── un solo recorrido vivo por vez ──────────────────────────────────────────
 //
@@ -476,7 +476,35 @@ export function pasoDentroDeTodo(ctx) {
         `hasta entonces solo registraba si le dabas a «siguiente».`
       : ` En ${y.year} Spotify no anotaba cuándo saltabas una canción, solo si le dabas a «siguiente».`;
     cuerpo += ` Por eso el porcentaje de saltos de este año no se puede comparar con el total ni con los años siguientes.`;
+  } else if (typeof y.skip_pct === 'number' && lineaBaseSaltos(stats.years)) {
+    // v=296 (tanda 44) — LOS AÑOS CON EL CAMPO SE COMPARAN CONTRA SU LÍNEA BASE, no contra el total.
+    //
+    // `totals.skip_pct` suma cinco años en los que Spotify no anotaba los saltos, que lo bajan: un
+    // año bien medido contra ese promedio exageraba cuánto se corta de más. La base es la misma
+    // cuenta que el total, restringida a los años con el campo (`lineaBaseSaltos()`, en
+    // `util/corte-saltos.js`, que es la que sabe qué años son). Como la comparación ya no mezcla
+    // nada, acá no va `AVISO_MEZCLA`. `desde`/`hasta` salen del dato: este archivo no escribe años.
+    //
+    // Las ramas, el umbral de 3 puntos y sus nombres son los de siempre. La frase «de cada 10»
+    // pasa a hablar de «esos años» (decir «todo tu historial» de la base sería falso), y con la
+    // base sale en 2026 (7 contra 6), donde contra el total no salía (6 contra 6).
+    const B = lineaBaseSaltos(stats.years);
+    const base = `de ${B.desde} a ${B.hasta}, los años en que Spotify ya anotaba los saltos`;
+    const mejor = B.pct - y.skip_pct;
+    const deCada10Base = Math.round(B.pct / 10);
+    const deCada10Anio = Math.round(y.skip_pct / 10);
+    cuerpo += Math.abs(mejor) < 3
+      ? ` Y escuchas igual que siempre: cortas el ${pct(y.skip_pct)} de lo que pones, contra el ${pct(B.pct)} ${base}.`
+      : mejor > 0
+        ? ` Y este año aguantas más: dejas a medias el ${pct(y.skip_pct)} de lo que pones, contra el ${pct(B.pct)} ${base}.` +
+          (deCada10Base !== deCada10Anio
+            ? ` En esos años cortas ${deCada10Base} de cada 10 canciones; este año, ${deCada10Anio}.`
+            : '')
+        : ` Aunque este año cortas más que de costumbre: ${pct(y.skip_pct)} contra el ${pct(B.pct)} ${base}.`;
   } else if (typeof y.skip_pct === 'number' && typeof t.skip_pct === 'number') {
+    // v=296: el CAMINO DE RESERVA. Solo corre si `lineaBaseSaltos()` da `null` (un BYOH importado
+    // antes de v=295 sin `plays_junk`, o menos de dos años con el campo). Queda EXACTAMENTE como
+    // en v=295: contra el total, con el aviso, que acá sí corresponde porque el total mezcla.
     // ⚠️ v=291: `years[].skip_pct` pasó a medir lo MISMO que `totals.skip_pct` (hasta v=290
     // era otra cuenta con el mismo nombre y daba 6-36 % contra un total de 64,1: los nueve
     // años caían en la rama de «aguantas mucho más», y era mentira). Con el dato bueno la
