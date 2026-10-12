@@ -94,6 +94,10 @@ const archivo1 = [
   play('2025-03-05T10:00:00Z', null, 900000),
   // basura funcional: no suma minutos (el pipeline la salta)
   play('2025-03-06T11:00:00Z', C, 600000, { track: 'Sonido Para Sacar Agua Del Movil', artista: 'nbeats' }),
+  // v=296 (tanda 44): un `fwdbtn` CORTO más, con uri y que no es basura, solo en su día (el
+  // 07/03, para no mover los asserts de los otros días). Es lo que hace que la PUERTA 2 vuelva a
+  // separar las tres fórmulas de salto (la cuenta, en la sección 4).
+  play('2025-03-07T08:00:00Z', A, 5000, { reason_end: 'fwdbtn' }),
 ];
 
 const archivo2 = [
@@ -260,21 +264,33 @@ const resultado = processStreamingHistory(fileArrays);
     igual(Math.round(b.saltos / Math.max(1, b.crudas - y.plays_junk) * 1000) / 10, y.skip_pct,
       `PUERTA 2: ${y.year} · saltos/(crudas − plays_junk) de sus días da \`years[].skip_pct\` EXACTO (una sola definición)`);
   }
-  // Y que el fixture distingue de verdad la definición nueva de la vieja. 2025,
-  // contado a mano: 8 crudas (B, A, B, la corta de C, el `fwdbtn` corto, el
-  // `fwdbtn` largo, el `skipped` y la basura; el podcast no tiene uri y la
-  // duplicada del archivo 2 no cuenta) y 2 saltos (el `fwdbtn` corto y el
-  // `skipped`; el `fwdbtn` LARGO no es salto). v=295: la basura sale del divisor, así que
-  // son 2 de (8 − 1) = 2 de 7 = 28,6. Hasta v=294 eran 2 de 8 = 25,0.
-  // ⚠️ Ese 28,6 COINCIDE por casualidad con lo que daba la fórmula de hasta v=290
-  // (2 / (5 + 2)): acá este fixture ya no distingue la fórmula vieja de la nueva. Lo que la
-  // distingue son `plays_raw`, `skips` y `plays_junk` de abajo (la vieja no los emitía) y las
-  // diez reproducciones de `tests/skip-por-anio.test.mjs` (60,0 contra el 40,0 de la vieja).
+  // Y que el fixture distingue de verdad las TRES fórmulas de salto. 2025, contado a mano (v=296,
+  // tanda 44, escrito ANTES de correrlo). Hasta v=295 el fixture no traía la play del 07/03 y su
+  // 2025 daba 28,6, que coincidía por casualidad con la fórmula de hasta v=290: no la distinguía.
+  //
+  //   play                          ms       reason_end  skipped  cruda  basura  válida(≥30s)  salto v=291+  yb.skipped (≤v=290)
+  //   04/03 10:00 B                 240.000  trackdone   no       sí     no      sí            no            no
+  //   04/03 10:05 A                 180.000  trackdone   no       sí     no      sí            no            no
+  //   04/03 18:00 B                 120.000  trackdone   no       sí     no      sí            no            no
+  //   04/03 18:10 C                  12.000  trackdone   no       sí     no      no            no            —  (corta)
+  //   05/03 09:00 A                   8.000  fwdbtn      no       sí     no      no            SÍ (fwd <30s) —  (corta)
+  //   05/03 09:10 A                 200.000  fwdbtn      no       sí     no      sí            no (fwd ≥30s) SÍ
+  //   05/03 09:20 B                  95.000  trackdone   SÍ       sí     no      sí            SÍ (skipped)  SÍ
+  //   05/03 10:00 podcast (sin uri) 900.000  trackdone   no       NO     —       —             —             —
+  //   06/03 11:00 C «sacar agua»    600.000  trackdone   no       sí     SÍ      no (basura)   no (basura)   —  (basura)
+  //   07/03 08:00 A  ← NUEVA          5.000  fwdbtn      no       sí     no      no            SÍ (fwd <30s) —  (corta)
+  //   (la duplicada del archivo 2 no cuenta)
+  //   Σ                                                            9      1       5             3             2
+  //
+  //   v=295 en adelante: skips / (crudas − basura) = 3 / (9 − 1) = 3 / 8 = 37,5
+  //   v=291 a v=294:     skips / crudas             = 3 / 9           = 33,3
+  //   hasta v=290:       yb.skipped / (válidas + yb.skipped) = 2 / (5 + 2) = 28,6
+  //                      (la play nueva es corta: no entra en `yb`, por eso esta fórmula no se mueve)
   const a2025 = resultado.stats.years.find(y => y.year === 2025);
-  igual(a2025.plays_raw, 8, 'PUERTA 2: 2025 tiene 8 crudas (la basura sigue siendo una cruda; el podcast y la duplicada, no)');
+  igual(a2025.plays_raw, 9, 'PUERTA 2: 2025 tiene 9 crudas (la basura sigue siendo una cruda; el podcast y la duplicada, no)');
   igual(a2025.plays_junk, 1, 'PUERTA 2: 2025 tiene 1 de basura, contada aparte');
-  igual(a2025.skips, 2, 'PUERTA 2: 2025 tiene 2 saltos (el fwdbtn corto y el skipped), no 3');
-  igual(a2025.skip_pct, 28.6, 'PUERTA 2: 2025 · 2 de (8 − 1) = 28,6 (hasta v=294, con la basura en el divisor, 25,0)');
+  igual(a2025.skips, 3, 'PUERTA 2: 2025 tiene 3 saltos (los dos fwdbtn cortos y el skipped), no 4: el fwdbtn largo no es salto');
+  igual(a2025.skip_pct, 37.5, 'PUERTA 2: 2025 · 3 de (9 − 1) = 37,5 — y no el 33,3 de v=291-294 (basura en el divisor) ni el 28,6 de hasta v=290 (2 / (5 + 2))');
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
