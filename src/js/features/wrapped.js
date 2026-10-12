@@ -614,15 +614,14 @@ function renderAllTime() {
   const t = stats.totals || {};
   // El mismo dato y el mismo formato que el tile «Skips» del Dashboard (64,1; 64,2 desde v=295).
   //
-  // 🟥 v=295 (tanda 43): ESTE TILE NO LLEVA `AVISO_MEZCLA`, Y NO ES UN OLVIDO. El total de saltos
-  // mezcla dos formas de contar y los otros dos sitios que lo muestran (el tile «Skips» del
-  // Dashboard y el paso «dentro de todo») lo dicen. Acá no entra: la pista de este tile admite
-  // 220 px en UN renglón a 1.366 px, «de 212.491 crudas · 64,2% skips» ya ocupa 183,5 y la frase
-  // mide 165. Con cualquier texto que conserve las crudas, el porcentaje y el aviso la pista
-  // pasa a dos renglones y el tile y su fila crecen de 160,1 a 168,2 px (y a 390 px, de 85,8 a
-  // 102). Los únicos que entran tiran «de 212.491 crudas» o la palabra «skips», y esa es otra
-  // decisión. Medido con 15 textos; la tabla está en `fonoteca-migracion/ULTIMO-CAMBIO.md`
-  // (tanda 43). No se tocó el CSS. `tests/corte-saltos.test.mjs` lo afirma con su porqué.
+  // v=296 (tanda 44): ESTE TILE LLEVA `AVISO_MEZCLA` detrás del porcentaje, como los otros dos
+  // sitios que muestran el total. En v=295 se quedó afuera porque no entraba en un renglón: la
+  // pista admite 220 px a 1.366 px, «de 212.491 crudas · 64,2% skips» ya ocupa 183,5 y la frase
+  // mide 165. La regla «el tile no cambia de alto» la levantó el planificador para este tile y
+  // solo para este: con las tres cosas la pista pasa a dos renglones y el tile y su fila crecen
+  // de 160,1 a 168,2 px (a 390 px, de 85,8 a 102, tres renglones). Es la opción 2 de la tabla de
+  // la tanda 43 (`fonoteca-migracion/medicion-total-candidatos-2026-10-11.json`). No se tocó el
+  // CSS. `tests/corte-saltos.test.mjs` (sección 5) lo afirma.
   const skipPctTotal = Number(t.skip_pct || 0).toLocaleString('es-ES', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
 
   const topArtist = (stats.top_artists_all_time || [])[0];
@@ -687,7 +686,7 @@ function renderAllTime() {
         <div class="wrapped-tile compact" style="grid-area:disc">
           <div class="wrapped-tile-label">Plays válidas</div>
           <div class="wrapped-tile-value">${(t.plays_valid || 0).toLocaleString('es-ES')}</div>
-          <div class="wrapped-tile-hint">de ${(t.plays_raw || 0).toLocaleString('es-ES')} crudas · ${skipPctTotal}% skips</div>
+          <div class="wrapped-tile-hint">de ${(t.plays_raw || 0).toLocaleString('es-ES')} crudas · ${skipPctTotal}% skips · ${AVISO_MEZCLA}</div>
         </div>
         <div class="wrapped-tile compact" style="grid-area:mes">
           <div class="wrapped-tile-label">Días activos</div>

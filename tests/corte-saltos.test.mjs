@@ -262,15 +262,19 @@ console.log('\n5. El aviso del total: una sola constante, en cada sitio donde en
      'Dashboard: el tile del total de saltos MUESTRA el aviso (valor «N% skips», etiqueta `AVISO_MEZCLA`)');
   igual((codigo['src/js/features/dashboard.js'].match(/\$\{AVISO_MEZCLA\}/g) || []).length, 1, 'Dashboard: y lo pinta una sola vez');
 
-  // El tile «Plays válidas» del Wrapped «de siempre»: NO la muestra, y el porqué va en el nombre.
+  // El tile «Plays válidas» del Wrapped «de siempre»: desde v=296 (tanda 44) SÍ la muestra.
+  // Hasta v=295 este assert afirmaba lo contrario («QUEDÓ SIN EL AVISO POR EL ANCHO»): la pista
+  // admite 220 px en un renglón a 1.366 px y con las tres cosas pasa a dos. El planificador levantó
+  // la regla del alto para este tile: crece de 160,1 a 168,2 px (a 390 px, de 85,8 a 102).
   const w = codigo['src/js/features/wrapped.js'];
   const tileSiempre = (/<div class="wrapped-tile compact" style="grid-area:disc">\s*<div class="wrapped-tile-label">Plays válidas<\/div>[\s\S]*?<\/div>\s*<\/div>/.exec(w) || [''])[0];
-  ok(/crudas · \$\{skipPctTotal\}% skips<\/div>/.test(tileSiempre), 'Wrapped «de siempre»: se encuentra el tile «Plays válidas» con su pista «de N crudas · X% skips»');
-  ok(!/AVISO_MEZCLA/.test(tileSiempre),
-     'Wrapped «de siempre»: el tile «Plays válidas» QUEDÓ SIN EL AVISO POR EL ANCHO — la pista admite 220 px en un renglón a 1.366 px, ' +
-     '«de 212.491 crudas · 64,2% skips» mide 183,5 y la frase 165: con las tres cosas pasa a dos renglones y el tile y su fila crecen ' +
-     'de 160,1 a 168,2 px (a 390 px, de 85,8 a 102). Si este assert se pone rojo es que alguien lo metió: hay que volver a medirlo');
-  igual((w.match(/\bAVISO_MEZCLA\b/g) || []).length, 2, 'wrapped.js: `AVISO_MEZCLA` aparece dos veces, el import y la pista del año del corte');
+  ok(/crudas · \$\{skipPctTotal\}% skips/.test(tileSiempre), 'Wrapped «de siempre»: se encuentra el tile «Plays válidas» con su pista «de N crudas · X% skips»');
+  ok(/<div class="wrapped-tile-hint">de \$\{\(t\.plays_raw \|\| 0\)\.toLocaleString\('es-ES'\)\} crudas · \$\{skipPctTotal\}% skips · \$\{AVISO_MEZCLA\}<\/div>/.test(tileSiempre),
+     'Wrapped «de siempre»: la pista del tile «Plays válidas» LLEVA EL AVISO, importado de `AVISO_MEZCLA`, detrás de «% skips» ' +
+     '(«de 212.491 crudas · 64,2% skips · mezcla dos formas de contar»; el tile crece a 168,2 px a 1.366 y a 102 a 390, permitido en la tanda 44)');
+  ok(/<div class="wrapped-tile-label">Plays válidas<\/div>\s*<div class="wrapped-tile-value">\$\{\(t\.plays_valid \|\| 0\)\.toLocaleString\('es-ES'\)\}<\/div>/.test(tileSiempre),
+     'Wrapped «de siempre»: la etiqueta («Plays válidas») y el valor (las válidas) no se tocaron');
+  igual((w.match(/\bAVISO_MEZCLA\b/g) || []).length, 3, 'wrapped.js: `AVISO_MEZCLA` aparece tres veces: el import, la pista del año del corte y la del tile «Plays válidas» de «de siempre»');
 
   // El paso «dentro de todo»: la trae pegada a la mención del total en las TRES ramas.
   const ap = codigo['src/js/features/wrapped-apertura.js'];
