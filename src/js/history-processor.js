@@ -4,8 +4,12 @@
 //
 // Uso desde el UI de upload:
 //   const raw = await Promise.all(files.map(readJson));   // File[] → array[array_plays]
-//   const result = processStreamingHistory(raw, { onProgress });
+//   const result = await processStreamingHistory(raw, { onProgress, ceder });
 //   await saveMyHistory(userId, result);
+//
+// Es `async` (v=297): con `ceder` cede el hilo cada `presupuestoMs` (50 por
+// defecto) en los puntos de control; sin `ceder` corre de un tirón, como en
+// los tests y en Node.
 //
 // Devuelve la misma forma que los JSONs del repo (mismos `version` numbers).
 
@@ -142,17 +146,15 @@ function round1(x) { return Math.round(x * 10) / 10; }
 // ── POR QUÉ ES UNA FUNCIÓN APARTE E INCREMENTAL ────────────────────────────
 //
 // `processStreamingHistory()` junta los 19 archivos de audio del export EN
-// MEMORIA (`arrays.push(JSON.parse(text))` en `features/import-history.js`) y
-// después corre **sincrónica** de punta a punta, con un `sort` global de las
-// 212.491 plays. Su `onProgress` tiene un `await` adentro que no cede nada,
-// porque quien lo llama no lo espera (`if (onProgress) onProgress({…})`, sin
-// `await`): el cartel de progreso se congela durante todo el procesamiento.
-// Está anotado en `PENDIENTES.md` y NO se arregla acá.
+// MEMORIA (`arrays.push(JSON.parse(text))` en `features/import-history.js`),
+// con un `sort` global de las 212.491 plays. Desde v=297 cede el hilo ella
+// misma (`ceder` + `presupuestoMs`), pero sigue necesitando los 19 arrays a
+// la vez.
 //
 // Este acumulador recibe **un archivo por vez**, lo acumula y lo suelta, así
 // los 19 nunca están juntos. Es lo que permite que la importación «solo el
-// detalle» del owner ceda el hilo entre archivo y archivo y mueva un progreso
-// de verdad.
+// detalle» del owner lea, procese y suelte archivo por archivo sin cargar
+// el export entero.
 //
 // ── UNA SOLA IMPLEMENTACIÓN ────────────────────────────────────────────────
 //
@@ -294,7 +296,29 @@ function crearAcumuladorDeDias() {
 
 // ---- Función principal ----
 
-function processStreamingHistory(fileArrays, { onProgress } = {}) {
+// ── CEDER EL HILO (v=297) ──────────────────────────────────────────────────
+//
+// Hasta v=296 esto corría sincrónico de punta a punta (~3,7 s con el export de
+// Ian en Chrome) y el cartel de progreso se quedaba quieto: el `onProgress` de
+// `handleFiles()` tenía un `await` adentro que nadie esperaba. Ahora la que
+// cede es la función: en cada punto de control llama a `onProgress` (que es
+// sincrónico, solo pinta) y, si pasaron `presupuestoMs` desde la última
+// cesión, hace `await ceder()`. Quien la llama decide CÓMO se cede: el import
+// le pasa `cederElHilo` (`MessageChannel`, que no se estrangula en una pestaña
+// oculta). Sin `ceder` no cede nunca: así la usan los tests y Node.
+//
+// ⚠️ Los puntos de control no tocan ningún cálculo: la salida es idéntica byte
+// a byte con y sin `ceder` (lo vigila `tests/import-cede.test.mjs`). El
+// `plays.sort` es una sola llamada y no se parte.
+async function processStreamingHistory(fileArrays, { onProgress, ceder, presupuestoMs = 50 } = {}) {
+  const reloj = () => (typeof performance !== 'undefined' ? performance.now() : Date.now());
+  let ultimaCesion = reloj();
+  const puntoDeControl = async () => {
+    if (!ceder || reloj() - ultimaCesion < presupuestoMs) return;
+    await ceder();
+    ultimaCesion = reloj();
+  };
+
   const totalRawPlays = fileArrays.reduce((n, arr) => n + arr.length, 0);
   if (onProgress) onProgress({ phase: 'dedup', loaded: 0, total: totalRawPlays });
 
@@ -313,12 +337,16 @@ function processStreamingHistory(fileArrays, { onProgress } = {}) {
       plays.push(r);
     }
     if (onProgress) onProgress({ phase: 'dedup', loaded: seenCount, total: totalRawPlays });
+    await puntoDeControl();
   }
   // El octavo payload va por su propia función, incremental y con la MISMA
   // deduplicación: una sola implementación de la agrupación por día. Se la
   // alimenta con los mismos arrays, archivo por archivo.
   const acuDias = crearAcumuladorDeDias();
-  for (const arr of fileArrays) acuDias.agregarArchivo(arr);
+  for (const arr of fileArrays) {
+    acuDias.agregarArchivo(arr);
+    await puntoDeControl();
+  }
   const days = acuDias.cerrar();
 
   // sort por ts asc (para first_year, discovery, milestones en orden real)
@@ -417,6 +445,12 @@ function processStreamingHistory(fileArrays, { onProgress } = {}) {
   const progressStep = Math.max(1, Math.floor(totalPlays / 40));
 
   for (let i = 0; i < plays.length; i++) {
+    // El punto de control va ARRIBA de todo: abajo lo saltaban los `continue`
+    // de las plays cortas y de la basura, y el progreso avanzaba a saltos.
+    if (i % progressStep === 0) {
+      if (onProgress) onProgress({ phase: 'aggregate', loaded: i, total: totalPlays });
+      await puntoDeControl();
+    }
     const r = plays[i];
     const parsed = parseTs(r.ts);
     if (!parsed) continue;
@@ -587,11 +621,9 @@ function processStreamingHistory(fileArrays, { onProgress } = {}) {
       milestones.push({ n: validSeq, date: day, name: track, artist });
     }
 
-    if (onProgress && i % progressStep === 0) {
-      onProgress({ phase: 'aggregate', loaded: i, total: totalPlays });
-    }
   }
   if (onProgress) onProgress({ phase: 'aggregate', loaded: totalPlays, total: totalPlays });
+  await puntoDeControl();
 
   // ---- Racha global histórica ----
   const allDaysSorted = [...activeDaysAll].sort();
@@ -612,6 +644,9 @@ function processStreamingHistory(fileArrays, { onProgress } = {}) {
     }
   }
 
+  // El armado de abajo también cede entre bloques (v=297): medido en Chrome con
+  // el export de Ian eran ~640 ms seguidos, y `skipStats` solo, ~260.
+  await puntoDeControl();
   // ---- Helpers de salida ----
   function albumEntry(ak, ms, plays_) {
     const m = albumMeta.get(ak) || {};
@@ -726,6 +761,7 @@ function processStreamingHistory(fileArrays, { onProgress } = {}) {
     });
   }
 
+  await puntoDeControl();
   const generatedAt = new Date().toISOString();
   const totalsFirstPlay = yearOut.length ? yearOut[0].first_play : null;
   const totalsLastPlay = yearOut.length ? yearOut[yearOut.length - 1].last_play : null;
@@ -758,6 +794,7 @@ function processStreamingHistory(fileArrays, { onProgress } = {}) {
     top_tracks_all_time: mostCommon(trackMs, TOP_N_ALLTIME).map(([tk, ms]) => trackEntry(tk, ms, trackPlaysCount.get(tk))),
   };
 
+  await puntoDeControl();
   // ---- trackPlays index (id → [plays, seg] o [p, s, "p"]) ----
   const trackPlaysOut = {};
   for (const [uri, v] of trackUriStats) {
@@ -773,6 +810,7 @@ function processStreamingHistory(fileArrays, { onProgress } = {}) {
     trackPlaysOut[tid] = [v.p, Math.round(v.ms / 1000), 'p'];
   }
 
+  await puntoDeControl();
   // ---- listened albums (agrupados por año del primer día que cumplieron el umbral) ----
   const listenedByYear = new Map();
   for (const [ak, info] of listenedFirst) {
@@ -799,13 +837,16 @@ function processStreamingHistory(fileArrays, { onProgress } = {}) {
     years: listenedYears,
   };
 
+  await puntoDeControl();
   // ---- skip stats v2: [ok, skip, fwd_ms[], close_ms[], gid] ----
   // El gid agrupa los ids del MISMO tema (ver util/song-identity.js). Se
   // recorre en orden de tid para que la numeración salga igual que en el
   // Python y los dos JSON sean comparables.
   const skipOut = {};
   const gidSeq = new Map();
+  let vueltas = 0;
   for (const tid of [...trackSkipStats.keys()].sort()) {
+    if (++vueltas % 500 === 0) await puntoDeControl();
     const v = trackSkipStats.get(tid);
     const total = v.ok + v.skip;
     // `|| v.close.length`: un id que siempre terminó en endplay/logout tiene
@@ -829,6 +870,7 @@ function processStreamingHistory(fileArrays, { onProgress } = {}) {
     tracks: skipOut,
   };
 
+  await puntoDeControl();
   // ---- detail (ficha de canción, tracks con >= DETAIL_MIN_PLAYS) ----
   const detailOut = {};
   for (const [uri, months] of trackUriMonthly) {
@@ -853,6 +895,7 @@ function processStreamingHistory(fileArrays, { onProgress } = {}) {
     tracks: detailOut,
   };
 
+  await puntoDeControl();
   // ---- records ----
   const tkName = (tk) => {
     const m = trackMeta.get(tk) || {};
@@ -894,6 +937,7 @@ function processStreamingHistory(fileArrays, { onProgress } = {}) {
   artistDayRecords.sort((a, b) => b[0] - a[0]);
   const topArtistDaysOut = artistDayRecords.slice(0, 15).map(([aMs, day, a]) => ({ artist: a, date: day, min: round1(aMs / 60000) }));
 
+  await puntoDeControl();
   const weekArr = [...weekTrackPlays.entries()].sort((a, b) => b[1] - a[1]).slice(0, 10);
   const topTrackWeeksOut = weekArr.map(([wk, n]) => {
     const idx = wk.lastIndexOf('|');
@@ -941,6 +985,7 @@ function processStreamingHistory(fileArrays, { onProgress } = {}) {
       top_artist: arts.size ? mostCommon(arts, 1)[0][0] : '',
     }));
 
+  await puntoDeControl();
   // #10 — el tema que aparece en más años distintos.
   const trackMostYearsOut = [...songYears.entries()]
     .sort((a, b) => (b[1].size - a[1].size) || ((songPlays.get(b[0]) || 0) - (songPlays.get(a[0]) || 0)))
@@ -999,6 +1044,7 @@ function processStreamingHistory(fileArrays, { onProgress } = {}) {
     artist: a, from_year: y_, to_year: nxt, from_min: round1(b), to_min: round1(d), factor: round1(f),
   }));
 
+  await puntoDeControl();
   // #18 — la racha más larga del mismo artista sin intercalar otro, en plays
   // válidas. Se ordena por plays y no por minutos a propósito: por minutos
   // sería otra forma de escribir "Maratones de un artista", que ya existe.
@@ -1026,6 +1072,7 @@ function processStreamingHistory(fileArrays, { onProgress } = {}) {
     milestones,
   };
 
+  await puntoDeControl();
   // [name, artist, plays, ms, first_day]. Los dos primeros campos NO se mueven:
   // album-heard.js desestructura `[name, artist]` y tiene que seguir andando con
   // los JSON v3. Los dos siguientes los usa la ficha de álbum (antes decía
@@ -1043,6 +1090,7 @@ function processStreamingHistory(fileArrays, { onProgress } = {}) {
     albums: albumsPlayedOut,
   };
 
+  await puntoDeControl();
   // v=126 — top de tracks POR ARTISTA desde el historial completo. Es lo que
   // usa la ficha de artista: los tops anuales (40) y el global (60) dejaban a
   // los artistas chicos con un solo track visible. Espejo de gen-stats.py.
@@ -1054,7 +1102,9 @@ function processStreamingHistory(fileArrays, { onProgress } = {}) {
   }
   const artistTracksOut = {};
   const artistTotalsOut = {};
+  vueltas = 0;
   for (const [artistName, tks] of perArtist) {
+    if (++vueltas % 500 === 0) await puntoDeControl();
     // Totales reales: los tops anuales (40) y el global (60) dejan fuera a la
     // mayoría de los artistas, y sin esto la ficha mostraría 0 plays, "último
     // año —" y sin chart.
@@ -1091,6 +1141,7 @@ function processStreamingHistory(fileArrays, { onProgress } = {}) {
     totals: artistTotalsOut,
   };
 
+  await puntoDeControl();
   // ⚠️ `days` se AGREGA. Los siete de siempre no cambian ni un byte: lo
   // afirma `tests/calendario-dias.test.mjs` con `JSON.stringify`.
   return { stats, trackPlays, listened, skipStats, detail, records, artistTracks, days };

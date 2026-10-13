@@ -129,7 +129,7 @@ console.log('\n2. Diez reproducciones, contadas a mano');
     play('2025-02-02T10:00:00Z', 240000),
   ];
   igual(diez.length, 10, 'el fixture son diez reproducciones');
-  const { stats: s } = processStreamingHistory([diez]);
+  const { stats: s } = await processStreamingHistory([diez]);
   const a24 = s.years.find(y => y.year === 2024), a25 = s.years.find(y => y.year === 2025);
   igual(s.years.length, 2, 'salen dos años');
   igual(a24.plays_raw, 6, '2024: 6 crudas (la basura sigue siendo una cruda)');

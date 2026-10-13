@@ -2214,11 +2214,41 @@ detalle.
 `setTimeout` a **uno por minuto** en una pestaña oculta, así que 19 archivos con
 `setTimeout(0)` entre cada uno tardarían 19 minutos y parecerían colgados.
 
-🟥 **El progreso congelado del import COMPLETO no se arregló acá**, y está
-anotado en `PENDIENTES.md`: el `onProgress` que le pasa `handleFiles()` es
-`async` con un `await` adentro que **nadie espera**, porque
-`processStreamingHistory()` lo llama sin `await`. El cartel se congela durante
-todo el procesamiento.
+🟩 **El import COMPLETO ya no congela el cartel (v=297, tanda 45).** Hasta v=296
+el `onProgress` de `handleFiles()` era `async` con un `await` que nadie esperaba
+y `processStreamingHistory()` corría sincrónica de punta a punta: medido en
+Chrome headless con el export real de Ian, **una sola long task de ~3,7 s** y el
+cartel quieto. Ahora:
+
+- `processStreamingHistory()` es **`async` y cede ella misma**: recibe `ceder`
+  (una función que devuelve una promesa) y `presupuestoMs` (**50** por
+  defecto); en cada punto de control llama a `onProgress` —sincrónico, solo
+  pinta— y, si pasaron 50 ms, hace `await ceder()`. Sin `ceder` no cede nunca
+  (así la usan los tests y Node). **Una sola implementación**: ni copia
+  sincrónica, ni Web Worker, ni algoritmo nuevo; el `plays.sort` sigue siendo
+  una llamada.
+- `handleFiles()` le pasa **`ceder: cederElHilo`**, la de arriba: un solo
+  `MessageChannel` para los dos caminos del import (el otro `new MessageChannel`
+  de `src/` es el del mosaico, `util/mosaico.js`, y no tiene que ver).
+- Puntos de control: después de cada archivo en la deduplicación y en el
+  acumulador de días, cada `progressStep` del bucle de agregados (arriba de la
+  iteración, para que los `continue` no lo salteen) y entre los bloques del
+  armado posterior, más cada 500 vueltas dentro de `skipStats` y
+  `artistTracks` (eran ~640 ms seguidos, `skipStats` solo ~260).
+- **La salida es idéntica byte a byte**: los ocho payloads, sin
+  `generated_at`, dan el mismo `sha256` antes y después sobre el export real
+  (y con `ceder` de 50 y de 0 ms). Lo vigila `tests/import-cede.test.mjs`.
+- Medido en headless (dato real, máquina headless, dos corridas por lado): el
+  hueco más largo entre frames pasa de 3.683–3.817 ms a 233–250 ms (y ~117 ms
+  dentro del procesamiento: el mayor cruza al arranque de `saveMyHistory()`),
+  de 5 a 58–59 frames, el cartel cambia en 36–39 frames en vez de 1, y la
+  duración pasa de 3.575–3.699 ms a 3.863–3.870 ms (~1,06×).
+
+⚠️ **NO verificado: la pestaña oculta.** `MessageChannel` no se estrangula, pero
+en headless no se puede comprobar; queda sin dar por bueno. Y el `setTimeout`
+de 60 ms que `handleFiles()` espera antes de procesar (para que se pinte el
+overlay) sigue ahí: no estaba en el alcance. La lectura de archivos, la
+descompresión del ZIP y `saveMyHistory()` no se tocaron.
 
 ### El contraste del selector de año: anillo, no blanco sobre el acento
 

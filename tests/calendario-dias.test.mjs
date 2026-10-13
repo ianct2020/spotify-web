@@ -184,7 +184,7 @@ const fileArrays = [archivo1, archivo2];
 // ═══════════════════════════════════════════════════════════════════════════
 // 2 · PUERTA 1 (sintética) · los minutos cuadran con `years[].days.min`
 // ═══════════════════════════════════════════════════════════════════════════
-const resultado = processStreamingHistory(fileArrays);
+const resultado = await processStreamingHistory(fileArrays);
 {
   af(!!resultado.days, '`processStreamingHistory()` devuelve el octavo payload');
   af(!!resultado.days.dias, 'y trae sus días');
@@ -221,7 +221,7 @@ const resultado = processStreamingHistory(fileArrays);
 // difieren por ahí y solo por ahí: se normaliza antes de comparar. Lo que se
 // afirma es que agregar `days` no movió NADA de lo demás.
 {
-  const otra = processStreamingHistory(fileArrays);
+  const otra = await processStreamingHistory(fileArrays);
   const sinFecha = (o) => JSON.stringify(o, (k, v) => (k === 'generated_at' ? '·' : v));
   for (const clave of ['stats', 'trackPlays', 'listened', 'skipStats', 'detail', 'records', 'artistTracks']) {
     af(sinFecha(resultado[clave]) === sinFecha(otra[clave]),

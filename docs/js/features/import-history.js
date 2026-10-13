@@ -2,11 +2,11 @@
 // Acepta ZIP del export de Spotify o los Streaming_History_Audio_*.json sueltos.
 // Extrae + procesa + guarda todo en el IDB del user (nada sale de su compu).
 
-import { processStreamingHistory, crearAcumuladorDeDias } from '../history-processor.js?v=296';
-import { saveMyHistory, clearMyHistory, hasLocalHistory, guardarSoloDias } from './history-data.js?v=296';
-import { escapeHtml, showProgress, hideProgress, confirmModal, alertModal } from '../ui/components.js?v=296';
-import { showToast } from '../ui/toast.js?v=296';
-import { openModal, closeTop, closeById } from '../ui/modal-stack.js?v=296';
+import { processStreamingHistory, crearAcumuladorDeDias } from '../history-processor.js?v=297';
+import { saveMyHistory, clearMyHistory, hasLocalHistory, guardarSoloDias } from './history-data.js?v=297';
+import { escapeHtml, showProgress, hideProgress, confirmModal, alertModal } from '../ui/components.js?v=297';
+import { showToast } from '../ui/toast.js?v=297';
+import { openModal, closeTop, closeById } from '../ui/modal-stack.js?v=297';
 
 const OVERLAY_ID = 'import-history-overlay';
 let overlay = null;
@@ -157,19 +157,14 @@ async function handleFiles(files) {
 
   let result;
   try {
-    // El procesamiento es CPU intensivo y sincrónico. Cedo el thread cada tanto
-    // llamando a onProgress que refresca el overlay.
-    const start = Date.now();
-    let lastYield = start;
-    result = processStreamingHistory(arrays, {
-      onProgress: async ({ phase, loaded, total }) => {
+    // El procesamiento es CPU intensivo. Lo que cede el hilo es el procesador
+    // (v=297), con `cederElHilo` —el `MessageChannel` de abajo, que sirve
+    // también en una pestaña oculta—; este `onProgress` solo pinta.
+    result = await processStreamingHistory(arrays, {
+      ceder: cederElHilo,
+      onProgress: ({ phase, loaded, total }) => {
         const label = phase === 'dedup' ? 'Leyendo plays…' : 'Calculando agregados…';
         showProgress(label, loaded, total);
-        const now = Date.now();
-        if (now - lastYield > 100) {
-          lastYield = now;
-          await new Promise(r => setTimeout(r, 0)); // yield al event loop
-        }
       },
     });
   } catch (e) {
@@ -318,12 +313,11 @@ async function extractHistoryJsons(zipFile) {
 // entre cada uno tardaría 19 minutos en una pestaña de fondo y parecería
 // colgado. Un `MessageChannel` no se clampea.
 //
-// 🟥 **El progreso congelado del import COMPLETO no se arregla acá**, y está
-// anotado en `PENDIENTES.md`: su `onProgress` (`import-history.js`, el
-// `handleFiles()` de arriba) es `async` con un `await` adentro que nadie
-// espera, porque `processStreamingHistory()` lo llama sin `await`
-// (`history-processor.js`: `if (onProgress) onProgress({…})`). Este modo no
-// tiene ese defecto porque el bucle es suyo.
+// 🟩 **El import COMPLETO ya no congela el cartel (v=297)**: hasta v=296 su
+// `onProgress` era `async` con un `await` que nadie esperaba. Ahora
+// `processStreamingHistory()` es `async` y cede ella misma, y `handleFiles()`
+// le pasa esta misma `cederElHilo()`: hay UN solo `MessageChannel` para los
+// dos caminos.
 
 /** Cede el hilo de verdad, también en una pestaña oculta. */
 function cederElHilo() {
