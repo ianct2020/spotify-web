@@ -2,11 +2,14 @@
 // Acepta ZIP del export de Spotify o los Streaming_History_Audio_*.json sueltos.
 // Extrae + procesa + guarda todo en el IDB del user (nada sale de su compu).
 
-import { processStreamingHistory, crearAcumuladorDeDias } from '../history-processor.js?v=297';
-import { saveMyHistory, clearMyHistory, hasLocalHistory, guardarSoloDias } from './history-data.js?v=297';
-import { escapeHtml, showProgress, hideProgress, confirmModal, alertModal } from '../ui/components.js?v=297';
-import { showToast } from '../ui/toast.js?v=297';
-import { openModal, closeTop, closeById } from '../ui/modal-stack.js?v=297';
+import { processStreamingHistory, crearAcumuladorDeDias } from '../history-processor.js?v=298';
+import {
+  saveMyHistory, clearMyHistory, hasLocalHistory, guardarSoloDias,
+  motivoSinImportCompleto, identityLockedMessage,
+} from './history-data.js?v=298';
+import { escapeHtml, showProgress, hideProgress, confirmModal, alertModal } from '../ui/components.js?v=298';
+import { showToast } from '../ui/toast.js?v=298';
+import { openModal, closeTop, closeById } from '../ui/modal-stack.js?v=298';
 
 const OVERLAY_ID = 'import-history-overlay';
 let overlay = null;
@@ -17,15 +20,9 @@ function close() {
   }
 }
 
-async function openImportHistory() {
-  close();
-  const alreadyHas = await hasLocalHistory();
-
-  overlay = openModal({
-    id: OVERLAY_ID,
-    onClose: () => { overlay = null; },
-    html: `
-    <div class="modal ih-modal" style="max-width:560px;width:min(560px,94vw)">
+// La cabecera del modal, la misma con o sin selector: con la explicación del
+// owner se queda igual, con su ✕.
+const CABECERA = `
       <div class="ih-header">
         <div class="ih-header-icon" aria-hidden="true">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="22" height="22">
@@ -39,7 +36,54 @@ async function openImportHistory() {
           <div style="font-size:12px;color:var(--color-text-muted);margin-top:2px">Todo se procesa en tu navegador — nada se sube a ningún lado</div>
         </div>
         <button class="btn btn-secondary btn-sm ih-close-btn" data-close-modal title="Cerrar" aria-label="Cerrar">✕</button>
-      </div>
+      </div>`;
+
+/**
+ * Lo que se enseña en vez del selector cuando la guarda dice que no
+ * (`motivoSinImportCompleto()`, history-data.js). SIN zona de arrastre, SIN
+ * `<input type="file">` y SIN «Borrarlo»: `clearMyHistory()` se llevaría
+ * también `local_<owner>_history_days`, que es lo que carga la importación
+ * «solo el detalle».
+ */
+function cuerpoBloqueado(motivo) {
+  // Identidad sin confirmar: el cartel que ya existe, sin copy nuevo.
+  if (motivo === 'identidad') return identityLockedMessage('La importación');
+  return `
+      <div class="ih-bloqueo-owner" style="font-size:13px;line-height:1.5;color:var(--color-text-secondary)">
+        <h4 style="margin:0 0 8px;font-size:15px;color:var(--color-text)">Tu historial ya está en la app</h4>
+        <p style="margin:0 0 10px">Las vistas de historial de esta cuenta (Wrapped, Récords, Calendario, Mis tapas…) salen de datos preparados aparte, con correcciones hechas a mano. Importar aquí tu export los sustituiría por un cálculo hecho en el navegador, así que en esta cuenta la importación completa está desactivada.</p>
+        <p style="margin:0">Si lo que quieres es ver qué sonó cada día, abre Calendario, elige un día y usa «Cargar el detalle por día desde tu export». Eso solo añade el detalle y no toca nada más.</p>
+      </div>`;
+}
+
+async function openImportHistory() {
+  close();
+  // La guarda, capa 3. Las cuatro puertas que llegan acá (el botón «Mi
+  // historial», `window.__openImportHistory`, el `[data-open-import]` del cartel
+  // de bloqueo y el botón del panel de `#calendario`) pasan todas por este punto.
+  const bloqueo = await motivoSinImportCompleto();
+  if (bloqueo) {
+    overlay = openModal({
+      id: OVERLAY_ID,
+      onClose: () => { overlay = null; },
+      html: `
+    <div class="modal ih-modal" data-import-bloqueado="${bloqueo}" style="max-width:560px;width:min(560px,94vw)">
+      ${CABECERA}
+      ${cuerpoBloqueado(bloqueo)}
+    </div>
+  `,
+    });
+    return;
+  }
+
+  const alreadyHas = await hasLocalHistory();
+
+  overlay = openModal({
+    id: OVERLAY_ID,
+    onClose: () => { overlay = null; },
+    html: `
+    <div class="modal ih-modal" style="max-width:560px;width:min(560px,94vw)">
+      ${CABECERA}
 
       <label id="ih-drop" class="ih-drop">
         <input type="file" id="ih-file" accept=".zip,application/zip,.json,application/json" multiple style="display:none">
@@ -112,6 +156,15 @@ async function handleFiles(files) {
     status.className = 'ih-status active' + (kind === 'error' ? ' error' : '');
     status.innerHTML = html;
   };
+
+  // La guarda, capa 2: ANTES de leer, descomprimir o procesar nada. Si el owner
+  // llegara hasta acá (un selector viejo abierto, otro camino que se agregue),
+  // no se gastan los ~5 s de procesamiento para terminar rechazado en
+  // `saveMyHistory()`: se le enseña la misma explicación.
+  if (await motivoSinImportCompleto()) {
+    await openImportHistory();
+    return;
+  }
 
   let jsonFiles = [];
   const zip = files.find(f => f.name.toLowerCase().endsWith('.zip'));
@@ -290,7 +343,8 @@ async function extractHistoryJsons(zipFile) {
 // LA IMPORTACIÓN «SOLO EL DETALLE POR DÍA» — v=289
 // ════════════════════════════════════════════════════════════════════════════
 //
-// ⚠️ **POR QUÉ EL OWNER NO PUEDE PASAR POR `handleFiles()`.**
+// ⚠️ **POR QUÉ EL OWNER NO PUEDE PASAR POR `handleFiles()`** — y desde v=298
+// de verdad no puede: hasta v=297 esto era una advertencia y no un candado.
 //
 // `saveMyHistory()` escribe las OCHO claves `local_{uid}_history_*`, y
 // `loadOne()` (history-data.js) las consulta **antes** que los JSON horneados
@@ -299,6 +353,12 @@ async function extractHistoryJsons(zipFile) {
 // mano que llevan los JSON («Birds In The Trap Sing McKnight», v=151) y sin
 // las tapas de `bake-covers.py`. Y pasaría sin fallar y sin avisar, que es el
 // modo exacto que este repo viene marcando desde v=208.
+//
+// Lo impide `motivoSinImportCompleto()` (history-data.js), la regla escrita una
+// sola vez, en tres capas: `openImportHistory()` le enseña una explicación en
+// vez del selector, `handleFiles()` pregunta antes de leer nada, y
+// `saveMyHistory()` tira (`err.importDelOwner`) antes de la primera escritura.
+// Con la identidad sin confirmar también bloquea.
 //
 // Así que este modo:
 //   · **NO corre `processStreamingHistory()`** — ni una vez;

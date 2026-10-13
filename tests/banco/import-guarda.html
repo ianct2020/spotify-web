@@ -1,0 +1,85 @@
+<!doctype html><html lang="es"><head><meta charset="utf-8"><title>banco import-guarda — el owner no puede correr el import completo</title>
+<style>html,body{margin:0;background:#111;color:#eee;font:13px system-ui}iframe{border:0;display:block}</style>
+</head><body>
+<pre id="progreso"></pre>
+<div id="marco"></div>
+<script type="module">
+// ── Qué prueba este banco (v=298) ────────────────────────────────────────────
+//
+// La guarda del import completo de historial, en la app REAL y entera, contra la
+// Spotify simulada (`simulado.mjs`: 0 peticiones reales). Tres casos, cada uno
+// en su iframe y en su carga de página (ver `import-guarda-caso.html`):
+//
+//   owner · las tres puertas del modal («Mi historial», `window.__openImportHistory()`
+//           y un `[data-open-import]` sembrado) dan la explicación, con 0
+//           `input[type="file"]` y sin «Borrarlo»; en #calendario, el panel de
+//           un día sin detalle NO trae «Importar mi historial entero» y SÍ
+//           «Cargar el detalle por día desde tu export».
+//   amigo · `/me` = un id de prueba: el selector de siempre (1 input) y el panel
+//           con los dos botones (y el segundo abre el selector).
+//   caido · `/me` en 429: el cartel de identidad, 0 input.
+//
+// Y en los tres: 0 peticiones que no sean `/me`, 0 escrituras, y abrir el modal
+// no suma ningún `/me` a los que ya se pagaban.
+//
+// 🔴 Al terminar se cuentan en la IndexedDB del perfil (temporal) las claves
+// `local_<owner>_history_*` que no son `days`: tienen que ser 0.
+
+import { esperarReal, anclar } from '/banco/simulado.mjs';
+import { fallar, listo } from '/banco/esperar.mjs';
+
+const ANCHO = +(new URLSearchParams(location.search).get('ancho') || 1351);
+const resultados = {};
+let actual = null;
+window.addEventListener('message', (e) => {
+  if (e.data?.banco === 'import-guarda') actual = e.data;
+});
+
+async function correr(caso) {
+  actual = null;
+  // Si el reloj se agota a mitad de un caso, `correr-banco.mjs` imprime este
+  // `<pre>`: el rojo dice qué caso no terminó.
+  document.getElementById('progreso').textContent = `el caso «${caso}» no terminó dentro del presupuesto de reloj virtual`;
+  const f = document.createElement('iframe');
+  f.width = ANCHO; f.height = 900;
+  f.src = `/banco/import-guarda-caso.html?caso=${caso}`;
+  document.getElementById('marco').replaceChildren(f);
+  await esperarReal(() => actual, { que: `el caso ${caso}`, vueltas: 12000 });
+  document.documentElement.setAttribute(`data-${caso}`, `${actual.ok ? 'ok' : 'error'} · reloj ${Math.round(performance.now())} ms`);
+  if (!actual.ok) throw new Error(actual.error);
+  resultados[caso] = actual.datos;
+}
+
+try {
+  await correr('owner');
+  await correr('amigo');
+  await correr('caido');
+
+  // La cuenta de la condición de parada, sobre la IndexedDB que compartieron los
+  // tres iframes (el mismo origen).
+  const { idbEntriesByPrefix } = await import('/js/idb.js');
+  const { HISTORY_OWNER_ID } = await import('/js/features/history-data.js');
+  // ⚠️ `anclar`: una lectura de IndexedDB sin anclar deja correr suelto el reloj
+  // virtual (ver PRESUPUESTO en `scripts/correr-banco.mjs`).
+  const delOwner = (await anclar(idbEntriesByPrefix(`local_${HISTORY_OWNER_ID}_history_`))).map(([k]) => k);
+  const prohibidas = delOwner.filter(k => !k.endsWith('_history_days'));
+  if (prohibidas.length) throw new Error(`BANCO: claves del owner que no son days en la IndexedDB: ${prohibidas.join(', ')}`);
+
+  const o = resultados.owner, a = resultados.amigo, c = resultados.caido;
+  const resumen =
+    `owner: 3 puertas → explicación, input=${Object.values(o.puertas).map(p => p.inputs).join('/')} · ` +
+    `#calendario cargar=${o.calendario.cargar} completo=${o.calendario.completo} · ` +
+    `amigo: input=${Object.values(a.puertas).map(p => p.inputs).join('/')} · calendario completo=${a.calendario.completo} (abre ${a.calendario.completoAbre}) · ` +
+    `caído: identidad, input=${Object.values(c.puertas).map(p => p.inputs).join('/')} · ` +
+    `/me al abrir el modal owner=${Object.values(o.puertas).map(p => p.meDelta).join('/')} amigo=${Object.values(a.puertas).map(p => p.meDelta).join('/')} · ` +
+    `/me totales owner=${o.meTotal} amigo=${a.meTotal} caído=${c.meTotal} · no-/me=${o.noMe.length + a.noMe.length + c.noMe.length} · ` +
+    `escrituras=${o.escrituras + a.escrituras + c.escrituras} · claves local_<owner>_history_* que no son days=${prohibidas.length} · ` +
+    `reloj virtual=${Math.round(performance.now())} ms`;
+  document.documentElement.setAttribute('data-resumen', resumen);
+  document.getElementById('progreso').textContent = resumen;
+  listo();
+} catch (e) {
+  fallar(e);
+}
+</script>
+</body></html>

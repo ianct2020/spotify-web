@@ -2210,6 +2210,46 @@ Por eso `importarSoloElDetalle()` (`features/import-history.js`) **no corre
 clave** por `guardarSoloDias()`. Lo ofrece el panel del día cuando no hay
 detalle.
 
+🟩 **Y desde v=298 (tanda 46) es un candado, no una advertencia.** Hasta v=297
+ningún paso del camino lo impedía: `openImportHistory()` abría el selector para
+cualquiera, `handleFiles()` procesaba sin mirar el uid y `saveMyHistory()`
+escribía sin preguntar. La regla vive **una sola vez**, en
+`motivoSinImportCompleto()` (`features/history-data.js`, exportada): devuelve
+`'owner'` si `/me` es `HISTORY_OWNER_ID`, `'identidad'` si la identidad está sin
+confirmar (`/me` caído, el id viene de `fonoteca_last_user_id`) y `null` si se
+puede. No suma ningún `/me` (va por el memo de `getCurrentUserId()`). **Tres
+capas, y las tres llaman a esa función** (ninguna compara contra
+`HISTORY_OWNER_ID` por su cuenta; en `src/js/` hay 3 comparaciones: `isOwner()`,
+`loadOne()` y la guarda):
+
+1. `saveMyHistory()` **tira** antes de la primera escritura
+   (`err.importDelOwner = true` para el owner, `err.identidadSinConfirmar = true`
+   sin identidad): no se escribe ninguna de las ocho claves. Es la que importa.
+2. `handleFiles()` pregunta **antes** de leer, descomprimir o procesar nada, y
+   si dice que no reabre la explicación: no se gastan los ~5 s para terminar
+   rechazado.
+3. `openImportHistory()` enseña la explicación («Tu historial ya está en la
+   app») dentro del mismo modal, **sin** zona de arrastre, **sin**
+   `<input type="file">` y **sin** «Borrarlo» —`clearMyHistory()` se llevaría
+   también `local_<owner>_history_days`—. Sin identidad, el cartel de
+   `identityLockedMessage('La importación')`, sin copy nuevo.
+
+**Las cuatro puertas** que llegan a `openImportHistory()`: el botón «Mi
+historial» (`app.js`, `my-history-btn`), `window.__openImportHistory`, el
+delegado de `[data-open-import]` de `bindOwnerLockedButtons()` (el «Ya tengo mi
+ZIP» de `ownerLockedMessage()`) y el botón «Importar mi historial entero» del
+panel de un día sin detalle de `#calendario` — que, además, **ya no se pinta**
+cuando la guarda dice que no (`calendario.js`, `importCompletoBloqueado`); «Cargar
+el detalle por día desde tu export» queda igual. La identidad sin confirmar
+también bloquea: el id guardado puede ser el del owner, y con `/me` caído
+`saveMyHistory()` no podría guardar de todos modos.
+
+La importación «solo el detalle» (`guardarSoloDias()`) **no pasa por la guarda**
+y sigue igual para el owner y para cualquiera. Guardas:
+`tests/import-guarda-owner.test.mjs` (Node, dobles; mira las escrituras del doble
+de IndexedDB) y el banco `tests/banco/import-guarda.html` (la app entera en tres
+iframes: owner, id de prueba y `/me` caído; en `prepush`).
+
 ⚠️ **Cede el hilo con `MessageChannel`, no con `setTimeout`**: Chrome estrangula
 `setTimeout` a **uno por minuto** en una pestaña oculta, así que 19 archivos con
 `setTimeout(0)` entre cada uno tardarían 19 minutos y parecerían colgados.
@@ -2303,6 +2343,7 @@ guarda de animaciones que no puede ser global) siguen valiendo y están en
 | los minutos cuadran día por día + los saltos (año por año, una sola definición) | `tests/calendario-dias.test.mjs` (73) | `npm test` |
 | los años suman el total · diez reproducciones contadas a mano · el copy de «dentro de todo» | `tests/skip-por-anio.test.mjs` (103) | `npm test` |
 | abrir no gasta · la playlist cuesta 2 y 3 | `tests/banco/calendario.html` | `npm run prepush` |
+| al owner el panel sin detalle no le ofrece el import completo (v=298) | `tests/banco/import-guarda.html` | `npm run prepush` |
 
 El instrumento de las capturas es `tests/banco/calendario-fotos.html` y **no va
 en `prepush`**: espera a un conductor externo, como `mosaico.html` sin `auto=1`.

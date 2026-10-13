@@ -84,7 +84,12 @@ const EXTRA = { mosaico: 'auto=1' };
 // ⚠️ El `render()` de #follow-artists es SINCRÓNICO (devuelve el `teardown`): no hay promesa que
 // anclar, y `anclar()` sobre él tira «promesa.then is not a function». Lo ancla el `esperarReal`
 // que viene después. `ocultar-artista` (90 s) no se midió en la tanda 42: no se tocó.
-const PRESUPUESTO = { 'calendario': 15000, 'ocultar-artista': 90000 };
+// `import-guarda` (v=298) abre la app ENTERA tres veces, una por iframe, y el caso de `/me`
+// caído se come ~25 s de reloj virtual a propósito: `spotifyFetch` duerme 5 × 5 s antes de
+// rendirse con el 429 (es lo que pasa de verdad). Medido a tasa de acierto el 13/10 (tanda 46):
+// con 90 s, diez corridas seguidas gastaron 26.401-27.864 ms de reloj virtual (10/10). El doble
+// de la más lenta, redondeado hacia arriba a múltiplo de 15 s: 60 s.
+const PRESUPUESTO = { 'calendario': 15000, 'ocultar-artista': 90000, 'import-guarda': 60000 };
 // `XQ="&peor=1"` agrega parámetros a la URL del banco sin tocar este archivo: sirve
 // para medir (p. ej. el ancho mínimo en que la barra de novedades sigue en una fila).
 

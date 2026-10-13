@@ -42,7 +42,7 @@
 // que ningún corte por tono los distingue) y **tostado cae en naranjas** (es un
 // marrón claro, y le falla el techo de L* de los marrones).
 
-import { srgb8ALab, labALch } from './cover-color.js?v=297';
+import { srgb8ALab, labALch } from './cover-color.js?v=298';
 
 /** Croma por debajo del cual no hay tono perceptible: la tapa es neutra. */
 export const CROMA_NEUTRO = 6;

@@ -44,20 +44,20 @@
 // quien lo lee.
 
 import {
-  loadHistoryStats, loadDays, isOwner, ownerLockedMessage,
-} from './history-data.js?v=297';
-import { escapeHtml, pageHeader, showProgress, hideProgress, promptPlaylistName, confirmModal } from '../ui/components.js?v=297';
-import { showToast } from '../ui/toast.js?v=297';
-import { openModal, closeModal } from '../ui/modal-stack.js?v=297';
-import { openTrackCard } from './track-card.js?v=297';
-import { attachArtistCard } from './artist-card.js?v=297';
-import { calendarioAnual, aMs, isoDelDia, ultimoDiaDelTramo } from '../ui/calendario-anual.js?v=297';
-import { fmtDia } from '../util/fecha.js?v=297';
-import { animationsEnabled, armRevealAll, releaseReveal } from '../ui/reveal.js?v=297';
-import { vigilarRuta } from '../util/vigencia-ruta.js?v=297';
-import { prefKey, migratePrefKey } from '../storage.js?v=297';
-import { createPlaylist, addTracksToPlaylist, invalidatePlaylistsCache } from '../api.js?v=297';
-import { openImportHistory, importarSoloElDetalle } from './import-history.js?v=297';
+  loadHistoryStats, loadDays, isOwner, ownerLockedMessage, motivoSinImportCompleto,
+} from './history-data.js?v=298';
+import { escapeHtml, pageHeader, showProgress, hideProgress, promptPlaylistName, confirmModal } from '../ui/components.js?v=298';
+import { showToast } from '../ui/toast.js?v=298';
+import { openModal, closeModal } from '../ui/modal-stack.js?v=298';
+import { openTrackCard } from './track-card.js?v=298';
+import { attachArtistCard } from './artist-card.js?v=298';
+import { calendarioAnual, aMs, isoDelDia, ultimoDiaDelTramo } from '../ui/calendario-anual.js?v=298';
+import { fmtDia } from '../util/fecha.js?v=298';
+import { animationsEnabled, armRevealAll, releaseReveal } from '../ui/reveal.js?v=298';
+import { vigilarRuta } from '../util/vigencia-ruta.js?v=298';
+import { prefKey, migratePrefKey } from '../storage.js?v=298';
+import { createPlaylist, addTracksToPlaylist, invalidatePlaylistsCache } from '../api.js?v=298';
+import { openImportHistory, importarSoloElDetalle } from './import-history.js?v=298';
 
 const PREF_ANIO = 'fonoteca_calendario_anio_v1';
 
@@ -91,6 +91,10 @@ let anioElegido = null;
 let diaEnfocado = 0;
 let detalle = null;        // el payload `days`, o null si no está cargado
 let detalleBuscado = false;
+// ¿Se le puede ofrecer el import COMPLETO en el panel de un día sin detalle?
+// Al owner no (v=298): ese panel es justo su estado, y el import completo le
+// pisaría el historial horneado. Lo decide la guarda de `history-data.js`.
+let importCompletoBloqueado = true;
 
 function anioConDatos() {
   return (stats?.years || []).filter(y => y.days && Array.isArray(y.days.min) && y.days.min.length);
@@ -175,6 +179,10 @@ export async function render(container) {
     detalle = await loadDays();
     if (!ruta.vigente()) return;
   }
+  // La misma regla que el modal de «Mi historial», no una comparación propia.
+  // No suma ningún `/me`: el id ya está memoizado por `loadHistoryStats()`.
+  importCompletoBloqueado = !!(await motivoSinImportCompleto());
+  if (!ruta.vigente()) return;
 
   pintar(content, ruta);
 }
@@ -372,7 +380,7 @@ function abrirDia(i, ruta) {
          ${nadaSono ? '' : `
          <p class="cal-panel-nota">El detalle por día <strong>no se publica</strong>: se queda en este navegador y nunca sale de tu ordenador.</p>
          <button class="btn btn-primary btn-sm" data-cal-cargar>Cargar el detalle por día desde tu export</button>
-         <button class="btn btn-secondary btn-sm" data-cal-import-completo>Importar mi historial entero</button>`}
+         ${importCompletoBloqueado ? '' : '<button class="btn btn-secondary btn-sm" data-cal-import-completo>Importar mi historial entero</button>'}`}
        </div>`
     : `
       ${d.artistas.length ? `
@@ -543,6 +551,7 @@ async function crearPlaylistDelDia(boton, iso, temas) {
 export function __reiniciarParaTests() {
   stats = null; anioElegido = null; diaEnfocado = 0;
   detalle = null; detalleBuscado = false; creando = false;
+  importCompletoBloqueado = true;
 }
 
 export { datosDelDia };

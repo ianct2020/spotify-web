@@ -55,7 +55,13 @@ function validarPath(path) {
 
 function d() { return globalThis.__DOBLE; }
 
-export async function getCurrentUserId() { return d().me; }
+// `meFalla` imita a `/me` caído (429 o red): `getCurrentUserId()` de verdad
+// agota sus reintentos y TIRA, no devuelve `null` (lo usa la suite de la guarda
+// del import, v=298).
+export async function getCurrentUserId() {
+  if (d().meFalla) throw new Error(d().meFalla);
+  return d().me;
+}
 
 export async function spotifyFetch(path) {
   d().llamadas.push(path);

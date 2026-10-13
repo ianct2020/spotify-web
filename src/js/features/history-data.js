@@ -93,6 +93,55 @@ async function isOwner() {
   return id === HISTORY_OWNER_ID;
 }
 
+// ════════════════════════════════════════════════════════════════════════════
+// LA GUARDA DEL IMPORT COMPLETO (v=298)
+// ════════════════════════════════════════════════════════════════════════════
+//
+// ⚠️ **EL OWNER NO PUEDE CORRER EL IMPORT COMPLETO.** `saveMyHistory()` escribe
+// las ocho claves `local_{uid}_history_*` y `loadOne()` las lee ANTES que los
+// JSON horneados del repo: a Ian le pisaría las siete vistas de historial con un
+// cálculo del navegador, sin las correcciones a mano de los JSON («Birds In The
+// Trap Sing McKnight», v=151) ni las tapas de `bake-covers.py`. Sin fallar y sin
+// avisar. Hasta v=297 ningún paso del camino lo impedía.
+//
+// La regla vive ACÁ y en ningún otro lado. La usan tres capas, y las tres
+// llaman a esta función en vez de comparar contra `HISTORY_OWNER_ID` por su
+// cuenta (la lección de v=219: el criterio escrito dos veces diverge):
+//   1. `saveMyHistory()`, antes de la primera escritura — la última línea de
+//      defensa, la que importa;
+//   2. `handleFiles()` (import-history.js), antes de leer o descomprimir nada;
+//   3. `openImportHistory()` (import-history.js), que enseña una explicación en
+//      vez del selector de archivos.
+//
+// ⚠️ **Con la identidad sin confirmar también bloquea.** El id guardado
+// (`fonoteca_last_user_id`) puede ser el del owner, y con `/me` caído
+// `saveMyHistory()` no podría guardar de todos modos: a un amigo no se le quita
+// nada. Es la misma postura que `isOwner()` (v=190), del otro lado: allá la
+// identidad sin confirmar no CONCEDE, acá no DEJA ESCRIBIR.
+//
+// La importación «solo el detalle» (`guardarSoloDias()`) NO pasa por acá: es
+// justamente el camino del owner, y escribe una sola clave.
+//
+// Devuelve `null` si se puede, `'owner'` o `'identidad'` si no. No suma ningún
+// `/me`: `resolvedUserId()` va por el memo de `getCurrentUserId()`.
+async function motivoSinImportCompleto() {
+  const { id, degradado } = await resolvedUserId();
+  if (degradado) return 'identidad';
+  if (id === HISTORY_OWNER_ID) return 'owner';
+  return null;
+}
+
+/** El error que tira `saveMyHistory()` cuando la guarda dice que no. */
+function errorImportBloqueado(motivo) {
+  const err = new Error(motivo === 'owner'
+    ? 'En esta cuenta la importación completa está desactivada: tu historial ya está en la app.'
+    : 'No hemos podido confirmar tu identidad, así que la importación no se puede guardar.');
+  err.importBloqueado = motivo;
+  if (motivo === 'owner') err.importDelOwner = true;
+  else err.identidadSinConfirmar = true;
+  return err;
+}
+
 // Las versiones y las claves viven en `history-keys.js`, que no importa nada.
 // Ahí está el porqué: `api.js` también las necesita para el guarda multiusuario
 // y tenía una copia a mano que se quedó vieja (v=188).
@@ -341,6 +390,10 @@ async function loadDays() {
 // Guarda el historial procesado (BYOH) en IDB del user actual.
 // payload = { stats, trackPlays, listened, skipStats, detail, records }
 async function saveMyHistory(payload) {
+  // La guarda, ANTES de la primera escritura: si dice que no, no se escribe
+  // ninguna de las ocho claves (ver `motivoSinImportCompleto`).
+  const bloqueo = await motivoSinImportCompleto();
+  if (bloqueo) throw errorImportBloqueado(bloqueo);
   const uid = await getCurrentUserId();
   if (!uid) throw new Error('No se pudo detectar tu user de Spotify');
   await Promise.all([
@@ -518,5 +571,5 @@ export {
   loadDays, guardarSoloDias, localKey,
   playsFor, trackIdOf, isOwner, HISTORY_OWNER_ID, ownerLockedMessage,
   hasLocalHistory, saveMyHistory, clearMyHistory, bindOwnerLockedButtons,
-  identidadSinConfirmar,
+  identidadSinConfirmar, motivoSinImportCompleto, identityLockedMessage,
 };

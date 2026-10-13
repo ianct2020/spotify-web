@@ -44,7 +44,7 @@
 // quien lo lee.
 
 import {
-  loadHistoryStats, loadDays, isOwner, ownerLockedMessage,
+  loadHistoryStats, loadDays, isOwner, ownerLockedMessage, motivoSinImportCompleto,
 } from './history-data.js';
 import { escapeHtml, pageHeader, showProgress, hideProgress, promptPlaylistName, confirmModal } from '../ui/components.js';
 import { showToast } from '../ui/toast.js';
@@ -91,6 +91,10 @@ let anioElegido = null;
 let diaEnfocado = 0;
 let detalle = null;        // el payload `days`, o null si no está cargado
 let detalleBuscado = false;
+// ¿Se le puede ofrecer el import COMPLETO en el panel de un día sin detalle?
+// Al owner no (v=298): ese panel es justo su estado, y el import completo le
+// pisaría el historial horneado. Lo decide la guarda de `history-data.js`.
+let importCompletoBloqueado = true;
 
 function anioConDatos() {
   return (stats?.years || []).filter(y => y.days && Array.isArray(y.days.min) && y.days.min.length);
@@ -175,6 +179,10 @@ export async function render(container) {
     detalle = await loadDays();
     if (!ruta.vigente()) return;
   }
+  // La misma regla que el modal de «Mi historial», no una comparación propia.
+  // No suma ningún `/me`: el id ya está memoizado por `loadHistoryStats()`.
+  importCompletoBloqueado = !!(await motivoSinImportCompleto());
+  if (!ruta.vigente()) return;
 
   pintar(content, ruta);
 }
@@ -372,7 +380,7 @@ function abrirDia(i, ruta) {
          ${nadaSono ? '' : `
          <p class="cal-panel-nota">El detalle por día <strong>no se publica</strong>: se queda en este navegador y nunca sale de tu ordenador.</p>
          <button class="btn btn-primary btn-sm" data-cal-cargar>Cargar el detalle por día desde tu export</button>
-         <button class="btn btn-secondary btn-sm" data-cal-import-completo>Importar mi historial entero</button>`}
+         ${importCompletoBloqueado ? '' : '<button class="btn btn-secondary btn-sm" data-cal-import-completo>Importar mi historial entero</button>'}`}
        </div>`
     : `
       ${d.artistas.length ? `
@@ -543,6 +551,7 @@ async function crearPlaylistDelDia(boton, iso, temas) {
 export function __reiniciarParaTests() {
   stats = null; anioElegido = null; diaEnfocado = 0;
   detalle = null; detalleBuscado = false; creando = false;
+  importCompletoBloqueado = true;
 }
 
 export { datosDelDia };

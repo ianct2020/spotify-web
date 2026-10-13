@@ -1,0 +1,208 @@
+<!doctype html><html lang="es"><head><meta charset="utf-8"><title>banco import-guarda — un caso</title>
+<link rel="stylesheet" href="/css/theme.css">
+<link rel="stylesheet" href="/css/components.css">
+<link rel="stylesheet" href="/css/main.css">
+<style>*,*::before,*::after{animation:none!important;transition:none!important}</style>
+</head><body>
+<div id="app"></div>
+<script type="module">
+// ── Un caso del banco `import-guarda.html` (v=298) ───────────────────────────
+//
+// Corre la app ENTERA (`/js/app.js`, con su `init()`, su barra lateral y su
+// router) contra la Spotify simulada, con `/me` contestando lo que pida el caso:
+//
+//   ?caso=owner   `/me` = HISTORY_OWNER_ID. Las cuatro puertas al import completo
+//                 tienen que dar la explicación, nunca el selector.
+//   ?caso=amigo   `/me` = un id de prueba. «Mi historial» abre el selector de
+//                 siempre y el panel de #calendario trae los dos botones.
+//   ?caso=caido   `/me` da 429 siempre (con un perfil guardado, para que la app
+//                 arranque degradada). «Mi historial» da el cartel de identidad.
+//
+// Va en un iframe porque cada caso necesita SU carga de página: el id de
+// `getCurrentUserId()` y el «/me falló» de `history-data.js` se memoizan por
+// carga, a propósito. Le devuelve el resultado a la madre con `postMessage`.
+//
+// ⚠️ El historial es SEMBRADO y sintético. Al owner NUNCA se le siembra una clave
+// `local_<owner>_history_*`: su `stats` va en la clave del caché del owner
+// (`OWNER_KEYS.stats`), que es por donde le llega en la app real.
+
+import { instalarRedSimulada, esperarReal, anclar } from '/banco/simulado.mjs';
+
+const q = new URLSearchParams(location.search);
+const CASO = q.get('caso');
+const PRUEBA = 't46-prueba-guarda-no-owner';
+const afirmar = (c, msg) => { if (!c) throw new Error(`BANCO [${CASO}]: ${msg}`); };
+const $ = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+const rechazos = [];
+window.addEventListener('unhandledrejection', e => rechazos.push(String(e.reason?.message || e.reason)));
+
+const datos = { caso: CASO };
+try {
+  const { HISTORY_OWNER_ID } = await import('/js/features/history-data.js');
+  const { OWNER_KEYS } = await import('/js/history-keys.js');
+  const { idbSetCached } = await import('/js/idb.js');
+  const ID = CASO === 'owner' ? HISTORY_OWNER_ID : PRUEBA;
+  datos.me = CASO === 'caido' ? '(429)' : (CASO === 'owner' ? 'HISTORY_OWNER_ID' : PRUEBA);
+
+  const sim = instalarRedSimulada();
+  if (CASO === 'caido') {
+    sim.ruta('GET', /^\/me$/, () => sim.sinSimular(429));
+  } else {
+    sim.ruta('GET', /^\/me$/, () => ({ id: ID, display_name: 'Banco' }));
+  }
+
+  // El id guardado. En `caido` es el de PRUEBA a propósito: una guarda que solo
+  // mirara el id guardado le abriría el selector, y este caso se pondría rojo.
+  localStorage.setItem('fonoteca_last_user_id', ID);
+  localStorage.setItem('fonoteca_perfil_v1', JSON.stringify({ id: ID, display_name: 'Banco' }));
+
+  // ── Un año sintético, con la forma que produce el pipeline ────────────────
+  const min = Array.from({ length: 90 }, (_, i) => (i % 7 === 3 ? 0 : 20 + i));
+  const stats = {
+    version: 6, generated_at: '2026-10-13T00:00:00Z',
+    totals: { plays_valid: 100, plays_raw: 200, min: 999, days_active: 70, longest_streak: 5,
+              unique_artists: 5, unique_albums: 6, unique_tracks: 7, skip_pct: 20 },
+    years: [{ year: 2025, min: min.reduce((a, b) => a + b, 0), plays: 100, days_active: 70,
+              longest_streak: 5, skip_pct: 20, first_play: '2025-01-01T00:00:10Z',
+              last_play: '2025-03-31T00:00:10Z', peak_day: { date: '2025-01-05', min: 30 },
+              peak_month: { month: 1, min: 300 }, discovery: null,
+              days: { from: '2025-01-01', min }, top_artists: [], top_albums: [], top_tracks: [] }],
+    monthly: [], heatmap: [], top_artists_all_time: [], top_albums_all_time: [], top_tracks_all_time: [],
+  };
+  const TTL = 100 * 365 * 24 * 60;
+  if (CASO === 'owner') await anclar(idbSetCached(OWNER_KEYS.stats, stats, TTL));
+  if (CASO === 'amigo') await anclar(idbSetCached(`local_${PRUEBA}_history_stats`, stats, TTL));
+
+  // ── Arrancar la app real ───────────────────────────────────────────────────
+  location.hash = '#home';
+  await import('/js/app.js');
+  await esperarReal(() => $('#my-history-btn'), { que: 'que la app arranque y pinte la barra lateral', vueltas: 4000 });
+  const meAlArrancar = () => sim.reg.llamadas.filter(l => l.ruta === '/me').length;
+  datos.meArranque = meAlArrancar();
+
+  const MODAL = '[data-stack-id="import-history-overlay"]';
+  const inputs = () => $$(`${MODAL} input[type="file"]`).length;
+  const cerrar = async () => {
+    $(`${MODAL} [data-close-modal]`)?.click();
+    await esperarReal(() => !$(MODAL), { que: 'que el modal se cierre' });
+  };
+  // El modal abierto, con el selector o con la explicación: se espera a
+  // CUALQUIERA de los dos y después se afirma cuál vino. Así una guarda rota da
+  // un rojo que dice qué apareció, no una espera agotada.
+  const abierto = () => {
+    const m = $(MODAL);
+    if (!m) return false;
+    return $('#ih-file', m) || $('[data-import-bloqueado]', m);
+  };
+  const VUELTAS = CASO === 'caido' ? 8000 : 1200;   // con /me en 429, `spotifyFetch` duerme 5 × 5 s
+
+  async function puerta(nombre, abrir) {
+    const antes = meAlArrancar();
+    abrir();
+    await esperarReal(abierto, { que: `que «${nombre}» abra el modal`, vueltas: VUELTAS });
+    const m = $(MODAL);
+    const r = {
+      inputs: inputs(),
+      clear: !!$('#ih-clear', m),
+      drop: !!$('#ih-drop', m),
+      bloqueado: $('[data-import-bloqueado]', m)?.dataset.importBloqueado || null,
+      texto: m.textContent.replace(/\s+/g, ' ').trim(),
+      meDelta: meAlArrancar() - antes,
+    };
+    await cerrar();
+    return r;
+  }
+
+  datos.puertas = {};
+  datos.puertas.boton = await puerta('Mi historial', () => $('#my-history-btn').click());
+  datos.puertas.ventana = await puerta('window.__openImportHistory()', () => window.__openImportHistory());
+  datos.puertas.dataOpenImport = await puerta('[data-open-import] sembrado', () => {
+    document.body.insertAdjacentHTML('beforeend', '<button id="sembrado" data-open-import>Ya tengo mi ZIP</button>');
+    $('#sembrado').click();
+  });
+
+  for (const [n, r] of Object.entries(datos.puertas)) {
+    if (CASO === 'owner') {
+      afirmar(r.bloqueado === 'owner', `${n}: abre la explicación del owner (vino ${r.bloqueado})`);
+      afirmar(r.inputs === 0, `${n}: 0 input[type=file] en el modal, hay ${r.inputs}`);
+      afirmar(!r.clear, `${n}: sin #ih-clear («Borrarlo»)`);
+      afirmar(!r.drop, `${n}: sin zona de arrastre`);
+      afirmar(/Tu historial ya está en la app/.test(r.texto), `${n}: el título «Tu historial ya está en la app»`);
+      afirmar(/la importación completa está desactivada/.test(r.texto) && /Cargar el detalle por día desde tu export/.test(r.texto),
+        `${n}: el texto de la explicación`);
+      afirmar(/Mi historial de Spotify/.test(r.texto), `${n}: la cabecera del modal se queda`);
+    } else if (CASO === 'amigo') {
+      afirmar(r.bloqueado === null, `${n}: no está bloqueado`);
+      afirmar(r.inputs === 1, `${n}: el selector de siempre (1 input[type=file]), hay ${r.inputs}`);
+      afirmar(r.drop, `${n}: con su zona de arrastre`);
+    } else {
+      afirmar(r.bloqueado === 'identidad', `${n}: abre el cartel de identidad (vino ${r.bloqueado})`);
+      afirmar(r.inputs === 0, `${n}: 0 input[type=file], hay ${r.inputs}`);
+      afirmar(/No hemos podido confirmar tu identidad/.test(r.texto), `${n}: el mensaje de identidad que ya existía`);
+      afirmar(!r.clear, `${n}: sin #ih-clear`);
+    }
+  }
+  if (CASO !== 'caido') {
+    // Abrir el modal no suma ningún /me a los que ya se pagaban: el primero lo
+    // paga `getCurrentUserId()` (antes lo pagaba `hasLocalHistory()`), memoizado.
+    const deltas = Object.values(datos.puertas).map(r => r.meDelta);
+    afirmar(deltas[0] <= 1 && deltas.slice(1).every(d => d === 0),
+      `abrir el modal: como mucho 1 /me la primera vez y 0 después; fueron ${deltas.join(', ')}`);
+  }
+
+  // ── #calendario: el panel de un día sin detalle ───────────────────────────
+  if (CASO !== 'caido') {
+    const meAntesCal = meAlArrancar();
+    location.hash = '#calendario';
+    await esperarReal(() => $('.cal-anual .wr-ap-cal i[data-dia]'), { que: 'que #calendario pinte su grilla' });
+    const celdas = $$('.cal-anual .wr-ap-cal i[data-dia]');
+    const i = celdas.findIndex(c => !/nada/.test(c.title));
+    afirmar(i >= 0, 'hay un día con minutos');
+    celdas[i].click();
+    await esperarReal(() => $('.cal-panel'), { que: 'que se abra el panel del día' });
+    datos.calendario = {
+      cargar: !!$('.cal-panel [data-cal-cargar]'),
+      completo: !!$('.cal-panel [data-cal-import-completo]'),
+      vacio: /historial horneado/.test($('.cal-panel').textContent),
+      meDelta: meAlArrancar() - meAntesCal,
+    };
+    afirmar(datos.calendario.vacio, 'el panel es el de un día SIN detalle');
+    afirmar(datos.calendario.cargar, 'el panel tiene «Cargar el detalle por día desde tu export» ([data-cal-cargar])');
+    if (CASO === 'owner') {
+      afirmar(!datos.calendario.completo, 'al owner el panel NO le pinta «Importar mi historial entero»');
+    } else {
+      afirmar(datos.calendario.completo, 'al amigo el panel le pinta los dos botones');
+      // Y esa cuarta puerta lleva al selector de siempre.
+      $('.cal-panel [data-cal-import-completo]').click();
+      await esperarReal(abierto, { que: 'que «Importar mi historial entero» abra el selector' });
+      datos.calendario.completoAbre = inputs();
+      afirmar(datos.calendario.completoAbre === 1, `el botón del panel abre el selector (1 input), hay ${datos.calendario.completoAbre}`);
+      await cerrar();
+    }
+    afirmar(datos.calendario.meDelta === 0, `abrir #calendario y el panel no suma /me, sumó ${datos.calendario.meDelta}`);
+  }
+
+  // ── Peticiones ─────────────────────────────────────────────────────────────
+  const noMe = sim.reg.llamadas.filter(l => l.ruta !== '/me');
+  datos.me = datos.me; datos.meTotal = meAlArrancar();
+  datos.noMe = noMe.map(l => `${l.metodo} ${l.ruta}`);
+  datos.escrituras = sim.reg.escrituras.length;
+  datos.externas = sim.reg.externas;
+  datos.desconocidas = sim.reg.desconocidas;
+  afirmar(noMe.length === 0, `0 peticiones que no sean /me, hubo ${noMe.length}: ${datos.noMe.join(' · ')}`);
+  afirmar(datos.escrituras === 0, `0 escrituras, hubo ${datos.escrituras}`);
+  afirmar(datos.externas.length === 0, `0 hosts externos: ${datos.externas.join(' · ')}`);
+  if (rechazos.length) throw new Error(`BANCO [${CASO}]: rechazos sin atrapar: ${rechazos.join(' | ')}`);
+
+  datos.reloj = Math.round(performance.now());
+  parent.postMessage({ banco: 'import-guarda', ok: true, datos }, '*');
+  // Abierto suelto (sin la madre), el resultado queda en el DOM para `--dump-dom`.
+  document.documentElement.setAttribute('data-caso', 'ok ' + JSON.stringify(datos));
+} catch (e) {
+  datos.reloj = Math.round(performance.now());
+  parent.postMessage({ banco: 'import-guarda', ok: false, error: String(e?.message || e), datos }, '*');
+  document.documentElement.setAttribute('data-caso', 'error ' + String(e?.message || e) + ' ' + JSON.stringify(datos));
+}
+</script>
+</body></html>

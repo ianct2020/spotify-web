@@ -48,7 +48,7 @@ if npm test --silent 2>&1 | tail -4 | sed 's/^/      /'; [ "${PIPESTATUS[0]}" -e
 # `mosaico` y `toasts` entraron en v=273:
 # estaban en rojo desde antes del 04/10 y justamente por no estar acá nadie los
 # miraba, igual que le había pasado a `barra` entre v=241 y v=261.
-echo "2b. bancos (barra · pausa-search · toasts · mosaico · novedades · escrituras · ocultar-artista ×3 · covers-orden · calendario)"
+echo "2b. bancos (barra · pausa-search · toasts · mosaico · novedades · escrituras · ocultar-artista ×3 · covers-orden · calendario · import-guarda)"
 # Los dos de `ocultar-artista` entraron en v=276: las TRES vistas que ocultan
 # artistas, reales, contra una Spotify simulada. Es el único sitio donde se puede
 # probar ocultar sin escribir en la cuenta de Ian, y el de `-disco` es el que
@@ -63,7 +63,12 @@ echo "2b. bancos (barra · pausa-search · toasts · mosaico · novedades · esc
 # 1 + ceil(N/100) POST (2 con 30 temas, 3 con 150). Es el único sitio donde se puede probar
 # el botón de playlist sin crear una playlist real en la cuenta de Ian — y no se pueden
 # borrar por API.
-for B in barra pausa-search toasts mosaico novedades escrituras ocultar-artista ocultar-artista-disco ocultar-artista-novedades covers-orden calendario; do
+# `import-guarda` entró en v=298: la guarda del import completo, en la app ENTERA. Con
+# `/me` = owner las cuatro puertas al import completo dan la explicación (0 `input[type=file]`,
+# sin «Borrarlo», y el panel de #calendario sin «Importar mi historial entero»); con un id de
+# prueba, el selector de siempre; con `/me` caído, el cartel de identidad. Y al final, 0 claves
+# `local_<owner>_history_*` que no sean `days` en la IndexedDB del perfil temporal.
+for B in barra pausa-search toasts mosaico novedades escrituras ocultar-artista ocultar-artista-disco ocultar-artista-novedades covers-orden calendario import-guarda; do
   if node scripts/correr-banco.mjs "$B" 2>&1 | sed 's/^/      /'; [ "${PIPESTATUS[0]}" -eq 0 ]; then
     ok "banco $B en verde"
   else
