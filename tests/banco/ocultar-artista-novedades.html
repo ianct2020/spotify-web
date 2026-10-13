@@ -146,6 +146,11 @@ try {
 
   // La uri salió de los me gusta de la vista: ni un /search, y la playlist la tiene.
   afirmar(!sim.reg.llamadas.some(l => /\/search/.test(l.ruta || l)), 'ocultar NO pasó por /search (la uri sale de los me gusta)');
+  // ⚠️ Esperar, no afirmar al toque (tanda 47): `toggle()` sube a la playlist EN SEGUNDO
+  // PLANO y desde v=299 antes del POST borra el caché de items (un `await` de IndexedDB),
+  // así que el POST ya no sale en el mismo tramo en que se van las tarjetas. Es la misma
+  // espera que hace `ocultar-artista.html` en este punto desde siempre.
+  await esperarA(() => playlistOcultos.items.length === 1, { que: 'que la pista representativa llegue a la playlist' });
   afirmar(playlistOcultos.items.length === 1 && /^spotify:track:l-0aAa/.test(playlistOcultos.items[0]),
     `la playlist de ocultos recibió una pista de «${victima}»: ${JSON.stringify(playlistOcultos.items)}`);
 

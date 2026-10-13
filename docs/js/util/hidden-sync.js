@@ -26,10 +26,11 @@ import {
   createPlaylist,
   getCurrentUserId,
   spotifyFetch,
-} from '../api.js?v=298';
-import { prefKey, migratePrefKey } from '../storage.js?v=298';
-import { invalidateOwnPlaylists } from './playlist-add.js?v=298';
-import { showToast } from '../ui/toast.js?v=298';
+} from '../api.js?v=299';
+import { prefKey, migratePrefKey } from '../storage.js?v=299';
+import { idbGetCached, idbSetCached, idbDel } from '../idb.js?v=299';
+import { invalidateOwnPlaylists } from './playlist-add.js?v=299';
+import { showToast } from '../ui/toast.js?v=299';
 
 const PLAYLIST_DESC = 'Lista interna de Fonoteca: lo que ocultaste en esta vista. Si la borras, se pierden los ocultos.';
 
@@ -268,6 +269,76 @@ function olvidarId(lsKey) {
   try { localStorage.removeItem(idKeyFor(lsKey)); } catch { /* sin localStorage */ }
 }
 
+// ── El caché de los items de la playlist espejo (v=299) ─────────────────────
+//
+// Hasta v=298 `sync()` bajaba la playlist ENTERA en cada carga de página
+// (`useCache: false`), en frío y en caliente: con los 900 ocultos de descubrir
+// eran 9 páginas por carga aunque no hubiera cambiado nada. El `useCache:false`
+// estaba puesto a propósito y la razón sigue en pie: la reconciliación necesita
+// el estado REAL de la playlist, porque toda clave local que no aparezca en lo
+// bajado se lee como «la playlist perdió un oculto» y se vuelve a subir. Una
+// lista vieja no se ve en pantalla: se ve como pistas DUPLICADAS en la cuenta.
+//
+// Así que el caché vale solo con estas reglas, y cada una tiene su porqué:
+//
+//   1. El snapshot que valida es SOLO el de la respuesta fresca del
+//      `GET /playlists/{id}` que `findPlaylist()` ya hacía con el id guardado
+//      (se le suma `snapshot_id` a los `fields`: ninguna petición nueva). Si la
+//      playlist se encontró POR NOMBRE no hay snapshot: se baja entera y no se
+//      escribe el caché. ⚠️ Nunca el de `getAllUserPlaylists()`: esa lista vive
+//      hasta 24 h en localStorage y un snapshot de ayer validaría items de ayer.
+//   2. Clave propia (`ocultos_items_v1_<playlistId>`), NO la del caché de
+//      `getAllPlaylistItems`: esa la escriben `#sin-clasificar` y los barridos
+//      de playlists propias para estas mismas playlists, con su propia forma de
+//      pedir el snapshot, y dos dueños de una clave terminan contestando
+//      distinto. (Por eso en este archivo no aparece ni esa clave ni la función
+//      que la parchea: lo vigila `tests/ocultos-cache.test.mjs`.)
+//   3. Antes de CADA escritura en la playlist, el caché se BORRA. No se parchea
+//      (al revés que W-Three, v=147): el snapshot que devuelve el POST incluye
+//      lo que escribieron OTROS dispositivos y este navegador no vio, así que
+//      parchear la lista vieja y sellarla con él deja afuera, hasta que la
+//      playlist vuelva a cambiar, lo que ocultaste en la otra compu. Y se borra
+//      ANTES y no después, para que una escritura que tira o queda a medias no
+//      deje un caché que la contradiga.
+//   4. Vence a las 24 h (`guardadoEn`) aunque el snapshot coincida: el snapshot
+//      va retrasado tras una escritura y sin cota conocida (CLAUDE.md, «GET
+//      /playlists/{id}?fields=snapshot_id»), y sin vencimiento un snapshot que
+//      no avanza dejaría una lista vieja para siempre.
+//
+// `auditar()` NO lo lee ni lo escribe: es la foto del estado real.
+const ITEMS_CACHE_PREFIX = 'ocultos_items_v1_';
+const ITEMS_CACHE_VIDA_MS = 24 * 60 * 60 * 1000;
+
+function itemsCacheKey(playlistId) {
+  return `${ITEMS_CACHE_PREFIX}${playlistId}`;
+}
+
+/** Los items guardados, solo si el snapshot coincide y no vencieron; si no, `null`. */
+async function leerItemsGuardados(playlistId, snapshot) {
+  if (!playlistId || !snapshot) return null;
+  try {
+    const c = await idbGetCached(itemsCacheKey(playlistId));
+    if (!c || c.snapshot !== snapshot || !Array.isArray(c.items)) return null;
+    if (!(Date.now() - c.guardadoEn < ITEMS_CACHE_VIDA_MS)) return null;
+    return c.items;
+  } catch { return null; }   // sin IndexedDB: se baja entera, como hasta v=298
+}
+
+async function guardarItems(playlistId, snapshot, items) {
+  if (!playlistId || !snapshot) return;
+  try {
+    // El TTL del envoltorio (24 h) es para que IndexedDB lo limpie solo si la
+    // playlist se abandona; la regla que manda es la de `guardadoEn`, arriba.
+    await idbSetCached(itemsCacheKey(playlistId), { snapshot, items, guardadoEn: Date.now() }, 24 * 60);
+  } catch { /* sin IndexedDB: la carga siguiente baja entera */ }
+}
+
+/** Antes de escribir en la playlist. Ver la regla 3. */
+async function borrarItemsGuardados(playlistId) {
+  if (!playlistId) return;
+  try { await idbDel(itemsCacheKey(playlistId)); } catch { /* sin IndexedDB: no hay caché que borrar */ }
+}
+
 // ── «No existe» contra «no pude preguntar» (v=287) ──────────────────────────
 //
 // EL FALLO QUE CIERRA ESTO. Hasta v=286 `findPlaylist()` tenía UN `catch` para
@@ -447,6 +518,18 @@ export function createHiddenStore({ lsKey, playlistName, keyOfTrack, label, uriF
   let synced = false;
   function ensureKeys() { if (!keys) keys = loadLocal(lsKey); return keys; }
   function ensureUris() { if (!uriByKey) uriByKey = loadUris(lsKey); return uriByKey; }
+
+  // (v=299) Cuántas veces este almacén se puso a escribir en su playlist. Un
+  // `sync()` que estaba bajando la lista cuando arrancó una escritura no guarda
+  // lo que bajó: es la foto de ANTES, y guardarla rehace el caché que la
+  // escritura acaba de borrar.
+  let escrituras = 0;
+
+  /** Antes de CADA escritura en la playlist: el caché de items se borra, nunca se parchea. */
+  async function antesDeEscribir(id) {
+    escrituras++;
+    await borrarItemsGuardados(id);
+  }
 
   // Claves que están en local pero todavía no subieron (sin uri conocida). No se
   // pierden NUNCA: se reintenta subirlas en cada sync, se anotan en disco
@@ -669,8 +752,12 @@ export function createHiddenStore({ lsKey, playlistName, keyOfTrack, label, uriF
     let sinRespuesta = null;
     if (guardado) {
       try {
-        const p = await spotifyFetch(`/playlists/${guardado}?fields=id,name,owner(id)`);
-        if (p?.id && p.owner?.id === me) return p;
+        const p = await spotifyFetch(`/playlists/${guardado}?fields=id,name,owner(id),snapshot_id`);
+        // (v=299) `snapshotFresco` es el ÚNICO snapshot que `sync()` acepta para
+        // usar el caché de items: el de esta respuesta, recién pedida por id.
+        // El camino por nombre de abajo no lo pone nunca. Ver «El caché de los
+        // items de la playlist espejo», arriba.
+        if (p?.id && p.owner?.id === me) return { ...p, snapshotFresco: p.snapshot_id || null };
         // Spotify CONTESTÓ y lo que contestó dice que no es tuya. Eso es una
         // respuesta, no un fallo: el id guardado ya no vale y se tira.
         console.warn(`[ocultos:${label}] la playlist guardada ${guardado} ya no es tuya; vuelvo a buscarla por nombre`);
@@ -800,7 +887,15 @@ export function createHiddenStore({ lsKey, playlistName, keyOfTrack, label, uriF
     }
 
     playlistId = existing.id;
-    const items = await getAllPlaylistItems(playlistId, null, { useCache: false });
+    // (v=299) Solo se baja si el snapshot cambió, falta o el caché venció. Sin
+    // `snapshotFresco` (encontrada por nombre) se baja entera y NO se guarda.
+    const snapshot = existing.snapshotFresco || null;
+    let items = await leerItemsGuardados(playlistId, snapshot);
+    if (!items) {
+      const antes = escrituras;
+      items = await getAllPlaylistItems(playlistId, null, { useCache: false });
+      if (antes === escrituras) await guardarItems(playlistId, snapshot, items);
+    }
 
     const remote = new Set();
     const claveDeUri = new Map();   // uri → la clave que esa pista reconstruye
@@ -1018,7 +1113,9 @@ export function createHiddenStore({ lsKey, playlistName, keyOfTrack, label, uriF
       return;
     }
 
-    await addTracksToPlaylist(await ensurePlaylist(), uris);
+    const id = await ensurePlaylist();
+    await antesDeEscribir(id);
+    await addTracksToPlaylist(id, uris);
     olvidarSinUri(subidas);
     saveUris(lsKey, uriByKey);
     console.info(`[ocultos:${label}] subidas ${uris.length} pistas a ${playlistName}`);
@@ -1147,6 +1244,7 @@ export function createHiddenStore({ lsKey, playlistName, keyOfTrack, label, uriF
       for (let i = 0; id && i < conUri.length; i += 100) {
         const tanda = conUri.slice(i, i + 100);
         const uris = [...new Set(tanda.map(t => t.uri))];
+        await antesDeEscribir(id);
         try {
           if (ocultar) await addTracksToPlaylist(id, uris);
           else await removeTracksFromPlaylist(id, uris);
@@ -1238,6 +1336,7 @@ export function createHiddenStore({ lsKey, playlistName, keyOfTrack, label, uriF
           return;
         }
         const id = await ensurePlaylist();
+        await antesDeEscribir(id);
         if (nowHidden) { await addTracksToPlaylist(id, [trackUri]); olvidarSinUri([key]); }
         else await removeTracksFromPlaylist(id, [trackUri]);
       })().catch(e => {
@@ -1297,6 +1396,7 @@ export function createHiddenStore({ lsKey, playlistName, keyOfTrack, label, uriF
       if (uris.length) {
         const id = playlistId || await ensurePlaylist().catch(() => null);
         if (id) {
+          await antesDeEscribir(id);
           await removeTracksFromPlaylist(id, uris).catch(e => console.warn(`[ocultos:${label}] clear:`, e.message));
         }
       }

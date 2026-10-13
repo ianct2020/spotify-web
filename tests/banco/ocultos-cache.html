@@ -1,0 +1,102 @@
+<!doctype html><html lang="es"><head><meta charset="utf-8"><title>banco ocultos-cache — la playlist de ocultos se baja solo si cambió</title>
+<style>html,body{margin:0;background:#111;color:#eee;font:13px system-ui}iframe{border:0;display:block}</style>
+</head><body>
+<pre id="progreso"></pre>
+<div id="marco"></div>
+<script type="module">
+// ── Qué prueba este banco (v=299, tanda 47) ─────────────────────────────────
+//
+// Las dos vistas de descubrir abiertas en la app REAL y entera, contra una
+// Spotify simulada con la forma de la cuenta de Ian (SEMBRADA): la playlist de
+// ocultos de descubrir con 900 pistas y la de artistas con 12, los ids guardados.
+// Cada carga de página es un iframe nuevo (`ocultos-cache-caso.html`); todos
+// comparten la IndexedDB del perfil (mismo origen) y el estado de la Spotify
+// simulada, que vive acá.
+//
+//   1. #discover-artists en frío (sin `ocultos_items_*`) y en caliente (la carga siguiente);
+//   2. #new-releases, ídem;
+//   3. las dos en la MISMA carga: lo que suma la segunda;
+//   4. la otra compu agrega una pista a la de descubrir: la carga siguiente la baja entera.
+//
+// Afirma: en caliente, 0 páginas de `/items` de las dos playlists de ocultos; en
+// frío, las de siempre (9 + 1); 0 escrituras; 0 rutas sin simular; 0 hosts
+// externos (o sea, 0 peticiones reales: `simulado.mjs` no tiene camino a la red).
+//
+// `?medir=1` no afirma nada y solo deja la tabla: es como se midió el «antes»
+// (v=298), corriendo este mismo banco contra el `src/` de HEAD en una copia.
+
+import { esperarReal } from '/banco/simulado.mjs';
+import { fallar, listo } from '/banco/esperar.mjs';
+import { crearEstado, escrituraAjena, PL_DESCUBRIR } from '/banco/escenario-ocultos-cache.mjs';
+
+const q = new URLSearchParams(location.search);
+const ANCHO = +(q.get('ancho') || 1351);
+const MEDIR = q.get('medir') === '1';
+const afirmar = (c, msg) => { if (!c && !MEDIR) throw new Error(`BANCO: ${msg}`); };
+window.__estadoOcultosCache = crearEstado({ descubrir: 900, artistas: 12 });
+
+let actual = null;
+window.addEventListener('message', (e) => { if (e.data?.banco === 'ocultos-cache') actual = e.data; });
+
+async function cargar(nombre, params) {
+  actual = null;
+  document.getElementById('progreso').textContent = `la carga «${nombre}» no terminó dentro del presupuesto de reloj virtual`;
+  const f = document.createElement('iframe');
+  f.width = ANCHO; f.height = 900;
+  f.src = `/banco/ocultos-cache-caso.html?${params}`;
+  document.getElementById('marco').replaceChildren(f);
+  await esperarReal(() => actual, { que: `la carga ${nombre}`, vueltas: 12000 });
+  if (!actual.ok) throw new Error(`BANCO [${nombre}]: ${actual.error}`);
+  return actual.datos;
+}
+
+const fila = (r) => `me=${r.me} desc=${r.descubrir}+${r.descubrirItems}p art=${r.artistas}+${r.artistasItems}p resto=${r.resto.length}`;
+const tabla = {};
+try {
+  const cargas = [
+    ['disco-frio', 'vistas=disco&limpiar=1'],
+    ['disco-caliente', 'vistas=disco'],
+    ['nr-frio', 'vistas=nr&limpiar=1'],
+    ['nr-caliente', 'vistas=nr'],
+    ['ambas', 'vistas=disco,nr'],
+  ];
+  const res = {};
+  for (const [n, p] of cargas) res[n] = await cargar(n, p);
+
+  // 4. La otra compu agrega una pista a la playlist de descubrir.
+  escrituraAjena(window.__estadoOcultosCache, PL_DESCUBRIR, (pl) => pl.items.push({ ...pl.items[0], id: 'ajenaq'.padEnd(22, 'q'), uri: 'spotify:track:' + 'ajenaq'.padEnd(22, 'q'), album: { ...pl.items[0].album, name: 'Disco oculto en la otra compu' } }));
+  res['cambio'] = await cargar('cambio', 'vistas=disco');
+
+  for (const [n, d] of Object.entries(res)) {
+    for (const [v, r] of Object.entries(d.porVista)) tabla[`${n}:${v}`] = r;
+    afirmar(d.escrituras.length === 0, `[${n}] 0 escrituras, hubo ${d.escrituras.join(' · ')}`);
+    afirmar(d.desconocidas.length === 0, `[${n}] 0 rutas sin simular: ${d.desconocidas.join(' · ')}`);
+    afirmar(d.externas.length === 0, `[${n}] 0 hosts externos: ${d.externas.join(' · ')}`);
+    afirmar(d.rechazos.length === 0, `[${n}] rechazos sin atrapar: ${d.rechazos.join(' | ')}`);
+  }
+  for (const v of ['disco', 'nr']) {
+    const frio = tabla[`${v}-frio:${v}`], cal = tabla[`${v}-caliente:${v}`];
+    afirmar(frio.descubrirItems === 9 && frio.artistasItems === 1, `${v} en frío: las páginas de siempre (9 + 1), dio ${frio.descubrirItems} + ${frio.artistasItems}`);
+    afirmar(cal.descubrirItems === 0 && cal.artistasItems === 0, `${v} en caliente: 0 páginas de /items de las dos playlists de ocultos, dio ${cal.descubrirItems} + ${cal.artistasItems}`);
+    afirmar(cal.descubrir === 1 && cal.artistas === 1, `${v} en caliente: 1 GET /playlists/{id} por playlist (el de findPlaylist), dio ${cal.descubrir} + ${cal.artistas}`);
+  }
+  const seg = tabla['ambas:nr'];
+  afirmar(seg.me + seg.descubrir + seg.descubrirItems + seg.artistas + seg.artistasItems + seg.resto.length === 0,
+    `la segunda vista de la misma carga no suma nada, sumó ${fila(seg)}`);
+  const cambio = tabla['cambio:disco'];
+  afirmar(cambio.descubrirItems === 10 && cambio.artistasItems === 0,
+    `la otra compu cambió la de descubrir: se baja entera (901 → 10 páginas) y la de artistas no, dio ${cambio.descubrirItems} + ${cambio.artistasItems}`);
+
+  const resumen = Object.entries(tabla).map(([k, r]) => `${k} ${fila(r)}${r.resto.length ? ' [' + r.resto.join(',') + ']' : ''}`).join(' · ')
+    + ` · arranque me=${res['disco-frio'].arranque.me} · escrituras=0 · reloj virtual=${Math.round(performance.now())} ms`;
+  document.documentElement.setAttribute('data-resumen', resumen);
+  document.documentElement.setAttribute('data-tabla', JSON.stringify(tabla));
+  document.getElementById('progreso').textContent = resumen;
+  listo();
+} catch (e) {
+  document.documentElement.setAttribute('data-tabla', JSON.stringify(tabla));
+  document.documentElement.setAttribute('data-resumen', `reloj virtual=${Math.round(performance.now())} ms`);
+  fallar(e);
+}
+</script>
+</body></html>

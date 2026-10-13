@@ -1470,6 +1470,16 @@ Las reglas que hay que respetar al tocar ese archivo:
 - **Un candidato solo vale si su clave RECALCULADA coincide exacto.** Subir un
   «parecido» deja en la playlist una pista que al releerla da otra clave: el
   oculto sigue perdido y encima la playlist queda sucia.
+- **Antes de escribir en la playlist, se borra el caché de items; nunca se
+  parchea** (v=299). `antesDeEscribir()` borra `ocultos_items_v1_<id>` antes de
+  cada una de las cuatro escrituras (`pushMissing`, `fijarVarios`, `toggle`,
+  `clear`), y antes y no después para que una escritura que tira no deje un
+  caché que la contradiga. El porqué es el caso C4 de
+  `tests/ocultos-cache.test.mjs`: caché `{A}`, la otra compu agrega Y, acá se
+  oculta Z. El snapshot que devuelve el POST ya incluye a Y; parchear `{A}` con
+  Z y sellarlo con ese snapshot deja a Y afuera hasta que la playlist vuelva a
+  cambiar. Es lo contrario de W-Three («parchear, no borrar», v=147), y es a
+  propósito: allá la playlist la escribe solo esta app.
 - **Nada en silencio.** Cada montón (la playlist perdió algo / nunca subió /
   no se puede representar) lleva `console.warn`, toast y línea en
   `ocultos_incidencias_v1`. Ese registro es la versión de `likes_borrados_log_v1`
@@ -2520,11 +2530,13 @@ fila sobrevivió así desde que se armó la tabla.
 | `#recs` | **0** | **0** | — | — | ✅ **confirmada el 2026-10-08**: `hiddenArtists.ready()` está en `run()` (`:265`, declarada en `:187`), que cuelga de `#recs-run-btn` |
 | `#discover-artists` | **32 + 2 + ceil(Hd/100)** = **43** | ídem que el frío menos «w three» | «w three» **+ la playlist de ocultos («descubrir»)** | pistas de «w three» **y nº de ocultos** | leída del código · **`/me` repasado el 2026-10-08**: `hiddenAlbums.ready()` (`:314`) SÍ está en el camino de `render()` (`:202`) y paga **1 `/me` propio**, ya contado en el «+2»; `artistasOcultos.ready()` (`:386`) reusa el memo y suma 0 |
 | ↳ **+2 desde v=276** (ocultar artistas) → **45** | **45** | ídem | **+ la playlist de ocultos («recomendados»)**: `1 /playlists/{id}` + `ceil(Ha/100)` | nº de artistas ocultos (**12** el 06/10) | leída del código |
+| ↳ 🟩 **los ocultos, medidos (v=299)**: frío **15**, caliente **3** (v=298: 15 y **13**) | **3** | **15** | frío: 1 `/me` + 1 `/playlists/{desc}` + **9** págs. + 1 `/playlists/{art}` + **1** pág. + `/me/albums` + `/me/playlists`. Caliente: 1 `/me` + los dos `GET /playlists/{id}`, **0** págs. | si la playlist cambió (snapshot nuevo) o el caché venció (24 h), esa playlist se baja entera | **medida en el banco el 2026-10-13** (`tests/banco/ocultos-cache.html`, Spotify simulada con **900 + 12** ocultos, ids guardados; el «antes» es el mismo banco contra el `src/` de v=298). **Sin «w three»** (no configurada en el banco): sus `1 + ceil(W/100)` van aparte y no cambiaron. Sin el `/me` del arranque |
 | `#follow-artists` | **1 `/me` + ceil(A/40)** = **10** | **1** | **`artistasOcultos.ready()` está DENTRO de `render()`** (`follow-artists.js:175`, `render` en `:17`) → `getCurrentUserId` · + `/me/library/contains?uris=spotify:artist:…` | **nº de discografías en la base** | 🔴 **corregida el 2026-10-08, leída del código.** Decía **9** y se le olvidaba el `/me` propio |
 | ↳ **+2 desde v=276** (ocultar artistas) → **11** | **2** | **+ la playlist de ocultos («recomendados»)** | ídem que arriba | nº de artistas ocultos | leída del código |
 | `#new-releases` | **12** `/items` + **5** `/me` | **1** | snapshot + págs. de `/items` de «w three» | pistas de «w three» | **medida en vivo el 2026-09-30** |
 | ↳ lo que predice el código | 1 + ceil(W/100) = **32** **+ 2 + ceil(Hd/100)** | ídem | «w three» + ocultos («descubrir»), el MISMO store que `#discover-artists` | ídem | leída del código |
 | ↳ **+2 desde v=278** (ocultar artistas) → **45** | **45** | ídem | **+ la playlist de ocultos («recomendados»)**: `1 /playlists/{id}` + `ceil(Ha/100)`; el `/me` ya lo pagó `hiddenAlbums` | nº de artistas ocultos (**12** el 06/10) | **medida el 2026-10-07 contra una Spotify simulada** con la forma de Ian (ids de playlist guardados, 12 dentro): 5 → 7 peticiones, **+2 exactos**. En vivo, no |
+| ↳ 🟩 **los ocultos, medidos (v=299)**: frío **13**, caliente **3** (v=298: 13 y **13**) | **3** | **13** | ídem que `#discover-artists`, sin `/me/albums` ni `/me/playlists` (en el banco ya los había pagado otra carga) | ídem | **medida en el banco el 2026-10-13**, igual que la fila de `#discover-artists`. Abierta **después** de `#discover-artists` en la misma carga suma **0**, en v=298 y en v=299 (los almacenes comparten el `ready()`) |
 | **Limpieza** | | | | | |
 | `#sync` | **~285** | **2** | `ceil(L/50)` + `ceil(P/50)` + 1 `/items?limit=1` + 1 snapshot + `ceil(T/100)` | me gusta **y** pistas de la espejo | leída del código · **`/me` repasado el 2026-10-08**: su `render()` no llega a `getCurrentUserId()` |
 | `#dedupe` | **ceil(P/50) + 1** = **3** | **0–1** | `/me/playlists` + 1 `/me` | nº de playlists | leída del código · **`/me` repasado el 2026-10-08**: el `getCurrentUserId()` de `dedupe.js:22` está en `loadAndShowGrid()`, que cuelga de `render()`. **El 1 `/me` que la fila ya contaba es el propio**, y está bien |
@@ -2586,6 +2598,13 @@ desborde de 48 de 12. Al abrir `#wthree` (y `#skips`, `#zeroplays`,
 1 /me  +  1 /playlists/{id}?fields=id,name,owner(id)  +  ceil(H/100) /items
 ```
 
+🟩 **Desde v=299 eso es en FRÍO.** En caliente (snapshot igual y caché de menos
+de 24 h) el almacén cuesta **`1 /playlists/{id}`** y ninguna página: pasa de
+`1 + ceil(H/100)` a `1` (más el `/me`, si es el primero de la carga). Medido en
+el banco solo para `#discover-artists` y `#new-releases` (ver sus filas). Para
+`#wthree`, `#skips`, `#zeroplays` y `#sin-clasificar` es **leído del código**: la
+pieza es la misma, pero esas cuatro vistas no se midieron.
+
 🟥 **Corrección del 06/10: `#recs` NO estaba en esa lista y acá decía que sí.**
 Su `hiddenArtists.ready()` vive dentro de `run()` —la función del botón «Buscar
 recomendaciones»—, no de `render()`, así que **abrir `#recs` cuesta 0**, como ya
@@ -2600,13 +2619,54 @@ cuesta 0 sigue costando 0 aunque gane ocultos. Es lo que mantiene `#similar` en 
 que sumarle a `#discover-artists` el almacén de artistas cuesta **+2** y no +3:
 el `/me` ya lo pagó `hiddenAlbums`.
 
-🟥 **Y ese último va con `useCache: false`**, así que **re-pagina la playlist de
-ocultos ENTERA cada sesión de página, en frío y en caliente**: no mira el
-`snapshot_id` y no deja caché. Es el único camino de apertura de toda la app que
-no se abarata nunca. Si algún día hay que bajar el costo de `#wthree`, éste es
-el sitio — pero **ojo: `useCache:false` está puesto a propósito**, porque la
-reconciliación de ocultos necesita el estado real de la playlist, no uno
-cacheado. No lo cambies sin leer esa sección.
+🟩 **Ese último ya no re-pagina en cada carga (v=299).** Hasta v=298 `sync()`
+iba con `useCache: false` y bajaba la playlist de ocultos ENTERA en cada sesión
+de página, en frío y en caliente. El `useCache: false` sigue (la reconciliación
+necesita el estado real: una clave local que falta en lo bajado se re-sube, y una
+lista vieja se ve como **pistas duplicadas en la cuenta**), pero ahora solo se
+llama cuando hace falta. Las reglas viven en `util/hidden-sync.js` («El caché de
+los items de la playlist espejo»):
+
+- **El snapshot sale gratis**: `findPlaylist()` le suma `snapshot_id` a los
+  `fields` del `GET /playlists/{id guardado}` que ya hacía. **Ese es el único
+  snapshot que vale.** Si la playlist se encontró por nombre no hay snapshot: se
+  baja entera y no se guarda. Nunca el de `getAllUserPlaylists()` (24 h en
+  localStorage: un snapshot de ayer validaría items de ayer).
+- **Caché propio**, `ocultos_items_v1_<playlistId>` = `{ snapshot, items,
+  guardadoEn }`. No la clave de items de `getAllPlaylistItems` ni
+  `updatePlaylistItemsCache()`: esa la escriben `#sin-clasificar` y los barridos
+  para las mismas playlists, y dos dueños de una clave terminan contestando
+  distinto. «Limpiar caché» lo borra (no está en `CONSERVAR_PREFIJOS`).
+- **Antes de cada escritura se BORRA** (las cuatro de `hidden-sync.js`). Ver la
+  regla en «Los ocultos: la uri va GUARDADA con la clave». Un `sync()` que
+  estaba bajando cuando arrancó una escritura no guarda lo que bajó.
+- **Vence a las 24 h** aunque el snapshot coincida: el snapshot va retrasado
+  tras una escritura, sin cota conocida.
+- **`auditar()` (`#debug` → «Salud de los ocultos») no cambió**: sigue con
+  `useCache: false` y no lee ni escribe el caché.
+
+**El precio que se acepta:** si la otra compu oculta algo y este navegador carga
+mientras Spotify todavía devuelve el snapshot viejo, ese oculto aparece en la
+carga siguiente en que el snapshot avance, o a las 24 h como mucho. No se pierde:
+llega tarde. Hasta v=298 llegaba al instante.
+
+**Lo que NO arregla:** si en la otra compu **devolvés** un oculto, este
+navegador lo sigue teniendo en local y en el `sync()` siguiente lo vuelve a
+subir (`perdidas`). Pasaba igual con `useCache: false`: es la unión.
+`tests/ocultos-cache.test.mjs` (C7) afirma que con el caché hace exactamente las
+mismas peticiones que v=298 en ese caso.
+
+⚠️ Hay un QUINTO escritor que no pasa por acá: `#zombies` puede sacar pistas de
+cualquier playlist propia, incluidas estas (`features/zombies.js`). No borra el
+caché, y no hace falta para no duplicar: su DELETE mueve el snapshot, la carga
+siguiente baja la lista y pasa lo mismo que en v=298 (la pista sigue en local y
+se re-sube, por la unión); si el snapshot todavía no avanzó, el caché tiene una
+pista de más que también está en local, así que no se re-sube nada hasta que
+avance.
+
+Guardas: `tests/ocultos-cache.test.mjs` (C1-C8 y la lectura estática; el doble de
+la API tiene snapshot-contador, retraso y «otro dispositivo») y el banco
+`tests/banco/ocultos-cache.html` (en `prepush`).
 
 ⚠️ **Hay SEIS almacenes de ocultos y cada uno tiene su PROPIA playlist.**
 No se comparten: **cada vista paga el suyo**. Censo completo, leído del código y

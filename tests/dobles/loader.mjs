@@ -1,7 +1,7 @@
 // Loader de módulos para los tests de `util/hidden-sync.js`.
 //
-// `hidden-sync.js` importa `../api.js` (red), `./playlist-add.js` (cachés) y
-// `../ui/toast.js` (DOM). Nada de eso existe en Node, y ninguno es lo que hay
+// `hidden-sync.js` importa `../api.js` (red), `./playlist-add.js` (cachés),
+// `../ui/toast.js` (DOM) y, desde v=299, `../idb.js` (IndexedDB). Nada de eso existe en Node, y ninguno es lo que hay
 // que probar: lo que se prueba es la reconciliación. Este loader los cambia por
 // dobles que guardan su estado en `globalThis.__DOBLE`, así que el test ve las
 // llamadas que se hicieron sin tocar el módulo real.
@@ -14,6 +14,8 @@ const MAPA = {
   '/src/js/api.js': '/tests/dobles/api-doble.mjs',
   '/src/js/util/playlist-add.js': '/tests/dobles/playlist-add-doble.mjs',
   '/src/js/ui/toast.js': '/tests/dobles/toast-doble.mjs',
+  // (v=299) el caché de items de la playlist espejo: ver idb-ocultos-doble.mjs
+  '/src/js/idb.js': '/tests/dobles/idb-ocultos-doble.mjs',
 };
 
 export async function resolve(specifier, context, next) {

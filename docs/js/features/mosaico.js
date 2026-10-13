@@ -24,16 +24,16 @@
 // salir de la ruta se cierra. La única salida es la descarga que pide el
 // usuario, que es un `<a download>` local.
 
-import { pageHeader, escapeHtml } from '../ui/components.js?v=298';
-import { showToast } from '../ui/toast.js?v=298';
-import { generacionActual, rutaVigente } from '../router.js?v=298';
-import { descargarBlob } from './covers-wallpaper.js?v=298';
-import { bajarPortadas, soltarBitmaps, pintarMosaico } from './mosaico-lienzo.js?v=298';
-import { leerColores, urlDe } from './mosaico-colores.js?v=298';
+import { pageHeader, escapeHtml } from '../ui/components.js?v=299';
+import { showToast } from '../ui/toast.js?v=299';
+import { generacionActual, rutaVigente } from '../router.js?v=299';
+import { descargarBlob } from './covers-wallpaper.js?v=299';
+import { bajarPortadas, soltarBitmaps, pintarMosaico } from './mosaico-lienzo.js?v=299';
+import { leerColores, urlDe } from './mosaico-colores.js?v=299';
 import {
   salidaPara, rejillaDelObjetivo, tilesALab, emparejarCediendo, mapaDeTinte, resumenDeEmparejado,
   podarGaleria, TOPE_GUARDADOS, TOPE_BYTES_GUARDADOS,
-} from '../util/mosaico.js?v=298';
+} from '../util/mosaico.js?v=299';
 
 // Tamaños de grilla que ofrece la vista: celdas del lado MÁS LARGO de la
 // imagen. 80 da las 60×80 que pidió Ian con una imagen 3:4.

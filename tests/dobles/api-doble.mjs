@@ -55,6 +55,41 @@ function validarPath(path) {
 
 function d() { return globalThis.__DOBLE; }
 
+// ── El snapshot miente como el de verdad (v=299) ─────────────────────────────
+//
+// `snapshot_id` es un CONTADOR de escrituras: cambia en cada POST y cada DELETE
+// y nunca vuelve a un valor anterior. Con `'s' + largo` (lo que tenía el banco)
+// un POST seguido de un DELETE deja el MISMO snapshot con otro contenido, y un
+// caché que valida por snapshot pasa en verde estando roto. `snapshotPorLargo`
+// vuelve a esa regla vieja SOLO para ver fallar la puerta 7 de la tanda 47.
+//
+// Y va RETRASADO como el real (CLAUDE.md: seguía viejo 40 s después de un PUT):
+// durante las `retraso` lecturas de `/playlists/{id}?fields=…` siguientes a una
+// escritura, devuelve el snapshot ANTERIOR, mientras los items ya son los nuevos.
+function snapReal(pl) {
+  return d().snapshotPorLargo ? 's' + pl.items.length : 's' + (pl.escrituras || 0);
+}
+function snapVisible(pl) {
+  if (pl.retrasoRestante > 0) { pl.retrasoRestante--; return pl.snapAnterior; }
+  return snapReal(pl);
+}
+function anotarEscritura(pl) {
+  pl.snapAnterior = snapReal(pl);
+  pl.escrituras = (pl.escrituras || 0) + 1;
+  pl.retrasoRestante = d().retraso || 0;
+}
+
+/**
+ * Una escritura en la playlist que NO pasa por la app: la otra compu. `cambiar`
+ * recibe la playlist y la toca a mano; el snapshot avanza (y se retrasa) igual
+ * que con una escritura de la app.
+ */
+export function escrituraAjena(id, cambiar) {
+  const pl = d().playlists.find(p => p.id === id);
+  cambiar(pl);
+  anotarEscritura(pl);
+}
+
 // `meFalla` imita a `/me` caído (429 o red): `getCurrentUserId()` de verdad
 // agota sus reintentos y TIRA, no devuelve `null` (lo usa la suite de la guarda
 // del import, v=298).
@@ -100,7 +135,10 @@ export async function spotifyFetch(path) {
       err.status = 404;
       throw err;
     }
-    return { id: pl.id, name: pl.name, owner: { id: pl.owner } };
+    const out = { id: pl.id, name: pl.name, owner: { id: pl.owner } };
+    // Solo si se pidió, como la API con `fields`.
+    if (/snapshot_id/.test(path)) out.snapshot_id = snapVisible(pl);
+    return out;
   }
   const t = path.match(/^\/playlists\/([^/?]+)\/items\?limit=1$/);
   if (t) {
@@ -122,12 +160,25 @@ export async function getAllUserPlaylists() {
   const fuera = new Set(d().listadoOculta || []);
   return d().playlists
     .filter(p => !fuera.has(p.id))
-    .map(p => ({ id: p.id, name: p.name, owner: { id: p.owner } }));
+    .map(p => ({
+      id: p.id, name: p.name, owner: { id: p.owner },
+      // `listadoSnapshot` imita la lista de `/me/playlists` guardada hasta 24 h
+      // en localStorage, con el snapshot que tenía CUANDO se guardó (v=299).
+      ...(d().listadoSnapshot && p.id in d().listadoSnapshot ? { snapshot_id: d().listadoSnapshot[p.id] } : {}),
+    }));
 }
 
-export async function getAllPlaylistItems(id) {
+export async function getAllPlaylistItems(id, onProgress, opciones = {}) {
   const pl = d().playlists.find(p => p.id === id);
-  return (pl ? pl.items : []).map(t => ({ item: t }));
+  const items = pl ? pl.items : [];
+  // (v=299) Las páginas que costaría de verdad: `ceil(n/100)`, y 1 con la
+  // playlist vacía (la API contesta igual). Se anotan APARTE de `llamadas` para
+  // no moverle la cuenta a las suites que ya la miran.
+  if (d().paginas) {
+    const n = Math.max(1, Math.ceil(items.length / 100));
+    for (let i = 0; i < n; i++) d().paginas.push({ id, offset: i * 100, useCache: opciones.useCache });
+  }
+  return items.map(t => ({ item: t }));
 }
 
 export async function addTracksToPlaylist(id, uris) {
@@ -135,7 +186,9 @@ export async function addTracksToPlaylist(id, uris) {
   d().añadidas.push({ id, uris: [...uris] });
   const pl = d().playlists.find(p => p.id === id);
   for (const uri of uris) pl.items.push(d().pistaDeUri(uri));
-  return { snapshot_id: 'x' };
+  anotarEscritura(pl);
+  // Como `api.js`: devuelve el snapshot NUEVO (el real, no el retrasado).
+  return snapReal(pl);
 }
 
 export async function removeTracksFromPlaylist(id, uris) {
@@ -143,7 +196,8 @@ export async function removeTracksFromPlaylist(id, uris) {
   d().quitadas.push({ id, uris: [...uris] });
   const pl = d().playlists.find(p => p.id === id);
   pl.items = pl.items.filter(t => !uris.includes(t.uri));
-  return { snapshot_id: 'x' };
+  anotarEscritura(pl);
+  return snapReal(pl);
 }
 
 export async function createPlaylist(name) {

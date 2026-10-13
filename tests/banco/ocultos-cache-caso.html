@@ -1,0 +1,98 @@
+<!doctype html><html lang="es"><head><meta charset="utf-8"><title>banco ocultos-cache — una carga de página</title>
+<link rel="stylesheet" href="/css/theme.css">
+<link rel="stylesheet" href="/css/components.css">
+<link rel="stylesheet" href="/css/main.css">
+<style>*,*::before,*::after{animation:none!important;transition:none!important}</style>
+</head><body>
+<div id="app"></div>
+<script type="module">
+// ── Una carga de página del banco `ocultos-cache.html` (v=299) ───────────────
+//
+// Arranca la app ENTERA (`/js/app.js`, con su `init()`, la barra lateral y el
+// router) contra la Spotify simulada de `escenario-ocultos-cache.mjs`, cuyo
+// estado vive en la madre, y abre las vistas que pida la URL:
+//
+//   ?vistas=disco        #discover-artists
+//   ?vistas=nr           #new-releases
+//   ?vistas=disco,nr     las dos, en esta misma carga (lo que suma la segunda)
+//   &limpiar=1           antes de arrancar, borra `ocultos_items_*` de la
+//                        IndexedDB (la carga FRÍA de v=299; en v=298 no existe)
+//
+// Cuenta las peticiones de cada vista POR RUTA, desde que se cambia el hash hasta
+// que los dos almacenes de ocultos terminaron su `sync()` y la vista pintó. El
+// `/me` del arranque se cuenta aparte. Le devuelve el resultado a la madre por
+// `postMessage`; no afirma nada: los asserts son de la madre.
+
+import { esperarReal, anclar } from '/banco/simulado.mjs';
+import { montarEscenarioOcultosCache, PL_DESCUBRIR, PL_ARTISTAS } from '/banco/escenario-ocultos-cache.mjs';
+
+const q = new URLSearchParams(location.search);
+const VISTAS = (q.get('vistas') || 'disco').split(',');
+const rechazos = [];
+window.addEventListener('unhandledrejection', e => rechazos.push(String(e.reason?.message || e.reason)));
+const $ = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+
+function porRuta(llamadas) {
+  const r = { me: 0, descubrir: 0, descubrirItems: 0, artistas: 0, artistasItems: 0, resto: [] };
+  for (const { metodo, ruta } of llamadas) {
+    const base = ruta.split('?')[0];
+    if (metodo === 'GET' && base === '/me') r.me++;
+    else if (metodo === 'GET' && base === `/playlists/${PL_DESCUBRIR}`) r.descubrir++;
+    else if (metodo === 'GET' && base === `/playlists/${PL_DESCUBRIR}/items`) r.descubrirItems++;
+    else if (metodo === 'GET' && base === `/playlists/${PL_ARTISTAS}`) r.artistas++;
+    else if (metodo === 'GET' && base === `/playlists/${PL_ARTISTAS}/items`) r.artistasItems++;
+    else r.resto.push(`${metodo} ${base}`);
+  }
+  return r;
+}
+
+const datos = { vistas: VISTAS };
+try {
+  const { sim } = await montarEscenarioOcultosCache(parent.__estadoOcultosCache);
+  if (q.get('limpiar') === '1') {
+    const { idbDelByPrefix } = await import('/js/idb.js');
+    // ⚠️ `anclar`: una lectura o escritura de IndexedDB sin anclar deja correr
+    // suelto el reloj virtual (ver PRESUPUESTO en `scripts/correr-banco.mjs`).
+    datos.borradas = await anclar(idbDelByPrefix('ocultos_items_'));
+  }
+
+  location.hash = '#home';
+  await import('/js/app.js');
+  await esperarReal(() => $('#my-history-btn'), { que: 'que la app arranque y pinte la barra lateral', vueltas: 4000 });
+  datos.arranque = porRuta(sim.reg.llamadas);
+
+  const { hiddenAlbums } = await import('/js/features/discover-common.js');
+  const { artistasOcultos } = await import('/js/features/artistas-ocultos.js');
+  const PINTA = {
+    disco: { hash: '#discover-artists', listo: () => $$('.disco-artist').length === 4 },
+    nr: { hash: '#new-releases', listo: () => $$('#newrel-list .dcard').length === 8 },
+  };
+  datos.porVista = {};
+  for (const v of VISTAS) {
+    const desde = sim.reg.llamadas.length;
+    location.hash = PINTA[v].hash;
+    await esperarReal(() => PINTA[v].listo() && hiddenAlbums.synced && artistasOcultos.synced,
+      { que: `que ${PINTA[v].hash} pinte y los dos almacenes terminen su sync`, vueltas: 6000 });
+    // Unas vueltas más, por si algo sale DESPUÉS del sync (una re-subida, un repintado
+    // que vuelve a pedir): lo que llegue acá también se cuenta.
+    let vueltas = 0;
+    await esperarReal(() => ++vueltas > 40, { que: 'que se asiente la vista' });
+    datos.porVista[v] = porRuta(sim.reg.llamadas.slice(desde));
+  }
+
+  const { idbEntriesByPrefix } = await import('/js/idb.js');
+  datos.cache = (await anclar(idbEntriesByPrefix('ocultos_items_'))).map(([k, w]) => `${k}@${w?.value?.snapshot}:${w?.value?.items?.length}`);
+  datos.escrituras = sim.reg.escrituras.map(e => `${e.metodo} ${e.ruta.split('?')[0]}`);
+  datos.desconocidas = sim.reg.desconocidas;
+  datos.externas = sim.reg.externas;
+  datos.rechazos = rechazos;
+  datos.reloj = Math.round(performance.now());
+  parent.postMessage({ banco: 'ocultos-cache', ok: true, datos }, '*');
+  document.documentElement.setAttribute('data-caso', 'ok ' + JSON.stringify(datos));
+} catch (e) {
+  parent.postMessage({ banco: 'ocultos-cache', ok: false, error: String(e?.message || e), datos }, '*');
+  document.documentElement.setAttribute('data-caso', 'error ' + String(e?.message || e) + ' ' + JSON.stringify(datos));
+}
+</script>
+</body></html>
