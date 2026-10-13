@@ -1,9 +1,10 @@
-import { getValidToken, refreshAccessToken } from './auth.js?v=299';
-import { cacheGet, cacheGetRaw, cacheGetTimestamp, cacheSet, cacheClear, prefKey, migratePrefKey } from './storage.js?v=299';
-import { idbDel, idbDelByPrefix, idbGetCached, idbGetCachedRaw, idbGetTimestamp, idbSetCached } from './idb.js?v=299';
-import { OWNER_KEY_LIST } from './history-keys.js?v=299';
-import { showToast } from './ui/toast.js?v=299';
-import { artistIsSame, limpiaParaQuery } from './util/track-match.js?v=299';
+import { getValidToken, refreshAccessToken } from './auth.js?v=300';
+import { cacheGet, cacheGetRaw, cacheGetTimestamp, cacheSet, cacheClear, prefKey, migratePrefKey } from './storage.js?v=300';
+import { idbDel, idbDelByPrefix, idbGetCached, idbGetCachedRaw, idbGetTimestamp, idbSetCached } from './idb.js?v=300';
+import { OWNER_KEY_LIST } from './history-keys.js?v=300';
+import { OCULTOS_ITEMS_PREFIX } from './util/ocultos-items-clave.js?v=300';
+import { showToast } from './ui/toast.js?v=300';
+import { artistIsSame, limpiaParaQuery } from './util/track-match.js?v=300';
 
 const BASE = 'https://api.spotify.com/v1';
 const MIN_RETRY_WAIT = 5000;
@@ -1086,6 +1087,15 @@ async function getCurrentUserId() {
       // la otra persona— se quedaban acá hasta caducar.
       idbDelByPrefix('playlist_items_')
         .then(n => { if (n) console.info(`Fonoteca: ${n} caches de items de playlist borrados al cambiar de usuario`); })
+        .catch(() => {});
+      // (v=300) Lo mismo para las playlists de OCULTOS: desde v=299
+      // `hidden-sync.js` guarda sus items en `ocultos_items_v1_<playlistId>`,
+      // que son también canciones de las playlists de la otra persona. Nadie
+      // las lee con otro usuario (la clave va por id de playlist), pero sin
+      // esto se quedaban en su navegador hasta que alguien apretara «Limpiar
+      // caché». El prefijo es la constante que usa `hidden-sync.js`.
+      idbDelByPrefix(OCULTOS_ITEMS_PREFIX)
+        .then(n => { if (n) console.info(`Fonoteca: ${n} caches de items de ocultos borrados al cambiar de usuario`); })
         .catch(() => {});
       // Top de Stats.fm: clave global, sin el user delante. Desde v=190 la
       // clave lleva el usuario de Stats.fm, pero puede quedar la vieja de una

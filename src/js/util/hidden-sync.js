@@ -30,6 +30,7 @@ import {
 import { prefKey, migratePrefKey } from '../storage.js';
 import { idbGetCached, idbSetCached, idbDel } from '../idb.js';
 import { invalidateOwnPlaylists } from './playlist-add.js';
+import { OCULTOS_ITEMS_PREFIX } from './ocultos-items-clave.js';
 import { showToast } from '../ui/toast.js';
 
 const PLAYLIST_DESC = 'Lista interna de Fonoteca: lo que ocultaste en esta vista. Si la borras, se pierden los ocultos.';
@@ -306,7 +307,12 @@ function olvidarId(lsKey) {
 //      no avanza dejaría una lista vieja para siempre.
 //
 // `auditar()` NO lo lee ni lo escribe: es la foto del estado real.
-const ITEMS_CACHE_PREFIX = 'ocultos_items_v1_';
+//
+// (v=300) El prefijo vive en `ocultos-items-clave.js` (sin imports) porque
+// `api.js` también lo necesita —lo borra al cambiar de usuario— y no puede
+// importar este archivo sin armar un ciclo. Se re-exporta acá.
+const ITEMS_CACHE_PREFIX = OCULTOS_ITEMS_PREFIX;
+export { OCULTOS_ITEMS_PREFIX };
 const ITEMS_CACHE_VIDA_MS = 24 * 60 * 60 * 1000;
 
 function itemsCacheKey(playlistId) {

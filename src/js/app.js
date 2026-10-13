@@ -603,10 +603,10 @@ function showApp(profile) {
     try {
       // Vacía IndexedDB (grouped de playlists, análisis, etc.) menos lo que
       // lista `util/limpiar-cache.js`: tus likes, la base de discografías
-      // (v=229) y la base de colores del mosaico (v=248). El porqué de cada
-      // una está en ese módulo.
+      // (v=229), la base de colores del mosaico (v=248) y el historial
+      // importado (v=300). El porqué de cada una está en ese módulo.
       const n = await idbClearAll(CONSERVAR_CLAVES, CONSERVAR_PREFIJOS);
-      showToast(`Caché limpiada (${n} entrada${n === 1 ? '' : 's'}). Tus likes, la base de discografías y la de colores del mosaico se conservan.`, 'success');
+      showToast(`Caché limpiada (${n} entrada${n === 1 ? '' : 's'}). Tus likes, la base de discografías, la de colores del mosaico y el historial que importaste se conservan.`, 'success');
     } catch (e) {
       showToast('Caché local limpiada (IDB falló: ' + e.message + ')', 'info');
     }

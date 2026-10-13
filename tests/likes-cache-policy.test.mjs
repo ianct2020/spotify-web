@@ -310,6 +310,18 @@ ok(/idbDelByPrefix\('playlist_items_'\)/.test(guarda),
 ok(/idbDelByPrefix\('statsfm_top_lifetime_v1'\)/.test(guarda),
   'y el top de Stats.fm del usuario anterior');
 
+// (v=300, tanda 48) Y el caché de items de las playlists de OCULTOS (v=299):
+// son las canciones de las playlists de la otra persona, igual que
+// `playlist_items_`. El prefijo sale de una sola constante, la que usa
+// `hidden-sync.js`, y no se escribe otra vez en api.js.
+const bloqueUsuario = api.slice(api.indexOf('if (prev && prev !== _cachedUserId)'), api.indexOf('localStorage.setItem(LAST_USER_KEY'));
+ok(/idbDelByPrefix\(OCULTOS_ITEMS_PREFIX\)/.test(bloqueUsuario),
+  'al cambiar de usuario borra el caché de items de los ocultos (ocultos_items_v1_), por la constante');
+ok(!/ocultos_items_v1_/.test(api), 'api.js no escribe la cadena ocultos_items_v1_');
+const hsync = sinComentarios(readFileSync(new URL('../src/js/util/hidden-sync.js', import.meta.url), 'utf8'));
+ok(/OCULTOS_ITEMS_PREFIX/.test(hsync) && !/ocultos_items_v1_/.test(hsync),
+  'hidden-sync.js usa la MISMA constante (no la vuelve a escribir)');
+
 const statsfm = sinComentarios(readFileSync(new URL('../src/js/api/statsfm.js', import.meta.url), 'utf8'));
 ok(/topLifetimeKey = \(u\)/.test(statsfm) && !/idbGetCached\(TOP_LIFETIME_KEY\)/.test(statsfm),
   'la clave de Stats.fm lleva el usuario delante');

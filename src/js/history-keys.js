@@ -48,8 +48,17 @@ const OWNER_KEYS = {
 /** Todas las claves del owner, para el guarda multiusuario. */
 const OWNER_KEY_LIST = Object.values(OWNER_KEYS);
 
+// El historial que el usuario IMPORTÓ (BYOH, y el detalle por día del owner):
+// `local_<uid>_history_<tipo>`, lo arma `localKey()` de `history-data.js`. Vive
+// acá y no allá por lo mismo que las de arriba: `util/limpiar-cache.js` lo
+// necesita para conservarlo (v=300), y `history-data.js` arrastra `api.js`.
+// El uid va en el MEDIO de la clave, así que el prefijo que se puede comparar
+// con `startsWith` es este y nada más largo. Al 2026-10-13 `localKey()` es el
+// único sitio de `src/js/` que arma claves de IndexedDB que empiezan así.
+const LOCAL_HISTORY_PREFIX = 'local_';
+
 export {
-  OWNER_KEYS, OWNER_KEY_LIST,
+  OWNER_KEYS, OWNER_KEY_LIST, LOCAL_HISTORY_PREFIX,
   STATS_VERSION, PLAYS_VERSION, LISTENED_VERSION, SKIP_VERSION,
   DETAIL_VERSION, RECORDS_VERSION, ARTIST_TRACKS_VERSION,
 };

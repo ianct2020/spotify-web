@@ -51,5 +51,33 @@ const llamadas = js.flatMap(p => (readFileSync(p, 'utf8').match(/idbClearAll\([^
 ok(llamadas.length === 1, `una sola llamada a idbClearAll fuera de idb.js (hay ${llamadas.length})`);
 ok(llamadas.every(([, m]) => m === 'idbClearAll(CONSERVAR_CLAVES, CONSERVAR_PREFIJOS)'), `y pasa las dos listas de limpiar-cache.js: ${llamadas.map(([, m]) => m).join(' · ')}`);
 
+// ── El historial importado (v=300, tanda 48) ────────────────────────────────
+//
+// `saveMyHistory()` y `guardarSoloDias()` escriben `local_<uid>_history_*`, y
+// eso no es caché: lo subió el usuario a mano desde su ZIP y no se puede volver
+// a bajar. Hasta v=299 «Limpiar caché» se lo llevaba (al owner, el detalle por
+// día; a un amigo, las ocho claves). El uid va de prueba: nunca el de Ian.
+console.log('\nEl historial importado se conserva (v=300)');
+const UID_PRUEBA = 't48-uid-de-prueba';
+const conHistorial = [
+  ...claves,
+  `local_${UID_PRUEBA}_history_days`, `local_${UID_PRUEBA}_history_stats`,
+  'ocultos_items_v1_x', 'playlist_items_x', 'discover_scan_x',
+];
+const borra2 = new Set(clavesABorrar(conHistorial, CONSERVAR_CLAVES, CONSERVAR_PREFIJOS));
+ok(!borra2.has(`local_${UID_PRUEBA}_history_days`), 'local_<uid>_history_days se conserva (el detalle por día del owner)');
+ok(!borra2.has(`local_${UID_PRUEBA}_history_stats`), 'local_<uid>_history_stats se conserva (el ZIP de un amigo)');
+for (const k of ['ocultos_items_v1_x', 'playlist_items_x', 'history_stats_v14', 'discover_scan_x']) {
+  ok(borra2.has(k), `${k} se sigue borrando`);
+}
+const conservadas = conHistorial.filter(k => !borra2.has(k));
+console.log(`      ${conHistorial.length} claves antes · ${borra2.size} borradas · ${conservadas.length} conservadas: ${conservadas.join(', ')}`);
+const appJs = readFileSync(new URL('../src/js/app.js', import.meta.url), 'utf8');
+ok(appJs.includes('Tus likes, la base de discografías, la de colores del mosaico y el historial que importaste se conservan.'),
+  'el toast del botón nombra el historial que importaste');
+ok(/entrada\$\{n === 1 \? '' : 's'\}/.test(appJs), 'y el singular/plural de «entrada» se arma como antes');
+const limpiarFuente = readFileSync(new URL('../src/js/util/limpiar-cache.js', import.meta.url), 'utf8');
+ok(!/['"`]local_/.test(limpiarFuente.replace(/^\s*\/\/.*$/gm, '')), 'limpiar-cache.js no escribe la cadena `local_`: la importa');
+
 console.log(`\n${fallaron ? 'FALLÓ' : 'OK'} limpiar-cache: ${pasaron} de ${pasaron + fallaron}`);
 if (fallaron) process.exit(1);

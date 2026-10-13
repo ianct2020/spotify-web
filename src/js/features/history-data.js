@@ -10,7 +10,7 @@
 
 import { idbGetCached, idbSetCached, idbDel } from '../idb.js';
 import { getCurrentUserId } from '../api.js';
-import { OWNER_KEYS, STATS_VERSION, PLAYS_VERSION, LISTENED_VERSION, SKIP_VERSION, DETAIL_VERSION, RECORDS_VERSION, ARTIST_TRACKS_VERSION } from '../history-keys.js';
+import { OWNER_KEYS, LOCAL_HISTORY_PREFIX, STATS_VERSION, PLAYS_VERSION, LISTENED_VERSION, SKIP_VERSION, DETAIL_VERSION, RECORDS_VERSION, ARTIST_TRACKS_VERSION } from '../history-keys.js';
 import { mostrarBannerDegradadoVista } from '../ui/degraded-banner.js';
 
 const HISTORY_OWNER_ID = 'orhs6wu5ykk7ql80u92ujn74o';
@@ -151,7 +151,7 @@ function errorImportBloqueado(motivo) {
 const LOCAL_TTL_MIN = 100 * 365 * 24 * 60; // ~100 años
 
 function localKey(uid, kind) {
-  return `local_${uid}_history_${kind}`;
+  return `${LOCAL_HISTORY_PREFIX}${uid}_history_${kind}`;
 }
 
 // Caches en memoria (por sesión de página). Se resetean al cambiar de user.

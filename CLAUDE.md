@@ -33,7 +33,7 @@
 - DELETE playlist items: body `{ items: [{uri}] }` (NO `{ tracks: [...] }` → da 400 "No uris provided")
 - Campo `popularity` en `/me/tracks`: **removido en la migración feb 2026**. Confirmado 2026-07-17 con 9548 tracks reales → 100% null. No usar más. Chart de popularidad sacado del Dashboard en v=41.
 - **Búsqueda** (`/search?type=album|track|artist`, con filtros `artist:"..."`): CONFIRMADO vivo (se usa en Similar y en Álbum similar v=45).
-- `GET /artists/{id}/albums`: **el limit máximo bajó a 10** (re-verificado en vivo 2026-08-11: `limit` 11..20 devuelven 400 "Invalid limit", `limit=10` devuelve 200 y pagina bien con `next`/`offset` — Taylor Swift, `total: 112`). Antes (2026-08-05) 20 andaba. Nunca mandar `market=from_token`. Usado en `#discover-artists` y `#new-releases`. **Cuota propia (medido 2026-09-16, v=225): 429 `QUOTA_EXCEEDED` después de exactamente 100 requests en ~33 s (~20 artistas), y sigue en 429 más de 23 minutos. Es SOLO ese endpoint**: en el mismo minuto `/artists/{id}`, `/albums/{id}/tracks`, `/search` y `/me` dan 200. `Retry-After` ilegible (solo se leen `cache-control` y `content-type`). `getArtistAlbumsConFuente()` (api.js, v=226) va sin reintentos; ante 429 pone el nativo en **pausa de 5 min que se dobla** (tope 60) y mientras tanto usa `/search?q=artist:"X"&type=album`; ante 400/403 lo abandona para la sesión y lo dice en pantalla. **La app corta `/search` en 40** (`SEARCH_MAX_PAGES = 4`, no es la API: medido 2026-09-18, sin tope llega al 77 % del nativo y el tope real es `limit + offset ≤ 1000`), y **`/search` tiene su propia cuota**: 429 `QUOTA_EXCEEDED` tras ~700 requests, y la comparte toda la app. Desde v=229 cada discografía vive en la **base sin caducidad** `discover_disco_base_v1_{id}` (unión por id de Spotify, nunca por `albumKey`; ver `util/disco-base.js`), con su fuente y si está cortada, y `#new-releases` avisa cuántas lo están. **Nada puede borrar la base**: «Actualizar» tira solo el caché de escaneo y «Limpiar caché» la conserva; si agregás otro camino que borre IndexedDB, conservá el prefijo `DISCO_BASE_PREFIX`. Se mueve entre máquinas con «Exportar base» / «Importar base». El diagnóstico de la sesión se lee desde la pestaña: `sessionStorage.fonoteca_artist_albums_diag` (o `artistAlbumsDiag` exportado).
+- `GET /artists/{id}/albums`: **el limit máximo bajó a 10** (re-verificado en vivo 2026-08-11: `limit` 11..20 devuelven 400 "Invalid limit", `limit=10` devuelve 200 y pagina bien con `next`/`offset` — Taylor Swift, `total: 112`). Antes (2026-08-05) 20 andaba. Nunca mandar `market=from_token`. Usado en `#discover-artists` y `#new-releases`. **Cuota propia (medido 2026-09-16, v=225): 429 `QUOTA_EXCEEDED` después de exactamente 100 requests en ~33 s (~20 artistas), y sigue en 429 más de 23 minutos. Es SOLO ese endpoint**: en el mismo minuto `/artists/{id}`, `/albums/{id}/tracks`, `/search` y `/me` dan 200. `Retry-After` ilegible (solo se leen `cache-control` y `content-type`). `getArtistAlbumsConFuente()` (api.js, v=226) va sin reintentos; ante 429 pone el nativo en **pausa de 5 min que se dobla** (tope 60) y mientras tanto usa `/search?q=artist:"X"&type=album`; ante 400/403 lo abandona para la sesión y lo dice en pantalla. **La app corta `/search` en 40** (`SEARCH_MAX_PAGES = 4`, no es la API: medido 2026-09-18, sin tope llega al 77 % del nativo y el tope real es `limit + offset ≤ 1000`), y **`/search` tiene su propia cuota**: 429 `QUOTA_EXCEEDED` tras ~700 requests, y la comparte toda la app. Desde v=229 cada discografía vive en la **base sin caducidad** `discover_disco_base_v1_{id}` (unión por id de Spotify, nunca por `albumKey`; ver `util/disco-base.js`), con su fuente y si está cortada, y `#new-releases` avisa cuántas lo están. **Nada puede borrar la base**: «Actualizar» tira solo el caché de escaneo y «Limpiar caché» la conserva; si agregás otro camino que borre IndexedDB, conservá el prefijo `DISCO_BASE_PREFIX` **y, desde v=300, `LOCAL_HISTORY_PREFIX` (`local_`, en `history-keys.js`)**: el historial que el usuario importó (ver «La importación "solo el detalle"»). La lista de lo que se conserva es una sola, `util/limpiar-cache.js`. Se mueve entre máquinas con «Exportar base» / «Importar base». El diagnóstico de la sesión se lee desde la pestaña: `sessionStorage.fonoteca_artist_albums_diag` (o `artistAlbumsDiag` exportado).
 - `GET /albums/{id}/tracks?limit=50`: **CONFIRMADO vivo (2026-08-16, 200 con token real)**. Lo usan W-Three (tracklist del modal por álbum), `#discover-artists` / `#new-releases` (pista representativa para el preview y para «+ Biblioteca») y, desde v=144, la **ficha de álbum**: sin el tracklist completo el ♥ marcaba todas las filas por igual, porque la lista eran solo los likes de ese disco. Ojo con el `albumId`: casi ningún llamador de `openAlbumCard()` lo trae (el mosaico, el Dashboard y el Wrapped mandan nombre + artista), así que hay que resolverlo. **Desde v=219 eso lo hace `util/album-resolver.js` y nadie más** — ver su sección más abajo; antes vivía en `album-card.js` y tenía un gemelo con `limit=1` dentro de `wthree.js`. Si no se resuelve, la ficha degrada a la lista vieja (solo likes, todos con ♥) **y ahora lo DICE en pantalla**, en vez de por `console.warn`.
 
 ## Skips crónicos: el veredicto NO va en el pipeline (v=146)
@@ -1480,6 +1480,17 @@ Las reglas que hay que respetar al tocar ese archivo:
   Z y sellarlo con ese snapshot deja a Y afuera hasta que la playlist vuelva a
   cambiar. Es lo contrario de W-Three («parchear, no borrar», v=147), y es a
   propósito: allá la playlist la escribe solo esta app.
+- **Cambiar de usuario borra `ocultos_items_v1_` (v=300).** El bloque de
+  `getCurrentUserId()` (`api.js`) que ya borraba `history_`, `playlist_items_` y
+  el top de Stats.fm suma `idbDelByPrefix(OCULTOS_ITEMS_PREFIX)`: son las
+  canciones de las playlists de ocultos de la otra persona. Nadie las lee con
+  otro usuario (la clave va por id de playlist), pero hasta v=299 se quedaban en
+  su navegador. ⚠️ El prefijo vive en `util/ocultos-items-clave.js` (sin
+  imports) y `hidden-sync.js` lo re-exporta: `api.js` no puede importar
+  `hidden-sync.js` sin el ciclo `api.js → hidden-sync.js → playlist-add.js →
+  api.js`, que revienta al cargar (`playlist-add.js` llama a
+  `onPlaylistsInvalidated()` antes de que `api.js` cree su `Set`). Lo vigila
+  `tests/likes-cache-policy.test.mjs`.
 - **Nada en silencio.** Cada montón (la playlist perdió algo / nunca subió /
   no se puede representar) lleva `console.warn`, toast y línea en
   `ocultos_incidencias_v1`. Ese registro es la versión de `likes_borrados_log_v1`
@@ -2255,7 +2266,21 @@ también bloquea: el id guardado puede ser el del owner, y con `/me` caído
 `saveMyHistory()` no podría guardar de todos modos.
 
 La importación «solo el detalle» (`guardarSoloDias()`) **no pasa por la guarda**
-y sigue igual para el owner y para cualquiera. Guardas:
+y sigue igual para el owner y para cualquiera.
+
+🟩 **«Limpiar caché» conserva las claves `local_*` desde v=300 (tanda 48).** Hasta
+v=299 el botón se llevaba al owner `local_<owner>_history_days` —el detalle por
+día, lo único que guarda esta importación— y a un amigo las ocho claves de su
+ZIP, o sea todo su historial; rehacer cualquiera de las dos pide volver a pasar
+el ZIP, y el toast decía que se conservaban los likes y las dos bases sin nombrar
+el historial. No es caché: es dato que el usuario subió y que no se puede volver
+a bajar. `CONSERVAR_PREFIJOS` (`util/limpiar-cache.js`) suma `LOCAL_HISTORY_PREFIX`
+(`history-keys.js`, lo usa `localKey()`); es `local_` a secas porque el uid va en
+el medio de la clave, y `localKey()` es el único sitio de `src/js/` que arma
+claves así. Para borrarlo queda el «Borrarlo» del modal (`clearMyHistory()`).
+Y una puerta de lectura estática en `tests/import-guarda-owner.test.mjs`:
+`idbSetCached(localKey(` con un tipo que no sea `'days'` aparece SOLO dentro de
+`saveMyHistory()`. Guardas:
 `tests/import-guarda-owner.test.mjs` (Node, dobles; mira las escrituras del doble
 de IndexedDB) y el banco `tests/banco/import-guarda.html` (la app entera en tres
 iframes: owner, id de prueba y `/me` caído; en `prepush`).
@@ -2636,7 +2661,8 @@ los items de la playlist espejo»):
   guardadoEn }`. No la clave de items de `getAllPlaylistItems` ni
   `updatePlaylistItemsCache()`: esa la escriben `#sin-clasificar` y los barridos
   para las mismas playlists, y dos dueños de una clave terminan contestando
-  distinto. «Limpiar caché» lo borra (no está en `CONSERVAR_PREFIJOS`).
+  distinto. «Limpiar caché» lo borra (no está en `CONSERVAR_PREFIJOS`; el `local_` de
+  v=300 no lo cubre), y desde v=300 también el cambio de usuario.
 - **Antes de cada escritura se BORRA** (las cuatro de `hidden-sync.js`). Ver la
   regla en «Los ocultos: la uri va GUARDADA con la clave». Un `sync()` que
   estaba bajando cuando arrancó una escritura no guarda lo que bajó.

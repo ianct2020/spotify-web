@@ -198,5 +198,28 @@ const sinComentarios = s => s.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])
   ok(/data-cal-cargar/.test(CAL), 'y «Cargar el detalle por día desde tu export» sigue ahí');
 }
 
+// ── Quién escribe las claves del historial (v=300, tanda 48) ────────────────
+//
+// `idbSetCached(localKey(…, '<tipo>'), …)` con un tipo que no sea `'days'`
+// aparece SOLO dentro de `saveMyHistory()` (las siete de la importación
+// completa, detrás de la guarda). `guardarSoloDias()` —y cualquier otro— puede
+// escribir únicamente `'days'`. Hoy es cierto; esto lo vuelve una puerta.
+// `HDATA_FUENTE=<ruta>` corre este bloque contra una copia (para verlo fallar).
+{
+  console.log('\nSolo saveMyHistory() escribe las claves del historial que no son days');
+  const fuente = sinComentarios(process.env.HDATA_FUENTE ? readFileSync(process.env.HDATA_FUENTE, 'utf8') : HDATA);
+  const escrituras = [...fuente.matchAll(/idbSetCached\(localKey\(\s*\w+\s*,\s*'(\w+)'\s*\)/g)];
+  const noDays = escrituras.filter(m => m[1] !== 'days');
+  ok(noDays.length > 0, `encuentra escrituras de tipos que no son days (${noDays.map(m => m[1]).join(', ')})`);
+  const i0 = fuente.indexOf('async function saveMyHistory(');
+  const cuerpo = cuerpoDe(fuente, 'async function saveMyHistory(') || '';
+  const i1 = i0 + fuente.slice(i0).indexOf(cuerpo) + cuerpo.length;
+  const fuera = noDays.filter(m => !(m.index > i0 && m.index < i1));
+  eq(fuera.map(m => m[1]), [], 'ninguna escritura de un tipo que no sea days fuera de saveMyHistory()');
+  eq(noDays.filter(m => m.index > i0 && m.index < i1).map(m => m[1]),
+    ['stats', 'plays', 'listened', 'skip', 'detail', 'records', 'artistTracks'],
+    'y dentro de saveMyHistory() son exactamente las siete');
+}
+
 console.log(`\n${pasaron} pasaron · ${fallaron} fallaron`);
 if (fallaron) process.exit(1);
