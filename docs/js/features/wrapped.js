@@ -1,22 +1,22 @@
 // Wrapped propio: mini-resumen tuyo por año, hecho con el Extended Streaming History.
 // A diferencia del Wrapped oficial (que corre oct-sept), este es del año calendario completo.
 
-import { loadHistoryStats, isOwner, ownerLockedMessage } from './history-data.js?v=300';
-import { escapeHtml, pageHeader } from '../ui/components.js?v=300';
-import { getPreview } from '../api/preview-providers.js?v=300';
-import { getArtistLikePreview, getAlbumLikePreview } from '../util/artist-preview.js?v=300';
-import { attachHover } from '../ui/preview-player.js?v=300';
-import { openTrackCard } from './track-card.js?v=300';
-import { openArtistCard } from './artist-card.js?v=300';
-import { openAlbumCard } from './album-card.js?v=300';
-import { getMyTop } from '../api.js?v=300';
-import { activateMarquee, marqueeSpan } from '../ui/marquee.js?v=300';
-import { openModal } from '../ui/modal-stack.js?v=300';
-import { armReveal, armRevealAll, releaseReveal, animationsEnabled } from '../ui/reveal.js?v=300';
-import { coverUrl } from '../util/cover-size.js?v=300';
-import { vigilarRuta } from '../util/vigencia-ruta.js?v=300';
-import { fmtDia } from '../util/fecha.js?v=300';
-import { anioSinCampoSkipped, esElAnioDelCorte, AVISO_MEZCLA } from '../util/corte-saltos.js?v=300';
+import { loadHistoryStats, isOwner, ownerLockedMessage } from './history-data.js?v=301';
+import { escapeHtml, pageHeader } from '../ui/components.js?v=301';
+import { getPreview } from '../api/preview-providers.js?v=301';
+import { getArtistLikePreview, getAlbumLikePreview } from '../util/artist-preview.js?v=301';
+import { attachHover } from '../ui/preview-player.js?v=301';
+import { openTrackCard } from './track-card.js?v=301';
+import { openArtistCard } from './artist-card.js?v=301';
+import { openAlbumCard } from './album-card.js?v=301';
+import { getMyTop } from '../api.js?v=301';
+import { activateMarquee, marqueeSpan } from '../ui/marquee.js?v=301';
+import { openModal } from '../ui/modal-stack.js?v=301';
+import { armReveal, armRevealAll, releaseReveal, animationsEnabled } from '../ui/reveal.js?v=301';
+import { coverUrl } from '../util/cover-size.js?v=301';
+import { vigilarRuta } from '../util/vigencia-ruta.js?v=301';
+import { fmtDia } from '../util/fecha.js?v=301';
+import { anioSinCampoSkipped, esElAnioDelCorte, AVISO_MEZCLA } from '../util/corte-saltos.js?v=301';
 
 let stats = null;
 let selectedYear = null;
@@ -66,7 +66,7 @@ const ESPERA_APERTURA_MS = 3000;
 // después — montarlo tarde sería justo el flash que se está arreglando.
 function cargarApertura() {
   return Promise.race([
-    import('../features/wrapped-apertura.js?v=300').catch(e => {
+    import('../features/wrapped-apertura.js?v=301').catch(e => {
       console.warn('[wrapped] la apertura no cargó, el resumen queda entero:', e);
       return null;
     }),

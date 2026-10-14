@@ -1,6 +1,6 @@
-import { getAllUserPlaylists, getAllPlaylistItems, removePlaylistItemsAtPositions, getCurrentUserId, getBestAvailableLikes } from '../api.js?v=300';
-import { showProgress, hideProgress, progressController, isCancelled, typeConfirmModal, renderTrackRow, escapeHtml, renderPlaylistGrid, bindPlaylistGrid, pageHeader, tarjetaSinLikes } from '../ui/components.js?v=300';
-import { showToast } from '../ui/toast.js?v=300';
+import { getAllUserPlaylists, getAllPlaylistItems, removePlaylistItemsAtPositions, getCurrentUserId, getBestAvailableLikes } from '../api.js?v=301';
+import { showProgress, hideProgress, progressController, isCancelled, typeConfirmModal, renderTrackRow, escapeHtml, renderPlaylistGrid, bindPlaylistGrid, pageHeader, tarjetaSinLikes } from '../ui/components.js?v=301';
+import { showToast } from '../ui/toast.js?v=301';
 
 let ownPlaylists = [];
 const LIKED_VIRTUAL_ID = '__liked_songs__';

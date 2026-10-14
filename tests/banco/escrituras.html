@@ -18,6 +18,8 @@
 //   F.3  La ficha de álbum de `#similar` ofrece «Guardar álbum»: pide
 //        confirmación, llama a lo MISMO que las otras dos vistas y la única
 //        escritura es `PUT /me/library?uris=spotify:album:…`.
+//   F.3 bis  (v=301) Un single (1 pista) también: la misma escritura, con su
+//        uri de álbum, y nada de la playlist «fonoteca · sin escuchar».
 //
 // `?paso=<nombre>` detiene el banco en ese punto con la pantalla como queda
 // (para fotografiarla); sin `paso` corre todo y termina en `data-banco="ok"`.
@@ -209,34 +211,45 @@ try {
   afirmar(sim.reg.externas.length === 0, 'nada salió a la red externa');
   afirmar(sim.reg.desconocidas.length === 0, `ninguna ruta sin simular: ${sim.reg.desconocidas.join(' | ')}`);
 
-  // ── F.3 bis: un SINGLE (menos de 4 pistas) NO va a la biblioteca ──────────────
-  // Va a la playlist «fonoteca · sin escuchar», que si no existe SE CREA (y Spotify
-  // la crea pública). La confirmación tiene que decirlo ANTES, y el banco comprueba
-  // que no hay ningún PUT /me/library en este camino.
+  // ── F.3 bis: un SINGLE (menos de 4 pistas) va a la biblioteca de álbumes (v=301) ──
+  // Hasta v=300 iba a la playlist «fonoteca · sin escuchar» (y la creaba, pública,
+  // si no existía). Desde v=301 se guarda igual que un álbum: un single ES un objeto
+  // álbum. La confirmación lo dice ANTES, y la ÚNICA escritura es el PUT
+  // /me/library con la uri del single: ninguna playlist creada, ninguna pista
+  // añadida, y ni siquiera el tracklist (antes se pedía para decidir por tamaño).
   $$('.modal-overlay').forEach(o => o.remove());
+  // El tracklist lo pide la FICHA para pintarse, no el guardado: por eso se espera a
+  // que llegue antes de apretar nada, y lo que se mira después es solo lo de después.
   sim.ruta('GET', /^\/albums\/alb-2\/tracks/, () => ({ items: pistas(1).map(p => ({ ...p, id: 's1', uri: 'spotify:track:s1' })), total: 1, next: null }));
-  sim.ruta('POST', /^\/me\/playlists/, ({ cuerpo }) => ({ id: 'pl-singles', name: cuerpo?.name || 'x', owner: dueno, public: true }));
   const fila2 = { album: 'Single de ejemplo', albumId: 'alb-2', albumTotal: 1, artist: 'Artista de ejemplo A', artistList: ['Artista de ejemplo A'] };
-  const antes2 = escrituras().length;
+  const esTracklistDelSingle = (l) => l.metodo === 'GET' && /^\/albums\/alb-2\/tracks/.test(l.ruta);
   openAlbumCard({ name: fila2.album, artist: fila2.artist, albumId: fila2.albumId, img: null, acciones: accionesDeAlbum(fila2) });
   await esperarEl('.album-modal-acciones-extra', 'la ficha del single');
+  await esperarA(() => sim.reg.llamadas.some(esTracklistDelSingle), { que: 'el tracklist que pide la ficha del single' });
+  const antes2 = escrituras().length;
+  const llamadasAntes2 = sim.reg.llamadas.length;
   clic(botonConTexto('Guardar álbum', $('.album-modal-acciones-extra')));
   await esperarA(() => $$('.modal').some(m => m.querySelector('h2')?.textContent === 'Guardar álbum'), { que: 'la confirmación del single' });
   const conf3 = $$('.modal').find(m => m.querySelector('h2')?.textContent === 'Guardar álbum');
-  afirmar(/single/.test(conf3.textContent) && /fonoteca · sin escuchar/.test(conf3.textContent), 'la confirmación del single dice que va a la playlist «fonoteca · sin escuchar»');
-  afirmar(/no entra en tu biblioteca/.test(conf3.textContent) && !/Vas a guardar/.test(conf3.textContent), 'y NO promete guardarlo en la biblioteca: dice que no entra');
+  afirmar(/Vas a guardar/.test(conf3.textContent) && /biblioteca de álbumes de Spotify/.test(conf3.textContent),
+    `la confirmación del single dice que va a la biblioteca de álbumes: «${conf3.textContent.replace(/\s+/g, ' ').trim()}»`);
+  afirmar(/Es un single \(1 pista\)/.test(conf3.textContent), 'y dice que es un single, con sus pistas');
+  afirmar(!/sin escuchar/.test(conf3.textContent) && !/playlist/.test(conf3.textContent), 'y ya no nombra la playlist «fonoteca · sin escuchar»');
   punto('single-confirmar');
   clic($('#modal-confirm', conf3));
-  await esperarA(() => /es un single: /.test($('.toast-container')?.textContent || ''), { que: 'el aviso (toast) del single' });
+  await esperarA(() => /«Single de ejemplo» guardado en tu biblioteca de álbumes/.test($('.toast-container')?.textContent || ''), { que: 'el aviso (toast) del single, el mismo de los álbumes' });
   const nuevas = escrituras().slice(antes2);
-  afirmar(!nuevas.some(w => w.ruta.startsWith('/me/library')), 'el single NO se guarda en la biblioteca: ningún PUT /me/library');
-  afirmar(nuevas.some(w => w.metodo === 'POST' && w.ruta === '/me/playlists'), 'se crea la playlist (simulada)');
-  afirmar(nuevas.some(w => w.metodo === 'POST' && /\/playlists\/pl-singles\/items/.test(w.ruta) && w.cuerpo.uris.includes('spotify:track:s1')), 'y se añade la pista del single a ella');
-  afirmar(/Creé la playlist/.test($('.toast-container')?.textContent || ''), 'se avisa de que la playlist nueva es pública');
+  afirmar(nuevas.length === 1, `el single hace UNA escritura y hizo ${nuevas.length}: ${nuevas.map(w => `${w.metodo} ${w.ruta}`).join(' | ')}`);
+  afirmar(nuevas[0].metodo === 'PUT' && nuevas[0].ruta.startsWith('/me/library?uris=') && decodeURIComponent(nuevas[0].ruta).includes('spotify:album:alb-2'),
+    `y es PUT /me/library con la uri del single: ${nuevas[0].metodo} ${nuevas[0].ruta}`);
+  afirmar(!nuevas.some(w => w.metodo === 'POST' && w.ruta.startsWith('/me/playlists')), 'ningún POST /me/playlists (no se crea ninguna playlist)');
+  afirmar(!nuevas.some(w => w.metodo === 'POST' && /^\/playlists\/[^/]+\/items/.test(w.ruta)), 'ningún POST /playlists/…/items (no se añade ninguna pista)');
+  afirmar(!sim.reg.llamadas.slice(llamadasAntes2).some(esTracklistDelSingle), 'ningún GET /albums/alb-2/tracks al guardar (guardar cuesta una petición)');
+  afirmar(!/es un single: |Creé la playlist|sin escuchar/.test($('.toast-container')?.textContent || ''), 'ni el aviso de la playlist ni el de la playlist pública');
 
   document.getElementById('main-content').insertAdjacentHTML('beforeend', '');
   afirmar(sim.reg.desconocidas.length === 0, `ninguna ruta sin simular: ${sim.reg.desconocidas.join(' | ')}`);
-  listo(`F.1: SYNC solo con quitar≥1 (POST ${deItems('POST').length}, DELETE ${deItems('DELETE').length}) · F.3: 1 PUT simulado · 0 peticiones reales`);
+  listo(`F.1: SYNC solo con quitar≥1 (POST ${deItems('POST').length}, DELETE ${deItems('DELETE').length}) · F.3: 2 PUT simulados (álbum y single) · 0 peticiones reales`);
 } catch (e) {
   if (e instanceof Parada) {
     document.documentElement.dataset.banco = 'ok';

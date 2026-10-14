@@ -119,10 +119,12 @@ export const FILTROS = [
   },
 ];
 
-// La playlist donde «Guardar single» deja los lanzamientos cortos. El nombre
-// está duplicado a propósito: importarlo de features/discover-common.js haría
-// que este módulo —que es de util/— dependiera de una feature, y la
-// dependencia ya va al revés.
+// La playlist donde «Guardar single» dejaba los lanzamientos cortos HASTA v=300.
+// Desde v=301 «Guardar single» va a la biblioteca de álbumes y ya no escribe
+// nadie en ella; el criterio la sigue leyendo por lo que ya tenga (lo que Ian
+// guardó ahí sigue resuelto). Hasta v=300 el nombre estaba duplicado a propósito
+// en features/discover-common.js (importarlo de ahí haría que este módulo —que
+// es de util/— dependiera de una feature); desde v=301 vive solo acá.
 export const PLAYLIST_SIN_ESCUCHAR = 'fonoteca · sin escuchar';
 
 const TODOS_ON = Object.fromEntries(FILTROS.map(f => [f.key, true]));

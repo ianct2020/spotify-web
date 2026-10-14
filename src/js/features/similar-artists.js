@@ -7,8 +7,8 @@ import { togglePreview, playingKey, isPlayingAudio } from '../ui/preview-player.
 import { paintPlayingCard } from '../ui/track-card-row.js';
 import { openTrackCard } from './track-card.js';
 import { openAlbumCard } from './album-card.js';
-import { guardarLanzamientoConAviso, PLAYLIST_SINGLES } from './discover-common.js';
-import { esEPoAlbum, EP_MIN_TRACKS } from '../util/release-size.js';
+import { guardarLanzamientoConAviso } from './discover-common.js';
+import { esEPoAlbum } from '../util/release-size.js';
 import { limpiaParaQuery, titleMatches, artistMatches } from '../util/track-match.js';
 import { iconoPlay, iconoPausa, iconoFicha, iconoDisco } from '../ui/icons.js';
 import {
@@ -364,8 +364,9 @@ function accionesDeFila(tracksEl) {
 
 // «Guardar álbum» dentro de la ficha (v=275). No reimplementa el guardado: llama
 // a `guardarLanzamientoConAviso`, el MISMO que usan `#new-releases` y
-// `#discover-artists`, así que el destino (biblioteca si tiene ≥4 pistas, la
-// playlist de singles si no) y los avisos son los de siempre.
+// `#discover-artists`, así que el destino y los avisos son los de siempre: desde
+// v=301, la biblioteca de álbumes para todo, también para un single (hasta v=300
+// el single iba a la playlist «fonoteca · sin escuchar»).
 //
 // A diferencia de esas dos vistas, acá el botón no vive en una tarjeta de la
 // grilla —no hay nada que apretar detrás— y es una ESCRITURA en la cuenta de
@@ -385,11 +386,10 @@ function textoConfirmarGuardado(r) {
   const de = quien ? ` de ${escapeHtml(quien)}` : '';
   const n = Number(r.albumTotal) || 0;
   if (n && !esEPoAlbum(n)) {
-    return `${nombre}${de} es un single (${n} ${n === 1 ? 'pista' : 'pistas'}): no entra en tu biblioteca de álbumes, `
-      + `sus pistas van a la playlist «${PLAYLIST_SINGLES}».`;
+    return `Vas a guardar ${nombre}${de} en tu biblioteca de álbumes de Spotify. `
+      + `Es un single (${n} ${n === 1 ? 'pista' : 'pistas'}). No toca tus me gusta.`;
   }
-  const dest = `Vas a guardar ${nombre}${de} en tu biblioteca de álbumes de Spotify. No toca tus me gusta.`;
-  return n ? dest : `${dest} Si tiene menos de ${EP_MIN_TRACKS} pistas es un single, y entonces sus pistas van a la playlist «${PLAYLIST_SINGLES}».`;
+  return `Vas a guardar ${nombre}${de} en tu biblioteca de álbumes de Spotify. No toca tus me gusta.`;
 }
 
 async function guardarAlbumDeFila(r, cerrar) {

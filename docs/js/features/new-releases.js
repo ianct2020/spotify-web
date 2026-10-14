@@ -10,14 +10,14 @@
 //   - Umbral de likes: 5+ / 10+ / 20+
 //   - Ventana temporal: 3 / 6 / 12 / 24 meses, 5 años y «todo» (default 12)
 
-import { escapeHtml, confirmModal, pageHeader } from '../ui/components.js?v=300';
-import { showToast } from '../ui/toast.js?v=300';
-import { buildAlbumHeardIndex } from '../util/album-heard.js?v=300';
-import { releaseKind } from '../util/release-size.js?v=300';
-import { loadFiltros, buildFilterContext, applyDiscoverFilters } from '../util/discover-filters.js?v=300';
-import { createIncrementalList, scrollRootOf } from '../ui/incremental-list.js?v=300';
-import { createLazyImages } from '../ui/lazy-img.js?v=300';
-import { prefKey, migratePrefKey } from '../storage.js?v=300';
+import { escapeHtml, confirmModal, pageHeader } from '../ui/components.js?v=301';
+import { showToast } from '../ui/toast.js?v=301';
+import { buildAlbumHeardIndex } from '../util/album-heard.js?v=301';
+import { releaseKind } from '../util/release-size.js?v=301';
+import { loadFiltros, buildFilterContext, applyDiscoverFilters } from '../util/discover-filters.js?v=301';
+import { createIncrementalList, scrollRootOf } from '../ui/incremental-list.js?v=301';
+import { createLazyImages } from '../ui/lazy-img.js?v=301';
+import { prefKey, migratePrefKey } from '../storage.js?v=301';
 import {
   getArtistIdCached,
   getArtistDiscoCached,
@@ -57,17 +57,17 @@ import {
   avisarRonda,
   botonesBaseHtml,
   conectarBotonesBase,
-} from './discover-common.js?v=300';
-import { compararLanzamientos, ORDENES_LANZAMIENTO } from '../util/release-date.js?v=300';
-import { estadoNativoDiscografia } from '../api.js?v=300';
-import { leerElegidos, sumarElegidos, artistasBuscados, colaAutomatica } from '../util/cola-escaneo.js?v=300';
-import { leerFallos, marcarFallo, limpiarFallo, sinFallosMarcados } from '../util/escaneo-fallos.js?v=300';
-import { contarSinEscanear, sufijoSinEscanear, notaSinEscanear } from '../util/sin-escanear.js?v=300';
-import { estadoFrescura } from '../util/frescura-escaneo.js?v=300';
+} from './discover-common.js?v=301';
+import { compararLanzamientos, ORDENES_LANZAMIENTO } from '../util/release-date.js?v=301';
+import { estadoNativoDiscografia } from '../api.js?v=301';
+import { leerElegidos, sumarElegidos, artistasBuscados, colaAutomatica } from '../util/cola-escaneo.js?v=301';
+import { leerFallos, marcarFallo, limpiarFallo, sinFallosMarcados } from '../util/escaneo-fallos.js?v=301';
+import { contarSinEscanear, sufijoSinEscanear, notaSinEscanear } from '../util/sin-escanear.js?v=301';
+import { estadoFrescura } from '../util/frescura-escaneo.js?v=301';
 import {
   artistasOcultos, artistaEstaOculto, alternarArtistaOculto,
   botonMenuArtistaHtml, botonArtistasOcultosHtml, conectarMenuArtista, cerrarMenuArtista,
-} from './artistas-ocultos.js?v=300';
+} from './artistas-ocultos.js?v=301';
 
 const SCAN_KEY = 'new_releases';
 
@@ -1036,9 +1036,10 @@ function updateSelectionUi(content) {
   }
 }
 
-// «Guardar álbum»: el disco entero como unidad, por `PUT /me/library` con la
-// uri de álbum (verificado 2026-08-18; `PUT /me/albums` da 403). No toca los
-// me gusta de las pistas.
+// «Guardar álbum» / «Guardar single»: el lanzamiento entero como unidad, por
+// `PUT /me/library` con la uri de álbum (verificado 2026-08-18 para álbumes;
+// `PUT /me/albums` da 403). Desde v=301 el single va al mismo sitio. No toca
+// los me gusta de las pistas.
 async function saveAlbum(albumId, artistName, btn) {
   const al = findAlbum(albumId);
   if (!al) return;
@@ -1046,8 +1047,8 @@ async function saveAlbum(albumId, artistName, btn) {
   btn.disabled = true;
   btn.textContent = 'Guardando…';
   try {
-    const r = await guardarLanzamientoConAviso(al);
-    btn.textContent = r.destino === 'biblioteca' ? '✓ Guardado' : '✓ En la playlist';
+    await guardarLanzamientoConAviso(al);
+    btn.textContent = '✓ Guardado';
     markAlbumResolved(al, artistName);
     setTimeout(() => {
       const content = document.getElementById('newrel-content');

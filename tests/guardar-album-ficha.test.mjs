@@ -7,6 +7,8 @@
 //   2. Las dos vistas viejas lo llaman y ya no llevan su copia del aviso.
 //   3. La ficha de #similar lo llama, y SOLO después de una confirmación.
 //   4. La ficha no escribe en Spotify por su cuenta (nada de PUT, ni de saveAlbumsToLibrary).
+//   5. (v=301) Un single va a la biblioteca de álbumes, igual que un álbum: nada
+//      de la playlist «fonoteca · sin escuchar», ni de su creación, ni del tracklist.
 
 import assert from 'node:assert';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
@@ -30,7 +32,25 @@ ok(conAviso[0].endsWith('features/discover-common.js'), 'y es discover-common.js
 const common = leer('../src/js/features/discover-common.js');
 ok(/export async function guardarLanzamientoConAviso\(al\)/.test(common), 'discover-common exporta guardarLanzamientoConAviso');
 ok(/const r = await guardarLanzamiento\(al\);/.test(common.slice(common.indexOf('guardarLanzamientoConAviso'))), 'que envuelve a guardarLanzamiento, el de siempre');
-eq((common.match(/Creé la playlist «\$\{PLAYLIST_SINGLES\}»/g) || []).length, 1, 'el aviso de la playlist pública también está una sola vez');
+
+// v=301: un single se guarda igual que un álbum, en la biblioteca de álbumes.
+// Se fue la playlist «fonoteca · sin escuchar» como destino, y con ella su
+// creación y sus avisos.
+console.log('\n«Guardar single» va a la biblioteca (v=301)');
+const codigoCommon = sinComentarios(common);
+ok(!/ensureSinglesPlaylist/.test(common), 'discover-common.js ya no nombra ensureSinglesPlaylist');
+ok(!/Creé la playlist/.test(common), 'ni el aviso de «Creé la playlist…» (la pública)');
+const iGL = common.indexOf('export async function guardarLanzamiento(');
+const cuerpoGL = sinComentarios(common.slice(iGL, common.indexOf('\n}\n', iGL)));
+ok(iGL > 0, 'sigue habiendo guardarLanzamiento');
+ok(!/addUrisToPlaylists\(/.test(cuerpoGL), 'guardarLanzamiento no llama a addUrisToPlaylists');
+ok(!/getAlbumTracks\(/.test(cuerpoGL), 'ni a getAlbumTracks (guardar cuesta una petición, no dos o tres)');
+ok(/await saveAlbumsToLibrary\(\[al\.id\]\);\s*return \{ destino: 'biblioteca' \};/.test(cuerpoGL), 'siempre saveAlbumsToLibrary([al.id]) y { destino: \'biblioteca\' }');
+ok(!/es un single: /.test(codigoCommon), 'se fue el toast de «es un single: … en la playlist»');
+ok(codigoCommon.includes('Guardar el single en tu biblioteca de álbumes de Spotify'), 'el title de «Guardar single» nombra el destino');
+ok(/'Guardar álbum' : 'Guardar single'/.test(codigoCommon), 'y las etiquetas «Guardar álbum» / «Guardar single» se quedan');
+const conSingles = todos.filter(p => /PLAYLIST_SINGLES|ensureSinglesPlaylist/.test(readFileSync(p, 'utf8')));
+eq(conSingles.length, 0, `ningún archivo de src/js nombra PLAYLIST_SINGLES ni ensureSinglesPlaylist (${conSingles.map(p => p.slice(raiz.length)).join(', ')})`);
 
 console.log('\nLas dos vistas viejas');
 for (const [v, nombre] of [['new-releases', 'saveAlbum'], ['discover-artists', 'saveAlbumToLibrary']]) {
@@ -42,7 +62,7 @@ for (const [v, nombre] of [['new-releases', 'saveAlbum'], ['discover-artists', '
   ok(!/guardarLanzamiento\(/.test(sinComentarios(cuerpo)), `${v}: ya no llama a guardarLanzamiento directo`);
   ok(!/showToast\(/.test(cuerpo.replace(/showToast\('Error al añadir[^;]*;/, '')), `${v}: ya no arma avisos de éxito propios`);
   ok(/markAlbumResolved\(al, artistName\)/.test(cuerpo) && /refreshList\(content\)/.test(cuerpo), `${v}: conserva lo suyo (marcar resuelto y repintar)`);
-  ok(/btn\.textContent = r\.destino === 'biblioteca' \? '✓ Guardado' : '✓ En la playlist'/.test(cuerpo), `${v}: el botón sigue diciendo adónde fue`);
+  ok(/btn\.textContent = '✓ Guardado';/.test(cuerpo) && !/En la playlist/.test(cuerpo), `${v}: el botón dice «✓ Guardado» siempre (v=301: ya no hay rama de la playlist)`);
 }
 
 console.log('\nLa ficha de #similar');
@@ -60,6 +80,10 @@ ok(!/saveAlbumsToLibrary|saveToLibrary|method:\s*'PUT'|\/me\/library/.test(limpi
 ok(!/guardarLanzamiento\(/.test(limpio), 'ni llama a guardarLanzamiento sin el aviso');
 ok(/albumTotal: hit\.album\?\.total_tracks/.test(sim), 'guarda el total de pistas que ya trae la búsqueda (evita una petición)');
 ok(/if \(!r\.albumId \|\| !r\.album\) return \[\];/.test(sim), 'sin albumId no ofrece el botón');
-ok(/PLAYLIST_SINGLES/.test(g + sim.slice(sim.indexOf('function textoConfirmarGuardado'))), 'la confirmación avisa de que un single va a la playlist');
+const conf = sinComentarios(sim.slice(sim.indexOf('function textoConfirmarGuardado'), sim.indexOf('async function guardarAlbumDeFila')));
+ok(!/PLAYLIST_SINGLES|sin escuchar|playlist/.test(conf), 'la confirmación ya no dice que un single va a la playlist (v=301)');
+ok(/Es un single \(\$\{n\} \$\{n === 1 \? 'pista' : 'pistas'\}\)\./.test(conf) && /biblioteca de álbumes de Spotify/.test(conf),
+  'la de un single dice que va a la biblioteca de álbumes y que es un single, con sus pistas');
+ok(!/Si tiene menos de/.test(conf), 'y la de siempre ya no lleva «Si tiene menos de 4 pistas es un single, y entonces…»');
 
 console.log(`\nOK guardar-album-ficha: ${n} asserts`);

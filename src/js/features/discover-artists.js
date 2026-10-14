@@ -1008,9 +1008,10 @@ function updateSelectionUi(content) {
   }
 }
 
-// «Guardar álbum»: el disco entero como unidad, por `PUT /me/library` con la
-// uri de álbum (verificado 2026-08-18; `PUT /me/albums` da 403). No toca los
-// me gusta de las pistas.
+// «Guardar álbum» / «Guardar single»: el lanzamiento entero como unidad, por
+// `PUT /me/library` con la uri de álbum (verificado 2026-08-18 para álbumes;
+// `PUT /me/albums` da 403). Desde v=301 el single va al mismo sitio. No toca
+// los me gusta de las pistas.
 async function saveAlbumToLibrary(albumId, artistName, btn) {
   const al = findAlbum(albumId);
   if (!al) return;
@@ -1018,8 +1019,8 @@ async function saveAlbumToLibrary(albumId, artistName, btn) {
   btn.disabled = true;
   btn.textContent = 'Guardando…';
   try {
-    const r = await guardarLanzamientoConAviso(al);
-    btn.textContent = r.destino === 'biblioteca' ? '✓ Guardado' : '✓ En la playlist';
+    await guardarLanzamientoConAviso(al);
+    btn.textContent = '✓ Guardado';
     markAlbumResolved(al, artistName);
     setTimeout(() => {
       const content = document.getElementById('disco-content');

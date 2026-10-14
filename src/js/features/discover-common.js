@@ -1236,15 +1236,17 @@ export function renderAlbumCard(al, artistName, {
   menuArtistaHtml = '',
 } = {}) {
   const tipo = al.type === 'single' ? 'single' : (al.type === 'compilation' ? 'recopilatorio' : 'álbum');
-  // El botón dice a dónde va DE VERDAD. Un single suelto no se guarda en la
-  // biblioteca: va a la playlist «fonoteca · sin escuchar» (ver
-  // `guardarLanzamiento`). La lección de v=147 fue exactamente esta — el botón
-  // «+ Biblioteca» no estaba roto, mentía el nombre.
+  // El botón dice qué es y a dónde va DE VERDAD. Desde v=301 los dos van al
+  // mismo sitio —la biblioteca de álbumes de Spotify (ver `guardarLanzamiento`)—,
+  // y la etiqueta sigue distinguiendo el single del disco para que se sepa qué
+  // se está guardando. Hasta v=300 el single iba a la playlist «fonoteca · sin
+  // escuchar». La lección de v=147 sigue siendo esta: el botón «+ Biblioteca» no
+  // estaba roto, mentía el nombre.
   const esDisco = esEPoAlbum(al.total);
   const guardarLabel = esDisco ? 'Guardar álbum' : 'Guardar single';
   const guardarTitle = esDisco
     ? 'Guardar el disco entero en tu biblioteca de álbumes'
-    : `Añadir sus pistas a la playlist «${PLAYLIST_SINGLES}» — un single suelto ensucia la biblioteca de álbumes`;
+    : 'Guardar el single en tu biblioteca de álbumes de Spotify';
   const id = escapeHtml(al.id);
   const artista = escapeHtml(artistName);
   const sonando = playingKey() === previewKeyOf(al.id);
@@ -1654,110 +1656,47 @@ export async function saveAlbumToLibrary(albumId) {
   return albumId;
 }
 
-// ── Guardar un lanzamiento: la biblioteca no es para todo (v=152) ──────────
+// ── Guardar un lanzamiento: todo va a la biblioteca de álbumes (v=301) ─────
 //
-// Un single suelto guardado como «álbum» ensucia la biblioteca: entre discos
-// de verdad aparecen decenas de fichas de una pista. Así que el destino
-// depende del tamaño:
+// Un single ES un objeto álbum para Spotify, así que se guarda igual que un
+// disco: `PUT /me/library?uris=spotify:album:{id}` (verificado en vivo para
+// álbumes el 2026-08-18; para un lanzamiento de tipo `single` NO está
+// verificado contra la Spotify real, solo contra la simulada del banco).
 //
-//   < 4 pistas  → single suelto  → a la playlist «fonoteca · sin escuchar»
-//   ≥ 4 pistas  → EP o álbum     → a la biblioteca, como hasta ahora
+// Hasta v=300 el destino dependía del tamaño (v=152): con menos de 4 pistas
+// (`EP_MIN_TRACKS`) las pistas iban a la playlist «fonoteca · sin escuchar»,
+// que se creaba PÚBLICA si no existía, para no llenar la biblioteca de fichas
+// de una pista. Ian buscó sus singles en la biblioteca y no estaban: el botón
+// no estaba roto, el destino no era el que él quería. Lo que se pierde es lo
+// que v=152 quería evitar, y Ian lo acepta. Lo que ya se guardó en esa
+// playlist se queda ahí (el criterio `sinescuchar` de `util/discover-filters.js`
+// la sigue leyendo); desde v=301 nadie escribe en ella.
 //
-// El umbral sale de `util/release-size.js`, que es el MISMO que ya usaba
-// `features/listened.js` desde v=127 para partir «Sin registrar». El encargo
-// de esta tanda decía «menos de 5 / 5 o más», pero se respeta el criterio que
-// ya estaba: con 5 un EP de 4 pistas iría a la playlist en una vista y
-// contaría como EP en la otra.
-//
-// ⚠️ La playlist se crea PÚBLICA y no hay forma de evitarlo: `POST
-// /me/playlists` ignora el campo `public` post-migración (verificado 2026-08-09,
-// ver CLAUDE.md). Hay que pasarla a privada a mano desde la app de Spotify,
-// como las otras cinco de fonoteca. Por eso el toast lo dice.
-export const PLAYLIST_SINGLES = 'fonoteca · sin escuchar';
-
-let _plSinglesId = null;
-
-/** Busca la playlist de singles y la crea si no está. Memoizada por sesión. */
-export async function ensureSinglesPlaylist() {
-  if (_plSinglesId) return { id: _plSinglesId, creada: false };
-  const propias = await getOwnPlaylists();
-  const ya = propias.find(p => (p.name || '').trim() === PLAYLIST_SINGLES);
-  if (ya) { _plSinglesId = ya.id; return { id: ya.id, creada: false }; }
-  const creada = await createPlaylist(
-    PLAYLIST_SINGLES,
-    'Singles de tus artistas que todavía no escuchaste. Generada por Fonoteca.',
-    false,
-  );
-  _plSinglesId = creada.id;
-  // La lista de playlists propias quedó vieja: sin esto, el próximo
-  // `ensureSinglesPlaylist` de la sesión no la encontraría y crearía otra.
-  await getOwnPlaylists({ force: true });
-  return { id: creada.id, creada: true };
-}
+// Y de paso guardar cuesta UNA petición: ya no hace falta el tracklist para
+// decidir el destino (antes, sin `al.total`, se pedía solo para eso).
 
 /**
- * Guarda un lanzamiento donde corresponda según su tamaño.
- * @returns {Promise<{destino:'biblioteca'|'playlist', pistas?:number, yaEstaban?:number, playlistCreada?:boolean}>}
+ * Guarda un lanzamiento —álbum, EP o single— en la biblioteca de álbumes.
+ * @returns {Promise<{destino:'biblioteca'}>}
  */
 export async function guardarLanzamiento(al) {
   if (!al?.id) throw new Error('lanzamiento sin id');
-
-  const total = al.total || (await getAlbumTracks(al.id)).length;
-  if (esEPoAlbum(total)) {
-    await saveAlbumsToLibrary([al.id]);
-    return { destino: 'biblioteca' };
-  }
-
-  const tracks = await getAlbumTracks(al.id);
-  const uris = tracks.map(t => t.uri).filter(Boolean);
-  if (!uris.length) throw new Error('el lanzamiento no tiene pistas');
-  const namesByUri = new Map(tracks.filter(t => t.uri && t.name).map(t => [t.uri, t.name]));
-
-  const { id, creada } = await ensureSinglesPlaylist();
-  // `addUrisToPlaylists` es el de util/playlist-add.js: ya mira los items de la
-  // playlist antes de escribir y descarta las uris repetidas, así que añadir
-  // dos veces el mismo single no lo duplica.
-  const res = await addUrisToPlaylists(uris, [{ id, name: PLAYLIST_SINGLES }], { namesByUri });
-  if (res.failed?.length) throw new Error(res.failed[0]?.message || 'no se pudo añadir a la playlist');
-  // La forma que devuelve util/playlist-add.js: `detail[]` trae `added` y `dup`
-  // de las que SÍ se escribieron, y `skipped[]` son las playlists en las que ya
-  // estaba todo (ahí no hubo POST y no hay entrada en `detail`).
-  const añadidas = (res.detail || []).reduce((n, d) => n + (d.added || 0), 0);
-  const yaEstaban = (res.detail || []).reduce((n, d) => n + (d.dup || 0), 0)
-    + (res.skipped || []).reduce((n, sk) => n + (sk.uris?.length || 0), 0);
-  return { destino: 'playlist', pistas: añadidas, yaEstaban, playlistCreada: creada };
+  await saveAlbumsToLibrary([al.id]);
+  return { destino: 'biblioteca' };
 }
 
 /**
- * «Guardar álbum» con su aviso: guarda donde corresponda (`guardarLanzamiento`)
- * y cuenta qué pasó en un toast. Es lo que hacían, copiado palabra por palabra,
- * `saveAlbum` de `#new-releases` y `saveAlbumToLibrary` de `#discover-artists`
- * (v=275: se sacó acá para que la ficha de álbum de `#similar` no fuera la
- * tercera copia). Cada vista conserva lo SUYO —buscar el lanzamiento en su
- * estado, el texto del botón, marcarlo resuelto y repintar—; lo que comparten es
- * esto. Devuelve lo mismo que `guardarLanzamiento`.
+ * «Guardar álbum» / «Guardar single» con su aviso: guarda (`guardarLanzamiento`)
+ * y lo cuenta en un toast que nombra el destino. Es lo que hacían, copiado
+ * palabra por palabra, `saveAlbum` de `#new-releases` y `saveAlbumToLibrary` de
+ * `#discover-artists` (v=275: se sacó acá para que la ficha de álbum de
+ * `#similar` no fuera la tercera copia). Cada vista conserva lo SUYO —buscar el
+ * lanzamiento en su estado, el texto del botón, marcarlo resuelto y repintar—;
+ * lo que comparten es esto. Devuelve lo mismo que `guardarLanzamiento`.
  */
 export async function guardarLanzamientoConAviso(al) {
   const r = await guardarLanzamiento(al);
-  if (r.destino === 'biblioteca') {
-    showToast(`«${al.name}» guardado en tu biblioteca de álbumes`, 'success');
-  } else {
-    const partes = [];
-    if (r.pistas) partes.push(`${r.pistas} ${r.pistas === 1 ? 'pista' : 'pistas'}`);
-    if (r.yaEstaban) partes.push(`${r.yaEstaban} ya ${r.yaEstaban === 1 ? 'estaba' : 'estaban'}`);
-    showToast(
-      `«${al.name}» es un single: ${partes.join(' · ') || 'sin pistas nuevas'} en «${PLAYLIST_SINGLES}»`,
-      'success',
-    );
-    // La playlist se crea PÚBLICA y no hay forma de evitarlo por API. Se
-    // avisa una sola vez, cuando se acaba de crear.
-    if (r.playlistCreada) {
-      showToast(
-        `Creé la playlist «${PLAYLIST_SINGLES}». Spotify la crea PÚBLICA y no se puede cambiar por API: pásala a privada a mano desde la app.`,
-        'info',
-      );
-    }
-  }
+  showToast(`«${al.name}» guardado en tu biblioteca de álbumes`, 'success');
   return r;
 }
 

@@ -44,10 +44,10 @@
 // sacan la pista representativa GRATIS de los me gusta que ya tienen en
 // memoria (ver `uriSugerida`), así que no pasan ni por `/search`.
 
-import { createHiddenStore } from '../util/hidden-sync.js?v=300';
-import { recuperarUriDeArtistaKey, REGLAS_VERSION } from '../util/hidden-recover.js?v=300';
-import { iconoPuntosVertical } from '../ui/icons.js?v=300';
-import { escapeHtml } from '../ui/components.js?v=300';
+import { createHiddenStore } from '../util/hidden-sync.js?v=301';
+import { recuperarUriDeArtistaKey, REGLAS_VERSION } from '../util/hidden-recover.js?v=301';
+import { iconoPuntosVertical } from '../ui/icons.js?v=301';
+import { escapeHtml } from '../ui/components.js?v=301';
 
 /**
  * El almacén. Mudado desde `recommendations.js` sin tocarle ni el `lsKey` ni el
