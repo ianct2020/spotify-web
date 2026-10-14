@@ -11,6 +11,10 @@ import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { clavesABorrar } from '../src/js/idb.js';
 import { CONSERVAR_CLAVES, CONSERVAR_PREFIJOS } from '../src/js/util/limpiar-cache.js';
+// Como namespace y no por nombre: así, contra un módulo que todavía no exporta
+// `LO_QUE_SE_CONSERVA`, la suite corre y falla assert por assert en vez de
+// reventar al importar.
+import * as limpiarCache from '../src/js/util/limpiar-cache.js';
 
 let pasaron = 0, fallaron = 0;
 function ok(cond, nombre) {
@@ -73,11 +77,44 @@ for (const k of ['ocultos_items_v1_x', 'playlist_items_x', 'history_stats_v14', 
 const conservadas = conHistorial.filter(k => !borra2.has(k));
 console.log(`      ${conHistorial.length} claves antes · ${borra2.size} borradas · ${conservadas.length} conservadas: ${conservadas.join(', ')}`);
 const appJs = readFileSync(new URL('../src/js/app.js', import.meta.url), 'utf8');
-ok(appJs.includes('Tus likes, la base de discografías, la de colores del mosaico y el historial que importaste se conservan.'),
+// v=301 (tanda 49): el toast ya no lleva la frase escrita a mano; la arma con
+// `LO_QUE_SE_CONSERVA`. Hasta v=300 este assert comparaba el texto exacto
+// («Tus likes, la base de discografías, la de colores del mosaico y el historial
+// que importaste se conservan.»).
+const LO = limpiarCache.LO_QUE_SE_CONSERVA;
+ok(/Se conservan \$\{LO_QUE_SE_CONSERVA\}\./.test(appJs) && /el historial que importaste/.test(LO || ''),
   'el toast del botón nombra el historial que importaste');
 ok(/entrada\$\{n === 1 \? '' : 's'\}/.test(appJs), 'y el singular/plural de «entrada» se arma como antes');
 const limpiarFuente = readFileSync(new URL('../src/js/util/limpiar-cache.js', import.meta.url), 'utf8');
 ok(!/['"`]local_/.test(limpiarFuente.replace(/^\s*\/\/.*$/gm, '')), 'limpiar-cache.js no escribe la cadena `local_`: la importa');
+
+// ── El title del botón dice lo que se conserva (v=301, tanda 49) ─────────────
+//
+// Hasta v=300 decía «Vacía todos los caches locales (likes, playlists, tags,
+// historial)», falso desde v=229: el botón CONSERVA los me gusta, las dos bases
+// y, desde v=300, el historial importado. Ahora el title y el toast salen de la
+// MISMA frase, `LO_QUE_SE_CONSERVA` de `util/limpiar-cache.js`, al lado de las
+// dos listas que dice describir.
+console.log('\nEl title y el toast dicen lo que se conserva (v=301)');
+const sinComentariosJs = t => t.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+const appCodigo = sinComentariosJs(appJs);
+ok(typeof LO === 'string' && LO.length > 0, 'limpiar-cache.js exporta LO_QUE_SE_CONSERVA');
+for (const [que, re] of [['me gusta', /me gusta/], ['discografías', /discografías/], ['mosaico', /mosaico/], ['historial', /historial/]]) {
+  ok(re.test(LO || ''), `LO_QUE_SE_CONSERVA nombra ${que}`);
+}
+const mTitle = appJs.match(/id="refresh-all-btn" title="([^"]*)"/);
+const title = mTitle ? mTitle[1] : '';
+ok(mTitle, 'el botón refresh-all-btn tiene title');
+ok(!/likes/.test(title) && !/historial\)/.test(title), `el title ya no dice que vacía los likes ni el historial: «${title}»`);
+ok(title === 'Vacía las cachés de este navegador. Se conservan ${LO_QUE_SE_CONSERVA}.', 'el title se arma con LO_QUE_SE_CONSERVA');
+ok(/showToast\(`Caché limpiada \(\$\{n\} entrada\$\{n === 1 \? '' : 's'\}\)\. Se conservan \$\{LO_QUE_SE_CONSERVA\}\.`, 'success'\)/.test(appJs),
+  'el toast de éxito se arma con LO_QUE_SE_CONSERVA');
+ok(/import \{[^}]*\bLO_QUE_SE_CONSERVA\b[^}]*\} from '\.\/util\/limpiar-cache\.js(\?v=\d+)?'/.test(appJs), 'app.js importa LO_QUE_SE_CONSERVA de limpiar-cache.js');
+ok(!/base de discografías/.test(appCodigo) && !/historial que importaste/.test(appCodigo),
+  'la frase no está escrita a mano en app.js (ni «base de discografías» ni «historial que importaste»)');
+// El texto visible es «Limpiar cache», sin tilde, desde antes de esta tanda: es
+// solo copy del title y del toast, el rótulo no se toca.
+ok(/id="refresh-all-btn"[^>]*>[\s\S]{0,400}?<span>Limpiar cache<\/span>/.test(appJs), 'el texto visible del botón no se toca («Limpiar cache»)');
 
 console.log(`\n${fallaron ? 'FALLÓ' : 'OK'} limpiar-cache: ${pasaron} de ${pasaron + fallaron}`);
 if (fallaron) process.exit(1);

@@ -3,7 +3,7 @@ import { spotifyFetch, onRateLimit } from './api.js?v=301';
 import { getValidToken } from './auth.js?v=301';
 import { cacheClearAll } from './storage.js?v=301';
 import { idbClearAll } from './idb.js?v=301';
-import { CONSERVAR_CLAVES, CONSERVAR_PREFIJOS } from './util/limpiar-cache.js?v=301';
+import { CONSERVAR_CLAVES, CONSERVAR_PREFIJOS, LO_QUE_SE_CONSERVA } from './util/limpiar-cache.js?v=301';
 import { registerRoute, initRouter, rutasRegistradas } from './router.js?v=301';
 import { showToast } from './ui/toast.js?v=301';
 import { pageHeader, escapeHtml } from './ui/components.js?v=301';
@@ -576,7 +576,7 @@ function showApp(profile) {
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><path d="M12 3a9 9 0 1 0 0 18c.83 0 1.5-.67 1.5-1.5 0-.39-.15-.74-.39-1-.24-.27-.39-.62-.39-1 0-.83.67-1.5 1.5-1.5H16a5 5 0 0 0 5-5c0-4.42-4.03-8-9-8z"/><circle cx="7.5" cy="10.5" r="1"/><circle cx="12" cy="7.5" r="1"/><circle cx="16.5" cy="10.5" r="1"/></svg>
             <span>Paleta</span>
           </button>
-          <button class="sidebar-action" id="refresh-all-btn" title="Vacía todos los caches locales (likes, playlists, tags, historial)">
+          <button class="sidebar-action" id="refresh-all-btn" title="Vacía las cachés de este navegador. Se conservan ${LO_QUE_SE_CONSERVA}.">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
             <span>Limpiar cache</span>
           </button>
@@ -602,11 +602,11 @@ function showApp(profile) {
     cacheClearAll(); // localStorage
     try {
       // Vacía IndexedDB (grouped de playlists, análisis, etc.) menos lo que
-      // lista `util/limpiar-cache.js`: tus likes, la base de discografías
-      // (v=229), la base de colores del mosaico (v=248) y el historial
-      // importado (v=300). El porqué de cada una está en ese módulo.
+      // lista `util/limpiar-cache.js` (los likes desde siempre, v=229, v=248 y
+      // v=300; el porqué de cada uno está en ese módulo). El toast y el title
+      // del botón dicen lo mismo con la misma frase, `LO_QUE_SE_CONSERVA` (v=301).
       const n = await idbClearAll(CONSERVAR_CLAVES, CONSERVAR_PREFIJOS);
-      showToast(`Caché limpiada (${n} entrada${n === 1 ? '' : 's'}). Tus likes, la base de discografías, la de colores del mosaico y el historial que importaste se conservan.`, 'success');
+      showToast(`Caché limpiada (${n} entrada${n === 1 ? '' : 's'}). Se conservan ${LO_QUE_SE_CONSERVA}.`, 'success');
     } catch (e) {
       showToast('Caché local limpiada (IDB falló: ' + e.message + ')', 'info');
     }

@@ -31,3 +31,11 @@ import { LOCAL_HISTORY_PREFIX } from '../history-keys.js?v=301';
 
 export const CONSERVAR_CLAVES = ['all_liked_tracks', 'all_liked_tracks_partial', MOSAICO_COLORES_KEY];
 export const CONSERVAR_PREFIJOS = [DISCO_BASE_PREFIX, LOCAL_HISTORY_PREFIX];
+
+// Lo que se conserva, en castellano de España, para el title del botón y el
+// toast de `app.js` (v=301): las dos frases salen de acá y de ningún otro lado.
+// ⚠️ Describe las DOS listas de arriba. Si tocás una lista, tocá esta frase en
+// el mismo commit (y al revés): si no coinciden, el copy vuelve a mentir, que es
+// lo que pasó con el title viejo («Vacía todos los caches locales (likes,
+// playlists, tags, historial)»), falso desde v=229.
+export const LO_QUE_SE_CONSERVA = 'tus me gusta, la base de discografías, la de colores del mosaico y el historial que importaste';
