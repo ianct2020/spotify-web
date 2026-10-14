@@ -377,6 +377,13 @@ function slimPlaylist(p) {
     public: p.public,
     collaborative: p.collaborative,
     image: smallest,
+    // (v=300) Si `/me/playlists` lo trae, se guarda; si no, `null` y todo lo
+    // demás queda como antes. NADIE lo lee todavía. Ojo: esta lista vive hasta
+    // 24 h en localStorage, así que es el snapshot de cuando se guardó — para
+    // validar un caché de items NO sirve (ver «El caché de los items de la
+    // playlist espejo» en `util/hidden-sync.js`, que lo tiene prohibido). Que la
+    // API real lo devuelva en el objeto simplificado no está verificado.
+    snapshot_id: p.snapshot_id ?? null,
   };
 }
 
