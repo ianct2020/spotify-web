@@ -25,9 +25,9 @@
 //
 // Si agregás otro camino que borre IndexedDB en masa, usá esta misma lista.
 
-import { DISCO_BASE_PREFIX } from './disco-base.js?v=301';
-import { MOSAICO_COLORES_KEY } from './cover-color.js?v=301';
-import { LOCAL_HISTORY_PREFIX } from '../history-keys.js?v=301';
+import { DISCO_BASE_PREFIX } from './disco-base.js?v=302';
+import { MOSAICO_COLORES_KEY } from './cover-color.js?v=302';
+import { LOCAL_HISTORY_PREFIX } from '../history-keys.js?v=302';
 
 export const CONSERVAR_CLAVES = ['all_liked_tracks', 'all_liked_tracks_partial', MOSAICO_COLORES_KEY];
 export const CONSERVAR_PREFIJOS = [DISCO_BASE_PREFIX, LOCAL_HISTORY_PREFIX];

@@ -1784,6 +1784,40 @@ sitios, comprueba que `Intl` tiene ICU de verdad —si no, la suite no significa
 nada— y lleva una regla ancha que caza cualquier `toFixed()` pegado a la palabra
 «días», que es la forma que tenían las tres. Comprobado que se pone roja.
 
+## `util/mb-pais.js`: la regla del país (v=302)
+
+Para el mapamundi de escucha (todavía no existe: esto es la fase 1, medir). Spotify
+no da el país de un artista; MusicBrainz sí, y la búsqueda `/ws/2/artist/?query=…`
+lo trae en la misma respuesta (`country`, `area`), sin el lookup. `util/mb-pais.js`
+es un módulo hoja, **sin imports y sin red**: recibe respuestas ya bajadas y decide.
+**Hoy no lo importa nadie de la app**; lo usa la medición, que vive en
+`fonoteca-migracion/mapa/`, y la fase 2 tiene que usar esta misma regla, no una
+copia (el resolutor de álbumes de v=219).
+
+`clasificar(nombre, artistasMB, idsDeGrabacion)` da una de cinco clases, comparando
+por **igualdad** de `name`, `sort-name` o algún alias después de `normalizarNombre`
+(nunca por `score` ni por parecido):
+
+| clase | cuándo | país |
+|---|---|---|
+| `sin-candidato` | ninguno se llama igual | ninguno |
+| `unico` | uno solo | el suyo, si lo tiene |
+| `varios-mismo-pais` | varios, y todos los que tienen país tienen el mismo | ese |
+| `desempatado` | varios con países distintos y la búsqueda de la grabación nombra a uno solo | el de ese |
+| `ambiguo` | varios con países distintos y la grabación no desempata | ninguno |
+
+🔴 **Nunca se adivina**: lo que no se puede atribuir con certeza queda sin país. Un
+país equivocado se ve igual que uno correcto. Y `unico` no quiere decir «correcto»
+(puede ser un homónimo); `corroborado()` mide eso, no cambia la clase.
+
+⚠️ **No usa `normText`** (`util/track-match.js`): tira todo lo que no sea
+`[a-z0-9 ]` y «¥$» le queda en la cadena vacía (v=142). `normalizarNombre` es NFKD,
+sin diacríticos, minúsculas y espacios colapsados, nada más. Lo vigila el caso 7 de
+`tests/mb-pais.test.mjs` (visto ponerse rojo con `normText`).
+
+`api/musicbrainz.js` y `by-genre.js` **no se tocaron**: siguen con su `limit=1` a
+ciegas (anotado en `fonoteca-migracion/PENDIENTES.md`).
+
 ## Client ID
 0c8c92ad128e4b89be7097c6b8082797
 
