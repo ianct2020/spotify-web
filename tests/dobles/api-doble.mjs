@@ -170,7 +170,9 @@ export async function getAllUserPlaylists() {
 
 export async function getAllPlaylistItems(id, onProgress, opciones = {}) {
   const pl = d().playlists.find(p => p.id === id);
-  const items = pl ? pl.items : [];
+  // (v=300) La foto se saca AL EMPEZAR a bajar, como la primera página de la API
+  // de verdad: lo que se escriba mientras se baja no entra en esta lista.
+  const items = pl ? pl.items.slice() : [];
   // (v=299) Las páginas que costaría de verdad: `ceil(n/100)`, y 1 con la
   // playlist vacía (la API contesta igual). Se anotan APARTE de `llamadas` para
   // no moverle la cuenta a las suites que ya la miran.
@@ -178,10 +180,17 @@ export async function getAllPlaylistItems(id, onProgress, opciones = {}) {
     const n = Math.max(1, Math.ceil(items.length / 100));
     for (let i = 0; i < n; i++) d().paginas.push({ id, offset: i * 100, useCache: opciones.useCache });
   }
+  // (v=300) `durantePaginas` corre MIENTRAS se baja (después de la foto y
+  // antes de devolverla): el caso C9 suelta ahí un POST que estaba colgado.
+  if (d().durantePaginas) await d().durantePaginas();
   return items.map(t => ({ item: t }));
 }
 
 export async function addTracksToPlaylist(id, uris) {
+  // (v=300) `retenerAdd` (una promesa) deja el POST colgado hasta que el test la
+  // resuelva: la escritura ya empezó (su `antesDeEscribir()` corrió) y todavía
+  // no llegó a Spotify. `addEnVuelo` cuenta los que están esperando.
+  if (d().retenerAdd) { d().addEnVuelo = (d().addEnVuelo || 0) + 1; await d().retenerAdd; d().addEnVuelo--; }
   if (d().fallarAdd) throw new Error(d().fallarAdd);
   d().añadidas.push({ id, uris: [...uris] });
   const pl = d().playlists.find(p => p.id === id);

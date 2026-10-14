@@ -1480,6 +1480,13 @@ Las reglas que hay que respetar al tocar ese archivo:
   Z y sellarlo con ese snapshot deja a Y afuera hasta que la playlist vuelva a
   cambiar. Es lo contrario de W-Three («parchear, no borrar», v=147), y es a
   propósito: allá la playlist la escribe solo esta app.
+  **El contador (v=300):** `escriturasDe(playlistId)` lleva, por playlist y para
+  todo el módulo, `empezadas` y `enVuelo` (de `antesDeEscribir()` a
+  `despuesDeEscribir()`, que va en un `finally`); `sync()` no guarda lo que bajó
+  si al empezar o al terminar la bajada había una escritura en vuelo, o si empezó
+  alguna mientras bajaba. Hasta v=299 contaba solo las empezadas y por almacén:
+  no veía un POST que ya estaba en vuelo (caso C9 de `tests/ocultos-cache.test.mjs`).
+  ⚠️ Dos pestañas no se ven entre sí: cada una tiene su módulo.
 - **Cambiar de usuario borra `ocultos_items_v1_` (v=300).** El bloque de
   `getCurrentUserId()` (`api.js`) que ya borraba `history_`, `playlist_items_` y
   el top de Stats.fm suma `idbDelByPrefix(OCULTOS_ITEMS_PREFIX)`: son las

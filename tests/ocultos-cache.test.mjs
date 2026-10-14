@@ -303,6 +303,68 @@ if (toca('C8')) {
   }
 }
 
+// ── C9 · una escritura que ya estaba EN VUELO cuando empezó el sync() ───────
+//
+// (v=300, tanda 48) El contador de la 47 veía las escrituras que EMPIEZAN
+// mientras `sync()` baja. Esta empezó ANTES (su `antesDeEscribir()` ya borró el
+// caché) y su POST llega a Spotify MIENTRAS otra instancia baja la lista. Esa
+// otra instancia leyó su lista local antes del ocultamiento (otra pestaña, o un
+// almacén que ya la tenía en memoria): para ella Z no existe.
+// La carga siguiente, con el snapshot todavía retrasado, no puede creerle a un
+// caché `{ snapshot viejo, items sin Z }`.
+
+if (toca('C9')) {
+  console.log('\nC9 · toggle(Z) con el POST colgado; otro sync() baja mientras el POST llega');
+  montar({ items: [A] });
+  await cargar().ready();
+  ok(enCache(), 'hay caché de la carga anterior');
+  const sA = cargar();              // la instancia que oculta
+  const sB = cargar();              // otra instancia, que sincroniza
+  eq(sB.size, 1, 'la otra instancia ya leyó su lista local (sin Z)');
+  let soltar;
+  d().retenerAdd = new Promise(r => { soltar = r; });
+  d().retraso = 3;                  // las lecturas siguientes al POST dan el snapshot de ANTES
+  sA.toggle(Z, `spotify:track:${Z}`);
+  await esperarQue(() => d().addEnVuelo === 1);
+  ok(d().addEnVuelo === 1 && !enCache(), 'el POST de Z está colgado y su antesDeEscribir() ya borró el caché');
+  const snapAntes = d().llamadas.length;
+  d().durantePaginas = async () => {
+    ok(d().llamadas.length > snapAntes, 'el sync() ya leyó el snapshot cuando se suelta el POST');
+    soltar();
+    await esperarQue(() => posts() === 1);
+  };
+  await sB.ready();
+  d().durantePaginas = null; d().retenerAdd = null;
+  eq(posts(), 1, 'el POST de Z llegó a Spotify durante la bajada');
+  contadores();
+  const incAntes = incidencias().filter(i => i.tipo === 'resubida').length;
+  await cargar().ready();
+  eq(posts(), 0, '0 POST en la carga siguiente');
+  eq(incidencias().filter(i => i.tipo === 'resubida').length - incAntes, 0, '0 incidencias «resubida»');
+  ok(locales().includes(Z), 'Z sigue oculta');
+}
+
+// ── C10 · el propio sync() re-sube algo ─────────────────────────────────────
+//
+// Durante el `sync()`, `reconciliar()` sube una clave que estaba solo en local
+// (`pushMissing`). Esa escritura es suya y movió el snapshot: lo que bajó antes
+// de subir no puede quedar como caché.
+
+if (toca('C10')) {
+  console.log('\nC10 · el sync() sube K (pushMissing): ese sync() no deja caché');
+  montar({ items: [A], local: [A, K] });
+  d().retraso = 3;
+  await cargar().ready();
+  eq(posts(), 1, 'el sync() subió K');
+  ok(!enCache(), 'y no quedó caché de la lista de antes de subir');
+  contadores();
+  const incAntes = incidencias().filter(i => i.tipo === 'resubida').length;
+  await cargar().ready();
+  eq(posts(), 0, '0 POST en la carga siguiente (con el snapshot retrasado)');
+  eq(incidencias().filter(i => i.tipo === 'resubida').length - incAntes, 0, '0 incidencias «resubida»');
+  ok(locales().includes(K), 'K sigue oculta');
+}
+
 // ── Lectura estática ────────────────────────────────────────────────────────
 
 if (!SOLO && !process.env.OCULTOS_MODULO) {

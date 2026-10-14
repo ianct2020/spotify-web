@@ -339,6 +339,24 @@ async function guardarItems(playlistId, snapshot, items) {
   } catch { /* sin IndexedDB: la carga siguiente baja entera */ }
 }
 
+// (v=300) Las escrituras de cada playlist, para TODO el módulo y no por almacén:
+// `empezadas` (sube en `antesDeEscribir()`) y `enVuelo` (sube ahí mismo y baja
+// cuando la escritura termina, salga bien o tire). Un `sync()` no guarda lo que
+// bajó si al empezar o al terminar la bajada había alguna en vuelo, o si empezó
+// alguna mientras bajaba. Hasta v=299 era un contador de `empezadas` por
+// almacén y nada más: no veía una escritura que había empezado ANTES del
+// `sync()` —con el caché ya borrado— y cuyo POST llegaba a Spotify mientras se
+// bajaba la lista (el caso C9 de `tests/ocultos-cache.test.mjs`). Va por
+// módulo para que dos almacenes de la misma playlist en la misma página se
+// vean entre sí. ⚠️ Dos PESTAÑAS no se ven: cada una tiene su módulo.
+const escriturasPorPlaylist = new Map();   // playlistId → { empezadas, enVuelo }
+
+function escriturasDe(playlistId) {
+  let e = escriturasPorPlaylist.get(playlistId);
+  if (!e) { e = { empezadas: 0, enVuelo: 0 }; escriturasPorPlaylist.set(playlistId, e); }
+  return e;
+}
+
 /** Antes de escribir en la playlist. Ver la regla 3. */
 async function borrarItemsGuardados(playlistId) {
   if (!playlistId) return;
@@ -525,16 +543,22 @@ export function createHiddenStore({ lsKey, playlistName, keyOfTrack, label, uriF
   function ensureKeys() { if (!keys) keys = loadLocal(lsKey); return keys; }
   function ensureUris() { if (!uriByKey) uriByKey = loadUris(lsKey); return uriByKey; }
 
-  // (v=299) Cuántas veces este almacén se puso a escribir en su playlist. Un
-  // `sync()` que estaba bajando la lista cuando arrancó una escritura no guarda
-  // lo que bajó: es la foto de ANTES, y guardarla rehace el caché que la
-  // escritura acaba de borrar.
-  let escrituras = 0;
+  // (v=299) Un `sync()` que estaba bajando la lista cuando arrancó una
+  // escritura no guarda lo que bajó: es la foto de ANTES, y guardarla rehace el
+  // caché que la escritura acaba de borrar. (v=300) Y tampoco si al empezar o
+  // al terminar de bajar había una escritura EN VUELO: ver `escriturasDe()`.
 
   /** Antes de CADA escritura en la playlist: el caché de items se borra, nunca se parchea. */
   async function antesDeEscribir(id) {
-    escrituras++;
+    const e = escriturasDe(id);
+    e.empezadas++;
+    e.enVuelo++;
     await borrarItemsGuardados(id);
+  }
+
+  /** Cuando la escritura terminó, bien o mal. Va siempre en un `finally`. */
+  function despuesDeEscribir(id) {
+    escriturasDe(id).enVuelo--;
   }
 
   // Claves que están en local pero todavía no subieron (sin uri conocida). No se
@@ -898,9 +922,13 @@ export function createHiddenStore({ lsKey, playlistName, keyOfTrack, label, uriF
     const snapshot = existing.snapshotFresco || null;
     let items = await leerItemsGuardados(playlistId, snapshot);
     if (!items) {
-      const antes = escrituras;
+      const escrituras = escriturasDe(playlistId);
+      const antes = escrituras.empezadas;
+      const enVueloAlEmpezar = escrituras.enVuelo;
       items = await getAllPlaylistItems(playlistId, null, { useCache: false });
-      if (antes === escrituras) await guardarItems(playlistId, snapshot, items);
+      if (antes === escrituras.empezadas && enVueloAlEmpezar === 0 && escrituras.enVuelo === 0) {
+        await guardarItems(playlistId, snapshot, items);
+      }
     }
 
     const remote = new Set();
@@ -1121,7 +1149,7 @@ export function createHiddenStore({ lsKey, playlistName, keyOfTrack, label, uriF
 
     const id = await ensurePlaylist();
     await antesDeEscribir(id);
-    await addTracksToPlaylist(id, uris);
+    try { await addTracksToPlaylist(id, uris); } finally { despuesDeEscribir(id); }
     olvidarSinUri(subidas);
     saveUris(lsKey, uriByKey);
     console.info(`[ocultos:${label}] subidas ${uris.length} pistas a ${playlistName}`);
@@ -1257,6 +1285,8 @@ export function createHiddenStore({ lsKey, playlistName, keyOfTrack, label, uriF
         } catch (e) {
           for (const { key } of tanda) fallidas.push({ key, motivo: e.message });
           continue;
+        } finally {
+          despuesDeEscribir(id);
         }
         for (const { key, uri } of tanda) {
           if (ocultar) { keys.add(key); recordarUri(key, uri); }
@@ -1343,8 +1373,10 @@ export function createHiddenStore({ lsKey, playlistName, keyOfTrack, label, uriF
         }
         const id = await ensurePlaylist();
         await antesDeEscribir(id);
-        if (nowHidden) { await addTracksToPlaylist(id, [trackUri]); olvidarSinUri([key]); }
-        else await removeTracksFromPlaylist(id, [trackUri]);
+        try {
+          if (nowHidden) { await addTracksToPlaylist(id, [trackUri]); olvidarSinUri([key]); }
+          else await removeTracksFromPlaylist(id, [trackUri]);
+        } finally { despuesDeEscribir(id); }
       })().catch(e => {
         console.warn(`[ocultos:${label}] no pude sincronizar «${key}»:`, e.message);
         if (nowHidden) marcarSinUri([key]);
@@ -1403,7 +1435,9 @@ export function createHiddenStore({ lsKey, playlistName, keyOfTrack, label, uriF
         const id = playlistId || await ensurePlaylist().catch(() => null);
         if (id) {
           await antesDeEscribir(id);
-          await removeTracksFromPlaylist(id, uris).catch(e => console.warn(`[ocultos:${label}] clear:`, e.message));
+          try {
+            await removeTracksFromPlaylist(id, uris).catch(e => console.warn(`[ocultos:${label}] clear:`, e.message));
+          } finally { despuesDeEscribir(id); }
         }
       }
       if (sinResolver.length) {
