@@ -326,9 +326,92 @@ console.log('\nEl ritmo medido');
   const comienzos = [0, 60_000, 120_000, 430_000, 450_000, 500_000, 550_000, 599_000];
   ok(E.peticionesPorMinuto(comienzos, ahora, 180_000) === 5 / 3, 'peticiones por minuto de los últimos 3 minutos');
   ok(E.peticionesPorMinuto([], ahora) === null, 'sin peticiones, sin ritmo');
-  const est = E.estimarLoQueFalta({ pendientes: 100, peticiones: 50, artistasHechos: 20, msTranscurridos: 100_000 });
-  ok(est && est.peticiones === 250 && Math.round(est.minutos) === 8, `100 pendientes a 2,5 pet./artista y 2 s/pet. → ~250 peticiones, ~8 min (${JSON.stringify(est)})`);
-  ok(E.estimarLoQueFalta({ pendientes: 10, peticiones: 3, artistasHechos: 0, msTranscurridos: 5000 }) === null, 'sin ningún artista hecho en la sesión, no se estima');
+  // v=306 (tanda 54): la estimación ya no recibe los totales de la sesión
+  // (`peticiones`, `artistasHechos`, `msTranscurridos`) sino lo ACUMULADO entre
+  // cargas (`ritmo`: peticiones, artistas, y la suma de la duración de cada
+  // artista y de sus cuadrados). Hasta v=305 este assert afirmaba «100
+  // pendientes, 50 peticiones, 20 artistas, 100 s → ~250 peticiones, ~8 min»
+  // (8,3 redondeado al más cercano). Con los mismos números —20 artistas de 5 s
+  // cada uno, sin dispersión— afirma ~250 peticiones y 9 minutos: 8,3 redondeado
+  // HACIA ARRIBA (lo que se enseña nunca va por lo bajo).
+  const ritmo = { ...E.ritmoVacio(), peticiones: 50, artistas: 20, msArtistas: 100_000, msArtistas2: 20 * 5000 ** 2 };
+  const est = E.estimarLoQueFalta({ pendientes: 100, ritmo });
+  ok(est && est.peticiones === 250 && est.minutos === 9, `100 pendientes a 2,5 pet./artista y 5 s/artista, sin dispersión → ~250 peticiones, 9 min (${JSON.stringify(est)})`);
+  // Hasta v=305: «sin ningún artista hecho en la sesión, no se estima». Sigue
+  // valiendo (con lo acumulado), y desde v=306 hace falta un mínimo.
+  ok(E.estimarLoQueFalta({ pendientes: 10, ritmo: { ...E.ritmoVacio(), peticiones: 3 } }) === null, 'sin ningún artista medido, no se estima');
+}
+
+// ── 12. Lo que falta: acumulado entre cargas y por lo alto (v=306, tanda 54) ─
+// Líneas de tiempo INVENTADAS (duración de cada artista, en ms), leídas «cada
+// 5 s» como la pantalla. El criterio, el de la tanda 54: desde la primera
+// lectura que enseña un número, ese número (en minutos, como se enseña) no queda
+// por debajo del 90 % de lo que de verdad faltaba, en NINGUNA lectura.
+console.log('\nLo que falta, acumulado y por lo alto');
+const RAPIDO = 2400, CON_503 = 25_000;   // un artista sin 503 (2 peticiones a 1,2 s) y uno con una ráfaga
+function simular(duraciones, { recargaEn = null, petPorArtista = 2 } = {}) {
+  // `recargaEn`: tras ese artista la página se recarga: lo acumulado sale de lo
+  // GUARDADO (JSON, como IndexedDB), por `ritmoDesde`, igual que en la vista.
+  const fines = [];
+  let t = 0;
+  for (const d of duraciones) fines.push((t += d));
+  const total = t, n = duraciones.length;
+  let ritmo = E.ritmoVacio(), hechos = 0;
+  const lecturas = [];
+  for (let ahora = 5000; ahora < total; ahora += 5000) {
+    while (hechos < n && fines[hechos] <= ahora) {
+      for (let i = 0; i < petPorArtista; i++) ritmo = E.sumarPeticion(ritmo, 200);
+      ritmo = E.sumarArtista(ritmo, duraciones[hechos]);
+      hechos++;
+      if (hechos === recargaEn) ritmo = E.ritmoDesde(JSON.parse(JSON.stringify(ritmo)));
+    }
+    const est = E.estimarLoQueFalta({ pendientes: n - hechos, ritmo });
+    lecturas.push({ ahora, hechos, minutos: est ? est.minutos : null, real: (total - ahora) / 60_000 });
+  }
+  return lecturas;
+}
+const debajo = (lecturas) => lecturas.filter((l) => l.minutos !== null && l.minutos < 0.9 * l.real);
+// 150 artistas con 503 repartidos por toda la búsqueda, con un patrón fijo (el 12 %).
+const conRafagas = Array.from({ length: 150 }, (_, i) => ((i * 53 + 7) % 100 < 12 ? CON_503 : RAPIDO));
+{
+  const l = simular(conRafagas);
+  const malas = debajo(l);
+  ok(l.some((x) => x.minutos !== null) && malas.length === 0,
+    `con 503 a mitad: ninguna lectura por debajo del 90 % de lo que faltaba (${malas.length} de ${l.filter((x) => x.minutos !== null).length})`,
+    malas.slice(0, 3).map((x) => `a ${x.ahora / 1000} s: ${x.minutos} min y faltaban ${x.real.toFixed(2)}`).join(' · '));
+  ok(l.every((x) => x.minutos === null || Number.isInteger(x.minutos)), 'los minutos se enseñan enteros (redondeados hacia arriba)');
+}
+{
+  // Una recarga a mitad: lo acumulado sigue (no vuelve a «se estimará…» ni baja a la mitad).
+  const l = simular(conRafagas, { recargaEn: 60 });
+  const antes = l.filter((x) => x.hechos < 60 && x.minutos !== null).at(-1);
+  const despues = l.find((x) => x.hechos >= 60);
+  ok(despues && despues.minutos !== null, `justo después de recargar sigue enseñando un número (${despues?.minutos} min), no «se estimará…»`);
+  ok(antes && despues && despues.minutos >= 0.9 * antes.minutos * (despues.real / antes.real), `y no baja de golpe: ${antes?.minutos} min antes y ${despues?.minutos} después, con ${antes?.real.toFixed(1)} y ${despues?.real.toFixed(1)} min de verdad por delante`);
+  ok(debajo(l).length === 0, `con la recarga, ninguna lectura por debajo del 90 % (${debajo(l).length})`);
+}
+{
+  // Una sesión que arranca sin 503: nada hasta el mínimo de artistas, y en
+  // cuanto llega una ráfaga el número sube.
+  const tranquila = [...Array(12).fill(RAPIDO), CON_503, ...Array(47).fill(RAPIDO)];
+  const l = simular(tranquila);
+  const primera = l.find((x) => x.minutos !== null);
+  ok(E.MIN_ARTISTAS_ESTIMAR >= 2 && primera && primera.hechos >= E.MIN_ARTISTAS_ESTIMAR, `el primer número sale con ${primera?.hechos} artistas medidos (mínimo ${E.MIN_ARTISTAS_ESTIMAR})`);
+  const r1 = { ...E.ritmoVacio(), peticiones: 2, artistas: 1, msArtistas: RAPIDO, msArtistas2: RAPIDO ** 2 };
+  ok(E.estimarLoQueFalta({ pendientes: 100, ritmo: r1 }) === null, 'con un solo artista medido no se enseña ningún número');
+  const r4 = [1, 2, 3, 4].reduce((r) => E.sumarArtista(E.sumarPeticion(E.sumarPeticion(r, 200), 200), RAPIDO), E.ritmoVacio());
+  ok(E.estimarLoQueFalta({ pendientes: 100, ritmo: r4 }) === null, 'con cuatro tampoco');
+  const antes = l.filter((x) => x.hechos === 12 && x.minutos !== null).at(-1);
+  const despues = l.find((x) => x.hechos === 13);
+  ok(antes && despues && despues.minutos > antes.minutos, `y cuando llega la primera ráfaga el número sube (${antes?.minutos} → ${despues?.minutos} min)`);
+}
+{
+  // Lo acumulado se guarda y se recupera tal cual; un guardado roto o de otra versión no se usa.
+  let r = E.ritmoVacio();
+  r = E.sumarPeticion(r, 503); r = E.sumarPeticion(r, 200); r = E.sumarArtista(r, 12_000);
+  ok(r.peticiones === 2 && r.n503 === 1 && r.artistas === 1 && r.msArtistas === 12_000 && r.msArtistas2 === 144_000_000, 'cuenta peticiones, 503, artistas y las dos sumas de la duración', JSON.stringify(r));
+  ok(igual(E.ritmoDesde(JSON.parse(JSON.stringify(r))), r), 'ritmoDesde(lo guardado) da lo mismo que se guardó');
+  ok(igual(E.ritmoDesde(null), E.ritmoVacio()) && igual(E.ritmoDesde({ v: 99, artistas: 3 }), E.ritmoVacio()) && igual(E.ritmoDesde({ v: 1, artistas: 'x' }), E.ritmoVacio()), 'sin guardado, de otra versión o roto: empieza de cero');
 }
 
 console.log(`\n${fallaron ? 'FALLÓ' : 'OK'} mapa-escaneo: ${pasaron} de ${pasaron + fallaron} · ${pasaron + fallaron} asserts`);

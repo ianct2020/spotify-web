@@ -1792,9 +1792,10 @@ lo trae en la misma respuesta (`country`, `area`), sin el lookup. `util/mb-pais.
 es un módulo hoja, **sin imports y sin red**: recibe respuestas ya bajadas y decide.
 **Desde v=304 lo importa `util/mapa-paises.js`** (la vista `#mapa`, ver abajo) y
 lo usa la medición, que vive en `fonoteca-migracion/mapa/`: una sola regla, no una
-copia (el resolutor de álbumes de v=219). ⚠️ El comentario de cabecera de
-`mb-pais.js` todavía dice «hoy no lo importa nadie»: quedó viejo y no se tocó (la
-tanda 52 no podía cambiar ese archivo).
+copia (el resolutor de álbumes de v=219). El comentario de cabecera de `mb-pais.js`
+decía «hoy no lo importa nadie» hasta v=305 (quedó viejo en v=304); **se corrigió en
+v=306**, y es lo único que cambió en ese archivo: la consulta (`queryArtista`) sigue
+siendo `artist:"…"` — ver «Los nombres y el ritmo (v=306)», más abajo.
 
 `clasificar(nombre, artistasMB, idsDeGrabacion)` da una de cinco clases, comparando
 por **igualdad** de `name`, `sort-name` o algún alias después de `normalizarNombre`
@@ -1930,9 +1931,10 @@ Las decisiones, y por qué:
   pestaña oculta hasta uno por minuto): antes de cada `fetch` hay como mucho UNA espera.
   🟥 **Pero la pestaña oculta NO está verificada**: en headless no se puede comprobar. La
   pantalla pide dejarla a la vista y enseña el ritmo medido (peticiones por minuto de los
-  últimos 3 minutos) para que, si se frena, se vea. La estimación de lo que falta usa las
-  peticiones por artista y los segundos por petición **de la sesión**, nunca un número
-  fijo (el cartel de `#genre`, que NO se tocó, calcula 1,1 s por artista y son dos).
+  últimos 3 minutos) para que, si se frena, se vea. La estimación de lo que falta usa lo
+  medido, nunca un número fijo (el cartel de `#genre`, que NO se tocó, calcula 1,1 s por
+  artista y son dos). Hasta v=305 eran los totales **de la sesión**; desde v=306, lo
+  ACUMULADO entre cargas y por lo alto (ver «Los nombres y el ritmo (v=306)»).
 - Se repinta a lo sumo una vez por frame (`requestAnimationFrame` con un `setTimeout` de
   respaldo, porque rAF no corre en una pestaña oculta ni en headless con `--dump-dom`) y
   solo las secciones que cambiaron (los botones van en la suya: si no, «Parar» se
@@ -2054,6 +2056,73 @@ Uruguay): al abrir con la caché vacía el SVG está y todo va «sin datos» (0 
 `/me`); al final cada país pintado tiene el tono de la cuenta a mano y los pintados son los de
 la lista menos los sin forma; Malta está en la lista y en «No se ven»; clic en un país pintado
 abre su fila; con el primer artista resuelto ya hay un país pintado; 0 errores.
+
+### Los nombres y el ritmo (v=306)
+
+La fase 4. No cambia lo que se ve (el mundo, los tonos, la leyenda, la lista): cambia cómo se
+calcula la estimación de «lo que falta». **La búsqueda del artista NO cambió**, y eso también es
+un resultado.
+
+**La consulta: medida, probada y revertida.** Hay artistas que se quedan `sin-candidato` aunque
+están en MusicBrainz, porque `artist:"…"` **no mira los alias ni el sort-name**: un artista que
+cambió de nombre y conserva el viejo como alias, o uno que MusicBrainz escribe con otra
+puntuación y tiene la de Spotify como sort-name o alias. `comoCoincide()` ya acepta un alias igual
+desde v=302 (lo afirma, como conservación, el caso 14 de `tests/mb-pais.test.mjs`, con un artista
+inventado): lo que falla es **la consulta**, no la comparación. Lo midió la tanda 54
+(`fonoteca-migracion/mapa/medir-nombres-2026-10-15.mjs` y su JSON):
+
+- `artist:"n" OR alias:"n"` encuentra a los renombrados, pero a un nombre corto y común le quita
+  los coincidentes de los 10 primeros (los que salen por nombre Y por alias suman las dos partes y
+  se adelantan).
+- `artist:"n" OR (alias:"n" AND NOT artist:"n")` (los que salen por nombre puntúan como antes)
+  encuentra a los renombrados y conserva ese caso, **pero sobre los 200 de la muestra le quitó el
+  país a un artista que lo tenía** (con un apóstrofo en el nombre: con la consulta nueva dejó de
+  aparecer en los 10 primeros; el control con la consulta vieja, el mismo día, sí lo encontraba), y
+  pasó a varios `unico` a `desempatado` (el mismo país, pero una grabación más por artista). **Por
+  la regla de siempre —un país perdido o equivocado se ve igual que uno correcto— se revirtió.** El
+  intento entero queda en `fonoteca-migracion/mapa/` (parche y medición) para la tanda que lo
+  retome.
+- Los que **no arregla ninguna consulta** sin aflojar la igualdad, y no se hace: un nombre que
+  MusicBrainz escribe con otro carácter (una letra griega donde Spotify pone `/\`) y sin el de Spotify
+  como alias, y uno al que Spotify le agrega un punto final que MusicBrainz no tiene ni como alias.
+  Y los que **no están en MusicBrainz** (0 resultados por nombre y por alias): eso no se arregla con
+  una consulta. Ninguna tabla de nombres escrita a mano, ninguna corrección por `score`.
+
+**La estimación de lo que falta** (`estimarLoQueFalta`, `util/mapa-escaneo.js`):
+
+- 🔴 **Se ACUMULA entre cargas.** Hasta v=305 usaba los totales de la SESIÓN, y una recarga la ponía
+  en cero: la sesión nueva arrancaba sin 503 y prometía menos de la mitad. Ahora lo medido
+  (peticiones, 503, artistas, y la suma de la duración de cada artista y de sus cuadrados) vive en
+  `mapa_ritmo_v1_<uid>` (`claveRitmo()` de `util/mapa-paises.js`), se guarda en cada respuesta y en
+  cada artista resuelto, y la vista lo lee al abrir: recargar o volver sigue desde ahí, y la línea
+  se enseña también con la búsqueda a medias, antes de apretar «Seguir». La duración de un artista
+  es el tiempo de búsqueda activa desde el anterior (o desde el clic): nunca el que la página estuvo
+  quieta. Con el uid también dentro del valor, como la del artista.
+- **«Limpiar caché» la BORRA, a propósito** (no está en `CONSERVAR_PREFIJOS`): es una medición, no un
+  dato; sin ella la pantalla dice «se estimará cuando se hayan buscado N artistas», que es lo
+  correcto, y rehacerla son unos pocos artistas. El cambio de usuario no la toca: va por uid.
+- 🔴 **Por lo alto, nunca al centro.** La duración de cada artista varía mucho (un 503 son 10 s de
+  espera, y vienen en ráfagas), así que se enseña el extremo alto de lo que pueden sumar los que
+  faltan: `media·p + 2·σ·√(p + p²/n)` (p = los que faltan, n = los medidos; es el intervalo de
+  predicción de una SUMA: el `p²/n` es lo que no se sabe de la media y el `p`, lo que varía cada
+  uno), **redondeado hacia arriba** al minuto. Texto: «Quedan ~N peticiones: unas 3 horas y 50 min,
+  calculado por lo alto con el ritmo medido.»
+- **Nada con menos de 5 artistas medidos** (`MIN_ARTISTAS_ESTIMAR`): con dos o tres duraciones la σ
+  no dice nada (un arranque tranquilo da σ≈0).
+- El criterio con el que se eligió (lo puso el encargo, **no es un estándar**): desde la primera
+  lectura con número, lo enseñado no queda por debajo del 90 % de lo que faltaba de verdad, en
+  ninguna lectura. Comprobado REPRODUCIENDO la línea de tiempo de una corrida real ya medida
+  (`fonoteca-migracion/mapa/reproducir-estimacion-2026-10-15.mjs`: la función vieja falla, la nueva
+  no) y con líneas de tiempo inventadas en `tests/mapa-escaneo.test.mjs` (503 repartidos, una
+  recarga a mitad, un arranque sin 503).
+- ⚠️ **Lo que no arregla**: un cambio de humor de MusicBrainz (un día con 3 % de 503 y otro con 16 %)
+  no lo ve lo medido antes; y si la búsqueda arranca en un tramo tranquilo largo, el primer número
+  sale bajo hasta que llega la primera ráfaga. El ritmo, la espera tras un 503, la pausa de 8 y el
+  candado **no se tocaron**.
+
+El banco suma dos puertas: cerrar a mitad y volver (otro documento) y la estimación sigue desde lo
+acumulado sin apretar nada (no vuelve a «se estimará…» ni baja a la mitad), y «Limpiar caché» borra
+`mapa_ritmo_v1_` y conserva los artistas y las áreas.
 
 ## Client ID
 0c8c92ad128e4b89be7097c6b8082797
@@ -2853,7 +2922,10 @@ fila sobrevivió así desde que se armó la tabla.
 | `#zombies` | **0** | **0** | — (todo detrás de «Analizar») | — | leída del código · **`/me` repasado el 2026-10-08**: su `render()` no llega a `getCurrentUserId()` |
 | `#versions` | **0** | **0** | — (detrás de «Analizar») | — | leída del código · **`/me` repasado el 2026-10-08**: su `render()` no llega a `getCurrentUserId()` |
 | `#zeroplays` | **2 + ceil(Hz/100)** | ídem | **1 `/me` propio** + 1 `/playlists/{id}` + la playlist de ocultos («sin plays») | **nº de ocultos de esta vista** | ✅ **confirmada el 2026-10-08, leída del código**: `render()` → `analyze()` → `Promise.all([getBestAvailableLikes(), loadTrackPlays()])` + `hiddenTracks.ready()`. Los dos caminos llegan al `/me`, pero **comparten el memo**: es 1, no 2. La fila ya estaba bien |
-| `#sin-clasificar` | **1 + ceil(P/50) + Σ(1 + ceil(Tᵢ/100)) + ocultos** ≈ **170+** | **~45** | `/me` + `/me/playlists` + las **42 propias** una por una + su playlist de ocultos | nº de playlists propias **y** su tamaño | leída del código · **`/me` repasado el 2026-10-08**: `hidden.ready()` (`:247`) y el `getCurrentUserId()` de `:249` están en `load()`, que `render()` dispara sola. **El `/me` que la fila ya contaba es el propio**, y está bien |
+| `#sin-clasificar` | **1 + ceil(P/50) + Σ(1 + ceil(Tᵢ/100)) + ocultos** ≈ **170+** | **2** (dentro de las 24 h del cruce) · **4** si además venció la lista de playlists | caliente: 1 `/me` propio + 1 `/playlists/{id}` del almacén de ocultos («sin clasificar»; 0 págs. con su caché de items al día) · + `ceil(P/50)` = 2 de `/me/playlists` **solo** si su caché de `localStorage` (24 h, otro reloj que el del cruce) venció | nº de playlists propias **y** su tamaño (en frío) · en caliente, **qué caché venció** | 🔴 **corregida el 2026-10-15, leída del código (no medida).** `load()` (`sin-clasificar.js:219`): `getBestAvailableLikes()` = 0; `hidden.ready()` (`:247`) y `getCurrentUserId()` (`:249`) comparten el memo (1 `/me`); `getAllUserPlaylists()` (`:251`) va ANTES de mirar el cruce y tiene su propio TTL de 24 h (`CACHE_TTL_MIN`, `api.js:32`); el cruce es `idbGetCached(CROSS_KEY)` (`:273`) con `CROSS_TTL_MIN = 24 * 60` (`:45`): dentro de las 24 h y con las mismas playlists a cruzar, **no se baja ninguna playlist**. Sin el `/me` del arranque |
+| ↳ lo que decía antes: **~45** en caliente | | | lo que cuesta **fuera** de las 24 h, no dentro: el cruce vencido re-valida cada playlist | | leída del código (hasta el 2026-10-15) |
+| ↳ **caliente, con el cruce VENCIDO (más de 24 h)**: **2 + (0–2) + N** ≈ **36–38** | | | lo de arriba + `scanPlaylists()`: **1** `/playlists/{id}?fields=snapshot_id` por cada playlist a cruzar (**N ≈ 34** = 42 propias − 2 excluidas de fábrica, «anothertwo» y «w three» − 6 de ocultos), más **todas las páginas** de cada una cuyo snapshot cambió | nº de playlists a cruzar y cuáles cambiaron | **leída del código el 2026-10-15**, no medida. N sale del censo del 08/10 (42 propias, 6 de ocultos) y de `DEFAULT_EXCLUDED_NAMES`: si Ian excluyó o creó otras, N es otro |
+| ↳ **al pulsar «Actualizar»** (en la misma carga): **(0–2) + N** ≈ **34–36** | | | borra el cruce (`idbDel(CROSS_KEY)`, `:630`) y repite `load({ force: true })`: el `/me` y el almacén de ocultos ya están en memoria (0); `/me/playlists` 0 o 2 según su caché; y el escaneo de arriba | ídem | **leída del código el 2026-10-15**, no medida |
 | `#skips` | **2 + ceil(Hk/100)** | ídem | **1 `/me` propio** + 1 `/playlists/{id}` + la playlist de ocultos («skips») | **nº de ocultos de esta vista** | ✅ **confirmada el 2026-10-08, leída del código**: `render()` → `analyze()` → `Promise.all([getBestAvailableLikes(), loadSkipStats()])` + `hiddenTracks.ready()`, mismo memo. La fila ya estaba bien |
 
 **Arrancar la app: 1 `/v1/me`** — *medido dos veces en producción el 07/10, y

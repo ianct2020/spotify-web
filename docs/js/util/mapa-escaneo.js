@@ -41,8 +41,8 @@
 // comprobar cómo se porta una pestaña oculta: la vista lo dice y enseña el ritmo
 // medido para que, si se frena, se vea.
 
-import { proximoPaso, recortarArtistas, recortarArea, idsDeGrabacion } from './mapa-paises.js?v=305';
-import { queryArtista, queryGrabacion, limpiarTitulo } from './mb-pais.js?v=305';
+import { proximoPaso, recortarArtistas, recortarArea, idsDeGrabacion } from './mapa-paises.js?v=306';
+import { queryArtista, queryGrabacion, limpiarTitulo } from './mb-pais.js?v=306';
 
 export const BASE_MB = 'https://musicbrainz.org/ws/2';
 export const INTERVALO_MS = 1200;
@@ -214,16 +214,88 @@ export function peticionesPorMinuto(comienzos, ahora, ventanaMs = 180_000) {
   return n / (ms / 60_000);
 }
 
+// ── Lo que falta (v=306, tanda 54) ───────────────────────────────────────────
+//
+// Hasta v=305 la estimación usaba los totales de la SESIÓN (peticiones por
+// artista y ms por petición desde el clic en esta carga de página), y eso tenía
+// dos problemas medidos en la corrida real de la tanda 53: una recarga la ponía
+// en cero (la sesión nueva arrancaba sin 503 y prometió 85-97 min donde antes
+// decía 171-298), y el número salía «al centro», así que la mitad de las veces
+// prometía de menos.
+//
+// Ahora:
+//   · lo medido se ACUMULA entre cargas (`ritmo`, que la vista guarda en
+//     IndexedDB con el uid: `claveRitmo()` de `mapa-paises.js`). Recargar o
+//     volver a la vista sigue desde ahí;
+//   · el número va POR LO ALTO: la duración de cada artista varía mucho (un 503
+//     cuesta 10 s de espera, y vienen en ráfagas), así que no se enseña la media
+//     por los que faltan sino el extremo alto de lo que pueden sumar:
+//         media·p + Z·σ·√(p + p²/n)
+//     con p = artistas que faltan, n = artistas medidos, y la media y la σ de la
+//     duración de cada artista. Es el intervalo de predicción de una SUMA de p
+//     duraciones con media y σ estimadas sobre n: el p² / n es lo que no se sabe
+//     de la media, el p, lo que varía cada artista. Z = 2. Y se redondea HACIA
+//     ARRIBA, al minuto;
+//   · con menos de `MIN_ARTISTAS_ESTIMAR` artistas medidos no se enseña nada:
+//     con dos o tres duraciones la σ no dice nada (un arranque tranquilo da σ≈0).
+// Lo eligió la tanda 54 con la línea de tiempo REAL de la 53 reproducida
+// (`fonoteca-migracion/mapa/reproducir-estimacion-2026-10-15.mjs`): con la media
+// sola, cinco lecturas quedaban por debajo del 90 % de lo que faltaba; con esto,
+// ninguna. Ese 90 % lo puso el encargo, no es un estándar.
+//
+// ⚠️ Lo que NO arregla: si MusicBrainz cambia de humor (un día con 3 % de 503 y
+// otro con 16 %), lo medido antes no lo sabe. Es una estimación con lo medido,
+// no una promesa. Y las peticiones por artista se estiman con los de más minutos
+// (que van primero): la cola pide algo menos (ver CONTEXTO-TECNICO.md).
+
+export const MIN_ARTISTAS_ESTIMAR = 5;
+export const Z_ESTIMACION = 2;
+const VERSION_RITMO = 1;
+
+/** Lo acumulado, vacío. Sumas en ms: la de cada artista y la de sus cuadrados (para la σ). */
+export const ritmoVacio = () => ({ v: VERSION_RITMO, peticiones: 0, n503: 0, artistas: 0, msArtistas: 0, msArtistas2: 0 });
+
+const CAMPOS_RITMO = ['peticiones', 'n503', 'artistas', 'msArtistas', 'msArtistas2'];
+/** Lo acumulado a partir de lo guardado; si no hay, es de otra versión o está roto, de cero. */
+export function ritmoDesde(guardado) {
+  if (!guardado || guardado.v !== VERSION_RITMO) return ritmoVacio();
+  if (!CAMPOS_RITMO.every((k) => Number.isFinite(guardado[k]) && guardado[k] >= 0)) return ritmoVacio();
+  const r = ritmoVacio();
+  for (const k of CAMPOS_RITMO) r[k] = guardado[k];
+  return r;
+}
+
+/** Una petición más (con su código: los 503 se cuentan aparte, para enseñarlos). */
+export function sumarPeticion(ritmo, status) {
+  return { ...ritmo, peticiones: ritmo.peticiones + 1, n503: ritmo.n503 + (status === 503 ? 1 : 0) };
+}
+
+/** Un artista resuelto, con lo que tardó (ms de búsqueda activa, desde el anterior). */
+export function sumarArtista(ritmo, ms) {
+  const d = Math.max(0, Number(ms) || 0);
+  return { ...ritmo, artistas: ritmo.artistas + 1, msArtistas: ritmo.msArtistas + d, msArtistas2: ritmo.msArtistas2 + d * d };
+}
+
 /**
- * Lo que falta, ESTIMADO con lo medido en esta sesión: peticiones por artista y
- * milisegundos por petición de ESTA sesión (no un número fijo: el de `#genre`
- * calcula 1,1 s por artista y son dos peticiones). `null` si todavía no hay con
- * qué estimar.
+ * Lo que falta, con lo ACUMULADO y por lo alto. `null` si todavía no hay con
+ * qué (menos de `MIN_ARTISTAS_ESTIMAR` artistas medidos) o no falta nada.
+ * `minutos` es lo que se enseña (entero, redondeado hacia arriba);
+ * `minutosCentral`, la media sola (para medir, no para enseñar).
  */
-export function estimarLoQueFalta({ pendientes, peticiones, artistasHechos, msTranscurridos }) {
-  if (!artistasHechos || !peticiones || !msTranscurridos) return null;
-  const porArtista = peticiones / artistasHechos;
-  const msPorPeticion = msTranscurridos / peticiones;
-  const pet = Math.round(pendientes * porArtista);
-  return { peticiones: pet, minutos: (pet * msPorPeticion) / 60_000, porArtista, msPorPeticion };
+export function estimarLoQueFalta({ pendientes, ritmo }) {
+  const r = ritmo || ritmoVacio();
+  const n = r.artistas;
+  if (!pendientes || n < MIN_ARTISTAS_ESTIMAR || !r.peticiones) return null;
+  const media = r.msArtistas / n;
+  const varianza = Math.max(0, (r.msArtistas2 - n * media * media) / (n - 1));
+  const central = pendientes * media;
+  const alto = central + Z_ESTIMACION * Math.sqrt(varianza * (pendientes + (pendientes * pendientes) / n));
+  return {
+    peticiones: Math.round(pendientes * (r.peticiones / n)),
+    minutos: Math.max(1, Math.ceil(alto / 60_000)),
+    minutosCentral: central / 60_000,
+    porArtista: r.peticiones / n,
+    msPorArtista: media,
+    sigmaMs: Math.sqrt(varianza),
+  };
 }

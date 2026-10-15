@@ -4,11 +4,12 @@
 //
 // Módulo hoja, sin imports y sin red: recibe respuestas de MusicBrainz ya
 // bajadas (`/ws/2/artist/?query=…` y `/ws/2/recording/?query=…`) y decide qué
-// artista es y de qué país. Hoy no lo importa nadie de la app: lo usa la
-// medición de la tanda 50 (`fonoteca-migracion/mapa/`), y la fase 2 del mapa va
-// a usar exactamente esta misma regla. Escrita una sola vez a propósito: en
-// este repo una regla escrita dos veces termina divergiendo (el resolutor de
-// álbumes de v=219).
+// artista es y de qué país. Lo importan `util/mapa-paises.js` (la regla, para la
+// vista `#mapa`, desde v=304) y `util/mapa-escaneo.js` (las consultas), y lo usan
+// las mediciones de `fonoteca-migracion/mapa/`. Escrita una sola vez a propósito:
+// en este repo una regla escrita dos veces termina divergiendo (el resolutor de
+// álbumes de v=219). (Hasta v=305 esta cabecera decía «hoy no lo importa nadie
+// de la app», y era falso desde v=304.)
 //
 // 🔴 Un artista que no se puede atribuir con certeza queda SIN país. Un país
 // equivocado se ve igual que uno correcto: es el falso positivo silencioso.

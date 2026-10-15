@@ -257,5 +257,21 @@ console.log('13. el país que sale del área (v=303)');
   ok(falta !== undefined && falta.pais === null && falta.areaFalta === 'p-solo', 'completarConArea dice qué área falta bajar');
 }
 
+console.log('14. el que cambió de nombre: si la respuesta lo trae, la regla lo reconoce (conservación, tanda 54)');
+{
+  // Un artista INVENTADO que hoy se llama «Faro Nuevo» y conserva el nombre de
+  // antes, «Faro Viejo», como alias; Spotify lo sigue llamando «Faro Viejo».
+  // CONSERVACIÓN, no un rojo: ya pasaba en v=305 (`comoCoincide()` mira los alias
+  // desde v=302). Lo que la tanda 54 midió es que el que falla es la CONSULTA
+  // (`artist:"…"` no mira los alias, así que MusicBrainz no lo devuelve), y la
+  // consulta que lo arreglaba le quitaba el país a otro artista: no se cambió.
+  // Este assert deja escrito que, el día que la consulta lo traiga, la regla ya
+  // está lista.
+  const renombrado = cand('r1', 'Faro Nuevo', { country: 'UY', aliases: [{ name: 'Faro Viejo' }, { name: 'FN' }] });
+  const r = llamar('clasificar', 'Faro Viejo', [cand('t1', 'Faro Viejo Tribute Band'), renombrado]);
+  ok(r?.clase === 'unico' && r?.mbid === 'r1' && r?.pais === 'UY', 'si la respuesta lo trae, coincide por su alias → unico UY');
+  ok(llamar('comoCoincide', 'Faro Viejo', renombrado) === 'alias', 'comoCoincide dice «alias»');
+}
+
 console.log(`\n${fallaron ? 'FALLÓ' : 'OK'} mb-pais: ${pasaron} de ${pasaron + fallaron}`);
 if (fallaron) process.exit(1);

@@ -29,7 +29,7 @@
 // Los minutos se suman en DÉCIMAS (enteros): las cinco filas tienen que sumar
 // exactamente el total, y con flotantes «exactamente» no existe.
 
-import { clasificar, completarConArea, corroborado, limpiarTitulo } from './mb-pais.js?v=305';
+import { clasificar, completarConArea, corroborado, limpiarTitulo } from './mb-pais.js?v=306';
 
 export const MIN_MINUTOS = 10;
 
@@ -42,6 +42,14 @@ export const PREFIJO_ARTISTA = 'mapa_artista_v1_';
 export const PREFIJO_AREA = 'mapa_area_v1_';
 export const claveArtista = (uid, nombre) => `${PREFIJO_ARTISTA}${uid}_${nombre}`;
 export const claveArea = (id) => `${PREFIJO_AREA}${id}`;
+// v=306 (tanda 54): lo medido del ritmo, ACUMULADO entre cargas, para estimar lo
+// que falta (`ritmoVacio`/`estimarLoQueFalta` de `mapa-escaneo.js`). Una clave
+// por usuario. «Limpiar caché» la borra a propósito (no está en
+// `CONSERVAR_PREFIJOS`): es una medición, no un dato, y sin ella la pantalla
+// vuelve a «se estimará cuando…», que es lo correcto; rehacerla son unos pocos
+// artistas. El cambio de usuario no la toca: va por uid, como la del artista.
+export const PREFIJO_RITMO = 'mapa_ritmo_v1_';
+export const claveRitmo = (uid) => `${PREFIJO_RITMO}${uid}`;
 
 // Comparación de cadenas simple (code units), nunca `localeCompare`: es la regla
 // de la muestra de la tanda 50, y la que hace el orden reproducible en cualquier

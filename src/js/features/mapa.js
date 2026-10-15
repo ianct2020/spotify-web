@@ -37,11 +37,11 @@
 
 import { loadArtistTracks, isOwner, ownerLockedMessage } from './history-data.js';
 import { getCurrentUserId } from '../api.js';
-import { idbEntriesEnRango, idbSetCached } from '../idb.js';
+import { idbEntriesEnRango, idbSetCached, idbGetCachedRaw } from '../idb.js';
 import { escapeHtml, pageHeader } from '../ui/components.js';
 import { vigilarRuta } from '../util/vigencia-ruta.js';
-import { armarMapa, universo, claveArtista, claveArea, PREFIJO_ARTISTA, PREFIJO_AREA, MIN_MINUTOS } from '../util/mapa-paises.js';
-import { escanear, conCandado, peticionesPorMinuto, estimarLoQueFalta } from '../util/mapa-escaneo.js';
+import { armarMapa, universo, claveArtista, claveArea, claveRitmo, PREFIJO_ARTISTA, PREFIJO_AREA, MIN_MINUTOS } from '../util/mapa-paises.js';
+import { escanear, conCandado, peticionesPorMinuto, estimarLoQueFalta, ritmoDesde, sumarPeticion, sumarArtista, MIN_ARTISTAS_ESTIMAR } from '../util/mapa-escaneo.js';
 import { armarMundo, textoDetalle, textoNoSeVen, etiquetaMapa, leyenda } from '../util/mapa-mundo.js';
 
 // Números con `es-ES` explícito: sin el locale se usa el del navegador (es-AR
@@ -75,9 +75,10 @@ const perf = { pintados: 0, ultimoMs: 0, maxMs: 0, montajeMs: null, montajes: 0,
 if (typeof window !== 'undefined') window.__mapaPerf = perf;
 
 async function leerCache(uid) {
-  const [arts, areas] = await Promise.all([
+  const [arts, areas, ritmo] = await Promise.all([
     idbEntriesEnRango(`${PREFIJO_ARTISTA}${uid}_`),
     idbEntriesEnRango(PREFIJO_AREA),
+    idbGetCachedRaw(claveRitmo(uid)).catch(() => null),
   ]);
   const artistas = new Map();
   for (const [, w] of arts) {
@@ -90,7 +91,9 @@ async function leerCache(uid) {
   for (const [k, w] of areas) {
     if (w?.value && typeof w.value === 'object') mapaAreas.set(k.slice(PREFIJO_AREA.length), w.value);
   }
-  return { artistas, areas: mapaAreas };
+  // v=306: lo medido del ritmo, acumulado entre cargas (ver «Lo que falta» en
+  // `util/mapa-escaneo.js`). El uid va también dentro, como en el del artista.
+  return { artistas, areas: mapaAreas, ritmo: ritmo?.uid === uid ? ritmoDesde(ritmo) : ritmoDesde(null) };
 }
 
 // El reloj de verdad. Una espera que se corta si se para el escaneo.
@@ -150,6 +153,7 @@ export async function render(container) {
     uid, totals: datos.totals,
     lista: universo(datos.totals, datos.artists),
     artistas: cache.artistas, areas: cache.areas,
+    ritmo: cache.ritmo,          // v=306: lo medido, ACUMULADO entre cargas (IndexedDB)
     estado: 'quieto',            // quieto · escaneando · pausa · ocupado · terminado · parado · error
     error: null,
     ctrl: null,
@@ -158,7 +162,7 @@ export async function render(container) {
     pintando: false,
     ultimoMapa: null,            // la última cuenta de `armarMapa` (la usa el mundo al armarse)
     mundo: null,                 // el SVG ya armado y los tonos aplicados (ver montarMundo)
-    sesion: { peticiones: 0, porTipo: { busqueda: 0, area: 0, grabacion: 0 }, n503: 0, otrosFallos: 0, comienzos: [], artistasHechos: 0, msActivos: 0, inicioCorrida: null, noSePudo: new Set() },
+    sesion: { peticiones: 0, porTipo: { busqueda: 0, area: 0, grabacion: 0 }, n503: 0, otrosFallos: 0, comienzos: [], desdeUltimo: null, noSePudo: new Set() },
   };
 
   content.innerHTML = `<div class="mapa">
@@ -200,8 +204,6 @@ async function arrancar(raiz, st, ruta) {
 
   const ctrl = new AbortController();
   st.ctrl = ctrl;
-  const inicio = Date.now();
-  st.sesion.inicioCorrida = inicio;
   const programar = () => programarPintado(raiz, st, ruta);
   const corrida = conCandado(typeof navigator !== 'undefined' ? navigator.locks : undefined, async () => {
     // Con el candado en la mano, se relee la caché: otra pestaña pudo haber
@@ -210,6 +212,12 @@ async function arrancar(raiz, st, ruta) {
     if (ctrl.signal.aborted || !ruta.vigente()) return { motivo: 'parado' };
     for (const [k, v] of c.artistas) st.artistas.set(k, v);
     for (const [k, v] of c.areas) st.areas.set(k, v);
+    // Lo acumulado, también releído: otra pestaña pudo haber medido mientras tanto.
+    if (c.ritmo.artistas >= st.ritmo.artistas) st.ritmo = c.ritmo;
+    // La duración de cada artista se mide desde el anterior (o desde acá): solo
+    // tiempo de búsqueda activa, nunca el que la página estuvo quieta.
+    st.sesion.desdeUltimo = Date.now();
+    const guardarRitmo = () => { idbSetCached(claveRitmo(st.uid), { ...st.ritmo, uid: st.uid }, null).catch(() => {}); };
     return escanear({
       lista: st.lista, artistas: st.artistas, areas: st.areas,
       pedir: pedirMB, reloj, signal: ctrl.signal,
@@ -224,10 +232,17 @@ async function arrancar(raiz, st, ruta) {
         s.comienzos.push(p.comienzo);
         if (p.status === 503) s.n503++;
         else if (p.status !== 200) s.otrosFallos++;
+        st.ritmo = sumarPeticion(st.ritmo, p.status);
+        guardarRitmo();
         programar();
       },
       onArtista: (nombre, estado) => {
-        if (estado === 'resuelto') st.sesion.artistasHechos++;
+        const ahora = Date.now();
+        if (estado === 'resuelto') {
+          st.ritmo = sumarArtista(st.ritmo, ahora - st.sesion.desdeUltimo);
+          guardarRitmo();
+        }
+        st.sesion.desdeUltimo = ahora;
         programar();
       },
     });
@@ -239,8 +254,6 @@ async function arrancar(raiz, st, ruta) {
   } catch (e) {
     r = { candado: 'error', valor: null, error: e };
   } finally {
-    st.sesion.msActivos += Date.now() - inicio;
-    st.sesion.inicioCorrida = null;
     if (st.ctrl === ctrl) st.ctrl = null;
   }
   if (!ruta.vigente()) return;
@@ -466,22 +479,27 @@ function htmlEscaneo(m, st) {
   const hayAlgo = m.escaneados > 0 || st.artistas.size > 0;
   const seguir = pendientes > 0 ? boton('buscar', hayAlgo ? 'Seguir' : 'Buscar países') : '';
 
+  // v=306: lo que falta sale de lo ACUMULADO entre cargas (`st.ritmo`) y por lo
+  // alto (ver «Lo que falta» en `util/mapa-escaneo.js`); por eso se enseña
+  // también con la búsqueda a medias, antes de apretar «Seguir».
+  const lineaFalta = () => {
+    if (pendientes === 0) return '';
+    const est = estimarLoQueFalta({ pendientes, ritmo: st.ritmo });
+    if (!est) {
+      return `<p class="mapa-estimacion">Lo que falta se estimará cuando se hayan buscado ${fmt(MIN_ARTISTAS_ESTIMAR)} artistas (van ${fmt(st.ritmo.artistas)}).</p>`;
+    }
+    return `<p class="mapa-estimacion">Quedan ~${fmt(est.peticiones)} peticiones: ${textoDuracion(est.minutos)}, calculado por lo alto con el ritmo medido.</p>`;
+  };
   const medidas = () => {
     const ahora = Date.now();
     const ritmo = peticionesPorMinuto(s.comienzos, ahora);
-    // El tiempo de búsqueda de esta sesión: las corridas anteriores más la de ahora.
-    const msActivos = s.msActivos + (s.inicioCorrida !== null ? ahora - s.inicioCorrida : 0);
-    const est = estimarLoQueFalta({ pendientes, peticiones: s.peticiones, artistasHechos: s.artistasHechos, msTranscurridos: msActivos });
     const partes = [
       `${plural(s.peticiones, 'petición', 'peticiones')} a MusicBrainz en esta sesión`,
       `${plural(s.n503, 'respuesta 503', 'respuestas 503')}`,
     ];
     if (s.otrosFallos) partes.push(plural(s.otrosFallos, 'otro fallo', 'otros fallos'));
     if (ritmo !== null) partes.push(`ritmo medido: ${fmt(ritmo, 1)} peticiones por minuto (últimos 3 minutos)`);
-    const falta = pendientes === 0 ? ''
-      : est ? `<p class="mapa-estimacion">Quedan ~${fmt(est.peticiones)} peticiones, unos ${fmt(Math.max(1, Math.round(est.minutos)))} minutos (estimado con el ritmo de esta sesión).</p>`
-        : `<p class="mapa-estimacion">Lo que falta se estimará cuando haya algún artista buscado en esta sesión.</p>`;
-    return `<p class="mapa-medidas">${partes.join(' · ')}</p>${falta}`;
+    return `<p class="mapa-medidas">${partes.join(' · ')}</p>${lineaFalta()}`;
   };
 
   const progreso = `<p class="mapa-progreso"><strong>${fmt(m.escaneados)}</strong> de ${plural(m.universo, 'artista', 'artistas')}</p>`;
@@ -514,11 +532,19 @@ function htmlEscaneo(m, st) {
           <p class="mapa-ayuda">La búsqueda le pregunta a MusicBrainz por tus ${plural(m.universo, 'artista', 'artistas')} con ${MIN_MINUTOS} minutos o más, de uno en uno y en orden de minutos, y la lista se va llenando a medida que llegan. Puedes pararla cuando quieras: lo que ya esté buscado queda guardado en este navegador.</p>`;
         botones = seguir;
       } else {
-        cuerpo = `<p class="mapa-estado-t">${st.estado === 'parado' ? 'Búsqueda parada.' : 'Búsqueda a medias.'} Lo que ya buscaste queda guardado.</p>${progreso}${s.peticiones ? medidas() : ''}`;
+        cuerpo = `<p class="mapa-estado-t">${st.estado === 'parado' ? 'Búsqueda parada.' : 'Búsqueda a medias.'} Lo que ya buscaste queda guardado.</p>${progreso}${s.peticiones ? medidas() : st.ritmo.artistas ? lineaFalta() : ''}`;
         botones = seguir;
       }
   }
   return { texto: `<h2 class="mapa-h2">La búsqueda</h2>${cuerpo}`, botones };
+}
+
+// «unos 12 minutos», «una hora y 5 min», «unas 3 horas y 50 min». Los minutos
+// ya vienen redondeados hacia arriba.
+function textoDuracion(min) {
+  if (min < 60) return min === 1 ? 'un minuto' : `unos ${fmt(min)} minutos`;
+  const h = Math.floor(min / 60), r = min % 60;
+  return `${h === 1 ? 'una hora' : `unas ${fmt(h)} horas`}${r ? ` y ${fmt(r)} min` : ''}`;
 }
 
 function htmlPaises(m, st) {
