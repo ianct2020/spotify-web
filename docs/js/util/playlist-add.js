@@ -17,8 +17,8 @@ import {
   addTracksToPlaylist, updatePlaylistItemsCache,
   getAllPlaylistItems,
   onPlaylistsInvalidated,
-} from '../api.js?v=303';
-import { showToast } from '../ui/toast.js?v=303';
+} from '../api.js?v=304';
+import { showToast } from '../ui/toast.js?v=304';
 
 // Playlists propias (las ajenas no se pueden escribir). Se memoiza en el módulo
 // porque las tres vistas piden lo mismo y getAllUserPlaylists ya cachea aparte.

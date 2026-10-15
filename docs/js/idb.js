@@ -187,8 +187,33 @@ async function idbEntriesByPrefix(prefix) {
   });
 }
 
+/**
+ * Lo mismo que `idbEntriesByPrefix` —`[clave, envoltorio]` CRUDOS, sin mirar
+ * `expiry` y sin borrar nada—, pero leyendo SOLO el rango de claves del
+ * prefijo (v=304, `#mapa`). El cursor de arriba recorre la base ENTERA y
+ * deserializa cada valor, incluidos los me gusta y la base de colores del
+ * mosaico (megas): para abrir una vista que lee una clave por artista, eso es
+ * pagar toda la base cada vez. El rango es exacto: el límite de arriba es el
+ * prefijo con su último carácter + 1, excluido, así que entra toda cadena que
+ * empiece por el prefijo y ninguna otra.
+ */
+async function idbEntriesEnRango(prefix) {
+  const db = await openDb();
+  const fin = prefix.slice(0, -1) + String.fromCharCode(prefix.charCodeAt(prefix.length - 1) + 1);
+  return new Promise((res, rej) => {
+    const t = db.transaction(STORE, 'readonly');
+    const store = t.objectStore(STORE);
+    const rango = IDBKeyRange.bound(prefix, fin, false, true);
+    const claves = store.getAllKeys(rango);
+    const valores = store.getAll(rango);
+    t.oncomplete = () => res(claves.result.map((k, i) => [k, valores.result[i]]));
+    t.onerror = () => rej(t.error);
+    t.onabort = () => rej(t.error);
+  });
+}
+
 export {
-  idbEntriesByPrefix,
+  idbEntriesByPrefix, idbEntriesEnRango,
   idbGet, idbSet, idbDel,
   idbGetCached, idbGetCachedRaw, idbGetTimestamp, idbSetCached,
   idbAvailable, idbClearAll, idbDelByPrefix,

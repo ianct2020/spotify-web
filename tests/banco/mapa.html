@@ -1,0 +1,218 @@
+<!doctype html><html lang="es"><head><meta charset="utf-8"><title>banco mapa — tus países, con un MusicBrainz de mentira</title>
+<style>html,body{margin:0;background:#111;color:#eee;font:13px system-ui}iframe{border:0;display:block}</style>
+</head><body>
+<pre id="progreso"></pre>
+<div id="marcos"></div>
+<script type="module">
+// ── Qué prueba este banco (v=304, tanda 52) ──────────────────────────────────
+//
+// `#mapa` REAL, en la app ENTERA (`mapa-caso.html`, uno por iframe), con `/me`
+// = owner contestado por la Spotify simulada, un historial INVENTADO sembrado en
+// la clave del caché del owner y un MusicBrainz SIMULADO que vive acá, en la
+// madre, para que su registro sobreviva a la recarga de un iframe. Nada sale a
+// `musicbrainz.org` ni a `api.spotify.com`.
+//
+// Las ocho puertas del encargo:
+//   1. abrir `#mapa` pide 0 a MusicBrainz y exactamente 1 `/me`;
+//   2. con «Buscar países», el primer país aparece después del PRIMER artista
+//      resuelto, no al final;
+//   3. con 503 en un patrón fijo (la petición 3, 8, 13…), el escaneo termina
+//      igual y ningún artista queda sin país por un 503;
+//   4. cerrar a mitad (recargar el iframe) y volver: «Seguir» no pide NADA de lo
+//      que ya se había contestado (ni artistas ni áreas);
+//   5. salir de `#mapa` a mitad: 0 peticiones después de salir, contadas durante
+//      30 s de reloj virtual, y 0 errores en consola;
+//   6. dos pestañas (dos iframes): solo una escanea y la otra lo dice;
+//   7. las cinco filas de cobertura suman el total y coinciden con la cuenta
+//      hecha a mano (`mapa-datos.mjs`, `ESPERADO`);
+//   8. «Limpiar caché» no se lleva ni `mapa_artista_v1_` ni `mapa_area_v1_`.
+//
+// ⚠️ Todas las esperas van con `esperarReal` (una petición al propio servidor
+// por vuelta): un `await` de IndexedDB sin anclar deja correr suelto el reloj
+// virtual (ver PRESUPUESTO en `scripts/correr-banco.mjs`).
+
+import { esperarReal, anclar } from '/banco/simulado.mjs';
+import { fallar, listo } from '/banco/esperar.mjs';
+import { crearMB, sembrarHistorial, ESPERADO } from '/banco/mapa-datos.mjs';
+
+const ANCHO = +(new URLSearchParams(location.search).get('ancho') || 1351);
+const afirmar = (c, msg) => { if (!c) throw new Error('BANCO: ' + msg); };
+const progreso = (t) => { document.getElementById('progreso').textContent = t; };
+const VUELTAS = 60000;
+
+// La petición 3, 8, 13, 18… de MusicBrainz contesta 503 (una vez: el reintento
+// es otra petición, con otro número).
+const mb = crearMB({ fallo503: (n) => n % 5 === 3 });
+window.__mb = mb;
+const delMarco = (m) => mb.log.filter((e) => e.marco === m);
+
+function abrirMarco(nombre, alto = 900) {
+  const f = document.createElement('iframe');
+  f.width = ANCHO; f.height = alto;
+  f.src = `/banco/mapa-caso.html?marco=${nombre}`;
+  document.getElementById('marcos').appendChild(f);
+  return f;
+}
+const win = (f) => f.contentWindow;
+const $ = (f, s) => f.contentDocument?.querySelector(s);
+const mapa = (f) => $(f, '.mapa[data-estado]');
+const meDe = (f) => win(f).__sim.reg.llamadas.filter((l) => l.ruta === '/me').length;
+async function arrancado(f, que) {
+  await esperarReal(() => win(f)?.__listo, { que: `que arranque ${que}`, vueltas: VUELTAS });
+}
+async function irA(f, hash, que, cond) {
+  win(f).location.hash = hash;
+  await esperarReal(cond, { que, vueltas: VUELTAS });
+}
+const boton = (f, accion) => $(f, `[data-mapa-accion="${accion}"]`);
+
+const datos = {};
+try {
+  await sembrarHistorial(anclar);
+  localStorage.setItem('fonoteca_last_user_id', (await import('/js/features/history-data.js')).HISTORY_OWNER_ID);
+
+  // ── 1. Abrir no escanea ────────────────────────────────────────────────────
+  progreso('puerta 1: abrir #mapa');
+  let A = abrirMarco('A');
+  await arrancado(A, 'el marco A');
+  const meArranque = meDe(A);
+  await irA(A, '#mapa', 'que #mapa pinte', () => mapa(A));
+  datos.abrir = { mb: mb.log.length, me: meDe(A) - meArranque, meArranque };
+  afirmar(mb.log.length === 0, `abrir #mapa no pide nada a MusicBrainz (pidió ${mb.log.length})`);
+  afirmar(datos.abrir.me === 1, `abrir #mapa pide exactamente 1 /me (pidió ${datos.abrir.me})`);
+  afirmar(boton(A, 'buscar')?.textContent.trim() === 'Buscar países', 'con la caché vacía, el botón dice «Buscar países»');
+  afirmar(mapa(A).dataset.escaneados === '0' && mapa(A).dataset.universo === '12', 'arranca con 0 de 12 escaneados');
+  afirmar(!$(A, '.mapa-pais'), 'y sin ningún país');
+
+  // ── 2. El primer país, al primer artista ──────────────────────────────────
+  progreso('puerta 2: el primer país');
+  boton(A, 'buscar').click();
+  await esperarReal(() => $(A, '.mapa-pais'), { que: 'que aparezca el primer país', vueltas: VUELTAS });
+  datos.primerPais = { peticiones: mb.log.length, escaneados: +mapa(A).dataset.escaneados, pais: $(A, '.mapa-pais').dataset.codigo };
+  afirmar(datos.primerPais.escaneados <= 2, `el primer país aparece con ${datos.primerPais.escaneados} artistas escaneados (≤ 2 de 12)`);
+  afirmar(datos.primerPais.peticiones < ESPERADO.peticionesSinFallos, `y con ${datos.primerPais.peticiones} peticiones, lejos del final (${ESPERADO.peticionesSinFallos} sin fallos)`);
+  afirmar(datos.primerPais.pais === 'AR', `el primero es el del artista con más minutos (AR), vino ${datos.primerPais.pais}`);
+
+  // ── 5. Salir a mitad ──────────────────────────────────────────────────────
+  progreso('puerta 5: salir a mitad');
+  await irA(A, '#home', 'que el inicio pinte', () => $(A, '.home-grid') && !mapa(A));
+  const alSalir = mb.log.length;
+  const t0 = performance.now();
+  await esperarReal(() => performance.now() - t0 > 30000, { que: '30 s de reloj después de salir', vueltas: VUELTAS });
+  datos.salir = { alSalir, despues: mb.log.length - alSalir, relojMs: Math.round(performance.now() - t0), errores: [...win(A).__errores] };
+  afirmar(datos.salir.despues === 0, `0 peticiones en ${datos.salir.relojMs} ms de reloj después de salir (hubo ${datos.salir.despues})`);
+  afirmar(datos.salir.errores.length === 0, `0 errores en consola: ${datos.salir.errores.join(' | ')}`);
+  await irA(A, '#mapa', 'que #mapa vuelva a pintar', () => mapa(A));
+  afirmar(mb.log.length === alSalir, 'volver a #mapa no pide nada');
+  afirmar(boton(A, 'buscar')?.textContent.trim() === 'Seguir', 'y ofrece «Seguir»');
+
+  // ── 6. Dos pestañas ───────────────────────────────────────────────────────
+  progreso('puerta 6: dos pestañas');
+  const B = abrirMarco('B', 600);
+  await arrancado(B, 'el marco B');
+  await irA(B, '#mapa', 'que #mapa pinte en B', () => mapa(B));
+  boton(A, 'buscar').click();
+  await esperarReal(() => mapa(A).dataset.estado === 'escaneando' && delMarco('A').length > alSalir, { que: 'que A vuelva a buscar', vueltas: VUELTAS });
+  afirmar(boton(B, 'buscar'), 'B ofrece buscar');
+  boton(B, 'buscar').click();
+  await esperarReal(() => mapa(B).dataset.estado === 'ocupado', { que: 'que B diga que hay otra búsqueda', vueltas: VUELTAS });
+  datos.dos = { pedidasPorB: delMarco('B').length, texto: $(B, '[data-seccion="escaneo"]').textContent.replace(/\s+/g, ' ').trim().slice(0, 160) };
+  afirmar(datos.dos.pedidasPorB === 0, `B no pidió nada a MusicBrainz (${datos.dos.pedidasPorB})`);
+  afirmar(/otra pestaña/.test(datos.dos.texto), `B lo dice: «${datos.dos.texto}»`);
+  afirmar(mapa(A).dataset.estado === 'escaneando', 'y A sigue buscando');
+  afirmar(win(B).__errores.length === 0, `0 errores en B: ${win(B).__errores.join(' | ')}`);
+  B.remove();
+
+  // ── 4. Cerrar a mitad y volver ────────────────────────────────────────────
+  progreso('puerta 4: cerrar a mitad');
+  await esperarReal(() => +mapa(A).dataset.escaneados >= 6, { que: 'que A llegue a 6 escaneados', vueltas: VUELTAS });
+  mb.congelado = true;
+  // Con una petición colgada, todo lo contestado antes ya está guardado: cada
+  // respuesta se guarda ANTES de la petición siguiente.
+  await esperarReal(() => mb.colgadas > 0, { que: 'que A se quede esperando una respuesta', vueltas: VUELTAS });
+  const contestadas = new Set(mb.log.filter((e) => e.status === 200).map((e) => e.url));
+  const antesDeCerrar = mb.log.length;
+  datos.cerrar = { escaneados: +mapa(A).dataset.escaneados, contestadas: contestadas.size };
+  afirmar(win(A).__errores.length === 0, `0 errores en A antes de cerrar: ${win(A).__errores.join(' | ')}`);
+  A.remove();
+  mb.congelado = false;
+  A = abrirMarco('A2');
+  await arrancado(A, 'el marco A recargado');
+  await irA(A, '#mapa', 'que #mapa pinte tras recargar', () => mapa(A));
+  afirmar(mb.log.length === antesDeCerrar, 'abrir #mapa tras recargar no pide nada');
+  afirmar(+mapa(A).dataset.escaneados === datos.cerrar.escaneados, `lo escaneado se conserva (${mapa(A).dataset.escaneados} de ${datos.cerrar.escaneados})`);
+  afirmar(boton(A, 'buscar')?.textContent.trim() === 'Seguir', 'y ofrece «Seguir»');
+  boton(A, 'buscar').click();
+  await esperarReal(() => mapa(A).dataset.estado === 'terminado', { que: 'que el escaneo termine', vueltas: VUELTAS });
+  const despues = mb.log.slice(antesDeCerrar);
+  const repetidas = despues.filter((e) => contestadas.has(e.url));
+  datos.retomar = { peticiones: despues.length, repetidas: repetidas.map((e) => e.url), areasRepetidas: repetidas.filter((e) => e.tipo === 'area').length };
+  afirmar(repetidas.length === 0, `al retomar, 0 peticiones por lo ya contestado (hubo ${repetidas.length}: ${repetidas.map((e) => e.url).join(' · ')})`);
+
+  // ── 3 y 7. El final: los 503 y la cuenta hecha a mano ─────────────────────
+  progreso('puertas 3 y 7: el final');
+  const m = mapa(A);
+  const n503 = mb.log.filter((e) => e.status === 503);
+  datos.final = {
+    peticiones: mb.log.length, n503: n503.length, filas: m.dataset.filas, total: +m.dataset.total,
+    paises: [...A.contentDocument.querySelectorAll('.mapa-pais')].map((li) => li.dataset.codigo),
+    sinPais: Object.fromEntries([...A.contentDocument.querySelectorAll('.mapa-sinpais li[data-categoria]')].map((li) => [li.querySelector('.mapa-art-n').textContent, li.dataset.categoria])),
+    errores: [...win(A).__errores],
+  };
+  afirmar(n503.length >= 3, `hubo 503 de verdad en el escaneo (${n503.length})`);
+  // Cada pedido que dio 503 se volvió a pedir hasta una respuesta de verdad (un
+  // 200, o el 400 del artista de la consulta rara): ninguno se saltó.
+  afirmar(n503.every((e) => mb.log.some((x) => x.n > e.n && x.url === e.url && (x.status === 200 || x.status === 400))), 'cada pedido que dio 503 se reintentó hasta una respuesta de verdad (ninguno se saltó)');
+  const filas = m.dataset.filas.split(',').map(Number);
+  afirmar(filas.reduce((a, b) => a + b, 0) === +m.dataset.total, `las cinco filas suman el total (${filas.join('+')} = ${m.dataset.total})`);
+  afirmar(+m.dataset.total === ESPERADO.total, `el total es el de la cuenta a mano (${m.dataset.total} = ${ESPERADO.total} décimas)`);
+  afirmar(filas.join(',') === ESPERADO.filas.join(','), `las cinco filas coinciden con la cuenta a mano (${filas.join(',')} contra ${ESPERADO.filas.join(',')})`);
+  afirmar(datos.final.paises.join(',') === ESPERADO.paises.map((p) => p[0]).join(','), `los países, por minutos: ${datos.final.paises.join(',')}`);
+  for (const [cod, , n] of ESPERADO.paises) {
+    const li = $(A, `.mapa-pais[data-codigo="${cod}"]`);
+    afirmar(li && li.querySelectorAll('.mapa-artistas-lista li').length === n, `${cod} con ${n} artistas`);
+  }
+  afirmar(JSON.stringify(datos.final.sinPais) === JSON.stringify(ESPERADO.sinPais), `«Sin país» trae exactamente a los esperados (${JSON.stringify(datos.final.sinPais)}): ninguno por un 503`);
+  afirmar(/1 no se ha podido consultar/.test($(A, '[data-seccion="cobertura"]').textContent), 'y cuenta el que no se pudo consultar (el 400)');
+  afirmar(datos.final.errores.length === 0, `0 errores en A: ${datos.final.errores.join(' | ')}`);
+  afirmar(mb.log.every((e) => e.metodo === 'GET' && e.cabeceras.length === 0), 'todas las peticiones a MusicBrainz son GET y sin cabeceras propias (no habría OPTIONS)');
+
+  // ── 8. «Limpiar caché» ────────────────────────────────────────────────────
+  progreso('puerta 8: Limpiar caché');
+  const { idbEntriesEnRango, idbAllKeys } = await import('/js/idb.js');
+  const { OWNER_KEYS } = await import('/js/history-keys.js');
+  const contar = async () => ({
+    art: (await anclar(idbEntriesEnRango('mapa_artista_v1_'))).length,
+    area: (await anclar(idbEntriesEnRango('mapa_area_v1_'))).length,
+    hist: (await anclar(idbAllKeys())).includes(OWNER_KEYS.artistTracks),
+  });
+  const antes = await contar();
+  afirmar(antes.art === ESPERADO.artistasGuardados && antes.area === ESPERADO.areasGuardadas, `antes: ${antes.art} artistas y ${antes.area} áreas guardados (esperaba ${ESPERADO.artistasGuardados} y ${ESPERADO.areasGuardadas})`);
+  $(A, '#refresh-all-btn').click();
+  await esperarReal(() => $(A, '#refresh-all-btn') && !$(A, '#refresh-all-btn').disabled && /Caché limpiada/.test(A.contentDocument.body.textContent), { que: 'que «Limpiar caché» termine', vueltas: VUELTAS });
+  const despuesDeLimpiar = await contar();
+  datos.limpiar = { antes, despues: despuesDeLimpiar };
+  afirmar(!despuesDeLimpiar.hist, 'el botón de verdad borró (el caché del historial del owner ya no está)');
+  afirmar(despuesDeLimpiar.art === antes.art && despuesDeLimpiar.area === antes.area, `y se quedan los ${despuesDeLimpiar.art} artistas y las ${despuesDeLimpiar.area} áreas del mapa`);
+
+  const s = win(A).__sim.reg;
+  afirmar(s.escrituras.length === 0 && s.desconocidas.length === 0 && s.externas.length === 0, `Spotify simulada: 0 escrituras, 0 rutas sin simular, 0 hosts externos (${s.desconocidas.join(',')} ${s.externas.join(',')})`);
+
+  const porTipo = (t) => mb.log.filter((e) => e.tipo === t).length;
+  const resumen =
+    `abrir: mb=${datos.abrir.mb} /me=${datos.abrir.me} · primer país con ${datos.primerPais.escaneados} escaneado(s) y ${datos.primerPais.peticiones} peticiones · ` +
+    `salir: ${datos.salir.despues} peticiones en ${datos.salir.relojMs} ms · dos pestañas: B pidió ${datos.dos.pedidasPorB} · ` +
+    `retomar: ${datos.retomar.repetidas.length} repetidas de ${datos.cerrar.contestadas} contestadas · ` +
+    `final: ${datos.final.peticiones} peticiones (búsquedas ${porTipo('busqueda')}, áreas ${porTipo('area')}, grabaciones ${porTipo('grabacion')}), ${datos.final.n503} 503 · ` +
+    `filas ${datos.final.filas} = ${datos.final.total} · países ${datos.final.paises.join('>')} · ` +
+    `limpiar: ${datos.limpiar.despues.art}/${datos.limpiar.despues.area} se quedan · errores=0 · ` +
+    `reloj virtual=${Math.round(performance.now())} ms`;
+  document.documentElement.setAttribute('data-resumen', resumen);
+  progreso(resumen);
+  listo();
+} catch (e) {
+  document.documentElement.setAttribute('data-resumen', 'reloj virtual=' + Math.round(performance.now()) + ' ms');
+  fallar(new Error(String(e?.message || e) + ' · ' + JSON.stringify(datos).slice(0, 1500)));
+}
+</script>
+</body></html>

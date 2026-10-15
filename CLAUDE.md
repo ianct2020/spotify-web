@@ -1790,9 +1790,11 @@ Para el mapamundi de escucha (todavía no existe: esto es la fase 1, medir). Spo
 no da el país de un artista; MusicBrainz sí, y la búsqueda `/ws/2/artist/?query=…`
 lo trae en la misma respuesta (`country`, `area`), sin el lookup. `util/mb-pais.js`
 es un módulo hoja, **sin imports y sin red**: recibe respuestas ya bajadas y decide.
-**Hoy no lo importa nadie de la app**; lo usa la medición, que vive en
-`fonoteca-migracion/mapa/`, y la fase 2 tiene que usar esta misma regla, no una
-copia (el resolutor de álbumes de v=219).
+**Desde v=304 lo importa `util/mapa-paises.js`** (la vista `#mapa`, ver abajo) y
+lo usa la medición, que vive en `fonoteca-migracion/mapa/`: una sola regla, no una
+copia (el resolutor de álbumes de v=219). ⚠️ El comentario de cabecera de
+`mb-pais.js` todavía dice «hoy no lo importa nadie»: quedó viejo y no se tocó (la
+tanda 52 no podía cambiar ese archivo).
 
 `clasificar(nombre, artistasMB, idsDeGrabacion)` da una de cinco clases, comparando
 por **igualdad** de `name`, `sort-name` o algún alias después de `normalizarNombre`
@@ -1852,6 +1854,104 @@ con `direction: "backward"` (las «forward» son los hijos) y el área del padre
 
 `api/musicbrainz.js` y `by-genre.js` **no se tocaron**: siguen con su `limit=1` a
 ciegas (anotado en `fonoteca-migracion/PENDIENTES.md`).
+
+## 🗺️ `#mapa`: tus países (v=304)
+
+La fase 2 del mapa: una LISTA, no un dibujo (el mapamundi es la tanda 53, sobre esta
+misma ruta). Tus países ordenados por minutos, con cuántos artistas tiene cada uno, y
+un bloque de cobertura que dice cuánto se sabe y cuánto no. Ruta `#mapa`, menú
+General, detrás de «Calendario», icono propio (`ICONS.mapa`, un globo); la cabecera
+dice «Tus países». La medición vive en `fonoteca-migracion/mapa/`.
+
+Tres archivos, para que lo que importa se pruebe sin navegador:
+
+| archivo | qué | probado en |
+|---|---|---|
+| `util/mapa-paises.js` | PURO: el universo (≥ 10 min, por minutos y a igualdad por nombre con comparación simple), el próximo pedido de cada artista, los países y las cinco filas | `tests/mapa-paises.test.mjs` |
+| `util/mapa-escaneo.js` | el bucle, con la red, el reloj, el guardado y el candado INYECTADOS | `tests/mapa-escaneo.test.mjs` (MusicBrainz y reloj de mentira) |
+| `features/mapa.js` | la vista: enchufa `fetch`, IndexedDB, `navigator.locks` y `setTimeout`, y pinta | `tests/banco/mapa.html` (en `prepush`) |
+
+Las decisiones, y por qué:
+
+- 🔴 **Abrir la vista NO escanea** (la regla de v=261, aplicada a MusicBrainz). Abrir
+  cuesta el `/me` de `loadOne()` y **0** peticiones a MusicBrainz: pinta la caché. El
+  escaneo arranca solo con el botón («Buscar países», «Seguir», «Parar»). Son miles de
+  peticiones y más de una hora; nadie puede gastarlas por abrir una pantalla.
+- 🔴 **La regla es `util/mb-pais.js`, importada y sin tocar.** «Tiene país» es la
+  definición **estricta** de las tandas 50 y 51: `unico` CORROBORADO por la grabación,
+  `varios-mismo-pais`, o `desempatado` con país (de `country` o del área). Un `unico` con
+  país sin corroborar va a su propia fila, «sin confirmar», y no suma a ningún país: un
+  homónimo se ve igual que el de verdad.
+- 🔴 **Los desconocidos NO se reparten** entre los países, ni en proporción ni de ninguna
+  forma, y el % de cada país es del TOTAL del historial (también los de < 10 min), no del
+  total con país. Repartir haría que un 70 % conocido se leyera como un 100 %.
+- **Las cinco filas** (con país · sin país · sin confirmar · sin buscar todavía · menos
+  de 10 min) suman **exactamente** el total: se cuentan en décimas de minuto, enteros.
+- 🔴 **La caché guarda lo que CONTESTÓ MusicBrainz, recortado, no la decisión.** Por
+  artista: los candidatos con lo que lee `clasificar` (id, name, sort-name, los nombres
+  de los alias, country, area con id/name/type, disambiguation), los ids de la
+  grabación (o `null`: no se pidió; `[]` es «pregunté y no hay») con el título buscado,
+  y la fecha. Por área: `type`, `iso-3166-1-codes` y las «part of» hacia el padre
+  (`backward`; las `forward` son los hijos y la regla no las lee). La decisión se
+  recalcula al pintar (pura, gratis): si la regla cambia, la caché sigue sirviendo sin
+  repetir una petición. Y por eso el progreso se guarda a medias (una búsqueda sin su
+  grabación) sin marca de «terminado»: `proximoPaso()` deduce lo que falta.
+- **Las claves**: `mapa_artista_v1_<uid>_<nombre>` lleva el uid porque la lista de
+  artistas es dato de escucha (el uid va también DENTRO del valor: «abc» es prefijo de
+  «abc_x»); `mapa_area_v1_<id>` no, porque un área es dato público y se comparte. Sin
+  caducidad. Las dos están en `CONSERVAR_PREFIJOS` (`util/limpiar-cache.js`) y en
+  `LO_QUE_SE_CONSERVA`: «Limpiar caché» no se puede llevar horas de escaneo. **El cambio
+  de usuario no las borra**, y no hace falta: el bloque de `getCurrentUserId()`
+  (`api.js`) borra `history_`, `playlist_items_`, los ocultos y Stats.fm; las de artista
+  no se cruzan entre usuarios (van por uid) y las de área no son de nadie.
+- **El ritmo** (lo que midieron la 50 y la 51; el ajuste fino es de otra tanda): una
+  petición por vez y **1.200 ms como mínimo entre comienzos**. Un 503, 429, 5xx o corte
+  de red es de MusicBrainz: se espera **10 s** y se reintenta **el mismo pedido**, luego
+  20, 40, 80 y de ahí 80 fijos; nunca se guarda y nunca salta al artista (la regla de
+  `util/cache-solo-exitos.js`, escrita a mano porque acá hay tres salidas: guardar,
+  reintentar o soltar al artista). **8 fallos seguidos sin un 200** → se pausa solo
+  («MusicBrainz no contesta ahora…»), sin descartar nada. Un 4xx que no es 429 es del
+  artista: «no se pudo consultar» en la sesión, sin guardar, y se sigue. Cada respuesta
+  buena se guarda ANTES de la petición siguiente, y un área se pide una sola vez en toda
+  la vida de la caché.
+- **Las URLs son las de la medición de la 51** (búsqueda `limit=10`; grabación del tema
+  con más minutos, `limpiarTitulo`, `limit=25`; área `inc=area-rels`) y en el mismo
+  orden: lo que mida la app se puede comparar con aquello.
+- **Sin ninguna cabecera propia en el `fetch`**: una cabecera no simple provoca una
+  `OPTIONS` previa por pedido (el doble contra MusicBrainz), y el `User-Agent` no se puede
+  fijar desde `fetch` en Chrome.
+- **Una sola búsqueda a la vez en el navegador**: `navigator.locks.request('fonoteca-mapa-escaneo',
+  { ifAvailable: true }, …)`. Si otra pestaña lo tiene, esta no escanea y lo dice; con
+  el candado en la mano se relee la caché (lo que resolvió la otra no se vuelve a pedir).
+- **Al salir de la ruta el escaneo para**: el `teardown` aborta la señal y el bucle
+  pregunta por la vigencia después de cada `await` (un teardown no corta un `await`,
+  v=174). Ninguna escritura al DOM después de salir.
+- ⚠️ **Las esperas no van encadenadas** (Chrome espacia los `setTimeout` encadenados de una
+  pestaña oculta hasta uno por minuto): antes de cada `fetch` hay como mucho UNA espera.
+  🟥 **Pero la pestaña oculta NO está verificada**: en headless no se puede comprobar. La
+  pantalla pide dejarla a la vista y enseña el ritmo medido (peticiones por minuto de los
+  últimos 3 minutos) para que, si se frena, se vea. La estimación de lo que falta usa las
+  peticiones por artista y los segundos por petición **de la sesión**, nunca un número
+  fijo (el cartel de `#genre`, que NO se tocó, calcula 1,1 s por artista y son dos).
+- Se repinta a lo sumo una vez por frame (`requestAnimationFrame` con un `setTimeout` de
+  respaldo, porque rAF no corre en una pestaña oculta ni en headless con `--dump-dom`) y
+  solo las secciones que cambiaron (los botones van en la suya: si no, «Parar» se
+  recrearía en cada petición). Los `<details>` abiertos siguen abiertos al repintar.
+- `idb.js` suma `idbEntriesEnRango(prefijo)`: lee solo el rango de claves del prefijo. El
+  `idbEntriesByPrefix` de siempre recorre con cursor la base entera, me gusta y base de
+  colores incluidos (megas), y abrir `#mapa` lee una clave por artista.
+- Los nombres de los países salen de `Intl.DisplayNames(['es-ES'], { type: 'region' })`:
+  ninguna tabla. Sin banderas, sin colores por país, sin animaciones nuevas.
+
+El banco (`tests/banco/mapa.html` + `mapa-caso.html` + `mapa-datos.mjs`, historial y
+MusicBrainz INVENTADOS, el MusicBrainz vive en la madre para sobrevivir a la recarga de un
+iframe) afirma: abrir = 0 MusicBrainz y 1 `/me`; el primer país sale con el primer artista;
+con 503 en un patrón fijo termina igual y nadie queda sin país por un 503; recargar a mitad
+y «Seguir» no repite nada contestado; salir para (0 peticiones en 30 s de reloj) sin
+errores; dos iframes: uno busca y el otro lo dice; las cinco filas = la cuenta a mano;
+«Limpiar caché» conserva las dos claves. `mapa-caso.html?foto=1` es el instrumento de la
+captura sembrada y de la medida del repintado (con `&artistas=N`), con un conductor
+externo y sin reloj virtual.
 
 ## Client ID
 0c8c92ad128e4b89be7097c6b8082797
@@ -2618,6 +2718,8 @@ fila sobrevivió así desde que se armó la tabla.
 | `#records` | **1 `/me`** (+1 del arranque = **2**) | ídem | `render()` → `loadRecords()` (`records.js:50`) → `loadOne` → `ensureFreshMem` → `resolvedUserId` → `getCurrentUserId` | **fijo** | 🔴 **corregida el 2026-10-08, leída del código.** Decía **0/0** y es la MISMA pieza que `#dashboard` y `#wrapped` |
 | `#calendario` | **1 `/me`** (+1 del arranque = **2**) | ídem | `render()` → `loadHistoryStats()` + `loadDays()` → `loadOne` → `getCurrentUserId` (memoizado: los dos comparten el `/me`, es 1 y no 2) | **fijo**, no escala con nada | **medida en la Spotify simulada el 2026-10-10** (`tests/banco/calendario.html`): abrir = **1** petición y es `/me`; cambiar de año y abrir y cerrar el detalle de un día = **0 más**; **0** lecturas que no sean `/me`, 0 rutas sin simular, 0 hosts externos. En vivo, no |
 | ↳ **al pulsar «Crear playlist con este día»**: **1 + ceil(N/100)** POST | — | ídem | `POST /me/playlists` + `POST /playlists/{id}/items` de a 100 | **N** = temas del día | **medida en la Spotify simulada el 2026-10-10**: **2** con 30 temas y **3** con 150, exactas y todas POST, **0 GET** |
+| `#mapa` (v=304) | **1 `/me`** (+1 del arranque = **2**) · **0 MusicBrainz** | ídem | `render()` → `loadArtistTracks()` → `loadOne` → `getCurrentUserId` (el `getCurrentUserId()` de la vista va por el memo: 0 más); la caché del mapa sale de IndexedDB | **fijo**, no escala con nada | **medida en el banco el 2026-10-14** (`tests/banco/mapa.html`, Spotify y MusicBrainz simulados): abrir = 1 `/me` y 0 a MusicBrainz, también al volver y tras recargar. En vivo, no |
+| ↳ **al pulsar «Buscar países» / «Seguir»**: **1 búsqueda por artista + la grabación si hace falta + 1 por cada área nueva**, de a una y a 1,2 s como mínimo, **0 a Spotify** | — | lo ya guardado: **0** | `musicbrainz.org/ws/2/artist/`, `/recording/`, `/area/<id>` | nº de artistas con ≥ 10 min sin buscar todavía | **medida en el banco** (12 artistas inventados: 23 peticiones sin fallos) y con tope en vivo contra MusicBrainz (ver `fonoteca-migracion/mapa/`) |
 | `#covers` | **1 `/me` + 1 + ceil(W/100)** = **33** | **2** | `isOwner()`/`loadListenedAlbums()` → `getCurrentUserId` · + 1 `/playlists/{id}?fields=snapshot_id` + págs. de `/playlists/{id}/items` | nº de pistas de «w three» | 🔴 **corregida el 2026-10-08, leída del código.** Decía **32** y se le olvidaba el `/me` propio |
 | `#mosaico` | **0** | **0** | **ninguno, a propósito** | — | **medida en vivo el 2026-10-06**: 10 mosaicos generados (hasta 43.200 celdas), **0 peticiones y 0 cortadas** con los topes de la API en CERO. Lo que sí sale a la red es el CDN de imágenes, que no gasta cuota |
 | `#search` | **0** | **0** | — | — | leída del código · **`/me` repasado el 2026-10-08**: su `render()` no llega a `getCurrentUserId()` |
@@ -2985,6 +3087,7 @@ cuesta una carga de likes.** Lo que no puede es usar las tuyas.
 | `#wrapped` | — | **historial**; sin él cae a `renderLite` (2 × `/me/top`) | Wrapped lite, más pobre pero anda | leída del código |
 | `#records` | — | **historial** | cartel de bloqueo | leída del código |
 | `#calendario` | — | **historial** (`years[].days`) para la grilla · el **detalle por día** para el panel | cartel de bloqueo, el mismo de `#records` con su botón de importar. Con BYOH la grilla sale de SU `stats` y el detalle lo obtiene solo (`saveMyHistory()` guarda `days`). El owner carga el detalle con la importación «solo el detalle»; sin él, el panel enseña los minutos del día y ofrece cargarlo | **leída del código y probada en el banco el 2026-10-10** |
+| `#mapa` (v=304) | — | **historial** (`artistTracks`) · y buscar los países en MusicBrainz (un botón, sin cuota de Spotify) | cartel de bloqueo, el mismo de `#records` (candado de «pide los datos primero»: BYOH la abre), **sin botón de buscar**. Con datos, la lista sale vacía hasta apretar «Buscar países» | **leída del código y probada en el banco el 2026-10-14** (solo el owner; el amigo, leída) |
 | `#zeroplays` | — | **historial** (`plays`) · stats.fm opcional | cartel de bloqueo | leída del código |
 | `#skips` | — | **historial** (`skip`, versión ≥ 4) · stats.fm opcional | cartel de bloqueo | leída del código |
 
@@ -2995,7 +3098,7 @@ respuesta falsa:
 
 | forma del candado | vistas | ¿BYOH la abre? |
 |---|---|:---:|
-| **pide los DATOS primero**, y recién si vienen vacíos pregunta por el owner | `#wrapped`, `#records`, `#zeroplays`, `#skips` | **sí** |
+| **pide los DATOS primero**, y recién si vienen vacíos pregunta por el owner | `#wrapped`, `#records`, `#zeroplays`, `#skips` (y `#mapa`, v=304) | **sí** |
 | **`isOwner()` por adelantado**, antes de tocar un solo dato, y `return` | `#covers`, `#wthree` | **NO** |
 
 En `#covers` (`covers.js:323`) y `#wthree` (`wthree.js:223`) lo primero que hace

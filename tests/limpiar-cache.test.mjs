@@ -116,5 +116,19 @@ ok(!/base de discografías/.test(appCodigo) && !/historial que importaste/.test(
 // solo copy del title y del toast, el rótulo no se toca.
 ok(/id="refresh-all-btn"[^>]*>[\s\S]{0,400}?<span>Limpiar cache<\/span>/.test(appJs), 'el texto visible del botón no se toca («Limpiar cache»)');
 
+// ── Los países de #mapa (v=304, tanda 52) ────────────────────────────────────
+//
+// Lo que contestó MusicBrainz, por artista y por área. Rehacerlo es más de una
+// hora y media de escaneo a 1,2 s por petición. Los prefijos son los de
+// `util/mapa-paises.js`, importados: no se escriben dos veces.
+console.log('\nLos países de #mapa se conservan (v=304)');
+const conMapa = [...claves, 'mapa_artista_v1_uid-de-prueba_Un Artista Inventado', 'mapa_area_v1_a0000000-0000-4000-8000-000000000001', 'mapa_otra_cosa_v1'];
+const borra3 = new Set(clavesABorrar(conMapa, CONSERVAR_CLAVES, CONSERVAR_PREFIJOS));
+ok(!borra3.has('mapa_artista_v1_uid-de-prueba_Un Artista Inventado'), 'mapa_artista_v1_<uid>_<nombre> se conserva');
+ok(!borra3.has('mapa_area_v1_a0000000-0000-4000-8000-000000000001'), 'mapa_area_v1_<id> se conserva');
+ok(borra3.has('mapa_otra_cosa_v1'), 'y no por un prefijo `mapa_` a secas: otra clave que empiece igual se borra');
+ok(/países que ya buscaste para el mapa/.test(LO || ''), `LO_QUE_SE_CONSERVA nombra los países del mapa: «${LO}»`);
+ok(!/['"`]mapa_/.test(limpiarFuente.replace(/^\s*\/\/.*$/gm, '')), 'limpiar-cache.js no escribe los prefijos `mapa_`: los importa');
+
 console.log(`\n${fallaron ? 'FALLÓ' : 'OK'} limpiar-cache: ${pasaron} de ${pasaron + fallaron}`);
 if (fallaron) process.exit(1);

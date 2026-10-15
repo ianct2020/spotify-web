@@ -136,7 +136,12 @@ console.log('corroborado');
   ok(llamar('corroborado', 'm1', null) === null, 'sin ids → null');
 }
 
-console.log('10. módulo hoja, nadie lo importa');
+// v=304 (tanda 52): hasta v=303 esta sección afirmaba «ningún archivo de src/js
+// lo importa». Desde v=304 lo importa `util/mapa-paises.js` (la vista #mapa), que
+// es justamente para lo que se escribió: la regla, una sola vez; y
+// `util/mapa-escaneo.js`, por las consultas (las URLs tienen que ser las de la
+// medición de la 51). Ahora se afirma que la importan esos dos y nadie más.
+console.log('10. módulo hoja, la importan solo mapa-paises.js y mapa-escaneo.js');
 {
   const RAIZ = join(dirname(fileURLToPath(import.meta.url)), '..');
   let src = '';
@@ -152,7 +157,10 @@ console.log('10. módulo hoja, nadie lo importa');
     }
   };
   recorrer(join(RAIZ, 'src/js'));
-  ok(quienes.length === 0, `ningún archivo de src/js lo importa${quienes.length ? ' (' + quienes.join(', ') + ')' : ''}`);
+  const importan = quienes.filter((p) => /from\s+['"][^'"]*mb-pais\.js(\?v=\d+)?['"]/.test(readFileSync(p, 'utf8')));
+  const permitidos = ['mapa-paises.js', 'mapa-escaneo.js'].map((f) => join('src', 'js', 'util', f));
+  ok(importan.length === 2 && importan.every((p) => permitidos.some((f) => p.endsWith(f))),
+    `de src/js la importan solo util/mapa-paises.js (la regla) y util/mapa-escaneo.js (las consultas) (la importan: ${importan.join(', ') || 'nadie'})`);
 }
 
 console.log('11. varios-mismo-pais exige país en TODOS (v=303)');

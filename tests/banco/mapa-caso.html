@@ -1,0 +1,93 @@
+<!doctype html><html lang="es"><head><meta charset="utf-8"><title>banco mapa — la app entera, en un iframe</title>
+<link rel="stylesheet" href="/css/theme.css">
+<link rel="stylesheet" href="/css/components.css">
+<link rel="stylesheet" href="/css/main.css">
+<style>*,*::before,*::after{animation:none!important;transition:none!important}</style>
+</head><body>
+<div id="app"></div>
+<script type="module">
+// ── Un iframe del banco `mapa.html` (v=304, tanda 52) ────────────────────────
+//
+// Arranca la app ENTERA (`/js/app.js`: su `init()`, su barra lateral, su router)
+// contra:
+//   · la Spotify simulada de `simulado.mjs`, con `/me` = HISTORY_OWNER_ID (así
+//     `loadArtistTracks()` sirve el historial del owner, que la madre sembró en
+//     IndexedDB INVENTADO, nunca el de Ian);
+//   · un MusicBrainz simulado que vive en la MADRE (`parent.__mb`): el registro
+//     de peticiones tiene que sobrevivir a la recarga de este iframe, que es
+//     justamente lo que se prueba («cerrar a mitad y volver»). Nada sale a
+//     `musicbrainz.org`.
+// La madre conduce desde afuera (mismo origen): cambia el hash, aprieta botones
+// y lee el DOM. Este archivo solo instala la red, junta los errores y arranca.
+//
+// Modo `?foto=1` (para la captura SEMBRADA y la medida del repintado, con un
+// conductor externo y SIN reloj virtual): siembra el historial inventado y llena
+// la caché del mapa corriendo el bucle REAL (`escanear`) contra el MusicBrainz
+// de mentira y un reloj instantáneo; con `&artistas=N` el historial tiene N
+// artistas sintéticos. Después abre #mapa y marca `data-foto="listo"`.
+
+import { instalarRedSimulada, esperarReal, anclar } from '/banco/simulado.mjs';
+
+const q = new URLSearchParams(location.search);
+const MARCO = q.get('marco') || 'x';
+window.__errores = [];
+window.addEventListener('error', (e) => window.__errores.push('error: ' + (e.message || e)));
+window.addEventListener('unhandledrejection', (e) => window.__errores.push('rechazo: ' + String(e.reason?.message || e.reason)));
+const errorOriginal = console.error.bind(console);
+console.error = (...a) => { window.__errores.push('console.error: ' + a.map(String).join(' ').slice(0, 300)); errorOriginal(...a); };
+
+const { HISTORY_OWNER_ID } = await import('/js/features/history-data.js');
+const sim = instalarRedSimulada();
+window.__sim = sim;
+sim.ruta('GET', /^\/me$/, () => ({ id: HISTORY_OWNER_ID, display_name: 'Banco' }));
+localStorage.setItem('fonoteca_last_user_id', HISTORY_OWNER_ID);
+localStorage.setItem('fonoteca_perfil_v1', JSON.stringify({ id: HISTORY_OWNER_ID, display_name: 'Banco' }));
+
+// El MusicBrainz simulado, por ENCIMA de la Spotify simulada: `simulado.mjs`
+// bloquea todo host externo no declarado, y este lo atiende antes.
+const debajo = window.fetch;
+window.fetch = (entrada, opciones = {}) => {
+  const url = typeof entrada === 'string' ? entrada : entrada.url;
+  const abs = new URL(url, location.href);
+  if (abs.hostname !== 'musicbrainz.org') return debajo(entrada, opciones);
+  const mb = (q.get('foto') ? window.__mbLocal : parent.__mb);
+  return new Promise((resolver, rechazar) => {
+    const signal = opciones.signal;
+    const abortar = () => { const e = new DOMException('abortado', 'AbortError'); rechazar(e); };
+    if (signal?.aborted) return abortar();
+    signal?.addEventListener('abort', abortar, { once: true });
+    mb.responder(abs.href, { marco: MARCO, metodo: String(opciones.method || 'GET').toUpperCase(), cabeceras: Object.keys(opciones.headers || {}) })
+      .then((r) => resolver(new Response(r.cuerpo, { status: r.status, headers: { 'content-type': 'application/json' } })), rechazar);
+  });
+};
+
+if (q.get('foto')) {
+  const { sembrarHistorial, crearMB, historialSintetico } = await import('/banco/mapa-datos.mjs');
+  const N = +(q.get('artistas') || 0);
+  const hat = N ? historialSintetico(N) : null;
+  await sembrarHistorial(anclar, hat);
+  window.__mbLocal = crearMB({ sintetico: N });
+  // Llenar la caché con el bucle REAL y un reloj instantáneo: 0 esperas de verdad.
+  const P = await import('/js/util/mapa-paises.js');
+  const E = await import('/js/util/mapa-escaneo.js');
+  const { idbSetCached } = await import('/js/idb.js');
+  const datos = hat || (await import('/banco/mapa-datos.mjs')).HISTORIAL;
+  let t = 0;
+  await E.escanear({
+    lista: P.universo(datos.totals, datos.artists), artistas: new Map(), areas: new Map(),
+    pedir: async (url) => { const r = await window.__mbLocal.responder(url, { marco: 'foto' }); return { status: r.status, datos: r.status === 200 ? JSON.parse(r.cuerpo) : null }; },
+    guardarArtista: (n, reg) => idbSetCached(P.claveArtista(HISTORY_OWNER_ID, n), { ...reg, uid: HISTORY_OWNER_ID }, null),
+    guardarArea: (id, a) => idbSetCached(P.claveArea(id), a, null),
+    reloj: { ahora: () => t, esperar: async (ms) => { t += ms; } },
+  });
+  location.hash = '#mapa';
+}
+await import('/js/app.js');
+await esperarReal(() => document.getElementById('my-history-btn'), { que: 'que la app arranque', vueltas: 4000 });
+window.__listo = true;
+if (q.get('foto')) {
+  await esperarReal(() => document.querySelector('.mapa[data-estado]'), { que: 'que #mapa pinte', vueltas: 4000 });
+  document.documentElement.dataset.foto = 'listo';
+}
+</script>
+</body></html>

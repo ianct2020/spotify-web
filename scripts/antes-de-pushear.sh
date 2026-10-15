@@ -48,7 +48,7 @@ if npm test --silent 2>&1 | tail -4 | sed 's/^/      /'; [ "${PIPESTATUS[0]}" -e
 # `mosaico` y `toasts` entraron en v=273:
 # estaban en rojo desde antes del 04/10 y justamente por no estar acá nadie los
 # miraba, igual que le había pasado a `barra` entre v=241 y v=261.
-echo "2b. bancos (barra · pausa-search · toasts · mosaico · novedades · escrituras · ocultar-artista ×3 · covers-orden · calendario · import-guarda · ocultos-cache)"
+echo "2b. bancos (barra · pausa-search · toasts · mosaico · novedades · escrituras · ocultar-artista ×3 · covers-orden · calendario · import-guarda · ocultos-cache · mapa)"
 # Los dos de `ocultar-artista` entraron en v=276: las TRES vistas que ocultan
 # artistas, reales, contra una Spotify simulada. Es el único sitio donde se puede
 # probar ocultar sin escribir en la cuenta de Ian, y el de `-disco` es el que
@@ -72,7 +72,10 @@ echo "2b. bancos (barra · pausa-search · toasts · mosaico · novedades · esc
 # una Spotify simulada con 900 + 12 ocultos y snapshot-contador. En caliente, 0 páginas de
 # `/items` de las dos playlists de ocultos; en frío, las de siempre; si la otra compu cambia
 # la playlist, se baja entera; 0 escrituras.
-for B in barra pausa-search toasts mosaico novedades escrituras ocultar-artista ocultar-artista-disco ocultar-artista-novedades covers-orden calendario import-guarda ocultos-cache; do
+# `mapa` entró en v=304: #mapa en la app ENTERA contra un MusicBrainz simulado (nada sale a la red):
+# abrir no escanea, el primer país sale con el primer artista, los 503 no se guardan, retomar no repite
+# nada, salir para el escaneo, una sola pestaña escanea y «Limpiar caché» conserva lo buscado.
+for B in barra pausa-search toasts mosaico novedades escrituras ocultar-artista ocultar-artista-disco ocultar-artista-novedades covers-orden calendario import-guarda ocultos-cache mapa; do
   if node scripts/correr-banco.mjs "$B" 2>&1 | sed 's/^/      /'; [ "${PIPESTATUS[0]}" -eq 0 ]; then
     ok "banco $B en verde"
   else

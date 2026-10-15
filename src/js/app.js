@@ -29,6 +29,7 @@ import { render as renderListened } from './features/listened.js';
 import { render as renderWrapped } from './features/wrapped.js';
 import { render as renderRecords } from './features/records.js';
 import { render as renderCalendario } from './features/calendario.js';
+import { render as renderMapa } from './features/mapa.js';
 import { openImportHistory } from './features/import-history.js';
 import { bindOwnerLockedButtons } from './features/history-data.js';
 import { render as renderZeroPlays } from './features/zero-plays.js';
@@ -483,6 +484,9 @@ function showApp(profile) {
           <a class="nav-link" data-route="calendario" href="#calendario">
             <span class="nav-link-icon">${ICONS.calendario}</span> Calendario
           </a>
+          <a class="nav-link" data-route="mapa" href="#mapa">
+            <span class="nav-link-icon">${ICONS.mapa}</span> Mapa
+          </a>
           <a class="nav-link" data-route="covers" href="#covers">
             <span class="nav-link-icon">${ICONS.covers}</span> Mis tapas
           </a>
@@ -734,6 +738,7 @@ function showApp(profile) {
   registerRoute('wrapped', renderWrapped);
   registerRoute('records', renderRecords);
   registerRoute('calendario', renderCalendario);
+  registerRoute('mapa', renderMapa);
   registerRoute('zeroplays', renderZeroPlays);
   registerRoute('skips', renderSkips);
   registerRoute('search', renderSearchLikes);
@@ -755,6 +760,7 @@ function showApp(profile) {
 // Set unificado de iconos Lucide inline. Cada uno con currentColor así toma el color del texto.
 const ICONS = {
   calendario: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>',
+  mapa: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/></svg>',
   dashboard: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>',
   records: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/></svg>',
   wrapped: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 12 20 22 4 22 4 12"/><rect x="2" y="7" width="20" height="5"/><line x1="12" y1="22" x2="12" y2="7"/><path d="M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7z"/><path d="M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z"/></svg>',
@@ -789,6 +795,7 @@ const HOME_SECTIONS = [
       { hash: 'wrapped', icon: ICONS.wrapped, name: 'Wrapped', desc: 'Tu resumen del año calendario, del streaming history.' },
       { hash: 'records', icon: ICONS.records, name: 'Récords', desc: 'Días épicos, maratones, rachas e hitos de tu historial.' },
       { hash: 'calendario', icon: ICONS.calendario, name: 'Calendario', desc: 'Cada día de tu historial, coloreado por lo que escuchaste.' },
+      { hash: 'mapa', icon: ICONS.mapa, name: 'Mapa', desc: 'Tus países, ordenados por los minutos que escuchaste.' },
       { hash: 'covers', icon: ICONS.covers, name: 'Mis tapas', desc: 'El mosaico de las portadas que escuchaste de verdad.' },
       { hash: 'search', icon: ICONS.search, name: 'Buscar likes', desc: 'Buscador instantáneo en tus likes, sin ir a Spotify.' },
       { hash: 'listened', icon: ICONS.listened, name: 'Álbumes escuchados', desc: 'Los álbumes de tu playlist de registro, agrupados.' },

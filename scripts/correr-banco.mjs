@@ -94,7 +94,13 @@ const EXTRA = { mosaico: 'auto=1' };
 // (tanda 47), con el defecto de 45 s: diez corridas seguidas gastaron 23.933-24.219 ms de reloj
 // virtual (10/10). El doble de la más lenta, redondeado hacia arriba a múltiplo de 15 s: 60 s. Con
 // los 60 s puestos, otras diez: 23.887-24.320 ms (10/10).
-const PRESUPUESTO = { 'calendario': 15000, 'ocultar-artista': 90000, 'import-guarda': 60000, 'ocultos-cache': 60000 };
+// `mapa` (v=304) abre la app ENTERA en tres iframes (uno se recarga a mitad) y escanea doce
+// artistas contra un MusicBrainz simulado con el ritmo de verdad: 1,2 s entre peticiones y 10 s
+// tras cada 503 (seis, por el patrón fijo), más 30 s de reloj mirando que no salga nada después
+// de dejar la ruta. Medido a tasa de acierto el 14/10 (tanda 52), con 900 s: diez corridas
+// seguidas gastaron 116.955-117.088 ms de reloj virtual (10/10). El doble de la más lenta,
+// redondeado hacia arriba a múltiplo de 15 s: 240 s.
+const PRESUPUESTO = { 'calendario': 15000, 'ocultar-artista': 90000, 'import-guarda': 60000, 'ocultos-cache': 60000, 'mapa': 240000 };
 // `XQ="&peor=1"` agrega parámetros a la URL del banco sin tocar este archivo: sirve
 // para medir (p. ej. el ancho mínimo en que la barra de novedades sigue en una fila).
 
