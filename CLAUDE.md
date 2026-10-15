@@ -1857,8 +1857,8 @@ ciegas (anotado en `fonoteca-migracion/PENDIENTES.md`).
 
 ## 🗺️ `#mapa`: tus países (v=304)
 
-La fase 2 del mapa: una LISTA, no un dibujo (el mapamundi es la tanda 53, sobre esta
-misma ruta). Tus países ordenados por minutos, con cuántos artistas tiene cada uno, y
+La fase 2 del mapa: una LISTA, no un dibujo (el mapamundi llegó en v=305, sobre esta
+misma ruta: ver «El mundo (v=305)», abajo). Tus países ordenados por minutos, con cuántos artistas tiene cada uno, y
 un bloque de cobertura que dice cuánto se sabe y cuánto no. Ruta `#mapa`, menú
 General, detrás de «Calendario», icono propio (`ICONS.mapa`, un globo); la cabecera
 dice «Tus países». La medición vive en `fonoteca-migracion/mapa/`.
@@ -1952,6 +1952,108 @@ errores; dos iframes: uno busca y el otro lo dice; las cinco filas = la cuenta a
 «Limpiar caché» conserva las dos claves. `mapa-caso.html?foto=1` es el instrumento de la
 captura sembrada y de la medida del repintado (con `&artistas=N`), con un conductor
 externo y sin reloj virtual.
+
+### El mundo (v=305)
+
+La fase 3: un mapamundi en SVG dentro de la MISMA vista, entre «Cuánto se sabe» (que sigue
+primero) y «La búsqueda». No cambia qué se busca, cómo, ni la regla del país: cambia lo que
+se ve. Cuatro archivos:
+
+| archivo | qué | probado en |
+|---|---|---|
+| `scripts/generar-mundo.mjs` | el generador (Node, sin dependencias) | `tests/mundo-geometria.test.mjs` (la proyección) |
+| `util/mundo-110m.js` | GENERADO y commiteado: `ANCHO`, `ALTO`, `VIEWBOX` y `FORMAS = [{ iso, d }]` | `tests/mundo-geometria.test.mjs` |
+| `util/mapa-mundo.js` | PURO: el tono de cada país, los que no tienen forma, la línea de detalle, la leyenda | `tests/mapa-mundo.test.mjs` |
+| `features/mapa.js` | carga la geometría, arma el SVG una vez y aplica los tonos | `tests/banco/mapa.html` (seis puertas más) |
+
+Lo decidido, y por qué:
+
+- **La geometría se genera una vez y se commitea; la app no baja nada.** Fuente: Natural Earth,
+  «Admin 0 – Countries» 1:110m, **v5.1.2**, **dominio público**
+  (`https://raw.githubusercontent.com/nvkelso/natural-earth-vector/v5.1.2/geojson/ne_110m_admin_0_countries.geojson`,
+  `sha256 6866c877d39cba9c357620878839b336d569f8c662d3cfab4cb1dbe2d39c977f`, 838.726 bytes, 177
+  países). **Para regenerarla**: bajar ese archivo a una carpeta `tmp-*/` (la tapa el
+  `.gitignore`; el GeoJSON NO se commitea) y `node scripts/generar-mundo.mjs <ruta>`. El
+  generador comprueba el sha256 y **para** si no coincide: otra versión es otro mapa.
+- **Va en `src/js/util/`, no en `src/data/`**: así `build.sh` le estampa el `?v=` al
+  `import()` (un módulo de datos viejo servido de la caché no falla, miente), y `src/data/`
+  es el horneado del historial. Pesa ~73 KB (tope que se puso: 150 KB).
+- **Se carga solo al abrir `#mapa`**, con `import('../util/mundo-110m.js')` al principio de
+  `render()`, en paralelo con el historial: abrir la app no lo baja. 🔴 **La lista nunca
+  depende del dibujo**: si el `import()` falla, la sección dice en una línea que no se pudo
+  cargar el dibujo y que la lista está completa, y todo lo demás sigue.
+- 🔴 **El código del país sale de `ISO_A2_EH`, nunca de `ISO_A2`.** En ese archivo `ISO_A2`
+  trae `-99` en Francia, Noruega y Kosovo, y `CN-TW` en Taiwán (visto al hacer fallar la puerta
+  del generador). Los que dan `-99` también en `ISO_A2_EH` (Northern Cyprus y Somaliland) se
+  escriben con `iso: null`: se dibujan en gris, sin código y sin poder elegirse. **Ninguna tabla
+  de corrección a mano.**
+- **La Antártida (`AQ`) afuera**: ocupa el fondo del dibujo y nadie hace música ahí. Es la
+  única exclusión (176 formas: 174 con código y 2 sin). El `viewBox` sigue siendo el del mundo
+  entero, con el (0°, 0°) en el centro: abajo queda una franja vacía, a propósito.
+- **Proyección Equal Earth** (Šavrič, Patterson y Jenny, 2018). Conserva las áreas: en un mapa
+  pintado por cantidad, Mercator o la equirrectangular agrandan Canadá, Rusia y Groenlandia y
+  un color pesa más de lo que vale. Constantes A1 = 1,340264, A2 = −0,081106, A3 = 0,000893,
+  A4 = 0,003796 y M = √3/2: **confirmadas contra el código de `equalEarthRaw` de d3-geo** (leído
+  de una copia local; la tanda 53 no tenía red para el artículo). Dan ±2,7066 × ±1,3174, y el
+  test lo afirma. `viewBox` de 1000 × 486,7.
+- **Coordenadas a 1 decimal y en comandos relativos** (`M x y l dx dy … z`). El redondeo va
+  sobre las ABSOLUTAS (en décimas, enteras) y los relativos son restas de enteros: no se
+  acumula error. Un anillo que el redondeo deja en menos de 3 puntos se omite (pasa con una
+  islita de Corea del Norte; el país conserva su forma principal). Relleno `evenodd`: los
+  huecos (Lesoto dentro de Sudáfrica) salen bien sin depender del sentido de los anillos.
+- **Los cinco cortes son FIJOS**, sobre TODO el historial (el mismo % de la lista): tono 5
+  desde el 10 %, 4 desde el 3 %, 3 desde el 1 %, 2 desde el 0,3 % y 1 por encima de 0. No son
+  cuantiles ni dependen del máximo: la leyenda se lee en palabras («10 % o más») y un país no
+  cambia de color porque otro creció. La cuenta es con enteros (`tonoDe`: décimas × 1000 contra
+  total × el corte en décimas de punto). ⚠️ En el borde, la lista redondea a un decimal: un país
+  con el 9,99 % va en el tono 4 y la línea de detalle dice «10,0 %».
+- 🔴 **Un país sin minutos asignados va «sin datos», aunque tenga artistas sin confirmar**: lo
+  «sin confirmar» y lo «sin país» no se pintan en ningún país, igual que en la lista.
+  `mapa-mundo.js` solo lee `mapa.paises`; nunca `sinPais` ni `filas`.
+- **Lo que no se ve**: un país con minutos sin forma a esta escala (Malta, Singapur, Hong Kong,
+  Mónaco, Andorra, Baréin, Barbados…) o con `-99` va en «No se ven en el mapa: …», con su
+  nombre de `Intl.DisplayNames`. **Nunca desaparece de la lista**: sigue arriba, con sus minutos.
+- **Los colores salen del tema, ninguno escrito a mano.** Los cinco tonos son
+  `color-mix(in srgb, var(--color-accent) P%, var(--color-surface))` con P = 33 · 50 · 67 · 83 ·
+  100 (`--mm-t1`…`--mm-t5` en `.mapa-mundo`); «sin datos» es `--color-elevated`; los bordes,
+  `--color-border`; el texto de la leyenda, el detalle y «no se ven», `--color-text-secondary`
+  (nunca el muted). Las proporciones se eligieron para que en Violeta —el preset con menos
+  distancia entre «sin datos» y el acento (2,89:1 en total)— los pasos queden parejos. El 1,2:1
+  de piso lo puso el encargo de la tanda 53, no es un estándar. Contraste WCAG 2.x (todos
+  opacos: no hay alfa que componer), «sin datos»/1 y cada tono con el siguiente:
+
+  | preset | sin datos/1 · 1/2 · 2/3 · 3/4 · 4/5 | contra la tarjeta: sin datos · 1 · 2 · 3 · 4 · 5 |
+  |---|---|---|
+  | violeta | 1,23 · 1,23 · 1,24 · 1,23 · 1,24 | 1,09 · 1,35 · 1,65 · 2,06 · 2,54 · 3,15 |
+  | ámbar | 1,58 · 1,42 · 1,41 · 1,35 · 1,34 | 1,10 · 1,74 · 2,47 · 3,47 · 4,68 · 6,28 |
+  | aguamarina | 1,91 · 1,54 · 1,49 · 1,40 · 1,38 | 1,11 · 2,12 · 3,26 · 4,87 · 6,83 · 9,43 |
+  | papel | 1,51 · 1,40 · 1,44 · 1,42 · 1,40 | 1,18 · 1,78 · 2,50 · 3,59 · 5,08 · 7,10 |
+
+  Los cinco van en orden en los cuatro (del más parecido a la tarjeta al más fuerte). Lo
+  recalcula `tests/mapa-mundo.test.mjs` leyendo las proporciones de la hoja y los colores de
+  `PRESETS`: si alguien cambia una proporción o un preset, la tabla se vuelve a medir sola.
+  ⚠️ Un tema hecho a mano con el acento muy parecido a la superficie puede no llegar: no se
+  vigila (son los colores del usuario).
+- **Tocar el mapa escribe en la LÍNEA DE DETALLE, debajo**, no en una caja flotante (en el
+  móvil, el dedo la tapa): nombre, minutos, % y artistas; un país sin datos, «sin datos». Con el
+  dedo, el `pointerleave` llega al soltar, así que solo el ratón limpia la línea al salir.
+  **Clic en un país con datos → su fila de la lista se abre (`<details open>`) y se lleva a la
+  vista** (`scrollIntoView`, sin animación); sin datos, solo la línea.
+- **Accesibilidad por la lista**: el SVG va con `role="img"` y un `aria-label` («Mapa de tus
+  países: N países con minutos», N = los de la lista). **Los países NO son focusables** (serían
+  174 paradas de tabulador): la versión accesible del mapa es la lista de países, que ya existe.
+- **Mientras busca, sin rehacer el SVG**: el SVG se arma una vez por render y cada repintado (el
+  mismo, a lo sumo uno por frame) solo cambia el `data-tono` de los países que cambiaron. Al
+  armarse usa la última cuenta del repintado (`st.ultimoMapa`) y no vuelve a llamar a
+  `armarMapa`. Medido en el banco con 2.302 artistas sintéticos (Chrome headless, sin reloj
+  virtual): ver `fonoteca-migracion/CONTEXTO-TECNICO.md`.
+- Sin animaciones nuevas, sin banderas, sin zoom ni arrastre, ninguna librería de mapas.
+
+El banco suma seis puertas (con un artista INVENTADO en Malta y otro con pocos minutos en
+Uruguay): al abrir con la caché vacía el SVG está y todo va «sin datos» (0 MusicBrainz, 1
+`/me`); al final cada país pintado tiene el tono de la cuenta a mano y los pintados son los de
+la lista menos los sin forma; Malta está en la lista y en «No se ven»; clic en un país pintado
+abre su fila; con el primer artista resuelto ya hay un país pintado; 0 errores.
 
 ## Client ID
 0c8c92ad128e4b89be7097c6b8082797
@@ -2718,7 +2820,7 @@ fila sobrevivió así desde que se armó la tabla.
 | `#records` | **1 `/me`** (+1 del arranque = **2**) | ídem | `render()` → `loadRecords()` (`records.js:50`) → `loadOne` → `ensureFreshMem` → `resolvedUserId` → `getCurrentUserId` | **fijo** | 🔴 **corregida el 2026-10-08, leída del código.** Decía **0/0** y es la MISMA pieza que `#dashboard` y `#wrapped` |
 | `#calendario` | **1 `/me`** (+1 del arranque = **2**) | ídem | `render()` → `loadHistoryStats()` + `loadDays()` → `loadOne` → `getCurrentUserId` (memoizado: los dos comparten el `/me`, es 1 y no 2) | **fijo**, no escala con nada | **medida en la Spotify simulada el 2026-10-10** (`tests/banco/calendario.html`): abrir = **1** petición y es `/me`; cambiar de año y abrir y cerrar el detalle de un día = **0 más**; **0** lecturas que no sean `/me`, 0 rutas sin simular, 0 hosts externos. En vivo, no |
 | ↳ **al pulsar «Crear playlist con este día»**: **1 + ceil(N/100)** POST | — | ídem | `POST /me/playlists` + `POST /playlists/{id}/items` de a 100 | **N** = temas del día | **medida en la Spotify simulada el 2026-10-10**: **2** con 30 temas y **3** con 150, exactas y todas POST, **0 GET** |
-| `#mapa` (v=304) | **1 `/me`** (+1 del arranque = **2**) · **0 MusicBrainz** | ídem | `render()` → `loadArtistTracks()` → `loadOne` → `getCurrentUserId` (el `getCurrentUserId()` de la vista va por el memo: 0 más); la caché del mapa sale de IndexedDB | **fijo**, no escala con nada | **medida en el banco el 2026-10-14** (`tests/banco/mapa.html`, Spotify y MusicBrainz simulados): abrir = 1 `/me` y 0 a MusicBrainz, también al volver y tras recargar. En vivo, no |
+| `#mapa` (v=304) | **1 `/me`** (+1 del arranque = **2**) · **0 MusicBrainz** | ídem | `render()` → `loadArtistTracks()` → `loadOne` → `getCurrentUserId` (el `getCurrentUserId()` de la vista va por el memo: 0 más); la caché del mapa sale de IndexedDB | **fijo**, no escala con nada | **medida en el banco el 2026-10-14** (`tests/banco/mapa.html`, Spotify y MusicBrainz simulados): abrir = 1 `/me` y 0 a MusicBrainz, también al volver y tras recargar. En vivo, no. Desde v=305 abrir baja además el módulo del mundo (`util/mundo-110m.js`, ~73 KB, del mismo origen: no es cuota de nadie); el banco lo vuelve a afirmar con el mundo puesto |
 | ↳ **al pulsar «Buscar países» / «Seguir»**: **1 búsqueda por artista + la grabación si hace falta + 1 por cada área nueva**, de a una y a 1,2 s como mínimo, **0 a Spotify** | — | lo ya guardado: **0** | `musicbrainz.org/ws/2/artist/`, `/recording/`, `/area/<id>` | nº de artistas con ≥ 10 min sin buscar todavía | **medida en el banco** (12 artistas inventados: 23 peticiones sin fallos) y con tope en vivo contra MusicBrainz (ver `fonoteca-migracion/mapa/`) |
 | `#covers` | **1 `/me` + 1 + ceil(W/100)** = **33** | **2** | `isOwner()`/`loadListenedAlbums()` → `getCurrentUserId` · + 1 `/playlists/{id}?fields=snapshot_id` + págs. de `/playlists/{id}/items` | nº de pistas de «w three» | 🔴 **corregida el 2026-10-08, leída del código.** Decía **32** y se le olvidaba el `/me` propio |
 | `#mosaico` | **0** | **0** | **ninguno, a propósito** | — | **medida en vivo el 2026-10-06**: 10 mosaicos generados (hasta 43.200 celdas), **0 peticiones y 0 cortadas** con los topes de la API en CERO. Lo que sí sale a la red es el CDN de imágenes, que no gasta cuota |

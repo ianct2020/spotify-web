@@ -6381,9 +6381,9 @@ body.covers-fs .main {
    #mapa — tus países (v=304)
    ══════════════════════════════════════════════════════════════════════════
 
-   Una lista, no un dibujo: el mapamundi es la tanda 53. Todo cuelga de `.mapa`
-   y nada redefine reglas de otra vista. Sin colores por país, sin banderas y sin
-   animaciones nuevas. Los textos de pista van en `--color-text-secondary` y no
+   La lista de la tanda 52 (el dibujo del mundo es el bloque de abajo, v=305). Todo cuelga de `.mapa`
+   y nada redefine reglas de otra vista. Sin banderas y sin animaciones nuevas (los
+   colores por país son los del mundo, abajo). Los textos de pista van en `--color-text-secondary` y no
    en `--color-text-muted` (el muted pasa AA desde v=290, pero el secundario es
    el que usan las vistas nuevas desde #calendario). */
 .mapa { display: flex; flex-direction: column; gap: 16px; max-width: 920px; }
@@ -6447,3 +6447,66 @@ body.covers-fs .main {
   .mapa-pais-a { min-width: 0; }
   .mapa-artistas-lista { padding-left: 22px; }
 }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   #mapa — el mundo (v=305)
+   ══════════════════════════════════════════════════════════════════════════
+
+   El mapamundi de `features/mapa.js`, dentro de la misma vista: cada país
+   pintado según qué parte de TODO tu historial son sus minutos (los cinco
+   cortes fijos de `util/mapa-mundo.js`). Todo cuelga de `.mapa-mundo` y nada
+   redefine reglas de otra vista.
+
+   🔴 Ningún color escrito a mano: los cinco tonos mezclan `--color-accent` con
+   `--color-surface` (el fondo de la tarjeta) en 33 · 50 · 67 · 83 · 100 %,
+   «sin datos» es `--color-elevated` y los bordes `--color-border`, así que el
+   mapa sigue a los cuatro presets (también al claro, «Papel»). Las proporciones
+   se eligieron para que en Violeta —el de menos contraste entre «sin datos» y
+   el acento— cada paso quede parejo (~1,23:1); los cuatro presets dan ≥ 1,2 y
+   en orden (lo mide `tests/mapa-mundo.test.mjs`, que lee esta hoja). El texto
+   va en `--color-text-secondary`, nunca en `--color-text-muted`.
+
+   Sin animaciones, sin zoom, sin arrastre. Los países no son focusables: la
+   versión accesible del mapa es la lista de abajo. */
+.mapa-mundo {
+  --mm-sin: var(--color-elevated);
+  --mm-t1: color-mix(in srgb, var(--color-accent) 33%, var(--color-surface));
+  --mm-t2: color-mix(in srgb, var(--color-accent) 50%, var(--color-surface));
+  --mm-t3: color-mix(in srgb, var(--color-accent) 67%, var(--color-surface));
+  --mm-t4: color-mix(in srgb, var(--color-accent) 83%, var(--color-surface));
+  --mm-t5: color-mix(in srgb, var(--color-accent) 100%, var(--color-surface));
+}
+/* El lienzo guarda la proporción del viewBox (1000 × 486,7) mientras llega la geometría: sin salto. */
+.mapa-mundo-lienzo { aspect-ratio: 1000 / 486.7; }
+.mapa-mundo-lienzo.is-sin-dibujo { aspect-ratio: auto; }
+.mapa-mundo-svg { display: block; width: 100%; height: auto; }
+.mapa-mundo-svg path {
+  fill: var(--mm-sin);
+  fill-rule: evenodd;
+  stroke: var(--color-border);
+  stroke-width: 0.6;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
+.mapa-mundo [data-tono="1"] { fill: var(--mm-t1); background-color: var(--mm-t1); }
+.mapa-mundo [data-tono="2"] { fill: var(--mm-t2); background-color: var(--mm-t2); }
+.mapa-mundo [data-tono="3"] { fill: var(--mm-t3); background-color: var(--mm-t3); }
+.mapa-mundo [data-tono="4"] { fill: var(--mm-t4); background-color: var(--mm-t4); }
+.mapa-mundo [data-tono="5"] { fill: var(--mm-t5); background-color: var(--mm-t5); }
+.mapa-mundo-svg path[data-iso] { cursor: pointer; }
+.mapa-mundo-svg path.is-activo { stroke: var(--color-text); stroke-width: 1.5; }
+.mapa-mundo-detalle {
+  margin: 8px 0 0; min-height: 1.5em; font-size: 13px; line-height: 1.5;
+  color: var(--color-text-secondary); font-variant-numeric: tabular-nums;
+}
+.mapa-mundo-leyenda { margin-top: 10px; font-size: 12px; line-height: 1.5; color: var(--color-text-secondary); }
+.mapa-mundo-leyenda-t { margin: 0 0 6px; }
+.mapa-mundo-tonos { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px 14px; }
+.mapa-mundo-tonos li { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.mapa-mundo-muestra {
+  display: inline-block; width: 16px; height: 11px; flex: none;
+  border: 1px solid var(--color-border); border-radius: 2px;
+  background-color: var(--mm-sin);
+}
+.mapa-mundo-frase { margin: 6px 0 0; }
+.mapa-mundo-noseven { margin: 6px 0 0; font-size: 12px; line-height: 1.5; color: var(--color-text-secondary); }

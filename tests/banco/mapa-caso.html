@@ -87,6 +87,8 @@ await esperarReal(() => document.getElementById('my-history-btn'), { que: 'que l
 window.__listo = true;
 if (q.get('foto')) {
   await esperarReal(() => document.querySelector('.mapa[data-estado]'), { que: 'que #mapa pinte', vueltas: 4000 });
+  // v=305: y que el mundo esté armado (o que haya dicho que no pudo).
+  await esperarReal(() => document.querySelector('.mapa-mundo:not([data-mundo="cargando"])'), { que: 'que el mundo se arme', vueltas: 4000 });
   document.documentElement.dataset.foto = 'listo';
 }
 </script>

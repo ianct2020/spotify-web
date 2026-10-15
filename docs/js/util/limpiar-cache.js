@@ -29,10 +29,10 @@
 //
 // Si agregás otro camino que borre IndexedDB en masa, usá esta misma lista.
 
-import { DISCO_BASE_PREFIX } from './disco-base.js?v=304';
-import { MOSAICO_COLORES_KEY } from './cover-color.js?v=304';
-import { LOCAL_HISTORY_PREFIX } from '../history-keys.js?v=304';
-import { PREFIJO_ARTISTA as MAPA_ARTISTA_PREFIX, PREFIJO_AREA as MAPA_AREA_PREFIX } from './mapa-paises.js?v=304';
+import { DISCO_BASE_PREFIX } from './disco-base.js?v=305';
+import { MOSAICO_COLORES_KEY } from './cover-color.js?v=305';
+import { LOCAL_HISTORY_PREFIX } from '../history-keys.js?v=305';
+import { PREFIJO_ARTISTA as MAPA_ARTISTA_PREFIX, PREFIJO_AREA as MAPA_AREA_PREFIX } from './mapa-paises.js?v=305';
 
 export const CONSERVAR_CLAVES = ['all_liked_tracks', 'all_liked_tracks_partial', MOSAICO_COLORES_KEY];
 export const CONSERVAR_PREFIJOS = [DISCO_BASE_PREFIX, LOCAL_HISTORY_PREFIX, MAPA_ARTISTA_PREFIX, MAPA_AREA_PREFIX];

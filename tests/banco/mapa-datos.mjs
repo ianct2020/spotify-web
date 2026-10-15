@@ -3,7 +3,9 @@
 // 🔴 TODO INVENTADO: artistas, minutos, temas, ids de MusicBrainz y áreas. El
 // repo es público y ningún dato de escucha de nadie entra acá.
 //
-// Doce artistas de 10 min o más —uno por cada caso de la regla— y dos de menos.
+// Doce artistas de 10 min o más —uno por cada caso de la regla— y dos de menos;
+// desde v=305, dos más para el mundo (uno en Malta, que no tiene forma en el
+// mapa, y uno con pocos minutos, para que se pinte un tono bajo).
 // Lo que tiene que dar cada uno está escrito al lado, a mano, y `ESPERADO` lo
 // junta: el banco compara la pantalla contra esta cuenta, no contra la del
 // código que prueba.
@@ -32,6 +34,9 @@ export const ARTISTAS = [
   ['Vidrio Verde', 60, 'Reflejo', null, null, 'no-se-pudo'],                                                                                           // la búsqueda da 400
   ['Ola Quieta', 30, 'Calma', [C('m-ola', 'Ola Quieta', { country: 'AR' })], ['m-ola'], 'AR'],
   ['Eco Bajo', 15, 'Rebote', [C('m-eco1', 'Eco Bajo', { area: { id: AREA.ciudad, name: 'Ciudad Inventada', type: 'City' } }), C('m-eco2', 'Eco Bajo', { country: 'MX' })], ['m-eco1'], 'BR'], // desempatado, país del área
+  // v=305 (tanda 53): los dos del mundo.
+  ['Faro Maltés', 40, 'Bahía', [C('m-malta', 'Faro Maltés', { country: 'MT' })], ['m-malta'], 'MT'],                                                // Malta: con minutos y SIN forma en el mapa
+  ['Brisa Sur', 12, 'Rambla', [C('m-brisa', 'Brisa Sur', { country: 'UY' })], ['m-brisa'], 'UY'],                                                   // pocos minutos: un tono bajo (2)
 ];
 const MENOS10 = [['Chispa', 5], ['Grano Fino', 9.9]];
 
@@ -45,22 +50,35 @@ export const HISTORIAL = {
 };
 
 // La cuenta hecha a mano, en décimas de minuto.
+// v=305 (tanda 53): con Faro Maltés (400) y Brisa Sur (120) el total pasa de
+// 22199 a 22719, «con país» de 15950 a 16470, los países de 4 a 6, las
+// peticiones sin fallos de 23 a 27, los guardados de 11 a 13 y el universo de 12
+// a 14. Las otras cuatro filas no cambian.
 export const ESPERADO = {
-  total: 22199,
+  total: 22719,
+  universo: 14,
   filas: [
-    5000 + 4000 + 3000 + 2500 + 1000 + 300 + 150,   // con país
+    5000 + 4000 + 3000 + 2500 + 1000 + 300 + 150 + 400 + 120,   // con país (+ Malta y Uruguay)
     2000 + 1500 + 800,                              // sin país: Tordo, Nube, Hilo
     1200,                                           // sin confirmar: Pez
     600,                                            // sin buscar: Vidrio (no se pudo, no se guarda)
     50 + 99,                                        // menos de 10 min
   ],
-  paises: [['AR', 5300, 2], ['BR', 5150, 3], ['ES', 3000, 1], ['CL', 2500, 1]],
+  paises: [['AR', 5300, 2], ['BR', 5150, 3], ['ES', 3000, 1], ['CL', 2500, 1], ['MT', 400, 1], ['UY', 120, 1]],
   // En el orden de la pantalla (el del escaneo: minutos descendente).
   sinPais: { 'Tordo Azul': 'sin-pais', 'Nube Baja': 'sin-pais', 'Pez Lento': 'sin-confirmar', 'Hilo Rojo': 'sin-pais' },
   // búsqueda + áreas + grabación, sin fallos.
-  peticionesSinFallos: 2 + 4 + 1 + 2 + 1 + 2 + 2 + 3 + 1 + 1 + 2 + 2,
-  artistasGuardados: 11,
+  peticionesSinFallos: 2 + 4 + 1 + 2 + 1 + 2 + 2 + 3 + 1 + 1 + 2 + 2 + 2 + 2,
+  artistasGuardados: 13,
   areasGuardadas: 3,
+  // El mundo (v=305), a mano, con los cortes fijos sobre 22719 décimas:
+  //   AR 5300 → 23,3 % · BR 5150 → 22,7 % · ES 3000 → 13,2 % · CL 2500 → 11,0 %: los cuatro ≥ 10 % → 5;
+  //   MT 400 → 1,76 % → 3, pero no tiene forma: no se pinta, va en «No se ven»;
+  //   UY 120 → 0,53 % → 2.
+  // Pintados: los 6 de la lista menos Malta = 5. Todos los demás, «sin datos».
+  tonos: { AR: 5, BR: 5, ES: 5, CL: 5, UY: 2 },
+  sinForma: ['MT'],
+  noSeVen: 'No se ven en el mapa: Malta',
 };
 
 const AREAS = {

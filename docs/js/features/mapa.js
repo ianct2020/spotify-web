@@ -1,7 +1,15 @@
-// #mapa — tus países (v=304, tanda 52). La fase 2 del mapa: todavía NO dibuja
-// el mundo (eso es la tanda 53, sobre esta misma ruta). Es una lista: tus
+// #mapa — tus países (v=304, tanda 52). La fase 2 del mapa: una lista de tus
 // países ordenados por minutos, con cuántos artistas tiene cada uno, y un bloque
 // que dice la verdad sobre cuánto se sabe.
+//
+// v=305 (tanda 53): además, EL MUNDO. Un mapamundi en SVG entre «Cuánto se
+// sabe» y «La búsqueda», cada país pintado por la parte de tus minutos que es
+// suya (los cortes y la leyenda, en `util/mapa-mundo.js`, puro). La geometría es
+// `util/mundo-110m.js`, generada una vez desde Natural Earth y commiteada, y se
+// pide con `import()` SOLO al abrir esta vista. 🔴 La lista nunca depende del
+// dibujo: si el `import()` falla, la vista sigue entera y lo dice en una línea.
+// El SVG se arma UNA vez; al repintar solo cambia el `data-tono` de los países
+// que cambiaron, dentro del mismo repintado por frame de siempre.
 //
 // De dónde sale cada cosa:
 //   · los minutos y los temas, de `loadArtistTracks()` (`history-data.js`), que
@@ -27,13 +35,14 @@
 // espera la sigue un `fetch`), pero en headless no se puede comprobar cómo se
 // porta oculta: la pantalla pide dejarla a la vista y enseña el ritmo medido.
 
-import { loadArtistTracks, isOwner, ownerLockedMessage } from './history-data.js?v=304';
-import { getCurrentUserId } from '../api.js?v=304';
-import { idbEntriesEnRango, idbSetCached } from '../idb.js?v=304';
-import { escapeHtml, pageHeader } from '../ui/components.js?v=304';
-import { vigilarRuta } from '../util/vigencia-ruta.js?v=304';
-import { armarMapa, universo, claveArtista, claveArea, PREFIJO_ARTISTA, PREFIJO_AREA, MIN_MINUTOS } from '../util/mapa-paises.js?v=304';
-import { escanear, conCandado, peticionesPorMinuto, estimarLoQueFalta } from '../util/mapa-escaneo.js?v=304';
+import { loadArtistTracks, isOwner, ownerLockedMessage } from './history-data.js?v=305';
+import { getCurrentUserId } from '../api.js?v=305';
+import { idbEntriesEnRango, idbSetCached } from '../idb.js?v=305';
+import { escapeHtml, pageHeader } from '../ui/components.js?v=305';
+import { vigilarRuta } from '../util/vigencia-ruta.js?v=305';
+import { armarMapa, universo, claveArtista, claveArea, PREFIJO_ARTISTA, PREFIJO_AREA, MIN_MINUTOS } from '../util/mapa-paises.js?v=305';
+import { escanear, conCandado, peticionesPorMinuto, estimarLoQueFalta } from '../util/mapa-escaneo.js?v=305';
+import { armarMundo, textoDetalle, textoNoSeVen, etiquetaMapa, leyenda } from '../util/mapa-mundo.js?v=305';
 
 // Números con `es-ES` explícito: sin el locale se usa el del navegador (es-AR
 // en las máquinas de Ian) y salen dos formatos en la misma pantalla.
@@ -59,8 +68,10 @@ function nombrePais(codigo) {
 // no, esta pestaña se diría a sí misma «hay otra búsqueda en marcha».
 let enCurso = null;
 
-// Medidas del repintado, para el banco (`tests/banco/mapa.html`).
-const perf = { pintados: 0, ultimoMs: 0, maxMs: 0 };
+// Medidas del repintado, para el banco (`tests/banco/mapa.html`). `montajeMs` es
+// lo que cuesta armar el SVG del mundo y ponerle los tonos (una vez por render)
+// y `registros`, cada repintado con su tiempo y si ya estaba el mundo.
+const perf = { pintados: 0, ultimoMs: 0, maxMs: 0, montajeMs: null, montajes: 0, registros: [] };
 if (typeof window !== 'undefined') window.__mapaPerf = perf;
 
 async function leerCache(uid) {
@@ -107,6 +118,10 @@ async function pedirMB(url, { signal } = {}) {
 
 export async function render(container) {
   const ruta = vigilarRuta();
+  // La geometría del mundo (~73 KB) se pide al abrir ESTA vista, en paralelo con
+  // el historial: abrir la app no la baja. Nunca rechaza: un fallo vuelve como
+  // `{ error }` y la vista sigue sin el dibujo.
+  const mundoP = import('../util/mundo-110m.js?v=305').then((mod) => ({ mod }), (error) => ({ error }));
   container.innerHTML = `
     ${pageHeader({ title: 'Tus países' })}
     <div id="mapa-content"><div class="empty-state"><div class="spinner spinner-lg"></div></div></div>
@@ -141,11 +156,14 @@ export async function render(container) {
     abiertos: new Set(),
     html: {},                    // lo último escrito en cada sección, para no repintar lo igual
     pintando: false,
+    ultimoMapa: null,            // la última cuenta de `armarMapa` (la usa el mundo al armarse)
+    mundo: null,                 // el SVG ya armado y los tonos aplicados (ver montarMundo)
     sesion: { peticiones: 0, porTipo: { busqueda: 0, area: 0, grabacion: 0 }, n503: 0, otrosFallos: 0, comienzos: [], artistasHechos: 0, msActivos: 0, inicioCorrida: null, noSePudo: new Set() },
   };
 
   content.innerHTML = `<div class="mapa">
     <section class="card mapa-cobertura" data-seccion="cobertura"></section>
+    <section class="card mapa-mundo" data-mundo="cargando">${htmlMundoMarco()}</section>
     <section class="card mapa-escaneo"><div data-seccion="escaneo"></div><div class="mapa-botones" data-seccion="botones"></div></section>
     <section class="mapa-paises" data-seccion="paises"></section>
     <section class="mapa-sinpais-sec" data-seccion="sinpais"></section>
@@ -167,6 +185,7 @@ export async function render(container) {
   });
 
   pintar(raiz, st, ruta);
+  mundoP.then((r) => montarMundo(raiz, st, ruta, r));
   return () => { st.ctrl?.abort(); };
 }
 
@@ -259,6 +278,7 @@ function pintar(raiz, st, ruta) {
   if (!ruta.vigente() || !raiz.isConnected) return;
   const t0 = performance.now();
   const m = armarMapa({ totals: st.totals, lista: st.lista, artistas: st.artistas, areas: st.areas, nombrePais });
+  st.ultimoMapa = m;   // para que el mundo, al armarse, pinte sin rehacer la cuenta
   const esc = htmlEscaneo(m, st);
   const secciones = {
     cobertura: htmlCobertura(m, st),
@@ -273,6 +293,7 @@ function pintar(raiz, st, ruta) {
     const el = raiz.querySelector(`[data-seccion="${k}"]`);
     if (el) el.innerHTML = html;
   }
+  if (st.mundo) pintarMundo(st, m);
   const f = m.filas;
   raiz.dataset.estado = st.estado;
   raiz.dataset.escaneados = String(m.escaneados);
@@ -284,6 +305,128 @@ function pintar(raiz, st, ruta) {
   perf.pintados++;
   perf.ultimoMs = ms;
   perf.maxMs = Math.max(perf.maxMs, ms);
+  if (perf.registros.length < 2000) perf.registros.push({ ms, mundo: !!st.mundo });
+}
+
+// ── El mundo ─────────────────────────────────────────────────────────────────
+
+const AYUDA_MUNDO = 'Pasa el ratón por un país o tócalo para ver sus minutos.';
+
+// El marco de la sección: el lienzo (vacío hasta que llega la geometría, con la
+// proporción del dibujo reservada), la línea de detalle, la leyenda y la línea
+// de lo que no se ve. Va UNA vez: el repintado no reescribe esta sección.
+function htmlMundoMarco() {
+  const l = leyenda();
+  return `
+    <h2 class="mapa-h2">El mapa</h2>
+    <div class="mapa-mundo-lienzo"></div>
+    <p class="mapa-mundo-detalle">${AYUDA_MUNDO}</p>
+    <div class="mapa-mundo-leyenda">
+      <p class="mapa-mundo-leyenda-t">${escapeHtml(l.titulo)}</p>
+      <ul class="mapa-mundo-tonos">
+        ${l.tonos.map((t) => `<li><span class="mapa-mundo-muestra" data-tono="${t.tono}" aria-hidden="true"></span>${escapeHtml(t.texto)}</li>`).join('')}
+      </ul>
+      <p class="mapa-mundo-frase">${escapeHtml(l.frase)}</p>
+    </div>
+    <p class="mapa-mundo-noseven" hidden></p>`;
+}
+
+// Arma el SVG una vez, con todos los países en «sin datos», y le aplica los
+// tonos con un repintado. Si la geometría no llegó, una línea y nada más: la
+// lista de abajo no depende del dibujo.
+function montarMundo(raiz, st, ruta, r) {
+  if (!ruta.vigente() || !raiz.isConnected) return;
+  const sec = raiz.querySelector('.mapa-mundo');
+  const lienzo = sec?.querySelector('.mapa-mundo-lienzo');
+  if (!sec || !lienzo) return;
+  const formas = r?.mod?.FORMAS;
+  if (r?.error || !Array.isArray(formas) || !r.mod.VIEWBOX) {
+    sec.dataset.mundo = 'error';
+    lienzo.classList.add('is-sin-dibujo');
+    lienzo.innerHTML = '<p class="mapa-mundo-detalle">No se ha podido cargar el dibujo del mapa. La lista de países de abajo está completa.</p>';
+    for (const s of ['.mapa-mundo-lienzo + .mapa-mundo-detalle', '.mapa-mundo-leyenda', '.mapa-mundo-noseven']) sec.querySelector(s)?.remove();
+    return;
+  }
+  const t0 = performance.now();
+  // Los `d` solo traen números, «M», «l», «z» y espacios, y los códigos son dos
+  // letras (lo vigila `tests/mundo-geometria.test.mjs`): no hay nada que escapar.
+  lienzo.innerHTML = `<svg class="mapa-mundo-svg" viewBox="${r.mod.VIEWBOX}" role="img" aria-label="${escapeHtml(etiquetaMapa(null))}" xmlns="http://www.w3.org/2000/svg">${
+    formas.map((f) => (f.iso ? `<path data-iso="${f.iso}" data-tono="0" d="${f.d}"/>` : `<path d="${f.d}"/>`)).join('')
+  }</svg>`;
+  const svg = lienzo.firstElementChild;
+  const porIso = new Map();
+  for (const p of svg.querySelectorAll('path[data-iso]')) porIso.set(p.dataset.iso, p);
+  st.mundo = {
+    formas, svg, porIso,
+    aplicados: new Map([...porIso.keys()].map((iso) => [iso, 0])),
+    etiqueta: null, noSeVen: null, activo: null, w: null,
+    detalle: sec.querySelector('.mapa-mundo-lienzo + .mapa-mundo-detalle'),
+    noseven: sec.querySelector('.mapa-mundo-noseven'),
+  };
+  conectarMundo(raiz, st, ruta);
+  // Los tonos con la última cuenta del repintado: rehacer `armarMapa` acá costaba
+  // otro repintado entero (~70-90 ms con 2.302 artistas) para no cambiar nada.
+  if (st.ultimoMapa) pintarMundo(st, st.ultimoMapa); else pintar(raiz, st, ruta);
+  perf.montajeMs = performance.now() - t0;
+  perf.montajes++;
+  sec.dataset.mundo = 'listo';
+}
+
+// Los tonos de hoy: solo se toca el `data-tono` de los países que cambiaron.
+function pintarMundo(st, m) {
+  const mm = st.mundo;
+  const w = armarMundo(m, mm.formas, nombrePais);
+  mm.w = w;
+  for (const [iso, t] of w.tonos) {
+    if (mm.aplicados.get(iso) === t) continue;
+    mm.aplicados.set(iso, t);
+    mm.porIso.get(iso)?.setAttribute('data-tono', String(t));
+  }
+  const et = etiquetaMapa(w);
+  if (et !== mm.etiqueta) { mm.etiqueta = et; mm.svg.setAttribute('aria-label', et); }
+  const nv = textoNoSeVen(w);
+  if (nv !== mm.noSeVen && mm.noseven) { mm.noSeVen = nv; mm.noseven.textContent = nv; mm.noseven.hidden = !nv; }
+  if (mm.activo) escribirDetalle(mm, mm.activo);
+}
+
+function escribirDetalle(mm, iso) {
+  const txt = iso && mm.w ? textoDetalle(iso, mm.w, nombrePais) : AYUDA_MUNDO;
+  if (mm.detalle && mm.detalle.textContent !== txt) mm.detalle.textContent = txt;
+}
+
+// Pasar el ratón o tocar un país escribe en la línea de detalle, DEBAJO del
+// mapa (una caja flotante, en el móvil, la tapa el dedo). Hacer clic en un país
+// con minutos abre su fila de la lista y la lleva a la vista. Los países no son
+// focusables (serían 174 paradas de tabulador): la versión accesible es la lista.
+function conectarMundo(raiz, st, ruta) {
+  const mm = st.mundo;
+  const activar = (iso) => {
+    if (mm.activo === iso) { escribirDetalle(mm, iso); return; }
+    if (mm.activo) mm.porIso.get(mm.activo)?.classList.remove('is-activo');
+    mm.activo = iso;
+    if (iso) mm.porIso.get(iso)?.classList.add('is-activo');
+    escribirDetalle(mm, iso);
+  };
+  mm.svg.addEventListener('pointerover', (e) => {
+    if (!ruta.vigente()) return;
+    activar(e.target.closest?.('path[data-iso]')?.dataset.iso || null);
+  });
+  // Con el dedo, el `pointerleave` llega justo después de soltar: la línea se
+  // quedaría en blanco antes de poder leerla. Solo el ratón la limpia al salir.
+  mm.svg.addEventListener('pointerleave', (e) => { if (e.pointerType === 'mouse' && ruta.vigente()) activar(null); });
+  mm.svg.addEventListener('click', (e) => {
+    if (!ruta.vigente()) return;
+    const iso = e.target.closest?.('path[data-iso]')?.dataset.iso;
+    if (!iso) return;
+    activar(iso);
+    if (!(mm.aplicados.get(iso) > 0)) return;   // sin datos: solo la línea de detalle
+    const li = raiz.querySelector(`.mapa-pais[data-codigo="${iso}"]`);
+    const d = li?.querySelector('details');
+    if (!d) return;
+    st.abiertos.add(`pais-${iso}`);
+    d.open = true;
+    li.scrollIntoView({ block: 'center' });
+  });
 }
 
 function htmlCobertura(m, st) {

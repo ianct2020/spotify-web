@@ -27,6 +27,19 @@
 //      hecha a mano (`mapa-datos.mjs`, `ESPERADO`);
 //   8. «Limpiar caché» no se lleva ni `mapa_artista_v1_` ni `mapa_area_v1_`.
 //
+// Y las seis del mundo (v=305, tanda 53):
+//   M1. al abrir con la caché vacía el SVG está y TODOS los países van en «sin
+//       datos» (abrir sigue costando 0 a MusicBrainz y 1 `/me`: la puerta 1);
+//   M2. terminado el escaneo, cada país pintado tiene el tono calculado a mano
+//       (`ESPERADO.tonos`) y los pintados son los de la lista menos los sin forma;
+//   M3. el artista de Malta (sin forma): Malta está en la lista de países y en
+//       «No se ven en el mapa»;
+//   M4. clic en un país pintado → su `<details>` queda abierto; en uno sin
+//       datos, solo la línea de detalle;
+//   M5. el mapa se pinta MIENTRAS busca: con el primer artista resuelto ya hay
+//       un país con tono;
+//   M6. 0 errores de consola (las mismas guardas de las puertas 5, 6 y 7).
+//
 // ⚠️ Todas las esperas van con `esperarReal` (una petición al propio servidor
 // por vuelta): un `await` de IndexedDB sin anclar deja correr suelto el reloj
 // virtual (ver PRESUPUESTO en `scripts/correr-banco.mjs`).
@@ -81,8 +94,23 @@ try {
   afirmar(mb.log.length === 0, `abrir #mapa no pide nada a MusicBrainz (pidió ${mb.log.length})`);
   afirmar(datos.abrir.me === 1, `abrir #mapa pide exactamente 1 /me (pidió ${datos.abrir.me})`);
   afirmar(boton(A, 'buscar')?.textContent.trim() === 'Buscar países', 'con la caché vacía, el botón dice «Buscar países»');
-  afirmar(mapa(A).dataset.escaneados === '0' && mapa(A).dataset.universo === '12', 'arranca con 0 de 12 escaneados');
+  afirmar(mapa(A).dataset.escaneados === '0' && mapa(A).dataset.universo === String(ESPERADO.universo), `arranca con 0 de ${ESPERADO.universo} escaneados`);
   afirmar(!$(A, '.mapa-pais'), 'y sin ningún país');
+
+  // ── M1. El mundo, todo en «sin datos» ─────────────────────────────────────
+  progreso('mundo 1: el SVG, sin datos');
+  await esperarReal(() => $(A, '.mapa-mundo[data-mundo="listo"]'), { que: 'que el mundo se arme', vueltas: VUELTAS });
+  const paths = () => [...A.contentDocument.querySelectorAll('.mapa-mundo-svg path[data-iso]')];
+  const conTono = () => paths().filter((p) => p.dataset.tono !== '0');
+  datos.mundo1 = { formas: paths().length, conTono: conTono().length, sinCodigo: A.contentDocument.querySelectorAll('.mapa-mundo-svg path:not([data-iso])').length, mb: mb.log.length, me: meDe(A) - meArranque };
+  afirmar(datos.mundo1.formas > 150, `el SVG está, con ${datos.mundo1.formas} países con código`);
+  afirmar(datos.mundo1.conTono === 0 && paths().every((p) => p.dataset.tono === '0'), `todos van en «sin datos» (${datos.mundo1.conTono} con tono)`);
+  afirmar(datos.mundo1.mb === 0 && datos.mundo1.me === 1, `y abrir con el mundo sigue costando 0 a MusicBrainz y 1 /me (${datos.mundo1.mb} y ${datos.mundo1.me})`);
+  const svgA = $(A, '.mapa-mundo-svg');
+  afirmar(svgA.getAttribute('role') === 'img' && svgA.getAttribute('aria-label') === 'Mapa de tus países: 0 países con minutos', `role=img y su aria-label: «${svgA.getAttribute('aria-label')}»`);
+  afirmar(!$(A, '.mapa-mundo-svg [tabindex]'), 'ningún país es focusable');
+  const orden = [...$(A, '.mapa').children].map((s) => s.className);
+  afirmar(orden.indexOf('card mapa-cobertura') === 0 && orden.indexOf('card mapa-mundo') === 1 && orden.indexOf('card mapa-escaneo') === 2, `el mapa va entre «Cuánto se sabe» y «La búsqueda» (${orden.join(' > ')})`);
 
   // ── 2. El primer país, al primer artista ──────────────────────────────────
   progreso('puerta 2: el primer país');
@@ -92,6 +120,12 @@ try {
   afirmar(datos.primerPais.escaneados <= 2, `el primer país aparece con ${datos.primerPais.escaneados} artistas escaneados (≤ 2 de 12)`);
   afirmar(datos.primerPais.peticiones < ESPERADO.peticionesSinFallos, `y con ${datos.primerPais.peticiones} peticiones, lejos del final (${ESPERADO.peticionesSinFallos} sin fallos)`);
   afirmar(datos.primerPais.pais === 'AR', `el primero es el del artista con más minutos (AR), vino ${datos.primerPais.pais}`);
+
+  // ── M5. El mapa se pinta mientras busca ───────────────────────────────────
+  // En el MISMO repintado que pone la primera fila de la lista.
+  datos.mundo5 = { conTono: conTono().map((p) => `${p.dataset.iso}=${p.dataset.tono}`), escaneados: +mapa(A).dataset.escaneados, estado: mapa(A).dataset.estado };
+  afirmar(datos.mundo5.conTono.length >= 1 && datos.mundo5.conTono[0] === 'AR=5', `con el primer artista resuelto ya hay un país pintado (${datos.mundo5.conTono.join(',')}), sin esperar al final`);
+  afirmar(datos.mundo5.estado === 'escaneando', 'y la búsqueda sigue en marcha');
 
   // ── 5. Salir a mitad ──────────────────────────────────────────────────────
   progreso('puerta 5: salir a mitad');
@@ -177,6 +211,36 @@ try {
   afirmar(datos.final.errores.length === 0, `0 errores en A: ${datos.final.errores.join(' | ')}`);
   afirmar(mb.log.every((e) => e.metodo === 'GET' && e.cabeceras.length === 0), 'todas las peticiones a MusicBrainz son GET y sin cabeceras propias (no habría OPTIONS)');
 
+  // ── M2 y M3. El mundo al final: los tonos a mano, y Malta ─────────────────
+  progreso('mundo 2 y 3: los tonos y lo que no se ve');
+  const pintados = Object.fromEntries(conTono().map((p) => [p.dataset.iso, +p.dataset.tono]));
+  datos.mundo2 = { pintados, n: Object.keys(pintados).length };
+  for (const [iso, t] of Object.entries(ESPERADO.tonos)) afirmar(pintados[iso] === t, `${iso} va en el tono ${t}, el de la cuenta a mano (vino ${pintados[iso]})`);
+  afirmar(JSON.stringify(Object.keys(pintados).sort()) === JSON.stringify(Object.keys(ESPERADO.tonos).sort()), `ningún otro país pintado (${Object.keys(pintados).sort().join(',')})`);
+  afirmar(datos.mundo2.n === ESPERADO.paises.length - ESPERADO.sinForma.length, `pintados = los ${ESPERADO.paises.length} de la lista menos los ${ESPERADO.sinForma.length} sin forma (${datos.mundo2.n})`);
+  afirmar($(A, '.mapa-mundo-svg').getAttribute('aria-label') === `Mapa de tus países: ${ESPERADO.paises.length} países con minutos`, `el aria-label cuenta los de la lista: «${$(A, '.mapa-mundo-svg').getAttribute('aria-label')}»`);
+  const noseven = $(A, '.mapa-mundo-noseven');
+  datos.mundo3 = { noseven: noseven?.textContent, oculto: noseven?.hidden, enLista: !!$(A, '.mapa-pais[data-codigo="MT"]') };
+  afirmar(datos.mundo3.enLista, 'Malta está en la lista de países');
+  afirmar(datos.mundo3.noseven === ESPERADO.noSeVen && datos.mundo3.oculto === false, `y en «No se ven en el mapa»: «${datos.mundo3.noseven}»`);
+  afirmar(!$(A, '.mapa-mundo-svg path[data-iso="MT"]'), 'y no tiene forma en el dibujo');
+
+  // ── M4. Clic en un país ───────────────────────────────────────────────────
+  progreso('mundo 4: clic en un país');
+  const clic = (iso) => $(A, `.mapa-mundo-svg path[data-iso="${iso}"]`).dispatchEvent(new MouseEvent('click', { bubbles: true }));
+  const filaCL = () => $(A, '.mapa-pais[data-codigo="CL"] details');
+  afirmar(filaCL() && !filaCL().open, 'la fila de Chile empieza cerrada');
+  clic('CL');
+  datos.mundo4 = { abierta: filaCL().open, detalle: $(A, '.mapa-mundo-lienzo + .mapa-mundo-detalle').textContent };
+  afirmar(datos.mundo4.abierta, 'clic en Chile (pintado) → su fila de la lista queda abierta');
+  afirmar(/^Chile · 250 min · 11,0 % de tus minutos · 1 artista$/.test(datos.mundo4.detalle), `y la línea de detalle lo dice: «${datos.mundo4.detalle}»`);
+  const abiertasAntes = A.contentDocument.querySelectorAll('.mapa details[open]').length;
+  clic('FR');
+  datos.mundo4.sinDatos = $(A, '.mapa-mundo-lienzo + .mapa-mundo-detalle').textContent;
+  afirmar(datos.mundo4.sinDatos === 'Francia · sin datos', `clic en Francia (sin datos): solo la línea de detalle, «${datos.mundo4.sinDatos}»`);
+  afirmar(A.contentDocument.querySelectorAll('.mapa details[open]').length === abiertasAntes, 'y no abre nada');
+  afirmar(win(A).__errores.length === 0, `M6: 0 errores en A con el mundo: ${win(A).__errores.join(' | ')}`);
+
   // ── 8. «Limpiar caché» ────────────────────────────────────────────────────
   progreso('puerta 8: Limpiar caché');
   const { idbEntriesEnRango, idbAllKeys } = await import('/js/idb.js');
@@ -205,7 +269,9 @@ try {
     `retomar: ${datos.retomar.repetidas.length} repetidas de ${datos.cerrar.contestadas} contestadas · ` +
     `final: ${datos.final.peticiones} peticiones (búsquedas ${porTipo('busqueda')}, áreas ${porTipo('area')}, grabaciones ${porTipo('grabacion')}), ${datos.final.n503} 503 · ` +
     `filas ${datos.final.filas} = ${datos.final.total} · países ${datos.final.paises.join('>')} · ` +
-    `limpiar: ${datos.limpiar.despues.art}/${datos.limpiar.despues.area} se quedan · errores=0 · ` +
+    `limpiar: ${datos.limpiar.despues.art}/${datos.limpiar.despues.area} se quedan · ` +
+    `mundo: abrir ${datos.mundo1.formas} formas y ${datos.mundo1.conTono} con tono · con el 1.º artista ${datos.mundo5.conTono.join(',')} · ` +
+    `final ${Object.entries(datos.mundo2.pintados).map(([k, v]) => k + '=' + v).join(',')} · no se ven: ${datos.mundo3.noseven.replace('No se ven en el mapa: ', '')} · clic CL abre=${datos.mundo4.abierta} · errores=0 · ` +
     `reloj virtual=${Math.round(performance.now())} ms`;
   document.documentElement.setAttribute('data-resumen', resumen);
   progreso(resumen);
