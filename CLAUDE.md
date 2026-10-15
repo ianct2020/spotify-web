@@ -1784,7 +1784,7 @@ sitios, comprueba que `Intl` tiene ICU de verdad —si no, la suite no significa
 nada— y lleva una regla ancha que caza cualquier `toFixed()` pegado a la palabra
 «días», que es la forma que tenían las tres. Comprobado que se pone roja.
 
-## `util/mb-pais.js`: la regla del país (v=302)
+## `util/mb-pais.js`: la regla del país (v=302, arreglada en v=303)
 
 Para el mapamundi de escucha (todavía no existe: esto es la fase 1, medir). Spotify
 no da el país de un artista; MusicBrainz sí, y la búsqueda `/ws/2/artist/?query=…`
@@ -1802,18 +1802,53 @@ por **igualdad** de `name`, `sort-name` o algún alias después de `normalizarNo
 |---|---|---|
 | `sin-candidato` | ninguno se llama igual | ninguno |
 | `unico` | uno solo | el suyo, si lo tiene |
-| `varios-mismo-pais` | varios, y todos los que tienen país tienen el mismo | ese |
-| `desempatado` | varios con países distintos y la búsqueda de la grabación nombra a uno solo | el de ese |
-| `ambiguo` | varios con países distintos y la grabación no desempata | ninguno |
+| `varios-mismo-pais` | varios, y **TODOS** traen `country`, el mismo (v=303) | ese |
+| `desempatado` | varios sin eso (países distintos, o alguno sin país) y la búsqueda de la grabación nombra a uno solo | el de ese |
+| `ambiguo` | varios sin eso y la grabación no desempata | ninguno |
 
 🔴 **Nunca se adivina**: lo que no se puede atribuir con certeza queda sin país. Un
 país equivocado se ve igual que uno correcto. Y `unico` no quiere decir «correcto»
 (puede ser un homónimo); `corroborado()` mide eso, no cambia la clase.
 
+🔴 **`varios-mismo-pais` exige país en TODOS los coincidentes (v=303).** Hasta v=302
+bastaba con que «todos los que tienen `country` tengan el mismo», y la medición
+encontró el caso que eso rompe: el artista de verdad **sin** `country` (su área es
+una subdivisión) y dos homónimos de otro país con `country`. Salía el país de los
+homónimos, y como esa clase no pide la grabación, nada lo corroboraba. **El
+homónimo sin país puede ser el de verdad.** Ahora, si alguno no trae `country`, va
+por la grabación como cualquier otro caso de varios (`necesitaGrabacion: true`).
+
 ⚠️ **No usa `normText`** (`util/track-match.js`): tira todo lo que no sea
 `[a-z0-9 ]` y «¥$» le queda en la cadena vacía (v=142). `normalizarNombre` es NFKD,
-sin diacríticos, minúsculas y espacios colapsados, nada más. Lo vigila el caso 7 de
-`tests/mb-pais.test.mjs` (visto ponerse rojo con `normText`).
+sin diacríticos, **los apóstrofos `’` (U+2019), `‘` (U+2018) y `ʼ` (U+02BC) pasados
+al recto `'`** (v=303: MusicBrainz escribe muchos nombres con el tipográfico y el
+nombre pedido viene con el recto), minúsculas y espacios colapsados, nada más. El
+resto de la puntuación no se toca. Lo vigila el caso 7 de `tests/mb-pais.test.mjs`
+(visto ponerse rojo con `normText`) y el 12 (visto rojo sin el reemplazo).
+
+### El país que sale del área (v=303)
+
+MusicBrainz **no manda `country` cuando el área es una subdivisión o una ciudad**.
+La búsqueda trae del área su `id`, `type` y `name`, **pero ningún código ISO**. El
+lookup `/ws/2/area/<id>?inc=area-rels` trae las relaciones «part of»: el padre va
+con `direction: "backward"` (las «forward» son los hijos) y el área del padre viene
+**con su `type` y sus códigos ISO**. O sea que se sube de a un lookup por salto.
+
+- 🔴 **Nada de tablas de nombres de áreas o de países**, escritas o bajadas: es una
+  regla escrita dos veces. El país sale de lo que contesta MusicBrainz, o no sale.
+- La **decisión** vive acá, pura: `paisDeArea(areaId, areas)` recibe las respuestas
+  de área ya bajadas (Map u objeto, por id) y sube hasta un área `type: "Country"`
+  con **un único** `iso-3166-1-codes` de dos letras. **Dos padres, cadena cortada,
+  más de `TOPE_SALTOS_AREA` (3) saltos o un país sin código único → sin país.** Si
+  falta bajar un área, lo dice (`falta`) y la red la pone quien llama.
+- `completarConArea(resultado, areas)` se lo aplica a un `unico` o `desempatado` sin
+  `country`; no cambia la clase ni el `mbid`, y marca **`paisDe: 'area'`** (contra
+  `'country'`) para poder contarlos aparte. `clasificar` devuelve además `areaId`.
+- **El costo es por ÁREA DISTINTA, no por artista**: un área se pide una vez y sirve
+  para todos los artistas que la traen. Quien haga la red guarda cada respuesta y
+  no la vuelve a pedir.
+- Un país que sale del área **necesita la misma corroboración** (la búsqueda de la
+  grabación) que uno que vino en `country`.
 
 `api/musicbrainz.js` y `by-genre.js` **no se tocaron**: siguen con su `limit=1` a
 ciegas (anotado en `fonoteca-migracion/PENDIENTES.md`).
