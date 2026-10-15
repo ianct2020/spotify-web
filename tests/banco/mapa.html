@@ -49,13 +49,22 @@
 //   (abrir sigue costando 0 a MusicBrainz y 1 `/me`, y 0 errores: las puertas 1
 //   y las guardas de siempre, que no cambiaron).
 //
+// Y las de la tanda 55 (v=307), el alias de respaldo y el rango:
+//   R1. un artista INVENTADO renombrado, que la búsqueda de siempre no encuentra y
+//       el respaldo sí (por su alias), sale con país, y su respaldo se pidió UNA vez;
+//   R2. un artista INVENTADO que sale `unico` con la de siempre: 0 respaldos por él;
+//   R3. un registro VIEJO sembrado (`sin-candidato`, sin el campo `respaldo`, como
+//       los que dejó v=304-306): al «Seguir» se pide SOLO su respaldo, 0 búsquedas;
+//   R4. la estimación enseña un RANGO, también después de recargar (E1, con el rango);
+//   (y abrir sigue costando 0 a MusicBrainz y 1 `/me`, con 0 errores).
+//
 // ⚠️ Todas las esperas van con `esperarReal` (una petición al propio servidor
 // por vuelta): un `await` de IndexedDB sin anclar deja correr suelto el reloj
 // virtual (ver PRESUPUESTO en `scripts/correr-banco.mjs`).
 
 import { esperarReal, anclar } from '/banco/simulado.mjs';
 import { fallar, listo } from '/banco/esperar.mjs';
-import { crearMB, sembrarHistorial, ESPERADO } from '/banco/mapa-datos.mjs';
+import { crearMB, sembrarHistorial, ESPERADO, REGISTRO_VIEJO } from '/banco/mapa-datos.mjs';
 
 const ANCHO = +(new URLSearchParams(location.search).get('ancho') || 1351);
 const afirmar = (c, msg) => { if (!c) throw new Error('BANCO: ' + msg); };
@@ -87,15 +96,14 @@ async function irA(f, hash, que, cond) {
   await esperarReal(cond, { que, vueltas: VUELTAS });
 }
 const boton = (f, accion) => $(f, `[data-mapa-accion="${accion}"]`);
-// Los minutos de «Quedan ~N peticiones: unos M minutos, …» (o «una hora y 5 min»…).
-function minutosDe(texto) {
-  const t = texto || '';
-  const h = /(una hora|unas ([\d.]+) horas)/.exec(t);
-  const m = /(\d+) min\b/.exec(t) || /unos ([\d.]+) minutos/.exec(t);
-  if (/un minuto/.test(t)) return 1;
-  const horas = h ? (h[2] ? +h[2].replace('.', '') : 1) : 0;
-  return horas * 60 + (m ? +m[1].replace('.', '') : 0) || null;
+// v=307: las dos cotas de «Quedan ~N peticiones: entre 3 horas y 27 min y 5 horas y 13 min, …», en
+// minutos y en orden ({ bajo, alto }); con una sola duración, las dos iguales.
+function cotasDe(texto) {
+  const ds = [...(texto || '').matchAll(/([\d.]+) horas? y ([\d.]+) min|([\d.]+) horas?|([\d.]+) min/g)]
+    .map((m) => (m[1] ? +m[1].replace('.', '') * 60 + +m[2] : m[3] ? +m[3].replace('.', '') * 60 : +m[4]));
+  return ds.length ? { bajo: ds[0], alto: ds.at(-1) } : null;
 }
+const RANGO = /^Quedan ~[\d.]+ peticiones: entre .+ y .+, según cuántos 503 dé MusicBrainz\.$/;
 const estimacion = (f) => $(f, '.mapa-estimacion')?.textContent.replace(/\s+/g, ' ').trim() || '';
 
 const datos = {};
@@ -186,14 +194,27 @@ try {
   const contestadas = new Set(mb.log.filter((e) => e.status === 200).map((e) => e.url));
   const antesDeCerrar = mb.log.length;
   datos.cerrar = { escaneados: +mapa(A).dataset.escaneados, contestadas: contestadas.size, estimacion: estimacion(A) };
-  // E1 (v=306): antes de cerrar, la estimación ya enseña un número (≥ 5 artistas medidos).
-  afirmar(/^Quedan ~[\d.]+ peticiones: .+, calculado por lo alto con el ritmo medido\.$/.test(datos.cerrar.estimacion), `E1: antes de cerrar, la estimación enseña un número: «${datos.cerrar.estimacion}»`);
+  // E1 (v=306; v=307, R4: un rango): antes de cerrar, la estimación ya enseña un rango (≥ 5 artistas medidos).
+  afirmar(RANGO.test(datos.cerrar.estimacion), `E1/R4: antes de cerrar, la estimación enseña un rango: «${datos.cerrar.estimacion}»`);
+  datos.cerrar.cotas = cotasDe(datos.cerrar.estimacion);
+  afirmar(datos.cerrar.cotas && datos.cerrar.cotas.bajo < datos.cerrar.cotas.alto, `R4: con la baja por debajo de la alta (${JSON.stringify(datos.cerrar.cotas)})`);
   const { idbEntriesEnRango: rangoIdb } = await import('/js/idb.js');
   datos.cerrar.ritmo = (await anclar(rangoIdb('mapa_ritmo_v1_'))).map(([k, w]) => ({ k, artistas: w?.value?.artistas, peticiones: w?.value?.peticiones }));
   afirmar(datos.cerrar.ritmo.length === 1 && datos.cerrar.ritmo[0].artistas >= 5, `E2: lo acumulado está en IndexedDB (${JSON.stringify(datos.cerrar.ritmo)})`);
   afirmar(win(A).__errores.length === 0, `0 errores en A antes de cerrar: ${win(A).__errores.join(' | ')}`);
   A.remove();
   mb.congelado = false;
+  // R3 (v=307): un registro VIEJO en la caché, como los de v=304-306: `sin-candidato` y SIN el campo
+  // `respaldo`. Se siembra antes de abrir el documento nuevo; el artista va último en el orden (11 min),
+  // así que la primera tanda de A no llegó a él.
+  {
+    const { idbSetCached } = await import('/js/idb.js');
+    const { HISTORY_OWNER_ID } = await import('/js/features/history-data.js');
+    const P = await import('/js/util/mapa-paises.js');
+    const v = { v: 1, nombre: REGISTRO_VIEJO.nombre, consultado: '2026-10-14T00:00:00.000Z', candidatos: P.recortarArtistas({ artists: REGISTRO_VIEJO.candidatos }), grabacion: null, uid: HISTORY_OWNER_ID };
+    await anclar(idbSetCached(P.claveArtista(HISTORY_OWNER_ID, REGISTRO_VIEJO.nombre), v, null));
+  }
+  const antesDeSeguirMusgo = mb.log.filter((e) => e.url.includes(encodeURIComponent(`"${REGISTRO_VIEJO.nombre}"`))).length;
   A = abrirMarco('A2');
   await arrancado(A, 'el marco A recargado');
   await irA(A, '#mapa', 'que #mapa pinte tras recargar', () => mapa(A));
@@ -201,19 +222,36 @@ try {
   afirmar(+mapa(A).dataset.escaneados === datos.cerrar.escaneados, `lo escaneado se conserva (${mapa(A).dataset.escaneados} de ${datos.cerrar.escaneados})`);
   afirmar(boton(A, 'buscar')?.textContent.trim() === 'Seguir', 'y ofrece «Seguir»');
   // E1 (v=306): en el documento NUEVO, sin apretar nada, la estimación sigue desde lo acumulado.
-  datos.recargar = { estimacion: estimacion(A), minutosAntes: minutosDe(datos.cerrar.estimacion) };
-  datos.recargar.minutos = minutosDe(datos.recargar.estimacion);
-  afirmar(!/se estimará/.test(datos.recargar.estimacion) && datos.recargar.minutos, `E1: tras recargar, la estimación sigue (no vuelve a «se estimará…»): «${datos.recargar.estimacion}»`);
-  afirmar(datos.recargar.minutos >= datos.recargar.minutosAntes / 2, `E1: y no baja a la mitad (${datos.recargar.minutosAntes} → ${datos.recargar.minutos} min)`);
+  // R4 (v=307): y sigue siendo un RANGO.
+  datos.recargar = { estimacion: estimacion(A), minutosAntes: datos.cerrar.cotas?.alto };
+  datos.recargar.cotas = cotasDe(datos.recargar.estimacion);
+  datos.recargar.minutos = datos.recargar.cotas?.alto;
+  afirmar(!/se estimará/.test(datos.recargar.estimacion) && RANGO.test(datos.recargar.estimacion), `E1/R4: tras recargar, la estimación sigue y es un rango (no vuelve a «se estimará…»): «${datos.recargar.estimacion}»`);
+  afirmar(datos.recargar.minutos >= datos.recargar.minutosAntes / 2, `E1: y la cota alta no baja a la mitad (${datos.recargar.minutosAntes} → ${datos.recargar.minutos} min)`);
   boton(A, 'buscar').click();
   await esperarReal(() => mapa(A).dataset.estado === 'escaneando', { que: 'que «Seguir» arranque', vueltas: VUELTAS });
   datos.recargar.trasSeguir = estimacion(A);
-  afirmar(!/se estimará/.test(datos.recargar.trasSeguir), `E1: y tras «Seguir» tampoco: «${datos.recargar.trasSeguir}»`);
+  afirmar(!/se estimará/.test(datos.recargar.trasSeguir) && RANGO.test(datos.recargar.trasSeguir), `E1/R4: y tras «Seguir» también es un rango: «${datos.recargar.trasSeguir}»`);
   await esperarReal(() => mapa(A).dataset.estado === 'terminado', { que: 'que el escaneo termine', vueltas: VUELTAS });
   const despues = mb.log.slice(antesDeCerrar);
   const repetidas = despues.filter((e) => contestadas.has(e.url));
   datos.retomar = { peticiones: despues.length, repetidas: repetidas.map((e) => e.url), areasRepetidas: repetidas.filter((e) => e.tipo === 'area').length };
   afirmar(repetidas.length === 0, `al retomar, 0 peticiones por lo ya contestado (hubo ${repetidas.length}: ${repetidas.map((e) => e.url).join(' · ')})`);
+
+  // ── R1-R3. El alias de respaldo (v=307) ───────────────────────────────────
+  progreso('respaldo: R1, R2 y R3');
+  const deArtista = (n) => mb.log.filter((e) => e.url.includes(encodeURIComponent(`"${n}"`)));
+  const coral = deArtista('Coral Antiguo'), lumbre = deArtista('Lumbre Norte'), musgo = deArtista(REGISTRO_VIEJO.nombre).slice(antesDeSeguirMusgo);
+  datos.respaldo = {
+    coral: { respaldos: coral.filter((e) => e.tipo === 'respaldo').length, busquedas: coral.filter((e) => e.tipo === 'busqueda').length, enPeru: !!$(A, '.mapa-pais[data-codigo="PE"]') && [...A.contentDocument.querySelectorAll('.mapa-pais[data-codigo="PE"] .mapa-art-n')].some((x) => x.textContent === 'Coral Antiguo') },
+    lumbre: { respaldos: lumbre.filter((e) => e.tipo === 'respaldo').length, busquedas: lumbre.filter((e) => e.tipo === 'busqueda').length },
+    musgo: { respaldos: musgo.filter((e) => e.tipo === 'respaldo').length, busquedas: musgo.filter((e) => e.tipo === 'busqueda').length, antesDeSeguir: antesDeSeguirMusgo },
+    total: mb.log.filter((e) => e.tipo === 'respaldo').length,
+  };
+  afirmar(datos.respaldo.coral.enPeru, 'R1: el renombrado (Coral Antiguo) sale con país: en la fila de Perú');
+  afirmar(datos.respaldo.coral.respaldos === 1, `R1: y su respaldo se pidió una vez (${datos.respaldo.coral.respaldos}), después de ${datos.respaldo.coral.busquedas} búsqueda(s) de siempre`);
+  afirmar(datos.respaldo.lumbre.respaldos === 0 && datos.respaldo.lumbre.busquedas >= 1, `R2: el unico (Lumbre Norte): 0 respaldos (${datos.respaldo.lumbre.respaldos}), con su búsqueda de siempre`);
+  afirmar(datos.respaldo.musgo.antesDeSeguir === 0 && datos.respaldo.musgo.busquedas === 0 && datos.respaldo.musgo.respaldos === 1, `R3: el registro viejo pidió SOLO su respaldo al «Seguir» (${datos.respaldo.musgo.respaldos} respaldo, ${datos.respaldo.musgo.busquedas} búsquedas repetidas)`);
 
   // ── 3 y 7. El final: los 503 y la cuenta hecha a mano ─────────────────────
   progreso('puertas 3 y 7: el final');
@@ -265,7 +303,8 @@ try {
   clic('CL');
   datos.mundo4 = { abierta: filaCL().open, detalle: $(A, '.mapa-mundo-lienzo + .mapa-mundo-detalle').textContent };
   afirmar(datos.mundo4.abierta, 'clic en Chile (pintado) → su fila de la lista queda abierta');
-  afirmar(/^Chile · 250 min · 11,0 % de tus minutos · 1 artista$/.test(datos.mundo4.detalle), `y la línea de detalle lo dice: «${datos.mundo4.detalle}»`);
+  // v=307: con el total de 23529 décimas, Chile es el 10,6 % (era 11,0 sobre 22719).
+  afirmar(/^Chile · 250 min · 10,6 % de tus minutos · 1 artista$/.test(datos.mundo4.detalle), `y la línea de detalle lo dice: «${datos.mundo4.detalle}»`);
   const abiertasAntes = A.contentDocument.querySelectorAll('.mapa details[open]').length;
   clic('FR');
   datos.mundo4.sinDatos = $(A, '.mapa-mundo-lienzo + .mapa-mundo-detalle').textContent;
@@ -301,10 +340,11 @@ try {
     `abrir: mb=${datos.abrir.mb} /me=${datos.abrir.me} · primer país con ${datos.primerPais.escaneados} escaneado(s) y ${datos.primerPais.peticiones} peticiones · ` +
     `salir: ${datos.salir.despues} peticiones en ${datos.salir.relojMs} ms · dos pestañas: B pidió ${datos.dos.pedidasPorB} · ` +
     `retomar: ${datos.retomar.repetidas.length} repetidas de ${datos.cerrar.contestadas} contestadas · ` +
-    `final: ${datos.final.peticiones} peticiones (búsquedas ${porTipo('busqueda')}, áreas ${porTipo('area')}, grabaciones ${porTipo('grabacion')}), ${datos.final.n503} 503 · ` +
+    `final: ${datos.final.peticiones} peticiones (búsquedas ${porTipo('busqueda')}, respaldos ${porTipo('respaldo')}, áreas ${porTipo('area')}, grabaciones ${porTipo('grabacion')}), ${datos.final.n503} 503 · ` +
+    `respaldo: Coral ${datos.respaldo.coral.respaldos} (PE=${datos.respaldo.coral.enPeru}), Lumbre ${datos.respaldo.lumbre.respaldos}, registro viejo ${datos.respaldo.musgo.respaldos} respaldo/${datos.respaldo.musgo.busquedas} búsquedas · ` +
     `filas ${datos.final.filas} = ${datos.final.total} · países ${datos.final.paises.join('>')} · ` +
     `limpiar: ${datos.limpiar.despues.art}/${datos.limpiar.despues.area} se quedan, ritmo ${datos.limpiar.antes.ritmo}→${datos.limpiar.despues.ritmo} · ` +
-    `estimación: antes de cerrar ${datos.recargar.minutosAntes} min (${datos.cerrar.ritmo[0].artistas} artistas medidos), al volver ${datos.recargar.minutos} min sin apretar nada · ` +
+    `estimación: antes de cerrar ${datos.cerrar.cotas.bajo}-${datos.cerrar.cotas.alto} min (${datos.cerrar.ritmo[0].artistas} artistas medidos), al volver ${datos.recargar.cotas.bajo}-${datos.recargar.cotas.alto} min sin apretar nada · ` +
     `mundo: abrir ${datos.mundo1.formas} formas y ${datos.mundo1.conTono} con tono · con el 1.º artista ${datos.mundo5.conTono.join(',')} · ` +
     `final ${Object.entries(datos.mundo2.pintados).map(([k, v]) => k + '=' + v).join(',')} · no se ven: ${datos.mundo3.noseven.replace('No se ven en el mapa: ', '')} · clic CL abre=${datos.mundo4.abierta} · errores=0 · ` +
     `reloj virtual=${Math.round(performance.now())} ms`;

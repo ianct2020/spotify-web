@@ -61,6 +61,17 @@ export function queryArtista(nombre) {
   return `artist:${frase(nombre)}`;
 }
 
+// v=307 (tanda 55): la consulta del RESPALDO. `artist:"…"` no mira los alias, y
+// un artista que cambió de nombre y conserva el viejo como alias sale
+// `sin-candidato`. Esta trae también a los que tienen el nombre como alias.
+// 🔴 NO reemplaza a `queryArtista()`: la tanda 54 la probó en su lugar y a un
+// artista que salía bien le quitó el país (con esta, el bueno no entraba en los
+// 10 primeros). `#mapa` la pide SOLO cuando la de siempre no trajo a nadie con
+// ese nombre; con lo que traiga se clasifica con la MISMA regla.
+export function queryArtistaConAlias(nombre) {
+  return `artist:${frase(nombre)} OR alias:${frase(nombre)}`;
+}
+
 export function queryGrabacion(titulo, nombre) {
   return `recording:${frase(titulo)} AND artist:${frase(nombre)}`;
 }

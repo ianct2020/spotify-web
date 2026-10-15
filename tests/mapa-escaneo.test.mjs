@@ -57,6 +57,14 @@ function crearMB({ artistas = {}, areas = {}, fallos = {}, porSiempre = {}, alPe
     }
     const q = u.searchParams.get('query');
     if (u.pathname === '/ws/2/artist/') {
+      // v=307: el respaldo (`artist:"n" OR alias:"n"`) contesta `respaldo` (si no
+      // hay, lo mismo que la búsqueda de siempre). Va ANTES que la otra: la regex
+      // de la de siempre, codiciosa, también «encaja» con esta.
+      const conAlias = q.match(/^artist:"(.*)" OR alias:"(.*)"$/);
+      if (conAlias) {
+        const nombre = conAlias[1].replace(/\\(.)/g, '$1');
+        return { status: 200, datos: { artists: artistas[nombre]?.respaldo ?? artistas[nombre]?.candidatos ?? [] } };
+      }
       const nombre = q.match(/^artist:"(.*)"$/)[1].replace(/\\(.)/g, '$1');
       return { status: 200, datos: { artists: artistas[nombre]?.candidatos || [] } };
     }
@@ -104,6 +112,10 @@ const T = (min) => [1, min, 2020, 2020, [], '2020-01-01'];
 const tema = (t, min = 1) => [t, 1, min, 'id'];
 const cand = (id, name, extra = {}) => ({ id, name, 'sort-name': name, score: 100, ...extra });
 const urlB = (n) => E.urlBusqueda(n);
+// v=307: ¿esta URL es el respaldo? (por la consulta: así no depende de que
+// `urlBusquedaConAlias` exista, y contra el código de v=306 da siempre false).
+const esRespaldo = (u) => u.includes('/artist/') && / OR alias:/.test(new URL(u).searchParams.get('query') || '');
+const esBusqueda = (u) => u.includes('/artist/') && !esRespaldo(u);
 
 // ── 1. El orden ──────────────────────────────────────────────────────────────
 console.log('El orden del escaneo');
@@ -113,7 +125,9 @@ console.log('El orden del escaneo');
   const lista = P.universo(totals, artists);
   const mb = crearMB({ artistas: Object.fromEntries(Object.keys(totals).map(n => [n, { candidatos: [] }])) });
   const r = await correr({ lista, mb });
-  const buscados = mb.llamadas.filter(u => u.includes('/artist/')).map(u => new URL(u).searchParams.get('query'));
+  // v=307: solo la búsqueda de siempre (los cuatro dan sin-candidato y piden
+  // además el respaldo, que tiene su propia sección).
+  const buscados = mb.llamadas.filter(esBusqueda).map(u => new URL(u).searchParams.get('query'));
   ok(igual(buscados, ['artist:"Bronce"', 'artist:"acero"', 'artist:"Ámbar"', 'artist:"Cobre"']),
     'minutos descendente y, a igualdad, por nombre (comparación simple); los < 10 min no se piden', JSON.stringify(buscados));
   ok(igual(r.resueltos, ['Bronce', 'acero', 'Ámbar', 'Cobre']), 'onArtista llega por cada uno, en el mismo orden, apenas se resuelve');
@@ -136,9 +150,12 @@ console.log('\n«Pregunté y no hay» se guarda');
   const lista = P.universo({ 'Nadie Así': T(20) }, { 'Nadie Así': [tema('x')] });
   const mb = crearMB({ artistas: { 'Nadie Así': { candidatos: [cand('z', 'Otro Nombre', { country: 'AR' })] } } });
   const r = await correr({ lista, mb });
-  ok(r.guardadosArtista.length === 1 && r.guardadosArtista[0][0] === 'Nadie Así', 'el sin-candidato queda guardado (es un resultado)');
+  // v=307 (tanda 55): hasta v=306 esto afirmaba «se guarda 1 vez» y «una sola
+  // petición». Ahora un sin-candidato pide además el respaldo: se guarda 2 veces
+  // (la búsqueda y el respaldo) y son 2 peticiones, ninguna de grabación.
+  ok(r.guardadosArtista.length === 2 && r.guardadosArtista.every(([n]) => n === 'Nadie Así'), `el sin-candidato queda guardado (es un resultado), con su respaldo (${r.guardadosArtista.length} guardados)`);
   ok(P.proximoPaso(lista[0], r.artistas.get('Nadie Así'), r.areas).clase === 'sin-candidato', 'y lo guardado da sin-candidato');
-  ok(mb.llamadas.length === 1, 'una sola petición: no pide la grabación');
+  ok(mb.llamadas.length === 2 && esBusqueda(mb.llamadas[0]) && esRespaldo(mb.llamadas[1]), `dos peticiones, la búsqueda y el respaldo, y ninguna grabación (${mb.llamadas.length})`);
 }
 
 // ── 4. Retomar: lo guardado no se vuelve a pedir ─────────────────────────────
@@ -286,14 +303,18 @@ console.log('\nSe guarda antes de pedir lo siguiente');
   const mb = crearMB({ artistas: mbArt });
   const r = await correr({ lista, mb });
   const ev = r.reloj.eventos.filter(e => e !== 'esperar');
-  ok(igual(ev, ['pedir', 'guardar', 'pedir', 'guardar', 'pedir', 'guardar']), 'pedir → guardar → pedir…: cada respuesta se guarda antes de la petición siguiente', ev.join(' '));
+  // v=307: «Río» da sin-candidato y pide el respaldo: 4 pares y no 3.
+  ok(igual(ev, ['pedir', 'guardar', 'pedir', 'guardar', 'pedir', 'guardar', 'pedir', 'guardar']), 'pedir → guardar → pedir…: cada respuesta se guarda antes de la petición siguiente (el respaldo también)', ev.join(' '));
 }
 
 // ── 9. Saltar los que ya fallaron en esta sesión, y parar ────────────────────
 console.log('\nSaltar y parar');
 {
   const lista = P.universo({ 'Uno': T(90), 'Dos': T(80) }, {});
-  const mb = crearMB({ artistas: { 'Uno': { candidatos: [] }, 'Dos': { candidatos: [] } } });
+  // v=307: «Dos» pasa a tener un coincidente sin país (unico, 1 petición): con
+  // `candidatos: []` pediría además el respaldo y el assert de abajo mediría eso
+  // en vez de lo que mide, que `saltar` no pide nada.
+  const mb = crearMB({ artistas: { 'Uno': { candidatos: [] }, 'Dos': { candidatos: [cand('d', 'Dos')] } } });
   await correr({ lista, mb, saltar: new Set(['Uno']) });
   ok(mb.llamadas.length === 1 && mb.llamadas[0] === urlB('Dos'), 'un artista en `saltar` no se pide');
 
@@ -319,6 +340,55 @@ console.log('\nEl candado');
   ok(r3.candado === 'sin-soporte' && r3.valor === 'sin', 'sin `navigator.locks`, escanea igual y lo dice');
 }
 
+// ── 10 bis. El alias de respaldo (v=307, tanda 55) ───────────────────────────
+console.log('\nEl alias de respaldo');
+{
+  ok(typeof E.urlBusquedaConAlias === 'function' && E.urlBusquedaConAlias('Ana "La" B') === 'https://musicbrainz.org/ws/2/artist/?query=' + encodeURIComponent('artist:"Ana \\"La\\" B" OR alias:"Ana \\"La\\" B"') + '&limit=10&fmt=json',
+    'la URL del respaldo: el nombre O un alias, mismas comillas y escapes, limit=10, fmt=json', typeof E.urlBusquedaConAlias === 'function' ? E.urlBusquedaConAlias('Ana "La" B') : 'no existe');
+  ok(E.urlBusqueda('Ana "La" B') === 'https://musicbrainz.org/ws/2/artist/?query=' + encodeURIComponent('artist:"Ana \\"La\\" B"') + '&limit=10&fmt=json', 'y la de siempre no cambió (conservación)');
+
+  // Un artista INVENTADO que cambió de nombre: Spotify dice «Faro Viejo»;
+  // MusicBrainz lo tiene como «Faro Nuevo», con «Faro Viejo» de alias. La de
+  // siempre trae solo un tributo; el respaldo, al de verdad.
+  const tributo = cand('t1', 'Faro Viejo Tribute Band');
+  const renombrado = cand('r1', 'Faro Nuevo', { country: 'UY', aliases: [{ name: 'Faro Viejo' }] });
+  const mbArt = {
+    'Faro Viejo': { candidatos: [tributo], respaldo: [tributo, renombrado], grabacion: ['r1'] },
+    'Unica Banda': { candidatos: [cand('u1', 'Unica Banda', { country: 'PE' })], respaldo: [cand('zz', 'Unica Banda', { country: 'ZZ' })], grabacion: ['u1'] },
+  };
+  const lista = P.universo({ 'Faro Viejo': T(90), 'Unica Banda': T(80) }, { 'Faro Viejo': [tema('Señal')], 'Unica Banda': [tema('Otra')] });
+  const mb = crearMB({ artistas: mbArt });
+  const r = await correr({ lista, mb });
+  const faro = mb.llamadas.filter((u) => u.includes(encodeURIComponent('"Faro Viejo"')));
+  const unica = mb.llamadas.filter((u) => u.includes(encodeURIComponent('"Unica Banda"')));
+  ok(faro.length === 3 && esBusqueda(faro[0]) && esRespaldo(faro[1]) && faro[2].includes('/recording/'),
+    'tras una búsqueda sin-candidato pide el respaldo, y después la grabación (con el nombre que pidió Ian)', faro.map((u) => new URL(u).searchParams.get('query')).join(' · '));
+  ok(faro[2] === E.urlGrabacion('Señal', 'Faro Viejo'), 'la grabación va con el nombre de Spotify, no con el de MusicBrainz');
+  ok(!unica.some(esRespaldo) && unica.length === 2, `tras una búsqueda unico NUNCA pide el respaldo (${unica.length} peticiones: búsqueda y grabación)`);
+  const p = P.proximoPaso(lista[0], r.artistas.get('Faro Viejo'), r.areas);
+  ok(p.falta === null && p.categoria === 'pais' && p.pais === 'UY' && p.mbid === 'r1', 'y sale con su país (UY), corroborado', JSON.stringify(p));
+  const q = P.proximoPaso(lista[1], r.artistas.get('Unica Banda'), r.areas);
+  ok(q.pais === 'PE' && q.categoria === 'pais', 'el unico sale con el suyo (PE), no con el del respaldo que el doble tenía preparado (ZZ)');
+  const reg = r.artistas.get('Faro Viejo');
+  ok(Array.isArray(reg.respaldo) && reg.respaldo.length === 2 && igual(Object.keys(reg.respaldo[0]).sort(), Object.keys(P.recortarArtistas({ artists: [tributo] })[0]).sort()),
+    'el registro guarda los candidatos del respaldo, recortados como los de la búsqueda', JSON.stringify(reg.respaldo));
+  ok(r.artistas.get('Unica Banda').respaldo === null, 'el de la búsqueda unico guarda `respaldo: null` (no se pidió)');
+  ok(r.guardadosArtista.filter(([n]) => n === 'Faro Viejo').length === 3, 'cada respuesta se guarda antes de la siguiente: búsqueda, respaldo y grabación (3 guardados)');
+
+  // Un registro de v=304-306: sin-candidato y SIN el campo. «Seguir» pide SOLO el respaldo.
+  const viejo = new Map([['Faro Viejo', { v: 1, nombre: 'Faro Viejo', consultado: 'x', candidatos: P.recortarArtistas({ artists: [tributo] }), grabacion: null }]]);
+  const mb2 = crearMB({ artistas: mbArt });
+  const r2 = await correr({ lista: lista.slice(0, 1), mb: mb2, artistas: viejo });
+  ok(mb2.llamadas.length >= 1 && esRespaldo(mb2.llamadas[0]) && !mb2.llamadas.some(esBusqueda),
+    `un registro viejo sin-candidato sin respaldo: pide SOLO el respaldo, 0 búsquedas repetidas (${mb2.llamadas.map((u) => (esRespaldo(u) ? 'respaldo' : esBusqueda(u) ? 'búsqueda' : 'otra')).join(', ')})`);
+  ok(r2.artistas.get('Faro Viejo').consultado === 'x' && r2.artistas.get('Faro Viejo').candidatos.length === 1, 'y conserva su búsqueda tal cual (la fecha y los candidatos)');
+
+  // Un 503 en el respaldo: se reintenta el MISMO pedido y nunca se guarda.
+  const mb3 = crearMB({ artistas: mbArt, fallos: { [E.urlBusquedaConAlias?.('Faro Viejo') ?? 'x']: [503] } });
+  const r3 = await correr({ lista: lista.slice(0, 1), mb: mb3 });
+  ok(mb3.llamadas.filter(esRespaldo).length === 2 && r3.guardadosArtista.every(([, g]) => g.respaldo === null || g.respaldo.length === 2), 'un 503 en el respaldo: se reintenta y no se guarda nada por el 503');
+}
+
 // ── 11. El ritmo medido y lo que falta (estimación) ──────────────────────────
 console.log('\nEl ritmo medido');
 {
@@ -331,23 +401,56 @@ console.log('\nEl ritmo medido');
   // cargas (`ritmo`: peticiones, artistas, y la suma de la duración de cada
   // artista y de sus cuadrados). Hasta v=305 este assert afirmaba «100
   // pendientes, 50 peticiones, 20 artistas, 100 s → ~250 peticiones, ~8 min»
-  // (8,3 redondeado al más cercano). Con los mismos números —20 artistas de 5 s
-  // cada uno, sin dispersión— afirma ~250 peticiones y 9 minutos: 8,3 redondeado
-  // HACIA ARRIBA (lo que se enseña nunca va por lo bajo).
+  // (8,3 redondeado al más cercano). En v=306 afirmaba ~250 peticiones y 9
+  // minutos (8,3 HACIA ARRIBA, por lo alto). v=307 (tanda 55): es un RANGO, y
+  // afirma ~250 peticiones, entre 8 min (8,3 hacia ABAJO: la cota baja es la
+  // media sola) y 15 min (8,3 + la racha entera de 6,5 min, hacia ARRIBA; sin
+  // dispersión, el término de la σ es 0).
   const ritmo = { ...E.ritmoVacio(), peticiones: 50, artistas: 20, msArtistas: 100_000, msArtistas2: 20 * 5000 ** 2 };
   const est = E.estimarLoQueFalta({ pendientes: 100, ritmo });
-  ok(est && est.peticiones === 250 && est.minutos === 9, `100 pendientes a 2,5 pet./artista y 5 s/artista, sin dispersión → ~250 peticiones, 9 min (${JSON.stringify(est)})`);
+  ok(est && est.peticiones === 250 && est.minutosBajo === 8 && est.minutosAlto === 15, `100 pendientes a 2,5 pet./artista y 5 s/artista, sin dispersión → ~250 peticiones, entre 8 y 15 min (${JSON.stringify(est)})`);
   // Hasta v=305: «sin ningún artista hecho en la sesión, no se estima». Sigue
   // valiendo (con lo acumulado), y desde v=306 hace falta un mínimo.
   ok(E.estimarLoQueFalta({ pendientes: 10, ritmo: { ...E.ritmoVacio(), peticiones: 3 } }) === null, 'sin ningún artista medido, no se estima');
 }
 
-// ── 12. Lo que falta: acumulado entre cargas y por lo alto (v=306, tanda 54) ─
+// ── 12. Lo que falta: un RANGO (v=307, tanda 55; acumulado desde v=306) ───────
 // Líneas de tiempo INVENTADAS (duración de cada artista, en ms), leídas «cada
-// 5 s» como la pantalla. El criterio, el de la tanda 54: desde la primera
-// lectura que enseña un número, ese número (en minutos, como se enseña) no queda
-// por debajo del 90 % de lo que de verdad faltaba, en NINGUNA lectura.
-console.log('\nLo que falta, acumulado y por lo alto');
+// 5 s» como la pantalla. La condición de la tanda 55, más estricta que el 10 %
+// de la 54 a propósito (es lo que promete un rango): desde la primera lectura
+// que enseña un rango, la cota ALTA (en minutos, como se enseña) no queda NUNCA
+// por debajo de lo que de verdad faltaba. La baja sí puede: es la cota baja.
+console.log('\nLo que falta: un rango, con la racha sacada de las constantes');
+// La racha, calculada ACÁ desde las dos constantes (no escrita a mano): lo más
+// que puede costar una sola racha de fallos antes de que el escaneo se pause
+// solo, o sea las esperas entre el primer fallo y el que dispara la pausa.
+const rachaEsperada = Array.from({ length: E.FALLOS_PARA_PAUSAR - 1 }, (_, i) => E.ESPERAS_MS[Math.min(i + 1, E.ESPERAS_MS.length) - 1]).reduce((s, x) => s + x, 0);
+{
+  ok(E.RACHA_MS === rachaEsperada, `la racha es la suma de las esperas de ESPERAS_MS hasta la que dispara la pausa (FALLOS_PARA_PAUSAR = ${E.FALLOS_PARA_PAUSAR}): ${rachaEsperada / 1000} s (en el código: ${E.RACHA_MS / 1000} s)`);
+  // Contra el bucle de verdad: una racha de FALLOS_PARA_PAUSAR − 1 fallos seguidos de un 200 espera EXACTAMENTE eso.
+  const lista = P.universo({ 'Racha': T(90) }, {});
+  const mb = crearMB({ artistas: { 'Racha': { candidatos: [cand('r', 'Racha')] } }, fallos: { [urlB('Racha')]: Array(E.FALLOS_PARA_PAUSAR - 1).fill(503) } });
+  const r = await correr({ lista, mb });
+  const esperado = r.reloj.esperas.filter((ms) => ms >= 10_000).reduce((s, x) => s + x, 0);
+  ok(r.res.motivo === 'completo' && esperado === rachaEsperada, `y es lo que espera escanear() con la racha más larga que no pausa (${esperado / 1000} s: una racha de ${E.FALLOS_PARA_PAUSAR - 1} respuestas 503 y después un 200; ojo, «N fallos» en una línea lo lee el runner como un fallo)`);
+  // La cota alta = la de v=306 (media·p + Z·σ·√(p + p²/n)) + la racha, hacia arriba.
+  const ritmo = { ...E.ritmoVacio(), peticiones: 40, artistas: 10, msArtistas: 10 * 4000, msArtistas2: 5 * 1000 ** 2 + 5 * 7000 ** 2 };
+  const n = 10, p = 30, media = 4000, sigma = Math.sqrt((ritmo.msArtistas2 - n * media * media) / (n - 1));
+  const alto306 = media * p + E.Z_ESTIMACION * sigma * Math.sqrt(p + (p * p) / n);
+  const est = E.estimarLoQueFalta({ pendientes: p, ritmo });
+  ok(est?.minutosAlto === Math.ceil((alto306 + rachaEsperada) / 60_000) && est?.minutosBajo === Math.max(1, Math.floor(media * p / 60_000)),
+    `cota baja = media·p hacia abajo (${est?.minutosBajo}), cota alta = lo de v=306 + la racha, hacia arriba (${est?.minutosAlto})`);
+  ok(E.Z_ESTIMACION === 2 && E.MIN_ARTISTAS_ESTIMAR === 5, 'Z y el mínimo de artistas no cambian (2 y 5)');
+}
+{
+  // El texto, en castellano de España, con las dos cotas.
+  ok(typeof E.textoLoQueFalta === 'function' && E.textoLoQueFalta({ peticiones: 5259, minutosBajo: 207, minutosAlto: 313 }) === 'Quedan ~5259 peticiones: entre 3 horas y 27 min y 5 horas y 13 min, según cuántos 503 dé MusicBrainz.',
+    'el texto enseña las DOS cotas', typeof E.textoLoQueFalta === 'function' ? E.textoLoQueFalta({ peticiones: 5259, minutosBajo: 207, minutosAlto: 313 }) : 'no existe');
+  ok(typeof E.textoLoQueFalta === 'function' && E.textoLoQueFalta({ peticiones: 12, minutosBajo: 1, minutosAlto: 8 }) === 'Quedan ~12 peticiones: entre 1 min y 8 min, según cuántos 503 dé MusicBrainz.', 'con pocos minutos');
+  ok(typeof E.textoLoQueFalta === 'function' && E.textoLoQueFalta({ peticiones: 300, minutosBajo: 60, minutosAlto: 120 }) === 'Quedan ~300 peticiones: entre 1 hora y 2 horas, según cuántos 503 dé MusicBrainz.', 'horas justas');
+  ok(typeof E.textoLoQueFalta === 'function' && E.textoLoQueFalta({ peticiones: 4, minutosBajo: 7, minutosAlto: 7 }) === 'Quedan ~4 peticiones: 7 min, según cuántos 503 dé MusicBrainz.', 'si las dos cotas dan lo mismo, una sola');
+  ok(typeof E.textoLoQueFalta === 'function' && E.textoLoQueFalta({ peticiones: 12345, minutosBajo: 61, minutosAlto: 1501 }).startsWith('Quedan ~12.345 peticiones: entre 1 hora y 1 min y 25 horas y 1 min'), 'con es-ES explícito (12.345: cinco cifras llevan separador)');
+}
 const RAPIDO = 2400, CON_503 = 25_000;   // un artista sin 503 (2 peticiones a 1,2 s) y uno con una ráfaga
 function simular(duraciones, { recargaEn = null, petPorArtista = 2 } = {}) {
   // `recargaEn`: tras ese artista la página se recarga: lo acumulado sale de lo
@@ -366,44 +469,63 @@ function simular(duraciones, { recargaEn = null, petPorArtista = 2 } = {}) {
       if (hechos === recargaEn) ritmo = E.ritmoDesde(JSON.parse(JSON.stringify(ritmo)));
     }
     const est = E.estimarLoQueFalta({ pendientes: n - hechos, ritmo });
-    lecturas.push({ ahora, hechos, minutos: est ? est.minutos : null, real: (total - ahora) / 60_000 });
+    // `v306`: el número de v=306, con la MISMA fórmula escrita acá (media·p + Z·σ·√(p + p²/n), hacia arriba).
+    let v306 = null;
+    if (ritmo.artistas >= 5 && n - hechos > 0) {
+      const m = ritmo.msArtistas / ritmo.artistas, va = Math.max(0, (ritmo.msArtistas2 - ritmo.artistas * m * m) / (ritmo.artistas - 1)), q = n - hechos;
+      v306 = Math.max(1, Math.ceil((m * q + 2 * Math.sqrt(va * (q + q * q / ritmo.artistas))) / 60_000));
+    }
+    lecturas.push({ ahora, hechos, bajo: est ? est.minutosBajo ?? null : null, alto: est ? est.minutosAlto ?? null : null, v306, real: (total - ahora) / 60_000 });
   }
   return lecturas;
 }
-const debajo = (lecturas) => lecturas.filter((l) => l.minutos !== null && l.minutos < 0.9 * l.real);
+const conRango = (lecturas) => lecturas.filter((l) => l.alto !== null && l.alto !== undefined);
+const altoDebajo = (lecturas) => conRango(lecturas).filter((l) => l.alto < l.real);
 // 150 artistas con 503 repartidos por toda la búsqueda, con un patrón fijo (el 12 %).
 const conRafagas = Array.from({ length: 150 }, (_, i) => ((i * 53 + 7) % 100 < 12 ? CON_503 : RAPIDO));
 {
+  // La forma del problema que encontró la tanda 54, con números INVENTADOS: un
+  // tramo tranquilo largo (la media baja y la σ es casi 0) y una racha de 503 al
+  // final, cuando ya quedan pocos. Ninguna dispersión medida la ve venir.
+  const rachaFinal = [...Array(34).fill(RAPIDO), ...Array(6).fill(16_000)];
+  const l = simular(rachaFinal);
+  const v306Debajo = l.filter((x) => x.v306 !== null && x.v306 < x.real);
+  ok(v306Debajo.length > 0, `con una racha al final, el número de v=306 queda por debajo de lo que faltaba (${v306Debajo.length} lecturas; la peor: ${v306Debajo[0]?.v306} min con ${v306Debajo[0]?.real.toFixed(2)} por delante) — es el defecto, no un assert del código nuevo`);
+  ok(conRango(l).length > 0 && altoDebajo(l).length === 0, `y la cota alta de v=307 no queda por debajo NUNCA (${altoDebajo(l).length} de ${conRango(l).length})`,
+    altoDebajo(l).slice(0, 3).map((x) => `a ${x.ahora / 1000} s: ${x.alto} min y faltaban ${x.real.toFixed(2)}`).join(' · '));
+}
+{
   const l = simular(conRafagas);
-  const malas = debajo(l);
-  ok(l.some((x) => x.minutos !== null) && malas.length === 0,
-    `con 503 a mitad: ninguna lectura por debajo del 90 % de lo que faltaba (${malas.length} de ${l.filter((x) => x.minutos !== null).length})`,
-    malas.slice(0, 3).map((x) => `a ${x.ahora / 1000} s: ${x.minutos} min y faltaban ${x.real.toFixed(2)}`).join(' · '));
-  ok(l.every((x) => x.minutos === null || Number.isInteger(x.minutos)), 'los minutos se enseñan enteros (redondeados hacia arriba)');
+  ok(conRango(l).length > 0 && altoDebajo(l).length === 0,
+    `con 503 a mitad: la cota alta nunca por debajo de lo que faltaba (${altoDebajo(l).length} de ${conRango(l).length})`,
+    altoDebajo(l).slice(0, 3).map((x) => `a ${x.ahora / 1000} s: ${x.alto} min y faltaban ${x.real.toFixed(2)}`).join(' · '));
+  ok(conRango(l).every((x) => Number.isInteger(x.alto) && Number.isInteger(x.bajo)), 'los minutos se enseñan enteros');
+  ok(conRango(l).every((x) => x.bajo <= x.alto && x.bajo >= 1), 'la cota baja nunca pasa a la alta (y es al menos 1 min)', conRango(l).filter((x) => x.bajo > x.alto).slice(0, 2).map((x) => JSON.stringify(x)).join(' · '));
 }
 {
   // Una recarga a mitad: lo acumulado sigue (no vuelve a «se estimará…» ni baja a la mitad).
   const l = simular(conRafagas, { recargaEn: 60 });
-  const antes = l.filter((x) => x.hechos < 60 && x.minutos !== null).at(-1);
+  const antes = conRango(l).filter((x) => x.hechos < 60).at(-1);
   const despues = l.find((x) => x.hechos >= 60);
-  ok(despues && despues.minutos !== null, `justo después de recargar sigue enseñando un número (${despues?.minutos} min), no «se estimará…»`);
-  ok(antes && despues && despues.minutos >= 0.9 * antes.minutos * (despues.real / antes.real), `y no baja de golpe: ${antes?.minutos} min antes y ${despues?.minutos} después, con ${antes?.real.toFixed(1)} y ${despues?.real.toFixed(1)} min de verdad por delante`);
-  ok(debajo(l).length === 0, `con la recarga, ninguna lectura por debajo del 90 % (${debajo(l).length})`);
+  ok(despues && despues.alto !== null && despues.bajo !== null, `justo después de recargar sigue enseñando el rango (${despues?.bajo}-${despues?.alto} min), no «se estimará…»`);
+  ok(antes && despues && despues.alto >= 0.9 * antes.alto * (despues.real / antes.real), `y no baja de golpe: ${antes?.alto} min antes y ${despues?.alto} después, con ${antes?.real.toFixed(1)} y ${despues?.real.toFixed(1)} min de verdad por delante`);
+  ok(altoDebajo(l).length === 0, `con la recarga, la cota alta nunca por debajo (${altoDebajo(l).length})`);
 }
 {
   // Una sesión que arranca sin 503: nada hasta el mínimo de artistas, y en
-  // cuanto llega una ráfaga el número sube.
+  // cuanto llega una ráfaga la cota alta sube.
   const tranquila = [...Array(12).fill(RAPIDO), CON_503, ...Array(47).fill(RAPIDO)];
   const l = simular(tranquila);
-  const primera = l.find((x) => x.minutos !== null);
-  ok(E.MIN_ARTISTAS_ESTIMAR >= 2 && primera && primera.hechos >= E.MIN_ARTISTAS_ESTIMAR, `el primer número sale con ${primera?.hechos} artistas medidos (mínimo ${E.MIN_ARTISTAS_ESTIMAR})`);
+  const primera = conRango(l)[0];
+  ok(E.MIN_ARTISTAS_ESTIMAR >= 2 && primera && primera.hechos >= E.MIN_ARTISTAS_ESTIMAR, `el primer rango sale con ${primera?.hechos} artistas medidos (mínimo ${E.MIN_ARTISTAS_ESTIMAR})`);
   const r1 = { ...E.ritmoVacio(), peticiones: 2, artistas: 1, msArtistas: RAPIDO, msArtistas2: RAPIDO ** 2 };
   ok(E.estimarLoQueFalta({ pendientes: 100, ritmo: r1 }) === null, 'con un solo artista medido no se enseña ningún número');
   const r4 = [1, 2, 3, 4].reduce((r) => E.sumarArtista(E.sumarPeticion(E.sumarPeticion(r, 200), 200), RAPIDO), E.ritmoVacio());
   ok(E.estimarLoQueFalta({ pendientes: 100, ritmo: r4 }) === null, 'con cuatro tampoco');
-  const antes = l.filter((x) => x.hechos === 12 && x.minutos !== null).at(-1);
+  const antes = conRango(l).filter((x) => x.hechos === 12).at(-1);
   const despues = l.find((x) => x.hechos === 13);
-  ok(antes && despues && despues.minutos > antes.minutos, `y cuando llega la primera ráfaga el número sube (${antes?.minutos} → ${despues?.minutos} min)`);
+  ok(antes && despues && despues.alto > antes.alto, `y cuando llega la primera ráfaga la cota alta sube (${antes?.alto} → ${despues?.alto} min)`);
+  ok(altoDebajo(l).length === 0, `y la cota alta nunca queda por debajo (${altoDebajo(l).length})`);
 }
 {
   // Lo acumulado se guarda y se recupera tal cual; un guardado roto o de otra versión no se usa.

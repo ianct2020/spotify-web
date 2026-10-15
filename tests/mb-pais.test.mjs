@@ -266,11 +266,23 @@ console.log('14. el que cambió de nombre: si la respuesta lo trae, la regla lo 
   // (`artist:"…"` no mira los alias, así que MusicBrainz no lo devuelve), y la
   // consulta que lo arreglaba le quitaba el país a otro artista: no se cambió.
   // Este assert deja escrito que, el día que la consulta lo traiga, la regla ya
-  // está lista.
+  // está lista. (Tanda 55, v=307: ese día llegó, como RESPALDO y no como
+  // reemplazo; ver el caso 15 y `tests/mapa-paises.test.mjs`.)
   const renombrado = cand('r1', 'Faro Nuevo', { country: 'UY', aliases: [{ name: 'Faro Viejo' }, { name: 'FN' }] });
   const r = llamar('clasificar', 'Faro Viejo', [cand('t1', 'Faro Viejo Tribute Band'), renombrado]);
   ok(r?.clase === 'unico' && r?.mbid === 'r1' && r?.pais === 'UY', 'si la respuesta lo trae, coincide por su alias → unico UY');
   ok(llamar('comoCoincide', 'Faro Viejo', renombrado) === 'alias', 'comoCoincide dice «alias»');
+}
+
+console.log('15. la consulta del respaldo (v=307, tanda 55)');
+{
+  // La de siempre NO cambia (los dos asserts del caso 9 siguen iguales, byte a
+  // byte). El respaldo es OTRA consulta, que `#mapa` pide solo cuando la de
+  // siempre no trajo a nadie con ese nombre: el nombre O un alias, con las
+  // mismas comillas y escapes.
+  ok(llamar('queryArtistaConAlias', 'Simple') === 'artist:"Simple" OR alias:"Simple"', 'queryArtistaConAlias: el nombre O un alias');
+  ok(llamar('queryArtistaConAlias', 'Banda "X" \\ Y') === 'artist:"Banda \\"X\\" \\\\ Y" OR alias:"Banda \\"X\\" \\\\ Y"', 'queryArtistaConAlias escapa comillas y barra invertida en las dos partes');
+  ok(llamar('queryArtista', 'Simple') === 'artist:"Simple"', 'y la de siempre sigue siendo artist:"…" a secas (conservación)');
 }
 
 console.log(`\n${fallaron ? 'FALLÓ' : 'OK'} mb-pais: ${pasaron} de ${pasaron + fallaron}`);

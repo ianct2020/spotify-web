@@ -6,6 +6,10 @@
 // Doce artistas de 10 min o más —uno por cada caso de la regla— y dos de menos;
 // desde v=305, dos más para el mundo (uno en Malta, que no tiene forma en el
 // mapa, y uno con pocos minutos, para que se pinte un tono bajo).
+// Desde v=307 (tanda 55), dos más para el alias de respaldo: uno que cambió de
+// nombre (la búsqueda de siempre no lo encuentra y el respaldo sí, por su alias)
+// y uno con un registro VIEJO en la caché (de v=304-306: `sin-candidato` y sin el
+// campo `respaldo`), que la madre siembra antes de recargar.
 // Lo que tiene que dar cada uno está escrito al lado, a mano, y `ESPERADO` lo
 // junta: el banco compara la pantalla contra esta cuenta, no contra la del
 // código que prueba.
@@ -19,7 +23,8 @@ export const AREA = {
   otra: 'b0000000-0000-4000-8000-000000000003',
 };
 
-// nombre, minutos, tema, candidatos de la búsqueda, ids de la grabación, y lo esperado.
+// nombre, minutos, tema, candidatos de la búsqueda, ids de la grabación, lo esperado y (v=307, opcional)
+// los candidatos del RESPALDO (`artist:"…" OR alias:"…"`); sin ellos, el respaldo contesta lo mismo que la búsqueda.
 const C = (id, name, extra = {}) => ({ id, name, 'sort-name': name, score: 100, type: 'Person', ...extra });
 export const ARTISTAS = [
   ['Lumbre Norte', 500, 'Brasa (Versión acústica)', [C('m-lumbre', 'Lumbre Norte', { country: 'AR' })], ['m-lumbre'], 'AR'],                         // unico corroborado
@@ -37,7 +42,13 @@ export const ARTISTAS = [
   // v=305 (tanda 53): los dos del mundo.
   ['Faro Maltés', 40, 'Bahía', [C('m-malta', 'Faro Maltés', { country: 'MT' })], ['m-malta'], 'MT'],                                                // Malta: con minutos y SIN forma en el mapa
   ['Brisa Sur', 12, 'Rambla', [C('m-brisa', 'Brisa Sur', { country: 'UY' })], ['m-brisa'], 'UY'],                                                   // pocos minutos: un tono bajo (2)
+  // v=307 (tanda 55): el alias de respaldo.
+  ['Coral Antiguo', 70, 'Arrecife', [C('m-coral-trib', 'Coral Antiguo Tributo')], ['m-coral'], 'PE',
+    [C('m-coral-trib', 'Coral Antiguo Tributo'), C('m-coral', 'Coral Nuevo', { country: 'PE', aliases: [{ name: 'Coral Antiguo' }] })]],                 // renombrado: sin-candidato → el respaldo lo trae por su alias → PE
+  ['Musgo Lento', 11, 'Humedad', [C('m-musgo-x', 'Musgo Lentísimo')], null, 'sin-pais', []],                                                         // registro VIEJO sembrado: solo pide el respaldo, que no trae a nadie
 ];
+// El registro de v=304-306 que la madre siembra antes de recargar (sin el campo `respaldo`).
+export const REGISTRO_VIEJO = { nombre: 'Musgo Lento', candidatos: [C('m-musgo-x', 'Musgo Lentísimo')] };
 const MENOS10 = [['Chispa', 5], ['Grano Fino', 9.9]];
 
 export const HISTORIAL = {
@@ -50,33 +61,40 @@ export const HISTORIAL = {
 };
 
 // La cuenta hecha a mano, en décimas de minuto.
+// v=307 (tanda 55): con Coral Antiguo (700, PE por el respaldo) y Musgo Lento (110,
+// sin país) el total pasa de 22719 a 23529, el universo de 14 a 16, «con país» de
+// 16470 a 17170, «sin país» de 4300 a 4410, los países de 6 a 7 (PE), las
+// peticiones sin fallos de 27 a 32 (Tordo +1 respaldo; Coral búsqueda, respaldo y
+// grabación; Musgo solo su respaldo) y los guardados de 13 a 15. Con el total
+// nuevo, Chile baja de 11,0 a 10,6 % (sigue en el tono 5) y Perú (2,98 %) va en el 3.
 // v=305 (tanda 53): con Faro Maltés (400) y Brisa Sur (120) el total pasa de
 // 22199 a 22719, «con país» de 15950 a 16470, los países de 4 a 6, las
 // peticiones sin fallos de 23 a 27, los guardados de 11 a 13 y el universo de 12
 // a 14. Las otras cuatro filas no cambian.
 export const ESPERADO = {
-  total: 22719,
-  universo: 14,
+  total: 23529,
+  universo: 16,
   filas: [
-    5000 + 4000 + 3000 + 2500 + 1000 + 300 + 150 + 400 + 120,   // con país (+ Malta y Uruguay)
-    2000 + 1500 + 800,                              // sin país: Tordo, Nube, Hilo
+    5000 + 4000 + 3000 + 2500 + 1000 + 300 + 150 + 400 + 120 + 700,   // con país (+ Malta y Uruguay; + Perú, v=307)
+    2000 + 1500 + 800 + 110,                        // sin país: Tordo, Nube, Hilo (+ Musgo, v=307)
     1200,                                           // sin confirmar: Pez
     600,                                            // sin buscar: Vidrio (no se pudo, no se guarda)
     50 + 99,                                        // menos de 10 min
   ],
-  paises: [['AR', 5300, 2], ['BR', 5150, 3], ['ES', 3000, 1], ['CL', 2500, 1], ['MT', 400, 1], ['UY', 120, 1]],
+  paises: [['AR', 5300, 2], ['BR', 5150, 3], ['ES', 3000, 1], ['CL', 2500, 1], ['PE', 700, 1], ['MT', 400, 1], ['UY', 120, 1]],
   // En el orden de la pantalla (el del escaneo: minutos descendente).
-  sinPais: { 'Tordo Azul': 'sin-pais', 'Nube Baja': 'sin-pais', 'Pez Lento': 'sin-confirmar', 'Hilo Rojo': 'sin-pais' },
-  // búsqueda + áreas + grabación, sin fallos.
-  peticionesSinFallos: 2 + 4 + 1 + 2 + 1 + 2 + 2 + 3 + 1 + 1 + 2 + 2 + 2 + 2,
-  artistasGuardados: 13,
+  sinPais: { 'Tordo Azul': 'sin-pais', 'Nube Baja': 'sin-pais', 'Pez Lento': 'sin-confirmar', 'Hilo Rojo': 'sin-pais', 'Musgo Lento': 'sin-pais' },
+  // búsqueda + respaldo + áreas + grabación, sin fallos (Tordo 1 → 2 por su respaldo; Coral 3; Musgo 1).
+  peticionesSinFallos: 2 + 4 + 1 + 2 + 2 + 2 + 2 + 3 + 1 + 1 + 2 + 2 + 2 + 2 + 3 + 1,
+  artistasGuardados: 15,
   areasGuardadas: 3,
-  // El mundo (v=305), a mano, con los cortes fijos sobre 22719 décimas:
-  //   AR 5300 → 23,3 % · BR 5150 → 22,7 % · ES 3000 → 13,2 % · CL 2500 → 11,0 %: los cuatro ≥ 10 % → 5;
-  //   MT 400 → 1,76 % → 3, pero no tiene forma: no se pinta, va en «No se ven»;
-  //   UY 120 → 0,53 % → 2.
-  // Pintados: los 6 de la lista menos Malta = 5. Todos los demás, «sin datos».
-  tonos: { AR: 5, BR: 5, ES: 5, CL: 5, UY: 2 },
+  // El mundo (v=305; v=307 sobre 23529 décimas), a mano, con los cortes fijos:
+  //   AR 5300 → 22,5 % · BR 5150 → 21,9 % · ES 3000 → 12,8 % · CL 2500 → 10,6 %: los cuatro ≥ 10 % → 5;
+  //   PE 700 → 2,98 % → 3 (v=307);
+  //   MT 400 → 1,70 % → 3, pero no tiene forma: no se pinta, va en «No se ven»;
+  //   UY 120 → 0,51 % → 2.
+  // Pintados: los 7 de la lista menos Malta = 6. Todos los demás, «sin datos».
+  tonos: { AR: 5, BR: 5, ES: 5, CL: 5, PE: 3, UY: 2 },
   sinForma: ['MT'],
   noSeVen: 'No se ven en el mapa: Malta',
 };
@@ -128,7 +146,9 @@ export function crearMB({ fallo503 = () => false, sintetico = 0 } = {}) {
   mb.responder = (url, meta = {}) => {
     const n = mb.log.length + 1;
     const u = new URL(url);
-    const tipo = u.pathname.startsWith('/ws/2/area/') ? 'area' : u.pathname === '/ws/2/recording/' ? 'grabacion' : u.pathname === '/ws/2/artist/' ? 'busqueda' : 'otra';
+    // v=307: el respaldo es la misma ruta con otra consulta (el nombre O un alias).
+    const respaldo = u.pathname === '/ws/2/artist/' && / OR alias:/.test(u.searchParams.get('query') || '');
+    const tipo = u.pathname.startsWith('/ws/2/area/') ? 'area' : u.pathname === '/ws/2/recording/' ? 'grabacion' : respaldo ? 'respaldo' : u.pathname === '/ws/2/artist/' ? 'busqueda' : 'otra';
     const entrada = { n, url, tipo, marco: meta.marco, metodo: meta.metodo || 'GET', cabeceras: meta.cabeceras || [], status: null };
     mb.log.push(entrada);
     if (mb.congelado) { mb.colgadas++; entrada.status = 'colgada'; return new Promise(() => {}); }
@@ -144,6 +164,13 @@ export function crearMB({ fallo503 = () => false, sintetico = 0 } = {}) {
       return AREAS[id] ? json(AREAS[id]) : { status: 404, cuerpo: '{}' };
     }
     const q = u.searchParams.get('query') || '';
+    if (tipo === 'respaldo') {
+      const nombre = (q.match(/^artist:"(.*)" OR alias:"(.*)"$/) || [])[1]?.replace(/\\(.)/g, '$1');
+      if (sintetico && /^Artista sintético/.test(nombre)) return json({ artists: [] });
+      const a = porNombre[nombre];
+      const lista = a ? (a[6] ?? a[3] ?? []) : [];
+      return json({ artists: lista, count: lista.length, offset: 0 });
+    }
     if (tipo === 'busqueda') {
       const nombre = (q.match(/^artist:"(.*)"$/) || [])[1]?.replace(/\\(.)/g, '$1');
       if (sintetico && /^Artista sintético/.test(nombre)) {

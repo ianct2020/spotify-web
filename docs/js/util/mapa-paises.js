@@ -29,7 +29,7 @@
 // Los minutos se suman en DÉCIMAS (enteros): las cinco filas tienen que sumar
 // exactamente el total, y con flotantes «exactamente» no existe.
 
-import { clasificar, completarConArea, corroborado, limpiarTitulo } from './mb-pais.js?v=306';
+import { clasificar, completarConArea, corroborado, limpiarTitulo } from './mb-pais.js?v=307';
 
 export const MIN_MINUTOS = 10;
 
@@ -132,17 +132,36 @@ export function idsDeGrabacion(resp) {
  *      para corroborarlo.
  * Sin tema no hay grabación que buscar: el artista termina con lo que tenga.
  *
+ * v=307 (tanda 55), EL RESPALDO: si la búsqueda de siempre da `sin-candidato`
+ * (nadie se llama así), se pide la consulta por alias (`{tipo:'respaldo'}`) y,
+ * con lo que traiga, la secuencia sigue igual (2-4), con la MISMA regla y la
+ * grabación con el nombre que pidió Ian. 🔴 Con cualquier otra clase en la de
+ * siempre (`unico`, `varios-mismo-pais`, `desempatado`, `ambiguo`) el respaldo
+ * no se pide y, si el registro lo trajera, NO se lee: un artista que hoy tiene
+ * país, «sin confirmar» o `ambiguo` no puede cambiar por esto. Esa es la
+ * garantía (la vigila `tests/mapa-paises.test.mjs`, sección 10), y es lo que
+ * faltaba en la tanda 54, que puso la consulta por alias EN LUGAR de la de
+ * siempre y le quitó el país a un artista que lo tenía.
+ * Un registro de v=304-306 (sin el campo `respaldo`) que dio `sin-candidato` pide
+ * solo el respaldo; mientras tanto cuenta como pendiente («sin buscar todavía»).
+ *
  * @param {{nombre: string, tema: string|null}} item
  * @param {object|null} registro  lo guardado del artista (o null)
  * @param {Map|object} areas      id → área recortada
- * @returns {{ falta: null | {tipo:'busqueda'} | {tipo:'area', id} | {tipo:'grabacion', titulo},
- *             clase, pais, paisDe, mbid, corroborado, categoria, areaMotivo }}
+ * @returns {{ falta: null | {tipo:'busqueda'} | {tipo:'respaldo'} | {tipo:'area', id} | {tipo:'grabacion', titulo},
+ *             clase, pais, paisDe, mbid, corroborado, categoria, areaMotivo, porRespaldo }}
  */
 export function proximoPaso(item, registro, areas) {
-  const pend = (falta) => ({ falta, clase: null, pais: null, paisDe: null, mbid: null, corroborado: null, categoria: 'pendiente', areaMotivo: null });
+  const pend = (falta) => ({ falta, clase: null, pais: null, paisDe: null, mbid: null, corroborado: null, categoria: 'pendiente', areaMotivo: null, porRespaldo: false });
   if (!registro) return pend({ tipo: 'busqueda' });
 
-  const candidatos = registro.candidatos || [];
+  let candidatos = registro.candidatos || [];
+  let porRespaldo = false;
+  if (clasificar(item.nombre, candidatos).clase === 'sin-candidato') {
+    if (!Array.isArray(registro.respaldo)) return pend({ tipo: 'respaldo' });
+    candidatos = registro.respaldo;
+    porRespaldo = true;
+  }
   const ids = Array.isArray(registro.grabacion?.ids) ? registro.grabacion.ids : null;
   const puedeGrabacion = !!item.tema;
   const grabacion = { tipo: 'grabacion', titulo: puedeGrabacion ? limpiarTitulo(item.tema) : null };
@@ -163,7 +182,7 @@ export function proximoPaso(item, registro, areas) {
   else categoria = 'sin-pais';
   return {
     falta: null, clase: r.clase, pais: r.pais || null, paisDe: r.paisDe ?? null, mbid: r.mbid ?? null,
-    corroborado: corr, categoria, areaMotivo: r.areaMotivo ?? null,
+    corroborado: corr, categoria, areaMotivo: r.areaMotivo ?? null, porRespaldo,
   };
 }
 

@@ -62,11 +62,15 @@ const respArea = {
 const areasCompletas = new Map(Object.entries(respArea).map(([id, a]) => [id, M.recortarArea(a)]));
 
 const cand = (id, name, extra = {}) => ({ id, name, 'sort-name': name, score: 100, tags: [{ name: 'x' }], ...extra });
-// Un registro de caché ya recortado, como lo deja el escaneo.
-const reg = (nombre, candidatos, ids = null, titulo = null) => ({
+// Un registro de caché ya recortado, como lo deja el escaneo. `respaldo`
+// (v=307): `undefined` = un registro de v=304-306, que no tiene el campo; `null`
+// = no se pidió; una lista = los candidatos del respaldo (`[]`: se pidió y no
+// trajo nada).
+const reg = (nombre, candidatos, ids = null, titulo = null, respaldo = undefined) => ({
   v: 1, nombre, consultado: '2026-10-14T00:00:00.000Z',
   candidatos: M.recortarArtistas({ artists: candidatos }),
   grabacion: ids === null ? null : { titulo, ids, consultado: '2026-10-14T00:00:01.000Z' },
+  ...(respaldo === undefined ? {} : { respaldo: respaldo === null ? null : M.recortarArtistas({ artists: respaldo }) }),
 });
 
 // ── 1. El orden del escaneo ──────────────────────────────────────────────────
@@ -151,10 +155,13 @@ console.log('\nLa secuencia de pedidos por artista');
   p = M.proximoPaso(it, r, new Map());
   ok(p.falta === null && p.categoria === 'sin-pais', 'unico sin país ni área: terminado, sin país (y sin pedir la grabación)');
 
-  // sin-candidato
-  r = reg('Alfa', [cand('z1', 'Otro nombre', { country: 'AR' })]);
+  // sin-candidato. v=307 (tanda 55): hasta v=306 este assert afirmaba que un
+  // sin-candidato guardado, sin más, estaba terminado. Desde v=307 eso vale
+  // cuando el respaldo YA se pidió y tampoco trajo a nadie (`respaldo: []`); sin
+  // el campo, le falta el respaldo (ver la sección 9).
+  r = reg('Alfa', [cand('z1', 'Otro nombre', { country: 'AR' })], null, null, []);
   p = M.proximoPaso(it, r, new Map());
-  ok(p.falta === null && p.clase === 'sin-candidato' && p.categoria === 'sin-pais', 'sin-candidato: terminado, sin país');
+  ok(p.falta === null && p.clase === 'sin-candidato' && p.categoria === 'sin-pais', 'sin-candidato con el respaldo pedido y vacío: terminado, sin país');
 
   // varios-mismo-pais: sin grabación
   r = reg('Alfa', [cand('m1', 'Alfa', { country: 'ES' }), cand('m2', 'Alfa', { country: 'ES' })]);
@@ -203,7 +210,7 @@ const nombrePais = (c) => ({ AR: 'Argentina', BR: 'Brasil', ES: 'España', CL: '
     ['Gama', reg('Gama', [cand('g1', 'Gama', { country: 'MX' })], ['otro'], 'T de Gama')],                                 // sin confirmar
     ['Delta', reg('Delta', [cand('d1', 'Delta', { country: 'CL' }), cand('d2', 'Delta', { area: { id: AREA.ciudad, type: 'City', name: 'c' } })], ['d2'], 'T de Delta')], // desempatado, BR del área
     ['Épsilon', reg('Épsilon', [cand('e1', 'Épsilon', { country: 'CL' }), cand('e2', 'Épsilon', { country: 'MX' })], ['nadie'], 'T de Épsilon')], // ambiguo
-    ['Zeta', reg('Zeta', [cand('x', 'Otro')])],                                                                              // sin-candidato
+    ['Zeta', reg('Zeta', [cand('x', 'Otro')], null, null, [])],                                                              // sin-candidato (con el respaldo pedido, v=307)
     ['Eta', reg('Eta', [cand('h1', 'Eta', { country: 'AR' })])],                                                            // a medias: falta la grabación
   ]);
   const m = M.armarMapa({ totals, artists, artistas, areas: areasCompletas, nombrePais });
@@ -224,14 +231,14 @@ const nombrePais = (c) => ({ AR: 'Argentina', BR: 'Brasil', ES: 'España', CL: '
   ok(porCodigo.BR?.decimas === 1004 && porCodigo.BR.artistas[0].nombre === 'Delta', 'el desempatado con país del área cuenta en su país');
   ok(porCodigo.ES?.decimas === 2000, 'el varios-mismo-pais cuenta');
   ok(igual(m.paises.map(p => p.codigo), ['AR', 'ES', 'BR']), 'los países, por minutos', JSON.stringify(m.paises.map(p => p.codigo)));
-  ok(m.paises[0].nombre === 'Argentina' && m.paises[0].artistas.length === 1, 'cada país con su nombre y sus artistas');
+  ok(m.paises[0]?.nombre === 'Argentina' && m.paises[0]?.artistas.length === 1, 'cada país con su nombre y sus artistas');
   ok(m.paises.reduce((s, p) => s + p.decimas, 0) === f.conPais, 'los países suman exactamente la fila «con país», ni una décima más');
   const sp = Object.fromEntries(m.sinPais.map(x => [x.nombre, x]));
   ok(sp.Gama?.categoria === 'sin-confirmar' && sp['Épsilon']?.categoria === 'sin-pais' && sp.Zeta && !sp.Eta && !sp.Alfa,
     'la lista «sin país» trae a los escaneados sin país y a los sin confirmar, y a nadie más', JSON.stringify(Object.keys(sp)));
   ok(m.sinPais.every(x => x.motivo && !/sin-candidato|ambiguo|unico|desempatado/.test(x.motivo)),
     'cada uno con el motivo en palabras, no el nombre interno de la clase', m.sinPais.map(x => x.motivo).join(' | '));
-  ok(/MX|México/.test(sp.Gama.motivo), 'el «sin confirmar» dice qué país sería', sp.Gama.motivo);
+  ok(/MX|México/.test(sp.Gama?.motivo ?? ''), 'el «sin confirmar» dice qué país sería', sp.Gama?.motivo);
 }
 
 // ── 5. Los desconocidos NO se reparten ───────────────────────────────────────
@@ -242,7 +249,7 @@ console.log('\nLos desconocidos no se reparten');
   const artistas = new Map([
     ['Uno', reg('Uno', [cand('u1', 'Uno', { country: 'AR' })], ['u1'], 'x')],
     ['Dos', reg('Dos', [cand('d1', 'Dos', { country: 'CL' })], ['d1'], 'x')],
-    ['Tres', reg('Tres', [cand('n', 'Nadie')])],
+    ['Tres', reg('Tres', [cand('n', 'Nadie')], null, null, [])],
     ['Cuatro', reg('Cuatro', [cand('c1', 'Cuatro', { country: 'AR' }), cand('c2', 'Cuatro', { country: 'MX' })], [], 'x')],
   ]);
   const artists = { Uno: [tema('x', 1)], Dos: [tema('x', 1)], Tres: [tema('x', 1)], Cuatro: [tema('x', 1)] };
@@ -286,6 +293,91 @@ console.log('\nLas claves de IndexedDB');
 ok(M.claveArtista('uid-de-prueba', 'Nombre Raro') === 'mapa_artista_v1_uid-de-prueba_Nombre Raro', 'la del artista lleva el uid (la lista de artistas es dato de escucha)');
 ok(M.claveArea('a-1') === 'mapa_area_v1_a-1', 'la del área no (es dato público)');
 ok(M.PREFIJO_ARTISTA === 'mapa_artista_v1_' && M.PREFIJO_AREA === 'mapa_area_v1_', 'los dos prefijos');
+
+// ── 9. El alias de respaldo (v=307, tanda 55) ────────────────────────────────
+// La búsqueda de siempre (`artist:"…"`) no mira los alias: un artista que cambió
+// de nombre y conserva el viejo como alias sale `sin-candidato`. El respaldo
+// (`artist:"…" OR alias:"…"`) se pide SOLO entonces, y con su respuesta se
+// clasifica con la MISMA regla. Nunca reemplaza lo que la de siempre resolvió.
+console.log('\nEl alias de respaldo');
+{
+  const it = { nombre: 'Faro Viejo', tema: 'Señal (En vivo)' };
+  const tributo = cand('t1', 'Faro Viejo Tribute Band');
+  const renombrado = cand('r1', 'Faro Nuevo', { country: 'UY', aliases: [{ name: 'Faro Viejo' }] });
+
+  // (a) Un registro de v=304-306: sin el campo. Pide SOLO el respaldo.
+  let r = reg('Faro Viejo', [tributo]);
+  let p = M.proximoPaso(it, r, new Map());
+  ok(igual(p.falta, { tipo: 'respaldo' }), 'un sin-candidato guardado SIN el campo (de v=304-306): le falta el respaldo, no la búsqueda', JSON.stringify(p.falta));
+  ok(p.categoria === 'pendiente', 'y mientras tanto cuenta como pendiente («sin buscar todavía»)');
+  // (b) Uno nuevo, con `respaldo: null` (la búsqueda acaba de dar sin-candidato).
+  p = M.proximoPaso(it, reg('Faro Viejo', [tributo], null, null, null), new Map());
+  ok(igual(p.falta, { tipo: 'respaldo' }), 'respaldo: null (no se pidió) → le falta el respaldo', JSON.stringify(p.falta));
+  // (c) El respaldo lo trae por su alias → la MISMA secuencia: la grabación, con el nombre que pidió Ian.
+  r = reg('Faro Viejo', [tributo], null, null, [tributo, renombrado]);
+  p = M.proximoPaso(it, r, new Map());
+  ok(p.falta?.tipo === 'grabacion' && p.falta.titulo === 'Señal', 'el respaldo lo trae por su alias: unico con país → falta la grabación, con el título limpio', JSON.stringify(p.falta));
+  // (d) Corroborado → tiene país.
+  r = reg('Faro Viejo', [tributo], ['r1', 'otro'], 'Señal', [tributo, renombrado]);
+  p = M.proximoPaso(it, r, new Map());
+  ok(p.falta === null && p.clase === 'unico' && p.pais === 'UY' && p.mbid === 'r1' && p.categoria === 'pais', 'con la grabación que lo nombra: unico, UY, con país', JSON.stringify(p));
+  // (e) Sin corroborar → «sin confirmar», como cualquier unico.
+  r = reg('Faro Viejo', [tributo], ['otro'], 'Señal', [tributo, renombrado]);
+  ok(M.proximoPaso(it, r, new Map()).categoria === 'sin-confirmar', 'si la grabación no lo nombra: «sin confirmar», no suma país');
+  // (f) El respaldo tampoco trae a nadie → terminado, sin país.
+  r = reg('Faro Viejo', [tributo], null, null, [tributo]);
+  p = M.proximoPaso(it, r, new Map());
+  ok(p.falta === null && p.clase === 'sin-candidato' && p.categoria === 'sin-pais', 'el respaldo tampoco lo trae: terminado, sin-candidato, sin país');
+  // (g) Un respaldo sin country con área → el área, salto por salto, como siempre.
+  const conArea = cand('r2', 'Faro Nuevo', { aliases: [{ name: 'Faro Viejo' }], area: { id: AREA.ciudad, name: 'Ciudad Inventada', type: 'City' } });
+  p = M.proximoPaso(it, reg('Faro Viejo', [tributo], null, null, [conArea]), new Map());
+  ok(igual(p.falta, { tipo: 'area', id: AREA.ciudad }), 'un respaldo sin country pero con área: el área (la misma secuencia)', JSON.stringify(p.falta));
+  // (h) Varios por el respaldo → la grabación los desempata, como siempre.
+  const otroAR = cand('r3', 'Faro Viejo', { country: 'AR' });
+  r = reg('Faro Viejo', [tributo], ['r1'], 'Señal', [renombrado, otroAR]);
+  p = M.proximoPaso(it, r, new Map());
+  ok(p.falta === null && p.clase === 'desempatado' && p.mbid === 'r1' && p.pais === 'UY', 'dos por el respaldo (uno por alias, otro por nombre) y la grabación nombra a uno: desempatado', JSON.stringify(p));
+  ok(p.porRespaldo === true && M.proximoPaso(it, reg('Alfa', [cand('m1', 'Faro Viejo', { country: 'AR' })], ['m1'], 'x'), new Map()).porRespaldo === false,
+    'el resultado dice si salió del respaldo (para contarlo), y uno de la búsqueda de siempre dice que no');
+
+  // La cobertura: el registro viejo va a «sin buscar todavía» hasta que llega su respaldo.
+  const totals = { 'Faro Viejo': T(40), 'Otro': T(20) };
+  const artists = { 'Faro Viejo': [tema('Señal (En vivo)', 1)], 'Otro': [tema('x', 1)] };
+  const viejo = M.armarMapa({ totals, artists, artistas: new Map([['Faro Viejo', reg('Faro Viejo', [tributo])], ['Otro', reg('Otro', [cand('o', 'Otro', { country: 'AR' })], ['o'], 'x')]]), areas: new Map(), nombrePais });
+  ok(viejo.filas.sinEscanear === 400 && viejo.filas.sinPais === 0 && viejo.pendientes === 1, `el sin-candidato viejo, sin respaldo: en «sin buscar todavía», no en «sin país» (${JSON.stringify(viejo.filas)})`);
+  const resuelto = M.armarMapa({ totals, artists, artistas: new Map([['Faro Viejo', reg('Faro Viejo', [tributo], ['r1'], 'Señal', [renombrado])], ['Otro', reg('Otro', [cand('o', 'Otro', { country: 'AR' })], ['o'], 'x')]]), areas: new Map(), nombrePais });
+  ok(resuelto.filas.conPais === 600 && resuelto.paises.some((x) => x.codigo === 'UY' && x.decimas === 400), 'con su respaldo y la grabación, suma a su país (UY, 40 min)');
+}
+
+// ── 10. La garantía: el respaldo nunca toca lo que la de siempre resolvió ────
+// Para CADA clase que no es sin-candidato, aunque el registro traiga un respaldo
+// con OTRO candidato que también coincidiría (y de otro país), `proximoPaso()`
+// da exactamente lo mismo que sin él, y nunca pide el respaldo. CONSERVACIÓN:
+// esto ya pasa en v=306 (no hay respaldo); está para que una tanda que «use el
+// respaldo también acá» se ponga roja.
+console.log('\nLa garantía: el respaldo no cambia ninguna otra clase');
+{
+  const it = { nombre: 'Alfa', tema: 'Canción' };
+  const intruso = [cand('x9', 'Alfa', { country: 'ZZ' })];
+  const varios = [cand('m1', 'Alfa', { country: 'CL' }), cand('m2', 'Alfa', { country: 'MX' })];
+  const casos = [
+    ['unico', [cand('m1', 'Alfa', { country: 'AR' })], ['m1']],
+    ['varios-mismo-pais', [cand('m1', 'Alfa', { country: 'ES' }), cand('m2', 'Alfa', { country: 'ES' })], null],
+    ['desempatado', varios, ['m1']],
+    ['ambiguo', varios, ['nadie']],
+  ];
+  for (const [clase, cands, ids] of casos) {
+    for (const conIds of ids === null ? [null] : [null, ids]) {
+      const sin = M.proximoPaso(it, reg('Alfa', cands, conIds, 'Canción'), new Map());
+      const con = M.proximoPaso(it, reg('Alfa', cands, conIds, 'Canción', intruso), new Map());
+      const nulo = M.proximoPaso(it, reg('Alfa', cands, conIds, 'Canción', null), new Map());
+      const etapa = conIds === null && ids !== null ? ' (antes de la grabación)' : '';
+      ok(sin.falta?.tipo !== 'respaldo' && con.falta?.tipo !== 'respaldo' && nulo.falta?.tipo !== 'respaldo', `${clase}${etapa}: nunca pide el respaldo`);
+      ok(igual(con, sin) && igual(nulo, sin), `${clase}${etapa}: con un respaldo que traería a otro (ZZ), da exactamente lo mismo`, `${JSON.stringify(sin)} contra ${JSON.stringify(con)}`);
+      if (conIds !== null || ids === null) ok(sin.clase === clase, `y la clase sigue siendo ${clase} (${sin.clase})`);
+    }
+  }
+}
 
 console.log(`\n${fallaron ? 'FALLÓ' : 'OK'} mapa-paises: ${pasaron} de ${pasaron + fallaron} · ${pasaron + fallaron} asserts`);
 if (fallaron) process.exit(1);

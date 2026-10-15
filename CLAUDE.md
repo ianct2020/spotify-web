@@ -1797,6 +1797,13 @@ decía «hoy no lo importa nadie» hasta v=305 (quedó viejo en v=304); **se cor
 v=306**, y es lo único que cambió en ese archivo: la consulta (`queryArtista`) sigue
 siendo `artist:"…"` — ver «Los nombres y el ritmo (v=306)», más abajo.
 
+**v=307: la consulta de siempre NO cambió** (`queryArtista()` byte a byte, y sus dos asserts
+del caso 9 de `tests/mb-pais.test.mjs` tampoco). Se SUMA una segunda,
+`queryArtistaConAlias()` = `artist:"…" OR alias:"…"` (mismas comillas y escapes, caso 15), que
+`#mapa` pide **solo como respaldo**, cuando la de siempre no trae a nadie que se llame así. La
+regla (`clasificar`, `comoCoincide`) no se tocó: con lo que traiga el respaldo se clasifica
+igual. Ver «El alias de respaldo y el rango (v=307)», más abajo.
+
 `clasificar(nombre, artistasMB, idsDeGrabacion)` da una de cinco clases, comparando
 por **igualdad** de `name`, `sort-name` o algún alias después de `normalizarNombre`
 (nunca por `score` ni por parecido):
@@ -2061,7 +2068,10 @@ abre su fila; con el primer artista resuelto ya hay un país pintado; 0 errores.
 
 La fase 4. No cambia lo que se ve (el mundo, los tonos, la leyenda, la lista): cambia cómo se
 calcula la estimación de «lo que falta». **La búsqueda del artista NO cambió**, y eso también es
-un resultado.
+un resultado. ⚠️ **Desde v=307 hay dos cosas de esta parte que ya no valen tal cual**: la consulta
+por alias SÍ se pide, pero como respaldo y no como reemplazo, y la estimación es un rango, no un
+número por lo alto. Ver «El alias de respaldo y el rango (v=307)», abajo; lo de acá queda como el
+porqué.
 
 **La consulta: medida, probada y revertida.** Hay artistas que se quedan `sin-candidato` aunque
 están en MusicBrainz, porque `artist:"…"` **no mira los alias ni el sort-name**: un artista que
@@ -2081,7 +2091,8 @@ inventado): lo que falla es **la consulta**, no la comparación. Lo midió la ta
   pasó a varios `unico` a `desempatado` (el mismo país, pero una grabación más por artista). **Por
   la regla de siempre —un país perdido o equivocado se ve igual que uno correcto— se revirtió.** El
   intento entero queda en `fonoteca-migracion/mapa/` (parche y medición) para la tanda que lo
-  retome.
+  retome. (v=307 lo retomó: la consulta `artist:"n" OR alias:"n"`, pero **solo detrás** de una
+  búsqueda de siempre que no encontró a nadie. El problema era reemplazar, no la consulta.)
 - Los que **no arregla ninguna consulta** sin aflojar la igualdad, y no se hace: un nombre que
   MusicBrainz escribe con otro carácter (una letra griega donde Spotify pone `/\`) y sin el de Spotify
   como alias, y uno al que Spotify le agrega un punto final que MusicBrainz no tiene ni como alias.
@@ -2106,7 +2117,8 @@ inventado): lo que falla es **la consulta**, no la comparación. Lo midió la ta
   faltan: `media·p + 2·σ·√(p + p²/n)` (p = los que faltan, n = los medidos; es el intervalo de
   predicción de una SUMA: el `p²/n` es lo que no se sabe de la media y el `p`, lo que varía cada
   uno), **redondeado hacia arriba** al minuto. Texto: «Quedan ~N peticiones: unas 3 horas y 50 min,
-  calculado por lo alto con el ritmo medido.»
+  calculado por lo alto con el ritmo medido.» (Hasta v=306: desde v=307 esto es la cota alta de un
+  rango, con una racha de 503 entera sumada; el texto cambió. Ver abajo.)
 - **Nada con menos de 5 artistas medidos** (`MIN_ARTISTAS_ESTIMAR`): con dos o tres duraciones la σ
   no dice nada (un arranque tranquilo da σ≈0).
 - El criterio con el que se eligió (lo puso el encargo, **no es un estándar**): desde la primera
@@ -2123,6 +2135,73 @@ inventado): lo que falla es **la consulta**, no la comparación. Lo midió la ta
 El banco suma dos puertas: cerrar a mitad y volver (otro documento) y la estimación sigue desde lo
 acumulado sin apretar nada (no vuelve a «se estimará…» ni baja a la mitad), y «Limpiar caché» borra
 `mapa_ritmo_v1_` y conserva los artistas y las áreas.
+
+### El alias de respaldo y el rango (v=307)
+
+La fase 5. El mundo, los tonos, la leyenda, la lista y la cobertura no cambian. Cambian dos cosas:
+**cuándo** se le pregunta a MusicBrainz por un alias, y **cómo se enseña** lo que falta.
+
+**El alias, como RESPALDO, nunca como reemplazo.** La búsqueda de siempre (`artist:"…"`,
+`queryArtista()`/`urlBusqueda()`) queda **byte a byte igual**. Si da `sin-candidato` (nadie con ese
+nombre), `proximoPaso()` pide `{tipo: 'respaldo'}`: **una petición más**, `artist:"…" OR alias:"…"`
+con `limit=10` (`queryArtistaConAlias()`/`urlBusquedaConAlias()`), por el mismo bucle, al mismo ritmo y
+con el mismo botón. Con su respuesta se clasifica con la **MISMA** regla (`clasificar`, igualdad de
+`comoCoincide`), la grabación va con el nombre que pidió el usuario y un `unico` se corrobora igual.
+Nada de `score`, de parecido ni de tablas de nombres.
+
+- **Por qué respaldo y no reemplazo.** El caso, inventado: «Faro Viejo» sale `unico`, con su país y
+  corroborado, con la búsqueda de siempre; con la consulta por alias puesta EN LUGAR de esa, los que
+  salen por nombre y por alias se adelantan y «Faro Viejo» queda fuera de los 10 primeros: pierde el
+  país. Es lo que encontró la tanda 54 con un artista de verdad, y por eso lo revirtió. Detrás de un
+  `sin-candidato` eso no puede pasar: no hay ningún país que perder.
+- 🔴 **La garantía, por construcción**: con `unico`, `varios-mismo-pais`, `desempatado` o `ambiguo`
+  en la de siempre, el respaldo **no se pide** y, si el registro lo trajera, **no se lee**. Un artista
+  que hoy tiene país, «sin confirmar» o `ambiguo` no puede cambiar por esto. La vigilan
+  `tests/mapa-paises.test.mjs` (sección 10: las cuatro clases, con un respaldo que traería a otro) y
+  las cuatro puertas vistas fallar (pedirlo siempre, no pedirlo nunca, usarlo también con `ambiguo`,
+  volver a pedir la búsqueda entera para un registro viejo).
+- **La caché** guarda lo que contestó, recortado como los candidatos: el registro de
+  `mapa_artista_v1_<uid>_<nombre>` suma `respaldo` (`null` = no se pidió, `[]` = se pidió y no trajo
+  nada) y `respaldoConsultado`. **El prefijo de la clave NO cambió**: cambiarlo dejaría inalcanzable
+  lo que ya se buscó. La decisión se sigue recalculando al pintar.
+- **Los registros viejos** (v=304-306, sin el campo): uno `sin-candidato` pide **solo** el respaldo,
+  nunca la búsqueda otra vez, y mientras tanto cuenta en «Sin buscar todavía» (le falta un paso, como
+  a uno a medias). Nada se pide al abrir la vista (la regla de v=261): se pide con «Seguir». Los demás
+  registros no se tocan.
+- `proximoPaso()` devuelve además `porRespaldo` (para contarlos al medir). «Limpiar caché» sigue
+  conservando `mapa_artista_v1_` y `mapa_area_v1_`. El ritmo, la espera tras un 503, la pausa de 8 y el
+  candado no se tocaron.
+
+**La estimación, como un RANGO** (`estimarLoQueFalta` → `minutosBajo`/`minutosAlto`;
+`textoLoQueFalta`, en `util/mapa-escaneo.js` para poder probar el texto en Node):
+
+- **Cota baja** = `media·p`, hacia abajo (como mínimo 1): lo que tarda si no vienen más 503 de los que
+  ya venían.
+- **Cota alta** = lo de v=306 (`media·p + Z·σ·√(p + p²/n)`, Z = 2) **más una racha entera**, hacia
+  arriba. 🔴 **La racha sale de las constantes, no está escrita**: `RACHA_MS` = la suma de las
+  esperas que hace `escanear()` entre el primer fallo y el que dispara la pausa, con `ESPERAS_MS` y
+  `FALLOS_PARA_PAUSAR` (hoy 10 + 20 + 40 + 80 + 80 + 80 + 80 s = 390 s: el octavo fallo seguido ya no
+  espera, pausa). Si cambia una de las dos, cambia la racha (una puerta lo vio fallar con la racha a
+  mano). El 1,2 s del ritmo no se suma: la espera de antes de un reintento es la mayor de las dos.
+- **Por qué**: ninguna cota hecha solo con la dispersión de lo ya medido ve venir una racha que
+  todavía no pasó, y en los últimos artistas una sola racha es más larga que todo lo que falta (la
+  tanda 54 lo encontró reproduciendo su propia corrida: subir la z no lo cubría sin inflar el escaneo
+  entero). `Z_ESTIMACION` (2) y `MIN_ARTISTAS_ESTIMAR` (5) no cambiaron, ni el acumulado ni su clave.
+- **La condición** (la puso el encargo, es la que promete un rango): desde la primera lectura que
+  enseña un rango, **la cota alta no queda NUNCA por debajo del tiempo real que faltaba**. La baja sí
+  puede. Comprobada reproduciendo las corridas de las tandas 53 y 54
+  (`fonoteca-migracion/mapa/reproducir-estimacion-rango-2026-10-15.mjs`: la función de v=306 falla con
+  la de la 54, la de v=307 no) y con líneas de tiempo inventadas en `tests/mapa-escaneo.test.mjs` (la
+  forma del problema: un tramo tranquilo largo y una racha al final). ⚠️ No prueba dos rachas seguidas
+  en un tramo final corto, ni la pestaña oculta. Y en el tramo final el rango es ancho a propósito
+  (la cota alta lleva siempre la racha entera).
+- **Texto**: «Quedan ~N peticiones: entre 3 horas y 27 min y 5 horas y 13 min, según cuántos 503 dé
+  MusicBrainz.» (si las dos cotas dan el mismo texto, una sola). «Lo que falta se estimará cuando…»
+  no cambió.
+
+El banco suma cuatro puertas: un artista inventado renombrado sale con país por el respaldo (pedido
+una vez); uno `unico` no lo pide nunca; un registro viejo sembrado pide solo el respaldo al «Seguir»;
+y la estimación es un rango también tras recargar.
 
 ## Client ID
 0c8c92ad128e4b89be7097c6b8082797

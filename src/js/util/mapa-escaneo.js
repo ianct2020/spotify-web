@@ -42,7 +42,7 @@
 // medido para que, si se frena, se vea.
 
 import { proximoPaso, recortarArtistas, recortarArea, idsDeGrabacion } from './mapa-paises.js';
-import { queryArtista, queryGrabacion, limpiarTitulo } from './mb-pais.js';
+import { queryArtista, queryArtistaConAlias, queryGrabacion, limpiarTitulo } from './mb-pais.js';
 
 export const BASE_MB = 'https://musicbrainz.org/ws/2';
 export const INTERVALO_MS = 1200;
@@ -54,6 +54,11 @@ export const NOMBRE_CANDADO = 'fonoteca-mapa-escaneo';
 // (`fonoteca-migracion/mapa/medir-mb-paises-2026-10-14.mjs`): lo que mida la app
 // tiene que poder compararse con aquello.
 export const urlBusqueda = (nombre) => `${BASE_MB}/artist/?query=${encodeURIComponent(queryArtista(nombre))}&limit=10&fmt=json`;
+// v=307 (tanda 55): el respaldo, el nombre O un alias, con el mismo `limit` y
+// `fmt`. Se pide SOLO tras una búsqueda `sin-candidato` (lo decide
+// `proximoPaso()`, no este archivo): una petición más, por el mismo bucle y al
+// mismo ritmo. Es la consulta `alias` que midió la tanda 54.
+export const urlBusquedaConAlias = (nombre) => `${BASE_MB}/artist/?query=${encodeURIComponent(queryArtistaConAlias(nombre))}&limit=10&fmt=json`;
 export const urlGrabacion = (tema, nombre) => `${BASE_MB}/recording/?query=${encodeURIComponent(queryGrabacion(limpiarTitulo(tema), nombre))}&limit=25&fmt=json`;
 export const urlArea = (id) => `${BASE_MB}/area/${id}?inc=area-rels&fmt=json`;
 
@@ -149,6 +154,7 @@ export async function escanear({
     while (paso.falta) {
       const f = paso.falta;
       const url = f.tipo === 'busqueda' ? urlBusqueda(it.nombre)
+        : f.tipo === 'respaldo' ? urlBusquedaConAlias(it.nombre)
         : f.tipo === 'area' ? urlArea(f.id)
         : urlGrabacion(it.tema, it.nombre);
       const r = await pedirUno(url, f.tipo, it.nombre);
@@ -164,9 +170,16 @@ export async function escanear({
         await guardarArea(f.id, area);
       } else {
         const previo = artistas.get(it.nombre) ?? null;
+        // v=307: `respaldo` es lo que contestó la consulta por alias, recortado
+        // igual que los candidatos: `null` = no se pidió, `[]` = se pidió y no
+        // trajo nada. El prefijo de la clave NO cambió (`mapa_artista_v1_`): un
+        // registro de v=304-306 no tiene el campo y `proximoPaso()` lo lee como
+        // `null`.
         const reg = f.tipo === 'busqueda'
-          ? { v: 1, nombre: it.nombre, consultado: cuando, candidatos: recortarArtistas(r.ok), grabacion: null }
-          : { ...previo, grabacion: { titulo: f.titulo, ids: idsDeGrabacion(r.ok), consultado: cuando } };
+          ? { v: 1, nombre: it.nombre, consultado: cuando, candidatos: recortarArtistas(r.ok), grabacion: null, respaldo: null }
+          : f.tipo === 'respaldo'
+            ? { ...previo, respaldo: recortarArtistas(r.ok), respaldoConsultado: cuando }
+            : { ...previo, grabacion: { titulo: f.titulo, ids: idsDeGrabacion(r.ok), consultado: cuando } };
         artistas.set(it.nombre, reg);
         await guardarArtista(it.nombre, reg);
       }
@@ -247,9 +260,37 @@ export function peticionesPorMinuto(comienzos, ahora, ventanaMs = 180_000) {
 // otro con 16 %), lo medido antes no lo sabe. Es una estimación con lo medido,
 // no una promesa. Y las peticiones por artista se estiman con los de más minutos
 // (que van primero): la cola pide algo menos (ver CONTEXTO-TECNICO.md).
+//
+// v=307 (tanda 55): UN RANGO, no un número. La tanda 54 encontró, reproduciendo
+// su propia corrida, el agujero de arriba en su forma más corta: un tramo
+// tranquilo largo (la media baja, la σ casi 0) y una racha de 503 al final, con
+// pocos artistas por delante. Ninguna cota hecha SOLO con la dispersión de lo ya
+// medido ve venir una racha que todavía no pasó, y en los últimos artistas una
+// sola racha es más larga que todo lo que falta (para cubrirlo con la z hacía
+// falta z = 6, que al escaneo entero le ponía horas de más). Así que:
+//   · cota BAJA = media·p (la media sola), hacia ABAJO: lo que tarda si
+//     MusicBrainz no da ningún 503 más de los que ya venía dando;
+//   · cota ALTA = lo de v=306 (media·p + Z·σ·√(p + p²/n)) MÁS UNA RACHA ENTERA,
+//     hacia ARRIBA. La racha es lo más que puede costar una sola racha de fallos
+//     antes de que el escaneo se pause solo: las esperas entre el primer fallo y
+//     el que dispara la pausa (`RACHA_MS`, sacada de `ESPERAS_MS` y
+//     `FALLOS_PARA_PAUSAR`: si cambia una, cambia la racha).
+// La condición con la que se eligió (la puso el encargo): desde la primera
+// lectura que enseña un rango, la cota alta no queda NUNCA por debajo del tiempo
+// real que faltaba. Comprobado reproduciendo las corridas de las tandas 53 y 54
+// (`fonoteca-migracion/mapa/reproducir-estimacion-rango-2026-10-15.mjs`) y con
+// líneas de tiempo inventadas en `tests/mapa-escaneo.test.mjs`. No prueba que
+// acierte con dos rachas seguidas en un tramo final corto ni en la pestaña
+// oculta.
 
 export const MIN_ARTISTAS_ESTIMAR = 5;
 export const Z_ESTIMACION = 2;
+// 10 + 20 + 40 + 80 + 80 + 80 + 80 s con las constantes de hoy: el octavo fallo
+// seguido ya no espera, pausa. El 1,2 s del ritmo no se suma: la espera de antes
+// de un reintento es la MAYOR entre las dos (`pedirUno`), así que va adentro. La
+// duración de cada petición fallida tampoco: no sale de las constantes y un 503
+// de MusicBrainz vuelve en menos de un segundo.
+export const RACHA_MS = Array.from({ length: FALLOS_PARA_PAUSAR - 1 }, (_, i) => esperaTrasFallo(i + 1)).reduce((s, ms) => s + ms, 0);
 const VERSION_RITMO = 1;
 
 /** Lo acumulado, vacío. Sumas en ms: la de cada artista y la de sus cuadrados (para la σ). */
@@ -277,10 +318,11 @@ export function sumarArtista(ritmo, ms) {
 }
 
 /**
- * Lo que falta, con lo ACUMULADO y por lo alto. `null` si todavía no hay con
- * qué (menos de `MIN_ARTISTAS_ESTIMAR` artistas medidos) o no falta nada.
- * `minutos` es lo que se enseña (entero, redondeado hacia arriba);
- * `minutosCentral`, la media sola (para medir, no para enseñar).
+ * Lo que falta, con lo ACUMULADO, como un RANGO (v=307). `null` si todavía no
+ * hay con qué (menos de `MIN_ARTISTAS_ESTIMAR` artistas medidos) o no falta nada.
+ * `minutosBajo` y `minutosAlto` son lo que se enseña (enteros: la baja hacia
+ * abajo, la alta hacia arriba, las dos como mínimo 1); `minutosCentral`, la media
+ * sola sin redondear (para medir, no para enseñar).
  */
 export function estimarLoQueFalta({ pendientes, ritmo }) {
   const r = ritmo || ritmoVacio();
@@ -289,13 +331,36 @@ export function estimarLoQueFalta({ pendientes, ritmo }) {
   const media = r.msArtistas / n;
   const varianza = Math.max(0, (r.msArtistas2 - n * media * media) / (n - 1));
   const central = pendientes * media;
-  const alto = central + Z_ESTIMACION * Math.sqrt(varianza * (pendientes + (pendientes * pendientes) / n));
+  const alto = central + Z_ESTIMACION * Math.sqrt(varianza * (pendientes + (pendientes * pendientes) / n)) + RACHA_MS;
   return {
     peticiones: Math.round(pendientes * (r.peticiones / n)),
-    minutos: Math.max(1, Math.ceil(alto / 60_000)),
+    minutosBajo: Math.max(1, Math.floor(central / 60_000)),
+    minutosAlto: Math.max(1, Math.ceil(alto / 60_000)),
     minutosCentral: central / 60_000,
     porArtista: r.peticiones / n,
     msPorArtista: media,
     sigmaMs: Math.sqrt(varianza),
   };
+}
+
+// Números con `es-ES` explícito: sin el locale se usa el del navegador (es-AR
+// en las máquinas de Ian). En español los de cuatro cifras van sin separador.
+const fmtEs = (n) => Number(n || 0).toLocaleString('es-ES', { maximumFractionDigits: 0 });
+
+// «45 min», «1 hora», «1 hora y 5 min», «3 horas y 27 min». Sin «unos»/«unas»:
+// va dentro de un rango, que ya dice que no es exacto.
+export function duracionCorta(min) {
+  if (min < 60) return `${fmtEs(min)} min`;
+  const h = Math.floor(min / 60), r = min % 60;
+  return `${h === 1 ? '1 hora' : `${fmtEs(h)} horas`}${r ? ` y ${fmtEs(r)} min` : ''}`;
+}
+
+/**
+ * La línea de lo que falta (castellano de España: la ve el usuario), con las
+ * DOS cotas. Si las dos dan el mismo texto, una sola.
+ */
+export function textoLoQueFalta(est) {
+  const bajo = duracionCorta(est.minutosBajo), alto = duracionCorta(est.minutosAlto);
+  const rango = bajo === alto ? alto : `entre ${bajo} y ${alto}`;
+  return `Quedan ~${fmtEs(est.peticiones)} peticiones: ${rango}, según cuántos 503 dé MusicBrainz.`;
 }

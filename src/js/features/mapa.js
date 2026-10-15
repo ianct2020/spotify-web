@@ -41,7 +41,7 @@ import { idbEntriesEnRango, idbSetCached, idbGetCachedRaw } from '../idb.js';
 import { escapeHtml, pageHeader } from '../ui/components.js';
 import { vigilarRuta } from '../util/vigencia-ruta.js';
 import { armarMapa, universo, claveArtista, claveArea, claveRitmo, PREFIJO_ARTISTA, PREFIJO_AREA, MIN_MINUTOS } from '../util/mapa-paises.js';
-import { escanear, conCandado, peticionesPorMinuto, estimarLoQueFalta, ritmoDesde, sumarPeticion, sumarArtista, MIN_ARTISTAS_ESTIMAR } from '../util/mapa-escaneo.js';
+import { escanear, conCandado, peticionesPorMinuto, estimarLoQueFalta, textoLoQueFalta, ritmoDesde, sumarPeticion, sumarArtista, MIN_ARTISTAS_ESTIMAR } from '../util/mapa-escaneo.js';
 import { armarMundo, textoDetalle, textoNoSeVen, etiquetaMapa, leyenda } from '../util/mapa-mundo.js';
 
 // Números con `es-ES` explícito: sin el locale se usa el del navegador (es-AR
@@ -162,7 +162,7 @@ export async function render(container) {
     pintando: false,
     ultimoMapa: null,            // la última cuenta de `armarMapa` (la usa el mundo al armarse)
     mundo: null,                 // el SVG ya armado y los tonos aplicados (ver montarMundo)
-    sesion: { peticiones: 0, porTipo: { busqueda: 0, area: 0, grabacion: 0 }, n503: 0, otrosFallos: 0, comienzos: [], desdeUltimo: null, noSePudo: new Set() },
+    sesion: { peticiones: 0, porTipo: { busqueda: 0, respaldo: 0, area: 0, grabacion: 0 }, n503: 0, otrosFallos: 0, comienzos: [], desdeUltimo: null, noSePudo: new Set() },
   };
 
   content.innerHTML = `<div class="mapa">
@@ -479,16 +479,17 @@ function htmlEscaneo(m, st) {
   const hayAlgo = m.escaneados > 0 || st.artistas.size > 0;
   const seguir = pendientes > 0 ? boton('buscar', hayAlgo ? 'Seguir' : 'Buscar países') : '';
 
-  // v=306: lo que falta sale de lo ACUMULADO entre cargas (`st.ritmo`) y por lo
-  // alto (ver «Lo que falta» en `util/mapa-escaneo.js`); por eso se enseña
-  // también con la búsqueda a medias, antes de apretar «Seguir».
+  // v=306: lo que falta sale de lo ACUMULADO entre cargas (`st.ritmo`); por eso
+  // se enseña también con la búsqueda a medias, antes de apretar «Seguir».
+  // v=307: es un RANGO, la cota baja con el ritmo medido y la alta con una racha
+  // de 503 entera de margen (ver «Lo que falta» en `util/mapa-escaneo.js`).
   const lineaFalta = () => {
     if (pendientes === 0) return '';
     const est = estimarLoQueFalta({ pendientes, ritmo: st.ritmo });
     if (!est) {
       return `<p class="mapa-estimacion">Lo que falta se estimará cuando se hayan buscado ${fmt(MIN_ARTISTAS_ESTIMAR)} artistas (van ${fmt(st.ritmo.artistas)}).</p>`;
     }
-    return `<p class="mapa-estimacion">Quedan ~${fmt(est.peticiones)} peticiones: ${textoDuracion(est.minutos)}, calculado por lo alto con el ritmo medido.</p>`;
+    return `<p class="mapa-estimacion">${escapeHtml(textoLoQueFalta(est))}</p>`;
   };
   const medidas = () => {
     const ahora = Date.now();
@@ -537,14 +538,6 @@ function htmlEscaneo(m, st) {
       }
   }
   return { texto: `<h2 class="mapa-h2">La búsqueda</h2>${cuerpo}`, botones };
-}
-
-// «unos 12 minutos», «una hora y 5 min», «unas 3 horas y 50 min». Los minutos
-// ya vienen redondeados hacia arriba.
-function textoDuracion(min) {
-  if (min < 60) return min === 1 ? 'un minuto' : `unos ${fmt(min)} minutos`;
-  const h = Math.floor(min / 60), r = min % 60;
-  return `${h === 1 ? 'una hora' : `unas ${fmt(h)} horas`}${r ? ` y ${fmt(r)} min` : ''}`;
 }
 
 function htmlPaises(m, st) {
