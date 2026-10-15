@@ -268,8 +268,10 @@ ok(OWNER_KEY_LIST.length === Object.keys(OWNER_KEYS).length && OWNER_KEY_LIST.le
   'la lista cubre las siete claves del owner');
 ok(OWNER_KEY_LIST.includes('history_track_plays_v5') && OWNER_KEY_LIST.includes('history_skip_stats_v4'),
   'y son las versiones que se escriben de verdad (plays v5, skips v4)');
-ok(OWNER_KEY_LIST.includes('history_artist_tracks_v2'),
-  'incluye history_artist_tracks_v2, que la copia vieja se olvidaba');
+// v=308 (tanda 56): `ARTIST_TRACKS_VERSION` 2 → 3 (el tema de entrada de `#puertas`).
+// El assert sigue a la versión, como el de plays v5 de arriba.
+ok(OWNER_KEY_LIST.includes('history_artist_tracks_v3'),
+  'incluye history_artist_tracks_v3, que la copia vieja se olvidaba');
 
 // ── La identidad sin confirmar no concede acceso al historial ───────────────
 //

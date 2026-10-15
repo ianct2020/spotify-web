@@ -89,7 +89,7 @@ SKIP_STATS_VERSION = 4      # v4: igual que v3, pero el `gid` se recalculó con 
 LISTENED_VERSION = 2         # bump: excluye "Sonido Para Sacar Agua Del Movil"
 TRACK_DETAIL_VERSION = 1     # ficha de canción: plays por mes + primera/última + récords del track
 RECORDS_VERSION = 3          # v3: seis récords nuevos (día con más artistas, tema en más años, artista con más días, abandonado, crecimiento, racha de artista). v2: excluye todas las variantes del sonido saca-agua
-ARTIST_TRACKS_VERSION = 2    # v2: `totals` lleva un 6º campo con el DÍA de la primera play válida del artista (ficha de artista: «primera vez»). v=126: top de tracks por artista desde el historial COMPLETO (ficha de artista)
+ARTIST_TRACKS_VERSION = 3    # v3 (v=308, `#puertas`): `totals` suma dos campos al final (append): [6] = [nombre, trackId] del TEMA DE ENTRADA (la primera play válida, la misma que fija [5]; a igualdad de `ts`, el menor trackId) y [7] = el día de la primera play válida de un tema DISTINTO (otro `song_key`), o None. v2: `totals` lleva un 6º campo con el DÍA de la primera play válida del artista (ficha de artista: «primera vez»). v=126: top de tracks por artista desde el historial COMPLETO (ficha de artista)
 ARTIST_TRACKS_TOP_N = 6      # la ficha muestra 5; guardamos 6 de colchón
 DETAIL_MIN_PLAYS = 5         # solo tracks con >=N plays válidas entran al detalle (controla peso)
 MILESTONE_TARGETS = {1, 10000, 25000, 50000, 75000, 100000, 125000, 150000, 175000, 200000, 250000, 300000}
@@ -392,6 +392,17 @@ def album_key(name, artist):
 def track_key(name, artist):
     return f"{(name or '').lower()}||{(artist or '').lower()}"
 
+def entrada_y_segundo(entrada, temas_dia, artist):
+    """[6] y [7] de `totals` (v3): `[nombre, trackId]` del tema de entrada y el día
+    de la primera play válida de un tema con OTRO `song_key`, o None. Espejo de
+    `entradaYSegundo()` de src/js/history-processor.js."""
+    if not entrada:
+        return [None, None]
+    sk_entrada = song_key(entrada[1], artist)
+    otros = [d for sk, d in (temas_dia or {}).items() if sk != sk_entrada]
+    return [[entrada[1], entrada[2]], min(otros) if otros else None]
+
+
 def build_stats(plays, img_idx):
     # Orden cronológico ascendente para que "primer año", "descubrimiento" y
     # "primer día que cumple umbral" salgan correctos.
@@ -436,6 +447,19 @@ def build_stats(plays, img_idx):
     # la clave es la de verdad.
     artist_first_day = {}
     album_first_day = {}
+    # v3 (tanda 56, `#puertas`): el TEMA DE ENTRADA de cada artista, (ts, nombre,
+    # trackId) de la MISMA play que fija `artist_first_day` (se llenan juntos: no
+    # puede haber dos definiciones de «primera»). Si dos plays válidas del mismo
+    # artista tienen el mismo `ts`, gana el menor trackId (orden de cadena): el
+    # orden de llegada depende del orden de los archivos y del sort, y un dato
+    # nuevo no se deja al azar. ⚠️ ESPEJO de `artistEntrada` en
+    # src/js/history-processor.js: si tocás una, tocá la otra.
+    artist_entrada = {}
+    # artista -> {song_key: primer día}, en orden de aparición. Sale el [7]: el
+    # día del primer tema DISTINTO del de entrada. «Distinto» es otro `song_key`,
+    # no otro id: un remaster o la versión del álbum del mismo single NO es un
+    # segundo tema.
+    artist_temas_dia = defaultdict(dict)
 
     # por año
     years = defaultdict(lambda: {
@@ -569,6 +593,13 @@ def build_stats(plays, img_idx):
             artist_first_year[artist] = y
         if artist and artist not in artist_first_day:
             artist_first_day[artist] = day
+        if artist:
+            tid_entrada = uri.split(":")[-1]
+            e = artist_entrada.get(artist)
+            # `plays` viene ordenado por ts: después de la primera solo puede
+            # empatar el mismo `ts`, nunca uno anterior.
+            if e is None or (e[0] == ts_str and tid_entrada < e[2]):
+                artist_entrada[artist] = (ts_str, track, tid_entrada)
 
         ak = album_key(album, artist)
         album_ms[ak] += ms
@@ -656,6 +687,11 @@ def build_stats(plays, img_idx):
         # el récord quiere contar. Por (nombre, artista) el mismo tema se parte
         # en varias filas y ninguna llega a los años que le corresponden.
         sk = song_key(track, artist)
+        # v3: el primer día de cada tema del artista (el mismo `sk`, la misma
+        # play válida: entre el `artist_first_day` de arriba y acá no hay ningún
+        # `continue`).
+        if artist and sk not in artist_temas_dia[artist]:
+            artist_temas_dia[artist][sk] = day
         song_years[sk].add(y)
         song_days[sk].add(day)
         song_plays[sk] += 1
@@ -905,6 +941,9 @@ def build_stats(plays, img_idx):
             curve[-1][0] if curve else None,
             curve,
             artist_first_day.get(artist_name),
+            # v3: [6] el tema de entrada y [7] el día del segundo tema (dato
+            # crudo: las cuentas las hace `#puertas` en el navegador).
+            *entrada_y_segundo(artist_entrada.get(artist_name), artist_temas_dia.get(artist_name), artist_name),
         ]
         artist_tracks_out[artist_name] = [
             [

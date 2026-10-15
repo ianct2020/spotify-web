@@ -1,0 +1,67 @@
+<!doctype html><html lang="es"><head><meta charset="utf-8"><title>banco puertas — la app entera, en un iframe</title>
+<link rel="stylesheet" href="/css/theme.css">
+<link rel="stylesheet" href="/css/components.css">
+<link rel="stylesheet" href="/css/main.css">
+<style>*,*::before,*::after{animation:none!important;transition:none!important}</style>
+</head><body>
+<div id="app"></div>
+<script type="module">
+// ── Un iframe del banco `puertas.html` (v=308, tanda 56) ─────────────────────
+//
+// Arranca la app ENTERA (`/js/app.js`: su `init()`, su menú, su router) en
+// `#home`, contra la Spotify simulada de `simulado.mjs`, con `/me` = el `uid` que
+// pide la madre (`?uid=owner` es `HISTORY_OWNER_ID`). El historial lo sembró la
+// madre en IndexedDB, INVENTADO (`puertas-datos.mjs`): con el owner en la clave
+// del caché del owner, con un amigo en `local_<uid>_history_artistTracks`. Nada
+// sale a la red: ni `api.spotify.com` ni ningún otro host.
+//
+// `window.__frenoMe`: si la madre pone acá una promesa, el `/me` que llegue
+// mientras tanto espera a que se resuelva. Es la forma de dejar la vista colgada
+// en `loadArtistTracks()` para probar que salir de la ruta a mitad de la carga no
+// escribe en la ruta nueva.
+//
+// Modo `?foto=1&uid=owner` (la captura SEMBRADA, con un conductor externo y SIN reloj
+// virtual): siembra él mismo el historial inventado del owner (`HISTORIAL` de
+// `puertas-datos.mjs`), abre `#puertas` y marca `data-foto="listo"` cuando la lista
+// está pintada.
+
+import { instalarRedSimulada, esperarReal, anclar } from '/banco/simulado.mjs';
+
+const q = new URLSearchParams(location.search);
+window.__errores = [];
+window.addEventListener('error', (e) => window.__errores.push('error: ' + (e.message || e)));
+window.addEventListener('unhandledrejection', (e) => window.__errores.push('rechazo: ' + String(e.reason?.message || e.reason)));
+const errorOriginal = console.error.bind(console);
+console.error = (...a) => { window.__errores.push('console.error: ' + a.map(String).join(' ').slice(0, 300)); errorOriginal(...a); };
+
+const { HISTORY_OWNER_ID } = await import('/js/features/history-data.js');
+const UID = q.get('uid') === 'owner' ? HISTORY_OWNER_ID : q.get('uid');
+const sim = instalarRedSimulada();
+window.__sim = sim;
+window.__frenoMe = null;
+sim.ruta('GET', /^\/me$/, async () => {
+  if (window.__frenoMe) await window.__frenoMe;
+  return { id: UID, display_name: 'Banco' };
+});
+// El último usuario de este navegador es éste: así `getCurrentUserId()` no entra
+// en la limpieza de «el usuario cambió», que no es lo que se prueba acá.
+localStorage.setItem('fonoteca_last_user_id', UID);
+localStorage.setItem('fonoteca_perfil_v1', JSON.stringify({ id: UID, display_name: 'Banco' }));
+
+const FOTO = q.get('foto') === '1';
+if (FOTO) {
+  const { HISTORIAL } = await import('/banco/puertas-datos.mjs');
+  const { OWNER_KEYS } = await import('/js/history-keys.js');
+  const { idbSetCached } = await import('/js/idb.js');
+  await anclar(idbSetCached(OWNER_KEYS.artistTracks, HISTORIAL, 100 * 365 * 24 * 60));
+}
+location.hash = FOTO ? '#puertas' : '#home';
+await import('/js/app.js');
+await esperarReal(() => document.getElementById('my-history-btn') && (FOTO || document.querySelector('.home-card')), { que: 'que la app arranque', vueltas: 4000 });
+window.__listo = true;
+if (FOTO) {
+  await esperarReal(() => document.querySelector('[data-puertas="lista"]'), { que: 'que #puertas pinte', vueltas: 4000 });
+  document.documentElement.dataset.foto = 'listo';
+}
+</script>
+</body></html>

@@ -1,0 +1,234 @@
+<!doctype html><html lang="es"><head><meta charset="utf-8"><title>banco puertas — puertas de entrada, con datos de mentira</title>
+<style>html,body{margin:0;background:#111;color:#eee;font:13px system-ui}iframe{border:0;display:block}</style>
+</head><body>
+<pre id="progreso"></pre>
+<div id="marcos"></div>
+<script type="module">
+// ── Qué prueba este banco (v=308, tanda 56) ──────────────────────────────────
+//
+// `#puertas` REAL, en la app ENTERA (`puertas-caso.html`, uno por iframe), contra
+// la Spotify simulada (`simulado.mjs`) y con historiales INVENTADOS sembrados en
+// IndexedDB (`puertas-datos.mjs`). Nada sale a la red.
+//
+//   1. abrir `#puertas` cuesta exactamente 1 `/me` y 0 de lo demás (0 rutas sin
+//      simular, 0 hosts externos, y el JSON horneado del repo NO se pide);
+//   2. las filas son las de la cuenta a mano (`ESPERADO`), en el orden de
+//      `universo()` de `util/mapa-paises.js`;
+//   3. el artista de un solo tema dice «solo un tema» y el del segundo tema el
+//      mismo día dice «el mismo día»;
+//   4. «Mostrar 100 más» aparece solo con más de 100 artistas: con 150, 100 → 150;
+//   5. un amigo (otro uid) con SU `artistTracks` v3 ve SUS filas; uno con un
+//      `artistTracks` sin [6] (importado antes de v=308) ve «vuelve a importar» y
+//      0 filas; uno sin datos ve el cartel de bloqueo de `#records`;
+//   6. salir de la ruta a mitad de la carga (con el `/me` frenado): 0 errores y 0
+//      escrituras al DOM de la ruta nueva;
+//   7. 0 errores de consola, en todos los marcos.
+//
+// ⚠️ Todas las esperas van con `esperarReal` (ver PRESUPUESTO en `scripts/correr-banco.mjs`).
+
+import { esperarReal, anclar } from '/banco/simulado.mjs';
+import { fallar, listo } from '/banco/esperar.mjs';
+import { HISTORIAL, ESPERADO, AMIGO_V3, ESPERADO_AMIGO, AMIGO_VIEJO, historialDe } from '/banco/puertas-datos.mjs';
+
+const ANCHO = +(new URLSearchParams(location.search).get('ancho') || 1351);
+const afirmar = (c, msg) => { if (!c) throw new Error('BANCO: ' + msg); };
+const progreso = (t) => { document.getElementById('progreso').textContent = t; };
+const VUELTAS = 20000;
+const igual = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+
+function abrirMarco(uid, nombre) {
+  const f = document.createElement('iframe');
+  f.width = ANCHO; f.height = 800;
+  f.src = `/banco/puertas-caso.html?uid=${encodeURIComponent(uid)}&marco=${nombre}`;
+  document.getElementById('marcos').appendChild(f);
+  return f;
+}
+const win = (f) => f.contentWindow;
+const $ = (f, s) => f.contentDocument?.querySelector(s);
+const $$ = (f, s) => [...(f.contentDocument?.querySelectorAll(s) || [])];
+const meDe = (f) => win(f).__sim.reg.llamadas.filter((l) => l.ruta === '/me').length;
+const texto = (el) => (el?.textContent || '').replace(/\s+/g, ' ').trim();
+const filas = (f) => $$(f, '.puertas-tabla tbody tr').map((tr) => [
+  texto(tr.querySelector('.puertas-art')), texto(tr.querySelector('.puertas-tema')), texto(tr.querySelector('.puertas-dia')),
+  texto(tr.querySelector('.puertas-sigue')), texto(tr.querySelector('.puertas-hasta')),
+]);
+async function arrancado(f, que) { await esperarReal(() => win(f)?.__listo, { que: `que arranque ${que}`, vueltas: VUELTAS }); }
+async function irA(f, hash, que, cond) { win(f).location.hash = hash; await esperarReal(cond, { que, vueltas: VUELTAS }); }
+// Lo que el marco bajó de OTRO origen DESPUÉS de abrir la vista, y si pidió el JSON horneado del repo.
+// ⚠️ «Después de abrir»: `main.css` trae en su primera línea el `@import` de la fuente Inter de Google
+// Fonts, así que cualquier página que cargue la hoja la pide al cargar (esta, los otros bancos y la
+// app de verdad). Eso no lo dispara abrir `#puertas` y no se cuenta acá; queda anotado en el reporte.
+const externosDe = (f) => win(f).performance.getEntriesByType('resource').map((e) => e.name).filter((u) => new URL(u).origin !== location.origin);
+const externosAlAbrir = new Map();
+const pidioElJsonDelRepo = (f) => win(f).performance.getEntriesByType('resource').some((e) => /\/data\/history-artist-tracks\.json/.test(e.name));
+const marcos = [];
+
+/** Abre `#puertas` desde `#home` y devuelve cuánto costó (en el marco, desde el clic). */
+async function abrirPuertas(f, que, cond) {
+  const me0 = meDe(f), n0 = win(f).__sim.reg.llamadas.length;
+  if (!externosAlAbrir.has(f)) externosAlAbrir.set(f, externosDe(f).length);
+  await irA(f, '#puertas', que, cond);
+  const nuevas = win(f).__sim.reg.llamadas.slice(n0);
+  return { me: meDe(f) - me0, otras: nuevas.filter((l) => l.ruta !== '/me').map((l) => `${l.metodo} ${l.ruta}`) };
+}
+function sinFugas(f, nombre) {
+  const s = win(f).__sim.reg;
+  afirmar(s.desconocidas.length === 0, `${nombre}: ninguna ruta sin simular: ${s.desconocidas.join(' · ')}`);
+  afirmar(s.externas.length === 0, `${nombre}: ninguna petición a un host externo: ${s.externas.join(' · ')}`);
+  const nuevos = externosDe(f).slice(externosAlAbrir.get(f) ?? 0);
+  afirmar(nuevos.length === 0, `${nombre}: nada bajado de otro origen desde que se abrió la vista: ${nuevos.join(' · ')}`);
+  afirmar(s.escrituras.length === 0, `${nombre}: 0 escrituras en la cuenta: ${s.escrituras.map((e) => e.metodo + ' ' + e.ruta).join(' · ')}`);
+  afirmar(!pidioElJsonDelRepo(f), `${nombre}: el JSON horneado del repo NO se pide (los datos son los sembrados)`);
+}
+
+const datos = {};
+try {
+  const { OWNER_KEYS } = await import('/js/history-keys.js');
+  const { idbSetCached, idbDel } = await import('/js/idb.js');
+  const { localKey, HISTORY_OWNER_ID } = await import('/js/features/history-data.js');
+  const { universo } = await import('/js/util/mapa-paises.js');
+  const TTL = 100 * 365 * 24 * 60;
+  await anclar(idbSetCached(OWNER_KEYS.artistTracks, HISTORIAL, TTL));
+  await anclar(idbDel(localKey(HISTORY_OWNER_ID, 'artistTracks')));
+  await anclar(idbSetCached(localKey('amigo-150', 'artistTracks'), historialDe(150), TTL));
+  await anclar(idbSetCached(localKey('amigo-v3', 'artistTracks'), AMIGO_V3, TTL));
+  await anclar(idbSetCached(localKey('amigo-viejo', 'artistTracks'), AMIGO_VIEJO, TTL));
+  await anclar(idbDel(localKey('amigo-sin', 'artistTracks')));
+
+  // ── 1, 2 y 3 · el owner, con el historial inventado ────────────────────────
+  progreso('1-3: el owner');
+  const A = abrirMarco('owner', 'A'); marcos.push(['A', A]);
+  await arrancado(A, 'el marco A');
+  afirmar($(A, '.home-card[data-route="puertas"]'), 'el inicio tiene la tarjeta «Puertas de entrada»');
+  afirmar(texto($(A, '.home-card[data-route="puertas"] .home-card-name')) === 'Puertas de entrada', 'la tarjeta se llama «Puertas de entrada»');
+  const linkMapa = $(A, '.nav-link[data-route="mapa"]');
+  afirmar(linkMapa?.nextElementSibling?.matches('.nav-link[data-route="puertas"]'), 'en el menú General, «Puertas de entrada» va justo detrás de «Mapa»');
+  const abrir = await abrirPuertas(A, 'que #puertas pinte la lista', () => $(A, '[data-puertas="lista"]'));
+  datos.abrir = abrir;
+  afirmar(abrir.me === 1, `PUERTA 1: abrir #puertas cuesta exactamente 1 \`/me\` y costó ${abrir.me}`);
+  afirmar(abrir.otras.length === 0, `PUERTA 1: y 0 de lo demás, hubo: ${abrir.otras.join(' · ')}`);
+  sinFugas(A, 'PUERTA 1');
+  afirmar($(A, '.nav-link[data-route="puertas"].active'), 'el menú marca «Puertas de entrada» como activa');
+  const fA = filas(A);
+  afirmar(igual(fA, ESPERADO), `PUERTA 2: las filas son las de la cuenta a mano.\n  vino:     ${JSON.stringify(fA)}\n  esperaba: ${JSON.stringify(ESPERADO)}`);
+  const orden = universo(HISTORIAL.totals, HISTORIAL.artists).map((u) => u.nombre);
+  afirmar(igual(fA.map((x) => x[0]), orden), `PUERTA 2: en el orden de universo(): ${JSON.stringify(orden)}`);
+  const de = (n) => fA.find((x) => x[0] === n);
+  afirmar(de('Cometa Azul')?.[4] === 'solo un tema', 'PUERTA 3: el artista de un solo tema dice «solo un tema»');
+  afirmar(de('Aurora Lenta')?.[4] === 'el mismo día', 'PUERTA 3: el del segundo tema el mismo día dice «el mismo día»');
+  afirmar(de('Delta Sur')?.[3] === 'Sí', 'la entrada que es una versión del top dice «Sí»');
+  afirmar(!$$(A, '.puertas-fila').some((tr) => /Kiwi|Lima/.test(tr.textContent)), 'los de menos de 10 minutos no salen');
+  afirmar($(A, '[data-puertas-mas]')?.hidden === true, 'PUERTA 4: con 10 artistas NO hay «Mostrar 100 más»');
+  afirmar(texto($(A, '[data-puertas-cuenta]')) === '10 de 10 artistas', `el pie dice cuántos: «${texto($(A, '[data-puertas-cuenta]'))}»`);
+  afirmar(/El primer tema que escuchaste de cada artista con 10 minutos o más/.test(texto($(A, '.puertas-intro'))), 'arriba, una línea que dice qué es la lista');
+
+  // ── 6 · salir de la ruta a mitad de la carga ───────────────────────────────
+  progreso('6: salir a mitad');
+  const F = abrirMarco('owner', 'F'); marcos.push(['F', F]);
+  await arrancado(F, 'el marco F');
+  let soltar;
+  win(F).__frenoMe = new Promise((r) => { soltar = r; });
+  const meF = meDe(F);
+  await irA(F, '#puertas', 'que #puertas quede esperando el /me', () => meDe(F) > meF && $(F, '#puertas-content .spinner'));
+  await irA(F, '#home', 'que el inicio se pinte encima', () => $(F, '.home-card') && !$(F, '#puertas-content'));
+  // El router marca la tarjeta activa en una SEGUNDA pasada, después de pintar el inicio
+  // (`markActiveRoute`, v=154): se deja asentar antes de empezar a mirar, para que lo que se
+  // cuente sea solo lo que escriba la carga colgada de #puertas.
+  let asentar = 0;
+  await esperarReal(() => ++asentar > 40, { que: 'que el inicio se asiente', vueltas: 200 });
+  const mainF = $(F, '#main-content');
+  const antesF = mainF.innerHTML;
+  // ⚠️ Lo que SÍ pasa, y no es de esta vista: `handleRoute()` (`router.js`) hace la segunda
+  // pasada de `markActiveRoute(hash)` cuando el render termina, aunque la ruta ya no esté vigente,
+  // y le pone `active` a la tarjeta «Puertas de entrada» del inicio. Le pasa a cualquier vista que
+  // tarde (no se tocó en la tanda 56: anotado en PENDIENTES). Se cuenta aparte: un cambio de
+  // `class` sobre un `[data-route]`. Todo lo demás es una escritura de la vista, y tiene que ser 0.
+  let mutaciones = 0, marcasDelRouter = 0;
+  const cuales = [];
+  const obs = new (win(F).MutationObserver)((ms) => {
+    for (const m of ms) {
+      if (m.type === 'attributes' && m.attributeName === 'class' && m.target.dataset?.route) { marcasDelRouter++; continue; }
+      mutaciones++;
+      cuales.push(`${m.type} en <${m.target.nodeName?.toLowerCase()} class="${m.target.className || ''}"> ${m.attributeName || ''} +${[...m.addedNodes].map((n) => (n.outerHTML || n.textContent || '').slice(0, 80)).join('|')} -${m.removedNodes.length}`);
+    }
+  });
+  obs.observe(mainF, { childList: true, subtree: true, characterData: true, attributes: true });
+  win(F).__frenoMe = null;
+  soltar();
+  let vueltas = 0;
+  await esperarReal(() => ++vueltas > 150, { que: 'que la carga colgada termine', vueltas: 400 });
+  obs.disconnect();
+  datos.salir = { mutaciones, marcasDelRouter, errores: win(F).__errores.length };
+  afirmar(mutaciones === 0, `PUERTA 6: salir a mitad: 0 escrituras al DOM de la ruta nueva, hubo ${mutaciones}: ${cuales.join(' ; ')}`);
+  const sinMarcas = (h) => h.replace(/ active"/g, '"');
+  afirmar(sinMarcas(mainF.innerHTML) === sinMarcas(antesF) && !$(F, '[data-puertas]') && !$(F, '#puertas-content'), 'PUERTA 6: el inicio quedó como estaba, sin nada de #puertas');
+  afirmar(win(F).__errores.length === 0, `PUERTA 6: 0 errores: ${win(F).__errores.join(' | ')}`);
+  // Y la carga colgada sí terminó: volver a abrir no pide otro /me (el memo ya lo tiene) y pinta la lista.
+  const otraVez = await abrirPuertas(F, 'que #puertas pinte al volver', () => $(F, '[data-puertas="lista"]'));
+  afirmar(otraVez.me === 0 && filas(F).length === ESPERADO.length, `PUERTA 6: al volver, 0 \`/me\` más (vino ${otraVez.me}) y la lista entera`);
+  sinFugas(F, 'PUERTA 6');
+
+  // ── 4 · «Mostrar 100 más», con 150 artistas ────────────────────────────────
+  progreso('4: 150 artistas');
+  const B = abrirMarco('amigo-150', 'B'); marcos.push(['B', B]);
+  await arrancado(B, 'el marco B');
+  const abrirB = await abrirPuertas(B, 'que #puertas pinte 150', () => $(B, '[data-puertas="lista"]'));
+  afirmar(abrirB.me === 1 && abrirB.otras.length === 0, `PUERTA 1 (amigo): 1 \`/me\` y nada más; vino ${abrirB.me} y ${abrirB.otras.join(' · ')}`);
+  const mas = $(B, '[data-puertas-mas]');
+  afirmar($$(B, '.puertas-fila').length === 100, `PUERTA 4: con 150, primero 100 filas; hay ${$$(B, '.puertas-fila').length}`);
+  afirmar(mas && !mas.hidden && texto(mas) === 'Mostrar 100 más', `PUERTA 4: y el botón «Mostrar 100 más» a la vista («${texto(mas)}»)`);
+  afirmar(texto($(B, '[data-puertas-cuenta]')) === '100 de 150 artistas', `el pie: «${texto($(B, '[data-puertas-cuenta]'))}»`);
+  const n0B = win(B).__sim.reg.llamadas.length;
+  mas.click();
+  await esperarReal(() => $$(B, '.puertas-fila').length === 150, { que: 'las 150 filas', vueltas: VUELTAS });
+  afirmar(mas.hidden === true, 'PUERTA 4: con las 150 a la vista, el botón se va');
+  afirmar(texto($(B, '[data-puertas-cuenta]')) === '150 de 150 artistas', 'el pie: «150 de 150 artistas»');
+  afirmar(win(B).__sim.reg.llamadas.length === n0B, 'PUERTA 4: «Mostrar 100 más» no pide nada');
+  const nombresB = $$(B, '.puertas-fila').map((tr) => tr.dataset.artista);
+  const hB = historialDe(150);
+  afirmar(igual(nombresB, universo(hB.totals, hB.artists).map((u) => u.nombre)), 'PUERTA 4: las 150, en el orden de universo()');
+  afirmar(new Set(nombresB).size === 150, 'PUERTA 4: ninguna repetida');
+  sinFugas(B, 'PUERTA 4');
+
+  // ── 5 · tres amigos: con su v3, con uno viejo y sin datos ──────────────────
+  progreso('5: amigos');
+  const C = abrirMarco('amigo-v3', 'C'); marcos.push(['C', C]);
+  await arrancado(C, 'el marco C');
+  const abrirC = await abrirPuertas(C, 'que #puertas pinte lo del amigo', () => $(C, '[data-puertas="lista"]'));
+  afirmar(abrirC.me === 1 && abrirC.otras.length === 0, `PUERTA 5: el amigo abre con 1 \`/me\` y nada más (${abrirC.me}; ${abrirC.otras.join(' · ')})`);
+  afirmar(igual(filas(C), ESPERADO_AMIGO), `PUERTA 5: el amigo ve SUS filas: ${JSON.stringify(filas(C))}`);
+  sinFugas(C, 'PUERTA 5 (v3)');
+
+  const D = abrirMarco('amigo-viejo', 'D'); marcos.push(['D', D]);
+  await arrancado(D, 'el marco D');
+  await abrirPuertas(D, 'que #puertas pida volver a importar', () => $(D, '[data-puertas="reimportar"]'));
+  afirmar(/Para ver esto, vuelve a importar tu historial\./.test(texto($(D, '[data-puertas="reimportar"]'))), `PUERTA 5: sin [6] lo dice: «${texto($(D, '[data-puertas="reimportar"]'))}»`);
+  afirmar($$(D, '.puertas-fila').length === 0 && !$(D, '.puertas-tabla'), 'PUERTA 5: y 0 filas (ni lista vacía ni con huecos)');
+  afirmar($(D, '[data-puertas="reimportar"] [data-open-import]'), 'PUERTA 5: con el botón de importar');
+  sinFugas(D, 'PUERTA 5 (viejo)');
+
+  const E = abrirMarco('amigo-sin', 'E'); marcos.push(['E', E]);
+  await arrancado(E, 'el marco E');
+  await abrirPuertas(E, 'que #puertas pinte el cartel', () => $(E, '#puertas-content .olm-card'));
+  afirmar(/Necesito tu historial/.test(texto($(E, '.olm-card'))) && /Puertas de entrada usa el Extended Streaming History/.test(texto($(E, '.olm-card'))),
+    `PUERTA 5: sin datos, el cartel de bloqueo de #records: «${texto($(E, '.olm-card')).slice(0, 160)}»`);
+  afirmar($(E, '.olm-card [data-open-import]'), 'PUERTA 5: con su botón de importar');
+  afirmar($$(E, '.puertas-fila').length === 0, 'PUERTA 5: y 0 filas');
+  sinFugas(E, 'PUERTA 5 (sin datos)');
+
+  // ── 7 · 0 errores en todos los marcos ──────────────────────────────────────
+  const errores = marcos.flatMap(([n, f]) => win(f).__errores.map((e) => `${n}: ${e}`));
+  afirmar(errores.length === 0, `PUERTA 7: 0 errores de consola: ${errores.join(' | ')}`);
+
+  const resumen = `abrir (owner): /me=${abrir.me} otras=${abrir.otras.length} · filas=${fA.length} = la cuenta a mano, en el orden de universo() · ` +
+    `150 artistas: 100 → 150 con «Mostrar 100 más» · amigo v3: ${filas(C).length} filas suyas · amigo sin [6]: «vuelve a importar», 0 filas · sin datos: cartel de #records · ` +
+    `salir a mitad: ${datos.salir.mutaciones} escrituras de la vista al DOM, ${datos.salir.errores} errores (y ${datos.salir.marcasDelRouter} marca tardía del router) · errores=${errores.length} · escrituras en la cuenta=0 · externos=0 · ` +
+    `reloj virtual=${Math.round(performance.now())} ms`;
+  document.documentElement.setAttribute('data-resumen', resumen);
+  progreso('ok · ' + resumen);
+  listo(resumen);
+} catch (e) {
+  fallar(e);
+}
+</script>
+</body></html>

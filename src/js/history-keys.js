@@ -33,7 +33,7 @@ const LISTENED_VERSION = 3;  // v3: las 91 tapas que faltaban (ítem 11) — mis
 const SKIP_VERSION = 4;    // v4: mismo formato que v3, pero el `gid` se recalculó con la cola de versión tras el guion (v=271): «X - Sped Up», «- Piano», «- reimagined», «- Raw Rhymes», «- Refix» y «- Music From …» vuelven a ser el mismo tema que su base
 const DETAIL_VERSION = 1;
 const RECORDS_VERSION = 3;  // v3: seis récords nuevos (día con más artistas, tema en más años, artista con más días, abandonado, crecimiento, racha de artista)
-const ARTIST_TRACKS_VERSION = 2;  // v2: `totals` lleva el día de la primera play válida del artista
+const ARTIST_TRACKS_VERSION = 3;  // v3 (v=308): `totals` suma [6] el tema de entrada y [7] el día del segundo tema (`#puertas`). La lista de `OWNER_PREV_KEYS.artistTracks` sigue VACÍA: el v2 pasa el `sanityCheck` y migrarlo pintaría `#puertas` sin los campos. v2: `totals` lleva el día de la primera play válida del artista
 
 const OWNER_KEYS = {
   stats: `history_stats_v${STATS_VERSION}`,

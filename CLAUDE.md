@@ -328,6 +328,8 @@ Los dos son **append**, así que un lector viejo que desestructure los primeros
 campos sigue andando. `history-processor.js` (el import BYOH) hace lo mismo.
 Las dos `OWNER_PREV_KEYS` van **vacías**: reciclar el JSON anterior dejaría la
 ficha sin fecha y sin fallar, o sea en silencio.
+**Desde v=308 (`history-artist-tracks` v3) `totals[artista]` tiene OCHO campos**: el 7.º es
+el tema de entrada y el 8.º el día del segundo tema (ver «🚪 `#puertas`», abajo).
 
 ⚠️ **La fecha del álbum se resuelve por `coverId()`, no por `albumKey()`.** Es el
 mismo motivo que los plays de v=140: el export parte los discos colaborativos en
@@ -2203,6 +2205,94 @@ El banco suma cuatro puertas: un artista inventado renombrado sale con país por
 una vez); uno `unico` no lo pide nunca; un registro viejo sembrado pide solo el respaldo al «Seguir»;
 y la estimación es un rango también tras recargar.
 
+## 🚪 `#puertas`: puertas de entrada (v=308)
+
+Para cada artista que escuchaste **10 minutos o más**: por qué tema entraste (la primera
+reproducción válida), si ese tema **sigue siendo tu top** de ese artista y **cuántos días**
+tardaste en escuchar un segundo tema suyo. Ruta `#puertas`, menú General, detrás de «Mapa»,
+icono propio (`ICONS.puertas`, una puerta entreabierta: no había ninguno libre que sirviera);
+la tarjeta de inicio y la cabecera dicen «Puertas de entrada». Pedido por Ian el 10/10.
+
+| archivo | qué | probado en |
+|---|---|---|
+| `util/puertas-entrada.js` | PURO: el universo (`universo()` de `mapa-paises.js`, IMPORTADO), «sigue siendo el top», los días y sus textos | `tests/puertas-entrada.test.mjs` |
+| `features/puertas.js` | la vista: `loadArtistTracks()`, el candado y la tabla de a 100 | `tests/banco/puertas.html` (en `prepush`) |
+| `scripts/gen-stats.py` + `history-processor.js` | los dos campos nuevos de `totals` | `tests/puertas-pipeline.test.mjs` |
+
+**El dato: el pipeline emite CRUDO y el navegador decide** (la regla de v=146).
+`history-artist-tracks` sube a **v3** y `totals[a]` suma dos campos al final (append: los seis de
+antes no se mueven ni cambian de valor):
+
+- **`[6]` = `[nombre, trackId]` del TEMA DE ENTRADA**: la primera reproducción **válida** del artista
+  —con `spotify_track_uri`, sin basura (`is_junk_track`/`isJunkTrack`), `ms_played ≥ 30 s`—, o sea la
+  MISMA que fija `[5]`. Se llena en el MISMO sitio del bucle que `artist_first_day`/`artistFirstDay`:
+  no puede haber dos definiciones de «primera». `trackId` sin el prefijo `spotify:track:`.
+- **`[7]` = `"YYYY-MM-DD"` (UTC) o `null`**: el día de la primera reproducción válida de un tema
+  **DISTINTO**. «Distinto» es **otro `song_key`/`songKey`**, no otro id: un remaster o la versión del
+  álbum del mismo single NO es un segundo tema. `null` si nunca sonó otro. `[7] ≥ [5]` siempre.
+- 🔴 **El desempate**: si dos reproducciones válidas del mismo artista tienen el **mismo `ts`**, gana
+  la de **menor `trackId`** (orden de cadena), escrito igual en los dos lenguajes. El orden de
+  llegada depende del orden de los archivos y del sort, y un dato nuevo no se deja al azar. No cambia
+  `[5]` (el día es el mismo con cualquier desempate).
+- El día de la entrada **no** se emite otra vez: es `[5]`.
+- 🔴 **Versión, los tres sitios a la vez** (`gen-stats.py`, `history-processor.js`, `history-keys.js`:
+  2 → 3) y **`OWNER_PREV_KEYS.artistTracks` VACÍA** (ya lo estaba): el v2 PASA el `sanityCheck`
+  (`d => !!d.artists`) y migrarlo pintaría la vista sin los campos, sin fallar y sin avisar (v=157, v=208).
+- **Un BYOH importado antes de v=308** tiene su `artistTracks` en `local_<uid>_history_artistTracks`
+  **sin** `[6]` ni `[7]` (esa clave no lleva versión). `armarPuertas()` lo detecta (`totals` de menos
+  de ocho campos) y la vista dice «Para ver esto, vuelve a importar tu historial», con el botón de
+  importar; ni una lista vacía ni una con huecos.
+- **Lo que se publica**: `history-artist-tracks.json` está en Pages y en un repo público. Ya publicaba,
+  por artista, plays, minutos, la curva por año, el día de la primera escucha y los seis temas top; lo
+  nuevo (cuál fue el primero y el día del segundo) es la misma clase de dato, por artista, sin la
+  granularidad del diario por día de `#calendario`.
+
+**La vista decide:**
+
+- 🔴 El universo es **`universo()` importado**, no copiado (una regla escrita dos veces diverge, v=219).
+  Las filas van en su orden; sin ranking, sin filtros, sin ordenar por otra columna.
+- 🔴 **«¿Sigue siendo tu top?»** compara por **`songKey`** el tema de entrada con el **primero de
+  `artists[a]`** (el top de la ficha de artista: más plays, a igualdad más minutos). «Sí», o «No:
+  ahora «X»» con el top de hoy.
+- 🔴 **Los días** entre `[5]` y `[7]` se cuentan sobre las cadenas `YYYY-MM-DD` con `Date.UTC` de las
+  partes, nunca con la hora local; el día se enseña con **`fmtDia()`**. 0 → «el mismo día», `null` →
+  «solo un tema», si no «N días» (`toLocaleString('es-ES')`).
+- **Paginada**: 100 filas y «Mostrar 100 más» (miles de filas de golpe es mucho DOM). A 600 px o menos
+  la tabla se apila: cada fila son DOS renglones (artista y tema de entrada; «¿sigue?» y «hasta el
+  segundo tema»), con la etiqueta de cada celda encima (`data-et`).
+- 🔴 **El candado es el de `#records`** («pide los DATOS primero»), no el de `#covers`: con BYOH la
+  vista se abre con los datos del amigo; sin datos, el cartel de bloqueo de siempre.
+- **Abrir cuesta 1 `/me`** (el de `loadOne()`) y 0 de lo demás. Vigencia de ruta después de cada
+  `await` (v=195).
+- 🔴 **SIN marca de «puede ser de antes de tu historial».** Las entradas de la primera semana del export
+  podrían ser artistas que ya escuchabas de antes, pero **Ian dijo el 15/10/2026 que antes de 2018 no usaba
+  esta cuenta**, así que se toman como reales. ⚠️ **Es una premisa de Ian, no un dato medido**: el
+  export no dice cuándo se creó la cuenta. Si algún dato la contradice, la vista tiene que cambiar
+  (anotado en `PENDIENTES.md`, igual que un amigo, que sí podría tener la cuenta más vieja que su export).
+
+Un ejemplo, INVENTADO: «Banda Inventada» sonó por primera vez con «Tema Uno» un 30 de enero (`[5]`),
+el single y su remaster son el mismo tema, y el 2 de febrero sonó «Tema Dos» (`[7]`). Fila: «Tema
+Uno · 30 ene» · si su top de hoy es «Tema Uno - Remastered», «Sí»; si es «Tema Dos», «No: ahora «Tema
+Dos»» · «3 días».
+
+**Lo que quedó AFUERA, y por qué:**
+- 🔴 **El ranking de «los temas que te abrieron más artistas»** (colaboraciones): **el export trae UN
+  artista por reproducción** (`master_metadata_album_artist_name`). Una colaboración no abre tres
+  artistas en el dato: abre uno. No se puede hacer bien y no se hace a medias.
+- 🔴 **«Artistas de un solo tema de entrada que después explotaron»**: no está definido qué es
+  «explotar», y no se define a ojo.
+- La ficha de artista no muestra el tema de entrada (otro encargo, si Ian lo quiere). El detalle por
+  día de IndexedDB no se usa (depende de que Ian lo cargue a mano).
+
+Guardas: `tests/puertas-pipeline.test.mjs` (los dos pipelines sobre las mismas reproducciones
+inventadas, la sección UTC también con `TZ` de Buenos Aires, la versión en los tres sitios y la
+conservación de los seis campos viejos); `tests/puertas-entrada.test.mjs` (la cuenta de la vista,
+con `TZ` de Buenos Aires); el banco `tests/banco/puertas.html` + `puertas-caso.html` +
+`puertas-datos.mjs` (la app ENTERA en seis iframes; `puertas-caso.html?uid=owner&foto=1` es el
+instrumento de la captura sembrada). `scripts/verificar-rehorneado.py` suma `--permitir-en ARCHIVO
+REGEX` para el rehorneado de un JSON que TIENE que cambiar. Medición y paridad sobre el export real
+en `fonoteca-migracion` (`medicion-puertas-*-2026-10-15.*`).
+
 ## Client ID
 0c8c92ad128e4b89be7097c6b8082797
 
@@ -2970,6 +3060,7 @@ fila sobrevivió así desde que se armó la tabla.
 | ↳ **al pulsar «Crear playlist con este día»**: **1 + ceil(N/100)** POST | — | ídem | `POST /me/playlists` + `POST /playlists/{id}/items` de a 100 | **N** = temas del día | **medida en la Spotify simulada el 2026-10-10**: **2** con 30 temas y **3** con 150, exactas y todas POST, **0 GET** |
 | `#mapa` (v=304) | **1 `/me`** (+1 del arranque = **2**) · **0 MusicBrainz** | ídem | `render()` → `loadArtistTracks()` → `loadOne` → `getCurrentUserId` (el `getCurrentUserId()` de la vista va por el memo: 0 más); la caché del mapa sale de IndexedDB | **fijo**, no escala con nada | **medida en el banco el 2026-10-14** (`tests/banco/mapa.html`, Spotify y MusicBrainz simulados): abrir = 1 `/me` y 0 a MusicBrainz, también al volver y tras recargar. En vivo, no. Desde v=305 abrir baja además el módulo del mundo (`util/mundo-110m.js`, ~73 KB, del mismo origen: no es cuota de nadie); el banco lo vuelve a afirmar con el mundo puesto |
 | ↳ **al pulsar «Buscar países» / «Seguir»**: **1 búsqueda por artista + la grabación si hace falta + 1 por cada área nueva**, de a una y a 1,2 s como mínimo, **0 a Spotify** | — | lo ya guardado: **0** | `musicbrainz.org/ws/2/artist/`, `/recording/`, `/area/<id>` | nº de artistas con ≥ 10 min sin buscar todavía | **medida en el banco** (12 artistas inventados: 23 peticiones sin fallos) y con tope en vivo contra MusicBrainz (ver `fonoteca-migracion/mapa/`) |
+| `#puertas` (v=308) | **1 `/me`** (+1 del arranque = **2**) | ídem | `render()` → `loadArtistTracks()` → `loadOne` → `getCurrentUserId`; «Mostrar 100 más» = **0** | **fijo**, no escala con nada | **medida en el banco el 2026-10-15** (`tests/banco/puertas.html`, Spotify simulada): abrir = 1 `/me` y 0 de lo demás, también con un amigo; 0 rutas sin simular, 0 hosts externos desde que se abre. Con el conductor de capturas (la app servida en local, `/me` contestado ahí): 2 `/me` en la carga, el del arranque y el de la vista. En vivo, no |
 | `#covers` | **1 `/me` + 1 + ceil(W/100)** = **33** | **2** | `isOwner()`/`loadListenedAlbums()` → `getCurrentUserId` · + 1 `/playlists/{id}?fields=snapshot_id` + págs. de `/playlists/{id}/items` | nº de pistas de «w three» | 🔴 **corregida el 2026-10-08, leída del código.** Decía **32** y se le olvidaba el `/me` propio |
 | `#mosaico` | **0** | **0** | **ninguno, a propósito** | — | **medida en vivo el 2026-10-06**: 10 mosaicos generados (hasta 43.200 celdas), **0 peticiones y 0 cortadas** con los topes de la API en CERO. Lo que sí sale a la red es el CDN de imágenes, que no gasta cuota |
 | `#search` | **0** | **0** | — | — | leída del código · **`/me` repasado el 2026-10-08**: su `render()` no llega a `getCurrentUserId()` |
@@ -3341,6 +3432,7 @@ cuesta una carga de likes.** Lo que no puede es usar las tuyas.
 | `#records` | — | **historial** | cartel de bloqueo | leída del código |
 | `#calendario` | — | **historial** (`years[].days`) para la grilla · el **detalle por día** para el panel | cartel de bloqueo, el mismo de `#records` con su botón de importar. Con BYOH la grilla sale de SU `stats` y el detalle lo obtiene solo (`saveMyHistory()` guarda `days`). El owner carga el detalle con la importación «solo el detalle»; sin él, el panel enseña los minutos del día y ofrece cargarlo | **leída del código y probada en el banco el 2026-10-10** |
 | `#mapa` (v=304) | — | **historial** (`artistTracks`) · y buscar los países en MusicBrainz (un botón, sin cuota de Spotify) | cartel de bloqueo, el mismo de `#records` (candado de «pide los datos primero»: BYOH la abre), **sin botón de buscar**. Con datos, la lista sale vacía hasta apretar «Buscar países» | **leída del código y probada en el banco el 2026-10-14** (solo el owner; el amigo, leída) |
+| `#puertas` (v=308) | — | **historial** (`artistTracks` **v3**: con el tema de entrada) | cartel de bloqueo, el mismo de `#records` (BYOH la abre con SUS datos). Con un historial importado antes de v=308 (sin el tema de entrada): «Para ver esto, vuelve a importar tu historial», con el botón de importar y 0 filas | **medida en el banco el 2026-10-15** (`tests/banco/puertas.html`: el owner, un amigo con su v3, uno con un historial viejo y uno sin datos) |
 | `#zeroplays` | — | **historial** (`plays`) · stats.fm opcional | cartel de bloqueo | leída del código |
 | `#skips` | — | **historial** (`skip`, versión ≥ 4) · stats.fm opcional | cartel de bloqueo | leída del código |
 
@@ -3351,7 +3443,7 @@ respuesta falsa:
 
 | forma del candado | vistas | ¿BYOH la abre? |
 |---|---|:---:|
-| **pide los DATOS primero**, y recién si vienen vacíos pregunta por el owner | `#wrapped`, `#records`, `#zeroplays`, `#skips` (y `#mapa`, v=304) | **sí** |
+| **pide los DATOS primero**, y recién si vienen vacíos pregunta por el owner | `#wrapped`, `#records`, `#zeroplays`, `#skips` (y `#mapa`, v=304, y `#puertas`, v=308) | **sí** |
 | **`isOwner()` por adelantado**, antes de tocar un solo dato, y `return` | `#covers`, `#wthree` | **NO** |
 
 En `#covers` (`covers.js:323`) y `#wthree` (`wthree.js:223`) lo primero que hace

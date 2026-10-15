@@ -8,10 +8,10 @@
 // Otro user cualquiera sin historial local ve el ownerLockedMessage que
 // invita a subir su ZIP.
 
-import { idbGetCached, idbSetCached, idbDel } from '../idb.js?v=307';
-import { getCurrentUserId } from '../api.js?v=307';
-import { OWNER_KEYS, LOCAL_HISTORY_PREFIX, STATS_VERSION, PLAYS_VERSION, LISTENED_VERSION, SKIP_VERSION, DETAIL_VERSION, RECORDS_VERSION, ARTIST_TRACKS_VERSION } from '../history-keys.js?v=307';
-import { mostrarBannerDegradadoVista } from '../ui/degraded-banner.js?v=307';
+import { idbGetCached, idbSetCached, idbDel } from '../idb.js?v=308';
+import { getCurrentUserId } from '../api.js?v=308';
+import { OWNER_KEYS, LOCAL_HISTORY_PREFIX, STATS_VERSION, PLAYS_VERSION, LISTENED_VERSION, SKIP_VERSION, DETAIL_VERSION, RECORDS_VERSION, ARTIST_TRACKS_VERSION } from '../history-keys.js?v=308';
+import { mostrarBannerDegradadoVista } from '../ui/degraded-banner.js?v=308';
 
 const HISTORY_OWNER_ID = 'orhs6wu5ykk7ql80u92ujn74o';
 
@@ -231,6 +231,10 @@ const OWNER_PREV_KEYS = {
   records: [],
   // Vacía por el mismo motivo: el v1 de `totals` no trae el día de la primera
   // play y la ficha de artista se quedaría sin «primera vez», en silencio.
+  // ⚠️ Y SIGUE VACÍA EN v3 (v=308, tanda 56): el v2 pasa el `sanityCheck`
+  // (`d => !!d.artists`) pero su `totals` no trae el tema de entrada ([6]) ni el
+  // día del segundo tema ([7]). Migrarlo dejaría `#puertas` sin los campos, sin
+  // fallar y sin avisar. Que refetchee.
   artistTracks: [],
   // `days` no tiene versiones anteriores porque no tiene versiones: nació en
   // v=289 y **el owner no tiene URL** de donde bajarlo (ver `loadDays`).

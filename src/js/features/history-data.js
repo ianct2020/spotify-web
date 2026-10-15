@@ -231,6 +231,10 @@ const OWNER_PREV_KEYS = {
   records: [],
   // Vacía por el mismo motivo: el v1 de `totals` no trae el día de la primera
   // play y la ficha de artista se quedaría sin «primera vez», en silencio.
+  // ⚠️ Y SIGUE VACÍA EN v3 (v=308, tanda 56): el v2 pasa el `sanityCheck`
+  // (`d => !!d.artists`) pero su `totals` no trae el tema de entrada ([6]) ni el
+  // día del segundo tema ([7]). Migrarlo dejaría `#puertas` sin los campos, sin
+  // fallar y sin avisar. Que refetchee.
   artistTracks: [],
   // `days` no tiene versiones anteriores porque no tiene versiones: nació en
   // v=289 y **el owner no tiene URL** de donde bajarlo (ver `loadDays`).

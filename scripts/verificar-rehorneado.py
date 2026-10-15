@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Las comprobaciones de DESPUÉS de correr `gen-stats.py` (tanda 40, el blindaje).
+r"""Las comprobaciones de DESPUÉS de correr `gen-stats.py` (tanda 40, el blindaje).
 
 POR QUÉ EXISTE: `gen-stats.py` tiene un modo de fallar que no avisa. Si no
 encuentra el export no falla: imprime «OK» y sobrescribe los siete JSON de
@@ -20,9 +20,22 @@ Qué mira, en este orden:
   b. `totals.plays_raw`, `totals.plays_valid` y `totals.skip_pct` son los de la copia
      (o los de `--raw/--valid/--skip`, si el export es nuevo y TIENEN que cambiar);
   c. están todos los años de la copia y ninguno tiene `plays`, `min` ni `plays_raw` en cero;
-  d. los otros seis JSON difieren de la copia SOLO en `generated_at`;
+  d. los otros seis JSON difieren de la copia SOLO en `generated_at` (y, en el archivo que
+     se nombre con `--permitir-en ARCHIVO REGEX`, en las rutas que se le digan y en ninguna más);
   e. en `history-stats.json` solo cambiaron las rutas permitidas (`generated_at` y
      `version` siempre; las demás, con `--permitir REGEX`, una por cada una).
+
+`--permitir-en` (tanda 56): para cuando un JSON del paso d TIENE que cambiar (un campo nuevo).
+Se repite por cada ruta permitida y la regex se compara contra la ruta ESTRICTA, con las claves
+entre corchetes y comillas JSON —`totals["Un Artista"][6]`—, porque un nombre de artista puede
+traer puntos o corchetes y la ruta con puntos sería ambigua. Ejemplo (v=308):
+
+    --permitir-en history-artist-tracks.json 'version' \
+    --permitir-en history-artist-tracks.json 'totals\["(?:[^"\\]|\\.)*"\]\[[67]\]'
+
+Una lista que cambia de largo da una ruta por cada posición que sobra o falta (hasta la tanda
+55 daba una sola, `…(largo a → b)`): así un campo agregado al final se puede permitir por su
+posición y todo lo demás de esa lista sigue exigiendo igualdad.
 
 Si algo da rojo: restaurar la copia sobre `src/data/` y NO commitear ningún JSON.
 """
@@ -48,7 +61,15 @@ ap.add_argument("--raw", type=int, default=None)
 ap.add_argument("--valid", type=int, default=None)
 ap.add_argument("--skip", type=float, default=None)
 ap.add_argument("--permitir", action="append", default=[], help=r"regex de una ruta de history-stats.json que SÍ puede cambiar, p. ej. 'years\[\d+\]\.skip_pct'")
+ap.add_argument("--permitir-en", nargs=2, action="append", default=[], metavar=("ARCHIVO", "REGEX"),
+                help=r"""en ese JSON del paso d, una ruta ESTRICTA que SÍ puede cambiar, p. ej. 'totals\["(?:[^"\\]|\\.)*"\]\[[67]\]'""")
 args = ap.parse_args()
+permitidas_en = {}
+for archivo, regex in args.permitir_en:
+    if archivo not in OTROS:
+        print(f"✗ --permitir-en: «{archivo}» no es uno de los seis JSON del paso d ({', '.join(OTROS)})")
+        sys.exit(2)
+    permitidas_en.setdefault(archivo, []).append(re.compile("^" + regex + "$"))
 
 fallos = 0
 
@@ -66,27 +87,41 @@ def cargar(carpeta, nombre):
         return json.load(f)
 
 
-def diferencias(a, b, ruta=""):
-    """Las rutas donde `a` y `b` difieren (hojas, o el nodo si cambia de forma)."""
+def diferencias(a, b, ruta=()):
+    """Las rutas (tuplas de claves e índices) donde `a` y `b` difieren: hojas, el nodo si
+    cambia de forma, y en una lista que cambia de largo, cada posición que sobra o falta."""
     if type(a) is not type(b):
-        return [ruta or "(raíz)"]
+        return [ruta]
     if isinstance(a, dict):
         out = []
         for k in sorted(set(a) | set(b)):
-            sub = f"{ruta}.{k}" if ruta else k
             if k not in a or k not in b:
-                out.append(sub)
+                out.append(ruta + (k,))
             else:
-                out.extend(diferencias(a[k], b[k], sub))
+                out.extend(diferencias(a[k], b[k], ruta + (k,)))
         return out
     if isinstance(a, list):
-        if len(a) != len(b):
-            return [f"{ruta}(largo {len(a)} → {len(b)})"]
         out = []
         for i, (x, y) in enumerate(zip(a, b)):
-            out.extend(diferencias(x, y, f"{ruta}[{i}]"))
+            out.extend(diferencias(x, y, ruta + (i,)))
+        out.extend(ruta + (i,) for i in range(min(len(a), len(b)), max(len(a), len(b))))
         return out
     return [] if a == b else [ruta]
+
+
+def con_puntos(ruta):
+    """`years[3].skip_pct`: la forma de siempre, para `--permitir` y para leer."""
+    out = ""
+    for p in ruta:
+        out += f"[{p}]" if isinstance(p, int) else (f".{p}" if out else str(p))
+    return out or "(raíz)"
+
+
+def estricta(ruta):
+    """`totals["Un Artista"][6]`: sin ambigüedad aunque la clave traiga puntos o corchetes. La
+    primera clave va suelta (son las del archivo: `version`, `totals`…, que no traen nada raro)."""
+    return "".join(f"[{p}]" if isinstance(p, int) else (f"[{json.dumps(p, ensure_ascii=False)}]" if i else str(p))
+                   for i, p in enumerate(ruta))
 
 
 print("a. el export")
@@ -130,11 +165,19 @@ for nombre in OTROS:
     a.pop("generated_at", None)
     b.pop("generated_at", None)
     d = diferencias(a, b)
-    paso(not d, f"{nombre}: " + ("idéntico" if not d else f"{len(d)} diferencias, p. ej. {d[:4]}"))
+    reglas = permitidas_en.get(nombre)
+    if not reglas:
+        paso(not d, f"{nombre}: " + ("idéntico" if not d else f"{len(d)} diferencias, p. ej. {[con_puntos(r) for r in d[:4]]}"))
+        continue
+    # La forma de la regla: el patrón va contra la ruta estricta (`totals["X"][6]`), que es
+    # la que no se puede confundir con otra; y la raíz tiene que seguir siendo un objeto.
+    fuera = [r for r in d if not r or not any(p.match(estricta(r)) for p in reglas)]
+    paso(not fuera, f"{nombre}: {len(d)} rutas distintas, {len(d) - len(fuera)} permitidas por --permitir-en"
+         + ("" if not fuera else f", {len(fuera)} NO permitidas, p. ej. {[estricta(r) for r in fuera[:6]]}"))
 
 print("e. history-stats.json: qué cambió")
 permitidas = [re.compile(r"^generated_at$"), re.compile(r"^version$")] + [re.compile("^" + r + "$") for r in args.permitir]
-d = diferencias(viejo, nuevo)
+d = [con_puntos(r) for r in diferencias(viejo, nuevo)]
 fuera = [r for r in d if not any(p.match(r) for p in permitidas)]
 dentro = len(d) - len(fuera)
 paso(not fuera, f"{len(d)} rutas distintas, {dentro} permitidas" + ("" if not fuera else f", {len(fuera)} NO permitidas, p. ej. {fuera[:6]}"))

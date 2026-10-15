@@ -100,6 +100,10 @@ const EXTRA = { mosaico: 'auto=1' };
 // de dejar la ruta. Medido a tasa de acierto el 14/10 (tanda 52), con 900 s: diez corridas
 // seguidas gastaron 116.955-117.088 ms de reloj virtual (10/10). El doble de la más lenta,
 // redondeado hacia arriba a múltiplo de 15 s: 240 s.
+// `puertas` (v=308) abre la app ENTERA en seis iframes y no lee nada sin anclar. Medido a tasa de
+// acierto el 15/10 (tanda 56), con el defecto de 45 s: diez corridas seguidas gastaron 5.222-5.848 ms
+// de reloj virtual (10/10). El doble de la más lenta da 11,7 s, por debajo del defecto: no entra en
+// `PRESUPUESTO` y corre con los 45 s.
 const PRESUPUESTO = { 'calendario': 15000, 'ocultar-artista': 90000, 'import-guarda': 60000, 'ocultos-cache': 60000, 'mapa': 240000 };
 // `XQ="&peor=1"` agrega parámetros a la URL del banco sin tocar este archivo: sirve
 // para medir (p. ej. el ancho mínimo en que la barra de novedades sigue en una fila).

@@ -48,7 +48,7 @@ if npm test --silent 2>&1 | tail -4 | sed 's/^/      /'; [ "${PIPESTATUS[0]}" -e
 # `mosaico` y `toasts` entraron en v=273:
 # estaban en rojo desde antes del 04/10 y justamente por no estar acá nadie los
 # miraba, igual que le había pasado a `barra` entre v=241 y v=261.
-echo "2b. bancos (barra · pausa-search · toasts · mosaico · novedades · escrituras · ocultar-artista ×3 · covers-orden · calendario · import-guarda · ocultos-cache · mapa)"
+echo "2b. bancos (barra · pausa-search · toasts · mosaico · novedades · escrituras · ocultar-artista ×3 · covers-orden · calendario · import-guarda · ocultos-cache · mapa · puertas)"
 # Los dos de `ocultar-artista` entraron en v=276: las TRES vistas que ocultan
 # artistas, reales, contra una Spotify simulada. Es el único sitio donde se puede
 # probar ocultar sin escribir en la cuenta de Ian, y el de `-disco` es el que
@@ -75,7 +75,10 @@ echo "2b. bancos (barra · pausa-search · toasts · mosaico · novedades · esc
 # `mapa` entró en v=304: #mapa en la app ENTERA contra un MusicBrainz simulado (nada sale a la red):
 # abrir no escanea, el primer país sale con el primer artista, los 503 no se guardan, retomar no repite
 # nada, salir para el escaneo, una sola pestaña escanea y «Limpiar caché» conserva lo buscado.
-for B in barra pausa-search toasts mosaico novedades escrituras ocultar-artista ocultar-artista-disco ocultar-artista-novedades covers-orden calendario import-guarda ocultos-cache mapa; do
+# `puertas` entró en v=308: #puertas en la app ENTERA con historiales inventados: abrir = 1 `/me` y nada
+# más, las filas = la cuenta a mano en el orden de `universo()`, «Mostrar 100 más» con 150, el amigo con
+# su v3 / con uno sin el tema de entrada / sin datos, y salir a mitad de la carga sin escribir en el DOM.
+for B in barra pausa-search toasts mosaico novedades escrituras ocultar-artista ocultar-artista-disco ocultar-artista-novedades covers-orden calendario import-guarda ocultos-cache mapa puertas; do
   if node scripts/correr-banco.mjs "$B" 2>&1 | sed 's/^/      /'; [ "${PIPESTATUS[0]}" -eq 0 ]; then
     ok "banco $B en verde"
   else

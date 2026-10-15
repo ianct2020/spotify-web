@@ -1,0 +1,176 @@
+{
+ "_nota": "Tanda 56: los seis primeros campos de totals y artists entero que da history-artist-tracks v2 (v=307, antes del cambio) sobre las reproducciones INVENTADAS de tests/puertas-pipeline.test.mjs. No se regenera.",
+ "version": 2,
+ "totals": {
+  "Banda Uno": [
+   2,
+   6,
+   2021,
+   2021,
+   [
+    [
+     2021,
+     6,
+     2
+    ]
+   ],
+   "2021-03-02"
+  ],
+  "Banda Dos": [
+   1,
+   3,
+   2021,
+   2021,
+   [
+    [
+     2021,
+     3,
+     1
+    ]
+   ],
+   "2021-04-02"
+  ],
+  "Banda Tres": [
+   3,
+   9,
+   2021,
+   2021,
+   [
+    [
+     2021,
+     9,
+     3
+    ]
+   ],
+   "2021-05-01"
+  ],
+  "Banda Cuatro": [
+   3,
+   9,
+   2021,
+   2021,
+   [
+    [
+     2021,
+     9,
+     3
+    ]
+   ],
+   "2021-06-01"
+  ],
+  "Banda Cinco": [
+   2,
+   6,
+   2021,
+   2021,
+   [
+    [
+     2021,
+     6,
+     2
+    ]
+   ],
+   "2021-07-01"
+  ],
+  "Banda Seis": [
+   2,
+   6,
+   2021,
+   2021,
+   [
+    [
+     2021,
+     6,
+     2
+    ]
+   ],
+   "2021-08-01"
+  ]
+ },
+ "artists": {
+  "Banda Uno": [
+   [
+    "Tema Largo",
+    1,
+    3,
+    "a1"
+   ],
+   [
+    "Tema Corto",
+    1,
+    3,
+    "b1"
+   ]
+  ],
+  "Banda Dos": [
+   [
+    "Canción Buena",
+    1,
+    3,
+    "g1"
+   ]
+  ],
+  "Banda Tres": [
+   [
+    "Luz",
+    1,
+    3,
+    "l1"
+   ],
+   [
+    "Luz - Remastered 2020",
+    1,
+    3,
+    "l2"
+   ],
+   [
+    "Otra Cosa",
+    1,
+    3,
+    "o1"
+   ]
+  ],
+  "Banda Cuatro": [
+   [
+    "Única",
+    2,
+    6,
+    "u1"
+   ],
+   [
+    "Única - Single Version",
+    1,
+    3,
+    "u2"
+   ]
+  ],
+  "Banda Cinco": [
+   [
+    "Zeta",
+    1,
+    3,
+    "zz9"
+   ],
+   [
+    "Alfa",
+    1,
+    3,
+    "aa1"
+   ]
+  ],
+  "Banda Seis": [
+   [
+    "Primera",
+    1,
+    3,
+    "s1"
+   ],
+   [
+    "Segunda",
+    1,
+    3,
+    "s2"
+   ]
+  ]
+ }
+}

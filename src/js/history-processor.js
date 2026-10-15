@@ -60,7 +60,7 @@ const RUN_GAP_S = 3 * 3600;
 // Wrapped ya muestra como tal. Con base >= 60 min el récord mide lo que dice
 // medir: que alguien que ya escuchabas pasó a escucharse mucho más.
 const GROWTH_MIN_BASE = 60;
-const ARTIST_TRACKS_VERSION = 2;  // v2: `totals` lleva el día de la primera play válida del artista
+const ARTIST_TRACKS_VERSION = 3;  // v3 (v=308, `#puertas`): `totals` suma [6] = [nombre, trackId] del tema de entrada y [7] = el día del primer tema DISTINTO (otro `songKey`) o null, espejo de gen-stats.py. v2: `totals` lleva el día de la primera play válida del artista
 const ARTIST_TRACKS_TOP_N = 6;
 const DETAIL_MIN_PLAYS = 5;
 const MILESTONE_TARGETS = new Set([1, 10000, 25000, 50000, 75000, 100000, 125000, 150000, 175000, 200000, 250000, 300000]);
@@ -100,6 +100,17 @@ function parseTs(ts) {
   // JS getUTCDay: 0=domingo. Python weekday: 0=lunes. Conversión:
   const wd = (d.getUTCDay() + 6) % 7;
   return { d, year: y, month: m, day: dayStr, weekday: wd, hour: d.getUTCHours(), ts };
+}
+
+// [6] y [7] de `totals` (v3): `[nombre, trackId]` del tema de entrada y el día
+// de la primera play válida de un tema con OTRO `songKey`, o null. Espejo de
+// `entrada_y_segundo()` de scripts/gen-stats.py.
+function entradaYSegundo(entrada, temasDia, artist) {
+  if (!entrada) return [null, null];
+  const skEntrada = songKey(entrada.name, artist);
+  let segundo = null;
+  for (const [sk, d] of temasDia || []) if (sk !== skEntrada && (segundo === null || d < segundo)) segundo = d;
+  return [[entrada.name, entrada.tid], segundo];
 }
 
 // Suma 1 día a un dayStr YYYY-MM-DD (para calcular rachas)
@@ -385,6 +396,18 @@ async function processStreamingHistory(fileArrays, { onProgress, ceder, presupue
   // ordenado asc, así que la primera vez que se ve la clave es la de verdad.
   const artistFirstDay = new Map();
   const albumFirstDay = new Map();
+  // v3 (tanda 56, `#puertas`): el TEMA DE ENTRADA de cada artista, {ts, name,
+  // tid} de la MISMA play que fija `artistFirstDay` (se llenan juntos: no puede
+  // haber dos definiciones de «primera»). Si dos plays válidas del mismo artista
+  // tienen el mismo `ts`, gana el menor trackId (orden de cadena): el orden de
+  // llegada depende del orden de los archivos y del sort, y un dato nuevo no se
+  // deja al azar. ⚠️ ESPEJO de `artist_entrada` en scripts/gen-stats.py.
+  const artistEntrada = new Map();
+  // artista → Map<songKey, primer día>, en orden de aparición. Sale el [7]: el
+  // día del primer tema DISTINTO del de entrada. «Distinto» es otro `songKey`,
+  // no otro id: un remaster o la versión del álbum del mismo single NO es un
+  // segundo tema.
+  const artistTemasDia = new Map();
 
   // Por año: obj con Maps y stats
   const years = new Map();
@@ -511,6 +534,13 @@ async function processStreamingHistory(fileArrays, { onProgress, ceder, presupue
     artistPlays.set(artist, (artistPlays.get(artist) || 0) + 1);
     if (artist && !artistFirstYear.has(artist)) artistFirstYear.set(artist, y);
     if (artist && !artistFirstDay.has(artist)) artistFirstDay.set(artist, day);
+    if (artist) {
+      const tidEntrada = uri.split(':').pop();
+      const e = artistEntrada.get(artist);
+      // `plays` viene ordenado por ts: después de la primera solo puede empatar
+      // el mismo `ts`, nunca uno anterior.
+      if (!e || (e.ts === r.ts && tidEntrada < e.tid)) artistEntrada.set(artist, { ts: r.ts, name: track, tid: tidEntrada });
+    }
 
     const ak = albumKey(album, artist);
     albumMs.set(ak, (albumMs.get(ak) || 0) + ms);
@@ -602,6 +632,13 @@ async function processStreamingHistory(fileArrays, { onProgress, ceder, presupue
     // quiere contar. Por (nombre, artista) el mismo tema se parte en varias
     // filas y ninguna llega a los años que le corresponden.
     const sk = songKey(track, artist);
+    // v3: el primer día de cada tema del artista (el mismo `sk`, la misma play
+    // válida: entre el `artistFirstDay` de arriba y acá no hay ningún `continue`).
+    if (artist) {
+      let td = artistTemasDia.get(artist);
+      if (!td) { td = new Map(); artistTemasDia.set(artist, td); }
+      if (!td.has(sk)) td.set(sk, day);
+    }
     let sy = songYears.get(sk); if (!sy) { sy = new Set(); songYears.set(sk, sy); } sy.add(y);
     let sd = songDays.get(sk); if (!sd) { sd = new Set(); songDays.set(sk, sd); } sd.add(day);
     songPlays.set(sk, (songPlays.get(sk) || 0) + 1);
@@ -1119,6 +1156,9 @@ async function processStreamingHistory(fileArrays, { onProgress, ceder, presupue
       curve.length ? curve[curve.length - 1][0] : null,
       curve,
       artistFirstDay.get(artistName) || null,
+      // v3: [6] el tema de entrada y [7] el día del segundo tema (dato crudo:
+      // las cuentas las hace `#puertas`).
+      ...entradaYSegundo(artistEntrada.get(artistName), artistTemasDia.get(artistName), artistName),
     ];
     tks.sort((a, b) =>
       (trackPlaysCount.get(b) || 0) - (trackPlaysCount.get(a) || 0) ||

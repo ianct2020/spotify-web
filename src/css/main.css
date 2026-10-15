@@ -6510,3 +6510,37 @@ body.covers-fs .main {
 }
 .mapa-mundo-frase { margin: 6px 0 0; }
 .mapa-mundo-noseven { margin: 6px 0 0; font-size: 12px; line-height: 1.5; color: var(--color-text-secondary); }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   #puertas — puertas de entrada (v=308, tanda 56)
+   ══════════════════════════════════════════════════════════════════════════
+
+   Una tabla de cuatro columnas a todo el ancho. Todo cuelga de `.puertas` y nada
+   redefine reglas de otra vista. Textos de pista en `--color-text-secondary`, como
+   las vistas nuevas desde #calendario. A 600 px o menos la tabla se apila: cada
+   fila son DOS renglones (artista y tema de entrada arriba; «¿sigue?» y «hasta el
+   segundo tema» abajo), con la etiqueta de cada celda encima de su valor (sale de
+   `data-et`), porque la cabecera se esconde. */
+.puertas { display: flex; flex-direction: column; gap: 12px; max-width: 1100px; }
+.puertas-intro { margin: 0; color: var(--color-text-secondary); font-size: 14px; line-height: 1.5; }
+.puertas-tabla { width: 100%; border-collapse: collapse; table-layout: fixed; }
+.puertas-tabla th { text-align: left; font-size: 12px; font-weight: 600; color: var(--color-text-secondary); padding: 6px 10px 6px 0; border-bottom: 1px solid var(--color-border); }
+.puertas-tabla th:nth-child(1) { width: 24%; }
+.puertas-tabla th:nth-child(2) { width: 36%; }
+.puertas-tabla th:nth-child(3) { width: 24%; }
+.puertas-tabla td { padding: 8px 10px 8px 0; border-bottom: 1px solid var(--color-border); vertical-align: top; font-size: 14px; overflow-wrap: anywhere; }
+.puertas-art { font-weight: 600; }
+.puertas-dia { color: var(--color-text-secondary); font-size: 12px; white-space: nowrap; }
+.puertas-sigue[data-sigue="no"], .puertas-hasta { color: var(--color-text-secondary); }
+.puertas-pie { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.puertas-cuenta { color: var(--color-text-secondary); font-size: 13px; font-variant-numeric: tabular-nums; }
+.puertas-pie .btn[hidden] { display: none; }
+.puertas-reimportar .btn { margin-top: 4px; }
+.puertas-nota { color: var(--color-text-secondary); font-size: 13px; }
+@media (max-width: 600px) {
+  .puertas-tabla, .puertas-tabla tbody { display: block; }
+  .puertas-tabla thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  .puertas-tabla tr { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); column-gap: 12px; row-gap: 6px; padding: 10px 0; border-bottom: 1px solid var(--color-border); }
+  .puertas-tabla td { display: block; padding: 0; border-bottom: 0; }
+  .puertas-tabla td::before { content: attr(data-et); display: block; font-size: 11px; font-weight: 500; color: var(--color-text-secondary); }
+}
