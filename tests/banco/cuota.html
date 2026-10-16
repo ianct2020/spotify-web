@@ -1,0 +1,142 @@
+<!doctype html><html lang="es"><head><meta charset="utf-8"><title>banco cuota — lo gastado de las dos cuotas, en el pie del menú</title>
+<style>html,body{margin:0;background:#111;color:#eee;font:13px system-ui}iframe{border:0;display:block}</style>
+</head><body>
+<pre id="progreso"></pre>
+<div id="marcos"></div>
+<script type="module">
+// ── Qué prueba este banco (v=310, tanda 58) ──────────────────────────────────
+//
+// El pie del menú enseña lo gastado de las DOS cuotas de Spotify que la app ya
+// choca, en la app ENTERA (`cuota-caso.html`, uno por iframe), contra la Spotify
+// simulada (`simulado.mjs`). Nada sale a la red. Dos marcos, porque la pausa vive
+// en el módulo y un documento nuevo es un módulo nuevo:
+//
+//   A. búsqueda: el pie existe al arrancar y dice «sin peticiones en esta pestaña»
+//      (las dos); N búsquedas → «N peticiones · sin 429»; un 429 de `/search` →
+//      N+1, el 429 y la pausa; una búsqueda más durante la pausa NO sube
+//      «peticiones» (la guarda la corta antes de salir: `/search` no llega a la
+//      red simulada) y sale como «1 cortada por la pausa». Las discografías, en 0.
+//   B. discografías: lo mismo con `getArtistAlbumsConFuente` y un 429 de
+//      `/artists/{id}/albums`; el artista siguiente, con el nativo en pausa, no
+//      pide el nativo y sale como cortada. El respaldo por `/search` cuenta en
+//      BÚSQUEDA, que es la cuota que gasta.
+//   C. el contenedor: `role="status"`, `aria-live="off"`, el color del texto es
+//      `--color-text-secondary` (nunca el muted), el `title` de cada renglón lleva
+//      el tope medido y el renglón no; `sessionStorage.fonoteca_cuota_v1` existe.
+//   D. 0 escrituras en la cuenta, 0 rutas sin simular, 0 hosts externos, 0 errores.
+//
+// ⚠️ Todas las esperas van con `esperarReal` (ver PRESUPUESTO en `scripts/correr-banco.mjs`).
+
+import { esperarReal } from '/banco/simulado.mjs';
+import { fallar, listo } from '/banco/esperar.mjs';
+
+const ANCHO = +(new URLSearchParams(location.search).get('ancho') || 1351);
+const afirmar = (c, msg) => { if (!c) throw new Error('BANCO: ' + msg); };
+const progreso = (t) => { document.getElementById('progreso').textContent = t; };
+const VUELTAS = 20000;
+
+function abrirMarco(nombre) {
+  const f = document.createElement('iframe');
+  f.width = ANCHO; f.height = 800;
+  f.src = `/banco/cuota-caso.html?marco=${nombre}`;
+  document.getElementById('marcos').appendChild(f);
+  return f;
+}
+const win = (f) => f.contentWindow;
+const $ = (f, s) => f.contentDocument?.querySelector(s);
+const texto = (el) => (el?.textContent || '').replace(/\s+/g, ' ').trim();
+const renglon = (f, c) => texto($(f, `.sidebar-cuota [data-cuota="${c}"]`));
+const llamadas = (f, re) => win(f).__sim.reg.llamadas.filter((l) => re.test(l.ruta)).length;
+const SEARCH = /^\/search\?/, ALBUMS = /^\/artists\/[^/]+\/albums\?/;
+const HORA = '\\d\\d:\\d\\d';
+async function arrancado(f, que) { await esperarReal(() => win(f)?.__listo, { que: `que arranque ${que}`, vueltas: VUELTAS }); }
+async function pie(f, c, re, que) {
+  await esperarReal(() => re.test(renglon(f, c)), { que: `${que} (dice «${renglon(f, c)}»)`, vueltas: 400 }).catch(() => {});
+  afirmar(re.test(renglon(f, c)), `${que}: el renglón de ${c} dice «${renglon(f, c)}», se esperaba ${re}`);
+}
+function sinFugas(f, nombre) {
+  const s = win(f).__sim.reg;
+  afirmar(s.escrituras.length === 0, `${nombre}: 0 escrituras en la cuenta: ${s.escrituras.map((x) => x.metodo + ' ' + x.ruta).join(' · ')}`);
+  afirmar(s.desconocidas.length === 0, `${nombre}: ninguna ruta sin simular: ${s.desconocidas.join(' · ')}`);
+  afirmar(s.externas.length === 0, `${nombre}: ninguna petición a un host externo: ${s.externas.join(' · ')}`);
+  afirmar(win(f).__errores.length === 0, `${nombre}: 0 errores: ${win(f).__errores.join(' · ')}`);
+}
+const ID = (i) => `${i}aBcDeFgHiJkLmNoPqRsTu`.slice(0, 22);
+const notas = [];
+
+try {
+  // ── A. Búsqueda ────────────────────────────────────────────────────────────
+  progreso('A. búsqueda…');
+  const a = abrirMarco('busqueda');
+  await arrancado(a, 'el marco de búsqueda');
+  await pie(a, 'busqueda', /^Búsqueda: sin peticiones en esta pestaña$/, 'A0. al arrancar');
+  await pie(a, 'discografia', /^Discografías: sin peticiones en esta pestaña$/, 'A0. al arrancar');
+  const api = win(a).__api;
+  const N = 5;
+  for (let i = 0; i < N; i++) await api.spotifyFetch(`/search?q=${encodeURIComponent(`artist:"Banda Inventada ${i}"`)}&type=album&limit=10`);
+  afirmar(llamadas(a, SEARCH) === N, `A1. ${N} búsquedas salieron a la red simulada (salieron ${llamadas(a, SEARCH)})`);
+  await pie(a, 'busqueda', new RegExp(`^Búsqueda: ${N} peticiones · sin 429$`), `A1. tras ${N} búsquedas`);
+  win(a).__modoSearch = 429;
+  let e429 = null;
+  try { await api.spotifyFetch('/search?q=otra&type=album&limit=10'); } catch (e) { e429 = e; }
+  afirmar(e429?.status === 429, 'A2. el 429 de /search tira');
+  afirmar(llamadas(a, SEARCH) === N + 1, `A2. el 429 salió a la red (${llamadas(a, SEARCH)})`);
+  await pie(a, 'busqueda', new RegExp(`^Búsqueda: ${N + 1} peticiones · 429 hace menos de 1 min, en pausa hasta las ${HORA}$`), 'A2. tras el 429');
+  const enPausa = renglon(a, 'busqueda');
+  let ePausa = null;
+  try { await api.spotifyFetch('/search?q=durante-la-pausa&type=album&limit=10'); } catch (e) { ePausa = e; }
+  afirmar(ePausa?.searchEnPausa === true, 'A3. la búsqueda durante la pausa la corta la guarda');
+  afirmar(llamadas(a, SEARCH) === N + 1, `A3. ...sin salir a la red (${llamadas(a, SEARCH)})`);
+  await pie(a, 'busqueda', new RegExp(`^Búsqueda: ${N + 1} peticiones · 429 hace menos de 1 min, en pausa hasta las ${HORA} · 1 cortada por la pausa$`), 'A3. tras la cortada');
+  await pie(a, 'discografia', /^Discografías: sin peticiones en esta pestaña$/, 'A3. las discografías no se mezclan');
+  notas.push(`búsqueda: «${enPausa}» → «${renglon(a, 'busqueda')}»`);
+
+  // ── C. El contenedor, sobre el marco A ─────────────────────────────────────
+  const caja = $(a, '.sidebar-cuota');
+  afirmar(caja?.closest('.sidebar-footer'), 'C. el contenedor vive en .sidebar-footer');
+  afirmar(caja.getAttribute('role') === 'status' && caja.getAttribute('aria-live') === 'off', `C. role=status y aria-live=off (${caja.getAttribute('role')} / ${caja.getAttribute('aria-live')})`);
+  const css = win(a).getComputedStyle(win(a).document.documentElement);
+  const secundario = css.getPropertyValue('--color-text-secondary').trim();
+  const muestra = win(a).document.createElement('span'); muestra.style.color = secundario; caja.appendChild(muestra);
+  const esperado = win(a).getComputedStyle(muestra).color; muestra.remove();
+  for (const c of ['busqueda', 'discografia']) {
+    const el = $(a, `.sidebar-cuota [data-cuota="${c}"]`);
+    afirmar(win(a).getComputedStyle(el).color === esperado, `C. ${c} va en --color-text-secondary (${win(a).getComputedStyle(el).color} contra ${esperado})`);
+    afirmar(/no un límite publicado/.test(el.title) && /esta pestaña/.test(el.title), `C. el title de ${c} lleva el tope medido: «${el.title}»`);
+    afirmar(!/\b(700|100)\b/.test(texto(el)), `C. el renglón de ${c} no lleva el tope: «${texto(el)}»`);
+  }
+  let guardado = null;
+  try { guardado = JSON.parse(win(a).sessionStorage.getItem('fonoteca_cuota_v1')); } catch { /* nada */ }
+  afirmar(guardado?.busqueda?.peticiones === N + 1 && guardado?.busqueda?.cortadas === 1, `C. sessionStorage.fonoteca_cuota_v1 = ${JSON.stringify(guardado)}`);
+  sinFugas(a, 'A');
+
+  // ── B. Discografías ────────────────────────────────────────────────────────
+  progreso('B. discografías…');
+  const b = abrirMarco('discografia');
+  await arrancado(b, 'el marco de discografías');
+  const apib = win(b).__api;
+  for (let i = 0; i < 3; i++) await apib.getArtistAlbumsConFuente(ID(i), `Banda Inventada ${i}`);
+  afirmar(llamadas(b, ALBUMS) === 3, `B1. 3 discografías salieron a la red simulada (${llamadas(b, ALBUMS)})`);
+  await pie(b, 'discografia', /^Discografías: 3 peticiones · sin 429$/, 'B1. tras 3 discografías');
+  await pie(b, 'busqueda', /^Búsqueda: sin peticiones en esta pestaña$/, 'B1. sin búsquedas');
+  win(b).__modoAlbums = 429;
+  const r4 = await apib.getArtistAlbumsConFuente(ID(3), 'Banda Inventada 3');
+  afirmar(r4.fuente === 'busqueda' && r4.motivo === 'pausa', `B2. el 429 del nativo cae a /search (${r4.fuente}/${r4.motivo})`);
+  afirmar(llamadas(b, ALBUMS) === 4, `B2. el 429 salió a la red (${llamadas(b, ALBUMS)})`);
+  await pie(b, 'discografia', new RegExp(`^Discografías: 4 peticiones · 429 hace menos de 1 min, en pausa hasta las ${HORA}$`), 'B2. tras el 429');
+  await pie(b, 'busqueda', /^Búsqueda: 1 petición · sin 429$/, 'B2. el respaldo por /search cuenta en búsqueda');
+  const r5 = await apib.getArtistAlbumsConFuente(ID(4), 'Banda Inventada 4');
+  afirmar(r5.motivo === 'pausa', 'B3. el artista siguiente va por la pausa');
+  afirmar(llamadas(b, ALBUMS) === 4, `B3. ...sin pedir el nativo (${llamadas(b, ALBUMS)})`);
+  await pie(b, 'discografia', new RegExp(`^Discografías: 4 peticiones · 429 hace menos de 1 min, en pausa hasta las ${HORA} · 1 cortada por la pausa$`), 'B3. tras la cortada');
+  await pie(b, 'busqueda', /^Búsqueda: 2 peticiones · sin 429$/, 'B3. su respaldo, otra búsqueda');
+  notas.push(`discografías: «${renglon(b, 'discografia')}» · búsqueda: «${renglon(b, 'busqueda')}»`);
+  sinFugas(b, 'B');
+
+  const resumen = `A: ${N} búsquedas + 1 429 + 1 cortada · B: 3 discografías + 1 429 + 1 cortada · ${notas.join(' · ')} · escrituras=0 · externos=0 · errores=0 · ` +
+    `reloj virtual=${Math.round(performance.now())} ms`;
+  document.documentElement.setAttribute('data-resumen', resumen);
+  progreso('ok · ' + resumen);
+  listo(resumen);
+} catch (e) { fallar(e); }
+</script></body></html>

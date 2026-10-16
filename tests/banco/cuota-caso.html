@@ -1,0 +1,81 @@
+<!doctype html><html lang="es"><head><meta charset="utf-8"><title>banco cuota — la app entera, en un iframe</title>
+<link rel="stylesheet" href="/css/theme.css">
+<link rel="stylesheet" href="/css/components.css">
+<link rel="stylesheet" href="/css/main.css">
+<style>*,*::before,*::after{animation:none!important;transition:none!important}</style>
+</head><body>
+<div id="app"></div>
+<script type="module">
+// ── Un iframe del banco `cuota.html` (v=310, tanda 58) ───────────────────────
+//
+// Arranca la app ENTERA (`/js/app.js`: su `init()`, su menú, su pie) en `#home`,
+// contra la Spotify simulada de `simulado.mjs`. Nada sale a la red. La madre
+// maneja las dos cuotas desde afuera:
+//
+//   · `window.__modoSearch` = 200 | 429: cómo contesta `/search` (200 = una página
+//     vacía de álbumes: no hay discos que inventar para esto);
+//   · `window.__modoAlbums` = 200 | 429: cómo contesta `/artists/{id}/albums`
+//     (200 = una sola página, sin `next`).
+//
+// y llama a `spotifyFetch` / `getArtistAlbumsConFuente` del MISMO `api.js` que usa
+// la app (un `import()` dentro del documento del iframe devuelve la misma instancia).
+//
+// Modo `?foto=sin429|429&tema=papel` (las capturas SEMBRADAS, con un conductor externo
+// y SIN reloj virtual): hace él mismo unas búsquedas y unas discografías (y, con `429`,
+// el 429 de búsqueda y la pausa), abre el menú y marca `data-foto="listo"`.
+
+import { instalarRedSimulada, esperarReal } from '/banco/simulado.mjs';
+
+const q = new URLSearchParams(location.search);
+window.__errores = [];
+window.addEventListener('error', (e) => window.__errores.push('error: ' + (e.message || e)));
+window.addEventListener('unhandledrejection', (e) => window.__errores.push('rechazo: ' + String(e.reason?.message || e.reason)));
+const errorOriginal = console.error.bind(console);
+console.error = (...a) => { window.__errores.push('console.error: ' + a.map(String).join(' ').slice(0, 300)); errorOriginal(...a); };
+
+const UID = 'usuarioDelBancoCuota';
+const sim = instalarRedSimulada();
+window.__sim = sim;
+window.__modoSearch = 200;
+window.__modoAlbums = 200;
+const cuota429 = () => sim.sinSimular(429);
+sim.ruta('GET', /^\/me$/, () => ({ id: UID, display_name: 'Banco' }));
+sim.ruta('GET', /^\/search\?/, () => (window.__modoSearch === 429 ? cuota429() : { albums: { items: [], next: null, total: 0 } }));
+sim.ruta('GET', /^\/artists\/[^/]+\/albums\?/, () => (window.__modoAlbums === 429 ? cuota429() : { items: [], next: null, total: 0 }));
+localStorage.setItem('fonoteca_last_user_id', UID);
+localStorage.setItem('fonoteca_perfil_v1', JSON.stringify({ id: UID, display_name: 'Banco' }));
+
+const FOTO = q.get('foto');
+if (q.get('tema') === 'papel') {
+  // El preset «Papel», escrito como lo escribe el panel de paleta: los OCHO colores, por usuario.
+  const { PRESETS } = await import('/js/ui/theme-panel.js');
+  const { prefKey } = await import('/js/storage.js');
+  const papel = PRESETS.find((p) => p.id === 'papel');
+  if (!papel) throw new Error('BANCO: no encuentro el preset Papel');
+  localStorage.setItem(prefKey('fonoteca_theme_v1'), JSON.stringify({ colors: papel.colors, preset: papel.id }));
+}
+location.hash = '#home';
+await import('/js/app.js');
+await esperarReal(() => document.getElementById('my-history-btn') && document.querySelector('.home-card'), { que: 'que la app arranque', vueltas: 4000 });
+window.__api = await import('/js/api.js');
+window.__listo = true;
+
+if (FOTO) {
+  const api = window.__api;
+  for (let i = 0; i < 7; i++) await api.spotifyFetch(`/search?q=${encodeURIComponent(`artist:"Banda Inventada ${i}"`)}&type=album&limit=10`);
+  for (let i = 0; i < 3; i++) await api.getArtistAlbumsConFuente(`${i}aAaAaAaAaAaAaAaAaAaAa`.slice(0, 22), `Banda Inventada ${i}`);
+  if (FOTO === '429') {
+    window.__modoSearch = 429;
+    try { await api.spotifyFetch('/search?q=otra&type=album&limit=10'); } catch { /* el 429, a propósito */ }
+  }
+  // El menú abierto: en `#home`, a más de 768 px, ya está acoplado (el ☰ lo DESACOPLARÍA);
+  // en el móvil es un overlay y se abre con el ☰, como lo abre una persona.
+  if (innerWidth <= 768) {
+    document.querySelector('[data-hamburger]').click();
+    await esperarReal(() => document.querySelector('.sidebar.open'), { que: 'que el ☰ abra el menú', vueltas: 4000 });
+  }
+  await esperarReal(() => document.querySelector('.sidebar-cuota [data-cuota="busqueda"]')?.textContent, { que: 'que el pie pinte la cuota', vueltas: 4000 });
+  document.documentElement.dataset.foto = 'listo';
+}
+</script>
+</body></html>

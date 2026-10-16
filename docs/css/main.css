@@ -2385,6 +2385,21 @@ h3 { font-size: 18px; font-weight: 600; }
   color: var(--color-text);
   border-color: var(--color-border);
 }
+/* La cuota a la vista (v=310): dos renglones chicos al final del pie. En el
+   secundario y nunca en el muted; del tamaño de las pistas de los tiles (12 px). */
+.sidebar-cuota {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: 12px;
+  padding: 0 10px;
+}
+.sidebar-cuota-linea {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--color-text-secondary);
+}
 .sidebar-action svg { flex-shrink: 0; opacity: 0.75; }
 .sidebar-action:hover svg { opacity: 1; }
 .sidebar-action-danger:hover {

@@ -43,6 +43,7 @@ import { render as renderDiscoverArtists } from './features/discover-artists.js'
 import { render as renderFollowArtists } from './features/follow-artists.js';
 import { render as renderNewReleases } from './features/new-releases.js';
 import { render as renderSinClasificar } from './features/sin-clasificar.js';
+import { pieCuotaHtml, montarPieCuota } from './ui/cuota-pie.js';
 
 // ── Arranque degradado cuando /me está rate-limiteado (v=173) ────────────────
 //
@@ -593,6 +594,9 @@ function showApp(profile) {
             <span>Cerrar sesión</span>
           </button>
         </div>
+        <!-- La cuota a la vista (v=310): lo gastado de /search y de las discografías
+             en esta pestaña. Lo pinta ui/cuota-pie.js; ver util/cuota.js. -->
+        ${pieCuotaHtml()}
       </div>
       </nav>
     </aside>
@@ -601,6 +605,7 @@ function showApp(profile) {
 
   document.getElementById('logout-btn').onclick = logout;
   document.getElementById('my-history-btn').onclick = () => openImportHistory();
+  montarPieCuota();
   document.getElementById('theme-btn').onclick = () => openThemePanel();
   document.getElementById('refresh-all-btn').onclick = async () => {
     const btn = document.getElementById('refresh-all-btn');

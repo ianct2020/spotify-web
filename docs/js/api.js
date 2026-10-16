@@ -1,10 +1,11 @@
-import { getValidToken, refreshAccessToken } from './auth.js?v=309';
-import { cacheGet, cacheGetRaw, cacheGetTimestamp, cacheSet, cacheClear, prefKey, migratePrefKey } from './storage.js?v=309';
-import { idbDel, idbDelByPrefix, idbGetCached, idbGetCachedRaw, idbGetTimestamp, idbSetCached } from './idb.js?v=309';
-import { OWNER_KEY_LIST } from './history-keys.js?v=309';
-import { OCULTOS_ITEMS_PREFIX } from './util/ocultos-items-clave.js?v=309';
-import { showToast } from './ui/toast.js?v=309';
-import { artistIsSame, limpiaParaQuery } from './util/track-match.js?v=309';
+import { getValidToken, refreshAccessToken } from './auth.js?v=310';
+import { cacheGet, cacheGetRaw, cacheGetTimestamp, cacheSet, cacheClear, prefKey, migratePrefKey } from './storage.js?v=310';
+import { idbDel, idbDelByPrefix, idbGetCached, idbGetCachedRaw, idbGetTimestamp, idbSetCached } from './idb.js?v=310';
+import { OWNER_KEY_LIST } from './history-keys.js?v=310';
+import { OCULTOS_ITEMS_PREFIX } from './util/ocultos-items-clave.js?v=310';
+import { showToast } from './ui/toast.js?v=310';
+import { artistIsSame, limpiaParaQuery } from './util/track-match.js?v=310';
+import { contadorCuota, cuotaDeEndpoint } from './util/cuota.js?v=310';
 
 const BASE = 'https://api.spotify.com/v1';
 const MIN_RETRY_WAIT = 5000;
@@ -58,6 +59,9 @@ async function spotifyFetch(endpoint, options = {}) {
   const method = (options.method || 'GET').toUpperCase();
   const maxRetries = options._maxRetries ?? DEFAULT_MAX_RETRIES;
   const esSearch = endpoint.startsWith('/search') || endpoint.includes('/v1/search');
+  // La cuota a la vista (v=310, `util/cuota.js`): de cuál de las dos cuotas es este
+  // pedido, si es de alguna. Contar no cambia ninguna espera ni ningún reintento.
+  const cuota = cuotaDeEndpoint(endpoint);
 
   // ⚠️ Puerta cerrada: si `/search` ya dio 429 hace poco, ni siquiera se pega
   // al servidor. Los 5 reintentos del retry loop, aplicados a un endpoint cuya
@@ -65,6 +69,7 @@ async function spotifyFetch(endpoint, options = {}) {
   // peticiones más contra el mismo tope: agravan lo que intentan sobrellevar.
   // El idiom es el mismo que `_nativoPausaHasta` usa para el nativo de discos.
   if (esSearch && Date.now() < _searchPausaHasta) {
+    contadorCuota.cortada('busqueda');   // no salió: no gastó cuota
     const err = new Error(`Spotify 429: /search en pausa hasta ${new Date(_searchPausaHasta).toISOString()} (cuota agotada).`);
     err.status = 429;
     err.searchEnPausa = true;
@@ -88,6 +93,8 @@ async function spotifyFetch(endpoint, options = {}) {
     let response;
     try {
       response = await fetch(url, { ...options, headers });
+      // Volvió una respuesta, o sea que salió a la red: gastó cuota (un 429 también).
+      if (cuota) contadorCuota.peticion(cuota, response.status);
     } catch (netErr) {
       // Error de red sin respuesta HTTP: "Failed to fetch", conexión cortada,
       // rate-limit enmascarado como CORS, etc. Reintentamos con backoff.
@@ -123,6 +130,7 @@ async function spotifyFetch(endpoint, options = {}) {
             : SEARCH_PAUSA_MIN_MS;
           _searchPausaHasta = Date.now() + _searchPausaMs;
         }
+        contadorCuota.pausa('busqueda', _searchPausaHasta);
         console.info(`[rate-limit] 429 en /search — pausa ${Math.round(_searchPausaMs / 1000)} s (endpoint: ${endpoint})`);
         const err = new Error(`Spotify 429: /search agotó su cuota; pausa ${Math.round(_searchPausaMs / 1000)} s.`);
         err.status = 429;
@@ -1720,7 +1728,10 @@ async function getArtistAlbumsConFuente(artistId, artistName, { includeSingles =
   };
 
   if (_nativoDenegado) return porBusqueda('denegado');
-  if (Date.now() < _nativoPausaHasta) return porBusqueda('pausa');
+  if (Date.now() < _nativoPausaHasta) {
+    contadorCuota.cortada('discografia');   // el nativo no se pidió: no gastó cuota
+    return porBusqueda('pausa');
+  }
 
   try {
     const r = await tryNative();
@@ -1742,6 +1753,7 @@ async function getArtistAlbumsConFuente(artistId, artistName, { includeSingles =
       } else if (status !== 429) {
         _nativoDenegado = { status, mensaje: String(e.message).slice(0, 200) };
       }
+      if (status === 429) contadorCuota.pausa('discografia', _nativoPausaHasta);
       artistAlbumsDiag.cambios.push({
         t: Date.now(),
         status,

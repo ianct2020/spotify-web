@@ -33,7 +33,7 @@
 - DELETE playlist items: body `{ items: [{uri}] }` (NO `{ tracks: [...] }` → da 400 "No uris provided")
 - Campo `popularity` en `/me/tracks`: **removido en la migración feb 2026**. Confirmado 2026-07-17 con 9548 tracks reales → 100% null. No usar más. Chart de popularidad sacado del Dashboard en v=41.
 - **Búsqueda** (`/search?type=album|track|artist`, con filtros `artist:"..."`): CONFIRMADO vivo (se usa en Similar y en Álbum similar v=45).
-- `GET /artists/{id}/albums`: **el limit máximo bajó a 10** (re-verificado en vivo 2026-08-11: `limit` 11..20 devuelven 400 "Invalid limit", `limit=10` devuelve 200 y pagina bien con `next`/`offset` — Taylor Swift, `total: 112`). Antes (2026-08-05) 20 andaba. Nunca mandar `market=from_token`. Usado en `#discover-artists` y `#new-releases`. **Cuota propia (medido 2026-09-16, v=225): 429 `QUOTA_EXCEEDED` después de exactamente 100 requests en ~33 s (~20 artistas), y sigue en 429 más de 23 minutos. Es SOLO ese endpoint**: en el mismo minuto `/artists/{id}`, `/albums/{id}/tracks`, `/search` y `/me` dan 200. `Retry-After` ilegible (solo se leen `cache-control` y `content-type`). `getArtistAlbumsConFuente()` (api.js, v=226) va sin reintentos; ante 429 pone el nativo en **pausa de 5 min que se dobla** (tope 60) y mientras tanto usa `/search?q=artist:"X"&type=album`; ante 400/403 lo abandona para la sesión y lo dice en pantalla. **La app corta `/search` en 40** (`SEARCH_MAX_PAGES = 4`, no es la API: medido 2026-09-18, sin tope llega al 77 % del nativo y el tope real es `limit + offset ≤ 1000`), y **`/search` tiene su propia cuota**: 429 `QUOTA_EXCEEDED` tras ~700 requests, y la comparte toda la app. Desde v=229 cada discografía vive en la **base sin caducidad** `discover_disco_base_v1_{id}` (unión por id de Spotify, nunca por `albumKey`; ver `util/disco-base.js`), con su fuente y si está cortada, y `#new-releases` avisa cuántas lo están. **Nada puede borrar la base**: «Actualizar» tira solo el caché de escaneo y «Limpiar caché» la conserva; si agregás otro camino que borre IndexedDB, conservá el prefijo `DISCO_BASE_PREFIX` **y, desde v=300, `LOCAL_HISTORY_PREFIX` (`local_`, en `history-keys.js`)**: el historial que el usuario importó (ver «La importación "solo el detalle"»). La lista de lo que se conserva es una sola, `util/limpiar-cache.js`. Se mueve entre máquinas con «Exportar base» / «Importar base». El diagnóstico de la sesión se lee desde la pestaña: `sessionStorage.fonoteca_artist_albums_diag` (o `artistAlbumsDiag` exportado).
+- `GET /artists/{id}/albums`: **el limit máximo bajó a 10** (re-verificado en vivo 2026-08-11: `limit` 11..20 devuelven 400 "Invalid limit", `limit=10` devuelve 200 y pagina bien con `next`/`offset` — Taylor Swift, `total: 112`). Antes (2026-08-05) 20 andaba. Nunca mandar `market=from_token`. Usado en `#discover-artists` y `#new-releases`. **Cuota propia (medido 2026-09-16, v=225): 429 `QUOTA_EXCEEDED` después de exactamente 100 requests en ~33 s (~20 artistas), y sigue en 429 más de 23 minutos. Es SOLO ese endpoint**: en el mismo minuto `/artists/{id}`, `/albums/{id}/tracks`, `/search` y `/me` dan 200. `Retry-After` ilegible (solo se leen `cache-control` y `content-type`). `getArtistAlbumsConFuente()` (api.js, v=226) va sin reintentos; ante 429 pone el nativo en **pausa de 5 min que se dobla** (tope 60) y mientras tanto usa `/search?q=artist:"X"&type=album`; ante 400/403 lo abandona para la sesión y lo dice en pantalla. **La app corta `/search` en 40** (`SEARCH_MAX_PAGES = 4`, no es la API: medido 2026-09-18, sin tope llega al 77 % del nativo y el tope real es `limit + offset ≤ 1000`), y **`/search` tiene su propia cuota**: 429 `QUOTA_EXCEEDED` tras ~700 requests, y la comparte toda la app. Desde v=229 cada discografía vive en la **base sin caducidad** `discover_disco_base_v1_{id}` (unión por id de Spotify, nunca por `albumKey`; ver `util/disco-base.js`), con su fuente y si está cortada, y `#new-releases` avisa cuántas lo están. **Nada puede borrar la base**: «Actualizar» tira solo el caché de escaneo y «Limpiar caché» la conserva; si agregás otro camino que borre IndexedDB, conservá el prefijo `DISCO_BASE_PREFIX` **y, desde v=300, `LOCAL_HISTORY_PREFIX` (`local_`, en `history-keys.js`)**: el historial que el usuario importó (ver «La importación "solo el detalle"»). La lista de lo que se conserva es una sola, `util/limpiar-cache.js`. Se mueve entre máquinas con «Exportar base» / «Importar base». El diagnóstico de la sesión se lee desde la pestaña: `sessionStorage.fonoteca_artist_albums_diag` (o `artistAlbumsDiag` exportado). **Desde v=310 lo gastado de esta cuota (y de la de `/search`) se ve además en el pie del menú**, sin abrir la consola: ver «📏 La cuota a la vista (v=310)». ⚠️ Con el `_maxRetries: 0` del nativo, un 429 tira ANTES de `avisarRateLimit()`, así que **`esperas429` no recibe los 429 del nativo** (quedan en `cambios`); el pie sí los cuenta.
 - `GET /albums/{id}/tracks?limit=50`: **CONFIRMADO vivo (2026-08-16, 200 con token real)**. Lo usan W-Three (tracklist del modal por álbum), `#discover-artists` / `#new-releases` (pista representativa para el preview y para «+ Biblioteca») y, desde v=144, la **ficha de álbum**: sin el tracklist completo el ♥ marcaba todas las filas por igual, porque la lista eran solo los likes de ese disco. Ojo con el `albumId`: casi ningún llamador de `openAlbumCard()` lo trae (el mosaico, el Dashboard y el Wrapped mandan nombre + artista), así que hay que resolverlo. **Desde v=219 eso lo hace `util/album-resolver.js` y nadie más** — ver su sección más abajo; antes vivía en `album-card.js` y tenía un gemelo con `limit=1` dentro de `wthree.js`. Si no se resuelve, la ficha degrada a la lista vieja (solo likes, todos con ♥) **y ahora lo DICE en pantalla**, en vez de por `console.warn`.
 
 ## Skips crónicos: el veredicto NO va en el pipeline (v=146)
@@ -1444,6 +1444,51 @@ las dos con una vista lenta de la que salís a mitad de la carga:
 Guarda de la 1: el banco `tests/banco/puertas.html` (PUERTA 6) exige 0 marcas tardías del router
 y que lo único activo en el documento sea la ruta nueva; visto ponerse rojo sacándole la
 condición a la segunda pasada. No cambia ninguna petición: la tabla de costos no se toca.
+
+## 📏 La cuota a la vista (v=310)
+
+El pie del menú (`.sidebar-footer`, al final, debajo de «Cerrar sesión») enseña siempre, en todas las
+rutas, dos renglones: lo gastado en ESTA pestaña de las dos cuotas de Spotify que la app ya choca.
+
+- **Qué cuenta** (`util/cuota.js`, puro; `ui/cuota-pie.js` pinta): por cuota (`busqueda` = `/search`,
+  `discografia` = `/artists/{id}/albums`), las peticiones que salieron a la red y volvieron con una
+  respuesta (**un 429 también cuenta**: salió), los 429 con la hora del último, la pausa que puso `api.js`
+  y, aparte, los pedidos que la pausa **cortó antes de salir** («cortada por la pausa»: no gastaron cuota,
+  y por eso no suman a «peticiones»).
+- **De dónde**: un solo punto, `spotifyFetch` (`cuotaDeEndpoint(endpoint)` decide la cuota), más la
+  cortada de la guarda de `/search`, la cortada del nativo en `getArtistAlbumsConFuente` y las dos pausas.
+  **No lee de `artistAlbumsDiag`** ni lo toca: el diag cuenta solo los 200 (`nativoRequests`) y su
+  `esperas429` no ve los 429 del nativo (ver el bullet de `/artists/{id}/albums`); contar en
+  `spotifyFetch` da la misma regla a las dos cuotas. El respaldo por `/search` de una discografía cuenta
+  en **búsqueda**, que es la cuota que gasta. Contar no cambia ninguna espera, pausa, reintento ni ritmo,
+  y no pide nada: la tabla de costos no se toca.
+- **Por pestaña y por carga, a propósito** (como el diag): nace en cero en cada carga y se guarda en
+  `sessionStorage.fonoteca_cuota_v1`. No alimenta nada de vuelta (la pausa sigue en memoria de `api.js`).
+  La cuota es de la CUENTA: el `title` lo dice.
+- 🔴 **El tope medido va en el `title`, nunca en el renglón** («Spotify cortó la búsqueda tras unas 700
+  peticiones el 18/09/2026 …; es un número medido una vez, no un límite publicado»). «37 de 700» sería
+  mentir con formato de dato. Lo vigila `tests/cuota.test.mjs` (lectura del cuerpo de `textoRenglon`).
+- Se repinta con el evento `cuotachange` (sobre `window`), sin intervalo; el «hace N min» del último 429
+  lleva UN `setInterval` de 60 s, solo mientras haya un 429. Contenedor `role="status"` +
+  `aria-live="off"`; 12 px en `--color-text-secondary` (nunca el muted). Números con
+  `toLocaleString('es-ES')` (12.345; las de cuatro cifras van sin separador: 1234).
+
+**El alto del pie** (SEMBRADO, `fonoteca-migracion/driver-capturas-cuota-2026-10-16.mjs`, menú abierto,
+en `#home`). El pie vive DENTRO del `<nav>` que scrollea (v=220), como último bloque: crecer alarga el
+contenido del nav, no achica su caja, y **no se pierde ningún link** visible.
+
+| | `.sidebar-footer` | bloque de la cuota | `<nav>` caja / contenido | links enteros sin scroll (de 27) |
+|---|---|---|---|---|
+| 1366×768, antes | 221 | — | 695 / 1.487 | 14 |
+| 1366×768, sin peticiones | 302,2 | 69,2 | 695 / 1.568 | 14 |
+| 1366×768, con un 429 en pausa | 319 | 86 | 695 / 1.585 | 14 |
+| 390×844, antes | 221 | — | 771 / 1.487 | 16 |
+| 390×844, sin peticiones | 302,2 | 69,2 | 771 / 1.568 | 16 |
+| 390×844, con un 429 en pausa | 319 | 86 | 771 / 1.585 | 16 |
+
+⚠️ El pie no entra sin scrollear el menú en ninguno de los dos, ni antes ni ahora: hay que bajar hasta el
+final del menú para verlo. Guardas: `tests/cuota.test.mjs` (Node) y el banco `tests/banco/cuota.html` (en
+`prepush`, el decimosexto), que vio el pie vacío contra v=309.
 
 ## ⛔ Cada despliegue, su propio `?v=` — dos contenidos no pueden compartir versión
 Pisado el 2026-09-03. El arreglo del cambio de variante salió como un **segundo
