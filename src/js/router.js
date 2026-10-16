@@ -147,7 +147,15 @@ async function handleRoute() {
     // Segunda pasada: las `.home-card` de Home nacen DENTRO del handler, o sea
     // después del `markActiveRoute` de arriba. Sin esto, en Home no se marca
     // nada. Es idempotente y recorre unas decenas de nodos.
-    markActiveRoute(hash);
+    //
+    // v=309: SOLO si esta ruta sigue vigente. Si saliste a mitad de la carga, la
+    // ruta nueva ya hizo sus dos pasadas, y marcar ACÁ le ponía `active` a la
+    // tarjeta y al link de la ruta que dejaste (y se lo sacaba a la que estás
+    // mirando) cuando el render viejo terminaba. Lo midió el banco `puertas`.
+    // ⚠️ Lo de `currentCleanup` de arriba tiene el mismo problema (el teardown
+    // de la ruta vieja pisa el de la vigente) y NO se arregló en la 57: está
+    // reproducido y anotado en PENDIENTES.
+    if (rutaVigente(gen)) markActiveRoute(hash);
   } else {
     main.innerHTML = `
       <div class="empty-state">

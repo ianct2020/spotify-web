@@ -307,6 +307,9 @@ siempre a la vista).
 
 ⚠️ Se llama **dos veces**: antes del handler y después. Las `.home-card` nacen
 DENTRO del handler de Home, así que con una sola pasada Home no marcaba nada.
+🟩 **Desde v=309 la segunda pasada pregunta por la vigencia** (`if (rutaVigente(gen))`):
+si saliste a mitad de la carga, la ruta vieja ya no marca nada al terminar. Ver «El router
+también pregunta por la vigencia (v=309)».
 
 ⚠️ `data-route` tiene que coincidir con el hash **exacto**. Hasta v=153 dos no
 coincidían (`discoverartists` contra `#discover-artists`, `newreleases` contra
@@ -1410,6 +1413,37 @@ Los bucles cortan entre ítems, como `scanArtists()` de `#discover-artists`: las
 similares (150 ms), las 20 de `#rabbit` y los 8 artistas de `computeRelatedTags`
 (200 ms). En `#sync`, en cambio, **la escritura en Spotify se termina igual** y
 el toast la anuncia — lo único que se saltea es pintar el resumen.
+
+## El router también pregunta por la vigencia (v=309)
+
+`handleRoute()` (`router.js`) hacía `currentCleanup = await guardRoute(main, handler)` y
+después la segunda pasada de `markActiveRoute(hash)` **sin preguntar si la ruta seguía
+vigente**. La regla de v=174 («un teardown no interrumpe un `await`: preguntá por la vigencia
+después») valía para las vistas y se le había escapado al propio router. Dos consecuencias,
+las dos con una vista lenta de la que salís a mitad de la carga:
+
+1. **La marca tardía — VISTA FALLAR y ARREGLADA.** Cuando el render viejo terminaba, la segunda
+   pasada le ponía `active` a la tarjeta y al link de la ruta que ya habías dejado, y se lo
+   sacaba a la que estabas mirando. La midió el banco `puertas` (tanda 56: 1 marca tardía; en
+   la 57, `[data-route].active` = `puertas` dos veces estando en `#home`). Arreglo: **la segunda
+   pasada solo si `rutaVigente(gen)`**. Vive en `handleRoute()` y en ningún otro lado (ni en
+   `markActiveRoute`, ni en las vistas, ni con un `:not()`): es el único sitio que sabe qué
+   generación terminó. Con la ruta vigente, todo igual que antes (Home sigue marcando su
+   tarjeta: `tests/inicio-censo.test.mjs`, sin tocar).
+2. **El teardown pisado — REPRODUCIDO, NO arreglado.** Con A lenta y B rápida: B deja
+   `currentCleanup = teardownB`; A termina tarde y lo pisa con `teardownA` (o con `null`). Al
+   salir de B corre el de A y **el de B no corre nunca** (sus observers, timers, el aborto del
+   escaneo de `#mapa`, el `releaseReveal`… quedan vivos), y el de A corre recién al salir de B.
+   Reproducido en Node con el `router.js` real y tres rutas inventadas
+   (`fonoteca-migracion/router-vigencia-repro-2026-10-15.mjs`): teardown de B, 0 veces; el de
+   A, 1 vez y después de salir de B. **No se arregló en la 57** (el encargo lo dejó para otra
+   tanda; está en `PENDIENTES.md`). El arreglo pensado, sin probar: si `!rutaVigente(gen)`, no
+   tocar `currentCleanup` y correr ahí mismo el teardown que devolvió la ruta vieja, en un
+   `try/catch` con el mismo `console.warn('[router] teardown:', e)`.
+
+Guarda de la 1: el banco `tests/banco/puertas.html` (PUERTA 6) exige 0 marcas tardías del router
+y que lo único activo en el documento sea la ruta nueva; visto ponerse rojo sacándole la
+condición a la segunda pasada. No cambia ninguna petición: la tabla de costos no se toca.
 
 ## ⛔ Cada despliegue, su propio `?v=` — dos contenidos no pueden compartir versión
 Pisado el 2026-09-03. El arreglo del cambio de variante salió como un **segundo
@@ -2775,6 +2809,23 @@ capas, y las tres llaman a esa función** (ninguna compara contra
    `<input type="file">` y **sin** «Borrarlo» —`clearMyHistory()` se llevaría
    también `local_<owner>_history_days`—. Sin identidad, el cartel de
    `identityLockedMessage('La importación')`, sin copy nuevo.
+
+🟩 **Y desde v=309 (tanda 57) el candado tiene CUATRO puntos**: las tres capas del import
+y **`clearMyHistory()`**, que llama a la misma `motivoSinImportCompleto()` antes del primer
+`idbDel` y tira con `errorImportBloqueado()` (mismas marcas). Hasta v=308 no preguntaba nada:
+con el owner se llevaba `local_<owner>_history_days` (lo único que guarda «solo el detalle», y
+que se rehace solo volviendo a pasar el ZIP; ningún botón llegaba ahí porque la capa 3 esconde
+«Borrarlo», o sea una puerta sin cerradura detrás de una pared), y sin uid volvía en silencio,
+así que «Borrarlo» anunciaba «Historial local borrado» sin haber borrado nada. Ahora sin uid
+también tira, y el handler de `#ih-clear` lo atrapa: toast rojo, sin cerrar el modal y sin
+recargar. Las comparaciones contra `HISTORY_OWNER_ID` en `src/js/` siguen siendo **3**.
+⚠️ **Consecuencia, a propósito: el owner no tiene ninguna forma de borrar su detalle por día
+desde la app** (anotado en `PENDIENTES.md`; si lo quiere, es otro encargo). Para un amigo con
+identidad confirmada no cambió nada. Guardas en `tests/import-guarda-owner.test.mjs` (owner,
+identidad, sin uid, el amigo como conservación, la lectura estática y el handler REAL de
+`#ih-clear` con la guarda en contra). ⚠️ Ese último caso **no está en el banco**: ahí el memo de
+`getCurrentUserId()` (`api.js`) no se puede vaciar sin tocar producción, así que la guarda no
+puede cambiar de opinión con el modal abierto; en Node el doble no memoiza.
 
 **Las cuatro puertas** que llegan a `openImportHistory()`: el botón «Mi
 historial» (`app.js`, `my-history-btn`), `window.__openImportHistory`, el

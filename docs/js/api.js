@@ -1,10 +1,10 @@
-import { getValidToken, refreshAccessToken } from './auth.js?v=308';
-import { cacheGet, cacheGetRaw, cacheGetTimestamp, cacheSet, cacheClear, prefKey, migratePrefKey } from './storage.js?v=308';
-import { idbDel, idbDelByPrefix, idbGetCached, idbGetCachedRaw, idbGetTimestamp, idbSetCached } from './idb.js?v=308';
-import { OWNER_KEY_LIST } from './history-keys.js?v=308';
-import { OCULTOS_ITEMS_PREFIX } from './util/ocultos-items-clave.js?v=308';
-import { showToast } from './ui/toast.js?v=308';
-import { artistIsSame, limpiaParaQuery } from './util/track-match.js?v=308';
+import { getValidToken, refreshAccessToken } from './auth.js?v=309';
+import { cacheGet, cacheGetRaw, cacheGetTimestamp, cacheSet, cacheClear, prefKey, migratePrefKey } from './storage.js?v=309';
+import { idbDel, idbDelByPrefix, idbGetCached, idbGetCachedRaw, idbGetTimestamp, idbSetCached } from './idb.js?v=309';
+import { OWNER_KEY_LIST } from './history-keys.js?v=309';
+import { OCULTOS_ITEMS_PREFIX } from './util/ocultos-items-clave.js?v=309';
+import { showToast } from './ui/toast.js?v=309';
+import { artistIsSame, limpiaParaQuery } from './util/track-match.js?v=309';
 
 const BASE = 'https://api.spotify.com/v1';
 const MIN_RETRY_WAIT = 5000;

@@ -2,14 +2,14 @@
 // Acepta ZIP del export de Spotify o los Streaming_History_Audio_*.json sueltos.
 // Extrae + procesa + guarda todo en el IDB del user (nada sale de su compu).
 
-import { processStreamingHistory, crearAcumuladorDeDias } from '../history-processor.js?v=308';
+import { processStreamingHistory, crearAcumuladorDeDias } from '../history-processor.js?v=309';
 import {
   saveMyHistory, clearMyHistory, hasLocalHistory, guardarSoloDias,
   motivoSinImportCompleto, identityLockedMessage,
-} from './history-data.js?v=308';
-import { escapeHtml, showProgress, hideProgress, confirmModal, alertModal } from '../ui/components.js?v=308';
-import { showToast } from '../ui/toast.js?v=308';
-import { openModal, closeTop, closeById } from '../ui/modal-stack.js?v=308';
+} from './history-data.js?v=309';
+import { escapeHtml, showProgress, hideProgress, confirmModal, alertModal } from '../ui/components.js?v=309';
+import { showToast } from '../ui/toast.js?v=309';
+import { openModal, closeTop, closeById } from '../ui/modal-stack.js?v=309';
 
 const OVERLAY_ID = 'import-history-overlay';
 let overlay = null;
@@ -141,7 +141,15 @@ async function openImportHistory() {
   if (clearBtn) clearBtn.onclick = async () => {
     const ok = await confirmModal('Borrar tu historial local', 'Vas a borrar los agregados de tu Extended Streaming History guardados en este navegador. No afecta tu cuenta de Spotify ni el ZIP que descargaste — puedes volver a subirlo cuando quieras.', 'Borrar');
     if (!ok) return;
-    await clearMyHistory();
+    // `clearMyHistory()` tira si la guarda dice que no o si no hay uid (v=309):
+    // toast rojo y el modal se queda, sin anunciar un borrado que no se hizo.
+    // Sin este `catch` el error llegaría al `unhandledrejection` y al banner.
+    try {
+      await clearMyHistory();
+    } catch (e) {
+      showToast(e?.message || 'No se ha podido borrar tu historial local.', 'error');
+      return;
+    }
     showToast('Historial local borrado', 'success');
     close();
     // Recargamos para que las features detecten el estado nuevo

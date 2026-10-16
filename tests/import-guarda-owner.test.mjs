@@ -107,6 +107,87 @@ console.log('\n[3] guardarSoloDias() con /me = owner (la importación «solo el 
   eq(escrituras(), [`local_${HISTORY_OWNER_ID}_history_days`], '1 escritura: local_<owner>_history_days, y ninguna más');
 }
 
+// ── 3b. clearMyHistory(): la cuarta puerta del candado (v=309, tanda 57) ─────
+// Hasta v=308 `clearMyHistory()` no preguntaba nada: con el owner borraba
+// `local_<owner>_history_days` (el detalle por día, lo único que guarda la
+// importación «solo el detalle») y sin uid volvía EN SILENCIO, con lo que «Borrarlo»
+// anunciaba un borrado que no había hecho. Se mira en los BORRADOS del doble.
+const borrados = () => globalThis.__IDB_ESCR.borrados;
+const sembrar = (uid) => { for (const k of KINDS) globalThis.__IDB_ESCR.kv.set(`local_${uid}_history_${k}`, { x: 1 }); };
+const OTRO = 't57-otro-amigo-que-no-se-toca';
+console.log('\n[3b] clearMyHistory()');
+{
+  // (a) el owner: tira con la marca del owner y 0 borrados.
+  globalThis.__DOBLE.me = HISTORY_OWNER_ID;
+  reiniciarEscrituras();
+  sembrar(HISTORY_OWNER_ID);
+  const err = await capturar(() => hd.clearMyHistory());
+  ok(err instanceof Error, '(a) owner: clearMyHistory() TIRA');
+  ok(err && err.importDelOwner === true && err.importBloqueado === 'owner', '(a) owner: con la marca `importDelOwner`');
+  eq(borrados(), [], '(a) owner: 0 borrados');
+  ok(globalThis.__IDB_ESCR.kv.has(`local_${HISTORY_OWNER_ID}_history_days`), '(a) owner: local_<owner>_history_days sigue ahí');
+  eq(escrituras(), [], '(a) owner: y 0 escrituras');
+}
+{
+  // (d) CONSERVACIÓN: un amigo con identidad confirmada borra sus ocho y solo sus ocho.
+  globalThis.__DOBLE.me = PRUEBA;
+  reiniciarEscrituras();
+  sembrar(PRUEBA); sembrar(OTRO);
+  globalThis.__IDB_ESCR.kv.set(`local_${HISTORY_OWNER_ID}_history_days`, { dias: {} });
+  const err = await capturar(() => hd.clearMyHistory());
+  ok(err === null, `(d) amigo: clearMyHistory() no tira${err ? ` (tiró: ${err.message})` : ''}`);
+  eq([...borrados()].sort(), KINDS.map(k => `local_${PRUEBA}_history_${k}`).sort(), '(d) amigo: borra exactamente sus ocho local_<amigo>_history_*');
+  ok(!borrados().some(k => !k.startsWith(`local_${PRUEBA}_history_`)), '(d) amigo: y ninguna otra clave');
+  ok(globalThis.__IDB_ESCR.kv.has(`local_${HISTORY_OWNER_ID}_history_days`), '(d) amigo: local_<owner>_history_days sigue ahí');
+  ok(KINDS.every(k => globalThis.__IDB_ESCR.kv.has(`local_${OTRO}_history_${k}`)), '(d) amigo: las ocho de otro uid siguen ahí');
+}
+{
+  // (c) /me contesta sin uid: tira (un borrado que no se hizo no vuelve en silencio) y 0 borrados.
+  globalThis.__DOBLE.me = null;
+  reiniciarEscrituras();
+  const err = await capturar(() => hd.clearMyHistory());
+  ok(err instanceof Error, '(c) /me sin uid: clearMyHistory() TIRA en vez de volver en silencio');
+  ok(err && /usuario|user/i.test(err.message), `(c) /me sin uid: el mensaje dice que no se pudo detectar el usuario («${err?.message}»)`);
+  eq(borrados(), [], '(c) /me sin uid: 0 borrados');
+  globalThis.__DOBLE.me = PRUEBA;
+}
+
+// ── 3c. «Borrarlo» cuando la guarda dice que no DESPUÉS de abrir el modal ───
+// El handler REAL de `#ih-clear` (`features/import-history.js`, con el modal, los
+// toasts y `confirmModal` doblados: `dobles/loader-borrarlo.mjs`). Con el amigo se
+// abre el modal (aparece «Borrarlo»); después `/me` pasa a contestar el owner (el
+// doble de `getCurrentUserId()` no memoiza, el de verdad sí: por eso esto no se
+// puede armar en el banco sin tocar producción) y se aprieta. Sin el `try/catch`
+// del handler, el `throw` nuevo llegaría al `unhandledrejection` y al banner.
+console.log('\n[3c] «Borrarlo» con la guarda en contra, en el handler real');
+{
+  register('./dobles/loader-borrarlo.mjs', pathToFileURL(import.meta.filename));
+  const { openImportHistory } = await import('../src/js/features/import-history.js');
+  globalThis.__DOBLE.toasts = [];
+  globalThis.__DOBLE.modal = null;
+  let recargas = 0;
+  globalThis.location = { reload() { recargas++; } };
+  globalThis.__DOBLE.me = PRUEBA;
+  reiniciarEscrituras();
+  sembrar(PRUEBA);
+  globalThis.__IDB_ESCR.kv.set(`local_${PRUEBA}_history_stats`, { years: [] });
+  await openImportHistory();
+  const clear = globalThis.__DOBLE.modal?.elementos['ih-clear'];
+  ok(typeof clear?.onclick === 'function', 'con el amigo, el modal trae «Borrarlo» (#ih-clear) con su handler');
+  const cerradosAntes = globalThis.__DOBLE.modal?.cerrados ?? 0;
+  globalThis.__DOBLE.me = HISTORY_OWNER_ID;   // la guarda dice «owner» a partir de acá
+  const err = await capturar(() => clear.onclick());
+  await new Promise(r => setTimeout(r, 500));  // el handler recarga a los 400 ms en el camino de éxito
+  ok(err === null, `el handler atrapa el error (no lo deja llegar al unhandledrejection)${err ? ` — se escapó: ${err.message}` : ''}`);
+  const t = globalThis.__DOBLE.toasts;
+  ok(t.some(x => x.type === 'error' && /desactivada|identidad|usuario/i.test(x.message)), `toast rojo con el mensaje del error (${JSON.stringify(t)})`);
+  ok(!t.some(x => /Historial local borrado/.test(x.message)), 'ningún «Historial local borrado»');
+  eq((globalThis.__DOBLE.modal?.cerrados ?? 0) - cerradosAntes, 0, 'el modal no se cierra');
+  eq(recargas, 0, '0 recargas');
+  eq(borrados(), [], '0 borrados');
+  globalThis.__DOBLE.me = PRUEBA;
+}
+
 // ── 4. /me caído: tira y 0 escrituras ───────────────────────────────────────
 // ⚠️ Va ÚLTIMO a propósito: `resolvedUserId()` recuerda el fallo para toda la
 // carga del módulo (`meFalloEnEstaCarga`), como en el navegador.
@@ -121,6 +202,15 @@ console.log('\n[4] saveMyHistory() con /me que falla');
   ok(err instanceof Error, 'saveMyHistory() tira con /me caído');
   ok(err && err.identidadSinConfirmar === true && !err.importDelOwner, 'con la marca de identidad, no la del owner');
   eq(escrituras().length, 0, 'con /me caído: 0 escrituras');
+
+  // (b) clearMyHistory() con la identidad sin confirmar: tira con esa marca y 0 borrados
+  // (acá todavía, porque el fallo de /me queda recordado para toda la carga del módulo).
+  reiniciarEscrituras();
+  sembrar(PRUEBA);
+  const errC = await capturar(() => hd.clearMyHistory());
+  ok(errC instanceof Error, '(b) identidad sin confirmar: clearMyHistory() TIRA');
+  ok(errC && errC.identidadSinConfirmar === true && !errC.importDelOwner, '(b) con la marca `identidadSinConfirmar`, no la del owner');
+  eq(borrados(), [], '(b) identidad sin confirmar: 0 borrados');
   delete globalThis.__DOBLE.meFalla;
 }
 
@@ -219,6 +309,21 @@ const sinComentarios = s => s.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])
   eq(noDays.filter(m => m.index > i0 && m.index < i1).map(m => m[1]),
     ['stats', 'plays', 'listened', 'skip', 'detail', 'records', 'artistTracks'],
     'y dentro de saveMyHistory() son exactamente las siete');
+}
+
+// ── clearMyHistory() pregunta ANTES de borrar (v=309, tanda 57) ─────────────
+// La guarda va antes del primer `idbDel(`, igual que en `saveMyHistory()` va antes
+// de la primera `idbSetCached(`. `HDATA_FUENTE=<ruta>` también vale acá.
+{
+  console.log('\nclearMyHistory() llama a la guarda antes de borrar');
+  const fuente = sinComentarios(process.env.HDATA_FUENTE ? readFileSync(process.env.HDATA_FUENTE, 'utf8') : HDATA);
+  const cmh = cuerpoDe(fuente, 'async function clearMyHistory(') || '';
+  ok(cmh.length > 50, 'encontré el cuerpo de clearMyHistory()');
+  const g = cmh.indexOf('motivoSinImportCompleto(');
+  const d = cmh.indexOf('idbDel(');
+  ok(g >= 0, 'clearMyHistory() llama a motivoSinImportCompleto()');
+  ok(g >= 0 && d >= 0 && g < d, 'y antes del primer `idbDel(`');
+  ok(!/HISTORY_OWNER_ID/.test(cmh), 'el cuerpo de clearMyHistory() no compara contra HISTORY_OWNER_ID a mano');
 }
 
 console.log(`\n${pasaron} pasaron · ${fallaron} fallaron`);

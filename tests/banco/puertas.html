@@ -20,7 +20,8 @@
 //   5. un amigo (otro uid) con SU `artistTracks` v3 ve SUS filas; uno con un
 //      `artistTracks` sin [6] (importado antes de v=308) ve «vuelve a importar» y
 //      0 filas; uno sin datos ve el cartel de bloqueo de `#records`;
-//   6. salir de la ruta a mitad de la carga (con el `/me` frenado): 0 errores y 0
+//   6. salir de la ruta a mitad de la carga (con el `/me` frenado): 0 errores, 0
+//      marcas tardías del router (v=309: lo único activo es la ruta nueva) y 0
 //      escrituras al DOM de la ruta nueva;
 //   7. 0 errores de consola, en todos los marcos.
 //
@@ -138,11 +139,11 @@ try {
   await esperarReal(() => ++asentar > 40, { que: 'que el inicio se asiente', vueltas: 200 });
   const mainF = $(F, '#main-content');
   const antesF = mainF.innerHTML;
-  // ⚠️ Lo que SÍ pasa, y no es de esta vista: `handleRoute()` (`router.js`) hace la segunda
-  // pasada de `markActiveRoute(hash)` cuando el render termina, aunque la ruta ya no esté vigente,
-  // y le pone `active` a la tarjeta «Puertas de entrada» del inicio. Le pasa a cualquier vista que
-  // tarde (no se tocó en la tanda 56: anotado en PENDIENTES). Se cuenta aparte: un cambio de
-  // `class` sobre un `[data-route]`. Todo lo demás es una escritura de la vista, y tiene que ser 0.
+  // Las marcas del router se cuentan aparte (un cambio de `class` sobre un `[data-route]`): hasta
+  // v=308 `handleRoute()` (`router.js`) hacía la segunda pasada de `markActiveRoute(hash)` cuando el
+  // render terminaba aunque la ruta ya no estuviera vigente, y le ponía `active` a la tarjeta
+  // «Puertas de entrada» del inicio (la tanda 56 midió 1). Desde v=309 la segunda pasada pregunta
+  // por la vigencia, así que las dos cuentas tienen que dar 0: la de la vista y la del router.
   let mutaciones = 0, marcasDelRouter = 0;
   const cuales = [];
   const obs = new (win(F).MutationObserver)((ms) => {
@@ -160,6 +161,13 @@ try {
   obs.disconnect();
   datos.salir = { mutaciones, marcasDelRouter, errores: win(F).__errores.length };
   afirmar(mutaciones === 0, `PUERTA 6: salir a mitad: 0 escrituras al DOM de la ruta nueva, hubo ${mutaciones}: ${cuales.join(' ; ')}`);
+  afirmar(marcasDelRouter === 0, `PUERTA 6: salir a mitad: 0 marcas tardías del router (la ruta que ya dejaste no se marca al terminar de cargar), hubo ${marcasDelRouter}`);
+  // Y en TODO el documento (el menú también, que vive fuera de #main-content): lo único marcado es
+  // la ruta en la que estás.
+  const activos = $$(F, '[data-route].active').map((el) => el.dataset.route);
+  datos.salir.activos = activos;
+  afirmar(activos.length > 0 && activos.every((r) => r === 'home'),
+    `PUERTA 6: después de que la carga vieja termine, lo único marcado como activo es «home»; hay: ${JSON.stringify(activos)}`);
   const sinMarcas = (h) => h.replace(/ active"/g, '"');
   afirmar(sinMarcas(mainF.innerHTML) === sinMarcas(antesF) && !$(F, '[data-puertas]') && !$(F, '#puertas-content'), 'PUERTA 6: el inicio quedó como estaba, sin nada de #puertas');
   afirmar(win(F).__errores.length === 0, `PUERTA 6: 0 errores: ${win(F).__errores.join(' | ')}`);
@@ -222,7 +230,7 @@ try {
 
   const resumen = `abrir (owner): /me=${abrir.me} otras=${abrir.otras.length} · filas=${fA.length} = la cuenta a mano, en el orden de universo() · ` +
     `150 artistas: 100 → 150 con «Mostrar 100 más» · amigo v3: ${filas(C).length} filas suyas · amigo sin [6]: «vuelve a importar», 0 filas · sin datos: cartel de #records · ` +
-    `salir a mitad: ${datos.salir.mutaciones} escrituras de la vista al DOM, ${datos.salir.errores} errores (y ${datos.salir.marcasDelRouter} marca tardía del router) · errores=${errores.length} · escrituras en la cuenta=0 · externos=0 · ` +
+    `salir a mitad: ${datos.salir.mutaciones} escrituras de la vista al DOM, ${datos.salir.errores} errores, ${datos.salir.marcasDelRouter} marcas tardías del router, activos=${datos.salir.activos.join('+')} · errores=${errores.length} · escrituras en la cuenta=0 · externos=0 · ` +
     `reloj virtual=${Math.round(performance.now())} ms`;
   document.documentElement.setAttribute('data-resumen', resumen);
   progreso('ok · ' + resumen);

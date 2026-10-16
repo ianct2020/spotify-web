@@ -112,6 +112,9 @@ async function isOwner() {
 //   2. `handleFiles()` (import-history.js), antes de leer o descomprimir nada;
 //   3. `openImportHistory()` (import-history.js), que enseña una explicación en
 //      vez del selector de archivos.
+// Y desde v=309 un cuarto punto, que no es del import pero borra lo mismo:
+//   4. `clearMyHistory()`, antes del primer borrado (con el owner se llevaría
+//      `local_<owner>_history_days`, el detalle por día).
 //
 // ⚠️ **Con la identidad sin confirmar también bloquea.** El id guardado
 // (`fonoteca_last_user_id`) puede ser el del owner, y con `/me` caído
@@ -131,7 +134,7 @@ async function motivoSinImportCompleto() {
   return null;
 }
 
-/** El error que tira `saveMyHistory()` cuando la guarda dice que no. */
+/** El error que tiran `saveMyHistory()` y `clearMyHistory()` (v=309) cuando la guarda dice que no. */
 function errorImportBloqueado(motivo) {
   const err = new Error(motivo === 'owner'
     ? 'En esta cuenta la importación completa está desactivada: tu historial ya está en la app.'
@@ -436,9 +439,18 @@ async function guardarSoloDias(days) {
   memCache.days = null;
 }
 
+// v=309 (tanda 57): la CUARTA puerta del candado del import. Hasta v=308 no
+// preguntaba nada: con el owner se llevaba `local_<owner>_history_days` (el
+// detalle por día, lo único que guarda la importación «solo el detalle», y que
+// se rehace solo volviendo a pasar el ZIP), y sin uid volvía en silencio, así
+// que «Borrarlo» anunciaba un borrado que no había hecho. Ahora tira en los dos
+// casos, con la MISMA guarda que `saveMyHistory()` (no una segunda regla), y el
+// handler de `#ih-clear` lo atrapa.
 async function clearMyHistory() {
+  const bloqueo = await motivoSinImportCompleto();
+  if (bloqueo) throw errorImportBloqueado(bloqueo);
   const uid = await getCurrentUserId().catch(() => null);
-  if (!uid) return;
+  if (!uid) throw new Error('No se ha podido detectar tu usuario de Spotify, así que no se ha borrado nada.');
   await Promise.all(['stats', 'plays', 'listened', 'skip', 'detail', 'records', 'artistTracks', 'days'].map(k => idbDel(localKey(uid, k)).catch(() => {})));
   memCache = { uid: null, stats: null, plays: null, listened: null, skip: null, detail: null, records: null, artistTracks: null, days: null };
 }
