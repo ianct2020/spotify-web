@@ -1,0 +1,97 @@
+<!doctype html><html lang="es"><head><meta charset="utf-8"><title>banco letras — la app entera, en un iframe</title>
+<link rel="stylesheet" href="/css/theme.css">
+<link rel="stylesheet" href="/css/components.css">
+<link rel="stylesheet" href="/css/main.css">
+<style>*,*::before,*::after{animation:none!important;transition:none!important}</style>
+</head><body>
+<div id="app"></div>
+<script type="module">
+// ── Un iframe del banco `letras.html` (v=311, tanda 59) ──────────────────────
+//
+// Arranca la app ENTERA (`/js/app.js`) en `#home` contra la Spotify simulada de
+// `simulado.mjs`, con los me gusta INVENTADOS de `letras-datos.mjs` en la caché, y
+// pone un lrclib SIMULADO por encima: toda petición a `lrclib.net` la contesta el
+// de la MADRE (`parent.__lrc`, para que el registro sobreviva a cerrar y abrir
+// fichas y se cuente entre marcos). Nada sale a `lrclib.net` ni a Spotify.
+// La madre conduce desde afuera: `window.__abrir(t)` abre la ficha de canción
+// (`openTrackCard`, la misma instancia que usa la app) y aprieta los botones.
+//
+// Modo `?foto=violeta|nohay|papel&tema=papel` (capturas SEMBRADAS, con un
+// conductor externo y SIN reloj virtual) y `?medir=1`: usan un lrclib local
+// (`window.__lrcLocal`), abren la ficha del tema de 60 renglones (o el del 404),
+// tocan «Letra» y marcan `data-foto="listo"`.
+
+import { instalarRedSimulada, esperarReal, anclar } from '/banco/simulado.mjs';
+import { likesInventados, crearLrclib, TEMAS, pedidoDe } from '/banco/letras-datos.mjs';
+
+const q = new URLSearchParams(location.search);
+const MARCO = q.get('marco') || 'x';
+const SOLO = q.get('foto') || q.get('medir');
+window.__errores = [];
+window.addEventListener('error', (e) => window.__errores.push('error: ' + (e.message || e)));
+window.addEventListener('unhandledrejection', (e) => window.__errores.push('rechazo: ' + String(e.reason?.message || e.reason)));
+const errorOriginal = console.error.bind(console);
+console.error = (...a) => { window.__errores.push('console.error: ' + a.map(String).join(' ').slice(0, 300)); errorOriginal(...a); };
+window.__avisos = [];
+const avisoOriginal = console.warn.bind(console);
+console.warn = (...a) => { window.__avisos.push(a.map(String).join(' ').slice(0, 300)); avisoOriginal(...a); };
+
+const UID = 'usuarioDelBancoLetras';
+const sim = instalarRedSimulada();
+window.__sim = sim;
+sim.ruta('GET', /^\/me$/, () => ({ id: UID, display_name: 'Banco' }));
+localStorage.setItem('fonoteca_last_user_id', UID);
+localStorage.setItem('fonoteca_perfil_v1', JSON.stringify({ id: UID, display_name: 'Banco' }));
+
+// El lrclib simulado, por ENCIMA de la Spotify simulada: `simulado.mjs` bloquea
+// todo host externo no declarado, y este lo atiende antes.
+if (SOLO) window.__lrcLocal = crearLrclib();
+const debajo = window.fetch;
+window.fetch = (entrada, opciones = {}) => {
+  const url = typeof entrada === 'string' ? entrada : entrada.url;
+  const abs = new URL(url, location.href);
+  if (abs.hostname !== 'lrclib.net') return debajo(entrada, opciones);
+  const lrc = SOLO ? window.__lrcLocal : parent.__lrc;
+  const info = {
+    marco: MARCO,
+    metodo: String(opciones.method || 'GET').toUpperCase(),
+    cabeceras: Object.keys(opciones.headers || {}),
+    credenciales: opciones.credentials || null,
+  };
+  return lrc.responder(abs.href, info).then((r) => new Response(
+    typeof r.cuerpo === 'string' ? r.cuerpo : JSON.stringify(r.cuerpo),
+    { status: r.status, headers: { 'content-type': 'application/json', ...(r.retryAfter ? { 'retry-after': r.retryAfter } : {}) } },
+  ));
+};
+
+const { idbSetCached } = await import('/js/idb.js');
+await anclar(idbSetCached('all_liked_tracks', likesInventados(), null));
+
+if (q.get('tema') === 'papel') {
+  // El preset «Papel», escrito como lo escribe el panel de paleta: los OCHO colores, por usuario.
+  const { PRESETS } = await import('/js/ui/theme-panel.js');
+  const { prefKey } = await import('/js/storage.js');
+  const papel = PRESETS.find((p) => p.id === 'papel');
+  if (!papel) throw new Error('BANCO: no encuentro el preset Papel');
+  localStorage.setItem(prefKey('fonoteca_theme_v1'), JSON.stringify({ colors: papel.colors, preset: papel.id }));
+}
+location.hash = '#home';
+await import('/js/app.js');
+await esperarReal(() => document.getElementById('my-history-btn') && document.querySelector('.home-card'), { que: 'que la app arranque', vueltas: 4000 });
+const tc = await import('/js/features/track-card.js');
+window.__abrir = (t) => tc.openTrackCard(pedidoDe(t));
+window.__idb = await import('/js/idb.js');
+window.__listo = true;
+
+if (SOLO) {
+  const t = q.get('foto') === 'nohay' ? TEMAS.silencio : TEMAS.largo;
+  window.__abrir(t);
+  await esperarReal(() => document.querySelector('#tc-letra-btn'), { que: 'que la ficha tenga «Letra»', vueltas: 4000 });
+  await esperarReal(() => !document.querySelector('#tc-body .skel'), { que: 'que la ficha termine de pintar', vueltas: 4000 });
+  window.__alto = { cerrado: document.querySelector('.modal').getBoundingClientRect().height };
+  document.querySelector('#tc-letra-btn').click();
+  await esperarReal(() => /^(letra|no-hay)$/.test(document.querySelector('#tc-letra')?.dataset.letraEstado || ''), { que: 'que la letra se pinte', vueltas: 4000 });
+  document.documentElement.dataset.foto = 'listo';
+}
+</script>
+</body></html>

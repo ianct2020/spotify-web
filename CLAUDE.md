@@ -1490,6 +1490,110 @@ contenido del nav, no achica su caja, y **no se pierde ningún link** visible.
 final del menú para verlo. Guardas: `tests/cuota.test.mjs` (Node) y el banco `tests/banco/cuota.html` (en
 `prepush`, el decimosexto), que vio el pie vacío contra v=309.
 
+## 🎤 Letras (v=311)
+
+La ficha de canción (`features/track-card.js`, la abren diez vistas) tiene un botón **«Letra»** en la fila de
+«▶ Preview» y «Abrir en Spotify ↗». Al tocarlo le pide a **lrclib.net** la letra de ESE tema, la guarda y la
+enseña en un bloque plegable debajo de la cabecera. Tres archivos:
+
+| archivo | qué | probado en |
+|---|---|---|
+| `util/letras.js` | PURO (sin red, reloj, IndexedDB ni DOM): la URL, la clase de la respuesta, la verificación de nombres, las marcas de tiempo fuera, el aviso de duración, el registro que se guarda y el copy | `tests/letras.test.mjs` |
+| `ui/letra-ficha.js` | la red, la caché y el bloque (`botonLetraHtml`, `bloqueLetraHtml`, `conectarLetra`); la ficha solo los llama | `tests/banco/letras.html` (en `prepush`, el decimoséptimo) |
+| `main.css` | `.tc-letra`, `.tc-letra-texto`, `.tc-letra-aviso`, `.tc-letra-estado`, `.tc-letra-fuente`: clases propias, no reusa ninguna de otro módulo (v=219) | el banco (sección M) |
+
+- 🔴 **Abrir la ficha NO le pide nada a lrclib** (la regla de v=261 aplicada a un tercero). Se pide al tocar
+  «Letra», de a un tema. Nunca en lote, ni de fondo, ni «para precargar».
+- **Una sola consulta**: `GET https://lrclib.net/api/get?artist_name=<artista principal>&track_name=<nombre tal cual>`.
+  **Sin `album_name` ni `duration`**: es la consulta que midió la tanda 58, y con `duration` el servidor exige
+  ±2 s, así que una diferencia mayor entre Spotify y lrclib daría 404 donde hoy hay letra (no medido; no se
+  arriesga). **Ninguna cabecera propia** en el `fetch` (una no simple provoca una `OPTIONS` previa) y ningún
+  token. CORS abierto (`access-control-allow-origin: *`) y `access-control-expose-headers: retry-after`
+  (curl de la tanda 58): el `retry-after` se puede leer.
+- **Lo que dice el servidor** (leído el 16/10/2026 en `github.com/tranxuanthang/lrclib`, rama `main`; la
+  documentación es una SPA sin texto):
+  - `server/src/routes/get_lyrics_by_metadata.rs`: `track_name` y `artist_name` obligatorios (no vacíos),
+    `album_name` opcional, `duration` opcional y entre 1 y 3600. La respuesta trae `id`, `name`, `trackName`,
+    `artistName`, `albumName`, `duration`, `instrumental`, `hasWordSync`, `plainLyrics`, `syncedLyrics` y
+    `lyricsfile`. El error de carga es `OverloadedError` (`acquire_load_permit()`: el servidor se quedó sin
+    permisos de carga): **es carga del servidor en ese momento, no un límite por cliente**. Que se convierta
+    en un 503 con `retry-after: 1` está en `errors.rs`, que no se leyó: lo midió la tanda 58. Y el servidor
+    **cachea también los 404** (`get_metadata_cache`, con un test `cached_miss_avoids_db_on_retry`): «Buscar
+    de nuevo» enseguida puede devolver el mismo 404 de su caché.
+  - `server/src/repositories/track_repository.rs`, `get_track_by_metadata`: `tracks.name_lower = ?` y
+    `tracks.artist_name_lower = ?` (**igualdad**, en minúsculas); con `duration`, `tracks.duration >= dur - 2.0`
+    y `<= dur + 2.0`; `ORDER BY tracks.id LIMIT 1` (el comentario dice «Prefer tracks with synced lyrics»,
+    pero ordena por id: si hay varios con el mismo nombre, gana el más viejo).
+- **La verificación, después de la respuesta**: el `trackName` que vuelve tiene que pasar `titleMatches` y el
+  `artistName` `artistMatches` (cualquiera de los artistas de la ficha), **importadas** de `util/track-match.js`
+  (la regla escrita dos veces diverge, v=219). Antes de `titleMatches` va una igualdad cruda (minúsculas,
+  espacios colapsados): `normText` deja vacío un título en japonés y `titleMatches` diría que no a un título
+  idéntico; la igualdad es la misma comparación que hace el servidor, más estricta que la de bigramas. Si no
+  pasa, es «no hay letra» y **no se muestra** (un falso positivo es silencioso).
+- **La duración avisa, no filtra**: si el tema es un me gusta, su `duration_ms` sale del caché de me gusta
+  (`getBestAvailableLikes()`, 0 peticiones, como `irAlAlbum`). Más de **2 s** de diferencia (el margen del
+  servidor) → la letra se muestra con «Puede ser de otra versión: esta dura 3:20 y la tuya 3:23.» encima. 2 s
+  justos, sin aviso. Sin duración propia, sin aviso.
+- 🔴 **No se sincroniza nada con la reproducción**: la app no sabe en qué segundo va Spotify (no pide permisos
+  de reproducción) y el preview de 30 s es de iTunes o Deezer, que arranca en otro punto. Se muestra
+  `plainLyrics`; si solo viene `syncedLyrics`, la misma sin las marcas (`[mm:ss]`, `[mm:ss.xx]`, una o varias al
+  principio del renglón). Con `instrumental: true`, «Es instrumental.». Debajo, «Letra de lrclib.net» en el
+  secundario.
+- **La caché**: IndexedDB, `letras_v1_<trackId>` (**sin uid**: es dato público, como `mapa_area_v1_`), sin
+  caducidad. Guarda **lo que contestó lrclib, recortado** (`id`, `trackName`, `artistName`, `duration`,
+  `instrumental`, el texto que se muestra y la fecha) o `{ noHay: true, fecha }` para un 404; la decisión (qué
+  mostrar, el aviso) se recalcula al pintar. Un 200 de otro artista también se guarda (es lo que contestó) y al
+  pintar sigue siendo «no hay». Segunda apertura del mismo tema: **0 peticiones**. **«Limpiar caché» la BORRA**
+  (no está en `CONSERVAR_PREFIJOS`: es re-pedible, una por tema) y `LO_QUE_SE_CONSERVA` no cambió. El cambio
+  de usuario no la toca (no es de nadie).
+- **Los errores, sin silencio y sin guardarlos**:
+  - **404** → «lrclib no tiene la letra de este tema.», guardado como «no hay», con «Buscar de nuevo» (pide
+    otra vez y pisa lo guardado).
+  - **503** → **un** reintento automático, esperando `retry-after` (1 s si no viene o no se lee; tope 10 s). Si
+    vuelve a fallar: «lrclib no contesta ahora. Prueba otra vez en un rato.» con «Reintentar». **Nada guardado.**
+    Si la ficha se cerró durante la espera, el reintento no se pide.
+  - **Corte de red, 429, otro 5xx, un 200 que no es JSON** → el mismo mensaje y «Reintentar», sin reintento
+    automático y sin guardar nada.
+  - El `try` de la red envuelve SOLO el `fetch`. El de afuera (caché, decisión, DOM) manda el error crudo a
+    `console.warn` y el bloque dice «No se pudo enseñar la letra: algo falló en la app…», **nunca «no hay
+    letra»** (v=154).
+- **La ficha cerrada con la respuesta en vuelo**: después de cada `await` se pregunta si el bloque sigue en el
+  documento (un teardown no corta un `await`, v=174): no se escribe en el DOM, y lo que llegó **sí** se guarda
+  si es un éxito o un 404.
+- ⚠️ **`.modal p` (0,1,1) le gana a una clase suelta** (0,1,0): los textos del bloque van con `.tc-letra`
+  delante, si no salían a 14 px y con 20 px de margen de abajo (la familia de v=153).
+- La fila de botones de la cabecera ganó `flex-wrap: wrap`: a 390 px, sin él, «▶ Preview» y «Abrir en
+  Spotify ↗» ya desbordaban su columna (83 px de caja para 163 de contenido, medido en el banco); con el tercer
+  botón se apilan y la cabecera pasa de 171,5 a 247,5 px de alto. A 1366 no cambia (78,5).
+
+**El modal, medido** (SEMBRADO: el banco `letras`, sección M, con quien NO es el dueño —el cuerpo es un
+párrafo— y una letra inventada de 60 renglones; `.modal` tiene `max-height: 80vh`, también a 390: la regla de
+92vh de móvil va antes en la hoja y pierde):
+
+| | modal cerrado | con la letra abierta | caja / contenido de la letra | ¿el modal scrollea? |
+|---|---|---|---|---|
+| 1366×768 | 189,5 | 571,5 (tope 614,4) | 292 / 1.255 | no: entra |
+| 390×844 | 354 | 631,1 (tope 675,2) | 169 / 1.255 | no: entra |
+
+El alto máximo de la letra es `min(300px, 38vh)` y, por debajo de 520 px, `min(170px, 20vh)` (la primera
+versión, `min(300px, 36vh)` en los dos y con el margen de `.modal p` todavía encima, a 390 scrolleaba: 842 de
+contenido en 673). ⚠️ **Con el dueño no está medido**: su
+cuerpo trae los cuatro números, las fechas y la curva de 200 px (unos 300 px más), así que con la letra
+abierta **el modal scrollea** a 1366×768.
+
+**Costo**: ver la nota debajo de la tabla de «💰 Cuánto cuesta abrir cada vista». Abrir la ficha cuesta lo
+mismo que antes (0 a lrclib, 0 a Spotify más); tocar «Letra», 1 (2 con el reintento del 503); la segunda vez, 0.
+Comprobado contra el servicio de verdad el 16/10 con 5 temas (6 peticiones, 0 errores de CORS; el detalle, en
+el repo privado).
+
+Guardas: `tests/letras.test.mjs` (78) y el banco `tests/banco/letras.html` + `letras-caso.html` +
+`letras-datos.mjs` (Spotify y lrclib simulados, letras INVENTADAS): abrir = 0 a lrclib; tocar = 1 y 0 la
+segunda vez; el 404 guardado y «Buscar de nuevo»; 503+200 y 503+503 sin guardar; otro artista no se muestra;
+el aviso a 3 s y no a 1 s; cerrar en vuelo sin escribir en el DOM; el modal a 1366×768 y 390×844. Las cuatro
+puertas vistas fallar en una copia (guardar ante un 503, sacar la verificación, pedir al abrir, no leer la
+caché). `letras-caso.html?foto=violeta|nohay|papel` es el instrumento de las capturas sembradas (conductor en
+`fonoteca-migracion/driver-capturas-letras-2026-10-16.mjs`).
+
 ## ⛔ Cada despliegue, su propio `?v=` — dos contenidos no pueden compartir versión
 Pisado el 2026-09-03. El arreglo del cambio de variante salió como un **segundo
 commit encima de v=193 sin bumpear**, así que `covers.js?v=193` pasó a servir dos
@@ -3193,6 +3297,11 @@ fila sobrevivió así desde que se armó la tabla.
 | ↳ **caliente, con el cruce VENCIDO (más de 24 h)**: **2 + (0–2) + N** ≈ **36–38** | | | lo de arriba + `scanPlaylists()`: **1** `/playlists/{id}?fields=snapshot_id` por cada playlist a cruzar (**N ≈ 34** = 42 propias − 2 excluidas de fábrica, «anothertwo» y «w three» − 6 de ocultos), más **todas las páginas** de cada una cuyo snapshot cambió | nº de playlists a cruzar y cuáles cambiaron | **leída del código el 2026-10-15**, no medida. N sale del censo del 08/10 (42 propias, 6 de ocultos) y de `DEFAULT_EXCLUDED_NAMES`: si Ian excluyó o creó otras, N es otro |
 | ↳ **al pulsar «Actualizar»** (en la misma carga): **(0–2) + N** ≈ **34–36** | | | borra el cruce (`idbDel(CROSS_KEY)`, `:630`) y repite `load({ force: true })`: el `/me` y el almacén de ocultos ya están en memoria (0); `/me/playlists` 0 o 2 según su caché; y el escaneo de arriba | ídem | **leída del código el 2026-10-15**, no medida |
 | `#skips` | **2 + ceil(Hk/100)** | ídem | **1 `/me` propio** + 1 `/playlists/{id}` + la playlist de ocultos («skips») | **nº de ocultos de esta vista** | ✅ **confirmada el 2026-10-08, leída del código**: `render()` → `analyze()` → `Promise.all([getBestAvailableLikes(), loadSkipStats()])` + `hiddenTracks.ready()`, mismo memo. La fila ya estaba bien |
+
+**La ficha de canción (v=311, no es una vista del menú: la abren diez)**: abrirla cuesta lo de siempre y
+**0 a lrclib.net**. Tocar «Letra» = **1** `GET lrclib.net/api/get` (**2** si el primero es un 503: el único
+reintento automático), **0** a Spotify; la segunda vez del mismo tema, **0** (sale de `letras_v1_<trackId>`).
+Medido en el banco `letras` (lrclib simulado) y, con 5 temas, contra el de verdad. Ver «🎤 Letras (v=311)».
 
 **Arrancar la app: 1 `/v1/me`** — *medido dos veces en producción el 07/10, y
 confirmado leyendo el código el 07/10*. **Es 1 a secas**: ni 3 que se deduplican

@@ -21,6 +21,7 @@ import { showToast } from '../ui/toast.js';
 import { skelCardBody, skelBox } from '../ui/skeleton.js';
 import { resolveArtistList } from '../util/artist-name.js';
 import { coverUrl } from '../util/cover-size.js';
+import { botonLetraHtml, bloqueLetraHtml, conectarLetra } from '../ui/letra-ficha.js';
 
 const MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
 
@@ -110,14 +111,16 @@ async function openTrackCard(t) {
               ).join('')
               : ''}${t.album ? ` · ${escapeHtml(t.album)}` : ''}
           </div>
-          <div style="display:flex;gap:8px;margin-top:8px">
+          <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px">
             <button class="btn btn-secondary btn-sm" id="tc-preview">▶ Preview</button>
             <a class="btn btn-secondary btn-sm" href="https://open.spotify.com/track/${t.id}" target="_blank" rel="noopener">Abrir en Spotify ↗</a>
+            ${botonLetraHtml()}
           </div>
         </div>
         <button class="btn btn-secondary btn-sm" id="tc-go-album" title="Abrir la ficha del álbum" style="flex-shrink:0">Ir al álbum</button>
         <button class="btn btn-secondary btn-sm" data-close-modal title="Cerrar" style="flex-shrink:0">✕</button>
       </div>
+      ${bloqueLetraHtml()}
       <div id="tc-body">${skelCardBody({ tiles: 4, lines: 0 })}${skelBox({ w: '100%', h: 160, radius: 10 })}</div>
     </div>
   `,
@@ -188,6 +191,10 @@ async function openTrackCard(t) {
       openArtistCard({ name: btn.dataset.artist });
     };
   });
+
+  // «Letra» (v=311): el botón y el bloque plegado. Abrir la ficha NO le pide nada
+  // a lrclib; se pide al tocar el botón (ver `ui/letra-ficha.js`).
+  conectarLetra(overlay, t, artistas);
 
   // Si el llamador no pasó tapa (típico de tracks del Wrapped/Récords, que vienen
   // solo con {name, artist, uri}), la traemos vía oEmbed — CORS abierto, sin auth.

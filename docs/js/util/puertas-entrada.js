@@ -31,9 +31,9 @@
 // esta cuenta. Es una premisa SUYA, no un dato medido (el export no dice cuándo
 // se creó la cuenta). Ver `fonoteca-migracion/PENDIENTES.md`.
 
-import { universo } from './mapa-paises.js?v=310';
-import { songKey } from './song-identity.js?v=310';
-import { fmtDia } from './fecha.js?v=310';
+import { universo } from './mapa-paises.js?v=311';
+import { songKey } from './song-identity.js?v=311';
+import { fmtDia } from './fecha.js?v=311';
 
 export const POR_PAGINA = 100;
 

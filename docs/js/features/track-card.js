@@ -8,19 +8,20 @@
 // acá y no se propaga: ver `util/artist-name.js`. Los nombres se pintan como
 // **enlaces separados** y cada uno abre SU ficha de artista.
 
-import { loadTrackPlays, loadTrackDetail, loadHistoryStats, isOwner } from './history-data.js?v=310';
-import { escapeHtml } from '../ui/components.js?v=310';
-import { getPreview } from '../api/preview-providers.js?v=310';
-import { togglePreview, playingKey } from '../ui/preview-player.js?v=310';
-import { hasUsername, findTrackId, getTrackCurrentStats, loadTopLifetime } from '../api/statsfm.js?v=310';
-import { openAlbumCard } from './album-card.js?v=310';
-import { openArtistCard, knownArtist } from './artist-card.js?v=310';
-import { openModal, closeTop } from '../ui/modal-stack.js?v=310';
-import { getBestAvailableLikes } from '../api.js?v=310';
-import { showToast } from '../ui/toast.js?v=310';
-import { skelCardBody, skelBox } from '../ui/skeleton.js?v=310';
-import { resolveArtistList } from '../util/artist-name.js?v=310';
-import { coverUrl } from '../util/cover-size.js?v=310';
+import { loadTrackPlays, loadTrackDetail, loadHistoryStats, isOwner } from './history-data.js?v=311';
+import { escapeHtml } from '../ui/components.js?v=311';
+import { getPreview } from '../api/preview-providers.js?v=311';
+import { togglePreview, playingKey } from '../ui/preview-player.js?v=311';
+import { hasUsername, findTrackId, getTrackCurrentStats, loadTopLifetime } from '../api/statsfm.js?v=311';
+import { openAlbumCard } from './album-card.js?v=311';
+import { openArtistCard, knownArtist } from './artist-card.js?v=311';
+import { openModal, closeTop } from '../ui/modal-stack.js?v=311';
+import { getBestAvailableLikes } from '../api.js?v=311';
+import { showToast } from '../ui/toast.js?v=311';
+import { skelCardBody, skelBox } from '../ui/skeleton.js?v=311';
+import { resolveArtistList } from '../util/artist-name.js?v=311';
+import { coverUrl } from '../util/cover-size.js?v=311';
+import { botonLetraHtml, bloqueLetraHtml, conectarLetra } from '../ui/letra-ficha.js?v=311';
 
 const MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
 
@@ -110,14 +111,16 @@ async function openTrackCard(t) {
               ).join('')
               : ''}${t.album ? ` · ${escapeHtml(t.album)}` : ''}
           </div>
-          <div style="display:flex;gap:8px;margin-top:8px">
+          <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px">
             <button class="btn btn-secondary btn-sm" id="tc-preview">▶ Preview</button>
             <a class="btn btn-secondary btn-sm" href="https://open.spotify.com/track/${t.id}" target="_blank" rel="noopener">Abrir en Spotify ↗</a>
+            ${botonLetraHtml()}
           </div>
         </div>
         <button class="btn btn-secondary btn-sm" id="tc-go-album" title="Abrir la ficha del álbum" style="flex-shrink:0">Ir al álbum</button>
         <button class="btn btn-secondary btn-sm" data-close-modal title="Cerrar" style="flex-shrink:0">✕</button>
       </div>
+      ${bloqueLetraHtml()}
       <div id="tc-body">${skelCardBody({ tiles: 4, lines: 0 })}${skelBox({ w: '100%', h: 160, radius: 10 })}</div>
     </div>
   `,
@@ -188,6 +191,10 @@ async function openTrackCard(t) {
       openArtistCard({ name: btn.dataset.artist });
     };
   });
+
+  // «Letra» (v=311): el botón y el bloque plegado. Abrir la ficha NO le pide nada
+  // a lrclib; se pide al tocar el botón (ver `ui/letra-ficha.js`).
+  conectarLetra(overlay, t, artistas);
 
   // Si el llamador no pasó tapa (típico de tracks del Wrapped/Récords, que vienen
   // solo con {name, artist, uri}), la traemos vía oEmbed — CORS abierto, sin auth.
