@@ -48,7 +48,7 @@ if npm test --silent 2>&1 | tail -4 | sed 's/^/      /'; [ "${PIPESTATUS[0]}" -e
 # `mosaico` y `toasts` entraron en v=273:
 # estaban en rojo desde antes del 04/10 y justamente por no estar acá nadie los
 # miraba, igual que le había pasado a `barra` entre v=241 y v=261.
-echo "2b. bancos (barra · pausa-search · toasts · mosaico · novedades · escrituras · ocultar-artista ×3 · covers-orden · calendario · import-guarda · ocultos-cache · mapa · puertas · cuota · letras · generos-cache)"
+echo "2b. bancos (barra · pausa-search · toasts · mosaico · novedades · escrituras · ocultar-artista ×3 · covers-orden · calendario · import-guarda · ocultos-cache · mapa · puertas · cuota · letras · generos-cache · generos-escaneo)"
 # Los dos de `ocultar-artista` entraron en v=276: las TRES vistas que ocultan
 # artistas, reales, contra una Spotify simulada. Es el único sitio donde se puede
 # probar ocultar sin escribir en la cuenta de Ian, y el de `-disco` es el que
@@ -90,7 +90,11 @@ echo "2b. bancos (barra · pausa-search · toasts · mosaico · novedades · esc
 # contra la Spotify simulada y Last.fm, MusicBrainz y stats.fm SIMULADOS: abrir #genre con el blob viejo no pide nada a
 # los terceros y migra también lo de hace 40 días; «Limpiar caché» lo conserva; recargar sin el blob da lo mismo; abrir
 # cuesta 2 `/me` (el del arranque y el de la vista) y nada más.
-for B in barra pausa-search toasts mosaico novedades escrituras ocultar-artista ocultar-artista-disco ocultar-artista-novedades covers-orden calendario import-guarda ocultos-cache mapa puertas cuota letras generos-cache; do
+# `generos-escaneo` entró en v=313: #generos en la app ENTERA contra la Spotify simulada y un Last.fm SIMULADO (nada sale a
+# la red): abrir no pide nada a Last.fm y cuesta 1 `/me`; «Seguir» pide exactamente los que faltan; con 29 y 503 termina
+# igual sin guardar ningún fallo; recargar a mitad no repite nada; salir para; dos pestañas no buscan a la vez; «Limpiar
+# caché» conserva las etiquetas y borra el ritmo; con la IndexedDB rota lo dice y no ofrece buscar; a 390 px no desborda.
+for B in barra pausa-search toasts mosaico novedades escrituras ocultar-artista ocultar-artista-disco ocultar-artista-novedades covers-orden calendario import-guarda ocultos-cache mapa puertas cuota letras generos-cache generos-escaneo; do
   if node scripts/correr-banco.mjs "$B" 2>&1 | sed 's/^/      /'; [ "${PIPESTATUS[0]}" -eq 0 ]; then
     ok "banco $B en verde"
   else

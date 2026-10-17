@@ -1,6 +1,6 @@
-import { prefKey, migratePrefKey } from '../storage.js?v=312';
-import { idbGet, idbSet, idbSetVarios, idbEntriesEnRango } from '../idb.js?v=312';
-import { crearAlmacenGeneros, CLAVE_MIGRADO } from '../util/generos-artista.js?v=312';
+import { prefKey, migratePrefKey } from '../storage.js?v=313';
+import { idbGet, idbSet, idbSetVarios, idbEntriesEnRango } from '../idb.js?v=313';
+import { crearAlmacenGeneros, CLAVE_MIGRADO, filtrarEtiquetasLastfm } from '../util/generos-artista.js?v=313';
 
 const LASTFM_KEY_STORAGE = 'lastfm_api_key';
 const LASTFM_USER_STORAGE = 'lastfm_username';
@@ -116,9 +116,9 @@ async function getTopArtistsByTag(tag, limit = 50) {
 async function getArtistTopTags(artistName) {
   const data = await lastfmFetch('artist.gettoptags', { artist: artistName, autocorrect: 1 });
   const list = data.toptags?.tag || [];
-  return list
-    .map(t => ({ name: (t.name || '').toLowerCase(), count: parseInt(t.count) || 0 }))
-    .filter(t => t.name && t.count >= 5);
+  // v=313: la regla del `count >= 5` vive en `util/generos-artista.js` (la usa también el
+  // escaneo de `#generos`); lo que devuelve esta función no cambió.
+  return filtrarEtiquetasLastfm(list);
 }
 
 async function getSimilarTags(tag) {
@@ -185,8 +185,15 @@ function getCachedTags(artistName) {
 
 // La fuente es el tercer argumento (v=312); sin él, Last.fm, que es quien llamaba a
 // esta función para guardar su respuesta entera. Devuelve la promesa de la escritura.
-function setCachedTags(artistName, tags, fuente = 'lastfm') {
-  return etiquetas.guardar(artistName, tags, fuente);
+// v=313: un cuarto argumento opcional, campos de más para el registro de esa fuente (el
+// escaneo de `#generos` guarda ahí el `artista` que devolvió Last.fm).
+function setCachedTags(artistName, tags, fuente = 'lastfm', extra = null) {
+  return etiquetas.guardar(artistName, tags, fuente, extra);
+}
+
+// v=313: lo que contestó cada fuente por ese artista, sin decidir nada (o `null`).
+function registroEtiquetas(artistName) {
+  return etiquetas.registro(artistName);
 }
 
 // Hasta v=311 mezclaba DENTRO de la entrada; desde v=312 guarda lo que contestó la
@@ -256,6 +263,7 @@ export {
   mergeCachedTags,
   importTagsCache,
   cargarEtiquetas,
+  registroEtiquetas,
   contarEtiquetasGuardadas,
   exportarEtiquetas,
   importarEtiquetas,

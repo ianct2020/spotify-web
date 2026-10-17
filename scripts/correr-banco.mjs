@@ -108,7 +108,11 @@ const EXTRA = { mosaico: 'auto=1' };
 // simulado; el 503 espera 1 s de verdad (el `retry-after`). Medido a tasa de acierto el 16/10 (tanda 59), con el
 // defecto de 45 s: diez corridas seguidas gastaron 5.000-5.290 ms de reloj virtual (10/10). El doble de la más
 // lenta da 10,6 s: no entra en `PRESUPUESTO` y corre con los 45 s.
-const PRESUPUESTO = { 'calendario': 15000, 'ocultar-artista': 90000, 'import-guarda': 60000, 'ocultos-cache': 60000, 'mapa': 240000 };
+// `generos-escaneo` (v=313) abre la app ENTERA en seis iframes (uno se recarga a mitad) y busca diez artistas contra un
+// Last.fm simulado a 1 s entre peticiones, con 29 y 503 que esperan 10 s cada uno, más los 30 s de reloj de la puerta E.
+// Medido a tasa de acierto el 17/10 (tanda 61), con 210 s de tope: diez corridas seguidas gastaron 96.482-97.341 ms de
+// reloj virtual (10/10). El doble de la más lenta, redondeado hacia arriba a múltiplo de 15 s: 195 s.
+const PRESUPUESTO = { 'calendario': 15000, 'ocultar-artista': 90000, 'import-guarda': 60000, 'ocultos-cache': 60000, 'mapa': 240000, 'generos-escaneo': 195000 };
 // `XQ="&peor=1"` agrega parámetros a la URL del banco sin tocar este archivo: sirve
 // para medir (p. ej. el ancho mínimo en que la barra de novedades sigue en una fila).
 

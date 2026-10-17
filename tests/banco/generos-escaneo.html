@@ -1,0 +1,275 @@
+<!doctype html><html lang="es"><head><meta charset="utf-8"><title>banco generos-escaneo — buscar los géneros de tu historial, con un Last.fm de mentira</title>
+<style>html,body{margin:0;background:#111;color:#eee;font:13px system-ui}iframe{border:0;display:block}</style>
+</head><body>
+<pre id="progreso"></pre>
+<div id="marcos"></div>
+<script type="module">
+// ── Qué prueba este banco (v=313, tanda 61) ──────────────────────────────────
+//
+// `#generos` REAL, en la app ENTERA (`generos-escaneo-caso.html`, uno por iframe), con `/me` =
+// owner contestado por la Spotify simulada, un historial INVENTADO sembrado en la clave del caché
+// del owner, tres registros sembrados en el almacén de etiquetas y un Last.fm SIMULADO que vive
+// acá, en la madre, para que su registro sobreviva a la recarga de un iframe. Nada sale a
+// `ws.audioscrobbler.com` ni a `api.spotify.com`.
+//
+//   A. abrir `#generos` pide 0 a Last.fm y exactamente 1 `/me` (el de la vista; el del arranque
+//      aparte), también al volver y tras recargar;
+//   B. con dos sembrados como ya buscados (uno `lastfm` con etiquetas, uno `migrado` con
+//      etiquetas) y uno `migrado` con `[]`, «Seguir» pide EXACTAMENTE los que faltan (y el del
+//      migrado vacío), con una sola respuesta definitiva por artista, y al final las cuatro filas
+//      dan la cuenta a mano;
+//   C. con errores de cuota (29) y 503 en un patrón fijo, el escaneo termina igual, cada fallo se
+//      reintentó con el MISMO artista y nadie quedó guardado por un fallo;
+//   D. recargar a mitad y «Seguir» no repite nada contestado;
+//   E. salir de la ruta a mitad para: la petición que estaba en vuelo (colgada) se ABORTA al salir
+//      (sin eso se queda viva para siempre, con el candado tomado), 0 peticiones a Last.fm en los
+//      30 s de reloj siguientes, y sin errores;
+//   F. dos iframes: uno busca y el otro lo dice (el candado);
+//   G. «Limpiar caché» conserva `generos_artista_v1_` y borra `generos_ritmo_v1_`;
+//   H. con `cargarEtiquetas` fallando (IndexedDB rota en el caso), la vista dice que no pudo leer
+//      y NO hay botón de buscar;
+//   I. a 390 px, ninguna fila de «Cuánto se sabe» desborda (`scrollWidth <= clientWidth`);
+//   y en todos: 0 rutas sin simular, 0 hosts externos fuera de los simulados, 0 errores.
+//
+// ⚠️ Todas las esperas van con `esperarReal` (una petición al propio servidor por vuelta): un
+// `await` de IndexedDB sin anclar deja correr suelto el reloj virtual.
+
+import { esperarReal, anclar } from '/banco/simulado.mjs';
+import { fallar, listo } from '/banco/esperar.mjs';
+import { crearLastfm, sembrarHistorial, sembrarEtiquetas, ESPERADO } from '/banco/generos-escaneo-datos.mjs';
+
+const ANCHO = +(new URLSearchParams(location.search).get('ancho') || 1351);
+const afirmar = (c, msg) => { if (!c) throw new Error('BANCO: ' + msg); };
+const progreso = (t) => { document.getElementById('progreso').textContent = t; };
+const VUELTAS = 60000;
+
+// Sin fallos al abrir; el patrón de C se enciende al empezar a buscar.
+const lf = crearLastfm();
+window.__lf = lf;
+const PATRON = (n) => (n % 5 === 3 ? 29 : n % 7 === 4 ? 503 : null);
+const delMarco = (m) => lf.log.filter((e) => e.marco === m);
+
+function abrirMarco(nombre, { alto = 900, ancho = ANCHO, extra = '' } = {}) {
+  const f = document.createElement('iframe');
+  f.width = ancho; f.height = alto;
+  f.src = `/banco/generos-escaneo-caso.html?marco=${nombre}${extra}`;
+  document.getElementById('marcos').appendChild(f);
+  return f;
+}
+const win = (f) => f.contentWindow;
+const $ = (f, s) => f.contentDocument?.querySelector(s);
+const vista = (f) => $(f, '.generos[data-estado]');
+const meDe = (f) => win(f).__sim.reg.llamadas.filter((l) => l.ruta === '/me').length;
+async function arrancado(f, que) { await esperarReal(() => win(f)?.__listo, { que: `que arranque ${que}`, vueltas: VUELTAS }); }
+async function irA(f, hash, que, cond) { win(f).location.hash = hash; await esperarReal(cond, { que, vueltas: VUELTAS }); }
+const boton = (f, accion) => $(f, `[data-generos-accion="${accion}"]`);
+const filas = (f) => vista(f).dataset.filas.split(',').map(Number);
+const artistas = (f) => vista(f).dataset.artistas.split(',').map(Number);
+const texto = (f, s) => ($(f, s)?.textContent || '').replace(/\s+/g, ' ').trim();
+const sinErrores = (f, que) => afirmar(win(f).__errores.length === 0, `0 errores en ${que}: ${win(f).__errores.join(' | ')}`);
+
+const datos = {};
+try {
+  const { HISTORY_OWNER_ID } = await import('/js/features/history-data.js');
+  await sembrarHistorial(anclar);
+  await sembrarEtiquetas(anclar, HISTORY_OWNER_ID);
+  localStorage.setItem('fonoteca_last_user_id', HISTORY_OWNER_ID);
+
+  // ── A. Abrir no le pide nada a Last.fm ────────────────────────────────────
+  progreso('A: abrir #generos');
+  let A = abrirMarco('A');
+  await arrancado(A, 'el marco A');
+  const meArranque = meDe(A);
+  await irA(A, '#generos', 'que #generos pinte', () => vista(A));
+  // Cinco segundos de reloj quieto: si abrir arrancara la búsqueda, la primera petición sale en ese rato.
+  const tAbrir = performance.now();
+  await esperarReal(() => performance.now() - tAbrir > 5000, { que: '5 s de reloj después de abrir', vueltas: VUELTAS });
+  afirmar(lf.log.length === 0, `A: abrir #generos no pide nada a Last.fm en 5 s de reloj (pidió ${lf.log.length})`);
+  afirmar(vista(A).dataset.estado === 'quieto', `A: abrir deja la búsqueda quieta (${vista(A).dataset.estado})`);
+  datos.abrir = { lf: lf.log.length, me: meDe(A) - meArranque, meArranque, filas: filas(A), artistas: artistas(A), boton: boton(A, 'buscar')?.textContent.trim() };
+  afirmar(lf.log.length === 0, `A: abrir #generos no pide nada a Last.fm (pidió ${lf.log.length})`);
+  afirmar(datos.abrir.me === 1, `A: abrir #generos pide exactamente 1 /me además del del arranque (pidió ${datos.abrir.me}; arranque ${meArranque})`);
+  afirmar(+vista(A).dataset.total === ESPERADO.total && +vista(A).dataset.universo === ESPERADO.universo, `el total y el universo son los de la cuenta a mano (${vista(A).dataset.total}, ${vista(A).dataset.universo})`);
+  afirmar(datos.abrir.filas.join() === ESPERADO.abrir.filas.join() && datos.abrir.artistas.join() === ESPERADO.abrir.artistas.join(), `al abrir, las cuatro filas = la cuenta a mano (${datos.abrir.filas} / ${datos.abrir.artistas})`);
+  afirmar(datos.abrir.boton === 'Seguir', `con dos ya buscados, el botón dice «Seguir» (${datos.abrir.boton})`);
+  const sinTags = ['cumbia lunar', 'vals sintético', 'folk de faro'].every((t) => !A.contentDocument.body.textContent.toLowerCase().includes(t));
+  afirmar(sinTags, 'la vista no enseña ninguna etiqueta (eso es la 62)');
+
+  // ── C (arranque). Buscar, con el patrón de fallos encendido ───────────────
+  progreso('C: buscar con 29 y 503 en un patrón fijo');
+  lf.fallo = PATRON;
+  boton(A, 'buscar').click();
+  await esperarReal(() => lf.log.filter((e) => e.definitiva).length >= 3, { que: 'que lleguen tres respuestas definitivas', vueltas: VUELTAS });
+  afirmar(vista(A).dataset.estado === 'escaneando', 'buscando');
+
+  // ── E. Salir a mitad ──────────────────────────────────────────────────────
+  progreso('E: salir a mitad');
+  // Con una petición colgada en vuelo: salir tiene que abortarla (el teardown), no solo dejar de pedir.
+  lf.congelado = true;
+  await esperarReal(() => lf.colgadas > 0, { que: 'que A se quede esperando una respuesta', vueltas: VUELTAS });
+  await irA(A, '#home', 'que el inicio pinte', () => $(A, '.home-grid') && !vista(A));
+  await esperarReal(() => lf.abortadas > 0, { que: 'que la petición en vuelo se aborte al salir', vueltas: 400 }).catch(() => {});
+  datos.abortadas = lf.abortadas;
+  afirmar(lf.abortadas === 1, `E: al salir, la petición en vuelo se abortó (abortadas: ${lf.abortadas})`);
+  lf.congelado = false;
+  const alSalir = lf.log.length;
+  const t0 = performance.now();
+  await esperarReal(() => performance.now() - t0 > 30000, { que: '30 s de reloj después de salir', vueltas: VUELTAS });
+  datos.salir = { alSalir, despues: lf.log.length - alSalir, relojMs: Math.round(performance.now() - t0) };
+  afirmar(datos.salir.despues === 0, `E: 0 peticiones a Last.fm en ${datos.salir.relojMs} ms de reloj después de salir (hubo ${datos.salir.despues})`);
+  sinErrores(A, 'A después de salir');
+  const meAntesDeVolver = meDe(A);
+  await irA(A, '#generos', 'que #generos vuelva a pintar', () => vista(A));
+  afirmar(lf.log.length === alSalir, 'A: volver a #generos no pide nada a Last.fm');
+  afirmar(meDe(A) === meAntesDeVolver, `A: y volver no pide otro /me (${meDe(A) - meAntesDeVolver})`);
+  afirmar(boton(A, 'buscar')?.textContent.trim() === 'Seguir', 'y ofrece «Seguir»');
+
+  // ── F. Dos pestañas ───────────────────────────────────────────────────────
+  progreso('F: dos pestañas');
+  const B = abrirMarco('B', { alto: 600 });
+  await arrancado(B, 'el marco B');
+  await irA(B, '#generos', 'que #generos pinte en B', () => vista(B));
+  boton(A, 'buscar').click();
+  await esperarReal(() => vista(A).dataset.estado === 'escaneando' && lf.log.length > alSalir, { que: 'que A vuelva a buscar', vueltas: VUELTAS });
+  afirmar(boton(B, 'buscar'), 'B ofrece buscar');
+  boton(B, 'buscar').click();
+  await esperarReal(() => vista(B).dataset.estado === 'ocupado', { que: 'que B diga que hay otra búsqueda', vueltas: VUELTAS });
+  datos.dos = { pedidasPorB: delMarco('B').length, texto: texto(B, '[data-seccion="escaneo"]').slice(0, 160) };
+  afirmar(datos.dos.pedidasPorB === 0, `F: B no pidió nada a Last.fm (${datos.dos.pedidasPorB})`);
+  afirmar(/otra pestaña/.test(datos.dos.texto), `F: B lo dice: «${datos.dos.texto}»`);
+  afirmar(vista(A).dataset.estado === 'escaneando', 'y A sigue buscando');
+  sinErrores(B, 'B');
+  B.remove();
+
+  // ── D. Cerrar a mitad y volver ────────────────────────────────────────────
+  progreso('D: cerrar a mitad');
+  await esperarReal(() => +vista(A).dataset.pendientes <= 4, { que: 'que A deje 4 o menos por pedir', vueltas: VUELTAS });
+  const colgadasAntes = lf.colgadas;
+  lf.congelado = true;
+  // Con una petición colgada, todo lo contestado antes ya está guardado (cada respuesta se guarda
+  // ANTES de la petición siguiente).
+  await esperarReal(() => lf.colgadas > colgadasAntes, { que: 'que A se quede esperando una respuesta', vueltas: VUELTAS });
+  const contestados = new Set(lf.log.filter((e) => e.definitiva).map((e) => e.artista));
+  const antesDeCerrar = lf.log.length;
+  datos.cerrar = { pendientes: +vista(A).dataset.pendientes, contestados: [...contestados], estimacion: texto(A, '.mapa-estimacion') };
+  const { idbEntriesEnRango } = await import('/js/idb.js');
+  datos.cerrar.ritmo = (await anclar(idbEntriesEnRango('generos_ritmo_v1_'))).map(([k, w]) => ({ k, artistas: w?.value?.artistas, uid: w?.value?.uid }));
+  afirmar(datos.cerrar.ritmo.length === 1 && datos.cerrar.ritmo[0].artistas >= 5 && datos.cerrar.ritmo[0].k === `generos_ritmo_v1_${HISTORY_OWNER_ID}` && datos.cerrar.ritmo[0].uid === HISTORY_OWNER_ID, `lo acumulado del ritmo está en IndexedDB, con el uid en la clave y en el valor (${JSON.stringify(datos.cerrar.ritmo)})`);
+  afirmar(/^Quedan ~\d+ peticiones: .+, según cuántos fallos dé Last\.fm\.$/.test(datos.cerrar.estimacion), `con 5 o más artistas medidos, la estimación (la del mapa, importada): «${datos.cerrar.estimacion}»`);
+  sinErrores(A, 'A antes de cerrar');
+  A.remove();
+  lf.congelado = false;
+  A = abrirMarco('A2');
+  await arrancado(A, 'el marco A recargado');
+  const meArranque2 = meDe(A);
+  await irA(A, '#generos', 'que #generos pinte tras recargar', () => vista(A));
+  afirmar(lf.log.length === antesDeCerrar, 'A: abrir #generos tras recargar no pide nada a Last.fm');
+  afirmar(meDe(A) - meArranque2 === 1, `A: y pide 1 /me además del del arranque (${meDe(A) - meArranque2})`);
+  afirmar(+vista(A).dataset.pendientes === datos.cerrar.pendientes, `lo buscado se conserva (${vista(A).dataset.pendientes} por pedir, antes ${datos.cerrar.pendientes})`);
+  afirmar(boton(A, 'buscar')?.textContent.trim() === 'Seguir', 'y ofrece «Seguir»');
+  boton(A, 'buscar').click();
+  await esperarReal(() => vista(A).dataset.estado === 'terminado', { que: 'que el escaneo termine', vueltas: VUELTAS });
+  const despues = lf.log.slice(antesDeCerrar);
+  const repetidas = despues.filter((e) => contestados.has(e.artista));
+  datos.retomar = { peticiones: despues.length, repetidas: repetidas.map((e) => e.artista) };
+  afirmar(repetidas.length === 0, `D: al retomar, 0 peticiones por lo ya contestado (hubo ${repetidas.length}: ${datos.retomar.repetidas.join(' · ')})`);
+
+  // ── B y C. El final ───────────────────────────────────────────────────────
+  progreso('B y C: el final');
+  const pedidos = [...new Set(lf.log.map((e) => e.artista))];
+  const definitivas = lf.log.filter((e) => e.definitiva);
+  const porArtista = Object.fromEntries(pedidos.map((n) => [n, definitivas.filter((e) => e.artista === n).length]));
+  const fallos = lf.log.filter((e) => !e.definitiva && e.status !== 'colgada');
+  datos.final = {
+    peticiones: lf.log.length, pedidos, porArtista,
+    n29: fallos.filter((e) => e.codigo === 29).length, n503: fallos.filter((e) => e.status === 503).length,
+    filas: filas(A), artistas: artistas(A), errores: [...win(A).__errores],
+  };
+  afirmar(JSON.stringify([...pedidos].sort()) === JSON.stringify([...ESPERADO.pedidos].sort()), `B: se pidieron exactamente los que faltaban, también el migrado vacío (${pedidos.join(', ')})`);
+  afirmar(pedidos.every((n) => porArtista[n] === 1), `B: una sola respuesta definitiva por artista (${JSON.stringify(porArtista)})`);
+  afirmar(datos.final.filas.join() === ESPERADO.final.filas.join() && datos.final.artistas.join() === ESPERADO.final.artistas.join(), `B: al final, las cuatro filas = la cuenta a mano (${datos.final.filas} / ${datos.final.artistas})`);
+  afirmar(datos.final.filas.reduce((a, b) => a + b, 0) === ESPERADO.total, 'y suman el total');
+  afirmar(datos.final.n29 >= 2 && datos.final.n503 >= 1, `C: hubo errores de cuota y 503 de verdad (${datos.final.n29} y ${datos.final.n503})`);
+  afirmar(fallos.every((e) => lf.log.some((x) => x.n > e.n && x.artista === e.artista && x.definitiva)), 'C: cada fallo se reintentó con el MISMO artista hasta una respuesta definitiva');
+  const { idbEntriesEnRango: rango } = await import('/js/idb.js');
+  const G = await import('/js/util/generos-artista.js');
+  const regs = Object.fromEntries((await anclar(rango(G.prefijoGeneros(HISTORY_OWNER_ID)))).map(([, v]) => [v.nombre, v]));
+  const mal = Object.entries(ESPERADO.guardado).filter(([n, tags]) => JSON.stringify(regs[n.toLowerCase()]?.fuentes?.lastfm?.tags) !== JSON.stringify(tags));
+  afirmar(mal.length === 0, `C: lo guardado de cada uno es lo de su respuesta definitiva, ninguno por un fallo (${mal.map(([n]) => n).join(', ')})`);
+  afirmar(regs['hilo rojo']?.fuentes?.lastfm?.artista === 'Hilo Rojo Oficial', `se guarda el nombre que devolvió Last.fm (${regs['hilo rojo']?.fuentes?.lastfm?.artista})`);
+  afirmar(regs['lumbre norte']?.fuentes?.lastfm?.fecha === Date.UTC(2026, 8, 1) && regs['cassia vento']?.fuentes?.lastfm === null, 'los ya buscados no se tocaron');
+  afirmar(lf.log.every((e) => e.metodo === 'GET' && e.cabeceras.length === 0), 'todas las peticiones a Last.fm son GET y sin cabeceras propias');
+  afirmar(lf.log.every((e) => e.consulta.method === 'artist.gettoptags' && e.consulta.autocorrect === '1' && e.consulta.format === 'json'), 'y todas con la consulta de getArtistTopTags (artist.gettoptags + autocorrect=1)');
+  afirmar(/Búsqueda terminada/.test(texto(A, '[data-seccion="escaneo"]')) && !boton(A, 'buscar'), 'al final dice «Búsqueda terminada» y no ofrece buscar');
+  afirmar(datos.final.errores.length === 0, `0 errores en A: ${datos.final.errores.join(' | ')}`);
+
+  // ── G. «Limpiar caché» ────────────────────────────────────────────────────
+  progreso('G: Limpiar caché');
+  const contar = async () => ({
+    etiquetas: (await anclar(rango('generos_artista_v1_'))).length,
+    ritmo: (await anclar(rango('generos_ritmo_v1_'))).length,
+  });
+  const antes = await contar();
+  $(A, '#refresh-all-btn').click();
+  await esperarReal(() => $(A, '#refresh-all-btn') && !$(A, '#refresh-all-btn').disabled && /Caché limpiada/.test(A.contentDocument.body.textContent), { que: 'que «Limpiar caché» termine', vueltas: VUELTAS });
+  const tras = await contar();
+  datos.limpiar = { antes, tras };
+  afirmar(antes.etiquetas === 12 && tras.etiquetas === antes.etiquetas, `G: se quedan los ${tras.etiquetas} registros de etiquetas (antes ${antes.etiquetas})`);
+  afirmar(antes.ritmo === 1 && tras.ritmo === 0, `G: y lo medido del ritmo se borra (${antes.ritmo} → ${tras.ritmo})`);
+  const s = win(A).__sim.reg;
+  afirmar(s.escrituras.length === 0 && s.desconocidas.length === 0 && s.externas.length === 0, `Spotify simulada: 0 escrituras, 0 rutas sin simular, 0 hosts externos (${s.desconocidas.join(',')} ${s.externas.join(',')})`);
+  A.remove();
+
+  // ── H. La IndexedDB rota ──────────────────────────────────────────────────
+  progreso('H: cargarEtiquetas falla');
+  const antesH = lf.log.length;
+  const H = abrirMarco('H', { extra: '&idbrota=1' });
+  await arrancado(H, 'el marco H');
+  await irA(H, '#generos', 'que #generos pinte en H', () => $(H, '.generos[data-estado]'));
+  datos.h = { estado: $(H, '.generos').dataset.estado, texto: texto(H, '.generos').slice(0, 200), botones: H.contentDocument.querySelectorAll('[data-generos-accion]').length, avisos: win(H).__avisos.filter((a) => a.startsWith('[generos]')) };
+  afirmar(datos.h.estado === 'sin-almacen' && /No se han podido leer las etiquetas/.test(datos.h.texto), `H: la vista dice que no pudo leer: «${datos.h.texto}»`);
+  afirmar(datos.h.botones === 0, `H: y no hay botón de buscar (${datos.h.botones})`);
+  afirmar(datos.h.avisos.length === 1 && /banco: IndexedDB rota/.test(datos.h.avisos[0]), `H: el error crudo va a console.warn (${datos.h.avisos.join(' | ')})`);
+  afirmar(lf.log.length === antesH, 'H: 0 a Last.fm');
+  afirmar(!/con etiquetas/i.test(datos.h.texto), 'H: no enseña ninguna fila de «cuánto se sabe»');
+  sinErrores(H, 'H');
+  const sh = win(H).__sim.reg;
+  afirmar(sh.desconocidas.length === 0 && sh.externas.length === 0, 'H: 0 rutas sin simular, 0 hosts externos');
+  H.remove();
+
+  // ── I. A 390 px ───────────────────────────────────────────────────────────
+  progreso('I: a 390 px');
+  const I = abrirMarco('I', { ancho: 390, alto: 844 });
+  await arrancado(I, 'el marco I');
+  await irA(I, '#generos', 'que #generos pinte a 390', () => vista(I));
+  const d = I.contentDocument;
+  const trs = [...d.querySelectorAll('.generos-filas tr')];
+  datos.i = {
+    filas: trs.map((tr) => `${tr.dataset.fila || 'pie'}:${tr.scrollWidth}/${tr.clientWidth}`),
+    tabla: `${d.querySelector('.generos-filas').scrollWidth}/${d.querySelector('.generos-cobertura').clientWidth}`,
+    pagina: `${d.documentElement.scrollWidth}/${d.documentElement.clientWidth}`,
+  };
+  afirmar(trs.length === 5 && trs.every((tr) => tr.scrollWidth <= tr.clientWidth), `I: a 390 px ninguna fila desborda (${datos.i.filas.join(' ')})`);
+  const cob = d.querySelector('.generos-cobertura');
+  afirmar(d.querySelector('.generos-filas').scrollWidth <= cob.clientWidth && cob.scrollWidth <= cob.clientWidth, `I: ni la tabla se sale de su tarjeta (${datos.i.tabla})`);
+  afirmar(d.documentElement.scrollWidth <= d.documentElement.clientWidth, `I: ni la página scrollea a lo ancho (${datos.i.pagina})`);
+  sinErrores(I, 'I');
+  I.remove();
+
+  const resumen =
+    `A: abrir lf=${datos.abrir.lf} /me=${datos.abrir.me} (+${datos.abrir.meArranque} del arranque) filas=${datos.abrir.filas.join('/')} · ` +
+    `E: abortada=${datos.abortadas}, ${datos.salir.despues} peticiones en ${datos.salir.relojMs} ms · F: B pidió ${datos.dos.pedidasPorB} · ` +
+    `D: ${datos.retomar.repetidas.length} repetidas de ${datos.cerrar.contestados.length} contestadas · ` +
+    `B/C: ${datos.final.peticiones} peticiones (${datos.final.n29} con 29, ${datos.final.n503} con 503) por ${datos.final.pedidos.length} artistas, filas=${datos.final.filas.join('/')} · ` +
+    `G: etiquetas ${datos.limpiar.antes.etiquetas}→${datos.limpiar.tras.etiquetas}, ritmo ${datos.limpiar.antes.ritmo}→${datos.limpiar.tras.ritmo} · ` +
+    `H: ${datos.h.estado}, botones=${datos.h.botones} · I: ${datos.i.filas.join(' ')} · errores=0 · ` +
+    `reloj virtual=${Math.round(performance.now())} ms`;
+  document.documentElement.setAttribute('data-resumen', resumen);
+  progreso(resumen);
+  listo();
+} catch (e) {
+  document.documentElement.setAttribute('data-resumen', 'reloj virtual=' + Math.round(performance.now()) + ' ms');
+  fallar(new Error(String(e?.message || e) + ' · ' + JSON.stringify(datos).slice(0, 1500)));
+}
+</script>
+</body></html>

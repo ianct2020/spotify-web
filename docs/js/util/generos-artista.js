@@ -65,6 +65,17 @@ export function mezclarEtiquetas(existentes, entrantes) {
   return [...byName.values()];
 }
 
+// La regla de qué etiqueta de Last.fm se queda (v=313, tanda 61): el map + filter que vivía
+// dentro de `getArtistTopTags` (`api/lastfm.js`), sacado acá SIN cambiar una coma para que lo
+// importen los dos que la usan, esa función y el escaneo de `#generos`
+// (`util/generos-escaneo.js`). Una regla escrita dos veces diverge (v=219). Recibe el
+// `toptags.tag` de la respuesta tal cual (una lista).
+export function filtrarEtiquetasLastfm(lista) {
+  return lista
+    .map(t => ({ name: (t.name || '').toLowerCase(), count: parseInt(t.count) || 0 }))
+    .filter(t => t.name && t.count >= 5);
+}
+
 // Las fuentes que contestaron, en el orden en que se escribieron.
 function fuentesEnOrden(registro) {
   const f = registro?.fuentes || {};
@@ -146,7 +157,10 @@ export function crearAlmacenGeneros({ leerRango, escribir, escribirVarios, leerM
   // sincrónicos y la vista pinta enseguida); si la IndexedDB dice que no, vuelve a lo
   // que había, solo si nadie escribió encima mientras tanto (si no, lo de encima ya
   // incluye esto y se guardó o se va a deshacer por su cuenta).
-  function guardar(nombre, tags, fuente) {
+  // v=313: `extra` (opcional) suma campos al registro de ESA fuente, al lado de `tags` y
+  // `fecha` (que no puede pisar). Lo usa el escaneo de `#generos` para guardar el nombre que
+  // devolvió Last.fm (`artista`); la decisión (`decidirEtiquetas`) no lo lee.
+  function guardar(nombre, tags, fuente, extra = null) {
     if (!FUENTES.includes(fuente)) throw new Error(`etiquetas: fuente desconocida «${fuente}»`);
     if (!mapa) {
       avisar('[etiquetas] se quiso guardar sin haber cargado las de este usuario:', nombre);
@@ -154,7 +168,7 @@ export function crearAlmacenGeneros({ leerRango, escribir, escribirVarios, leerM
     }
     const k = String(nombre).toLowerCase();
     const prev = mapa.get(k);
-    const reg = { uid, nombre: k, fuentes: { ...(prev?.fuentes || fuentesVacias()), [fuente]: { tags: Array.isArray(tags) ? tags.map(t => ({ ...t })) : [], fecha: ahora() } } };
+    const reg = { uid, nombre: k, fuentes: { ...(prev?.fuentes || fuentesVacias()), [fuente]: { ...(extra || {}), tags: Array.isArray(tags) ? tags.map(t => ({ ...t })) : [], fecha: ahora() } } };
     mapa.set(k, reg);
     const mio = mapa;
     return escribir(claveGeneros(uid, k), reg).then(() => true, (e) => {
@@ -165,6 +179,11 @@ export function crearAlmacenGeneros({ leerRango, escribir, escribirVarios, leerM
   }
 
   const contar = () => (mapa ? mapa.size : 0);
+
+  // v=313: el registro CRUDO de un artista (lo que contestó cada fuente), o `null`. Lo lee el
+  // escaneo de `#generos` para saber si Last.fm ya contestó por él; `leer` sigue dando la
+  // decisión y nada más.
+  const registro = (nombre) => (mapa ? mapa.get(String(nombre).toLowerCase()) ?? null : null);
 
   // El formato del archivo de siempre (`tags.entries` de `exportAllData`):
   // `{ nombre: { tags: la decisión, at: la fecha más nueva de sus fuentes } }`.
@@ -195,5 +214,5 @@ export function crearAlmacenGeneros({ leerRango, escribir, escribirVarios, leerM
     return { added, updated, total: pares.length };
   }
 
-  return { cargar, listo, leer, guardar, contar, exportar, importar, get uid() { return uid; } };
+  return { cargar, listo, leer, registro, guardar, contar, exportar, importar, get uid() { return uid; } };
 }

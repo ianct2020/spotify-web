@@ -1,0 +1,112 @@
+<!doctype html><html lang="es"><head><meta charset="utf-8"><title>banco generos-escaneo — la app entera, en un iframe</title>
+<link rel="stylesheet" href="/css/theme.css">
+<link rel="stylesheet" href="/css/components.css">
+<link rel="stylesheet" href="/css/main.css">
+<style>*,*::before,*::after{animation:none!important;transition:none!important}</style>
+</head><body>
+<div id="app"></div>
+<script type="module">
+// ── Un iframe del banco `generos-escaneo.html` (v=313, tanda 61) ─────────────
+//
+// Arranca la app ENTERA (`/js/app.js`) contra:
+//   · la Spotify simulada de `simulado.mjs`, con `/me` = HISTORY_OWNER_ID (así
+//     `loadArtistTracks()` sirve el historial del owner, que la madre sembró en IndexedDB
+//     INVENTADO, nunca el de Ian);
+//   · un Last.fm simulado que vive en la MADRE (`parent.__lf`): el registro de peticiones tiene
+//     que sobrevivir a la recarga de este iframe («cerrar a mitad y volver»). Nada sale a
+//     `ws.audioscrobbler.com`.
+// La madre conduce desde afuera (mismo origen): cambia el hash, aprieta botones y lee el DOM.
+//
+// `?idbrota=1`: la lectura del rango de las etiquetas de género (`generos_artista_v1_`) falla en
+// IndexedDB, así `cargarEtiquetas()` tira (la puerta H). El resto de la IndexedDB anda.
+//
+// `?foto=1` (para las capturas SEMBRADAS, con un conductor externo y SIN reloj virtual): siembra
+// el historial y los registros inventados, corre el bucle REAL (`escanearGeneros`) contra un
+// Last.fm de mentira local y un reloj instantáneo hasta dejar 6 artistas buscados (la búsqueda a
+// medias), siembra un ritmo acumulado de 6 artistas medidos (para que se vea la estimación),
+// abre #generos y marca `data-foto="listo"`.
+
+import { instalarRedSimulada, esperarReal, anclar } from '/banco/simulado.mjs';
+
+const q = new URLSearchParams(location.search);
+const MARCO = q.get('marco') || 'x';
+window.__errores = [];
+window.__avisos = [];
+window.addEventListener('error', (e) => window.__errores.push('error: ' + (e.message || e)));
+window.addEventListener('unhandledrejection', (e) => window.__errores.push('rechazo: ' + String(e.reason?.message || e.reason)));
+const errorOriginal = console.error.bind(console);
+console.error = (...a) => { window.__errores.push('console.error: ' + a.map(String).join(' ').slice(0, 300)); errorOriginal(...a); };
+const avisoOriginal = console.warn.bind(console);
+console.warn = (...a) => { window.__avisos.push(a.map(String).join(' ').slice(0, 300)); avisoOriginal(...a); };
+
+if (q.get('idbrota')) {
+  const getAll = IDBObjectStore.prototype.getAll;
+  IDBObjectStore.prototype.getAll = function (rango, ...resto) {
+    if (rango && typeof rango.lower === 'string' && rango.lower.startsWith('generos_artista_v1_')) throw new DOMException('banco: IndexedDB rota a propósito', 'UnknownError');
+    return getAll.call(this, rango, ...resto);
+  };
+}
+
+const { HISTORY_OWNER_ID } = await import('/js/features/history-data.js');
+const sim = instalarRedSimulada();
+window.__sim = sim;
+sim.ruta('GET', /^\/me$/, () => ({ id: HISTORY_OWNER_ID, display_name: 'Banco' }));
+localStorage.setItem('fonoteca_last_user_id', HISTORY_OWNER_ID);
+localStorage.setItem('fonoteca_perfil_v1', JSON.stringify({ id: HISTORY_OWNER_ID, display_name: 'Banco' }));
+
+// El Last.fm simulado, por ENCIMA de la Spotify simulada: `simulado.mjs` bloquea todo host
+// externo no declarado, y este lo atiende antes.
+const debajo = window.fetch;
+window.fetch = (entrada, opciones = {}) => {
+  const url = typeof entrada === 'string' ? entrada : entrada.url;
+  const abs = new URL(url, location.href);
+  if (abs.hostname !== 'ws.audioscrobbler.com') return debajo(entrada, opciones);
+  const lf = q.get('foto') ? window.__lfLocal : parent.__lf;
+  return new Promise((resolver, rechazar) => {
+    const signal = opciones.signal;
+    let hecha = false;
+    const abortar = () => { if (hecha) return; hecha = true; lf.abortadas++; rechazar(new DOMException('abortado', 'AbortError')); };
+    if (signal?.aborted) return abortar();
+    signal?.addEventListener('abort', abortar, { once: true });
+    lf.responder(abs.href, { marco: MARCO, metodo: String(opciones.method || 'GET').toUpperCase(), cabeceras: Object.keys(opciones.headers || {}) })
+      .then((r) => { if (hecha) return; hecha = true; resolver(new Response(r.cuerpo, { status: r.status, headers: { 'content-type': 'application/json', 'access-control-allow-origin': '*' } })); }, rechazar);
+  });
+};
+
+if (q.get('foto')) {
+  const D = await import('/banco/generos-escaneo-datos.mjs');
+  await D.sembrarHistorial(anclar);
+  await D.sembrarEtiquetas(anclar, HISTORY_OWNER_ID);
+  window.__lfLocal = D.crearLastfm();
+  const P = await import('/js/util/mapa-paises.js');
+  const G = await import('/js/util/generos-escaneo.js');
+  const M = await import('/js/util/mapa-escaneo.js');
+  const L = await import('/js/api/lastfm.js');
+  const { idbSetCached } = await import('/js/idb.js');
+  await anclar(L.cargarEtiquetas(HISTORY_OWNER_ID));
+  // El bucle REAL, con un reloj instantáneo, hasta 6 artistas buscados por él.
+  const ctrl = new AbortController();
+  let hechos = 0, t = 0;
+  await anclar(G.escanearGeneros({
+    lista: P.universo(D.HISTORIAL.totals, D.HISTORIAL.artists), registro: (n) => L.registroEtiquetas(n),
+    url: (n) => G.urlEtiquetas(n, 'clave-del-banco'), signal: ctrl.signal,
+    pedir: async (url) => { const r = await window.__lfLocal.responder(url, { marco: 'foto' }); return { status: r.status, datos: JSON.parse(r.cuerpo) }; },
+    guardar: (n, tags, artista) => L.setCachedTags(n, tags, 'lastfm', artista === undefined ? null : { artista }),
+    reloj: { ahora: () => t, esperar: async (ms) => { t += ms; } },
+    onArtista: () => { if (++hechos >= 6) ctrl.abort(); },
+  }));
+  // Un ritmo acumulado de 6 artistas medidos, a 1,1 s cada uno (sembrado, para la captura).
+  let rt = M.ritmoVacio();
+  for (let i = 0; i < 6; i++) { rt = M.sumarPeticion(rt, 200); rt = M.sumarArtista(rt, 1000 + i * 40); }
+  await anclar(idbSetCached(G.claveRitmo(HISTORY_OWNER_ID), { ...rt, uid: HISTORY_OWNER_ID }, null));
+  location.hash = '#generos';
+}
+await import('/js/app.js');
+await esperarReal(() => document.getElementById('my-history-btn'), { que: 'que la app arranque', vueltas: 4000 });
+window.__listo = true;
+if (q.get('foto')) {
+  await esperarReal(() => document.querySelector('.generos[data-estado]'), { que: 'que #generos pinte', vueltas: 4000 });
+  document.documentElement.dataset.foto = 'listo';
+}
+</script>
+</body></html>
