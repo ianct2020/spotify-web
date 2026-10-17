@@ -2219,6 +2219,49 @@ h3 { font-size: 18px; font-weight: 600; }
 .wrapped-hero-note strong { color: var(--color-text); }
 
 /* ============ Ficha de canción (track-card) ============ */
+/* La cabecera (tanda 60, v=312): tapa · texto (título, artistas y la fila de botones) ·
+   «Ir al álbum» · ✕. Hasta v=311 vivía en estilos inline; pasó a clases para que el móvil
+   la pueda reacomodar. En el escritorio son los MISMOS valores (78,5 px de alto a 1366,
+   medido en el banco `letras`, sección M). */
+.tc-cabecera {
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+  margin-bottom: 14px;
+}
+.tc-cabecera-texto { flex: 1; min-width: 0; }
+.tc-botones {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+/* Por debajo de 520 px (el corte de `.tc-letra-texto`) la columna del texto quedaba en
+   ~83 px: el título en tres renglones, el artista cortado y los tres botones apilados
+   (cabecera de 247,5 px; 286 con el dueño, que suma la barra de scroll del modal). Ahora
+   es una grilla: el título al lado de la tapa y de «Ir al álbum» y ✕, el artista debajo a
+   todo lo que queda de ancho, y la fila de botones debajo de todo, a lo ancho del modal.
+   El orden del DOM no cambia (la columna del texto se vuelve `display: contents`). */
+@media (max-width: 520px) {
+  .tc-cabecera {
+    display: grid;
+    grid-template-columns: 64px minmax(0, 1fr) auto auto;
+    grid-template-areas:
+      "tapa titulo album cerrar"
+      "tapa artista artista artista"
+      "botones botones botones botones";
+    column-gap: 14px;
+    row-gap: 0;
+    align-items: start;
+  }
+  .tc-cabecera-texto { display: contents; }
+  .tc-cabecera .tc-tapa { grid-area: tapa; }
+  .tc-cabecera .tc-titulo { grid-area: titulo; }
+  .tc-cabecera .tc-artists { grid-area: artista; min-width: 0; }
+  .tc-cabecera .tc-botones { grid-area: botones; }
+  .tc-cabecera .tc-ir-album { grid-area: album; }
+  .tc-cabecera .tc-cerrar { grid-area: cerrar; }
+}
 .tc-stats {
   display: grid;
   grid-template-columns: repeat(4, 1fr);

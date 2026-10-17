@@ -1,0 +1,86 @@
+<!doctype html><html lang="es"><head><meta charset="utf-8"><title>banco generos-cache — la app entera, en un iframe</title>
+<link rel="stylesheet" href="/css/theme.css">
+<link rel="stylesheet" href="/css/components.css">
+<link rel="stylesheet" href="/css/main.css">
+<style>*,*::before,*::after{animation:none!important;transition:none!important}</style>
+</head><body>
+<div id="app"></div>
+<script type="module">
+// ── Un iframe del banco `generos-cache.html` (v=312, tanda 60) ───────────────
+//
+// Arranca la app ENTERA (`/js/app.js`) en `#genre` contra la Spotify simulada de
+// `simulado.mjs`, con me gusta INVENTADOS en la caché de IndexedDB, y con Last.fm,
+// MusicBrainz y stats.fm SIMULADOS por encima: toda petición a esos tres hosts la
+// anota la MADRE (`parent.__terceros`, para contar entre marcos) y se contesta vacía.
+// Nada sale a la red.
+//
+// `?sembrar=1` deja además en `localStorage` el blob viejo de etiquetas
+// (`lastfm_artist_tags_cache`) con una entrada de hace 40 días y otra de ayer, antes de
+// cargar la app: es lo que encuentra la primera apertura de v=312 y tiene que migrar.
+
+import { instalarRedSimulada, esperarReal, anclar } from '/banco/simulado.mjs';
+
+const q = new URLSearchParams(location.search);
+window.__errores = [];
+window.addEventListener('error', (e) => window.__errores.push('error: ' + (e.message || e)));
+window.addEventListener('unhandledrejection', (e) => window.__errores.push('rechazo: ' + String(e.reason?.message || e.reason)));
+const errorOriginal = console.error.bind(console);
+console.error = (...a) => { window.__errores.push('console.error: ' + a.map(String).join(' ').slice(0, 300)); errorOriginal(...a); };
+
+const UID = 'usuarioDelBancoGeneros';
+const DIA = 24 * 60 * 60 * 1000;
+const ARTISTAS = ['Banda Vieja Inventada', 'Banda Fresca Inventada', 'Banda Sin Etiquetas Inventada'];
+
+const sim = instalarRedSimulada();
+window.__sim = sim;
+sim.ruta('GET', /^\/me$/, () => ({ id: UID, display_name: 'Banco' }));
+localStorage.setItem('fonoteca_last_user_id', UID);
+localStorage.setItem('fonoteca_perfil_v1', JSON.stringify({ id: UID, display_name: 'Banco' }));
+
+// Last.fm, MusicBrainz y stats.fm simulados, por ENCIMA de la Spotify simulada.
+const TERCEROS = ['ws.audioscrobbler.com', 'musicbrainz.org', 'api.stats.fm'];
+const debajo = window.fetch;
+window.fetch = (entrada, opciones = {}) => {
+  const url = typeof entrada === 'string' ? entrada : entrada.url;
+  const abs = new URL(url, location.href);
+  if (!TERCEROS.includes(abs.hostname)) return debajo(entrada, opciones);
+  parent.__terceros.push(`${q.get('marco')} ${abs.hostname}${abs.pathname}`);
+  return Promise.resolve(new Response('{}', { status: 200, headers: { 'content-type': 'application/json' } }));
+};
+
+if (q.get('sembrar') === '1') {
+  const ahora = Date.now();
+  localStorage.setItem('lastfm_artist_tags_cache', JSON.stringify({
+    'banda vieja inventada': { tags: [{ name: 'shoegaze inventado', count: 40 }], at: ahora - 40 * DIA },
+    'banda fresca inventada': { tags: [{ name: 'trip-hop inventado', count: 55 }], at: ahora - 1 * DIA },
+  }));
+}
+
+// Seis me gusta por artista (`#genre` pide 5 temas para enseñar un género).
+const id = (n, c) => `${n}${c}${c.toUpperCase()}`.repeat(8).slice(0, 22);
+const likes = [];
+ARTISTAS.forEach((nombre, a) => {
+  for (let i = 0; i < 6; i++) {
+    const tid = id(a * 6 + i, 'abcdefghijklmnopqr'[a * 6 + i]);
+    likes.push({
+      added_at: new Date(Date.UTC(2025, a, 1 + i)).toISOString(),
+      track: {
+        id: tid, uri: `spotify:track:${tid}`, name: `Tema ${i + 1} de ${nombre}`, popularity: 50, duration_ms: 180000,
+        explicit: false, is_playable: true, track_number: i + 1,
+        artists: [{ id: id(a, 'z'), name: nombre }],
+        album: { id: id(a, 'y'), name: `Disco de ${nombre}`, release_date: '2020-01-01', album_type: 'album', total_tracks: 6, images: [] },
+      },
+    });
+  }
+});
+const { idbSetCached } = await import('/js/idb.js');
+await anclar(idbSetCached('all_liked_tracks', likes, null));
+
+location.hash = '#genre';
+await import('/js/app.js');
+await esperarReal(() => document.getElementById('genre-begin-btn'), { que: 'que #genre pinte su pantalla de inicio', vueltas: 4000 });
+window.__idb = await import('/js/idb.js');
+window.__UID = UID;
+window.__listo = true;
+</script>
+</body></html>

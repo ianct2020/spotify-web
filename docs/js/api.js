@@ -1,11 +1,12 @@
-import { getValidToken, refreshAccessToken } from './auth.js?v=311';
-import { cacheGet, cacheGetRaw, cacheGetTimestamp, cacheSet, cacheClear, prefKey, migratePrefKey } from './storage.js?v=311';
-import { idbDel, idbDelByPrefix, idbGetCached, idbGetCachedRaw, idbGetTimestamp, idbSetCached } from './idb.js?v=311';
-import { OWNER_KEY_LIST } from './history-keys.js?v=311';
-import { OCULTOS_ITEMS_PREFIX } from './util/ocultos-items-clave.js?v=311';
-import { showToast } from './ui/toast.js?v=311';
-import { artistIsSame, limpiaParaQuery } from './util/track-match.js?v=311';
-import { contadorCuota, cuotaDeEndpoint } from './util/cuota.js?v=311';
+import { getValidToken, refreshAccessToken } from './auth.js?v=312';
+import { cacheGet, cacheGetRaw, cacheGetTimestamp, cacheSet, cacheClear, prefKey, migratePrefKey } from './storage.js?v=312';
+import { idbDel, idbDelByPrefix, idbGetCached, idbGetCachedRaw, idbGetTimestamp, idbSetCached } from './idb.js?v=312';
+import { OWNER_KEY_LIST } from './history-keys.js?v=312';
+import { OCULTOS_ITEMS_PREFIX } from './util/ocultos-items-clave.js?v=312';
+import { showToast } from './ui/toast.js?v=312';
+import { artistIsSame, limpiaParaQuery } from './util/track-match.js?v=312';
+import { contadorCuota, cuotaDeEndpoint } from './util/cuota.js?v=312';
+import { exportarEtiquetas, importarEtiquetas } from './api/lastfm.js?v=312';
 
 const BASE = 'https://api.spotify.com/v1';
 const MIN_RETRY_WAIT = 5000;
@@ -786,7 +787,12 @@ function applyLocalConfig(cfg, { overwrite = false } = {}) {
 
 async function exportAllData(spotifyUserId) {
   const { items: likes, source } = await getBestAvailableLikes();
-  const tagsCache = JSON.parse(localStorage.getItem('lastfm_artist_tags_cache') || '{}');
+  // v=312: las etiquetas salen de IndexedDB (por usuario) con el formato de siempre,
+  // `{ nombre: { tags, at } }`, así un archivo de v=312 se importa en v=311 y al revés.
+  // Sin uid no hay de quién leerlas: el archivo sale sin etiquetas y se avisa.
+  let tagsCache = {};
+  if (spotifyUserId) tagsCache = await exportarEtiquetas(spotifyUserId);
+  else console.warn('[export] sin usuario: el archivo sale sin las etiquetas de género');
   return {
     _format: 'spotify-tools-data',
     _version: 2,
@@ -830,18 +836,12 @@ async function importAllData(parsed, onProgress, { currentUserId = null } = {}) 
   const isOldTags = parsed.entries && parsed._format === 'spotify-tools-genres';
   if (hasNewTags || isOldTags) {
     const tagsPayload = hasNewTags ? parsed.tags : parsed;
-    const cache = JSON.parse(localStorage.getItem('lastfm_artist_tags_cache') || '{}');
-    let added = 0;
-    let updated = 0;
-    for (const [key, entry] of Object.entries(tagsPayload.entries || {})) {
-      if (!entry || !Array.isArray(entry.tags)) continue;
-      if (cache[key]) updated++;
-      else added++;
-      cache[key] = { tags: entry.tags, at: entry.at || Date.now() };
-    }
-    localStorage.setItem('lastfm_artist_tags_cache', JSON.stringify(cache));
-    result.tagsImported = added;
-    result.tagsUpdated = updated;
+    // v=312: a IndexedDB, del usuario de ahora, como `migrado` (el archivo no dice de
+    // qué fuente salió cada etiqueta). Lo vencido del archivo también entra.
+    const uid = currentUserId || await getCurrentUserId();
+    const r = await importarEtiquetas(uid, tagsPayload.entries || {});
+    result.tagsImported = r.added;
+    result.tagsUpdated = r.updated;
   }
 
   if (parsed._config && typeof parsed._config === 'object') {

@@ -24,8 +24,10 @@
 //      modal cerrado, y lo que llegó SÍ queda guardado;
 //   H. 0 escrituras a Spotify, 0 rutas sin simular, 0 hosts externos fuera del lrclib
 //      simulado, 0 errores;
-//   M. el modal con una letra de 60 renglones, a 1366×768 y a 390×844: con la letra
-//      abierta el modal no scrollea (entra en su alto).
+//   M. el modal con una letra de 60 renglones, a 1366×768 y a 390×844, sin el dueño y
+//      (tanda 60) con el dueño: la caja de la letra entera a la vista (C1), la cabecera a
+//      390 (C2: botones en ≤ 2 renglones, el artista entero, < 247,5 px) y la de 1366 en
+//      78,5 (C3); sin el dueño, el modal entero entra sin scrollear.
 //
 // ⚠️ Todas las esperas van con `esperarReal` (ver PRESUPUESTO en `scripts/correr-banco.mjs`).
 
@@ -40,10 +42,10 @@ const VUELTAS = 20000;
 const lrc = crearLrclib();
 window.__lrc = lrc;
 
-function abrirMarco(nombre, w = ANCHO, h = 800) {
+function abrirMarco(nombre, w = ANCHO, h = 800, extra = '') {
   const f = document.createElement('iframe');
   f.width = w; f.height = h;
-  f.src = `/banco/letras-caso.html?marco=${nombre}`;
+  f.src = `/banco/letras-caso.html?marco=${nombre}${extra}`;
   document.getElementById('marcos').appendChild(f);
   return f;
 }
@@ -208,24 +210,77 @@ try {
   const spotify = s.llamadas.filter((l) => !/^https:\/\/lrclib/.test(l.ruta)).map((l) => l.metodo + ' ' + l.ruta);
   afirmar(spotify.every((x) => x === 'GET /me'), `H. a Spotify, solo el /me (${spotify.join(' · ')})`);
 
-  // ── M. El modal, con 60 renglones ──────────────────────────────────────────
+  // ── M. El modal, con 60 renglones (tanda 59) y con el DUEÑO (tanda 60) ───
+  // Cuatro marcos, uno por caso, cada uno con su viewport fijo desde que nace: quien no es el
+  // dueño (el cuerpo es un párrafo) y el dueño (`?uid=owner`: números, fechas y la curva de
+  // 200 px, con el historial INVENTADO de `historialDuenio()`), a 1366×768 y a 390×844. Los del
+  // dueño van después: su marco escribe `fonoteca_last_user_id` y siembra las claves del dueño.
+  //   C1. con la letra abierta y el scroll del modal en 0, la caja de la letra entera (del aviso
+  //       a «Letra de lrclib.net») queda DENTRO del área visible del modal, en los cuatro;
+  //   C2. a 390: la fila de botones en 2 renglones como mucho, el artista sin cortar
+  //       (`scrollWidth <= clientWidth`, «Banda Inventada») y la cabecera por debajo de 247,5 px;
+  //   C3. a 1366: la cabecera en 78,5 px (dueño o no);
+  //   y, sin el dueño, el modal entero entra sin scrollear y la letra scrollea dentro (la 59).
+  // Que el modal del DUEÑO scrollee con la letra abierta se acepta: se mide y no se afirma.
   progreso('M. el modal…');
   const medidas = [];
-  for (const [w, h] of [[1366, 768], [390, 844]]) {
-    const f = abrirMarco(`medir-${w}`, w, h);
-    await arrancado(f, `el marco de ${w}×${h}`);
-    await abrirFicha(f, TEMAS.largo);
+  const fallosM = [];
+  const r1 = (n) => Math.round(n * 10) / 10;
+  function medirModal(f) {
     const modal = $(f, '.modal');
-    const cerrado = modal.getBoundingClientRect().height;
-    await tocarLetra(f, /^letra$/, `M. la letra de 60 renglones a ${w}×${h}`);
-    const abierto = modal.getBoundingClientRect().height;
-    const bloque = $(f, '.tc-letra-texto');
-    const scrollea = modal.scrollHeight > modal.clientHeight + 1;
-    const cabecera = modal.firstElementChild.getBoundingClientRect().height;
-    medidas.push(`${w}×${h}: cerrado ${cerrado.toFixed(1)} · abierto ${abierto.toFixed(1)} · cabecera ${cabecera.toFixed(1)} · bloque ${bloque.clientHeight}/${bloque.scrollHeight} · modal ${scrollea ? 'SCROLLEA' : 'entra'} (${modal.scrollHeight}/${modal.clientHeight}, viewport ${win(f).innerHeight})`);
-    medidas.ok = (medidas.ok ?? true) && bloque.scrollHeight > bloque.clientHeight && !scrollea && win(f).__errores.length === 0;
+    modal.scrollTop = 0;
+    const cab = modal.firstElementChild;
+    const fila = $(f, '#tc-preview').parentElement;
+    const renglones = new Set([...fila.children].map((b) => Math.round(b.getBoundingClientRect().top))).size;
+    const art = $(f, '.tc-artists');
+    const rm = modal.getBoundingClientRect();
+    const out = {
+      alto: r1(rm.height), tope: win(f).getComputedStyle(modal).maxHeight,
+      scrollea: modal.scrollHeight > modal.clientHeight + 1, sh: modal.scrollHeight, ch: modal.clientHeight,
+      cab: r1(cab.getBoundingClientRect().height), renglones,
+      artCortado: art.scrollWidth > art.clientWidth, artW: `${art.scrollWidth}/${art.clientWidth}`,
+    };
+    const aviso = $(f, '#tc-letra .tc-letra-aviso');
+    const fuente = $(f, '#tc-letra .tc-letra-fuente');
+    if (aviso && fuente && !$(f, '#tc-letra').hidden) {
+      const arriba = rm.top + modal.clientTop;
+      out.cajaTop = r1(aviso.getBoundingClientRect().top - arriba);
+      out.cajaBottom = r1(fuente.getBoundingClientRect().bottom - arriba);
+      out.visible = modal.clientHeight;
+      out.cajaDentro = out.cajaTop >= 0 && out.cajaBottom <= out.visible + 0.5;
+      const bloque = $(f, '.tc-letra-texto');
+      out.bloque = `${bloque.clientHeight}/${bloque.scrollHeight}`;
+      out.bloqueScrollea = bloque.scrollHeight > bloque.clientHeight;
+    }
+    return out;
   }
-  afirmar(medidas.ok, `M. con la letra abierta, el modal entra sin scrollear y la letra scrollea dentro, sin errores: ${medidas.join(' | ')}`);
+  const fmt = (m) => `alto ${m.alto} (tope ${m.tope}) ${m.scrollea ? 'SCROLLEA' : 'entra'} ${m.sh}/${m.ch} · cabecera ${m.cab} · botones en ${m.renglones} renglón(es) · artista ${m.artCortado ? 'CORTADO' : 'entero'} ${m.artW}` +
+    (m.cajaTop !== undefined ? ` · caja ${m.cajaTop}→${m.cajaBottom} de ${m.visible} ${m.cajaDentro ? 'dentro' : 'FUERA'} · bloque ${m.bloque}` : '');
+  for (const [duenio, w, h] of [[false, 1366, 768], [false, 390, 844], [true, 1366, 768], [true, 390, 844]]) {
+    const caso = `${duenio ? 'dueño' : 'no dueño'} ${w}×${h}`;
+    const f = abrirMarco(`medir-${duenio ? 'duenio-' : ''}${w}`, w, h, duenio ? '&uid=owner' : '');
+    await arrancado(f, `el marco de ${caso}`);
+    await abrirFicha(f, TEMAS.largo);
+    if (duenio) await esperarReal(() => $(f, '#tc-chart') && $(f, '.tc-stats'), { que: `que la ficha del dueño pinte su cuerpo (${caso})`, vueltas: 4000 });
+    else afirmar(!$(f, '.tc-stats'), `M. ${caso}: sin el cuerpo del dueño`);
+    const cerrado = medirModal(f);
+    await tocarLetra(f, /^letra$/, `M. la letra de 60 renglones (${caso})`);
+    const abierto = medirModal(f);
+    medidas.push(`${caso}: cerrada [${fmt(cerrado)}] · abierta [${fmt(abierto)}]`);
+    if (!abierto.cajaDentro) fallosM.push(`C1 ${caso}: la caja de la letra ${abierto.cajaTop}→${abierto.cajaBottom}, el área visible ${abierto.visible}`);
+    if (w === 390) {
+      if (abierto.renglones > 2) fallosM.push(`C2 ${caso}: los botones en ${abierto.renglones} renglones`);
+      if (abierto.artCortado) fallosM.push(`C2 ${caso}: el artista cortado (${abierto.artW})`);
+      if (!(abierto.cab < 247.5)) fallosM.push(`C2 ${caso}: la cabecera en ${abierto.cab} (tiene que bajar de 247,5)`);
+    } else if (abierto.cab !== 78.5) fallosM.push(`C3 ${caso}: la cabecera en ${abierto.cab}, no 78,5`);
+    if (!duenio && (abierto.scrollea || !abierto.bloqueScrollea)) fallosM.push(`${caso}: el modal tiene que entrar sin scrollear y la letra scrollear dentro`);
+    if (win(f).__errores.length) fallosM.push(`${caso}: errores ${win(f).__errores.join(' · ')}`);
+    if (duenio) {
+      const sd = win(f).__sim.reg;
+      if (sd.externas.length || sd.desconocidas.length || sd.escrituras.length) fallosM.push(`${caso}: fugas ${JSON.stringify({ e: sd.externas, d: sd.desconocidas, w: sd.escrituras.length })}`);
+    }
+  }
+  afirmar(fallosM.length === 0, `M. ${fallosM.join(' · ')} — medido: ${medidas.join(' | ')}`);
   notas.push('M: ' + medidas.join(' | '));
 
   const resumen = `ok · A: abrir=0 lrclib · ${notas.join(' · ')} · G: 0 escrituras al DOM cerrado, guardado · peticiones lrclib=${lrc.reg.length} · escrituras=0 · externos=0 · errores=0 · ` +

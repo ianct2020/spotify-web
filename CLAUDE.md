@@ -1564,7 +1564,8 @@ enseña en un bloque plegable debajo de la cabecera. Tres archivos:
   delante, si no salían a 14 px y con 20 px de margen de abajo (la familia de v=153).
 - La fila de botones de la cabecera ganó `flex-wrap: wrap`: a 390 px, sin él, «▶ Preview» y «Abrir en
   Spotify ↗» ya desbordaban su columna (83 px de caja para 163 de contenido, medido en el banco); con el tercer
-  botón se apilan y la cabecera pasa de 171,5 a 247,5 px de alto. A 1366 no cambia (78,5).
+  botón se apilaban y la cabecera pasaba de 171,5 a 247,5 px de alto. A 1366 no cambia (78,5). **Desde v=312 la
+  cabecera a 390 se reacomoda** (ver «La cabecera a 390 px y el dueño (v=312)», abajo).
 
 **El modal, medido** (SEMBRADO: el banco `letras`, sección M, con quien NO es el dueño —el cuerpo es un
 párrafo— y una letra inventada de 60 renglones; `.modal` tiene `max-height: 80vh`, también a 390: la regla de
@@ -1577,9 +1578,50 @@ párrafo— y una letra inventada de 60 renglones; `.modal` tiene `max-height: 8
 
 El alto máximo de la letra es `min(300px, 38vh)` y, por debajo de 520 px, `min(170px, 20vh)` (la primera
 versión, `min(300px, 36vh)` en los dos y con el margen de `.modal p` todavía encima, a 390 scrolleaba: 842 de
-contenido en 673). ⚠️ **Con el dueño no está medido**: su
-cuerpo trae los cuatro números, las fechas y la curva de 200 px (unos 300 px más), así que con la letra
-abierta **el modal scrollea** a 1366×768.
+contenido en 673).
+
+### La cabecera a 390 px y el dueño (v=312)
+
+**Medido con el dueño** (tanda 60; SEMBRADO: `letras-caso.html?uid=owner` siembra en las claves del dueño un
+historial INVENTADO, `historialDuenio()` de `letras-datos.mjs`, y un `Chart` de mentira que llena la caja de 200 px:
+Chart.js viene de jsDelivr y el banco no sale a la red). Sin stats.fm (el banco no tiene usuario de stats.fm): con
+él, el cuerpo del dueño suma el renglón de «Stats.fm hoy» (~45 px) debajo de la curva. Alto del modal · si scrollea
+(`scrollHeight`/`clientHeight`) · cabecera · renglones de la fila de botones · artista (`scrollWidth`/`clientWidth`)
+· la caja de la letra (del aviso a «Letra de lrclib.net») dentro del área visible del modal, con su scroll en 0:
+
+| v=311 (antes) | cerrada | con la letra abierta | cabecera | botones | artista | caja de la letra |
+|---|---|---|---|---|---|---|
+| no dueño 1366×768 | 189,5 | 571,5 (tope 614,4), entra | 78,5 | 1 | entero 340/340 | 133,5 → 475,5 de 570 |
+| no dueño 390×844 | 354 | 631,1 (tope 675,2), entra | 247,5 | **3** | **cortado** 114/83 | 290,5 → 527,6 de 629 |
+| dueño 1366×768 | 443,5 | 614,4, **scrollea** 824/612 | 78,5 | 1 | entero 330/330 | 133,5 → 475,5 de 612 |
+| dueño 390×844 | 675,2, **scrollea** 715/673 | 675,2, **scrollea** 992/673 | **286** | **3** | **cortado** 114/73 | 329 → 566,1 de 673 |
+
+| v=312 (después) | cerrada | con la letra abierta | cabecera | botones | artista | caja de la letra |
+|---|---|---|---|---|---|---|
+| no dueño 1366×768 | 189,5 | 571,5, entra | 78,5 | 1 | entero 340/340 | 133,5 → 475,5 de 570 |
+| no dueño 390×844 | 230 | 507,1, entra | **123,5** | 1 | entero 247/247 | 166,5 → 403,6 de 505 |
+| dueño 1366×768 | 443,5 | 614,4, scrollea 824/612 | 78,5 | 1 | entero 330/330 | 133,5 → 475,5 de 612 |
+| dueño 390×844 | 554,5, entra | 675,2, scrollea 890/673 | **184** (123,5 cerrada) | 2 | entero 237/237 | 227 → 464,1 de 673 |
+
+- **La caja de la letra entera ya quedaba a la vista al abrirla, en los cuatro casos** (va justo debajo de la
+  cabecera y las stats van después): el alto de `.tc-letra-texto` no se tocó.
+- 🔴 **Con el dueño el modal SCROLLEA con la letra abierta**, a 1366 y a 390: la curva y las stats quedan debajo.
+  **Se acepta, a propósito** (no se achica la curva, no se pliegan las stats, no se mueve la letra); anotado en
+  `PENDIENTES.md` con los números.
+- **La cabecera**: hasta v=311 eran estilos inline. Pasó a clases (`.tc-cabecera`, `.tc-cabecera-texto`,
+  `.tc-titulo`, `.tc-botones`, `.tc-tapa`, `.tc-ir-album`, `.tc-cerrar`) con los MISMOS valores en el escritorio
+  (78,5 a 1366, dueño o no). Por debajo de **520 px** (el corte de `.tc-letra-texto`) es una grilla: el título al
+  lado de la tapa, «Ir al álbum» y ✕; el artista debajo, a todo lo que queda de ancho; la fila de botones debajo de
+  todo, a lo ancho del modal. La columna del texto se vuelve `display: contents`: **el orden del DOM no cambia**, ni
+  los botones ni sus textos.
+- ⚠️ Con el dueño a 390, al abrir la letra aparece la barra de scroll del modal, el ancho baja y la fila de botones
+  pasa a 2 renglones (la cabecera, de 123,5 a 184). En las capturas (`--hide-scrollbars`) no se ve: 123,5.
+- La regla `.modal { max-height: 92vh }` del móvil sigue perdiendo contra la base (80vh): no se tocó.
+
+Guardas: la sección M del banco `letras` mide los cuatro casos, cerrada y abierta, y afirma la caja de la letra a
+la vista (los cuatro), la cabecera a 390 (≤ 2 renglones de botones, el artista entero, < 247,5 px) y la de 1366 en
+78,5. Contra v=311 dio rojo en lo de 390; una copia sin la regla de 520 px, también. Capturas sembradas:
+`fonoteca-migracion/driver-capturas-ficha-2026-10-16.mjs`.
 
 **Costo**: ver la nota debajo de la tabla de «💰 Cuánto cuesta abrir cada vista». Abrir la ficha cuesta lo
 mismo que antes (0 a lrclib, 0 a Spotify más); tocar «Letra», 1 (2 con el reintento del 503); la segunda vez, 0.
@@ -1593,6 +1635,74 @@ el aviso a 3 s y no a 1 s; cerrar en vuelo sin escribir en el DOM; el modal a 13
 puertas vistas fallar en una copia (guardar ante un 503, sacar la verificación, pedir al abrir, no leer la
 caché). `letras-caso.html?foto=violeta|nohay|papel` es el instrumento de las capturas sembradas (conductor en
 `fonoteca-migracion/driver-capturas-letras-2026-10-16.mjs`).
+
+## 🏷️ Las etiquetas de género, permanentes (v=312)
+
+La vista de géneros (la tanda 61) necesita las etiquetas de TODOS los artistas del historial. Hasta v=311 vivían en
+**un blob de `localStorage`**, `lastfm_artist_tags_cache` (`{ [artista en minúsculas]: { tags: [{name, count}], at } }`),
+y `getCachedTags()` las daba por inexistentes **pasados 30 días** (`TAGS_CACHE_TTL_MS`, al leer: las vencidas seguían
+en el blob). Lo de hace un mes se volvía a pedir y una vista de 2.000 artistas no terminaba nunca de estar completa.
+
+| archivo | qué | probado en |
+|---|---|---|
+| `util/generos-artista.js` | PURO (sin imports): la clave, la mezcla (`mezclarEtiquetas`), la decisión (`decidirEtiquetas`) y el almacén con la IndexedDB, el blob y el reloj inyectados (`crearAlmacenGeneros`) | `tests/generos-artista.test.mjs` |
+| `api/lastfm.js` | arma el almacén con `idb.js` y el blob; `cargarEtiquetas(uid)`, `getCachedTags`, `setCachedTags`, `mergeCachedTags`, `contarEtiquetasGuardadas`, `exportarEtiquetas`, `importarEtiquetas` | ídem (con `idb.js` doblado) |
+| `features/by-genre.js`, `features/listened.js`, `api.js` | cargan el `Map` y leen de él (nadie lee el blob crudo) | el banco `tests/banco/generos-cache.html` (en `prepush`, el decimoctavo) |
+
+- **La clave**: IndexedDB, **una por artista**, `generos_artista_v1_<uid>_<nombre en minúsculas>`. El uid va en la
+  clave (la lista de artistas es dato de escucha: la misma razón que `mapa_artista_v1_`) **y dentro del valor**
+  («abc» es prefijo de «abc_x»: al leer el rango de «abc» aparecen los de «abc_x» y se descartan por el uid). El
+  nombre es `toLowerCase()` **tal cual**, sin normalizar más: la clave que ya escribió el blob y la que leen todos.
+  **Sin caducidad.** En `CONSERVAR_PREFIJOS`, y `LO_QUE_SE_CONSERVA` suma «las etiquetas de género que ya buscaste».
+  El cambio de usuario no las borra (van por uid). El «Reset + Login» (`localStorage.clear()`) ya no se las lleva.
+- 🔴 **Se guarda lo que contestó CADA fuente, por separado, y se decide al leer** (el molde del mapa):
+  `{ uid, nombre, fuentes: { lastfm, musicbrainz, statsfm, migrado } }`, cada una `null` (no se pidió) o
+  `{ tags: [{name, count}], fecha }` (`tags: []` = «pregunté y no hay»). `getCachedTags` devuelve la mezcla de las
+  fuentes en el orden en que se escribieron (por `fecha`; a igualdad, `migrado`, `lastfm`, `musicbrainz`,
+  `statsfm`), o `null` si ninguna contestó.
+- **Una sola función de mezcla**: la de `mergeCachedTags` de v=311, sin cambiar una coma, sacada a
+  `mezclarEtiquetas` (minúsculas, una vez cada nombre, gana el `count` mayor, uno nuevo sin `count` vale 100). La
+  importa `lastfm.js`; no hay una segunda copia (v=219). El test lo afirma de conservación: las mismas mezclas dan
+  lo mismo que en v=311.
+- ⚠️ **Cada fuente guarda su ÚLTIMA respuesta.** Volver a pedirle a Last.fm reemplaza lo de Last.fm y nada más
+  (hasta v=311 `setCachedTags` pisaba la entrada entera, lo de MusicBrainz y stats.fm incluido); dos
+  sincronizaciones de stats.fm ya no se suman, la segunda reemplaza. Las firmas no cambiaron: `setCachedTags` y
+  `mergeCachedTags` suman un **tercer argumento opcional**, la fuente (sin él, Last.fm y stats.fm, que eran quienes
+  las llamaban así); los dos de MusicBrainz de `by-genre.js` la pasan.
+- **El `Map` en memoria**: los lectores siguen siendo sincrónicos. `cargarEtiquetas(uid)` trae **una vez** todo el
+  prefijo del uid con `idbEntriesEnRango` (no `idbEntriesByPrefix`, que recorre la base entera). La llaman
+  `renderStartScreen()` de `#genre`, `loadAlbums()` de `#listened` y, por las suyas, `exportarEtiquetas` /
+  `importarEtiquetas`. Una escritura cambia el `Map` al instante y va a IndexedDB; **si la escritura falla, el `Map`
+  vuelve a lo que había** (solo si nadie escribió encima mientras tanto) y se avisa por consola.
+- **La migración del blob, sin perder nada**: la primera vez, se lee el blob y CADA entrada —**también las de más de
+  30 días**— se escribe como registro con `fuentes.migrado = { tags, fecha: at }` (el blob no dice de qué fuente vino
+  cada etiqueta: no se inventa). **El blob NO se borra** (si hay que volver atrás, sigue ahí). Todo va en **una sola
+  transacción** (`idbSetVarios`, nueva en `idb.js`) junto con la marca `generos_artista_migrado_v1`
+  (`{ uid, fecha, entradas }`, también en `CONSERVAR_CLAVES`). **La marca decide**, no que falten claves: una
+  migración que falló no escribió nada y se reintenta en la carga siguiente; una que salió no se repite, aunque el
+  usuario no tuviera ninguna etiqueta. ⚠️ **La marca es una por navegador**: con dos usuarios, el blob va al primero
+  que abre `#genre` o `#listened` (no hay forma de saber de quién era; anotado en `PENDIENTES.md`).
+- **Exportar e importar, el formato de siempre**: `tags.entries` = `{ nombre: { tags, at } }` con `tags` = la
+  decisión y `at` = la fecha más nueva de sus fuentes, así un archivo de v=312 se importa en v=311 y al revés.
+  `importAllData` escribe lo importado como `fuentes.migrado` (todo, también lo vencido), en una transacción.
+  `exportAllData` sin uid sale sin etiquetas (y lo avisa). `importTagsCache` de `lastfm.js` **no lo usa nadie**
+  (grep del 16/10) y se dejó como estaba: es lo único que todavía escribe el blob.
+- ⚠️ **El `[]` de MusicBrainz ahora es para siempre.** `api/musicbrainz.js` busca con `limit=1` a ciegas y guarda
+  `[]` cuando no encuentra al artista; antes caducaba a los 30 días, ahora no. Como va por fuente, una tanda futura
+  puede volver a pedirle solo a MusicBrainz. Anotado en `PENDIENTES.md`. El `count >= 5` de Last.fm tampoco se tocó.
+- **El costo: `#genre` pasó de 0 a 1 `/me`** al abrirse (su `getCurrentUserId()` estaba solo en `handleExport()`);
+  medido en el banco. `#listened` ya pagaba el suyo (el de `isOwner()`, memoizado): **no suma** (leído del código).
+  **0 peticiones nuevas** a Last.fm, MusicBrainz y stats.fm: qué se pide, cuándo y a qué ritmo no cambió.
+
+🔴 **Para la tanda 61: «el universo de la vista de géneros son los artistas del HISTORIAL (`universo()` de
+`mapa-paises.js`, ≥ 10 min), no los de los me gusta, que es lo que recorre `#genre` hoy».**
+
+Guardas: `tests/generos-artista.test.mjs` (lo vencido se lee —rojo contra v=311—, la mezcla conservada, las fuentes
+separadas, la migración, el uid, exportar/importar, la escritura que falla y la lectura estática) y el banco
+`generos-cache` (A: abrir con un blob de hace 40 días → 0 a los terceros, cuenta como cacheado y la clave nueva está;
+B: «Limpiar caché» la conserva; C: recargar sin el blob da lo mismo; D: abrir = 2 `/me` y nada más). Las cuatro
+puertas vistas fallar en una copia: el TTL de vuelta, sin el prefijo en `CONSERVAR_PREFIJOS`, migrar solo lo
+fresco, la clave sin uid.
 
 ## ⛔ Cada despliegue, su propio `?v=` — dos contenidos no pueden compartir versión
 Pisado el 2026-09-03. El arreglo del cambio de variante salió como un **segundo
@@ -3271,7 +3381,8 @@ fila sobrevivió así desde que se armó la tabla.
 | `#byartist` | **0** | **0** | — | — | leída del código · **`/me` repasado el 2026-10-08**: su `render()` no llega a `getCurrentUserId()` |
 | `#wthree` | **45** `/playlists/{id}/items` | **~15** | snapshot + págs. de «w three» + **la playlist de ocultos entera** | pistas de la playlist **y nº de ocultos** | **medida en vivo el 2026-10-04** |
 | ↳ y el código lo explica | 1 + ceil(W/100) **+ 2 + ceil(H/100)** | ídem | `31` de «w three» + **14 de ocultos** = los 45 medidos | ídem | leída del código |
-| `#genre` | **0** | **0** | — (stats.fm no es Spotify) | — | ✅ **confirmada el 2026-10-08**: su `getCurrentUserId()` está en `handleExport()` (`:252`), que cuelga de un botón |
+| `#genre` | **1 `/me`** (+1 del arranque = **2**) | ídem | `renderStartScreen()` → `cargarEtiquetas(await getCurrentUserId())` (v=312: las etiquetas viven en IndexedDB por usuario) | **fijo** | **medida en el banco el 2026-10-16** (`tests/banco/generos-cache.html`, Spotify, Last.fm, MusicBrainz y stats.fm simulados): abrir = 2 `GET /me` (el del arranque y el de la vista) y nada más; contra el `src/` de v=311, 1. **0** a los tres terceros. En vivo, no |
+| ↳ lo que decía antes: **0/0**, «confirmada el 2026-10-08: su `getCurrentUserId()` está en `handleExport()` (`:252`), que cuelga de un botón» | | | era cierto hasta v=311 | | |
 | **Descubrir** | | | | | |
 | `#similar` | **0** | **0** | — (la búsqueda es un acto explícito) | — | ✅ **confirmada el 2026-10-08**: `artistasOcultos.ready()` está en `pickSourceArtist` (`:177`, declarada en `:161`), que cuelga de un clic — no de `render()` |
 | ↳ y SIGUE en 0 con ocultar artistas (v=276) | **0** | **0** | el `ready()` del almacén de artistas va dentro de `pickSourceArtist`, no de `render()` | — | leída del código |

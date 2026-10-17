@@ -48,7 +48,7 @@ if npm test --silent 2>&1 | tail -4 | sed 's/^/      /'; [ "${PIPESTATUS[0]}" -e
 # `mosaico` y `toasts` entraron en v=273:
 # estaban en rojo desde antes del 04/10 y justamente por no estar acá nadie los
 # miraba, igual que le había pasado a `barra` entre v=241 y v=261.
-echo "2b. bancos (barra · pausa-search · toasts · mosaico · novedades · escrituras · ocultar-artista ×3 · covers-orden · calendario · import-guarda · ocultos-cache · mapa · puertas · cuota · letras)"
+echo "2b. bancos (barra · pausa-search · toasts · mosaico · novedades · escrituras · ocultar-artista ×3 · covers-orden · calendario · import-guarda · ocultos-cache · mapa · puertas · cuota · letras · generos-cache)"
 # Los dos de `ocultar-artista` entraron en v=276: las TRES vistas que ocultan
 # artistas, reales, contra una Spotify simulada. Es el único sitio donde se puede
 # probar ocultar sin escribir en la cuenta de Ian, y el de `-disco` es el que
@@ -85,7 +85,12 @@ echo "2b. bancos (barra · pausa-search · toasts · mosaico · novedades · esc
 # un lrclib SIMULADO (nada sale a lrclib.net): abrir la ficha no pide nada; tocar «Letra», 1 petición y 0 la segunda
 # vez; el 404 se guarda; el 503 reintenta una vez y no guarda nada; otro artista no se muestra; el aviso de duración;
 # cerrar con la respuesta en vuelo no escribe en el DOM; y el modal con 60 renglones entra a 1366×768 y a 390×844.
-for B in barra pausa-search toasts mosaico novedades escrituras ocultar-artista ocultar-artista-disco ocultar-artista-novedades covers-orden calendario import-guarda ocultos-cache mapa puertas cuota letras; do
+# (v=312 suma a `letras` la ficha del DUEÑO y la cabecera a 390 px.)
+# `generos-cache` entró en v=312: las etiquetas de género en IndexedDB, por usuario y sin caducidad, en la app ENTERA
+# contra la Spotify simulada y Last.fm, MusicBrainz y stats.fm SIMULADOS: abrir #genre con el blob viejo no pide nada a
+# los terceros y migra también lo de hace 40 días; «Limpiar caché» lo conserva; recargar sin el blob da lo mismo; abrir
+# cuesta 2 `/me` (el del arranque y el de la vista) y nada más.
+for B in barra pausa-search toasts mosaico novedades escrituras ocultar-artista ocultar-artista-disco ocultar-artista-novedades covers-orden calendario import-guarda ocultos-cache mapa puertas cuota letras generos-cache; do
   if node scripts/correr-banco.mjs "$B" 2>&1 | sed 's/^/      /'; [ "${PIPESTATUS[0]}" -eq 0 ]; then
     ok "banco $B en verde"
   else

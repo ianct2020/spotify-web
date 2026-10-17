@@ -20,9 +20,14 @@
 // conductor externo y SIN reloj virtual) y `?medir=1`: usan un lrclib local
 // (`window.__lrcLocal`), abren la ficha del tema de 60 renglones (o el del 404),
 // tocan «Letra» y marcan `data-foto="listo"`.
+//
+// Modo `?uid=owner` (tanda 60): `/me` contesta `HISTORY_OWNER_ID` y se siembra en las
+// claves del dueño (`OWNER_KEYS.plays` y `.detail`) el historial INVENTADO de
+// `historialDuenio()`, así la ficha pinta el cuerpo del dueño (números, fechas y curva).
+// Se combina con los demás (`?foto=violeta&uid=owner`, `?medir=1&uid=owner`).
 
 import { instalarRedSimulada, esperarReal, anclar } from '/banco/simulado.mjs';
-import { likesInventados, crearLrclib, TEMAS, pedidoDe } from '/banco/letras-datos.mjs';
+import { likesInventados, crearLrclib, TEMAS, pedidoDe, historialDuenio } from '/banco/letras-datos.mjs';
 
 const q = new URLSearchParams(location.search);
 const MARCO = q.get('marco') || 'x';
@@ -36,7 +41,9 @@ window.__avisos = [];
 const avisoOriginal = console.warn.bind(console);
 console.warn = (...a) => { window.__avisos.push(a.map(String).join(' ').slice(0, 300)); avisoOriginal(...a); };
 
-const UID = 'usuarioDelBancoLetras';
+const DUENIO = q.get('uid') === 'owner';
+const { HISTORY_OWNER_ID } = await import('/js/features/history-data.js');
+const UID = DUENIO ? HISTORY_OWNER_ID : 'usuarioDelBancoLetras';
 const sim = instalarRedSimulada();
 window.__sim = sim;
 sim.ruta('GET', /^\/me$/, () => ({ id: UID, display_name: 'Banco' }));
@@ -66,6 +73,27 @@ window.fetch = (entrada, opciones = {}) => {
 
 const { idbSetCached } = await import('/js/idb.js');
 await anclar(idbSetCached('all_liked_tracks', likesInventados(), null));
+if (DUENIO) {
+  const { OWNER_KEYS } = await import('/js/history-keys.js');
+  const { plays, detail } = historialDuenio();
+  await anclar(idbSetCached(OWNER_KEYS.plays, plays, 100 * 365 * 24 * 60));
+  await anclar(idbSetCached(OWNER_KEYS.detail, detail, 100 * 365 * 24 * 60));
+  // Chart.js lo carga `index.html` desde jsDelivr y este marco no lo trae (ni sale a la red):
+  // un `Chart` de mentira que llena la caja de 200 px de `.chart-box` con barras planas. El
+  // alto lo pone la caja, no el gráfico, así que el modal mide lo mismo que con el de verdad.
+  window.Chart = class {
+    constructor(canvas, cfg) {
+      const caja = canvas.parentElement.getBoundingClientRect();
+      canvas.width = Math.round(caja.width); canvas.height = Math.round(caja.height);
+      const ctx = canvas.getContext('2d'), datos = cfg.data.datasets[0].data;
+      const max = Math.max(1, ...datos), w = canvas.width / datos.length;
+      ctx.fillStyle = cfg.data.datasets[0].backgroundColor;
+      datos.forEach((n, i) => { const alto = (canvas.height - 20) * n / max; ctx.fillRect(i * w + 1, canvas.height - 10 - alto, Math.max(1, w - 2), alto); });
+    }
+    destroy() {}
+    resize() {}
+  };
+}
 
 if (q.get('tema') === 'papel') {
   // El preset «Papel», escrito como lo escribe el panel de paleta: los OCHO colores, por usuario.

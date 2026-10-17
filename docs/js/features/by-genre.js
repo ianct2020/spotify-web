@@ -1,14 +1,14 @@
-import { getAllLikedTracks, createPlaylist, addTracksToPlaylist, invalidatePlaylistsCache, exportAllData, importAllData, getCurrentUserId, getBestAvailableLikes } from '../api.js?v=311';
-import { hasKey, setKey, getArtistTopTags, getCachedTags, setCachedTags, mergeCachedTags } from '../api/lastfm.js?v=311';
-import * as statsfm from '../api/statsfm.js?v=311';
-import { getGenresForArtist as mbGetGenres } from '../api/musicbrainz.js?v=311';
-import { showProgress, hideProgress, progressController, isCancelled, promptPlaylistName, alertModal, confirmModal, escapeHtml, pageHeader } from '../ui/components.js?v=311';
-import { showToast } from '../ui/toast.js?v=311';
-import { openModal, closeTop } from '../ui/modal-stack.js?v=311';
-import { bucketFor } from '../util/genre-reason.js?v=311';
-import { openGenreAudit } from './genre-detail.js?v=311';
-import { prefKey, migratePrefKey } from '../storage.js?v=311';
-import { pedirYCachear, CUALQUIER_RESPUESTA } from '../util/cache-solo-exitos.js?v=311';
+import { getAllLikedTracks, createPlaylist, addTracksToPlaylist, invalidatePlaylistsCache, exportAllData, importAllData, getCurrentUserId, getBestAvailableLikes } from '../api.js?v=312';
+import { hasKey, setKey, getArtistTopTags, getCachedTags, setCachedTags, mergeCachedTags, cargarEtiquetas, contarEtiquetasGuardadas } from '../api/lastfm.js?v=312';
+import * as statsfm from '../api/statsfm.js?v=312';
+import { getGenresForArtist as mbGetGenres } from '../api/musicbrainz.js?v=312';
+import { showProgress, hideProgress, progressController, isCancelled, promptPlaylistName, alertModal, confirmModal, escapeHtml, pageHeader } from '../ui/components.js?v=312';
+import { showToast } from '../ui/toast.js?v=312';
+import { openModal, closeTop } from '../ui/modal-stack.js?v=312';
+import { bucketFor } from '../util/genre-reason.js?v=312';
+import { openGenreAudit } from './genre-detail.js?v=312';
+import { prefKey, migratePrefKey } from '../storage.js?v=312';
+import { pedirYCachear, CUALQUIER_RESPUESTA } from '../util/cache-solo-exitos.js?v=312';
 
 const NOISE_TAGS = new Set([
   'seen live', 'favorites', 'favorite', 'favourite', 'favourites',
@@ -116,7 +116,15 @@ async function renderStartScreen() {
   const content = document.getElementById('genre-content');
   content.innerHTML = `<div class="empty-state"><div class="spinner spinner-lg"></div><div style="margin-top:16px">Leyendo caché local...</div></div>`;
 
-  const cachedTagsCount = Object.keys(JSON.parse(localStorage.getItem('lastfm_artist_tags_cache') || '{}')).length;
+  // v=312: las etiquetas viven en IndexedDB, por usuario y sin caducidad; se traen
+  // una vez a memoria y de ahí en adelante se leen sincrónicas. Cuesta el `/me` de
+  // `getCurrentUserId()` (memoizado): abrir `#genre` pasó de 0 a 1 `/me`.
+  try {
+    await cargarEtiquetas(await getCurrentUserId());
+  } catch (e) {
+    console.warn('[genre] no se pudieron leer las etiquetas guardadas:', e?.message || e);
+  }
+  const cachedTagsCount = contarEtiquetasGuardadas();
   const { items: cachedLikes } = await getBestAvailableLikes();
   const hasLikes = cachedLikes.length > 0;
 
@@ -169,21 +177,15 @@ function renderKeySetup() {
   };
 }
 
-// Cuántas entradas hay REALMENTE en el cache de tags, sin mirar el TTL.
+// Cuántos artistas tienen etiquetas guardadas, de cualquier fuente.
 //
-// Esto no es lo mismo que `cachedCount`, que cuenta los artistas de tus likes
-// cuyos tags siguen frescos (getCachedTags devuelve null pasados 30 días). El
-// botón «Exportar cache» estaba atado a ese número, y por eso quedaba
-// DESHABILITADO con 2.260 artistas guardados en localStorage: no había ninguno
-// vigente. Justo al revés de lo que uno quiere — el momento de bajar el backup
-// es antes de volver a pedir todo. `exportAllData` exporta las entradas crudas,
-// vencidas incluidas, así que el botón tiene que mirar esto.
+// Hasta v=311 esto contaba las claves del blob crudo, sin mirar el TTL, y no era lo
+// mismo que `cachedCount` (los artistas de tus likes con etiquetas frescas): el botón
+// «Exportar cache» estuvo atado a ese otro número y quedaba DESHABILITADO con 2.260
+// artistas guardados, ninguno vigente. Desde v=312 no hay TTL y los dos miden lo mismo
+// salvo que este cuenta a todos, no solo a los de tus likes.
 function entradasEnCacheDeTags() {
-  try {
-    return Object.keys(JSON.parse(localStorage.getItem('lastfm_artist_tags_cache') || '{}')).length;
-  } catch {
-    return 0;
-  }
+  return contarEtiquetasGuardadas();
 }
 
 async function start() {
@@ -318,10 +320,10 @@ async function handleMusicBrainz() {
       const r = await mbGetGenres(name);
       if (r.notFound || r.tags.length === 0) {
         notFound++;
-        setCachedTags(name, []);
+        setCachedTags(name, [], 'musicbrainz');
       } else {
         hits++;
-        mergeCachedTags(name, r.tags);
+        mergeCachedTags(name, r.tags, 'musicbrainz');
       }
     } catch (e) {
       errors++;
@@ -370,7 +372,7 @@ async function handleStatsfm() {
     for (const a of artists) {
       const tags = a.genres.map(g => ({ name: g, count: 100 }));
       if (tags.length === 0) { skipped++; continue; }
-      mergeCachedTags(a.name, tags);
+      mergeCachedTags(a.name, tags, 'statsfm');
       merged++;
     }
 
@@ -522,10 +524,11 @@ async function fetchAllTags(artistNames) {
 
   for (const name of artistNames) {
     // Un 429 o un corte de red NO se cachea (v=256). Antes el `catch` escribía
-    // `setCachedTags(name, [])`, y la caché de etiquetas tiene **30 días de
+    // `setCachedTags(name, [])`, y la caché de etiquetas tenía **30 días de
     // TTL**: un corte a mitad del barrido dejaba a todo el resto de los
     // artistas en «Sin género» por un mes, sin forma de distinguirlo de un
-    // artista que de verdad no tiene etiquetas.
+    // artista que de verdad no tiene etiquetas. Desde v=312 no caduca: sería
+    // para siempre.
     //
     // Una lista VACÍA sí se cachea, y es correcto: `getArtistTopTags` tira si
     // Last.fm no pudo contestar (`lastfmFetch` mira `data.error`), así que un
@@ -534,7 +537,7 @@ async function fetchAllTags(artistNames) {
     await pedirYCachear({
       pedir: () => getArtistTopTags(name),
       esResultado: CUALQUIER_RESPUESTA,
-      guardar: tags => setCachedTags(name, tags),
+      guardar: tags => setCachedTags(name, tags, 'lastfm'),
       alFallar: e => {
         errors++;
         console.warn(`[genre] etiquetas de «${name}»:`, e.message);

@@ -48,6 +48,12 @@ async function idbSet(key, value) {
   return tx('readwrite', store => reqPromise(store.put(value, key)));
 }
 
+// Varias claves en UNA transacción: o se escriben todas o ninguna (v=312, la migración
+// de las etiquetas de género: un corte a mitad no puede dejar la mitad migrada).
+async function idbSetVarios(pares) {
+  return tx('readwrite', store => { for (const [k, v] of pares) store.put(v, k); });
+}
+
 async function idbDel(key) {
   return tx('readwrite', store => reqPromise(store.delete(key)));
 }
@@ -214,7 +220,7 @@ async function idbEntriesEnRango(prefix) {
 
 export {
   idbEntriesByPrefix, idbEntriesEnRango,
-  idbGet, idbSet, idbDel,
+  idbGet, idbSet, idbSetVarios, idbDel,
   idbGetCached, idbGetCachedRaw, idbGetTimestamp, idbSetCached,
   idbAvailable, idbClearAll, idbDelByPrefix,
   idbAllKeys, clavesABorrar,

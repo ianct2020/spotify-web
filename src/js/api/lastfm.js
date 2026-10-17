@@ -1,4 +1,6 @@
 import { prefKey, migratePrefKey } from '../storage.js';
+import { idbGet, idbSet, idbSetVarios, idbEntriesEnRango } from '../idb.js';
+import { crearAlmacenGeneros, CLAVE_MIGRADO } from '../util/generos-artista.js';
 
 const LASTFM_KEY_STORAGE = 'lastfm_api_key';
 const LASTFM_USER_STORAGE = 'lastfm_username';
@@ -135,8 +137,17 @@ async function getUserTopArtists(username, period = '6month', limit = 30) {
   }));
 }
 
+// ── Las etiquetas de género por artista (v=312, tanda 60) ─────────────────────
+//
+// Hasta v=311: un blob en `localStorage` con TTL de 30 días al leer. Ahora: IndexedDB,
+// una clave por artista y por usuario, sin caducidad, lo que contestó cada fuente por
+// separado y la decisión al leer (ver `util/generos-artista.js`). Los lectores siguen
+// siendo sincrónicos: `cargarEtiquetas(uid)` trae una vez todo el prefijo del usuario
+// a un `Map` y `getCachedTags`/`setCachedTags`/`mergeCachedTags` trabajan sobre él.
+//
+// El blob viejo NO se borra (si hay que volver atrás, sigue ahí): se lee una sola vez,
+// para migrarlo, y nada más lo escribe salvo `importTagsCache` (que no usa nadie).
 const TAGS_CACHE_KEY = 'lastfm_artist_tags_cache';
-const TAGS_CACHE_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 
 function loadTagsCache() {
   try {
@@ -154,41 +165,51 @@ function saveTagsCache(cache) {
   }
 }
 
+const etiquetas = crearAlmacenGeneros({
+  leerRango: idbEntriesEnRango,
+  escribir: idbSet,
+  escribirVarios: idbSetVarios,
+  leerMarca: () => idbGet(CLAVE_MIGRADO),
+  leerBlob: loadTagsCache,
+});
+
+// Hay que llamarla (con el uid de `getCurrentUserId()`) antes de leer o escribir.
+// La segunda vez, con el mismo uid, no lee nada.
+function cargarEtiquetas(uid) {
+  return etiquetas.cargar(uid);
+}
+
 function getCachedTags(artistName) {
-  const cache = loadTagsCache();
-  const key = artistName.toLowerCase();
-  const entry = cache[key];
-  if (!entry) return null;
-  if (Date.now() - entry.at > TAGS_CACHE_TTL_MS) return null;
-  return entry.tags;
+  return etiquetas.leer(artistName);
 }
 
-function setCachedTags(artistName, tags) {
-  const cache = loadTagsCache();
-  cache[artistName.toLowerCase()] = { tags, at: Date.now() };
-  saveTagsCache(cache);
+// La fuente es el tercer argumento (v=312); sin él, Last.fm, que es quien llamaba a
+// esta función para guardar su respuesta entera. Devuelve la promesa de la escritura.
+function setCachedTags(artistName, tags, fuente = 'lastfm') {
+  return etiquetas.guardar(artistName, tags, fuente);
 }
 
-function mergeCachedTags(artistName, incomingTags) {
-  const cache = loadTagsCache();
-  const key = artistName.toLowerCase();
-  const existing = cache[key]?.tags || [];
-  const byName = new Map();
-  existing.forEach(t => {
-    if (t?.name) byName.set(t.name.toLowerCase(), { ...t, name: t.name.toLowerCase() });
-  });
-  incomingTags.forEach(t => {
-    if (!t?.name) return;
-    const name = t.name.toLowerCase();
-    const cur = byName.get(name);
-    if (!cur) {
-      byName.set(name, { name, count: t.count ?? 100 });
-    } else if ((t.count ?? 0) > (cur.count ?? 0)) {
-      byName.set(name, { ...cur, count: t.count });
-    }
-  });
-  cache[key] = { tags: [...byName.values()], at: Date.now() };
-  saveTagsCache(cache);
+// Hasta v=311 mezclaba DENTRO de la entrada; desde v=312 guarda lo que contestó la
+// fuente y la mezcla se hace al leer (`decidirEtiquetas`). Sin fuente, stats.fm, que
+// es quien la llama sin decir nada más.
+function mergeCachedTags(artistName, incomingTags, fuente = 'statsfm') {
+  return etiquetas.guardar(artistName, incomingTags, fuente);
+}
+
+// Cuántos artistas tienen etiquetas guardadas (alguna fuente contestó, aunque sea `[]`).
+function contarEtiquetasGuardadas() {
+  return etiquetas.contar();
+}
+
+// El `tags.entries` del archivo de `exportAllData`, con el formato de siempre.
+async function exportarEtiquetas(uid) {
+  await etiquetas.cargar(uid);
+  return etiquetas.exportar();
+}
+
+async function importarEtiquetas(uid, entries) {
+  await etiquetas.cargar(uid);
+  return etiquetas.importar(entries);
 }
 
 function importTagsCache(parsed, { mode = 'merge' } = {}) {
@@ -234,4 +255,8 @@ export {
   setCachedTags,
   mergeCachedTags,
   importTagsCache,
+  cargarEtiquetas,
+  contarEtiquetasGuardadas,
+  exportarEtiquetas,
+  importarEtiquetas,
 };

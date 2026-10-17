@@ -1,0 +1,115 @@
+<!doctype html><html lang="es"><head><meta charset="utf-8"><title>banco generos-cache — las etiquetas de género, permanentes</title>
+<style>html,body{margin:0;background:#111;color:#eee;font:13px system-ui}iframe{border:0;display:block}</style>
+</head><body>
+<pre id="progreso"></pre>
+<div id="marcos"></div>
+<script type="module">
+// ── Qué prueba este banco (v=312, tanda 60) ──────────────────────────────────
+//
+// `#genre` en la app ENTERA (`generos-cache-caso.html`, uno por iframe), contra la
+// Spotify simulada y Last.fm, MusicBrainz y stats.fm SIMULADOS (`parent.__terceros`
+// los cuenta). Artistas, temas y etiquetas INVENTADOS.
+//
+//   A. abrir `#genre` con el blob viejo sembrado (una entrada de hace 40 días y otra de
+//      ayer) → 0 peticiones a los tres terceros; «Ver mis géneros» cuenta a los DOS
+//      artistas como «ya cacheados» (hasta v=311, la de 40 días era «por analizar»), y
+//      la IndexedDB del perfil tiene `generos_artista_v1_<uid>_banda vieja inventada`;
+//   B. «Limpiar caché» conserva `generos_artista_v1_` (y la marca de la migración);
+//   C. recargar (otro iframe) SIN el blob (el banco lo quita para probar que se lee de
+//      IndexedDB: la app no lo borra) → 0 peticiones a los terceros y lo mismo en
+//      pantalla;
+//   D. abrir `#genre` cuesta en Spotify solo `/me` (el del arranque y el de la vista,
+//      contados); 0 rutas sin simular, 0 hosts externos fuera de los simulados (Google
+//      Fonts no pasa por `fetch`: va aparte), 0 escrituras, 0 errores.
+//
+// ⚠️ Todas las esperas van con `esperarReal` (ver PRESUPUESTO en `scripts/correr-banco.mjs`).
+
+import { esperarReal, anclar } from '/banco/simulado.mjs';
+import { fallar, listo } from '/banco/esperar.mjs';
+
+const afirmar = (c, msg) => { if (!c) throw new Error('BANCO: ' + msg); };
+const progreso = (t) => { document.getElementById('progreso').textContent = t; };
+const VUELTAS = 20000;
+window.__terceros = [];
+const ME_AL_ABRIR = 2;   // el del arranque (`testConnection`) y el de la vista (`getCurrentUserId`), medidos
+
+function abrirMarco(nombre, extra = '') {
+  const f = document.createElement('iframe');
+  f.width = 1351; f.height = 800;
+  f.src = `/banco/generos-cache-caso.html?marco=${nombre}${extra}`;
+  document.getElementById('marcos').appendChild(f);
+  return f;
+}
+const win = (f) => f.contentWindow;
+const $ = (f, s) => f.contentDocument?.querySelector(s);
+const texto = (el) => (el?.textContent || '').replace(/\s+/g, ' ').trim();
+const spotify = (f) => win(f).__sim.reg.llamadas.filter((l) => !/^https?:/.test(l.ruta)).map((l) => `${l.metodo} ${l.ruta}`);
+
+async function abrirGenre(f, que) {
+  await esperarReal(() => win(f)?.__listo, { que: `que arranque ${que}`, vueltas: VUELTAS });
+  for (let i = 0; i < 20; i++) await new Promise((r) => setTimeout(r, 25));
+  const alAbrir = { spotify: spotify(f), intro: texto($(f, '#genre-content .card p')) };
+  $(f, '#genre-begin-btn').click();
+  await esperarReal(() => $(f, '#genre-show-btn'), { que: `que «Ver mis géneros» pinte la cabecera (${que})`, vueltas: VUELTAS });
+  const estado = texto($(f, '#genre-content .card div > div > div:nth-child(2)'));
+  $(f, '#genre-show-btn').click();
+  await esperarReal(() => texto($(f, '#genre-results')).length > 0, { que: `que se pinten los géneros (${que})`, vueltas: VUELTAS });
+  return { ...alAbrir, estado, generos: texto($(f, '#genre-results')) };
+}
+const rango = (f, p) => anclar(win(f).__idb.idbEntriesEnRango(p));
+
+try {
+  // ── A. La primera apertura, con el blob viejo ─────────────────────────────
+  progreso('A. abrir con el blob viejo…');
+  const a = abrirMarco('a', '&sembrar=1');
+  const A = await abrirGenre(a, 'el marco A');
+  const uid = win(a).__UID;
+  afirmar(window.__terceros.length === 0, `A. 0 peticiones a Last.fm, MusicBrainz y stats.fm (hubo ${window.__terceros.length}: ${window.__terceros.join(' · ')})`);
+  afirmar(/^2 ya cacheados · 1 por analizar$/.test(A.estado), `A. «Ver mis géneros»: los dos artistas con etiquetas cuentan como cacheados, también el de hace 40 días («${A.estado}»)`);
+  const regsA = await rango(a, `generos_artista_v1_${uid}_`);
+  const vieja = regsA.find(([k]) => k === `generos_artista_v1_${uid}_banda vieja inventada`);
+  afirmar(vieja && vieja[1]?.uid === uid && vieja[1]?.fuentes?.migrado?.tags?.[0]?.name === 'shoegaze inventado', `A. la IndexedDB tiene la clave nueva del artista viejo (${regsA.map(([k]) => k).join(' · ')})`);
+  afirmar(regsA.length === 2, `A. y las dos migradas (${regsA.length})`);
+  afirmar(win(a).localStorage.getItem('lastfm_artist_tags_cache')?.includes('banda vieja inventada'), 'A. el blob viejo NO se borra');
+  afirmar(/shoegaze inventado/.test(A.generos) || /shoegaze/i.test(A.generos), `A. y el género del artista viejo sale en la lista («${A.generos.slice(0, 160)}»)`);
+
+  // ── D (primera mitad). Lo que cuesta abrir ────────────────────────────────
+  afirmar(A.spotify.length === ME_AL_ABRIR && A.spotify.every((x) => x === 'GET /me'), `D. abrir #genre: solo ${ME_AL_ABRIR} GET /me en Spotify (${A.spotify.join(' · ') || 'nada'})`);
+
+  // ── B. «Limpiar caché» ────────────────────────────────────────────────────
+  progreso('B. Limpiar caché…');
+  const marcaAntes = await anclar(win(a).__idb.idbGet('generos_artista_migrado_v1'));
+  $(a, '#refresh-all-btn').click();
+  await esperarReal(() => $(a, '#refresh-all-btn') && !$(a, '#refresh-all-btn').disabled && /Caché limpiada/.test(a.contentDocument.body.textContent), { que: 'que «Limpiar caché» termine', vueltas: VUELTAS });
+  const regsB = await rango(a, `generos_artista_v1_${uid}_`);
+  const marcaB = await anclar(win(a).__idb.idbGet('generos_artista_migrado_v1'));
+  afirmar(regsB.length === 2, `B. «Limpiar caché» conserva generos_artista_v1_ (${regsB.length} de 2)`);
+  afirmar(marcaAntes?.uid === uid && marcaB?.uid === uid, `B. y la marca de la migración (${JSON.stringify(marcaB)})`);
+  const errA = win(a).__errores.slice();
+  const sA = win(a).__sim.reg;
+
+  // ── C. Recargar, sin el blob ──────────────────────────────────────────────
+  progreso('C. recargar…');
+  win(a).localStorage.removeItem('lastfm_artist_tags_cache');
+  a.remove();
+  const c = abrirMarco('c');
+  const C = await abrirGenre(c, 'el marco C');
+  afirmar(window.__terceros.length === 0, `C. 0 peticiones a los terceros (hubo ${window.__terceros.length})`);
+  afirmar(C.estado === A.estado && C.intro === A.intro && C.generos === A.generos, `C. lo mismo en pantalla («${C.estado}» / «${A.estado}»; intro «${C.intro}»)`);
+  afirmar(C.spotify.length === ME_AL_ABRIR && C.spotify.every((x) => x === 'GET /me'), `D. abrir otra vez: solo ${ME_AL_ABRIR} GET /me (${C.spotify.join(' · ')})`);
+
+  // ── D. Sin fugas ──────────────────────────────────────────────────────────
+  for (const [nombre, s, err] of [['A', sA, errA], ['C', win(c).__sim.reg, win(c).__errores]]) {
+    afirmar(s.escrituras.length === 0, `D. ${nombre}: 0 escrituras en la cuenta (${s.escrituras.map((x) => x.metodo + ' ' + x.ruta).join(' · ')})`);
+    afirmar(s.desconocidas.length === 0, `D. ${nombre}: ninguna ruta sin simular (${s.desconocidas.join(' · ')})`);
+    afirmar(s.externas.length === 0, `D. ${nombre}: ningún host externo fuera de los simulados (${s.externas.join(' · ')})`);
+    afirmar(err.length === 0, `D. ${nombre}: 0 errores (${err.join(' · ')})`);
+  }
+
+  const resumen = `ok · A: terceros=0 · «${A.estado}» · ${regsA.length} claves generos_artista_v1_ · blob intacto · B: limpiar conserva ${regsB.length} + la marca · ` +
+    `C: terceros=0 · igual en pantalla · D: abrir=${A.spotify.length} GET /me (A) y ${C.spotify.length} (C) · escrituras=0 · externos=0 · errores=0 · reloj virtual=${Math.round(performance.now())} ms`;
+  document.documentElement.setAttribute('data-resumen', resumen);
+  progreso(resumen);
+  listo(resumen);
+} catch (e) { fallar(e); }
+</script></body></html>

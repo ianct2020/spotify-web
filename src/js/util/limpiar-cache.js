@@ -26,6 +26,12 @@
 //     (`mapa_artista_v1_<uid>_<nombre>`) y por área (`mapa_area_v1_<id>`), los
 //     dos por prefijo. Escanear los ~2.300 artistas de Ian es más de una hora y
 //     media a una petición por 1,2 s: «Limpiar caché» no puede llevárselo.
+//   - Las etiquetas de género por artista (v=312): lo que contestaron Last.fm,
+//     MusicBrainz y stats.fm (`generos_artista_v1_<uid>_<nombre>`, por prefijo) y la
+//     marca de que el blob viejo de `localStorage` ya se migró
+//     (`generos_artista_migrado_v1`, por nombre). Volver a pedirlas son miles de
+//     peticiones a terceros; y sin la marca, un segundo usuario del navegador se
+//     llevaría el blob del primero.
 //
 // Si agregás otro camino que borre IndexedDB en masa, usá esta misma lista.
 
@@ -33,9 +39,10 @@ import { DISCO_BASE_PREFIX } from './disco-base.js';
 import { MOSAICO_COLORES_KEY } from './cover-color.js';
 import { LOCAL_HISTORY_PREFIX } from '../history-keys.js';
 import { PREFIJO_ARTISTA as MAPA_ARTISTA_PREFIX, PREFIJO_AREA as MAPA_AREA_PREFIX } from './mapa-paises.js';
+import { PREFIJO_GENEROS, CLAVE_MIGRADO as GENEROS_MIGRADO_KEY } from './generos-artista.js';
 
-export const CONSERVAR_CLAVES = ['all_liked_tracks', 'all_liked_tracks_partial', MOSAICO_COLORES_KEY];
-export const CONSERVAR_PREFIJOS = [DISCO_BASE_PREFIX, LOCAL_HISTORY_PREFIX, MAPA_ARTISTA_PREFIX, MAPA_AREA_PREFIX];
+export const CONSERVAR_CLAVES = ['all_liked_tracks', 'all_liked_tracks_partial', MOSAICO_COLORES_KEY, GENEROS_MIGRADO_KEY];
+export const CONSERVAR_PREFIJOS = [DISCO_BASE_PREFIX, LOCAL_HISTORY_PREFIX, MAPA_ARTISTA_PREFIX, MAPA_AREA_PREFIX, PREFIJO_GENEROS];
 
 // Lo que se conserva, en castellano de España, para el title del botón y el
 // toast de `app.js` (v=301): las dos frases salen de acá y de ningún otro lado.
@@ -43,4 +50,4 @@ export const CONSERVAR_PREFIJOS = [DISCO_BASE_PREFIX, LOCAL_HISTORY_PREFIX, MAPA
 // el mismo commit (y al revés): si no coinciden, el copy vuelve a mentir, que es
 // lo que pasó con el title viejo («Vacía todos los caches locales (likes,
 // playlists, tags, historial)»), falso desde v=229.
-export const LO_QUE_SE_CONSERVA = 'tus me gusta, la base de discografías, la de colores del mosaico, el historial que importaste y los países que ya buscaste para el mapa';
+export const LO_QUE_SE_CONSERVA = 'tus me gusta, la base de discografías, la de colores del mosaico, el historial que importaste, los países que ya buscaste para el mapa y las etiquetas de género que ya buscaste';

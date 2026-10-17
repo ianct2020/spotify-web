@@ -96,14 +96,14 @@ async function openTrackCard(t) {
     onReveal: onModalReveal,
     html: `
     <div class="modal" style="max-width:640px;width:min(640px,92vw)">
-      <div style="display:flex;gap:14px;align-items:flex-start;margin-bottom:14px">
-        <div id="tc-cover" title="Ver ficha del álbum" style="width:64px;height:64px;border-radius:8px;background:var(--color-elevated);display:flex;align-items:center;justify-content:center;font-size:26px;color:var(--color-text-muted);flex-shrink:0;overflow:hidden;cursor:pointer">
+      <div class="tc-cabecera">
+        <div id="tc-cover" class="tc-tapa" title="Ver ficha del álbum" style="width:64px;height:64px;border-radius:8px;background:var(--color-elevated);display:flex;align-items:center;justify-content:center;font-size:26px;color:var(--color-text-muted);flex-shrink:0;overflow:hidden;cursor:pointer">
           ${t.img
             ? `<img src="${t.img}" alt="" style="width:100%;height:100%;object-fit:cover">`
             : `♪`}
         </div>
-        <div style="flex:1;min-width:0">
-          <h3 style="margin:0 0 2px;font-size:18px;line-height:1.25">${escapeHtml(t.name || '(sin nombre)')}</h3>
+        <div class="tc-cabecera-texto">
+          <h3 class="tc-titulo" style="margin:0 0 2px;font-size:18px;line-height:1.25">${escapeHtml(t.name || '(sin nombre)')}</h3>
           <div class="tc-artists" style="color:var(--color-text-secondary);font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">
             ${artistas.length
               ? artistas.map((n, i) =>
@@ -111,14 +111,14 @@ async function openTrackCard(t) {
               ).join('')
               : ''}${t.album ? ` · ${escapeHtml(t.album)}` : ''}
           </div>
-          <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px">
+          <div class="tc-botones">
             <button class="btn btn-secondary btn-sm" id="tc-preview">▶ Preview</button>
             <a class="btn btn-secondary btn-sm" href="https://open.spotify.com/track/${t.id}" target="_blank" rel="noopener">Abrir en Spotify ↗</a>
             ${botonLetraHtml()}
           </div>
         </div>
-        <button class="btn btn-secondary btn-sm" id="tc-go-album" title="Abrir la ficha del álbum" style="flex-shrink:0">Ir al álbum</button>
-        <button class="btn btn-secondary btn-sm" data-close-modal title="Cerrar" style="flex-shrink:0">✕</button>
+        <button class="btn btn-secondary btn-sm tc-ir-album" id="tc-go-album" title="Abrir la ficha del álbum" style="flex-shrink:0">Ir al álbum</button>
+        <button class="btn btn-secondary btn-sm tc-cerrar" data-close-modal title="Cerrar" style="flex-shrink:0">✕</button>
       </div>
       ${bloqueLetraHtml()}
       <div id="tc-body">${skelCardBody({ tiles: 4, lines: 0 })}${skelBox({ w: '100%', h: 160, radius: 10 })}</div>

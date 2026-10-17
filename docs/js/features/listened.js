@@ -1,14 +1,15 @@
-import { getAllPlaylistItems, getBestAvailableLikes, addTracksToPlaylist, removeTracksFromPlaylist, getAllUserPlaylists } from '../api.js?v=311';
-import { esEPoAlbum } from '../util/release-size.js?v=311';
-import { idbGetCached, idbSetCached, idbGetTimestamp } from '../idb.js?v=311';
-import { escapeHtml, confirmModal, pageHeader } from '../ui/components.js?v=311';
-import { showToast } from '../ui/toast.js?v=311';
-import { isJunkTrack } from '../util/junk.js?v=311';
-import { openModal, closeTop } from '../ui/modal-stack.js?v=311';
-import { getListenedPlaylist, groupItemsByAlbum, openListenedAlbumsPicker, albumKey, baseName, norm } from './listened-shared.js?v=311';
-import { openAlbumCard } from './album-card.js?v=311';
-import { prefKey, migratePrefKey } from '../storage.js?v=311';
-import { pedirYCachear, SOLO_CON_CONTENIDO } from '../util/cache-solo-exitos.js?v=311';
+import { getAllPlaylistItems, getBestAvailableLikes, addTracksToPlaylist, removeTracksFromPlaylist, getAllUserPlaylists, getCurrentUserId } from '../api.js?v=312';
+import { cargarEtiquetas, getCachedTags } from '../api/lastfm.js?v=312';
+import { esEPoAlbum } from '../util/release-size.js?v=312';
+import { idbGetCached, idbSetCached, idbGetTimestamp } from '../idb.js?v=312';
+import { escapeHtml, confirmModal, pageHeader } from '../ui/components.js?v=312';
+import { showToast } from '../ui/toast.js?v=312';
+import { isJunkTrack } from '../util/junk.js?v=312';
+import { openModal, closeTop } from '../ui/modal-stack.js?v=312';
+import { getListenedPlaylist, groupItemsByAlbum, openListenedAlbumsPicker, albumKey, baseName, norm } from './listened-shared.js?v=312';
+import { openAlbumCard } from './album-card.js?v=312';
+import { prefKey, migratePrefKey } from '../storage.js?v=312';
+import { pedirYCachear, SOLO_CON_CONTENIDO } from '../util/cache-solo-exitos.js?v=312';
 
 const SORT_KEY = 'listened_sort_mode';
 const VALID_SORTS = new Set(['recent', 'year-desc', 'year-asc', 'artist-asc', 'likes-desc', 'name-asc']);
@@ -67,7 +68,7 @@ function dismissHistory(key) {
 // Solo lo bajamos si el user logueado es el dueño (Ian): son sus datos personales.
 async function loadHistoryData() {
   if (historyAlbums) return historyAlbums;
-  const { isOwner } = await import('./history-data.js?v=311');
+  const { isOwner } = await import('./history-data.js?v=312');
   if (!(await isOwner())) { historyAlbums = []; return historyAlbums; }
   try {
     const cached = await idbGetCached(HISTORY_CACHE_KEY);
@@ -133,15 +134,12 @@ function computeHistoryUnregistered(min = historyMin) {
 // Álbumes con MÁS de un track en la playlist (querés 1 track por álbum). Ordenados por cantidad.
 // Cuenta álbumes por género, usando el cache de tags Last.fm (llenado por la feature "Por género").
 // Para cada álbum tomamos el top tag del artista principal. Devuelve top N géneros con lista.
-function loadArtistTagsCache() {
-  try { return JSON.parse(localStorage.getItem('lastfm_artist_tags_cache') || '{}'); }
-  catch { return {}; }
-}
-
-function topTagOf(cache, artist) {
+// v=312: las etiquetas salen del `Map` de `api/lastfm.js` (las carga `loadAlbums()`
+// con `cargarEtiquetas`), no del blob crudo de `localStorage`. Este lector nunca miró
+// el TTL de 30 días, y ahora no hay TTL: lee lo mismo que leía.
+function topTagOf(artist) {
   if (!artist) return null;
-  const entry = cache[artist.toLowerCase()];
-  const tags = entry?.tags || [];
+  const tags = getCachedTags(artist) || [];
   if (!tags.length) return null;
   const sorted = [...tags].sort((a, b) => (b.count || 0) - (a.count || 0));
   const t = sorted[0];
@@ -150,11 +148,10 @@ function topTagOf(cache, artist) {
 }
 
 function computeGenreDistribution(topN = 15) {
-  const cache = loadArtistTagsCache();
   const buckets = new Map();
   let uncached = 0;
   for (const a of albums) {
-    const tag = topTagOf(cache, a.artist);
+    const tag = topTagOf(a.artist);
     if (!tag) { uncached++; continue; }
     if (!buckets.has(tag)) buckets.set(tag, []);
     buckets.get(tag).push(a);
@@ -253,6 +250,14 @@ async function loadAlbums({ force = false } = {}) {
   const content = document.getElementById('listened-content');
   const key = cacheKeyFor(playlistInfo.id);
   content.innerHTML = `<div class="empty-state"><div class="spinner spinner-lg"></div><div style="margin-top:16px">${force ? 'Actualizando' : 'Cargando'} "${escapeHtml(playlistInfo.name)}"...</div></div>`;
+
+  // Las etiquetas de género para «por género» (v=312). El `/me` es el mismo memo que
+  // ya paga `isOwner()` en esta vista: no suma. Si falla, el reparto sale sin géneros.
+  try {
+    await cargarEtiquetas(await getCurrentUserId());
+  } catch (e) {
+    console.warn('[listened] no se pudieron leer las etiquetas de género:', e?.message || e);
+  }
 
   try {
     let totalTracks;

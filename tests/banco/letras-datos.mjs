@@ -94,3 +94,24 @@ export function likesInventados() {
     },
   }));
 }
+
+// El historial del DUEÑO para la ficha (tanda 60, `letras-caso.html?uid=owner`), INVENTADO:
+// los totales y el detalle por mes de cada tema, con la forma que leen `loadTrackPlays()`
+// (`tracks[id] = [plays, segundos]`, más `albums`) y `loadTrackDetail()`
+// (`tracks[id] = { m, f, l, d, x }`). Con esto la ficha pinta los cuatro números, las fechas
+// y la curva de 200 px, que es lo que el modal del dueño tiene de más.
+export function historialDuenio() {
+  const plays = { tracks: {}, albums: [] };
+  const detail = { tracks: {} };
+  Object.values(TEMAS).forEach((t, i) => {
+    const m = {};
+    for (let a = 2019; a <= 2024; a++) for (let mes = 1; mes <= 12; mes++) {
+      const n = (a * 7 + mes * 3 + i) % 11;
+      if (n > 2) m[`${a}-${String(mes).padStart(2, '0')}`] = n;
+    }
+    const total = Object.values(m).reduce((s, n) => s + n, 0);
+    plays.tracks[t.id] = [total, total * 200];
+    detail.tracks[t.id] = { m, f: '2019-01-05', l: '2024-12-20', d: Math.round(total * 0.8), x: 9 };
+  });
+  return { plays, detail };
+}
