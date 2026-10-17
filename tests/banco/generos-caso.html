@@ -1,0 +1,78 @@
+<!doctype html><html lang="es"><head><meta charset="utf-8"><title>banco generos — la app entera, en un iframe</title>
+<link rel="stylesheet" href="/css/theme.css">
+<link rel="stylesheet" href="/css/components.css">
+<link rel="stylesheet" href="/css/main.css">
+<style>*,*::before,*::after{animation:none!important;transition:none!important}</style>
+</head><body>
+<div id="app"></div>
+<script type="module">
+// ── Un iframe del banco `generos.html` (v=314, tanda 62) ─────────────────────
+//
+// Arranca la app ENTERA (`/js/app.js`) contra:
+//   · la Spotify simulada de `simulado.mjs`, con `/me` = HISTORY_OWNER_ID (así `loadArtistTracks()` sirve el
+//     historial del owner, que la madre sembró en IndexedDB INVENTADO, nunca el de Ian);
+//   · un Last.fm simulado que vive en la MADRE (`parent.__lf`). Nada sale a `ws.audioscrobbler.com`.
+// Y cuenta CADA `fetch` que hace la página, a cualquier host (`window.__fetchs`): desplegar un género,
+// «Ver todos» y «Mostrar 100 más» tienen que dar 0.
+//
+// `?foto=1` (para las capturas SEMBRADAS, con un conductor externo y SIN reloj virtual): siembra el historial y
+// los registros inventados de `generos-datos.mjs` (la búsqueda queda a medias: tres sin buscar), abre #generos,
+// despliega «cumbia lunar» y marca `data-foto="listo"`.
+
+import { instalarRedSimulada, esperarReal, anclar } from '/banco/simulado.mjs';
+
+const q = new URLSearchParams(location.search);
+const MARCO = q.get('marco') || 'x';
+window.__errores = [];
+window.__fetchs = [];
+window.addEventListener('error', (e) => window.__errores.push('error: ' + (e.message || e)));
+window.addEventListener('unhandledrejection', (e) => window.__errores.push('rechazo: ' + String(e.reason?.message || e.reason)));
+const errorOriginal = console.error.bind(console);
+console.error = (...a) => { window.__errores.push('console.error: ' + a.map(String).join(' ').slice(0, 300)); errorOriginal(...a); };
+
+const { HISTORY_OWNER_ID } = await import('/js/features/history-data.js');
+const sim = instalarRedSimulada();
+window.__sim = sim;
+sim.ruta('GET', /^\/me$/, () => ({ id: HISTORY_OWNER_ID, display_name: 'Banco' }));
+localStorage.setItem('fonoteca_last_user_id', HISTORY_OWNER_ID);
+localStorage.setItem('fonoteca_perfil_v1', JSON.stringify({ id: HISTORY_OWNER_ID, display_name: 'Banco' }));
+
+// El Last.fm simulado, por ENCIMA de la Spotify simulada (que bloquea todo host externo no declarado), y el
+// contador de TODOS los `fetch` de la página por encima de los dos.
+const debajo = window.fetch;
+window.fetch = (entrada, opciones = {}) => {
+  const url = typeof entrada === 'string' ? entrada : entrada.url;
+  const abs = new URL(url, location.href);
+  window.__fetchs.push(abs.href);
+  if (abs.hostname !== 'ws.audioscrobbler.com') return debajo(entrada, opciones);
+  const lf = q.get('foto') ? window.__lfLocal : parent.__lf;
+  return new Promise((resolver, rechazar) => {
+    const signal = opciones.signal;
+    let hecha = false;
+    const abortar = () => { if (hecha) return; hecha = true; rechazar(new DOMException('abortado', 'AbortError')); };
+    if (signal?.aborted) return abortar();
+    signal?.addEventListener('abort', abortar, { once: true });
+    lf.responder(abs.href, { marco: MARCO })
+      .then((r) => { if (hecha) return; hecha = true; resolver(new Response(r.cuerpo, { status: r.status, headers: { 'content-type': 'application/json', 'access-control-allow-origin': '*' } })); }, rechazar);
+  });
+};
+
+if (q.get('foto')) {
+  const D = await import('/banco/generos-datos.mjs');
+  await D.sembrarHistorial(anclar);
+  await D.sembrarEtiquetas(anclar, HISTORY_OWNER_ID);
+  window.__lfLocal = D.crearLastfm();
+  location.hash = '#generos';
+}
+await import('/js/app.js');
+await esperarReal(() => document.getElementById('my-history-btn'), { que: 'que la app arranque', vueltas: 4000 });
+window.__listo = true;
+if (q.get('foto')) {
+  await esperarReal(() => document.querySelector('.generos-top > li'), { que: 'que #generos pinte los géneros', vueltas: 4000 });
+  const d = [...document.querySelectorAll('.generos-top > li')].find((li) => li.dataset.genero === 'cumbia lunar')?.querySelector('details');
+  d.open = true;
+  await esperarReal(() => d.querySelector('.mapa-artistas-lista li'), { que: 'que se pinten los artistas del género', vueltas: 4000 });
+  document.documentElement.dataset.foto = 'listo';
+}
+</script>
+</body></html>

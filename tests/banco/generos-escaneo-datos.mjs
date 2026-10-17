@@ -39,18 +39,22 @@ export const HISTORIAL = {
   totals: Object.fromEntries([...ARTISTAS.map(([n, min]) => [n, T(min)]), ...MENOS10.map(([n, min]) => [n, T(min)])]),
 };
 
-// La cuenta hecha a mano, en décimas de minuto (filas: con etiquetas · Last.fm dice que no tiene ·
-// sin buscar todavía · menos de 10 min; cada una décimas y artistas).
+// La cuenta hecha a mano, en décimas de minuto (filas, cinco desde v=314: con géneros · con etiquetas
+// pero ninguna de género · Last.fm dice que no tiene · sin buscar todavía · menos de 10 min; cada una
+// décimas y artistas). Las etiquetas inventadas son todas géneros para la regla de v=314.
 //   total = 5000+4000+3000+2500+2000+1500+1200+1000+800+600+300+150 + 50+99 = 22199
-//   al abrir: con etiquetas = Lumbre + Cassia = 9000 (2); sin buscar = el resto del universo,
+//   al abrir: con géneros = Lumbre + Cassia = 9000 (2); sin buscar = el resto del universo,
 //             22050 − 9000 = 13050 (10); menos de 10 = 149 (2).
-//   al final: Tordo (no encontrado, 2000) y Nube (sin ninguna ≥ 5, 1500) van a «no tiene» = 3500
-//             (2); con etiquetas = 22050 − 3500 = 18550 (10); sin buscar = 0.
+//   al final: Tordo (no encontrado, 2000), Nube (sin ninguna ≥ 5, 1500) y, desde v=314, Hilo Rojo (el
+//             autocorrect devolvió OTRO artista: lo de Last.fm no cuenta, 800) van a «no tiene» = 4300 (3);
+//             con géneros = 22050 − 4300 = 17750 (9); sin buscar = 0.
+//   (v=313, cuatro filas: abrir [9000, 0, 13050, 149] / [2, 0, 10, 2]; final [18550, 3500, 0, 149] /
+//   [10, 2, 0, 2]: Hilo Rojo contaba «con etiquetas».)
 export const ESPERADO = {
   total: 22199,
   universo: 12,
-  abrir: { filas: [9000, 0, 13050, 149], artistas: [2, 0, 10, 2] },
-  final: { filas: [18550, 3500, 0, 149], artistas: [10, 2, 0, 2] },
+  abrir: { filas: [9000, 0, 0, 13050, 149], artistas: [2, 0, 0, 10, 2] },
+  final: { filas: [17750, 0, 4300, 0, 149], artistas: [9, 0, 3, 0, 2] },
   // Los que se tienen que pedir, en el orden del universo: todos menos los dos ya buscados.
   pedidos: ARTISTAS.filter((a) => a[3] !== 'lastfm' && a[3] !== 'migrado').map((a) => a[0]),
   // Lo que tiene que quedar guardado en `fuentes.lastfm.tags` de cada uno (el filtro de siempre).

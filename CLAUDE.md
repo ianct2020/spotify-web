@@ -2586,7 +2586,7 @@ instrumento de la captura sembrada). `scripts/verificar-rehorneado.py` suma `--p
 REGEX` para el rehorneado de un JSON que TIENE que cambiar. Medición y paridad sobre el export real
 en `fonoteca-migracion` (`medicion-puertas-*-2026-10-15.*`).
 
-## 🔎 `#generos`: buscar los géneros de tu historial (v=313)
+## 🔎 `#generos`: buscar los géneros de tu historial (v=313) y enseñarlos (v=314)
 
 La primera mitad de la vista de géneros (tanda 61): el escaneo que llena el almacén de la tanda 60 con las etiquetas
 de Last.fm de **todos los artistas del historial**, con su botón, como «Buscar países» del mapa. Ruta `#generos`, menú
@@ -2594,7 +2594,9 @@ General, detrás de «Puertas de entrada», icono propio (`ICONS.generos`, dos e
 la de `#genre` es una sola etiqueta), tarjeta de inicio y cabecera «Tus géneros». 🔴 **Enseña dos secciones y nada
 más**: «Cuánto se sabe» y «La búsqueda». **Ningún género, ningún top, ningún porcentaje por género, ninguna lista de
 etiquetas**: eso es la tanda 62, con la regla que salga de la medición (ver «Last.fm, medido (tanda 61)», abajo).
-`#genre` (la vista vieja, sobre los me gusta) no se tocó.
+`#genre` (la vista vieja, sobre los me gusta) no se tocó. ⚠️ **Desde v=314 enseña tres secciones** («Cuánto se sabe»
+con cinco filas, «Tus 10 géneros» y «La búsqueda», que no cambió): ver «Los géneros (v=314)», más abajo. Lo de esta
+parte sigue valiendo para el escaneo, que no se tocó.
 
 | archivo | qué | probado en |
 |---|---|---|
@@ -2655,7 +2657,7 @@ etiquetas**: eso es la tanda 62, con la regla que salga de la medición (ver «L
 - **La estimación**: la del mapa, como un rango, con lo ACUMULADO en **`generos_ritmo_v1_<uid>`** (uid en la clave y
   dentro del valor). **«Limpiar caché» lo BORRA** (no está en `CONSERVAR_PREFIJOS`: es una medición); las etiquetas
   (`generos_artista_v1_`) se conservan, como desde v=312. Con menos de 5 artistas medidos, «se estimará cuando…».
-- **«Cuánto se sabe»** (`armarCobertura`): cuatro filas que **suman exactamente** los minutos de todo el historial (en
+- **«Cuánto se sabe»** (`armarCobertura`; ⚠️ **cinco filas desde v=314**, ver abajo): cuatro filas que **suman exactamente** los minutos de todo el historial (en
   décimas, enteras): con etiquetas (alguna fuente con al menos una: también lo de `#genre` y lo migrado) · Last.fm
   dice que no tiene (buscado y vacío) · sin buscar todavía · menos de 10 min; cada una con artistas y minutos
   (`toLocaleString('es-ES')`). Un artista con etiquetas SOLO de MusicBrainz o stats.fm va en «con etiquetas» y el
@@ -2663,7 +2665,7 @@ etiquetas**: eso es la tanda 62, con la regla que salga de la medición (ver «L
 - Repintado a lo sumo una vez por frame (rAF con un `setTimeout` de respaldo), solo las secciones que cambiaron, los
   botones en la suya. Las piezas de texto y la tabla son las del mapa (`.mapa-h2`, `.mapa-filas`, `.mapa-num`…, que
   son presentación); el contenedor `.generos` es suyo. Secundario en `--color-text-secondary`; sin animaciones nuevas.
-- 🔴 **Lo que NO hace**: ningún género, ningún top, ningún porcentaje por género; no le pregunta nada a MusicBrainz ni
+- 🔴 **Lo que NO hacía en v=313** (desde v=314 enseña los géneros y lee el `artista`: ver abajo): ningún género, ningún top, ningún porcentaje por género; no le pregunta nada a MusicBrainz ni
   a stats.fm; no completa con otra fuente lo que Last.fm no tiene; no usa el `artista` del autocorrect para nada.
 - **El costo**: abrir = **1 `/me`** (+1 del arranque) y **0 a Last.fm**; «Buscar géneros»/«Seguir» = **1 petición por
   artista** del universo sin buscar (más los reintentos), a 1 s, **0 a Spotify** (ver la tabla de costos).
@@ -2710,6 +2712,95 @@ el detalle, con los nombres, en `fonoteca-migracion/generos/`; acá no va ningun
 - **La proyección (no es una medición del escaneo entero)**: a 1 s por artista, el universo entero (2.302 artistas
   con ≥ 10 min el 17/10) son unos 38 min sin ningún fallo, ~45 min con una racha entera; menos los que ya estén
   guardados en el navegador de quien busque.
+
+### Los géneros (v=314)
+
+La segunda mitad (tanda 62): **qué se enseña** con lo que el escaneo de la 61 ya guarda. El escaneo no cambió
+(`escanearGeneros`, `yaBuscado`, `clasificar`, `urlEtiquetas`, el ritmo, las esperas, la pausa, el candado, el teardown y
+la estimación, byte a byte: `tests/generos-regla.test.mjs` compara el `sha256` del texto de cada función con el de v=313).
+Tampoco `decidirEtiquetas`, `mezclarEtiquetas`, `leer`, `filtrarEtiquetasLastfm` ni el almacén.
+
+| archivo | qué | probado en |
+|---|---|---|
+| `util/generos-regla.js` | PURO, sin red: `NO_ES_GENERO`, `PATRONES_NO_GENERO`, `SINONIMOS`, `esGenero`, `canonico`, `generosDeArtista` (los géneros de un artista y por qué no tiene) y `armarGeneros` (por género: minutos, artistas, %) | `tests/generos-regla.test.mjs` |
+| `util/generos-escaneo.js` | `armarCobertura` cambia EN EL LUGAR: cinco filas, decidiendo con `generosDeArtista` (`pendientes` sale igual que en v=313, de `yaBuscado`) | ídem y `tests/generos-escaneo.test.mjs` (los dos asserts de las filas, de cuatro a cinco) |
+| `features/generos.js` | «Tus 10 géneros», «Ver todos (N)» y los artistas de cada género de a 100 | `tests/banco/generos.html` (en `prepush`, el vigésimo) |
+
+Las decisiones, y por qué:
+
+- 🔴 **Qué es un género sale de lo que midió Last.fm, no de la primera etiqueta.** En la 61, en 12 de 50 artistas la
+  primera no era un género. Cuentan **todas** las etiquetas que ya pasan el `count >= 5` de siempre, **menos** las de
+  `NO_ES_GENERO` (escrita a mano, en minúsculas) y las que cazan los `PATRONES_NO_GENERO`, pasadas por `SINONIMOS` a
+  una forma canónica y **sin repetir** (un artista con «hip-hop» y «hip hop» cuenta una vez, en «hip hop»). **Ningún otro
+  corte de `count`** («solo las de 50 o más» sería un número inventado).
+- 🔴 **Las listas las escribió la sesión LEYENDO las etiquetas de a una**, nunca un modelo de lenguaje, nada bajado ni
+  generado. Cada entrada dice de dónde sale: `[61: n · 62A: n · 62B: n]` (en cuántos artistas de cada muestra) o
+  `[como X]` (no se vio y se agregó por ser de la misma clase que X: las **sospechosas**, 27).
+- 🔴 **Qué hay en la lista y qué no** (el repo es público): solo lo **genérico**: países, gentilicios, ciudades y
+  regiones, instrumentos y cómo suena («piano», «acoustic», «instrumental»), quién canta («female vocalists»), etiquetas
+  personales, oficios y formatos («seen live», «dj», «producer», «podcast»…). Las décadas, las notas («5 stars»), las
+  listas personales («my …»), la basura con `_`, con cuatro dígitos seguidos o de cinco palabras o más van como
+  **patrones**, cada uno con su fuente y sin el texto que lo motivó. **Los nombres propios (otro artista, un grupo, un
+  colectivo, un programa) NO se escriben y se quedan contando como género**: es un defecto conocido. ⚠️ El encargo decía
+  que son géneros de uno o dos artistas que no llegan al top: **en la mitad B de la medición uno llegó al puesto 10 del
+  top de la muestra** (de un solo artista con muchos minutos). En el historial entero no está medido. Y ninguna regla
+  del tipo «si se llama como un artista de tu historial no es un género»: hay artistas que se llaman como un género.
+- **Los sinónimos son variantes de ESCRITURA del mismo nombre** (`hip-hop`/`hip hop` → `hip hop`, como lo escribe la
+  RAE; `dnb`/`drum n bass` → `drum and bass`; `synth pop` → `synthpop`; `rhythm and blues`/`r&b` → `rnb`; y seis
+  más). Nada de agrupar subgéneros en un padre: `rap` y `hip hop`, `trap` y `hip hop`, `house` y `dance` siguen aparte.
+- 🔴 **Los minutos NO se reparten**: cada artista suma sus minutos ENTEROS a CADA uno de sus géneros (repartir por el
+  `count` sería inventarse pesos), y el % de un género es sobre **todo el historial** (también los de menos de 10 min),
+  como el mapa. **Los porcentajes suman más de 100**, y la pantalla lo dice en una línea. Los «sin buscar todavía» no
+  están en ningún género y no se reparten; con la búsqueda a medias, otra línea lo dice.
+- 🔴 **El autocorrect que devuelve OTRO artista no cuenta.** Si `fuentes.lastfm.artista` existe y, con
+  **`normalizarNombre` importado de `util/mb-pais.js`** (una sola; `tests/mb-pais.test.mjs` suma `generos-regla.js` a
+  los que la importan), no es el nombre pedido, lo de Last.fm de ese artista no se usa (se decide sobre una copia con
+  `lastfm: null`) y va a «Last.fm dice que no tiene». Lo de otras fuentes sigue valiendo. Sin `artista` (lo de `#genre`,
+  lo migrado), como siempre. En la medición de la 62, 3 de 196 devolvieron otro artista (16 de 19 cambios eran solo mayúsculas).
+- ⚠️ **De qué fuentes salen las etiquetas**: de `decidirEtiquetas` de siempre (todas las fuentes del registro, mezcladas):
+  lo mismo que lee `#genre`. **Eso incluye lo que `#genre` trajo de MusicBrainz con su `limit=1` a ciegas y lo migrado de
+  fuente desconocida**: defecto conocido (en `PENDIENTES.md`), no se arregló.
+- ⚠️ **Un import circular a propósito**: `generos-regla.js` importa `yaBuscado` de `generos-escaneo.js` (para «no tiene»
+  contra «sin buscar»: una sola función decide «ya buscado») y `generos-escaneo.js` importa `generosDeArtista` de
+  `generos-regla.js` (para «Cuánto se sabe»). Es seguro porque ninguno usa lo del otro al cargarse.
+
+**Medido, en dos mitades** (REAL; la medición, con los nombres, en `fonoteca-migracion/generos/`; acá no va ninguno). Una
+segunda muestra de Last.fm de 196 artistas del universo (índices `5 + 11·j` sin los de la 61), partida en A (98) y B
+(98). Las listas se escribieron con la 61 + A (**versión 1**) y se midieron sobre B, que no se usó para escribirlas:
+**a la versión 1 se le escapaban en B 34 etiquetas que la sesión lee como no-género, en 29 artistas y 3.729,6 min de los
+10.289,4 de B** (22 genéricas —ciudades, países, gentilicios, «composer», «podcast», adjetivos— y 12 nombres propios o
+basura que no se pueden escribir), y un sinónimo que el mapeo no juntaba (`neo soul`/`neo-soul`, 1 artista). **La
+versión 2 (la del código) suma las 22 genéricas y el sinónimo; sobre ella no hay medición fuera de muestra.** El top 10
+de B con la v2 sigue teniendo un nombre propio en el puesto 10.
+
+**Las cinco filas de «Cuánto se sabe»** (suman exactamente el total, en décimas): con géneros · con etiquetas, pero
+ninguna de género (para que esos minutos no se mezclen con «no tiene») · Last.fm dice que no tiene (incluye el
+autocorrect a otro) · sin buscar todavía · menos de 10 min.
+
+**La vista**: debajo de «Cuánto se sabe», «Tus 10 géneros» (nombre, minutos, % con un decimal `es-ES` y artistas), la
+línea de que los % suman más de 100 (en `--color-text-secondary`), y «Ver todos (N)» si hay más de 10 (un `<details>`;
+la lista se pinta solo abierta). Cada género es un `<details>` de verdad (foco y teclado): al abrirlo, sus artistas
+por minutos, de a 100 con «Mostrar 100 más» (como `#puertas`). **Mientras la búsqueda avanza, cada género es el MISMO
+`<li>`**: el repintado (el de la 61, una vez por frame) solo le cambia el resumen, sus artistas si está abierto y, si
+hace falta, el sitio; lo abierto sigue abierto y con su foco. Sin ningún género, una línea («Tus géneros saldrán aquí a
+medida que avance la búsqueda.»; con la búsqueda terminada y ninguno, «Ninguno de los artistas buscados tiene una
+etiqueta de género.») y nada más. Las piezas son las de la lista de países (`.mapa-lista`, `.mapa-pais`…); lo suyo es
+«Ver todos» y el pie (`.generos-todos`, `.generos-pie`). Sin colores por género, sin gráfico, sin animaciones. La
+tarjeta de inicio: «Los géneros que más escuchas, según las etiquetas de Last.fm.» (61 caracteres).
+
+**El costo**: abrir, igual que en v=313 (1 `/me` + el del arranque, 0 a Last.fm); **desplegar un género, «Ver todos» y
+«Mostrar 100 más» = 0 peticiones** a cualquier host (medido en el banco).
+
+Guardas: `tests/generos-regla.test.mjs` (82: `esGenero`, `canonico`, el autocorrect, que los minutos no se reparten y el %
+es de todo el historial, las cinco filas a mano, `pendientes` de conservación, la lectura estática de lo que no se toca,
+`normalizarNombre` una sola y la fuente de cada entrada; rojo contra v=313) y el banco `tests/banco/generos.html` +
+`-caso.html` + `-datos.mjs` (historial, etiquetas y Last.fm INVENTADOS): F sin géneros, una línea; A abrir = 0 a Last.fm
+y 1 `/me`, también al volver y tras recargar, y desplegar los 13 géneros y «Ver todos» = 0 peticiones; B el top 10 y la
+lista entera a mano; C las cinco filas; G a 1366 y 390 nada desborda; D buscando, el género abierto es el mismo elemento
+tras tres respuestas; E «Mostrar 100 más» con 130. Las seis puertas vistas fallar en una copia (la primera etiqueta,
+repartir minutos, sin la lista, sin el autocorrect, «sin género» sumado a «no tiene», desplegar pide a la red).
+`generos-caso.html?foto=1` es el instrumento de las capturas sembradas (conductor en
+`fonoteca-migracion/driver-capturas-generos-t62-2026-10-17.mjs`).
 
 ## Client ID
 0c8c92ad128e4b89be7097c6b8082797
@@ -3496,7 +3587,8 @@ fila sobrevivió así desde que se armó la tabla.
 | `#mapa` (v=304) | **1 `/me`** (+1 del arranque = **2**) · **0 MusicBrainz** | ídem | `render()` → `loadArtistTracks()` → `loadOne` → `getCurrentUserId` (el `getCurrentUserId()` de la vista va por el memo: 0 más); la caché del mapa sale de IndexedDB | **fijo**, no escala con nada | **medida en el banco el 2026-10-14** (`tests/banco/mapa.html`, Spotify y MusicBrainz simulados): abrir = 1 `/me` y 0 a MusicBrainz, también al volver y tras recargar. En vivo, no. Desde v=305 abrir baja además el módulo del mundo (`util/mundo-110m.js`, ~73 KB, del mismo origen: no es cuota de nadie); el banco lo vuelve a afirmar con el mundo puesto |
 | ↳ **al pulsar «Buscar países» / «Seguir»**: **1 búsqueda por artista + la grabación si hace falta + 1 por cada área nueva**, de a una y a 1,2 s como mínimo, **0 a Spotify** | — | lo ya guardado: **0** | `musicbrainz.org/ws/2/artist/`, `/recording/`, `/area/<id>` | nº de artistas con ≥ 10 min sin buscar todavía | **medida en el banco** (12 artistas inventados: 23 peticiones sin fallos) y con tope en vivo contra MusicBrainz (ver `fonoteca-migracion/mapa/`) |
 | `#puertas` (v=308) | **1 `/me`** (+1 del arranque = **2**) | ídem | `render()` → `loadArtistTracks()` → `loadOne` → `getCurrentUserId`; «Mostrar 100 más» = **0** | **fijo**, no escala con nada | **medida en el banco el 2026-10-15** (`tests/banco/puertas.html`, Spotify simulada): abrir = 1 `/me` y 0 de lo demás, también con un amigo; 0 rutas sin simular, 0 hosts externos desde que se abre. Con el conductor de capturas (la app servida en local, `/me` contestado ahí): 2 `/me` en la carga, el del arranque y el de la vista. En vivo, no |
-| `#generos` (v=313) | **1 `/me`** (+1 del arranque = **2**) · **0 Last.fm** | ídem | `render()` → `loadArtistTracks()` → `loadOne` → `getCurrentUserId`; `cargarEtiquetas(await getCurrentUserId())` va por el memo (0 más); las etiquetas y el ritmo salen de IndexedDB | **fijo**, no escala con nada | **medida en el banco el 2026-10-17** (`tests/banco/generos-escaneo.html`, Spotify y Last.fm simulados): abrir = 1 `/me` además del del arranque y 0 a Last.fm en 5 s de reloj, también al volver y tras recargar; 0 rutas sin simular, 0 hosts externos. En vivo, no |
+| `#generos` (v=313; los géneros, v=314) | **1 `/me`** (+1 del arranque = **2**) · **0 Last.fm** | ídem | `render()` → `loadArtistTracks()` → `loadOne` → `getCurrentUserId`; `cargarEtiquetas(await getCurrentUserId())` va por el memo (0 más); las etiquetas y el ritmo salen de IndexedDB | **fijo**, no escala con nada | **medida en el banco el 2026-10-17** (`tests/banco/generos-escaneo.html`, Spotify y Last.fm simulados): abrir = 1 `/me` además del del arranque y 0 a Last.fm en 5 s de reloj, también al volver y tras recargar; 0 rutas sin simular, 0 hosts externos. **v=314, el mismo costo**, medido en `tests/banco/generos.html` (también tras recargar). En vivo, no |
+| ↳ **al desplegar un género, «Ver todos» o «Mostrar 100 más»** (v=314): **0** | — | **0** | ninguno: todo sale de lo guardado | — | **medida en el banco el 2026-10-17** (`tests/banco/generos.html`): 0 `fetch` a cualquier host |
 | ↳ **al pulsar «Buscar géneros» / «Seguir»**: **1 `artist.gettoptags` por artista** con ≥ 10 min que Last.fm no contestó todavía (más los reintentos de los fallos), de a una y a 1 s como mínimo, **0 a Spotify** | — | lo ya buscado: **0** | `ws.audioscrobbler.com/2.0/?method=artist.gettoptags&autocorrect=1` | nº de artistas del universo sin buscar | **medida en el banco el 2026-10-17** (10 artistas inventados: 10 respuestas definitivas, una por artista, más los reintentos de 3 errores 29 y 1 503) y, la consulta, en vivo con 51 artistas desde Node (tanda 61) |
 | `#covers` | **1 `/me` + 1 + ceil(W/100)** = **33** | **2** | `isOwner()`/`loadListenedAlbums()` → `getCurrentUserId` · + 1 `/playlists/{id}?fields=snapshot_id` + págs. de `/playlists/{id}/items` | nº de pistas de «w three» | 🔴 **corregida el 2026-10-08, leída del código.** Decía **32** y se le olvidaba el `/me` propio |
 | `#mosaico` | **0** | **0** | **ninguno, a propósito** | — | **medida en vivo el 2026-10-06**: 10 mosaicos generados (hasta 43.200 celdas), **0 peticiones y 0 cortadas** con los topes de la API en CERO. Lo que sí sale a la red es el CDN de imágenes, que no gasta cuota |
@@ -3876,7 +3968,7 @@ cuesta una carga de likes.** Lo que no puede es usar las tuyas.
 | `#calendario` | — | **historial** (`years[].days`) para la grilla · el **detalle por día** para el panel | cartel de bloqueo, el mismo de `#records` con su botón de importar. Con BYOH la grilla sale de SU `stats` y el detalle lo obtiene solo (`saveMyHistory()` guarda `days`). El owner carga el detalle con la importación «solo el detalle»; sin él, el panel enseña los minutos del día y ofrece cargarlo | **leída del código y probada en el banco el 2026-10-10** |
 | `#mapa` (v=304) | — | **historial** (`artistTracks`) · y buscar los países en MusicBrainz (un botón, sin cuota de Spotify) | cartel de bloqueo, el mismo de `#records` (candado de «pide los datos primero»: BYOH la abre), **sin botón de buscar**. Con datos, la lista sale vacía hasta apretar «Buscar países» | **leída del código y probada en el banco el 2026-10-14** (solo el owner; el amigo, leída) |
 | `#puertas` (v=308) | — | **historial** (`artistTracks` **v3**: con el tema de entrada) | cartel de bloqueo, el mismo de `#records` (BYOH la abre con SUS datos). Con un historial importado antes de v=308 (sin el tema de entrada): «Para ver esto, vuelve a importar tu historial», con el botón de importar y 0 filas | **medida en el banco el 2026-10-15** (`tests/banco/puertas.html`: el owner, un amigo con su v3, uno con un historial viejo y uno sin datos) |
-| `#generos` (v=313) | — | **historial** (`artistTracks`, cualquier versión: solo lee los minutos y los nombres) · y buscar en Last.fm (un botón, sin cuota de Spotify, con la key del código) | cartel de bloqueo, el mismo de `#records` (BYOH la abre con SUS datos), **sin botón de buscar**. Con datos, las cuatro filas y «Buscar géneros». Si no se pueden leer las etiquetas guardadas, lo dice y no ofrece buscar | **medida en el banco el 2026-10-17** (solo el owner; el amigo, leída del código) |
+| `#generos` (v=313; los géneros, v=314) | — | **historial** (`artistTracks`, cualquier versión: solo lee los minutos y los nombres) · y buscar en Last.fm (un botón, sin cuota de Spotify, con la key del código) | cartel de bloqueo, el mismo de `#records` (BYOH la abre con SUS datos), **sin botón de buscar**. Con datos, las cinco filas, «Tus 10 géneros» (vacío, con una línea, hasta que la búsqueda traiga alguno) y «Buscar géneros». Si no se pueden leer las etiquetas guardadas, lo dice y no ofrece buscar | **medida en el banco el 2026-10-17** (solo el owner; el amigo, leída del código) |
 | `#zeroplays` | — | **historial** (`plays`) · stats.fm opcional | cartel de bloqueo | leída del código |
 | `#skips` | — | **historial** (`skip`, versión ≥ 4) · stats.fm opcional | cartel de bloqueo | leída del código |
 

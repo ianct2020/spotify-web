@@ -15,7 +15,8 @@
 //      seguidos pausan. Un error de la key (10, 26) para todo sin guardar. Otro 4xx sigue con el siguiente.
 //   3. El ritmo: dos comienzos nunca a menos de `INTERVALO_MS`, y nunca dos esperas sin una petición.
 //   4. Retomable: con la mitad guardada, «Seguir» pide solo la otra mitad.
-//   5. Las cuatro filas de «Cuánto se sabe» suman el total, contra una cuenta hecha a mano.
+//   5. Las filas de «Cuánto se sabe» suman el total, contra una cuenta hecha a mano (cinco desde v=314: ver
+//      `tests/generos-regla.test.mjs`, que prueba la regla del género).
 //   6. El filtro `count >= 5` es UNA función (`filtrarEtiquetasLastfm`): `getArtistTopTags` la importa,
 //      no tiene su propio `>= 5`, y devuelve lo mismo que antes para una respuesta inventada.
 //
@@ -253,8 +254,8 @@ if (tiene(G.escanearGeneros)) {
   ok(r.motivo === 'parado' && lf.llamadas.length === 2, `si la ruta deja de estar vigente, para sin pedir más (${r.motivo}, ${lf.llamadas.length})`);
 }
 
-// ── 5. Las cuatro filas ─────────────────────────────────────────────────────
-console.log('5. «Cuánto se sabe»: las cuatro filas, contra una cuenta a mano');
+// ── 5. Las filas (cinco desde v=314) ────────────────────────────────────────
+console.log('5. «Cuánto se sabe»: las cinco filas, contra una cuenta a mano');
 if (tiene(G.armarCobertura) && tiene(A.crearAlmacenGeneros)) {
   const T = (min) => [1, min, 2021, 2025, [], '2021-01-01'];
   const totals = {
@@ -273,14 +274,18 @@ if (tiene(G.armarCobertura) && tiene(A.crearAlmacenGeneros)) {
   const c = G.armarCobertura({ totals, lista, registro: (n) => al.registro(n) });
   // A mano, en décimas: 120,04 → 1200; 80 → 800; 33,3 → 333; 50,5 → 505; 20 → 200; 10 → 100;
   // 9,99 → 100; 0,4 → 4. Total 3242.
-  // con etiquetas: Con Lastfm + Con Migrado + Con MB Solo = 1200 + 800 + 333 = 2333 (3 artistas)
+  // con géneros: Con Lastfm + Con Migrado + Con MB Solo = 1200 + 800 + 333 = 2333 (3 artistas): las tres etiquetas
+  //   inventadas son géneros para la regla de v=314 (hasta v=313 la fila se llamaba «con etiquetas» y daba lo mismo)
+  // con etiquetas, ninguna de género: nadie = 0 (0) — la fila nueva de v=314
   // Last.fm dice que no tiene: Lastfm Vacio = 505 (1)
   // sin buscar: Migrado Vacio + Nadie = 200 + 100 = 300 (2)
   // menos de 10 min: Chica Uno + Chica Dos = 100 + 4 = 104 (2)
   const f = c.filas;
   ok(c.total === 3242, `el total, a mano: 3242 décimas (${c.total})`);
-  ok(igual([f.conEtiquetas, f.noTiene, f.sinBuscar, f.menos10], [{ artistas: 3, decimas: 2333 }, { artistas: 1, decimas: 505 }, { artistas: 2, decimas: 300 }, { artistas: 2, decimas: 104 }]), `las cuatro filas = la cuenta a mano (${JSON.stringify(f)})`);
-  ok(f.conEtiquetas.decimas + f.noTiene.decimas + f.sinBuscar.decimas + f.menos10.decimas === c.total, 'y suman exactamente el total');
+  // v=314: eran cuatro filas, [conEtiquetas, noTiene, sinBuscar, menos10] = [3/2333, 1/505, 2/300, 2/104]; ahora son
+  // cinco y la de en medio es nueva («con etiquetas, ninguna de género»), vacía en este caso.
+  ok(igual([f.conGeneros, f.sinGenero, f.noTiene, f.sinBuscar, f.menos10], [{ artistas: 3, decimas: 2333 }, { artistas: 0, decimas: 0 }, { artistas: 1, decimas: 505 }, { artistas: 2, decimas: 300 }, { artistas: 2, decimas: 104 }]), `las cinco filas = la cuenta a mano (${JSON.stringify(f)})`);
+  ok(['conGeneros', 'sinGenero', 'noTiene', 'sinBuscar', 'menos10'].reduce((s, k) => s + (f[k]?.decimas ?? NaN), 0) === c.total, 'y suman exactamente el total');
   ok(c.universo === 6 && c.pendientes === 3, `universo 6 y por pedir 3 (Con MB Solo, Migrado Vacio, Nadie): ${c.universo}, ${c.pendientes}`);
 }
 

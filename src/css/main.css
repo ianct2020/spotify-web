@@ -6504,6 +6504,22 @@ body.covers-fs .main {
 .generos { display: flex; flex-direction: column; gap: 16px; max-width: 920px; }
 .generos .card { padding: 16px 18px; }
 .generos-filas th { width: 100%; }
+/* Los géneros (v=314): cada género y sus artistas son las piezas de la lista de países (`.mapa-lista`,
+   `.mapa-pais`, `.mapa-artistas-lista`…). Lo suyo es «Ver todos (N)» y el pie de «Mostrar 100 más» (el de
+   `#puertas`). Sin colores por género, sin gráfico, sin animaciones. */
+.generos-lista .mapa-lista { margin-top: 10px; }
+.generos-medias { margin-bottom: 4px; }
+.generos-suma { margin-top: 10px; }
+.generos-todos { margin-top: 12px; }
+.generos-todos > summary {
+  display: flex; align-items: baseline; gap: 8px;
+  padding: 6px 0; cursor: pointer; list-style: none; font-size: 14px; font-weight: 500;
+}
+.generos-todos > summary::-webkit-details-marker { display: none; }
+.generos-todos > summary::before { content: '▸'; color: var(--color-text-secondary); flex: none; width: 1em; }
+.generos-todos[open] > summary::before { content: '▾'; }
+.generos-todos > summary:focus-visible { outline: 2px solid var(--color-accent); }
+.generos-pie { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 0 14px 12px 34px; }
 
 /* ── el bloque de cobertura ────────────────────────────────────────────── */
 .mapa-filas { width: 100%; border-collapse: collapse; }
@@ -6551,6 +6567,7 @@ body.covers-fs .main {
 
 @media (max-width: 600px) {
   .generos .card { padding: 14px; }
+  .generos-pie { padding-left: 22px; }
   .mapa .card:not(.mapa-sinpais) { padding: 14px; }
   .mapa-pais summary, .mapa-sinpais summary { flex-wrap: wrap; gap: 2px 10px; }
   /* El nombre comparte renglón con el triángulo; los números van debajo, alineados con el nombre. */

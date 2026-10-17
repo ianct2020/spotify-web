@@ -1,10 +1,12 @@
-// #generos — buscar los géneros de tu historial (v=313, tanda 61).
+// #generos — tus géneros (v=313 el escaneo, tanda 61; v=314 los géneros, tanda 62).
 //
-// La primera mitad de la vista de géneros: el escaneo que le pide a Last.fm las etiquetas de
-// cada artista del HISTORIAL (`universo()` de `util/mapa-paises.js`, ≥ 10 min), y un bloque que
-// dice cuánto se sabe. 🔴 Ningún género, ningún top, ningún porcentaje por género: eso es la
-// tanda 62, con la regla que salga de la medición de la 61. `#genre` (la vista vieja, sobre los
-// me gusta) no se tocó.
+// El escaneo le pide a Last.fm las etiquetas de cada artista del HISTORIAL (`universo()` de
+// `util/mapa-paises.js`, ≥ 10 min); «Cuánto se sabe» dice cuánto se sabe, en cinco filas; y desde
+// v=314 «Tus 10 géneros» enseña lo que ya está guardado, con la regla de `util/generos-regla.js`
+// (todas las etiquetas de género, sin repartir minutos: un artista cuenta ENTERO en cada uno de
+// sus géneros, y el % es sobre todo el historial). Los «sin buscar todavía» no se reparten. El
+// escaneo (el bucle, el ritmo, las esperas, el candado, el teardown) no cambió en v=314.
+// `#genre` (la vista vieja, sobre los me gusta) no se tocó.
 //
 // De dónde sale cada cosa:
 //   · los minutos, de `loadArtistTracks()` (`history-data.js`), que pasa por `loadOne()`: el
@@ -20,6 +22,7 @@
 // 🔴 ABRIR LA VISTA NO LE PIDE NADA A LAST.FM (la regla de v=261). Abrir cuesta el `/me` de
 // `loadOne()` (el `getCurrentUserId()` de acá va por el memo) y 0 a Last.fm. El escaneo arranca
 // SOLO con el botón («Buscar géneros» la primera vez, «Seguir» si hay algo hecho, «Parar»).
+// Desplegar un género, «Ver todos» y «Mostrar 100 más» = 0 peticiones: todo sale de lo guardado.
 //
 // 🔴 Si `cargarEtiquetas()` falla, la vista LO DICE y no ofrece buscar: con el almacén sin
 // cargar, `guardar()` no escribe y el escaneo gastaría peticiones para nada, y enseñar «0 con
@@ -42,12 +45,18 @@ import { universo, MIN_MINUTOS } from '../util/mapa-paises.js';
 import { prefijoGeneros } from '../util/generos-artista.js';
 import { peticionesPorMinuto, estimarLoQueFalta, ritmoDesde, sumarPeticion, sumarArtista, MIN_ARTISTAS_ESTIMAR } from '../util/mapa-escaneo.js';
 import { escanearGeneros, conCandado, armarCobertura, yaBuscado, urlEtiquetas, claveRitmo, textoLoQueFalta } from '../util/generos-escaneo.js';
+import { armarGeneros } from '../util/generos-regla.js';
 
 // Números con `es-ES` explícito: sin el locale se usa el del navegador (es-AR en las máquinas
 // de Ian) y salen dos formatos en la misma pantalla.
 const fmt = (n, dec = 0) => Number(n || 0).toLocaleString('es-ES', { minimumFractionDigits: dec, maximumFractionDigits: dec });
 const fmtMin = (decimas) => `${fmt(Math.round(decimas / 10))} min`;
 const plural = (n, uno, varios) => `${fmt(n)} ${n === 1 ? uno : varios}`;
+const fmtPct = (parte, total) => `${fmt(total ? (parte / total) * 100 : 0, 1)} %`;
+
+// Los géneros que se enseñan arriba, y los artistas de un género de a cuántos (como `#puertas`).
+const TOP = 10;
+const POR_PAGINA = 100;
 
 // La tanda en curso de ESTA pestaña: al volver a la ruta mientras la anterior termina de abortar,
 // se espera a que suelte el candado antes de pedirlo (si no, se diría «hay otra búsqueda»).
@@ -131,6 +140,12 @@ export async function render(container) {
     ctrl: null,
     html: {},
     pintando: false,
+    // Los géneros (v=314): qué está abierto (para lo que se crea de nuevo; lo ya pintado manda el DOM),
+    // cuántos artistas se enseñan de cada género abierto, y los nodos de cada lista por género.
+    abiertos: new Set(),
+    mostrados: new Map(),
+    nodos: { top: new Map(), todos: new Map() },
+    generosModo: null,
     sesion: { peticiones: 0, fallos: 0, otrosFallos: 0, comienzos: [], desdeUltimo: null, noSePudo: new Set() },
   };
   // El registro de un artista: el del almacén de esta pestaña o, si otra ya lo buscó, el releído.
@@ -143,14 +158,29 @@ export async function render(container) {
 
   content.innerHTML = `<div class="generos">
     <section class="card generos-cobertura" data-seccion="cobertura"></section>
+    <section class="card generos-lista" data-seccion="generos"></section>
     <section class="card generos-escaneo"><div data-seccion="escaneo"></div><div class="mapa-botones" data-seccion="botones"></div></section>
   </div>`;
   const raiz = content.querySelector('.generos');
+  // Los `<details>` que se abren y se cierran: `toggle` no burbujea, se escucha en la captura. Al abrir un
+  // género se pintan sus artistas (no antes: miles de filas cerradas son mucho DOM para nada).
+  raiz.addEventListener('toggle', (e) => {
+    const d = e.target;
+    const clave = d instanceof HTMLDetailsElement ? d.dataset.generoClave : null;
+    if (!clave) return;
+    if (d.open) st.abiertos.add(clave); else st.abiertos.delete(clave);
+    pintar(raiz, st, ruta);
+  }, true);
   raiz.addEventListener('click', (e) => {
     const b = e.target.closest('[data-generos-accion]');
     if (!b || b.disabled) return;
     if (b.dataset.generosAccion === 'buscar') arrancar(raiz, st, ruta);
     else if (b.dataset.generosAccion === 'parar') st.ctrl?.abort();
+    else if (b.dataset.generosAccion === 'mas') {
+      const clave = b.dataset.clave;
+      st.mostrados.set(clave, (st.mostrados.get(clave) || POR_PAGINA) + POR_PAGINA);
+      pintar(raiz, st, ruta);
+    }
   });
 
   pintar(raiz, st, ruta);
@@ -259,24 +289,135 @@ function pintar(raiz, st, ruta) {
     const el = raiz.querySelector(`[data-seccion="${k}"]`);
     if (el) el.innerHTML = html;
   }
+  const g = armarGeneros({ totals: st.totals, lista: st.lista, registro: st.registro });
+  const sec = raiz.querySelector('[data-seccion="generos"]');
+  if (sec) pintarGeneros(sec, g, c, st);
   const f = c.filas;
+  const filas = [f.conGeneros, f.sinGenero, f.noTiene, f.sinBuscar, f.menos10];
   raiz.dataset.estado = st.estado;
   raiz.dataset.universo = String(c.universo);
   raiz.dataset.pendientes = String(c.pendientes);
   raiz.dataset.total = String(c.total);
-  raiz.dataset.filas = [f.conEtiquetas.decimas, f.noTiene.decimas, f.sinBuscar.decimas, f.menos10.decimas].join(',');
-  raiz.dataset.artistas = [f.conEtiquetas.artistas, f.noTiene.artistas, f.sinBuscar.artistas, f.menos10.artistas].join(',');
+  raiz.dataset.filas = filas.map((x) => x.decimas).join(',');
+  raiz.dataset.artistas = filas.map((x) => x.artistas).join(',');
+  raiz.dataset.generos = String(g.generos.length);
+}
+
+// ── Los géneros (v=314) ──────────────────────────────────────────────────────
+//
+// No se rehace la sección en cada respuesta de la búsqueda: cada género es un `<li>` que se crea una vez y
+// después solo se le cambia lo que cambió (el resumen, sus artistas si está abierto) y, si hace falta, el
+// sitio. Así un género abierto sigue siendo EL MISMO elemento mientras la lista crece, con su foco. Lo que
+// manda si está abierto es el DOM (`details.open`); `st.abiertos` solo sirve para lo que se crea de nuevo.
+
+function pintarGeneros(el, g, c, st) {
+  const modo = g.generos.length ? 'lista' : 'vacio';
+  if (st.generosModo !== modo) {
+    st.generosModo = modo;
+    st.nodos = { top: new Map(), todos: new Map() };
+    st.html.generos = {};
+    el.innerHTML = modo === 'vacio'
+      ? `<h2 class="mapa-h2">Géneros</h2><p class="mapa-vacio" data-parte="vacio"></p>`
+      : `<h2 class="mapa-h2" data-parte="titulo"></h2>
+        <p class="mapa-nota generos-medias" data-parte="medias" hidden></p>
+        <ol class="mapa-lista generos-top" data-lista="top"></ol>
+        <p class="mapa-nota generos-suma">Un artista cuenta en todos sus géneros, así que los porcentajes suman más de 100.</p>
+        <details class="generos-todos" data-genero-clave="todos" hidden><summary data-parte="ver-todos"></summary><ol class="mapa-lista" data-lista="todos"></ol></details>`;
+    const todos = el.querySelector('.generos-todos');
+    if (todos && st.abiertos.has('todos')) todos.open = true;
+  }
+  const partes = st.html.generos;
+  const parte = (k, texto) => {
+    if (partes[k] === texto) return;
+    partes[k] = texto;
+    const p = el.querySelector(`[data-parte="${k}"]`);
+    if (!p) return;
+    p.textContent = texto;
+    if (p.hasAttribute('hidden') !== !texto) p.hidden = !texto;
+  };
+  if (modo === 'vacio') {
+    parte('vacio', c.pendientes > 0
+      ? 'Tus géneros saldrán aquí a medida que avance la búsqueda.'
+      : 'Ninguno de los artistas buscados tiene una etiqueta de género.');
+    return;
+  }
+  const n = g.generos.length;
+  parte('titulo', n === 1 ? 'Tu género' : `Tus ${fmt(Math.min(TOP, n))} géneros`);
+  // 🔴 Los «sin buscar todavía» no están en ningún género, ni repartidos: con la búsqueda a medias se dice.
+  parte('medias', c.filas.sinBuscar.artistas > 0
+    ? 'Son los géneros de los artistas ya buscados: los minutos «sin buscar todavía» no están en ningún género, así que los porcentajes irán creciendo.'
+    : '');
+  parchearLista(el.querySelector('[data-lista="top"]'), g.generos.slice(0, TOP), 'top', g.total, st);
+  const todos = el.querySelector('.generos-todos');
+  if (todos.hidden !== (n <= TOP)) todos.hidden = n <= TOP;
+  parte('ver-todos', `Ver todos (${fmt(n)})`);
+  parchearLista(todos.querySelector('[data-lista="todos"]'), todos.open && n > TOP ? g.generos : [], 'todos', g.total, st);
+}
+
+function parchearLista(ol, items, lista, total, st) {
+  const viejos = st.nodos[lista];
+  const nuevos = new Map();
+  let antes = null;
+  for (const x of items) {
+    const clave = `${lista}:${x.genero}`;
+    let n = viejos.get(x.genero);
+    if (!n) {
+      const li = document.createElement('li');
+      li.className = 'mapa-pais generos-genero';
+      li.dataset.genero = x.genero;
+      li.innerHTML = `<details data-genero-clave="${escapeHtml(clave)}"><summary></summary><div class="generos-artistas"></div></details>`;
+      n = { li, details: li.firstElementChild, summary: li.querySelector('summary'), cuerpo: li.querySelector('.generos-artistas'), resumen: null, artistas: null };
+      if (st.abiertos.has(clave)) n.details.open = true;
+    }
+    const resumen = htmlResumen(x, total);
+    if (n.resumen !== resumen) { n.summary.innerHTML = resumen; n.resumen = resumen; }
+    const artistas = n.details.open ? htmlArtistas(x, clave, st) : '';
+    if (n.artistas !== artistas) {
+      // Si el foco estaba en «Mostrar 100 más», vuelve al botón nuevo (o al género, si ya no hay más).
+      const conFoco = n.cuerpo.contains(document.activeElement);
+      n.cuerpo.innerHTML = artistas;
+      n.artistas = artistas;
+      if (conFoco) (n.cuerpo.querySelector('[data-generos-accion="mas"]') || n.summary).focus({ preventScroll: true });
+    }
+    const sitio = antes ? antes.nextSibling : ol.firstChild;
+    if (sitio !== n.li) ol.insertBefore(n.li, sitio);
+    antes = n.li;
+    nuevos.set(x.genero, n);
+  }
+  for (const [k, n] of viejos) if (!nuevos.has(k)) n.li.remove();
+  st.nodos[lista] = nuevos;
+}
+
+function htmlResumen(x, total) {
+  return `<span class="mapa-pais-n">${escapeHtml(x.genero)}</span>
+    <span class="mapa-num">${fmtMin(x.decimas)}</span>
+    <span class="mapa-num mapa-pct">${fmtPct(x.decimas, total)}</span>
+    <span class="mapa-num mapa-pais-a">${plural(x.artistas.length, 'artista', 'artistas')}</span>`;
+}
+
+function htmlArtistas(x, clave, st) {
+  const todos = x.artistas.length;
+  const n = Math.min(st.mostrados.get(clave) || POR_PAGINA, todos);
+  const filas = x.artistas.slice(0, n).map((a) => `<li><span class="mapa-art-n">${escapeHtml(a.nombre)}</span><span class="mapa-num">${fmtMin(a.decimas)}</span></li>`).join('');
+  const pie = todos > POR_PAGINA
+    ? `<div class="generos-pie"><span class="mapa-num">${fmt(n)} de ${plural(todos, 'artista', 'artistas')}</span>${n < todos
+      ? `<button class="btn btn-secondary btn-sm" data-generos-accion="mas" data-clave="${escapeHtml(clave)}">Mostrar ${fmt(POR_PAGINA)} más</button>` : ''}</div>`
+    : '';
+  return `<ol class="mapa-artistas-lista">${filas}</ol>${pie}`;
 }
 
 function htmlCobertura(c, st) {
   const f = c.filas;
+  // Cinco filas desde v=314: «con etiquetas, pero ninguna de género» va aparte, para que esos minutos no se
+  // mezclen con «Last.fm dice que no tiene» (que incluye a los que Last.fm cambió por OTRO artista).
   const filas = [
-    ['con-etiquetas', 'Con etiquetas', 'Alguna fuente les da al menos una etiqueta', f.conEtiquetas],
-    ['no-tiene', 'Last.fm dice que no tiene', 'Buscados, y sin ninguna etiqueta', f.noTiene],
+    ['con-generos', 'Con géneros', 'Alguna etiqueta suya es un género', f.conGeneros],
+    ['sin-genero', 'Con etiquetas, pero ninguna de género', 'Solo países, voces u otras que no son géneros', f.sinGenero],
+    ['no-tiene', 'Last.fm dice que no tiene', 'Buscados, y sin ninguna etiqueta a su nombre', f.noTiene],
     ['sin-buscar', 'Sin buscar todavía', `Artistas con ${MIN_MINUTOS} minutos o más`, f.sinBuscar],
     ['menos10', `Menos de ${MIN_MINUTOS} minutos`, 'No se buscan', f.menos10],
   ];
-  const todos = f.conEtiquetas.artistas + f.noTiene.artistas + f.sinBuscar.artistas + f.menos10.artistas;
+  const todos = filas.reduce((s, x) => s + x[3].artistas, 0);
   const noSePudo = st.sesion.noSePudo.size;
   return `
     <h2 class="mapa-h2">Cuánto se sabe</h2>

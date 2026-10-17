@@ -817,7 +817,7 @@ const HOME_SECTIONS = [
       { hash: 'calendario', icon: ICONS.calendario, name: 'Calendario', desc: 'Cada día de tu historial, coloreado por lo que escuchaste.' },
       { hash: 'mapa', icon: ICONS.mapa, name: 'Mapa', desc: 'Tus países, ordenados por los minutos que escuchaste.' },
       { hash: 'puertas', icon: ICONS.puertas, name: 'Puertas de entrada', desc: 'Por qué tema entraste a cada artista y si sigue siendo tu top.' },
-      { hash: 'generos', icon: ICONS.generos, name: 'Tus géneros', desc: 'Busca en Last.fm las etiquetas de los artistas que escuchas.' },
+      { hash: 'generos', icon: ICONS.generos, name: 'Tus géneros', desc: 'Los géneros que más escuchas, según las etiquetas de Last.fm.' },
       { hash: 'covers', icon: ICONS.covers, name: 'Mis tapas', desc: 'El mosaico de las portadas que escuchaste de verdad.' },
       { hash: 'search', icon: ICONS.search, name: 'Buscar likes', desc: 'Buscador instantáneo en tus likes, sin ir a Spotify.' },
       { hash: 'listened', icon: ICONS.listened, name: 'Álbumes escuchados', desc: 'Los álbumes de tu playlist de registro, agrupados.' },

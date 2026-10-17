@@ -1,0 +1,257 @@
+<!doctype html><html lang="es"><head><meta charset="utf-8"><title>banco generos — la vista de tus géneros, con un Last.fm de mentira</title>
+<style>html,body{margin:0;background:#111;color:#eee;font:13px system-ui}iframe{border:0;display:block}</style>
+</head><body>
+<pre id="progreso"></pre>
+<div id="marcos"></div>
+<script type="module">
+// ── Qué prueba este banco (v=314, tanda 62) ──────────────────────────────────
+//
+// `#generos` REAL, en la app ENTERA (`generos-caso.html`, uno por iframe), con `/me` = owner contestado por la
+// Spotify simulada, un historial INVENTADO sembrado en la clave del caché del owner, registros sembrados en el
+// almacén de etiquetas y un Last.fm SIMULADO que vive acá, en la madre. Nada sale a `ws.audioscrobbler.com` ni
+// a `api.spotify.com`.
+//
+//   F. sin ningún género (nadie buscado): la sección dice en una línea que salen a medida que avanza la
+//      búsqueda, y ninguna lista ni tabla;
+//   A. abrir = 0 a Last.fm y 1 `/me` de la vista (+1 del arranque), también al volver y tras recargar;
+//      desplegar géneros, «Ver todos» y un género dentro = 0 peticiones a CUALQUIER host;
+//   B. el top 10 y la lista entera = la cuenta a mano (minutos, %, artistas y orden); el de las dos formas de
+//      «hip hop» cuenta una vez; el del autocorrect a otro artista no está en ningún género;
+//   C. las cinco filas de «Cuánto se sabe» = la cuenta a mano, y suman el total;
+//   G. a 1366 y a 390 px nada desborda (cada fila del top, de la lista, de los artistas y de «Cuánto se sabe»),
+//      con las alturas de la página medidas (top 10, «Ver todos» abierto, un género desplegado);
+//   D. con la búsqueda corriendo, la lista crece sin recrear el género abierto: es el MISMO elemento y sigue
+//      abierto después de tres respuestas;
+//   E. «Mostrar 100 más» con un género de 130 artistas inventados: 100 → 130, 0 peticiones;
+//   y en todos: 0 rutas sin simular, 0 hosts externos fuera de los simulados, 0 escrituras, 0 errores.
+//
+// ⚠️ Todas las esperas van con `esperarReal` (una petición al propio servidor por vuelta): un `await` de
+// IndexedDB sin anclar deja correr suelto el reloj virtual.
+
+import { esperarReal, anclar } from '/banco/simulado.mjs';
+import { fallar, listo } from '/banco/esperar.mjs';
+import { crearLastfm, sembrarHistorial, sembrarEtiquetas, ESPERADO, HISTORIAL_GRANDE, GRANDE } from '/banco/generos-datos.mjs';
+
+const afirmar = (c, msg) => { if (!c) throw new Error('BANCO: ' + msg); };
+const progreso = (t) => { document.getElementById('progreso').textContent = t; };
+const VUELTAS = 60000;
+
+const lf = crearLastfm();
+window.__lf = lf;
+
+function abrirMarco(nombre, { alto = 900, ancho = 1366 } = {}) {
+  const f = document.createElement('iframe');
+  f.width = ancho; f.height = alto;
+  f.src = `/banco/generos-caso.html?marco=${nombre}`;
+  document.getElementById('marcos').appendChild(f);
+  return f;
+}
+const win = (f) => f.contentWindow;
+const $ = (f, s) => f.contentDocument?.querySelector(s);
+const $$ = (f, s) => [...(f.contentDocument?.querySelectorAll(s) || [])];
+const vista = (f) => $(f, '.generos[data-estado]');
+const meDe = (f) => win(f).__sim.reg.llamadas.filter((l) => l.ruta === '/me').length;
+const fetchs = (f) => win(f).__fetchs.length;
+async function arrancado(f, que) { await esperarReal(() => win(f)?.__listo, { que: `que arranque ${que}`, vueltas: VUELTAS }); }
+async function irA(f, hash, que, cond) { win(f).location.hash = hash; await esperarReal(cond, { que, vueltas: VUELTAS }); }
+const txt = (el) => (el?.textContent || '').replace(/\s+/g, ' ').trim();
+const liDe = (f, lista, genero) => $$(f, `[data-lista="${lista}"] > li`).find((li) => li.dataset.genero === genero);
+// Abrir como lo hace una persona: un clic en el `<summary>`.
+// La espera va acotada: si lo que se quiere abrir no está (una puerta rota), falla con su mensaje.
+async function desplegar(details, que) {
+  if (!details) throw new Error(`BANCO: no está lo que se quiere desplegar (${que})`);
+  if (!details.open) details.querySelector(':scope > summary').click();
+  await esperarReal(() => details.open && (details.classList.contains('generos-todos') ? details.querySelector('li') : details.querySelector('.mapa-artistas-lista li')), { que, vueltas: 3000 });
+}
+const resumenDe = (li) => [li.dataset.genero, ...[...li.querySelectorAll(':scope > details > summary .mapa-num')].map(txt)];
+const artistasDe = (li) => [...li.querySelectorAll('.mapa-artistas-lista .mapa-art-n')].map(txt);
+function limpio(f, que) {
+  const s = win(f).__sim.reg;
+  afirmar(win(f).__errores.length === 0, `0 errores en ${que}: ${win(f).__errores.join(' | ')}`);
+  afirmar(s.desconocidas.length === 0 && s.externas.length === 0 && s.escrituras.length === 0, `${que}: 0 rutas sin simular, 0 hosts externos, 0 escrituras (${s.desconocidas.join(',')} ${s.externas.join(',')})`);
+}
+const alto = (f) => Math.round(f.contentDocument.documentElement.scrollHeight);
+
+const datos = {};
+try {
+  const { HISTORY_OWNER_ID } = await import('/js/features/history-data.js');
+  localStorage.setItem('fonoteca_last_user_id', HISTORY_OWNER_ID);
+  await sembrarHistorial(anclar);
+
+  // ── F. Sin ningún género todavía ──────────────────────────────────────────
+  progreso('F: sin géneros');
+  const F = abrirMarco('F');
+  await arrancado(F, 'el marco F');
+  await irA(F, '#generos', 'que #generos pinte en F', () => vista(F) && $(F, '.generos-lista [data-parte="vacio"]'));
+  datos.f = { texto: [...$(F, '.generos-lista').children].map(txt).join(' | '), listas: $$(F, '.generos-lista ol, .generos-lista table, .generos-lista li').length };
+  afirmar(datos.f.texto === 'Géneros | Tus géneros saldrán aquí a medida que avance la búsqueda.', `F: una línea y nada más: «${datos.f.texto}»`);
+  afirmar(datos.f.listas === 0, `F: ninguna lista ni tabla de géneros (${datos.f.listas})`);
+  afirmar(lf.log.length === 0, 'F: 0 a Last.fm');
+  limpio(F, 'F');
+  F.remove();
+
+  await sembrarEtiquetas(anclar, HISTORY_OWNER_ID);
+
+  // ── A. Abrir no le pide nada a nadie ──────────────────────────────────────
+  progreso('A: abrir #generos');
+  const A = abrirMarco('A');
+  await arrancado(A, 'el marco A');
+  const meArranque = meDe(A);
+  await irA(A, '#generos', 'que #generos pinte los géneros', () => vista(A) && $(A, '.generos-top > li'));
+  const tAbrir = performance.now();
+  await esperarReal(() => performance.now() - tAbrir > 5000, { que: '5 s de reloj después de abrir', vueltas: VUELTAS });
+  datos.abrir = { lf: lf.log.length, me: meDe(A) - meArranque, meArranque, estado: vista(A).dataset.estado };
+  afirmar(datos.abrir.lf === 0 && datos.abrir.estado === 'quieto', `A: abrir no pide nada a Last.fm en 5 s y la búsqueda queda quieta (${datos.abrir.lf}, ${datos.abrir.estado})`);
+  afirmar(datos.abrir.me === 1, `A: abrir pide exactamente 1 /me además del del arranque (${datos.abrir.me}; arranque ${meArranque})`);
+  await irA(A, '#home', 'que el inicio pinte', () => $(A, '.home-grid') && !vista(A));
+  const tarjeta = txt($$(A, '.home-card').find((c) => c.dataset.route === 'generos')?.querySelector('.home-card-desc'));
+  afirmar(tarjeta === 'Los géneros que más escuchas, según las etiquetas de Last.fm.', `A: la tarjeta de inicio dice lo que enseña ahora («${tarjeta}»)`);
+  const meVolver = meDe(A);
+  await irA(A, '#generos', 'que #generos vuelva a pintar', () => vista(A) && $(A, '.generos-top > li'));
+  afirmar(lf.log.length === 0 && meDe(A) === meVolver, `A: volver no pide nada (Last.fm ${lf.log.length}, /me ${meDe(A) - meVolver})`);
+
+  // Desde acá, B y C despliegan géneros y «Ver todos»: lo que piden se cuenta al final de C (A: tiene que ser 0).
+  const antes = { fetchs: fetchs(A), lf: lf.log.length, sim: win(A).__sim.reg.llamadas.length };
+
+  // ── B. El top 10 y la lista entera, contra la cuenta a mano ───────────────
+  // B y C solo leen la pantalla: si fallan, se anota y se sigue con la otra, para que una puerta que rompe las
+  // dos se vea roja en las dos (el banco falla igual, al final de C).
+  const fallos = [];
+  const seccion = async (nombre, fn) => { try { await fn(); } catch (e) { fallos.push(`${nombre} → ${e.message}`); } };
+  const fila = (k) => $(A, `.generos-filas tr[data-fila="${k}"]`);
+  progreso('B: los géneros a mano');
+  await seccion('B', async () => {
+  await desplegar(liDe(A, 'top', 'rap')?.querySelector('details'), 'que se desplieguen los artistas de «rap»');
+  const esperadoFila = (x) => [x[0], x[1], x[2], `${x[3].length} ${x[3].length === 1 ? 'artista' : 'artistas'}`];
+  const top = $$(A, '[data-lista="top"] > li').map(resumenDe);
+  afirmar(JSON.stringify(top) === JSON.stringify(ESPERADO.generos.slice(0, 10).map(esperadoFila)), `B: el top 10 = la cuenta a mano\n${JSON.stringify(top)}`);
+  afirmar(txt($(A, '[data-parte="titulo"]')) === 'Tus 10 géneros' && txt($(A, '[data-parte="ver-todos"]')) === 'Ver todos (13)', `B: «Tus 10 géneros» y «Ver todos (13)» (${txt($(A, '[data-parte="titulo"]'))} · ${txt($(A, '[data-parte="ver-todos"]'))})`);
+  afirmar(/Un artista cuenta en todos sus géneros, así que los porcentajes suman más de 100\./.test(txt($(A, '.generos-suma'))), 'B: la línea de que los porcentajes suman más de 100');
+  afirmar(!$(A, '[data-parte="medias"]').hidden && /sin buscar todavía/.test(txt($(A, '[data-parte="medias"]'))), 'B: con la búsqueda a medias, la línea que lo dice');
+  await desplegar($(A, '.generos-todos'), 'que se abra «Ver todos»');
+  await desplegar(liDe(A, 'todos', 'salsa polar')?.querySelector('details'), 'que se desplieguen los de «salsa polar» dentro de «Ver todos»');
+  const todos = $$(A, '[data-lista="todos"] > li');
+  afirmar(JSON.stringify(todos.map(resumenDe)) === JSON.stringify(ESPERADO.generos.map(esperadoFila)), `B: la lista entera (13) = la cuenta a mano, en orden\n${JSON.stringify(todos.map(resumenDe))}`);
+  for (const li of todos) li.querySelector('details').open = true;
+  await esperarReal(() => todos.every((li) => li.querySelector('.mapa-artistas-lista li')), { que: 'que se pinten los artistas de los 13', vueltas: VUELTAS });
+  const artistas = todos.map((li) => [li.dataset.genero, artistasDe(li)]);
+  afirmar(JSON.stringify(artistas) === JSON.stringify(ESPERADO.generos.map((x) => [x[0], x[3]])), `B: los artistas de cada género, por minutos (${JSON.stringify(artistas)})`);
+  afirmar(JSON.stringify(artistas.find((x) => x[0] === 'hip hop')[1]) === '["Brisa Norte"]' && !artistas.some((x) => x[0] === 'hip-hop'), 'B: el de «hip-hop» y «hip hop» cuenta una vez, en «hip hop»');
+  afirmar(!artistas.some((x) => x[1].includes('Hilo Doble')), 'B: el del autocorrect a otro artista no está en ningún género');
+  afirmar(!artistas.some((x) => ['canadian', 'female vocalists', '80s', 'british', 'usa', 'lote_inventado_3', 'my lista inventada'].includes(x[0])), 'B: ninguna etiqueta que no es género está en la lista');
+  afirmar(/^Last\.fm dice que no tiene.*2 artistas 650 min$/.test(txt(fila('no-tiene'))), `B: el del autocorrect cuenta en «no tiene» (${txt(fila('no-tiene'))})`);
+  });
+  datos.tarjeta = tarjeta;
+
+  // ── C. Las cinco filas ────────────────────────────────────────────────────
+  progreso('C: las cinco filas');
+  await seccion('C', async () => {
+  const filas = vista(A).dataset.filas.split(',').map(Number), artF = vista(A).dataset.artistas.split(',').map(Number);
+  datos.filas = filas;
+  afirmar(filas.join() === ESPERADO.filas.join() && artF.join() === ESPERADO.artistasFilas.join(), `C: las cinco filas = la cuenta a mano (${filas} / ${artF})`);
+  afirmar(filas.reduce((a, b) => a + b, 0) === ESPERADO.total && +vista(A).dataset.total === ESPERADO.total, 'C: y suman el total');
+  afirmar(+vista(A).dataset.universo === ESPERADO.universo && +vista(A).dataset.pendientes === ESPERADO.pendientes, `C: universo 15 y 3 por buscar (${vista(A).dataset.universo}, ${vista(A).dataset.pendientes})`);
+  afirmar(JSON.stringify($$(A, '.generos-filas tbody tr').map((tr) => tr.dataset.fila)) === '["con-generos","sin-genero","no-tiene","sin-buscar","menos10"]', 'C: las cinco, en su orden');
+  afirmar(/^Con etiquetas, pero ninguna de género.*1 artista 400 min$/.test(txt(fila('sin-genero'))), `C: la fila nueva (${txt(fila('sin-genero'))})`);
+  });
+  datos.desplegar = { fetchs: fetchs(A) - antes.fetchs, lf: lf.log.length - antes.lf, sim: win(A).__sim.reg.llamadas.length - antes.sim };
+  await seccion('A', async () => {
+    afirmar(datos.desplegar.fetchs === 0 && datos.desplegar.lf === 0 && datos.desplegar.sim === 0, `A: desplegar los 13 géneros y «Ver todos» = 0 peticiones a cualquier host (${JSON.stringify(datos.desplegar)})`);
+  });
+  if (fallos.length) throw new Error(fallos.join('\n'));
+  limpio(A, 'A');
+
+  // ── G. A 1366 y a 390 px, nada desborda (y tras recargar, abrir sigue costando lo mismo) ──
+  datos.g = {};
+  for (const ancho of [1366, 390]) {
+    progreso(`G: a ${ancho} px`);
+    const M = abrirMarco('G' + ancho, { ancho, alto: ancho === 390 ? 844 : 768 });
+    await arrancado(M, `el marco de ${ancho}`);
+    const meA = meDe(M);
+    await irA(M, '#generos', `que #generos pinte a ${ancho}`, () => vista(M) && $(M, '.generos-top > li'));
+    afirmar(meDe(M) - meA === 1 && lf.log.length === 0, `G${ancho}: tras recargar, abrir = 1 /me y 0 a Last.fm (${meDe(M) - meA}, ${lf.log.length})`);
+    const g = { top: alto(M) };
+    const todosM = $(M, '.generos-todos');
+    await desplegar(todosM, `que se abra «Ver todos» a ${ancho}`);
+    g.verTodos = alto(M);
+    todosM.querySelector(':scope > summary').click();
+    await esperarReal(() => !todosM.open && !todosM.querySelector('li'), { que: 'que se cierre «Ver todos»', vueltas: VUELTAS });
+    await desplegar(liDe(M, 'top', 'cumbia lunar').querySelector('details'), `que se despliegue «cumbia lunar» a ${ancho}`);
+    g.genero = alto(M);
+    await desplegar(todosM, `que se vuelva a abrir «Ver todos» a ${ancho}`);
+    await desplegar(liDe(M, 'todos', 'drum and bass').querySelector('details'), 'que se despliegue «drum and bass»');
+    const piezas = [...$$(M, '.generos-lista li'), ...$$(M, '.generos-lista summary'), ...$$(M, '.generos-filas tr'), ...$$(M, '.generos-lista p')];
+    const desbordan = piezas.filter((el) => el.scrollWidth > el.clientWidth).map((el) => `${el.tagName}.${el.className}:${el.scrollWidth}/${el.clientWidth}`);
+    const pagina = `${M.contentDocument.documentElement.scrollWidth}/${M.contentDocument.documentElement.clientWidth}`;
+    g.piezas = piezas.length; g.pagina = pagina; g.todo = alto(M);
+    datos.g[ancho] = g;
+    afirmar(desbordan.length === 0, `G${ancho}: ninguna fila desborda (${piezas.length} medidas; ${desbordan.join(' ')})`);
+    afirmar(M.contentDocument.documentElement.scrollWidth <= M.contentDocument.documentElement.clientWidth, `G${ancho}: ni la página scrollea a lo ancho (${pagina})`);
+    limpio(M, `G${ancho}`);
+    M.remove();
+  }
+
+  // ── D. Con la búsqueda corriendo, el género abierto sigue siendo el mismo ──
+  progreso('D: la búsqueda corriendo');
+  const liCumbia = liDe(A, 'top', 'cumbia lunar');
+  const dCumbia = liCumbia.querySelector('details');
+  await desplegar(dCumbia, 'que se despliegue «cumbia lunar»');
+  afirmar($(A, '[data-generos-accion="buscar"]')?.textContent.trim() === 'Seguir', 'D: con algo buscado, el botón dice «Seguir»');
+  $(A, '[data-generos-accion="buscar"]').click();
+  const vistos = [];
+  for (let k = 1; k <= 3; k++) {
+    await esperarReal(() => lf.log.length >= k && liDe(A, 'top', 'cumbia lunar'), { que: `la respuesta ${k}`, vueltas: VUELTAS });
+    await esperarReal(() => +vista(A).dataset.pendientes <= 3 - k, { que: `que se guarde la respuesta ${k}`, vueltas: VUELTAS });
+    vistos.push(liDe(A, 'top', 'cumbia lunar') === liCumbia && dCumbia.open);
+  }
+  await esperarReal(() => vista(A).dataset.estado === 'terminado', { que: 'que la búsqueda termine', vueltas: VUELTAS });
+  const tras = resumenDe(liDe(A, 'top', 'cumbia lunar'));
+  datos.d = { vistos, tras, pedidos: lf.log.map((e) => e.artista) };
+  afirmar(vistos.every(Boolean), `D: después de cada una de las tres respuestas, «cumbia lunar» es el MISMO elemento y sigue abierto (${vistos})`);
+  afirmar(tras[1] === ESPERADO.despues.cumbia[0] && tras[3] === `${ESPERADO.despues.cumbia[1]} artistas` && artistasDe(liCumbia).includes('Valle Hondo'), `D: y creció con lo nuevo (${tras.join(' · ')})`);
+  afirmar(JSON.stringify(datos.d.pedidos) === '["Valle Hondo","Cala Azul","Sierra Baja"]', `D: se pidieron solo los tres sin buscar (${datos.d.pedidos.join(', ')})`);
+  const ola = $$(A, '.generos-lista li').find((li) => li.dataset.genero === 'ola nueva');
+  afirmar(ola && resumenDe(ola)[1] === ESPERADO.despues.olaNueva[0], `D: apareció «ola nueva» con lo suyo (${ola ? resumenDe(ola).join(' · ') : 'no está'})`);
+  afirmar($(A, '[data-parte="medias"]').hidden, 'D: terminada la búsqueda, la línea de «a medias» se va');
+  limpio(A, 'A después de buscar');
+  A.remove();
+
+  // ── E. «Mostrar 100 más» ──────────────────────────────────────────────────
+  progreso('E: un género de 130 artistas');
+  await sembrarHistorial(anclar, HISTORIAL_GRANDE);
+  await sembrarEtiquetas(anclar, HISTORY_OWNER_ID, GRANDE);
+  const Eg = abrirMarco('E');
+  await arrancado(Eg, 'el marco E');
+  await irA(Eg, '#generos', 'que #generos pinte en E', () => vista(Eg) && liDe(Eg, 'top', 'polka masiva'));
+  const liP = liDe(Eg, 'top', 'polka masiva');
+  const antesE = { fetchs: fetchs(Eg), lf: lf.log.length };
+  await desplegar(liP.querySelector('details'), 'que se desplieguen los artistas de «polka masiva»');
+  const filas100 = liP.querySelectorAll('.mapa-artistas-lista li').length;
+  const pie = txt(liP.querySelector('.generos-pie'));
+  afirmar(filas100 === 100 && pie === '100 de 130 artistasMostrar 100 más', `E: de entrada 100 filas y el pie (${filas100}, «${pie}»)`);
+  liP.querySelector('[data-generos-accion="mas"]').click();
+  await esperarReal(() => liP.querySelectorAll('.mapa-artistas-lista li').length === 130, { que: 'que salgan los 130', vueltas: VUELTAS });
+  const nombres = artistasDe(liP);
+  datos.e = { filas: nombres.length, pie: txt(liP.querySelector('.generos-pie')), fetchs: fetchs(Eg) - antesE.fetchs, lf: lf.log.length - antesE.lf };
+  afirmar(datos.e.pie === '130 de 130 artistas' && !liP.querySelector('[data-generos-accion="mas"]'), `E: con los 130, sin botón (${datos.e.pie})`);
+  afirmar(nombres[0] === 'Masa 001' && nombres[129] === 'Masa 130', `E: por minutos (${nombres[0]} … ${nombres[129]})`);
+  afirmar(datos.e.fetchs === 0 && datos.e.lf === 0, `E: desplegar y «Mostrar 100 más» = 0 peticiones (${datos.e.fetchs}, ${datos.e.lf})`);
+  limpio(Eg, 'E');
+  Eg.remove();
+
+  const resumen =
+    `F: «${datos.f.texto.split(' | ')[1]}», listas=${datos.f.listas} · A: abrir lf=${datos.abrir.lf} /me=${datos.abrir.me} (+${datos.abrir.meArranque} del arranque) · ` +
+    `desplegar ${JSON.stringify(datos.desplegar)} · B: top 10 y los 13 = la cuenta a mano · C: filas=${datos.filas.join('/')} · ` +
+    `G: 1366 alto top=${datos.g[1366].top} verTodos=${datos.g[1366].verTodos} genero=${datos.g[1366].genero} (${datos.g[1366].piezas} piezas, página ${datos.g[1366].pagina}) · ` +
+    `390 alto top=${datos.g[390].top} verTodos=${datos.g[390].verTodos} genero=${datos.g[390].genero} (${datos.g[390].piezas} piezas, página ${datos.g[390].pagina}) · ` +
+    `D: mismo elemento abierto ${datos.d.vistos.join('/')}, cumbia ${datos.d.tras.slice(1).join(' ')} · E: ${datos.e.filas} filas, ${datos.e.fetchs} peticiones · ` +
+    `tarjeta «${datos.tarjeta}» · errores=0 · reloj virtual=${Math.round(performance.now())} ms`;
+  document.documentElement.setAttribute('data-resumen', resumen);
+  progreso(resumen);
+  listo();
+} catch (e) {
+  document.documentElement.setAttribute('data-resumen', 'reloj virtual=' + Math.round(performance.now()) + ' ms');
+  fallar(new Error(String(e?.message || e) + ' · ' + JSON.stringify(datos).slice(0, 1500)));
+}
+</script>
+</body></html>

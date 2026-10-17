@@ -48,7 +48,7 @@ if npm test --silent 2>&1 | tail -4 | sed 's/^/      /'; [ "${PIPESTATUS[0]}" -e
 # `mosaico` y `toasts` entraron en v=273:
 # estaban en rojo desde antes del 04/10 y justamente por no estar acá nadie los
 # miraba, igual que le había pasado a `barra` entre v=241 y v=261.
-echo "2b. bancos (barra · pausa-search · toasts · mosaico · novedades · escrituras · ocultar-artista ×3 · covers-orden · calendario · import-guarda · ocultos-cache · mapa · puertas · cuota · letras · generos-cache · generos-escaneo)"
+echo "2b. bancos (barra · pausa-search · toasts · mosaico · novedades · escrituras · ocultar-artista ×3 · covers-orden · calendario · import-guarda · ocultos-cache · mapa · puertas · cuota · letras · generos-cache · generos-escaneo · generos)"
 # Los dos de `ocultar-artista` entraron en v=276: las TRES vistas que ocultan
 # artistas, reales, contra una Spotify simulada. Es el único sitio donde se puede
 # probar ocultar sin escribir en la cuenta de Ian, y el de `-disco` es el que
@@ -94,7 +94,11 @@ echo "2b. bancos (barra · pausa-search · toasts · mosaico · novedades · esc
 # la red): abrir no pide nada a Last.fm y cuesta 1 `/me`; «Seguir» pide exactamente los que faltan; con 29 y 503 termina
 # igual sin guardar ningún fallo; recargar a mitad no repite nada; salir para; dos pestañas no buscan a la vez; «Limpiar
 # caché» conserva las etiquetas y borra el ritmo; con la IndexedDB rota lo dice y no ofrece buscar; a 390 px no desborda.
-for B in barra pausa-search toasts mosaico novedades escrituras ocultar-artista ocultar-artista-disco ocultar-artista-novedades covers-orden calendario import-guarda ocultos-cache mapa puertas cuota letras generos-cache generos-escaneo; do
+# `generos` entró en v=314: los géneros de #generos en la app ENTERA, con un historial y etiquetas INVENTADOS y un Last.fm
+# SIMULADO: sin géneros, una línea y ninguna lista; abrir = 1 `/me` y 0 a Last.fm; desplegar, «Ver todos» y «Mostrar 100
+# más» = 0 peticiones; el top 10 y la lista entera = la cuenta a mano (sin repartir minutos, sinónimos juntos, el
+# autocorrect a otro artista afuera); las cinco filas; a 1366 y a 390 nada desborda; buscando, el género abierto sigue.
+for B in barra pausa-search toasts mosaico novedades escrituras ocultar-artista ocultar-artista-disco ocultar-artista-novedades covers-orden calendario import-guarda ocultos-cache mapa puertas cuota letras generos-cache generos-escaneo generos; do
   if node scripts/correr-banco.mjs "$B" 2>&1 | sed 's/^/      /'; [ "${PIPESTATUS[0]}" -eq 0 ]; then
     ok "banco $B en verde"
   else

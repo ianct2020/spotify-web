@@ -141,7 +141,9 @@ console.log('corroborado');
 // es justamente para lo que se escribió: la regla, una sola vez; y
 // `util/mapa-escaneo.js`, por las consultas (las URLs tienen que ser las de la
 // medición de la 51). Ahora se afirma que la importan esos dos y nadie más.
-console.log('10. módulo hoja, la importan solo mapa-paises.js y mapa-escaneo.js');
+// v=314 (tanda 62): y `util/generos-regla.js`, por `normalizarNombre` (para decidir si el autocorrect de
+// Last.fm devolvió OTRO artista: el encargo pide la de acá, importada, y no una copia). Son tres, y nadie más.
+console.log('10. módulo hoja, la importan solo mapa-paises.js, mapa-escaneo.js y generos-regla.js');
 {
   const RAIZ = join(dirname(fileURLToPath(import.meta.url)), '..');
   let src = '';
@@ -158,9 +160,9 @@ console.log('10. módulo hoja, la importan solo mapa-paises.js y mapa-escaneo.js
   };
   recorrer(join(RAIZ, 'src/js'));
   const importan = quienes.filter((p) => /from\s+['"][^'"]*mb-pais\.js(\?v=\d+)?['"]/.test(readFileSync(p, 'utf8')));
-  const permitidos = ['mapa-paises.js', 'mapa-escaneo.js'].map((f) => join('src', 'js', 'util', f));
-  ok(importan.length === 2 && importan.every((p) => permitidos.some((f) => p.endsWith(f))),
-    `de src/js la importan solo util/mapa-paises.js (la regla) y util/mapa-escaneo.js (las consultas) (la importan: ${importan.join(', ') || 'nadie'})`);
+  const permitidos = ['mapa-paises.js', 'mapa-escaneo.js', 'generos-regla.js'].map((f) => join('src', 'js', 'util', f));
+  ok(importan.length === 3 && importan.every((p) => permitidos.some((f) => p.endsWith(f))),
+    `de src/js la importan solo util/mapa-paises.js (la regla), util/mapa-escaneo.js (las consultas) y util/generos-regla.js (normalizarNombre) (la importan: ${importan.join(', ') || 'nadie'})`);
 }
 
 console.log('11. varios-mismo-pais exige país en TODOS (v=303)');

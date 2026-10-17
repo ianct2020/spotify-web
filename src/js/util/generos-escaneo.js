@@ -31,7 +31,10 @@
 //     key» y 26 «API Key Suspended» (la key). Ninguno de esos se vio en la medición.
 
 import { esperaTrasFallo, FALLOS_PARA_PAUSAR, duracionCorta } from './mapa-escaneo.js';
-import { filtrarEtiquetasLastfm, decidirEtiquetas } from './generos-artista.js';
+import { filtrarEtiquetasLastfm } from './generos-artista.js';
+// v=314: «Cuánto se sabe» decide con la regla del género (ver la cabecera de `generos-regla.js`, que importa
+// `yaBuscado` de acá: el import es circular a propósito y ninguno de los dos usa lo del otro al cargarse).
+import { generosDeArtista } from './generos-regla.js';
 
 export const BASE_LASTFM = 'https://ws.audioscrobbler.com/2.0/';
 // Una petición por vez y 1.000 ms como mínimo entre COMIENZOS. Las condiciones de uso de la API
@@ -208,31 +211,35 @@ export async function conCandado(locks, fn) {
   });
 }
 
-// En décimas de minuto, enteras: así las cuatro filas suman EXACTAMENTE el total (la misma cuenta
+// En décimas de minuto, enteras: así las cinco filas suman EXACTAMENTE el total (la misma cuenta
 // que `decimas()` de `mapa-paises.js`, que no está exportada).
 const decimas = (min) => Math.round((Number(min) || 0) * 10);
 
 /**
- * «Cuánto se sabe»: cuatro filas que suman exactamente los minutos de todo el historial.
- *   · conEtiquetas: alguna fuente trae al menos una etiqueta (también lo de `#genre` y lo migrado);
- *   · noTiene: Last.fm ya contestó y no hay ninguna (buscado y vacío);
+ * «Cuánto se sabe»: cinco filas que suman exactamente los minutos de todo el historial (v=314; hasta
+ * v=313 eran cuatro y «con etiquetas» mezclaba a los que no tienen ninguna de género). Decide
+ * `generosDeArtista` (`util/generos-regla.js`), la misma regla que pinta los géneros:
+ *   · conGeneros: al menos una etiqueta de género (de cualquier fuente: también lo de `#genre` y lo migrado);
+ *   · sinGenero: con etiquetas, pero ninguna de género (un país, «female vocalists», basura);
+ *   · noTiene: Last.fm ya contestó y no hay nada que usar: vacío, o el autocorrect devolvió OTRO artista;
  *   · sinBuscar: del universo, sin etiquetas y sin buscar todavía;
  *   · menos10: los de menos de 10 min (no se buscan).
  * Cada una `{ artistas, decimas }`. `pendientes` = los del universo que el escaneo pediría (no
- * `yaBuscado`): incluye a los que tienen etiquetas de MusicBrainz o stats.fm solamente.
+ * `yaBuscado`, igual que en v=313): incluye a los que tienen etiquetas de MusicBrainz o stats.fm solamente.
  */
 export function armarCobertura({ totals, lista, registro }) {
   let total = 0, todos = 0;
   for (const t of Object.values(totals || {})) { total += decimas(t?.[1]); todos++; }
-  const filas = { conEtiquetas: { artistas: 0, decimas: 0 }, noTiene: { artistas: 0, decimas: 0 }, sinBuscar: { artistas: 0, decimas: 0 }, menos10: { artistas: 0, decimas: 0 } };
+  const vacia = () => ({ artistas: 0, decimas: 0 });
+  const filas = { conGeneros: vacia(), sinGenero: vacia(), noTiene: vacia(), sinBuscar: vacia(), menos10: vacia() };
+  const filaDe = { 'sin-genero': filas.sinGenero, 'no-tiene': filas.noTiene, 'sin-buscar': filas.sinBuscar };
   let enUniverso = 0, pendientes = 0;
   for (const it of lista) {
     enUniverso += it.decimas;
     const reg = registro(it.nombre);
-    const buscado = yaBuscado(reg);
-    if (!buscado) pendientes++;
-    const tags = decidirEtiquetas(reg);
-    const fila = tags && tags.length ? filas.conEtiquetas : buscado ? filas.noTiene : filas.sinBuscar;
+    if (!yaBuscado(reg)) pendientes++;
+    const { motivo } = generosDeArtista(reg, it.nombre);
+    const fila = motivo === null ? filas.conGeneros : filaDe[motivo];
     fila.artistas++;
     fila.decimas += it.decimas;
   }

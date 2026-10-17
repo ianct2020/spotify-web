@@ -16,8 +16,8 @@
 //      aparte), también al volver y tras recargar;
 //   B. con dos sembrados como ya buscados (uno `lastfm` con etiquetas, uno `migrado` con
 //      etiquetas) y uno `migrado` con `[]`, «Seguir» pide EXACTAMENTE los que faltan (y el del
-//      migrado vacío), con una sola respuesta definitiva por artista, y al final las cuatro filas
-//      dan la cuenta a mano;
+//      migrado vacío), con una sola respuesta definitiva por artista, y al final las filas (cinco
+//      desde v=314) dan la cuenta a mano;
 //   C. con errores de cuota (29) y 503 en un patrón fijo, el escaneo termina igual, cada fallo se
 //      reintentó con el MISMO artista y nadie quedó guardado por un fallo;
 //   D. recargar a mitad y «Seguir» no repite nada contestado;
@@ -28,7 +28,8 @@
 //   G. «Limpiar caché» conserva `generos_artista_v1_` y borra `generos_ritmo_v1_`;
 //   H. con `cargarEtiquetas` fallando (IndexedDB rota en el caso), la vista dice que no pudo leer
 //      y NO hay botón de buscar;
-//   I. a 390 px, ninguna fila de «Cuánto se sabe» desborda (`scrollWidth <= clientWidth`);
+//   I. a 390 px, ninguna fila de «Cuánto se sabe» desborda (`scrollWidth <= clientWidth`; seis `tr` desde
+//      v=314: las cinco filas y el pie);
 //   y en todos: 0 rutas sin simular, 0 hosts externos fuera de los simulados, 0 errores.
 //
 // ⚠️ Todas las esperas van con `esperarReal` (una petición al propio servidor por vuelta): un
@@ -90,10 +91,12 @@ try {
   afirmar(lf.log.length === 0, `A: abrir #generos no pide nada a Last.fm (pidió ${lf.log.length})`);
   afirmar(datos.abrir.me === 1, `A: abrir #generos pide exactamente 1 /me además del del arranque (pidió ${datos.abrir.me}; arranque ${meArranque})`);
   afirmar(+vista(A).dataset.total === ESPERADO.total && +vista(A).dataset.universo === ESPERADO.universo, `el total y el universo son los de la cuenta a mano (${vista(A).dataset.total}, ${vista(A).dataset.universo})`);
-  afirmar(datos.abrir.filas.join() === ESPERADO.abrir.filas.join() && datos.abrir.artistas.join() === ESPERADO.abrir.artistas.join(), `al abrir, las cuatro filas = la cuenta a mano (${datos.abrir.filas} / ${datos.abrir.artistas})`);
+  afirmar(datos.abrir.filas.join() === ESPERADO.abrir.filas.join() && datos.abrir.artistas.join() === ESPERADO.abrir.artistas.join(), `al abrir, las cinco filas = la cuenta a mano (${datos.abrir.filas} / ${datos.abrir.artistas})`);
   afirmar(datos.abrir.boton === 'Seguir', `con dos ya buscados, el botón dice «Seguir» (${datos.abrir.boton})`);
-  const sinTags = ['cumbia lunar', 'vals sintético', 'folk de faro'].every((t) => !A.contentDocument.body.textContent.toLowerCase().includes(t));
-  afirmar(sinTags, 'la vista no enseña ninguna etiqueta (eso es la 62)');
+  // v=313 afirmaba acá «la vista no enseña ninguna etiqueta (eso es la 62)»; desde v=314 enseña los géneros de
+  // lo YA guardado: los dos ya buscados, y nada del que está sin buscar.
+  const enPantalla = [...A.contentDocument.querySelectorAll('.generos-top > li')].map((li) => li.dataset.genero);
+  afirmar(JSON.stringify(enPantalla) === JSON.stringify(['cumbia lunar', 'vals sintético']), `al abrir, los géneros son los de los dos ya buscados y nada más (${enPantalla.join(', ')})`);
 
   // ── C (arranque). Buscar, con el patrón de fallos encendido ───────────────
   progreso('C: buscar con 29 y 503 en un patrón fijo');
@@ -187,7 +190,7 @@ try {
   };
   afirmar(JSON.stringify([...pedidos].sort()) === JSON.stringify([...ESPERADO.pedidos].sort()), `B: se pidieron exactamente los que faltaban, también el migrado vacío (${pedidos.join(', ')})`);
   afirmar(pedidos.every((n) => porArtista[n] === 1), `B: una sola respuesta definitiva por artista (${JSON.stringify(porArtista)})`);
-  afirmar(datos.final.filas.join() === ESPERADO.final.filas.join() && datos.final.artistas.join() === ESPERADO.final.artistas.join(), `B: al final, las cuatro filas = la cuenta a mano (${datos.final.filas} / ${datos.final.artistas})`);
+  afirmar(datos.final.filas.join() === ESPERADO.final.filas.join() && datos.final.artistas.join() === ESPERADO.final.artistas.join(), `B: al final, las cinco filas = la cuenta a mano (${datos.final.filas} / ${datos.final.artistas})`);
   afirmar(datos.final.filas.reduce((a, b) => a + b, 0) === ESPERADO.total, 'y suman el total');
   afirmar(datos.final.n29 >= 2 && datos.final.n503 >= 1, `C: hubo errores de cuota y 503 de verdad (${datos.final.n29} y ${datos.final.n503})`);
   afirmar(fallos.every((e) => lf.log.some((x) => x.n > e.n && x.artista === e.artista && x.definitiva)), 'C: cada fallo se reintentó con el MISMO artista hasta una respuesta definitiva');
@@ -249,7 +252,7 @@ try {
     tabla: `${d.querySelector('.generos-filas').scrollWidth}/${d.querySelector('.generos-cobertura').clientWidth}`,
     pagina: `${d.documentElement.scrollWidth}/${d.documentElement.clientWidth}`,
   };
-  afirmar(trs.length === 5 && trs.every((tr) => tr.scrollWidth <= tr.clientWidth), `I: a 390 px ninguna fila desborda (${datos.i.filas.join(' ')})`);
+  afirmar(trs.length === 6 && trs.every((tr) => tr.scrollWidth <= tr.clientWidth), `I: a 390 px ninguna fila desborda (${datos.i.filas.join(' ')})`);
   const cob = d.querySelector('.generos-cobertura');
   afirmar(d.querySelector('.generos-filas').scrollWidth <= cob.clientWidth && cob.scrollWidth <= cob.clientWidth, `I: ni la tabla se sale de su tarjeta (${datos.i.tabla})`);
   afirmar(d.documentElement.scrollWidth <= d.documentElement.clientWidth, `I: ni la página scrollea a lo ancho (${datos.i.pagina})`);
