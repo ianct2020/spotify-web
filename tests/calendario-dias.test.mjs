@@ -301,7 +301,14 @@ const resultado = await processStreamingHistory(fileArrays);
 // `gen-stats.py`. Necesita el export de Ian en disco, que está gitignoreado,
 // así que en otra máquina se SALTA — y lo dice, porque un paso que se saltea en
 // silencio es peor que uno que falta.
-{
+//
+// 🔴 Desde v=316 (tanda 65) corre SOLO A PEDIDO: con `FONOTECA_LEER_EXPORT=1` en el
+// entorno. Sin la variable no mira el disco (ni un `existsSync` de esa ruta): un
+// `npm test` cualquiera no puede abrir el export de Ian (la tanda 64 lo pisó una vez).
+// Lo vigila `tests/export-a-pedido.test.mjs`.
+if (process.env.FONOTECA_LEER_EXPORT !== '1') {
+  console.log('  · PUERTA 1 (real): SALTADA — sin FONOTECA_LEER_EXPORT=1');
+} else {
   const DIR = join(raiz, 'my_spotify_data/Spotify Extended Streaming History');
   if (!existsSync(DIR)) {
     console.log('  · PUERTA 1 (real): SALTADA — no hay `my_spotify_data/` en esta máquina.');

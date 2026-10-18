@@ -8,7 +8,8 @@
 // Lo que se vigila:
 //   1. `esGenero`: la lista y los patrones dicen que no; un género inventado dice que sí.
 //   2. `canonico` y la deduplicación: dos formas del mismo nombre cuentan UNA vez; dos géneros distintos no se juntan.
-//   3. El autocorrect: el `artista` que devolvió Last.fm, normalizado con `normalizarNombre`, decide si lo de Last.fm vale.
+//   3. El autocorrect: el `artista` que devolvió Last.fm decide si lo de Last.fm vale, con `mismoArtistaAutocorregido`
+//      (`util/autocorrect-lastfm.js`, v=316): igual según `normalizarNombre`, o la misma escritura («$» por «s»).
 //   4. Los minutos NO se reparten (cada artista suma sus minutos enteros a cada género) y el porcentaje es sobre TODO
 //      el historial (también los de menos de 10 min): los porcentajes suman más de 100.
 //   5. Las cinco filas de «Cuánto se sabe» suman el total, contra una cuenta a mano; `pendientes`, de conservación.
@@ -91,6 +92,11 @@ if (tiene(R.generosDeArtista)) {
   const g3 = R.generosDeArtista(r3, 'Hilo Inventado');
   ok(igual(g3, { generos: ['jota inventada'], motivo: null }), `distinto pero con etiquetas de otra fuente: cuentan las de la otra (${JSON.stringify(g3)})`);
   ok(r3.fuentes.lastfm.tags.length === 1 && r3.fuentes.lastfm.artista === 'Otro Artista Inventado', 'y el registro no se toca');
+  // v=316 (tanda 65): un autocorrect que solo cambia la ESCRITURA es el mismo artista (rojo contra v=315: daba `no-tiene`).
+  const g2b = R.generosDeArtista(reg('Hilos Rojos', lf([E('polka cuántica')], 'Hilo$ Rojos')), 'Hilos Rojos');
+  ok(igual(g2b, { generos: ['polka cuántica'], motivo: null }), `el autocorrect que solo cambia una «s» por «$» cuenta sus géneros (${JSON.stringify(g2b)})`);
+  const g2c = R.generosDeArtista(reg('Hilos Rojos', lf([E('polka cuántica')], 'Hilos Rojos Orquesta')), 'Hilos Rojos');
+  ok(igual(g2c, { generos: [], motivo: 'no-tiene' }), `y uno que cambia el nombre sigue siendo OTRO: «no tiene» (${JSON.stringify(g2c)})`);
   const g4 = R.generosDeArtista(reg('Hilo Inventado', lf([E('polka cuántica')])), 'Hilo Inventado');
   ok(igual(g4.generos, ['polka cuántica']), 'sin `artista` (lo de `#genre`) cuenta');
   const g5 = R.generosDeArtista(reg('Hilo Inventado', { migrado: { tags: [E('vals de prueba')], fecha: 1 } }), 'Hilo Inventado');
@@ -228,7 +234,10 @@ console.log('6. De conservación: el escaneo, la mezcla y el filtro, byte a byte
   } else ok(false, 'las funciones de generos-artista.js existen');
   // `normalizarNombre`, UNA sola: importada de `mb-pais.js`, sin copias en `src/js/`.
   const regla = leerFuente('src/js/util/generos-regla.js');
-  ok(/import \{ normalizarNombre \} from '\.\/mb-pais\.js';/.test(regla), 'generos-regla.js importa normalizarNombre de mb-pais.js');
+  // v=316: generos-regla.js ya no la importa directo: la usa a través de `mismoArtistaAutocorregido`, que la importa de mb-pais.js.
+  ok(/import \{ mismoArtistaAutocorregido \} from '\.\/autocorrect-lastfm\.js';/.test(regla) && !/normalizarNombre\(/.test(regla.replace(/^\s*(\/\/|\*).*$/gm, '')),
+    'generos-regla.js decide el autocorrect con mismoArtistaAutocorregido (autocorrect-lastfm.js), sin una comparación propia');
+  ok(/import \{ normalizarNombre \} from '\.\/mb-pais\.js';/.test(leerFuente('src/js/util/autocorrect-lastfm.js')), 'y autocorrect-lastfm.js importa normalizarNombre de mb-pais.js');
   const archivos = [];
   const recorrer = (d) => { for (const f of readdirSync(d)) { const p = join(d, f); if (statSync(p).isDirectory()) recorrer(p); else if (p.endsWith('.js')) archivos.push(p); } };
   recorrer(join(raiz, 'src/js'));

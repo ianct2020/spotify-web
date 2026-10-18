@@ -12,19 +12,27 @@
 //   · 🔴 cada frame dibuja los puntos y, como mucho, las líneas del artista ELEGIDO (sus ~55
 //     parecidos). Nunca todas, ni «las fuertes», ni una capa precalculada.
 //
+// v=316 (tanda 65): con el plano entero a la vista el más grande medía ~1,5 px y no salía ningún
+// nombre (hacían falta 12 px). Ahora el radio en pantalla tiene un PISO que mantiene el orden de
+// tamaños de lejos (`radioEnPantalla`) y los nombres no dependen del radio (`nombresVisibles`).
+//
 // Lo de acá lo prueba `tests/mapa-artistas.test.mjs` con un grafo inventado de pocos nodos:
 // leer el JSON compacto, los vecinos ordenados por `match`, el toque (pantalla → plano → el
 // círculo más cercano), el pan y el zoom con sus topes, qué nombres se dibujan y el buscador.
 
-import { normalizarNombre } from './mb-pais.js?v=315';
+import { normalizarNombre } from './mb-pais.js?v=316';
 
 // El radio de cada artista, en unidades del PLANO (el zoom lo agranda): el mismo del horneado,
 // `2 + 18·√(minutos / máximo)`. Tiene que ser el mismo: `forceCollide` acomodó con ese radio.
 export const RADIO_MIN = 2;
 export const RADIO_EXTRA = 18;
 export const ZOOM_MAX = 40;            // veces el zoom de «todo el mapa»
-export const RADIO_NOMBRE_PX = 12;     // un nombre se dibuja si su círculo mide esto o más en pantalla
-export const MAX_NOMBRES = 60;         // y como mucho tantos por frame
+// El piso del radio en PANTALLA (v=316): `1 + 4·√(minutos / máximo)` px. De cerca manda el plano (el
+// horneado acomodó con ese radio); de lejos, el piso, para que «cuanto más grande, más lo has
+// escuchado» se siga viendo. Es una decisión de diseño, no una medida.
+export const PISO_RADIO_MIN_PX = 1;
+export const PISO_RADIO_EXTRA_PX = 4;
+export const MAX_NOMBRES = 60;         // los nombres, como mucho tantos por frame
 export const ALTO_NOMBRE_PX = 14;      // el alto de la caja de un nombre, para ver si se pisan
 export const MARGEN_TOQUE_PX = 4;      // el toque vale hasta 4 px fuera del círculo
 export const POR_PAGINA = 50;          // los parecidos del panel, de a tantos
@@ -50,8 +58,12 @@ export function leerMapa(json, totals) {
   }
   let max = 0;
   for (let i = 0; i < N; i++) if (minutos[i] > max) max = minutos[i];
-  const r = new Float64Array(N);
-  for (let i = 0; i < N; i++) r[i] = RADIO_MIN + RADIO_EXTRA * Math.sqrt(max > 0 ? minutos[i] / max : 0);
+  const r = new Float64Array(N), piso = new Float64Array(N);
+  for (let i = 0; i < N; i++) {
+    const p = Math.sqrt(max > 0 ? minutos[i] / max : 0);
+    r[i] = RADIO_MIN + RADIO_EXTRA * p;
+    piso[i] = PISO_RADIO_MIN_PX + PISO_RADIO_EXTRA_PX * p;
+  }
 
   const vecinos = Array.from({ length: N }, () => []);
   const A = json.aristas;
@@ -74,7 +86,7 @@ export function leerMapa(json, totals) {
   for (let i = 0; i < N; i++) if (!vecinos[i].length) { aislados++; decimasAislados += Math.round(minutos[i] * 10); }
   const claves = json.nombres.map((n) => normalizarNombre(n));
   return {
-    N, nombres: json.nombres, claves, x, y, r, minutos, vecinos,
+    N, nombres: json.nombres, claves, x, y, r, piso, minutos, vecinos,
     aristas: A.length / 4, aislados, minutosAislados: decimasAislados / 10,
     limites: { minX, maxX, minY, maxY },
   };
@@ -95,6 +107,9 @@ export function vistaTodo(mapa, ancho, alto) {
 }
 
 export const pantallaAPlano = (v, px, py) => [(px - v.tx) / v.escala, (py - v.ty) / v.escala];
+
+/** El radio del artista `i` en pantalla: `max(r · escala, piso)`. El mismo para dibujar y para tocar. */
+export const radioEnPantalla = (mapa, i, escala) => Math.max(mapa.r[i] * escala, mapa.piso[i]);
 export const planoAPantalla = (v, x, y) => [x * v.escala + v.tx, y * v.escala + v.ty];
 
 /** La escala, entre «todo el mapa» y `ZOOM_MAX` veces eso. */
@@ -118,23 +133,26 @@ export function centrarEn(v, mapa, i, ancho, alto) {
 /**
  * El artista tocado en (px, py) de la pantalla, o -1. Gana el círculo más cercano al punto (la
  * distancia al BORDE: dentro de un círculo es negativa), y vale solo si el punto cae dentro de
- * su radio en pantalla más `MARGEN_TOQUE_PX`. A igualdad, el de más minutos (el índice menor).
+ * su radio en pantalla (`radioEnPantalla`, con su piso) más `MARGEN_TOQUE_PX`. A igualdad, el de
+ * más minutos (el índice menor).
  */
 export function tocar(mapa, v, px, py) {
   let mejor = -1, mejorD = Infinity;
   for (let i = 0; i < mapa.N; i++) {
     const [sx, sy] = planoAPantalla(v, mapa.x[i], mapa.y[i]);
-    const d = Math.hypot(px - sx, py - sy) - mapa.r[i] * v.escala;
+    const d = Math.hypot(px - sx, py - sy) - radioEnPantalla(mapa, i, v.escala);
     if (d <= MARGEN_TOQUE_PX && d < mejorD) { mejor = i; mejorD = d; }
   }
   return mejor;
 }
 
 /**
- * Qué nombres se dibujan: los de los círculos que miden `RADIO_NOMBRE_PX` o más en pantalla y
- * se ven, de más minutos a menos (el orden del universo), como mucho `MAX_NOMBRES`, y sin que dos
- * cajas se pisen (si se pisan, gana el de más minutos, que llegó antes). La caja va centrada en
- * el círculo; `medir(nombre)` da su ancho en píxeles (la vista pasa `measureText`).
+ * Qué nombres se dibujan (v=316): de más minutos a menos (el orden del universo), como mucho
+ * `MAX_NOMBRES`, solo de círculos con el centro dentro del lienzo, y sin que dos cajas se pisen (si
+ * se pisan, gana el de más minutos, que llegó antes). **No depende del radio**: hasta v=315 hacía
+ * falta un círculo de 12 px o más, y con el plano entero a la vista no salía ninguno. Así el más
+ * escuchado que se vea siempre tiene nombre. La caja va centrada en el círculo; `medir(nombre)` da
+ * su ancho en píxeles (la vista pasa `measureText`).
  *
  * @returns {Array<{ i: number, x: number, y: number }>} el centro de cada nombre, en pantalla
  */
@@ -142,10 +160,8 @@ export function nombresVisibles(mapa, v, ancho, alto, medir) {
   const fuera = [];
   const cajas = [];
   for (let i = 0; i < mapa.N && fuera.length < MAX_NOMBRES; i++) {
-    const rp = mapa.r[i] * v.escala;
-    if (rp < RADIO_NOMBRE_PX) continue;
     const [sx, sy] = planoAPantalla(v, mapa.x[i], mapa.y[i]);
-    if (sx + rp < 0 || sx - rp > ancho || sy + rp < 0 || sy - rp > alto) continue;
+    if (sx < 0 || sx > ancho || sy < 0 || sy > alto) continue;
     const w = medir(mapa.nombres[i]);
     const c = { x0: sx - w / 2, x1: sx + w / 2, y0: sy - ALTO_NOMBRE_PX / 2, y1: sy + ALTO_NOMBRE_PX / 2 };
     if (cajas.some((o) => c.x0 < o.x1 && o.x0 < c.x1 && c.y0 < o.y1 && o.y0 < c.y1)) continue;

@@ -38,14 +38,23 @@
 //   · «Está en tu historial» es la regla de la 63: igualdad de `normalizarNombre` (importado de
 //     `util/mb-pais.js`) entre el similar y un nombre del universo, sin el propio artista. Si dos
 //     nombres del universo normalizan igual, gana el primero en el orden de `universo()`.
-//   · Si el autocorrect devolvió OTRO nombre (según `normalizarNombre`), ese artista no aporta
-//     aristas salientes (la prudencia de `#generos`: un autocorrect equivocado mete parecidos de
-//     otro y no se ve). Sí recibe las de los demás.
+//   · El autocorrect (v=316, tanda 65): si devolvió otro nombre, `mismoArtistaAutocorregido`
+//     (`util/autocorrect-lastfm.js`, la MISMA regla de `#generos`) decide si es el mismo artista
+//     escrito distinto («Travi$ Scott»). Aceptado: aporta sus aristas salientes y su `devuelto`
+//     normalizado es una SEGUNDA clave suya al buscar los similares de los demás (así «Travi$ Scott»
+//     en la lista de otro apunta a él), salvo que esa clave ya sea la de otro artista del universo:
+//     gana el del universo. Descartado (otro nombre): sin salientes y sin segunda clave, como hasta
+//     v=315 (la prudencia de `#generos`: un autocorrect equivocado mete parecidos de otro y no se
+//     ve). Los dos reciben las de los demás.
 //   · Sin dirección: el par {a, b} existe si a apunta a b o b a a; su peso es el MAYOR `match` de
 //     las dos direcciones, en entero de 0 a 1.000, y `mutua` dice si están las dos. Ningún corte.
 //   · El layout: d3 7.9.0 (cargado con `vm`, verificado por sha256; no está en `package.json`),
 //     las fuerzas de la 63 sin tocar: `forceLink`, `forceManyBody`, `forceCenter` y
 //     `forceCollide(r)` con r = 2 + 18·√(minutos / máximo), todo lo demás por defecto, 300 ticks.
+//     🔴 Desde v=316 entra a la simulación SOLO el componente conexo más grande: sin ningún enlace
+//     que los retenga, `forceManyBody` empujaba a los aislados a un anillo lejos de todo y el plano
+//     medía casi el doble que el grafo. Los demás («los sueltos»: aislados y componentes chicos) van
+//     en una grilla debajo, sin simulación (`colocarSueltos`).
 //   · Solo se hornea con al menos el 95 % del universo con respuesta definitiva. Tope de 3 MB: si
 //     lo pasa, cada artista conserva sus 40 aristas de mayor `match` (un par queda si alguno de
 //     los dos lo conserva).
@@ -57,6 +66,7 @@ import { dirname, join } from 'node:path';
 import vm from 'node:vm';
 import { universo } from '../src/js/util/mapa-paises.js';
 import { normalizarNombre } from '../src/js/util/mb-pais.js';
+import { mismoArtistaAutocorregido } from '../src/js/util/autocorrect-lastfm.js';
 import { esperaTrasFallo, FALLOS_PARA_PAUSAR } from '../src/js/util/mapa-escaneo.js';
 
 const RAIZ = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -70,6 +80,9 @@ export const MINIMO_PARA_HORNEAR = 0.95;
 export const TOPE_BYTES = 3 * 1024 * 1024;
 export const ARISTAS_POR_ARTISTA_SI_SOBRA = 40;
 export const TICKS = 300;
+export const VERSION = 2;              // v=316: el autocorrect y los sueltos (`SIMILARES_VERSION`)
+export const CELDA_SUELTOS = 48;       // la grilla de los sueltos: más que el diámetro del más grande (40)
+export const SEPARACION_SUELTOS = 96;  // del borde inferior del componente grande al centro de la primera fila
 const D3_SHA256 = 'f2094bbf6141b359722c4fe454eb6c4b0f0e42cc10cc7af921fc158fceb86539';
 const METODO = 'artist.getsimilar';
 
@@ -191,16 +204,30 @@ export function definitivas(avance, u) {
 
 /**
  * Las aristas sin dirección: `Map` de `i * N + j` (i < j) a `{ i, j, match, ab, ba }`.
- * `autocorregidos` son los índices cuyo nombre devuelto no es el pedido: no aportan salientes.
+ * `aceptados` son los índices cuyo autocorrect cambió el nombre y la regla da por el mismo artista
+ * (aportan salientes y su segunda clave); `descartados`, los que no (sin salientes). `pisadas`, las
+ * segundas claves que ya eran de otro artista del universo (gana el del universo).
  */
 export function armarAristas(u, resp) {
   const N = u.length;
   const indicePorClave = new Map();
   u.forEach((a, i) => { const k = normalizarNombre(a.nombre); if (!indicePorClave.has(k)) indicePorClave.set(k, i); });
-  const pares = new Map(), autocorregidos = [];
+  const aceptados = [], descartados = [], pisadas = [];
+  // Primero las segundas claves, en el orden del universo: tienen que estar todas antes de leer
+  // el primer similar. Una clave que ya es de alguien no se pisa.
+  for (const [a, p] of [...resp].sort((x, y) => x[0] - y[0])) {
+    if (p.devuelto == null || normalizarNombre(p.devuelto) === normalizarNombre(p.pedido)) continue;
+    if (!mismoArtistaAutocorregido(p.pedido, p.devuelto)) { descartados.push(a); continue; }
+    aceptados.push(a);
+    const k = normalizarNombre(p.devuelto);
+    if (indicePorClave.has(k)) pisadas.push({ indice: a, de: indicePorClave.get(k) });
+    else indicePorClave.set(k, a);
+  }
+  const fuera = new Set(descartados);
+  const pares = new Map();
   for (const [a, p] of resp) {
+    if (fuera.has(a)) continue;
     const propio = normalizarNombre(p.pedido);
-    if (p.devuelto != null && normalizarNombre(p.devuelto) !== propio) { autocorregidos.push(a); continue; }
     for (const s of p.similares) {
       const k = normalizarNombre(s.name);
       if (k === propio) continue;
@@ -214,7 +241,7 @@ export function armarAristas(u, resp) {
       if (a === i) e.ab = true; else e.ba = true;
     }
   }
-  return { pares, autocorregidos };
+  return { pares, aceptados, descartados, pisadas, autocorregidos: [...aceptados, ...descartados].sort((x, y) => x - y) };
 }
 
 /** El recorte del tope de tamaño: cada artista conserva sus `k` aristas de mayor `match`. */
@@ -234,11 +261,53 @@ export function cargarD3(ruta) {
   return ctx.d3;
 }
 
-/** Las posiciones, a 1 decimal, en el orden del universo: `[x0, y0, x1, y1, …]`. */
+/**
+ * Los componentes conexos, de más grande a más chico y, a igualdad, por su primer índice (el orden
+ * del universo). Cada uno, con sus índices en orden.
+ */
+export function componentes(N, lista) {
+  const padre = Array.from({ length: N }, (_, i) => i);
+  const raiz = (x) => { while (padre[x] !== x) x = padre[x] = padre[padre[x]]; return x; };
+  for (const e of lista) { const a = raiz(e.i), b = raiz(e.j); if (a !== b) padre[Math.max(a, b)] = Math.min(a, b); }
+  const grupos = new Map();
+  for (let i = 0; i < N; i++) { const r = raiz(i); if (!grupos.has(r)) grupos.set(r, []); grupos.get(r).push(i); }
+  return [...grupos.values()].sort((a, b) => b.length - a.length || a[0] - b[0]);
+}
+
+/**
+ * Los sueltos (todo lo que no es el componente grande), en una grilla debajo de él, sin simulación.
+ * `caja` = los bordes del componente grande contando radios; `grupos` = los demás componentes, en el
+ * orden de `componentes()` (primero los de más de uno, de más grande a más chico, así quedan juntos;
+ * después los aislados, en el orden del universo). Celdas de `CELDA_SUELTOS`; columnas =
+ * `floor(ancho / celda)`, como mínimo 1; la primera fila con su centro `SEPARACION_SUELTOS` por debajo
+ * del borde inferior, alineada al borde izquierdo.
+ *
+ * @returns {Array<[number, number, number]>} `[índice, x, y]`, a 1 decimal
+ */
+export function colocarSueltos(caja, grupos) {
+  const columnas = Math.max(1, Math.floor((caja.maxX - caja.minX) / CELDA_SUELTOS));
+  const r1 = (x) => { const v = Math.round(x * 10) / 10; return v === 0 ? 0 : v; };
+  const fuera = [];
+  let n = 0;
+  for (const g of grupos) for (const i of g) {
+    const col = n % columnas, fila = Math.floor(n / columnas);
+    fuera.push([i, r1(caja.minX + CELDA_SUELTOS / 2 + col * CELDA_SUELTOS), r1(caja.maxY + SEPARACION_SUELTOS + fila * CELDA_SUELTOS)]);
+    n++;
+  }
+  return fuera;
+}
+
+/**
+ * Las posiciones, a 1 decimal, en el orden del universo: `[x0, y0, x1, y1, …]`. Solo el componente
+ * grande pasa por la simulación; los sueltos, por `colocarSueltos`.
+ */
 export function acomodar(d3, u, lista) {
   const max = u[0].minutos;
-  const nodos = u.map((a) => ({ r: 2 + 18 * Math.sqrt(a.minutos / max) }));
-  const links = lista.map((e) => ({ source: e.i, target: e.j }));
+  const radio = (i) => 2 + 18 * Math.sqrt(u[i].minutos / max);
+  const [grande, ...resto] = componentes(u.length, lista);
+  const local = new Map(grande.map((i, k) => [i, k]));
+  const nodos = grande.map((i) => ({ r: radio(i) }));
+  const links = lista.filter((e) => local.has(e.i)).map((e) => ({ source: local.get(e.i), target: local.get(e.j) }));
   // d3 usa por defecto `randomLcg(1)`: las mismas entradas dan las mismas posiciones.
   const sim = d3.forceSimulation(nodos)
     .force('link', d3.forceLink(links))
@@ -248,7 +317,37 @@ export function acomodar(d3, u, lista) {
     .stop();
   for (let t = 0; t < TICKS; t++) sim.tick();
   const r1 = (x) => { const v = Math.round(x * 10) / 10; return v === 0 ? 0 : v; };
-  return nodos.flatMap((n) => [r1(n.x), r1(n.y)]);
+  const pos = new Array(2 * u.length).fill(0);
+  const caja = { minX: Infinity, maxX: -Infinity, minY: Infinity, maxY: -Infinity };
+  grande.forEach((i, k) => {
+    const x = r1(nodos[k].x), y = r1(nodos[k].y), r = radio(i);
+    pos[2 * i] = x; pos[2 * i + 1] = y;
+    caja.minX = Math.min(caja.minX, x - r); caja.maxX = Math.max(caja.maxX, x + r);
+    caja.minY = Math.min(caja.minY, y - r); caja.maxY = Math.max(caja.maxY, y + r);
+  });
+  for (const [i, x, y] of colocarSueltos(caja, resto)) { pos[2 * i] = x; pos[2 * i + 1] = y; }
+  return pos;
+}
+
+/** El ancho y el alto del plano (contando radios) y cuántos quedaron fuera del componente grande. */
+export function medirPlano(u, pos, lista) {
+  const max = u[0].minutos;
+  const caja = (idx) => {
+    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+    for (const i of idx) {
+      const r = 2 + 18 * Math.sqrt(u[i].minutos / max);
+      minX = Math.min(minX, pos[2 * i] - r); maxX = Math.max(maxX, pos[2 * i] + r);
+      minY = Math.min(minY, pos[2 * i + 1] - r); maxY = Math.max(maxY, pos[2 * i + 1] + r);
+    }
+    return { ancho: Math.round((maxX - minX) * 10) / 10, alto: Math.round((maxY - minY) * 10) / 10 };
+  };
+  const comps = componentes(u.length, lista);
+  const resto = comps.slice(1);
+  return {
+    plano: caja(u.map((_, i) => i)), grande: caja(comps[0]), enElGrande: comps[0].length,
+    sueltos: resto.reduce((s, g) => s + g.length, 0), aislados: resto.filter((g) => g.length === 1).length,
+    componentesChicos: resto.filter((g) => g.length > 1).map((g) => g.length),
+  };
 }
 
 function hornear(archivo, rutaD3) {
@@ -262,11 +361,11 @@ function hornear(archivo, rutaD3) {
     process.exitCode = 3;
     return;
   }
-  const { pares, autocorregidos } = armarAristas(u, resp);
+  const { pares, aceptados, descartados, pisadas } = armarAristas(u, resp);
   let lista = [...pares.values()].sort((a, b) => a.i - b.i || a.j - b.j);
   const d3 = cargarD3(rutaD3);
   const armar = (l, pos) => JSON.stringify({
-    version: 1, fuente: 'Last.fm artist.getSimilar', fecha: new Date().toISOString().slice(0, 10), limit: LIMIT,
+    version: VERSION, fuente: 'Last.fm artist.getSimilar', fecha: new Date().toISOString().slice(0, 10), limit: LIMIT,
     nombres: u.map((a) => a.nombre), pos,
     aristas: l.flatMap((e) => [e.i, e.j, e.match, e.ab && e.ba ? 1 : 0]),
   });
@@ -288,7 +387,9 @@ function hornear(archivo, rutaD3) {
   writeFileSync(SALIDA, texto);
   informe.aristas = lista.length;
   informe.mutuas = lista.filter((e) => e.ab && e.ba).length;
-  informe.autocorregidos = autocorregidos.length;
+  informe.autocorrect = { aceptados: aceptados.length, descartados: descartados.length, segundasClavesPisadas: pisadas.length };
+  informe.plano = medirPlano(u, pos, lista);
+  informe.huellaArchivo = sha256(texto);
   informe.horneado = true;
   console.log(JSON.stringify(informe));
 }

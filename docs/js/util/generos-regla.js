@@ -20,7 +20,8 @@
 //     nombres propios se quedan contando como género: es un defecto conocido (son géneros de uno o
 //     dos artistas, no llegan al top). Y ninguna regla del tipo «si se llama como un artista de tu
 //     historial no es un género»: hay artistas que se llaman como un género y se borraría el género.
-//   · El autocorrect que devuelve OTRO artista no cuenta (ver `generosDeArtista`).
+//   · El autocorrect que devuelve OTRO artista no cuenta (ver `generosDeArtista`); desde v=316 lo
+//     decide `mismoArtistaAutocorregido` de `util/autocorrect-lastfm.js`, la misma del mapa de artistas.
 //
 // La fuente de cada entrada, entre corchetes: `61: n` = en n de los 51 artistas de la tanda 61
 // (`fonoteca-migracion/generos/medicion-lastfm-2026-10-17.json`); `62A: n` = en n de los 98 de la
@@ -28,12 +29,12 @@
 // se sumó DESPUÉS de medir lo que se le escapaba a la versión 1 (ver `PENDIENTES.md`); «como X» =
 // no se vio en ninguna muestra y se agregó por ser de la misma clase que X (son las sospechosas).
 
-import { decidirEtiquetas } from './generos-artista.js?v=315';
-import { normalizarNombre } from './mb-pais.js?v=315';
+import { decidirEtiquetas } from './generos-artista.js?v=316';
+import { mismoArtistaAutocorregido } from './autocorrect-lastfm.js?v=316';
 // ⚠️ Un import circular A PROPÓSITO: `generos-escaneo.js` importa `generosDeArtista` de acá para
 // «Cuánto se sabe», y acá hace falta su `yaBuscado` (UNA sola función decide «ya buscado», v=219).
 // Es seguro porque ninguno de los dos usa lo del otro al cargarse, solo adentro de funciones.
-import { yaBuscado } from './generos-escaneo.js?v=315';
+import { yaBuscado } from './generos-escaneo.js?v=316';
 
 /** Lo que NO es un género, en minúsculas. Cada entrada, con de dónde sale. */
 export const NO_ES_GENERO = new Set([
@@ -211,9 +212,10 @@ export function canonico(etiqueta) {
  *     orden, mezcladas): lo mismo que lee `#genre` y lo que contaba «Cuánto se sabe» en v=313.
  *     ⚠️ Eso incluye lo que `#genre` trajo de MusicBrainz con su `limit=1` a ciegas y lo migrado de
  *     fuente desconocida (defecto conocido, en `PENDIENTES.md`; no se arregla acá).
- *   · El autocorrect: si Last.fm devolvió un `artista` que, normalizado con `normalizarNombre` (el de
- *     `mb-pais.js`, importado), no es el nombre pedido normalizado igual, lo de Last.fm de ese
- *     artista no se usa (las etiquetas son de OTRO). Se decide sobre una copia con
+ *   · El autocorrect: si Last.fm devolvió un `artista` que no es el MISMO que el pedido según
+ *     `mismoArtistaAutocorregido` (`util/autocorrect-lastfm.js`, v=316: igual con `normalizarNombre`,
+ *     o la misma escritura —«Travi$ Scott»—), lo de Last.fm de ese artista no se usa (las etiquetas
+ *     son de OTRO). Se decide sobre una copia con
  *     `fuentes.lastfm = null`: el registro y `decidirEtiquetas` no se tocan. Lo de las otras fuentes
  *     sigue valiendo. Sin `artista` (lo de `#genre`, lo migrado) se usa como siempre.
  *   · Se quedan las que `esGenero`, pasadas por `canonico` y sin repetir (`hip-hop` y `hip hop`
@@ -227,7 +229,7 @@ export function canonico(etiqueta) {
 export function generosDeArtista(registro, nombre) {
   let reg = registro;
   const devuelto = reg?.fuentes?.lastfm?.artista;
-  if (devuelto != null && normalizarNombre(devuelto) !== normalizarNombre(nombre ?? reg?.nombre)) {
+  if (!mismoArtistaAutocorregido(nombre ?? reg?.nombre, devuelto)) {
     reg = { ...reg, fuentes: { ...reg.fuentes, lastfm: null } };
   }
   const tags = decidirEtiquetas(reg) || [];

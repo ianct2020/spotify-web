@@ -8,10 +8,10 @@
 // Otro user cualquiera sin historial local ve el ownerLockedMessage que
 // invita a subir su ZIP.
 
-import { idbGetCached, idbSetCached, idbDel } from '../idb.js?v=315';
-import { getCurrentUserId } from '../api.js?v=315';
-import { OWNER_KEYS, LOCAL_HISTORY_PREFIX, STATS_VERSION, PLAYS_VERSION, LISTENED_VERSION, SKIP_VERSION, DETAIL_VERSION, RECORDS_VERSION, ARTIST_TRACKS_VERSION, SIMILARES_VERSION } from '../history-keys.js?v=315';
-import { mostrarBannerDegradadoVista } from '../ui/degraded-banner.js?v=315';
+import { idbGetCached, idbSetCached, idbDel } from '../idb.js?v=316';
+import { getCurrentUserId } from '../api.js?v=316';
+import { OWNER_KEYS, LOCAL_HISTORY_PREFIX, STATS_VERSION, PLAYS_VERSION, LISTENED_VERSION, SKIP_VERSION, DETAIL_VERSION, RECORDS_VERSION, ARTIST_TRACKS_VERSION, SIMILARES_VERSION } from '../history-keys.js?v=316';
+import { mostrarBannerDegradadoVista } from '../ui/degraded-banner.js?v=316';
 
 const HISTORY_OWNER_ID = 'orhs6wu5ykk7ql80u92ujn74o';
 
@@ -242,6 +242,7 @@ const OWNER_PREV_KEYS = {
   // Vacía desde que nació (v=315): no hay versión anterior. Cuando el horneado cambie, se sube
   // `SIMILARES_VERSION` y esta lista sigue vacía: un mapa viejo pasa el `sanityCheck` igual que
   // uno nuevo, y migrarlo pintaría las posiciones de antes sin fallar y sin avisar.
+  // ⚠️ Y SIGUE VACÍA EN v2 (v=316, tanda 65): la v1 se publicó con v=315 y quedó en IndexedDB.
   similares: [],
   // `days` no tiene versiones anteriores porque no tiene versiones: nació en
   // v=289 y **el owner no tiene URL** de donde bajarlo (ver `loadDays`).

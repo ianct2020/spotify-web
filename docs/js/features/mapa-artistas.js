@@ -25,20 +25,21 @@
 //   · Accesible por el buscador y el panel, que son HTML de verdad; el `<canvas>` es una imagen
 //     con su `aria-label`.
 //
-// `window.__mapaArtistasDibujo` = `{ puntos, lineas, nombres, ms, cuadros }` del último frame (los
-// cuadros, acumulados): lo lee el banco `tests/banco/mapa-artistas.html`, que afirma que sin
-// elegido se dibujan 0 líneas y con uno, exactamente su grado. `window.__mapaArtistasBanco` es el
+// `window.__mapaArtistasDibujo` = `{ puntos, lineas, nombres, conNombre, ms, cuadros }` del último
+// frame (los cuadros, acumulados; `conNombre`, los índices que llevaron nombre): lo lee el banco
+// `tests/banco/mapa-artistas.html`, que afirma que sin elegido se dibujan 0 líneas y con uno,
+// exactamente su grado, y que a «Ver todo» sale el nombre del de más minutos (puerta H, v=316). `window.__mapaArtistasBanco` es el
 // instrumento del banco y de la medición de frames (pintar ya, sin esperar al frame): solo existe
 // mientras la ruta está abierta.
 
-import { loadArtistTracks, loadArtistSimilares, isOwner, ownerLockedMessage } from './history-data.js?v=315';
-import { openArtistCard } from './artist-card.js?v=315';
-import { escapeHtml, pageHeader } from '../ui/components.js?v=315';
-import { vigilarRuta } from '../util/vigencia-ruta.js?v=315';
+import { loadArtistTracks, loadArtistSimilares, isOwner, ownerLockedMessage } from './history-data.js?v=316';
+import { openArtistCard } from './artist-card.js?v=316';
+import { escapeHtml, pageHeader } from '../ui/components.js?v=316';
+import { vigilarRuta } from '../util/vigencia-ruta.js?v=316';
 import {
   leerMapa, vistaTodo, zoomEn, mover, centrarEn, tocar, nombresVisibles, buscar,
-  mezclar, leerRgb, planoAPantalla, POR_PAGINA,
-} from '../util/mapa-artistas.js?v=315';
+  mezclar, leerRgb, planoAPantalla, radioEnPantalla, POR_PAGINA,
+} from '../util/mapa-artistas.js?v=316';
 
 const num = (n) => Number(n || 0).toLocaleString('es-ES');
 const min = (m) => `${num(Math.round(m))} min`;
@@ -117,7 +118,7 @@ function montar(content, mapa, ruta) {
     punteros: new Map(), arrastre: null, pellizco: null,
     anchos: new Map(), fuente: '',
   };
-  const dibujo = { puntos: 0, lineas: 0, nombres: 0, ms: 0, cuadros: 0 };
+  const dibujo = { puntos: 0, lineas: 0, nombres: 0, conNombre: [], ms: 0, cuadros: 0 };
   window.__mapaArtistasDibujo = dibujo;
 
   // ── El tamaño ─────────────────────────────────────────────────────────────
@@ -187,7 +188,7 @@ function montar(content, mapa, ruta) {
     for (let i = 0; i < mapa.N; i++) {
       if (resaltados.has(i)) continue;
       const [sx, sy] = planoAPantalla(v, mapa.x[i], mapa.y[i]);
-      const rp = mapa.r[i] * v.escala;
+      const rp = radioEnPantalla(mapa, i, v.escala);
       if (!visible(sx, sy, rp)) continue;
       ctx.moveTo(sx + rp, sy);
       ctx.arc(sx, sy, rp, 0, Math.PI * 2);
@@ -217,7 +218,7 @@ function montar(content, mapa, ruta) {
       ctx.beginPath();
       for (const i of resaltados) {
         const [sx, sy] = planoAPantalla(v, mapa.x[i], mapa.y[i]);
-        const rp = mapa.r[i] * v.escala;
+        const rp = radioEnPantalla(mapa, i, v.escala);
         if (!visible(sx, sy, rp)) continue;
         ctx.moveTo(sx + rp, sy);
         ctx.arc(sx, sy, rp, 0, Math.PI * 2);
@@ -226,13 +227,13 @@ function montar(content, mapa, ruta) {
       ctx.fillStyle = rgb(acento);
       ctx.fill();
       ctx.beginPath();
-      ctx.arc(ax, ay, mapa.r[sel] * v.escala + 2, 0, Math.PI * 2);
+      ctx.arc(ax, ay, radioEnPantalla(mapa, sel, v.escala) + 2, 0, Math.PI * 2);
       ctx.strokeStyle = rgb(texto);
       ctx.lineWidth = 2;
       ctx.stroke();
     }
 
-    // 4. Los nombres de los grandes (≥ 12 px de radio en pantalla), sin pisarse.
+    // 4. Los nombres, de más minutos a menos, sin pisarse (v=316: sin el umbral de 12 px de radio).
     const familia = getComputedStyle(canvas).fontFamily || 'sans-serif';
     const fuente = `600 12px ${familia}`;
     if (fuente !== st.fuente) { st.fuente = fuente; st.anchos.clear(); }
@@ -259,6 +260,7 @@ function montar(content, mapa, ruta) {
     dibujo.puntos = puntos;
     dibujo.lineas = lineas;
     dibujo.nombres = etiquetas.length;
+    dibujo.conNombre = etiquetas.map((e) => e.i);
     dibujo.ms = performance.now() - t0;
     dibujo.cuadros++;
     dibujo.vista = { ...v };

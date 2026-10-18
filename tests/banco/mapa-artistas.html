@@ -24,6 +24,9 @@
 //   F. a 1366 y a 390 nada desborda la página;
 //   G. salir de la ruta a mitad de la carga (con el `/me` frenado): 0 errores, 0 escrituras al DOM
 //      de la ruta nueva y 0 frames; y salir con un frame pendiente: 0 frames después;
+//   H. (v=316) a «Ver todo», con los sueltos en su franja: TODOS los puntos dentro del lienzo (con el
+//      radio en pantalla que se dibuja) y al menos un nombre, que es el del artista de más minutos.
+//      Contra v=315 da 0 nombres (pedía 12 px de radio y el más grande medía ~5);
 //   y 0 errores de consola en todos los marcos.
 //
 // ⚠️ Todas las esperas van con `esperarReal` (ver PRESUPUESTO en `scripts/correr-banco.mjs`).
@@ -122,9 +125,9 @@ try {
   sinFugas(A, 'PUERTA A');
   afirmar(texto($(A, '.page-header h1, h1')) === 'Mapa de artistas' || /Mapa de artistas/.test(texto($(A, '#main-content'))), 'la cabecera dice «Mapa de artistas»');
   const canvasA = $(A, 'canvas.mapa-artistas-canvas');
-  afirmar(canvasA?.getAttribute('role') === 'img' && /^Mapa de tus artistas: 2302 artistas, 60\.141 parecidos$/.test(canvasA.getAttribute('aria-label')),
+  afirmar(canvasA?.getAttribute('role') === 'img' && /^Mapa de tus artistas: 2302 artistas, 60\.142 parecidos$/.test(canvasA.getAttribute('aria-label')),
     `el canvas es una imagen con su aria-label: «${canvasA?.getAttribute('aria-label')}»`);
-  afirmar(/^9 artistas no tienen ningún parecido en tu historial\. Parecidos según Last\.fm\.$/.test(texto($(A, '.mapa-artistas-pie'))), `la línea de los aislados y el crédito: «${texto($(A, '.mapa-artistas-pie'))}»`);
+  afirmar(/^7 artistas no tienen ningún parecido en tu historial\. Parecidos según Last\.fm\.$/.test(texto($(A, '.mapa-artistas-pie'))), `la línea de los aislados y el crédito: «${texto($(A, '.mapa-artistas-pie'))}»`);
   afirmar($(A, '.mapa-artistas-pie a')?.getAttribute('href') === 'https://www.last.fm', 'el crédito enlaza a https://www.last.fm');
 
   // ── B (1) · sin elegido, 0 líneas ──────────────────────────────────────────
@@ -135,6 +138,24 @@ try {
   afirmar(d.puntos === N, `al abrir se ven los ${N} puntos; se dibujaron ${d.puntos}`);
   // A «todo el mapa» los círculos pueden no llegar a los 12 px de radio: 0 nombres es la regla, no un fallo.
   afirmar(d.nombres <= 60, `como mucho 60 nombres (${d.nombres})`);
+
+  // ── H · a «Ver todo»: todo dentro, y el nombre del más escuchado ──────────
+  progreso('H: ver todo');
+  {
+    const bh = win(A).__mapaArtistasBanco, v = d.vista, c = bh.canvas, w = c.clientWidth, h = c.clientHeight;
+    const P = await import('/js/util/mapa-artistas.js');
+    const rpDe = (i) => (P.radioEnPantalla ? P.radioEnPantalla(bh.mapa, i, v.escala) : bh.mapa.r[i] * v.escala);
+    let fuera = 0;
+    for (let i = 0; i < N; i++) {
+      const sx = bh.mapa.x[i] * v.escala + v.tx, sy = bh.mapa.y[i] * v.escala + v.ty, rp = rpDe(i);
+      if (sx - rp < 0 || sx + rp > w || sy - rp < 0 || sy + rp > h) fuera++;
+    }
+    datos.verTodo = { escala: v.escala, nombres: d.nombres, fuera, primero: (d.conNombre || [])[0] };
+    afirmar(v.escala === v.base, 'PUERTA H: al abrir, la vista es «Ver todo»');
+    afirmar(fuera === 0, `PUERTA H: a «Ver todo» todos los puntos caen dentro del lienzo (${w}×${h}); fuera: ${fuera}`);
+    afirmar(d.nombres >= 1, `PUERTA H: a «Ver todo» sale al menos un nombre (salieron ${d.nombres})`);
+    afirmar((d.conNombre || []).includes(0), `PUERTA H: y el del artista de más minutos («${nombreDe(0)}») está entre ellos (${JSON.stringify((d.conNombre || []).slice(0, 5))}…)`);
+  }
   // El zoom, con los botones (al centro) y con la rueda sobre el artista 0 (el centro del plano
   // inventado está vacío: las manchas forman un anillo).
   $(A, '[data-zoom="mas"]').click();
@@ -321,7 +342,7 @@ try {
   const errores = marcos.flatMap(([n, f]) => win(f).__errores.map((e) => `${n}: ${e}`));
   afirmar(errores.length === 0, `0 errores de consola: ${errores.join(' | ')}`);
 
-  const resumen = `A abrir: /me=${datos.abrir.me} otras=${datos.abrir.otras.length}, al volver 0 · B sin elegido: líneas=${datos.sinElegido.lineas} puntos=${datos.sinElegido.puntos} nombres=${datos.sinElegido.nombres} (con zoom ${datos.sinElegido.nombresConZoom}); con elegido: líneas=${datos.conElegido.lineas} = grado ${datos.conElegido.grado} · ` +
+  const resumen = `A abrir: /me=${datos.abrir.me} otras=${datos.abrir.otras.length}, al volver 0 · H ver todo: escala=${datos.verTodo.escala.toFixed(3)} nombres=${datos.verTodo.nombres} fuera=${datos.verTodo.fuera} primero=${datos.verTodo.primero} · B sin elegido: líneas=${datos.sinElegido.lineas} puntos=${datos.sinElegido.puntos} nombres=${datos.sinElegido.nombres} (con zoom ${datos.sinElegido.nombresConZoom}); con elegido: líneas=${datos.conElegido.lineas} = grado ${datos.conElegido.grado} · ` +
     `C tocar elige y el fondo suelta · D 0 peticiones, quieto 5 s: ${datos.quieto} frames · E amigo: la línea y 0 puntos · F desborde 1366=${datos.desborde.a1366} 390=${datos.desborde.a390} · ` +
     `G salir con un frame pendiente=${datos.pendienteAlSalir}: 0 frames después; salir a mitad: ${datos.salir.mutaciones} escrituras, ${datos.salir.cuadros} frames, ${datos.salir.errores} errores · errores=${errores.length} · reloj virtual=${Math.round(performance.now())} ms`;
   document.documentElement.setAttribute('data-resumen', resumen);

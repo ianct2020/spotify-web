@@ -242,6 +242,7 @@ const OWNER_PREV_KEYS = {
   // Vacía desde que nació (v=315): no hay versión anterior. Cuando el horneado cambie, se sube
   // `SIMILARES_VERSION` y esta lista sigue vacía: un mapa viejo pasa el `sanityCheck` igual que
   // uno nuevo, y migrarlo pintaría las posiciones de antes sin fallar y sin avisar.
+  // ⚠️ Y SIGUE VACÍA EN v2 (v=316, tanda 65): la v1 se publicó con v=315 y quedó en IndexedDB.
   similares: [],
   // `days` no tiene versiones anteriores porque no tiene versiones: nació en
   // v=289 y **el owner no tiene URL** de donde bajarlo (ver `loadDays`).

@@ -3,6 +3,11 @@
 // forma de `history-artist-similares.json` y la DENSIDAD que midió la tanda 63 (grado medio ~52
 // dentro del historial): posiciones en doce manchas y pares sobre todo dentro de cada mancha.
 // Determinista (mulberry32 con semilla fija): cada corrida del banco ve el mismo grafo.
+//
+// v=316 (tanda 65): como el horneado nuevo, los sueltos van en una FRANJA debajo del grafo, en una
+// grilla de 48 (la de `colocarSueltos` de `scripts/hornear-similares.mjs`, escrita acá de nuevo porque
+// el script es de Node): dos de los nueve aislados pasan a ser una pareja (un componente chico de dos,
+// con un solo par entre ellos), y quedan siete aislados. El resto del grafo, el mismo de la v=315.
 
 export const N = 2302;
 const SEMILLA = 640064;
@@ -21,6 +26,9 @@ function prng(semilla) {
 export const nombreDe = (i) => `Artista inventado ${String(i + 1).padStart(4, '0')}`;
 // Los aislados: uno de cada 250 (nueve). Sin ningún par: sirven para la línea de «no tienen ningún parecido».
 export const esAislado = (i) => i % 250 === 249;
+// Dos de ellos (v=316) son una pareja: solo se parecen entre sí. Los aislados de verdad quedan siete.
+export const PAREJA = [1999, 2249];
+export const esSuelto = esAislado;
 
 /** El historial: minutos estrictamente decrecientes (así el orden de `universo()` es el del índice). */
 export function historial() {
@@ -58,8 +66,23 @@ export function grafo() {
       if (!pares.has(id)) pares.set(id, [a, b, 1 + Math.floor(r() * 1000), r() < 0.5 ? 1 : 0]);
     }
   }
+  pares.set(PAREJA[0] * N + PAREJA[1], [PAREJA[0], PAREJA[1], 500, 1]);
   const aristas = [...pares.values()].sort((x, y) => x[0] - y[0] || x[1] - y[1]).flat();
-  return { version: 1, fuente: 'banco (INVENTADO)', fecha: '2026-10-18', limit: 250, nombres: Array.from({ length: N }, (_, i) => nombreDe(i)), pos, aristas };
+  // La franja: la caja del grafo (contando radios), y debajo la pareja y después los aislados, en orden.
+  const totals = historial().totals, max = totals[nombreDe(0)][1];
+  const radio = (i) => 2 + 18 * Math.sqrt(totals[nombreDe(i)][1] / max);
+  let minX = Infinity, maxX = -Infinity, maxY = -Infinity;
+  for (let i = 0; i < N; i++) {
+    if (esSuelto(i)) continue;
+    minX = Math.min(minX, pos[2 * i] - radio(i)); maxX = Math.max(maxX, pos[2 * i] + radio(i)); maxY = Math.max(maxY, pos[2 * i + 1] + radio(i));
+  }
+  const columnas = Math.max(1, Math.floor((maxX - minX) / 48));
+  const sueltos = [...PAREJA, ...[...Array(N).keys()].filter((i) => esAislado(i) && !PAREJA.includes(i))];
+  sueltos.forEach((i, n) => {
+    pos[2 * i] = Math.round((minX + 24 + (n % columnas) * 48) * 10) / 10;
+    pos[2 * i + 1] = Math.round((maxY + 96 + Math.floor(n / columnas) * 48) * 10) / 10;
+  });
+  return { version: 2, fuente: 'banco (INVENTADO)', fecha: '2026-10-18', limit: 250, nombres: Array.from({ length: N }, (_, i) => nombreDe(i)), pos, aristas };
 }
 
 /** Los vecinos de `i`, contados SIN `util/mapa-artistas.js`: por match de mayor a menor y, a igualdad, por índice. */

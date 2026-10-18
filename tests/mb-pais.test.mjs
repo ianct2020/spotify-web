@@ -145,7 +145,9 @@ console.log('corroborado');
 // Last.fm devolvió OTRO artista: el encargo pide la de acá, importada, y no una copia). Son tres, y nadie más.
 // v=315 (tanda 64): y `util/mapa-artistas.js`, por `normalizarNombre` (el buscador del mapa de artistas: la misma
 // igualdad con la que el horneado decidió qué similar «está en tu historial»). Son cuatro, y nadie más.
-console.log('10. módulo hoja, la importan solo mapa-paises.js, mapa-escaneo.js, generos-regla.js y mapa-artistas.js');
+// v=316 (tanda 65): `util/generos-regla.js` deja de importarla y la importa `util/autocorrect-lastfm.js`, la
+// regla del autocorrect que comparten `#generos` y el horneado del mapa. Siguen siendo cuatro, y nadie más.
+console.log('10. módulo hoja, la importan solo mapa-paises.js, mapa-escaneo.js, autocorrect-lastfm.js y mapa-artistas.js');
 {
   const RAIZ = join(dirname(fileURLToPath(import.meta.url)), '..');
   let src = '';
@@ -162,9 +164,9 @@ console.log('10. módulo hoja, la importan solo mapa-paises.js, mapa-escaneo.js,
   };
   recorrer(join(RAIZ, 'src/js'));
   const importan = quienes.filter((p) => /from\s+['"][^'"]*mb-pais\.js(\?v=\d+)?['"]/.test(readFileSync(p, 'utf8')));
-  const permitidos = ['mapa-paises.js', 'mapa-escaneo.js', 'generos-regla.js', 'mapa-artistas.js'].map((f) => join('src', 'js', 'util', f));
+  const permitidos = ['mapa-paises.js', 'mapa-escaneo.js', 'autocorrect-lastfm.js', 'mapa-artistas.js'].map((f) => join('src', 'js', 'util', f));
   ok(importan.length === 4 && importan.every((p) => permitidos.some((f) => p.endsWith(f))),
-    `de src/js la importan solo util/mapa-paises.js (la regla), util/mapa-escaneo.js (las consultas), util/generos-regla.js y util/mapa-artistas.js (normalizarNombre) (la importan: ${importan.join(', ') || 'nadie'})`);
+    `de src/js la importan solo util/mapa-paises.js (la regla), util/mapa-escaneo.js (las consultas), util/autocorrect-lastfm.js y util/mapa-artistas.js (normalizarNombre) (la importan: ${importan.join(', ') || 'nadie'})`);
 }
 
 console.log('11. varios-mismo-pais exige país en TODOS (v=303)');

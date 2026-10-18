@@ -11,15 +11,22 @@
 //   · un JSON con otra forma da `null`, nunca un mapa vacío (la vista lo dice);
 //   · el toque vale dentro del círculo más 4 px, y no más; entre dos, gana el más cercano;
 //   · el zoom no baja de «todo el mapa» ni sube de 40 veces eso, y deja quieto el punto del puntero;
-//   · los nombres: solo los círculos de 12 px o más en pantalla, como mucho 60, sin pisarse (gana el
-//     de más minutos);
+//   · los nombres (v=316): de más minutos a menos, como mucho 60, solo con el centro en el lienzo y sin
+//     pisarse (gana el de más minutos); SIN el umbral de 12 px de radio de v=315, así el más escuchado
+//     que se vea siempre tiene nombre;
+//   · el radio en pantalla (v=316): `max(r · escala, 1 + 4·√(minutos / máximo))`, el mismo para dibujar
+//     y para tocar: de lejos se sigue viendo el orden de tamaños;
+//   · el horneado (v=316): solo el componente grande se simula y los sueltos van en una franja debajo
+//     (`componentes`, `colocarSueltos`, `acomodar` con un d3 de mentira), y la regla del autocorrect en
+//     `armarAristas` (un aceptado aporta salientes y una segunda clave; un descartado, nada);
 //   · el buscador usa `normalizarNombre` (`util/mb-pais.js`), no `normText`: un apóstrofo tipográfico
 //     encuentra al recto, y «¥$» —que `normText` deja vacío— se encuentra;
 //   · 🔴 el JSON horneado, si está, no lleva minutos ni plays (salen de `history-artist-tracks.json`);
 //   · la vista no carga d3 ni corre ninguna simulación, e `index.html` no gana ningún script externo.
 //
 // 🔴 Todo es INVENTADO: los artistas, las posiciones, los pares y los minutos (el repo es público).
-// Contra v=314 da rojo: `util/mapa-artistas.js` no existía.
+// Contra v=314 da rojo: `util/mapa-artistas.js` no existía. Contra v=315, las secciones 5, 5b, 10 y 11:
+// los nombres pedían 12 px, no había piso ni `colocarSueltos`, y el autocorrect se descartaba entero.
 //
 // Correr con: node tests/mapa-artistas.test.mjs
 
@@ -27,6 +34,7 @@ import { readFileSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import * as M from '../src/js/util/mapa-artistas.js';
+const H = await import('../scripts/hornear-similares.mjs').catch((e) => { console.log(`  (no se pudo importar el horneado: ${e.message})`); return {}; });
 
 const raiz = join(dirname(fileURLToPath(import.meta.url)), '..');
 let pasaron = 0, fallaron = 0;
@@ -106,12 +114,17 @@ ok(M.tocar(mapa, V4, 200, 200 + 3.8 * 4 + 3) === 4, 'con zoom, el radio que cuen
 
 console.log('5. los nombres');
 const medir = (s) => s.length * 7;
+ok(!('RADIO_NOMBRE_PX' in M), 'ya no hay umbral de radio para los nombres (RADIO_NOMBRE_PX se fue)');
 const n1 = M.nombresVisibles(mapa, V1, 400, 300, medir);
-ok(igual(n1.map((e) => e.i), [0]), 'a escala 1, solo Aurora mide 12 px o más (20); Banda (11) no', JSON.stringify(n1));
-const V2 = { escala: 2, base: 1, tx: 10, ty: 10 };
-const n2 = M.nombresVisibles(mapa, V2, 400, 300, medir);
-ok(igual(n2.map((e) => e.i), [0, 1, 2]), 'a escala 2: Aurora, Banda y Don’t Stop (≥ 12 px), «¥$» (11,2) no', JSON.stringify(n2.map((e) => e.i)));
+ok(igual(n1.map((e) => e.i), [0, 1, 2, 3, 4]), 'a escala 1, los cinco (no se pisan), de más minutos a menos: también Banda (11) y «¥$» (5,6), que antes no llegaban a 12 px', JSON.stringify(n1.map((e) => e.i)));
+// Muy de lejos (escala 0,01): los cinco caen casi en el mismo punto y se pisan. Gana el de más minutos.
+const lejos2 = { escala: 0.01, base: 0.01, tx: 200, ty: 150 };
+const nl = M.nombresVisibles(mapa, lejos2, 400, 300, medir);
+ok(igual(nl.map((e) => e.i), [0]), 'muy de lejos se pisan todos y queda uno: el de más minutos, que siempre tiene nombre', JSON.stringify(nl.map((e) => e.i)));
 ok(igual(M.nombresVisibles(mapa, { escala: 2, base: 1, tx: -1000, ty: -1000 }, 400, 300, medir), []), 'fuera de la pantalla no se dibuja ninguno');
+// Aurora con el centro 5 px a la izquierda del lienzo: su círculo (r 20) asoma, pero el nombre no sale.
+const nb = M.nombresVisibles(mapa, { escala: 1, base: 1, tx: -5, ty: 50 }, 400, 300, medir);
+ok(!nb.some((e) => e.i === 0) && nb.some((e) => e.i === 1), 'un círculo con el centro fuera del lienzo no lleva nombre (aunque asome); los de dentro sí');
 // Dos grandes pegados: las cajas se pisan y gana el de más minutos.
 const pegados = M.leerMapa({ nombres: ['Grande Uno', 'Grande Dos'], pos: [0, 0, 10, 0], aristas: [] }, { 'Grande Uno': [1, 900], 'Grande Dos': [1, 800] });
 const np = M.nombresVisibles(pegados, { escala: 1, base: 1, tx: 100, ty: 100 }, 400, 300, () => 80);
@@ -124,6 +137,17 @@ const muchos = M.leerMapa({ nombres: cien, pos: cien.flatMap((_, i) => [(i % 10)
   Object.fromEntries(cien.map((n, i) => [n, [1, 1000 - i]])));
 const nm = M.nombresVisibles(muchos, { escala: 1, base: 1, tx: 30, ty: 30 }, 2000, 2000, () => 40);
 ok(nm.length === M.MAX_NOMBRES && igual(nm.map((e) => e.i), Array.from({ length: 60 }, (_, i) => i)), `como mucho ${M.MAX_NOMBRES}, los de más minutos (vino ${nm.length})`);
+
+console.log('5b. el radio en pantalla, con su piso');
+ok(M.PISO_RADIO_MIN_PX === 1 && M.PISO_RADIO_EXTRA_PX === 4, 'el piso es 1 + 4·√(minutos / máximo) px');
+ok(cerca(mapa.piso[0], 5) && cerca(mapa.piso[4], 1 + 4 * Math.sqrt(0.01)), 'el piso de cada uno (Aurora 5, Cometa 1,4)');
+ok(cerca(M.radioEnPantalla(mapa, 0, 2), 40) && cerca(M.radioEnPantalla(mapa, 4, 2), 7.6), 'de cerca manda el plano: r · escala');
+ok(cerca(M.radioEnPantalla(mapa, 0, 0.01), 5) && cerca(M.radioEnPantalla(mapa, 3, 0.01), 1 + 4 * 0.2), 'de lejos manda el piso');
+const radiosLejos = [0, 1, 2, 3, 4].map((i) => M.radioEnPantalla(mapa, i, 0.01));
+ok(radiosLejos.every((r, k) => k === 0 || r < radiosLejos[k - 1]), `de lejos se mantiene el orden de tamaños (${radiosLejos.map((r) => r.toFixed(2)).join(' > ')})`);
+const VL = { escala: 0.01, base: 0.01, tx: 50, ty: 50 };
+ok(M.tocar(mapa, VL, 50 + 5 + 4, 50) === 0 && M.tocar(mapa, VL, 50 + 5 + 4.5, 50) === -1, 'el toque usa el mismo radio: el piso (5) + 4 px, y no más');
+ok(cerca(sinMinutos.piso[0], M.PISO_RADIO_MIN_PX), 'sin minutos, el piso es el mínimo, sin dividir por cero');
 
 console.log('6. el buscador');
 ok(M.buscar(mapa, 'aurora lenta') === 0 && M.buscar(mapa, '  AURORA   Lenta ') === 0, 'igualdad de normalizarNombre: mayúsculas y espacios no cuentan');
@@ -158,6 +182,7 @@ if (existsSync(ruta)) {
   const texto = readFileSync(ruta, 'utf8');
   const j = JSON.parse(texto);
   ok(igual(Object.keys(j), ['version', 'fuente', 'fecha', 'limit', 'nombres', 'pos', 'aristas']), `las claves son las de la forma acordada: ${Object.keys(j).join(', ')}`);
+  ok(j.version === 2, `es la v2 (v=316: el autocorrect y los sueltos), y vino ${j.version}`);
   ok(!/minut|plays|\"ms\"|radio/i.test(texto.replace(/"nombres":\[.*?\],"pos"/s, '"pos"')), 'fuera de los nombres, ni minutos ni plays ni radios');
   ok(j.pos.length === 2 * j.nombres.length && j.aristas.length % 4 === 0, 'pos = 2 × nombres; aristas de a cuatro');
   let bien = true;
@@ -167,9 +192,75 @@ if (existsSync(ruta)) {
   }
   ok(bien, 'cada par: i < j < N, match entre 0 y 1.000, mutua 0 o 1');
   ok(M.leerMapa(j, {}) !== null, 'y leerMapa lo lee');
+  // v=316: los aislados van en la franja de abajo, en una grilla de 48, y por debajo de todo lo conectado.
+  const g = new Array(j.nombres.length).fill(0);
+  for (let k = 0; k < j.aristas.length; k += 4) { g[j.aristas[k]]++; g[j.aristas[k + 1]]++; }
+  const ys = (f) => j.nombres.map((_, i) => i).filter(f).map((i) => j.pos[2 * i + 1]);
+  const ysAislados = ys((i) => g[i] === 0), ysConectados = ys((i) => g[i] >= 3);
+  ok(ysAislados.length > 0 && Math.min(...ysAislados) > Math.max(...ysConectados) + 20, `los aislados (${ysAislados.length}) quedan por debajo de todo el grafo`);
+  const x0 = Math.min(...j.nombres.map((_, i) => i).filter((i) => g[i] === 0).map((i) => j.pos[2 * i]));
+  ok(j.nombres.map((_, i) => i).filter((i) => g[i] === 0).every((i) => Number.isInteger(Math.round((j.pos[2 * i] - x0) * 10) / 10 / 48) && Number.isInteger(Math.round((j.pos[2 * i + 1] - ysAislados[0]) * 10) / 10 / 48)), 'y en una grilla de 48');
 } else {
   console.log('  · (no hay JSON horneado: se saltea)');
 }
+
+console.log('10. el horneado: los sueltos en una franja (`componentes`, `colocarSueltos`, `acomodar`)');
+if (typeof H.componentes === 'function' && typeof H.colocarSueltos === 'function' && typeof H.acomodar === 'function') {
+  // Un grafo INVENTADO de 9: un componente de cuatro (0-1-2-3), uno de tres (5-6-7), uno de dos (4-8) y nada más.
+  const L = [[0, 1], [1, 2], [2, 3], [5, 6], [6, 7], [4, 8]].map(([i, j]) => ({ i, j }));
+  const comps = H.componentes(9, L);
+  ok(igual(comps, [[0, 1, 2, 3], [5, 6, 7], [4, 8]]), `componentes de más grande a más chico (${JSON.stringify(comps)})`);
+  const conAislados = H.componentes(12, L);
+  ok(igual(conAislados.slice(3), [[9], [10], [11]]), 'los aislados al final, en el orden del universo');
+  ok(igual(H.componentes(4, [{ i: 2, j: 3 }, { i: 0, j: 1 }]), [[0, 1], [2, 3]]), 'a igualdad de tamaño, el que tiene el primer índice menor');
+  const caja = { minX: -100, maxX: 100, minY: -50, maxY: 50 };   // 200 de ancho → floor(200/48) = 4 columnas
+  const s1 = H.colocarSueltos(caja, conAislados.slice(1));
+  ok(igual(s1.map((e) => e[0]), [5, 6, 7, 4, 8, 9, 10, 11]), `el orden: el de tres, el de dos (juntos) y los aislados (${s1.map((e) => e[0]).join(',')})`);
+  ok(igual(s1.map((e) => [e[1], e[2]]), [[-76, 146], [-28, 146], [20, 146], [68, 146], [-76, 194], [-28, 194], [20, 194], [68, 194]]),
+    'celdas de 48, cuatro columnas, la primera fila a 96 del borde inferior y alineada al borde izquierdo');
+  ok(s1.every(([, x, y]) => !(x >= caja.minX && x <= caja.maxX && y >= caja.minY && y <= caja.maxY)), 'nadie queda dentro de la caja del componente grande');
+  ok(igual(H.colocarSueltos({ minX: 0, maxX: 10, minY: 0, maxY: 0 }, [[1], [2]]).map((e) => [e[1], e[2]]), [[24, 96], [24, 144]]), 'más angosto que una celda: una columna (como mínimo 1)');
+  ok(H.CELDA_SUELTOS === 48 && H.SEPARACION_SUELTOS === 96, 'celda 48, separación 96');
+  // `acomodar` con un d3 de MENTIRA: cuenta cuántos nodos le pasan y los deja en una fila.
+  let simulados = null, links = null;
+  const d3Falso = {
+    forceSimulation: (nodos) => { simulados = nodos.length; const sim = { force: () => sim, stop: () => sim, tick: () => nodos.forEach((n, k) => { n.x = k * 10; n.y = 0; }) }; return sim; },
+    forceLink: (l) => { links = l; return {}; }, forceManyBody: () => ({}), forceCenter: () => ({}), forceCollide: () => ({}),
+  };
+  const u = Array.from({ length: 12 }, (_, i) => ({ nombre: `Inventado ${i}`, minutos: 1000 - i }));
+  const pos = H.acomodar(d3Falso, u, L);
+  ok(simulados === 4 && links.length === 3 && links.every((l) => l.source < 4 && l.target < 4), `a la simulación entra solo el componente grande (${simulados} nodos, ${links.length} enlaces, en índices locales)`);
+  ok(pos.length === 24 && pos[0] === 0 && pos[2] === 10 && pos[6] === 30, 'el grande queda donde lo dejó la simulación');
+  const maxYGrande = Math.max(...[0, 1, 2, 3].map((i) => pos[2 * i + 1] + 2 + 18 * Math.sqrt(u[i].minutos / 1000)));
+  ok([4, 5, 6, 7, 8, 9, 10, 11].every((i) => pos[2 * i + 1] >= maxYGrande + 96 - 1e-9), 'y los sueltos, debajo, a 96 o más de su borde inferior');
+  const lectura = [5, 6, 7, 4, 8, 9, 10, 11].map((i) => pos[2 * i + 1] * 1e6 + pos[2 * i]);
+  ok(lectura.every((v, k) => k === 0 || v > lectura[k - 1]), 'en orden de lectura: el de tres, el de dos y los aislados (acá, una sola columna: el grande mide 70 de ancho)');
+} else ok(false, 'componentes, colocarSueltos y acomodar existen en el horneado');
+
+console.log('11. el horneado: el autocorrect en `armarAristas`');
+if (typeof H.armarAristas === 'function') {
+  // INVENTADO: «Gemas Fríos» vuelve como «Gema$ Fríos» (la misma escritura: aceptado); «Los Faroles», como
+  // «Faroles» (otro nombre: descartado); «Coral» vuelve como «Ola» (que YA es del universo: no se pisa).
+  const u = ['Gemas Fríos', 'Banda Inventada', 'Los Faroles', 'Coral', 'Ola'].map((nombre, i) => ({ nombre, minutos: 100 - i }));
+  const sim = (name, match) => ({ name, match, mbid: '' });
+  const resp = new Map([
+    [0, { pedido: 'Gemas Fríos', devuelto: 'Gema$ Fríos', similares: [sim('Banda Inventada', 0.9)] }],
+    [1, { pedido: 'Banda Inventada', devuelto: 'Banda Inventada', similares: [sim('Gema$ Fríos', 0.8), sim('Faroles', 0.7), sim('Ola', 0.3)] }],
+    [2, { pedido: 'Los Faroles', devuelto: 'Faroles', similares: [sim('Banda Inventada', 0.6)] }],
+    [3, { pedido: 'Coral', devuelto: 'Ola', similares: [sim('Banda Inventada', 0.5)] }],
+    [4, { pedido: 'Ola', devuelto: null, similares: [] }],
+  ]);
+  const r = H.armarAristas(u, resp);
+  const pares = [...r.pares.values()].map((e) => [e.i, e.j, e.match, e.ab && e.ba ? 1 : 0]).sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+  ok(igual(r.aceptados, [0]) && igual(r.descartados, [2, 3]), `aceptados [0], descartados [2, 3] (${JSON.stringify([r.aceptados, r.descartados])})`);
+  ok(igual(pares, [[0, 1, 900, 1], [1, 4, 300, 0]]),
+    `el aceptado aporta su saliente y recibe por su segunda clave («Gema$ Fríos» → 0): par mutuo; «Faroles» no apunta a nadie; los descartados no aportan (${JSON.stringify(pares)})`);
+  ok(r.pisadas.length === 0, 'un descartado no reclama segunda clave');
+  // Una segunda clave que ya es de otro del universo: gana el del universo.
+  const u2 = ['Gemas Fríos', 'Gema$ Fríos', 'Banda Inventada'].map((nombre, i) => ({ nombre, minutos: 100 - i }));
+  const r2 = H.armarAristas(u2, new Map([[0, { pedido: 'Gemas Fríos', devuelto: 'Gema$ Fríos', similares: [] }], [2, { pedido: 'Banda Inventada', devuelto: null, similares: [sim('Gema$ Fríos', 0.5)] }]]));
+  ok(igual(r2.pisadas, [{ indice: 0, de: 1 }]) && igual([...r2.pares.values()].map((e) => [e.i, e.j]), [[1, 2]]), 'si la segunda clave ya es de otro artista del universo, gana el del universo');
+} else ok(false, 'armarAristas existe en el horneado');
 
 console.log(`\nOK mapa-artistas: ${pasaron} de ${pasaron + fallaron}`);
 process.exit(fallaron ? 1 : 0);

@@ -1204,7 +1204,9 @@ no corrió nunca. Eso arregla la acumulación, **no** el `index.html` viejo de a
 (un proceso por suite, sale con 1 si alguna falla; `-- --orden=inverso|azar:N` y
 `-- --paralelo` para cazar dependencias de orden) y `npm run prepush` comprueba,
 sin modificar nada, sintaxis, tests, `docs/` al día, versiones parejas y que no
-haya nada personal en el staging.
+haya nada personal en el staging. **Desde v=316 la PUERTA 1 real de `calendario-dias` solo corre con
+`FONOTECA_LEER_EXPORT=1`**: sin la variable, `npm test` no abre `my_spotify_data/` (ni lo mira); lo
+vigila `tests/export-a-pedido.test.mjs`.
 
 ## `#covers` estuvo ROTA nueve versiones — `a.sources.has is not a function` (RESUELTO en v=176)
 > ⚠️ **Corregido el 2026-08-30**: esta sección decía «PENDIENTE... sin
@@ -2757,6 +2759,21 @@ Las decisiones, y por qué:
   los que la importan), no es el nombre pedido, lo de Last.fm de ese artista no se usa (se decide sobre una copia con
   `lastfm: null`) y va a «Last.fm dice que no tiene». Lo de otras fuentes sigue valiendo. Sin `artista` (lo de `#genre`,
   lo migrado), como siempre. En la medición de la 62, 3 de 196 devolvieron otro artista (16 de 19 cambios eran solo mayúsculas).
+  🟩 **Desde v=316 (tanda 65) «el mismo» lo decide UNA regla, `mismoArtistaAutocorregido(pedido, devuelto)`
+  (`util/autocorrect-lastfm.js`), que comparte con el horneado del mapa de artistas.** Sin `devuelto` o igual según
+  `normalizarNombre`: el mismo. Si no, el mismo **solo si** las dos **claves de escritura** son iguales y no vacías:
+  `normalizarNombre` → cada `$` a `s` → cada `&` a ` and ` → fuera todo lo que no sea letra, número o espacio
+  (`/[^\p{L}\p{N} ]/gu`) → fuera un `the ` del principio → espacios colapsados. **Nada más**: ni tablas de nombres, ni
+  distancia de edición, ni `score`, ni el `mbid`. Es una regla de escritura del mismo nombre, como `SINONIMOS`: un
+  autocorrect que cambia el NOMBRE («Los X» → «X», un dúo por su nombre corto, una sigla por otra) **sigue descartado**,
+  aunque sea el mismo artista (el precio de no aceptar a ciegas; los que se pierden, con sus minutos, en `PENDIENTES.md`).
+  Sobre los 42 autocorrects a otro nombre del escaneo de la 64: **17 aceptados y 25 descartados**; entre los aceptados,
+  el 4.º artista más escuchado, que con la regla vieja iba a «no tiene» y ahora tiene sus 6 géneros (REAL, sin red, sobre
+  el registro guardado). ⚠️ La regla no sabe si dos artistas que se escriben igual son el mismo: los dudosos de la
+  lectura están en `PENDIENTES.md`. ⚠️ Y no arregla el «+»: Last.fm devuelve «A + B» como «A   B» (tres espacios) y con
+  0 similares y 0 etiquetas; aceptarlo no le da nada propio. `generos-regla.js` ya no importa `normalizarNombre` (la usa
+  a través de la regla; `tests/mb-pais.test.mjs` cuenta `autocorrect-lastfm.js` en su lugar). La decisión se recalcula
+  al pintar: no hace falta volver a pedir nada (el registro guardado ya trae el `artista`).
 - ⚠️ **De qué fuentes salen las etiquetas**: de `decidirEtiquetas` de siempre (todas las fuentes del registro, mezcladas):
   lo mismo que lee `#genre`. **Eso incluye lo que `#genre` trajo de MusicBrainz con su `limit=1` a ciegas y lo migrado de
   fuente desconocida**: defecto conocido (en `PENDIENTES.md`), no se arregló.
@@ -2816,7 +2833,8 @@ Pedido por Ian; lo midió la tanda 63 y lo hizo la 64.
 | `src/data/history-artist-similares.json` | HORNEADO: `{ version, fuente, fecha, limit, nombres, pos: [x0, y0, …], aristas: [i, j, match, mutua, …] }`, compacto | `tests/mapa-artistas.test.mjs` (sección 9: la forma, y que no lleva minutos) |
 | `util/mapa-artistas.js` | PURO: leer el JSON, los vecinos por `match`, el toque, el pan y el zoom con sus topes, qué nombres se dibujan, el buscador | `tests/mapa-artistas.test.mjs` |
 | `features/mapa-artistas.js` | la vista: el `<canvas>`, los eventos (puntero, rueda, pellizco, botones) y el panel | `tests/banco/mapa-artistas.html` (en `prepush`, el vigésimo primero) |
-| `history-keys.js` / `features/history-data.js` | `SIMILARES_VERSION = 1`, `OWNER_KEYS.similares`, `loadArtistSimilares()` con `OWNER_PREV_KEYS.similares` VACÍA | `tests/likes-cache-policy.test.mjs` (ocho claves del owner) |
+| `history-keys.js` / `features/history-data.js` | `SIMILARES_VERSION = 2` (v=316; era 1), `OWNER_KEYS.similares`, `loadArtistSimilares()` con `OWNER_PREV_KEYS.similares` VACÍA | `tests/likes-cache-policy.test.mjs` (ocho claves del owner, con la v2) |
+| `util/autocorrect-lastfm.js` (v=316) | PURO: `mismoArtistaAutocorregido` y `claveEscritura`, la regla del autocorrect que comparte con `#generos` | `tests/autocorrect-lastfm.test.mjs` |
 
 **Lo que no se reabre** (lo midió la 63 y lo decidió el encargo de la 64):
 
@@ -2855,13 +2873,18 @@ Pedido por Ian; lo midió la tanda 63 y lo hizo la 64.
   8/11/16 o un 200 sin `similarartists` se reintentan con el mismo artista tras `esperaTrasFallo` del mapa; 8 seguidos
   paran. Un 10 o un 26 paran todo. Retomable (una línea por petición en el avance, escrita apenas termina) y con tope.
 - **«Está en tu historial»** es la regla de la 63: igualdad de `normalizarNombre` entre el similar y un nombre del
-  universo, sin el propio artista; si dos nombres del universo normalizan igual, gana el primero. **Un artista cuyo
-  autocorrect devolvió OTRO nombre no aporta aristas salientes** (la prudencia de `#generos`), pero sí recibe las de los
-  demás. Sin dirección: el par existe si uno apunta al otro; su peso es el MAYOR `match` de las dos direcciones, en
+  universo, sin el propio artista; si dos nombres del universo normalizan igual, gana el primero. **El autocorrect
+  (v=316)**: si devolvió otro nombre, decide `mismoArtistaAutocorregido` (la regla de `#generos`, ver «🔎 `#generos`»).
+  **Aceptado** (la misma escritura): aporta sus salientes **y su `devuelto` normalizado es una segunda clave suya** al
+  buscar los similares de los demás (los otros lo nombran como lo escribe Last.fm), salvo que esa clave ya sea de otro
+  artista del universo: gana el del universo. **Descartado** (otro nombre): sin salientes y sin segunda clave, como en
+  v=315; recibe las de los demás si lo nombran con el nombre del historial. Sin dirección: el par existe si uno apunta al otro; su peso es el MAYOR `match` de las dos direcciones, en
   entero de 0 a 1.000, y `mutua` dice si están las dos. **Ningún corte de `match` ni de grado.**
 - El layout: `d3@7.9.0` (bajado una vez, verificado por sha256, cargado con `vm`; NO está en `package.json`), las
   fuerzas de la 63 sin tocar (`forceLink`, `forceManyBody`, `forceCenter`, `forceCollide(r)`, todo lo demás por defecto,
   el `randomLcg(1)` de d3), 300 ticks a mano, posiciones a 1 decimal. Determinista: dos corridas, el mismo sha256.
+  🔴 **Desde v=316 a la simulación entra SOLO el componente conexo más grande**; los demás («los sueltos») van en una
+  franja debajo, sin simulación (`colocarSueltos`, ver «Los sueltos, los nombres y el radio (v=316)», abajo).
 - Solo se hornea con al menos el 95 % del universo con respuesta definitiva. Tope de 3 MB (si lo pasa, cada artista
   conserva sus 40 aristas de mayor `match`).
 - ⚠️ **Con un export nuevo** el universo cambia: hay que volver a escanear (el avance es retomable, pero los índices
@@ -2876,18 +2899,20 @@ error 6, 0 reintentos, CORS `*` en todas; 39,2 min escaneando en dos sesiones, a
 sleep). **77.420 pares** sin dirección (la 63 proyectaba 60.013-120.026), el 51,5 % mutuos; grado sin dirección mediana 65,
 p90 128, máx. 236; grado SALIENTE medio 51,9 (la muestra de la 63: 52,14). **77 aislados** (grado 0), con el 2,4 % de los
 minutos. 42 artistas con el autocorrect a otro nombre (no aportan salientes). Layout en Node ≈12 s, dos corridas con el mismo
-sha256. El JSON pesa **1,17 MB** (sin recorte).
+sha256. El JSON pesa **1,17 MB** (sin recorte). ⚠️ Eso es la v1 (v=315). La v2 (v=316), rehorneada sin red con la regla
+del autocorrect y los sueltos aparte: ver «Los sueltos, los nombres y el radio (v=316)», abajo.
 
 **La vista**:
 
-- Un `<canvas>` con todos los artistas como círculos, arrancando con todo el mapa a la vista. **Nombres** solo de los
-  círculos de 12 px de radio o más en pantalla, como mucho 60 por frame (los de más minutos primero) y sin pisarse.
-  ⚠️ A «todo el mapa» puede no haber ninguno: aparecen con el zoom.
+- Un `<canvas>` con todos los artistas como círculos, arrancando con todo el mapa a la vista (los sueltos incluidos,
+  en su franja). **Nombres** (v=316): de más minutos a menos, como mucho 60 por frame, solo de círculos con el centro
+  dentro del lienzo y sin pisarse (gana el de más minutos); **sin umbral de radio** (hasta v=315 pedían 12 px y a
+  «todo el mapa» no salía ninguno). El radio en pantalla es `max(r · escala, 1 + 4·√(minutos / máximo))` px: ver abajo.
 - Pan arrastrando (pointer events, también el dedo), zoom con la rueda (al puntero), con dos dedos y con «+», «−» y
   «Ver todo»; entre «todo el mapa» y 40 veces eso. `touch-action: none` en el lienzo: dentro, el dedo mueve el mapa; la
   página se scrollea tocando fuera (el lienzo mide `clamp(300px, 62vh, 720px)`).
-- **Tocar** elige el círculo de borde más cercano si el punto cae dentro de su radio en pantalla más 4 px; el fondo lo
-  suelta. Con un elegido: sus líneas, sus parecidos en el acento y el resto atenuado.
+- **Tocar** elige el círculo de borde más cercano si el punto cae dentro de su radio en pantalla (el mismo que se
+  dibuja, con su piso) más 4 px; el fondo lo suelta. Con un elegido: sus líneas, sus parecidos en el acento y el resto atenuado.
 - **El panel**, debajo: el nombre, sus minutos (`es-ES`), «N artistas parecidos en tu historial» y la lista por `match`
   de mayor a menor (a igualdad, por minutos), de a 50 con «Mostrar 50 más»; cada uno, un botón que lo elige y lo centra.
   «Ver ficha» abre `openArtistCard({ name })` (lo que cueste la ficha es de la ficha).
@@ -2914,8 +2939,67 @@ densidad medida): A abrir = 1 `/me` y 0 de lo demás, también al volver; B sin 
 tocar elige, el panel en el orden esperado, el fondo suelta; D arrastrar, rueda, botones, buscar y «Mostrar 50 más» = 0
 peticiones y quieto 5 s = 0 frames; E el amigo sin mapa, la línea y 0 puntos; F a 1366 y 390 nada desborda; G salir a
 mitad, 0 escrituras y 0 frames, y salir con un frame pendiente, 0 frames después del teardown. B y D vistas fallar en
-una copia. `mapa-artistas-caso.html?modo=foto&uid=owner&datos=real|inventado[&tema=papel]` es el instrumento de las
-capturas y de la medición de frames (conductor en `fonoteca-migracion/mapa-artistas/driver-mapa-artistas-2026-10-18.mjs`).
+una copia. **v=316**: el grafo inventado suma una pareja (dos de los nueve aislados, con un solo par entre ellos: 60.142
+pares, siete aislados) y los sueltos colocados como franja; y la puerta **H**: a «Ver todo», TODOS los puntos dentro del
+lienzo (con el radio que se dibuja) y al menos un nombre, el del artista de más minutos (vista fallar contra v=315:
+«salieron 0»). `mapa-artistas-caso.html?modo=foto&uid=owner&datos=real|inventado[&tema=papel]` es el instrumento de las
+capturas y de la medición de frames (conductor en `fonoteca-migracion/mapa-artistas/driver-mapa-artistas-2026-10-18.mjs`;
+el de v=316, `driver-mapa-artistas-t65-2026-10-18.mjs`). ⚠️ **El instrumento no tiene `<meta name="viewport">`**: con
+`Emulation.setDeviceMetricsOverride` y `mobile: true` Chrome lo maqueta a ~980 px, y el «390» de la tanda 64 era un lienzo
+de 874×720. El conductor de la 65 usa `mobile: false` (390 es 390).
+
+### Los sueltos, los nombres y el radio (v=316)
+
+La tanda 65. Al abrir v=315 el mapa era una mancha oscura en el medio, sin un solo nombre, por tres causas que se arreglan
+juntas: (1) **los aislados formaban un anillo** lejos de todo (`forceManyBody` los empuja y ningún enlace los retiene): el
+plano medía **6.212,8 × 6.150,7** unidades para un grafo que entra en bastante menos; (2) **con cualquier encuadre no salía
+ningún nombre**: pedían 12 px de radio y a «todo el mapa» el más grande medía unos pocos px; (3) **el 4.º artista más
+escuchado estaba aislado** por el autocorrect (Last.fm lo escribe con «$», su respuesta se descartaba y los demás lo
+nombraban así: tampoco recibía). La (3) es la regla del autocorrect (ver «🔎 `#generos`»); las otras dos, esto:
+
+- **Los sueltos, fuera de la simulación** (`colocarSueltos` y `componentes`, puras, en `scripts/hornear-similares.mjs`).
+  Entra a `d3-force` solo el componente conexo más grande, con las fuerzas de siempre sin tocar. Los demás —aislados y
+  componentes chicos— van en una **grilla debajo**: primero los componentes de más de uno (de más grande a más chico, y
+  adentro en el orden de `universo()`, así quedan juntos), después los aislados en el orden de `universo()`; celda de
+  **48** unidades (más que el diámetro del más grande, 40); columnas = `floor(ancho del componente grande / 48)`, como
+  mínimo 1; la primera fila con su centro **96** por debajo del borde inferior del componente grande (contando radios),
+  alineada a su borde izquierdo; a 1 decimal. Lo prueba `tests/mapa-artistas.test.mjs` (secciones 10 y 11, con un grafo
+  inventado y un d3 de mentira que cuenta cuántos nodos simula).
+- 🔴 **Los nombres no dependen del radio**: de más minutos a menos, como mucho 60, solo con el centro dentro del lienzo y
+  sin pisarse (gana el de más minutos). Así el más escuchado que se vea siempre tiene nombre. `RADIO_NOMBRE_PX` no existe
+  más. Siguen en `--color-text`, con el borde de `--color-bg`, sin animación.
+- **El radio en pantalla tiene un piso**: `max(r · escala, 1 + 4·√(minutos / máximo))` px (`radioEnPantalla`, el mismo
+  para dibujar, para el anillo del elegido y para tocar). De cerca manda el plano (el horneado acomodó con `r`); de lejos,
+  el piso, que mantiene el orden de tamaños (el más grande, 5 px; el más chico, ~1,2). **Es una decisión de diseño, no una
+  medida.**
+- Elegir (desde el mapa, el panel o el buscador) **centra pero no cambia la escala**, como en v=315. Encuadrar al elegido
+  con sus parecidos es otro encargo (en `PENDIENTES.md`).
+
+**El rehorneado** (REAL, **0 peticiones**: del archivo de avance de la 64, con el mismo d3; dos corridas, el mismo
+sha256 de posiciones y de archivo, ~14,6 s cada una; `bwrap --unshare-net` para probar que no sale a la red): **78.455
+pares** (v1: 77.420), 40.372 mutuos (v1: 39.845); **63 aislados** con 2.439,7 min (v1: 77 con 6.120,8) y **dos parejas**
+fuera del componente grande (67 sueltos en total); de los 42 autocorrects a otro nombre, 17 aceptados y 25 descartados
+(ninguna segunda clave pisada); el 4.º más escuchado pasa de grado 0 a **175**. El plano: **3.571,7 × 4.090,4** (el
+componente grande, 3.571,7 × 3.987,8). El JSON pesa 1.185.500 bytes (v1: 1.171.258).
+
+**A «Ver todo»** (SEMBRADO, el JSON real servido en local, Chrome headless, la letra de reserva: Google Fonts cortado):
+
+| | lienzo | escala | nombres | de los 10 más escuchados, con nombre | puntos fuera del lienzo |
+|---|---|---|---|---|---|
+| 1366×768 | 1.198 × 476 | 0,1105 | 60 | 7 (1, 3, 5, 6, 7, 8, 9) | 0 de 2.302 |
+| 390×844 | 368 × 523 | 0,0963 | 49 | 6 (1, 3, 5, 6, 7, 9) | 0 de 2.302 |
+
+Los que no tienen nombre se pisan con uno de más minutos: los grandes están juntos. El detalle (y los frames) en
+`fonoteca-migracion/mapa-artistas/`.
+
+**Los frames** (SINTÉTICO: CPU ×1 y ×6 de esta máquina, no la netbook; el método de la 64, 60 frames sin elegido y 60 con
+el de más grado, tres corridas; la carga de la máquina estaba por encima de 1,0): dibujar hasta 60 nombres por frame
+cuesta. A ×6 y 1366, mediana **35–36 ms** sin elegido y 34–38 con elegido (la 64, sin nombres: 21–22). **Decidido de
+antemano: si pasaba de 100 ms, `MAX_NOMBRES` bajaba a 30. No pasó: queda en 60.**
+
+⚠️ **Visto en las capturas, sin arreglar** (en `PENDIENTES.md`): un nombre con el centro dentro pero la caja fuera se
+corta en el borde del lienzo; dos cajas pueden quedar pegadas (no se pisan, pero sin aire); y el elegido no tiene
+prioridad para su nombre (si se pisa con uno de más minutos, no sale).
 
 ## Client ID
 0c8c92ad128e4b89be7097c6b8082797
