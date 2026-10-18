@@ -1,14 +1,14 @@
-import { getAllLikedTracks, createPlaylist, addTracksToPlaylist, invalidatePlaylistsCache, exportAllData, importAllData, getCurrentUserId, getBestAvailableLikes } from '../api.js?v=314';
-import { hasKey, setKey, getArtistTopTags, getCachedTags, setCachedTags, mergeCachedTags, cargarEtiquetas, contarEtiquetasGuardadas } from '../api/lastfm.js?v=314';
-import * as statsfm from '../api/statsfm.js?v=314';
-import { getGenresForArtist as mbGetGenres } from '../api/musicbrainz.js?v=314';
-import { showProgress, hideProgress, progressController, isCancelled, promptPlaylistName, alertModal, confirmModal, escapeHtml, pageHeader } from '../ui/components.js?v=314';
-import { showToast } from '../ui/toast.js?v=314';
-import { openModal, closeTop } from '../ui/modal-stack.js?v=314';
-import { bucketFor } from '../util/genre-reason.js?v=314';
-import { openGenreAudit } from './genre-detail.js?v=314';
-import { prefKey, migratePrefKey } from '../storage.js?v=314';
-import { pedirYCachear, CUALQUIER_RESPUESTA } from '../util/cache-solo-exitos.js?v=314';
+import { getAllLikedTracks, createPlaylist, addTracksToPlaylist, invalidatePlaylistsCache, exportAllData, importAllData, getCurrentUserId, getBestAvailableLikes } from '../api.js?v=315';
+import { hasKey, setKey, getArtistTopTags, getCachedTags, setCachedTags, mergeCachedTags, cargarEtiquetas, contarEtiquetasGuardadas } from '../api/lastfm.js?v=315';
+import * as statsfm from '../api/statsfm.js?v=315';
+import { getGenresForArtist as mbGetGenres } from '../api/musicbrainz.js?v=315';
+import { showProgress, hideProgress, progressController, isCancelled, promptPlaylistName, alertModal, confirmModal, escapeHtml, pageHeader } from '../ui/components.js?v=315';
+import { showToast } from '../ui/toast.js?v=315';
+import { openModal, closeTop } from '../ui/modal-stack.js?v=315';
+import { bucketFor } from '../util/genre-reason.js?v=315';
+import { openGenreAudit } from './genre-detail.js?v=315';
+import { prefKey, migratePrefKey } from '../storage.js?v=315';
+import { pedirYCachear, CUALQUIER_RESPUESTA } from '../util/cache-solo-exitos.js?v=315';
 
 const NOISE_TAGS = new Set([
   'seen live', 'favorites', 'favorite', 'favourite', 'favourites',

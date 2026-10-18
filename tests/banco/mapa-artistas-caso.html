@@ -1,0 +1,73 @@
+<!doctype html><html lang="es"><head><meta charset="utf-8"><title>banco mapa-artistas — la app entera, en un iframe</title>
+<link rel="stylesheet" href="/css/theme.css">
+<link rel="stylesheet" href="/css/components.css">
+<link rel="stylesheet" href="/css/main.css">
+<style>*,*::before,*::after{animation:none!important;transition:none!important}</style>
+</head><body>
+<div id="app"></div>
+<script type="module">
+// ── Un iframe del banco `mapa-artistas.html` (v=315, tanda 64) ───────────────
+//
+// Arranca la app ENTERA (`/js/app.js`) en `#home`, contra la Spotify simulada de `simulado.mjs`,
+// con `/me` = el `uid` que pide la madre (`?uid=owner` es `HISTORY_OWNER_ID`). El historial y el
+// mapa los sembró la madre en IndexedDB, INVENTADOS (`mapa-artistas-datos.mjs`). Nada sale a la red.
+//
+// `window.__frenoMe`: si la madre pone acá una promesa, el `/me` que llegue mientras tanto espera a
+// que se resuelva (para salir de la ruta a mitad de la carga).
+//
+// Modo `?modo=foto&uid=owner` (las capturas y la medición de frames, con un conductor externo y SIN
+// reloj virtual): con `&datos=inventado` siembra él mismo el historial y el mapa inventados; con
+// `&datos=real` NO siembra nada y la app baja los JSON horneados del propio servidor local
+// (`src/data/`, que son públicos), como en producción. Con `&tema=papel` pone el preset Papel. Abre
+// `#mapa-artistas` y marca `data-foto="listo"` cuando el primer frame está pintado.
+
+import { instalarRedSimulada, esperarReal, anclar } from '/banco/simulado.mjs';
+
+const q = new URLSearchParams(location.search);
+window.__errores = [];
+window.addEventListener('error', (e) => window.__errores.push('error: ' + (e.message || e)));
+window.addEventListener('unhandledrejection', (e) => window.__errores.push('rechazo: ' + String(e.reason?.message || e.reason)));
+const errorOriginal = console.error.bind(console);
+console.error = (...a) => { window.__errores.push('console.error: ' + a.map(String).join(' ').slice(0, 300)); errorOriginal(...a); };
+
+const { HISTORY_OWNER_ID } = await import('/js/features/history-data.js');
+const UID = q.get('uid') === 'owner' ? HISTORY_OWNER_ID : q.get('uid');
+const sim = instalarRedSimulada();
+window.__sim = sim;
+window.__frenoMe = null;
+sim.ruta('GET', /^\/me$/, async () => {
+  if (window.__frenoMe) await window.__frenoMe;
+  return { id: UID, display_name: 'Banco' };
+});
+localStorage.setItem('fonoteca_last_user_id', UID);
+localStorage.setItem('fonoteca_perfil_v1', JSON.stringify({ id: UID, display_name: 'Banco' }));
+
+const FOTO = q.get('modo') === 'foto';
+if (FOTO) {
+  const { prefKey } = await import('/js/storage.js');
+  localStorage.setItem(prefKey('fonoteca_anim_v1'), 'nunca');
+  if (q.get('tema') === 'papel') {
+    const { PRESETS } = await import('/js/ui/theme-panel.js');
+    const papel = PRESETS.find((p) => p.id === 'papel');
+    if (!papel) throw new Error('banco: no encontré el preset Papel');
+    // La forma de `write()` de `theme-panel.js`: los ocho colores y el id del preset.
+    localStorage.setItem(prefKey('fonoteca_theme_v1'), JSON.stringify({ colors: papel.colors, preset: 'papel' }));
+  }
+  if (q.get('datos') === 'inventado') {
+    const { historial, grafo } = await import('/banco/mapa-artistas-datos.mjs');
+    const { OWNER_KEYS } = await import('/js/history-keys.js');
+    const { idbSetCached } = await import('/js/idb.js');
+    await anclar(idbSetCached(OWNER_KEYS.artistTracks, historial(), 100 * 365 * 24 * 60));
+    await anclar(idbSetCached(OWNER_KEYS.similares, grafo(), 100 * 365 * 24 * 60));
+  }
+}
+location.hash = FOTO ? '#mapa-artistas' : '#home';
+await import('/js/app.js');
+await esperarReal(() => document.getElementById('my-history-btn') && (FOTO || document.querySelector('.home-card')), { que: 'que la app arranque', vueltas: 4000 });
+window.__listo = true;
+if (FOTO) {
+  await esperarReal(() => document.querySelector('[data-mapa-artistas="listo"]') && window.__mapaArtistasDibujo?.cuadros > 0, { que: 'que #mapa-artistas pinte', vueltas: 8000 });
+  document.documentElement.dataset.foto = 'listo';
+}
+</script>
+</body></html>

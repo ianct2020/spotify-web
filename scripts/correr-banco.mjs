@@ -112,6 +112,12 @@ const EXTRA = { mosaico: 'auto=1' };
 // Last.fm simulado a 1 s entre peticiones, con 29 y 503 que esperan 10 s cada uno, más los 30 s de reloj de la puerta E.
 // Medido a tasa de acierto el 17/10 (tanda 61), con 210 s de tope: diez corridas seguidas gastaron 96.482-97.341 ms de
 // reloj virtual (10/10). El doble de la más lenta, redondeado hacia arriba a múltiplo de 15 s: 195 s.
+// `mapa-artistas` (v=315) abre la app ENTERA en seis iframes con un grafo inventado de 2.302 artistas y ~60.000 pares, y
+// espera 5 s de reloj quieto (puerta D) y 1 s tras salir (puerta G). Medido a tasa de acierto el 18/10 (tanda 64), con el
+// defecto de 45 s: veinte corridas seguidas gastaron 12.379-15.734 ms de reloj virtual (20/20). El doble de la más lenta da
+// 31,5 s: no entra en `PRESUPUESTO` y corre con los 45 s. ⚠️ La primera versión de la puerta G fallaba 3 de 20: miraba los
+// frames desde ANTES de cambiar de ruta, y el navegador a veces pinta el frame pendiente entre el clic y el `hashchange` (con
+// la ruta todavía abierta, que está bien). Ahora cuenta desde el `routeteardown`.
 const PRESUPUESTO = { 'calendario': 15000, 'ocultar-artista': 90000, 'import-guarda': 60000, 'ocultos-cache': 60000, 'mapa': 240000, 'generos-escaneo': 195000 };
 // `XQ="&peor=1"` agrega parámetros a la URL del banco sin tocar este archivo: sirve
 // para medir (p. ej. el ancho mínimo en que la barra de novedades sigue en una fila).

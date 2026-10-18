@@ -48,7 +48,7 @@ if npm test --silent 2>&1 | tail -4 | sed 's/^/      /'; [ "${PIPESTATUS[0]}" -e
 # `mosaico` y `toasts` entraron en v=273:
 # estaban en rojo desde antes del 04/10 y justamente por no estar acá nadie los
 # miraba, igual que le había pasado a `barra` entre v=241 y v=261.
-echo "2b. bancos (barra · pausa-search · toasts · mosaico · novedades · escrituras · ocultar-artista ×3 · covers-orden · calendario · import-guarda · ocultos-cache · mapa · puertas · cuota · letras · generos-cache · generos-escaneo · generos)"
+echo "2b. bancos (barra · pausa-search · toasts · mosaico · novedades · escrituras · ocultar-artista ×3 · covers-orden · calendario · import-guarda · ocultos-cache · mapa · puertas · cuota · letras · generos-cache · generos-escaneo · generos · mapa-artistas)"
 # Los dos de `ocultar-artista` entraron en v=276: las TRES vistas que ocultan
 # artistas, reales, contra una Spotify simulada. Es el único sitio donde se puede
 # probar ocultar sin escribir en la cuenta de Ian, y el de `-disco` es el que
@@ -98,7 +98,12 @@ echo "2b. bancos (barra · pausa-search · toasts · mosaico · novedades · esc
 # SIMULADO: sin géneros, una línea y ninguna lista; abrir = 1 `/me` y 0 a Last.fm; desplegar, «Ver todos» y «Mostrar 100
 # más» = 0 peticiones; el top 10 y la lista entera = la cuenta a mano (sin repartir minutos, sinónimos juntos, el
 # autocorrect a otro artista afuera); las cinco filas; a 1366 y a 390 nada desborda; buscando, el género abierto sigue.
-for B in barra pausa-search toasts mosaico novedades escrituras ocultar-artista ocultar-artista-disco ocultar-artista-novedades covers-orden calendario import-guarda ocultos-cache mapa puertas cuota letras generos-cache generos-escaneo generos; do
+# `mapa-artistas` entró en v=315: #mapa-artistas en la app ENTERA con un grafo INVENTADO de 2.302 artistas y ~60.000 pares
+# (la densidad medida en la tanda 63): abrir = 1 `/me` y 0 de lo demás; sin elegido 0 líneas por frame y con uno exactamente
+# su grado (visto fallar con una copia que dibuja todas); tocar elige y el fondo suelta; arrastrar, la rueda, buscar y
+# «Mostrar 50 más» = 0 peticiones y quieto 0 frames (visto fallar con una copia que repinta en bucle); el amigo sin mapa,
+# una línea; a 1366 y 390 nada desborda; salir a mitad, 0 escrituras y 0 frames.
+for B in barra pausa-search toasts mosaico novedades escrituras ocultar-artista ocultar-artista-disco ocultar-artista-novedades covers-orden calendario import-guarda ocultos-cache mapa puertas cuota letras generos-cache generos-escaneo generos mapa-artistas; do
   if node scripts/correr-banco.mjs "$B" 2>&1 | sed 's/^/      /'; [ "${PIPESTATUS[0]}" -eq 0 ]; then
     ok "banco $B en verde"
   else

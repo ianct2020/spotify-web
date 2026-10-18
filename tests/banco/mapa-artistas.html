@@ -1,0 +1,334 @@
+<!doctype html><html lang="es"><head><meta charset="utf-8"><title>banco mapa-artistas — el mapa de artistas, con un grafo de mentira</title>
+<style>html,body{margin:0;background:#111;color:#eee;font:13px system-ui}iframe{border:0;display:block}</style>
+</head><body>
+<pre id="progreso"></pre>
+<div id="marcos"></div>
+<script type="module">
+// ── Qué prueba este banco (v=315, tanda 64) ──────────────────────────────────
+//
+// `#mapa-artistas` REAL, en la app ENTERA (`mapa-artistas-caso.html`, uno por iframe), contra la
+// Spotify simulada (`simulado.mjs`), con un historial y un mapa INVENTADOS de 2.302 artistas y
+// ~60.000 pares (la densidad que midió la tanda 63), sembrados en IndexedDB
+// (`mapa-artistas-datos.mjs`). Nada sale a la red.
+//
+//   A. abrir = exactamente 1 `/me` (además del del arranque) y 0 de cualquier otro host, también al
+//      volver a la ruta; el JSON horneado del repo NO se pide (los datos son los sembrados);
+//   B. 🔴 sin elegido, 0 líneas por frame (también después de hacer zoom); con un elegido,
+//      EXACTAMENTE su grado. Lo cuenta la vista en `window.__mapaArtistasDibujo`;
+//   C. tocar un punto conocido lo elige y el panel lista sus parecidos en el orden esperado (contado
+//      acá, sin `util/mapa-artistas.js`); tocar el fondo lo suelta;
+//   D. arrastrar, la rueda, los botones de zoom, buscar y «Mostrar 50 más» = 0 peticiones; y tras 5 s
+//      de reloj quieto, 0 frames pintados (no hay bucle);
+//   E. un amigo con historial y sin mapa ve la línea «El mapa todavía no existe para tu historial.» y
+//      0 puntos; uno sin nada, el cartel de bloqueo de siempre;
+//   F. a 1366 y a 390 nada desborda la página;
+//   G. salir de la ruta a mitad de la carga (con el `/me` frenado): 0 errores, 0 escrituras al DOM
+//      de la ruta nueva y 0 frames; y salir con un frame pendiente: 0 frames después;
+//   y 0 errores de consola en todos los marcos.
+//
+// ⚠️ Todas las esperas van con `esperarReal` (ver PRESUPUESTO en `scripts/correr-banco.mjs`).
+
+import { esperarReal, anclar } from '/banco/simulado.mjs';
+import { fallar, listo } from '/banco/esperar.mjs';
+import { historial, grafo, vecinosEsperados, nombreDe, N } from '/banco/mapa-artistas-datos.mjs';
+
+const afirmar = (c, msg) => { if (!c) throw new Error('BANCO: ' + msg); };
+const progreso = (t) => { document.getElementById('progreso').textContent = t; };
+const VUELTAS = 20000;
+const igual = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+
+function abrirMarco(uid, nombre, ancho = 1366, alto = 900) {
+  const f = document.createElement('iframe');
+  f.width = ancho; f.height = alto;
+  f.src = `/banco/mapa-artistas-caso.html?uid=${encodeURIComponent(uid)}&marco=${nombre}`;
+  document.getElementById('marcos').appendChild(f);
+  return f;
+}
+const win = (f) => f.contentWindow;
+const $ = (f, s) => f.contentDocument?.querySelector(s);
+const $$ = (f, s) => [...(f.contentDocument?.querySelectorAll(s) || [])];
+const meDe = (f) => win(f).__sim.reg.llamadas.filter((l) => l.ruta === '/me').length;
+const texto = (el) => (el?.textContent || '').replace(/\s+/g, ' ').trim();
+const dibujo = (f) => win(f).__mapaArtistasDibujo;
+async function arrancado(f, que) { await esperarReal(() => win(f)?.__listo, { que: `que arranque ${que}`, vueltas: VUELTAS }); }
+async function irA(f, hash, que, cond) { win(f).location.hash = hash; await esperarReal(cond, { que, vueltas: VUELTAS }); }
+const externosDe = (f) => win(f).performance.getEntriesByType('resource').map((e) => e.name).filter((u) => new URL(u).origin !== location.origin);
+const externosAlAbrir = new Map();
+const pidioElJsonDelRepo = (f) => win(f).performance.getEntriesByType('resource').some((e) => /\/data\/history-artist-(similares|tracks)\.json/.test(e.name));
+const marcos = [];
+
+async function abrirMapa(f, que, cond) {
+  const me0 = meDe(f), n0 = win(f).__sim.reg.llamadas.length;
+  if (!externosAlAbrir.has(f)) externosAlAbrir.set(f, externosDe(f).length);
+  await irA(f, '#mapa-artistas', que, cond);
+  const nuevas = win(f).__sim.reg.llamadas.slice(n0);
+  return { me: meDe(f) - me0, otras: nuevas.filter((l) => l.ruta !== '/me').map((l) => `${l.metodo} ${l.ruta}`) };
+}
+function sinFugas(f, nombre) {
+  const s = win(f).__sim.reg;
+  afirmar(s.desconocidas.length === 0, `${nombre}: ninguna ruta sin simular: ${s.desconocidas.join(' · ')}`);
+  afirmar(s.externas.length === 0, `${nombre}: ninguna petición a un host externo: ${s.externas.join(' · ')}`);
+  const nuevos = externosDe(f).slice(externosAlAbrir.get(f) ?? 0);
+  afirmar(nuevos.length === 0, `${nombre}: nada bajado de otro origen desde que se abrió la vista: ${nuevos.join(' · ')}`);
+  afirmar(s.escrituras.length === 0, `${nombre}: 0 escrituras en la cuenta`);
+  afirmar(!pidioElJsonDelRepo(f), `${nombre}: los JSON horneados del repo NO se piden (los datos son los sembrados)`);
+}
+/** Espera el próximo frame pintado (el contador de la vista sube). */
+async function otroFrame(f, que) {
+  const c0 = dibujo(f)?.cuadros ?? 0;
+  await esperarReal(() => (dibujo(f)?.cuadros ?? 0) > c0, { que, vueltas: VUELTAS });
+  return dibujo(f);
+}
+/** Las coordenadas de CLIENTE del artista `i`, con la vista que tiene la página ahora. */
+function clienteDe(f, i) {
+  const b = win(f).__mapaArtistasBanco, v = b.vista(), r = b.canvas.getBoundingClientRect();
+  return [r.left + b.mapa.x[i] * v.escala + v.tx, r.top + b.mapa.y[i] * v.escala + v.ty];
+}
+function puntero(f, tipo, x, y, id = 1) {
+  const c = win(f).__mapaArtistasBanco.canvas;
+  c.dispatchEvent(new (win(f).PointerEvent)(tipo, { clientX: x, clientY: y, pointerId: id, pointerType: 'mouse', isPrimary: id === 1, bubbles: true, cancelable: true, button: 0, buttons: tipo === 'pointerup' ? 0 : 1 }));
+}
+const tocarEn = (f, x, y) => { puntero(f, 'pointerdown', x, y); puntero(f, 'pointerup', x, y); };
+const llamadas = (f) => win(f).__sim.reg.llamadas.length;
+
+try {
+  const { OWNER_KEYS } = await import('/js/history-keys.js');
+  const { idbSetCached, idbDel } = await import('/js/idb.js');
+  const { localKey, HISTORY_OWNER_ID } = await import('/js/features/history-data.js');
+  const TTL = 100 * 365 * 24 * 60;
+  const H = historial(), G = grafo();
+  await anclar(idbSetCached(OWNER_KEYS.artistTracks, H, TTL));
+  await anclar(idbSetCached(OWNER_KEYS.similares, G, TTL));
+  await anclar(idbDel(localKey(HISTORY_OWNER_ID, 'artistTracks')));
+  await anclar(idbDel(localKey(HISTORY_OWNER_ID, 'similares')));
+  await anclar(idbSetCached(localKey('amigo-hist', 'artistTracks'), H, TTL));
+  await anclar(idbDel(localKey('amigo-sin', 'artistTracks')));
+  const grado = new Array(N).fill(0);
+  for (let k = 0; k < G.aristas.length; k += 4) { grado[G.aristas[k]]++; grado[G.aristas[k + 1]]++; }
+  const MAS = grado.indexOf(Math.max(...grado));        // el de más parecidos (más de 50)
+  const datos = {};
+
+  // ── A · abrir, y volver ────────────────────────────────────────────────────
+  progreso('A: abrir');
+  const A = abrirMarco('owner', 'A'); marcos.push(['A', A]);
+  await arrancado(A, 'el marco A');
+  afirmar($(A, '.home-card[data-route="mapa-artistas"]'), 'el inicio tiene la tarjeta «Mapa de artistas»');
+  afirmar(texto($(A, '.home-card[data-route="mapa-artistas"] .home-card-name')) === 'Mapa de artistas', 'la tarjeta se llama «Mapa de artistas»');
+  afirmar($(A, '.nav-link[data-route="generos"]')?.nextElementSibling?.matches('.nav-link[data-route="mapa-artistas"]'), 'en el menú General, «Mapa de artistas» va justo detrás de «Tus géneros»');
+  const abrir = await abrirMapa(A, 'que #mapa-artistas pinte', () => $(A, '[data-mapa-artistas="listo"]') && dibujo(A)?.cuadros > 0);
+  datos.abrir = abrir;
+  afirmar(abrir.me === 1, `PUERTA A: abrir cuesta exactamente 1 \`/me\` y costó ${abrir.me}`);
+  afirmar(abrir.otras.length === 0, `PUERTA A: y 0 de lo demás, hubo: ${abrir.otras.join(' · ')}`);
+  sinFugas(A, 'PUERTA A');
+  afirmar(texto($(A, '.page-header h1, h1')) === 'Mapa de artistas' || /Mapa de artistas/.test(texto($(A, '#main-content'))), 'la cabecera dice «Mapa de artistas»');
+  const canvasA = $(A, 'canvas.mapa-artistas-canvas');
+  afirmar(canvasA?.getAttribute('role') === 'img' && /^Mapa de tus artistas: 2302 artistas, 60\.141 parecidos$/.test(canvasA.getAttribute('aria-label')),
+    `el canvas es una imagen con su aria-label: «${canvasA?.getAttribute('aria-label')}»`);
+  afirmar(/^9 artistas no tienen ningún parecido en tu historial\. Parecidos según Last\.fm\.$/.test(texto($(A, '.mapa-artistas-pie'))), `la línea de los aislados y el crédito: «${texto($(A, '.mapa-artistas-pie'))}»`);
+  afirmar($(A, '.mapa-artistas-pie a')?.getAttribute('href') === 'https://www.last.fm', 'el crédito enlaza a https://www.last.fm');
+
+  // ── B (1) · sin elegido, 0 líneas ──────────────────────────────────────────
+  progreso('B: sin elegido');
+  let d = dibujo(A);
+  datos.sinElegido = { puntos: d.puntos, lineas: d.lineas, nombres: d.nombres };
+  afirmar(d.lineas === 0, `PUERTA B: sin elegido, 0 líneas; se dibujaron ${d.lineas}`);
+  afirmar(d.puntos === N, `al abrir se ven los ${N} puntos; se dibujaron ${d.puntos}`);
+  // A «todo el mapa» los círculos pueden no llegar a los 12 px de radio: 0 nombres es la regla, no un fallo.
+  afirmar(d.nombres <= 60, `como mucho 60 nombres (${d.nombres})`);
+  // El zoom, con los botones (al centro) y con la rueda sobre el artista 0 (el centro del plano
+  // inventado está vacío: las manchas forman un anillo).
+  $(A, '[data-zoom="mas"]').click();
+  d = await otroFrame(A, 'el frame del botón «+»');
+  afirmar(d.lineas === 0, `PUERTA B: sin elegido y con el botón «+», 0 líneas; se dibujaron ${d.lineas}`);
+  $(A, '[data-zoom="todo"]').click();
+  await otroFrame(A, 'el frame de «Ver todo»');
+  for (let k = 0; k < 4; k++) {
+    const [zx, zy] = clienteDe(A, 0);
+    win(A).__mapaArtistasBanco.canvas.dispatchEvent(new (win(A).WheelEvent)('wheel', { clientX: zx, clientY: zy, deltaY: -200, bubbles: true, cancelable: true }));
+    d = await otroFrame(A, 'el frame de la rueda');
+    afirmar(d.lineas === 0, `PUERTA B: sin elegido y con zoom ${k + 1}, 0 líneas; se dibujaron ${d.lineas}`);
+  }
+  datos.sinElegido.nombresConZoom = d.nombres;
+  afirmar(d.nombres > 0 && d.nombres <= 60, `con zoom (×${Math.exp(1.6).toFixed(2)} sobre el artista 0), algunos nombres y como mucho 60 (${d.nombres})`);
+  $(A, '[data-zoom="todo"]').click();
+  await otroFrame(A, 'el frame de «Ver todo»');
+
+  // ── C · tocar un punto conocido, y el fondo ─────────────────────────────────
+  progreso('C: tocar');
+  const n0C = llamadas(A);
+  const [x0, y0] = clienteDe(A, 0);
+  tocarEn(A, x0, y0);
+  d = await otroFrame(A, 'el frame del elegido');
+  afirmar(d.elegido === 0, `PUERTA C: tocar el centro del artista 0 lo elige (elegido=${d.elegido})`);
+  afirmar(d.lineas === grado[0], `PUERTA B: con un elegido, exactamente su grado (${grado[0]}); se dibujaron ${d.lineas}`);
+  datos.conElegido = { grado: grado[0], lineas: d.lineas };
+  afirmar(texto($(A, '.mapa-artistas-nombre')) === nombreDe(0), `PUERTA C: el panel nombra al elegido: «${texto($(A, '.mapa-artistas-nombre'))}»`);
+  afirmar(texto($(A, '.mapa-artistas-meta')).endsWith(`· ${grado[0]} artistas parecidos en tu historial`), `PUERTA C: «N artistas parecidos en tu historial»: «${texto($(A, '.mapa-artistas-meta'))}»`);
+  const minutos0 = Math.round(H.totals[nombreDe(0)][1]).toLocaleString('es-ES');
+  afirmar(texto($(A, '.mapa-artistas-meta')).startsWith(`${minutos0} min`), `PUERTA C: los minutos del elegido, es-ES: «${texto($(A, '.mapa-artistas-meta'))}»`);
+  const listaC = $$(A, '.mapa-artistas-parecido').map((b) => texto(b));
+  const esperado0 = vecinosEsperados(G, 0).slice(0, 50).map(nombreDe);
+  afirmar(igual(listaC, esperado0), `PUERTA C: los parecidos, por match de mayor a menor.\n  vino: ${JSON.stringify(listaC.slice(0, 8))}…\n  esperaba: ${JSON.stringify(esperado0.slice(0, 8))}…`);
+  // El fondo: una esquina del lienzo que no toca ningún círculo (lo comprueba la propia cuenta).
+  const { tocar } = await import('/js/util/mapa-artistas.js');
+  const b = win(A).__mapaArtistasBanco, rc = b.canvas.getBoundingClientRect();
+  let fondo = null;
+  for (const [fx, fy] of [[3, 3], [rc.width - 3, rc.height - 3], [3, rc.height - 3], [rc.width / 2, 3]]) {
+    if (tocar(b.mapa, b.vista(), fx, fy) === -1) { fondo = [rc.left + fx, rc.top + fy]; break; }
+  }
+  afirmar(fondo, 'hay un rincón de fondo para tocar');
+  tocarEn(A, ...fondo);
+  d = await otroFrame(A, 'el frame sin elegido');
+  afirmar(d.elegido === -1 && d.lineas === 0, `PUERTA C: tocar el fondo lo suelta (elegido=${d.elegido}, líneas=${d.lineas})`);
+  afirmar(!$(A, '.mapa-artistas-nombre') && /Toca un artista del mapa/.test(texto($(A, '[data-panel]'))), 'PUERTA C: y el panel vuelve a la línea de ayuda');
+  afirmar(llamadas(A) === n0C, 'PUERTA D: tocar no pide nada');
+
+  // ── D · arrastrar, la rueda, buscar y «Mostrar 50 más» = 0 peticiones ───────
+  progreso('D: sin peticiones');
+  const n0D = llamadas(A), r0D = externosDe(A).length;
+  const v0 = b.vista();
+  puntero(A, 'pointerdown', rc.left + 200, rc.top + 200);
+  for (let k = 1; k <= 5; k++) puntero(A, 'pointermove', rc.left + 200 + 20 * k, rc.top + 200 + 10 * k);
+  puntero(A, 'pointerup', rc.left + 300, rc.top + 250);
+  await otroFrame(A, 'el frame del arrastre');
+  const v1 = b.vista();
+  afirmar(Math.abs(v1.tx - v0.tx - 100) < 1e-6 && Math.abs(v1.ty - v0.ty - 50) < 1e-6, `PUERTA D: arrastrar mueve la vista lo mismo que el puntero (${(v1.tx - v0.tx).toFixed(1)}, ${(v1.ty - v0.ty).toFixed(1)})`);
+  afirmar(dibujo(A).elegido === -1, 'PUERTA D: un arrastre no es un toque: no elige a nadie');
+  const rueda = new (win(A).WheelEvent)('wheel', { clientX: rc.left + 100, clientY: rc.top + 100, deltaY: -400, bubbles: true, cancelable: true });
+  b.canvas.dispatchEvent(rueda);
+  await otroFrame(A, 'el frame de la rueda');
+  afirmar(rueda.defaultPrevented && b.vista().escala > v1.escala, 'PUERTA D: la rueda hace zoom (y no scrollea la página)');
+  const campo = $(A, '.mapa-artistas-campo');
+  campo.value = nombreDe(MAS).toUpperCase();
+  $(A, '.mapa-artistas-buscar').requestSubmit();
+  d = await otroFrame(A, 'el frame de la búsqueda');
+  afirmar(d.elegido === MAS && texto($(A, '.mapa-artistas-nombre')) === nombreDe(MAS), `PUERTA D: buscar (en mayúsculas) lo elige: ${d.elegido}`);
+  const [cx, cy] = clienteDe(A, MAS);
+  afirmar(Math.abs(cx - rc.left - rc.width / 2) < 1 && Math.abs(cy - rc.top - rc.height / 2) < 1, 'y lo centra');
+  afirmar(d.lineas === grado[MAS], `PUERTA B: el buscado dibuja exactamente su grado (${grado[MAS]}); ${d.lineas}`);
+  afirmar($$(A, '.mapa-artistas-parecido').length === 50, `con ${grado[MAS]} parecidos, primero 50 (${$$(A, '.mapa-artistas-parecido').length})`);
+  const mas = $(A, '[data-mas]');
+  afirmar(mas && !mas.hidden && texto(mas) === 'Mostrar 50 más', '«Mostrar 50 más» a la vista');
+  mas.click();
+  afirmar($$(A, '.mapa-artistas-parecido').length === grado[MAS] && mas.hidden, `«Mostrar 50 más» trae los ${grado[MAS]} y se va`);
+  afirmar(igual($$(A, '.mapa-artistas-parecido').map((x) => texto(x)), vecinosEsperados(G, MAS).map(nombreDe)), 'en el orden esperado');
+  campo.value = 'Nadie con este nombre';
+  $(A, '.mapa-artistas-buscar').requestSubmit();
+  afirmar(texto($(A, '.mapa-artistas-aviso')) === 'No está en tu mapa.', `sin resultados: «${texto($(A, '.mapa-artistas-aviso'))}»`);
+  // Un parecido del panel: lo elige y lo centra.
+  const otro = $(A, '.mapa-artistas-parecido');
+  const jOtro = +otro.dataset.elegir;
+  otro.click();
+  d = await otroFrame(A, 'el frame del parecido');
+  afirmar(d.elegido === jOtro && d.lineas === grado[jOtro], `un parecido del panel lo elige y dibuja su grado (${grado[jOtro]}): ${d.lineas}`);
+  $(A, '[data-zoom="menos"]').click(); await otroFrame(A, 'el frame de «−»');
+  afirmar(llamadas(A) === n0D && externosDe(A).length === r0D, `PUERTA D: arrastrar, la rueda, los botones, buscar y «Mostrar 50 más» = 0 peticiones (${llamadas(A) - n0D} a la simulada, ${externosDe(A).length - r0D} de otro origen)`);
+  // Quieto 5 s de reloj: 0 frames.
+  const c0 = dibujo(A).cuadros, t0 = performance.now();
+  await esperarReal(() => performance.now() - t0 > 5000, { que: '5 s quieto', vueltas: 50000 });
+  afirmar(dibujo(A).cuadros === c0, `PUERTA D: quieto 5 s, 0 frames pintados (hubo ${dibujo(A).cuadros - c0})`);
+  datos.quieto = dibujo(A).cuadros - c0;
+  sinFugas(A, 'PUERTA D');
+
+  // Volver a la ruta: 0 `/me` más y 0 de lo demás.
+  await irA(A, '#home', 'el inicio', () => $(A, '.home-card') && !$(A, '[data-mapa-artistas]'));
+  const volver = await abrirMapa(A, 'que #mapa-artistas pinte otra vez', () => $(A, '[data-mapa-artistas="listo"]') && dibujo(A)?.cuadros > 0);
+  afirmar(volver.me === 0 && volver.otras.length === 0, `PUERTA A: al volver, 0 \`/me\` más (memo) y 0 de lo demás (${volver.me}; ${volver.otras.join(' · ')})`);
+  afirmar(dibujo(A).lineas === 0, 'PUERTA B: al volver, sin elegido: 0 líneas');
+  sinFugas(A, 'PUERTA A (volver)');
+
+  // ── G · salir con un frame pendiente, y salir a mitad de la carga ───────────
+  progreso('G: salir');
+  // Deja un frame programado y sale. Entre el clic y el `hashchange` el navegador PUEDE pintar ese
+  // frame (con la ruta todavía abierta, y está bien): lo que se afirma es que después del teardown no
+  // se pinta ninguno. Se mira en el momento exacto: `routeteardown`, que el router dispara justo antes
+  // de llamar al teardown, y se anota si en ese momento quedaba un frame pendiente.
+  let alSalir = null;
+  A.contentDocument.addEventListener('routeteardown', () => {
+    alSalir = { cuadros: dibujo(A).cuadros, pendiente: win(A).__mapaArtistasBanco?.pendiente() };
+  }, { once: true });
+  $(A, '[data-zoom="mas"]').click();
+  win(A).location.hash = '#home';
+  await esperarReal(() => alSalir && $(A, '.home-card') && !$(A, '[data-mapa-artistas]'), { que: 'el inicio', vueltas: VUELTAS });
+  const tG = performance.now();
+  await esperarReal(() => performance.now() - tG > 1000, { que: '1 s después de salir', vueltas: 20000 });
+  datos.pendienteAlSalir = alSalir.pendiente;
+  afirmar(dibujo(A).cuadros === alSalir.cuadros, `PUERTA G: salir (con un frame pendiente: ${alSalir.pendiente}): 0 frames después del teardown (hubo ${dibujo(A).cuadros - alSalir.cuadros})`);
+  afirmar(!win(A).__mapaArtistasBanco, 'PUERTA G: el teardown suelta el instrumento');
+
+  const F = abrirMarco('owner', 'F'); marcos.push(['F', F]);
+  await arrancado(F, 'el marco F');
+  let soltar;
+  win(F).__frenoMe = new Promise((r) => { soltar = r; });
+  const meF = meDe(F);
+  await irA(F, '#mapa-artistas', 'que #mapa-artistas quede esperando el /me', () => meDe(F) > meF && $(F, '#mapa-artistas-content .spinner'));
+  await irA(F, '#home', 'que el inicio se pinte encima', () => $(F, '.home-card') && !$(F, '#mapa-artistas-content'));
+  let asentar = 0;
+  await esperarReal(() => ++asentar > 40, { que: 'que el inicio se asiente', vueltas: 200 });
+  const mainF = $(F, '#main-content');
+  const antesF = mainF.innerHTML;
+  let mutaciones = 0;
+  const obs = new (win(F).MutationObserver)((ms) => { for (const m of ms) if (!(m.type === 'attributes' && m.attributeName === 'class' && m.target.dataset?.route)) mutaciones++; });
+  obs.observe(mainF, { childList: true, subtree: true, characterData: true, attributes: true });
+  win(F).__frenoMe = null;
+  soltar();
+  let vueltas = 0;
+  await esperarReal(() => ++vueltas > 150, { que: 'que la carga colgada termine', vueltas: 400 });
+  obs.disconnect();
+  datos.salir = { mutaciones, errores: win(F).__errores.length, cuadros: dibujo(F)?.cuadros ?? 0 };
+  afirmar(mutaciones === 0, `PUERTA G: salir a mitad: 0 escrituras al DOM de la ruta nueva, hubo ${mutaciones}`);
+  afirmar(!dibujo(F) || dibujo(F).cuadros === 0, `PUERTA G: salir a mitad: 0 frames (${dibujo(F)?.cuadros})`);
+  afirmar(mainF.innerHTML.replace(/ active"/g, '"') === antesF.replace(/ active"/g, '"') && !$(F, '[data-mapa-artistas]'), 'PUERTA G: el inicio quedó como estaba');
+  afirmar(win(F).__errores.length === 0, `PUERTA G: 0 errores: ${win(F).__errores.join(' | ')}`);
+
+  // ── E · el amigo con historial y sin mapa, y el que no tiene nada ───────────
+  progreso('E: amigos');
+  const E1 = abrirMarco('amigo-hist', 'E1'); marcos.push(['E1', E1]);
+  await arrancado(E1, 'el marco E1');
+  const abrirE = await abrirMapa(E1, 'que #mapa-artistas diga que no hay mapa', () => $(E1, '[data-mapa-artistas="sin-mapa"]'));
+  afirmar(texto($(E1, '[data-mapa-artistas="sin-mapa"]')) === 'El mapa todavía no existe para tu historial.', `PUERTA E: la línea: «${texto($(E1, '[data-mapa-artistas="sin-mapa"]'))}»`);
+  afirmar(!$(E1, 'canvas') && !dibujo(E1), 'PUERTA E: 0 puntos (ni canvas)');
+  afirmar(texto($(E1, '#mapa-artistas-content')) === 'El mapa todavía no existe para tu historial.', 'PUERTA E: y nada más');
+  afirmar(abrirE.me === 1 && abrirE.otras.length === 0, `PUERTA A (amigo): 1 \`/me\` y nada más (${abrirE.me}; ${abrirE.otras.join(' · ')})`);
+  sinFugas(E1, 'PUERTA E');
+  const E2 = abrirMarco('amigo-sin', 'E2'); marcos.push(['E2', E2]);
+  await arrancado(E2, 'el marco E2');
+  await abrirMapa(E2, 'el cartel de bloqueo', () => $(E2, '#mapa-artistas-content .olm-card'));
+  afirmar(/Mapa de artistas usa el Extended Streaming History/.test(texto($(E2, '.olm-card'))), `PUERTA E: sin historial, el cartel de siempre: «${texto($(E2, '.olm-card')).slice(0, 120)}»`);
+  afirmar(!$(E2, 'canvas'), 'PUERTA E: sin canvas');
+
+  // ── F · 1366 y 390: nada desborda ──────────────────────────────────────────
+  progreso('F: anchos');
+  const desborde = (f) => { const de = f.contentDocument.documentElement; return de.scrollWidth - de.clientWidth; };
+  const F390 = abrirMarco('owner', 'F390', 390, 844); marcos.push(['F390', F390]);
+  await arrancado(F390, 'el marco de 390');
+  await abrirMapa(F390, 'que pinte a 390', () => $(F390, '[data-mapa-artistas="listo"]') && dibujo(F390)?.cuadros > 0);
+  win(F390).__mapaArtistasBanco.elegir(MAS);
+  await otroFrame(F390, 'el elegido a 390');
+  $(F390, '[data-mas]').click();
+  datos.desborde = { a1366: desborde(A), a390: desborde(F390) };
+  // A, con un elegido y la lista abierta, a 1366.
+  await abrirMapa(A, 'otra vez a 1366', () => $(A, '[data-mapa-artistas="listo"]') && dibujo(A)?.cuadros > 0);
+  win(A).__mapaArtistasBanco.elegir(MAS);
+  await otroFrame(A, 'el elegido a 1366');
+  $(A, '[data-mas]').click();
+  datos.desborde.a1366 = desborde(A);
+  afirmar(datos.desborde.a1366 <= 0, `PUERTA F: a 1366 nada desborda (${datos.desborde.a1366} px)`);
+  afirmar(datos.desborde.a390 <= 0, `PUERTA F: a 390 nada desborda (${datos.desborde.a390} px)`);
+  const lienzo390 = $(F390, 'canvas').getBoundingClientRect();
+  afirmar(lienzo390.width > 200 && lienzo390.right <= 390, `PUERTA F: el lienzo entra a 390 (${lienzo390.width.toFixed(0)} px)`);
+
+  const errores = marcos.flatMap(([n, f]) => win(f).__errores.map((e) => `${n}: ${e}`));
+  afirmar(errores.length === 0, `0 errores de consola: ${errores.join(' | ')}`);
+
+  const resumen = `A abrir: /me=${datos.abrir.me} otras=${datos.abrir.otras.length}, al volver 0 · B sin elegido: líneas=${datos.sinElegido.lineas} puntos=${datos.sinElegido.puntos} nombres=${datos.sinElegido.nombres} (con zoom ${datos.sinElegido.nombresConZoom}); con elegido: líneas=${datos.conElegido.lineas} = grado ${datos.conElegido.grado} · ` +
+    `C tocar elige y el fondo suelta · D 0 peticiones, quieto 5 s: ${datos.quieto} frames · E amigo: la línea y 0 puntos · F desborde 1366=${datos.desborde.a1366} 390=${datos.desborde.a390} · ` +
+    `G salir con un frame pendiente=${datos.pendienteAlSalir}: 0 frames después; salir a mitad: ${datos.salir.mutaciones} escrituras, ${datos.salir.cuadros} frames, ${datos.salir.errores} errores · errores=${errores.length} · reloj virtual=${Math.round(performance.now())} ms`;
+  document.documentElement.setAttribute('data-resumen', resumen);
+  progreso('ok · ' + resumen);
+  listo(resumen);
+} catch (e) {
+  fallar(e);
+}
+</script>
+</body></html>

@@ -2802,6 +2802,121 @@ repartir minutos, sin la lista, sin el autocorrect, «sin género» sumado a «n
 `generos-caso.html?foto=1` es el instrumento de las capturas sembradas (conductor en
 `fonoteca-migracion/driver-capturas-generos-t62-2026-10-17.mjs`).
 
+## 🕸️ `#mapa-artistas`: el mapa de artistas (v=315)
+
+Los ~2.300 artistas de tu historial (`universo()`: ≥ 10 min) acomodados en un plano por parecido, según los «similares»
+de Last.fm, con el tamaño de cada uno según sus minutos: continentes, islas y puentes. Ruta `#mapa-artistas`, menú
+General, detrás de «Tus géneros», icono propio (`ICONS.mapaartistas`, tres nodos unidos: la «share-2» de Lucide),
+tarjeta de inicio y cabecera «Mapa de artistas» («Tus artistas acomodados por parecido, según Last.fm.», 52 caracteres).
+Pedido por Ian; lo midió la tanda 63 y lo hizo la 64.
+
+| archivo | qué | probado en |
+|---|---|---|
+| `scripts/hornear-similares.mjs` | el escaneo (`escanear`, con red, retomable, con tope) y el horneado (`hornear`, sin red: las aristas y el layout de `d3-force` en Node) | la tanda 64, contra Last.fm de verdad (ver abajo) |
+| `src/data/history-artist-similares.json` | HORNEADO: `{ version, fuente, fecha, limit, nombres, pos: [x0, y0, …], aristas: [i, j, match, mutua, …] }`, compacto | `tests/mapa-artistas.test.mjs` (sección 9: la forma, y que no lleva minutos) |
+| `util/mapa-artistas.js` | PURO: leer el JSON, los vecinos por `match`, el toque, el pan y el zoom con sus topes, qué nombres se dibujan, el buscador | `tests/mapa-artistas.test.mjs` |
+| `features/mapa-artistas.js` | la vista: el `<canvas>`, los eventos (puntero, rueda, pellizco, botones) y el panel | `tests/banco/mapa-artistas.html` (en `prepush`, el vigésimo primero) |
+| `history-keys.js` / `features/history-data.js` | `SIMILARES_VERSION = 1`, `OWNER_KEYS.similares`, `loadArtistSimilares()` con `OWNER_PREV_KEYS.similares` VACÍA | `tests/likes-cache-policy.test.mjs` (ocho claves del owner) |
+
+**Lo que no se reabre** (lo midió la 63 y lo decidió el encargo de la 64):
+
+- 🔴 **El layout se calcula UNA vez, en Node, y se hornea.** El navegador no corre ninguna simulación ni carga d3: lee
+  posiciones. Acomodar 2.302 nodos con `d3-force` son 5,2-5,5 s a velocidad normal y 30-41 s con la CPU seis veces más
+  lenta (SINTÉTICO, la 63): en la netbook no se puede pagar al abrir. `index.html` no ganó ningún `<script>`.
+- 🔴 **Cada frame dibuja los puntos, los nombres de los grandes y, como mucho, las líneas del artista ELEGIDO.** Sin
+  elegido, 0 líneas. Un frame con todas las líneas del grafo eran 270 ms (3,2 s a ×6, con frames sueltos de 41 s); sin
+  líneas, 8 y 49 ms (SINTÉTICO, la 63). Nada de «las fuertes», «las de los más escuchados» ni una capa precalculada
+  (rehacerla en cada zoom cuesta lo mismo). El banco lo vigila con `window.__mapaArtistasDibujo` (puerta B, vista fallar
+  con una copia que dibuja todas: «se dibujaron 60141»).
+- **Se repinta solo cuando algo cambió**, a lo sumo una vez por frame (rAF con un `setTimeout` de 100 ms de respaldo:
+  rAF no corre en una pestaña oculta ni en headless con `--dump-dom`). Quieto, 0 frames (puerta D, vista fallar con una
+  copia que repinta en bucle: 70 frames en 5 s).
+- 🔴 **El JSON horneado no lleva minutos, plays ni radios**: los minutos salen de `history-artist-tracks.json`
+  (`totals[nombre][1]`), que la vista ya carga, y el radio se calcula al leer (`2 + 18·√(minutos / máximo)`, el MISMO del
+  layout: `forceCollide` acomodó con él). Lo nuevo que se publica son los pares de artistas de tu historial que Last.fm
+  da por parecidos, su `match` y dónde cae cada uno; los nombres ya eran públicos en `history-artist-tracks.json`, y los
+  pares se reproducen con esa lista y la API pública. Las respuestas crudas (con los similares que NO están en tu
+  historial) viven solo en `fonoteca-migracion/mapa-artistas/`.
+- **Las condiciones de Last.fm** (`https://www.last.fm/api/tos`, 3.1, 4.1, 4.2 y 4.3.4) dan licencia para publicar sus
+  datos sin fines comerciales, con crédito y por debajo de 100 MB: la vista lleva «Parecidos según Last.fm» con su enlace.
+  ⚠️ El botón «powered by AudioScrobbler» de la 2.7 no está (anotado en `PENDIENTES.md`, para toda la app).
+- 🔴 **Los amigos (BYOH) no tienen mapa.** El horneado es del historial de Ian; `gen-stats.py` y el import no lo producen.
+  Con historial y sin mapa, la vista dice «El mapa todavía no existe para tu historial.» y nada más. El escaneo en el
+  navegador para ellos es otro encargo.
+
+**El horneado** (`node scripts/hornear-similares.mjs escanear <avance.jsonl>` y después `… hornear <avance.jsonl>
+<d3.min.js>`):
+
+- La consulta: `artist.getsimilar`, **`limit=250`** (con el `limit=50` de la app la media dentro del historial baja de 52
+  a 15 y los aislados suben de 9 a 16 de 200: medido por la 63), `autocorrect=1`, `format=json`, la key leída del fuente
+  y nunca escrita, sin ninguna cabecera propia, de a una y 1.000 ms como mínimo entre comienzos.
+- Definitivo = lo de `clasificar` de `generos-escaneo.js` con `similarartists` en lugar de `toptags`: un 200 con
+  `similarartists` (aunque traiga 0) y el error 6. Un 29, un 5xx, un 429, un corte de red (o 30 s), los temporales
+  8/11/16 o un 200 sin `similarartists` se reintentan con el mismo artista tras `esperaTrasFallo` del mapa; 8 seguidos
+  paran. Un 10 o un 26 paran todo. Retomable (una línea por petición en el avance, escrita apenas termina) y con tope.
+- **«Está en tu historial»** es la regla de la 63: igualdad de `normalizarNombre` entre el similar y un nombre del
+  universo, sin el propio artista; si dos nombres del universo normalizan igual, gana el primero. **Un artista cuyo
+  autocorrect devolvió OTRO nombre no aporta aristas salientes** (la prudencia de `#generos`), pero sí recibe las de los
+  demás. Sin dirección: el par existe si uno apunta al otro; su peso es el MAYOR `match` de las dos direcciones, en
+  entero de 0 a 1.000, y `mutua` dice si están las dos. **Ningún corte de `match` ni de grado.**
+- El layout: `d3@7.9.0` (bajado una vez, verificado por sha256, cargado con `vm`; NO está en `package.json`), las
+  fuerzas de la 63 sin tocar (`forceLink`, `forceManyBody`, `forceCenter`, `forceCollide(r)`, todo lo demás por defecto,
+  el `randomLcg(1)` de d3), 300 ticks a mano, posiciones a 1 decimal. Determinista: dos corridas, el mismo sha256.
+- Solo se hornea con al menos el 95 % del universo con respuesta definitiva. Tope de 3 MB (si lo pasa, cada artista
+  conserva sus 40 aristas de mayor `match`).
+- ⚠️ **Con un export nuevo** el universo cambia: hay que volver a escanear (el avance es retomable, pero los índices
+  son los del universo de ESE momento: `hornear` para si el nombre de un índice no coincide) y subir
+  `SIMILARES_VERSION` con `OWNER_PREV_KEYS.similares` vacía.
+- `src/data/README.md` NO lo menciona: el encargo exigía que los diez archivos de `src/data/` quedaran byte a byte, y el
+  README es uno de ellos (anotado en `PENDIENTES.md`).
+
+**Lo que dio el escaneo** (tanda 64, REAL; el detalle, con los nombres, en `fonoteca-migracion/mapa-artistas/`; acá no va
+ninguno): 2.302 de 2.302 con respuesta definitiva, **2.305 peticiones** (2.302 `getsimilar` + 3 `gettoptags`), todas 200, un
+error 6, 0 reintentos, CORS `*` en todas; 39,2 min escaneando en dos sesiones, a 58,7 por minuto (el ritmo es el de nuestro
+sleep). **77.420 pares** sin dirección (la 63 proyectaba 60.013-120.026), el 51,5 % mutuos; grado sin dirección mediana 65,
+p90 128, máx. 236; grado SALIENTE medio 51,9 (la muestra de la 63: 52,14). **77 aislados** (grado 0), con el 2,4 % de los
+minutos. 42 artistas con el autocorrect a otro nombre (no aportan salientes). Layout en Node ≈12 s, dos corridas con el mismo
+sha256. El JSON pesa **1,17 MB** (sin recorte).
+
+**La vista**:
+
+- Un `<canvas>` con todos los artistas como círculos, arrancando con todo el mapa a la vista. **Nombres** solo de los
+  círculos de 12 px de radio o más en pantalla, como mucho 60 por frame (los de más minutos primero) y sin pisarse.
+  ⚠️ A «todo el mapa» puede no haber ninguno: aparecen con el zoom.
+- Pan arrastrando (pointer events, también el dedo), zoom con la rueda (al puntero), con dos dedos y con «+», «−» y
+  «Ver todo»; entre «todo el mapa» y 40 veces eso. `touch-action: none` en el lienzo: dentro, el dedo mueve el mapa; la
+  página se scrollea tocando fuera (el lienzo mide `clamp(300px, 62vh, 720px)`).
+- **Tocar** elige el círculo de borde más cercano si el punto cae dentro de su radio en pantalla más 4 px; el fondo lo
+  suelta. Con un elegido: sus líneas, sus parecidos en el acento y el resto atenuado.
+- **El panel**, debajo: el nombre, sus minutos (`es-ES`), «N artistas parecidos en tu historial» y la lista por `match`
+  de mayor a menor (a igualdad, por minutos), de a 50 con «Mostrar 50 más»; cada uno, un botón que lo elige y lo centra.
+  «Ver ficha» abre `openArtistCard({ name })` (lo que cueste la ficha es de la ficha).
+- **El buscador**: igualdad de `normalizarNombre` o, si no, el primero cuyo nombre normalizado empiece igual; sin
+  resultados, «No está en tu mapa.». `normalizarNombre` y no `normText` (que deja «¥$» vacío): `tests/mb-pais.test.mjs`
+  suma `mapa-artistas.js` a los que la importan (cuatro).
+- Una línea con cuántos artistas no tienen ningún parecido en tu historial, y «Parecidos según Last.fm» con su enlace.
+- **Colores del tema**, ninguno escrito a mano, leídos con `getComputedStyle` en cada frame (y `themechange` pide uno):
+  los puntos con `--color-accent` (el elegido y sus parecidos) y una mezcla del acento con `--color-surface` para el resto
+  (60 % del acento sin elegido, 22 % con uno); las líneas con `--color-text-secondary`; los nombres con `--color-text` y
+  un borde de `--color-bg`. Sin animaciones.
+- Accesible por el buscador y el panel (HTML, foco y teclado); el `<canvas>` es `role="img"` con su `aria-label` («Mapa
+  de tus artistas: N artistas, M parecidos»). Elegir desde el panel o el buscador lleva el foco al nombre.
+- El `teardown` suelta los listeners, el `ResizeObserver`, el rAF y el respaldo pendientes; `pintar()` además pregunta
+  por la vigencia de la ruta. Clases propias (`.mapa-artistas-…`), sin reusar las de otro módulo.
+
+**El costo**: abrir = **1 `/me`** (+1 del arranque) y **0 a Last.fm y a cualquier CDN** (los dos JSON salen del propio
+Pages); tocar, arrastrar, hacer zoom, buscar y «Mostrar 50 más» = **0**. Medido en el banco.
+
+Guardas: `tests/mapa-artistas.test.mjs` (lo puro con un grafo inventado de cinco artistas, la lectura estática de que
+la vista no carga d3 ni simula, y la forma del JSON horneado; rojo contra v=314: el módulo no existía) y el banco
+`tests/banco/mapa-artistas.html` + `-caso.html` + `-datos.mjs` (un grafo INVENTADO de 2.302 artistas y 60.141 pares, la
+densidad medida): A abrir = 1 `/me` y 0 de lo demás, también al volver; B sin elegido 0 líneas y con uno su grado; C
+tocar elige, el panel en el orden esperado, el fondo suelta; D arrastrar, rueda, botones, buscar y «Mostrar 50 más» = 0
+peticiones y quieto 5 s = 0 frames; E el amigo sin mapa, la línea y 0 puntos; F a 1366 y 390 nada desborda; G salir a
+mitad, 0 escrituras y 0 frames, y salir con un frame pendiente, 0 frames después del teardown. B y D vistas fallar en
+una copia. `mapa-artistas-caso.html?modo=foto&uid=owner&datos=real|inventado[&tema=papel]` es el instrumento de las
+capturas y de la medición de frames (conductor en `fonoteca-migracion/mapa-artistas/driver-mapa-artistas-2026-10-18.mjs`).
+
 ## Client ID
 0c8c92ad128e4b89be7097c6b8082797
 
@@ -3590,6 +3705,8 @@ fila sobrevivió así desde que se armó la tabla.
 | `#generos` (v=313; los géneros, v=314) | **1 `/me`** (+1 del arranque = **2**) · **0 Last.fm** | ídem | `render()` → `loadArtistTracks()` → `loadOne` → `getCurrentUserId`; `cargarEtiquetas(await getCurrentUserId())` va por el memo (0 más); las etiquetas y el ritmo salen de IndexedDB | **fijo**, no escala con nada | **medida en el banco el 2026-10-17** (`tests/banco/generos-escaneo.html`, Spotify y Last.fm simulados): abrir = 1 `/me` además del del arranque y 0 a Last.fm en 5 s de reloj, también al volver y tras recargar; 0 rutas sin simular, 0 hosts externos. **v=314, el mismo costo**, medido en `tests/banco/generos.html` (también tras recargar). En vivo, no |
 | ↳ **al desplegar un género, «Ver todos» o «Mostrar 100 más»** (v=314): **0** | — | **0** | ninguno: todo sale de lo guardado | — | **medida en el banco el 2026-10-17** (`tests/banco/generos.html`): 0 `fetch` a cualquier host |
 | ↳ **al pulsar «Buscar géneros» / «Seguir»**: **1 `artist.gettoptags` por artista** con ≥ 10 min que Last.fm no contestó todavía (más los reintentos de los fallos), de a una y a 1 s como mínimo, **0 a Spotify** | — | lo ya buscado: **0** | `ws.audioscrobbler.com/2.0/?method=artist.gettoptags&autocorrect=1` | nº de artistas del universo sin buscar | **medida en el banco el 2026-10-17** (10 artistas inventados: 10 respuestas definitivas, una por artista, más los reintentos de 3 errores 29 y 1 503) y, la consulta, en vivo con 51 artistas desde Node (tanda 61) |
+| `#mapa-artistas` (v=315) | **1 `/me`** (+1 del arranque = **2**) · **0 Last.fm** · **0 CDN** | ídem | `render()` → `loadArtistTracks()` + `loadArtistSimilares()` → `loadOne` → `getCurrentUserId` (memoizado: las dos comparten el `/me`); los dos JSON salen del propio Pages (`data/`) o de IndexedDB | **fijo**, no escala con nada | **medida en el banco el 2026-10-18** (`tests/banco/mapa-artistas.html`, Spotify simulada, grafo inventado): abrir = 1 `/me` además del del arranque y 0 de lo demás, también al volver (0 `/me` más); 0 rutas sin simular, 0 hosts externos. En vivo, no |
+| ↳ **al tocar, arrastrar, hacer zoom, buscar o «Mostrar 50 más»** (v=315): **0** | — | **0** | ninguno: todo sale de lo cargado | — | **medida en el banco el 2026-10-18**: 0 peticiones a cualquier host. «Ver ficha» abre la ficha de artista y cuesta lo que cueste la ficha |
 | `#covers` | **1 `/me` + 1 + ceil(W/100)** = **33** | **2** | `isOwner()`/`loadListenedAlbums()` → `getCurrentUserId` · + 1 `/playlists/{id}?fields=snapshot_id` + págs. de `/playlists/{id}/items` | nº de pistas de «w three» | 🔴 **corregida el 2026-10-08, leída del código.** Decía **32** y se le olvidaba el `/me` propio |
 | `#mosaico` | **0** | **0** | **ninguno, a propósito** | — | **medida en vivo el 2026-10-06**: 10 mosaicos generados (hasta 43.200 celdas), **0 peticiones y 0 cortadas** con los topes de la API en CERO. Lo que sí sale a la red es el CDN de imágenes, que no gasta cuota |
 | `#search` | **0** | **0** | — | — | leída del código · **`/me` repasado el 2026-10-08**: su `render()` no llega a `getCurrentUserId()` |
@@ -3969,6 +4086,7 @@ cuesta una carga de likes.** Lo que no puede es usar las tuyas.
 | `#mapa` (v=304) | — | **historial** (`artistTracks`) · y buscar los países en MusicBrainz (un botón, sin cuota de Spotify) | cartel de bloqueo, el mismo de `#records` (candado de «pide los datos primero»: BYOH la abre), **sin botón de buscar**. Con datos, la lista sale vacía hasta apretar «Buscar países» | **leída del código y probada en el banco el 2026-10-14** (solo el owner; el amigo, leída) |
 | `#puertas` (v=308) | — | **historial** (`artistTracks` **v3**: con el tema de entrada) | cartel de bloqueo, el mismo de `#records` (BYOH la abre con SUS datos). Con un historial importado antes de v=308 (sin el tema de entrada): «Para ver esto, vuelve a importar tu historial», con el botón de importar y 0 filas | **medida en el banco el 2026-10-15** (`tests/banco/puertas.html`: el owner, un amigo con su v3, uno con un historial viejo y uno sin datos) |
 | `#generos` (v=313; los géneros, v=314) | — | **historial** (`artistTracks`, cualquier versión: solo lee los minutos y los nombres) · y buscar en Last.fm (un botón, sin cuota de Spotify, con la key del código) | cartel de bloqueo, el mismo de `#records` (BYOH la abre con SUS datos), **sin botón de buscar**. Con datos, las cinco filas, «Tus 10 géneros» (vacío, con una línea, hasta que la búsqueda traiga alguno) y «Buscar géneros». Si no se pueden leer las etiquetas guardadas, lo dice y no ofrece buscar | **medida en el banco el 2026-10-17** (solo el owner; el amigo, leída del código) |
+| `#mapa-artistas` (v=315) | — | **historial** (`artistTracks`) **y el mapa horneado**, que es SOLO del owner (`history-artist-similares.json`: ni `gen-stats.py` ni el import BYOH lo producen) | sin historial, el cartel de bloqueo de `#records`; **con historial y sin mapa (un amigo con su BYOH), una línea: «El mapa todavía no existe para tu historial.»** y nada más | **medida en el banco el 2026-10-18** (el owner, un amigo con historial y sin mapa, uno sin nada) |
 | `#zeroplays` | — | **historial** (`plays`) · stats.fm opcional | cartel de bloqueo | leída del código |
 | `#skips` | — | **historial** (`skip`, versión ≥ 4) · stats.fm opcional | cartel de bloqueo | leída del código |
 

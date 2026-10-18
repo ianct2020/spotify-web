@@ -264,8 +264,12 @@ ok(!/const OWNER_KEYS = \{/.test(histData),
   'history-data.js ya no define su propia copia de OWNER_KEYS');
 ok(/from '\.\.\/history-keys\.js'/.test(histData),
   'history-data.js las toma del módulo compartido');
-ok(OWNER_KEY_LIST.length === Object.keys(OWNER_KEYS).length && OWNER_KEY_LIST.length === 7,
-  'la lista cubre las siete claves del owner');
+// v=315 (tanda 64): ocho, con `history_artist_similares_v1` (el mapa de artistas horneado). El guarda
+// multiusuario la borra con las otras al cambiar de usuario: es dato de escucha del owner.
+ok(OWNER_KEY_LIST.length === Object.keys(OWNER_KEYS).length && OWNER_KEY_LIST.length === 8,
+  'la lista cubre las ocho claves del owner');
+ok(OWNER_KEY_LIST.includes('history_artist_similares_v1'),
+  'incluye history_artist_similares_v1, el mapa de artistas (v=315)');
 ok(OWNER_KEY_LIST.includes('history_track_plays_v5') && OWNER_KEY_LIST.includes('history_skip_stats_v4'),
   'y son las versiones que se escriben de verdad (plays v5, skips v4)');
 // v=308 (tanda 56): `ARTIST_TRACKS_VERSION` 2 → 3 (el tema de entrada de `#puertas`).

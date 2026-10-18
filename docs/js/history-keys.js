@@ -33,6 +33,7 @@ const LISTENED_VERSION = 3;  // v3: las 91 tapas que faltaban (ítem 11) — mis
 const SKIP_VERSION = 4;    // v4: mismo formato que v3, pero el `gid` se recalculó con la cola de versión tras el guion (v=271): «X - Sped Up», «- Piano», «- reimagined», «- Raw Rhymes», «- Refix» y «- Music From …» vuelven a ser el mismo tema que su base
 const DETAIL_VERSION = 1;
 const RECORDS_VERSION = 3;  // v3: seis récords nuevos (día con más artistas, tema en más años, artista con más días, abandonado, crecimiento, racha de artista)
+const SIMILARES_VERSION = 1;  // v1 (v=315, tanda 64): `history-artist-similares.json`, el mapa de artistas horneado por `scripts/hornear-similares.mjs` (los parecidos de Last.fm entre tus artistas y sus posiciones). No lo produce `gen-stats.py` ni el import BYOH: es solo del owner. `OWNER_PREV_KEYS.similares` VACÍA
 const ARTIST_TRACKS_VERSION = 3;  // v3 (v=308): `totals` suma [6] el tema de entrada y [7] el día del segundo tema (`#puertas`). La lista de `OWNER_PREV_KEYS.artistTracks` sigue VACÍA: el v2 pasa el `sanityCheck` y migrarlo pintaría `#puertas` sin los campos. v2: `totals` lleva el día de la primera play válida del artista
 
 const OWNER_KEYS = {
@@ -43,6 +44,7 @@ const OWNER_KEYS = {
   detail: `history_track_detail_v${DETAIL_VERSION}`,
   records: `history_records_v${RECORDS_VERSION}`,
   artistTracks: `history_artist_tracks_v${ARTIST_TRACKS_VERSION}`,
+  similares: `history_artist_similares_v${SIMILARES_VERSION}`,
 };
 
 /** Todas las claves del owner, para el guarda multiusuario. */
@@ -60,5 +62,5 @@ const LOCAL_HISTORY_PREFIX = 'local_';
 export {
   OWNER_KEYS, OWNER_KEY_LIST, LOCAL_HISTORY_PREFIX,
   STATS_VERSION, PLAYS_VERSION, LISTENED_VERSION, SKIP_VERSION,
-  DETAIL_VERSION, RECORDS_VERSION, ARTIST_TRACKS_VERSION,
+  DETAIL_VERSION, RECORDS_VERSION, ARTIST_TRACKS_VERSION, SIMILARES_VERSION,
 };
