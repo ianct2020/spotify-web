@@ -15,7 +15,10 @@
 // pares suyos que ya tenían 1.000 con otro bajan a 999 (si no, un vecino lejano de índice menor se colaría entre los
 // 30). Siguen en su mancha y dentro del componente grande: los pares de siempre no se tocan.
 
-export const N = 2302;
+// v=321 (tanda 68): un artista más, el `DEBAJO_DE_LOS_BOTONES` (el último del universo, ver abajo). El grafo de siempre se
+// genera con los 2.302 de antes (`N_MANCHAS`): así el azar y los 60.170 pares de siempre no cambian.
+export const N_MANCHAS = 2302;
+export const N = N_MANCHAS + 1;
 const SEMILLA = 640064;
 
 function prng(semilla) {
@@ -38,6 +41,12 @@ export const esSuelto = esAislado;
 // v=319: la estrella y sus 30 (ninguno es aislado: 1249 es el primero de esa franja que lo sería).
 export const ESTRELLA = 1200;
 export const APRETADOS = Array.from({ length: 30 }, (_, k) => ESTRELLA + 1 + k);
+// v=321 (tanda 68): para la puerta M. Con el grafo de manchas, a 390×844 y con la estrella elegida (40 veces «Ver todo»,
+// escala 7,157), ningún nombre caía debajo de los botones de zoom y la puerta daba verde contra v=320. Este artista va a
+// (+12,7, −33,2) unidades de la estrella: en pantalla, a (275, 24) de un lienzo de 368×523, debajo de la caja de
+// `.artmapa-zoom` (x 196,7–360, y 8–39). Tiene UN par, con la estrella y `match` 1 (no entra entre sus 30 primeros), así
+// que está en el componente grande y no es suelto.
+export const DEBAJO_DE_LOS_BOTONES = N_MANCHAS;
 
 /** El historial: minutos estrictamente decrecientes (así el orden de `universo()` es el del índice). */
 export function historial() {
@@ -53,19 +62,19 @@ export function historial() {
 export function grafo() {
   const r = prng(SEMILLA);
   const MANCHAS = 12;
-  const mancha = Array.from({ length: N }, () => Math.floor(r() * MANCHAS));
+  const mancha = Array.from({ length: N_MANCHAS }, () => Math.floor(r() * MANCHAS));
   const pos = [];
-  for (let i = 0; i < N; i++) {
+  for (let i = 0; i < N_MANCHAS; i++) {
     const ang = (mancha[i] / MANCHAS) * Math.PI * 2;
     const cx = Math.cos(ang) * 700, cy = Math.sin(ang) * 700;
     const rr = Math.sqrt(r()) * 260, aa = r() * Math.PI * 2;
     pos.push(Math.round((cx + Math.cos(aa) * rr) * 10) / 10, Math.round((cy + Math.sin(aa) * rr) * 10) / 10);
   }
   const porMancha = Array.from({ length: MANCHAS }, () => []);
-  for (let i = 0; i < N; i++) if (!esAislado(i)) porMancha[mancha[i]].push(i);
-  const libres = [...Array(N).keys()].filter((i) => !esAislado(i));
+  for (let i = 0; i < N_MANCHAS; i++) if (!esAislado(i)) porMancha[mancha[i]].push(i);
+  const libres = [...Array(N_MANCHAS).keys()].filter((i) => !esAislado(i));
   const pares = new Map();
-  for (let i = 0; i < N; i++) {
+  for (let i = 0; i < N_MANCHAS; i++) {
     if (esAislado(i)) continue;
     for (let k = 0; k < 29; k++) {
       const lista = r() < 0.8 ? porMancha[mancha[i]] : libres;
@@ -85,6 +94,9 @@ export function grafo() {
     pos[2 * j + 1] = Math.round((ey + Math.sin(ang) * d) * 10) / 10;
     pares.set(ESTRELLA * N + j, [ESTRELLA, j, 1000, 1]);
   });
+  // v=321: el de debajo de los botones, con su único par (con la estrella, `match` 1).
+  pos.push(Math.round((ex + 12.7) * 10) / 10, Math.round((ey - 33.2) * 10) / 10);
+  pares.set(ESTRELLA * N + DEBAJO_DE_LOS_BOTONES, [ESTRELLA, DEBAJO_DE_LOS_BOTONES, 1, 0]);
   const aristas = [...pares.values()].sort((x, y) => x[0] - y[0] || x[1] - y[1]).flat();
   // La franja: la caja del grafo (contando radios), y debajo la pareja y después los aislados, en orden.
   const totals = historial().totals, max = totals[nombreDe(0)][1];

@@ -3106,6 +3106,69 @@ con el scroll en 0; uno de 390×844, lo mismo que antes; ninguna caja de nombre 
 contra 366.4») y la puerta **I apretada** (una `ESTRELLA` inventada con 30 parecidos a entre 6 y 20 unidades: tiene que
 acercar al menos 3 veces; vista fallar contra v=317: «1.00 veces»; con v=319, 40,00). El grafo del banco pasa a 60.170 pares.
 
+### Los nombres en la pantalla de Ian (v=321)
+
+La tanda 68. Tres reglas, puras en `util/mapa-artistas.js` (la vista solo mide y llama). **La colocación del nombre NO
+cambió**: sigue centrado en su círculo (corrido solo para no salirse del borde), con 3 px de aire, 12 px de letra y el tope
+de 60.
+
+1. **Los sueltos, con el cupo que sobra.** `nombresVisibles` coloca primero a los del componente grande (`principal[i] ===
+   1`) en el orden de siempre, y **recién después**, si quedó cupo, a los sueltos, en el orden del universo y con la misma
+   colisión, aire y borde. **Un suelto nunca desplaza a uno del componente grande**: esa lista sale idéntica con sueltos y
+   sin ellos. El elegido sigue primero, sea suelto o no. (La regla de v=319 —«un suelto no lleva nombre»— tenía sentido a
+   1366×768, donde se llena el cupo de 60; a 1366×591 salen 34 de 60 y sacarles el nombre no le liberaba lugar a nadie.)
+2. **Los botones de zoom ocupan lugar.** `nombresVisibles(…, elegido, ocupadas = [])`: cajas `{ x0, x1, y0, y1 }` en
+   coordenadas del lienzo; un nombre cuya caja, con el aire, toque una no sale. La vista pasa la caja de `.artmapa-zoom`,
+   medida en `medirLienzo` cuando cambia el tamaño, **nunca en cada frame**.
+3. **`nombresAjenos(mapa, v, etiquetas)`**: cuántos nombres son **ajenos**. Para cada nombre, el centro de su caja (ya
+   corrida: donde se pinta) y `d(j) = hypot(cx − sxⱼ, cy − syⱼ) − radioEnPantalla(mapa, j, escala)`; es ajeno si **algún**
+   otro artista `j ≠ i` tiene `d(j) < d(i)`. Un nombre ajeno **miente** sobre qué punto nombra. Cuesta `N` por nombre: la
+   usan el test, el banco y el conductor, **la vista no**.
+
+🔴 **La caída de 44 a 34 nombres a «Ver todo» en 1366×591 es el precio de no tener nombres pegados.** Sobre el mismo lienzo
+de 402 px, las reglas de v=318 dan 48: de los 14 que faltan, 6 son sueltos (los devuelve la regla 1) y 8 se pierden por el
+aire. Se midieron cuatro variantes para recuperarlos y **las cuatro quedaron descartadas** (SEMBRADO, la `nombresVisibles`
+real, el JSON real e Inter 600 12px; las midió quien escribió el encargo de la 68, no esta tanda):
+
+| «Ver todo», SEMBRADO | 1366×591: nombres · de los 10 · ajenos | 390: nombres · de los 10 · ajenos |
+|---|---|---|
+| v=319/v=320 | 34 · 5 · **0** | 35 · 5 · **1** |
+| aire 2 | 38 · 5 · 0 | 39 · 5 · 1 |
+| fuente 11 | 40 · 5 · 0 | 42 · 5 · 1 |
+| fuente 10 | 44 · 5 · 0 | 46 · 6 · 1 |
+| el nombre corrido al costado del punto | 48 · 7 · **33** | 50 · 7 · **31** |
+
+Aire y fuente no ganan ni uno de los 10 más escuchados y achican la letra o vuelven a juntar nombres; el nombre corrido gana
+dos de los 10 porque **miente** (33 ajenos de 48). A «Ver todo», en la pantalla de Ian, 5 de 10 es el techo sin mentir.
+
+**Los sueltos son 67: 63 aislados y 2 parejas** («63» era el número de los aislados). Con el buscador se encuentra, se
+encuadra, sale el nombre y se elige tocando a cada uno de los 67 (lo comprobó el encargo de la 68 con la función real; la
+puerta **L** lo vigila con el grafo inventado).
+
+Medido (SEMBRADO, el JSON real, Chrome headless con `mobile: false`, **Inter instalada en la máquina**: Google Fonts
+cortado, pero `document.fonts.check('600 12px Inter')` da `true`; conductor
+`fonoteca-migracion/mapa-artistas/driver-mapa-artistas-t68-2026-10-20.mjs`):
+
+| «Ver todo» | nombres v=320 → v=321 | de los 10 | sueltos con nombre | desplazados por un suelto | ajenos | tocan los botones |
+|---|---|---|---|---|---|---|
+| 1366×591 | 34 → **40** | 5 → 5 | 0 → 6 | 0 | 0 → 0 | 0 → 0 |
+| 1366×768 | 60 → 60 | 7 → 7 | 0 → 0 | 0 | 0 → 0 | 0 → 0 |
+| 390×844 | 35 → 40 | 5 → 5 | 0 → 5 | 0 | 1 → 2 | 0 → 0 |
+| Travis Scott (buscador), 390×844 | 60 → 60 | 6 → 6 | 0 → 0 | 0 | 3 → 4 | **1 → 0** |
+
+Decidido de antemano: la regla 1 entraba si a 1366×591 salían al menos 40 con 0 ajenos y a 1366×768 seguían 60 con 0
+desplazados. Entró. Frames (SINTÉTICO, esta máquina, 1366×591, el método de la 65): mediana a ×6 **32,4–36,9 ms** sin elegido
+y 31,7–34,3 con el de más grado (tope decidido: 100). **0 peticiones nuevas**: la tabla de costos no cambia.
+
+Guardas: `tests/mapa-artistas.test.mjs` (sección 14, y los asserts de los sueltos de la 5 y la 13 reescritos con su porqué;
+rojo contra v=320) y tres puertas del banco: **L** (los siete aislados y la pareja del grafo inventado: el buscador los
+encuentra, los centra, su nombre sale y tocarlos los elige; **de conservación**: contra v=320 también da verde), **M** (a
+390×844 con la `ESTRELLA` elegida desde el buscador, ninguna caja de nombre toca `.artmapa-zoom`; con el grafo de manchas no
+fallaba contra v=320, así que el grafo suma un artista inventado, `DEBAJO_DE_LOS_BOTONES`, a (+12,7, −33,2) de la estrella,
+que cae justo ahí; vista fallar contra v=320: «tocan 1 de 14») y **N** (a «Ver todo» en 1366×591, 0 ajenos; **de
+conservación**). El grafo del banco pasa a 2.303 artistas y 60.171 pares (los 60.170 de antes no cambian: el azar sigue
+siendo el de los 2.302).
+
 ## Client ID
 0c8c92ad128e4b89be7097c6b8082797
 

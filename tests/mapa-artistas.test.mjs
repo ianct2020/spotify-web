@@ -27,6 +27,9 @@
 //     a menos de 769 px de ancho no se toca); una caja de nombre que se sale por un borde se corre adentro hasta
 //     quedar a 2 px; dos cajas a menos de 3 px se pisan; y un suelto (fuera del componente más grande,
 //     `principal`) no lleva nombre salvo que sea el elegido;
+//   · (v=321) los sueltos llevan nombre solo con el cupo que sobra y nunca desplazan a uno del componente grande; una caja
+//     de `ocupadas` (los botones de zoom) cuenta como lugar ocupado, con el aire; `nombresAjenos` cuenta los nombres más
+//     cerca de otro círculo que del suyo;
 //   · el buscador usa `normalizarNombre` (`util/mb-pais.js`), no `normText`: un apóstrofo tipográfico
 //     encuentra al recto, y «¥$» —que `normText` deja vacío— se encuentra;
 //   · 🔴 el JSON horneado, si está, no lleva minutos ni plays (salen de `history-artist-tracks.json`);
@@ -36,7 +39,8 @@
 // Contra v=314 da rojo: `util/mapa-artistas.js` no existía. Contra v=315, las secciones 5, 5b, 10 y 11:
 // los nombres pedían 12 px, no había piso ni `colocarSueltos`, y el autocorrect se descartaba entero.
 // Contra v=317, la sección 12: `encuadrarElegido` no existía. Contra v=318, la sección 13 (y los cambios de la 5,
-// abajo): no había `altoDelLienzo`, ni corrimiento, ni aire, ni `principal`.
+// abajo): no había `altoDelLienzo`, ni corrimiento, ni aire, ni `principal`. Contra v=320, la sección 14 y los dos asserts
+// de los sueltos de la 13 (reescritos con su porqué): los sueltos no llevaban nombre, no había `ocupadas` ni `nombresAjenos`.
 //
 // Correr con: node tests/mapa-artistas.test.mjs
 
@@ -128,7 +132,9 @@ ok(!('RADIO_NOMBRE_PX' in M), 'ya no hay umbral de radio para los nombres (RADIO
 const n1 = M.nombresVisibles(mapa, V1, 400, 300, medir);
 // v=319: «¥$» no tiene ningún par, así que es un SUELTO (fuera del componente más grande) y ya no lleva nombre.
 // Hasta v=318 este assert esperaba los cinco; lo que se vigila sigue igual: Banda (11 px) sale sin umbral de radio.
-ok(igual(n1.map((e) => e.i), [0, 1, 2, 4]), 'a escala 1, los cuatro del componente grande (no se pisan), de más minutos a menos: también Banda (11), que antes no llegaba a 12 px; «¥$», suelto, no (v=319)', JSON.stringify(n1.map((e) => e.i)));
+// v=321: hasta v=320 esperaba [0, 1, 2, 4]. Ahora «¥$», suelto, sale con el cupo que sobra, DETRÁS de los cuatro del
+// componente grande (aunque tenga más minutos que «Cometa Azul»): [0, 1, 2, 4, 3].
+ok(igual(n1.map((e) => e.i), [0, 1, 2, 4, 3]), 'a escala 1, los cuatro del componente grande (no se pisan), de más minutos a menos: también Banda (11), que antes no llegaba a 12 px; «¥$», suelto, al final (v=321)', JSON.stringify(n1.map((e) => e.i)));
 // Muy de lejos (escala 0,01): los cinco caen casi en el mismo punto y se pisan. Gana el de más minutos.
 const lejos2 = { escala: 0.01, base: 0.01, tx: 200, ty: 150 };
 const nl = M.nombresVisibles(mapa, lejos2, 400, 300, medir);
@@ -400,10 +406,55 @@ ok(gp.principal instanceof Uint8Array && igual([...gp.principal], [1, 1, 1, 1, 1
 const empate = M.leerMapa({ nombres: ['A1', 'A2', 'B1', 'B2'], pos: [0, 0, 1, 0, 2, 0, 3, 0], aristas: [0, 1, 500, 1, 2, 3, 500, 1] }, {});
 ok(igual([...empate.principal], [1, 1, 0, 0]), 'a igualdad de tamaño, el que contiene al índice más chico');
 const np8 = M.nombresVisibles(gp, { escala: 1, base: 1, tx: 30, ty: 50 }, 1000, 200, () => 30);
-ok(igual(np8.map((e) => e.i), [0, 1, 2, 3, 4]), `un suelto con muchos minutos no lleva nombre (salieron ${JSON.stringify(np8.map((e) => e.i))})`);
+// v=321 (tanda 68): hasta v=320 este assert esperaba [0, 1, 2, 3, 4] («un suelto no lleva nombre»). Desde v=321 los
+// sueltos se colocan DESPUÉS de los del componente grande, con el cupo que sobra: acá sobra (8 de 60), así que salen
+// detrás, aunque tengan más minutos. Lo que se vigilaba (que no se adelantan a los del componente grande) sigue.
+ok(igual(np8.map((e) => e.i), [0, 1, 2, 3, 4, 5, 6, 7]), `un suelto con muchos minutos va DESPUÉS de los del componente grande (salieron ${JSON.stringify(np8.map((e) => e.i))})`);
 const np8e = M.nombresVisibles(gp, { escala: 1, base: 1, tx: 30, ty: 50 }, 1000, 200, () => 30, 6);
-ok(np8e.some((e) => e.i === 6) && !np8e.some((e) => e.i === 5 || e.i === 7), 'si es el elegido, sí (y los demás sueltos, no)');
+// v=321: hasta v=320, «y los demás sueltos, no». Ahora el elegido suelto sale PRIMERO y los otros sueltos, al final.
+ok(np8e[0]?.i === 6 && igual(np8e.slice(1, 6).map((e) => e.i), [0, 1, 2, 3, 4]), `si es el elegido, sale primero; los demás sueltos, al final (${JSON.stringify(np8e.map((e) => e.i))})`);
 } catch (e) { ok(false, 'la sección 13 corre', e.stack); }
+
+console.log('14. los nombres en la pantalla de Ian (v=321)');
+try {
+  // Un componente grande (una cadena) y sueltos, INVENTADOS. Pantalla = plano.
+  const V0 = { escala: 1, base: 1, tx: 0, ty: 0 };
+  const armar = (nombres, pos, min, aristas) => M.leerMapa({ nombres, pos, aristas }, Object.fromEntries(nombres.map((x, i) => [x, [1, min[i]]])));
+  // Con cupo de sobra: el suelto «Isla Sola» (lejos de todos) sale con nombre, detrás de los dos de la pareja grande.
+  const g1 = armar(['Faro Viejo', 'Gemas Fríos', 'Isla Sola'], [50, 50, 200, 50, 350, 50], [100, 90, 5000], [0, 1, 500, 1]);
+  ok(igual(M.nombresVisibles(g1, V0, 400, 100, () => 40).map((e) => e.i), [0, 1, 2]), 'con cupo de sobra, un suelto sale con nombre (al final)');
+  // Con el cupo LLENO de nombres del componente grande: 60 en cadena y un suelto con más minutos que todos.
+  const lleno = Array.from({ length: 61 }, (_, i) => (i < 60 ? `Grande ${String(i).padStart(2, '0')}` : 'Isla Sola'));
+  const gl = armar(lleno, lleno.flatMap((_, i) => [(i % 10) * 100 + 30, Math.floor(i / 10) * 100 + 30]), lleno.map((_, i) => (i < 60 ? 1000 - i : 9999)),
+    lleno.slice(1, 60).flatMap((_, i) => [i, i + 1, 500, 1]));
+  const nl = M.nombresVisibles(gl, V0, 2000, 2000, () => 40);
+  ok(nl.length === M.MAX_NOMBRES && !nl.some((e) => e.i === 60), `con el cupo lleno de nombres del componente grande, el suelto no sale (salieron ${nl.length}, suelto: ${nl.some((e) => e.i === 60)})`);
+  // 🔴 Un suelto encima de uno del componente grande: la lista del componente grande, la MISMA con y sin sueltos.
+  // «Isla Sola» (suelto, muchos minutos) en x = 210, pegado a «Gemas Fríos» (x = 200): se pisan. Gana Gemas.
+  const g2 = armar(['Faro Viejo', 'Gemas Fríos', 'Isla Sola', 'Ola'], [50, 50, 200, 50, 210, 50, 350, 50], [100, 90, 5000, 80], [0, 1, 500, 1, 1, 3, 500, 1]);
+  const sinSueltos = armar(['Faro Viejo', 'Gemas Fríos', 'Isla Sola', 'Ola'], [50, 50, 200, 50, -9999, 50, 350, 50], [100, 90, 5000, 80], [0, 1, 500, 1, 1, 3, 500, 1]);
+  const con = M.nombresVisibles(g2, V0, 400, 100, () => 40).map((e) => e.i);
+  const sin = M.nombresVisibles(sinSueltos, V0, 400, 100, () => 40).map((e) => e.i);
+  ok(igual(con.filter((i) => g2.principal[i]), sin) && igual(sin, [0, 1, 3]) && !con.includes(2),
+    `un suelto encima de uno del componente grande no lo desplaza: con sueltos ${JSON.stringify(con)}, sin ${JSON.stringify(sin)}`);
+  // `ocupadas`: una caja (los botones de zoom) a la derecha. Caja del nombre 40 × 14 centrada en (100, 50): x 80…120.
+  const g3 = armar(['Faro Viejo', 'Gemas Fríos'], [100, 50, 300, 50], [100, 90], [0, 1, 500, 1]);
+  const ocupa = (x0) => [{ x0, x1: x0 + 50, y0: 40, y1: 60 }];
+  ok(igual(M.nombresVisibles(g3, V0, 400, 100, () => 40, -1, ocupa(118)).map((e) => e.i), [1]), 'un nombre cuya caja toca una caja de `ocupadas` no sale');
+  ok(igual(M.nombresVisibles(g3, V0, 400, 100, () => 40, -1, ocupa(122)).map((e) => e.i), [1]), 'a 2 px (menos que el aire), tampoco');
+  ok(igual(M.nombresVisibles(g3, V0, 400, 100, () => 40, -1, ocupa(124)).map((e) => e.i), [0, 1]), 'a 4 px, sí');
+  ok(igual(M.nombresVisibles(g3, V0, 400, 100, () => 40).map((e) => e.i), [0, 1]), 'sin `ocupadas`, como siempre');
+  // `nombresAjenos`.
+  ok(typeof M.nombresAjenos === 'function', 'nombresAjenos existe');
+  // Un nombre centrado en su punto: 0. Uno corrido 30 px hacia otro punto (pegado a él): 1.
+  const g4 = armar(['Faro Viejo', 'Gemas Fríos'], [100, 50, 140, 50], [100, 100], [0, 1, 500, 1]);
+  ok(M.nombresAjenos(g4, V0, [{ i: 0, x: 100, y: 50 }, { i: 1, x: 140, y: 50 }]) === 0, 'nombres centrados en sus puntos: 0 ajenos');
+  ok(M.nombresAjenos(g4, V0, [{ i: 0, x: 135, y: 50 }, { i: 1, x: 140, y: 50 }]) === 1, 'un nombre más cerca del círculo de otro que del suyo: 1 ajeno');
+  // Los sueltos de la franja, cada uno con el nombre en su punto: 0.
+  const g5 = armar(['Faro Viejo', 'Gemas Fríos', 'Isla Sola', 'Coral'], [50, 50, 100, 50, 200, 150, 300, 150], [100, 90, 80, 70], [0, 1, 500, 1]);
+  const e5 = M.nombresVisibles(g5, V0, 400, 200, () => 30);
+  ok(e5.length === 4 && M.nombresAjenos(g5, V0, e5) === 0, `nombres centrados en puntos sueltos: 0 ajenos (${e5.length} nombres)`);
+} catch (e) { ok(false, 'la sección 14 corre', e.stack); }
 
 console.log(`\nOK mapa-artistas: ${pasaron} de ${pasaron + fallaron}`);
 process.exit(fallaron ? 1 : 0);

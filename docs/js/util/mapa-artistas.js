@@ -23,11 +23,15 @@
 // ventana (`altoDelLienzo`), una caja de nombre que se sale por un borde se corre adentro, dos cajas necesitan 3 px de
 // aire, y los sueltos (fuera del componente más grande: `principal`) no se llevan nombres del cupo.
 //
+// v=321 (tanda 68): los sueltos vuelven a llevar nombre, pero solo con el cupo que SOBRA después de los del componente
+// grande (nunca desplazan a uno de ellos); los botones de zoom ocupan lugar (`ocupadas`); y `nombresAjenos` cuenta los
+// nombres que quedan más cerca de otro círculo que del suyo (la guarda contra un nombre que miente sobre su punto).
+//
 // Lo de acá lo prueba `tests/mapa-artistas.test.mjs` con un grafo inventado de pocos nodos:
 // leer el JSON compacto, los vecinos ordenados por `match`, el toque (pantalla → plano → el
 // círculo más cercano), el pan y el zoom con sus topes, qué nombres se dibujan y el buscador.
 
-import { normalizarNombre } from './mb-pais.js?v=320';
+import { normalizarNombre } from './mb-pais.js?v=321';
 
 // El radio de cada artista, en unidades del PLANO (el zoom lo agranda): el mismo del horneado,
 // `2 + 18·√(minutos / máximo)`. Tiene que ser el mismo: `forceCollide` acomodó con ese radio.
@@ -253,9 +257,15 @@ export function tocar(mapa, v, px, py) {
  * la caja ya corrida, y lo que se devuelve es el centro de la caja corrida: la vista pinta ahí. (2) Dos cajas se
  * pisan si quedan a menos de `AIRE_NOMBRE_PX`. (3) Un suelto (`principal[i]` en 0) no lleva nombre, salvo el elegido.
  *
+ * v=321: (1) los sueltos, con el cupo que SOBRA: primero se colocan los del componente grande (y el elegido), en el orden
+ * de siempre; recién después, si queda cupo, los sueltos, en el orden del universo y con la misma colisión, aire y borde.
+ * Un suelto nunca desplaza a uno del componente grande: esa lista sale idéntica con sueltos y sin ellos. (2) `ocupadas`:
+ * cajas `{ x0, x1, y0, y1 }` en coordenadas del lienzo (la vista pasa la de los botones de zoom); un nombre cuya caja,
+ * con el aire, toque una de ellas no sale.
+ *
  * @returns {Array<{ i: number, x: number, y: number }>} el centro de cada caja de nombre, en pantalla
  */
-export function nombresVisibles(mapa, v, ancho, alto, medir, elegido = -1) {
+export function nombresVisibles(mapa, v, ancho, alto, medir, elegido = -1, ocupadas = []) {
   const fuera = [];
   const cajas = [];
   // Corre el centro `c` de una caja de largo `l` para que no se salga de [0, lado]: a `BORDE_NOMBRE_PX` del borde por
@@ -266,15 +276,15 @@ export function nombresVisibles(mapa, v, ancho, alto, medir, elegido = -1) {
     if (c + l / 2 > lado) return lado - BORDE_NOMBRE_PX - l / 2;
     return c;
   };
+  const a = AIRE_NOMBRE_PX;
+  const toca = (c, o) => c.x0 < o.x1 + a && o.x0 < c.x1 + a && c.y0 < o.y1 + a && o.y0 < c.y1 + a;
   const poner = (i) => {
-    if (!mapa.principal[i] && i !== elegido) return;
     const [sx, sy] = planoAPantalla(v, mapa.x[i], mapa.y[i]);
     if (sx < 0 || sx > ancho || sy < 0 || sy > alto) return;
     const w = medir(mapa.nombres[i]);
     const cx = correr(sx, w, ancho), cy = correr(sy, ALTO_NOMBRE_PX, alto);
     const c = { x0: cx - w / 2, x1: cx + w / 2, y0: cy - ALTO_NOMBRE_PX / 2, y1: cy + ALTO_NOMBRE_PX / 2 };
-    const a = AIRE_NOMBRE_PX;
-    if (cajas.some((o) => c.x0 < o.x1 + a && o.x0 < c.x1 + a && c.y0 < o.y1 + a && o.y0 < c.y1 + a)) return;
+    if (cajas.some((o) => toca(c, o)) || ocupadas.some((o) => toca(c, o))) return;
     cajas.push(c);
     fuera.push({ i, x: cx, y: cy });
   };
@@ -284,8 +294,31 @@ export function nombresVisibles(mapa, v, ancho, alto, medir, elegido = -1) {
     if (sx - rp >= 0 && sx + rp <= ancho && sy - rp >= 0 && sy + rp <= alto) { poner(elegido); primero = elegido; }
   }
   // Si no se adelantó (el círculo no está entero dentro), va en su turno, como cualquiera.
-  for (let i = 0; i < mapa.N && fuera.length < MAX_NOMBRES; i++) if (i !== primero) poner(i);
+  // Los del componente grande (y el elegido, si no se adelantó), y después los sueltos con el cupo que sobra.
+  for (let i = 0; i < mapa.N && fuera.length < MAX_NOMBRES; i++) if (i !== primero && (mapa.principal[i] || i === elegido)) poner(i);
+  for (let i = 0; i < mapa.N && fuera.length < MAX_NOMBRES; i++) if (i !== primero && !mapa.principal[i] && i !== elegido) poner(i);
   return fuera;
+}
+
+/**
+ * Cuántos nombres son AJENOS (v=321): los que quedan más cerca del círculo de OTRO artista que del suyo. Para cada
+ * etiqueta (el centro de su caja, ya corrida, que es donde se pinta) se toma `d(j) = hypot(cx − sxⱼ, cy − syⱼ) −
+ * radioEnPantalla(mapa, j, escala)`; es ajena si algún `j ≠ i` tiene `d(j) < d(i)`. Cuesta `N` por nombre: la usan el
+ * test, el banco y el conductor, **la vista no**.
+ *
+ * @param {Array<{ i: number, x: number, y: number }>} etiquetas  lo que devuelve `nombresVisibles`
+ */
+export function nombresAjenos(mapa, v, etiquetas) {
+  const dist = (e, j) => {
+    const [sx, sy] = planoAPantalla(v, mapa.x[j], mapa.y[j]);
+    return Math.hypot(e.x - sx, e.y - sy) - radioEnPantalla(mapa, j, v.escala);
+  };
+  let n = 0;
+  for (const e of etiquetas) {
+    const propia = dist(e, e.i);
+    for (let j = 0; j < mapa.N; j++) if (j !== e.i && dist(e, j) < propia) { n++; break; }
+  }
+  return n;
 }
 
 /**

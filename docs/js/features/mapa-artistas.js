@@ -32,14 +32,14 @@
 // instrumento del banco y de la medición de frames (pintar ya, sin esperar al frame): solo existe
 // mientras la ruta está abierta.
 
-import { loadArtistTracks, loadArtistSimilares, isOwner, ownerLockedMessage } from './history-data.js?v=320';
-import { openArtistCard } from './artist-card.js?v=320';
-import { escapeHtml, pageHeader } from '../ui/components.js?v=320';
-import { vigilarRuta } from '../util/vigencia-ruta.js?v=320';
+import { loadArtistTracks, loadArtistSimilares, isOwner, ownerLockedMessage } from './history-data.js?v=321';
+import { openArtistCard } from './artist-card.js?v=321';
+import { escapeHtml, pageHeader } from '../ui/components.js?v=321';
+import { vigilarRuta } from '../util/vigencia-ruta.js?v=321';
 import {
   leerMapa, vistaTodo, zoomEn, mover, encuadrarElegido, tocar, nombresVisibles, buscar,
   mezclar, leerRgb, planoAPantalla, radioEnPantalla, altoDelLienzo, POR_PAGINA,
-} from '../util/mapa-artistas.js?v=320';
+} from '../util/mapa-artistas.js?v=321';
 
 const num = (n) => Number(n || 0).toLocaleString('es-ES');
 const min = (m) => `${num(Math.round(m))} min`;
@@ -116,7 +116,7 @@ function montar(content, mapa, ruta) {
     elegido: -1, mostrados: POR_PAGINA,
     raf: 0, respaldo: 0, pendiente: false, vivo: true,
     punteros: new Map(), arrastre: null, pellizco: null,
-    anchos: new Map(), fuente: '',
+    anchos: new Map(), fuente: '', ocupadas: [],
   };
   const dibujo = { puntos: 0, lineas: 0, nombres: 0, conNombre: [], ms: 0, cuadros: 0 };
   window.__mapaArtistasDibujo = dibujo;
@@ -141,6 +141,10 @@ function montar(content, mapa, ruta) {
     const centro = antes ? [(st.ancho / 2 - antes.tx) / antes.escala, (st.alto / 2 - antes.ty) / antes.escala] : null;
     st.ancho = w; st.alto = h; st.dpr = dpr;
     canvas.width = Math.round(w * dpr); canvas.height = Math.round(h * dpr);
+    // v=321: los botones de zoom ocupan lugar para los nombres. Su caja, en coordenadas del lienzo, se mide acá (cuando
+    // cambia el tamaño), nunca en cada frame.
+    const lr = canvas.getBoundingClientRect(), zr = raiz.querySelector('.artmapa-zoom')?.getBoundingClientRect();
+    st.ocupadas = zr && zr.width ? [{ x0: zr.left - lr.left, x1: zr.right - lr.left, y0: zr.top - lr.top, y1: zr.bottom - lr.top }] : [];
     const todo = vistaTodo(mapa, w, h);
     if (enTodo) st.vista = todo;
     else {
@@ -253,7 +257,7 @@ function montar(content, mapa, ruta) {
       if (a === undefined) { a = ctx.measureText(s).width; st.anchos.set(s, a); }
       return a;
     };
-    const etiquetas = nombresVisibles(mapa, v, w, h, medir, sel);   // v=318: el del elegido, primero
+    const etiquetas = nombresVisibles(mapa, v, w, h, medir, sel, st.ocupadas);   // v=318: el del elegido, primero; v=321: los botones
     if (etiquetas.length) {
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
@@ -415,6 +419,7 @@ function montar(content, mapa, ruta) {
   window.__mapaArtistasBanco = {
     mapa,
     vista: () => ({ ...st.vista }),
+    ocupadas: () => st.ocupadas.map((o) => ({ ...o })),   // v=321: la caja de los botones de zoom
     pendiente: () => st.pendiente,
     pintarYa: () => { st.pendiente = false; cancelAnimationFrame(st.raf); clearTimeout(st.respaldo); pintar(); return { ...dibujo }; },
     zoomCentro: (f) => { st.vista = zoomEn(st.vista, f, st.ancho / 2, st.alto / 2); },

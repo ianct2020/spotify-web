@@ -38,6 +38,13 @@
 //      390×844, lo mismo que antes. En los dos, ninguna caja de nombre se sale del lienzo;
 //   K. (v=317, tanda 66) la lista de parecidos del panel va en columnas de 220 px y no es flex: hasta v=316 su
 //      clase era también la de las listas de #mapa y #generos, y salía en una sola columna;
+//   L. (v=321, tanda 68) los sueltos (los siete aislados y la pareja): buscar a cada uno por el buscador lo encuentra, lo
+//      deja en el centro, su nombre sale, y tocar su punto lo elige. Es de CONSERVACIÓN: contra v=320 también da verde;
+//   M. (v=321, tanda 68) en el marco de 390×844, con la `ESTRELLA` elegida desde el buscador, ninguna caja de nombre toca
+//      la caja de `.artmapa-zoom` (los botones «+», «−» y «Ver todo»). Contra v=320 da rojo: `nombresVisibles` no sabía
+//      dónde estaban los botones;
+//   N. (v=321, tanda 68) a «Ver todo» en el marco de 1366×591, 0 nombres AJENOS (más cerca del círculo de otro artista
+//      que del suyo: `nombresAjenos`). Es de CONSERVACIÓN: contra v=320 también da 0;
 //   y 0 errores de consola en todos los marcos.
 //
 // ⚠️ Todas las esperas van con `esperarReal` (ver PRESUPUESTO en `scripts/correr-banco.mjs`).
@@ -136,7 +143,9 @@ try {
   sinFugas(A, 'PUERTA A');
   afirmar(texto($(A, '.page-header h1, h1')) === 'Mapa de artistas' || /Mapa de artistas/.test(texto($(A, '#main-content'))), 'la cabecera dice «Mapa de artistas»');
   const canvasA = $(A, 'canvas.artmapa-canvas');
-  afirmar(canvasA?.getAttribute('role') === 'img' && /^Mapa de tus artistas: 2302 artistas, 60\.170 parecidos$/.test(canvasA.getAttribute('aria-label')),
+  // v=321 (tanda 68): hasta v=320, «2302 artistas, 60.170 parecidos». El grafo inventado suma el artista
+  // `DEBAJO_DE_LOS_BOTONES` (de la puerta M) con un solo par: 2.303 y 60.171. Los de antes no cambian.
+  afirmar(canvasA?.getAttribute('role') === 'img' && /^Mapa de tus artistas: 2303 artistas, 60\.171 parecidos$/.test(canvasA.getAttribute('aria-label')),
     `el canvas es una imagen con su aria-label: «${canvasA?.getAttribute('aria-label')}»`);
   afirmar(/^7 artistas no tienen ningún parecido en tu historial\. Parecidos según Last\.fm\.$/.test(texto($(A, '.artmapa-pie'))), `la línea de los aislados y el crédito: «${texto($(A, '.artmapa-pie'))}»`);
   afirmar($(A, '.artmapa-pie a')?.getAttribute('href') === 'https://www.last.fm', 'el crédito enlaza a https://www.last.fm');
@@ -434,12 +443,87 @@ try {
     datos.alto.cajas = { a591: k591, a390: k390 };
     afirmar(k591.fuera === 0 && k390.fuera === 0, `PUERTA J: ninguna caja de nombre se sale del lienzo (1366×591: ${k591.fuera} de ${k591.n}; 390×844: ${k390.fuera} de ${k390.n})`);
     sinFugas(J591, 'PUERTA J');
+
+    // ── N · a «Ver todo» en 1366×591, 0 nombres ajenos (v=321) ──────────────
+    progreso('N: los nombres ajenos');
+    // Las etiquetas como las pinta la vista (con la caja de los botones si la vista la tiene: v=320 no la tenía).
+    const etiquetasDe = (f) => {
+      const b = win(f).__mapaArtistasBanco, c = b.canvas, ctx = c.getContext('2d'), v = b.vista();
+      ctx.font = `600 12px ${win(f).getComputedStyle(c).fontFamily || 'sans-serif'}`;
+      const medir = (t) => ctx.measureText(t).width;
+      const et = P.nombresVisibles(b.mapa, v, c.clientWidth, c.clientHeight, medir, dibujo(f).elegido ?? -1, b.ocupadas ? b.ocupadas() : []);
+      return { b, v, et, medir };
+    };
+    // La definición de «ajeno», escrita acá también: así la puerta corre contra v=320, que no tenía `nombresAjenos`.
+    const ajenosDe = (M, v, et) => {
+      if (typeof P.nombresAjenos === 'function') return P.nombresAjenos(M, v, et);
+      const d = (e, j) => Math.hypot(e.x - (M.x[j] * v.escala + v.tx), e.y - (M.y[j] * v.escala + v.ty)) - P.radioEnPantalla(M, j, v.escala);
+      return et.filter((e) => { const p = d(e, e.i); for (let j = 0; j < M.N; j++) if (j !== e.i && d(e, j) < p) return true; return false; }).length;
+    };
+    {
+      const b = win(J591).__mapaArtistasBanco;
+      b.elegir(-1); b.verTodo(); b.pintarYa();
+      const { v, et } = etiquetasDe(J591);
+      const aj = ajenosDe(b.mapa, v, et);
+      datos.ajenos = { nombres: et.length, ajenos: aj };
+      afirmar(aj === 0, `PUERTA N: a «Ver todo» en 1366×591, 0 nombres ajenos (hubo ${aj} de ${et.length})`);
+    }
+
+    // ── M · a 390×844, con la estrella elegida, ningún nombre debajo de los botones (v=321) ──
+    progreso('M: los botones de zoom');
+    {
+      const b = win(F390).__mapaArtistasBanco;
+      b.elegir(-1); b.verTodo(); win(F390).scrollTo(0, 0); b.pintarYa();
+      $(F390, '.artmapa-campo').value = nombreDe(ESTRELLA);
+      $(F390, '.artmapa-buscar').requestSubmit();
+      await otroFrame(F390, 'la estrella a 390');
+      b.pintarYa();
+      afirmar(dibujo(F390).elegido === ESTRELLA, `PUERTA M: el buscador elige a la estrella (${dibujo(F390).elegido})`);
+      const { et, medir } = etiquetasDe(F390);
+      afirmar(JSON.stringify(et.map((e) => e.i)) === JSON.stringify(dibujo(F390).conNombre), 'PUERTA M: las etiquetas contadas acá son las que pintó la vista');
+      const lr = b.canvas.getBoundingClientRect(), zr = $(F390, '.artmapa-zoom').getBoundingClientRect();
+      const z = { x0: zr.left - lr.left, x1: zr.right - lr.left, y0: zr.top - lr.top, y1: zr.bottom - lr.top };
+      const tocan = et.filter((e) => { const w = medir(b.mapa.nombres[e.i]); return e.x - w / 2 < z.x1 && z.x0 < e.x + w / 2 && e.y - P.ALTO_NOMBRE_PX / 2 < z.y1 && z.y0 < e.y + P.ALTO_NOMBRE_PX / 2; });
+      datos.botones = { nombres: et.length, tocan: tocan.length };
+      afirmar(tocan.length === 0, `PUERTA M: a 390×844 con la estrella elegida, ninguna caja de nombre toca los botones de zoom (tocan ${tocan.length} de ${et.length}: ${tocan.map((e) => b.mapa.nombres[e.i]).join(', ')})`);
+      sinFugas(F390, 'PUERTA M');
+    }
+  }
+
+  // ── L · los sueltos: el buscador los encuentra, los encuadra, su nombre sale y tocarlos los elige (v=321) ──
+  progreso('L: los sueltos');
+  {
+    const { esAislado, PAREJA } = await import('/banco/mapa-artistas-datos.mjs');
+    const sueltos = [...Array(N).keys()].filter((i) => esAislado(i));
+    afirmar(sueltos.length === 9 && PAREJA.every((i) => sueltos.includes(i)), `PUERTA L: los sueltos del grafo inventado son 9: 7 aislados y la pareja (${sueltos.length})`);
+    const n0L = llamadas(A), r0L = externosDe(A).length;
+    const b = win(A).__mapaArtistasBanco;
+    let bien = 0;
+    for (const i of sueltos) {
+      b.elegir(-1); b.verTodo(); b.pintarYa();
+      $(A, '.artmapa-campo').value = nombreDe(i);
+      $(A, '.artmapa-buscar').requestSubmit();
+      const d = await otroFrame(A, `el suelto ${i} desde el buscador`);
+      const v = b.vista(), c = b.canvas, cx = b.mapa.x[i] * v.escala + v.tx, cy = b.mapa.y[i] * v.escala + v.ty;
+      afirmar(d.elegido === i, `PUERTA L: el buscador encuentra al suelto ${nombreDe(i)} (elegido=${d.elegido})`);
+      afirmar(Math.abs(cx - c.clientWidth / 2) < 0.5 && Math.abs(cy - c.clientHeight / 2) < 0.5, `PUERTA L: y lo encuadra en el centro (${cx.toFixed(1)}, ${cy.toFixed(1)})`);
+      afirmar(d.conNombre.includes(i), `PUERTA L: su nombre sale (${nombreDe(i)})`);
+      // Soltarlo tocando el fondo (una esquina vacía) y volver a elegirlo tocando su punto.
+      b.elegir(-1); b.pintarYa();
+      const [x, y] = clienteDe(A, i);
+      tocarEn(A, x, y);
+      const d2 = await otroFrame(A, `tocar el suelto ${i}`);
+      afirmar(d2.elegido === i, `PUERTA L: tocar su punto lo elige (${nombreDe(i)}: elegido=${d2.elegido})`);
+      bien++;
+    }
+    datos.sueltos = bien;
+    afirmar(llamadas(A) === n0L && externosDe(A).length === r0L, `PUERTA L: 0 peticiones (${llamadas(A) - n0L} a la simulada, ${externosDe(A).length - r0L} de otro origen)`);
   }
 
   const errores = marcos.flatMap(([n, f]) => win(f).__errores.map((e) => `${n}: ${e}`));
   afirmar(errores.length === 0, `0 errores de consola: ${errores.join(' | ')}`);
 
-  const resumen = `I encuadre: la estrella, grado ${datos.encuadre.grado}, ${datos.encuadre.veces.toFixed(2)}× «Ver todo», fuera ${datos.encuadre.fuera1} y ${datos.encuadre.fuera2} de 30 · J alto: 1366×591 ${datos.alto.a591} (antes ${datos.alto.antes591.toFixed(1)}, abajo ${datos.alto.abajo591.toFixed(1)} de ${datos.alto.ventana591}), 390×844 ${datos.alto.a390} (antes ${datos.alto.antes390.toFixed(1)}), cajas fuera ${datos.alto.cajas.a591.fuera}/${datos.alto.cajas.a591.n} y ${datos.alto.cajas.a390.fuera}/${datos.alto.cajas.a390.n} · K lista: columnas=${datos.lista.columnWidth} display=${datos.lista.display} · A abrir: /me=${datos.abrir.me} otras=${datos.abrir.otras.length}, al volver 0 · H ver todo: escala=${datos.verTodo.escala.toFixed(3)} nombres=${datos.verTodo.nombres} fuera=${datos.verTodo.fuera} primero=${datos.verTodo.primero} · B sin elegido: líneas=${datos.sinElegido.lineas} puntos=${datos.sinElegido.puntos} nombres=${datos.sinElegido.nombres} (con zoom ${datos.sinElegido.nombresConZoom}); con elegido: líneas=${datos.conElegido.lineas} = grado ${datos.conElegido.grado} · ` +
+  const resumen = `L sueltos: ${datos.sueltos} de 9 buscados, encuadrados, con nombre y tocados · M botones a 390 con la estrella: ${datos.botones.tocan} de ${datos.botones.nombres} los tocan · N ajenos a 1366×591: ${datos.ajenos.ajenos} de ${datos.ajenos.nombres} · I encuadre: la estrella, grado ${datos.encuadre.grado}, ${datos.encuadre.veces.toFixed(2)}× «Ver todo», fuera ${datos.encuadre.fuera1} y ${datos.encuadre.fuera2} de 30 · J alto: 1366×591 ${datos.alto.a591} (antes ${datos.alto.antes591.toFixed(1)}, abajo ${datos.alto.abajo591.toFixed(1)} de ${datos.alto.ventana591}), 390×844 ${datos.alto.a390} (antes ${datos.alto.antes390.toFixed(1)}), cajas fuera ${datos.alto.cajas.a591.fuera}/${datos.alto.cajas.a591.n} y ${datos.alto.cajas.a390.fuera}/${datos.alto.cajas.a390.n} · K lista: columnas=${datos.lista.columnWidth} display=${datos.lista.display} · A abrir: /me=${datos.abrir.me} otras=${datos.abrir.otras.length}, al volver 0 · H ver todo: escala=${datos.verTodo.escala.toFixed(3)} nombres=${datos.verTodo.nombres} fuera=${datos.verTodo.fuera} primero=${datos.verTodo.primero} · B sin elegido: líneas=${datos.sinElegido.lineas} puntos=${datos.sinElegido.puntos} nombres=${datos.sinElegido.nombres} (con zoom ${datos.sinElegido.nombresConZoom}); con elegido: líneas=${datos.conElegido.lineas} = grado ${datos.conElegido.grado} · ` +
     `C tocar elige y el fondo suelta · D 0 peticiones, quieto 5 s: ${datos.quieto} frames · E amigo: la línea y 0 puntos · F desborde 1366=${datos.desborde.a1366} 390=${datos.desborde.a390} · ` +
     `G salir con un frame pendiente=${datos.pendienteAlSalir}: 0 frames después; salir a mitad: ${datos.salir.mutaciones} escrituras, ${datos.salir.cuadros} frames, ${datos.salir.errores} errores · errores=${errores.length} · reloj virtual=${Math.round(performance.now())} ms`;
   document.documentElement.setAttribute('data-resumen', resumen);
