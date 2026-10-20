@@ -30,6 +30,12 @@
 //   I. (v=318, tanda 66) elegir desde el buscador a un artista de grado ≥ 30 lo deja en el centro, acerca desde
 //      «Ver todo» y deja sus 30 primeros parecidos dentro del lienzo (también desde un zoom de 20 veces), con 0
 //      peticiones; contra v=317 centraba conservando la escala;
+//      (v=319, tanda 67) APRETADA: busca a la `ESTRELLA` inventada (30 parecidos a entre 6 y 20 unidades) y exige
+//      que acerque al menos 3 veces desde «Ver todo», con los 30 dentro; contra v=317 da 1,00 veces. Hasta v=318
+//      buscaba a cualquiera de grado ≥ 30 y acercaba ~1,03 veces: casi no distinguía;
+//   J. (v=319, tanda 67) en un marco de 1366×591 (la pantalla de Ian) el lienzo mide MÁS que el CSS de antes
+//      (`clamp(300px, 62vh, 720px)`) y su borde de abajo queda dentro de la ventana con el scroll en 0; en uno de
+//      390×844, lo mismo que antes. En los dos, ninguna caja de nombre se sale del lienzo;
 //   K. (v=317, tanda 66) la lista de parecidos del panel va en columnas de 220 px y no es flex: hasta v=316 su
 //      clase era también la de las listas de #mapa y #generos, y salía en una sola columna;
 //   y 0 errores de consola en todos los marcos.
@@ -38,7 +44,7 @@
 
 import { esperarReal, anclar } from '/banco/simulado.mjs';
 import { fallar, listo } from '/banco/esperar.mjs';
-import { historial, grafo, vecinosEsperados, nombreDe, N } from '/banco/mapa-artistas-datos.mjs';
+import { historial, grafo, vecinosEsperados, nombreDe, N, ESTRELLA, APRETADOS } from '/banco/mapa-artistas-datos.mjs';
 
 const afirmar = (c, msg) => { if (!c) throw new Error('BANCO: ' + msg); };
 const progreso = (t) => { document.getElementById('progreso').textContent = t; };
@@ -130,7 +136,7 @@ try {
   sinFugas(A, 'PUERTA A');
   afirmar(texto($(A, '.page-header h1, h1')) === 'Mapa de artistas' || /Mapa de artistas/.test(texto($(A, '#main-content'))), 'la cabecera dice «Mapa de artistas»');
   const canvasA = $(A, 'canvas.artmapa-canvas');
-  afirmar(canvasA?.getAttribute('role') === 'img' && /^Mapa de tus artistas: 2302 artistas, 60\.142 parecidos$/.test(canvasA.getAttribute('aria-label')),
+  afirmar(canvasA?.getAttribute('role') === 'img' && /^Mapa de tus artistas: 2302 artistas, 60\.170 parecidos$/.test(canvasA.getAttribute('aria-label')),
     `el canvas es una imagen con su aria-label: «${canvasA?.getAttribute('aria-label')}»`);
   afirmar(/^7 artistas no tienen ningún parecido en tu historial\. Parecidos según Last\.fm\.$/.test(texto($(A, '.artmapa-pie'))), `la línea de los aislados y el crédito: «${texto($(A, '.artmapa-pie'))}»`);
   afirmar($(A, '.artmapa-pie a')?.getAttribute('href') === 'https://www.last.fm', 'el crédito enlaza a https://www.last.fm');
@@ -215,49 +221,47 @@ try {
   afirmar(!$(A, '.artmapa-nombre') && /Toca un artista del mapa/.test(texto($(A, '[data-panel]'))), 'PUERTA C: y el panel vuelve a la línea de ayuda');
   afirmar(llamadas(A) === n0C, 'PUERTA D: tocar no pide nada');
 
-  // ── I · elegir desde el buscador encuadra (v=318) ──────────────────────────
-  // El encuadre ACERCA (nunca baja de «Ver todo»): si los 30 primeros parecidos no entran centrados a «Ver todo»,
-  // no entran con ninguna escala. Así que se elige (sin la función nueva: con la cuenta de acá) el primer artista
-  // de grado ≥ 30 cuyos 30 primeros SÍ entran centrados a «Ver todo», y se le pide a la vista dos cosas:
-  //   1. desde «Ver todo», buscarlo lo deja en el centro, ACERCA y los 30 quedan con el punto entero dentro;
-  //   2. desde un zoom fuerte (20 veces), buscarlo otra vez deja a los 30 dentro.
-  // Contra v=317 (centraba conservando la escala): en 1 no acerca, y en 2 se salen.
+  // ── I · elegir desde el buscador encuadra (v=318), apretada (v=319) ──────────
+  // La `ESTRELLA` inventada tiene sus 30 primeros parecidos a entre 6 y 20 unidades: encuadrarla tiene que ACERCAR de
+  // verdad. Se le pide a la vista:
+  //   1. desde «Ver todo», buscarla la deja en el centro, acerca AL MENOS 3 veces y sus 30 quedan con el punto entero
+  //      dentro; su nombre sale;
+  //   2. desde un zoom fuerte (20 veces), buscarla otra vez deja a los 30 dentro.
+  // Contra v=317 (centraba conservando la escala): 1,00 veces. Hasta v=318 la puerta buscaba a cualquiera de grado ≥ 30
+  // y con el grafo de manchas acercaba 1,03 veces.
   progreso('I: el encuadre');
   {
     const n0I = llamadas(A), r0I = externosDe(A).length;
     const { radioEnPantalla } = await import('/js/util/mapa-artistas.js');
     const bI = win(A).__mapaArtistasBanco, W = bI.canvas.clientWidth, Hc = bI.canvas.clientHeight, Mi = bI.mapa;
-    const fueraDe = (v, i, js, m = 0) => js.filter((j) => {
+    const fueraDe = (v, js, m = 0) => js.filter((j) => {
       const sx = Mi.x[j] * v.escala + v.tx, sy = Mi.y[j] * v.escala + v.ty, rp = radioEnPantalla(Mi, j, v.escala);
       return sx - rp < m || sx + rp > W - m || sy - rp < m || sy + rp > Hc - m;
     });
     $(A, '[data-zoom="todo"]').click();
     await otroFrame(A, 'el frame de «Ver todo»');
     const base = bI.vista().base;
-    const centradoEnTodo = (i) => ({ escala: base, base, tx: W / 2 - Mi.x[i] * base, ty: Hc / 2 - Mi.y[i] * base });
-    const ELEGIDO = grado.findIndex((g, i) => g >= 30 && fueraDe(centradoEnTodo(i), i, vecinosEsperados(G, i).slice(0, 30), 24).length === 0);
-    afirmar(ELEGIDO >= 0, 'PUERTA I: hay un artista de grado ≥ 30 cuyos 30 primeros parecidos entran centrados a «Ver todo»');
-    const primeros = vecinosEsperados(G, ELEGIDO).slice(0, 30);
+    const primeros = vecinosEsperados(G, ESTRELLA).slice(0, 30);
+    afirmar(igual(primeros, APRETADOS), 'PUERTA I: los 30 primeros parecidos de la estrella son los apretados');
     const buscarlo = async (que) => {
-      $(A, '.artmapa-campo').value = nombreDe(ELEGIDO);
+      $(A, '.artmapa-campo').value = nombreDe(ESTRELLA);
       $(A, '.artmapa-buscar').requestSubmit();
       return otroFrame(A, que);
     };
     d = await buscarlo('el frame del elegido desde el buscador');
     const v1 = bI.vista();
-    const cx = Mi.x[ELEGIDO] * v1.escala + v1.tx, cy = Mi.y[ELEGIDO] * v1.escala + v1.ty;
-    afirmar(d.elegido === ELEGIDO, `PUERTA I: el buscador elige al ${ELEGIDO} (grado ${grado[ELEGIDO]})`);
+    const cx = Mi.x[ESTRELLA] * v1.escala + v1.tx, cy = Mi.y[ESTRELLA] * v1.escala + v1.ty;
+    afirmar(d.elegido === ESTRELLA, `PUERTA I: el buscador elige a la estrella (${ESTRELLA}, grado ${grado[ESTRELLA]})`);
     afirmar(Math.abs(cx - W / 2) < 0.5 && Math.abs(cy - Hc / 2) < 0.5, `PUERTA I: el elegido queda en el centro (${cx.toFixed(1)}, ${cy.toFixed(1)} en ${W}×${Hc})`);
-    const fuera1 = fueraDe(v1, ELEGIDO, primeros).length;
-    afirmar(v1.escala > base * 1.01 && fuera1 === 0, `PUERTA I: desde «Ver todo» acerca (${(v1.escala / base).toFixed(2)} veces) y sus 30 primeros parecidos quedan dentro (fuera: ${fuera1})`);
-    // v=318: el nombre del elegido, con su círculo entero en el lienzo, sale siempre (prioridad).
-    afirmar(d.conNombre.includes(ELEGIDO), `PUERTA I: el nombre del elegido sale (${d.conNombre.length} nombres)`);
+    const fuera1 = fueraDe(v1, primeros).length, veces = v1.escala / base;
+    afirmar(veces >= 3 && fuera1 === 0, `PUERTA I: desde «Ver todo» acerca al menos 3 veces (${veces.toFixed(2)} veces) y sus 30 primeros parecidos quedan dentro (fuera: ${fuera1})`);
+    afirmar(d.conNombre.includes(ESTRELLA), `PUERTA I: el nombre del elegido sale (${d.conNombre.length} nombres)`);
     bI.zoomCentro(20);
     bI.pintarYa();   // `zoomCentro` no pide frame: se pinta acá
     d = await buscarlo('el frame del elegido desde el buscador, con zoom');
-    const v2 = bI.vista(), fuera2 = fueraDe(v2, ELEGIDO, primeros).length;
+    const v2 = bI.vista(), fuera2 = fueraDe(v2, primeros).length;
     afirmar(fuera2 === 0, `PUERTA I: desde un zoom de 20 veces, también (fuera: ${fuera2}, ${(v2.escala / base).toFixed(2)} veces)`);
-    datos.encuadre = { elegido: ELEGIDO, grado: grado[ELEGIDO], veces: v1.escala / base, fuera1, fuera2 };
+    datos.encuadre = { elegido: ESTRELLA, grado: grado[ESTRELLA], veces, fuera1, fuera2 };
     afirmar(llamadas(A) === n0I && externosDe(A).length === r0I, `PUERTA I: 0 peticiones (${llamadas(A) - n0I} a la simulada, ${externosDe(A).length - r0I} de otro origen)`);
     // Como estaba antes de I, para D: sin elegido, en «Ver todo» y con el buscador vacío.
     bI.elegir(-1);
@@ -401,10 +405,41 @@ try {
   const lienzo390 = $(F390, 'canvas').getBoundingClientRect();
   afirmar(lienzo390.width > 200 && lienzo390.right <= 390, `PUERTA F: el lienzo entra a 390 (${lienzo390.width.toFixed(0)} px)`);
 
+  // ── J · el lienzo en la pantalla de Ian (v=319) ───────────────────────────
+  progreso('J: el alto del lienzo');
+  {
+    const P = await import('/js/util/mapa-artistas.js');
+    const J591 = abrirMarco('owner', 'J591', 1366, 591); marcos.push(['J591', J591]);
+    await arrancado(J591, 'el marco de 1366×591');
+    await abrirMapa(J591, 'que pinte a 1366×591', () => $(J591, '[data-mapa-artistas="listo"]') && dibujo(J591)?.cuadros > 0);
+    // El CSS de antes (`clamp(300px, 62vh, 720px)`), contado acá con el alto del marco.
+    const deAntes = (f) => Math.min(720, Math.max(300, 0.62 * win(f).innerHeight));
+    // Las cajas de los nombres que se dibujan a «Ver todo», con la letra del lienzo: ninguna fuera.
+    const cajasFuera = (f) => {
+      const b = win(f).__mapaArtistasBanco;
+      b.elegir(-1); b.verTodo(); b.pintarYa();
+      const c = b.canvas, ctx = c.getContext('2d'), Wc = c.clientWidth, Hj = c.clientHeight, v = b.vista();
+      const medir = (t) => ctx.measureText(t).width;
+      const et = P.nombresVisibles(b.mapa, v, Wc, Hj, medir, -1);
+      return { n: et.length, fuera: et.filter((e) => { const w = medir(b.mapa.nombres[e.i]); return e.x - w / 2 < 0 || e.x + w / 2 > Wc || e.y - P.ALTO_NOMBRE_PX / 2 < 0 || e.y + P.ALTO_NOMBRE_PX / 2 > Hj; }).length };
+    };
+    win(J591).scrollTo(0, 0);
+    const cj = $(J591, 'canvas.artmapa-canvas'), rj = cj.getBoundingClientRect();
+    const c390 = $(F390, 'canvas.artmapa-canvas');
+    datos.alto = { a591: cj.clientHeight, antes591: deAntes(J591), abajo591: rj.bottom, ventana591: win(J591).innerHeight, a390: c390.clientHeight, antes390: deAntes(F390) };
+    afirmar(cj.clientHeight > Math.round(deAntes(J591)), `PUERTA J: a 1366×591 el lienzo mide más que el CSS de antes (${cj.clientHeight} contra ${deAntes(J591).toFixed(1)})`);
+    afirmar(rj.bottom <= win(J591).innerHeight, `PUERTA J: y su borde de abajo queda dentro de la ventana con el scroll en 0 (${rj.bottom.toFixed(1)} de ${win(J591).innerHeight})`);
+    afirmar(Math.abs(c390.clientHeight - deAntes(F390)) < 1, `PUERTA J: a 390×844 el lienzo mide lo mismo que antes (${c390.clientHeight} contra ${deAntes(F390).toFixed(1)})`);
+    const k591 = cajasFuera(J591), k390 = cajasFuera(F390);
+    datos.alto.cajas = { a591: k591, a390: k390 };
+    afirmar(k591.fuera === 0 && k390.fuera === 0, `PUERTA J: ninguna caja de nombre se sale del lienzo (1366×591: ${k591.fuera} de ${k591.n}; 390×844: ${k390.fuera} de ${k390.n})`);
+    sinFugas(J591, 'PUERTA J');
+  }
+
   const errores = marcos.flatMap(([n, f]) => win(f).__errores.map((e) => `${n}: ${e}`));
   afirmar(errores.length === 0, `0 errores de consola: ${errores.join(' | ')}`);
 
-  const resumen = `I encuadre: grado ${datos.encuadre.grado}, ${datos.encuadre.veces.toFixed(2)}× «Ver todo», fuera ${datos.encuadre.fuera1} y ${datos.encuadre.fuera2} de 30 · K lista: columnas=${datos.lista.columnWidth} display=${datos.lista.display} · A abrir: /me=${datos.abrir.me} otras=${datos.abrir.otras.length}, al volver 0 · H ver todo: escala=${datos.verTodo.escala.toFixed(3)} nombres=${datos.verTodo.nombres} fuera=${datos.verTodo.fuera} primero=${datos.verTodo.primero} · B sin elegido: líneas=${datos.sinElegido.lineas} puntos=${datos.sinElegido.puntos} nombres=${datos.sinElegido.nombres} (con zoom ${datos.sinElegido.nombresConZoom}); con elegido: líneas=${datos.conElegido.lineas} = grado ${datos.conElegido.grado} · ` +
+  const resumen = `I encuadre: la estrella, grado ${datos.encuadre.grado}, ${datos.encuadre.veces.toFixed(2)}× «Ver todo», fuera ${datos.encuadre.fuera1} y ${datos.encuadre.fuera2} de 30 · J alto: 1366×591 ${datos.alto.a591} (antes ${datos.alto.antes591.toFixed(1)}, abajo ${datos.alto.abajo591.toFixed(1)} de ${datos.alto.ventana591}), 390×844 ${datos.alto.a390} (antes ${datos.alto.antes390.toFixed(1)}), cajas fuera ${datos.alto.cajas.a591.fuera}/${datos.alto.cajas.a591.n} y ${datos.alto.cajas.a390.fuera}/${datos.alto.cajas.a390.n} · K lista: columnas=${datos.lista.columnWidth} display=${datos.lista.display} · A abrir: /me=${datos.abrir.me} otras=${datos.abrir.otras.length}, al volver 0 · H ver todo: escala=${datos.verTodo.escala.toFixed(3)} nombres=${datos.verTodo.nombres} fuera=${datos.verTodo.fuera} primero=${datos.verTodo.primero} · B sin elegido: líneas=${datos.sinElegido.lineas} puntos=${datos.sinElegido.puntos} nombres=${datos.sinElegido.nombres} (con zoom ${datos.sinElegido.nombresConZoom}); con elegido: líneas=${datos.conElegido.lineas} = grado ${datos.conElegido.grado} · ` +
     `C tocar elige y el fondo suelta · D 0 peticiones, quieto 5 s: ${datos.quieto} frames · E amigo: la línea y 0 puntos · F desborde 1366=${datos.desborde.a1366} 390=${datos.desborde.a390} · ` +
     `G salir con un frame pendiente=${datos.pendienteAlSalir}: 0 frames después; salir a mitad: ${datos.salir.mutaciones} escrituras, ${datos.salir.cuadros} frames, ${datos.salir.errores} errores · errores=${errores.length} · reloj virtual=${Math.round(performance.now())} ms`;
   document.documentElement.setAttribute('data-resumen', resumen);

@@ -8,6 +8,12 @@
 // grilla de 48 (la de `colocarSueltos` de `scripts/hornear-similares.mjs`, escrita acá de nuevo porque
 // el script es de Node): dos de los nueve aislados pasan a ser una pareja (un componente chico de dos,
 // con un solo par entre ellos), y quedan siete aislados. El resto del grafo, el mismo de la v=315.
+//
+// v=319 (tanda 67): una ESTRELLA para la puerta I. Con el grafo de manchas, encuadrar a cualquiera acercaba ~1,03
+// veces: sus 30 primeros parecidos estaban desparramados por la mancha. Ahora el artista `ESTRELLA` tiene 30 parecidos
+// APRETADOS alrededor (`APRETADOS`, a entre 6 y 20 unidades), con `match` 1.000, así que son sus 30 primeros; los
+// pares suyos que ya tenían 1.000 con otro bajan a 999 (si no, un vecino lejano de índice menor se colaría entre los
+// 30). Siguen en su mancha y dentro del componente grande: los pares de siempre no se tocan.
 
 export const N = 2302;
 const SEMILLA = 640064;
@@ -29,6 +35,9 @@ export const esAislado = (i) => i % 250 === 249;
 // Dos de ellos (v=316) son una pareja: solo se parecen entre sí. Los aislados de verdad quedan siete.
 export const PAREJA = [1999, 2249];
 export const esSuelto = esAislado;
+// v=319: la estrella y sus 30 (ninguno es aislado: 1249 es el primero de esa franja que lo sería).
+export const ESTRELLA = 1200;
+export const APRETADOS = Array.from({ length: 30 }, (_, k) => ESTRELLA + 1 + k);
 
 /** El historial: minutos estrictamente decrecientes (así el orden de `universo()` es el del índice). */
 export function historial() {
@@ -67,6 +76,15 @@ export function grafo() {
     }
   }
   pares.set(PAREJA[0] * N + PAREJA[1], [PAREJA[0], PAREJA[1], 500, 1]);
+  // La estrella (v=319): sus 30 alrededor, en espiral, y con `match` 1.000; ningún otro par suyo empata con ellos.
+  for (const [id, p] of pares) if ((p[0] === ESTRELLA || p[1] === ESTRELLA) && p[2] === 1000) pares.set(id, [p[0], p[1], 999, p[3]]);
+  const ex = pos[2 * ESTRELLA], ey = pos[2 * ESTRELLA + 1];
+  APRETADOS.forEach((j, k) => {
+    const d = 6 + (14 * k) / 29, ang = k * 2.399963;
+    pos[2 * j] = Math.round((ex + Math.cos(ang) * d) * 10) / 10;
+    pos[2 * j + 1] = Math.round((ey + Math.sin(ang) * d) * 10) / 10;
+    pares.set(ESTRELLA * N + j, [ESTRELLA, j, 1000, 1]);
+  });
   const aristas = [...pares.values()].sort((x, y) => x[0] - y[0] || x[1] - y[1]).flat();
   // La franja: la caja del grafo (contando radios), y debajo la pareja y después los aislados, en orden.
   const totals = historial().totals, max = totals[nombreDe(0)][1];

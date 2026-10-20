@@ -3047,6 +3047,54 @@ grado 0, el caso que no entra con `entraron`, el tope de 40, el nombre del elegi
 banco `mapa-artistas` (desde «Ver todo» buscar a uno de grado ≥ 30 acerca con sus 30 dentro, también desde un zoom de 20
 veces, el nombre sale y 0 peticiones; vista fallar contra v=317: «acerca (1.00 veces)»).
 
+### El mapa en la pantalla de Ian (v=319)
+
+La tanda 67. Todas las mediciones del mapa hasta la 66 eran a **1366×768**, y la ventana de Ian mide **1366 × 591** de alto
+útil (ver «El presupuesto de alto del modal de W-Three», v=170). Ahí el lienzo de `clamp(300px, 62vh, 720px)` medía **366
+px**. Cuatro reglas, todas puras en `util/mapa-artistas.js` (la vista solo mide y llama):
+
+1. **El alto del lienzo al alto disponible**: `altoDelLienzo(altoVentana, topLienzo, anchoVentana)`. Por debajo de **769
+   px** de ancho, `null` y manda el CSS de siempre (**a 390 no cambia nada**: 368×523). Si no,
+   `max(hoy, min(720, altoVentana − topLienzo − 16))` redondeado, con `hoy = min(720, max(300, 0,62 · altoVentana))`:
+   **nunca más bajo que antes ni más de 720**. `topLienzo` es la posición del lienzo en la PÁGINA (scroll en 0). La vista
+   lo mide al abrir y en el `resize` de la VENTANA (`ajustarAlto`), **nunca en el `ResizeObserver` del lienzo** (cambiar
+   el alto lo dispara: sería un bucle; medido, 0 cambios de alto y 0 frames en 5 s quieto). El CSS no cambió: es el
+   respaldo. ⚠️ El `top` se mide una vez al abrir: si la cabecera cambiara de alto después (la letra que llega tarde), el
+   lienzo no se reajusta hasta un `resize`.
+2. **Nombres enteros**: si el centro del círculo está dentro pero la caja se sale por un borde, la caja se **corre hacia
+   adentro** hasta quedar a **2 px** (`BORDE_NOMBRE_PX`), en x y en y; la colisión se calcula con la caja ya corrida y
+   `nombresVisibles` devuelve el centro de la caja corrida (la vista pinta ahí). Si la caja no entra ni con 2 px a cada
+   lado, se queda centrada.
+3. **Aire**: dos cajas se pisan si quedan a menos de **3 px** (`AIRE_NOMBRE_PX`; hasta v=318, solo si se superponían).
+4. **Los sueltos, fuera del cupo**: `leerMapa` agrega `principal` (`Uint8Array`, 1 en el componente conexo más grande por
+   `vecinos`; a igualdad de tamaño, el del índice más chico). Un suelto **no lleva nombre**, salvo el elegido.
+
+El **16**, el **3** y el **2** son decisiones de diseño, no medidas.
+
+**A 1366×591** (SEMBRADO, el JSON real, Chrome headless con `mobile: false`, la letra de reserva; conductor
+`fonoteca-migracion/mapa-artistas/driver-mapa-artistas-t67-2026-10-20.mjs`, que comprobó que el `top` del lienzo es **173**
+en `mapa-artistas-caso.html` y en la app, `index.html#mapa-artistas`):
+
+| 1366×591 | lienzo | escala | nombres | de los 10 más escuchados, con nombre | cajas cortadas | pares a < 3 px | nombres de sueltos |
+|---|---|---|---|---|---|---|---|
+| «Ver todo», v=318 | 1.198 × 366 | 0,0836 | 44 | 5 (1, 3, 5, 6, 9) | 0 | 27 | 6 |
+| «Ver todo», v=319 | 1.198 × 402 | 0,0924 | **34** | 5 (1, 3, 5, 6, 9) | 0 | 0 | 0 |
+| Travis Scott desde el buscador, v=318 | 1.198 × 366 | 0,6971 | 60 | 7 | 4 | 11 | 0 |
+| Travis Scott desde el buscador, v=319 | 1.198 × 402 | 0,7760 | 60 | 7 | 0 | 0 | 0 |
+
+⚠️ **A «Ver todo» salen MENOS nombres (44 → 34)**: el aire de 3 px deja afuera a los que antes quedaban pegados. Decidido de
+antemano: no se revierte; está en `PENDIENTES.md`. La escala sube un 10,5 % (lo que da el alto: 366 → 402). A 1366×768:
+1.198×476 → 1.198×579, 0,1105 → 0,1357, 60 nombres los dos, 7 de 10 los dos. A 390×844: alto y escala iguales (368×523,
+0,0963); nombres 49 → 35 y de los 10, 6 → 5. Frames (SINTÉTICO, esta máquina, 1366×591, el método de la 65): mediana a ×6
+**30,8–33,2 ms** sin elegido y 30,4–32,2 con el de más grado (tope decidido: 100). La rueda sobre el título mueve la página
+(`scrollY` 0 → 76) y sobre el lienzo hace zoom sin moverla. **0 peticiones nuevas**: la tabla de costos no cambia.
+
+Guardas: `tests/mapa-artistas.test.mjs` (sección 13, y tres fixtures de la 5 con un par para que no sean sueltos; rojo
+contra v=318) y el banco: la puerta **J** (un marco de 1366×591: el lienzo mide más que antes y su borde de abajo entra
+con el scroll en 0; uno de 390×844, lo mismo que antes; ninguna caja de nombre fuera; vista fallar contra v=318: «366
+contra 366.4») y la puerta **I apretada** (una `ESTRELLA` inventada con 30 parecidos a entre 6 y 20 unidades: tiene que
+acercar al menos 3 veces; vista fallar contra v=317: «1.00 veces»; con v=319, 40,00). El grafo del banco pasa a 60.170 pares.
+
 ## Client ID
 0c8c92ad128e4b89be7097c6b8082797
 

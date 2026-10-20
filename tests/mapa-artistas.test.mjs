@@ -23,6 +23,10 @@
 //   · el encuadre del elegido (v=318): `encuadrarElegido` lo deja en el centro con la mayor escala que deja a sus
 //     30 primeros parecidos con el punto entero dentro y 24 px de margen; grado 0, como `centrarEn`; si no
 //     entran ni a «Ver todo», esa escala y `entraron` lo dice; nunca más de 40 veces «Ver todo»;
+//   · (v=319) el alto del lienzo al alto disponible (`altoDelLienzo`, nunca menos que el CSS de hoy ni más de 720, y
+//     a menos de 769 px de ancho no se toca); una caja de nombre que se sale por un borde se corre adentro hasta
+//     quedar a 2 px; dos cajas a menos de 3 px se pisan; y un suelto (fuera del componente más grande,
+//     `principal`) no lleva nombre salvo que sea el elegido;
 //   · el buscador usa `normalizarNombre` (`util/mb-pais.js`), no `normText`: un apóstrofo tipográfico
 //     encuentra al recto, y «¥$» —que `normText` deja vacío— se encuentra;
 //   · 🔴 el JSON horneado, si está, no lleva minutos ni plays (salen de `history-artist-tracks.json`);
@@ -31,7 +35,8 @@
 // 🔴 Todo es INVENTADO: los artistas, las posiciones, los pares y los minutos (el repo es público).
 // Contra v=314 da rojo: `util/mapa-artistas.js` no existía. Contra v=315, las secciones 5, 5b, 10 y 11:
 // los nombres pedían 12 px, no había piso ni `colocarSueltos`, y el autocorrect se descartaba entero.
-// Contra v=317, la sección 12: `encuadrarElegido` no existía.
+// Contra v=317, la sección 12: `encuadrarElegido` no existía. Contra v=318, la sección 13 (y los cambios de la 5,
+// abajo): no había `altoDelLienzo`, ni corrimiento, ni aire, ni `principal`.
 //
 // Correr con: node tests/mapa-artistas.test.mjs
 
@@ -121,7 +126,9 @@ console.log('5. los nombres');
 const medir = (s) => s.length * 7;
 ok(!('RADIO_NOMBRE_PX' in M), 'ya no hay umbral de radio para los nombres (RADIO_NOMBRE_PX se fue)');
 const n1 = M.nombresVisibles(mapa, V1, 400, 300, medir);
-ok(igual(n1.map((e) => e.i), [0, 1, 2, 3, 4]), 'a escala 1, los cinco (no se pisan), de más minutos a menos: también Banda (11) y «¥$» (5,6), que antes no llegaban a 12 px', JSON.stringify(n1.map((e) => e.i)));
+// v=319: «¥$» no tiene ningún par, así que es un SUELTO (fuera del componente más grande) y ya no lleva nombre.
+// Hasta v=318 este assert esperaba los cinco; lo que se vigila sigue igual: Banda (11 px) sale sin umbral de radio.
+ok(igual(n1.map((e) => e.i), [0, 1, 2, 4]), 'a escala 1, los cuatro del componente grande (no se pisan), de más minutos a menos: también Banda (11), que antes no llegaba a 12 px; «¥$», suelto, no (v=319)', JSON.stringify(n1.map((e) => e.i)));
 // Muy de lejos (escala 0,01): los cinco caen casi en el mismo punto y se pisan. Gana el de más minutos.
 const lejos2 = { escala: 0.01, base: 0.01, tx: 200, ty: 150 };
 const nl = M.nombresVisibles(mapa, lejos2, 400, 300, medir);
@@ -131,14 +138,17 @@ ok(igual(M.nombresVisibles(mapa, { escala: 2, base: 1, tx: -1000, ty: -1000 }, 4
 const nb = M.nombresVisibles(mapa, { escala: 1, base: 1, tx: -5, ty: 50 }, 400, 300, medir);
 ok(!nb.some((e) => e.i === 0) && nb.some((e) => e.i === 1), 'un círculo con el centro fuera del lienzo no lleva nombre (aunque asome); los de dentro sí');
 // Dos grandes pegados: las cajas se pisan y gana el de más minutos.
-const pegados = M.leerMapa({ nombres: ['Grande Uno', 'Grande Dos'], pos: [0, 0, 10, 0], aristas: [] }, { 'Grande Uno': [1, 900], 'Grande Dos': [1, 800] });
+// v=319: con un par entre los dos (sin él, «Grande Dos» sería un suelto y no llevaría nombre).
+const pegados = M.leerMapa({ nombres: ['Grande Uno', 'Grande Dos'], pos: [0, 0, 10, 0], aristas: [0, 1, 500, 1] }, { 'Grande Uno': [1, 900], 'Grande Dos': [1, 800] });
 const np = M.nombresVisibles(pegados, { escala: 1, base: 1, tx: 100, ty: 100 }, 400, 300, () => 80);
 ok(igual(np.map((e) => e.i), [0]), 'dos nombres que se pisan → solo el de más minutos');
-const np2 = M.nombresVisibles(pegados, { escala: 1, base: 1, tx: 100, ty: 100 }, 400, 300, () => 8);
+// v=319: cajas de 6 px a 10 de distancia dejan 4 px de aire (con 8, como hasta v=318, dejaban 2: ahora se pisan).
+const np2 = M.nombresVisibles(pegados, { escala: 1, base: 1, tx: 100, ty: 100 }, 400, 300, () => 6);
 ok(np2.length === 2, 'si no se pisan, los dos');
 // Cien grandes separados: como mucho 60, los de más minutos.
 const cien = Array.from({ length: 100 }, (_, i) => `Inventado ${String(i).padStart(3, '0')}`);
-const muchos = M.leerMapa({ nombres: cien, pos: cien.flatMap((_, i) => [(i % 10) * 100, Math.floor(i / 10) * 100]), aristas: [] },
+// v=319: una cadena de pares (0-1, 1-2…), así los cien son un solo componente y ninguno es suelto.
+const muchos = M.leerMapa({ nombres: cien, pos: cien.flatMap((_, i) => [(i % 10) * 100, Math.floor(i / 10) * 100]), aristas: cien.slice(1).flatMap((_, i) => [i, i + 1, 500, 1]) },
   Object.fromEntries(cien.map((n, i) => [n, [1, 1000 - i]])));
 const nm = M.nombresVisibles(muchos, { escala: 1, base: 1, tx: 30, ty: 30 }, 2000, 2000, () => 40);
 ok(nm.length === M.MAX_NOMBRES && igual(nm.map((e) => e.i), Array.from({ length: 60 }, (_, i) => i)), `como mucho ${M.MAX_NOMBRES}, los de más minutos (vino ${nm.length})`);
@@ -334,6 +344,66 @@ if (typeof M.encuadrarElegido === 'function') {
   ok(cerca(pegado.escala, todo.base * M.ZOOM_MAX), `no pasa de ${M.ZOOM_MAX} veces «Ver todo» (${(pegado.escala / todo.base).toFixed(2)})`);
   ok(pegado.entraron === 1, 'y con el tope, el parecido pegado entra');
 } else ok(false, 'encuadrarElegido existe en util/mapa-artistas.js');
+
+console.log('13. el mapa en la pantalla de Ian (v=319)');
+if (typeof M.altoDelLienzo === 'function') {
+  // `altoDelLienzo(altoVentana, topLienzo, anchoVentana)`: el de hoy es min(720, max(300, 0,62 · alto)).
+  ok(M.altoDelLienzo(844, 195, 390) === null, 'a 390 de ancho, null: manda el CSS de hoy');
+  ok(M.altoDelLienzo(591, 173, 768) === null && M.altoDelLienzo(591, 173, 769) === 402, 'el corte es 769 px de ancho: 768 → null, 769 → se calcula');
+  ok(M.altoDelLienzo(591, 173, 1366) === 402, `1366×591 con el lienzo en 173 → 591 − 173 − 16 = 402 (vino ${M.altoDelLienzo(591, 173, 1366)})`);
+  ok(M.altoDelLienzo(768, 173, 1366) === 579, `1366×768 con el lienzo en 173 → 579 (vino ${M.altoDelLienzo(768, 173, 1366)})`);
+  ok(M.altoDelLienzo(591, 5000, 1366) === 366 && M.altoDelLienzo(768, 5000, 1366) === 476, 'con un top enorme, el de hoy (0,62 · alto, redondeado): nunca menos');
+  ok(M.altoDelLienzo(400, 5000, 1366) === 300, 'y con una ventana baja, el piso de 300 de hoy');
+  ok(M.altoDelLienzo(2000, 173, 1366) === 720, 'con una ventana de 2.000, 720: nunca más');
+  ok(M.AIRE_ABAJO_LIENZO_PX === 16, 'el aire de abajo es 16');
+} else ok(false, 'altoDelLienzo existe en util/mapa-artistas.js');
+
+try {
+// Las cajas. Un mapa INVENTADO de un solo componente (una cadena de pares), en pantalla = plano.
+const cadena = (n, pos, min) => M.leerMapa({ nombres: n, pos, aristas: n.slice(1).flatMap((_, i) => [i, i + 1, 500, 1]) },
+  Object.fromEntries(n.map((x, i) => [x, [1, min[i]]])));
+const V0 = { escala: 1, base: 1, tx: 0, ty: 0 };
+// «Banda Inventada» con el centro a 10 px del borde derecho de un lienzo de 400 y una caja de 80: se sale 30 px.
+const borde = cadena(['Banda Inventada', 'Cometa Azul'], [390, 150, 100, 150], [100, 50]);
+const nbd = M.nombresVisibles(borde, V0, 400, 300, () => 80);
+const cb = nbd.find((e) => e.i === 0);
+ok(cb && cerca(cb.x + 40, 400 - 2) && cerca(cb.y, 150), `una caja que se sale por la derecha se corre adentro y queda a 2 px del borde (su borde derecho en ${cb ? (cb.x + 40).toFixed(1) : '—'})`);
+// Arriba y a la izquierda, lo mismo.
+const esquina = cadena(['Aurora Lenta', 'Cometa Azul'], [3, 1, 200, 150], [100, 50]);
+const ce1 = M.nombresVisibles(esquina, V0, 400, 300, () => 60).find((e) => e.i === 0);
+ok(ce1 && cerca(ce1.x - 30, 2) && cerca(ce1.y - M.ALTO_NOMBRE_PX / 2, 2), `y por la izquierda y por arriba, también a 2 px (caja desde ${ce1 ? (ce1.x - 30).toFixed(1) : '—'}, ${ce1 ? (ce1.y - 7).toFixed(1) : '—'})`);
+// Más ancha que el lienzo: se queda centrada en el círculo.
+const ancha = M.nombresVisibles(borde, { escala: 1, base: 1, tx: -190, ty: 0 }, 400, 300, () => 600).find((e) => e.i === 0);
+ok(ancha && cerca(ancha.x, 200), `una caja más ancha que el lienzo se queda centrada (x = ${ancha?.x})`);
+// La colisión, con la caja ya corrida: «Banda» en x = 399 (caja 359…439, corrida a 318…398) y «Cometa» en x = 314
+// (caja 274…354). Sin correr, 5 px de hueco y salen las dos; corrida, se pisan y gana la de más minutos.
+const dosBorde = cadena(['Banda Inventada', 'Cometa Azul'], [399, 100, 314, 100], [100, 50]);
+const ndb = M.nombresVisibles(dosBorde, V0, 400, 300, () => 80);
+ok(igual(ndb.map((e) => e.i), [0]), `la colisión se calcula con la caja ya corrida: el segundo, corrido, se pisa y no sale (${JSON.stringify(ndb.map((e) => e.i))})`);
+// El aire: cajas de 40 de ancho con centros a 42 (2 px de hueco) y a 44 (4 px).
+const a2 = cadena(['Aurora Lenta', 'Cometa Azul'], [100, 100, 142, 100], [100, 50]);
+const a4 = cadena(['Aurora Lenta', 'Cometa Azul'], [100, 100, 144, 100], [100, 50]);
+ok(M.AIRE_NOMBRE_PX === 3, 'el aire entre cajas es 3 px');
+ok(igual(M.nombresVisibles(a2, V0, 400, 300, () => 40).map((e) => e.i), [0]), 'dos cajas a 2 px: la segunda no sale');
+ok(igual(M.nombresVisibles(a4, V0, 400, 300, () => 40).map((e) => e.i), [0, 1]), 'a 4 px, salen las dos');
+// También en vertical: 14 de alto, centros a 16 (2 px) y a 18 (4 px).
+const v2 = cadena(['Aurora Lenta', 'Cometa Azul'], [100, 100, 100, 116], [100, 50]);
+const v4 = cadena(['Aurora Lenta', 'Cometa Azul'], [100, 100, 100, 118], [100, 50]);
+ok(M.nombresVisibles(v2, V0, 400, 300, () => 40).length === 1 && M.nombresVisibles(v4, V0, 400, 300, () => 40).length === 2, 'y en vertical: a 2 px una, a 4 px las dos');
+
+// `principal` y los sueltos: un componente de 5 (0-4), una pareja (5-6) y un aislado (7).
+const nombresP = ['Faro Viejo', 'Gemas Fríos', 'Los Faroles', 'Coral', 'Ola', 'Pareja Uno', 'Pareja Dos', 'Isla Sola'];
+const minP = [100, 90, 80, 70, 60, 5000, 4000, 3000];   // los sueltos con MUCHOS minutos
+const gp = M.leerMapa({ nombres: nombresP, pos: nombresP.flatMap((_, i) => [i * 100, 50]), aristas: [0, 1, 500, 1, 1, 2, 500, 1, 2, 3, 500, 1, 3, 4, 500, 1, 5, 6, 500, 1] },
+  Object.fromEntries(nombresP.map((n, i) => [n, [1, minP[i]]])));
+ok(gp.principal instanceof Uint8Array && igual([...gp.principal], [1, 1, 1, 1, 1, 0, 0, 0]), `principal: 1 en el componente de 5, 0 en la pareja y el aislado (${gp.principal ? [...gp.principal].join('') : '—'})`);
+const empate = M.leerMapa({ nombres: ['A1', 'A2', 'B1', 'B2'], pos: [0, 0, 1, 0, 2, 0, 3, 0], aristas: [0, 1, 500, 1, 2, 3, 500, 1] }, {});
+ok(igual([...empate.principal], [1, 1, 0, 0]), 'a igualdad de tamaño, el que contiene al índice más chico');
+const np8 = M.nombresVisibles(gp, { escala: 1, base: 1, tx: 30, ty: 50 }, 1000, 200, () => 30);
+ok(igual(np8.map((e) => e.i), [0, 1, 2, 3, 4]), `un suelto con muchos minutos no lleva nombre (salieron ${JSON.stringify(np8.map((e) => e.i))})`);
+const np8e = M.nombresVisibles(gp, { escala: 1, base: 1, tx: 30, ty: 50 }, 1000, 200, () => 30, 6);
+ok(np8e.some((e) => e.i === 6) && !np8e.some((e) => e.i === 5 || e.i === 7), 'si es el elegido, sí (y los demás sueltos, no)');
+} catch (e) { ok(false, 'la sección 13 corre', e.stack); }
 
 console.log(`\nOK mapa-artistas: ${pasaron} de ${pasaron + fallaron}`);
 process.exit(fallaron ? 1 : 0);

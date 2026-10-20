@@ -38,7 +38,7 @@ import { escapeHtml, pageHeader } from '../ui/components.js';
 import { vigilarRuta } from '../util/vigencia-ruta.js';
 import {
   leerMapa, vistaTodo, zoomEn, mover, encuadrarElegido, tocar, nombresVisibles, buscar,
-  mezclar, leerRgb, planoAPantalla, radioEnPantalla, POR_PAGINA,
+  mezclar, leerRgb, planoAPantalla, radioEnPantalla, altoDelLienzo, POR_PAGINA,
 } from '../util/mapa-artistas.js';
 
 const num = (n) => Number(n || 0).toLocaleString('es-ES');
@@ -122,6 +122,16 @@ function montar(content, mapa, ruta) {
   window.__mapaArtistasDibujo = dibujo;
 
   // ── El tamaño ─────────────────────────────────────────────────────────────
+  // v=319: el alto del lienzo, al alto que queda en la ventana (`altoDelLienzo`; a menos de 769 px de ancho, el CSS
+  // de siempre). Se mide al abrir y en el `resize` de la VENTANA, nunca dentro del `ResizeObserver` del lienzo:
+  // cambiar el alto lo dispara, y medir ahí sería un bucle. Si el valor no cambió, no se toca el estilo.
+  function ajustarAlto() {
+    const r = canvas.getBoundingClientRect();
+    const alto = altoDelLienzo(window.innerHeight, r.top + window.scrollY, window.innerWidth);
+    const valor = alto == null ? '' : `${alto}px`;
+    if (canvas.style.height !== valor) canvas.style.height = valor;
+  }
+
   function medirLienzo() {
     const w = canvas.clientWidth, h = canvas.clientHeight;
     if (!w || !h) return false;
@@ -251,6 +261,7 @@ function montar(content, mapa, ruta) {
       ctx.lineWidth = 3;
       ctx.strokeStyle = rgb(fondo);
       ctx.fillStyle = rgb(texto);
+      // v=319: `e.x`, `e.y` es el centro de la caja YA CORRIDA (no el del círculo): se pinta donde dice la función.
       for (const e of etiquetas) {
         ctx.strokeText(mapa.nombres[e.i], e.x, e.y);
         ctx.fillText(mapa.nombres[e.i], e.x, e.y);
@@ -393,7 +404,10 @@ function montar(content, mapa, ruta) {
   obs?.observe(canvas);
   const alTema = () => programar();
   document.addEventListener('themechange', alTema);
+  const alCambiarVentana = () => ajustarAlto();
+  window.addEventListener('resize', alCambiarVentana);
 
+  ajustarAlto();
   medirLienzo();
   pintarPanel();
   programar();
@@ -416,6 +430,7 @@ function montar(content, mapa, ruta) {
     clearTimeout(st.respaldo);
     obs?.disconnect();
     document.removeEventListener('themechange', alTema);
+    window.removeEventListener('resize', alCambiarVentana);
     canvas.removeEventListener('pointerdown', alBajar);
     canvas.removeEventListener('pointermove', alMover);
     canvas.removeEventListener('pointerup', alSoltar);

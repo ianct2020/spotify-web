@@ -19,11 +19,15 @@
 // v=318 (tanda 66): elegir desde el buscador o el panel ENCUADRA (`encuadrarElegido`: el elegido en el
 // centro y sus 30 primeros parecidos dentro), y el nombre del elegido sale primero (`nombresVisibles`).
 //
+// v=319 (tanda 67): el mapa en la pantalla de Ian (1366 × 591 de alto útil). El lienzo toma el alto que queda en la
+// ventana (`altoDelLienzo`), una caja de nombre que se sale por un borde se corre adentro, dos cajas necesitan 3 px de
+// aire, y los sueltos (fuera del componente más grande: `principal`) no se llevan nombres del cupo.
+//
 // Lo de acá lo prueba `tests/mapa-artistas.test.mjs` con un grafo inventado de pocos nodos:
 // leer el JSON compacto, los vecinos ordenados por `match`, el toque (pantalla → plano → el
 // círculo más cercano), el pan y el zoom con sus topes, qué nombres se dibujan y el buscador.
 
-import { normalizarNombre } from './mb-pais.js?v=318';
+import { normalizarNombre } from './mb-pais.js?v=319';
 
 // El radio de cada artista, en unidades del PLANO (el zoom lo agranda): el mismo del horneado,
 // `2 + 18·√(minutos / máximo)`. Tiene que ser el mismo: `forceCollide` acomodó con ese radio.
@@ -40,6 +44,17 @@ export const ALTO_NOMBRE_PX = 14;      // el alto de la caja de un nombre, para 
 export const MARGEN_TOQUE_PX = 4;      // el toque vale hasta 4 px fuera del círculo
 export const POR_PAGINA = 50;          // los parecidos del panel, de a tantos
 export const MARGEN_VISTA_PX = 12;     // aire alrededor de «todo el mapa»
+// v=319. Las tres son DECISIONES DE DISEÑO, no medidas: el aire entre dos cajas de nombre, lo que queda entre una caja
+// corrida y el borde del lienzo, y el aire debajo del lienzo cuando toma el alto de la ventana.
+export const AIRE_NOMBRE_PX = 3;
+export const BORDE_NOMBRE_PX = 2;
+export const AIRE_ABAJO_LIENZO_PX = 16;
+// El alto del lienzo de hoy, el de `main.css` (`.artmapa-canvas`: `clamp(300px, 62vh, 720px)`), y el ancho desde el
+// que manda `altoDelLienzo` (por debajo, el CSS de siempre: a 390 no cambia nada).
+export const ALTO_LIENZO_MIN_PX = 300;
+export const ALTO_LIENZO_MAX_PX = 720;
+export const ALTO_LIENZO_VH = 0.62;
+export const ANCHO_MIN_ALTO_LIENZO = 769;
 
 /**
  * Lee el JSON compacto y lo cruza con los minutos del historial. Devuelve `null` si no tiene la
@@ -85,14 +100,47 @@ export function leerMapa(json, totals) {
     minY = Math.min(minY, y[i] - r[i]); maxY = Math.max(maxY, y[i] + r[i]);
   }
   if (!N) minX = maxX = minY = maxY = 0;
+  // v=319: el componente conexo más grande (por `vecinos`; a igualdad de tamaño, el que contiene al índice más chico,
+  // que es el que se encuentra primero). `principal[i]` es 1 si el artista está ahí: los demás son los sueltos.
+  const comp = new Int32Array(N).fill(-1), tam = [];
+  for (let s = 0; s < N; s++) {
+    if (comp[s] >= 0) continue;
+    const pila = [s];
+    comp[s] = tam.length;
+    let n = 0;
+    while (pila.length) {
+      const u = pila.pop();
+      n++;
+      for (const { j } of vecinos[u]) if (comp[j] < 0) { comp[j] = tam.length; pila.push(j); }
+    }
+    tam.push(n);
+  }
+  let grande = 0;
+  for (let k = 1; k < tam.length; k++) if (tam[k] > tam[grande]) grande = k;
+  const principal = new Uint8Array(N);
+  for (let i = 0; i < N; i++) principal[i] = comp[i] === grande ? 1 : 0;
   let aislados = 0, decimasAislados = 0;
   for (let i = 0; i < N; i++) if (!vecinos[i].length) { aislados++; decimasAislados += Math.round(minutos[i] * 10); }
   const claves = json.nombres.map((n) => normalizarNombre(n));
   return {
-    N, nombres: json.nombres, claves, x, y, r, piso, minutos, vecinos,
+    N, nombres: json.nombres, claves, x, y, r, piso, minutos, vecinos, principal,
     aristas: A.length / 4, aislados, minutosAislados: decimasAislados / 10,
     limites: { minX, maxX, minY, maxY },
   };
+}
+
+// ── El alto del lienzo (v=319) ──────────────────────────────────────────────────────────────
+
+/**
+ * El alto del lienzo en px, para una ventana de `anchoVentana` × `altoVentana` con el lienzo empezando en `topLienzo`
+ * (su posición en la PÁGINA, con el scroll en 0). Por debajo de `ANCHO_MIN_ALTO_LIENZO` de ancho, `null`: manda el
+ * CSS de siempre. Si no, lo que queda debajo del lienzo menos `AIRE_ABAJO_LIENZO_PX`, pero **nunca menos que el de
+ * hoy** (`clamp(300px, 62vh, 720px)`) **ni más de 720**, redondeado a entero.
+ */
+export function altoDelLienzo(altoVentana, topLienzo, anchoVentana) {
+  if (!(anchoVentana >= ANCHO_MIN_ALTO_LIENZO)) return null;
+  const hoy = Math.min(ALTO_LIENZO_MAX_PX, Math.max(ALTO_LIENZO_MIN_PX, ALTO_LIENZO_VH * altoVentana));
+  return Math.round(Math.max(hoy, Math.min(ALTO_LIENZO_MAX_PX, altoVentana - topLienzo - AIRE_ABAJO_LIENZO_PX)));
 }
 
 // ── La vista: pantalla = plano · escala + desplazamiento ────────────────────────────────────
@@ -200,19 +248,35 @@ export function tocar(mapa, v, px, py) {
  * El elegido (v=318), si lo hay y su círculo entero está dentro del lienzo, va PRIMERO: su nombre sale
  * siempre y les gana el lugar a los demás (cuenta en el tope de `MAX_NOMBRES`).
  *
- * @returns {Array<{ i: number, x: number, y: number }>} el centro de cada nombre, en pantalla
+ * v=319: (1) si la caja no entra entera, se CORRE hacia adentro hasta quedar a `BORDE_NOMBRE_PX` del borde (en x y
+ * en y); si es más ancha que el lienzo (con ese borde a los dos lados), se queda centrada. La colisión se calcula con
+ * la caja ya corrida, y lo que se devuelve es el centro de la caja corrida: la vista pinta ahí. (2) Dos cajas se
+ * pisan si quedan a menos de `AIRE_NOMBRE_PX`. (3) Un suelto (`principal[i]` en 0) no lleva nombre, salvo el elegido.
+ *
+ * @returns {Array<{ i: number, x: number, y: number }>} el centro de cada caja de nombre, en pantalla
  */
 export function nombresVisibles(mapa, v, ancho, alto, medir, elegido = -1) {
   const fuera = [];
   const cajas = [];
+  // Corre el centro `c` de una caja de largo `l` para que no se salga de [0, lado]: a `BORDE_NOMBRE_PX` del borde por
+  // el que se salía. Si no entra ni con el borde a los dos lados, no se mueve.
+  const correr = (c, l, lado) => {
+    if (l + 2 * BORDE_NOMBRE_PX > lado) return c;
+    if (c - l / 2 < 0) return BORDE_NOMBRE_PX + l / 2;
+    if (c + l / 2 > lado) return lado - BORDE_NOMBRE_PX - l / 2;
+    return c;
+  };
   const poner = (i) => {
+    if (!mapa.principal[i] && i !== elegido) return;
     const [sx, sy] = planoAPantalla(v, mapa.x[i], mapa.y[i]);
     if (sx < 0 || sx > ancho || sy < 0 || sy > alto) return;
     const w = medir(mapa.nombres[i]);
-    const c = { x0: sx - w / 2, x1: sx + w / 2, y0: sy - ALTO_NOMBRE_PX / 2, y1: sy + ALTO_NOMBRE_PX / 2 };
-    if (cajas.some((o) => c.x0 < o.x1 && o.x0 < c.x1 && c.y0 < o.y1 && o.y0 < c.y1)) return;
+    const cx = correr(sx, w, ancho), cy = correr(sy, ALTO_NOMBRE_PX, alto);
+    const c = { x0: cx - w / 2, x1: cx + w / 2, y0: cy - ALTO_NOMBRE_PX / 2, y1: cy + ALTO_NOMBRE_PX / 2 };
+    const a = AIRE_NOMBRE_PX;
+    if (cajas.some((o) => c.x0 < o.x1 + a && o.x0 < c.x1 + a && c.y0 < o.y1 + a && o.y0 < c.y1 + a)) return;
     cajas.push(c);
-    fuera.push({ i, x: sx, y: sy });
+    fuera.push({ i, x: cx, y: cy });
   };
   let primero = -1;
   if (elegido >= 0 && elegido < mapa.N) {
