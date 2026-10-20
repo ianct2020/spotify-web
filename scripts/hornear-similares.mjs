@@ -45,7 +45,11 @@
 //     en la lista de otro apunta a él), salvo que esa clave ya sea la de otro artista del universo:
 //     gana el del universo. Descartado (otro nombre): sin salientes y sin segunda clave, como hasta
 //     v=315 (la prudencia de `#generos`: un autocorrect equivocado mete parecidos de otro y no se
-//     ve). Los dos reciben las de los demás.
+//     ve). El aceptado recibe las de los demás. El descartado recibe SOLO las que lo nombran con el
+//     nombre del historial, y casi nunca pasa: los demás lo nombran como lo escribe Last.fm, que es
+//     justo la clave que no tiene. En la v2, 24 de los 25 descartados quedaron con grado 0 y el
+//     otro con 1 (contado en la tanda 66 sobre el JSON publicado). Hasta la 66 acá decía que «los
+//     dos reciben las de los demás»: era falso.
 //   · Sin dirección: el par {a, b} existe si a apunta a b o b a a; su peso es el MAYOR `match` de
 //     las dos direcciones, en entero de 0 a 1.000, y `mutua` dice si están las dos. Ningún corte.
 //   · El layout: d3 7.9.0 (cargado con `vm`, verificado por sha256; no está en `package.json`),

@@ -19,6 +19,10 @@
 //   · el horneado (v=316): solo el componente grande se simula y los sueltos van en una franja debajo
 //     (`componentes`, `colocarSueltos`, `acomodar` con un d3 de mentira), y la regla del autocorrect en
 //     `armarAristas` (un aceptado aporta salientes y una segunda clave; un descartado, nada);
+//   · el nombre del elegido (v=318), si su círculo está entero en el lienzo, sale primero y gana el lugar;
+//   · el encuadre del elegido (v=318): `encuadrarElegido` lo deja en el centro con la mayor escala que deja a sus
+//     30 primeros parecidos con el punto entero dentro y 24 px de margen; grado 0, como `centrarEn`; si no
+//     entran ni a «Ver todo», esa escala y `entraron` lo dice; nunca más de 40 veces «Ver todo»;
 //   · el buscador usa `normalizarNombre` (`util/mb-pais.js`), no `normText`: un apóstrofo tipográfico
 //     encuentra al recto, y «¥$» —que `normText` deja vacío— se encuentra;
 //   · 🔴 el JSON horneado, si está, no lleva minutos ni plays (salen de `history-artist-tracks.json`);
@@ -27,6 +31,7 @@
 // 🔴 Todo es INVENTADO: los artistas, las posiciones, los pares y los minutos (el repo es público).
 // Contra v=314 da rojo: `util/mapa-artistas.js` no existía. Contra v=315, las secciones 5, 5b, 10 y 11:
 // los nombres pedían 12 px, no había piso ni `colocarSueltos`, y el autocorrect se descartaba entero.
+// Contra v=317, la sección 12: `encuadrarElegido` no existía.
 //
 // Correr con: node tests/mapa-artistas.test.mjs
 
@@ -137,6 +142,20 @@ const muchos = M.leerMapa({ nombres: cien, pos: cien.flatMap((_, i) => [(i % 10)
   Object.fromEntries(cien.map((n, i) => [n, [1, 1000 - i]])));
 const nm = M.nombresVisibles(muchos, { escala: 1, base: 1, tx: 30, ty: 30 }, 2000, 2000, () => 40);
 ok(nm.length === M.MAX_NOMBRES && igual(nm.map((e) => e.i), Array.from({ length: 60 }, (_, i) => i)), `como mucho ${M.MAX_NOMBRES}, los de más minutos (vino ${nm.length})`);
+
+// El elegido, con prioridad (v=318): pegado al de más minutos, su nombre sale y el del otro no.
+const conElegido = M.nombresVisibles(pegados, { escala: 1, base: 1, tx: 100, ty: 100 }, 400, 300, () => 80, 1);
+ok(igual(conElegido.map((e) => e.i), [1]), `con «Grande Dos» elegido, sale su nombre y les gana el lugar (vino ${JSON.stringify(conElegido.map((e) => e.i))})`);
+ok(igual(M.nombresVisibles(pegados, { escala: 1, base: 1, tx: 100, ty: 100 }, 400, 300, () => 80, -1).map((e) => e.i), [0]), 'sin elegido, como siempre: el de más minutos');
+// Con el círculo cortado por el borde (el centro dentro, el círculo no entero), no se adelanta: va en su turno.
+// «Grande Uno» en x = 5 y «Grande Dos» (r ≈ 19) en x = 15: se pisan y gana el de más minutos.
+const asoma = M.nombresVisibles(pegados, { escala: 1, base: 1, tx: 5, ty: 100 }, 400, 300, () => 80, 1);
+ok(igual(asoma.map((e) => e.i), [0]), `si su círculo no está entero dentro, no se adelanta (vino ${JSON.stringify(asoma.map((e) => e.i))})`);
+// Y no pierde su turno: con «Grande Uno» fuera del lienzo, el nombre de «Grande Dos» (cortado) sale igual.
+const turno = M.nombresVisibles(pegados, { escala: 1, base: 1, tx: -5, ty: 100 }, 400, 300, () => 80, 1);
+ok(igual(turno.map((e) => e.i), [1]), `y si no se adelanta, no pierde su turno (vino ${JSON.stringify(turno.map((e) => e.i))})`);
+const nmE = M.nombresVisibles(muchos, { escala: 1, base: 1, tx: 30, ty: 30 }, 2000, 2000, () => 40, 99);
+ok(nmE.length === M.MAX_NOMBRES && nmE[0].i === 99 && !nmE.some((e) => e.i === 59), 'el del elegido cuenta en el tope: sale primero y deja afuera al 60.º');
 
 console.log('5b. el radio en pantalla, con su piso');
 ok(M.PISO_RADIO_MIN_PX === 1 && M.PISO_RADIO_EXTRA_PX === 4, 'el piso es 1 + 4·√(minutos / máximo) px');
@@ -261,6 +280,60 @@ if (typeof H.armarAristas === 'function') {
   const r2 = H.armarAristas(u2, new Map([[0, { pedido: 'Gemas Fríos', devuelto: 'Gema$ Fríos', similares: [] }], [2, { pedido: 'Banda Inventada', devuelto: null, similares: [sim('Gema$ Fríos', 0.5)] }]]));
   ok(igual(r2.pisadas, [{ indice: 0, de: 1 }]) && igual([...r2.pares.values()].map((e) => [e.i, e.j]), [[1, 2]]), 'si la segunda clave ya es de otro artista del universo, gana el del universo');
 } else ok(false, 'armarAristas existe en el horneado');
+
+console.log('12. el encuadre del elegido (v=318)');
+if (typeof M.encuadrarElegido === 'function') {
+  // INVENTADO: una estrella. El 0 (1.000 min) en (0, 0) con 40 parecidos: los 30 primeros (por `match`, de
+  // mayor a menor) en un anillo de radios crecientes, de 20 a 165, y los 10 últimos lejos, a 1.200. Dos
+  // aislados en (±3.000, ±3.000) hacen que «Ver todo» quede muy lejos. Y dos pares chicos, aparte:
+  // «Borde» (40) en una esquina con su único parecido en la otra, y «Pegado» (41) con el suyo a 1 unidad.
+  const N = 46, pos = new Array(2 * N).fill(0), aristas = [], nombres = [], totals = {};
+  for (let k = 1; k <= 40; k++) {
+    const ang = k * 2.399963, d = k <= 30 ? 15 + k * 5 : 1200;
+    pos[2 * k] = +(d * Math.cos(ang)).toFixed(1); pos[2 * k + 1] = +(d * Math.sin(ang)).toFixed(1);
+    aristas.push(0, k, 1000 - k, 0);
+  }
+  const fijar = (i, x, y) => { pos[2 * i] = x; pos[2 * i + 1] = y; };
+  fijar(40, 3000, 3000);   // «Borde»: el último del anillo lejano se reemplaza (sigue siendo vecino del 0)
+  fijar(42, -3000, -3000); fijar(43, 3000, -3000); fijar(44, 500, 500); fijar(45, 501, 500);
+  aristas.push(40, 42, 900, 0, 44, 45, 900, 0);
+  for (let i = 0; i < N; i++) { nombres.push(`Inventado ${i}`); totals[`Inventado ${i}`] = [1, i === 0 ? 1000 : 10]; }
+  const est = M.leerMapa({ nombres, pos, aristas }, totals);
+  const W = 400, H2 = 300, todo = M.vistaTodo(est, W, H2);
+  const dentro = (v, j, m = M.MARGEN_ENCUADRE_PX) => {
+    const [sx, sy] = M.planoAPantalla(v, est.x[j], est.y[j]), rp = M.radioEnPantalla(est, j, v.escala), e = 1e-6;
+    return sx - rp >= m - e && sx + rp <= W - m + e && sy - rp >= m - e && sy + rp <= H2 - m + e;
+  };
+  const primeros = est.vecinos[0].slice(0, M.ENCUADRE_PARECIDOS).map((n) => n.j);
+  ok(M.ENCUADRE_PARECIDOS === 30 && M.MARGEN_ENCUADRE_PX === 24, 'los 30 parecidos y los 24 px de margen');
+  ok(igual(primeros, [...Array(30).keys()].map((k) => k + 1)), 'los 30 primeros son los del orden del panel (match de mayor a menor)');
+
+  const e0 = M.encuadrarElegido(todo, est, 0, W, H2);
+  const [cx0, cy0] = M.planoAPantalla(e0, est.x[0], est.y[0]);
+  ok(cerca(cx0, W / 2) && cerca(cy0, H2 / 2), `el elegido queda en el centro del lienzo (${cx0.toFixed(2)}, ${cy0.toFixed(2)})`);
+  ok(primeros.every((j) => dentro(e0, j)) && e0.entraron === 30, `sus 30 primeros parecidos, con el punto entero dentro y 24 px de margen (entraron ${e0.entraron})`);
+  ok(e0.escala > todo.base * 2, `y acerca: ${(e0.escala / todo.base).toFixed(2)} veces «Ver todo»`);
+  const mas = M.centrarEn({ ...e0, escala: e0.escala * 1.01 }, est, 0, W, H2);
+  ok(!primeros.every((j) => dentro(mas, j)), 'es la MAYOR escala que los deja dentro: un 1 % más y alguno se sale');
+  ok(!dentro(e0, 31, 0), 'el 31.º (lejos) no cuenta: queda fuera y no achica la escala');
+  ok(e0.base === todo.base, 'conserva el piso del zoom («Ver todo»)');
+
+  const desdeZoom = M.encuadrarElegido(M.zoomEn(todo, 7, 10, 10), est, 0, W, H2);
+  ok(cerca(desdeZoom.escala, e0.escala) && cerca(desdeZoom.tx, e0.tx) && cerca(desdeZoom.ty, e0.ty), 'no depende del zoom que había antes');
+
+  const g0 = M.encuadrarElegido(M.zoomEn(todo, 3, 50, 50), est, 43, W, H2);
+  const c0 = M.centrarEn(M.zoomEn(todo, 3, 50, 50), est, 43, W, H2);
+  ok(est.vecinos[43].length === 0 && igual(g0, c0), 'grado 0: lo mismo que centrarEn (centra y conserva la escala)');
+
+  const borde = M.encuadrarElegido(todo, est, 42, W, H2);
+  const [bx, by] = M.planoAPantalla(borde, est.x[42], est.y[42]);
+  ok(cerca(borde.escala, todo.base) && cerca(bx, W / 2) && cerca(by, H2 / 2), 'si ni a «Ver todo» entran, queda la escala de «Ver todo», centrada en el elegido');
+  ok(borde.entraron === 0 && borde.entraron < est.vecinos[42].length, `y lo dice: entraron ${borde.entraron} de ${est.vecinos[42].length}`);
+
+  const pegado = M.encuadrarElegido(todo, est, 44, W, H2);
+  ok(cerca(pegado.escala, todo.base * M.ZOOM_MAX), `no pasa de ${M.ZOOM_MAX} veces «Ver todo» (${(pegado.escala / todo.base).toFixed(2)})`);
+  ok(pegado.entraron === 1, 'y con el tope, el parecido pegado entra');
+} else ok(false, 'encuadrarElegido existe en util/mapa-artistas.js');
 
 console.log(`\nOK mapa-artistas: ${pasaron} de ${pasaron + fallaron}`);
 process.exit(fallaron ? 1 : 0);

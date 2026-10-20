@@ -1,12 +1,12 @@
-import { getValidToken, refreshAccessToken } from './auth.js?v=317';
-import { cacheGet, cacheGetRaw, cacheGetTimestamp, cacheSet, cacheClear, prefKey, migratePrefKey } from './storage.js?v=317';
-import { idbDel, idbDelByPrefix, idbGetCached, idbGetCachedRaw, idbGetTimestamp, idbSetCached } from './idb.js?v=317';
-import { OWNER_KEY_LIST } from './history-keys.js?v=317';
-import { OCULTOS_ITEMS_PREFIX } from './util/ocultos-items-clave.js?v=317';
-import { showToast } from './ui/toast.js?v=317';
-import { artistIsSame, limpiaParaQuery } from './util/track-match.js?v=317';
-import { contadorCuota, cuotaDeEndpoint } from './util/cuota.js?v=317';
-import { exportarEtiquetas, importarEtiquetas } from './api/lastfm.js?v=317';
+import { getValidToken, refreshAccessToken } from './auth.js?v=318';
+import { cacheGet, cacheGetRaw, cacheGetTimestamp, cacheSet, cacheClear, prefKey, migratePrefKey } from './storage.js?v=318';
+import { idbDel, idbDelByPrefix, idbGetCached, idbGetCachedRaw, idbGetTimestamp, idbSetCached } from './idb.js?v=318';
+import { OWNER_KEY_LIST } from './history-keys.js?v=318';
+import { OCULTOS_ITEMS_PREFIX } from './util/ocultos-items-clave.js?v=318';
+import { showToast } from './ui/toast.js?v=318';
+import { artistIsSame, limpiaParaQuery } from './util/track-match.js?v=318';
+import { contadorCuota, cuotaDeEndpoint } from './util/cuota.js?v=318';
+import { exportarEtiquetas, importarEtiquetas } from './api/lastfm.js?v=318';
 
 const BASE = 'https://api.spotify.com/v1';
 const MIN_RETRY_WAIT = 5000;

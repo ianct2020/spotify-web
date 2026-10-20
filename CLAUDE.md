@@ -2914,7 +2914,8 @@ del autocorrect y los sueltos aparte: ver «Los sueltos, los nombres y el radio 
 - **Tocar** elige el círculo de borde más cercano si el punto cae dentro de su radio en pantalla (el mismo que se
   dibuja, con su piso) más 4 px; el fondo lo suelta. Con un elegido: sus líneas, sus parecidos en el acento y el resto atenuado.
 - **El panel**, debajo: el nombre, sus minutos (`es-ES`), «N artistas parecidos en tu historial» y la lista por `match`
-  de mayor a menor (a igualdad, por minutos), de a 50 con «Mostrar 50 más»; cada uno, un botón que lo elige y lo centra.
+  de mayor a menor (a igualdad, por minutos), de a 50 con «Mostrar 50 más»; cada uno, un botón que lo elige y lo
+  encuadra (v=318; hasta v=317, lo centraba).
   «Ver ficha» abre `openArtistCard({ name })` (lo que cueste la ficha es de la ficha).
 - **El buscador**: igualdad de `normalizarNombre` o, si no, el primero cuyo nombre normalizado empiece igual; sin
   resultados, «No está en tu mapa.». `normalizarNombre` y no `normText` (que deja «¥$» vacío): `tests/mb-pais.test.mjs`
@@ -2973,8 +2974,8 @@ nombraban así: tampoco recibía). La (3) es la regla del autocorrect (ver «�
   para dibujar, para el anillo del elegido y para tocar). De cerca manda el plano (el horneado acomodó con `r`); de lejos,
   el piso, que mantiene el orden de tamaños (el más grande, 5 px; el más chico, ~1,2). **Es una decisión de diseño, no una
   medida.**
-- Elegir (desde el mapa, el panel o el buscador) **centra pero no cambia la escala**, como en v=315. Encuadrar al elegido
-  con sus parecidos es otro encargo (en `PENDIENTES.md`).
+- Elegir (desde el mapa, el panel o el buscador) **centra pero no cambia la escala**, como en v=315. ⚠️ **Desde v=318 el
+  buscador y el panel ENCUADRAN** (ver «El encuadre del elegido (v=318)», abajo); tocar el lienzo sigue sin moverse.
 
 **El rehorneado** (REAL, **0 peticiones**: del archivo de avance de la 64, con el mismo d3; dos corridas, el mismo
 sha256 de posiciones y de archivo, ~14,6 s cada una; `bwrap --unshare-net` para probar que no sale a la red): **78.455
@@ -2999,8 +3000,52 @@ cuesta. A ×6 y 1366, mediana **35–36 ms** sin elegido y 34–38 con elegido (
 antemano: si pasaba de 100 ms, `MAX_NOMBRES` bajaba a 30. No pasó: queda en 60.**
 
 ⚠️ **Visto en las capturas, sin arreglar** (en `PENDIENTES.md`): un nombre con el centro dentro pero la caja fuera se
-corta en el borde del lienzo; dos cajas pueden quedar pegadas (no se pisan, pero sin aire); y el elegido no tiene
-prioridad para su nombre (si se pisa con uno de más minutos, no sale).
+corta en el borde del lienzo; y dos cajas pueden quedar pegadas (no se pisan, pero sin aire). El elegido sin prioridad
+para su nombre se arregló en v=318 (abajo).
+
+### El encuadre del elegido y las clases propias (v=317 y v=318)
+
+La tanda 66. Dos cosas, en dos versiones:
+
+**`.artmapa-*` es de esta vista y de nadie más (v=317).** Hasta v=316 la vista usaba `.mapa-artistas-…`, y dos de esas
+clases (`.mapa-artistas` y `.mapa-artistas-lista`) eran también de `#mapa` y `#generos` (la línea de conteo de «Cuánto se
+sabe» y las listas de artistas de cada país y de cada género). Las reglas nuevas iban después en `main.css` y les ganaban:
+desde v=315, en `#mapa` la línea de conteo salía en **cuatro renglones apilados (100 px)** y en `#generos` en **dos (44
+px)**, y las listas perdían sus rellenos; en `#mapa-artistas` la lista de parecidos salía en una columna. Es la regla de
+`.wt-play-btn` (v=219) rota otra vez, y nadie la vio. Ahora todas las clases de la vista son `.artmapa-…` (`.artmapa`,
+`.artmapa-lienzo`, `.artmapa-lista`…); **la ruta, el `data-route`, los `data-mapa-artistas`, el id `mapa-artistas-content`,
+`window.__mapaArtistasDibujo` y los nombres de archivo NO cambiaron**, y `#mapa`/`#generos` no se tocaron. Guardas:
+`tests/css-clases-duplicadas.test.mjs` (una clase suelta, una sola regla de nivel superior en `src/css/*.css`; las 10
+duplicadas de antes, partidas a propósito, en una lista de exclusión con su nombre, una por una, y en `PENDIENTES.md`) y
+la puerta **K** de los bancos `mapa`, `generos` y `mapa-artistas` (vistas fallar contra v=316).
+
+**El encuadre (v=318).** Al elegir desde el **buscador** o un **botón del panel** (`data-elegir`), `encuadrarElegido`
+(`util/mapa-artistas.js`, pura) deja al elegido en el centro del lienzo con la **mayor escala que deja a sus 30 primeros
+parecidos** (en el orden del panel) **con el punto entero dentro** (el radio que se dibuja, con su piso) y **24 px de
+margen** por lado. Pasa por `limitarEscala` (nunca menos que «Ver todo» ni más de 40 veces eso): si ni a «Ver todo» entran,
+queda esa escala, centrada, y `entraron` dice cuántos. Grado 0: como `centrarEn` (centra y conserva la escala). **Tocar el
+lienzo NO encuadra**: elige sin moverse (quien explora con el dedo no se queda sin piso). Sin animación.
+`ENCUADRE_PARECIDOS = 30` y `MARGEN_ENCUADRE_PX = 24` son **decisiones de diseño, no medidas**: con todos los parecidos, un
+artista de grado 175 se encuadra casi como «Ver todo». ⚠️ El encuadre solo ACERCA: si los 30 entran centrados a «Ver
+todo», también entraban con v=317; lo que cambia es la escala (el elegido deja de ser un punto de 5 px entre 2.302).
+`centrarEn` sigue: lo usa `encuadrarElegido`.
+
+**El nombre del elegido con prioridad (v=318)**: si hay un elegido y su círculo está entero dentro del lienzo, su nombre
+sale primero y les gana el lugar a los demás (cuenta en el tope de 60); si no, va en su turno, como cualquiera.
+
+Medido (SEMBRADO, el JSON real, Chrome headless con `mobile: false`, la letra de reserva), eligiendo desde «Ver todo»:
+
+| | v=317: escala · 30 primeros dentro · todos dentro · nombre | v=318: escala (veces «Ver todo») · 30 primeros · todos · nombre |
+|---|---|---|
+| Travis Scott (grado 175), buscador, 1366×768 | 0,1105 · 30/30 · 175/175 · no | 0,9382 (8,49) · 30/30 · 157/175 · sí |
+| Travis Scott, buscador, 390×844 | 0,0963 · 30/30 · 174/175 · no | 0,5868 (6,09) · 30/30 · 162/175 · sí |
+| el más escuchado (grado 211), panel, 1366×768 | 0,1105 · 30/30 · 211/211 · sí | 0,6367 (5,76) · 30/30 · 210/211 · sí |
+| el más escuchado, panel, 390×844 | 0,0963 · 30/30 · 211/211 · sí | 0,1760 (1,83) · 30/30 · 210/211 · sí |
+
+Guardas: `tests/mapa-artistas.test.mjs` (secciones 5 y 12: el centro, los 30 dentro con el margen y que es la MAYOR escala,
+grado 0, el caso que no entra con `entraron`, el tope de 40, el nombre del elegido; rojo contra v=317) y la puerta **I** del
+banco `mapa-artistas` (desde «Ver todo» buscar a uno de grado ≥ 30 acerca con sus 30 dentro, también desde un zoom de 20
+veces, el nombre sale y 0 peticiones; vista fallar contra v=317: «acerca (1.00 veces)»).
 
 ## Client ID
 0c8c92ad128e4b89be7097c6b8082797

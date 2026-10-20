@@ -32,14 +32,14 @@
 // instrumento del banco y de la medición de frames (pintar ya, sin esperar al frame): solo existe
 // mientras la ruta está abierta.
 
-import { loadArtistTracks, loadArtistSimilares, isOwner, ownerLockedMessage } from './history-data.js?v=317';
-import { openArtistCard } from './artist-card.js?v=317';
-import { escapeHtml, pageHeader } from '../ui/components.js?v=317';
-import { vigilarRuta } from '../util/vigencia-ruta.js?v=317';
+import { loadArtistTracks, loadArtistSimilares, isOwner, ownerLockedMessage } from './history-data.js?v=318';
+import { openArtistCard } from './artist-card.js?v=318';
+import { escapeHtml, pageHeader } from '../ui/components.js?v=318';
+import { vigilarRuta } from '../util/vigencia-ruta.js?v=318';
 import {
-  leerMapa, vistaTodo, zoomEn, mover, centrarEn, tocar, nombresVisibles, buscar,
+  leerMapa, vistaTodo, zoomEn, mover, encuadrarElegido, tocar, nombresVisibles, buscar,
   mezclar, leerRgb, planoAPantalla, radioEnPantalla, POR_PAGINA,
-} from '../util/mapa-artistas.js?v=317';
+} from '../util/mapa-artistas.js?v=318';
 
 const num = (n) => Number(n || 0).toLocaleString('es-ES');
 const min = (m) => `${num(Math.round(m))} min`;
@@ -243,7 +243,7 @@ function montar(content, mapa, ruta) {
       if (a === undefined) { a = ctx.measureText(s).width; st.anchos.set(s, a); }
       return a;
     };
-    const etiquetas = nombresVisibles(mapa, v, w, h, medir);
+    const etiquetas = nombresVisibles(mapa, v, w, h, medir, sel);   // v=318: el del elegido, primero
     if (etiquetas.length) {
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
@@ -290,10 +290,13 @@ function montar(content, mapa, ruta) {
       ${vec.length ? `<ol class="artmapa-lista">${vec.slice(0, hasta).map(filaParecido).join('')}</ol>` : ''}
       <button class="btn btn-secondary" type="button" data-mas ${hasta >= vec.length ? 'hidden' : ''}>Mostrar ${num(POR_PAGINA)} más</button>`;
   }
-  function elegir(i, { centrar = false, foco = false } = {}) {
+  // Desde el buscador o un botón del panel, ENCUADRA (v=318): el elegido en el centro y sus 30 primeros
+  // parecidos dentro (`encuadrarElegido`). Tocar el lienzo elige sin moverse: quien explora con el dedo no
+  // se queda sin piso.
+  function elegir(i, { encuadrar = false, foco = false } = {}) {
     st.elegido = i;
     st.mostrados = POR_PAGINA;
-    if (centrar && i >= 0 && st.vista) st.vista = centrarEn(st.vista, mapa, i, st.ancho, st.alto);
+    if (encuadrar && i >= 0 && st.vista) st.vista = encuadrarElegido(st.vista, mapa, i, st.ancho, st.alto);
     pintarPanel();
     if (foco && i >= 0) panel.querySelector('.artmapa-nombre')?.focus({ preventScroll: true });
     programar();
@@ -302,7 +305,7 @@ function montar(content, mapa, ruta) {
   panel.addEventListener('click', (e) => {
     const b = e.target.closest('button');
     if (!b) return;
-    if (b.hasAttribute('data-elegir')) elegir(+b.dataset.elegir, { centrar: true, foco: true });
+    if (b.hasAttribute('data-elegir')) elegir(+b.dataset.elegir, { encuadrar: true, foco: true });
     else if (b.hasAttribute('data-ficha')) { if (st.elegido >= 0) openArtistCard({ name: mapa.nombres[st.elegido] }); }
     else if (b.hasAttribute('data-mas')) {
       const vec = mapa.vecinos[st.elegido] || [];
@@ -318,7 +321,7 @@ function montar(content, mapa, ruta) {
     e.preventDefault();
     const i = buscar(mapa, campo.value);
     aviso.textContent = i < 0 ? 'No está en tu mapa.' : '';
-    if (i >= 0) elegir(i, { centrar: true, foco: true });
+    if (i >= 0) elegir(i, { encuadrar: true, foco: true });
   });
 
   // ── Zoom con los botones ─────────────────────────────────────────────────
@@ -402,7 +405,7 @@ function montar(content, mapa, ruta) {
     pintarYa: () => { st.pendiente = false; cancelAnimationFrame(st.raf); clearTimeout(st.respaldo); pintar(); return { ...dibujo }; },
     zoomCentro: (f) => { st.vista = zoomEn(st.vista, f, st.ancho / 2, st.alto / 2); },
     verTodo: () => { st.vista = vistaTodo(mapa, st.ancho, st.alto); },
-    elegir: (i) => elegir(i, { centrar: true }),
+    elegir: (i) => elegir(i, { encuadrar: true }),   // como desde el panel (v=318: encuadra)
     canvas,
   };
 

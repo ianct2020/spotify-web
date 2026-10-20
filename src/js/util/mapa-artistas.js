@@ -16,6 +16,9 @@
 // nombre (hacían falta 12 px). Ahora el radio en pantalla tiene un PISO que mantiene el orden de
 // tamaños de lejos (`radioEnPantalla`) y los nombres no dependen del radio (`nombresVisibles`).
 //
+// v=318 (tanda 66): elegir desde el buscador o el panel ENCUADRA (`encuadrarElegido`: el elegido en el
+// centro y sus 30 primeros parecidos dentro), y el nombre del elegido sale primero (`nombresVisibles`).
+//
 // Lo de acá lo prueba `tests/mapa-artistas.test.mjs` con un grafo inventado de pocos nodos:
 // leer el JSON compacto, los vecinos ordenados por `match`, el toque (pantalla → plano → el
 // círculo más cercano), el pan y el zoom con sus topes, qué nombres se dibujan y el buscador.
@@ -130,6 +133,46 @@ export function centrarEn(v, mapa, i, ancho, alto) {
   return { ...v, tx: ancho / 2 - mapa.x[i] * v.escala, ty: alto / 2 - mapa.y[i] * v.escala };
 }
 
+// El encuadre del elegido (v=318, tanda 66): cuántos parecidos se encuadran y con cuánto aire.
+// `ENCUADRE_PARECIDOS` es una DECISIÓN DE DISEÑO, no una medida: con todos, un artista de grado 175 se
+// encuadra casi como «Ver todo» y no cambiaría nada.
+export const ENCUADRE_PARECIDOS = 30;
+export const MARGEN_ENCUADRE_PX = 24;
+
+/**
+ * Al elegir desde el buscador o el panel (v=318): el artista `i` en el centro del lienzo y la escala
+ * MÁS GRANDE que deja a sus primeros `ENCUADRE_PARECIDOS` parecidos (en el orden del panel: `match` de
+ * mayor a menor y, a igualdad, el de más minutos) con el PUNTO ENTERO dentro del lienzo, a
+ * `MARGEN_ENCUADRE_PX` de cada borde. El radio es el que se dibuja (`radioEnPantalla`, con su piso).
+ * Pasa por `limitarEscala`: nunca menos que «Ver todo» ni más que `ZOOM_MAX` veces eso. Si ni a la
+ * escala de «Ver todo» entran (centrado en el elegido no hay escala que alcance), queda esa, centrada.
+ * `entraron` dice cuántos de esos parecidos quedaron dentro, con el margen. Sin parecidos, lo mismo que
+ * `centrarEn` (centra y conserva la escala). Tocar el lienzo NO pasa por acá: elige sin moverse.
+ */
+export function encuadrarElegido(v, mapa, i, ancho, alto) {
+  const vec = mapa.vecinos[i].slice(0, ENCUADRE_PARECIDOS);
+  if (!vec.length) return centrarEn(v, mapa, i, ancho, alto);
+  const mx = ancho / 2 - MARGEN_ENCUADRE_PX, my = alto / 2 - MARGEN_ENCUADRE_PX;
+  // Para un parecido a distancia d del elegido (en un eje), con radio r en el plano y piso p en pantalla,
+  // el punto entero entra si d·s + max(r·s, p) ≤ m: o sea s ≤ m / (d + r) y, si d > 0, s ≤ (m − p) / d.
+  let s = Infinity;
+  for (const { j } of vec) {
+    for (const [d, m] of [[Math.abs(mapa.x[j] - mapa.x[i]), mx], [Math.abs(mapa.y[j] - mapa.y[i]), my]]) {
+      s = Math.min(s, m / (d + mapa.r[j]));
+      if (d > 0) s = Math.min(s, (m - mapa.piso[j]) / d);
+    }
+  }
+  const escala = limitarEscala(Number.isFinite(s) ? s : v.base, v.base);
+  const vista = centrarEn({ ...v, escala }, mapa, i, ancho, alto);
+  const dentro = (j) => {
+    const [sx, sy] = planoAPantalla(vista, mapa.x[j], mapa.y[j]);
+    const rp = radioEnPantalla(mapa, j, escala), e = 1e-6;
+    return sx - rp >= MARGEN_ENCUADRE_PX - e && sx + rp <= ancho - MARGEN_ENCUADRE_PX + e
+      && sy - rp >= MARGEN_ENCUADRE_PX - e && sy + rp <= alto - MARGEN_ENCUADRE_PX + e;
+  };
+  return { ...vista, entraron: vec.filter(({ j }) => dentro(j)).length };
+}
+
 /**
  * El artista tocado en (px, py) de la pantalla, o -1. Gana el círculo más cercano al punto (la
  * distancia al BORDE: dentro de un círculo es negativa), y vale solo si el punto cae dentro de
@@ -154,20 +197,30 @@ export function tocar(mapa, v, px, py) {
  * escuchado que se vea siempre tiene nombre. La caja va centrada en el círculo; `medir(nombre)` da
  * su ancho en píxeles (la vista pasa `measureText`).
  *
+ * El elegido (v=318), si lo hay y su círculo entero está dentro del lienzo, va PRIMERO: su nombre sale
+ * siempre y les gana el lugar a los demás (cuenta en el tope de `MAX_NOMBRES`).
+ *
  * @returns {Array<{ i: number, x: number, y: number }>} el centro de cada nombre, en pantalla
  */
-export function nombresVisibles(mapa, v, ancho, alto, medir) {
+export function nombresVisibles(mapa, v, ancho, alto, medir, elegido = -1) {
   const fuera = [];
   const cajas = [];
-  for (let i = 0; i < mapa.N && fuera.length < MAX_NOMBRES; i++) {
+  const poner = (i) => {
     const [sx, sy] = planoAPantalla(v, mapa.x[i], mapa.y[i]);
-    if (sx < 0 || sx > ancho || sy < 0 || sy > alto) continue;
+    if (sx < 0 || sx > ancho || sy < 0 || sy > alto) return;
     const w = medir(mapa.nombres[i]);
     const c = { x0: sx - w / 2, x1: sx + w / 2, y0: sy - ALTO_NOMBRE_PX / 2, y1: sy + ALTO_NOMBRE_PX / 2 };
-    if (cajas.some((o) => c.x0 < o.x1 && o.x0 < c.x1 && c.y0 < o.y1 && o.y0 < c.y1)) continue;
+    if (cajas.some((o) => c.x0 < o.x1 && o.x0 < c.x1 && c.y0 < o.y1 && o.y0 < c.y1)) return;
     cajas.push(c);
     fuera.push({ i, x: sx, y: sy });
+  };
+  let primero = -1;
+  if (elegido >= 0 && elegido < mapa.N) {
+    const [sx, sy] = planoAPantalla(v, mapa.x[elegido], mapa.y[elegido]), rp = radioEnPantalla(mapa, elegido, v.escala);
+    if (sx - rp >= 0 && sx + rp <= ancho && sy - rp >= 0 && sy + rp <= alto) { poner(elegido); primero = elegido; }
   }
+  // Si no se adelantó (el círculo no está entero dentro), va en su turno, como cualquiera.
+  for (let i = 0; i < mapa.N && fuera.length < MAX_NOMBRES; i++) if (i !== primero) poner(i);
   return fuera;
 }
 
