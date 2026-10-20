@@ -2944,9 +2944,9 @@ pares, siete aislados) y los sueltos colocados como franja; y la puerta **H**: a
 lienzo (con el radio que se dibuja) y al menos un nombre, el del artista de más minutos (vista fallar contra v=315:
 «salieron 0»). `mapa-artistas-caso.html?modo=foto&uid=owner&datos=real|inventado[&tema=papel]` es el instrumento de las
 capturas y de la medición de frames (conductor en `fonoteca-migracion/mapa-artistas/driver-mapa-artistas-2026-10-18.mjs`;
-el de v=316, `driver-mapa-artistas-t65-2026-10-18.mjs`). ⚠️ **El instrumento no tiene `<meta name="viewport">`**: con
-`Emulation.setDeviceMetricsOverride` y `mobile: true` Chrome lo maqueta a ~980 px, y el «390» de la tanda 64 era un lienzo
-de 874×720. El conductor de la 65 usa `mobile: false` (390 es 390).
+el de v=316, `driver-mapa-artistas-t65-2026-10-18.mjs`). 🟩 **Arreglado en la tanda 66: los 38 `tests/banco/*.html` llevan
+la `<meta name="viewport">` de `src/index.html`** (hasta la 65 no la tenían, y con `mobile: true` Chrome los maquetaba a
+~980 px: el «390» de la 64 era un lienzo de 874×720); con la meta, 390 es 390 con `mobile: true` o `false`.
 
 ### Los sueltos, los nombres y el radio (v=316)
 
