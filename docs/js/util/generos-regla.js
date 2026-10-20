@@ -22,6 +22,9 @@
 //     historial no es un género»: hay artistas que se llaman como un género y se borraría el género.
 //   · El autocorrect que devuelve OTRO artista no cuenta (ver `generosDeArtista`); desde v=316 lo
 //     decide `mismoArtistaAutocorregido` de `util/autocorrect-lastfm.js`, la misma del mapa de artistas.
+//   · v=320 (tanda 67): una etiqueta igual al nombre del PROPIO artista no es un género
+//     (`esNombreDelArtista`, con `claveEscritura` importada: ninguna normalización nueva). Solo el propio:
+//     contra OTROS artistas del historial no se compara (hay artistas que se llaman como un género).
 //
 // La fuente de cada entrada, entre corchetes: `61: n` = en n de los 51 artistas de la tanda 61
 // (`fonoteca-migracion/generos/medicion-lastfm-2026-10-17.json`); `62A: n` = en n de los 98 de la
@@ -29,12 +32,12 @@
 // se sumó DESPUÉS de medir lo que se le escapaba a la versión 1 (ver `PENDIENTES.md`); «como X» =
 // no se vio en ninguna muestra y se agregó por ser de la misma clase que X (son las sospechosas).
 
-import { decidirEtiquetas } from './generos-artista.js?v=319';
-import { mismoArtistaAutocorregido } from './autocorrect-lastfm.js?v=319';
+import { decidirEtiquetas } from './generos-artista.js?v=320';
+import { mismoArtistaAutocorregido, claveEscritura } from './autocorrect-lastfm.js?v=320';
 // ⚠️ Un import circular A PROPÓSITO: `generos-escaneo.js` importa `generosDeArtista` de acá para
 // «Cuánto se sabe», y acá hace falta su `yaBuscado` (UNA sola función decide «ya buscado», v=219).
 // Es seguro porque ninguno de los dos usa lo del otro al cargarse, solo adentro de funciones.
-import { yaBuscado } from './generos-escaneo.js?v=319';
+import { yaBuscado } from './generos-escaneo.js?v=320';
 
 /** Lo que NO es un género, en minúsculas. Cada entrada, con de dónde sale. */
 export const NO_ES_GENERO = new Set([
@@ -200,6 +203,16 @@ export function esGenero(etiqueta) {
   return !PATRONES_NO_GENERO.some((p) => p.re.test(t));
 }
 
+/**
+ * ¿La etiqueta es el nombre del propio artista? (v=320, tanda 67) `true` si su `claveEscritura` no es vacía y es igual
+ * a la del `nombre`: las mismas reglas de escritura del autocorrect (mayúsculas, «$» por «s», «&», un «the» adelante,
+ * la puntuación). Igual, no «contiene»: «banda inventada rock» no es «Banda Inventada».
+ */
+export function esNombreDelArtista(etiqueta, nombre) {
+  const k = claveEscritura(String(etiqueta ?? ''));
+  return !!k && k === claveEscritura(String(nombre ?? ''));
+}
+
 /** La forma canónica (en minúsculas): la del mapeo, o la misma. */
 export function canonico(etiqueta) {
   const t = limpia(etiqueta);
@@ -220,6 +233,9 @@ export function canonico(etiqueta) {
  *     sigue valiendo. Sin `artista` (lo de `#genre`, lo migrado) se usa como siempre.
  *   · Se quedan las que `esGenero`, pasadas por `canonico` y sin repetir (`hip-hop` y `hip hop`
  *     cuentan UNA vez, en `hip hop`), en el orden de la mezcla.
+ *   · v=320: una etiqueta igual al nombre del propio artista (`esNombreDelArtista`, con `nombre` o, si no viene,
+ *     `reg.nombre`) no cuenta, igual que una de `NO_ES_GENERO`. Si era la única de género y tenía etiquetas, el
+ *     artista va a «sin-genero», como cualquiera.
  *
  * @returns {{ generos: string[], motivo: null | 'sin-buscar' | 'no-tiene' | 'sin-genero' }}
  *   `motivo` es `null` si tiene alguno; si no: `sin-genero` (tiene etiquetas, ninguna de género),
@@ -233,9 +249,10 @@ export function generosDeArtista(registro, nombre) {
     reg = { ...reg, fuentes: { ...reg.fuentes, lastfm: null } };
   }
   const tags = decidirEtiquetas(reg) || [];
+  const propio = nombre ?? reg?.nombre;
   const generos = [];
   for (const t of tags) {
-    if (!esGenero(t.name)) continue;
+    if (!esGenero(t.name) || esNombreDelArtista(t.name, propio)) continue;
     const c = canonico(t.name);
     if (!generos.includes(c)) generos.push(c);
   }

@@ -153,6 +153,7 @@ try {
   afirmar(JSON.stringify(artistas) === JSON.stringify(ESPERADO.generos.map((x) => [x[0], x[3]])), `B: los artistas de cada género, por minutos (${JSON.stringify(artistas)})`);
   afirmar(JSON.stringify(artistas.find((x) => x[0] === 'hip hop')[1]) === '["Brisa Norte"]' && !artistas.some((x) => x[0] === 'hip-hop'), 'B: el de «hip-hop» y «hip hop» cuenta una vez, en «hip hop»');
   afirmar(!artistas.some((x) => x[1].includes('Hilo Doble')), 'B: el del autocorrect a otro artista no está en ningún género');
+  afirmar(!artistas.some((x) => x[0] === 'nube fina'), 'B (v=320): «Nube Fina», con su propio nombre como etiqueta, no aparece como género «nube fina» en «Ver todos»');
   afirmar(!artistas.some((x) => ['canadian', 'female vocalists', '80s', 'british', 'usa', 'lote_inventado_3', 'my lista inventada'].includes(x[0])), 'B: ninguna etiqueta que no es género está en la lista');
   afirmar(/^Last\.fm dice que no tiene.*2 artistas 650 min$/.test(txt(fila('no-tiene'))), `B: el del autocorrect cuenta en «no tiene» (${txt(fila('no-tiene'))})`);
   });

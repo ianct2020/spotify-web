@@ -17,9 +17,9 @@
 // como está (marcado como el preview actual, pero con el ▶), que es lo honesto:
 // no sabemos si Spotify está sonando dentro del iframe.
 
-import { escapeHtml } from './components.js?v=319';
-import { showToast } from './toast.js?v=319';
-import { mountBottom } from './bottom-layer.js?v=319';
+import { escapeHtml } from './components.js?v=320';
+import { showToast } from './toast.js?v=320';
+import { mountBottom } from './bottom-layer.js?v=320';
 
 const audio = new Audio();
 audio.preload = 'none';

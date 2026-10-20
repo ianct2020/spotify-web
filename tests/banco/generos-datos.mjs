@@ -7,7 +7,8 @@
 // Quince artistas de 10 min o más y tres de menos, con registros SEMBRADOS en el almacén de etiquetas que
 // cubren lo que la regla tiene que decidir: géneros con basura al lado, dos formas de un sinónimo, solo
 // no-géneros, «no tiene», el autocorrect a OTRO artista, lo migrado, y tres sin buscar (que el Last.fm de
-// mentira contesta en la puerta D). Lo que tiene que dar está escrito A MANO en `ESPERADO`: el banco
+// mentira contesta en la puerta D). v=320 (tanda 67): «Nube Fina» lleva su propio nombre como etiqueta, que no es un
+// género (con v=319 salía «nube fina» en «Ver todos»: 14). Lo que tiene que dar está escrito A MANO en `ESPERADO`: el banco
 // compara la pantalla contra esta cuenta, no contra la del código que prueba.
 
 const T = (min) => [Math.max(1, Math.round(min / 3)), min, 2021, 2025, [[2025, min, 1]], '2021-03-01'];
@@ -27,7 +28,7 @@ export const ARTISTAS = [
   ['Monte Gris', 180, { migrado: [E('rap'), E('trap marino', 60)] }],                              // lo migrado cuenta
   ['Duna Clara', 160, { lastfm: { tags: [E('Bolero Cósmico'), E('Synth Pop', 30)], artista: 'DUNA CLARA' } }], // autocorrect de mayúsculas: vale
   ['Isla Verde', 140, { lastfm: { tags: [E('Jota Eléctrica'), E('Tango de Faro', 80), E('USA', 20)] } }],
-  ['Nube Fina', 120, { lastfm: { tags: [E('Salsa Polar')] } }],
+  ['Nube Fina', 120, { lastfm: { tags: [E('Salsa Polar'), E('Nube Fina', 50)] } }],               // v=320: su nombre no es un género
   ['Peña Roja', 100, { lastfm: { tags: [E('dnb'), E('Drum and Bass', 50)] } }],                    // dos formas de «drum and bass»
   ['Cala Azul', 80, null, { tags: [E('Ola Nueva')] }],                                             // sin buscar (D)
   ['Bahía Mansa', 50, { lastfm: { tags: [E('Ska Lunar'), E('My Lista Inventada', 50)] } }],

@@ -16,6 +16,10 @@
 //   6. De conservación: lo de la 60 y la 61 que esta tanda no puede tocar sigue byte a byte (lectura estática), y
 //      `normalizarNombre` se importa de `mb-pais.js` (una sola).
 //   7. Las listas: cada entrada dice de dónde sale; nada de lo que caza un patrón está escrito a mano.
+//   8. (v=320, tanda 67) Una etiqueta igual al nombre del PROPIO artista no es género (`esNombreDelArtista`, con
+//      `claveEscritura`): mayúsculas, «$» por «s» y un «the» adelante no la salvan; una que CONTIENE el nombre sí es
+//      género; el artista que se queda sin géneros va a «sin-genero»; sus minutos no se mueven a otro género; y las
+//      cinco filas siguen sumando el total. Rojo contra v=319: la función no existía y el nombre contaba como género.
 //
 // 🔴 Todo INVENTADO: artistas, minutos y etiquetas (salvo las etiquetas genéricas de la lista, que son de la regla).
 //
@@ -235,7 +239,8 @@ console.log('6. De conservación: el escaneo, la mezcla y el filtro, byte a byte
   // `normalizarNombre`, UNA sola: importada de `mb-pais.js`, sin copias en `src/js/`.
   const regla = leerFuente('src/js/util/generos-regla.js');
   // v=316: generos-regla.js ya no la importa directo: la usa a través de `mismoArtistaAutocorregido`, que la importa de mb-pais.js.
-  ok(/import \{ mismoArtistaAutocorregido \} from '\.\/autocorrect-lastfm\.js';/.test(regla) && !/normalizarNombre\(/.test(regla.replace(/^\s*(\/\/|\*).*$/gm, '')),
+  // v=320: el import suma `claveEscritura` (la regla del nombre propio, T67.3): el patrón acepta las dos formas.
+  ok(/import \{ mismoArtistaAutocorregido(?:, claveEscritura)? \} from '\.\/autocorrect-lastfm\.js';/.test(regla) && !/normalizarNombre\(/.test(regla.replace(/^\s*(\/\/|\*).*$/gm, '')),
     'generos-regla.js decide el autocorrect con mismoArtistaAutocorregido (autocorrect-lastfm.js), sin una comparación propia');
   ok(/import \{ normalizarNombre \} from '\.\/mb-pais\.js';/.test(leerFuente('src/js/util/autocorrect-lastfm.js')), 'y autocorrect-lastfm.js importa normalizarNombre de mb-pais.js');
   const archivos = [];
@@ -262,6 +267,48 @@ if (R.NO_ES_GENERO instanceof Set && Array.isArray(R.PATRONES_NO_GENERO) && R.SI
   const bloqueSin = (src.match(/export const SINONIMOS = \{([\s\S]*?)\n\};/) || ['', ''])[1];
   ok(bloqueSin.split('\n').filter((l) => /^\s*\/\//.test(l)).every((l) => /\[(?:61|62A|62B): /.test(l)), 'cada grupo de sinónimos dice de dónde sale');
 } else ok(false, 'las listas existen');
+
+// ── 8. El nombre del propio artista (v=320) ────────────────────────────────
+console.log('8. Una etiqueta igual al nombre del propio artista no es género (v=320)');
+if (tiene(R.esNombreDelArtista)) {
+  ok(R.esNombreDelArtista('banda inventada', 'Banda Inventada') && R.esNombreDelArtista('BANDA INVENTADA', 'Banda Inventada'), 'igual, y en mayúsculas: es el nombre');
+  ok(R.esNombreDelArtista('Banda Inventada$', 'Banda Inventadas') && R.esNombreDelArtista('the banda inventada', 'Banda Inventada'), 'con «$» por «s» y con un «the» adelante, también');
+  ok(!R.esNombreDelArtista('banda inventada rock', 'Banda Inventada'), 'una que CONTIENE el nombre pero no es igual no es el nombre');
+  ok(!R.esNombreDelArtista('', '') && !R.esNombreDelArtista('!!', '??') && !R.esNombreDelArtista('polka cuántica', null), 'vacío (o solo puntuación) contra vacío no cuenta');
+} else ok(false, 'esNombreDelArtista existe en util/generos-regla.js');
+// Lo que sigue no depende de que la función exista: contra v=319 dice que el nombre sale como género.
+if (tiene(R.generosDeArtista)) {
+  const g1 = R.generosDeArtista(reg('Banda Inventada', { lastfm: { tags: [E('Banda Inventada', 100), E('polka cuántica', 60), E('banda inventada rock', 20)], fecha: 1 } }), 'Banda Inventada');
+  ok(igual(g1, { generos: ['polka cuántica', 'banda inventada rock'], motivo: null }), `el nombre no cuenta; lo demás sí, también la que contiene el nombre (${JSON.stringify(g1)})`);
+  const g2 = R.generosDeArtista(reg('Trio Inventado', { lastfm: { tags: [E('TRIO INVENTADO', 100), E('the trio inventado', 40), E('canadian', 20)], fecha: 1 } }), 'Trio Inventado');
+  ok(igual(g2, { generos: [], motivo: 'sin-genero' }), `si sus únicas etiquetas de género son su nombre, va a «sin-genero» (${JSON.stringify(g2)})`);
+  const g3 = R.generosDeArtista(reg('Trio Inventado', { lastfm: { tags: [E('trio inventado')], fecha: 1 } }));
+  ok(igual(g3, { generos: [], motivo: 'sin-genero' }), 'sin `nombre`, usa el del registro');
+  if (tiene(R.armarGeneros) && tiene(P.universo) && tiene(G.armarCobertura)) {
+    const totals = { 'Banda Inventada': T(300), 'Trio Inventado': T(200), 'Otra Inventada': T(100), 'Chica': T(5) };
+    const regs = {
+      'banda inventada': reg('Banda Inventada', { lastfm: { tags: [E('banda inventada'), E('polka cuántica', 50)], fecha: 1 } }),
+      'trio inventado': reg('Trio Inventado', { lastfm: { tags: [E('trio inventado'), E('canadian', 20)], fecha: 1 } }),
+      'otra inventada': reg('Otra Inventada', { lastfm: { tags: [E('trio inventado'), E('polka cuántica', 50)], fecha: 1 } }),
+    };
+    const lista = P.universo(totals, {});
+    const registro = (n) => regs[n.toLowerCase()] ?? null;
+    const g = R.armarGeneros({ totals, lista, registro });
+    // A mano, en décimas: total 3000 + 2000 + 1000 + 50 = 6050. «banda inventada» y «trio inventado» son los nombres de
+    // sus artistas: no son géneros de ellos. Pero «Otra Inventada» tiene «trio inventado» como etiqueta y para ELLA no
+    // es su nombre: cuenta (la regla no compara contra OTROS artistas). polka = 3000 + 1000 = 4000 (2); trio inventado
+    // = 1000 (1). Los 2000 de «Trio Inventado» no van a ningún género.
+    const filas = g.generos.map((x) => [x.genero, x.decimas, x.artistas.map((a) => a.nombre)]);
+    ok(igual(filas, [['polka cuántica', 4000, ['Banda Inventada', 'Otra Inventada']], ['trio inventado', 1000, ['Otra Inventada']]]), `armarGeneros: ninguno está en un «género» con su nombre y sus minutos no se mueven a otro (${JSON.stringify(filas)})`);
+    ok(!g.generos.some((x) => x.genero === 'banda inventada'), 'no hay un género «banda inventada»');
+    const c = G.armarCobertura({ totals, lista, registro });
+    const f = c.filas;
+    ok(igual([f.conGeneros, f.sinGenero], [{ artistas: 2, decimas: 4000 }, { artistas: 1, decimas: 2000 }]), `«Cuánto se sabe»: «Trio Inventado» pasa a «con etiquetas, pero ninguna de género» (${JSON.stringify([f.conGeneros, f.sinGenero])})`);
+    ok(['conGeneros', 'sinGenero', 'noTiene', 'sinBuscar', 'menos10'].reduce((s, k) => s + (f[k]?.decimas ?? NaN), 0) === c.total && c.total === 6050, `y las cinco filas suman exacto el total (${c.total})`);
+  } else ok(false, 'armarGeneros, universo y armarCobertura existen');
+  const regla8 = leerFuente('src/js/util/generos-regla.js');
+  ok(/claveEscritura/.test(regla8.replace(/^\s*(\/\/|\*).*$/gm, '')) && !/function claveEscritura|claveEscritura\s*=/.test(regla8), 'claveEscritura se importa de autocorrect-lastfm.js (ninguna normalización nueva)');
+} else ok(false, 'generosDeArtista existe');
 
 console.log(`\n${fallaron ? 'FALLÓ' : 'OK'} generos-regla: ${pasaron} de ${pasaron + fallaron} · ${pasaron + fallaron} asserts`);
 if (fallaron) process.exit(1);

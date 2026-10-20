@@ -81,7 +81,9 @@ console.log('5. lectura estática');
   ok(!/new (Set|Map)\(\[|levenshtein|distancia|score|mbid/i.test(codigo), 'sin tablas de nombres, sin distancia de edición, sin score ni mbid');
   const regla = leer('src/js/util/generos-regla.js');
   const horneado = leer('scripts/hornear-similares.mjs');
-  ok(/import \{ mismoArtistaAutocorregido \} from '\.\/autocorrect-lastfm\.js';/.test(regla), 'generos-regla.js la importa');
+  // v=320 (tanda 67): el import de generos-regla.js suma `claveEscritura` (una etiqueta igual al nombre del propio
+  // artista no es género): el patrón acepta las dos formas; lo que se vigila (que la importa de acá) no cambia.
+  ok(/import \{ mismoArtistaAutocorregido(?:, claveEscritura)? \} from '\.\/autocorrect-lastfm\.js';/.test(regla), 'generos-regla.js la importa');
   ok(/import \{ mismoArtistaAutocorregido \} from '\.\.\/src\/js\/util\/autocorrect-lastfm\.js';/.test(horneado), 'y el horneado del mapa también: una sola regla');
 }
 

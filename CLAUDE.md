@@ -2781,6 +2781,17 @@ Las decisiones, y por qué:
   contra «sin buscar»: una sola función decide «ya buscado») y `generos-escaneo.js` importa `generosDeArtista` de
   `generos-regla.js` (para «Cuánto se sabe»). Es seguro porque ninguno usa lo del otro al cargarse.
 
+- 🟩 **Una etiqueta igual al nombre del PROPIO artista no es un género (v=320, tanda 67)**: `esNombreDelArtista(etiqueta,
+  nombre)` (`claveEscritura` de `util/autocorrect-lastfm.js` IMPORTADA: igual y no vacía; «contiene» no alcanza); en
+  `generosDeArtista` cuenta como una de `NO_ES_GENERO` (con el nombre del historial o, si no viene, `reg.nombre`). **Solo el
+  propio**: contra otros artistas del historial no se compara (un género que también es nombre de banda). Medido (REAL, los
+  nombres en `fonoteca-migracion/generos/`): sobre la muestra de **diseño** (61 + 62, 247 artistas, la que se leyó para
+  proponerla) 9 aciertos y 0 falsos; sobre una muestra **nueva** de 200 (índices `8 + 11·j`, sin los de la 61 y la 62, huella
+  `8cf968d8…`) **9 aciertos, 0 falsos positivos**, y ningún artista pasa a «sin género» (los 9 tienen otros). Con 0 falsos en
+  200 la tasa puede ser hasta 3/200 = 1,5 % (la regla del tres): 0 no es nunca. **`#genre` no la usa**: `generosDeArtista` y
+  `armarGeneros` los importan solo `util/generos-escaneo.js` y `features/generos.js`. Solo se nota en artistas con etiquetas
+  guardadas.
+
 **Medido, en dos mitades** (REAL; la medición, con los nombres, en `fonoteca-migracion/generos/`; acá no va ninguno). Una
 segunda muestra de Last.fm de 196 artistas del universo (índices `5 + 11·j` sin los de la 61), partida en A (98) y B
 (98). Las listas se escribieron con la 61 + A (**versión 1**) y se midieron sobre B, que no se usó para escribirlas:
