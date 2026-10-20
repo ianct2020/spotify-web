@@ -1,8 +1,8 @@
-import { idbGetCached, idbSetCached } from '../idb.js?v=316';
-import { prefKey, migratePrefKey } from '../storage.js?v=316';
+import { idbGetCached, idbSetCached } from '../idb.js?v=317';
+import { prefKey, migratePrefKey } from '../storage.js?v=317';
 // `normName` era idéntica a los `norm` de itunes.js y preview-providers.js.
 // Desde el paso 1 del plan de normalizadores las tres son una sola.
-import { normProveedor as normName } from '../util/texto.js?v=316';
+import { normProveedor as normName } from '../util/texto.js?v=317';
 
 const STATSFM_USER_STORAGE = 'statsfm_username';
 const BASE = 'https://api.stats.fm/api/v1';

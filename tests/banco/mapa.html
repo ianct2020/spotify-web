@@ -49,6 +49,11 @@
 //   (abrir sigue costando 0 a MusicBrainz y 1 `/me`, y 0 errores: las puertas 1
 //   y las guardas de siempre, que no cambiaron).
 //
+// Y la de la tanda 66 (v=317):
+//   K. la línea de conteo de «Cuánto se sabe» (`p.mapa-artistas`) ocupa UN renglón
+//      y la lista de artistas de un país conserva sus rellenos y no va en columnas:
+//      v=315 les pisó las dos clases desde #mapa-artistas (cuatro renglones, ~100 px).
+//
 // Y las de la tanda 55 (v=307), el alias de respaldo y el rango:
 //   R1. un artista INVENTADO renombrado, que la búsqueda de siempre no encuentra y
 //       el respaldo sí (por su alias), sale con país, y su respaldo se pidió UNA vez;
@@ -106,6 +111,19 @@ function cotasDe(texto) {
 const RANGO = /^Quedan ~[\d.]+ peticiones: entre .+ y .+, según cuántos 503 dé MusicBrainz\.$/;
 const estimacion = (f) => $(f, '.mapa-estimacion')?.textContent.replace(/\s+/g, ' ').trim() || '';
 
+// v=317 (tanda 66): cuántos RENGLONES ocupa un elemento. `getClientRects()` del propio <p> no sirve (un bloque da
+// siempre 1, tenga los renglones que tenga): se cuentan los `top` distintos de los rectángulos de su CONTENIDO
+// (un `Range`), juntando los que difieren en menos de 6 px (el texto y un <strong> del mismo renglón).
+function renglones(f, el) {
+  const r = f.contentDocument.createRange();
+  r.selectNodeContents(el);
+  const tops = [...r.getClientRects()].filter((x) => x.width > 0 && x.height > 0).map((x) => x.top).sort((a, b) => a - b);
+  let n = 0, ultimo = -Infinity;
+  for (const t of tops) { if (t - ultimo > 6) n++; ultimo = t; }
+  const cs = f.contentWindow.getComputedStyle(el);
+  return { renglones: n, alto: +el.getBoundingClientRect().height.toFixed(1), lineHeight: cs.lineHeight, display: cs.display };
+}
+
 const datos = {};
 try {
   await sembrarHistorial(anclar);
@@ -123,6 +141,10 @@ try {
   afirmar(boton(A, 'buscar')?.textContent.trim() === 'Buscar países', 'con la caché vacía, el botón dice «Buscar países»');
   afirmar(mapa(A).dataset.escaneados === '0' && mapa(A).dataset.universo === String(ESPERADO.universo), `arranca con 0 de ${ESPERADO.universo} escaneados`);
   afirmar(!$(A, '.mapa-pais'), 'y sin ningún país');
+  // PUERTA K (v=317): la línea de conteo de «Cuánto se sabe» es UN renglón. v=315 le pisó la clase (`.mapa-artistas`
+  // era también la raíz de #mapa-artistas, `display: flex` en columna) y salía en cuatro, apilados.
+  datos.conteo = renglones(A, $(A, 'p.mapa-artistas'));
+  afirmar(datos.conteo.renglones === 1 && datos.conteo.display === 'block', `PUERTA K: la línea de conteo ocupa un renglón y es un bloque (${JSON.stringify(datos.conteo)})`);
 
   // ── M1. El mundo, todo en «sin datos» ─────────────────────────────────────
   progreso('mundo 1: el SVG, sin datos');
@@ -303,6 +325,11 @@ try {
   clic('CL');
   datos.mundo4 = { abierta: filaCL().open, detalle: $(A, '.mapa-mundo-lienzo + .mapa-mundo-detalle').textContent };
   afirmar(datos.mundo4.abierta, 'clic en Chile (pintado) → su fila de la lista queda abierta');
+  // PUERTA K (v=317): la lista de artistas de un país conserva sus rellenos (34 px a la izquierda, 14 a la derecha) y
+  // no va en columnas: `.mapa-artistas-lista` era también la lista de parecidos de #mapa-artistas, y le ganaba.
+  const csCL = win(A).getComputedStyle($(A, '.mapa-pais[data-codigo="CL"] .mapa-artistas-lista'));
+  datos.listaPais = { padding: csCL.padding, columnWidth: csCL.columnWidth };
+  afirmar(csCL.paddingLeft === '34px' && csCL.paddingRight === '14px' && csCL.columnWidth === 'auto', `PUERTA K: la lista de Chile con sus rellenos y sin columnas (${JSON.stringify(datos.listaPais)})`);
   // v=307: con el total de 23529 décimas, Chile es el 10,6 % (era 11,0 sobre 22719).
   afirmar(/^Chile · 250 min · 10,6 % de tus minutos · 1 artista$/.test(datos.mundo4.detalle), `y la línea de detalle lo dice: «${datos.mundo4.detalle}»`);
   const abiertasAntes = A.contentDocument.querySelectorAll('.mapa details[open]').length;
@@ -346,6 +373,7 @@ try {
     `limpiar: ${datos.limpiar.despues.art}/${datos.limpiar.despues.area} se quedan, ritmo ${datos.limpiar.antes.ritmo}→${datos.limpiar.despues.ritmo} · ` +
     `estimación: antes de cerrar ${datos.cerrar.cotas.bajo}-${datos.cerrar.cotas.alto} min (${datos.cerrar.ritmo[0].artistas} artistas medidos), al volver ${datos.recargar.cotas.bajo}-${datos.recargar.cotas.alto} min sin apretar nada · ` +
     `mundo: abrir ${datos.mundo1.formas} formas y ${datos.mundo1.conTono} con tono · con el 1.º artista ${datos.mundo5.conTono.join(',')} · ` +
+    `K: conteo ${datos.conteo.renglones} renglón (${datos.conteo.alto} px), lista ${datos.listaPais.padding} · ` +
     `final ${Object.entries(datos.mundo2.pintados).map(([k, v]) => k + '=' + v).join(',')} · no se ven: ${datos.mundo3.noseven.replace('No se ven en el mapa: ', '')} · clic CL abre=${datos.mundo4.abierta} · errores=0 · ` +
     `reloj virtual=${Math.round(performance.now())} ms`;
   document.documentElement.setAttribute('data-resumen', resumen);

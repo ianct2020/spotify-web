@@ -23,6 +23,8 @@
 //   D. con la búsqueda corriendo, la lista crece sin recrear el género abierto: es el MISMO elemento y sigue
 //      abierto después de tres respuestas;
 //   E. «Mostrar 100 más» con un género de 130 artistas inventados: 100 → 130, 0 peticiones;
+//   K. (v=317, tanda 66) la línea de conteo de «Cuánto se sabe» (`p.mapa-artistas`) ocupa un renglón y la lista de
+//      artistas de un género conserva sus rellenos: v=315 les pisó las dos clases desde #mapa-artistas;
 //   y en todos: 0 rutas sin simular, 0 hosts externos fuera de los simulados, 0 escrituras, 0 errores.
 //
 // ⚠️ Todas las esperas van con `esperarReal` (una petición al propio servidor por vuelta): un `await` de
@@ -35,6 +37,19 @@ import { crearLastfm, sembrarHistorial, sembrarEtiquetas, ESPERADO, HISTORIAL_GR
 const afirmar = (c, msg) => { if (!c) throw new Error('BANCO: ' + msg); };
 const progreso = (t) => { document.getElementById('progreso').textContent = t; };
 const VUELTAS = 60000;
+
+// v=317 (tanda 66): cuántos RENGLONES ocupa un elemento. `getClientRects()` del propio <p> no sirve (un bloque da
+// siempre 1, tenga los renglones que tenga): se cuentan los `top` distintos de los rectángulos de su CONTENIDO
+// (un `Range`), juntando los que difieren en menos de 6 px (el texto y un <strong> del mismo renglón).
+function renglones(f, el) {
+  const r = f.contentDocument.createRange();
+  r.selectNodeContents(el);
+  const tops = [...r.getClientRects()].filter((x) => x.width > 0 && x.height > 0).map((x) => x.top).sort((a, b) => a - b);
+  let n = 0, ultimo = -Infinity;
+  for (const t of tops) { if (t - ultimo > 6) n++; ultimo = t; }
+  const cs = f.contentWindow.getComputedStyle(el);
+  return { renglones: n, alto: +el.getBoundingClientRect().height.toFixed(1), lineHeight: cs.lineHeight, display: cs.display };
+}
 
 const lf = crearLastfm();
 window.__lf = lf;
@@ -159,6 +174,14 @@ try {
     afirmar(datos.desplegar.fetchs === 0 && datos.desplegar.lf === 0 && datos.desplegar.sim === 0, `A: desplegar los 13 géneros y «Ver todos» = 0 peticiones a cualquier host (${JSON.stringify(datos.desplegar)})`);
   });
   if (fallos.length) throw new Error(fallos.join('\n'));
+  // ── K. Las clases de #mapa que usa esta vista, como antes de v=315 (v=317) ──
+  // La línea de conteo (`p.mapa-artistas`) es un renglón y la lista de artistas de un género conserva sus rellenos:
+  // v=315 les pisó las dos clases desde #mapa-artistas (cuatro renglones apilados y la lista sin rellenos).
+  datos.k = { conteo: renglones(A, $(A, 'p.mapa-artistas')) };
+  const csRap = win(A).getComputedStyle(liDe(A, 'top', 'rap').querySelector('.mapa-artistas-lista'));
+  datos.k.lista = { padding: csRap.padding, columnWidth: csRap.columnWidth };
+  afirmar(datos.k.conteo.renglones === 1 && datos.k.conteo.display === 'block', `K: la línea de conteo ocupa un renglón y es un bloque (${JSON.stringify(datos.k.conteo)})`);
+  afirmar(csRap.paddingLeft === '34px' && csRap.paddingRight === '14px' && csRap.columnWidth === 'auto', `K: la lista de «rap» con sus rellenos y sin columnas (${JSON.stringify(datos.k.lista)})`);
   limpio(A, 'A');
 
   // ── G. A 1366 y a 390 px, nada desborda (y tras recargar, abrir sigue costando lo mismo) ──
@@ -245,7 +268,7 @@ try {
     `G: 1366 alto top=${datos.g[1366].top} verTodos=${datos.g[1366].verTodos} genero=${datos.g[1366].genero} (${datos.g[1366].piezas} piezas, página ${datos.g[1366].pagina}) · ` +
     `390 alto top=${datos.g[390].top} verTodos=${datos.g[390].verTodos} genero=${datos.g[390].genero} (${datos.g[390].piezas} piezas, página ${datos.g[390].pagina}) · ` +
     `D: mismo elemento abierto ${datos.d.vistos.join('/')}, cumbia ${datos.d.tras.slice(1).join(' ')} · E: ${datos.e.filas} filas, ${datos.e.fetchs} peticiones · ` +
-    `tarjeta «${datos.tarjeta}» · errores=0 · reloj virtual=${Math.round(performance.now())} ms`;
+    `K: conteo ${datos.k.conteo.renglones} renglón (${datos.k.conteo.alto} px), lista ${datos.k.lista.padding} · tarjeta «${datos.tarjeta}» · errores=0 · reloj virtual=${Math.round(performance.now())} ms`;
   document.documentElement.setAttribute('data-resumen', resumen);
   progreso(resumen);
   listo();

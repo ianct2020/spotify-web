@@ -77,7 +77,7 @@ export async function render(container) {
     // (v=154: un error no se disfraza de resultado).
     content.innerHTML = propio
       ? '<div class="card" data-mapa-artistas="error"><p>No he podido cargar el mapa. Vuelve a intentarlo.</p></div>'
-      : '<p class="mapa-artistas-nota" data-mapa-artistas="sin-mapa">El mapa todavía no existe para tu historial.</p>';
+      : '<p class="artmapa-nota" data-mapa-artistas="sin-mapa">El mapa todavía no existe para tu historial.</p>';
     return;
   }
 
@@ -85,31 +85,31 @@ export async function render(container) {
 }
 
 function montar(content, mapa, ruta) {
-  content.innerHTML = `<div class="mapa-artistas" data-mapa-artistas="listo">
-    <p class="mapa-artistas-intro">Cada punto es un artista de tu historial: cuanto más grande, más lo has escuchado. Toca uno para ver a quién se parece.</p>
-    <form class="mapa-artistas-buscar" role="search">
-      <input class="input mapa-artistas-campo" type="search" placeholder="Busca un artista" aria-label="Buscar un artista en el mapa" autocomplete="off">
+  content.innerHTML = `<div class="artmapa" data-mapa-artistas="listo">
+    <p class="artmapa-intro">Cada punto es un artista de tu historial: cuanto más grande, más lo has escuchado. Toca uno para ver a quién se parece.</p>
+    <form class="artmapa-buscar" role="search">
+      <input class="input artmapa-campo" type="search" placeholder="Busca un artista" aria-label="Buscar un artista en el mapa" autocomplete="off">
       <button class="btn btn-secondary" type="submit">Buscar</button>
-      <span class="mapa-artistas-aviso" aria-live="polite"></span>
+      <span class="artmapa-aviso" aria-live="polite"></span>
     </form>
-    <div class="mapa-artistas-lienzo">
-      <canvas class="mapa-artistas-canvas" role="img" aria-label="Mapa de tus artistas: ${num(mapa.N)} artistas, ${num(mapa.aristas)} parecidos"></canvas>
-      <div class="mapa-artistas-zoom">
+    <div class="artmapa-lienzo">
+      <canvas class="artmapa-canvas" role="img" aria-label="Mapa de tus artistas: ${num(mapa.N)} artistas, ${num(mapa.aristas)} parecidos"></canvas>
+      <div class="artmapa-zoom">
         <button class="btn btn-secondary" type="button" data-zoom="mas" aria-label="Acercar">+</button>
         <button class="btn btn-secondary" type="button" data-zoom="menos" aria-label="Alejar">−</button>
         <button class="btn btn-secondary" type="button" data-zoom="todo">Ver todo</button>
       </div>
     </div>
-    <section class="mapa-artistas-panel" data-panel aria-live="polite"></section>
-    <p class="mapa-artistas-pie">${mapa.aislados === 1 ? '1 artista no tiene' : `${num(mapa.aislados)} artistas no tienen`} ningún parecido en tu historial. Parecidos según <a href="https://www.last.fm" target="_blank" rel="noopener">Last.fm</a>.</p>
+    <section class="artmapa-panel" data-panel aria-live="polite"></section>
+    <p class="artmapa-pie">${mapa.aislados === 1 ? '1 artista no tiene' : `${num(mapa.aislados)} artistas no tienen`} ningún parecido en tu historial. Parecidos según <a href="https://www.last.fm" target="_blank" rel="noopener">Last.fm</a>.</p>
   </div>`;
 
-  const raiz = content.querySelector('.mapa-artistas');
+  const raiz = content.querySelector('.artmapa');
   const canvas = raiz.querySelector('canvas');
   const ctx = canvas.getContext('2d');
   const panel = raiz.querySelector('[data-panel]');
-  const campo = raiz.querySelector('.mapa-artistas-campo');
-  const aviso = raiz.querySelector('.mapa-artistas-aviso');
+  const campo = raiz.querySelector('.artmapa-campo');
+  const aviso = raiz.querySelector('.artmapa-aviso');
 
   const st = {
     ancho: 0, alto: 0, dpr: 1, vista: null,
@@ -269,12 +269,12 @@ function montar(content, mapa, ruta) {
 
   // ── El panel del elegido ─────────────────────────────────────────────────
   function filaParecido(n) {
-    return `<li class="mapa-artistas-fila"><button class="mapa-artistas-parecido" type="button" data-elegir="${n.j}">${escapeHtml(mapa.nombres[n.j])}</button> <span class="mapa-artistas-min">${min(mapa.minutos[n.j])}</span></li>`;
+    return `<li class="artmapa-fila"><button class="artmapa-parecido" type="button" data-elegir="${n.j}">${escapeHtml(mapa.nombres[n.j])}</button> <span class="artmapa-min">${min(mapa.minutos[n.j])}</span></li>`;
   }
   function pintarPanel() {
     const sel = st.elegido;
     if (sel < 0) {
-      panel.innerHTML = '<p class="mapa-artistas-nota">Toca un artista del mapa, o búscalo, para ver sus parecidos.</p>';
+      panel.innerHTML = '<p class="artmapa-nota">Toca un artista del mapa, o búscalo, para ver sus parecidos.</p>';
       return;
     }
     const vec = mapa.vecinos[sel];
@@ -282,12 +282,12 @@ function montar(content, mapa, ruta) {
       : vec.length === 1 ? '1 artista parecido en tu historial'
         : `${num(vec.length)} artistas parecidos en tu historial`;
     const hasta = Math.min(st.mostrados, vec.length);
-    panel.innerHTML = `<div class="mapa-artistas-cabecera">
-        <h2 class="mapa-artistas-nombre" tabindex="-1">${escapeHtml(mapa.nombres[sel])}</h2>
+    panel.innerHTML = `<div class="artmapa-cabecera">
+        <h2 class="artmapa-nombre" tabindex="-1">${escapeHtml(mapa.nombres[sel])}</h2>
         <button class="btn btn-secondary" type="button" data-ficha>Ver ficha</button>
       </div>
-      <p class="mapa-artistas-meta">${min(mapa.minutos[sel])} · ${cuantos}</p>
-      ${vec.length ? `<ol class="mapa-artistas-lista">${vec.slice(0, hasta).map(filaParecido).join('')}</ol>` : ''}
+      <p class="artmapa-meta">${min(mapa.minutos[sel])} · ${cuantos}</p>
+      ${vec.length ? `<ol class="artmapa-lista">${vec.slice(0, hasta).map(filaParecido).join('')}</ol>` : ''}
       <button class="btn btn-secondary" type="button" data-mas ${hasta >= vec.length ? 'hidden' : ''}>Mostrar ${num(POR_PAGINA)} más</button>`;
   }
   function elegir(i, { centrar = false, foco = false } = {}) {
@@ -295,7 +295,7 @@ function montar(content, mapa, ruta) {
     st.mostrados = POR_PAGINA;
     if (centrar && i >= 0 && st.vista) st.vista = centrarEn(st.vista, mapa, i, st.ancho, st.alto);
     pintarPanel();
-    if (foco && i >= 0) panel.querySelector('.mapa-artistas-nombre')?.focus({ preventScroll: true });
+    if (foco && i >= 0) panel.querySelector('.artmapa-nombre')?.focus({ preventScroll: true });
     programar();
   }
 
@@ -308,13 +308,13 @@ function montar(content, mapa, ruta) {
       const vec = mapa.vecinos[st.elegido] || [];
       const desde = st.mostrados;
       st.mostrados = Math.min(desde + POR_PAGINA, vec.length);
-      panel.querySelector('.mapa-artistas-lista')?.insertAdjacentHTML('beforeend', vec.slice(desde, st.mostrados).map(filaParecido).join(''));
+      panel.querySelector('.artmapa-lista')?.insertAdjacentHTML('beforeend', vec.slice(desde, st.mostrados).map(filaParecido).join(''));
       b.hidden = st.mostrados >= vec.length;
     }
   });
 
   // ── El buscador ──────────────────────────────────────────────────────────
-  raiz.querySelector('.mapa-artistas-buscar').addEventListener('submit', (e) => {
+  raiz.querySelector('.artmapa-buscar').addEventListener('submit', (e) => {
     e.preventDefault();
     const i = buscar(mapa, campo.value);
     aviso.textContent = i < 0 ? 'No está en tu mapa.' : '';
@@ -322,7 +322,7 @@ function montar(content, mapa, ruta) {
   });
 
   // ── Zoom con los botones ─────────────────────────────────────────────────
-  raiz.querySelector('.mapa-artistas-zoom').addEventListener('click', (e) => {
+  raiz.querySelector('.artmapa-zoom').addEventListener('click', (e) => {
     const b = e.target.closest('[data-zoom]');
     if (!b || !st.vista) return;
     if (b.dataset.zoom === 'todo') st.vista = vistaTodo(mapa, st.ancho, st.alto);

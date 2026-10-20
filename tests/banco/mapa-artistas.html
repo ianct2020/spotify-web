@@ -27,6 +27,8 @@
 //   H. (v=316) a «Ver todo», con los sueltos en su franja: TODOS los puntos dentro del lienzo (con el
 //      radio en pantalla que se dibuja) y al menos un nombre, que es el del artista de más minutos.
 //      Contra v=315 da 0 nombres (pedía 12 px de radio y el más grande medía ~5);
+//   K. (v=317, tanda 66) la lista de parecidos del panel va en columnas de 220 px y no es flex: hasta v=316 su
+//      clase era también la de las listas de #mapa y #generos, y salía en una sola columna;
 //   y 0 errores de consola en todos los marcos.
 //
 // ⚠️ Todas las esperas van con `esperarReal` (ver PRESUPUESTO en `scripts/correr-banco.mjs`).
@@ -124,11 +126,11 @@ try {
   afirmar(abrir.otras.length === 0, `PUERTA A: y 0 de lo demás, hubo: ${abrir.otras.join(' · ')}`);
   sinFugas(A, 'PUERTA A');
   afirmar(texto($(A, '.page-header h1, h1')) === 'Mapa de artistas' || /Mapa de artistas/.test(texto($(A, '#main-content'))), 'la cabecera dice «Mapa de artistas»');
-  const canvasA = $(A, 'canvas.mapa-artistas-canvas');
+  const canvasA = $(A, 'canvas.artmapa-canvas');
   afirmar(canvasA?.getAttribute('role') === 'img' && /^Mapa de tus artistas: 2302 artistas, 60\.142 parecidos$/.test(canvasA.getAttribute('aria-label')),
     `el canvas es una imagen con su aria-label: «${canvasA?.getAttribute('aria-label')}»`);
-  afirmar(/^7 artistas no tienen ningún parecido en tu historial\. Parecidos según Last\.fm\.$/.test(texto($(A, '.mapa-artistas-pie'))), `la línea de los aislados y el crédito: «${texto($(A, '.mapa-artistas-pie'))}»`);
-  afirmar($(A, '.mapa-artistas-pie a')?.getAttribute('href') === 'https://www.last.fm', 'el crédito enlaza a https://www.last.fm');
+  afirmar(/^7 artistas no tienen ningún parecido en tu historial\. Parecidos según Last\.fm\.$/.test(texto($(A, '.artmapa-pie'))), `la línea de los aislados y el crédito: «${texto($(A, '.artmapa-pie'))}»`);
+  afirmar($(A, '.artmapa-pie a')?.getAttribute('href') === 'https://www.last.fm', 'el crédito enlaza a https://www.last.fm');
 
   // ── B (1) · sin elegido, 0 líneas ──────────────────────────────────────────
   progreso('B: sin elegido');
@@ -183,13 +185,19 @@ try {
   afirmar(d.elegido === 0, `PUERTA C: tocar el centro del artista 0 lo elige (elegido=${d.elegido})`);
   afirmar(d.lineas === grado[0], `PUERTA B: con un elegido, exactamente su grado (${grado[0]}); se dibujaron ${d.lineas}`);
   datos.conElegido = { grado: grado[0], lineas: d.lineas };
-  afirmar(texto($(A, '.mapa-artistas-nombre')) === nombreDe(0), `PUERTA C: el panel nombra al elegido: «${texto($(A, '.mapa-artistas-nombre'))}»`);
-  afirmar(texto($(A, '.mapa-artistas-meta')).endsWith(`· ${grado[0]} artistas parecidos en tu historial`), `PUERTA C: «N artistas parecidos en tu historial»: «${texto($(A, '.mapa-artistas-meta'))}»`);
+  afirmar(texto($(A, '.artmapa-nombre')) === nombreDe(0), `PUERTA C: el panel nombra al elegido: «${texto($(A, '.artmapa-nombre'))}»`);
+  afirmar(texto($(A, '.artmapa-meta')).endsWith(`· ${grado[0]} artistas parecidos en tu historial`), `PUERTA C: «N artistas parecidos en tu historial»: «${texto($(A, '.artmapa-meta'))}»`);
   const minutos0 = Math.round(H.totals[nombreDe(0)][1]).toLocaleString('es-ES');
-  afirmar(texto($(A, '.mapa-artistas-meta')).startsWith(`${minutos0} min`), `PUERTA C: los minutos del elegido, es-ES: «${texto($(A, '.mapa-artistas-meta'))}»`);
-  const listaC = $$(A, '.mapa-artistas-parecido').map((b) => texto(b));
+  afirmar(texto($(A, '.artmapa-meta')).startsWith(`${minutos0} min`), `PUERTA C: los minutos del elegido, es-ES: «${texto($(A, '.artmapa-meta'))}»`);
+  const listaC = $$(A, '.artmapa-parecido').map((b) => texto(b));
   const esperado0 = vecinosEsperados(G, 0).slice(0, 50).map(nombreDe);
   afirmar(igual(listaC, esperado0), `PUERTA C: los parecidos, por match de mayor a menor.\n  vino: ${JSON.stringify(listaC.slice(0, 8))}…\n  esperaba: ${JSON.stringify(esperado0.slice(0, 8))}…`);
+  // PUERTA K (v=317, tanda 66): la lista de parecidos va en columnas de 220 px y NO es flex. Hasta v=316 su clase
+  // (`.artmapa-lista`) era también la de las listas de #mapa y #generos, con `display: flex` en columna, y
+  // salía en una sola columna.
+  const csLista = win(A).getComputedStyle($(A, '.artmapa-lista'));
+  datos.lista = { columnWidth: csLista.columnWidth, display: csLista.display };
+  afirmar(csLista.columnWidth === '220px' && csLista.display !== 'flex', `PUERTA K: la lista de parecidos en columnas de 220 px y sin flex (${JSON.stringify(datos.lista)})`);
   // El fondo: una esquina del lienzo que no toca ningún círculo (lo comprueba la propia cuenta).
   const { tocar } = await import('/js/util/mapa-artistas.js');
   const b = win(A).__mapaArtistasBanco, rc = b.canvas.getBoundingClientRect();
@@ -201,7 +209,7 @@ try {
   tocarEn(A, ...fondo);
   d = await otroFrame(A, 'el frame sin elegido');
   afirmar(d.elegido === -1 && d.lineas === 0, `PUERTA C: tocar el fondo lo suelta (elegido=${d.elegido}, líneas=${d.lineas})`);
-  afirmar(!$(A, '.mapa-artistas-nombre') && /Toca un artista del mapa/.test(texto($(A, '[data-panel]'))), 'PUERTA C: y el panel vuelve a la línea de ayuda');
+  afirmar(!$(A, '.artmapa-nombre') && /Toca un artista del mapa/.test(texto($(A, '[data-panel]'))), 'PUERTA C: y el panel vuelve a la línea de ayuda');
   afirmar(llamadas(A) === n0C, 'PUERTA D: tocar no pide nada');
 
   // ── D · arrastrar, la rueda, buscar y «Mostrar 50 más» = 0 peticiones ───────
@@ -219,25 +227,25 @@ try {
   b.canvas.dispatchEvent(rueda);
   await otroFrame(A, 'el frame de la rueda');
   afirmar(rueda.defaultPrevented && b.vista().escala > v1.escala, 'PUERTA D: la rueda hace zoom (y no scrollea la página)');
-  const campo = $(A, '.mapa-artistas-campo');
+  const campo = $(A, '.artmapa-campo');
   campo.value = nombreDe(MAS).toUpperCase();
-  $(A, '.mapa-artistas-buscar').requestSubmit();
+  $(A, '.artmapa-buscar').requestSubmit();
   d = await otroFrame(A, 'el frame de la búsqueda');
-  afirmar(d.elegido === MAS && texto($(A, '.mapa-artistas-nombre')) === nombreDe(MAS), `PUERTA D: buscar (en mayúsculas) lo elige: ${d.elegido}`);
+  afirmar(d.elegido === MAS && texto($(A, '.artmapa-nombre')) === nombreDe(MAS), `PUERTA D: buscar (en mayúsculas) lo elige: ${d.elegido}`);
   const [cx, cy] = clienteDe(A, MAS);
   afirmar(Math.abs(cx - rc.left - rc.width / 2) < 1 && Math.abs(cy - rc.top - rc.height / 2) < 1, 'y lo centra');
   afirmar(d.lineas === grado[MAS], `PUERTA B: el buscado dibuja exactamente su grado (${grado[MAS]}); ${d.lineas}`);
-  afirmar($$(A, '.mapa-artistas-parecido').length === 50, `con ${grado[MAS]} parecidos, primero 50 (${$$(A, '.mapa-artistas-parecido').length})`);
+  afirmar($$(A, '.artmapa-parecido').length === 50, `con ${grado[MAS]} parecidos, primero 50 (${$$(A, '.artmapa-parecido').length})`);
   const mas = $(A, '[data-mas]');
   afirmar(mas && !mas.hidden && texto(mas) === 'Mostrar 50 más', '«Mostrar 50 más» a la vista');
   mas.click();
-  afirmar($$(A, '.mapa-artistas-parecido').length === grado[MAS] && mas.hidden, `«Mostrar 50 más» trae los ${grado[MAS]} y se va`);
-  afirmar(igual($$(A, '.mapa-artistas-parecido').map((x) => texto(x)), vecinosEsperados(G, MAS).map(nombreDe)), 'en el orden esperado');
+  afirmar($$(A, '.artmapa-parecido').length === grado[MAS] && mas.hidden, `«Mostrar 50 más» trae los ${grado[MAS]} y se va`);
+  afirmar(igual($$(A, '.artmapa-parecido').map((x) => texto(x)), vecinosEsperados(G, MAS).map(nombreDe)), 'en el orden esperado');
   campo.value = 'Nadie con este nombre';
-  $(A, '.mapa-artistas-buscar').requestSubmit();
-  afirmar(texto($(A, '.mapa-artistas-aviso')) === 'No está en tu mapa.', `sin resultados: «${texto($(A, '.mapa-artistas-aviso'))}»`);
+  $(A, '.artmapa-buscar').requestSubmit();
+  afirmar(texto($(A, '.artmapa-aviso')) === 'No está en tu mapa.', `sin resultados: «${texto($(A, '.artmapa-aviso'))}»`);
   // Un parecido del panel: lo elige y lo centra.
-  const otro = $(A, '.mapa-artistas-parecido');
+  const otro = $(A, '.artmapa-parecido');
   const jOtro = +otro.dataset.elegir;
   otro.click();
   d = await otroFrame(A, 'el frame del parecido');
@@ -342,7 +350,7 @@ try {
   const errores = marcos.flatMap(([n, f]) => win(f).__errores.map((e) => `${n}: ${e}`));
   afirmar(errores.length === 0, `0 errores de consola: ${errores.join(' | ')}`);
 
-  const resumen = `A abrir: /me=${datos.abrir.me} otras=${datos.abrir.otras.length}, al volver 0 · H ver todo: escala=${datos.verTodo.escala.toFixed(3)} nombres=${datos.verTodo.nombres} fuera=${datos.verTodo.fuera} primero=${datos.verTodo.primero} · B sin elegido: líneas=${datos.sinElegido.lineas} puntos=${datos.sinElegido.puntos} nombres=${datos.sinElegido.nombres} (con zoom ${datos.sinElegido.nombresConZoom}); con elegido: líneas=${datos.conElegido.lineas} = grado ${datos.conElegido.grado} · ` +
+  const resumen = `K lista: columnas=${datos.lista.columnWidth} display=${datos.lista.display} · A abrir: /me=${datos.abrir.me} otras=${datos.abrir.otras.length}, al volver 0 · H ver todo: escala=${datos.verTodo.escala.toFixed(3)} nombres=${datos.verTodo.nombres} fuera=${datos.verTodo.fuera} primero=${datos.verTodo.primero} · B sin elegido: líneas=${datos.sinElegido.lineas} puntos=${datos.sinElegido.puntos} nombres=${datos.sinElegido.nombres} (con zoom ${datos.sinElegido.nombresConZoom}); con elegido: líneas=${datos.conElegido.lineas} = grado ${datos.conElegido.grado} · ` +
     `C tocar elige y el fondo suelta · D 0 peticiones, quieto 5 s: ${datos.quieto} frames · E amigo: la línea y 0 puntos · F desborde 1366=${datos.desborde.a1366} 390=${datos.desborde.a390} · ` +
     `G salir con un frame pendiente=${datos.pendienteAlSalir}: 0 frames después; salir a mitad: ${datos.salir.mutaciones} escrituras, ${datos.salir.cuadros} frames, ${datos.salir.errores} errores · errores=${errores.length} · reloj virtual=${Math.round(performance.now())} ms`;
   document.documentElement.setAttribute('data-resumen', resumen);

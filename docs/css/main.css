@@ -6679,32 +6679,38 @@ body.covers-fs .main {
    #mapa-artistas — el mapa de artistas (v=315, tanda 64)
    ══════════════════════════════════════════════════════════════════════════
 
-   Todo cuelga de `.mapa-artistas` y nada redefine reglas de otra vista (v=219). El
+   Todo cuelga de `.artmapa` y nada redefine reglas de otra vista (v=219). El
    `<canvas>` no lleva colores en la hoja: los lee la vista del tema al pintar. Alto
    del lienzo con tope (en un móvil queda sitio para scrollear la página tocando fuera
    del mapa: dentro, el dedo arrastra el mapa, `touch-action: none`). Textos de pista
-   en `--color-text-secondary`. Sin animaciones. */
-.mapa-artistas { display: flex; flex-direction: column; gap: 12px; max-width: 1200px; min-width: 0; }
-.mapa-artistas-intro { margin: 0; color: var(--color-text-secondary); font-size: 14px; line-height: 1.5; }
-.mapa-artistas-buscar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
-.mapa-artistas-campo { flex: 1 1 200px; min-width: 0; max-width: 360px; }
-.mapa-artistas-aviso { color: var(--color-text-secondary); font-size: 13px; }
-.mapa-artistas-aviso:empty { display: none; }
-.mapa-artistas-lienzo { position: relative; min-width: 0; border: 1px solid var(--color-border); border-radius: 10px; background: var(--color-surface); overflow: hidden; }
-.mapa-artistas-canvas { display: block; width: 100%; height: clamp(300px, 62vh, 720px); touch-action: none; cursor: grab; }
-.mapa-artistas-canvas:active { cursor: grabbing; }
-.mapa-artistas-zoom { position: absolute; top: 8px; right: 8px; display: flex; gap: 6px; }
-.mapa-artistas-zoom .btn { min-width: 36px; padding: 6px 10px; }
-.mapa-artistas-panel { min-width: 0; }
-.mapa-artistas-cabecera { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
-.mapa-artistas-nombre { margin: 0; font-size: 18px; font-weight: 600; overflow-wrap: anywhere; min-width: 0; }
-.mapa-artistas-meta { margin: 4px 0 8px; color: var(--color-text-secondary); font-size: 13px; }
-.mapa-artistas-lista { margin: 0 0 10px; padding: 0 0 0 2.2em; columns: 3 220px; column-gap: 24px; }
-.mapa-artistas-fila { break-inside: avoid; padding: 2px 0; font-size: 14px; overflow-wrap: anywhere; }
-.mapa-artistas-parecido { background: none; border: 0; padding: 0; color: var(--color-text); font: inherit; text-align: left; cursor: pointer; text-decoration: underline; text-decoration-color: var(--color-border); text-underline-offset: 3px; }
-.mapa-artistas-parecido:hover, .mapa-artistas-parecido:focus-visible { text-decoration-color: var(--color-accent); }
-.mapa-artistas-min { color: var(--color-text-secondary); font-size: 12px; white-space: nowrap; }
-.mapa-artistas-panel .btn[hidden] { display: none; }
-.mapa-artistas-nota { margin: 0; color: var(--color-text-secondary); font-size: 14px; }
-.mapa-artistas-pie { margin: 0; color: var(--color-text-secondary); font-size: 12px; line-height: 1.5; }
-.mapa-artistas-pie a { color: inherit; }
+   en `--color-text-secondary`. Sin animaciones.
+
+   v=317 (tanda 66): hasta v=316 estas clases se llamaban `.mapa-artistas-…`, y dos
+   (`.mapa-artistas` y `.mapa-artistas-lista`) eran también de #mapa y #generos: como
+   iban después en la hoja les ganaban (la línea de conteo de aquellas en cuatro
+   renglones, y acá la lista de parecidos en una sola columna). `.artmapa-*` es de esta
+   vista y de nadie más; lo vigila `tests/css-clases-duplicadas.test.mjs`. */
+.artmapa { display: flex; flex-direction: column; gap: 12px; max-width: 1200px; min-width: 0; }
+.artmapa-intro { margin: 0; color: var(--color-text-secondary); font-size: 14px; line-height: 1.5; }
+.artmapa-buscar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.artmapa-campo { flex: 1 1 200px; min-width: 0; max-width: 360px; }
+.artmapa-aviso { color: var(--color-text-secondary); font-size: 13px; }
+.artmapa-aviso:empty { display: none; }
+.artmapa-lienzo { position: relative; min-width: 0; border: 1px solid var(--color-border); border-radius: 10px; background: var(--color-surface); overflow: hidden; }
+.artmapa-canvas { display: block; width: 100%; height: clamp(300px, 62vh, 720px); touch-action: none; cursor: grab; }
+.artmapa-canvas:active { cursor: grabbing; }
+.artmapa-zoom { position: absolute; top: 8px; right: 8px; display: flex; gap: 6px; }
+.artmapa-zoom .btn { min-width: 36px; padding: 6px 10px; }
+.artmapa-panel { min-width: 0; }
+.artmapa-cabecera { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+.artmapa-nombre { margin: 0; font-size: 18px; font-weight: 600; overflow-wrap: anywhere; min-width: 0; }
+.artmapa-meta { margin: 4px 0 8px; color: var(--color-text-secondary); font-size: 13px; }
+.artmapa-lista { margin: 0 0 10px; padding: 0 0 0 2.2em; columns: 3 220px; column-gap: 24px; }
+.artmapa-fila { break-inside: avoid; padding: 2px 0; font-size: 14px; overflow-wrap: anywhere; }
+.artmapa-parecido { background: none; border: 0; padding: 0; color: var(--color-text); font: inherit; text-align: left; cursor: pointer; text-decoration: underline; text-decoration-color: var(--color-border); text-underline-offset: 3px; }
+.artmapa-parecido:hover, .artmapa-parecido:focus-visible { text-decoration-color: var(--color-accent); }
+.artmapa-min { color: var(--color-text-secondary); font-size: 12px; white-space: nowrap; }
+.artmapa-panel .btn[hidden] { display: none; }
+.artmapa-nota { margin: 0; color: var(--color-text-secondary); font-size: 14px; }
+.artmapa-pie { margin: 0; color: var(--color-text-secondary); font-size: 12px; line-height: 1.5; }
+.artmapa-pie a { color: inherit; }

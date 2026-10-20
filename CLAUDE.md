@@ -2927,7 +2927,8 @@ del autocorrect y los sueltos aparte: ver «Los sueltos, los nombres y el radio 
 - Accesible por el buscador y el panel (HTML, foco y teclado); el `<canvas>` es `role="img"` con su `aria-label` («Mapa
   de tus artistas: N artistas, M parecidos»). Elegir desde el panel o el buscador lleva el foco al nombre.
 - El `teardown` suelta los listeners, el `ResizeObserver`, el rAF y el respaldo pendientes; `pintar()` además pregunta
-  por la vigencia de la ruta. Clases propias (`.mapa-artistas-…`), sin reusar las de otro módulo.
+  por la vigencia de la ruta. Clases propias (`.artmapa-…` desde v=317; hasta v=316, `.mapa-artistas-…`, y dos chocaban
+  con las de `#mapa`/`#generos` y les ganaban; lo vigila `tests/css-clases-duplicadas.test.mjs`), sin reusar las de otro módulo.
 
 **El costo**: abrir = **1 `/me`** (+1 del arranque) y **0 a Last.fm y a cualquier CDN** (los dos JSON salen del propio
 Pages); tocar, arrastrar, hacer zoom, buscar y «Mostrar 50 más» = **0**. Medido en el banco.

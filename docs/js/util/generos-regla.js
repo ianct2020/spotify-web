@@ -29,12 +29,12 @@
 // se sumó DESPUÉS de medir lo que se le escapaba a la versión 1 (ver `PENDIENTES.md`); «como X» =
 // no se vio en ninguna muestra y se agregó por ser de la misma clase que X (son las sospechosas).
 
-import { decidirEtiquetas } from './generos-artista.js?v=316';
-import { mismoArtistaAutocorregido } from './autocorrect-lastfm.js?v=316';
+import { decidirEtiquetas } from './generos-artista.js?v=317';
+import { mismoArtistaAutocorregido } from './autocorrect-lastfm.js?v=317';
 // ⚠️ Un import circular A PROPÓSITO: `generos-escaneo.js` importa `generosDeArtista` de acá para
 // «Cuánto se sabe», y acá hace falta su `yaBuscado` (UNA sola función decide «ya buscado», v=219).
 // Es seguro porque ninguno de los dos usa lo del otro al cargarse, solo adentro de funciones.
-import { yaBuscado } from './generos-escaneo.js?v=316';
+import { yaBuscado } from './generos-escaneo.js?v=317';
 
 /** Lo que NO es un género, en minúsculas. Cada entrada, con de dónde sale. */
 export const NO_ES_GENERO = new Set([
