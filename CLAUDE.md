@@ -1570,13 +1570,17 @@ enseña en un bloque plegable debajo de la cabecera. Tres archivos:
   cabecera a 390 se reacomoda** (ver «La cabecera a 390 px y el dueño (v=312)», abajo).
 
 **El modal, medido** (SEMBRADO: el banco `letras`, sección M, con quien NO es el dueño —el cuerpo es un
-párrafo— y una letra inventada de 60 renglones; `.modal` tiene `max-height: 80vh`, también a 390: la regla de
-92vh de móvil va antes en la hoja y pierde):
+párrafo— y una letra inventada de 60 renglones; `.modal` tiene `max-height: 80vh` y, desde v=322, a 600 px o menos
+`92vh`: hasta v=321 la regla del móvil iba antes en la hoja y perdía):
 
 | | modal cerrado | con la letra abierta | caja / contenido de la letra | ¿el modal scrollea? |
 |---|---|---|---|---|
 | 1366×768 | 189,5 | 571,5 (tope 614,4) | 292 / 1.255 | no: entra |
-| 390×844 | 354 | 631,1 (tope 675,2) | 169 / 1.255 | no: entra |
+| 390×844 | 230 | 507,1 (tope **776,5**) | 169 / 1.255 | no: entra |
+
+⚠️ La fila de 390 se re-midió en la tanda 68 (v=322, el banco `letras`, sección M). Hasta v=321 decía «354 · 631,1 (tope
+675,2)»: el 354 y el 631,1 eran de v=311 (la cabecera de v=312 ya los había bajado a 230 y 507,1, y nadie actualizó esta
+tabla); el tope pasa de 675,2 a 776,5 porque el `max-height: 92vh` del celular ya no lo pisa la regla general `.modal`.
 
 El alto máximo de la letra es `min(300px, 38vh)` y, por debajo de 520 px, `min(170px, 20vh)` (la primera
 versión, `min(300px, 36vh)` en los dos y con el margen de `.modal p` todavía encima, a 390 scrolleaba: 842 de
@@ -1603,7 +1607,13 @@ Chart.js viene de jsDelivr y el banco no sale a la red). Sin stats.fm (el banco 
 | no dueño 1366×768 | 189,5 | 571,5, entra | 78,5 | 1 | entero 340/340 | 133,5 → 475,5 de 570 |
 | no dueño 390×844 | 230 | 507,1, entra | **123,5** | 1 | entero 247/247 | 166,5 → 403,6 de 505 |
 | dueño 1366×768 | 443,5 | 614,4, scrollea 824/612 | 78,5 | 1 | entero 330/330 | 133,5 → 475,5 de 612 |
-| dueño 390×844 | 554,5, entra | 675,2, scrollea 890/673 | **184** (123,5 cerrada) | 2 | entero 237/237 | 227 → 464,1 de 673 |
+| dueño 390×844 | 554,5, entra | **776,5**, scrollea 890/**774** | **184** (123,5 cerrada) | 2 | entero 237/237 | 227 → 464,1 de **774** |
+
+⚠️ Las dos filas de 390 de esta tabla se re-midieron en la tanda 68 (v=322, banco `letras`, sección M). Cambió solo la del
+dueño con la letra abierta: hasta v=321 decía «675,2, scrollea 890/673 … de 673». El modal llega ahora a su tope de 776,5
+(92vh de 844) en vez de 675,2 (80vh) porque el `max-height: 92vh` del celular ya no lo pisa la regla general `.modal`; el
+contenido (890) no cambió, así que sigue scrolleando, con 101 px más de caja. La del no dueño no cambió (507,1 entra con los
+dos topes). La tabla de v=311 (antes), de arriba, es historia y no se tocó.
 
 - **La caja de la letra entera ya quedaba a la vista al abrirla, en los cuatro casos** (va justo debajo de la
   cabecera y las stats van después): el alto de `.tc-letra-texto` no se tocó.
@@ -1618,7 +1628,8 @@ Chart.js viene de jsDelivr y el banco no sale a la red). Sin stats.fm (el banco 
   los botones ni sus textos.
 - ⚠️ Con el dueño a 390, al abrir la letra aparece la barra de scroll del modal, el ancho baja y la fila de botones
   pasa a 2 renglones (la cabecera, de 123,5 a 184). En las capturas (`--hide-scrollbars`) no se ve: 123,5.
-- La regla `.modal { max-height: 92vh }` del móvil sigue perdiendo contra la base (80vh): no se tocó.
+- La regla `.modal { max-height: 92vh }` del móvil sigue perdiendo contra la base (80vh): no se tocó. ⚠️ **Arreglado en v=322**
+  (ver «Las reglas de `@media` que nadie aplicaba (v=322)», abajo).
 
 Guardas: la sección M del banco `letras` mide los cuatro casos, cerrada y abierta, y afirma la caja de la letra a
 la vista (los cuatro), la cabecera a 390 (≤ 2 renglones de botones, el artista entero, < 247,5 px) y la de 1366 en
@@ -1637,6 +1648,29 @@ el aviso a 3 s y no a 1 s; cerrar en vuelo sin escribir en el DOM; el modal a 13
 puertas vistas fallar en una copia (guardar ante un 503, sacar la verificación, pedir al abrir, no leer la
 caché). `letras-caso.html?foto=violeta|nohay|papel` es el instrumento de las capturas sembradas (conductor en
 `fonoteca-migracion/driver-capturas-letras-2026-10-16.mjs`).
+
+## Las reglas de `@media` que nadie aplicaba (v=322)
+
+La tanda 68. Una declaración dentro de un `@media` tiene la MISMA especificidad que la misma regla fuera de él: si la regla
+general viene **después** en la cascada, gana siempre y la del `@media` no se aplica nunca, en ningún ancho. Pasaba con dos
+reglas, las dos de `main.css` y las dos del celular:
+
+| la regla del `@media` | qué la pisaba | lo que no se aplicaba |
+|---|---|---|
+| `.blayer-right { align-items: stretch; margin-left: 0 }` en `@media (max-width: 768px)` | la general `.blayer-right { align-items: flex-end; margin-left: auto }`, que iba después | los widgets de la capa de abajo estirados a lo ancho |
+| `.modal { max-height: 92vh; border-radius: … 0 0 }` en `@media (max-width: 600px)` | la general `.modal` (`max-height: 80vh`, `border-radius: var(--radius-xl)`), que iba después | el modal al 92vh y con las esquinas de abajo rectas |
+
+Las contó `fonoteca-migracion/css/detector-media-pisada-2026-10-20.mjs` con las hojas **en el orden de carga de
+`index.html`** (`theme.css`, `components.css`, `main.css`): **4 declaraciones en 2 reglas** (en otro orden el número es otro).
+**El arreglo fue por ORDEN**: cada bloque `@media` quedó después de la regla general que lo pisaba, entero y sin cambiar una
+declaración (en la capa se movieron las dos reglas generales antes del bloque; en el modal, el bloque después de `.modal`).
+**Ni `!important` ni más especificidad.** Medido (SEMBRADO, Chrome headless, `mobile: false`; conductor
+`fonoteca-migracion/css/driver-media-t68-2026-10-20.mjs`): a 390×844, `.modal` pasa de `max-height` 675,2 px y `border-radius`
+20 px a 776,48 px y `10px 10px 0 0`, y `.blayer-right` de `align-items: flex-end` a `stretch` (`margin-left` computado, 0 en los
+dos: el ancho del toast ya era 360 de 360); a 1366×591 las cuatro propiedades y las capturas, idénticas (`cmp`). **Solo se ve
+en el celular.** Guarda: `tests/css-media-pisada.test.mjs` (lee los `<link rel="stylesheet">` de `src/index.html`, comprueba que
+`callback.html` carga lo mismo y afirma 0; rojo contra v=321 con las 4). `tests/css-clases-duplicadas.test.mjs` cita las líneas
+nuevas de `.blayer-right` (`main.css:791 y :799`).
 
 ## 🏷️ Las etiquetas de género, permanentes (v=312)
 

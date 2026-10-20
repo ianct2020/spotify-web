@@ -117,7 +117,10 @@ const EXCLUIDAS = new Map([
   ['.sc-actionbar', 'components.css:1459 y main.css:4952 · PARTIDA: la barra flotante de las tarjetas compartidas y, en main.css, su sitio junto a la capa de abajo (agrupada con `.disco-actionbar`, el look compartido en la hoja como pide v=219). La misma pieza, en dos hojas'],
   ['.sc-ex-item', 'components.css:1590 y :1605 · PARTIDA: la fila de un ítem agrupada con `.sc-pl-item` y, aparte, sus columnas (la del ítem excluido lleva una más). La misma pieza'],
   ['.home-card', 'main.css:457 y :479 · PARTIDA: la tarjeta de inicio, y aparte `min-width: 0` / `max-width: 100%` para que no ensanche la grilla. La misma pieza'],
-  ['.blayer-right', 'main.css:809 y :818 · PARTIDA: las dos columnas de la capa de abajo juntas y, aparte, lo de la derecha (`justify-content`). La misma pieza'],
+  // v=322 (tanda 68): hasta v=321 decía `main.css:809 y :818` y «lo de la derecha (`justify-content`)», que era falso desde
+  // siempre (la 67 lo corrigió en PENDIENTES.md). Las dos reglas se movieron ANTES del `@media (max-width: 768px)` de la capa,
+  // para que la del celular (`align-items: stretch; margin-left: 0`) deje de estar pisada (tests/css-media-pisada.test.mjs).
+  ['.blayer-right', 'main.css:791 y :799 · PARTIDA: las dos columnas de la capa de abajo juntas (flex en columna, hueco, sin desbordar) y, aparte, lo de la derecha (`align-items: flex-end; margin-left: auto`). La misma pieza'],
   ['.wt-footer', 'main.css:3946 y :3958 · PARTIDA: el pie del modal de W-Three y, aparte, el `display: flex` de v=258 para «Quitar N de me gusta». La misma pieza'],
   ['.disco-actionbar', 'main.css:4899 y :4952 · PARTIDA: la barra de las dos vistas de descubrir y, aparte, su sitio junto a la capa de abajo (agrupada con `.sc-actionbar`). La misma pieza'],
   ['.wr-ap-cal', 'main.css:5757 y :5763 · PARTIDA: la grilla del calendario agrupada con sus meses y, aparte, sus filas. La misma pieza (el calendario anual del Wrapped y de #calendario)'],

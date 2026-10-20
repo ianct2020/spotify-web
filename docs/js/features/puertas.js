@@ -26,11 +26,11 @@
 // `universo()` y de a 100 filas («Mostrar 100 más»), que miles de filas de golpe son
 // mucho DOM. A 390 px cada fila pasa a dos renglones (ver `.puertas` en main.css).
 
-import { loadArtistTracks, isOwner, ownerLockedMessage } from './history-data.js?v=321';
-import { escapeHtml, pageHeader } from '../ui/components.js?v=321';
-import { vigilarRuta } from '../util/vigencia-ruta.js?v=321';
-import { armarPuertas, POR_PAGINA } from '../util/puertas-entrada.js?v=321';
-import { MIN_MINUTOS } from '../util/mapa-paises.js?v=321';
+import { loadArtistTracks, isOwner, ownerLockedMessage } from './history-data.js?v=322';
+import { escapeHtml, pageHeader } from '../ui/components.js?v=322';
+import { vigilarRuta } from '../util/vigencia-ruta.js?v=322';
+import { armarPuertas, POR_PAGINA } from '../util/puertas-entrada.js?v=322';
+import { MIN_MINUTOS } from '../util/mapa-paises.js?v=322';
 
 const num = (n) => Number(n || 0).toLocaleString('es-ES');
 

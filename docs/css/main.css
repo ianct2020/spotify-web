@@ -787,6 +787,20 @@ h3 { font-size: 18px; font-weight: 600; }
 @media (min-width: 769px) {
   body:not(.sidebar-hidden) .blayer { padding-left: 312px; }
 }
+.blayer-left,
+.blayer-right {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+  max-width: 100%;
+}
+/* Pegada a la derecha aunque la zona izquierda esté vacía. */
+.blayer-right {
+  align-items: flex-end;
+  margin-left: auto;
+}
+
 /* En móvil no hay sitio para dos zonas en una fila: la izquierda se pliega
    (está vacía salvo que W-Three esté guardando) y la columna derecha ocupa el
    ancho entero, con los widgets estirados. */
@@ -804,20 +818,6 @@ h3 { font-size: 18px; font-weight: 600; }
   .blayer-right { align-items: stretch; margin-left: 0; }
   /* El botón redondo no se estira. */
   .blayer-right .back-to-top { align-self: flex-end; }
-}
-
-.blayer-left,
-.blayer-right {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  min-width: 0;
-  max-width: 100%;
-}
-/* Pegada a la derecha aunque la zona izquierda esté vacía. */
-.blayer-right {
-  align-items: flex-end;
-  margin-left: auto;
 }
 .blayer-slot { display: contents; }
 
@@ -943,11 +943,6 @@ h3 { font-size: 18px; font-weight: 600; }
   padding: 24px;
   animation: fade-in 0.2s ease;
 }
-@media (max-width: 600px) {
-  .modal-overlay { padding: 12px; align-items: flex-end; }
-  .modal { max-height: 92vh; border-radius: var(--radius-md, 10px) var(--radius-md, 10px) 0 0; }
-}
-
 .modal {
   background: var(--color-surface);
   border: 1px solid var(--color-border);
@@ -958,6 +953,11 @@ h3 { font-size: 18px; font-weight: 600; }
   max-height: 80vh;
   overflow-y: auto;
   animation: modal-in 0.25s ease;
+}
+
+@media (max-width: 600px) {
+  .modal-overlay { padding: 12px; align-items: flex-end; }
+  .modal { max-height: 92vh; border-radius: var(--radius-md, 10px) var(--radius-md, 10px) 0 0; }
 }
 
 .modal h2 {
