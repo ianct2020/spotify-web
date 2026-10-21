@@ -139,10 +139,32 @@ async function handleRoute() {
     main.innerHTML = LOADING_HTML;
     const gen = generacionRuta;
     abrirRender(gen, hash);
+    let limpieza;
     try {
-      currentCleanup = await guardRoute(main, handler);
+      limpieza = await guardRoute(main, handler);
     } finally {
       cerrarRender(gen);
+    }
+    // v=324: el teardown también pregunta por la vigencia. Hasta v=323 esto era
+    // `currentCleanup = await guardRoute(…)` a secas: con A lenta y B rápida, B
+    // dejaba el suyo y A, al terminar tarde, lo PISABA con el de A (o con `null`).
+    // Al salir de B corría el de A y el de B no corría nunca (el `abort()` del
+    // escaneo de `#mapa` y `#generos`, el `ResizeObserver` de `#mapa-artistas`…).
+    //
+    // Si esta ruta ya no es la vigente, `currentCleanup` es de otra y no se toca.
+    // El teardown de la vieja se corre ACÁ, apenas termina, con el mismo `try` que
+    // el de arriba: nadie más lo va a correr. Salvo si la vieja tiene el MISMO
+    // hash que la que estás mirando (A → B → A, y el A viejo terminó tarde): hay
+    // teardowns de MÓDULO, no de cada render (`discover-artists.js` suelta `list`
+    // y `lazyCovers`, que son variables del archivo), y correr el del A viejo
+    // destruiría la lista del A nuevo. El A nuevo ya lo llama al empezar su
+    // `render()`, así que del viejo no queda nada colgado. Lo que se pierde es el
+    // teardown de un render viejo de cierre PROPIO de la misma ruta: hoy ninguno
+    // llega a devolverlo (ver PENDIENTES, tanda 71).
+    if (rutaVigente(gen)) {
+      currentCleanup = limpieza;
+    } else if (limpieza && hash !== hashActual) {
+      try { limpieza(); } catch (e) { console.warn('[router] teardown:', e); }
     }
     // Segunda pasada: las `.home-card` de Home nacen DENTRO del handler, o sea
     // después del `markActiveRoute` de arriba. Sin esto, en Home no se marca
@@ -152,9 +174,6 @@ async function handleRoute() {
     // ruta nueva ya hizo sus dos pasadas, y marcar ACÁ le ponía `active` a la
     // tarjeta y al link de la ruta que dejaste (y se lo sacaba a la que estás
     // mirando) cuando el render viejo terminaba. Lo midió el banco `puertas`.
-    // ⚠️ Lo de `currentCleanup` de arriba tiene el mismo problema (el teardown
-    // de la ruta vieja pisa el de la vigente) y NO se arregló en la 57: está
-    // reproducido y anotado en PENDIENTES.
     if (rutaVigente(gen)) markActiveRoute(hash);
   } else {
     main.innerHTML = `

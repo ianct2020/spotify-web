@@ -1,0 +1,100 @@
+<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>banco router-teardown — la app entera, en un iframe</title>
+<link rel="stylesheet" href="/css/theme.css">
+<link rel="stylesheet" href="/css/components.css">
+<link rel="stylesheet" href="/css/main.css">
+<style>*,*::before,*::after{animation:none!important;transition:none!important}</style>
+</head><body>
+<div id="app"></div>
+<script type="module">
+// ── Un iframe del banco `router-teardown.html` (v=324, tanda 71) ─────────────
+//
+// Arranca la app ENTERA (`/js/app.js`: su `init()`, su barra lateral, su router)
+// en una de dos escenas:
+//
+//   · `?escena=mapa`: `/me` = HISTORY_OWNER_ID contestado por la Spotify simulada
+//     (`simulado.mjs`, sin tocar), el historial INVENTADO que la madre sembró con
+//     `sembrarHistorial` de `mapa-datos.mjs`, y el MusicBrainz SIMULADO de la madre
+//     (`parent.__mb`, el `crearMB` de `mapa-datos.mjs`). Lo que suma este archivo al
+//     doble de MusicBrainz de `mapa-caso.html`: cuenta en `parent.__mbAbortos` cada
+//     petición que se aborta MIENTRAS está en vuelo (la señal del `teardown` de
+//     `#mapa`, `st.ctrl?.abort()`).
+//   · `?escena=disco`: la Spotify simulada y los me gusta y las discografías
+//     INVENTADOS de `escenario-ocultos.mjs` (sin tocarlo), para `#discover-artists`.
+//
+// En las dos, `/me` se puede RETENER: `__retenerProximaMe()` hace que la próxima
+// `GET /me` quede sin contestar hasta `__soltarMe()`. Es la respuesta que espera el
+// `render()` de la vista lenta (`getCurrentUserId()`, memoizado solo con el VALOR: un
+// segundo `getCurrentUserId()` mientras el primero espera pide otra `/me`, que sí se
+// contesta). El `/me` del arranque (`testConnection()`) sale antes y no se retiene.
+//
+// La madre conduce desde afuera (mismo origen). Nada sale a `api.spotify.com` ni a
+// `musicbrainz.org`.
+
+import { instalarRedSimulada, esperarReal } from '/banco/simulado.mjs';
+
+const q = new URLSearchParams(location.search);
+const ESCENA = q.get('escena') || 'mapa';
+const MARCO = q.get('marco') || ESCENA;
+window.__errores = [];
+window.__avisos = [];
+window.addEventListener('error', (e) => window.__errores.push('error: ' + (e.message || e)));
+window.addEventListener('unhandledrejection', (e) => window.__errores.push('rechazo: ' + String(e.reason?.message || e.reason)));
+const errorOriginal = console.error.bind(console);
+console.error = (...a) => { window.__errores.push('console.error: ' + a.map(String).join(' ').slice(0, 300)); errorOriginal(...a); };
+const warnOriginal = console.warn.bind(console);
+console.warn = (...a) => { window.__avisos.push(a.map(String).join(' ').slice(0, 300)); warnOriginal(...a); };
+
+// ── La `/me` que se puede retener ────────────────────────────────────────────
+let meId = null;
+let retener = false;
+let soltar = null;
+window.__meRetenida = false;
+window.__meSoltada = false;
+window.__retenerProximaMe = () => { retener = true; };
+window.__soltarMe = () => { if (soltar) soltar(); };
+const responderMe = () => {
+  if (!retener) return { id: meId, display_name: 'Banco' };
+  retener = false;
+  window.__meRetenida = true;
+  return new Promise((r) => { soltar = () => { soltar = null; window.__meSoltada = true; r({ id: meId, display_name: 'Banco' }); }; });
+};
+
+if (ESCENA === 'mapa') {
+  const { HISTORY_OWNER_ID } = await import('/js/features/history-data.js');
+  meId = HISTORY_OWNER_ID;
+  const sim = instalarRedSimulada();
+  window.__sim = sim;
+  sim.ruta('GET', /^\/me$/, responderMe);
+  localStorage.setItem('fonoteca_last_user_id', meId);
+  localStorage.setItem('fonoteca_perfil_v1', JSON.stringify({ id: meId, display_name: 'Banco' }));
+
+  // El MusicBrainz simulado, por ENCIMA de la Spotify simulada (como en `mapa-caso.html`).
+  const debajo = window.fetch;
+  window.fetch = (entrada, opciones = {}) => {
+    const url = typeof entrada === 'string' ? entrada : entrada.url;
+    const abs = new URL(url, location.href);
+    if (abs.hostname !== 'musicbrainz.org') return debajo(entrada, opciones);
+    return new Promise((resolver, rechazar) => {
+      const signal = opciones.signal;
+      const abortar = () => { parent.__mbAbortos = (parent.__mbAbortos || 0) + 1; rechazar(new DOMException('abortado', 'AbortError')); };
+      if (signal?.aborted) return abortar();
+      signal?.addEventListener('abort', abortar, { once: true });
+      // Solo cuenta el aborto de una petición que sigue EN VUELO: si ya contestó, se suelta el oyente.
+      const suelta = () => signal?.removeEventListener('abort', abortar);
+      parent.__mb.responder(abs.href, { marco: MARCO, metodo: String(opciones.method || 'GET').toUpperCase(), cabeceras: Object.keys(opciones.headers || {}) })
+        .then((r) => { suelta(); resolver(new Response(r.cuerpo, { status: r.status, headers: { 'content-type': 'application/json' } })); },
+          (e) => { suelta(); rechazar(e); });
+    });
+  };
+} else {
+  const { montarEscenarioOcultos } = await import('/banco/escenario-ocultos.mjs');
+  const { sim } = await montarEscenarioOcultos();
+  meId = 'usuario-banco';
+  sim.ruta('GET', /^\/me$/, responderMe);   // la última declarada gana
+}
+
+await import('/js/app.js');
+await esperarReal(() => document.getElementById('my-history-btn'), { que: 'que la app arranque', vueltas: 4000 });
+window.__listo = true;
+</script>
+</body></html>

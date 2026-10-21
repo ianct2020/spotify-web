@@ -48,7 +48,7 @@ if npm test --silent 2>&1 | tail -4 | sed 's/^/      /'; [ "${PIPESTATUS[0]}" -e
 # `mosaico` y `toasts` entraron en v=273:
 # estaban en rojo desde antes del 04/10 y justamente por no estar acá nadie los
 # miraba, igual que le había pasado a `barra` entre v=241 y v=261.
-echo "2b. bancos (barra · pausa-search · toasts · mosaico · novedades · escrituras · ocultar-artista ×3 · covers-orden · calendario · import-guarda · ocultos-cache · mapa · puertas · cuota · letras · generos-cache · generos-escaneo · generos · mapa-artistas · versiones-deluxe)"
+echo "2b. bancos (barra · pausa-search · toasts · mosaico · novedades · escrituras · ocultar-artista ×3 · covers-orden · calendario · import-guarda · ocultos-cache · mapa · puertas · cuota · letras · generos-cache · generos-escaneo · generos · mapa-artistas · versiones-deluxe · router-teardown)"
 # Los dos de `ocultar-artista` entraron en v=276: las TRES vistas que ocultan
 # artistas, reales, contra una Spotify simulada. Es el único sitio donde se puede
 # probar ocultar sin escribir en la cuenta de Ian, y el de `-disco` es el que
@@ -110,7 +110,13 @@ echo "2b. bancos (barra · pausa-search · toasts · mosaico · novedades · esc
 # tilda una pista y ningún botón acepta más de un grupo; «Borrar sobrantes» lista la que se va y el ÚNICO
 # DELETE lo recibe la Spotify simulada, verificado; a 1366×591 y 390×844 nada desborda. Visto fallar contra
 # v=322 en B (y en C con `XQ="&omitir=B"`).
-for B in barra pausa-search toasts mosaico novedades escrituras ocultar-artista ocultar-artista-disco ocultar-artista-novedades covers-orden calendario import-guarda ocultos-cache mapa puertas cuota letras generos-cache generos-escaneo generos mapa-artistas versiones-deluxe; do
+# `router-teardown` entró en v=324 (tanda 71): el teardown de la ruta vigente no lo pisa el de una vieja que
+# termina tarde. La app ENTERA: #puertas con su `/me` retenida, #mapa buscando contra el MusicBrainz simulado
+# con una petición en vuelo, #puertas termina, #home; la petición en vuelo se ABORTA y el candado de la
+# búsqueda queda libre (contra v=323: 0 abortadas y el candado tomado; 0 peticiones nuevas en los dos, por la
+# vigencia del bucle). Y A → B → A con #discover-artists (teardown de módulo): la lista del render nuevo sigue
+# viva cuando la vieja termina (de conservación; visto fallar con una copia que corre también el del mismo hash).
+for B in barra pausa-search toasts mosaico novedades escrituras ocultar-artista ocultar-artista-disco ocultar-artista-novedades covers-orden calendario import-guarda ocultos-cache mapa puertas cuota letras generos-cache generos-escaneo generos mapa-artistas versiones-deluxe router-teardown; do
   if node scripts/correr-banco.mjs "$B" 2>&1 | sed 's/^/      /'; [ "${PIPESTATUS[0]}" -eq 0 ]; then
     ok "banco $B en verde"
   else

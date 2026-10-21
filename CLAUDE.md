@@ -1484,20 +1484,46 @@ las dos con una vista lenta de la que salís a mitad de la carga:
    `markActiveRoute`, ni en las vistas, ni con un `:not()`): es el único sitio que sabe qué
    generación terminó. Con la ruta vigente, todo igual que antes (Home sigue marcando su
    tarjeta: `tests/inicio-censo.test.mjs`, sin tocar).
-2. **El teardown pisado — REPRODUCIDO, NO arreglado.** Con A lenta y B rápida: B deja
-   `currentCleanup = teardownB`; A termina tarde y lo pisa con `teardownA` (o con `null`). Al
-   salir de B corre el de A y **el de B no corre nunca** (sus observers, timers, el aborto del
-   escaneo de `#mapa`, el `releaseReveal`… quedan vivos), y el de A corre recién al salir de B.
-   Reproducido en Node con el `router.js` real y tres rutas inventadas
-   (`fonoteca-migracion/router-vigencia-repro-2026-10-15.mjs`): teardown de B, 0 veces; el de
-   A, 1 vez y después de salir de B. **No se arregló en la 57** (el encargo lo dejó para otra
-   tanda; está en `PENDIENTES.md`). El arreglo pensado, sin probar: si `!rutaVigente(gen)`, no
-   tocar `currentCleanup` y correr ahí mismo el teardown que devolvió la ruta vieja, en un
-   `try/catch` con el mismo `console.warn('[router] teardown:', e)`.
+2. **El teardown pisado — ARREGLADO en v=324 (tanda 71).** Con A lenta y B rápida: B dejaba
+   `currentCleanup = teardownB`; A terminaba tarde y lo pisaba con `teardownA` (o con `null`). Al
+   salir de B corría el de A y **el de B no corría nunca** (sus observers, timers, el aborto del
+   escaneo de `#mapa`, el `releaseReveal`… quedaban vivos). Lo reprodujo la 57 en Node
+   (`fonoteca-migracion/router-vigencia-repro-2026-10-15.mjs`). Arreglo, en `handleRoute()` y
+   en ningún otro lado: después del `await guardRoute(…)`, **si `rutaVigente(gen)`, todo como
+   antes** (`currentCleanup = lo que devolvió`); **si no, `currentCleanup` no se toca** y el
+   teardown que devolvió la ruta vieja **se corre ahí mismo**, en un `try/catch` con el mismo
+   `console.warn('[router] teardown:', e)`, **salvo que la vieja tenga el MISMO hash que la
+   actual** (A → B → A, y el A viejo terminó tarde): ahí no se corre. 🔴 **El porqué del mismo
+   hash**: hay teardowns de MÓDULO, no de cada render (`discover-artists.js`, `new-releases.js`,
+   `skips.js`, `zero-plays.js`, `sin-clasificar.js` sueltan `list`/`lazyCovers`, que son
+   variables del archivo): correr el del A viejo destruiría la lista del A nuevo, y el A nuevo ya
+   lo llama al empezar su `render()`. Lo que se pierde es el teardown de un render viejo de cierre
+   PROPIO de la misma ruta; hoy ninguno llega a devolverlo (las cinco async con cierre propio
+   —`#mapa`, `#generos`, `#mapa-artistas`, `#covers`, `#mosaico`— no tienen un `await` entre su
+   última guarda de vigencia y el `return`). La tabla de las 32 rutas (quién devuelve teardown, de
+   qué es y si su `render()` lo llama al empezar) está en `fonoteca-migracion/PENDIENTES.md`
+   (tanda 71). ⚠️ `#dashboard` tiene teardown de módulo y su `render()` no lo llama al empezar,
+   pero es SINCRÓNICO: nunca termina tarde. Si algún día pasa a `async`, mirar esto.
 
 Guarda de la 1: el banco `tests/banco/puertas.html` (PUERTA 6) exige 0 marcas tardías del router
 y que lo único activo en el documento sea la ruta nueva; visto ponerse rojo sacándole la
-condición a la segunda pasada. No cambia ninguna petición: la tabla de costos no se toca.
+condición a la segunda pasada.
+
+Guardas de la 2 (v=324): `tests/router-teardown.test.mjs` (el `router.js` real en Node con rutas
+INVENTADAS: A lenta → B → A termina → C; A → B → A2 con el viejo terminando durante A2 y después
+de A2; la vieja sin teardown; la vieja con un teardown que tira; y la conservación. Rojo contra
+v=323 en 7 asserts) y el banco `tests/banco/router-teardown.html` (en `prepush`, el vigésimo
+tercero: la app ENTERA, `#puertas` con su `/me` retenida, `#mapa` buscando con una petición en
+vuelo, `#home`: la petición en vuelo se aborta y el candado de la búsqueda queda libre — contra
+v=323, 0 abortadas y el candado tomado —; y A → B → A con `#discover-artists`, de conservación,
+visto fallar con una copia que corre también el del mismo hash). ⚠️ **«0 peticiones a MusicBrainz
+después de salir» NO distingue el arreglo**: el bucle de `#mapa` ya pregunta por la vigencia antes
+de cada petición; lo que el teardown perdido dejaba vivo era la petición EN VUELO y el candado.
+⚠️ **No arreglado, solo anotado**: si la ruta vieja TIRA después de que te fuiste, `guardRoute()`
+le pinta la pantalla de error a `main`, encima de la vista vigente (leído del código: su `catch`
+hace `pantallaDeError(container, err)` y `container` es `main`; los tests de la 71 no lo ejercitan;
+en `PENDIENTES.md`).
+Ninguna de las dos cambia una petición: la tabla de costos no se toca.
 
 ## 📏 La cuota a la vista (v=310)
 

@@ -1,0 +1,208 @@
+<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>banco router-teardown — el teardown de la ruta vigente no lo pisa una vieja</title>
+<style>html,body{margin:0;background:#111;color:#eee;font:13px system-ui}iframe{border:0;display:block}</style>
+</head><body>
+<pre id="progreso"></pre>
+<div id="marcos"></div>
+<script type="module">
+// ── Qué prueba este banco (v=324, tanda 71) ──────────────────────────────────
+//
+// El teardown pisado del router (`handleRoute()`, `router.js`), en el caso REAL: la
+// app ENTERA en un iframe (`router-teardown-caso.html`), con la Spotify simulada
+// (`simulado.mjs`) y el MusicBrainz simulado del banco `mapa` (`crearMB` y
+// `sembrarHistorial` de `mapa-datos.mjs`: historial y artistas INVENTADOS). Nada
+// sale a `api.spotify.com` ni a `musicbrainz.org`.
+//
+// LA VISTA LENTA ES `#puertas`. Es una de las 32 rutas del menú, y su `render()`
+// espera `loadArtistTracks()` → `loadOne()` → `getCurrentUserId()` → `GET /me`
+// antes de pintar nada: el banco RETIENE esa `/me` y la suelta cuando quiere (el
+// arranque ya pagó la suya con `testConnection()`, que no pasa por el memo). No
+// devuelve teardown: al terminar tarde, v=323 dejaba `currentCleanup = null` y así
+// se perdía el de la vista vigente. No toca MusicBrainz, así que no ensucia la cuenta.
+//
+//   1. `#puertas`, con su `/me` retenida: se queda en el esqueleto;
+//   2. `#mapa` y «Buscar países»: el escaneo arranca contra el MusicBrainz simulado;
+//      se deja contestar la primera y la siguiente queda EN VUELO (`congelado`);
+//   3. se suelta la `/me`: `#puertas` termina, vieja (no pinta nada sobre `#mapa`);
+//   4. `#home`;
+//   5. LA PUERTA, en los 30 s de reloj siguientes:
+//        a. 0 peticiones NUEVAS al MusicBrainz simulado y 0 escrituras en el DOM de
+//           `#mapa` (de conservación: ver abajo);
+//        b. 🔴 la petición que estaba en vuelo SE ABORTA y el candado
+//           `fonoteca-mapa-escaneo` queda libre. Es el `abort()` del teardown de `#mapa`.
+//      ⚠️ Lo que el encargo pedía como puerta roja era «0 peticiones en 30 s», y contra
+//      v=323 eso NO da rojo: el bucle de `#mapa` pregunta `seguir: () => ruta.vigente()`
+//      antes de cada petición (v=304), así que al salir no sale ninguna nueva aunque el
+//      teardown no corra (ya lo decía PENDIENTES: «el banco `mapa` no distingue "el
+//      teardown no aborta"»). Lo que el teardown perdido deja vivo es la petición EN
+//      VUELO, sin abortar, y con ella el candado de la búsqueda tomado: otra pestaña no
+//      puede buscar hasta que MusicBrainz conteste (o nunca, si no contesta). Eso es lo
+//      que da rojo contra v=323, y es lo que la puerta mira (lo mismo que la puerta E de
+//      `generos-escaneo`).
+//   6. Conservación: la vista vieja no pintó nada, `[data-route].active` es solo el de
+//      `#home` y 0 errores en consola.
+//   7. A → B → A con una vista de teardown DEL MÓDULO: `#discover-artists` con su `/me`
+//      retenida (el `isOwner()` de `buildAlbumHeardIndex()`), `#home`, `#discover-artists`
+//      otra vez (pinta sus 4 bloques) y la vieja termina. La lista del render NUEVO sigue
+//      viva. Qué se mira: `window.__discoPerf.lazy`, que es el getter que la vista define
+//      sobre su `lazyCovers` de MÓDULO (`lazyCovers?.stats`) — el `teardown()` de la vista
+//      lo pone en `null` junto con `list`. Y para saber que la sonda ve un teardown de
+//      verdad: al salir al final, tiene que quedar en `null`. De conservación: verde contra
+//      v=323 y contra v=324; existe para que el arreglo no corra el teardown de la vieja
+//      cuando es el MISMO hash.
+//
+// ⚠️ Una precondición en las dos escenas: la vista vieja tiene que haber TERMINADO antes
+// de salir de la que la reemplazó. Si no, el router la nombra en
+// «[crash-guard] «#…» seguía renderizando» al cambiar de ruta, y el banco para diciéndolo
+// (sería un rojo del banco, no de la app).
+//
+// Todas las esperas van con `esperarReal` (una petición al propio servidor por vuelta):
+// ver PRESUPUESTO en `scripts/correr-banco.mjs`.
+
+import { esperarReal, anclar } from '/banco/simulado.mjs';
+import { fallar, listo } from '/banco/esperar.mjs';
+import { crearMB, sembrarHistorial } from '/banco/mapa-datos.mjs';
+
+const Q = new URLSearchParams(location.search);
+const ANCHO = +(Q.get('ancho') || 1351);
+// `XQ="&omitir=puerta"` deja la puerta 5b anotada sin cortar el banco: para ver la 6 y la 7 contra v=323.
+const OMITIR = new Set((Q.get('omitir') || '').split(',').filter(Boolean));
+const afirmar = (c, msg) => { if (!c) throw new Error('BANCO: ' + msg); };
+const progreso = (t) => { document.getElementById('progreso').textContent = t; };
+const VUELTAS = 60000;
+
+const mb = crearMB();
+window.__mb = mb;
+window.__mbAbortos = 0;
+
+function abrirMarco(escena, alto = 900) {
+  const f = document.createElement('iframe');
+  f.width = ANCHO; f.height = alto;
+  f.src = `/banco/router-teardown-caso.html?escena=${escena}`;
+  document.getElementById('marcos').appendChild(f);
+  return f;
+}
+const win = (f) => f.contentWindow;
+const $ = (f, s) => f.contentDocument?.querySelector(s);
+const $$ = (f, s) => [...(f.contentDocument?.querySelectorAll(s) || [])];
+const activos = (f) => [...new Set($$(f, '[data-route].active').map((e) => e.dataset.route))];
+const esperar = (cond, que) => esperarReal(cond, { que, vueltas: VUELTAS });
+async function irA(f, hash, que, cond) {
+  win(f).location.hash = hash;
+  await esperar(cond, que);
+}
+async function reloj(ms, que) {
+  const t0 = performance.now();
+  await esperar(() => performance.now() - t0 > ms, que);
+  return Math.round(performance.now() - t0);
+}
+// ¿El router nombró a esta vista como «todavía renderizando» al cambiar de ruta?
+const huerfana = (f, desde, hash) => win(f).__avisos.slice(desde).some((a) => a.includes(`«#${hash}» seguía renderizando`));
+
+const datos = {};
+try {
+  await sembrarHistorial(anclar);
+  const { HISTORY_OWNER_ID } = await import('/js/features/history-data.js');
+  localStorage.setItem('fonoteca_last_user_id', HISTORY_OWNER_ID);
+
+  // ══ 1-6. #puertas lenta → #mapa buscando → #puertas termina → #home ═══════
+  progreso('1. #puertas con su /me retenida');
+  const M = abrirMarco('mapa');
+  await esperar(() => win(M)?.__listo, 'que arranque el marco del mapa');
+  win(M).__retenerProximaMe();
+  win(M).location.hash = '#puertas';
+  await esperar(() => win(M).__meRetenida && $(M, '#puertas-content'), 'que #puertas quede esperando su /me');
+  await reloj(500, 'medio segundo con #puertas esperando');
+  afirmar($(M, '#puertas-content .spinner') && !$(M, '#puertas-content table, #puertas-content .puertas-fila'),
+    '#puertas sigue en el esqueleto: su render() está esperando la /me retenida');
+
+  progreso('2. #mapa y «Buscar países»');
+  await irA(M, '#mapa', 'que #mapa pinte', () => $(M, '.mapa[data-estado]'));
+  afirmar(mb.log.length === 0, `abrir #mapa no pide nada a MusicBrainz (pidió ${mb.log.length})`);
+  $(M, '[data-mapa-accion="buscar"]').click();
+  await esperar(() => mb.log.length >= 1 && mb.log[0].status !== null, 'la primera respuesta del MusicBrainz simulado');
+  mb.congelado = true;
+  await esperar(() => mb.colgadas === 1, 'que una petición quede en vuelo, sin contestar');
+  afirmar($(M, '.mapa[data-estado]').dataset.estado === 'escaneando', 'el escaneo está en marcha');
+
+  progreso('3. se suelta la /me: #puertas termina, vieja');
+  win(M).__soltarMe();
+  const settle = await reloj(3000, 'que #puertas termine');
+  afirmar(win(M).__meSoltada, 'la /me retenida se contestó');
+  afirmar($(M, '.mapa[data-estado]') && !$(M, '#puertas-content'), 'la vista vieja no pintó nada sobre #mapa');
+  const activosEnMapa = activos(M);
+  afirmar(activosEnMapa.length === 1 && activosEnMapa[0] === 'mapa', `en #mapa, lo único activo es mapa (${JSON.stringify(activosEnMapa)})`);
+
+  progreso('4. #home');
+  const raiz = $(M, '.mapa');
+  let mutaciones = 0;
+  const obs = new (win(M).MutationObserver)((l) => { mutaciones += l.length; });
+  obs.observe(raiz, { subtree: true, childList: true, attributes: true, characterData: true });
+  const avisosAntes = win(M).__avisos.length;
+  await irA(M, '#home', 'que el inicio pinte', () => $(M, '.home-grid') && !$(M, '.mapa'));
+  afirmar(!huerfana(M, avisosAntes, 'puertas'), 'precondición: #puertas ya había terminado al salir de #mapa (el router no la nombró como huérfana)');
+  const alSalir = mb.log.length;
+
+  progreso('5. 30 s de reloj después de salir');
+  const relojMs = await reloj(30000, '30 s de reloj después de salir');
+  obs.disconnect();
+  const locks = await anclar(win(M).navigator.locks.query());
+  const candado = (locks.held || []).some((l) => l.name === 'fonoteca-mapa-escaneo');
+  datos.salir = { alSalir, despues: mb.log.length - alSalir, abortos: window.__mbAbortos, candado, mutaciones, relojMs, settle };
+  afirmar(datos.salir.despues === 0, `0 peticiones NUEVAS al MusicBrainz simulado en ${relojMs} ms de reloj después de salir (hubo ${datos.salir.despues})`);
+  afirmar(mutaciones === 0, `0 escrituras en el DOM de #mapa después de salir (hubo ${mutaciones})`);
+  (OMITIR.has('puerta') ? () => {} : afirmar)(window.__mbAbortos === 1 && !candado,
+    `PUERTA: la petición que estaba en vuelo al salir de #mapa se abortó y el candado de la búsqueda quedó libre `
+    + `(abortadas: ${window.__mbAbortos} de 1 en vuelo · candado ${candado ? 'TOMADO' : 'libre'} a los ${relojMs} ms). `
+    + 'Sin el abort() del teardown de #mapa, la petición sigue colgada y el candado tomado.');
+
+  progreso('6. conservación');
+  const activosEnHome = activos(M);
+  afirmar(activosEnHome.length === 1 && activosEnHome[0] === 'home', `en #home, lo único activo es home (${JSON.stringify(activosEnHome)})`);
+  afirmar(!$(M, '#puertas-content') && !$(M, '.crash-msg'), 'la vista vieja no pintó nada sobre #home');
+  afirmar(win(M).__errores.length === 0, `0 errores en consola: ${win(M).__errores.join(' | ')}`);
+  const s = win(M).__sim.reg;
+  afirmar(s.escrituras.length === 0 && s.desconocidas.length === 0 && s.externas.length === 0,
+    `Spotify simulada: 0 escrituras, 0 rutas sin simular, 0 hosts externos (${s.desconocidas.join(',')} ${s.externas.join(',')})`);
+  datos.me = s.llamadas.filter((l) => l.ruta === '/me').length;
+
+  // ══ 7. #discover-artists → #home → #discover-artists, y la vieja termina ═══
+  progreso('7. A → B → A con #discover-artists');
+  const D = abrirMarco('disco');
+  await esperar(() => win(D)?.__listo, 'que arranque el marco de descubrir');
+  win(D).__retenerProximaMe();
+  win(D).location.hash = '#discover-artists';
+  await esperar(() => win(D).__meRetenida && $(D, '#disco-content'), 'que #discover-artists quede esperando su /me');
+  await reloj(500, 'medio segundo con #discover-artists esperando');
+  afirmar($$(D, '.disco-artist').length === 0, `la vieja sigue cargando (pinta ${$$(D, '.disco-artist').length} bloques)`);
+  await irA(D, '#home', 'que el inicio pinte', () => $(D, '.home-grid'));
+  await irA(D, '#discover-artists', 'que el render NUEVO pinte sus 4 bloques',
+    () => $$(D, '.disco-artist').length === 4 && win(D).__discoPerf?.lazy);
+  const lazyNuevo = !!win(D).__discoPerf.lazy;
+  win(D).__soltarMe();
+  await reloj(5000, 'que la vieja termine');
+  afirmar(win(D).__meSoltada, 'la /me retenida de la vieja se contestó');
+  datos.disco = { bloques: $$(D, '.disco-artist').length, lazyNuevo, lazyTrasLaVieja: !!win(D).__discoPerf.lazy };
+  afirmar(datos.disco.bloques === 4, `la lista del render nuevo conserva sus 4 bloques (tiene ${datos.disco.bloques})`);
+  afirmar(datos.disco.lazyTrasLaVieja, 'la lista del render nuevo SIGUE VIVA cuando la vieja termina: `__discoPerf.lazy` (el `lazyCovers` del módulo) no es null');
+  afirmar(win(D).__errores.length === 0, `0 errores en consola: ${win(D).__errores.join(' | ')}`);
+  const avisosD = win(D).__avisos.length;
+  await irA(D, '#home', 'que el inicio pinte', () => $(D, '.home-grid') && !$(D, '#disco-content'));
+  afirmar(!huerfana(D, avisosD, 'discover-artists'), 'precondición: la vieja ya había terminado al salir (el router no la nombró como huérfana)');
+  datos.disco.lazyAlSalir = win(D).__discoPerf.lazy;
+  afirmar(datos.disco.lazyAlSalir === null, `la sonda ve un teardown de verdad: al salir, \`__discoPerf.lazy\` queda en null (${datos.disco.lazyAlSalir})`);
+
+  const resumen =
+    `ok · vista lenta #puertas (/me retenida) · #mapa: 1 contestada + 1 en vuelo · ` +
+    `salir: ${datos.salir.despues} nuevas en ${datos.salir.relojMs} ms, abortadas ${datos.salir.abortos}, candado ${datos.salir.candado ? 'tomado' : 'libre'}, ` +
+    `${datos.salir.mutaciones} escrituras en #mapa · activos=home · /me=${datos.me} · ` +
+    `A→B→A #discover-artists: ${datos.disco.bloques} bloques, lazy vivo=${datos.disco.lazyTrasLaVieja}, al salir null=${datos.disco.lazyAlSalir === null} · errores=0 · ` +
+    `reloj virtual=${Math.round(performance.now())} ms`;
+  document.documentElement.setAttribute('data-resumen', resumen);
+  progreso(resumen);
+  listo();
+} catch (e) {
+  document.documentElement.setAttribute('data-resumen', 'reloj virtual=' + Math.round(performance.now()) + ' ms');
+  fallar(new Error(String(e?.message || e) + ' · ' + JSON.stringify(datos).slice(0, 1500)));
+}
+</script>
+</body></html>
