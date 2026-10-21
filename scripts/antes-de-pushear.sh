@@ -48,7 +48,7 @@ if npm test --silent 2>&1 | tail -4 | sed 's/^/      /'; [ "${PIPESTATUS[0]}" -e
 # `mosaico` y `toasts` entraron en v=273:
 # estaban en rojo desde antes del 04/10 y justamente por no estar acá nadie los
 # miraba, igual que le había pasado a `barra` entre v=241 y v=261.
-echo "2b. bancos (barra · pausa-search · toasts · mosaico · novedades · escrituras · ocultar-artista ×3 · covers-orden · calendario · import-guarda · ocultos-cache · mapa · puertas · cuota · letras · generos-cache · generos-escaneo · generos · mapa-artistas)"
+echo "2b. bancos (barra · pausa-search · toasts · mosaico · novedades · escrituras · ocultar-artista ×3 · covers-orden · calendario · import-guarda · ocultos-cache · mapa · puertas · cuota · letras · generos-cache · generos-escaneo · generos · mapa-artistas · versiones-deluxe)"
 # Los dos de `ocultar-artista` entraron en v=276: las TRES vistas que ocultan
 # artistas, reales, contra una Spotify simulada. Es el único sitio donde se puede
 # probar ocultar sin escribir en la cuenta de Ian, y el de `-disco` es el que
@@ -103,7 +103,14 @@ echo "2b. bancos (barra · pausa-search · toasts · mosaico · novedades · esc
 # su grado (visto fallar con una copia que dibuja todas); tocar elige y el fondo suelta; arrastrar, la rueda, buscar y
 # «Mostrar 50 más» = 0 peticiones y quieto 0 frames (visto fallar con una copia que repinta en bucle); el amigo sin mapa,
 # una línea; a 1366 y 390 nada desborda; salir a mitad, 0 escrituras y 0 frames.
-for B in barra pausa-search toasts mosaico novedades escrituras ocultar-artista ocultar-artista-disco ocultar-artista-novedades covers-orden calendario import-guarda ocultos-cache mapa puertas cuota letras generos-cache generos-escaneo generos mapa-artistas; do
+# `versiones-deluxe` entró en v=323 (tanda 70): la propuesta de «solo cambia la edición del disco» de
+# #versions, en la app ENTERA contra la Spotify simulada y me gusta INVENTADOS: abrir = 0 peticiones (las de
+# v=322); «Analizar» = las mismas de v=322, con la propuesta SOLO en el grupo que pasa (no en el remaster, ni
+# a 3 s, ni con empate de pistas, ni con un single, ni en el oculto) y nada tildado; «Aceptar propuesta»
+# tilda una pista y ningún botón acepta más de un grupo; «Borrar sobrantes» lista la que se va y el ÚNICO
+# DELETE lo recibe la Spotify simulada, verificado; a 1366×591 y 390×844 nada desborda. Visto fallar contra
+# v=322 en B (y en C con `XQ="&omitir=B"`).
+for B in barra pausa-search toasts mosaico novedades escrituras ocultar-artista ocultar-artista-disco ocultar-artista-novedades covers-orden calendario import-guarda ocultos-cache mapa puertas cuota letras generos-cache generos-escaneo generos mapa-artistas versiones-deluxe; do
   if node scripts/correr-banco.mjs "$B" 2>&1 | sed 's/^/      /'; [ "${PIPESTATUS[0]}" -eq 0 ]; then
     ok "banco $B en verde"
   else

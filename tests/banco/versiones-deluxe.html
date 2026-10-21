@@ -1,0 +1,219 @@
+<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>banco versiones-deluxe — la propuesta de edición en #versions</title>
+<style>html,body{margin:0;background:#111;color:#eee;font:13px system-ui}iframe{border:0;display:block}</style>
+</head><body>
+<pre id="progreso"></pre>
+<div id="marcos"></div>
+<script type="module">
+// ── Qué prueba este banco (v=323, tanda 70) ──────────────────────────────────
+//
+// La propuesta de «solo cambia la edición del disco» de #versions, en la app
+// ENTERA (`versiones-deluxe-caso.html`, uno por iframe), contra la Spotify
+// simulada (`simulado.mjs`): ningún DELETE sale a la red ni toca ninguna cuenta.
+// Me gusta INVENTADOS (`versiones-deluxe-datos.mjs`): seis grupos, solo G1 pasa.
+//
+//   A. abrir #versions = las MISMAS peticiones que con v=322 (ninguna) y 0
+//      escrituras; 0 bloques de propuesta antes de «Analizar»;
+//   B. «Analizar» → la propuesta SOLO en G1, con qué queda, qué se borra y por
+//      qué; nada tildado; las peticiones de «Analizar», las mismas que con v=322;
+//   C. «Aceptar propuesta» tilda exactamente la pista que queda y nada más; no hay
+//      ningún botón que acepte más de un grupo;
+//   D. «Borrar sobrantes» → la confirmación lista la pista de la edición que se
+//      va; al confirmar, el ÚNICO DELETE lo recibe la Spotify simulada, con esa
+//      uri y nada más; la verificación pasa;
+//   E. a 1366×591 y a 390×844: nada desborda en horizontal y el bloque se lee entero.
+//
+// Las peticiones «de v=322» están escritas acá abajo: se midieron con este mismo
+// banco contra una copia del `src/` de v=322 (tanda 70). Ver el reporte.
+//
+// ⚠️ Todas las esperas van con `esperarReal` (ver PRESUPUESTO en `scripts/correr-banco.mjs`).
+
+import { esperarReal } from '/banco/simulado.mjs';
+import { fallar, listo } from '/banco/esperar.mjs';
+import { GRUPOS } from '/banco/versiones-deluxe-datos.mjs';
+
+const q = new URLSearchParams(location.search);
+const ANCHO = +(q.get('ancho') || 1351);
+// `?omitir=B` salta los asserts de la puerta B (solo para ver fallar la C contra un `src/`
+// viejo, donde B falla antes; `XQ="&omitir=B" node scripts/correr-banco.mjs versiones-deluxe`).
+const OMITIR = new Set((q.get('omitir') || '').split(',').filter(Boolean));
+const afirmar = (c, msg) => { if (!c) throw new Error('BANCO: ' + msg); };
+const afirmarB = (c, msg) => { if (!OMITIR.has('B')) afirmar(c, msg); };
+const progreso = (t) => { document.getElementById('progreso').textContent = t; };
+const VUELTAS = 20000;
+
+// Lo que cuesta con v=322, medido con este banco (ver la cabecera).
+const ESPERADO_ABRIR = [];
+const ESPERADO_ANALIZAR = ['GET /me/tracks?limit=50&offset=0', 'GET /me/tracks?limit=50&offset=50'];
+
+function abrirMarco(nombre, w = ANCHO, h = 800) {
+  const f = document.createElement('iframe');
+  f.width = w; f.height = h;
+  f.src = `/banco/versiones-deluxe-caso.html?marco=${nombre}`;
+  document.getElementById('marcos').appendChild(f);
+  return f;
+}
+const win = (f) => f.contentWindow;
+const $ = (f, s) => f.contentDocument?.querySelector(s);
+const $$ = (f, s) => [...(f.contentDocument?.querySelectorAll(s) || [])];
+const texto = (el) => (el?.textContent || '').replace(/\s+/g, ' ').trim();
+const reg = (f) => win(f).__sim.reg;
+const llamadas = (f, desde = 0) => reg(f).llamadas.slice(desde).map(l => `${l.metodo} ${l.ruta}`);
+async function arrancado(f, que) { await esperarReal(() => win(f)?.__listo, { que: `que arranque ${que}`, vueltas: VUELTAS }); }
+async function quieto(n = 20) { for (let i = 0; i < n; i++) await new Promise((r) => setTimeout(r, 50)); }
+const idDe = (l) => l.track.id;
+const tarjetaDe = (f, item) => $$(f, '.cluster-group').find(c => c.querySelector(`.keep-check[data-track-id="${idDe(item)}"]`));
+
+async function entrarYAnalizar(f, que) {
+  win(f).location.hash = '#versions';
+  await esperarReal(() => $(f, '#versions-analyze-btn'), { que: `que abra #versions (${que})`, vueltas: VUELTAS });
+  await quieto();
+  const antes = reg(f).llamadas.length;
+  $(f, '#versions-analyze-btn').click();
+  await esperarReal(() => $$(f, '.cluster-group').length >= 5 && !$(f, '#versions-analyze-btn').disabled, { que: `que «Analizar» pinte los grupos (${que})`, vueltas: VUELTAS });
+  await quieto();
+  return antes;
+}
+
+try {
+  // ── A. Abrir #versions ───────────────────────────────────────────────────────
+  progreso('A. abrir…');
+  const a = abrirMarco('principal');
+  await arrancado(a, 'el marco principal');
+  await quieto();
+  const tras = reg(a).llamadas.length;
+  win(a).location.hash = '#versions';
+  await esperarReal(() => $(a, '#versions-analyze-btn'), { que: 'que abra #versions', vueltas: VUELTAS });
+  await quieto(40);
+  const abrir = llamadas(a, tras);
+  afirmar(JSON.stringify(abrir) === JSON.stringify(ESPERADO_ABRIR),
+    `A. abrir #versions = las peticiones de v=322 (${JSON.stringify(ESPERADO_ABRIR)}); hubo ${JSON.stringify(abrir)}`);
+  afirmar(reg(a).escrituras.length === 0, `A. 0 escrituras (hubo ${reg(a).escrituras.length})`);
+  afirmar($$(a, '.ver-propuesta').length === 0 && !$(a, '#versions-propuestas .ver-propuestas-texto'), 'A. 0 bloques de propuesta antes de «Analizar»');
+
+  // ── B. «Analizar» ────────────────────────────────────────────────────────────
+  progreso('B. analizar…');
+  const antesAnalizar = reg(a).llamadas.length;
+  $(a, '#versions-analyze-btn').click();
+  await esperarReal(() => $$(a, '.cluster-group').length >= 5 && !$(a, '#versions-analyze-btn').disabled, { que: 'que «Analizar» pinte los grupos', vueltas: VUELTAS });
+  await quieto(40);
+  const analizar = llamadas(a, antesAnalizar);
+  afirmar(ESPERADO_ANALIZAR !== null, `B. (medición) las peticiones de «Analizar» fueron ${JSON.stringify(analizar)}`);
+  afirmar(JSON.stringify(analizar) === JSON.stringify(ESPERADO_ANALIZAR),
+    `B. «Analizar» = las peticiones de v=322 (${JSON.stringify(ESPERADO_ANALIZAR)}); hubo ${JSON.stringify(analizar)}`);
+  afirmar(reg(a).escrituras.length === 0, 'B. «Analizar» no escribe nada');
+  afirmar($$(a, '.cluster-group').length === 5, `B. cinco grupos a la vista, el oculto no (${$$(a, '.cluster-group').length})`);
+  afirmar(!tarjetaDe(a, GRUPOS.oculto[0]), 'B. el grupo oculto no está');
+  const bloques = $$(a, '.ver-propuesta');
+  afirmarB(bloques.length === 1, `B. UN bloque de propuesta (${bloques.length})`);
+  const g1 = tarjetaDe(a, GRUPOS.pasa[0]);
+  afirmarB(g1 && g1.contains(bloques[0]), 'B. el bloque está en la tarjeta de G1');
+  for (const k of ['remaster', 'duracion', 'empate', 'single']) {
+    const t = tarjetaDe(a, GRUPOS[k][0]);
+    afirmarB(t && !t.querySelector('.ver-propuesta'), `B. ${k}: sin propuesta`);
+  }
+  const que = texto(bloques[0]?.querySelector('.ver-propuesta-que'));
+  afirmarB(que === 'Propuesta: quedarte con la de «Disco Ficticio (Deluxe Edition)» (16 pistas) y borrar la de «Disco Ficticio» (10 pistas).',
+    `B. qué queda y qué se borra: «${que}»`);
+  const porque = texto(bloques[0]?.querySelector('.ver-propuesta-porque'));
+  afirmarB(porque === 'Por qué: mismo título y artista; duran lo mismo (diferencia de 0,4 s); ninguno de los dos es explícito; el ISRC es el mismo; los dos discos son ediciones de «Disco Ficticio».',
+    `B. por qué: «${porque}»`);
+  afirmarB(bloques[0]?.compareDocumentPosition(g1.querySelector('.version-row')) & Node.DOCUMENT_POSITION_FOLLOWING, 'B. el bloque va encima de las filas');
+  afirmarB($$(a, '.keep-check:checked').length === 0 && texto($(a, '#batch-keep-count')) === '0', 'B. nada tildado: keepIds vacío');
+  afirmarB(texto($(a, '#versions-propuestas .ver-propuestas-texto')).startsWith('1 grupo solo cambia la edición del disco.'),
+    `B. la línea de arriba: «${texto($(a, '#versions-propuestas .ver-propuestas-texto'))}»`);
+  afirmarB(/Ver solo los que tienen propuesta \(1\)/.test(texto($(a, '#versions-solo-propuesta-wrap'))), 'B. el interruptor con su número');
+  // El interruptor filtra y vuelve.
+  if (!OMITIR.has('B')) {
+    $(a, '#versions-solo-propuesta').click();
+    afirmarB($$(a, '.cluster-group').length === 1 && $$(a, '.ver-propuesta').length === 1, `B. «Ver solo los que tienen propuesta» deja uno (${$$(a, '.cluster-group').length})`);
+    $(a, '#versions-solo-propuesta').click();
+    afirmarB($$(a, '.cluster-group').length === 5, 'B. apagado, vuelven los cinco');
+    afirmarB($$(a, '.keep-check:checked').length === 0, 'B. el interruptor no tilda nada');
+  }
+  // Los fantasmas siguen en su tarjeta, sin propuesta.
+  afirmarB($(a, '#versions-ghosts') && !$(a, '#versions-ghosts .ver-propuesta'), 'B. los fantasmas, en su tarjeta y sin propuesta');
+
+  // ── C. «Aceptar propuesta» ──────────────────────────────────────────────────
+  progreso('C. aceptar…');
+  const botones = $$(a, 'button').filter(b => /acept/i.test(texto(b)));
+  afirmar(botones.length === 1 && texto(botones[0]) === 'Aceptar propuesta', `C. un solo botón que acepta, el del grupo (${botones.map(texto)})`);
+  afirmar(!$$(a, 'button').some(b => /todas|todos los grupos/i.test(texto(b))), 'C. ningún «Aceptar todas»');
+  const g1Tarjeta = tarjetaDe(a, GRUPOS.pasa[0]);
+  g1Tarjeta.querySelector('.ver-propuesta-aceptar').click();
+  const tildadas = $$(a, '.keep-check:checked').map(b => b.dataset.trackId);
+  afirmar(JSON.stringify(tildadas) === JSON.stringify([idDe(GRUPOS.pasa[1])]), `C. tildada SOLO la del deluxe (${tildadas})`);
+  afirmar(texto($(a, '#batch-keep-count')) === '1' && texto($(a, '#batch-delete-count')) === '1', `C. 1 marcada y 1 sobrante (${texto($(a, '#batch-keep-count'))}/${texto($(a, '#batch-delete-count'))})`);
+  g1Tarjeta.querySelector('.ver-propuesta-aceptar').click();
+  afirmar($$(a, '.keep-check:checked').length === 1, 'C. aceptar dos veces no cambia nada');
+  // Se puede destildar a mano, como cualquier otra, y volver a aceptar.
+  const caja = g1Tarjeta.querySelector(`.keep-check[data-track-id="${idDe(GRUPOS.pasa[1])}"]`);
+  caja.click();
+  afirmar(!caja.checked && texto($(a, '#batch-keep-count')) === '0', 'C. destildar a mano la saca');
+  g1Tarjeta.querySelector('.ver-propuesta-aceptar').click();
+  afirmar(caja.checked && texto($(a, '#batch-keep-count')) === '1', 'C. y aceptar la vuelve a tildar');
+  afirmar(reg(a).escrituras.length === 0, 'C. aceptar no escribe nada');
+
+  // ── D. «Borrar sobrantes» ───────────────────────────────────────────────────
+  progreso('D. borrar…');
+  const btnBorrar = $(a, '#batch-delete-btn');
+  afirmar(btnBorrar && !btnBorrar.disabled, 'D. «Borrar sobrantes» habilitado');
+  btnBorrar.click();
+  await esperarReal(() => $(a, '#confirm-text-input'), { que: 'la confirmación', vueltas: VUELTAS });
+  const filas = $$(a, '.modal li');
+  afirmar(filas.length === 1, `D. la confirmación lista UNA pista (${filas.length})`);
+  afirmar(/Tema Que Pasa/.test(texto(filas[0])) && texto(filas[0].querySelector('div')) === 'Disco Ficticio',
+    `D. y es la de la edición que se va: «${texto(filas[0])}»`);
+  afirmar(reg(a).escrituras.length === 0, 'D. antes de confirmar, 0 escrituras');
+  const campo = $(a, '#confirm-text-input');
+  campo.value = 'BORRAR'; campo.dispatchEvent(new Event('input'));
+  $(a, '#modal-confirm').click();
+  await esperarReal(() => reg(a).escrituras.length >= 1, { que: 'el DELETE simulado', vueltas: VUELTAS });
+  await esperarReal(() => /eliminada/.test(texto($(a, '.toast-container'))), { que: 'el aviso de borrado', vueltas: VUELTAS });
+  await quieto(20);
+  const esc = reg(a).escrituras;
+  afirmar(esc.length === 1, `D. UNA escritura (${esc.map(e => e.metodo + ' ' + e.ruta)})`);
+  const uriSeVa = `spotify:track:${idDe(GRUPOS.pasa[0])}`;
+  afirmar(esc[0].metodo === 'DELETE' && decodeURIComponent(esc[0].ruta) === `/me/library?uris=${uriSeVa}`,
+    `D. el DELETE lleva esa uri y nada más: ${esc[0].metodo} ${decodeURIComponent(esc[0].ruta)}`);
+  afirmar(!win(a).__spotify.enLaBiblioteca.has(uriSeVa) && win(a).__spotify.enLaBiblioteca.has(`spotify:track:${idDe(GRUPOS.pasa[1])}`),
+    'D. en la Spotify simulada se fue la de 10 pistas y quedó la del deluxe');
+  const aviso = texto($(a, '.toast-container'));
+  afirmar(/1 versión\(es\) eliminada\(s\) · ✓ verificado: 1 de 1 salieron y 1 que se queda\(n\) sigue\(n\) ahí/.test(aviso), `D. la verificación pasa: «${aviso}»`);
+  afirmar(reg(a).llamadas.filter(l => /^\/me\/library\/contains/.test(l.ruta)).length >= 2, 'D. se verificó contra la biblioteca (las que se van y la que se queda)');
+  afirmar(reg(a).desconocidas.length === 0 && reg(a).externas.length === 0, `D. 0 rutas sin simular y 0 hosts externos (${reg(a).desconocidas} · ${reg(a).externas})`);
+  afirmar(win(a).__errores.length === 0, `D. 0 errores (${win(a).__errores.join(' | ')})`);
+  afirmar($$(a, '.ver-propuesta').length === 0, 'D. resuelto el grupo, ya no hay propuesta que mostrar');
+
+  // ── E. A 1366×591 y a 390×844 ───────────────────────────────────────────────
+  const medidas = [];
+  for (const [w, h] of [[1366, 591], [390, 844]]) {
+    progreso(`E. ${w}×${h}…`);
+    const f = abrirMarco(`e${w}`, w, h);
+    await arrancado(f, `el marco de ${w}`);
+    await entrarYAnalizar(f, `${w}×${h}`);
+    const d = f.contentDocument.documentElement;
+    afirmar(d.scrollWidth <= d.clientWidth, `E. ${w}: la página no desborda en horizontal (${d.scrollWidth} > ${d.clientWidth})`);
+    const b = $(f, '.ver-propuesta');
+    afirmar(b, `E. ${w}: el bloque está`);
+    const rb = b.getBoundingClientRect();
+    afirmar(rb.left >= 0 && rb.right <= w + 0.5, `E. ${w}: el bloque entra en el ancho (${rb.left}–${rb.right})`);
+    for (const el of [b, ...b.querySelectorAll('p, button'), $(f, '#versions-propuestas')]) {
+      afirmar(el.scrollWidth <= el.clientWidth + 1, `E. ${w}: «${el.className || el.id}» no se corta en horizontal (${el.scrollWidth} > ${el.clientWidth})`);
+      const r = el.getBoundingClientRect();
+      afirmar(r.left >= -0.5 && r.right <= w + 0.5, `E. ${w}: «${el.className || el.id}» dentro de la pantalla (${r.left}–${r.right})`);
+    }
+    afirmar(b.scrollHeight <= b.clientHeight + 1, `E. ${w}: el bloque se lee entero en alto (${b.scrollHeight} > ${b.clientHeight})`);
+    afirmar(win(f).__errores.length === 0, `E. ${w}: 0 errores (${win(f).__errores.join(' | ')})`);
+    afirmar(reg(f).escrituras.length === 0, `E. ${w}: 0 escrituras`);
+    medidas.push(`${w}×${h}: bloque ${Math.round(rb.width)}×${Math.round(rb.height)}`);
+  }
+
+  const resumen = `A: abrir = ${abrir.length} peticiones · B: «Analizar» = ${analizar.length} (las de v=322), 1 propuesta de 5 grupos · C: 1 tildada · D: 1 DELETE simulado, verificado · E: ${medidas.join(' · ')}`;
+  progreso(resumen);
+  document.documentElement.dataset.resumen = `${resumen} · reloj virtual=${Math.round(performance.now())} ms`;
+  listo(resumen);
+} catch (e) {
+  fallar(e);
+}
+</script>
+</body></html>

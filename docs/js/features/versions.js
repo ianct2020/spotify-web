@@ -1,13 +1,14 @@
-import { getAllLikedTracks, removeLikedTracks, checkLibraryContains } from '../api.js?v=322';
-import { borrarLikesVerificado } from '../util/borrado-verificado.js?v=322';
-import { normalizeKey, esFantasma, guardaUltimoEjemplar, indexarBiblioteca } from '../util/versions-guard.js?v=322';
-import { showProgress, hideProgress, progressController, isCancelled, typeConfirmModal, infoModal, renderTrackRow, escapeHtml, pageHeader } from '../ui/components.js?v=322';
-import { showToast } from '../ui/toast.js?v=322';
-import { openModal, closeTop } from '../ui/modal-stack.js?v=322';
-import { coverUrl } from '../util/cover-size.js?v=322';
-import { openPlaylistPicker } from '../ui/playlist-picker.js?v=322';
-import { getOwnPlaylists, addUrisToPlaylists, toastAddResult } from '../util/playlist-add.js?v=322';
-import { prefKey, migratePrefKey } from '../storage.js?v=322';
+import { getAllLikedTracks, removeLikedTracks, checkLibraryContains } from '../api.js?v=323';
+import { borrarLikesVerificado } from '../util/borrado-verificado.js?v=323';
+import { normalizeKey, esFantasma, guardaUltimoEjemplar, indexarBiblioteca } from '../util/versions-guard.js?v=323';
+import { showProgress, hideProgress, progressController, isCancelled, typeConfirmModal, infoModal, renderTrackRow, escapeHtml, pageHeader } from '../ui/components.js?v=323';
+import { showToast } from '../ui/toast.js?v=323';
+import { openModal, closeTop } from '../ui/modal-stack.js?v=323';
+import { coverUrl } from '../util/cover-size.js?v=323';
+import { openPlaylistPicker } from '../ui/playlist-picker.js?v=323';
+import { getOwnPlaylists, addUrisToPlaylists, toastAddResult } from '../util/playlist-add.js?v=323';
+import { prefKey, migratePrefKey } from '../storage.js?v=323';
+import { propuestaDeGrupo } from '../util/deluxe-propuesta.js?v=323';
 
 // ── «Borrar sobrantes» REHABILITADO (2026-08-28) ─────────────────────────────
 //
@@ -138,6 +139,8 @@ let libraryByKey = new Map();
 let fantasmas = [];
 // 6.3: el toggle deja trabajar solo sobre lo que falta sin perder lo resuelto.
 let ocultarResueltas = false;
+// Tanda 70: «Ver solo los que tienen propuesta». Arranca apagado en cada análisis.
+let soloConPropuesta = false;
 // Snapshot de metadata por cluster key (para poder mostrar ocultos con tapa aunque
 // hayan salido del listado tras un análisis nuevo).
 const clusterMetaCache = new Map();
@@ -342,6 +345,8 @@ async function analyze(force = false) {
         </div>` : ''}
       </div>
 
+      <div id="versions-propuestas" class="ver-propuestas-resumen"></div>
+
       <div id="versions-clusters" class="versions-grid"></div>
 
       ${renderFantasmas()}
@@ -350,6 +355,7 @@ async function analyze(force = false) {
     bindFantasmas();
     shownCount = SHOWN_STEP;
     ocultarResueltas = false;
+    soloConPropuesta = false;
     renderClusterList();
 
     const toggle = document.getElementById('versions-hide-resolved');
@@ -385,17 +391,34 @@ function renderClusterList() {
   // El idx que viaja al DOM es la posición REAL en allClusters: `computeRemovals`
   // y el ✕ de ocultar lo usan para indexar el array. Con el filtro de resueltas
   // encendido la posición visible ya no coincide, así que se lleva en el par.
+  //
+  // La propuesta de edición (tanda 70) se recalcula en cada pintada desde
+  // `allClusters`, que es lo que de verdad hay: un grupo oculto ya no está, uno
+  // resuelto quedó con una sola versión (y una sola no tiene propuesta). Es una
+  // cuenta pura sobre lo que ya está en memoria: 0 peticiones.
+  const propuestas = allClusters.map(cluster => propuestaDeGrupo(cluster));
+  const conPropuesta = propuestas.filter(Boolean).length;
+  if (conPropuesta === 0) soloConPropuesta = false;
+  pintarResumenPropuestas(conPropuesta);
   const visibles = allClusters
-    .map((cluster, idx) => ({ cluster, idx }))
-    .filter(({ idx }) => !(ocultarResueltas && resolvedClusterIdxs.has(idx)));
+    .map((cluster, idx) => ({ cluster, idx, propuesta: propuestas[idx] }))
+    .filter(({ idx }) => !(ocultarResueltas && resolvedClusterIdxs.has(idx)))
+    .filter(({ propuesta }) => !(soloConPropuesta && !propuesta));
   const shown = visibles.slice(0, shownCount);
   const rest = visibles.length - shown.length;
+  const vacio = soloConPropuesta
+    ? 'No queda ningún grupo con propuesta a la vista. Desmarca los filtros para ver los demás.'
+    : `Resolviste los ${allClusters.length} grupos. Desmarca el filtro para volver a verlos.`;
   holder.innerHTML = `
-    ${shown.map(({ cluster, idx }) => renderCluster(cluster, idx)).join('')}
+    ${shown.map(({ cluster, idx, propuesta }) => renderCluster(cluster, idx, propuesta)).join('')}
     ${rest > 0 ? `<div class="versions-more-wrap"><button class="btn btn-secondary" id="versions-more-btn">Ver ${Math.min(SHOWN_STEP, rest)} grupos más (${rest} restantes)</button></div>` : ''}
-    ${visibles.length === 0 ? `<div class="versions-more-wrap" style="color:var(--color-text-muted)">Resolviste los ${allClusters.length} grupos. Desmarca el filtro para volver a verlos.</div>` : ''}
+    ${visibles.length === 0 ? `<div class="versions-more-wrap" style="color:var(--color-text-muted)">${vacio}</div>` : ''}
   `;
   updateResolvedFilter();
+  // «Aceptar propuesta»: UN grupo por clic, el de su tarjeta. Ver `aceptarPropuesta`.
+  holder.querySelectorAll('.ver-propuesta-aceptar').forEach(btn => {
+    btn.onclick = () => aceptarPropuesta(btn);
+  });
   holder.querySelectorAll('.keep-check').forEach(box => {
     box.addEventListener('change', () => {
       if (box.checked) keepIds.add(box.dataset.trackId);
@@ -435,6 +458,89 @@ function renderClusterList() {
   });
   const moreBtn = document.getElementById('versions-more-btn');
   if (moreBtn) moreBtn.onclick = () => { shownCount += SHOWN_STEP; renderClusterList(); };
+}
+
+// ── La propuesta de edición (tanda 70) ───────────────────────────────────────
+//
+// Ian, el 16/10: «estaría bueno uno que haga automático con deluxes y yo solo
+// confirme». La regla vive en `util/deluxe-propuesta.js` (pura, medida contra el
+// export: ver su cabecera). Acá solo se PROPONE:
+//
+//   · nada sale tildado: `keepIds` sigue arrancando vacío en cada análisis;
+//   · cada grupo con propuesta lleva SU botón, que tilda «quedarme» en la(s)
+//     pista(s) que quedan disparando el MISMO `change` del checkbox (o sea, el
+//     mismo camino que el clic a mano) y nada más: no destilda, no borra;
+//   · no existe ningún «Aceptar todas» ni nada que tilde varios grupos de un
+//     clic, a propósito: es la confirmación grupo por grupo que pidió Ian;
+//   · el borrado es el de siempre («Borrar sobrantes», con su lista pieza por
+//     pieza, `borrarLikesVerificado` y la guarda del último ejemplar).
+
+// La línea de arriba del listado y el interruptor «Ver solo los que tienen propuesta».
+function pintarResumenPropuestas(n) {
+  const el = document.getElementById('versions-propuestas');
+  if (!el) return;
+  const num = n.toLocaleString('es-ES');
+  el.innerHTML = n === 0
+    ? '<p class="ver-propuestas-texto">Ningún grupo es solo de edición.</p>'
+    : `<p class="ver-propuestas-texto">${num} ${n === 1 ? 'grupo solo cambia' : 'grupos solo cambian'} la edición del disco.
+         <span class="ver-propuestas-nota">${n === 1 ? 'Lleva' : 'Cada uno lleva'} su propuesta; no se marca nada hasta que la aceptes.</span></p>
+       <label class="versions-filter" id="versions-solo-propuesta-wrap">
+         <input type="checkbox" id="versions-solo-propuesta" ${soloConPropuesta ? 'checked' : ''}>
+         <span>Ver solo los que tienen propuesta (${num})</span>
+       </label>`;
+  const toggle = document.getElementById('versions-solo-propuesta');
+  if (toggle) toggle.onchange = () => {
+    soloConPropuesta = toggle.checked;
+    renderClusterList();
+  };
+}
+
+// Tilda «quedarme» en lo que la propuesta de ESE grupo deja, por el mismo
+// camino que el clic a mano. La propuesta se vuelve a calcular acá, sobre el
+// grupo tal como está ahora en `allClusters`, y solo se tocan las casillas de
+// la tarjeta del botón.
+function aceptarPropuesta(btn) {
+  const clusterEl = btn.closest('.cluster-group');
+  const cluster = allClusters[parseInt(btn.dataset.clusterIdx)];
+  const propuesta = cluster ? propuestaDeGrupo(cluster) : null;
+  if (!clusterEl || !propuesta) return;
+  for (const id of propuesta.queda) {
+    const box = [...clusterEl.querySelectorAll('.keep-check')].find(b => b.dataset.trackId === id);
+    if (box && !box.checked) {
+      box.checked = true;
+      box.dispatchEvent(new Event('change'));
+    }
+  }
+}
+
+const fmtPistas = (n) => `${n.toLocaleString('es-ES')} pista${n === 1 ? '' : 's'}`;
+const laDe = (e) => `«${escapeHtml(e.disco)}» (${fmtPistas(e.pistas)})`;
+function enumerar(xs) {
+  return xs.length <= 1 ? (xs[0] || '') : `${xs.slice(0, -1).join(', ')} y ${xs.at(-1)}`;
+}
+
+// El bloque de la tarjeta: qué propone, por qué y su botón.
+function bloquePropuesta(propuesta, idx) {
+  const { ediciones, diferenciaMs, explicit, isrc, base } = propuesta.porque;
+  const quedan = ediciones.filter(e => e.queda);
+  const seVan = ediciones.filter(e => !e.queda);
+  const n = ediciones.length;
+  const segundos = (diferenciaMs / 1000).toLocaleString('es-ES', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+  const porque = [
+    'mismo título y artista',
+    `duran lo mismo (diferencia de ${segundos} s)`,
+    explicit
+      ? (n === 2 ? 'los dos son explícitos' : `los ${n} son explícitos`)
+      : (n === 2 ? 'ninguno de los dos es explícito' : 'ninguno es explícito'),
+    isrc === 'igual' ? 'el ISRC es el mismo' : 'ISRC: no está en tu caché',
+    `${n === 2 ? 'los dos discos' : `los ${n} discos`} son ediciones de «${escapeHtml(base)}»`,
+  ];
+  return `
+    <div class="ver-propuesta">
+      <p class="ver-propuesta-que">Propuesta: quedarte con la de ${enumerar(quedan.map(laDe))} y borrar ${seVan.length === 1 ? 'la' : 'las'} de ${enumerar(seVan.map(laDe))}.</p>
+      <p class="ver-propuesta-porque">Por qué: ${porque.join('; ')}.</p>
+      <button type="button" class="btn btn-secondary btn-sm ver-propuesta-aceptar" data-cluster-idx="${idx}">Aceptar propuesta</button>
+    </div>`;
 }
 
 // Muestra el toggle solo cuando hay algo que ocultar, y le pone el número al lado.
@@ -759,7 +865,7 @@ function avisarSupervivientesPerdidas(perdidas, totalBorradas) {
   );
 }
 
-function renderCluster(cluster, idx) {
+function renderCluster(cluster, idx, propuesta = null) {
   if (!cluster.length) return '';
   const firstTrack = cluster[0].track;
   const artistName = firstTrack.artists?.map(a => a.name).join(', ') || 'Unknown';
@@ -777,6 +883,7 @@ function renderCluster(cluster, idx) {
         ${headerBadge}
         ${isResolved ? '' : `<button class="cluster-dismiss" data-cluster-idx="${idx}" title="Ocultar: no es duplicado">✕</button>`}
       </div>
+      ${propuesta && !isResolved ? bloquePropuesta(propuesta, idx) : ''}
       <div style="padding:8px">
         ${cluster.map(item => {
           const t = item.track;

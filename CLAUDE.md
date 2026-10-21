@@ -841,6 +841,58 @@ vista nueva que borre me gusta no compila mentalmente sin decidir cuál de las
 dos es. Tests: `tests/borrado-verificado.test.mjs` (19) y
 `tests/versions-guard.test.mjs` (16), los dos sin navegador ni token.
 
+## 🧩 `#versions`: la propuesta de edición (v=323)
+
+La tanda 70, por un pedido de Ian del 16/10 («uno que haga automático con deluxes y yo solo confirme»). En muchos
+grupos de «Versiones duplicadas» la única diferencia es el disco: el mismo tema en «X» y en «X (Deluxe Edition)».
+Ahí la vista **propone** qué edición queda, cuál se borra y por qué. **Solo propone.**
+
+- 🔴 **Hace falta «Analizar»**: la propuesta no aparece al entrar (`render()` no cambió; abrir sigue costando 0).
+- 🔴 **Nada sale tildado**: `keepIds` arranca vacío en cada análisis. Cada grupo con propuesta lleva **su** botón
+  «Aceptar propuesta», que tilda «quedarme» en la pista que queda **disparando el mismo `change` del checkbox** (el
+  camino del clic a mano) y nada más. **No hay ningún «Aceptar todas»** ni nada que tilde varios grupos de un clic. El
+  borrado es el de siempre: «Borrar sobrantes», su lista pieza por pieza, `borrarLikesVerificado` y `'ultimo-ejemplar'`.
+- Arriba del listado, «N grupos solo cambian la edición del disco» (o «Ningún grupo es solo de edición.») y el
+  interruptor «Ver solo los que tienen propuesta (N)». Los ocultos y los fantasmas no llevan propuesta. Clases propias
+  (`.ver-propuesta…`, en `components.css`), el «por qué» en `--color-text-secondary`.
+
+**La regla** (`util/deluxe-propuesta.js`, PURA; si un solo miembro no cumple, el grupo queda a mano):
+
+- por nombres (`motivosPorNombre`, la parte que se midió): el mismo artista principal y el mismo título tras la
+  limpieza MÍNIMA (`limpiarNombre`: NFC, minúsculas, espacios, apóstrofos tipográficos al recto; nada más: «X» y «X -
+  2011 Remaster» no son el mismo); ningún título con marcador de versión (`VERSION_MARKERS` **importado** más la lista
+  propia: remix, mix, en vivo, live, acústico/a, acoustic, remaster/ed/izado/a, radio edit, edit, demo, regrabación,
+  re-recorded, sped up, slowed, reverb, nightcore, 8d, instrumental, karaoke, a cappella, version/versión, mono,
+  stereo, bonus, session(s), unplugged, rework, reimagined, cover, commentary; palabra entera, sin mayúsculas ni
+  acentos); los discos con nombres distintos, la misma `baseDeEdicion()` (exacta, no vacía) y al menos uno con
+  `tieneAgregadoDeEdicion()` (las dos **importadas** de `util/edition-suffix.js`); y, **apretado por la medición**,
+  ningún disco cuyo nombre diga otra grabación (`discoDeOtraGrabacion`: remaster, extended, regrabación, remezcla o
+  «<alguien>'s Version»);
+- lo que solo trae la API: ids de disco distintos; todos `album_type === 'album'` (el single contra el álbum NO
+  entra); la duración, el más largo menos el más corto **≤ 2.000 ms**; el mismo `explicit`; el ISRC, si **todos** lo
+  traen, igual (si falta en alguno, sigue sin él y la vista dice «ISRC: no está en tu caché»; nunca con ISRC
+  distintos);
+- queda la edición de **más `total_tracks`**, si es única (a igualdad, a mano); con tres o más, se borran las demás.
+
+**El umbral, medido contra el export** (REAL, tanda 70, solo por nombres, sin red; con los nombres en
+`fonoteca-migracion/deluxes/`): 3.796 grupos de dos uris o más, partidos por el `sha256` de la clave antes de mirar. La
+mitad A marcó 47 con 4 falsos positivos (un remaster, un «Extended», dos versiones posesivas de otra persona): se apretó
+la regla. La mitad B, que no se usó para apretarla, marcó 45 con **0 falsos positivos: la tasa puede ser hasta 3/45
+(6,7 %)** (la regla del tres; nunca «tasa cero»). 🔴 **Es una COTA ALTA**: la regla de la app es la de nombres más ids,
+`album_type`, duración, `explicit`, ISRC y el desempate por pistas, así que marca un subconjunto. **La medición no mide**
+la duración, el `explicit`, el ISRC, el `album_type`, qué edición tiene más pistas (cuál propone conservar) ni los me
+gusta que nunca sonaron (el export son escuchas, no me gusta).
+
+`slimTrack` (`api.js`) ya guardaba todo lo que la regla lee (`album.id`, `album_type`, `total_tracks`, `explicit`,
+`duration_ms`, `external_ids.isrc`): no hizo falta tocar la caché. ⚠️ La guía de migración de febrero de 2026 lista
+`external_ids` como quitado y «reverted — see March 2026 changelog»: si vuelve a venir no está verificado; la regla
+funciona igual sin él.
+
+Guardas: `tests/deluxe-propuesta.test.mjs` (cada condición, un caso que pasa y uno que falla, con pistas inventadas),
+`tests/versions-propuesta.test.mjs` (lectura estática: un solo `keepIds.add`, el del checkbox; «Aceptar propuesta» no
+sale de su tarjeta; ningún «aceptar todas»; `render()` no calcula nada) y el banco `tests/banco/versiones-deluxe.html`
+(en `prepush`, el vigésimo segundo). Las dos suites y el banco, vistos fallar contra v=322.
+
 ## El embed de previews: medido tarjeta por tarjeta (v=167)
 
 Ian reportaba que en `#zero-plays` y en `#skips` «la mayoría» le abría el embed
@@ -4023,7 +4075,8 @@ fila sobrevivió así desde que se armó la tabla.
 | `#sync` | **~285** | **2** | `ceil(L/50)` + `ceil(P/50)` + 1 `/items?limit=1` + 1 snapshot + `ceil(T/100)` | me gusta **y** pistas de la espejo | leída del código · **`/me` repasado el 2026-10-08**: su `render()` no llega a `getCurrentUserId()` |
 | `#dedupe` | **ceil(P/50) + 1** = **3** | **0–1** | `/me/playlists` + 1 `/me` | nº de playlists | leída del código · **`/me` repasado el 2026-10-08**: el `getCurrentUserId()` de `dedupe.js:22` está en `loadAndShowGrid()`, que cuelga de `render()`. **El 1 `/me` que la fila ya contaba es el propio**, y está bien |
 | `#zombies` | **0** | **0** | — (todo detrás de «Analizar») | — | leída del código · **`/me` repasado el 2026-10-08**: su `render()` no llega a `getCurrentUserId()` |
-| `#versions` | **0** | **0** | — (detrás de «Analizar») | — | leída del código · **`/me` repasado el 2026-10-08**: su `render()` no llega a `getCurrentUserId()` |
+| `#versions` | **0** | **0** | — (detrás de «Analizar») | — | leída del código · **`/me` repasado el 2026-10-08**: su `render()` no llega a `getCurrentUserId()` · 🟩 **medida en el banco el 2026-10-20** (`tests/banco/versiones-deluxe.html`, Spotify simulada): abrir = **0** peticiones, con v=322 y con v=323 |
+| ↳ **al pulsar «Analizar»** (v=323, con la propuesta de edición): **ceil(L/50)** págs. de `/me/tracks` en frío, **0** con la caché de me gusta | — | **0** | `/me/tracks` paginado (lo de siempre); la propuesta es una cuenta pura sobre lo ya bajado | nº de me gusta | **medida en el banco el 2026-10-20**: 54 me gusta inventados → **2** `GET /me/tracks`, las MISMAS que con v=322; 0 escrituras. «Aceptar propuesta» = **0** |
 | `#zeroplays` | **2 + ceil(Hz/100)** | ídem | **1 `/me` propio** + 1 `/playlists/{id}` + la playlist de ocultos («sin plays») | **nº de ocultos de esta vista** | ✅ **confirmada el 2026-10-08, leída del código**: `render()` → `analyze()` → `Promise.all([getBestAvailableLikes(), loadTrackPlays()])` + `hiddenTracks.ready()`. Los dos caminos llegan al `/me`, pero **comparten el memo**: es 1, no 2. La fila ya estaba bien |
 | `#sin-clasificar` | **1 + ceil(P/50) + Σ(1 + ceil(Tᵢ/100)) + ocultos** ≈ **170+** | **2** (dentro de las 24 h del cruce) · **4** si además venció la lista de playlists | caliente: 1 `/me` propio + 1 `/playlists/{id}` del almacén de ocultos («sin clasificar»; 0 págs. con su caché de items al día) · + `ceil(P/50)` = 2 de `/me/playlists` **solo** si su caché de `localStorage` (24 h, otro reloj que el del cruce) venció | nº de playlists propias **y** su tamaño (en frío) · en caliente, **qué caché venció** | 🔴 **corregida el 2026-10-15, leída del código (no medida).** `load()` (`sin-clasificar.js:219`): `getBestAvailableLikes()` = 0; `hidden.ready()` (`:247`) y `getCurrentUserId()` (`:249`) comparten el memo (1 `/me`); `getAllUserPlaylists()` (`:251`) va ANTES de mirar el cruce y tiene su propio TTL de 24 h (`CACHE_TTL_MIN`, `api.js:32`); el cruce es `idbGetCached(CROSS_KEY)` (`:273`) con `CROSS_TTL_MIN = 24 * 60` (`:45`): dentro de las 24 h y con las mismas playlists a cruzar, **no se baja ninguna playlist**. Sin el `/me` del arranque |
 | ↳ lo que decía antes: **~45** en caliente | | | lo que cuesta **fuera** de las 24 h, no dentro: el cruce vencido re-valida cada playlist | | leída del código (hasta el 2026-10-15) |

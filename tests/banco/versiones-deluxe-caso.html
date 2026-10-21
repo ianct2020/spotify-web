@@ -1,0 +1,62 @@
+<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>banco versiones-deluxe — la app entera, en un iframe</title>
+<link rel="stylesheet" href="/css/theme.css">
+<link rel="stylesheet" href="/css/components.css">
+<link rel="stylesheet" href="/css/main.css">
+<style>*,*::before,*::after{animation:none!important;transition:none!important}</style>
+</head><body>
+<div id="app"></div>
+<script type="module">
+// ── Un iframe del banco `versiones-deluxe.html` (tanda 70) ───────────────────
+//
+// Arranca la app ENTERA (`/js/app.js`) en `#home` contra la Spotify simulada
+// (`simulado.mjs` + `crearSpotify` de `versiones-deluxe-datos.mjs`), con los me
+// gusta INVENTADOS servidos por `/me/tracks` y la caché de me gusta VACÍA (así
+// «Analizar» los baja y se pueden contar sus peticiones). El grupo G6 sale oculto
+// («no es duplicado»). La madre conduce desde afuera (hash, clics) y lee
+// `window.__sim.reg`.
+//
+// Modo `?foto=1` (capturas SEMBRADAS, con un conductor externo y SIN reloj
+// virtual): entra a #versions, aprieta «Analizar», espera la propuesta y marca
+// `data-foto="listo"`. No acepta nada.
+
+import { instalarRedSimulada, esperarReal, anclar } from '/banco/simulado.mjs';
+import { crearSpotify, CLAVE_OCULTO } from '/banco/versiones-deluxe-datos.mjs';
+
+const q = new URLSearchParams(location.search);
+window.__errores = [];
+window.addEventListener('error', (e) => window.__errores.push('error: ' + (e.message || e)));
+window.addEventListener('unhandledrejection', (e) => window.__errores.push('rechazo: ' + String(e.reason?.message || e.reason)));
+const errorOriginal = console.error.bind(console);
+console.error = (...a) => { window.__errores.push('console.error: ' + a.map(String).join(' ').slice(0, 300)); errorOriginal(...a); };
+
+const UID = 'usuarioDelBancoVersiones';
+const sim = instalarRedSimulada();
+window.__sim = sim;
+window.__spotify = crearSpotify(sim, { uid: UID });
+localStorage.setItem('fonoteca_last_user_id', UID);
+localStorage.setItem('fonoteca_perfil_v1', JSON.stringify({ id: UID, display_name: 'Banco' }));
+
+// La caché de me gusta, VACÍA: la comparten los iframes (mismo origen), y cada uno
+// tiene que bajar los suyos de su propia Spotify simulada.
+const idb = await import('/js/idb.js');
+await anclar(idb.idbDel('all_liked_tracks'));
+await anclar(idb.idbDel('all_liked_tracks_partial'));
+// El grupo G6, oculto como lo oculta el ✕ de la tarjeta (la clave por usuario).
+const { prefKey } = await import('/js/storage.js');
+localStorage.removeItem('versions_dismissed');
+localStorage.setItem(prefKey('versions_dismissed'), JSON.stringify([CLAVE_OCULTO]));
+
+location.hash = '#home';
+await import('/js/app.js');
+await esperarReal(() => document.getElementById('my-history-btn') && document.querySelector('.home-card'), { que: 'que la app arranque', vueltas: 4000 });
+window.__listo = true;
+
+if (q.get('foto')) {
+  location.hash = '#versions';
+  await esperarReal(() => document.getElementById('versions-analyze-btn'), { que: 'que abra #versions', vueltas: 4000 });
+  document.getElementById('versions-analyze-btn').click();
+  await esperarReal(() => document.querySelector('.ver-propuesta'), { que: 'la propuesta', vueltas: 8000 });
+  document.documentElement.dataset.foto = 'listo';
+}
+</script>
+</body></html>
