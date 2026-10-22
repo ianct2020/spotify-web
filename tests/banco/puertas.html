@@ -25,11 +25,21 @@
 //      escrituras al DOM de la ruta nueva;
 //   7. 0 errores de consola, en todos los marcos.
 //
+// v=328 (tanda 74), el embellecimiento:
+//   8. el resumen enseña los tres números de la cuenta a mano (`RESUMEN`): 7 de 10 siguen, 1 el mismo
+//      día, 2,5 días de mediana (de los 8 con segundo tema);
+//   9. cada chip filtra a su cuenta (10 · 7 · 3), en el orden de `universo()`, y con 260 artistas
+//      mezclados «Mostrar 100 más» va sobre lo filtrado (173 siguen: 100 → 173; 87 cambiaron, sin botón);
+//      filtrar = 0 peticiones;
+//  10. el contraste de la pastilla «Sí», de las etiquetas del resumen, de los chips y del día ≥ 4,5 en los
+//      cuatro presets (componiendo el fondo capa por capa hasta uno opaco);
+//  11. a 1366×591 y a 390×844, nada desborda (ni la página, ni las tarjetas, ni los chips, ni las filas).
+//
 // ⚠️ Todas las esperas van con `esperarReal` (ver PRESUPUESTO en `scripts/correr-banco.mjs`).
 
 import { esperarReal, anclar } from '/banco/simulado.mjs';
 import { fallar, listo } from '/banco/esperar.mjs';
-import { HISTORIAL, ESPERADO, AMIGO_V3, ESPERADO_AMIGO, AMIGO_VIEJO, historialDe } from '/banco/puertas-datos.mjs';
+import { HISTORIAL, ESPERADO, AMIGO_V3, ESPERADO_AMIGO, AMIGO_VIEJO, historialDe, RESUMEN, historialMezclado } from '/banco/puertas-datos.mjs';
 
 const ANCHO = +(new URLSearchParams(location.search).get('ancho') || 1351);
 const afirmar = (c, msg) => { if (!c) throw new Error('BANCO: ' + msg); };
@@ -37,9 +47,9 @@ const progreso = (t) => { document.getElementById('progreso').textContent = t; }
 const VUELTAS = 20000;
 const igual = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 
-function abrirMarco(uid, nombre) {
+function abrirMarco(uid, nombre, ancho = ANCHO, alto = 800) {
   const f = document.createElement('iframe');
-  f.width = ANCHO; f.height = 800;
+  f.width = ancho; f.height = alto;
   f.src = `/banco/puertas-caso.html?uid=${encodeURIComponent(uid)}&marco=${nombre}`;
   document.getElementById('marcos').appendChild(f);
   return f;
@@ -95,6 +105,7 @@ try {
   await anclar(idbSetCached(localKey('amigo-v3', 'artistTracks'), AMIGO_V3, TTL));
   await anclar(idbSetCached(localKey('amigo-viejo', 'artistTracks'), AMIGO_VIEJO, TTL));
   await anclar(idbDel(localKey('amigo-sin', 'artistTracks')));
+  await anclar(idbSetCached(localKey('amigo-mezcla', 'artistTracks'), historialMezclado(260), TTL));
 
   // ── 1, 2 y 3 · el owner, con el historial inventado ────────────────────────
   progreso('1-3: el owner');
@@ -224,12 +235,139 @@ try {
   afirmar($$(E, '.puertas-fila').length === 0, 'PUERTA 5: y 0 filas');
   sinFugas(E, 'PUERTA 5 (sin datos)');
 
+  // ── 8 · el resumen (v=328) ─────────────────────────────────────────────────
+  progreso('8: el resumen');
+  const tarjeta = (f, k) => $(f, `[data-puertas-resumen="${k}"]`);
+  const numDe = (f, k) => texto(tarjeta(f, k)?.querySelector('.puertas-resumen-num'));
+  const etDe = (f, k) => texto(tarjeta(f, k)?.querySelector('.puertas-resumen-et'));
+  afirmar(numDe(A, 'siguen') === String(RESUMEN.siguen) && etDe(A, 'siguen').startsWith(`de ${RESUMEN.total} artistas siguen teniendo su tema de entrada`),
+    `PUERTA 8: «${numDe(A, 'siguen')} ${etDe(A, 'siguen')}» (la cuenta a mano: ${RESUMEN.siguen} de ${RESUMEN.total})`);
+  afirmar(numDe(A, 'mismo-dia') === String(RESUMEN.mismoDia) && /^te ganaron el mismo día/.test(etDe(A, 'mismo-dia')), `PUERTA 8: «${numDe(A, 'mismo-dia')} ${etDe(A, 'mismo-dia')}» (a mano: ${RESUMEN.mismoDia})`);
+  afirmar(numDe(A, 'mediana') === RESUMEN.mediana && etDe(A, 'mediana').includes(`de los ${RESUMEN.conSegundo} que lo tienen`), `PUERTA 8: «${numDe(A, 'mediana')} ${etDe(A, 'mediana')}» (a mano: ${RESUMEN.mediana}, de ${RESUMEN.conSegundo})`);
+  datos.resumen = `${numDe(A, 'siguen')} de ${RESUMEN.total} · ${numDe(A, 'mismo-dia')} el mismo día · ${numDe(A, 'mediana')}`;
+
+  // ── 9 · el filtro (v=328) ──────────────────────────────────────────────────
+  progreso('9: el filtro');
+  const chip = (f, id) => $(f, `[data-puertas-filtro="${id}"]`);
+  const nombres = (f) => $$(f, '.puertas-fila').map((tr) => tr.dataset.artista);
+  const costo = (f) => ({ sim: win(f).__sim.reg.llamadas.length, rec: win(f).performance.getEntriesByType('resource').length });
+  async function filtrar(f, id, esperadas, que) {
+    chip(f, id).click();
+    await esperarReal(() => chip(f, id).classList.contains('is-on') && $$(f, '.puertas-fila').length === esperadas, { que, vueltas: VUELTAS });
+  }
+  const c0 = costo(A);
+  afirmar(['todos', 'siguen', 'cambiaron'].map((id) => texto(chip(A, id)?.querySelector('.puertas-chip-cuenta'))).join(' ') === '10 7 3', `PUERTA 9: las cuentas de los chips son 10 · 7 · 3 (${['todos', 'siguen', 'cambiaron'].map((id) => texto(chip(A, id))).join(' · ')})`);
+  afirmar(chip(A, 'todos').classList.contains('is-on') && chip(A, 'todos').getAttribute('aria-pressed') === 'true', 'PUERTA 9: al abrir, el elegido es «Todos»');
+  const siguenA = ESPERADO.filter((x) => x[3] === 'Sí').map((x) => x[0]), cambiaronA = ESPERADO.filter((x) => x[3] !== 'Sí').map((x) => x[0]);
+  await filtrar(A, 'siguen', 7, 'el filtro «siguen»');
+  afirmar(igual(nombres(A), siguenA) && texto($(A, '[data-puertas-cuenta]')) === '7 de 7 artistas' && chip(A, 'siguen').getAttribute('aria-pressed') === 'true' && chip(A, 'todos').getAttribute('aria-pressed') === 'false',
+    `PUERTA 9: «Siguen siendo su top» = los 7, en orden (${JSON.stringify(nombres(A))}, «${texto($(A, '[data-puertas-cuenta]'))}»)`);
+  await filtrar(A, 'cambiaron', 3, 'el filtro «cambiaron»');
+  afirmar(igual(nombres(A), cambiaronA) && texto($(A, '[data-puertas-cuenta]')) === '3 de 3 artistas', `PUERTA 9: «Cambiaron» = los 3 (${JSON.stringify(nombres(A))})`);
+  await filtrar(A, 'todos', 10, 'volver a «todos»');
+  afirmar(igual(filas(A), ESPERADO), 'PUERTA 9: «Todos» vuelve a la lista entera, igual que al abrir');
+  const c1 = costo(A);
+  afirmar(c1.sim === c0.sim && c1.rec === c0.rec, `PUERTA 9: filtrar = 0 peticiones (simulada ${c1.sim - c0.sim}, recursos ${c1.rec - c0.rec})`);
+
+  const G = abrirMarco('amigo-mezcla', 'G'); marcos.push(['G', G]);
+  await arrancado(G, 'el marco G');
+  const abrirG = await abrirPuertas(G, 'que #puertas pinte 260', () => $(G, '[data-puertas="lista"]'));
+  afirmar(abrirG.me === 1 && abrirG.otras.length === 0, `PUERTA 9: el amigo de 260 abre con 1 \`/me\` y nada más (${abrirG.me}; ${abrirG.otras.join(' · ')})`);
+  const hM = historialMezclado(260);
+  const ordenM = universo(hM.totals, hM.artists).map((u) => u.nombre);
+  const siguenM = ordenM.filter((n) => +n.slice(-3) % 3 !== 0), cambiaronM = ordenM.filter((n) => +n.slice(-3) % 3 === 0);
+  afirmar(siguenM.length === 173 && cambiaronM.length === 87, `PUERTA 9: la cuenta a mano de los 260: 173 y 87 (${siguenM.length}, ${cambiaronM.length})`);
+  afirmar(['todos', 'siguen', 'cambiaron'].map((id) => texto(chip(G, id)?.querySelector('.puertas-chip-cuenta'))).join(' ') === '260 173 87', `PUERTA 9: los chips dicen 260 · 173 · 87 (${['todos', 'siguen', 'cambiaron'].map((id) => texto(chip(G, id))).join(' · ')})`);
+  const g0 = costo(G);
+  await filtrar(G, 'siguen', 100, 'el filtro «siguen» con 260');
+  const masG = $(G, '[data-puertas-mas]');
+  afirmar(!masG.hidden && texto($(G, '[data-puertas-cuenta]')) === '100 de 173 artistas' && igual(nombres(G), siguenM.slice(0, 100)), `PUERTA 9: filtrado, primero 100 de 173 y el botón («${texto($(G, '[data-puertas-cuenta]'))}»)`);
+  masG.click();
+  await esperarReal(() => $$(G, '.puertas-fila').length === 173, { que: 'las 173', vueltas: VUELTAS });
+  afirmar(masG.hidden && igual(nombres(G), siguenM) && texto($(G, '[data-puertas-cuenta]')) === '173 de 173 artistas', 'PUERTA 9: «Mostrar 100 más» sobre lo filtrado: las 173, en el orden de universo(), y el botón se va');
+  await filtrar(G, 'cambiaron', 87, 'el filtro «cambiaron» con 260');
+  afirmar(masG.hidden && igual(nombres(G), cambiaronM) && texto($(G, '[data-puertas-cuenta]')) === '87 de 87 artistas', `PUERTA 9: «Cambiaron» = 87, sin botón (vuelve a la primera página de lo filtrado)`);
+  await filtrar(G, 'todos', 100, 'volver a «todos» con 260');
+  afirmar(!masG.hidden && texto($(G, '[data-puertas-cuenta]')) === '100 de 260 artistas', `PUERTA 9: «Todos» vuelve a 100 de 260 («${texto($(G, '[data-puertas-cuenta]'))}»)`);
+  const g1 = costo(G);
+  afirmar(g1.sim === g0.sim && g1.rec === g0.rec, `PUERTA 9: filtrar y paginar = 0 peticiones (simulada ${g1.sim - g0.sim}, recursos ${g1.rec - g0.rec})`);
+  sinFugas(G, 'PUERTA 9');
+  datos.filtro = '10·7·3 y 260·173·87; 100 → 173 sobre lo filtrado; 0 peticiones';
+
+  // ── 10 · el contraste, en los cuatro presets (v=328) ───────────────────────
+  progreso('10: contraste');
+  // La cuenta de WCAG 2.x de `tests/tema-contraste.test.mjs`, la misma; el fondo se COMPONE capa por capa
+  // (alfa incluido) hasta uno opaco: leer un rgba como si fuera opaco da números inventados.
+  const rgbaDe = (css) => { const m = String(css).match(/rgba?\(([^)]+)\)/); if (!m) return null; const p = m[1].split(/[\s,/]+/).filter(Boolean).map(Number); return [p[0], p[1], p[2], p[3] ?? 1]; };
+  const lumDe = (c) => { const [r, g, b] = c.slice(0, 3).map((v) => { const s = v / 255; return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4; }); return 0.2126 * r + 0.7152 * g + 0.0722 * b; };
+  const contrasteDe = (a, b) => { const x = lumDe(a), y = lumDe(b); return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05); };
+  const sobre = (arriba, abajo) => { const a = arriba[3]; return [0, 1, 2].map((i) => arriba[i] * a + abajo[i] * (1 - a)).concat(1); };
+  function fondoDe(f, el) {
+    const capas = [];
+    for (let n = el; n && n.nodeType === 1; n = n.parentElement) { const c = rgbaDe(win(f).getComputedStyle(n).backgroundColor); if (c && c[3] > 0) { capas.push(c); if (c[3] >= 1) break; } }
+    let base = capas.length && capas.at(-1)[3] >= 1 ? capas.pop() : [255, 255, 255, 1];
+    while (capas.length) base = sobre(capas.pop(), base);
+    return base;
+  }
+  function colorDe(f, el) { const cs = win(f).getComputedStyle(el); const c = rgbaDe(cs.color); return sobre([c[0], c[1], c[2], c[3] * Number(cs.opacity || 1)], fondoDe(f, el)); }
+  await filtrar(A, 'siguen', 7, 'un chip elegido para medirlo');
+  const medidos = [];
+  for (const id of ['violeta', 'ambar', 'aguamarina', 'papel']) {
+    await anclar(win(A).__ponerTema(id));
+    const piezas = [
+      ['pastilla «Sí»', $(A, '.puertas-pastilla')],
+      ['etiqueta del resumen', $(A, '.puertas-resumen-et')],
+      ['número del resumen', $(A, '.puertas-resumen-num')],
+      ['chip elegido', chip(A, 'siguen')],
+      ['cuenta del chip', $(A, '.puertas-chip.is-on .puertas-chip-cuenta')],
+      ['chip sin elegir', chip(A, 'todos')],
+      ['día del tema', $(A, '.puertas-dia')],
+      ['«Ahora: …»', $(A, '.puertas-sigue[data-sigue="no"]')],
+    ];
+    let peor = Infinity, cual = '';
+    for (const [nombre, el] of piezas) {
+      if (!el) { if (nombre !== '«Ahora: …»') throw new Error(`BANCO: PUERTA 10 (${id}): falta ${nombre}`); continue; }
+      const r = contrasteDe(colorDe(A, el), fondoDe(A, el));
+      if (r < peor) { peor = r; cual = nombre; }
+      afirmar(r >= 4.5, `PUERTA 10 (${id}): ${nombre} da ${r.toFixed(2)}:1 y AA pide 4,5`);
+    }
+    // La pastilla elegida no es blanco sobre el acento: su fondo NO es el acento.
+    const ac = rgbaDe(win(A).getComputedStyle(f_doc(A).documentElement).getPropertyValue('--color-accent').trim().replace(/^#(..)(..)(..)$/, (m, r, g, b) => `rgb(${parseInt(r, 16)}, ${parseInt(g, 16)}, ${parseInt(b, 16)})`));
+    afirmar(!ac || fondoDe(A, $(A, '.puertas-pastilla')).slice(0, 3).join() !== ac.slice(0, 3).join(), `PUERTA 10 (${id}): la pastilla no va sobre el acento`);
+    medidos.push(`${id} ${peor.toFixed(2)} (${cual})`);
+  }
+  await anclar(win(A).__ponerTema('violeta'));
+  await filtrar(A, 'todos', 10, 'volver a «todos»');
+  datos.contraste = medidos.join(' · ');
+
+  // ── 11 · sin desborde a 1366×591 y 390×844 (v=328) ─────────────────────────
+  progreso('11: desborde');
+  const desb = [];
+  for (const [ancho, alto] of [[1366, 591], [390, 844]]) {
+    const f = abrirMarco('owner', `D${ancho}`, ancho, alto); marcos.push([`D${ancho}`, f]);
+    await arrancado(f, `el marco de ${ancho}`);
+    await abrirPuertas(f, `#puertas a ${ancho}`, () => $(f, '[data-puertas="lista"]'));
+    const de = f.contentDocument.documentElement;
+    afirmar(de.scrollWidth <= win(f).innerWidth, `PUERTA 11 (${ancho}): sin barra horizontal (${de.scrollWidth} > ${win(f).innerWidth})`);
+    const malos = [...$$(f, '.puertas-resumen-tarjeta'), ...$$(f, '.puertas-chip'), $(f, '.puertas-filtro'), $(f, '.puertas-resumen'), $(f, '.puertas-tabla'), ...$$(f, '.puertas-fila'), ...$$(f, '.puertas-fila td')]
+      .filter((el) => el && el.scrollWidth > el.clientWidth + 1).map((el) => `${el.className || el.nodeName} ${el.scrollWidth}>${el.clientWidth}`);
+    afirmar(malos.length === 0, `PUERTA 11 (${ancho}): nada desborda su caja (${malos.slice(0, 5).join(' · ')})`);
+    const cont = $(f, '.puertas').getBoundingClientRect();
+    const fuera = [...$$(f, '.puertas-resumen-tarjeta'), ...$$(f, '.puertas-chip'), ...$$(f, '.puertas-pastilla'), ...$$(f, '.puertas-barra')].filter((el) => { const r = el.getBoundingClientRect(); return r.left < cont.left - 0.5 || r.right > cont.right + 0.5; });
+    afirmar(fuera.length === 0, `PUERTA 11 (${ancho}): las tarjetas, los chips, las pastillas y las barritas, dentro de la lista (${fuera.length} fuera)`);
+    const colsResumen = new Set($$(f, '.puertas-resumen-tarjeta').map((el) => Math.round(el.getBoundingClientRect().left))).size;
+    desb.push(`${ancho}×${alto}: página ${de.scrollWidth}/${win(f).innerWidth}, resumen en ${colsResumen} columna(s)`);
+    sinFugas(f, `PUERTA 11 (${ancho})`);
+  }
+  datos.desborde = desb.join(' · ');
+
   // ── 7 · 0 errores en todos los marcos ──────────────────────────────────────
   const errores = marcos.flatMap(([n, f]) => win(f).__errores.map((e) => `${n}: ${e}`));
   afirmar(errores.length === 0, `PUERTA 7: 0 errores de consola: ${errores.join(' | ')}`);
 
   const resumen = `abrir (owner): /me=${abrir.me} otras=${abrir.otras.length} · filas=${fA.length} = la cuenta a mano, en el orden de universo() · ` +
     `150 artistas: 100 → 150 con «Mostrar 100 más» · amigo v3: ${filas(C).length} filas suyas · amigo sin [6]: «vuelve a importar», 0 filas · sin datos: cartel de #records · ` +
+    `resumen: ${datos.resumen} · filtro: ${datos.filtro} · contraste peor: ${datos.contraste} · ${datos.desborde} · ` +
     `salir a mitad: ${datos.salir.mutaciones} escrituras de la vista al DOM, ${datos.salir.errores} errores, ${datos.salir.marcasDelRouter} marcas tardías del router, activos=${datos.salir.activos.join('+')} · errores=${errores.length} · escrituras en la cuenta=0 · externos=0 · ` +
     `reloj virtual=${Math.round(performance.now())} ms`;
   document.documentElement.setAttribute('data-resumen', resumen);
@@ -238,5 +376,6 @@ try {
 } catch (e) {
   fallar(e);
 }
+function f_doc(f) { return f.contentDocument; }
 </script>
 </body></html>

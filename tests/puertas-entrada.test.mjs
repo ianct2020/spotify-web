@@ -1,4 +1,4 @@
-// tests/puertas-entrada.test.mjs — la cuenta de `#puertas` (v=308, tanda 56)
+// tests/puertas-entrada.test.mjs — la cuenta de `#puertas` (v=308, tanda 56; el resumen y el filtro, v=328)
 //
 // `util/puertas-entrada.js` es la parte PURA de la vista: recibe `totals` y
 // `artists` de `loadArtistTracks()` (v3: `totals[a][6]` es el tema de entrada y
@@ -127,6 +127,50 @@ console.log('5. La paginación');
 ok(P.POR_PAGINA === 100, 'de a 100', vs(P.POR_PAGINA, 100));
 const sinTop = P.armarPuertas({ 'Hilo': T(20, '2020-01-01', ['Aguja', 'aguja1'], null) }, {});
 ok(sinTop.filas[0].sigue === null && sinTop.filas[0].top === null, 'sin la lista de temas, «sigue» queda en null (no inventa un «no»)');
+
+// ═══════════════════════════════════════════════════════════════════════════
+console.log('6. El resumen de arriba y el filtro (v=328)');
+// Las cuentas, HECHAS A MANO sobre las cinco filas de arriba (Alba Norte, Bruma, Cauce, Duna, Eco):
+//   · siguen siendo su top: Alba Norte, Cauce, Duna, Eco = 4 (Bruma cambió);
+//   · el mismo día: Alba Norte = 1;  solo un tema: Duna = 1;
+//   · días hasta el segundo, sin los de «solo un tema»: Alba 0, Bruma 3, Cauce 1, Eco 40 → [0, 1, 3, 40]:
+//     N = 4 (par), la mediana es (1 + 3) / 2 = 2.
+const tieneResumen = typeof P.resumenPuertas === 'function';
+ok(tieneResumen, 'puertas-entrada.js exporta resumenPuertas()');
+ok(typeof P.filtrarPuertas === 'function' && typeof P.cuentasPuertas === 'function', 'y filtrarPuertas() y cuentasPuertas()');
+ok(typeof P.anchoBarra === 'function' && typeof P.textoMediana === 'function', 'y anchoBarra() y textoMediana()');
+if (tieneResumen) {
+  const res = P.resumenPuertas(r.filas);
+  ok(igual(res, { total: 5, siguen: 4, mismoDia: 1, soloUnTema: 1, conSegundo: 4, mediana: 2 }), 'el resumen de las cinco, contado a mano (mediana con N par: el promedio de los dos del medio)',
+    vs(res, { total: 5, siguen: 4, mismoDia: 1, soloUnTema: 1, conSegundo: 4, mediana: 2 }));
+  const sinEco = r.filas.filter((f) => f.nombre !== 'Eco');
+  ok(P.resumenPuertas(sinEco).mediana === 1, 'con N impar ([0, 1, 3]) la mediana es la del medio: 1', vs(P.resumenPuertas(sinEco).mediana, 1));
+  ok(P.resumenPuertas(r.filas.filter((f) => f.nombre !== 'Duna')).mediana === 2, 'los de «solo un tema» no cuentan para la mediana (sacar a Duna no la mueve)');
+  const ninguno = r.filas.map((f) => ({ ...f, dias: null }));
+  const resN = P.resumenPuertas(ninguno);
+  ok(resN.mediana === null && resN.conSegundo === 0 && resN.soloUnTema === 5 && resN.mismoDia === 0, 'sin ningún segundo tema: mediana null (no 0) y nadie «el mismo día»', vs(resN, { mediana: null, conSegundo: 0, soloUnTema: 5, mismoDia: 0 }));
+  ok(igual(P.resumenPuertas([]), { total: 0, siguen: 0, mismoDia: 0, soloUnTema: 0, conSegundo: 0, mediana: null }), 'sin filas, todo en cero y la mediana null');
+  ok(P.textoMediana(2) === '2 días' && P.textoMediana(1) === '1 día' && P.textoMediana(2.5) === '2,5 días' && P.textoMediana(1234) === '1234 días' && P.textoMediana(null) === '—',
+    'textoMediana: «2 días», «1 día», «2,5 días» (coma de es-ES), «1234 días», «—»', vs([P.textoMediana(2), P.textoMediana(1), P.textoMediana(2.5), P.textoMediana(1234), P.textoMediana(null)], ['2 días', '1 día', '2,5 días', '1234 días', '—']));
+
+  // El filtro: Todos / Siguen siendo su top / Cambiaron, con su cuenta, y en el orden de universo().
+  ok(igual(P.cuentasPuertas(r.filas), { todos: 5, siguen: 4, cambiaron: 1 }), 'las cuentas de los tres chips: 5 · 4 · 1', vs(P.cuentasPuertas(r.filas), { todos: 5, siguen: 4, cambiaron: 1 }));
+  ok(igual(P.filtrarPuertas(r.filas, 'siguen').map((f) => f.nombre), ['Alba Norte', 'Cauce', 'Duna', 'Eco']), '«siguen»: los cuatro, en el orden de universo()', vs(P.filtrarPuertas(r.filas, 'siguen').map((f) => f.nombre), ['Alba Norte', 'Cauce', 'Duna', 'Eco']));
+  ok(igual(P.filtrarPuertas(r.filas, 'cambiaron').map((f) => f.nombre), ['Bruma']), '«cambiaron»: Bruma');
+  ok(P.filtrarPuertas(r.filas, 'todos') === r.filas || igual(P.filtrarPuertas(r.filas, 'todos'), r.filas), '«todos»: las cinco, tal cual');
+  ok(igual(P.filtrarPuertas(r.filas, 'cualquier-cosa'), r.filas), 'un filtro desconocido no esconde nada');
+  // `sigue: null` (sin la lista de temas) no es ni «siguen» ni «cambiaron»: solo sale en «todos».
+  const conNull = [...r.filas, { ...r.filas[0], nombre: 'Hilo', sigue: null }];
+  ok(igual(P.cuentasPuertas(conNull), { todos: 6, siguen: 4, cambiaron: 1 }), 'una fila sin dato de top solo cuenta en «todos»', vs(P.cuentasPuertas(conNull), { todos: 6, siguen: 4, cambiaron: 1 }));
+
+  // La barrita: log1p(días) / log1p(máximo), y nada para «solo un tema».
+  ok(P.anchoBarra(0, 40) === 0 && P.anchoBarra(40, 40) === 1, 'la barrita: 0 días → 0, el máximo → 1');
+  ok(Math.abs(P.anchoBarra(3, 40) - Math.log1p(3) / Math.log1p(40)) < 1e-12, 'y en el medio, log1p(días) / log1p(máximo)');
+  ok(P.anchoBarra(null, 40) === null, '«solo un tema»: sin barrita (null)');
+  ok(P.anchoBarra(0, 0) === 0, 'con el máximo en 0 (todos el mismo día), 0 y no NaN');
+  const maxDias = P.maxDias ? P.maxDias(r.filas) : undefined;
+  ok(maxDias === 40, 'maxDias(): el mayor de los días, sin los null', vs(maxDias, 40));
+}
 
 // Y que la zona de Buenos Aires de verdad mueve el día (si no, la suite no vigila nada).
 ok(new Date('2020-03-10').getDate() === 9, 'con TZ de Buenos Aires, new Date("2020-03-10").getDate() da 9');

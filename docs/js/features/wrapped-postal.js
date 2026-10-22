@@ -48,8 +48,8 @@
 // `window.__postalDibujo` queda para el banco, como `window.__mapaArtistasDibujo`: cada `fillText` con
 // su texto, el ancho medido, el máximo y los colores con que se pintó, y cada tapa con si se dibujó.
 
-import { conTapa, descargarBlob } from './covers-wallpaper.js?v=327';
-import { planPostal, degradadoPostal, avisoPostal, PESOS, ANCHO, ALTO } from '../util/postal-anio.js?v=327';
+import { conTapa, descargarBlob } from './covers-wallpaper.js?v=328';
+import { planPostal, degradadoPostal, avisoPostal, PESOS, ANCHO, ALTO } from '../util/postal-anio.js?v=328';
 
 const TOKENS = {
   bg: '--color-bg', surface: '--color-surface', elevated: '--color-elevated',

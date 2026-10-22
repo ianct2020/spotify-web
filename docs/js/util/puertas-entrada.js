@@ -31,9 +31,9 @@
 // esta cuenta. Es una premisa SUYA, no un dato medido (el export no dice cuándo
 // se creó la cuenta). Ver `fonoteca-migracion/PENDIENTES.md`.
 
-import { universo } from './mapa-paises.js?v=327';
-import { songKey } from './song-identity.js?v=327';
-import { fmtDia } from './fecha.js?v=327';
+import { universo } from './mapa-paises.js?v=328';
+import { songKey } from './song-identity.js?v=328';
+import { fmtDia } from './fecha.js?v=328';
 
 export const POR_PAGINA = 100;
 
@@ -78,4 +78,65 @@ export function armarPuertas(totals, artists) {
     };
   });
   return { sinEntrada: false, filas };
+}
+
+// ── El resumen de arriba, el filtro y la barrita (v=328) ─────────────────────
+//
+// Todo sale de las MISMAS filas de `armarPuertas()`: no se pide ni se calcula nada nuevo del dato.
+//   · «siguen» es `sigue === true`; «cambiaron», `sigue === false`. Una fila sin la lista de temas
+//     (`sigue: null`) no es ninguna de las dos: solo sale en «todos».
+//   · La mediana es de los días hasta el segundo tema SOLO de quienes lo tienen (`dias !== null`): un
+//     «solo un tema» no es un cero. Con N par, el promedio de los dos del medio (puede dar ,5).
+//   · La barrita es logarítmica: `log1p(días) / log1p(máximo)`. Con una escala lineal, el que tardó
+//     siete años aplasta a todos los demás contra el cero.
+
+/** Los tres chips del filtro, en su orden. */
+export const FILTROS = [
+  { id: 'todos', texto: 'Todos' },
+  { id: 'siguen', texto: 'Siguen siendo su top' },
+  { id: 'cambiaron', texto: 'Cambiaron' },
+];
+
+/** Las filas de un filtro, en el mismo orden (el de `universo()`). Un filtro desconocido es «todos». */
+export function filtrarPuertas(filas, filtro) {
+  if (filtro === 'siguen') return filas.filter((f) => f.sigue === true);
+  if (filtro === 'cambiaron') return filas.filter((f) => f.sigue === false);
+  return filas;
+}
+
+/** Cuántas filas tiene cada chip. */
+export function cuentasPuertas(filas) {
+  return { todos: filas.length, siguen: filas.filter((f) => f.sigue === true).length, cambiaron: filas.filter((f) => f.sigue === false).length };
+}
+
+/** Los números del resumen: `{ total, siguen, mismoDia, soloUnTema, conSegundo, mediana }` (mediana null sin ningún segundo tema). */
+export function resumenPuertas(filas) {
+  const dias = filas.map((f) => f.dias).filter((d) => d !== null && d !== undefined).sort((a, b) => a - b);
+  const n = dias.length;
+  const mediana = !n ? null : n % 2 ? dias[(n - 1) / 2] : (dias[n / 2 - 1] + dias[n / 2]) / 2;
+  return {
+    total: filas.length,
+    siguen: filas.filter((f) => f.sigue === true).length,
+    mismoDia: filas.filter((f) => f.dias === 0).length,
+    soloUnTema: filas.filter((f) => f.dias === null || f.dias === undefined).length,
+    conSegundo: n,
+    mediana,
+  };
+}
+
+/** «2 días», «1 día», «2,5 días» (es-ES), o «—» sin mediana. */
+export function textoMediana(m) {
+  if (m === null || m === undefined) return '—';
+  return `${m.toLocaleString('es-ES', { maximumFractionDigits: 1 })} ${m === 1 ? 'día' : 'días'}`;
+}
+
+/** El mayor de los días hasta el segundo tema (0 si no hay ninguno). */
+export function maxDias(filas) {
+  return filas.reduce((m, f) => (f.dias !== null && f.dias !== undefined && f.dias > m ? f.dias : m), 0);
+}
+
+/** El largo de la barrita, de 0 a 1: `log1p(días) / log1p(máximo)`; null sin segundo tema. */
+export function anchoBarra(dias, max) {
+  if (dias === null || dias === undefined) return null;
+  return max > 0 ? Math.log1p(dias) / Math.log1p(max) : 0;
 }

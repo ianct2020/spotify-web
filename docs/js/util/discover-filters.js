@@ -19,15 +19,15 @@
 // Normalizar más agresivamente `albumKey` fusionaría American Football LP3/LP4,
 // Crystal Castles I/II y Ed Sheeran ÷ vs =, que ya costó caro dos veces.
 
-import { albumKey } from './album-key.js?v=327';
-import { songKey, songKeysCandidatas, songKeyBase } from './song-identity.js?v=327';
-import { baseDeEdicion } from './edition-suffix.js?v=327';
-import { EP_MIN_TRACKS } from './release-size.js?v=327';
-import { getSavedAlbums, getBestAvailableLikes, getAllPlaylistItems } from '../api.js?v=327';
-import { getOwnPlaylists } from './playlist-add.js?v=327';
-import { loadListenedAlbums } from '../features/history-data.js?v=327';
-import { buildAlbumHeardIndex } from './album-heard.js?v=327';
-import { prefKey, migratePrefKey } from '../storage.js?v=327';
+import { albumKey } from './album-key.js?v=328';
+import { songKey, songKeysCandidatas, songKeyBase } from './song-identity.js?v=328';
+import { baseDeEdicion } from './edition-suffix.js?v=328';
+import { EP_MIN_TRACKS } from './release-size.js?v=328';
+import { getSavedAlbums, getBestAvailableLikes, getAllPlaylistItems } from '../api.js?v=328';
+import { getOwnPlaylists } from './playlist-add.js?v=328';
+import { loadListenedAlbums } from '../features/history-data.js?v=328';
+import { buildAlbumHeardIndex } from './album-heard.js?v=328';
+import { prefKey, migratePrefKey } from '../storage.js?v=328';
 
 const LS_KEY = 'discover_filtros_v1';
 

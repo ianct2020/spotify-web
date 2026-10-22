@@ -2649,8 +2649,8 @@ la tarjeta de inicio y la cabecera dicen «Puertas de entrada». Pedido por Ian 
 
 | archivo | qué | probado en |
 |---|---|---|
-| `util/puertas-entrada.js` | PURO: el universo (`universo()` de `mapa-paises.js`, IMPORTADO), «sigue siendo el top», los días y sus textos | `tests/puertas-entrada.test.mjs` |
-| `features/puertas.js` | la vista: `loadArtistTracks()`, el candado y la tabla de a 100 | `tests/banco/puertas.html` (en `prepush`) |
+| `util/puertas-entrada.js` | PURO: el universo (`universo()` de `mapa-paises.js`, IMPORTADO), «sigue siendo el top», los días y sus textos; desde v=328, el resumen (`resumenPuertas`), el filtro (`filtrarPuertas`, `cuentasPuertas`, `FILTROS`) y la barrita (`anchoBarra`, `maxDias`, `textoMediana`) | `tests/puertas-entrada.test.mjs` |
+| `features/puertas.js` | la vista: `loadArtistTracks()`, el candado, el resumen, los chips y la tabla de a 100 | `tests/banco/puertas.html` (en `prepush`) |
 | `scripts/gen-stats.py` + `history-processor.js` | los dos campos nuevos de `totals` | `tests/puertas-pipeline.test.mjs` |
 
 **El dato: el pipeline emite CRUDO y el navegador decide** (la regla de v=146).
@@ -2684,20 +2684,54 @@ antes no se mueven ni cambian de valor):
 **La vista decide:**
 
 - 🔴 El universo es **`universo()` importado**, no copiado (una regla escrita dos veces diverge, v=219).
-  Las filas van en su orden; sin ranking, sin filtros, sin ordenar por otra columna.
+  Las filas van en su orden; sin ranking ni ordenar por otra columna (desde v=328, con un filtro: abajo).
 - 🔴 **«¿Sigue siendo tu top?»** compara por **`songKey`** el tema de entrada con el **primero de
   `artists[a]`** (el top de la ficha de artista: más plays, a igualdad más minutos). «Sí», o «No:
   ahora «X»» con el top de hoy.
 - 🔴 **Los días** entre `[5]` y `[7]` se cuentan sobre las cadenas `YYYY-MM-DD` con `Date.UTC` de las
   partes, nunca con la hora local; el día se enseña con **`fmtDia()`**. 0 → «el mismo día», `null` →
   «solo un tema», si no «N días» (`toLocaleString('es-ES')`).
+- **«Sí» / «Ahora: «X»» (v=328; hasta v=327, «Sí» / «No: ahora «X»»)**: «Sí» es una pastilla (`.puertas-pastilla`)
+  con el ANILLO del acento y el texto en `--color-text` sobre `--color-surface`: el molde de `.covers-chip.is-on`
+  (v=290), **nunca blanco sobre el acento**. Cuando cambió, texto en el secundario: «Ahora: «X»».
 - **Paginada**: 100 filas y «Mostrar 100 más» (miles de filas de golpe es mucho DOM). A 600 px o menos
   la tabla se apila: cada fila son DOS renglones (artista y tema de entrada; «¿sigue?» y «hasta el
   segundo tema»), con la etiqueta de cada celda encima (`data-et`).
 - 🔴 **El candado es el de `#records`** («pide los DATOS primero»), no el de `#covers`: con BYOH la
   vista se abre con los datos del amigo; sin datos, el cartel de bloqueo de siempre.
 - **Abrir cuesta 1 `/me`** (el de `loadOne()`) y 0 de lo demás. Vigencia de ruta después de cada
-  `await` (v=195).
+  `await` (v=195). **Filtrar y «Mostrar 100 más» cuestan 0** (medido en el banco, v=328).
+
+**El embellecimiento (v=328, tanda 74)**. Pedido de Ian del 22/10: «se podría embellecer un poco no? osea está bien que son
+datos nada más». **Los datos no cambiaron: cambió cómo se ven.** Todo sale de las MISMAS filas de `armarPuertas()`.
+
+- **El resumen de arriba**, tres tarjetas (`.puertas-resumen`) calculadas por `resumenPuertas(filas)` (pura):
+  «**N** de **M** artistas siguen teniendo su tema de entrada como el más escuchado» (`sigue === true`), «**N** te ganaron el
+  mismo día: el segundo tema sonó el mismo día que el primero» (`dias === 0`) y «**N días**: la mediana hasta el segundo
+  tema (de los K que lo tienen)». 🔴 **La mediana es SOLO de los que tienen segundo tema** (`dias !== null`): un «solo un
+  tema» no es un cero. Con N par, el promedio de los dos del medio (`textoMediana`: «2,5 días», con la coma de es-ES); sin
+  ninguno, «—». Los números a 30 px en `--color-text`; las etiquetas en `--color-text-secondary` (nunca el muted). **Con el
+  JSON del repo** (REAL, contado el 22/10 sin nombres): **2.302** artistas, **1.043** siguen, **603** el mismo día, **343**
+  solo un tema, **mediana 40 días** (de 1.959), máximo 2.817.
+- **Cada fila con jerarquía**: el artista a 15 px y 700 (protagonista); el tema con la fecha DEBAJO, más chica; la pastilla
+  o «Ahora: «X»»; y en «Hasta el segundo tema», el texto de siempre y debajo una **barrita** (`.puertas-barra`, 4 px, hasta
+  160 px de ancho) del acento sobre `--color-elevated`, con `aria-hidden="true"` (el número ya está escrito), de ancho
+  **`log1p(días) / log1p(máximo)`** (`anchoBarra`): con una escala lineal el que tardó años aplasta a todos contra el cero.
+  No sale en «solo un tema»; «el mismo día» es la pista vacía. 🔴 **La escala es la de TODAS las filas** (`maxDias(filas)`),
+  no la del filtro: una barrita no cambia de largo por apretar un chip.
+- **El filtro de tres chips** (`.puertas-chip`): Todos / Siguen siendo su top / Cambiaron, cada uno con su cuenta
+  (`cuentasPuertas`); el elegido con el anillo del acento y `aria-pressed`. Una fila con `sigue: null` solo sale en «Todos».
+  🔴 **Filtrar va ANTES de paginar**: elegir un chip vuelve a la primera página DE LO FILTRADO, «Mostrar 100 más» sigue
+  sobre lo filtrado y el pie dice «N de M artistas» con M = los del filtro; el orden sigue siendo el de `universo()`. Un
+  filtro sin filas: «Ningún artista en este filtro.».
+- A 600 px o menos, la fila apilada de siempre (dos renglones), con la pastilla y la barrita; el resumen en una columna,
+  con el número a la izquierda de su etiqueta.
+- Clases propias `.puertas-…` (`tests/css-clases-duplicadas.test.mjs`, verde); sin animaciones nuevas; las fechas siguen
+  con `fmtDia`.
+
+Medido en el banco (SEMBRADO, datos INVENTADOS), contraste peor de la pastilla, las etiquetas del resumen, los chips, sus
+cuentas, el día y «Ahora: …» (WCAG 2.x, el fondo compuesto capa por capa): **violeta 6,36 · ámbar 6,20 · aguamarina 6,27 ·
+papel 6,51**. A 1366×591 y 390×844, nada desborda.
 - 🔴 **SIN marca de «puede ser de antes de tu historial».** Las entradas de la primera semana del export
   podrían ser artistas que ya escuchabas de antes, pero **Ian dijo el 15/10/2026 que antes de 2018 no usaba
   esta cuenta**, así que se toman como reales. ⚠️ **Es una premisa de Ian, no un dato medido**: el
@@ -2706,8 +2740,8 @@ antes no se mueven ni cambian de valor):
 
 Un ejemplo, INVENTADO: «Banda Inventada» sonó por primera vez con «Tema Uno» un 30 de enero (`[5]`),
 el single y su remaster son el mismo tema, y el 2 de febrero sonó «Tema Dos» (`[7]`). Fila: «Tema
-Uno · 30 ene» · si su top de hoy es «Tema Uno - Remastered», «Sí»; si es «Tema Dos», «No: ahora «Tema
-Dos»» · «3 días».
+Uno · 30 ene» · si su top de hoy es «Tema Uno - Remastered», «Sí»; si es «Tema Dos», «Ahora: «Tema
+Dos»» (hasta v=327, «No: ahora «Tema Dos»») · «3 días».
 
 **Lo que quedó AFUERA, y por qué:**
 - 🔴 **El ranking de «los temas que te abrieron más artistas»** (colaboraciones): **el export trae UN
@@ -2721,9 +2755,15 @@ Dos»» · «3 días».
 Guardas: `tests/puertas-pipeline.test.mjs` (los dos pipelines sobre las mismas reproducciones
 inventadas, la sección UTC también con `TZ` de Buenos Aires, la versión en los tres sitios y la
 conservación de los seis campos viejos); `tests/puertas-entrada.test.mjs` (la cuenta de la vista,
-con `TZ` de Buenos Aires); el banco `tests/banco/puertas.html` + `puertas-caso.html` +
-`puertas-datos.mjs` (la app ENTERA en seis iframes; `puertas-caso.html?uid=owner&foto=1` es el
-instrumento de la captura sembrada). `scripts/verificar-rehorneado.py` suma `--permitir-en ARCHIVO
+con `TZ` de Buenos Aires; desde v=328, el resumen con N par e impar, sin los de «solo un tema», sin
+ningún segundo tema, el filtro con su cuenta y la barrita; rojo contra v=327); el banco
+`tests/banco/puertas.html` + `puertas-caso.html` + `puertas-datos.mjs` (la app ENTERA en nueve
+iframes; `puertas-caso.html?uid=owner&foto=1[&tema=papel]` es el instrumento de la captura sembrada, y
+`window.__ponerTema(id)` aplica un preset). v=328 suma las puertas 8 (el resumen = la cuenta a mano:
+7 de 10, 1, 2,5 días), 9 (cada chip a su cuenta, y con 260 artistas mezclados «Mostrar 100 más» sobre
+lo filtrado: 100 → 173; filtrar = 0 peticiones), 10 (el contraste en los cuatro presets) y 11 (sin
+desborde a 1366×591 y 390×844); contra v=327, rojas desde la 2 (el «No: ahora») y la 8. Capturas:
+`fonoteca-migracion/driver-capturas-puertas-t74-2026-10-22.mjs`. `scripts/verificar-rehorneado.py` suma `--permitir-en ARCHIVO
 REGEX` para el rehorneado de un JSON que TIENE que cambiar. Medición y paridad sobre el export real
 en `fonoteca-migracion` (`medicion-puertas-*-2026-10-15.*`).
 

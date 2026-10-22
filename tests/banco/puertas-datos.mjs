@@ -43,6 +43,9 @@ export const HISTORIAL = {
   },
 };
 
+// (v=328: la columna «¿sigue?» de los que cambiaron decía «No: ahora «X»»; ahora el «Sí» es una
+// pastilla y el «No» se dice con «Ahora: «X»».)
+
 /**
  * La cuenta, HECHA A MANO (no con el código): una fila por artista del universo
  * (10 min o más), por minutos y a igualdad por nombre. Cada fila:
@@ -50,13 +53,13 @@ export const HISTORIAL = {
  */
 export const ESPERADO = [
   ['Aurora Lenta', 'Mar de fondo', '2 abr 2019', 'Sí', 'el mismo día'],
-  ['Bosque Quieto', 'Hojas', '30 ene 2020', 'No: ahora «Raíces»', '3 días'],
+  ['Bosque Quieto', 'Hojas', '30 ene 2020', 'Ahora: «Raíces»', '3 días'],
   ['Cometa Azul', 'Polvo', '1 jun 2021', 'Sí', 'solo un tema'],
   ['Delta Sur', 'Corriente', '15 sep 2018', 'Sí', '365 días'],
-  ['Eco Lejano', 'Voz', '31 dic 2022', 'No: ahora «Silencio»', '1 día'],
+  ['Eco Lejano', 'Voz', '31 dic 2022', 'Ahora: «Silencio»', '1 día'],
   ['Faro Rojo', 'Luz', '3 mar 2023', 'Sí', '7 días'],
   ['Gaviota', 'Ala', '28 feb 2024', 'Sí', '2 días'],
-  ['Humo', 'Ceniza', '7 jul 2024', 'No: ahora «Brasa»', '30 días'],
+  ['Humo', 'Ceniza', '7 jul 2024', 'Ahora: «Brasa»', '30 días'],
   ['Isla', 'Arena', '5 may 2025', 'Sí', '1 día'],
   ['Junco', 'Agua', '9 sep 2025', 'Sí', 'solo un tema'],
 ];
@@ -94,4 +97,27 @@ export function historialDe(n) {
     artists[nombre] = [[`Tema ${i}`, 5, 10, id(1000 + i)]];
   }
   return { version: 3, generated_at: '2026-10-15T00:00:00Z', totals, artists };
+}
+
+/**
+ * El resumen del owner (v=328), HECHO A MANO sobre `ESPERADO`: siguen = Aurora, Cometa, Delta, Faro,
+ * Gaviota, Isla y Junco (7); cambiaron = Bosque, Eco y Humo (3); el mismo día = Aurora (1); solo un
+ * tema = Cometa y Junco (2); días de los 8 con segundo tema = [0, 1, 1, 2, 3, 7, 30, 365] → N par, la
+ * mediana es (2 + 3) / 2 = 2,5.
+ */
+export const RESUMEN = { total: 10, siguen: 7, cambiaron: 3, mismoDia: 1, soloUnTema: 2, conSegundo: 8, mediana: '2,5 días' };
+
+/**
+ * N artistas sintéticos con el top MEZCLADO (v=328, para el filtro con paginación): cada tercero (i
+ * múltiplo de 3) tiene otro top que su tema de entrada («cambiaron»); los demás, el mismo («siguen»).
+ * Con 260: cambiaron 87 (0, 3, …, 258) y siguen 173.
+ */
+export function historialMezclado(n) {
+  const totals = {}, artists = {};
+  for (let i = 0; i < n; i++) {
+    const nombre = `Artista mezclado ${String(i).padStart(3, '0')}`;
+    totals[nombre] = T(10 + (n - i), '2021-03-01', [`Entrada ${i}`, id(3000 + i)], i % 2 ? '2021-03-05' : null);
+    artists[nombre] = i % 3 === 0 ? [[`Otro ${i}`, 9, 20, id(5000 + i)], [`Entrada ${i}`, 2, 5, id(3000 + i)]] : [[`Entrada ${i}`, 9, 20, id(3000 + i)]];
+  }
+  return { version: 3, generated_at: '2026-10-22T00:00:00Z', totals, artists };
 }

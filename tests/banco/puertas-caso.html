@@ -20,7 +20,7 @@
 // en `loadArtistTracks()` para probar que salir de la ruta a mitad de la carga no
 // escribe en la ruta nueva.
 //
-// Modo `?foto=1&uid=owner` (la captura SEMBRADA, con un conductor externo y SIN reloj
+// Modo `?foto=1&uid=owner[&tema=papel]` (la captura SEMBRADA, con un conductor externo y SIN reloj
 // virtual): siembra él mismo el historial inventado del owner (`HISTORIAL` de
 // `puertas-datos.mjs`), abre `#puertas` y marca `data-foto="listo"` cuando la lista
 // está pintada.
@@ -47,6 +47,22 @@ sim.ruta('GET', /^\/me$/, async () => {
 // en la limpieza de «el usuario cambió», que no es lo que se prueba acá.
 localStorage.setItem('fonoteca_last_user_id', UID);
 localStorage.setItem('fonoteca_perfil_v1', JSON.stringify({ id: UID, display_name: 'Banco' }));
+
+// v=328: el tema (para las capturas en Papel: `&tema=papel`) y `window.__ponerTema(id)`, que aplica uno de
+// los cuatro `PRESETS` con `applyTheme` de la app (la puerta del contraste).
+const { prefKey } = await import('/js/storage.js');
+if (q.get('tema') && q.get('tema') !== 'violeta') {
+  const { PRESETS } = await import('/js/ui/theme-panel.js');
+  const p = PRESETS.find((x) => x.id === q.get('tema'));
+  if (!p) throw new Error('banco: no encontré el preset ' + q.get('tema'));
+  localStorage.setItem(prefKey('fonoteca_theme_v1'), JSON.stringify({ colors: p.colors, preset: p.id }));
+}
+window.__ponerTema = async (id) => {
+  const { PRESETS, applyTheme } = await import('/js/ui/theme-panel.js');
+  const p = PRESETS.find((x) => x.id === id);
+  if (!p) throw new Error('banco: no encontré el preset ' + id);
+  applyTheme(p.colors);
+};
 
 const FOTO = q.get('foto') === '1';
 if (FOTO) {

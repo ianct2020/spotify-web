@@ -6671,7 +6671,14 @@ body.covers-fs .main {
    las vistas nuevas desde #calendario. A 600 px o menos la tabla se apila: cada
    fila son DOS renglones (artista y tema de entrada arriba; «¿sigue?» y «hasta el
    segundo tema» abajo), con la etiqueta de cada celda encima de su valor (sale de
-   `data-et`), porque la cabecera se esconde. */
+   `data-et`), porque la cabecera se esconde.
+
+   v=328 (tanda 74): arriba, tres tarjetas de resumen (el número grande en --color-text,
+   la etiqueta en --color-text-secondary: nunca el muted); un filtro de tres chips con el
+   elegido marcado con el ANILLO del acento (el molde de `.covers-chip.is-on`, v=290: el
+   texto sigue en --color-text, nada de blanco sobre el acento); en cada fila, el artista
+   como protagonista, el día debajo del tema, la pastilla «Sí» con el mismo anillo y una
+   barrita del acento (no es texto) para los días. Sin animaciones. */
 .puertas { display: flex; flex-direction: column; gap: 12px; max-width: 1100px; }
 .puertas-intro { margin: 0; color: var(--color-text-secondary); font-size: 14px; line-height: 1.5; }
 .puertas-tabla { width: 100%; border-collapse: collapse; table-layout: fixed; }
@@ -6680,9 +6687,26 @@ body.covers-fs .main {
 .puertas-tabla th:nth-child(2) { width: 36%; }
 .puertas-tabla th:nth-child(3) { width: 24%; }
 .puertas-tabla td { padding: 8px 10px 8px 0; border-bottom: 1px solid var(--color-border); vertical-align: top; font-size: 14px; overflow-wrap: anywhere; }
-.puertas-art { font-weight: 600; }
-.puertas-dia { color: var(--color-text-secondary); font-size: 12px; white-space: nowrap; }
+.puertas-tabla td.puertas-art { font-weight: 700; font-size: 15px; color: var(--color-text); }
+.puertas-tema { display: block; }
+.puertas-dia { display: block; margin-top: 2px; color: var(--color-text-secondary); font-size: 12px; white-space: nowrap; }
 .puertas-sigue[data-sigue="no"], .puertas-hasta { color: var(--color-text-secondary); }
+.puertas-pastilla { display: inline-block; padding: 1px 10px; border: 1px solid var(--color-accent); border-radius: 999px; box-shadow: 0 0 0 1px var(--color-accent); background: var(--color-surface); color: var(--color-text); font-size: 12px; font-weight: 600; line-height: 1.5; }
+.puertas-hasta-texto { display: block; }
+.puertas-barra { display: block; width: 100%; max-width: 160px; height: 4px; margin-top: 5px; border-radius: 2px; background: var(--color-elevated); overflow: hidden; }
+.puertas-barra-llena { display: block; height: 100%; border-radius: 2px; background: var(--color-accent); }
+.puertas-resumen { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.puertas-resumen-tarjeta { display: flex; flex-direction: column; gap: 4px; min-width: 0; padding: 14px 16px; border: 1px solid var(--color-border); border-radius: var(--radius-lg, 12px); background: var(--color-surface); }
+.puertas-resumen-num { font-size: 30px; font-weight: 700; line-height: 1.1; color: var(--color-text); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.puertas-resumen-et { font-size: 13px; line-height: 1.4; color: var(--color-text-secondary); }
+.puertas-filtro { display: flex; flex-wrap: wrap; gap: 8px; }
+.puertas-chip { display: inline-flex; align-items: center; gap: 6px; padding: 5px 12px; border: 1px solid var(--color-border); border-radius: 999px; background: var(--color-surface); color: var(--color-text); font: inherit; font-size: 13px; cursor: pointer; }
+.puertas-chip:hover { border-color: var(--color-accent); }
+.puertas-chip.is-on { border-color: var(--color-accent); box-shadow: 0 0 0 2px var(--color-accent); }
+.puertas-chip:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 3px; }
+.puertas-chip-cuenta { color: var(--color-text-secondary); font-variant-numeric: tabular-nums; }
+.puertas-vacio { margin: 0; color: var(--color-text-secondary); font-size: 14px; }
+.puertas-vacio[hidden] { display: none; }
 .puertas-pie { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 .puertas-cuenta { color: var(--color-text-secondary); font-size: 13px; font-variant-numeric: tabular-nums; }
 .puertas-pie .btn[hidden] { display: none; }
@@ -6694,6 +6718,9 @@ body.covers-fs .main {
   .puertas-tabla tr { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); column-gap: 12px; row-gap: 6px; padding: 10px 0; border-bottom: 1px solid var(--color-border); }
   .puertas-tabla td { display: block; padding: 0; border-bottom: 0; }
   .puertas-tabla td::before { content: attr(data-et); display: block; font-size: 11px; font-weight: 500; color: var(--color-text-secondary); }
+  .puertas-resumen { grid-template-columns: minmax(0, 1fr); gap: 8px; }
+  .puertas-resumen-tarjeta { flex-direction: row; align-items: baseline; gap: 10px; padding: 10px 12px; }
+  .puertas-resumen-num { flex: 0 0 auto; font-size: 24px; }
 }
 
 /* ══════════════════════════════════════════════════════════════════════════
