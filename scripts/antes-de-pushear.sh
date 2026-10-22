@@ -48,7 +48,7 @@ if npm test --silent 2>&1 | tail -4 | sed 's/^/      /'; [ "${PIPESTATUS[0]}" -e
 # `mosaico` y `toasts` entraron en v=273:
 # estaban en rojo desde antes del 04/10 y justamente por no estar acá nadie los
 # miraba, igual que le había pasado a `barra` entre v=241 y v=261.
-echo "2b. bancos (barra · pausa-search · toasts · mosaico · novedades · escrituras · ocultar-artista ×3 · covers-orden · calendario · import-guarda · ocultos-cache · mapa · puertas · cuota · letras · generos-cache · generos-escaneo · generos · mapa-artistas · versiones-deluxe · router-teardown · guard-ruta-vieja)"
+echo "2b. bancos (barra · pausa-search · toasts · mosaico · novedades · escrituras · ocultar-artista ×3 · covers-orden · calendario · import-guarda · ocultos-cache · mapa · puertas · cuota · letras · generos-cache · generos-escaneo · generos · mapa-artistas · versiones-deluxe · router-teardown · guard-ruta-vieja · postal)"
 # Los dos de `ocultar-artista` entraron en v=276: las TRES vistas que ocultan
 # artistas, reales, contra una Spotify simulada. Es el único sitio donde se puede
 # probar ocultar sin escribir en la cuenta de Ian, y el de `-disco` es el que
@@ -121,7 +121,14 @@ echo "2b. bancos (barra · pausa-search · toasts · mosaico · novedades · esc
 # TIRA (su `getElementById` sin guarda de vigencia da null); a los 2 s, #main-content sigue con #home y sin
 # `.crash-screen` (contra v=324: la tarjeta «Se rompió algo al cargar esta página» encima de #home). Y de
 # conservación, #records con la `/me` caída SIN salir: pinta lo suyo y nadie le pinta un error encima.
-for B in barra pausa-search toasts mosaico novedades escrituras ocultar-artista ocultar-artista-disco ocultar-artista-novedades covers-orden calendario import-guarda ocultos-cache mapa puertas cuota letras generos-cache generos-escaneo generos mapa-artistas versiones-deluxe router-teardown guard-ruta-vieja; do
+# `postal` entró en v=326 (tanda 73): la postal del año de #wrapped, en la app ENTERA contra la Spotify simulada
+# y un historial INVENTADO, con las tapas fabricadas en el banco (nada sale a la red): abrir no baja el módulo;
+# apretar da UN PNG de 1080×1350 (decodificado) con 5 pedidos de tapa y 0 a Spotify y a cualquier CDN; una tapa
+# 404 y otra de otro origen sin CORS → el PNG sale igual (no se mancha), esas casillas con ♪ y el aviso dice «2»;
+# nada pasa de su caja; en los cuatro presets solo --color-text/--color-text-secondary y ≥ 4,5:1; dos clics = una
+# descarga; salir mientras genera = 0 descargas y 0 escrituras; sin desborde a 1366×591 y 390×844; y si `toBlob`
+# tira, sale sin tapas y lo dice. Visto en rojo contra v=325 en B a I (no hay botón).
+for B in barra pausa-search toasts mosaico novedades escrituras ocultar-artista ocultar-artista-disco ocultar-artista-novedades covers-orden calendario import-guarda ocultos-cache mapa puertas cuota letras generos-cache generos-escaneo generos mapa-artistas versiones-deluxe router-teardown guard-ruta-vieja postal; do
   if node scripts/correr-banco.mjs "$B" 2>&1 | sed 's/^/      /'; [ "${PIPESTATUS[0]}" -eq 0 ]; then
     ok "banco $B en verde"
   else

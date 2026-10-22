@@ -1,0 +1,357 @@
+<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>banco postal — la postal del año, con un historial de mentira</title>
+<style>html,body{margin:0;background:#111;color:#eee;font:13px system-ui}iframe{border:0;display:block}</style>
+</head><body>
+<pre id="progreso"></pre>
+<div id="marcos"></div>
+<script type="module">
+// ── Qué prueba este banco (v=326, tanda 73) ──────────────────────────────────
+//
+// La postal del año de `#wrapped` REAL, en la app ENTERA (`postal-caso.html`, uno por iframe), contra la
+// Spotify simulada (`simulado.mjs`, sin tocar) y un `history-stats.json` INVENTADO (`postal-datos.mjs`).
+// Nada sale a la red: las tapas buenas son `data:` URL fabricadas en el banco, la 404 la contesta el
+// servidor del banco y la «ajena» es otro origen del mismo servidor (`localhost`), sin CORS.
+//
+//   A. abrir «Wrapped» = las mismas peticiones que antes (1 `/me` y nada más) y 0 del módulo de la postal
+//      hasta apretar (de CONSERVACIÓN: verde también contra v=325);
+//   B. apretar «Descargar postal (PNG)»: sale UN PNG de 1080×1350 llamado `fonoteca-2025.png` (decodificado
+//      acá), con 5 pedidos de tapa, 0 a Spotify y 0 a cualquier host de CDN real (se listan los tocados), y
+//      cada tapa en su casilla (un píxel de cada una es su color);
+//   C. 🔴 tapas que fallan (una 404 y otra de otro origen sin `access-control-allow-origin`): el PNG sale
+//      igual (`toBlob` no tira: el lienzo NO quedó manchado), esas dos casillas son el cuadro ♪ (un píxel
+//      del centro no es el fondo ni una tapa) y el aviso dice «2»;
+//   D. ningún `fillText` con el ancho medido mayor que su máximo, y el nombre largo termina en «…»;
+//   E. en los cuatro presets, el texto usa solo `--color-text` y `--color-text-secondary`, y su contraste
+//      contra el fondo donde se dibujó es ≥ 4,5:1 (calculado acá con los valores computados);
+//   F. dos clics rápidos = una descarga;
+//   G. salir de la ruta mientras genera (con una tapa retenida): la petición se aborta, 0 descargas, 0
+//      toasts y 0 escrituras en el botón después del cambio de ruta;
+//   H. a 1366×591 y 390×844, el botón entra en `.wrapped-hero` sin desbordar y la página no tiene barra
+//      horizontal;
+//   I. si `toBlob` tira (un `SecurityError` forzado acá), la postal sale SIN tapas, se descarga igual y el
+//      aviso lo dice («La postal salió sin tapas: …»);
+//   y 0 errores de consola en todos los marcos.
+//
+// `?solo=B,C` corre solo esas puertas (A siempre): sirve para ver cada una en rojo contra v=325.
+// ⚠️ Todas las esperas van con `esperarReal` (ver PRESUPUESTO en `scripts/correr-banco.mjs`).
+
+import { esperarReal, anclar } from '/banco/simulado.mjs';
+import { fallar, listo } from '/banco/esperar.mjs';
+import { LARGO, COLORES_TAPA, ESPERADO_2025 } from '/banco/postal-datos.mjs';
+
+const afirmar = (c, msg) => { if (!c) throw new Error('BANCO: ' + msg); };
+const pasos = [];
+const progreso = (t) => { pasos.push(`${t} @${Math.round(performance.now())}`); document.getElementById('progreso').textContent = pasos.join(' · '); };
+const VUELTAS = 20000;
+const SOLO = (new URLSearchParams(location.search).get('solo') || '').split(',').filter(Boolean);
+const corre = (g) => !SOLO.length || SOLO.includes(g);
+
+function abrirMarco(nombre, ancho, alto) {
+  const f = document.createElement('iframe');
+  f.width = ancho; f.height = alto;
+  f.src = `/banco/postal-caso.html?marco=${nombre}`;
+  document.getElementById('marcos').appendChild(f);
+  return f;
+}
+const win = (f) => f.contentWindow;
+const $ = (f, s) => f.contentDocument?.querySelector(s);
+const meDe = (f) => win(f).__sim.reg.llamadas.filter((l) => l.ruta === '/me').length;
+const recursos = (f) => win(f).performance.getEntriesByType('resource').map((e) => e.name);
+const moduloPostal = (f) => recursos(f).filter((u) => /wrapped-postal\.js|postal-anio\.js/.test(u));
+const CDN = /spotifycdn\.com$|(^|\.)scdn\.co$|mzstatic\.com$|dzcdn\.net$|lastfm|fastly|akamai|cloudfront/i;
+async function arrancado(f, que) { await esperarReal(() => win(f)?.__listo, { que: `que arranque ${que}`, vueltas: VUELTAS }); }
+const anioActivo = (f) => $(f, '.wrapped-year-tab.active')?.dataset.year;
+async function abrirWrapped(f, que) {
+  win(f).location.hash = '#wrapped';
+  await esperarReal(() => $(f, '#wrapped-year-card .wrapped-hero') && anioActivo(f), { que: `que #wrapped pinte (${que})`, vueltas: VUELTAS });
+}
+async function elegirAnio(f, anio) {
+  if (anioActivo(f) === String(anio)) return;
+  $(f, `.wrapped-year-tab[data-year="${anio}"]`).click();
+  await esperarReal(() => anioActivo(f) === String(anio) && $(f, '#wrapped-year-card .wrapped-hero-year')?.textContent === String(anio), { que: `el año ${anio}`, vueltas: VUELTAS });
+}
+const boton = (f) => $(f, '#wrapped-year-card .wrapped-hero .wrapped-postal-btn');
+
+/** Aprieta el botón y espera la descarga entera. Devuelve lo que pasó en el medio. */
+async function generar(f, que) {
+  const b = boton(f);
+  afirmar(b, `${que}: hay un botón .wrapped-postal-btn dentro de .wrapped-hero de la tarjeta del año`);
+  const w = win(f);
+  const d0 = w.__descargas.length, t0 = w.__toasts.length, p0 = w.__tapas.pedidas.length, l0 = w.__sim.reg.llamadas.length, r0 = recursos(f).length;
+  const textoAntes = b.textContent.trim();
+  const tClic = performance.now();
+  b.click();
+  const durante = { disabled: b.disabled, texto: b.textContent.trim() };
+  await esperarReal(() => w.__descargas.length > d0 && w.__descargas.at(-1).bytes && w.__toasts.length > t0, { que: `${que}: la descarga y su aviso`, vueltas: VUELTAS });
+  await esperarReal(() => boton(f) && !boton(f).disabled, { que: `${que}: el botón vuelve`, vueltas: VUELTAS });
+  const desc = w.__descargas.slice(d0);
+  progreso(`${que}: generada en ${Math.round(performance.now() - tClic)} ms de reloj; tapas ${w.__tapas.pedidas.slice(p0).map((t) => `${t.t0}→${t.t1}`).join(' ')}`);
+  return {
+    textoAntes, durante, despues: boton(f).textContent.trim(),
+    descargas: desc, desc: desc[0], toasts: w.__toasts.slice(t0),
+    tapas: w.__tapas.pedidas.slice(p0), spotify: w.__sim.reg.llamadas.slice(l0),
+    recursos: recursos(f).slice(r0), dibujo: JSON.parse(JSON.stringify(w.__postalDibujo || null)),
+  };
+}
+
+/** El PNG: firma, IHDR y los píxeles (decodificado acá, en la madre). */
+async function leerPng(bytes) {
+  const sig = [137, 80, 78, 71, 13, 10, 26, 10].every((v, i) => bytes[i] === v);
+  const dv = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  const ihdr = String.fromCharCode(...bytes.slice(12, 16));
+  const w = dv.getUint32(16), h = dv.getUint32(20);
+  // Anclado: decodificar no es red, y sin el ancla el reloj virtual salta al próximo temporizador de la
+  // app (el toast de 30 s) mientras tanto. Es la trampa de PRESUPUESTO en `scripts/correr-banco.mjs`.
+  const bmp = await anclar(createImageBitmap(new Blob([bytes], { type: 'image/png' })));
+  const c = document.createElement('canvas'); c.width = bmp.width; c.height = bmp.height;
+  const x = c.getContext('2d'); x.drawImage(bmp, 0, 0);
+  const px = (a, b) => [...x.getImageData(Math.round(a), Math.round(b), 1, 1).data.slice(0, 3)];
+  return { sig, ihdr, w, h, bw: bmp.width, bh: bmp.height, px };
+}
+const cerca = (a, b, tol = 8) => a.every((v, i) => Math.abs(v - b[i]) <= tol);
+const hexA = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
+// La cuenta de WCAG 2.x de `tests/tema-contraste.test.mjs`, la misma (los colores del tema son opacos).
+const lum = (h) => { const [r, g, b] = hexA(h).map((v) => { const s = v / 255; return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4; }); return 0.2126 * r + 0.7152 * g + 0.0722 * b; };
+const contraste = (a, b) => { const x = lum(a), y = lum(b); return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05); };
+/** Un color CSS a `#rrggbb` con el mismo normalizador que usa el lienzo. */
+function normal(f, css) { const x = f.contentDocument.createElement('canvas').getContext('2d'); x.fillStyle = '#000'; x.fillStyle = css.trim(); return x.fillStyle; }
+const token = (f, k) => normal(f, win(f).getComputedStyle(f.contentDocument.documentElement).getPropertyValue(k));
+/** Un punto de la casilla `t` fuera de la franja diagonal de la tapa inventada. */
+const puntoDeTapa = (t) => [t.x + t.lado * 0.25, t.y + t.lado * 0.75];
+
+const marcos = [];
+const datos = {};
+/** N vueltas de espera de verdad (cada una, una petición al propio banco: el reloj virtual no la deja atrás). */
+async function margen(n) { let k = 0; await esperarReal(() => ++k > n, { que: 'un margen', vueltas: n + 10 }); }
+try {
+  // ── A · abrir, y nada del módulo de la postal ──────────────────────────────
+  progreso('A: abrir');
+  const A = abrirMarco('A', 1366, 900); marcos.push(['A', A]);
+  await arrancado(A, 'el marco A');
+  {
+    const me0 = meDe(A), l0 = win(A).__sim.reg.llamadas.length, r0 = recursos(A).length;
+    await abrirWrapped(A, 'A');
+    const nuevas = win(A).__sim.reg.llamadas.slice(l0);
+    const otrosOrigenes = recursos(A).slice(r0).filter((u) => new URL(u).origin !== location.origin);
+    datos.abrir = { me: meDe(A) - me0, otras: nuevas.filter((l) => l.ruta !== '/me').length, recursos: recursos(A).length - r0, modulo: moduloPostal(A).length, otrosOrigenes: otrosOrigenes.length, tapas: win(A).__tapas.pedidas.length };
+    afirmar(datos.abrir.me === 1 && datos.abrir.otras === 0, `PUERTA A: abrir «Wrapped» = 1 /me y 0 de lo demás a la simulada (${datos.abrir.me} /me, ${datos.abrir.otras} otras: ${nuevas.map((l) => l.ruta).join(' · ')})`);
+    afirmar(datos.abrir.modulo === 0, `PUERTA A: abrir no baja el módulo de la postal (${moduloPostal(A).join(' · ')})`);
+    afirmar(datos.abrir.otrosOrigenes === 0, `PUERTA A: nada de otro origen al abrir (${otrosOrigenes.join(' · ')})`);
+    afirmar(datos.abrir.tapas === 0, `PUERTA A: 0 tapas pedidas por fetch al abrir (${datos.abrir.tapas})`);
+    afirmar(!recursos(A).some((u) => /\/data\/history-stats\.json/.test(u)), 'PUERTA A: el history-stats.json del repo NO se pide (los datos son los sembrados)');
+    afirmar(anioActivo(A) === '2025', `PUERTA A: el año elegido de arranque es el último inventado (${anioActivo(A)})`);
+    const s = win(A).__sim.reg;
+    afirmar(s.desconocidas.length === 0 && s.externas.length === 0 && s.escrituras.length === 0, `PUERTA A: 0 rutas sin simular, 0 hosts externos, 0 escrituras (${s.desconocidas.join(' · ')} ${s.externas.join(' · ')})`);
+  }
+
+  // ── B · apretar ────────────────────────────────────────────────────────────
+  if (corre('B') || corre('D')) {
+    progreso('B: apretar');
+    const b = boton(A);
+    afirmar(b, 'PUERTA B: la tarjeta del año tiene el botón «Descargar postal (PNG)» dentro de .wrapped-hero');
+    afirmar(b.textContent.trim() === 'Descargar postal (PNG)' && b.type === 'button', `PUERTA B: el botón dice «Descargar postal (PNG)» (${b.textContent.trim()})`);
+    afirmar(b.previousElementSibling?.matches('.wrapped-hero-sub'), 'PUERTA B: el botón va debajo de .wrapped-hero-sub');
+    const g = await generar(A, 'PUERTA B');
+    afirmar(g.durante.disabled && g.durante.texto === 'Generando…', `PUERTA B: mientras genera, deshabilitado y «Generando…» (${g.durante.disabled} «${g.durante.texto}»)`);
+    afirmar(g.despues === 'Descargar postal (PNG)', `PUERTA B: al terminar vuelve a su texto («${g.despues}»)`);
+    afirmar(g.descargas.length === 1, `PUERTA B: UNA descarga (${g.descargas.length})`);
+    afirmar(g.desc.nombre === ESPERADO_2025.archivo, `PUERTA B: se llama ${ESPERADO_2025.archivo} («${g.desc.nombre}»)`);
+    const png = await leerPng(g.desc.bytes);
+    afirmar(png.sig && png.ihdr === 'IHDR' && png.w === 1080 && png.h === 1350 && png.bw === 1080 && png.bh === 1350, `PUERTA B: es un PNG de 1080×1350 (firma ${png.sig}, ${png.ihdr} ${png.w}×${png.h}, decodificado ${png.bw}×${png.bh})`);
+    afirmar(g.tapas.length === 5, `PUERTA B: 5 pedidos de tapa (${g.tapas.length})`);
+    afirmar(g.tapas.every((t) => t.modo === 'cors' && t.estado === 200), `PUERTA B: las 5 con mode cors y 200 (${g.tapas.map((t) => `${t.modo}/${t.estado}`).join(' · ')})`);
+    afirmar(g.spotify.length === 0, `PUERTA B: 0 peticiones a Spotify (${g.spotify.map((l) => l.ruta).join(' · ')})`);
+    const hosts = [...new Set([...g.tapas.map((t) => t.host), ...g.recursos.map((u) => new URL(u).host)])];
+    afirmar(!hosts.some((h) => CDN.test(h)), `PUERTA B: 0 a un CDN real (hosts tocados: ${hosts.join(', ')})`);
+    afirmar(hosts.every((h) => h === 'data:' || h === location.host), `PUERTA B: solo el propio banco (${hosts.join(', ')})`);
+    datos.apretar = { tapas: g.tapas.length, spotify: g.spotify.length, hosts: hosts.join(' + '), bytes: g.desc.bytes.length, modulo: moduloPostal(A).length, toast: g.toasts.join(' | ') };
+    afirmar(g.toasts.length === 1 && g.toasts[0] === 'Postal descargada.', `PUERTA B: el aviso «Postal descargada.» (${g.toasts.join(' | ')})`);
+    const dib = g.dibujo;
+    afirmar(dib && dib.ancho === 1080 && dib.alto === 1350, 'PUERTA B: window.__postalDibujo existe y mide 1080×1350');
+    afirmar(dib.tapas.length === 5 && dib.tapas.every((t) => t.dibujada) && dib.faltan === 0 && !dib.sinTapas, `PUERTA B: las 5 tapas dibujadas (${dib.tapas.map((t) => t.dibujada).join(',')})`);
+    for (const [i, t] of dib.tapas.entries()) {
+      const c = png.px(...puntoDeTapa(t));
+      afirmar(cerca(c, COLORES_TAPA[i]), `PUERTA B: la casilla ${i + 1} tiene su tapa (rgb ${c} contra ${COLORES_TAPA[i]})`);
+    }
+    const tx = (id) => dib.textos.find((t) => t.id === id)?.texto;
+    afirmar(tx('anio') === '2025' && tx('rango') === ESPERADO_2025.rango && tx('cifra-reproducciones') === ESPERADO_2025.reproducciones && tx('cifra-dias') === ESPERADO_2025.dias && tx('cifra-racha') === ESPERADO_2025.racha && tx('pico') === ESPERADO_2025.pico && tx('pie') === 'Fonoteca',
+      `PUERTA B: los textos son los contados a mano (${['anio', 'rango', 'cifra-reproducciones', 'cifra-dias', 'cifra-racha', 'pico', 'pie'].map(tx).join(' | ')})`);
+    afirmar(!dib.textos.some((t) => /skip|salt|%/i.test(t.texto)), 'PUERTA B: ningún texto de la postal dice «skip», «salt» ni lleva «%»');
+    datos.dibujoB = dib;
+
+    // ── D · el recorte ─────────────────────────────────────────────────────
+    progreso('D: el recorte');
+    const pasados = dib.textos.filter((t) => !(t.ancho <= t.max + 0.01));
+    afirmar(pasados.length === 0, `PUERTA D: ningún fillText con el ancho medido mayor que su máximo (${pasados.map((t) => `${t.id} ${t.ancho.toFixed(1)}>${t.max}`).join(', ')})`);
+    const a0 = dib.textos.find((t) => t.id === 'artista-nombre-0'), d0 = dib.textos.find((t) => t.id === 'disco-nombre-0');
+    afirmar(a0 && a0.texto.endsWith('…') && LARGO.startsWith(a0.texto.slice(0, -1).trimEnd()), `PUERTA D: el nombre largo del artista termina en «…» y es el principio del nombre («${a0?.texto}»)`);
+    afirmar(d0 && d0.texto.endsWith('…'), `PUERTA D: el nombre largo del disco también («${d0?.texto}»)`);
+    datos.recorte = { textos: dib.textos.length, maxHolgura: Math.min(...dib.textos.map((t) => t.max - t.ancho)).toFixed(1), artista: a0.texto, letra: dib.letra };
+  }
+
+  // ── F · dos clics rápidos ──────────────────────────────────────────────────
+  if (corre('F')) {
+    progreso('F: dos clics');
+    const b = boton(A);
+    afirmar(b, 'PUERTA F: hay botón');
+    const w = win(A), d0 = w.__descargas.length, p0 = w.__tapas.pedidas.length;
+    b.click(); b.click();
+    // Y el manejador llamado a mano por segunda vez, como un clic que se colara antes del `disabled`.
+    b.onclick?.call(b);
+    await esperarReal(() => w.__descargas.length > d0 && w.__descargas.at(-1).bytes && boton(A) && !boton(A).disabled, { que: 'PUERTA F: la descarga', vueltas: VUELTAS });
+    await margen(60);
+    afirmar(w.__descargas.length - d0 === 1, `PUERTA F: dos clics rápidos = UNA descarga (${w.__descargas.length - d0})`);
+    afirmar(w.__tapas.pedidas.length - p0 === 5, `PUERTA F: y una sola tanda de 5 tapas (${w.__tapas.pedidas.length - p0})`);
+    datos.dosClics = w.__descargas.length - d0;
+  }
+
+  // ── C · tapas que fallan ───────────────────────────────────────────────────
+  if (corre('C')) {
+    progreso('C: tapas que fallan');
+    await elegirAnio(A, 2024);
+    const g = await generar(A, 'PUERTA C');
+    afirmar(g.descargas.length === 1 && g.desc.nombre === 'fonoteca-2024.png', `PUERTA C: el PNG sale igual (${g.descargas.map((d) => d.nombre).join(', ')})`);
+    const png = await leerPng(g.desc.bytes);
+    afirmar(png.sig && png.w === 1080 && png.h === 1350, `PUERTA C: 1080×1350 (${png.w}×${png.h})`);
+    const dib = g.dibujo;
+    afirmar(!dib.sinTapas && !dib.motivo, `PUERTA C: toBlob NO tiró ni devolvió null: el lienzo no quedó manchado (sinTapas=${dib.sinTapas}, motivo=${dib.motivo})`);
+    afirmar(JSON.stringify(dib.tapas.map((t) => t.dibujada)) === '[true,false,false,true,true]' && dib.faltan === 2, `PUERTA C: faltan la 2 y la 3 (${dib.tapas.map((t) => t.dibujada).join(',')}, faltan ${dib.faltan})`);
+    const e404 = g.tapas.find((t) => /postal-tapa-que-no-existe/.test(t.url)), ajena = g.tapas.find((t) => /atardecer-prueba/.test(t.url));
+    afirmar(e404?.estado === 404, `PUERTA C: la 404 contestó 404 (${e404?.estado})`);
+    afirmar(ajena && ajena.host.startsWith('localhost:') && /^rechazada: TypeError/.test(String(ajena.estado)), `PUERTA C: la de otro origen sin CORS: el fetch se RECHAZÓ, no llegó ningún blob (${ajena?.host} ${ajena?.estado})`);
+    const fondo = hexA(token(A, '--color-bg')), elevado = hexA(token(A, '--color-elevated'));
+    const centros = [];
+    for (const i of [1, 2]) {
+      const t = dib.tapas[i], c = png.px(t.x + t.lado / 2, t.y + t.lado / 2), lejos = png.px(...puntoDeTapa(t));
+      afirmar(!cerca(c, fondo, 2) && !COLORES_TAPA.some((k) => cerca(c, k, 12)), `PUERTA C: el centro de la casilla ${i + 1} no es el fondo ni una tapa (rgb ${c})`);
+      afirmar(cerca(lejos, elevado, 2), `PUERTA C: la casilla ${i + 1} es el cuadro de --color-elevated (rgb ${lejos} contra ${elevado})`);
+      centros.push(`casilla ${i + 1}: centro rgb(${c}), cuadro rgb(${lejos})`);
+    }
+    afirmar(dib.textos.filter((t) => t.id.startsWith('nota-')).length === 2 && dib.textos.filter((t) => t.id.startsWith('nota-')).every((t) => t.texto === '♪'), 'PUERTA C: las dos casillas llevan su ♪');
+    for (const i of [0, 3, 4]) { const t = dib.tapas[i]; afirmar(cerca(png.px(...puntoDeTapa(t)), COLORES_TAPA[i]), `PUERTA C: la casilla ${i + 1}, que sí bajó, tiene su tapa`); }
+    afirmar(g.toasts.length === 1 && /\b2\b/.test(g.toasts[0]) && /tapas?/.test(g.toasts[0]), `PUERTA C: el aviso dice «2» (${g.toasts.join(' | ')})`);
+    afirmar(g.spotify.length === 0, 'PUERTA C: 0 a Spotify');
+    const hosts = [...new Set([...g.tapas.map((t) => t.host), ...g.recursos.map((u) => new URL(u).host)])];
+    afirmar(!hosts.some((h) => CDN.test(h)), `PUERTA C: 0 a un CDN real (${hosts.join(', ')})`);
+    datos.tapasQueFallan = { toast: g.toasts[0], centros: centros.join(' · '), ajena: ajena.estado, e404: e404.estado, hosts: hosts.join(' + ') };
+    await elegirAnio(A, 2025);
+  }
+
+  // ── I · si toBlob tira, la postal sale sin tapas ───────────────────────────
+  if (corre('I')) {
+    progreso('I: sin tapas');
+    const w = win(A);
+    const original = w.HTMLCanvasElement.prototype.toBlob;
+    let forzados = 0;
+    w.HTMLCanvasElement.prototype.toBlob = function (...a) {
+      if (this.width === 1080 && this.height === 1350 && forzados === 0) { forzados++; throw new w.DOMException('El lienzo está manchado (forzado por el banco)', 'SecurityError'); }
+      return original.apply(this, a);
+    };
+    let g;
+    try { g = await generar(A, 'PUERTA I'); } finally { w.HTMLCanvasElement.prototype.toBlob = original; }
+    afirmar(forzados === 1, `PUERTA I: el banco forzó el SecurityError una vez (${forzados})`);
+    afirmar(g.descargas.length === 1 && g.desc.nombre === 'fonoteca-2025.png', 'PUERTA I: se descarga igual');
+    const png = await leerPng(g.desc.bytes);
+    afirmar(png.w === 1080 && png.h === 1350, 'PUERTA I: 1080×1350');
+    afirmar(g.dibujo.sinTapas === true && /SecurityError/.test(g.dibujo.motivo || ''), `PUERTA I: __postalDibujo dice sin tapas y por qué (${g.dibujo.sinTapas}, ${g.dibujo.motivo})`);
+    const elevado = hexA(token(A, '--color-elevated'));
+    afirmar(g.dibujo.tapas.every((t) => !t.dibujada) && g.dibujo.tapas.every((t) => cerca(png.px(...puntoDeTapa(t)), elevado, 2)), 'PUERTA I: las cinco casillas son el cuadro ♪ (ninguna tapa en el PNG)');
+    afirmar(g.toasts.length === 1 && g.toasts[0].startsWith('La postal salió sin tapas: '), `PUERTA I: el aviso «La postal salió sin tapas: …» (${g.toasts.join(' | ')})`);
+    datos.sinTapas = g.toasts[0];
+  }
+
+  // ── E · los colores, en los cuatro presets ─────────────────────────────────
+  if (corre('E')) {
+    progreso('E: colores');
+    const res = [];
+    for (const id of ['violeta', 'ambar', 'aguamarina', 'papel']) {
+      await anclar(win(A).__ponerTema(id));
+      const T = token(A, '--color-text'), S = token(A, '--color-text-secondary'), B = token(A, '--color-bg');
+      const g = await generar(A, `PUERTA E (${id})`);
+      const dib = g.dibujo;
+      afirmar(dib.colores.bg === B, `PUERTA E (${id}): el fondo de la postal es --color-bg (${dib.colores.bg} contra ${B})`);
+      const usados = [...new Set(dib.textos.map((t) => t.valor))];
+      afirmar(usados.every((c) => c === T || c === S), `PUERTA E (${id}): el texto usa solo --color-text ${T} y --color-text-secondary ${S} (usados: ${usados.join(', ')})`);
+      afirmar(dib.textos.every((t) => (t.color === 'text' ? t.valor === T : t.valor === S)), `PUERTA E (${id}): cada texto lleva el que declara`);
+      let min = Infinity, peor = '';
+      for (const t of dib.textos) { const r = contraste(t.valor, t.sobreValor); if (r < min) { min = r; peor = `${t.id} ${t.valor} sobre ${t.sobreValor}`; } }
+      afirmar(min >= 4.5, `PUERTA E (${id}): contraste mínimo ${min.toFixed(2)}:1 (${peor}) y AA pide 4,5:1`);
+      res.push(`${id} ${min.toFixed(2)}`);
+    }
+    await anclar(win(A).__ponerTema('violeta'));
+    datos.colores = res.join(' · ');
+  }
+
+  // ── G · salir mientras genera ──────────────────────────────────────────────
+  if (corre('G')) {
+    progreso('G: salir mientras genera');
+    const w = win(A), b = boton(A);
+    afirmar(b, 'PUERTA G: hay botón');
+    const retenida = w.__tapasBuenas[2];
+    w.__tapas.retener = (u) => u === retenida;
+    const d0 = w.__descargas.length, t0 = w.__toasts.length, p0 = w.__tapas.pedidas.length;
+    b.click();
+    await esperarReal(() => w.__tapas.pedidas.slice(p0).some((t) => t.estado === 'retenida'), { que: 'PUERTA G: la tapa retenida', vueltas: VUELTAS });
+    const reg = w.__tapas.pedidas.slice(p0).find((t) => t.estado === 'retenida');
+    let escrituras = 0;
+    const obs = new w.MutationObserver((ms) => { escrituras += ms.length; });
+    obs.observe(b, { attributes: true, childList: true, subtree: true, characterData: true });
+    const anclas = new w.MutationObserver((ms) => { for (const m of ms) for (const n of m.addedNodes) if (n.nodeName === 'A' && n.download) escrituras++; });
+    anclas.observe(f_doc(A).body, { childList: true });
+    w.location.hash = '#home';
+    await esperarReal(() => $(A, '.home-card'), { que: 'PUERTA G: #home', vueltas: VUELTAS });
+    await esperarReal(() => reg.estado === 'abortada', { que: 'PUERTA G: que la tapa retenida se aborte', vueltas: VUELTAS });
+    await margen(80);
+    w.__tapas.soltar?.();
+    await margen(40);
+    obs.disconnect(); anclas.disconnect();
+    w.__tapas.retener = null;
+    afirmar(w.__descargas.length === d0, `PUERTA G: 0 descargas después de salir (${w.__descargas.length - d0})`);
+    afirmar(w.__toasts.length === t0, `PUERTA G: 0 avisos después de salir (${w.__toasts.slice(t0).join(' | ')})`);
+    afirmar(escrituras === 0, `PUERTA G: 0 escrituras en el DOM (el botón viejo y un <a download>) después del cambio de ruta (${escrituras})`);
+    afirmar($(A, '.home-card') && !$(A, '.crash-screen'), 'PUERTA G: #home sigue entera, sin pantalla de error');
+    datos.salir = { estado: reg.estado, escrituras, descargas: w.__descargas.length - d0 };
+  }
+
+  // ── H · sin desborde, a 1366×591 y 390×844 ─────────────────────────────────
+  if (corre('H')) {
+    progreso('H: sin desborde');
+    const res = [];
+    for (const [ancho, alto] of [[1366, 591], [390, 844]]) {
+      const f = abrirMarco(`H${ancho}`, ancho, alto); marcos.push([`H${ancho}`, f]);
+      await arrancado(f, `el marco de ${ancho}`);
+      await abrirWrapped(f, `${ancho}×${alto}`);
+      const b = boton(f), hero = $(f, '#wrapped-year-card .wrapped-hero');
+      afirmar(b, `PUERTA H (${ancho}): hay botón`);
+      const rb = b.getBoundingClientRect(), rh = hero.getBoundingClientRect(), de = f.contentDocument.documentElement;
+      afirmar(b.scrollWidth <= b.clientWidth, `PUERTA H (${ancho}): el texto del botón no desborda (${b.scrollWidth} > ${b.clientWidth})`);
+      afirmar(hero.scrollWidth <= hero.clientWidth, `PUERTA H (${ancho}): .wrapped-hero no desborda (${hero.scrollWidth} > ${hero.clientWidth})`);
+      afirmar(rb.left >= rh.left - 0.5 && rb.right <= rh.right + 0.5 && rb.top >= rh.top - 0.5 && rb.bottom <= rh.bottom + 0.5, `PUERTA H (${ancho}): el botón entra en el hero (${rb.left.toFixed(1)}-${rb.right.toFixed(1)} en ${rh.left.toFixed(1)}-${rh.right.toFixed(1)})`);
+      afirmar(de.scrollWidth <= win(f).innerWidth, `PUERTA H (${ancho}): sin barra horizontal (${de.scrollWidth} > ${win(f).innerWidth})`);
+      res.push(`${ancho}×${alto}: botón ${rb.width.toFixed(0)}×${rb.height.toFixed(0)} en hero ${rh.width.toFixed(0)}, página ${de.scrollWidth}/${win(f).innerWidth}`);
+    }
+    datos.desborde = res.join(' · ');
+  }
+
+  const errores = marcos.flatMap(([n, f]) => win(f).__errores.map((e) => `${n}: ${e}`));
+  afirmar(errores.length === 0, `0 errores de consola: ${errores.join(' | ')}`);
+
+  const a = datos.abrir;
+  const resumen = `ok · A abrir: /me=${a.me} otras=${a.otras} módulo de la postal=${a.modulo} tapas=${a.tapas}` +
+    (datos.apretar ? ` · B apretar: 1 PNG 1080×1350 (${datos.apretar.bytes} B), tapas=${datos.apretar.tapas}, spotify=${datos.apretar.spotify}, hosts=${datos.apretar.hosts}, «${datos.apretar.toast}»` : '') +
+    (datos.recorte ? ` · D recorte: ${datos.recorte.textos} textos, holgura mínima ${datos.recorte.maxHolgura} px, «${datos.recorte.artista}»` : '') +
+    (datos.dosClics != null ? ` · F dos clics: ${datos.dosClics} descarga` : '') +
+    (datos.tapasQueFallan ? ` · C tapas que fallan: 404=${datos.tapasQueFallan.e404}, ajena=${datos.tapasQueFallan.ajena}, ${datos.tapasQueFallan.centros}, «${datos.tapasQueFallan.toast}»` : '') +
+    (datos.sinTapas ? ` · I toBlob tira: «${datos.sinTapas}»` : '') +
+    (datos.colores ? ` · E contraste mínimo: ${datos.colores}` : '') +
+    (datos.salir ? ` · G salir: tapa ${datos.salir.estado}, ${datos.salir.descargas} descargas, ${datos.salir.escrituras} escrituras` : '') +
+    (datos.desborde ? ` · H ${datos.desborde}` : '') +
+    ` · errores=${errores.length} · reloj virtual=${Math.round(performance.now())} ms`;
+  document.documentElement.setAttribute('data-resumen', resumen);
+  document.getElementById('progreso').textContent = resumen;
+  listo(resumen);
+} catch (e) {
+  fallar(e);
+}
+function f_doc(f) { return f.contentDocument; }
+</script>
+</body></html>

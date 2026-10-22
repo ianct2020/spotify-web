@@ -17,6 +17,7 @@ import { coverUrl } from '../util/cover-size.js';
 import { vigilarRuta } from '../util/vigencia-ruta.js';
 import { fmtDia } from '../util/fecha.js';
 import { anioSinCampoSkipped, esElAnioDelCorte, AVISO_MEZCLA } from '../util/corte-saltos.js';
+import { showToast } from '../ui/toast.js';
 
 let stats = null;
 let selectedYear = null;
@@ -331,6 +332,7 @@ function renderYearCard() {
         <div class="wrapped-hero-year">${y.year}</div>
         <div class="wrapped-hero-min">${fmtMinutes(y.min)}</div>
         <div class="wrapped-hero-sub">${fmtDays(y.min)} · ${y.plays.toLocaleString('es-ES')} plays</div>
+        <button type="button" class="wrapped-postal-btn" id="wrapped-postal-btn"${generandoPostal() ? ' disabled' : ''}>${generandoPostal() ? 'Generando…' : 'Descargar postal (PNG)'}</button>
       </div>
 
       <div class="wrapped-year-layout">
@@ -426,8 +428,57 @@ function renderYearCard() {
     lastPlayInfo.onclick = () => openLastPlayModal(fmtDia(y.last_play));
   }
 
+  const postalBtn = holder.querySelector('#wrapped-postal-btn');
+  if (postalBtn) postalBtn.onclick = () => descargarPostal(y);
+
   activateMarquee(holder);
   armarWrapped(holder);
+}
+
+// ── La postal del año (v=326) ───────────────────────────────────────────────
+//
+// El botón y nada más: qué dice la postal y dónde va cada cosa es `util/postal-anio.js`, y el dibujo y
+// la descarga, `features/wrapped-postal.js`, que se pide con `import()` RECIÉN al apretar (abrir
+// «Wrapped» cuesta lo mismo que antes y no baja el módulo). `fmtMinutes` y `fmtDia` van por contexto,
+// como a la apertura: no hay un segundo formateador.
+//
+// Dos clics rápidos son UNA postal: el botón se deshabilita en el mismo paso del clic, y aunque se colara
+// otro, `postalEnCurso` lo frena. Si salís de la ruta mientras genera, el `routeteardown` aborta las tapas
+// en vuelo y, con la ruta ya no vigente (v=174), no se descarga nada y no se escribe en el DOM: ni el
+// toast ni el botón. `postalEnCurso` guarda la vigencia de la ruta que la pidió, así que al volver a
+// «Wrapped» el botón nace habilitado aunque la vieja todavía no haya terminado de soltar.
+let postalEnCurso = null;
+const generandoPostal = () => !!postalEnCurso?.vigente();
+
+function pintarBotonPostal(generando) {
+  const b = document.getElementById('wrapped-postal-btn');
+  if (!b) return;
+  b.disabled = generando;
+  b.textContent = generando ? 'Generando…' : 'Descargar postal (PNG)';
+}
+
+async function descargarPostal(y) {
+  if (generandoPostal()) return;
+  const ruta = vigilarRuta();
+  postalEnCurso = ruta;
+  const ctrl = new AbortController();
+  const alSalir = () => ctrl.abort();
+  document.addEventListener('routeteardown', alSalir, { once: true });
+  pintarBotonPostal(true);
+  try {
+    const mod = await import('./wrapped-postal.js');
+    if (!ruta.vigente()) return;
+    const r = await mod.generarPostal(y, { fmtMinutes, fmtDia, signal: ctrl.signal, vigente: ruta.vigente });
+    if (!r || !ruta.vigente()) return;
+    showToast(r.aviso, r.faltan || r.sinTapas ? 'warning' : 'success');
+  } catch (e) {
+    console.warn('[wrapped] la postal no salió:', e);
+    if (ruta.vigente()) showToast(`No pude generar la postal: ${e?.message || e}`, 'error');
+  } finally {
+    document.removeEventListener('routeteardown', alSalir);
+    if (postalEnCurso === ruta) postalEnCurso = null;
+    if (ruta.vigente()) pintarBotonPostal(false);
+  }
 }
 
 function openLastPlayModal(lastDate) {

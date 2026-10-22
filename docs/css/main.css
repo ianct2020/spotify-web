@@ -1766,6 +1766,27 @@ h3 { font-size: 18px; font-weight: 600; }
   font-size: 13px;
   opacity: 0.9;
 }
+/* La postal del año (v=326). Clase propia: no reusa la de ningún otro botón (la regla de `.wt-play-btn`,
+   v=219). Va sobre el degradé del acento, como el resto del hero: texto blanco sobre el acento oscurecido
+   un 45 %: sobre el acento PURO (el peor punto del degradé) el blanco da 11,82 · 7,62 · 5,64 · 13,34 (violeta,
+   ámbar, aguamarina, papel); con un 30 %, aguamarina daba 3,76. */
+.wrapped-postal-btn {
+  margin-top: 12px;
+  max-width: 100%;
+  padding: 7px 16px;
+  border: 1px solid rgba(255, 255, 255, 0.55);
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.45);
+  color: #fff;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.2;
+  cursor: pointer;
+}
+.wrapped-postal-btn:hover:not(:disabled) { background: rgba(0, 0, 0, 0.58); }
+.wrapped-postal-btn:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+.wrapped-postal-btn:disabled { cursor: progress; }
 .wrapped-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));

@@ -3308,6 +3308,77 @@ que cae justo ahí; vista fallar contra v=320: «tocan 1 de 14») y **N** (a «V
 conservación**). El grafo del banco pasa a 2.303 artistas y 60.171 pares (los 60.170 de antes no cambian: el azar sigue
 siendo el de los 2.302).
 
+## 🖼️ La postal del año (v=326)
+
+En «Wrapped», con un año elegido, el botón **«Descargar postal (PNG)»** (debajo de `.wrapped-hero-sub`) dibuja una imagen
+de **1080×1350** con ese año y la baja como **`fonoteca-<año>.png`**. Pedido de Ian del 16/10, textual: «pngs para exportar,
+con metricas o cosas interesantes». 🔴 **Que sea UNA POSTAL POR AÑO, en «Wrapped», fue NUESTRA lectura del pedido, no lo dijo
+él**: `years[]` de `history-stats.json` ya trae todo para los 9 años y los 5 primeros discos de cada año tienen tapa (45 de 45,
+contado sobre el JSON del repo el 21/10). La postal de un artista (no hay foto en ningún JSON), la de un disco (solo el día del
+umbral) y la de «de siempre» quedan para cuando Ian las pida.
+
+| archivo | qué | probado en |
+|---|---|---|
+| `util/postal-anio.js` | PURO (sin DOM, red ni lienzo): los textos, el recorte con la medida INYECTADA, la posición de cada cosa y el aviso del final | `tests/postal-anio.test.mjs` (83) |
+| `features/wrapped-postal.js` | lee los colores, espera la letra, baja las tapas con `conTapa`, dibuja, `toBlob('image/png')`, `descargarBlob`; deja `window.__postalDibujo` para el banco | `tests/banco/postal.html` (en `prepush`, el vigésimo quinto) |
+| `features/wrapped.js` | el botón y nada más: lo pide con `import()` **al apretar** | ídem |
+| `main.css` | `.wrapped-postal-btn`, clase propia (la regla de `.wt-play-btn`, v=219) | ídem (puerta H) y `tests/css-clases-duplicadas.test.mjs` |
+
+**Qué lleva**: el año, grande; el rango («del 15 ago 2018 al 31 dic 2018»); los minutos, las reproducciones, los días con
+música y la racha más larga («N días seguidos»); el día pico con sus minutos; los 5 primeros artistas con sus minutos (y una
+barra del acento por cada uno); los 5 primeros discos con tapa, nombre y artista; y abajo, «Fonoteca». **Nada más.**
+
+- 🔴 **Los saltos NO van**, ni el porcentaje ni la palabra: antes del 15/10/2022 el export no los anotaba igual (ver «La
+  definición de salto»), y una imagen que circula sola no puede llevar el aviso. El test lo afirma («skip», «salt», «%»).
+- 🔴 **Las fechas con `fmtDia`** (el día que dice el dato, sin `Date`): la primera escucha de 2026 es `2026-01-01T00:00:28Z`
+  y con hora local la postal diría «del 31 dic 2025» (el bug de v=231). **Los minutos con el `fmtMinutes` de `wrapped.js`**,
+  pasados por contexto como a la apertura: no hay un segundo formateador. Números con `toLocaleString('es-ES')`.
+- **El recorte**: cada texto tiene el ancho de su caja y se corta con «…» **midiendo con la letra ya puesta**
+  (`measureText`), nunca por cantidad de caracteres; sin dejar un espacio colgando y sin partir un emoji. Con menos de 5
+  artistas o discos salen los que hay (los discos, centrados); un nombre vacío sale «—».
+- **La letra**: antes de medir, `document.fonts.load` de los pesos que usa (400, 600 y 700) con un tope de 3 s; si no carga,
+  la de reserva, sin avisar (no es un error).
+- **Los colores, ninguno escrito a mano**, leídos con `getComputedStyle` al apretar: fondo `--color-bg`, cajas
+  `--color-surface`, la casilla del ♪ `--color-elevated`, texto `--color-text` y el secundario `--color-text-secondary`
+  (**nunca el muted**); el acento solo en lo que no es texto (la franja de arriba, la línea y las barras). Contraste mínimo
+  del texto contra su caja (los cuatro presets, la cuenta de `tema-contraste`): **6,36 · 6,20 · 6,27 · 6,51** (violeta,
+  ámbar, aguamarina, papel; medido en el banco con los valores computados). El botón, sobre el degradé del hero: blanco
+  sobre el acento oscurecido un 45 % (en el peor punto, el acento puro: 11,82 · 7,62 · 5,64 · 13,34).
+
+**Las tapas, por `conTapa()` de `covers-wallpaper.js`, IMPORTADO y no copiado**, con `coverVariant(url, 300)` (la casilla mide
+160 px). 🔴 **Por qué no puede manchar el lienzo, leído del código**: con `mode: 'cors'`, una respuesta sin
+`access-control-allow-origin` **rechaza el `fetch`** (no llega ningún blob) y `conTapa` devuelve `false`; el bitmap que sale
+del blob de un `fetch` CORS no mancha. No hay camino que dibuje una imagen opaca. **Que el CDN contesta con CORS ya está
+medido en vivo**: `mosaico-colores.js` baja así y lee los píxeles con `getImageData` (que tira sobre un lienzo manchado), y
+así se armó la base de colores de Ian el 27/09 con 5.715 tapas de los mismos tres hosts. **La guarda de antemano**: si
+`toBlob` devuelve `null` o tira, la postal se vuelve a dibujar SIN tapas **en un lienzo nuevo** (uno manchado no se limpia
+pintando encima: la marca es del lienzo) y se descarga igual, con «La postal salió sin tapas: …». **Una tapa que no baja**
+(404, sin CORS, la red) es una casilla de `--color-elevated` con un ♪; el aviso dice cuántas faltaron.
+
+**Las dos guardas del botón**: dos clics rápidos = **una** postal (se deshabilita y dice «Generando…» en el mismo paso del
+clic, y `postalEnCurso` frena el que se cuele); y **salir de la ruta mientras genera** aborta las tapas en vuelo
+(`routeteardown` → `AbortController`) y, con la ruta ya no vigente (v=174), **no se descarga nada y no se escribe en el DOM**
+(ni el toast, ni el botón, ni el `<a>` de la descarga). `postalEnCurso` guarda la vigencia de la ruta que la pidió: al volver a
+«Wrapped» el botón nace habilitado.
+
+**El costo**: abrir «Wrapped», **igual que antes** (1 `/me` + el del arranque; 0 del módulo de la postal); apretar, **0 a
+Spotify** y **como mucho 5 al CDN de imágenes** (que no es cuota de nadie), más los dos módulos de la app la primera vez. Ver la
+fila `↳` de `#wrapped` en la tabla de costos.
+
+Guardas: `tests/postal-anio.test.mjs` (con `TZ` de Buenos Aires y años INVENTADOS: el rango, los números, sin saltos, el
+recorte con 1 px por carácter, menos de 5, ninguna caja fuera ni pisada, el contraste en los cuatro presets, la variante de
+300 y el aviso; rojo contra v=325: el módulo no existía) y el banco `tests/banco/postal.html` + `-caso.html` + `-datos.mjs`
+(la app ENTERA, historial INVENTADO; las tapas buenas son `data:` URL fabricadas en el banco, la 404 la da el servidor del
+banco y la «ajena» es `atardecer-prueba.png` pedida desde `localhost`, otro origen del mismo servidor, sin CORS): A abrir sin
+el módulo (verde también contra v=325); B un PNG de 1080×1350 decodificado, 5 tapas, 0 Spotify, 0 CDN; **C** la 404 y la ajena
+(el `fetch` RECHAZADO) → el PNG sale igual, `toBlob` no tira, las dos casillas con ♪ y el aviso dice «2»; D el recorte; E los
+colores; F dos clics; G salir con una tapa retenida (abortada, 0 descargas, 0 escrituras; visto fallar con una copia que no le
+pasa la señal ni la vigencia); H sin desborde a 1366×591 y 390×844; I `toBlob` con un `SecurityError` forzado → sin tapas y el
+aviso. B a I, rojas contra v=325 (no hay botón). ⚠️ El banco ancla la decodificación del PNG en la madre: sin `anclar()` el
+reloj virtual saltaba al toast de 30 s y una puerta gastaba 478 s. `postal-caso.html?modo=foto[&tema=papel]` es el instrumento
+de las capturas y de las postales de ejemplo (conductor en `fonoteca-migracion/driver-capturas-postal-t73-2026-10-21.mjs`).
+⚠️ **Ninguna postal se hizo con el JSON real** (necesitaría el CDN real) y ninguna se commiteó.
+
 ## Client ID
 0c8c92ad128e4b89be7097c6b8082797
 
@@ -4087,6 +4158,7 @@ fila sobrevivió así desde que se armó la tabla.
 | `#wrapped` | **1 `/me`** (+1 del arranque = **2** medidos) | ídem | `getCurrentUserId()` de `loadOne()`, vía `loadHistoryStats()` en `render()` | **fijo** | **medida en vivo el 2026-10-07** · desglose **leído del código el 2026-10-08** |
 | ↳ lo que decía antes (**0/0**) era FALSO: es el MISMO par que `#dashboard` | | | | | ver la nota de abajo |
 | ↳ sin historial (`renderLite`) | **2** | **2** | 2 × `/me/top/{artists,tracks}` | fijo | leída del código |
+| ↳ **al apretar «Descargar postal (PNG)»** (v=326): **0 a Spotify**, **≤ 5 al CDN de imágenes** | — | ídem | `conTapa()` de las 5 tapas del año (la variante de 300), más `wrapped-postal.js` y `util/postal-anio.js` del propio Pages la primera vez; abrir «Wrapped» no cambia (0 del módulo) | nº de discos del año con tapa (5 de 5 en los 9 años, 21/10) | **medida en el banco el 2026-10-21** (`tests/banco/postal.html`, tapas inventadas: 5 pedidos, 0 a la simulada, 0 hosts de CDN). En vivo, no |
 | `#records` | **1 `/me`** (+1 del arranque = **2**) | ídem | `render()` → `loadRecords()` (`records.js:50`) → `loadOne` → `ensureFreshMem` → `resolvedUserId` → `getCurrentUserId` | **fijo** | 🔴 **corregida el 2026-10-08, leída del código.** Decía **0/0** y es la MISMA pieza que `#dashboard` y `#wrapped` |
 | `#calendario` | **1 `/me`** (+1 del arranque = **2**) | ídem | `render()` → `loadHistoryStats()` + `loadDays()` → `loadOne` → `getCurrentUserId` (memoizado: los dos comparten el `/me`, es 1 y no 2) | **fijo**, no escala con nada | **medida en la Spotify simulada el 2026-10-10** (`tests/banco/calendario.html`): abrir = **1** petición y es `/me`; cambiar de año y abrir y cerrar el detalle de un día = **0 más**; **0** lecturas que no sean `/me`, 0 rutas sin simular, 0 hosts externos. En vivo, no |
 | ↳ **al pulsar «Crear playlist con este día»**: **1 + ceil(N/100)** POST | — | ídem | `POST /me/playlists` + `POST /playlists/{id}/items` de a 100 | **N** = temas del día | **medida en la Spotify simulada el 2026-10-10**: **2** con 30 temas y **3** con 150, exactas y todas POST, **0 GET** |

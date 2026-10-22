@@ -1,22 +1,23 @@
 // Wrapped propio: mini-resumen tuyo por año, hecho con el Extended Streaming History.
 // A diferencia del Wrapped oficial (que corre oct-sept), este es del año calendario completo.
 
-import { loadHistoryStats, isOwner, ownerLockedMessage } from './history-data.js?v=325';
-import { escapeHtml, pageHeader } from '../ui/components.js?v=325';
-import { getPreview } from '../api/preview-providers.js?v=325';
-import { getArtistLikePreview, getAlbumLikePreview } from '../util/artist-preview.js?v=325';
-import { attachHover } from '../ui/preview-player.js?v=325';
-import { openTrackCard } from './track-card.js?v=325';
-import { openArtistCard } from './artist-card.js?v=325';
-import { openAlbumCard } from './album-card.js?v=325';
-import { getMyTop } from '../api.js?v=325';
-import { activateMarquee, marqueeSpan } from '../ui/marquee.js?v=325';
-import { openModal } from '../ui/modal-stack.js?v=325';
-import { armReveal, armRevealAll, releaseReveal, animationsEnabled } from '../ui/reveal.js?v=325';
-import { coverUrl } from '../util/cover-size.js?v=325';
-import { vigilarRuta } from '../util/vigencia-ruta.js?v=325';
-import { fmtDia } from '../util/fecha.js?v=325';
-import { anioSinCampoSkipped, esElAnioDelCorte, AVISO_MEZCLA } from '../util/corte-saltos.js?v=325';
+import { loadHistoryStats, isOwner, ownerLockedMessage } from './history-data.js?v=326';
+import { escapeHtml, pageHeader } from '../ui/components.js?v=326';
+import { getPreview } from '../api/preview-providers.js?v=326';
+import { getArtistLikePreview, getAlbumLikePreview } from '../util/artist-preview.js?v=326';
+import { attachHover } from '../ui/preview-player.js?v=326';
+import { openTrackCard } from './track-card.js?v=326';
+import { openArtistCard } from './artist-card.js?v=326';
+import { openAlbumCard } from './album-card.js?v=326';
+import { getMyTop } from '../api.js?v=326';
+import { activateMarquee, marqueeSpan } from '../ui/marquee.js?v=326';
+import { openModal } from '../ui/modal-stack.js?v=326';
+import { armReveal, armRevealAll, releaseReveal, animationsEnabled } from '../ui/reveal.js?v=326';
+import { coverUrl } from '../util/cover-size.js?v=326';
+import { vigilarRuta } from '../util/vigencia-ruta.js?v=326';
+import { fmtDia } from '../util/fecha.js?v=326';
+import { anioSinCampoSkipped, esElAnioDelCorte, AVISO_MEZCLA } from '../util/corte-saltos.js?v=326';
+import { showToast } from '../ui/toast.js?v=326';
 
 let stats = null;
 let selectedYear = null;
@@ -66,7 +67,7 @@ const ESPERA_APERTURA_MS = 3000;
 // después — montarlo tarde sería justo el flash que se está arreglando.
 function cargarApertura() {
   return Promise.race([
-    import('../features/wrapped-apertura.js?v=325').catch(e => {
+    import('../features/wrapped-apertura.js?v=326').catch(e => {
       console.warn('[wrapped] la apertura no cargó, el resumen queda entero:', e);
       return null;
     }),
@@ -331,6 +332,7 @@ function renderYearCard() {
         <div class="wrapped-hero-year">${y.year}</div>
         <div class="wrapped-hero-min">${fmtMinutes(y.min)}</div>
         <div class="wrapped-hero-sub">${fmtDays(y.min)} · ${y.plays.toLocaleString('es-ES')} plays</div>
+        <button type="button" class="wrapped-postal-btn" id="wrapped-postal-btn"${generandoPostal() ? ' disabled' : ''}>${generandoPostal() ? 'Generando…' : 'Descargar postal (PNG)'}</button>
       </div>
 
       <div class="wrapped-year-layout">
@@ -426,8 +428,57 @@ function renderYearCard() {
     lastPlayInfo.onclick = () => openLastPlayModal(fmtDia(y.last_play));
   }
 
+  const postalBtn = holder.querySelector('#wrapped-postal-btn');
+  if (postalBtn) postalBtn.onclick = () => descargarPostal(y);
+
   activateMarquee(holder);
   armarWrapped(holder);
+}
+
+// ── La postal del año (v=326) ───────────────────────────────────────────────
+//
+// El botón y nada más: qué dice la postal y dónde va cada cosa es `util/postal-anio.js`, y el dibujo y
+// la descarga, `features/wrapped-postal.js`, que se pide con `import()` RECIÉN al apretar (abrir
+// «Wrapped» cuesta lo mismo que antes y no baja el módulo). `fmtMinutes` y `fmtDia` van por contexto,
+// como a la apertura: no hay un segundo formateador.
+//
+// Dos clics rápidos son UNA postal: el botón se deshabilita en el mismo paso del clic, y aunque se colara
+// otro, `postalEnCurso` lo frena. Si salís de la ruta mientras genera, el `routeteardown` aborta las tapas
+// en vuelo y, con la ruta ya no vigente (v=174), no se descarga nada y no se escribe en el DOM: ni el
+// toast ni el botón. `postalEnCurso` guarda la vigencia de la ruta que la pidió, así que al volver a
+// «Wrapped» el botón nace habilitado aunque la vieja todavía no haya terminado de soltar.
+let postalEnCurso = null;
+const generandoPostal = () => !!postalEnCurso?.vigente();
+
+function pintarBotonPostal(generando) {
+  const b = document.getElementById('wrapped-postal-btn');
+  if (!b) return;
+  b.disabled = generando;
+  b.textContent = generando ? 'Generando…' : 'Descargar postal (PNG)';
+}
+
+async function descargarPostal(y) {
+  if (generandoPostal()) return;
+  const ruta = vigilarRuta();
+  postalEnCurso = ruta;
+  const ctrl = new AbortController();
+  const alSalir = () => ctrl.abort();
+  document.addEventListener('routeteardown', alSalir, { once: true });
+  pintarBotonPostal(true);
+  try {
+    const mod = await import('./wrapped-postal.js?v=326');
+    if (!ruta.vigente()) return;
+    const r = await mod.generarPostal(y, { fmtMinutes, fmtDia, signal: ctrl.signal, vigente: ruta.vigente });
+    if (!r || !ruta.vigente()) return;
+    showToast(r.aviso, r.faltan || r.sinTapas ? 'warning' : 'success');
+  } catch (e) {
+    console.warn('[wrapped] la postal no salió:', e);
+    if (ruta.vigente()) showToast(`No pude generar la postal: ${e?.message || e}`, 'error');
+  } finally {
+    document.removeEventListener('routeteardown', alSalir);
+    if (postalEnCurso === ruta) postalEnCurso = null;
+    if (ruta.vigente()) pintarBotonPostal(false);
+  }
 }
 
 function openLastPlayModal(lastDate) {
