@@ -3308,25 +3308,59 @@ que cae justo ahí; vista fallar contra v=320: «tocan 1 de 14») y **N** (a «V
 conservación**). El grafo del banco pasa a 2.303 artistas y 60.171 pares (los 60.170 de antes no cambian: el azar sigue
 siendo el de los 2.302).
 
-## 🖼️ La postal del año (v=326)
+## 🖼️ La postal del año (v=326, rediseñada en v=327)
 
 En «Wrapped», con un año elegido, el botón **«Descargar postal (PNG)»** (debajo de `.wrapped-hero-sub`) dibuja una imagen
 de **1080×1350** con ese año y la baja como **`fonoteca-<año>.png`**. Pedido de Ian del 16/10, textual: «pngs para exportar,
 con metricas o cosas interesantes». 🔴 **Que sea UNA POSTAL POR AÑO, en «Wrapped», fue NUESTRA lectura del pedido, no lo dijo
 él**: `years[]` de `history-stats.json` ya trae todo para los 9 años y los 5 primeros discos de cada año tienen tapa (45 de 45,
-contado sobre el JSON del repo el 21/10). La postal de un artista (no hay foto en ningún JSON), la de un disco (solo el día del
-umbral) y la de «de siempre» quedan para cuando Ian las pida.
+contado sobre el JSON del repo el 21/10 y otra vez el 22/10). La postal de un artista (no hay foto en ningún JSON), la de un
+disco (solo el día del umbral) y la de «de siempre» quedan para cuando Ian las pida. **La v=326 está en producción desde el
+22/10 (12:41:15); la v=327 (el rediseño) la despliega la tanda 75.**
 
 | archivo | qué | probado en |
 |---|---|---|
-| `util/postal-anio.js` | PURO (sin DOM, red ni lienzo): los textos, el recorte con la medida INYECTADA, la posición de cada cosa y el aviso del final | `tests/postal-anio.test.mjs` (83) |
-| `features/wrapped-postal.js` | lee los colores, espera la letra, baja las tapas con `conTapa`, dibuja, `toBlob('image/png')`, `descargarBlob`; deja `window.__postalDibujo` para el banco | `tests/banco/postal.html` (en `prepush`, el vigésimo quinto) |
-| `features/wrapped.js` | el botón y nada más: lo pide con `import()` **al apretar** | ídem |
-| `main.css` | `.wrapped-postal-btn`, clase propia (la regla de `.wt-play-btn`, v=219) | ídem (puerta H) y `tests/css-clases-duplicadas.test.mjs` |
+| `util/postal-anio.js` | PURO (sin DOM, red ni lienzo): los textos, el recorte y los dos renglones (`partir`) con la medida INYECTADA, la posición de cada cosa, el degradé con su contraste (`degradadoPostal`) y el aviso del final | `tests/postal-anio.test.mjs` (171) |
+| `features/wrapped-postal.js` | lee los colores, espera la letra, baja las tapas con `conTapa`, dibuja (el degradé, las tapas con las esquinas redondeadas), `toBlob('image/png')`, `descargarBlob`; deja `window.__postalDibujo` para el banco | `tests/banco/postal.html` (en `prepush`, el vigésimo quinto) |
+| `features/wrapped.js` | el botón y nada más: lo pide con `import()` **al apretar** (no cambió en v=327) | ídem |
+| `main.css` | `.wrapped-postal-btn`, clase propia (la regla de `.wt-play-btn`, v=219; no cambió en v=327) | ídem (puerta H) y `tests/css-clases-duplicadas.test.mjs` |
+| `scripts/dev-server.mjs` | (v=327) sirve `/image/ab67616d00001e02<24 hex>` con CORS y 404 para cualquier otro prefijo: SOLO para el banco (puerta J); `src/` no lo pide nunca | la puerta J |
 
-**Qué lleva**: el año, grande; el rango («del 15 ago 2018 al 31 dic 2018»); los minutos, las reproducciones, los días con
-música y la racha más larga («N días seguidos»); el día pico con sus minutos; los 5 primeros artistas con sus minutos (y una
-barra del acento por cada uno); los 5 primeros discos con tapa, nombre y artista; y abajo, «Fonoteca». **Nada más.**
+**Qué lleva**: el año, grande; el rango («del 15 ago 2018 al 31 dic 2018»); los minutos del año como **número héroe**; una
+**franja** con las reproducciones, los días con música, la racha más larga («47 días» · «la racha más larga») y el día pico
+(«9 mar 2025» · «día pico · 11h 8m»); el **artista 1** destacado (su nombre en hasta dos renglones, sus minutos y una barra
+entera) y del 2 al 5 con puesto, nombre, minutos y una barra contra los del primero; el **disco 1** con su tapa de 380 px y, al
+lado, su nombre (hasta dos renglones) y su artista; los discos 2 a 5 con tapas de 117 px en fila, cada nombre en hasta dos
+renglones; y abajo, «Fonoteca · <año>». **Nada más.**
+
+**Qué cambió en v=327, y por qué** (pedido de Ian del 22/10: «la postal podría ser más linda»): la de v=326 se leía como una
+planilla —tres cajas de `--color-surface` iguales, una arriba de otra, todo con el mismo peso— y los nombres de disco quedaban
+mutilados en casillas de 160 px de un renglón («Disco Inventa…» cuatro veces en la postal de ejemplo).
+
+- **Jerarquía**: lo primero que se lee es el año y los minutos (156 px), sobre el degradé; el resto de los números baja a la
+  franja de datos chicos (38 px y su etiqueta a 21), medida: cada casilla mide lo que su valor o su etiqueta, y lo que sobra
+  va a los huecos, con una línea del acento en el medio de cada uno. **Sin cajas** (`fondos` vacío): separan el espacio y los
+  tamaños. El año y los minutos tienen una caja de 0,95× (dígitos, «h» y «m»: nada baja de la línea); el resto, 1,25×.
+- 🔴 **Los nombres en hasta DOS renglones** (`partir(texto, max, medir, renglones = 2)`): si entra en uno, tal cual; si no, el
+  primer renglón lleva las palabras que entran y el resto sigue abajo; el último se recorta con «…» (`recortar`) si no entra;
+  si ni la primera palabra entra, se parte por caracteres; y si lo que sigue no entra de ninguna forma (ni el «…»), el recorte
+  de un renglón (nunca un nombre cortado sin avisar). Los discos 2 a 5 nunca más anchos que su tapa; el disco 1 y el artista
+  1 tienen la columna. Probado en Node (barrido con dos medidas) y en el banco (puerta D: «Disco Inventado N» entero).
+- **El disco 1 es la imagen de la postal**: 380 px, **dibujada desde la variante de 300** (×1,27: algo menos nítida que una de
+  640; se eligió la de 300 para que los 5 pedidos sean a la misma variante). Esquinas redondeadas (14 y 8 px).
+
+**El degradé**: la franja de arriba (y 0 a 500) va con un degradé vertical **del tema**: el acento mezclado con `--color-bg`
+(sin el `#4c1d95` escrito a mano del `.wrapped-hero`), con tres paradas: la mezcla entera arriba, el 40 % de ella a 0,55 y el
+fondo abajo. `degradadoPostal(plan, colores)` arranca con `MEZCLA_MAX = 0,6` y la **BAJA** de a un centésimo hasta que cada
+texto que va encima tenga, **contra el punto PEOR del degradé detrás de su caja** (renglón por renglón, en el centro del
+píxel, interpolado en sRGB y redondeado a 8 bits como lo pinta el lienzo), al menos `PISO_CONTRASTE = 4,6` (AA pide 4,5: el
+resto es margen); si ni con el fondo liso pasa (un tema hecho a mano con el texto ilegible), queda en 0. Sobre el degradé va
+**solo `--color-text`** (el secundario no llega sobre el acento en Papel). La cuenta es la de WCAG 2.x de
+`tests/tema-contraste.test.mjs`; el test la rehace por su lado (su propia interpolación) y compara con la del módulo.
+**Medido** (contraste peor sobre el degradé, con la mezcla de 0,6 en los cuatro): **violeta 10,18 · ámbar 6,71 · aguamarina
+5,01 · papel 6,39**, y lo mismo contra los PÍXELES del PNG en el banco (puerta E, leídos en x = 2, donde no hay nada dibujado
+encima). El contraste peor de toda la postal (también el ♪ sobre `--color-elevated` y el secundario sobre el fondo): 5,83 ·
+5,64 · 5,01 · 5,99.
 
 - 🔴 **Los saltos NO van**, ni el porcentaje ni la palabra: antes del 15/10/2022 el export no los anotaba igual (ver «La
   definición de salto»), y una imagen que circula sola no puede llevar el aviso. El test lo afirma («skip», «salt», «%»).
@@ -3335,25 +3369,29 @@ barra del acento por cada uno); los 5 primeros discos con tapa, nombre y artista
   pasados por contexto como a la apertura: no hay un segundo formateador. Números con `toLocaleString('es-ES')`.
 - **El recorte**: cada texto tiene el ancho de su caja y se corta con «…» **midiendo con la letra ya puesta**
   (`measureText`), nunca por cantidad de caracteres; sin dejar un espacio colgando y sin partir un emoji. Con menos de 5
-  artistas o discos salen los que hay (los discos, centrados); un nombre vacío sale «—».
+  artistas o discos salen los que hay (los discos chicos, desde la izquierda); un nombre vacío sale «—».
 - **La letra**: antes de medir, `document.fonts.load` de los pesos que usa (400, 600 y 700) con un tope de 3 s; si no carga,
   la de reserva, sin avisar (no es un error).
-- **Los colores, ninguno escrito a mano**, leídos con `getComputedStyle` al apretar: fondo `--color-bg`, cajas
-  `--color-surface`, la casilla del ♪ `--color-elevated`, texto `--color-text` y el secundario `--color-text-secondary`
-  (**nunca el muted**); el acento solo en lo que no es texto (la franja de arriba, la línea y las barras). Contraste mínimo
-  del texto contra su caja (los cuatro presets, la cuenta de `tema-contraste`): **6,36 · 6,20 · 6,27 · 6,51** (violeta,
-  ámbar, aguamarina, papel; medido en el banco con los valores computados). El botón, sobre el degradé del hero: blanco
-  sobre el acento oscurecido un 45 % (en el peor punto, el acento puro: 11,82 · 7,62 · 5,64 · 13,34).
+- **Los colores, ninguno escrito a mano**, leídos con `getComputedStyle` al apretar y normalizados a `#rrggbb` con un lienzo:
+  fondo `--color-bg`, el degradé (acento + fondo), la casilla del ♪ `--color-elevated`, texto `--color-text` y el secundario
+  `--color-text-secondary` (**nunca el muted**); el acento solo en lo que no es texto (las líneas de la franja y las barras).
+  El botón, sobre el degradé del hero: blanco sobre el acento oscurecido un 45 % (en el peor punto, el acento puro: 11,82 ·
+  7,62 · 5,64 · 13,34).
 
-**Las tapas, por `conTapa()` de `covers-wallpaper.js`, IMPORTADO y no copiado**, con `coverVariant(url, 300)` (la casilla mide
-160 px). 🔴 **Por qué no puede manchar el lienzo, leído del código**: con `mode: 'cors'`, una respuesta sin
+**Las tapas, por `conTapa()` de `covers-wallpaper.js`, IMPORTADO y no copiado**, con `coverVariant(url, 300)`. 🔴 **Contado el
+22/10 sobre el JSON del repo (sin red)**: las 45 `img` de los 5 primeros discos de los 9 años tienen la forma del CDN
+(`/image/ab67616d…`), conservan el host (34 de `image-cdn-ak.spotifycdn.com`, 11 de `image-cdn-fa`), y **ya traen el prefijo
+`ab67616d00001e02`, el de 300**: `coverVariant(img, 300)` no cambia **ninguna** (0 de 45). La postal pide la URL tal cual está
+en el JSON. 🔴 **Por qué no puede manchar el lienzo, leído del código**: con `mode: 'cors'`, una respuesta sin
 `access-control-allow-origin` **rechaza el `fetch`** (no llega ningún blob) y `conTapa` devuelve `false`; el bitmap que sale
-del blob de un `fetch` CORS no mancha. No hay camino que dibuje una imagen opaca. **Que el CDN contesta con CORS ya está
-medido en vivo**: `mosaico-colores.js` baja así y lee los píxeles con `getImageData` (que tira sobre un lienzo manchado), y
-así se armó la base de colores de Ian el 27/09 con 5.715 tapas de los mismos tres hosts. **La guarda de antemano**: si
-`toBlob` devuelve `null` o tira, la postal se vuelve a dibujar SIN tapas **en un lienzo nuevo** (uno manchado no se limpia
-pintando encima: la marca es del lienzo) y se descarga igual, con «La postal salió sin tapas: …». **Una tapa que no baja**
-(404, sin CORS, la red) es una casilla de `--color-elevated` con un ♪; el aviso dice cuántas faltaron.
+del blob de un `fetch` CORS no mancha. No hay camino que dibuje una imagen opaca. 🟥 **LO QUE SIGUE SIN MEDIR: que el CDN real
+contesta con CORS para la variante de 300.** Hasta v=326 acá decía que estaba «medido en vivo» porque `mosaico-colores.js` leyó
+los píxeles de 5.715 tapas de esos hosts el 27/09; pero **`mosaico-colores.js` pide la de 64** (`coverVariant(url, 64)`), no
+la de 300. Es la misma familia de URL en los mismos hosts, no una medición. **La primera prueba de verdad es el primer clic de
+Ian.** Si falla, la postal sale igual con los 5 discos con ♪ y el aviso «5 tapas no se pudieron bajar…». **La guarda de
+antemano**: si `toBlob` devuelve `null` o tira, la postal se vuelve a dibujar SIN tapas **en un lienzo nuevo** (uno manchado no
+se limpia pintando encima: la marca es del lienzo) y se descarga igual, con «La postal salió sin tapas: …». **Una tapa que no
+baja** (404, sin CORS, la red) es una casilla de `--color-elevated` con un ♪ (a 0,4 del lado); el aviso dice cuántas faltaron.
 
 **Las dos guardas del botón**: dos clics rápidos = **una** postal (se deshabilita y dice «Generando…» en el mismo paso del
 clic, y `postalEnCurso` frena el que se cuele); y **salir de la ruta mientras genera** aborta las tapas en vuelo
@@ -3363,21 +3401,26 @@ clic, y `postalEnCurso` frena el que se cuele); y **salir de la ruta mientras ge
 
 **El costo**: abrir «Wrapped», **igual que antes** (1 `/me` + el del arranque; 0 del módulo de la postal); apretar, **0 a
 Spotify** y **como mucho 5 al CDN de imágenes** (que no es cuota de nadie), más los dos módulos de la app la primera vez. Ver la
-fila `↳` de `#wrapped` en la tabla de costos.
+fila `↳` de `#wrapped` en la tabla de costos. v=327 no cambió ninguna petición.
 
 Guardas: `tests/postal-anio.test.mjs` (con `TZ` de Buenos Aires y años INVENTADOS: el rango, los números, sin saltos, el
-recorte con 1 px por carácter, menos de 5, ninguna caja fuera ni pisada, el contraste en los cuatro presets, la variante de
-300 y el aviso; rojo contra v=325: el módulo no existía) y el banco `tests/banco/postal.html` + `-caso.html` + `-datos.mjs`
-(la app ENTERA, historial INVENTADO; las tapas buenas son `data:` URL fabricadas en el banco, la 404 la da el servidor del
-banco y la «ajena» es `atardecer-prueba.png` pedida desde `localhost`, otro origen del mismo servidor, sin CORS): A abrir sin
-el módulo (verde también contra v=325); B un PNG de 1080×1350 decodificado, 5 tapas, 0 Spotify, 0 CDN; **C** la 404 y la ajena
-(el `fetch` RECHAZADO) → el PNG sale igual, `toBlob` no tira, las dos casillas con ♪ y el aviso dice «2»; D el recorte; E los
-colores; F dos clics; G salir con una tapa retenida (abortada, 0 descargas, 0 escrituras; visto fallar con una copia que no le
-pasa la señal ni la vigencia); H sin desborde a 1366×591 y 390×844; I `toBlob` con un `SecurityError` forzado → sin tapas y el
-aviso. B a I, rojas contra v=325 (no hay botón). ⚠️ El banco ancla la decodificación del PNG en la madre: sin `anclar()` el
-reloj virtual saltaba al toast de 30 s y una puerta gastaba 478 s. `postal-caso.html?modo=foto[&tema=papel]` es el instrumento
-de las capturas y de las postales de ejemplo (conductor en `fonoteca-migracion/driver-capturas-postal-t73-2026-10-21.mjs`).
-⚠️ **Ninguna postal se hizo con el JSON real** (necesitaría el CDN real) y ninguna se commiteó.
+recorte, los dos renglones —uno que la v=326 cortaba entra entero, uno larguísimo lleva el «…» en el segundo—, menos de 5,
+ninguna caja fuera ni pisada, sin cajas de fondo, el contraste contra el punto peor del degradé en los cuatro presets, que el
+degradé existe —mezcla ≥ 0,3— y es solo acento + fondo, un tema hecho a mano donde la mezcla baja, la tapa del disco 1 ≥ 360,
+la variante de 300, las 45 tapas del JSON del repo contadas sin nombres, y el aviso; rojo contra v=326 en 38 asserts) y el
+banco `tests/banco/postal.html` + `-caso.html` + `-datos.mjs` (la app ENTERA, historial INVENTADO; las tapas buenas de 2025
+son `data:` URL fabricadas en el banco, la 404 la da el servidor del banco, la «ajena» es `atardecer-prueba.png` pedida desde
+`localhost` sin CORS, y las de 2023 tienen la forma del CDN): A abrir sin el módulo; B un PNG de 1080×1350 decodificado, 5
+tapas, 0 Spotify, 0 CDN, los textos nuevos y el disco 1 grande; C la 404 y la ajena → el PNG sale igual, las dos casillas con
+♪ y el aviso dice «2»; D el recorte y los dos renglones; E los colores y el degradé contra los píxeles; F dos clics; G salir con
+una tapa retenida; H sin desborde a 1366×591 y 390×844; I `toBlob` con un `SecurityError` forzado → sin tapas y el aviso; **J
+(v=327) las tapas con la forma del CDN**: los 5 pedidos a la de 300, a otro origen, con CORS y 200, las 5 dibujadas (un píxel
+de cada una) y 0 pedidos a otro prefijo (el servidor contesta 404 a cualquier otro). **Contra v=326: B, D y E rojas; A, C, F,
+G, H, I y J verdes** (J es de conservación: la v=326 también pedía la de 300). 10 de 10 corridas. ⚠️ El banco ancla la
+decodificación del PNG en la madre: sin `anclar()` el reloj virtual saltaba al toast de 30 s y una puerta gastaba 478 s.
+`postal-caso.html?modo=foto[&tema=papel][&datos=largos|chico]` es el instrumento de las postales de ejemplo (conductor en
+`fonoteca-migracion/driver-capturas-postal-t74-2026-10-22.mjs`; el de la 73, para las capturas de la tarjeta). ⚠️ **Ninguna
+postal se hizo con el JSON real** (necesitaría el CDN real) y ninguna se commiteó.
 
 ## Client ID
 0c8c92ad128e4b89be7097c6b8082797

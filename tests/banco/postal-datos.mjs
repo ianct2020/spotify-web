@@ -1,7 +1,7 @@
 // Datos INVENTADOS para el banco de la postal del año (v=326, tanda 73). El repo es público: ningún
 // nombre ni número de acá es de nadie.
 //
-// Dos años:
+// Tres años:
 //   · 2025 arranca `2025-01-01T00:00:28Z` (la trampa del 31 dic en UTC−3) y termina el 30/09; sus cinco
 //     tapas son BUENAS (las fabrica `tapasInventadas()` con un <canvas>, como `data:` URL: no hay ningún
 //     PNG en el repo y no sale nada a la red) y su primer artista y su primer disco tienen un nombre muy
@@ -9,10 +9,19 @@
 //   · 2024 arranca a mitad de año (15/06) y dos de sus cinco tapas FALLAN de verdad, por la red: una es
 //     un 404 del propio servidor del banco y la otra es `atardecer-prueba.png` (un archivo que ya está en
 //     el banco) pedida desde OTRO origen (`localhost` en vez de `127.0.0.1`, el mismo puerto), que el
-//     servidor contesta sin `access-control-allow-origin`: con `mode: 'cors'` el `fetch` se rechaza.
+//     servidor contesta sin `access-control-allow-origin`: con `mode: 'cors'` el `fetch` se rechaza;
+//   · 2023 (v=327, la puerta J) trae las cinco `img` con la FORMA del CDN de Spotify, como el JSON del
+//     repo: `http://localhost:<puerto>/image/ab67616d0000b273<24 hex INVENTADOS>` (la de 640). La postal
+//     tiene que pedir la de 300 (`ab67616d00001e02`), que es lo único que el servidor del banco sirve
+//     (con CORS; cualquier otro prefijo es un 404, ver `scripts/dev-server.mjs`). Los seis primeros hex
+//     del final son el color de la tapa (`COLORES_CDN`).
 
 export const LARGO = 'Orquesta Imaginaria de los Martes por la Tarde y Sus Amigos Ficticios del Barrio';
 export const COLORES_TAPA = [[220, 70, 60], [60, 140, 220], [240, 190, 40], [70, 180, 110], [180, 90, 200]];
+export const COLORES_CDN = [[200, 60, 140], [40, 160, 160], [230, 120, 30], [90, 90, 210], [150, 200, 60]];
+const hex2 = (v) => v.toString(16).padStart(2, '0');
+/** Las cinco `img` de 2023, con la forma del CDN y la variante de 640 (la postal pide la de 300). */
+export const urlsCdn = (puerto) => COLORES_CDN.map((c, i) => `http://localhost:${puerto}/image/ab67616d0000b273${c.map(hex2).join('')}${'0'.repeat(17)}${i}`);
 
 /** Las cinco tapas buenas: 300×300, un color liso con una franja diagonal más oscura, como `data:` URL. */
 export function tapasInventadas(doc = document) {
@@ -61,17 +70,40 @@ function anio({ year, first, last, n, tapas, semilla }) {
   };
 }
 
-/** El `history-stats.json` inventado. `tapas` son las cinco buenas; `origen` y `puerto`, los del banco. */
-export function statsInventadas({ tapas, origen, puerto }) {
+// Para las postales de ejemplo (v=327, `postal-caso.html?modo=foto&datos=…`): nombres muy largos en los
+// cinco discos y en los artistas, o un año con 2 artistas y 3 discos. Inventados, como todo lo de acá.
+const DISCOS_LARGOS = [
+  LARGO,
+  'Canciones Inventadas Para Una Tarde Muy Larga De Domingo En La Costa',
+  'El Disco Imaginario De Las Luces Que Nunca Se Apagaron Del Todo',
+  'Volumen Dos: Grabaciones Ficticias Del Sótano De Un Amigo Lejano',
+  'Sesiones Perdidas Y Encontradas De Una Banda Que Nunca Existió',
+];
+const ARTISTAS_LARGOS = ['Conjunto Instrumental Imaginario De La Calle Sin Nombre', 'Los Hermanos Ficticios Y Su Orquesta De Prueba Del Lunes', 'Coro Municipal Inventado De Un Pueblo Que No Está', 'Solista Imaginaria Con Un Nombre Larguísimo De Prueba'];
+function variar(y, variante) {
+  if (variante === 'largos') {
+    return {
+      ...y,
+      top_artists: y.top_artists.map((a, i) => (i === 0 ? a : { ...a, name: ARTISTAS_LARGOS[(i - 1) % 4] })),
+      top_albums: y.top_albums.map((a, i) => ({ ...a, name: DISCOS_LARGOS[i], artist: i === 0 ? LARGO : ARTISTAS_LARGOS[(i - 1) % 4] })),
+    };
+  }
+  if (variante === 'chico') return { ...y, top_artists: y.top_artists.slice(0, 2), top_albums: y.top_albums.slice(0, 3) };
+  return y;
+}
+
+/** El `history-stats.json` inventado. `tapas` son las cinco buenas; `origen` y `puerto`, los del banco; `variante`, la de las postales de ejemplo. */
+export function statsInventadas({ tapas, origen, puerto, variante = null }) {
   const y2024 = anio({ year: 2024, first: '2024-06-15T13:00:00Z', last: '2024-12-31T01:30:00Z', n: 200, semilla: 7,
     tapas: [tapas[0], urlTapa404(origen), urlTapaAjena(puerto), tapas[3], tapas[4]] });
-  const y2025 = anio({ year: 2025, first: '2025-01-01T00:00:28Z', last: '2025-09-30T02:10:00Z', n: 273, semilla: 11, tapas });
+  const y2023 = anio({ year: 2023, first: '2023-02-01T10:00:00Z', last: '2023-12-31T22:00:00Z', n: 334, semilla: 5, tapas: urlsCdn(puerto) });
+  const y2025 = variar(anio({ year: 2025, first: '2025-01-01T00:00:28Z', last: '2025-09-30T02:10:00Z', n: 273, semilla: 11, tapas }), variante);
   const meses = [];
-  for (const [y, desde, hasta] of [[2024, 6, 12], [2025, 1, 9]]) for (let m = desde; m <= hasta; m++) meses.push({ m: `${y}-${String(m).padStart(2, '0')}`, min: 5000 + m * 100 });
+  for (const [y, desde, hasta] of [[2023, 2, 12], [2024, 6, 12], [2025, 1, 9]]) for (let m = desde; m <= hasta; m++) meses.push({ m: `${y}-${String(m).padStart(2, '0')}`, min: 5000 + m * 100 });
   return {
     version: 5, generated_at: '2031-01-01T00:00:00Z',
     totals: { plays_valid: 24690, plays_raw: 40000, min: 122469, days_active: 468, longest_streak: 47, unique_artists: 7, unique_albums: 9, unique_tracks: 5, skip_pct: 55.5, plays_junk: 20 },
-    years: [y2024, y2025],
+    years: [y2023, y2024, y2025],
     monthly: meses,
     heatmap: {},
     top_artists_all_time: y2025.top_artists.map((a) => ({ ...a, first_year: 2024 })),
@@ -86,6 +118,8 @@ export const ESPERADO_2025 = {
   rango: 'del 1 ene 2025 al 30 sep 2025',
   reproducciones: '12.345',
   dias: '234',
-  racha: '47',
-  pico: 'Día pico: 9 mar 2025 · 11h 8m',
+  racha: '47 días',
+  pico: '9 mar 2025',
+  picoEt: 'día pico · 11h 8m',
+  pie: 'Fonoteca · 2025',
 };

@@ -5,7 +5,7 @@
 </head><body>
 <div id="app"></div>
 <script type="module">
-// ── Un iframe del banco `postal.html` (v=326, tanda 73) ───────────────────────
+// ── Un iframe del banco `postal.html` (v=326, tanda 73; v=327, tanda 74) ─────
 //
 // Arranca la app ENTERA (`/js/app.js`) en `#home`, contra la Spotify simulada de `simulado.mjs` (sin
 // tocarla), con `/me` = el owner. El `history-stats.json` es INVENTADO (`postal-datos.mjs`) y se siembra
@@ -23,8 +23,8 @@
 //     el reloj virtual, uno de 30 s puede irse antes de que la madre lo mire;
 //   · `window.__ponerTema(id)`: aplica uno de los cuatro `PRESETS` con `applyTheme` de la app.
 //
-// Modo `?modo=foto[&tema=papel]` (las capturas y las postales de ejemplo, con un conductor externo y SIN
-// reloj virtual): abre `#wrapped` directo y marca `data-foto="listo"` con la tarjeta del año pintada.
+// Modo `?modo=foto[&tema=papel][&datos=largos|chico]` (las capturas y las postales de ejemplo, con un
+// conductor externo y SIN reloj virtual): abre `#wrapped` directo y marca `data-foto="listo"` con la tarjeta del año pintada.
 
 import { instalarRedSimulada, esperarReal, anclar } from '/banco/simulado.mjs';
 import { tapasInventadas, statsInventadas } from '/banco/postal-datos.mjs';
@@ -57,7 +57,8 @@ const TAPAS = tapasInventadas();
 window.__tapasBuenas = TAPAS;
 window.__tapas = { pedidas: [], retener: null, soltar: null };
 const fetchSimulado = window.fetch;
-const esTapa = (u) => u.startsWith('data:image/') || /\/banco\/(postal-tapa|atardecer-prueba)/.test(u);
+// v=327: también las de la forma del CDN que sirve el banco (`/image/ab67616d…`, la puerta J).
+const esTapa = (u) => u.startsWith('data:image/') || /\/banco\/(postal-tapa|atardecer-prueba)/.test(u) || /\/image\/ab67616d/.test(u);
 window.fetch = (entrada, opciones = {}) => {
   const href = typeof entrada === 'string' ? entrada : entrada.url;
   if (!esTapa(href)) return fetchSimulado(entrada, opciones);
@@ -105,7 +106,7 @@ window.__ponerTema = async (id) => {
 {
   const { OWNER_KEYS } = await import('/js/history-keys.js');
   const { idbSetCached } = await import('/js/idb.js');
-  await anclar(idbSetCached(OWNER_KEYS.stats, statsInventadas({ tapas: TAPAS, origen: location.origin, puerto: location.port }), 100 * 365 * 24 * 60));
+  await anclar(idbSetCached(OWNER_KEYS.stats, statsInventadas({ tapas: TAPAS, origen: location.origin, puerto: location.port, variante: q.get('datos') }), 100 * 365 * 24 * 60));
 }
 
 const FOTO = q.get('modo') === 'foto';

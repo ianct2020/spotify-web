@@ -4,7 +4,7 @@
 <pre id="progreso"></pre>
 <div id="marcos"></div>
 <script type="module">
-// ── Qué prueba este banco (v=326, tanda 73) ──────────────────────────────────
+// ── Qué prueba este banco (v=326, tanda 73; rediseño de v=327, tanda 74) ─────
 //
 // La postal del año de `#wrapped` REAL, en la app ENTERA (`postal-caso.html`, uno por iframe), contra la
 // Spotify simulada (`simulado.mjs`, sin tocar) y un `history-stats.json` INVENTADO (`postal-datos.mjs`).
@@ -21,7 +21,9 @@
 //      del centro no es el fondo ni una tapa) y el aviso dice «2»;
 //   D. ningún `fillText` con el ancho medido mayor que su máximo, y el nombre largo termina en «…»;
 //   E. en los cuatro presets, el texto usa solo `--color-text` y `--color-text-secondary`, y su contraste
-//      contra el fondo donde se dibujó es ≥ 4,5:1 (calculado acá con los valores computados);
+//      contra el fondo donde se dibujó es ≥ 4,5:1 (calculado acá con los valores computados); el que va
+//      sobre el degradé (v=327), además, contra los PÍXELES del PNG, renglón por renglón de su caja (el
+//      punto peor de verdad, leído en el borde izquierdo, donde no hay nada dibujado encima);
 //   F. dos clics rápidos = una descarga;
 //   G. salir de la ruta mientras genera (con una tapa retenida): la petición se aborta, 0 descargas, 0
 //      toasts y 0 escrituras en el botón después del cambio de ruta;
@@ -29,6 +31,11 @@
 //      horizontal;
 //   I. si `toBlob` tira (un `SecurityError` forzado acá), la postal sale SIN tapas, se descarga igual y el
 //      aviso lo dice («La postal salió sin tapas: …»);
+//   J. (v=327) las tapas con la FORMA del CDN (`/image/ab67616d0000b273<hex>`, como el JSON del repo,
+//      pedidas a `localhost`: otro origen) → los 5 pedidos son a la variante de 300 (`ab67616d00001e02`),
+//      con CORS y 200, las 5 se dibujan (un píxel de cada una es su color) y 0 pedidos a otro prefijo
+//      (el servidor del banco contesta 404 a cualquier otro). Es de CONSERVACIÓN: la v=326 también pedía
+//      la de 300, y tiene que dar verde contra ella;
 //   y 0 errores de consola en todos los marcos.
 //
 // `?solo=B,C` corre solo esas puertas (A siempre): sirve para ver cada una en rojo contra v=325.
@@ -36,7 +43,7 @@
 
 import { esperarReal, anclar } from '/banco/simulado.mjs';
 import { fallar, listo } from '/banco/esperar.mjs';
-import { LARGO, COLORES_TAPA, ESPERADO_2025 } from '/banco/postal-datos.mjs';
+import { LARGO, COLORES_TAPA, COLORES_CDN, ESPERADO_2025 } from '/banco/postal-datos.mjs';
 
 const afirmar = (c, msg) => { if (!c) throw new Error('BANCO: ' + msg); };
 const pasos = [];
@@ -173,8 +180,10 @@ try {
       afirmar(cerca(c, COLORES_TAPA[i]), `PUERTA B: la casilla ${i + 1} tiene su tapa (rgb ${c} contra ${COLORES_TAPA[i]})`);
     }
     const tx = (id) => dib.textos.find((t) => t.id === id)?.texto;
-    afirmar(tx('anio') === '2025' && tx('rango') === ESPERADO_2025.rango && tx('cifra-reproducciones') === ESPERADO_2025.reproducciones && tx('cifra-dias') === ESPERADO_2025.dias && tx('cifra-racha') === ESPERADO_2025.racha && tx('pico') === ESPERADO_2025.pico && tx('pie') === 'Fonoteca',
-      `PUERTA B: los textos son los contados a mano (${['anio', 'rango', 'cifra-reproducciones', 'cifra-dias', 'cifra-racha', 'pico', 'pie'].map(tx).join(' | ')})`);
+    afirmar(tx('anio') === '2025' && tx('rango') === ESPERADO_2025.rango && tx('dato-reproducciones') === ESPERADO_2025.reproducciones && tx('dato-dias') === ESPERADO_2025.dias && tx('dato-racha') === ESPERADO_2025.racha && tx('dato-pico') === ESPERADO_2025.pico && tx('dato-pico-et') === ESPERADO_2025.picoEt && tx('pie') === ESPERADO_2025.pie,
+      `PUERTA B: los textos son los contados a mano (${['anio', 'rango', 'dato-reproducciones', 'dato-dias', 'dato-racha', 'dato-pico', 'dato-pico-et', 'pie'].map(tx).join(' | ')})`);
+    afirmar(tx('heroe') === '1020h 35m', `PUERTA B: el número héroe son los minutos del año con el fmtMinutes de la app («${tx('heroe')}»)`);
+    afirmar(dib.tapas[0].lado >= 360 && dib.tapas.slice(1).every((t) => t.lado < dib.tapas[0].lado), `PUERTA B: el disco 1 es la tapa grande (${dib.tapas.map((t) => t.lado).join(', ')})`);
     afirmar(!dib.textos.some((t) => /skip|salt|%/i.test(t.texto)), 'PUERTA B: ningún texto de la postal dice «skip», «salt» ni lleva «%»');
     datos.dibujoB = dib;
 
@@ -182,10 +191,15 @@ try {
     progreso('D: el recorte');
     const pasados = dib.textos.filter((t) => !(t.ancho <= t.max + 0.01));
     afirmar(pasados.length === 0, `PUERTA D: ningún fillText con el ancho medido mayor que su máximo (${pasados.map((t) => `${t.id} ${t.ancho.toFixed(1)}>${t.max}`).join(', ')})`);
-    const a0 = dib.textos.find((t) => t.id === 'artista-nombre-0'), d0 = dib.textos.find((t) => t.id === 'disco-nombre-0');
-    afirmar(a0 && a0.texto.endsWith('…') && LARGO.startsWith(a0.texto.slice(0, -1).trimEnd()), `PUERTA D: el nombre largo del artista termina en «…» y es el principio del nombre («${a0?.texto}»)`);
-    afirmar(d0 && d0.texto.endsWith('…'), `PUERTA D: el nombre largo del disco también («${d0?.texto}»)`);
-    datos.recorte = { textos: dib.textos.length, maxHolgura: Math.min(...dib.textos.map((t) => t.max - t.ancho)).toFixed(1), artista: a0.texto, letra: dib.letra };
+    const a0 = dib.textos.find((t) => t.id === 'artista-nombre-0'), d0 = dib.textos.find((t) => t.id === 'disco-nombre-0'), d0b = dib.textos.find((t) => t.id === 'disco-nombre-0-b');
+    const a0b = dib.textos.find((t) => t.id === 'artista-nombre-0-b');
+    afirmar(a0 && a0b && a0b.texto.endsWith('…') && LARGO.startsWith(a0.texto + ' ') && LARGO.includes(' ' + a0b.texto.slice(0, -1).trimEnd()), `PUERTA D: el nombre largo del artista va en dos renglones y termina en «…» («${a0?.texto}» / «${a0b?.texto}»)`);
+    // v=327: el nombre de disco va en dos renglones; el «…» lo lleva el segundo, y el primero termina en
+    // una palabra entera del nombre.
+    afirmar(d0 && d0b && !d0.texto.endsWith('…') && d0b.texto.endsWith('…') && LARGO.startsWith(d0.texto + ' ') && LARGO.includes(' ' + d0b.texto.slice(0, -1).trimEnd()), `PUERTA D: el nombre largo del disco va en dos renglones, con el «…» en el segundo («${d0?.texto}» / «${d0b?.texto}»)`);
+    const enteros = [1, 2, 3, 4].map((k) => dib.textos.filter((t) => t.id === `disco-nombre-${k}` || t.id === `disco-nombre-${k}-b`).map((t) => t.texto).join(' '));
+    afirmar(enteros.every((n, j) => n === `Disco Inventado ${j + 2}`), `PUERTA D: los discos 2 a 5 («Disco Inventado N») salen enteros, sin «…» (${enteros.join(' | ')})`);
+    datos.recorte = { textos: dib.textos.length, maxHolgura: Math.min(...dib.textos.map((t) => t.max - t.ancho)).toFixed(1), artista: `${a0.texto} / ${a0b.texto}`, letra: dib.letra };
   }
 
   // ── F · dos clics rápidos ──────────────────────────────────────────────────
@@ -275,10 +289,57 @@ try {
       let min = Infinity, peor = '';
       for (const t of dib.textos) { const r = contraste(t.valor, t.sobreValor); if (r < min) { min = r; peor = `${t.id} ${t.valor} sobre ${t.sobreValor}`; } }
       afirmar(min >= 4.5, `PUERTA E (${id}): contraste mínimo ${min.toFixed(2)}:1 (${peor}) y AA pide 4,5:1`);
-      res.push(`${id} ${min.toFixed(2)}`);
+      // v=327: el degradé, contra los píxeles de verdad. Para cada texto sobre él, cada renglón de su
+      // caja leído en x=2 (el borde izquierdo: ahí no se dibuja nada encima, el degradé es horizontalmente
+      // parejo).
+      const png = await leerPng(g.desc.bytes);
+      const deg = dib.degradado;
+      afirmar(deg && deg.mezcla > 0 && deg.paradas.at(-1).color === B, `PUERTA E (${id}): hay degradé y termina en --color-bg (mezcla ${deg?.mezcla}, ${deg?.paradas.map((p) => p.color).join(' → ')})`);
+      const arriba = png.px(2, 2), abajo = png.px(2, deg.y1 + 4);
+      afirmar(!cerca(arriba, hexA(B), 6) && cerca(abajo, hexA(B), 1), `PUERTA E (${id}): arriba se ve el degradé (rgb ${arriba}) y debajo de él, el fondo liso (rgb ${abajo} contra ${hexA(B)})`);
+      let minPx = Infinity, peorPx = '';
+      for (const t of dib.textos.filter((x) => x.sobre === 'degradado')) {
+        for (let yy = Math.floor(t.caja.y); yy < Math.ceil(t.caja.y + t.caja.h); yy++) {
+          const c = png.px(2, yy), hx = '#' + c.map((v) => v.toString(16).padStart(2, '0')).join('');
+          const r = contraste(t.valor, hx);
+          if (r < minPx) { minPx = r; peorPx = `${t.id} en y=${yy} sobre ${hx}`; }
+        }
+      }
+      afirmar(minPx >= 4.5, `PUERTA E (${id}): el texto sobre el degradé, contra los píxeles del PNG en su punto PEOR: ${minPx.toFixed(2)}:1 (${peorPx})`);
+      res.push(`${id} ${min.toFixed(2)} (degradé: mezcla ${deg.mezcla}, píxel peor ${minPx.toFixed(2)})`);
     }
     await anclar(win(A).__ponerTema('violeta'));
     datos.colores = res.join(' · ');
+  }
+
+  // ── J · las tapas con la forma del CDN: se pide la de 300 y nada más ────────
+  if (corre('J')) {
+    progreso('J: la variante de 300');
+    await elegirAnio(A, 2023);
+    const r0 = recursos(A).length;
+    const g = await generar(A, 'PUERTA J');
+    const pedidos = g.tapas;
+    const de300 = /\/image\/ab67616d00001e02[0-9a-f]{24}$/;
+    afirmar(pedidos.length === 5, `PUERTA J: 5 pedidos de tapa (${pedidos.length})`);
+    afirmar(pedidos.every((t) => de300.test(t.url)), `PUERTA J: los 5 son a la variante de 300 (${pedidos.map((t) => t.url.replace(/^.*\/image\//, '')).join(' · ')})`);
+    afirmar(pedidos.every((t) => t.host === `localhost:${location.port}` && t.modo === 'cors' && t.estado === 200), `PUERTA J: a otro origen, con mode cors, y contestados 200 con CORS (${pedidos.map((t) => `${t.host} ${t.modo}/${t.estado}`).join(' · ')})`);
+    const otrosPrefijos = [...pedidos.map((t) => t.url), ...recursos(A).slice(r0)].filter((u) => /\/image\//.test(u) && !de300.test(u.split('?')[0]));
+    afirmar(otrosPrefijos.length === 0, `PUERTA J: 0 pedidos a otro prefijo (${otrosPrefijos.join(' · ')})`);
+    const png = await leerPng(g.desc.bytes);
+    const dib = g.dibujo;
+    afirmar(!dib.sinTapas && dib.faltan === 0 && dib.tapas.every((t) => t.dibujada), `PUERTA J: las 5 tapas dibujadas (${dib.tapas.map((t) => t.dibujada).join(',')}, faltan ${dib.faltan})`);
+    const vistos = [];
+    for (const [i, t] of dib.tapas.entries()) {
+      const c = png.px(...puntoDeTapa(t));
+      vistos.push(`${i + 1}: rgb(${c})`);
+      afirmar(cerca(c, COLORES_CDN[i]), `PUERTA J: la casilla ${i + 1} tiene su tapa del CDN del banco (rgb ${c} contra ${COLORES_CDN[i]})`);
+    }
+    afirmar(g.toasts.length === 1 && g.toasts[0] === 'Postal descargada.', `PUERTA J: el aviso «Postal descargada.» (${g.toasts.join(' | ')})`);
+    afirmar(g.spotify.length === 0, 'PUERTA J: 0 a Spotify');
+    const hosts = [...new Set([...pedidos.map((t) => t.host), ...g.recursos.map((u) => new URL(u).host)])];
+    afirmar(!hosts.some((h) => CDN.test(h)), `PUERTA J: 0 a un CDN real (${hosts.join(', ')})`);
+    datos.cdn = { pedidos: pedidos.length, de300: pedidos.filter((t) => de300.test(t.url)).length, otros: otrosPrefijos.length, vistos: vistos.join(' ') };
+    await elegirAnio(A, 2025);
   }
 
   // ── G · salir mientras genera ──────────────────────────────────────────────
@@ -343,6 +404,7 @@ try {
     (datos.tapasQueFallan ? ` · C tapas que fallan: 404=${datos.tapasQueFallan.e404}, ajena=${datos.tapasQueFallan.ajena}, ${datos.tapasQueFallan.centros}, «${datos.tapasQueFallan.toast}»` : '') +
     (datos.sinTapas ? ` · I toBlob tira: «${datos.sinTapas}»` : '') +
     (datos.colores ? ` · E contraste mínimo: ${datos.colores}` : '') +
+    (datos.cdn ? ` · J CDN del banco: ${datos.cdn.pedidos} pedidos, ${datos.cdn.de300} a la de 300, ${datos.cdn.otros} a otro prefijo, ${datos.cdn.vistos}` : '') +
     (datos.salir ? ` · G salir: tapa ${datos.salir.estado}, ${datos.salir.descargas} descargas, ${datos.salir.escrituras} escrituras` : '') +
     (datos.desborde ? ` · H ${datos.desborde}` : '') +
     ` · errores=${errores.length} · reloj virtual=${Math.round(performance.now())} ms`;
