@@ -122,7 +122,11 @@ const EXTRA = { mosaico: 'auto=1' };
 // y baja 54 me gusta inventados de una Spotify simulada en cada uno. Medido a tasa de acierto el 20/10 (tanda 70), con
 // el defecto de 45 s: diez corridas seguidas gastaron 13.184-13.448 ms de reloj virtual (10/10). El doble de la más
 // lenta da 26,9 s: no entra en `PRESUPUESTO` y corre con los 45 s.
-const PRESUPUESTO = { 'calendario': 15000, 'ocultar-artista': 90000, 'import-guarda': 60000, 'ocultos-cache': 60000, 'mapa': 240000, 'generos-escaneo': 195000, 'router-teardown': 120000 };
+// `guard-ruta-vieja` (v=325) abre la app ENTERA en tres iframes, y en dos de ellos `/me` contesta 500 con sus 5
+// reintentos de `spotifyFetch` (0,5 + 1 + 2 + 4 + 8 s de backoff, a propósito). Medido a tasa de acierto el 21/10
+// (tanda 72): diez corridas seguidas gastaron 38.521-39.194 ms de reloj virtual (10/10). El doble de la más lenta,
+// redondeado hacia arriba a múltiplo de 15 s: 90 s.
+const PRESUPUESTO = { 'calendario': 15000, 'ocultar-artista': 90000, 'import-guarda': 60000, 'ocultos-cache': 60000, 'mapa': 240000, 'generos-escaneo': 195000, 'router-teardown': 120000, 'guard-ruta-vieja': 90000 };
 // `XQ="&peor=1"` agrega parámetros a la URL del banco sin tocar este archivo: sirve
 // para medir (p. ej. el ancho mínimo en que la barra de novedades sigue en una fila).
 

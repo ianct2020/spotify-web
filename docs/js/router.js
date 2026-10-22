@@ -1,5 +1,5 @@
-import { guardRoute, marcarCambioDeRuta, abrirRender, cerrarRender } from './ui/crash-guard.js?v=324';
-import { skelPage } from './ui/skeleton.js?v=324';
+import { guardRoute, marcarCambioDeRuta, abrirRender, cerrarRender } from './ui/crash-guard.js?v=325';
+import { skelPage } from './ui/skeleton.js?v=325';
 
 const routes = {};
 
@@ -141,7 +141,9 @@ async function handleRoute() {
     abrirRender(gen, hash);
     let limpieza;
     try {
-      limpieza = await guardRoute(main, handler);
+      // v=325: `main` es de todas las rutas. Si esta ya no es la vigente cuando
+      // termina (o tira), `guardRoute()` no pinta nada encima de la que estás mirando.
+      limpieza = await guardRoute(main, handler, { vigente: () => rutaVigente(gen) });
     } finally {
       cerrarRender(gen);
     }

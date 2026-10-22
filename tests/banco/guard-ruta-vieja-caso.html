@@ -1,0 +1,73 @@
+<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>banco guard-ruta-vieja — la app entera, en un iframe</title>
+<link rel="stylesheet" href="/css/theme.css">
+<link rel="stylesheet" href="/css/components.css">
+<link rel="stylesheet" href="/css/main.css">
+<style>*,*::before,*::after{animation:none!important;transition:none!important}</style>
+</head><body>
+<div id="app"></div>
+<script type="module">
+// ── Un iframe del banco `guard-ruta-vieja.html` (v=325, tanda 72) ────────────
+//
+// Arranca la app ENTERA (`/js/app.js`: su `init()`, su barra lateral, su router) con la
+// Spotify simulada (`simulado.mjs`, sin tocarlo). El usuario es INVENTADO
+// (`usuario-banco`, no es el owner): `#records` no llega a pedir ningún JSON del
+// historial, porque `loadOne()` le devuelve `null` sin datos BYOH. Nada sale a
+// `api.spotify.com`.
+//
+// Lo que suma este archivo a la Spotify simulada: la `/me` que se puede RETENER y soltar
+// con error. `__retenerProximaMe()` hace que la próxima `GET /me` quede sin contestar
+// hasta `__soltarMe(modo)`:
+//   · `modo = 'falla'`: se contesta 500, y desde ahí TODAS las `/me` contestan 500 (los
+//     reintentos de `spotifyFetch` también: 5 con backoff, y después tira);
+//   · `modo = 'ok'`: se contesta bien.
+// El `/me` del arranque (`testConnection()`) sale antes, no se retiene y no pasa por el
+// memo de `getCurrentUserId()`: la primera vista que pregunta quién sos paga la suya.
+
+import { instalarRedSimulada, esperarReal } from '/banco/simulado.mjs';
+
+window.__errores = [];
+window.__avisos = [];
+window.addEventListener('error', (e) => window.__errores.push('error: ' + (e.message || e)));
+window.addEventListener('unhandledrejection', (e) => window.__errores.push('rechazo: ' + String(e.reason?.message || e.reason)));
+const errorOriginal = console.error.bind(console);
+console.error = (...a) => { window.__errores.push('console.error: ' + a.map(String).join(' ').slice(0, 300)); errorOriginal(...a); };
+const warnOriginal = console.warn.bind(console);
+console.warn = (...a) => { window.__avisos.push(a.map(String).join(' ').slice(0, 300)); warnOriginal(...a); };
+
+const ME_ID = 'usuario-banco';
+let retener = false;
+let soltar = null;
+let falla = false;
+window.__meRetenida = false;
+window.__meSoltada = false;
+window.__mePedidas = 0;
+window.__retenerProximaMe = () => { retener = true; };
+window.__soltarMe = (modo) => { if (soltar) soltar(modo); };
+const bien = () => ({ id: ME_ID, display_name: 'Banco' });
+const mal = () => ({ __status: 500, body: { error: { status: 500, message: 'banco: /me caída' } } });
+const responderMe = () => {
+  window.__mePedidas++;
+  if (falla) return mal();
+  if (!retener) return bien();
+  retener = false;
+  window.__meRetenida = true;
+  return new Promise((r) => {
+    soltar = (modo) => {
+      soltar = null;
+      window.__meSoltada = true;
+      if (modo === 'falla') { falla = true; r(mal()); } else r(bien());
+    };
+  });
+};
+
+const sim = instalarRedSimulada();
+window.__sim = sim;
+sim.ruta('GET', /^\/me$/, responderMe);
+localStorage.setItem('fonoteca_last_user_id', ME_ID);
+localStorage.setItem('fonoteca_perfil_v1', JSON.stringify(bien()));
+
+await import('/js/app.js');
+await esperarReal(() => document.getElementById('my-history-btn'), { que: 'que la app arranque', vueltas: 4000 });
+window.__listo = true;
+</script>
+</body></html>

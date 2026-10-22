@@ -1519,11 +1519,38 @@ v=323, 0 abortadas y el candado tomado —; y A → B → A con `#discover-artis
 visto fallar con una copia que corre también el del mismo hash). ⚠️ **«0 peticiones a MusicBrainz
 después de salir» NO distingue el arreglo**: el bucle de `#mapa` ya pregunta por la vigencia antes
 de cada petición; lo que el teardown perdido dejaba vivo era la petición EN VUELO y el candado.
-⚠️ **No arreglado, solo anotado**: si la ruta vieja TIRA después de que te fuiste, `guardRoute()`
-le pinta la pantalla de error a `main`, encima de la vista vigente (leído del código: su `catch`
-hace `pantallaDeError(container, err)` y `container` es `main`; los tests de la 71 no lo ejercitan;
-en `PENDIENTES.md`).
-Ninguna de las dos cambia una petición: la tabla de costos no se toca.
+⚠️ ~~**No arreglado, solo anotado**: si la ruta vieja TIRA después de que te fuiste, `guardRoute()`
+le pinta la pantalla de error a `main`, encima de la vista vigente~~ → arreglado en v=325 (el punto 3).
+
+3. **La pantalla de error de una ruta vieja ya no tapa la vigente — ARREGLADO en v=325 (tanda 72).**
+   `guardRoute()` pinta en `container`, que es `#main-content`: el MISMO para todas las rutas. Con A
+   lenta que TIRA después de que te fuiste a B, su `catch` le pintaba a B la pantalla de error de A
+   (y con A terminando sin pintar mientras `main` tenía el esqueleto de B, «Esta página quedó
+   vacía»). Arreglo: `guardRoute(container, handler, { vigente })`, y `handleRoute()` le pasa
+   `{ vigente: () => rutaVigente(gen) }` (nada más cambió en el router). **Con la ruta NO vigente no
+   se pinta nada** en `container`; el error va crudo a
+   `console.warn('[crash-guard] la ruta vieja falló después de que saliste:', err)` y se devuelve lo
+   de siempre: `null` si tiró, el cleanup si no (incluso si `main` quedó «en blanco»: el router de
+   v=324 decide qué hacer con él). **Sin el tercer argumento, o con la ruta vigente, todo igual que
+   antes.** `alFallar()`, `installCrashGuard()`, el banner y `pantallaDeError()` no se tocaron.
+   La ruta REAL del banco es **`#records`**: su `render()` espera `loadRecords()` (→ `GET /me`) y
+   después hace `getElementById('records-content')` sin guarda de vigencia, así que si te fuiste
+   tira «Cannot set properties of null» (con la `/me` caída **o contestada bien**: no le hace falta
+   un fallo de red). Es un defecto de la vista, anotado en `PENDIENTES.md` y no arreglado (el
+   arreglo es del contenedor). La tanda 72 leyó los 19 `render` async: solo `#records` y
+   `#byartist` pueden tirar después de un `await` hoy, y **ninguno de los 32 hace un `await` antes
+   de escribir en `container`**, así que el segundo camino («quedó vacía» sobre la vigente) no se da
+   con las rutas de hoy: lo cubre solo el test de Node. Guardas: `tests/guard-ruta-vieja.test.mjs`
+   (el `router.js` y el `crash-guard.js` reales con rutas INVENTADAS; rojo contra v=324 en 9
+   asserts) y el banco `tests/banco/guard-ruta-vieja.html` (en `prepush`, el vigésimo cuarto:
+   `#records` con su `/me` retenida → `#home` → la `/me` se suelta con 500 y, aparte, bien; a los
+   2 s `#main-content` sigue con `.home-grid` y sin `.crash-screen`. Contra v=324, la tarjeta «Se
+   rompió algo al cargar esta página» / «Cannot set properties of null (setting 'innerHTML')»
+   encima de `#home`. Y de conservación, `#records` con la `/me` caída sin salir: pinta lo suyo).
+   ⚠️ La conservación «una ruta VIGENTE que tira → pantalla de error» no tiene caso real: ninguna de
+   las 32 tira hoy estando vigente. La cubre el test de Node.
+
+Ninguna de las tres cambia una petición: la tabla de costos no se toca.
 
 ## 📏 La cuota a la vista (v=310)
 

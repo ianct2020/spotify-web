@@ -1,0 +1,181 @@
+<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>banco guard-ruta-vieja — una ruta vieja no tapa la vigente con su error</title>
+<style>html,body{margin:0;background:#111;color:#eee;font:13px system-ui}iframe{border:0;display:block}</style>
+</head><body>
+<pre id="progreso"></pre>
+<div id="marcos"></div>
+<script type="module">
+// ── Qué prueba este banco (v=325, tanda 72) ──────────────────────────────────
+//
+// `guardRoute()` (`ui/crash-guard.js`) pinta en `#main-content`, que es el MISMO contenedor
+// para todas las rutas. Hasta v=324, si la ruta A seguía cargando cuando te ibas a B y
+// después A TIRABA, su `catch` le pintaba la pantalla de error encima a B. Desde v=325 el
+// router le pasa `{ vigente }` y una ruta que ya no es la vigente no pinta nada: el error va
+// a la consola, crudo.
+//
+// El caso REAL: la app ENTERA en un iframe (`guard-ruta-vieja-caso.html`), con la Spotify
+// simulada (`simulado.mjs`, sin tocarlo) y un usuario INVENTADO. Nada sale a
+// `api.spotify.com`.
+//
+// LA RUTA VIEJA ES `#records`, una de las 32 del menú, sin tocar. Su `render()` escribe la
+// cabecera, espera `loadRecords()` (→ `loadOne()` → `getCurrentUserId()` → `GET /me`, que el
+// banco RETIENE) y al volver hace `document.getElementById('records-content')` SIN preguntar
+// por la vigencia: si te fuiste, eso es `null` y `content.innerHTML = …` TIRA («Cannot set
+// properties of null»). Es un defecto de la vista (anotado en PENDIENTES, no se arregla acá:
+// el arreglo es del contenedor). La tanda 72 leyó los 19 `render` async: es una de las dos
+// que pueden tirar después de un `await` (la otra, `#byartist`, espera solo IndexedDB y el
+// banco no puede retenerla sin tocar `src/`).
+//
+// LA RUTA VIGENTE ES `#home`: lo reconocible es `.home-grid` dentro de `#main-content`.
+//
+//   A. `salir-falla`: `#records` con su `/me` retenida → `#home` → la `/me` se suelta con
+//      500 (y todas las que siguen: los 5 reintentos de `spotifyFetch`) → `#records` tira.
+//      🔴 LA PUERTA, a los 2 s de reloj desde que tiró: `#main-content` SIN `.crash-screen`,
+//      CON `.home-grid`, y `[data-route].active` = solo `home`. Y el `console.warn` de la
+//      ruta vieja, con el error crudo. Contra v=324: la tarjeta de error en `#main-content`.
+//   B. `salir-ok`: lo mismo con la `/me` contestada BIEN. `#records` tira igual (no le hace
+//      falta un fallo de red: le alcanza con que te hayas ido). La misma puerta.
+//   C. Conservación, `quedarse-falla`: `#records` con la misma `/me` caída, SIN salir. Hoy
+//      la vista no tira (pinta su cartel de identidad sin confirmar) y la app no le pinta
+//      ninguna pantalla de error encima: verde contra v=324 y contra v=325. ⚠️ La
+//      conservación de «la ruta vigente que tira → pantalla de error» NO está acá: ninguna de
+//      las 32 rutas tira hoy estando vigente (es el test de Node, con rutas inventadas).
+//   En las tres: 0 escrituras en la cuenta, 0 rutas sin simular, 0 hosts externos.
+//
+// «Ya tiró» se reconoce por lo que deja `guardRoute()` en la consola: `[crash-guard] la ruta
+// rompió:` (v=324) o `[crash-guard] la ruta vieja falló` (v=325). Si no llega ninguna de las
+// dos, el banco para diciéndolo (la vieja no terminó: un rojo del banco, no de la app).
+//
+// Todas las esperas van con `esperarReal` (una petición al propio servidor por vuelta): ver
+// PRESUPUESTO en `scripts/correr-banco.mjs`.
+
+import { esperarReal } from '/banco/simulado.mjs';
+import { fallar, listo } from '/banco/esperar.mjs';
+
+const Q = new URLSearchParams(location.search);
+const ANCHO = +(Q.get('ancho') || 1351);
+// `XQ="&omitir=puerta"` deja anotadas las puertas de A y B sin cortar el banco: para ver C contra v=324.
+const OMITIR = new Set((Q.get('omitir') || '').split(',').filter(Boolean));
+const omitidas = [];
+const afirmar = (c, msg) => { if (!c) throw new Error('BANCO: ' + msg); };
+const puerta = (c, msg) => { if (c) return; if (OMITIR.has('puerta')) omitidas.push(msg.slice(0, 400)); else afirmar(c, msg); };
+const progreso = (t) => { document.getElementById('progreso').textContent = t; };
+const VUELTAS = 60000;
+
+function abrirMarco(nombre) {
+  const f = document.createElement('iframe');
+  f.width = ANCHO; f.height = 900;
+  f.src = `/banco/guard-ruta-vieja-caso.html?marco=${nombre}`;
+  document.getElementById('marcos').appendChild(f);
+  return f;
+}
+const win = (f) => f.contentWindow;
+const $ = (f, s) => f.contentDocument?.querySelector(s);
+const $$ = (f, s) => [...(f.contentDocument?.querySelectorAll(s) || [])];
+const activos = (f) => [...new Set($$(f, '[data-route].active').map((e) => e.dataset.route))];
+const esperar = (cond, que) => esperarReal(cond, { que, vueltas: VUELTAS });
+async function reloj(ms, que) {
+  const t0 = performance.now();
+  await esperar(() => performance.now() - t0 > ms, que);
+  return Math.round(performance.now() - t0);
+}
+const rompioVieja = (f) => win(f).__errores.some((e) => e.includes('[crash-guard] la ruta rompió'))
+  || win(f).__avisos.some((a) => a.startsWith('[crash-guard] la ruta vieja falló'));
+const enMain = (f) => {
+  const h = $(f, '#main-content .crash-screen h2')?.textContent?.trim();
+  const m = $(f, '#main-content .crash-screen .crash-msg')?.textContent?.trim();
+  return h ? `la tarjeta de error «${h}» / «${m}»` : 'sin tarjeta de error';
+};
+function red(f) {
+  const s = win(f).__sim.reg;
+  return { me: s.llamadas.filter((l) => l.ruta === '/me').length, escrituras: s.escrituras.length, desconocidas: s.desconocidas, externas: s.externas };
+}
+
+const datos = {};
+
+async function salir(nombre, modo) {
+  progreso(`${nombre}: #records con su /me retenida`);
+  const F = abrirMarco(nombre);
+  await esperar(() => win(F)?.__listo, `que arranque el marco ${nombre}`);
+  win(F).__retenerProximaMe();
+  win(F).location.hash = '#records';
+  await esperar(() => win(F).__meRetenida && $(F, '#records-content'), `${nombre}: que #records quede esperando su /me`);
+  await reloj(300, 'un rato con #records esperando');
+  afirmar($(F, '#records-content .spinner'), `${nombre}: #records sigue en su spinner (su render() espera la /me retenida)`);
+
+  progreso(`${nombre}: #home`);
+  win(F).location.hash = '#home';
+  await esperar(() => $(F, '#main-content .home-grid') && !$(F, '#records-content'), `${nombre}: que el inicio pinte`);
+
+  progreso(`${nombre}: se suelta la /me (${modo})`);
+  win(F).__soltarMe(modo);
+  await esperar(() => rompioVieja(F), `${nombre}: que #records termine tirando (el aviso de guardRoute en la consola)`);
+  const relojMs = await reloj(2000, `${nombre}: 2 s de reloj después de que #records tiró`);
+
+  const r = {
+    crash: !!$(F, '#main-content .crash-screen'),
+    home: !!$(F, '#main-content .home-grid'),
+    activos: activos(F),
+    enMain: enMain(F),
+    aviso: win(F).__avisos.find((a) => a.startsWith('[crash-guard] la ruta vieja falló')) || null,
+    relojMs,
+    red: red(F),
+    errores: win(F).__errores.length,
+  };
+  datos[nombre] = r;
+  puerta(!r.crash && r.home && r.activos.length === 1 && r.activos[0] === 'home',
+    `PUERTA ${nombre}: a los ${relojMs} ms de que #records (la vieja) tiró, #main-content tiene que seguir con #home `
+    + `(sin .crash-screen, con .home-grid) y lo único activo, home. Hay: ${r.enMain} · .home-grid ${r.home ? 'sí' : 'NO'} · activos ${JSON.stringify(r.activos)}`);
+  puerta(r.aviso && r.aviso.includes('Cannot set properties of null'),
+    `${nombre}: el console.warn('[crash-guard] la ruta vieja falló…') trae el error crudo de #records (${JSON.stringify(r.aviso)})`);
+  afirmar(r.red.escrituras === 0 && r.red.desconocidas.length === 0 && r.red.externas.length === 0,
+    `${nombre}: Spotify simulada: 0 escrituras, 0 rutas sin simular, 0 hosts externos (${r.red.desconocidas.join(',')} ${r.red.externas.join(',')})`);
+}
+
+try {
+  // ══ A y B. Salir de #records mientras carga ══════════════════════════════
+  await salir('salir-falla', 'falla');
+  await salir('salir-ok', 'ok');
+
+  // ══ C. Conservación: la misma /me caída, sin salir de #records ═══════════
+  progreso('quedarse-falla: #records con su /me retenida, sin salir');
+  const C = abrirMarco('quedarse-falla');
+  await esperar(() => win(C)?.__listo, 'que arranque el marco quedarse-falla');
+  win(C).__retenerProximaMe();
+  win(C).location.hash = '#records';
+  await esperar(() => win(C).__meRetenida && $(C, '#records-content .spinner'), 'quedarse-falla: que #records quede esperando su /me');
+  win(C).__soltarMe('falla');
+  await esperar(() => $(C, '#records-content') && !$(C, '#records-content .spinner'), 'quedarse-falla: que #records termine (sin el spinner)');
+  const relojC = await reloj(2000, 'quedarse-falla: 2 s de reloj después');
+  datos.quedarse = {
+    crash: !!$(C, '#main-content .crash-screen'),
+    pinto: ($(C, '#records-content')?.textContent || '').trim().length > 0,
+    activos: activos(C),
+    avisoViejo: win(C).__avisos.some((a) => a.startsWith('[crash-guard] la ruta vieja falló')),
+    relojMs: relojC,
+    red: red(C),
+  };
+  const q = datos.quedarse;
+  afirmar(!q.crash && q.pinto && q.activos.length === 1 && q.activos[0] === 'records' && !q.avisoViejo,
+    `conservación: sin salir, #records pinta lo suyo y nadie le pinta una pantalla de error encima `
+    + `(${enMain(C)} · pintó ${q.pinto} · activos ${JSON.stringify(q.activos)} · aviso de ruta vieja ${q.avisoViejo})`);
+  afirmar(q.red.escrituras === 0 && q.red.desconocidas.length === 0 && q.red.externas.length === 0,
+    `quedarse-falla: Spotify simulada: 0 escrituras, 0 rutas sin simular, 0 hosts externos`);
+
+  const A = datos['salir-falla'], B = datos['salir-ok'];
+  const resumen =
+    `ok · vieja #records (/me retenida) → vigente #home · ` +
+    `A /me 500: crash=${A.crash} home=${A.home} activos=${A.activos.join(',')} /me=${A.red.me} · ` +
+    `B /me ok: crash=${B.crash} home=${B.home} activos=${B.activos.join(',')} /me=${B.red.me} · ` +
+    `C sin salir: crash=${q.crash} activos=${q.activos.join(',')} /me=${q.red.me} · ` +
+    `escrituras=0 · externos=0 · ` +
+    (omitidas.length ? `PUERTAS OMITIDAS (${omitidas.length}): ${omitidas.join(' | ')} · ` : '') +
+    `reloj virtual=${Math.round(performance.now())} ms`;
+  document.documentElement.setAttribute('data-resumen', resumen);
+  progreso(resumen);
+  listo();
+} catch (e) {
+  document.documentElement.setAttribute('data-resumen', 'reloj virtual=' + Math.round(performance.now()) + ' ms');
+  fallar(new Error(String(e?.message || e) + ' · ' + JSON.stringify(datos).slice(0, 1500)));
+}
+</script>
+</body></html>

@@ -227,12 +227,26 @@ export function installCrashGuard() {
  * Envuelve el render de una ruta. Devuelve el cleanup que haya devuelto el
  * handler, o null.
  *
+ * v=325: `vigente` (opcional) dice si la ruta sigue siendo la que estás mirando.
+ * `container` es `#main-content`, el MISMO para todas las rutas: lo que pinta acá
+ * una ruta vieja lo pinta ENCIMA de la vigente. Hasta v=324, si la ruta A todavía
+ * cargaba cuando te ibas a B y después A tiraba, el `catch` le pintaba a B la
+ * pantalla de error de A (y si A terminaba sin pintar con el esqueleto de B en
+ * pantalla, «Esta página quedó vacía»). Con la ruta NO vigente no se pinta nada:
+ * el error va a la consola, CRUDO (la lección de v=154: un `catch` que no muestra
+ * el error crudo esconde los errores de programación), y se devuelve lo mismo que
+ * hoy (null si tiró, el cleanup si no) para que el router decida qué hacer con el
+ * teardown. Sin `vigente`, o con la ruta vigente, todo exactamente como antes.
+ *
  * @param {HTMLElement} container
  * @param {Function} handler
+ * @param {{ vigente?: () => boolean }} [opciones]
  */
-export async function guardRoute(container, handler) {
+export async function guardRoute(container, handler, { vigente } = {}) {
+  const yaNoEs = () => typeof vigente === 'function' && !vigente();
   try {
     const cleanup = await handler(container);
+    if (yaNoEs()) return typeof cleanup === 'function' ? cleanup : null;
     // El caso de Ian: el handler no tiró, pero tampoco escribió (se fue por una
     // rama que hace `return` sin pintar, o la escritura se perdió). Un container
     // vacío no es un estado válido de ninguna ruta.
@@ -245,6 +259,10 @@ export async function guardRoute(container, handler) {
     }
     return typeof cleanup === 'function' ? cleanup : null;
   } catch (err) {
+    if (yaNoEs()) {
+      console.warn('[crash-guard] la ruta vieja falló después de que saliste:', err);
+      return null;
+    }
     console.error('[crash-guard] la ruta rompió:', err);
     pantallaDeError(container, err);
     return null;

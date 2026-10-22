@@ -5,7 +5,7 @@
 // intervalo. Lo único que necesita reloj es el «hace N min» del último 429: UN
 // `setInterval` de 60 s, y solo mientras haya un 429 que enseñar.
 
-import { contadorCuota, textoRenglon, tituloRenglon, EVENTO_CUOTA, CUOTAS } from '../util/cuota.js?v=324';
+import { contadorCuota, textoRenglon, tituloRenglon, EVENTO_CUOTA, CUOTAS } from '../util/cuota.js?v=325';
 
 const MINUTO = 60 * 1000;
 
