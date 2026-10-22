@@ -3424,11 +3424,24 @@ encima). El contraste peor de toda la postal (también el ♪ sobre `--color-ele
 `ab67616d00001e02`, el de 300**: `coverVariant(img, 300)` no cambia **ninguna** (0 de 45). La postal pide la URL tal cual está
 en el JSON. 🔴 **Por qué no puede manchar el lienzo, leído del código**: con `mode: 'cors'`, una respuesta sin
 `access-control-allow-origin` **rechaza el `fetch`** (no llega ningún blob) y `conTapa` devuelve `false`; el bitmap que sale
-del blob de un `fetch` CORS no mancha. No hay camino que dibuje una imagen opaca. 🟥 **LO QUE SIGUE SIN MEDIR: que el CDN real
-contesta con CORS para la variante de 300.** Hasta v=326 acá decía que estaba «medido en vivo» porque `mosaico-colores.js` leyó
-los píxeles de 5.715 tapas de esos hosts el 27/09; pero **`mosaico-colores.js` pide la de 64** (`coverVariant(url, 64)`), no
-la de 300. Es la misma familia de URL en los mismos hosts, no una medición. **La primera prueba de verdad es el primer clic de
-Ian.** Si falla, la postal sale igual con los 5 discos con ♪ y el aviso «5 tapas no se pudieron bajar…». **La guarda de
+del blob de un `fetch` CORS no mancha. No hay camino que dibuje una imagen opaca.
+
+🟩 **El CORS del CDN para la variante de 300 ESTÁ MEDIDO, el 26/09/2026** (corregido en la tanda 75). La fuente:
+**`fonoteca-migracion/RESUMEN-CORS-TAPAS-2026-09-26.md`, sección «## 2. La prueba de CORS»**. Lo que se midió:
+**en la pestaña de Ian, con el origen real** (`https://ianct2020.github.io`) y sobre portadas de 300 px tal como están
+guardadas, `fetch(url, { mode: 'cors' })` → `blob` → `createImageBitmap` → `getImageData` anduvo en 3 de 3 de 300 (más 20
+de 64), y un `<img crossOrigin="anonymous">` de 300 → `getImageData(0, 0, 300, 300)` también; **con `curl`** (HEAD, sobre la
+de 64): `access-control-allow-origin: *` en los tres hosts (`image-cdn-ak`, `image-cdn-fa`, `i.scdn.co`), **incondicional**
+(igual con `Origin` y sin él) y **sin `Vary`**, así que el `force-cache` de `conTapa()` no se envenena con las `<img>` sin
+CORS que la tarjeta del año pinta con esas mismas URLs (eso es razonamiento sobre las cabeceras: el escenario en sí no se
+probó). **Lo que sigue sin medir de verdad**: el camino exacto de la postal (`conTapa` con `cache: 'force-cache'` + el
+`toBlob` del lienzo) contra el CDN real. La medición tiene semanas, es n=3 en la de 300 (con `cache: 'no-store'`), y nada
+obliga a Spotify a mantener el `*`. **El primer clic de Ian es la confirmación punta a punta.** 🔴 **La historia, para que
+no se repita**: v=326 lo daba por medido citando el mosaico (que pide la de 64) y v=327 lo dio por no medido; **las dos
+veces sin buscar este archivo**. Antes de afirmar algo sobre el CDN de tapas, se busca en `fonoteca-migracion` con
+`grep -ril cors`.
+
+Si el CDN dejara de mandar el CORS, la postal sale igual con los 5 discos con ♪ y el aviso «5 tapas no se pudieron bajar…». **La guarda de
 antemano**: si `toBlob` devuelve `null` o tira, la postal se vuelve a dibujar SIN tapas **en un lienzo nuevo** (uno manchado no
 se limpia pintando encima: la marca es del lienzo) y se descarga igual, con «La postal salió sin tapas: …». **Una tapa que no
 baja** (404, sin CORS, la red) es una casilla de `--color-elevated` con un ♪ (a 0,4 del lado); el aviso dice cuántas faltaron.
