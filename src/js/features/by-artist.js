@@ -5,6 +5,7 @@ import { getArtistLikePreview } from '../util/artist-preview.js';
 import { attachHover } from '../ui/preview-player.js';
 import { openArtistCard } from './artist-card.js';
 import { prefKey, migratePrefKey } from '../storage.js';
+import { vigilarRuta } from '../util/vigencia-ruta.js';
 
 const SORT_KEY = 'artist_sort_mode';
 const VALID_SORTS = new Set(['count-desc', 'count-asc', 'name-asc']);
@@ -21,7 +22,12 @@ let artistMap = new Map();
 let selectedArtists = new Set();
 let filterText = '';
 
+// v=329: `render()` y `loadLikes()` preguntan por la vigencia después de su `await` (el patrón de
+// v=195). Hasta v=328, si salías mientras leía la caché, `renderStart()`/`build()` hacían
+// `getElementById('by-artist-content')` → `null` y la vista TIRABA; y si salías mientras «Cargar
+// likes» bajaba, `build()` tiraba y el `catch` de `loadLikes()` lo escribía en el nodo viejo.
 export async function render(container) {
+  const ruta = vigilarRuta();
   migratePrefKey(SORT_KEY);
   likes = [];
   artistMap = new Map();
@@ -36,6 +42,7 @@ export async function render(container) {
   `;
 
   const { items } = await getBestAvailableLikes();
+  if (!ruta.vigente()) return;
   if (items.length === 0) {
     renderStart();
   } else {
@@ -58,17 +65,25 @@ function renderStart() {
   document.getElementById('artist-load-btn').onclick = loadLikes;
 }
 
+// Va enchufada directo como `onclick`: la ruta se toma ACÁ, al hacer clic, y no por parámetro
+// (el primer argumento sería el `Event`: la trampa de v=195). Si saliste a mitad, lo que se bajó
+// se guarda igual (lo hace `getAllLikedTracks`) y el overlay se cierra; lo único que se saltea es
+// escribir en la vista.
 async function loadLikes() {
+  const ruta = vigilarRuta();
   const content = document.getElementById('by-artist-content');
   content.innerHTML = `<div class="empty-state"><div class="spinner spinner-lg"></div><div style="margin-top:16px">Cargando Liked Songs...</div></div>`;
 
   const prog = progressController('Cargando likes...');
   try {
-    likes = await getAllLikedTracks(({ loaded, total }) => prog.update(loaded, total), { signal: prog.signal });
+    const bajados = await getAllLikedTracks(({ loaded, total }) => prog.update(loaded, total), { signal: prog.signal });
     prog.done();
+    if (!ruta.vigente()) return;
+    likes = bajados;
     build();
   } catch (e) {
     hideProgress();
+    if (!ruta.vigente()) return;
     const msg = isCancelled(e)
       ? 'Carga detenida. Lo que se bajó quedó guardado — entra de nuevo para retomar.'
       : escapeHtml(e.message);

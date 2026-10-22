@@ -41,9 +41,22 @@
 //      las 32 rutas tira hoy estando vigente (es el test de Node, con rutas inventadas).
 //   En las tres: 0 escrituras en la cuenta, 0 rutas sin simular, 0 hosts externos.
 //
-// «Ya tiró» se reconoce por lo que deja `guardRoute()` en la consola: `[crash-guard] la ruta
-// rompió:` (v=324) o `[crash-guard] la ruta vieja falló` (v=325). Si no llega ninguna de las
-// dos, el banco para diciéndolo (la vieja no terminó: un rojo del banco, no de la app).
+// ── v=329 (tanda 75): la vista vieja ya no tira ──────────────────────────────
+//
+// Desde v=329 `#records` y `#byartist` preguntan por la vigencia después de cada `await`
+// (`vigilarRuta()`, el patrón de v=195) y, si saliste, vuelven sin tocar el DOM. Las puertas de A y
+// B se dan vuelta: hasta v=328 afirmaban que el `console.warn('[crash-guard] la ruta vieja falló…')`
+// traía el error crudo de `#records`; ahora afirman **0** avisos de ruta vieja y que el `render` de
+// la vista vieja **terminó sin tirar**. «Terminó» lo dice el espía del caso
+// (`guard-ruta-vieja-espia.mjs`, por import map: el módulo real, con su `render` envuelto), porque
+// sin el aviso no había con qué saberlo; si no termina, el banco para diciéndolo.
+//   D. `salir-byartist`: `#byartist` con 60.000 me gusta INVENTADOS en la caché de IndexedDB
+//      (`?likes=`), y `#home` mientras lee (su `render()` espera `getBestAvailableLikes()`, que es
+//      SOLO IndexedDB: no hay `/me` que retener; la caché grande hace que la lectura tarde). Las
+//      mismas puertas que A y B. Contra v=328, `build()` tira «Cannot set properties of null».
+//   E. Conservación, `quedarse-byartist`: la misma caché, sin salir: pinta su grilla de artistas.
+//   (El camino del botón «Cargar likes» —`loadLikes()`— no se ve en el banco: su `catch` se come el
+//   error y lo pinta en un nodo desenganchado. Lo prueba `tests/by-artist-vigencia.test.mjs`.)
 //
 // Todas las esperas van con `esperarReal` (una petición al propio servidor por vuelta): ver
 // PRESUPUESTO en `scripts/correr-banco.mjs`.
@@ -78,8 +91,10 @@ async function reloj(ms, que) {
   await esperar(() => performance.now() - t0 > ms, que);
   return Math.round(performance.now() - t0);
 }
-const rompioVieja = (f) => win(f).__errores.some((e) => e.includes('[crash-guard] la ruta rompió'))
-  || win(f).__avisos.some((a) => a.startsWith('[crash-guard] la ruta vieja falló'));
+const AVISO_VIEJA = '[crash-guard] la ruta vieja falló';
+const avisosVieja = (f) => win(f).__avisos.filter((a) => a.startsWith(AVISO_VIEJA));
+// El `render` de la vista `m` según el espía del caso: { fin, tiro }.
+const espia = (f, m) => (win(f).__renders || []).filter((r) => r.ruta === m).at(-1) || null;
 const enMain = (f) => {
   const h = $(f, '#main-content .crash-screen h2')?.textContent?.trim();
   const m = $(f, '#main-content .crash-screen .crash-msg')?.textContent?.trim();
@@ -108,25 +123,79 @@ async function salir(nombre, modo) {
 
   progreso(`${nombre}: se suelta la /me (${modo})`);
   win(F).__soltarMe(modo);
-  await esperar(() => rompioVieja(F), `${nombre}: que #records termine tirando (el aviso de guardRoute en la consola)`);
-  const relojMs = await reloj(2000, `${nombre}: 2 s de reloj después de que #records tiró`);
+  await esperar(() => espia(F, 'records')?.fin, `${nombre}: que el render de #records (la vieja) termine (el espía del caso)`);
+  const relojMs = await reloj(2000, `${nombre}: 2 s de reloj después de que #records terminó`);
 
   const r = {
     crash: !!$(F, '#main-content .crash-screen'),
     home: !!$(F, '#main-content .home-grid'),
     activos: activos(F),
     enMain: enMain(F),
-    aviso: win(F).__avisos.find((a) => a.startsWith('[crash-guard] la ruta vieja falló')) || null,
+    avisos: avisosVieja(F),
+    tiro: espia(F, 'records').tiro,
     relojMs,
     red: red(F),
-    errores: win(F).__errores.length,
+    errores: [...win(F).__errores],
   };
   datos[nombre] = r;
   puerta(!r.crash && r.home && r.activos.length === 1 && r.activos[0] === 'home',
-    `PUERTA ${nombre}: a los ${relojMs} ms de que #records (la vieja) tiró, #main-content tiene que seguir con #home `
+    `PUERTA ${nombre}: a los ${relojMs} ms de que #records (la vieja) terminó, #main-content tiene que seguir con #home `
     + `(sin .crash-screen, con .home-grid) y lo único activo, home. Hay: ${r.enMain} · .home-grid ${r.home ? 'sí' : 'NO'} · activos ${JSON.stringify(r.activos)}`);
-  puerta(r.aviso && r.aviso.includes('Cannot set properties of null'),
-    `${nombre}: el console.warn('[crash-guard] la ruta vieja falló…') trae el error crudo de #records (${JSON.stringify(r.aviso)})`);
+  // v=329: la vista vieja ya no tira. Hasta v=328 esta puerta afirmaba lo contrario (que el aviso
+  // traía «Cannot set properties of null»): era el defecto de la vista, anotado y no arreglado.
+  puerta(r.avisos.length === 0 && r.tiro === null,
+    `PUERTA ${nombre} (v=329): 0 console.warn de «${AVISO_VIEJA} después de que saliste» y el render de #records `
+    + `terminó sin tirar. Hay ${r.avisos.length}: ${JSON.stringify(r.avisos)} · tiró: ${JSON.stringify(r.tiro)}`);
+  puerta(r.errores.length === 0,
+    `PUERTA ${nombre} (v=329): 0 errores en la página (error, unhandledrejection, console.error). Hay ${r.errores.length}: ${JSON.stringify(r.errores)}`);
+  afirmar(r.red.escrituras === 0 && r.red.desconocidas.length === 0 && r.red.externas.length === 0,
+    `${nombre}: Spotify simulada: 0 escrituras, 0 rutas sin simular, 0 hosts externos (${r.red.desconocidas.join(',')} ${r.red.externas.join(',')})`);
+}
+
+const LIKES_BYARTIST = 60000;
+function abrirMarcoConLikes(nombre) {
+  const f = document.createElement('iframe');
+  f.width = ANCHO; f.height = 900;
+  f.src = `/banco/guard-ruta-vieja-caso.html?marco=${nombre}&likes=${LIKES_BYARTIST}`;
+  document.getElementById('marcos').appendChild(f);
+  return f;
+}
+
+async function salirByArtist(nombre) {
+  progreso(`${nombre}: #byartist leyendo ${LIKES_BYARTIST} me gusta de IndexedDB`);
+  const F = abrirMarcoConLikes(nombre);
+  await esperar(() => win(F)?.__listo, `que arranque el marco ${nombre}`);
+  afirmar(win(F).__likesSembrados === LIKES_BYARTIST, `${nombre}: la caché sembrada (${win(F).__likesSembrados})`);
+  win(F).location.hash = '#byartist';
+  await esperar(() => $(F, '#by-artist-content .spinner'), `${nombre}: que #byartist quede leyendo la caché`);
+  const leyendo = !espia(F, 'by-artist')?.fin;
+  win(F).location.hash = '#home';
+  await esperar(() => $(F, '#main-content .home-grid') && !$(F, '#by-artist-content'), `${nombre}: que el inicio pinte`);
+  await esperar(() => espia(F, 'by-artist')?.fin, `${nombre}: que el render de #byartist (la vieja) termine (el espía del caso)`);
+  const relojMs = await reloj(2000, `${nombre}: 2 s de reloj después de que #byartist terminó`);
+  const r = {
+    leyendo,
+    crash: !!$(F, '#main-content .crash-screen'),
+    home: !!$(F, '#main-content .home-grid'),
+    activos: activos(F),
+    enMain: enMain(F),
+    avisos: avisosVieja(F),
+    tiro: espia(F, 'by-artist').tiro,
+    relojMs,
+    red: red(F),
+    errores: [...win(F).__errores],
+  };
+  datos[nombre] = r;
+  // Si la lectura ya había terminado al salir, el caso no prueba nada: es un rojo del banco.
+  afirmar(r.leyendo, `${nombre}: al cambiar a #home el render de #byartist todavía tenía que estar leyendo la caché`);
+  puerta(!r.crash && r.home && r.activos.length === 1 && r.activos[0] === 'home',
+    `PUERTA ${nombre}: a los ${relojMs} ms de que #byartist (la vieja) terminó, #main-content sigue con #home. `
+    + `Hay: ${r.enMain} · .home-grid ${r.home ? 'sí' : 'NO'} · activos ${JSON.stringify(r.activos)}`);
+  puerta(r.avisos.length === 0 && r.tiro === null,
+    `PUERTA ${nombre} (v=329): 0 console.warn de «${AVISO_VIEJA} después de que saliste» y el render de #byartist `
+    + `terminó sin tirar. Hay ${r.avisos.length}: ${JSON.stringify(r.avisos)} · tiró: ${JSON.stringify(r.tiro)}`);
+  puerta(r.errores.length === 0,
+    `PUERTA ${nombre} (v=329): 0 errores en la página. Hay ${r.errores.length}: ${JSON.stringify(r.errores)}`);
   afirmar(r.red.escrituras === 0 && r.red.desconocidas.length === 0 && r.red.externas.length === 0,
     `${nombre}: Spotify simulada: 0 escrituras, 0 rutas sin simular, 0 hosts externos (${r.red.desconocidas.join(',')} ${r.red.externas.join(',')})`);
 }
@@ -161,12 +230,43 @@ try {
   afirmar(q.red.escrituras === 0 && q.red.desconocidas.length === 0 && q.red.externas.length === 0,
     `quedarse-falla: Spotify simulada: 0 escrituras, 0 rutas sin simular, 0 hosts externos`);
 
-  const A = datos['salir-falla'], B = datos['salir-ok'];
+  // ══ D. Salir de #byartist mientras lee la caché (v=329) ══════════════════
+  await salirByArtist('salir-byartist');
+
+  // ══ E. Conservación: la misma caché, sin salir de #byartist ══════════════
+  progreso('quedarse-byartist: #byartist con la caché, sin salir');
+  const E = abrirMarcoConLikes('quedarse-byartist');
+  await esperar(() => win(E)?.__listo, 'que arranque el marco quedarse-byartist');
+  win(E).location.hash = '#byartist';
+  await esperar(() => espia(E, 'by-artist')?.fin, 'quedarse-byartist: que el render de #byartist termine');
+  await esperar(() => $(E, '#artist-grid-holder .artist-card'), 'quedarse-byartist: que pinte la grilla de artistas');
+  const relojE = await reloj(2000, 'quedarse-byartist: 2 s de reloj después');
+  datos.quedarseByArtist = {
+    crash: !!$(E, '#main-content .crash-screen'),
+    tarjetas: $$(E, '#artist-grid-holder .artist-card').length,
+    resumen: ($(E, '#by-artist-content .card')?.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 80),
+    activos: activos(E),
+    tiro: espia(E, 'by-artist').tiro,
+    avisoViejo: avisosVieja(E).length,
+    relojMs: relojE,
+    red: red(E),
+  };
+  const qb = datos.quedarseByArtist;
+  afirmar(!qb.crash && qb.tarjetas === 400 && qb.activos.length === 1 && qb.activos[0] === 'byartist' && qb.tiro === null && qb.avisoViejo === 0,
+    `conservación: sin salir, #byartist pinta su grilla (400 tarjetas de 500 artistas inventados) y nada tira `
+    + `(${enMain(E)} · tarjetas ${qb.tarjetas} · activos ${JSON.stringify(qb.activos)} · tiró ${JSON.stringify(qb.tiro)} · avisos ${qb.avisoViejo})`);
+  afirmar(qb.red.escrituras === 0 && qb.red.desconocidas.length === 0 && qb.red.externas.length === 0,
+    `quedarse-byartist: Spotify simulada: 0 escrituras, 0 rutas sin simular, 0 hosts externos`);
+
+  const A = datos['salir-falla'], B = datos['salir-ok'], D = datos['salir-byartist'];
   const resumen =
     `ok · vieja #records (/me retenida) → vigente #home · ` +
     `A /me 500: crash=${A.crash} home=${A.home} activos=${A.activos.join(',')} /me=${A.red.me} · ` +
     `B /me ok: crash=${B.crash} home=${B.home} activos=${B.activos.join(',')} /me=${B.red.me} · ` +
     `C sin salir: crash=${q.crash} activos=${q.activos.join(',')} /me=${q.red.me} · ` +
+    `avisos de ruta vieja A=${A.avisos.length} B=${B.avisos.length} D=${D.avisos.length} · tiró A=${A.tiro === null ? 'no' : 'sí'} B=${B.tiro === null ? 'no' : 'sí'} D=${D.tiro === null ? 'no' : 'sí'} · ` +
+    `D #byartist (${LIKES_BYARTIST} me gusta): crash=${D.crash} home=${D.home} activos=${D.activos.join(',')} · ` +
+    `E sin salir: ${qb.tarjetas} tarjetas, activos=${qb.activos.join(',')} · ` +
     `escrituras=0 · externos=0 · ` +
     (omitidas.length ? `PUERTAS OMITIDAS (${omitidas.length}): ${omitidas.join(' | ')} · ` : '') +
     `reloj virtual=${Math.round(performance.now())} ms`;

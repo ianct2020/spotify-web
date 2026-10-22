@@ -125,7 +125,8 @@ const EXTRA = { mosaico: 'auto=1' };
 // `guard-ruta-vieja` (v=325) abre la app ENTERA en tres iframes, y en dos de ellos `/me` contesta 500 con sus 5
 // reintentos de `spotifyFetch` (0,5 + 1 + 2 + 4 + 8 s de backoff, a propósito). Medido a tasa de acierto el 21/10
 // (tanda 72): diez corridas seguidas gastaron 38.521-39.194 ms de reloj virtual (10/10). El doble de la más lenta,
-// redondeado hacia arriba a múltiplo de 15 s: 90 s.
+// redondeado hacia arriba a múltiplo de 15 s: 90 s. v=329 (tanda 75) le suma dos iframes de `#byartist` con 60.000 me
+// gusta sembrados en IndexedDB: diez corridas, 43.382-44.275 ms (10/10); el doble de la más lenta, 88,6 s: siguen los 90.
 // `postal` (v=326) abre la app ENTERA en tres iframes y genera diez postales (1080×1350, PNG). La primera versión
 // no llegaba nunca al final, ni con 600 s de tope: decodificar el PNG en la madre (`createImageBitmap`) no es red,
 // y sin anclar el reloj virtual saltaba al próximo temporizador de la app (el toast de 30 s) en cada lectura: una

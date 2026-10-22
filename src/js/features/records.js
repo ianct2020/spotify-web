@@ -8,6 +8,7 @@ import { getPreview } from '../api/preview-providers.js';
 import { getArtistLikePreview } from '../util/artist-preview.js';
 import { attachHover } from '../ui/preview-player.js';
 import { openArtistCard } from './artist-card.js';
+import { vigilarRuta } from '../util/vigencia-ruta.js';
 
 const MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
 const DIAS = ['lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado', 'domingo'];
@@ -41,16 +42,24 @@ function fmtHours(min) {
   return `${total}m`;
 }
 
+// v=329: pregunta por la vigencia después de cada `await` (el patrón de v=195). Hasta v=328, si
+// salías mientras cargaba, `getElementById('records-content')` era `null` y la vista TIRABA
+// («Cannot set properties of null»): desde v=325 ya no tapaba la ruta nueva, pero el banco
+// `guard-ruta-vieja` lo veía en la consola. Y si salías durante `isOwner()`, pintaba en el nodo viejo.
 export async function render(container) {
+  const ruta = vigilarRuta();
   container.innerHTML = `
     ${pageHeader({ title: 'Récords' })}
     <div id="records-content"><div class="empty-state"><div class="spinner spinner-lg"></div></div></div>
   `;
 
   const r = await loadRecords();
+  if (!ruta.vigente()) return;
   const content = document.getElementById('records-content');
   if (!r || !r.top_days?.length) {
-    content.innerHTML = (await isOwner())
+    const owner = await isOwner();
+    if (!ruta.vigente()) return;
+    content.innerHTML = owner
       ? `<div class="card"><p>No pude cargar los récords. Vuelve a intentarlo.</p></div>`
       : ownerLockedMessage('Récords');
     return;

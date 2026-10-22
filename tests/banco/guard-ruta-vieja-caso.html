@@ -3,6 +3,20 @@
 <link rel="stylesheet" href="/css/components.css">
 <link rel="stylesheet" href="/css/main.css">
 <style>*,*::before,*::after{animation:none!important;transition:none!important}</style>
+<script type="importmap">
+{
+  "imports": {
+    "/js/features/records.js": "/banco/guard-ruta-vieja-espia.mjs?m=records",
+    "/js/features/by-artist.js": "/banco/guard-ruta-vieja-espia.mjs?m=by-artist"
+  },
+  "scopes": {
+    "/banco/": {
+      "/js/features/records.js": "/js/features/records.js",
+      "/js/features/by-artist.js": "/js/features/by-artist.js"
+    }
+  }
+}
+</script>
 </head><body>
 <div id="app"></div>
 <script type="module">
@@ -22,8 +36,17 @@
 //   · `modo = 'ok'`: se contesta bien.
 // El `/me` del arranque (`testConnection()`) sale antes, no se retiene y no pasa por el
 // memo de `getCurrentUserId()`: la primera vista que pregunta quién sos paga la suya.
+//
+// v=329 (tanda 75), dos cosas más:
+//   · el import map de arriba desvía `/js/features/records.js` y `/js/features/by-artist.js` a
+//     `guard-ruta-vieja-espia.mjs`, que importa el módulo REAL y anota en `window.__renders` cuándo
+//     terminó su `render` y si tiró (re-tirando el mismo error). Es con lo que el banco sabe que la
+//     ruta vieja terminó cuando ya no tira;
+//   · `?likes=N` siembra, ANTES de arrancar la app, N me gusta INVENTADOS en la caché de IndexedDB
+//     (`all_liked_tracks`, la clave de `leerLikesCacheados()`), para que la lectura de `#byartist`
+//     (`getBestAvailableLikes()`, solo IndexedDB) tarde lo bastante para salir mientras lee.
 
-import { instalarRedSimulada, esperarReal } from '/banco/simulado.mjs';
+import { instalarRedSimulada, esperarReal, anclar } from '/banco/simulado.mjs';
 
 window.__errores = [];
 window.__avisos = [];
@@ -65,6 +88,21 @@ window.__sim = sim;
 sim.ruta('GET', /^\/me$/, responderMe);
 localStorage.setItem('fonoteca_last_user_id', ME_ID);
 localStorage.setItem('fonoteca_perfil_v1', JSON.stringify(bien()));
+
+const LIKES = +(new URLSearchParams(location.search).get('likes') || 0);
+if (LIKES > 0) {
+  const { idbSetCached } = await import('/js/idb.js');
+  const items = Array.from({ length: LIKES }, (_, i) => ({
+    added_at: '2020-01-01T00:00:00Z',
+    track: {
+      uri: `spotify:track:banco${i}`, id: `banco${i}`, name: `Tema inventado ${i}`, duration_ms: 200000,
+      artists: [{ id: `artista${i % 500}`, name: `Artista inventado ${i % 500}` }],
+      album: { id: `disco${i % 2000}`, name: `Disco inventado ${i % 2000}`, images: [] },
+    },
+  }));
+  await anclar(idbSetCached('all_liked_tracks', items, null));
+  window.__likesSembrados = LIKES;
+}
 
 await import('/js/app.js');
 await esperarReal(() => document.getElementById('my-history-btn'), { que: 'que la app arranque', vueltas: 4000 });

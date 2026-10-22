@@ -32,14 +32,14 @@
 // instrumento del banco y de la medición de frames (pintar ya, sin esperar al frame): solo existe
 // mientras la ruta está abierta.
 
-import { loadArtistTracks, loadArtistSimilares, isOwner, ownerLockedMessage } from './history-data.js?v=328';
-import { openArtistCard } from './artist-card.js?v=328';
-import { escapeHtml, pageHeader } from '../ui/components.js?v=328';
-import { vigilarRuta } from '../util/vigencia-ruta.js?v=328';
+import { loadArtistTracks, loadArtistSimilares, isOwner, ownerLockedMessage } from './history-data.js?v=329';
+import { openArtistCard } from './artist-card.js?v=329';
+import { escapeHtml, pageHeader } from '../ui/components.js?v=329';
+import { vigilarRuta } from '../util/vigencia-ruta.js?v=329';
 import {
   leerMapa, vistaTodo, zoomEn, mover, encuadrarElegido, tocar, nombresVisibles, buscar,
   mezclar, leerRgb, planoAPantalla, radioEnPantalla, altoDelLienzo, POR_PAGINA,
-} from '../util/mapa-artistas.js?v=328';
+} from '../util/mapa-artistas.js?v=329';
 
 const num = (n) => Number(n || 0).toLocaleString('es-ES');
 const min = (m) => `${num(Math.round(m))} min`;

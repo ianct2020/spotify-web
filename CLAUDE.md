@@ -1533,12 +1533,13 @@ le pinta la pantalla de error a `main`, encima de la vista vigente~~ → arregla
    de siempre: `null` si tiró, el cleanup si no (incluso si `main` quedó «en blanco»: el router de
    v=324 decide qué hacer con él). **Sin el tercer argumento, o con la ruta vigente, todo igual que
    antes.** `alFallar()`, `installCrashGuard()`, el banner y `pantallaDeError()` no se tocaron.
-   La ruta REAL del banco es **`#records`**: su `render()` espera `loadRecords()` (→ `GET /me`) y
-   después hace `getElementById('records-content')` sin guarda de vigencia, así que si te fuiste
-   tira «Cannot set properties of null» (con la `/me` caída **o contestada bien**: no le hace falta
-   un fallo de red). Es un defecto de la vista, anotado en `PENDIENTES.md` y no arreglado (el
-   arreglo es del contenedor). La tanda 72 leyó los 19 `render` async: solo `#records` y
-   `#byartist` pueden tirar después de un `await` hoy, y **ninguno de los 32 hace un `await` antes
+   La ruta REAL del banco es **`#records`**: hasta v=328 su `render()` esperaba `loadRecords()` (→
+   `GET /me`) y después hacía `getElementById('records-content')` sin guarda de vigencia, así que si
+   te ibas tiraba «Cannot set properties of null» (con la `/me` caída **o contestada bien**: no le
+   hacía falta un fallo de red). Era un defecto de la vista (el arreglo de v=325 es del contenedor).
+   🟩 **Arreglado en v=329 (tanda 75), en `#records` y en `#byartist`**: ver «`#records` y `#byartist`
+   preguntan por la vigencia (v=329)», abajo. La tanda 72 leyó los 19 `render` async: solo `#records` y
+   `#byartist` podían tirar después de un `await` (desde v=329, ninguno), y **ninguno de los 32 hace un `await` antes
    de escribir en `container`**, así que el segundo camino («quedó vacía» sobre la vigente) no se da
    con las rutas de hoy: lo cubre solo el test de Node. Guardas: `tests/guard-ruta-vieja.test.mjs`
    (el `router.js` y el `crash-guard.js` reales con rutas INVENTADAS; rojo contra v=324 en 9
@@ -1551,6 +1552,44 @@ le pinta la pantalla de error a `main`, encima de la vista vigente~~ → arregla
    las 32 tira hoy estando vigente. La cubre el test de Node.
 
 Ninguna de las tres cambia una petición: la tabla de costos no se toca.
+
+### `#records` y `#byartist` preguntan por la vigencia (v=329)
+
+La tanda 75, al tercer aviso. Las dos vistas hacían `document.getElementById(…)` después de un `await` sin preguntar si la
+ruta seguía vigente: si salías mientras cargaban, `null.innerHTML` y la vista TIRABA (desde v=325 sin taparle la pantalla a
+la ruta nueva, pero tiraba: el `console.warn('[crash-guard] la ruta vieja falló después de que saliste:', …)`). Arreglo, el
+patrón de v=195: `const ruta = vigilarRuta()` al empezar `render()` y `if (!ruta.vigente()) return;` después de cada
+`await` y antes de tocar el DOM. Los `await`, uno por uno:
+
+- `records.js`: `loadRecords()` (después, `getElementById('records-content')`) e `isOwner()` de la rama sin récords (hasta
+  v=328 iba DENTRO de la asignación `content.innerHTML = (await isOwner()) ? …`: si salías durante esa espera, pintaba
+  en el nodo viejo; ahora se espera aparte y se pregunta).
+- `by-artist.js`: `getBestAvailableLikes()` en `render()` (después, `renderStart()` o `build()`, los dos con
+  `getElementById`) y `getAllLikedTracks()` en `loadLikes()`. ⚠️ `loadLikes` va enchufada directo como `onclick` del
+  botón «Cargar likes»: la ruta se toma DENTRO de `loadLikes`, al hacer clic, y no por parámetro (el primer argumento
+  sería el `Event`: la trampa de v=195). Si saliste a mitad de la descarga, lo bajado se guarda igual
+  (`getAllLikedTracks`), el overlay se cierra (`prog.done()` / `hideProgress()`, que son globales) y la vista no escribe.
+  Hasta v=328 ese camino no tiraba: `build()` tiraba y el `catch` de `loadLikes` se lo comía y escribía «Cannot set
+  properties of null…» en el nodo viejo, desenganchado (la familia de `#sync` en v=195).
+- **No se tocan** los `await` de `createPlaylistFromSelection()` (`promptPlaylistName`, `createPlaylist`,
+  `addTracksToPlaylist`): después escriben en globales (overlay, toast) y en `renderGrid()`/`updateActionBar()`, que ya
+  preguntan `if (!holder …) return`. La escritura en Spotify se termina igual y el toast la anuncia (la regla de `#sync`).
+
+Ningún `catch` nuevo: si algo tira por otra razón con la ruta vigente, sigue llegando a `guardRoute`. 0 peticiones nuevas.
+
+Guardas: `tests/vigencia-records-byartist.test.mjs` (los `records.js` y `by-artist.js` REALES en Node con los `import`
+desviados a un doble, `tests/dobles/loader-vigencia-vistas.mjs` + `vigencia-vistas-doble.mjs`; las esperas se resuelven
+DESPUÉS de subir la generación y reemplazar `#main-content`; datos inventados. Rojo contra v=328 en 7 asserts: cuatro
+«Cannot set properties of null (setting 'innerHTML')» y tres escrituras en el nodo viejo) y el banco `guard-ruta-vieja`:
+las puertas de A y B se dieron vuelta (hasta v=328 afirmaban que el aviso traía el error crudo de `#records`; ahora, **0**
+avisos de ruta vieja, el render terminó sin tirar y 0 errores en la página) y dos casos nuevos, **D** `salir-byartist`
+(60.000 me gusta INVENTADOS sembrados en IndexedDB con `?likes=`, para que la lectura tarde; se sale mientras lee) y **E**
+`quedarse-byartist` (conservación: pinta sus 400 tarjetas). Como la vista ya no tira, el banco sabe que la vieja terminó
+por un **espía** (`tests/banco/guard-ruta-vieja-espia.mjs`): el caso pone un import map que desvía
+`/js/features/records.js` y `/js/features/by-artist.js` al espía, que importa el módulo REAL (el scope `/banco/` lo deja
+pasar) y envuelve solo su `render` (anota fin y error, y re-tira el mismo error). Contra v=328, A, B y D rojas en 10 de 10
+corridas (D con la lectura todavía en curso al salir en las 10); con v=329, 10 de 10 verdes, 43.382-44.275 ms de reloj
+virtual (el presupuesto del banco sigue en 90 s).
 
 ## 📏 La cuota a la vista (v=310)
 
@@ -3432,7 +3471,7 @@ del blob de un `fetch` CORS no mancha. No hay camino que dibuje una imagen opaca
 guardadas, `fetch(url, { mode: 'cors' })` → `blob` → `createImageBitmap` → `getImageData` anduvo en 3 de 3 de 300 (más 20
 de 64), y un `<img crossOrigin="anonymous">` de 300 → `getImageData(0, 0, 300, 300)` también; **con `curl`** (HEAD, sobre la
 de 64): `access-control-allow-origin: *` en los tres hosts (`image-cdn-ak`, `image-cdn-fa`, `i.scdn.co`), **incondicional**
-(igual con `Origin` y sin él) y **sin `Vary`**, así que el `force-cache` de `conTapa()` no se envenena con las `<img>` sin
+(igual con `Origin` y sin él en los dos `image-cdn`; `i.scdn.co` se midió solo con `Origin`) y **sin `Vary`**, así que el `force-cache` de `conTapa()` no se envenena con las `<img>` sin
 CORS que la tarjeta del año pinta con esas mismas URLs (eso es razonamiento sobre las cabeceras: el escenario en sí no se
 probó). **Lo que sigue sin medir de verdad**: el camino exacto de la postal (`conTapa` con `cache: 'force-cache'` + el
 `toBlob` del lienzo) contra el CDN real. La medición tiene semanas, es n=3 en la de 300 (con `cache: 'no-store'`), y nada
