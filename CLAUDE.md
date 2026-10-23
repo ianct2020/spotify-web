@@ -4811,3 +4811,67 @@ que dice qué falta.** Eso no es casualidad, es la regla que v=190 y v=178 dejar
 escrita, y conviene no aflojarla. 🟥 Pero «no se rompe» no es «se puede usar»:
 para `#covers` y `#wthree` el cartel es el techo.
 
+
+## 💾 La copia completa (v=333)
+
+La tanda 78. «Exportar todo» (⚙ de `#dashboard`, al lado de «Exportar JSON», con la pista «copia de seguridad»)
+descarga `fonoteca-copia-<AAAA-MM-DD>.json` (fecha local) con lo que la app guarda en ESTE navegador y vale la pena
+sacar. 🔴 **Solo exporta: el import llega con la 79** (fusionar sin pisar, la guarda del owner sobre `local_*`, el uid
+del archivo contra `/me`; nada de eso está hecho). El «Exportar JSON» (v2), `exportAllData`, `importAllData`,
+«Exportar base» y «Limpiar caché» no se tocaron.
+
+| archivo | qué |
+|---|---|
+| `util/copia-completa.js` | PURO (su único import es `generos-artista.js`, también puro): el **censo** (`CENSO`, una fila por clave o prefijo, con su clase y si entra), qué entra (`elegir`), el lector con dobles (`leerNavegador`), el armado (`armarCopia`), el JSON con binarios (`serializar`), la segunda red (`contieneSecreto`) y el nombre del archivo |
+| `api.js`, `exportarCopiaCompleta()` | el enchufe: le pasa `idb.js` (`idbEntriesByPrefix('')`, y si eso tira, `idbAllKeys` + `idbGet` clave por clave) y `localStorage` |
+| `features/dashboard.js`, `handleExportTodo()` | el botón, la descarga y el toast |
+
+**El formato (v3)**: los mismos campos de nivel superior que el v2 (`_format: 'spotify-tools-data'`, `_exportedAt`,
+`spotifyUserId`, `_likesSource`, `likes`, `tags`, `_config`) con `_version: 3`, más cuatro que el `importAllData` de hoy
+ignora: `_leeme` (cada parte explicada en castellano, para leerlo sin la app), `navegador: { idb, localStorage }` (los
+valores CRUDOS: el envoltorio `{ value, storedAt, expiry }` de IndexedDB tal cual, el texto de `localStorage` tal cual),
+`_censo` (`version`, la clase de cada clave exportada, cuántas quedaron fuera, cuántas eran de otro usuario y los NOMBRES
+de las que el censo no conoce, `sinCensar`) y `_errores`. Un v3 pasado por el `importAllData` de hoy importa lo mismo
+que un v2 del mismo perfil (lo vigila el test). Los `Uint8Array` (la base de colores guarda dos) van como
+`{ "__tipo": "Uint8Array", "base64": … }`: con `JSON.stringify` a secas salían `{"0":…,"1":…}`, sin tipo y cuatro veces
+más grandes. `Map`/`Set` igual, con `entradas`.
+
+**Qué entra** (el censo entero, con el porqué de cada fila, está en el repo privado: `fonoteca-migracion/CENSO-NAVEGADOR-2026-10-22.md`):
+las clases 1 (irrecuperable: solo vive acá), 2 (rehacible con el ZIP, con horas de terceros o con cuota de Spotify) y 3
+(respaldada en una playlist espejo), las preferencias y los registros. **No entran** las cachés (clase 4: lo que se
+vuelve a pedir solo; los me gusta, aunque son caché, van en `likes` como en el v2), nada de `sessionStorage` ni de la
+Cache API, y **nunca** los secretos (clase 5: `sp_access_token`, `sp_refresh_token`, `sp_token_expiry`,
+`sp_code_verifier` y la `lastfm_api_key` que el usuario escribe en el ⚙). Solo lo del usuario de ahora: las claves con
+`prefKey()` de otro uid y las `local_<otro>_…`, `mapa_artista_v1_<otro>_…`, `generos_artista_v1_<otro>_…` (también la de
+un uid «abc_x» dentro del rango de «abc», por el uid del valor) no salen. Los irrecuperables que encontró el censo: los
+«ya escuchados» de Descubrir (`discover_escuchados` y sus uris), lo quitado de las tres listas de `#listened`
+(`listened_unreg_dismissed`, `listened_dupes_dismissed`, `listened_history_dismissed`), los grupos descartados de
+`#versions`, los géneros ocultos de «Por género», los artistas elegidos a mano para escanear (Descubrir y Novedades) y
+los dos registros de borrados (`likes_borrados_log_v1`, `versions_supervivientes_perdidas_v1`); más, dentro de los
+ocultos (clase 3), los que nunca subieron a su playlist (`ocultos_sin_uri_v1`).
+
+🔴 **La guarda del secreto, por ESTRUCTURA**: sale lo que la lista del censo marca `entra: true` y nada más; una clave
+que el censo no conoce NO sale (solo su nombre, en `_censo.sinCensar`). Nunca «todo menos lo secreto». **Si agregás una
+clave nueva a la app, agregala al `CENSO`**: si no, la copia no la lleva (y lo dice). Y una segunda red: si el texto
+lleva el valor del token, del `refresh_token`, del `code_verifier` o de la key de Last.fm de este navegador (≥ 8
+caracteres), **no se descarga** y sale un toast rojo con el porqué.
+
+🔴 **Leer no escribe**: ni `idbSet*`, `idbDel*`, `setItem`, `removeItem` en todo el camino, y tampoco lo que escribe por
+debajo: `readLocalConfig()` y `getBestAvailableLikes()` mudan claves (`migratePrefKey`, la migración de los me gusta de
+`localStorage`) e `idbGetCached` borra lo vencido al leerlo. Por eso `_config`, `likes` y `tags` se arman de lo leído con
+la MISMA regla que el v2, sin llamarlo (`tags` con el mismo `crearAlmacenGeneros`, con escritores que no hacen nada).
+**0 peticiones**: el uid sale del memo de `getCurrentUserId()` (`_cachedUserId`) o, si no hay, de
+`fonoteca_last_user_id`; **no suma ningún `/me`**. Si leer una clave falla, va a `_errores` con su nombre y el toast
+dice «INCOMPLETA».
+
+**El peso** (SEMBRADO: el banco con `XQ="&tamano=ian"`, datos INVENTADOS del tamaño de los de Ian; una estimación):
+**~19,1 MB** (19.977.236 bytes): me gusta 6,8 MB, etiquetas (v2) 0,66 MB, lo rehacible 10,9 MB (discografías 3,9;
+detalle por día 4,8; géneros por fuente 1,0; mapa 0,5; colores 0,34), los ocultos 0,43 MB, los irrecuperables 37 KB. Un
+`Blob` de ese tamaño se descarga sin problema; no se parte.
+
+Guardas: `tests/copia-completa.test.mjs` (el `api.js` real en Node con `idb.js` y `toast.js` doblados,
+`dobles/loader-copia.mjs` + `idb-copia-doble.mjs`: exactamente las claves del censo que entran, los canarios fuera, v3 =
+v2 por el `importAllData` de hoy, `_errores`, 0 escrituras, 0 `fetch`, la lectura estática; rojo contra v=332) y el banco
+`tests/banco/copia-completa.html` + `-caso.html` (en `prepush`, el vigésimo sexto: la app ENTERA, el botón de verdad, la
+descarga interceptada, 0 peticiones a cualquier host, el mismo sha256 de IndexedDB y `localStorage` antes y después, y
+la madre lee el archivo con un `JSON.parse` sin cargar nada de `src/`).

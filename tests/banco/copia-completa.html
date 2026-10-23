@@ -1,0 +1,61 @@
+<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>banco copia-completa — «Exportar todo» solo lee y no saca secretos</title>
+<style>html,body{margin:0;background:#111;color:#eee;font:13px system-ui}iframe{border:0;display:block}</style>
+</head><body>
+<pre id="progreso"></pre>
+<div id="marco"></div>
+<script type="module">
+// ── Banco `copia-completa` (v=333, tanda 78; el vigésimo sexto de `prepush`) ─
+//
+// «Exportar todo» en la app ENTERA, con un perfil SEMBRADO con datos INVENTADOS (el caso, en un iframe:
+// `copia-completa-caso.html`). El caso aprieta el botón, intercepta la descarga y afirma: las claves del censo que
+// entran y ninguna más, ningún canario de la sesión, 0 peticiones a cualquier host durante el export y el MISMO
+// sha256 de IndexedDB y `localStorage` antes y después. Esta madre recibe el TEXTO del archivo y lo lee **sin la
+// app**: no importa ningún módulo de `src/` (solo los dos ayudantes del banco), y un `JSON.parse` tiene que dar un
+// objeto con `_leeme` en castellano.
+//
+// Por qué un banco nuevo y no una puerta en otro: ninguno de los 25 abre #dashboard ni aprieta su ⚙, y los que
+// siembran mucho (`mapa`, `generos`, `ocultos-cache`…) siembran lo SUYO; este siembra una clave por fila del censo,
+// que es lo que se prueba. Meterlo en otro le cambiaría el presupuesto y el porqué a un banco que ya está medido.
+//
+//   ?tamano=ian   el instrumento del peso, con datos del tamaño de los de Ian (no está en `prepush`).
+
+import { esperarReal } from '/banco/simulado.mjs';
+import { fallar, listo } from '/banco/esperar.mjs';
+
+const q = new URLSearchParams(location.search);
+const ANCHO = +(q.get('ancho') || 1351);
+let actual = null;
+window.addEventListener('message', (e) => { if (e.data?.banco === 'copia-completa') actual = e.data; });
+
+try {
+  const f = document.createElement('iframe');
+  f.width = ANCHO; f.height = 900;
+  f.src = `/banco/copia-completa-caso.html${q.get('tamano') ? `?tamano=${q.get('tamano')}` : ''}`;
+  document.getElementById('progreso').textContent = 'el caso no terminó dentro del presupuesto de reloj virtual';
+  document.getElementById('marco').replaceChildren(f);
+  await esperarReal(() => actual, { que: 'el caso', vueltas: 40000 });
+  if (!actual.ok) throw new Error(actual.error);
+
+  // Fuera de la app: ni un módulo de `src/` cargado en esta página.
+  const deSrc = performance.getEntriesByType('resource').map(e => new URL(e.name).pathname).filter(p => p.startsWith('/js/'));
+  if (deSrc.length) throw new Error(`BANCO: la madre cargó módulos de la app: ${deSrc.join(', ')}`);
+  const copia = JSON.parse(actual.texto);
+  if (!copia || typeof copia._leeme !== 'object' || !copia._leeme['qué es'] || !copia._leeme.navegador) throw new Error('BANCO: el archivo, leído sin la app, no trae _leeme');
+  if (copia._format !== 'spotify-tools-data' || copia._version !== 3) throw new Error(`BANCO: formato ${copia._format} v${copia._version}`);
+  if (/CANARIO/.test(actual.texto)) throw new Error('BANCO: hay un canario en el archivo');
+
+  const d = actual.datos;
+  const kb = (n) => (n / 1024).toLocaleString('es-ES', { maximumFractionDigits: 1 }) + ' KB';
+  const resumen =
+    `tamaño=${d.tamano} · archivo ${d.nombre}, ${d.bytes.toLocaleString('es-ES')} bytes · claves idb=${d.claves.idb} localStorage=${d.claves.localStorage} sinCensar=${d.claves.sinCensar} deOtro=${d.claves.deOtroUsuario} · ` +
+    `peticiones durante el export ${JSON.stringify(d.peticionesDurante)} · sha256 antes=${d.shaAntes} después=${d.shaDespues} · ` +
+    `_leeme fuera de la app: ${Object.keys(copia._leeme).length} apartados · por clase: ${Object.entries(d.porClase).map(([k, v]) => `${k} ${kb(v)}`).join(' · ')} · ` +
+    `por grupo de IndexedDB: ${Object.entries(d.porGrupo).map(([k, v]) => `${k} ${kb(v)}`).join(' · ')} · botón «${d.botonTexto}» · toast «${d.toast}» · reloj virtual=${Math.round(performance.now())} ms`;
+  document.documentElement.setAttribute('data-resumen', resumen);
+  document.getElementById('progreso').textContent = resumen;
+  listo();
+} catch (e) {
+  fallar(e);
+}
+</script>
+</body></html>

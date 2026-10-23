@@ -1,4 +1,4 @@
-import { getAllLikedTracks, getLikesPartialInfo, exportAllData, importAllData, getCurrentUserId, syncLikesIncremental, getLikesCacheTimestamp, getBestAvailableLikes, getAllPlaylistItems } from '../api.js';
+import { getAllLikedTracks, getLikesPartialInfo, exportAllData, exportarCopiaCompleta, importAllData, getCurrentUserId, syncLikesIncremental, getLikesCacheTimestamp, getBestAvailableLikes, getAllPlaylistItems } from '../api.js';
 import { showProgress, hideProgress, alertModal, escapeHtml, pageHeader } from '../ui/components.js';
 import { openModal, closeTop } from '../ui/modal-stack.js';
 import { showToast } from '../ui/toast.js';
@@ -26,6 +26,7 @@ import { openAlbumCard } from './album-card.js';
 import { activateMarquee, marqueeSpan } from '../ui/marquee.js';
 import { isJunkTrack } from '../util/junk.js';
 import { AVISO_MEZCLA } from '../util/corte-saltos.js';
+import { nombreArchivo } from '../util/copia-completa.js';
 
 let charts = [];
 let _loadController = null;
@@ -86,6 +87,7 @@ export function render(container) {
       <button class="btn btn-secondary btn-sm dash-cog-btn" id="dash-cog-btn" title="Acciones" aria-haspopup="menu" aria-expanded="false" aria-label="Acciones">⚙</button>
       <div id="dash-cog-menu" class="dash-cog-menu" role="menu" hidden>
         <button class="dash-cog-item" data-act="export-json" role="menuitem">Exportar JSON <span class="dash-cog-hint">likes + tags</span></button>
+        <button class="dash-cog-item" data-act="export-todo" role="menuitem">Exportar todo <span class="dash-cog-hint">copia de seguridad</span></button>
         <button class="dash-cog-item" data-act="export-csv" role="menuitem">Exportar CSV <span class="dash-cog-hint">solo likes, plano</span></button>
         <button class="dash-cog-item" data-act="import" role="menuitem">Importar JSON</button>
         <button class="dash-cog-item" data-act="refresh" role="menuitem">Actualizar datos</button>
@@ -132,6 +134,7 @@ export function render(container) {
       const act = item.dataset.act;
       closeCog();
       if (act === 'export-json') handleExportAll();
+      else if (act === 'export-todo') handleExportTodo();
       else if (act === 'export-csv') handleExportCsv();
       else if (act === 'import') importInput.click();
       else if (act === 'refresh') handleRefresh();
@@ -467,6 +470,42 @@ async function handleExportAll() {
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
   showToast(`Exportado: ${likesCount.toLocaleString('es-ES')} likes + ${tagsCount.toLocaleString('es-ES')} artistas con tags`, 'success');
+}
+
+// «Exportar todo» (v=333): la copia completa de lo que la app guarda en este navegador (`util/copia-completa.js`).
+// Solo lee y no pide nada a nadie. Si el texto lleva un dato de la sesión, NO se descarga (la segunda red, por si el
+// censo se equivocara alguna vez): mejor sin copia que con el token adentro.
+async function handleExportTodo() {
+  let r;
+  try {
+    r = await exportarCopiaCompleta();
+  } catch (e) {
+    console.warn('[export-todo]', e);
+    showToast(`No se ha podido hacer la copia: ${e?.message || e}`, 'error');
+    return;
+  }
+  if (r.secretos.length) {
+    console.warn('[export-todo] el archivo llevaba el valor de:', r.secretos);
+    showToast('No se ha descargado la copia: el archivo llevaba un dato de tu sesión de Spotify, y eso no puede salir del navegador.', 'error');
+    return;
+  }
+  const blob = new Blob([r.texto], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = nombreArchivo();
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  const mb = r.bytes < 1048576
+    ? `${Math.max(1, Math.round(r.bytes / 1024)).toLocaleString('es-ES')} KB`
+    : `${(r.bytes / 1048576).toLocaleString('es-ES', { maximumFractionDigits: 1 })} MB`;
+  if (r.errores.length) {
+    showToast(`Copia descargada, pero INCOMPLETA: no se han podido leer ${r.errores.length.toLocaleString('es-ES')} claves (están en «_errores» del archivo). ${mb}.`, 'error');
+  } else {
+    showToast(`Copia descargada: ${r.copia.likes.items.length.toLocaleString('es-ES')} me gusta y ${(Object.keys(r.copia.navegador.idb).length + Object.keys(r.copia.navegador.localStorage).length).toLocaleString('es-ES')} claves más del navegador, ${mb}.`, 'success');
+  }
 }
 
 async function handleImportAll(e) {

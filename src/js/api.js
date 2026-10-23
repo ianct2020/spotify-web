@@ -1,12 +1,13 @@
 import { getValidToken, refreshAccessToken } from './auth.js';
 import { cacheGet, cacheGetRaw, cacheGetTimestamp, cacheSet, cacheClear, prefKey, migratePrefKey } from './storage.js';
-import { idbDel, idbDelByPrefix, idbGetCached, idbGetCachedRaw, idbGetTimestamp, idbSetCached } from './idb.js';
+import { idbDel, idbDelByPrefix, idbGetCached, idbGetCachedRaw, idbGetTimestamp, idbSetCached, idbGet, idbAllKeys, idbEntriesByPrefix } from './idb.js';
 import { OWNER_KEY_LIST } from './history-keys.js';
 import { OCULTOS_ITEMS_PREFIX } from './util/ocultos-items-clave.js';
 import { showToast } from './ui/toast.js';
 import { artistIsSame, limpiaParaQuery } from './util/track-match.js';
 import { contadorCuota, cuotaDeEndpoint } from './util/cuota.js';
 import { exportarEtiquetas, importarEtiquetas } from './api/lastfm.js';
+import { leerNavegador, armarCopia, serializar, contieneSecreto } from './util/copia-completa.js';
 
 const BASE = 'https://api.spotify.com/v1';
 const MIN_RETRY_WAIT = 5000;
@@ -808,6 +809,25 @@ async function exportAllData(spotifyUserId) {
     },
     _config: readLocalConfig(),
   };
+}
+
+// «Exportar todo» (v=333): enchufa `util/copia-completa.js` (puro) a IndexedDB y a `localStorage`. 🔴 SOLO LEE: ni una
+// escritura en todo el camino (ni `readLocalConfig()` ni `getBestAvailableLikes()`, que por debajo mudan claves; ni
+// `idbGetCached`, que borra lo vencido al leerlo). 0 peticiones: el uid sale del memo de `getCurrentUserId()` o, si
+// todavía no se pidió, de `fonoteca_last_user_id`; nunca de un `/me`. Lo vigila `tests/copia-completa.test.mjs`.
+// Devuelve `{ copia, texto, secretos, errores, bytes }`: si `secretos` no viene vacío, el que llama NO descarga.
+async function exportarCopiaCompleta({ ahora = new Date() } = {}) {
+  const leido = await leerNavegador({
+    idbTodo: () => idbEntriesByPrefix(''),
+    idbClaves: () => idbAllKeys(),
+    idbLeer: (k) => idbGet(k),
+    lsClaves: () => Array.from({ length: localStorage.length }, (_, i) => localStorage.key(i)),
+    lsLeer: (k) => localStorage.getItem(k),
+  });
+  const uid = _cachedUserId || leido.ls[LAST_USER_KEY] || null;
+  const copia = await armarCopia({ ...leido, uid, configKeys: CONFIG_LOCAL_KEYS, ahora });
+  const texto = serializar(copia);
+  return { copia, texto, secretos: contieneSecreto(texto, leido.ls), errores: copia._errores, bytes: new Blob([texto]).size };
 }
 
 async function importAllData(parsed, onProgress, { currentUserId = null } = {}) {
@@ -1877,6 +1897,7 @@ export {
   syncLikesIncremental,
   importLikesData,
   exportAllData,
+  exportarCopiaCompleta,
   importAllData,
   getBestAvailableLikes,
   getLikesPartialInfo,

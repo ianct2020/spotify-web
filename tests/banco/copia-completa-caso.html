@@ -1,0 +1,226 @@
+<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>banco copia-completa — un caso</title>
+<link rel="stylesheet" href="/css/theme.css">
+<link rel="stylesheet" href="/css/components.css">
+<link rel="stylesheet" href="/css/main.css">
+<style>*,*::before,*::after{animation:none!important;transition:none!important}</style>
+</head><body>
+<div id="app"></div>
+<script type="module">
+// ── Un caso del banco `copia-completa.html` (v=333, tanda 78) ───────────────
+//
+// La app ENTERA (`/js/app.js`) contra la Spotify simulada, con un perfil SEMBRADO con datos INVENTADOS: una clave
+// por fila del censo (`util/copia-completa.js`), más trampas (otro usuario, una clave sin censar) y los secretos con
+// un CANARIO. Abre #dashboard, aprieta ⚙ → «Exportar todo», intercepta la descarga (no llega al disco: el `click`
+// del enlace se cambia por uno que solo anota) y le manda el TEXTO a la madre, que lo lee sin la app.
+//
+//   ?tamano=ian   además, datos inventados del TAMAÑO de los de Ian (9.548 me gusta, 351 discografías, 2.302
+//                 artistas en el mapa y en géneros, 1.950 días de detalle, 5.715 tapas en la base de colores, los
+//                 seis almacenes de ocultos): mide cuánto pesa cada clase. Es un instrumento (no está en `prepush`).
+
+import { instalarRedSimulada, esperarReal, anclar } from '/banco/simulado.mjs';
+
+const q = new URLSearchParams(location.search);
+const IAN = q.get('tamano') === 'ian';
+const UID = 't78-banco-uid';
+const OTRO = 't78-banco-otro';
+const CANARIO = {
+  sp_access_token: 'CANARIO-BANCO-ACCESS-5e1f0c9a',
+  sp_refresh_token: 'CANARIO-BANCO-REFRESH-a7c3d2b8',
+  sp_code_verifier: 'CANARIO-BANCO-VERIFIER-31e9f0aa',
+  [`lastfm_api_key__${UID}`]: 'CANARIO-BANCO-LASTFM-0f0e0d0c',
+};
+const afirmar = (c, msg) => { if (!c) throw new Error(`BANCO copia-completa: ${msg}`); };
+const $ = (s, r = document) => r.querySelector(s);
+const rechazos = [];
+window.addEventListener('unhandledrejection', e => rechazos.push(String(e.reason?.message || e.reason)));
+
+// ── IndexedDB a mano (la madre del navegador, no la de la app): sembrar y leer ─────────────────
+function abrir() {
+  return new Promise((res, rej) => {
+    const r = indexedDB.open('spotify-tools', 1);
+    r.onupgradeneeded = () => { if (!r.result.objectStoreNames.contains('kv')) r.result.createObjectStore('kv'); };
+    r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error);
+  });
+}
+async function sembrarIdb(pares) {
+  const db = await abrir();
+  await new Promise((res, rej) => { const t = db.transaction('kv', 'readwrite'); for (const [k, v] of pares) t.objectStore('kv').put(v, k); t.oncomplete = res; t.onerror = () => rej(t.error); });
+  db.close();
+}
+async function leerIdb() {
+  const db = await abrir();
+  const out = await new Promise((res, rej) => {
+    const t = db.transaction('kv', 'readonly'); const s = t.objectStore('kv');
+    const k = s.getAllKeys(), v = s.getAll();
+    t.oncomplete = () => res(k.result.map((x, i) => [x, v.result[i]])); t.onerror = () => rej(t.error);
+  });
+  db.close();
+  return out;
+}
+const hex = (buf) => [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2, '0')).join('');
+
+const datos = { tamano: IAN ? 'ian' : 'chico' };
+try {
+  const C = await import('/js/util/copia-completa.js');
+  const sim = instalarRedSimulada();
+  sim.ruta('GET', /^\/me$/, () => ({ id: UID, display_name: 'Banco' }));
+  sim.ruta('GET', /^\/me\/playlists/, () => ({ items: [], total: 0, next: null }));
+  for (const [k, v] of Object.entries(CANARIO)) localStorage.setItem(k, v);
+  localStorage.setItem('fonoteca_last_user_id', UID);
+  localStorage.setItem('fonoteca_perfil_v1', JSON.stringify({ id: UID, display_name: 'Banco' }));
+
+  // ── La siembra: una clave por fila del censo ────────────────────────────────
+  const idbPares = [];
+  const esperadas = { idb: new Set(), ls: new Set() };
+  const L = (n, f) => Array.from({ length: n }, (_, i) => f(i));
+  const id22 = (i, p = 'x') => (p + String(i).padStart(21, '0')).slice(0, 22);
+  const like = (i) => ({ added_at: `2024-0${1 + i % 9}-1${i % 9}T10:00:00Z`, track: { id: id22(i, 't'), uri: `spotify:track:${id22(i, 't')}`, name: `Tema inventado número ${i}`, popularity: null, duration_ms: 180000 + i % 90000, explicit: i % 7 === 0, is_playable: true, track_number: 1 + i % 12, external_ids: { isrc: `XX${String(i).padStart(10, '0')}` }, artists: [{ id: id22(i % 2302, 'a'), name: `Artista inventado ${i % 2302}` }], album: { id: id22(i % 4000, 'b'), name: `Disco inventado ${i % 4000}`, release_date: '2019-05-17', album_type: 'album', total_tracks: 12, images: [{ url: `https://i.scdn.co/image/ab67616d00001e02${'0'.repeat(24)}${String(i).padStart(16, '0')}`, height: 300, width: 300 }, { url: `https://i.scdn.co/image/ab67616d00004851${'0'.repeat(24)}${String(i).padStart(16, '0')}`, height: 64, width: 64 }] } } });
+  const envolver = (value) => ({ value, storedAt: 1_760_000_000_000, expiry: null });
+  const nLikes = IAN ? 9548 : 40;
+  const etiqueta = (n) => ({ uid: UID, nombre: n, fuentes: { migrado: null, lastfm: { tags: L(5, j => ({ name: `género inventado ${j}`, count: 100 - j * 10 })), fecha: 1_760_000_000_000, artista: n }, musicbrainz: { tags: [{ name: 'rock inventado', count: 3 }], fecha: 1_760_000_100_000 }, statsfm: null } });
+  const lanzamiento = (a, j) => ({ id: id22(a * 100 + j, 'r'), name: `Lanzamiento inventado ${j}`, album_type: j % 3 ? 'single' : 'album', release_date: `20${10 + j % 15}-01-01`, total_tracks: 1 + j % 14, images: [{ url: `https://i.scdn.co/image/ab67616d00004851${'1'.repeat(24)}${String(a * 100 + j).padStart(16, '0')}`, height: 64, width: 64 }], artists: [{ id: id22(a, 'a'), name: `Artista inventado ${a}` }] });
+  const nTapas = IAN ? 5715 : 6;
+  const muestras = {
+    all_liked_tracks: () => envolver(L(nLikes, like)),
+    mosaico_colores_v1: () => envolver({ formato: 1, rejilla: '3x3', espacio: 'lineal→srgb8', lado: 64, hosts: ['i.scdn.co', 'mosaic.scdn.co', 'image-cdn-ak.spotifycdn.com'], ids: L(nTapas, i => id22(i, 'c')), host: Uint8Array.from(L(nTapas, i => i % 3)), datos: Uint8Array.from(L(nTapas * 27, i => (i * 37) % 256)), fallidas: 0, rarasUrl: 0, bytes: nTapas * 2500, msRed: 1, creado: 1, actualizado: 2 }),
+    generos_artista_migrado_v1: () => ({ uid: UID, fecha: 1, entradas: 0 }),
+  };
+  for (const c of C.CENSO) {
+    if (c.donde !== 'idb' && c.donde !== 'ls') continue;
+    let k;
+    if (c.porUsuario === 'clave') k = c.deUsuario(UID) + (c.deUsuario(UID).endsWith('_') ? 'muestra' : '');
+    else if (c.prefijo) k = c.clave + 'muestra';
+    else if (c.porUsuario === 'pref') k = `${c.clave}__${UID}`;
+    else k = c.clave;
+    if (c.clase === 5 || c.clave === 'fonoteca_last_user_id' || c.clave === 'fonoteca_perfil_v1') continue;   // ya sembrados
+    if (c.donde === 'idb') {
+      const v = muestras[k] ? muestras[k]() : k.startsWith('generos_artista_v1_') ? etiqueta('artista inventado') : envolver({ uid: UID, inventado: k });
+      idbPares.push([k, v]);
+    } else localStorage.setItem(k, JSON.stringify(['valor inventado', k]));
+    if (c.entra) esperadas[c.donde].add(k);
+  }
+  // Las trampas.
+  localStorage.setItem(`discover_escuchados__${OTRO}`, JSON.stringify(['de otro']));
+  localStorage.setItem('t78_banco_sin_censar', 'x');
+  idbPares.push([`local_${OTRO}_history_days`, envolver({ otro: 1 })], ['t78_banco_idb_sin_censar', envolver(1)]);
+
+  // ── Con el tamaño de los de Ian (INVENTADO) ─────────────────────────────────
+  if (IAN) {
+    for (let a = 0; a < 351; a++) idbPares.push([`discover_disco_base_v1_${id22(a, 'a')}`, envolver({ fuente: 'nativo', cortada: false, items: L(35, j => lanzamiento(a, j)), reciente: 1_760_000_000_000 })]);
+    for (let a = 0; a < 2302; a++) {
+      idbPares.push([`mapa_artista_v1_${UID}_artista inventado ${a}`, envolver({ uid: UID, nombre: `artista inventado ${a}`, estado: 'ok', mbid: `${String(a).padStart(8, '0')}-0000-4000-8000-000000000000`, area: `area-${a % 150}`, pais: 'XX', fecha: 1_760_000_000_000 })]);
+      idbPares.push([`generos_artista_v1_${UID}_artista inventado ${a}`, etiqueta(`artista inventado ${a}`)]);
+    }
+    for (let i = 0; i < 150; i++) idbPares.push([`mapa_area_v1_area-${i}`, envolver({ id: `area-${i}`, nombre: `Área inventada ${i}`, pais: 'XX', tipo: 'City', padre: null })]);
+    // El detalle por día: 1.950 días, 46.260 temas en el diccionario, 100.400 filas (las cifras de CLAUDE.md).
+    const temas = L(46260, i => [`Tema inventado ${i}`, `Artista inventado ${i % 2302}`, id22(i, 't')]);
+    const dias = {};
+    for (let d = 0; d < 1950; d++) { const f = new Date(Date.UTC(2018, 0, 1 + d)).toISOString().slice(0, 10); dias[f] = L(d < 1000 ? 52 : 51, j => [(d * 53 + j) % 46260, 30000 + (j * 977) % 200000, 1 + j % 3]); }
+    idbPares.push([`local_${UID}_history_days`, envolver({ version: 1, temas, dias })]);
+    const ocultos = { wthree_hidden_albums: 1400, discover_ocultos: 900, recs_ocultos: 12, skips_hidden_tracks: 500, zeroplays_hidden_tracks: 500, sin_clasificar_ocultas: 500 };
+    for (const [k, n] of Object.entries(ocultos)) {
+      const claves = L(n, i => `${k === 'wthree_hidden_albums' || k === 'discover_ocultos' ? `disco inventado ${i}||artista inventado ${i % 300}` : id22(i, 'h')}`);
+      localStorage.setItem(`${k}__${UID}`, JSON.stringify(claves));
+      localStorage.setItem(`${k}_uris__${UID}`, JSON.stringify(Object.fromEntries(claves.map((c, i) => [c, `spotify:track:${id22(i, 'u')}`]))));
+    }
+    for (const k of ['discover_escuchados', 'listened_unreg_dismissed', 'listened_history_dismissed', 'versions_dismissed']) localStorage.setItem(`${k}__${UID}`, JSON.stringify(L(200, i => `disco inventado ${i}||artista inventado ${i % 300}`)));
+  }
+  await anclar(sembrarIdb(idbPares), { vueltas: 20000 });
+
+  // ── Arrancar la app y abrir #dashboard ──────────────────────────────────────
+  location.hash = '#dashboard';
+  await import('/js/app.js');
+  await esperarReal(() => $('#dash-cog-btn') && $('[data-act="export-todo"]'), { que: 'que #dashboard pinte su ⚙', vueltas: 8000 });
+  datos.botonTexto = $('[data-act="export-todo"]').textContent.replace(/\s+/g, ' ').trim();
+
+  // ── La foto de antes (sha256 de TODO IndexedDB y localStorage) ──────────────
+  async function foto() {
+    const idb = await anclar(leerIdb(), { vueltas: 20000 });
+    const ls = Array.from({ length: localStorage.length }, (_, i) => localStorage.key(i)).sort().map(k => [k, localStorage.getItem(k)]);
+    const texto = C.serializar({ idb: idb.sort((a, b) => (a[0] < b[0] ? -1 : 1)), ls });
+    return { sha: hex(await anclar(crypto.subtle.digest('SHA-256', new TextEncoder().encode(texto)))), idbClaves: idb.map(([k]) => k), lsClaves: ls.map(([k]) => k), ls: Object.fromEntries(ls) };
+  }
+  const antes = await foto();
+
+  // ── La descarga, interceptada (no llega al disco) ───────────────────────────
+  const blobs = new Map();
+  let descarga = null;
+  const crearURL = URL.createObjectURL.bind(URL);
+  URL.createObjectURL = (b) => { const u = crearURL(b); blobs.set(u, b); return u; };
+  const clickOriginal = HTMLAnchorElement.prototype.click;
+  HTMLAnchorElement.prototype.click = function () { if (this.download) descarga = { nombre: this.download, blob: blobs.get(this.href) }; else clickOriginal.call(this); };
+  // 0 peticiones durante el export: todo `fetch` (de cualquier host, también el propio), y las entradas de recursos.
+  let fetchesDurante = 0, contando = false;
+  const fetchApp = window.fetch;
+  window.fetch = (...a) => { if (contando) fetchesDurante++; return fetchApp(...a); };
+  const recursos = () => performance.getEntriesByType('resource').filter(e => !e.name.endsWith('/banco/esperar.mjs')).length;
+  const llamadasAntes = sim.reg.llamadas.length, externasAntes = sim.reg.externas.length, recursosAntes = recursos();
+
+  contando = true;
+  $('#dash-cog-btn').click();
+  $('[data-act="export-todo"]').click();
+  await esperarReal(() => descarga, { que: 'la descarga de «Exportar todo»', vueltas: 20000 });
+  const toastCopia = () => [...document.querySelectorAll('.toast')].find(t => /Copia descargada/.test(t.textContent));
+  await esperarReal(toastCopia, { que: 'el toast de la copia', vueltas: 4000 });
+  contando = false;
+  datos.peticionesDurante = { fetch: fetchesDurante, spotify: sim.reg.llamadas.length - llamadasAntes, externas: sim.reg.externas.length - externasAntes, recursos: recursos() - recursosAntes };
+  afirmar(Object.values(datos.peticionesDurante).every(n => n === 0), `0 peticiones durante el export: ${JSON.stringify(datos.peticionesDurante)}`);
+
+  const texto = await anclar(descarga.blob.text(), { vueltas: 20000 });
+  datos.nombre = descarga.nombre;
+  datos.bytes = descarga.blob.size;
+  afirmar(/^fonoteca-copia-\d{4}-\d{2}-\d{2}\.json$/.test(descarga.nombre), `el nombre del archivo (${descarga.nombre})`);
+  const toast = toastCopia();
+  afirmar(toast.classList.contains('toast-success'), `el toast es verde (${toast.className})`);
+  datos.toast = toast.textContent.replace(/[×✕]\s*$/, '').trim();
+
+  // ── La foto de después: no escribió nada ────────────────────────────────────
+  const despues = await foto();
+  datos.shaAntes = antes.sha.slice(0, 16); datos.shaDespues = despues.sha.slice(0, 16);
+  afirmar(antes.sha === despues.sha, `el mismo sha256 de IndexedDB y localStorage antes (${antes.sha.slice(0, 12)}) y después (${despues.sha.slice(0, 12)})`);
+
+  // ── Lo que salió contra el censo (con las claves del perfil de verdad, no solo lo sembrado) ──────
+  const copia = JSON.parse(texto);
+  for (const [k, v] of Object.entries(CANARIO)) afirmar(!texto.includes(v), `el canario de ${k} no está en el archivo`);
+  const nav = copia.navegador;
+  const delUsuario = (c, k) => c.porUsuario === 'pref' ? (k === c.clave || k === `${c.clave}__${UID}`) : c.porUsuario === 'clave' ? k.startsWith(c.deUsuario(UID)) : true;
+  const deberian = (claves, donde) => new Set(claves.filter(k => { const c = C.entradaDe(donde, k); return c?.entra && delUsuario(c, k); }));
+  const debIdb = deberian(antes.idbClaves, 'idb'), debLs = deberian(antes.lsClaves, 'ls');
+  const dif = (a, b) => [...a].filter(x => !b.has(x));
+  const salIdb = new Set(Object.keys(nav.idb)), salLs = new Set(Object.keys(nav.localStorage));
+  afirmar(!dif(salIdb, debIdb).length && !dif(debIdb, salIdb).length, `IndexedDB: de más ${dif(salIdb, debIdb).join(', ') || '—'} · de menos ${dif(debIdb, salIdb).join(', ') || '—'}`);
+  afirmar(!dif(salLs, debLs).length && !dif(debLs, salLs).length, `localStorage: de más ${dif(salLs, debLs).join(', ') || '—'} · de menos ${dif(debLs, salLs).join(', ') || '—'}`);
+  afirmar(dif(esperadas.idb, salIdb).length === 0 && dif(esperadas.ls, salLs).length === 0, `todo lo sembrado que entra salió (faltan ${[...dif(esperadas.idb, salIdb), ...dif(esperadas.ls, salLs)].join(', ') || '—'})`);
+  afirmar(!salLs.has(`discover_escuchados__${OTRO}`) && !salIdb.has(`local_${OTRO}_history_days`) && !salLs.has('t78_banco_sin_censar'), 'ni otro usuario ni lo sin censar');
+  afirmar(copia._censo.sinCensar.includes('ls:t78_banco_sin_censar'), 'lo sin censar, nombrado en _censo.sinCensar');
+  const irrec = C.CENSO.filter(c => c.clase === 1).map(c => `${c.clave}__${UID}`);
+  afirmar(irrec.every(k => salLs.has(k)), `los ${irrec.length} irrecuperables están en el archivo`);
+  afirmar(copia._errores.length === 0, `sin _errores (${JSON.stringify(copia._errores)})`);
+  afirmar(copia.likes.items.length === nLikes, `los ${nLikes} me gusta (${copia.likes.items.length})`);
+  datos.claves = { idb: salIdb.size, localStorage: salLs.size, sinCensar: copia._censo.sinCensar.length, deOtroUsuario: copia._censo.deOtroUsuario };
+  datos.sinCensar = copia._censo.sinCensar;
+
+  // ── El peso, por clase ──────────────────────────────────────────────────────
+  const tam = (v) => new Blob([C.serializar(v)]).size;
+  const porClase = { 'likes (v2)': tam(copia.likes), 'tags (v2)': tam(copia.tags), '_config (v2)': tam(copia._config) };
+  for (const [donde, clases] of [['idb', copia._censo.clases.idb], ['localStorage', copia._censo.clases.localStorage]]) {
+    for (const [k, cl] of Object.entries(clases)) {
+      const nombre = C.CLASES[cl] || String(cl);
+      porClase[nombre] = (porClase[nombre] || 0) + tam(nav[donde][k]) + k.length + 4;
+    }
+  }
+  datos.porClase = porClase;
+  datos.porGrupo = {};
+  for (const [k, v] of Object.entries(nav.idb)) { const c = C.entradaDe('idb', k); datos.porGrupo[c.clave] = (datos.porGrupo[c.clave] || 0) + tam(v); }
+
+  if (rechazos.length) throw new Error(`BANCO copia-completa: rechazos sin atrapar: ${rechazos.join(' | ')}`);
+  datos.reloj = Math.round(performance.now());
+  parent.postMessage({ banco: 'copia-completa', ok: true, datos, texto }, '*');
+  document.documentElement.setAttribute('data-caso', 'ok ' + JSON.stringify(datos));
+} catch (e) {
+  datos.reloj = Math.round(performance.now());
+  parent.postMessage({ banco: 'copia-completa', ok: false, error: String(e?.message || e), datos }, '*');
+  document.documentElement.setAttribute('data-caso', 'error ' + String(e?.message || e) + ' ' + JSON.stringify(datos));
+}
+</script>
+</body></html>
