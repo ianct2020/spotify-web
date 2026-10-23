@@ -36,6 +36,9 @@
 //      con CORS y 200, las 5 se dibujan (un píxel de cada una es su color) y 0 pedidos a otro prefijo
 //      (el servidor del banco contesta 404 a cualquier otro). Es de CONSERVACIÓN: la v=326 también pedía
 //      la de 300, y tiene que dar verde contra ella;
+//   K. (v=331, tanda 76) una tapa que NO CONTESTA NUNCA (el CDN del banco la retiene hasta que su `signal` aborte, como un
+//      `fetch` colgado): la descarga del PNG termina antes de 8 s + 4 s de reloj, esa casilla sale con el ♪ y las otras
+//      cuatro con su tapa, el aviso dice «1» y 0 errores. Contra v=330 da rojo: la postal se queda esperando;
 //   y 0 errores de consola en todos los marcos.
 //
 // `?solo=B,C` corre solo esas puertas (A siempre): sirve para ver cada una en rojo contra v=325.
@@ -91,9 +94,10 @@ async function generar(f, que) {
   await esperarReal(() => w.__descargas.length > d0 && w.__descargas.at(-1).bytes && w.__toasts.length > t0, { que: `${que}: la descarga y su aviso`, vueltas: VUELTAS });
   await esperarReal(() => boton(f) && !boton(f).disabled, { que: `${que}: el botón vuelve`, vueltas: VUELTAS });
   const desc = w.__descargas.slice(d0);
-  progreso(`${que}: generada en ${Math.round(performance.now() - tClic)} ms de reloj; tapas ${w.__tapas.pedidas.slice(p0).map((t) => `${t.t0}→${t.t1}`).join(' ')}`);
+  const ms = Math.round(performance.now() - tClic);
+  progreso(`${que}: generada en ${ms} ms de reloj; tapas ${w.__tapas.pedidas.slice(p0).map((t) => `${t.t0}→${t.t1}`).join(' ')}`);
   return {
-    textoAntes, durante, despues: boton(f).textContent.trim(),
+    ms, textoAntes, durante, despues: boton(f).textContent.trim(),
     descargas: desc, desc: desc[0], toasts: w.__toasts.slice(t0),
     tapas: w.__tapas.pedidas.slice(p0), spotify: w.__sim.reg.llamadas.slice(l0),
     recursos: recursos(f).slice(r0), dibujo: JSON.parse(JSON.stringify(w.__postalDibujo || null)),
@@ -170,7 +174,7 @@ try {
     const hosts = [...new Set([...g.tapas.map((t) => t.host), ...g.recursos.map((u) => new URL(u).host)])];
     afirmar(!hosts.some((h) => CDN.test(h)), `PUERTA B: 0 a un CDN real (hosts tocados: ${hosts.join(', ')})`);
     afirmar(hosts.every((h) => h === 'data:' || h === location.host), `PUERTA B: solo el propio banco (${hosts.join(', ')})`);
-    datos.apretar = { tapas: g.tapas.length, spotify: g.spotify.length, hosts: hosts.join(' + '), bytes: g.desc.bytes.length, modulo: moduloPostal(A).length, toast: g.toasts.join(' | ') };
+    datos.apretar = { ms: g.ms, tapas: g.tapas.length, spotify: g.spotify.length, hosts: hosts.join(' + '), bytes: g.desc.bytes.length, modulo: moduloPostal(A).length, toast: g.toasts.join(' | ') };
     afirmar(g.toasts.length === 1 && g.toasts[0] === 'Postal descargada.', `PUERTA B: el aviso «Postal descargada.» (${g.toasts.join(' | ')})`);
     const dib = g.dibujo;
     afirmar(dib && dib.ancho === 1080 && dib.alto === 1350, 'PUERTA B: window.__postalDibujo existe y mide 1080×1350');
@@ -342,6 +346,45 @@ try {
     await elegirAnio(A, 2025);
   }
 
+  // ── K · una tapa que no contesta nunca (v=331) ───────────────────────────────
+  // La retiene el CDN del banco (`__tapas.retener`) hasta que su `signal` aborte, como un `fetch` colgado de verdad.
+  // Con el tope de 8 s por tapa, la postal sale igual; sin él (v=330), se queda esperando: la espera de acá corta a los
+  // 8 s + 4 s de reloj y lo dice.
+  if (corre('K')) {
+    progreso('K: una tapa que no contesta');
+    await elegirAnio(A, 2025);
+    const w = win(A), b = boton(A);
+    afirmar(b, 'PUERTA K: hay botón');
+    datos.tope = { any: typeof AbortSignal.any, timeout: typeof AbortSignal.timeout, chrome: (navigator.userAgent.match(/Chrome\/[\d.]+/) || ['?'])[0] };
+    const colgada = w.__tapasBuenas[2];
+    w.__tapas.retener = (u) => u === colgada;
+    const d0 = w.__descargas.length, t0 = w.__toasts.length, p0 = w.__tapas.pedidas.length, e0 = w.__errores.length;
+    const tClic = performance.now();
+    b.click();
+    const LIMITE = 8000 + 4000;
+    await esperarReal(() => (w.__descargas.length > d0 && w.__descargas.at(-1).bytes && w.__toasts.length > t0) || performance.now() - tClic > LIMITE,
+      { que: 'PUERTA K: la descarga, o el límite de 12 s de reloj', vueltas: VUELTAS });
+    const ms = Math.round(performance.now() - tClic), salio = w.__descargas.length > d0;
+    // (Las tapas `data:` se anotan como `data:#<índice>`: se busca la que retuvo el CDN del banco por su estado, como en G.)
+    const reg = w.__tapas.pedidas.slice(p0).find((t) => t.estado === 'retenida' || t.estado === 'abortada');
+    w.__tapas.retener = null;
+    w.__tapas.soltar?.();   // contra v=330, para que no quede colgada
+    afirmar(salio && ms < LIMITE, `PUERTA K: con una tapa que no contesta, la postal termina antes de 8 s + 4 s de reloj (${salio ? `salió a los ${ms} ms` : `a los ${ms} ms no había salido`}; AbortSignal.any: ${datos.tope.any}, timeout: ${datos.tope.timeout})`);
+    await esperarReal(() => boton(A) && !boton(A).disabled, { que: 'PUERTA K: el botón vuelve', vueltas: VUELTAS });
+    const dib = JSON.parse(JSON.stringify(w.__postalDibujo || null)), png = await leerPng(w.__descargas.at(-1).bytes);
+    afirmar(reg && /^abortada/.test(String(reg.estado)), `PUERTA K: la tapa colgada se abortó (${reg?.estado})`);
+    afirmar(JSON.stringify(dib.tapas.map((t) => t.dibujada)) === '[true,true,false,true,true]' && dib.faltan === 1 && !dib.sinTapas, `PUERTA K: falta solo la 3 (${dib.tapas.map((t) => t.dibujada).join(',')}, faltan ${dib.faltan})`);
+    const fondo = hexA(token(A, '--color-bg')), elevado = hexA(token(A, '--color-elevated'));
+    const t3 = dib.tapas[2], c3 = png.px(t3.x + t3.lado / 2, t3.y + t3.lado / 2);
+    afirmar(!cerca(c3, fondo, 2) && !COLORES_TAPA.some((k) => cerca(c3, k, 12)) && cerca(png.px(...puntoDeTapa(t3)), elevado, 2), `PUERTA K: la casilla 3 es el cuadro con el ♪ (centro rgb ${c3})`);
+    afirmar(dib.textos.filter((t) => t.id.startsWith('nota-')).length === 1, 'PUERTA K: un solo ♪');
+    for (const i of [0, 1, 3, 4]) afirmar(cerca(png.px(...puntoDeTapa(dib.tapas[i])), COLORES_TAPA[i]), `PUERTA K: la casilla ${i + 1} tiene su tapa`);
+    const toast = w.__toasts.slice(t0);
+    afirmar(toast.length === 1 && toast[0] === 'Postal descargada. 1 tapa no se pudo bajar y va con ♪.', `PUERTA K: el aviso dice 1 tapa (${toast.join(' | ')})`);
+    afirmar(w.__errores.length === e0, `PUERTA K: 0 errores en la página (${w.__errores.slice(e0).join(' | ')})`);
+    datos.colgada = { ms, estado: reg.estado };
+  }
+
   // ── G · salir mientras genera ──────────────────────────────────────────────
   if (corre('G')) {
     progreso('G: salir mientras genera');
@@ -398,13 +441,14 @@ try {
 
   const a = datos.abrir;
   const resumen = `ok · A abrir: /me=${a.me} otras=${a.otras} módulo de la postal=${a.modulo} tapas=${a.tapas}` +
-    (datos.apretar ? ` · B apretar: 1 PNG 1080×1350 (${datos.apretar.bytes} B), tapas=${datos.apretar.tapas}, spotify=${datos.apretar.spotify}, hosts=${datos.apretar.hosts}, «${datos.apretar.toast}»` : '') +
+    (datos.apretar ? ` · B apretar (${datos.apretar.ms} ms de reloj): 1 PNG 1080×1350 (${datos.apretar.bytes} B), tapas=${datos.apretar.tapas}, spotify=${datos.apretar.spotify}, hosts=${datos.apretar.hosts}, «${datos.apretar.toast}»` : '') +
     (datos.recorte ? ` · D recorte: ${datos.recorte.textos} textos, holgura mínima ${datos.recorte.maxHolgura} px, «${datos.recorte.artista}»` : '') +
     (datos.dosClics != null ? ` · F dos clics: ${datos.dosClics} descarga` : '') +
     (datos.tapasQueFallan ? ` · C tapas que fallan: 404=${datos.tapasQueFallan.e404}, ajena=${datos.tapasQueFallan.ajena}, ${datos.tapasQueFallan.centros}, «${datos.tapasQueFallan.toast}»` : '') +
     (datos.sinTapas ? ` · I toBlob tira: «${datos.sinTapas}»` : '') +
     (datos.colores ? ` · E contraste mínimo: ${datos.colores}` : '') +
     (datos.cdn ? ` · J CDN del banco: ${datos.cdn.pedidos} pedidos, ${datos.cdn.de300} a la de 300, ${datos.cdn.otros} a otro prefijo, ${datos.cdn.vistos}` : '') +
+    (datos.colgada ? ` · K tapa colgada: la postal salió a los ${datos.colgada.ms} ms de reloj, tapa ${datos.colgada.estado} (${datos.tope.chrome}, AbortSignal.any ${datos.tope.any}, timeout ${datos.tope.timeout})` : '') +
     (datos.salir ? ` · G salir: tapa ${datos.salir.estado}, ${datos.salir.descargas} descargas, ${datos.salir.escrituras} escrituras` : '') +
     (datos.desborde ? ` · H ${datos.desborde}` : '') +
     ` · errores=${errores.length} · reloj virtual=${Math.round(performance.now())} ms`;

@@ -35,14 +35,14 @@
 // espera la sigue un `fetch`), pero en headless no se puede comprobar cómo se
 // porta oculta: la pantalla pide dejarla a la vista y enseña el ritmo medido.
 
-import { loadArtistTracks, isOwner, ownerLockedMessage } from './history-data.js?v=330';
-import { getCurrentUserId } from '../api.js?v=330';
-import { idbEntriesEnRango, idbSetCached, idbGetCachedRaw } from '../idb.js?v=330';
-import { escapeHtml, pageHeader } from '../ui/components.js?v=330';
-import { vigilarRuta } from '../util/vigencia-ruta.js?v=330';
-import { armarMapa, universo, claveArtista, claveArea, claveRitmo, PREFIJO_ARTISTA, PREFIJO_AREA, MIN_MINUTOS } from '../util/mapa-paises.js?v=330';
-import { escanear, conCandado, peticionesPorMinuto, estimarLoQueFalta, textoLoQueFalta, ritmoDesde, sumarPeticion, sumarArtista, MIN_ARTISTAS_ESTIMAR } from '../util/mapa-escaneo.js?v=330';
-import { armarMundo, textoDetalle, textoNoSeVen, etiquetaMapa, leyenda } from '../util/mapa-mundo.js?v=330';
+import { loadArtistTracks, isOwner, ownerLockedMessage } from './history-data.js?v=331';
+import { getCurrentUserId } from '../api.js?v=331';
+import { idbEntriesEnRango, idbSetCached, idbGetCachedRaw } from '../idb.js?v=331';
+import { escapeHtml, pageHeader } from '../ui/components.js?v=331';
+import { vigilarRuta } from '../util/vigencia-ruta.js?v=331';
+import { armarMapa, universo, claveArtista, claveArea, claveRitmo, PREFIJO_ARTISTA, PREFIJO_AREA, MIN_MINUTOS } from '../util/mapa-paises.js?v=331';
+import { escanear, conCandado, peticionesPorMinuto, estimarLoQueFalta, textoLoQueFalta, ritmoDesde, sumarPeticion, sumarArtista, MIN_ARTISTAS_ESTIMAR } from '../util/mapa-escaneo.js?v=331';
+import { armarMundo, textoDetalle, textoNoSeVen, etiquetaMapa, leyenda } from '../util/mapa-mundo.js?v=331';
 
 // Números con `es-ES` explícito: sin el locale se usa el del navegador (es-AR
 // en las máquinas de Ian) y salen dos formatos en la misma pantalla.
@@ -124,7 +124,7 @@ export async function render(container) {
   // La geometría del mundo (~73 KB) se pide al abrir ESTA vista, en paralelo con
   // el historial: abrir la app no la baja. Nunca rechaza: un fallo vuelve como
   // `{ error }` y la vista sigue sin el dibujo.
-  const mundoP = import('../util/mundo-110m.js?v=330').then((mod) => ({ mod }), (error) => ({ error }));
+  const mundoP = import('../util/mundo-110m.js?v=331').then((mod) => ({ mod }), (error) => ({ error }));
   container.innerHTML = `
     ${pageHeader({ title: 'Tus países' })}
     <div id="mapa-content"><div class="empty-state"><div class="spinner spinner-lg"></div></div></div>

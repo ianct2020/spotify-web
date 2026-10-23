@@ -3547,6 +3547,19 @@ antemano**: si `toBlob` devuelve `null` o tira, la postal se vuelve a dibujar SI
 se limpia pintando encima: la marca es del lienzo) y se descarga igual, con «La postal salió sin tapas: …». **Una tapa que no
 baja** (404, sin CORS, la red) es una casilla de `--color-elevated` con un ♪ (a 0,4 del lado); el aviso dice cuántas faltaron.
 
+**El tope de cada tapa (v=331, tanda 76): 8 s** (`TOPE_TAPA_MS` en `wrapped-postal.js`; **decisión de diseño, no medida**).
+Hasta v=330 `conTapa` bajaba cada tapa sin tope: una conexión colgada del CDN dejaba la postal esperando hasta el error de
+red de Chrome, con el botón en «Generando…» (solo la cortaba salir de la ruta). Ahora cada llamada de la postal
+(`conTapaConTope`) le pasa a `conTapa` la señal de la ruta combinada con `AbortSignal.any` con la de un `AbortController`
+que aborta a los 8 s con un `TimeoutError`. Una tapa que llega al tope es **una tapa que no bajó**: ♪ en su casilla, cuenta
+en el aviso («1 tapa no se pudo bajar y va con ♪.») y la postal sale igual. La vigencia sigue mirando la señal de la ruta:
+que una tapa venza no aborta la postal. Sin `AbortSignal.any` (Chrome < 116), como hasta v=330: sin tope y sin tirar.
+⚠️ **No es `AbortSignal.timeout`**, aunque era el diseño del encargo: su temporizador no se puede cancelar y quedaban cinco de
+8 s vivos después de cada postal; con el reloj virtual del banco eso corría el tiempo de lo que venía después y la puerta J
+se ponía roja 4 de 4 (una `<img>` de la tarjeta del año contaba como pedido a otro prefijo). Con un `setTimeout` que se
+limpia en el `finally` de cada tapa, J vuelve a verde. 🔴 **`covers-wallpaper.js` no cambió**: el mosaico y «Mis tapas»,
+igual. 0 peticiones nuevas.
+
 **Las dos guardas del botón**: dos clics rápidos = **una** postal (se deshabilita y dice «Generando…» en el mismo paso del
 clic, y `postalEnCurso` frena el que se cuele); y **salir de la ruta mientras genera** aborta las tapas en vuelo
 (`routeteardown` → `AbortController`) y, con la ruta ya no vigente (v=174), **no se descarga nada y no se escribe en el DOM**
@@ -3567,7 +3580,11 @@ son `data:` URL fabricadas en el banco, la 404 la da el servidor del banco, la �
 `localhost` sin CORS, y las de 2023 tienen la forma del CDN): A abrir sin el módulo; B un PNG de 1080×1350 decodificado, 5
 tapas, 0 Spotify, 0 CDN, los textos nuevos y el disco 1 grande; C la 404 y la ajena → el PNG sale igual, las dos casillas con
 ♪ y el aviso dice «2»; D el recorte y los dos renglones; E los colores y el degradé contra los píxeles; F dos clics; G salir con
-una tapa retenida; H sin desborde a 1366×591 y 390×844; I `toBlob` con un `SecurityError` forzado → sin tapas y el aviso; **J
+una tapa retenida; H sin desborde a 1366×591 y 390×844; I `toBlob` con un `SecurityError` forzado → sin tapas y el aviso;
+**K (v=331) una tapa que no contesta nunca** (el CDN del banco la retiene hasta que su `signal` aborte): la postal sale antes de
+8 s + 4 s de reloj, esa casilla con el ♪, las otras cuatro con su tapa, el aviso dice 1 y 0 errores (contra v=330, «a los
+12006 ms no había salido»; con v=331, 10 de 10, la postal sale a los 9.038-9.048 ms y el banco entero gasta 22.047-24.644
+ms de reloj virtual: entró en `PRESUPUESTO` con 60 s); **J
 (v=327) las tapas con la forma del CDN**: los 5 pedidos a la de 300, a otro origen, con CORS y 200, las 5 dibujadas (un píxel
 de cada una) y 0 pedidos a otro prefijo (el servidor contesta 404 a cualquier otro). **Contra v=326: B, D y E rojas; A, C, F,
 G, H, I y J verdes** (J es de conservación: la v=326 también pedía la de 300). 10 de 10 corridas. ⚠️ El banco ancla la

@@ -26,6 +26,11 @@
 // postal salió sin tapas: …». Una tapa que no baja (404, sin CORS, la red) es una casilla con ♪, nunca
 // una postal abortada.
 //
+// v=331 (tanda 76): cada tapa tiene un TOPE de tiempo (`TOPE_TAPA_MS`). Sin él, una conexión colgada del CDN dejaba
+// la postal esperando hasta el error de red de Chrome, con el botón en «Generando…»: solo la cortaba salir de la
+// ruta. La que llega al tope es una tapa que no bajó: ♪, cuenta en el aviso, y la postal sale igual. El tope va
+// acá, en la señal que se le pasa a `conTapa`: `covers-wallpaper.js` no cambió (el mosaico y «Mis tapas», igual).
+//
 // ── Los colores y la letra ──────────────────────────────────────────────────
 //
 // Ningún color escrito a mano: se leen del tema con `getComputedStyle` al apretar. Fondo `--color-bg`,
@@ -48,8 +53,8 @@
 // `window.__postalDibujo` queda para el banco, como `window.__mapaArtistasDibujo`: cada `fillText` con
 // su texto, el ancho medido, el máximo y los colores con que se pintó, y cada tapa con si se dibujó.
 
-import { conTapa, descargarBlob } from './covers-wallpaper.js?v=330';
-import { planPostal, degradadoPostal, avisoPostal, PESOS, ANCHO, ALTO } from '../util/postal-anio.js?v=330';
+import { conTapa, descargarBlob } from './covers-wallpaper.js?v=331';
+import { planPostal, degradadoPostal, avisoPostal, PESOS, ANCHO, ALTO } from '../util/postal-anio.js?v=331';
 
 const TOKENS = {
   bg: '--color-bg', surface: '--color-surface', elevated: '--color-elevated',
@@ -58,6 +63,33 @@ const TOKENS = {
 // Lo que se espera a la letra como mucho. Medido en ningún lado: es un tope para que una red lenta no
 // deje el botón en «Generando…»; pasado, se dibuja con la de reserva.
 const ESPERA_LETRA_MS = 3000;
+// 8 s por tapa; decisión de diseño, no medida.
+const TOPE_TAPA_MS = 8000;
+
+/**
+ * `conTapa` con la señal de la ruta (salir aborta) combinada con un tope de `TOPE_TAPA_MS` para ESTA tapa. El tope es
+ * un `setTimeout` que se limpia apenas la tapa termina, y no `AbortSignal.timeout`, que no se puede cancelar: dejaba
+ * cinco temporizadores de 8 s vivos después de cada postal (con el reloj virtual del banco, eso corría el tiempo de
+ * todo lo que venía después). Si el navegador no tiene `AbortSignal.any`, como hasta v=330: sin tope, y sin tirar.
+ */
+async function conTapaConTope(url, signal, usar) {
+  let combinada = signal, reloj = 0;
+  try {
+    if (typeof AbortSignal.any === 'function') {
+      const tope = new AbortController();
+      reloj = setTimeout(() => tope.abort(new DOMException(`la tapa no llegó en ${TOPE_TAPA_MS} ms`, 'TimeoutError')), TOPE_TAPA_MS);
+      combinada = signal ? AbortSignal.any([signal, tope.signal]) : tope.signal;
+    }
+  } catch {
+    clearTimeout(reloj);
+    combinada = signal;
+  }
+  try {
+    return await conTapa(url, combinada, usar);
+  } finally {
+    clearTimeout(reloj);
+  }
+}
 
 function leerColores() {
   const cs = getComputedStyle(document.documentElement);
@@ -178,7 +210,7 @@ export async function generarPostal(y, { fmtMinutes, fmtDia, signal, vigente = (
 
   const base = lienzoBase(plan, colores, fam, deg);
   const dibujadas = await Promise.all(plan.tapas.map((t) => (t.url
-    ? conTapa(t.url, signal, (dib) => pintarTapa(base.ctx, dib, t))
+    ? conTapaConTope(t.url, signal, (dib) => pintarTapa(base.ctx, dib, t))
     : Promise.resolve(false))));
   if (!sigue()) { base.canvas.width = base.canvas.height = 0; return null; }
   const notas = plan.tapas.filter((t, k) => !dibujadas[k]).map((t) => pintarNota(base.ctx, t, colores, fam));
