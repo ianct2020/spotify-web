@@ -16,9 +16,15 @@
 //     opaca de otro origen;
 //   · el bitmap que sale del blob de un `fetch` CORS no mancha el lienzo, así que `toBlob` funciona.
 //
-// Que el CDN de Spotify contesta con CORS ya está medido en vivo: `mosaico-colores.js` baja así sus tapas
-// y lee los píxeles con `getImageData`, que TIRA sobre un lienzo manchado; la base de colores del
-// navegador de Ian se armó así el 27/09 con 5.715 tapas de los mismos tres hosts.
+// Que el CDN de Spotify contesta con CORS a la tapa de 300 (la que pide la postal) está medido dos veces:
+//   · el 26/09/2026, en la pestaña de Ian y desde el origen real (`https://ianct2020.github.io`, o sea con
+//     `Origin`): `fetch(url, { mode: 'cors' })` → blob → `createImageBitmap` → `getImageData` anduvo con 3 de
+//     3 tapas de 300 (`fonoteca-migracion/RESUMEN-CORS-TAPAS-2026-09-26.md`, §2; ese día el `curl` con
+//     `Origin` vio `access-control-allow-origin: *` en los tres hosts, pero sobre la tapa de 64);
+//   · el 22/10/2026, Ian bajó la postal desde producción (v=329) y salió con las cinco tapas reales de 300:
+//     la confirmación en vivo, punta a punta.
+// `mosaico-colores.js` NO sirve de prueba (v=326 lo citaba): pide la tapa de 64, no la de 300. Y nada
+// obliga a Spotify a seguir mandando el `*`: por eso la regla de abajo.
 //
 // Igual, por las dudas, la regla de antemano: si `toBlob` devuelve `null` o tira (`SecurityError` o lo
 // que sea), la postal se vuelve a dibujar SIN tapas en un lienzo NUEVO (uno manchado no se limpia
@@ -53,8 +59,8 @@
 // `window.__postalDibujo` queda para el banco, como `window.__mapaArtistasDibujo`: cada `fillText` con
 // su texto, el ancho medido, el máximo y los colores con que se pintó, y cada tapa con si se dibujó.
 
-import { conTapa, descargarBlob } from './covers-wallpaper.js?v=331';
-import { planPostal, degradadoPostal, avisoPostal, PESOS, ANCHO, ALTO } from '../util/postal-anio.js?v=331';
+import { conTapa, descargarBlob } from './covers-wallpaper.js?v=332';
+import { planPostal, degradadoPostal, avisoPostal, PESOS, ANCHO, ALTO } from '../util/postal-anio.js?v=332';
 
 const TOKENS = {
   bg: '--color-bg', surface: '--color-surface', elevated: '--color-elevated',

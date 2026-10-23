@@ -3541,6 +3541,11 @@ obliga a Spotify a mantener el `*`. **El primer clic de Ian es la confirmación 
 no se repita**: v=326 lo daba por medido citando el mosaico (que pide la de 64) y v=327 lo dio por no medido; **las dos
 veces sin buscar este archivo**. Antes de afirmar algo sobre el CDN de tapas, se busca en `fonoteca-migracion` con
 `grep -ril cors`.
+🔴 **v=332 (tanda 77): se corrigió la cita del comentario de cabecera de `wrapped-postal.js`**, que seguía con la frase
+de v=326 (el mosaico como prueba). Ahora cita las dos fuentes: la medición del **26/09/2026** en la pestaña de Ian desde el
+origen real (3 de 3 de 300; el `curl` de ese día, sobre la de 64) y **el PNG que Ian bajó desde producción (v=329) el
+22/10/2026, con las cinco tapas reales de la de 300**: la confirmación en vivo. Dice que el mosaico no sirve de prueba
+(pide la de 64) y no dice «incondicional». Solo comentario: el código no cambió.
 
 Si el CDN dejara de mandar el CORS, la postal sale igual con los 5 discos con ♪ y el aviso «5 tapas no se pudieron bajar…». **La guarda de
 antemano**: si `toBlob` devuelve `null` o tira, la postal se vuelve a dibujar SIN tapas **en un lienzo nuevo** (uno manchado no

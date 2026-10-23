@@ -22,7 +22,7 @@
 //   · Nada se sincroniza con la reproducción: la app no sabe en qué segundo va
 //     Spotify, así que de una letra sincronizada se muestra el texto sin marcas.
 
-import { titleMatches, artistMatches } from './track-match.js?v=331';
+import { titleMatches, artistMatches } from './track-match.js?v=332';
 
 export const URL_LRCLIB = 'https://lrclib.net/api/get';
 // Sin uid: una letra es dato público, como `mapa_area_v1_`. «Limpiar caché» la
