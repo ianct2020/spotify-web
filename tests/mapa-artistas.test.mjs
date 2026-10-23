@@ -30,6 +30,8 @@
 //   · (v=321) los sueltos llevan nombre solo con el cupo que sobra y nunca desplazan a uno del componente grande; una caja
 //     de `ocupadas` (los botones de zoom) cuenta como lugar ocupado, con el aire; `nombresAjenos` cuenta los nombres más
 //     cerca de otro círculo que del suyo;
+//   · (v=330) `girarMapa` gira el plano un cuarto de vuelta (x' = −y, y' = x) en una copia con los mismos vecinos, minutos,
+//     radios y orden, y `girarSiAncho` lo pide solo con el lienzo más ancho que alto;
 //   · el buscador usa `normalizarNombre` (`util/mb-pais.js`), no `normText`: un apóstrofo tipográfico
 //     encuentra al recto, y «¥$» —que `normText` deja vacío— se encuentra;
 //   · 🔴 el JSON horneado, si está, no lleva minutos ni plays (salen de `history-artist-tracks.json`);
@@ -455,6 +457,34 @@ try {
   const e5 = M.nombresVisibles(g5, V0, 400, 200, () => 30);
   ok(e5.length === 4 && M.nombresAjenos(g5, V0, e5) === 0, `nombres centrados en puntos sueltos: 0 ajenos (${e5.length} nombres)`);
 } catch (e) { ok(false, 'la sección 14 corre', e.stack); }
+
+console.log('15. el giro del plano (v=330)');
+try {
+  ok(typeof M.girarMapa === 'function' && typeof M.girarSiAncho === 'function', 'girarMapa y girarSiAncho existen');
+  // Un mapa INVENTADO más alto que ancho: tres artistas en columna, en cadena.
+  const alto = M.leerMapa({ nombres: ['Faro Viejo', 'Gemas Fríos', 'Isla Sola'], pos: [0, 0, 10, 200, -5, 400], aristas: [0, 1, 500, 1, 1, 2, 300, 0] },
+    { 'Faro Viejo': [1, 900], 'Gemas Fríos': [1, 400], 'Isla Sola': [1, 100] });
+  const g = M.girarMapa(alto);
+  const lados = (m) => [m.limites.maxX - m.limites.minX, m.limites.maxY - m.limites.minY];
+  const [w0, h0] = lados(alto), [w1, h1] = lados(g);
+  ok(h0 > w0 && w1 > h1, `un mapa más alto que ancho (${w0.toFixed(1)} × ${h0.toFixed(1)}), girado, sale más ancho que alto (${w1.toFixed(1)} × ${h1.toFixed(1)})`);
+  ok(cerca(w1, h0) && cerca(h1, w0), 'el giro cambia los lados entre sí, sin estirarlos');
+  ok([0, 1, 2].every((i) => g.x[i] === -alto.y[i] && g.y[i] === alto.x[i]), "x' = −y, y' = x");
+  // Los límites del girado son los de sus puntos (con su radio), contados acá.
+  const lim = { minX: Math.min(...[0, 1, 2].map((i) => g.x[i] - g.r[i])), maxX: Math.max(...[0, 1, 2].map((i) => g.x[i] + g.r[i])),
+    minY: Math.min(...[0, 1, 2].map((i) => g.y[i] - g.r[i])), maxY: Math.max(...[0, 1, 2].map((i) => g.y[i] + g.r[i])) };
+  ok(Object.keys(lim).every((k) => cerca(g.limites[k], lim[k])), `los límites girados son los de los puntos girados (${JSON.stringify(g.limites)})`);
+  ok(g.vecinos === alto.vecinos && g.minutos === alto.minutos && g.r === alto.r && g.piso === alto.piso && g.principal === alto.principal
+    && g.nombres === alto.nombres && g.claves === alto.claves && g.N === alto.N, 'los mismos vecinos, minutos, radios (y su piso), principal, nombres y orden');
+  ok(igual(g.vecinos[1].map((n) => n.j), [0, 2]), 'los vecinos, en el mismo orden por match');
+  ok(alto.x[1] === 10 && alto.y[1] === 200 && !alto.girado && g.girado === true, 'es una copia: el mapa recto no cambia');
+  ok(M.girarSiAncho(1198, 402) && !M.girarSiAncho(368, 523) && !M.girarSiAncho(400, 400),
+    'gira con un lienzo más ancho que alto (1198 × 402), no con uno más alto que ancho (368 × 523) ni con uno cuadrado');
+  const e0 = M.vistaTodo(alto, 1198, 402).escala, e1 = M.vistaTodo(g, 1198, 402).escala;
+  ok(e1 > e0, `en un lienzo ancho, «Ver todo» del girado tiene más escala (${e0.toFixed(4)} → ${e1.toFixed(4)})`);
+  ok(M.tocar(g, M.vistaTodo(g, 1198, 402), ...M.planoAPantalla(M.vistaTodo(g, 1198, 402), g.x[2], g.y[2])) === 2, 'el toque trabaja con el girado: el punto de «Isla Sola» la elige');
+} catch (e) { ok(false, 'la sección 15 corre', e.stack); }
+
 
 console.log(`\nOK mapa-artistas: ${pasaron} de ${pasaron + fallaron}`);
 process.exit(fallaron ? 1 : 0);

@@ -32,14 +32,14 @@
 // instrumento del banco y de la medición de frames (pintar ya, sin esperar al frame): solo existe
 // mientras la ruta está abierta.
 
-import { loadArtistTracks, loadArtistSimilares, isOwner, ownerLockedMessage } from './history-data.js?v=329';
-import { openArtistCard } from './artist-card.js?v=329';
-import { escapeHtml, pageHeader } from '../ui/components.js?v=329';
-import { vigilarRuta } from '../util/vigencia-ruta.js?v=329';
+import { loadArtistTracks, loadArtistSimilares, isOwner, ownerLockedMessage } from './history-data.js?v=330';
+import { openArtistCard } from './artist-card.js?v=330';
+import { escapeHtml, pageHeader } from '../ui/components.js?v=330';
+import { vigilarRuta } from '../util/vigencia-ruta.js?v=330';
 import {
   leerMapa, vistaTodo, zoomEn, mover, encuadrarElegido, tocar, nombresVisibles, buscar,
-  mezclar, leerRgb, planoAPantalla, radioEnPantalla, altoDelLienzo, POR_PAGINA,
-} from '../util/mapa-artistas.js?v=329';
+  mezclar, leerRgb, planoAPantalla, radioEnPantalla, altoDelLienzo, girarMapa, girarSiAncho, POR_PAGINA,
+} from '../util/mapa-artistas.js?v=330';
 
 const num = (n) => Number(n || 0).toLocaleString('es-ES');
 const min = (m) => `${num(Math.round(m))} min`;
@@ -84,7 +84,10 @@ export async function render(container) {
   return montar(content, mapa, ruta);
 }
 
-function montar(content, mapa, ruta) {
+function montar(content, recto, ruta) {
+  // v=330: `mapa` es el que se dibuja: `recto` (el horneado tal cual) o su copia girada, que se hace una vez y solo si
+  // hace falta (`orientar`, abajo).
+  let mapa = recto, girado = null;
   content.innerHTML = `<div class="artmapa" data-mapa-artistas="listo">
     <p class="artmapa-intro">Cada punto es un artista de tu historial: cuanto más grande, más lo has escuchado. Toca uno para ver a quién se parece.</p>
     <form class="artmapa-buscar" role="search">
@@ -130,6 +133,15 @@ function montar(content, mapa, ruta) {
     const alto = altoDelLienzo(window.innerHeight, r.top + window.scrollY, window.innerWidth);
     const valor = alto == null ? '' : `${alto}px`;
     if (canvas.style.height !== valor) canvas.style.height = valor;
+  }
+
+  // v=330 (tanda 76): el plano se gira si el lienzo es más ancho que alto (`girarSiAncho`). Se decide al abrir y en el
+  // `resize` de la VENTANA, como `ajustarAlto`, nunca en el `ResizeObserver` del lienzo. Devuelve si cambió.
+  function orientar() {
+    const quiere = girarSiAncho(canvas.clientWidth, canvas.clientHeight) ? (girado ||= girarMapa(recto)) : recto;
+    if (quiere === mapa) return false;
+    mapa = quiere;
+    return true;
   }
 
   function medirLienzo() {
@@ -408,16 +420,27 @@ function montar(content, mapa, ruta) {
   obs?.observe(canvas);
   const alTema = () => programar();
   document.addEventListener('themechange', alTema);
-  const alCambiarVentana = () => ajustarAlto();
+  const alCambiarVentana = () => {
+    ajustarAlto();
+    if (!orientar()) return;
+    // v=330: se cruzó la proporción. El mapa en la otra orientación, y el elegido encuadrado otra vez (sin elegido,
+    // «Ver todo»). Sin animación.
+    medirLienzo();
+    if (!st.vista) return;
+    const todo = vistaTodo(mapa, st.ancho, st.alto);
+    st.vista = st.elegido >= 0 ? encuadrarElegido(todo, mapa, st.elegido, st.ancho, st.alto) : todo;
+    programar();
+  };
   window.addEventListener('resize', alCambiarVentana);
 
   ajustarAlto();
+  orientar();
   medirLienzo();
   pintarPanel();
   programar();
 
   window.__mapaArtistasBanco = {
-    mapa,
+    get mapa() { return mapa; },   // v=330: el que se dibuja (girado o no)
     vista: () => ({ ...st.vista }),
     ocupadas: () => st.ocupadas.map((o) => ({ ...o })),   // v=321: la caja de los botones de zoom
     pendiente: () => st.pendiente,

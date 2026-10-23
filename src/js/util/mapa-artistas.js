@@ -27,6 +27,10 @@
 // grande (nunca desplazan a uno de ellos); los botones de zoom ocupan lugar (`ocupadas`); y `nombresAjenos` cuenta los
 // nombres que quedan más cerca de otro círculo que del suyo (la guarda contra un nombre que miente sobre su punto).
 //
+// v=330 (tanda 76): el plano se GIRA al leer (`girarMapa`: x' = −y, y' = x) cuando el lienzo es más ancho que alto
+// (`girarSiAncho`). El horneado es más alto que ancho (3.571,7 × 4.090,4) y la pantalla de Ian, más ancha: girado, «Ver
+// todo» lo muestra más grande. A 390 el lienzo es más alto que ancho y no gira: queda como antes. 🔴 No se rehornea nada.
+//
 // Lo de acá lo prueba `tests/mapa-artistas.test.mjs` con un grafo inventado de pocos nodos:
 // leer el JSON compacto, los vecinos ordenados por `match`, el toque (pantalla → plano → el
 // círculo más cercano), el pan y el zoom con sus topes, qué nombres se dibujan y el buscador.
@@ -131,6 +135,24 @@ export function leerMapa(json, totals) {
     aristas: A.length / 4, aislados, minutosAislados: decimasAislados / 10,
     limites: { minX, maxX, minY, maxY },
   };
+}
+
+// ── El giro del plano (v=330) ───────────────────────────────────────────────────────────────
+
+/** Si el plano se gira para un lienzo de `ancho` × `alto`: solo cuando es más ancho que alto (v=330). */
+export const girarSiAncho = (ancho, alto) => ancho > alto;
+
+/**
+ * El mismo mapa con el plano girado un cuarto de vuelta (v=330, tanda 76): `x' = −y`, `y' = x`. Es una COPIA: `x`, `y` y
+ * `limites` nuevos y `girado: true`; los vecinos, los minutos, los radios, `principal`, los nombres y el orden son los
+ * mismos objetos (no cambian con el giro). La franja de los sueltos, que el horneado deja debajo, queda a la izquierda,
+ * lejos de los botones de zoom. Se hace al leer, en el navegador: el JSON horneado no se toca.
+ */
+export function girarMapa(mapa) {
+  const x = Float64Array.from(mapa.y, (y) => -y);
+  const y = Float64Array.from(mapa.x);
+  const { minX, maxX, minY, maxY } = mapa.limites;
+  return { ...mapa, x, y, girado: true, limites: { minX: -maxY, maxX: -minY, minY: minX, maxY: maxX } };
 }
 
 // ── El alto del lienzo (v=319) ──────────────────────────────────────────────────────────────

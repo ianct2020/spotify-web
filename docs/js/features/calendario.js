@@ -45,19 +45,19 @@
 
 import {
   loadHistoryStats, loadDays, isOwner, ownerLockedMessage, motivoSinImportCompleto,
-} from './history-data.js?v=329';
-import { escapeHtml, pageHeader, showProgress, hideProgress, promptPlaylistName, confirmModal } from '../ui/components.js?v=329';
-import { showToast } from '../ui/toast.js?v=329';
-import { openModal, closeModal } from '../ui/modal-stack.js?v=329';
-import { openTrackCard } from './track-card.js?v=329';
-import { attachArtistCard } from './artist-card.js?v=329';
-import { calendarioAnual, aMs, isoDelDia, ultimoDiaDelTramo } from '../ui/calendario-anual.js?v=329';
-import { fmtDia } from '../util/fecha.js?v=329';
-import { animationsEnabled, armRevealAll, releaseReveal } from '../ui/reveal.js?v=329';
-import { vigilarRuta } from '../util/vigencia-ruta.js?v=329';
-import { prefKey, migratePrefKey } from '../storage.js?v=329';
-import { createPlaylist, addTracksToPlaylist, invalidatePlaylistsCache } from '../api.js?v=329';
-import { openImportHistory, importarSoloElDetalle } from './import-history.js?v=329';
+} from './history-data.js?v=330';
+import { escapeHtml, pageHeader, showProgress, hideProgress, promptPlaylistName, confirmModal } from '../ui/components.js?v=330';
+import { showToast } from '../ui/toast.js?v=330';
+import { openModal, closeModal } from '../ui/modal-stack.js?v=330';
+import { openTrackCard } from './track-card.js?v=330';
+import { attachArtistCard } from './artist-card.js?v=330';
+import { calendarioAnual, aMs, isoDelDia, ultimoDiaDelTramo } from '../ui/calendario-anual.js?v=330';
+import { fmtDia } from '../util/fecha.js?v=330';
+import { animationsEnabled, armRevealAll, releaseReveal } from '../ui/reveal.js?v=330';
+import { vigilarRuta } from '../util/vigencia-ruta.js?v=330';
+import { prefKey, migratePrefKey } from '../storage.js?v=330';
+import { createPlaylist, addTracksToPlaylist, invalidatePlaylistsCache } from '../api.js?v=330';
+import { openImportHistory, importarSoloElDetalle } from './import-history.js?v=330';
 
 const PREF_ANIO = 'fonoteca_calendario_anio_v1';
 

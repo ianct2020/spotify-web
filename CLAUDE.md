@@ -3387,6 +3387,68 @@ que cae justo ahí; vista fallar contra v=320: «tocan 1 de 14») y **N** (a «V
 conservación**). El grafo del banco pasa a 2.303 artistas y 60.171 pares (los 60.170 de antes no cambian: el azar sigue
 siendo el de los 2.302).
 
+### Las letras, segunda vuelta (v=330)
+
+La tanda 76, la segunda y **última** vuelta de las letras del mapa (Ian: «más que nada las fuentes»). La 75 había probado
+tres cambios y ninguno pasó el umbral:
+
+| la 75, 1366×591, «Ver todo» | escala | nombres | de los 10 más escuchados | ajenos | por qué no entró |
+|---|---|---|---|---|---|
+| v=329 | 0,0924 | 40 | 5 | 0 | — |
+| A: letra de 11 a 16 px según los minutos | 0,0924 | 40 | **4** | 0 | pide al menos 5 de 10 |
+| A2: letra de 11 a 14 px | 0,0924 | 44 | 5 | **1** | pide 0 ajenos (y a 390 dio 3; el tope es 2) |
+| B: peso 500 y borde de 2 px | 0,0924 | 40 | 5 | 0 | el contraste contra el acento puro (2,50 · 1,68 · 2,48 en Ámbar, Aguamarina y Papel): el borde es lo que deja leer |
+| C: el plano girado 90° | **0,1058 (+14,5 %)** | 58 | 6 | 0 | a 390×844 la escala baja −12,7 % (el tope era −10 %) |
+
+**El umbral, el mismo de la 75**: a 1366×591, al menos 5 de los 10 más escuchados con nombre, 0 ajenos, 0 cajas sobre
+`.artmapa-zoom`, 0 cajas fuera del lienzo y la mediana de frames a ×6 ≤ 100 ms; a 390×844, ajenos ≤ 2 y 0 sobre los botones.
+Además, C′: la escala de «Ver todo» a 1366×591 sube al menos un 10 % y a 390×844 todo queda idéntico; A3: a 1366×768 siguen
+60 nombres y 7 de 10. Y las puertas del banco que miran la geometría siguen verdes.
+
+La 76 probó dos ideas (SEMBRADO: el JSON real servido en local, Chrome headless con `mobile: false`, Inter instalada; el
+conductor de la 75, `fonoteca-migracion/mapa-artistas/driver-mapa-artistas-t75-2026-10-22.mjs`; frames SINTÉTICO, CPU ×6 de
+esta máquina, el método de la 65):
+
+| la 76, «Ver todo» | 1366×591: escala · nombres · de los 10 · ajenos · frames ×6 (sin · con elegido) | 1366×768: nombres · de los 10 | 390×844: escala · nombres · de los 10 · ajenos |
+|---|---|---|---|
+| v=329 | 0,0924 · 40 · 5 · 0 · 31,5–32 · 31,3–32,8 | 60 · 7 | 0,0963 · 40 · 5 · 2 |
+| **C′: el giro solo con el lienzo más ancho que alto** | **0,1058 · 58 · 6 · 0** · 25,7–28,4 · 18,1–18,3 | 60 · 7 | **0,0963 · 40 · 5 · 2** (idéntico) |
+| A3: letra de 11 a 14 px y un nombre ajeno no se coloca | 0,0924 · 43 · 5 · 0 · 75,5–89,4 · 75,1–87,5 | 60 · 7 | 0,0963 · 45 · 4 · 0 |
+| C′ + A3 | 0,1058 · 60 · 6 · 0 · 70,6–76 · 60,7–62,2 | 60 · 7 | 0,0963 · 45 · 4 · 0 |
+
+🔴 **Entró C′. A3 NO entró**: pasa el umbral con el JSON real, pero **pone roja la puerta I** del banco («el nombre del
+elegido sale»). La regla de «ajeno» mira la distancia al BORDE de cada círculo: un punto chico dentro de uno grande queda
+más cerca del grande aunque su nombre esté centrado encima del suyo. La `ESTRELLA` inventada (51 min) está dentro de un
+parecido de 1.114 min, y A3 le escondía el nombre al elegido, que desde v=318 sale siempre. **Con esto, el tema de las
+letras del mapa queda cerrado**: no hay tercera vuelta (otra escala, otro peso, otro borde, otro tope) sin un dato nuevo.
+
+**C′, cómo es** (`util/mapa-artistas.js`, puro; la vista solo mide y llama):
+
+- `girarMapa(mapa)` devuelve una COPIA con el plano girado un cuarto de vuelta, `x' = −y`, `y' = x`, sus `limites` y
+  `girado: true`; los vecinos, los minutos, los radios (y su piso), `principal`, los nombres y el orden son los mismos
+  objetos. La franja de los sueltos, que el horneado deja debajo, queda a la izquierda, lejos de los botones de zoom.
+- `girarSiAncho(ancho, alto)` → `ancho > alto`. **La decide la vista con el tamaño del LIENZO**: al abrir (después de
+  `ajustarAlto`) y en el `resize` de la VENTANA (`orientar()`, junto a `ajustarAlto`), **nunca en el `ResizeObserver` del
+  lienzo** (la regla de v=319). A 1366 el lienzo es 1.198 × 402: gira. A 390 es 368 × 523: no gira y queda **idéntico a
+  v=329** (y las capturas, byte a byte). Si un `resize` cruza la proporción: el mapa en la otra orientación y, con un
+  elegido, `encuadrarElegido` sobre la «Ver todo» nueva; sin elegido, «Ver todo». Sin animación.
+- 🔴 **Se hace al leer, en el navegador. `history-artist-similares.json` NO se rehornea** y no cambió un byte. El plano
+  horneado es más alto que ancho (3.571,7 × 4.090,4): girado, en una pantalla ancha entra más grande.
+- El buscador, el toque, el panel y la ficha no cambiaron: trabajan por índice. `window.__mapaArtistasBanco.mapa` es un
+  *getter*: el mapa que se dibuja, girado o no.
+- ⚠️ Si al abrir el lienzo mide 0 (el contenedor oculto), no gira hasta un `resize` de la ventana.
+- **0 peticiones nuevas**: la tabla de costos no cambia.
+
+Guardas: `tests/mapa-artistas.test.mjs` (sección 15: un mapa más alto que ancho, girado, sale más ancho que alto con los
+mismos vecinos, minutos, radios y orden; los límites; que es una copia; la decisión con un lienzo ancho, uno alto y uno
+cuadrado; la escala de «Ver todo»; el toque sobre el girado. Rojo contra v=329) y la puerta **O** del banco (a 1366×591 el
+mapa que se dibuja es el horneado girado y «Ver todo» tiene su escala; a 390×844, el horneado tal cual y la escala de
+antes; y el cruce de la proporción con un `resize`, con la estrella elegida y de vuelta sin elegido. Rojo contra v=329; 10
+de 10 verdes con v=330, 13.643–14.306 ms de reloj virtual). ⚠️ En headless con reloj virtual el `resize` del marco no llega
+solo (no corren los pasos de pintado): la puerta lo dispara a mano después de cambiarle el tamaño. ⚠️ **El grafo inventado
+es un anillo casi redondo: girarlo no gana lugar.** Lo que vale de la escala sale de la tabla con el JSON real, no de las
+capturas.
+
 ## 🖼️ La postal del año (v=326, rediseñada en v=327)
 
 En «Wrapped», con un año elegido, el botón **«Descargar postal (PNG)»** (debajo de `.wrapped-hero-sub`) dibuja una imagen
