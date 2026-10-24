@@ -193,6 +193,10 @@ const URL = `http://127.0.0.1:${puerto}/banco/${BANCO}.html?ancho=${ANCHO}${proc
   + (EXTRA[BANCO] ? '&' + EXTRA[BANCO] : '');
 const perfil = mkdtempSync(join(tmpdir(), 'banco-chrome-'));
 
+// ⚠️ `process.exit()` NO corre el `finally`: hasta la tanda 82 había un `process.exit(0)` y un `process.exit(1)` dentro
+// del `try`, así que el `rmSync(perfil…)` de abajo no llegaba nunca y quedaba un `/tmp/banco-chrome-*` por corrida (69 en
+// la 81). Ahora el `try` solo decide el código y la salida va DESPUÉS del `finally`.
+let codigo = 1;
 try {
   const dom = await new Promise((res, rej) => {
     const p = spawn(chrome, [
@@ -229,13 +233,14 @@ try {
   const reloj = (dom.match(/<html[^>]*\sdata-resumen="[^"]*reloj virtual=(\d+) ms/) || [])[1];
   if (estado === 'ok') {
     console.log(`✓ banco/${BANCO}.html (ancho=${ANCHO}): ${mens || 'ok'}${reloj ? ` · reloj virtual ${reloj} ms` : ''}`);
-    process.exit(0);
+    codigo = 0;
+  } else {
+    console.error(`✗ banco/${BANCO}.html (ancho=${ANCHO}): estado="${estado || 'ausente'}"${reloj ? ` · reloj virtual ${reloj} ms` : ''}`);
+    if (mens) console.error('  ' + mens);
+    console.error('  URL: ' + URL);
   }
-  console.error(`✗ banco/${BANCO}.html (ancho=${ANCHO}): estado="${estado || 'ausente'}"${reloj ? ` · reloj virtual ${reloj} ms` : ''}`);
-  if (mens) console.error('  ' + mens);
-  console.error('  URL: ' + URL);
-  process.exit(1);
 } finally {
   cerrarServer();
   try { rmSync(perfil, { recursive: true, force: true }); } catch { /* ignora */ }
 }
+process.exit(codigo);
