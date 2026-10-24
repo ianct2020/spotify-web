@@ -9,6 +9,7 @@ import { openPlaylistPicker } from '../ui/playlist-picker.js';
 import { getOwnPlaylists, addUrisToPlaylists, toastAddResult } from '../util/playlist-add.js';
 import { prefKey, migratePrefKey } from '../storage.js';
 import { propuestaDeGrupo, resumenDeFaltantes } from '../util/deluxe-propuesta.js';
+import { SUPERVIVIENTES_PERDIDAS_MAX, ENSAYOS_VERSIONS_MAX } from '../util/topes-registros.js';
 
 // ── «Borrar sobrantes» REHABILITADO (2026-08-28) ─────────────────────────────
 //
@@ -98,7 +99,8 @@ function borradoSimulado(ids, { meta = null, supervivientes = null } = {}) {
   try {
     const previo = JSON.parse(localStorage.getItem(DRY_LOG_KEY) || '[]');
     previo.unshift(entrada);
-    localStorage.setItem(DRY_LOG_KEY, JSON.stringify(previo.slice(0, 20)));
+    // (v=337) El tope vive en `util/topes-registros.js`: «Importar todo» lo usa también, importado.
+    localStorage.setItem(DRY_LOG_KEY, JSON.stringify(previo.slice(0, ENSAYOS_VERSIONS_MAX)));
   } catch { /* el registro es una red, no un requisito */ }
   console.log(`[versions][simulacro] NO se borró nada. ${ids.length} id(s):`, ids);
   return entrada;
@@ -862,7 +864,8 @@ function avisarSupervivientesPerdidas(perdidas, totalBorradas) {
     migratePrefKey(PERDIDAS_KEY);
     const previo = JSON.parse(localStorage.getItem(prefKey(PERDIDAS_KEY)) || '[]');
     const entrada = { fecha: new Date().toISOString(), totalBorradas, perdidas };
-    localStorage.setItem(prefKey(PERDIDAS_KEY), JSON.stringify([entrada, ...previo].slice(0, 20)));
+    // (v=337) El tope, en `util/topes-registros.js` (lo usa también «Importar todo»).
+    localStorage.setItem(prefKey(PERDIDAS_KEY), JSON.stringify([entrada, ...previo].slice(0, SUPERVIVIENTES_PERDIDAS_MAX)));
   } catch { /* el registro es una red, no un requisito: el modal ya avisó */ }
 
   const filas = perdidas.map(p => `

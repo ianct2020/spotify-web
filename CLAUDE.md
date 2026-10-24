@@ -4939,7 +4939,7 @@ lo que quitaste DESPUÉS de hacer la copia (un disco de «no registraste», un o
 | archivo | qué |
 |---|---|
 | `util/copia-importar.js` | PURO (importa `copia-completa.js`, `disco-base.js`, `generos-artista.js` y `topes-registros.js`, los cuatro puros): `planDeImport` (sincrónica: el archivo ya parseado + el estado YA LEÍDO → `{ rechazo, idb, ls, resumen, meta }`), `segundaRed`, `revivir` (los `{"__tipo": …}` de vuelta a `Uint8Array`/`Map`/`Set`, byte a byte) y `resumenEnPalabras` |
-| `util/topes-registros.js` | SIN IMPORTS: los topes de `likes_borrados_log_v1` (20) y `ocultos_incidencias_v1` (100), que vivían privados en `api.js` y `hidden-sync.js`. Los dueños y el import los importan de acá (importados, no copiados) |
+| `util/topes-registros.js` | SIN IMPORTS: los topes de `likes_borrados_log_v1` (20) y `ocultos_incidencias_v1` (100), que vivían privados en `api.js` y `hidden-sync.js`, y desde v=337 (tanda 81) los dos de `#versions`: `versions_supervivientes_perdidas_v1` (`SUPERVIVIENTES_PERDIDAS_MAX`, 20) y `versions_dry_run_log_v1` (`ENSAYOS_VERSIONS_MAX`, 20), que eran un `20` literal en `features/versions.js`. Los dueños y el import los importan de acá (importados, no copiados) |
 | `api.js`, `importarCopiaCompleta(texto)` / `aplicarPlan(plan)` | el enchufe: lee con las MISMAS lecturas sin efectos de `exportarCopiaCompleta` (el test las compara letra por letra), decide, y recién `aplicarPlan` escribe |
 | `features/dashboard.js`, `handleImportTodo()` | el ítem del ⚙, su `<input type="file">`, los dos modales y la recarga |
 | `util/canal-copia.js`, `ui/aviso-copia.js` (v=335) | el aviso a las OTRAS pestañas: el `BroadcastChannel('fonoteca-copia')` y el aviso fijo |
@@ -4958,7 +4958,7 @@ cual viene, siempre). La forma de cada valor se leyó en su módulo dueño; la q
 |---|---|---|
 | `conjunto` | los seis `<lsKey>` de ocultos, `discover_escuchados`, los tres `listened_*_dismissed`, `versions_dismissed`, `genre_hidden_tags`, `discoverart_elegidos`, `newrel_elegidos` (arrays JSON de cadenas) | une: primero lo tuyo en su orden, después lo del archivo que falte |
 | `mapa` | los seis `<lsKey>_uris` y `discover_escuchados_uris` (objeto clave → cadena) | agrega las claves que faltan; si una está en los dos con otro valor, gana la tuya |
-| `registro` | `likes_borrados_log_v1` (tope 20), `ocultos_incidencias_v1` (tope 100), `versions_supervivientes_perdidas_v1` y `versions_dry_run_log_v1` (**sin tope**: el suyo es un `20` literal dentro de `features/versions.js`, que la 79 no tocó; lo recorta `#versions` en su próxima escritura) | une por entrada exacta, las más nuevas primero por `fecha`, con el tope del dueño. ⚠️ El tope puede dejar afuera entradas tuyas más viejas que lo que trae el archivo (es la regla del registro: quedan las N más nuevas). Una entrada sin fecha: no se puede ordenar, gana la tuya |
+| `registro` | `likes_borrados_log_v1` (tope 20), `ocultos_incidencias_v1` (tope 100), `versions_supervivientes_perdidas_v1` y `versions_dry_run_log_v1` (tope 20 cada uno **desde v=337**; hasta v=336, sin tope: el suyo era un `20` literal dentro de `features/versions.js`) | une por entrada exacta, las más nuevas primero por `fecha`, con el tope del dueño. ⚠️ El tope puede dejar afuera entradas tuyas más viejas que lo que trae el archivo (es la regla del registro: quedan las N más nuevas). Una entrada sin fecha: no se puede ordenar, gana la tuya |
 | `discografia` | `discover_disco_base_v1_*` | `fusionarBases()` de `disco-base.js`, importada, **pero al revés de su comentario**: `fusionarBases(archivo, tuya)`. En el orden del comentario («a = este navegador, b = la importada») `unirItems` deja que los campos no vacíos de `b` pisen los de `a`: el archivo te cambiaría el nombre o la tapa de un lanzamiento que ya tenías. Al revés, ningún campo no vacío tuyo cambia (uno vacío —`null`, `''`, `[]`, `0`— sí puede llenarse). La última entrada del historial se rehace con los números del archivo. Si el archivo no trae ningún id nuevo, no se escribe. Una base que no pasa `esBaseValida()` no entra |
 | `la tuya gana` | todo lo demás: el id de cada playlist espejo (`fonoteca_hidden_pl_*`: un id guardado nunca se pisa, v=287), las preferencias, el historial, el mapa, las áreas, las etiquetas, la base de colores, `ocultos_sin_uri_v1` (es clave → **objeto**, no clave → cadena), `fonoteca_crash_log_v1` (su tope es POR TIPO, `CUPOS` de `crash-guard.js`: aplicarlo sería copiar la poda), `discoverart_fallos`/`newrel_fallos` (objetos, no listas), los dos informes y la marca de las etiquetas | nada |
 
@@ -5050,6 +5050,34 @@ recarga). Sin escrituras (la segunda red, la lectura, IndexedDB que tira, un rec
 `r.ok` con 0 escrituras (el mismo archivo dos veces) sigue recargando y sigue sin avisar a nadie. Guardas:
 `tests/importar-a-medias.test.mjs` (el `api.js` real y el `handleImportTodo` REAL sacado del fuente con dobles; rojo contra
 v=335: 20 de 42) y el caso **I** del banco `copia-importar` (abajo).
+
+**Los topes de `#versions` (v=337, tanda 81).** Los dos registros ordenan por `fecha` (la `fechaCampo` de su fila; las dos
+formas, leídas en `versions.js`: `{ fecha, simulacro, total, ids, … }` y `{ fecha, totalBorradas, perdidas }`), así que el
+import los une como a los otros dos: las más nuevas primero, con el tope del dueño. Un archivo con 50 y una tuya: 20 (hasta
+v=336, 51). ⚠️ Una clave que FALTA va tal cual viene (50), como cualquier clave que falta, también `likes_borrados_log_v1`:
+la regla de «si falta, se escribe tal cual» no se tocó; la recorta el dueño en su próxima escritura. `#versions` escribe
+igual (el mismo 20, ahora importado). Guarda: `tests/topes-versions.test.mjs` (rojo contra v=336: 10 de 15).
+
+**La otra pestaña: la memoria de los almacenes (tanda 81) — la unión quedó PARADA.** De las 21 filas `conjunto`/`mapa`
+del `CENSO`, solo DOS dueños guardan el conjunto ENTERO desde la memoria: `createHiddenStore` (los seis almacenes de ocultos:
+`keys`, un `Set` perezoso, y `uriByKey`, un `Map`; guardan en `renombrarLocal`, `sync`, `fijarVarios`, `toggle`, `clear`,
+`remember`, `pushMissing`) y `createLocalStore` (`discover_escuchados` y `_uris`). Los demás releen `localStorage` antes de
+cada escritura y no pueden pisar lo importado: los tres `listened_*_dismissed` (`listened.js:36-65`), `versions_dismissed`
+(`versions.js:125-130`; escrituras en `:437` y `:962`), `genre_hidden_tags` (`by-genre.js:89-94`; `:720` es «Restaurar todos»)
+y los dos `*_elegidos` (`cola-escaneo.js:20-33`; `state.elegidos` queda en memoria solo para pintar). La 81 diseñó que esos
+dos dueños, al llegar `{ tipo: 'importada' }`, UNIERAN a su memoria lo que lee `localStorage` (muta el mismo `Set`/`Map`, no
+guarda, no sincroniza). La regla que lo hacía exacto: «el import nunca quita, y todo lo que esta pestaña hizo ya está en
+`localStorage` (cada cambio se guarda al instante)». 🔴 **Esa premisa es falsa en `fijarVarios`**: borra de la memoria tanda
+por tanda (de a 100) y guarda recién al final, con `await` en el medio. Si el mensaje llega entre dos tandas de un «devolver»
+de más de 100 (la barra de Descubrir/Novedades), la unión revive lo ya devuelto (medido en Node: vuelven 100 de 150, con sus
+uris, y el próximo `sync()` los volvería a subir a la playlist). Por el encargo («si encontrás un caso que lo rompa, se para»)
+**la unión NO está en el código**: el aviso fijo de la 80 sigue siendo lo único que tiene la otra pestaña. La propuesta entera
+(la unión en `util/union-en-memoria.js`, sin imports; `fijarVarios` guardando después de cada tanda; `canal-copia.js` con
+`unref?.()` para Node; el texto nuevo del aviso; la suite `copia-otra-pestana`, 43 asserts con fuerza bruta de 1.720 casos,
+semilla `0x81c0b1a`) está como parche en `fonoteca-migracion/t81-2-otra-pestana-propuesta-2026-10-24.patch` (aplica sobre
+`4ade3847` con `patch -p1`; con él, 97/97). Otra cosa que mide esa suite: si el mensaje llega mientras un `sync()` BAJA la
+playlist, ese mismo `sync()` sube lo que trajo la copia y la playlist no tenía (las escrituras dejan de ser las de v=336 en
+ese caso; en v=336 eso se perdía).
 
 **El tiempo** (SEMBRADO: el banco con `XQ="&tamano=ian&solo=ab"`, datos INVENTADOS del tamaño de los de Ian, archivo de
 19.939.678 bytes, en un perfil VACÍO): reloj de pared **474 ms** para leer el archivo, leer el navegador y decidir, y **671 ms**

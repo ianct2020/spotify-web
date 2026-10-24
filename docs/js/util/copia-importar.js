@@ -17,14 +17,20 @@
 // Cada `fusion` del censo (qué hace con una clave que ya está) está explicada en `copia-completa.js`, arriba del
 // `CENSO`, y la tabla entera con la forma de cada valor en `CLAUDE.md`, «Importar todo (v=334)».
 
-import { CENSO, CLASES, COPIA_VERSION, ULTIMO_USUARIO, entradaDe, esDelUsuario, uidDelValor } from './copia-completa.js?v=336';
-import { fusionarBases, esBaseValida } from './disco-base.js?v=336';
-import { CLAVE_MIGRADO } from './generos-artista.js?v=336';
-import { BORRADOS_LOG_MAX, INCIDENCIAS_OCULTOS_MAX } from './topes-registros.js?v=336';
+import { CENSO, CLASES, COPIA_VERSION, ULTIMO_USUARIO, entradaDe, esDelUsuario, uidDelValor } from './copia-completa.js?v=337';
+import { fusionarBases, esBaseValida } from './disco-base.js?v=337';
+import { CLAVE_MIGRADO } from './generos-artista.js?v=337';
+import { BORRADOS_LOG_MAX, INCIDENCIAS_OCULTOS_MAX, SUPERVIVIENTES_PERDIDAS_MAX, ENSAYOS_VERSIONS_MAX } from './topes-registros.js?v=337';
 
-// El tope de cada registro, el de su dueño. Los dos de `#versions` no están: su tope es un `20` literal dentro de
-// `features/versions.js`, que la 79 no tocó; esos se unen sin tope (lo recorta `#versions` en su próxima escritura).
-const TOPES = { likes_borrados_log_v1: BORRADOS_LOG_MAX, ocultos_incidencias_v1: INCIDENCIAS_OCULTOS_MAX };
+// El tope de cada registro, el de su dueño (importado, no copiado). Los dos de `#versions` entraron en v=337 (tanda 81):
+// hasta entonces eran un `20` literal en `features/versions.js` y el import los unía sin tope. Los cuatro ordenan por
+// `fecha` (la `fechaCampo` de su fila del CENSO).
+const TOPES = {
+  likes_borrados_log_v1: BORRADOS_LOG_MAX,
+  ocultos_incidencias_v1: INCIDENCIAS_OCULTOS_MAX,
+  versions_supervivientes_perdidas_v1: SUPERVIVIENTES_PERDIDAS_MAX,
+  versions_dry_run_log_v1: ENSAYOS_VERSIONS_MAX,
+};
 const BLOB_ETIQUETAS = 'lastfm_artist_tags_cache';
 const PREFIJO_HISTORIAL = 'local_';
 const DIAS = 'days';   // `localKey(uid, 'days')` (history-data.js): lo único que guarda «solo el detalle»

@@ -6,11 +6,18 @@
 // diverge, v=219). No se pueden importar de los dueños: `api.js` no es puro y `hidden-sync.js` arrastra
 // `api.js` por `playlist-add.js`. Así que el número vive acá y los dueños lo importan de acá.
 //
-// Los dos registros de `#versions` (`versions_supervivientes_perdidas_v1`, `versions_dry_run_log_v1`) tienen
-// su tope como un `20` literal dentro de `features/versions.js` y NO están acá: esa vista no se tocó en la 79.
+// (v=337, tanda 81) Los dos registros de `#versions` (`versions_supervivientes_perdidas_v1`, `versions_dry_run_log_v1`)
+// tenían su tope como un `20` literal dentro de `features/versions.js`, y el import los unía sin tope. Ahora viven acá
+// también: la vista y el import los importan.
 
 /** `likes_borrados_log_v1` (`api.js`): los últimos borrados de me gusta. */
 export const BORRADOS_LOG_MAX = 20;
 
 /** `ocultos_incidencias_v1` (`util/hidden-sync.js`): las últimas incidencias de los ocultos. */
 export const INCIDENCIAS_OCULTOS_MAX = 100;
+
+/** `versions_supervivientes_perdidas_v1` (`features/versions.js`): las últimas veces que `#versions` perdió la que se quedaba. */
+export const SUPERVIVIENTES_PERDIDAS_MAX = 20;
+
+/** `versions_dry_run_log_v1` (`features/versions.js`): los últimos ensayos del doble de borrado de `#versions`. */
+export const ENSAYOS_VERSIONS_MAX = 20;

@@ -138,7 +138,9 @@ console.log('· registro');
   ok(!enPlan(p3, 'ls', k), 'conserva: si todo lo del archivo es más viejo que lo que el tope deja, no se escribe');
   const kv = 'versions_dry_run_log_v1';
   const p4 = plan(copiaDe({ ls: { [kv]: J(muchas(9, 15)) } }), {}, { [kv]: J(muchas(8, 15)) });
-  ok(JSON.parse(enPlan(p4, 'ls', kv)?.[1] || '[]').length === 30, 'los de #versions, sin tope (su tope es un literal de versions.js, que no se tocó)');
+  // (v=337, tanda 81) Reescrito a propósito: hasta v=336 decía «sin tope» (30). El tope de #versions vive ahora en
+  // `topes-registros.js` y el import lo usa (ver `topes-versions.test.mjs`).
+  ok(JSON.parse(enPlan(p4, 'ls', kv)?.[1] || '[]').length === 20, 'los de #versions, con su tope (20, de topes-registros.js desde v=337)');
   const p5 = plan(copiaDe({ ls: { [k]: J([{ sinFecha: 1 }]) } }), {}, { [k]: J(tuyo) });
   ok(!enPlan(p5, 'ls', k), 'una entrada sin fecha: no hay cómo ordenar, gana la tuya');
   const ki = `ocultos_incidencias_v1__${UID}`;
@@ -309,7 +311,8 @@ console.log('· 🔴 el invariante, por fuerza bruta');
   const ser = (v) => C.serializar(v);
   const lista = (t) => { try { const v = JSON.parse(t); return Array.isArray(v) ? v : null; } catch { return null; } };
   const obj = (t) => { try { const v = JSON.parse(t); return v && typeof v === 'object' && !Array.isArray(v) ? v : null; } catch { return null; } };
-  const TOPE = { likes_borrados_log_v1: 20, ocultos_incidencias_v1: 100 };
+  // (v=337) Los dos de #versions también tienen tope en el import (`topes-versions.test.mjs`).
+  const TOPE = { likes_borrados_log_v1: 20, ocultos_incidencias_v1: 100, versions_dry_run_log_v1: 20, versions_supervivientes_perdidas_v1: 20 };
   // ¿`despues` contiene a `antes`, según la `fusion` de su fila?
   function contiene(c, antes, despues) {
     if (despues === undefined) return false;

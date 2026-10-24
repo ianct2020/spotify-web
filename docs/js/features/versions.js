@@ -1,14 +1,15 @@
-import { getAllLikedTracks, removeLikedTracks, checkLibraryContains } from '../api.js?v=336';
-import { borrarLikesVerificado } from '../util/borrado-verificado.js?v=336';
-import { normalizeKey, esFantasma, guardaUltimoEjemplar, indexarBiblioteca } from '../util/versions-guard.js?v=336';
-import { showProgress, hideProgress, progressController, isCancelled, typeConfirmModal, infoModal, renderTrackRow, escapeHtml, pageHeader } from '../ui/components.js?v=336';
-import { showToast } from '../ui/toast.js?v=336';
-import { openModal, closeTop } from '../ui/modal-stack.js?v=336';
-import { coverUrl } from '../util/cover-size.js?v=336';
-import { openPlaylistPicker } from '../ui/playlist-picker.js?v=336';
-import { getOwnPlaylists, addUrisToPlaylists, toastAddResult } from '../util/playlist-add.js?v=336';
-import { prefKey, migratePrefKey } from '../storage.js?v=336';
-import { propuestaDeGrupo, resumenDeFaltantes } from '../util/deluxe-propuesta.js?v=336';
+import { getAllLikedTracks, removeLikedTracks, checkLibraryContains } from '../api.js?v=337';
+import { borrarLikesVerificado } from '../util/borrado-verificado.js?v=337';
+import { normalizeKey, esFantasma, guardaUltimoEjemplar, indexarBiblioteca } from '../util/versions-guard.js?v=337';
+import { showProgress, hideProgress, progressController, isCancelled, typeConfirmModal, infoModal, renderTrackRow, escapeHtml, pageHeader } from '../ui/components.js?v=337';
+import { showToast } from '../ui/toast.js?v=337';
+import { openModal, closeTop } from '../ui/modal-stack.js?v=337';
+import { coverUrl } from '../util/cover-size.js?v=337';
+import { openPlaylistPicker } from '../ui/playlist-picker.js?v=337';
+import { getOwnPlaylists, addUrisToPlaylists, toastAddResult } from '../util/playlist-add.js?v=337';
+import { prefKey, migratePrefKey } from '../storage.js?v=337';
+import { propuestaDeGrupo, resumenDeFaltantes } from '../util/deluxe-propuesta.js?v=337';
+import { SUPERVIVIENTES_PERDIDAS_MAX, ENSAYOS_VERSIONS_MAX } from '../util/topes-registros.js?v=337';
 
 // ── «Borrar sobrantes» REHABILITADO (2026-08-28) ─────────────────────────────
 //
@@ -98,7 +99,8 @@ function borradoSimulado(ids, { meta = null, supervivientes = null } = {}) {
   try {
     const previo = JSON.parse(localStorage.getItem(DRY_LOG_KEY) || '[]');
     previo.unshift(entrada);
-    localStorage.setItem(DRY_LOG_KEY, JSON.stringify(previo.slice(0, 20)));
+    // (v=337) El tope vive en `util/topes-registros.js`: «Importar todo» lo usa también, importado.
+    localStorage.setItem(DRY_LOG_KEY, JSON.stringify(previo.slice(0, ENSAYOS_VERSIONS_MAX)));
   } catch { /* el registro es una red, no un requisito */ }
   console.log(`[versions][simulacro] NO se borró nada. ${ids.length} id(s):`, ids);
   return entrada;
@@ -862,7 +864,8 @@ function avisarSupervivientesPerdidas(perdidas, totalBorradas) {
     migratePrefKey(PERDIDAS_KEY);
     const previo = JSON.parse(localStorage.getItem(prefKey(PERDIDAS_KEY)) || '[]');
     const entrada = { fecha: new Date().toISOString(), totalBorradas, perdidas };
-    localStorage.setItem(prefKey(PERDIDAS_KEY), JSON.stringify([entrada, ...previo].slice(0, 20)));
+    // (v=337) El tope, en `util/topes-registros.js` (lo usa también «Importar todo»).
+    localStorage.setItem(prefKey(PERDIDAS_KEY), JSON.stringify([entrada, ...previo].slice(0, SUPERVIVIENTES_PERDIDAS_MAX)));
   } catch { /* el registro es una red, no un requisito: el modal ya avisó */ }
 
   const filas = perdidas.map(p => `
