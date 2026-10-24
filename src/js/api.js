@@ -8,7 +8,7 @@ import { artistIsSame, limpiaParaQuery } from './util/track-match.js';
 import { contadorCuota, cuotaDeEndpoint } from './util/cuota.js';
 import { exportarEtiquetas, importarEtiquetas } from './api/lastfm.js';
 import { leerNavegador, armarCopia, serializar, contieneSecreto, CENSO } from './util/copia-completa.js';
-import { leerCopia, planDeImport, segundaRed, TEXTOS as TEXTOS_IMPORT } from './util/copia-importar.js';
+import { leerCopia, planDeImport, segundaRed, importEscribio, TEXTOS as TEXTOS_IMPORT } from './util/copia-importar.js';
 import { MARCA_DESDE_COPIA, leerMarca, marcaTrasImport } from './util/ocultos-desde-copia.js';
 import { avisarCopiaImportada } from './util/canal-copia.js';
 import { BORRADOS_LOG_MAX } from './util/topes-registros.js';
@@ -940,7 +940,8 @@ const ALMACENES_DE_OCULTOS = CENSO.filter((c) => c.donde === 'ls' && c.clase ===
 //      menos lo que leía antes, unido a la marca que hubiera. UN `setItem`, el de la marca, fuera del plan (ni
 //      `planDeImport` ni `segundaRed` la ven). Si tira, el `sync()` avisa como en v=334 y nada más;
 //   2. el aviso a las OTRAS pestañas (`util/canal-copia.js`), si se escribió algo. ⚠️ También en una cuota que cortó a
-//      mitad: lo ya escrito es justo lo que otra pestaña puede pisar.
+//      mitad: lo ya escrito es justo lo que otra pestaña puede pisar. (v=336) «Si se escribió algo» es
+//      `importEscribio()`, la MISMA función con la que `handleImportTodo` decide recargar esta pestaña.
 function alTerminarImport(r, { lsAntes = null, escritas = [], uid = null } = {}) {
   if (lsAntes && escritas.length && uid) {
     try {
@@ -953,7 +954,7 @@ function alTerminarImport(r, { lsAntes = null, escritas = [], uid = null } = {})
       console.warn('[import-todo] no pude dejar la marca de los ocultos importados (el aviso del próximo sync dirá «habían desaparecido»):', e);
     }
   }
-  if ((r.idb || 0) + (r.ls || 0) > 0) avisarCopiaImportada();
+  if (importEscribio(r)) avisarCopiaImportada();
   return r;
 }
 

@@ -508,7 +508,11 @@ console.log('· lectura estática');
   ok(/if \(!ok\) return;/.test(handler) && handler.indexOf('if (!ok) return;') < handler.indexOf('aplicarPlan('), '«Cancelar» vuelve antes de aplicarPlan: 0 escrituras');
   // (v=335, tanda 80) Hasta v=334 decía «sin recarga automática: solo «Recargar ahora»». La 80 la hizo OBLIGADA: el modal
   // del resultado no ofrece «Cerrar» y, se cierre como se cierre, la pestaña recarga (ver `tests/importar-recarga.test.mjs`).
-  ok(/cancelText: null, variant: 'info' \}\);\s*location\.reload\(\);\s*\}\s*$/.test(handler) && (handler.match(/location\.reload/g) || []).length === 1, 'la recarga es obligada: un solo location.reload, sin condición, después del modal sin «Cerrar»');
+  // (v=336, tanda 81) Reescrito a propósito: hasta v=335 había UN `location.reload`. Ahora son dos, el del import entero y
+  // el del import a medias (`importar-a-medias.test.mjs`); cada uno va justo después de su modal sin «Cerrar».
+  const recargas = handler.match(/location\.reload/g) || [];
+  const trasModal = handler.match(/cancelText: null, variant: '(info|warning)' \}\);\s*location\.reload\(\);/g) || [];
+  ok(/cancelText: null, variant: 'info' \}\);\s*location\.reload\(\);\s*\}\s*$/.test(handler) && recargas.length === 2 && trasModal.length === 2, 'la recarga es obligada: cada location.reload (el entero y el a medias), sin condición, después de su modal sin «Cerrar»');
   ok(/data-act="export-todo"[^\n]*\n\s*<button class="dash-cog-item" data-act="import-todo" role="menuitem">Importar todo <span class="dash-cog-hint">cargar una copia<\/span><\/button>/.test(fuente('src/js/features/dashboard.js')), '«Importar todo» con la pista «cargar una copia», debajo de «Exportar todo»');
   ok(C.LEEME['cómo se vuelve a cargar'] === '⚙ del Dashboard → “Importar todo”. Solo agrega lo que falta y une las listas: nunca borra ni cambia lo que ya tienes.', '_leeme dice cómo se vuelve a cargar');
   ok(C.CENSO.filter((c) => c.entra).every((c) => ['conjunto', 'mapa', 'registro', 'discografia', 'la tuya gana'].includes(c.fusion)) && C.CENSO.filter((c) => !c.entra).every((c) => !c.fusion), 'cada fila que entra tiene su `fusion`; las que no, no');

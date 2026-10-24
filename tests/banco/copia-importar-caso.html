@@ -23,6 +23,9 @@
 //   ?caso=H2   (tanda 80) la OTRA pestaña: la app abierta en #home con el perfil de B; espera a que la madre le diga
 //              «mira» y cuenta si apareció el aviso de «se ha cargado una copia en otra pestaña» y si NO recargó
 //   ?caso=H1   (tanda 80) la pestaña que importa, con H2 abierta al lado: como B, pero sin vaciar (el perfil es el de H2)
+//   ?caso=I    (tanda 81) la cuota que corta a mitad: el perfil de B con `localStorage` LLENO de relleno INVENTADO hasta
+//              dejar un hueco del tamaño de las 4 primeras claves del plan y media; el import escribe 4 y la quinta no
+//              entra. El modal «La copia se ha importado a medias» y la recarga; lo que había antes, igual
 //   &tamano=ian  A con el tamaño de los datos de Ian (INVENTADO): mide el import (no está en `prepush`)
 //
 // 🔴 La recarga después de importar (tanda 80, v=335). El modal «Copia importada» ya no tiene «Cerrar» y, se cierre como
@@ -113,9 +116,14 @@ async function importar(texto, accion) {
   else {
     const t2 = performance.now();
     $('#modal-confirm', modal).click();
-    const hecho = await esperarReal(() => $$('.modal-alert').find((m) => /Copia importada/.test(m.querySelector('h2')?.textContent || '')), { que: 'el modal de «Copia importada»', vueltas: vueltasLargas });
+    // (tanda 81) El resultado puede ser «Copia importada» o, si se cortó a mitad, «La copia se ha importado a medias».
+    const elModal = () => $$('.modal-alert').find((m) => /Copia importada|a medias/.test(m.querySelector('h2')?.textContent || ''));
+    await esperarReal(() => elModal() || $('.toast-error'), { que: 'el modal del resultado («Copia importada» o «a medias»)', vueltas: vueltasLargas });
+    // Hasta v=335, a medias salía un toast rojo y NADA más: ni modal ni recarga. Que el rojo lo diga.
+    const hecho = elModal();
+    afirmar(hecho, `sin modal del resultado: un toast rojo («${$('.toast-error')?.textContent.replace(/\s+/g, ' ').trim()}») y la pestaña no recarga`);
     const t3 = performance.now();
-    r.hecho = { texto: hecho.querySelector('.modal-alert-body').textContent.replace(/\s+/g, ' ').trim(), botones: $$('button', hecho).map((b) => b.textContent.trim()) };
+    r.hecho = { titulo: hecho.querySelector('h2').textContent, texto: hecho.querySelector('.modal-alert-body').textContent.replace(/\s+/g, ' ').trim(), botones: $$('button', hecho).map((b) => b.textContent.trim()) };
     r.ms = { leerYDecidir: Math.round(t1 - t0), aplicar: Math.round(t3 - t2) };
     // (v=335) El modal se queda abierto: cerrarlo recarga. Se cierra al final del caso (`recargarYEntregar`).
     modalHecho = hecho;
@@ -143,6 +151,26 @@ async function recargarYEntregar(via) {
   await esperarReal(() => ++v > 3000, { que: 'la recarga', vueltas: 4000 });
   window.name = '';
   throw new Error(`cerrar «Copia importada» por «${via}» no recargó la pestaña (modal ${modalHecho.isConnected ? 'abierto' : 'cerrado'})`);
+}
+
+// (tanda 81) El caso I: `localStorage` lleno de relleno INVENTADO, con un hueco de las 4 primeras claves del plan y la
+// mitad de la quinta. El plan sale de la MISMA lectura que hará el clic (`importarCopiaCompleta` solo lee). La cuota de
+// Chrome cuenta caracteres de la clave y del valor: se reserva el hueco con una clave, se llena el resto con valores que
+// se van achicando a la mitad hasta que no entra ni uno de un carácter, y se suelta el hueco.
+async function llenarHastaElHueco(texto) {
+  const api = await import('/js/api.js');
+  const { plan } = await anclar(api.importarCopiaCompleta(texto), { vueltas: vueltasLargas });
+  const tam = plan.ls.map(([k, v]) => k.length + v.length);
+  const N = 4;
+  const hueco = tam.slice(0, N).reduce((a, b) => a + b, 0) + Math.floor(tam[N] / 2);
+  localStorage.setItem('t81h', 'h'.repeat(hueco));
+  let i = 0, intentos = 0;
+  for (let t = 1 << 21; t >= 1; t >>= 1) {
+    const v = 'r'.repeat(t);
+    for (;;) { intentos++; try { localStorage.setItem(`r${i}`, v); i++; } catch { break; } }
+  }
+  localStorage.removeItem('t81h');
+  return { hueco, tam: tam.slice(0, N + 1), rellenos: i, intentos, planLs: plan.ls.length, planIdb: plan.idb.length, claves: plan.ls.map(([k]) => k) };
 }
 
 const esperarSyncSkips = (desde) => esperarReal(() => infos.slice(desde).some((m) => /^\[ocultos:skips\] \d+ ocultos \(/.test(m)), { que: 'que el almacén de #skips termine su sync()', vueltas: 20000 });
@@ -247,6 +275,7 @@ try {
     // El memo de `getCurrentUserId()`: lo llena la primera vista que pregunta quién sos (en un perfil vacío, el Dashboard
     // no pregunta). Se llena ANTES de contar, salvo en D, que mide el import en frío: ahí la guarda pide su `/me`.
     if (CASO !== 'D') { const api = await import('/js/api.js'); await anclar(api.getCurrentUserId()); }
+    if (CASO === 'I') datos.relleno = await llenarHastaElHueco(texto);
     const antes = await foto(C);
     const accion = CASO === 'D' ? 'cerrar' : CASO === 'G' ? 'cancelar' : 'importar';
     datos.import = await importar(texto, accion);
@@ -254,6 +283,15 @@ try {
     datos.shaAntes = antes.sha.slice(0, 16); datos.shaDespues = despues.sha.slice(0, 16);
     datos.igual = antes.sha === despues.sha;
 
+    if (CASO === 'I') {
+      // 🔴 Lo que había antes del import (el relleno incluido), clave por clave: sigue y con el mismo valor.
+      const cambiadas = [];
+      for (const [donde, a, d] of [['idb', antes.idb, despues.idb], ['ls', antes.ls, despues.ls]]) {
+        for (const [k, v] of a) if (d.get(k) !== v) cambiadas.push(`${donde}:${k}`);
+      }
+      const escritas = datos.relleno.claves.filter((k) => despues.ls.has(k) && !antes.ls.has(k));
+      datos.i = { cambiadas, escritas, idbNuevas: [...despues.idb.keys()].filter((k) => !antes.idb.has(k)).length };
+    }
     if (CASO === 'B' || CASO === 'F' || CASO === 'E' || CASO === 'H1') datos.shas = await shasQueEntran(C, despues, uid);
     datos.marcaCopia = localStorage.getItem(`ocultos_desde_copia_v1__${uid}`);
     if (CASO === 'F') {
@@ -280,7 +318,7 @@ try {
       datos.c.agregadas = [...despues.ls.keys()].filter((k) => !antes.ls.has(k)).length + [...despues.idb.keys()].filter((k) => !antes.idb.has(k)).length;
     }
     // (tanda 80) Medido todo: cerrar el modal recarga. Cada caso por un camino.
-    if (modalHecho) await recargarYEntregar({ B: 'boton', C1: 'escape', E: 'afuera', F: 'boton', H1: 'boton' }[CASO] || 'boton');
+    if (modalHecho) await recargarYEntregar({ B: 'boton', C1: 'escape', E: 'afuera', F: 'boton', H1: 'boton', I: 'boton' }[CASO] || 'boton');
   }
   throw { fin: true };
 } catch (e) {

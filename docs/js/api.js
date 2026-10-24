@@ -1,17 +1,17 @@
-import { getValidToken, refreshAccessToken } from './auth.js?v=335';
-import { cacheGet, cacheGetRaw, cacheGetTimestamp, cacheSet, cacheClear, prefKey, migratePrefKey } from './storage.js?v=335';
-import { idbDel, idbDelByPrefix, idbGetCached, idbGetCachedRaw, idbGetTimestamp, idbSetCached, idbGet, idbAllKeys, idbEntriesByPrefix, idbSetVarios } from './idb.js?v=335';
-import { OWNER_KEY_LIST } from './history-keys.js?v=335';
-import { OCULTOS_ITEMS_PREFIX } from './util/ocultos-items-clave.js?v=335';
-import { showToast } from './ui/toast.js?v=335';
-import { artistIsSame, limpiaParaQuery } from './util/track-match.js?v=335';
-import { contadorCuota, cuotaDeEndpoint } from './util/cuota.js?v=335';
-import { exportarEtiquetas, importarEtiquetas } from './api/lastfm.js?v=335';
-import { leerNavegador, armarCopia, serializar, contieneSecreto, CENSO } from './util/copia-completa.js?v=335';
-import { leerCopia, planDeImport, segundaRed, TEXTOS as TEXTOS_IMPORT } from './util/copia-importar.js?v=335';
-import { MARCA_DESDE_COPIA, leerMarca, marcaTrasImport } from './util/ocultos-desde-copia.js?v=335';
-import { avisarCopiaImportada } from './util/canal-copia.js?v=335';
-import { BORRADOS_LOG_MAX } from './util/topes-registros.js?v=335';
+import { getValidToken, refreshAccessToken } from './auth.js?v=336';
+import { cacheGet, cacheGetRaw, cacheGetTimestamp, cacheSet, cacheClear, prefKey, migratePrefKey } from './storage.js?v=336';
+import { idbDel, idbDelByPrefix, idbGetCached, idbGetCachedRaw, idbGetTimestamp, idbSetCached, idbGet, idbAllKeys, idbEntriesByPrefix, idbSetVarios } from './idb.js?v=336';
+import { OWNER_KEY_LIST } from './history-keys.js?v=336';
+import { OCULTOS_ITEMS_PREFIX } from './util/ocultos-items-clave.js?v=336';
+import { showToast } from './ui/toast.js?v=336';
+import { artistIsSame, limpiaParaQuery } from './util/track-match.js?v=336';
+import { contadorCuota, cuotaDeEndpoint } from './util/cuota.js?v=336';
+import { exportarEtiquetas, importarEtiquetas } from './api/lastfm.js?v=336';
+import { leerNavegador, armarCopia, serializar, contieneSecreto, CENSO } from './util/copia-completa.js?v=336';
+import { leerCopia, planDeImport, segundaRed, importEscribio, TEXTOS as TEXTOS_IMPORT } from './util/copia-importar.js?v=336';
+import { MARCA_DESDE_COPIA, leerMarca, marcaTrasImport } from './util/ocultos-desde-copia.js?v=336';
+import { avisarCopiaImportada } from './util/canal-copia.js?v=336';
+import { BORRADOS_LOG_MAX } from './util/topes-registros.js?v=336';
 
 const BASE = 'https://api.spotify.com/v1';
 const MIN_RETRY_WAIT = 5000;
@@ -870,7 +870,7 @@ async function importarCopiaCompleta(texto, { ahora = new Date() } = {}) {
     plan.rechazo = { motivo: 'roto', texto: `El archivo no es un JSON válido (${e?.message || e}).` };
     return { plan };
   }
-  const { motivoSinImportCompleto } = await import('./features/history-data.js?v=335');
+  const { motivoSinImportCompleto } = await import('./features/history-data.js?v=336');
   const motivoOwner = await motivoSinImportCompleto();
   const uid = motivoOwner === 'identidad' ? null : _cachedUserId;
   const leido = await leerParaImportar();
@@ -940,7 +940,8 @@ const ALMACENES_DE_OCULTOS = CENSO.filter((c) => c.donde === 'ls' && c.clase ===
 //      menos lo que leía antes, unido a la marca que hubiera. UN `setItem`, el de la marca, fuera del plan (ni
 //      `planDeImport` ni `segundaRed` la ven). Si tira, el `sync()` avisa como en v=334 y nada más;
 //   2. el aviso a las OTRAS pestañas (`util/canal-copia.js`), si se escribió algo. ⚠️ También en una cuota que cortó a
-//      mitad: lo ya escrito es justo lo que otra pestaña puede pisar.
+//      mitad: lo ya escrito es justo lo que otra pestaña puede pisar. (v=336) «Si se escribió algo» es
+//      `importEscribio()`, la MISMA función con la que `handleImportTodo` decide recargar esta pestaña.
 function alTerminarImport(r, { lsAntes = null, escritas = [], uid = null } = {}) {
   if (lsAntes && escritas.length && uid) {
     try {
@@ -953,7 +954,7 @@ function alTerminarImport(r, { lsAntes = null, escritas = [], uid = null } = {})
       console.warn('[import-todo] no pude dejar la marca de los ocultos importados (el aviso del próximo sync dirá «habían desaparecido»):', e);
     }
   }
-  if ((r.idb || 0) + (r.ls || 0) > 0) avisarCopiaImportada();
+  if (importEscribio(r)) avisarCopiaImportada();
   return r;
 }
 

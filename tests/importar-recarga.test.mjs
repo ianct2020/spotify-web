@@ -196,7 +196,9 @@ console.log('· el modal del resultado');
   ok(/cancelText: opts\.cancelText \|\| 'Cerrar'/.test(comp), 'infoModal sigue convirtiendo cualquier vacío (también `null`) en «Cerrar»');
   const conNull = (await import('node:child_process')).execSync(`grep -rln "cancelText: null," ${join(raiz, 'src/js')} || true`).toString().trim().split('\n').filter(Boolean).map((p) => p.slice(raiz.length + 1));
   ok(J(conNull) === J(['src/js/features/dashboard.js']), `nadie más pasa \`cancelText: null\` (${conNull.join(', ')})`);
-  ok(/Los ocultos que se agreguen se subirán a sus listas de Spotify la próxima vez que abras Skips crónicos, Sin plays, Sin clasificar, W-Three helper, Sin escuchar de tus artistas, Novedades de tus artistas o Seguir artistas\./.test(fuente('src/js/features/dashboard.js')), 'la línea de los ocultos del modal nombra las siete vistas, con los nombres del menú');
+  // (v=336, tanda 81) Reescrito a propósito: la línea suma los dos clics que también suben (Artistas similares y
+  // Recomendaciones); el detalle lo vigila `importar-a-medias.test.mjs`.
+  ok(/Los ocultos que se agreguen se subirán a sus listas de Spotify la próxima vez que abras Skips crónicos, Sin plays, Sin clasificar, W-Three helper, Sin escuchar de tus artistas, Novedades de tus artistas o Seguir artistas, o cuando elijas un artista en Artistas similares o pulses «Generar recomendaciones» en Recomendaciones\./.test(fuente('src/js/features/dashboard.js')), 'la línea de los ocultos del modal nombra las siete vistas y los dos clics, con los nombres del menú');
   const app = fuente('src/js/app.js');
   for (const nombre of ['Skips crónicos', 'Sin plays', 'Sin clasificar', 'W-Three helper', 'Sin escuchar de tus artistas', 'Novedades de tus artistas', 'Seguir artistas']) {
     ok(app.includes(`name: '${nombre}'`), `«${nombre}» es un nombre del menú (app.js)`);

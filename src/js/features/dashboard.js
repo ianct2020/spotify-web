@@ -27,7 +27,7 @@ import { activateMarquee, marqueeSpan } from '../ui/marquee.js';
 import { isJunkTrack } from '../util/junk.js';
 import { AVISO_MEZCLA } from '../util/corte-saltos.js';
 import { nombreArchivo } from '../util/copia-completa.js';
-import { resumenEnPalabras } from '../util/copia-importar.js';
+import { resumenEnPalabras, importEscribio } from '../util/copia-importar.js';
 
 let charts = [];
 let _loadController = null;
@@ -516,12 +516,16 @@ async function handleExportTodo() {
 
 // «Importar todo» (v=334): vuelve a cargar una copia de «Exportar todo» (`util/copia-importar.js`). Solo agrega lo que
 // falta y une las listas; nunca borra ni cambia lo que ya hay. Nada se escribe hasta «Importar», y «Cancelar» no escribe
-// nada. No recarga sola: los módulos guardan estado en memoria y la recarga la decide el usuario («Recargar ahora»).
+// nada. Si escribió algo, aunque sea a medias, la página se recarga (v=335; a medias, desde v=336): ver abajo.
 // Cuándo suben a Spotify los ocultos que trae una copia: la próxima vez que se abre una de las siete vistas que
 // sincronizan su almacén al abrirse (`hiddenStore.ready()` en el camino de su `render()`; comprobadas en la tanda 80:
 // skips.js, zero-plays.js, sin-clasificar.js —si hay me gusta en la caché—, wthree.js —con su playlist cargada—,
-// discover-artists.js, new-releases.js y follow-artists.js). Con los nombres del menú (`app.js`).
-const OCULTOS_CUANDO = 'Los ocultos que se agreguen se subirán a sus listas de Spotify la próxima vez que abras Skips crónicos, Sin plays, Sin clasificar, W-Three helper, Sin escuchar de tus artistas, Novedades de tus artistas o Seguir artistas.';
+// discover-artists.js, new-releases.js y follow-artists.js), o con uno de los DOS clics que hacen el primer `ready()`
+// de los artistas ocultos en esa carga (v=336, tanda 81): elegir un artista en Artistas similares
+// (`similar-artists.js`, `pickSourceArtist`) y «Generar recomendaciones» (`recommendations.js`, `run`). No hay un
+// décimo camino: el lote de la barra de Descubrir/Novedades (`fijarOcultosDeAlbumes`) vive dentro de esas dos vistas.
+// Con los nombres del menú (`app.js`). Va en el modal de CONFIRMACIÓN: es antes de decidir cuando sirve saberlo.
+const OCULTOS_CUANDO = 'Los ocultos que se agreguen se subirán a sus listas de Spotify la próxima vez que abras Skips crónicos, Sin plays, Sin clasificar, W-Three helper, Sin escuchar de tus artistas, Novedades de tus artistas o Seguir artistas, o cuando elijas un artista en Artistas similares o pulses «Generar recomendaciones» en Recomendaciones.';
 
 async function handleImportTodo(e) {
   const file = e.target.files?.[0];
@@ -561,8 +565,27 @@ async function handleImportTodo(e) {
     r = { ok: false, motivo: 'error', error: err?.message || String(err), idb: 0, ls: 0 };
   }
   hideProgress();
+  if (!r.ok) console.warn('[import-todo] no se aplicó entero:', r);
+  // (v=336) Si escribió algo, también a medias (la cuota que cortó el bucle de `localStorage`, o IndexedDB escrita y
+  // después un fallo o un rechazo al releer `localStorage`), la recarga es la misma de la 80: lo ya escrito es justo
+  // lo que los almacenes en memoria pueden pisar. `importEscribio` es la MISMA función con la que `aplicarPlan` decide
+  // avisar a las otras pestañas. Hasta v=335 el `return` de abajo iba antes del modal: esta pestaña no recargaba.
+  if (!r.ok && importEscribio(r)) {
+    const n = (x) => (x || 0).toLocaleString('es-ES');
+    const faltaron = r.faltaron || [];
+    const causa = escapeHtml(r.error || r.texto || r.motivo || 'sin motivo');
+    await alertModal('La copia se ha importado a medias', `
+      <p>Se han escrito ${n(r.idb)} ${r.idb === 1 ? 'clave' : 'claves'} en IndexedDB y ${n(r.ls)} en localStorage.</p>
+      ${faltaron.length
+        ? `<p>Faltan ${n(faltaron.length)} de localStorage (${causa}): ${faltaron.map(escapeHtml).join(', ')}.</p>`
+        : `<p>No se ha llegado a escribir en localStorage (${causa}).</p>`}
+      <p>Lo que ya tenías sigue entero.</p>
+      <p>La página se recarga ahora para que todas las vistas vean lo que sí se ha escrito. Puedes volver a importar la misma copia después: lo que ya entró no se duplica.</p>
+    `, { confirmText: 'Recargar ahora', cancelText: null, variant: 'warning' });
+    location.reload();
+    return;
+  }
   if (!r.ok) {
-    console.warn('[import-todo] no se aplicó entero:', r);
     if (r.motivo === 'idb') showToast(`No se ha importado nada: IndexedDB no ha aceptado la escritura (${r.error}).`, 'error');
     else if (r.motivo === 'ls') showToast(`Importación INCOMPLETA: ${r.ls.toLocaleString('es-ES')} claves de localStorage escritas y ${r.faltaron.length.toLocaleString('es-ES')} sin escribir (${r.error}). Lo que ya tenías sigue entero. Faltaron: ${r.faltaron.join(', ')}.`, 'error');
     else if (r.motivo === 'red') showToast(`No se ha importado nada: el plan traía claves que no pueden entrar (${(r.malas || []).join(', ')}).`, 'error');

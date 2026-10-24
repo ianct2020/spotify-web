@@ -26,14 +26,14 @@ import {
   createPlaylist,
   getCurrentUserId,
   spotifyFetch,
-} from '../api.js?v=335';
-import { prefKey, migratePrefKey } from '../storage.js?v=335';
-import { INCIDENCIAS_OCULTOS_MAX } from './topes-registros.js?v=335';
-import { idbGetCached, idbSetCached, idbDel } from '../idb.js?v=335';
-import { invalidateOwnPlaylists } from './playlist-add.js?v=335';
-import { OCULTOS_ITEMS_PREFIX } from './ocultos-items-clave.js?v=335';
-import { MARCA_DESDE_COPIA, leerMarca, clavesDeLaMarca, sacarDeLaMarca, dejarEnLaMarca } from './ocultos-desde-copia.js?v=335';
-import { showToast } from '../ui/toast.js?v=335';
+} from '../api.js?v=336';
+import { prefKey, migratePrefKey } from '../storage.js?v=336';
+import { INCIDENCIAS_OCULTOS_MAX } from './topes-registros.js?v=336';
+import { idbGetCached, idbSetCached, idbDel } from '../idb.js?v=336';
+import { invalidateOwnPlaylists } from './playlist-add.js?v=336';
+import { OCULTOS_ITEMS_PREFIX } from './ocultos-items-clave.js?v=336';
+import { MARCA_DESDE_COPIA, leerMarca, clavesDeLaMarca, sacarDeLaMarca, dejarEnLaMarca } from './ocultos-desde-copia.js?v=336';
+import { showToast } from '../ui/toast.js?v=336';
 
 const PLAYLIST_DESC = 'Lista interna de Fonoteca: lo que ocultaste en esta vista. Si la borras, se pierden los ocultos.';
 

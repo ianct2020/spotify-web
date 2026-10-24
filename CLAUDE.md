@@ -5012,7 +5012,13 @@ el modal lo dice, con las siete vistas que sincronizan al abrirse (v=335): «Los
 listas de Spotify la próxima vez que abras Skips crónicos, Sin plays, Sin clasificar, W-Three helper, Sin escuchar de tus
 artistas, Novedades de tus artistas o Seguir artistas.» (comprobadas en la tanda 80: `hiddenStore.ready()` en el camino de su
 `render()`; «Sin clasificar» solo si hay me gusta en la caché y «W-Three helper» con su playlist cargada; «Artistas
-similares» y «Recomendaciones» también sincronizan los artistas ocultos, pero al pulsar, no al abrir). Suben a la playlist
+similares» y «Recomendaciones» también sincronizan los artistas ocultos, pero al pulsar, no al abrir). **Desde v=336
+(tanda 81) la línea nombra también esos dos clics**: «…o Seguir artistas, o cuando elijas un artista en Artistas similares
+o pulses «Generar recomendaciones» en Recomendaciones.» (`similar-artists.js:177`, `pickSourceArtist`;
+`recommendations.js:265`, dentro de `run()`, el `onclick` de «Generar recomendaciones»). Va en el modal de CONFIRMACIÓN
+(el de «Importar» / «Cancelar»), que es donde ya estaba: es antes de decidir cuando sirve saberlo. No hay un décimo camino
+(leído en la 81): el lote de la barra de Descubrir/Novedades (`fijarOcultosDeAlbumes`, el único otro que llama a `ready()`)
+vive dentro de esas dos vistas, «Salud de los ocultos» solo lee y `toggle()` sube solo la clave que tocás. Suben a la playlist
 cuyo id tiene TU navegador (el del archivo no pisa el tuyo). 🟩 **Desde v=335 el aviso dice la verdad**: «he subido a tu
 playlist de Spotify N ocultos que venían de tu copia» y `desde-copia` (hasta v=334, «habían desaparecido de la playlist» y
 `resubida`): ver la marca `ocultos_desde_copia_v1` en «Los ocultos: la uri va GUARDADA con la clave».
@@ -5031,6 +5037,20 @@ de un borrado verificado o de una escritura en Spotify). Que además impida guar
 hizo (en `PENDIENTES.md`). Sin `BroadcastChannel`, no hace nada. Guardas: `tests/importar-recarga.test.mjs` (40; rojo
 contra v=334) y el banco `copia-importar` (abajo).
 
+🔴 **A medias también recarga (v=336, tanda 81).** Hasta v=335 el `if (!r.ok) { …toast…; return; }` de `handleImportTodo`
+iba ANTES del modal obligado: tres salidas de `aplicarPlan` con `ok: false` que YA escribieron (la cuota que corta el bucle
+de `localStorage`; IndexedDB escrita y la relectura de `localStorage` que tira; IndexedDB escrita y la tercera decisión con un
+rechazo, la que no estaba anotada) avisaban a las otras pestañas y dejaban a ESTA sin recargar, que es justo el caso que la
+80 vino a cerrar. Ahora: **«escribió algo» es UNA función, `importEscribio(r)`** (`util/copia-importar.js`: `(idb || 0) +
+(ls || 0) > 0`), y la usan las dos puntas: `alTerminarImport` para avisar y `handleImportTodo` para recargar. Si escribió
+algo y no está entero: `alertModal` «La copia se ha importado a medias» con `cancelText: null` y `location.reload()` sin
+condición (cuántas en IndexedDB y en `localStorage`, cuáles faltaron con el error crudo, «Lo que ya tenías sigue entero.»,
+y que se puede volver a importar la misma copia sin duplicar nada); **el toast rojo se fue en ese caso** (se perdería con la
+recarga). Sin escrituras (la segunda red, la lectura, IndexedDB que tira, un rechazo): como antes, toast rojo y sin recarga.
+`r.ok` con 0 escrituras (el mismo archivo dos veces) sigue recargando y sigue sin avisar a nadie. Guardas:
+`tests/importar-a-medias.test.mjs` (el `api.js` real y el `handleImportTodo` REAL sacado del fuente con dobles; rojo contra
+v=335: 20 de 42) y el caso **I** del banco `copia-importar` (abajo).
+
 **El tiempo** (SEMBRADO: el banco con `XQ="&tamano=ian&solo=ab"`, datos INVENTADOS del tamaño de los de Ian, archivo de
 19.939.678 bytes, en un perfil VACÍO): reloj de pared **474 ms** para leer el archivo, leer el navegador y decidir, y **671 ms**
 para aplicar 5.189 claves (una transacción de IndexedDB y los `setItem`). Reloj virtual: 270 y 3.134 ms (el virtual cuenta las
@@ -5047,4 +5067,10 @@ archivo; G «Cancelar»). **Desde v=335** (tanda 80) cada caso que importa mide 
 carga siguiente los entrega, y si no recargó, el caso falla. La madre escucha el canal: 1 aviso en B, C1, E, F y H1, 0 en
 A, C2, D y G. C2 afirma el toast `'info'` de la copia, `desde-copia` y ninguna `resubida`, con el mismo POST que en la 79.
 Y un caso nuevo, **H, dos pestañas** (dos iframes del mismo origen): la segunda pinta el aviso y NO recarga (su marcador
-sigue en su `window`); contra v=334, nada. `?solo=h` corre A y H.
+sigue en su `window`); contra v=334, nada. `?solo=h` corre A y H. **Desde v=336** (tanda 81): B afirma la línea de los ocultos
+con los dos clics en el modal de confirmación, y el caso **I, la cuota a mitad, de verdad**: el perfil de B con `localStorage`
+LLENO de relleno inventado (una clave reserva el hueco, se llena el resto con valores que se achican a la mitad hasta que no
+entra ni uno de un carácter, y se suelta el hueco) del tamaño de las 4 primeras claves del plan y media. Escribe 4, la
+quinta no entra (medido: 15 claves de relleno, hueco de 372 caracteres, 4 de 74): el modal «a medias» con UN botón, la
+recarga, 1 aviso por el canal y lo que había antes, relleno incluido, igual clave por clave. Contra v=335: «sin modal del
+resultado: un toast rojo (…) y la pestaña no recarga».

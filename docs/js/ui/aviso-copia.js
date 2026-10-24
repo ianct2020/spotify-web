@@ -8,7 +8,7 @@
 // Clases propias (`.aviso-copia…`, en `components.css`; la regla de `.wt-play-btn`, v=219), colores del tema, sin
 // animación. Mismo molde que `ui/degraded-banner.js`.
 
-import { escucharCopiaImportada } from '../util/canal-copia.js?v=335';
+import { escucharCopiaImportada } from '../util/canal-copia.js?v=336';
 
 const AVISO_ID = 'aviso-copia';
 

@@ -286,6 +286,16 @@ export function segundaRed(plan, censo = CENSO) {
   return malas;
 }
 
+/**
+ * (v=336) Si `aplicarPlan` escribió algo, también a medias (una cuota que cortó, o IndexedDB escrita y `localStorage`
+ * no). Lo usan las DOS puntas: `alTerminarImport` (`api.js`) para avisar a las otras pestañas y `handleImportTodo`
+ * (`features/dashboard.js`) para recargar esta. Escrito una sola vez para que no vuelvan a divergir: hasta v=335 la
+ * primera avisaba con un import a medias y la segunda no recargaba.
+ */
+export function importEscribio(r) {
+  return ((r?.idb || 0) + (r?.ls || 0)) > 0;
+}
+
 // ── El resumen en palabras, para el modal ─────────────────────────────────────────────────────────
 const NOMBRES = {
   irrecuperable: 'Lo que solo vive en tu navegador',
