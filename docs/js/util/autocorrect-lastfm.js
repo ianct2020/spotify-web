@@ -14,7 +14,7 @@
 //
 // Lo prueba `tests/autocorrect-lastfm.test.mjs`, con nombres inventados.
 
-import { normalizarNombre } from './mb-pais.js?v=338';
+import { normalizarNombre } from './mb-pais.js?v=339';
 
 /**
  * La clave de escritura de un nombre, en este orden: `normalizarNombre` (el de `mb-pais.js`, no

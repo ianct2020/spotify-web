@@ -5031,10 +5031,11 @@ cancelar; es opt-in, nadie más lo pasa, e `infoModal` sigue igual), y `location
 botón, Escape, el clic afuera o un cambio de ruta recargan igual. **Y las OTRAS pestañas de la app**: `aplicarPlan`, si
 escribió algo (también si una cuota lo cortó a mitad), manda `{ tipo: 'importada', fecha, origen }` por
 `BroadcastChannel('fonoteca-copia')` (`util/canal-copia.js`, un canal por pestaña, que ignora lo suyo); `app.js` escucha al
-arrancar y `ui/aviso-copia.js` pinta un aviso fijo arriba, sin cerrar: «Se ha cargado una copia en otra pestaña. Recarga
-esta antes de seguir, o puedes perder lo que trajo la copia.» con «Recargar». 🔴 **No la recarga sola** (puede estar a mitad
-de un borrado verificado o de una escritura en Spotify). Que además impida guardar a sus almacenes es otro diseño: no se
-hizo (en `PENDIENTES.md`). Sin `BroadcastChannel`, no hace nada. Guardas: `tests/importar-recarga.test.mjs` (40; rojo
+arrancar y `ui/aviso-copia.js` pinta un aviso fijo arriba, sin cerrar, con «Recargar»: desde v=339 «Se ha cargado una
+copia en otra pestaña. Lo que trajo ya cuenta en esta, pero recárgala para que todas las vistas lo enseñen.» (hasta v=338:
+«… Recarga esta antes de seguir, o puedes perder lo que trajo la copia.»; ver la unión, abajo). 🔴 **No la recarga sola**
+(puede estar a mitad de un borrado verificado o de una escritura en Spotify). Que además impida guardar a sus almacenes es
+otro diseño: no se hizo (desde v=339 lo reemplaza la unión). Sin `BroadcastChannel`, no hace nada. Guardas: `tests/importar-recarga.test.mjs` (40; rojo
 contra v=334) y el banco `copia-importar` (abajo).
 
 🔴 **A medias también recarga (v=336, tanda 81).** Hasta v=335 el `if (!r.ok) { …toast…; return; }` de `handleImportTodo`
@@ -5066,26 +5067,57 @@ por `recuperadas` (álbum o artista sin uri que la búsqueda encuentra) **subía
 salir de la marca** (solo un `console.info`). `subir` y `perdidasDeVerdad` no cambiaron: las escrituras son las de v=337
 (constantes medidas contra `b8e48f9b`). Guarda: `tests/aviso-copia-tres-vias.test.mjs` (rojo contra v=337: 12 de 30).
 
-**La otra pestaña: la memoria de los almacenes (tanda 81) — la unión quedó PARADA.** De las 21 filas `conjunto`/`mapa`
-del `CENSO`, solo DOS dueños guardan el conjunto ENTERO desde la memoria: `createHiddenStore` (los seis almacenes de ocultos:
+**La otra pestaña une lo que trajo la copia (v=339, tanda 82; diseño de la 81).** De las 21 filas `conjunto`/`mapa` del
+`CENSO`, solo DOS dueños guardan el conjunto ENTERO desde la memoria: `createHiddenStore` (los seis almacenes de ocultos:
 `keys`, un `Set` perezoso, y `uriByKey`, un `Map`; guardan en `renombrarLocal`, `sync`, `fijarVarios`, `toggle`, `clear`,
 `remember`, `pushMissing`) y `createLocalStore` (`discover_escuchados` y `_uris`). Los demás releen `localStorage` antes de
 cada escritura y no pueden pisar lo importado: los tres `listened_*_dismissed` (`listened.js:36-65`), `versions_dismissed`
 (`versions.js:125-130`; escrituras en `:437` y `:962`), `genre_hidden_tags` (`by-genre.js:89-94`; `:720` es «Restaurar todos»)
-y los dos `*_elegidos` (`cola-escaneo.js:20-33`; `state.elegidos` queda en memoria solo para pintar). La 81 diseñó que esos
-dos dueños, al llegar `{ tipo: 'importada' }`, UNIERAN a su memoria lo que lee `localStorage` (muta el mismo `Set`/`Map`, no
-guarda, no sincroniza). La regla que lo hacía exacto: «el import nunca quita, y todo lo que esta pestaña hizo ya está en
-`localStorage` (cada cambio se guarda al instante)». 🔴 **Esa premisa es falsa en `fijarVarios`**: borra de la memoria tanda
-por tanda (de a 100) y guarda recién al final, con `await` en el medio. Si el mensaje llega entre dos tandas de un «devolver»
-de más de 100 (la barra de Descubrir/Novedades), la unión revive lo ya devuelto (medido en Node: vuelven 100 de 150, con sus
-uris, y el próximo `sync()` los volvería a subir a la playlist). Por el encargo («si encontrás un caso que lo rompa, se para»)
-**la unión NO está en el código**: el aviso fijo de la 80 sigue siendo lo único que tiene la otra pestaña. La propuesta entera
-(la unión en `util/union-en-memoria.js`, sin imports; `fijarVarios` guardando después de cada tanda; `canal-copia.js` con
-`unref?.()` para Node; el texto nuevo del aviso; la suite `copia-otra-pestana`, 43 asserts con fuerza bruta de 1.720 casos,
-semilla `0x81c0b1a`) está como parche en `fonoteca-migracion/t81-2-otra-pestana-propuesta-2026-10-24.patch` (aplica sobre
-`4ade3847` con `patch -p1`; con él, 97/97). Otra cosa que mide esa suite: si el mensaje llega mientras un `sync()` BAJA la
-playlist, ese mismo `sync()` sube lo que trajo la copia y la playlist no tenía (las escrituras dejan de ser las de v=336 en
-ese caso; en v=336 eso se perdía).
+y los dos `*_elegidos` (`cola-escaneo.js:20-33`; `state.elegidos` queda en memoria solo para pintar).
+
+- **El diseño**: cada almacén de esos dos dueños se apunta al crearse (`alLlegarUnaCopia`, en `hidden-sync.js`) y, cuando
+  llega `{ tipo: 'importada' }` por `util/canal-copia.js` (la pestaña que importa no lo recibe: se recarga), los que YA
+  cargaron su memoria le UNEN lo que lee ahora `localStorage` (`util/union-en-memoria.js`, sin imports: la prefijada o, si no
+  hay, la pelada, sin migrar; en el mapa gana lo de memoria). Los que no cargaron, nada: la próxima lectura trae lo nuevo.
+  🔴 **Solo AGREGA a la memoria**: no guarda, no sincroniza, no avisa, no sube nada. Muta el MISMO `Set`/`Map` (las únicas
+  reasignaciones son las de `clear()`), así que un `sync()` en vuelo que después guarda su `keys` guarda también lo agregado.
+- **Por qué es exacta**: el import nunca quita, y todo lo que esta pestaña quitó ya está quitado de `localStorage` cuando
+  llega el mensaje. 🔴 **Eso último es una REGLA, no una casualidad**: «en `hidden-sync.js`, después de cada `keys.delete(`,
+  `uriByKey.delete(`, `.clear(` o reasignación de `keys`/`uriByKey`, hay un `saveLocal`/`saveUris` antes del siguiente
+  `await` de esa función (y, en un bucle con un `await`, antes de que cierre la vuelta)». Un mensaje de otra pestaña es una
+  TAREA: solo entra cuando todo lo que corre espera red, IndexedDB o un temporizador, o sea en un `await`. Hasta v=338
+  `fijarVarios` no la cumplía: borraba tanda por tanda (de a 100) y guardaba al final; un «devolver» de más de 100 con el
+  mensaje entre dos tandas revivía lo ya devuelto (la 81 lo midió: 100 de 150) y el `sync()` siguiente lo volvía a subir. El
+  arreglo: guardar antes del primer `await` (las «devolver sin uri» del primer bucle) y al terminar cada tanda. El estado
+  final es el de siempre en todos sus caminos (los guardados no tocan la memoria y el guardado final sigue siendo el último).
+- **La guarda de la regla**, `tests/copia-cada-await.test.mjs`: **R** lee el texto de `hidden-sync.js` (sin comentarios ni
+  cadenas) y falla con cada borrado sin guardar antes de un `await` o de cerrar un bucle con `await` (es la que ve una función
+  NUEVA; contra una copia sin el arreglo de `fijarVarios`, 3 violaciones con su línea); **B** es la fuerza bruta: cada
+  operación que muta un almacén (`toggle` ocultar/devolver, `fijarVarios` ocultar/devolver con 1, 100, 101 y 250, con y sin
+  claves sin uri y con y sin una tanda que falla, `clear()`, `renameKey`, `sync()` con y sin algo que subir) con el import y
+  el mensaje inyectados en CADA punto de espera (antes y después de cada llamada a la Spotify o la IndexedDB dobladas:
+  `dobles/puntos.mjs`, `loader-puntos.mjs`); afirma que nada quitado vuelve (salvo que lo traiga la copia), que lo agregado
+  queda guardado, que la memoria es `localStorage`, y que lo guardado es exactamente lo de sin copia ∪ lo agregado. Semilla
+  `0x82a7a17`. Si agregás una operación que muta un almacén, sumala a `escenarios()`.
+- **E1b, aceptado**: si el mensaje llega mientras un `sync()` BAJA la playlist, ese mismo `sync()` sube lo que trajo la copia
+  y la playlist no tenía (entra por `porSubir`: llegó a `uriByKey` después de la foto `sabidasAlEmpezar`), con el aviso de la
+  copia (v=338). Es lo que pasaría al recargar. **No se pospone la unión**: posponerla PIERDE la clave, porque el
+  `saveLocal(keys)` de ese mismo `sync()` pisa `localStorage` antes de que la unión lo lea.
+- 🔴 **`c.unref?.()` en `canal-copia.js`**: en Node un `BroadcastChannel` que escucha mantiene vivo el proceso (un `node -e`
+  no termina), y desde v=339 `hidden-sync.js` escucha al importarse: sin el `unref`, toda suite que lo importa se colgaría.
+  En el navegador `unref` no existe y el `?.` no hace nada.
+- ⚠️ **No arreglado, anotado**: dos pestañas editando el MISMO almacén y un import en una tercera. La unión de cada una une
+  lo que lee `localStorage`, y ese texto puede traer el conjunto viejo que guardó la otra: lo que una devolvió puede revivir
+  en la otra. Es el caso de «dos pestañas editando a la vez», que tampoco se resuelve sin import (cada pestaña guarda su
+  conjunto entero) y está en `PENDIENTES.md`.
+- El aviso fijo de la 80 **se queda**, como red para la carrera de milisegundos que queda (un guardado de esta pestaña entre
+  la escritura de la otra y la llegada del mensaje) y para las vistas que siguen pintando lo de antes; desde v=339 dice lo
+  que es cierto ahora (arriba).
+
+Guardas: `tests/copia-otra-pestana.test.mjs` (46: los siete almacenes, lo quitado sigue quitado, las uris, el perezoso, el
+`sync()` en vuelo —E1b con su aviso «venía de tu copia», su `desde-copia` y fuera de la marca—, la pestaña que importa,
+`fijarVarios` entre dos tandas y la fuerza bruta de la 81; rojo contra v=338: 27 de 43), `tests/copia-cada-await.test.mjs`
+(arriba), el assert del texto en `importar-recarga` y el caso **H2** del banco `copia-importar` (abajo).
 
 **El tiempo** (SEMBRADO: el banco con `XQ="&tamano=ian&solo=ab"`, datos INVENTADOS del tamaño de los de Ian, archivo de
 19.939.678 bytes, en un perfil VACÍO): reloj de pared **474 ms** para leer el archivo, leer el navegador y decidir, y **671 ms**
@@ -5109,4 +5141,8 @@ LLENO de relleno inventado (una clave reserva el hueco, se llena el resto con va
 entra ni uno de un carácter, y se suelta el hueco) del tamaño de las 4 primeras claves del plan y media. Escribe 4, la
 quinta no entra (medido: 15 claves de relleno, hueco de 372 caracteres, 4 de 74): el modal «a medias» con UN botón, la
 recarga, 1 aviso por el canal y lo que había antes, relleno incluido, igual clave por clave. Contra v=335: «sin modal del
-resultado: un toast rojo (…) y la pestaña no recarga».
+resultado: un toast rojo (…) y la pestaña no recarga». **Desde v=339** (tanda 82): **H2** abre `#skips` con su almacén ya
+cargado ANTES del import (SEMBRADO, `perfilH2` de `-datos.mjs`: su propia playlist simulada vacía, `PL_SKIPS_H2`, un me gusta
+inventado salteado 9 de 10 veces y su historial de saltos BYOH, para que haya UNA tarjeta), y después del aviso, sin recargar,
+la oculta con su botón de verdad: lo guardado tiene los 5 ocultos de la copia Y el nuevo, y lo único que sube es el nuevo (1
+POST a su playlist). Contra v=338: «faltan 5», 1 guardado. Diez corridas: 10 de 10, 19.499-20.044 ms de reloj virtual.

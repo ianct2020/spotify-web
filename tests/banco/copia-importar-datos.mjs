@@ -89,6 +89,24 @@ export function montarSpotify(sim, estado, uid) {
   });
 }
 
+// ── H2, la otra pestaña que oculta DESPUÉS del aviso (tanda 82) ─────────────────────────────────────
+// Su propia playlist de ocultos de #skips (vacía al empezar: así lo que trae la copia de A no está ya en la memoria de H2
+// por la playlist, que en la corrida entera tiene lo que subió C2), un me gusta INVENTADO que salteaste 9 veces de 10 y su
+// historial de saltos (el BYOH de un amigo, `local_<uid>_history_skip`, formato v4), para que #skips tenga UNA tarjeta con
+// su botón de ocultar.
+export const PL_SKIPS_H2 = 'plOcultosSkipsH2000000';
+export const SALTEADA_H2 = id22(50, 's');
+export function perfilH2() {
+  const pista = { id: SALTEADA_H2, uri: `spotify:track:${SALTEADA_H2}`, name: 'Tema inventado que salteas', artists: [{ id: id22(50, 'a'), name: 'Artista inventado de H2' }], album: { id: id22(50, 'b'), name: 'Disco inventado de H2', images: [] }, duration_ms: 200_000 };
+  return {
+    idb: [
+      ['all_liked_tracks', envolver([pista])],
+      [`local_${UID}_history_skip`, envolver({ version: 4, tracks: { [SALTEADA_H2]: [1, 9, L(9, () => 5_000), [], undefined] } })],
+    ],
+    ls: [[`fonoteca_hidden_pl_skips_hidden_tracks__${UID}`, PL_SKIPS_H2]],
+  };
+}
+
 // ── El perfil A: una clave por fila del censo que entra ────────────────────────────────────────────
 // Los ocultos de #skips de A: dos que C también tiene (ya en la playlist) y tres que C no tiene.
 export const ocultosDeC = () => [id22(1, 'h'), id22(2, 'h'), id22(3, 'h')];

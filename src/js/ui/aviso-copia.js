@@ -3,10 +3,15 @@
 // Arriba, fijo, en todas las rutas, y SIN botón de cerrar: mientras esta pestaña no recargue, sus almacenes pueden
 // guardar lo de antes encima de lo que trajo la copia. 🔴 No recarga sola: el botón «Recargar» lo hace al pulsarlo
 // (esta pestaña puede estar a mitad de un borrado verificado o de una escritura en Spotify). Que el aviso además
-// impida guardar a los almacenes es otro diseño y no se hizo (anotado en `fonoteca-migracion/PENDIENTES.md`).
+// impida guardar a los almacenes no se hizo: desde v=339 la unión de abajo lo reemplaza.
 //
 // Clases propias (`.aviso-copia…`, en `components.css`; la regla de `.wt-play-btn`, v=219), colores del tema, sin
 // animación. Mismo molde que `ui/degraded-banner.js`.
+//
+// (v=339, diseñada en la tanda 81) Desde que los almacenes ya cargados unen lo que trajo la copia (`util/hidden-sync.js`), perder lo
+// importado solo pasa en una carrera de milisegundos (un guardado de esta pestaña entre la escritura de la otra y la
+// llegada del mensaje). El aviso SE QUEDA, como red para eso y para las vistas que siguen pintando lo de antes, y dice
+// lo que es cierto ahora.
 
 import { escucharCopiaImportada } from '../util/canal-copia.js';
 
@@ -19,7 +24,7 @@ export function mostrarAvisoDeCopia() {
   aviso.className = 'aviso-copia';
   aviso.setAttribute('role', 'alert');
   aviso.innerHTML = `
-    <span class="aviso-copia-texto">Se ha cargado una copia en otra pestaña. Recarga esta antes de seguir, o puedes perder lo que trajo la copia.</span>
+    <span class="aviso-copia-texto">Se ha cargado una copia en otra pestaña. Lo que trajo ya cuenta en esta, pero recárgala para que todas las vistas lo enseñen.</span>
     <button class="btn btn-secondary btn-sm" id="aviso-copia-recargar" type="button">Recargar</button>
   `;
   document.body.appendChild(aviso);

@@ -210,7 +210,8 @@ console.log('· el aviso de la otra pestaña');
 {
   const aviso = sinComentarios(fuente('src/js/ui/aviso-copia.js'));
   const canal = sinComentarios(fuente('src/js/util/canal-copia.js'));
-  ok(/Se ha cargado una copia en otra pestaña\. Recarga esta antes de seguir, o puedes perder lo que trajo la copia\./.test(aviso) && /id="aviso-copia-recargar" type="button">Recargar<\/button>/.test(aviso), 'el texto y el botón «Recargar»');
+  // (v=339) Reescrito a propósito: con la unión, lo importado ya cuenta en la otra pestaña.
+  ok(/Se ha cargado una copia en otra pestaña\. Lo que trajo ya cuenta en esta, pero recárgala para que todas las vistas lo enseñen\./.test(aviso) && /id="aviso-copia-recargar" type="button">Recargar<\/button>/.test(aviso), 'el texto y el botón «Recargar»');
   ok((aviso.match(/location\.reload\(\)/g) || []).length === 1 && /\.onclick = \(\) => location\.reload\(\)/.test(aviso), 'no recarga sola: el único `location.reload()` es el del botón');
   ok(!/cerrar|✕|×|remove\(\)/i.test(aviso.replace(/Recarga/g, '')), 'no se puede cerrar: ni botón de cerrar ni quien lo quite');
   ok(!/^import /m.test(canal) && /new BroadcastChannel\(CANAL_COPIA\)/.test(canal) && /CANAL_COPIA = 'fonoteca-copia'/.test(canal), 'canal-copia.js: sin imports, UN BroadcastChannel(«fonoteca-copia»)');

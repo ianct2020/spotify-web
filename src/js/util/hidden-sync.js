@@ -33,6 +33,8 @@ import { idbGetCached, idbSetCached, idbDel } from '../idb.js';
 import { invalidateOwnPlaylists } from './playlist-add.js';
 import { OCULTOS_ITEMS_PREFIX } from './ocultos-items-clave.js';
 import { MARCA_DESDE_COPIA, leerMarca, clavesDeLaMarca, sacarDeLaMarca, dejarEnLaMarca } from './ocultos-desde-copia.js';
+import { escucharCopiaImportada } from './canal-copia.js';
+import { leerConPrefijo, unirConjuntoEnMemoria, unirMapaEnMemoria } from './union-en-memoria.js';
 import { showToast } from '../ui/toast.js';
 
 const PLAYLIST_DESC = 'Lista interna de Fonoteca: lo que ocultaste en esta vista. Si la borras, se pierden los ocultos.';
@@ -105,6 +107,40 @@ function saveUris(lsKey, map) {
   try {
     localStorage.setItem(prefKey(urisKeyFor(lsKey)), JSON.stringify(Object.fromEntries(map)));
   } catch { /* lleno */ }
+}
+
+// ── Lo que trajo una copia en OTRA pestaña (v=339; diseño de la tanda 81) ───
+//
+// Los dos dueños de este archivo (`createHiddenStore`, los seis almacenes de
+// ocultos; `createLocalStore`, «ya escuchado») son los únicos de las filas
+// `conjunto` / `mapa` del CENSO que guardan su conjunto ENTERO desde la memoria
+// (los demás releen `localStorage` antes de cada escritura: la tabla está en
+// `CLAUDE.md`, «💾 La copia completa»). Hasta v=336, si otra pestaña importaba
+// una copia y acá se tocaba un almacén ya cargado, se guardaba lo viejo encima de
+// lo importado. Ahora cada almacén se apunta acá al crearse y, cuando llega el
+// mensaje de `util/canal-copia.js` (la pestaña que importa no lo recibe), los
+// que YA cargaron su memoria le unen lo que lee ahora `localStorage`
+// (`util/union-en-memoria.js`, escrita una vez). Los que no cargaron, nada: la
+// próxima lectura trae lo nuevo. 🔴 Y nada más: no guarda, no sincroniza, no
+// avisa, no toca la playlist. Muta el MISMO `Set` y el MISMO `Map`: un `sync()`
+// en vuelo que después guarda su `keys` guarda también lo agregado.
+const UNIONES_DE_LA_COPIA = new Set();
+let escuchandoLaCopia = false;
+
+function alLlegarUnaCopia(unir) {
+  UNIONES_DE_LA_COPIA.add(unir);
+  if (escuchandoLaCopia) return;
+  escuchandoLaCopia = true;
+  escucharCopiaImportada(() => {
+    for (const u of UNIONES_DE_LA_COPIA) {
+      try { u(); } catch (e) { console.warn('[ocultos] no pude unir lo que trajo la copia de otra pestaña:', e); }
+    }
+  });
+}
+
+/** Lo que la app LEERÍA de `base` ahora: la prefijada o, si no hay, la pelada (sin migrar: eso escribe). */
+function textoDeAhora(base) {
+  try { return leerConPrefijo(base, prefKey(base), (k) => localStorage.getItem(k)); } catch { return null; }
 }
 
 // ── El registro de incidencias (v=205) ──────────────────────────────────────
@@ -476,6 +512,11 @@ export function createLocalStore({ lsKey, label }) {
   let uriByKey = null;
   function ensureKeys() { if (!keys) keys = loadLocal(lsKey); return keys; }
   function ensureUris() { if (!uriByKey) uriByKey = loadUris(lsKey); return uriByKey; }
+  // (v=339) Lo que trajo una copia en otra pestaña: ver `alLlegarUnaCopia`.
+  alLlegarUnaCopia(() => {
+    if (keys) unirConjuntoEnMemoria(keys, textoDeAhora(lsKey));
+    if (uriByKey) unirMapaEnMemoria(uriByKey, textoDeAhora(urisKeyFor(lsKey)));
+  });
 
   return {
     has(key) { return ensureKeys().has(key); },
@@ -572,6 +613,14 @@ export function createHiddenStore({ lsKey, playlistName, keyOfTrack, label, uriF
   let synced = false;
   function ensureKeys() { if (!keys) keys = loadLocal(lsKey); return keys; }
   function ensureUris() { if (!uriByKey) uriByKey = loadUris(lsKey); return uriByKey; }
+  // (v=339) Lo que trajo una copia en otra pestaña: ver `alLlegarUnaCopia`. Sobre
+  // el mismo `Set`/`Map` (las únicas reasignaciones son las de `clear()`), así que
+  // un `sync()` a mitad de camino no se rompe: ver «El `sync()` en vuelo» en
+  // `CLAUDE.md`.
+  alLlegarUnaCopia(() => {
+    if (keys) unirConjuntoEnMemoria(keys, textoDeAhora(lsKey));
+    if (uriByKey) unirMapaEnMemoria(uriByKey, textoDeAhora(urisKeyFor(lsKey)));
+  });
 
   // (v=299) Un `sync()` que estaba bajando la lista cuando arrancó una
   // escritura no guarda lo que bajó: es la foto de ANTES, y guardarla rehace el
@@ -1327,6 +1376,14 @@ export function createHiddenStore({ lsKey, playlistName, keyOfTrack, label, uriF
         hechas.push(key);
       }
     }
+    // (v=339) Guardar ANTES del primer `await`: si entre dos esperas llega una
+    // copia de otra pestaña (`alLlegarUnaCopia`), la unión lee `localStorage`, y
+    // lo quitado acá tiene que estar ya quitado allí. Es la regla de la unión:
+    // después de borrar de `keys`/`uriByKey`, guardar antes del siguiente
+    // `await` (y antes de cerrar la vuelta de un bucle con un `await`). La
+    // vigila `tests/copia-cada-await.test.mjs` (R, leyendo este archivo; B, con
+    // el mensaje inyectado en cada punto de espera).
+    if (hechas.length) { saveLocal(lsKey, keys); saveUris(lsKey, uriByKey); }
 
     if (conUri.length) {
       let id = null;
@@ -1354,6 +1411,9 @@ export function createHiddenStore({ lsKey, playlistName, keyOfTrack, label, uriF
           hechas.push(key);
         }
         olvidarSinUri(tanda.map(t => t.key));
+        // (v=339) Cada tanda, guardada al terminar: ver arriba.
+        saveLocal(lsKey, keys);
+        saveUris(lsKey, uriByKey);
       }
     }
 

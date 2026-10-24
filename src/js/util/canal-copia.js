@@ -10,7 +10,8 @@
 // y además el mensaje lleva el id de la pestaña que lo mandó (`origen`) y quien escucha ignora el suyo. Si el navegador
 // no tiene `BroadcastChannel`, no se hace nada (Chrome lo tiene desde la 54).
 //
-// SIN IMPORTS: lo usan `api.js` (manda) y `ui/aviso-copia.js` (escucha).
+// SIN IMPORTS: lo usan `api.js` (manda), `ui/aviso-copia.js` (escucha) y, desde v=339, `util/hidden-sync.js` (escucha:
+// sus almacenes ya cargados unen a su memoria lo que trajo la copia, ver `util/union-en-memoria.js`).
 
 export const CANAL_COPIA = 'fonoteca-copia';
 
@@ -19,7 +20,13 @@ const pestana = Math.random().toString(36).slice(2) + Date.now().toString(36);
 
 function abrirCanal() {
   if (typeof BroadcastChannel !== 'function') return null;
-  try { return new BroadcastChannel(CANAL_COPIA); } catch { return null; }
+  try {
+    const c = new BroadcastChannel(CANAL_COPIA);
+    // (v=339) En Node un canal que escucha mantiene vivo el proceso (medido: `node -e` no termina): las suites que
+    // importan `hidden-sync.js` se colgarían. `unref` es de Node; en el navegador no existe y esto no hace nada.
+    c.unref?.();
+    return c;
+  } catch { return null; }
 }
 
 function elCanal() {

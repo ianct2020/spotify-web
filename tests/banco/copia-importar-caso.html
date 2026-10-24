@@ -20,8 +20,10 @@
 //   ?caso=E    el owner: de `local_<owner>_history_*` solo entra `days`
 //   ?caso=F    el archivo con un secreto, la key de Last.fm y una clave inventadas: no se escriben y se nombran
 //   ?caso=G    «Cancelar»: el navegador queda igual
-//   ?caso=H2   (tanda 80) la OTRA pestaña: la app abierta en #home con el perfil de B; espera a que la madre le diga
-//              «mira» y cuenta si apareció el aviso de «se ha cargado una copia en otra pestaña» y si NO recargó
+//   ?caso=H2   (tanda 80) la OTRA pestaña: la app abierta con el perfil de B; espera a que la madre le diga
+//              «mira» y cuenta si apareció el aviso de «se ha cargado una copia en otra pestaña» y si NO recargó.
+//              (tanda 82) Abierta en #skips con su almacén cargado; después del aviso oculta su tarjeta (el botón de
+//              verdad) y entrega lo guardado: tiene que tener lo de la copia Y lo nuevo
 //   ?caso=H1   (tanda 80) la pestaña que importa, con H2 abierta al lado: como B, pero sin vaciar (el perfil es el de H2)
 //   ?caso=I    (tanda 81) la cuota que corta a mitad: el perfil de B con `localStorage` LLENO de relleno INVENTADO hasta
 //              dejar un hueco del tamaño de las 4 primeras claves del plan y media; el import escribe 4 y la quinta no
@@ -194,9 +196,17 @@ try {
 
   if (CASO === 'H2') {
     // La otra pestaña: la app abierta, un marcador en su `window`, y a esperar.
-    location.hash = '#home';
+    // (tanda 82) Abierta en #skips, con su almacén de ocultos YA cargado antes del import (es el caso que perdía lo de la
+    // copia): su propia playlist simulada, vacía, y una tarjeta con su botón de ocultar (`perfilH2`, INVENTADO).
+    const h2 = D.perfilH2();
+    for (const [k, v] of h2.ls) localStorage.setItem(k, v);
+    await anclar(D.sembrarIdb(h2.idb));
+    location.hash = '#skips';
     await import('/js/app.js');
-    await esperarReal(() => $('.home-card'), { que: 'que #home pinte (H2)', vueltas: 8000 });
+    await esperarSyncSkips(0);
+    const tarjeta = () => $(`.sc-card[data-id="${D.SALTEADA_H2}"] .sc-hide`);
+    await esperarReal(tarjeta, { que: 'la tarjeta de #skips con su botón de ocultar (H2)', vueltas: 8000 });
+    const antesDelImport = localStorage.getItem(`skips_hidden_tracks__${D.UID}`);
     window.__marcadorH2 = 'sigo-aqui';
     window.name = 'banco-h2-viva';
     madre.postMessage({ banco: 'copia-importar-h2', fase: 'lista' }, '*');
@@ -204,12 +214,24 @@ try {
     let v = 0;
     await esperarReal(() => $('#aviso-copia') || ++v > 400, { que: 'el aviso de la otra pestaña (H2)', vueltas: 2000 });
     const aviso = $('#aviso-copia');
+    // (tanda 82) Después del aviso, SIN recargar, se oculta la tarjeta: el `toggle` de verdad, que guarda el conjunto ENTERO
+    // de la memoria. Con la unión, lo de la copia ya está en esa memoria; sin ella (v=338), se pisaba.
+    const posts0 = madre.__estadoImport.posts.length;
+    const lsAntesDeOcultar = localStorage.getItem(`skips_hidden_tracks__${D.UID}`);
+    tarjeta().click();
+    await esperarReal(() => madre.__estadoImport.posts.length > posts0, { que: 'el POST del oculto de H2 a su playlist simulada', vueltas: 8000 });
+    let w = 0; await esperarReal(() => ++w > 40, { que: 'que se asiente H2' });
     window.name = '';
     madre.postMessage({ banco: 'copia-importar-h2', fase: 'visto', datos: {
       aviso: aviso ? aviso.querySelector('.aviso-copia-texto')?.textContent.trim() : null,
       botones: aviso ? $$('button', aviso).map((b) => b.textContent.trim()) : [],
       fijo: aviso ? getComputedStyle(aviso).position : null,
       marcador: window.__marcadorH2 || null,
+      antesDelImport: JSON.parse(antesDelImport || '[]'),
+      antesDeOcultar: JSON.parse(lsAntesDeOcultar || '[]'),
+      guardado: JSON.parse(localStorage.getItem(`skips_hidden_tracks__${D.UID}`) || '[]'),
+      uris: JSON.parse(localStorage.getItem(`skips_hidden_tracks_uris__${D.UID}`) || '{}'),
+      posts: madre.__estadoImport.posts.slice(posts0),
       rechazos,
     } }, '*');
     await new Promise(() => {});
