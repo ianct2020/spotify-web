@@ -650,6 +650,16 @@ input[type="checkbox"].keep-check:checked::after {
   font-size: 12px;
   color: var(--color-text-secondary);
 }
+/* (v=335) «A N grupos más les faltan datos…»: debajo de la línea y del
+   interruptor (el contenedor es flex con `wrap`: `flex-basis: 100%` la baja). */
+.ver-propuestas-faltan {
+  flex-basis: 100%;
+  margin: 0;
+  font-size: 12px;
+  color: var(--color-text-secondary);
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
 .ver-propuesta {
   padding: 10px 14px;
   border-bottom: 1px solid var(--color-border);
@@ -2004,6 +2014,31 @@ body.con-banner-degradado { padding-top: 44px; }
 @media (max-width: 768px) {
   .banner-degradado { flex-wrap: wrap; font-size: 12px; }
   body.con-banner-degradado { padding-top: 72px; }
+}
+
+/* ── «Se ha cargado una copia en otra pestaña» (v=335) ───────────────────────
+   `ui/aviso-copia.js`. La misma franja fija de arriba que `.banner-degradado`,
+   con clases propias, por encima de ella si salen las dos (esta es la que
+   pide hacer algo YA), sin botón de cerrar y sin animación. */
+.aviso-copia {
+  position: fixed;
+  top: 0; left: 0; right: 0;
+  z-index: 901;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 16px;
+  background: var(--color-elevated);
+  border-bottom: 2px solid var(--color-warning);
+  color: var(--color-text);
+  font-size: 13px;
+  line-height: 1.4;
+}
+.aviso-copia-texto { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
+body.con-aviso-copia { padding-top: 46px; }
+@media (max-width: 768px) {
+  .aviso-copia { flex-wrap: wrap; font-size: 12px; }
+  body.con-aviso-copia { padding-top: 80px; }
 }
 
 /* ── Aviso de espera por rate limit (429) ───────────────────────────────────

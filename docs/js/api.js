@@ -1,15 +1,17 @@
-import { getValidToken, refreshAccessToken } from './auth.js?v=334';
-import { cacheGet, cacheGetRaw, cacheGetTimestamp, cacheSet, cacheClear, prefKey, migratePrefKey } from './storage.js?v=334';
-import { idbDel, idbDelByPrefix, idbGetCached, idbGetCachedRaw, idbGetTimestamp, idbSetCached, idbGet, idbAllKeys, idbEntriesByPrefix, idbSetVarios } from './idb.js?v=334';
-import { OWNER_KEY_LIST } from './history-keys.js?v=334';
-import { OCULTOS_ITEMS_PREFIX } from './util/ocultos-items-clave.js?v=334';
-import { showToast } from './ui/toast.js?v=334';
-import { artistIsSame, limpiaParaQuery } from './util/track-match.js?v=334';
-import { contadorCuota, cuotaDeEndpoint } from './util/cuota.js?v=334';
-import { exportarEtiquetas, importarEtiquetas } from './api/lastfm.js?v=334';
-import { leerNavegador, armarCopia, serializar, contieneSecreto } from './util/copia-completa.js?v=334';
-import { leerCopia, planDeImport, segundaRed, TEXTOS as TEXTOS_IMPORT } from './util/copia-importar.js?v=334';
-import { BORRADOS_LOG_MAX } from './util/topes-registros.js?v=334';
+import { getValidToken, refreshAccessToken } from './auth.js?v=335';
+import { cacheGet, cacheGetRaw, cacheGetTimestamp, cacheSet, cacheClear, prefKey, migratePrefKey } from './storage.js?v=335';
+import { idbDel, idbDelByPrefix, idbGetCached, idbGetCachedRaw, idbGetTimestamp, idbSetCached, idbGet, idbAllKeys, idbEntriesByPrefix, idbSetVarios } from './idb.js?v=335';
+import { OWNER_KEY_LIST } from './history-keys.js?v=335';
+import { OCULTOS_ITEMS_PREFIX } from './util/ocultos-items-clave.js?v=335';
+import { showToast } from './ui/toast.js?v=335';
+import { artistIsSame, limpiaParaQuery } from './util/track-match.js?v=335';
+import { contadorCuota, cuotaDeEndpoint } from './util/cuota.js?v=335';
+import { exportarEtiquetas, importarEtiquetas } from './api/lastfm.js?v=335';
+import { leerNavegador, armarCopia, serializar, contieneSecreto, CENSO } from './util/copia-completa.js?v=335';
+import { leerCopia, planDeImport, segundaRed, TEXTOS as TEXTOS_IMPORT } from './util/copia-importar.js?v=335';
+import { MARCA_DESDE_COPIA, leerMarca, marcaTrasImport } from './util/ocultos-desde-copia.js?v=335';
+import { avisarCopiaImportada } from './util/canal-copia.js?v=335';
+import { BORRADOS_LOG_MAX } from './util/topes-registros.js?v=335';
 
 const BASE = 'https://api.spotify.com/v1';
 const MIN_RETRY_WAIT = 5000;
@@ -868,7 +870,7 @@ async function importarCopiaCompleta(texto, { ahora = new Date() } = {}) {
     plan.rechazo = { motivo: 'roto', texto: `El archivo no es un JSON válido (${e?.message || e}).` };
     return { plan };
   }
-  const { motivoSinImportCompleto } = await import('./features/history-data.js?v=334');
+  const { motivoSinImportCompleto } = await import('./features/history-data.js?v=335');
   const motivoOwner = await motivoSinImportCompleto();
   const uid = motivoOwner === 'identidad' ? null : _cachedUserId;
   const leido = await leerParaImportar();
@@ -890,6 +892,8 @@ async function importarCopiaCompleta(texto, { ahora = new Date() } = {}) {
 //      clave. Si una tira (cuota), se para ahí y vuelven las que faltaron: lo ya escrito fueron solo agregados y
 //      uniones, así que lo que había sigue entero.
 // Devuelve `{ ok, … }`; nunca tira por algo del plan.
+// (v=335) Toda salida que ESCRIBIÓ algo pasa por `alTerminarImport()`: la marca de los ocultos que llegaron
+// (`ocultos_desde_copia_v1`) y el aviso a las OTRAS pestañas. Las salidas sin escrituras, no.
 async function aplicarPlan(plan) {
   const malas = segundaRed(plan);
   if (plan?.rechazo || !plan?.entrada || malas.length) return { ok: false, motivo: 'red', malas, idb: 0, ls: 0 };
@@ -907,23 +911,50 @@ async function aplicarPlan(plan) {
     }
   }
 
-  let final;
+  let final, lsAhora = {};
   try {
-    final = planDeImport({ ...plan.entrada, idb: leido.idb, ls: leerLsAhora() });
+    lsAhora = leerLsAhora();
+    final = planDeImport({ ...plan.entrada, idb: leido.idb, ls: lsAhora });
   } catch (e) {
-    return { ok: false, motivo: 'ls', error: e?.message || String(e), idb: fresco.idb.length, ls: 0, faltaron: [] };
+    return alTerminarImport({ ok: false, motivo: 'ls', error: e?.message || String(e), idb: fresco.idb.length, ls: 0, faltaron: [] });
   }
-  if (final.rechazo || segundaRed(final).length) return { ok: false, motivo: final.rechazo ? final.rechazo.motivo : 'red', texto: final.rechazo?.texto, idb: fresco.idb.length, ls: 0, faltaron: [] };
+  if (final.rechazo || segundaRed(final).length) return alTerminarImport({ ok: false, motivo: final.rechazo ? final.rechazo.motivo : 'red', texto: final.rechazo?.texto, idb: fresco.idb.length, ls: 0, faltaron: [] });
   let escritas = 0;
   for (const [clave, texto] of final.ls) {
     try {
       localStorage.setItem(clave, texto);
       escritas++;
     } catch (e) {
-      return { ok: false, motivo: 'ls', error: e?.message || String(e), idb: fresco.idb.length, ls: escritas, faltaron: final.ls.slice(escritas).map(([k]) => k), resumen: final.resumen };
+      return alTerminarImport({ ok: false, motivo: 'ls', error: e?.message || String(e), idb: fresco.idb.length, ls: escritas, faltaron: final.ls.slice(escritas).map(([k]) => k), resumen: final.resumen }, { lsAntes: lsAhora, escritas: final.ls.slice(0, escritas), uid: plan.entrada.uid });
     }
   }
-  return { ok: true, idb: fresco.idb.length, ls: escritas, resumen: final.resumen };
+  return alTerminarImport({ ok: true, idb: fresco.idb.length, ls: escritas, resumen: final.resumen }, { lsAntes: lsAhora, escritas: final.ls, uid: plan.entrada.uid });
+}
+
+// Los seis almacenes de ocultos con playlist espejo, del CENSO (las filas de clase 3 que son un conjunto): no una lista
+// copiada.
+const ALMACENES_DE_OCULTOS = CENSO.filter((c) => c.donde === 'ls' && c.clase === 3 && c.fusion === 'conjunto').map((c) => c.clave);
+
+// (v=335) Después de un import que escribió algo. Dos cosas, y ninguna puede hacer fallar el import:
+//   1. la marca de los ocultos que llegaron (`util/ocultos-desde-copia.js`): lo que la app LEE de cada almacén después
+//      menos lo que leía antes, unido a la marca que hubiera. UN `setItem`, el de la marca, fuera del plan (ni
+//      `planDeImport` ni `segundaRed` la ven). Si tira, el `sync()` avisa como en v=334 y nada más;
+//   2. el aviso a las OTRAS pestañas (`util/canal-copia.js`), si se escribió algo. ⚠️ También en una cuota que cortó a
+//      mitad: lo ya escrito es justo lo que otra pestaña puede pisar.
+function alTerminarImport(r, { lsAntes = null, escritas = [], uid = null } = {}) {
+  if (lsAntes && escritas.length && uid) {
+    try {
+      const despues = { ...lsAntes };
+      for (const [k, v] of escritas) despues[k] = v;
+      const claveMarca = `${MARCA_DESDE_COPIA}__${uid}`;
+      const m = marcaTrasImport({ marca: leerMarca(localStorage.getItem(claveMarca)), antes: lsAntes, despues, uid, almacenes: ALMACENES_DE_OCULTOS });
+      if (m.cambio) localStorage.setItem(claveMarca, JSON.stringify(m.marca));
+    } catch (e) {
+      console.warn('[import-todo] no pude dejar la marca de los ocultos importados (el aviso del próximo sync dirá «habían desaparecido»):', e);
+    }
+  }
+  if ((r.idb || 0) + (r.ls || 0) > 0) avisarCopiaImportada();
+  return r;
 }
 
 async function importAllData(parsed, onProgress, { currentUserId = null } = {}) {

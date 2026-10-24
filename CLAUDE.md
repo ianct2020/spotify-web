@@ -893,6 +893,35 @@ Guardas: `tests/deluxe-propuesta.test.mjs` (cada condición, un caso que pasa y 
 sale de su tarjeta; ningún «aceptar todas»; `render()` no calcula nada) y el banco `tests/banco/versiones-deluxe.html`
 (en `prepush`, el vigésimo segundo). Las dos suites y el banco, vistos fallar contra v=322.
 
+### «Le faltan datos» no es «ninguno» (v=335)
+
+La caché de me gusta es incremental y no caduca: los me gusta guardados antes de v=127 no traen `album_type` ni
+`total_tracks`, y la regla los exige en TODOS los miembros. Hasta v=334 un grupo con un me gusta viejo caía por
+`no-es-album` o `sin-total-de-pistas` y la vista decía «Ningún grupo es solo de edición.»: un resultado del dominio tapando
+un dato que falta (la familia de v=154). **La regla no cambió**: `motivosPorNombre`, `motivosDeLaRegla` y
+`propuestaDeGrupo` quedaron byte a byte (el `sha256` del texto de cada una está como constante en el test).
+
+- **Qué cuenta** (`faltanDatos` / `resumenDeFaltantes`, nuevas en `util/deluxe-propuesta.js`, puras): a un miembro le
+  falta un dato si `album.album_type` es null/undefined/`''` (`'single'` y `'compilation'` son valores), si
+  `album.total_tracks` no es un entero > 0, si `duration_ms` no es > 0 o si `explicit` no es booleano (el ISRC no cuenta).
+  Un grupo cuenta si pasa por NOMBRES y algún miembro tiene un dato faltante: es una COTA (con los datos completos puede
+  seguir sin propuesta). M = me gusta distintos con un dato faltante en esos N grupos.
+- **El texto**: con 0 propuestas y N > 0, «Ningún grupo tiene propuesta todavía: a N grupos les faltan datos que tu caché
+  de me gusta guardó con una versión vieja de la app (M me gusta). Pulsa «↻ Re-analizar» para volver a bajarlos: lee tus
+  me gusta de Spotify y no cambia nada en tu cuenta.»; con propuestas, debajo y en `--color-text-secondary`
+  (`.ver-propuestas-faltan`), «A N grupos más les faltan datos para decidir: pulsa «↻ Re-analizar».». «Ningún grupo es
+  solo de edición.» queda SOLO con N = 0 y 0 propuestas. Es cierto lo que dice: el «↻ Re-analizar»
+  (`getAllLikedTracks({ force: true })`) vacía el parcial y vuelve a paginar `/me/tracks` con `slimTrack`, que guarda los
+  dos campos desde v=127; solo lee.
+- **Qué no hace**: no aprieta el botón, no baja nada, no toca la caché. Cuenta sobre `allClusters` en
+  `renderClusterList()`: 0 peticiones. El `title` del botón pasó de «usalo» a «úsalo».
+
+Guardas: `tests/versions-faltan-datos.test.mjs` (cada campo de a uno; el single no falta; un grupo que falla por nombres
+no cuenta; el texto con la función DE LA VISTA, `pintarResumenPropuestas` sacada del fuente con un `document` de mentira;
+los tres `sha256`; la lectura estática. Rojo contra v=334: 50 de 62) y el caso F del banco `versiones-deluxe` (la caché
+SEMBRADA con el deluxe de G1 sin `album_type` ni `total_tracks`: «Analizar» = 0 peticiones, las mismas que con v=334, y el
+cartel nuevo; contra v=334, «Ningún grupo es solo de edición.»).
+
 ## El embed de previews: medido tarjeta por tarjeta (v=167)
 
 Ian reportaba que en `#zero-plays` y en `#skips` «la mayoría» le abría el embed
@@ -1986,6 +2015,25 @@ Las reglas que hay que respetar al tocar ese archivo:
   Por eso está `#debug` → «Salud de los ocultos», que compara las seis playlists
   contra el navegador y nombra cada huérfana con su motivo. Si agregás un aviso
   nuevo a este mecanismo, que se pueda mirar desde ahí.
+- **Lo que llegó con «Importar todo» no es «la playlist lo perdió» (v=335).** Las
+  claves importadas traen su uri en `<lsKey>_uris`, así que `reconciliar()` las
+  cuenta como `perdidas`. `aplicarPlan` (`api.js`, `alTerminarImport`) deja
+  `ocultos_desde_copia_v1` (con `prefKey`, `{ <lsKey pelado>: [claves] }`: lo que
+  la app LEE de cada almacén después del import menos lo que leía antes, unido a
+  la marca que hubiera; el lector vive en `util/ocultos-desde-copia.js`, puro y sin
+  imports). `sync()` parte `perdidas` en las de la marca (`deLaCopia`) y las de
+  verdad: estas, con su toast amarillo y su `resubida` de siempre; las de la copia,
+  DESPUÉS de que `pushMissing` vuelve sin tirar, con un toast `'info'` («he subido
+  a tu playlist de Spotify N ocultos que venían de tu copia») y una incidencia
+  `desde-copia`, y salen de la marca (si el POST tira, quedan para el próximo). En
+  cada `sync()` se podan de la marca de ese almacén las que ya no están «solo en
+  local». 🔴 **La marca NUNCA decide qué se sube**: `subir` sigue armándose con
+  `perdidas` ENTERA, en el mismo orden; corrupta = vacía y no se reescribe. Las
+  escrituras de v=334 y v=335, comparadas byte a byte en cinco suites (los
+  C1-C10 de `ocultos-cache` incluidos): iguales. En el `CENSO` va con `entra:
+  false` y clase 4 (perderla no pierde nada; los registros entran todos). Guarda:
+  `tests/ocultos-desde-copia.test.mjs` (las escrituras de cada caso, constantes
+  medidas contra v=334; rojo contra v=334: 12 de 32).
 
 ## `findPlaylist()`: «no existe» y «no pude preguntar» NO son lo mismo (v=287)
 
@@ -4893,7 +4941,9 @@ lo que quitaste DESPUÉS de hacer la copia (un disco de «no registraste», un o
 | `util/copia-importar.js` | PURO (importa `copia-completa.js`, `disco-base.js`, `generos-artista.js` y `topes-registros.js`, los cuatro puros): `planDeImport` (sincrónica: el archivo ya parseado + el estado YA LEÍDO → `{ rechazo, idb, ls, resumen, meta }`), `segundaRed`, `revivir` (los `{"__tipo": …}` de vuelta a `Uint8Array`/`Map`/`Set`, byte a byte) y `resumenEnPalabras` |
 | `util/topes-registros.js` | SIN IMPORTS: los topes de `likes_borrados_log_v1` (20) y `ocultos_incidencias_v1` (100), que vivían privados en `api.js` y `hidden-sync.js`. Los dueños y el import los importan de acá (importados, no copiados) |
 | `api.js`, `importarCopiaCompleta(texto)` / `aplicarPlan(plan)` | el enchufe: lee con las MISMAS lecturas sin efectos de `exportarCopiaCompleta` (el test las compara letra por letra), decide, y recién `aplicarPlan` escribe |
-| `features/dashboard.js`, `handleImportTodo()` | el ítem del ⚙, su `<input type="file">`, los dos modales y «Recargar ahora» |
+| `features/dashboard.js`, `handleImportTodo()` | el ítem del ⚙, su `<input type="file">`, los dos modales y la recarga |
+| `util/canal-copia.js`, `ui/aviso-copia.js` (v=335) | el aviso a las OTRAS pestañas: el `BroadcastChannel('fonoteca-copia')` y el aviso fijo |
+| `util/ocultos-desde-copia.js` (v=335) | la marca de los ocultos que llegaron (ver «Los ocultos: la uri va GUARDADA», arriba) |
 
 **El censo decide de nuevo, al importar.** Que una clave venga en el archivo no la habilita: pasa por `entradaDe()` del
 MISMO `CENSO`. Si no está en el censo, si su fila no entra, si es de clase 5 (secreto) o si es de otro usuario
@@ -4958,17 +5008,28 @@ pide **un `/me`**: es la confirmación de identidad sin la cual no se escribe na
 
 🔴 **Los ocultos agregados suben a Spotify DESPUÉS, la próxima vez que se abre su vista**: `sync()` ve claves locales que la
 playlist no tiene y las sube (`pushMissing`). Es una escritura en la cuenta, diferida, y es lo que se quiere (restaurarlos):
-el modal lo dice («Los ocultos que se agreguen se subirán a sus listas de Spotify la próxima vez que abras su vista.»). Suben
-a la playlist cuyo id tiene TU navegador (el del archivo no pisa el tuyo). ⚠️ **Y el aviso miente un poco**: como su uri
-viajó en `<lsKey>_uris`, `sync()` las cuenta como «perdidas» (la uri ya estaba guardada al empezar) y no como «nunca
-subieron»: toast «3 ocultos habían desaparecido de la playlist. Los he vuelto a subir.» y una línea `resubida` en
-`ocultos_incidencias_v1` (medido en el banco, caso C2). No se tocó (`hidden-sync.js` es de otra tanda; anotado en
-`PENDIENTES.md`).
+el modal lo dice, con las siete vistas que sincronizan al abrirse (v=335): «Los ocultos que se agreguen se subirán a sus
+listas de Spotify la próxima vez que abras Skips crónicos, Sin plays, Sin clasificar, W-Three helper, Sin escuchar de tus
+artistas, Novedades de tus artistas o Seguir artistas.» (comprobadas en la tanda 80: `hiddenStore.ready()` en el camino de su
+`render()`; «Sin clasificar» solo si hay me gusta en la caché y «W-Three helper» con su playlist cargada; «Artistas
+similares» y «Recomendaciones» también sincronizan los artistas ocultos, pero al pulsar, no al abrir). Suben a la playlist
+cuyo id tiene TU navegador (el del archivo no pisa el tuyo). 🟩 **Desde v=335 el aviso dice la verdad**: «he subido a tu
+playlist de Spotify N ocultos que venían de tu copia» y `desde-copia` (hasta v=334, «habían desaparecido de la playlist» y
+`resubida`): ver la marca `ocultos_desde_copia_v1` en «Los ocultos: la uri va GUARDADA con la clave».
 
-⚠️ **Sin recarga automática, pero hace falta recargar**: los almacenes de ocultos (y `discover_escuchados`) leen su conjunto
-una vez por carga y lo guardan ENTERO cuando cambia. Si en esa carga ya abriste `#skips`, importás y, sin recargar, ocultás
-algo ahí, el almacén guarda su conjunto VIEJO más el nuevo y lo importado de ese almacén se pierde (lo que ya tenías, no).
-Por eso el modal final ofrece «Recargar ahora» y lo explica.
+🔴 **La recarga es obligada (v=335)**: los almacenes de ocultos (y `discover_escuchados`) leen su conjunto una vez por carga y
+lo guardan ENTERO cuando cambia. Si en esa carga ya abriste `#skips`, importás y, sin recargar, ocultás algo ahí, el almacén
+guarda su conjunto VIEJO más el nuevo y lo importado de ese almacén se pierde. Hasta v=334 «Recargar ahora» era optativo.
+Ahora el modal «Copia importada» tiene UN botón, «Recargar ahora» (`alertModal` con `cancelText: null`: sin botón de
+cancelar; es opt-in, nadie más lo pasa, e `infoModal` sigue igual), y `location.reload()` va sin condición después: el
+botón, Escape, el clic afuera o un cambio de ruta recargan igual. **Y las OTRAS pestañas de la app**: `aplicarPlan`, si
+escribió algo (también si una cuota lo cortó a mitad), manda `{ tipo: 'importada', fecha, origen }` por
+`BroadcastChannel('fonoteca-copia')` (`util/canal-copia.js`, un canal por pestaña, que ignora lo suyo); `app.js` escucha al
+arrancar y `ui/aviso-copia.js` pinta un aviso fijo arriba, sin cerrar: «Se ha cargado una copia en otra pestaña. Recarga
+esta antes de seguir, o puedes perder lo que trajo la copia.» con «Recargar». 🔴 **No la recarga sola** (puede estar a mitad
+de un borrado verificado o de una escritura en Spotify). Que además impida guardar a sus almacenes es otro diseño: no se
+hizo (en `PENDIENTES.md`). Sin `BroadcastChannel`, no hace nada. Guardas: `tests/importar-recarga.test.mjs` (40; rojo
+contra v=334) y el banco `copia-importar` (abajo).
 
 **El tiempo** (SEMBRADO: el banco con `XQ="&tamano=ian&solo=ab"`, datos INVENTADOS del tamaño de los de Ian, archivo de
 19.939.678 bytes, en un perfil VACÍO): reloj de pared **474 ms** para leer el archivo, leer el navegador y decidir, y **671 ms**
@@ -4981,4 +5042,9 @@ y el bloque del amigo, el archivo editado, la segunda red, IndexedDB que falla, 
 contra v=333, y con un `planDeImport` que pisa, el invariante en rojo) y el banco `tests/banco/copia-importar.html` +
 `-caso.html` + `-datos.mjs` (en `prepush`, el vigésimo séptimo: A → B con el mismo sha256 por clave y 0 peticiones; C con estado
 propio contra un oráculo; C2, lo agregado sube a la playlist simulada de C; D otro uid; E el owner; F un secreto en el
-archivo; G «Cancelar»).
+archivo; G «Cancelar»). **Desde v=335** (tanda 80) cada caso que importa mide todo con el modal abierto, deja sus datos en
+`window.name` y lo cierra por un camino distinto (B, F y H1 con «Recargar ahora», C1 con Escape, E con un clic afuera): la
+carga siguiente los entrega, y si no recargó, el caso falla. La madre escucha el canal: 1 aviso en B, C1, E, F y H1, 0 en
+A, C2, D y G. C2 afirma el toast `'info'` de la copia, `desde-copia` y ninguna `resubida`, con el mismo POST que en la 79.
+Y un caso nuevo, **H, dos pestañas** (dos iframes del mismo origen): la segunda pinta el aviso y NO recarga (su marcador
+sigue en su `window`); contra v=334, nada. `?solo=h` corre A y H.

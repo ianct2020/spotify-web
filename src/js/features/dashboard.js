@@ -517,6 +517,12 @@ async function handleExportTodo() {
 // «Importar todo» (v=334): vuelve a cargar una copia de «Exportar todo» (`util/copia-importar.js`). Solo agrega lo que
 // falta y une las listas; nunca borra ni cambia lo que ya hay. Nada se escribe hasta «Importar», y «Cancelar» no escribe
 // nada. No recarga sola: los módulos guardan estado en memoria y la recarga la decide el usuario («Recargar ahora»).
+// Cuándo suben a Spotify los ocultos que trae una copia: la próxima vez que se abre una de las siete vistas que
+// sincronizan su almacén al abrirse (`hiddenStore.ready()` en el camino de su `render()`; comprobadas en la tanda 80:
+// skips.js, zero-plays.js, sin-clasificar.js —si hay me gusta en la caché—, wthree.js —con su playlist cargada—,
+// discover-artists.js, new-releases.js y follow-artists.js). Con los nombres del menú (`app.js`).
+const OCULTOS_CUANDO = 'Los ocultos que se agreguen se subirán a sus listas de Spotify la próxima vez que abras Skips crónicos, Sin plays, Sin clasificar, W-Three helper, Sin escuchar de tus artistas, Novedades de tus artistas o Seguir artistas.';
+
 async function handleImportTodo(e) {
   const file = e.target.files?.[0];
   e.target.value = '';
@@ -542,7 +548,7 @@ async function handleImportTodo(e) {
     <p>Copia del <strong>${escapeHtml(fecha)}</strong>, del usuario <strong>${escapeHtml(plan.meta.usuario || '')}</strong>.</p>
     <p>Solo se agrega lo que te falta y se unen las listas: no se borra ni se cambia nada de lo que ya tienes.</p>
     ${clases(plan.resumen)}
-    <p class="import-todo-ocultos">Los ocultos que se agreguen se subirán a sus listas de Spotify la próxima vez que abras su vista.</p>
+    <p class="import-todo-ocultos">${OCULTOS_CUANDO}</p>
     ${fuera.length ? `<details class="import-todo-fuera"><summary>Lo que no entra (${fuera.length.toLocaleString('es-ES')})</summary><ul>${fuera.map(f => `<li><code>${escapeHtml(f.clave)}</code>: ${escapeHtml(f.motivo)}</li>`).join('')}</ul></details>` : ''}
   `, { confirmText: 'Importar', cancelText: 'Cancelar', variant: 'info' });
   if (!ok) return;
@@ -564,12 +570,18 @@ async function handleImportTodo(e) {
     return;
   }
   const s = r.resumen.claves;
-  const recargar = await alertModal('Copia importada', `
+  // (v=335) La recarga es OBLIGADA: los almacenes de ocultos (y
+  // `discover_escuchados`) tienen su conjunto de antes en memoria y, si se tocan
+  // sin recargar, lo guardan encima de lo importado. El modal no ofrece
+  // «Cerrar» (`cancelText: null`) y, se cierre como se cierre (el botón,
+  // Escape, clic afuera, un cambio de ruta), recarga. Las OTRAS pestañas ya
+  // recibieron el aviso de `aplicarPlan` (`util/canal-copia.js`).
+  await alertModal('Copia importada', `
     <p>Hecho: ${s.agregan.length.toLocaleString('es-ES')} ${s.agregan.length === 1 ? 'clave agregada' : 'claves agregadas'} y ${s.unen.length.toLocaleString('es-ES')} ${s.unen.length === 1 ? 'unida' : 'unidas'} con lo tuyo. No se ha borrado ni cambiado nada de lo que ya tenías.</p>
     ${clases(r.resumen)}
-    <p>Recarga la página para que todas las vistas lo vean: hasta entonces, algunas siguen con lo de antes en memoria, y si cambias algo en ellas podrían no contar lo importado.</p>
-  `, { confirmText: 'Recargar ahora', cancelText: 'Cerrar', variant: 'info' });
-  if (recargar) location.reload();
+    <p>La página se recarga ahora para que todas las vistas lo vean: hasta entonces, algunas siguen con lo de antes en memoria, y si cambias algo en ellas podrían no contar lo importado.</p>
+  `, { confirmText: 'Recargar ahora', cancelText: null, variant: 'info' });
+  location.reload();
 }
 
 async function handleImportAll(e) {

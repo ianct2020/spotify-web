@@ -1,16 +1,16 @@
-import { getAllLikedTracks, getLikesPartialInfo, exportAllData, exportarCopiaCompleta, importarCopiaCompleta, aplicarPlan, importAllData, getCurrentUserId, syncLikesIncremental, getLikesCacheTimestamp, getBestAvailableLikes, getAllPlaylistItems } from '../api.js?v=334';
-import { showProgress, hideProgress, alertModal, infoModal, escapeHtml, pageHeader } from '../ui/components.js?v=334';
-import { openModal, closeTop } from '../ui/modal-stack.js?v=334';
-import { showToast } from '../ui/toast.js?v=334';
-import { openListenedAlbumsPicker, getListenedPlaylist } from './listened-shared.js?v=334';
-import { loadHistoryStats, loadListenedAlbums } from './history-data.js?v=334';
-import { getArtistLikePreview } from '../util/artist-preview.js?v=334';
-import { hoverIn, hoverOut } from '../ui/preview-player.js?v=334';
-import { armRevealAll } from '../ui/reveal.js?v=334';
-import { hasUsername, getUsername, setUsername } from '../api/statsfm.js?v=334';
-import { getKey as getLastfmKey, setKey as setLastfmKey, clearKey as clearLastfmKey, isDefaultKey as lastfmIsDefaultKey } from '../api/lastfm.js?v=334';
-import { prefKey, migratePrefKey } from '../storage.js?v=334';
-import { alpha } from '../ui/theme-panel.js?v=334';
+import { getAllLikedTracks, getLikesPartialInfo, exportAllData, exportarCopiaCompleta, importarCopiaCompleta, aplicarPlan, importAllData, getCurrentUserId, syncLikesIncremental, getLikesCacheTimestamp, getBestAvailableLikes, getAllPlaylistItems } from '../api.js?v=335';
+import { showProgress, hideProgress, alertModal, infoModal, escapeHtml, pageHeader } from '../ui/components.js?v=335';
+import { openModal, closeTop } from '../ui/modal-stack.js?v=335';
+import { showToast } from '../ui/toast.js?v=335';
+import { openListenedAlbumsPicker, getListenedPlaylist } from './listened-shared.js?v=335';
+import { loadHistoryStats, loadListenedAlbums } from './history-data.js?v=335';
+import { getArtistLikePreview } from '../util/artist-preview.js?v=335';
+import { hoverIn, hoverOut } from '../ui/preview-player.js?v=335';
+import { armRevealAll } from '../ui/reveal.js?v=335';
+import { hasUsername, getUsername, setUsername } from '../api/statsfm.js?v=335';
+import { getKey as getLastfmKey, setKey as setLastfmKey, clearKey as clearLastfmKey, isDefaultKey as lastfmIsDefaultKey } from '../api/lastfm.js?v=335';
+import { prefKey, migratePrefKey } from '../storage.js?v=335';
+import { alpha } from '../ui/theme-panel.js?v=335';
 
 // Tres estados posibles, no dos: puede haber una key propia, la del código, o
 // —si algún día la constante queda vacía— ninguna. El hint del ⚙ tiene que
@@ -20,14 +20,14 @@ function estadoLastfm() {
   if (localStorage.getItem(prefKey('lastfm_api_key'))) return 'propia';
   return lastfmIsDefaultKey() ? 'la del código' : 'sin configurar';
 }
-import { loadHistoryStats as _loadStatsForCounter } from './history-data.js?v=334';
-import { openArtistCard } from './artist-card.js?v=334';
-import { openAlbumCard } from './album-card.js?v=334';
-import { activateMarquee, marqueeSpan } from '../ui/marquee.js?v=334';
-import { isJunkTrack } from '../util/junk.js?v=334';
-import { AVISO_MEZCLA } from '../util/corte-saltos.js?v=334';
-import { nombreArchivo } from '../util/copia-completa.js?v=334';
-import { resumenEnPalabras } from '../util/copia-importar.js?v=334';
+import { loadHistoryStats as _loadStatsForCounter } from './history-data.js?v=335';
+import { openArtistCard } from './artist-card.js?v=335';
+import { openAlbumCard } from './album-card.js?v=335';
+import { activateMarquee, marqueeSpan } from '../ui/marquee.js?v=335';
+import { isJunkTrack } from '../util/junk.js?v=335';
+import { AVISO_MEZCLA } from '../util/corte-saltos.js?v=335';
+import { nombreArchivo } from '../util/copia-completa.js?v=335';
+import { resumenEnPalabras } from '../util/copia-importar.js?v=335';
 
 let charts = [];
 let _loadController = null;
@@ -517,6 +517,12 @@ async function handleExportTodo() {
 // «Importar todo» (v=334): vuelve a cargar una copia de «Exportar todo» (`util/copia-importar.js`). Solo agrega lo que
 // falta y une las listas; nunca borra ni cambia lo que ya hay. Nada se escribe hasta «Importar», y «Cancelar» no escribe
 // nada. No recarga sola: los módulos guardan estado en memoria y la recarga la decide el usuario («Recargar ahora»).
+// Cuándo suben a Spotify los ocultos que trae una copia: la próxima vez que se abre una de las siete vistas que
+// sincronizan su almacén al abrirse (`hiddenStore.ready()` en el camino de su `render()`; comprobadas en la tanda 80:
+// skips.js, zero-plays.js, sin-clasificar.js —si hay me gusta en la caché—, wthree.js —con su playlist cargada—,
+// discover-artists.js, new-releases.js y follow-artists.js). Con los nombres del menú (`app.js`).
+const OCULTOS_CUANDO = 'Los ocultos que se agreguen se subirán a sus listas de Spotify la próxima vez que abras Skips crónicos, Sin plays, Sin clasificar, W-Three helper, Sin escuchar de tus artistas, Novedades de tus artistas o Seguir artistas.';
+
 async function handleImportTodo(e) {
   const file = e.target.files?.[0];
   e.target.value = '';
@@ -542,7 +548,7 @@ async function handleImportTodo(e) {
     <p>Copia del <strong>${escapeHtml(fecha)}</strong>, del usuario <strong>${escapeHtml(plan.meta.usuario || '')}</strong>.</p>
     <p>Solo se agrega lo que te falta y se unen las listas: no se borra ni se cambia nada de lo que ya tienes.</p>
     ${clases(plan.resumen)}
-    <p class="import-todo-ocultos">Los ocultos que se agreguen se subirán a sus listas de Spotify la próxima vez que abras su vista.</p>
+    <p class="import-todo-ocultos">${OCULTOS_CUANDO}</p>
     ${fuera.length ? `<details class="import-todo-fuera"><summary>Lo que no entra (${fuera.length.toLocaleString('es-ES')})</summary><ul>${fuera.map(f => `<li><code>${escapeHtml(f.clave)}</code>: ${escapeHtml(f.motivo)}</li>`).join('')}</ul></details>` : ''}
   `, { confirmText: 'Importar', cancelText: 'Cancelar', variant: 'info' });
   if (!ok) return;
@@ -564,12 +570,18 @@ async function handleImportTodo(e) {
     return;
   }
   const s = r.resumen.claves;
-  const recargar = await alertModal('Copia importada', `
+  // (v=335) La recarga es OBLIGADA: los almacenes de ocultos (y
+  // `discover_escuchados`) tienen su conjunto de antes en memoria y, si se tocan
+  // sin recargar, lo guardan encima de lo importado. El modal no ofrece
+  // «Cerrar» (`cancelText: null`) y, se cierre como se cierre (el botón,
+  // Escape, clic afuera, un cambio de ruta), recarga. Las OTRAS pestañas ya
+  // recibieron el aviso de `aplicarPlan` (`util/canal-copia.js`).
+  await alertModal('Copia importada', `
     <p>Hecho: ${s.agregan.length.toLocaleString('es-ES')} ${s.agregan.length === 1 ? 'clave agregada' : 'claves agregadas'} y ${s.unen.length.toLocaleString('es-ES')} ${s.unen.length === 1 ? 'unida' : 'unidas'} con lo tuyo. No se ha borrado ni cambiado nada de lo que ya tenías.</p>
     ${clases(r.resumen)}
-    <p>Recarga la página para que todas las vistas lo vean: hasta entonces, algunas siguen con lo de antes en memoria, y si cambias algo en ellas podrían no contar lo importado.</p>
-  `, { confirmText: 'Recargar ahora', cancelText: 'Cerrar', variant: 'info' });
-  if (recargar) location.reload();
+    <p>La página se recarga ahora para que todas las vistas lo vean: hasta entonces, algunas siguen con lo de antes en memoria, y si cambias algo en ellas podrían no contar lo importado.</p>
+  `, { confirmText: 'Recargar ahora', cancelText: null, variant: 'info' });
+  location.reload();
 }
 
 async function handleImportAll(e) {

@@ -127,6 +127,10 @@ export const CENSO = [
   ]),
   e('ls', 'ocultos_sin_uri_v1', 3, true, 'util/hidden-sync.js:172', 'los ocultos que no tienen uri (no están en ninguna playlist)', { porUsuario: 'pref', fusion: TUYA }),
   e('ls', 'ocultos_incidencias_v1', 'registro', true, 'util/hidden-sync.js:125', 'las últimas 100 incidencias de los ocultos', { porUsuario: 'pref', fusion: 'registro', fechaCampo: 'fecha' }),
+  // (v=335) La marca de los ocultos que llegaron con «Importar todo» (`util/ocultos-desde-copia.js`): un registro DE PASO,
+  // que sale cuando suben. No entra: exportarla haría que un import la reviviera. Clase 4 y no «registro» (los registros
+  // entran todos): perderla no pierde nada, solo cambia el texto de un aviso.
+  e('ls', 'ocultos_desde_copia_v1', 4, false, 'api.js (alTerminarImport) · util/hidden-sync.js', 'qué ocultos llegaron con «Importar todo» y todavía no subieron', { porUsuario: 'pref' }),
 
   // ── localStorage: lo rehacible (clase 2) ─────────────────────────────────────────────────────
   e('ls', 'lastfm_artist_tags_cache', 2, true, 'api/lastfm.js:162 (heredado ≤ v=311)', 'el blob viejo de etiquetas, de antes de IndexedDB', { fusion: TUYA }),

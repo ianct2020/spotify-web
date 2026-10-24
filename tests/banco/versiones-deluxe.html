@@ -20,7 +20,12 @@
 //   D. «Borrar sobrantes» → la confirmación lista la pista de la edición que se
 //      va; al confirmar, el ÚNICO DELETE lo recibe la Spotify simulada, con esa
 //      uri y nada más; la verificación pasa;
-//   E. a 1366×591 y a 390×844: nada desborda en horizontal y el bloque se lee entero.
+//   E. a 1366×591 y a 390×844: nada desborda en horizontal y el bloque se lee entero;
+//   F. (tanda 80, v=335) la caché de me gusta SEMBRADA con el deluxe de G1 sin
+//      `album_type` ni `total_tracks` (`?cache=vieja`): «Analizar» lee la caché (0
+//      peticiones, las mismas que con v=334) y el cartel dice que a un grupo le
+//      faltan datos, con el «↻ Re-analizar» al lado, en vez de «Ningún grupo es solo
+//      de edición.» (lo que decía v=334: el rojo). A, B, C, D y E no cambian.
 //
 // Las peticiones «de v=322» están escritas acá abajo: se midieron con este mismo
 // banco contra una copia del `src/` de v=322 (tanda 70). Ver el reporte.
@@ -45,10 +50,10 @@ const VUELTAS = 20000;
 const ESPERADO_ABRIR = [];
 const ESPERADO_ANALIZAR = ['GET /me/tracks?limit=50&offset=0', 'GET /me/tracks?limit=50&offset=50'];
 
-function abrirMarco(nombre, w = ANCHO, h = 800) {
+function abrirMarco(nombre, w = ANCHO, h = 800, extra = '') {
   const f = document.createElement('iframe');
   f.width = w; f.height = h;
-  f.src = `/banco/versiones-deluxe-caso.html?marco=${nombre}`;
+  f.src = `/banco/versiones-deluxe-caso.html?marco=${nombre}${extra}`;
   document.getElementById('marcos').appendChild(f);
   return f;
 }
@@ -208,7 +213,28 @@ try {
     medidas.push(`${w}×${h}: bloque ${Math.round(rb.width)}×${Math.round(rb.height)}`);
   }
 
-  const resumen = `A: abrir = ${abrir.length} peticiones · B: «Analizar» = ${analizar.length} (las de v=322), 1 propuesta de 5 grupos · C: 1 tildada · D: 1 DELETE simulado, verificado · E: ${medidas.join(' · ')}`;
+  // ── F. La caché vieja: «faltan datos» no es «ninguno» (tanda 80) ────────────
+  progreso('F. la caché vieja…');
+  const fv = abrirMarco('f-vieja', ANCHO, 800, '&cache=vieja');
+  await arrancado(fv, 'el marco de la caché vieja');
+  win(fv).location.hash = '#versions';
+  await esperarReal(() => $(fv, '#versions-analyze-btn'), { que: 'que abra #versions (F)', vueltas: VUELTAS });
+  await quieto();
+  const antesF = reg(fv).llamadas.length;
+  $(fv, '#versions-analyze-btn').click();
+  await esperarReal(() => $$(fv, '.cluster-group').length >= 5 && !$(fv, '#versions-analyze-btn').disabled, { que: 'que «Analizar» pinte los grupos (F)', vueltas: VUELTAS });
+  await quieto(40);
+  const analizarF = llamadas(fv, antesF);
+  const cartelF = texto($(fv, '#versions-propuestas'));
+  afirmar(JSON.stringify(analizarF) === '[]', `F. «Analizar» con la caché sembrada: 0 peticiones, las de siempre (hubo ${JSON.stringify(analizarF)})`);
+  afirmar(reg(fv).escrituras.length === 0, `F. 0 escrituras (${reg(fv).escrituras.length})`);
+  afirmar($$(fv, '.ver-propuesta').length === 0, 'F. G1 no tiene propuesta: le faltan datos (la regla no cambió)');
+  afirmar(cartelF === 'Ningún grupo tiene propuesta todavía: a un grupo le faltan datos que tu caché de me gusta guardó con una versión vieja de la app (1 me gusta). Pulsa «↻ Re-analizar» para volver a bajarlos: lee tus me gusta de Spotify y no cambia nada en tu cuenta.',
+    `F. el cartel de «faltan datos», no «Ningún grupo es solo de edición.»: «${cartelF}»`);
+  afirmar($(fv, '#versions-refresh-btn') && /^↻ Re-analizar/.test(texto($(fv, '#versions-refresh-btn'))), 'F. el botón «↻ Re-analizar» está al lado');
+  afirmar(win(fv).__errores.length === 0, `F. 0 errores (${win(fv).__errores.join(' | ')})`);
+
+  const resumen = `A: abrir = ${abrir.length} peticiones · B: «Analizar» = ${analizar.length} (las de v=322), 1 propuesta de 5 grupos · C: 1 tildada · D: 1 DELETE simulado, verificado · E: ${medidas.join(' · ')} · F: «Analizar» = ${analizarF.length} peticiones, «${cartelF}»`;
   progreso(resumen);
   document.documentElement.dataset.resumen = `${resumen} · reloj virtual=${Math.round(performance.now())} ms`;
   listo(resumen);

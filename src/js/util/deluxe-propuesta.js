@@ -241,3 +241,48 @@ export function propuestaDeGrupo(grupo) {
     },
   };
 }
+
+// ── «Le faltan datos» no es «no es de edición» (tanda 80, v=335) ─────────────
+//
+// La caché de me gusta es incremental y no caduca: lo guardado antes de v=127
+// no trae `album_type` ni `total_tracks`, y la regla de arriba los exige en
+// TODOS los miembros. Un grupo con un me gusta viejo cae por `no-es-album` o
+// `sin-total-de-pistas`, y hasta v=334 la vista decía «Ningún grupo es solo de
+// edición.»: un resultado del dominio tapando un dato que falta. Estas dos NO
+// tocan la regla (las tres de arriba quedan byte a byte, lo vigila
+// `tests/versions-faltan-datos.test.mjs`): solo cuentan aparte, para el cartel.
+
+/**
+ * ¿A este miembro le falta algún dato de los que la regla lee y solo trae la
+ * API? `album_type` vacío (`'single'` o `'compilation'` son valores, no faltan),
+ * `total_tracks` que no es un entero > 0, `duration_ms` que no es > 0, o
+ * `explicit` que no es booleano. El ISRC no cuenta: la regla ya sigue sin él.
+ */
+export function faltanDatos(miembro) {
+  const t = pista(miembro);
+  const tipo = t.album?.album_type;
+  if (tipo == null || tipo === '') return true;
+  const n = t.album?.total_tracks;
+  if (!Number.isInteger(n) || n <= 0) return true;
+  if (!(typeof t.duration_ms === 'number' && t.duration_ms > 0)) return true;
+  return typeof t.explicit !== 'boolean';
+}
+
+/**
+ * Cuántos grupos «podrían ser solo de edición, pero faltan datos»: pasan por
+ * nombres (`motivosPorNombre` vacío) y algún miembro tiene un dato faltante. Es
+ * una COTA: con los datos completos pueden seguir sin propuesta. `meGusta` son
+ * los me gusta distintos (por id) con algún dato faltante dentro de esos grupos.
+ */
+export function resumenDeFaltantes(grupos) {
+  let n = 0;
+  const ids = new Set();
+  for (const grupo of grupos || []) {
+    if (motivosPorNombre(grupo).length) continue;
+    const viejos = (grupo || []).filter(faltanDatos);
+    if (!viejos.length) continue;
+    n++;
+    viejos.forEach((m, i) => ids.add(pista(m).id ?? `sin-id-${n}-${i}`));
+  }
+  return { grupos: n, meGusta: ids.size };
+}

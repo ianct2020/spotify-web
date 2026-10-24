@@ -12,6 +12,7 @@ import { auditarOcultos, leerIncidencias } from './util/hidden-sync.js';
 import { getStack } from './ui/modal-stack.js';
 import { installBackToTop } from './ui/back-to-top.js';
 import { applyStoredTheme, openThemePanel } from './ui/theme-panel.js';
+import { escucharAvisoDeCopia } from './ui/aviso-copia.js';
 
 import { render as renderSync } from './features/sync.js';
 import { render as renderDedupe } from './features/dedupe.js';
@@ -1268,6 +1269,11 @@ installCrashGuard();
 // La paleta guardada se pinta ANTES de que se arme nada: si se aplicara después
 // del primer render, el tema elegido entraría como un flash de la paleta vieja.
 applyStoredTheme();
+
+// (v=335) Si OTRA pestaña de la app carga una copia («Importar todo»), esta pinta
+// un aviso fijo para que recargue antes de seguir. No recarga sola. Ver
+// `util/canal-copia.js`.
+escucharAvisoDeCopia();
 
 // PWA: registra el service worker (path relativo → scope /spotify-web/ en Pages).
 // Con esto Chrome ofrece "Instalar Fonoteca" y los estáticos quedan offline.

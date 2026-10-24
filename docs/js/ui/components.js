@@ -1,6 +1,6 @@
-import { openModal, closeTop } from './modal-stack.js?v=334';
-import { mountBottomHtml } from './bottom-layer.js?v=334';
-import { coverUrl } from '../util/cover-size.js?v=334';
+import { openModal, closeTop } from './modal-stack.js?v=335';
+import { mountBottomHtml } from './bottom-layer.js?v=335';
+import { coverUrl } from '../util/cover-size.js?v=335';
 
 function renderTrackRow(track, extra = '') {
   const art = coverUrl(track.album?.images, 'grande') || '';
@@ -247,6 +247,10 @@ function escapeHtml(str) {
   return div.innerHTML.replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
+// `cancelText: null` (explícito, v=335) = SIN botón de cancelar: lo usa el
+// resultado de «Importar todo», que recarga se cierre como se cierre. Con
+// `undefined` sigue siendo «Cancelar», e `infoModal` convierte el `null` en
+// «Cerrar»: nadie más cambia.
 function alertModal(title, messageHtml, opts = {}) {
   const {
     confirmText = 'Aceptar',
@@ -269,7 +273,7 @@ function alertModal(title, messageHtml, opts = {}) {
         </div>
         <div class="modal-alert-body picker-scroll">${messageHtml}</div>
         <div class="modal-actions">
-          <button class="btn btn-secondary" id="modal-cancel">${escapeHtml(cancelText)}</button>
+          ${cancelText === null ? '' : `<button class="btn btn-secondary" id="modal-cancel">${escapeHtml(cancelText)}</button>`}
           <button class="btn btn-primary" id="modal-confirm">${escapeHtml(confirmText)}</button>
         </div>
       </div>
@@ -279,7 +283,7 @@ function alertModal(title, messageHtml, opts = {}) {
     const confirmBtn = overlay.querySelector('#modal-confirm');
     setTimeout(() => confirmBtn.focus(), 20);
 
-    cancelBtn.onclick = () => done(false);
+    if (cancelBtn) cancelBtn.onclick = () => done(false);
     confirmBtn.onclick = () => done(true);
     overlay.addEventListener('keydown', e => {
       if (e.key === 'Enter') { e.preventDefault(); done(true); }

@@ -20,7 +20,17 @@
 //   ?caso=E    el owner: de `local_<owner>_history_*` solo entra `days`
 //   ?caso=F    el archivo con un secreto, la key de Last.fm y una clave inventadas: no se escriben y se nombran
 //   ?caso=G    «Cancelar»: el navegador queda igual
+//   ?caso=H2   (tanda 80) la OTRA pestaña: la app abierta en #home con el perfil de B; espera a que la madre le diga
+//              «mira» y cuenta si apareció el aviso de «se ha cargado una copia en otra pestaña» y si NO recargó
+//   ?caso=H1   (tanda 80) la pestaña que importa, con H2 abierta al lado: como B, pero sin vaciar (el perfil es el de H2)
 //   &tamano=ian  A con el tamaño de los datos de Ian (INVENTADO): mide el import (no está en `prepush`)
+//
+// 🔴 La recarga después de importar (tanda 80, v=335). El modal «Copia importada» ya no tiene «Cerrar» y, se cierre como
+// se cierre, la pestaña recarga. Así que cada caso que importa (B, C1, E, F, H1) toma TODAS sus medidas con el modal
+// abierto, deja `datos` en `window.name` (sobrevive a la recarga del iframe), cierra el modal por un camino distinto
+// —B, F y H1 con «Recargar ahora», C1 con Escape, E con un clic afuera— y la carga siguiente, al ver la marca, manda
+// los datos a la madre sin arrancar la app. Si no recarga, el caso falla. Contra v=334 el Escape y el clic afuera
+// cerraban sin recargar: C1 y E fallaban (el rojo).
 
 import { instalarRedSimulada, esperarReal, anclar } from '/banco/simulado.mjs';
 import * as D from '/banco/copia-importar-datos.mjs';
@@ -37,8 +47,26 @@ window.addEventListener('unhandledrejection', (e) => rechazos.push(String(e.reas
 const infos = [];
 const infoOriginal = console.info.bind(console);
 console.info = (...a) => { infos.push(a.map(String).join(' ')); infoOriginal(...a); };
-const datos = { caso: CASO };
+let datos = { caso: CASO };
 const vueltasLargas = IAN ? 400000 : 40000;
+
+// ── La carga DESPUÉS de la recarga (tanda 80) ─────────────────────────────────────────────────────
+const MARCA_RECARGA = 'banco-recarga:';
+if (window.name.startsWith(MARCA_RECARGA)) {
+  datos = JSON.parse(window.name.slice(MARCA_RECARGA.length));
+  window.name = '';
+  datos.recarga.hecha = true;
+  madre.postMessage({ banco: 'copia-importar', ok: true, datos }, '*');
+  document.documentElement.setAttribute('data-caso', 'ok');
+  await new Promise(() => {});   // esta carga solo entrega los datos: no arranca la app
+}
+// H2, la otra pestaña: si esta carga viene de una recarga, se avisa (no tendría que pasar nunca).
+if (CASO === 'H2' && window.name === 'banco-h2-viva') {
+  window.name = '';
+  madre.postMessage({ banco: 'copia-importar-h2', fase: 'recargo' }, '*');
+  await new Promise(() => {});
+}
+let modalHecho = null;
 
 async function foto(C) {
   const idb = (await anclar(D.leerIdb(), { vueltas: vueltasLargas })).sort((a, b) => (a[0] < b[0] ? -1 : 1));
@@ -89,8 +117,8 @@ async function importar(texto, accion) {
     const t3 = performance.now();
     r.hecho = { texto: hecho.querySelector('.modal-alert-body').textContent.replace(/\s+/g, ' ').trim(), botones: $$('button', hecho).map((b) => b.textContent.trim()) };
     r.ms = { leerYDecidir: Math.round(t1 - t0), aplicar: Math.round(t3 - t2) };
-    $('#modal-cancel', hecho).click();   // «Cerrar»: «Recargar ahora» recargaría el iframe
-    await esperarReal(() => !hecho.isConnected, { que: 'que se cierre el modal de «Copia importada»' });
+    // (v=335) El modal se queda abierto: cerrarlo recarga. Se cierra al final del caso (`recargarYEntregar`).
+    modalHecho = hecho;
   }
   // Unas vueltas más: lo que la app hiciera DESPUÉS también se cuenta.
   let v = 0; await esperarReal(() => ++v > 30, { que: 'que se asiente' });
@@ -101,13 +129,29 @@ async function importar(texto, accion) {
   return r;
 }
 
+// (tanda 80) Cierra el modal «Copia importada» por `via` y espera a que la pestaña RECARGUE: los datos viajan en
+// `window.name` y los entrega la carga siguiente. Si no recarga, el caso falla con el camino que no recargó.
+async function recargarYEntregar(via) {
+  datos.recarga = { via, hecha: false };
+  datos.rechazos = rechazos;
+  datos.reloj = Math.round(performance.now());
+  window.name = MARCA_RECARGA + JSON.stringify(datos);
+  if (via === 'boton') $('#modal-confirm', modalHecho).click();
+  else if (via === 'escape') document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+  else modalHecho.closest('.modal-overlay').dispatchEvent(new MouseEvent('click', { bubbles: true }));
+  let v = 0;
+  await esperarReal(() => ++v > 3000, { que: 'la recarga', vueltas: 4000 });
+  window.name = '';
+  throw new Error(`cerrar «Copia importada» por «${via}» no recargó la pestaña (modal ${modalHecho.isConnected ? 'abierto' : 'cerrado'})`);
+}
+
 const esperarSyncSkips = (desde) => esperarReal(() => infos.slice(desde).some((m) => /^\[ocultos:skips\] \d+ ocultos \(/.test(m)), { que: 'que el almacén de #skips termine su sync()', vueltas: 20000 });
 
 try {
   const C = await import('/js/util/copia-completa.js');
   const estado = madre.__estadoImport;
   const uid = CASO === 'D' ? D.OTRO : CASO === 'E' ? D.OWNER : D.UID;
-  if (CASO !== 'C2') { localStorage.clear(); await anclar(D.vaciarIdb()); }
+  if (CASO !== 'C2' && CASO !== 'H1') { localStorage.clear(); await anclar(D.vaciarIdb()); }
   const sim = instalarRedSimulada();
   window.__sim = sim;
   D.montarSpotify(sim, estado, uid);
@@ -118,6 +162,29 @@ try {
     const conSim = window.fetch;
     datos.dataBloqueadas = 0;
     window.fetch = (u, o) => { if (new URL(typeof u === 'string' ? u : u.url, location.href).pathname.startsWith('/data/')) { datos.dataBloqueadas++; return Promise.resolve(new Response('{}', { status: 404 })); } return conSim(u, o); };
+  }
+
+  if (CASO === 'H2') {
+    // La otra pestaña: la app abierta, un marcador en su `window`, y a esperar.
+    location.hash = '#home';
+    await import('/js/app.js');
+    await esperarReal(() => $('.home-card'), { que: 'que #home pinte (H2)', vueltas: 8000 });
+    window.__marcadorH2 = 'sigo-aqui';
+    window.name = 'banco-h2-viva';
+    madre.postMessage({ banco: 'copia-importar-h2', fase: 'lista' }, '*');
+    await new Promise((res) => window.addEventListener('message', (e) => { if (e.data?.banco === 'copia-importar-h2-mira') res(); }));
+    let v = 0;
+    await esperarReal(() => $('#aviso-copia') || ++v > 400, { que: 'el aviso de la otra pestaña (H2)', vueltas: 2000 });
+    const aviso = $('#aviso-copia');
+    window.name = '';
+    madre.postMessage({ banco: 'copia-importar-h2', fase: 'visto', datos: {
+      aviso: aviso ? aviso.querySelector('.aviso-copia-texto')?.textContent.trim() : null,
+      botones: aviso ? $$('button', aviso).map((b) => b.textContent.trim()) : [],
+      fijo: aviso ? getComputedStyle(aviso).position : null,
+      marcador: window.__marcadorH2 || null,
+      rechazos,
+    } }, '*');
+    await new Promise(() => {});
   }
 
   if (CASO === 'A') {
@@ -161,6 +228,9 @@ try {
       let v = 0; await esperarReal(() => ++v > 40, { que: 'que se asiente #skips' });
       datos.postsAlAbrir = estado.posts.slice(posts0);
       datos.toasts = $$('.toast').map((t) => t.textContent.replace(/[×✕]\s*$/, '').trim());
+      datos.toastsTipo = $$('.toast').map((t) => [...t.classList].find((c) => c.startsWith('toast-')) || '');
+      datos.incidencias = JSON.parse(localStorage.getItem(`ocultos_incidencias_v1__${uid}`) || '[]').map((i) => ({ tipo: i.tipo, store: i.store, n: (i.claves || []).length }));
+      datos.marcaCopia = localStorage.getItem(`ocultos_desde_copia_v1__${uid}`);
       if (CASO === 'C2') throw { fin: true };
       location.hash = '#dashboard';
     }
@@ -184,7 +254,8 @@ try {
     datos.shaAntes = antes.sha.slice(0, 16); datos.shaDespues = despues.sha.slice(0, 16);
     datos.igual = antes.sha === despues.sha;
 
-    if (CASO === 'B' || CASO === 'F' || CASO === 'E') datos.shas = await shasQueEntran(C, despues, uid);
+    if (CASO === 'B' || CASO === 'F' || CASO === 'E' || CASO === 'H1') datos.shas = await shasQueEntran(C, despues, uid);
+    datos.marcaCopia = localStorage.getItem(`ocultos_desde_copia_v1__${uid}`);
     if (CASO === 'F') {
       datos.f = { refresh: localStorage.getItem('sp_refresh_token'), lastfm: localStorage.getItem(`lastfm_api_key__${D.UID}`), inventada: localStorage.getItem('t79_banco_inventada') };
     }
@@ -208,6 +279,8 @@ try {
       datos.c.marca = despues.idb.has('generos_artista_migrado_v1');
       datos.c.agregadas = [...despues.ls.keys()].filter((k) => !antes.ls.has(k)).length + [...despues.idb.keys()].filter((k) => !antes.idb.has(k)).length;
     }
+    // (tanda 80) Medido todo: cerrar el modal recarga. Cada caso por un camino.
+    if (modalHecho) await recargarYEntregar({ B: 'boton', C1: 'escape', E: 'afuera', F: 'boton', H1: 'boton' }[CASO] || 'boton');
   }
   throw { fin: true };
 } catch (e) {

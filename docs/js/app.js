@@ -1,51 +1,52 @@
-import { isLoggedIn, loginWithSpotify, logout } from './auth.js?v=334';
-import { spotifyFetch, onRateLimit } from './api.js?v=334';
-import { getValidToken } from './auth.js?v=334';
-import { cacheClearAll } from './storage.js?v=334';
-import { idbClearAll } from './idb.js?v=334';
-import { CONSERVAR_CLAVES, CONSERVAR_PREFIJOS, LO_QUE_SE_CONSERVA } from './util/limpiar-cache.js?v=334';
-import { registerRoute, initRouter, rutasRegistradas } from './router.js?v=334';
-import { showToast } from './ui/toast.js?v=334';
-import { pageHeader, escapeHtml } from './ui/components.js?v=334';
-import { installCrashGuard } from './ui/crash-guard.js?v=334';
-import { auditarOcultos, leerIncidencias } from './util/hidden-sync.js?v=334';
-import { getStack } from './ui/modal-stack.js?v=334';
-import { installBackToTop } from './ui/back-to-top.js?v=334';
-import { applyStoredTheme, openThemePanel } from './ui/theme-panel.js?v=334';
+import { isLoggedIn, loginWithSpotify, logout } from './auth.js?v=335';
+import { spotifyFetch, onRateLimit } from './api.js?v=335';
+import { getValidToken } from './auth.js?v=335';
+import { cacheClearAll } from './storage.js?v=335';
+import { idbClearAll } from './idb.js?v=335';
+import { CONSERVAR_CLAVES, CONSERVAR_PREFIJOS, LO_QUE_SE_CONSERVA } from './util/limpiar-cache.js?v=335';
+import { registerRoute, initRouter, rutasRegistradas } from './router.js?v=335';
+import { showToast } from './ui/toast.js?v=335';
+import { pageHeader, escapeHtml } from './ui/components.js?v=335';
+import { installCrashGuard } from './ui/crash-guard.js?v=335';
+import { auditarOcultos, leerIncidencias } from './util/hidden-sync.js?v=335';
+import { getStack } from './ui/modal-stack.js?v=335';
+import { installBackToTop } from './ui/back-to-top.js?v=335';
+import { applyStoredTheme, openThemePanel } from './ui/theme-panel.js?v=335';
+import { escucharAvisoDeCopia } from './ui/aviso-copia.js?v=335';
 
-import { render as renderSync } from './features/sync.js?v=334';
-import { render as renderDedupe } from './features/dedupe.js?v=334';
-import { render as renderDupalbums } from './features/duplicate-albums.js?v=334';
-import { render as renderZombies } from './features/zombies.js?v=334';
-import { render as renderVersions } from './features/versions.js?v=334';
-import { render as renderDashboard } from './features/dashboard.js?v=334';
-import { render as renderSmart } from './features/smart.js?v=334';
-import { render as renderSimilar } from './features/similar-artists.js?v=334';
-import { render as renderRabbit } from './features/rabbit-hole.js?v=334';
-import { render as renderByGenre } from './features/by-genre.js?v=334';
-import { render as renderByArtist } from './features/by-artist.js?v=334';
-import { render as renderRecs } from './features/recommendations.js?v=334';
-import { render as renderListened } from './features/listened.js?v=334';
-import { render as renderWrapped } from './features/wrapped.js?v=334';
-import { render as renderRecords } from './features/records.js?v=334';
-import { render as renderCalendario } from './features/calendario.js?v=334';
-import { render as renderMapa } from './features/mapa.js?v=334';
-import { render as renderPuertas } from './features/puertas.js?v=334';
-import { render as renderGeneros } from './features/generos.js?v=334';
-import { render as renderMapaArtistas } from './features/mapa-artistas.js?v=334';
-import { openImportHistory } from './features/import-history.js?v=334';
-import { bindOwnerLockedButtons } from './features/history-data.js?v=334';
-import { render as renderZeroPlays } from './features/zero-plays.js?v=334';
-import { render as renderSkips } from './features/skips.js?v=334';
-import { render as renderSearchLikes } from './features/search-likes.js?v=334';
-import { render as renderWthree } from './features/wthree.js?v=334';
-import { render as renderCovers } from './features/covers.js?v=334';
-import { render as renderMosaico } from './features/mosaico.js?v=334';
-import { render as renderDiscoverArtists } from './features/discover-artists.js?v=334';
-import { render as renderFollowArtists } from './features/follow-artists.js?v=334';
-import { render as renderNewReleases } from './features/new-releases.js?v=334';
-import { render as renderSinClasificar } from './features/sin-clasificar.js?v=334';
-import { pieCuotaHtml, montarPieCuota } from './ui/cuota-pie.js?v=334';
+import { render as renderSync } from './features/sync.js?v=335';
+import { render as renderDedupe } from './features/dedupe.js?v=335';
+import { render as renderDupalbums } from './features/duplicate-albums.js?v=335';
+import { render as renderZombies } from './features/zombies.js?v=335';
+import { render as renderVersions } from './features/versions.js?v=335';
+import { render as renderDashboard } from './features/dashboard.js?v=335';
+import { render as renderSmart } from './features/smart.js?v=335';
+import { render as renderSimilar } from './features/similar-artists.js?v=335';
+import { render as renderRabbit } from './features/rabbit-hole.js?v=335';
+import { render as renderByGenre } from './features/by-genre.js?v=335';
+import { render as renderByArtist } from './features/by-artist.js?v=335';
+import { render as renderRecs } from './features/recommendations.js?v=335';
+import { render as renderListened } from './features/listened.js?v=335';
+import { render as renderWrapped } from './features/wrapped.js?v=335';
+import { render as renderRecords } from './features/records.js?v=335';
+import { render as renderCalendario } from './features/calendario.js?v=335';
+import { render as renderMapa } from './features/mapa.js?v=335';
+import { render as renderPuertas } from './features/puertas.js?v=335';
+import { render as renderGeneros } from './features/generos.js?v=335';
+import { render as renderMapaArtistas } from './features/mapa-artistas.js?v=335';
+import { openImportHistory } from './features/import-history.js?v=335';
+import { bindOwnerLockedButtons } from './features/history-data.js?v=335';
+import { render as renderZeroPlays } from './features/zero-plays.js?v=335';
+import { render as renderSkips } from './features/skips.js?v=335';
+import { render as renderSearchLikes } from './features/search-likes.js?v=335';
+import { render as renderWthree } from './features/wthree.js?v=335';
+import { render as renderCovers } from './features/covers.js?v=335';
+import { render as renderMosaico } from './features/mosaico.js?v=335';
+import { render as renderDiscoverArtists } from './features/discover-artists.js?v=335';
+import { render as renderFollowArtists } from './features/follow-artists.js?v=335';
+import { render as renderNewReleases } from './features/new-releases.js?v=335';
+import { render as renderSinClasificar } from './features/sin-clasificar.js?v=335';
+import { pieCuotaHtml, montarPieCuota } from './ui/cuota-pie.js?v=335';
 
 // ── Arranque degradado cuando /me está rate-limiteado (v=173) ────────────────
 //
@@ -1081,7 +1082,7 @@ async function montarBaseMosaico() {
   const parar = document.getElementById('debug-mosaico-parar');
   let mod;
   try {
-    mod = await import('./features/mosaico-colores.js?v=334');
+    mod = await import('./features/mosaico-colores.js?v=335');
   } catch (err) {
     estado.textContent = `No he podido cargar el módulo: ${err.message}`;
     return;
@@ -1268,6 +1269,11 @@ installCrashGuard();
 // La paleta guardada se pinta ANTES de que se arme nada: si se aplicara después
 // del primer render, el tema elegido entraría como un flash de la paleta vieja.
 applyStoredTheme();
+
+// (v=335) Si OTRA pestaña de la app carga una copia («Importar todo»), esta pinta
+// un aviso fijo para que recargue antes de seguir. No recarga sola. Ver
+// `util/canal-copia.js`.
+escucharAvisoDeCopia();
 
 // PWA: registra el service worker (path relativo → scope /spotify-web/ en Pages).
 // Con esto Chrome ofrece "Instalar Fonoteca" y los estáticos quedan offline.

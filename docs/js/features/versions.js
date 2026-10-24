@@ -1,14 +1,14 @@
-import { getAllLikedTracks, removeLikedTracks, checkLibraryContains } from '../api.js?v=334';
-import { borrarLikesVerificado } from '../util/borrado-verificado.js?v=334';
-import { normalizeKey, esFantasma, guardaUltimoEjemplar, indexarBiblioteca } from '../util/versions-guard.js?v=334';
-import { showProgress, hideProgress, progressController, isCancelled, typeConfirmModal, infoModal, renderTrackRow, escapeHtml, pageHeader } from '../ui/components.js?v=334';
-import { showToast } from '../ui/toast.js?v=334';
-import { openModal, closeTop } from '../ui/modal-stack.js?v=334';
-import { coverUrl } from '../util/cover-size.js?v=334';
-import { openPlaylistPicker } from '../ui/playlist-picker.js?v=334';
-import { getOwnPlaylists, addUrisToPlaylists, toastAddResult } from '../util/playlist-add.js?v=334';
-import { prefKey, migratePrefKey } from '../storage.js?v=334';
-import { propuestaDeGrupo } from '../util/deluxe-propuesta.js?v=334';
+import { getAllLikedTracks, removeLikedTracks, checkLibraryContains } from '../api.js?v=335';
+import { borrarLikesVerificado } from '../util/borrado-verificado.js?v=335';
+import { normalizeKey, esFantasma, guardaUltimoEjemplar, indexarBiblioteca } from '../util/versions-guard.js?v=335';
+import { showProgress, hideProgress, progressController, isCancelled, typeConfirmModal, infoModal, renderTrackRow, escapeHtml, pageHeader } from '../ui/components.js?v=335';
+import { showToast } from '../ui/toast.js?v=335';
+import { openModal, closeTop } from '../ui/modal-stack.js?v=335';
+import { coverUrl } from '../util/cover-size.js?v=335';
+import { openPlaylistPicker } from '../ui/playlist-picker.js?v=335';
+import { getOwnPlaylists, addUrisToPlaylists, toastAddResult } from '../util/playlist-add.js?v=335';
+import { prefKey, migratePrefKey } from '../storage.js?v=335';
+import { propuestaDeGrupo, resumenDeFaltantes } from '../util/deluxe-propuesta.js?v=335';
 
 // ── «Borrar sobrantes» REHABILITADO (2026-08-28) ─────────────────────────────
 //
@@ -153,7 +153,7 @@ export function render(container) {
     ${pageHeader({ title: 'Versiones Duplicadas' })}
     <div class="feature-actions" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
       <button class="btn btn-primary" id="versions-analyze-btn">Analizar</button>
-      <button class="btn btn-secondary" id="versions-refresh-btn" title="Vuelve a bajar tus likes desde Spotify (usalo si borraste versiones y todavía aparecen)">↻ Re-analizar (bajar likes de nuevo)</button>
+      <button class="btn btn-secondary" id="versions-refresh-btn" title="Vuelve a bajar tus likes desde Spotify (úsalo si borraste versiones y todavía aparecen)">↻ Re-analizar (bajar likes de nuevo)</button>
       <button class="btn btn-secondary" id="versions-hidden-btn" style="margin-left:auto">Ver ocultos <span id="versions-hidden-count" style="color:var(--color-text-muted)"></span></button>
     </div>
     <div id="versions-results"></div>
@@ -399,7 +399,9 @@ function renderClusterList() {
   const propuestas = allClusters.map(cluster => propuestaDeGrupo(cluster));
   const conPropuesta = propuestas.filter(Boolean).length;
   if (conPropuesta === 0) soloConPropuesta = false;
-  pintarResumenPropuestas(conPropuesta);
+  // (v=335) Y los que no se pueden decidir porque a la caché le faltan datos:
+  // misma cuenta pura sobre `allClusters`, 0 peticiones.
+  pintarResumenPropuestas(conPropuesta, resumenDeFaltantes(allClusters));
   const visibles = allClusters
     .map((cluster, idx) => ({ cluster, idx, propuesta: propuestas[idx] }))
     .filter(({ idx }) => !(ocultarResueltas && resolvedClusterIdxs.has(idx)))
@@ -476,18 +478,35 @@ function renderClusterList() {
 //     pieza, `borrarLikesVerificado` y la guarda del último ejemplar).
 
 // La línea de arriba del listado y el interruptor «Ver solo los que tienen propuesta».
-function pintarResumenPropuestas(n) {
+//
+// (v=335) `faltan` = `resumenDeFaltantes(allClusters)`: los grupos que pasan por
+// nombres pero a los que la caché de me gusta les guardó un dato de menos (los
+// me gusta de antes de v=127 no traen `album_type` ni `total_tracks`). Hasta
+// v=334 esos caían callados en «Ningún grupo es solo de edición.», que es un
+// resultado del dominio tapando un dato que falta. Ahora se dice, con el botón
+// que lo arregla («↻ Re-analizar», que solo LEE de Spotify). El cartel no
+// aprieta nada ni baja nada.
+function pintarResumenPropuestas(n, faltan = { grupos: 0, meGusta: 0 }) {
   const el = document.getElementById('versions-propuestas');
   if (!el) return;
   const num = n.toLocaleString('es-ES');
-  el.innerHTML = n === 0
-    ? '<p class="ver-propuestas-texto">Ningún grupo es solo de edición.</p>'
-    : `<p class="ver-propuestas-texto">${num} ${n === 1 ? 'grupo solo cambia' : 'grupos solo cambian'} la edición del disco.
+  const g = faltan?.grupos || 0;
+  const numG = g.toLocaleString('es-ES');
+  const m = faltan?.meGusta || 0;
+  if (n === 0) {
+    el.innerHTML = g === 0
+      ? '<p class="ver-propuestas-texto">Ningún grupo es solo de edición.</p>'
+      : `<p class="ver-propuestas-texto">Ningún grupo tiene propuesta todavía: ${g === 1 ? 'a un grupo le faltan' : `a ${numG} grupos les faltan`} datos que tu caché de me gusta guardó con una versión vieja de la app (${m.toLocaleString('es-ES')} me gusta).
+           <span class="ver-propuestas-nota">Pulsa «↻ Re-analizar» para volver a bajarlos: lee tus me gusta de Spotify y no cambia nada en tu cuenta.</span></p>`;
+    return;
+  }
+  el.innerHTML = `<p class="ver-propuestas-texto">${num} ${n === 1 ? 'grupo solo cambia' : 'grupos solo cambian'} la edición del disco.
          <span class="ver-propuestas-nota">${n === 1 ? 'Lleva' : 'Cada uno lleva'} su propuesta; no se marca nada hasta que la aceptes.</span></p>
        <label class="versions-filter" id="versions-solo-propuesta-wrap">
          <input type="checkbox" id="versions-solo-propuesta" ${soloConPropuesta ? 'checked' : ''}>
          <span>Ver solo los que tienen propuesta (${num})</span>
-       </label>`;
+       </label>${g > 0 ? `
+       <p class="ver-propuestas-faltan">${g === 1 ? 'A un grupo más le faltan' : `A ${numG} grupos más les faltan`} datos para decidir: pulsa «↻ Re-analizar».</p>` : ''}`;
   const toggle = document.getElementById('versions-solo-propuesta');
   if (toggle) toggle.onchange = () => {
     soloConPropuesta = toggle.checked;

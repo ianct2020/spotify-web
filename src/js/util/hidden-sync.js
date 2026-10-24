@@ -32,6 +32,7 @@ import { INCIDENCIAS_OCULTOS_MAX } from './topes-registros.js';
 import { idbGetCached, idbSetCached, idbDel } from '../idb.js';
 import { invalidateOwnPlaylists } from './playlist-add.js';
 import { OCULTOS_ITEMS_PREFIX } from './ocultos-items-clave.js';
+import { MARCA_DESDE_COPIA, leerMarca, clavesDeLaMarca, sacarDeLaMarca, dejarEnLaMarca } from './ocultos-desde-copia.js';
 import { showToast } from '../ui/toast.js';
 
 const PLAYLIST_DESC = 'Lista interna de Fonoteca: lo que ocultaste en esta vista. Si la borras, se pierden los ocultos.';
@@ -126,6 +127,33 @@ function anotarIncidencia(entrada) {
     arr.unshift({ fecha: new Date().toISOString(), ...entrada });
     localStorage.setItem(k, JSON.stringify(arr.slice(0, LOG_MAX)));
   } catch { /* lleno o sin localStorage: el console.warn ya salió igual */ }
+}
+
+// ── Lo que llegó con «Importar todo» (v=335) ─────────────────────────────────
+//
+// `aplicarPlan` (`api.js`) deja en `ocultos_desde_copia_v1` qué claves agregó a
+// cada almacén. Esas claves traen su uri, así que `reconciliar()` las cuenta
+// como `perdidas`; con la marca se AVISAN como lo que son («venían de tu
+// copia», `desde-copia`) en vez de «habían desaparecido de la playlist». 🔴 La
+// marca nunca decide qué se sube: `subir` se arma igual que en v=334. Corrupta
+// (`leerMarca` → null) = vacía y no se reescribe. Ver `util/ocultos-desde-copia.js`.
+function leerMarcaDesdeCopia() {
+  try { return leerMarca(localStorage.getItem(prefKey(MARCA_DESDE_COPIA))); } catch { return null; }
+}
+
+function guardarMarcaDesdeCopia(marca) {
+  try {
+    if (Object.keys(marca).length) localStorage.setItem(prefKey(MARCA_DESDE_COPIA), JSON.stringify(marca));
+    else localStorage.removeItem(prefKey(MARCA_DESDE_COPIA));
+  } catch { /* lleno: el aviso del próximo sync() diría lo de v=334, y nada más */ }
+}
+
+/** Aplica `cambiar(marca)` → `{ marca, cambio }` y guarda si cambió. Sin `await`: leer y escribir van juntos. */
+function tocarMarcaDesdeCopia(cambiar) {
+  const marca = leerMarcaDesdeCopia();
+  if (!marca) return;
+  const r = cambiar(marca);
+  if (r.cambio) guardarMarcaDesdeCopia(r.marca);
 }
 
 export function leerIncidencias() {
@@ -913,6 +941,7 @@ export function createHiddenStore({ lsKey, playlistName, keyOfTrack, label, uriF
       // Sin playlist: si no hay nada local tampoco, no creamos nada todavía.
       if (keys.size === 0) { synced = true; return; }
       playlistId = await ensurePlaylist();
+      tocarMarcaDesdeCopia(m => dejarEnLaMarca(m, lsKey, new Set(keys)));
       await reconciliar([...keys], sabidasAlEmpezar);
       synced = true;
       return;
@@ -977,6 +1006,8 @@ export function createHiddenStore({ lsKey, playlistName, keyOfTrack, label, uriF
     }
 
     const onlyLocal = [...keys].filter(k => !remote.has(k));
+    // (v=335) Lo que ya está en la playlist, o ya no está oculto, sale de la marca de la copia.
+    tocarMarcaDesdeCopia(m => dejarEnLaMarca(m, lsKey, new Set(onlyLocal)));
 
     // La unión es el estado nuevo.
     for (const k of remote) keys.add(k);
@@ -1015,17 +1046,23 @@ export function createHiddenStore({ lsKey, playlistName, keyOfTrack, label, uriF
     const porSubir = onlyLocal.filter(k => !sabidasAlEmpezar.has(k) && uriDe(k));
     // 3. Las que no se pueden representar con lo que hay en el navegador.
     const sinUri = onlyLocal.filter(k => !uriDe(k));
+    // (v=335) De las «perdidas», las que llegaron con «Importar todo» nunca
+    // estuvieron en la playlist: se avisan aparte, DESPUÉS de subirlas. Solo
+    // cambia el aviso: `subir` (abajo) sigue llevando `perdidas` entera.
+    const marcadas = clavesDeLaMarca(leerMarcaDesdeCopia(), lsKey);
+    const deLaCopia = perdidas.filter(k => marcadas.has(k));
+    const perdidasDeVerdad = perdidas.filter(k => !marcadas.has(k));
 
-    if (perdidas.length) {
+    if (perdidasDeVerdad.length) {
       console.warn(
-        `[ocultos:${label}] «${playlistName}» perdió ${perdidas.length} oculto(s) que este navegador sí tiene, ` +
-        `y de los que ya conocía la uri. Los vuelvo a subir: ${perdidas.join(', ')}`
+        `[ocultos:${label}] «${playlistName}» perdió ${perdidasDeVerdad.length} oculto(s) que este navegador sí tiene, ` +
+        `y de los que ya conocía la uri. Los vuelvo a subir: ${perdidasDeVerdad.join(', ')}`
       );
-      anotarIncidencia({ store: lsKey, label, tipo: 'resubida', claves: perdidas });
+      anotarIncidencia({ store: lsKey, label, tipo: 'resubida', claves: perdidasDeVerdad });
       avisar(
-        perdidas.length === 1
+        perdidasDeVerdad.length === 1
           ? `«${label}»: un oculto había desaparecido de la playlist. Lo he vuelto a subir.`
-          : `«${label}»: ${perdidas.length} ocultos habían desaparecido de la playlist. Los he vuelto a subir.`,
+          : `«${label}»: ${perdidasDeVerdad.length} ocultos habían desaparecido de la playlist. Los he vuelto a subir.`,
         'warning'
       );
     }
@@ -1091,6 +1128,20 @@ export function createHiddenStore({ lsKey, playlistName, keyOfTrack, label, uriF
 
     const subir = [...perdidas, ...porSubir, ...recuperadas];
     if (subir.length) await pushMissing(subir);
+
+    // (v=335) `pushMissing` volvió sin tirar: las de la copia ya están en la
+    // playlist. Si tiró, no se llega acá y quedan en la marca para el próximo.
+    if (deLaCopia.length) {
+      console.info(`[ocultos:${label}] subidos a «${playlistName}» ${deLaCopia.length} oculto(s) que llegaron con «Importar todo»: ${deLaCopia.join(', ')}`);
+      anotarIncidencia({ store: lsKey, label, tipo: 'desde-copia', claves: deLaCopia });
+      avisar(
+        deLaCopia.length === 1
+          ? `«${label}»: he subido a tu playlist de Spotify un oculto que venía de tu copia.`
+          : `«${label}»: he subido a tu playlist de Spotify ${deLaCopia.length} ocultos que venían de tu copia.`,
+        'info'
+      );
+      tocarMarcaDesdeCopia(m => sacarDeLaMarca(m, lsKey, deLaCopia));
+    }
 
     if (irrecuperables.length) {
       // El `console.warn` lista SIEMPRE los dos grupos: es gratis y es el rastro

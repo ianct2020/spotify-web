@@ -20,7 +20,7 @@
 // `data-foto="listo"`. No acepta nada.
 
 import { instalarRedSimulada, esperarReal, anclar } from '/banco/simulado.mjs';
-import { crearSpotify, CLAVE_OCULTO } from '/banco/versiones-deluxe-datos.mjs';
+import { crearSpotify, CLAVE_OCULTO, GRUPOS, likesInventados } from '/banco/versiones-deluxe-datos.mjs';
 
 const q = new URLSearchParams(location.search);
 window.__errores = [];
@@ -41,6 +41,19 @@ localStorage.setItem('fonoteca_perfil_v1', JSON.stringify({ id: UID, display_nam
 const idb = await import('/js/idb.js');
 await anclar(idb.idbDel('all_liked_tracks'));
 await anclar(idb.idbDel('all_liked_tracks_partial'));
+// `?cache=vieja` (tanda 80, caso F): la caché SEMBRADA como la dejaba una app de
+// antes de v=127, con el deluxe de G1 sin `album_type` ni `total_tracks`. «Analizar»
+// la lee tal cual (0 peticiones) y G1 no puede decidirse: el cartel lo tiene que decir.
+if (q.get('cache') === 'vieja') {
+  const viejos = likesInventados().map((l) => {
+    if (l.track.id !== GRUPOS.pasa[1].track.id) return l;
+    const t = structuredClone(l);
+    delete t.track.album.album_type;
+    delete t.track.album.total_tracks;
+    return t;
+  });
+  await anclar(idb.idbSetCached('all_liked_tracks', viejos, null));
+}
 // El grupo G6, oculto como lo oculta el ✕ de la tarjeta (la clave por usuario).
 const { prefKey } = await import('/js/storage.js');
 localStorage.removeItem('versions_dismissed');

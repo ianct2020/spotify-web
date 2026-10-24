@@ -1,23 +1,23 @@
 // Wrapped propio: mini-resumen tuyo por año, hecho con el Extended Streaming History.
 // A diferencia del Wrapped oficial (que corre oct-sept), este es del año calendario completo.
 
-import { loadHistoryStats, isOwner, ownerLockedMessage } from './history-data.js?v=334';
-import { escapeHtml, pageHeader } from '../ui/components.js?v=334';
-import { getPreview } from '../api/preview-providers.js?v=334';
-import { getArtistLikePreview, getAlbumLikePreview } from '../util/artist-preview.js?v=334';
-import { attachHover } from '../ui/preview-player.js?v=334';
-import { openTrackCard } from './track-card.js?v=334';
-import { openArtistCard } from './artist-card.js?v=334';
-import { openAlbumCard } from './album-card.js?v=334';
-import { getMyTop } from '../api.js?v=334';
-import { activateMarquee, marqueeSpan } from '../ui/marquee.js?v=334';
-import { openModal } from '../ui/modal-stack.js?v=334';
-import { armReveal, armRevealAll, releaseReveal, animationsEnabled } from '../ui/reveal.js?v=334';
-import { coverUrl } from '../util/cover-size.js?v=334';
-import { vigilarRuta } from '../util/vigencia-ruta.js?v=334';
-import { fmtDia } from '../util/fecha.js?v=334';
-import { anioSinCampoSkipped, esElAnioDelCorte, AVISO_MEZCLA } from '../util/corte-saltos.js?v=334';
-import { showToast } from '../ui/toast.js?v=334';
+import { loadHistoryStats, isOwner, ownerLockedMessage } from './history-data.js?v=335';
+import { escapeHtml, pageHeader } from '../ui/components.js?v=335';
+import { getPreview } from '../api/preview-providers.js?v=335';
+import { getArtistLikePreview, getAlbumLikePreview } from '../util/artist-preview.js?v=335';
+import { attachHover } from '../ui/preview-player.js?v=335';
+import { openTrackCard } from './track-card.js?v=335';
+import { openArtistCard } from './artist-card.js?v=335';
+import { openAlbumCard } from './album-card.js?v=335';
+import { getMyTop } from '../api.js?v=335';
+import { activateMarquee, marqueeSpan } from '../ui/marquee.js?v=335';
+import { openModal } from '../ui/modal-stack.js?v=335';
+import { armReveal, armRevealAll, releaseReveal, animationsEnabled } from '../ui/reveal.js?v=335';
+import { coverUrl } from '../util/cover-size.js?v=335';
+import { vigilarRuta } from '../util/vigencia-ruta.js?v=335';
+import { fmtDia } from '../util/fecha.js?v=335';
+import { anioSinCampoSkipped, esElAnioDelCorte, AVISO_MEZCLA } from '../util/corte-saltos.js?v=335';
+import { showToast } from '../ui/toast.js?v=335';
 
 let stats = null;
 let selectedYear = null;
@@ -67,7 +67,7 @@ const ESPERA_APERTURA_MS = 3000;
 // después — montarlo tarde sería justo el flash que se está arreglando.
 function cargarApertura() {
   return Promise.race([
-    import('../features/wrapped-apertura.js?v=334').catch(e => {
+    import('../features/wrapped-apertura.js?v=335').catch(e => {
       console.warn('[wrapped] la apertura no cargó, el resumen queda entero:', e);
       return null;
     }),
@@ -466,7 +466,7 @@ async function descargarPostal(y) {
   document.addEventListener('routeteardown', alSalir, { once: true });
   pintarBotonPostal(true);
   try {
-    const mod = await import('./wrapped-postal.js?v=334');
+    const mod = await import('./wrapped-postal.js?v=335');
     if (!ruta.vigente()) return;
     const r = await mod.generarPostal(y, { fmtMinutes, fmtDia, signal: ctrl.signal, vigente: ruta.vigente });
     if (!r || !ruta.vigente()) return;
