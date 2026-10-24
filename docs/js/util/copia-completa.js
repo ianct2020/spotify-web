@@ -20,7 +20,7 @@
 //
 // El censo entero, con el porqué de cada clase, está en `fonoteca-migracion/CENSO-NAVEGADOR-2026-10-22.md`.
 
-import { crearAlmacenGeneros, prefijoGeneros, PREFIJO_GENEROS, CLAVE_MIGRADO } from './generos-artista.js?v=333';
+import { crearAlmacenGeneros, prefijoGeneros, PREFIJO_GENEROS, CLAVE_MIGRADO } from './generos-artista.js?v=334';
 
 export const COPIA_VERSION = 3;
 export const CENSO_VERSION = '2026-10-22';
@@ -56,7 +56,20 @@ const OCULTOS = [
 // 'clave' = el uid va dentro de la clave (el `deUsuario` da el prefijo del usuario de ahora); null = es del navegador.
 // `donde`: 'idb' (la base `spotify-tools`, store `kv`), 'ls' (`localStorage`), 'ss' (`sessionStorage`), 'cache'
 // (la Cache API del service worker). Solo 'idb' y 'ls' pueden entrar.
-const e = (donde, clave, clase, entra, quien, que, extra = {}) => ({ donde, clave, prefijo: false, porUsuario: null, clase, entra, quien, que, ...extra });
+//
+// `fusion` (v=334, la 79): qué hace «Importar todo» (`util/copia-importar.js`) cuando la clave YA está en el navegador y
+// el archivo trae otra cosa. Si la clave falta, se escribe tal cual viene, sea cual sea. La forma de cada valor se leyó
+// en su módulo dueño; la que no encajaba en su regla fue a «la tuya gana» (la tabla, con el porqué de cada una, está en
+// `CLAUDE.md`, «Importar todo (v=334)»):
+//   'conjunto'    un array JSON de cadenas o números: une, primero lo tuyo en su orden, después lo del archivo que falte
+//   'mapa'        un objeto JSON clave → cadena: agrega las claves que faltan; si una está en los dos, gana la tuya
+//   'registro'    una lista de entradas con fecha (`fechaCampo`): une por entrada exacta, las más nuevas primero, con el
+//                 tope del dueño si se puede importar (`util/topes-registros.js`)
+//   'discografia' la base de discografías: `fusionarBases()` de `disco-base.js` (unión por id de Spotify)
+//   TUYA          todo lo demás: nada
+// Las filas que no entran no llevan `fusion`.
+const TUYA = 'la tuya gana';
+const e =(donde, clave, clase, entra, quien, que, extra = {}) => ({ donde, clave, prefijo: false, porUsuario: null, clase, entra, quien, que, ...extra });
 const p = (donde, clave, clase, entra, quien, que, extra = {}) => e(donde, clave, clase, entra, quien, que, { prefijo: true, ...extra });
 
 export const CENSO = [
@@ -71,13 +84,13 @@ export const CENSO = [
   // Los me gusta van en `likes` (como en el v2), no en `navegador`: la excepción de la clase 4.
   e('idb', 'all_liked_tracks', 4, false, 'api.js:468', 'los me gusta (van en `likes`, como en el v2)'),
   e('idb', 'all_liked_tracks_partial', 4, false, 'api.js:232', 'una descarga de me gusta a medias'),
-  p('idb', 'discover_disco_base_v1_', 2, true, 'features/discover-common.js:97', 'la base de discografías, una por artista'),
-  e('idb', 'mosaico_colores_v1', 2, true, 'features/mosaico-colores.js:289', 'la base de colores del mosaico'),
-  p('idb', 'local_', 2, true, 'features/history-data.js:418-426, 449', 'el historial importado del ZIP y el detalle por día', { porUsuario: 'clave', deUsuario: (u) => `local_${u}_history_` }),
-  p('idb', 'mapa_artista_v1_', 2, true, 'features/mapa.js:226', 'el país de cada artista (MusicBrainz)', { porUsuario: 'clave', deUsuario: (u) => `mapa_artista_v1_${u}_` }),
-  p('idb', 'mapa_area_v1_', 2, true, 'features/mapa.js:227', 'cada área de MusicBrainz y su país'),
-  p('idb', PREFIJO_GENEROS, 2, true, 'util/generos-artista.js:137, 174, 212', 'las etiquetas de género por artista, por fuente', { porUsuario: 'clave', deUsuario: (u) => prefijoGeneros(u) }),
-  e('idb', CLAVE_MIGRADO, 'registro', true, 'util/generos-artista.js:137', 'la marca de que el blob viejo de etiquetas ya se migró'),
+  p('idb', 'discover_disco_base_v1_', 2, true, 'features/discover-common.js:97', 'la base de discografías, una por artista', { fusion: 'discografia' }),
+  e('idb', 'mosaico_colores_v1', 2, true, 'features/mosaico-colores.js:289', 'la base de colores del mosaico', { fusion: TUYA }),
+  p('idb', 'local_', 2, true, 'features/history-data.js:418-426, 449', 'el historial importado del ZIP y el detalle por día', { porUsuario: 'clave', deUsuario: (u) => `local_${u}_history_`, fusion: TUYA }),
+  p('idb', 'mapa_artista_v1_', 2, true, 'features/mapa.js:226', 'el país de cada artista (MusicBrainz)', { porUsuario: 'clave', deUsuario: (u) => `mapa_artista_v1_${u}_`, fusion: TUYA }),
+  p('idb', 'mapa_area_v1_', 2, true, 'features/mapa.js:227', 'cada área de MusicBrainz y su país', { fusion: TUYA }),
+  p('idb', PREFIJO_GENEROS, 2, true, 'util/generos-artista.js:137, 174, 212', 'las etiquetas de género por artista, por fuente', { porUsuario: 'clave', deUsuario: (u) => prefijoGeneros(u), fusion: TUYA }),
+  e('idb', CLAVE_MIGRADO, 'registro', true, 'util/generos-artista.js:137', 'la marca de que el blob viejo de etiquetas ya se migró', { fusion: TUYA }),
   p('idb', 'mapa_ritmo_v1_', 4, false, 'features/mapa.js:220', 'el ritmo medido del escaneo del mapa (una medición)', { porUsuario: 'clave', deUsuario: (u) => `mapa_ritmo_v1_${u}` }),
   p('idb', 'generos_ritmo_v1_', 4, false, 'features/generos.js:212', 'el ritmo medido del escaneo de géneros (una medición)', { porUsuario: 'clave', deUsuario: (u) => `generos_ritmo_v1_${u}` }),
   p('idb', 'letras_v1_', 4, false, 'ui/letra-ficha.js:93', 'las letras de lrclib, una por tema'),
@@ -94,29 +107,29 @@ export const CENSO = [
   p('idb', 'statsfm_top_lifetime_v1', 4, false, 'api/statsfm.js:179', 'el top de siempre de stats.fm'),
 
   // ── localStorage: lo que no se rehace ────────────────────────────────────────────────────────
-  e('ls', 'discover_escuchados', 1, true, 'util/hidden-sync.js:57 (createLocalStore, discover-common.js:1022)', 'los discos marcados como «ya escuchado» en Descubrir', { porUsuario: 'pref' }),
-  e('ls', 'discover_escuchados_uris', 1, true, 'util/hidden-sync.js:104', 'la uri de cada «ya escuchado»', { porUsuario: 'pref' }),
-  e('ls', 'listened_unreg_dismissed', 1, true, 'features/listened.js:43, 1180', 'los álbumes quitados de «Quizás escuchaste y no registraste»', { porUsuario: 'pref' }),
-  e('ls', 'listened_dupes_dismissed', 1, true, 'features/listened.js:52', 'los grupos marcados «no es duplicado» en #listened', { porUsuario: 'pref' }),
-  e('ls', 'listened_history_dismissed', 1, true, 'features/listened.js:65, 1562', 'los álbumes del historial quitados en #listened', { porUsuario: 'pref' }),
-  e('ls', 'versions_dismissed', 1, true, 'features/versions.js:129', 'los grupos descartados en #versions', { porUsuario: 'pref' }),
-  e('ls', 'genre_hidden_tags', 1, true, 'features/by-genre.js:93', 'los géneros ocultos en «Por género»', { porUsuario: 'pref' }),
-  e('ls', 'discoverart_elegidos', 1, true, 'util/cola-escaneo.js:31 (discover-artists.js:499)', 'los artistas elegidos a mano para escanear en Descubrir', { porUsuario: 'pref' }),
-  e('ls', 'newrel_elegidos', 1, true, 'util/cola-escaneo.js:31 (new-releases.js)', 'los artistas elegidos a mano para escanear en Novedades', { porUsuario: 'pref' }),
-  e('ls', 'likes_borrados_log_v1', 1, true, 'api.js:1304', 'los últimos 20 borrados de me gusta (para volver a darles me gusta)', { porUsuario: 'pref' }),
-  e('ls', 'versions_supervivientes_perdidas_v1', 1, true, 'features/versions.js:846', 'las últimas 20 veces que #versions perdió la que se quedaba', { porUsuario: 'pref' }),
+  e('ls', 'discover_escuchados', 1, true, 'util/hidden-sync.js:57 (createLocalStore, discover-common.js:1022)', 'los discos marcados como «ya escuchado» en Descubrir', { porUsuario: 'pref', fusion: 'conjunto' }),
+  e('ls', 'discover_escuchados_uris', 1, true, 'util/hidden-sync.js:104', 'la uri de cada «ya escuchado»', { porUsuario: 'pref', fusion: 'mapa' }),
+  e('ls', 'listened_unreg_dismissed', 1, true, 'features/listened.js:43, 1180', 'los álbumes quitados de «Quizás escuchaste y no registraste»', { porUsuario: 'pref', fusion: 'conjunto' }),
+  e('ls', 'listened_dupes_dismissed', 1, true, 'features/listened.js:52', 'los grupos marcados «no es duplicado» en #listened', { porUsuario: 'pref', fusion: 'conjunto' }),
+  e('ls', 'listened_history_dismissed', 1, true, 'features/listened.js:65, 1562', 'los álbumes del historial quitados en #listened', { porUsuario: 'pref', fusion: 'conjunto' }),
+  e('ls', 'versions_dismissed', 1, true, 'features/versions.js:129', 'los grupos descartados en #versions', { porUsuario: 'pref', fusion: 'conjunto' }),
+  e('ls', 'genre_hidden_tags', 1, true, 'features/by-genre.js:93', 'los géneros ocultos en «Por género»', { porUsuario: 'pref', fusion: 'conjunto' }),
+  e('ls', 'discoverart_elegidos', 1, true, 'util/cola-escaneo.js:31 (discover-artists.js:499)', 'los artistas elegidos a mano para escanear en Descubrir', { porUsuario: 'pref', fusion: 'conjunto' }),
+  e('ls', 'newrel_elegidos', 1, true, 'util/cola-escaneo.js:31 (new-releases.js)', 'los artistas elegidos a mano para escanear en Novedades', { porUsuario: 'pref', fusion: 'conjunto' }),
+  e('ls', 'likes_borrados_log_v1', 1, true, 'api.js:1304', 'los últimos 20 borrados de me gusta (para volver a darles me gusta)', { porUsuario: 'pref', fusion: 'registro', fechaCampo: 'fecha' }),
+  e('ls', 'versions_supervivientes_perdidas_v1', 1, true, 'features/versions.js:846', 'las últimas 20 veces que #versions perdió la que se quedaba', { porUsuario: 'pref', fusion: 'registro', fechaCampo: 'fecha' }),
 
   // ── localStorage: los ocultos con playlist espejo (clase 3) ─────────────────────────────────
   ...OCULTOS.flatMap(([k, quien, que]) => [
-    e('ls', k, 3, true, `util/hidden-sync.js:57 (${quien})`, que, { porUsuario: 'pref' }),
-    e('ls', `${k}_uris`, 3, true, 'util/hidden-sync.js:104', `la uri de cada uno (${que})`, { porUsuario: 'pref' }),
-    e('ls', `fonoteca_hidden_pl_${k}`, 3, true, 'util/hidden-sync.js:266', `el id de la playlist espejo (${que})`, { porUsuario: 'pref' }),
+    e('ls', k, 3, true, `util/hidden-sync.js:57 (${quien})`, que, { porUsuario: 'pref', fusion: 'conjunto' }),
+    e('ls', `${k}_uris`, 3, true, 'util/hidden-sync.js:104', `la uri de cada uno (${que})`, { porUsuario: 'pref', fusion: 'mapa' }),
+    e('ls', `fonoteca_hidden_pl_${k}`, 3, true, 'util/hidden-sync.js:266', `el id de la playlist espejo (${que})`, { porUsuario: 'pref', fusion: TUYA }),
   ]),
-  e('ls', 'ocultos_sin_uri_v1', 3, true, 'util/hidden-sync.js:172', 'los ocultos que no tienen uri (no están en ninguna playlist)', { porUsuario: 'pref' }),
-  e('ls', 'ocultos_incidencias_v1', 'registro', true, 'util/hidden-sync.js:125', 'las últimas 100 incidencias de los ocultos', { porUsuario: 'pref' }),
+  e('ls', 'ocultos_sin_uri_v1', 3, true, 'util/hidden-sync.js:172', 'los ocultos que no tienen uri (no están en ninguna playlist)', { porUsuario: 'pref', fusion: TUYA }),
+  e('ls', 'ocultos_incidencias_v1', 'registro', true, 'util/hidden-sync.js:125', 'las últimas 100 incidencias de los ocultos', { porUsuario: 'pref', fusion: 'registro', fechaCampo: 'fecha' }),
 
   // ── localStorage: lo rehacible (clase 2) ─────────────────────────────────────────────────────
-  e('ls', 'lastfm_artist_tags_cache', 2, true, 'api/lastfm.js:162 (heredado ≤ v=311)', 'el blob viejo de etiquetas, de antes de IndexedDB'),
+  e('ls', 'lastfm_artist_tags_cache', 2, true, 'api/lastfm.js:162 (heredado ≤ v=311)', 'el blob viejo de etiquetas, de antes de IndexedDB', { fusion: TUYA }),
 
   // ── localStorage: preferencias ───────────────────────────────────────────────────────────────
   // Las siete de `CONFIG_LOCAL_KEYS` (api.js) van, además, en `_config`, como en el v2.
@@ -156,16 +169,16 @@ export const CENSO = [
     ['skips_group_ids', 'features/skips.js:633', 'un arreglo activado en #skips'],
     ['skips_nearfull_fwd', 'features/skips.js:633', 'un arreglo activado en #skips'],
     ['skips_close_ok', 'features/skips.js:633', 'un arreglo activado en #skips'],
-  ].map(([k, quien, que]) => e('ls', k, 'preferencia', true, quien, que, { porUsuario: 'pref' })),
-  e('ls', 'versions_dry_run', 'preferencia', true, '(se pone a mano; versions.js:79 solo la lee)', 'el modo ensayo de #versions'),
+  ].map(([k, quien, que]) => e('ls', k, 'preferencia', true, quien, que, { porUsuario: 'pref', fusion: TUYA })),
+  e('ls', 'versions_dry_run', 'preferencia', true, '(se pone a mano; versions.js:79 solo la lee)', 'el modo ensayo de #versions', { fusion: TUYA }),
 
   // ── localStorage: registros ──────────────────────────────────────────────────────────────────
-  e('ls', 'discoverart_fallos', 'registro', true, 'util/escaneo-fallos.js:39', 'los escaneos que fallaron en Descubrir, con el día', { porUsuario: 'pref' }),
-  e('ls', 'newrel_fallos', 'registro', true, 'util/escaneo-fallos.js:39', 'los escaneos que fallaron en Novedades, con el día', { porUsuario: 'pref' }),
-  e('ls', 'versions_dry_run_log_v1', 'registro', true, 'features/versions.js:101', 'los últimos 20 ensayos de #versions'),
-  e('ls', 'fonoteca_crash_log_v1', 'registro', true, 'ui/crash-guard.js:89', 'los últimos fallos de la app'),
-  e('ls', 'fonoteca_barrido_v1', 'registro', true, 'app.js:962', 'el informe del último barrido de claves'),
-  e('ls', 'disco_base_migracion_v1', 'registro', true, 'features/discover-common.js:239', 'el informe de la migración a la base de discografías'),
+  e('ls', 'discoverart_fallos', 'registro', true, 'util/escaneo-fallos.js:39', 'los escaneos que fallaron en Descubrir, con el día', { porUsuario: 'pref', fusion: TUYA }),
+  e('ls', 'newrel_fallos', 'registro', true, 'util/escaneo-fallos.js:39', 'los escaneos que fallaron en Novedades, con el día', { porUsuario: 'pref', fusion: TUYA }),
+  e('ls', 'versions_dry_run_log_v1', 'registro', true, 'features/versions.js:101', 'los últimos 20 ensayos de #versions', { fusion: 'registro', fechaCampo: 'fecha' }),
+  e('ls', 'fonoteca_crash_log_v1', 'registro', true, 'ui/crash-guard.js:89', 'los últimos fallos de la app', { fusion: TUYA }),
+  e('ls', 'fonoteca_barrido_v1', 'registro', true, 'app.js:962', 'el informe del último barrido de claves', { fusion: TUYA }),
+  e('ls', 'disco_base_migracion_v1', 'registro', true, 'features/discover-common.js:239', 'el informe de la migración a la base de discografías', { fusion: TUYA }),
 
   // ── localStorage: caché ──────────────────────────────────────────────────────────────────────
   e('ls', ULTIMO_USUARIO, 4, false, 'api.js:1120', 'el último uid (va en `spotifyUserId`)'),
@@ -196,8 +209,9 @@ export function entradaDe(donde, clave, censo = CENSO) {
   return null;
 }
 
-// ¿Es de este usuario? (solo tiene sentido para las del censo)
-function esDelUsuario(c, clave, uid, uidPref) {
+// ¿Es de este usuario? (solo tiene sentido para las del censo). Exportada para «Importar todo» (v=334), que decide
+// con la MISMA regla qué claves del archivo son del usuario.
+export function esDelUsuario(c, clave, uid, uidPref) {
   if (c.porUsuario === 'pref') return clave === c.clave || (!!uidPref && clave === `${c.clave}__${uidPref}`);
   if (c.porUsuario === 'clave') return !!uid && clave.startsWith(c.deUsuario(uid));
   return true;
@@ -205,7 +219,7 @@ function esDelUsuario(c, clave, uid, uidPref) {
 
 // El uid dentro del VALOR, donde lo hay (mapa_artista_v1_ y generos_artista_v1_ lo llevan: «abc» es prefijo de
 // «abc_x», y el rango de uno trae las del otro).
-const uidDelValor = (v) => (v && typeof v === 'object' ? (v.uid ?? v.value?.uid) : undefined);
+export const uidDelValor = (v) => (v && typeof v === 'object' ? (v.uid ?? v.value?.uid) : undefined);
 
 /**
  * Elige las claves que salen. `idb` y `ls` son `{ clave: valor }` YA LEÍDOS. Devuelve
@@ -275,7 +289,7 @@ async function etiquetasDe(idb, ls, uid, ahora) {
 // En castellano de España: es lo que lee quien abra el archivo sin la app.
 export const LEEME = {
   'qué es': 'Copia de seguridad de lo que Fonoteca guarda en tu navegador. Es JSON plano: se puede abrir con cualquier editor de texto. No lleva tu sesión de Spotify (ni el token ni nada que sirva para entrar en tu cuenta).',
-  'cómo se vuelve a cargar': 'Todavía no se puede: la forma de volver a cargarla llega en la próxima versión. Mientras tanto, «Importar JSON» del Dashboard lee de este archivo lo mismo que de un «Exportar JSON»: los me gusta, las etiquetas de género y tus preferencias.',
+  'cómo se vuelve a cargar': '⚙ del Dashboard → “Importar todo”. Solo agrega lo que falta y une las listas: nunca borra ni cambia lo que ya tienes.',
   _format: 'Siempre «spotify-tools-data». Los mismos campos del «Exportar JSON» de siempre (versión 2), con _version 3.',
   _exportedAt: 'Cuándo se hizo la copia (UTC).',
   spotifyUserId: 'Tu usuario de Spotify, el de la sesión con la que se hizo la copia.',

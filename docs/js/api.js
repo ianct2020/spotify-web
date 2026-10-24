@@ -1,13 +1,15 @@
-import { getValidToken, refreshAccessToken } from './auth.js?v=333';
-import { cacheGet, cacheGetRaw, cacheGetTimestamp, cacheSet, cacheClear, prefKey, migratePrefKey } from './storage.js?v=333';
-import { idbDel, idbDelByPrefix, idbGetCached, idbGetCachedRaw, idbGetTimestamp, idbSetCached, idbGet, idbAllKeys, idbEntriesByPrefix } from './idb.js?v=333';
-import { OWNER_KEY_LIST } from './history-keys.js?v=333';
-import { OCULTOS_ITEMS_PREFIX } from './util/ocultos-items-clave.js?v=333';
-import { showToast } from './ui/toast.js?v=333';
-import { artistIsSame, limpiaParaQuery } from './util/track-match.js?v=333';
-import { contadorCuota, cuotaDeEndpoint } from './util/cuota.js?v=333';
-import { exportarEtiquetas, importarEtiquetas } from './api/lastfm.js?v=333';
-import { leerNavegador, armarCopia, serializar, contieneSecreto } from './util/copia-completa.js?v=333';
+import { getValidToken, refreshAccessToken } from './auth.js?v=334';
+import { cacheGet, cacheGetRaw, cacheGetTimestamp, cacheSet, cacheClear, prefKey, migratePrefKey } from './storage.js?v=334';
+import { idbDel, idbDelByPrefix, idbGetCached, idbGetCachedRaw, idbGetTimestamp, idbSetCached, idbGet, idbAllKeys, idbEntriesByPrefix, idbSetVarios } from './idb.js?v=334';
+import { OWNER_KEY_LIST } from './history-keys.js?v=334';
+import { OCULTOS_ITEMS_PREFIX } from './util/ocultos-items-clave.js?v=334';
+import { showToast } from './ui/toast.js?v=334';
+import { artistIsSame, limpiaParaQuery } from './util/track-match.js?v=334';
+import { contadorCuota, cuotaDeEndpoint } from './util/cuota.js?v=334';
+import { exportarEtiquetas, importarEtiquetas } from './api/lastfm.js?v=334';
+import { leerNavegador, armarCopia, serializar, contieneSecreto } from './util/copia-completa.js?v=334';
+import { leerCopia, planDeImport, segundaRed, TEXTOS as TEXTOS_IMPORT } from './util/copia-importar.js?v=334';
+import { BORRADOS_LOG_MAX } from './util/topes-registros.js?v=334';
 
 const BASE = 'https://api.spotify.com/v1';
 const MIN_RETRY_WAIT = 5000;
@@ -830,6 +832,100 @@ async function exportarCopiaCompleta({ ahora = new Date() } = {}) {
   return { copia, texto, secretos: contieneSecreto(texto, leido.ls), errores: copia._errores, bytes: new Blob([texto]).size };
 }
 
+// «Importar todo» (v=334): enchufa `util/copia-importar.js` (puro) a IndexedDB y a `localStorage`. Lee con las MISMAS
+// lecturas sin efectos de `exportarCopiaCompleta` (el test compara las dos, letra por letra) y NO ESCRIBE: devuelve el
+// plan para que el usuario lo confirme. 0 peticiones con el memo de `getCurrentUserId()` lleno: `motivoSinImportCompleto()`
+// va por él y el uid sale de él. ⚠️ Si en esta carga todavía nadie preguntó (un perfil sin me gusta: el Dashboard no lo
+// pregunta), la guarda pide UN `/me`, y es a propósito: es la confirmación de identidad sin la cual no se escribe nada.
+// Va por `import()` porque `history-data.js` importa este archivo (un import estático sería un ciclo).
+async function leerParaImportar() {
+  return leerNavegador({
+    idbTodo: () => idbEntriesByPrefix(''),
+    idbClaves: () => idbAllKeys(),
+    idbLeer: (k) => idbGet(k),
+    lsClaves: () => Array.from({ length: localStorage.length }, (_, i) => localStorage.key(i)),
+    lsLeer: (k) => localStorage.getItem(k),
+  });
+}
+
+// `localStorage` entero, SINCRÓNICO: lo usa `aplicarPlan()` para releer y escribir sin soltar el hilo.
+function leerLsAhora() {
+  const ls = {};
+  for (let i = 0; i < localStorage.length; i++) {
+    const k = localStorage.key(i);
+    const v = localStorage.getItem(k);
+    if (v != null) ls[k] = v;
+  }
+  return ls;
+}
+
+async function importarCopiaCompleta(texto, { ahora = new Date() } = {}) {
+  let copia;
+  try {
+    copia = leerCopia(texto);
+  } catch (e) {
+    const plan = planDeImport({ copia: null });
+    plan.rechazo = { motivo: 'roto', texto: `El archivo no es un JSON válido (${e?.message || e}).` };
+    return { plan };
+  }
+  const { motivoSinImportCompleto } = await import('./features/history-data.js?v=334');
+  const motivoOwner = await motivoSinImportCompleto();
+  const uid = motivoOwner === 'identidad' ? null : _cachedUserId;
+  const leido = await leerParaImportar();
+  const entrada = { copia, uid, motivoOwner, ahora };
+  const plan = planDeImport({ ...entrada, idb: leido.idb, ls: leido.ls });
+  // Una clave que no se pudo leer parecería «que falta» y se escribiría encima: no se carga nada.
+  if (!plan.rechazo && leido.errores.length) return { plan: { ...plan, idb: [], ls: [], rechazo: { motivo: 'lectura', texto: TEXTOS_IMPORT.lectura } } };
+  plan.entrada = entrada;
+  return { plan };
+}
+
+// Aplica un plan de `importarCopiaCompleta()`. 🔴 Las únicas escrituras: UNA `idbSetVarios` (una transacción) y los
+// `setItem` de las claves del plan. Ni un `removeItem`, ni un `idbDel`, ni `importAllData`.
+//   1. la segunda red sobre el plan que se confirmó: si trae una clave que el censo no deja entrar, nada;
+//   2. vuelve a leer y a decidir con la MISMA copia, uid y motivo: si entre el modal y el clic cambió algo (otra
+//      pestaña), se une con lo de ahora, no con lo de hace un rato; y la segunda red otra vez;
+//   3. IndexedDB, todo en una transacción. Si tira: 0 escrituras en `localStorage`;
+//   4. `localStorage`, releído y redecidido de forma SINCRÓNICA (ningún `await` entre leer y escribir), clave por
+//      clave. Si una tira (cuota), se para ahí y vuelven las que faltaron: lo ya escrito fueron solo agregados y
+//      uniones, así que lo que había sigue entero.
+// Devuelve `{ ok, … }`; nunca tira por algo del plan.
+async function aplicarPlan(plan) {
+  const malas = segundaRed(plan);
+  if (plan?.rechazo || !plan?.entrada || malas.length) return { ok: false, motivo: 'red', malas, idb: 0, ls: 0 };
+  const leido = await leerParaImportar();
+  if (leido.errores.length) return { ok: false, motivo: 'lectura', texto: TEXTOS_IMPORT.lectura, idb: 0, ls: 0 };
+  const fresco = planDeImport({ ...plan.entrada, idb: leido.idb, ls: leido.ls });
+  const malasFresco = segundaRed(fresco);
+  if (fresco.rechazo || malasFresco.length) return { ok: false, motivo: fresco.rechazo ? fresco.rechazo.motivo : 'red', texto: fresco.rechazo?.texto, malas: malasFresco, idb: 0, ls: 0 };
+
+  if (fresco.idb.length) {
+    try {
+      await idbSetVarios(fresco.idb);
+    } catch (e) {
+      return { ok: false, motivo: 'idb', error: e?.message || String(e), idb: 0, ls: 0 };
+    }
+  }
+
+  let final;
+  try {
+    final = planDeImport({ ...plan.entrada, idb: leido.idb, ls: leerLsAhora() });
+  } catch (e) {
+    return { ok: false, motivo: 'ls', error: e?.message || String(e), idb: fresco.idb.length, ls: 0, faltaron: [] };
+  }
+  if (final.rechazo || segundaRed(final).length) return { ok: false, motivo: final.rechazo ? final.rechazo.motivo : 'red', texto: final.rechazo?.texto, idb: fresco.idb.length, ls: 0, faltaron: [] };
+  let escritas = 0;
+  for (const [clave, texto] of final.ls) {
+    try {
+      localStorage.setItem(clave, texto);
+      escritas++;
+    } catch (e) {
+      return { ok: false, motivo: 'ls', error: e?.message || String(e), idb: fresco.idb.length, ls: escritas, faltaron: final.ls.slice(escritas).map(([k]) => k), resumen: final.resumen };
+    }
+  }
+  return { ok: true, idb: fresco.idb.length, ls: escritas, resumen: final.resumen };
+}
+
 async function importAllData(parsed, onProgress, { currentUserId = null } = {}) {
   if (!parsed || typeof parsed !== 'object') throw new Error('Archivo inválido');
 
@@ -1280,7 +1376,7 @@ async function removeFromLikesCache(ids) {
 // todavía está sin filtrar. Si no hay ninguna de las dos, se guardan los ids
 // pelados: sirven igual para volver a likear con `PUT /me/library`.
 const BORRADOS_LOG_KEY = 'likes_borrados_log_v1';
-const BORRADOS_LOG_MAX = 20;
+// El tope (20) vive en `util/topes-registros.js` desde v=334: «Importar todo» lo usa también, importado.
 
 async function registrarBorradoDeLikes(ids, { origen = 'desconocido', meta = null } = {}) {
   let detalle = null;
@@ -1898,6 +1994,8 @@ export {
   importLikesData,
   exportAllData,
   exportarCopiaCompleta,
+  importarCopiaCompleta,
+  aplicarPlan,
   importAllData,
   getBestAvailableLikes,
   getLikesPartialInfo,

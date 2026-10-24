@@ -1,0 +1,126 @@
+<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>banco copia-importar — «Importar todo» nunca pisa</title>
+<style>html,body{margin:0;background:#111;color:#eee;font:13px system-ui}iframe{border:0;display:block}</style>
+</head><body>
+<pre id="progreso"></pre>
+<div id="marco"></div>
+<script type="module">
+// ── Banco `copia-importar` (v=334, tanda 79; el vigésimo séptimo de `prepush`) ─
+//
+// «Importar todo» en la app ENTERA, contra la Spotify simulada, con perfiles SEMBRADOS con datos INVENTADOS (cada caso
+// es un iframe, `copia-importar-caso.html`, que vacía el almacenamiento del origen del banco antes de sembrar el suyo):
+//
+//   A → B   el perfil A con todo exporta («Exportar todo», interceptado); B, vacío y con el mismo uid, importa: el sha256
+//           de cada clave de B que entra es el de A, y 0 peticiones a cualquier host entre el clic y el final;
+//   C       un perfil con estado propio: abre #skips ANTES de importar (no sube nada), importa, y cada clave contra el
+//           oráculo (las uniones, calculadas aparte) y el invariante (toda clave de antes sigue y contiene lo que tenía);
+//   C2      la carga siguiente de C: abre #skips y los ocultos agregados suben a SU playlist simulada (el id de C, no
+//           el del archivo). Esa es la escritura diferida que el modal anuncia: acá se cuenta;
+//   D       otro uid: el modal no ofrece «Importar», dice por qué, y el sha256 de todo el navegador queda igual;
+//   E       el owner: de `local_<owner>_history_*` solo entra `days`;
+//   F       el archivo con un token, la key de Last.fm y una clave inventada: no se escriben y se nombran;
+//   G       «Cancelar»: el sha256 de todo el navegador queda igual.
+//
+// Por qué un banco NUEVO y no una puerta en `copia-completa`: aquel prueba que exportar SOLO LEE (el mismo sha256
+// antes y después, en UN perfil) y su madre lee el archivo sin la app; este necesita varios perfiles distintos, una
+// Spotify simulada con una playlist de ocultos que viva entre cargas, y ESCRIBE. Meterlo allá le cambiaría el porqué y el
+// presupuesto a un banco que ya está medido.
+//
+//   ?tamano=ian&solo=ab   el instrumento del tiempo: A del tamaño de los datos de Ian (INVENTADO) → B (no está en `prepush`).
+
+import { esperarReal } from '/banco/simulado.mjs';
+import { fallar, listo } from '/banco/esperar.mjs';
+import * as D from '/banco/copia-importar-datos.mjs';
+
+const q = new URLSearchParams(location.search);
+const ANCHO = +(q.get('ancho') || 1351);
+const TAMANO = q.get('tamano') || '';
+const SOLO_AB = q.get('solo') === 'ab';
+const afirmar = (c, msg) => { if (!c) throw new Error(`BANCO copia-importar: ${msg}`); };
+window.__estadoImport = D.crearEstado();
+let actual = null;
+window.addEventListener('message', (e) => { if (e.data?.banco === 'copia-importar') actual = e.data; });
+
+async function caso(nombre) {
+  actual = null;
+  document.getElementById('progreso').textContent = `el caso ${nombre} no terminó dentro del presupuesto de reloj virtual`;
+  const f = document.createElement('iframe');
+  f.width = ANCHO; f.height = 900;
+  f.src = `/banco/copia-importar-caso.html?caso=${nombre}${TAMANO ? `&tamano=${TAMANO}` : ''}`;
+  document.getElementById('marco').replaceChildren(f);
+  await esperarReal(() => actual, { que: `el caso ${nombre}`, vueltas: TAMANO ? 800000 : 60000 });
+  if (!actual.ok) throw new Error(`[${nombre}] ${actual.error}`);
+  afirmar(actual.datos.rechazos.length === 0, `[${nombre}] rechazos sin atrapar: ${actual.datos.rechazos.join(' | ')}`);
+  return actual.datos;
+}
+const sinPeticiones = (p) => Object.values(p).every((n) => n === 0);
+const OCULTOS = 'Los ocultos que se agreguen se subirán a sus listas de Spotify la próxima vez que abras su vista.';
+
+try {
+  const r = {};
+  r.A = await caso('A');
+  window.__textoA = r.A.texto;
+  afirmar(r.A.claves > 80, `A siembra todas las filas que entran (${r.A.claves} claves)`);
+  r.B = await caso('B');
+  const b = r.B.import;
+  afirmar(r.B.item === 'Importar todo cargar una copia' && r.B.itemDespuesDeExportar, `el ítem del ⚙ («${r.B.item}»), debajo de «Exportar todo»`);
+  afirmar(b.titulo === 'Importar todo' && b.botones.includes('Importar') && b.botones.includes('Cancelar'), `el modal con «Importar» y «Cancelar» (${b.botones.join(' · ')})`);
+  afirmar(b.texto.includes(D.UID) && /Copia del \d+ de \w+ de 2026/.test(b.texto) && b.texto.includes(OCULTOS), `el modal dice la fecha, el usuario y la línea de los ocultos («${b.texto.slice(0, 160)}…»)`);
+  afirmar(b.hecho && b.hecho.botones.includes('Recargar ahora'), `al terminar, «Recargar ahora» (${b.hecho?.botones.join(' · ')})`);
+  afirmar(sinPeticiones(b.peticiones), `🔴 0 peticiones entre el clic y el final del import: ${JSON.stringify(b.peticiones)} ${b.rutas.join(' · ')}`);
+  const distintas = Object.keys(r.A.shas).filter((k) => r.B.shas[k] !== r.A.shas[k]);
+  const deMas = Object.keys(r.B.shas).filter((k) => !(k in r.A.shas));
+  afirmar(distintas.length === 0 && deMas.length === 0, `A → B: el sha256 de cada una de las ${Object.keys(r.A.shas).length} claves que entran es el mismo (distintas: ${distintas.join(', ') || '—'} · de más: ${deMas.join(', ') || '—'})`);
+
+  if (!SOLO_AB) {
+    r.C1 = await caso('C1');
+    const c = r.C1.c;
+    afirmar(r.C1.postsAlAbrir.length === 0, `abrir #skips ANTES de importar no sube nada (${JSON.stringify(r.C1.postsAlAbrir)})`);
+    afirmar(c.perdidas.length === 0, `🔴 C: ninguna clave de antes desapareció (${c.perdidas.join(', ') || '—'})`);
+    const malas = c.oraculo.filter((o) => !o.ok);
+    afirmar(malas.length === 0, `C: cada clave probada es la que dice el oráculo (no: ${malas.map((o) => o.k).join(', ') || '—'})`);
+    afirmar(J(c.disco.ids) === J([0, 1, 2, 3, 4, 5, 99].map((j) => D.id22(100 + j, 'r')).sort()) && c.disco.nombre1 === 'Nombre propio de C' && c.disco.cortada === false && c.disco.storedAt === 1_700_000_000_000 && c.disco.ultimo?.via === 'importacion' && c.disco.ultimo?.nuevos === 4,
+      `C: la discografía se une por id, el nombre propio de C se queda, y la entrada del historial cuenta lo del archivo (${JSON.stringify(c.disco)})`);
+    afirmar(c.area?.deC === true, 'C: el área distinta, la de C');
+    afirmar(J(c.local) === J([`local_${D.UID}_history_stats`]), `C: un amigo con una de las ocho del historial no recibe ninguna (${c.local.join(', ')})`);
+    afirmar(c.marca === false, 'C: con el blob viejo sin migrar, la marca de etiquetas de A no entra');
+    r.C2 = await caso('C2');
+    const subidas = r.C2.postsAlAbrir.flatMap((p) => p.uris);
+    const esperadas = D.ocultosDeA().filter((id) => !D.ocultosDeC().includes(id)).map((id) => `spotify:track:${id}`);
+    afirmar(r.C2.postsAlAbrir.every((p) => p.playlist === D.PL_SKIPS), `lo importado sube a la playlist de C (${D.PL_SKIPS}), no a la del archivo`);
+    afirmar(J(subidas.sort()) === J(esperadas.sort()), `al abrir #skips después de importar, suben los ${esperadas.length} ocultos agregados (${subidas.length} uris en ${r.C2.postsAlAbrir.length} POST)`);
+
+    r.D = await caso('D');
+    afirmar(r.D.import.titulo === 'No se puede cargar esta copia' && !r.D.import.botones.includes('Importar') && /otro usuario/.test(r.D.import.texto), `D (otro uid): el modal no ofrece «Importar» y dice por qué («${r.D.import.texto}» · ${r.D.import.botones.join(' · ')})`);
+    afirmar(r.D.igual, `D: el sha256 de todo el navegador, igual (${r.D.shaAntes} → ${r.D.shaDespues})`);
+    afirmar(r.D.import.rutas.every((x) => x === 'GET /me') && r.D.import.rutas.length <= 1 && r.D.import.peticiones.externas === 0 && r.D.import.peticiones.recursos === 0, `D, en frío (sin memo): como mucho el GET /me de la identidad y nada más (${JSON.stringify(r.D.import.peticiones)} ${r.D.import.rutas.join(' · ')})`);
+
+    r.E = await caso('E');
+    afirmar(J(r.E.e.local) === J([`local_${D.OWNER}_history_days`]), `E (owner): de las ocho, solo days (${r.E.e.local.join(', ')})`);
+    afirmar(r.E.import.fuera.filter((k) => k.startsWith('local_')).length === 7, `E: las otras siete, nombradas en el modal (${r.E.import.fuera.filter((k) => k.startsWith('local_')).length})`);
+
+    r.F = await caso('F');
+    afirmar(r.F.f.refresh === 'ref-del-banco' && r.F.f.lastfm === null && r.F.f.inventada === null, `F: ni el token, ni la key de Last.fm, ni la inventada (${JSON.stringify(r.F.f)})`);
+    afirmar(['sp_refresh_token', `lastfm_api_key__${D.UID}`, 't79_banco_inventada'].every((k) => r.F.import.fuera.includes(k)), `F: las tres, nombradas en el modal (${r.F.import.fuera.join(', ')})`);
+    afirmar(Object.keys(r.A.shas).every((k) => r.F.shas[k] === r.A.shas[k]), 'F: lo demás entró igual');
+
+    r.G = await caso('G');
+    afirmar(r.G.import.botones.includes('Cancelar') && r.G.igual, `G («Cancelar»): el sha256 de todo el navegador, igual (${r.G.shaAntes} → ${r.G.shaDespues})`);
+    for (const n of ['E', 'F', 'G']) afirmar(sinPeticiones(r[n].import.peticiones), `${n}: 0 peticiones (${JSON.stringify(r[n].import.peticiones)} ${r[n].import.rutas.join(' · ')})`);
+  }
+
+  const resumen = `tamaño=${TAMANO || 'chico'} · A: ${r.A.claves} claves que entran, archivo ${r.A.bytes.toLocaleString('es-ES')} bytes · ` +
+    `B: ${Object.keys(r.B.shas).length} claves con el mismo sha256 que A, peticiones ${JSON.stringify(r.B.import.peticiones)}, leer y decidir ${r.B.import.ms.leerYDecidir} ms, aplicar ${r.B.import.ms.aplicar} ms · ` +
+    (SOLO_AB ? '' :
+      `C: ${r.C1.c.antes} claves antes, ${r.C1.c.despues} después (${r.C1.c.agregadas} agregadas, ${r.C1.c.sinTocar} sin tocar, 0 perdidas), oráculo ${r.C1.c.oraculo.length}/${r.C1.c.oraculo.length} · ` +
+      `#skips antes de importar: ${r.C1.postsAlAbrir.length} POST · después (C2): ${r.C2.postsAlAbrir.length} POST con ${r.C2.postsAlAbrir.flatMap((p) => p.uris).length} uris a la playlist simulada · toasts de C2: «${r.C2.toasts.join(' | ')}» · ` +
+      `D: igual ${r.D.shaAntes}, en frío ${r.D.import.rutas.length} petición (${r.D.import.rutas.join(',') || '—'}) · E: ${r.E.e.local.join(',')}, /data/ bloqueadas ${r.E.dataBloqueadas} · F: fuera ${r.F.import.fuera.length} · G: igual ${r.G.shaAntes} · `) +
+    `modal: «${r.B.import.texto.slice(0, 400)}» · hecho: «${r.B.import.hecho.texto.slice(0, 300)}» · reloj virtual=${Math.round(performance.now())} ms`;
+  document.documentElement.setAttribute('data-resumen', resumen);
+  document.getElementById('progreso').textContent = resumen;
+  listo();
+} catch (e) {
+  fallar(e);
+}
+function J(x) { return JSON.stringify(x); }
+</script>
+</body></html>

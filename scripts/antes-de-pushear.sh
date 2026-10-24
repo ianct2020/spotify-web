@@ -48,7 +48,7 @@ if npm test --silent 2>&1 | tail -4 | sed 's/^/      /'; [ "${PIPESTATUS[0]}" -e
 # `mosaico` y `toasts` entraron en v=273:
 # estaban en rojo desde antes del 04/10 y justamente por no estar acá nadie los
 # miraba, igual que le había pasado a `barra` entre v=241 y v=261.
-echo "2b. bancos (barra · pausa-search · toasts · mosaico · novedades · escrituras · ocultar-artista ×3 · covers-orden · calendario · import-guarda · ocultos-cache · mapa · puertas · cuota · letras · generos-cache · generos-escaneo · generos · mapa-artistas · versiones-deluxe · router-teardown · guard-ruta-vieja · postal · copia-completa)"
+echo "2b. bancos (barra · pausa-search · toasts · mosaico · novedades · escrituras · ocultar-artista ×3 · covers-orden · calendario · import-guarda · ocultos-cache · mapa · puertas · cuota · letras · generos-cache · generos-escaneo · generos · mapa-artistas · versiones-deluxe · router-teardown · guard-ruta-vieja · postal · copia-completa · copia-importar)"
 # Los dos de `ocultar-artista` entraron en v=276: las TRES vistas que ocultan
 # artistas, reales, contra una Spotify simulada. Es el único sitio donde se puede
 # probar ocultar sin escribir en la cuenta de Ian, y el de `-disco` es el que
@@ -134,7 +134,15 @@ echo "2b. bancos (barra · pausa-search · toasts · mosaico · novedades · esc
 # peticiones a cualquier host durante el export, el MISMO sha256 de IndexedDB y localStorage antes y después, y la
 # madre lo lee con un JSON.parse sin cargar nada de src/ (trae `_leeme`). Diez corridas el 22/10: 787-1.005 ms de reloj
 # virtual (10/10), corre con el defecto de 45 s. Rojo contra v=332 (no hay botón).
-for B in barra pausa-search toasts mosaico novedades escrituras ocultar-artista ocultar-artista-disco ocultar-artista-novedades covers-orden calendario import-guarda ocultos-cache mapa puertas cuota letras generos-cache generos-escaneo generos mapa-artistas versiones-deluxe router-teardown guard-ruta-vieja postal copia-completa; do
+# `copia-importar` entró en v=334 (tanda 79): «Importar todo» del ⚙ de #dashboard, en la app ENTERA contra la Spotify
+# simulada, con perfiles SEMBRADOS con datos INVENTADOS (cada caso vacía el almacenamiento del origen del banco): A exporta
+# y B, vacío y con el mismo uid, importa → el sha256 de cada clave que entra es el de A y 0 peticiones a cualquier host
+# entre el clic y el final; C, con estado propio, abre #skips antes (0 POST), importa y cada clave cumple el invariante y
+# el oráculo de las uniones; C2 (la carga siguiente) abre #skips y lo agregado sube a SU playlist simulada; D (otro uid),
+# el modal sin «Importar» y el navegador igual; E (el owner), de local_<owner>_history_* solo days; F (un token, la key
+# de Last.fm y una clave inventada en el archivo), ninguna se escribe y las tres se nombran; G («Cancelar»), el navegador
+# igual. Rojo contra v=333 (no hay «Importar todo»). Corre con el defecto de 45 s.
+for B in barra pausa-search toasts mosaico novedades escrituras ocultar-artista ocultar-artista-disco ocultar-artista-novedades covers-orden calendario import-guarda ocultos-cache mapa puertas cuota letras generos-cache generos-escaneo generos mapa-artistas versiones-deluxe router-teardown guard-ruta-vieja postal copia-completa copia-importar; do
   if node scripts/correr-banco.mjs "$B" 2>&1 | sed 's/^/      /'; [ "${PIPESTATUS[0]}" -eq 0 ]; then
     ok "banco $B en verde"
   else

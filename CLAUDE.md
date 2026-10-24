@@ -4818,7 +4818,8 @@ La tanda 78. «Exportar todo» (⚙ de `#dashboard`, al lado de «Exportar JSON�
 descarga `fonoteca-copia-<AAAA-MM-DD>.json` (fecha local) con lo que la app guarda en ESTE navegador y vale la pena
 sacar. 🔴 **Solo exporta: el import llega con la 79** (fusionar sin pisar, la guarda del owner sobre `local_*`, el uid
 del archivo contra `/me`; nada de eso está hecho). El «Exportar JSON» (v2), `exportAllData`, `importAllData`,
-«Exportar base» y «Limpiar caché» no se tocaron.
+«Exportar base» y «Limpiar caché» no se tocaron. → **El import llegó en v=334 (tanda 79): ver «Importar todo (v=334)»,
+al final de esta sección.**
 
 | archivo | qué |
 |---|---|
@@ -4875,3 +4876,109 @@ v2 por el `importAllData` de hoy, `_errores`, 0 escrituras, 0 `fetch`, la lectur
 `tests/banco/copia-completa.html` + `-caso.html` (en `prepush`, el vigésimo sexto: la app ENTERA, el botón de verdad, la
 descarga interceptada, 0 peticiones a cualquier host, el mismo sha256 de IndexedDB y `localStorage` antes y después, y
 la madre lee el archivo con un `JSON.parse` sin cargar nada de `src/`).
+
+### Importar todo (v=334)
+
+La tanda 79. «Importar todo» (⚙ de `#dashboard`, debajo de «Exportar todo», con la pista «cargar una copia») vuelve a
+cargar en el navegador una copia de «Exportar todo». Es la primera vez que la app escribe EN BLOQUE sobre datos que no se
+pueden rehacer, y por eso todo gira alrededor de una sola regla.
+
+🔴 **EL INVARIANTE: el import NUNCA pisa.** Toda clave que existía antes del import sigue existiendo después, con un valor
+que contiene todo lo que tenía. Lo único que hace es **agregar claves que faltan y unir** conjuntos, mapas, registros y
+discografías. Ni un `removeItem`, ni un `idbDel`, ni `importAllData`. ⚠️ El precio, dicho: una unión no sabe borrar, así que
+lo que quitaste DESPUÉS de hacer la copia (un disco de «no registraste», un oculto devuelto) vuelve al importarla.
+
+| archivo | qué |
+|---|---|
+| `util/copia-importar.js` | PURO (importa `copia-completa.js`, `disco-base.js`, `generos-artista.js` y `topes-registros.js`, los cuatro puros): `planDeImport` (sincrónica: el archivo ya parseado + el estado YA LEÍDO → `{ rechazo, idb, ls, resumen, meta }`), `segundaRed`, `revivir` (los `{"__tipo": …}` de vuelta a `Uint8Array`/`Map`/`Set`, byte a byte) y `resumenEnPalabras` |
+| `util/topes-registros.js` | SIN IMPORTS: los topes de `likes_borrados_log_v1` (20) y `ocultos_incidencias_v1` (100), que vivían privados en `api.js` y `hidden-sync.js`. Los dueños y el import los importan de acá (importados, no copiados) |
+| `api.js`, `importarCopiaCompleta(texto)` / `aplicarPlan(plan)` | el enchufe: lee con las MISMAS lecturas sin efectos de `exportarCopiaCompleta` (el test las compara letra por letra), decide, y recién `aplicarPlan` escribe |
+| `features/dashboard.js`, `handleImportTodo()` | el ítem del ⚙, su `<input type="file">`, los dos modales y «Recargar ahora» |
+
+**El censo decide de nuevo, al importar.** Que una clave venga en el archivo no la habilita: pasa por `entradaDe()` del
+MISMO `CENSO`. Si no está en el censo, si su fila no entra, si es de clase 5 (secreto) o si es de otro usuario
+(`esDelUsuario` y `uidDelValor`, exportadas de `copia-completa.js`), no va al plan y queda nombrada en el modal («Lo que no
+entra»). Un archivo editado a mano no puede meter un token ni una clave inventada. Y antes de escribir, **una segunda red**
+(`segundaRed`): si el plan trae una clave que el censo no deja entrar, no se aplica NADA.
+
+**Qué hace con una clave que YA está** (la propiedad `fusion` de cada fila del `CENSO`; si la clave falta, se escribe tal
+cual viene, siempre). La forma de cada valor se leyó en su módulo dueño; la que no encajaba en su regla fue a «la tuya gana»:
+
+| `fusion` | filas | qué hace si la clave ya está y es distinta |
+|---|---|---|
+| `conjunto` | los seis `<lsKey>` de ocultos, `discover_escuchados`, los tres `listened_*_dismissed`, `versions_dismissed`, `genre_hidden_tags`, `discoverart_elegidos`, `newrel_elegidos` (arrays JSON de cadenas) | une: primero lo tuyo en su orden, después lo del archivo que falte |
+| `mapa` | los seis `<lsKey>_uris` y `discover_escuchados_uris` (objeto clave → cadena) | agrega las claves que faltan; si una está en los dos con otro valor, gana la tuya |
+| `registro` | `likes_borrados_log_v1` (tope 20), `ocultos_incidencias_v1` (tope 100), `versions_supervivientes_perdidas_v1` y `versions_dry_run_log_v1` (**sin tope**: el suyo es un `20` literal dentro de `features/versions.js`, que la 79 no tocó; lo recorta `#versions` en su próxima escritura) | une por entrada exacta, las más nuevas primero por `fecha`, con el tope del dueño. ⚠️ El tope puede dejar afuera entradas tuyas más viejas que lo que trae el archivo (es la regla del registro: quedan las N más nuevas). Una entrada sin fecha: no se puede ordenar, gana la tuya |
+| `discografia` | `discover_disco_base_v1_*` | `fusionarBases()` de `disco-base.js`, importada, **pero al revés de su comentario**: `fusionarBases(archivo, tuya)`. En el orden del comentario («a = este navegador, b = la importada») `unirItems` deja que los campos no vacíos de `b` pisen los de `a`: el archivo te cambiaría el nombre o la tapa de un lanzamiento que ya tenías. Al revés, ningún campo no vacío tuyo cambia (uno vacío —`null`, `''`, `[]`, `0`— sí puede llenarse). La última entrada del historial se rehace con los números del archivo. Si el archivo no trae ningún id nuevo, no se escribe. Una base que no pasa `esBaseValida()` no entra |
+| `la tuya gana` | todo lo demás: el id de cada playlist espejo (`fonoteca_hidden_pl_*`: un id guardado nunca se pisa, v=287), las preferencias, el historial, el mapa, las áreas, las etiquetas, la base de colores, `ocultos_sin_uri_v1` (es clave → **objeto**, no clave → cadena), `fonoteca_crash_log_v1` (su tope es POR TIPO, `CUPOS` de `crash-guard.js`: aplicarlo sería copiar la poda), `discoverart_fallos`/`newrel_fallos` (objetos, no listas), los dos informes y la marca de las etiquetas | nada |
+
+**Dos reglas más, que salieron de leer el código:**
+
+- 🔴 **Las claves con `prefKey()` no se escriben a ciegas.** `migratePrefKey(base)` BORRA la pelada cuando la prefijada existe.
+  Por fila: si tu navegador no tiene ninguna de las dos, las del archivo van tal cual (la app las migra como en el navegador de
+  origen); si tiene alguna, se une lo que la app LEERÍA de cada lado (la prefijada o, si no hay, la pelada: la regla de
+  `configDe`) y va a la **prefijada**. La pelada tuya no se toca (la app la tira cuando migra, y su contenido ya está adentro).
+- **`generos_artista_migrado_v1` no entra si tu navegador tiene el blob viejo (`lastfm_artist_tags_cache`) sin la marca**: la
+  marca impediría migrar TU blob a IndexedDB (la migración la decide la marca).
+
+**Los rechazos** (plan vacío, 0 escrituras, y el motivo en un modal SIN «Importar»; «roto» va en un toast rojo):
+
+1. **otro usuario**: el `spotifyUserId` del archivo no es el uid de la sesión (o el archivo no dice de quién es). No hay
+   «importar la copia de otro»;
+2. **identidad sin confirmar**: `motivoSinImportCompleto()` dice `'identidad'` (`/me` caído), no hay uid, o
+   `fonoteca_last_user_id` no es el uid (entonces `prefKey()` armaría otras claves que las del plan);
+3. **el formato**: `_format` ≠ `spotify-tools-data`; `_version` 2 → «Este archivo es de “Exportar JSON”: cárgalo con
+   “Importar JSON”.»; otra `_version`; no es JSON, o le faltan `navegador`/`_censo` (roto).
+
+Y uno del enchufe: **si leer el estado actual falla en alguna clave, no se carga nada** (una clave que no se pudo leer
+parecería «que falta» y se escribiría encima).
+
+**La guarda del owner, la de siempre** (`motivoSinImportCompleto()`, importada con un `import()` dinámico: un import estático
+haría el ciclo `api.js → history-data.js → api.js`). Con el owner, de las `local_<uid>_history_*` solo entra
+`local_<uid>_history_days`, y solo si falta (las otras siete pisarían los JSON horneados). Con un amigo, las del archivo
+entran **en bloque y solo si no tiene ninguna** `local_<uid>_history_*`: dos historiales no se mezclan.
+
+**Los campos del v2 (`likes`, `tags`, `_config`) no se usan.** Los me gusta se vuelven a bajar de Spotify con un botón (una
+caché vieja pisando una nueva sería justo lo que no se quiere); las etiquetas ya vienen enteras, por fuente, en
+`navegador.idb` (`generos_artista_v1_…`); `_config` son siete preferencias que ya vienen en `navegador.localStorage`, y van
+con la misma regla que el resto (el `importAllData` de hoy las pisa con `overwrite: true`, y por eso no se llama).
+**El export v2, el import v2 y sus botones no se tocaron.**
+
+**Escribir** (`aplicarPlan`): la segunda red sobre el plan confirmado; después **vuelve a leer y a decidir** con la misma
+copia, uid y motivo (si entre el modal y el clic otra pestaña cambió algo, se une con lo de ahora); **todas** las de IndexedDB
+en **una** `idbSetVarios` (una transacción: si tira, 0 escrituras en `localStorage` y toast rojo); y `localStorage`, releído y
+redecidido **sin un `await` entre leer y escribir**, clave por clave: si una tira (cuota), se para ahí, se nombran las que
+faltaron, y lo ya escrito fueron solo agregados y uniones. ⚠️ Entre leer IndexedDB y escribirla hay unos milisegundos (son dos
+transacciones: `idb.js` no tiene un «leer y escribir» en una): si justo ahí otra parte de la app escribe una clave del plan, la
+del plan gana.
+
+**Las peticiones.** El import en sí hace **0**: el uid sale del memo de `getCurrentUserId()` (`_cachedUserId`). ⚠️ **Pero si en
+esa carga nadie preguntó todavía quién sos** (un perfil sin me gusta: el Dashboard no pregunta), `motivoSinImportCompleto()`
+pide **un `/me`**: es la confirmación de identidad sin la cual no se escribe nada (medido en el banco, caso D).
+
+🔴 **Los ocultos agregados suben a Spotify DESPUÉS, la próxima vez que se abre su vista**: `sync()` ve claves locales que la
+playlist no tiene y las sube (`pushMissing`). Es una escritura en la cuenta, diferida, y es lo que se quiere (restaurarlos):
+el modal lo dice («Los ocultos que se agreguen se subirán a sus listas de Spotify la próxima vez que abras su vista.»). Suben
+a la playlist cuyo id tiene TU navegador (el del archivo no pisa el tuyo). ⚠️ **Y el aviso miente un poco**: como su uri
+viajó en `<lsKey>_uris`, `sync()` las cuenta como «perdidas» (la uri ya estaba guardada al empezar) y no como «nunca
+subieron»: toast «3 ocultos habían desaparecido de la playlist. Los he vuelto a subir.» y una línea `resubida` en
+`ocultos_incidencias_v1` (medido en el banco, caso C2). No se tocó (`hidden-sync.js` es de otra tanda; anotado en
+`PENDIENTES.md`).
+
+⚠️ **Sin recarga automática, pero hace falta recargar**: los almacenes de ocultos (y `discover_escuchados`) leen su conjunto
+una vez por carga y lo guardan ENTERO cuando cambia. Si en esa carga ya abriste `#skips`, importás y, sin recargar, ocultás
+algo ahí, el almacén guarda su conjunto VIEJO más el nuevo y lo importado de ese almacén se pierde (lo que ya tenías, no).
+Por eso el modal final ofrece «Recargar ahora» y lo explica.
+
+**El tiempo** (SEMBRADO: el banco con `XQ="&tamano=ian&solo=ab"`, datos INVENTADOS del tamaño de los de Ian, archivo de
+19.939.678 bytes, en un perfil VACÍO): reloj de pared **474 ms** para leer el archivo, leer el navegador y decidir, y **671 ms**
+para aplicar 5.189 claves (una transacción de IndexedDB y los `setItem`). Reloj virtual: 270 y 3.134 ms (el virtual cuenta las
+vueltas de espera del banco, no el trabajo).
+
+Guardas: `tests/copia-importar.test.mjs` (87 asserts: el invariante por fuerza bruta —22.500 casos, semilla `0x79a79`—, la
+vuelta entera A → B con el export real de la v=333, cada `fusion` con un caso que une y uno que conserva, los rechazos, el owner
+y el bloque del amigo, el archivo editado, la segunda red, IndexedDB que falla, la cuota, 0 `fetch`, la lectura estática; rojo
+contra v=333, y con un `planDeImport` que pisa, el invariante en rojo) y el banco `tests/banco/copia-importar.html` +
+`-caso.html` + `-datos.mjs` (en `prepush`, el vigésimo séptimo: A → B con el mismo sha256 por clave y 0 peticiones; C con estado
+propio contra un oráculo; C2, lo agregado sube a la playlist simulada de C; D otro uid; E el owner; F un secreto en el
+archivo; G «Cancelar»).

@@ -1,6 +1,8 @@
 // Doble de `src/js/idb.js` para `tests/copia-completa.test.mjs` (v=333). El estado va en `globalThis.__IDB_COPIA`:
 // `kv` (Map clave → valor), `escrituras` (cada `put`/`delete`, en orden) y `fallar` (claves cuya LECTURA tira, para
 // probar `_errores`; con alguna, `idbEntriesByPrefix` tira también, como un cursor que se rompe a mitad).
+// v=334 (la 79, «Importar todo»): `fallarEscritura` = true hace que `idbSetVarios` tire ANTES de escribir nada
+// (una transacción que aborta: todo o nada). Sin la bandera, todo como en la 78.
 
 function e() {
   const d = (globalThis.__IDB_COPIA ??= {});
@@ -14,7 +16,10 @@ const escribir = (k, v) => { e().escrituras.push(['put', k]); e().kv.set(k, stru
 
 export async function idbGet(key) { return leer(key); }
 export async function idbSet(key, value) { escribir(key, value); }
-export async function idbSetVarios(pares) { for (const [k, v] of pares) escribir(k, v); }
+export async function idbSetVarios(pares) {
+  if (e().fallarEscritura) throw new Error('doble: la transacción abortó');
+  for (const [k, v] of pares) escribir(k, v);
+}
 export async function idbDel(key) { e().escrituras.push(['del', key]); e().kv.delete(key); }
 export async function idbGetCached(key) {
   const w = leer(key);

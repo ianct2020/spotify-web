@@ -55,7 +55,7 @@
 // Cada texto tiene un ancho máximo y se recorta con «…» MIDIENDO con la letra de verdad, nunca contando
 // caracteres: «WWWW» y «iiii» no miden lo mismo. La medida entra inyectada.
 
-import { coverVariant } from './album-key.js?v=333';
+import { coverVariant } from './album-key.js?v=334';
 
 export const ANCHO = 1080;
 export const ALTO = 1350;

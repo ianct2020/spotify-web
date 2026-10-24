@@ -1,0 +1,221 @@
+<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>banco copia-importar — un caso</title>
+<link rel="stylesheet" href="/css/theme.css">
+<link rel="stylesheet" href="/css/components.css">
+<link rel="stylesheet" href="/css/main.css">
+<style>*,*::before,*::after{animation:none!important;transition:none!important}</style>
+</head><body>
+<div id="app"></div>
+<script type="module">
+// ── Un caso del banco `copia-importar.html` (v=334, tanda 79) ───────────────
+//
+// La app ENTERA (`/js/app.js`) contra la Spotify simulada, en un perfil SEMBRADO con datos INVENTADOS
+// (`copia-importar-datos.mjs`). Cada caso, salvo `C2`, VACÍA antes el almacenamiento del origen del banco: es el perfil
+// temporal de Chrome del banco, y así cada caso es un perfil distinto.
+//
+//   ?caso=A    el perfil A con todo; ⚙ → «Exportar todo», interceptado; el sha256 de cada clave que entra
+//   ?caso=B    vacío, el mismo uid: ⚙ → «Importar todo» → «Importar»; el sha256 de cada clave que entra
+//   ?caso=C1   estado PROPIO; abre #skips ANTES de importar (no sube nada); importa; cada clave contra el oráculo
+//   ?caso=C2   la carga siguiente de C (sin vaciar): abre #skips y lo importado sube a la playlist simulada
+//   ?caso=D    otro uid: el modal no ofrece «Importar» y el navegador queda igual
+//   ?caso=E    el owner: de `local_<owner>_history_*` solo entra `days`
+//   ?caso=F    el archivo con un secreto, la key de Last.fm y una clave inventadas: no se escriben y se nombran
+//   ?caso=G    «Cancelar»: el navegador queda igual
+//   &tamano=ian  A con el tamaño de los datos de Ian (INVENTADO): mide el import (no está en `prepush`)
+
+import { instalarRedSimulada, esperarReal, anclar } from '/banco/simulado.mjs';
+import * as D from '/banco/copia-importar-datos.mjs';
+
+const q = new URLSearchParams(location.search);
+const CASO = q.get('caso');
+const IAN = q.get('tamano') === 'ian';
+const madre = parent;
+const afirmar = (c, msg) => { if (!c) throw new Error(`BANCO copia-importar [${CASO}]: ${msg}`); };
+const $ = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+const rechazos = [];
+window.addEventListener('unhandledrejection', (e) => rechazos.push(String(e.reason?.message || e.reason)));
+const infos = [];
+const infoOriginal = console.info.bind(console);
+console.info = (...a) => { infos.push(a.map(String).join(' ')); infoOriginal(...a); };
+const datos = { caso: CASO };
+const vueltasLargas = IAN ? 400000 : 40000;
+
+async function foto(C) {
+  const idb = (await anclar(D.leerIdb(), { vueltas: vueltasLargas })).sort((a, b) => (a[0] < b[0] ? -1 : 1));
+  const ls = D.leerLs();
+  const texto = C.serializar({ idb, ls });
+  return { sha: await anclar(D.sha(texto)), idb: new Map(idb.map(([k, v]) => [k, C.serializar(v)])), idbCrudo: new Map(idb), ls: new Map(ls) };
+}
+// El sha256 de cada clave del usuario que el censo deja entrar.
+async function shasQueEntran(C, f, uid) {
+  const del = (c, k) => (c.porUsuario === 'pref' ? (k === c.clave || k === `${c.clave}__${uid}`) : c.porUsuario === 'clave' ? k.startsWith(c.deUsuario(uid)) : true);
+  const out = {};
+  for (const [donde, m] of [['idb', f.idb], ['ls', f.ls]]) {
+    for (const [k, v] of m) { const c = C.entradaDe(donde, k); if (c?.entra && del(c, k)) out[`${donde}:${k}`] = await anclar(D.sha(v)); }
+  }
+  return out;
+}
+
+// ⚙ → «Importar todo» → el archivo → el modal. `accion`: 'importar' | 'cancelar' | 'cerrar' (un rechazo).
+async function importar(texto, accion) {
+  const input = $('#dash-import-todo-input');
+  let abrioSelector = false;
+  input.click = () => { abrioSelector = true; };   // en headless no hay selector de archivos: el archivo se pone a mano
+  const item = $('[data-act="import-todo"]');
+  datos.item = item.textContent.replace(/\s+/g, ' ').trim();
+  datos.itemDespuesDeExportar = item.previousElementSibling?.dataset.act === 'export-todo';
+  let fetches = 0, contando = true;
+  const fetchApp = window.fetch;
+  window.fetch = (...a) => { if (contando) fetches++; return fetchApp(...a); };
+  const recursos = () => performance.getEntriesByType('resource').filter((e) => !e.name.endsWith('/banco/esperar.mjs')).length;
+  const llamadas0 = window.__sim.reg.llamadas.length, externas0 = window.__sim.reg.externas.length, recursos0 = recursos();
+  const t0 = performance.now();
+  $('#dash-cog-btn').click();
+  item.click();
+  afirmar(abrioSelector, 'el ítem «Importar todo» abre el selector de archivos');
+  const dt = new DataTransfer();
+  dt.items.add(new File([texto], 'fonoteca-copia-2026-10-23.json', { type: 'application/json' }));
+  input.files = dt.files;
+  input.dispatchEvent(new Event('change'));
+  const modal = await esperarReal(() => $$('.modal-alert').find((m) => /Importar todo|No se puede cargar/.test(m.querySelector('h2')?.textContent || '')), { que: 'el modal de «Importar todo»', vueltas: vueltasLargas });
+  const t1 = performance.now();
+  const r = { titulo: modal.querySelector('h2').textContent, texto: modal.querySelector('.modal-alert-body').textContent.replace(/\s+/g, ' ').trim(), botones: $$('button', modal).map((b) => b.textContent.trim()), fuera: $$('.import-todo-fuera li code', modal).map((x) => x.textContent) };
+  if (accion === 'cancelar') { $('#modal-cancel', modal).click(); await esperarReal(() => !modal.isConnected, { que: 'que se cierre el modal' }); }
+  else if (accion === 'cerrar') { $('#modal-confirm', modal).click(); await esperarReal(() => !modal.isConnected, { que: 'que se cierre el modal' }); }
+  else {
+    const t2 = performance.now();
+    $('#modal-confirm', modal).click();
+    const hecho = await esperarReal(() => $$('.modal-alert').find((m) => /Copia importada/.test(m.querySelector('h2')?.textContent || '')), { que: 'el modal de «Copia importada»', vueltas: vueltasLargas });
+    const t3 = performance.now();
+    r.hecho = { texto: hecho.querySelector('.modal-alert-body').textContent.replace(/\s+/g, ' ').trim(), botones: $$('button', hecho).map((b) => b.textContent.trim()) };
+    r.ms = { leerYDecidir: Math.round(t1 - t0), aplicar: Math.round(t3 - t2) };
+    $('#modal-cancel', hecho).click();   // «Cerrar»: «Recargar ahora» recargaría el iframe
+    await esperarReal(() => !hecho.isConnected, { que: 'que se cierre el modal de «Copia importada»' });
+  }
+  // Unas vueltas más: lo que la app hiciera DESPUÉS también se cuenta.
+  let v = 0; await esperarReal(() => ++v > 30, { que: 'que se asiente' });
+  contando = false;
+  window.fetch = fetchApp;
+  r.peticiones = { fetch: fetches, spotify: window.__sim.reg.llamadas.length - llamadas0, externas: window.__sim.reg.externas.length - externas0, recursos: recursos() - recursos0 };
+  r.rutas = window.__sim.reg.llamadas.slice(llamadas0).map((x) => `${x.metodo} ${x.ruta}`);
+  return r;
+}
+
+const esperarSyncSkips = (desde) => esperarReal(() => infos.slice(desde).some((m) => /^\[ocultos:skips\] \d+ ocultos \(/.test(m)), { que: 'que el almacén de #skips termine su sync()', vueltas: 20000 });
+
+try {
+  const C = await import('/js/util/copia-completa.js');
+  const estado = madre.__estadoImport;
+  const uid = CASO === 'D' ? D.OTRO : CASO === 'E' ? D.OWNER : D.UID;
+  if (CASO !== 'C2') { localStorage.clear(); await anclar(D.vaciarIdb()); }
+  const sim = instalarRedSimulada();
+  window.__sim = sim;
+  D.montarSpotify(sim, estado, uid);
+  localStorage.setItem('fonoteca_last_user_id', uid);
+  localStorage.setItem('fonoteca_perfil_v1', JSON.stringify({ id: uid, display_name: 'Banco' }));
+  // E: el owner. El banco no carga ni un dato horneado de Ian: lo de `/data/` del propio servidor contesta 404.
+  if (CASO === 'E') {
+    const conSim = window.fetch;
+    datos.dataBloqueadas = 0;
+    window.fetch = (u, o) => { if (new URL(typeof u === 'string' ? u : u.url, location.href).pathname.startsWith('/data/')) { datos.dataBloqueadas++; return Promise.resolve(new Response('{}', { status: 404 })); } return conSim(u, o); };
+  }
+
+  if (CASO === 'A') {
+    const { idb, ls } = D.perfilA(C, { ian: IAN });
+    for (const [k, v] of ls) localStorage.setItem(k, v);
+    await anclar(D.sembrarIdb(idb), { vueltas: vueltasLargas });
+    location.hash = '#dashboard';
+    await import('/js/app.js');
+    await esperarReal(() => $('#dash-cog-btn') && $('[data-act="export-todo"]'), { que: 'que #dashboard pinte su ⚙', vueltas: 8000 });
+    const antes = await foto(C);
+    // La descarga, interceptada (no llega al disco).
+    const blobs = new Map(); let descarga = null;
+    const crearURL = URL.createObjectURL.bind(URL);
+    URL.createObjectURL = (b) => { const u = crearURL(b); blobs.set(u, b); return u; };
+    const clickOriginal = HTMLAnchorElement.prototype.click;
+    HTMLAnchorElement.prototype.click = function () { if (this.download) descarga = { nombre: this.download, blob: blobs.get(this.href) }; else clickOriginal.call(this); };
+    $('#dash-cog-btn').click();
+    $('[data-act="export-todo"]').click();
+    await esperarReal(() => descarga, { que: 'la descarga de «Exportar todo»', vueltas: vueltasLargas });
+    const texto = await anclar(descarga.blob.text(), { vueltas: vueltasLargas });
+    datos.bytes = descarga.blob.size;
+    datos.shas = await shasQueEntran(C, antes, D.UID);
+    datos.claves = Object.keys(datos.shas).length;
+    datos.texto = texto;
+  } else {
+    if (CASO === 'C1') {
+      const { idb, ls } = D.perfilC();
+      for (const [k, v] of ls) localStorage.setItem(k, v);
+      await anclar(D.sembrarIdb(idb));
+    }
+    if (CASO === 'D' || CASO === 'G') {
+      localStorage.setItem(`versions_dismissed__${uid}`, JSON.stringify(['propio de ' + CASO]));
+      await anclar(D.sembrarIdb([['mapa_area_v1_area-1', D.envolver({ propio: CASO })]]));
+    }
+    const vista = CASO === 'C1' || CASO === 'C2' ? '#skips' : '#dashboard';
+    const posts0 = estado.posts.length;
+    location.hash = vista;
+    await import('/js/app.js');
+    if (vista === '#skips') {
+      await esperarSyncSkips(0);
+      let v = 0; await esperarReal(() => ++v > 40, { que: 'que se asiente #skips' });
+      datos.postsAlAbrir = estado.posts.slice(posts0);
+      datos.toasts = $$('.toast').map((t) => t.textContent.replace(/[×✕]\s*$/, '').trim());
+      if (CASO === 'C2') throw { fin: true };
+      location.hash = '#dashboard';
+    }
+    await esperarReal(() => $('#dash-cog-btn') && $('[data-act="export-todo"]'), { que: 'que #dashboard pinte su ⚙', vueltas: 8000 });
+    afirmar($('[data-act="import-todo"]'), 'el ⚙ del Dashboard no tiene «Importar todo»');
+
+    let texto = madre.__textoA;
+    if (CASO === 'E') texto = texto.split(D.UID).join(D.OWNER);
+    if (CASO === 'F') {
+      const c = JSON.parse(texto);
+      Object.assign(c.navegador.localStorage, { sp_refresh_token: 'CANARIO-F-REFRESH-0123', [`lastfm_api_key__${D.UID}`]: 'CANARIO-F-LASTFM-4567', t79_banco_inventada: 'x' });
+      texto = JSON.stringify(c);
+    }
+    // El memo de `getCurrentUserId()`: lo llena la primera vista que pregunta quién sos (en un perfil vacío, el Dashboard
+    // no pregunta). Se llena ANTES de contar, salvo en D, que mide el import en frío: ahí la guarda pide su `/me`.
+    if (CASO !== 'D') { const api = await import('/js/api.js'); await anclar(api.getCurrentUserId()); }
+    const antes = await foto(C);
+    const accion = CASO === 'D' ? 'cerrar' : CASO === 'G' ? 'cancelar' : 'importar';
+    datos.import = await importar(texto, accion);
+    const despues = await foto(C);
+    datos.shaAntes = antes.sha.slice(0, 16); datos.shaDespues = despues.sha.slice(0, 16);
+    datos.igual = antes.sha === despues.sha;
+
+    if (CASO === 'B' || CASO === 'F' || CASO === 'E') datos.shas = await shasQueEntran(C, despues, uid);
+    if (CASO === 'F') {
+      datos.f = { refresh: localStorage.getItem('sp_refresh_token'), lastfm: localStorage.getItem(`lastfm_api_key__${D.UID}`), inventada: localStorage.getItem('t79_banco_inventada') };
+    }
+    if (CASO === 'E') {
+      datos.e = { local: [...despues.idb.keys()].filter((k) => k.startsWith('local_')) };
+    }
+    if (CASO === 'C1') {
+      // 🔴 El invariante, clave por clave: toda clave de antes sigue; cada una contiene lo que tenía.
+      const sinTocar = [], perdidas = [];
+      for (const [donde, a, d] of [['idb', antes.idb, despues.idb], ['ls', antes.ls, despues.ls]]) {
+        for (const [k, v] of a) { if (!d.has(k)) perdidas.push(`${donde}:${k}`); else if (d.get(k) === v) sinTocar.push(`${donde}:${k}`); }
+      }
+      datos.c = { antes: antes.idb.size + antes.ls.size, despues: despues.idb.size + despues.ls.size, perdidas, sinTocar: sinTocar.length };
+      const lsA = JSON.parse(madre.__textoA).navegador.localStorage;
+      const orac = D.oraculoC(Object.entries(lsA), D.perfilC().ls);
+      datos.c.oraculo = Object.entries(orac).map(([k, v]) => ({ k, ok: despues.ls.get(k) === v, antes: antes.ls.get(k) === v }));
+      const base = despues.idbCrudo.get(`discover_disco_base_v1_${D.id22(1, 'a')}`);
+      datos.c.disco = { ids: base?.value.items.map((x) => x.id).sort(), nombre1: base?.value.items.find((x) => x.id === D.id22(101, 'r'))?.name, cortada: base?.value.cortada, storedAt: base?.storedAt, ultimo: base?.value.historial.at(-1) };
+      datos.c.area = despues.idbCrudo.get('mapa_area_v1_area-1')?.value;
+      datos.c.local = [...despues.idb.keys()].filter((k) => k.startsWith('local_'));
+      datos.c.marca = despues.idb.has('generos_artista_migrado_v1');
+      datos.c.agregadas = [...despues.ls.keys()].filter((k) => !antes.ls.has(k)).length + [...despues.idb.keys()].filter((k) => !antes.idb.has(k)).length;
+    }
+  }
+  throw { fin: true };
+} catch (e) {
+  datos.rechazos = rechazos;
+  datos.reloj = Math.round(performance.now());
+  if (e?.fin) madre.postMessage({ banco: 'copia-importar', ok: true, datos }, '*');
+  else madre.postMessage({ banco: 'copia-importar', ok: false, error: String(e?.message || e), datos }, '*');
+  document.documentElement.setAttribute('data-caso', e?.fin ? 'ok' : 'error ' + String(e?.message || e));
+}
+</script>
+</body></html>

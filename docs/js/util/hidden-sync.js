@@ -26,12 +26,13 @@ import {
   createPlaylist,
   getCurrentUserId,
   spotifyFetch,
-} from '../api.js?v=333';
-import { prefKey, migratePrefKey } from '../storage.js?v=333';
-import { idbGetCached, idbSetCached, idbDel } from '../idb.js?v=333';
-import { invalidateOwnPlaylists } from './playlist-add.js?v=333';
-import { OCULTOS_ITEMS_PREFIX } from './ocultos-items-clave.js?v=333';
-import { showToast } from '../ui/toast.js?v=333';
+} from '../api.js?v=334';
+import { prefKey, migratePrefKey } from '../storage.js?v=334';
+import { INCIDENCIAS_OCULTOS_MAX } from './topes-registros.js?v=334';
+import { idbGetCached, idbSetCached, idbDel } from '../idb.js?v=334';
+import { invalidateOwnPlaylists } from './playlist-add.js?v=334';
+import { OCULTOS_ITEMS_PREFIX } from './ocultos-items-clave.js?v=334';
+import { showToast } from '../ui/toast.js?v=334';
 
 const PLAYLIST_DESC = 'Lista interna de Fonoteca: lo que ocultaste en esta vista. Si la borras, se pierden los ocultos.';
 
@@ -114,7 +115,8 @@ function saveUris(lsKey, map) {
 //
 // Se guardan las últimas 100 incidencias, las más nuevas primero.
 const LOG_KEY = 'ocultos_incidencias_v1';
-const LOG_MAX = 100;
+// El tope (100) vive en `util/topes-registros.js` desde v=334: «Importar todo» lo usa también, importado.
+const LOG_MAX = INCIDENCIAS_OCULTOS_MAX;
 
 function anotarIncidencia(entrada) {
   try {

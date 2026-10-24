@@ -28,6 +28,7 @@ import {
   spotifyFetch,
 } from '../api.js';
 import { prefKey, migratePrefKey } from '../storage.js';
+import { INCIDENCIAS_OCULTOS_MAX } from './topes-registros.js';
 import { idbGetCached, idbSetCached, idbDel } from '../idb.js';
 import { invalidateOwnPlaylists } from './playlist-add.js';
 import { OCULTOS_ITEMS_PREFIX } from './ocultos-items-clave.js';
@@ -114,7 +115,8 @@ function saveUris(lsKey, map) {
 //
 // Se guardan las últimas 100 incidencias, las más nuevas primero.
 const LOG_KEY = 'ocultos_incidencias_v1';
-const LOG_MAX = 100;
+// El tope (100) vive en `util/topes-registros.js` desde v=334: «Importar todo» lo usa también, importado.
+const LOG_MAX = INCIDENCIAS_OCULTOS_MAX;
 
 function anotarIncidencia(entrada) {
   try {

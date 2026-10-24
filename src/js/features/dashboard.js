@@ -1,5 +1,5 @@
-import { getAllLikedTracks, getLikesPartialInfo, exportAllData, exportarCopiaCompleta, importAllData, getCurrentUserId, syncLikesIncremental, getLikesCacheTimestamp, getBestAvailableLikes, getAllPlaylistItems } from '../api.js';
-import { showProgress, hideProgress, alertModal, escapeHtml, pageHeader } from '../ui/components.js';
+import { getAllLikedTracks, getLikesPartialInfo, exportAllData, exportarCopiaCompleta, importarCopiaCompleta, aplicarPlan, importAllData, getCurrentUserId, syncLikesIncremental, getLikesCacheTimestamp, getBestAvailableLikes, getAllPlaylistItems } from '../api.js';
+import { showProgress, hideProgress, alertModal, infoModal, escapeHtml, pageHeader } from '../ui/components.js';
 import { openModal, closeTop } from '../ui/modal-stack.js';
 import { showToast } from '../ui/toast.js';
 import { openListenedAlbumsPicker, getListenedPlaylist } from './listened-shared.js';
@@ -27,6 +27,7 @@ import { activateMarquee, marqueeSpan } from '../ui/marquee.js';
 import { isJunkTrack } from '../util/junk.js';
 import { AVISO_MEZCLA } from '../util/corte-saltos.js';
 import { nombreArchivo } from '../util/copia-completa.js';
+import { resumenEnPalabras } from '../util/copia-importar.js';
 
 let charts = [];
 let _loadController = null;
@@ -88,6 +89,7 @@ export function render(container) {
       <div id="dash-cog-menu" class="dash-cog-menu" role="menu" hidden>
         <button class="dash-cog-item" data-act="export-json" role="menuitem">Exportar JSON <span class="dash-cog-hint">likes + tags</span></button>
         <button class="dash-cog-item" data-act="export-todo" role="menuitem">Exportar todo <span class="dash-cog-hint">copia de seguridad</span></button>
+        <button class="dash-cog-item" data-act="import-todo" role="menuitem">Importar todo <span class="dash-cog-hint">cargar una copia</span></button>
         <button class="dash-cog-item" data-act="export-csv" role="menuitem">Exportar CSV <span class="dash-cog-hint">solo likes, plano</span></button>
         <button class="dash-cog-item" data-act="import" role="menuitem">Importar JSON</button>
         <button class="dash-cog-item" data-act="refresh" role="menuitem">Actualizar datos</button>
@@ -96,6 +98,7 @@ export function render(container) {
       </div>
     </div>
     <input type="file" id="dash-import-all-input" accept=".json,application/json" style="display:none">
+    <input type="file" id="dash-import-todo-input" accept=".json,application/json" style="display:none">
   `;
   container.innerHTML = `
     ${pageHeader({ title: 'Dashboard', right: headerRight })}
@@ -129,12 +132,14 @@ export function render(container) {
     if (e.key === 'Escape' && !cogMenu.hidden) closeCog();
   });
   const importInput = document.getElementById('dash-import-all-input');
+  const importTodoInput = document.getElementById('dash-import-todo-input');
   cogMenu.querySelectorAll('.dash-cog-item').forEach(item => {
     item.onclick = () => {
       const act = item.dataset.act;
       closeCog();
       if (act === 'export-json') handleExportAll();
       else if (act === 'export-todo') handleExportTodo();
+      else if (act === 'import-todo') importTodoInput.click();
       else if (act === 'export-csv') handleExportCsv();
       else if (act === 'import') importInput.click();
       else if (act === 'refresh') handleRefresh();
@@ -143,6 +148,7 @@ export function render(container) {
     };
   });
   importInput.onchange = handleImportAll;
+  importTodoInput.onchange = handleImportTodo;
 
   document.addEventListener('themechange', onThemeChange);
 
@@ -506,6 +512,64 @@ async function handleExportTodo() {
   } else {
     showToast(`Copia descargada: ${r.copia.likes.items.length.toLocaleString('es-ES')} me gusta y ${(Object.keys(r.copia.navegador.idb).length + Object.keys(r.copia.navegador.localStorage).length).toLocaleString('es-ES')} claves más del navegador, ${mb}.`, 'success');
   }
+}
+
+// «Importar todo» (v=334): vuelve a cargar una copia de «Exportar todo» (`util/copia-importar.js`). Solo agrega lo que
+// falta y une las listas; nunca borra ni cambia lo que ya hay. Nada se escribe hasta «Importar», y «Cancelar» no escribe
+// nada. No recarga sola: los módulos guardan estado en memoria y la recarga la decide el usuario («Recargar ahora»).
+async function handleImportTodo(e) {
+  const file = e.target.files?.[0];
+  e.target.value = '';
+  if (!file) return;
+  let plan;
+  try {
+    ({ plan } = await importarCopiaCompleta(await file.text()));
+  } catch (err) {
+    console.warn('[import-todo]', err);
+    showToast(`No se ha podido leer la copia: ${err?.message || err}`, 'error');
+    return;
+  }
+  if (plan.rechazo) {
+    if (plan.rechazo.motivo === 'roto') { showToast(plan.rechazo.texto, 'error'); return; }
+    await infoModal('No se puede cargar esta copia', `<p class="import-todo-motivo">${escapeHtml(plan.rechazo.texto)}</p><p>No se ha escrito nada.</p>`, { variant: 'warning', confirmText: 'Entendido' });
+    return;
+  }
+
+  const fecha = plan.meta.exportadoEn ? new Date(plan.meta.exportadoEn).toLocaleString('es-ES', { dateStyle: 'long', timeStyle: 'short' }) : 'sin fecha';
+  const clases = (resumen) => `<ul class="import-todo-clases">${resumenEnPalabras(resumen).map(l => `<li><strong>${escapeHtml(l.titulo)}</strong>: ${escapeHtml(l.texto)}.</li>`).join('')}</ul>`;
+  const fuera = plan.resumen.claves.noEntran;
+  const ok = await alertModal('Importar todo', `
+    <p>Copia del <strong>${escapeHtml(fecha)}</strong>, del usuario <strong>${escapeHtml(plan.meta.usuario || '')}</strong>.</p>
+    <p>Solo se agrega lo que te falta y se unen las listas: no se borra ni se cambia nada de lo que ya tienes.</p>
+    ${clases(plan.resumen)}
+    <p class="import-todo-ocultos">Los ocultos que se agreguen se subirán a sus listas de Spotify la próxima vez que abras su vista.</p>
+    ${fuera.length ? `<details class="import-todo-fuera"><summary>Lo que no entra (${fuera.length.toLocaleString('es-ES')})</summary><ul>${fuera.map(f => `<li><code>${escapeHtml(f.clave)}</code>: ${escapeHtml(f.motivo)}</li>`).join('')}</ul></details>` : ''}
+  `, { confirmText: 'Importar', cancelText: 'Cancelar', variant: 'info' });
+  if (!ok) return;
+
+  showProgress('Importando la copia…', 0, 0);
+  let r;
+  try {
+    r = await aplicarPlan(plan);
+  } catch (err) {
+    r = { ok: false, motivo: 'error', error: err?.message || String(err), idb: 0, ls: 0 };
+  }
+  hideProgress();
+  if (!r.ok) {
+    console.warn('[import-todo] no se aplicó entero:', r);
+    if (r.motivo === 'idb') showToast(`No se ha importado nada: IndexedDB no ha aceptado la escritura (${r.error}).`, 'error');
+    else if (r.motivo === 'ls') showToast(`Importación INCOMPLETA: ${r.ls.toLocaleString('es-ES')} claves de localStorage escritas y ${r.faltaron.length.toLocaleString('es-ES')} sin escribir (${r.error}). Lo que ya tenías sigue entero. Faltaron: ${r.faltaron.join(', ')}.`, 'error');
+    else if (r.motivo === 'red') showToast(`No se ha importado nada: el plan traía claves que no pueden entrar (${(r.malas || []).join(', ')}).`, 'error');
+    else showToast(`No se ha importado nada: ${r.texto || r.error || r.motivo}`, 'error');
+    return;
+  }
+  const s = r.resumen.claves;
+  const recargar = await alertModal('Copia importada', `
+    <p>Hecho: ${s.agregan.length.toLocaleString('es-ES')} ${s.agregan.length === 1 ? 'clave agregada' : 'claves agregadas'} y ${s.unen.length.toLocaleString('es-ES')} ${s.unen.length === 1 ? 'unida' : 'unidas'} con lo tuyo. No se ha borrado ni cambiado nada de lo que ya tenías.</p>
+    ${clases(r.resumen)}
+    <p>Recarga la página para que todas las vistas lo vean: hasta entonces, algunas siguen con lo de antes en memoria, y si cambias algo en ellas podrían no contar lo importado.</p>
+  `, { confirmText: 'Recargar ahora', cancelText: 'Cerrar', variant: 'info' });
+  if (recargar) location.reload();
 }
 
 async function handleImportAll(e) {
