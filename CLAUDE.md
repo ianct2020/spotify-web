@@ -5058,6 +5058,14 @@ v=336, 51). ⚠️ Una clave que FALTA va tal cual viene (50), como cualquier cl
 la regla de «si falta, se escribe tal cual» no se tocó; la recorta el dueño en su próxima escritura. `#versions` escribe
 igual (el mismo 20, ahora importado). Guarda: `tests/topes-versions.test.mjs` (rojo contra v=336: 10 de 15).
 
+**El aviso «venían de tu copia» mira las TRES vías de subida (v=338, tanda 82).** En `reconciliar()` (`hidden-sync.js`),
+`deLaCopia` es `subir.filter(k => marcadas.has(k))`, calculado después de la recuperación y antes del `pushMissing`. Hasta
+v=337 era `perdidas.filter(…)`: una clave de la copia que entraba por `porSubir` (id de pista sin su par en `_uris`, en
+`#skips`/`#zeroplays`/`#sin-clasificar`; o la que trae la unión de la otra pestaña mientras un `sync()` baja la playlist) o
+por `recuperadas` (álbum o artista sin uri que la búsqueda encuentra) **subía a la cuenta sin aviso, sin `desde-copia` y sin
+salir de la marca** (solo un `console.info`). `subir` y `perdidasDeVerdad` no cambiaron: las escrituras son las de v=337
+(constantes medidas contra `b8e48f9b`). Guarda: `tests/aviso-copia-tres-vias.test.mjs` (rojo contra v=337: 12 de 30).
+
 **La otra pestaña: la memoria de los almacenes (tanda 81) — la unión quedó PARADA.** De las 21 filas `conjunto`/`mapa`
 del `CENSO`, solo DOS dueños guardan el conjunto ENTERO desde la memoria: `createHiddenStore` (los seis almacenes de ocultos:
 `keys`, un `Set` perezoso, y `uriByKey`, un `Map`; guardan en `renombrarLocal`, `sync`, `fijarVarios`, `toggle`, `clear`,

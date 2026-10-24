@@ -1,22 +1,22 @@
-import { spotifyFetch, createPlaylist, addTracksToPlaylist, invalidatePlaylistsCache, getAllLikedTracks } from '../api.js?v=337';
-import { hasKey, setKey, hasUsername, getUsername, setUsername, getUserTopArtists, getSimilarArtists, getArtistTopTracks } from '../api/lastfm.js?v=337';
-import { showProgress, hideProgress, promptPlaylistName, escapeHtml, pageHeader } from '../ui/components.js?v=337';
-import { showToast } from '../ui/toast.js?v=337';
-import { getPreview } from '../api/preview-providers.js?v=337';
-import { togglePreview, playingKey, isPlayingAudio } from '../ui/preview-player.js?v=337';
-import { paintPlayingCard } from '../ui/track-card-row.js?v=337';
-import { openTrackCard } from './track-card.js?v=337';
-import { openAlbumCard } from './album-card.js?v=337';
-import { limpiaParaQuery, titleMatches, artistMatches } from '../util/track-match.js?v=337';
-import { vigilarRuta } from '../util/vigencia-ruta.js?v=337';
-import { recuperarUriDeArtistaKey } from '../util/hidden-recover.js?v=337';
+import { spotifyFetch, createPlaylist, addTracksToPlaylist, invalidatePlaylistsCache, getAllLikedTracks } from '../api.js?v=338';
+import { hasKey, setKey, hasUsername, getUsername, setUsername, getUserTopArtists, getSimilarArtists, getArtistTopTracks } from '../api/lastfm.js?v=338';
+import { showProgress, hideProgress, promptPlaylistName, escapeHtml, pageHeader } from '../ui/components.js?v=338';
+import { showToast } from '../ui/toast.js?v=338';
+import { getPreview } from '../api/preview-providers.js?v=338';
+import { togglePreview, playingKey, isPlayingAudio } from '../ui/preview-player.js?v=338';
+import { paintPlayingCard } from '../ui/track-card-row.js?v=338';
+import { openTrackCard } from './track-card.js?v=338';
+import { openAlbumCard } from './album-card.js?v=338';
+import { limpiaParaQuery, titleMatches, artistMatches } from '../util/track-match.js?v=338';
+import { vigilarRuta } from '../util/vigencia-ruta.js?v=338';
+import { recuperarUriDeArtistaKey } from '../util/hidden-recover.js?v=338';
 import {
   artistasOcultos as hiddenArtists,
   alternarArtistaOculto,
   artistaEstaOculto,
-} from './artistas-ocultos.js?v=337';
-import { iconoPlay, iconoPausa, iconoFicha, iconoDisco, iconoOjo, iconoOjoTachado } from '../ui/icons.js?v=337';
-import { pedirYCachear, CUALQUIER_RESPUESTA } from '../util/cache-solo-exitos.js?v=337';
+} from './artistas-ocultos.js?v=338';
+import { iconoPlay, iconoPausa, iconoFicha, iconoDisco, iconoOjo, iconoOjoTachado } from '../ui/icons.js?v=338';
+import { pedirYCachear, CUALQUIER_RESPUESTA } from '../util/cache-solo-exitos.js?v=338';
 
 // Iconos de las dos fichas. Los mismos trazos que usa la tarjeta compartida.
 // Mismos trazos que el ojo de discover-common.js (v=165), acá con 14px para

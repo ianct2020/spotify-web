@@ -26,14 +26,14 @@ import {
   createPlaylist,
   getCurrentUserId,
   spotifyFetch,
-} from '../api.js?v=337';
-import { prefKey, migratePrefKey } from '../storage.js?v=337';
-import { INCIDENCIAS_OCULTOS_MAX } from './topes-registros.js?v=337';
-import { idbGetCached, idbSetCached, idbDel } from '../idb.js?v=337';
-import { invalidateOwnPlaylists } from './playlist-add.js?v=337';
-import { OCULTOS_ITEMS_PREFIX } from './ocultos-items-clave.js?v=337';
-import { MARCA_DESDE_COPIA, leerMarca, clavesDeLaMarca, sacarDeLaMarca, dejarEnLaMarca } from './ocultos-desde-copia.js?v=337';
-import { showToast } from '../ui/toast.js?v=337';
+} from '../api.js?v=338';
+import { prefKey, migratePrefKey } from '../storage.js?v=338';
+import { INCIDENCIAS_OCULTOS_MAX } from './topes-registros.js?v=338';
+import { idbGetCached, idbSetCached, idbDel } from '../idb.js?v=338';
+import { invalidateOwnPlaylists } from './playlist-add.js?v=338';
+import { OCULTOS_ITEMS_PREFIX } from './ocultos-items-clave.js?v=338';
+import { MARCA_DESDE_COPIA, leerMarca, clavesDeLaMarca, sacarDeLaMarca, dejarEnLaMarca } from './ocultos-desde-copia.js?v=338';
+import { showToast } from '../ui/toast.js?v=338';
 
 const PLAYLIST_DESC = 'Lista interna de Fonoteca: lo que ocultaste en esta vista. Si la borras, se pierden los ocultos.';
 
@@ -1048,9 +1048,9 @@ export function createHiddenStore({ lsKey, playlistName, keyOfTrack, label, uriF
     const sinUri = onlyLocal.filter(k => !uriDe(k));
     // (v=335) De las «perdidas», las que llegaron con «Importar todo» nunca
     // estuvieron en la playlist: se avisan aparte, DESPUÉS de subirlas. Solo
-    // cambia el aviso: `subir` (abajo) sigue llevando `perdidas` entera.
+    // cambia el aviso: `subir` (abajo) sigue llevando `perdidas` entera. Las de
+    // la copia se cuentan abajo, sobre `subir` (v=338).
     const marcadas = clavesDeLaMarca(leerMarcaDesdeCopia(), lsKey);
-    const deLaCopia = perdidas.filter(k => marcadas.has(k));
     const perdidasDeVerdad = perdidas.filter(k => !marcadas.has(k));
 
     if (perdidasDeVerdad.length) {
@@ -1127,6 +1127,13 @@ export function createHiddenStore({ lsKey, playlistName, keyOfTrack, label, uriF
     }
 
     const subir = [...perdidas, ...porSubir, ...recuperadas];
+    // (v=338) Lo de la copia sale de las TRES vías, no solo de `perdidas`: una
+    // clave de la copia sin su par en `_uris` entra por `porSubir` (uri deducida
+    // del id de pista, o traída por la unión de la otra pestaña mientras este
+    // `sync()` bajaba la playlist) y una de álbum o artista sin uri, por
+    // `recuperadas`. Hasta v=337 esas subían a la cuenta en silencio. Solo cambia
+    // el aviso, la incidencia y la marca: `subir` no se toca.
+    const deLaCopia = subir.filter(k => marcadas.has(k));
     if (subir.length) await pushMissing(subir);
 
     // (v=335) `pushMissing` volvió sin tirar: las de la copia ya están en la

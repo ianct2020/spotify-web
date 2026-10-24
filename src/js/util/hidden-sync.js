@@ -1048,9 +1048,9 @@ export function createHiddenStore({ lsKey, playlistName, keyOfTrack, label, uriF
     const sinUri = onlyLocal.filter(k => !uriDe(k));
     // (v=335) De las «perdidas», las que llegaron con «Importar todo» nunca
     // estuvieron en la playlist: se avisan aparte, DESPUÉS de subirlas. Solo
-    // cambia el aviso: `subir` (abajo) sigue llevando `perdidas` entera.
+    // cambia el aviso: `subir` (abajo) sigue llevando `perdidas` entera. Las de
+    // la copia se cuentan abajo, sobre `subir` (v=338).
     const marcadas = clavesDeLaMarca(leerMarcaDesdeCopia(), lsKey);
-    const deLaCopia = perdidas.filter(k => marcadas.has(k));
     const perdidasDeVerdad = perdidas.filter(k => !marcadas.has(k));
 
     if (perdidasDeVerdad.length) {
@@ -1127,6 +1127,13 @@ export function createHiddenStore({ lsKey, playlistName, keyOfTrack, label, uriF
     }
 
     const subir = [...perdidas, ...porSubir, ...recuperadas];
+    // (v=338) Lo de la copia sale de las TRES vías, no solo de `perdidas`: una
+    // clave de la copia sin su par en `_uris` entra por `porSubir` (uri deducida
+    // del id de pista, o traída por la unión de la otra pestaña mientras este
+    // `sync()` bajaba la playlist) y una de álbum o artista sin uri, por
+    // `recuperadas`. Hasta v=337 esas subían a la cuenta en silencio. Solo cambia
+    // el aviso, la incidencia y la marca: `subir` no se toca.
+    const deLaCopia = subir.filter(k => marcadas.has(k));
     if (subir.length) await pushMissing(subir);
 
     // (v=335) `pushMissing` volvió sin tirar: las de la copia ya están en la
