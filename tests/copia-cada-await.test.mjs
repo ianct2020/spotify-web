@@ -23,6 +23,7 @@
 import { register } from 'node:module';
 import { pathToFileURL } from 'node:url';
 import { readFileSync } from 'node:fs';
+import { punto } from './dobles/puntos.mjs';
 
 console.info = () => {};
 console.warn = () => {};   // los avisos de «sin uri» de cada sync taparían los asserts
@@ -178,12 +179,14 @@ const mismo = (a, b) => J(ordenado(a)) === J(ordenado(b));
 // Cada caso con su propio `lsKey`: los almacenes de casos viejos siguen apuntados a la unión (no hay forma de darlos de
 // baja), y así leen una clave que ya no existe en vez de volver a parsear la de este.
 let nCaso = 0;
-function montar(lsKey, { playlist = [], local = [], uris = {} }) {
+function montar(lsKey, { playlist = [], local = [], uris = {}, marca = null }) {
   lsMapa.clear();
   lsMapa.set('fonoteca_last_user_id', UID);
   lsMapa.set(P(`fonoteca_hidden_pl_${lsKey}`), `pl-${lsKey}`);
   lsMapa.set(P(lsKey), J(local));
   lsMapa.set(P(`${lsKey}_uris`), J(uris));
+  // (tanda 83) Claves que ya llegaron con una copia ANTES de la operación: la marca de `ocultos-desde-copia.js`.
+  if (marca) lsMapa.set(P('ocultos_desde_copia_v1'), J({ [lsKey]: marca }));
   globalThis.__DOBLE = {
     me: UID,
     playlists: [{ id: `pl-${lsKey}`, name: `fonoteca · ocultos (${lsKey})`, owner: UID, items: playlist.map(pista) }],
@@ -275,33 +278,83 @@ function escenarios() {
   // sync() en una carga nueva: sin nada que subir, y con algo (una perdida con su uri y dos que nunca subieron).
   E.push({ nombre: 'sync() sin nada que subir', estado: { playlist: base, local: base, uris: conUris(base) }, sinCargar: true, op: (s) => s.ready(), fuera: [id(1), id(9000), id(9001), su(9)] });
   E.push({ nombre: 'sync() con cosas que subir', estado: { playlist: base.slice(0, 4), local: [...base, id(60), id(61)], uris: conUris(base) }, sinCargar: true, op: (s) => s.ready(), fuera: [id(4), id(60), id(9000), id(9001), su(9)] });
+  // (tanda 83) El camino de `recuperadas` de `reconciliar`, que la 82 no pasaba: un almacén de ÁLBUM (la clave no es un id
+  // de pista: `uriFromKey` no deduce nada) con un `recoverUri` que pasa por los puntos, y la pausa entre búsquedas
+  // (`setTimeout`) convertida en punto. La playlist tiene cuatro de los seis con uri; en local, además, TRES claves sin uri
+  // que la búsqueda encuentra (con tres, la pausa corre dos veces). `rec(2)` llegó con una copia anterior: está en la marca.
+  E.push({
+    nombre: 'sync() con recuperación (álbum)',
+    estado: { playlist: baseAlb.slice(0, 4).map(tid), local: [...baseAlb, rec(1), rec(2), rec(3)], uris: Object.fromEntries(baseAlb.map((k) => [k, uriAlb(k)])), marca: [rec(2)] },
+    sinCargar: true, crear: crearAlbum, temporizador: true, marcada: rec(2),
+    uriCopia: (k) => (azar() < 0.3 ? null : uriAlb(k)),
+    op: (s) => s.ready(),
+    fuera: [alb(4), rec(1), rec(2), rec(3), alb(9000), rec(9000)],
+  });
   return E;
 }
 
 const crear = (lsKey) => HS.createHiddenStore({ lsKey, playlistName: `fonoteca · ocultos (${lsKey})`, label: lsKey, keyOfTrack: (t) => t?.id || null, uriFromKey: (k) => (/^[A-Za-z0-9]{22}$/.test(k) ? uri(k) : null) });
 
+// (tanda 83) Las claves de álbum: `t83alb<n>` (en la playlist) y `t83rec<n>` (sin uri, se recuperan). La pista que
+// representa a la clave `k` es la de id `tid(k)` (la clave con `x` de relleno hasta 22), y `keyOfTrack` le quita el relleno.
+const alb = (n) => `t83alb${n}`;
+const rec = (n) => `t83rec${n}`;
+const uriAlb = (k) => uri(tid(k));
+const baseAlb = rango(6, alb);
+/** El `recoverUri` del almacén de álbum: siempre encuentra y confirma, y pasa por dos puntos de espera como un doble. */
+async function recuperar(k) {
+  await punto('recoverUri', 'antes');
+  const u = uriAlb(k);
+  await punto('recoverUri', 'despues');
+  return u;
+}
+const crearAlbum = (lsKey) => HS.createHiddenStore({ lsKey, playlistName: `fonoteca · ocultos (${lsKey})`, label: lsKey, keyOfTrack: (t) => (t?.id ? t.id.replace(/x+$/, '') : null), uriFromKey: () => null, recoverUri: recuperar });
+
+// (tanda 83) La pausa entre búsquedas de `reconciliar` es un `setTimeout`, no una llamada a un doble. Mientras corre el
+// escenario que lo pide, cada `setTimeout` pasa por `punto('setTimeout', 'antes')` al pedirse y por
+// `punto('setTimeout', 'despues')` al vencer, antes del callback. Va con 0 ms: el orden lo deciden los puntos.
+const setTimeoutReal = globalThis.setTimeout;
+function temporizadorConPuntos() {
+  globalThis.setTimeout = (fn, ms, ...args) => {
+    const antes = punto('setTimeout', 'antes');
+    return setTimeoutReal(async () => { await antes; await punto('setTimeout', 'despues'); fn(...args); }, 0);
+  };
+}
+const leerIncidencias = () => JSON.parse(lsMapa.get(P('ocultos_incidencias_v1')) || '[]');
+
 /** Una corrida: `inyectar` = { k, copia } o null. Devuelve lo que hace falta para afirmar. */
 async function correr(esc, inyectar) {
   const lsKey = `t82c${++nCaso}`;
   montar(lsKey, esc.estado);
-  const s = crear(lsKey);
+  const s = (esc.crear || crear)(lsKey);
   if (!esc.sinCargar) { await s.ready(); await asentar(); }
   const antes = new Set(esc.sinCargar ? esc.estado.local : s.values());
   globalThis.__FALLA_ESCRITURA = esc.falla ? { ...esc.falla, cuenta: 0 } : null;
   let n = 0, agregado = null, copia = null;
+  const porTipo = {};
+  // La uri que trae la copia para cada clave (`null`: la trae sin uri). Por defecto, la de la 82: las sin uri, 3 de 10.
+  const uriCopia = esc.uriCopia || ((k) => (!k.startsWith('t82-sin') || azar() < 0.3 ? uri(k.startsWith('t82-sin') ? tid('t82r' + k.slice(-3)) : k) : null));
   globalThis.__CONTADOR_PUNTOS = 0;
-  globalThis.__PUNTOS = async () => {
+  globalThis.__PUNTOS = async (donde) => {
     n++; globalThis.__CONTADOR_PUNTOS = n;
+    porTipo[donde] = (porTipo[donde] || 0) + 1;
     if (inyectar && n === inyectar.k) {
       copia = inyectar.copia;
-      agregado = importar(lsKey, copia, Object.fromEntries(copia.filter((k) => !k.startsWith('t82-sin') || azar() < 0.3).map((k) => [k, uri(k.startsWith('t82-sin') ? tid('t82r' + k.slice(-3)) : k)])));
+      agregado = importar(lsKey, copia, Object.fromEntries(copia.map((k) => [k, uriCopia(k)]).filter(([, v]) => v)));
       llegaCopia();
     }
   };
-  await esc.op(s);
-  await asentar();
+  if (esc.temporizador) temporizadorConPuntos();
+  try {
+    await esc.op(s);
+    await asentar();
+  } finally {
+    globalThis.setTimeout = setTimeoutReal;
+  }
   globalThis.__PUNTOS = null;
-  return { antes, final: new Set(guardadas(lsKey)), memoria: new Set(s.values()), puntos: n, agregado: new Set(agregado || []), copia: new Set(copia || []) };
+  const desdeCopia = leerIncidencias().filter((x) => x.store === lsKey && x.tipo === 'desde-copia');
+  const toastsCopia = globalThis.__DOBLE.toasts.filter((t) => /de tu copia/.test(t.message));
+  return { antes, final: new Set(guardadas(lsKey)), memoria: new Set(s.values()), puntos: n, porTipo, agregado: new Set(agregado || []), copia: new Set(copia || []), desdeCopia, toastsCopia };
 }
 
 if (toca('B')) {
@@ -311,8 +364,26 @@ if (toca('B')) {
   for (const esc of escenarios()) {
     const sin = await correr(esc, null);
     const quitadas = [...sin.antes].filter((k) => !sin.final.has(k));
-    let r1 = 0, r2 = 0, r3 = 0, rx = 0;
-    const ej = [];
+    // (tanda 83) El aviso «venían de tu copia»: la clave de la marca sale en UNA incidencia `desde-copia` (y en un toast), y
+    // ninguna clave que no esté en la marca (la de antes ∪ lo que agregó la copia inyectada) entra en una.
+    const avisoMal = (c) => {
+      if (!esc.marcada) return null;
+      const conLaMarcada = c.desdeCopia.filter((x) => x.claves.includes(esc.marcada)).length;
+      if (conLaMarcada !== 1) return `la clave de la marca sale en ${conLaMarcada} incidencias desde-copia`;
+      if (c.toastsCopia.length !== 1) return `${c.toastsCopia.length} toasts «de tu copia»`;
+      const permitidas = new Set([...esc.estado.marca, ...c.agregado]);
+      const intrusas = c.desdeCopia.flatMap((x) => x.claves).filter((k) => !permitidas.has(k));
+      if (intrusas.length) return `claves sin marca en desde-copia: ${intrusas.join(', ')}`;
+      return null;
+    };
+    if (esc.marcada) {
+      const t = sin.porTipo;
+      console.log(`  · ${esc.nombre}, puntos por tipo (sin copia): ${Object.entries(t).map(([d, v]) => `${d} ${v}`).join(' · ')}`);
+      ok((t.setTimeout || 0) >= 4 && (t.recoverUri || 0) >= 6, `${esc.nombre}: los puntos nuevos se alcanzan (setTimeout ${t.setTimeout || 0} ≥ 4, recoverUri ${t.recoverUri || 0} ≥ 6)`);
+      ok(avisoMal(sin) === null && J(sin.desdeCopia.flatMap((x) => x.claves)) === J([esc.marcada]), `${esc.nombre}: sin copia, el aviso de la copia sale una vez y solo por ${esc.marcada} (${avisoMal(sin) || J(sin.desdeCopia.flatMap((x) => x.claves))})`);
+    }
+    let r1 = 0, r2 = 0, r3 = 0, rx = 0, ra = 0;
+    const ej = [], ejA = [];
     for (let k = 1; k <= sin.puntos; k++) {
       for (let r = 0; r < REPETICIONES; r++) {
         const universo = [...new Set([...esc.fuera, ...sin.antes, ...quitadas])];
@@ -324,11 +395,14 @@ if (toca('B')) {
         if ([...c.agregado].some((a) => !c.final.has(a))) r2++;
         if (!mismo(c.memoria, c.final)) r3++;
         if (!mismo(c.final, new Set([...sin.final, ...c.agregado]))) rx++;
+        const a = avisoMal(c);
+        if (a) { ra++; if (ejA.length < 2) ejA.push(`punto ${k}: ${a}`); }
       }
     }
     totalPuntos += sin.puntos;
     const casos = sin.puntos * REPETICIONES;
     console.log(`  · ${esc.nombre}: ${sin.puntos} puntos de espera, ${casos} casos (quita ${quitadas.length} sin copia)`);
+    if (esc.marcada) ok(ra === 0, `${esc.nombre}: el aviso «venían de tu copia» sale una vez por ${esc.marcada} y ninguna clave sin marca lo dispara (${ra} de ${casos} no${ejA.length ? ': ' + ejA.join(' · ') : ''})`);
     ok(r1 === 0, `${esc.nombre}: 🔴 nada de lo que esta pestaña quitó vuelve (salvo que lo trajera la copia) (${r1} de ${casos}${ej.length ? ': ' + ej.join(' · ') : ''})`);
     ok(r2 === 0 && r3 === 0, `${esc.nombre}: lo que agregó la copia está guardado (${r2} de ${casos} no) y la memoria = localStorage (${r3} de ${casos} no)`);
     ok(rx === 0, `${esc.nombre}: lo guardado es EXACTAMENTE lo de sin copia ∪ lo que agregó la copia (${rx} de ${casos} no)`);
