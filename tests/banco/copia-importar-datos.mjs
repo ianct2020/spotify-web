@@ -13,6 +13,8 @@
 // (`/tmp/banco-chrome-*`, que `correr-banco.mjs` crea y borra), nunca el de nadie. Así A, B, C… son perfiles distintos
 // dentro de la misma corrida.
 
+import { BORRADOS_LOG_MAX, INCIDENCIAS_OCULTOS_MAX, SUPERVIVIENTES_PERDIDAS_MAX, ENSAYOS_VERSIONS_MAX } from '/js/util/topes-registros.js';
+
 export const UID = 't79-banco-uid';
 export const OTRO = 't79-banco-otro';
 export const OWNER = 'orhs6wu5ykk7ql80u92ujn74o';   // HISTORY_OWNER_ID: solo en el caso E, contra la Spotify simulada
@@ -223,4 +225,158 @@ export function oraculoC(lsA, lsC) {
     lastfm_artist_tags_cache: c.lastfm_artist_tags_cache,
     versions_dismissed: c.versions_dismissed,
   };
+}
+
+// ── L: el import con los DOS navegadores llenos (tanda 87) ──────────────────────────────────────────
+// Hasta la 87 el tamaño de Ian se midió solo contra un navegador VACÍO (B). L importa la copia de A en un destino del
+// MISMO tamaño (`perfilLleno`, armado a partir de `perfilA`, todo INVENTADO), así la unión trabaja de verdad:
+//   · una de cada cinco claves de `localStorage` y una de cada tres de las filas con prefijo de IndexedDB FALTAN en el
+//     destino (el import las agrega); en su lugar va una propia del mismo tamaño, así los dos lados pesan lo mismo;
+//   · las demás están, con contenido que se solapa a medias: los conjuntos con la mitad de lo de A y la otra mitad propia,
+//     los mapas con una clave de cada cuatro en común con otro valor (gana la tuya), «la tuya gana» con otro valor;
+//   · una de cada tres de las filas con prefijo tiene una clave PROPIA (otro artista, otra área) que A no trae;
+//   · cada discografía en común: la mitad de los lanzamientos de A (con la tapa vacía o el nombre propio) y la otra
+//     mitad propia; la copia, a su vez, llega con nombres y fechas vacías (`copiaParaL`, en el caso);
+//   · los cuatro registros con `tope - 1` entradas (una igual a la de A y las fechas del 10 al 13 repetidas): sumados a
+//     los de A, pasan su tope;
+//   · `genre_hidden_tags` solo con la pelada y `listened_dupes_dismissed` con la pelada y la prefijada (las `prefKey`).
+// `oraculoLleno` cuenta las violaciones del invariante, fila por fila del CENSO: ver sus reglas en el reporte de la 87.
+
+const TOPES_L = { likes_borrados_log_v1: BORRADOS_LOG_MAX, ocultos_incidencias_v1: INCIDENCIAS_OCULTOS_MAX, versions_supervivientes_perdidas_v1: SUPERVIVIENTES_PERDIDAS_MAX, versions_dry_run_log_v1: ENSAYOS_VERSIONS_MAX };
+const SOLO_PELADA_L = 'genre_hidden_tags';
+const PELADA_Y_PREFIJADA_L = 'listened_dupes_dismissed';
+
+function discoDeL(v) {
+  const items = v.value.items.map((it, j) => {
+    if (j % 2) return { ...it, id: 'l' + it.id.slice(1), name: `Lanzamiento propio de L ${j}` };   // propio
+    if (j % 4 === 0) return { ...it, images: [] };                                                 // vacío: se puede llenar
+    return { ...it, name: `Nombre propio de L ${j}` };                                              // lleno: no cambia
+  });
+  return { ...v, storedAt: 1_700_000_000_087, value: { ...v.value, items } };
+}
+
+export function perfilLleno(C, { ian = false } = {}) {
+  const a = perfilA(C, { ian });
+  const ls = [];
+  a.ls.forEach(([k, v], n) => {
+    const c = C.entradaDe('ls', k);
+    // Falta (el import la agrega), y en su lugar una propia fuera del censo del mismo largo: el mismo tamaño que A.
+    if (n % 5 === 4 && c.clave !== SOLO_PELADA_L && c.clave !== PELADA_Y_PREFIJADA_L) { ls.push([`t87_propia_de_L_${n}`, 'L'.repeat(v.length)]); return; }
+    let w;
+    if (c.fusion === 'conjunto') w = J(JSON.parse(v).map((x, j) => (j % 2 ? `propio de L ${j}` : x)));
+    else if (c.fusion === 'mapa') w = J(Object.fromEntries(Object.entries(JSON.parse(v)).map(([x, y], j) => (j % 4 === 0 ? [x, y] : j % 4 === 1 ? [x, 'spotify:track:DE_L_GANA'] : [`propia de L ${j} ${x}`, y]))));
+    else if (c.fusion === 'registro') w = J([JSON.parse(v)[0], ...registro(TOPES_L[c.clave] - 2, 1, { deL: true })]);
+    else if (c.clave.startsWith('fonoteca_hidden_pl_')) w = id22(c.clave.length, 'L');
+    else w = J({ preferenciaDeL: c.clave });
+    if (c.clave === SOLO_PELADA_L) ls.push([c.clave, w]);
+    else {
+      ls.push([k, w]);
+      if (c.clave === PELADA_Y_PREFIJADA_L) ls.push([c.clave, J(['pelada vieja de L'])]);
+    }
+  });
+  ls.push(['t87_propia_de_L', 'no está en el censo']);
+  // IndexedDB, por fila del CENSO: en cada fila con prefijo, de sus claves (en orden) una en común, una que falta (y en
+  // su lugar una propia del mismo tamaño) y una propia; y además siempre una propia de más (con el perfil chico cada fila
+  // tiene una sola clave).
+  const idb = [];
+  const enFila = new Map();
+  for (const [k, v] of new Map(a.idb)) {
+    const c = C.entradaDe('idb', k);
+    if (!c || !c.entra) { idb.push([k, v]); continue; }              // los me gusta: no entran, se quedan
+    const i = enFila.get(c) || 0;
+    enFila.set(c, i + 1);
+    const w = c.fusion === 'discografia' ? discoDeL(v) : v && 'storedAt' in v && 'value' in v ? { ...v, storedAt: 1_700_000_000_087 } : { ...v, propioDeL: true };
+    const propia = (j) => (c.fusion === 'discografia' ? `${c.clave}${id22(9000 + j, 'a')}` : `${k} propio de L ${j}`);
+    if (!c.prefijo) { idb.push([k, w]); continue; }
+    if (i === 0) idb.push([propia(idb.length), w]);
+    idb.push([i % 3 === 0 ? k : propia(idb.length), w]);            // i % 3 === 1: la clave de A falta en el destino
+  }
+  return { idb, ls };
+}
+
+/** La copia de A como llega a L: en cada discografía, una fecha vacía de cada cuatro lanzamientos y un nombre vacío. */
+export function copiaParaL(texto) {
+  const c = JSON.parse(texto);
+  for (const [k, v] of Object.entries(c.navegador.idb)) {
+    if (!k.startsWith('discover_disco_base_v1_') || !Array.isArray(v?.value?.items)) continue;
+    v.value.items.forEach((it, j) => { if (j % 4 === 0) it.release_date = ''; if (j % 4 === 2) it.name = ''; });
+  }
+  return JSON.stringify(c);
+}
+
+const vacioL = (v) => v == null || v === '' || (Array.isArray(v) && !v.length) || v === 0;
+const leerJ = (t) => { try { return JSON.parse(t); } catch { return undefined; } };
+
+/**
+ * El oráculo de L. `antes`/`despues`: `{ idb: Map(clave → serializado), idbCrudo: Map(clave → valor), ls: Map }` (la
+ * `foto()` del caso). Devuelve `{ violaciones: [{ clave, fila, regla }], revisadas, porFusion }`. Sin `copia-importar.js`.
+ */
+export function oraculoLleno(C, antes, despues, uid) {
+  const violaciones = [];
+  const porFusion = {};
+  let revisadas = 0;
+  const mal = (clave, c, regla) => violaciones.push({ clave, fila: c ? `${c.clave} (${c.fusion})` : '—', regla });
+  const comparar = (c, clave, ta, td, crudoA, crudoD) => {
+    porFusion[c.fusion] = (porFusion[c.fusion] || 0) + 1;
+    if (td === undefined) return mal(clave, c, '1: la clave (o lo que la app lee de su fila) desapareció');
+    if (c.fusion === 'conjunto' || c.fusion === 'mapa' || c.fusion === 'registro') {
+      const a = leerJ(ta), d = leerJ(td);
+      const lista = c.fusion !== 'mapa';
+      const forma = (x) => (lista ? Array.isArray(x) : x && typeof x === 'object' && !Array.isArray(x));
+      if (!forma(a) || !forma(d) || (c.fusion === 'registro' && !a.every((e) => typeof e?.[c.fechaCampo] === 'string'))) {
+        if (ta !== td) mal(clave, c, `${c.fusion}: sin la forma de su regla, tenía que quedar igual byte a byte`);
+        return;
+      }
+      if (c.fusion === 'conjunto') {
+        const hay = new Set(d.map((x) => `${typeof x}:${x}`));
+        const faltan = a.filter((x) => !hay.has(`${typeof x}:${x}`));
+        if (faltan.length) mal(clave, c, `3 conjunto: faltan ${faltan.length} de antes (${J(faltan.slice(0, 3))})`);
+      } else if (c.fusion === 'mapa') {
+        const malas = Object.keys(a).filter((x) => !Object.prototype.hasOwnProperty.call(d, x) || d[x] !== a[x]);
+        if (malas.length) mal(clave, c, `4 mapa: ${malas.length} claves de antes faltan o cambiaron (${J(malas.slice(0, 3))})`);
+      } else {
+        const tope = TOPES_L[c.clave] || null;
+        const fa = new Set(a.map((e) => J(e))), fd = new Set(d.map((e) => J(e)));
+        const deFuera = d.filter((e) => !fa.has(J(e)));
+        const perdidas = a.filter((e) => !fd.has(J(e)) && !(tope && d.length >= tope && deFuera.every((x) => x[c.fechaCampo] > e[c.fechaCampo])));
+        if (perdidas.length) mal(clave, c, `5 registro: ${perdidas.length} entradas de antes que el tope (${tope ?? 'sin tope'}) no deja afuera (${J(perdidas.slice(0, 2))})`);
+      }
+      return;
+    }
+    if (c.fusion === 'discografia') {
+      const ia = crudoA?.value?.items, id = crudoD?.value?.items;
+      if (!Array.isArray(ia) || !Array.isArray(id)) { if (ta !== td) mal(clave, c, 'discografía sin items: tenía que quedar igual'); return; }
+      const porId = new Map(id.map((x) => [x?.id, x]));
+      let sinId = 0, cambiados = 0; const ej = [];
+      for (const it of ia) {
+        const d = porId.get(it.id);
+        if (!d) { sinId++; continue; }
+        for (const [f, v] of Object.entries(it)) if (!vacioL(v) && J(d[f]) !== J(v)) { cambiados++; if (ej.length < 3) ej.push(`${it.id}.${f}`); }
+      }
+      if (sinId) mal(clave, c, `6 discografía: ${sinId} lanzamientos de antes ya no están`);
+      if (cambiados) mal(clave, c, `6 discografía: ${cambiados} campos no vacíos de antes cambiaron (${ej.join(', ')})`);
+      return;
+    }
+    if (ta !== td) mal(clave, c, '7 la tuya gana: cambió');
+  };
+  const prefHechas = new Set();
+  for (const [donde, a, d] of [['idb', antes.idb, despues.idb], ['ls', antes.ls, despues.ls]]) {
+    for (const [k, v] of a) {
+      const c = C.entradaDe(donde, k);
+      revisadas++;
+      if (!d.has(k)) { mal(`${donde}:${k}`, c, '1: la clave desapareció'); continue; }
+      if (!c || !c.entra) continue;
+      if (c.porUsuario === 'pref') {
+        if (k === c.clave && d.get(k) !== v) mal(`${donde}:${k}`, c, '8 prefKey: la pelada cambió');
+        if (prefHechas.has(c.clave)) continue;
+        prefHechas.add(c.clave);
+        const pre = `${c.clave}__${uid}`;
+        const leer = (m) => (m.has(pre) ? m.get(pre) : m.get(c.clave));
+        comparar(c, `${donde}:${c.clave} (lo que la app lee)`, leer(a), leer(d));
+        continue;
+      }
+      comparar(c, `${donde}:${k}`, v, d.get(k), antes.idbCrudo?.get(k), despues.idbCrudo?.get(k));
+    }
+  }
+  return { violaciones, revisadas, porFusion };
 }

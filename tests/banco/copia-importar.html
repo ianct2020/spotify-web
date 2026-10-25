@@ -44,7 +44,19 @@
 // Spotify simulada con una playlist de ocultos que viva entre cargas, y ESCRIBE. Meterlo allá le cambiaría el porqué y el
 // presupuesto a un banco que ya está medido.
 //
+// Tanda 87:
+//   L       los DOS navegadores llenos: el destino (`perfilLleno` de `-datos.mjs`, INVENTADO) tiene claves en común con la
+//           copia de A que se solapan a medias, claves propias, discografías del mismo artista con lanzamientos distintos y
+//           campos vacíos a cada lado, y registros que sumados pasan su tope. Importa, recarga (como B) y `oraculoLleno`
+//           cuenta las violaciones del invariante fila por fila del CENSO: tienen que ser 0. Hasta la 87 el tamaño de Ian
+//           se había medido solo contra un navegador VACÍO (B). En `prepush`, el destino chico; el tiempo no se mide.
+//
 //   ?tamano=ian&solo=ab   el instrumento del tiempo: A del tamaño de los datos de Ian (INVENTADO) → B (no está en `prepush`).
+//   ?tamano=ian&solo=l    (tanda 87) el mismo instrumento con los dos lados del tamaño de Ian: A → L. Con los 45 s por
+//                         defecto de `correr-banco.mjs` no entra (tampoco `solo=ab`, desde la 87): se corre con
+//                         `tests/instrumento-copia-importar.mjs`.
+//   &roto=t87             (tanda 87) el import de la app sale de `copia-importar-roto-t87.mjs`, una copia rota a propósito
+//                         que no se commitea: el oráculo de L tiene que dar rojo.
 //   ?solo=h               A y después H (para ver el rojo de H contra un `src/` viejo sin que lo tape otro caso).
 
 import { esperarReal } from '/banco/simulado.mjs';
@@ -56,6 +68,8 @@ const ANCHO = +(q.get('ancho') || 1351);
 const TAMANO = q.get('tamano') || '';
 const SOLO_AB = q.get('solo') === 'ab';
 const SOLO_H = q.get('solo') === 'h';
+const SOLO_L = q.get('solo') === 'l';
+const ROTO = q.get('roto') || '';
 const afirmar = (c, msg) => { if (!c) throw new Error(`BANCO copia-importar: ${msg}`); };
 window.__estadoImport = D.crearEstado();
 let actual = null;
@@ -77,7 +91,7 @@ async function caso(nombre, { aLado = false } = {}) {
   document.getElementById('progreso').textContent = `el caso ${nombre} no terminó dentro del presupuesto de reloj virtual`;
   const f = document.createElement('iframe');
   f.width = ANCHO; f.height = 900;
-  f.src = `/banco/copia-importar-caso.html?caso=${nombre}${TAMANO ? `&tamano=${TAMANO}` : ''}`;
+  f.src = `/banco/copia-importar-caso.html?caso=${nombre}${TAMANO ? `&tamano=${TAMANO}` : ''}${ROTO ? `&roto=${ROTO}` : ''}`;
   if (aLado) document.getElementById('marco').appendChild(f); else document.getElementById('marco').replaceChildren(f);
   await esperarReal(() => actual, { que: `el caso ${nombre}`, vueltas: TAMANO ? 800000 : 60000 });
   if (!actual.ok) throw new Error(`[${nombre}] ${actual.error}`);
@@ -102,6 +116,14 @@ try {
     const resumenH = `solo=h · A: ${r.A.claves} claves · H1: recargó por ${r.H1.recarga?.via}, avisos ${nAvisos('H1')} · H2: «${r.H2.aviso}» ${J(r.H2.botones)} marcador=${r.H2.marcador} guardado=${r.H2.guardado.length} posts=${J(r.H2.posts)} · reloj virtual=${Math.round(performance.now())} ms`;
     document.documentElement.setAttribute('data-resumen', resumenH);
     document.getElementById('progreso').textContent = resumenH;
+    listo();
+    throw { soloH: true };
+  }
+  if (SOLO_L) {
+    await casoL(r);
+    const resumenL = `solo=l · tamaño=${TAMANO || 'chico'}${ROTO ? ` · roto=${ROTO}` : ''} · A: ${r.A.claves} claves, archivo ${r.A.bytes.toLocaleString('es-ES')} bytes · ${textoL(r.L)} · reloj virtual=${Math.round(performance.now())} ms`;
+    document.documentElement.setAttribute('data-resumen', resumenL);
+    document.getElementById('progreso').textContent = resumenL;
     listo();
     throw { soloH: true };
   }
@@ -190,6 +212,7 @@ try {
     afirmar(r.I.i.cambiadas.length === 0, `🔴 I: lo que había antes (el relleno incluido), igual clave por clave (cambiadas: ${r.I.i.cambiadas.join(', ') || '—'})`);
     afirmar(sinPeticiones(r.I.import.peticiones), `I: 0 peticiones (${J(r.I.import.peticiones)})`);
     await casoH(r);
+    await casoL(r);
   }
 
   const resumen = `tamaño=${TAMANO || 'chico'} · A: ${r.A.claves} claves que entran, archivo ${r.A.bytes.toLocaleString('es-ES')} bytes · ` +
@@ -199,6 +222,7 @@ try {
       `#skips antes de importar: ${r.C1.postsAlAbrir.length} POST · después (C2): ${r.C2.postsAlAbrir.length} POST con ${r.C2.postsAlAbrir.flatMap((p) => p.uris).length} uris a la playlist simulada · toasts de C2: «${r.C2.toasts.join(' | ')}» · ` +
       `D: igual ${r.D.shaAntes}, en frío ${r.D.import.rutas.length} petición (${r.D.import.rutas.join(',') || '—'}) · E: ${r.E.e.local.join(',')}, /data/ bloqueadas ${r.E.dataBloqueadas} · F: fuera ${r.F.import.fuera.length} · G: igual ${r.G.shaAntes} · ` +
       `I: relleno ${r.I.relleno.rellenos} claves, hueco ${r.I.relleno.hueco} (${J(r.I.relleno.tam)}), escritas ${r.I.i.escritas.length} de ${r.I.relleno.planLs}, «${r.I.import.hecho.titulo}» · ` +
+      `${textoL(r.L)} · ` +
       `C2 POST: ${J(r.C2.postsAlAbrir)} · C2 incidencias: ${J(r.C2.incidencias)} · recargas: ${['B', 'C1', 'E', 'F', 'H1', 'I'].map((n) => `${n}=${r[n].recarga?.via}`).join(',')} · avisos: ${J(Object.fromEntries(Object.keys(avisos).map((k) => [k, nAvisos(k)])))} · H2: «${r.H2.aviso}» marcador=${r.H2.marcador} guardado=${r.H2.guardado.length} (${D.ocultosDeA().length} de la copia + el nuevo) posts=${J(r.H2.posts)} · `) +
     `modal: «${r.B.import.texto.slice(0, 400)}» · hecho: «${r.B.import.hecho.texto.slice(0, 300)}» · reloj virtual=${Math.round(performance.now())} ms`;
   document.documentElement.setAttribute('data-resumen', resumen);
@@ -208,6 +232,25 @@ try {
   if (!e?.soloH) fallar(e);
 }
 function J(x) { return JSON.stringify(x); }
+
+// ── L · los dos navegadores llenos (tanda 87) ─────────────────────────────────────────────────────────
+async function casoL(r) {
+  r.L = await caso('L');
+  const l = r.L.l;
+  afirmar(l.violaciones === 0, `🔴 L: con los dos navegadores llenos, el import no pisa nada (${l.violaciones} violaciones del invariante en ${l.revisadas} claves de antes: ${l.ejemplos.map((v) => `${v.clave} [${v.fila}] ${v.regla}`).join(' | ')})`);
+  afirmar(l.enComun > 0 && l.enComun < l.antes && l.antes > 0, `L: el destino comparte una parte de sus claves con la copia y tiene propias (${l.enComun} de ${l.antes})`);
+  afirmar(['conjunto', 'mapa', 'registro', 'discografia', 'la tuya gana'].every((f) => l.porFusion[f] > 0), `L: el oráculo miró cada fusión (${J(l.porFusion)})`);
+  afirmar(l.cambiadas > 0 && l.nuevas > 0, `L: el import unió claves que ya estaban y agregó las que faltaban (${l.cambiadas} unidas, ${l.nuevas} nuevas)`);
+  afirmar(recargo(r.L, 'boton'), `L: «Recargar ahora» recargó (${J(r.L.recarga)})`);
+  afirmar(nAvisos('L') === 1, `L: un aviso a las otras pestañas (${nAvisos('L')})`);
+  afirmar(sinPeticiones(r.L.import.peticiones), `🔴 L: 0 peticiones entre el clic y el final del import (${J(r.L.import.peticiones)} ${r.L.import.rutas.join(' · ')})`);
+}
+function textoL(L) {
+  const l = L.l;
+  return `L: destino ${l.antes} claves (${l.bytesAntes.toLocaleString('es-ES')} caracteres), ${l.enComun} en común con la copia (${l.copia} claves, archivo ${l.bytesArchivo.toLocaleString('es-ES')} bytes) · ` +
+    `violaciones ${l.violaciones} de ${l.revisadas} revisadas ${J(l.porFusion)} · unidas ${l.cambiadas}, nuevas ${l.nuevas}, después ${l.despues} claves (${l.bytesDespues.toLocaleString('es-ES')} caracteres) · ` +
+    `leer y decidir ${L.import.ms.leerYDecidir} ms, aplicar ${L.import.ms.aplicar} ms · «${L.import.hecho.texto.slice(0, 90)}…»`;
+}
 
 // ── H · dos pestañas (tanda 80) ────────────────────────────────────────────────────────────────────
 async function casoH(r) {
