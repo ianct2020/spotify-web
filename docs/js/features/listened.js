@@ -1,15 +1,15 @@
-import { getAllPlaylistItems, getBestAvailableLikes, addTracksToPlaylist, removeTracksFromPlaylist, getAllUserPlaylists, getCurrentUserId } from '../api.js?v=339';
-import { cargarEtiquetas, getCachedTags } from '../api/lastfm.js?v=339';
-import { esEPoAlbum } from '../util/release-size.js?v=339';
-import { idbGetCached, idbSetCached, idbGetTimestamp } from '../idb.js?v=339';
-import { escapeHtml, confirmModal, pageHeader } from '../ui/components.js?v=339';
-import { showToast } from '../ui/toast.js?v=339';
-import { isJunkTrack } from '../util/junk.js?v=339';
-import { openModal, closeTop } from '../ui/modal-stack.js?v=339';
-import { getListenedPlaylist, groupItemsByAlbum, openListenedAlbumsPicker, albumKey, baseName, norm } from './listened-shared.js?v=339';
-import { openAlbumCard } from './album-card.js?v=339';
-import { prefKey, migratePrefKey } from '../storage.js?v=339';
-import { pedirYCachear, SOLO_CON_CONTENIDO } from '../util/cache-solo-exitos.js?v=339';
+import { getAllPlaylistItems, getBestAvailableLikes, addTracksToPlaylist, removeTracksFromPlaylist, getAllUserPlaylists, getCurrentUserId } from '../api.js?v=340';
+import { cargarEtiquetas, getCachedTags } from '../api/lastfm.js?v=340';
+import { esEPoAlbum } from '../util/release-size.js?v=340';
+import { idbGetCached, idbSetCached, idbGetTimestamp } from '../idb.js?v=340';
+import { escapeHtml, confirmModal, pageHeader } from '../ui/components.js?v=340';
+import { showToast } from '../ui/toast.js?v=340';
+import { isJunkTrack } from '../util/junk.js?v=340';
+import { openModal, closeTop } from '../ui/modal-stack.js?v=340';
+import { getListenedPlaylist, groupItemsByAlbum, openListenedAlbumsPicker, albumKey, baseName, norm } from './listened-shared.js?v=340';
+import { openAlbumCard } from './album-card.js?v=340';
+import { prefKey, migratePrefKey } from '../storage.js?v=340';
+import { pedirYCachear, SOLO_CON_CONTENIDO } from '../util/cache-solo-exitos.js?v=340';
 
 const SORT_KEY = 'listened_sort_mode';
 const VALID_SORTS = new Set(['recent', 'year-desc', 'year-asc', 'artist-asc', 'likes-desc', 'name-asc']);
@@ -68,7 +68,7 @@ function dismissHistory(key) {
 // Solo lo bajamos si el user logueado es el dueño (Ian): son sus datos personales.
 async function loadHistoryData() {
   if (historyAlbums) return historyAlbums;
-  const { isOwner } = await import('./history-data.js?v=339');
+  const { isOwner } = await import('./history-data.js?v=340');
   if (!(await isOwner())) { historyAlbums = []; return historyAlbums; }
   try {
     const cached = await idbGetCached(HISTORY_CACHE_KEY);

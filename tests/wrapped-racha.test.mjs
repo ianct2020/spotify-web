@@ -91,8 +91,10 @@ for (const y of anios) {
 const ultimo = anios[anios.length - 1];
 const r = rachaVigente(ultimo, stats);
 comprobar('el último año del historial es 2026', ultimo.year === 2026, String(ultimo.year));
-comprobar('el corte cae el 2026-08-27', r.corte === '2026-08-27', r.corte);
-comprobar('la racha en curso es de 4 días', r.dias === 4, String(r.dias));
+// Tanda 84, export nuevo (llega al 2026-10-22): el corte pasó del 2026-08-27 al 2026-10-22 y la
+// racha en curso de 4 a 32 días (contada aparte sobre `years[2026].days` del JSON nuevo).
+comprobar('el corte cae el 2026-10-22', r.corte === '2026-10-22', r.corte);
+comprobar('la racha en curso es de 32 días', r.dias === 32, String(r.dias));
 comprobar('el corte NO es hoy (el export se queda atrás)',
   aMs(r.corte) < Date.now() - DIA, r.corte);
 

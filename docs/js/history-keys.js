@@ -27,14 +27,14 @@
 // v=204 (a94e43a) subió solo los de acá, para forzar el refetch de las tapas
 // nuevas. Ningún código lee el `version` de stats ni el de listened; el único
 // lector de `.version` es el de skips.
-const STATS_VERSION = 6;   // v6 (v=295): la basura funcional sale también del divisor de `skip_pct`, y `years[]` y `totals` ganan `plays_junk`. OJO: es otro contador que el `version` de DENTRO del JSON (5). v5 (v=291): `years[].skip_pct` con la definición de `totals.skip_pct`, más `plays_raw` y `skips` por año. OJO: es otro contador que el `version` de DENTRO del JSON (4). v4: `years[].days`
-const PLAYS_VERSION = 5;   // v5: cada álbum de `albums` lleva además el día de la primera play válida
-const LISTENED_VERSION = 3;  // v3: las 91 tapas que faltaban (ítem 11) — mismo contenido, campo `img` ya no nulo
-const SKIP_VERSION = 4;    // v4: mismo formato que v3, pero el `gid` se recalculó con la cola de versión tras el guion (v=271): «X - Sped Up», «- Piano», «- reimagined», «- Raw Rhymes», «- Refix» y «- Music From …» vuelven a ser el mismo tema que su base
-const DETAIL_VERSION = 1;
-const RECORDS_VERSION = 3;  // v3: seis récords nuevos (día con más artistas, tema en más años, artista con más días, abandonado, crecimiento, racha de artista)
+const STATS_VERSION = 7;   // v7: contenido del export nuevo (tanda 84), mismo formato. v6 (v=295): la basura funcional sale también del divisor de `skip_pct`, y `years[]` y `totals` ganan `plays_junk`. OJO: es otro contador que el `version` de DENTRO del JSON (5). v5 (v=291): `years[].skip_pct` con la definición de `totals.skip_pct`, más `plays_raw` y `skips` por año. OJO: es otro contador que el `version` de DENTRO del JSON (4). v4: `years[].days`
+const PLAYS_VERSION = 6;   // v6: contenido del export nuevo (tanda 84), mismo formato. v5: cada álbum de `albums` lleva además el día de la primera play válida
+const LISTENED_VERSION = 4;  // v4: contenido del export nuevo (tanda 84), mismo formato. v3: las 91 tapas que faltaban (ítem 11) — mismo contenido, campo `img` ya no nulo
+const SKIP_VERSION = 5;    // v5: contenido del export nuevo (tanda 84), mismo formato. v4: mismo formato que v3, pero el `gid` se recalculó con la cola de versión tras el guion (v=271): «X - Sped Up», «- Piano», «- reimagined», «- Raw Rhymes», «- Refix» y «- Music From …» vuelven a ser el mismo tema que su base
+const DETAIL_VERSION = 2;  // v2: contenido del export nuevo (tanda 84), mismo formato
+const RECORDS_VERSION = 4;  // v4: contenido del export nuevo (tanda 84), mismo formato. v3: seis récords nuevos (día con más artistas, tema en más años, artista con más días, abandonado, crecimiento, racha de artista)
 const SIMILARES_VERSION = 2;  // v1 (v=315, tanda 64): `history-artist-similares.json`, el mapa de artistas horneado por `scripts/hornear-similares.mjs` (los parecidos de Last.fm entre tus artistas y sus posiciones). No lo produce `gen-stats.py` ni el import BYOH: es solo del owner. v2 (v=316, tanda 65): rehorneado con la regla del autocorrect (`util/autocorrect-lastfm.js`) y los sueltos en una franja aparte; sin el bump, quien abrió la v1 la seguiría viendo desde IndexedDB sin fallar y sin avisar. `OWNER_PREV_KEYS.similares` VACÍA
-const ARTIST_TRACKS_VERSION = 3;  // v3 (v=308): `totals` suma [6] el tema de entrada y [7] el día del segundo tema (`#puertas`). La lista de `OWNER_PREV_KEYS.artistTracks` sigue VACÍA: el v2 pasa el `sanityCheck` y migrarlo pintaría `#puertas` sin los campos. v2: `totals` lleva el día de la primera play válida del artista
+const ARTIST_TRACKS_VERSION = 4;  // v4: contenido del export nuevo (tanda 84), mismo formato. v3 (v=308): `totals` suma [6] el tema de entrada y [7] el día del segundo tema (`#puertas`). La lista de `OWNER_PREV_KEYS.artistTracks` sigue VACÍA: el v2 pasa el `sanityCheck` y migrarlo pintaría `#puertas` sin los campos. v2: `totals` lleva el día de la primera play válida del artista
 
 const OWNER_KEYS = {
   stats: `history_stats_v${STATS_VERSION}`,

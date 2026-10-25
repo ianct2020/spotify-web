@@ -95,16 +95,39 @@ const sinCampo = stats.years.filter(y => anioSinCampoSkipped(y.year));
   // cláusula se fue de estas ramas: la comparación ya no mezcla nada.
   const BASE = 'de 2023 a 2026, los años en que Spotify ya anotaba los saltos';
   //            la cláusula de v=291 (en la referencia)                                       → la de hoy (v=296)
+  // Tanda 84 (export nuevo): la referencia se regeneró con el código de v=291 (worktree en 4cb156f1)
+  // sobre el `history-stats.json` nuevo, así que el lado viejo trae el total nuevo (63,8) y los
+  // porcentajes por año del JSON nuevo; el lado de hoy, la base nueva (67,9 = 122.382 / 180.140).
+  // En 2025 v=291 cae ahora en «más que de costumbre» (66,8 − 63,8 = 3,0, justo el umbral) y hoy en
+  // «igual que siempre» (contra 67,9): por eso su cláusula reemplaza también el arranque de la rama.
   const REEMPLAZOS = {
-    2023: [['74,9% contra el 64,1% histórico.',                                                '74,9% contra el 68,5% ' + BASE + '.']],
-    2024: [['71,8% contra el 64,1% histórico.',                                                '71,9% contra el 68,5% ' + BASE + '.']],
-    2025: [['cortas el 66,7% de lo que pones, contra el 64,1% histórico.',                     'cortas el 66,8% de lo que pones, contra el 68,5% ' + BASE + '.']],
-    2026: [['dejas a medias el 58,4% de lo que pones, cuando en el total de tu historial la cifra es 64,1%.',
-            'dejas a medias el 58,5% de lo que pones, contra el 68,5% ' + BASE + '. En esos años cortas 7 de cada 10 canciones; este año, 6.']],
+    2023: [['74,9% contra el 63,8% histórico.',                                                '74,9% contra el 67,9% ' + BASE + '.']],
+    2024: [['71,9% contra el 63,8% histórico.',                                                '71,9% contra el 67,9% ' + BASE + '.']],
+    2025: [['Aunque este año cortas más que de costumbre: 66,8% contra el 63,8% histórico.',    'Y escuchas igual que siempre: cortas el 66,8% de lo que pones, contra el 67,9% ' + BASE + '.']],
+    2026: [['dejas a medias el 57,5% de lo que pones, cuando en el total de tu historial la cifra es 63,8%.',
+            'dejas a medias el 57,5% de lo que pones, contra el 67,9% ' + BASE + '. En esos años cortas 7 de cada 10 canciones; este año, 6.']],
   };
   const RAMA = (f) => /igual que siempre/.test(f) ? 'igual' : /aguantas más/.test(f) ? 'menos' : /más que de costumbre/.test(f) ? 'más' : '?';
   // La rama que tiene que salir, escrita a mano (la de la referencia, que no cambia).
   const RAMA_ESPERADA = { 2023: 'más', 2024: 'más', 2025: 'igual', 2026: 'menos' };
+  // Tanda 85: hasta acá se afirmaba además que la rama de hoy era la MISMA de la referencia, y eso
+  // dependía del dato: la referencia compara contra el total y hoy se compara contra la base, y
+  // coincidían por casualidad (con el export nuevo, 2025 cae en el umbral contra el total: 66,8 −
+  // 63,8 = 3,0, «más»; contra la base, 67,9, «igual»). Ahora se afirma que la rama de hoy es la que
+  // da SU regla contra la base: la base sale de `lineaBaseSaltos()`, importada; el umbral de 3
+  // puntos es el de la rama de la base de `wrapped-apertura.js`, que se lee del fuente más abajo.
+  const B = lineaBaseSaltos(stats.years);
+  const reglaContraLaBase = (anio) => {
+    const mejor = B.pct - anio.skip_pct;
+    return Math.abs(mejor) < 3 ? 'igual' : mejor > 0 ? 'menos' : 'más';
+  };
+  {
+    const ap = leer('src/js/features/wrapped-apertura.js');
+    const ramaBase = (/lineaBaseSaltos\(stats\.years\)\) \{([\s\S]*?)\} else if/.exec(ap) || ['', ''])[1];
+    ok(/const mejor = B\.pct - y\.skip_pct;/.test(ramaBase) && /Math\.abs\(mejor\) < 3\s*\?\s*` Y escuchas igual que siempre/.test(ramaBase) &&
+       /: mejor > 0\s*\?\s*` Y este año aguantas más/.test(ramaBase),
+       'wrapped-apertura.js: la rama de la base compara `B.pct − y.skip_pct` con el umbral de 3 puntos (la regla de `reglaContraLaBase`)');
+  }
   igual(Object.keys(REEMPLAZOS).join(','), '2023,2024,2025,2026', 'la tabla de reemplazos cubre los cuatro años con el campo');
   for (const y of conCampo) {
     const hoy = JSON.stringify(paso(y));
@@ -114,7 +137,7 @@ const sinCampo = stats.years.filter(y => anioSinCampoSkipped(y.year));
       esperado = esperado.split(de).join(a);
     }
     ok(hoy === esperado, `${y.year}: JSON.stringify idéntico al de la referencia de v=291 después de aplicar SOLO la tabla de reemplazos`);
-    igual(RAMA(paso(y).cuerpo), RAMA(JSON.parse(referencia[y.year]).cuerpo), `${y.year}: la rama de la comparación es la misma de la referencia`);
+    igual(RAMA(paso(y).cuerpo), reglaContraLaBase(y), `${y.year}: la rama de hoy es la que da su regla contra la base (${B.pct} − ${y.skip_pct})`);
     igual(RAMA(paso(y).cuerpo), RAMA_ESPERADA[y.year], `${y.year}: y es «${RAMA_ESPERADA[y.year]}»`);
   }
   // Que la comparación de arriba mire algo: las tres ramas viejas siguen vivas ahí.
@@ -131,7 +154,7 @@ console.log('\n3. 2018-2022: sin comparación de saltos');
 {
   igual(sinCampo.map(y => y.year).join(','), '2018,2019,2020,2021,2022', 'los años sin el campo');
   const pctTotal = stats.totals.skip_pct.toFixed(1).replace('.', ',');
-  igual(pctTotal, '64,2', 'el porcentaje del total, formateado como lo pinta la apertura');
+  igual(pctTotal, '63,8', 'el porcentaje del total, formateado como lo pinta la apertura'); // tanda 84, export nuevo (era 64,2)
   // El mes que nombra el copy de 2022 sale de la constante, no de la memoria.
   igual(MESES_LARGOS[Number(PRIMER_SKIPPED_TRUE.slice(5, 7)) - 1], 'octubre', 'el mes del corte');
   ok(Number(PRIMER_SKIPPED_TRUE.slice(8, 10)) >= 11 && Number(PRIMER_SKIPPED_TRUE.slice(8, 10)) <= 20, 'y el día cae «a mediados»');
@@ -308,12 +331,15 @@ console.log('\n6. La línea base de los años que anotan los saltos');
   //   2026   17.304   29.654     78          29.576
   //   Σ     119.278  174.444    203         174.241   →  119.278 / 174.241 = 68,456 %  →  68,5
   //   (sin sacar la basura daría 119.278 / 174.444 = 68,376 → 68,4: el divisor de hasta v=294)
+  // Tanda 84, export nuevo (2018-2025 idénticos; 2026 crece): 2026 = 20.408 / 35.553 / 78 / 35.475,
+  //   Σ 122.382 / 180.343 / 203 / 180.140 → 122.382 / 180.140 = 67,937 % → 67,9
+  //   (sin sacar la basura, 122.382 / 180.343 = 67,861 → también 67,9).
   const B = lineaBaseSaltos(stats.years);
-  igual(B && B.pct, 68.5, 'JSON real: `pct` = 68,5 (119.278 / 174.241)');
+  igual(B && B.pct, 67.9, 'JSON real: `pct` = 67,9 (122.382 / 180.140)');
   igual(B && B.desde, 2023, 'JSON real: `desde` = 2023');
   igual(B && B.hasta, 2026, 'JSON real: `hasta` = 2026');
-  igual(B && B.saltos, 119278, 'JSON real: `saltos` = 119.278');
-  igual(B && B.crudas, 174241, 'JSON real: `crudas` = 174.241 (ya sin la basura)');
+  igual(B && B.saltos, 122382, 'JSON real: `saltos` = 122.382'); // tanda 84, export nuevo (era 119.278)
+  igual(B && B.crudas, 180140, 'JSON real: `crudas` = 180.140 (ya sin la basura)'); // tanda 84, export nuevo (era 174.241)
   igual(B && B.anios.join(','), '2023,2024,2025,2026', 'JSON real: entran los cuatro años con el campo');
 
   // Sintéticos.
@@ -333,7 +359,8 @@ console.log('\n6. La línea base de los años que anotan los saltos');
   const pctTotal = stats.totals.skip_pct.toFixed(1).replace('.', ',') + '%';
   for (const y of conCampo) {
     const c = paso(y).cuerpo;
-    ok(c.includes(`contra el 68,5% de ${B.desde} a ${B.hasta}, los años en que Spotify ya anotaba los saltos.`), `${y.year}: compara contra la base («contra el 68,5% de 2023 a 2026, los años en que Spotify ya anotaba los saltos.»)`);
+    // tanda 84, export nuevo: la base pasó de 68,5 a 67,9
+    ok(c.includes(`contra el 67,9% de ${B.desde} a ${B.hasta}, los años en que Spotify ya anotaba los saltos.`), `${y.year}: compara contra la base («contra el 67,9% de 2023 a 2026, los años en que Spotify ya anotaba los saltos.»)`);
     ok(!c.includes(AVISO_MEZCLA), `${y.year}: NO trae \`AVISO_MEZCLA\` (la comparación ya no mezcla)`);
     ok(!c.includes(pctTotal), `${y.year}: NO trae el total (${pctTotal})`);
     ok(!/todo tu historial|histórico/.test(c), `${y.year}: no dice «histórico» ni «todo tu historial» de la base`);
@@ -347,12 +374,14 @@ console.log('\n6. La línea base de los años que anotan los saltos');
   igual(lineaBaseSaltos(statsSinJunk.years), null, 'sin `plays_junk` en un año, la base es null');
   const y23 = statsSinJunk.years.find(y => y.year === 2023);
   const reserva = pasoDentroDeTodo({ stats: statsSinJunk, y: y23, MESES, MESES_LARGOS, fmtMinutes, fmtDia, ultimoDia: null }).cuerpo;
-  igual(reserva, 'De las 104.147 reproducciones válidas que Spotify tiene tuyas en 9 años, 16,6% son de 2023. ' +
-    `Aunque este año cortas más que de costumbre: 74,9% contra el 64,2% histórico, que ${AVISO_MEZCLA}. ` +
+  // tanda 84, export nuevo: 107.661 válidas (eran 104.147), 2023 es el 16,1% (17.326 / 107.661; era 16,6) y el total 63,8 (era 64,2)
+  igual(reserva, 'De las 107.661 reproducciones válidas que Spotify tiene tuyas en 9 años, 16,1% son de 2023. ' +
+    `Aunque este año cortas más que de costumbre: 74,9% contra el 63,8% histórico, que ${AVISO_MEZCLA}. ` +
     'Ninguna tarjeta de las de abajo da este número: todas miran un año por vez.',
-    'con la base en null, 2023 sale EXACTAMENTE como en v=295: contra el 64,2% histórico, con el aviso');
+    'con la base en null, 2023 sale EXACTAMENTE como en v=295: contra el 63,8% histórico, con el aviso');
   const reserva26 = pasoDentroDeTodo({ stats: statsSinJunk, y: statsSinJunk.years.find(y => y.year === 2026), MESES, MESES_LARGOS, fmtMinutes, fmtDia, ultimoDia: null }).cuerpo;
-  ok(reserva26.includes(`cuando en el total de tu historial la cifra es 64,2%, que ${AVISO_MEZCLA}.`) && !/de cada 10/.test(reserva26), 'y 2026 en reserva: contra el total, con el aviso, sin la frase «de cada 10» (6 y 6), como en v=295');
+  // tanda 84, export nuevo: el total pasó de 64,2 a 63,8 (y 2026 sigue sin «de cada 10»: 6 y 6)
+  ok(reserva26.includes(`cuando en el total de tu historial la cifra es 63,8%, que ${AVISO_MEZCLA}.`) && !/de cada 10/.test(reserva26), 'y 2026 en reserva: contra el total, con el aviso, sin la frase «de cada 10» (6 y 6), como en v=295');
 
   // Lo estático: la rama de la base no escribe años, ni el aviso, ni el total.
   const sinCom = (x) => x.split('\n').map(l => l.replace(/(^|[^:'"`\\])\/\/.*$/, '$1')).join('\n');

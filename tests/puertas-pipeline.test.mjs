@@ -176,7 +176,7 @@ const vPy = readFileSync(join(raiz, 'scripts/gen-stats.py'), 'utf8').match(/^ART
 const vJs = readFileSync(join(raiz, 'src/js/history-processor.js'), 'utf8').match(/^const ARTIST_TRACKS_VERSION = (\d+);/m);
 igual(vPy && +vPy[1], 3, 'ARTIST_TRACKS_VERSION de scripts/gen-stats.py');
 igual(vJs && +vJs[1], 3, 'ARTIST_TRACKS_VERSION de src/js/history-processor.js');
-igual(VERSION_CLAVES, 3, 'ARTIST_TRACKS_VERSION de src/js/history-keys.js');
+igual(VERSION_CLAVES, 4, 'ARTIST_TRACKS_VERSION de src/js/history-keys.js'); // tanda 84: la clave sube a 4 por el contenido del export nuevo; el `version` de DENTRO del JSON sigue en 3
 igual(atJs?.version, 3, 'el `version` del artistTracks que arma processStreamingHistory()');
 igual(atPy?.version, 3, 'el `version` del artistTracks que arma build_stats()');
 

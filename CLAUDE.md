@@ -1957,6 +1957,25 @@ El procedimiento completo con el próximo export (los DOS `gen-stats.py`, y qué
 verificar) está en `fonoteca-migracion/CONTEXTO-TECNICO.md`, sección «Con cada
 export nuevo: hornear las tapas que falten».
 
+## 📦 El export nuevo (v=340)
+`src/data/` se horneó con el export que Ian pidió en octubre de 2026 (tanda 84) y se publicó en la
+85, tal cual, verificado por `sha256`: **218.390 crudas, 107.661 válidas, hasta el 22/10/2026**,
+`totals.skip_pct` 63,8, línea base de saltos 2023-2026 67,9 (`lineaBaseSaltos()`: 122.382 / 180.140)
+y 270 tapas en `covers-extra.json`. **2018 a 2025 no cambiaron** (los años de `history-stats.json`,
+idénticos campo por campo); solo crece 2026. `listening-history.json` y
+`history-artist-similares.json` son los de siempre, byte a byte.
+
+⚠️ Las cifras viejas que aparecen en otras secciones de este archivo (212.491 crudas, 104.147
+válidas, 64,2 de total, 68,5 de base…) son de cuando se escribieron: no se reescribieron.
+
+⚠️ **Al mapa de artistas le faltan 60 del universo nuevo** (≥ 10 min: 2.362 artistas contra los
+2.302 del mapa, el 0,66 % de los minutos). Se reescanea en otra tanda; `SIMILARES_VERSION` sigue en 2.
+
+Los tres asserts que el dato nuevo dejaba en rojo por redondeo (no eran defectos): los dos «el divisor
+viejo NO da el total» (`skip-por-anio`, PUERTA 2 real de `calendario-dias`) comparan ahora los cocientes
+sin redondear y prueban la puerta con un caso INVENTADO (44,4 contra 40,0); el de la rama de 2025
+(`corte-saltos`) afirma la regla de hoy contra la base en vez de la rama de la referencia de v=291.
+
 ## Los ocultos: la uri va GUARDADA con la clave (v=205)
 `util/hidden-sync.js` reconcilia el caché local con una playlist de Spotify por
 unión, y para re-subir una clave necesita la **uri** de la pista que la

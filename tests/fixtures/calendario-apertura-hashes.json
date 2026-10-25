@@ -46,9 +46,10 @@
   },
   "2026": {
    "from": "2026-01-01",
-   "dias": 239,
-   "largo": 12105,
-   "sha256": "e91ce37803d41e242279dcff9456e31d92f030af262d90e7619b135a0ff4e7e7"
+   "dias": 295,
+   "largo": 14793,
+   "sha256": "2faffec9f0ebc817e4ae45530960ea36bdf31c4284a4a040824788bbba5e2997"
   }
- }
+ },
+ "_tanda_84": "2026 regenerado en la tanda 84 (2026-10-24) con el export nuevo: el mismo cálculo, con el código de v=289 (git worktree en 4f9f99cc = ceb5f3de^, donde src/js/ui/calendario-anual.js es el de e1383a94) sobre el history-stats.json nuevo. El método se validó antes reproduciendo los ocho hashes de arriba con el JSON viejo. 2019-2025 no cambiaron (los años cerrados del export nuevo son idénticos)."
 }

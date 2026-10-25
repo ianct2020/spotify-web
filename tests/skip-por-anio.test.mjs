@@ -47,6 +47,11 @@ function ok(cond, nombre) {
 }
 const igual = (a, b, nombre) => ok(a === b, `${nombre} (esperaba ${JSON.stringify(b)}, vino ${JSON.stringify(a)})`);
 const r1 = (x) => Math.round(x * 10) / 10;
+// La puerta del total: Σ skips / (Σ crudas − Σ basura), redondeado, tiene que dar `totals.skip_pct`.
+const puertaDelTotal = (s) => {
+  const sum = (k) => s.years.reduce((n, y) => n + y[k], 0);
+  return r1(sum('skips') / Math.max(1, sum('plays_raw') - sum('plays_junk')) * 100) === s.totals.skip_pct;
+};
 
 // ── 1. El JSON real del repo ───────────────────────────────────────────────
 
@@ -65,7 +70,23 @@ const stats = JSON.parse(leer('src/data/history-stats.json'));
   igual(basura, t.plays_junk, 'Σ years[].plays_junk = totals.plays_junk');
   ok(t.plays_junk > 0, `el JSON real trae basura que restar (${t.plays_junk}): si fuera 0 la suite no miraría el divisor nuevo`);
   igual(r1(saltos / Math.max(1, crudas - basura) * 100), t.skip_pct, 'Σ skips / (Σ crudas − Σ basura), redondeado, = totals.skip_pct');
-  ok(r1(saltos / Math.max(1, crudas) * 100) !== t.skip_pct, 'y con el divisor viejo (las crudas enteras) NO da el total: la puerta distingue las dos cuentas');
+  // Tanda 85: hasta acá había `r1(saltos / crudas × 100) !== t.skip_pct`, que dependía de cómo
+  // redondeara el dato: con el export nuevo los dos divisores dan 63,842 y 63,776, y los dos
+  // redondean a 63,8. Sobre el dato real se comparan ahora los cocientes SIN redondear, y que la
+  // puerta distingue los dos divisores lo afirma el caso INVENTADO de abajo, que no cambia con el export.
+  const nuevo = saltos / Math.max(1, crudas - basura) * 100, viejo = saltos / Math.max(1, crudas) * 100;
+  ok(nuevo > viejo, `sin redondear, el divisor nuevo y el viejo dan cocientes distintos (${nuevo.toFixed(3)} contra ${viejo.toFixed(3)})`);
+  ok(Math.abs(nuevo - t.skip_pct) <= 0.05 + 1e-9, `y \`totals.skip_pct\` (${t.skip_pct}) está a medio punto o menos del cociente nuevo sin redondear`);
+  igual(puertaDelTotal(stats), true, 'la puerta del total, sobre el JSON real, da verde');
+  // INVENTADO: 400 saltos sobre 1.000 crudas con 100 de basura. Con el divisor nuevo, 400 / 900 =
+  // 44,4; con el viejo, 400 / 1.000 = 40,0. Un JSON horneado con cada uno, y la puerta tiene que
+  // aceptar uno solo.
+  const inventado = (skip_pct) => ({
+    years: [{ year: 2031, plays_raw: 600, skips: 300, plays_junk: 100 }, { year: 2032, plays_raw: 400, skips: 100, plays_junk: 0 }],
+    totals: { plays_raw: 1000, plays_junk: 100, skip_pct },
+  });
+  igual(puertaDelTotal(inventado(44.4)), true, 'INVENTADO: el JSON con el divisor nuevo (400 / 900 = 44,4) pasa la puerta');
+  igual(puertaDelTotal(inventado(40.0)), false, 'INVENTADO: y el JSON con el divisor viejo (400 / 1.000 = 40,0) NO la pasa: la puerta distingue las dos cuentas');
   for (const y of stats.years) {
     igual(y.skip_pct, r1(y.skips / Math.max(1, y.plays_raw - y.plays_junk) * 100), `${y.year}: skip_pct = round(skips / (plays_raw − plays_junk) × 100, 1)`);
     ok(y.plays_junk <= y.plays_raw - y.plays, `${y.year}: la basura no supera a las crudas que no son válidas`);
@@ -188,8 +209,9 @@ console.log('\n3. Los dos lenguajes y los números de versión');
   igual(vPy, 5, 'gen-stats.py: STATS_VERSION = 5');
   igual(vJs, vPy, 'history-processor.js: el mismo número (el BYOH no queda atrás)');
   const claves = leer('src/js/history-keys.js');
-  igual(+(claves.match(/^const STATS_VERSION = (\d+);/m) || [])[1], 6,
-        'history-keys.js: STATS_VERSION = 6 (la clave de IndexedDB y el `?v=` del JSON)');
+  // tanda 84: la clave sube de 6 a 7 por el contenido del export nuevo (mismo formato; el de dentro sigue en 5)
+  igual(+(claves.match(/^const STATS_VERSION = (\d+);/m) || [])[1], 7,
+        'history-keys.js: STATS_VERSION = 7 (la clave de IndexedDB y el `?v=` del JSON)');
   // Sin esto el navegador migraría el JSON viejo a la clave nueva, sin fallar.
   ok(/\n  stats: \[\],\n/.test(leer('src/js/features/history-data.js')),
      'history-data.js: `OWNER_PREV_KEYS.stats` sigue VACÍA');

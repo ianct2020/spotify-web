@@ -1,11 +1,11 @@
-import { getAllLikedTracks, createPlaylist, addTracksToPlaylist, invalidatePlaylistsCache, getBestAvailableLikes } from '../api.js?v=339';
-import { showProgress, hideProgress, progressController, isCancelled, promptPlaylistName, escapeHtml, pageHeader } from '../ui/components.js?v=339';
-import { showToast } from '../ui/toast.js?v=339';
-import { getArtistLikePreview } from '../util/artist-preview.js?v=339';
-import { attachHover } from '../ui/preview-player.js?v=339';
-import { openArtistCard } from './artist-card.js?v=339';
-import { prefKey, migratePrefKey } from '../storage.js?v=339';
-import { vigilarRuta } from '../util/vigencia-ruta.js?v=339';
+import { getAllLikedTracks, createPlaylist, addTracksToPlaylist, invalidatePlaylistsCache, getBestAvailableLikes } from '../api.js?v=340';
+import { showProgress, hideProgress, progressController, isCancelled, promptPlaylistName, escapeHtml, pageHeader } from '../ui/components.js?v=340';
+import { showToast } from '../ui/toast.js?v=340';
+import { getArtistLikePreview } from '../util/artist-preview.js?v=340';
+import { attachHover } from '../ui/preview-player.js?v=340';
+import { openArtistCard } from './artist-card.js?v=340';
+import { prefKey, migratePrefKey } from '../storage.js?v=340';
+import { vigilarRuta } from '../util/vigencia-ruta.js?v=340';
 
 const SORT_KEY = 'artist_sort_mode';
 const VALID_SORTS = new Set(['count-desc', 'count-asc', 'name-asc']);

@@ -306,6 +306,16 @@ const resultado = await processStreamingHistory(fileArrays);
 // entorno. Sin la variable no mira el disco (ni un `existsSync` de esa ruta): un
 // `npm test` cualquiera no puede abrir el export de Ian (la tanda 64 lo pisó una vez).
 // Lo vigila `tests/export-a-pedido.test.mjs`.
+
+// La puerta del total de la PUERTA 2 real: saltos / (crudas − basura), redondeado, = `totals.skip_pct`.
+// Tanda 85: que distingue los dos divisores se afirma acá, con un caso INVENTADO que corre siempre
+// (no depende de cómo redondee el export): 400 saltos sobre 1.000 crudas con 100 de basura dan
+// 44,4 con el divisor nuevo y 40,0 con el viejo.
+const puertaSkipTotal = (saltos, crudas, basura, skipPct) =>
+  Math.round(saltos / Math.max(1, crudas - basura) * 1000) / 10 === skipPct;
+igual(puertaSkipTotal(400, 1000, 100, 44.4), true, 'PUERTA 2 (INVENTADO): el total horneado con el divisor nuevo (400 / 900 = 44,4) pasa la puerta');
+igual(puertaSkipTotal(400, 1000, 100, 40.0), false, 'PUERTA 2 (INVENTADO): y el horneado con el divisor viejo (400 / 1.000 = 40,0) NO la pasa: la puerta distingue los dos divisores');
+
 if (process.env.FONOTECA_LEER_EXPORT !== '1') {
   console.log('  · PUERTA 1 (real): SALTADA — sin FONOTECA_LEER_EXPORT=1');
 } else {
@@ -348,10 +358,14 @@ if (process.env.FONOTECA_LEER_EXPORT !== '1') {
     igual(validas, stats.totals.plays_valid, 'PUERTA 2 (real): las válidas dan `totals.plays_valid` (104.147)');
     // v=295: las crudas de los días siguen dando `plays_raw` (arriba, sin tocar); el
     // porcentaje se compara sobre crudas − `plays_junk`, con el `plays_junk` del JSON.
-    igual(Math.round(saltos / Math.max(1, crudas - stats.totals.plays_junk) * 1000) / 10, stats.totals.skip_pct,
-      'PUERTA 2 (real): los saltos, sobre crudas − `totals.plays_junk`, dan `totals.skip_pct` (64,2)');
-    af(Math.round(saltos / Math.max(1, crudas) * 1000) / 10 !== stats.totals.skip_pct,
-      'PUERTA 2 (real): y sobre las crudas enteras NO lo dan (64,1): la puerta distingue los dos divisores');
+    igual(puertaSkipTotal(saltos, crudas, stats.totals.plays_junk, stats.totals.skip_pct), true,
+      'PUERTA 2 (real): los saltos, sobre crudas − `totals.plays_junk`, dan `totals.skip_pct`');
+    // Tanda 85: hasta acá se afirmaba que sobre las crudas enteras, REDONDEADO, NO daba el total;
+    // con el export nuevo los dos divisores redondean a lo mismo. Se comparan sin redondear, y que
+    // la puerta distingue los dos divisores lo afirma el caso INVENTADO de arriba de este bloque.
+    const nuevo = saltos / Math.max(1, crudas - stats.totals.plays_junk), viejo = saltos / Math.max(1, crudas);
+    af(stats.totals.plays_junk > 0 && nuevo > viejo,
+      `PUERTA 2 (real): sin redondear, el divisor nuevo y el viejo dan cocientes distintos (vino ${(nuevo * 100).toFixed(3)} contra ${(viejo * 100).toFixed(3)})`);
     // Y año por año, contra el JSON que horneó el Python (v=291: una sola definición).
     const realPorAnio = new Map();
     for (const [dia, d] of Object.entries(days.dias)) {
