@@ -3,6 +3,17 @@
 <link rel="stylesheet" href="/css/components.css">
 <link rel="stylesheet" href="/css/main.css">
 <style>*,*::before,*::after{animation:none!important;transition:none!important}</style>
+<script>
+// (tanda 87) `&roto=<nombre>`: el import de la app sale de `/banco/copia-importar-roto-<nombre>.mjs` (una copia rota a
+// propósito, que NO se commitea), para ver el oráculo de L en rojo. El import map va antes de cualquier módulo.
+const rotoT87 = new URLSearchParams(location.search).get('roto');
+if (rotoT87 && /^[a-z0-9-]+$/.test(rotoT87)) {
+  const m = document.createElement('script');
+  m.type = 'importmap';
+  m.textContent = JSON.stringify({ imports: { '/js/util/copia-importar.js': `/banco/copia-importar-roto-${rotoT87}.mjs` } });
+  document.currentScript.after(m);
+}
+</script>
 </head><body>
 <div id="app"></div>
 <script type="module">
@@ -28,7 +39,11 @@
 //   ?caso=I    (tanda 81) la cuota que corta a mitad: el perfil de B con `localStorage` LLENO de relleno INVENTADO hasta
 //              dejar un hueco del tamaño de las 4 primeras claves del plan y media; el import escribe 4 y la quinta no
 //              entra. El modal «La copia se ha importado a medias» y la recarga; lo que había antes, igual
-//   &tamano=ian  A con el tamaño de los datos de Ian (INVENTADO): mide el import (no está en `prepush`)
+//   ?caso=L    (tanda 87) los DOS navegadores llenos: un destino del tamaño de A (`perfilLleno`, INVENTADO), con claves
+//              en común que se solapan a medias, claves propias, discografías y registros que se unen; importa la copia
+//              de A (`copiaParaL`) y `oraculoLleno` cuenta las violaciones del invariante
+//   &tamano=ian  A (y en L, el destino) con el tamaño de los datos de Ian (INVENTADO): mide el import (no está en `prepush`)
+//   &roto=t87  (tanda 87) el import sale de una copia rota a propósito (ver el script de arriba)
 //
 // 🔴 La recarga después de importar (tanda 80, v=335). El modal «Copia importada» ya no tiene «Cerrar» y, se cierre como
 // se cierre, la pestaña recarga. Así que cada caso que importa (B, C1, E, F, H1) toma TODAS sus medidas con el modal
@@ -265,6 +280,11 @@ try {
       for (const [k, v] of ls) localStorage.setItem(k, v);
       await anclar(D.sembrarIdb(idb));
     }
+    if (CASO === 'L') {
+      const { idb, ls } = D.perfilLleno(C, { ian: IAN });
+      for (const [k, v] of ls) localStorage.setItem(k, v);
+      await anclar(D.sembrarIdb(idb), { vueltas: vueltasLargas });
+    }
     if (CASO === 'D' || CASO === 'G') {
       localStorage.setItem(`versions_dismissed__${uid}`, JSON.stringify(['propio de ' + CASO]));
       await anclar(D.sembrarIdb([['mapa_area_v1_area-1', D.envolver({ propio: CASO })]]));
@@ -289,6 +309,7 @@ try {
 
     let texto = madre.__textoA;
     if (CASO === 'E') texto = texto.split(D.UID).join(D.OWNER);
+    if (CASO === 'L') texto = D.copiaParaL(texto);
     if (CASO === 'F') {
       const c = JSON.parse(texto);
       Object.assign(c.navegador.localStorage, { sp_refresh_token: 'CANARIO-F-REFRESH-0123', [`lastfm_api_key__${D.UID}`]: 'CANARIO-F-LASTFM-4567', t79_banco_inventada: 'x' });
@@ -313,6 +334,22 @@ try {
       }
       const escritas = datos.relleno.claves.filter((k) => despues.ls.has(k) && !antes.ls.has(k));
       datos.i = { cambiadas, escritas, idbNuevas: [...despues.idb.keys()].filter((k) => !antes.idb.has(k)).length };
+    }
+    if (CASO === 'L') {
+      // (tanda 87) 🔴 El invariante con los dos lados llenos, fila por fila del CENSO (las reglas, en `oraculoLleno`).
+      const o = D.oraculoLleno(C, antes, despues, uid);
+      const nav = JSON.parse(texto).navegador;
+      const enCopia = new Set([...Object.keys(nav.idb || {}).map((k) => `idb:${k}`), ...Object.keys(nav.localStorage || {}).map((k) => `ls:${k}`)]);
+      const claves = (f) => [...[...f.idb.keys()].map((k) => `idb:${k}`), ...[...f.ls.keys()].map((k) => `ls:${k}`)];
+      const bytes = (f) => [...f.idb, ...f.ls].reduce((n, [k, v]) => n + k.length + v.length, 0);
+      const cambiadas = [...despues.idb].filter(([k, v]) => antes.idb.has(k) && antes.idb.get(k) !== v).length + [...despues.ls].filter(([k, v]) => antes.ls.has(k) && antes.ls.get(k) !== v).length;
+      const nuevas = claves(despues).filter((k) => !(k.startsWith('idb:') ? antes.idb.has(k.slice(4)) : antes.ls.has(k.slice(3)))).length;
+      datos.l = {
+        violaciones: o.violaciones.length, ejemplos: o.violaciones.slice(0, 12), revisadas: o.revisadas, porFusion: o.porFusion,
+        antes: claves(antes).length, enComun: claves(antes).filter((k) => enCopia.has(k)).length, copia: enCopia.size,
+        bytesAntes: bytes(antes), bytesDespues: bytes(despues), bytesArchivo: new Blob([texto]).size,
+        despues: claves(despues).length, cambiadas, nuevas,
+      };
     }
     if (CASO === 'B' || CASO === 'F' || CASO === 'E' || CASO === 'H1') datos.shas = await shasQueEntran(C, despues, uid);
     datos.marcaCopia = localStorage.getItem(`ocultos_desde_copia_v1__${uid}`);
@@ -340,7 +377,7 @@ try {
       datos.c.agregadas = [...despues.ls.keys()].filter((k) => !antes.ls.has(k)).length + [...despues.idb.keys()].filter((k) => !antes.idb.has(k)).length;
     }
     // (tanda 80) Medido todo: cerrar el modal recarga. Cada caso por un camino.
-    if (modalHecho) await recargarYEntregar({ B: 'boton', C1: 'escape', E: 'afuera', F: 'boton', H1: 'boton', I: 'boton' }[CASO] || 'boton');
+    if (modalHecho) await recargarYEntregar({ B: 'boton', C1: 'escape', E: 'afuera', F: 'boton', H1: 'boton', I: 'boton', L: 'boton' }[CASO] || 'boton');
   }
   throw { fin: true };
 } catch (e) {
