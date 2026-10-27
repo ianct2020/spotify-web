@@ -119,14 +119,27 @@ async function renderStartScreen() {
   // v=312: las etiquetas viven en IndexedDB, por usuario y sin caducidad; se traen
   // una vez a memoria y de ahí en adelante se leen sincrónicas. Cuesta el `/me` de
   // `getCurrentUserId()` (memoizado): abrir `#genre` pasó de 0 a 1 `/me`.
+  //
+  // v=próxima (tanda 86): si `cargarEtiquetas()` falla, la pantalla LO DICE y no ofrece
+  // analizar, como `#generos`. Hasta acá el `catch` solo avisaba por consola y la pantalla
+  // seguía con «0 artistas con tags» y «Ver mis géneros»: con el almacén sin cargar
+  // `guardar()` no escribe, así que analizar gastaba peticiones a Last.fm que no quedaban
+  // guardadas (un resultado de dominio tapando un error de la app, v=154).
+  let sinAlmacen = false;
   try {
     await cargarEtiquetas(await getCurrentUserId());
   } catch (e) {
     console.warn('[genre] no se pudieron leer las etiquetas guardadas:', e?.message || e);
+    sinAlmacen = true;
   }
   const cachedTagsCount = contarEtiquetasGuardadas();
   const { items: cachedLikes } = await getBestAvailableLikes();
   const hasLikes = cachedLikes.length > 0;
+
+  if (sinAlmacen) {
+    renderStartScreenSinAlmacen(content, hasLikes);
+    return;
+  }
 
   const intro = hasLikes
     ? `Tienes <strong>${cachedLikes.length.toLocaleString('es-ES')}</strong> likes y <strong>${cachedTagsCount.toLocaleString('es-ES')}</strong> artistas con tags cacheados. Ya puedes ver tus géneros.`
@@ -156,6 +169,30 @@ async function renderStartScreen() {
     } else {
       renderStartScreen();
     }
+  };
+}
+
+// La pantalla de inicio con el almacén de etiquetas sin cargar (tanda 86). Sin el número de
+// artistas con tags (no se sabe) y sin «Ver mis géneros» (lleva a analizar). Importar un JSON
+// no depende de las etiquetas y se queda, pero al terminar vuelve a esta pantalla en vez de
+// `start()`: `renderStartScreen()` reintenta `cargarEtiquetas()` y, si ahora sale, enseña la de siempre.
+function renderStartScreenSinAlmacen(content, hasLikes) {
+  content.innerHTML = `
+    <div class="card" style="max-width:640px" data-estado="sin-almacen">
+      <h3 style="margin-bottom:8px">¿Cómo quieres arrancar?</h3>
+      <p style="color:var(--color-text-secondary);font-size:13px;margin-bottom:8px">No se han podido leer las etiquetas de género que ya están guardadas en este navegador.</p>
+      <p style="color:var(--color-text-secondary);font-size:13px;margin-bottom:16px">Sin ellas no se puede analizar: se volvería a pedir lo que ya está y no se guardaría. Recarga la página para volver a intentarlo.</p>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-secondary" id="genre-preimport-btn">${hasLikes ? 'Importar otro JSON' : 'Importar cache primero'}</button>
+        <input type="file" id="genre-preimport-input" accept=".json,application/json" style="display:none">
+      </div>
+    </div>
+  `;
+  const preInput = document.getElementById('genre-preimport-input');
+  document.getElementById('genre-preimport-btn').onclick = () => preInput.click();
+  preInput.onchange = async (e) => {
+    await handleImport(e, { skipRefresh: true, returnResult: true });
+    renderStartScreen();
   };
 }
 
