@@ -13,7 +13,7 @@
 // llegada del mensaje). El aviso SE QUEDA, como red para eso y para las vistas que siguen pintando lo de antes, y dice
 // lo que es cierto ahora.
 
-import { escucharCopiaImportada } from '../util/canal-copia.js?v=340';
+import { escucharCopiaImportada } from '../util/canal-copia.js?v=341';
 
 const AVISO_ID = 'aviso-copia';
 

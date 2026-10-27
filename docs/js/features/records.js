@@ -2,13 +2,13 @@
 // maratones de un artista, temas en loop, rachas e hitos. Todo sale de
 // history-records.json (gen-stats.py) ya calculado, acá es solo UI.
 
-import { loadRecords, isOwner, ownerLockedMessage } from './history-data.js?v=340';
-import { escapeHtml, pageHeader } from '../ui/components.js?v=340';
-import { getPreview } from '../api/preview-providers.js?v=340';
-import { getArtistLikePreview } from '../util/artist-preview.js?v=340';
-import { attachHover } from '../ui/preview-player.js?v=340';
-import { openArtistCard } from './artist-card.js?v=340';
-import { vigilarRuta } from '../util/vigencia-ruta.js?v=340';
+import { loadRecords, isOwner, ownerLockedMessage } from './history-data.js?v=341';
+import { escapeHtml, pageHeader } from '../ui/components.js?v=341';
+import { getPreview } from '../api/preview-providers.js?v=341';
+import { getArtistLikePreview } from '../util/artist-preview.js?v=341';
+import { attachHover } from '../ui/preview-player.js?v=341';
+import { openArtistCard } from './artist-card.js?v=341';
+import { vigilarRuta } from '../util/vigencia-ruta.js?v=341';
 
 const MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
 const DIAS = ['lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado', 'domingo'];

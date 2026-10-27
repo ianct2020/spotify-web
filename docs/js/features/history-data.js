@@ -8,10 +8,10 @@
 // Otro user cualquiera sin historial local ve el ownerLockedMessage que
 // invita a subir su ZIP.
 
-import { idbGetCached, idbSetCached, idbDel } from '../idb.js?v=340';
-import { getCurrentUserId } from '../api.js?v=340';
-import { OWNER_KEYS, LOCAL_HISTORY_PREFIX, STATS_VERSION, PLAYS_VERSION, LISTENED_VERSION, SKIP_VERSION, DETAIL_VERSION, RECORDS_VERSION, ARTIST_TRACKS_VERSION, SIMILARES_VERSION } from '../history-keys.js?v=340';
-import { mostrarBannerDegradadoVista } from '../ui/degraded-banner.js?v=340';
+import { idbGetCached, idbSetCached, idbDel } from '../idb.js?v=341';
+import { getCurrentUserId } from '../api.js?v=341';
+import { OWNER_KEYS, LOCAL_HISTORY_PREFIX, STATS_VERSION, PLAYS_VERSION, LISTENED_VERSION, SKIP_VERSION, DETAIL_VERSION, RECORDS_VERSION, ARTIST_TRACKS_VERSION, SIMILARES_VERSION } from '../history-keys.js?v=341';
+import { mostrarBannerDegradadoVista } from '../ui/degraded-banner.js?v=341';
 
 const HISTORY_OWNER_ID = 'orhs6wu5ykk7ql80u92ujn74o';
 
@@ -457,13 +457,33 @@ async function guardarSoloDias(days) {
 // que «Borrarlo» anunciaba un borrado que no había hecho. Ahora tira en los dos
 // casos, con la MISMA guarda que `saveMyHistory()` (no una segunda regla), y el
 // handler de `#ih-clear` lo atrapa.
+//
+// v=próxima (tanda 86): hasta acá cada `idbDel` llevaba su `.catch(() => {})`, así que
+// una clave que no se borraba no se enteraba nadie y «Borrarlo» anunciaba «Historial
+// local borrado» con la clave todavía ahí (la lección de v=154). Ahora se intentan las
+// ocho igual (que una falle no frena a las otras) y, si alguna falló, TIRA diciendo
+// cuántas, con el error crudo de cada una en `err.fallos` y en `console.warn`. El
+// handler de `#ih-clear` ya pinta en rojo lo que se tire, sin recargar.
 async function clearMyHistory() {
   const bloqueo = await motivoSinImportCompleto();
   if (bloqueo) throw errorImportBloqueado(bloqueo);
   const uid = await getCurrentUserId().catch(() => null);
   if (!uid) throw new Error('No se ha podido detectar tu usuario de Spotify, así que no se ha borrado nada.');
-  await Promise.all(['stats', 'plays', 'listened', 'skip', 'detail', 'records', 'artistTracks', 'days'].map(k => idbDel(localKey(uid, k)).catch(() => {})));
+  const kinds = ['stats', 'plays', 'listened', 'skip', 'detail', 'records', 'artistTracks', 'days'];
+  const resultados = await Promise.allSettled(kinds.map(k => idbDel(localKey(uid, k))));
+  // La memoria se vacía igual: algunas sí se borraron, y lo que quede se relee de IndexedDB.
   memCache = { uid: null, stats: null, plays: null, listened: null, skip: null, detail: null, records: null, artistTracks: null, similares: null, days: null };
+  const fallos = resultados
+    .map((r, i) => (r.status === 'rejected' ? { clave: localKey(uid, kinds[i]), error: r.reason } : null))
+    .filter(Boolean);
+  if (fallos.length) {
+    for (const f of fallos) console.warn('[history] no se pudo borrar', f.clave, f.error?.message || f.error);
+    const err = new Error(fallos.length === 1
+      ? `No se ha podido borrar 1 de las ${kinds.length} partes de tu historial local. Vuelve a intentarlo.`
+      : `No se han podido borrar ${fallos.length} de las ${kinds.length} partes de tu historial local. Vuelve a intentarlo.`);
+    err.fallos = fallos;
+    throw err;
+  }
 }
 
 function trackIdOf(uri) {

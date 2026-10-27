@@ -16,11 +16,11 @@
 // pasado el TTL. Los URLs de audio los cachea cada proveedor por su cuenta
 // (itunes.js ya lo hace; Deezer usa el suyo interno más abajo).
 
-import { findTrackPreview } from './itunes.js?v=340';
-import { pickBestMatch, artistMatches, artistList, preferredQueryArtists } from '../util/track-match.js?v=340';
+import { findTrackPreview } from './itunes.js?v=341';
+import { pickBestMatch, artistMatches, artistList, preferredQueryArtists } from '../util/track-match.js?v=341';
 // El `norm` de acá era una copia, cuerpo por cuerpo, del de iTunes. Desde el
 // paso 1 del plan de normalizadores los dos son el mismo.
-import { normProveedor as norm } from '../util/texto.js?v=340';
+import { normProveedor as norm } from '../util/texto.js?v=341';
 
 // v5 (v=185): la clave sube otra vez por lo mismo que subió a v4 —cambió
 // la COMPARACIÓN de títulos, no el proveedor— así que un 'none' o
@@ -280,7 +280,7 @@ async function getArtistTopPreview(artist) {
   if (cached === 'none') return null;
 
   if (cached === 'itunes' || !cached) {
-    const { findArtistTopPreview } = await import('./itunes.js?v=340');
+    const { findArtistTopPreview } = await import('./itunes.js?v=341');
     const it = await findArtistTopPreview(artist);
     if (it) {
       setProvider(key, 'itunes');

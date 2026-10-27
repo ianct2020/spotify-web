@@ -194,6 +194,31 @@ arreglado el import):
   álbum de `#listened` (otro código) o la vista entera de `#covers`, que con
   2.449 tapas tarda bastante más.
 
+## Dos `catch` que decían «hecho» (v=341, tanda 86)
+
+La lección de v=154 aplicada a dos sitios que seguían rompiéndola:
+
+- **«Borrarlo» (`clearMyHistory()`, `features/history-data.js`)**: cada `idbDel` de las ocho claves
+  `local_<uid>_history_*` llevaba su `.catch(() => {})`, así que una clave que no se borraba no se
+  enteraba nadie y el handler de `#ih-clear` anunciaba «Historial local borrado» y recargaba. Ahora va
+  con `Promise.allSettled`: se intentan las ocho igual y, si alguna falló, **tira** («No se ha podido
+  borrar 1 de las 8 partes…» / «No se han podido borrar N de las 8…»), con el error crudo de cada una en
+  `err.fallos` (`{ clave, error }`) y en `console.warn('[history] no se pudo borrar', …)`. `memCache` se
+  vacía igual. La guarda (`motivoSinImportCompleto()` / `errorImportBloqueado()`) sigue primero y sin
+  tocar. El handler no cambió: ya pintaba en rojo lo que se tirara (v=309).
+- **La pantalla de inicio de `#genre` (`renderStartScreen()`, `features/by-genre.js`)**: si
+  `cargarEtiquetas()` falla, ya no dice «0 artistas con tags» ni ofrece «Ver mis géneros» (que lleva a
+  analizar con un almacén que no guarda). Dice «No se han podido leer las etiquetas de género que ya
+  están guardadas en este navegador.» y pide recargar; el error crudo va a `console.warn` como antes.
+  Queda solo el botón de importar JSON (`renderStartScreenSinAlmacen()`), que al terminar vuelve a
+  `renderStartScreen()` (reintenta la carga) en vez de ir a `start()`. Con el almacén cargado, la
+  pantalla es la de siempre, byte a byte con el espacio aplanado (un almacén cargado y vacío sigue
+  diciendo «0»: eso sí es un resultado).
+
+Guarda: `tests/errores-que-dicen-hecho.test.mjs` (los dos módulos REALES en Node con dobles nuevos:
+`loader-errores-hecho.mjs`, `api-errores-hecho-doble.mjs`, `idb-borrado-falla-doble.mjs`,
+`lastfm-genre-doble.mjs`, `vista-genre-doble.mjs`). Rojo contra la versión anterior en 9 de 29.
+
 ## Zona horaria: las fechas del historial NO se pasan a local (v=154 + v=231)
 
 **Medio arreglo en v=154.** Récords decía «9 ene 2026» y Wrapped «8 ene 2026»
@@ -2243,8 +2268,13 @@ no depender de auditar después). Por eso está copiada acá, que sí se carga s
 al trabajar en este repo. Ver el porqué en `fonoteca-migracion/CONTEXTO-TECNICO.md`,
 «una regla que no está donde se lee, no existe».
 
-Deploy completo: poner el `?v=` nuevo en **los OCHO `?v=` de `src/`** —los 4 de
-`src/index.html` y los 4 de `src/callback.html`— →
+Deploy completo: `npm run subir-version` (tanda 88, `scripts/subir-version.mjs`), que sube de una
+**los OCHO `?v=` de `src/`** —los 4 de `src/index.html` y los 4 de `src/callback.html`— al actual + 1
+(`-- --a N` para otro número, que tiene que ser mayor; `-- --revisar` para ver qué haría sin
+escribir). **Se niega sin escribir nada** si no son 4 y 4 o si no están todos en el mismo número:
+eso es lo que caza el 4b, y el bueno lo elige una persona, a mano. Cambia solo esos dígitos (el
+resto de los dos archivos queda byte a byte) y no toca `docs/`, `sw.js` ni `git`. Lo vigila
+`tests/subir-version.test.mjs`, sobre copias. →
 
 ⚠️ **Hasta v=286 acá decía que «los otros tres `?v=` de `src/index.html` pueden
 quedar atrasados», y eso era el bug de A.2 (v=287).** Es cierto que `build.sh`
@@ -2901,8 +2931,7 @@ parte sigue valiendo para el escaneo, que no se tocó.
   géneros», «Seguir», «Parar»).
 - 🔴 **Si `cargarEtiquetas()` falla, la vista LO DICE y no ofrece buscar.** Con el almacén sin cargar `guardar()` no
   escribe, y enseñar «0 con etiquetas» sería un resultado de dominio tapando un error de la app (v=154). El error
-  crudo va a `console.warn` y no se pinta ninguna fila. ⚠️ El `catch` ancho de `renderStartScreen` de `#genre` sigue
-  como estaba (anotado en `PENDIENTES.md`); no se copió.
+  crudo va a `console.warn` y no se pinta ninguna fila. 🟩 Desde v=341 `#genre` hace lo mismo (tanda 86).
 - 🔴 **«Ya buscado»** (`yaBuscado`, una sola función pura): `fuentes.lastfm` no es `null` (aunque sea `tags: []`), **o**
   `fuentes.migrado` trae **al menos una** etiqueta. Si no, se le pide a Last.fm. Un `migrado` con `[]` se vuelve a
   pedir: pudo ser el `[]` de MusicBrainz de un `limit=1` a ciegas (el blob viejo no decía de qué fuente era) y no se
@@ -4164,6 +4193,7 @@ identidad, sin uid, el amigo como conservación, la lectura estática y el handl
 `#ih-clear` con la guarda en contra). ⚠️ Ese último caso **no está en el banco**: ahí el memo de
 `getCurrentUserId()` (`api.js`) no se puede vaciar sin tocar producción, así que la guarda no
 puede cambiar de opinión con el modal abierto; en Node el doble no memoiza.
+Desde v=341, además, `clearMyHistory()` tira si alguna de las ocho claves no se pudo borrar.
 
 **Las cuatro puertas** que llegan a `openImportHistory()`: el botón «Mi
 historial» (`app.js`, `my-history-btn`), `window.__openImportHistory`, el
@@ -5141,7 +5171,8 @@ Guardas: `tests/copia-otra-pestana.test.mjs` (46: los siete almacenes, lo quitad
 **El tiempo** (SEMBRADO: el banco con `XQ="&tamano=ian&solo=ab"`, datos INVENTADOS del tamaño de los de Ian, archivo de
 19.939.678 bytes, en un perfil VACÍO): reloj de pared **474 ms** para leer el archivo, leer el navegador y decidir, y **671 ms**
 para aplicar 5.189 claves (una transacción de IndexedDB y los `setItem`). Reloj virtual: 270 y 3.134 ms (el virtual cuenta las
-vueltas de espera del banco, no el trabajo).
+vueltas de espera del banco, no el trabajo). ⚠️ Desde la tanda 87 este instrumento ya no corre con `correr-banco.mjs` (el caso A
+no termina en 45 s): el que sirve es `tests/instrumento-copia-importar.mjs` (ver «Los dos navegadores llenos (tanda 87)», abajo).
 
 Guardas: `tests/copia-importar.test.mjs` (87 asserts: el invariante por fuerza bruta —22.500 casos, semilla `0x79a79`—, la
 vuelta entera A → B con el export real de la v=333, cada `fusion` con un caso que une y uno que conserva, los rechazos, el owner
@@ -5165,3 +5196,26 @@ cargado ANTES del import (SEMBRADO, `perfilH2` de `-datos.mjs`: su propia playli
 inventado salteado 9 de 10 veces y su historial de saltos BYOH, para que haya UNA tarjeta), y después del aviso, sin recargar,
 la oculta con su botón de verdad: lo guardado tiene los 5 ocultos de la copia Y el nuevo, y lo único que sube es el nuevo (1
 POST a su playlist). Contra v=338: «faltan 5», 1 guardado. Diez corridas: 10 de 10, 19.499-20.044 ms de reloj virtual.
+
+**Los dos navegadores llenos (tanda 87).** Hasta la 87, el tamaño de Ian se había medido solo contra un navegador VACÍO
+(B). El caso **L** del banco `copia-importar` importa la copia de A en un destino del MISMO tamaño (`perfilLleno` de
+`-datos.mjs`, INVENTADO: una parte de las claves en común con contenido a medias, una parte que falta, claves propias,
+discografías del mismo artista con la mitad de los lanzamientos y campos vacíos a cada lado —`copiaParaL` vacía nombres y
+fechas en la copia—, los registros con `tope − 1` entradas, `genre_hidden_tags` solo pelada y `listened_dupes_dismissed`
+pelada y prefijada) y `oraculoLleno` cuenta las violaciones del invariante fila por fila del `CENSO` (toda clave de antes
+sigue; `conjunto` ⊇; `mapa` cada clave con su valor; `registro`, lo que el tope deja y ni una menos, a igual fecha gana la
+tuya; `discografia`, los ids y ningún campo no vacío cambiado; «la tuya gana» byte a byte; las `prefKey`, lo que la app
+LEE y la pelada intacta). En `prepush`, el destino chico (100 claves): 0 violaciones, 10 de 10, 21.020–21.707 ms de reloj
+virtual (el banco pasó de ~19,4–20,1 s a ~21,0–21,7 s; sigue con los 45 s por defecto). Con `?tamano=ian&solo=l`
+(SEMBRADO: destino de 5.202 claves y 18.598.351 caracteres, 1.767 en común con la copia de 5.189 claves y 19.832.974
+bytes): **0 violaciones de 5.202** en 3 de 3, 135 unidas y 3.418 nuevas, y de **reloj de pared** leer y decidir
+**718–814 ms** y aplicar **742–856 ms** (1,46–1,67 s; con el destino vacío, en el mismo modo, 494 + 716 ms). Contra una
+copia de `copia-importar.js` con «la tuya gana» pisando (`&roto=<nombre>`, un import map que el caso inserta antes de los
+módulos; la copia rota no se commitea), el oráculo da rojo: 44 (chico) y 1.629 (Ian).
+
+⚠️ **El instrumento del tiempo ya no entra en `correr-banco.mjs`**: con los datos del tamaño de Ian, el trabajo sincrónico
+(sembrar, exportar, los sha256) se descuenta del `--virtual-time-budget` y el caso A no termina en 45 s. Se corre con
+`tests/instrumento-copia-importar.mjs` (`XQ="&tamano=ian&solo=l"`). ⚠️ **Y con reloj virtual `leerYDecidir`/`aplicar` no
+son tiempo de pared**: cada vuelta de `esperarReal` suma sus 8 ms de `setTimeout` adelantados; con el destino lleno dan
+26.430 + 21.034 ms. Para el tiempo, `PARED_MS=400000`: Chrome sin reloj virtual y el corredor pregunta por DevTools
+(`--remote-debugging-pipe`) si el banco terminó.
