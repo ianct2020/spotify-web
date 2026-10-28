@@ -921,13 +921,13 @@ function renderCluster(cluster, idx, propuesta = null) {
             </label>
           `;
           const row = renderTrackRow(t, `
-            <div style="display:flex;align-items:center;gap:6px;flex-shrink:0;flex-wrap:wrap;justify-content:flex-end">
-              <span style="font-size:12px;color:var(--color-text-secondary);max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(albumInfo)}</span>
+            <div class="version-row-extra">
+              <span class="version-row-album" title="${escapeHtml(albumInfo)}">${escapeHtml(albumInfo)}</span>
               ${dupeBadge}
               ${durBadge}
             </div>
           `);
-          return `<div class="version-row" data-track-id="${t.id}" style="display:flex;align-items:center;border-bottom:1px solid var(--color-border)">${checkbox}<div style="flex:1;min-width:0">${row}</div></div>`;
+          return `<div class="version-row" data-track-id="${t.id}" style="display:flex;align-items:center;border-bottom:1px solid var(--color-border)">${checkbox}<div class="version-row-body">${row}</div></div>`;
         }).join('')}
       </div>
     </div>
