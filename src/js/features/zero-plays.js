@@ -123,7 +123,7 @@ async function analyze() {
   // baja la biblioteca entera: minutos en los que el usuario puede irse.
   const ruta = vigilarRuta();
   const content = document.getElementById('zeroplays-content');
-  let likes, plays, top = null;
+  let likes, plays, top = null, statsfmError = false;
   try {
     [{ items: likes }, plays] = await Promise.all([
       getBestAvailableLikes(),
@@ -134,7 +134,13 @@ async function analyze() {
     ]);
     if (!ruta.vigente()) return;
     if (useStatsfm && hasUsername()) {
-      top = await loadTopLifetime().catch(() => null);
+      try {
+        top = await loadTopLifetime();
+      } catch (e) {
+        if (!ruta.vigente()) return;
+        console.warn('[zeroplays] no se pudo leer Stats.fm:', e);
+        statsfmError = true;
+      }
       if (!ruta.vigente()) return;
     }
   } catch (e) {
@@ -145,15 +151,15 @@ async function analyze() {
   // Sin likes en caché el cruce daría «0 canciones sin reproducir» con la
   // biblioteca entera en Spotify. Ver `tarjetaSinLikes()`.
   if (likes.length === 0) {
-    content.innerHTML = tarjetaSinLikes('tu historial de reproducción');
+    content.innerHTML = `${statsfmError ? statsfmAviso() : ''}${tarjetaSinLikes('tu historial de reproducción')}`;
     return;
   }
   if (!plays || !plays.tracks) {
     const propio = await isOwner();
     if (!ruta.vigente()) return;
-    content.innerHTML = propio
+    content.innerHTML = `${statsfmError ? statsfmAviso() : ''}${propio
       ? `<div class="card"><p>No pude cargar el historial. Vuelve a intentarlo.</p></div>`
-      : ownerLockedMessage('Sin plays');
+      : ownerLockedMessage('Sin plays')}`;
     return;
   }
   const zeros = [];
@@ -191,7 +197,7 @@ async function analyze() {
     return ta - tb;
   });
 
-  cache = { zeros, some, likesCount: likes.length, partialsInZeros, statsfmUsed: !!top, statsfmRescued };
+  cache = { zeros, some, likesCount: likes.length, partialsInZeros, statsfmUsed: !!top, statsfmRescued, statsfmError };
   console.log(`[zeroplays] ${zeros.length} tarjetas (${partialsInZeros} con plays cortas) de ${likes.length} likes`);
   renderResults();
 }
@@ -308,13 +314,17 @@ function onHideClick(r) {
   applyRows({ preserveRendered: true });
 }
 
+function statsfmAviso() {
+  return '<div style="color: var(--color-text-secondary)">No se pudieron leer tus datos de stats.fm: la vista sigue sin ellos.</div>';
+}
+
 function renderResults() {
   const content = document.getElementById('zeroplays-content');
   if (!content || !cache) return;
   if (list) { list.destroy(); list = null; }
   if (lazyCovers) { lazyCovers.destroy(); lazyCovers = null; }
 
-  const { zeros, some, likesCount, statsfmUsed, statsfmRescued } = cache;
+  const { zeros, some, likesCount, statsfmUsed, statsfmRescued, statsfmError } = cache;
   currentRows = visibles();
   rowById = new Map(currentRows.map(r => [r.id, r]));
   window.__filasZeroPlays = currentRows;
@@ -354,7 +364,7 @@ function renderResults() {
         <button class="btn btn-secondary btn-sm" id="zp-select-all" ${currentRows.length === 0 ? 'disabled' : ''} title="Marca las ${currentRows.length.toLocaleString('es-ES')} de la lista, no solo las pintadas">Seleccionar todos</button>
       </div>
     </div>
-    ${sfToggleHtml}
+    ${sfToggleHtml}${statsfmError ? `\n    ${statsfmAviso()}` : ''}
 
     ${currentRows.length === 0 ? `
       <div class="card"><p>${showingHidden
