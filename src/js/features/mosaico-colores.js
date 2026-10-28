@@ -68,7 +68,13 @@ export async function armarCatalogo() {
   const mapa = new Map();
   let filasEscuchadas = 0, likes = 0, likesSinTapa = 0;
 
-  const listened = await loadListenedAlbums().catch(() => null);
+  let listened, escuchadasFallo = false;
+  try {
+    listened = await loadListenedAlbums();
+  } catch (e) {
+    escuchadasFallo = true;
+    console.warn('[mosaico-colores] no se pudieron leer los álbumes escuchados:', e);
+  }
   for (const y of (listened?.years || [])) {
     for (const a of (y.albums || [])) {
       filasEscuchadas++;
@@ -101,6 +107,7 @@ export async function armarCatalogo() {
       deLikes,
       soloLikes: lista.length - escuchadas,
       enLasDos: lista.filter(x => x.fuentes.size === 2).length,
+      ...(escuchadasFallo ? { escuchadasFallo: true } : {}),
     },
   };
 }

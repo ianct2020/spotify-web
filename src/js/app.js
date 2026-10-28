@@ -1097,7 +1097,7 @@ async function montarBaseMosaico() {
     return;
   }
 
-  const pintarGuardado = async () => {
+  const pintarGuardado = async (cuentasTanda) => {
     const [reg, cat] = await Promise.all([mod.leerColores(), mod.armarCatalogo()]);
     const enCat = new Set(cat.items.map(x => x.id));
     const hechas = reg ? reg.ids.filter(id => enCat.has(id)).length : 0;
@@ -1106,7 +1106,8 @@ async function montarBaseMosaico() {
     estado.innerHTML = `<strong>${fmtN(hechas)} de ${fmtN(cat.cuentas.total)}</strong> portadas con color`
       + ` (${fmtN(cat.cuentas.escuchadas)} de álbumes escuchados, ${fmtN(cat.cuentas.soloLikes)} más solo de tus likes)`
       + (fallidas ? ` · <span style="color:var(--color-error)">${fmtFallidas(fallidas)}</span>` : '')
-      + (reg ? ` · bajados ${fmtMB(reg.bytes)} MB en total · guardada ${escapeHtml(new Date(reg.actualizado).toLocaleString('es-ES'))}` : ' · todavía no hay nada guardado');
+      + (reg ? ` · bajados ${fmtMB(reg.bytes)} MB en total · guardada ${escapeHtml(new Date(reg.actualizado).toLocaleString('es-ES'))}` : ' · todavía no hay nada guardado')
+      + (cat.cuentas.escuchadasFallo || cuentasTanda?.escuchadasFallo ? '<br><span style="color: var(--color-text-secondary)">No se han podido leer tus álbumes escuchados: el catálogo sale solo con tus me gusta.</span>' : '');
     btn.textContent = !reg || hechas === 0 ? 'Construir' : faltan ? `Continuar (faltan ${fmtN(faltan)})` : 'Completa · repasar';
     btn.disabled = mod.construyendo();
   };
@@ -1135,7 +1136,7 @@ async function montarBaseMosaico() {
       if (r.corte) showToast(`Base de colores cortada: ${r.corte}. ${tanda}. Faltan ${fmtN(r.faltan)}.`, r.corte === 'detenida a mano' ? 'info' : 'error');
       else showToast(`Base de colores: ${tanda}. Faltan ${fmtN(r.faltan)}${r.fallidas ? `, ${fmtFallidas(r.fallidas)}` : ''}.`, r.faltan ? 'warning' : 'success');
     }
-    if (document.getElementById('debug-mosaico-estado') === estado) await pintarGuardado();
+    if (document.getElementById('debug-mosaico-estado') === estado) await pintarGuardado(r?.cuentas);
   };
   parar.onclick = () => { ctrl?.abort(); parar.disabled = true; };
 
