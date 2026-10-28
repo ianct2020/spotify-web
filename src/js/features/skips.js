@@ -159,7 +159,7 @@ async function analyze() {
   // util/vigencia-ruta.js, junto al helper que usan las seis vistas.
   const ruta = vigilarRuta();
   const content = document.getElementById('skips-content');
-  let likes, stats, top = null;
+  let likes, stats, top = null, statsfmError = false;
   try {
     [{ items: likes }, stats] = await Promise.all([
       getBestAvailableLikes(),
@@ -170,7 +170,13 @@ async function analyze() {
     ]);
     if (!ruta.vigente()) return;   // te fuiste mientras bajaba los likes
     if (useStatsfm && hasUsername()) {
-      top = await loadTopLifetime().catch(() => null);
+      try {
+        top = await loadTopLifetime();
+      } catch (e) {
+        if (!ruta.vigente()) return;
+        console.warn('[skips] no se pudo leer Stats.fm:', e);
+        statsfmError = true;
+      }
       if (!ruta.vigente()) return;
     }
   } catch (e) {
@@ -181,15 +187,15 @@ async function analyze() {
   // Sin likes en caché no hay nada que cruzar, y la lista vacía se leería como
   // «no tienes skips crónicos». Ver `tarjetaSinLikes()`.
   if (likes.length === 0) {
-    content.innerHTML = tarjetaSinLikes('tu historial de skips');
+    content.innerHTML = `${statsfmError ? statsfmAviso() : ''}${tarjetaSinLikes('tu historial de skips')}`;
     return;
   }
   if (!stats || !stats.tracks) {
     const propio = await isOwner();
     if (!ruta.vigente()) return;
-    content.innerHTML = propio
+    content.innerHTML = `${statsfmError ? statsfmAviso() : ''}${propio
       ? `<div class="card"><p>No pude cargar el historial de skips. Vuelve a intentarlo.</p></div>`
-      : ownerLockedMessage('Skips crónicos');
+      : ownerLockedMessage('Skips crónicos')}`;
     return;
   }
 
@@ -200,6 +206,7 @@ async function analyze() {
     likesCount: likes.length,
     statsfmUsed: !!top,
     statsfmUpdated: rows.filter(r => r.updated).length,
+    statsfmError,
   };
   renderResults();
 }
@@ -438,6 +445,10 @@ function updateRemoveBtn() {
   rmBtn.disabled = n === 0;
 }
 
+function statsfmAviso() {
+  return '<div style="color: var(--color-text-secondary)">No se pudieron leer tus datos de stats.fm: la vista sigue sin ellos.</div>';
+}
+
 function renderResults() {
   const t0 = performance.now();
   window.__skipsPerf = { batches: [] };
@@ -464,7 +475,7 @@ function renderResults() {
   // Topbar en UNA sola fila (v=121): stats mini + chips + toggle Stats.fm + acciones
   // agrupados con auto-margin. Todo compactado para que quepa cómodo en desktop.
   content.innerHTML = `
-    <div class="skips-topbar skips-topbar-single">
+    ${cache.statsfmError ? `${statsfmAviso()}\n    ` : ''}<div class="skips-topbar skips-topbar-single">
       <div class="skips-topbar-row">
         <div class="skips-stat-mini">
           <span class="skips-stat-mini-v" id="skips-count-visible">${rows.length.toLocaleString('es-ES')}</span>
