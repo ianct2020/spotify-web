@@ -203,6 +203,9 @@ try {
       '--headless=new',
       '--disable-gpu',
       '--no-sandbox',
+      // Solo los nombres del servidor local pasan por el resolutor. Las IP
+      // literales no pasan por esta regla; el bwrap sin red las tapa afuera.
+      '--host-resolver-rules=MAP * ~NOTFOUND, EXCLUDE localhost, EXCLUDE 127.0.0.1',
       `--user-data-dir=${perfil}`,
       // 45 s de reloj VIRTUAL, no de pared: es un tope, no una espera. Subio de
       // 20 s en v=273 porque el banco del mosaico hace trabajo de verdad
