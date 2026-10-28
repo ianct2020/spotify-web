@@ -93,7 +93,7 @@ export const MINIMO_PARA_HORNEAR = 0.95;
 export const TOPE_BYTES = 3 * 1024 * 1024;
 export const ARISTAS_POR_ARTISTA_SI_SOBRA = 40;
 export const TICKS = 300;
-export const VERSION = 2;              // v=316: el autocorrect y los sueltos (`SIMILARES_VERSION`)
+export const VERSION = 3;              // v=316: el autocorrect y los sueltos; v3 (tanda 95): los 60 del export nuevo (`SIMILARES_VERSION`)
 export const CELDA_SUELTOS = 48;       // la grilla de los sueltos: más que el diámetro del más grande (40)
 export const SEPARACION_SUELTOS = 96;  // del borde inferior del componente grande al centro de la primera fila
 const D3_SHA256 = 'f2094bbf6141b359722c4fe454eb6c4b0f0e42cc10cc7af921fc158fceb86539';
