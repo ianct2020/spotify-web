@@ -1,0 +1,274 @@
+<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>banco menos-salteas — las que menos te saltas, con datos de mentira</title>
+<style>html,body{margin:0;background:#111;color:#eee;font:13px system-ui}iframe{border:0;display:block}</style>
+</head><body>
+<pre id="progreso"></pre>
+<div id="marcos"></div>
+<script type="module">
+// ── Qué prueba este banco (tanda 90) ─────────────────────────────────────────
+//
+// `#menos-salteas` REAL, en la app ENTERA (`menos-salteas-caso.html`, uno por
+// iframe), contra la Spotify simulada (`simulado.mjs`) y con historiales
+// INVENTADOS sembrados en IndexedDB (`menos-salteas-datos.mjs`). Nada sale a la red.
+//
+//   1. la tarjeta de inicio y el link del menú (detrás de «Puertas de entrada»),
+//      con `data-route` = el hash; abrir cuesta exactamente 1 `/me` y 0 de lo demás
+//      (0 rutas sin simular, 0 hosts externos, el JSON horneado del repo NO se pide);
+//   2. el owner ve la lista de la cuenta a mano (`ESPERADO`), con el renglón de
+//      arriba, el 30 % justo dentro y el grupo sin nombre en su sitio;
+//   3. «Mostrar 25 más»: con 60 grupos, 25 → 50 → 60, y cuesta 0 peticiones;
+//   4. un amigo con SU v5 ve SUS filas; uno con datos de antes (v4, cinco campos)
+//      ve «vuelve a importar» con el botón; uno con pocos datos ve «Todavía no hay
+//      temas que cumplan esto.»; uno sin datos, el cartel de bloqueo de `#records`;
+//   5. tocar un tema abre la ficha de canción (y no pide nada a Spotify);
+//   6. salir de la ruta a mitad de la carga (con el `/me` frenado): 0 escrituras en
+//      la ruta nueva y 0 errores;
+//   7. a 1366×591 y a 390×844, nada desborda;
+//   8. 0 errores de consola, en todos los marcos.
+//
+// ⚠️ Todas las esperas van con `esperarReal` (ver PRESUPUESTO en `scripts/correr-banco.mjs`).
+
+import { esperarReal, anclar } from '/banco/simulado.mjs';
+import { fallar, listo } from '/banco/esperar.mjs';
+import {
+  SKIP, STATS, ARTIST_TRACKS, ESPERADO, INTRO, AMIGO_SKIP, AMIGO_AT, ESPERADO_AMIGO,
+  AMIGO_VIEJO_SKIP, POCOS_SKIP, historialDe,
+} from '/banco/menos-salteas-datos.mjs';
+
+const ANCHO = +(new URLSearchParams(location.search).get('ancho') || 1351);
+const afirmar = (c, msg) => { if (!c) throw new Error('BANCO: ' + msg); };
+const progreso = (t) => { document.getElementById('progreso').textContent = t; };
+const VUELTAS = 20000;
+const igual = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+
+function abrirMarco(uid, nombre, ancho = ANCHO, alto = 800) {
+  const f = document.createElement('iframe');
+  f.width = ancho; f.height = alto;
+  f.src = `/banco/menos-salteas-caso.html?uid=${encodeURIComponent(uid)}&marco=${nombre}`;
+  document.getElementById('marcos').appendChild(f);
+  return f;
+}
+const win = (f) => f.contentWindow;
+const $ = (f, s) => f.contentDocument?.querySelector(s);
+const $$ = (f, s) => [...(f.contentDocument?.querySelectorAll(s) || [])];
+const meDe = (f) => win(f).__sim.reg.llamadas.filter((l) => l.ruta === '/me').length;
+const texto = (el) => (el?.textContent || '').replace(/\s+/g, ' ').trim();
+const filas = (f) => $$(f, '.menos-salteas-fila').map((li) => [
+  texto(li.querySelector('.menos-salteas-tema')), texto(li.querySelector('.menos-salteas-artista')),
+  texto(li.querySelector('.menos-salteas-cuentas')), texto(li.querySelector('.menos-salteas-pct')),
+]);
+async function arrancado(f, que) { await esperarReal(() => win(f)?.__listo, { que: `que arranque ${que}`, vueltas: VUELTAS }); }
+async function irA(f, hash, que, cond) { win(f).location.hash = hash; await esperarReal(cond, { que, vueltas: VUELTAS }); }
+// Lo bajado de OTRO origen DESPUÉS de abrir la vista (la fuente de Google de `main.css` se pide al cargar la hoja:
+// no la dispara abrir la vista y no se cuenta), y si se pidió alguno de los JSON horneados del repo.
+const externosDe = (f) => win(f).performance.getEntriesByType('resource').map((e) => e.name).filter((u) => new URL(u).origin !== location.origin);
+const externosAlAbrir = new Map();
+const pidioElJsonDelRepo = (f) => win(f).performance.getEntriesByType('resource').some((e) => /\/data\/history-(skip-stats|stats|artist-tracks)\.json/.test(e.name));
+const marcos = [];
+
+/** Abre `#menos-salteas` desde `#home` y devuelve cuánto costó. */
+async function abrirVista(f, que, cond) {
+  const me0 = meDe(f), n0 = win(f).__sim.reg.llamadas.length;
+  if (!externosAlAbrir.has(f)) externosAlAbrir.set(f, externosDe(f).length);
+  await irA(f, '#menos-salteas', que, cond);
+  const nuevas = win(f).__sim.reg.llamadas.slice(n0);
+  return { me: meDe(f) - me0, otras: nuevas.filter((l) => l.ruta !== '/me').map((l) => `${l.metodo} ${l.ruta}`) };
+}
+function sinFugas(f, nombre) {
+  const s = win(f).__sim.reg;
+  afirmar(s.desconocidas.length === 0, `${nombre}: ninguna ruta sin simular: ${s.desconocidas.join(' · ')}`);
+  afirmar(s.externas.length === 0, `${nombre}: ninguna petición a un host externo: ${s.externas.join(' · ')}`);
+  const nuevos = externosDe(f).slice(externosAlAbrir.get(f) ?? 0);
+  afirmar(nuevos.length === 0, `${nombre}: nada bajado de otro origen desde que se abrió la vista: ${nuevos.join(' · ')}`);
+  afirmar(s.escrituras.length === 0, `${nombre}: 0 escrituras en la cuenta: ${s.escrituras.map((e) => e.metodo + ' ' + e.ruta).join(' · ')}`);
+  afirmar(!pidioElJsonDelRepo(f), `${nombre}: los JSON horneados del repo NO se piden (los datos son los sembrados)`);
+}
+
+const datos = {};
+try {
+  const { OWNER_KEYS } = await import('/js/history-keys.js');
+  const { idbSetCached, idbDel } = await import('/js/idb.js');
+  const { localKey, HISTORY_OWNER_ID } = await import('/js/features/history-data.js');
+  const TTL = 100 * 365 * 24 * 60;
+  const sembrar = async (uid, skip, stats, at) => {
+    for (const [kind, v] of [['skip', skip], ['stats', stats], ['artistTracks', at]]) {
+      if (v) await anclar(idbSetCached(localKey(uid, kind), v, TTL));
+      else await anclar(idbDel(localKey(uid, kind)));
+    }
+  };
+  await anclar(idbSetCached(OWNER_KEYS.skip, SKIP, TTL));
+  await anclar(idbSetCached(OWNER_KEYS.stats, STATS, TTL));
+  await anclar(idbSetCached(OWNER_KEYS.artistTracks, ARTIST_TRACKS, TTL));
+  await sembrar(HISTORY_OWNER_ID, null, null, null);
+  const h60 = historialDe(60);
+  await sembrar('amigo-60', h60.skip, STATS, h60.at);
+  await sembrar('amigo-v5', AMIGO_SKIP, STATS, AMIGO_AT);
+  await sembrar('amigo-viejo', AMIGO_VIEJO_SKIP, STATS, AMIGO_AT);
+  await sembrar('amigo-pocos', POCOS_SKIP, STATS, null);
+  await sembrar('amigo-sin', null, null, null);
+
+  // ── 1 y 2 · el owner ───────────────────────────────────────────────────────
+  progreso('1-2: el owner');
+  const A = abrirMarco('owner', 'A'); marcos.push(['A', A]);
+  await arrancado(A, 'el marco A');
+  const tarjeta = $(A, '.home-card[data-route="menos-salteas"]');
+  afirmar(tarjeta && texto(tarjeta.querySelector('.home-card-name')) === 'Las que menos te saltas', `PUERTA 1: el inicio tiene la tarjeta «Las que menos te saltas» («${texto(tarjeta?.querySelector('.home-card-name'))}»)`);
+  const linkPuertas = $(A, '.nav-link[data-route="puertas"]');
+  const link = $(A, '.nav-link[data-route="menos-salteas"]');
+  afirmar(linkPuertas?.nextElementSibling === link && link?.getAttribute('href') === '#menos-salteas', 'PUERTA 1: en el menú General va justo detrás de «Puertas de entrada», con data-route = el hash');
+  afirmar(texto(link) === 'Las que menos te saltas', `PUERTA 1: el link dice «Las que menos te saltas» («${texto(link)}»)`);
+  const iconoLink = link.querySelector('.nav-link-icon')?.innerHTML;
+  const otros = $$(A, '.nav-link[data-route]').filter((l) => l !== link).map((l) => l.querySelector('.nav-link-icon')?.innerHTML);
+  afirmar(iconoLink && /<svg/.test(iconoLink) && !otros.includes(iconoLink), 'PUERTA 1: un icono propio, que no usa ninguna otra ruta del menú');
+  const abrir = await abrirVista(A, 'que #menos-salteas pinte la lista', () => $(A, '[data-menos-salteas="lista"]'));
+  datos.abrir = abrir;
+  afirmar(abrir.me === 1, `PUERTA 1: abrir cuesta exactamente 1 \`/me\` y costó ${abrir.me}`);
+  afirmar(abrir.otras.length === 0, `PUERTA 1: y 0 de lo demás, hubo: ${abrir.otras.join(' · ')}`);
+  sinFugas(A, 'PUERTA 1');
+  afirmar($(A, '.nav-link[data-route="menos-salteas"].active'), 'el menú la marca como activa');
+  afirmar(texto($(A, '.page-header h1, .page-header h2, h1')) === 'Las que menos te saltas', `la cabecera dice «Las que menos te saltas» («${texto($(A, '.page-header h1, .page-header h2, h1'))}»)`);
+  afirmar(texto($(A, '.menos-salteas-intro')) === INTRO, `PUERTA 2: el renglón de arriba: «${texto($(A, '.menos-salteas-intro'))}»`);
+  const fA = filas(A);
+  afirmar(igual(fA, ESPERADO), `PUERTA 2: las filas son las de la cuenta a mano.\n  vino:     ${JSON.stringify(fA)}\n  esperaba: ${JSON.stringify(ESPERADO)}`);
+  afirmar($(A, '[data-menos-salteas-mas]')?.hidden === true, 'PUERTA 3: con 7 temas NO hay «Mostrar 25 más»');
+  afirmar(texto($(A, '[data-menos-salteas-cuenta]')) === '7 de 7 temas', `el pie: «${texto($(A, '[data-menos-salteas-cuenta]'))}»`);
+
+  // ── 5 · tocar un tema abre la ficha ────────────────────────────────────────
+  progreso('5: la ficha');
+  const n5 = win(A).__sim.reg.llamadas.length;
+  $$(A, '.menos-salteas-tema')[2].click();
+  await esperarReal(() => $(A, '.tc-titulo'), { que: 'que se abra la ficha de canción', vueltas: VUELTAS });
+  afirmar(texto($(A, '.tc-titulo')) === 'Mar de fondo', `PUERTA 5: la ficha es la del tema tocado («${texto($(A, '.tc-titulo'))}»)`);
+  const pedidas5 = win(A).__sim.reg.llamadas.slice(n5).map((l) => `${l.metodo} ${l.ruta}`);
+  datos.ficha = pedidas5.length;
+  afirmar(win(A).__sim.reg.escrituras.length === 0, 'PUERTA 5: abrir la ficha no escribe en la cuenta');
+  win(A).document.dispatchEvent(new (win(A).KeyboardEvent)('keydown', { key: 'Escape', bubbles: true }));
+  await esperarReal(() => !$(A, '.tc-titulo'), { que: 'que la ficha se cierre', vueltas: VUELTAS });
+
+  // ── 6 · salir de la ruta a mitad de la carga ───────────────────────────────
+  progreso('6: salir a mitad');
+  const F = abrirMarco('owner', 'F'); marcos.push(['F', F]);
+  await arrancado(F, 'el marco F');
+  let soltar;
+  win(F).__frenoMe = new Promise((r) => { soltar = r; });
+  const meF = meDe(F);
+  await irA(F, '#menos-salteas', 'que #menos-salteas quede esperando el /me', () => meDe(F) > meF && $(F, '#menos-salteas-content .spinner'));
+  await irA(F, '#home', 'que el inicio se pinte encima', () => $(F, '.home-card') && !$(F, '#menos-salteas-content'));
+  let asentar = 0;
+  await esperarReal(() => ++asentar > 40, { que: 'que el inicio se asiente', vueltas: 200 });
+  const mainF = $(F, '#main-content');
+  let mutaciones = 0;
+  const cuales = [];
+  const obs = new (win(F).MutationObserver)((ms) => {
+    for (const m of ms) {
+      if (m.type === 'attributes' && m.attributeName === 'class' && m.target.dataset?.route) continue;
+      mutaciones++;
+      cuales.push(`${m.type} en <${m.target.nodeName?.toLowerCase()} class="${m.target.className || ''}">`);
+    }
+  });
+  obs.observe(mainF, { childList: true, subtree: true, characterData: true, attributes: true });
+  win(F).__frenoMe = null;
+  soltar();
+  let vueltas = 0;
+  await esperarReal(() => ++vueltas > 150, { que: 'que la carga colgada termine', vueltas: 400 });
+  obs.disconnect();
+  datos.salir = { mutaciones, errores: win(F).__errores.length };
+  afirmar(mutaciones === 0, `PUERTA 6: salir a mitad: 0 escrituras al DOM de la ruta nueva, hubo ${mutaciones}: ${cuales.join(' ; ')}`);
+  afirmar(!$(F, '[data-menos-salteas]') && !$(F, '#menos-salteas-content'), 'PUERTA 6: el inicio quedó sin nada de #menos-salteas');
+  afirmar(win(F).__errores.length === 0, `PUERTA 6: 0 errores: ${win(F).__errores.join(' | ')}`);
+  const otraVez = await abrirVista(F, 'que #menos-salteas pinte al volver', () => $(F, '[data-menos-salteas="lista"]'));
+  afirmar(otraVez.me === 0 && filas(F).length === ESPERADO.length, `PUERTA 6: al volver, 0 \`/me\` más (vino ${otraVez.me}) y la lista entera`);
+  sinFugas(F, 'PUERTA 6');
+
+  // ── 3 · «Mostrar 25 más», con 60 grupos ────────────────────────────────────
+  progreso('3: 60 temas');
+  const B = abrirMarco('amigo-60', 'B'); marcos.push(['B', B]);
+  await arrancado(B, 'el marco B');
+  const abrirB = await abrirVista(B, 'que #menos-salteas pinte 60', () => $(B, '[data-menos-salteas="lista"]'));
+  afirmar(abrirB.me === 1 && abrirB.otras.length === 0, `PUERTA 1 (amigo): 1 \`/me\` y nada más; vino ${abrirB.me} y ${abrirB.otras.join(' · ')}`);
+  const mas = $(B, '[data-menos-salteas-mas]');
+  afirmar($$(B, '.menos-salteas-fila').length === 25, `PUERTA 3: con 60, primero 25 filas; hay ${$$(B, '.menos-salteas-fila').length}`);
+  afirmar(mas && !mas.hidden && texto(mas) === 'Mostrar 25 más', `PUERTA 3: y «Mostrar 25 más» a la vista («${texto(mas)}»)`);
+  afirmar(texto($(B, '[data-menos-salteas-cuenta]')) === '25 de 60 temas', `el pie: «${texto($(B, '[data-menos-salteas-cuenta]'))}»`);
+  const c0 = { sim: win(B).__sim.reg.llamadas.length, rec: win(B).performance.getEntriesByType('resource').length };
+  mas.click();
+  await esperarReal(() => $$(B, '.menos-salteas-fila').length === 50, { que: 'las 50 filas', vueltas: VUELTAS });
+  afirmar(!mas.hidden && texto($(B, '[data-menos-salteas-cuenta]')) === '50 de 60 temas', 'PUERTA 3: 50 de 60 y el botón sigue');
+  mas.click();
+  await esperarReal(() => $$(B, '.menos-salteas-fila').length === 60, { que: 'las 60 filas', vueltas: VUELTAS });
+  afirmar(mas.hidden && texto($(B, '[data-menos-salteas-cuenta]')) === '60 de 60 temas', 'PUERTA 3: con las 60, el botón se va');
+  const c1 = { sim: win(B).__sim.reg.llamadas.length, rec: win(B).performance.getEntriesByType('resource').length };
+  afirmar(c1.sim === c0.sim && c1.rec === c0.rec, `PUERTA 3: «Mostrar 25 más» = 0 peticiones (simulada ${c1.sim - c0.sim}, recursos ${c1.rec - c0.rec})`);
+  const temasB = filas(B).map((x) => x[0]);
+  const esperadosB = Array.from({ length: 60 }, (_, i) => `Tema ${String(i).padStart(3, '0')}`);
+  afirmar(igual(temasB, esperadosB), 'PUERTA 3: las 60 en orden (0 % todas: de más a menos enteras), ninguna repetida');
+  afirmar(igual($$(B, '.menos-salteas-puesto').map(texto), esperadosB.map((_, i) => String(i + 1))), 'PUERTA 3: los puestos siguen de 1 a 60 al paginar');
+  sinFugas(B, 'PUERTA 3');
+
+  // ── 4 · amigos ─────────────────────────────────────────────────────────────
+  progreso('4: amigos');
+  const C = abrirMarco('amigo-v5', 'C'); marcos.push(['C', C]);
+  await arrancado(C, 'el marco C');
+  const abrirC = await abrirVista(C, 'que pinte lo del amigo', () => $(C, '[data-menos-salteas="lista"]'));
+  afirmar(abrirC.me === 1 && abrirC.otras.length === 0, `PUERTA 4: el amigo abre con 1 \`/me\` y nada más (${abrirC.me}; ${abrirC.otras.join(' · ')})`);
+  afirmar(igual(filas(C), ESPERADO_AMIGO), `PUERTA 4: el amigo ve SUS filas: ${JSON.stringify(filas(C))}`);
+  sinFugas(C, 'PUERTA 4 (v5)');
+
+  const D = abrirMarco('amigo-viejo', 'D'); marcos.push(['D', D]);
+  await arrancado(D, 'el marco D');
+  const abrirD = await abrirVista(D, 'que pida volver a importar', () => $(D, '[data-menos-salteas="reimportar"]'));
+  afirmar(abrirD.me === 1 && abrirD.otras.length === 0, `PUERTA 4: el amigo viejo abre con 1 \`/me\` y nada más (${abrirD.me}; ${abrirD.otras.join(' · ')})`);
+  afirmar(/Para ver esto, vuelve a importar tu historial\./.test(texto($(D, '[data-menos-salteas="reimportar"]'))), `PUERTA 4: con datos de antes lo dice: «${texto($(D, '[data-menos-salteas="reimportar"]'))}»`);
+  afirmar($(D, '[data-menos-salteas="reimportar"] [data-open-import]'), 'PUERTA 4: con el botón de importar');
+  afirmar($$(D, '.menos-salteas-fila').length === 0, 'PUERTA 4: y 0 filas');
+  sinFugas(D, 'PUERTA 4 (viejo)');
+
+  const P = abrirMarco('amigo-pocos', 'P'); marcos.push(['P', P]);
+  await arrancado(P, 'el marco P');
+  await abrirVista(P, 'que diga que no hay', () => $(P, '[data-menos-salteas="vacia"]'));
+  afirmar(texto($(P, '[data-menos-salteas="vacia"]')) === 'Todavía no hay temas que cumplan esto.', `PUERTA 4: con pocos datos: «${texto($(P, '[data-menos-salteas="vacia"]'))}»`);
+  sinFugas(P, 'PUERTA 4 (pocos)');
+
+  const E = abrirMarco('amigo-sin', 'E'); marcos.push(['E', E]);
+  await arrancado(E, 'el marco E');
+  await abrirVista(E, 'que pinte el cartel', () => $(E, '#menos-salteas-content .olm-card'));
+  afirmar(/Necesito tu historial/.test(texto($(E, '.olm-card'))) && /Las que menos te saltas usa el Extended Streaming History/.test(texto($(E, '.olm-card'))),
+    `PUERTA 4: sin datos, el cartel de bloqueo de #records: «${texto($(E, '.olm-card')).slice(0, 160)}»`);
+  afirmar($(E, '.olm-card [data-open-import]'), 'PUERTA 4: con su botón de importar');
+  sinFugas(E, 'PUERTA 4 (sin datos)');
+
+  // ── 7 · sin desborde a 1366×591 y 390×844 ──────────────────────────────────
+  progreso('7: desborde');
+  const desb = [];
+  for (const [ancho, alto] of [[1366, 591], [390, 844]]) {
+    const f = abrirMarco('owner', `D${ancho}`, ancho, alto); marcos.push([`D${ancho}`, f]);
+    await arrancado(f, `el marco de ${ancho}`);
+    await abrirVista(f, `#menos-salteas a ${ancho}`, () => $(f, '[data-menos-salteas="lista"]'));
+    const de = f.contentDocument.documentElement;
+    afirmar(de.scrollWidth <= win(f).innerWidth, `PUERTA 7 (${ancho}): sin barra horizontal (${de.scrollWidth} > ${win(f).innerWidth})`);
+    const piezas = [$(f, '.menos-salteas'), $(f, '.menos-salteas-lista'), ...$$(f, '.menos-salteas-fila'), ...$$(f, '.menos-salteas-fila > *'), ...$$(f, '.menos-salteas-tema'), ...$$(f, '.menos-salteas-artista')];
+    const malos = piezas.filter((el) => el && el.scrollWidth > el.clientWidth + 1).map((el) => `${el.className} ${el.scrollWidth}>${el.clientWidth}`);
+    afirmar(malos.length === 0, `PUERTA 7 (${ancho}): nada desborda su caja (${malos.slice(0, 5).join(' · ')})`);
+    const cont = $(f, '.menos-salteas').getBoundingClientRect();
+    const fuera = $$(f, '.menos-salteas-fila > *').filter((el) => { const r = el.getBoundingClientRect(); return r.left < cont.left - 0.5 || r.right > cont.right + 0.5; });
+    afirmar(fuera.length === 0, `PUERTA 7 (${ancho}): todo dentro de la lista (${fuera.length} fuera)`);
+    desb.push(`${ancho}×${alto}: página ${de.scrollWidth}/${win(f).innerWidth}`);
+    sinFugas(f, `PUERTA 7 (${ancho})`);
+  }
+  datos.desborde = desb.join(' · ');
+
+  // ── 8 · 0 errores en todos los marcos ──────────────────────────────────────
+  const errores = marcos.flatMap(([n, f]) => win(f).__errores.map((e) => `${n}: ${e}`));
+  afirmar(errores.length === 0, `PUERTA 8: 0 errores de consola: ${errores.join(' | ')}`);
+
+  const resumen = `abrir (owner): /me=${abrir.me} otras=${abrir.otras.length} · filas=${fA.length} = la cuenta a mano · ` +
+    `60 temas: 25 → 50 → 60 con «Mostrar 25 más», 0 peticiones · amigo v5: ${filas(C).length} fila suya · amigo viejo: «vuelve a importar» · pocos: «Todavía no hay…» · sin datos: cartel de #records · ` +
+    `ficha: abre (${datos.ficha} peticiones a la Spotify simulada) · ${datos.desborde} · salir a mitad: ${datos.salir.mutaciones} escrituras, ${datos.salir.errores} errores · errores=${errores.length} · ` +
+    `reloj virtual=${Math.round(performance.now())} ms`;
+  document.documentElement.setAttribute('data-resumen', resumen);
+  progreso('ok · ' + resumen);
+  listo(resumen);
+} catch (e) {
+  fallar(e);
+}
+</script>
+</body></html>

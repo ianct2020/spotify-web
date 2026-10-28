@@ -1,0 +1,65 @@
+<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>banco menos-salteas — la app entera, en un iframe</title>
+<link rel="stylesheet" href="/css/theme.css">
+<link rel="stylesheet" href="/css/components.css">
+<link rel="stylesheet" href="/css/main.css">
+<style>*,*::before,*::after{animation:none!important;transition:none!important}</style>
+</head><body>
+<div id="app"></div>
+<script type="module">
+// ── Un iframe del banco `menos-salteas.html` (tanda 90) ──────────────────────
+//
+// Arranca la app ENTERA (`/js/app.js`: su `init()`, su menú, su router) en
+// `#home`, contra la Spotify simulada de `simulado.mjs`, con `/me` = el `uid` que
+// pide la madre (`?uid=owner` es `HISTORY_OWNER_ID`). El historial lo sembró la
+// madre en IndexedDB, INVENTADO (`menos-salteas-datos.mjs`): el del owner en las
+// claves del caché del owner, el de un amigo en `local_<uid>_history_*`. Nada sale
+// a la red.
+//
+// `window.__frenoMe`: si la madre pone acá una promesa, el `/me` que llegue mientras
+// tanto espera a que se resuelva (para salir de la ruta a mitad de la carga).
+//
+// Modo `?foto=1&uid=owner` (la captura SEMBRADA, con un conductor externo y SIN reloj
+// virtual): siembra él mismo el historial inventado del owner, abre `#menos-salteas`
+// y marca `data-foto="listo"` cuando la lista está pintada.
+
+import { instalarRedSimulada, esperarReal, anclar } from '/banco/simulado.mjs';
+
+const q = new URLSearchParams(location.search);
+window.__errores = [];
+window.addEventListener('error', (e) => window.__errores.push('error: ' + (e.message || e)));
+window.addEventListener('unhandledrejection', (e) => window.__errores.push('rechazo: ' + String(e.reason?.message || e.reason)));
+const errorOriginal = console.error.bind(console);
+console.error = (...a) => { window.__errores.push('console.error: ' + a.map(String).join(' ').slice(0, 300)); errorOriginal(...a); };
+
+const { HISTORY_OWNER_ID } = await import('/js/features/history-data.js');
+const UID = q.get('uid') === 'owner' ? HISTORY_OWNER_ID : q.get('uid');
+const sim = instalarRedSimulada();
+window.__sim = sim;
+window.__frenoMe = null;
+sim.ruta('GET', /^\/me$/, async () => {
+  if (window.__frenoMe) await window.__frenoMe;
+  return { id: UID, display_name: 'Banco' };
+});
+localStorage.setItem('fonoteca_last_user_id', UID);
+localStorage.setItem('fonoteca_perfil_v1', JSON.stringify({ id: UID, display_name: 'Banco' }));
+
+const FOTO = q.get('foto') === '1';
+if (FOTO) {
+  const { SKIP, STATS, ARTIST_TRACKS } = await import('/banco/menos-salteas-datos.mjs');
+  const { OWNER_KEYS } = await import('/js/history-keys.js');
+  const { idbSetCached } = await import('/js/idb.js');
+  const TTL = 100 * 365 * 24 * 60;
+  await anclar(idbSetCached(OWNER_KEYS.skip, SKIP, TTL));
+  await anclar(idbSetCached(OWNER_KEYS.stats, STATS, TTL));
+  await anclar(idbSetCached(OWNER_KEYS.artistTracks, ARTIST_TRACKS, TTL));
+}
+location.hash = FOTO ? '#menos-salteas' : '#home';
+await import('/js/app.js');
+await esperarReal(() => document.getElementById('my-history-btn') && (FOTO || document.querySelector('.home-card')), { que: 'que la app arranque', vueltas: 4000 });
+window.__listo = true;
+if (FOTO) {
+  await esperarReal(() => document.querySelector('[data-menos-salteas="lista"]'), { que: 'que #menos-salteas pinte', vueltas: 4000 });
+  document.documentElement.dataset.foto = 'listo';
+}
+</script>
+</body></html>

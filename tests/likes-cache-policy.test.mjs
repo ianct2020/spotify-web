@@ -272,8 +272,9 @@ ok(OWNER_KEY_LIST.length === Object.keys(OWNER_KEYS).length && OWNER_KEY_LIST.le
 ok(OWNER_KEY_LIST.includes('history_artist_similares_v2') && !OWNER_KEY_LIST.includes('history_artist_similares_v1'),
   'incluye history_artist_similares_v2, el mapa de artistas (v=316), y ya no la v1');
 // Tanda 84 (export nuevo, mismo formato): plays v5 → v6 y skips v4 → v5 en `history-keys.js`.
-ok(OWNER_KEY_LIST.includes('history_track_plays_v6') && OWNER_KEY_LIST.includes('history_skip_stats_v5'),
-  'y son las versiones que se escriben de verdad (plays v6, skips v5)');
+// Tanda 90 (`#menos-salteas`): skips v5 → v6 (`tracks[id]` suma completas y saltos desde el corte).
+ok(OWNER_KEY_LIST.includes('history_track_plays_v6') && OWNER_KEY_LIST.includes('history_skip_stats_v6') && !OWNER_KEY_LIST.includes('history_skip_stats_v5'),
+  'y son las versiones que se escriben de verdad (plays v6, skips v6)');
 // v=308 (tanda 56): `ARTIST_TRACKS_VERSION` 2 → 3 (el tema de entrada de `#puertas`).
 // El assert sigue a la versión, como el de plays v5 de arriba.
 // Tanda 84 (export nuevo, mismo formato): artist_tracks v3 → v4.

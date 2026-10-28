@@ -48,7 +48,7 @@ if npm test --silent 2>&1 | tail -4 | sed 's/^/      /'; [ "${PIPESTATUS[0]}" -e
 # `mosaico` y `toasts` entraron en v=273:
 # estaban en rojo desde antes del 04/10 y justamente por no estar acá nadie los
 # miraba, igual que le había pasado a `barra` entre v=241 y v=261.
-echo "2b. bancos (barra · pausa-search · toasts · mosaico · novedades · escrituras · ocultar-artista ×3 · covers-orden · calendario · import-guarda · ocultos-cache · mapa · puertas · cuota · letras · generos-cache · generos-escaneo · generos · mapa-artistas · versiones-deluxe · router-teardown · guard-ruta-vieja · postal · copia-completa · copia-importar)"
+echo "2b. bancos (barra · pausa-search · toasts · mosaico · novedades · escrituras · ocultar-artista ×3 · covers-orden · calendario · import-guarda · ocultos-cache · mapa · puertas · cuota · letras · generos-cache · generos-escaneo · generos · mapa-artistas · versiones-deluxe · router-teardown · guard-ruta-vieja · postal · copia-completa · copia-importar · menos-salteas)"
 # Los dos de `ocultar-artista` entraron en v=276: las TRES vistas que ocultan
 # artistas, reales, contra una Spotify simulada. Es el único sitio donde se puede
 # probar ocultar sin escribir en la cuenta de Ian, y el de `-disco` es el que
@@ -142,7 +142,13 @@ echo "2b. bancos (barra · pausa-search · toasts · mosaico · novedades · esc
 # el modal sin «Importar» y el navegador igual; E (el owner), de local_<owner>_history_* solo days; F (un token, la key
 # de Last.fm y una clave inventada en el archivo), ninguna se escribe y las tres se nombran; G («Cancelar»), el navegador
 # igual. Rojo contra v=333 (no hay «Importar todo»). Corre con el defecto de 45 s.
-for B in barra pausa-search toasts mosaico novedades escrituras ocultar-artista ocultar-artista-disco ocultar-artista-novedades covers-orden calendario import-guarda ocultos-cache mapa puertas cuota letras generos-cache generos-escaneo generos mapa-artistas versiones-deluxe router-teardown guard-ruta-vieja postal copia-completa copia-importar; do
+# `menos-salteas` entró en la tanda 90: #menos-salteas en la app ENTERA con historiales INVENTADOS: abrir = 1 `/me` y
+# nada más; la lista del owner = la cuenta a mano (el 30 % justo dentro, el grupo sin nombre en su sitio); «Mostrar 25
+# más» con 60 temas, 0 peticiones; un amigo con su v5, uno con datos de antes («vuelve a importar»), uno con pocos
+# («Todavía no hay temas que cumplan esto.») y uno sin datos (el cartel de #records); la ficha de canción; salir a mitad
+# sin escribir; sin desborde a 1366×591 y 390×844. Cinco corridas el 27/10: 6.809-7.110 ms de reloj virtual (5/5), corre
+# con el defecto de 45 s. Visto rojo con las dos cargas en paralelo (2 `/me`).
+for B in barra pausa-search toasts mosaico novedades escrituras ocultar-artista ocultar-artista-disco ocultar-artista-novedades covers-orden calendario import-guarda ocultos-cache mapa puertas cuota letras generos-cache generos-escaneo generos mapa-artistas versiones-deluxe router-teardown guard-ruta-vieja postal copia-completa copia-importar menos-salteas; do
   if node scripts/correr-banco.mjs "$B" 2>&1 | sed 's/^/      /'; [ "${PIPESTATUS[0]}" -eq 0 ]; then
     ok "banco $B en verde"
   else
