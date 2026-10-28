@@ -202,7 +202,15 @@ async function run() {
       return;
     }
 
-    const [likes] = await Promise.all([getAllLikedTracks(() => {}).catch(() => [])]);
+    let likes;
+    try {
+      likes = await getAllLikedTracks(() => {});
+    } catch (e) {
+      console.warn('[recs] no pude leer tus me gusta:', e);
+      if (!ruta.vigente()) return;
+      panel.innerHTML = '<div class="card"><p style="color: var(--color-text-secondary)">No se han podido leer tus me gusta. No se han calculado recomendaciones.</p></div>';
+      return;
+    }
     if (!ruta.vigente()) return;
     const knownArtists = new Set();
     likedUris.clear();

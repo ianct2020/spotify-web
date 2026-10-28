@@ -1,0 +1,36 @@
+// Datos INVENTADOS: cero red y cero acceso al navegador de Ian.
+const s = () => globalThis.__T92B_WTHREE;
+const sinRed = async () => { throw Error('red prohibida'); };
+export const spotifyFetch = sinRed, addTracksToPlaylist = sinRed, removeTracksFromPlaylist = sinRed;
+export const reorderPlaylistItems = sinRed, removeLikedTracks = sinRed, checkLibraryContains = sinRed;
+export const getAllPlaylistItems = async () => { s().playlistCalls++; return []; };
+export const getAllUserPlaylists = async () => [];
+export const getCachedPlaylistItems = () => [], updatePlaylistItemsCache = () => {};
+export const getBestAvailableLikes = async () => ({ items: [] });
+export const vigilarRuta = () => ({ vigente: () => true });
+export const patchPlaylistItems = () => {}, buildCachedItem = () => ({});
+export const loadHistoryStats = async () => ({ top_albums_all_time: [] });
+export const loadListenedAlbums = async () => {
+  s().historialCalls++;
+  if (s().historialError) throw Error(s().historialError);
+  return { years: [] };
+};
+export const isOwner = async () => true, ownerLockedMessage = () => '';
+export const escapeHtml = x => String(x), pageHeader = () => '', confirmModal = () => {};
+export const showToast = () => {}, wireHoverMarquee = () => {}, hoverMarqueeSpan = () => '';
+export const openModal = () => {}, closeById = () => {}, closeModal = () => {};
+export const getPreview = async () => null, togglePreview = () => {}, playingKey = () => '';
+export const openAlbumCard = () => {}, albumKey = (name, artist) => `${name}|${artist}`;
+export const resolveAlbumId = async () => null, computeUpdatedPickPositions = () => [];
+export const createHiddenStore = () => ({ size: 0, has: () => false, ready: () => new Promise(() => {}), toggle: () => {} });
+export const recuperarUriDeAlbumKey = async () => null, REGLAS_VERSION = 1;
+export const mountBottom = () => {}, coverUrl = () => '';
+export const insercionPorPuntero = () => {}, moverA = () => {}, indicadorPara = () => '';
+export const prefKey = x => x, migratePrefKey = () => {};
+export const iconoPlay = () => '', iconoPausa = () => '', iconoPuntos = () => '';
+export const iconoOjo = () => '', iconoOjoTachado = () => '';
+export const pedirYCachear = async () => null, SOLO_CON_CONTENIDO = () => true;
+export const indiceIdsDeAlbum = () => new Map(), idLocalDelAlbum = () => null;
+export const openPlaylistPicker = () => {}, getOwnPlaylists = async () => [];
+export const addUrisToPlaylists = sinRed, toastAddResult = () => {}, listaNombres = () => '';
+export const borrarLikesVerificado = sinRed;
