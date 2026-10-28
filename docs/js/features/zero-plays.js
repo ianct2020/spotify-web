@@ -14,27 +14,27 @@
 // `util/hidden-sync.js`, playlist como fuente de verdad y localStorage como
 // caché local para pintar al instante.
 
-import { getBestAvailableLikes, removeLikedTracks, checkLibraryContains } from '../api.js?v=341';
-import { borrarLikesVerificado } from '../util/borrado-verificado.js?v=341';
-import { vigilarRuta } from '../util/vigencia-ruta.js?v=341';
-import { loadTrackPlays, trackIdOf, isOwner, ownerLockedMessage } from './history-data.js?v=341';
-import { escapeHtml, confirmModal, pageHeader, tarjetaSinLikes } from '../ui/components.js?v=341';
-import { showToast } from '../ui/toast.js?v=341';
-import { openTrackCard } from './track-card.js?v=341';
-import { hasUsername, loadTopLifetime } from '../api/statsfm.js?v=341';
-import { getPreview } from '../api/preview-providers.js?v=341';
-import { togglePreview, playingKey } from '../ui/preview-player.js?v=341';
-import { renderTrackCardRow, wireTrackCardGrid, paintCardSelection, paintPlayingCard } from '../ui/track-card-row.js?v=341';
-import { createIncrementalList, scrollRootOf } from '../ui/incremental-list.js?v=341';
-import { createLazyImages } from '../ui/lazy-img.js?v=341';
-import { activateMarquee } from '../ui/marquee.js?v=341';
-import { coverAtSize } from '../util/cover-size.js?v=341';
-import { firstArtistName } from '../util/artist-name.js?v=341';
-import { createHiddenStore, uriDeTrackId } from '../util/hidden-sync.js?v=341';
-import { fmtDiaCorto } from '../util/fecha.js?v=341';
-import { prefKey, migratePrefKey } from '../storage.js?v=341';
-import { openPlaylistPicker } from '../ui/playlist-picker.js?v=341';
-import { getOwnPlaylists, addUrisToPlaylists, toastAddResult } from '../util/playlist-add.js?v=341';
+import { getBestAvailableLikes, removeLikedTracks, checkLibraryContains } from '../api.js?v=342';
+import { borrarLikesVerificado } from '../util/borrado-verificado.js?v=342';
+import { vigilarRuta } from '../util/vigencia-ruta.js?v=342';
+import { loadTrackPlays, trackIdOf, isOwner, ownerLockedMessage } from './history-data.js?v=342';
+import { escapeHtml, confirmModal, pageHeader, tarjetaSinLikes } from '../ui/components.js?v=342';
+import { showToast } from '../ui/toast.js?v=342';
+import { openTrackCard } from './track-card.js?v=342';
+import { hasUsername, loadTopLifetime } from '../api/statsfm.js?v=342';
+import { getPreview } from '../api/preview-providers.js?v=342';
+import { togglePreview, playingKey } from '../ui/preview-player.js?v=342';
+import { renderTrackCardRow, wireTrackCardGrid, paintCardSelection, paintPlayingCard } from '../ui/track-card-row.js?v=342';
+import { createIncrementalList, scrollRootOf } from '../ui/incremental-list.js?v=342';
+import { createLazyImages } from '../ui/lazy-img.js?v=342';
+import { activateMarquee } from '../ui/marquee.js?v=342';
+import { coverAtSize } from '../util/cover-size.js?v=342';
+import { firstArtistName } from '../util/artist-name.js?v=342';
+import { createHiddenStore, uriDeTrackId } from '../util/hidden-sync.js?v=342';
+import { fmtDiaCorto } from '../util/fecha.js?v=342';
+import { prefKey, migratePrefKey } from '../storage.js?v=342';
+import { openPlaylistPicker } from '../ui/playlist-picker.js?v=342';
+import { getOwnPlaylists, addUrisToPlaylists, toastAddResult } from '../util/playlist-add.js?v=342';
 
 let cache = null;
 
@@ -123,7 +123,7 @@ async function analyze() {
   // baja la biblioteca entera: minutos en los que el usuario puede irse.
   const ruta = vigilarRuta();
   const content = document.getElementById('zeroplays-content');
-  let likes, plays, top = null;
+  let likes, plays, top = null, statsfmError = false;
   try {
     [{ items: likes }, plays] = await Promise.all([
       getBestAvailableLikes(),
@@ -134,7 +134,13 @@ async function analyze() {
     ]);
     if (!ruta.vigente()) return;
     if (useStatsfm && hasUsername()) {
-      top = await loadTopLifetime().catch(() => null);
+      try {
+        top = await loadTopLifetime();
+      } catch (e) {
+        if (!ruta.vigente()) return;
+        console.warn('[zeroplays] no se pudo leer Stats.fm:', e);
+        statsfmError = true;
+      }
       if (!ruta.vigente()) return;
     }
   } catch (e) {
@@ -145,15 +151,15 @@ async function analyze() {
   // Sin likes en caché el cruce daría «0 canciones sin reproducir» con la
   // biblioteca entera en Spotify. Ver `tarjetaSinLikes()`.
   if (likes.length === 0) {
-    content.innerHTML = tarjetaSinLikes('tu historial de reproducción');
+    content.innerHTML = `${statsfmError ? statsfmAviso() : ''}${tarjetaSinLikes('tu historial de reproducción')}`;
     return;
   }
   if (!plays || !plays.tracks) {
     const propio = await isOwner();
     if (!ruta.vigente()) return;
-    content.innerHTML = propio
+    content.innerHTML = `${statsfmError ? statsfmAviso() : ''}${propio
       ? `<div class="card"><p>No pude cargar el historial. Vuelve a intentarlo.</p></div>`
-      : ownerLockedMessage('Sin plays');
+      : ownerLockedMessage('Sin plays')}`;
     return;
   }
   const zeros = [];
@@ -191,7 +197,7 @@ async function analyze() {
     return ta - tb;
   });
 
-  cache = { zeros, some, likesCount: likes.length, partialsInZeros, statsfmUsed: !!top, statsfmRescued };
+  cache = { zeros, some, likesCount: likes.length, partialsInZeros, statsfmUsed: !!top, statsfmRescued, statsfmError };
   console.log(`[zeroplays] ${zeros.length} tarjetas (${partialsInZeros} con plays cortas) de ${likes.length} likes`);
   renderResults();
 }
@@ -308,13 +314,17 @@ function onHideClick(r) {
   applyRows({ preserveRendered: true });
 }
 
+function statsfmAviso() {
+  return '<div style="color: var(--color-text-secondary)">No se pudieron leer tus datos de stats.fm: la vista sigue sin ellos.</div>';
+}
+
 function renderResults() {
   const content = document.getElementById('zeroplays-content');
   if (!content || !cache) return;
   if (list) { list.destroy(); list = null; }
   if (lazyCovers) { lazyCovers.destroy(); lazyCovers = null; }
 
-  const { zeros, some, likesCount, statsfmUsed, statsfmRescued } = cache;
+  const { zeros, some, likesCount, statsfmUsed, statsfmRescued, statsfmError } = cache;
   currentRows = visibles();
   rowById = new Map(currentRows.map(r => [r.id, r]));
   window.__filasZeroPlays = currentRows;
@@ -354,7 +364,7 @@ function renderResults() {
         <button class="btn btn-secondary btn-sm" id="zp-select-all" ${currentRows.length === 0 ? 'disabled' : ''} title="Marca las ${currentRows.length.toLocaleString('es-ES')} de la lista, no solo las pintadas">Seleccionar todos</button>
       </div>
     </div>
-    ${sfToggleHtml}
+    ${sfToggleHtml}${statsfmError ? `\n    ${statsfmAviso()}` : ''}
 
     ${currentRows.length === 0 ? `
       <div class="card"><p>${showingHidden

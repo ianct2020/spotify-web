@@ -13,8 +13,9 @@
 //
 // Devuelve la misma forma que los JSONs del repo (mismos `version` numbers).
 
-import { isJunkTrack } from './util/junk.js?v=341';
-import { songKey } from './util/song-identity.js?v=341';
+import { isJunkTrack } from './util/junk.js?v=342';
+import { songKey } from './util/song-identity.js?v=342';
+import { PRIMER_SKIPPED_TRUE } from './util/corte-saltos.js?v=342';
 
 // ---- Configuración (igual a gen-stats.py) ----
 const MIN_MS = 30000;
@@ -32,6 +33,8 @@ const COMPLETE_CLOSES = new Set([
   'unexpected-exit-while-paused',
   'backbtn',
 ]);
+// Desde cuándo el export anota `skipped` (espejo de CORTE_SKIPPED en gen-stats.py).
+const CORTE_SKIPPED = `${PRIMER_SKIPPED_TRUE}T00:00:00Z`;
 // ⚠️ Estos números van al campo `version` DENTRO de lo que produce el BYOH. Son
 // un tercer juego de contadores, distinto del de `scripts/gen-stats.py` (el
 // `version` de los JSON del owner) y del de `history-keys.js` (clave de
@@ -43,7 +46,7 @@ const COMPLETE_CLOSES = new Set([
 // `totals` ganan `plays_junk`. Sigue parejo con `gen-stats.py`.
 const STATS_VERSION = 5;
 const TRACK_PLAYS_VERSION = 5;   // v5: cada álbum de `albums` lleva además el día de la primera play válida (espejo de gen-stats.py)
-const SKIP_STATS_VERSION = 4;    // v4: dato crudo (ms de cada skip/cierre) + gid; el veredicto pasó a features/skips.js. El bump a v4 es por el `gid`: la cola de versión tras el guion («- Sped Up», «- Piano»…) reagrupa en v=271. ⚠️ Tiene que ir a la par del guarda `>= N` de features/history-data.js: si se queda atrás, el BYOH recién importado se RECHAZA
+const SKIP_STATS_VERSION = 5;    // v5 (tanda 90, `#menos-salteas`): `tracks[id]` suma [5] = completas y [6] = saltos desde CORTE_SKIPPED (append), espejo de gen-stats.py. v4: dato crudo (ms de cada skip/cierre) + gid; el veredicto pasó a features/skips.js. El bump a v4 es por el `gid`: la cola de versión tras el guion («- Sped Up», «- Piano»…) reagrupa en v=271. ⚠️ Tiene que ir a la par del guarda `>= N` de features/history-data.js: si se queda atrás, el BYOH recién importado se RECHAZA
 const LISTENED_VERSION = 2;
 const TRACK_DETAIL_VERSION = 1;
 const RECORDS_VERSION = 3;
@@ -435,7 +438,7 @@ async function processStreamingHistory(fileArrays, { onProgress, ceder, presupue
   const trackUriPartial = new Map(); // uri → { p, ms } (solo <30s)
   // v2: además de los contadores, los ms_played crudos de cada skip y de cada
   // cierre completo. El veredicto lo arma features/skips.js con el duration_ms.
-  const trackSkipStats = new Map(); // tid → { ok, skip, fwd[], close[] }
+  const trackSkipStats = new Map(); // tid → { ok, skip, fwd[], close[], completas, saltos }
   const trackSkipMeta = new Map(); // tid → [nombre, artista] (solo para el gid; ya no se emite)
 
   // Ficha de canción
@@ -507,10 +510,16 @@ async function processStreamingHistory(fileArrays, { onProgress, ceder, presupue
     if (uri) {
       const tidOnly = uri.split(':').pop();
       let ss = trackSkipStats.get(tidOnly);
-      if (!ss) { ss = { ok: 0, skip: 0, fwd: [], close: [] }; trackSkipStats.set(tidOnly, ss); }
+      if (!ss) { ss = { ok: 0, skip: 0, fwd: [], close: [], completas: 0, saltos: 0 }; trackSkipStats.set(tidOnly, ss); }
       if (endReason === 'trackdone') ss.ok++;
       else if (endReason === 'fwdbtn' && ms >= SKIP_MIN_MS) { ss.skip++; ss.fwd.push(ms); }
       if (COMPLETE_CLOSES.has(endReason)) ss.close.push(ms);
+      // v5: desde el corte, un salto (`isSkip`, la definición de arriba) o una completa
+      // (`trackdone` que no es salto). Lo demás no suma a nada. Espejo de gen-stats.py.
+      if (r.ts >= CORTE_SKIPPED) {
+        if (isSkip) ss.saltos++;
+        else if (endReason === 'trackdone') ss.completas++;
+      }
       if (!trackSkipMeta.has(tidOnly) && (track || artist)) {
         trackSkipMeta.set(tidOnly, [track, artist]);
       }
@@ -875,7 +884,7 @@ async function processStreamingHistory(fileArrays, { onProgress, ceder, presupue
   };
 
   await puntoDeControl();
-  // ---- skip stats v2: [ok, skip, fwd_ms[], close_ms[], gid] ----
+  // ---- skip stats v2: [ok, skip, fwd_ms[], close_ms[], gid]; v5: + [completas, saltos] ----
   // El gid agrupa los ids del MISMO tema (ver util/song-identity.js). Se
   // recorre en orden de tid para que la numeración salga igual que en el
   // Python y los dos JSON sean comparables.
@@ -895,7 +904,7 @@ async function processStreamingHistory(fileArrays, { onProgress, ceder, presupue
     // Sin nombre no hay identidad: que sea su propio grupo, no todos juntos.
     if (!key.split('||')[0]) key = '\x00' + tid;
     if (!gidSeq.has(key)) gidSeq.set(key, gidSeq.size);
-    skipOut[tid] = [v.ok, v.skip, v.fwd, v.close, gidSeq.get(key)];
+    skipOut[tid] = [v.ok, v.skip, v.fwd, v.close, gidSeq.get(key), v.completas, v.saltos];
   }
   const skipStats = {
     version: SKIP_STATS_VERSION,

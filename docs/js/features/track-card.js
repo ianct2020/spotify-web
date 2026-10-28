@@ -8,20 +8,20 @@
 // acá y no se propaga: ver `util/artist-name.js`. Los nombres se pintan como
 // **enlaces separados** y cada uno abre SU ficha de artista.
 
-import { loadTrackPlays, loadTrackDetail, loadHistoryStats, isOwner } from './history-data.js?v=341';
-import { escapeHtml } from '../ui/components.js?v=341';
-import { getPreview } from '../api/preview-providers.js?v=341';
-import { togglePreview, playingKey } from '../ui/preview-player.js?v=341';
-import { hasUsername, findTrackId, getTrackCurrentStats, loadTopLifetime } from '../api/statsfm.js?v=341';
-import { openAlbumCard } from './album-card.js?v=341';
-import { openArtistCard, knownArtist } from './artist-card.js?v=341';
-import { openModal, closeTop } from '../ui/modal-stack.js?v=341';
-import { getBestAvailableLikes } from '../api.js?v=341';
-import { showToast } from '../ui/toast.js?v=341';
-import { skelCardBody, skelBox } from '../ui/skeleton.js?v=341';
-import { resolveArtistList } from '../util/artist-name.js?v=341';
-import { coverUrl } from '../util/cover-size.js?v=341';
-import { botonLetraHtml, bloqueLetraHtml, conectarLetra } from '../ui/letra-ficha.js?v=341';
+import { loadTrackPlays, loadTrackDetail, loadHistoryStats, isOwner } from './history-data.js?v=342';
+import { escapeHtml } from '../ui/components.js?v=342';
+import { getPreview } from '../api/preview-providers.js?v=342';
+import { togglePreview, playingKey } from '../ui/preview-player.js?v=342';
+import { hasUsername, findTrackId, getTrackCurrentStats, loadTopLifetime } from '../api/statsfm.js?v=342';
+import { openAlbumCard } from './album-card.js?v=342';
+import { openArtistCard, knownArtist } from './artist-card.js?v=342';
+import { openModal, closeTop } from '../ui/modal-stack.js?v=342';
+import { getBestAvailableLikes } from '../api.js?v=342';
+import { showToast } from '../ui/toast.js?v=342';
+import { skelCardBody, skelBox } from '../ui/skeleton.js?v=342';
+import { resolveArtistList } from '../util/artist-name.js?v=342';
+import { coverUrl } from '../util/cover-size.js?v=342';
+import { botonLetraHtml, bloqueLetraHtml, conectarLetra } from '../ui/letra-ficha.js?v=342';
 
 const MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
 

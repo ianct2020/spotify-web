@@ -1,52 +1,53 @@
-import { isLoggedIn, loginWithSpotify, logout } from './auth.js?v=341';
-import { spotifyFetch, onRateLimit } from './api.js?v=341';
-import { getValidToken } from './auth.js?v=341';
-import { cacheClearAll } from './storage.js?v=341';
-import { idbClearAll } from './idb.js?v=341';
-import { CONSERVAR_CLAVES, CONSERVAR_PREFIJOS, LO_QUE_SE_CONSERVA } from './util/limpiar-cache.js?v=341';
-import { registerRoute, initRouter, rutasRegistradas } from './router.js?v=341';
-import { showToast } from './ui/toast.js?v=341';
-import { pageHeader, escapeHtml } from './ui/components.js?v=341';
-import { installCrashGuard } from './ui/crash-guard.js?v=341';
-import { auditarOcultos, leerIncidencias } from './util/hidden-sync.js?v=341';
-import { getStack } from './ui/modal-stack.js?v=341';
-import { installBackToTop } from './ui/back-to-top.js?v=341';
-import { applyStoredTheme, openThemePanel } from './ui/theme-panel.js?v=341';
-import { escucharAvisoDeCopia } from './ui/aviso-copia.js?v=341';
+import { isLoggedIn, loginWithSpotify, logout } from './auth.js?v=342';
+import { spotifyFetch, onRateLimit } from './api.js?v=342';
+import { getValidToken } from './auth.js?v=342';
+import { cacheClearAll } from './storage.js?v=342';
+import { idbClearAll } from './idb.js?v=342';
+import { CONSERVAR_CLAVES, CONSERVAR_PREFIJOS, LO_QUE_SE_CONSERVA } from './util/limpiar-cache.js?v=342';
+import { registerRoute, initRouter, rutasRegistradas } from './router.js?v=342';
+import { showToast } from './ui/toast.js?v=342';
+import { pageHeader, escapeHtml } from './ui/components.js?v=342';
+import { installCrashGuard } from './ui/crash-guard.js?v=342';
+import { auditarOcultos, leerIncidencias } from './util/hidden-sync.js?v=342';
+import { getStack } from './ui/modal-stack.js?v=342';
+import { installBackToTop } from './ui/back-to-top.js?v=342';
+import { applyStoredTheme, openThemePanel } from './ui/theme-panel.js?v=342';
+import { escucharAvisoDeCopia } from './ui/aviso-copia.js?v=342';
 
-import { render as renderSync } from './features/sync.js?v=341';
-import { render as renderDedupe } from './features/dedupe.js?v=341';
-import { render as renderDupalbums } from './features/duplicate-albums.js?v=341';
-import { render as renderZombies } from './features/zombies.js?v=341';
-import { render as renderVersions } from './features/versions.js?v=341';
-import { render as renderDashboard } from './features/dashboard.js?v=341';
-import { render as renderSmart } from './features/smart.js?v=341';
-import { render as renderSimilar } from './features/similar-artists.js?v=341';
-import { render as renderRabbit } from './features/rabbit-hole.js?v=341';
-import { render as renderByGenre } from './features/by-genre.js?v=341';
-import { render as renderByArtist } from './features/by-artist.js?v=341';
-import { render as renderRecs } from './features/recommendations.js?v=341';
-import { render as renderListened } from './features/listened.js?v=341';
-import { render as renderWrapped } from './features/wrapped.js?v=341';
-import { render as renderRecords } from './features/records.js?v=341';
-import { render as renderCalendario } from './features/calendario.js?v=341';
-import { render as renderMapa } from './features/mapa.js?v=341';
-import { render as renderPuertas } from './features/puertas.js?v=341';
-import { render as renderGeneros } from './features/generos.js?v=341';
-import { render as renderMapaArtistas } from './features/mapa-artistas.js?v=341';
-import { openImportHistory } from './features/import-history.js?v=341';
-import { bindOwnerLockedButtons } from './features/history-data.js?v=341';
-import { render as renderZeroPlays } from './features/zero-plays.js?v=341';
-import { render as renderSkips } from './features/skips.js?v=341';
-import { render as renderSearchLikes } from './features/search-likes.js?v=341';
-import { render as renderWthree } from './features/wthree.js?v=341';
-import { render as renderCovers } from './features/covers.js?v=341';
-import { render as renderMosaico } from './features/mosaico.js?v=341';
-import { render as renderDiscoverArtists } from './features/discover-artists.js?v=341';
-import { render as renderFollowArtists } from './features/follow-artists.js?v=341';
-import { render as renderNewReleases } from './features/new-releases.js?v=341';
-import { render as renderSinClasificar } from './features/sin-clasificar.js?v=341';
-import { pieCuotaHtml, montarPieCuota } from './ui/cuota-pie.js?v=341';
+import { render as renderSync } from './features/sync.js?v=342';
+import { render as renderDedupe } from './features/dedupe.js?v=342';
+import { render as renderDupalbums } from './features/duplicate-albums.js?v=342';
+import { render as renderZombies } from './features/zombies.js?v=342';
+import { render as renderVersions } from './features/versions.js?v=342';
+import { render as renderDashboard } from './features/dashboard.js?v=342';
+import { render as renderSmart } from './features/smart.js?v=342';
+import { render as renderSimilar } from './features/similar-artists.js?v=342';
+import { render as renderRabbit } from './features/rabbit-hole.js?v=342';
+import { render as renderByGenre } from './features/by-genre.js?v=342';
+import { render as renderByArtist } from './features/by-artist.js?v=342';
+import { render as renderRecs } from './features/recommendations.js?v=342';
+import { render as renderListened } from './features/listened.js?v=342';
+import { render as renderWrapped } from './features/wrapped.js?v=342';
+import { render as renderRecords } from './features/records.js?v=342';
+import { render as renderCalendario } from './features/calendario.js?v=342';
+import { render as renderMapa } from './features/mapa.js?v=342';
+import { render as renderPuertas } from './features/puertas.js?v=342';
+import { render as renderMenosSalteas } from './features/menos-salteas.js?v=342';
+import { render as renderGeneros } from './features/generos.js?v=342';
+import { render as renderMapaArtistas } from './features/mapa-artistas.js?v=342';
+import { openImportHistory } from './features/import-history.js?v=342';
+import { bindOwnerLockedButtons } from './features/history-data.js?v=342';
+import { render as renderZeroPlays } from './features/zero-plays.js?v=342';
+import { render as renderSkips } from './features/skips.js?v=342';
+import { render as renderSearchLikes } from './features/search-likes.js?v=342';
+import { render as renderWthree } from './features/wthree.js?v=342';
+import { render as renderCovers } from './features/covers.js?v=342';
+import { render as renderMosaico } from './features/mosaico.js?v=342';
+import { render as renderDiscoverArtists } from './features/discover-artists.js?v=342';
+import { render as renderFollowArtists } from './features/follow-artists.js?v=342';
+import { render as renderNewReleases } from './features/new-releases.js?v=342';
+import { render as renderSinClasificar } from './features/sin-clasificar.js?v=342';
+import { pieCuotaHtml, montarPieCuota } from './ui/cuota-pie.js?v=342';
 
 // ── Arranque degradado cuando /me está rate-limiteado (v=173) ────────────────
 //
@@ -495,6 +496,9 @@ function showApp(profile) {
           <a class="nav-link" data-route="puertas" href="#puertas">
             <span class="nav-link-icon">${ICONS.puertas}</span> Puertas de entrada
           </a>
+          <a class="nav-link" data-route="menos-salteas" href="#menos-salteas">
+            <span class="nav-link-icon">${ICONS.menossalteas}</span> Las que menos te saltas
+          </a>
           <a class="nav-link" data-route="generos" href="#generos">
             <span class="nav-link-icon">${ICONS.generos}</span> Tus géneros
           </a>
@@ -758,6 +762,7 @@ function showApp(profile) {
   registerRoute('calendario', renderCalendario);
   registerRoute('mapa', renderMapa);
   registerRoute('puertas', renderPuertas);
+  registerRoute('menos-salteas', renderMenosSalteas);
   registerRoute('generos', renderGeneros);
   registerRoute('mapa-artistas', renderMapaArtistas);
   registerRoute('zeroplays', renderZeroPlays);
@@ -784,6 +789,9 @@ const ICONS = {
   mapa: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/></svg>',
   // v=308: una puerta entreabierta (la «door-open» de Lucide), para #puertas.
   puertas: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M13 4h3a2 2 0 0 1 2 2v14"/><path d="M2 20h3"/><path d="M13 20h9"/><path d="M10 12v.01"/><path d="M13 4.562v16.157a1 1 0 0 1-1.242.97L5 20V5.562a2 2 0 0 1 1.515-1.94l4-1A2 2 0 0 1 13 4.561Z"/></svg>',
+  // Tanda 90: una insignia con un visto (la «badge-check» de Lucide), para #menos-salteas: los temas
+  // que escuchas enteros. Ninguna otra ruta la usa.
+  menossalteas: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3.85 8.62a4 4 0 0 1 4.78-4.77 4 4 0 0 1 6.74 0 4 4 0 0 1 4.78 4.78 4 4 0 0 1 0 6.74 4 4 0 0 1-4.77 4.78 4 4 0 0 1-6.75 0 4 4 0 0 1-4.78-4.77 4 4 0 0 1 0-6.76Z"/><path d="m9 12 2 2 4-4"/></svg>',
   // v=313: dos etiquetas superpuestas (la «tags» de Lucide), para #generos: las etiquetas de
   // todos tus artistas. No es la de #genre (una etiqueta sola con su agujero).
   generos: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m15 5 6.3 6.3a2.4 2.4 0 0 1 0 3.4L17 19"/><path d="M9.586 5.586A2 2 0 0 0 8.172 5H3a1 1 0 0 0-1 1v5.172a2 2 0 0 0 .586 1.414L8.29 18.29a2.426 2.426 0 0 0 3.42 0l3.58-3.58a2.426 2.426 0 0 0 0-3.42z"/><circle cx="6.5" cy="9.5" r=".5" fill="currentColor"/></svg>',
@@ -825,6 +833,7 @@ const HOME_SECTIONS = [
       { hash: 'calendario', icon: ICONS.calendario, name: 'Calendario', desc: 'Cada día de tu historial, coloreado por lo que escuchaste.' },
       { hash: 'mapa', icon: ICONS.mapa, name: 'Mapa', desc: 'Tus países, ordenados por los minutos que escuchaste.' },
       { hash: 'puertas', icon: ICONS.puertas, name: 'Puertas de entrada', desc: 'Por qué tema entraste a cada artista y si sigue siendo tu top.' },
+      { hash: 'menos-salteas', icon: ICONS.menossalteas, name: 'Las que menos te saltas', desc: 'Los temas que escuchas enteros y casi nunca te saltas.' },
       { hash: 'generos', icon: ICONS.generos, name: 'Tus géneros', desc: 'Los géneros que más escuchas, según las etiquetas de Last.fm.' },
       { hash: 'mapa-artistas', icon: ICONS.mapaartistas, name: 'Mapa de artistas', desc: 'Tus artistas acomodados por parecido, según Last.fm.' },
       { hash: 'covers', icon: ICONS.covers, name: 'Mis tapas', desc: 'El mosaico de las portadas que escuchaste de verdad.' },
@@ -1082,7 +1091,7 @@ async function montarBaseMosaico() {
   const parar = document.getElementById('debug-mosaico-parar');
   let mod;
   try {
-    mod = await import('./features/mosaico-colores.js?v=341');
+    mod = await import('./features/mosaico-colores.js?v=342');
   } catch (err) {
     estado.textContent = `No he podido cargar el módulo: ${err.message}`;
     return;

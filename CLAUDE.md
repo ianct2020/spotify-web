@@ -219,6 +219,27 @@ Guarda: `tests/errores-que-dicen-hecho.test.mjs` (los dos módulos REALES en Nod
 `loader-errores-hecho.mjs`, `api-errores-hecho-doble.mjs`, `idb-borrado-falla-doble.mjs`,
 `lastfm-genre-doble.mjs`, `vista-genre-doble.mjs`). Rojo contra la versión anterior en 9 de 29.
 
+**Tanda 92A (v=342): stats.fm en «Sin plays» y «Skips crónicos».** En `features/zero-plays.js` y `features/skips.js`,
+`loadTopLifetime()` llevaba `.catch(() => null)`: con «Cruzar con Stats.fm» marcado y stats.fm caído, la lista salía sin
+el cruce y sin decirlo (temas escuchados después del export quedaban como «sin plays»). Ahora el error crudo va a
+`console.warn` con el prefijo del módulo (`[zeroplays]` / `[skips]`) y la vista sigue sin stats.fm, con una línea en
+`--color-text-secondary`: «No se pudieron leer tus datos de stats.fm: la vista sigue sin ellos.». ⚠️ Esa línea sale también
+encima de la tarjeta de sin me gusta y del candado de un amigo sin datos (menor, anotado en `PENDIENTES.md`). Guarda:
+`tests/catch-que-tapan-92a.test.mjs` (dobles `loader-catch-t92a.mjs` y `vista-catch-t92a.mjs`), rojo contra v=341 y verde
+después, con el HTML de la vista sana conservado.
+
+**Tanda 92B (v=342): me gusta en «Recomendaciones» y álbumes escuchados en «W-Three».** `features/recommendations.js`
+hacía `getAllLikedTracks().catch(() => [])`: con `[]`, `knownArtists` y `likedUris` quedaban vacíos y podía recomendarte
+lo que ya tenés. Ahora, si falla, **no calcula**: el error crudo va a `console.warn('[recs] …')` y la vista dice «No se han
+podido leer tus me gusta. No se han calculado recomendaciones.», en `--color-text-secondary`. `features/wthree.js` tapaba
+`loadListenedAlbums()` con `null` y `crossWithHistory` daba por no escuchado lo escuchado; ahora el error va a
+`console.warn('[wthree] …')`, la vista sigue con el resto y avisa arriba de los cubos, también en
+`--color-text-secondary`: «No se han podido leer tus álbumes escuchados: la vista sigue sin ellos.». 🔴 **Queda pendiente
+`features/mosaico-colores.js`**: `armarCatalogo()` sigue tapando el fallo de `loadListenedAlbums()`, pero el aviso se
+tendría que pintar en `#debug`, que se arma en `app.js` (fuera del alcance de la 92B). Guardas:
+`tests/catch-que-tapan-92b-recs.test.mjs` y `tests/catch-que-tapan-92b-wthree.test.mjs` (cuatro archivos en
+`tests/dobles/`), rojos contra v=341 y verdes después, con el HTML sano conservado.
+
 ## Zona horaria: las fechas del historial NO se pasan a local (v=154 + v=231)
 
 **Medio arreglo en v=154.** Récords decía «9 ene 2026» y Wrapped «8 ene 2026»
@@ -2902,6 +2923,98 @@ desborde a 1366×591 y 390×844); contra v=327, rojas desde la 2 (el «No: ahora
 `fonoteca-migracion/driver-capturas-puertas-t74-2026-10-22.mjs`. `scripts/verificar-rehorneado.py` suma `--permitir-en ARCHIVO
 REGEX` para el rehorneado de un JSON que TIENE que cambiar. Medición y paridad sobre el export real
 en `fonoteca-migracion` (`medicion-puertas-*-2026-10-15.*`).
+
+## ✅ `#menos-salteas`: las que menos te saltas (v=342)
+
+La salida que quedó de «las infalibles» (la tanda 69 midió la definición de Ian y daban **0**). Ian, el 25/10: «bueno
+hagamos ese entonces». Ruta `#menos-salteas`, menú General, detrás de «Puertas de entrada», icono propio
+(`ICONS.menossalteas`, la «badge-check» de Lucide: ninguna otra ruta la usa). Tarjeta de inicio y cabecera: **«Las que
+menos te saltas»** (es-ES peninsular; «Las que menos salteas» quedó descartada por el encargo).
+
+| archivo | qué | probado en |
+|---|---|---|
+| `util/menos-salteas.js` | PURO: la vara, la agrupación por `gid`, el orden, los nombres y los textos | `tests/menos-salteas.test.mjs` |
+| `features/menos-salteas.js` | la vista: el candado, los cuatro carteles, la lista de a 25 y la ficha | `tests/banco/menos-salteas.html` (en `prepush`) |
+| `scripts/gen-stats.py` + `history-processor.js` | los dos campos nuevos de `tracks[id]` | `tests/menos-salteas.test.mjs` (sección 3) |
+
+**La regla (decidida ANTES de mirar el dato):**
+
+- **Salto** = la definición única de v=291 (`skipped === true || (fwdbtn && ms < 30 s)`), sobre las crudas deduplicadas
+  con uri y sin basura. **Completa** = `trackdone` que **no** es salto. Un `endplay`, un `logout` o un `fwdbtn` de 30 s o
+  más sin `skipped` no suman a nada.
+- **Solo desde el 15/10/2022 a las 00:00 UTC** (`CORTE_SKIPPED` en `gen-stats.py`; en JS, `PRIMER_SKIPPED_TRUE` de
+  `util/corte-saltos.js` + `T00:00:00Z`, importado). Antes el export trae `skipped: false` en todas las filas.
+- **El mismo tema** = el `gid` (el `songKey` del pipeline), como `#skips`. La fila se enseña con el id del grupo con más
+  reproducciones desde el corte (a igualdad, el menor id).
+- **Porcentaje** = saltos / (completas + saltos). **Entra** con completas ≥ 10 y porcentaje ≤ la mitad de
+  `lineaBaseSaltos(years).pct` (IMPORTADA; 67,9 con el export de octubre → la mitad, 33,95).
+- 🔴 **La comparación es en enteros**: `2000 × saltos ≤ round(base × 10) × (completas + saltos)`. En coma flotante
+  14 / 125 × 100 = 11,200000000000001 y un 11,2 % justo (base 22,4) quedaba fuera.
+- **Orden**: porcentaje de menor a mayor (comparado en cruz, en enteros) y, a igualdad, completas de mayor a menor.
+
+**El dato: `history-skip-stats` v5.** `tracks[id]` suma **dos enteros al final** (append; `skips.js:221` desestructura
+los cinco primeros y no se entera): `[ok, skip, fwd[], close[], gid, completas, saltos]`, **por id**; la agrupación la
+hace el navegador. El filtro de emisión NO cambió (`total ≥ 1 or cierres`). Medido (REAL): de los 37 grupos que pasan,
+**0** pierden un id por ese filtro; en todo el JSON, los ids que no se emiten llevan 1.811 saltos desde el corte que no
+están en el horneado (130.158 contados en el export, 128.347 emitidos), ninguno de un grupo que entra.
+
+- **Versiones, las tres a la vez**: `SKIP_STATS_VERSION` 4 → 5 (`gen-stats.py` y `history-processor.js`), `SKIP_VERSION`
+  5 → 6 (`history-keys.js`), `OWNER_PREV_KEYS.skip` **vacía** (ya lo estaba; vive en `features/history-data.js`).
+- 🔴 **La guarda de `loadSkipStats()` se queda en `>= 4`, A PROPÓSITO.** El encargo decía subirla a 5 «si hace falta», y
+  no hace falta: los dos campos van al final y un v4 le sirve entero a `#skips`. Subirla se probó y **dejaba sin `#skips`
+  a un amigo con un historial importado antes** (el v4 llegaba como `null`): el caso H2 del banco `copia-importar` (que
+  siembra justo eso) se colgaba, 3 de 3, y volvió a verde al bajarla. El comentario de `history-processor.js` («tiene que
+  ir a la par del guarda») solo obliga a guarda ≤ versión. ⚠️ **Si algún día se cambia el `gid`, ahí sí hay que subirla**
+  (la regla de v=270/v=271).
+- **Un BYOH viejo en `#menos-salteas`**: llega con `tracks[id]` de cinco campos, `faltanCampos()` lo detecta y la vista
+  dice «Para ver esto, vuelve a importar tu historial», con el botón. Sin `skip` y con historial propio
+  (`hasLocalHistory()`), lo mismo; sin nada, el cartel de `#records`. El dueño no corre ese riesgo: su import solo escribe
+  `days` (lo afirma el caso E de `copia-importar`).
+- Rehorneado con la copia y `verificar-rehorneado.py --permitir-en history-skip-stats.json '.*'`: 110.111 rutas
+  distintas, todas en ese archivo. `gen-stats.py` reescribió los otros seis por el `generated_at`: restaurados desde la
+  copia, los diez restantes de `src/data/` idénticos byte a byte (`listening-history.json` en `53011e62…`).
+- **Paridad Python/JS sobre el export real** (REAL, 27/10): 55.055 ids de 55.055, **0 diferencias** en `[5]`/`[6]` y 0
+  en los cinco de antes; Σ completas 54.329 y Σ saltos 128.347 en los dos.
+
+**Lo medido antes de construir** (REAL, `tmp-t90/medir.py`, sin red): **37 grupos pasan la vara**. Completas de los que
+entran: mínimo 10, mediana 16, máximo 40; porcentaje: mínimo 16,0, mediana 28,6, máximo 33,3; ninguno con 0 saltos.
+
+| completas | ≤ 25 % | ≤ la mitad de la base (33,95) | ≤ 50 % |
+|---|---|---|---|
+| ≥ 5 | 47 | 107 | 554 |
+| ≥ 10 | 8 | **37** | 251 |
+| ≥ 20 | 3 | 12 | 69 |
+
+**La vista:**
+
+- Arriba: «Temas que escuchaste enteros al menos 10 veces desde el 15/10/2022 y que saltas como mucho la mitad que tu
+  promedio (67,9 %).». 🔴 **El «N %» es el promedio (la línea base), no su mitad**: la mitad de 67,9 es 33,95 y con un
+  decimal no hay forma limpia de escribirla. La fecha sale de `PRIMER_SKIPPED_TRUE`.
+- Lista numerada, **top 25** y «Mostrar 25 más» (0 peticiones). Cada fila: puesto, tema, artista, «N enteras, M
+  saltadas» (singular cuando toca) y el porcentaje con un decimal en es-ES («28,6 %», espacio duro). Tocar el tema abre
+  `openTrackCard`. Sin gráficos ni animaciones; clases propias `.menos-salteas-…`; a 600 px o menos las cuentas bajan
+  debajo del artista.
+- Vacía: «Todavía no hay temas que cumplan esto.». Sin dos años con los saltos anotados: «Tu historial no tiene dos años
+  con los saltos anotados: no puedo calcular tu promedio.».
+- 🔴 **Los nombres NO están en ningún JSON horneado por id** (el `meta` se sacó por peso en v=146;
+  `history-track-plays` y `history-track-detail` no los traen). Salen, sin pedir nada, de: (1) la caché de me gusta
+  (`getBestAvailableLikes()` **sin** `allowFetch`, lo que usa `#skips`) y (2) los seis temas top por artista de
+  `history-artist-tracks`. **Con solo (2), 5 de los 37 grupos REALES quedan sin nombre** (puestos 6, 11, 12, 19 y 24); con
+  la caché de me gusta de Ian no se midió (su IndexedDB no se lee). Un grupo sin nombre se enseña igual, en su sitio, con
+  «Sin nombre en tus datos» y la ficha por id: sacarlo cambiaría el ranking en silencio.
+- **Abrir cuesta 1 `/me`** y 0 de lo demás (medido en el banco). ⚠️ **Las dos primeras cargas van EN SERIE**:
+  `getCurrentUserId()` (`api.js`) memoiza el id pero no la promesa, y `loadSkipStats()` + `loadHistoryStats()` con
+  `Promise.all` y el `/me` frío pedían **2** `/me` (visto rojo en el banco). Vigencia de ruta después de cada `await`.
+
+Guardas: `tests/menos-salteas.test.mjs` (58: la vara con sus bordes —9/10 completas, el 30 % justo, el 11,2 % de coma
+flotante, el 14/10/2022 a las 23:59:59 que no cuenta y el 15/10 a las 00:00:00 que sí—, `trackdone` con `skipped`,
+`fwdbtn` de 10 s y de 40 s, `endplay`, el `gid`, los dos pipelines sobre las mismas reproducciones INVENTADAS, las
+versiones en los tres sitios, la guarda en 4, `OWNER_PREV_KEYS.skip`, el corte de Python = el de JS, el horneado v5, el
+orden, los textos y los nombres; **rojo contra v=341 en 21**) y el banco `tests/banco/menos-salteas.html` +
+`-caso.html` + `-datos.mjs` (en `prepush`; abrir = 1 `/me`, la lista del owner = la cuenta a mano, 25 → 50 → 60 con
+0 peticiones, amigo v5 / viejo / pocos / sin datos, la ficha, salir a mitad sin escribir, sin desborde a 1366×591 y
+390×844; 5/5, 6.809-7.110 ms de reloj virtual, corre con el defecto de 45 s). `tests/likes-cache-policy.test.mjs`
+afirma `history_skip_stats_v6`.
 
 ## 🔎 `#generos`: buscar los géneros de tu historial (v=313) y enseñarlos (v=314)
 
