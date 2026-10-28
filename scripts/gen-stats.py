@@ -5,12 +5,14 @@ Genera JSONs agregados a partir del Extended Streaming History de Spotify.
 Salidas:
 - src/data/history-stats.json    Wrapped + Dashboard: totales, por año, heatmap, timeline mensual, all-time tops
 - src/data/history-track-plays.json  Índice track_uri -> {p:plays, ms:ms_totales} para cruces con likes
-- src/data/history-skip-stats.json   Índice track_id -> [ok, skip, fwd_ms, close_ms, gid] para "Skips crónicos"
+- src/data/history-skip-stats.json   Índice track_id -> [ok, skip, fwd_ms, close_ms, gid, completas, saltos] para "Skips crónicos" y «Las que menos te saltas»
   · ok = plays con reason_end == 'trackdone'
   · skip = plays con reason_end == 'fwdbtn' y ms_played >= SKIP_MIN_MS (skip consciente)
   · fwd_ms = los ms_played de cada uno de esos skips (crudo, sin veredicto)
   · close_ms = los ms_played de los cierres "completos" (COMPLETE_CLOSES)
   · gid = id de grupo: los ids de Spotify del MISMO tema comparten gid
+  · completas, saltos (v5, tanda 90) = desde CORTE_SKIPPED, las `trackdone` que no son
+    salto y los saltos (la definición única de v=291). Los usa `#menos-salteas`.
 
   v2 — el pipeline ya NO decide qué es un skip: emite el dato crudo y el
   veredicto se calcula en features/skips.js, que es el único lado que tiene el
@@ -68,6 +70,11 @@ SKIP_STATS_MIN_PLAYS = 1
 # Cierres "completos": la pista se cortó porque saliste, cerraste sesión o se
 # cayó la app, NO porque le dieras next. Si a esa altura ya habías escuchado
 # casi todo el tema, es una escucha completa y no debería quedar sin contar.
+# Desde cuándo el export anota `skipped` (antes trae `false` en todas las filas: no se
+# puede contar un salto). Tiene que ser el `PRIMER_SKIPPED_TRUE` de
+# `src/js/util/corte-saltos.js` a las 00:00 UTC; lo vigila tests/menos-salteas.test.mjs.
+CORTE_SKIPPED = "2022-10-15T00:00:00Z"
+
 COMPLETE_CLOSES = {
     "endplay",
     "logout",
@@ -85,7 +92,7 @@ COMPLETE_CLOSES = {
 # único lector de `.version` es el de skips, en `history-data.js`).
 STATS_VERSION = 5            # v5: la basura funcional sale también del DIVISOR de skip_pct (por año y en el total), y years[] y totals ganan plays_junk (v=295). v4: years[].skip_pct pasa a la definición de totals.skip_pct, y years[] gana plays_raw y skips (v=291). v3: years[].days
 TRACK_PLAYS_VERSION = 5      # v5: cada entrada de `albums` lleva además el DÍA de la primera play válida (ficha de álbum: «primera vez»). v4: cada entrada de `albums` lleva plays y ms además de name/artist (la ficha de álbum decía "0 plays"). v3: agregó `albums`. v2: incluía entries "partial" para tracks solo con plays <30s
-SKIP_STATS_VERSION = 4      # v4: igual que v3, pero el `gid` se recalculó con la cola de versión tras el guion (v=271)
+SKIP_STATS_VERSION = 5      # v5 (tanda 90, `#menos-salteas`): `tracks[id]` suma dos enteros al final (append: los cinco de antes no se mueven), [5] = completas y [6] = saltos, los dos desde CORTE_SKIPPED. v4: igual que v3, pero el `gid` se recalculó con la cola de versión tras el guion (v=271)
 LISTENED_VERSION = 2         # bump: excluye "Sonido Para Sacar Agua Del Movil"
 TRACK_DETAIL_VERSION = 1     # ficha de canción: plays por mes + primera/última + récords del track
 RECORDS_VERSION = 3          # v3: seis récords nuevos (día con más artistas, tema en más años, artista con más días, abandonado, crecimiento, racha de artista). v2: excluye todas las variantes del sonido saca-agua
@@ -492,7 +499,8 @@ def build_stats(plays, img_idx):
     # v2: además de los contadores guardamos los ms_played crudos de cada skip
     # (`fwd`) y de cada cierre completo (`close`). Son ~57k + ~43k números; el
     # veredicto lo arma skips.js, que sí tiene el duration_ms.
-    track_skip_stats = defaultdict(lambda: {"ok": 0, "skip": 0, "fwd": [], "close": []})
+    # v5 (tanda 90): `completas` y `saltos` desde CORTE_SKIPPED, para `#menos-salteas`.
+    track_skip_stats = defaultdict(lambda: {"ok": 0, "skip": 0, "fwd": [], "close": [], "completas": 0, "saltos": 0})
     # Solo para calcular el gid: el meta ya NO se emite (nadie lo consumía y
     # eran 9.585 entradas de peso muerto en el JSON).
     track_skip_meta = {}
@@ -570,6 +578,13 @@ def build_stats(plays, img_idx):
                 _s["fwd"].append(ms)
             if end_reason in COMPLETE_CLOSES:
                 _s["close"].append(ms)
+            # v5: desde el corte, un salto (la definición de arriba, `is_skip`) o una
+            # completa (`trackdone` que no es salto). Lo demás no suma a nada.
+            if ts_str >= CORTE_SKIPPED:
+                if is_skip:
+                    _s["saltos"] += 1
+                elif end_reason == "trackdone":
+                    _s["completas"] += 1
             if tid_only not in track_skip_meta and (track or artist):
                 track_skip_meta[tid_only] = (track, artist)
 
@@ -1025,7 +1040,7 @@ def build_stats(plays, img_idx):
         "years": listened_years,
     }
 
-    # Skip stats v2: {id: [ok, skip, fwd_ms[], close_ms[], gid]}.
+    # Skip stats v2: {id: [ok, skip, fwd_ms[], close_ms[], gid]}. v5: + [completas, saltos].
     #
     # El `gid` es un entero por track: los ids del MISMO tema comparten gid. Se
     # calcula acá y no en el navegador para no tener que mandar 46.158 pares
@@ -1051,7 +1066,7 @@ def build_stats(plays, img_idx):
             key = "\x00" + tid
         if key not in gid_seq:
             gid_seq[key] = len(gid_seq)
-        skip_out[tid] = [v["ok"], v["skip"], v["fwd"], v["close"], gid_seq[key]]
+        skip_out[tid] = [v["ok"], v["skip"], v["fwd"], v["close"], gid_seq[key], v["completas"], v["saltos"]]
 
     skip_payload = {
         "version": SKIP_STATS_VERSION,
