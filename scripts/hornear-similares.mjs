@@ -4,6 +4,7 @@
 //
 //   node scripts/hornear-similares.mjs escanear <archivo de avance.jsonl>
 //   node scripts/hornear-similares.mjs hornear  <archivo de avance.jsonl> <d3.min.js>
+//   node scripts/hornear-similares.mjs reindexar <avance viejo.jsonl> <avance nuevo.jsonl>
 //
 // El molde es el de `bake-covers.py`: un dato horneado aparte, con su script commiteado, que
 // nadie corre al cargar la app. Lo que mide y decide salió de la tanda 63
@@ -33,6 +34,14 @@
 //   · Retomable: al arrancar se lee el avance y no se le pide a nadie que ya tenga respuesta
 //     definitiva. El tope (`TOPE`) es de la tanda entera y cuenta TODAS las líneas del avance,
 //     también las de otros métodos que se hayan anotado ahí.
+//
+// REINDEXAR (tanda 95). Sin red. Con cada export nuevo, ANTES de `escanear`: el avance guarda cada
+// respuesta por `indice` del universo de cuando se escaneó, y con artistas nuevos metidos por minutos
+// los índices quedan corridos. `definitivas()` tira y `escanear` (que salta por índice, no por
+// nombre) le pediría a los artistas equivocados. `reindexar` copia el avance a un archivo NUEVO con
+// cada línea igual salvo `indice`, que pasa a ser el de `pedido` en el universo de hoy por igualdad
+// exacta (la de `definitivas()`, sin normalizar). Lo que ya no está en el universo no se copia, y se
+// cuenta. Nunca escribe sobre el viejo.
 //
 // HORNEAR. Sin red.
 //   · «Está en tu historial» es la regla de la 63: igualdad de `normalizarNombre` (importado de
@@ -66,7 +75,7 @@
 import { readFileSync, writeFileSync, appendFileSync, existsSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
-import { dirname, join } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import vm from 'node:vm';
 import { universo } from '../src/js/util/mapa-paises.js';
 import { normalizarNombre } from '../src/js/util/mb-pais.js';
@@ -128,13 +137,26 @@ export function clasificar({ status, datos }) {
 
 const dormir = (ms) => new Promise((r) => setTimeout(r, ms));
 
+/** Los índices que ya tienen respuesta definitiva en el avance (por índice, como los salta `escanear`). */
+export function hechos(avance) {
+  return new Set(avance.filter((p) => p.metodo === METODO && p.clase === 'definitiva').map((p) => p.indice));
+}
+
+/** Lo que `escanear` pediría, en su orden: los índices del universo (de `N`) sin respuesta definitiva. */
+export function pendientes(avance, N) {
+  const h = hechos(avance);
+  const l = [];
+  for (let indice = 0; indice < N; indice++) if (!h.has(indice)) l.push(indice);
+  return l;
+}
+
 async function escanear(archivo) {
   const key = leerKey();
   const { u, huella } = cargarUniverso();
   const previas = leerAvance(archivo);
-  const hechos = new Set(previas.filter((p) => p.metodo === METODO && p.clase === 'definitiva').map((p) => p.indice));
+  const yaDefinitivos = hechos(previas).size;
   let gastadas = previas.length;
-  console.log(JSON.stringify({ universo: u.length, huella, yaDefinitivos: hechos.size, peticionesPrevias: gastadas, tope: TOPE }));
+  console.log(JSON.stringify({ universo: u.length, huella, yaDefinitivos, peticionesPrevias: gastadas, tope: TOPE }));
 
   const escribir = (linea) => {
     const texto = JSON.stringify(linea);
@@ -145,8 +167,7 @@ async function escanear(archivo) {
   let ultimo = -Infinity, fallosSeguidos = 0, motivo = 'completo';
   const t0 = Date.now();
   afuera:
-  for (let indice = 0; indice < u.length; indice++) {
-    if (hechos.has(indice)) continue;
+  for (const indice of pendientes(previas, u.length)) {
     const { nombre, minutos } = u[indice];
     for (let intento = 0; ; intento++) {
       if (gastadas >= TOPE) { motivo = 'tope'; break afuera; }
@@ -191,6 +212,40 @@ async function escanear(archivo) {
   const todas = leerAvance(archivo);
   const definitivos = new Set(todas.filter((p) => p.metodo === METODO && p.clase === 'definitiva').map((p) => p.indice)).size;
   console.log(JSON.stringify({ motivo, peticionesTotales: todas.length, tope: TOPE, definitivos, universo: u.length, segundos: Math.round((Date.now() - t0) / 1000) }));
+}
+
+// ── Reindexar ────────────────────────────────────────────────────────────────────────────────
+
+/**
+ * El avance con cada `indice` pasado al universo de hoy por el nombre exacto de `pedido`. Las líneas
+ * cuyo `pedido` ya no está en el universo no se copian: van a `descartadas` (su `n`, su índice viejo).
+ */
+export function reindexar(avance, u) {
+  const indicePorNombre = new Map();
+  u.forEach((a, i) => { if (!indicePorNombre.has(a.nombre)) indicePorNombre.set(a.nombre, i); });
+  const lineas = [], descartadas = [];
+  for (const p of avance) {
+    const i = indicePorNombre.get(p.pedido);
+    if (i === undefined) { descartadas.push({ n: p.n, indice: p.indice }); continue; }
+    lineas.push({ ...p, indice: i });
+  }
+  return { lineas, descartadas };
+}
+
+/** `reindexar` de archivo a archivo. El universo se pasa en los tests; si no, es el de hoy. */
+export function reindexarArchivos(viejo, nuevo, { u, huella } = cargarUniverso()) {
+  if (!nuevo) throw new Error('Falta el avance nuevo.');
+  if (!existsSync(viejo)) throw new Error(`No existe el avance viejo: ${viejo}`);
+  if (resolve(viejo) === resolve(nuevo)) throw new Error('El avance nuevo es el mismo archivo que el viejo: no se escribe.');
+  if (existsSync(nuevo)) throw new Error(`El avance nuevo ya existe (${nuevo}): no se pisa.`);
+  const avance = leerAvance(viejo);
+  const { lineas, descartadas } = reindexar(avance, u);
+  // `wx`: si alguien lo creó entre el chequeo y acá, tampoco se pisa.
+  writeFileSync(nuevo, lineas.map((p) => JSON.stringify(p) + '\n').join(''), { flag: 'wx' });
+  return {
+    leidas: avance.length, copiadas: lineas.length, descartadas: descartadas.length, descartadasDetalle: descartadas,
+    definitivas: definitivas(lineas, u).size, universo: u.length, huella,
+  };
 }
 
 // ── Hornear ──────────────────────────────────────────────────────────────────────────────────
@@ -400,8 +455,9 @@ function hornear(archivo, rutaD3) {
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const [modo, archivo, rutaD3] = process.argv.slice(2);
-  if (!archivo) { console.error('uso: hornear-similares.mjs escanear|hornear <avance.jsonl> [d3.min.js]'); process.exit(2); }
+  if (!archivo) { console.error('uso: hornear-similares.mjs escanear|hornear|reindexar <avance.jsonl> [d3.min.js | avance nuevo.jsonl]'); process.exit(2); }
   if (modo === 'escanear') await escanear(archivo);
   else if (modo === 'hornear') hornear(archivo, rutaD3);
+  else if (modo === 'reindexar') console.log(JSON.stringify(reindexarArchivos(archivo, rutaD3)));
   else { console.error('modo desconocido: ' + modo); process.exit(2); }
 }
