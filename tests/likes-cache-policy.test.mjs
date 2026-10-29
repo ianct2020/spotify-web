@@ -269,8 +269,8 @@ ok(/from '\.\.\/history-keys\.js'/.test(histData),
 ok(OWNER_KEY_LIST.length === Object.keys(OWNER_KEYS).length && OWNER_KEY_LIST.length === 8,
   'la lista cubre las ocho claves del owner');
 // v=316 (tanda 65): `SIMILARES_VERSION` 1 → 2 (el rehorneado con el autocorrect y los sueltos). El assert sigue a la versión.
-ok(OWNER_KEY_LIST.includes('history_artist_similares_v2') && !OWNER_KEY_LIST.includes('history_artist_similares_v1'),
-  'incluye history_artist_similares_v2, el mapa de artistas (v=316), y ya no la v1');
+ok(OWNER_KEY_LIST.includes('history_artist_similares_v3') && !OWNER_KEY_LIST.includes('history_artist_similares_v2') && !OWNER_KEY_LIST.includes('history_artist_similares_v1'),
+  'incluye history_artist_similares_v3, el mapa de artistas (tanda 95), y ya no la v2 ni la v1');
 // Tanda 84 (export nuevo, mismo formato): plays v5 → v6 y skips v4 → v5 en `history-keys.js`.
 // Tanda 90 (`#menos-salteas`): skips v5 → v6 (`tracks[id]` suma completas y saltos desde el corte).
 ok(OWNER_KEY_LIST.includes('history_track_plays_v6') && OWNER_KEY_LIST.includes('history_skip_stats_v6') && !OWNER_KEY_LIST.includes('history_skip_stats_v5'),

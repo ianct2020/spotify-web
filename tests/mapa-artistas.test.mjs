@@ -219,7 +219,7 @@ if (existsSync(ruta)) {
   const texto = readFileSync(ruta, 'utf8');
   const j = JSON.parse(texto);
   ok(igual(Object.keys(j), ['version', 'fuente', 'fecha', 'limit', 'nombres', 'pos', 'aristas']), `las claves son las de la forma acordada: ${Object.keys(j).join(', ')}`);
-  ok(j.version === 2, `es la v2 (v=316: el autocorrect y los sueltos), y vino ${j.version}`);
+  ok(j.version === 3, `es la v3 (tanda 95: los 60 del export nuevo), y vino ${j.version}`);
   ok(!/minut|plays|\"ms\"|radio/i.test(texto.replace(/"nombres":\[.*?\],"pos"/s, '"pos"')), 'fuera de los nombres, ni minutos ni plays ni radios');
   ok(j.pos.length === 2 * j.nombres.length && j.aristas.length % 4 === 0, 'pos = 2 × nombres; aristas de a cuatro');
   let bien = true;
