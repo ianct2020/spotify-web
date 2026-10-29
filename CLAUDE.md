@@ -2289,6 +2289,13 @@ no depender de auditar después). Por eso está copiada acá, que sí se carga s
 al trabajar en este repo. Ver el porqué en `fonoteca-migracion/CONTEXTO-TECNICO.md`,
 «una regla que no está donde se lee, no existe».
 
+### La red en las pruebas
+
+Todo `npm test`, `prepush`, banco o conductor corre con `bwrap … --unshare-net`,
+tapando el export, y se pega la línea entera: sin eso, la red es «no medida», nunca «0».
+Desde esta tanda, el corredor también corta los nombres externos en Chrome.
+Para la tanda 44 vale la copia de la 93, `fonoteca-migracion/driver-capturas-linea-base-sin-fuentes-t93-2026-10-28.mjs`: corta y cuenta las fuentes; el original las deja pasar sin contarlas.
+
 Deploy completo: `npm run subir-version` (tanda 88, `scripts/subir-version.mjs`), que sube de una
 **los OCHO `?v=` de `src/`** —los 4 de `src/index.html` y los 4 de `src/callback.html`— al actual + 1
 (`-- --a N` para otro número, que tiene que ser mayor; `-- --revisar` para ver qué haría sin
@@ -4529,7 +4536,7 @@ medir y hay motivo para dudar de las cuatro.
 La moraleja es la de siempre y se repite: **«leída del código» no es una medición.** La
 fila sobrevivió así desde que se armó la tabla.
 
-### Las 24 vistas del menú
+### Las vistas del menú
 
 > ⚠️ **CÓMO LEER ESTA TABLA — la capa de cada fila no es decorativa.**
 >
@@ -4594,6 +4601,7 @@ fila sobrevivió así desde que se armó la tabla.
 | `#mapa` (v=304) | **1 `/me`** (+1 del arranque = **2**) · **0 MusicBrainz** | ídem | `render()` → `loadArtistTracks()` → `loadOne` → `getCurrentUserId` (el `getCurrentUserId()` de la vista va por el memo: 0 más); la caché del mapa sale de IndexedDB | **fijo**, no escala con nada | **medida en el banco el 2026-10-14** (`tests/banco/mapa.html`, Spotify y MusicBrainz simulados): abrir = 1 `/me` y 0 a MusicBrainz, también al volver y tras recargar. En vivo, no. Desde v=305 abrir baja además el módulo del mundo (`util/mundo-110m.js`, ~73 KB, del mismo origen: no es cuota de nadie); el banco lo vuelve a afirmar con el mundo puesto |
 | ↳ **al pulsar «Buscar países» / «Seguir»**: **1 búsqueda por artista + la grabación si hace falta + 1 por cada área nueva**, de a una y a 1,2 s como mínimo, **0 a Spotify** | — | lo ya guardado: **0** | `musicbrainz.org/ws/2/artist/`, `/recording/`, `/area/<id>` | nº de artistas con ≥ 10 min sin buscar todavía | **medida en el banco** (12 artistas inventados: 23 peticiones sin fallos) y con tope en vivo contra MusicBrainz (ver `fonoteca-migracion/mapa/`) |
 | `#puertas` (v=308) | **1 `/me`** (+1 del arranque = **2**) | ídem | `render()` → `loadArtistTracks()` → `loadOne` → `getCurrentUserId`; «Mostrar 100 más» = **0** | **fijo**, no escala con nada | **medida en el banco el 2026-10-15** (`tests/banco/puertas.html`, Spotify simulada): abrir = 1 `/me` y 0 de lo demás, también con un amigo; 0 rutas sin simular, 0 hosts externos desde que se abre. Con el conductor de capturas (la app servida en local, `/me` contestado ahí): 2 `/me` en la carga, el del arranque y el de la vista. En vivo, no |
+| `#menos-salteas` (v=342) | **1 `/me`** (+1 del arranque = **2**) · **0** de lo demás | ídem | `render()` → `getCurrentUserId()` → `loadSkipStats()` + `loadHistoryStats()` en serie; «Mostrar 25 más» = **0** | **fijo** al abrir | **medida en el banco `menos-salteas`**, según la sección v=342 (fecha del banco no consignada; en vivo, no) |
 | `#generos` (v=313; los géneros, v=314) | **1 `/me`** (+1 del arranque = **2**) · **0 Last.fm** | ídem | `render()` → `loadArtistTracks()` → `loadOne` → `getCurrentUserId`; `cargarEtiquetas(await getCurrentUserId())` va por el memo (0 más); las etiquetas y el ritmo salen de IndexedDB | **fijo**, no escala con nada | **medida en el banco el 2026-10-17** (`tests/banco/generos-escaneo.html`, Spotify y Last.fm simulados): abrir = 1 `/me` además del del arranque y 0 a Last.fm en 5 s de reloj, también al volver y tras recargar; 0 rutas sin simular, 0 hosts externos. **v=314, el mismo costo**, medido en `tests/banco/generos.html` (también tras recargar). En vivo, no |
 | ↳ **al desplegar un género, «Ver todos» o «Mostrar 100 más»** (v=314): **0** | — | **0** | ninguno: todo sale de lo guardado | — | **medida en el banco el 2026-10-17** (`tests/banco/generos.html`): 0 `fetch` a cualquier host |
 | ↳ **al pulsar «Buscar géneros» / «Seguir»**: **1 `artist.gettoptags` por artista** con ≥ 10 min que Last.fm no contestó todavía (más los reintentos de los fallos), de a una y a 1 s como mínimo, **0 a Spotify** | — | lo ya buscado: **0** | `ws.audioscrobbler.com/2.0/?method=artist.gettoptags&autocorrect=1` | nº de artistas del universo sin buscar | **medida en el banco el 2026-10-17** (10 artistas inventados: 10 respuestas definitivas, una por artista, más los reintentos de 3 errores 29 y 1 503) y, la consulta, en vivo con 51 artistas desde Node (tanda 61) |
@@ -4949,7 +4957,7 @@ ni se muestran (`features/mosaico.js`, la guarda de `reg.ids?.length`).
 🟩 **Respuesta corta para Ian: sí, un amigo puede armar su propio mosaico, y le
 cuesta una carga de likes.** Lo que no puede es usar las tuyas.
 
-### Las 24 vistas, por lo que necesitan
+### Las vistas, por lo que necesitan
 
 | vista | con solo login | necesita además | sin eso, qué pasa | capa |
 |---|:---:|---|---|---|
@@ -4960,6 +4968,7 @@ cuesta una carga de likes.** Lo que no puede es usar las tuyas.
 | `#zombies` | ✅ | — | anda | leída del código |
 | `#versions` | ✅ | — | anda | leída del código |
 | `#sin-clasificar` | ✅ | — | anda | leída del código |
+| `#menos-salteas` (v=342) | — | **historial** (`skip` v5 con completas y saltos, y `years` para la línea base); caché de me gusta opcional para los nombres | sin datos, candado de `#records`; con BYOH viejo o sin `skip`, pide volver a importar; si falta un nombre, enseña «Sin nombre en tus datos» | **leída de la sección v=342 el 2026-10-28** |
 | `#mosaico` | — | **base de colores** (`mosaico_colores_v1`), y antes **el caché de likes**: sin él el catálogo da **0 portadas** (ver el censo de arriba) | «Todavía no hay base de colores»; se construye en `#debug` (que no está en el menú), sin cuota de Spotify | leída del código **y medida el 2026-10-07** |
 | `#search` | — | caché de likes | cartel: «No hay likes cacheados» + link al Dashboard | leída del código |
 | `#byartist` | — | caché de likes | cartel con botón de carga | leída del código |
