@@ -27,11 +27,11 @@
 // temporizadores encadenados hasta uno por minuto. El bucle solo espera a la
 // red y a la decodificación, que no se frenan.
 
-import { idbGetCachedRaw, idbSetCached } from '../idb.js?v=342';
-import { loadListenedAlbums } from './history-data.js?v=342';
-import { getBestAvailableLikes } from '../api.js?v=342';
-import { coverId, coverVariant } from '../util/album-key.js?v=342';
-import { MOSAICO_COLORES_KEY, BYTES_POR_PORTADA, rejilla3x3 } from '../util/cover-color.js?v=342';
+import { idbGetCachedRaw, idbSetCached } from '../idb.js?v=343';
+import { loadListenedAlbums } from './history-data.js?v=343';
+import { getBestAvailableLikes } from '../api.js?v=343';
+import { coverId, coverVariant } from '../util/album-key.js?v=343';
+import { MOSAICO_COLORES_KEY, BYTES_POR_PORTADA, rejilla3x3 } from '../util/cover-color.js?v=343';
 
 const FORMATO = 1;
 // Descargas a la vez. Es el lote de `covers-wallpaper.js`, medido allí contra
@@ -68,7 +68,13 @@ export async function armarCatalogo() {
   const mapa = new Map();
   let filasEscuchadas = 0, likes = 0, likesSinTapa = 0;
 
-  const listened = await loadListenedAlbums().catch(() => null);
+  let listened, escuchadasFallo = false;
+  try {
+    listened = await loadListenedAlbums();
+  } catch (e) {
+    escuchadasFallo = true;
+    console.warn('[mosaico-colores] no se pudieron leer los álbumes escuchados:', e);
+  }
   for (const y of (listened?.years || [])) {
     for (const a of (y.albums || [])) {
       filasEscuchadas++;
@@ -101,6 +107,7 @@ export async function armarCatalogo() {
       deLikes,
       soloLikes: lista.length - escuchadas,
       enLasDos: lista.filter(x => x.fuentes.size === 2).length,
+      ...(escuchadasFallo ? { escuchadasFallo: true } : {}),
     },
   };
 }

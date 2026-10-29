@@ -3190,9 +3190,19 @@ h3 { font-size: 18px; font-weight: 600; }
     word-break: normal;
     overflow-wrap: anywhere;
   }
-  .wrapped-album-hero { padding: 14px; align-items: center; text-align: center; }
+  .wrapped-album-hero { padding: 14px; align-items: center; text-align: center; flex-direction: column; }
   .wrapped-album-hero-cover { max-width: 220px; max-height: 220px; }
-  .wrapped-album-hero-name { font-size: 16px; }
+  .wrapped-album-hero-name {
+    font-size: 16px;
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 3;
+    overflow: hidden;
+    overflow-wrap: anywhere;
+  }
   .wrapped-album-hero-meta { padding-top: 4px; }
   .wrapped-top-cards { grid-template-columns: minmax(0, 1fr) !important; gap: 12px; margin-top: 12px; }
   .wrapped-top-card { padding: 12px 12px 10px; min-width: 0; overflow: hidden; }

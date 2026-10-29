@@ -234,11 +234,20 @@ lo que ya tenés. Ahora, si falla, **no calcula**: el error crudo va a `console.
 podido leer tus me gusta. No se han calculado recomendaciones.», en `--color-text-secondary`. `features/wthree.js` tapaba
 `loadListenedAlbums()` con `null` y `crossWithHistory` daba por no escuchado lo escuchado; ahora el error va a
 `console.warn('[wthree] …')`, la vista sigue con el resto y avisa arriba de los cubos, también en
-`--color-text-secondary`: «No se han podido leer tus álbumes escuchados: la vista sigue sin ellos.». 🔴 **Queda pendiente
-`features/mosaico-colores.js`**: `armarCatalogo()` sigue tapando el fallo de `loadListenedAlbums()`, pero el aviso se
-tendría que pintar en `#debug`, que se arma en `app.js` (fuera del alcance de la 92B). Guardas:
+`--color-text-secondary`: «No se han podido leer tus álbumes escuchados: la vista sigue sin ellos.». 🟩 **`features/mosaico-colores.js`
+lo cerró la 94A en v=343** (ver abajo): hasta ahí `armarCatalogo()` tapaba el fallo de `loadListenedAlbums()` y el aviso
+se tenía que pintar en `#debug`, que se arma en `app.js` (fuera del alcance de la 92B). Guardas:
 `tests/catch-que-tapan-92b-recs.test.mjs` y `tests/catch-que-tapan-92b-wthree.test.mjs` (cuatro archivos en
 `tests/dobles/`), rojos contra v=341 y verdes después, con el HTML sano conservado.
+
+**Tanda 94A (v=343): álbumes escuchados en la base de colores del mosaico.** En `features/mosaico-colores.js`,
+`armarCatalogo()` hacía `loadListenedAlbums().catch(() => null)`: un fallo de lectura salía igual que «no hay historial» y el
+catálogo quedaba solo con los me gusta sin decirlo. Ahora el fallo se registra (el error crudo a
+`console.warn('[mosaico-colores] …')`) y queda marcado en `cuentas` (`escuchadasFallo: true`); `app.js`
+(`montarBaseMosaico()`) muestra en `#debug`, en `--color-text-secondary`, «No se han podido leer tus álbumes escuchados: el
+catálogo sale solo con tus me gusta.», también después de construir (lo trae el resumen de la tanda). El `null` válido y la
+lectura correcta conservan el resultado previo. Guarda: `tests/catch-que-tapan-94a.test.mjs` (dobles `catch-94a-doble.mjs` y
+`loader-catch-94a.mjs`), rojo contra v=342 en 5 de 14 y verde después. ⚠️ Visto solo en Node con un DOM inventado.
 
 ## Zona horaria: las fechas del historial NO se pasan a local (v=154 + v=231)
 
@@ -967,6 +976,12 @@ no cuenta; el texto con la función DE LA VISTA, `pintarResumenPropuestas` sacad
 los tres `sha256`; la lectura estática. Rojo contra v=334: 50 de 62) y el caso F del banco `versiones-deluxe` (la caché
 SEMBRADA con el deluxe de G1 sin `album_type` ni `total_tracks`: «Analizar» = 0 peticiones, las mismas que con v=334, y el
 cartel nuevo; contra v=334, «Ningún grupo es solo de edición.»).
+
+**Las filas a 390 px (v=343, tanda 94C).** `versions.js` pasó el marcado secundario de cada fila (el disco y las insignias)
+de `style` en línea a clases propias, `.version-row-body`, `.version-row-extra` y `.version-row-album` (en `components.css`,
+con las mismas medidas de antes en escritorio), y puso el nombre entero del disco en el `title` de `.version-row-album`. Por
+debajo de 600 px la fila parte: el cuerpo y el bloque del disco ocupan cada uno el ancho entero y nada desborda. Guarda: el
+banco `tests/banco/versiones-deluxe.html` (puerta E, a 1366×591 y 390×844).
 
 ## El embed de previews: medido tarjeta por tarjeta (v=167)
 
@@ -3278,7 +3293,7 @@ Pedido por Ian; lo midió la tanda 63 y lo hizo la 64.
 | `src/data/history-artist-similares.json` | HORNEADO: `{ version, fuente, fecha, limit, nombres, pos: [x0, y0, …], aristas: [i, j, match, mutua, …] }`, compacto | `tests/mapa-artistas.test.mjs` (sección 9: la forma, y que no lleva minutos) |
 | `util/mapa-artistas.js` | PURO: leer el JSON, los vecinos por `match`, el toque, el pan y el zoom con sus topes, qué nombres se dibujan, el buscador | `tests/mapa-artistas.test.mjs` |
 | `features/mapa-artistas.js` | la vista: el `<canvas>`, los eventos (puntero, rueda, pellizco, botones) y el panel | `tests/banco/mapa-artistas.html` (en `prepush`, el vigésimo primero) |
-| `history-keys.js` / `features/history-data.js` | `SIMILARES_VERSION = 2` (v=316; era 1), `OWNER_KEYS.similares`, `loadArtistSimilares()` con `OWNER_PREV_KEYS.similares` VACÍA | `tests/likes-cache-policy.test.mjs` (ocho claves del owner, con la v2) |
+| `history-keys.js` / `features/history-data.js` | `SIMILARES_VERSION = 3` (v=343; era 2), `OWNER_KEYS.similares`, `loadArtistSimilares()` con `OWNER_PREV_KEYS.similares` VACÍA | `tests/likes-cache-policy.test.mjs` (ocho claves del owner, con la v3) |
 | `util/autocorrect-lastfm.js` (v=316) | PURO: `mismoArtistaAutocorregido` y `claveEscritura`, la regla del autocorrect que comparte con `#generos` | `tests/autocorrect-lastfm.test.mjs` |
 
 **Lo que no se reabre** (lo midió la 63 y lo decidió el encargo de la 64):
@@ -3332,9 +3347,12 @@ Pedido por Ian; lo midió la tanda 63 y lo hizo la 64.
   franja debajo, sin simulación (`colocarSueltos`, ver «Los sueltos, los nombres y el radio (v=316)», abajo).
 - Solo se hornea con al menos el 95 % del universo con respuesta definitiva. Tope de 3 MB (si lo pasa, cada artista
   conserva sus 40 aristas de mayor `match`).
-- ⚠️ **Con un export nuevo** el universo cambia: hay que volver a escanear (el avance es retomable, pero los índices
-  son los del universo de ESE momento: `hornear` para si el nombre de un índice no coincide) y subir
-  `SIMILARES_VERSION` con `OWNER_PREV_KEYS.similares` vacía.
+- ⚠️ **Con un export nuevo** el universo cambia y los índices del avance quedan corridos (`definitivas()` tira y `escanear`,
+  que salta por índice, le pediría a otro artista). El procedimiento (tanda 95): (1) `reindexar <avance viejo> <avance
+  nuevo>` (sin red; el viejo no se toca); (2) `escanear <avance nuevo>`: pide solo a los que no tienen respuesta definitiva;
+  (3) `hornear`; (4) subir `SIMILARES_VERSION` con `OWNER_PREV_KEYS.similares` vacía. ⚠️ Con el avance reindexado `hornear`
+  ya no se niega si los nuevos son menos del 5 %: hornearía con ellos aislados. No hornear antes de escanear. `TOPE = 2460`
+  cuenta todas las líneas del avance: con el de la 95 (2.365) quedan 95.
 - `src/data/README.md` NO lo menciona: el encargo exigía que los diez archivos de `src/data/` quedaran byte a byte, y el
   README es uno de ellos (anotado en `PENDIENTES.md`).
 
@@ -3394,6 +3412,17 @@ capturas y de la medición de frames (conductor en `fonoteca-migracion/mapa-arti
 el de v=316, `driver-mapa-artistas-t65-2026-10-18.mjs`). 🟩 **Arreglado en la tanda 66: los 38 `tests/banco/*.html` llevan
 la `<meta name="viewport">` de `src/index.html`** (hasta la 65 no la tenían, y con `mobile: true` Chrome los maquetaba a
 ~980 px: el «390» de la 64 era un lienzo de 874×720); con la meta, 390 es 390 con `mobile: true` o `false`.
+
+**Tanda 95 (v=343): el mapa de artistas con los 60 del export nuevo.** Cambia **un JSON de `src/data/`**,
+`history-artist-similares.json` (v2 → v3), y es la única del grupo 94A-D/95 que toca `src/data/`. Sube
+`SIMILARES_VERSION` a 3 con `OWNER_PREV_KEYS.similares` **vacía** (la v2 pasa el `sanityCheck` y enseñaría el mapa viejo sin
+avisar). Números (REAL): 60 peticiones `artist.getsimilar` nuevas, las 60 definitivas; 2.362 nombres (los 2.302 de la v2,
+todos); 81.520 pares (+3.065: 942 por la respuesta del nuevo, 621 gratis de respuestas viejas, 1.459 en las dos direcciones,
+43 entre dos nuevos); 65 aislados (3 de los 60); 1.232.516 bytes, sin recorte; sha256
+`11469c131685734fa12d3b076d6dee116a0baf8b68e510cd3464b0582942259f`, igual en dos horneados. Modo nuevo
+`node scripts/hornear-similares.mjs reindexar <avance viejo> <avance nuevo>`: con cada export nuevo, **antes** de `escanear`,
+pasa cada línea del avance al índice de su `pedido` en el universo de hoy (igualdad exacta), descarta y cuenta lo que ya no
+está y nunca escribe sobre el viejo. Guarda: `tests/hornear-reindexar.test.mjs`.
 
 ### Los sueltos, los nombres y el radio (v=316)
 
@@ -3664,6 +3693,14 @@ de 10 verdes con v=330, 13.643–14.306 ms de reloj virtual). ⚠️ En headless
 solo (no corren los pasos de pintado): la puerta lo dispara a mano después de cambiarle el tamaño. ⚠️ **El grafo inventado
 es un anillo casi redondo: girarlo no gana lugar.** Lo que vale de la escala sale de la tabla con el JSON real, no de las
 capturas.
+
+## El «Álbum del año» a 390 px (v=343)
+
+La tanda 94C. En el Wrapped, por debajo del corte móvil de `main.css`, `.wrapped-album-hero` apila la tapa y el texto
+(`flex-direction: column`) y `.wrapped-album-hero-name` usa el ancho entero de la tarjeta y se corta en tres renglones como
+mucho (`-webkit-line-clamp: 3`, con `overflow-wrap: anywhere` para un nombre de una sola palabra). En escritorio, igual que
+antes. Guarda: `tests/wrapped-album-390.test.mjs` (lectura del CSS). ⚠️ El nombre recortado **no tiene `title`** con el
+nombre entero: el marcado sale de `features/wrapped.js`, que no estaba en el alcance de la 94C. Lo hace la tanda 97.
 
 ## 🖼️ La postal del año (v=326, rediseñada en v=327)
 

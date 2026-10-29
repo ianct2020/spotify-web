@@ -1,53 +1,53 @@
-import { isLoggedIn, loginWithSpotify, logout } from './auth.js?v=342';
-import { spotifyFetch, onRateLimit } from './api.js?v=342';
-import { getValidToken } from './auth.js?v=342';
-import { cacheClearAll } from './storage.js?v=342';
-import { idbClearAll } from './idb.js?v=342';
-import { CONSERVAR_CLAVES, CONSERVAR_PREFIJOS, LO_QUE_SE_CONSERVA } from './util/limpiar-cache.js?v=342';
-import { registerRoute, initRouter, rutasRegistradas } from './router.js?v=342';
-import { showToast } from './ui/toast.js?v=342';
-import { pageHeader, escapeHtml } from './ui/components.js?v=342';
-import { installCrashGuard } from './ui/crash-guard.js?v=342';
-import { auditarOcultos, leerIncidencias } from './util/hidden-sync.js?v=342';
-import { getStack } from './ui/modal-stack.js?v=342';
-import { installBackToTop } from './ui/back-to-top.js?v=342';
-import { applyStoredTheme, openThemePanel } from './ui/theme-panel.js?v=342';
-import { escucharAvisoDeCopia } from './ui/aviso-copia.js?v=342';
+import { isLoggedIn, loginWithSpotify, logout } from './auth.js?v=343';
+import { spotifyFetch, onRateLimit } from './api.js?v=343';
+import { getValidToken } from './auth.js?v=343';
+import { cacheClearAll } from './storage.js?v=343';
+import { idbClearAll } from './idb.js?v=343';
+import { CONSERVAR_CLAVES, CONSERVAR_PREFIJOS, LO_QUE_SE_CONSERVA } from './util/limpiar-cache.js?v=343';
+import { registerRoute, initRouter, rutasRegistradas } from './router.js?v=343';
+import { showToast } from './ui/toast.js?v=343';
+import { pageHeader, escapeHtml } from './ui/components.js?v=343';
+import { installCrashGuard } from './ui/crash-guard.js?v=343';
+import { auditarOcultos, leerIncidencias } from './util/hidden-sync.js?v=343';
+import { getStack } from './ui/modal-stack.js?v=343';
+import { installBackToTop } from './ui/back-to-top.js?v=343';
+import { applyStoredTheme, openThemePanel } from './ui/theme-panel.js?v=343';
+import { escucharAvisoDeCopia } from './ui/aviso-copia.js?v=343';
 
-import { render as renderSync } from './features/sync.js?v=342';
-import { render as renderDedupe } from './features/dedupe.js?v=342';
-import { render as renderDupalbums } from './features/duplicate-albums.js?v=342';
-import { render as renderZombies } from './features/zombies.js?v=342';
-import { render as renderVersions } from './features/versions.js?v=342';
-import { render as renderDashboard } from './features/dashboard.js?v=342';
-import { render as renderSmart } from './features/smart.js?v=342';
-import { render as renderSimilar } from './features/similar-artists.js?v=342';
-import { render as renderRabbit } from './features/rabbit-hole.js?v=342';
-import { render as renderByGenre } from './features/by-genre.js?v=342';
-import { render as renderByArtist } from './features/by-artist.js?v=342';
-import { render as renderRecs } from './features/recommendations.js?v=342';
-import { render as renderListened } from './features/listened.js?v=342';
-import { render as renderWrapped } from './features/wrapped.js?v=342';
-import { render as renderRecords } from './features/records.js?v=342';
-import { render as renderCalendario } from './features/calendario.js?v=342';
-import { render as renderMapa } from './features/mapa.js?v=342';
-import { render as renderPuertas } from './features/puertas.js?v=342';
-import { render as renderMenosSalteas } from './features/menos-salteas.js?v=342';
-import { render as renderGeneros } from './features/generos.js?v=342';
-import { render as renderMapaArtistas } from './features/mapa-artistas.js?v=342';
-import { openImportHistory } from './features/import-history.js?v=342';
-import { bindOwnerLockedButtons } from './features/history-data.js?v=342';
-import { render as renderZeroPlays } from './features/zero-plays.js?v=342';
-import { render as renderSkips } from './features/skips.js?v=342';
-import { render as renderSearchLikes } from './features/search-likes.js?v=342';
-import { render as renderWthree } from './features/wthree.js?v=342';
-import { render as renderCovers } from './features/covers.js?v=342';
-import { render as renderMosaico } from './features/mosaico.js?v=342';
-import { render as renderDiscoverArtists } from './features/discover-artists.js?v=342';
-import { render as renderFollowArtists } from './features/follow-artists.js?v=342';
-import { render as renderNewReleases } from './features/new-releases.js?v=342';
-import { render as renderSinClasificar } from './features/sin-clasificar.js?v=342';
-import { pieCuotaHtml, montarPieCuota } from './ui/cuota-pie.js?v=342';
+import { render as renderSync } from './features/sync.js?v=343';
+import { render as renderDedupe } from './features/dedupe.js?v=343';
+import { render as renderDupalbums } from './features/duplicate-albums.js?v=343';
+import { render as renderZombies } from './features/zombies.js?v=343';
+import { render as renderVersions } from './features/versions.js?v=343';
+import { render as renderDashboard } from './features/dashboard.js?v=343';
+import { render as renderSmart } from './features/smart.js?v=343';
+import { render as renderSimilar } from './features/similar-artists.js?v=343';
+import { render as renderRabbit } from './features/rabbit-hole.js?v=343';
+import { render as renderByGenre } from './features/by-genre.js?v=343';
+import { render as renderByArtist } from './features/by-artist.js?v=343';
+import { render as renderRecs } from './features/recommendations.js?v=343';
+import { render as renderListened } from './features/listened.js?v=343';
+import { render as renderWrapped } from './features/wrapped.js?v=343';
+import { render as renderRecords } from './features/records.js?v=343';
+import { render as renderCalendario } from './features/calendario.js?v=343';
+import { render as renderMapa } from './features/mapa.js?v=343';
+import { render as renderPuertas } from './features/puertas.js?v=343';
+import { render as renderMenosSalteas } from './features/menos-salteas.js?v=343';
+import { render as renderGeneros } from './features/generos.js?v=343';
+import { render as renderMapaArtistas } from './features/mapa-artistas.js?v=343';
+import { openImportHistory } from './features/import-history.js?v=343';
+import { bindOwnerLockedButtons } from './features/history-data.js?v=343';
+import { render as renderZeroPlays } from './features/zero-plays.js?v=343';
+import { render as renderSkips } from './features/skips.js?v=343';
+import { render as renderSearchLikes } from './features/search-likes.js?v=343';
+import { render as renderWthree } from './features/wthree.js?v=343';
+import { render as renderCovers } from './features/covers.js?v=343';
+import { render as renderMosaico } from './features/mosaico.js?v=343';
+import { render as renderDiscoverArtists } from './features/discover-artists.js?v=343';
+import { render as renderFollowArtists } from './features/follow-artists.js?v=343';
+import { render as renderNewReleases } from './features/new-releases.js?v=343';
+import { render as renderSinClasificar } from './features/sin-clasificar.js?v=343';
+import { pieCuotaHtml, montarPieCuota } from './ui/cuota-pie.js?v=343';
 
 // ── Arranque degradado cuando /me está rate-limiteado (v=173) ────────────────
 //
@@ -1091,13 +1091,13 @@ async function montarBaseMosaico() {
   const parar = document.getElementById('debug-mosaico-parar');
   let mod;
   try {
-    mod = await import('./features/mosaico-colores.js?v=342');
+    mod = await import('./features/mosaico-colores.js?v=343');
   } catch (err) {
     estado.textContent = `No he podido cargar el módulo: ${err.message}`;
     return;
   }
 
-  const pintarGuardado = async () => {
+  const pintarGuardado = async (cuentasTanda) => {
     const [reg, cat] = await Promise.all([mod.leerColores(), mod.armarCatalogo()]);
     const enCat = new Set(cat.items.map(x => x.id));
     const hechas = reg ? reg.ids.filter(id => enCat.has(id)).length : 0;
@@ -1106,7 +1106,8 @@ async function montarBaseMosaico() {
     estado.innerHTML = `<strong>${fmtN(hechas)} de ${fmtN(cat.cuentas.total)}</strong> portadas con color`
       + ` (${fmtN(cat.cuentas.escuchadas)} de álbumes escuchados, ${fmtN(cat.cuentas.soloLikes)} más solo de tus likes)`
       + (fallidas ? ` · <span style="color:var(--color-error)">${fmtFallidas(fallidas)}</span>` : '')
-      + (reg ? ` · bajados ${fmtMB(reg.bytes)} MB en total · guardada ${escapeHtml(new Date(reg.actualizado).toLocaleString('es-ES'))}` : ' · todavía no hay nada guardado');
+      + (reg ? ` · bajados ${fmtMB(reg.bytes)} MB en total · guardada ${escapeHtml(new Date(reg.actualizado).toLocaleString('es-ES'))}` : ' · todavía no hay nada guardado')
+      + (cat.cuentas.escuchadasFallo || cuentasTanda?.escuchadasFallo ? '<br><span style="color: var(--color-text-secondary)">No se han podido leer tus álbumes escuchados: el catálogo sale solo con tus me gusta.</span>' : '');
     btn.textContent = !reg || hechas === 0 ? 'Construir' : faltan ? `Continuar (faltan ${fmtN(faltan)})` : 'Completa · repasar';
     btn.disabled = mod.construyendo();
   };
@@ -1135,7 +1136,7 @@ async function montarBaseMosaico() {
       if (r.corte) showToast(`Base de colores cortada: ${r.corte}. ${tanda}. Faltan ${fmtN(r.faltan)}.`, r.corte === 'detenida a mano' ? 'info' : 'error');
       else showToast(`Base de colores: ${tanda}. Faltan ${fmtN(r.faltan)}${r.fallidas ? `, ${fmtFallidas(r.fallidas)}` : ''}.`, r.faltan ? 'warning' : 'success');
     }
-    if (document.getElementById('debug-mosaico-estado') === estado) await pintarGuardado();
+    if (document.getElementById('debug-mosaico-estado') === estado) await pintarGuardado(r?.cuentas);
   };
   parar.onclick = () => { ctrl?.abort(); parar.disabled = true; };
 

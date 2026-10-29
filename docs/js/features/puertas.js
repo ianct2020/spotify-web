@@ -34,11 +34,11 @@
 // Siguen siendo su top / Cambiaron) que filtra ANTES de paginar: «Mostrar 100 más» va
 // sobre lo filtrado y el orden sigue siendo el de `universo()`. Filtrar no pide nada.
 
-import { loadArtistTracks, isOwner, ownerLockedMessage } from './history-data.js?v=342';
-import { escapeHtml, pageHeader } from '../ui/components.js?v=342';
-import { vigilarRuta } from '../util/vigencia-ruta.js?v=342';
-import { armarPuertas, POR_PAGINA, FILTROS, filtrarPuertas, cuentasPuertas, resumenPuertas, textoMediana, maxDias, anchoBarra } from '../util/puertas-entrada.js?v=342';
-import { MIN_MINUTOS } from '../util/mapa-paises.js?v=342';
+import { loadArtistTracks, isOwner, ownerLockedMessage } from './history-data.js?v=343';
+import { escapeHtml, pageHeader } from '../ui/components.js?v=343';
+import { vigilarRuta } from '../util/vigencia-ruta.js?v=343';
+import { armarPuertas, POR_PAGINA, FILTROS, filtrarPuertas, cuentasPuertas, resumenPuertas, textoMediana, maxDias, anchoBarra } from '../util/puertas-entrada.js?v=343';
+import { MIN_MINUTOS } from '../util/mapa-paises.js?v=343';
 
 const num = (n) => Number(n || 0).toLocaleString('es-ES');
 
