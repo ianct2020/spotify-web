@@ -625,6 +625,35 @@ input[type="checkbox"].keep-check:checked::after {
   color: #22C55E;
 }
 
+.version-row-body {
+  flex: 1;
+  min-width: 0;
+}
+.version-row-extra {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+.version-row-album {
+  font-size: 12px;
+  color: var(--color-text-secondary);
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (max-width: 600px) {
+  .version-row { flex-wrap: wrap; }
+  .version-row-body { flex: 1 1 100%; }
+  .version-row-body .track-row { flex-wrap: wrap; gap: 6px 12px; }
+  .version-row-extra { flex: 1 1 100%; justify-content: flex-start; min-width: 0; }
+  .version-row-album { min-width: 0; }
+}
+
 /* La propuesta de edición de #versions (tanda 70): clases propias, `.ver-propuesta…`.
    El texto secundario va en --color-text-secondary (nunca el muted, que no pasa AA)
    y los nombres de disco largos parten donde haga falta: a 390 px nada se sale. */

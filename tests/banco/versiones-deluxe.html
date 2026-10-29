@@ -196,6 +196,28 @@ try {
     const f = abrirMarco(`e${w}`, w, h);
     await arrancado(f, `el marco de ${w}`);
     await entrarYAnalizar(f, `${w}×${h}`);
+    const rect = (el) => {
+      const r = el.getBoundingClientRect();
+      return [r.x, r.y, r.width, r.height].map(n => +n.toFixed(2));
+    };
+    const filasVersion = $$(f, '.version-row');
+    afirmar(filasVersion.length === 10, `E. ${w}: diez filas SEMBRADAS (${filasVersion.length})`);
+    if (w === 1366) {
+      // Rectángulos SEMBRADOS de aa0fc915, antes del arreglo. El escritorio no se mueve.
+      const base = [[81,469.66,601,61],[81,530.66,601,61],[714,334.19,601,61],
+        [714,395.19,601,61],[81,673.66,601,61],[81,734.66,601,61],
+        [714,673.66,601,61],[714,734.66,601,61],[81,877.66,601,61],[81,938.66,601,61]];
+      filasVersion.forEach((fila, i) => rect(fila).forEach((n, k) =>
+        afirmar(Math.abs(n - base[i][k]) <= 0.5, `E. escritorio: fila ${i + 1}, rectángulo ${k} = ${n} (base ${base[i][k]})`)));
+    } else {
+      for (const [i, fila] of filasVersion.entries()) {
+        const tarjeta = fila.closest('.cluster-group').getBoundingClientRect();
+        for (const el of [fila, ...fila.querySelectorAll('*')]) {
+          const r = el.getBoundingClientRect();
+          afirmar(r.right <= tarjeta.right + 1, `E. móvil: fila ${i + 1}, ${el.className || el.tagName} termina en ${r.right.toFixed(2)}; tarjeta ${tarjeta.right.toFixed(2)}`);
+        }
+      }
+    }
     const d = f.contentDocument.documentElement;
     afirmar(d.scrollWidth <= d.clientWidth, `E. ${w}: la página no desborda en horizontal (${d.scrollWidth} > ${d.clientWidth})`);
     const b = $(f, '.ver-propuesta');
