@@ -1,125 +1,91 @@
-// La postal del año (v=326; rediseñada en v=327): QUÉ dice y DÓNDE va cada cosa. PURO: sin DOM, sin red
-// y sin lienzo, para probarlo en Node (`tests/postal-anio.test.mjs`). El dibujo y la descarga viven en
-// `features/wrapped-postal.js`, que le pasa la función de medir con la letra ya puesta.
+// La postal del año «El año en días» (v=344, tanda 97; la de las tapas fue v=326-v=343): QUÉ dice y DÓNDE va
+// cada cosa. PURO: sin DOM, sin red y sin lienzo, para probarlo en Node (`tests/postal-anio.test.mjs`). El
+// dibujo y la descarga viven en `features/wrapped-postal.js`, que le pasa la función de medir con la letra ya
+// puesta.
 //
 // ── Por qué una postal POR AÑO ──────────────────────────────────────────────
 //
 // Ian pidió «pngs para exportar, con metricas o cosas interesantes» (16/10) y no dijo de qué. Que sea
-// una por año, en «Wrapped», es NUESTRA lectura del pedido: `years[]` de `history-stats.json` ya trae
-// todo lo que hace falta para los nueve años, y los cinco primeros discos de cada año tienen tapa. El
-// artista no tiene foto en ningún JSON y el disco solo trae el día en que cumplió el umbral: esas
-// postales quedan para otra tanda, si él las quiere.
+// una por año, en «Wrapped», es NUESTRA lectura del pedido. En la tanda 91 se probaron tres diseños como
+// prototipos de banco e Ian eligió el B, «El año en días»: los doce meses hechos de días, coloreados por
+// minutos. Es el que está acá.
 //
 // ── Lo que lleva, y lo que NO ───────────────────────────────────────────────
 //
-// El año, el rango («del 15 ago 2018 al 31 dic 2018»), los minutos (el número héroe), una franja con
-// las reproducciones, los días con música, la racha más larga y el día pico, el artista más escuchado
-// y los cuatro siguientes con sus barras, el disco más escuchado con su tapa grande y los cuatro
-// siguientes con tapa chica, y abajo, «Fonoteca» y el año. Nada más.
+// Arriba, «EL AÑO EN DÍAS» (lo traía el prototipo y se dejó), el año y los minutos del año; en el medio, los
+// doce meses («01 / ENERO»…), cada uno con sus días en columnas de lunes a domingo; abajo, la racha más larga
+// y el día pico (la fecha y sus minutos) y «Fonoteca · <año>». Nada más: ni tapas, ni nombres.
 //
+//   · 🔴 El tono de cada día es el NIVEL del calendario: `tercilesDelTramo` de `ui/calendario-anual.js`,
+//     IMPORTADA. La postal y el calendario pintan el mismo día con el mismo nivel; una copia de la regla
+//     terminaría divergiendo (la lección de v=219 y v=231).
+//   · Los días del año que el tramo `days` no cubre (antes del export, o después del último día) van con un
+//     tono propio, «fuera»: no es lo mismo «no se registró» que «se registró y no sonó nada» (el nivel 0).
+//     El día pico, si cae dentro del tramo, lleva un contorno de `--color-text`.
 //   · 🔴 Las fechas, con el `fmtDia` que se le pasa (el de `util/fecha.js`): lee los diez primeros
-//     caracteres y no construye un `Date`. La primera escucha de 2026 es `2026-01-01T00:00:28Z`, y con
-//     `new Date()` en UTC−3 la postal de 2026 diría «del 31 dic 2025» (el bug de v=231).
-//   · Los minutos, con el `fmtMinutes` de `wrapped.js`, también pasado por contexto (como la apertura):
-//     si se copiara acá, la copia es la que terminaría mintiendo (la lección de v=231).
-//   · 🔴 Los saltos NO van, ni el porcentaje ni la palabra. Antes del 15/10/2022 el export no anotaba los
-//     saltos igual que después (ver «La definición de salto» en CLAUDE.md), y en la vista eso lo avisa una
-//     pista; una imagen que circula sola no puede llevar el aviso.
+//     caracteres y no construye un `Date`. Los días de la trama se cuentan en UTC (`aMs`,
+//     `diaSemanaLunes`, también importadas): el 1/1 es el 1/1 en cualquier huso (el bug de v=231).
+//   · Los minutos, con el `fmtMinutes` de `wrapped.js`, también pasado por contexto: si se copiara acá, la
+//     copia es la que terminaría mintiendo. El prototipo traía una copia propia: no se llevó.
+//   · 🔴 Los saltos NO van, ni el porcentaje ni la palabra (ver «La definición de salto» en CLAUDE.md): una
+//     imagen que circula sola no puede llevar el aviso.
 //
-// ── El diseño (v=327) ───────────────────────────────────────────────────────
+// ── Los colores y su contraste ──────────────────────────────────────────────
 //
-// La de v=326 se leía como una planilla: tres cajas de `--color-surface` iguales, una arriba de otra,
-// todo con el mismo peso, y los nombres de disco mutilados en casillas de 160 px de un renglón. Ahora:
-//
-//   · una JERARQUÍA: lo primero que se lee es el año y los minutos, enormes, sobre un degradé del tema
-//     (el acento mezclado con `--color-bg`, fuerte arriba y suave abajo, como el `.wrapped-hero` de la
-//     tarjeta del año); el resto de los números baja a UNA franja de datos chicos;
-//   · el artista 1 destacado a la izquierda (hasta dos renglones) y del 2 al 5 con sus barras;
-//   · SIN cajas: las secciones las separan el espacio y los tamaños;
-//   · el disco 1 es la imagen de la postal (380 px) y los otros cuatro van chicos al lado;
-//   · los nombres de disco en hasta DOS renglones, partidos por palabra (`partir`), y el «…» solo si no
-//     entran en dos.
-//
-// ── El degradé y su contraste ───────────────────────────────────────────────
-//
-// `degradadoPostal(plan, colores)` arma las paradas con el acento y el fondo del tema (ningún color a
-// mano) y elige la mezcla: arranca en `MEZCLA_MAX` y la BAJA de a un centésimo hasta que cada texto que
-// va encima tenga, contra el punto PEOR del degradé detrás de su caja (renglón por renglón, redondeado a
-// 8 bits como lo pinta el lienzo), al menos `PISO_CONTRASTE`. Si ni con el fondo liso pasa (un tema
-// hecho a mano con el texto ilegible), queda en 0: la postal no arregla el tema, no lo empeora. La
-// cuenta es la de WCAG 2.x de `tests/tema-contraste.test.mjs`, la misma; el test la vuelve a hacer por
-// su lado y compara.
+// `tonosPostal(colores)` arma los tonos con los colores del tema (ningún color a mano), con la MISMA mezcla
+// que usaba el degradé de v=327 (`mezclar`, una sola en este archivo): el nivel 0 es la superficie hacia el
+// fondo, del 1 al 3 el fondo hacia el acento (0,27 · 0,54 · 0,84), «fuera» el fondo hacia la superficie
+// (0,48). Son los números del prototipo. `contrastePostal(plan, colores)` da, para cada texto, su contraste
+// contra el punto PEOR de lo que tiene detrás: el fondo y cada día (con su contorno) que toque su caja. Con
+// esta trama ningún texto pisa un día, así que el peor es el fondo; la cuenta es igual de general por si
+// cambia. La fórmula es la de WCAG 2.x de `tests/tema-contraste.test.mjs`; el test la rehace por su lado.
 //
 // ── El recorte ──────────────────────────────────────────────────────────────
 //
 // Cada texto tiene un ancho máximo y se recorta con «…» MIDIENDO con la letra de verdad, nunca contando
 // caracteres: «WWWW» y «iiii» no miden lo mismo. La medida entra inyectada.
 
-import { coverVariant } from './album-key.js?v=343';
+import { aMs, diaSemanaLunes, tercilesDelTramo } from '../ui/calendario-anual.js?v=344';
 
 export const ANCHO = 1080;
 export const ALTO = 1350;
-/** Cuántos artistas y cuántos discos. */
-export const TOPE = 5;
-/** La variante de tapa que se pide (la casilla grande se agranda desde ésta: ×1,27). */
-export const VARIANTE_TAPA = 300;
 export const ELIPSIS = '…';
 
-const MARGEN = 72;
-const X0 = MARGEN;                 // donde empieza el contenido
-const X1 = ANCHO - MARGEN;         // 1008: donde termina
-/** El lado de la tapa del disco 1, la imagen de la postal. */
-export const LADO_TAPA_1 = 380;
-const CANAL = 40;                  // entre la columna de la izquierda y la de la derecha
-const XD = X0 + LADO_TAPA_1 + CANAL;   // 492: la columna de la derecha
-const ANCHO_DER = X1 - XD;             // 516
-const SEP_TAPAS = 16;
-/** El lado de las tapas de los discos 2 a 5: cuatro en la columna de la derecha. */
-export const LADO_TAPA = Math.floor((ANCHO_DER - 3 * SEP_TAPAS) / 4);   // 117
+// La trama: tres meses por fila, cuatro filas. Cada mes, siete columnas (lunes a domingo) y hasta seis
+// semanas. Las medidas son las del prototipo de la tanda 91B.
+const X0 = 54;
+const X1 = ANCHO - X0;             // 1026
+const Y_TRAMA = 292;
+const MES_W = 308, MES_H = 203, MES_SEP_X = 24, MES_SEP_Y = 19;
+const DIA_W = 40, DIA_H = 23, PASO_X = 44, PASO_Y = 27;
+const Y_DIAS = 34;                 // de la etiqueta del mes a la primera semana
+const RADIO_DIA = 5;
+const DIA_MS = 86400000;
 
-// Las alturas, de arriba abajo. El degradé termina en Y_FIN_DEGRADE: todo lo que va encima es texto
-// del bloque del año; la franja de datos ya va sobre el fondo liso.
-const Y_ANIO = 60;
-const Y_FIN_DEGRADE = 500;
-const Y_DATOS = 530;
-const Y_ARTISTAS = 664;
-const Y_DISCOS = 876;
-const Y_PIE = 1294;
+const MESES = ['ENERO', 'FEBRERO', 'MARZO', 'ABRIL', 'MAYO', 'JUNIO', 'JULIO', 'AGOSTO', 'SEPTIEMBRE', 'OCTUBRE', 'NOVIEMBRE', 'DICIEMBRE'];
 
 // Las letras: peso y tamaño. La familia la pone quien dibuja (la de la app, `--font-sans`).
 const F = {
-  anio: { peso: 700, tam: 104 },
-  rango: { peso: 400, tam: 30 },
-  heroe: { peso: 700, tam: 156 },
-  heroeEt: { peso: 400, tam: 32 },
-  dato: { peso: 700, tam: 38 },
-  datoEt: { peso: 400, tam: 21 },
-  titulo: { peso: 600, tam: 21 },
-  artista1: { peso: 700, tam: 40 },
-  artista1Min: { peso: 400, tam: 26 },
-  puesto: { peso: 600, tam: 24 },
-  artista: { peso: 600, tam: 26 },
-  artistaMin: { peso: 400, tam: 22 },
-  disco1: { peso: 700, tam: 36 },
-  disco1Artista: { peso: 400, tam: 26 },
-  disco: { peso: 600, tam: 20 },
-  discoArtista: { peso: 400, tam: 18 },
-  pie: { peso: 600, tam: 22 },
+  marca: { peso: 600, tam: 19 },
+  anio: { peso: 800, tam: 148 },
+  min: { peso: 700, tam: 47 },
+  minEt: { peso: 400, tam: 23 },
+  mes: { peso: 700, tam: 19 },
+  dato: { peso: 700, tam: 34 },
+  datoEt: { peso: 400, tam: 20 },
+  pie: { peso: 500, tam: 21 },
 };
 /** Los pesos que usa la postal, para esperar a que cargue la letra antes de medir. */
-export const PESOS = [...new Set([...Object.values(F).map((f) => f.peso), 400])].sort();
+export const PESOS = [...new Set(Object.values(F).map((f) => f.peso))].sort((a, b) => a - b);
 
 // El alto de la caja de un renglón: 1,25 veces el tamaño, con la línea de base arriba («top»), cabe la
-// parte de abajo de la «g» y de la «p». Dos renglones van uno debajo del otro, a esa misma distancia.
+// parte de abajo de la «g» y de la «p».
 const altoDe = (f) => Math.ceil(f.tam * 1.25);
-// El año y los minutos son dígitos, «h», «m» y «—»: sin nada que baje de la línea. Su caja es más justa
-// (0,95 veces el tamaño), si no queda un hueco de 70 px entre los minutos y «de música».
+// El año y los minutos son dígitos, «h», «m» y «—»: sin nada que baje de la línea. Su caja es más justa.
 const altoJusto = (f) => Math.ceil(f.tam * 0.95);
-const interlinea = altoDe;
 const numero = (v) => Number(v || 0);
 const plural = (n, uno, varios) => (n === 1 ? uno : varios);
-// Un nombre vacío no deja un hueco: va «—».
-const nombreDe = (s) => (String(s ?? '').trim() || '—');
+const dos = (n) => String(n).padStart(2, '0');
 
 /**
  * El texto recortado para que `medir(texto) ≤ max`. Si entra, tal cual; si no, el prefijo más largo que
@@ -142,64 +108,18 @@ export function recortar(texto, max, medir) {
   return con(lo);
 }
 
-/**
- * El texto en hasta `renglones` renglones de `max` cada uno, partido por PALABRA. Si entra en uno, va
- * tal cual. Si no, el primer renglón lleva las palabras que entran (separadas por un espacio) y el
- * resto sigue en el siguiente; el último renglón se recorta con «…» (`recortar`) si no entra. Si ni la
- * primera palabra entra, se parte por caracteres (sin «…»: sigue en el renglón de abajo). Devuelve la
- * lista de renglones (vacía si no hay texto).
- */
-export function partir(texto, max, medir, renglones = 2) {
-  const s = texto == null ? '' : String(texto);
-  if (!s) return [];
-  if (renglones <= 1 || medir(s) <= max) {
-    const r = recortar(s, max, medir);
-    return r ? [r] : [];
-  }
-  const palabras = s.trim().split(/\s+/).filter(Boolean);
-  if (!palabras.length) return [];
-  let k = 0;
-  while (k < palabras.length && medir(palabras.slice(0, k + 1).join(' ')) <= max) k++;
-  let primero, resto;
-  if (k === 0) {
-    const cs = Array.from(palabras[0]);
-    let j = 0;
-    while (j < cs.length && medir(cs.slice(0, j + 1).join('')) <= max) j++;
-    if (j === 0) { const r = recortar(s, max, medir); return r ? [r] : []; }
-    primero = cs.slice(0, j).join('');
-    resto = [cs.slice(j).join(''), ...palabras.slice(1)].filter(Boolean).join(' ');
-  } else {
-    primero = palabras.slice(0, k).join(' ');
-    resto = palabras.slice(k).join(' ');
-  }
-  if (!resto) return [primero];
-  const siguen = partir(resto, max, medir, renglones - 1);
-  // Si lo que sigue no entra de ninguna forma (ni el «…»), no se corta en silencio: el recorte de un
-  // renglón, como con `recortar`.
-  if (!siguen.length) { const r = recortar(s, max, medir); return r ? [r] : []; }
-  return [primero, ...siguen];
-}
-
 /** Los textos de la postal de un año de `years[]`, sin posiciones. */
 export function textosPostal(y, { fmtMinutes, fmtDia }) {
-  const plays = numero(y.plays), dias = numero(y.days_active), racha = numero(y.longest_streak);
+  const racha = numero(y.longest_streak);
   const pico = y.peak_day?.date;
   return {
+    marca: 'EL AÑO EN DÍAS',
     anio: String(y.year),
-    rango: `del ${fmtDia(y.first_play)} al ${fmtDia(y.last_play)}`,
-    heroe: { valor: fmtMinutes(y.min), etiqueta: 'de música' },
-    datos: [
-      { id: 'reproducciones', valor: plays.toLocaleString('es-ES'), etiqueta: plural(plays, 'reproducción', 'reproducciones') },
-      { id: 'dias', valor: dias.toLocaleString('es-ES'), etiqueta: plural(dias, 'día con música', 'días con música') },
-      { id: 'racha', valor: `${racha.toLocaleString('es-ES')} ${plural(racha, 'día', 'días')}`, etiqueta: 'la racha más larga' },
-      { id: 'pico', valor: pico ? fmtDia(pico) : '—', etiqueta: pico ? `día pico · ${fmtMinutes(y.peak_day.min)}` : 'día pico' },
-    ],
-    tituloArtistas: 'Artista más escuchado',
-    artistas: (y.top_artists || []).slice(0, TOPE).map((a) => ({ nombre: nombreDe(a.name), minutos: fmtMinutes(a.min), min: numero(a.min) })),
-    tituloDiscos: 'Disco más escuchado',
-    // La tapa de 300 sale cambiando el prefijo de la URL, sin ida a la API (`coverVariant`). Sin `img`,
-    // `null`: la casilla lleva el ♪, como una tapa que no bajó.
-    discos: (y.top_albums || []).slice(0, TOPE).map((a) => ({ nombre: nombreDe(a.name), artista: nombreDe(a.artist), url: a.img ? coverVariant(a.img, VARIANTE_TAPA) : null })),
+    min: fmtMinutes(y.min),
+    minEt: 'de música',
+    meses: MESES.map((m, k) => `${dos(k + 1)} / ${m}`),
+    racha: { valor: `${racha.toLocaleString('es-ES')} ${plural(racha, 'día', 'días')}`, etiqueta: 'racha más larga' },
+    pico: { valor: pico ? fmtDia(pico) : '—', etiqueta: pico ? `día pico · ${fmtMinutes(y.peak_day.min)}` : 'día pico' },
     pie: `Fonoteca · ${y.year}`,
   };
 }
@@ -208,120 +128,72 @@ export function textosPostal(y, { fmtMinutes, fmtDia }) {
  * La postal entera: qué se dibuja y dónde. `medir(texto, fuente)` devuelve el ancho en px con esa
  * fuente (`{ peso, tam }`). Coordenadas del lienzo de 1080×1350; los textos con la línea de base arriba.
  *
- * Devuelve `{ ancho, alto, degradado, fondos, barras, textos, tapas }`:
- *   · `degradado`: `{ y0, y1 }`, la franja de arriba que lleva el degradé (los colores los pone
- *     `degradadoPostal`, que depende del tema);
- *   · `fondos`: las cajas (desde v=327, ninguna; queda la forma para quien dibuja);
- *   · `barras`: lo que va con el acento (nunca texto), `{ id, x, y, w, h }`;
+ * Devuelve `{ ancho, alto, meses, celdas, textos }`:
+ *   · `meses`: el recuadro de cada mes, `{ mes, x, y, w, h }` (la etiqueta y sus días van adentro);
+ *   · `celdas`: un día del año cada una, `{ iso, i, mes, col, fila, x, y, w, h, radio, fuera, nivel, pico }`:
+ *     `i` es su índice en `days.min` (−1 si el tramo no lo cubre), `fuera` si el tramo no lo cubre, `nivel`
+ *     el de `tercilesDelTramo` (0 a 3; `null` si va fuera) y `pico` si lleva el contorno;
  *   · `textos`: `{ id, texto (ya recortado), x, y, max, alinear, fuente, alto, color: 'text'|'secondary',
- *     sobre: 'degradado'|'bg', caja: { x, y, w, h } }` — `caja` es el lugar que tiene reservado;
- *   · `tapas`: `{ id, i, url|null, x, y, lado, radio, nota }`, con `nota` = el ♪ por si la tapa no baja
- *     (sobre `--color-elevated`).
+ *     caja: { x, y, w, h } }` — `caja` es el lugar que tiene reservado.
  */
 export function planPostal(y, { fmtMinutes, fmtDia, medir }) {
   const tx = textosPostal(y, { fmtMinutes, fmtDia });
-  const fondos = [], barras = [], textos = [], tapas = [];
-  const poner = (id, texto, { x, y: yy, max, fuente, color, sobre, alinear = 'left', justo = false }) => {
+  const textos = [], meses = [], celdas = [];
+  const poner = (id, texto, { x, y: yy, max, fuente, color, alinear = 'left', justo = false }) => {
     const alto = justo ? altoJusto(fuente) : altoDe(fuente);
     const cx = alinear === 'left' ? x : alinear === 'right' ? x - max : x - max / 2;
-    const t = { id, texto: recortar(texto, max, (s) => medir(s, fuente)), x, y: yy, max, alinear, fuente, alto, color, sobre, caja: { x: cx, y: yy, w: max, h: alto } };
-    textos.push(t);
-    return t;
+    textos.push({ id, texto: recortar(texto, max, (s) => medir(s, fuente)), x, y: yy, max, alinear, fuente, alto, color, caja: { x: cx, y: yy, w: max, h: alto } });
   };
-  // Un nombre en hasta dos renglones: `id` el primero y `id-b` el segundo. Devuelve dónde termina.
-  const ponerEnDos = (id, texto, { x, y: yy, max, fuente, color, sobre }) => {
-    const rs = partir(texto, max, (s) => medir(s, fuente));
-    rs.forEach((r, k) => poner(k ? `${id}-b` : id, r, { x, y: yy + k * interlinea(fuente), max, fuente, color, sobre }));
-    return yy + (rs.length ? (rs.length - 1) * interlinea(fuente) + altoDe(fuente) : 0);
-  };
-  const sobreDeg = { color: 'text', sobre: 'degradado' };
 
-  // ── El bloque del año, sobre el degradé: solo `--color-text` (el secundario no llega sobre el acento).
-  poner('anio', tx.anio, { x: X0, y: Y_ANIO, max: X1 - X0, fuente: F.anio, justo: true, ...sobreDeg });
-  const yRango = Y_ANIO + altoJusto(F.anio) + 12;
-  poner('rango', tx.rango, { x: X0, y: yRango, max: X1 - X0, fuente: F.rango, ...sobreDeg });
-  const yHeroe = yRango + altoDe(F.rango) + 30;
-  poner('heroe', tx.heroe.valor, { x: X0, y: yHeroe, max: X1 - X0, fuente: F.heroe, justo: true, ...sobreDeg });
-  poner('heroe-et', tx.heroe.etiqueta, { x: X0 + 4, y: yHeroe + altoJusto(F.heroe) + 6, max: X1 - X0 - 4, fuente: F.heroeEt, ...sobreDeg });
+  // ── Arriba: la marca, el año y los minutos.
+  poner('marca', tx.marca, { x: X0, y: 42, max: 500, fuente: F.marca, color: 'secondary' });
+  poner('anio', tx.anio, { x: X0, y: 74, max: 520, fuente: F.anio, color: 'text', justo: true });
+  poner('min', tx.min, { x: X1, y: 133, max: 430, fuente: F.min, color: 'text', alinear: 'right', justo: true });
+  poner('min-et', tx.minEt, { x: X1, y: 194, max: 430, fuente: F.minEt, color: 'secondary', alinear: 'right' });
 
-  // ── La franja de datos chicos: cuatro, en un renglón, separados por una línea del acento. Cada uno
-  // mide lo que mide (el valor o la etiqueta, lo más ancho) y lo que sobra se reparte en los huecos; si
-  // no entran con un hueco mínimo, van a partes iguales y se recortan.
-  {
-    const HUECO_MIN = 40;
-    const n = tx.datos.length;
-    let anchos = tx.datos.map((d) => Math.ceil(Math.max(medir(d.valor, F.dato), medir(d.etiqueta, F.datoEt))));
-    const cabe = X1 - X0 - (n - 1) * HUECO_MIN;
-    if (anchos.reduce((a, b) => a + b, 0) > cabe) anchos = anchos.map(() => Math.floor(cabe / n));
-    const hueco = (X1 - X0 - anchos.reduce((a, b) => a + b, 0)) / (n - 1);
-    let x = X0;
-    tx.datos.forEach((d, k) => {
-      poner(`dato-${d.id}`, d.valor, { x, y: Y_DATOS, max: anchos[k], fuente: F.dato, color: 'text', sobre: 'bg' });
-      poner(`dato-${d.id}-et`, d.etiqueta, { x, y: Y_DATOS + altoDe(F.dato) + 2, max: anchos[k], fuente: F.datoEt, color: 'secondary', sobre: 'bg' });
-      if (k < n - 1) barras.push({ id: `dato-sep-${k}`, x: Math.round(x + anchos[k] + hueco / 2 - 1), y: Y_DATOS + 6, w: 2, h: altoDe(F.dato) + altoDe(F.datoEt) - 10 });
-      x += anchos[k] + hueco;
-    });
-  }
-
-  // ── Los artistas: el 1 a la izquierda, grande, con su barra entera; del 2 al 5 a la derecha, con el
-  // puesto, el nombre, los minutos y una barra con sus minutos contra los del primero.
-  if (tx.artistas.length) {
-    const a1 = tx.artistas[0];
-    const tope = Math.max(...tx.artistas.map((a) => a.min));
-    poner('artistas-titulo', tx.tituloArtistas, { x: X0, y: Y_ARTISTAS, max: LADO_TAPA_1, fuente: F.titulo, color: 'secondary', sobre: 'bg' });
-    // El nombre del 1, como los de los discos, en hasta dos renglones: en uno, a este tamaño, casi
-    // cualquier nombre de verdad se cortaba.
-    const yM = ponerEnDos('artista-nombre-0', a1.nombre, { x: X0, y: Y_ARTISTAS + altoDe(F.titulo) + 6, max: LADO_TAPA_1, fuente: F.artista1, color: 'text', sobre: 'bg' }) + 2;
-    poner('artista-min-0', a1.minutos, { x: X0, y: yM, max: LADO_TAPA_1, fuente: F.artista1Min, color: 'secondary', sobre: 'bg' });
-    barras.push({ id: 'artista-barra-0', x: X0, y: yM + altoDe(F.artista1Min) + 8, w: LADO_TAPA_1, h: 8 });
-    const resto = tx.artistas.slice(1);
-    if (resto.length) {
-      const anchoMin = Math.min(180, Math.ceil(Math.max(...resto.map((a) => medir(a.minutos, F.artistaMin)))));
-      const xNombre = XD + 38;
-      resto.forEach((a, j) => {
-        const k = j + 1, yy = Y_ARTISTAS + j * 40;
-        poner(`artista-puesto-${k}`, String(k + 1), { x: XD, y: yy + 2, max: 30, fuente: F.puesto, color: 'secondary', sobre: 'bg' });
-        poner(`artista-nombre-${k}`, a.nombre, { x: xNombre, y: yy, max: X1 - anchoMin - 16 - xNombre, fuente: F.artista, color: 'text', sobre: 'bg' });
-        poner(`artista-min-${k}`, a.minutos, { x: X1, y: yy + 4, max: anchoMin, fuente: F.artistaMin, color: 'secondary', sobre: 'bg', alinear: 'right' });
-        barras.push({ id: `artista-barra-${k}`, x: xNombre, y: yy + 34, w: Math.max(2, Math.round((X1 - xNombre) * (tope > 0 ? a.min / tope : 0))), h: 4 });
+  // ── La trama. Sin `days` (o vacío), todos los días van «fuera»: la postal sale igual.
+  const D = y.days && y.days.from && Array.isArray(y.days.min) && y.days.min.length ? y.days : null;
+  const nivel = D ? tercilesDelTramo(D).nivel : null;
+  const desde = D ? aMs(D.from) : 0;
+  const pico = D && y.peak_day?.date ? String(y.peak_day.date).slice(0, 10) : null;
+  const anio = Number(y.year);
+  for (let mes = 0; mes < 12; mes++) {
+    const x = X0 + (mes % 3) * (MES_W + MES_SEP_X);
+    const yy = Y_TRAMA + Math.floor(mes / 3) * (MES_H + MES_SEP_Y);
+    meses.push({ mes, x, y: yy, w: MES_W, h: MES_H });
+    poner(`mes-${mes + 1}`, tx.meses[mes], { x, y: yy, max: MES_W, fuente: F.mes, color: 'secondary' });
+    const offset = diaSemanaLunes(`${anio}-${dos(mes + 1)}-01`);
+    const largo = new Date(Date.UTC(anio, mes + 1, 0)).getUTCDate();
+    for (let dia = 1; dia <= largo; dia++) {
+      const iso = `${anio}-${dos(mes + 1)}-${dos(dia)}`;
+      const k = offset + dia - 1, col = k % 7, fila = Math.floor(k / 7);
+      const i = D ? Math.round((aMs(iso) - desde) / DIA_MS) : -1;
+      const dentro = !!D && i >= 0 && i < D.min.length;
+      celdas.push({
+        iso, i: dentro ? i : -1, mes, col, fila,
+        x: x + col * PASO_X, y: yy + Y_DIAS + fila * PASO_Y, w: DIA_W, h: DIA_H, radio: RADIO_DIA,
+        fuera: !dentro, nivel: dentro ? nivel(D.min[i]) : null, pico: dentro && iso === pico,
       });
     }
   }
 
-  // ── Los discos: el 1, la tapa grande a la izquierda y su nombre (hasta dos renglones) y su artista a
-  // la derecha; del 2 al 5, tapas chicas en fila debajo, con el nombre (hasta dos renglones) y el
-  // artista, nunca más anchos que su tapa. Con menos de cinco, los que hay, desde la izquierda.
-  if (tx.discos.length) {
-    const nota = (lado) => ({ texto: '♪', fuente: { peso: 400, tam: Math.round(lado * 0.4) }, color: 'secondary', sobre: 'elevated' });
-    const d1 = tx.discos[0];
-    tapas.push({ id: 'tapa-0', i: 0, url: d1.url, x: X0, y: Y_DISCOS, lado: LADO_TAPA_1, radio: 14, nota: nota(LADO_TAPA_1) });
-    poner('discos-titulo', tx.tituloDiscos, { x: XD, y: Y_DISCOS, max: ANCHO_DER, fuente: F.titulo, color: 'secondary', sobre: 'bg' });
-    const finNombre = ponerEnDos('disco-nombre-0', d1.nombre, { x: XD, y: Y_DISCOS + altoDe(F.titulo) + 6, max: ANCHO_DER, fuente: F.disco1, color: 'text', sobre: 'bg' });
-    poner('disco-artista-0', d1.artista, { x: XD, y: finNombre + 2, max: ANCHO_DER, fuente: F.disco1Artista, color: 'secondary', sobre: 'bg' });
-    // Las tapas chicas, para que su bloque entero (tapa, dos renglones y el artista) termine donde
-    // termina la tapa grande.
-    const yT = Y_DISCOS + LADO_TAPA_1 - (LADO_TAPA + 8 + interlinea(F.disco) + altoDe(F.disco) + 1 + altoDe(F.discoArtista));
-    tx.discos.slice(1).forEach((d, j) => {
-      const k = j + 1, x = XD + j * (LADO_TAPA + SEP_TAPAS);
-      tapas.push({ id: `tapa-${k}`, i: k, url: d.url, x, y: yT, lado: LADO_TAPA, radio: 8, nota: nota(LADO_TAPA) });
-      const fin = ponerEnDos(`disco-nombre-${k}`, d.nombre, { x, y: yT + LADO_TAPA + 8, max: LADO_TAPA, fuente: F.disco, color: 'text', sobre: 'bg' });
-      poner(`disco-artista-${k}`, d.artista, { x, y: fin + 1, max: LADO_TAPA, fuente: F.discoArtista, color: 'secondary', sobre: 'bg' });
-    });
-  }
-
-  poner('pie', tx.pie, { x: ANCHO / 2, y: Y_PIE, max: X1 - X0, fuente: F.pie, color: 'secondary', sobre: 'bg', alinear: 'center' });
-  return { ancho: ANCHO, alto: ALTO, degradado: { y0: 0, y1: Y_FIN_DEGRADE }, fondos, barras, textos, tapas };
+  // ── Abajo: la racha, el día pico y el pie.
+  poner('racha', tx.racha.valor, { x: X0, y: 1200, max: 440, fuente: F.dato, color: 'text' });
+  poner('racha-et', tx.racha.etiqueta, { x: X0, y: 1245, max: 440, fuente: F.datoEt, color: 'secondary' });
+  poner('pico', tx.pico.valor, { x: 560, y: 1200, max: X1 - 560, fuente: F.dato, color: 'text' });
+  poner('pico-et', tx.pico.etiqueta, { x: 560, y: 1245, max: X1 - 560, fuente: F.datoEt, color: 'secondary' });
+  poner('pie', tx.pie, { x: ANCHO / 2, y: 1302, max: X1 - X0, fuente: F.pie, color: 'secondary', alinear: 'center' });
+  return { ancho: ANCHO, alto: ALTO, meses, celdas, textos };
 }
 
-// ── El degradé ──────────────────────────────────────────────────────────────
+// ── Los colores ─────────────────────────────────────────────────────────────
 
-/** La mezcla más fuerte del acento con el fondo, arriba de todo (0 = el fondo liso, 1 = el acento). */
-export const MEZCLA_MAX = 0.6;
-/** El contraste que tiene que dar el texto contra el punto peor del degradé. AA pide 4,5: un poco de
- *  margen por el redondeo y el difuminado del lienzo. */
+/** El contraste que tiene que dar cada texto contra el punto peor detrás de su caja. AA pide 4,5: un poco
+ *  de margen por el redondeo y el difuminado del lienzo. */
 export const PISO_CONTRASTE = 4.6;
-// Las paradas: la mezcla entera arriba, un 40 % de ella a media altura y el fondo abajo.
-const PARADAS = [{ t: 0, de: 1 }, { t: 0.55, de: 0.4 }, { t: 1, de: 0 }];
+// Las mezclas del diseño B (tanda 91B): [de, hacia, cuánto].
+const MEZCLA_NIVEL = [['surface', 'bg', 0.3], ['bg', 'accent', 0.27], ['bg', 'accent', 0.54], ['bg', 'accent', 0.84]];
+const MEZCLA_FUERA = ['bg', 'surface', 0.48];
 
 const rgbDe = (h) => [1, 3, 5].map((i) => parseInt(String(h).slice(i, i + 2), 16));
 const hexDe = (c) => '#' + c.map((v) => Math.max(0, Math.min(255, Math.round(v))).toString(16).padStart(2, '0')).join('');
@@ -331,48 +203,37 @@ const lumDe = (h) => {
   return 0.2126 * r + 0.7152 * g + 0.0722 * b;
 };
 const contrasteDe = (a, b) => { const x = lumDe(a), y = lumDe(b); return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05); };
-const mezclar = (bg, acento, m) => { const a = rgbDe(bg), b = rgbDe(acento); return hexDe(a.map((v, i) => v + (b[i] - v) * m)); };
-
-/** El color del degradé a la altura `y` (el centro del píxel), redondeado a 8 bits. */
-function colorEn(paradas, y0, y1, y) {
-  const t = Math.min(1, Math.max(0, (y + 0.5 - y0) / (y1 - y0)));
-  let k = 0;
-  while (k < paradas.length - 2 && t > paradas[k + 1].t) k++;
-  const a = paradas[k], b = paradas[k + 1];
-  const u = b.t === a.t ? 0 : (t - a.t) / (b.t - a.t);
-  const ca = rgbDe(a.color), cb = rgbDe(b.color);
-  return hexDe(ca.map((v, i) => v + (cb[i] - v) * u));
-}
+/** `a` mezclado hacia `b` en `m` (0 = `a`, 1 = `b`), en sRGB y redondeado a 8 bits como lo pinta el lienzo. */
+const mezclar = (a, b, m) => { const x = rgbDe(a), y = rgbDe(b); return hexDe(x.map((v, i) => v + (y[i] - v) * m)); };
 
 /**
- * Los colores del degradé para el tema `colores` (`{ bg, accent, text, secondary }`, en `#rrggbb`) y el
- * plan `plan`. Devuelve `{ y0, y1, mezcla, paradas: [{ t, color }], peor: [{ id, ratio, color, y }] }`:
- * `peor` es, para cada texto sobre el degradé, su contraste contra el punto peor de lo que tiene detrás.
+ * Los tonos de la trama para el tema `colores` (`{ bg, surface, accent, text }`, en `#rrggbb`):
+ * `{ niveles: [n0, n1, n2, n3], fuera, borde }` (`borde` es el contorno del día pico).
  */
-export function degradadoPostal(plan, colores) {
-  const { y0, y1 } = plan.degradado;
-  const zona = plan.textos.filter((t) => t.sobre === 'degradado' && t.texto);
-  const medirCon = (paradas) => zona.map((t) => {
-    let ratio = Infinity, color = null, donde = null;
-    for (let yy = Math.floor(t.caja.y); yy < Math.ceil(t.caja.y + t.caja.h); yy++) {
-      const c = colorEn(paradas, y0, y1, yy);
-      const r = contrasteDe(colores[t.color], c);
-      if (r < ratio) { ratio = r; color = c; donde = yy; }
-    }
-    return { id: t.id, ratio, color, y: donde };
-  });
-  for (let k = Math.round(MEZCLA_MAX * 100); k >= 0; k--) {
-    const mezcla = k / 100;
-    const paradas = PARADAS.map((p) => ({ t: p.t, color: mezclar(colores.bg, colores.accent, mezcla * p.de) }));
-    const peor = medirCon(paradas);
-    if (k === 0 || peor.every((p) => p.ratio >= PISO_CONTRASTE)) return { y0, y1, mezcla, paradas, peor };
-  }
-  return null;
+export function tonosPostal(colores) {
+  return {
+    niveles: MEZCLA_NIVEL.map(([a, b, m]) => mezclar(colores[a], colores[b], m)),
+    fuera: mezclar(colores[MEZCLA_FUERA[0]], colores[MEZCLA_FUERA[1]], MEZCLA_FUERA[2]),
+    borde: colores.text,
+  };
 }
 
-/** El aviso de cuando termina: lo que la postal trae, sin vender de más. */
-export function avisoPostal({ faltan = 0, sinTapas = false, motivo = null } = {}) {
-  if (sinTapas) return `La postal salió sin tapas: el navegador no dejó exportarla con ellas (${motivo || 'sin motivo'}). Los discos van con su nombre y un ♪.`;
-  if (faltan > 0) return `Postal descargada. ${faltan === 1 ? '1 tapa no se pudo bajar y va' : `${faltan} tapas no se pudieron bajar y van`} con ♪.`;
-  return 'Postal descargada.';
+/** El color de un día con esos tonos. */
+export const tonoDe = (celda, tonos) => (celda.fuera ? tonos.fuera : tonos.niveles[celda.nivel]);
+
+/**
+ * Para cada texto del plan, su contraste contra el punto PEOR de lo que tiene detrás: `--color-bg` y el tono
+ * (y el contorno, si es el pico) de cada día que toque su caja; el contorno sale 1 px por fuera de la casilla.
+ * Devuelve `[{ id, ratio, color }]`, con `color` el de ese punto peor.
+ */
+export function contrastePostal(plan, colores) {
+  const tonos = tonosPostal(colores);
+  const toca = (a, c) => a.x < c.x + c.w + 1 && c.x - 1 < a.x + a.w && a.y < c.y + c.h + 1 && c.y - 1 < a.y + a.h;
+  return plan.textos.map((t) => {
+    const detras = [colores.bg];
+    for (const c of plan.celdas || []) if (toca(t.caja, c)) detras.push(tonoDe(c, tonos), ...(c.pico ? [tonos.borde] : []));
+    let ratio = Infinity, color = null;
+    for (const d of detras) { const r = contrasteDe(colores[t.color], d); if (r < ratio) { ratio = r; color = d; } }
+    return { id: t.id, ratio, color };
+  });
 }

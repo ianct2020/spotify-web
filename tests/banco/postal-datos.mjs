@@ -1,5 +1,7 @@
 // Datos INVENTADOS para el banco de la postal del año (v=326, tanda 73). El repo es público: ningún
-// nombre ni número de acá es de nadie.
+// nombre ni número de acá es de nadie. Desde v=344 la postal no lleva tapas ni nombres: las tapas y los
+// nombres largos siguen acá porque los pinta la TARJETA del año (y la puerta J mira que la postal no pida
+// las de 2023). Lo que la postal usa de cada año es `days`, `min`, `longest_streak` y `peak_day`.
 //
 // Tres años:
 //   · 2025 arranca `2025-01-01T00:00:28Z` (la trampa del 31 dic en UTC−3) y termina el 30/09; sus cinco
@@ -112,12 +114,11 @@ export function statsInventadas({ tapas, origen, puerto, variante = null }) {
   };
 }
 
-/** Lo que la postal de 2025 tiene que decir (contado acá, a mano). */
+/** Lo que la postal de 2025 tiene que decir (contado acá, a mano). Desde v=344, «El año en días»: el año, los
+ *  minutos, la racha, el día pico y el pie (el rango, las reproducciones y los días con música ya no van). */
 export const ESPERADO_2025 = {
   archivo: 'fonoteca-2025.png',
-  rango: 'del 1 ene 2025 al 30 sep 2025',
-  reproducciones: '12.345',
-  dias: '234',
+  min: '1020h 35m',
   racha: '47 días',
   pico: '9 mar 2025',
   picoEt: 'día pico · 11h 8m',

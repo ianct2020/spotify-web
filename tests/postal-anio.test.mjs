@@ -1,5 +1,5 @@
-// tests/postal-anio.test.mjs — la postal del año: textos, recorte, posiciones y contraste (v=326, tanda 73;
-// rediseñada en v=327, tanda 74)
+// tests/postal-anio.test.mjs — la postal del año «El año en días»: textos, tramas, posiciones y contraste
+// (v=326, tanda 73; rediseñada en v=327, tanda 74; reemplazada por el diseño B en v=344, tanda 97)
 //
 // ═══════════════════════════════════════════════════════════════════════════
 // QUÉ PROTEGE ESTE ARCHIVO
@@ -8,32 +8,27 @@
 // La postal es una imagen que circula SOLA: no lleva el ⓘ de la vista, ni el aviso del corte de los
 // saltos, ni la posibilidad de abrir la ficha y ver de dónde sale un número. Lo que se equivoque ahí no
 // lo corrige nadie. Por eso la parte que decide QUÉ dice y DÓNDE va (`src/js/util/postal-anio.js`) es pura
-// y se prueba acá, en Node, con años INVENTADOS (2029, 2030, 2031: ningún número es de nadie):
+// y se prueba acá, en Node, con años INVENTADOS (2029, 2030, 2031: ningún número es de nadie) y, para el
+// tono de cada día, con el `history-stats.json` del repo (solo cuentas, sin un nombre):
 //
-//   1. el rango sale con `fmtDia` (el día que dice el dato): un año que arranca `…-01-01T00:00:28Z` dice
-//      «1 ene», nunca «31 dic» — el bug de v=231, que en UTC−3 corre la primera escucha al año anterior.
-//      Con `TZ` fijada a Buenos Aires: en una máquina en UTC el bug no se ve;
-//   2. los números con `toLocaleString('es-ES')` (12.345 y 1234) y los minutos con el `fmtMinutes` QUE SE
-//      LE PASA (uno de mentira acá): la postal no escribe su propio formateador;
-//   3. 🔴 ningún texto dice «skip», «salt» ni lleva un porcentaje: antes del 15/10/2022 el export no anotaba
-//      los saltos igual, y una imagen suelta no puede llevar el aviso;
-//   4. el recorte con «…», con una medida de mentira (1 px por carácter): lo que entra no se toca, lo que
-//      no entra termina en «…» y NUNCA pasa del máximo, y un nombre vacío no rompe;
-//   4b. (v=327) los nombres de disco en hasta DOS renglones, partidos por palabra (`partir`): uno que en
-//      la v=326 terminaba en «…» ahora entra entero, y uno larguísimo lleva el «…» en el segundo;
-//   5. con menos de 5 artistas o discos salen los que hay, sin filas vacías ni huecos;
-//   6. ninguna caja se sale de 1080×1350 ni se pisa con otra;
-//   7. el contraste del texto contra lo que tiene detrás, en los cuatro `PRESETS`, ≥ 4,5:1 (la cuenta de
-//      `tema-contraste.test.mjs`, la misma fórmula), y solo `--color-text` y `--color-text-secondary`.
-//      🔴 (v=327) El texto que va sobre el DEGRADÉ se mide contra el PUNTO PEOR del degradé detrás de su
-//      caja (renglón por renglón, con los colores redondeados a 8 bits como los pinta el lienzo), no contra
-//      el promedio; y el degradé existe de verdad (la mezcla no se fue a cero para pasar);
-//   8. la tapa, de 300 (y el disco 1, de al menos 360 de lado); y las 45 tapas del JSON del repo tienen la
-//      forma del CDN (contadas sin red y sin nombres);
-//   9. el aviso del final.
+//   1. las fechas salen con `fmtDia` (el día que dice el dato): con `TZ` de Buenos Aires, el 1 de enero
+//      es el 1 de enero, nunca el 31 de diciembre — el bug de v=231. Y el 1/1 cae en la primera casilla
+//      de enero, en la columna de su día de la semana (lunes primero);
+//   2. los minutos con el `fmtMinutes` QUE SE LE PASA (uno de mentira acá) y los números con
+//      `toLocaleString('es-ES')`: la postal no escribe su propio formateador;
+//   3. 🔴 ningún texto dice «skip», «salt» ni lleva un porcentaje;
+//   4. el recorte con «…», con una medida de mentira: lo que no entra termina en «…» y NUNCA pasa del
+//      máximo;
+//   5. sin `peak_day`, sin `days` o con `days` vacío, la postal sale igual (y se dice qué sale);
+//   6. ninguna caja (texto o día, con el contorno del pico) se sale de 1080×1350 ni se pisa con otra, y
+//      cada día cae dentro de su mes;
+//   7. el contraste de cada texto contra el punto PEOR detrás de su caja (el fondo y cualquier día que la
+//      toque), en los cuatro `PRESETS`, ≥ `PISO_CONTRASTE`; los tonos y la cuenta, rehechos acá por su lado;
+//   8. 🔴 el tono de cada día es el del calendario (`calendarioAnual` de `ui/calendario-anual.js`), día por
+//      día, para 2025 y 2018 del JSON del repo; un día fuera del tramo va «fuera» y el pico lleva contorno;
+//   9. ninguna tapa: ni el módulo puro ni el que dibuja las piden.
 //
-// Contra v=325 da rojo porque el módulo no existe; contra v=326, por el diseño (dos renglones, la tapa
-// grande, el degradé).
+// Contra v=343 (la postal de las tapas) da rojo: no hay trama de días.
 
 process.env.TZ = 'America/Argentina/Buenos_Aires';
 
@@ -71,7 +66,7 @@ globalThis.window = globalThis;
 const raiz = join(dirname(fileURLToPath(import.meta.url)), '..');
 const { PRESETS } = await import('../src/js/ui/theme-panel.js');
 const { fmtDia } = await import('../src/js/util/fecha.js');
-const { coverVariant } = await import('../src/js/util/album-key.js');
+const { calendarioAnual, aMs } = await import('../src/js/ui/calendario-anual.js');
 let P;
 try {
   P = await import('../src/js/util/postal-anio.js');
@@ -79,89 +74,95 @@ try {
   af(false, `src/js/util/postal-anio.js no carga: ${e.message}`);
   salir();
 }
-const { planPostal, textosPostal, recortar, avisoPostal, ANCHO, ALTO } = P;
-const partir = typeof P.partir === 'function' ? P.partir : null;
-const degradadoPostal = typeof P.degradadoPostal === 'function' ? P.degradadoPostal : null;
-af(partir, 'postal-anio.js exporta `partir` (los nombres en dos renglones)');
-af(degradadoPostal, 'postal-anio.js exporta `degradadoPostal` (el fondo con el degradé del tema)');
+const { planPostal, textosPostal, recortar, ANCHO, ALTO } = P;
+// Contra un módulo sin trama, que el test diga qué falta en vez de reventar en el primer `.find`.
+const planDe = (y, ctx) => { const p = planPostal(y, ctx); p.celdas ||= []; p.meses ||= []; return p; };
+const tonosPostal = typeof P.tonosPostal === 'function' ? P.tonosPostal : null;
+const contrastePostal = typeof P.contrastePostal === 'function' ? P.contrastePostal : null;
+af(tonosPostal, 'postal-anio.js exporta `tonosPostal` (el tono de cada nivel, de «fuera» y del contorno del pico)');
+af(contrastePostal, 'postal-anio.js exporta `contrastePostal` (cada texto contra el punto peor detrás de su caja)');
+af(P.PISO_CONTRASTE === 4.6, `el piso de contraste sigue en 4,6 (${P.PISO_CONTRASTE})`);
 
 // ── Los años INVENTADOS ─────────────────────────────────────────────────────
 const fmtMentira = (m) => `MIN[${m}]`;
 const porLetra = (t) => [...String(t)].length;           // 1 px por carácter
-const ancha = (t) => [...String(t)].length * 20;         // 20 px por carácter: para que el recorte muerda en la postal
+const ancha = (t) => [...String(t)].length * 20;         // 20 px por carácter: para que el recorte muerda
 // Medio tamaño de letra por carácter: se parece a la letra de verdad (Inter mide 0,5-0,6 em por carácter).
 const proporcional = (t, f) => [...String(t)].length * f.tam * 0.5;
-const IMG = (k) => `https://i.scdn.co/image/ab67616d0000b273${String(k).padStart(24, '0')}`;
+const DIA = 86400000;
+const isoDe = (ms) => new Date(ms).toISOString().slice(0, 10);
 
+/** Un tramo `days` inventado: `n` días desde `from`, con minutos pseudoazarosos y algún cero. */
+function tramo(from, n, semilla = 7) {
+  const min = [];
+  let s = semilla;
+  for (let i = 0; i < n; i++) { s = (s * 1103515245 + 12345) % 2147483648; min.push(s % 6 === 0 ? 0 : (s % 5000) / 10); }
+  return { from, min };
+}
 function anio(over = {}) {
   return {
     year: 2031, min: 98765, plays: 12345, days_active: 1234, longest_streak: 12345,
     skip_pct: 41.7, skips: 999, plays_raw: 13000,
     first_play: '2031-01-01T00:00:28Z', last_play: '2031-12-31T01:10:00Z',
     peak_day: { date: '2031-03-09', min: 668 },
-    top_artists: [1, 2, 3, 4, 5, 6].map((i) => ({ name: `Artista inventado ${i}`, min: 1000 - i * 100, plays: 50 - i })),
-    top_albums: [1, 2, 3, 4, 5, 6].map((i) => ({ name: `Disco inventado ${i}`, artist: `Artista inventado ${i}`, min: 500 - i * 10, plays: 30 - i, img: IMG(i) })),
+    days: tramo('2031-01-01', 365),
+    top_artists: [{ name: 'Artista inventado', min: 900, plays: 50 }],
+    top_albums: [{ name: 'Disco inventado', artist: 'Artista inventado', min: 500, plays: 30, img: 'https://i.scdn.co/image/ab67616d0000b273' + '0'.repeat(24) }],
     ...over,
   };
 }
 const ctxMentira = { fmtMinutes: fmtMentira, fmtDia, medir: (t) => porLetra(t) };
 const textos = (plan) => plan.textos.map((t) => t.texto);
 const de = (plan, id) => plan.textos.find((t) => t.id === id);
-/** El nombre del disco k entero, uniendo sus renglones (`disco-nombre-k` y `disco-nombre-k-b`). */
-const renglonesDe = (plan, base) => plan.textos.filter((t) => t.id === base || t.id === `${base}-b`).map((t) => t.texto);
+const celdaDe = (plan, iso) => plan.celdas.find((c) => c.iso === iso);
 
-// ── 1 · el rango, con fmtDia ────────────────────────────────────────────────
+// ── 1 · las fechas, con fmtDia ──────────────────────────────────────────────
 {
-  const p = planPostal(anio(), ctxMentira);
-  const r = de(p, 'rango')?.texto;
-  af(r === 'del 1 ene 2031 al 31 dic 2031', `rango de un año que arranca 00:00:28Z y termina 01:10Z: «${r}»`);
-  af(!textos(p).some((t) => /31 dic 2030|30 dic 2031/.test(t)), 'ningún texto corre el día a la hora local (ni «31 dic 2030» ni «30 dic 2031»)');
-  af(de(p, 'anio')?.texto === '2031', 'el año, grande, tal cual');
-  const medio = planPostal(anio({ year: 2029, first_play: '2029-08-15T14:00:00Z', last_play: '2029-12-31T20:00:00Z' }), ctxMentira);
-  af(de(medio, 'rango')?.texto === 'del 15 ago 2029 al 31 dic 2029', `un año que empieza a mitad: «${de(medio, 'rango')?.texto}»`);
-  const corto = planPostal(anio({ year: 2030, first_play: '2030-01-01T00:00:01Z', last_play: '2030-08-27T02:00:00Z' }), ctxMentira);
-  af(de(corto, 'rango')?.texto === 'del 1 ene 2030 al 27 ago 2030', `un año que termina antes del 31/12: «${de(corto, 'rango')?.texto}»`);
-  // El día pico es una casilla más de la franja de datos: el día con fmtDia y sus minutos en la etiqueta.
-  af(de(p, 'dato-pico')?.texto === '9 mar 2031', `el día pico con fmtDia: «${de(p, 'dato-pico')?.texto}»`);
-  af(de(p, 'dato-pico-et')?.texto === 'día pico · MIN[668]', `y sus minutos con el fmtMinutes pasado: «${de(p, 'dato-pico-et')?.texto}»`);
+  const p = planDe(anio(), ctxMentira);
+  af(de(p, 'anio')?.texto === '2031', `el año, grande, tal cual («${de(p, 'anio')?.texto}»)`);
+  af(de(p, 'pico')?.texto === '9 mar 2031', `el día pico con fmtDia: «${de(p, 'pico')?.texto}»`);
+  af(de(p, 'pico-et')?.texto === 'día pico · MIN[668]', `y sus minutos con el fmtMinutes pasado: «${de(p, 'pico-et')?.texto}»`);
+  // El pico el 1 de enero: con `new Date()` en UTC−3 diría «31 dic 2030».
+  const enero = planDe(anio({ peak_day: { date: '2031-01-01', min: 5 } }), ctxMentira);
+  af(de(enero, 'pico')?.texto === '1 ene 2031', `un pico el 1/1 dice «1 ene 2031», no el día anterior: «${de(enero, 'pico')?.texto}»`);
+  af(!textos(enero).some((t) => /31 dic 2030/.test(t)), 'ningún texto corre el día a la hora local');
+  // El 1/1/2031 es miércoles: la primera casilla de enero va en la columna 2 (lunes = 0), y es el día 0.
+  const c = celdaDe(p, '2031-01-01'), mes = p.meses[0];
+  af(c && c.i === 0 && c.mes === 0, `el 1 ene 2031 es la casilla del día 0, en enero (${c && `${c.i}, mes ${c.mes}`})`);
+  af(c && mes && c.col === 2 && c.fila === 0 && c.x > mes.x, `y cae en la columna del miércoles, primera fila (col ${c?.col}, fila ${c?.fila})`);
+  af(p.celdas.every((x) => x.col === (new Date(aMs(x.iso)).getUTCDay() + 6) % 7), 'cada día va en la columna de su día de la semana (lunes primero)');
+  const c31 = celdaDe(p, '2031-12-31');
+  af(c31 && c31.i === 364 && c31.mes === 11, `el 31 dic 2031 es el día 364, en diciembre (${c31?.i})`);
 }
 
 // ── 2 · los números, y los minutos con el fmtMinutes que se le pasa ─────────
 {
-  const p = planPostal(anio(), ctxMentira);
-  const t = textos(p);
-  af(de(p, 'heroe')?.texto === 'MIN[98765]', `los minutos del año (el número héroe) salen del fmtMinutes pasado: «${de(p, 'heroe')?.texto}»`);
-  af(de(p, 'heroe-et')?.texto === 'de música', `debajo, «de música»: «${de(p, 'heroe-et')?.texto}»`);
-  af(de(p, 'dato-reproducciones')?.texto === '12.345', `reproducciones con es-ES: «${de(p, 'dato-reproducciones')?.texto}»`);
-  af(de(p, 'dato-dias')?.texto === '1234', `días con música con es-ES (cuatro cifras sin separador): «${de(p, 'dato-dias')?.texto}»`);
-  af(de(p, 'dato-racha')?.texto === '12.345 días', `la racha con es-ES y «días»: «${de(p, 'dato-racha')?.texto}»`);
-  af(de(p, 'dato-reproducciones-et')?.texto === 'reproducciones', 'la etiqueta: «reproducciones»');
-  af(de(p, 'dato-dias-et')?.texto === 'días con música', 'la etiqueta: «días con música»');
-  af(de(p, 'dato-racha-et')?.texto === 'la racha más larga', `la etiqueta de la racha: «${de(p, 'dato-racha-et')?.texto}»`);
-  // El héroe es EL número: más grande que cualquier otro texto salvo el año, y que todos los de la franja.
-  const heroe = de(p, 'heroe');
-  const otros = p.textos.filter((x) => !['heroe', 'anio'].includes(x.id));
-  af(heroe && otros.every((x) => x.fuente.tam < heroe.fuente.tam), `el número héroe tiene la letra más grande de la postal fuera del año (${heroe?.fuente.tam} px)`);
-  const franja = p.textos.filter((x) => /^dato-/.test(x.id));
-  af(franja.length === 8 && new Set(franja.filter((x) => !/-et$/.test(x.id)).map((x) => x.y)).size === 1, `los cuatro datos chicos van en UNA franja: el mismo renglón (${[...new Set(franja.map((x) => x.y))].join(', ')})`);
-  for (let i = 0; i < 5; i++) {
-    af(de(p, `artista-min-${i}`)?.texto === `MIN[${1000 - (i + 1) * 100}]`, `los minutos del artista ${i + 1} con el fmtMinutes pasado`);
-  }
-  af(!t.some((x) => /\d+h \d+m/.test(x)), 'ningún texto trae minutos con otro formateador («Nh Mm»)');
-  const uno = planPostal(anio({ plays: 1, days_active: 1, longest_streak: 1 }), ctxMentira);
-  af(de(uno, 'dato-reproducciones-et')?.texto === 'reproducción' && de(uno, 'dato-dias-et')?.texto === 'día con música' && de(uno, 'dato-racha')?.texto === '1 día', 'en singular con 1: «reproducción», «día con música», «1 día»');
-  // `textosPostal` es lo mismo, sin posiciones: lo que usa `planPostal`.
+  const p = planDe(anio(), ctxMentira);
+  af(de(p, 'min')?.texto === 'MIN[98765]', `los minutos del año salen del fmtMinutes pasado: «${de(p, 'min')?.texto}»`);
+  af(de(p, 'min-et')?.texto === 'de música', `debajo, «de música»: «${de(p, 'min-et')?.texto}»`);
+  af(de(p, 'racha')?.texto === '12.345 días', `la racha con es-ES y «días»: «${de(p, 'racha')?.texto}»`);
+  af(de(p, 'racha-et')?.texto === 'racha más larga', `su etiqueta: «${de(p, 'racha-et')?.texto}»`);
+  af(de(p, 'pie')?.texto === 'Fonoteca · 2031', `abajo, «Fonoteca · 2031»: «${de(p, 'pie')?.texto}»`);
+  af(!textos(p).some((x) => /\d+h \d+m/.test(x)), 'ningún texto trae minutos con otro formateador («Nh Mm»)');
+  const uno = planDe(anio({ longest_streak: 1 }), ctxMentira);
+  af(de(uno, 'racha')?.texto === '1 día', `en singular con 1: «${de(uno, 'racha')?.texto}»`);
+  const corta = planDe(anio({ longest_streak: 1234 }), ctxMentira);
+  af(de(corta, 'racha')?.texto === '1234 días', `cuatro cifras sin separador, como es-ES: «${de(corta, 'racha')?.texto}»`);
+  // Lo que lleva y nada más: la marca, el año, los minutos, la racha, el pico, los doce meses y el pie.
+  const ids = p.textos.map((t) => t.id).sort();
+  const esperados = ['marca', 'anio', 'min', 'min-et', 'racha', 'racha-et', 'pico', 'pico-et', 'pie', ...Array.from({ length: 12 }, (_, k) => `mes-${k + 1}`)].sort();
+  af(JSON.stringify(ids) === JSON.stringify(esperados), `los textos son esos y nada más (${ids.join(', ')})`);
+  af(!textos(p).some((t) => /inventado/i.test(t)), 'ningún nombre de artista ni de disco');
+  af(de(p, 'mes-1')?.texto === '01 / ENERO' && de(p, 'mes-12')?.texto === '12 / DICIEMBRE', `los meses: «${de(p, 'mes-1')?.texto}» … «${de(p, 'mes-12')?.texto}»`);
   const tx = textosPostal(anio(), { fmtMinutes: fmtMentira, fmtDia });
-  af(tx.rango === 'del 1 ene 2031 al 31 dic 2031' && tx.artistas.length === 5 && tx.discos.length === 5, 'textosPostal: el rango y cinco y cinco');
-  af(tx.pie === 'Fonoteca · 2031' && de(p, 'pie')?.texto === 'Fonoteca · 2031', `abajo, «Fonoteca» y el año: «${de(p, 'pie')?.texto}»`);
+  af(tx.anio === '2031' && tx.min === 'MIN[98765]' && tx.pie === 'Fonoteca · 2031', 'textosPostal: lo mismo, sin posiciones');
+  af(de(p, 'anio') && de(p, 'anio').fuente.tam > Math.max(...p.textos.filter((t) => t.id !== 'anio').map((t) => t.fuente.tam)), 'el año tiene la letra más grande de la postal');
 }
 
 // ── 3 · sin saltos ──────────────────────────────────────────────────────────
-{
-  for (const y of [anio(), anio({ year: 2022 }), anio({ year: 2018, skip_pct: 64.2 })]) {
-    const t = textos(planPostal(y, { fmtMinutes: (m) => `${m} min`, fmtDia, medir: porLetra }));
-    af(!t.some((x) => /skip|salt|%/i.test(x)), `${y.year}: ningún texto dice «skip», «salt» ni lleva «%» (${t.filter((x) => /skip|salt|%/i.test(x)).join(' | ')})`);
-  }
+for (const y of [anio(), anio({ year: 2022 }), anio({ year: 2018, skip_pct: 64.2 })]) {
+  const t = textos(planDe(y, { fmtMinutes: (m) => `${m} min`, fmtDia, medir: porLetra }));
+  af(!t.some((x) => /skip|salt|%/i.test(x)), `${y.year}: ningún texto dice «skip», «salt» ni lleva «%» (${t.filter((x) => /skip|salt|%/i.test(x)).join(' | ')})`);
 }
 
 // ── 4 · el recorte, con 1 px por carácter ───────────────────────────────────
@@ -170,13 +171,12 @@ const renglonesDe = (plan, base) => plan.textos.filter((t) => t.id === base || t
   af(recortar('abcd', 5, porLetra) === 'abcd', 'uno que sobra tampoco');
   const r = recortar('abcdef', 5, porLetra);
   af(r.endsWith('…') && porLetra(r) <= 5 && r === 'abcd…', `uno que no entra termina en «…» y no pasa del máximo: «${r}»`);
-  af(recortar('', 5, porLetra) === '', 'un nombre vacío no rompe');
+  af(recortar('', 5, porLetra) === '', 'un texto vacío no rompe');
   af(recortar(null, 5, porLetra) === '' && recortar(undefined, 5, porLetra) === '', 'ni uno nulo');
   af(recortar('abc', 0, porLetra) === '', 'con máximo 0 no sale nada (ni el «…», que no entra)');
   af(recortar('abc', 1, porLetra) === '…', 'con máximo 1, solo el «…»');
   af(recortar('ab   cdef', 6, porLetra) === 'ab…', `no deja un espacio colgando antes del «…»: «${recortar('ab   cdef', 6, porLetra)}»`);
   af(recortar('🎵🎵🎵🎵', 3, porLetra) === '🎵🎵…', 'no parte un carácter de dos unidades por la mitad');
-  // Barrido: ningún resultado pasa del máximo, con cualquier largo y cualquier medida.
   let pasa = 0, prob = 0;
   for (let n = 0; n < 40; n++) {
     const s = 'x'.repeat(n) + 'Ñandú inventado';
@@ -189,132 +189,59 @@ const renglonesDe = (plan, base) => plan.textos.filter((t) => t.id === base || t
     }
   }
   af(pasa === prob, `barrido del recorte: ${pasa} de ${prob} dentro del máximo y con «…» cuando corta`);
-  // En la postal: con 20 px por carácter el nombre largo se corta y ningún texto pasa de su caja.
-  const largo = 'Orquesta Imaginaria de los Martes por la Tarde y Sus Amigos Ficticios del Barrio';
-  const y = anio({ top_artists: [{ name: largo, min: 900, plays: 1 }, ...anio().top_artists.slice(1)], top_albums: [{ name: largo, artist: largo, min: 1, plays: 1, img: IMG(1) }] });
-  const p = planPostal(y, { fmtMinutes: fmtMentira, fmtDia, medir: ancha });
-  // v=327: el artista 1 va en hasta dos renglones, y el «…» lo lleva el último.
-  const ra = renglonesDe(p, 'artista-nombre-0'), a0 = de(p, 'artista-nombre-0-b') || de(p, 'artista-nombre-0');
-  af(ra.length === 2 && a0.texto.endsWith('…') && ancha(a0.texto) <= a0.max, `el nombre largo del artista va en dos renglones, termina en «…» y entra (${JSON.stringify(ra)})`);
-  const r0 = renglonesDe(p, 'disco-nombre-0');
-  af(r0.length === 2 && r0[1].endsWith('…') && !r0[0].endsWith('…') && de(p, 'disco-artista-0')?.texto.endsWith('…'), `el nombre largo del disco va en dos renglones con el «…» en el segundo, y su artista también se corta (${JSON.stringify(r0)})`);
+  // En la postal, con 20 px por carácter: los minutos de mentira no entran y se cortan; nada pasa de su caja.
+  // Unos minutos de mentira de 40 caracteres (800 px) en una caja de 430: tienen que cortarse.
+  const p = planDe(anio(), { fmtMinutes: (m) => `MIN[${m}]`.padEnd(40, '9'), fmtDia, medir: ancha });
   const pasados = p.textos.filter((t) => ancha(t.texto) > t.max);
   af(pasados.length === 0, `ningún texto pasa de su máximo con 20 px por carácter: ${pasados.map((t) => t.id).join(', ')}`);
-  const vacio = planPostal(anio({ top_artists: [{ name: '', min: 5, plays: 1 }], top_albums: [{ name: '', artist: '', min: 1, plays: 1 }] }), ctxMentira);
-  af(de(vacio, 'artista-nombre-0')?.texto === '—' && de(vacio, 'disco-nombre-0')?.texto === '—', 'un artista o un disco sin nombre sale como «—», no como un hueco');
+  af(de(p, 'min')?.texto.endsWith('…'), `y el que no entra lleva el «…» («${de(p, 'min')?.texto}»)`);
 }
 
-// ── 4b · los nombres en DOS renglones (v=327) ───────────────────────────────
-if (partir) {
-  const igual = (a, b) => JSON.stringify(a) === JSON.stringify(b);
-  af(igual(partir('abc', 5, porLetra), ['abc']), 'un nombre que entra en un renglón va en uno, tal cual');
-  af(igual(partir('', 5, porLetra), []) && igual(partir(null, 5, porLetra), []), 'uno vacío o nulo: ningún renglón');
-  af(igual(partir('Disco Inventado Cuatro', 16, porLetra), ['Disco Inventado', 'Cuatro']), `partido por palabra: ${JSON.stringify(partir('Disco Inventado Cuatro', 16, porLetra))}`);
-  // El caso de la v=326: con el mismo máximo, `recortar` lo dejaba en «Disco Inventado…» y ahora entra entero.
-  af(recortar('Disco Inventado Cuatro', 16, porLetra).endsWith('…'), 'la v=326 (un renglón) lo cortaba con «…»');
-  const largo = 'Orquesta Imaginaria de los Martes por la Tarde';
-  const l = partir(largo, 16, porLetra);
-  af(l.length === 2 && l[1].endsWith('…') && !l[0].endsWith('…') && l.every((x) => porLetra(x) <= 16), `uno larguísimo: dos renglones, el «…» en el segundo y ninguno pasa del máximo (${JSON.stringify(l)})`);
-  af(l[0] === 'Orquesta' && l[1].startsWith('Imaginaria'), 'el primer renglón termina en una palabra entera');
-  const palabrota = partir('Supercalifragilístico', 8, porLetra);
-  af(palabrota.length === 2 && palabrota[0] === 'Supercal' && palabrota[1].endsWith('…') && palabrota.every((x) => porLetra(x) <= 8), `una sola palabra que no entra: se parte por caracteres (${JSON.stringify(palabrota)})`);
-  af(igual(partir('abc def', 3, porLetra), ['abc', 'def']), 'dos palabras justas: una por renglón, sin «…»');
-  af(igual(partir('🎵🎵🎵 🎵🎵🎵', 3, porLetra), ['🎵🎵🎵', '🎵🎵🎵']), 'un emoji no se parte');
-  af(igual(partir('abc def', 3, porLetra, 1), ['ab…']), 'con un renglón, es el recorte de siempre');
-  // Barrido: ≤ 2 renglones, ninguno pasa del máximo, el «…» solo al final del último, sin «…» las palabras
-  // son las del nombre, en orden, y vacío solo cuando ni el «…» entra.
-  let pasa = 0, prob = 0;
-  const frases = ['Disco Inventado', 'Un Disco Con Un Nombre Bastante Largo Para Dos Renglones', 'Ñandú', 'a b c d e f g h', 'Palabraenormesinespacios y otra', '  con espacios   de más  '];
-  for (const s of frases) for (let max = 1; max < 40; max++) for (const medir of [porLetra, (t) => [...t].reduce((a, c) => a + (c === '…' ? 3 : c === ' ' ? 1 : 2), 0)]) {
-    prob++;
-    const r = partir(s, max, medir);
-    const sinElipsis = !r.some((x) => x.includes('…'));
-    // Vacío solo si ni el «…» entra (como `recortar`): nunca un nombre cortado sin avisar.
-    const okR = r.length === 0 ? medir('…') > max : r.length <= 2 && r.every((x) => medir(x) <= max) && r.slice(0, -1).every((x) => !x.endsWith('…'))
-      && (!sinElipsis || r.join('').replace(/\s+/g, '') === s.replace(/\s+/g, ''));
-    if (okR) pasa++;
-  }
-  af(pasa === prob, `barrido de los dos renglones: ${pasa} de ${prob}`);
-
-  // En la postal, con una medida que se parece a la letra (medio tamaño por carácter): «Disco Inventado 2»
-  // en una tapa chica no entraba en un renglón y entra entero en dos.
-  const p = planPostal(anio({ top_albums: [1, 2, 3, 4, 5].map((i) => ({ name: `Disco Inventado ${i}`, artist: 'Banda', min: 1, plays: 1, img: IMG(i) })) }), { fmtMinutes: fmtMentira, fmtDia, medir: proporcional });
-  for (const k of [1, 2, 3, 4]) {
-    const r = renglonesDe(p, `disco-nombre-${k}`);
-    const t = de(p, `disco-nombre-${k}`);
-    af(r.join(' ') === `Disco Inventado ${k + 1}` && !r.some((x) => x.includes('…')), `disco ${k + 1}: «Disco Inventado ${k + 1}» entra entero en ${r.length} renglón(es) (${JSON.stringify(r)})`);
-    af(t && proporcional(`Disco Inventado ${k + 1}`, t.fuente) > t.max, `disco ${k + 1}: y en un solo renglón NO entraba (${t && proporcional(`Disco Inventado ${k + 1}`, t.fuente)} > ${t?.max}): es el caso que la v=326 cortaba`);
-  }
-  // Nombre y artista nunca más anchos que su tapa (los discos 2 a 5; el 1 tiene la columna de al lado).
-  const malos = p.tapas.slice(1).filter((tp) => p.textos.filter((t) => new RegExp(`^disco-(nombre|artista)-${tp.i}(-b)?$`).test(t.id)).some((t) => t.max > tp.lado));
-  af(malos.length === 0, `discos 2 a 5: nombre y artista no más anchos que su tapa (${malos.map((t) => t.i + 1).join(', ')})`);
-}
-
-// ── 5 · menos de 5 ──────────────────────────────────────────────────────────
+// ── 5 · lo que falta no la rompe ────────────────────────────────────────────
 {
-  const chico = anio({ top_artists: anio().top_artists.slice(0, 2), top_albums: anio().top_albums.slice(0, 3) });
-  const p = planPostal(chico, ctxMentira);
-  const nombres = p.textos.filter((t) => /^artista-nombre-/.test(t.id));
-  af(nombres.length === 2, `con 2 artistas, 2 filas (${nombres.length})`);
-  af(p.tapas.length === 3 && p.textos.filter((t) => /^disco-nombre-\d$/.test(t.id)).length === 3, `con 3 discos, 3 tapas y 3 nombres (${p.tapas.length})`);
-  af(!p.textos.some((t) => t.texto === ''), 'ningún texto vacío (ninguna fila sin nada)');
-  // El 1, grande; los otros dos, chicos, uno al lado del otro y desde la izquierda de su columna: sin huecos.
-  const [t0, t1, t2] = p.tapas;
-  af(t0.lado > t1.lado && t1.lado === t2.lado, `el disco 1 es el grande y los otros dos son iguales (${t0.lado}, ${t1.lado}, ${t2.lado})`);
-  const completo = planPostal(anio(), ctxMentira);
-  af(t1.x === completo.tapas[1].x && t2.x === completo.tapas[2].x && t1.y === completo.tapas[1].y, 'con 3 discos, el 2 y el 3 van donde van con 5 (desde la izquierda, sin huecos)');
-  const sinDiscos = planPostal(anio({ top_albums: [] }), ctxMentira);
-  af(sinDiscos.tapas.length === 0 && !de(sinDiscos, 'discos-titulo') && !sinDiscos.textos.some((t) => /^disco-/.test(t.id)), 'sin discos no hay tapas ni título de discos (ni un título sobre nada)');
-  const sinNada = planPostal(anio({ top_albums: undefined, top_artists: undefined, peak_day: null }), ctxMentira);
-  af(sinNada && de(sinNada, 'dato-pico')?.texto === '—' && de(sinNada, 'dato-pico-et')?.texto === 'día pico' && !de(sinNada, 'artistas-titulo') && !sinNada.textos.some((t) => /^artista-/.test(t.id)), 'sin listas ni día pico no revienta: «—» en el día pico y sin artistas');
-  const sinImg = planPostal(anio({ top_albums: [{ name: 'Disco sin tapa', artist: 'X', min: 1, plays: 1 }] }), ctxMentira);
-  af(sinImg.tapas.length === 1 && sinImg.tapas[0].url === null, 'un disco sin `img` lleva url null (la vista le pone el ♪)');
+  const sinPico = planDe(anio({ peak_day: null }), ctxMentira);
+  af(de(sinPico, 'pico')?.texto === '—' && de(sinPico, 'pico-et')?.texto === 'día pico' && !sinPico.celdas.some((c) => c.pico), 'sin día pico: «—», «día pico» y ningún contorno');
+  for (const [que, days] of [['sin days', undefined], ['con days vacío', { from: '2031-01-01', min: [] }], ['con days null', null]]) {
+    let p = null, err = null;
+    try { p = planDe(anio({ days }), ctxMentira); } catch (e) { err = e; }
+    af(p && !err, `${que}: la postal sale (${err?.message || 'ok'})`);
+    if (!p) continue;
+    af(p.celdas.length === 365 && p.celdas.every((c) => c.fuera && c.i === -1 && !c.pico), `${que}: los 365 días del año van «fuera», sin pico (${p.celdas.filter((c) => c.fuera).length} de ${p.celdas.length})`);
+    af(de(p, 'anio')?.texto === '2031' && de(p, 'min')?.texto === 'MIN[98765]' && de(p, 'pico')?.texto === '9 mar 2031', `${que}: el año, los minutos y el pico, igual`);
+  }
 }
 
 // ── 6 · las posiciones ──────────────────────────────────────────────────────
-function cajasDe(p) {
-  return [
-    ...p.textos.map((t) => ({ id: t.id, ...t.caja })),
-    ...p.tapas.map((t) => ({ id: `tapa-${t.i}`, x: t.x, y: t.y, w: t.lado, h: t.lado })),
-    ...p.barras.map((b) => ({ id: b.id, x: b.x, y: b.y, w: b.w, h: b.h })),
-  ];
-}
 const pisa = (a, b) => a.x < b.x + b.w - 1e-6 && b.x < a.x + a.w - 1e-6 && a.y < b.y + b.h - 1e-6 && b.y < a.y + a.h - 1e-6;
-const largoX = 'Orquesta Imaginaria de los Martes por la Tarde y Sus Amigos Ficticios del Barrio';
+// El contorno del pico va centrado en el borde de la casilla, de 2 px: 1 px por fuera. Se cuenta en todas.
+const cajaCelda = (c) => ({ id: `dia-${c.iso}`, x: c.x - 1, y: c.y - 1, w: c.w + 2, h: c.h + 2 });
 for (const [que, y, medir] of [
-  ['el año entero', anio(), porLetra],
+  ['2031 entero', anio(), porLetra],
   ['con 20 px por carácter', anio(), ancha],
   ['con medio tamaño por carácter', anio(), proporcional],
-  ['nombres larguísimos', anio({ top_artists: anio().top_artists.map((a) => ({ ...a, name: largoX })), top_albums: anio().top_albums.map((a) => ({ ...a, name: largoX, artist: largoX })) }), proporcional],
-  ['2 artistas y 3 discos', anio({ top_artists: anio().top_artists.slice(0, 2), top_albums: anio().top_albums.slice(0, 3) }), ancha],
+  ['un bisiesto (2028)', anio({ year: 2028, days: tramo('2028-01-01', 366), peak_day: { date: '2028-02-29', min: 9 } }), proporcional],
+  ['un tramo que arranca a mitad (2029)', anio({ year: 2029, days: tramo('2029-08-15', 139), peak_day: { date: '2029-10-13', min: 9 } }), proporcional],
 ]) {
-  const p = planPostal(y, { fmtMinutes: fmtMentira, fmtDia, medir });
+  const p = planDe(y, { fmtMinutes: fmtMentira, fmtDia, medir });
   af(p.ancho === 1080 && p.alto === 1350 && ANCHO === 1080 && ALTO === 1350, `${que}: el lienzo es de 1080×1350`);
-  const todas = [...cajasDe(p), ...p.fondos];
-  const fuera = todas.filter((c) => c.x < 0 || c.y < 0 || c.x + c.w > 1080 || c.y + c.h > 1350 || !(c.w >= 0 && c.h > 0));
-  af(fuera.length === 0, `${que}: ninguna caja se sale de 1080×1350 (${fuera.map((c) => c.id).join(', ')})`);
-  const c = cajasDe(p);
+  const largo = (Date.UTC(y.year + 1, 0, 1) - Date.UTC(y.year, 0, 1)) / DIA;
+  af(p.celdas.length === largo && new Set(p.celdas.map((c) => c.iso)).size === largo, `${que}: una casilla por día del año (${p.celdas.length} de ${largo})`);
+  const todas = [...p.textos.map((t) => ({ id: t.id, ...t.caja })), ...p.celdas.map(cajaCelda)];
+  const fuera = todas.filter((c) => c.x < 0 || c.y < 0 || c.x + c.w > 1080 || c.y + c.h > 1350 || !(c.w > 0 && c.h > 0));
+  af(fuera.length === 0, `${que}: ninguna caja se sale de 1080×1350 (${fuera.slice(0, 5).map((c) => c.id).join(', ')})`);
   const pisadas = [];
-  for (let i = 0; i < c.length; i++) for (let j = i + 1; j < c.length; j++) if (pisa(c[i], c[j])) pisadas.push(`${c[i].id}×${c[j].id}`);
-  af(pisadas.length === 0, `${que}: ningún texto, tapa ni barra se pisa con otro (${pisadas.join(', ')})`);
-  const fp = [];
-  for (let i = 0; i < p.fondos.length; i++) for (let j = i + 1; j < p.fondos.length; j++) if (pisa(p.fondos[i], p.fondos[j])) fp.push(`${p.fondos[i].id}×${p.fondos[j].id}`);
-  af(fp.length === 0, `${que}: las cajas de fondo no se pisan (${fp.join(', ')})`);
-  af(p.fondos.length === 0, `${que}: sin cajas de --color-surface (la planilla eran tres cajas apiladas)`);
-  // Cada texto está donde dice que está: sobre el degradé, dentro de su franja; sobre el fondo, fuera de ella.
-  af(p.degradado && p.degradado.y1 > p.degradado.y0, `${que}: el plan dice dónde va el degradé`);
-  const d = p.degradado || { y0: 0, y1: 0 };
-  const malSobre = p.textos.filter((t) => (t.sobre === 'degradado' ? !(t.caja.y >= d.y0 && t.caja.y + t.caja.h <= d.y1) : t.sobre === 'bg' ? t.caja.y < d.y1 : true));
-  af(malSobre.length === 0, `${que}: cada texto está sobre el fondo que declara (${malSobre.map((t) => `${t.id}:${t.sobre}`).join(', ')})`);
-  af(p.tapas.every((t) => t.y >= d.y1), `${que}: ninguna tapa sobre el degradé`);
-  af(p.tapas.every((t) => t.nota && t.nota.texto === '♪' && t.nota.sobre === 'elevated'), `${que}: cada tapa trae su ♪ por si no baja (sobre --color-elevated)`);
+  for (let i = 0; i < todas.length; i++) for (let j = i + 1; j < todas.length; j++) if (pisa(todas[i], todas[j])) pisadas.push(`${todas[i].id}×${todas[j].id}`);
+  af(pisadas.length === 0, `${que}: ningún texto ni día se pisa con otro (${pisadas.slice(0, 5).join(', ')})`);
+  af(p.meses.length === 12, `${que}: doce meses`);
+  const malMes = p.celdas.filter((c) => { const m = p.meses[c.mes]; return !m || +c.iso.slice(5, 7) !== c.mes + 1 || c.x < m.x || c.y < m.y || c.x + c.w > m.x + m.w || c.y + c.h > m.y + m.h; });
+  af(malMes.length === 0, `${que}: cada día cae dentro del recuadro de su mes (${malMes.slice(0, 3).map((c) => c.iso).join(', ')})`);
   const pasados = p.textos.filter((t) => medir(t.texto, t.fuente) > t.max);
   af(pasados.length === 0, `${que}: ningún texto pasa de su máximo (${pasados.map((t) => t.id).join(', ')})`);
 }
 
 // ── 7 · el contraste, en los cuatro presets ─────────────────────────────────
-// La cuenta de WCAG 2.x, la MISMA de `tests/tema-contraste.test.mjs` (y de `mapa-mundo.test.mjs`): no
-// es otra fórmula, es la de allá reusada. Los colores del tema son opacos: no hay alfa que componer.
+// La cuenta de WCAG 2.x, la MISMA de `tests/tema-contraste.test.mjs`. Los tonos de los días y la cuenta
+// del punto peor los rehace ESTE test: si el módulo se equivocara, esto no lo copia.
 const rgb = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
 const lum = (h) => {
   const [r, g, b] = rgb(h).map((v) => { const s = v / 255; return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4; });
@@ -322,123 +249,104 @@ const lum = (h) => {
 };
 const contraste = (a, b) => { const x = lum(a), y = lum(b); return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05); };
 const hex = (c) => '#' + c.map((v) => Math.round(v).toString(16).padStart(2, '0')).join('');
-// El color del degradé a la altura `y` (en el centro del píxel, como el lienzo), redondeado a 8 bits:
-// interpolado entre las paradas en sRGB, igual que `createLinearGradient`. Lo calcula ESTE test, no el
-// módulo: si el módulo se equivocara en la cuenta, esto no lo copia.
-function colorEn(deg, y) {
-  const t = Math.min(1, Math.max(0, (y + 0.5 - deg.y0) / (deg.y1 - deg.y0)));
-  const ps = deg.paradas;
-  let k = 0;
-  while (k < ps.length - 2 && t > ps[k + 1].t) k++;
-  const a = ps[k], b = ps[k + 1];
-  const u = b.t === a.t ? 0 : (t - a.t) / (b.t - a.t);
-  return hex(rgb(a.color).map((v, i) => v + (rgb(b.color)[i] - v) * u));
-}
-/** El PEOR contraste de un texto contra el degradé, renglón por renglón de su caja. */
-function peorSobreDegrade(deg, caja, color) {
-  let min = Infinity, donde = null;
-  for (let y = Math.floor(caja.y); y < Math.ceil(caja.y + caja.h); y++) {
-    const r = contraste(color, colorEn(deg, y));
-    if (r < min) { min = r; donde = y; }
-  }
-  return { min, donde };
-}
-const TOKEN = { text: '--color-text', secondary: '--color-text-secondary', bg: '--color-bg', surface: '--color-surface', elevated: '--color-elevated' };
-const coloresDe = (pr) => ({ bg: pr.colors['--color-bg'], accent: pr.colors['--color-accent'], text: pr.colors['--color-text'], secondary: pr.colors['--color-text-secondary'], elevated: pr.colors['--color-elevated'] });
+const mix = (a, b, p) => hex(rgb(a).map((v, i) => v * (1 - p) + rgb(b)[i] * p));
+const coloresDe = (pr) => ({ bg: pr.colors['--color-bg'], surface: pr.colors['--color-surface'], accent: pr.colors['--color-accent'], text: pr.colors['--color-text'], secondary: pr.colors['--color-text-secondary'] });
 const peores = {};
-{
-  const p = planPostal(anio(), ctxMentira);
-  const pares = [...p.textos.map((t) => [t.id, t.color, t.sobre, t.caja]), ...p.tapas.map((t) => [`nota-${t.i}`, t.nota.color, t.nota.sobre, null])];
-  af(pares.every(([, c]) => c === 'text' || c === 'secondary'), `solo --color-text y --color-text-secondary para el texto (${[...new Set(pares.map(([, c]) => c))].join(', ')})`);
+if (tonosPostal && contrastePostal) {
+  const p = planDe(anio(), { fmtMinutes: fmtMentira, fmtDia, medir: proporcional });
+  af(p.textos.every((t) => t.color === 'text' || t.color === 'secondary'), `solo --color-text y --color-text-secondary para el texto (${[...new Set(p.textos.map((t) => t.color))].join(', ')})`);
   af(PRESETS.length === 4, `cuatro presets (${PRESETS.length})`);
-  af(pares.some(([, , s]) => s === 'degradado') && pares.some(([, , s]) => s === 'bg'), 'hay texto sobre el degradé y texto sobre el fondo liso');
   for (const pr of PRESETS) {
     const col = coloresDe(pr);
-    const deg = degradadoPostal ? degradadoPostal(p, col) : null;
+    const t = tonosPostal(col);
+    // Los tonos del diseño B (tanda 91B): el nivel 0 es la superficie hacia el fondo; del 1 al 3, el fondo
+    // hacia el acento; «fuera», el fondo hacia la superficie; el contorno del pico, el texto.
+    const mios = { niveles: [mix(col.surface, col.bg, 0.3), mix(col.bg, col.accent, 0.27), mix(col.bg, col.accent, 0.54), mix(col.bg, col.accent, 0.84)], fuera: mix(col.bg, col.surface, 0.48), borde: col.text };
+    af(JSON.stringify(t.niveles.map((x) => x.toLowerCase())) === JSON.stringify(mios.niveles) && t.fuera.toLowerCase() === mios.fuera && t.borde.toLowerCase() === col.text.toLowerCase(), `${pr.id}: los tonos son los del diseño B, del tema y sin nada escrito a mano (${t.niveles.join(' ')} · fuera ${t.fuera})`);
+    const dist = t.niveles.slice(1).map((c) => contraste(c, col.bg));
+    af(dist.every((v, i) => i === 0 || v > dist[i - 1]), `${pr.id}: del nivel 1 al 3, cada vez más lejos del fondo (${dist.map((v) => v.toFixed(2)).join(' → ')})`);
+    af(new Set([t.fuera, t.niveles[0], col.bg].map((x) => x.toLowerCase())).size === 3, `${pr.id}: «fuera», el día sin música y el fondo son tres colores distintos`);
+    // El punto peor detrás de cada caja: el fondo y el tono (y el contorno, si es el pico) de cada día que la toque.
     const bajos = [];
-    let min = Infinity, minDeg = Infinity, peorDeg = '';
-    for (const [id, c, s, caja] of pares) {
-      let r;
-      if (s === 'degradado') {
-        if (!deg) { bajos.push(`${id} sin degradé`); continue; }
-        const w = peorSobreDegrade(deg, caja, pr.colors[TOKEN[c]]);
-        r = w.min;
-        if (r < minDeg) { minDeg = r; peorDeg = `${id} en y=${w.donde}`; }
-      } else r = contraste(pr.colors[TOKEN[c]], pr.colors[TOKEN[s]]);
-      min = Math.min(min, r);
-      if (!(r >= 4.5)) bajos.push(`${id} ${r.toFixed(2)}`);
+    let min = Infinity, donde = '';
+    for (const x of p.textos) {
+      const detras = [col.bg];
+      for (const c of p.celdas) if (pisa(x.caja, cajaCelda(c))) detras.push(c.fuera ? mios.fuera : mios.niveles[c.nivel], ...(c.pico ? [col.text] : []));
+      const r = Math.min(...detras.map((d) => contraste(col[x.color], d)));
+      if (r < min) { min = r; donde = x.id; }
+      if (!(r >= P.PISO_CONTRASTE)) bajos.push(`${x.id} ${r.toFixed(2)}`);
     }
-    af(bajos.length === 0, `${pr.id}: todo el texto de la postal ≥ 4,5:1 contra lo que tiene detrás, el degradé en su punto PEOR (mínimo ${min.toFixed(2)}): ${bajos.join(', ')}`);
-    if (!deg) continue;
-    peores[pr.id] = { mezcla: deg.mezcla, minDeg, peorDeg, min };
-    // El degradé existe de verdad: no se «pasó» bajando la mezcla a cero.
-    af(deg.mezcla >= 0.3, `${pr.id}: el degradé lleva el acento de verdad (mezcla ${deg.mezcla} ≥ 0,3)`);
-    af(deg.paradas.at(-1).color.toLowerCase() === pr.colors['--color-bg'].toLowerCase(), `${pr.id}: el degradé termina en --color-bg (${deg.paradas.at(-1).color})`);
-    af(deg.paradas[0].color.toLowerCase() !== pr.colors['--color-bg'].toLowerCase(), `${pr.id}: y arriba no es el fondo liso (${deg.paradas[0].color})`);
-    // Ningún color escrito a mano: cada parada está, canal por canal, entre --color-bg y --color-accent.
-    const [bg, ac] = [rgb(pr.colors['--color-bg']), rgb(pr.colors['--color-accent'])];
-    af(deg.paradas.every((q) => rgb(q.color).every((v, i) => v >= Math.min(bg[i], ac[i]) - 1 && v <= Math.max(bg[i], ac[i]) + 1)), `${pr.id}: las paradas son el acento mezclado con el fondo, nada más (${deg.paradas.map((q) => q.color).join(' → ')})`);
-    // Fuerte arriba y suave abajo: la mezcla no crece hacia abajo.
-    const dist = deg.paradas.map((q) => contraste(q.color, pr.colors['--color-bg']));
-    af(dist.every((v, i) => i === 0 || v <= dist[i - 1] + 1e-9), `${pr.id}: fuerte arriba y suave abajo (${dist.map((v) => v.toFixed(2)).join(' → ')})`);
-    // El módulo dice cuál es su punto peor; tiene que coincidir con el de esta cuenta (a 0,01).
-    const delModulo = Math.min(...deg.peor.map((q) => q.ratio));
-    af(Math.abs(delModulo - minDeg) < 0.01, `${pr.id}: el punto peor que calcula el módulo (${delModulo.toFixed(3)}) es el de esta cuenta (${minDeg.toFixed(3)})`);
+    af(bajos.length === 0, `${pr.id}: cada texto ≥ ${P.PISO_CONTRASTE}:1 contra el punto peor detrás de su caja (mínimo ${min.toFixed(2)}, ${donde}): ${bajos.join(', ')}`);
+    const delModulo = contrastePostal(p, col);
+    const minMod = Math.min(...delModulo.map((q) => q.ratio));
+    af(delModulo.length === p.textos.length && Math.abs(minMod - min) < 0.01, `${pr.id}: el punto peor del módulo (${minMod.toFixed(3)}) es el de esta cuenta (${min.toFixed(3)})`);
+    peores[pr.id] = { min, donde };
   }
-  console.log('  contraste peor sobre el degradé (mezcla · ratio · dónde): ' + Object.entries(peores).map(([id, v]) => `${id} ${v.mezcla} · ${v.minDeg.toFixed(2)} · ${v.peorDeg}`).join(' | '));
-  console.log('  contraste peor de toda la postal: ' + Object.entries(peores).map(([id, v]) => `${id} ${v.min.toFixed(2)}`).join(' · '));
-}
-if (degradadoPostal) {
-  // Un tema hecho a mano con el acento claro y el texto claro: la mezcla BAJA hasta que el texto pase, no se
-  // cambia la regla. Y un tema que ni sin degradé pasa no lo arregla la postal (mezcla 0: el fondo liso).
-  const p = planPostal(anio(), ctxMentira);
-  const claro = { bg: '#101010', accent: '#E0E0E0', text: '#F5F5F5', secondary: '#B0B0B0', elevated: '#202020' };
-  const deg = degradadoPostal(p, claro);
-  const zona = p.textos.filter((t) => t.sobre === 'degradado');
-  const min = Math.min(...zona.map((t) => peorSobreDegrade(deg, t.caja, claro[t.color]).min));
-  af(deg.mezcla > 0 && deg.mezcla < P.MEZCLA_MAX && min >= 4.5, `un acento claro con texto claro: la mezcla baja a ${deg.mezcla} y el texto queda en ${min.toFixed(2)}`);
-  const malo = degradadoPostal(p, { ...claro, text: '#303030' });
-  af(malo.mezcla === 0, `un tema cuyo texto no pasa ni sobre el fondo liso: mezcla 0 (${malo.mezcla})`);
+  console.log('  contraste peor de la postal (del test): ' + Object.entries(peores).map(([id, v]) => `${id} ${v.min.toFixed(2)} (${v.donde})`).join(' · '));
+  // Un texto encima de un día: el módulo lo mide contra ese día, no contra el fondo.
+  const col = coloresDe(PRESETS[0]);
+  const c = p.celdas.find((x) => !x.fuera && x.nivel === 3);
+  const encima = { ...p, textos: [{ id: 'encima', texto: 'x', color: 'text', caja: { x: c.x + 2, y: c.y + 2, w: 4, h: 4 } }] };
+  const r = contrastePostal(encima, col)[0];
+  af(r && Math.abs(r.ratio - contraste(col.text, tonosPostal(col).niveles[3])) < 0.01, `un texto sobre un día del nivel 3 se mide contra ese día (${r?.ratio.toFixed(2)})`);
 }
 
-// ── 8 · la tapa, de 300 ─────────────────────────────────────────────────────
+// ── 8 · el tono de cada día es el del calendario (el JSON del repo) ─────────
 {
-  const p = planPostal(anio(), ctxMentira);
-  af(p.tapas.length === 5, 'cinco tapas');
-  af(p.tapas.every((t, i) => t.url === IMG(i + 1).replace('ab67616d0000b273', 'ab67616d00001e02')), 'cada tapa pide la variante de 300 (`coverVariant`), sin ida a la API');
-  af(p.tapas[0].lado >= 360, `el disco 1 es la imagen de la postal: su tapa mide ${p.tapas[0].lado} ≥ 360`);
-  af(p.tapas.slice(1).every((t) => t.lado < p.tapas[0].lado && t.lado <= 300), `los otros cuatro, más chicos y sin pedir más que la de 300 (${p.tapas.slice(1).map((t) => t.lado).join(', ')})`);
-  af(p.tapas[0].lado / 300 <= 1.3, `el disco 1 se agranda desde la de 300 como mucho ×1,3 (×${(p.tapas[0].lado / 300).toFixed(2)})`);
-}
-{
-  // Las tapas del JSON del repo (REAL, en solo lectura, sin red): las 45 de los 5 primeros discos de los
-  // 9 años. Sin un solo nombre en la salida: solo cuentas.
   const s = JSON.parse(readFileSync(join(raiz, 'src/data/history-stats.json'), 'utf8'));
-  const imgs = s.years.flatMap((y) => (y.top_albums || []).slice(0, 5).map((a) => a.img));
-  const FORMA = /\/image\/ab67616d[0-9a-f]{8}[0-9a-f]{24}$/;
-  const v300 = imgs.map((u) => (u ? coverVariant(u, 300) : null));
-  const cuentas = {
-    img: imgs.filter(Boolean).length,
-    matchean: imgs.filter((u) => u && FORMA.test(u)).length,
-    cambian: imgs.filter((u, i) => u && v300[i] !== u).length,
-    prefijo300: v300.filter((u) => u && /\/image\/ab67616d00001e02[0-9a-f]{24}$/.test(u)).length,
-    host: imgs.filter((u, i) => u && new URL(v300[i]).host === new URL(u).host).length,
-  };
-  console.log(`  tapas del JSON del repo (REAL): ${cuentas.img} img · ${cuentas.matchean} con la forma del CDN · ${cuentas.cambian} cambian con coverVariant(300) · ${cuentas.prefijo300} quedan con ab67616d00001e02 · ${cuentas.host} conservan el host`);
-  af(s.years.length === 9 && imgs.length === 45 && cuentas.img === 45, `las 45 tapas de los 9 años tienen img (${cuentas.img} de ${imgs.length})`);
-  af(cuentas.matchean === 45, `las 45 tienen la forma del CDN, así que coverVariant las sabe cambiar (${cuentas.matchean})`);
-  af(cuentas.prefijo300 === 45, `las 45 quedan pidiendo la variante de 300 (${cuentas.prefijo300})`);
-  af(cuentas.host === 45, `y conservan su host (${cuentas.host})`);
+  const ctxCal = { fmtDia, fmtMinutes: (m) => `${m}`, MESES_LARGOS: Array.from({ length: 12 }, (_, k) => `m${k}`) };
+  for (const year of [2025, 2018]) {
+    const y = s.years.find((x) => x.year === year);
+    const D = y?.days;
+    af(D?.from && D.min?.length, `${year}: el JSON del repo trae days`);
+    if (!D?.min?.length) continue;
+    const iPico = y.peak_day?.date ? Math.round((aMs(y.peak_day.date) - aMs(D.from)) / DIA) : -1;
+    // Las casillas del calendario, en orden (los huecos no llevan `title`): su nivel y si es el pico.
+    const cal = [...calendarioAnual(D, iPico, ctxCal).matchAll(/<i class="([^"]*)" title=/g)].map((m) => ({ nivel: +(m[1].match(/\bn(\d)\b/)?.[1] || 0), pico: /\bpico\b/.test(m[1]) }));
+    const p = planDe(y, { fmtMinutes: fmtMentira, fmtDia, medir: proporcional });
+    const conDato = p.celdas.filter((c) => !c.fuera).sort((a, b) => a.i - b.i);
+    const iguales = conDato.filter((c) => cal[c.i] && cal[c.i].nivel === c.nivel).length;
+    const porNivel = [0, 1, 2, 3].map((n) => conDato.filter((c) => c.nivel === n).length);
+    const fueraEsperados = p.celdas.length - D.min.length;
+    console.log(`  ${year} (REAL, solo cuentas): ${D.min.length} días con dato · ${iguales} con el nivel del calendario · por nivel ${porNivel.join('/')} · ${p.celdas.filter((c) => c.fuera).length} fuera`);
+    af(cal.length === D.min.length && conDato.length === D.min.length, `${year}: tantas casillas con dato como días del tramo (${conDato.length}, calendario ${cal.length}, tramo ${D.min.length})`);
+    af(iguales === D.min.length, `${year}: el nivel de cada día es el del calendario (${iguales} de ${D.min.length})`);
+    af(conDato.every((c) => c.iso === isoDe(aMs(D.from) + c.i * DIA)), `${year}: cada casilla lleva el día que le toca`);
+    af(p.celdas.filter((c) => c.fuera).length === fueraEsperados, `${year}: los días del año fuera del tramo van «fuera» (${fueraEsperados})`);
+    const picoPostal = p.celdas.filter((c) => c.pico), picoCal = cal.findIndex((c) => c.pico);
+    af(picoPostal.length === 1 && picoPostal[0].i === picoCal && picoPostal[0].iso === y.peak_day.date.slice(0, 10), `${year}: el pico lleva contorno, en el mismo día que el calendario (${picoPostal.length} contorno, día ${picoPostal[0]?.i} contra ${picoCal})`);
+  }
+  // 2018 arranca el 15/08: del 1/1 al 14/08 van «fuera» (lo que no registró el export no es «sin música»).
+  const y18 = s.years.find((x) => x.year === 2018);
+  if (y18?.days) {
+    const p = planDe(y18, { fmtMinutes: fmtMentira, fmtDia, medir: proporcional });
+    af(celdaDe(p, '2018-08-14')?.fuera && !celdaDe(p, '2018-08-15')?.fuera, '2018: el 14/08 va «fuera» y el 15/08, con su nivel');
+  }
+}
+{
+  // Un tramo inventado que arranca el 10/03 y termina el 20/11: los de afuera, «fuera»; un cero, nivel 0.
+  const D = tramo('2031-03-10', 256);
+  D.min[3] = 0;
+  const p = planDe(anio({ days: D, peak_day: { date: '2031-05-01', min: 9 } }), ctxMentira);
+  af(celdaDe(p, '2031-03-09')?.fuera && celdaDe(p, '2031-01-01')?.fuera, 'el día anterior al tramo va «fuera»');
+  af(celdaDe(p, '2031-11-20')?.fuera === false && celdaDe(p, '2031-11-21')?.fuera, `el último día del tramo tiene nivel y el siguiente va «fuera» (${celdaDe(p, '2031-11-20')?.i})`);
+  af(celdaDe(p, '2031-03-13')?.nivel === 0 && !celdaDe(p, '2031-03-13')?.fuera, 'un día del tramo sin minutos va con el nivel 0, no «fuera»');
+  af(p.celdas.filter((c) => c.pico).length === 1 && celdaDe(p, '2031-05-01')?.pico, 'el pico lleva contorno');
+  // Un pico que cae fuera del tramo no lleva contorno (no hay casilla con dato que marcar).
+  const raro = planDe(anio({ days: D, peak_day: { date: '2031-01-05', min: 9 } }), ctxMentira);
+  af(!raro.celdas.some((c) => c.pico), 'un pico fuera del tramo no marca ninguna casilla');
 }
 
-// ── 9 · el aviso del final ──────────────────────────────────────────────────
+// ── 9 · ninguna tapa ────────────────────────────────────────────────────────
 {
-  af(avisoPostal({ faltan: 0 }) === 'Postal descargada.', 'sin faltantes: «Postal descargada.»');
-  af(/\b2 tapas no se pudieron bajar\b/.test(avisoPostal({ faltan: 2 })) && avisoPostal({ faltan: 2 }).includes('♪'), `con 2 faltantes lo dice con el número: «${avisoPostal({ faltan: 2 })}»`);
-  af(/\b1 tapa no se pudo bajar\b/.test(avisoPostal({ faltan: 1 })), 'con 1, en singular');
-  const sin = avisoPostal({ sinTapas: true, motivo: 'SecurityError', faltan: 0 });
-  af(sin.startsWith('La postal salió sin tapas: ') && sin.includes('SecurityError'), `sin tapas, lo dice con todas las letras y el motivo: «${sin}»`);
-  af(![avisoPostal({}), avisoPostal({ faltan: 3 }), sin].some((x) => /\b(tenés|podés|acá)\b/.test(x)), 'el aviso, en castellano de España');
+  const p = planDe(anio(), ctxMentira);
+  af(!('tapas' in p) && !JSON.stringify(p).includes('scdn'), 'el plan no trae tapas ni ninguna URL del CDN');
+  const puro = readFileSync(join(raiz, 'src/js/util/postal-anio.js'), 'utf8');
+  const dibujo = readFileSync(join(raiz, 'src/js/features/wrapped-postal.js'), 'utf8');
+  const sinComentarios = (s) => s.replace(/\/\*[\s\S]*?\*\//g, '').split('\n').map((l) => l.replace(/\/\/.*$/, '')).join('\n');
+  af(!/coverVariant|album-key/.test(sinComentarios(puro)), 'postal-anio.js no importa coverVariant');
+  af(!/conTapa|TOPE_TAPA_MS|createImageBitmap|fetch\(/.test(sinComentarios(dibujo)), 'wrapped-postal.js no baja ninguna tapa (ni conTapa, ni TOPE_TAPA_MS, ni fetch)');
+  af(/tercilesDelTramo/.test(sinComentarios(puro)) && /from '\.\.\/ui\/calendario-anual\.js'/.test(puro), 'postal-anio.js IMPORTA tercilesDelTramo de ui/calendario-anual.js (una sola regla de niveles)');
 }
 
 salir();

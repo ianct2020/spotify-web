@@ -17,10 +17,10 @@
 // Cada `fusion` del censo (qué hace con una clave que ya está) está explicada en `copia-completa.js`, arriba del
 // `CENSO`, y la tabla entera con la forma de cada valor en `CLAUDE.md`, «Importar todo (v=334)».
 
-import { CENSO, CLASES, COPIA_VERSION, ULTIMO_USUARIO, entradaDe, esDelUsuario, uidDelValor } from './copia-completa.js?v=343';
-import { fusionarBases, esBaseValida } from './disco-base.js?v=343';
-import { CLAVE_MIGRADO } from './generos-artista.js?v=343';
-import { BORRADOS_LOG_MAX, INCIDENCIAS_OCULTOS_MAX, SUPERVIVIENTES_PERDIDAS_MAX, ENSAYOS_VERSIONS_MAX } from './topes-registros.js?v=343';
+import { CENSO, CLASES, COPIA_VERSION, ULTIMO_USUARIO, entradaDe, esDelUsuario, uidDelValor } from './copia-completa.js?v=344';
+import { fusionarBases, esBaseValida } from './disco-base.js?v=344';
+import { CLAVE_MIGRADO } from './generos-artista.js?v=344';
+import { BORRADOS_LOG_MAX, INCIDENCIAS_OCULTOS_MAX, SUPERVIVIENTES_PERDIDAS_MAX, ENSAYOS_VERSIONS_MAX } from './topes-registros.js?v=344';
 
 // El tope de cada registro, el de su dueño (importado, no copiado). Los dos de `#versions` entraron en v=337 (tanda 81):
 // hasta entonces eran un `20` literal en `features/versions.js` y el import los unía sin tope. Los cuatro ordenan por
