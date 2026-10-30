@@ -717,7 +717,7 @@ function renderAllTime() {
             ${topAlbum.img
               ? `<img src="${topAlbum.img}" alt="" class="wrapped-album-hero-cover" loading="lazy" onerror="this.outerHTML='&lt;div class=&quot;wrapped-album-hero-cover&quot; style=&quot;background:var(--color-elevated);display:flex;align-items:center;justify-content:center;color:var(--color-text-muted);font-size:44px&quot;&gt;♪&lt;/div&gt;'">`
               : `<div class="wrapped-album-hero-cover" style="background:var(--color-elevated);display:flex;align-items:center;justify-content:center;color:var(--color-text-muted);font-size:44px">♪</div>`}
-            <div class="wrapped-album-hero-name">${escapeHtml(topAlbum.name)}</div>
+            <div class="wrapped-album-hero-name" title="${escapeHtml(topAlbum.name)}">${escapeHtml(topAlbum.name)}</div>
             <div class="wrapped-album-hero-artist">${escapeHtml(topAlbum.artist)}</div>
             <div class="wrapped-album-hero-meta">${fmtMinutes(topAlbum.min)} · ${(topAlbum.plays || 0).toLocaleString('es-ES')} plays</div>
           </div>

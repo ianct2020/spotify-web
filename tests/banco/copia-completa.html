@@ -18,14 +18,19 @@
 // que es lo que se prueba. Meterlo en otro le cambiaría el presupuesto y el porqué a un banco que ya está medido.
 //
 //   ?tamano=ian   el instrumento del peso, con datos del tamaño de los de Ian (no está en `prepush`).
+//
+// (v=345, tanda 98) Y un segundo caso, después y en su propio iframe: `copia-completa-caso.html?caso=otra-cuenta`. La
+// caché de me gusta es de la cuenta A, la `/me` contesta B y el borrado de los me gusta FALLA: «Exportar todo» tiene que
+// salir firmado con B, con 0 me gusta de A y con la marca `fonoteca_likes_de_otro_v1` puesta. Contra v=344, la copia
+// salía firmada con A y con los 40 de A (el Dashboard no pregunta por la cuenta antes de exportar).
 
 import { esperarReal } from '/banco/simulado.mjs';
 import { fallar, listo } from '/banco/esperar.mjs';
 
 const q = new URLSearchParams(location.search);
 const ANCHO = +(q.get('ancho') || 1351);
-let actual = null;
-window.addEventListener('message', (e) => { if (e.data?.banco === 'copia-completa') actual = e.data; });
+let actual = null, otra = null;
+window.addEventListener('message', (e) => { if (e.data?.banco === 'copia-completa') actual = e.data; if (e.data?.banco === 'copia-completa-otra') otra = e.data; });
 
 try {
   const f = document.createElement('iframe');
@@ -44,13 +49,27 @@ try {
   if (copia._format !== 'spotify-tools-data' || copia._version !== 3) throw new Error(`BANCO: formato ${copia._format} v${copia._version}`);
   if (/CANARIO/.test(actual.texto)) throw new Error('BANCO: hay un canario en el archivo');
 
+  // (v=345, tanda 98) El caso de la otra cuenta, DESPUÉS y en su propio iframe (el de antes se va: suelta su IndexedDB).
+  // Solo con el perfil de siempre: el instrumento del peso no lo corre.
+  let resumenOtra = '';
+  if (!q.get('tamano')) {
+    const g = document.createElement('iframe');
+    g.width = ANCHO; g.height = 900;
+    g.src = '/banco/copia-completa-caso.html?caso=otra-cuenta';
+    document.getElementById('marco').replaceChildren(g);
+    await esperarReal(() => otra, { que: 'el caso de la otra cuenta', vueltas: 40000 });
+    if (!otra.ok) throw new Error(`${otra.error} · ${JSON.stringify(otra.datos)}`);
+    const o = otra.datos;
+    resumenOtra = ` · otra cuenta: spotifyUserId=${o.spotifyUserId} me gusta=${o.likes} (de A ${o.likesDeA}, ${o.likesSource}) marca=${o.marca ? 'puesta' : 'NO'} borrados que fallaron=${o.borradosQueFallaron} /me=${o.me} peticiones durante el export ${JSON.stringify(o.peticionesDurante)} reloj del caso=${o.reloj} ms`;
+  }
+
   const d = actual.datos;
   const kb = (n) => (n / 1024).toLocaleString('es-ES', { maximumFractionDigits: 1 }) + ' KB';
   const resumen =
     `tamaño=${d.tamano} · archivo ${d.nombre}, ${d.bytes.toLocaleString('es-ES')} bytes · claves idb=${d.claves.idb} localStorage=${d.claves.localStorage} sinCensar=${d.claves.sinCensar} deOtro=${d.claves.deOtroUsuario} · ` +
     `peticiones durante el export ${JSON.stringify(d.peticionesDurante)} · sha256 antes=${d.shaAntes} después=${d.shaDespues} · ` +
     `_leeme fuera de la app: ${Object.keys(copia._leeme).length} apartados · por clase: ${Object.entries(d.porClase).map(([k, v]) => `${k} ${kb(v)}`).join(' · ')} · ` +
-    `por grupo de IndexedDB: ${Object.entries(d.porGrupo).map(([k, v]) => `${k} ${kb(v)}`).join(' · ')} · botón «${d.botonTexto}» · toast «${d.toast}» · reloj virtual=${Math.round(performance.now())} ms`;
+    `por grupo de IndexedDB: ${Object.entries(d.porGrupo).map(([k, v]) => `${k} ${kb(v)}`).join(' · ')} · botón «${d.botonTexto}» · toast «${d.toast}»${resumenOtra} · reloj virtual=${Math.round(performance.now())} ms`;
   document.documentElement.setAttribute('data-resumen', resumen);
   document.getElementById('progreso').textContent = resumen;
   listo();

@@ -1609,6 +1609,19 @@ v=323, 0 abortadas y el candado tomado —; y A → B → A con `#discover-artis
 visto fallar con una copia que corre también el del mismo hash). ⚠️ **«0 peticiones a MusicBrainz
 después de salir» NO distingue el arreglo**: el bucle de `#mapa` ya pregunta por la vigencia antes
 de cada petición; lo que el teardown perdido dejaba vivo era la petición EN VUELO y el candado.
+
+🔁 **El banco, rehecho en v=345 (tanda 99).** Con la promesa en vuelo de `getCurrentUserId()` (v=345, ver «LA
+CONVENCIÓN DEL `/me`»), retener la `/me` de `#puertas` trababa también a `#mapa`: su `render()` espera el uid
+(`loadArtistTracks()` → `loadOne()` → `getCurrentUserId()`) ANTES de pintar, así que no aparecía ni el botón «Buscar
+países» y el banco quedaba «ausente» en el paso 2 (la tanda 98 paró por eso). Ahora **la `/me` se contesta siempre** y
+lo retenido es algo que solo espera la ruta vieja, DESPUÉS del uid: en la escena del mapa, la PRIMERA carga de
+`history-artist-tracks.json` (el caso la contesta con el historial INVENTADO de `mapa-datos.mjs`, que ya no se siembra
+en IndexedDB; `loadOne()` no comparte esa petición entre rutas —el `memCache` se llena al terminar—, así que `#mapa`
+pide la suya y pinta); en la de `#discover-artists`, la primera `GET /playlists/{W-Three}?fields=snapshot_id` de
+`buildAlbumHeardIndex()`, con una W-Three INVENTADA y vacía (`getAllPlaylistItems()` tampoco comparte). Cualquier otro
+`/data/*` se contesta 404 y la madre exige 0: la primera versión dejaba pasar el JSON REAL del repo porque `loadOne()`
+pide con un objeto `URL`, no con un texto. **Lo que prueba no cambió, y se volvió a ver**: contra el `router.js` sin el
+arreglo de v=324 y con la promesa en vuelo puesta, 3 de 3 rojos con «abortadas: 0 de 1 en vuelo · candado TOMADO a los 30006 ms» (el mismo texto las tres); con el de hoy, 10 de 10 verdes, 41.523-42.048 ms de reloj virtual (el presupuesto del banco sigue en 120 s). `/me` = 2 en la carga (el del arranque y el de la vista).
 ⚠️ ~~**No arreglado, solo anotado**: si la ruta vieja TIRA después de que te fuiste, `guardRoute()`
 le pinta la pantalla de error a `main`, encima de la vista vigente~~ → arreglado en v=325 (el punto 3).
 
@@ -3702,7 +3715,7 @@ mucho (`-webkit-line-clamp: 3`, con `overflow-wrap: anywhere` para un nombre de 
 antes. Guarda: `tests/wrapped-album-390.test.mjs` (lectura del CSS). 🟩 **v=344 (tanda 97): el nombre recortado lleva `title`
 con el nombre entero**, escapado igual que el texto (`escapeHtml`), en `features/wrapped.js`. Guarda: el mismo test, que pinta el
 renglón del nombre tal como está en `wrapped.js` con un nombre INVENTADO de 131 caracteres y afirma el `title` (rojo contra
-v=343). ⚠️ Solo el «Álbum del año»: la tarjeta «Álbum de siempre» usa la misma clase y sigue sin `title` (fuera del encargo).
+v=343). ⚠️ Solo el «Álbum del año»: la tarjeta «Álbum de siempre» usa la misma clase y ~~sigue sin `title` (fuera del encargo)~~ → 🟩 **hecho en v=345** (tanda 98): el mismo `title` con el nombre entero, escapado igual que el texto. Guarda: `tests/wrapped-album-390.test.mjs` (rojo antes en 2 asserts).
 
 ## 🖼️ La postal del año: «El año en días» (v=344; la de las tapas fue v=326-v=343)
 
@@ -3800,6 +3813,90 @@ pestaña de Ian, desde `https://ianct2020.github.io`, 3 de 3 de 300; con `curl`,
 hosts, sobre la de 64, sin `Vary`), y el 22/10/2026 Ian bajó desde producción (v=329) la postal con las cinco tapas reales de
 300. Nada obliga a Spotify a mantener el `*`. 🔴 Antes de afirmar algo sobre el CDN de tapas, se busca en `fonoteca-migracion`
 con `grep -ril cors` (v=326 y v=327 lo afirmaron y lo negaron sin buscar ese archivo).
+
+## 👤 Los me gusta del usuario anterior (v=345)
+
+Las tandas 98 (el arreglo) y 99 (el banco del router y la publicación). La caché de me gusta (`all_liked_tracks`, su
+parcial `all_liked_tracks_partial` y la heredada `spc_all_liked_tracks` de `localStorage`) **no lleva el uid en la
+clave**. Hasta v=344, si en el mismo navegador entraba otra cuenta, el borrado era un `idbDel(…).catch(() => {})` que
+nadie esperaba (`invalidateLikesCache()`, que ya no existe), y había vistas que leían la caché antes de que nadie
+preguntara quién sos. La cuenta nueva podía ver y descargar los me gusta de la anterior.
+
+**El caso del banco** (`tests/banco/copia-completa.html`, `?caso=otra-cuenta`, la app ENTERA, SEMBRADO): a v=344,
+«Exportar todo» entrando con la otra cuenta descargaba un archivo **firmado con la cuenta ANTERIOR y con sus 40 me
+gusta**. No con la nueva: el Dashboard no pregunta por la cuenta antes del clic, así que `fonoteca_last_user_id` seguía
+en la anterior y no se había intentado ningún borrado. Con v=345: firmado con la nueva, 0 me gusta y la marca puesta.
+
+**La marca y el orden** (`util/likes-de-otro.js`, sin imports; `revisarCambioDeUsuario()` y `borrarLikesDeOtro()` en
+`api.js`):
+
+1. **marca**: `localStorage['fonoteca_likes_de_otro_v1'] = <uid anterior>`, sincrónica, ANTES del primer borrado;
+2. **borrado** de las tres copias (la completa y el parcial de IndexedDB con `Promise.allSettled`, y la heredada);
+3. **quitar la marca**, solo si salieron todas. Si una falla, la marca queda y el error crudo va a
+   `console.warn('[likes] …')`.
+
+Una pestaña cerrada a mitad, un borrado que falla o una lectura que llega en el medio encuentran la marca y hacen como
+si no hubiera caché. `borrarLikesDeOtro()` **nunca tira** (la llama `getCurrentUserId()`, de la que cuelga media app).
+
+**Los dos sitios que revisan el cambio de cuenta**, con UNA sola función (`revisarCambioDeUsuario(id)`, idempotente: si
+`fonoteca_last_user_id` ya es ese id, no hace nada):
+
+- **el arranque** (`app.js`, `init()` y el reintento de la pantalla de cuota): con el id del `/me` que ya hizo
+  `testConnection()`, antes de `showApp`. 0 peticiones nuevas; no memoiza `getCurrentUserId()`;
+- **`getCurrentUserId()`**: después de su `/me` y ANTES de escribir `_cachedUserId`, así que quien recibe el id ya
+  encuentra la marca puesta (o la caché borrada).
+
+El borrado de los me gusta se **espera**, con un **tope de 3 s** (`TOPE_BORRADO_LIKES_MS`): si se pasa, se sigue (el
+borrado continúa y, si termina bien, quita la marca igual). Los demás borrados del cambio de usuario (playlists,
+historial del owner, ocultos, stats.fm) siguen como antes, sin esperarlos. `fonoteca_last_user_id` se escribe igual
+que siempre, también si el borrado falló.
+
+**La promesa en vuelo**: `getCurrentUserId()` guarda la promesa del `/me` + la revisión (`_userIdEnVuelo`). Dos
+llamadas a la vez con el memo frío piden UN `/me`. 🔴 **Todo lo que pide el uid espera el MISMO `/me`: si se cuelga, se
+cuelga todo lo que lo espera** (ver «LA CONVENCIÓN DEL `/me`»). Por eso hubo que rehacer el banco `router-teardown`
+(ver «El router también pregunta por la vigencia (v=309)»).
+
+**Los seis caminos que leen la caché**, y qué hacen con la marca puesta:
+
+| | camino | con la marca |
+|---|---|---|
+| L1 | `leerLikesCacheados()` (`getBestAvailableLikes`, `syncLikesIncremental` y sus ~60 llamadores) | reintenta el borrado (`borrarLikesDeOtro`) y devuelve «no hay caché» |
+| L2 | `likesDe()` (`util/copia-completa.js`, «Exportar todo») | la copia sale con 0 me gusta (`_likesSource: 'empty'`), sin reintentar ni escribir: leer no escribe. La marca no entra en la copia (`entra: false` en el `CENSO`) |
+| L3 | `startLikesLoad()` / `loadPartial()` (la reanudación del parcial) | no retoma; reintenta el borrado; si no sale, tira con «No se han podido borrar los me gusta de la otra cuenta…»; si sale, la descarga empieza en 0 |
+| L4 | `getLikesPartialInfo()` (el Dashboard ofrece retomar) | `null` |
+| L5 | `getLikesCacheTimestamp()` («última sincronización») | `null` |
+| L6 | `registrarBorradoDeLikes()` | **ESTRUCTURAL**: no lee la clave y guarda los ids pelados. Un id de pista es la misma canción en cualquier cuenta: no había nada que se viera |
+
+`migrateLikesFromLocalStorage()` (la heredada que entra a IndexedDB) también pregunta. Quién atrapa el error de L3: todos
+sus llamadores (la tabla está en el reporte de la tanda 98).
+
+**La guarda de lectura estática** (`tests/me-gusta-de-otra-cuenta.test.mjs`, `PERMITIDOS`): cada mención de la caché
+fuera de comentarios tiene que estar en la lista (archivo y función) **y**, si lee, preguntar por la marca
+(`hayLikesDeOtro(`). 🔴 **Una mención nueva de la caché tiene que entrar a esa lista Y preguntar por la marca**: si no,
+el test se pone rojo con archivo y línea. Probada con mutantes (un séptimo lector en `api.js`, una vista que lee la
+clave por su nombre, un lector de la lista que deja de preguntar).
+
+**«Limpiar caché»** borra también las `spc_*` de `localStorage` (`cacheClearAll()`, `storage.js`, antes de
+`idbClearAll(CONSERVAR_CLAVES, CONSERVAR_PREFIJOS)`): se lleva la heredada. La marca **sobrevive** porque no empieza
+con `spc_`; no hizo falta conservarla a mano.
+
+**Lo que quedó FUERA, a propósito** (anotado en `fonoteca-migracion/PENDIENTES.md`):
+
+- **«Reset + Login»** (`app.js`, la pantalla «Error al conectar», `localStorage.clear()`): se lleva
+  `fonoteca_last_user_id` y la marca, y deja la caché de me gusta en IndexedDB. La cuenta que entre después no ve
+  «cambio de usuario» (no hay contra qué comparar) y lee lo que haya.
+- **El modo degradado** (sin `/me` al arrancar): no revisa el cambio de cuenta.
+- **«Importar JSON»** (v2, `importAllData`): escribe en la caché los me gusta del archivo sin mirar la marca; y si se
+  importa con la marca puesta, el reintento siguiente borra lo importado.
+- **La base de colores del mosaico** (`mosaico_colores_v1`): se arma con los me gusta (vía L1). Si se armó con los de
+  otra cuenta, sobrevive al cambio (está en `CONSERVAR_CLAVES` y el cambio de usuario no la borra). No es un lector de
+  la caché: es un derivado.
+
+Guardas: `tests/me-gusta-de-otra-cuenta.test.mjs` (el `api.js` REAL en Node, con `tests/dobles/idb-otra-cuenta-doble.mjs` y
+`loader-otra-cuenta.mjs`, datos INVENTADOS; rojo contra v=344 en 22 de 45; desde la tanda 99, 51 asserts con el de la
+marca fuera de la copia, visto rojo poniendo la fila del `CENSO` en `entra: true`), `tests/copia-completa.test.mjs`
+(ya NO siembra la marca: por eso el assert de L2), `tests/likes-cache-policy.test.mjs` y el caso `otra-cuenta` del banco
+`copia-completa`.
 
 ## Client ID
 0c8c92ad128e4b89be7097c6b8082797
@@ -4571,6 +4668,19 @@ fila sobrevivió así desde que se armó la tabla.
 > **A partir de acá la columna «en frío» NO incluye el `/me` del arranque.** Se suma
 > aparte, una vez. Las filas medidas en vivo que lo incluían quedan con el desglose
 > a la vista.
+>
+> 🟩 **v=345 (tandas 98 y 99): lo que cambió, sin cambiar ningún número de la tabla.**
+> (a) El `/me` del arranque ahora también **se usa** para revisar el cambio de cuenta:
+> `init()` (y el reintento de la pantalla de cuota) llama a `revisarCambioDeUsuario(profile.id)`
+> antes de `showApp`, con el id de ESA respuesta: 0 peticiones nuevas y **sin memoizarlo**
+> (`_cachedUserId` sigue vacío; siguen siendo dos `/me` por carga). (b) `getCurrentUserId()`
+> guarda la **promesa en vuelo** (`_userIdEnVuelo`): dos llamadas a la vez con el memo frío
+> piden UN `/me`, no dos (los dos que vio la tanda 90). 🔴 La consecuencia: **todo lo que pide
+> el uid espera el MISMO `/me`; si ese `/me` se cuelga, se cuelga todo lo que lo espera.**
+> Hasta v=344 cada llamada concurrente sacaba el suyo y una colgada no trababa a las demás
+> (de ahí salió el banco `router-teardown` rehecho: ver «El router también pregunta por la
+> vigencia»). El fracaso sigue sin memoizarse: si el `/me` falla, la promesa se suelta y la
+> llamada siguiente vuelve a pedir. Ver «👤 Los me gusta del usuario anterior (v=345)».
 
 | vista | en frío (sin el `/me` del arranque) | en caliente | endpoints que dispara | de qué depende | capa |
 |---|---:|---:|---|---|---|

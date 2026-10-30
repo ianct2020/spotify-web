@@ -20,7 +20,8 @@
 //
 // El censo entero, con el porqué de cada clase, está en `fonoteca-migracion/CENSO-NAVEGADOR-2026-10-22.md`.
 
-import { crearAlmacenGeneros, prefijoGeneros, PREFIJO_GENEROS, CLAVE_MIGRADO } from './generos-artista.js?v=344';
+import { crearAlmacenGeneros, prefijoGeneros, PREFIJO_GENEROS, CLAVE_MIGRADO } from './generos-artista.js?v=345';
+import { LIKES_DE_OTRO_KEY, hayLikesDeOtro } from './likes-de-otro.js?v=345';
 
 export const COPIA_VERSION = 3;
 export const CENSO_VERSION = '2026-10-22';
@@ -186,6 +187,9 @@ export const CENSO = [
 
   // ── localStorage: caché ──────────────────────────────────────────────────────────────────────
   e('ls', ULTIMO_USUARIO, 4, false, 'api.js:1120', 'el último uid (va en `spotifyUserId`)'),
+  // (v=345) La marca de que la caché de me gusta es de la cuenta anterior: de ESTE navegador, no del usuario. No entra:
+  // en otro navegador escondería unos me gusta que sí son tuyos.
+  e('ls', LIKES_DE_OTRO_KEY, 4, false, 'api.js (revisarCambioDeUsuario, borrarLikesDeOtro)', 'que la caché de me gusta es de otra cuenta y falta borrarla'),
   e('ls', 'fonoteca_perfil_v1', 4, false, 'app.js:133', 'el perfil de Spotify del último arranque'),
   e('ls', 'sp_granted_scopes', 4, false, 'auth.js:145', 'los permisos que dio el login (se rehacen al entrar)'),
   p('ls', 'spc_', 4, false, 'storage.js:53 (cacheSet: api.js:234, 611)', 'la caché de 24 h (playlists; y los me gusta de antes de v=86)'),
@@ -249,7 +253,10 @@ export function elegir({ idb = {}, ls = {}, uid = null, censo = CENSO }) {
 
 // Los me gusta, como `leerLikesCacheados()` (api.js): el de IndexedDB si es una lista con algo, si no el heredado de
 // `localStorage` (pre-v=86), si no ninguno. Sin descargar nada (el `allowFetch: false` del v2).
+// (v=345) Con la marca (`util/likes-de-otro.js`), ninguno: la caché es de la cuenta anterior y la copia va firmada con
+// la de ahora. No reintenta el borrado: la copia no escribe nada.
 function likesDe(idb, ls) {
+  if (hayLikesDeOtro(ls)) return { items: [], source: 'empty' };
   const full = idb[LIKES_CLAVE]?.value;
   if (Array.isArray(full) && full.length > 0) return { items: full, source: 'full' };
   try {

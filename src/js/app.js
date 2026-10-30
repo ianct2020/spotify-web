@@ -1,5 +1,5 @@
 import { isLoggedIn, loginWithSpotify, logout } from './auth.js';
-import { spotifyFetch, onRateLimit } from './api.js';
+import { spotifyFetch, onRateLimit, revisarCambioDeUsuario } from './api.js';
 import { getValidToken } from './auth.js';
 import { cacheClearAll } from './storage.js';
 import { idbClearAll } from './idb.js';
@@ -328,6 +328,7 @@ function showRateLimitScreen() {
       } else if (res.ok) {
         statusEl.textContent = 'Conectado, cargando...';
         const profile = await res.json();
+        await revisarCambioDeUsuario(profile.id);
         showApp(profile);
       } else {
         const text = await res.text().catch(() => '');
@@ -387,6 +388,9 @@ async function init() {
     }
     const profile = await res.json();
     guardarPerfil(profile);
+    // (v=345) El cambio de cuenta se revisa ACÁ, antes de que ninguna vista lea los me gusta, con el id de este `/me`
+    // (0 peticiones nuevas; no memoiza `getCurrentUserId()`). Nunca tira. Ver `revisarCambioDeUsuario` en api.js.
+    await revisarCambioDeUsuario(profile.id);
     showApp(profile);
   } catch (e) {
     console.error('Failed to load profile:', e);

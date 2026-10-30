@@ -21,6 +21,22 @@ import { instalarRedSimulada, esperarReal, anclar } from '/banco/simulado.mjs';
 
 const q = new URLSearchParams(location.search);
 const IAN = q.get('tamano') === 'ian';
+
+// ── ?caso=otra-cuenta (v=345, tanda 98): los me gusta del usuario anterior ──────────────────────
+// La caché de me gusta es de la cuenta A (INVENTADA), `fonoteca_last_user_id` = A y la `/me` simulada contesta B: otra
+// persona entra en el mismo navegador. ANTES de cargar ningún módulo de la app, `IDBObjectStore.prototype.delete` se
+// envuelve para FALLAR con las claves que empiezan con `all_liked_tracks`: el borrado del cambio de cuenta no sale.
+// Se abre #dashboard, se aprieta «Exportar todo» y el archivo tiene que traer `spotifyUserId` B y 0 me gusta de A, con
+// la marca `fonoteca_likes_de_otro_v1` en `localStorage`. Contra v=344, la copia de B salía con los 40 de A.
+const OTRA = q.get('caso') === 'otra-cuenta';
+const borradosQueFallaron = [];
+if (OTRA) {
+  const borrar = IDBObjectStore.prototype.delete;
+  IDBObjectStore.prototype.delete = function (k) {
+    if (String(k).startsWith('all_liked_tracks')) { borradosQueFallaron.push(String(k)); throw new DOMException('banco: el borrado de los me gusta falla', 'UnknownError'); }
+    return borrar.call(this, k);
+  };
+}
 const UID = 't78-banco-uid';
 const OTRO = 't78-banco-otro';
 const CANARIO = {
@@ -59,6 +75,72 @@ async function leerIdb() {
 }
 const hex = (buf) => [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2, '0')).join('');
 
+async function casoOtraCuenta() {
+  const A = 't98-banco-cuenta-a', B = 't98-banco-cuenta-b', MARCA = 'fonoteca_likes_de_otro_v1';
+  const datos = { caso: 'otra-cuenta' };
+  // Junta todos los fallos antes de tirar: el rojo dice a la vez con qué cuenta firma y qué me gusta lleva.
+  const fallos = [];
+  const comprobar = (c, msg) => { if (!c) fallos.push(msg); };
+  // La madre corre este caso DESPUÉS del de siempre, en el mismo origen: se vacía lo que dejó (la store con
+  // `clear()`, que no pasa por el `delete` envuelto) y se siembra solo lo de este caso.
+  localStorage.clear();
+  const vaciar = async () => {
+    const db = await abrir();
+    await new Promise((res, rej) => { const t = db.transaction('kv', 'readwrite'); t.objectStore('kv').clear(); t.oncomplete = res; t.onerror = () => rej(t.error); });
+    db.close();
+  };
+  await anclar(vaciar(), { vueltas: 20000 });
+  const sim = instalarRedSimulada();
+  sim.ruta('GET', /^\/me$/, () => ({ id: B, display_name: 'Banco B' }));
+  sim.ruta('GET', /^\/me\/playlists/, () => ({ items: [], total: 0, next: null }));
+  localStorage.setItem('fonoteca_last_user_id', A);
+  localStorage.setItem('fonoteca_perfil_v1', JSON.stringify({ id: A, display_name: 'Banco A' }));
+  const id22 = (i, p) => (p + String(i).padStart(21, '0')).slice(0, 22);
+  const likeA = (i) => ({ added_at: '2024-03-1' + (i % 9) + 'T10:00:00Z', track: { id: id22(i, 'A'), uri: `spotify:track:${id22(i, 'A')}`, name: `Tema inventado de A ${i}`, duration_ms: 180000, explicit: false, is_playable: true, track_number: 1, artists: [{ id: id22(i % 5, 'r'), name: `Artista inventado de A ${i % 5}` }], album: { id: id22(i % 9, 'd'), name: `Disco inventado de A ${i % 9}`, release_date: '2019-05-17', album_type: 'album', total_tracks: 12, images: [] } } });
+  const nA = 40;
+  const envolver = (value) => ({ value, storedAt: 1_760_000_000_000, expiry: null });
+  await anclar(sembrarIdb([['all_liked_tracks', envolver(Array.from({ length: nA }, (_, i) => likeA(i)))], ['all_liked_tracks_partial', envolver({ items: [likeA(0)], offset: 50, startOffset: 0 })]]), { vueltas: 20000 });
+
+  location.hash = '#dashboard';
+  await import('/js/app.js');
+  await esperarReal(() => $('#dash-cog-btn') && $('[data-act="export-todo"]'), { que: 'que #dashboard pinte su ⚙', vueltas: 8000 });
+
+  const blobs = new Map();
+  let descarga = null;
+  const crearURL = URL.createObjectURL.bind(URL);
+  URL.createObjectURL = (b) => { const u = crearURL(b); blobs.set(u, b); return u; };
+  const clickOriginal = HTMLAnchorElement.prototype.click;
+  HTMLAnchorElement.prototype.click = function () { if (this.download) descarga = { nombre: this.download, blob: blobs.get(this.href) }; else clickOriginal.call(this); };
+  const llamadasAntes = sim.reg.llamadas.length, externasAntes = sim.reg.externas.length;
+  $('#dash-cog-btn').click();
+  $('[data-act="export-todo"]').click();
+  await esperarReal(() => descarga, { que: 'la descarga de «Exportar todo» (otra cuenta)', vueltas: 20000 });
+  datos.peticionesDurante = { spotify: sim.reg.llamadas.length - llamadasAntes, externas: sim.reg.externas.length - externasAntes };
+  const copia = JSON.parse(await anclar(descarga.blob.text(), { vueltas: 20000 }));
+  const deA = (copia.likes?.items || []).filter((it) => String(it?.track?.id || '').startsWith('A')).length;
+  Object.assign(datos, { ultimoUsuario: localStorage.getItem('fonoteca_last_user_id'), spotifyUserId: copia.spotifyUserId, likes: copia.likes?.items?.length ?? null, likesDeA: deA, likesSource: copia._likesSource, marca: localStorage.getItem(MARCA), borradosQueFallaron: borradosQueFallaron.length, me: sim.reg.llamadas.filter((l) => l.ruta === '/me').length });
+  comprobar(datos.ultimoUsuario === B, `al exportar, la app ya sabe que la cuenta es B: el arranque revisó el cambio (fonoteca_last_user_id = ${datos.ultimoUsuario})`);
+  comprobar(copia.spotifyUserId === B, `la copia va firmada con la cuenta B (${copia.spotifyUserId})`);
+  comprobar(deA === 0 && datos.likes === 0, `la copia de B trae 0 me gusta de A (trae ${datos.likes}, ${deA} de A)`);
+  comprobar(datos.marca === A, `la marca «${MARCA}» está en localStorage con el uid de A (${datos.marca})`);
+  comprobar(borradosQueFallaron.length > 0, 'el envoltorio del delete hizo fallar algún borrado de los me gusta (si no, el caso no prueba nada)');
+  comprobar(datos.peticionesDurante.spotify === 0 && datos.peticionesDurante.externas === 0, `0 peticiones durante el export: ${JSON.stringify(datos.peticionesDurante)}`);
+  if (fallos.length) throw new Error(`BANCO copia-completa (otra cuenta): ${fallos.join(' | ')} · ${JSON.stringify(datos)}`);
+  if (rechazos.length) throw new Error(`BANCO copia-completa (otra cuenta): rechazos sin atrapar: ${rechazos.join(' | ')}`);
+  return datos;
+}
+
+if (OTRA) {
+  try {
+    const datos = await casoOtraCuenta();
+    datos.reloj = Math.round(performance.now());
+    parent.postMessage({ banco: 'copia-completa-otra', ok: true, datos }, '*');
+    document.documentElement.setAttribute('data-caso', 'ok ' + JSON.stringify(datos));
+  } catch (e) {
+    parent.postMessage({ banco: 'copia-completa-otra', ok: false, error: String(e?.message || e), datos: { borradosQueFallaron: borradosQueFallaron.length, marca: localStorage.getItem('fonoteca_likes_de_otro_v1'), ultimoUsuario: localStorage.getItem('fonoteca_last_user_id'), reloj: Math.round(performance.now()) } }, '*');
+    document.documentElement.setAttribute('data-caso', 'error ' + String(e?.message || e));
+  }
+} else {
 const datos = { tamano: IAN ? 'ian' : 'chico' };
 try {
   const C = await import('/js/util/copia-completa.js');
@@ -93,6 +175,7 @@ try {
     else if (c.porUsuario === 'pref') k = `${c.clave}__${UID}`;
     else k = c.clave;
     if (c.clase === 5 || c.clave === 'fonoteca_last_user_id' || c.clave === 'fonoteca_perfil_v1') continue;   // ya sembrados
+    if (c.clave === 'fonoteca_likes_de_otro_v1') continue;   // (v=345) la marca: con ella la copia sale sin me gusta; es el caso «otra-cuenta»
     if (c.donde === 'idb') {
       const v = muestras[k] ? muestras[k]() : k.startsWith('generos_artista_v1_') ? etiqueta('artista inventado') : envolver({ uid: UID, inventado: k });
       idbPares.push([k, v]);
@@ -221,6 +304,7 @@ try {
   datos.reloj = Math.round(performance.now());
   parent.postMessage({ banco: 'copia-completa', ok: false, error: String(e?.message || e), datos }, '*');
   document.documentElement.setAttribute('data-caso', 'error ' + String(e?.message || e) + ' ' + JSON.stringify(datos));
+}
 }
 </script>
 </body></html>

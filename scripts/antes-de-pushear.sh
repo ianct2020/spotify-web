@@ -116,6 +116,11 @@ echo "2b. bancos (barra · pausa-search · toasts · mosaico · novedades · esc
 # búsqueda queda libre (contra v=323: 0 abortadas y el candado tomado; 0 peticiones nuevas en los dos, por la
 # vigencia del bucle). Y A → B → A con #discover-artists (teardown de módulo): la lista del render nuevo sigue
 # viva cuando la vieja termina (de conservación; visto fallar con una copia que corre también el del mismo hash).
+# Rehecho en v=345 (tanda 99): con la promesa en vuelo de `getCurrentUserId()`, retener la `/me` trababa también a
+# #mapa (y al #discover-artists nuevo). Ahora la `/me` se contesta siempre y se retiene lo que solo espera la vieja,
+# después del uid: la primera carga del JSON del historial de artistas (INVENTADO, servido por el caso; cualquier otro
+# `/data/*` da 404 y tiene que ser 0) y la primera `GET` del snapshot de una W-Three INVENTADA. Rojo contra el router
+# sin el arreglo de v=324 (3 de 3: 0 abortadas, candado tomado); verde 10 de 10, 41.523-42.048 ms de reloj virtual.
 # `guard-ruta-vieja` entró en v=325 (tanda 72): la pantalla de error de una ruta vieja no tapa la vigente. La
 # app ENTERA: #records con su `/me` retenida, #home, la `/me` se suelta (con 500, y otra vez bien) y #records
 # TIRA (su `getElementById` sin guarda de vigencia da null); a los 2 s, #main-content sigue con #home y sin
@@ -134,6 +139,8 @@ echo "2b. bancos (barra · pausa-search · toasts · mosaico · novedades · esc
 # peticiones a cualquier host durante el export, el MISMO sha256 de IndexedDB y localStorage antes y después, y la
 # madre lo lee con un JSON.parse sin cargar nada de src/ (trae `_leeme`). Diez corridas el 22/10: 787-1.005 ms de reloj
 # virtual (10/10), corre con el defecto de 45 s. Rojo contra v=332 (no hay botón).
+# Desde v=345 (tanda 98), el caso `otra-cuenta`: otra cuenta entra con los me gusta de la anterior en caché; la copia
+# sale firmada con la NUEVA, con 0 me gusta y la marca puesta (contra v=344: firmada con la anterior y con sus 40).
 # `copia-importar` entró en v=334 (tanda 79): «Importar todo» del ⚙ de #dashboard, en la app ENTERA contra la Spotify
 # simulada, con perfiles SEMBRADOS con datos INVENTADOS (cada caso vacía el almacenamiento del origen del banco): A exporta
 # y B, vacío y con el mismo uid, importa → el sha256 de cada clave que entra es el de A y 0 peticiones a cualquier host

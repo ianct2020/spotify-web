@@ -114,6 +114,9 @@ function sembrar() {
   resetear();
   for (const c of CENSO) {
     if (c.donde !== 'idb' && c.donde !== 'ls') continue;
+    // (v=345) La marca de los me gusta de otra cuenta no se siembra: con ella la copia sale, a propósito, sin me gusta
+    // (lo prueba `me-gusta-de-otra-cuenta.test.mjs`), y este perfil es el de un usuario que no cambió.
+    if (c.clave === 'fonoteca_likes_de_otro_v1') continue;
     const k = claveDeMuestra(c);
     const v = valorDeMuestra(c, k);
     if (c.donde === 'idb') idbD().kv.set(k, v); else lsMapa.set(k, v);
@@ -233,6 +236,8 @@ ok(!PROHIBIDO.test(util), `copia-completa.js no escribe (${(util.match(PROHIBIDO
 ok(!PROHIBIDO.test(enchufe), `exportarCopiaCompleta no escribe (${(enchufe.match(PROHIBIDO) || ['—'])[0]})`);
 ok(!/fetch\(|spotifyFetch|getCurrentUserId\(|XMLHttpRequest|import\(/.test(util + enchufe + handler), 'ni red ni /me en todo el camino (el uid sale del memo)');
 ok(!/document\.|window\.|localStorage\.|indexedDB\./.test(util), 'copia-completa.js es puro: sin DOM, sin storage');
-ok(/^import \{[^}]*\} from '\.\/generos-artista\.js';$/m.test(util) && (util.match(/^import /gm) || []).length === 1, 'su único import es generos-artista.js (puro)');
+// (v=345) Y `likes-de-otro.js`, la marca de los me gusta de otra cuenta, que no importa nada.
+ok(/^import \{[^}]*\} from '\.\/generos-artista\.js';$/m.test(util) && /^import \{[^}]*\} from '\.\/likes-de-otro\.js';$/m.test(util) && (util.match(/^import /gm) || []).length === 2
+  && !/^\s*import\b/m.test(fuente('src/js/util/likes-de-otro.js')), 'sus únicos imports son generos-artista.js y likes-de-otro.js (los dos puros; el segundo, sin imports)');
 
 fin();

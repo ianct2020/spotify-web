@@ -12,6 +12,7 @@ import { leerCopia, planDeImport, segundaRed, importEscribio, TEXTOS as TEXTOS_I
 import { MARCA_DESDE_COPIA, leerMarca, marcaTrasImport } from './util/ocultos-desde-copia.js';
 import { avisarCopiaImportada } from './util/canal-copia.js';
 import { BORRADOS_LOG_MAX } from './util/topes-registros.js';
+import { LIKES_DE_OTRO_KEY, hayLikesDeOtro } from './util/likes-de-otro.js';
 
 const BASE = 'https://api.spotify.com/v1';
 const MIN_RETRY_WAIT = 5000;
@@ -242,6 +243,8 @@ async function savePartial(key, payload) {
 
 async function loadPartial(key) {
   if (key === LIKES_CACHE_KEY || key === LIKES_PARTIAL_KEY) {
+    // (v=345) Con la marca, el parcial es de la cuenta anterior: no se retoma (ver `borrarLikesDeOtro`).
+    if (hayLikesDeOtro()) return null;
     try { return await idbGetCachedRaw(LIKES_PARTIAL_KEY); } catch { return null; }
   }
   return cacheGet(key + '_partial');
@@ -402,6 +405,8 @@ function slimPlaylist(p) {
 }
 
 async function migrateLikesFromLocalStorage() {
+  // (v=345) Con la marca, la heredada es de la cuenta anterior: no se muda nada a IndexedDB.
+  if (hayLikesDeOtro()) return;
   const legacy = cacheGetRaw(LIKES_CACHE_KEY);
   if (Array.isArray(legacy) && legacy.length > 0) {
     try {
@@ -440,7 +445,14 @@ async function migrateLikesFromLocalStorage() {
 // dos formas de leer lo mismo, en tres meses vuelven a divergir.
 //
 // Nunca borra nada. Si el caché no sirve, se rehace; no se destruye.
+// ⚠️ Salvo una cosa (v=345): si la caché es de OTRA cuenta (la marca de `util/likes-de-otro.js`), reintenta el borrado
+// que dejó pendiente el cambio de usuario (`borrarLikesDeOtro`, la misma función) y, salga o no, devuelve «no hay
+// caché». Eso no destruye nada tuyo: lo que hay ahí no es tuyo.
 async function leerLikesCacheados() {
+  if (hayLikesDeOtro()) {
+    await borrarLikesDeOtro();
+    return null;
+  }
   try {
     const full = await idbGetCachedRaw(LIKES_CACHE_KEY);
     if (Array.isArray(full) && full.length > 0) return full;
@@ -498,6 +510,10 @@ function startLikesLoad({ force }) {
   };
   state.promise = (async () => {
     try {
+      // (v=345) Con la marca, el parcial es de la otra cuenta: se reintenta el borrado y, si sale, la descarga arranca
+      // de cero. Si no sale, se tira: retomar mezclaría sus me gusta con los tuyos y, si cuadrara con tu total, se
+      // guardaría como completa.
+      if (hayLikesDeOtro() && !(await borrarLikesDeOtro())) throw new Error(TEXTO_LIKES_DE_OTRO);
       if (force) await clearPartial(LIKES_CACHE_KEY);
       const meta = {};
       const items = await paginateAll('/me/tracks', {
@@ -617,10 +633,44 @@ async function getAllUserPlaylists(onProgress, { force = false, signal } = {}) {
   return items;
 }
 
-function invalidateLikesCache() {
-  cacheClear(LIKES_CACHE_KEY);
-  idbDel(LIKES_CACHE_KEY).catch(() => {});
-  idbDel(LIKES_PARTIAL_KEY).catch(() => {});
+// ── Los me gusta del usuario anterior (v=345, tanda 98) ─────────────────────
+//
+// La caché de me gusta NO lleva el uid en la clave. Cuando cambia la cuenta, `revisarCambioDeUsuario()` pone la marca
+// (`fonoteca_likes_de_otro_v1`, sincrónica, ANTES del primer borrado) y llama a esta función, que borra las tres
+// copias —la completa y el parcial de IndexedDB, y la heredada de `localStorage`— y, SOLO si salen todas, quita la
+// marca. Mientras la marca esté, los seis caminos que leen la caché hacen como si no hubiera (ver CLAUDE.md, «👤 Los me
+// gusta del usuario anterior»): un borrado que falla, una lectura a mitad del borrado o una pestaña cerrada a mitad no
+// pueden enseñarle a la cuenta nueva los me gusta de la anterior.
+//
+// Hasta v=344 esto era `invalidateLikesCache()`: los `idbDel` con `.catch(() => {})`, sin esperarlos y sin marca. Si
+// fallaba, nadie se enteraba y la carga siguiente ya no veía «cambio de usuario» que lo reintentara.
+//
+// Devuelve `true` si quedó limpia y `false` si no (o si pasó el tope: el borrado sigue, y si termina bien, quita la marca
+// igual). 🔴 NUNCA TIRA: la llama `getCurrentUserId()`, de la que cuelga media app. El error crudo va a `console.warn`.
+// La llaman la revisión del cambio de cuenta y los lectores que reintentan (L1 y L3): una sola copia de la regla.
+const TOPE_BORRADO_LIKES_MS = 3000;
+const TEXTO_LIKES_DE_OTRO = 'No se han podido borrar los me gusta de la otra cuenta que usó este navegador, así que no se cargan los tuyos para no mezclarlos. Recarga la página para reintentarlo.';
+
+async function borrarLikesDeOtro() {
+  const borrado = (async () => {
+    cacheClear(LIKES_CACHE_KEY);
+    cacheClear(LIKES_CACHE_KEY + '_partial');
+    const r = await Promise.allSettled([idbDel(LIKES_CACHE_KEY), idbDel(LIKES_PARTIAL_KEY)]);
+    const fallo = r.find((x) => x.status === 'rejected');
+    if (fallo) throw fallo.reason;
+    localStorage.removeItem(LIKES_DE_OTRO_KEY);
+    return true;
+  })().catch((e) => {
+    console.warn('[likes] no se pudo borrar la caché de me gusta de la cuenta anterior:', e);
+    return false;
+  });
+  let reloj;
+  const tope = new Promise((res) => { reloj = setTimeout(() => res(false), TOPE_BORRADO_LIKES_MS); });
+  try {
+    return await Promise.race([borrado, tope]);
+  } finally {
+    clearTimeout(reloj);
+  }
 }
 
 async function getLikesTotal() {
@@ -735,6 +785,8 @@ async function getBestAvailableLikes({ onProgress, signal, allowFetch = false } 
  * nada — y para ofrecer «retomar», que cuesta 18 requests en vez de 190.
  */
 async function getLikesPartialInfo() {
+  // (v=345) Con la marca, el parcial no es tuyo: no hay nada que retomar.
+  if (hayLikesDeOtro()) return null;
   try {
     const p = await loadPartial(LIKES_CACHE_KEY);
     if (p && Array.isArray(p.items) && p.items.length > 0) {
@@ -745,6 +797,8 @@ async function getLikesPartialInfo() {
 }
 
 async function getLikesCacheTimestamp() {
+  // (v=345) Con la marca, la fecha sería la de la sincronización de la otra cuenta.
+  if (hayLikesDeOtro()) return null;
   const ts = await idbGetTimestamp(LIKES_CACHE_KEY);
   if (ts) return ts;
   const tsPartial = await idbGetTimestamp(LIKES_PARTIAL_KEY);
@@ -1208,19 +1262,45 @@ async function getUserProfile() {
 }
 
 let _cachedUserId = null;
+let _userIdEnVuelo = null;
 const LAST_USER_KEY = 'fonoteca_last_user_id';
+// (v=345) La promesa del `/me` + la revisión va guardada: dos llamadas a la vez con el memo frío piden UN `/me`, no dos
+// (lo vio la tanda 90). Un fracaso no se memoiza: si el `/me` falla, la promesa se suelta y la llamada siguiente vuelve
+// a pedir. `_cachedUserId` se escribe DESPUÉS de la revisión: quien recibe el id ya encuentra la marca puesta (o la
+// caché borrada). Sigue tirando SOLO cuando falla el `/me`, como siempre.
 async function getCurrentUserId() {
   if (_cachedUserId) return _cachedUserId;
-  const me = await spotifyFetch('/me');
-  _cachedUserId = me.id;
-  // Si el user id cambió respecto al último que estuvo en este browser,
-  // limpio caches de likes/playlists para que no se mezclen. También limpio
-  // los caches del historial pre-cargado (JSONs del owner) en IDB.
-  try {
-    const prev = localStorage.getItem(LAST_USER_KEY);
-    if (prev && prev !== _cachedUserId) {
-      console.info(`Fonoteca: user cambió (${prev} → ${_cachedUserId}), limpiando caché local`);
-      invalidateLikesCache();
+  if (!_userIdEnVuelo) {
+    _userIdEnVuelo = (async () => {
+      const me = await spotifyFetch('/me');
+      await revisarCambioDeUsuario(me.id);
+      _cachedUserId = me.id;
+      return _cachedUserId;
+    })().finally(() => { _userIdEnVuelo = null; });
+  }
+  return _userIdEnVuelo;
+}
+
+// Si el user id cambió respecto al último que estuvo en este browser, limpio las cachés de likes/playlists para que no
+// se mezclen, y las del historial pre-cargado (JSONs del owner) en IDB.
+//
+// (v=345) UNA sola función decide el cambio de cuenta, y la llaman DOS sitios: el arranque (`app.js`, con el id del
+// `/me` que ya hizo `testConnection()`, antes de `showApp`; 0 peticiones nuevas) y `getCurrentUserId()`. Es idempotente:
+// si `fonoteca_last_user_id` ya es ese id, no hace nada. Los me gusta van con la marca (`borrarLikesDeOtro`, arriba) y se
+// ESPERAN, con un tope de 3 s; los demás borrados siguen como antes, sin esperarlos. `fonoteca_last_user_id` se escribe
+// igual que siempre, también si el borrado falló (de él salen `prefKey()` y la guarda del import). 🔴 Nunca tira.
+async function revisarCambioDeUsuario(id) {
+  if (!id) return;
+  let prev = null;
+  try { prev = localStorage.getItem(LAST_USER_KEY); } catch { return; /* sin localStorage no hay contra qué comparar */ }
+  if (prev === id) return;
+  let borrado = null;
+  if (prev) {
+    console.info(`Fonoteca: user cambió (${prev} → ${id}), limpiando caché local`);
+    // 🔴 La marca PRIMERO, sincrónica y antes del primer borrado.
+    try { localStorage.setItem(LIKES_DE_OTRO_KEY, prev); } catch (e) { console.warn('[likes] no se pudo dejar la marca de los me gusta de la cuenta anterior:', e); }
+    borrado = borrarLikesDeOtro();
+    try {
       invalidatePlaylistsCache();
       // Caches del historial del owner: si el nuevo user no es el owner, sobran;
       // si es el owner de vuelta, los re-baja del JSON del repo.
@@ -1264,10 +1344,10 @@ async function getCurrentUserId() {
       // clave lleva el usuario de Stats.fm, pero puede quedar la vieja de una
       // sesión anterior a la actualización.
       idbDelByPrefix('statsfm_top_lifetime_v1').catch(() => {});
-    }
-    localStorage.setItem(LAST_USER_KEY, _cachedUserId);
-  } catch { /* ignora si no hay localStorage */ }
-  return _cachedUserId;
+    } catch { /* ignora si no hay localStorage */ }
+  }
+  try { localStorage.setItem(LAST_USER_KEY, id); } catch { /* ignora si no hay localStorage */ }
+  if (borrado) await borrado;
 }
 
 // Devuelven el snapshot_id de la última escritura para poder actualizar el
@@ -1415,7 +1495,9 @@ async function registrarBorradoDeLikes(ids, { origen = 'desconocido', meta = nul
   try {
     if (Array.isArray(meta) && meta.length) {
       detalle = meta;
-    } else {
+    } else if (!hayLikesDeOtro()) {
+      // (v=345) Con la marca no se lee la caché: los ids van pelados. No es un bug que se viera (un id de pista es la
+      // misma canción en cualquier cuenta), es que ningún camino lea una caché que no es tuya.
       const cached = await idbGetCachedRaw(LIKES_CACHE_KEY);
       if (Array.isArray(cached)) {
         const porId = new Map(cached.map(it => [it?.track?.id, it]));
@@ -1993,6 +2075,7 @@ export {
   getMyTop,
   getUserProfile,
   getCurrentUserId,
+  revisarCambioDeUsuario,
   addTracksToPlaylist,
   removeTracksFromPlaylist,
   reorderPlaylistItems,
@@ -2017,7 +2100,6 @@ export {
   artistAlbumsDiag,
   getAlbumTracks,
   searchArtistByName,
-  invalidateLikesCache,
   onRateLimit,
   invalidatePlaylistsCache,
   onPlaylistsInvalidated,

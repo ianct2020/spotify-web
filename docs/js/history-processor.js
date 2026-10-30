@@ -13,9 +13,9 @@
 //
 // Devuelve la misma forma que los JSONs del repo (mismos `version` numbers).
 
-import { isJunkTrack } from './util/junk.js?v=344';
-import { songKey } from './util/song-identity.js?v=344';
-import { PRIMER_SKIPPED_TRUE } from './util/corte-saltos.js?v=344';
+import { isJunkTrack } from './util/junk.js?v=345';
+import { songKey } from './util/song-identity.js?v=345';
+import { PRIMER_SKIPPED_TRUE } from './util/corte-saltos.js?v=345';
 
 // ---- Configuración (igual a gen-stats.py) ----
 const MIN_MS = 30000;

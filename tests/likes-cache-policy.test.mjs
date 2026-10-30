@@ -324,7 +324,9 @@ ok(/idbDelByPrefix\('statsfm_top_lifetime_v1'\)/.test(guarda),
 // son las canciones de las playlists de la otra persona, igual que
 // `playlist_items_`. El prefijo sale de una sola constante, la que usa
 // `hidden-sync.js`, y no se escribe otra vez en api.js.
-const bloqueUsuario = api.slice(api.indexOf('if (prev && prev !== _cachedUserId)'), api.indexOf('localStorage.setItem(LAST_USER_KEY'));
+// (v=345) El bloque salió de `getCurrentUserId()` a `revisarCambioDeUsuario()`: se recorta desde ahí.
+const iRevision = api.indexOf('async function revisarCambioDeUsuario');
+const bloqueUsuario = api.slice(iRevision, api.indexOf('localStorage.setItem(LAST_USER_KEY', iRevision));
 ok(/idbDelByPrefix\(OCULTOS_ITEMS_PREFIX\)/.test(bloqueUsuario),
   'al cambiar de usuario borra el caché de items de los ocultos (ocultos_items_v1_), por la constante');
 ok(!/ocultos_items_v1_/.test(api), 'api.js no escribe la cadena ocultos_items_v1_');

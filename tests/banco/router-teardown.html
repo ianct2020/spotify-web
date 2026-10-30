@@ -13,16 +13,28 @@
 // sale a `api.spotify.com` ni a `musicbrainz.org`.
 //
 // LA VISTA LENTA ES `#puertas`. Es una de las 32 rutas del menú, y su `render()`
-// espera `loadArtistTracks()` → `loadOne()` → `getCurrentUserId()` → `GET /me`
-// antes de pintar nada: el banco RETIENE esa `/me` y la suelta cuando quiere (el
-// arranque ya pagó la suya con `testConnection()`, que no pasa por el memo). No
-// devuelve teardown: al terminar tarde, v=323 dejaba `currentCleanup = null` y así
-// se perdía el de la vista vigente. No toca MusicBrainz, así que no ensucia la cuenta.
+// espera `loadArtistTracks()` → `loadOne()` → el uid → el JSON del historial de
+// artistas antes de pintar nada: el banco RETIENE ese JSON (la primera petición; la
+// siguiente se contesta) y lo suelta cuando quiere. No devuelve teardown: al terminar
+// tarde, v=323 dejaba `currentCleanup = undefined` y así se perdía el de la vista
+// vigente. No toca MusicBrainz, así que no ensucia la cuenta.
 //
-//   1. `#puertas`, con su `/me` retenida: se queda en el esqueleto;
+// ⚠️ Hasta v=344 lo retenido era la `/me` de `#puertas`, y `#mapa` sacaba la suya. Desde
+// v=345 `getCurrentUserId()` guarda la promesa en vuelo: todo lo que pide el uid espera
+// el MISMO `/me`, y con él retenido `#mapa` se quedaba en el esqueleto, sin el botón
+// (el banco quedaba «ausente» en el paso 2). Ahora la `/me` se contesta siempre y lo que
+// se retiene es algo que solo espera `#puertas`: `loadOne()` NO comparte la petición del
+// JSON entre rutas (el `memCache` se llena al terminar), así que `#mapa` pide el suyo y
+// pinta. Por eso el historial ya no se siembra en IndexedDB: lo sirve el caso, con el
+// mismo `HISTORIAL` INVENTADO de `mapa-datos.mjs` (ver `router-teardown-caso.html`). Lo que
+// el banco prueba no cambió: A termina tarde con B vigente, y al salir de B su teardown
+// tiene que correr. Visto rojo con el `router.js` sin el arreglo de v=324 y la promesa
+// en vuelo puesta (tanda 99: 3 de 3, «abortadas: 0 de 1 en vuelo · candado TOMADO»).
+//
+//   1. `#puertas`, con su JSON retenido: se queda en el esqueleto;
 //   2. `#mapa` y «Buscar países»: el escaneo arranca contra el MusicBrainz simulado;
 //      se deja contestar la primera y la siguiente queda EN VUELO (`congelado`);
-//   3. se suelta la `/me`: `#puertas` termina, vieja (no pinta nada sobre `#mapa`);
+//   3. se suelta el JSON: `#puertas` termina, vieja (no pinta nada sobre `#mapa`);
 //   4. `#home`;
 //   5. LA PUERTA, en los 30 s de reloj siguientes:
 //        a. 0 peticiones NUEVAS al MusicBrainz simulado y 0 escrituras en el DOM de
@@ -40,8 +52,10 @@
 //      `generos-escaneo`).
 //   6. Conservación: la vista vieja no pintó nada, `[data-route].active` es solo el de
 //      `#home` y 0 errores en consola.
-//   7. A → B → A con una vista de teardown DEL MÓDULO: `#discover-artists` con su `/me`
-//      retenida (el `isOwner()` de `buildAlbumHeardIndex()`), `#home`, `#discover-artists`
+//   7. A → B → A con una vista de teardown DEL MÓDULO: `#discover-artists` con su W-Three
+//      retenida (la `GET /playlists/{W-Three}?fields=snapshot_id` de `buildAlbumHeardIndex()`,
+//      después del uid; hasta v=344 era la `/me`, que ahora trabaría también al render
+//      nuevo), `#home`, `#discover-artists`
 //      otra vez (pinta sus 4 bloques) y la vieja termina. La lista del render NUEVO sigue
 //      viva. Qué se mira: `window.__discoPerf.lazy`, que es el getter que la vista define
 //      sobre su `lazyCovers` de MÓDULO (`lazyCovers?.stats`) — el `teardown()` de la vista
@@ -60,7 +74,7 @@
 
 import { esperarReal, anclar } from '/banco/simulado.mjs';
 import { fallar, listo } from '/banco/esperar.mjs';
-import { crearMB, sembrarHistorial } from '/banco/mapa-datos.mjs';
+import { crearMB } from '/banco/mapa-datos.mjs';
 
 const Q = new URLSearchParams(location.search);
 const ANCHO = +(Q.get('ancho') || 1351);
@@ -100,34 +114,34 @@ const huerfana = (f, desde, hash) => win(f).__avisos.slice(desde).some((a) => a.
 
 const datos = {};
 try {
-  await sembrarHistorial(anclar);
   const { HISTORY_OWNER_ID } = await import('/js/features/history-data.js');
   localStorage.setItem('fonoteca_last_user_id', HISTORY_OWNER_ID);
 
   // ══ 1-6. #puertas lenta → #mapa buscando → #puertas termina → #home ═══════
-  progreso('1. #puertas con su /me retenida');
+  progreso('1. #puertas con su JSON retenido');
   const M = abrirMarco('mapa');
   await esperar(() => win(M)?.__listo, 'que arranque el marco del mapa');
-  win(M).__retenerProximaMe();
+  win(M).__retenerProxima();
   win(M).location.hash = '#puertas';
-  await esperar(() => win(M).__meRetenida && $(M, '#puertas-content'), 'que #puertas quede esperando su /me');
+  await esperar(() => win(M).__retenida && $(M, '#puertas-content'), 'que #puertas quede esperando su JSON');
   await reloj(500, 'medio segundo con #puertas esperando');
   afirmar($(M, '#puertas-content .spinner') && !$(M, '#puertas-content table, #puertas-content .puertas-fila'),
-    '#puertas sigue en el esqueleto: su render() está esperando la /me retenida');
+    '#puertas sigue en el esqueleto: su render() está esperando el JSON retenido');
 
   progreso('2. #mapa y «Buscar países»');
   await irA(M, '#mapa', 'que #mapa pinte', () => $(M, '.mapa[data-estado]'));
   afirmar(mb.log.length === 0, `abrir #mapa no pide nada a MusicBrainz (pidió ${mb.log.length})`);
+  afirmar(win(M).__datosServidos === 1 && !win(M).__soltada, `#mapa pintó con SU JSON, con el de #puertas todavía retenido (servidos: ${win(M).__datosServidos})`);
   $(M, '[data-mapa-accion="buscar"]').click();
   await esperar(() => mb.log.length >= 1 && mb.log[0].status !== null, 'la primera respuesta del MusicBrainz simulado');
   mb.congelado = true;
   await esperar(() => mb.colgadas === 1, 'que una petición quede en vuelo, sin contestar');
   afirmar($(M, '.mapa[data-estado]').dataset.estado === 'escaneando', 'el escaneo está en marcha');
 
-  progreso('3. se suelta la /me: #puertas termina, vieja');
-  win(M).__soltarMe();
+  progreso('3. se suelta el JSON: #puertas termina, vieja');
+  win(M).__soltar();
   const settle = await reloj(3000, 'que #puertas termine');
-  afirmar(win(M).__meSoltada, 'la /me retenida se contestó');
+  afirmar(win(M).__soltada && win(M).__datosServidos === 2, `el JSON retenido se contestó (servidos: ${win(M).__datosServidos})`);
   afirmar($(M, '.mapa[data-estado]') && !$(M, '#puertas-content'), 'la vista vieja no pintó nada sobre #mapa');
   const activosEnMapa = activos(M);
   afirmar(activosEnMapa.length === 1 && activosEnMapa[0] === 'mapa', `en #mapa, lo único activo es mapa (${JSON.stringify(activosEnMapa)})`);
@@ -164,25 +178,27 @@ try {
   afirmar(s.escrituras.length === 0 && s.desconocidas.length === 0 && s.externas.length === 0,
     `Spotify simulada: 0 escrituras, 0 rutas sin simular, 0 hosts externos (${s.desconocidas.join(',')} ${s.externas.join(',')})`);
   datos.me = s.llamadas.filter((l) => l.ruta === '/me').length;
+  afirmar(win(M).__datosAjenos.length === 0, `ningún otro JSON del repo se pidió (${win(M).__datosAjenos.join(',')})`);
 
   // ══ 7. #discover-artists → #home → #discover-artists, y la vieja termina ═══
   progreso('7. A → B → A con #discover-artists');
   const D = abrirMarco('disco');
   await esperar(() => win(D)?.__listo, 'que arranque el marco de descubrir');
-  win(D).__retenerProximaMe();
+  win(D).__retenerProxima();
   win(D).location.hash = '#discover-artists';
-  await esperar(() => win(D).__meRetenida && $(D, '#disco-content'), 'que #discover-artists quede esperando su /me');
+  await esperar(() => win(D).__retenida && $(D, '#disco-content'), 'que #discover-artists quede esperando su W-Three');
   await reloj(500, 'medio segundo con #discover-artists esperando');
   afirmar($$(D, '.disco-artist').length === 0, `la vieja sigue cargando (pinta ${$$(D, '.disco-artist').length} bloques)`);
   await irA(D, '#home', 'que el inicio pinte', () => $(D, '.home-grid'));
   await irA(D, '#discover-artists', 'que el render NUEVO pinte sus 4 bloques',
     () => $$(D, '.disco-artist').length === 4 && win(D).__discoPerf?.lazy);
   const lazyNuevo = !!win(D).__discoPerf.lazy;
-  win(D).__soltarMe();
+  win(D).__soltar();
   await reloj(5000, 'que la vieja termine');
-  afirmar(win(D).__meSoltada, 'la /me retenida de la vieja se contestó');
+  afirmar(win(D).__soltada, 'la W-Three retenida de la vieja se contestó');
   datos.disco = { bloques: $$(D, '.disco-artist').length, lazyNuevo, lazyTrasLaVieja: !!win(D).__discoPerf.lazy };
   afirmar(datos.disco.bloques === 4, `la lista del render nuevo conserva sus 4 bloques (tiene ${datos.disco.bloques})`);
+  afirmar(win(D).__datosAjenos.length === 0, `ningún JSON del repo se pidió (${win(D).__datosAjenos.join(',')})`);
   afirmar(datos.disco.lazyTrasLaVieja, 'la lista del render nuevo SIGUE VIVA cuando la vieja termina: `__discoPerf.lazy` (el `lazyCovers` del módulo) no es null');
   afirmar(win(D).__errores.length === 0, `0 errores en consola: ${win(D).__errores.join(' | ')}`);
   const avisosD = win(D).__avisos.length;
@@ -192,7 +208,7 @@ try {
   afirmar(datos.disco.lazyAlSalir === null, `la sonda ve un teardown de verdad: al salir, \`__discoPerf.lazy\` queda en null (${datos.disco.lazyAlSalir})`);
 
   const resumen =
-    `ok · vista lenta #puertas (/me retenida) · #mapa: 1 contestada + 1 en vuelo · ` +
+    `ok · vista lenta #puertas (JSON retenido) · #mapa: 1 contestada + 1 en vuelo · ` +
     `salir: ${datos.salir.despues} nuevas en ${datos.salir.relojMs} ms, abortadas ${datos.salir.abortos}, candado ${datos.salir.candado ? 'tomado' : 'libre'}, ` +
     `${datos.salir.mutaciones} escrituras en #mapa · activos=home · /me=${datos.me} · ` +
     `A→B→A #discover-artists: ${datos.disco.bloques} bloques, lazy vivo=${datos.disco.lazyTrasLaVieja}, al salir null=${datos.disco.lazyAlSalir === null} · errores=0 · ` +

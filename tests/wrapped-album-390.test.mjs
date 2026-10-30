@@ -54,4 +54,17 @@ comprobar(/overflow-wrap:\s*anywhere\s*;/.test(nombre), 'un nombre de una sola p
   comprobar(m && desescapar(m[2]) === LARGO, 'el texto del nombre es el nombre entero, escapado');
   comprobar(title != null && desescapar(title) === LARGO, `lleva title con el nombre entero (${title == null ? 'sin title' : desescapar(title).length + ' caracteres'})`);
   comprobar(title != null && title === m?.[2], 'y el title va escapado igual que el texto (ninguna comilla corta el atributo)');
+
+  // ── El gemelo: el «Álbum de siempre» del Wrapped de siempre (v=345, tanda 98) ──────────────
+  // El mismo renglón, el mismo nombre INVENTADO, la misma lectura. Hasta v=344 este no llevaba `title`.
+  const bloqueSiempre = js.slice(js.indexOf('<div class="wrapped-tile-label">Álbum de siempre</div>'));
+  const renglonSiempre = js.includes('<div class="wrapped-tile-label">Álbum de siempre</div>') ? (bloqueSiempre.match(/<div class="wrapped-album-hero-name"[^\n]*<\/div>/)?.[0] || '') : '';
+  comprobar(renglonSiempre, 'wrapped.js pinta el nombre del «Álbum de siempre» en .wrapped-album-hero-name');
+  let htmlSiempre = '';
+  try { htmlSiempre = escapeHtml && renglonSiempre ? new Function('escapeHtml', 'topAlbum', `return \`${renglonSiempre}\`;`)(escapeHtml, { name: LARGO }) : ''; } catch (e) { htmlSiempre = ''; comprobar(false, `el renglón del «Álbum de siempre» no se pudo pintar: ${e.message}`); }
+  const ms = htmlSiempre.match(/^<div class="wrapped-album-hero-name"((?:\s+[a-z-]+="[^"]*")*)>([^<]*)<\/div>$/);
+  const titleSiempre = ms?.[1].match(/\stitle="([^"]*)"/)?.[1];
+  comprobar(ms && desescapar(ms[2]) === LARGO, 'el «Álbum de siempre»: el texto del nombre es el nombre entero, escapado');
+  comprobar(titleSiempre != null && desescapar(titleSiempre) === LARGO, `el «Álbum de siempre» lleva title con el nombre entero (${titleSiempre == null ? 'sin title' : desescapar(titleSiempre).length + ' caracteres'})`);
+  comprobar(titleSiempre != null && titleSiempre === ms?.[2], 'y su title va escapado igual que el texto');
 }

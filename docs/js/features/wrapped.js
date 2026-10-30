@@ -1,23 +1,23 @@
 // Wrapped propio: mini-resumen tuyo por año, hecho con el Extended Streaming History.
 // A diferencia del Wrapped oficial (que corre oct-sept), este es del año calendario completo.
 
-import { loadHistoryStats, isOwner, ownerLockedMessage } from './history-data.js?v=344';
-import { escapeHtml, pageHeader } from '../ui/components.js?v=344';
-import { getPreview } from '../api/preview-providers.js?v=344';
-import { getArtistLikePreview, getAlbumLikePreview } from '../util/artist-preview.js?v=344';
-import { attachHover } from '../ui/preview-player.js?v=344';
-import { openTrackCard } from './track-card.js?v=344';
-import { openArtistCard } from './artist-card.js?v=344';
-import { openAlbumCard } from './album-card.js?v=344';
-import { getMyTop } from '../api.js?v=344';
-import { activateMarquee, marqueeSpan } from '../ui/marquee.js?v=344';
-import { openModal } from '../ui/modal-stack.js?v=344';
-import { armReveal, armRevealAll, releaseReveal, animationsEnabled } from '../ui/reveal.js?v=344';
-import { coverUrl } from '../util/cover-size.js?v=344';
-import { vigilarRuta } from '../util/vigencia-ruta.js?v=344';
-import { fmtDia } from '../util/fecha.js?v=344';
-import { anioSinCampoSkipped, esElAnioDelCorte, AVISO_MEZCLA } from '../util/corte-saltos.js?v=344';
-import { showToast } from '../ui/toast.js?v=344';
+import { loadHistoryStats, isOwner, ownerLockedMessage } from './history-data.js?v=345';
+import { escapeHtml, pageHeader } from '../ui/components.js?v=345';
+import { getPreview } from '../api/preview-providers.js?v=345';
+import { getArtistLikePreview, getAlbumLikePreview } from '../util/artist-preview.js?v=345';
+import { attachHover } from '../ui/preview-player.js?v=345';
+import { openTrackCard } from './track-card.js?v=345';
+import { openArtistCard } from './artist-card.js?v=345';
+import { openAlbumCard } from './album-card.js?v=345';
+import { getMyTop } from '../api.js?v=345';
+import { activateMarquee, marqueeSpan } from '../ui/marquee.js?v=345';
+import { openModal } from '../ui/modal-stack.js?v=345';
+import { armReveal, armRevealAll, releaseReveal, animationsEnabled } from '../ui/reveal.js?v=345';
+import { coverUrl } from '../util/cover-size.js?v=345';
+import { vigilarRuta } from '../util/vigencia-ruta.js?v=345';
+import { fmtDia } from '../util/fecha.js?v=345';
+import { anioSinCampoSkipped, esElAnioDelCorte, AVISO_MEZCLA } from '../util/corte-saltos.js?v=345';
+import { showToast } from '../ui/toast.js?v=345';
 
 let stats = null;
 let selectedYear = null;
@@ -67,7 +67,7 @@ const ESPERA_APERTURA_MS = 3000;
 // después — montarlo tarde sería justo el flash que se está arreglando.
 function cargarApertura() {
   return Promise.race([
-    import('../features/wrapped-apertura.js?v=344').catch(e => {
+    import('../features/wrapped-apertura.js?v=345').catch(e => {
       console.warn('[wrapped] la apertura no cargó, el resumen queda entero:', e);
       return null;
     }),
@@ -466,7 +466,7 @@ async function descargarPostal(y) {
   document.addEventListener('routeteardown', alSalir, { once: true });
   pintarBotonPostal(true);
   try {
-    const mod = await import('./wrapped-postal.js?v=344');
+    const mod = await import('./wrapped-postal.js?v=345');
     if (!ruta.vigente()) return;
     const r = await mod.generarPostal(y, { fmtMinutes, fmtDia, signal: ctrl.signal, vigente: ruta.vigente });
     if (!r || !ruta.vigente()) return;
@@ -717,7 +717,7 @@ function renderAllTime() {
             ${topAlbum.img
               ? `<img src="${topAlbum.img}" alt="" class="wrapped-album-hero-cover" loading="lazy" onerror="this.outerHTML='&lt;div class=&quot;wrapped-album-hero-cover&quot; style=&quot;background:var(--color-elevated);display:flex;align-items:center;justify-content:center;color:var(--color-text-muted);font-size:44px&quot;&gt;♪&lt;/div&gt;'">`
               : `<div class="wrapped-album-hero-cover" style="background:var(--color-elevated);display:flex;align-items:center;justify-content:center;color:var(--color-text-muted);font-size:44px">♪</div>`}
-            <div class="wrapped-album-hero-name">${escapeHtml(topAlbum.name)}</div>
+            <div class="wrapped-album-hero-name" title="${escapeHtml(topAlbum.name)}">${escapeHtml(topAlbum.name)}</div>
             <div class="wrapped-album-hero-artist">${escapeHtml(topAlbum.artist)}</div>
             <div class="wrapped-album-hero-meta">${fmtMinutes(topAlbum.min)} · ${(topAlbum.plays || 0).toLocaleString('es-ES')} plays</div>
           </div>
