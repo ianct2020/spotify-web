@@ -7,12 +7,14 @@
 {
   "imports": {
     "/js/features/records.js": "/banco/guard-ruta-vieja-espia.mjs?m=records",
-    "/js/features/by-artist.js": "/banco/guard-ruta-vieja-espia.mjs?m=by-artist"
+    "/js/features/by-artist.js": "/banco/guard-ruta-vieja-espia.mjs?m=by-artist",
+    "/js/idb.js": "/banco/guard-ruta-vieja-idb.mjs"
   },
   "scopes": {
     "/banco/": {
       "/js/features/records.js": "/js/features/records.js",
-      "/js/features/by-artist.js": "/js/features/by-artist.js"
+      "/js/features/by-artist.js": "/js/features/by-artist.js",
+      "/js/idb.js": "/js/idb.js"
     }
   }
 }
@@ -45,6 +47,12 @@
 //   · `?likes=N` siembra, ANTES de arrancar la app, N me gusta INVENTADOS en la caché de IndexedDB
 //     (`all_liked_tracks`, la clave de `leerLikesCacheados()`), para que la lectura de `#byartist`
 //     (`getBestAvailableLikes()`, solo IndexedDB) tarde lo bastante para salir mientras lee.
+// v=345 (tanda 100): «que tarde lo bastante» era una apuesta y a veces se perdía (el render terminaba antes
+// de que la madre viera el spinner: «ausente»). El import map desvía también `/js/idb.js` a
+// `guard-ruta-vieja-idb.mjs`, que re-exporta el real y deja RETENER la próxima lectura de los me gusta
+// (`__retenerProximaLecturaLikes()` / `__soltarLecturaLikes()`), como la `/me` de arriba. La siembra de
+// abajo importa `idb.js` desde `/banco/`, o sea el real. Los 60.000 siguen: los lee D al soltarla y los
+// pinta E.
 
 import { instalarRedSimulada, esperarReal, anclar } from '/banco/simulado.mjs';
 

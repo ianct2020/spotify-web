@@ -23,7 +23,7 @@
 // properties of null»). Es un defecto de la vista (anotado en PENDIENTES, no se arregla acá:
 // el arreglo es del contenedor). La tanda 72 leyó los 19 `render` async: es una de las dos
 // que pueden tirar después de un `await` (la otra, `#byartist`, espera solo IndexedDB y el
-// banco no puede retenerla sin tocar `src/`).
+// banco no podía retenerla sin tocar `src/`; desde la tanda 100 la retiene por import map: ver D).
 //
 // LA RUTA VIGENTE ES `#home`: lo reconocible es `.home-grid` dentro de `#main-content`.
 //
@@ -54,6 +54,11 @@
 //      (`?likes=`), y `#home` mientras lee (su `render()` espera `getBestAvailableLikes()`, que es
 //      SOLO IndexedDB: no hay `/me` que retener; la caché grande hace que la lectura tarde). Las
 //      mismas puertas que A y B. Contra v=328, `build()` tira «Cannot set properties of null».
+//      ⚠️ Tanda 100: «que tarde» era una apuesta. Si la lectura terminaba antes de que la madre viera el
+//      spinner, la espera del spinner no se cumplía nunca y el banco salía «ausente» (1 de 10 en la 99,
+//      1 de 20 y 3 de 60 en la 100). Ahora la PRÓXIMA lectura de `all_liked_tracks` del render de
+//      `#byartist` queda RETENIDA (`guard-ruta-vieja-idb.mjs`, por el import map del caso) hasta que
+//      `#home` pintó, y recién ahí se suelta y se lee de verdad.
 //   E. Conservación, `quedarse-byartist`: la misma caché, sin salir: pinta su grilla de artistas.
 //   (El camino del botón «Cargar likes» —`loadLikes()`— no se ve en el banco: su `catch` se come el
 //   error y lo pinta en un nodo desenganchado. Lo prueba `tests/by-artist-vigencia.test.mjs`.)
@@ -166,15 +171,23 @@ async function salirByArtist(nombre) {
   const F = abrirMarcoConLikes(nombre);
   await esperar(() => win(F)?.__listo, `que arranque el marco ${nombre}`);
   afirmar(win(F).__likesSembrados === LIKES_BYARTIST, `${nombre}: la caché sembrada (${win(F).__likesSembrados})`);
+  // v=345 (tanda 100): la lectura se RETIENE (`guard-ruta-vieja-idb.mjs`), como la `/me` de A y B. Hasta la 99
+  // se esperaba ver el spinner con la lectura corriendo; si terminaba antes de la vuelta siguiente (~5 % de
+  // las corridas) el spinner ya no estaba, esta espera no se cumplía nunca y el banco salía «ausente». Además
+  // termina si el render terminó, para que eso, si vuelve a pasar, sea un `error` con su texto (el de abajo).
+  win(F).__retenerProximaLecturaLikes();
   win(F).location.hash = '#byartist';
-  await esperar(() => $(F, '#by-artist-content .spinner'), `${nombre}: que #byartist quede leyendo la caché`);
+  await esperar(() => (win(F).__lecturaLikesRetenida && $(F, '#by-artist-content .spinner')) || espia(F, 'by-artist')?.fin,
+    `${nombre}: que #byartist quede leyendo la caché (la lectura retenida)`);
   const leyendo = !espia(F, 'by-artist')?.fin;
   win(F).location.hash = '#home';
   await esperar(() => $(F, '#main-content .home-grid') && !$(F, '#by-artist-content'), `${nombre}: que el inicio pinte`);
+  win(F).__soltarLecturaLikes();
   await esperar(() => espia(F, 'by-artist')?.fin, `${nombre}: que el render de #byartist (la vieja) termine (el espía del caso)`);
   const relojMs = await reloj(2000, `${nombre}: 2 s de reloj después de que #byartist terminó`);
   const r = {
     leyendo,
+    retenida: !!win(F).__lecturaLikesRetenida,
     crash: !!$(F, '#main-content .crash-screen'),
     home: !!$(F, '#main-content .home-grid'),
     activos: activos(F),
@@ -187,7 +200,8 @@ async function salirByArtist(nombre) {
   };
   datos[nombre] = r;
   // Si la lectura ya había terminado al salir, el caso no prueba nada: es un rojo del banco.
-  afirmar(r.leyendo, `${nombre}: al cambiar a #home el render de #byartist todavía tenía que estar leyendo la caché`);
+  afirmar(r.leyendo && r.retenida, `${nombre}: al cambiar a #home el render de #byartist todavía tenía que estar leyendo la caché, con la lectura retenida `
+    + `(lectura retenida: ${win(F).__lecturaLikesRetenida ? 'sí' : 'NO'})`);
   puerta(!r.crash && r.home && r.activos.length === 1 && r.activos[0] === 'home',
     `PUERTA ${nombre}: a los ${relojMs} ms de que #byartist (la vieja) terminó, #main-content sigue con #home. `
     + `Hay: ${r.enMain} · .home-grid ${r.home ? 'sí' : 'NO'} · activos ${JSON.stringify(r.activos)}`);
@@ -265,7 +279,7 @@ try {
     `B /me ok: crash=${B.crash} home=${B.home} activos=${B.activos.join(',')} /me=${B.red.me} · ` +
     `C sin salir: crash=${q.crash} activos=${q.activos.join(',')} /me=${q.red.me} · ` +
     `avisos de ruta vieja A=${A.avisos.length} B=${B.avisos.length} D=${D.avisos.length} · tiró A=${A.tiro === null ? 'no' : 'sí'} B=${B.tiro === null ? 'no' : 'sí'} D=${D.tiro === null ? 'no' : 'sí'} · ` +
-    `D #byartist (${LIKES_BYARTIST} me gusta): crash=${D.crash} home=${D.home} activos=${D.activos.join(',')} · ` +
+    `D #byartist (${LIKES_BYARTIST} me gusta, lectura retenida=${D.retenida ? 'sí' : 'no'}): crash=${D.crash} home=${D.home} activos=${D.activos.join(',')} · ` +
     `E sin salir: ${qb.tarjetas} tarjetas, activos=${qb.activos.join(',')} · ` +
     `escrituras=0 · externos=0 · ` +
     (omitidas.length ? `PUERTAS OMITIDAS (${omitidas.length}): ${omitidas.join(' | ')} · ` : '') +

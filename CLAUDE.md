@@ -1694,6 +1694,19 @@ pasar) y envuelve solo su `render` (anota fin y error, y re-tira el mismo error)
 corridas (D con la lectura todavía en curso al salir en las 10); con v=329, 10 de 10 verdes, 43.382-44.275 ms de reloj
 virtual (el presupuesto del banco sigue en 90 s).
 
+🔁 **El «ausente» de D (tanda 100, v=345).** D cambiaba a `#byartist`, esperaba ver el spinner con la lectura de los 60.000
+me gusta en curso y recién ahí salía: apostaba a que la lectura TARDARA. Dura pocas vueltas de `esperarReal` y a veces menos
+de una: el render terminaba antes de que la madre viera el spinner, esa espera (`guard-ruta-vieja.html`, la del spinner) no se
+cumplía nunca y Chrome cortaba a los 90 s sin `data-banco` («ausente»). Lo midió una sonda que escribe en el `<pre>` la espera
+en curso: 3 de 60 rojas, las tres ahí, con el espía diciendo que el render ya había terminado sin tirar. **No era un `await`
+de IndexedDB sin anclar** (la madre está siempre dentro de un `esperarReal`) ni la siembra (`anclar`, < 80 vueltas en las 60).
+Arreglo, solo en el banco: el import map del caso desvía también `/js/idb.js` a `tests/banco/guard-ruta-vieja-idb.mjs`, que
+re-exporta el real y **retiene** la próxima `idbGetCachedRaw('all_liked_tracks')` del render de `#byartist` hasta que `#home`
+pintó (como la `/me` de A y B); la espera del spinner también termina si el render terminó, así que si vuelve a pasar es un
+`error` con su texto, no un «ausente». Tasa: antes 1 de 10 (la 99) y 1 de 20 (la 100), siempre «ausente» en D; después, 20 de 20
+verdes, 43.165-44.322 ms de reloj (puede fallar hasta 3 de cada 20: la regla del tres; el presupuesto sigue en 90 s). Contra
+`by-artist.js` sin los `if (!ruta.vigente()) return;`, 3 de 3 rojos por la puerta de D («Cannot set properties of null»).
+
 ## 📏 La cuota a la vista (v=310)
 
 El pie del menú (`.sidebar-footer`, al final, debajo de «Cerrar sesión») enseña siempre, en todas las
