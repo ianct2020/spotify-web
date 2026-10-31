@@ -23,10 +23,10 @@
 //    Hip-Hop/Rap son 3.762 filas y pintarlas de una es el mismo error que
 //    costó 21,5 s en el mosaico de tapas.
 
-import { escapeHtml } from '../ui/components.js?v=350';
-import { openModal } from '../ui/modal-stack.js?v=350';
-import { createIncrementalList, scrollRootOf } from '../ui/incremental-list.js?v=350';
-import { reasonsFor, tallyReasons } from '../util/genre-reason.js?v=350';
+import { escapeHtml } from '../ui/components.js?v=351';
+import { openModal } from '../ui/modal-stack.js?v=351';
+import { createIncrementalList, scrollRootOf } from '../ui/incremental-list.js?v=351';
+import { reasonsFor, tallyReasons } from '../util/genre-reason.js?v=351';
 
 const BATCH = 60;
 

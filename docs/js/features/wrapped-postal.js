@@ -34,8 +34,8 @@
 // `window.__postalDibujo` queda para el banco, como `window.__mapaArtistasDibujo`: cada `fillText` con
 // su texto, el ancho medido, el máximo y los colores con que se pintó, y cada día con su tono.
 
-import { descargarBlob } from './covers-wallpaper.js?v=350';
-import { planPostal, tonosPostal, tonoDe, contrastePostal, PESOS, ANCHO, ALTO } from '../util/postal-anio.js?v=350';
+import { descargarBlob } from './covers-wallpaper.js?v=351';
+import { planPostal, tonosPostal, tonoDe, contrastePostal, PESOS, ANCHO, ALTO } from '../util/postal-anio.js?v=351';
 
 const TOKENS = {
   bg: '--color-bg', surface: '--color-surface', accent: '--color-accent',

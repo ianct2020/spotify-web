@@ -238,7 +238,12 @@ lo que ya tenés. Ahora, si falla, **no calcula**: el error crudo va a `console.
 podido leer tus me gusta. No se han calculado recomendaciones.», en `--color-text-secondary`. `features/wthree.js` tapaba
 `loadListenedAlbums()` con `null` y `crossWithHistory` daba por no escuchado lo escuchado; ahora el error va a
 `console.warn('[wthree] …')`, la vista sigue con el resto y avisa arriba de los cubos, también en
-`--color-text-secondary`: «No se han podido leer tus álbumes escuchados: la vista sigue sin ellos.». 🟩 **`features/mosaico-colores.js`
+`--color-text-secondary`: «No se han podido leer tus álbumes escuchados: la vista sigue sin ellos.». ⚠️ **Ese aviso de W-Three
+estuvo muerto hasta v=351**, por la misma causa que el de la 94A (abajo): `loadListenedAlbums()` no tiraba nunca, así que
+su `.catch` no corría y `falloHistorialEscuchas` quedaba en `false`. 🟩 Desde v=351 la llamada es
+`loadListenedAlbums({ tirarSiFalla: true })` (la única de `wthree.js`; el `.catch` y el aviso no cambiaron). Guarda:
+`tests/escuchadas-caidas-92b.test.mjs` (`wthree.js` y `history-data.js` REALES; rojo contra v=350 en 6 de 19; el HTML sano,
+el mismo `sha256` que `catch-que-tapan-92b-wthree`). En pantalla, no medido (W-Three no entró en las capturas). 🟩 **`features/mosaico-colores.js`
 lo cerró la 94A en v=343** (ver abajo): hasta ahí `armarCatalogo()` tapaba el fallo de `loadListenedAlbums()` y el aviso
 se tenía que pintar en `#debug`, que se arma en `app.js` (fuera del alcance de la 92B). Guardas:
 `tests/catch-que-tapan-92b-recs.test.mjs` y `tests/catch-que-tapan-92b-wthree.test.mjs` (cuatro archivos en
@@ -252,10 +257,30 @@ catálogo quedaba solo con los me gusta sin decirlo. Ahora el fallo se registra 
 catálogo sale solo con tus me gusta.», también después de construir (lo trae el resumen de la tanda). El `null` válido y la
 lectura correcta conservan el resultado previo. Guarda: `tests/catch-que-tapan-94a.test.mjs` (dobles `catch-94a-doble.mjs` y
 `loader-catch-94a.mjs`), rojo contra v=342 en 5 de 14 y verde después. ⚠️ Visto solo en Node con un DOM inventado.
-⚠️ **Mirado en la app entera en la tanda 107B (v=350): el aviso no sale, y con la app de hoy no puede salir.**
-`loadListenedAlbums()` → `loadOne()` (`features/history-data.js`) no tira nunca: con una cuenta que no es el owner devuelve
-`null` sin pedir el JSON, y con el owner atrapa el fallo del `fetch` (500, corte) y también devuelve `null`. O sea que
-`escuchadasFallo` solo lo pone un doble que tira. Capturas con datos inventados y anotado en `PENDIENTES.md` (tanda 107).
+⚠️ **Mirado en la app entera en la tanda 107B (v=350): el aviso no salía, y con la app de entonces no podía salir.**
+`loadListenedAlbums()` → `loadOne()` (`features/history-data.js`) no tiraba nunca: con una cuenta que no es el owner devuelve
+`null` sin pedir el JSON, y con el owner atrapaba el fallo del `fetch` (500, corte, JSON roto) y también devolvía `null`. O
+sea que `escuchadasFallo` solo lo ponía un doble que tiraba.
+🟩 **Desde v=351 (tanda 108) el aviso SÍ sale**, con una opción: `loadOne(kind, campo, sanity, url, opciones = {})` y
+`loadListenedAlbums(opciones = {})`. Con `opciones.tirarSiFalla === true`, **solo el `catch` final del `fetch` del owner**
+hace su `console.warn` de siempre y re-tira el mismo error; todo lo demás sigue igual (identidad sin confirmar → `null`; no
+owner sin historial → `null` sin pedir nada; lecturas de IndexedDB que fallan, ignoradas; el fracaso no se memoiza). La pasan
+**solo** `armarCatalogo()` y el `loadAndRender()` de W-Three (92B, abajo). ⚠️ **`loadOne()` no tira para todos, a
+propósito**: pasan por ella 9 cargadores, `loadListenedAlbums()` tiene 8 llamadores que cuentan con el `null`
+(`discover-filters.js`, `album-stats.js`, `artist-albums.js`, `mosaico-colores.js`, `covers.js`, `wthree.js` y dos en
+`dashboard.js`), y `loadDays()` DEPENDE de ese `catch` (su `fetchUrlForOwner` tira porque `days` es privado: si `loadOne()`
+tirara siempre, el panel del día de `#calendario` se rompería para el owner). Guarda: `tests/escuchadas-caidas-94a.test.mjs`
+(`history-data.js` y `mosaico-colores.js` REALES, el owner simulado con `/me` doblado, la IndexedDB vacía y `fetch` con 500,
+rechazo y 200 no-JSON; rojo contra v=350 en 7 de 30). Los otros `catch` de `history-data.js` están nombrados en
+`PENDIENTES.md` (tanda 108), sin arreglar. Visto en la app entera, con el owner simulado y el JSON en 500: capturas de la
+tanda 108 (`fonoteca-migracion/informes/tanda-108/`).
+
+**v=351, el resto de `#debug`.** «Salud de los ocultos» (`tablaDeOcultos()`, `app.js`) tiene cinco columnas (ícono, vista,
+aquí, playlist, huérfanas); «sin uri» y «cuáles» pasaron a una fila de detalle propia (`<td colspan="5">`, a la izquierda)
+debajo de cada fila con error, huérfanas o sin uri, con cada clave en un `.debug-oc-clave`: a 390 px se lee sin deslizar la
+tabla y a 1366 no queda debajo de los toasts. Relleno lateral de las celdas, 6 px (con 10, a 390 la tabla pedía 346 de 344).
+«1 oculto solo en este navegador» / «1 oculto está…» (`ocultosSueltos()`). `#debug-log` nace con `hidden` y «Correr tests»
+lo muestra. Guarda: `tests/debug-ocultos-390.test.mjs`.
 
 ## Zona horaria: las fechas del historial NO se pasan a local (v=154 + v=231)
 

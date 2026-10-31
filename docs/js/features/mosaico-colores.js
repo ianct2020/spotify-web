@@ -27,11 +27,11 @@
 // temporizadores encadenados hasta uno por minuto. El bucle solo espera a la
 // red y a la decodificación, que no se frenan.
 
-import { idbGetCachedRaw, idbSetCached } from '../idb.js?v=350';
-import { loadListenedAlbums } from './history-data.js?v=350';
-import { getBestAvailableLikes } from '../api.js?v=350';
-import { coverId, coverVariant } from '../util/album-key.js?v=350';
-import { MOSAICO_COLORES_KEY, BYTES_POR_PORTADA, rejilla3x3 } from '../util/cover-color.js?v=350';
+import { idbGetCachedRaw, idbSetCached } from '../idb.js?v=351';
+import { loadListenedAlbums } from './history-data.js?v=351';
+import { getBestAvailableLikes } from '../api.js?v=351';
+import { coverId, coverVariant } from '../util/album-key.js?v=351';
+import { MOSAICO_COLORES_KEY, BYTES_POR_PORTADA, rejilla3x3 } from '../util/cover-color.js?v=351';
 
 const FORMATO = 1;
 // Descargas a la vez. Es el lote de `covers-wallpaper.js`, medido allí contra
@@ -70,7 +70,9 @@ export async function armarCatalogo() {
 
   let listened, escuchadasFallo = false;
   try {
-    listened = await loadListenedAlbums();
+    // `tirarSiFalla` (v=351): sin ella `loadListenedAlbums()` no tira nunca y este
+    // `catch` no corría (el aviso de la 94A era código muerto hasta v=350).
+    listened = await loadListenedAlbums({ tirarSiFalla: true });
   } catch (e) {
     escuchadasFallo = true;
     console.warn('[mosaico-colores] no se pudieron leer los álbumes escuchados:', e);

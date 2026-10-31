@@ -70,7 +70,9 @@ export async function armarCatalogo() {
 
   let listened, escuchadasFallo = false;
   try {
-    listened = await loadListenedAlbums();
+    // `tirarSiFalla` (v=351): sin ella `loadListenedAlbums()` no tira nunca y este
+    // `catch` no corría (el aviso de la 94A era código muerto hasta v=350).
+    listened = await loadListenedAlbums({ tirarSiFalla: true });
   } catch (e) {
     escuchadasFallo = true;
     console.warn('[mosaico-colores] no se pudieron leer los álbumes escuchados:', e);

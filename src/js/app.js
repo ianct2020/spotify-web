@@ -1017,36 +1017,56 @@ function tablaDelBarrido(informe) {
 //
 // Una fila por playlist de ocultos. «Huérfanas» son las claves que están en
 // este navegador y NO en la playlist: si son 0, no hay nada que se pueda perder.
+//
+// (v=351) Cinco columnas: ícono, vista, aquí, playlist y huérfanas. «sin uri» y «cuáles»
+// dejaron de ser columnas: a 390 px la clave quedaba fuera de la tarjeta (había que
+// deslizar la tabla) y a 1366 debajo de los toasts, que van abajo a la derecha. Lo suelto
+// va ahora en una fila propia debajo de la suya, a todo lo ancho y a la izquierda; cada
+// clave en un `.debug-oc-clave` (lo mide el conductor de la tanda 108). Una fila sin nada
+// suelto no lleva detalle: el ✅ ya lo dice.
+
+// «1 oculto solo en este navegador» / «2 ocultos…». Con `conVerbo`, la frase del toast
+// («1 oculto está…» / «2 ocultos están…»).
+function ocultosSueltos(n, conVerbo = false) {
+  return n === 1
+    ? `1 oculto${conVerbo ? ' está' : ''} solo en este navegador`
+    : `${n} ocultos${conVerbo ? ' están' : ''} solo en este navegador`;
+}
+
 function tablaDeOcultos(filas) {
   const cuerpo = filas.map(f => {
-    const mal = f.error || f.huerfanas.length;
     const icono = f.error ? '❌' : (f.huerfanas.length ? '⚠️' : '✅');
     // (v=252) Una huérfana congelada (motivo definitivo: ya no se busca más) se
     // tiene que VER congelada. Si no, «dejar de reintentar» es un silencio, y el
     // silencio es lo que este panel existe para romper.
     const porClave = new Map((f.detalleSinUri || []).map(d => [d.key, d]));
-    const detalle = f.error
-      ? escapeHtml(f.error)
-      : (f.huerfanas.length
-        ? f.huerfanas.map(k => {
-          const d = porClave.get(k);
-          if (!d) return escapeHtml(k);
-          const sello = d.definitivo
-            ? '<span style="color:var(--color-text-muted)">· definitivo, ya no se busca</span>'
-            : '<span style="color:var(--color-text-muted)">· se reintenta cada 24 h</span>';
-          return `${escapeHtml(k)} ${sello}${d.motivo ? `<br><span style="color:var(--color-text-muted)">&nbsp;&nbsp;${escapeHtml(d.motivo)}</span>` : ''}`;
-        }).join('<br>')
-        : '<span style="color:var(--color-text-muted)">nada suelto</span>');
+    const clave = (k) => `<span class="debug-oc-clave" style="overflow-wrap:anywhere">${escapeHtml(k)}</span>`;
+    const partes = [];
+    if (f.sinUri.length) partes.push(`<span style="color:var(--color-error)">sin forma de subirla a Spotify: ${f.sinUri.length}</span>`);
+    if (f.error) partes.push(escapeHtml(f.error));
+    else for (const k of f.huerfanas) {
+      const d = porClave.get(k);
+      if (!d) { partes.push(clave(k)); continue; }
+      const sello = d.definitivo
+        ? '<span style="color:var(--color-text-muted)">· definitivo, ya no se busca</span>'
+        : '<span style="color:var(--color-text-muted)">· se reintenta cada 24 h</span>';
+      partes.push(`${clave(k)} ${sello}${d.motivo ? `<br><span style="color:var(--color-text-muted)">&nbsp;&nbsp;${escapeHtml(d.motivo)}</span>` : ''}`);
+    }
+    const detalle = partes.length
+      ? `
+      <tr>
+        <td colspan="5" style="padding:0 6px 8px;text-align:left;color:var(--color-text-secondary);font-size:12px;overflow-wrap:anywhere">${partes.join('<br>')}</td>
+      </tr>`
+      : '';
+    // Relleno lateral de 6 px (era 10): con 10, a 390 px la tabla pedía 346 px de 344 (medido, tanda 108).
     return `
-      <tr${mal ? '' : ''}>
-        <td style="padding:4px 10px">${icono}</td>
-        <td style="padding:4px 10px">${escapeHtml(f.label)}</td>
-        <td style="padding:4px 10px;text-align:right">${f.local}</td>
-        <td style="padding:4px 10px;text-align:right">${f.enPlaylist}</td>
-        <td style="padding:4px 10px;text-align:right">${f.huerfanas.length}</td>
-        <td style="padding:4px 10px;text-align:right">${f.sinUri.length}</td>
-        <td style="padding:4px 10px;color:var(--color-text-secondary);font-size:12px">${detalle}</td>
-      </tr>`;
+      <tr>
+        <td style="padding:4px 6px">${icono}</td>
+        <td style="padding:4px 6px">${escapeHtml(f.label)}</td>
+        <td style="padding:4px 6px;text-align:right">${f.local}</td>
+        <td style="padding:4px 6px;text-align:right">${f.enPlaylist}</td>
+        <td style="padding:4px 6px;text-align:right">${f.huerfanas.length}</td>
+      </tr>${detalle}`;
   }).join('');
 
   const totalHuerfanas = filas.reduce((a, f) => a + f.huerfanas.length, 0);
@@ -1066,18 +1086,16 @@ function tablaDeOcultos(filas) {
   return `
     <div class="card" style="margin-top:20px">
       <p style="margin:0 0 10px">
-        <strong>${totalHuerfanas === 0 ? 'Ningún oculto suelto' : `${totalHuerfanas} ocultos solo en este navegador`}</strong>
+        <strong>${totalHuerfanas === 0 ? 'Ningún oculto suelto' : ocultosSueltos(totalHuerfanas)}</strong>
         ${totalSinUri ? ` · <span style="color:var(--color-error)">${totalSinUri} sin forma de subirlos a Spotify</span>` : ''}
         ${totalDefinitivos ? ` · <span style="color:var(--color-text-muted)">${totalDefinitivos} con motivo definitivo: no se vuelven a buscar</span>` : ''}
       </p>
       <div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:13px">
         <tr style="text-align:left;color:var(--color-text-muted)">
-          <th style="padding:4px 10px"></th><th style="padding:4px 10px">vista</th>
-          <th style="padding:4px 10px;text-align:right">aquí</th>
-          <th style="padding:4px 10px;text-align:right">playlist</th>
-          <th style="padding:4px 10px;text-align:right">huérfanas</th>
-          <th style="padding:4px 10px;text-align:right">sin uri</th>
-          <th style="padding:4px 10px">cuáles</th>
+          <th style="padding:4px 6px"></th><th style="padding:4px 6px">vista</th>
+          <th style="padding:4px 6px;text-align:right">aquí</th>
+          <th style="padding:4px 6px;text-align:right">playlist</th>
+          <th style="padding:4px 6px;text-align:right">huérfanas</th>
         </tr>
         ${cuerpo}
       </table></div>
@@ -1174,7 +1192,7 @@ async function renderDebug(container) {
     </div>
     <div id="debug-ocultos"></div>
     <div id="debug-barrido"></div>
-    <pre id="debug-log" style="margin-top:20px;background:var(--color-surface);padding:20px;border-radius:var(--radius-md);font-size:13px;overflow-x:auto;white-space:pre-wrap;word-break:break-all;max-height:70vh;overflow-y:auto"></pre>
+    <pre id="debug-log" hidden style="margin-top:20px;background:var(--color-surface);padding:20px;border-radius:var(--radius-md);font-size:13px;overflow-x:auto;white-space:pre-wrap;word-break:break-all;max-height:70vh;overflow-y:auto"></pre>
   `;
 
   // El último barrido, si lo hay: entrar a #debug tiene que mostrarlo sin
@@ -1195,7 +1213,7 @@ async function renderDebug(container) {
       caja.innerHTML = tablaDeOcultos(filas);
       const sueltas = filas.reduce((a, f) => a + f.huerfanas.length, 0);
       showToast(sueltas
-        ? `${sueltas} ocultos están solo en este navegador`
+        ? ocultosSueltos(sueltas, true)
         : 'Los ocultos coinciden con sus playlists', sueltas ? 'warning' : 'success');
     } catch (err) {
       caja.innerHTML = `<p style="margin-top:20px;color:var(--color-error)">No he podido auditar: ${escapeHtml(err.message)}</p>`;
@@ -1220,8 +1238,11 @@ async function renderDebug(container) {
     if (caja) caja.innerHTML = tablaDelBarrido(informe);
   };
 
+  // (v=351) El <pre> nace con `hidden` (vacío era una caja sin nada al pie de #debug)
+  // y «Correr tests», lo único que escribe ahí, lo muestra antes que nada.
   document.getElementById('debug-run-btn').onclick = async () => {
     const log = document.getElementById('debug-log');
+    log.hidden = false;
     const btn = document.getElementById('debug-run-btn');
     btn.disabled = true;
     log.textContent = '';

@@ -1,53 +1,53 @@
-import { isLoggedIn, loginWithSpotify, logout } from './auth.js?v=350';
-import { spotifyFetch, onRateLimit, revisarCambioDeUsuario } from './api.js?v=350';
-import { getValidToken } from './auth.js?v=350';
-import { cacheClearAll } from './storage.js?v=350';
-import { idbClearAll } from './idb.js?v=350';
-import { CONSERVAR_CLAVES, CONSERVAR_PREFIJOS, LO_QUE_SE_CONSERVA } from './util/limpiar-cache.js?v=350';
-import { registerRoute, initRouter, rutasRegistradas } from './router.js?v=350';
-import { showToast } from './ui/toast.js?v=350';
-import { pageHeader, escapeHtml } from './ui/components.js?v=350';
-import { installCrashGuard } from './ui/crash-guard.js?v=350';
-import { auditarOcultos, leerIncidencias } from './util/hidden-sync.js?v=350';
-import { getStack } from './ui/modal-stack.js?v=350';
-import { installBackToTop } from './ui/back-to-top.js?v=350';
-import { applyStoredTheme, openThemePanel } from './ui/theme-panel.js?v=350';
-import { escucharAvisoDeCopia } from './ui/aviso-copia.js?v=350';
+import { isLoggedIn, loginWithSpotify, logout } from './auth.js?v=351';
+import { spotifyFetch, onRateLimit, revisarCambioDeUsuario } from './api.js?v=351';
+import { getValidToken } from './auth.js?v=351';
+import { cacheClearAll } from './storage.js?v=351';
+import { idbClearAll } from './idb.js?v=351';
+import { CONSERVAR_CLAVES, CONSERVAR_PREFIJOS, LO_QUE_SE_CONSERVA } from './util/limpiar-cache.js?v=351';
+import { registerRoute, initRouter, rutasRegistradas } from './router.js?v=351';
+import { showToast } from './ui/toast.js?v=351';
+import { pageHeader, escapeHtml } from './ui/components.js?v=351';
+import { installCrashGuard } from './ui/crash-guard.js?v=351';
+import { auditarOcultos, leerIncidencias } from './util/hidden-sync.js?v=351';
+import { getStack } from './ui/modal-stack.js?v=351';
+import { installBackToTop } from './ui/back-to-top.js?v=351';
+import { applyStoredTheme, openThemePanel } from './ui/theme-panel.js?v=351';
+import { escucharAvisoDeCopia } from './ui/aviso-copia.js?v=351';
 
-import { render as renderSync } from './features/sync.js?v=350';
-import { render as renderDedupe } from './features/dedupe.js?v=350';
-import { render as renderDupalbums } from './features/duplicate-albums.js?v=350';
-import { render as renderZombies } from './features/zombies.js?v=350';
-import { render as renderVersions } from './features/versions.js?v=350';
-import { render as renderDashboard } from './features/dashboard.js?v=350';
-import { render as renderSmart } from './features/smart.js?v=350';
-import { render as renderSimilar } from './features/similar-artists.js?v=350';
-import { render as renderRabbit } from './features/rabbit-hole.js?v=350';
-import { render as renderByGenre } from './features/by-genre.js?v=350';
-import { render as renderByArtist } from './features/by-artist.js?v=350';
-import { render as renderRecs } from './features/recommendations.js?v=350';
-import { render as renderListened } from './features/listened.js?v=350';
-import { render as renderWrapped } from './features/wrapped.js?v=350';
-import { render as renderRecords } from './features/records.js?v=350';
-import { render as renderCalendario } from './features/calendario.js?v=350';
-import { render as renderMapa } from './features/mapa.js?v=350';
-import { render as renderPuertas } from './features/puertas.js?v=350';
-import { render as renderMenosSalteas } from './features/menos-salteas.js?v=350';
-import { render as renderGeneros } from './features/generos.js?v=350';
-import { render as renderMapaArtistas } from './features/mapa-artistas.js?v=350';
-import { openImportHistory } from './features/import-history.js?v=350';
-import { bindOwnerLockedButtons } from './features/history-data.js?v=350';
-import { render as renderZeroPlays } from './features/zero-plays.js?v=350';
-import { render as renderSkips } from './features/skips.js?v=350';
-import { render as renderSearchLikes } from './features/search-likes.js?v=350';
-import { render as renderWthree } from './features/wthree.js?v=350';
-import { render as renderCovers } from './features/covers.js?v=350';
-import { render as renderMosaico } from './features/mosaico.js?v=350';
-import { render as renderDiscoverArtists } from './features/discover-artists.js?v=350';
-import { render as renderFollowArtists } from './features/follow-artists.js?v=350';
-import { render as renderNewReleases } from './features/new-releases.js?v=350';
-import { render as renderSinClasificar } from './features/sin-clasificar.js?v=350';
-import { pieCuotaHtml, montarPieCuota } from './ui/cuota-pie.js?v=350';
+import { render as renderSync } from './features/sync.js?v=351';
+import { render as renderDedupe } from './features/dedupe.js?v=351';
+import { render as renderDupalbums } from './features/duplicate-albums.js?v=351';
+import { render as renderZombies } from './features/zombies.js?v=351';
+import { render as renderVersions } from './features/versions.js?v=351';
+import { render as renderDashboard } from './features/dashboard.js?v=351';
+import { render as renderSmart } from './features/smart.js?v=351';
+import { render as renderSimilar } from './features/similar-artists.js?v=351';
+import { render as renderRabbit } from './features/rabbit-hole.js?v=351';
+import { render as renderByGenre } from './features/by-genre.js?v=351';
+import { render as renderByArtist } from './features/by-artist.js?v=351';
+import { render as renderRecs } from './features/recommendations.js?v=351';
+import { render as renderListened } from './features/listened.js?v=351';
+import { render as renderWrapped } from './features/wrapped.js?v=351';
+import { render as renderRecords } from './features/records.js?v=351';
+import { render as renderCalendario } from './features/calendario.js?v=351';
+import { render as renderMapa } from './features/mapa.js?v=351';
+import { render as renderPuertas } from './features/puertas.js?v=351';
+import { render as renderMenosSalteas } from './features/menos-salteas.js?v=351';
+import { render as renderGeneros } from './features/generos.js?v=351';
+import { render as renderMapaArtistas } from './features/mapa-artistas.js?v=351';
+import { openImportHistory } from './features/import-history.js?v=351';
+import { bindOwnerLockedButtons } from './features/history-data.js?v=351';
+import { render as renderZeroPlays } from './features/zero-plays.js?v=351';
+import { render as renderSkips } from './features/skips.js?v=351';
+import { render as renderSearchLikes } from './features/search-likes.js?v=351';
+import { render as renderWthree } from './features/wthree.js?v=351';
+import { render as renderCovers } from './features/covers.js?v=351';
+import { render as renderMosaico } from './features/mosaico.js?v=351';
+import { render as renderDiscoverArtists } from './features/discover-artists.js?v=351';
+import { render as renderFollowArtists } from './features/follow-artists.js?v=351';
+import { render as renderNewReleases } from './features/new-releases.js?v=351';
+import { render as renderSinClasificar } from './features/sin-clasificar.js?v=351';
+import { pieCuotaHtml, montarPieCuota } from './ui/cuota-pie.js?v=351';
 
 // ── Arranque degradado cuando /me está rate-limiteado (v=173) ────────────────
 //
@@ -1017,36 +1017,56 @@ function tablaDelBarrido(informe) {
 //
 // Una fila por playlist de ocultos. «Huérfanas» son las claves que están en
 // este navegador y NO en la playlist: si son 0, no hay nada que se pueda perder.
+//
+// (v=351) Cinco columnas: ícono, vista, aquí, playlist y huérfanas. «sin uri» y «cuáles»
+// dejaron de ser columnas: a 390 px la clave quedaba fuera de la tarjeta (había que
+// deslizar la tabla) y a 1366 debajo de los toasts, que van abajo a la derecha. Lo suelto
+// va ahora en una fila propia debajo de la suya, a todo lo ancho y a la izquierda; cada
+// clave en un `.debug-oc-clave` (lo mide el conductor de la tanda 108). Una fila sin nada
+// suelto no lleva detalle: el ✅ ya lo dice.
+
+// «1 oculto solo en este navegador» / «2 ocultos…». Con `conVerbo`, la frase del toast
+// («1 oculto está…» / «2 ocultos están…»).
+function ocultosSueltos(n, conVerbo = false) {
+  return n === 1
+    ? `1 oculto${conVerbo ? ' está' : ''} solo en este navegador`
+    : `${n} ocultos${conVerbo ? ' están' : ''} solo en este navegador`;
+}
+
 function tablaDeOcultos(filas) {
   const cuerpo = filas.map(f => {
-    const mal = f.error || f.huerfanas.length;
     const icono = f.error ? '❌' : (f.huerfanas.length ? '⚠️' : '✅');
     // (v=252) Una huérfana congelada (motivo definitivo: ya no se busca más) se
     // tiene que VER congelada. Si no, «dejar de reintentar» es un silencio, y el
     // silencio es lo que este panel existe para romper.
     const porClave = new Map((f.detalleSinUri || []).map(d => [d.key, d]));
-    const detalle = f.error
-      ? escapeHtml(f.error)
-      : (f.huerfanas.length
-        ? f.huerfanas.map(k => {
-          const d = porClave.get(k);
-          if (!d) return escapeHtml(k);
-          const sello = d.definitivo
-            ? '<span style="color:var(--color-text-muted)">· definitivo, ya no se busca</span>'
-            : '<span style="color:var(--color-text-muted)">· se reintenta cada 24 h</span>';
-          return `${escapeHtml(k)} ${sello}${d.motivo ? `<br><span style="color:var(--color-text-muted)">&nbsp;&nbsp;${escapeHtml(d.motivo)}</span>` : ''}`;
-        }).join('<br>')
-        : '<span style="color:var(--color-text-muted)">nada suelto</span>');
+    const clave = (k) => `<span class="debug-oc-clave" style="overflow-wrap:anywhere">${escapeHtml(k)}</span>`;
+    const partes = [];
+    if (f.sinUri.length) partes.push(`<span style="color:var(--color-error)">sin forma de subirla a Spotify: ${f.sinUri.length}</span>`);
+    if (f.error) partes.push(escapeHtml(f.error));
+    else for (const k of f.huerfanas) {
+      const d = porClave.get(k);
+      if (!d) { partes.push(clave(k)); continue; }
+      const sello = d.definitivo
+        ? '<span style="color:var(--color-text-muted)">· definitivo, ya no se busca</span>'
+        : '<span style="color:var(--color-text-muted)">· se reintenta cada 24 h</span>';
+      partes.push(`${clave(k)} ${sello}${d.motivo ? `<br><span style="color:var(--color-text-muted)">&nbsp;&nbsp;${escapeHtml(d.motivo)}</span>` : ''}`);
+    }
+    const detalle = partes.length
+      ? `
+      <tr>
+        <td colspan="5" style="padding:0 6px 8px;text-align:left;color:var(--color-text-secondary);font-size:12px;overflow-wrap:anywhere">${partes.join('<br>')}</td>
+      </tr>`
+      : '';
+    // Relleno lateral de 6 px (era 10): con 10, a 390 px la tabla pedía 346 px de 344 (medido, tanda 108).
     return `
-      <tr${mal ? '' : ''}>
-        <td style="padding:4px 10px">${icono}</td>
-        <td style="padding:4px 10px">${escapeHtml(f.label)}</td>
-        <td style="padding:4px 10px;text-align:right">${f.local}</td>
-        <td style="padding:4px 10px;text-align:right">${f.enPlaylist}</td>
-        <td style="padding:4px 10px;text-align:right">${f.huerfanas.length}</td>
-        <td style="padding:4px 10px;text-align:right">${f.sinUri.length}</td>
-        <td style="padding:4px 10px;color:var(--color-text-secondary);font-size:12px">${detalle}</td>
-      </tr>`;
+      <tr>
+        <td style="padding:4px 6px">${icono}</td>
+        <td style="padding:4px 6px">${escapeHtml(f.label)}</td>
+        <td style="padding:4px 6px;text-align:right">${f.local}</td>
+        <td style="padding:4px 6px;text-align:right">${f.enPlaylist}</td>
+        <td style="padding:4px 6px;text-align:right">${f.huerfanas.length}</td>
+      </tr>${detalle}`;
   }).join('');
 
   const totalHuerfanas = filas.reduce((a, f) => a + f.huerfanas.length, 0);
@@ -1066,18 +1086,16 @@ function tablaDeOcultos(filas) {
   return `
     <div class="card" style="margin-top:20px">
       <p style="margin:0 0 10px">
-        <strong>${totalHuerfanas === 0 ? 'Ningún oculto suelto' : `${totalHuerfanas} ocultos solo en este navegador`}</strong>
+        <strong>${totalHuerfanas === 0 ? 'Ningún oculto suelto' : ocultosSueltos(totalHuerfanas)}</strong>
         ${totalSinUri ? ` · <span style="color:var(--color-error)">${totalSinUri} sin forma de subirlos a Spotify</span>` : ''}
         ${totalDefinitivos ? ` · <span style="color:var(--color-text-muted)">${totalDefinitivos} con motivo definitivo: no se vuelven a buscar</span>` : ''}
       </p>
       <div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:13px">
         <tr style="text-align:left;color:var(--color-text-muted)">
-          <th style="padding:4px 10px"></th><th style="padding:4px 10px">vista</th>
-          <th style="padding:4px 10px;text-align:right">aquí</th>
-          <th style="padding:4px 10px;text-align:right">playlist</th>
-          <th style="padding:4px 10px;text-align:right">huérfanas</th>
-          <th style="padding:4px 10px;text-align:right">sin uri</th>
-          <th style="padding:4px 10px">cuáles</th>
+          <th style="padding:4px 6px"></th><th style="padding:4px 6px">vista</th>
+          <th style="padding:4px 6px;text-align:right">aquí</th>
+          <th style="padding:4px 6px;text-align:right">playlist</th>
+          <th style="padding:4px 6px;text-align:right">huérfanas</th>
         </tr>
         ${cuerpo}
       </table></div>
@@ -1100,7 +1118,7 @@ async function montarBaseMosaico() {
   const parar = document.getElementById('debug-mosaico-parar');
   let mod;
   try {
-    mod = await import('./features/mosaico-colores.js?v=350');
+    mod = await import('./features/mosaico-colores.js?v=351');
   } catch (err) {
     estado.textContent = `No he podido cargar el módulo: ${err.message}`;
     return;
@@ -1174,7 +1192,7 @@ async function renderDebug(container) {
     </div>
     <div id="debug-ocultos"></div>
     <div id="debug-barrido"></div>
-    <pre id="debug-log" style="margin-top:20px;background:var(--color-surface);padding:20px;border-radius:var(--radius-md);font-size:13px;overflow-x:auto;white-space:pre-wrap;word-break:break-all;max-height:70vh;overflow-y:auto"></pre>
+    <pre id="debug-log" hidden style="margin-top:20px;background:var(--color-surface);padding:20px;border-radius:var(--radius-md);font-size:13px;overflow-x:auto;white-space:pre-wrap;word-break:break-all;max-height:70vh;overflow-y:auto"></pre>
   `;
 
   // El último barrido, si lo hay: entrar a #debug tiene que mostrarlo sin
@@ -1195,7 +1213,7 @@ async function renderDebug(container) {
       caja.innerHTML = tablaDeOcultos(filas);
       const sueltas = filas.reduce((a, f) => a + f.huerfanas.length, 0);
       showToast(sueltas
-        ? `${sueltas} ocultos están solo en este navegador`
+        ? ocultosSueltos(sueltas, true)
         : 'Los ocultos coinciden con sus playlists', sueltas ? 'warning' : 'success');
     } catch (err) {
       caja.innerHTML = `<p style="margin-top:20px;color:var(--color-error)">No he podido auditar: ${escapeHtml(err.message)}</p>`;
@@ -1220,8 +1238,11 @@ async function renderDebug(container) {
     if (caja) caja.innerHTML = tablaDelBarrido(informe);
   };
 
+  // (v=351) El <pre> nace con `hidden` (vacío era una caja sin nada al pie de #debug)
+  // y «Correr tests», lo único que escribe ahí, lo muestra antes que nada.
   document.getElementById('debug-run-btn').onclick = async () => {
     const log = document.getElementById('debug-log');
+    log.hidden = false;
     const btn = document.getElementById('debug-run-btn');
     btn.disabled = true;
     log.textContent = '';

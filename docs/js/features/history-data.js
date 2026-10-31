@@ -8,10 +8,10 @@
 // Otro user cualquiera sin historial local ve el ownerLockedMessage que
 // invita a subir su ZIP.
 
-import { idbGetCached, idbSetCached, idbDel } from '../idb.js?v=350';
-import { getCurrentUserId } from '../api.js?v=350';
-import { OWNER_KEYS, LOCAL_HISTORY_PREFIX, STATS_VERSION, PLAYS_VERSION, LISTENED_VERSION, SKIP_VERSION, DETAIL_VERSION, RECORDS_VERSION, ARTIST_TRACKS_VERSION, SIMILARES_VERSION } from '../history-keys.js?v=350';
-import { mostrarBannerDegradadoVista } from '../ui/degraded-banner.js?v=350';
+import { idbGetCached, idbSetCached, idbDel } from '../idb.js?v=351';
+import { getCurrentUserId } from '../api.js?v=351';
+import { OWNER_KEYS, LOCAL_HISTORY_PREFIX, STATS_VERSION, PLAYS_VERSION, LISTENED_VERSION, SKIP_VERSION, DETAIL_VERSION, RECORDS_VERSION, ARTIST_TRACKS_VERSION, SIMILARES_VERSION } from '../history-keys.js?v=351';
+import { mostrarBannerDegradadoVista } from '../ui/degraded-banner.js?v=351';
 
 const HISTORY_OWNER_ID = 'orhs6wu5ykk7ql80u92ujn74o';
 
@@ -249,7 +249,19 @@ const OWNER_PREV_KEYS = {
   days: [],
 };
 
-async function loadOne(kind, cacheField, sanityCheck, fetchUrlForOwner) {
+// `opciones.tirarSiFalla` (v=351, tanda 108): con `true`, el `catch` FINAL del `fetch`
+// del owner hace su `console.warn` de siempre y re-tira el mismo error en vez de
+// devolver `null`. Es lo ÚNICO que cambia: la identidad sin confirmar, el «no es
+// owner y no tiene historial» y las lecturas de IndexedDB que fallan siguen en `null`
+// o ignoradas, y el fracaso no se memoiza (`memCache` solo guarda éxitos).
+//
+// ⚠️ Es opt-in a propósito. Sin la opción, `loadOne()` sigue devolviendo `null` ante
+// cualquier fallo, y de ese `null` dependen hoy los 9 cargadores y los 8 llamadores de
+// `loadListenedAlbums()`; `loadDays()`, además, depende de este `catch` (su
+// `fetchUrlForOwner` tira a propósito: `days` es privado). Solo la pasan los dos que
+// tienen un aviso para el fallo: `armarCatalogo()` (#debug, 94A) y `loadAndRender()`
+// de W-Three (92B). Hasta v=350 los dos avisos eran código muerto.
+async function loadOne(kind, cacheField, sanityCheck, fetchUrlForOwner, opciones = {}) {
   const uid = await ensureFreshMem();
 
   // ⚠️ Y ACÁ ESTÁ LA MITAD QUE IMPORTA DE LA REGLA DE `isOwner()`.
@@ -321,6 +333,7 @@ async function loadOne(kind, cacheField, sanityCheck, fetchUrlForOwner) {
     return data;
   } catch (e) {
     console.warn(`No se pudo cargar ${kind}:`, e.message);
+    if (opciones.tirarSiFalla === true) throw e;
     return null;
   }
 }
@@ -334,8 +347,8 @@ async function loadTrackPlays() {
   // requerimos `albums` para invalidar cualquier v2 stale (v2 solo traía tracks).
   return loadOne('plays', 'plays', d => !!d.tracks && Array.isArray(d.albums), () => dataUrl('history-track-plays.json', PLAYS_VERSION));
 }
-async function loadListenedAlbums() {
-  return loadOne('listened', 'listened', d => !!d.years, () => dataUrl('history-listened-albums.json', LISTENED_VERSION));
+async function loadListenedAlbums(opciones = {}) {
+  return loadOne('listened', 'listened', d => !!d.years, () => dataUrl('history-listened-albums.json', LISTENED_VERSION), opciones);
 }
 async function loadSkipStats() {
   // Exijo `version >= 4`: un BYOH viejo guardado en IDB (que no lleva versión en

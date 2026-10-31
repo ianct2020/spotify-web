@@ -1,15 +1,15 @@
-import { getBestAvailableLikes, consultarSeguimientoArtistas, seguirArtistas, ARTISTAS_POR_LOTE } from '../api.js?v=350';
-import { idbEntriesByPrefix } from '../idb.js?v=350';
-import { DISCO_BASE_PREFIX } from '../util/disco-base.js?v=350';
-import { artistasDeBases } from '../util/seguir-artistas.js?v=350';
-import { controlesSeleccionArtistasHtml, conectarSeleccionArtistas } from './discover-common.js?v=350';
-import { hasSpotifyScope, loginWithSpotify } from '../auth.js?v=350';
-import { pageHeader, escapeHtml, confirmModal, tarjetaSinLikes } from '../ui/components.js?v=350';
-import { showToast } from '../ui/toast.js?v=350';
+import { getBestAvailableLikes, consultarSeguimientoArtistas, seguirArtistas, ARTISTAS_POR_LOTE } from '../api.js?v=351';
+import { idbEntriesByPrefix } from '../idb.js?v=351';
+import { DISCO_BASE_PREFIX } from '../util/disco-base.js?v=351';
+import { artistasDeBases } from '../util/seguir-artistas.js?v=351';
+import { controlesSeleccionArtistasHtml, conectarSeleccionArtistas } from './discover-common.js?v=351';
+import { hasSpotifyScope, loginWithSpotify } from '../auth.js?v=351';
+import { pageHeader, escapeHtml, confirmModal, tarjetaSinLikes } from '../ui/components.js?v=351';
+import { showToast } from '../ui/toast.js?v=351';
 import {
   artistasOcultos, artistaEstaOculto, alternarArtistaOculto,
   botonMenuArtistaHtml, botonArtistasOcultosHtml, conectarMenuArtista,
-} from './artistas-ocultos.js?v=350';
+} from './artistas-ocultos.js?v=351';
 
 const EXPLICACION = 'Seguir artistas no cambia nada en Fonoteca. «Novedades» y «Sin escuchar» se basan en tus me gusta y en las discografías guardadas, no en a quién sigues. Sirve para que Spotify tenga en cuenta a estos artistas en sus recomendaciones y avisos de música nueva; las notificaciones dependen de tus ajustes en Spotify.';
 let session = null;

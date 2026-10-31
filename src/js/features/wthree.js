@@ -301,7 +301,7 @@ async function loadAndRender(content, ruta = vigilarRuta()) {
     const [items, stats, listened] = await Promise.all([
       getAllPlaylistItems(playlistId),
       loadHistoryStats(),
-      loadListenedAlbums().catch(e => {
+      loadListenedAlbums({ tirarSiFalla: true }).catch(e => {
         console.warn('[wthree] no pude leer los álbumes escuchados:', e);
         falloListened = true;
         return null;
