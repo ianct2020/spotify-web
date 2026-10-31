@@ -1,0 +1,35 @@
+<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>caso candado-lectura — el candado con la lectura del historial caída</title>
+<script type="importmap">
+{
+  "imports": { "/js/idb.js": "/banco/candado-lectura-idb.mjs" },
+  "scopes": { "/banco/": { "/js/idb.js": "/js/idb.js" } }
+}
+</script>
+<link rel="stylesheet" href="/css/theme.css">
+<link rel="stylesheet" href="/css/components.css">
+<link rel="stylesheet" href="/css/main.css">
+<style>*,*::before,*::after{animation:none!important;transition:none!important}</style>
+</head><body>
+<div id="app"></div>
+<script type="module">
+// ── Instrumento de captura de la tanda 109 (no es un banco que se autocompruebe) ──
+//
+// La app ENTERA en `#menos-salteas`, como un amigo INVENTADO (`/me` = `t109inventada-amigo`,
+// no el owner), contra la Spotify simulada, con la IndexedDB envuelta por
+// `candado-lectura-idb.mjs`: toda lectura de `local_<uid>_history_*` TIRA. Es el amigo que
+// importó su historial y cuyo navegador no lo puede leer. Marca `data-foto="listo"` cuando
+// `#menos-salteas` pintó su tarjeta. Lo usa el conductor de capturas de la tanda 109.
+import { instalarRedSimulada, esperarReal } from '/banco/simulado.mjs';
+
+const UID = new URLSearchParams(location.search).get('uid') || 't109inventada-amigo';
+const sim = instalarRedSimulada();
+window.__sim = sim;
+sim.ruta('GET', /^\/me$/, () => ({ id: UID, display_name: 'Amigo inventado' }));
+localStorage.setItem('fonoteca_last_user_id', UID);
+localStorage.setItem('fonoteca_perfil_v1', JSON.stringify({ id: UID, display_name: 'Amigo inventado' }));
+location.hash = '#menos-salteas';
+await import('/js/app.js');
+await esperarReal(() => document.querySelector('#menos-salteas-content .olm-card, #menos-salteas-content .card'), { que: 'que #menos-salteas pinte', vueltas: 4000 });
+document.documentElement.dataset.foto = 'listo';
+</script>
+</body></html>

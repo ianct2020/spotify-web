@@ -282,6 +282,46 @@ tabla y a 1366 no queda debajo de los toasts. Relleno lateral de las celdas, 6 p
 «1 oculto solo en este navegador» / «1 oculto está…» (`ocultosSueltos()`). `#debug-log` nace con `hidden` y «Correr tests»
 lo muestra. Guarda: `tests/debug-ocultos-390.test.mjs`.
 
+**v=352, la tabla de ocultos lejos de los toasts y con margen a 360.** La tarjeta lleva `.debug-oc-caja` (`components.css`):
+en escritorio, `max-width: max(340px, min(560px, calc(100vw - 488px)))`. En `#debug` el menú va oculto y `.main` deja 72 px a la
+izquierda; los toasts van a 20 px del borde derecho y miden como mucho 380: a 1366 su borde izquierdo queda en x ≥ 966 y el de la
+tarjeta en x ≤ 632 (el `calc` es 72 + 400 + 16 de margen, para pantallas más angostas). La celda de la vista lleva `.debug-oc-vista`
+(`overflow-wrap: anywhere`): la etiqueta puede partirse en dos renglones, y con eso la tabla entra a 360 px con los peores datos
+(«sin-clasificar» con 2234 · 1234 · 1000) sin achicar letras ni rellenos. Guarda: el banco `tests/banco/debug-ocultos-ancho.html`
+(en `prepush`), que afirma `scrollWidth <= clientWidth` del contenedor de la tabla a 360 y a 390; rojo contra v=351 (a 360, 311 > 304).
+
+### El candado dice cuando falló la lectura (v=352)
+
+La tanda 109, sobre los `catch` de `features/history-data.js` que la 108 dejó marcados. Tres de ellos convertían un FALLO de
+lectura en el mismo `null` / `false` que «no hay historial», y el candado le ofrecía importar a un amigo que ya había importado
+y cuyo navegador no lo podía leer.
+
+- **El registro**: `fallosDeLectura` (variable de módulo, memoria de esta carga), una anotación por `kind`:
+  `{ uid, kind, origen, error }`. **`falloDeLecturaDelHistorial()`** (exportada, sincrónica) devuelve la del uid de ahora o `null`.
+  Una lectura de ese `kind` que sale bien (aunque no traiga datos: «no hay» es un resultado) borra su anotación; un cambio de uid
+  (`ensureFreshMem`) vacía todo. Nada se memoiza: `memCache` sigue guardando solo éxitos, y **ningún `catch` cambió lo que devuelve**.
+- **Quién anota**, cada uno con su `console.warn('[history-data] …', e)` (o el `No se pudo cargar …` de siempre en el último):
+  el `catch` de la lectura BYOH de `loadOne()` (`origen: 'byoh'`), el de IndexedDB de `hasLocalHistory()` (`'hasLocalHistory'`) y el
+  `catch` final del `fetch` del owner, con `tirarSiFalla` o sin ella (`'fetch-owner'`).
+- **Por qué `loadDays()` no**: su `fetchUrlForOwner` tira a propósito (`days` no tiene URL). `loadOne()` ahora pide la URL en un
+  `try` APARTE, antes del `fetch`: si tira, sale como hasta v=351 (el mismo `console.warn`, `null` o, con la opción, el mismo error)
+  sin anotar nada. No es una lectura que falló, es que no hay fuente; anotarlo le pondría al owner «no se ha podido leer» en
+  `#calendario`.
+- **`ownerLockedMessage()` es el único que lo lee**: después de la rama de `identidadSinConfirmar()` (que va primero y no cambió), si hay
+  un fallo devuelve otra `.olm-card` (`data-fallo-lectura`): «No se ha podido leer tu historial» / «Ha fallado una lectura de este
+  navegador, así que no podemos saber si tienes historial guardado. Recarga la página para volver a intentarlo.», **sin el botón de
+  importar**. Sin fallo, el HTML de siempre (el test lo compara por `sha256`). Ningún llamador se enteró.
+- **Lo que quedó fuera, a propósito**: el `.catch(() => null)` de `getCurrentUserId()` en `hasLocalHistory()` (con `/me` caído el candado
+  ya enseña la tarjeta de identidad: `#menos-salteas` pasa antes por `loadSkipStats()`/`isOwner()`, que marcan el modo degradado); el aviso
+  del modal del import (`import-history.js:79`): para que avise habría que tocar ese llamador; y las lecturas del caché IndexedDB del owner
+  (siguen ignoradas). ⚠️ **Para el owner el registro no se ve en ninguna vista**: con el `fetch` caído ninguna llega a
+  `ownerLockedMessage()`; diez pintan su «No he podido cargar…» (`#mapa`, `#records`, `#skips`, `#calendario`, `#zeroplays`,
+  `#mapa-artistas`, `#puertas`, `#generos`, `#menos-salteas`, `#wrapped`) y otras pintan vacío, «—» o, en la ficha de canción,
+  «Este tema no aparece en tu historial…» (la lista, en `fonoteca-migracion/PENDIENTES.md`, tanda 109).
+
+Guarda: `tests/fallo-lectura-historial.test.mjs` (`history-data.js` REAL en Node; dobles `loader-fallo-lectura.mjs` y
+`fallo-lectura-doble.mjs`, con una IndexedDB que tira por clave). Rojo contra v=351 en 8 de 36.
+
 ## Zona horaria: las fechas del historial NO se pasan a local (v=154 + v=231)
 
 **Medio arreglo en v=154.** Récords decía «9 ene 2026» y Wrapped «8 ene 2026»

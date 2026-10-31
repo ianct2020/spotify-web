@@ -1,0 +1,97 @@
+<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>banco debug-ocultos-ancho — la tabla de ocultos no desborda a 360 ni a 390</title>
+<style>html,body{margin:0;background:#111;color:#eee;font:13px system-ui}iframe{border:0;display:block}</style>
+</head><body>
+<pre id="progreso"></pre>
+<div id="marcos"></div>
+<script type="module">
+// ── Qué prueba este banco (tanda 109) ────────────────────────────────────────
+//
+// `#debug` → «Salud de los ocultos» REAL, en la app ENTERA (`debug-ocultos-ancho-caso.html`,
+// uno por iframe), como el owner simulado, contra la Spotify simulada y con dos almacenes de
+// ocultos INVENTADOS (`debug-ocultos-ancho-datos.mjs`): «sin-clasificar» —la etiqueta más
+// larga de los seis— con cuatro cifras en «aquí», «playlist» y «huérfanas», y «skips».
+//
+//   1. a 360×800 y a 390×844, el contenedor de la tabla (`table.parentElement`) cumple
+//      `scrollWidth <= clientWidth` (la tabla no hay que deslizarla) y la página tampoco
+//      desborda;
+//   2. la fila de «sin-clasificar» dice 2234 · 1234 · 1000 (los datos llegaron enteros);
+//   3. 0 escrituras en la cuenta, 0 rutas sin simular, 0 hosts externos, ningún JSON del
+//      repo pedido, 0 errores de consola.
+//
+// ⚠️ Todas las esperas van con `esperarReal` (ver PRESUPUESTO en `scripts/correr-banco.mjs`).
+import { esperarReal, anclar } from '/banco/simulado.mjs';
+import { fallar, listo } from '/banco/esperar.mjs';
+import { SC_LOCAL, SKIPS, LISTENED } from '/banco/debug-ocultos-ancho-datos.mjs';
+
+const afirmar = (c, msg) => { if (!c) throw new Error('BANCO: ' + msg); };
+const progreso = (t) => { document.getElementById('progreso').textContent = t; };
+const VUELTAS = 20000;
+const win = (f) => f.contentWindow;
+const $ = (f, s) => f.contentDocument?.querySelector(s);
+const texto = (el) => (el?.textContent || '').replace(/\s+/g, ' ').trim();
+const marcos = [];
+
+function abrirMarco(nombre, ancho, alto) {
+  const f = document.createElement('iframe');
+  f.width = ancho; f.height = alto;
+  f.src = `/banco/debug-ocultos-ancho-caso.html?marco=${nombre}`;
+  document.getElementById('marcos').appendChild(f);
+  return f;
+}
+
+try {
+  const { OWNER_KEYS } = await import('/js/history-keys.js');
+  const { idbSetCached } = await import('/js/idb.js');
+  const { HISTORY_OWNER_ID } = await import('/js/features/history-data.js');
+  localStorage.clear();
+  localStorage.setItem('fonoteca_last_user_id', HISTORY_OWNER_ID);
+  const { prefKey } = await import('/js/storage.js');
+  localStorage.setItem(prefKey('sin_clasificar_ocultas'), JSON.stringify(SC_LOCAL));
+  localStorage.setItem(prefKey('skips_hidden_tracks'), JSON.stringify(SKIPS));
+  await anclar(idbSetCached(OWNER_KEYS.listened, LISTENED, 100 * 365 * 24 * 60));
+
+  const medidas = [];
+  for (const [ancho, alto] of [[360, 800], [390, 844]]) {
+    progreso(`${ancho}: abrir #debug`);
+    const f = abrirMarco(`M${ancho}`, ancho, alto); marcos.push([`M${ancho}`, f]);
+    await esperarReal(() => win(f)?.__listo, { que: `que #debug arranque a ${ancho}`, vueltas: VUELTAS });
+    progreso(`${ancho}: Salud de los ocultos`);
+    $(f, '#debug-ocultos-btn').click();
+    await esperarReal(() => { const b = $(f, '#debug-ocultos-btn'), c = $(f, '#debug-ocultos'); return b && !b.disabled && c && (c.querySelector('table') || /No he podido auditar/.test(c.textContent)); },
+      { que: `que «Salud de los ocultos» termine a ${ancho}`, vueltas: VUELTAS });
+    const tabla = $(f, '#debug-ocultos table');
+    afirmar(tabla, `${ancho}: la tabla está (dice: «${texto($(f, '#debug-ocultos')).slice(0, 200)}»)`);
+    const filaSC = [...tabla.querySelectorAll('tr')].find((tr) => tr.children[1] && texto(tr.children[1]) === 'sin-clasificar');
+    const nums = filaSC ? [...filaSC.children].slice(2).map(texto) : null;
+    afirmar(nums && nums.join(' · ') === '2234 · 1234 · 1000', `PUERTA 2 (${ancho}): la fila de «sin-clasificar» dice 2234 · 1234 · 1000 (dice ${JSON.stringify(nums)})`);
+    const cont = tabla.parentElement;
+    const de = f.contentDocument.documentElement;
+    // La tabla va al `width:100%`: si entra, `scrollWidth` es igual a `clientWidth` y no dice cuánto margen queda. El
+    // margen de verdad es el ancho MÍNIMO de la tabla (con `width:min-content`, un momento, y se devuelve).
+    const anchoAntes = tabla.style.width;
+    tabla.style.width = 'min-content';
+    const minimo = Math.ceil(tabla.getBoundingClientRect().width);
+    tabla.style.width = anchoAntes;
+    medidas.push(`${ancho}: tabla ${cont.scrollWidth}/${cont.clientWidth} (ancho mínimo ${minimo}, margen ${cont.clientWidth - minimo}) · página ${de.scrollWidth}/${win(f).innerWidth}`);
+    afirmar(cont.scrollWidth <= cont.clientWidth, `PUERTA 1 (${ancho}×${alto}): la tabla de ocultos desborda su contenedor (scrollWidth ${cont.scrollWidth} > clientWidth ${cont.clientWidth})`);
+    afirmar(de.scrollWidth <= win(f).innerWidth, `PUERTA 1 (${ancho}×${alto}): la página desborda (${de.scrollWidth} > ${win(f).innerWidth})`);
+    const s = win(f).__sim.reg;
+    afirmar(s.escrituras.length === 0, `PUERTA 3 (${ancho}): 0 escrituras en la cuenta: ${s.escrituras.map((e) => e.metodo + ' ' + e.ruta).join(' · ')}`);
+    afirmar(s.desconocidas.length === 0, `PUERTA 3 (${ancho}): ninguna ruta sin simular: ${s.desconocidas.join(' · ')}`);
+    afirmar(s.externas.length === 0, `PUERTA 3 (${ancho}): ningún host externo: ${s.externas.join(' · ')}`);
+    const repo = win(f).performance.getEntriesByType('resource').map((e) => e.name).filter((u) => /\/data\//.test(u));
+    afirmar(repo.length === 0, `PUERTA 3 (${ancho}): ningún JSON del repo pedido: ${repo.join(' · ')}`);
+  }
+
+  const errores = marcos.flatMap(([n, f]) => win(f).__errores.map((e) => `${n}: ${e}`));
+  afirmar(errores.length === 0, `PUERTA 3: 0 errores de consola: ${errores.join(' | ')}`);
+
+  const resumen = `${medidas.join(' · ')} · sin-clasificar 2234/1234/1000 · errores=${errores.length} · reloj virtual=${Math.round(performance.now())} ms`;
+  document.documentElement.setAttribute('data-resumen', resumen);
+  progreso('ok · ' + resumen);
+  listo(resumen);
+} catch (e) {
+  fallar(e);
+}
+</script>
+</body></html>

@@ -1,53 +1,53 @@
-import { isLoggedIn, loginWithSpotify, logout } from './auth.js?v=351';
-import { spotifyFetch, onRateLimit, revisarCambioDeUsuario } from './api.js?v=351';
-import { getValidToken } from './auth.js?v=351';
-import { cacheClearAll } from './storage.js?v=351';
-import { idbClearAll } from './idb.js?v=351';
-import { CONSERVAR_CLAVES, CONSERVAR_PREFIJOS, LO_QUE_SE_CONSERVA } from './util/limpiar-cache.js?v=351';
-import { registerRoute, initRouter, rutasRegistradas } from './router.js?v=351';
-import { showToast } from './ui/toast.js?v=351';
-import { pageHeader, escapeHtml } from './ui/components.js?v=351';
-import { installCrashGuard } from './ui/crash-guard.js?v=351';
-import { auditarOcultos, leerIncidencias } from './util/hidden-sync.js?v=351';
-import { getStack } from './ui/modal-stack.js?v=351';
-import { installBackToTop } from './ui/back-to-top.js?v=351';
-import { applyStoredTheme, openThemePanel } from './ui/theme-panel.js?v=351';
-import { escucharAvisoDeCopia } from './ui/aviso-copia.js?v=351';
+import { isLoggedIn, loginWithSpotify, logout } from './auth.js?v=352';
+import { spotifyFetch, onRateLimit, revisarCambioDeUsuario } from './api.js?v=352';
+import { getValidToken } from './auth.js?v=352';
+import { cacheClearAll } from './storage.js?v=352';
+import { idbClearAll } from './idb.js?v=352';
+import { CONSERVAR_CLAVES, CONSERVAR_PREFIJOS, LO_QUE_SE_CONSERVA } from './util/limpiar-cache.js?v=352';
+import { registerRoute, initRouter, rutasRegistradas } from './router.js?v=352';
+import { showToast } from './ui/toast.js?v=352';
+import { pageHeader, escapeHtml } from './ui/components.js?v=352';
+import { installCrashGuard } from './ui/crash-guard.js?v=352';
+import { auditarOcultos, leerIncidencias } from './util/hidden-sync.js?v=352';
+import { getStack } from './ui/modal-stack.js?v=352';
+import { installBackToTop } from './ui/back-to-top.js?v=352';
+import { applyStoredTheme, openThemePanel } from './ui/theme-panel.js?v=352';
+import { escucharAvisoDeCopia } from './ui/aviso-copia.js?v=352';
 
-import { render as renderSync } from './features/sync.js?v=351';
-import { render as renderDedupe } from './features/dedupe.js?v=351';
-import { render as renderDupalbums } from './features/duplicate-albums.js?v=351';
-import { render as renderZombies } from './features/zombies.js?v=351';
-import { render as renderVersions } from './features/versions.js?v=351';
-import { render as renderDashboard } from './features/dashboard.js?v=351';
-import { render as renderSmart } from './features/smart.js?v=351';
-import { render as renderSimilar } from './features/similar-artists.js?v=351';
-import { render as renderRabbit } from './features/rabbit-hole.js?v=351';
-import { render as renderByGenre } from './features/by-genre.js?v=351';
-import { render as renderByArtist } from './features/by-artist.js?v=351';
-import { render as renderRecs } from './features/recommendations.js?v=351';
-import { render as renderListened } from './features/listened.js?v=351';
-import { render as renderWrapped } from './features/wrapped.js?v=351';
-import { render as renderRecords } from './features/records.js?v=351';
-import { render as renderCalendario } from './features/calendario.js?v=351';
-import { render as renderMapa } from './features/mapa.js?v=351';
-import { render as renderPuertas } from './features/puertas.js?v=351';
-import { render as renderMenosSalteas } from './features/menos-salteas.js?v=351';
-import { render as renderGeneros } from './features/generos.js?v=351';
-import { render as renderMapaArtistas } from './features/mapa-artistas.js?v=351';
-import { openImportHistory } from './features/import-history.js?v=351';
-import { bindOwnerLockedButtons } from './features/history-data.js?v=351';
-import { render as renderZeroPlays } from './features/zero-plays.js?v=351';
-import { render as renderSkips } from './features/skips.js?v=351';
-import { render as renderSearchLikes } from './features/search-likes.js?v=351';
-import { render as renderWthree } from './features/wthree.js?v=351';
-import { render as renderCovers } from './features/covers.js?v=351';
-import { render as renderMosaico } from './features/mosaico.js?v=351';
-import { render as renderDiscoverArtists } from './features/discover-artists.js?v=351';
-import { render as renderFollowArtists } from './features/follow-artists.js?v=351';
-import { render as renderNewReleases } from './features/new-releases.js?v=351';
-import { render as renderSinClasificar } from './features/sin-clasificar.js?v=351';
-import { pieCuotaHtml, montarPieCuota } from './ui/cuota-pie.js?v=351';
+import { render as renderSync } from './features/sync.js?v=352';
+import { render as renderDedupe } from './features/dedupe.js?v=352';
+import { render as renderDupalbums } from './features/duplicate-albums.js?v=352';
+import { render as renderZombies } from './features/zombies.js?v=352';
+import { render as renderVersions } from './features/versions.js?v=352';
+import { render as renderDashboard } from './features/dashboard.js?v=352';
+import { render as renderSmart } from './features/smart.js?v=352';
+import { render as renderSimilar } from './features/similar-artists.js?v=352';
+import { render as renderRabbit } from './features/rabbit-hole.js?v=352';
+import { render as renderByGenre } from './features/by-genre.js?v=352';
+import { render as renderByArtist } from './features/by-artist.js?v=352';
+import { render as renderRecs } from './features/recommendations.js?v=352';
+import { render as renderListened } from './features/listened.js?v=352';
+import { render as renderWrapped } from './features/wrapped.js?v=352';
+import { render as renderRecords } from './features/records.js?v=352';
+import { render as renderCalendario } from './features/calendario.js?v=352';
+import { render as renderMapa } from './features/mapa.js?v=352';
+import { render as renderPuertas } from './features/puertas.js?v=352';
+import { render as renderMenosSalteas } from './features/menos-salteas.js?v=352';
+import { render as renderGeneros } from './features/generos.js?v=352';
+import { render as renderMapaArtistas } from './features/mapa-artistas.js?v=352';
+import { openImportHistory } from './features/import-history.js?v=352';
+import { bindOwnerLockedButtons } from './features/history-data.js?v=352';
+import { render as renderZeroPlays } from './features/zero-plays.js?v=352';
+import { render as renderSkips } from './features/skips.js?v=352';
+import { render as renderSearchLikes } from './features/search-likes.js?v=352';
+import { render as renderWthree } from './features/wthree.js?v=352';
+import { render as renderCovers } from './features/covers.js?v=352';
+import { render as renderMosaico } from './features/mosaico.js?v=352';
+import { render as renderDiscoverArtists } from './features/discover-artists.js?v=352';
+import { render as renderFollowArtists } from './features/follow-artists.js?v=352';
+import { render as renderNewReleases } from './features/new-releases.js?v=352';
+import { render as renderSinClasificar } from './features/sin-clasificar.js?v=352';
+import { pieCuotaHtml, montarPieCuota } from './ui/cuota-pie.js?v=352';
 
 // ── Arranque degradado cuando /me está rate-limiteado (v=173) ────────────────
 //
@@ -1062,7 +1062,7 @@ function tablaDeOcultos(filas) {
     return `
       <tr>
         <td style="padding:4px 6px">${icono}</td>
-        <td style="padding:4px 6px">${escapeHtml(f.label)}</td>
+        <td class="debug-oc-vista" style="padding:4px 6px">${escapeHtml(f.label)}</td>
         <td style="padding:4px 6px;text-align:right">${f.local}</td>
         <td style="padding:4px 6px;text-align:right">${f.enPlaylist}</td>
         <td style="padding:4px 6px;text-align:right">${f.huerfanas.length}</td>
@@ -1083,8 +1083,12 @@ function tablaDeOcultos(filas) {
       <ul style="margin:2px 0 6px;padding-left:16px">${claves.map(c => `<li>${c}</li>`).join('')}</ul></li>`;
   }).join('');
 
+  // (v=352) `.debug-oc-caja` (components.css): en escritorio la tarjeta no pasa de 560 px, así
+  // que a 1366 su borde derecho queda lejos de la franja de los toasts, que van abajo a la
+  // derecha. `.debug-oc-vista`: la etiqueta de vista puede partirse en dos renglones, y con eso
+  // la tabla entra a 360 px con margen sin achicar letras ni rellenos.
   return `
-    <div class="card" style="margin-top:20px">
+    <div class="card debug-oc-caja" style="margin-top:20px">
       <p style="margin:0 0 10px">
         <strong>${totalHuerfanas === 0 ? 'Ningún oculto suelto' : ocultosSueltos(totalHuerfanas)}</strong>
         ${totalSinUri ? ` · <span style="color:var(--color-error)">${totalSinUri} sin forma de subirlos a Spotify</span>` : ''}
@@ -1118,7 +1122,7 @@ async function montarBaseMosaico() {
   const parar = document.getElementById('debug-mosaico-parar');
   let mod;
   try {
-    mod = await import('./features/mosaico-colores.js?v=351');
+    mod = await import('./features/mosaico-colores.js?v=352');
   } catch (err) {
     estado.textContent = `No he podido cargar el módulo: ${err.message}`;
     return;

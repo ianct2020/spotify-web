@@ -1062,7 +1062,7 @@ function tablaDeOcultos(filas) {
     return `
       <tr>
         <td style="padding:4px 6px">${icono}</td>
-        <td style="padding:4px 6px">${escapeHtml(f.label)}</td>
+        <td class="debug-oc-vista" style="padding:4px 6px">${escapeHtml(f.label)}</td>
         <td style="padding:4px 6px;text-align:right">${f.local}</td>
         <td style="padding:4px 6px;text-align:right">${f.enPlaylist}</td>
         <td style="padding:4px 6px;text-align:right">${f.huerfanas.length}</td>
@@ -1083,8 +1083,12 @@ function tablaDeOcultos(filas) {
       <ul style="margin:2px 0 6px;padding-left:16px">${claves.map(c => `<li>${c}</li>`).join('')}</ul></li>`;
   }).join('');
 
+  // (v=352) `.debug-oc-caja` (components.css): en escritorio la tarjeta no pasa de 560 px, así
+  // que a 1366 su borde derecho queda lejos de la franja de los toasts, que van abajo a la
+  // derecha. `.debug-oc-vista`: la etiqueta de vista puede partirse en dos renglones, y con eso
+  // la tabla entra a 360 px con margen sin achicar letras ni rellenos.
   return `
-    <div class="card" style="margin-top:20px">
+    <div class="card debug-oc-caja" style="margin-top:20px">
       <p style="margin:0 0 10px">
         <strong>${totalHuerfanas === 0 ? 'Ningún oculto suelto' : ocultosSueltos(totalHuerfanas)}</strong>
         ${totalSinUri ? ` · <span style="color:var(--color-error)">${totalSinUri} sin forma de subirlos a Spotify</span>` : ''}

@@ -2110,3 +2110,18 @@ body.con-aviso-copia { padding-top: 46px; }
   .aviso-espera { flex-wrap: wrap; font-size: 12px; }
 }
 .sel-art-fallo { color: var(--color-warning); }
+
+/* «Salud de los ocultos» de #debug (v=352, tanda 109).
+   · En escritorio la tarjeta no pasa de 560 px. En #debug el menú va oculto y `.main` deja 72 px a
+     la izquierda; los toasts van a la derecha (20 px del borde, como mucho 380 de ancho): a 1366 su
+     borde izquierdo queda en x ≥ 966 y el de la tarjeta en x ≤ 632, más de 300 px de aire. 560 le
+     sobra a la tabla (cinco columnas; a 360 px de pantalla entra en ~300). En pantallas más
+     angostas el `calc` la achica para seguir a la izquierda de los toasts (72 + 400 + 16 de
+     margen), con un piso de 340 px para que la tabla no se apriete.
+   · La etiqueta de vista puede partirse (`anywhere` también baja su ancho mínimo): es lo que deja
+     entrar la tabla a 360 px con margen, sin achicar letras ni rellenos. A 390 o más, «sin-clasificar»
+     y «recomendados» siguen en un renglón. */
+@media (min-width: 769px) {
+  .debug-oc-caja { max-width: max(340px, min(560px, calc(100vw - 488px))); }
+}
+.debug-oc-vista { overflow-wrap: anywhere; }

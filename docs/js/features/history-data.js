@@ -8,10 +8,10 @@
 // Otro user cualquiera sin historial local ve el ownerLockedMessage que
 // invita a subir su ZIP.
 
-import { idbGetCached, idbSetCached, idbDel } from '../idb.js?v=351';
-import { getCurrentUserId } from '../api.js?v=351';
-import { OWNER_KEYS, LOCAL_HISTORY_PREFIX, STATS_VERSION, PLAYS_VERSION, LISTENED_VERSION, SKIP_VERSION, DETAIL_VERSION, RECORDS_VERSION, ARTIST_TRACKS_VERSION, SIMILARES_VERSION } from '../history-keys.js?v=351';
-import { mostrarBannerDegradadoVista } from '../ui/degraded-banner.js?v=351';
+import { idbGetCached, idbSetCached, idbDel } from '../idb.js?v=352';
+import { getCurrentUserId } from '../api.js?v=352';
+import { OWNER_KEYS, LOCAL_HISTORY_PREFIX, STATS_VERSION, PLAYS_VERSION, LISTENED_VERSION, SKIP_VERSION, DETAIL_VERSION, RECORDS_VERSION, ARTIST_TRACKS_VERSION, SIMILARES_VERSION } from '../history-keys.js?v=352';
+import { mostrarBannerDegradadoVista } from '../ui/degraded-banner.js?v=352';
 
 const HISTORY_OWNER_ID = 'orhs6wu5ykk7ql80u92ujn74o';
 
@@ -160,6 +160,45 @@ function localKey(uid, kind) {
 // Caches en memoria (por sesión de página). Se resetean al cambiar de user.
 let memCache = { uid: null, stats: null, plays: null, listened: null, skip: null, detail: null, records: null, artistTracks: null, similares: null, days: null };
 
+// ── El registro de los fallos de lectura (v=352, tanda 109) ─────────────────
+//
+// Tres `catch` de este archivo convierten un FALLO de lectura en el mismo `null` / `false`
+// que «no hay historial»: la lectura BYOH de `loadOne()`, la de IndexedDB de
+// `hasLocalHistory()` y el `catch` final del `fetch` del owner. Lo que devuelven NO cambia
+// (de ese `null` dependen 9 cargadores y sus llamadores); lo que cambia es que el fallo queda
+// ANOTADO acá, y `ownerLockedMessage()` —el único que lo lee— deja de ofrecer «importar» a
+// quien ya importó y no se le pudo leer.
+//
+//   · Se anota por `kind`: `{ uid, kind, origen, error }`. `origen` dice de qué `catch` vino
+//     (`'byoh'`, `'hasLocalHistory'`, `'fetch-owner'`).
+//   · Una lectura de ese mismo `kind` y ese uid que sale BIEN (aunque no traiga datos: «no hay»
+//     es un resultado) borra su anotación. Un cambio de uid (`ensureFreshMem`) vacía todo.
+//   · Memoria de esta carga, nada más (como `meFalloEnEstaCarga`). Nada se memoiza: `memCache`
+//     sigue guardando solo éxitos.
+//   · ⚠️ `loadDays()` NO anota: su `fetchUrlForOwner` tira a propósito (`days` no tiene URL).
+//     Eso no es un fallo de lectura, es que no hay fuente; si lo anotara, el owner vería «no se
+//     ha podido leer tu historial» en `#calendario`. Ver `loadOne()`.
+let fallosDeLectura = { uid: null, porKind: {} };
+
+function anotarFalloDeLectura(uid, kind, origen, error) {
+  if (fallosDeLectura.uid !== uid) fallosDeLectura = { uid, porKind: {} };
+  fallosDeLectura.porKind[kind] = { uid, kind, origen, error };
+}
+function borrarFalloDeLectura(uid, kind) {
+  if (fallosDeLectura.uid === uid) delete fallosDeLectura.porKind[kind];
+}
+
+/**
+ * El fallo de lectura del historial anotado para el uid de ahora, o `null`. Sincrónica.
+ * Si hay varios, el primero que se anotó.
+ */
+function falloDeLecturaDelHistorial() {
+  const { uid, porKind } = fallosDeLectura;
+  if (memCache.uid !== null && memCache.uid !== uid) return null;
+  const kinds = Object.keys(porKind);
+  return kinds.length ? porKind[kinds[0]] : null;
+}
+
 async function ensureFreshMem() {
   // [v178] Mismo fallback que `isOwner()`: sin esto, con `/me` caído el uid
   // quedaba en `null`, el chequeo `uid === HISTORY_OWNER_ID` de más abajo
@@ -167,17 +206,27 @@ async function ensureFreshMem() {
   // mientras `loadOne()` seguía sirviendo `null` — banner sin contenido atrás.
   const { id: uid } = await resolvedUserId();
   if (memCache.uid !== uid) memCache = { uid, stats: null, plays: null, listened: null, skip: null, detail: null, records: null, artistTracks: null, similares: null, days: null };
+  if (fallosDeLectura.uid !== uid) fallosDeLectura = { uid, porKind: {} };
   return uid;
 }
 
 // Chequeo rápido: ¿el user actual tiene historial cargado localmente?
+//
+// (v=352) Si la lectura de IndexedDB falla, sigue devolviendo `false`, pero lo anota y lo avisa.
+// El `.catch(() => null)` de `getCurrentUserId()` NO anota: con `/me` caído el candado ya
+// enseña la tarjeta de identidad (`identidadSinConfirmar()`), que va primero.
 async function hasLocalHistory() {
   const uid = await getCurrentUserId().catch(() => null);
   if (!uid) return false;
   try {
     const s = await idbGetCached(localKey(uid, 'stats'));
+    borrarFalloDeLectura(uid, 'stats');
     return !!(s && s.years);
-  } catch { return false; }
+  } catch (e) {
+    console.warn('[history-data] no se pudo leer el historial importado (stats) de IndexedDB:', e);
+    anotarFalloDeLectura(uid, 'stats', 'hasLocalHistory', e);
+    return false;
+  }
 }
 
 // Claves de versiones anteriores por kind — si aparecen en IDB y la nueva
@@ -282,14 +331,21 @@ async function loadOne(kind, cacheField, sanityCheck, fetchUrlForOwner, opciones
   if (memCache[cacheField]) return memCache[cacheField];
 
   // 1) local del user (cualquier user — owner o no)
+  // (v=352) Si la lectura TIRA, sigue el camino de siempre (para un amigo, `null`), pero el
+  // fallo queda anotado y se avisa con el error crudo. Una lectura que no tira, traiga lo que
+  // traiga, borra la anotación de este `kind`.
   if (uid) {
     try {
       const cached = await idbGetCached(localKey(uid, kind));
+      borrarFalloDeLectura(uid, kind);
       if (cached && sanityCheck(cached)) {
         console.log(`[history-data] ${kind}: hit local BYOH (${uid})`);
         memCache[cacheField] = cached; return cached;
       }
-    } catch { /* ignora */ }
+    } catch (e) {
+      console.warn(`[history-data] no se pudo leer el historial importado (${kind}) de IndexedDB:`, e);
+      anotarFalloDeLectura(uid, kind, 'byoh', e);
+    }
   }
 
   // 2) cache del owner (histórico) — el resto de los users cae acá si son Ian,
@@ -301,6 +357,7 @@ async function loadOne(kind, cacheField, sanityCheck, fetchUrlForOwner, opciones
     const cached = await idbGetCached(OWNER_KEYS[kind]);
     if (cached && sanityCheck(cached)) {
       console.log(`[history-data] ${kind}: hit IDB owner (${OWNER_KEYS[kind]})`);
+      borrarFalloDeLectura(uid, kind);
       memCache[cacheField] = cached; return cached;
     }
   } catch { /* ignora */ }
@@ -312,18 +369,32 @@ async function loadOne(kind, cacheField, sanityCheck, fetchUrlForOwner, opciones
       if (prev && sanityCheck(prev)) {
         console.log(`[history-data] ${kind}: migrando ${prevKey} → ${OWNER_KEYS[kind]}`);
         memCache[cacheField] = prev;
+        borrarFalloDeLectura(uid, kind);
         try { await idbSetCached(OWNER_KEYS[kind], prev, 365 * 24 * 60); } catch { /* ignora */ }
         return prev;
       }
     } catch { /* ignora */ }
   }
 
+  // (v=352) La URL se pide APARTE del `fetch`, y es como se distingue `loadDays()`: su
+  // `fetchUrlForOwner` tira a propósito (`days` no tiene URL). Eso no es una lectura que
+  // falló —no hay de dónde leer—, así que sale como hasta v=351 (el mismo `console.warn`, el
+  // mismo `null` o, con `tirarSiFalla`, el mismo error) SIN anotar nada.
+  let url;
   try {
-    const url = fetchUrlForOwner();
+    url = fetchUrlForOwner();
+  } catch (e) {
+    console.warn(`No se pudo cargar ${kind}:`, e.message);
+    if (opciones.tirarSiFalla === true) throw e;
+    return null;
+  }
+
+  try {
     console.log(`[history-data] ${kind}: FETCH ${url.toString ? url.toString() : url}`);
     const res = await fetch(url);
     if (!res.ok) throw new Error('HTTP ' + res.status);
     const data = await res.json();
+    borrarFalloDeLectura(uid, kind);
     memCache[cacheField] = data;
     // TTL 1 año: los JSON del owner casi nunca cambian (solo cuando bumpeo el
     // pipeline y subo _VERSION — ahí la key cambia y esta entrada queda
@@ -333,6 +404,8 @@ async function loadOne(kind, cacheField, sanityCheck, fetchUrlForOwner, opciones
     return data;
   } catch (e) {
     console.warn(`No se pudo cargar ${kind}:`, e.message);
+    // (v=352) Con la opción o sin ella: el fallo queda anotado para el candado.
+    anotarFalloDeLectura(uid, kind, 'fetch-owner', e);
     if (opciones.tirarSiFalla === true) throw e;
     return null;
   }
@@ -547,11 +620,35 @@ function identityLockedMessage(featureName = 'esta vista') {
   </div>`;
 }
 
+/** La tarjeta del candado cuando falló una lectura del historial (v=352, tanda 109). */
+function falloLecturaMessage(featureName = 'esta vista') {
+  return `<div class="olm-card" data-fallo-lectura>
+    <div class="olm-header">
+      <div class="olm-header-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="20" height="20">
+          <circle cx="12" cy="12" r="9"/><line x1="12" y1="7.5" x2="12" y2="12.5"/><line x1="12" y1="16" x2="12" y2="16.5"/>
+        </svg>
+      </div>
+      <div style="flex:1;min-width:0">
+        <h3 style="margin:0;font-size:16px">No se ha podido leer tu historial</h3>
+        <div style="color:var(--color-text-muted);font-size:12px;margin-top:2px">${escapeHtmlLite(featureName)} necesita tu historial</div>
+      </div>
+    </div>
+    <div style="padding:14px 16px;font-size:13px;line-height:1.5;color:var(--color-text-secondary)">
+      <p style="margin:0">Ha fallado una lectura de este navegador, así que no podemos saber si tienes historial guardado. Recarga la página para volver a intentarlo.</p>
+    </div>
+  </div>`;
+}
+
 function ownerLockedMessage(featureName = 'esta vista') {
   // Dos motivos muy distintos para no enseñar el historial, y confundirlos
   // manda al usuario a hacer algo que no le sirve: si sos el owner y lo que
   // falla es `/me`, importar un historial que ya tenés no arregla nada.
   if (identidadSinConfirmar()) return identityLockedMessage(featureName);
+  // (v=352) Un tercer motivo: una lectura del historial FALLÓ (ver «El registro de los fallos
+  // de lectura»). Ofrecer importar encima de un historial que no se pudo leer es justo lo que
+  // no hay que hacer, así que esta tarjeta no lleva el botón. Sin fallo anotado, lo de siempre.
+  if (falloDeLecturaDelHistorial()) return falloLecturaMessage(featureName);
   return `<div class="olm-card">
     <div class="olm-header">
       <div class="olm-header-icon">
@@ -632,4 +729,5 @@ export {
   playsFor, trackIdOf, isOwner, HISTORY_OWNER_ID, ownerLockedMessage,
   hasLocalHistory, saveMyHistory, clearMyHistory, bindOwnerLockedButtons,
   identidadSinConfirmar, motivoSinImportCompleto, identityLockedMessage,
+  falloDeLecturaDelHistorial,
 };

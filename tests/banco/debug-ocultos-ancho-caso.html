@@ -1,0 +1,51 @@
+<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>banco debug-ocultos-ancho — la app entera, en un iframe</title>
+<link rel="stylesheet" href="/css/theme.css">
+<link rel="stylesheet" href="/css/components.css">
+<link rel="stylesheet" href="/css/main.css">
+<style>*,*::before,*::after{animation:none!important;transition:none!important}</style>
+</head><body>
+<div id="app"></div>
+<script type="module">
+// ── Un iframe del banco `debug-ocultos-ancho.html` (tanda 109) ───────────────
+//
+// Arranca la app ENTERA (`/js/app.js`) en `#debug`, contra la Spotify simulada de
+// `simulado.mjs`, con `/me` = el owner (`HISTORY_OWNER_ID`). Las dos playlists de ocultos son
+// INVENTADAS (claves `t109inventada…`) y las contesta este caso; lo que «este navegador» cree
+// que está oculto lo sembró la madre en `localStorage` (mismo origen). El historial del owner
+// para la base de colores del mosaico también lo sembró la madre, INVENTADO, en IndexedDB:
+// así no se pide el JSON horneado del repo. Nada sale a la red.
+import { instalarRedSimulada, esperarReal } from '/banco/simulado.mjs';
+import { PLAYLISTS, plDe, itemDe } from '/banco/debug-ocultos-ancho-datos.mjs';
+
+window.__errores = [];
+window.addEventListener('error', (e) => window.__errores.push('error: ' + (e.message || e)));
+window.addEventListener('unhandledrejection', (e) => window.__errores.push('rechazo: ' + String(e.reason?.message || e.reason)));
+const errorOriginal = console.error.bind(console);
+console.error = (...a) => { window.__errores.push('console.error: ' + a.map(String).join(' ').slice(0, 300)); errorOriginal(...a); };
+
+const { HISTORY_OWNER_ID: UID } = await import('/js/features/history-data.js');
+const sim = instalarRedSimulada();
+window.__sim = sim;
+sim.ruta('GET', /^\/me$/, () => ({ id: UID, display_name: 'Banco' }));
+sim.ruta('GET', /^\/me\/playlists(\?|$)/, () => ({ items: PLAYLISTS.map((p) => plDe(p, UID)), total: PLAYLISTS.length, limit: 50, offset: 0, next: null }));
+sim.ruta('GET', /^\/playlists\/[^/?]+(\?|$)/, ({ url }) => {
+  const p = PLAYLISTS.find((x) => url.pathname.endsWith('/' + x.id));
+  return p ? plDe(p, UID) : sim.sinSimular();
+});
+sim.ruta('GET', /^\/playlists\/[^/?]+\/items(\?|$)/, ({ url }) => {
+  const p = PLAYLISTS.find((x) => url.pathname.endsWith('/' + x.id + '/items'));
+  if (!p) return sim.sinSimular();
+  const offset = +(url.searchParams.get('offset') || 0), limit = +(url.searchParams.get('limit') || 100);
+  const pagina = p.claves.slice(offset, offset + limit);
+  const sigue = offset + limit < p.claves.length;
+  return { items: pagina.map(itemDe), total: p.claves.length, limit, offset, next: sigue ? `https://api.spotify.com/v1/playlists/${p.id}/items?offset=${offset + limit}&limit=${limit}` : null };
+});
+localStorage.setItem('fonoteca_last_user_id', UID);
+localStorage.setItem('fonoteca_perfil_v1', JSON.stringify({ id: UID, display_name: 'Banco' }));
+
+location.hash = '#debug';
+await import('/js/app.js');
+await esperarReal(() => document.getElementById('debug-ocultos-btn'), { que: 'que #debug pinte', vueltas: 4000 });
+window.__listo = true;
+</script>
+</body></html>
