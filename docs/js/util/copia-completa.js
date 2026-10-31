@@ -20,8 +20,8 @@
 //
 // El censo entero, con el porqué de cada clase, está en `fonoteca-migracion/CENSO-NAVEGADOR-2026-10-22.md`.
 
-import { crearAlmacenGeneros, prefijoGeneros, PREFIJO_GENEROS, CLAVE_MIGRADO } from './generos-artista.js?v=348';
-import { LIKES_DE_OTRO_KEY, hayLikesDeOtro } from './likes-de-otro.js?v=348';
+import { crearAlmacenGeneros, prefijoGeneros, PREFIJO_GENEROS, CLAVE_MIGRADO } from './generos-artista.js?v=349';
+import { LIKES_DE_OTRO_KEY, hayLikesDeOtro } from './likes-de-otro.js?v=349';
 
 export const COPIA_VERSION = 3;
 export const CENSO_VERSION = '2026-10-22';

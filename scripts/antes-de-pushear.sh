@@ -48,7 +48,7 @@ if npm test --silent 2>&1 | tail -4 | sed 's/^/      /'; [ "${PIPESTATUS[0]}" -e
 # `mosaico` y `toasts` entraron en v=273:
 # estaban en rojo desde antes del 04/10 y justamente por no estar acá nadie los
 # miraba, igual que le había pasado a `barra` entre v=241 y v=261.
-echo "2b. bancos (barra · pausa-search · toasts · mosaico · novedades · escrituras · ocultar-artista ×3 · covers-orden · calendario · import-guarda · ocultos-cache · mapa · puertas · cuota · letras · generos-cache · generos-escaneo · generos · mapa-artistas · versiones-deluxe · router-teardown · guard-ruta-vieja · postal · copia-completa · copia-importar · menos-salteas)"
+echo "2b. bancos (barra · pausa-search · toasts · mosaico · novedades · escrituras · ocultar-artista ×3 · covers-orden · calendario · import-guarda · ocultos-cache · mapa · puertas · cuota · letras · generos-cache · generos-escaneo · generos · mapa-artistas · versiones-deluxe · router-teardown · guard-ruta-vieja · postal · copia-completa · copia-importar · menos-salteas · rehacer-me-gusta)"
 # Los dos de `ocultar-artista` entraron en v=276: las TRES vistas que ocultan
 # artistas, reales, contra una Spotify simulada. Es el único sitio donde se puede
 # probar ocultar sin escribir en la cuenta de Ian, y el de `-disco` es el que
@@ -155,7 +155,13 @@ echo "2b. bancos (barra · pausa-search · toasts · mosaico · novedades · esc
 # («Todavía no hay temas que cumplan esto.») y uno sin datos (el cartel de #records); la ficha de canción; salir a mitad
 # sin escribir; sin desborde a 1366×591 y 390×844. Cinco corridas el 27/10: 6.809-7.110 ms de reloj virtual (5/5), corre
 # con el defecto de 45 s. Visto rojo con las dos cargas en paralelo (2 `/me`).
-for B in barra pausa-search toasts mosaico novedades escrituras ocultar-artista ocultar-artista-disco ocultar-artista-novedades covers-orden calendario import-guarda ocultos-cache mapa puertas cuota letras generos-cache generos-escaneo generos mapa-artistas versiones-deluxe router-teardown guard-ruta-vieja postal copia-completa copia-importar menos-salteas; do
+# `rehacer-me-gusta` entró en v=349 (tanda 106): «Rehacer me gusta desde Spotify» del ⚙ de #dashboard, en la app ENTERA contra
+# la Spotify simulada con `/me/tracks` paginado y copias INVENTADAS (cada caso vacía el almacenamiento del origen): abrir = 0 a
+# /me/tracks; «Cancelar», Escape y clic afuera = 0 y la copia igual; con {u1..u120} contra {u21..u150}, «tenía 20 … y le
+# faltaban 30», la caché con las 130 y exactamente 3 peticiones; un 500 en la página 2 y «Detener carga» en la página 2 dejan
+# el sha256 de la caché igual y pintan el error de loadData, no el modal; sin desborde a 1366×591 y 390×844. Rojo contra v=348
+# (no hay ítem). Presupuesto de 60 s (ver scripts/correr-banco.mjs).
+for B in barra pausa-search toasts mosaico novedades escrituras ocultar-artista ocultar-artista-disco ocultar-artista-novedades covers-orden calendario import-guarda ocultos-cache mapa puertas cuota letras generos-cache generos-escaneo generos mapa-artistas versiones-deluxe router-teardown guard-ruta-vieja postal copia-completa copia-importar menos-salteas rehacer-me-gusta; do
   if node scripts/correr-banco.mjs "$B" 2>&1 | sed 's/^/      /'; [ "${PIPESTATUS[0]}" -eq 0 ]; then
     ok "banco $B en verde"
   else

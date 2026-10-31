@@ -1,0 +1,213 @@
+<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>banco rehacer-me-gusta — un caso</title>
+<link rel="stylesheet" href="/css/theme.css">
+<link rel="stylesheet" href="/css/components.css">
+<link rel="stylesheet" href="/css/main.css">
+<style>*,*::before,*::after{animation:none!important;transition:none!important}</style>
+</head><body>
+<div id="app"></div>
+<script type="module">
+// ── Un caso del banco `rehacer-me-gusta.html` (v=349, tanda 106) ─────────────────────────────────
+//
+// La app ENTERA (`/js/app.js`) contra la Spotify simulada, a la que este caso le suma `/me/tracks` paginado (de a 50,
+// con `total` y `next`). Cada caso vacía el almacenamiento del origen del banco (IndexedDB y `localStorage`) y siembra
+// una copia de me gusta INVENTADA. `?caso=`:
+//
+//   A                abrir #dashboard → 0 peticiones a /me/tracks
+//   B-cancelar       ⚙ → «Rehacer me gusta desde Spotify» → «Cancelar» → 0 a /me/tracks y la copia igual
+//   B-escape         lo mismo, cerrando con Escape
+//   B-afuera         lo mismo, con un clic en el fondo
+//   C                «Rehacer» con la copia {u1..u120} y Spotify {u21..u150} → el modal dice «tenía 20 que Spotify ya no
+//                    tiene y le faltaban 30», la caché queda con las 130 y las peticiones a /me/tracks son exactamente 3
+//   D                Spotify da 500 en la página 2 hasta agotar los reintentos → el sha256 de la caché, igual; el error
+//                    de loadData y no el modal
+//   E                «Detener carga» en la página 2 → lo mismo que D
+//   F                (con `&w=&h=` de la madre) sin desborde del ítem del ⚙, de la confirmación ni del modal final
+//
+// Le manda a la madre `{ banco: 'rehacer-me-gusta', caso, ok, datos | error }`.
+
+import { instalarRedSimulada, esperarReal, anclar } from '/banco/simulado.mjs';
+import { UID, rango } from '/banco/rehacer-me-gusta-datos.mjs';
+
+const q = new URLSearchParams(location.search);
+const CASO = q.get('caso') || 'A';
+const $ = (s, r = document) => r.querySelector(s);
+const rechazos = [];
+window.addEventListener('unhandledrejection', (e) => rechazos.push(String(e.reason?.message || e.reason)));
+window.addEventListener('error', (e) => rechazos.push(String(e.message)));
+
+function abrir() {
+  return new Promise((res, rej) => {
+    const r = indexedDB.open('spotify-tools', 1);
+    r.onupgradeneeded = () => { if (!r.result.objectStoreNames.contains('kv')) r.result.createObjectStore('kv'); };
+    r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error);
+  });
+}
+async function vaciarYSembrar(pares) {
+  const db = await abrir();
+  await new Promise((res, rej) => {
+    const t = db.transaction('kv', 'readwrite'); const s = t.objectStore('kv');
+    s.clear();
+    for (const [k, v] of pares) s.put(v, k);
+    t.oncomplete = res; t.onerror = () => rej(t.error);
+  });
+  db.close();
+}
+async function leer(k) {
+  const db = await abrir();
+  const v = await new Promise((res, rej) => { const t = db.transaction('kv', 'readonly'); const r = t.objectStore('kv').get(k); t.oncomplete = () => res(r.result); t.onerror = () => rej(t.error); });
+  db.close();
+  return v;
+}
+const hex = (buf) => [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, '0')).join('');
+async function shaCopia() {
+  const v = await anclar(leer('all_liked_tracks'), { vueltas: 20000 });
+  return hex(await anclar(crypto.subtle.digest('SHA-256', new TextEncoder().encode(JSON.stringify(v ?? null))), { vueltas: 20000 }));
+}
+async function pausa(vueltas) { let n = 0; await esperarReal(() => ++n > vueltas, { que: 'una pausa', vueltas: vueltas + 5 }); }
+const textoDe = (el) => (el?.textContent || '').replace(/\s+/g, ' ').trim();
+const modalFinal = () => [...document.querySelectorAll('.modal-alert')].find((m) => /Listo:/.test(textoDe(m)));
+const confirmacion = () => [...document.querySelectorAll('.modal-alert')].find((m) => /Vuelve a bajar todos tus me gusta/.test(textoDe(m)));
+
+async function correr() {
+  const datos = { caso: CASO };
+  const fallos = [];
+  const comprobar = (c, msg) => { if (!c) fallos.push(msg); };
+
+  // ── El almacenamiento del origen, vacío, y la copia sembrada ──────────────────────────────────
+  localStorage.clear();
+  const COPIAS = { A: [1, 120], 'B-cancelar': [1, 120], 'B-escape': [1, 120], 'B-afuera': [1, 120], C: [1, 120], D: [1, 120], E: [1, 120], F: [1, 3] };
+  const SPOTIFY = { C: [21, 150], D: [21, 150], E: [21, 150], F: [2, 5] };
+  const copia = rango(...COPIAS[CASO]);
+  const biblioteca = SPOTIFY[CASO] ? rango(...SPOTIFY[CASO]) : rango(1, 120);
+  await anclar(vaciarYSembrar([['all_liked_tracks', { value: copia, storedAt: 1_760_000_000_000, expiry: null }]]), { vueltas: 20000 });
+  datos.shaAntes = await shaCopia();
+
+  const sim = instalarRedSimulada();
+  sim.ruta('GET', /^\/me$/, () => ({ id: UID, display_name: 'Banco' }));
+  sim.ruta('GET', /^\/me\/playlists/, () => ({ items: [], total: 0, next: null }));
+  localStorage.setItem('fonoteca_last_user_id', UID);
+  localStorage.setItem('fonoteca_perfil_v1', JSON.stringify({ id: UID, display_name: 'Banco' }));
+
+  // `/me/tracks` paginado. En D la página 2 da 500 siempre; en E, al pedir la página 2 se aprieta «Detener carga».
+  const lineasBarra = [];
+  sim.ruta('GET', /^\/me\/tracks/, ({ url }) => {
+    const limit = +(url.searchParams.get('limit') || 20), offset = +(url.searchParams.get('offset') || 0);
+    const barra = $('#dash-content')?.textContent || '';
+    if (/Detener carga/.test(barra)) lineasBarra.push(/Si la detienes, la copia que ya tienes queda como estaba\./.test(barra) ? 'rehacer' : /retoma desde donde quedó/.test(barra) ? 'siempre' : 'otra');
+    if (CASO === 'D' && offset === 50) return sim.sinSimular(500);
+    if (CASO === 'E' && offset === 50) $('#dash-cancel-btn')?.click();
+    return { items: biblioteca.slice(offset, offset + limit), total: biblioteca.length, limit, offset, next: offset + limit < biblioteca.length ? `https://api.spotify.com/v1/me/tracks?offset=${offset + limit}&limit=${limit}` : null };
+  });
+  const aTracks = () => sim.reg.llamadas.filter((l) => l.ruta.startsWith('/me/tracks')).length;
+
+  // Chart.js lo carga `index.html` desde jsDelivr y este marco no lo trae (ni sale a la red). Sin él, `renderDashboard`
+  // tira después de la descarga y `loadData` cae en su `catch`: un `Chart` de mentira que no dibuja nada.
+  window.Chart = class { constructor() {} destroy() {} resize() {} update() {} };
+
+  location.hash = '#dashboard';
+  await import('/js/app.js');
+  await esperarReal(() => $('#dash-cog-btn') && $('#dash-content .dash-state-card'), { que: 'que #dashboard pinte su ⚙ y la pantalla de arranque', vueltas: 8000 });
+
+  if (CASO === 'A') {
+    await pausa(150);
+    datos.aTracks = aTracks();
+    comprobar(datos.aTracks === 0, `abrir #dashboard: 0 peticiones a /me/tracks (${datos.aTracks})`);
+  } else {
+    const abrirElItem = async () => {
+      $('#dash-cog-btn').click();
+      await esperarReal(() => !$('#dash-cog-menu').hidden && $('[data-act="rehacer"]'), { que: 'el ítem «Rehacer me gusta desde Spotify» en el ⚙', vueltas: 400 });
+    };
+    await abrirElItem();
+    const item = $('[data-act="rehacer"]');
+    datos.item = textoDe(item);
+    if (CASO === 'F') {
+      const r = item.getBoundingClientRect(), menu = $('#dash-cog-menu').getBoundingClientRect();
+      datos.itemCaja = { ancho: Math.round(r.width), scroll: item.scrollWidth, cliente: item.clientWidth, izq: Math.round(menu.left), der: Math.round(menu.right), vista: innerWidth };
+      comprobar(item.scrollWidth <= item.clientWidth + 1, `el ítem no desborda (${item.scrollWidth}/${item.clientWidth})`);
+      comprobar(menu.left >= 0 && menu.right <= innerWidth + 0.5, `el menú del ⚙ entra en la vista (${Math.round(menu.left)}–${Math.round(menu.right)} de ${innerWidth})`);
+      comprobar(document.documentElement.scrollWidth <= innerWidth, `la página no desborda a lo ancho con el menú abierto (${document.documentElement.scrollWidth}/${innerWidth})`);
+    }
+    item.click();
+    await esperarReal(confirmacion, { que: 'la confirmación', vueltas: 4000 });
+    const conf = confirmacion();
+    datos.confirmacion = textoDe(conf.querySelector('.modal-alert-body'));
+    datos.botones = [...conf.querySelectorAll('.modal-actions button')].map(textoDe);
+    const medirModal = (m, nombre) => {
+      const r = m.getBoundingClientRect();
+      const cuerpo = m.querySelector('.modal-alert-body');
+      comprobar(r.left >= 0 && r.right <= innerWidth + 0.5 && r.top >= 0 && r.bottom <= innerHeight + 0.5, `${nombre}: el modal entra en la vista (${Math.round(r.left)},${Math.round(r.top)}–${Math.round(r.right)},${Math.round(r.bottom)} de ${innerWidth}×${innerHeight})`);
+      comprobar(m.scrollWidth <= m.clientWidth + 1 && cuerpo.scrollWidth <= cuerpo.clientWidth + 1, `${nombre}: nada desborda a lo ancho dentro del modal (${m.scrollWidth}/${m.clientWidth}, cuerpo ${cuerpo.scrollWidth}/${cuerpo.clientWidth})`);
+      comprobar(document.documentElement.scrollWidth <= innerWidth, `${nombre}: la página no desborda a lo ancho (${document.documentElement.scrollWidth}/${innerWidth})`);
+      return { ancho: Math.round(r.width), alto: Math.round(r.height), cuerpo: `${cuerpo.scrollHeight}/${cuerpo.clientHeight}` };
+    };
+    if (CASO === 'F') datos.confCaja = medirModal(conf, 'la confirmación');
+
+    if (CASO.startsWith('B-')) {
+      if (CASO === 'B-cancelar') conf.querySelector('#modal-cancel').click();
+      if (CASO === 'B-escape') document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+      if (CASO === 'B-afuera') conf.closest('.modal-overlay').dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await esperarReal(() => !confirmacion(), { que: 'que la confirmación se cierre', vueltas: 4000 });
+      await pausa(150);
+      datos.aTracks = aTracks();
+      datos.shaDespues = await shaCopia();
+      comprobar(datos.aTracks === 0, `${CASO}: 0 peticiones a /me/tracks (${datos.aTracks})`);
+      comprobar(datos.shaDespues === datos.shaAntes, `${CASO}: la copia igual (sha256 ${datos.shaAntes.slice(0, 12)} → ${datos.shaDespues.slice(0, 12)})`);
+      comprobar(!$('#dash-load-bar'), `${CASO}: no apareció la barra de carga`);
+    } else {
+      conf.querySelector('#modal-confirm').click();
+      if (CASO === 'C' || CASO === 'F') {
+        await esperarReal(() => modalFinal() || $('#dash-retry-btn'), { que: 'el modal del final', vueltas: 3000 });
+        if (!modalFinal()) throw new Error(`no salió el modal del final: loadData pintó su error («${textoDe($('#dash-content')).slice(0, 200)}»)`);
+        const fin = modalFinal();
+        datos.final = textoDe(fin.querySelector('.modal-alert-body'));
+        datos.tituloFinal = textoDe(fin.querySelector('h2'));
+        if (CASO === 'F') datos.finalCaja = medirModal(fin, 'el modal final');
+        const nueva = await anclar(leer('all_liked_tracks'), { vueltas: 20000 });
+        datos.cache = nueva?.value?.length ?? null;
+        datos.aTracks = aTracks();
+        datos.barra = [...new Set(lineasBarra)];
+        datos.shaDespues = await shaCopia();
+        if (CASO === 'C') {
+          comprobar(datos.final === 'Listo: 130 me gusta. Tu copia anterior tenía 20 que Spotify ya no tiene y le faltaban 30. Si quitaste me gusta desde la app de Spotify, esos cuentan entre los 20.', `C: el modal del final («${datos.final}»)`);
+          const uris = (nueva?.value || []).map((i) => i.track.uri);
+          const esperadas = rango(21, 150).map((i) => i.track.uri);
+          comprobar(datos.cache === 130 && JSON.stringify(uris) === JSON.stringify(esperadas), `C: la caché quedó con las 130 de Spotify (${datos.cache})`);
+          comprobar(datos.aTracks === 3, `C: exactamente 3 peticiones a /me/tracks (${datos.aTracks})`);
+          comprobar(datos.barra.length === 1 && datos.barra[0] === 'rehacer', `C: el cartel de la barra dice «Si la detienes…» (${datos.barra.join(', ')})`);
+        } else {
+          comprobar(datos.cache === 4 && datos.aTracks === 1, `F: bajó y guardó (${datos.cache}, ${datos.aTracks} petición)`);
+        }
+      } else {
+        // D y E: el error de siempre de loadData, y la copia igual
+        const esperado = CASO === 'D' ? 'No se han podido descargar los me gusta.' : 'Descarga cancelada.';
+        await esperarReal(() => $('#dash-retry-btn') && textoDe($('#dash-content')).includes(esperado), { que: `el error de loadData («${esperado}»)`, vueltas: 3000 });
+        await pausa(150);
+        datos.error = esperado;
+        datos.aTracks = aTracks();
+        datos.shaDespues = await shaCopia();
+        datos.barra = [...new Set(lineasBarra)];
+        comprobar(datos.shaDespues === datos.shaAntes, `${CASO}: el sha256 de la caché es el mismo antes y después (${datos.shaAntes} → ${datos.shaDespues})`);
+        comprobar(!modalFinal(), `${CASO}: no salió el modal del final`);
+        comprobar(CASO === 'D' ? datos.aTracks === 4 : datos.aTracks === 2, `${CASO}: peticiones a /me/tracks (${datos.aTracks}; D = 1 + 3 intentos de la página 2, E = 2)`);
+      }
+    }
+  }
+  datos.externas = sim.reg.externas.length;
+  datos.desconocidas = sim.reg.desconocidas;
+  datos.escrituras = sim.reg.escrituras.length;
+  comprobar(datos.externas === 0, `0 peticiones fuera de la Spotify simulada (${sim.reg.externas.join(', ')})`);
+  comprobar(datos.escrituras === 0, `0 escrituras a Spotify (${datos.escrituras})`);
+  if (rechazos.length) fallos.push(`errores sin atrapar: ${rechazos.join(' | ')}`);
+  if (fallos.length) throw new Error(`${fallos.join(' | ')} · ${JSON.stringify(datos)}`);
+  return datos;
+}
+
+try {
+  const datos = await correr();
+  datos.reloj = Math.round(performance.now());
+  parent.postMessage({ banco: 'rehacer-me-gusta', caso: CASO, ok: true, datos }, '*');
+} catch (e) {
+  parent.postMessage({ banco: 'rehacer-me-gusta', caso: CASO, ok: false, error: `BANCO rehacer-me-gusta (${CASO}): ${String(e?.message || e)}` }, '*');
+}
+</script>
+</body></html>

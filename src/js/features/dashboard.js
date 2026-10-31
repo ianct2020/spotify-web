@@ -1,4 +1,4 @@
-import { getAllLikedTracks, getLikesPartialInfo, exportAllData, exportarCopiaCompleta, importarCopiaCompleta, aplicarPlan, importAllData, TEXTOS_LIKES_SIN_IMPORTAR, getCurrentUserId, syncLikesIncremental, getLikesCacheTimestamp, getBestAvailableLikes, getAllPlaylistItems } from '../api.js';
+import { getAllLikedTracks, hayCargaDeLikesEnVuelo, getLikesPartialInfo, exportAllData, exportarCopiaCompleta, importarCopiaCompleta, aplicarPlan, importAllData, TEXTOS_LIKES_SIN_IMPORTAR, getCurrentUserId, syncLikesIncremental, getLikesCacheTimestamp, getBestAvailableLikes, getAllPlaylistItems } from '../api.js';
 import { showProgress, hideProgress, alertModal, infoModal, escapeHtml, pageHeader } from '../ui/components.js';
 import { openModal, closeTop } from '../ui/modal-stack.js';
 import { showToast } from '../ui/toast.js';
@@ -28,6 +28,8 @@ import { isJunkTrack } from '../util/junk.js';
 import { AVISO_MEZCLA } from '../util/corte-saltos.js';
 import { nombreArchivo } from '../util/copia-completa.js';
 import { resumenEnPalabras, importEscribio } from '../util/copia-importar.js';
+import { diferenciaDeLikes, urisDeLikes, textoConfirmacionRehacer, textoFinalRehacer } from '../util/likes-diferencia.js';
+import { vigilarRuta } from '../util/vigencia-ruta.js';
 
 let charts = [];
 let _loadController = null;
@@ -93,6 +95,7 @@ export function render(container) {
         <button class="dash-cog-item" data-act="export-csv" role="menuitem">Exportar CSV <span class="dash-cog-hint">solo likes, plano</span></button>
         <button class="dash-cog-item" data-act="import" role="menuitem">Importar JSON</button>
         <button class="dash-cog-item" data-act="refresh" role="menuitem">Actualizar datos</button>
+        <button class="dash-cog-item" data-act="rehacer" role="menuitem">Rehacer me gusta desde Spotify <span class="dash-cog-hint">vuelve a bajar todos</span></button>
         <button class="dash-cog-item" data-act="statsfm" role="menuitem">Usuario de Stats.fm <span class="dash-cog-hint" id="dash-cog-statsfm-hint">${hasUsername() ? escapeHtml(getUsername()) : 'sin configurar'}</span></button>
         <button class="dash-cog-item" data-act="lastfm" role="menuitem">API key de Last.fm <span class="dash-cog-hint" id="dash-cog-lastfm-hint">${estadoLastfm()}</span></button>
       </div>
@@ -143,6 +146,7 @@ export function render(container) {
       else if (act === 'export-csv') handleExportCsv();
       else if (act === 'import') importInput.click();
       else if (act === 'refresh') handleRefresh();
+      else if (act === 'rehacer') handleRehacerLikes();
       else if (act === 'statsfm') promptStatsfm();
       else if (act === 'lastfm') promptLastfm();
     };
@@ -401,6 +405,50 @@ async function handleRefresh() {
   } catch (e) {
     showToast('Error: ' + e.message, 'error');
     renderStartScreen();
+  }
+}
+
+// «Rehacer me gusta desde Spotify» (v=349, tanda 106). La caché de me gusta no dice de qué cuenta es cada ítem: si otra
+// cuenta usó este navegador antes de v=345, la copia puede tener mezcla vieja, y eso no se puede detectar sin bajar todo
+// de nuevo. Esto lo baja por el camino de siempre (`loadData(true)`, con su barra y «Detener carga»), y al terminar dice
+// cuántas tenía la copia que Spotify ya no tiene y cuántas le faltaban, sin decir qué eran: un me gusta quitado desde la
+// app de Spotify y uno de otra cuenta se ven igual desde acá.
+//
+// - De la copia de antes se guarda en memoria SOLO el conjunto de uris (`urisDeLikes`), leído con
+//   `getBestAvailableLikes()` (0 peticiones). No escribe nada más que lo que ya escribe `saveLikes` por dentro.
+// - «Cancelar», Escape o un clic afuera: 0 peticiones y 0 escrituras.
+// - Si se corta (red, 429, «Detener carga», la cuenta que cambia), `startLikesLoad` tira, la copia queda igual,
+//   `loadData` pinta su error de siempre y devuelve `null`: no hay modal del final. Volver a apretar arranca de 0 (`force`
+//   borra el parcial al empezar).
+// - Con una descarga de me gusta ya en vuelo en esta pestaña (este botón, «Actualizar datos» u otra vista), no arranca
+//   otra: `loadLikesShared` le colgaría el `force` a una que no lo es, y que pudo retomar un parcial. Lo dice un toast.
+// - Si saliste de la ruta mientras bajaba, la descarga sigue (lo que hace `loadData` hoy) y el modal no sale en otra vista.
+let _rehaciendo = false;
+const TEXTO_YA_BAJANDO = 'Ya se están descargando tus me gusta. Espera a que termine.';
+
+async function handleRehacerLikes() {
+  if (_rehaciendo || hayCargaDeLikesEnVuelo()) { showToast(TEXTO_YA_BAJANDO, 'info'); return; }
+  _rehaciendo = true;
+  try {
+    const ruta = vigilarRuta();
+    let cuantos, viejos;
+    {
+      const { items } = await getBestAvailableLikes();
+      cuantos = items.length;
+      viejos = urisDeLikes(items);
+    }
+    if (!ruta.vigente()) return;
+    const ok = await alertModal('Rehacer me gusta desde Spotify', `<p>${escapeHtml(textoConfirmacionRehacer(cuantos))}</p>`,
+      { confirmText: 'Rehacer', cancelText: 'Cancelar', variant: 'warning' });
+    if (!ok || !ruta.vigente()) return;
+    if (hayCargaDeLikesEnVuelo()) { showToast(TEXTO_YA_BAJANDO, 'info'); return; }
+    const nuevos = await loadData(true, { rehacer: true });
+    if (!nuevos || !ruta.vigente()) return;
+    const { deMas, faltaban } = diferenciaDeLikes(viejos, nuevos);
+    await infoModal('Me gusta rehechos', `<p>${escapeHtml(textoFinalRehacer({ n: nuevos.length, deMas, faltaban, habiaCopia: cuantos > 0 }))}</p>`,
+      { confirmText: 'Entendido' });
+  } finally {
+    _rehaciendo = false;
   }
 }
 
@@ -677,9 +725,12 @@ function inspectImportPayload(parsed) {
   };
 }
 
-async function loadData(forceRefresh) {
+// (v=349) Devuelve la lista de me gusta si salió bien y `null` si no: la usa «Rehacer me gusta desde Spotify». Lo que
+// pinta no cambió, y los demás llamadores ignoran el valor. `rehacer: true` (solo ese botón) cambia la línea de debajo de
+// «Detener carga»: con `force`, un corte no se retoma, así que «la próxima vez retoma desde donde quedó» sería falso.
+async function loadData(forceRefresh, { rehacer = false } = {}) {
   const content = document.getElementById('dash-content');
-  if (!content) return;
+  if (!content) return null;
 
   // ⚠️ Antes: `if (forceRefresh) invalidateLikesCache();` — borraba las ~9.400
   // canciones ANTES de bajar el reemplazo, así que un 429 a mitad de camino
@@ -698,7 +749,7 @@ async function loadData(forceRefresh) {
         <div id="dash-load-bar" style="height:100%;background:var(--color-accent);width:0%;transition:width 0.2s"></div>
       </div>
       <button class="btn btn-danger" id="dash-cancel-btn" style="min-width:180px">Detener carga</button>
-      <div style="font-size:12px;color:var(--color-text-muted);margin-top:12px">Puedes detener sin problema — la próxima vez retoma desde donde quedó.</div>
+      <div style="font-size:12px;color:var(--color-text-muted);margin-top:12px">${rehacer ? 'Si la detienes, la copia que ya tienes queda como estaba.' : 'Puedes detener sin problema — la próxima vez retoma desde donde quedó.'}</div>
     </div>
   `;
 
@@ -744,6 +795,7 @@ async function loadData(forceRefresh) {
     _lastStats = stats;
     _lastContainer = content;
     refreshLastSyncLabel();
+    return likes;
   } catch (e) {
     // REGLA: si algo falla, el contenido queda VISIBLE.
     //
@@ -792,6 +844,7 @@ async function loadData(forceRefresh) {
     // Sin caché no hay nada que rescatar, pero tampoco queda un callejón sin
     // salida: los dos botones de arriba siguen ahí, y «Volver a empezar» lleva
     // a la pantalla de arranque, que ya sabe contar el parcial.
+    return null;
   } finally {
     _loadController = null;
   }

@@ -15,7 +15,7 @@
 // El único import de este módulo: el tronco lower+NFD que abajo era un cuerpo
 // escrito a mano, repetido en artist-card.js y search-likes.js (paso 2 del
 // plan de normalizadores).
-import { sinTildes } from './texto.js?v=348';
+import { sinTildes } from './texto.js?v=349';
 
 // Artistas que solo publican sonidos funcionales — se van enteros.
 // Comparación exacta sobre el nombre normalizado.

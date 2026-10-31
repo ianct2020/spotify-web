@@ -1,18 +1,18 @@
-import { getValidToken, refreshAccessToken } from './auth.js?v=348';
-import { cacheGet, cacheGetRaw, cacheGetTimestamp, cacheSet, cacheClear, prefKey, migratePrefKey } from './storage.js?v=348';
-import { idbDel, idbDelByPrefix, idbGetCached, idbGetCachedRaw, idbGetTimestamp, idbSetCached, idbGet, idbAllKeys, idbEntriesByPrefix, idbSetVarios } from './idb.js?v=348';
-import { OWNER_KEY_LIST } from './history-keys.js?v=348';
-import { OCULTOS_ITEMS_PREFIX } from './util/ocultos-items-clave.js?v=348';
-import { showToast } from './ui/toast.js?v=348';
-import { artistIsSame, limpiaParaQuery } from './util/track-match.js?v=348';
-import { contadorCuota, cuotaDeEndpoint } from './util/cuota.js?v=348';
-import { exportarEtiquetas, importarEtiquetas } from './api/lastfm.js?v=348';
-import { leerNavegador, armarCopia, serializar, contieneSecreto, CENSO } from './util/copia-completa.js?v=348';
-import { leerCopia, planDeImport, segundaRed, importEscribio, TEXTOS as TEXTOS_IMPORT } from './util/copia-importar.js?v=348';
-import { MARCA_DESDE_COPIA, leerMarca, marcaTrasImport } from './util/ocultos-desde-copia.js?v=348';
-import { avisarCopiaImportada } from './util/canal-copia.js?v=348';
-import { BORRADOS_LOG_MAX } from './util/topes-registros.js?v=348';
-import { LIKES_DE_OTRO_KEY, hayLikesDeOtro } from './util/likes-de-otro.js?v=348';
+import { getValidToken, refreshAccessToken } from './auth.js?v=349';
+import { cacheGet, cacheGetRaw, cacheGetTimestamp, cacheSet, cacheClear, prefKey, migratePrefKey } from './storage.js?v=349';
+import { idbDel, idbDelByPrefix, idbGetCached, idbGetCachedRaw, idbGetTimestamp, idbSetCached, idbGet, idbAllKeys, idbEntriesByPrefix, idbSetVarios } from './idb.js?v=349';
+import { OWNER_KEY_LIST } from './history-keys.js?v=349';
+import { OCULTOS_ITEMS_PREFIX } from './util/ocultos-items-clave.js?v=349';
+import { showToast } from './ui/toast.js?v=349';
+import { artistIsSame, limpiaParaQuery } from './util/track-match.js?v=349';
+import { contadorCuota, cuotaDeEndpoint } from './util/cuota.js?v=349';
+import { exportarEtiquetas, importarEtiquetas } from './api/lastfm.js?v=349';
+import { leerNavegador, armarCopia, serializar, contieneSecreto, CENSO } from './util/copia-completa.js?v=349';
+import { leerCopia, planDeImport, segundaRed, importEscribio, TEXTOS as TEXTOS_IMPORT } from './util/copia-importar.js?v=349';
+import { MARCA_DESDE_COPIA, leerMarca, marcaTrasImport } from './util/ocultos-desde-copia.js?v=349';
+import { avisarCopiaImportada } from './util/canal-copia.js?v=349';
+import { BORRADOS_LOG_MAX } from './util/topes-registros.js?v=349';
+import { LIKES_DE_OTRO_KEY, hayLikesDeOtro } from './util/likes-de-otro.js?v=349';
 
 const BASE = 'https://api.spotify.com/v1';
 const MIN_RETRY_WAIT = 5000;
@@ -665,6 +665,13 @@ async function loadLikesShared(onProgress, { force = false, signal } = {}) {
   }
 }
 
+// (v=349) ¿Hay una descarga de me gusta en vuelo en ESTA pestaña? La pregunta «Rehacer me gusta desde Spotify» (#dashboard)
+// antes de arrancar: `loadLikesShared` cuelga un `force` de la carga que ya esté en vuelo aunque esa no sea `force` (y esa
+// pudo retomar un parcial), así que con una en vuelo el botón no arranca otra y lo dice. No lee la caché.
+function hayCargaDeLikesEnVuelo() {
+  return likesInFlight !== null;
+}
+
 async function getAllLikedTracks(onProgress, { force = false, signal } = {}) {
   await migrateLikesFromLocalStorage();
 
@@ -998,7 +1005,7 @@ async function importarCopiaCompleta(texto, { ahora = new Date() } = {}) {
     plan.rechazo = { motivo: 'roto', texto: `El archivo no es un JSON válido (${e?.message || e}).` };
     return { plan };
   }
-  const { motivoSinImportCompleto } = await import('./features/history-data.js?v=348');
+  const { motivoSinImportCompleto } = await import('./features/history-data.js?v=349');
   const motivoOwner = await motivoSinImportCompleto();
   const uid = motivoOwner === 'identidad' ? null : _cachedUserId;
   const leido = await leerParaImportar();
@@ -2200,6 +2207,7 @@ export {
   spotifyFetch,
   paginateAll,
   getAllLikedTracks,
+  hayCargaDeLikesEnVuelo,
   getAllUserPlaylists,
   getAllPlaylistItems,
   updatePlaylistItemsCache,

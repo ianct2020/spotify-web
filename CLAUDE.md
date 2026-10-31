@@ -4049,6 +4049,91 @@ nombrada, con su valor byte a byte; y lo mismo contra «Cerrar sesión», de con
 dos heredadas, y la marca fuera, en el medio de la espera de cada escritor; con ella, 0 escrituras de la caché después del
 cambio; sin ella, escribe como siempre). Los números, en el informe de la tanda 105 (`fonoteca-migracion/informes/tanda-105/`).
 
+### Rehacer me gusta desde Spotify (v=349)
+
+La tanda 106. Las tandas 98, 103 y 105 cerraron los caminos por los que se podían colar los me gusta de otra cuenta, pero
+una copia que **ya** tenía mezcla de antes de v=345 no se puede detectar: ningún ítem dice de qué cuenta es (`slimTrack`
+guarda `added_at` y la pista). La única forma es comparar contra Spotify, y comparar cuesta lo mismo que rehacer. Ian no sabe
+si alguna vez entró con otra cuenta en su navegador.
+
+**Qué hace.** Un ítem del ⚙ de `#dashboard`, debajo de «Actualizar datos»: «Rehacer me gusta desde Spotify», con la pista
+«vuelve a bajar todos» (`data-act="rehacer"` → `handleRehacerLikes()`, `features/dashboard.js`):
+
+1. lee la copia con `getBestAvailableLikes()` (0 peticiones) y guarda en memoria **solo el conjunto de `track.uri`**;
+2. pregunta (`alertModal`, «Rehacer» / «Cancelar»): «Vuelve a bajar todos tus me gusta de Spotify (unas P páginas, varios
+   minutos) y reemplaza la copia de este navegador. No cambia nada en tu cuenta de Spotify. Si se corta o la detienes, la
+   copia que ya tienes queda como estaba.» P = `ceil(L/50)` en `toLocaleString('es-ES')`; con P = 1, «(una página, varios
+   minutos)»; sin copia, sin el paréntesis. **«Cancelar», Escape o un clic afuera = 0 peticiones y 0 escrituras**;
+3. baja por el camino de siempre, `loadData(true, { rehacer: true })`, con su barra y «Detener carga». La línea de debajo
+   del botón dice «Si la detienes, la copia que ya tienes queda como estaba.» (con `force`, «la próxima vez retoma desde
+   donde quedó» sería falso); para los demás llamadores, la de siempre. **`loadData` devuelve** la lista si salió bien y
+   `null` si no (lo que pinta no cambió, y los demás la ignoran);
+4. compara por `track.uri` distintas con `diferenciaDeLikes(viejos, nuevos)` → `{ deMas, faltaban }`
+   (`util/likes-diferencia.js`, puro y sin imports; los ítems sin `uri` no cuentan) y lo dice en un `infoModal`:
+   - con diferencias: «Listo: N me gusta. Tu copia anterior tenía X que Spotify ya no tiene y le faltaban Y. Si quitaste me
+     gusta desde la app de Spotify, esos cuentan entre los X.» (con Y = 1, «le faltaba 1»; con X = 1, la última frase es
+     «Si quitaste un me gusta desde la app de Spotify, puede ser ese.»; con X = 0, «Listo: N me gusta. A tu copia anterior le
+     faltaban Y.»; con Y = 0, sin «y le faltaban…»);
+   - sin diferencias: «Listo: N me gusta. Tu copia coincidía con Spotify.»;
+   - sin copia anterior: «Listo: N me gusta. No había una copia anterior con la que comparar.».
+
+   🔴 **Ninguno dice «cuenta» (la palabra), «mezcl» ni «otra persona»**: lo vigila un assert sobre todas las variantes (con
+   `\bcuenta\b`, porque «esos cuentan» sí está).
+
+No escribe nada más que lo que ya escribe `saveLikes` por dentro. Ninguna clave nueva de `localStorage` ni de IndexedDB.
+
+**Qué cuesta**: `ceil(L/50)` peticiones a `/me/tracks`, **unas 186 con 9.281**, y varios minutos (600 ms entre páginas), más
+lo de pintar el Dashboard al terminar. Ver la fila `↳` de `#dashboard` en «💰 Cuánto cuesta abrir cada vista».
+
+🔴 **No distingue mezcla de un me gusta quitado en Spotify.** Un me gusta que la copia tiene y Spotify no puede ser de otra
+cuenta **o** uno que Ian quitó desde la app; desde el navegador las dos cosas se ven igual. Por eso el texto cuenta y no
+promete qué eran: si X es chico, lo más probable es lo segundo.
+
+**Si se corta** (un error de red o un 429 agotados, «Detener carga», la marca o la época que cambian, o 399 de 400): la copia
+queda **igual byte a byte** (`startLikesLoad` tira antes de `saveLikes`, que además exige `complete` y la época), sale el error
+de siempre de `loadData` y no sale el modal del final. ⚠️ Lo que sí se escribe es el **parcial** de la descarga cortada
+(`all_liked_tracks_partial`, la red de seguridad de `paginateAll`; con la época cambiada, tampoco). **Volver a apretar arranca
+de 0** (`force` borra el parcial al empezar); el «Reintentar» del cartel de error es `loadData(false)`, que con la copia
+completa la usa tal cual y no baja nada (el cartel dice «al reintentar se retoma donde se quedó»: con este botón no es así; no se
+tocó).
+
+**Dos clics = una descarga.** `_rehaciendo` (de módulo) cubre el clic con el modal abierto y con la descarga en marcha, y
+`hayCargaDeLikesEnVuelo()` (`api.js`, nueva: `likesInFlight !== null`, no lee la caché) cubre una carga de otra vista: en los
+dos casos no arranca y lo dice un toast `info`, «Ya se están descargando tus me gusta. Espera a que termine.». Se pregunta antes
+y después de la confirmación. El porqué: `loadLikesShared` cuelga un `force` de la carga que ya esté en vuelo aunque esa no
+sea `force`, y esa pudo retomar un parcial. «Rehacer» dos veces en el modal: `alertModal` resuelve una sola vez.
+
+**Salir de la ruta a mitad**: `render()` no aborta `_loadController` y `loadData` no pregunta por la vigencia, así que la
+descarga **sigue** hasta el final y, si cuadra, guarda (no se cambió). El handler pregunta por la vigencia
+(`vigilarRuta()`) después de cada espera: el modal del final no sale sobre otra vista. ⚠️ **Lo que ya pasaba antes del botón**:
+si la descarga FALLA después de que saliste, el `catch` de `loadData` pinta en el nodo viejo y
+`document.getElementById('dash-retry-btn').onclick` da `null` → «Cannot set properties of null (setting 'onclick')», que sube
+como promesa sin atrapar (el banner chico de crash-guard sobre la vista nueva). Pasa igual con «Descargar de Spotify»; anotado
+en `PENDIENTES.md` (tanda 106), sin tocar.
+
+⚠️ **La base de colores del mosaico** (`mosaico_colores_v1`) se arma con los me gusta y **no se rehace sola** después del
+botón: si se armó con una copia mezclada, sigue así hasta que se vuelva a construir.
+
+⚠️ Si pintar el Dashboard tira después de una descarga buena (p. ej. Chart.js que no cargó del CDN), `loadData` cae en su
+`catch`: la copia **ya** se reemplazó, pero devuelve `null` y el modal del final no sale (y el cartel dice «No se han podido
+descargar los me gusta»). Leído del código y visto en el banco antes de ponerle un `Chart` de mentira.
+
+**Guardas**:
+
+- `tests/likes-diferencia.test.mjs` (la función pura: listas inventadas, repetidas, sin `track` o sin `uri`, vacías, que no
+  muta);
+- `tests/rehacer-me-gusta.test.mjs` (el handler y `loadData` REALES sacados del fuente con `tests/dobles/rehacer-dashboard.mjs`
+  y un DOM de mentira, con el `api.js` REAL y la IndexedDB doblada de la 98: los textos palabra por palabra, «Cancelar» /
+  Escape / clic afuera, el cartel de la barra, dos clics y la ruta que cambia);
+- `tests/rehacer-me-gusta-corte.test.mjs` (el corte a mitad con el `api.js` REAL, copia de 300 contra 400: el `sha256` de la
+  copia igual y 0 escrituras en e1-e4; contra v=348, esa parte da verde también —la copia ya estaba protegida— y lo rojo es
+  el modal y el `null`, que no existían);
+- el banco `tests/banco/rehacer-me-gusta.html` (en `prepush`, el vigésimo noveno: la app ENTERA, nueve iframes, ver el
+  comentario de `scripts/antes-de-pushear.sh`).
+
+🔴 **El botón no se aprieta con la cuenta de Ian** en ninguna prueba: todo va con dobles y la Spotify simulada. Lo aprieta Ian
+cuando quiera.
+
 ## Client ID
 0c8c92ad128e4b89be7097c6b8082797
 
@@ -4839,6 +4924,7 @@ fila sobrevivió así desde que se armó la tabla.
 | `#dashboard` | **1 `/me`** (+1 del arranque = **2** medidos) | ídem | `getCurrentUserId()` de `loadOne()`, vía `loadHistoryStats()` en `render()` | **fijo**, no escala con la biblioteca | **medida en vivo el 2026-10-07** · desglose **leído del código el 2026-10-08** |
 | ↳ **al pulsar «Usar los de la caché»**: **1 + ceil(n/100)** = **27** | — | **1** | `1 /playlists/{P}?fields=snapshot_id` + págs. de `/playlists/{P}/items` | **n** = pistas de la playlist de álbumes escuchados (**2.509** el 07/10) | **leída del código 2026-10-07** |
 | ↳ lo que decía antes (**0/0**, y después **1 `/me` + 1 `/playlists` + 1 `/items`**) era FALSO | | | | | ver la nota de abajo |
+| ↳ **al apretar ⚙ → «Rehacer me gusta desde Spotify» y «Rehacer»** (v=349): **`ceil(L/50)`** a `/me/tracks` (**186** con 9.281), más lo de pintar el Dashboard al terminar (lo de «Usar los de la caché»). «Cancelar», Escape o clic afuera: **0** | — | ídem (con `force` no lee la caché) | `GET /me/tracks?limit=50&offset=…`, de 0 al final | **L** = me gusta en Spotify | **medida en el banco el 2026-10-31** (`tests/banco/rehacer-me-gusta.html`, caso C: 130 inventados → **3** peticiones a `/me/tracks`). En vivo, no: Ian no lo apretó |
 | `#wrapped` | **1 `/me`** (+1 del arranque = **2** medidos) | ídem | `getCurrentUserId()` de `loadOne()`, vía `loadHistoryStats()` en `render()` | **fijo** | **medida en vivo el 2026-10-07** · desglose **leído del código el 2026-10-08** |
 | ↳ lo que decía antes (**0/0**) era FALSO: es el MISMO par que `#dashboard` | | | | | ver la nota de abajo |
 | ↳ sin historial (`renderLite`) | **2** | **2** | 2 × `/me/top/{artists,tracks}` | fijo | leída del código |

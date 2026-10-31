@@ -1,0 +1,69 @@
+<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>banco rehacer-me-gusta — el botón que vuelve a bajar los me gusta</title>
+<style>html,body{margin:0;background:#111;color:#eee;font:13px system-ui}iframe{border:0;display:block}</style>
+</head><body>
+<pre id="progreso"></pre>
+<div id="marco"></div>
+<script type="module">
+// ── Banco `rehacer-me-gusta` (v=349, tanda 106; el vigésimo noveno de `prepush`) ─────────────────
+//
+// «Rehacer me gusta desde Spotify», el ítem del ⚙ de #dashboard, en la app ENTERA contra la Spotify simulada con
+// `/me/tracks` paginado y copias de me gusta INVENTADAS. Cada caso va en su propio iframe (`rehacer-me-gusta-caso.html`),
+// uno detrás del otro, y vacía el almacenamiento del origen antes de sembrar el suyo:
+//
+//   A   abrir #dashboard = 0 peticiones a /me/tracks
+//   B   «Cancelar», Escape y clic afuera = 0 a /me/tracks y la copia igual (tres iframes)
+//   C   copia {u1..u120}, Spotify {u21..u150}: «tenía 20 que Spotify ya no tiene y le faltaban 30», la caché con las 130
+//       y exactamente 3 peticiones a /me/tracks
+//   D   500 en la página 2 hasta agotar: el sha256 de la caché, igual, y el error de loadData, no el modal
+//   E   «Detener carga» en la página 2: lo mismo
+//   F   sin desborde del ítem del ⚙ ni de los modales a 1366×591 y a 390×844
+//
+// El banco no carga nada de la red: lo que no es del origen del banco lo corta `simulado.mjs` (y Chrome corre con
+// `--host-resolver-rules` que no resuelve ningún host). Visto rojo contra v=348 en C (no existe el ítem).
+
+import { esperarReal } from '/banco/simulado.mjs';
+import { fallar, listo } from '/banco/esperar.mjs';
+
+const CASOS = [
+  ['A', 1366, 591], ['B-cancelar', 1366, 591], ['B-escape', 1366, 591], ['B-afuera', 1366, 591],
+  ['C', 1366, 591], ['D', 1366, 591], ['E', 1366, 591], ['F', 1366, 591], ['F', 390, 844],
+];
+const res = [];
+let actual = null;
+window.addEventListener('message', (e) => { if (e.data?.banco === 'rehacer-me-gusta') actual = e.data; });
+
+try {
+  // Corre TODOS los casos aunque uno falle, y al final dice cuáles: el rojo se ve entero de una vez.
+  const errores = [];
+  for (const [caso, w, h] of CASOS) {
+    actual = null;
+    const f = document.createElement('iframe');
+    f.width = w; f.height = h;
+    f.src = `/banco/rehacer-me-gusta-caso.html?caso=${caso}&w=${w}`;
+    document.getElementById('progreso').textContent = `el caso ${caso} (${w}×${h}) no terminó dentro del presupuesto de reloj virtual`;
+    document.getElementById('marco').replaceChildren(f);
+    await esperarReal(() => actual, { que: `el caso ${caso} a ${w}×${h}`, vueltas: 40000 });
+    if (!actual.ok) errores.push(actual.error);
+    else res.push({ ...actual.datos, caso: `${caso}@${w}x${h}` });
+  }
+  if (errores.length) throw new Error(`${errores.length} de ${CASOS.length} casos en rojo (verdes: ${res.map((r) => r.caso).join(', ') || 'ninguno'}): ${errores.join(' ‖ ')} · reloj virtual=${Math.round(performance.now())} ms`);
+  const d = Object.fromEntries(res.map((r) => [r.caso, r]));
+  const C = d['C@1366x591'], D = d['D@1366x591'], E = d['E@1366x591'];
+  const resumen = [
+    `A: /me/tracks=${d['A@1366x591'].aTracks}`,
+    `B: cancelar=${d['B-cancelar@1366x591'].aTracks} escape=${d['B-escape@1366x591'].aTracks} afuera=${d['B-afuera@1366x591'].aTracks} (copia igual en los tres)`,
+    `C: «${C.final}» · caché=${C.cache} · /me/tracks=${C.aTracks} · barra=${C.barra.join('/')} · confirmación «${C.confirmacion}» · botones ${C.botones.join('/')}`,
+    `D: sha256 ${D.shaAntes} → ${D.shaDespues} · /me/tracks=${D.aTracks} · «${D.error}»`,
+    `E: sha256 ${E.shaAntes} → ${E.shaDespues} · /me/tracks=${E.aTracks} · «${E.error}»`,
+    `F: 1366×591 ítem ${JSON.stringify(d['F@1366x591'].itemCaja)} conf ${JSON.stringify(d['F@1366x591'].confCaja)} final ${JSON.stringify(d['F@1366x591'].finalCaja)} · 390×844 ítem ${JSON.stringify(d['F@390x844'].itemCaja)} conf ${JSON.stringify(d['F@390x844'].confCaja)} final ${JSON.stringify(d['F@390x844'].finalCaja)}`,
+    `externas=${res.reduce((s, r) => s + r.externas, 0)} · rutas sin simular: ${[...new Set(res.flatMap((r) => r.desconocidas))].join(', ') || 'ninguna'}`,
+    `reloj virtual=${Math.round(performance.now())} ms`,
+  ].join(' · ');
+  document.documentElement.setAttribute('data-resumen', resumen);
+  document.getElementById('progreso').textContent = resumen;
+  listo();
+} catch (e) {
+  fallar(e);
+}
+</script>
+</body></html>

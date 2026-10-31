@@ -665,6 +665,13 @@ async function loadLikesShared(onProgress, { force = false, signal } = {}) {
   }
 }
 
+// (v=349) ¿Hay una descarga de me gusta en vuelo en ESTA pestaña? La pregunta «Rehacer me gusta desde Spotify» (#dashboard)
+// antes de arrancar: `loadLikesShared` cuelga un `force` de la carga que ya esté en vuelo aunque esa no sea `force` (y esa
+// pudo retomar un parcial), así que con una en vuelo el botón no arranca otra y lo dice. No lee la caché.
+function hayCargaDeLikesEnVuelo() {
+  return likesInFlight !== null;
+}
+
 async function getAllLikedTracks(onProgress, { force = false, signal } = {}) {
   await migrateLikesFromLocalStorage();
 
@@ -2200,6 +2207,7 @@ export {
   spotifyFetch,
   paginateAll,
   getAllLikedTracks,
+  hayCargaDeLikesEnVuelo,
   getAllUserPlaylists,
   getAllPlaylistItems,
   updatePlaylistItemsCache,
