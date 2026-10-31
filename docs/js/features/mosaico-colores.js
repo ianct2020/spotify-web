@@ -27,11 +27,11 @@
 // temporizadores encadenados hasta uno por minuto. El bucle solo espera a la
 // red y a la decodificación, que no se frenan.
 
-import { idbGetCachedRaw, idbSetCached } from '../idb.js?v=349';
-import { loadListenedAlbums } from './history-data.js?v=349';
-import { getBestAvailableLikes } from '../api.js?v=349';
-import { coverId, coverVariant } from '../util/album-key.js?v=349';
-import { MOSAICO_COLORES_KEY, BYTES_POR_PORTADA, rejilla3x3 } from '../util/cover-color.js?v=349';
+import { idbGetCachedRaw, idbSetCached } from '../idb.js?v=350';
+import { loadListenedAlbums } from './history-data.js?v=350';
+import { getBestAvailableLikes } from '../api.js?v=350';
+import { coverId, coverVariant } from '../util/album-key.js?v=350';
+import { MOSAICO_COLORES_KEY, BYTES_POR_PORTADA, rejilla3x3 } from '../util/cover-color.js?v=350';
 
 const FORMATO = 1;
 // Descargas a la vez. Es el lote de `covers-wallpaper.js`, medido allí contra

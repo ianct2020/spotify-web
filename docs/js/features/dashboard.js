@@ -1,16 +1,16 @@
-import { getAllLikedTracks, hayCargaDeLikesEnVuelo, getLikesPartialInfo, exportAllData, exportarCopiaCompleta, importarCopiaCompleta, aplicarPlan, importAllData, TEXTOS_LIKES_SIN_IMPORTAR, getCurrentUserId, syncLikesIncremental, getLikesCacheTimestamp, getBestAvailableLikes, getAllPlaylistItems } from '../api.js?v=349';
-import { showProgress, hideProgress, alertModal, infoModal, escapeHtml, pageHeader } from '../ui/components.js?v=349';
-import { openModal, closeTop } from '../ui/modal-stack.js?v=349';
-import { showToast } from '../ui/toast.js?v=349';
-import { openListenedAlbumsPicker, getListenedPlaylist } from './listened-shared.js?v=349';
-import { loadHistoryStats, loadListenedAlbums } from './history-data.js?v=349';
-import { getArtistLikePreview } from '../util/artist-preview.js?v=349';
-import { hoverIn, hoverOut } from '../ui/preview-player.js?v=349';
-import { armRevealAll } from '../ui/reveal.js?v=349';
-import { hasUsername, getUsername, setUsername } from '../api/statsfm.js?v=349';
-import { getKey as getLastfmKey, setKey as setLastfmKey, clearKey as clearLastfmKey, isDefaultKey as lastfmIsDefaultKey } from '../api/lastfm.js?v=349';
-import { prefKey, migratePrefKey } from '../storage.js?v=349';
-import { alpha } from '../ui/theme-panel.js?v=349';
+import { getAllLikedTracks, hayCargaDeLikesEnVuelo, getLikesPartialInfo, exportAllData, exportarCopiaCompleta, importarCopiaCompleta, aplicarPlan, importAllData, TEXTOS_LIKES_SIN_IMPORTAR, getCurrentUserId, syncLikesIncremental, getLikesCacheTimestamp, getBestAvailableLikes, getAllPlaylistItems } from '../api.js?v=350';
+import { showProgress, hideProgress, alertModal, infoModal, escapeHtml, pageHeader } from '../ui/components.js?v=350';
+import { openModal, closeTop } from '../ui/modal-stack.js?v=350';
+import { showToast } from '../ui/toast.js?v=350';
+import { openListenedAlbumsPicker, getListenedPlaylist } from './listened-shared.js?v=350';
+import { loadHistoryStats, loadListenedAlbums } from './history-data.js?v=350';
+import { getArtistLikePreview } from '../util/artist-preview.js?v=350';
+import { hoverIn, hoverOut } from '../ui/preview-player.js?v=350';
+import { armRevealAll } from '../ui/reveal.js?v=350';
+import { hasUsername, getUsername, setUsername } from '../api/statsfm.js?v=350';
+import { getKey as getLastfmKey, setKey as setLastfmKey, clearKey as clearLastfmKey, isDefaultKey as lastfmIsDefaultKey } from '../api/lastfm.js?v=350';
+import { prefKey, migratePrefKey } from '../storage.js?v=350';
+import { alpha } from '../ui/theme-panel.js?v=350';
 
 // Tres estados posibles, no dos: puede haber una key propia, la del código, o
 // —si algún día la constante queda vacía— ninguna. El hint del ⚙ tiene que
@@ -20,16 +20,16 @@ function estadoLastfm() {
   if (localStorage.getItem(prefKey('lastfm_api_key'))) return 'propia';
   return lastfmIsDefaultKey() ? 'la del código' : 'sin configurar';
 }
-import { loadHistoryStats as _loadStatsForCounter } from './history-data.js?v=349';
-import { openArtistCard } from './artist-card.js?v=349';
-import { openAlbumCard } from './album-card.js?v=349';
-import { activateMarquee, marqueeSpan } from '../ui/marquee.js?v=349';
-import { isJunkTrack } from '../util/junk.js?v=349';
-import { AVISO_MEZCLA } from '../util/corte-saltos.js?v=349';
-import { nombreArchivo } from '../util/copia-completa.js?v=349';
-import { resumenEnPalabras, importEscribio } from '../util/copia-importar.js?v=349';
-import { diferenciaDeLikes, urisDeLikes, textoConfirmacionRehacer, textoFinalRehacer } from '../util/likes-diferencia.js?v=349';
-import { vigilarRuta } from '../util/vigencia-ruta.js?v=349';
+import { loadHistoryStats as _loadStatsForCounter } from './history-data.js?v=350';
+import { openArtistCard } from './artist-card.js?v=350';
+import { openAlbumCard } from './album-card.js?v=350';
+import { activateMarquee, marqueeSpan } from '../ui/marquee.js?v=350';
+import { isJunkTrack } from '../util/junk.js?v=350';
+import { AVISO_MEZCLA } from '../util/corte-saltos.js?v=350';
+import { nombreArchivo } from '../util/copia-completa.js?v=350';
+import { resumenEnPalabras, importEscribio } from '../util/copia-importar.js?v=350';
+import { diferenciaDeLikes, urisDeLikes, textoConfirmacionRehacer, textoFinalRehacer } from '../util/likes-diferencia.js?v=350';
+import { vigilarRuta } from '../util/vigencia-ruta.js?v=350';
 
 let charts = [];
 let _loadController = null;
@@ -768,8 +768,12 @@ async function loadData(forceRefresh, { rehacer = false } = {}) {
     return `~${m}m ${s}s restantes`;
   };
 
+  // (v=350) Después de cada `await`, si `#dash-content` ya no está en el documento (saliste de la ruta), no se escribe nada
+  // y se sale: la lista si la descarga salió bien, `null` si no. Un teardown no corta un `await` (v=174). Y los botones se
+  // buscan DENTRO de `content`: `document.getElementById` de un nodo desenganchado da `null` y tiraba en el `onclick`.
+  let likes;
   try {
-    const likes = await getAllLikedTracks(({ loaded, total, cached }) => {
+    likes = await getAllLikedTracks(({ loaded, total, cached }) => {
       if (cached) {
         textEl.textContent = `Usando caché local (${loaded.toLocaleString('es-ES')} likes)`;
         etaEl.textContent = 'Listo desde cache.';
@@ -786,17 +790,8 @@ async function loadData(forceRefresh, { rehacer = false } = {}) {
         }
       }
     }, { signal: _loadController.signal, force: !!forceRefresh });
-
-    charts.forEach(c => c.destroy());
-    charts = [];
-
-    const stats = computeStats(likes);
-    renderDashboard(content, stats);
-    _lastStats = stats;
-    _lastContainer = content;
-    refreshLastSyncLabel();
-    return likes;
   } catch (e) {
+    if (!content.isConnected) return null;
     // REGLA: si algo falla, el contenido queda VISIBLE.
     //
     // Antes esto pintaba un cartel de error y un botón «Volver», borrando de
@@ -806,7 +801,10 @@ async function loadData(forceRefresh, { rehacer = false } = {}) {
     // pantalla de arranque con el parcial y sus botones.
     const cancelled = e.message.includes('cancelada');
     const { items: rescatados } = await getBestAvailableLikes();
+    if (!content.isConnected) return null;
 
+    // (v=350) Con «Rehacer» (`force`) un corte no se retoma, y «Reintentar» (`loadData(false)`) solo volvería a cargar la
+    // copia vieja, que ya se pinta debajo: otra línea y sin ese botón. Sin `rehacer`, el cartel es byte a byte el de antes.
     content.innerHTML = `
       <div class="card" style="border-left:3px solid var(--color-${cancelled ? 'warning' : 'error'});margin-bottom:16px">
         <p style="margin:0 0 6px;font-weight:500">
@@ -814,21 +812,22 @@ async function loadData(forceRefresh, { rehacer = false } = {}) {
         </p>
         <p style="margin:0;font-size:13px;color:var(--color-text-secondary)">${escapeHtml(e.message)}</p>
         <p style="margin:8px 0 0;font-size:13px;color:var(--color-text-secondary)">
-          El progreso descargado se conserva: al reintentar se retoma donde se quedó.
+          ${rehacer ? 'La copia que ya tenías queda como estaba. Para volver a intentarlo, usa «Rehacer me gusta desde Spotify» en el ⚙.' : 'El progreso descargado se conserva: al reintentar se retoma donde se quedó.'}
         </p>
         <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap">
-          <button class="btn btn-primary btn-sm" id="dash-retry-btn">Reintentar</button>
-          <button class="btn btn-secondary btn-sm" id="dash-back-btn">Volver a empezar</button>
+          ${rehacer ? '' : `<button class="btn btn-primary btn-sm" id="dash-retry-btn">Reintentar</button>
+          `}<button class="btn btn-secondary btn-sm" id="dash-back-btn">Volver a empezar</button>
         </div>
       </div>
       <div id="dash-rescate"></div>
     `;
-    document.getElementById('dash-retry-btn').onclick = () => loadData(false);
-    document.getElementById('dash-back-btn').onclick = renderStartScreen;
+    const retryBtn = content.querySelector('#dash-retry-btn');
+    if (retryBtn) retryBtn.onclick = () => loadData(false);
+    content.querySelector('#dash-back-btn').onclick = renderStartScreen;
 
     // Lo que sobrevivió al fallo se pinta igual. Un dashboard con datos de ayer
     // es infinitamente más útil que un cartel de error.
-    const hueco = document.getElementById('dash-rescate');
+    const hueco = content.querySelector('#dash-rescate');
     if (rescatados.length > 0) {
       try {
         charts.forEach(c => c.destroy());
@@ -846,8 +845,35 @@ async function loadData(forceRefresh, { rehacer = false } = {}) {
     // a la pantalla de arranque, que ya sabe contar el parcial.
     return null;
   } finally {
+    // En el `finally` y no dentro del `catch`: `tests/cache-solo-exitos.test.mjs` no deja asignar un `let` de módulo en un
+    // `catch` (la 107B lo vio en rojo). En el fallo se suelta al terminar el `catch`, como hasta v=349; en el éxito, antes
+    // de pintar.
     _loadController = null;
   }
+  if (!content.isConnected) return likes;
+
+  // (v=350) Pintar no es descargar: hasta v=349 esto iba dentro del `try` de la descarga, y si pintar tiraba con la copia
+  // ya reemplazada, el cartel decía «No se han podido descargar» y `loadData` devolvía `null` (el modal de «Rehacer» no
+  // salía). Ahora el error crudo va a la consola, el cartel dice lo que pasó y se devuelve la lista.
+  try {
+    charts.forEach(c => c.destroy());
+    charts = [];
+
+    const stats = computeStats(likes);
+    renderDashboard(content, stats);
+    _lastStats = stats;
+    _lastContainer = content;
+    refreshLastSyncLabel();
+  } catch (err) {
+    console.warn('[dashboard] se descargaron los me gusta pero no se pudo pintar el panel:', err);
+    content.innerHTML = `
+      <div class="card" style="border-left:3px solid var(--color-error);margin-bottom:16px">
+        <p style="margin:0 0 6px;font-weight:500">Se han descargado tus me gusta, pero no se ha podido pintar el panel.</p>
+        <p style="margin:0;font-size:13px;color:var(--color-text-secondary)">${escapeHtml(err?.message || String(err))}</p>
+      </div>
+    `;
+  }
+  return likes;
 }
 
 function computeStats(likes) {

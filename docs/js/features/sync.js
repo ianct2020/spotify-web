@@ -1,8 +1,8 @@
-import { getAllLikedTracks, getAllPlaylistItems, updatePlaylistItemsCache, getAllUserPlaylists, addTracksToPlaylist, removeTracksFromPlaylist, createPlaylist, unfollowPlaylist, spotifyFetch } from '../api.js?v=349';
-import { showProgress, hideProgress, progressController, isCancelled, typeConfirmModal, alertModal, renderTrackRow, escapeHtml, pageHeader } from '../ui/components.js?v=349';
-import { showToast } from '../ui/toast.js?v=349';
-import { vigilarRuta } from '../util/vigencia-ruta.js?v=349';
-import { confirmacionDeSync } from '../util/confirmar-sync.js?v=349';
+import { getAllLikedTracks, getAllPlaylistItems, updatePlaylistItemsCache, getAllUserPlaylists, addTracksToPlaylist, removeTracksFromPlaylist, createPlaylist, unfollowPlaylist, spotifyFetch } from '../api.js?v=350';
+import { showProgress, hideProgress, progressController, isCancelled, typeConfirmModal, alertModal, renderTrackRow, escapeHtml, pageHeader } from '../ui/components.js?v=350';
+import { showToast } from '../ui/toast.js?v=350';
+import { vigilarRuta } from '../util/vigencia-ruta.js?v=350';
+import { confirmacionDeSync } from '../util/confirmar-sync.js?v=350';
 
 const TARGET_PLAYLIST_NAME = 'anothertwo';
 const SPOTIFY_PLAYLIST_MAX = 10000;

@@ -29,7 +29,7 @@
 // Los minutos se suman en DÉCIMAS (enteros): las cinco filas tienen que sumar
 // exactamente el total, y con flotantes «exactamente» no existe.
 
-import { clasificar, completarConArea, corroborado, limpiarTitulo } from './mb-pais.js?v=349';
+import { clasificar, completarConArea, corroborado, limpiarTitulo } from './mb-pais.js?v=350';
 
 export const MIN_MINUTOS = 10;
 

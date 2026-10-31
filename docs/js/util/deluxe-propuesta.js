@@ -23,8 +23,8 @@
 // #versions) y `baseDeEdicion` / `tieneAgregadoDeEdicion` (los filtros de
 // descubrir, v=165).
 
-import { VERSION_MARKERS } from './versions-guard.js?v=349';
-import { baseDeEdicion, tieneAgregadoDeEdicion } from './edition-suffix.js?v=349';
+import { VERSION_MARKERS } from './versions-guard.js?v=350';
+import { baseDeEdicion, tieneAgregadoDeEdicion } from './edition-suffix.js?v=350';
 
 // Tope de diferencia de duración entre el más largo y el más corto del grupo.
 export const TOPE_DURACION_MS = 2000;

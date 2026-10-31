@@ -252,6 +252,10 @@ catálogo quedaba solo con los me gusta sin decirlo. Ahora el fallo se registra 
 catálogo sale solo con tus me gusta.», también después de construir (lo trae el resumen de la tanda). El `null` válido y la
 lectura correcta conservan el resultado previo. Guarda: `tests/catch-que-tapan-94a.test.mjs` (dobles `catch-94a-doble.mjs` y
 `loader-catch-94a.mjs`), rojo contra v=342 en 5 de 14 y verde después. ⚠️ Visto solo en Node con un DOM inventado.
+⚠️ **Mirado en la app entera en la tanda 107B (v=350): el aviso no sale, y con la app de hoy no puede salir.**
+`loadListenedAlbums()` → `loadOne()` (`features/history-data.js`) no tira nunca: con una cuenta que no es el owner devuelve
+`null` sin pedir el JSON, y con el owner atrapa el fallo del `fetch` (500, corte) y también devuelve `null`. O sea que
+`escuchadasFallo` solo lo pone un doble que tira. Capturas con datos inventados y anotado en `PENDIENTES.md` (tanda 107).
 
 ## Zona horaria: las fechas del historial NO se pasan a local (v=154 + v=231)
 
@@ -1954,7 +1958,8 @@ en el blob). Lo de hace un mes se volvía a pedir y una vista de 2.000 artistas 
   («abc» es prefijo de «abc_x»: al leer el rango de «abc» aparecen los de «abc_x» y se descartan por el uid). El
   nombre es `toLowerCase()` **tal cual**, sin normalizar más: la clave que ya escribió el blob y la que leen todos.
   **Sin caducidad.** En `CONSERVAR_PREFIJOS`, y `LO_QUE_SE_CONSERVA` suma «las etiquetas de género que ya buscaste».
-  El cambio de usuario no las borra (van por uid). El «Reset + Login» (`localStorage.clear()`) ya no se las lleva.
+  El cambio de usuario no las borra (van por uid). Desde v=348 «Reset + Login» es `logout()` y no borra nada fuera de las
+  cinco claves del login (ver «La época y Reset + Login (v=348)»).
 - 🔴 **Se guarda lo que contestó CADA fuente, por separado, y se decide al leer** (el molde del mapa):
   `{ uid, nombre, fuentes: { lastfm, musicbrainz, statsfm, migrado } }`, cada una `null` (no se pidió) o
   `{ tags: [{name, count}], fecha }` (`tags: []` = «pregunté y no hay»). `getCachedTags` devuelve la mezcla de las
@@ -4095,7 +4100,7 @@ de siempre de `loadData` y no sale el modal del final. ⚠️ Lo que sí se escr
 (`all_liked_tracks_partial`, la red de seguridad de `paginateAll`; con la época cambiada, tampoco). **Volver a apretar arranca
 de 0** (`force` borra el parcial al empezar); el «Reintentar» del cartel de error es `loadData(false)`, que con la copia
 completa la usa tal cual y no baja nada (el cartel dice «al reintentar se retoma donde se quedó»: con este botón no es así; no se
-tocó).
+tocó). 🟩 **Arreglado en v=350**: ver «v=350 (tanda 107)», abajo.
 
 **Dos clics = una descarga.** `_rehaciendo` (de módulo) cubre el clic con el modal abierto y con la descarga en marcha, y
 `hayCargaDeLikesEnVuelo()` (`api.js`, nueva: `likesInFlight !== null`, no lee la caché) cubre una carga de otra vista: en los
@@ -4109,14 +4114,15 @@ descarga **sigue** hasta el final y, si cuadra, guarda (no se cambió). El handl
 si la descarga FALLA después de que saliste, el `catch` de `loadData` pinta en el nodo viejo y
 `document.getElementById('dash-retry-btn').onclick` da `null` → «Cannot set properties of null (setting 'onclick')», que sube
 como promesa sin atrapar (el banner chico de crash-guard sobre la vista nueva). Pasa igual con «Descargar de Spotify»; anotado
-en `PENDIENTES.md` (tanda 106), sin tocar.
+en `PENDIENTES.md` (tanda 106), sin tocar. 🟩 **Arreglado en v=350** (ver abajo).
 
 ⚠️ **La base de colores del mosaico** (`mosaico_colores_v1`) se arma con los me gusta y **no se rehace sola** después del
 botón: si se armó con una copia mezclada, sigue así hasta que se vuelva a construir.
 
 ⚠️ Si pintar el Dashboard tira después de una descarga buena (p. ej. Chart.js que no cargó del CDN), `loadData` cae en su
 `catch`: la copia **ya** se reemplazó, pero devuelve `null` y el modal del final no sale (y el cartel dice «No se han podido
-descargar los me gusta»). Leído del código y visto en el banco antes de ponerle un `Chart` de mentira.
+descargar los me gusta»). Leído del código y visto en el banco antes de ponerle un `Chart` de mentira. 🟩 **Arreglado en
+v=350** (ver abajo).
 
 **Guardas**:
 
@@ -4133,6 +4139,41 @@ descargar los me gusta»). Leído del código y visto en el banco antes de poner
 
 🔴 **El botón no se aprieta con la cuenta de Ian** en ninguna prueba: todo va con dobles y la Spotify simulada. Lo aprieta Ian
 cuando quiera.
+
+**v=350 (tanda 107): salir a mitad, el cartel y pintar separado de descargar.** Los tres ⚠️ de arriba quedaron cerrados en
+`loadData`:
+
+- **Salir a mitad ya no tira.** Después de cada espera (`getAllLikedTracks` y el `getBestAvailableLikes()` del `catch`), si
+  `#dash-content` ya no está en el documento (`!content.isConnected`), no escribe nada y sale: la lista si la descarga salió
+  bien, `null` si no. Los botones del cartel se buscan con `content.querySelector`, no en el documento. La descarga sigue igual
+  que antes (el teardown no aborta `_loadController`) y, si cuadra, guarda; `api.js` no se tocó.
+- **El cartel con «Rehacer»**: «La copia que ya tenías queda como estaba. Para volver a intentarlo, usa «Rehacer me gusta desde
+  Spotify» en el ⚙.» y **sin** «Reintentar» (`loadData(false)` solo volvería a cargar la copia vieja, que ya se pinta debajo);
+  «Volver a empezar» se queda. Sin `rehacer` (los otros tres llamadores), el cartel es byte a byte el de v=349.
+- **Pintar no es descargar.** `computeStats` + `renderDashboard` van en un `try` propio, fuera del de la descarga. Si pintar
+  tira después de una descarga buena: el error crudo a `console.warn('[dashboard] …')`, en pantalla «Se han descargado tus me
+  gusta, pero no se ha podido pintar el panel.» con el error, y `loadData` **devuelve la lista** (el modal de «Rehacer» sale y
+  dice la verdad: la copia sí se reemplazó). «No se han podido descargar los me gusta.» queda solo para la descarga que falló.
+- `_loadController = null` va en el `finally` del `try` de la descarga, **no dentro del `catch`**: así lo había dejado la 107 y
+  `tests/cache-solo-exitos.test.mjs` (el barrido «nadie escribe en una caché desde un catch», que no deja asignar un `let` de
+  módulo en un `catch`) dio rojo en el `npm test` de la 107B. En el fallo se suelta al terminar el `catch` (como en v=349); en el
+  éxito, antes de pintar. El test no se tocó.
+
+Guarda: `tests/dashboard-salir-a-mitad.test.mjs` (el `loadData` y el handler REALES con `dobles/rehacer-dashboard.mjs`, que
+sumó `querySelector('#id')` a su DOM de mentira; s1-s5 salir a mitad y conservación, c1-c4 el cartel, c2 comparando byte a byte
+contra el `loadData` de 37d71c2 sacado con `git show`; `DASHBOARD_FUENTE=<ruta>` lo apunta a otro fuente). Rojo contra v=349 en
+s1, s2, s4, c1, c3 y c4.
+
+**El banco `rehacer-me-gusta`, arreglado en la 107B.** `rehacer-me-gusta-caso.html` esperaba `#dash-retry-btn` («Reintentar»):
+en D y E (la descarga que falla y «Detener carga», los dos con «Rehacer») y, como salida de la espera, en C y F. Codificaba el
+cartel viejo, justo lo que este cambio vino a sacar, y con v=350 D se quedaba esperando un botón que ya no está («ausente», la
+parada de la 107). Ahora las dos esperas buscan `#dash-back-btn` («Volver a empezar», que sigue), y D y E comprueban además que
+**no** hay `#dash-retry-btn`. Contra el `dashboard.js` de v=349, rojo en D y E («el cartel no lleva «Reintentar»»); con v=350,
+10 de 10 verdes (24.519-24.868 ms de reloj virtual).
+
+⚠️ **Lo que sabemos de «Rehacer», textual**: del botón, lo que probó la 106 es el modal y el `null`; que la copia quede igual
+ante un corte **ya era cierto antes del botón** (los e1-e4 de `rehacer-me-gusta-corte` daban verde contra v=348), y el banco
+`rehacer-me-gusta` contra v=348 dio «ausente», no rojo en C.
 
 ## Client ID
 0c8c92ad128e4b89be7097c6b8082797

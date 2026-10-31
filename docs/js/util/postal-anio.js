@@ -45,7 +45,7 @@
 // Cada texto tiene un ancho máximo y se recorta con «…» MIDIENDO con la letra de verdad, nunca contando
 // caracteres: «WWWW» y «iiii» no miden lo mismo. La medida entra inyectada.
 
-import { aMs, diaSemanaLunes, tercilesDelTramo } from '../ui/calendario-anual.js?v=349';
+import { aMs, diaSemanaLunes, tercilesDelTramo } from '../ui/calendario-anual.js?v=350';
 
 export const ANCHO = 1080;
 export const ALTO = 1350;

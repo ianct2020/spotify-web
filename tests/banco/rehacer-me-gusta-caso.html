@@ -19,7 +19,8 @@
 //   C                «Rehacer» con la copia {u1..u120} y Spotify {u21..u150} → el modal dice «tenía 20 que Spotify ya no
 //                    tiene y le faltaban 30», la caché queda con las 130 y las peticiones a /me/tracks son exactamente 3
 //   D                Spotify da 500 en la página 2 hasta agotar los reintentos → el sha256 de la caché, igual; el error
-//                    de loadData y no el modal
+//                    de loadData y no el modal; desde v=350 (tanda 107), sin «Reintentar» (`#dash-retry-btn`) en el
+//                    cartel: se espera «Volver a empezar» (`#dash-back-btn`), que sigue
 //   E                «Detener carga» en la página 2 → lo mismo que D
 //   F                (con `&w=&h=` de la madre) sin desborde del ítem del ⚙, de la confirmación ni del modal final
 //
@@ -156,7 +157,7 @@ async function correr() {
     } else {
       conf.querySelector('#modal-confirm').click();
       if (CASO === 'C' || CASO === 'F') {
-        await esperarReal(() => modalFinal() || $('#dash-retry-btn'), { que: 'el modal del final', vueltas: 3000 });
+        await esperarReal(() => modalFinal() || $('#dash-back-btn'), { que: 'el modal del final', vueltas: 3000 });
         if (!modalFinal()) throw new Error(`no salió el modal del final: loadData pintó su error («${textoDe($('#dash-content')).slice(0, 200)}»)`);
         const fin = modalFinal();
         datos.final = textoDe(fin.querySelector('.modal-alert-body'));
@@ -180,9 +181,12 @@ async function correr() {
       } else {
         // D y E: el error de siempre de loadData, y la copia igual
         const esperado = CASO === 'D' ? 'No se han podido descargar los me gusta.' : 'Descarga cancelada.';
-        await esperarReal(() => $('#dash-retry-btn') && textoDe($('#dash-content')).includes(esperado), { que: `el error de loadData («${esperado}»)`, vueltas: 3000 });
+        await esperarReal(() => $('#dash-back-btn') && textoDe($('#dash-content')).includes(esperado), { que: `el error de loadData («${esperado}»)`, vueltas: 3000 });
         await pausa(150);
         datos.error = esperado;
+        // v=350 (tanda 107): con «Rehacer», el cartel ya no lleva «Reintentar» (reintentar con loadData(false) solo
+        // volvería a cargar la copia vieja, que ya se pinta debajo)
+        comprobar(!$('#dash-retry-btn'), `${CASO}: el cartel no lleva «Reintentar» (#dash-retry-btn)`);
         datos.aTracks = aTracks();
         datos.shaDespues = await shaCopia();
         datos.barra = [...new Set(lineasBarra)];

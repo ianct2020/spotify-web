@@ -10,6 +10,9 @@
 // El DOM de mentira (`crearDom`) registra cada escritura (`innerHTML` y `textContent`) con si el nodo estaba en el
 // documento. Un `innerHTML` nuevo desengancha a los hijos del anterior, como el de verdad: `getElementById` ya no los
 // encuentra, y escribir en ellos queda anotado como escritura en un nodo fuera del documento.
+//
+// (v=350, tanda 107) Los nodos saben `querySelector('#id')` sobre sus descendientes, para el `loadData` que busca sus
+// botones dentro de `#dash-content` y no en el documento. El test lo pueden apuntar a otro fuente (`sacarDelFuente`).
 
 import { readFileSync, existsSync } from 'node:fs';
 
@@ -62,6 +65,12 @@ export function crearDom() {
     get innerHTML() { return this._html; }
     set textContent(t) { this._texto = String(t); escrituras.push({ id: this.id, que: 'textContent', valor: this._texto, conectado: this.isConnected }); }
     get textContent() { return this._texto; }
+    /** (v=350) Solo `#id`, y busca entre los descendientes de este nodo, esté o no en el documento (como el de verdad). */
+    querySelector(sel) {
+      const id = String(sel).replace(/^#/, '');
+      for (const c of this.hijos) { if (c.id === id) return c; const d = c.querySelector(sel); if (d) return d; }
+      return null;
+    }
   }
   function desenganchar(e) { e.fuera = true; if (registro.get(e.id) === e) registro.delete(e.id); for (const c of e.hijos) desenganchar(c); }
   const main = new El('main-content', null);
