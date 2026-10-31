@@ -401,11 +401,16 @@ async function init() {
           <p style="margin-bottom:8px">${e.message}</p>
           <div style="display:flex;gap:12px;justify-content:center;margin-top:24px">
             <button class="btn btn-primary" onclick="location.reload()">Reintentar</button>
-            <button class="btn btn-secondary" onclick="localStorage.clear();location.reload()">Reset + Login</button>
+            <button class="btn btn-secondary" id="reset-login-btn">Reset + Login</button>
           </div>
         </div>
       </div>
     `;
+    // (v=348, tanda 105) «Reset + Login» = «Cerrar sesión»: `logout()` borra solo las cinco claves del login y recarga.
+    // Hasta v=347 era `localStorage.clear()`: se llevaba lo que no se puede rehacer (los «ya escuchados», lo quitado,
+    // lo descartado…), `fonoteca_last_user_id` y la marca de los me gusta de otra cuenta. Se conecta acá y no con un
+    // `onclick="…"` en línea: ese corre en el ámbito global y no ve los `import` del módulo.
+    document.getElementById('reset-login-btn').onclick = logout;
   }
 }
 

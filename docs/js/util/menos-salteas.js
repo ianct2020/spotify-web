@@ -19,7 +19,7 @@
 // En coma flotante, 14 / 125 × 100 da 11,200000000000001 y un 11,2 % justo se quedaría
 // fuera de la mitad de una base de 22,4.
 
-import { lineaBaseSaltos, PRIMER_SKIPPED_TRUE } from './corte-saltos.js?v=347';
+import { lineaBaseSaltos, PRIMER_SKIPPED_TRUE } from './corte-saltos.js?v=348';
 
 export const MIN_COMPLETAS = 10;
 export const POR_PAGINA = 25;

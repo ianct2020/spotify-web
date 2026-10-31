@@ -89,13 +89,15 @@ async function montar(cacheInicial) {
     ${trozo(api, 'async function anadirLikes', 'async function saveAlbumsToLibrary')}
     return { anadirLikes, saveToLibrary };
   `;
-  const fab = new Function('spotifyFetch', 'leerLikesCacheados', 'saveLikes', 'showToast', 'console', cuerpo);
+  // (v=348) `epocaDeLikes`: desde la tanda 105, `addToLikesCache` toma la época al empezar; acá, una fija e inventada.
+  const fab = new Function('spotifyFetch', 'leerLikesCacheados', 'saveLikes', 'showToast', 'console', 'epocaDeLikes', cuerpo);
   const api2 = fab(
     async (url, opt) => { peticiones.push({ url, metodo: opt?.method || 'GET' }); return {}; },
     async () => cacheInicial,
     async (items, meta) => { guardados.push({ items, meta }); return { ok: true }; },
     () => {},
     { info: () => {}, warn: () => {} },
+    () => 't105-cuenta-a-inventada',
   );
   return { api2, peticiones, guardados };
 }

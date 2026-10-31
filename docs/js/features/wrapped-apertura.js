@@ -76,9 +76,9 @@
 // y un año que acabó con el último día en blanco no tiene racha que enseñar.
 // Con menos de dos pasos la apertura no se monta: no hay recorrido que hacer.
 
-import { animationsEnabled } from '../ui/reveal.js?v=347';
-import { calendarioAnual, aMs, isoDesde, diaSemanaLunes } from '../ui/calendario-anual.js?v=347';
-import { anioSinCampoSkipped, esElAnioDelCorte, AVISO_MEZCLA, lineaBaseSaltos } from '../util/corte-saltos.js?v=347';
+import { animationsEnabled } from '../ui/reveal.js?v=348';
+import { calendarioAnual, aMs, isoDesde, diaSemanaLunes } from '../ui/calendario-anual.js?v=348';
+import { anioSinCampoSkipped, esElAnioDelCorte, AVISO_MEZCLA, lineaBaseSaltos } from '../util/corte-saltos.js?v=348';
 
 // ── un solo recorrido vivo por vez ──────────────────────────────────────────
 //

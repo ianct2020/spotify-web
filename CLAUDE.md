@@ -3899,9 +3899,10 @@ con `spc_`; no hizo falta conservarla a mano.
 
 **Lo que quedó FUERA, a propósito** (anotado en `fonoteca-migracion/PENDIENTES.md`):
 
-- **«Reset + Login»** (`app.js`, la pantalla «Error al conectar», `localStorage.clear()`): se lleva
+- ~~**«Reset + Login»** (`app.js`, la pantalla «Error al conectar», `localStorage.clear()`): se lleva
   `fonoteca_last_user_id` y la marca, y deja la caché de me gusta en IndexedDB. La cuenta que entre después no ve
-  «cambio de usuario» (no hay contra qué comparar) y lee lo que haya.
+  «cambio de usuario» (no hay contra qué comparar) y lee lo que haya.~~ 🟩 Arreglado en v=348: ver «La época y Reset +
+  Login (v=348)», abajo.
 - **El modo degradado** (sin `/me` al arrancar): no revisa el cambio de cuenta.
 - ~~**«Importar JSON»** (v2, `importAllData`): escribe en la caché los me gusta del archivo sin mirar la marca; y si se
   importa con la marca puesta, el reintento siguiente borra lo importado.~~ 🟩 Arreglado en v=346: ver «Los que escriben
@@ -3962,9 +3963,10 @@ v=345 tiraba si fallaba el `/me` sin tener nada que guardar, y eso tapaba el avi
 | `removeFromLikesCache` → `saveLikes` | la completa | por la lectura, y `saveLikes` | la lectura de IndexedDB | no dice nada y no hace falta: el borrado en Spotify se hizo, y la caché se rehace (con la marca, el lector siguiente la borra) |
 | `addToLikesCache` → `saveLikes` | la completa | ídem | ídem | ídem |
 
-⚠️ **Lo que NO cierra**: la marca solo vive mientras dura el borrado de la pestaña que cambió de cuenta. Si esa pestaña
+~~⚠️ **Lo que NO cierra**: la marca solo vive mientras dura el borrado de la pestaña que cambió de cuenta. Si esa pestaña
 borra bien y quita la marca mientras un escritor de ESTA pestaña espera, el escritor ya no ve marca y escribe los me gusta de
-la cuenta vieja. Leído en el código, no medido; anotado en `PENDIENTES.md` (tanda 103). 🟩 `startLikesLoad` con la marca
+la cuenta vieja. Leído en el código, no medido; anotado en `PENDIENTES.md` (tanda 103).~~ 🟩 Cerrado en v=348 con la época:
+ver «La época y Reset + Login (v=348)», abajo. 🟩 `startLikesLoad` con la marca
 llegada a mitad de la descarga decía el motivo equivocado («el navegador no ha podido guardarlas… el progreso queda guardado
 para retomarlo»: las dos cosas eran falsas, y con la marca `savePartial()` tampoco escribe). **Desde v=347** tira
 exactamente `TEXTO_LIKES_DE_OTRO` (sin sufijo) cuando la descarga cuadró y `saveLikes()` devolvió `likesDeOtro`, con un
@@ -3982,6 +3984,70 @@ una vista que escribe la clave por su nombre, `saveLikes` sin la pregunta) y con
 Guardas: `tests/importar-json-me-gusta.test.mjs` (el `api.js` REAL en Node con los dobles de la 98, y los dos handlers
 REALES sacados del fuente; datos INVENTADOS; rojo contra v=345 en 32 de 54, con la conservación —un archivo tuyo importa lo
 mismo, con las mismas peticiones y la misma caché— medida contra v=345 y verde antes y después) y la guarda de escritura.
+
+### La época y Reset + Login (v=348)
+
+La tanda 105 cerró los dos agujeros que quedaban.
+
+**La época** (`epocaDeLikes()`, `api.js`, sincrónica, nunca tira). La marca solo vive mientras dura el borrado de la pestaña
+que cambió de cuenta; si la otra pestaña borraba bien y la quitaba mientras un escritor de ésta esperaba, el escritor ya no veía
+nada y guardaba los me gusta de la cuenta vieja. La época de un escritor es el `fonoteca_last_user_id` que había **cuando
+empezó** (no es una clave nueva: la escribe `revisarCambioDeUsuario()` en cada cambio de cuenta, sincrónica con la marca y
+también si el borrado falla). La regla, en `saveLikes(items, { complete, total, epoca })`:
+
+- **sin el campo** (`undefined`): tira `Error('saveLikes sin epoca')`. Es un error de programación, y que tire es lo que hace
+  que un escritor nuevo no se la pueda olvidar en silencio;
+- **con una época no nula y distinta del `fonoteca_last_user_id` de ahora**: no escribe, `{ ok: false, likesDeOtro: true }` y
+  `console.warn('[likes] …')`, igual que con la marca. Los llamadores ya mostraban lo que tiran: `TEXTO_LIKES_DE_OTRO` sale
+  donde ya salía;
+- 🔴 **con `epoca === null`** (cuando empezó no había cuenta guardada): vale **solo la marca**. Después del arranque no pasa
+  (`init()` escribe la cuenta antes de `showApp`), pero **NO está cubierto**: un escritor que arrancó sin cuenta guardada y
+  durante el que otra pestaña entró y borró bien, escribe.
+
+El parcial sigue la misma regla: `paginateAll` recibe `epoca` y se la pasa a `savePartial(key, payload, epoca)`, que la mira
+**solo con la clave de me gusta** (sin ella, tira sin escribir); las demás claves (las playlists) no cambian.
+
+**Los seis escritores**, cada uno toma la época **antes de su primer `await`**:
+
+| escritor | dónde toma la época | la espera que cubre |
+|---|---|---|
+| `startLikesLoad` | al entrar, antes del IIFE | el reintento del borrado, la paginación entera (el parcial cada 10 páginas) y `saveLikes` |
+| `syncLikesIncremental` | primera línea | la mudanza, la lectura, `getLikesTotal` y `getRecentLikes` |
+| `importLikesData` | primera línea | el reintento del borrado, `getLikesTotal` y `getRecentLikes` |
+| `removeFromLikesCache` | primera línea | la lectura de IndexedDB (`leerLikesCacheados`) |
+| `addToLikesCache` | primera línea | ídem |
+| `migrateLikesFromLocalStorage` | primera línea | escribe directo en IndexedDB: compara ella misma antes de la segunda mudanza (y la marca) |
+
+⚠️ `migrateLikesFromLocalStorage` **no tenía la carrera**: el parcial heredado se lee DESPUÉS del `await` de la primera mudanza,
+y la otra pestaña ya lo borró de `localStorage`, que es compartido. Su caso del test dio verde contra v=347 y queda de guarda.
+⚠️ Lo que un escritor ya mandó a IndexedDB no se puede parar: la época se mira ANTES de pedir la escritura; si la otra pestaña
+borra mientras la transacción está en vuelo, gana la que IndexedDB comprometa última (el lector siguiente, con la cuenta B, lee
+lo que haya). No medido.
+
+**La guarda estática** (`tests/me-gusta-de-otra-cuenta.test.mjs`, junto a `ESCRITORES_IDB`): en `src/js/`, cada llamada a
+`saveLikes(` pasa `epoca` entre sus argumentos, y `saveLikes`, `savePartial` y `migrateLikesFromLocalStorage` llaman a
+`epocaDeLikes(`. Probada con mutantes (un `saveLikes(items, { complete: true })` nuevo en `api.js`, un `saveLikes(v)` en una vista,
+`savePartial` sin la comparación) y con una copia del repo con el `saveLikes(` de `importLikesData` sin `epoca`: rojo con
+archivo y línea. `saveLikes` se exporta solo para `tests/likes-epoca.test.mjs`.
+
+**«Reset + Login» = `logout()`**. La pantalla «Error al conectar» (`app.js`, el `catch` de `init()`) tenía
+`onclick="localStorage.clear();location.reload()"`. Ahora el botón lleva `id="reset-login-btn"` y se conecta con
+`document.getElementById('reset-login-btn').onclick = logout;`, como «Cerrar sesión» (un `onclick="…"` en línea corre en el
+ámbito global y no ve los `import`). El texto no cambió. `logout()` borra las cinco del login (`sp_granted_scopes`,
+`sp_access_token`, `sp_refresh_token`, `sp_token_expiry`, `sp_code_verifier`) y recarga. **Ya no borra** (la lista de clase 1
+en `localStorage` del `CENSO`, peladas y con `prefKey()`): `discover_escuchados`, `discover_escuchados_uris`,
+`listened_unreg_dismissed`, `listened_dupes_dismissed`, `listened_history_dismissed`, `versions_dismissed`,
+`genre_hidden_tags`, `discoverart_elegidos`, `newrel_elegidos`, `likes_borrados_log_v1` y
+`versions_supervivientes_perdidas_v1`; ni nada más del `localStorage` (los ocultos, las preferencias, los registros),
+**ni `fonoteca_last_user_id` ni la marca**: si después entra otra cuenta, `revisarCambioDeUsuario()` ve el cambio, pone la marca
+y borra la caché, como en cualquier cambio de cuenta. **Ningún `localStorage.clear(` en `src/js`** (fuera de comentarios).
+
+Guardas: `tests/reset-login.test.mjs` (la plantilla y la conexión sacadas del FUENTE, con un DOM de mentira que compila el
+`onclick` en línea en el ámbito global y el `logout()` REAL; la lista sale del `CENSO` y está escrita a mano; cada clave,
+nombrada, con su valor byte a byte; y lo mismo contra «Cerrar sesión», de conservación) y `tests/likes-epoca.test.mjs` (el
+`api.js` REAL con los dobles de la 98/103; «la otra pestaña» = A → B, la marca, el borrado de las dos claves de IndexedDB y de las
+dos heredadas, y la marca fuera, en el medio de la espera de cada escritor; con ella, 0 escrituras de la caché después del
+cambio; sin ella, escribe como siempre). Los números, en el informe de la tanda 105 (`fonoteca-migracion/informes/tanda-105/`).
 
 ## Client ID
 0c8c92ad128e4b89be7097c6b8082797

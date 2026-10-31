@@ -540,4 +540,48 @@ ok(esc.sinMarca.length === 0, `🔴 las tres preguntan por la marca, hayLikesDeO
   ok(iSl >= 0 && r2.sinMarca.some((x) => /^src\/js\/api\.js:\d+ saveLikes$/.test(x)), `saveLikes sin la pregunta se pone rojo, con archivo y línea (${r2.sinMarca.join(' · ') || 'no lo vio'})`);
 }
 
+// ── La guarda de la ÉPOCA estática (v=348, tanda 105) ────────────────────────────────────────────
+decir('· la guarda de la época: cada saveLikes( pasa epoca, y los tres que escriben comparan contra la época');
+// La marca solo vive mientras dura el borrado de la otra pestaña. Lo que cierra la carrera es la época: el
+// `fonoteca_last_user_id` que había cuando el escritor empezó (`epocaDeLikes()`). Ver «La época y Reset + Login (v=348)»
+// en CLAUDE.md. Un `saveLikes(` sin `epoca` tira en tiempo de ejecución; esto lo pone rojo antes, con archivo y línea.
+/** Cada llamada a `saveLikes(` (no la definición) sin `epoca` entre sus argumentos, y los escritores que no comparan. */
+function epocas(fuentes) {
+  const sinEpoca = [], sinComparar = [];
+  for (const [archivo, src] of Object.entries(fuentes)) {
+    const { cod, esq } = pelar(src);
+    for (const m of esq.matchAll(/\bsaveLikes\s*\(/g)) {
+      if (/\bfunction\s*$/.test(esq.slice(Math.max(0, m.index - 20), m.index))) continue;
+      let i = m.index + m[0].length, prof = 1;
+      while (i < esq.length && prof) { if (esq[i] === '(') prof++; else if (esq[i] === ')') prof--; i++; }
+      if (!/\bepoca\b/.test(cod.slice(m.index + m[0].length, i - 1))) sinEpoca.push(`${archivo}:${cod.slice(0, m.index).split('\n').length}`);
+    }
+    if (archivo !== 'src/js/api.js') continue;
+    const fns = funciones(esq);
+    for (const nombre of ['saveLikes', 'savePartial', 'migrateLikesFromLocalStorage']) {
+      const f = fns.find((x) => x.nombre === nombre);
+      if (!f || !/\bepocaDeLikes\(/.test(cod.slice(f.ini, f.fin))) sinComparar.push(`${archivo}:${f ? cod.slice(0, f.ini).split('\n').length : '?'} ${nombre}${f ? '' : ': no existe'}`);
+    }
+  }
+  return { sinEpoca, sinComparar };
+}
+const ep = epocas(fuentes);
+ok(ep.sinEpoca.length === 0, `🔴 cada saveLikes( de src/js pasa epoca (sin epoca: ${ep.sinEpoca.join(' · ') || '—'})`);
+ok(ep.sinComparar.length === 0, `🔴 saveLikes, savePartial y migrateLikesFromLocalStorage llaman a epocaDeLikes( (no: ${ep.sinComparar.join(' · ') || '—'})`);
+{
+  const api = fuentes['src/js/api.js'];
+  // Un escritor nuevo que llama a `saveLikes(` sin `epoca`.
+  const conMutante = api + '\nasync function escritorNuevo(items) { return saveLikes(items, { complete: true }); }\n';
+  const r1 = epocas({ ...fuentes, 'src/js/api.js': conMutante });
+  const lineaMut = conMutante.split('\n').length - 1;
+  ok(r1.sinEpoca.includes(`src/js/api.js:${lineaMut}`), `un saveLikes( sin epoca se pone rojo, con archivo y línea (${r1.sinEpoca.join(' · ') || 'no lo vio'})`);
+  const otraVista = epocas({ ...fuentes, 'src/js/features/vista-inventada.js': 'export async function x(v) {\n  await saveLikes(v);\n}\n' });
+  ok(otraVista.sinEpoca.includes('src/js/features/vista-inventada.js:2'), 'un saveLikes(v) a secas en otra vista se pone rojo');
+  // `savePartial` sin la comparación.
+  const iSp = api.indexOf('async function savePartial(');
+  const sinComparar = api.slice(0, iSp) + api.slice(iSp).replace(/epocaDeLikes\(\)/, 'epoca');
+  const r2 = epocas({ ...fuentes, 'src/js/api.js': sinComparar });
+  ok(iSp >= 0 && r2.sinComparar.some((x) => /^src\/js\/api\.js:\d+ savePartial$/.test(x)), `savePartial sin la comparación se pone rojo, con archivo y línea (${r2.sinComparar.join(' · ') || 'no lo vio'})`);
+}
+
 fin();

@@ -1,18 +1,18 @@
-import { getValidToken, refreshAccessToken } from './auth.js?v=347';
-import { cacheGet, cacheGetRaw, cacheGetTimestamp, cacheSet, cacheClear, prefKey, migratePrefKey } from './storage.js?v=347';
-import { idbDel, idbDelByPrefix, idbGetCached, idbGetCachedRaw, idbGetTimestamp, idbSetCached, idbGet, idbAllKeys, idbEntriesByPrefix, idbSetVarios } from './idb.js?v=347';
-import { OWNER_KEY_LIST } from './history-keys.js?v=347';
-import { OCULTOS_ITEMS_PREFIX } from './util/ocultos-items-clave.js?v=347';
-import { showToast } from './ui/toast.js?v=347';
-import { artistIsSame, limpiaParaQuery } from './util/track-match.js?v=347';
-import { contadorCuota, cuotaDeEndpoint } from './util/cuota.js?v=347';
-import { exportarEtiquetas, importarEtiquetas } from './api/lastfm.js?v=347';
-import { leerNavegador, armarCopia, serializar, contieneSecreto, CENSO } from './util/copia-completa.js?v=347';
-import { leerCopia, planDeImport, segundaRed, importEscribio, TEXTOS as TEXTOS_IMPORT } from './util/copia-importar.js?v=347';
-import { MARCA_DESDE_COPIA, leerMarca, marcaTrasImport } from './util/ocultos-desde-copia.js?v=347';
-import { avisarCopiaImportada } from './util/canal-copia.js?v=347';
-import { BORRADOS_LOG_MAX } from './util/topes-registros.js?v=347';
-import { LIKES_DE_OTRO_KEY, hayLikesDeOtro } from './util/likes-de-otro.js?v=347';
+import { getValidToken, refreshAccessToken } from './auth.js?v=348';
+import { cacheGet, cacheGetRaw, cacheGetTimestamp, cacheSet, cacheClear, prefKey, migratePrefKey } from './storage.js?v=348';
+import { idbDel, idbDelByPrefix, idbGetCached, idbGetCachedRaw, idbGetTimestamp, idbSetCached, idbGet, idbAllKeys, idbEntriesByPrefix, idbSetVarios } from './idb.js?v=348';
+import { OWNER_KEY_LIST } from './history-keys.js?v=348';
+import { OCULTOS_ITEMS_PREFIX } from './util/ocultos-items-clave.js?v=348';
+import { showToast } from './ui/toast.js?v=348';
+import { artistIsSame, limpiaParaQuery } from './util/track-match.js?v=348';
+import { contadorCuota, cuotaDeEndpoint } from './util/cuota.js?v=348';
+import { exportarEtiquetas, importarEtiquetas } from './api/lastfm.js?v=348';
+import { leerNavegador, armarCopia, serializar, contieneSecreto, CENSO } from './util/copia-completa.js?v=348';
+import { leerCopia, planDeImport, segundaRed, importEscribio, TEXTOS as TEXTOS_IMPORT } from './util/copia-importar.js?v=348';
+import { MARCA_DESDE_COPIA, leerMarca, marcaTrasImport } from './util/ocultos-desde-copia.js?v=348';
+import { avisarCopiaImportada } from './util/canal-copia.js?v=348';
+import { BORRADOS_LOG_MAX } from './util/topes-registros.js?v=348';
+import { LIKES_DE_OTRO_KEY, hayLikesDeOtro } from './util/likes-de-otro.js?v=348';
 
 const BASE = 'https://api.spotify.com/v1';
 const MIN_RETRY_WAIT = 5000;
@@ -220,6 +220,20 @@ function sleep(ms) {
 
 const LIKES_PARTIAL_KEY = LIKES_CACHE_KEY + '_partial';
 
+// ── La época de un escritor de la caché de me gusta (v=348, tanda 105) ──────────────────────────
+//
+// La marca de `util/likes-de-otro.js` vive solo mientras dura el borrado de la pestaña que cambió de cuenta. Si OTRA
+// pestaña entra con otra cuenta, borra bien y quita la marca mientras un escritor de ésta espera (una paginación de
+// minutos, un `/me/tracks?limit=1`, una lectura de IndexedDB), al escribir ya no hay marca que ver. La época es el
+// `fonoteca_last_user_id` que había cuando el escritor EMPEZÓ: no es una clave nueva, es la que `revisarCambioDeUsuario()`
+// escribe en cada cambio de cuenta (también si el borrado falla). Cada escritor la toma antes de su primer `await` y se
+// la pasa a `saveLikes` / `savePartial` (`paginateAll`), que no escriben si cambió. `null` = cuando empezó no había
+// cuenta guardada (después del arranque no pasa: `init()` la escribe antes de `showApp`); ahí vale solo la marca.
+// Sincrónica, y nunca tira: sin `localStorage`, `null`.
+function epocaDeLikes() {
+  try { return localStorage.getItem(LAST_USER_KEY); } catch { return null; }
+}
+
 // ⚠️ El parcial NO caduca (antes: TTL de 24 h) y se lee con `idbGetCachedRaw`.
 //
 // El 2026-09-02 el caché de likes llevaba tres días sin poder completarse: la
@@ -233,11 +247,20 @@ const LIKES_PARTIAL_KEY = LIKES_CACHE_KEY + '_partial';
 // `startOffset` antes de retomarlo, y si la lista final no cuadra con el total
 // que declara Spotify, `saveLikes()` la descarta igual. El TTL no protegía de
 // nada. Ver PENDIENTES.md, «Riesgos abiertos» ítem 0.
-async function savePartial(key, payload) {
+//
+// (v=348) `epoca`: la de quien empezó la descarga (ver `epocaDeLikes`, abajo). Solo cuenta con la clave de me gusta; las
+// demás claves (las playlists) no la miran.
+async function savePartial(key, payload, epoca) {
   if (key === LIKES_CACHE_KEY || key === LIKES_PARTIAL_KEY) {
+    if (epoca === undefined) throw new Error('savePartial sin epoca');
     // (v=346) La misma regla que `saveLikes`: con la marca, el parcial no se escribe.
     if (hayLikesDeOtro()) {
       console.warn(`[likes] descarto guardar el parcial (${payload?.items?.length ?? 0} likes): la caché es de otra cuenta`);
+      return { ok: false, likesDeOtro: true };
+    }
+    // (v=348) Y si la cuenta cambió desde que empezó la descarga, tampoco (la otra pestaña ya pudo quitar la marca).
+    if (epoca !== null && epoca !== epocaDeLikes()) {
+      console.warn(`[likes] descarto guardar el parcial (${payload?.items?.length ?? 0} likes): la cuenta cambió mientras se descargaba`);
       return { ok: false, likesDeOtro: true };
     }
     try { await idbSetCached(LIKES_PARTIAL_KEY, payload, null); } catch (e) { console.warn('savePartial IDB:', e); }
@@ -271,7 +294,9 @@ async function clearPartial(key) {
 // `keepPartial: true` → paginateAll NO borra el parcial al terminar y deja esa
 // decisión al caller. Ver el porqué en `startLikesLoad()`: el parcial es la red
 // de seguridad y no se puede soltar antes de saber que hay suelo.
-async function paginateAll(endpoint, { limit = 50, onProgress, partialCacheKey, transform, maxItems, startOffset = 0, signal, meta, keepPartial = false } = {}) {
+// `epoca` (v=348): con la clave de me gusta es OBLIGATORIA (la de `epocaDeLikes()` al empezar) y va a cada `savePartial`,
+// que sin ella tira sin escribir. Las demás claves no la miran.
+async function paginateAll(endpoint, { limit = 50, onProgress, partialCacheKey, transform, maxItems, startOffset = 0, signal, meta, keepPartial = false, epoca } = {}) {
   let items = [];
   let offset = startOffset;
   const initialOffset = startOffset;
@@ -293,7 +318,7 @@ async function paginateAll(endpoint, { limit = 50, onProgress, partialCacheKey, 
   while (offset < total && (!maxItems || items.length < maxItems)) {
     if (signal?.aborted) {
       if (partialCacheKey && items.length > 0) {
-        await savePartial(partialCacheKey, { items, offset, startOffset: initialOffset });
+        await savePartial(partialCacheKey, { items, offset, startOffset: initialOffset }, epoca);
       }
       throw new Error('Carga cancelada');
     }
@@ -315,7 +340,7 @@ async function paginateAll(endpoint, { limit = 50, onProgress, partialCacheKey, 
       }
 
       if (partialCacheKey && pagesSinceSave >= 10) {
-        await savePartial(partialCacheKey, { items, offset, startOffset: initialOffset });
+        await savePartial(partialCacheKey, { items, offset, startOffset: initialOffset }, epoca);
         pagesSinceSave = 0;
       }
 
@@ -323,7 +348,7 @@ async function paginateAll(endpoint, { limit = 50, onProgress, partialCacheKey, 
       await sleep(600);
     } catch (e) {
       if (partialCacheKey && items.length > 0) {
-        await savePartial(partialCacheKey, { items, offset, startOffset: initialOffset });
+        await savePartial(partialCacheKey, { items, offset, startOffset: initialOffset }, epoca);
         console.warn(`Saved partial progress: ${items.length} items at offset ${offset}`);
       }
       throw e;
@@ -410,6 +435,10 @@ function slimPlaylist(p) {
 }
 
 async function migrateLikesFromLocalStorage() {
+  // (v=348) La época, antes del primer `await`: escribe directo en IndexedDB (no pasa por `saveLikes`), así que compara
+  // ella misma antes de cada escritura.
+  const epoca = epocaDeLikes();
+  const cambioLaCuenta = () => epoca !== null && epoca !== epocaDeLikes();
   // (v=345) Con la marca, la heredada es de la cuenta anterior: no se muda nada a IndexedDB.
   if (hayLikesDeOtro()) return;
   const legacy = cacheGetRaw(LIKES_CACHE_KEY);
@@ -422,6 +451,8 @@ async function migrateLikesFromLocalStorage() {
       console.warn('Migration failed:', e);
     }
   }
+  // (v=348) Entre las dos mudanzas hay un `await`: otra pestaña pudo cambiar de cuenta (y quitar ya la marca).
+  if (hayLikesDeOtro() || cambioLaCuenta()) return;
   const legacyPartial = cacheGetRaw(LIKES_CACHE_KEY + '_partial');
   if (legacyPartial && legacyPartial.items?.length > 0) {
     try {
@@ -478,16 +509,25 @@ async function leerLikesCacheados() {
 //
 // 🔴 (v=346, tanda 103) La regla de los que ESCRIBEN, en un solo sitio: con la marca de `util/likes-de-otro.js` puesta,
 // no se escribe y se devuelve `{ ok: false, likesDeOtro: true }`. Un escritor nuevo queda cubierto sin acordarse (lo
-// vigila la guarda estática de `tests/me-gusta-de-otra-cuenta.test.mjs`). ⚠️ Cierra «la marca sigue puesta cuando llego a
-// escribir»; NO cierra que otra pestaña ponga la marca, borre bien y la quite mientras este escritor espera: ahí ya no
-// hay marca que ver (ver CLAUDE.md, «Los que escriben (v=346)»).
-async function saveLikes(items, { complete = true, total = null } = {}) {
+// vigila la guarda estática de `tests/me-gusta-de-otra-cuenta.test.mjs`). La marca cierra «sigue puesta cuando llego a
+// escribir»; NO cierra que otra pestaña ponga la marca, borre bien y la quite mientras este escritor espera.
+//
+// 🔴 (v=348, tanda 105) Eso lo cierra la ÉPOCA (`epocaDeLikes()`, arriba): `epoca` es OBLIGATORIA. Sin el campo, tira
+// (un escritor nuevo no se la puede olvidar en silencio); con una época que no es el `fonoteca_last_user_id` de ahora, no
+// escribe y devuelve lo mismo que con la marca; con `null` (cuando empezó no había cuenta guardada), vale solo la marca.
+// Ver CLAUDE.md, «La época y Reset + Login (v=348)».
+async function saveLikes(items, { complete = true, total = null, epoca } = {}) {
+  if (epoca === undefined) throw new Error('saveLikes sin epoca');
   if (!complete) {
     console.warn(`[likes] descarto guardar ${items.length} likes: carga incompleta` + (total != null ? ` (total real ${total})` : ''));
     return { ok: false, skipped: true };
   }
   if (hayLikesDeOtro()) {
     console.warn(`[likes] descarto guardar ${items.length} likes: la caché es de otra cuenta (la marca de util/likes-de-otro.js sigue puesta)`);
+    return { ok: false, likesDeOtro: true };
+  }
+  if (epoca !== null && epoca !== epocaDeLikes()) {
+    console.warn(`[likes] descarto guardar ${items.length} likes: la cuenta cambió desde que empezó quien los trajo (otra pestaña entró con otra cuenta)`);
     return { ok: false, likesDeOtro: true };
   }
   try {
@@ -518,6 +558,8 @@ async function saveLikes(items, { complete = true, total = null } = {}) {
 let likesInFlight = null;
 
 function startLikesLoad({ force }) {
+  // (v=348) La época, antes del primer `await`: la paginación dura minutos y otra pestaña puede cambiar de cuenta.
+  const epoca = epocaDeLikes();
   const state = {
     controller: new AbortController(),
     listeners: new Set(),
@@ -544,6 +586,7 @@ function startLikesLoad({ force }) {
         meta,
         // La red de seguridad no se suelta acá — ver abajo.
         keepPartial: true,
+        epoca,
       });
 
       // ⚠️ ORDEN, y es lo importante de este bloque.
@@ -559,12 +602,13 @@ function startLikesLoad({ force }) {
       // Ahora el parcial se borra SOLO después de que el completo esté escrito
       // y confirmado. Si algo falla, se conserva el progreso: siempre es mejor
       // retomar en 8.500 que volver a empezar de 0.
-      const guardado = await saveLikes(items, { complete: meta.complete, total: meta.total });
+      const guardado = await saveLikes(items, { complete: meta.complete, total: meta.total, epoca });
 
       // (v=347) La marca de otra cuenta apareció durante la descarga (otra pestaña entró con otra cuenta): no falla el
       // navegador, y con la marca puesta `savePartial()` tampoco escribe, así que no hay progreso que retomar.
+      // (v=348) Lo mismo si la cuenta cambió y la marca ya se fue (la época): `saveLikes` devuelve el mismo `likesDeOtro`.
       if (meta.complete && guardado.likesDeOtro) {
-        console.warn('[likes] la descarga cuadró pero no se guarda: la caché es de otra cuenta (la marca apareció durante la descarga)');
+        console.warn('[likes] la descarga cuadró pero no se guarda: la caché es de otra cuenta (la marca apareció o la cuenta cambió durante la descarga)');
         throw new Error(TEXTO_LIKES_DE_OTRO);
       }
 
@@ -711,6 +755,8 @@ async function getRecentLikes(count) {
 }
 
 async function syncLikesIncremental(onProgress) {
+  // (v=348) La época, antes del primer `await` (ver `epocaDeLikes`).
+  const epoca = epocaDeLikes();
   await migrateLikesFromLocalStorage();
   const cached = await leerLikesCacheados();
   if (!cached || cached.length === 0) {
@@ -751,7 +797,7 @@ async function syncLikesIncremental(onProgress) {
   const finalItems = [...newOnes, ...cached];
   // (v=346) Hasta v=345 no se miraba el resultado y el Dashboard decía «+N likes nuevos traídos» con la caché sin
   // escribir. Si no se guardó, se tira: `handleRefresh` lo pinta en rojo.
-  const guardado = await saveLikes(finalItems);
+  const guardado = await saveLikes(finalItems, { epoca });
   if (!guardado.ok) {
     throw new Error(guardado.likesDeOtro ? TEXTO_LIKES_DE_OTRO
       : `Se han traído ${newOnes.length.toLocaleString('es-ES')} likes nuevos, pero el navegador no ha podido guardarlos${guardado.error ? ` (${guardado.error.message})` : ''}.`);
@@ -952,7 +998,7 @@ async function importarCopiaCompleta(texto, { ahora = new Date() } = {}) {
     plan.rechazo = { motivo: 'roto', texto: `El archivo no es un JSON válido (${e?.message || e}).` };
     return { plan };
   }
-  const { motivoSinImportCompleto } = await import('./features/history-data.js?v=347');
+  const { motivoSinImportCompleto } = await import('./features/history-data.js?v=348');
   const motivoOwner = await motivoSinImportCompleto();
   const uid = motivoOwner === 'identidad' ? null : _cachedUserId;
   const leido = await leerParaImportar();
@@ -1127,6 +1173,8 @@ async function importAllData(parsed, onProgress, { currentUserId = null } = {}) 
 }
 
 async function importLikesData(parsed, onProgress) {
+  // (v=348) La época, antes del primer `await` (ver `epocaDeLikes`).
+  const epoca = epocaDeLikes();
   if (!parsed || typeof parsed !== 'object') throw new Error('Archivo inválido');
   const imported = Array.isArray(parsed.items) ? parsed.items : (Array.isArray(parsed) ? parsed : null);
   if (!imported) throw new Error('El archivo no tiene items');
@@ -1164,7 +1212,7 @@ async function importLikesData(parsed, onProgress) {
 
   // (v=346) Nada dice «hecho» sin haberlo hecho: si no se escribió (la marca llegó durante las peticiones, o el
   // navegador no guardó), se tira y el toast de «Importado: N likes» no sale.
-  const guardado = await saveLikes(finalItems);
+  const guardado = await saveLikes(finalItems, { epoca });
   if (!guardado.ok) {
     throw new Error(guardado.likesDeOtro ? TEXTO_LIKES_DE_OTRO
       : `No se han podido guardar los me gusta del archivo en el navegador${guardado.error ? ` (${guardado.error.message})` : ''}.`);
@@ -1526,12 +1574,14 @@ async function removePlaylistItemsAtPositions(playlistId, itemsWithPositions) {
 // Saca ids del cache de likes SIN re-bajar todo (evita el full-refetch y que por consistencia
 // eventual de Spotify reaparezcan los recién borrados).
 async function removeFromLikesCache(ids) {
+  // (v=348) La época, antes del primer `await` (ver `epocaDeLikes`).
+  const epoca = epocaDeLikes();
   const idSet = new Set(ids);
   try {
     const cached = await leerLikesCacheados();
     if (Array.isArray(cached)) {
       const filtered = cached.filter(it => !idSet.has(it?.track?.id));
-      await saveLikes(filtered, { complete: true, total: filtered.length });
+      await saveLikes(filtered, { complete: true, total: filtered.length, epoca });
     }
   } catch (e) {
     // ⚠️ Antes acá había un `invalidateLikesCache()`: si quitar 3 ids del caché
@@ -1700,6 +1750,8 @@ async function saveToLibrary(ids) {
 // menos es infinitamente mejor que ninguna, y la escritura en Spotify ya se
 // hizo igual).
 async function addToLikesCache(items) {
+  // (v=348) La época, antes del primer `await` (ver `epocaDeLikes`).
+  const epoca = epocaDeLikes();
   const nuevos = (items || []).filter(it => it?.track?.id);
   if (nuevos.length === 0) return;
   try {
@@ -1711,7 +1763,7 @@ async function addToLikesCache(items) {
     // Al frente, como `syncLikesIncremental`: la caché está ordenada por
     // `added_at` descendente y lo recién añadido es lo más nuevo.
     const final = [...faltantes, ...cached];
-    await saveLikes(final, { complete: true, total: final.length });
+    await saveLikes(final, { complete: true, total: final.length, epoca });
   } catch (e) {
     console.info('[likes] no pude meter lo añadido en la caché (queda sin ellos):', e.message);
     showToast('Los añadí en Spotify, pero la caché local quedó sin ellos. Se corrige en la próxima sincronización.', 'info');
@@ -2185,6 +2237,7 @@ export {
   getLikesTotal,
   syncLikesIncremental,
   importLikesData,
+  saveLikes,   // (v=348) solo para `tests/likes-epoca.test.mjs` (la época obligatoria); las vistas no la llaman
   exportAllData,
   exportarCopiaCompleta,
   importarCopiaCompleta,

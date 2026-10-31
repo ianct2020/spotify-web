@@ -1,53 +1,53 @@
-import { isLoggedIn, loginWithSpotify, logout } from './auth.js?v=347';
-import { spotifyFetch, onRateLimit, revisarCambioDeUsuario } from './api.js?v=347';
-import { getValidToken } from './auth.js?v=347';
-import { cacheClearAll } from './storage.js?v=347';
-import { idbClearAll } from './idb.js?v=347';
-import { CONSERVAR_CLAVES, CONSERVAR_PREFIJOS, LO_QUE_SE_CONSERVA } from './util/limpiar-cache.js?v=347';
-import { registerRoute, initRouter, rutasRegistradas } from './router.js?v=347';
-import { showToast } from './ui/toast.js?v=347';
-import { pageHeader, escapeHtml } from './ui/components.js?v=347';
-import { installCrashGuard } from './ui/crash-guard.js?v=347';
-import { auditarOcultos, leerIncidencias } from './util/hidden-sync.js?v=347';
-import { getStack } from './ui/modal-stack.js?v=347';
-import { installBackToTop } from './ui/back-to-top.js?v=347';
-import { applyStoredTheme, openThemePanel } from './ui/theme-panel.js?v=347';
-import { escucharAvisoDeCopia } from './ui/aviso-copia.js?v=347';
+import { isLoggedIn, loginWithSpotify, logout } from './auth.js?v=348';
+import { spotifyFetch, onRateLimit, revisarCambioDeUsuario } from './api.js?v=348';
+import { getValidToken } from './auth.js?v=348';
+import { cacheClearAll } from './storage.js?v=348';
+import { idbClearAll } from './idb.js?v=348';
+import { CONSERVAR_CLAVES, CONSERVAR_PREFIJOS, LO_QUE_SE_CONSERVA } from './util/limpiar-cache.js?v=348';
+import { registerRoute, initRouter, rutasRegistradas } from './router.js?v=348';
+import { showToast } from './ui/toast.js?v=348';
+import { pageHeader, escapeHtml } from './ui/components.js?v=348';
+import { installCrashGuard } from './ui/crash-guard.js?v=348';
+import { auditarOcultos, leerIncidencias } from './util/hidden-sync.js?v=348';
+import { getStack } from './ui/modal-stack.js?v=348';
+import { installBackToTop } from './ui/back-to-top.js?v=348';
+import { applyStoredTheme, openThemePanel } from './ui/theme-panel.js?v=348';
+import { escucharAvisoDeCopia } from './ui/aviso-copia.js?v=348';
 
-import { render as renderSync } from './features/sync.js?v=347';
-import { render as renderDedupe } from './features/dedupe.js?v=347';
-import { render as renderDupalbums } from './features/duplicate-albums.js?v=347';
-import { render as renderZombies } from './features/zombies.js?v=347';
-import { render as renderVersions } from './features/versions.js?v=347';
-import { render as renderDashboard } from './features/dashboard.js?v=347';
-import { render as renderSmart } from './features/smart.js?v=347';
-import { render as renderSimilar } from './features/similar-artists.js?v=347';
-import { render as renderRabbit } from './features/rabbit-hole.js?v=347';
-import { render as renderByGenre } from './features/by-genre.js?v=347';
-import { render as renderByArtist } from './features/by-artist.js?v=347';
-import { render as renderRecs } from './features/recommendations.js?v=347';
-import { render as renderListened } from './features/listened.js?v=347';
-import { render as renderWrapped } from './features/wrapped.js?v=347';
-import { render as renderRecords } from './features/records.js?v=347';
-import { render as renderCalendario } from './features/calendario.js?v=347';
-import { render as renderMapa } from './features/mapa.js?v=347';
-import { render as renderPuertas } from './features/puertas.js?v=347';
-import { render as renderMenosSalteas } from './features/menos-salteas.js?v=347';
-import { render as renderGeneros } from './features/generos.js?v=347';
-import { render as renderMapaArtistas } from './features/mapa-artistas.js?v=347';
-import { openImportHistory } from './features/import-history.js?v=347';
-import { bindOwnerLockedButtons } from './features/history-data.js?v=347';
-import { render as renderZeroPlays } from './features/zero-plays.js?v=347';
-import { render as renderSkips } from './features/skips.js?v=347';
-import { render as renderSearchLikes } from './features/search-likes.js?v=347';
-import { render as renderWthree } from './features/wthree.js?v=347';
-import { render as renderCovers } from './features/covers.js?v=347';
-import { render as renderMosaico } from './features/mosaico.js?v=347';
-import { render as renderDiscoverArtists } from './features/discover-artists.js?v=347';
-import { render as renderFollowArtists } from './features/follow-artists.js?v=347';
-import { render as renderNewReleases } from './features/new-releases.js?v=347';
-import { render as renderSinClasificar } from './features/sin-clasificar.js?v=347';
-import { pieCuotaHtml, montarPieCuota } from './ui/cuota-pie.js?v=347';
+import { render as renderSync } from './features/sync.js?v=348';
+import { render as renderDedupe } from './features/dedupe.js?v=348';
+import { render as renderDupalbums } from './features/duplicate-albums.js?v=348';
+import { render as renderZombies } from './features/zombies.js?v=348';
+import { render as renderVersions } from './features/versions.js?v=348';
+import { render as renderDashboard } from './features/dashboard.js?v=348';
+import { render as renderSmart } from './features/smart.js?v=348';
+import { render as renderSimilar } from './features/similar-artists.js?v=348';
+import { render as renderRabbit } from './features/rabbit-hole.js?v=348';
+import { render as renderByGenre } from './features/by-genre.js?v=348';
+import { render as renderByArtist } from './features/by-artist.js?v=348';
+import { render as renderRecs } from './features/recommendations.js?v=348';
+import { render as renderListened } from './features/listened.js?v=348';
+import { render as renderWrapped } from './features/wrapped.js?v=348';
+import { render as renderRecords } from './features/records.js?v=348';
+import { render as renderCalendario } from './features/calendario.js?v=348';
+import { render as renderMapa } from './features/mapa.js?v=348';
+import { render as renderPuertas } from './features/puertas.js?v=348';
+import { render as renderMenosSalteas } from './features/menos-salteas.js?v=348';
+import { render as renderGeneros } from './features/generos.js?v=348';
+import { render as renderMapaArtistas } from './features/mapa-artistas.js?v=348';
+import { openImportHistory } from './features/import-history.js?v=348';
+import { bindOwnerLockedButtons } from './features/history-data.js?v=348';
+import { render as renderZeroPlays } from './features/zero-plays.js?v=348';
+import { render as renderSkips } from './features/skips.js?v=348';
+import { render as renderSearchLikes } from './features/search-likes.js?v=348';
+import { render as renderWthree } from './features/wthree.js?v=348';
+import { render as renderCovers } from './features/covers.js?v=348';
+import { render as renderMosaico } from './features/mosaico.js?v=348';
+import { render as renderDiscoverArtists } from './features/discover-artists.js?v=348';
+import { render as renderFollowArtists } from './features/follow-artists.js?v=348';
+import { render as renderNewReleases } from './features/new-releases.js?v=348';
+import { render as renderSinClasificar } from './features/sin-clasificar.js?v=348';
+import { pieCuotaHtml, montarPieCuota } from './ui/cuota-pie.js?v=348';
 
 // ── Arranque degradado cuando /me está rate-limiteado (v=173) ────────────────
 //
@@ -401,11 +401,16 @@ async function init() {
           <p style="margin-bottom:8px">${e.message}</p>
           <div style="display:flex;gap:12px;justify-content:center;margin-top:24px">
             <button class="btn btn-primary" onclick="location.reload()">Reintentar</button>
-            <button class="btn btn-secondary" onclick="localStorage.clear();location.reload()">Reset + Login</button>
+            <button class="btn btn-secondary" id="reset-login-btn">Reset + Login</button>
           </div>
         </div>
       </div>
     `;
+    // (v=348, tanda 105) «Reset + Login» = «Cerrar sesión»: `logout()` borra solo las cinco claves del login y recarga.
+    // Hasta v=347 era `localStorage.clear()`: se llevaba lo que no se puede rehacer (los «ya escuchados», lo quitado,
+    // lo descartado…), `fonoteca_last_user_id` y la marca de los me gusta de otra cuenta. Se conecta acá y no con un
+    // `onclick="…"` en línea: ese corre en el ámbito global y no ve los `import` del módulo.
+    document.getElementById('reset-login-btn').onclick = logout;
   }
 }
 
@@ -1095,7 +1100,7 @@ async function montarBaseMosaico() {
   const parar = document.getElementById('debug-mosaico-parar');
   let mod;
   try {
-    mod = await import('./features/mosaico-colores.js?v=347');
+    mod = await import('./features/mosaico-colores.js?v=348');
   } catch (err) {
     estado.textContent = `No he podido cargar el módulo: ${err.message}`;
     return;

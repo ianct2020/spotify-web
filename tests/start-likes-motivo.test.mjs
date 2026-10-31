@@ -11,6 +11,7 @@
 // llega por `getAllLikedTracks({ force: true })`, que con la caché vacía y `force` va directo a `loadLikesShared()`.
 
 import { register } from 'node:module';
+import { readFileSync } from 'node:fs';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { dirname, join } from 'node:path';
 
@@ -95,6 +96,15 @@ function escenario() {
 const sinTirar = async (f) => { try { return { valor: await f() }; } catch (e) { return { error: e }; } };
 const enCache = () => idb().kv.get('all_liked_tracks')?.value ?? null;
 const sinSufijo = (m) => !/no ha podido guardarlas|retomarlo/.test(m || '');
+/** El texto del `console.warn` de la rama `if (meta.complete && guardado.likesDeOtro) {` de `startLikesLoad`, del fuente. */
+function avisoPropioDeStartLikesLoad() {
+  const src = readFileSync(join(raiz, 'src/js/api.js'), 'utf8');
+  const iFn = src.indexOf('function startLikesLoad(');
+  const iRama = iFn < 0 ? -1 : src.indexOf('if (meta.complete && guardado.likesDeOtro) {', iFn);
+  if (iRama < 0) return null;
+  const m = /console\.warn\(\s*'((?:[^'\\]|\\.)*)'\s*\)/.exec(src.slice(iRama, src.indexOf('}', iRama)));
+  return m ? m[1] : null;
+}
 
 // ── a) La marca aparece durante la paginación y la descarga cuadra ─────────────────────────────
 decir('· a) la marca aparece a mitad de la descarga y la descarga cuadra');
@@ -111,7 +121,13 @@ decir('· a) la marca aparece a mitad de la descarga y la descarga cuadra');
   ok(!/no ha podido guardarlas/.test(r.error?.message || ''), '🔴 a) no dice «no ha podido guardarlas»');
   ok(!/retomarlo/.test(r.error?.message || ''), '🔴 a) no dice «retomarlo»');
   ok(enCache() === null, 'a) la caché no se escribió');
-  ok(avisos.some((m) => m.startsWith('[likes]') && /otra cuenta/.test(m)), `a) hay un console.warn('[likes] …') que dice lo de la otra cuenta (${avisos.filter((m) => m.startsWith('[likes]')).length} avisos [likes])`);
+  // (v=348, tanda 105) Hasta la 104 este assert contaba los `console.warn('[likes] …')`, y ya daba verde contra v=346 con
+  // el de `saveLikes`. Ahora mira el aviso PROPIO de `startLikesLoad`, con su texto sacado del fuente: la rama
+  // `if (meta.complete && guardado.likesDeOtro)`.
+  const propio = avisoPropioDeStartLikesLoad();
+  ok(!!propio, `🔴 a) el aviso propio de startLikesLoad está en el fuente (${propio ?? 'no está la rama `if (meta.complete && guardado.likesDeOtro)` con su console.warn'})`);
+  const veces = propio ? avisos.filter((m) => m === propio).length : 0;
+  ok(veces === 1, `🔴 a) el console.warn propio de startLikesLoad sale EXACTAMENTE una vez (${veces})`);
   ok(!infos.some((m) => m.includes('carga no consolidada')), 'a) el console.info de «carga no consolidada» NO se usa para este caso');
 }
 

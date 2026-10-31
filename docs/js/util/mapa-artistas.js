@@ -35,7 +35,7 @@
 // leer el JSON compacto, los vecinos ordenados por `match`, el toque (pantalla → plano → el
 // círculo más cercano), el pan y el zoom con sus topes, qué nombres se dibujan y el buscador.
 
-import { normalizarNombre } from './mb-pais.js?v=347';
+import { normalizarNombre } from './mb-pais.js?v=348';
 
 // El radio de cada artista, en unidades del PLANO (el zoom lo agranda): el mismo del horneado,
 // `2 + 18·√(minutos / máximo)`. Tiene que ser el mismo: `forceCollide` acomodó con ese radio.
