@@ -151,13 +151,13 @@ async function analyze() {
   // Sin likes en caché el cruce daría «0 canciones sin reproducir» con la
   // biblioteca entera en Spotify. Ver `tarjetaSinLikes()`.
   if (likes.length === 0) {
-    content.innerHTML = `${statsfmError ? statsfmAviso() : ''}${tarjetaSinLikes('tu historial de reproducción')}`;
+    content.innerHTML = tarjetaSinLikes('tu historial de reproducción');
     return;
   }
   if (!plays || !plays.tracks) {
     const propio = await isOwner();
     if (!ruta.vigente()) return;
-    content.innerHTML = `${statsfmError ? statsfmAviso() : ''}${propio
+    content.innerHTML = `${propio
       ? `<div class="card"><p>No pude cargar el historial. Vuelve a intentarlo.</p></div>`
       : ownerLockedMessage('Sin plays')}`;
     return;

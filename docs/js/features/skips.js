@@ -16,25 +16,25 @@
 // Preview 30s instantáneo vía iTunes (arranca en el estribillo, no suma plays
 // en tu historial de Spotify). Fallback: iframe embed oficial si iTunes no lo tiene.
 
-import { getBestAvailableLikes, removeLikedTracks, checkLibraryContains } from '../api.js?v=346';
-import { borrarLikesVerificado } from '../util/borrado-verificado.js?v=346';
-import { loadSkipStats, trackIdOf, isOwner, ownerLockedMessage } from './history-data.js?v=346';
-import { escapeHtml, confirmModal, pageHeader, tarjetaSinLikes } from '../ui/components.js?v=346';
-import { showToast } from '../ui/toast.js?v=346';
-import { getPreview } from '../api/preview-providers.js?v=346';
-import { togglePreview, playingKey } from '../ui/preview-player.js?v=346';
-import { openTrackCard } from './track-card.js?v=346';
-import { firstArtistName, artistNames } from '../util/artist-name.js?v=346';
-import { activateMarquee } from '../ui/marquee.js?v=346';
-import { hasUsername, loadTopLifetime } from '../api/statsfm.js?v=346';
-import { createHiddenStore, uriDeTrackId } from '../util/hidden-sync.js?v=346';
-import { prefKey, migratePrefKey } from '../storage.js?v=346';
-import { vigilarRuta } from '../util/vigencia-ruta.js?v=346';
-import { createIncrementalList, scrollRootOf } from '../ui/incremental-list.js?v=346';
-import { createLazyImages } from '../ui/lazy-img.js?v=346';
-import { renderTrackCardRow, wireTrackCardGrid, paintCardSelection, paintPlayingCard, paintEmbedCard } from '../ui/track-card-row.js?v=346';
-import { coverAtSize } from '../util/cover-size.js?v=346';
-import { coverUrl } from '../util/cover-size.js?v=346';
+import { getBestAvailableLikes, removeLikedTracks, checkLibraryContains } from '../api.js?v=347';
+import { borrarLikesVerificado } from '../util/borrado-verificado.js?v=347';
+import { loadSkipStats, trackIdOf, isOwner, ownerLockedMessage } from './history-data.js?v=347';
+import { escapeHtml, confirmModal, pageHeader, tarjetaSinLikes } from '../ui/components.js?v=347';
+import { showToast } from '../ui/toast.js?v=347';
+import { getPreview } from '../api/preview-providers.js?v=347';
+import { togglePreview, playingKey } from '../ui/preview-player.js?v=347';
+import { openTrackCard } from './track-card.js?v=347';
+import { firstArtistName, artistNames } from '../util/artist-name.js?v=347';
+import { activateMarquee } from '../ui/marquee.js?v=347';
+import { hasUsername, loadTopLifetime } from '../api/statsfm.js?v=347';
+import { createHiddenStore, uriDeTrackId } from '../util/hidden-sync.js?v=347';
+import { prefKey, migratePrefKey } from '../storage.js?v=347';
+import { vigilarRuta } from '../util/vigencia-ruta.js?v=347';
+import { createIncrementalList, scrollRootOf } from '../ui/incremental-list.js?v=347';
+import { createLazyImages } from '../ui/lazy-img.js?v=347';
+import { renderTrackCardRow, wireTrackCardGrid, paintCardSelection, paintPlayingCard, paintEmbedCard } from '../ui/track-card-row.js?v=347';
+import { coverAtSize } from '../util/cover-size.js?v=347';
+import { coverUrl } from '../util/cover-size.js?v=347';
 
 let cache = null;
 // Filas visibles con los filtros actuales, en el mismo orden que las tarjetas
@@ -187,13 +187,13 @@ async function analyze() {
   // Sin likes en caché no hay nada que cruzar, y la lista vacía se leería como
   // «no tienes skips crónicos». Ver `tarjetaSinLikes()`.
   if (likes.length === 0) {
-    content.innerHTML = `${statsfmError ? statsfmAviso() : ''}${tarjetaSinLikes('tu historial de skips')}`;
+    content.innerHTML = tarjetaSinLikes('tu historial de skips');
     return;
   }
   if (!stats || !stats.tracks) {
     const propio = await isOwner();
     if (!ruta.vigente()) return;
-    content.innerHTML = `${statsfmError ? statsfmAviso() : ''}${propio
+    content.innerHTML = `${propio
       ? `<div class="card"><p>No pude cargar el historial de skips. Vuelve a intentarlo.</p></div>`
       : ownerLockedMessage('Skips crónicos')}`;
     return;

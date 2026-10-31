@@ -223,8 +223,12 @@ Guarda: `tests/errores-que-dicen-hecho.test.mjs` (los dos módulos REALES en Nod
 `loadTopLifetime()` llevaba `.catch(() => null)`: con «Cruzar con Stats.fm» marcado y stats.fm caído, la lista salía sin
 el cruce y sin decirlo (temas escuchados después del export quedaban como «sin plays»). Ahora el error crudo va a
 `console.warn` con el prefijo del módulo (`[zeroplays]` / `[skips]`) y la vista sigue sin stats.fm, con una línea en
-`--color-text-secondary`: «No se pudieron leer tus datos de stats.fm: la vista sigue sin ellos.». ⚠️ Esa línea sale también
-encima de la tarjeta de sin me gusta y del candado de un amigo sin datos (menor, anotado en `PENDIENTES.md`). Guarda:
+`--color-text-secondary`: «No se pudieron leer tus datos de stats.fm: la vista sigue sin ellos.». ⚠️ Esa línea salía también
+encima de la tarjeta de sin me gusta y del candado de un amigo sin datos. 🟩 **Desde v=347 no sale en las tres salidas
+tempranas** (sin me gusta, bloqueo y «No pude cargar el historial…»): ahí no hay nada que cruzar con stats.fm, así que su
+fallo no cambia lo que se ve. El `console.warn` con el error crudo se queda, y con la lista de resultados el aviso sale
+igual. Guarda: `tests/statsfm-aviso-salidas-tempranas.test.mjs` (dobles `loader-t104.mjs` y `vista-t104.mjs`), rojo contra
+v=346 en 6 de 28 asserts. Guarda:
 `tests/catch-que-tapan-92a.test.mjs` (dobles `loader-catch-t92a.mjs` y `vista-catch-t92a.mjs`), rojo contra v=341 y verde
 después, con el HTML de la vista sana conservado.
 
@@ -3952,7 +3956,7 @@ v=345 tiraba si fallaba el `/me` sin tener nada que guardar, y eso tapaba el avi
 | `saveLikes` | la completa | **pregunta (v=346)** | — | — |
 | `savePartial` | el parcial | **pregunta (v=346)** | — | — |
 | `migrateLikesFromLocalStorage` | las dos, desde la heredada | pregunta (v=345) | — | — |
-| `startLikesLoad` → `saveLikes` | la completa | al arrancar, y `saveLikes` al final | toda la paginación | tira (ya miraba el resultado; dice «el navegador no ha podido guardarlas», ver abajo) |
+| `startLikesLoad` → `saveLikes` | la completa | al arrancar, y `saveLikes` al final | toda la paginación | tira (ya miraba el resultado; dice «el navegador no ha podido guardarlas», salvo con la marca llegada a mitad: desde v=347 tira `TEXTO_LIKES_DE_OTRO`, ver abajo) |
 | `syncLikesIncremental` → `saveLikes` | la completa | por la lectura, y `saveLikes` | `getLikesTotal` y `getRecentLikes` | **tira con `TEXTO_LIKES_DE_OTRO` (v=346)**: hasta v=345 el Dashboard decía «+N likes nuevos traídos» sin haberlos guardado |
 | `importLikesData` → `saveLikes` | la completa | **la línea de `startLikesLoad` (v=346)**, y `saveLikes` | `getLikesTotal` y `getRecentLikes` | **tira (v=346)** |
 | `removeFromLikesCache` → `saveLikes` | la completa | por la lectura, y `saveLikes` | la lectura de IndexedDB | no dice nada y no hace falta: el borrado en Spotify se hizo, y la caché se rehace (con la marca, el lector siguiente la borra) |
@@ -3960,8 +3964,12 @@ v=345 tiraba si fallaba el `/me` sin tener nada que guardar, y eso tapaba el avi
 
 ⚠️ **Lo que NO cierra**: la marca solo vive mientras dura el borrado de la pestaña que cambió de cuenta. Si esa pestaña
 borra bien y quita la marca mientras un escritor de ESTA pestaña espera, el escritor ya no ve marca y escribe los me gusta de
-la cuenta vieja. Leído en el código, no medido; anotado en `PENDIENTES.md` (tanda 103). ⚠️ Y `startLikesLoad` con la marca
-llegada a mitad dice el motivo equivocado («el navegador no ha podido guardarlas»); no dice «hecho» y no se tocó.
+la cuenta vieja. Leído en el código, no medido; anotado en `PENDIENTES.md` (tanda 103). 🟩 `startLikesLoad` con la marca
+llegada a mitad de la descarga decía el motivo equivocado («el navegador no ha podido guardarlas… el progreso queda guardado
+para retomarlo»: las dos cosas eran falsas, y con la marca `savePartial()` tampoco escribe). **Desde v=347** tira
+exactamente `TEXTO_LIKES_DE_OTRO` (sin sufijo) cuando la descarga cuadró y `saveLikes()` devolvió `likesDeOtro`, con un
+`console.warn('[likes] …')`; los otros dos motivos (descarga cortada, navegador que no guarda) quedaron igual. Guarda:
+`tests/start-likes-motivo.test.mjs`, rojo contra v=346 en 4 de 16 asserts.
 
 **La guarda de escritura estática** (`tests/me-gusta-de-otra-cuenta.test.mjs`, `ESCRITORES_IDB`): en `src/js/`, todo
 `idbSet…(` cuyo primer argumento sea la caché de me gusta (`LIKES_CACHE_KEY`, `LIKES_PARTIAL_KEY` o la clave por su nombre,

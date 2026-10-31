@@ -1,14 +1,14 @@
-import { getAllLikedTracks, createPlaylist, addTracksToPlaylist, invalidatePlaylistsCache, exportAllData, importAllData, TEXTOS_LIKES_SIN_IMPORTAR, getCurrentUserId, getBestAvailableLikes } from '../api.js?v=346';
-import { hasKey, setKey, getArtistTopTags, getCachedTags, setCachedTags, mergeCachedTags, cargarEtiquetas, contarEtiquetasGuardadas } from '../api/lastfm.js?v=346';
-import * as statsfm from '../api/statsfm.js?v=346';
-import { getGenresForArtist as mbGetGenres } from '../api/musicbrainz.js?v=346';
-import { showProgress, hideProgress, progressController, isCancelled, promptPlaylistName, alertModal, confirmModal, escapeHtml, pageHeader } from '../ui/components.js?v=346';
-import { showToast } from '../ui/toast.js?v=346';
-import { openModal, closeTop } from '../ui/modal-stack.js?v=346';
-import { bucketFor } from '../util/genre-reason.js?v=346';
-import { openGenreAudit } from './genre-detail.js?v=346';
-import { prefKey, migratePrefKey } from '../storage.js?v=346';
-import { pedirYCachear, CUALQUIER_RESPUESTA } from '../util/cache-solo-exitos.js?v=346';
+import { getAllLikedTracks, createPlaylist, addTracksToPlaylist, invalidatePlaylistsCache, exportAllData, importAllData, TEXTOS_LIKES_SIN_IMPORTAR, getCurrentUserId, getBestAvailableLikes } from '../api.js?v=347';
+import { hasKey, setKey, getArtistTopTags, getCachedTags, setCachedTags, mergeCachedTags, cargarEtiquetas, contarEtiquetasGuardadas } from '../api/lastfm.js?v=347';
+import * as statsfm from '../api/statsfm.js?v=347';
+import { getGenresForArtist as mbGetGenres } from '../api/musicbrainz.js?v=347';
+import { showProgress, hideProgress, progressController, isCancelled, promptPlaylistName, alertModal, confirmModal, escapeHtml, pageHeader } from '../ui/components.js?v=347';
+import { showToast } from '../ui/toast.js?v=347';
+import { openModal, closeTop } from '../ui/modal-stack.js?v=347';
+import { bucketFor } from '../util/genre-reason.js?v=347';
+import { openGenreAudit } from './genre-detail.js?v=347';
+import { prefKey, migratePrefKey } from '../storage.js?v=347';
+import { pedirYCachear, CUALQUIER_RESPUESTA } from '../util/cache-solo-exitos.js?v=347';
 
 const NOISE_TAGS = new Set([
   'seen live', 'favorites', 'favorite', 'favourite', 'favourites',

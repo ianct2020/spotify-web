@@ -187,13 +187,13 @@ async function analyze() {
   // Sin likes en caché no hay nada que cruzar, y la lista vacía se leería como
   // «no tienes skips crónicos». Ver `tarjetaSinLikes()`.
   if (likes.length === 0) {
-    content.innerHTML = `${statsfmError ? statsfmAviso() : ''}${tarjetaSinLikes('tu historial de skips')}`;
+    content.innerHTML = tarjetaSinLikes('tu historial de skips');
     return;
   }
   if (!stats || !stats.tracks) {
     const propio = await isOwner();
     if (!ruta.vigente()) return;
-    content.innerHTML = `${statsfmError ? statsfmAviso() : ''}${propio
+    content.innerHTML = `${propio
       ? `<div class="card"><p>No pude cargar el historial de skips. Vuelve a intentarlo.</p></div>`
       : ownerLockedMessage('Skips crónicos')}`;
     return;

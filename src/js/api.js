@@ -561,6 +561,13 @@ function startLikesLoad({ force }) {
       // retomar en 8.500 que volver a empezar de 0.
       const guardado = await saveLikes(items, { complete: meta.complete, total: meta.total });
 
+      // (v=347) La marca de otra cuenta apareció durante la descarga (otra pestaña entró con otra cuenta): no falla el
+      // navegador, y con la marca puesta `savePartial()` tampoco escribe, así que no hay progreso que retomar.
+      if (meta.complete && guardado.likesDeOtro) {
+        console.warn('[likes] la descarga cuadró pero no se guarda: la caché es de otra cuenta (la marca apareció durante la descarga)');
+        throw new Error(TEXTO_LIKES_DE_OTRO);
+      }
+
       if (!meta.complete || !guardado.ok) {
         // Dos fallos distintos, y confundirlos manda a buscar donde no es:
         //  - la descarga no llegó al final → faltan canciones

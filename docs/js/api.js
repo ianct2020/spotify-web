@@ -1,18 +1,18 @@
-import { getValidToken, refreshAccessToken } from './auth.js?v=346';
-import { cacheGet, cacheGetRaw, cacheGetTimestamp, cacheSet, cacheClear, prefKey, migratePrefKey } from './storage.js?v=346';
-import { idbDel, idbDelByPrefix, idbGetCached, idbGetCachedRaw, idbGetTimestamp, idbSetCached, idbGet, idbAllKeys, idbEntriesByPrefix, idbSetVarios } from './idb.js?v=346';
-import { OWNER_KEY_LIST } from './history-keys.js?v=346';
-import { OCULTOS_ITEMS_PREFIX } from './util/ocultos-items-clave.js?v=346';
-import { showToast } from './ui/toast.js?v=346';
-import { artistIsSame, limpiaParaQuery } from './util/track-match.js?v=346';
-import { contadorCuota, cuotaDeEndpoint } from './util/cuota.js?v=346';
-import { exportarEtiquetas, importarEtiquetas } from './api/lastfm.js?v=346';
-import { leerNavegador, armarCopia, serializar, contieneSecreto, CENSO } from './util/copia-completa.js?v=346';
-import { leerCopia, planDeImport, segundaRed, importEscribio, TEXTOS as TEXTOS_IMPORT } from './util/copia-importar.js?v=346';
-import { MARCA_DESDE_COPIA, leerMarca, marcaTrasImport } from './util/ocultos-desde-copia.js?v=346';
-import { avisarCopiaImportada } from './util/canal-copia.js?v=346';
-import { BORRADOS_LOG_MAX } from './util/topes-registros.js?v=346';
-import { LIKES_DE_OTRO_KEY, hayLikesDeOtro } from './util/likes-de-otro.js?v=346';
+import { getValidToken, refreshAccessToken } from './auth.js?v=347';
+import { cacheGet, cacheGetRaw, cacheGetTimestamp, cacheSet, cacheClear, prefKey, migratePrefKey } from './storage.js?v=347';
+import { idbDel, idbDelByPrefix, idbGetCached, idbGetCachedRaw, idbGetTimestamp, idbSetCached, idbGet, idbAllKeys, idbEntriesByPrefix, idbSetVarios } from './idb.js?v=347';
+import { OWNER_KEY_LIST } from './history-keys.js?v=347';
+import { OCULTOS_ITEMS_PREFIX } from './util/ocultos-items-clave.js?v=347';
+import { showToast } from './ui/toast.js?v=347';
+import { artistIsSame, limpiaParaQuery } from './util/track-match.js?v=347';
+import { contadorCuota, cuotaDeEndpoint } from './util/cuota.js?v=347';
+import { exportarEtiquetas, importarEtiquetas } from './api/lastfm.js?v=347';
+import { leerNavegador, armarCopia, serializar, contieneSecreto, CENSO } from './util/copia-completa.js?v=347';
+import { leerCopia, planDeImport, segundaRed, importEscribio, TEXTOS as TEXTOS_IMPORT } from './util/copia-importar.js?v=347';
+import { MARCA_DESDE_COPIA, leerMarca, marcaTrasImport } from './util/ocultos-desde-copia.js?v=347';
+import { avisarCopiaImportada } from './util/canal-copia.js?v=347';
+import { BORRADOS_LOG_MAX } from './util/topes-registros.js?v=347';
+import { LIKES_DE_OTRO_KEY, hayLikesDeOtro } from './util/likes-de-otro.js?v=347';
 
 const BASE = 'https://api.spotify.com/v1';
 const MIN_RETRY_WAIT = 5000;
@@ -561,6 +561,13 @@ function startLikesLoad({ force }) {
       // retomar en 8.500 que volver a empezar de 0.
       const guardado = await saveLikes(items, { complete: meta.complete, total: meta.total });
 
+      // (v=347) La marca de otra cuenta apareció durante la descarga (otra pestaña entró con otra cuenta): no falla el
+      // navegador, y con la marca puesta `savePartial()` tampoco escribe, así que no hay progreso que retomar.
+      if (meta.complete && guardado.likesDeOtro) {
+        console.warn('[likes] la descarga cuadró pero no se guarda: la caché es de otra cuenta (la marca apareció durante la descarga)');
+        throw new Error(TEXTO_LIKES_DE_OTRO);
+      }
+
       if (!meta.complete || !guardado.ok) {
         // Dos fallos distintos, y confundirlos manda a buscar donde no es:
         //  - la descarga no llegó al final → faltan canciones
@@ -945,7 +952,7 @@ async function importarCopiaCompleta(texto, { ahora = new Date() } = {}) {
     plan.rechazo = { motivo: 'roto', texto: `El archivo no es un JSON válido (${e?.message || e}).` };
     return { plan };
   }
-  const { motivoSinImportCompleto } = await import('./features/history-data.js?v=346');
+  const { motivoSinImportCompleto } = await import('./features/history-data.js?v=347');
   const motivoOwner = await motivoSinImportCompleto();
   const uid = motivoOwner === 'identidad' ? null : _cachedUserId;
   const leido = await leerParaImportar();
