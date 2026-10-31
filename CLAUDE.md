@@ -3899,8 +3899,9 @@ con `spc_`; no hizo falta conservarla a mano.
   `fonoteca_last_user_id` y la marca, y deja la caché de me gusta en IndexedDB. La cuenta que entre después no ve
   «cambio de usuario» (no hay contra qué comparar) y lee lo que haya.
 - **El modo degradado** (sin `/me` al arrancar): no revisa el cambio de cuenta.
-- **«Importar JSON»** (v2, `importAllData`): escribe en la caché los me gusta del archivo sin mirar la marca; y si se
-  importa con la marca puesta, el reintento siguiente borra lo importado.
+- ~~**«Importar JSON»** (v2, `importAllData`): escribe en la caché los me gusta del archivo sin mirar la marca; y si se
+  importa con la marca puesta, el reintento siguiente borra lo importado.~~ 🟩 Arreglado en v=346: ver «Los que escriben
+  (v=346)», abajo.
 - **La base de colores del mosaico** (`mosaico_colores_v1`): se arma con los me gusta (vía L1). Si se armó con los de
   otra cuenta, sobrevive al cambio (está en `CONSERVAR_CLAVES` y el cambio de usuario no la borra). No es un lector de
   la caché: es un derivado.
@@ -3910,6 +3911,69 @@ Guardas: `tests/me-gusta-de-otra-cuenta.test.mjs` (el `api.js` REAL en Node, con
 marca fuera de la copia, visto rojo poniendo la fila del `CENSO` en `entra: true`), `tests/copia-completa.test.mjs`
 (ya NO siembra la marca: por eso el assert de L2), `tests/likes-cache-policy.test.mjs` y el caso `otra-cuenta` del banco
 `copia-completa`.
+
+### Los que escriben (v=346)
+
+La tanda 103. La 98 miró solo a los que LEEN; del lado de los que ESCRIBEN quedaban dos agujeros, los dos en «Importar
+JSON» (`importAllData` → `importLikesData`): con la marca puesta escribía igual y el lector siguiente borraba lo recién
+importado (el toast ya había dicho «Importado: N likes»), y los me gusta de un archivo de OTRA cuenta entraban en tu caché.
+
+**La regla, en UN sitio**: `saveLikes()` no escribe la completa si `hayLikesDeOtro()`; devuelve
+`{ ok: false, likesDeOtro: true }` y avisa por `console.warn('[likes] …')`. `savePartial()` sigue la misma regla para el
+parcial. Es estructural: un escritor nuevo que pase por ellas queda cubierto sin acordarse.
+
+**«Importar JSON» con la marca**: hace lo mismo que `startLikesLoad`, con la misma línea
+(`if (hayLikesDeOtro() && !(await borrarLikesDeOtro())) throw new Error(TEXTO_LIKES_DE_OTRO);`), ANTES de pedir nada (antes
+de `getLikesTotal()`). Si el borrado sale, la marca se va y el import escribe; si no, tira sin escribir y sin peticiones. Y
+si `saveLikes()` devuelve `ok: false`, `importLikesData` **tira**: el toast de «Importado» no sale con 0 escrituras.
+
+**De quién es el archivo**: los me gusta entran SOLO si el `spotifyUserId` del archivo es la cuenta de ahora. El uid de
+ahora lo resuelve `importAllData` (el `currentUserId` que le pasen o `getCurrentUserId()`: así queda cubierto `#genre`, que
+no pasa nada). Si no entran, `result.likesSkipped` dice por qué, y los dos toasts (`handleImportAll` del Dashboard y
+`handleImport` de `#genre`) lo dicen con `TEXTOS_LIKES_SIN_IMPORTAR` (`api.js`); si no entró ninguna otra cosa, en rojo, y si
+entraron etiquetas o preferencias, `info`:
+
+| `likesSkipped` | cuándo | el toast |
+|---|---|---|
+| `'otra-cuenta'` | el archivo es de otro uid | «Los me gusta del archivo no se han importado: el archivo es de otra cuenta.» |
+| `'sin-dueno'` | formato viejo `spotify-tools-likes` o `spotifyUserId: null` | «…: el archivo no dice de qué cuenta es.» |
+| `'sin-identidad'` | `getCurrentUserId()` tira | «…: no se ha podido comprobar con qué cuenta has entrado.» |
+
+El porqué del sin dueño: los me gusta se vuelven a bajar de Spotify («Cargar desde Spotify»), así que rechazar un archivo
+viejo no pierde nada; mezclar los de otra persona sí. Un archivo sin me gusta no avisa de nada. Las etiquetas y `_config`
+siguen con su regla de siempre, con una salvedad: un archivo con `tags.entries` VACÍO ya no pregunta por la cuenta (hasta
+v=345 tiraba si fallaba el `/me` sin tener nada que guardar, y eso tapaba el aviso `'sin-identidad'`). «Importar todo» (v3,
+`aplicarPlan`) no se tocó: no escribe la caché (las dos filas del `CENSO` van con `entra: false`).
+
+**Los escritores** (con la tabla de lecturas y `await` de la tanda, en `fonoteca-migracion/informes/tanda-103/lectura.md`):
+
+| escritor | qué escribe | la marca | `await` entre leer y escribir | con `ok: false, likesDeOtro` |
+|---|---|---|---|---|
+| `saveLikes` | la completa | **pregunta (v=346)** | — | — |
+| `savePartial` | el parcial | **pregunta (v=346)** | — | — |
+| `migrateLikesFromLocalStorage` | las dos, desde la heredada | pregunta (v=345) | — | — |
+| `startLikesLoad` → `saveLikes` | la completa | al arrancar, y `saveLikes` al final | toda la paginación | tira (ya miraba el resultado; dice «el navegador no ha podido guardarlas», ver abajo) |
+| `syncLikesIncremental` → `saveLikes` | la completa | por la lectura, y `saveLikes` | `getLikesTotal` y `getRecentLikes` | **tira con `TEXTO_LIKES_DE_OTRO` (v=346)**: hasta v=345 el Dashboard decía «+N likes nuevos traídos» sin haberlos guardado |
+| `importLikesData` → `saveLikes` | la completa | **la línea de `startLikesLoad` (v=346)**, y `saveLikes` | `getLikesTotal` y `getRecentLikes` | **tira (v=346)** |
+| `removeFromLikesCache` → `saveLikes` | la completa | por la lectura, y `saveLikes` | la lectura de IndexedDB | no dice nada y no hace falta: el borrado en Spotify se hizo, y la caché se rehace (con la marca, el lector siguiente la borra) |
+| `addToLikesCache` → `saveLikes` | la completa | ídem | ídem | ídem |
+
+⚠️ **Lo que NO cierra**: la marca solo vive mientras dura el borrado de la pestaña que cambió de cuenta. Si esa pestaña
+borra bien y quita la marca mientras un escritor de ESTA pestaña espera, el escritor ya no ve marca y escribe los me gusta de
+la cuenta vieja. Leído en el código, no medido; anotado en `PENDIENTES.md` (tanda 103). ⚠️ Y `startLikesLoad` con la marca
+llegada a mitad dice el motivo equivocado («el navegador no ha podido guardarlas»); no dice «hecho» y no se tocó.
+
+**La guarda de escritura estática** (`tests/me-gusta-de-otra-cuenta.test.mjs`, `ESCRITORES_IDB`): en `src/js/`, todo
+`idbSet…(` cuyo primer argumento sea la caché de me gusta (`LIKES_CACHE_KEY`, `LIKES_PARTIAL_KEY` o la clave por su nombre,
+también dentro de `idbSetVarios([[…`) tiene que estar dentro de `saveLikes`, `savePartial` o `migrateLikesFromLocalStorage`,
+y las tres tienen que preguntar `hayLikesDeOtro(`. A diferencia de la de lectura, una escritura nueva se pone roja AUNQUE su
+función esté en `PERMITIDOS`. Probada con mutantes dentro del test (un `idbSetCached(LIKES_CACHE_KEY, …)` en `clearPartial`,
+una vista que escribe la clave por su nombre, `saveLikes` sin la pregunta) y con dos copias del repo mutadas (tanda 103).
+🔴 Un escritor de `localStorage` (`cacheSet`) no lo ve: hoy no hay ninguno de la caché de me gusta.
+
+Guardas: `tests/importar-json-me-gusta.test.mjs` (el `api.js` REAL en Node con los dobles de la 98, y los dos handlers
+REALES sacados del fuente; datos INVENTADOS; rojo contra v=345 en 32 de 54, con la conservación —un archivo tuyo importa lo
+mismo, con las mismas peticiones y la misma caché— medida contra v=345 y verde antes y después) y la guarda de escritura.
 
 ## Client ID
 0c8c92ad128e4b89be7097c6b8082797

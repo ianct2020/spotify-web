@@ -488,4 +488,56 @@ ok(sinUso.length === 0, `la lista no tiene entradas viejas: cada una menciona la
   } else ok(false, 'un lector de la lista que deja de preguntar por la marca se pone rojo (getLikesPartialInfo todavía no pregunta)');
 }
 
+// ── La guarda de ESCRITURA estática (v=346, tanda 103) ───────────────────────────────────────────
+decir('· la guarda de escritura estática: solo tres funciones escriben la caché de me gusta en IndexedDB, y las tres preguntan');
+// 🔴 LA LISTA de los que escriben. La regla vive en `saveLikes` / `savePartial` (no escriben con la marca) y la mudanza
+// de la heredada ya preguntaba. Un `idbSet…(LIKES_CACHE_KEY | LIKES_PARTIAL_KEY | 'all_liked_tracks…', …)` en cualquier
+// otra función de `src/js/` se pone rojo con archivo y línea, AUNQUE esa función esté en `PERMITIDOS` (ahí está la
+// diferencia con la guarda de lectura). Ver «Los que escriben (v=346)» en CLAUDE.md.
+const ESCRITORES_IDB = [
+  { archivo: 'src/js/api.js', nombre: 'saveLikes' },
+  { archivo: 'src/js/api.js', nombre: 'savePartial' },
+  { archivo: 'src/js/api.js', nombre: 'migrateLikesFromLocalStorage' },
+];
+/** Cada mención de la caché que es el primer argumento de un `idbSet…(` (también dentro de `idbSetVarios([[…`). */
+function escriturasIdb(fuentes) {
+  const fuera = [], sinMarca = [];
+  for (const [archivo, src] of Object.entries(fuentes)) {
+    const { cod, esq } = pelar(src);
+    const fns = funciones(esq);
+    for (const m of cod.matchAll(MENCION)) {
+      if (!/\bidbSet\w*\s*\(\s*(?:\[\s*)*$/.test(cod.slice(Math.max(0, m.index - 80), m.index))) continue;
+      const nombre = duenio(m.index, fns, esq);
+      const linea = cod.slice(0, m.index).split('\n').length;
+      if (!ESCRITORES_IDB.some((x) => x.archivo === archivo && x.nombre === nombre)) fuera.push(`${archivo}:${linea} (${nombre}: ${m[0]})`);
+    }
+    for (const p of ESCRITORES_IDB.filter((x) => x.archivo === archivo)) {
+      const f = fns.find((x) => x.nombre === p.nombre);
+      if (!f || !/\bhayLikesDeOtro\(/.test(cod.slice(f.ini, f.fin))) {
+        const linea = f ? cod.slice(0, f.ini).split('\n').length : '?';
+        sinMarca.push(`${archivo}:${linea} ${p.nombre}${f ? '' : ': no existe'}`);
+      }
+    }
+  }
+  return { fuera, sinMarca };
+}
+const esc = escriturasIdb(fuentes);
+ok(esc.fuera.length === 0, `🔴 la caché de me gusta solo se escribe en IndexedDB dentro de saveLikes, savePartial y migrateLikesFromLocalStorage (fuera: ${esc.fuera.join(' · ') || '—'})`);
+ok(esc.sinMarca.length === 0, `🔴 las tres preguntan por la marca, hayLikesDeOtro( (no preguntan: ${esc.sinMarca.join(' · ') || '—'})`);
+{
+  const api = fuentes['src/js/api.js'];
+  // Un escritor nuevo DENTRO de una función que ya está en PERMITIDOS (clearPartial): la guarda de lectura no lo ve.
+  const iCp = api.indexOf('async function clearPartial(key) {');
+  const conEscritor = api.slice(0, iCp) + api.slice(iCp).replace('async function clearPartial(key) {', 'async function clearPartial(key) {\n  await idbSetCached(LIKES_CACHE_KEY, [], null);');
+  const r1 = escriturasIdb({ ...fuentes, 'src/js/api.js': conEscritor });
+  ok(iCp >= 0 && r1.fuera.some((x) => /^src\/js\/api\.js:\d+ \(clearPartial: LIKES_CACHE_KEY\)$/.test(x)), `un idbSetCached(LIKES_CACHE_KEY, …) en otra función se pone rojo, con archivo y línea (${r1.fuera.join(' · ') || 'no lo vio'})`);
+  const otraVista = escriturasIdb({ ...fuentes, 'src/js/features/vista-inventada.js': "export async function x(v) { await idbSetVarios([['all_liked_tracks', v]]); }\n" });
+  ok(otraVista.fuera.some((x) => x.startsWith('src/js/features/vista-inventada.js:1')), 'una vista nueva que escriba la clave por su nombre (idbSetVarios) se pone roja');
+  // `saveLikes` sin la pregunta.
+  const iSl = api.indexOf('async function saveLikes(');
+  const sinPregunta = api.slice(0, iSl) + api.slice(iSl).replace(/if \(hayLikesDeOtro\(\)\) \{/, 'if (false) {');
+  const r2 = escriturasIdb({ ...fuentes, 'src/js/api.js': sinPregunta });
+  ok(iSl >= 0 && r2.sinMarca.some((x) => /^src\/js\/api\.js:\d+ saveLikes$/.test(x)), `saveLikes sin la pregunta se pone rojo, con archivo y línea (${r2.sinMarca.join(' · ') || 'no lo vio'})`);
+}
+
 fin();

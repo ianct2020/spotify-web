@@ -23,3 +23,4 @@ export async function addTracksToPlaylist() { anotar('addTracksToPlaylist'); thr
 export function invalidatePlaylistsCache() { anotar('invalidatePlaylistsCache'); }
 export async function exportAllData() { anotar('exportAllData'); return {}; }
 export async function importAllData() { anotar('importAllData'); return {}; }
+export const TEXTOS_LIKES_SIN_IMPORTAR = {};

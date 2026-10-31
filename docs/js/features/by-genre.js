@@ -1,14 +1,14 @@
-import { getAllLikedTracks, createPlaylist, addTracksToPlaylist, invalidatePlaylistsCache, exportAllData, importAllData, getCurrentUserId, getBestAvailableLikes } from '../api.js?v=345';
-import { hasKey, setKey, getArtistTopTags, getCachedTags, setCachedTags, mergeCachedTags, cargarEtiquetas, contarEtiquetasGuardadas } from '../api/lastfm.js?v=345';
-import * as statsfm from '../api/statsfm.js?v=345';
-import { getGenresForArtist as mbGetGenres } from '../api/musicbrainz.js?v=345';
-import { showProgress, hideProgress, progressController, isCancelled, promptPlaylistName, alertModal, confirmModal, escapeHtml, pageHeader } from '../ui/components.js?v=345';
-import { showToast } from '../ui/toast.js?v=345';
-import { openModal, closeTop } from '../ui/modal-stack.js?v=345';
-import { bucketFor } from '../util/genre-reason.js?v=345';
-import { openGenreAudit } from './genre-detail.js?v=345';
-import { prefKey, migratePrefKey } from '../storage.js?v=345';
-import { pedirYCachear, CUALQUIER_RESPUESTA } from '../util/cache-solo-exitos.js?v=345';
+import { getAllLikedTracks, createPlaylist, addTracksToPlaylist, invalidatePlaylistsCache, exportAllData, importAllData, TEXTOS_LIKES_SIN_IMPORTAR, getCurrentUserId, getBestAvailableLikes } from '../api.js?v=346';
+import { hasKey, setKey, getArtistTopTags, getCachedTags, setCachedTags, mergeCachedTags, cargarEtiquetas, contarEtiquetasGuardadas } from '../api/lastfm.js?v=346';
+import * as statsfm from '../api/statsfm.js?v=346';
+import { getGenresForArtist as mbGetGenres } from '../api/musicbrainz.js?v=346';
+import { showProgress, hideProgress, progressController, isCancelled, promptPlaylistName, alertModal, confirmModal, escapeHtml, pageHeader } from '../ui/components.js?v=346';
+import { showToast } from '../ui/toast.js?v=346';
+import { openModal, closeTop } from '../ui/modal-stack.js?v=346';
+import { bucketFor } from '../util/genre-reason.js?v=346';
+import { openGenreAudit } from './genre-detail.js?v=346';
+import { prefKey, migratePrefKey } from '../storage.js?v=346';
+import { pedirYCachear, CUALQUIER_RESPUESTA } from '../util/cache-solo-exitos.js?v=346';
 
 const NOISE_TAGS = new Set([
   'seen live', 'favorites', 'favorite', 'favourite', 'favourites',
@@ -498,7 +498,13 @@ async function handleImport(e, { skipRefresh = false, returnResult = false } = {
     if (result.likesImported > 0) parts.push(`${result.likesImported.toLocaleString('es-ES')} likes`);
     if (result.tagsImported > 0) parts.push(`${result.tagsImported} artistas nuevos`);
     if (result.tagsUpdated > 0) parts.push(`${result.tagsUpdated} actualizados`);
-    showToast(parts.length > 0 ? `Importado: ${parts.join(' · ')}` : 'Sin cambios', 'success');
+    // (v=346) Los me gusta del archivo no entraron: el toast lo dice, y si no entró ninguna otra cosa, en rojo.
+    if (result.likesSkipped) {
+      const aviso = TEXTOS_LIKES_SIN_IMPORTAR[result.likesSkipped] || 'Los me gusta del archivo no se han importado.';
+      showToast(parts.length > 0 ? `${aviso} Importado: ${parts.join(' · ')}` : aviso, parts.length > 0 ? 'info' : 'error');
+    } else {
+      showToast(parts.length > 0 ? `Importado: ${parts.join(' · ')}` : 'Sin cambios', 'success');
+    }
     if (!skipRefresh) refreshHeaderAndGenres();
     return returnResult ? result : null;
   } catch (err) {

@@ -1,4 +1,4 @@
-import { getAllLikedTracks, createPlaylist, addTracksToPlaylist, invalidatePlaylistsCache, exportAllData, importAllData, getCurrentUserId, getBestAvailableLikes } from '../api.js';
+import { getAllLikedTracks, createPlaylist, addTracksToPlaylist, invalidatePlaylistsCache, exportAllData, importAllData, TEXTOS_LIKES_SIN_IMPORTAR, getCurrentUserId, getBestAvailableLikes } from '../api.js';
 import { hasKey, setKey, getArtistTopTags, getCachedTags, setCachedTags, mergeCachedTags, cargarEtiquetas, contarEtiquetasGuardadas } from '../api/lastfm.js';
 import * as statsfm from '../api/statsfm.js';
 import { getGenresForArtist as mbGetGenres } from '../api/musicbrainz.js';
@@ -498,7 +498,13 @@ async function handleImport(e, { skipRefresh = false, returnResult = false } = {
     if (result.likesImported > 0) parts.push(`${result.likesImported.toLocaleString('es-ES')} likes`);
     if (result.tagsImported > 0) parts.push(`${result.tagsImported} artistas nuevos`);
     if (result.tagsUpdated > 0) parts.push(`${result.tagsUpdated} actualizados`);
-    showToast(parts.length > 0 ? `Importado: ${parts.join(' · ')}` : 'Sin cambios', 'success');
+    // (v=346) Los me gusta del archivo no entraron: el toast lo dice, y si no entró ninguna otra cosa, en rojo.
+    if (result.likesSkipped) {
+      const aviso = TEXTOS_LIKES_SIN_IMPORTAR[result.likesSkipped] || 'Los me gusta del archivo no se han importado.';
+      showToast(parts.length > 0 ? `${aviso} Importado: ${parts.join(' · ')}` : aviso, parts.length > 0 ? 'info' : 'error');
+    } else {
+      showToast(parts.length > 0 ? `Importado: ${parts.join(' · ')}` : 'Sin cambios', 'success');
+    }
     if (!skipRefresh) refreshHeaderAndGenres();
     return returnResult ? result : null;
   } catch (err) {

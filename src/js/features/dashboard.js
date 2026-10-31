@@ -1,4 +1,4 @@
-import { getAllLikedTracks, getLikesPartialInfo, exportAllData, exportarCopiaCompleta, importarCopiaCompleta, aplicarPlan, importAllData, getCurrentUserId, syncLikesIncremental, getLikesCacheTimestamp, getBestAvailableLikes, getAllPlaylistItems } from '../api.js';
+import { getAllLikedTracks, getLikesPartialInfo, exportAllData, exportarCopiaCompleta, importarCopiaCompleta, aplicarPlan, importAllData, TEXTOS_LIKES_SIN_IMPORTAR, getCurrentUserId, syncLikesIncremental, getLikesCacheTimestamp, getBestAvailableLikes, getAllPlaylistItems } from '../api.js';
 import { showProgress, hideProgress, alertModal, infoModal, escapeHtml, pageHeader } from '../ui/components.js';
 import { openModal, closeTop } from '../ui/modal-stack.js';
 import { showToast } from '../ui/toast.js';
@@ -648,7 +648,15 @@ async function handleImportAll(e) {
     if (result.configSkipped) parts.push(`config del backup ignorada (no es tu cuenta)`);
     const msg = parts.length > 0 ? `Importado: ${parts.join(' · ')}` : 'Archivo importado (sin cambios)';
     const type = result.likesImported === 0 && inspection.hasLikes === false ? 'error' : 'success';
-    showToast(msg, type);
+    // (v=346) Los me gusta del archivo no entraron (de otra cuenta, sin dueño o sin saber quién sos): el toast lo dice,
+    // y si no entró ninguna otra cosa, en rojo.
+    if (result.likesSkipped) {
+      const nadaMas = !result.tagsImported && !result.tagsUpdated && !result.configApplied;
+      const aviso = TEXTOS_LIKES_SIN_IMPORTAR[result.likesSkipped] || 'Los me gusta del archivo no se han importado.';
+      showToast(parts.length > 0 ? `${aviso} ${msg}` : aviso, nadaMas ? 'error' : 'info');
+    } else {
+      showToast(msg, type);
+    }
     loadData(false);
   } catch (err) {
     hideProgress();

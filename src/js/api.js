@@ -235,6 +235,11 @@ const LIKES_PARTIAL_KEY = LIKES_CACHE_KEY + '_partial';
 // nada. Ver PENDIENTES.md, «Riesgos abiertos» ítem 0.
 async function savePartial(key, payload) {
   if (key === LIKES_CACHE_KEY || key === LIKES_PARTIAL_KEY) {
+    // (v=346) La misma regla que `saveLikes`: con la marca, el parcial no se escribe.
+    if (hayLikesDeOtro()) {
+      console.warn(`[likes] descarto guardar el parcial (${payload?.items?.length ?? 0} likes): la caché es de otra cuenta`);
+      return { ok: false, likesDeOtro: true };
+    }
     try { await idbSetCached(LIKES_PARTIAL_KEY, payload, null); } catch (e) { console.warn('savePartial IDB:', e); }
   } else {
     cacheSet(key + '_partial', payload, 60);
@@ -470,10 +475,20 @@ async function leerLikesCacheados() {
 // de las 9.548 canciones buenas, y el resto de la app la leía como si fuera la
 // biblioteca entera. Ahora una escritura solo pisa el caché si viene marcada
 // como completa; si no, se descarta y queda el caché anterior intacto.
+//
+// 🔴 (v=346, tanda 103) La regla de los que ESCRIBEN, en un solo sitio: con la marca de `util/likes-de-otro.js` puesta,
+// no se escribe y se devuelve `{ ok: false, likesDeOtro: true }`. Un escritor nuevo queda cubierto sin acordarse (lo
+// vigila la guarda estática de `tests/me-gusta-de-otra-cuenta.test.mjs`). ⚠️ Cierra «la marca sigue puesta cuando llego a
+// escribir»; NO cierra que otra pestaña ponga la marca, borre bien y la quite mientras este escritor espera: ahí ya no
+// hay marca que ver (ver CLAUDE.md, «Los que escriben (v=346)»).
 async function saveLikes(items, { complete = true, total = null } = {}) {
   if (!complete) {
     console.warn(`[likes] descarto guardar ${items.length} likes: carga incompleta` + (total != null ? ` (total real ${total})` : ''));
     return { ok: false, skipped: true };
+  }
+  if (hayLikesDeOtro()) {
+    console.warn(`[likes] descarto guardar ${items.length} likes: la caché es de otra cuenta (la marca de util/likes-de-otro.js sigue puesta)`);
+    return { ok: false, likesDeOtro: true };
   }
   try {
     // ⚠️ SIN caducidad (antes: CACHE_TTL_MIN, 24 h). Ver `leerLikesCacheados()`
@@ -727,7 +742,13 @@ async function syncLikesIncremental(onProgress) {
   const recent = await getRecentLikes(delta + 20);
   const newOnes = recent.filter(r => r?.track?.uri && !knownUris.has(r.track.uri));
   const finalItems = [...newOnes, ...cached];
-  await saveLikes(finalItems);
+  // (v=346) Hasta v=345 no se miraba el resultado y el Dashboard decía «+N likes nuevos traídos» con la caché sin
+  // escribir. Si no se guardó, se tira: `handleRefresh` lo pinta en rojo.
+  const guardado = await saveLikes(finalItems);
+  if (!guardado.ok) {
+    throw new Error(guardado.likesDeOtro ? TEXTO_LIKES_DE_OTRO
+      : `Se han traído ${newOnes.length.toLocaleString('es-ES')} likes nuevos, pero el navegador no ha podido guardarlos${guardado.error ? ` (${guardado.error.message})` : ''}.`);
+  }
   return { hadCache: true, added: newOnes.length, removed: 0, totalNow, cachedCount: finalItems.length };
 }
 
@@ -1012,12 +1033,21 @@ function alTerminarImport(r, { lsAntes = null, escritas = [], uid = null } = {})
   return r;
 }
 
+// (v=346, tanda 103) Por qué no entraron los me gusta de un archivo (`likesSkipped`), dicho para el toast. Los usan los
+// dos llamadores de `importAllData` (`handleImportAll` del Dashboard y `handleImport` de `#genre`).
+const TEXTOS_LIKES_SIN_IMPORTAR = {
+  'otra-cuenta': 'Los me gusta del archivo no se han importado: el archivo es de otra cuenta.',
+  'sin-dueno': 'Los me gusta del archivo no se han importado: el archivo no dice de qué cuenta es.',
+  'sin-identidad': 'Los me gusta del archivo no se han importado: no se ha podido comprobar con qué cuenta has entrado.',
+};
+
 async function importAllData(parsed, onProgress, { currentUserId = null } = {}) {
   if (!parsed || typeof parsed !== 'object') throw new Error('Archivo inválido');
 
   const result = {
     likesImported: 0,
     likesAdded: 0,
+    likesSkipped: null,
     tagsImported: 0,
     tagsUpdated: 0,
     configApplied: 0,
@@ -1025,22 +1055,53 @@ async function importAllData(parsed, onProgress, { currentUserId = null } = {}) 
     format: parsed._format || 'desconocido',
   };
 
+  // El uid de ahora: el que pasen o, si no viene (`#genre` no lo pasa), `getCurrentUserId()`. Se pide UNA vez y solo si
+  // hace falta; si tira, el error se guarda para las etiquetas, que siguen con su regla de siempre (sin uid, tiran).
+  let uidAhora = currentUserId || null;
+  let errorUid = null;
+  const resolverUid = async () => {
+    if (!uidAhora && !errorUid) {
+      try { uidAhora = await getCurrentUserId(); } catch (e) { errorUid = e; }
+    }
+    return uidAhora;
+  };
+
   const hasNewLikes = parsed.likes?.items && Array.isArray(parsed.likes.items);
   const isOldLikes = Array.isArray(parsed.items) && parsed._format === 'spotify-tools-likes';
   if (hasNewLikes || isOldLikes) {
     const likesPayload = hasNewLikes ? parsed.likes : parsed;
-    const r = await importLikesData(likesPayload, onProgress);
-    result.likesImported = r.imported;
-    result.likesAdded = r.added;
+    // 🔴 (v=346) Los me gusta del archivo entran SOLO si el archivo es de la cuenta de ahora. Un archivo sin dueño (el
+    // formato viejo, o `spotifyUserId: null`) o sin saber quién sos tampoco entra: los me gusta se vuelven a bajar de
+    // Spotify («Cargar desde Spotify»), así que rechazar no pierde nada; mezclar los de otra persona sí. Hasta v=345 la
+    // comparación era solo para `_config` y los me gusta entraban siempre. Un archivo sin me gusta no avisa de nada.
+    let motivo = null;
+    if (likesPayload.items.length > 0) {
+      const dueno = parsed.spotifyUserId || null;
+      if (!dueno) motivo = 'sin-dueno';
+      else if (!(await resolverUid())) motivo = 'sin-identidad';
+      else if (dueno !== uidAhora) motivo = 'otra-cuenta';
+    }
+    if (motivo) {
+      result.likesSkipped = motivo;
+      console.warn(`[likes] no importo los ${likesPayload.items.length} me gusta del archivo: ${motivo}`);
+    } else {
+      const r = await importLikesData(likesPayload, onProgress);
+      result.likesImported = r.imported;
+      result.likesAdded = r.added;
+    }
   }
 
   const hasNewTags = parsed.tags?.entries && typeof parsed.tags.entries === 'object';
   const isOldTags = parsed.entries && parsed._format === 'spotify-tools-genres';
-  if (hasNewTags || isOldTags) {
-    const tagsPayload = hasNewTags ? parsed.tags : parsed;
+  const tagsPayload = hasNewTags ? parsed.tags : parsed;
+  // (v=346) Sin ninguna etiqueta en el archivo no hay nada que guardar y no se pregunta quién sos: hasta v=345 un archivo
+  // con `tags.entries: {}` (todos los de «Exportar JSON» sin etiquetas) tiraba si fallaba el `/me`, y eso tapaba el aviso
+  // de los me gusta (`'sin-identidad'`). Con etiquetas, la regla de siempre.
+  if ((hasNewTags || isOldTags) && Object.keys(tagsPayload.entries || {}).length > 0) {
     // v=312: a IndexedDB, del usuario de ahora, como `migrado` (el archivo no dice de
     // qué fuente salió cada etiqueta). Lo vencido del archivo también entra.
-    const uid = currentUserId || await getCurrentUserId();
+    const uid = await resolverUid();
+    if (!uid) throw errorUid;
     const r = await importarEtiquetas(uid, tagsPayload.entries || {});
     result.tagsImported = r.added;
     result.tagsUpdated = r.updated;
@@ -1070,6 +1131,11 @@ async function importLikesData(parsed, onProgress) {
     return { imported: 0, added: 0, totalNow: null, totalAtExport, empty: true };
   }
 
+  // (v=346) Con la marca, lo mismo que `startLikesLoad`, y ANTES de pedir nada: se reintenta el borrado de la caché de
+  // la otra cuenta y, si no sale, se tira sin escribir. Hasta v=345 se escribía igual y el lector siguiente
+  // (`leerLikesCacheados` → `borrarLikesDeOtro`) borraba lo recién importado con el toast de «Importado» ya dado.
+  if (hayLikesDeOtro() && !(await borrarLikesDeOtro())) throw new Error(TEXTO_LIKES_DE_OTRO);
+
   if (onProgress) onProgress({ phase: 'checking', message: 'Chequeando total con Spotify (1 request)...' });
   const totalNow = await getLikesTotal();
   const delta = totalNow - totalAtExport;
@@ -1089,7 +1155,13 @@ async function importLikesData(parsed, onProgress) {
     }
   }
 
-  await saveLikes(finalItems);
+  // (v=346) Nada dice «hecho» sin haberlo hecho: si no se escribió (la marca llegó durante las peticiones, o el
+  // navegador no guardó), se tira y el toast de «Importado: N likes» no sale.
+  const guardado = await saveLikes(finalItems);
+  if (!guardado.ok) {
+    throw new Error(guardado.likesDeOtro ? TEXTO_LIKES_DE_OTRO
+      : `No se han podido guardar los me gusta del archivo en el navegador${guardado.error ? ` (${guardado.error.message})` : ''}.`);
+  }
   return {
     imported: imported.length,
     added: finalItems.length - imported.length,
@@ -2111,6 +2183,7 @@ export {
   importarCopiaCompleta,
   aplicarPlan,
   importAllData,
+  TEXTOS_LIKES_SIN_IMPORTAR,
   getBestAvailableLikes,
   getLikesPartialInfo,
   getLikesCacheTimestamp,
