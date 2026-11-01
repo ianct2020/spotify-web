@@ -490,8 +490,12 @@ export async function render(container) {
     const avisoWthree = wthreeFallo
       ? ` · <strong style="color:var(--color-warning)">falta W-Three: ${escapeHtml(wthreeFallo)}</strong>`
       : '';
+    // (v=356) Con los escuchados sin leer, la frase no nombra esa fuente: la única que se leyó es la playlist (la
+    // línea de AVISO_HISTORIAL_ILEGIBLE, arriba de la grilla, ya dice lo que falta). Sin W-Three y sin los escuchados
+    // no se llega acá: la lista queda vacía y la vista sale antes, con la línea sola.
+    if (wthreeItems && avisoEscuchados) return `La playlist «w three» · ${deWthree} están en W-Three${sinTapa}`;
     return wthreeItems
-      ? `Álbumes dados por escuchados (${escapeHtml(umbral)}) y la playlist «w three» · ${deWthree} están en W-Three${avisoEscuchados ? '' : `, ${soloWthree} solo ahí`}${sinTapa}`
+      ? `Álbumes dados por escuchados (${escapeHtml(umbral)}) y la playlist «w three» · ${deWthree} están en W-Three, ${soloWthree} solo ahí${sinTapa}`
       : `Álbumes dados por escuchados (${escapeHtml(umbral)})${sinTapa}${avisoWthree}`;
   }
 

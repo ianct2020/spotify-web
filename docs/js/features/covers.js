@@ -9,27 +9,27 @@
 // placeholder→img. Botón "Pantalla completa" (Fullscreen API) que oculta
 // sidebar/header/toolbar y recalcula el lado.
 
-import { loadListenedAlbums, isOwner, ownerLockedMessage, falloDeLecturaDelHistorial, avisoHistorialIlegibleHtml } from './history-data.js?v=355';
-import { isJunkTrack } from '../util/junk.js?v=355';
-import { vigilarRuta } from '../util/vigencia-ruta.js?v=355';
-import { createIncrementalList, scrollRootOf } from '../ui/incremental-list.js?v=355';
-import { createLazyImages } from '../ui/lazy-img.js?v=355';
-import { getAllPlaylistItems, getBestAvailableLikes } from '../api.js?v=355';
-import { escapeHtml, pageHeader, showProgress, hideProgress } from '../ui/components.js?v=355';
-import { showToast } from '../ui/toast.js?v=355';
-import { openAlbumCard } from './album-card.js?v=355';
-import { openArtistCard } from './artist-card.js?v=355';
-import { albumKey, coverId, coverVariant } from '../util/album-key.js?v=355';
-import { generarWallpaper, descargarBlob, WALLPAPER_PRESETS } from './covers-wallpaper.js?v=355';
-import { buildAlbumStatsIndex } from '../util/album-stats.js?v=355';
-import { sortList, ORDENES_TAPAS } from '../util/orden-tapas.js?v=355';
-import { getPreview } from '../api/preview-providers.js?v=355';
-import { hoverIn, hoverOut } from '../ui/preview-player.js?v=355';
-import { coverUrl, tapaParaCelda } from '../util/cover-size.js?v=355';
-import { prefKey, migratePrefKey } from '../storage.js?v=355';
-import { leerColores, coloresAlVuelo } from './mosaico-colores.js?v=355';
-import { mediaDeRejilla, BYTES_POR_PORTADA } from '../util/cover-color.js?v=355';
-import { FAMILIAS, SIN_COLOR, SIN_COLOR_NOMBRE, familiaDeRgb } from '../util/familia-color.js?v=355';
+import { loadListenedAlbums, isOwner, ownerLockedMessage, falloDeLecturaDelHistorial, avisoHistorialIlegibleHtml } from './history-data.js?v=356';
+import { isJunkTrack } from '../util/junk.js?v=356';
+import { vigilarRuta } from '../util/vigencia-ruta.js?v=356';
+import { createIncrementalList, scrollRootOf } from '../ui/incremental-list.js?v=356';
+import { createLazyImages } from '../ui/lazy-img.js?v=356';
+import { getAllPlaylistItems, getBestAvailableLikes } from '../api.js?v=356';
+import { escapeHtml, pageHeader, showProgress, hideProgress } from '../ui/components.js?v=356';
+import { showToast } from '../ui/toast.js?v=356';
+import { openAlbumCard } from './album-card.js?v=356';
+import { openArtistCard } from './artist-card.js?v=356';
+import { albumKey, coverId, coverVariant } from '../util/album-key.js?v=356';
+import { generarWallpaper, descargarBlob, WALLPAPER_PRESETS } from './covers-wallpaper.js?v=356';
+import { buildAlbumStatsIndex } from '../util/album-stats.js?v=356';
+import { sortList, ORDENES_TAPAS } from '../util/orden-tapas.js?v=356';
+import { getPreview } from '../api/preview-providers.js?v=356';
+import { hoverIn, hoverOut } from '../ui/preview-player.js?v=356';
+import { coverUrl, tapaParaCelda } from '../util/cover-size.js?v=356';
+import { prefKey, migratePrefKey } from '../storage.js?v=356';
+import { leerColores, coloresAlVuelo } from './mosaico-colores.js?v=356';
+import { mediaDeRejilla, BYTES_POR_PORTADA } from '../util/cover-color.js?v=356';
+import { FAMILIAS, SIN_COLOR, SIN_COLOR_NOMBRE, familiaDeRgb } from '../util/familia-color.js?v=356';
 
 const LS_KEY_SIZE = 'covers_cell_size';
 const LS_KEY_SORT = 'covers_sort_mode';
@@ -490,8 +490,12 @@ export async function render(container) {
     const avisoWthree = wthreeFallo
       ? ` · <strong style="color:var(--color-warning)">falta W-Three: ${escapeHtml(wthreeFallo)}</strong>`
       : '';
+    // (v=356) Con los escuchados sin leer, la frase no nombra esa fuente: la única que se leyó es la playlist (la
+    // línea de AVISO_HISTORIAL_ILEGIBLE, arriba de la grilla, ya dice lo que falta). Sin W-Three y sin los escuchados
+    // no se llega acá: la lista queda vacía y la vista sale antes, con la línea sola.
+    if (wthreeItems && avisoEscuchados) return `La playlist «w three» · ${deWthree} están en W-Three${sinTapa}`;
     return wthreeItems
-      ? `Álbumes dados por escuchados (${escapeHtml(umbral)}) y la playlist «w three» · ${deWthree} están en W-Three${avisoEscuchados ? '' : `, ${soloWthree} solo ahí`}${sinTapa}`
+      ? `Álbumes dados por escuchados (${escapeHtml(umbral)}) y la playlist «w three» · ${deWthree} están en W-Three, ${soloWthree} solo ahí${sinTapa}`
       : `Álbumes dados por escuchados (${escapeHtml(umbral)})${sinTapa}${avisoWthree}`;
   }
 

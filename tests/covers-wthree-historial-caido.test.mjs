@@ -16,6 +16,8 @@
 //
 // Tanda 112 (v=355), T112a: con el JSON caído el rótulo ya no dice «N solo ahí» (sin los escuchados no se sabe) y sí
 // «N están en W-Three». Rojo contra d33e0749 (v=354) en 3 asserts; el sha256 sano no cambió.
+// Tanda 113 (v=356), T113b: con el JSON caído la frase de fuentes ya no dice «Álbumes dados por escuchados (…)»: dice
+// «La playlist «w three» · N están en W-Three». Rojo contra 91478b19 (v=355); el sha256 sano no cambió.
 import { register } from 'node:module';
 import { pathToFileURL } from 'node:url';
 import { resolve } from 'node:path';
@@ -147,6 +149,9 @@ for (const [m, como] of TRIO) {
   // T112a (v=355): sin el historial, «solo ahí» no se sabe. «N están en W-Three» sí.
   ok(!/solo ahí/.test(r.html), 'el rótulo NO dice «N solo ahí» (T112a)');
   ok(r.html.includes('5 están en W-Three'), 'el rótulo dice «5 están en W-Three» (T112a)');
+  // T113b (v=356): la frase de fuentes no nombra una fuente que no se pudo leer.
+  ok(!r.html.includes('Álbumes dados por escuchados'), 'la frase de fuentes NO dice «Álbumes dados por escuchados» (T113b)');
+  ok(r.html.includes('La playlist «w three» · 5 están en W-Three'), 'la frase de fuentes dice «La playlist «w three» · 5 están en W-Three» (T113b)');
 }
 
 console.log('\n[covers + W-Three · sano] owner con W-Three configurada y el JSON bien');

@@ -401,6 +401,22 @@ entera como el owner; los JSON los contesta con 500 el conductor de capturas; **
   `.wthree-album-list > .wthree-album-row` con la primera columna en 40 px; dos clases porque esa hoja carga ANTES que
   `main.css`). `main.css` no se tocó. A más de 600 px no cambia nada.
 
+**v=356 (tanda 113).**
+- **Sin `data/`, 0 de 33 rutas se rompen al entrar.** Medido con la app entera en Chrome headless, como el owner, con
+  Spotify simulada y todos los `data/*.json` caídos a la vez, en los tres casos (500, `fetch` que rechaza y 200 con HTML):
+  ninguna termina en la pantalla de `guardRoute`, con el banner del crash-guard, con un error no atrapado, colgada ni vacía
+  (y tampoco con `data/` sano). Los tres casos dan el mismo HTML ruta por ruta. Las que cambian son 12: las diez del
+  historial pintan su «No he podido cargar…» / «No pude cargar…» (`#wrapped`, `#records`, `#calendario`, `#mapa`,
+  `#puertas`, `#menos-salteas`, `#generos`, `#mapa-artistas`, `#zeroplays`, `#skips`), `#covers` pinta
+  `AVISO_HISTORIAL_ILEGIBLE` y `#debug` su base de colores. ⚠️ Mide **la entrada** a cada ruta: lo que pasa detrás de un
+  botón (el «Usar los de la caché» de `#dashboard`), con W-Three configurada o en las fichas no entra en este barrido. No
+  hubo nada que arreglar en la entrada; lo que miente (no rompe) está en `fonoteca-migracion/PENDIENTES.md` («Tanda 113»).
+  El barrido es `fonoteca-migracion/barrido-t113-2026-11-01.mjs` (`MODO=500|rechazo|html|sano`, `RAIZ_APP`, `RUTAS`).
+- **`#covers` con W-Three y `history-listened-albums.json` sin leer**: la frase de fuentes ya no dice «Álbumes dados por
+  escuchados (…) y la playlist «w three»»: dice «La playlist «w three» · N están en W-Three» (la única fuente que se leyó;
+  la línea de arriba de la grilla dice lo que falta). Solo `buildSourcesLine()`. Guarda:
+  `tests/covers-wthree-historial-caido.test.mjs` (asserts nuevos, el trío; el `sha256` sano no cambió).
+
 ## Zona horaria: las fechas del historial NO se pasan a local (v=154 + v=231)
 
 **Medio arreglo en v=154.** Récords decía «9 ene 2026» y Wrapped «8 ene 2026»

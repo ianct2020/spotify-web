@@ -10,22 +10,22 @@
 // 100 artistas en lugar de 20. Lógica de fetch/cache/playlist compartida en
 // features/discover-common.js con #new-releases.
 
-import { escapeHtml, confirmModal, pageHeader } from '../ui/components.js?v=355';
-import { showToast } from '../ui/toast.js?v=355';
-import { openArtistCard } from './artist-card.js?v=355';
-import { createIncrementalList, scrollRootOf } from '../ui/incremental-list.js?v=355';
-import { createLazyImages } from '../ui/lazy-img.js?v=355';
-import { isJunkTrack } from '../util/junk.js?v=355';
-import { buildAlbumHeardIndex } from '../util/album-heard.js?v=355';
-import { loadFiltros, buildFilterContext, applyDiscoverFilters } from '../util/discover-filters.js?v=355';
-import { releaseKind } from '../util/release-size.js?v=355';
-import { masNuevoPrimero } from '../util/release-date.js?v=355';
-import { vigilarRuta } from '../util/vigencia-ruta.js?v=355';
-import { leerElegidos, sumarElegidos, artistasBuscados, colaAutomatica } from '../util/cola-escaneo.js?v=355';
-import { leerFallos, marcarFallo, limpiarFallo, sinFallosMarcados } from '../util/escaneo-fallos.js?v=355';
-import { contarSinEscanear, sufijoSinEscanear, notaSinEscanear } from '../util/sin-escanear.js?v=355';
-import { estadoFrescura } from '../util/frescura-escaneo.js?v=355';
-import { prefKey, migratePrefKey } from '../storage.js?v=355';
+import { escapeHtml, confirmModal, pageHeader } from '../ui/components.js?v=356';
+import { showToast } from '../ui/toast.js?v=356';
+import { openArtistCard } from './artist-card.js?v=356';
+import { createIncrementalList, scrollRootOf } from '../ui/incremental-list.js?v=356';
+import { createLazyImages } from '../ui/lazy-img.js?v=356';
+import { isJunkTrack } from '../util/junk.js?v=356';
+import { buildAlbumHeardIndex } from '../util/album-heard.js?v=356';
+import { loadFiltros, buildFilterContext, applyDiscoverFilters } from '../util/discover-filters.js?v=356';
+import { releaseKind } from '../util/release-size.js?v=356';
+import { masNuevoPrimero } from '../util/release-date.js?v=356';
+import { vigilarRuta } from '../util/vigencia-ruta.js?v=356';
+import { leerElegidos, sumarElegidos, artistasBuscados, colaAutomatica } from '../util/cola-escaneo.js?v=356';
+import { leerFallos, marcarFallo, limpiarFallo, sinFallosMarcados } from '../util/escaneo-fallos.js?v=356';
+import { contarSinEscanear, sufijoSinEscanear, notaSinEscanear } from '../util/sin-escanear.js?v=356';
+import { estadoFrescura } from '../util/frescura-escaneo.js?v=356';
+import { prefKey, migratePrefKey } from '../storage.js?v=356';
 import {
   getArtistIdCached,
   getArtistDiscoCached,
@@ -66,11 +66,11 @@ import {
   avisarRonda,
   botonesBaseHtml,
   conectarBotonesBase,
-} from './discover-common.js?v=355';
+} from './discover-common.js?v=356';
 import {
   artistasOcultos, artistaEstaOculto, alternarArtistaOculto,
   botonMenuArtistaHtml, botonArtistasOcultosHtml, conectarMenuArtista, cerrarMenuArtista,
-} from './artistas-ocultos.js?v=355';
+} from './artistas-ocultos.js?v=356';
 
 const SCAN_KEY = 'discover_artists';
 
