@@ -9,27 +9,27 @@
 // placeholder→img. Botón "Pantalla completa" (Fullscreen API) que oculta
 // sidebar/header/toolbar y recalcula el lado.
 
-import { loadListenedAlbums, isOwner, ownerLockedMessage, falloDeLecturaDelHistorial, avisoHistorialIlegibleHtml } from './history-data.js?v=354';
-import { isJunkTrack } from '../util/junk.js?v=354';
-import { vigilarRuta } from '../util/vigencia-ruta.js?v=354';
-import { createIncrementalList, scrollRootOf } from '../ui/incremental-list.js?v=354';
-import { createLazyImages } from '../ui/lazy-img.js?v=354';
-import { getAllPlaylistItems, getBestAvailableLikes } from '../api.js?v=354';
-import { escapeHtml, pageHeader, showProgress, hideProgress } from '../ui/components.js?v=354';
-import { showToast } from '../ui/toast.js?v=354';
-import { openAlbumCard } from './album-card.js?v=354';
-import { openArtistCard } from './artist-card.js?v=354';
-import { albumKey, coverId, coverVariant } from '../util/album-key.js?v=354';
-import { generarWallpaper, descargarBlob, WALLPAPER_PRESETS } from './covers-wallpaper.js?v=354';
-import { buildAlbumStatsIndex } from '../util/album-stats.js?v=354';
-import { sortList, ORDENES_TAPAS } from '../util/orden-tapas.js?v=354';
-import { getPreview } from '../api/preview-providers.js?v=354';
-import { hoverIn, hoverOut } from '../ui/preview-player.js?v=354';
-import { coverUrl, tapaParaCelda } from '../util/cover-size.js?v=354';
-import { prefKey, migratePrefKey } from '../storage.js?v=354';
-import { leerColores, coloresAlVuelo } from './mosaico-colores.js?v=354';
-import { mediaDeRejilla, BYTES_POR_PORTADA } from '../util/cover-color.js?v=354';
-import { FAMILIAS, SIN_COLOR, SIN_COLOR_NOMBRE, familiaDeRgb } from '../util/familia-color.js?v=354';
+import { loadListenedAlbums, isOwner, ownerLockedMessage, falloDeLecturaDelHistorial, avisoHistorialIlegibleHtml } from './history-data.js?v=355';
+import { isJunkTrack } from '../util/junk.js?v=355';
+import { vigilarRuta } from '../util/vigencia-ruta.js?v=355';
+import { createIncrementalList, scrollRootOf } from '../ui/incremental-list.js?v=355';
+import { createLazyImages } from '../ui/lazy-img.js?v=355';
+import { getAllPlaylistItems, getBestAvailableLikes } from '../api.js?v=355';
+import { escapeHtml, pageHeader, showProgress, hideProgress } from '../ui/components.js?v=355';
+import { showToast } from '../ui/toast.js?v=355';
+import { openAlbumCard } from './album-card.js?v=355';
+import { openArtistCard } from './artist-card.js?v=355';
+import { albumKey, coverId, coverVariant } from '../util/album-key.js?v=355';
+import { generarWallpaper, descargarBlob, WALLPAPER_PRESETS } from './covers-wallpaper.js?v=355';
+import { buildAlbumStatsIndex } from '../util/album-stats.js?v=355';
+import { sortList, ORDENES_TAPAS } from '../util/orden-tapas.js?v=355';
+import { getPreview } from '../api/preview-providers.js?v=355';
+import { hoverIn, hoverOut } from '../ui/preview-player.js?v=355';
+import { coverUrl, tapaParaCelda } from '../util/cover-size.js?v=355';
+import { prefKey, migratePrefKey } from '../storage.js?v=355';
+import { leerColores, coloresAlVuelo } from './mosaico-colores.js?v=355';
+import { mediaDeRejilla, BYTES_POR_PORTADA } from '../util/cover-color.js?v=355';
+import { FAMILIAS, SIN_COLOR, SIN_COLOR_NOMBRE, familiaDeRgb } from '../util/familia-color.js?v=355';
 
 const LS_KEY_SIZE = 'covers_cell_size';
 const LS_KEY_SORT = 'covers_sort_mode';
@@ -481,6 +481,8 @@ export async function render(container) {
   // `renderGrid` desde `currentList.length`). Con un filtro puesto podían
   // superar al total mostrado — por eso `buildSourcesLine` recibe la lista YA
   // filtrada y hay que llamarla de nuevo cada vez que cambia el filtro.
+  // (v=355) Con `history-listened-albums.json` sin leer (`avisoEscuchados`, la anotación de la tanda 109), «solo
+  // ahí» no se sabe: todas las de W-Three saldrían «solo ahí». «N están en W-Three» sí se sabe y queda.
   function buildSourcesLine(albumsList, noCoverList) {
     const deWthree = albumsList.filter(a => a.sources.has('wthree')).length;
     const soloWthree = albumsList.filter(a => a.sources.has('wthree') && !a.sources.has('listened')).length;
@@ -489,7 +491,7 @@ export async function render(container) {
       ? ` · <strong style="color:var(--color-warning)">falta W-Three: ${escapeHtml(wthreeFallo)}</strong>`
       : '';
     return wthreeItems
-      ? `Álbumes dados por escuchados (${escapeHtml(umbral)}) y la playlist «w three» · ${deWthree} están en W-Three, ${soloWthree} solo ahí${sinTapa}`
+      ? `Álbumes dados por escuchados (${escapeHtml(umbral)}) y la playlist «w three» · ${deWthree} están en W-Three${avisoEscuchados ? '' : `, ${soloWthree} solo ahí`}${sinTapa}`
       : `Álbumes dados por escuchados (${escapeHtml(umbral)})${sinTapa}${avisoWthree}`;
   }
 

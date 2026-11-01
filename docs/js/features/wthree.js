@@ -2,32 +2,32 @@
 // por álbum). Muestra qué álbumes ya tienen picks, cuántos, y cuáles te faltan.
 // Ordenado por álbumes más escuchados primero para priorizar tu tiempo.
 
-import { spotifyFetch, getAllPlaylistItems, getAllUserPlaylists, addTracksToPlaylist, removeTracksFromPlaylist, reorderPlaylistItems, getCachedPlaylistItems, updatePlaylistItemsCache, getBestAvailableLikes, removeLikedTracks, checkLibraryContains } from '../api.js?v=354';
-import { vigilarRuta } from '../util/vigencia-ruta.js?v=354';
-import { patchPlaylistItems, buildCachedItem } from '../util/playlist-cache-patch.js?v=354';
-import { loadHistoryStats, loadListenedAlbums, isOwner, ownerLockedMessage, falloDeLecturaDelHistorial, avisoHistorialIlegibleHtml } from './history-data.js?v=354';
-import { escapeHtml, pageHeader, confirmModal } from '../ui/components.js?v=354';
-import { showToast } from '../ui/toast.js?v=354';
-import { wireHoverMarquee, hoverMarqueeSpan } from '../ui/hover-marquee.js?v=354';
-import { openModal, closeById, closeModal } from '../ui/modal-stack.js?v=354';
-import { getPreview } from '../api/preview-providers.js?v=354';
-import { togglePreview, playingKey } from '../ui/preview-player.js?v=354';
-import { openAlbumCard } from './album-card.js?v=354';
-import { albumKey } from '../util/album-key.js?v=354';
-import { resolveAlbumId } from '../util/album-resolver.js?v=354';
-import { computeUpdatedPickPositions } from '../util/reorder-shifts.js?v=354';
-import { createHiddenStore } from '../util/hidden-sync.js?v=354';
-import { recuperarUriDeAlbumKey, REGLAS_VERSION } from '../util/hidden-recover.js?v=354';
-import { mountBottom } from '../ui/bottom-layer.js?v=354';
-import { coverUrl } from '../util/cover-size.js?v=354';
-import { insercionPorPuntero, moverA, indicadorPara } from '../util/reorder-drop.js?v=354';
-import { prefKey, migratePrefKey } from '../storage.js?v=354';
-import { iconoPlay, iconoPausa, iconoPuntos, iconoOjo, iconoOjoTachado } from '../ui/icons.js?v=354';
-import { pedirYCachear, SOLO_CON_CONTENIDO } from '../util/cache-solo-exitos.js?v=354';
-import { indiceIdsDeAlbum, idLocalDelAlbum } from '../util/album-id-local.js?v=354';
-import { openPlaylistPicker } from '../ui/playlist-picker.js?v=354';
-import { getOwnPlaylists, addUrisToPlaylists, toastAddResult, listaNombres } from '../util/playlist-add.js?v=354';
-import { borrarLikesVerificado } from '../util/borrado-verificado.js?v=354';
+import { spotifyFetch, getAllPlaylistItems, getAllUserPlaylists, addTracksToPlaylist, removeTracksFromPlaylist, reorderPlaylistItems, getCachedPlaylistItems, updatePlaylistItemsCache, getBestAvailableLikes, removeLikedTracks, checkLibraryContains } from '../api.js?v=355';
+import { vigilarRuta } from '../util/vigencia-ruta.js?v=355';
+import { patchPlaylistItems, buildCachedItem } from '../util/playlist-cache-patch.js?v=355';
+import { loadHistoryStats, loadListenedAlbums, isOwner, ownerLockedMessage, falloDeLecturaDelHistorial, avisoHistorialIlegibleHtml } from './history-data.js?v=355';
+import { escapeHtml, pageHeader, confirmModal } from '../ui/components.js?v=355';
+import { showToast } from '../ui/toast.js?v=355';
+import { wireHoverMarquee, hoverMarqueeSpan } from '../ui/hover-marquee.js?v=355';
+import { openModal, closeById, closeModal } from '../ui/modal-stack.js?v=355';
+import { getPreview } from '../api/preview-providers.js?v=355';
+import { togglePreview, playingKey } from '../ui/preview-player.js?v=355';
+import { openAlbumCard } from './album-card.js?v=355';
+import { albumKey } from '../util/album-key.js?v=355';
+import { resolveAlbumId } from '../util/album-resolver.js?v=355';
+import { computeUpdatedPickPositions } from '../util/reorder-shifts.js?v=355';
+import { createHiddenStore } from '../util/hidden-sync.js?v=355';
+import { recuperarUriDeAlbumKey, REGLAS_VERSION } from '../util/hidden-recover.js?v=355';
+import { mountBottom } from '../ui/bottom-layer.js?v=355';
+import { coverUrl } from '../util/cover-size.js?v=355';
+import { insercionPorPuntero, moverA, indicadorPara } from '../util/reorder-drop.js?v=355';
+import { prefKey, migratePrefKey } from '../storage.js?v=355';
+import { iconoPlay, iconoPausa, iconoPuntos, iconoOjo, iconoOjoTachado } from '../ui/icons.js?v=355';
+import { pedirYCachear, SOLO_CON_CONTENIDO } from '../util/cache-solo-exitos.js?v=355';
+import { indiceIdsDeAlbum, idLocalDelAlbum } from '../util/album-id-local.js?v=355';
+import { openPlaylistPicker } from '../ui/playlist-picker.js?v=355';
+import { getOwnPlaylists, addUrisToPlaylists, toastAddResult, listaNombres } from '../util/playlist-add.js?v=355';
+import { borrarLikesVerificado } from '../util/borrado-verificado.js?v=355';
 
 const LS_KEY_ID = 'wthree_playlist_id';
 const LS_KEY_NAME = 'wthree_playlist_name';
@@ -485,6 +485,14 @@ function renderBuckets(content) {
   const historyCount = visible.filter(a => a.source === 'history').length;
   const listenedCount = visible.filter(a => a.source === 'listened').length;
   const hiddenCount = hiddenSet.size;
+  // (v=355) Con `history-stats.json` sin leer (la anotación de la tanda 109), no hay tiempo escuchado: el orden cae
+  // a los años de los escuchados y a la playlist, así que el título no nombra criterio, y el pie no dice «0 álbumes
+  // del top historial» (no es un cero, es que no se pudo leer). Los escuchados salen de su propio JSON y la playlist,
+  // de Spotify: esos números sí quedan. Sin la anotación, los dos textos de siempre.
+  const tituloSinPicks = falloHistorialStats ? '🔴 Sin picks' : '🔴 Sin picks — priorizados por tiempo escuchado';
+  const pieFuentes = falloHistorialStats
+    ? `${listenedCount ? `${listenedCount} detectados en tu historial de escucha · ` : ''}${picksByAlbum.size} álbumes en la playlist`
+    : `${historyCount} álbumes del top historial${listenedCount ? ` · ${listenedCount} más detectados en tu historial de escucha` : ''} · ${picksByAlbum.size} álbumes en la playlist`;
 
   const isSel = (k) => selectedBucket === k;
   const bucketDef = [
@@ -544,14 +552,14 @@ function renderBuckets(content) {
       </div>
     ` : ''}
 
-    ${!selectedBucket || selectedBucket === '0' ? renderBucket('🔴 Sin picks — priorizados por tiempo escuchado', buckets['0'], 'danger', selectedBucket === '0' ? 999 : 20, '0') : ''}
+    ${!selectedBucket || selectedBucket === '0' ? renderBucket(tituloSinPicks, buckets['0'], 'danger', selectedBucket === '0' ? 999 : 20, '0') : ''}
     ${!selectedBucket || selectedBucket === '1' ? renderBucket('🟠 Con 1 pick — completar', buckets['1'], '', selectedBucket === '1' ? 999 : 15, '1') : ''}
     ${!selectedBucket || selectedBucket === '2' ? renderBucket('🟡 Con 2 picks — falta uno', buckets['2'], '', selectedBucket === '2' ? 999 : 15, '2') : ''}
     ${!selectedBucket || selectedBucket === '3' ? renderBucket('✅ Ya con 3', buckets['3'], 'ok', selectedBucket === '3' ? 999 : 10, '3') : ''}
     ${buckets['4+'].length && (!selectedBucket || selectedBucket === '4+') ? renderBucket('⚠️ Más de 3 picks — sacar alguno?', buckets['4+'], 'warn', selectedBucket === '4+' ? 999 : 10, '4+') : ''}
 
     <div style="font-size:11px;color:var(--color-text-muted);margin-top:14px;text-align:center">
-      ${historyCount} álbumes del top historial${listenedCount ? ` · ${listenedCount} más detectados en tu historial de escucha` : ''} · ${picksByAlbum.size} álbumes en la playlist${hiddenCount && !showingHidden ? ` · ${hiddenCount} oculto${hiddenCount === 1 ? '' : 's'}` : ''}${sinLikesCount && !showNoLikes ? ` · ${sinLikesCount} sin ningún like, fuera de la lista` : ''}
+      ${pieFuentes}${hiddenCount && !showingHidden ? ` · ${hiddenCount} oculto${hiddenCount === 1 ? '' : 's'}` : ''}${sinLikesCount && !showNoLikes ? ` · ${sinLikesCount} sin ningún like, fuera de la lista` : ''}
     </div>
   `;
 

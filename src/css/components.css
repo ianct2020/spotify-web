@@ -2125,3 +2125,12 @@ body.con-aviso-copia { padding-top: 46px; }
   .debug-oc-caja { max-width: max(340px, min(560px, calc(100vw - 488px))); }
 }
 .debug-oc-vista { overflow-wrap: anywhere; }
+
+/* v=355 (tanda 112): las tarjetas de `#wthree` a ≤600 px. `main.css` agranda ahí la tapa a 40 px
+   (`.wthree-album-cover`) pero la columna de la grilla de `.wthree-album-row` seguía en 18 px: la tapa
+   desbordaba su columna y el nombre del disco quedaba encima (medido a 390×844 en v=354: 10 de 10 tarjetas,
+   con el historial bien o caído). La columna acompaña a la tapa. Va con dos clases porque esta hoja carga
+   ANTES que `main.css` y con una sola perdería por orden. A más de 600 px no aplica: 18 px como siempre. */
+@media (max-width: 600px) {
+  .wthree-album-list > .wthree-album-row { grid-template-columns: 40px minmax(0, 1fr) auto auto; }
+}

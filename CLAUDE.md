@@ -383,6 +383,24 @@ entera como el owner; los JSON los contesta con 500 el conductor de capturas; **
   `AVISO_HISTORIAL_ILEGIBLE` en la misma `.album-modal-no-data`. Si el llamador trajo números, quedan (la regla de siempre).
   `util/album-stats.js` no cambió. Guarda: `tests/ficha-album-historial-caido.test.mjs`.
 
+**v=355 (tanda 112).**
+- **`#wthree` con `history-stats.json` sin leer** (`falloHistorialStats`, la anotación de `stats`): el cubo ya no se titula
+  «Sin picks — priorizados por tiempo escuchado» (no hay tiempo; el orden cae al año de los escuchados y a la playlist):
+  queda «🔴 Sin picks». El pie ya no dice «0 álbumes del top historial»: dice «N detectados en tu historial de escucha»
+  (de `history-listened-albums.json`, que se leyó; sin el «más», que era relativo al top) y «N álbumes en la playlist»
+  (de Spotify), más los ocultos y los sin like de siempre. Sin la anotación, los dos textos de siempre. Solo `renderBuckets()`.
+- **`#covers` con W-Three y `history-listened-albums.json` sin leer** (`avisoEscuchados`): el rótulo dice «N están en
+  W-Three» y ya no «N solo ahí» (sin los escuchados, todas salían «solo ahí»). Solo `buildSourcesLine()`.
+- Guardas: `tests/historial-caido-wthree-112.test.mjs` (nuevo: dos discos inventados en los escuchados para que el cubo se
+  pinte) y `tests/covers-wthree-historial-caido.test.mjs` (asserts nuevos). El trío; rojos contra v=354; con el historial
+  bien, el mismo `sha256` que en v=354.
+- **`#wthree` a ≤600 px: la tapa quedaba debajo del nombre, y venía de antes** (no de la 110): `main.css` agranda
+  `.wthree-album-cover` a 40 px por debajo de 600 y la columna de `.wthree-album-row` seguía en 18 px. Medido a 390×844
+  en v=354 con el conductor (`getBoundingClientRect` de la tapa y del nombre de cada tarjeta): 10 de 10 superpuestas con
+  el historial bien y 10 de 10 caído; a 1366, 0 de 10. Arreglo en `components.css` (`@media (max-width: 600px)`,
+  `.wthree-album-list > .wthree-album-row` con la primera columna en 40 px; dos clases porque esa hoja carga ANTES que
+  `main.css`). `main.css` no se tocó. A más de 600 px no cambia nada.
+
 ## Zona horaria: las fechas del historial NO se pasan a local (v=154 + v=231)
 
 **Medio arreglo en v=154.** Récords decía «9 ene 2026» y Wrapped «8 ene 2026»

@@ -481,6 +481,8 @@ export async function render(container) {
   // `renderGrid` desde `currentList.length`). Con un filtro puesto podían
   // superar al total mostrado — por eso `buildSourcesLine` recibe la lista YA
   // filtrada y hay que llamarla de nuevo cada vez que cambia el filtro.
+  // (v=355) Con `history-listened-albums.json` sin leer (`avisoEscuchados`, la anotación de la tanda 109), «solo
+  // ahí» no se sabe: todas las de W-Three saldrían «solo ahí». «N están en W-Three» sí se sabe y queda.
   function buildSourcesLine(albumsList, noCoverList) {
     const deWthree = albumsList.filter(a => a.sources.has('wthree')).length;
     const soloWthree = albumsList.filter(a => a.sources.has('wthree') && !a.sources.has('listened')).length;
@@ -489,7 +491,7 @@ export async function render(container) {
       ? ` · <strong style="color:var(--color-warning)">falta W-Three: ${escapeHtml(wthreeFallo)}</strong>`
       : '';
     return wthreeItems
-      ? `Álbumes dados por escuchados (${escapeHtml(umbral)}) y la playlist «w three» · ${deWthree} están en W-Three, ${soloWthree} solo ahí${sinTapa}`
+      ? `Álbumes dados por escuchados (${escapeHtml(umbral)}) y la playlist «w three» · ${deWthree} están en W-Three${avisoEscuchados ? '' : `, ${soloWthree} solo ahí`}${sinTapa}`
       : `Álbumes dados por escuchados (${escapeHtml(umbral)})${sinTapa}${avisoWthree}`;
   }
 

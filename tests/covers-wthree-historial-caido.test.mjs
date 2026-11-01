@@ -13,6 +13,9 @@
 // los REALES; el resto de `src/js/` lo dobla `tests/dobles/loader-t110.mjs` (sin tocar). La lista incremental es un
 // doble que guarda los `items` y el `renderItem` que le pasa `covers.js`: eso es «lo que trae la grilla».
 // Datos INVENTADOS (`t111inventada…`). `T111_SRC` (opcional) apunta a otra copia de `src/` (la de 9fee7ba9).
+//
+// Tanda 112 (v=355), T112a: con el JSON caído el rótulo ya no dice «N solo ahí» (sin los escuchados no se sabe) y sí
+// «N están en W-Three». Rojo contra d33e0749 (v=354) en 3 asserts; el sha256 sano no cambió.
 import { register } from 'node:module';
 import { pathToFileURL } from 'node:url';
 import { resolve } from 'node:path';
@@ -141,6 +144,9 @@ for (const [m, como] of TRIO) {
   ok(SOLO_WT.every((h) => r.tapas.includes(h)), `la grilla trae las tapas que solo están en W-Three (${r.tapas.length} tapas)`);
   ok(WT.every((d) => r.tapas.includes(hex24(d.n))), 'la grilla trae las cinco de W-Three');
   ok(!SOLO_HIST.some((h) => r.tapas.includes(h)), 'y ninguna que solo viniera del historial');
+  // T112a (v=355): sin el historial, «solo ahí» no se sabe. «N están en W-Three» sí.
+  ok(!/solo ahí/.test(r.html), 'el rótulo NO dice «N solo ahí» (T112a)');
+  ok(r.html.includes('5 están en W-Three'), 'el rótulo dice «5 están en W-Three» (T112a)');
 }
 
 console.log('\n[covers + W-Three · sano] owner con W-Three configurada y el JSON bien');
@@ -148,6 +154,7 @@ await preparar({});
 const s = await pintar();
 ok(!s.error, `render() no tira${s.error ? ' (tiró: ' + s.error.message + ')' : ''}`);
 ok(!s.html.includes(AVISO), 'sin la línea');
+ok(s.html.includes('5 están en W-Three, 2 solo ahí'), 'el rótulo de siempre: «5 están en W-Three, 2 solo ahí»');
 ok([...WT.map((d) => hex24(d.n)), ...SOLO_HIST].every((h) => s.tapas.includes(h)) && s.tapas.length === 7, `la grilla trae las 7 (W-Three y el historial): ${s.tapas.length}`);
 const medido = sha(s.html + '\n----\n' + s.celdas);
 console.log(`  sha256 sano medido: ${medido}`);

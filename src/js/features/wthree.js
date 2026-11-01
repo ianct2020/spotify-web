@@ -485,6 +485,14 @@ function renderBuckets(content) {
   const historyCount = visible.filter(a => a.source === 'history').length;
   const listenedCount = visible.filter(a => a.source === 'listened').length;
   const hiddenCount = hiddenSet.size;
+  // (v=355) Con `history-stats.json` sin leer (la anotación de la tanda 109), no hay tiempo escuchado: el orden cae
+  // a los años de los escuchados y a la playlist, así que el título no nombra criterio, y el pie no dice «0 álbumes
+  // del top historial» (no es un cero, es que no se pudo leer). Los escuchados salen de su propio JSON y la playlist,
+  // de Spotify: esos números sí quedan. Sin la anotación, los dos textos de siempre.
+  const tituloSinPicks = falloHistorialStats ? '🔴 Sin picks' : '🔴 Sin picks — priorizados por tiempo escuchado';
+  const pieFuentes = falloHistorialStats
+    ? `${listenedCount ? `${listenedCount} detectados en tu historial de escucha · ` : ''}${picksByAlbum.size} álbumes en la playlist`
+    : `${historyCount} álbumes del top historial${listenedCount ? ` · ${listenedCount} más detectados en tu historial de escucha` : ''} · ${picksByAlbum.size} álbumes en la playlist`;
 
   const isSel = (k) => selectedBucket === k;
   const bucketDef = [
@@ -544,14 +552,14 @@ function renderBuckets(content) {
       </div>
     ` : ''}
 
-    ${!selectedBucket || selectedBucket === '0' ? renderBucket('🔴 Sin picks — priorizados por tiempo escuchado', buckets['0'], 'danger', selectedBucket === '0' ? 999 : 20, '0') : ''}
+    ${!selectedBucket || selectedBucket === '0' ? renderBucket(tituloSinPicks, buckets['0'], 'danger', selectedBucket === '0' ? 999 : 20, '0') : ''}
     ${!selectedBucket || selectedBucket === '1' ? renderBucket('🟠 Con 1 pick — completar', buckets['1'], '', selectedBucket === '1' ? 999 : 15, '1') : ''}
     ${!selectedBucket || selectedBucket === '2' ? renderBucket('🟡 Con 2 picks — falta uno', buckets['2'], '', selectedBucket === '2' ? 999 : 15, '2') : ''}
     ${!selectedBucket || selectedBucket === '3' ? renderBucket('✅ Ya con 3', buckets['3'], 'ok', selectedBucket === '3' ? 999 : 10, '3') : ''}
     ${buckets['4+'].length && (!selectedBucket || selectedBucket === '4+') ? renderBucket('⚠️ Más de 3 picks — sacar alguno?', buckets['4+'], 'warn', selectedBucket === '4+' ? 999 : 10, '4+') : ''}
 
     <div style="font-size:11px;color:var(--color-text-muted);margin-top:14px;text-align:center">
-      ${historyCount} álbumes del top historial${listenedCount ? ` · ${listenedCount} más detectados en tu historial de escucha` : ''} · ${picksByAlbum.size} álbumes en la playlist${hiddenCount && !showingHidden ? ` · ${hiddenCount} oculto${hiddenCount === 1 ? '' : 's'}` : ''}${sinLikesCount && !showNoLikes ? ` · ${sinLikesCount} sin ningún like, fuera de la lista` : ''}
+      ${pieFuentes}${hiddenCount && !showingHidden ? ` · ${hiddenCount} oculto${hiddenCount === 1 ? '' : 's'}` : ''}${sinLikesCount && !showNoLikes ? ` · ${sinLikesCount} sin ningún like, fuera de la lista` : ''}
     </div>
   `;
 
