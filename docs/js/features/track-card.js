@@ -8,20 +8,20 @@
 // acá y no se propaga: ver `util/artist-name.js`. Los nombres se pintan como
 // **enlaces separados** y cada uno abre SU ficha de artista.
 
-import { loadTrackPlays, loadTrackDetail, loadHistoryStats, isOwner } from './history-data.js?v=352';
-import { escapeHtml } from '../ui/components.js?v=352';
-import { getPreview } from '../api/preview-providers.js?v=352';
-import { togglePreview, playingKey } from '../ui/preview-player.js?v=352';
-import { hasUsername, findTrackId, getTrackCurrentStats, loadTopLifetime } from '../api/statsfm.js?v=352';
-import { openAlbumCard } from './album-card.js?v=352';
-import { openArtistCard, knownArtist } from './artist-card.js?v=352';
-import { openModal, closeTop } from '../ui/modal-stack.js?v=352';
-import { getBestAvailableLikes } from '../api.js?v=352';
-import { showToast } from '../ui/toast.js?v=352';
-import { skelCardBody, skelBox } from '../ui/skeleton.js?v=352';
-import { resolveArtistList } from '../util/artist-name.js?v=352';
-import { coverUrl } from '../util/cover-size.js?v=352';
-import { botonLetraHtml, bloqueLetraHtml, conectarLetra } from '../ui/letra-ficha.js?v=352';
+import { loadTrackPlays, loadTrackDetail, loadHistoryStats, isOwner, falloDeLecturaDelHistorial, avisoHistorialIlegibleHtml } from './history-data.js?v=353';
+import { escapeHtml } from '../ui/components.js?v=353';
+import { getPreview } from '../api/preview-providers.js?v=353';
+import { togglePreview, playingKey } from '../ui/preview-player.js?v=353';
+import { hasUsername, findTrackId, getTrackCurrentStats, loadTopLifetime } from '../api/statsfm.js?v=353';
+import { openAlbumCard } from './album-card.js?v=353';
+import { openArtistCard, knownArtist } from './artist-card.js?v=353';
+import { openModal, closeTop } from '../ui/modal-stack.js?v=353';
+import { getBestAvailableLikes } from '../api.js?v=353';
+import { showToast } from '../ui/toast.js?v=353';
+import { skelCardBody, skelBox } from '../ui/skeleton.js?v=353';
+import { resolveArtistList } from '../util/artist-name.js?v=353';
+import { coverUrl } from '../util/cover-size.js?v=353';
+import { botonLetraHtml, bloqueLetraHtml, conectarLetra } from '../ui/letra-ficha.js?v=353';
 
 const MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
 
@@ -230,6 +230,17 @@ async function openTrackCard(t) {
   const [plays, detail] = await Promise.all([loadTrackPlays(), loadTrackDetail()]);
   const totals = plays?.tracks?.[t.id] || null;   // [plays, segundos] o [p, s, "p"]
   const det = detail?.tracks?.[t.id] || null;     // { m, f, l, d, x }
+  // (v=353) `null` es lo mismo «no hay» que «no se pudo leer»: lo distingue el registro de la
+  // tanda 109, leído acá, después del `await` y antes de pintar. Sin anotación, todo como antes.
+  const fallaronPlays = !plays && !!falloDeLecturaDelHistorial('plays');
+  const fallaDetail = !detail && !!falloDeLecturaDelHistorial('detail');
+
+  if (!totals && !det && (fallaronPlays || fallaDetail)) {
+    body.innerHTML = `<p style="color:var(--color-text-secondary);font-size:13px;margin:0">No se ha podido leer tu historial, así que no sé cuántas veces escuchaste este tema. Recarga la página para volver a intentarlo.</p>
+      <div id="tc-statsfm"></div>`;
+    fillStatsfmLine(t);
+    return;
+  }
 
   if (!totals && !det) {
     body.innerHTML = `<p style="color:var(--color-text-secondary);font-size:13px;margin:0">Este tema no aparece en tu historial (o solo tuvo plays de menos de 30s). Nunca lo escuchaste entero desde 2018.</p>
@@ -255,7 +266,7 @@ async function openTrackCard(t) {
         <span>Última vez: <strong style="color:var(--color-text)">${fmtDay(det.l)}</strong></span>
       </div>
       <div class="chart-box" style="height:200px"><canvas id="tc-chart"></canvas></div>
-    ` : `
+    ` : fallaDetail ? avisoHistorialIlegibleHtml('margin-top:10px') : `
       <p style="color:var(--color-text-muted);font-size:12px;margin:10px 0 0">Curva mensual disponible solo para temas con 5+ plays.</p>
     `}
     <div id="tc-statsfm"></div>

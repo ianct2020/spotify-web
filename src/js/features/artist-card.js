@@ -2,7 +2,7 @@
 // primer/último año, top tracks del artista, hover-play, y plays actuales
 // vía Stats.fm si aplica. Se abre desde cualquier feature con openArtistCard({ name }).
 
-import { loadHistoryStats, loadArtistTracks, isOwner } from './history-data.js';
+import { loadHistoryStats, loadArtistTracks, isOwner, falloDeLecturaDelHistorial, avisoHistorialIlegibleHtml } from './history-data.js';
 import { escapeHtml } from '../ui/components.js';
 import { getPreview } from '../api/preview-providers.js';
 import { togglePreview, playingKey, attachHover } from '../ui/preview-player.js';
@@ -253,7 +253,9 @@ async function openArtistCard(entrada) {
   }
 
   const stats = await loadHistoryStats();
-  if (!stats) { body.innerHTML = ''; return; }
+  // (v=353) Con la lectura FALLIDA (el registro de la tanda 109) el cuerpo lo dice en vez de
+  // quedar vacío. Sin fallo, vacío como antes.
+  if (!stats) { body.innerHTML = falloDeLecturaDelHistorial('stats') ? avisoHistorialIlegibleHtml() : ''; return; }
 
   // Datos del artista: recorro years para armar la curva por año + acumular tops.
   const yearsWithArtist = [];
@@ -298,6 +300,9 @@ async function openArtistCard(entrada) {
   // colado en un top anual. history-artist-tracks.json indexa todo artista con
   // al menos una play válida, así que acá ya vienen los 6 reales.
   const artistTracks = await loadArtistTracks();
+  // (v=353) Sin el índice por artista porque su lectura FALLÓ: la ficha sigue con los tops de
+  // `history-stats.json` y lo dice (y no afirma «No aparece en tu historial», que no sabe).
+  const avisoTemas = !artistTracks && falloDeLecturaDelHistorial('artistTracks') ? avisoHistorialIlegibleHtml('margin:10px 0 0') : '';
   // Acá ya está pago: aprovechamos para sembrar el índice de nombres conocidos
   // que usa la guarda de la cadena de artistas.
   sembrarConocidos(artistTracks);
@@ -344,6 +349,10 @@ async function openArtistCard(entrada) {
 
   // El corte por "no está en ningún top" se hace DESPUÉS de mirar el historial
   // completo: un artista puede no entrar en ningún top y aun así tener plays.
+  if (!totalPlays && !allTime && !topTracks.length && avisoTemas) {
+    body.innerHTML = avisoHistorialIlegibleHtml();
+    return;
+  }
   if (!totalPlays && !allTime && !topTracks.length) {
     body.innerHTML = `<p style="color:var(--color-text-secondary);font-size:13px;margin:0">No aparece en tu historial (o no está en los tops de ningún año). Igual puedes escucharlo en Spotify y ver el preview arriba.</p>`;
     return;
@@ -358,7 +367,7 @@ async function openArtistCard(entrada) {
       <div class="tc-stat"><div class="tc-stat-v">${totalPlays.toLocaleString('es-ES')}</div><div class="tc-stat-l">plays</div></div>
       <div class="tc-stat" title="${firstDay ? 'El primer día que lo escuchaste al menos 30 segundos' : ''}"><div class="tc-stat-v${firstDay ? ' tc-stat-v-fecha' : ''}">${firstDay ? escapeHtml(fmtDia(firstDay)) : (firstYear || '—')}</div><div class="tc-stat-l">${firstDay ? 'primera vez' : 'primer año'}</div></div>
       <div class="tc-stat"><div class="tc-stat-v">${lastYear || '—'}</div><div class="tc-stat-l">último año</div></div>
-    </div>
+    </div>${avisoTemas}
     <div class="ac-cols">
       ${hasChart ? `
         <div class="ac-col-chart">

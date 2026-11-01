@@ -3,7 +3,7 @@ import { showProgress, hideProgress, alertModal, infoModal, escapeHtml, pageHead
 import { openModal, closeTop } from '../ui/modal-stack.js';
 import { showToast } from '../ui/toast.js';
 import { openListenedAlbumsPicker, getListenedPlaylist } from './listened-shared.js';
-import { loadHistoryStats, loadListenedAlbums } from './history-data.js';
+import { loadHistoryStats, loadListenedAlbums, falloDeLecturaDelHistorial, avisoHistorialIlegibleHtml } from './history-data.js';
 import { getArtistLikePreview } from '../util/artist-preview.js';
 import { hoverIn, hoverOut } from '../ui/preview-player.js';
 import { armRevealAll } from '../ui/reveal.js';
@@ -1084,6 +1084,16 @@ async function hydrateHistorySection() {
   const section = document.getElementById('history-section');
   if (!section) return;
   const h = await loadHistoryStats();
+  // (v=353) Si la lectura FALLÓ (el registro de la tanda 109), la sección se muestra con la línea
+  // y sin sus números —un cero sería inventado— y sin los gráficos vacíos. Sin fallo, como antes.
+  if (!h && falloDeLecturaDelHistorial('stats')) {
+    section.style.display = '';
+    const grid = section.querySelector('.dash-grid');
+    if (grid) grid.style.display = 'none';
+    const tilesFallo = document.getElementById('history-stat-tiles');
+    if (tilesFallo) tilesFallo.innerHTML = avisoHistorialIlegibleHtml('grid-column:1/-1');
+    return;
+  }
   if (!h || !h.years?.length) { section.style.display = 'none'; return; }
   section.style.display = '';
   _lastHistory = h;
@@ -1414,6 +1424,13 @@ async function hydrateListenedYearTiles() {
   card.style.display = '';
   try {
     const data = await loadListenedAlbums();
+    // (v=353) Lectura FALLIDA: la tarjeta se queda, con la línea en vez de los años (y sin la ⓘ,
+    // que explica un criterio que no se pudo leer). Sin fallo, como antes.
+    if (!data && falloDeLecturaDelHistorial('listened')) {
+      holder.innerHTML = avisoHistorialIlegibleHtml();
+      if (infoBtn) infoBtn.style.display = 'none';
+      return;
+    }
     if (!data || !data.years?.length) { card.style.display = 'none'; return; }
 
     const years = [...data.years].sort((a, b) => b.year - a.year);

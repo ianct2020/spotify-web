@@ -2,32 +2,32 @@
 // por álbum). Muestra qué álbumes ya tienen picks, cuántos, y cuáles te faltan.
 // Ordenado por álbumes más escuchados primero para priorizar tu tiempo.
 
-import { spotifyFetch, getAllPlaylistItems, getAllUserPlaylists, addTracksToPlaylist, removeTracksFromPlaylist, reorderPlaylistItems, getCachedPlaylistItems, updatePlaylistItemsCache, getBestAvailableLikes, removeLikedTracks, checkLibraryContains } from '../api.js?v=352';
-import { vigilarRuta } from '../util/vigencia-ruta.js?v=352';
-import { patchPlaylistItems, buildCachedItem } from '../util/playlist-cache-patch.js?v=352';
-import { loadHistoryStats, loadListenedAlbums, isOwner, ownerLockedMessage } from './history-data.js?v=352';
-import { escapeHtml, pageHeader, confirmModal } from '../ui/components.js?v=352';
-import { showToast } from '../ui/toast.js?v=352';
-import { wireHoverMarquee, hoverMarqueeSpan } from '../ui/hover-marquee.js?v=352';
-import { openModal, closeById, closeModal } from '../ui/modal-stack.js?v=352';
-import { getPreview } from '../api/preview-providers.js?v=352';
-import { togglePreview, playingKey } from '../ui/preview-player.js?v=352';
-import { openAlbumCard } from './album-card.js?v=352';
-import { albumKey } from '../util/album-key.js?v=352';
-import { resolveAlbumId } from '../util/album-resolver.js?v=352';
-import { computeUpdatedPickPositions } from '../util/reorder-shifts.js?v=352';
-import { createHiddenStore } from '../util/hidden-sync.js?v=352';
-import { recuperarUriDeAlbumKey, REGLAS_VERSION } from '../util/hidden-recover.js?v=352';
-import { mountBottom } from '../ui/bottom-layer.js?v=352';
-import { coverUrl } from '../util/cover-size.js?v=352';
-import { insercionPorPuntero, moverA, indicadorPara } from '../util/reorder-drop.js?v=352';
-import { prefKey, migratePrefKey } from '../storage.js?v=352';
-import { iconoPlay, iconoPausa, iconoPuntos, iconoOjo, iconoOjoTachado } from '../ui/icons.js?v=352';
-import { pedirYCachear, SOLO_CON_CONTENIDO } from '../util/cache-solo-exitos.js?v=352';
-import { indiceIdsDeAlbum, idLocalDelAlbum } from '../util/album-id-local.js?v=352';
-import { openPlaylistPicker } from '../ui/playlist-picker.js?v=352';
-import { getOwnPlaylists, addUrisToPlaylists, toastAddResult, listaNombres } from '../util/playlist-add.js?v=352';
-import { borrarLikesVerificado } from '../util/borrado-verificado.js?v=352';
+import { spotifyFetch, getAllPlaylistItems, getAllUserPlaylists, addTracksToPlaylist, removeTracksFromPlaylist, reorderPlaylistItems, getCachedPlaylistItems, updatePlaylistItemsCache, getBestAvailableLikes, removeLikedTracks, checkLibraryContains } from '../api.js?v=353';
+import { vigilarRuta } from '../util/vigencia-ruta.js?v=353';
+import { patchPlaylistItems, buildCachedItem } from '../util/playlist-cache-patch.js?v=353';
+import { loadHistoryStats, loadListenedAlbums, isOwner, ownerLockedMessage, falloDeLecturaDelHistorial, avisoHistorialIlegibleHtml } from './history-data.js?v=353';
+import { escapeHtml, pageHeader, confirmModal } from '../ui/components.js?v=353';
+import { showToast } from '../ui/toast.js?v=353';
+import { wireHoverMarquee, hoverMarqueeSpan } from '../ui/hover-marquee.js?v=353';
+import { openModal, closeById, closeModal } from '../ui/modal-stack.js?v=353';
+import { getPreview } from '../api/preview-providers.js?v=353';
+import { togglePreview, playingKey } from '../ui/preview-player.js?v=353';
+import { openAlbumCard } from './album-card.js?v=353';
+import { albumKey } from '../util/album-key.js?v=353';
+import { resolveAlbumId } from '../util/album-resolver.js?v=353';
+import { computeUpdatedPickPositions } from '../util/reorder-shifts.js?v=353';
+import { createHiddenStore } from '../util/hidden-sync.js?v=353';
+import { recuperarUriDeAlbumKey, REGLAS_VERSION } from '../util/hidden-recover.js?v=353';
+import { mountBottom } from '../ui/bottom-layer.js?v=353';
+import { coverUrl } from '../util/cover-size.js?v=353';
+import { insercionPorPuntero, moverA, indicadorPara } from '../util/reorder-drop.js?v=353';
+import { prefKey, migratePrefKey } from '../storage.js?v=353';
+import { iconoPlay, iconoPausa, iconoPuntos, iconoOjo, iconoOjoTachado } from '../ui/icons.js?v=353';
+import { pedirYCachear, SOLO_CON_CONTENIDO } from '../util/cache-solo-exitos.js?v=353';
+import { indiceIdsDeAlbum, idLocalDelAlbum } from '../util/album-id-local.js?v=353';
+import { openPlaylistPicker } from '../ui/playlist-picker.js?v=353';
+import { getOwnPlaylists, addUrisToPlaylists, toastAddResult, listaNombres } from '../util/playlist-add.js?v=353';
+import { borrarLikesVerificado } from '../util/borrado-verificado.js?v=353';
 
 const LS_KEY_ID = 'wthree_playlist_id';
 const LS_KEY_NAME = 'wthree_playlist_name';
@@ -41,6 +41,8 @@ let albumsList = null;     // [{name, artist, img, min, plays, picks[]}] cross d
 let historyStats = null;
 let listenedAlbums = null; // { years: [{ year, albums: [{name, artist, img, date}] }] }
 let falloHistorialEscuchas = false;
+// (v=353) `loadHistoryStats()` dio `null` porque su lectura FALLÓ (el registro de la tanda 109).
+let falloHistorialStats = false;
 let albumTracksCache = new Map(); // key → tracks fetched from Spotify
 let selectedBucket = null; // null = all, o '0'/'1'/'2'/'3'/'4+'
 let hiddenSet = null;      // store de álbumes marcados como "ya está, no me interesa"
@@ -312,6 +314,7 @@ async function loadAndRender(content, ruta = vigilarRuta()) {
     historyStats = stats;
     listenedAlbums = listened;
     falloHistorialEscuchas = falloListened;
+    falloHistorialStats = !stats && !!falloDeLecturaDelHistorial('stats');
     buildAlbumIndex(items);
     crossWithHistory(stats, listened);
     renderBuckets(content);
@@ -516,7 +519,7 @@ function renderBuckets(content) {
       </div>
     </div>
 
-    ${falloHistorialEscuchas ? '<p style="color: var(--color-text-secondary)">No se han podido leer tus álbumes escuchados: la vista sigue sin ellos.</p>' : ''}
+    ${falloHistorialStats ? avisoHistorialIlegibleHtml('margin:0 0 10px') : ''}${falloHistorialEscuchas ? '<p style="color: var(--color-text-secondary)">No se han podido leer tus álbumes escuchados: la vista sigue sin ellos.</p>' : ''}
 
     ${showingHidden ? `
       <div class="wthree-filter-active">

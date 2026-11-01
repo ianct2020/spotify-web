@@ -8,10 +8,10 @@
 // Otro user cualquiera sin historial local ve el ownerLockedMessage que
 // invita a subir su ZIP.
 
-import { idbGetCached, idbSetCached, idbDel } from '../idb.js?v=352';
-import { getCurrentUserId } from '../api.js?v=352';
-import { OWNER_KEYS, LOCAL_HISTORY_PREFIX, STATS_VERSION, PLAYS_VERSION, LISTENED_VERSION, SKIP_VERSION, DETAIL_VERSION, RECORDS_VERSION, ARTIST_TRACKS_VERSION, SIMILARES_VERSION } from '../history-keys.js?v=352';
-import { mostrarBannerDegradadoVista } from '../ui/degraded-banner.js?v=352';
+import { idbGetCached, idbSetCached, idbDel } from '../idb.js?v=353';
+import { getCurrentUserId } from '../api.js?v=353';
+import { OWNER_KEYS, LOCAL_HISTORY_PREFIX, STATS_VERSION, PLAYS_VERSION, LISTENED_VERSION, SKIP_VERSION, DETAIL_VERSION, RECORDS_VERSION, ARTIST_TRACKS_VERSION, SIMILARES_VERSION } from '../history-keys.js?v=353';
+import { mostrarBannerDegradadoVista } from '../ui/degraded-banner.js?v=353';
 
 const HISTORY_OWNER_ID = 'orhs6wu5ykk7ql80u92ujn74o';
 
@@ -190,13 +190,25 @@ function borrarFalloDeLectura(uid, kind) {
 
 /**
  * El fallo de lectura del historial anotado para el uid de ahora, o `null`. Sincrónica.
- * Si hay varios, el primero que se anotó.
+ * Sin argumento, si hay varios, el primero que se anotó (lo de v=352, que usa el candado).
+ * Con `kind` (v=353), la anotación de ESE `kind` o `null`: es lo que preguntan las vistas que
+ * pinta el owner, después del `await` del cargador y antes de pintar.
  */
-function falloDeLecturaDelHistorial() {
+function falloDeLecturaDelHistorial(kind) {
   const { uid, porKind } = fallosDeLectura;
   if (memCache.uid !== null && memCache.uid !== uid) return null;
+  if (kind !== undefined) return porKind[kind] || null;
   const kinds = Object.keys(porKind);
   return kinds.length ? porKind[kinds[0]] : null;
+}
+
+// (v=353) El texto ÚNICO de las vistas que siguen sin una parte del historial porque su lectura
+// falló (ver «El registro de los fallos de lectura», arriba). Lo pintan con
+// `avisoHistorialIlegibleHtml()`, en `--color-text-secondary`; ningún sitio lo escribe a mano.
+// La ficha de canción tiene su propia frase (dice qué es lo que no sabe), no esta.
+const AVISO_HISTORIAL_ILEGIBLE = 'No se ha podido leer tu historial, así que esta parte sale sin él. Recarga la página para volver a intentarlo.';
+function avisoHistorialIlegibleHtml(estiloExtra = '') {
+  return `<p class="aviso-historial-ilegible" style="color:var(--color-text-secondary);font-size:13px;margin:0${estiloExtra ? ';' + estiloExtra : ''}">${AVISO_HISTORIAL_ILEGIBLE}</p>`;
 }
 
 async function ensureFreshMem() {
@@ -729,5 +741,5 @@ export {
   playsFor, trackIdOf, isOwner, HISTORY_OWNER_ID, ownerLockedMessage,
   hasLocalHistory, saveMyHistory, clearMyHistory, bindOwnerLockedButtons,
   identidadSinConfirmar, motivoSinImportCompleto, identityLockedMessage,
-  falloDeLecturaDelHistorial,
+  falloDeLecturaDelHistorial, AVISO_HISTORIAL_ILEGIBLE, avisoHistorialIlegibleHtml,
 };

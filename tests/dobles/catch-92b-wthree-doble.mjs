@@ -16,6 +16,8 @@ export const loadListenedAlbums = async () => {
   return { years: [] };
 };
 export const isOwner = async () => true, ownerLockedMessage = () => '';
+// (v=353) Los dos que `wthree.js` importa desde la tanda 110: sin ningún fallo de lectura anotado.
+export const falloDeLecturaDelHistorial = () => null, avisoHistorialIlegibleHtml = () => '';
 export const escapeHtml = x => String(x), pageHeader = () => '', confirmModal = () => {};
 export const showToast = () => {}, wireHoverMarquee = () => {}, hoverMarqueeSpan = () => '';
 export const openModal = () => {}, closeById = () => {}, closeModal = () => {};

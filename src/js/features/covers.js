@@ -9,7 +9,7 @@
 // placeholder→img. Botón "Pantalla completa" (Fullscreen API) que oculta
 // sidebar/header/toolbar y recalcula el lado.
 
-import { loadListenedAlbums, isOwner, ownerLockedMessage } from './history-data.js';
+import { loadListenedAlbums, isOwner, ownerLockedMessage, falloDeLecturaDelHistorial, avisoHistorialIlegibleHtml } from './history-data.js';
 import { isJunkTrack } from '../util/junk.js';
 import { vigilarRuta } from '../util/vigencia-ruta.js';
 import { createIncrementalList, scrollRootOf } from '../ui/incremental-list.js';
@@ -401,6 +401,9 @@ export async function render(container) {
     return;
   }
   if (!ruta.vigente()) return;
+  // (v=353) `null` sin tirar es «no hay» o «no se pudo leer»: lo distingue el registro de la tanda
+  // 109. Si falló, la vista sigue con W-Three como siempre, pero lo dice arriba de la grilla.
+  const avisoEscuchados = !data && falloDeLecturaDelHistorial('listened') ? avisoHistorialIlegibleHtml('margin:0 0 10px') : '';
 
   let wthreeItems = null;
   let wthreeFallo = null;
@@ -434,7 +437,9 @@ export async function render(container) {
       noCover.map(a => `${a.name} — ${a.artist}`).join(' | '));
   }
   if (!allAlbums.length) {
-    content.innerHTML = `<div class="card"><p>Todavía no hay álbumes en tu historial. Importa el ZIP de Extended Streaming History desde la barra lateral.</p></div>`;
+    content.innerHTML = avisoEscuchados
+      ? `<div class="card">${avisoHistorialIlegibleHtml()}</div>`
+      : `<div class="card"><p>Todavía no hay álbumes en tu historial. Importa el ZIP de Extended Streaming History desde la barra lateral.</p></div>`;
     return;
   }
 
@@ -612,7 +617,7 @@ export async function render(container) {
          nada. La base se construye en #debug → «Base de colores del mosaico»,
          y no gasta cuota de Spotify. -->
     ${hayBaseDeColor ? `<div class="covers-year-chips covers-color-chips" id="covers-color-chips" role="group" aria-label="Filtrar por color de la portada">${pastillasDeColorHtml()}</div>` : ''}
-    <p class="covers-vacio" id="covers-vacio" style="display:none" role="status"></p>
+    ${avisoEscuchados}<p class="covers-vacio" id="covers-vacio" style="display:none" role="status"></p>
     <div class="covers-grid-wrap" id="covers-grid-wrap">
       <div class="covers-grid" id="covers-grid" data-size="${size}" style="--cover-min:${size}px;--cover-gap:${GRID_GAP}px"></div>
     </div>

@@ -1,16 +1,16 @@
-import { getAllLikedTracks, hayCargaDeLikesEnVuelo, getLikesPartialInfo, exportAllData, exportarCopiaCompleta, importarCopiaCompleta, aplicarPlan, importAllData, TEXTOS_LIKES_SIN_IMPORTAR, getCurrentUserId, syncLikesIncremental, getLikesCacheTimestamp, getBestAvailableLikes, getAllPlaylistItems } from '../api.js?v=352';
-import { showProgress, hideProgress, alertModal, infoModal, escapeHtml, pageHeader } from '../ui/components.js?v=352';
-import { openModal, closeTop } from '../ui/modal-stack.js?v=352';
-import { showToast } from '../ui/toast.js?v=352';
-import { openListenedAlbumsPicker, getListenedPlaylist } from './listened-shared.js?v=352';
-import { loadHistoryStats, loadListenedAlbums } from './history-data.js?v=352';
-import { getArtistLikePreview } from '../util/artist-preview.js?v=352';
-import { hoverIn, hoverOut } from '../ui/preview-player.js?v=352';
-import { armRevealAll } from '../ui/reveal.js?v=352';
-import { hasUsername, getUsername, setUsername } from '../api/statsfm.js?v=352';
-import { getKey as getLastfmKey, setKey as setLastfmKey, clearKey as clearLastfmKey, isDefaultKey as lastfmIsDefaultKey } from '../api/lastfm.js?v=352';
-import { prefKey, migratePrefKey } from '../storage.js?v=352';
-import { alpha } from '../ui/theme-panel.js?v=352';
+import { getAllLikedTracks, hayCargaDeLikesEnVuelo, getLikesPartialInfo, exportAllData, exportarCopiaCompleta, importarCopiaCompleta, aplicarPlan, importAllData, TEXTOS_LIKES_SIN_IMPORTAR, getCurrentUserId, syncLikesIncremental, getLikesCacheTimestamp, getBestAvailableLikes, getAllPlaylistItems } from '../api.js?v=353';
+import { showProgress, hideProgress, alertModal, infoModal, escapeHtml, pageHeader } from '../ui/components.js?v=353';
+import { openModal, closeTop } from '../ui/modal-stack.js?v=353';
+import { showToast } from '../ui/toast.js?v=353';
+import { openListenedAlbumsPicker, getListenedPlaylist } from './listened-shared.js?v=353';
+import { loadHistoryStats, loadListenedAlbums, falloDeLecturaDelHistorial, avisoHistorialIlegibleHtml } from './history-data.js?v=353';
+import { getArtistLikePreview } from '../util/artist-preview.js?v=353';
+import { hoverIn, hoverOut } from '../ui/preview-player.js?v=353';
+import { armRevealAll } from '../ui/reveal.js?v=353';
+import { hasUsername, getUsername, setUsername } from '../api/statsfm.js?v=353';
+import { getKey as getLastfmKey, setKey as setLastfmKey, clearKey as clearLastfmKey, isDefaultKey as lastfmIsDefaultKey } from '../api/lastfm.js?v=353';
+import { prefKey, migratePrefKey } from '../storage.js?v=353';
+import { alpha } from '../ui/theme-panel.js?v=353';
 
 // Tres estados posibles, no dos: puede haber una key propia, la del código, o
 // —si algún día la constante queda vacía— ninguna. El hint del ⚙ tiene que
@@ -20,16 +20,16 @@ function estadoLastfm() {
   if (localStorage.getItem(prefKey('lastfm_api_key'))) return 'propia';
   return lastfmIsDefaultKey() ? 'la del código' : 'sin configurar';
 }
-import { loadHistoryStats as _loadStatsForCounter } from './history-data.js?v=352';
-import { openArtistCard } from './artist-card.js?v=352';
-import { openAlbumCard } from './album-card.js?v=352';
-import { activateMarquee, marqueeSpan } from '../ui/marquee.js?v=352';
-import { isJunkTrack } from '../util/junk.js?v=352';
-import { AVISO_MEZCLA } from '../util/corte-saltos.js?v=352';
-import { nombreArchivo } from '../util/copia-completa.js?v=352';
-import { resumenEnPalabras, importEscribio } from '../util/copia-importar.js?v=352';
-import { diferenciaDeLikes, urisDeLikes, textoConfirmacionRehacer, textoFinalRehacer } from '../util/likes-diferencia.js?v=352';
-import { vigilarRuta } from '../util/vigencia-ruta.js?v=352';
+import { loadHistoryStats as _loadStatsForCounter } from './history-data.js?v=353';
+import { openArtistCard } from './artist-card.js?v=353';
+import { openAlbumCard } from './album-card.js?v=353';
+import { activateMarquee, marqueeSpan } from '../ui/marquee.js?v=353';
+import { isJunkTrack } from '../util/junk.js?v=353';
+import { AVISO_MEZCLA } from '../util/corte-saltos.js?v=353';
+import { nombreArchivo } from '../util/copia-completa.js?v=353';
+import { resumenEnPalabras, importEscribio } from '../util/copia-importar.js?v=353';
+import { diferenciaDeLikes, urisDeLikes, textoConfirmacionRehacer, textoFinalRehacer } from '../util/likes-diferencia.js?v=353';
+import { vigilarRuta } from '../util/vigencia-ruta.js?v=353';
 
 let charts = [];
 let _loadController = null;
@@ -1084,6 +1084,16 @@ async function hydrateHistorySection() {
   const section = document.getElementById('history-section');
   if (!section) return;
   const h = await loadHistoryStats();
+  // (v=353) Si la lectura FALLÓ (el registro de la tanda 109), la sección se muestra con la línea
+  // y sin sus números —un cero sería inventado— y sin los gráficos vacíos. Sin fallo, como antes.
+  if (!h && falloDeLecturaDelHistorial('stats')) {
+    section.style.display = '';
+    const grid = section.querySelector('.dash-grid');
+    if (grid) grid.style.display = 'none';
+    const tilesFallo = document.getElementById('history-stat-tiles');
+    if (tilesFallo) tilesFallo.innerHTML = avisoHistorialIlegibleHtml('grid-column:1/-1');
+    return;
+  }
   if (!h || !h.years?.length) { section.style.display = 'none'; return; }
   section.style.display = '';
   _lastHistory = h;
@@ -1414,6 +1424,13 @@ async function hydrateListenedYearTiles() {
   card.style.display = '';
   try {
     const data = await loadListenedAlbums();
+    // (v=353) Lectura FALLIDA: la tarjeta se queda, con la línea en vez de los años (y sin la ⓘ,
+    // que explica un criterio que no se pudo leer). Sin fallo, como antes.
+    if (!data && falloDeLecturaDelHistorial('listened')) {
+      holder.innerHTML = avisoHistorialIlegibleHtml();
+      if (infoBtn) infoBtn.style.display = 'none';
+      return;
+    }
     if (!data || !data.years?.length) { card.style.display = 'none'; return; }
 
     const years = [...data.years].sort((a, b) => b.year - a.year);

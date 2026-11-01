@@ -5,7 +5,7 @@
 import { processStreamingHistory, crearAcumuladorDeDias } from '../history-processor.js';
 import {
   saveMyHistory, clearMyHistory, hasLocalHistory, guardarSoloDias,
-  motivoSinImportCompleto, identityLockedMessage,
+  motivoSinImportCompleto, identityLockedMessage, falloDeLecturaDelHistorial,
 } from './history-data.js';
 import { escapeHtml, showProgress, hideProgress, confirmModal, alertModal } from '../ui/components.js';
 import { showToast } from '../ui/toast.js';
@@ -77,6 +77,25 @@ async function openImportHistory() {
   }
 
   const alreadyHas = await hasLocalHistory();
+
+  // (v=353) `hasLocalHistory()` da `false` también cuando la lectura de IndexedDB FALLÓ (lo anota
+  // en el registro de la tanda 109 con `origen: 'hasLocalHistory'`). Ahí no se sabe si hay un
+  // historial guardado, e importar encima podría pisarlo: el modal no ofrece importar (ni zona de
+  // arrastre ni `<input type="file">`) ni «Borrarlo», y pide recargar. Sin anotación, como antes.
+  const fallo = falloDeLecturaDelHistorial('stats');
+  if (!alreadyHas && fallo && fallo.origen === 'hasLocalHistory') {
+    overlay = openModal({
+      id: OVERLAY_ID,
+      onClose: () => { overlay = null; },
+      html: `
+    <div class="modal ih-modal" data-import-bloqueado="lectura" style="max-width:560px;width:min(560px,94vw)">
+      ${CABECERA}
+      <p style="font-size:13px;line-height:1.5;color:var(--color-text-secondary);margin:0">No se ha podido comprobar si ya tienes un historial guardado en este navegador. Recarga la página antes de importar.</p>
+    </div>
+  `,
+    });
+    return;
+  }
 
   overlay = openModal({
     id: OVERLAY_ID,

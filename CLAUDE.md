@@ -322,6 +322,50 @@ y cuyo navegador no lo podía leer.
 Guarda: `tests/fallo-lectura-historial.test.mjs` (`history-data.js` REAL en Node; dobles `loader-fallo-lectura.mjs` y
 `fallo-lectura-doble.mjs`, con una IndexedDB que tira por clave). Rojo contra v=351 en 8 de 36.
 
+### El owner también lo ve (v=353)
+
+La tanda 110. El registro de v=352 lo leía solo el candado, que el owner no ve nunca: con su `fetch` caído, la ficha de
+canción le decía «Nunca lo escuchaste entero desde 2018» y otras vistas se escondían o salían vacías.
+
+- **La consulta**: `falloDeLecturaDelHistorial(kind)`. **Sin argumento, lo de v=352** (el candado no cambió: su `sha256`
+  con y sin fallo es el de v=352). Con `kind`, la anotación de ese `kind` para el uid de ahora o `null`. Se lee **en el
+  sitio que pinta**, sincrónica, después del `await` del cargador y antes de pintar, y solo si el cargador dio `null`.
+  **Ningún cargador cambió lo que devuelve.**
+- **El texto único**: `AVISO_HISTORIAL_ILEGIBLE` («No se ha podido leer tu historial, así que esta parte sale sin él.
+  Recarga la página para volver a intentarlo.»), pintado con `avisoHistorialIlegibleHtml(estiloExtra)` (un
+  `<p class="aviso-historial-ilegible">` en `--color-text-secondary`; nunca el muted). Los dos en `history-data.js`.
+- **La ficha de canción** (`track-card.js`): si `plays` o `detail` dieron `null` **y** hay anotación de su `kind`, en vez
+  de «Este tema no aparece…» dice «No se ha podido leer tu historial, así que no sé cuántas veces escuchaste este tema.
+  Recarga la página para volver a intentarlo.» Sin anotación, la frase de siempre. Con `detail` caído y el tema en
+  `plays`, la línea va donde iría la curva (en vez de «Curva mensual disponible solo para temas con 5+ plays.»).
+  ⚠️ El encargo decía que la curva salía de `loadHistoryStats().catch`: **no**, ese `loadHistoryStats()` es el de «Ir al
+  álbum»; la curva sale de `detail`.
+- **Las que usan la línea**: `#dashboard` «Del historial de reproducción» (se muestra con la línea en vez de los seis
+  tiles y sin los gráficos; antes se escondía) y «Álbumes escuchados por año» (la línea en vez de los años, sin la ⓘ);
+  `#covers` (la línea arriba de la grilla, y en vez de «Todavía no hay álbumes en tu historial…» cuando sin el historial
+  no queda ninguna tapa); `#wthree` (la línea arriba de los cubos si `stats` falló; la vista sigue igual); la ficha de
+  artista (el cuerpo, que quedaba vacío, con `stats` caído; con `artistTracks` caído, la línea debajo de las stats, y en
+  vez de «No aparece en tu historial…»).
+- **Las que NO entraron** (en `fonoteca-migracion/PENDIENTES.md`, tanda 110): el contador «Álbumes escuchados» del
+  `#dashboard` (el «—» lo pisa el conteo de la playlist apenas llega y la frase no entra en un tile); la ficha de álbum
+  («Sin datos de escucha», `util/album-stats.js`), por margen; `#discover-artists` / `#new-releases`
+  (`util/discover-filters.js`: arreglarlo es tocar los dos llamadores o lo que devuelve `buildFilterContext()`);
+  `util/album-heard.js` (3 importadores) y `util/artist-preview.js` (5) por la misma regla, y `util/artist-albums.js`
+  (1 llamador, «Sus álbumes» de la ficha de artista), por margen.
+- **El modal del import** (`import-history.js`, el único archivo tocado para esto): después de `hasLocalHistory()`, si da
+  `false` y hay anotación de `stats` con `origen: 'hasLocalHistory'`, el modal NO ofrece importar (ni zona de arrastre ni
+  `<input type="file">`) ni «Borrarlo», y dice «No se ha podido comprobar si ya tienes un historial guardado en este
+  navegador. Recarga la página antes de importar.» (`data-import-bloqueado="lectura"`). Importar encima de un historial
+  que no se pudo leer podría pisarlo. Sin anotación, el modal de siempre (`sha256`).
+
+Guardas: `tests/ficha-cancion-historial-caido.test.mjs`, `tests/historial-caido-vistas.test.mjs` (las dos funciones del
+Dashboard sacadas del fuente), `tests/historial-caido-wthree.test.mjs` (el loader y el doble de la 92B sin tocar) y
+`tests/import-historial-caido.test.mjs`. Los módulos REALES en Node; el resto de `src/js/` lo dobla
+`tests/dobles/loader-t110.mjs`, que arma cada doble leyendo los nombres que exporta el módulo real (stubs en
+`globalThis.__T110`). Con 500, rechazo y 200 no-JSON; rojos contra v=352 en 48 asserts; con el historial bien, el mismo
+`sha256` que en v=352. En pantalla: `tests/banco/historial-caido-caso.html?vista=ficha|artista|dashboard|covers` (la app
+entera como el owner; los JSON los contesta con 500 el conductor de capturas; **no va en `prepush`**).
+
 ## Zona horaria: las fechas del historial NO se pasan a local (v=154 + v=231)
 
 **Medio arreglo en v=154.** Récords decía «9 ene 2026» y Wrapped «8 ene 2026»

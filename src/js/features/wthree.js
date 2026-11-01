@@ -5,7 +5,7 @@
 import { spotifyFetch, getAllPlaylistItems, getAllUserPlaylists, addTracksToPlaylist, removeTracksFromPlaylist, reorderPlaylistItems, getCachedPlaylistItems, updatePlaylistItemsCache, getBestAvailableLikes, removeLikedTracks, checkLibraryContains } from '../api.js';
 import { vigilarRuta } from '../util/vigencia-ruta.js';
 import { patchPlaylistItems, buildCachedItem } from '../util/playlist-cache-patch.js';
-import { loadHistoryStats, loadListenedAlbums, isOwner, ownerLockedMessage } from './history-data.js';
+import { loadHistoryStats, loadListenedAlbums, isOwner, ownerLockedMessage, falloDeLecturaDelHistorial, avisoHistorialIlegibleHtml } from './history-data.js';
 import { escapeHtml, pageHeader, confirmModal } from '../ui/components.js';
 import { showToast } from '../ui/toast.js';
 import { wireHoverMarquee, hoverMarqueeSpan } from '../ui/hover-marquee.js';
@@ -41,6 +41,8 @@ let albumsList = null;     // [{name, artist, img, min, plays, picks[]}] cross d
 let historyStats = null;
 let listenedAlbums = null; // { years: [{ year, albums: [{name, artist, img, date}] }] }
 let falloHistorialEscuchas = false;
+// (v=353) `loadHistoryStats()` dio `null` porque su lectura FALLÓ (el registro de la tanda 109).
+let falloHistorialStats = false;
 let albumTracksCache = new Map(); // key → tracks fetched from Spotify
 let selectedBucket = null; // null = all, o '0'/'1'/'2'/'3'/'4+'
 let hiddenSet = null;      // store de álbumes marcados como "ya está, no me interesa"
@@ -312,6 +314,7 @@ async function loadAndRender(content, ruta = vigilarRuta()) {
     historyStats = stats;
     listenedAlbums = listened;
     falloHistorialEscuchas = falloListened;
+    falloHistorialStats = !stats && !!falloDeLecturaDelHistorial('stats');
     buildAlbumIndex(items);
     crossWithHistory(stats, listened);
     renderBuckets(content);
@@ -516,7 +519,7 @@ function renderBuckets(content) {
       </div>
     </div>
 
-    ${falloHistorialEscuchas ? '<p style="color: var(--color-text-secondary)">No se han podido leer tus álbumes escuchados: la vista sigue sin ellos.</p>' : ''}
+    ${falloHistorialStats ? avisoHistorialIlegibleHtml('margin:0 0 10px') : ''}${falloHistorialEscuchas ? '<p style="color: var(--color-text-secondary)">No se han podido leer tus álbumes escuchados: la vista sigue sin ellos.</p>' : ''}
 
     ${showingHidden ? `
       <div class="wthree-filter-active">

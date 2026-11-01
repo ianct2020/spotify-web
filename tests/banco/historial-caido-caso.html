@@ -1,0 +1,94 @@
+<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>banco historial caído — la app entera, como el owner</title>
+<link rel="stylesheet" href="/css/theme.css">
+<link rel="stylesheet" href="/css/components.css">
+<link rel="stylesheet" href="/css/main.css">
+<style>*,*::before,*::after{animation:none!important;transition:none!important}</style>
+</head><body>
+<div id="app"></div>
+<script type="module">
+// ── Caso de las capturas de la tanda 110 (v=353). NO va en `prepush` ──────────
+//
+// Parte de `letras-caso.html?uid=owner`: arranca la app ENTERA (`/js/app.js`) contra la Spotify
+// simulada de `simulado.mjs`, con los me gusta INVENTADOS de `letras-datos.mjs` en la caché y `/me`
+// contestando `HISTORY_OWNER_ID`. Lo distinto: NO siembra `OWNER_KEYS.plays` (sí un `detail` vacío,
+// `{ tracks: {} }`, para que lo único que falle sea `history-track-plays.json`), así que la app pide los
+// JSON del historial a `/data/…`. Quien los contesta es el CONDUCTOR (el de capturas de la tanda 110,
+// por CDP): 500 para `history-track-plays`, `history-stats`, `history-listened-albums` y
+// `history-artist-tracks`; cualquier otro `/data/` se corta.
+//
+//   ?vista=ficha     abre la ficha de canción de «Tema de Sesenta Renglones» (inventado)
+//   ?vista=artista   abre la ficha de artista de «Banda Inventada» (inventado)
+//   ?vista=dashboard entra a `#dashboard`
+//   ?vista=covers    entra a `#covers`
+//
+// Cuando la vista terminó de pintar, `data-foto="listo"` en `<html>`.
+
+import { instalarRedSimulada, esperarReal, anclar } from '/banco/simulado.mjs';
+import { likesInventados, TEMAS, pedidoDe, ARTISTA } from '/banco/letras-datos.mjs';
+
+const q = new URLSearchParams(location.search);
+const VISTA = q.get('vista') || 'ficha';
+window.__errores = [];
+window.addEventListener('error', (e) => window.__errores.push('error: ' + (e.message || e)));
+window.addEventListener('unhandledrejection', (e) => window.__errores.push('rechazo: ' + String(e.reason?.message || e.reason)));
+const errorOriginal = console.error.bind(console);
+console.error = (...a) => { window.__errores.push('console.error: ' + a.map(String).join(' ').slice(0, 300)); errorOriginal(...a); };
+
+const { HISTORY_OWNER_ID } = await import('/js/features/history-data.js');
+const UID = HISTORY_OWNER_ID;
+const sim = instalarRedSimulada();
+window.__sim = sim;
+sim.ruta('GET', /^\/me$/, () => ({ id: UID, display_name: 'Banco' }));
+localStorage.setItem('fonoteca_last_user_id', UID);
+localStorage.setItem('fonoteca_perfil_v1', JSON.stringify({ id: UID, display_name: 'Banco' }));
+
+const { idbSetCached } = await import('/js/idb.js');
+await anclar(idbSetCached('all_liked_tracks', likesInventados(), null));
+const { OWNER_KEYS } = await import('/js/history-keys.js');
+await anclar(idbSetCached(OWNER_KEYS.detail, { tracks: {} }, 100 * 365 * 24 * 60));
+// Chart.js no viene (ni sale a la red): el mismo `Chart` de mentira de `letras-caso.html`.
+window.Chart = class {
+  constructor(canvas, cfg) {
+    const caja = canvas.parentElement.getBoundingClientRect();
+    canvas.width = Math.round(caja.width); canvas.height = Math.round(caja.height);
+    const ctx = canvas.getContext('2d'), datos = cfg.data.datasets[0].data;
+    const max = Math.max(1, ...datos), w = canvas.width / Math.max(1, datos.length);
+    ctx.fillStyle = cfg.data.datasets[0].backgroundColor;
+    datos.forEach((n, i) => { const alto = (canvas.height - 20) * n / max; ctx.fillRect(i * w + 1, canvas.height - 10 - alto, Math.max(1, w - 2), alto); });
+  }
+  destroy() {}
+  resize() {}
+  update() {}
+};
+
+const RUTA = { dashboard: '#dashboard', covers: '#covers' }[VISTA] || '#home';
+location.hash = RUTA;
+await import('/js/app.js');
+const pausa = (ms) => new Promise((r) => setTimeout(r, ms));
+await esperarReal(() => document.getElementById('my-history-btn'), { que: 'que la app arranque', vueltas: 4000 });
+
+if (VISTA === 'ficha') {
+  await esperarReal(() => document.querySelector('.home-card'), { que: 'que Home pinte', vueltas: 4000 });
+  const tc = await import('/js/features/track-card.js');
+  tc.openTrackCard(pedidoDe(TEMAS.largo));
+  await esperarReal(() => document.querySelector('#tc-body') && !document.querySelector('#tc-body .skel'), { que: 'que la ficha de canción termine de pintar', vueltas: 4000 });
+} else if (VISTA === 'artista') {
+  await esperarReal(() => document.querySelector('.home-card'), { que: 'que Home pinte', vueltas: 4000 });
+  const ac = await import('/js/features/artist-card.js');
+  ac.openArtistCard({ name: ARTISTA });
+  await esperarReal(() => document.querySelector('#ac-body') && !document.querySelector('#ac-body .skel'), { que: 'que la ficha de artista termine de pintar', vueltas: 4000 });
+} else if (VISTA === 'dashboard') {
+  // La pantalla de inicio del Dashboard: «Usar los de la caché» (los me gusta inventados ya sembrados).
+  await esperarReal(() => document.getElementById('dash-start-btn'), { que: 'el botón de inicio del Dashboard', vueltas: 8000 });
+  document.getElementById('dash-start-btn').click();
+  await esperarReal(() => {
+    const card = document.getElementById('listened-year-card'), tiles = document.getElementById('listened-year-tiles');
+    return card && tiles && (card.style.display === 'none' || !/Cargando/.test(tiles.textContent));
+  }, { que: 'que el Dashboard lea el historial', vueltas: 8000 });
+} else if (VISTA === 'covers') {
+  await esperarReal(() => document.getElementById('covers-content') && !document.querySelector('#covers-content .spinner'), { que: 'que #covers pinte', vueltas: 8000 });
+}
+await pausa(1500);
+document.documentElement.dataset.foto = 'listo';
+</script>
+</body></html>

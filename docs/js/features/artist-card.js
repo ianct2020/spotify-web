@@ -2,24 +2,24 @@
 // primer/último año, top tracks del artista, hover-play, y plays actuales
 // vía Stats.fm si aplica. Se abre desde cualquier feature con openArtistCard({ name }).
 
-import { loadHistoryStats, loadArtistTracks, isOwner } from './history-data.js?v=352';
-import { escapeHtml } from '../ui/components.js?v=352';
-import { getPreview } from '../api/preview-providers.js?v=352';
-import { togglePreview, playingKey, attachHover } from '../ui/preview-player.js?v=352';
-import { hasUsername, loadTopLifetime } from '../api/statsfm.js?v=352';
-import { openTrackCard } from './track-card.js?v=352';
-import { spotifyFetch, getBestAvailableLikes } from '../api.js?v=352';
-import { openModal, closeTop } from '../ui/modal-stack.js?v=352';
-import { firstArtistName, artistNames, resolveArtistName, looksLikeArtistChain } from '../util/artist-name.js?v=352';
-import { coverUrl } from '../util/cover-size.js?v=352';
-import { getArtistLikePreview } from '../util/artist-preview.js?v=352';
-import { skelCardBody, skelTrackRows, skelBox } from '../ui/skeleton.js?v=352';
-import { fmtDia, fmtDiaCorto } from '../util/fecha.js?v=352';
-import { albumsDeArtista } from '../util/artist-albums.js?v=352';
-import { openAlbumCard } from './album-card.js?v=352';
-import { limpiaParaQuery, artistIsSame } from '../util/track-match.js?v=352';
-import { sinTildes } from '../util/texto.js?v=352';
-import { pedirYCachear, CUALQUIER_RESPUESTA } from '../util/cache-solo-exitos.js?v=352';
+import { loadHistoryStats, loadArtistTracks, isOwner, falloDeLecturaDelHistorial, avisoHistorialIlegibleHtml } from './history-data.js?v=353';
+import { escapeHtml } from '../ui/components.js?v=353';
+import { getPreview } from '../api/preview-providers.js?v=353';
+import { togglePreview, playingKey, attachHover } from '../ui/preview-player.js?v=353';
+import { hasUsername, loadTopLifetime } from '../api/statsfm.js?v=353';
+import { openTrackCard } from './track-card.js?v=353';
+import { spotifyFetch, getBestAvailableLikes } from '../api.js?v=353';
+import { openModal, closeTop } from '../ui/modal-stack.js?v=353';
+import { firstArtistName, artistNames, resolveArtistName, looksLikeArtistChain } from '../util/artist-name.js?v=353';
+import { coverUrl } from '../util/cover-size.js?v=353';
+import { getArtistLikePreview } from '../util/artist-preview.js?v=353';
+import { skelCardBody, skelTrackRows, skelBox } from '../ui/skeleton.js?v=353';
+import { fmtDia, fmtDiaCorto } from '../util/fecha.js?v=353';
+import { albumsDeArtista } from '../util/artist-albums.js?v=353';
+import { openAlbumCard } from './album-card.js?v=353';
+import { limpiaParaQuery, artistIsSame } from '../util/track-match.js?v=353';
+import { sinTildes } from '../util/texto.js?v=353';
+import { pedirYCachear, CUALQUIER_RESPUESTA } from '../util/cache-solo-exitos.js?v=353';
 
 // Cache de imágenes de artistas resueltas por Spotify search. TTL 30 días.
 // Se persiste el hit y la falta (null) para no reintentar contra tracks
@@ -253,7 +253,9 @@ async function openArtistCard(entrada) {
   }
 
   const stats = await loadHistoryStats();
-  if (!stats) { body.innerHTML = ''; return; }
+  // (v=353) Con la lectura FALLIDA (el registro de la tanda 109) el cuerpo lo dice en vez de
+  // quedar vacío. Sin fallo, vacío como antes.
+  if (!stats) { body.innerHTML = falloDeLecturaDelHistorial('stats') ? avisoHistorialIlegibleHtml() : ''; return; }
 
   // Datos del artista: recorro years para armar la curva por año + acumular tops.
   const yearsWithArtist = [];
@@ -298,6 +300,9 @@ async function openArtistCard(entrada) {
   // colado en un top anual. history-artist-tracks.json indexa todo artista con
   // al menos una play válida, así que acá ya vienen los 6 reales.
   const artistTracks = await loadArtistTracks();
+  // (v=353) Sin el índice por artista porque su lectura FALLÓ: la ficha sigue con los tops de
+  // `history-stats.json` y lo dice (y no afirma «No aparece en tu historial», que no sabe).
+  const avisoTemas = !artistTracks && falloDeLecturaDelHistorial('artistTracks') ? avisoHistorialIlegibleHtml('margin:10px 0 0') : '';
   // Acá ya está pago: aprovechamos para sembrar el índice de nombres conocidos
   // que usa la guarda de la cadena de artistas.
   sembrarConocidos(artistTracks);
@@ -344,6 +349,10 @@ async function openArtistCard(entrada) {
 
   // El corte por "no está en ningún top" se hace DESPUÉS de mirar el historial
   // completo: un artista puede no entrar en ningún top y aun así tener plays.
+  if (!totalPlays && !allTime && !topTracks.length && avisoTemas) {
+    body.innerHTML = avisoHistorialIlegibleHtml();
+    return;
+  }
   if (!totalPlays && !allTime && !topTracks.length) {
     body.innerHTML = `<p style="color:var(--color-text-secondary);font-size:13px;margin:0">No aparece en tu historial (o no está en los tops de ningún año). Igual puedes escucharlo en Spotify y ver el preview arriba.</p>`;
     return;
@@ -358,7 +367,7 @@ async function openArtistCard(entrada) {
       <div class="tc-stat"><div class="tc-stat-v">${totalPlays.toLocaleString('es-ES')}</div><div class="tc-stat-l">plays</div></div>
       <div class="tc-stat" title="${firstDay ? 'El primer día que lo escuchaste al menos 30 segundos' : ''}"><div class="tc-stat-v${firstDay ? ' tc-stat-v-fecha' : ''}">${firstDay ? escapeHtml(fmtDia(firstDay)) : (firstYear || '—')}</div><div class="tc-stat-l">${firstDay ? 'primera vez' : 'primer año'}</div></div>
       <div class="tc-stat"><div class="tc-stat-v">${lastYear || '—'}</div><div class="tc-stat-l">último año</div></div>
-    </div>
+    </div>${avisoTemas}
     <div class="ac-cols">
       ${hasChart ? `
         <div class="ac-col-chart">
