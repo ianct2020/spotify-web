@@ -11,31 +11,32 @@
 // tus me gusta" en cada fila y previews que prueban contra TODOS los artistas
 // del track.
 
-import { escapeHtml, confirmModal } from '../ui/components.js?v=353';
-import { showToast } from '../ui/toast.js?v=353';
-import { openArtistCard, knownArtist } from './artist-card.js?v=353';
-import { openModal, closeTop } from '../ui/modal-stack.js?v=353';
-import { getBestAvailableLikes, getAlbumTracks, anadirLikes } from '../api.js?v=353';
-import { albumKey, coverId } from '../util/album-key.js?v=353';
-import { artistMatches } from '../util/track-match.js?v=353';
+import { escapeHtml, confirmModal } from '../ui/components.js?v=354';
+import { showToast } from '../ui/toast.js?v=354';
+import { openArtistCard, knownArtist } from './artist-card.js?v=354';
+import { openModal, closeTop } from '../ui/modal-stack.js?v=354';
+import { getBestAvailableLikes, getAlbumTracks, anadirLikes } from '../api.js?v=354';
+import { albumKey, coverId } from '../util/album-key.js?v=354';
+import { artistMatches } from '../util/track-match.js?v=354';
 // `limpiaParaQuery` ya no se importa acá: desde v=219 la aplica el resolutor,
 // que es quien arma la query. Es a propósito — cuando la limpieza era tarea del
 // llamador, `wthree.js` se olvidaba del apóstrofo y nadie se enteraba. El
 // antecedente: hasta v=153 el import FALTABA en este archivo y cada ficha
 // tiraba un ReferenceError que el catch convertía en «no pude resolver el
 // álbum», o sea un error de programación con cara de resultado normal.
-import { resolveAlbumId } from '../util/album-resolver.js?v=353';
-import { indiceIdsDeAlbum, idLocalDelAlbum } from '../util/album-id-local.js?v=353';
-import { pedirYCachear } from '../util/cache-solo-exitos.js?v=353';
-import { skelTracklist } from '../ui/skeleton.js?v=353';
-import { firstArtistName, resolveArtistName } from '../util/artist-name.js?v=353';
-import { coverUrl } from '../util/cover-size.js?v=353';
-import { lookupAlbumStats } from '../util/album-stats.js?v=353';
-import { fmtDia } from '../util/fecha.js?v=353';
-import { getPreview } from '../api/preview-providers.js?v=353';
-import { togglePreview, playingKey } from '../ui/preview-player.js?v=353';
-import { openTrackCard } from './track-card.js?v=353';
-import { iconoPlay, iconoPausa, iconoPuntos } from '../ui/icons.js?v=353';
+import { resolveAlbumId } from '../util/album-resolver.js?v=354';
+import { indiceIdsDeAlbum, idLocalDelAlbum } from '../util/album-id-local.js?v=354';
+import { pedirYCachear } from '../util/cache-solo-exitos.js?v=354';
+import { skelTracklist } from '../ui/skeleton.js?v=354';
+import { firstArtistName, resolveArtistName } from '../util/artist-name.js?v=354';
+import { coverUrl } from '../util/cover-size.js?v=354';
+import { lookupAlbumStats } from '../util/album-stats.js?v=354';
+import { falloDeLecturaDelHistorial, AVISO_HISTORIAL_ILEGIBLE } from './history-data.js?v=354';
+import { fmtDia } from '../util/fecha.js?v=354';
+import { getPreview } from '../api/preview-providers.js?v=354';
+import { togglePreview, playingKey } from '../ui/preview-player.js?v=354';
+import { openTrackCard } from './track-card.js?v=354';
+import { iconoPlay, iconoPausa, iconoPuntos } from '../ui/icons.js?v=354';
 
 // Mismo corazón que la tracklist de W-Three (features/wthree.js).
 const HEART_SVG = `<svg viewBox="0 0 24 24" width="11" height="11" fill="currentColor" aria-hidden="true"><path d="M12 21s-7.5-4.6-9.5-9A5 5 0 0 1 12 6.5 5 5 0 0 1 21.5 12c-2 4.4-9.5 9-9.5 9z"/></svg>`;
@@ -412,7 +413,18 @@ export function openAlbumCard(entrada) {
   // Solo se pisa lo que el índice sabe de verdad: si devuelve ceros, se deja lo
   // que hubiera pasado el llamador.
   lookupAlbumStats(a).then(t => {
-    if (!(t.plays > 0 || t.min > 0)) return;
+    if (!(t.plays > 0 || t.min > 0)) {
+      // (v=354) Vacío es «no hay» o «no se pudo leer»: lo distingue el registro de la tanda 109, leído acá,
+      // después del `await` y antes de pintar. Los números de `lookupAlbumStats` salen de
+      // `history-track-plays.json` (`kind` `plays`). Si falló y la ficha estaba diciendo «Sin datos de
+      // escucha» (el llamador no trajo números), en su lugar va el aviso, con el mismo estilo. Sin anotación,
+      // nada cambia.
+      if (!(a.plays > 0 || a.min > 0) && falloDeLecturaDelHistorial('plays')) {
+        const slot = overlay.querySelector('#alb-stats');
+        if (slot) slot.innerHTML = `<div class="album-modal-no-data">${AVISO_HISTORIAL_ILEGIBLE}</div>${primeraVezHtml(a.first)}`;
+      }
+      return;
+    }
     // La fecha SOLO la tiene el índice: si llegó, hay que repintar aunque los
     // números que trajo el llamador ya fueran los buenos.
     if (!t.first && t.plays <= (a.plays || 0) && t.min <= (a.min || 0)) return;

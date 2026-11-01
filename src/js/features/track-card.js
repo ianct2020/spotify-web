@@ -8,7 +8,7 @@
 // acá y no se propaga: ver `util/artist-name.js`. Los nombres se pintan como
 // **enlaces separados** y cada uno abre SU ficha de artista.
 
-import { loadTrackPlays, loadTrackDetail, loadHistoryStats, isOwner, falloDeLecturaDelHistorial, avisoHistorialIlegibleHtml } from './history-data.js';
+import { loadTrackPlays, loadTrackDetail, loadHistoryStats, isOwner, falloDeLecturaDelHistorial, avisoHistorialIlegibleHtml, AVISO_HISTORIAL_ILEGIBLE } from './history-data.js';
 import { escapeHtml } from '../ui/components.js';
 import { getPreview } from '../api/preview-providers.js';
 import { togglePreview, playingKey } from '../ui/preview-player.js';
@@ -252,11 +252,17 @@ async function openTrackCard(t) {
   const totalPlays = totals ? totals[0] : 0;
   const totalMin = totals ? Math.round(totals[1] / 60) : 0;
   const partial = totals && totals[2] === 'p';
+  // (v=354) Con `plays` caído y el tema en `detail`, las plays y los minutos NO se saben: hasta v=353
+  // salían «0 plays válidas» y «0m», un cero inventado. Van como «—» con el aviso en el `title` (el mismo
+  // «—» que ya llevan «días distintos» y «récord en un día» cuando falta `detail`), y a Stats.fm no se le
+  // pasa un 0 para comparar. Sin anotación, todo como antes.
+  const sinPlays = fallaronPlays && !totals;
+  const noSe = `<div class="tc-stat-v" title="${AVISO_HISTORIAL_ILEGIBLE}">—</div>`;
 
   body.innerHTML = `
     <div class="tc-stats">
-      <div class="tc-stat"><div class="tc-stat-v">${totalPlays.toLocaleString('es-ES')}</div><div class="tc-stat-l">${partial ? 'plays cortas (<30s)' : 'plays válidas'}</div></div>
-      <div class="tc-stat"><div class="tc-stat-v">${totalMin.toLocaleString('es-ES')}m</div><div class="tc-stat-l">minutos totales</div></div>
+      <div class="tc-stat">${sinPlays ? noSe : `<div class="tc-stat-v">${totalPlays.toLocaleString('es-ES')}</div>`}<div class="tc-stat-l">${partial ? 'plays cortas (<30s)' : 'plays válidas'}</div></div>
+      <div class="tc-stat">${sinPlays ? noSe : `<div class="tc-stat-v">${totalMin.toLocaleString('es-ES')}m</div>`}<div class="tc-stat-l">minutos totales</div></div>
       <div class="tc-stat"><div class="tc-stat-v">${det ? det.d : '—'}</div><div class="tc-stat-l">días distintos</div></div>
       <div class="tc-stat"><div class="tc-stat-v">${det ? det.x : '—'}</div><div class="tc-stat-l">récord en un día</div></div>
     </div>
@@ -272,7 +278,7 @@ async function openTrackCard(t) {
     <div id="tc-statsfm"></div>
   `;
 
-  fillStatsfmLine(t, totals ? totals[0] : 0);
+  fillStatsfmLine(t, totals ? totals[0] : (sinPlays ? null : 0));
 
   if (det) {
     const { labels, data } = buildSeries(det.m);

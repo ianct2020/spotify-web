@@ -366,6 +366,23 @@ Dashboard sacadas del fuente), `tests/historial-caido-wthree.test.mjs` (el loade
 `sha256` que en v=352. En pantalla: `tests/banco/historial-caido-caso.html?vista=ficha|artista|dashboard|covers` (la app
 entera como el owner; los JSON los contesta con 500 el conductor de capturas; **no va en `prepush`**).
 
+**v=354 (tanda 111).**
+- **`#wthree` y `#covers` con W-Three, mirados en pantalla** (el caso de banco ganó `?vista=wthree|covers-wthree&caido=…`, con
+  una playlist «w three» INVENTADA de 20 pistas y el historial inventado sembrado en la caché del owner, salvo el JSON que se
+  cae). En `#wthree`, con `history-stats.json` en 500, la línea va entre la tarjeta «Playlist activa» y los contadores, entera,
+  en `--color-text-secondary`; los cubos siguen, sin minutos ni plays (cada tarjeta dice el año). En `#covers` con
+  `history-listened-albums.json` en 500, la línea va entre las pastillas de año y la grilla, y la grilla trae solo las tapas de
+  W-Three. A 390 la línea parte en dos renglones y no se corta. En Node, `tests/covers-wthree-historial-caido.test.mjs`
+  (el trío; con el JSON bien, el mismo `sha256` que en v=353).
+- **El cero inventado de la ficha de canción**: con `plays` caído y el tema en `detail`, «plays válidas» y «minutos totales»
+  ya no dicen 0 / 0m: van como «—» con `AVISO_HISTORIAL_ILEGIBLE` en el `title` (el mismo «—» que llevan «días distintos» y
+  «récord en un día» cuando falta `detail`), y a la línea de Stats.fm no se le pasa un 0 para comparar. Lo de `detail` (la
+  curva, los días) sigue igual. Solo `track-card.js`.
+- **La ficha de álbum** (`album-card.js`, la fila 9 de la 110): si `lookupAlbumStats()` dio vacío **y** hay anotación de
+  `plays` (el `kind` de donde salen sus números) **y** la ficha estaba diciendo «Sin datos de escucha», en su lugar va
+  `AVISO_HISTORIAL_ILEGIBLE` en la misma `.album-modal-no-data`. Si el llamador trajo números, quedan (la regla de siempre).
+  `util/album-stats.js` no cambió. Guarda: `tests/ficha-album-historial-caido.test.mjs`.
+
 ## Zona horaria: las fechas del historial NO se pasan a local (v=154 + v=231)
 
 **Medio arreglo en v=154.** Récords decía «9 ene 2026» y Wrapped «8 ene 2026»

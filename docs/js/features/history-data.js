@@ -8,10 +8,10 @@
 // Otro user cualquiera sin historial local ve el ownerLockedMessage que
 // invita a subir su ZIP.
 
-import { idbGetCached, idbSetCached, idbDel } from '../idb.js?v=353';
-import { getCurrentUserId } from '../api.js?v=353';
-import { OWNER_KEYS, LOCAL_HISTORY_PREFIX, STATS_VERSION, PLAYS_VERSION, LISTENED_VERSION, SKIP_VERSION, DETAIL_VERSION, RECORDS_VERSION, ARTIST_TRACKS_VERSION, SIMILARES_VERSION } from '../history-keys.js?v=353';
-import { mostrarBannerDegradadoVista } from '../ui/degraded-banner.js?v=353';
+import { idbGetCached, idbSetCached, idbDel } from '../idb.js?v=354';
+import { getCurrentUserId } from '../api.js?v=354';
+import { OWNER_KEYS, LOCAL_HISTORY_PREFIX, STATS_VERSION, PLAYS_VERSION, LISTENED_VERSION, SKIP_VERSION, DETAIL_VERSION, RECORDS_VERSION, ARTIST_TRACKS_VERSION, SIMILARES_VERSION } from '../history-keys.js?v=354';
+import { mostrarBannerDegradadoVista } from '../ui/degraded-banner.js?v=354';
 
 const HISTORY_OWNER_ID = 'orhs6wu5ykk7ql80u92ujn74o';
 

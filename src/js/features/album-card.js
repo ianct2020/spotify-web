@@ -31,6 +31,7 @@ import { skelTracklist } from '../ui/skeleton.js';
 import { firstArtistName, resolveArtistName } from '../util/artist-name.js';
 import { coverUrl } from '../util/cover-size.js';
 import { lookupAlbumStats } from '../util/album-stats.js';
+import { falloDeLecturaDelHistorial, AVISO_HISTORIAL_ILEGIBLE } from './history-data.js';
 import { fmtDia } from '../util/fecha.js';
 import { getPreview } from '../api/preview-providers.js';
 import { togglePreview, playingKey } from '../ui/preview-player.js';
@@ -412,7 +413,18 @@ export function openAlbumCard(entrada) {
   // Solo se pisa lo que el índice sabe de verdad: si devuelve ceros, se deja lo
   // que hubiera pasado el llamador.
   lookupAlbumStats(a).then(t => {
-    if (!(t.plays > 0 || t.min > 0)) return;
+    if (!(t.plays > 0 || t.min > 0)) {
+      // (v=354) Vacío es «no hay» o «no se pudo leer»: lo distingue el registro de la tanda 109, leído acá,
+      // después del `await` y antes de pintar. Los números de `lookupAlbumStats` salen de
+      // `history-track-plays.json` (`kind` `plays`). Si falló y la ficha estaba diciendo «Sin datos de
+      // escucha» (el llamador no trajo números), en su lugar va el aviso, con el mismo estilo. Sin anotación,
+      // nada cambia.
+      if (!(a.plays > 0 || a.min > 0) && falloDeLecturaDelHistorial('plays')) {
+        const slot = overlay.querySelector('#alb-stats');
+        if (slot) slot.innerHTML = `<div class="album-modal-no-data">${AVISO_HISTORIAL_ILEGIBLE}</div>${primeraVezHtml(a.first)}`;
+      }
+      return;
+    }
     // La fecha SOLO la tiene el índice: si llegó, hay que repintar aunque los
     // números que trajo el llamador ya fueran los buenos.
     if (!t.first && t.plays <= (a.plays || 0) && t.min <= (a.min || 0)) return;

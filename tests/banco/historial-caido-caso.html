@@ -22,6 +22,21 @@
 //   ?vista=covers    entra a `#covers`
 //
 // Cuando la vista terminó de pintar, `data-foto="listo"` en `<html>`.
+//
+// ── Tanda 111 (v=354) ─────────────────────────────────────────────────────────
+//
+//   ?vista=ficha&detalle=1   la misma ficha, pero el tema SÍ está en `detail` (sembrado): con `plays` en 500
+//                            es el caso del «0 plays válidas» inventado (T111b)
+//   ?vista=album             abre la ficha de álbum de «Disco t111inventada de la ficha» (T111c)
+//   ?vista=wthree&caido=stats|ninguno          `#wthree` con la playlist «w three» INVENTADA configurada
+//   ?vista=covers-wthree&caido=listened|ninguno `#covers` con esa misma W-Three configurada
+//
+// En `wthree` y `covers-wthree` los JSON del historial que NO se caen se siembran en la caché del owner
+// (`OWNER_KEYS`) con datos INVENTADOS, así que la app no los pide; el que se cae no se siembra y lo pide a
+// `/data/…`, donde el conductor contesta 500. Con `caido=ninguno` no se pide ninguno. La playlist tiene 20
+// pistas `t111inventada…` de 6 discos inventados; el historial inventado comparte 3 de esos discos y trae 4
+// que no están en la playlist. Las tapas son URLs con la forma del CDN que el CONDUCTOR contesta con un PNG
+// local (ninguna sale a la red).
 
 import { instalarRedSimulada, esperarReal, anclar } from '/banco/simulado.mjs';
 import { likesInventados, TEMAS, pedidoDe, ARTISTA } from '/banco/letras-datos.mjs';
@@ -45,7 +60,48 @@ localStorage.setItem('fonoteca_perfil_v1', JSON.stringify({ id: UID, display_nam
 const { idbSetCached } = await import('/js/idb.js');
 await anclar(idbSetCached('all_liked_tracks', likesInventados(), null));
 const { OWNER_KEYS } = await import('/js/history-keys.js');
-await anclar(idbSetCached(OWNER_KEYS.detail, { tracks: {} }, 100 * 365 * 24 * 60));
+const SIEMPRE = 100 * 365 * 24 * 60;
+const T111 = VISTA === 'wthree' || VISTA === 'covers-wthree';
+const CAIDO = q.get('caido') || 'ninguno';
+if (!T111) {
+  const detalle = q.get('detalle') === '1'
+    ? { tracks: { [TEMAS.largo.id]: { m: { '2023-01': 3, '2023-02': 1, '2023-05': 4, '2024-02': 2 }, f: '2023-01-14', l: '2024-02-03', d: 9, x: 2 } } }
+    : { tracks: {} };
+  await anclar(idbSetCached(OWNER_KEYS.detail, detalle, SIEMPRE));
+}
+
+// ── Lo de la tanda 111: la playlist «w three» y el historial, INVENTADOS ──
+const hex24 = (n) => ('a111' + n.toString(16).padStart(20, '0')).slice(0, 24);
+const TAPA = (n) => `https://i.scdn.co/image/ab67616d0000b273${hex24(n)}`;
+const DISCOS_WT = [1, 2, 3, 4, 5, 6].map((n) => ({ n, id: `t111inventadaalb0000${String(n).padStart(2, '0')}`, name: `Disco t111inventada ${n}`, artist: `Artista t111inventada ${n}`, img: TAPA(n) }));
+const POR_DISCO = [4, 4, 3, 3, 3, 3];   // 20 pistas
+const PISTAS_WT = [];
+DISCOS_WT.forEach((d, i) => { for (let k = 1; k <= POR_DISCO[i]; k++) PISTAS_WT.push({ d, k, id: `t111inventada${String(i * 10 + k).padStart(9, '0')}` }); });
+const itemWt = (p) => ({ added_at: '2026-01-01T00:00:00Z', item: { id: p.id, uri: `spotify:track:${p.id}`, type: 'track', name: `Tema t111inventada ${p.d.n}.${p.k}`, duration_ms: 200000, track_number: p.k, artists: [{ id: `t111inventadaart0000${String(p.d.n).padStart(2, '0')}`, name: p.d.artist }], album: { id: p.d.id, name: p.d.name, release_date: '2022-01-01', album_type: 'album', total_tracks: 10, images: [{ url: p.d.img, width: 640, height: 640 }] } } });
+// Los del historial que NO están en la playlist (7 a 10).
+const DISCOS_HIST = [7, 8, 9, 10].map((n) => ({ n, name: `Disco t111inventada ${n}`, artist: `Artista t111inventada ${n}`, img: TAPA(n) }));
+const PLAYLIST_WT = 't111inventadaplwthree0';
+if (T111) {
+  const { prefKey } = await import('/js/storage.js');
+  localStorage.setItem(prefKey('wthree_playlist_id'), PLAYLIST_WT);
+  localStorage.setItem(prefKey('wthree_playlist_name'), 'w three t111inventada');
+  sim.ruta('GET', new RegExp(`^/playlists/${PLAYLIST_WT}\\?`), () => ({ id: PLAYLIST_WT, name: 'w three t111inventada', owner: { id: UID }, snapshot_id: 't111s1', tracks: { total: PISTAS_WT.length } }));
+  sim.ruta('GET', new RegExp(`^/playlists/${PLAYLIST_WT}/items`), () => ({ items: PISTAS_WT.map(itemWt), total: PISTAS_WT.length, limit: 100, offset: 0, next: null }));
+  sim.ruta('GET', /^\/me\/playlists/, () => ({ items: [], total: 0, limit: 50, offset: 0, next: null }));
+  // Los me gusta: las pistas de la playlist (cada disco de W-Three tiene likes) y una de cada disco del historial.
+  const likesT111 = [...PISTAS_WT.map((p) => ({ added_at: '2026-01-02T00:00:00Z', track: itemWt(p).item })),
+    ...DISCOS_HIST.map((d) => ({ added_at: '2026-01-03T00:00:00Z', track: { id: `t111inventada${String(900 + d.n).padStart(9, '0')}`, uri: `spotify:track:t111inventada${String(900 + d.n).padStart(9, '0')}`, type: 'track', name: `Tema t111inventada ${d.n}.1`, duration_ms: 200000, track_number: 1, artists: [{ id: `t111inventadaart0000${String(d.n).padStart(2, '0')}`, name: d.artist }], album: { id: `t111inventadaalb0000${String(d.n).padStart(2, '0')}`, name: d.name, release_date: '2021-01-01', album_type: 'album', total_tracks: 10, images: [{ url: d.img, width: 640, height: 640 }] } } }))];
+  await anclar(idbSetCached('all_liked_tracks', likesT111, null));
+  // El historial INVENTADO: comparte con la playlist los discos 1, 2 y 3; los 7 a 10 son solo del historial.
+  const enHist = [...DISCOS_WT.slice(0, 3), ...DISCOS_HIST];
+  const stats = { version: 1, years: [{ year: 2024 }], top_albums_all_time: enHist.slice(0, 5).map((d, i) => ({ name: d.name, artist: d.artist, img: d.img, min: 300 - i * 40, plays: 90 - i * 12 })) };
+  const listened = { version: 1, criteria: 't111', years: [{ year: 2024, albums: enHist.map((d, i) => ({ name: d.name, artist: d.artist, date: `2024-0${1 + (i % 6)}-1${i % 9}`, tracks_that_day: 5, min_that_day: 25, img: d.img })) }] };
+  const plays = { tracks: {}, albums: enHist.map((d, i) => [d.name, d.artist, 90 - i * 10, (300 - i * 30) * 60000, `2024-01-0${1 + i}`]) };
+  if (CAIDO !== 'stats') await anclar(idbSetCached(OWNER_KEYS.stats, stats, SIEMPRE));
+  if (CAIDO !== 'listened') await anclar(idbSetCached(OWNER_KEYS.listened, listened, SIEMPRE));
+  await anclar(idbSetCached(OWNER_KEYS.plays, plays, SIEMPRE));
+  await anclar(idbSetCached(OWNER_KEYS.detail, { tracks: {} }, SIEMPRE));
+}
 // Chart.js no viene (ni sale a la red): el mismo `Chart` de mentira de `letras-caso.html`.
 window.Chart = class {
   constructor(canvas, cfg) {
@@ -61,7 +117,7 @@ window.Chart = class {
   update() {}
 };
 
-const RUTA = { dashboard: '#dashboard', covers: '#covers' }[VISTA] || '#home';
+const RUTA = { dashboard: '#dashboard', covers: '#covers', wthree: '#wthree', 'covers-wthree': '#covers' }[VISTA] || '#home';
 location.hash = RUTA;
 await import('/js/app.js');
 const pausa = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -85,9 +141,17 @@ if (VISTA === 'ficha') {
     const card = document.getElementById('listened-year-card'), tiles = document.getElementById('listened-year-tiles');
     return card && tiles && (card.style.display === 'none' || !/Cargando/.test(tiles.textContent));
   }, { que: 'que el Dashboard lea el historial', vueltas: 8000 });
-} else if (VISTA === 'covers') {
+} else if (VISTA === 'covers' || VISTA === 'covers-wthree') {
   await esperarReal(() => document.getElementById('covers-content') && !document.querySelector('#covers-content .spinner'), { que: 'que #covers pinte', vueltas: 8000 });
+} else if (VISTA === 'wthree') {
+  await esperarReal(() => document.getElementById('wthree-content') && !document.querySelector('#wthree-content .spinner'), { que: 'que #wthree pinte', vueltas: 8000 });
+} else if (VISTA === 'album') {
+  await esperarReal(() => document.querySelector('.home-card'), { que: 'que Home pinte', vueltas: 4000 });
+  const al = await import('/js/features/album-card.js');
+  al.openAlbumCard({ name: 'Disco t111inventada de la ficha', artist: ARTISTA, img: TAPA(99) });
+  await esperarReal(() => document.querySelector('#alb-stats') && !document.querySelector('#alb-likes .skel'), { que: 'que la ficha de álbum termine de pintar', vueltas: 4000 });
 }
+window.__simReg = sim.reg;
 await pausa(1500);
 document.documentElement.dataset.foto = 'listo';
 </script>

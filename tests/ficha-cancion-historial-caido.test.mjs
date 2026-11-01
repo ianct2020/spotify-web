@@ -42,8 +42,16 @@ const SHA_352 = {
   candadoConFallo: '45227d479af1e26204f30b18a5243e6a87baccb91575efff535441fcaa357fda',
 };
 
-const PLAYS = { tracks: { [SI]: [12, 2400], [SOLO_PLAYS]: [3, 600] }, albums: [] };
-const DETAIL = { tracks: { [SI]: { m: { '2024-01': 7, '2024-03': 5 }, f: '2024-01-02', l: '2024-03-09', d: 6, x: 3 } } };
+// Tanda 111 (v=354), T111b: el tema SÍ está en `detail` y `plays` se cae (el «0 plays válidas» inventado),
+// y uno que en `plays` tiene de verdad 0 plays válidas (armado a mano: `[0, 0]`, con su `detail`).
+const T111_SI = 't111inventadatemasi';
+const T111_CERO = 't111inventadaceroplays';
+const PLAYS = { tracks: { [SI]: [12, 2400], [SOLO_PLAYS]: [3, 600], [T111_CERO]: [0, 0] }, albums: [] };
+const DETAIL = { tracks: {
+  [SI]: { m: { '2024-01': 7, '2024-03': 5 }, f: '2024-01-02', l: '2024-03-09', d: 6, x: 3 },
+  [T111_SI]: { m: { '2023-05': 4, '2023-06': 2 }, f: '2023-05-01', l: '2023-06-20', d: 5, x: 2 },
+  [T111_CERO]: { m: { '2022-02': 1 }, f: '2022-02-03', l: '2022-02-03', d: 1, x: 1 },
+} };
 
 const estado = { me: OWNER, plays: 'ok', detail: 'ok', pedidos: [] };
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -156,6 +164,23 @@ console.log(`\n[fila 2] owner, plays bien, history-track-detail.json → 500; te
   ok(cuerpo.includes(AVISO), 'sale AVISO_HISTORIAL_ILEGIBLE donde iría la curva');
   ok(/12<\/div><div class="tc-stat-l">plays válidas/.test(cuerpo), 'las stats del tema siguen (12 plays válidas)');
   ok(!cuerpo.includes(FRASE_FALSA) && !cuerpo.includes(FRASE_NUEVA), 'y ninguna de las dos frases de «no aparece»');
+}
+
+// ── T111b (v=354): el cero inventado ──────────────────────────────────────
+for (const [m, como] of [['500', 'Response 500'], ['rechaza', 'fetch rechaza con TypeError("Failed to fetch")'], ['nojson', 'Response 200 con HTML (res.json() tira SyntaxError)']]) {
+  console.log(`\n[T111b · ${m}] owner, history-track-plays.json → ${como}; detail bien; tema ${T111_SI} (está en detail)`);
+  const { cuerpo } = await ficha(T111_SI, { plays: m, detail: 'ok' });
+  ok(!/>0<\/div><div class="tc-stat-l">plays válidas/.test(cuerpo), '«0 plays válidas» NO sale');
+  ok(!/>0m<\/div>/.test(cuerpo), '«0m» NO sale');
+  ok((cuerpo.match(new RegExp(`<div class="tc-stat-v" title="${AVISO}">—</div>`, 'g')) || []).length === 2, 'las plays y los minutos van como «—» con el aviso en el title');
+  ok(/>5<\/div><div class="tc-stat-l">días distintos/.test(cuerpo) && /tc-chart/.test(cuerpo), 'lo que sale de detail sigue: días distintos (5) y la curva');
+  ok(!cuerpo.includes(FRASE_FALSA) && !cuerpo.includes(FRASE_NUEVA), 'y ninguna de las dos frases de «no aparece»');
+}
+console.log(`\n[T111b · sin anotación] owner con los dos JSON bien; tema ${T111_CERO}, que en plays tiene 0 plays válidas de verdad`);
+{
+  const { cuerpo } = await ficha(T111_CERO, { plays: 'ok', detail: 'ok' });
+  ok(/>0<\/div><div class="tc-stat-l">plays válidas/.test(cuerpo) && />0m<\/div>/.test(cuerpo), 'sigue diciendo 0 plays válidas y 0m: ese cero es un dato');
+  ok(!cuerpo.includes(AVISO), 'sin el aviso');
 }
 
 // ── Conservación: con el historial bien, byte a byte lo de 27a0e64d ───────
