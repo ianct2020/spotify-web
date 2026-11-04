@@ -1273,6 +1273,50 @@ veredictos no cambian —el trabajo de red no se throttlea—, pero el bucle hay
 manejarlo **por tandas desde afuera**, sin sleeps encadenados. Es la otra cara
 de [[fonoteca-pestana-extension-hidden]].
 
+## 🎧 El reproductor de previews (v=357)
+
+**No es Spotify.** `ui/preview-player.js` es un solo `<audio>` para toda la app con previews de **30 s** de iTunes o
+Deezer (`api/preview-providers.js`); si ninguno tiene el tema, cae al **embed** de Spotify (un `<iframe>` dentro del
+mismo pill, que no nos avisa nada: ahí no hay pausa, ni barra, ni `playing`). La app no pide permisos de reproducción y
+no hace falta premium. Canciones enteras serían el Web Playback SDK (premium, permisos nuevos): no está, a propósito.
+
+El pill (`.preview-pill`) nace en el **primer** preview y vive en el slot `player` de la capa de abajo. Sus estados:
+
+| estado | etiqueta / fuente | controles |
+|---|---|---|
+| buscando | «Buscando preview…» / «buscando…» | ✕ |
+| cargando o trabado | «nombre — artista» / «vía iTunes» (barritas quietas) | ⏸, barra, ✕ |
+| sonando | igual, barritas moviéndose | ⏸, barra, ✕ |
+| en pausa (v=357) | igual, barritas quietas, `.is-paused` | ▶ «Seguir preview», barra donde quedó, ✕ |
+| embed | la nota, el iframe y «Abrir en Spotify ↗» | ✕ |
+| error | se pinta y el `catch` del `play()` lo esconde enseguida: lo que se ve es el toast (ver `PENDIENTES.md`, tanda 115) | — |
+
+**Lo que arregló la tanda 115**, todo dentro de `preview-player.js` y `components.css`, sin cambiar ninguna firma ni el
+evento `previewchange` (`{ key, provider, playing }`):
+- **Pausa**: `.preview-pill-toggle` («Pausar preview» / «Seguir preview», con los `iconoPausa`/`iconoPlay` de
+  `ui/icons.js`) deja el pill a la vista y sigue desde donde estaba. Una pausa es `previewchange` con el mismo `key` y
+  `playing: false` (el camino que las tarjetas ya pintaban). `pausadoPorUsuario` la separa de un `pause`/`waiting` del
+  navegador: con él, el ▶ de una tarjeta con su preview en pausa **sigue** en vez de parar (`togglePreview` devuelve
+  `true`), un `stalled` en pausa no arma el corte de 8 s y el AbortError del `play()` que pausaste mientras cargaba no
+  cierra el pill. El ✕ sigue parando y cerrando.
+- **La barra de los 30 s**: `.preview-pill-progress` (`role="progressbar"`, `aria-valuetext` «0:12 de 0:30, faltan
+  0:18») con lo que va a la izquierda y lo que falta a la derecha («0:12 ━━── −0:18»), movida por `timeupdate`. La
+  transición del relleno solo existe con `.preview-pill-anim`, que pone el JS según **`animationsEnabled()`**, no el
+  media query. Sin animación salta de a pasos y el texto dice igual lo que falta. Buscando, con el embed y con error,
+  sin botón ni barra.
+- **El nombre entero** en el `title` de `.preview-pill-label` (se corta con «…» a 420 px: a 1366 se cortaba incluso con
+  50 caracteres).
+- **«Abrir en Spotify ↗»** del embed en `--color-text-secondary` subrayado (con el acento daba 2,89:1).
+
+⚠️ **La especificidad**: el CSS de siempre del pill vive en `main.css` (`.preview-pill…`), que **no se toca** (importa
+Google Fonts). Lo nuevo va en `components.css`, que carga ANTES: todo con **dos clases** (`.preview-pill .x`), o pierde
+por orden contra una regla de una clase de `main.css`. Es lo mismo que la regla de `#wthree` de la tanda 112.
+
+Guarda: `tests/preview-player-t115.test.mjs` (el `preview-player.js` REAL en Node, con `dobles/loader-t115.mjs`,
+`dobles/preview-t115-doble.mjs` y `dobles/dom-preview-doble.mjs`; `RAIZ_T115` para correrlo contra otra raíz). Rojo
+contra v=356. Lo que quedó medido y sin arreglar (el trabado que dice «vía iTunes», el pill que a 390 tapa la ficha, el
+pill de error que no se ve) está en `fonoteca-migracion/PENDIENTES.md`, «Tanda 115».
+
 ## #recs: preview y las dos fichas por fila (v=167)
 `features/recommendations.js`. Las filas son un `<label>` que envuelve el
 checkbox, así que **cualquier click en un descendiente lo tilda**: las tres

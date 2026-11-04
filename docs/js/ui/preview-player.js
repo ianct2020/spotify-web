@@ -17,9 +17,36 @@
 // como está (marcado como el preview actual, pero con el ▶), que es lo honesto:
 // no sabemos si Spotify está sonando dentro del iframe.
 
-import { escapeHtml } from './components.js?v=356';
-import { showToast } from './toast.js?v=356';
-import { mountBottom } from './bottom-layer.js?v=356';
+//
+// ── Pausa y barra de los 30 s (v=357, tanda 115) ─────────────────────────────
+//
+// Hasta v=356 el único control del pill era el ✕, que para Y cierra. Ahora hay
+// un botón de pausa (`.preview-pill-toggle`, «Pausar preview» / «Seguir
+// preview») que deja el pill a la vista y sigue desde donde estaba, y una barra
+// (`role="progressbar"`) con lo que va a la izquierda y lo que falta a la
+// derecha («0:12 ━━━━──── −0:18»). Ninguna firma ni el evento cambiaron: una
+// pausa es `previewchange` con el mismo `key` y `playing: false`, que es el
+// camino que las tarjetas ya pintaban (el del buffering y el embed).
+//
+// Tres cosas que no se ven y hacen falta:
+//   - `pausadoPorUsuario` separa una pausa pedida de un `pause`/`waiting` del
+//     navegador. Con él, el ▶ de una tarjeta con su preview en pausa SIGUE en
+//     vez de parar (`togglePreview`), un `stalled` en pausa no arma el corte de
+//     8 s, y el `play()` que se rechaza porque pausaste mientras cargaba
+//     (AbortError) no cierra el pill.
+//   - La barra se mueve con `timeupdate` (unas 4 veces por segundo). La
+//     transición que la suaviza la pone `.preview-pill-anim`, que decide
+//     `animationsEnabled()` y no el media query (Ian tiene las animaciones del
+//     sistema apagadas y el toggle de la paleta puede forzar por encima). Sin
+//     animación la barra salta de a pasos y el texto dice igual lo que falta.
+//   - Buscando y con el embed no hay botón ni barra: no hay nada que pausar ni
+//     ningún tiempo que leer (el iframe no avisa nada).
+
+import { escapeHtml } from './components.js?v=357';
+import { showToast } from './toast.js?v=357';
+import { mountBottom } from './bottom-layer.js?v=357';
+import { animationsEnabled } from './reveal.js?v=357';
+import { iconoPlay, iconoPausa } from './icons.js?v=357';
 
 const audio = new Audio();
 audio.preload = 'none';
@@ -33,6 +60,9 @@ let currentProvider = null;    // 'itunes' | 'deezer' | 'spotify-embed' | null
 // suena nada miente igual que el que se queda en ▶.
 let audioPlaying = false;
 let pill = null;
+// La pausa la pidió el usuario con el botón del pill (o la retomó con el ▶ de
+// la tarjeta). Distinto de un `pause`/`waiting` del navegador.
+let pausadoPorUsuario = false;
 
 // --- estado de hover (para hover-play con debounce) ---
 let hoverKey = null;
@@ -67,11 +97,18 @@ function ensurePill() {
     <div class="preview-pill-main">
       <div class="preview-pill-label"></div>
       <div class="preview-pill-provider"></div>
+      <div class="preview-pill-progress" role="progressbar" aria-label="Avance del preview" aria-valuemin="0" aria-valuemax="30" aria-valuenow="0" hidden>
+        <span class="preview-pill-time-va">0:00</span>
+        <span class="preview-pill-progress-bar"><span class="preview-pill-progress-fill"></span></span>
+        <span class="preview-pill-time-falta"></span>
+      </div>
     </div>
     <div class="preview-pill-embed" hidden></div>
+    <button type="button" class="preview-pill-toggle" aria-label="Pausar preview" title="Pausar" hidden></button>
     <button class="preview-pill-close" title="Parar preview">✕</button>
   `;
   pill.querySelector('.preview-pill-close').onclick = () => stopPreview();
+  pill.querySelector('.preview-pill-toggle').onclick = () => alternarPausa();
   // El pill ya no se posiciona solo: es un item más de la capa de abajo, que
   // es la que garantiza que no se pise con el progreso ni con los toasts.
   mountBottom('player', pill);
@@ -87,9 +124,77 @@ function ensurePill() {
 function setAudioPlaying(on) {
   const val = !!on;
   if (pill) pill.classList.toggle('is-playing', val);
+  pintarBotonPausa();
   if (val === audioPlaying) return;
   audioPlaying = val;
   emit();
+}
+
+// ── Los controles nuevos (v=357) ──
+// «Pausar» mientras no lo pausaste vos (aunque esté buffereando: pausar sirve
+// igual); «Seguir» solo con la pausa pedida.
+function pintarBotonPausa() {
+  const b = pill?.querySelector('.preview-pill-toggle');
+  if (!b) return;
+  pill.classList.toggle('is-paused', pausadoPorUsuario);
+  b.innerHTML = pausadoPorUsuario ? iconoPlay(14) : iconoPausa(14);
+  b.setAttribute('aria-label', pausadoPorUsuario ? 'Seguir preview' : 'Pausar preview');
+  b.title = pausadoPorUsuario ? 'Seguir' : 'Pausar';
+}
+
+// Botón y barra: a la vista solo con audio nuestro (no buscando, no embed, no error).
+function mostrarControles(on) {
+  if (!pill) return;
+  pill.querySelector('.preview-pill-toggle').hidden = !on;
+  pill.querySelector('.preview-pill-progress').hidden = !on;
+}
+
+const mmss = (s) => {
+  const t = Math.max(0, Math.round(s || 0));
+  return `${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}`;
+};
+
+function actualizarBarra() {
+  if (!pill) return;
+  const barra = pill.querySelector('.preview-pill-progress');
+  const dur = Number.isFinite(audio.duration) && audio.duration > 0 ? audio.duration : 30;
+  const va = Math.min(dur, Math.max(0, audio.currentTime || 0));
+  // Los textos van en segundos enteros; el relleno, en el mismo segundo que el
+  // texto, para que la barra y el número nunca digan dos cosas distintas.
+  const vaS = Math.round(va), durS = Math.round(dur);
+  const faltaS = Math.max(0, durS - vaS);
+  pill.classList.toggle('preview-pill-anim', animationsEnabled());
+  barra.setAttribute('aria-valuemax', String(durS));
+  barra.setAttribute('aria-valuenow', String(vaS));
+  barra.setAttribute('aria-valuetext', `${mmss(vaS)} de ${mmss(durS)}, faltan ${mmss(faltaS)}`);
+  pill.querySelector('.preview-pill-progress-fill').style.width = `${durS ? Math.round((vaS / durS) * 1000) / 10 : 0}%`;
+  pill.querySelector('.preview-pill-time-va').textContent = mmss(vaS);
+  pill.querySelector('.preview-pill-time-falta').textContent = `−${mmss(faltaS)}`;
+}
+
+function reanudar() {
+  pausadoPorUsuario = false;
+  pintarBotonPausa();
+  audio.play().catch(err => {
+    if (err && err.name === 'NotAllowedError') {
+      showToast('El navegador bloqueó el audio: haz un click en cualquier lado y prueba de nuevo', 'info');
+    }
+    if (pausadoPorUsuario && err && err.name === 'AbortError') return;   // la volviste a pausar
+    stopPreview();
+  });
+}
+
+function alternarPausa() {
+  if (!currentKey || currentProvider === 'spotify-embed' || !audio.getAttribute('src')) return;
+  if (pausadoPorUsuario) { reanudar(); return; }
+  pausadoPorUsuario = true;
+  // Pausar es un gesto explícito, como el clic en el ▶: fija el preview, así
+  // que sacar el mouse de la tarjeta ya no lo corta.
+  lockedKey = currentKey;
+  hoverStartedKey = null;
+  clearStallTimer();
+  audio.pause();
+  pintarBotonPausa();
 }
 
 /**
@@ -109,6 +214,9 @@ function mostrarFalloEnPill(motivo) {
   }
   const eq = p.querySelector('.preview-eq');
   if (eq) eq.style.display = 'none';
+  pausadoPorUsuario = false;
+  pintarBotonPausa();
+  mostrarControles(false);
   p.classList.add('show');
 }
 
@@ -120,12 +228,20 @@ function showPillAudio(label, provider, loading) {
   p.querySelector('.preview-pill-main').style.display = '';
   p.querySelector('.preview-pill-embed').hidden = true;
   p.querySelector('.preview-pill-embed').innerHTML = '';
-  p.querySelector('.preview-pill-label').innerHTML = escapeHtml(label || '');
+  const labelEl = p.querySelector('.preview-pill-label');
+  labelEl.innerHTML = escapeHtml(label || '');
+  // (v=357) La etiqueta se corta con «…» a 420 px (`main.css`): el nombre entero
+  // va en el `title`, que es la única forma de leerlo desde el pill.
+  labelEl.title = label || '';
   const provEl = p.querySelector('.preview-pill-provider');
   provEl.textContent = loading ? 'buscando…' : (PROVIDER_LABEL[provider] || '');
   p.classList.toggle('loading', !!loading);
   // Quietas hasta que el <audio> avise que está sonando de verdad.
   p.classList.remove('is-playing');
+  pausadoPorUsuario = false;
+  pintarBotonPausa();
+  mostrarControles(!loading);
+  if (!loading) actualizarBarra();
   p.classList.add('show');
 }
 
@@ -141,6 +257,8 @@ function showPillEmbed(url, label) {
   p.classList.remove('loading');
   p.querySelector('.preview-eq').style.display = 'none';
   p.querySelector('.preview-pill-main').style.display = 'none';
+  pausadoPorUsuario = false;
+  mostrarControles(false);
   const box = p.querySelector('.preview-pill-embed');
   box.hidden = false;
   const trackUrl = url.replace('/embed/track/', '/track/');
@@ -164,6 +282,7 @@ function hidePill() {
 
 audio.addEventListener('ended', () => {
   clearStallTimer();
+  pausadoPorUsuario = false;
   currentKey = null;
   currentProvider = null;
   audioPlaying = false;
@@ -181,6 +300,11 @@ audio.addEventListener('play', () => setAudioPlaying(!audio.paused));
 audio.addEventListener('pause', () => setAudioPlaying(false));
 audio.addEventListener('waiting', () => setAudioPlaying(false));
 audio.addEventListener('emptied', () => setAudioPlaying(false));
+// La barra (v=357): unas 4 veces por segundo mientras suena, y al saber la duración.
+audio.addEventListener('timeupdate', () => actualizarBarra());
+audio.addEventListener('pause', () => actualizarBarra());   // en pausa, la barra dice dónde quedó
+audio.addEventListener('durationchange', () => actualizarBarra());
+audio.addEventListener('loadedmetadata', () => actualizarBarra());
 
 // ── Una URL muerta tiene que decirlo (v=173) ─────────────────────────────────
 //
@@ -243,6 +367,7 @@ function fail(motivo) {
   console.warn(`[preview] no se pudo reproducir (${currentProvider || 'sin proveedor'}): ${motivo}`);
   mostrarFalloEnPill(motivo);
   clearStallTimer();
+  pausadoPorUsuario = false;
   audio.pause();
   audio.removeAttribute('src');
   currentKey = null;
@@ -260,10 +385,12 @@ audio.addEventListener('stalled', () => {
   setAudioPlaying(false);
   const key = currentKey;
   clearStallTimer();
+  // En pausa (v=357) el navegador puede dejar de bajar y avisar `stalled`: no es un trabado.
+  if (pausadoPorUsuario) return;
   stallTimer = setTimeout(() => {
     // Puede que para cuando dispare ya haya arrancado (rearmado por otro
     // 'stalled' intermedio) o que el usuario ya haya pedido otra cosa.
-    if (currentKey === key && !audioPlaying) fail('no respondió a tiempo — puede que el enlace ya no esté disponible');
+    if (currentKey === key && !audioPlaying && !pausadoPorUsuario) fail('no respondió a tiempo — puede que el enlace ya no esté disponible');
   }, STALL_TIMEOUT_MS);
 });
 
@@ -289,6 +416,9 @@ function playAudio(key, { url, label, provider }) {
     if (err && err.name === 'NotAllowedError') {
       showToast('El navegador bloqueó el audio: haz un click en cualquier lado y prueba de nuevo', 'info');
     }
+    // (v=357) Pausar mientras carga rechaza este `play()` con AbortError: es
+    // la pausa que pediste, no un fallo, y no cierra el pill.
+    if (pausadoPorUsuario && err && err.name === 'AbortError' && currentKey === key) return;
     stopPreview();
   });
 }
@@ -315,6 +445,7 @@ function playPreview(key, result) {
 
 function stopPreview() {
   clearStallTimer();
+  pausadoPorUsuario = false;
   audio.pause();
   audio.removeAttribute('src');
   currentKey = null;
@@ -353,6 +484,10 @@ function isPlayingAudio() {
 // es exactamente lo que el botón NO debería hacer.
 async function togglePreview(key, getter) {
   if (currentKey === key) {
+    // (v=357) Con su preview en pausa, el ▶ de la tarjeta (que se pinta ▶
+    // porque `playing` es false) SIGUE: parar ahí sería hacer lo contrario de
+    // lo que dice el botón. Devuelve true, que ya significa «arrancó».
+    if (pausadoPorUsuario) { lockedKey = key; hoverStartedKey = null; reanudar(); return true; }
     if (lockedKey === key) { stopPreview(); return false; }
     lockedKey = key;
     hoverStartedKey = null;

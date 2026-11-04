@@ -1,18 +1,18 @@
-import { getValidToken, refreshAccessToken } from './auth.js?v=356';
-import { cacheGet, cacheGetRaw, cacheGetTimestamp, cacheSet, cacheClear, prefKey, migratePrefKey } from './storage.js?v=356';
-import { idbDel, idbDelByPrefix, idbGetCached, idbGetCachedRaw, idbGetTimestamp, idbSetCached, idbGet, idbAllKeys, idbEntriesByPrefix, idbSetVarios } from './idb.js?v=356';
-import { OWNER_KEY_LIST } from './history-keys.js?v=356';
-import { OCULTOS_ITEMS_PREFIX } from './util/ocultos-items-clave.js?v=356';
-import { showToast } from './ui/toast.js?v=356';
-import { artistIsSame, limpiaParaQuery } from './util/track-match.js?v=356';
-import { contadorCuota, cuotaDeEndpoint } from './util/cuota.js?v=356';
-import { exportarEtiquetas, importarEtiquetas } from './api/lastfm.js?v=356';
-import { leerNavegador, armarCopia, serializar, contieneSecreto, CENSO } from './util/copia-completa.js?v=356';
-import { leerCopia, planDeImport, segundaRed, importEscribio, TEXTOS as TEXTOS_IMPORT } from './util/copia-importar.js?v=356';
-import { MARCA_DESDE_COPIA, leerMarca, marcaTrasImport } from './util/ocultos-desde-copia.js?v=356';
-import { avisarCopiaImportada } from './util/canal-copia.js?v=356';
-import { BORRADOS_LOG_MAX } from './util/topes-registros.js?v=356';
-import { LIKES_DE_OTRO_KEY, hayLikesDeOtro } from './util/likes-de-otro.js?v=356';
+import { getValidToken, refreshAccessToken } from './auth.js?v=357';
+import { cacheGet, cacheGetRaw, cacheGetTimestamp, cacheSet, cacheClear, prefKey, migratePrefKey } from './storage.js?v=357';
+import { idbDel, idbDelByPrefix, idbGetCached, idbGetCachedRaw, idbGetTimestamp, idbSetCached, idbGet, idbAllKeys, idbEntriesByPrefix, idbSetVarios } from './idb.js?v=357';
+import { OWNER_KEY_LIST } from './history-keys.js?v=357';
+import { OCULTOS_ITEMS_PREFIX } from './util/ocultos-items-clave.js?v=357';
+import { showToast } from './ui/toast.js?v=357';
+import { artistIsSame, limpiaParaQuery } from './util/track-match.js?v=357';
+import { contadorCuota, cuotaDeEndpoint } from './util/cuota.js?v=357';
+import { exportarEtiquetas, importarEtiquetas } from './api/lastfm.js?v=357';
+import { leerNavegador, armarCopia, serializar, contieneSecreto, CENSO } from './util/copia-completa.js?v=357';
+import { leerCopia, planDeImport, segundaRed, importEscribio, TEXTOS as TEXTOS_IMPORT } from './util/copia-importar.js?v=357';
+import { MARCA_DESDE_COPIA, leerMarca, marcaTrasImport } from './util/ocultos-desde-copia.js?v=357';
+import { avisarCopiaImportada } from './util/canal-copia.js?v=357';
+import { BORRADOS_LOG_MAX } from './util/topes-registros.js?v=357';
+import { LIKES_DE_OTRO_KEY, hayLikesDeOtro } from './util/likes-de-otro.js?v=357';
 
 const BASE = 'https://api.spotify.com/v1';
 const MIN_RETRY_WAIT = 5000;
@@ -1005,7 +1005,7 @@ async function importarCopiaCompleta(texto, { ahora = new Date() } = {}) {
     plan.rechazo = { motivo: 'roto', texto: `El archivo no es un JSON válido (${e?.message || e}).` };
     return { plan };
   }
-  const { motivoSinImportCompleto } = await import('./features/history-data.js?v=356');
+  const { motivoSinImportCompleto } = await import('./features/history-data.js?v=357');
   const motivoOwner = await motivoSinImportCompleto();
   const uid = motivoOwner === 'identidad' ? null : _cachedUserId;
   const leido = await leerParaImportar();

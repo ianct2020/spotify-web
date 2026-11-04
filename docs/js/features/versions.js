@@ -1,15 +1,15 @@
-import { getAllLikedTracks, removeLikedTracks, checkLibraryContains } from '../api.js?v=356';
-import { borrarLikesVerificado } from '../util/borrado-verificado.js?v=356';
-import { normalizeKey, esFantasma, guardaUltimoEjemplar, indexarBiblioteca } from '../util/versions-guard.js?v=356';
-import { showProgress, hideProgress, progressController, isCancelled, typeConfirmModal, infoModal, renderTrackRow, escapeHtml, pageHeader } from '../ui/components.js?v=356';
-import { showToast } from '../ui/toast.js?v=356';
-import { openModal, closeTop } from '../ui/modal-stack.js?v=356';
-import { coverUrl } from '../util/cover-size.js?v=356';
-import { openPlaylistPicker } from '../ui/playlist-picker.js?v=356';
-import { getOwnPlaylists, addUrisToPlaylists, toastAddResult } from '../util/playlist-add.js?v=356';
-import { prefKey, migratePrefKey } from '../storage.js?v=356';
-import { propuestaDeGrupo, resumenDeFaltantes } from '../util/deluxe-propuesta.js?v=356';
-import { SUPERVIVIENTES_PERDIDAS_MAX, ENSAYOS_VERSIONS_MAX } from '../util/topes-registros.js?v=356';
+import { getAllLikedTracks, removeLikedTracks, checkLibraryContains } from '../api.js?v=357';
+import { borrarLikesVerificado } from '../util/borrado-verificado.js?v=357';
+import { normalizeKey, esFantasma, guardaUltimoEjemplar, indexarBiblioteca } from '../util/versions-guard.js?v=357';
+import { showProgress, hideProgress, progressController, isCancelled, typeConfirmModal, infoModal, renderTrackRow, escapeHtml, pageHeader } from '../ui/components.js?v=357';
+import { showToast } from '../ui/toast.js?v=357';
+import { openModal, closeTop } from '../ui/modal-stack.js?v=357';
+import { coverUrl } from '../util/cover-size.js?v=357';
+import { openPlaylistPicker } from '../ui/playlist-picker.js?v=357';
+import { getOwnPlaylists, addUrisToPlaylists, toastAddResult } from '../util/playlist-add.js?v=357';
+import { prefKey, migratePrefKey } from '../storage.js?v=357';
+import { propuestaDeGrupo, resumenDeFaltantes } from '../util/deluxe-propuesta.js?v=357';
+import { SUPERVIVIENTES_PERDIDAS_MAX, ENSAYOS_VERSIONS_MAX } from '../util/topes-registros.js?v=357';
 
 // ── «Borrar sobrantes» REHABILITADO (2026-08-28) ─────────────────────────────
 //

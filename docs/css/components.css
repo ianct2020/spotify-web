@@ -2134,3 +2134,59 @@ body.con-aviso-copia { padding-top: 46px; }
 @media (max-width: 600px) {
   .wthree-album-list > .wthree-album-row { grid-template-columns: 40px minmax(0, 1fr) auto auto; }
 }
+
+/* v=357 (tanda 115): el pill del reproductor de previews (`ui/preview-player.js`). Su CSS de siempre vive en
+   `main.css` (`.preview-pill…`, que no se toca); esto va con DOS clases (`.preview-pill .x`) porque esta hoja
+   carga ANTES que `main.css`, igual que la regla de `#wthree` de arriba.
+   - El botón de pausa: a la izquierda del ✕, el mismo tamaño de toque, en `--color-text` (el ✕ queda en el
+     atenuado: pausar es la acción de uso, cerrar la secundaria). Con `:focus-visible`, porque se usa con teclado.
+   - La barra de los 30 s: «0:12 ━━━━──── −0:18», debajo del «vía …». El relleno salta con cada `timeupdate`;
+     la transición que lo suaviza solo existe con `.preview-pill-anim`, que pone el JS según `animationsEnabled()`
+     (no `prefers-reduced-motion`: el toggle de la paleta puede forzar por encima del sistema). Los tiempos en
+     `--color-text-secondary` (AA sobre `--color-elevated` en los cuatro presets; el atenuado pasa raspando a 10 px).
+   - «Abrir en Spotify ↗» del embed: con el acento sobre `--color-elevated` daba 2,89:1 (medido en la tanda 115);
+     pasa a `--color-text-secondary` subrayado, que sigue leyéndose como enlace. */
+.preview-pill .preview-pill-toggle {
+  background: none;
+  border: none;
+  color: var(--color-text);
+  cursor: pointer;
+  line-height: 0;
+  padding: 5px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.preview-pill .preview-pill-toggle:hover { background: var(--color-surface-hover); }
+.preview-pill .preview-pill-toggle:focus-visible,
+.preview-pill .preview-pill-close:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 1px; }
+.preview-pill .preview-pill-toggle[hidden] { display: none; }
+.preview-pill .preview-pill-progress {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+  font-size: 10px;
+  line-height: 1;
+  color: var(--color-text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+.preview-pill .preview-pill-progress[hidden] { display: none; }
+.preview-pill .preview-pill-progress-bar {
+  flex: 1 1 auto;
+  min-width: 90px;
+  height: 3px;
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--color-text) 18%, transparent);
+  overflow: hidden;
+}
+.preview-pill .preview-pill-progress-fill {
+  display: block;
+  height: 100%;
+  width: 0;
+  background: var(--color-accent);
+}
+.preview-pill.preview-pill-anim .preview-pill-progress-fill { transition: width 0.25s linear; }
+.preview-pill .preview-pill-embed-link {
+  color: var(--color-text-secondary);
+  text-decoration: underline;
+}
