@@ -13,15 +13,19 @@
 //   B. la ficha de un artista con 5 temas: el ▶ de la fila 2 suena (el pill dice su nombre), la fila 2 en ⏸ y `#ac-preview`
 //      en «▶ Preview»; la ficha de canción no se abrió; 0 peticiones a Spotify por el botón; el ▶ del artista después: ninguna
 //      fila en ⏸. Un tema que no está en ningún proveedor: su fila deshabilitada, con «Sin preview», y ningún toast.
-//   C. un artista con 2 temas, dos botones; uno con 0, ninguno y la vista sin errores.
+//   C. un artista con 2 temas, dos botones; uno con 1, un botón, que suena, dice «Parar preview de…» y vuelve a ▶ al pararlo;
+//      uno con 0, ninguno y la vista sin errores.
 //   D. a 1366×591 y 390×844, ningún desborde en `#ac-top-tracks` ni en la barra de años.
+//   E. (v=361, tanda 120) el chip elegido de la barra, un año y «Siempre», en los cuatro presets: el texto ≥ 4,5:1 contra su fondo
+//      compuesto capa por capa, con las transiciones terminadas, en reposo y con la regla de `:hover`; y el anillo del acento,
+//      que un chip sin elegir no tiene. Junta todos los fallos antes de tirar: contra v=360, el texto cae en Ámbar y Aguamarina.
 //
 // 🔴 Si T119b se cae por tiempo, B y C (y la parte de D de la ficha) se van con ella. `?solo=A,D` corre esas.
 // ⚠️ Todas las esperas van con `esperarReal` (ver PRESUPUESTO en `scripts/correr-banco.mjs`).
 
-import { esperarReal } from '/banco/simulado.mjs';
+import { esperarReal, anclar } from '/banco/simulado.mjs';
 import { fallar, listo } from '/banco/esperar.mjs';
-import { TEMAS_CINCO, SIN_PREVIEW } from '/banco/siempre-y-play-datos.mjs';
+import { TEMAS_CINCO, SIN_PREVIEW, ARTISTA_UNO, TEMA_UNO } from '/banco/siempre-y-play-datos.mjs';
 
 const afirmar = (c, msg) => { if (!c) throw new Error('BANCO: ' + msg); };
 const pasos = [];
@@ -109,7 +113,8 @@ try {
     afirmar(label.includes(TEMAS_CINCO[1]), `B: el pill dice el nombre del tema («${label}»)`);
     afirmar(botones()[1].dataset.sonando === '1' && enPausa(botones()[1]), 'B: la fila 2 en ⏸');
     afirmar(botones().filter((b) => b.dataset.sonando === '1').length === 1, 'B: las demás en ▶');
-    afirmar(botones()[1].getAttribute('aria-label') === `Pausar preview de ${TEMAS_CINCO[1]}`, 'B: aria-label «Pausar preview de…»');
+    afirmar(botones()[1].getAttribute('aria-label') === `Parar preview de ${TEMAS_CINCO[1]}`, `B: aria-label «Parar preview de…» (dice «${botones()[1].getAttribute('aria-label')}»)`);
+    afirmar(botones()[1].title === 'Parar el preview', `B: title «Parar el preview» (dice «${botones()[1].title}»)`);
     const pv = win(f).document.getElementById('ac-preview').textContent;
     afirmar(pv === '▶ Preview', `B: #ac-preview en «▶ Preview» (dice «${pv}»)`);
     afirmar($$(f, '.modal').length === modales0 && $$(f, '.tc-modal, .track-card-modal').length === fichasAntes, 'B: la ficha de canción no se abrió');
@@ -141,6 +146,18 @@ try {
     await arrancado(f, 'C');
     await abrirFicha(f, 'Dúo Dos Inventado', 2);
     afirmar($$(f, '#ac-top-tracks .ac-track-play').length === 2, 'C: con 2 temas, dos botones');
+    await abrirFicha(f, ARTISTA_UNO, 1);
+    const solos = $$(f, '#ac-top-tracks .ac-track-play');
+    afirmar(solos.length === 1, `C: con 1 tema, un botón (${solos.length})`);
+    afirmar(solos[0].getAttribute('aria-label') === `Escuchar preview de ${TEMA_UNO}`, 'C: con 1 tema, nace en «Escuchar preview de…»');
+    solos[0].click();
+    await esperarReal(() => $(f, '.preview-pill.is-playing'), { que: 'C: el único tema suena', vueltas: VUELTAS });
+    afirmar(solos[0].dataset.sonando === '1' && enPausa(solos[0]), 'C: con 1 tema, la fila en ⏸');
+    afirmar(solos[0].getAttribute('aria-label') === `Parar preview de ${TEMA_UNO}`, `C: con 1 tema, aria-label «Parar preview de…» (dice «${solos[0].getAttribute('aria-label')}»)`);
+    solos[0].click();
+    await esperarReal(() => solos[0].dataset.sonando === '0', { que: 'C: el único tema se para', vueltas: VUELTAS });
+    afirmar(solos[0].getAttribute('aria-label') === `Escuchar preview de ${TEMA_UNO}`, 'C: al pararlo, vuelve a «Escuchar preview de…»');
+    afirmar(!$(f, '.preview-pill.is-playing'), 'C: al pararlo, el pill deja de sonar');
     await abrirFicha(f, 'Artista Sin Temas Inventado', 0);
     afirmar($$(f, '.ac-track-play').length === 0, 'C: con 0, ninguno');
     progreso('C');
@@ -178,12 +195,79 @@ try {
     progreso('D');
   }
 
+  if (corre('E')) {
+    const f = abrirMarco('e', 1366, 591); marcos.push(['e', f]);
+    await arrancado(f, 'E');
+    await abrirWrapped(f, 'E');
+    // La cuenta de WCAG 2.x y la composición de capas de la puerta 10 de `puertas.html`, las mismas.
+    const rgbaDe = (css) => { const m = String(css).match(/rgba?\(([^)]+)\)/); if (!m) return null; const p = m[1].split(/[\s,/]+/).filter(Boolean).map(Number); return [p[0], p[1], p[2], p[3] ?? 1]; };
+    const lumDe = (c) => { const [r, g, b] = c.slice(0, 3).map((v) => { const s = v / 255; return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4; }); return 0.2126 * r + 0.7152 * g + 0.0722 * b; };
+    const contrasteDe = (a, b) => { const x = lumDe(a), y = lumDe(b); return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05); };
+    const sobre = (arriba, abajo) => { const a = arriba[3]; return [0, 1, 2].map((i) => arriba[i] * a + abajo[i] * (1 - a)).concat(1); };
+    const cs = (el) => win(f).getComputedStyle(el);
+    function fondoDe(el) {
+      const capas = [];
+      for (let n = el; n && n.nodeType === 1; n = n.parentElement) { const c = rgbaDe(cs(n).backgroundColor); if (c && c[3] > 0) { capas.push(c); if (c[3] >= 1) break; } }
+      let base = capas.length && capas.at(-1)[3] >= 1 ? capas.pop() : [255, 255, 255, 1];
+      while (capas.length) base = sobre(capas.pop(), base);
+      return base;
+    }
+    const ratioDe = (el) => { const fondo = fondoDe(el), c = rgbaDe(cs(el).color); return contrasteDe(sobre([c[0], c[1], c[2], c[3] * Number(cs(el).opacity || 1)], fondo), fondo); };
+    // 🔴 Con las transiciones terminadas: el chip anima `color` y `background`, y a mitad de camino da otro número (la trampa del 09/10).
+    const terminar = (el) => { cs(el).color; el.getAnimations().forEach((a) => a.finish()); };
+    const acentoDe = (padre) => { const d = f.contentDocument.createElement('div'); d.style.color = 'var(--color-accent)'; d.style.transition = 'none'; padre.appendChild(d); const v = cs(d).color; d.remove(); return v; };
+    const reglas = [...f.contentDocument.styleSheets].flatMap((h) => { try { return [...h.cssRules]; } catch { return []; } });
+    const reglaDe = (sel) => reglas.find((r) => r.selectorText === sel);
+    // Un `.click()` no pone `:hover`: se pinta un clon con las declaraciones de la regla de `:hover`, resueltas con el tema de ahora.
+    // Sin esa regla, el hover de una elegida no hace nada, siempre que `.active` vaya DESPUÉS del `:hover` general (misma especificidad).
+    const hoverGeneral = reglas.indexOf(reglaDe('.wrapped-year-tab:hover')), elegida = reglas.indexOf(reglaDe('.wrapped-year-tab.active'));
+    afirmar(hoverGeneral >= 0 && elegida > hoverGeneral, 'E: .wrapped-year-tab.active va después de .wrapped-year-tab:hover');
+    function ratioHover(el) {
+      const r = reglaDe('.wrapped-year-tab.active:hover');
+      if (!r) return ratioDe(el);
+      const clon = el.cloneNode(true);
+      clon.style.cssText = r.style.cssText + ';transition:none';
+      el.parentElement.appendChild(clon);
+      const v = ratioDe(clon);
+      clon.remove();
+      return v;
+    }
+    const fallos = [], medidos = [];
+    const chips = [['año', () => $(f, '.wrapped-year-tab[data-year="2024"]')], ['Siempre', () => $(f, '.wrapped-year-tab[data-siempre]')]];
+    for (const id of ['violeta', 'ambar', 'aguamarina', 'papel']) {
+      await anclar(win(f).__ponerTema(id));
+      let peor = Infinity;
+      for (const [nombre, chip] of chips) {
+        chip().click();
+        await esperarReal(() => chip()?.classList.contains('active'), { que: `E: ${nombre} elegido en ${id}`, vueltas: VUELTAS });
+        const el = chip();
+        terminar(el);
+        const reposo = ratioDe(el), hover = ratioHover(el);
+        peor = Math.min(peor, reposo, hover);
+        if (reposo < 4.5) fallos.push(`${id} ${nombre} en reposo ${reposo.toFixed(2)}:1`);
+        if (hover < 4.5) fallos.push(`${id} ${nombre} con :hover ${hover.toFixed(2)}:1`);
+        // Se distingue de una sin elegir sin depender del color del texto: el anillo del acento.
+        const acento = acentoDe(el.parentElement), otro = $$(f, '.wrapped-year-tab:not(.active)')[0];
+        terminar(otro);
+        const anillo = cs(el).boxShadow.includes(acento) && /\b0px 0px 0px 2px\b/.test(cs(el).boxShadow) && cs(el).borderTopColor === acento;
+        if (!anillo) fallos.push(`${id} ${nombre} sin el anillo de 2 px del acento (${cs(el).boxShadow})`);
+        if (cs(otro).boxShadow !== 'none') fallos.push(`${id}: un chip sin elegir lleva anillo (${cs(otro).boxShadow})`);
+      }
+      medidos.push(`${id} ${peor.toFixed(2)}`);
+    }
+    await anclar(win(f).__ponerTema('violeta'));
+    afirmar(fallos.length === 0, `E: ${fallos.join(' · ')}`);
+    datos.e = medidos.join(', ');
+    progreso('E');
+  }
+
   const errores = marcos.flatMap(([n, f]) => win(f).__errores.map((e) => `${n}: ${e}`));
   afirmar(errores.length === 0, `0 errores de consola: ${errores.join(' | ')}`);
   const ajenos = marcos.flatMap(([, f]) => win(f).__sim.reg.desconocidas);
   const resumen = `ok${datos.a ? ` · A elegir: ${datos.a.nuevas} peticiones, apertura ${datos.a.conApertura ? 'montada antes' : 'no montada'}` : ''}` +
     (datos.b ? ` · B: ${datos.b.itunes} a iTunes, ${datos.b.spotify} a Spotify` : '') +
     (datos.d ? ` · D ${datos.d}` : '') +
+    (datos.e ? ` · E chip elegido, el peor por preset: ${datos.e}` : '') +
     ` · rutas sin simular=${ajenos.length} · errores=${errores.length} · reloj virtual=${Math.round(performance.now())} ms`;
   document.documentElement.setAttribute('data-resumen', resumen);
   document.getElementById('progreso').textContent = resumen;

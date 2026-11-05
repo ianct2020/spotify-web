@@ -1684,21 +1684,21 @@ h3 { font-size: 18px; font-weight: 600; }
   color: var(--color-text);
 }
 .wrapped-year-tab:active { transform: translateY(1px); }
+/* v=361: el foco va con `outline`, como `.cal-anio`. Con `box-shadow` lo pisaría el anillo de
+   `.active` (misma especificidad, va después) y un chip elegido con foco se vería igual que sin foco. */
 .wrapped-year-tab:focus-visible {
-  outline: none;
+  outline: 2px solid var(--color-accent);
+  outline-offset: 3px;
   border-color: var(--color-accent);
-  box-shadow: 0 0 0 3px var(--color-accent-soft);
 }
+/* 🔴 El elegido se marca con un ANILLO, no con blanco sobre el acento (v=361): es el patrón de
+   `.covers-chip.is-on` (v=290). El blanco daba violeta 5,70 · **ámbar 2,84** · **aguamarina 1,89** ·
+   papel 7,10. El hover de un elegido no hace nada: esta regla va después de `:hover` y le gana. */
 .wrapped-year-tab.active {
-  background: var(--color-accent);
+  background: var(--color-surface);
+  color: var(--color-text);
   border-color: var(--color-accent);
-  color: #fff;
-  box-shadow: 0 0 0 3px var(--color-accent-soft);
-}
-.wrapped-year-tab.active:hover {
-  background: var(--color-accent-hover);
-  border-color: var(--color-accent-hover);
-  color: #fff;
+  box-shadow: 0 0 0 2px var(--color-accent);
 }
 /* ⓘ inline dentro de un .wrapped-tile-hint (v=126, "Última registrada"). */
 .wrapped-hint-info {

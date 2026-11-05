@@ -32,6 +32,9 @@ export function statsInventadas() {
 
 export const TEMAS_CINCO = ['Primer Tema Inventado', 'Segundo Tema Inventado', 'Tercer Tema Inventado', 'Cuarto Tema Inventado', 'Quinto Tema Con Un Nombre Larguísimo Que No Entra En La Fila De Ninguna Manera'];
 export const TEMAS_DOS = ['Sol Inventado', 'Luna Inventada'];
+// (v=361, tanda 120) El caso de una sola fila.
+export const ARTISTA_UNO = 'Solista De Un Tema Inventada';
+export const TEMA_UNO = 'Tema Único Inventado';
 // Este tema no lo tiene el iTunes simulado (y Deezer no se contesta): sale «Sin preview».
 export const SIN_PREVIEW = 'Cuarto Tema Inventado';
 
@@ -41,6 +44,7 @@ export function indiceInventado() {
     artists: {
       'Banda Cinco Inventada': TEMAS_CINCO.map((n, i) => [n, 50 - i * 5, 300 - i * 30, id('a', i)]),
       'Dúo Dos Inventado': TEMAS_DOS.map((n, i) => [n, 30 - i * 5, 150 - i * 30, id('b', i)]),
+      [ARTISTA_UNO]: [[TEMA_UNO, 12, 60, id('e', 0)]],
     },
     totals: {},
   };
@@ -49,8 +53,8 @@ export function indiceInventado() {
 /** Lo que contesta el iTunes simulado: el tema pedido, del artista pedido, salvo `SIN_PREVIEW`. */
 export function itunesInventado(url) {
   const termino = url.searchParams.get('term') || '';
-  const artista = ['Banda Cinco Inventada', 'Dúo Dos Inventado'].find((a) => termino.startsWith(a));
-  const tema = [...TEMAS_CINCO, ...TEMAS_DOS].find((t) => termino.endsWith(t));
+  const artista = ['Banda Cinco Inventada', 'Dúo Dos Inventado', ARTISTA_UNO].find((a) => termino.startsWith(a));
+  const tema = [...TEMAS_CINCO, ...TEMAS_DOS, TEMA_UNO].find((t) => termino.endsWith(t));
   if (!artista || !tema || tema === SIN_PREVIEW) return { results: [] };
   return { results: [{ trackName: tema, artistName: artista, previewUrl: `/banco/preview-inventado-${encodeURIComponent(tema)}.m4a` }] };
 }

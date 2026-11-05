@@ -1331,7 +1331,11 @@ historial, del fallback o de stats.fm) lleva un `.ac-track-play`, armado por `bo
   `togglePreview` da `null` y la fila queda deshabilitada, con «Sin preview». Va con `artists: [artista]`: el índice del historial solo
   sabe el artista de la ficha, no los demás del tema (la regla de v=142 se cumple con lo que hay).
 - ⚠️ **El ⏸ de la fila PARA y cierra el pill, no pausa** (como el de `#skips` o `#zeroplays`): `togglePreview` no pausa, y
-  `preview-player.js` no se tocó. El `aria-label` dice «Pausar preview de…» porque así se pidió. La pausa de verdad es la del pill.
+  `preview-player.js` no se tocó. La pausa de verdad es la del pill. **Desde v=361 (tanda 120) el texto lo dice**: sonando, `aria-label`
+  «Parar preview de <tema>» y `title` «Parar el preview», lo mismo que `#recs` y `#similar`; en reposo, «Escuchar preview de <tema>» y el
+  `title` de `#recs` («Preview de 30 s — no suma reproducciones»). **No se agregó una pausa**: pide una función que `preview-player.js` no
+  exporta. El ícono sigue siendo `iconoPausa`, el de todas las vistas que paran; cambiarlo en una sola las haría distintas entre sí. Medido
+  también el caso de **una sola fila** (un botón, que suena, dice «Parar» y vuelve a ▶ al pararlo), en el test y en la puerta C.
 - El CSS, en `components.css` con dos clases. `margin: -4px` para que la fila no crezca con un botón de 32 px.
 
 Guardas: `tests/ficha-artista-play.test.mjs` y las puertas B, C y D del banco `tests/banco/siempre-y-play.html`. El banco reemplaza
@@ -3970,19 +3974,38 @@ El primer chip de la barra de años, «Siempre» (`.wrapped-year-tab` con `data-
 byte a byte). La elección vive en `selectedYear` (`'siempre'`), en memoria de esta carga, como la de un año. Sin postal: la postal es
 de un año.
 
-- 🔴 **Con un año elegido, la vista es la de v=359 byte a byte.** El chip vive dentro de `#wrapped-content`, así que el HTML entero no
-  puede dar igual: lo que se compara es ese HTML sin el chip, y da el `sha256` de `f6f4df1` (el año por defecto y el más viejo).
+- 🔴 **Con un año elegido, la vista es la de v=359 byte a byte, salvo el botón del chip.** El chip vive dentro de `#wrapped-content`, así
+  que el HTML entero no puede dar igual: lo que se compara es ese HTML sin el chip, y da el `sha256` de `f6f4df1` (el año por defecto y
+  el más viejo). La 119 lo probó con datos inventados; **la 120 lo probó con el dato real** (fuera de este repo, que es público: el año por
+  defecto y 2018 difieren de v=359 en una sola inserción, el botón, y nada más).
 - ⚠️ **La apertura se destruye al elegir «Siempre»**: no alcanza con no montarla. La del año anterior tiene oyentes de `document` y
   `window` que recién se irían con `routeteardown`. `montarApertura(host, null)` corre `destruirVivo()` y no pinta nada, sin tocar
   `wrapped-apertura.js`.
 - El deslizamiento: «Siempre» cuenta como más nuevo que cualquier año, sin tocar `deslizar()`.
 - 🔴 **La apertura «de siempre» NO existe todavía.** Ian pidió el chip Y el recorrido por pasos (05/11/2026); el recorrido es una vista
-  nueva y va sola en la tanda 120.
-- ⚠️ El chip elegido hereda el blanco sobre el acento de `.wrapped-year-tab.active`, igual que los años: **unos 2,9 en Ámbar y 1,9 en
-  Aguamarina** (medido, con la transición de la pastilla todavía moviendo unas centésimas; 5,70 en Violeta y 7,1 en Papel). No se tocó: vive en `main.css` y es de toda la barra (`PENDIENTES.md`, tanda 119).
+  nueva y va sola en la tanda 121.
 
 Guardas: `tests/wrapped-siempre.test.mjs` (`wrapped.js` REAL con `dobles/loader-t110.mjs` y `dobles/dom-t119-doble.mjs`, un DOM de
 mentira que parsea lo que se pinta; rojo contra `f6f4df1`) y las puertas A y D del banco `tests/banco/siempre-y-play.html`.
+
+**v=361 (tanda 120): el chip elegido con anillo.** Hasta v=360 `.wrapped-year-tab.active` pintaba blanco sobre el acento, en cualquier año
+elegido y en «Siempre», y fallaba AA en dos presets. Ahora es el patrón de `.covers-chip.is-on` (v=290): `--color-surface` de fondo,
+`--color-text` de texto, y la selección la dicen `border-color` y `box-shadow: 0 0 0 2px` del acento. Sin el anillo de 3 px de
+`--color-accent-soft`: con el de 2 px no aporta nada que se vea. `.wrapped-year-tab.active:hover` ya no existe: el hover de un elegido no hace nada, porque `.active` va después de
+`:hover` con la misma especificidad (**si se reordenan, deja de ganarle**; lo vigila la puerta E). El foco pasó de `box-shadow` a `outline`
+de 2 px con 3 de separación, como `.cal-anio`: si no, el anillo de `.active` lo pisaba. `#wl-range-tabs`, del Wrapped lite, usa la misma clase pero sin `.active`,
+con estilo en línea, y no cambió. Medido con las transiciones terminadas, igual para un año y para «Siempre»:
+
+| | violeta | ámbar | aguamarina | papel |
+|---|---|---|---|---|
+| antes, en reposo | 5,70 | **2,84** | **1,89** | 7,10 |
+| antes, con `:hover` | 7,28 | **3,84** | **2,61** | 8,80 |
+| después, en reposo y con `:hover` | 15,82 | 15,73 | 15,88 | 17,60 |
+
+⚠️ Los «2,93 y 1,90» que anotó la 119 estaban medidos a mitad de transición. Guarda: la puerta E del banco `siempre-y-play` (el contraste
+con los colores del tema de cada preset y el anillo; contra v=360, roja). `main.css` tiene el `sha256` fijado en
+`tests/ficha-artista-play.test.mjs` y `tests/preview-player-t115.test.mjs`: **si tocás esa hoja, esos dos tests se ponen rojos**, y hay que
+actualizar el número.
 
 ## 🖼️ La postal del año: «El año en días» (v=344; la de las tapas fue v=326-v=343)
 

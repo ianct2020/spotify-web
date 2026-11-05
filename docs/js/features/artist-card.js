@@ -2,25 +2,25 @@
 // primer/último año, top tracks del artista, hover-play, y plays actuales
 // vía Stats.fm si aplica. Se abre desde cualquier feature con openArtistCard({ name }).
 
-import { loadHistoryStats, loadArtistTracks, isOwner, falloDeLecturaDelHistorial, avisoHistorialIlegibleHtml } from './history-data.js?v=360';
-import { escapeHtml } from '../ui/components.js?v=360';
-import { getPreview } from '../api/preview-providers.js?v=360';
-import { togglePreview, playingKey, isPlayingAudio, attachHover } from '../ui/preview-player.js?v=360';
-import { iconoPlay, iconoPausa } from '../ui/icons.js?v=360';
-import { hasUsername, loadTopLifetime } from '../api/statsfm.js?v=360';
-import { openTrackCard } from './track-card.js?v=360';
-import { spotifyFetch, getBestAvailableLikes } from '../api.js?v=360';
-import { openModal, closeTop } from '../ui/modal-stack.js?v=360';
-import { firstArtistName, artistNames, resolveArtistName, looksLikeArtistChain } from '../util/artist-name.js?v=360';
-import { coverUrl } from '../util/cover-size.js?v=360';
-import { getArtistLikePreview } from '../util/artist-preview.js?v=360';
-import { skelCardBody, skelTrackRows, skelBox } from '../ui/skeleton.js?v=360';
-import { fmtDia, fmtDiaCorto } from '../util/fecha.js?v=360';
-import { albumsDeArtista } from '../util/artist-albums.js?v=360';
-import { openAlbumCard } from './album-card.js?v=360';
-import { limpiaParaQuery, artistIsSame } from '../util/track-match.js?v=360';
-import { sinTildes } from '../util/texto.js?v=360';
-import { pedirYCachear, CUALQUIER_RESPUESTA } from '../util/cache-solo-exitos.js?v=360';
+import { loadHistoryStats, loadArtistTracks, isOwner, falloDeLecturaDelHistorial, avisoHistorialIlegibleHtml } from './history-data.js?v=361';
+import { escapeHtml } from '../ui/components.js?v=361';
+import { getPreview } from '../api/preview-providers.js?v=361';
+import { togglePreview, playingKey, isPlayingAudio, attachHover } from '../ui/preview-player.js?v=361';
+import { iconoPlay, iconoPausa } from '../ui/icons.js?v=361';
+import { hasUsername, loadTopLifetime } from '../api/statsfm.js?v=361';
+import { openTrackCard } from './track-card.js?v=361';
+import { spotifyFetch, getBestAvailableLikes } from '../api.js?v=361';
+import { openModal, closeTop } from '../ui/modal-stack.js?v=361';
+import { firstArtistName, artistNames, resolveArtistName, looksLikeArtistChain } from '../util/artist-name.js?v=361';
+import { coverUrl } from '../util/cover-size.js?v=361';
+import { getArtistLikePreview } from '../util/artist-preview.js?v=361';
+import { skelCardBody, skelTrackRows, skelBox } from '../ui/skeleton.js?v=361';
+import { fmtDia, fmtDiaCorto } from '../util/fecha.js?v=361';
+import { albumsDeArtista } from '../util/artist-albums.js?v=361';
+import { openAlbumCard } from './album-card.js?v=361';
+import { limpiaParaQuery, artistIsSame } from '../util/track-match.js?v=361';
+import { sinTildes } from '../util/texto.js?v=361';
+import { pedirYCachear, CUALQUIER_RESPUESTA } from '../util/cache-solo-exitos.js?v=361';
 
 // Cache de imágenes de artistas resueltas por Spotify search. TTL 30 días.
 // Se persiste el hit y la falta (null) para no reintentar contra tracks
@@ -170,16 +170,20 @@ document.addEventListener('previewchange', (e) => {
 // quedaría diciendo «⏹ Parar» con una fila sonando. La clase es propia por la regla de `.wt-play-btn`
 // (v=219). Sin `spotifyId` a propósito: con él, un tema sin preview abriría el embed de Spotify, y este
 // botón no le pide nada a Spotify. Sale de la ficha el único artista que sabemos del tema: el índice del
-// historial no guarda los demás. ⚠️ El ⏸ PARA, como el de las demás vistas: `togglePreview` no sabe pausar.
+// historial no guarda los demás. ⚠️ El ⏸ PARA, como el de las demás vistas: `togglePreview` no sabe pausar. Desde
+// v=361 el texto lo dice («Parar preview de…», el mismo «Parar» de `#recs` y `#similar`); el ícono sigue siendo el de pausa.
+const TITLE_FILA_REPOSO = 'Preview de 30 s — no suma reproducciones';
+
 function botonPlayFila(nombre, i) {
-  return `<button type="button" class="ac-track-play" data-fila="${i}" aria-label="Escuchar preview de ${escapeHtml(nombre)}">${iconoPlay(12)}</button>`;
+  return `<button type="button" class="ac-track-play" data-fila="${i}" title="${TITLE_FILA_REPOSO}" aria-label="Escuchar preview de ${escapeHtml(nombre)}">${iconoPlay(12)}</button>`;
 }
 
 function pintarPlayFila(btn, suena) {
   if (btn.disabled) return;
   btn.innerHTML = suena ? iconoPausa(12) : iconoPlay(12);
   btn.dataset.sonando = suena ? '1' : '0';
-  btn.setAttribute('aria-label', `${suena ? 'Pausar' : 'Escuchar'} preview de ${btn.dataset.tema}`);
+  btn.title = suena ? 'Parar el preview' : TITLE_FILA_REPOSO;
+  btn.setAttribute('aria-label', `${suena ? 'Parar' : 'Escuchar'} preview de ${btn.dataset.tema}`);
 }
 
 function conectarPlayFilas(holder, temas, artista) {

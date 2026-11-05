@@ -35,17 +35,17 @@
 // ⚠️ La pestaña oculta NO está verificada (como en `#mapa`): la pantalla pide dejarla a la vista y
 // enseña el ritmo medido.
 
-import { loadArtistTracks, isOwner, ownerLockedMessage } from './history-data.js?v=360';
-import { getCurrentUserId } from '../api.js?v=360';
-import { getKey, cargarEtiquetas, registroEtiquetas, setCachedTags } from '../api/lastfm.js?v=360';
-import { idbEntriesEnRango, idbSetCached, idbGetCachedRaw } from '../idb.js?v=360';
-import { escapeHtml, pageHeader } from '../ui/components.js?v=360';
-import { vigilarRuta } from '../util/vigencia-ruta.js?v=360';
-import { universo, MIN_MINUTOS } from '../util/mapa-paises.js?v=360';
-import { prefijoGeneros } from '../util/generos-artista.js?v=360';
-import { peticionesPorMinuto, estimarLoQueFalta, ritmoDesde, sumarPeticion, sumarArtista, MIN_ARTISTAS_ESTIMAR } from '../util/mapa-escaneo.js?v=360';
-import { escanearGeneros, conCandado, armarCobertura, yaBuscado, urlEtiquetas, claveRitmo, textoLoQueFalta } from '../util/generos-escaneo.js?v=360';
-import { armarGeneros } from '../util/generos-regla.js?v=360';
+import { loadArtistTracks, isOwner, ownerLockedMessage } from './history-data.js?v=361';
+import { getCurrentUserId } from '../api.js?v=361';
+import { getKey, cargarEtiquetas, registroEtiquetas, setCachedTags } from '../api/lastfm.js?v=361';
+import { idbEntriesEnRango, idbSetCached, idbGetCachedRaw } from '../idb.js?v=361';
+import { escapeHtml, pageHeader } from '../ui/components.js?v=361';
+import { vigilarRuta } from '../util/vigencia-ruta.js?v=361';
+import { universo, MIN_MINUTOS } from '../util/mapa-paises.js?v=361';
+import { prefijoGeneros } from '../util/generos-artista.js?v=361';
+import { peticionesPorMinuto, estimarLoQueFalta, ritmoDesde, sumarPeticion, sumarArtista, MIN_ARTISTAS_ESTIMAR } from '../util/mapa-escaneo.js?v=361';
+import { escanearGeneros, conCandado, armarCobertura, yaBuscado, urlEtiquetas, claveRitmo, textoLoQueFalta } from '../util/generos-escaneo.js?v=361';
+import { armarGeneros } from '../util/generos-regla.js?v=361';
 
 // Números con `es-ES` explícito: sin el locale se usa el del navegador (es-AR en las máquinas
 // de Ian) y salen dos formatos en la misma pantalla.

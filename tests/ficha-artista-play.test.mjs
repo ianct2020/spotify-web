@@ -11,7 +11,8 @@
 //   D. `previewchange` con esa clave: la fila en ⏸, las demás en ▶ y `#ac-preview` en «▶ Preview» (la trampa: el listener
 //      de `#ac-preview` mira que la clave no empiece con `ac:`); con `playing: false`, ▶; con `ac:<artista>`, ninguna en ⏸;
 //   E. sin preview (`togglePreview` da `null`): esa fila deshabilitada, con `title` y `aria-label` «Sin preview»;
-//   F. con 2 temas, dos botones; con 0, ninguno y el texto de siempre; las filas de stats.fm, también con ▶;
+//   F. con 2 temas, dos botones; con 1 (v=361), un botón, que suena, dice «Parar preview de…» y vuelve a ▶ al pararlo; con 0,
+//      ninguno y el texto de siempre; las filas de stats.fm, también con ▶;
 //   G. una ficha que se abre con su preview sonando nace en ⏸; dos fichas apiladas (dos `#ac-top-tracks`) se pintan las dos;
 //   H. el CSS: en `components.css` con dos clases, nunca el atenuado, y `main.css` byte a byte.
 //
@@ -26,8 +27,8 @@ import { instalarDom } from './dobles/dom-t119-doble.mjs';
 const SRC = process.env.T119_SRC ? resolve(process.env.T119_SRC) : resolve(import.meta.dirname, '../src');
 register('./dobles/loader-t110.mjs', pathToFileURL(import.meta.filename), { data: { reales: ['features/artist-card.js'] } });
 
-// `sha256sum src/css/main.css` en `f6f4df1`.
-const SHA_MAIN_CSS = '409e0503b479d125d93bf80dfa8212ac8e03669103ac8bb094875fdf5b01641f';
+// `sha256sum src/css/main.css` en v=361: lo único que cambió desde `f6f4df1` son las reglas del chip elegido de la tanda 120.
+const SHA_MAIN_CSS = 'b7578fd08f8a654844de07e37fbce25646460efb5e3b79f5e6c30cfe5403a893';
 
 let bien = 0, mal = 0;
 const ok = (c, nombre) => { console.log(`  ${c ? '✓' : '✗'} ${nombre}`); c ? bien++ : mal++; };
@@ -45,6 +46,7 @@ const INDICE = {
     'Banda Cinco': [tema('Uno', 50, 'aaaaaaaaaaaaaaaaaaaaa1'), tema('Dos', 40, 'aaaaaaaaaaaaaaaaaaaaa2'), tema('Tres', 30, 'aaaaaaaaaaaaaaaaaaaaa3'), tema('Cuatro', 20, 'aaaaaaaaaaaaaaaaaaaaa4'), tema('Cinco', 10, 'aaaaaaaaaaaaaaaaaaaaa5')],
     'Dúo Dos': [tema('Sol', 9, 'bbbbbbbbbbbbbbbbbbbbb1'), tema('Luna', 8, 'bbbbbbbbbbbbbbbbbbbbb2')],
     'Otra Banda': [tema('Uno', 7, 'ccccccccccccccccccccc1')],
+    'Solista Uno': [tema('Tema Único', 6, 'eeeeeeeeeeeeeeeeeeeee1')],
   },
   totals: {},
 };
@@ -110,6 +112,7 @@ ok(filas().length === 5, 'siguen las 5 filas');
 ok(filas().every((f) => f.querySelectorAll('.ac-track-play').length === 1), 'cada fila tiene su .ac-track-play');
 ok(botones().every((b) => b.tag === 'button' && b.getAttribute('type') === 'button'), 'son <button type="button">');
 ok(botones()[1]?.getAttribute('aria-label') === 'Escuchar preview de Dos', 'aria-label «Escuchar preview de <tema>»');
+ok(botones()[1]?.getAttribute('title') === 'Preview de 30 s — no suma reproducciones', 'en reposo, el title de #recs');
 ok(!doc.querySelector('#ac-top-tracks .wt-play-btn, #ac-top-tracks .sc-play, #ac-top-tracks .dcard-play'), 'ninguna clase de otro módulo');
 ok(botones().every((b) => !enPausa(b)), 'todas nacen en ▶');
 
@@ -132,11 +135,14 @@ previewBtn().textContent = '⏹ Parar';
 evento({ key: clave, provider: 'itunes', playing: true });
 ok(enPausa(botones()[1] || { innerHTML: '' }), 'la fila que suena, en ⏸');
 ok(botones().filter(enPausa).length === 1, 'las demás, en ▶');
-ok(botones()[1]?.getAttribute('aria-label') === 'Pausar preview de Dos', 'aria-label «Pausar preview de <tema>»');
+ok(botones()[1]?.getAttribute('aria-label') === 'Parar preview de Dos', `sonando, aria-label «Parar preview de <tema>» (dice «${botones()[1]?.getAttribute('aria-label')}»)`);
+ok(botones()[1]?.getAttribute('title') === 'Parar el preview', 'sonando, title «Parar el preview»');
+ok(enPausa(botones()[1] || { innerHTML: '' }), 'y el ícono sigue siendo iconoPausa, el de todas las vistas que paran');
 ok(previewBtn().textContent === '▶ Preview', '#ac-preview vuelve a «▶ Preview» al sonar una fila');
 evento({ key: clave, provider: 'itunes', playing: false });
 ok(botones().length === 5 && botones().filter(enPausa).length === 0, 'en pausa (playing: false), ▶');
 ok(botones()[1]?.getAttribute('aria-label') === 'Escuchar preview de Dos', 'y el aria-label vuelve');
+ok(botones()[1]?.getAttribute('title') === 'Preview de 30 s — no suma reproducciones', 'y el title vuelve');
 evento({ key: clave, provider: 'itunes', playing: true });
 evento({ key: clave0, provider: 'itunes', playing: true });
 ok(botones().length === 5 && enPausa(botones()[0]) && !enPausa(botones()[1]), 'otra fila: el ⏸ se muda');
@@ -160,6 +166,19 @@ ok(sin?.disabled === true && sin?.getAttribute('aria-label') === 'Sin preview', 
 console.log('F. menos de 5 filas, y ninguna');
 await abrir('Dúo Dos');
 ok(filas().length === 2 && botones().length === 2, 'con 2 temas, dos botones');
+await abrir('Solista Uno');
+ok(filas().length === 1 && botones().length === 1, 'con 1 tema, un botón');
+ok(botones()[0]?.getAttribute('aria-label') === 'Escuchar preview de Tema Único', 'con 1 tema, nace en «Escuchar preview de…»');
+botones()[0]?.click();
+await tick();
+const claveUnica = toggles.at(-1);
+ok(previews.at(-1)?.name === 'Tema Único', 'con 1 tema, suena ese tema');
+evento({ key: claveUnica, provider: 'itunes', playing: true });
+ok(enPausa(botones()[0] || { innerHTML: '' }), 'con 1 tema, la fila en ⏸');
+ok(botones()[0]?.getAttribute('aria-label') === 'Parar preview de Tema Único', `con 1 tema, aria-label «Parar preview de…» (dice «${botones()[0]?.getAttribute('aria-label')}»)`);
+evento({ key: claveUnica, provider: 'itunes', playing: false });
+ok(!enPausa(botones()[0] || { innerHTML: '<svg data-icono="pausa">' }), 'con 1 tema, al pararlo vuelve a ▶');
+ok(botones()[0]?.getAttribute('aria-label') === 'Escuchar preview de Tema Único', 'con 1 tema, al pararlo vuelve el «Escuchar preview de…»');
 await abrir('Sin Temas');
 ok(botones().length === 0, 'con 0, ningún botón');
 ok(doc.querySelector('#ac-top-tracks')?.textContent.includes('Sin tracks puntuales'), 'y el texto de siempre');

@@ -170,16 +170,20 @@ document.addEventListener('previewchange', (e) => {
 // quedaría diciendo «⏹ Parar» con una fila sonando. La clase es propia por la regla de `.wt-play-btn`
 // (v=219). Sin `spotifyId` a propósito: con él, un tema sin preview abriría el embed de Spotify, y este
 // botón no le pide nada a Spotify. Sale de la ficha el único artista que sabemos del tema: el índice del
-// historial no guarda los demás. ⚠️ El ⏸ PARA, como el de las demás vistas: `togglePreview` no sabe pausar.
+// historial no guarda los demás. ⚠️ El ⏸ PARA, como el de las demás vistas: `togglePreview` no sabe pausar. Desde
+// v=361 el texto lo dice («Parar preview de…», el mismo «Parar» de `#recs` y `#similar`); el ícono sigue siendo el de pausa.
+const TITLE_FILA_REPOSO = 'Preview de 30 s — no suma reproducciones';
+
 function botonPlayFila(nombre, i) {
-  return `<button type="button" class="ac-track-play" data-fila="${i}" aria-label="Escuchar preview de ${escapeHtml(nombre)}">${iconoPlay(12)}</button>`;
+  return `<button type="button" class="ac-track-play" data-fila="${i}" title="${TITLE_FILA_REPOSO}" aria-label="Escuchar preview de ${escapeHtml(nombre)}">${iconoPlay(12)}</button>`;
 }
 
 function pintarPlayFila(btn, suena) {
   if (btn.disabled) return;
   btn.innerHTML = suena ? iconoPausa(12) : iconoPlay(12);
   btn.dataset.sonando = suena ? '1' : '0';
-  btn.setAttribute('aria-label', `${suena ? 'Pausar' : 'Escuchar'} preview de ${btn.dataset.tema}`);
+  btn.title = suena ? 'Parar el preview' : TITLE_FILA_REPOSO;
+  btn.setAttribute('aria-label', `${suena ? 'Parar' : 'Escuchar'} preview de ${btn.dataset.tema}`);
 }
 
 function conectarPlayFilas(holder, temas, artista) {
