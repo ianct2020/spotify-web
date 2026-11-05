@@ -250,7 +250,8 @@ console.log('\n[fila 8 · sano] owner con los JSON bien');
 {
   const { todo, cuerpo } = await fichaArtista({});
   ok(!cuerpo.includes(AVISO), 'sin la línea');
-  conserva('artistaSano', todo, 'la ficha');
+  // (v=360, tanda 119) Las filas llevan su ▶ (`.ac-track-play`): quitándolo, exacto, la ficha es la de siempre.
+  conserva('artistaSano', todo.replace(/\s*<button type="button" class="ac-track-play"[^>]*>[^]*?<\/button>/g, ''), 'la ficha');
 }
 console.log('\n[fila 8 · sano, no está] owner con los JSON bien, un artista que no está');
 {

@@ -2218,3 +2218,24 @@ body.con-aviso-copia { padding-top: 46px; }
   .lluvia-num { font-size: 26px; }
   .lluvia-tabla th, .lluvia-tabla td { padding: 6px 4px; }
 }
+
+/* El boton de play por fila de la ficha de artista (v=360). Dos clases porque esta hoja carga antes que main.css */
+.ac-col-tracks .ac-track-play {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  margin: -4px;
+  padding: 0;
+  border: 1px solid var(--color-border);
+  border-radius: 50%;
+  background: transparent;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+}
+.ac-col-tracks .ac-track-play:hover:not(:disabled) { color: var(--color-text); border-color: var(--color-accent); }
+.ac-col-tracks .ac-track-play:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 1px; }
+.ac-col-tracks .ac-track-play[data-sonando="1"] { color: var(--color-text); border-color: var(--color-accent); }
+.ac-col-tracks .ac-track-play:disabled { cursor: default; border-style: dashed; }

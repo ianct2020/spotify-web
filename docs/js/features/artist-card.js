@@ -2,24 +2,25 @@
 // primer/último año, top tracks del artista, hover-play, y plays actuales
 // vía Stats.fm si aplica. Se abre desde cualquier feature con openArtistCard({ name }).
 
-import { loadHistoryStats, loadArtistTracks, isOwner, falloDeLecturaDelHistorial, avisoHistorialIlegibleHtml } from './history-data.js?v=359';
-import { escapeHtml } from '../ui/components.js?v=359';
-import { getPreview } from '../api/preview-providers.js?v=359';
-import { togglePreview, playingKey, attachHover } from '../ui/preview-player.js?v=359';
-import { hasUsername, loadTopLifetime } from '../api/statsfm.js?v=359';
-import { openTrackCard } from './track-card.js?v=359';
-import { spotifyFetch, getBestAvailableLikes } from '../api.js?v=359';
-import { openModal, closeTop } from '../ui/modal-stack.js?v=359';
-import { firstArtistName, artistNames, resolveArtistName, looksLikeArtistChain } from '../util/artist-name.js?v=359';
-import { coverUrl } from '../util/cover-size.js?v=359';
-import { getArtistLikePreview } from '../util/artist-preview.js?v=359';
-import { skelCardBody, skelTrackRows, skelBox } from '../ui/skeleton.js?v=359';
-import { fmtDia, fmtDiaCorto } from '../util/fecha.js?v=359';
-import { albumsDeArtista } from '../util/artist-albums.js?v=359';
-import { openAlbumCard } from './album-card.js?v=359';
-import { limpiaParaQuery, artistIsSame } from '../util/track-match.js?v=359';
-import { sinTildes } from '../util/texto.js?v=359';
-import { pedirYCachear, CUALQUIER_RESPUESTA } from '../util/cache-solo-exitos.js?v=359';
+import { loadHistoryStats, loadArtistTracks, isOwner, falloDeLecturaDelHistorial, avisoHistorialIlegibleHtml } from './history-data.js?v=360';
+import { escapeHtml } from '../ui/components.js?v=360';
+import { getPreview } from '../api/preview-providers.js?v=360';
+import { togglePreview, playingKey, isPlayingAudio, attachHover } from '../ui/preview-player.js?v=360';
+import { iconoPlay, iconoPausa } from '../ui/icons.js?v=360';
+import { hasUsername, loadTopLifetime } from '../api/statsfm.js?v=360';
+import { openTrackCard } from './track-card.js?v=360';
+import { spotifyFetch, getBestAvailableLikes } from '../api.js?v=360';
+import { openModal, closeTop } from '../ui/modal-stack.js?v=360';
+import { firstArtistName, artistNames, resolveArtistName, looksLikeArtistChain } from '../util/artist-name.js?v=360';
+import { coverUrl } from '../util/cover-size.js?v=360';
+import { getArtistLikePreview } from '../util/artist-preview.js?v=360';
+import { skelCardBody, skelTrackRows, skelBox } from '../ui/skeleton.js?v=360';
+import { fmtDia, fmtDiaCorto } from '../util/fecha.js?v=360';
+import { albumsDeArtista } from '../util/artist-albums.js?v=360';
+import { openAlbumCard } from './album-card.js?v=360';
+import { limpiaParaQuery, artistIsSame } from '../util/track-match.js?v=360';
+import { sinTildes } from '../util/texto.js?v=360';
+import { pedirYCachear, CUALQUIER_RESPUESTA } from '../util/cache-solo-exitos.js?v=360';
 
 // Cache de imágenes de artistas resueltas por Spotify search. TTL 30 días.
 // Se persiste el hit y la falta (null) para no reintentar contra tracks
@@ -160,6 +161,55 @@ document.addEventListener('previewchange', (e) => {
   if (btn && !(e.detail.key || '').startsWith('ac:') && btn.textContent !== 'Sin preview') {
     btn.textContent = '▶ Preview';
   }
+});
+
+// ── El ▶ por fila de «Tus 5 tracks más escuchados» (v=360) ──────────────────
+//
+// ⚠️ La clave es `acf:…` y NUNCA puede empezar con `ac:`: el listener de arriba vuelve `#ac-preview` a
+// «▶ Preview» solo si la clave no empieza con `ac:`, así que con otra forma el botón del artista se
+// quedaría diciendo «⏹ Parar» con una fila sonando. La clase es propia por la regla de `.wt-play-btn`
+// (v=219). Sin `spotifyId` a propósito: con él, un tema sin preview abriría el embed de Spotify, y este
+// botón no le pide nada a Spotify. Sale de la ficha el único artista que sabemos del tema: el índice del
+// historial no guarda los demás. ⚠️ El ⏸ PARA, como el de las demás vistas: `togglePreview` no sabe pausar.
+function botonPlayFila(nombre, i) {
+  return `<button type="button" class="ac-track-play" data-fila="${i}" aria-label="Escuchar preview de ${escapeHtml(nombre)}">${iconoPlay(12)}</button>`;
+}
+
+function pintarPlayFila(btn, suena) {
+  if (btn.disabled) return;
+  btn.innerHTML = suena ? iconoPausa(12) : iconoPlay(12);
+  btn.dataset.sonando = suena ? '1' : '0';
+  btn.setAttribute('aria-label', `${suena ? 'Pausar' : 'Escuchar'} preview de ${btn.dataset.tema}`);
+}
+
+function conectarPlayFilas(holder, temas, artista) {
+  holder.querySelectorAll('.ac-track-play').forEach(btn => {
+    const t = temas[+btn.dataset.fila];
+    if (!t) return;
+    const key = `acf:${btn.dataset.fila}:${artista}:${t.name}`;
+    btn.dataset.previewKey = key;
+    btn.dataset.tema = t.name || '(sin nombre)';
+    pintarPlayFila(btn, playingKey() === key && isPlayingAudio());
+    // La fila entera abre la ficha de canción con su `onclick`: sin esto, el clic burbujea hasta ella.
+    btn.onclick = async (e) => {
+      e.stopPropagation();
+      const res = await togglePreview(key, () => getPreview({ name: t.name, artist: artista, artists: [artista] }));
+      if (res !== null) return;
+      btn.innerHTML = iconoPlay(12);
+      btn.dataset.sonando = '0';
+      btn.disabled = true;
+      btn.title = 'Sin preview';
+      btn.setAttribute('aria-label', 'Sin preview');
+    };
+  });
+}
+
+// Con `querySelectorAll` y no `getElementById`: con dos fichas apiladas hay dos `#ac-top-tracks`.
+document.addEventListener('previewchange', (e) => {
+  const { key, playing } = e.detail;
+  document.querySelectorAll('#ac-top-tracks .ac-track-play').forEach(btn => {
+    pintarPlayFila(btn, !!playing && btn.dataset.previewKey === key);
+  });
 });
 
 async function openArtistCard(entrada) {
@@ -381,6 +431,7 @@ async function openArtistCard(entrada) {
           ${topTracks.length ? topTracks.map((t, i) => `
             <div class="wrapped-top-row tc-clickable" data-uri="${t.uri || ''}" data-name="${escapeHtml(t.name)}">
               <span class="wrapped-top-rank">${i + 1}</span>
+              ${botonPlayFila(t.name, i)}
               <div class="wrapped-top-info">
                 <div class="wrapped-top-name">${escapeHtml(t.name)}</div>
               </div>
@@ -413,6 +464,7 @@ async function openArtistCard(entrada) {
     const id = uri.split(':').pop();
     el.onclick = () => openTrackCard({ id, name: el.dataset.name, artist: a.name });
   });
+  conectarPlayFilas(body.querySelector('#ac-top-tracks'), topTracks, a.name);
 
   // Chart de años (solo años con datos). Doble rAF para que el browser haga
   // layout de todo el modal antes de que Chart.js mida el contenedor — si lo
@@ -535,6 +587,7 @@ async function fillStatsfmArtist(name, fillEmptyTracks = false) {
           return `
             <div class="wrapped-top-row${id ? ' tc-clickable' : ''}" data-uri="${id ? 'spotify:track:' + id : ''}" data-name="${escapeHtml(t.name || '')}">
               <span class="wrapped-top-rank">${i + 1}</span>
+              ${botonPlayFila(t.name || '(sin nombre)', i)}
               <div class="wrapped-top-info">
                 <div class="wrapped-top-name">${escapeHtml(t.name || '(sin nombre)')}</div>
                 <div class="wrapped-top-artist" style="font-size:10px;color:var(--color-text-muted)">Stats.fm</div>
@@ -548,6 +601,7 @@ async function fillStatsfmArtist(name, fillEmptyTracks = false) {
           const id = uri.split(':').pop();
           el.onclick = () => openTrackCard({ id, name: el.dataset.name, artist: name });
         });
+        conectarPlayFilas(tracksHolder, top5, name);
       } else {
         tracksHolder.innerHTML = `<div style="color:var(--color-text-muted);font-size:12px;padding:8px 4px">Sin tracks puntuales en tu top-1000 tampoco.</div>`;
       }

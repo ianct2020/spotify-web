@@ -1320,6 +1320,23 @@ Guarda: `tests/preview-player-t115.test.mjs` (el `preview-player.js` REAL en Nod
 contra v=356. Lo que quedó medido y sin arreglar (el trabado que dice «vía iTunes», el pill que a 390 tapa la ficha, el
 pill de error que no se ve) está en `fonoteca-migracion/PENDIENTES.md`, «Tanda 115».
 
+**El ▶ por fila de la ficha de artista (v=360, tanda 119).** Cada fila de «Tus 5 tracks más escuchados» (`#ac-top-tracks`, venga del
+historial, del fallback o de stats.fm) lleva un `.ac-track-play`, armado por `botonPlayFila()` y conectado por `conectarPlayFilas()`.
+- 🔴 **La clave es `acf:<fila>:<artista>:<tema>` y NUNCA puede empezar con `ac:`.** El listener de `previewchange` de `artist-card.js`
+  que vuelve `#ac-preview` a «▶ Preview» solo actúa si la clave **no** empieza con `ac:`: con `ac:…`, el botón del artista se quedaría
+  en «⏹ Parar» con una fila sonando. Lo vigila un assert, y una copia con `ac:…` lo pone rojo.
+- Clase propia por la regla de `.wt-play-btn` (v=219). El estado lo pinta UN listener, sobre `#ac-top-tracks .ac-track-play` con
+  `querySelectorAll`: con dos fichas apiladas hay dos `#ac-top-tracks`.
+- **Sin `spotifyId`, a propósito**: con él, un tema sin preview abriría el embed de Spotify, y este botón no le pide nada a Spotify. Así
+  `togglePreview` da `null` y la fila queda deshabilitada, con «Sin preview». Va con `artists: [artista]`: el índice del historial solo
+  sabe el artista de la ficha, no los demás del tema (la regla de v=142 se cumple con lo que hay).
+- ⚠️ **El ⏸ de la fila PARA y cierra el pill, no pausa** (como el de `#skips` o `#zeroplays`): `togglePreview` no pausa, y
+  `preview-player.js` no se tocó. El `aria-label` dice «Pausar preview de…» porque así se pidió. La pausa de verdad es la del pill.
+- El CSS, en `components.css` con dos clases. `margin: -4px` para que la fila no crezca con un botón de 32 px.
+
+Guardas: `tests/ficha-artista-play.test.mjs` y las puertas B, C y D del banco `tests/banco/siempre-y-play.html`. El banco reemplaza
+`HTMLMediaElement.prototype.play` y `Chart`: un `.click()` no es un gesto de usuario, y el caso no carga el CDN.
+
 ## #recs: preview y las dos fichas por fila (v=167)
 `features/recommendations.js`. Las filas son un `<label>` que envuelve el
 checkbox, así que **cualquier click en un descendiente lo tilda**: las tres
@@ -3946,6 +3963,27 @@ con el nombre entero**, escapado igual que el texto (`escapeHtml`), en `features
 renglón del nombre tal como está en `wrapped.js` con un nombre INVENTADO de 131 caracteres y afirma el `title` (rojo contra
 v=343). ⚠️ Solo el «Álbum del año»: la tarjeta «Álbum de siempre» usa la misma clase y ~~sigue sin `title` (fuera del encargo)~~ → 🟩 **hecho en v=345** (tanda 98): el mismo `title` con el nombre entero, escapado igual que el texto. Guarda: `tests/wrapped-album-390.test.mjs` (rojo antes en 2 asserts).
 
+## «Siempre» en `#wrapped` (v=360, tanda 119)
+
+El primer chip de la barra de años, «Siempre» (`.wrapped-year-tab` con `data-siempre`, no `data-year`): `#wrapped-alltime` arriba y
+`#wrapped-year-card` y `#wrapped-apertura` vacíos. No hay ningún dato nuevo: es la tarjeta «DE SIEMPRE» de siempre (`renderAllTime()`,
+byte a byte). La elección vive en `selectedYear` (`'siempre'`), en memoria de esta carga, como la de un año. Sin postal: la postal es
+de un año.
+
+- 🔴 **Con un año elegido, la vista es la de v=359 byte a byte.** El chip vive dentro de `#wrapped-content`, así que el HTML entero no
+  puede dar igual: lo que se compara es ese HTML sin el chip, y da el `sha256` de `f6f4df1` (el año por defecto y el más viejo).
+- ⚠️ **La apertura se destruye al elegir «Siempre»**: no alcanza con no montarla. La del año anterior tiene oyentes de `document` y
+  `window` que recién se irían con `routeteardown`. `montarApertura(host, null)` corre `destruirVivo()` y no pinta nada, sin tocar
+  `wrapped-apertura.js`.
+- El deslizamiento: «Siempre» cuenta como más nuevo que cualquier año, sin tocar `deslizar()`.
+- 🔴 **La apertura «de siempre» NO existe todavía.** Ian pidió el chip Y el recorrido por pasos (05/11/2026); el recorrido es una vista
+  nueva y va sola en la tanda 120.
+- ⚠️ El chip elegido hereda el blanco sobre el acento de `.wrapped-year-tab.active`, igual que los años: **unos 2,9 en Ámbar y 1,9 en
+  Aguamarina** (medido, con la transición de la pastilla todavía moviendo unas centésimas; 5,70 en Violeta y 7,1 en Papel). No se tocó: vive en `main.css` y es de toda la barra (`PENDIENTES.md`, tanda 119).
+
+Guardas: `tests/wrapped-siempre.test.mjs` (`wrapped.js` REAL con `dobles/loader-t110.mjs` y `dobles/dom-t119-doble.mjs`, un DOM de
+mentira que parsea lo que se pinta; rojo contra `f6f4df1`) y las puertas A y D del banco `tests/banco/siempre-y-play.html`.
+
 ## 🖼️ La postal del año: «El año en días» (v=344; la de las tapas fue v=326-v=343)
 
 En «Wrapped», con un año elegido, el botón **«Descargar postal (PNG)»** (debajo de `.wrapped-hero-sub`) dibuja una imagen
@@ -5267,6 +5305,8 @@ fila sobrevivió así desde que se armó la tabla.
 | ↳ lo que decía antes (**0/0**) era FALSO: es el MISMO par que `#dashboard` | | | | | ver la nota de abajo |
 | ↳ sin historial (`renderLite`) | **2** | **2** | 2 × `/me/top/{artists,tracks}` | fijo | leída del código |
 | ↳ **al apretar «Descargar postal (PNG)»** (v=344): **0 a Spotify**, **0 al CDN** | — | ídem | nada de red: la postal «El año en días» no lleva tapas; solo `wrapped-postal.js` y `util/postal-anio.js` del propio Pages la primera vez; abrir «Wrapped» no cambia (0 del módulo) | fijo | **medida en el banco el 2026-10-28** (`tests/banco/postal.html`, historial inventado: 0 a la simulada, 0 pedidos de tapa, 0 a `/image/` con las `img` de 2023 con la forma del CDN). En vivo, no. Hasta v=343 (la postal de las tapas): ≤ 5 al CDN |
+| ↳ **al elegir «Siempre»** (v=360): **0** | — | **0** | ninguno: repinta con lo cargado | fijo | **medida en el banco** (`tests/banco/siempre-y-play.html`, historial inventado) |
+| ↳ **la ficha de artista** (v=360): abrirla, igual que antes; **tocar un ▶ de fila = un preview** (iTunes/Deezer, cacheado), **0 a Spotify** | — | ídem | `getPreview()` sin `spotifyId` | fijo | **medida en el banco** (1 a iTunes, 0 a Spotify) |
 | `#records` | **1 `/me`** (+1 del arranque = **2**) | ídem | `render()` → `loadRecords()` (`records.js:50`) → `loadOne` → `ensureFreshMem` → `resolvedUserId` → `getCurrentUserId` | **fijo** | 🔴 **corregida el 2026-10-08, leída del código.** Decía **0/0** y es la MISMA pieza que `#dashboard` y `#wrapped` |
 | `#calendario` | **1 `/me`** (+1 del arranque = **2**) | ídem | `render()` → `loadHistoryStats()` + `loadDays()` → `loadOne` → `getCurrentUserId` (memoizado: los dos comparten el `/me`, es 1 y no 2) | **fijo**, no escala con nada | **medida en la Spotify simulada el 2026-10-10** (`tests/banco/calendario.html`): abrir = **1** petición y es `/me`; cambiar de año y abrir y cerrar el detalle de un día = **0 más**; **0** lecturas que no sean `/me`, 0 rutas sin simular, 0 hosts externos. En vivo, no |
 | ↳ **al pulsar «Crear playlist con este día»**: **1 + ceil(N/100)** POST | — | ídem | `POST /me/playlists` + `POST /playlists/{id}/items` de a 100 | **N** = temas del día | **medida en la Spotify simulada el 2026-10-10**: **2** con 30 temas y **3** con 150, exactas y todas POST, **0 GET** |

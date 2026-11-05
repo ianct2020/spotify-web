@@ -20,7 +20,9 @@ import { anioSinCampoSkipped, esElAnioDelCorte, AVISO_MEZCLA } from '../util/cor
 import { showToast } from '../ui/toast.js';
 
 let stats = null;
+// El año elegido en la barra, o `SIEMPRE` (v=360): se recuerda igual, en memoria de esta carga.
 let selectedYear = null;
+const SIEMPRE = 'siempre';
 
 const MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
 
@@ -165,19 +167,24 @@ export async function render(container) {
 
   // orden inverso (más nuevo arriba) y default = último año con datos
   const yearsDesc = [...stats.years].sort((a, b) => b.year - a.year);
-  if (!selectedYear || !yearsDesc.find(y => y.year === selectedYear)) {
+  if (selectedYear !== SIEMPRE && (!selectedYear || !yearsDesc.find(y => y.year === selectedYear))) {
     selectedYear = yearsDesc[0].year;
   }
+  const enSiempre = selectedYear === SIEMPRE;
 
   const dataFrom = fmtDia(stats.totals?.first_play || stats.years[0].first_play);
   const dataTo = fmtDia(stats.totals?.last_play || yearsDesc[0].last_play);
   const dataPlays = stats.totals.plays_valid.toLocaleString('es-ES');
 
+  // El chip «Siempre» (v=360), el primero de la barra: la tarjeta «DE SIEMPRE» arriba, y ni la del año ni
+  // la apertura. Va pegado al `map` para que, con un año elegido, quitarlo deje la vista de v=359 byte a
+  // byte (lo vigila `tests/wrapped-siempre.test.mjs`). El recorrido por pasos de todo el historial todavía
+  // no existe: la apertura de `wrapped-apertura.js` es de un año.
   content.innerHTML = `
     <div class="wrapped-year-bar">
       <div class="wrapped-year-bar-label">Elige el año</div>
       <div class="wrapped-year-bar-tabs" id="wrapped-year-tabs">
-        ${yearsDesc.map(y => `
+        <button class="wrapped-year-tab${enSiempre ? ' active' : ''}" data-siempre>Siempre</button>${yearsDesc.map(y => `
           <button class="wrapped-year-tab${y.year === selectedYear ? ' active' : ''}" data-year="${y.year}">${y.year}</button>
         `).join('')}
       </div>
@@ -186,7 +193,7 @@ export async function render(container) {
     <div id="wrapped-slide">
       <div id="wrapped-apertura"></div>
       <div id="wrapped-year-card"></div>
-      <div id="wrapped-alltime" style="margin-top:20px"></div>
+      <div id="wrapped-alltime"${enSiempre ? '' : ' style="margin-top:20px"'}></div>
     </div>
   `;
 
@@ -198,13 +205,15 @@ export async function render(container) {
   content.querySelectorAll('.wrapped-year-tab').forEach(btn => {
     btn.onclick = () => {
       const anterior = selectedYear;
-      selectedYear = Number(btn.dataset.year);
+      selectedYear = btn.dataset.siempre !== undefined ? SIEMPRE : Number(btn.dataset.year);
       // La fila de chips va de más nuevo (izquierda) a más viejo (derecha), así
       // que irse a un año más viejo es moverse hacia la DERECHA de la fila y lo
-      // que entra tiene que venir de la izquierda. Ver `deslizar()`.
+      // que entra tiene que venir de la izquierda. Ver `deslizar()`. «Siempre» está
+      // a la izquierda de todos: cuenta como más nuevo que cualquier año.
+      const lugar = (v) => (v === SIEMPRE ? Infinity : v);
       deseado = anterior === null || selectedYear === anterior
         ? null
-        : (selectedYear < anterior ? 'izquierda' : 'derecha');
+        : (lugar(selectedYear) < lugar(anterior) ? 'izquierda' : 'derecha');
       render(container);
     };
   });
@@ -226,7 +235,7 @@ export async function render(container) {
   // arriba, junto con las stats, y acá ya está resuelto. Las tres líneas de
   // abajo corren en el MISMO task, que es lo que cierra la ventana de 342,5 ms
   // en la que se veía el Wrapped sin la apertura.
-  renderYearCard();
+  if (!enSiempre) renderYearCard();
   renderAllTime();
   montarApertura(modApertura);
   deslizar(document.getElementById('wrapped-slide'));
@@ -245,6 +254,10 @@ function montarApertura(mod) {
   const host = document.getElementById('wrapped-apertura');
   if (!host || !mod || typeof mod.montarApertura !== 'function') return;
   try {
+    // Con «Siempre» no se monta (v=360), pero la del año del que venís sigue viva: sus oyentes son de
+    // `document` y `window`, y se irían recién al salir de la ruta. Sin contexto, `montarApertura` la
+    // destruye y no pinta nada.
+    if (selectedYear === SIEMPRE) { mod.montarApertura(host, null); return; }
     const y = stats.years.find(yy => yy.year === selectedYear);
     if (!y) return;
     mod.montarApertura(host, {

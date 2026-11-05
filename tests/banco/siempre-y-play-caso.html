@@ -1,0 +1,105 @@
+<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>banco siempre-y-play — la app entera, en un iframe</title>
+<link rel="stylesheet" href="/css/theme.css">
+<link rel="stylesheet" href="/css/components.css">
+<link rel="stylesheet" href="/css/main.css">
+</head><body>
+<div id="app"></div>
+<script type="module">
+// ── Un iframe del banco `siempre-y-play.html` (v=360, tanda 119) ─────────────
+//
+// La app ENTERA en `#home`, contra la Spotify simulada, con `/me` = el owner y el historial INVENTADO sembrado en
+// IndexedDB. Por encima:
+//   · iTunes lo contesta `itunesInventado()` (por `rutaExterna`). Deezer va por JSONP, un <script>: el banco no lo
+//     contesta, el resolutor de Chrome del corredor lo corta y `getPreview` sigue. Así sale el tema «Sin preview».
+//   · `/data/*`: 404 y anotado. Ningún JSON del repo.
+//   · `HTMLMediaElement.prototype.play`: lo reemplaza un doble que anota la URL y avisa `playing`. Un `.click()` de la
+//     madre no es un gesto de usuario (el `play()` de verdad se rechazaría con NotAllowedError y `stopPreview()` cerraría
+//     el pill), y no hay ningún audio en el repo. Lo que se prueba es lo que dice la app, no el decodificador.
+//
+// Modo `?foto=wrapped|ficha[&tema=papel]` (capturas, con un conductor externo y sin reloj virtual): deja la vista lista
+// (con «Siempre» elegido, o con la ficha y su fila 2 sonando) y marca `data-foto="listo"`.
+
+import { instalarRedSimulada, esperarReal, anclar } from '/banco/simulado.mjs';
+import { statsInventadas, indiceInventado, itunesInventado } from '/banco/siempre-y-play-datos.mjs';
+
+const q = new URLSearchParams(location.search);
+window.__errores = [];
+window.addEventListener('error', (e) => window.__errores.push('error: ' + (e.message || e)));
+window.addEventListener('unhandledrejection', (e) => window.__errores.push('rechazo: ' + String(e.reason?.message || e.reason)));
+const errorOriginal = console.error.bind(console);
+console.error = (...a) => { window.__errores.push('console.error: ' + a.map(String).join(' ').slice(0, 300)); errorOriginal(...a); };
+
+const { HISTORY_OWNER_ID } = await import('/js/features/history-data.js');
+const sim = instalarRedSimulada();
+window.__sim = sim;
+sim.ruta('GET', /^\/me$/, () => ({ id: HISTORY_OWNER_ID, display_name: 'Banco' }));
+sim.ruta('GET', /^\/search/, () => ({ artists: { items: [] }, albums: { items: [] }, tracks: { items: [] } }));
+sim.rutaExterna(/^https:\/\/itunes\.apple\.com\/search/, ({ url }) => itunesInventado(url));
+localStorage.setItem('fonoteca_last_user_id', HISTORY_OWNER_ID);
+localStorage.setItem('fonoteca_perfil_v1', JSON.stringify({ id: HISTORY_OWNER_ID, display_name: 'Banco' }));
+const { prefKey } = await import('/js/storage.js');
+localStorage.setItem(prefKey('fonoteca_anim_v1'), 'nunca');
+if (q.get('tema') && q.get('tema') !== 'violeta') {
+  const { PRESETS } = await import('/js/ui/theme-panel.js');
+  const p = PRESETS.find((x) => x.id === q.get('tema'));
+  if (!p) throw new Error('banco: no encontré el preset ' + q.get('tema'));
+  localStorage.setItem(prefKey('fonoteca_theme_v1'), JSON.stringify({ colors: p.colors, preset: p.id }));
+}
+
+window.__datosAjenos = [];
+const debajo = window.fetch;
+window.fetch = (entrada, opciones = {}) => {
+  // `loadOne()` pide con un objeto `URL`: sin el `href`, el JSON REAL del repo pasaría (tanda 99).
+  const url = typeof entrada === 'string' ? entrada : (entrada instanceof URL ? entrada.href : entrada.url);
+  const abs = new URL(url, location.href);
+  if (abs.origin === location.origin && /\/data\//.test(abs.pathname)) {
+    window.__datosAjenos.push(abs.pathname);
+    return Promise.resolve(new Response('{}', { status: 404, headers: { 'content-type': 'application/json' } }));
+  }
+  return debajo(url === entrada ? entrada : url, opciones);
+};
+
+// Chart.js lo carga `index.html` desde el CDN, y este caso no pasa por él: la ficha pinta su gráfico con esta de mentira,
+// que no dibuja nada. El ancho de las columnas es el de verdad (el `.chart-box` está), que es lo que mide la puerta D.
+window.Chart = class { destroy() {} resize() {} };
+
+window.__audios = [];
+HTMLMediaElement.prototype.play = function () {
+  window.__audios.push(this.getAttribute('src'));
+  setTimeout(() => this.dispatchEvent(new Event('playing')), 0);
+  return Promise.resolve();
+};
+
+const { OWNER_KEYS } = await import('/js/history-keys.js');
+const { idbSetCached } = await import('/js/idb.js');
+const SIGLO = 100 * 365 * 24 * 60;
+await anclar(idbSetCached(OWNER_KEYS.stats, statsInventadas(), SIGLO));
+await anclar(idbSetCached(OWNER_KEYS.artistTracks, indiceInventado(), SIGLO));
+
+const FOTO = q.get('foto');
+location.hash = FOTO === 'wrapped' ? '#wrapped' : '#home';
+await import('/js/app.js');
+await esperarReal(() => document.getElementById('my-history-btn') && (FOTO === 'wrapped' || document.querySelector('.home-card')), { que: 'que la app arranque', vueltas: 4000 });
+const { openArtistCard } = await import('/js/features/artist-card.js');
+window.__abrirFicha = (name) => openArtistCard({ name });
+window.__ponerTema = async (id) => {
+  const { PRESETS, applyTheme } = await import('/js/ui/theme-panel.js');
+  applyTheme(PRESETS.find((x) => x.id === id).colors);
+};
+window.__listo = true;
+
+if (FOTO === 'wrapped') {
+  await esperarReal(() => document.querySelector('.wrapped-year-tab.active'), { que: '#wrapped', vueltas: 8000 });
+  document.querySelector('[data-siempre]')?.click();
+  await esperarReal(() => !document.querySelector('[data-siempre]') || document.querySelector('[data-siempre].active'), { que: '«Siempre»', vueltas: 8000 });
+  document.documentElement.dataset.foto = 'listo';
+} else if (FOTO === 'ficha') {
+  window.__abrirFicha('Banda Cinco Inventada');
+  await esperarReal(() => document.querySelectorAll('#ac-top-tracks .wrapped-top-row').length === 5, { que: 'la ficha', vueltas: 8000 });
+  const b = document.querySelectorAll('#ac-top-tracks .ac-track-play')[1];
+  b?.click();
+  await esperarReal(() => !b || document.querySelector('.preview-pill.is-playing'), { que: 'la fila 2 sonando', vueltas: 8000 });
+  document.documentElement.dataset.foto = 'listo';
+}
+</script>
+</body></html>

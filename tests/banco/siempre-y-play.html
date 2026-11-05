@@ -1,0 +1,195 @@
+<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>banco siempre-y-play — el chip «Siempre» y el ▶ de la ficha, con un historial de mentira</title>
+<style>html,body{margin:0;background:#111;color:#eee;font:13px system-ui}iframe{border:0;display:block}</style>
+</head><body>
+<pre id="progreso"></pre>
+<div id="marcos"></div>
+<script type="module">
+// ── Qué prueba este banco (v=360, tanda 119) ─────────────────────────────────
+//
+// La app ENTERA (`siempre-y-play-caso.html`, uno por iframe), con la Spotify y el iTunes simulados y un historial INVENTADO:
+//
+//   A. `#wrapped`: el chip «Siempre» primero; elegirlo pinta la tarjeta de siempre arriba y ni la del año ni la apertura
+//      (y la apertura viva queda desmontada: sin `.wr-con-apertura`); 0 peticiones al elegir; volver a un año, todo de vuelta.
+//   B. la ficha de un artista con 5 temas: el ▶ de la fila 2 suena (el pill dice su nombre), la fila 2 en ⏸ y `#ac-preview`
+//      en «▶ Preview»; la ficha de canción no se abrió; 0 peticiones a Spotify por el botón; el ▶ del artista después: ninguna
+//      fila en ⏸. Un tema que no está en ningún proveedor: su fila deshabilitada, con «Sin preview», y ningún toast.
+//   C. un artista con 2 temas, dos botones; uno con 0, ninguno y la vista sin errores.
+//   D. a 1366×591 y 390×844, ningún desborde en `#ac-top-tracks` ni en la barra de años.
+//
+// 🔴 Si T119b se cae por tiempo, B y C (y la parte de D de la ficha) se van con ella. `?solo=A,D` corre esas.
+// ⚠️ Todas las esperas van con `esperarReal` (ver PRESUPUESTO en `scripts/correr-banco.mjs`).
+
+import { esperarReal } from '/banco/simulado.mjs';
+import { fallar, listo } from '/banco/esperar.mjs';
+import { TEMAS_CINCO, SIN_PREVIEW } from '/banco/siempre-y-play-datos.mjs';
+
+const afirmar = (c, msg) => { if (!c) throw new Error('BANCO: ' + msg); };
+const pasos = [];
+const progreso = (t) => { pasos.push(`${t} @${Math.round(performance.now())}`); document.getElementById('progreso').textContent = pasos.join(' · '); };
+const VUELTAS = 20000;
+const SOLO = (new URLSearchParams(location.search).get('solo') || '').split(',').filter(Boolean);
+const corre = (g) => !SOLO.length || SOLO.includes(g);
+
+function abrirMarco(nombre, ancho, alto) {
+  const f = document.createElement('iframe');
+  f.width = ancho; f.height = alto;
+  f.src = `/banco/siempre-y-play-caso.html?marco=${nombre}`;
+  document.getElementById('marcos').appendChild(f);
+  return f;
+}
+const win = (f) => f.contentWindow;
+const $ = (f, s) => f.contentDocument?.querySelector(s);
+const $$ = (f, s) => [...(f.contentDocument?.querySelectorAll(s) || [])];
+const arrancado = (f, que) => esperarReal(() => win(f)?.__listo, { que: `que arranque ${que}`, vueltas: VUELTAS });
+const llamadas = (f) => win(f).__sim.reg.llamadas;
+const aSpotify = (lista) => lista.filter((l) => !/^https?:/.test(l.ruta));
+const recursosRed = (f) => win(f).performance.getEntriesByType('resource').length;
+const enPausa = (b) => !!b.querySelector('rect') || b.innerHTML.includes('M6 ') || b.dataset.sonando === '1';
+
+async function abrirWrapped(f, que) {
+  win(f).location.hash = '#wrapped';
+  await esperarReal(() => $(f, '#wrapped-year-card .wrapped-hero') && $(f, '.wrapped-year-tab.active'), { que: `#wrapped (${que})`, vueltas: VUELTAS });
+}
+async function abrirFicha(f, nombre, filas) {
+  $$(f, '[data-close-modal]').forEach((b) => b.click());
+  await esperarReal(() => !$(f, '.ac-modal'), { que: 'que se cierre la ficha anterior', vueltas: VUELTAS });
+  win(f).__abrirFicha(nombre);
+  await esperarReal(() => filas === 0
+    ? $(f, '#ac-top-tracks')?.textContent.includes('Sin tracks puntuales')
+    : $$(f, '#ac-top-tracks .wrapped-top-row').length === filas, { que: `la ficha de ${nombre}`, vueltas: VUELTAS });
+}
+
+const datos = {};
+const marcos = [];
+try {
+  if (corre('A')) {
+    const f = abrirMarco('a', 1366, 591); marcos.push(['a', f]);
+    await arrancado(f, 'A');
+    await abrirWrapped(f, 'A');
+    const fila = $$(f, '#wrapped-year-tabs .wrapped-year-tab');
+    afirmar(fila[0]?.dataset.siempre !== undefined, `A: el primero de la barra es «Siempre» (es «${fila[0]?.textContent.trim()}»)`);
+    afirmar(fila[0].textContent.trim() === 'Siempre', 'A: dice «Siempre»');
+    afirmar($(f, '.wrapped-year-tab.active')?.dataset.year === '2024', 'A: por defecto, el año más nuevo');
+    const conApertura = !!$(f, '#wrapped-apertura .wr-ap');
+    const l0 = llamadas(f).length, r0 = recursosRed(f), json0 = win(f).__datosAjenos.length;
+    fila[0].click();
+    await esperarReal(() => $(f, '[data-siempre].active'), { que: 'A: «Siempre» elegido', vueltas: VUELTAS });
+    afirmar($(f, '#wrapped-alltime .wrapped-hero-year')?.textContent === 'DE SIEMPRE', 'A: la tarjeta «DE SIEMPRE» está');
+    afirmar($(f, '#wrapped-year-card').innerHTML === '', 'A: #wrapped-year-card vacío');
+    afirmar($(f, '#wrapped-apertura').innerHTML === '', 'A: #wrapped-apertura vacío');
+    afirmar(!$(f, '.wr-con-apertura'), 'A: ninguna apertura viva');
+    afirmar(!$(f, '.wrapped-postal-btn'), 'A: sin postal');
+    afirmar($$(f, '.wrapped-year-tab.active').length === 1, 'A: ningún año .active');
+    const hero = $(f, '#wrapped-alltime .wrapped-hero').getBoundingClientRect(), barra = $(f, '.wrapped-year-bar').getBoundingClientRect();
+    afirmar(hero.top >= barra.bottom && hero.top - barra.bottom < 40, `A: la tarjeta va arriba, justo debajo de la barra (${(hero.top - barra.bottom).toFixed(1)} px)`);
+    const nuevas = llamadas(f).length - l0, json = win(f).__datosAjenos.length - json0;
+    afirmar(nuevas === 0 && json === 0, `A: 0 peticiones al elegir (${nuevas} a Spotify o iTunes, ${json} a /data/)`);
+    $(f, '.wrapped-year-tab[data-year="2022"]').click();
+    await esperarReal(() => $(f, '.wrapped-year-tab.active')?.dataset.year === '2022' && $(f, '#wrapped-year-card .wrapped-hero-year')?.textContent === '2022', { que: 'A: volver a 2022', vueltas: VUELTAS });
+    afirmar(!!$(f, '#wrapped-year-card .wrapped-postal-btn'), 'A: de vuelta en un año, la postal');
+    afirmar(!!$(f, '#wrapped-alltime .wrapped-hero'), 'A: y la tarjeta de siempre debajo');
+    afirmar(!conApertura || !!$(f, '#wrapped-apertura .wr-ap'), 'A: y la apertura');
+    datos.a = { conApertura, nuevas, recursos: recursosRed(f) - r0 };
+    progreso('A');
+  }
+
+  if (corre('B')) {
+    const f = abrirMarco('b', 1366, 591); marcos.push(['b', f]);
+    await arrancado(f, 'B');
+    await abrirFicha(f, 'Banda Cinco Inventada', 5);
+    const botones = () => $$(f, '#ac-top-tracks .ac-track-play');
+    afirmar(botones().length === 5, `B: un ▶ por fila (${botones().length})`);
+    const fichasAntes = $$(f, '.tc-modal, .track-card-modal').length;
+    const modales0 = $$(f, '.modal').length;
+    const l0 = llamadas(f).length;
+    win(f).document.getElementById('ac-preview').textContent = '⏹ Parar';
+    botones()[1].click();
+    await esperarReal(() => $(f, '.preview-pill.is-playing'), { que: 'B: la fila 2 suena', vueltas: VUELTAS });
+    const label = $(f, '.preview-pill-label')?.textContent || '';
+    afirmar(label.includes(TEMAS_CINCO[1]), `B: el pill dice el nombre del tema («${label}»)`);
+    afirmar(botones()[1].dataset.sonando === '1' && enPausa(botones()[1]), 'B: la fila 2 en ⏸');
+    afirmar(botones().filter((b) => b.dataset.sonando === '1').length === 1, 'B: las demás en ▶');
+    afirmar(botones()[1].getAttribute('aria-label') === `Pausar preview de ${TEMAS_CINCO[1]}`, 'B: aria-label «Pausar preview de…»');
+    const pv = win(f).document.getElementById('ac-preview').textContent;
+    afirmar(pv === '▶ Preview', `B: #ac-preview en «▶ Preview» (dice «${pv}»)`);
+    afirmar($$(f, '.modal').length === modales0 && $$(f, '.tc-modal, .track-card-modal').length === fichasAntes, 'B: la ficha de canción no se abrió');
+    const hechas = llamadas(f).slice(l0);
+    const spot = aSpotify(hechas);
+    afirmar(spot.length === 0, `B: 0 peticiones a Spotify por el botón (${spot.map((x) => x.ruta).join(', ')})`);
+    afirmar(hechas.length >= 1 && hechas.every((x) => x.ruta.startsWith('https://itunes.apple.com/')), 'B: lo único que salió es la búsqueda en iTunes');
+    afirmar(win(f).__audios.at(-1)?.includes(encodeURIComponent(TEMAS_CINCO[1])), 'B: suena el preview de ese tema');
+    datos.b = { itunes: hechas.length, spotify: spot.length };
+
+    // El ▶ del artista: ninguna fila queda en ⏸. Su preview es `ac:` y el iTunes simulado no tiene al artista: el
+    // `togglePreview` termina en null, y por el camino la fila 2 tiene que soltar el ⏸ igual.
+    win(f).document.getElementById('ac-preview').click();
+    await esperarReal(() => botones().every((b) => b.dataset.sonando !== '1'), { que: 'B: suena el artista, ninguna fila en ⏸', vueltas: VUELTAS });
+
+    // Sin preview.
+    const iSin = TEMAS_CINCO.indexOf(SIN_PREVIEW);
+    const toasts0 = $$(f, '.toast').length;
+    botones()[iSin].click();
+    await esperarReal(() => botones()[iSin].disabled, { que: 'B: la fila sin preview se deshabilita', vueltas: VUELTAS });
+    afirmar(botones()[iSin].title === 'Sin preview' && botones()[iSin].getAttribute('aria-label') === 'Sin preview', 'B: title y aria-label «Sin preview»');
+    afirmar($$(f, '.toast').length === toasts0, 'B: ningún toast');
+    afirmar(botones().filter((b) => b.disabled).length === 1, 'B: solo esa');
+    progreso('B');
+  }
+
+  if (corre('C')) {
+    const f = abrirMarco('c', 1366, 591); marcos.push(['c', f]);
+    await arrancado(f, 'C');
+    await abrirFicha(f, 'Dúo Dos Inventado', 2);
+    afirmar($$(f, '#ac-top-tracks .ac-track-play').length === 2, 'C: con 2 temas, dos botones');
+    await abrirFicha(f, 'Artista Sin Temas Inventado', 0);
+    afirmar($$(f, '.ac-track-play').length === 0, 'C: con 0, ninguno');
+    progreso('C');
+  }
+
+  if (corre('D')) {
+    const res = [];
+    for (const [ancho, alto] of [[1366, 591], [390, 844]]) {
+      const f = abrirMarco(`d${ancho}`, ancho, alto); marcos.push([`d${ancho}`, f]);
+      await arrancado(f, `D ${ancho}`);
+      await abrirWrapped(f, `D ${ancho}`);
+      const tabs = $(f, '#wrapped-year-tabs'), bar = $(f, '.wrapped-year-bar');
+      afirmar(tabs.scrollWidth <= tabs.clientWidth, `D ${ancho}: la barra de años no desborda (${tabs.scrollWidth} > ${tabs.clientWidth})`);
+      afirmar(bar.scrollWidth <= bar.clientWidth, `D ${ancho}: .wrapped-year-bar no desborda (${bar.scrollWidth} > ${bar.clientWidth})`);
+      const de = f.contentDocument.documentElement;
+      afirmar(de.scrollWidth <= win(f).innerWidth, `D ${ancho}: la página no desborda (${de.scrollWidth} > ${win(f).innerWidth})`);
+      let medida = `barra ${tabs.scrollWidth}/${tabs.clientWidth}`;
+      if (corre('B')) {
+        await abrirFicha(f, 'Banda Cinco Inventada', 5);
+        const t = $(f, '#ac-top-tracks');
+        afirmar(t.clientWidth > 0, `D ${ancho}: #ac-top-tracks tiene ancho`);
+        afirmar(t.scrollWidth <= t.clientWidth, `D ${ancho}: #ac-top-tracks no desborda (${t.scrollWidth} > ${t.clientWidth})`);
+        for (const b of $$(f, '#ac-top-tracks .ac-track-play')) {
+          const r = b.getBoundingClientRect(), fr = b.closest('.wrapped-top-row').getBoundingClientRect();
+          afirmar(r.left >= fr.left && r.right <= fr.right, `D ${ancho}: el ▶ entra en su fila`);
+          afirmar(r.width >= 28 && r.height >= 28, `D ${ancho}: el ▶ se puede tocar (${r.width}×${r.height})`);
+        }
+        const nombre = $$(f, '#ac-top-tracks .wrapped-top-name').at(-1).getBoundingClientRect();
+        afirmar(nombre.width > 40, `D ${ancho}: el nombre conserva ancho (${nombre.width.toFixed(0)})`);
+        medida += `, tracks ${t.scrollWidth}/${t.clientWidth}, nombre ${nombre.width.toFixed(0)}`;
+      }
+      res.push(`${ancho}: ${medida}`);
+    }
+    datos.d = res.join(' · ');
+    progreso('D');
+  }
+
+  const errores = marcos.flatMap(([n, f]) => win(f).__errores.map((e) => `${n}: ${e}`));
+  afirmar(errores.length === 0, `0 errores de consola: ${errores.join(' | ')}`);
+  const ajenos = marcos.flatMap(([, f]) => win(f).__sim.reg.desconocidas);
+  const resumen = `ok${datos.a ? ` · A elegir: ${datos.a.nuevas} peticiones, apertura ${datos.a.conApertura ? 'montada antes' : 'no montada'}` : ''}` +
+    (datos.b ? ` · B: ${datos.b.itunes} a iTunes, ${datos.b.spotify} a Spotify` : '') +
+    (datos.d ? ` · D ${datos.d}` : '') +
+    ` · rutas sin simular=${ajenos.length} · errores=${errores.length} · reloj virtual=${Math.round(performance.now())} ms`;
+  document.documentElement.setAttribute('data-resumen', resumen);
+  document.getElementById('progreso').textContent = resumen;
+  listo(resumen);
+} catch (e) {
+  fallar(e);
+}
+</script>
+</body></html>
