@@ -6,17 +6,23 @@
 //
 // Corre con `TZ` de Buenos Aires y de Tokio: ninguna cuenta puede depender de la zona de la máquina.
 // Correr con: node tests/lluvia.test.mjs
+// `RAIZ_LLUVIA=<carpeta>` lo corre contra otra copia del repo (la de la versión anterior, para ver el rojo).
 import { readFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { dirname, join } from 'node:path';
 
-const raiz = join(dirname(fileURLToPath(import.meta.url)), '..');
+const raiz = process.env.RAIZ_LLUVIA || join(dirname(fileURLToPath(import.meta.url)), '..');
+const moduloDeLaRaiz = (ruta) => import(pathToFileURL(join(raiz, ruta)).href);
+const util = await moduloDeLaRaiz('src/js/util/lluvia.js');
 const {
   decimas, esDiaDeLluvia, validarLluvia, diasLocalesValidos, filasDeLaVentana, media, mediana, resumir, porAnio,
-  masLluviosos, lineaVentana, fraseDiferencia, FRASE_NO_CAUSA, textoMinutos, textoMm, textoPct, trozosAtribucion,
-} = await import('../src/js/util/lluvia.js');
-const { LLUVIA_VERSION, DAYS_LOCAL_VERSION, OWNER_KEYS } = await import('../src/js/history-keys.js');
+  masLluviosos, lineaVentana, FRASE_NO_CAUSA, textoMinutos, textoMm, textoPct, trozosAtribucion,
+  // Con los dos valores por defecto, contra una versión que no las tiene salen asserts en rojo y no un TypeError.
+  lineaAnios = () => '(lineaAnios no existe)', lineaRecorte = () => ({ texto: '(lineaRecorte no existe)', title: '(lineaRecorte no existe)' }),
+} = util;
+const { fmtDia } = await moduloDeLaRaiz('src/js/util/fecha.js');
+const { LLUVIA_VERSION, DAYS_LOCAL_VERSION, OWNER_KEYS } = await moduloDeLaRaiz('src/js/history-keys.js');
 
 let ok = 0;
 const fallos = [];
@@ -99,15 +105,64 @@ function casos() {
   igual(textoMm(10), '1,0', '1 mm, con su decimal');
   igual(lineaVentana([{ dia: '2018-08-15' }, { dia: '2026-10-21' }]), 'Del 15 ago 2018 al 21 oct 2026: 2 días. Un día con lluvia es uno con 1 mm o más.', 'la línea de arriba');
 
-  // ── 7 · la frase, en sus tres textos ──────────────────────────────────────
-  igual(fraseDiferencia(1500, 1200), 'Los días con lluvia escuchas de media 30 min más que los días sin lluvia.', 'más');
-  igual(fraseDiferencia(1200, 1500), 'Los días con lluvia escuchas de media 30 min menos que los días sin lluvia.', 'menos');
-  igual(fraseDiferencia(1200, 1204), 'Los días con lluvia escuchas lo mismo de media que los días sin lluvia.', 'lo mismo: 0,4 min redondea a 0');
-  igual(fraseDiferencia(1204, 1200), 'Los días con lluvia escuchas lo mismo de media que los días sin lluvia.', 'lo mismo, del otro lado');
-  igual(fraseDiferencia(1205, 1200), 'Los días con lluvia escuchas de media 1 min más que los días sin lluvia.', '0,5 min redondea a 1');
-  igual(fraseDiferencia(1200, 1205), 'Los días con lluvia escuchas de media 1 min menos que los días sin lluvia.', 'y lo mismo en negativo (sin el -0 ni el redondeo asimétrico)');
-  igual(fraseDiferencia(null, 1200), null, 'sin días con lluvia no hay frase');
+  // ── 7 · la línea de los años (v=359): cuenta años, sin conclusión ─────────
   igual(FRASE_NO_CAUSA, 'Esto compara días: no dice que la lluvia sea la causa.', 'la frase de la causa');
+  const anios = (...pares) => pares.map(([mediaConD, mediaSinD], i) => ({ anio: 2000 + i, diasConLluvia: 1, mediaConD, mediaSinD }));
+  const PRINCIPIO = 'Año por año, la media de los días con lluvia sale';
+  igual(lineaAnios(anios([100, 90], [50, 60], [70, 60], [40, 41], [80, 70], [120, 110], [30, 40], [200, 210], [300, 200])),
+    `${PRINCIPIO} más alta en 5 y más baja en 4.`, '5 más y 4 menos');
+  igual(lineaAnios(anios([100, 100], [90, 80], [10, 20])), `${PRINCIPIO} más alta en 1, más baja en 1 e igual en 1.`, 'un empate en décimas, en singular');
+  igual(lineaAnios(anios([100, 100], [90, 90], [90, 80], [10, 20], [10, 20])), `${PRINCIPIO} más alta en 1, más baja en 2 e igual en 2.`, 'dos empates');
+  // 123,4 y 123,1 se enseñan los dos como «123»: difieren en décimas, así que NO empatan.
+  igual(textoMinutos(1234), textoMinutos(1231), 'las dos medias redondean al mismo minuto');
+  igual(lineaAnios(anios([1234, 1231], [1231, 1234])), `${PRINCIPIO} más alta en 1 y más baja en 1.`, 'en décimas, no en los minutos redondeados de la tabla');
+  igual(lineaAnios(anios([null, 100], [90, 80], [70, 80])), `${PRINCIPIO} más alta en 1 y más baja en 1. (1 sin días de los dos tipos.)`, 'un año sin días con lluvia no cuenta');
+  igual(lineaAnios(anios([100, null], [null, 100], [90, 80])), `${PRINCIPIO} más alta en 1 y más baja en 0. (2 sin días de los dos tipos.)`, 'tampoco uno sin días sin lluvia');
+  igual(lineaAnios(anios([100, 100], [90, 80], [10, 20], [null, 5])), `${PRINCIPIO} más alta en 1, más baja en 1 e igual en 1. (1 sin días de los dos tipos.)`, 'el empate y el año sin días, juntos');
+  igual(lineaAnios(anios([100, 90])), null, 'un solo año: sin línea');
+  igual(lineaAnios(anios([null, 90])), null, 'un solo año sin días con lluvia: sin línea');
+  igual(lineaAnios([]), null, 'sin años: sin línea');
+
+  // ── 7 bis · la línea del recorte (v=359): la oración fija y las fechas en el `title` ──────
+  const ORACION = 'Son los días en que hay historial y lluvia a la vez; el primer y el último día de tu historial no entran porque pueden estar a medias.';
+  const histR = { from: '2021-03-10', min: [1, 2, 3, 4, 5, 6] };
+  const lluviaR = { desde: '2021-03-01', hasta: '2021-03-31', mm: [] };
+  const titleR = 'Tu historial: del 10 mar 2021 al 15 mar 2021. La lluvia: del 1 mar 2021 al 31 mar 2021.';
+  const recorte = lineaRecorte(histR, lluviaR);
+  igual(recorte.texto, ORACION, 'el cuerpo es la oración fija');
+  af(!/\d/.test(recorte.texto), 'el cuerpo no lleva fechas ni números');
+  igual(recorte.title, titleR, 'las cuatro fechas van en el title');
+  igual(lineaRecorte({ ...histR, from: '2021-03-11' }, lluviaR).title, 'Tu historial: del 11 mar 2021 al 16 mar 2021. La lluvia: del 1 mar 2021 al 31 mar 2021.', 'otro primer día del historial cambia A y B');
+  igual(lineaRecorte({ ...histR, min: [1, 2, 3] }, lluviaR).title, 'Tu historial: del 10 mar 2021 al 12 mar 2021. La lluvia: del 1 mar 2021 al 31 mar 2021.', 'menos días de historial cambian B');
+  igual(lineaRecorte(histR, { ...lluviaR, desde: '2021-02-01' }).title, 'Tu historial: del 10 mar 2021 al 15 mar 2021. La lluvia: del 1 feb 2021 al 31 mar 2021.', 'otro `desde` cambia C');
+  igual(lineaRecorte(histR, { ...lluviaR, hasta: '2021-04-30' }).title, 'Tu historial: del 10 mar 2021 al 15 mar 2021. La lluvia: del 1 mar 2021 al 30 abr 2021.', 'otro `hasta` cambia D');
+  // Con `TZ` de Buenos Aires, un `new Date('2020-01-01')` leído en local se iría a 2019.
+  igual(lineaRecorte({ from: '2020-01-01', min: Array.from({ length: 366 }, () => 0) }, { desde: '2021-01-01', hasta: '2021-12-31', mm: [] }).title,
+    'Tu historial: del 1 ene 2020 al 31 dic 2020. La lluvia: del 1 ene 2021 al 31 dic 2021.', 'las fechas que cruzan de año en UTC−3 siguen siendo las del dato');
+
+  // ── 7 ter · los dos números juntos: el N de la línea de arriba y el recorte ───────────────
+  const nDe = (linea) => Number(linea.match(/: ([\d.]+) días\./)[1].replace(/\./g, ''));
+  const sumaDias = (filas) => { const g = resumir(filas); return g.con.dias + g.sin.dias; };
+  // La lluvia cubre el historial entero: 12 días de historial, 10 en la ventana.
+  const histC = { from: '2021-03-10', min: Array.from({ length: 12 }, (_, i) => i * 3) };
+  const lluviaC = { desde: '2021-03-01', hasta: '2021-03-31', mm: Array.from({ length: 31 }, (_, i) => (i % 3 ? 0 : 2)) };
+  const fC = filasDeLaVentana(histC, lluviaC);
+  igual(nDe(lineaVentana(fC)), 10, 'cubre: el N de la línea');
+  igual(nDe(lineaVentana(fC)), sumaDias(fC), 'cubre: N = con lluvia + sin lluvia');
+  igual(nDe(lineaVentana(fC)), histC.min.length - 2, 'cubre: N = días del historial − 2');
+  // La lluvia empieza después: 10 días de historial y 5 en la ventana, y no 8.
+  const histD = { from: '2021-02-25', min: Array.from({ length: 10 }, () => 7) };
+  const fD = filasDeLaVentana(histD, { ...lluviaC, desde: '2021-03-01' });
+  igual(nDe(lineaVentana(fD)), 5, 'la lluvia empieza después: el N de la línea');
+  igual(nDe(lineaVentana(fD)), sumaDias(fD), 'la lluvia empieza después: N = con lluvia + sin lluvia');
+  af(nDe(lineaVentana(fD)) !== histD.min.length - 2, 'la lluvia empieza después: N no es «− 2»');
+  igual(lineaRecorte(histD, lluviaC).texto, ORACION, 'y la oración es la misma');
+  // La lluvia termina antes: 6 días de historial y 1 en la ventana, y no 4.
+  const histE = { from: '2021-03-30', min: [1, 2, 3, 4, 5, 6] };
+  const fE = filasDeLaVentana(histE, lluviaC);
+  igual(nDe(lineaVentana(fE)), 1, 'la lluvia termina antes: el N de la línea');
+  igual(nDe(lineaVentana(fE)), sumaDias(fE), 'la lluvia termina antes: N = con lluvia + sin lluvia');
+  af(nDe(lineaVentana(fE)) !== histE.min.length - 2, 'la lluvia termina antes: N no es «− 2»');
 
   // ── 8 · los 10 más lluviosos ──────────────────────────────────────────────
   const dias12 = [
@@ -187,6 +242,24 @@ igual(trozos.filter((t) => t.href), [
 const fuente = readFileSync(join(raiz, 'src/js/features/lluvia.js'), 'utf8');
 af(!fuente.includes('Copernicus') && !fuente.includes('pluviómetro'), 'features/lluvia.js no escribe el crédito ni el aviso a mano');
 af(/escapeHtml\(lluvia\.aviso\)/.test(fuente) && /trozosAtribucion\(lluvia\.atribucion\)/.test(fuente), 'los lee del JSON');
+
+// 🔴 v=359: la frase de la diferencia se fue. La vista no saca conclusión de 5 min entre miles de días.
+af(!fuente.includes('fraseDiferencia'), 'features/lluvia.js no usa fraseDiferencia');
+af(!fuente.includes('data-lluvia-frase'), 'features/lluvia.js no pinta data-lluvia-frase');
+af(!/min más|min menos/.test(fuente), 'features/lluvia.js no dice «min más» ni «min menos»');
+af(util.fraseDiferencia === undefined, 'util/lluvia.js ya no exporta fraseDiferencia');
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 11 bis. Los dos números juntos, con el dato real (solo cuentas: ningún nombre)
+// ═══════════════════════════════════════════════════════════════════════════
+const DIAS_REALES = JSON.parse(readFileSync(join(raiz, 'src/data/history-days-local.json'), 'utf8'));
+const filasReales = filasDeLaVentana(DIAS_REALES, L);
+const nReal = Number(lineaVentana(filasReales).match(/: ([\d.]+) días\./)[1].replace(/\./g, ''));
+const rReal = resumir(filasReales);
+igual(nReal, rReal.con.dias + rReal.sin.dias, 'dato real: N de la línea = días con lluvia + días sin lluvia');
+const finHistorial = new Date(Date.UTC(+DIAS_REALES.from.slice(0, 4), +DIAS_REALES.from.slice(5, 7) - 1, +DIAS_REALES.from.slice(8, 10) + DIAS_REALES.min.length - 1)).toISOString().slice(0, 10);
+if (L.desde <= DIAS_REALES.from && L.hasta >= finHistorial) igual(nReal, DIAS_REALES.min.length - 2, 'dato real: la lluvia cubre el historial, así que N = días del historial − 2');
+igual(lineaRecorte(DIAS_REALES, L).title, `Tu historial: del ${fmtDia(DIAS_REALES.from)} al ${fmtDia(finHistorial)}. La lluvia: del ${fmtDia(L.desde)} al ${fmtDia(L.hasta)}.`, 'dato real: el title lleva las cuatro fechas de los dos JSON');
 
 // ═══════════════════════════════════════════════════════════════════════════
 // 12. Las claves

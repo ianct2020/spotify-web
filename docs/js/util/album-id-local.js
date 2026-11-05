@@ -20,7 +20,7 @@
 // que se cruza la lista. No es la de #discover-artists (firma del álbum): ver
 // `util/discover-key.js`. Mezclarlas dentro de una vista rompe el cruce.
 
-import { albumKey } from './album-key.js?v=358';
+import { albumKey } from './album-key.js?v=359';
 
 /**
  * @param {Array<{track?:object}>} items  el `items` de getBestAvailableLikes()

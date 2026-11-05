@@ -11,8 +11,8 @@
 // a la red, y los dos JSON del repo no se piden al servidor.
 //
 //   A. abrir `#lluvia` cuesta exactamente 1 `/me` y 0 de lo demás;
-//   B. los números de las dos tarjetas, la línea, la frase, la tabla y los diez más lluviosos son los de
-//      la cuenta a mano (`ESPERADO`);
+//   B. los números de las dos tarjetas, la línea, el recorte, la línea de los años, la tabla y los diez más
+//      lluviosos son los de la cuenta a mano (`ESPERADO`), y la frase de la diferencia ya no existe (v=359);
 //   C. el trío de la lluvia caída (500, `fetch` que rechaza, 200 con HTML): la línea de error, el error
 //      crudo en `console.warn('[lluvia] …')` y ningún número;
 //   D. el amigo: con su historial importado, una línea y nada más (sin botón de importar, sin pedir la
@@ -109,7 +109,15 @@ try {
     afirmar(igual(vino, e), `PUERTA B (${t}): vino ${JSON.stringify(vino)} y la cuenta a mano dice ${JSON.stringify(e)}`);
   }
   afirmar(texto($(A, '[data-lluvia-tarjeta="con"] .lluvia-tit')) === 'Días con lluvia' && texto($(A, '[data-lluvia-tarjeta="sin"] .lluvia-tit')) === 'Días sin lluvia', 'PUERTA B: los títulos de las tarjetas');
-  afirmar(texto($(A, '[data-lluvia-frase]')) === ESPERADO.frase, `PUERTA B: la frase: «${texto($(A, '[data-lluvia-frase]'))}»`);
+  // v=359: la frase de la diferencia se fue; en su sitio, la línea que cuenta años, sin conclusión.
+  afirmar(!$(A, '[data-lluvia-frase]'), `PUERTA B: no existe [data-lluvia-frase]: «${texto($(A, '[data-lluvia-frase]'))}»`);
+  afirmar(texto($(A, '[data-lluvia-anios]')) === ESPERADO.lineaAnios, `PUERTA B: la línea de los años: «${texto($(A, '[data-lluvia-anios]'))}»`);
+  afirmar($(A, '[data-lluvia-anios]')?.previousElementSibling?.matches('.lluvia-tarjetas') && $(A, '[data-lluvia-anios]')?.nextElementSibling?.matches('[data-lluvia-causa]'), 'PUERTA B: la línea de los años va entre las tarjetas y «no dice que la lluvia sea la causa»');
+  afirmar($(A, '[data-lluvia-linea]').nextElementSibling === $(A, '[data-lluvia-recorte]') && $(A, '[data-lluvia-recorte]'), 'PUERTA B: [data-lluvia-recorte] va justo después de [data-lluvia-linea]');
+  afirmar(texto($(A, '[data-lluvia-recorte]')) === ESPERADO.recorte, `PUERTA B: el recorte: «${texto($(A, '[data-lluvia-recorte]'))}»`);
+  afirmar($(A, '[data-lluvia-recorte]').title === ESPERADO.recorteTitle, `PUERTA B: el title del recorte: «${$(A, '[data-lluvia-recorte]').title}»`);
+  const nLinea = Number((texto($(A, '[data-lluvia-linea]')).match(/: ([\d.]+) días\./) || [])[1]?.replace(/\./g, ''));
+  afirmar(nLinea === Number(dato(A, 'con', 'dias')) + Number(dato(A, 'sin', 'dias')), `PUERTA B: el N de la línea (${nLinea}) es la suma de los días de las dos tarjetas`);
   afirmar(texto($(A, '[data-lluvia-causa]')) === ESPERADO.causa, 'PUERTA B: «no dice que la lluvia sea la causa»');
   afirmar(igual(filasDe(A, 'anios'), ESPERADO.anios), `PUERTA B: por año: ${JSON.stringify(filasDe(A, 'anios'))}`);
   afirmar(igual(filasDe(A, 'lluviosos'), ESPERADO.lluviosos), `PUERTA B: los más lluviosos: ${JSON.stringify(filasDe(A, 'lluviosos'))}`);
@@ -228,8 +236,8 @@ try {
   for (const id of ['violeta', 'ambar', 'aguamarina', 'papel']) {
     await anclar(win(A).__ponerTema(id));
     const piezas = [
-      ['línea de arriba', $(A, '[data-lluvia-linea]')], ['título de la tarjeta', $(A, '.lluvia-tit')], ['número de la tarjeta', $(A, '.lluvia-num')],
-      ['etiqueta de la tarjeta', $(A, '.lluvia-et')], ['frase', $(A, '[data-lluvia-frase]')], ['«no dice la causa»', $(A, '[data-lluvia-causa]')],
+      ['línea de arriba', $(A, '[data-lluvia-linea]')], ['línea del recorte', $(A, '[data-lluvia-recorte]')], ['título de la tarjeta', $(A, '.lluvia-tit')], ['número de la tarjeta', $(A, '.lluvia-num')],
+      ['etiqueta de la tarjeta', $(A, '.lluvia-et')], ['línea de los años', $(A, '[data-lluvia-anios]')], ['«no dice la causa»', $(A, '[data-lluvia-causa]')],
       ['título de sección', $(A, '.lluvia-sec')], ['cabecera de la tabla', $(A, '.lluvia-tabla th')], ['celda de la tabla', $(A, '.lluvia-tabla td')],
       ['aviso del pie', $(A, '[data-lluvia-pie="aviso"]')], ['crédito del pie', $(A, '[data-lluvia-pie="credito"]')], ['enlace del pie', $(A, '.lluvia-pie a')],
     ];
@@ -257,7 +265,7 @@ try {
     await abrirLluvia(f, `#lluvia a ${ancho}`, () => $(f, '[data-lluvia="lista"]'));
     const de = f.contentDocument.documentElement;
     afirmar(de.scrollWidth <= win(f).innerWidth, `PUERTA F (${ancho}): sin barra horizontal (${de.scrollWidth} > ${win(f).innerWidth})`);
-    const malos = [$(f, '.lluvia'), $(f, '.lluvia-tarjetas'), ...$$(f, '.lluvia-tarjeta'), ...$$(f, '.lluvia-dato'), ...$$(f, '.lluvia-tabla-marco'), ...$$(f, '.lluvia-tabla'), ...$$(f, '.lluvia-tabla td'), $(f, '.lluvia-pie')]
+    const malos = [$(f, '.lluvia'), $(f, '[data-lluvia-recorte]'), $(f, '[data-lluvia-anios]'), $(f, '.lluvia-tarjetas'), ...$$(f, '.lluvia-tarjeta'), ...$$(f, '.lluvia-dato'), ...$$(f, '.lluvia-tabla-marco'), ...$$(f, '.lluvia-tabla'), ...$$(f, '.lluvia-tabla td'), $(f, '.lluvia-pie')]
       .filter((el) => el && el.scrollWidth > el.clientWidth + 1).map((el) => `${el.className || el.nodeName} ${el.scrollWidth}>${el.clientWidth}`);
     afirmar(malos.length === 0, `PUERTA F (${ancho}): nada desborda su caja (${malos.slice(0, 5).join(' · ')})`);
     const cont = $(f, '.lluvia').getBoundingClientRect();

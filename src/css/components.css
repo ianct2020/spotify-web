@@ -2204,7 +2204,6 @@ body.con-aviso-copia { padding-top: 46px; }
 .lluvia-dato { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .lluvia-num { font-size: 30px; font-weight: 700; line-height: 1.1; color: var(--color-text); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
 .lluvia-et { font-size: 13px; line-height: 1.4; color: var(--color-text-secondary); }
-.lluvia-frase { margin: 0; font-size: 16px; font-weight: 600; line-height: 1.4; color: var(--color-text); }
 .lluvia-sec { margin: 10px 0 0; font-size: 15px; font-weight: 700; color: var(--color-text); }
 .lluvia-tabla-marco { min-width: 0; max-width: 640px; }
 .lluvia-tabla { width: 100%; border-collapse: collapse; font-size: 13px; color: var(--color-text); font-variant-numeric: tabular-nums; }

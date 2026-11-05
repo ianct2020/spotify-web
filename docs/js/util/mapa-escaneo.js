@@ -41,8 +41,8 @@
 // comprobar cómo se porta una pestaña oculta: la vista lo dice y enseña el ritmo
 // medido para que, si se frena, se vea.
 
-import { proximoPaso, recortarArtistas, recortarArea, idsDeGrabacion } from './mapa-paises.js?v=358';
-import { queryArtista, queryArtistaConAlias, queryGrabacion, limpiarTitulo } from './mb-pais.js?v=358';
+import { proximoPaso, recortarArtistas, recortarArea, idsDeGrabacion } from './mapa-paises.js?v=359';
+import { queryArtista, queryArtistaConAlias, queryGrabacion, limpiarTitulo } from './mb-pais.js?v=359';
 
 export const BASE_MB = 'https://musicbrainz.org/ws/2';
 export const INTERVALO_MS = 1200;

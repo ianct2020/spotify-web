@@ -22,7 +22,7 @@ import { fmtDia } from '../util/fecha.js';
 import { vigilarRuta } from '../util/vigencia-ruta.js';
 import {
   validarLluvia, diasLocalesValidos, filasDeLaVentana, resumir, porAnio, masLluviosos, lineaVentana,
-  fraseDiferencia, FRASE_NO_CAUSA, textoMinutos, textoMm, textoPct, trozosAtribucion,
+  lineaRecorte, lineaAnios, FRASE_NO_CAUSA, textoMinutos, textoMm, textoPct, trozosAtribucion,
 } from '../util/lluvia.js';
 
 const num = (n) => Number(n).toLocaleString('es-ES');
@@ -74,16 +74,18 @@ function pieHtml(lluvia) {
   </footer>`;
 }
 
-function vistaHtml(filas, lluvia) {
+function vistaHtml(filas, lluvia, dias) {
   const { con, sin } = resumir(filas);
-  const frase = fraseDiferencia(con.mediaD, sin.mediaD);
+  const recorte = lineaRecorte(dias, lluvia);
+  const anios = lineaAnios(porAnio(filas));
   return `<div class="lluvia" data-lluvia="lista">
     <p class="lluvia-linea" data-lluvia-linea>${escapeHtml(lineaVentana(filas))}</p>
+    <p class="lluvia-linea" data-lluvia-recorte title="${escapeHtml(recorte.title)}">${escapeHtml(recorte.texto)}</p>
     <div class="lluvia-tarjetas">
       ${tarjetaHtml('con', 'Días con lluvia', con)}
       ${tarjetaHtml('sin', 'Días sin lluvia', sin)}
     </div>
-    ${frase ? `<p class="lluvia-frase" data-lluvia-frase>${escapeHtml(frase)}</p>` : ''}
+    ${anios ? `<p class="lluvia-linea" data-lluvia-anios>${escapeHtml(anios)}</p>` : ''}
     <p class="lluvia-linea" data-lluvia-causa>${escapeHtml(FRASE_NO_CAUSA)}</p>
     ${tablaAniosHtml(filas)}
     ${tablaLluviososHtml(filas)}
@@ -143,6 +145,6 @@ export async function render(container) {
 
   const filas = filasDeLaVentana(dias, lluvia);
   content.innerHTML = filas.length
-    ? vistaHtml(filas, lluvia)
+    ? vistaHtml(filas, lluvia, dias)
     : notaHtml('sin-dias', 'Todavía no hay días con los dos datos para comparar.');
 }

@@ -14,7 +14,7 @@
 //   · Todas las cuentas en enteros (décimas de minuto y de mm). Se redondea al final, al enseñar.
 //
 // Guarda: `tests/lluvia.test.mjs`.
-import { fmtDia } from './fecha.js?v=358';
+import { fmtDia } from './fecha.js?v=359';
 
 /** 1 mm, en décimas. */
 export const UMBRAL_DECIMAS = 10;
@@ -121,12 +121,35 @@ export function lineaVentana(filas) {
   return `Del ${fmtDia(filas[0].dia)} al ${fmtDia(filas[filas.length - 1].dia)}: ${num(filas.length)} días. Un día con lluvia es uno con 1 mm o más.`;
 }
 
-/** La frase de la diferencia de las medias. `null` si falta uno de los dos grupos. */
-export function fraseDiferencia(mediaConD, mediaSinD) {
-  if (mediaConD === null || mediaSinD === null) return null;
-  const minutos = Math.round(Math.abs(mediaConD - mediaSinD) / 10);
-  if (minutos === 0) return 'Los días con lluvia escuchas lo mismo de media que los días sin lluvia.';
-  return `Los días con lluvia escuchas de media ${num(minutos)} min ${mediaConD > mediaSinD ? 'más' : 'menos'} que los días sin lluvia.`;
+/**
+ * Debajo de la línea de arriba: de dónde sale ese número de días. El cuerpo es una oración fija; las cuatro
+ * fechas van en el `title`, leídas de los dos JSON.
+ */
+export function lineaRecorte(diasLocal, lluvia) {
+  const finHistorial = isoDe(diaNum(diasLocal.from) + diasLocal.min.length - 1);
+  return {
+    texto: 'Son los días en que hay historial y lluvia a la vez; el primer y el último día de tu historial no entran porque pueden estar a medias.',
+    title: `Tu historial: del ${fmtDia(diasLocal.from)} al ${fmtDia(finHistorial)}. La lluvia: del ${fmtDia(lluvia.desde)} al ${fmtDia(lluvia.hasta)}.`,
+  };
+}
+
+/**
+ * Cuenta los años, sin sacar conclusión (v=359). Compara en décimas enteras, no los minutos redondeados
+ * de la tabla. Un año sin días con lluvia o sin días sin lluvia no cuenta. Con un solo año, `null`.
+ */
+export function lineaAnios(anios) {
+  if (anios.length < 2) return null;
+  let altos = 0, bajos = 0, iguales = 0, sinLosDos = 0;
+  for (const { mediaConD, mediaSinD } of anios) {
+    if (mediaConD === null || mediaSinD === null) sinLosDos++;
+    else if (mediaConD > mediaSinD) altos++;
+    else if (mediaConD < mediaSinD) bajos++;
+    else iguales++;
+  }
+  const cuenta = iguales
+    ? `más alta en ${altos}, más baja en ${bajos} e igual en ${iguales}.`
+    : `más alta en ${altos} y más baja en ${bajos}.`;
+  return `Año por año, la media de los días con lluvia sale ${cuenta}${sinLosDos ? ` (${sinLosDos} sin días de los dos tipos.)` : ''}`;
 }
 
 export const FRASE_NO_CAUSA = 'Esto compara días: no dice que la lluvia sea la causa.';

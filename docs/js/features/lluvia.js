@@ -15,15 +15,15 @@
 // Abrir cuesta 1 `/me` (el de `loadOne()`) y 0 de todo lo demás: los dos JSON salen del propio Pages.
 // 🔴 Después de cada `await` se pregunta por la vigencia de la ruta (v=195/v=329).
 
-import { loadDaysLocal, isOwner, hasLocalHistory, identidadSinConfirmar, ownerLockedMessage, falloDeLecturaDelHistorial, avisoHistorialIlegibleHtml } from './history-data.js?v=358';
-import { LLUVIA_VERSION } from '../history-keys.js?v=358';
-import { escapeHtml, pageHeader } from '../ui/components.js?v=358';
-import { fmtDia } from '../util/fecha.js?v=358';
-import { vigilarRuta } from '../util/vigencia-ruta.js?v=358';
+import { loadDaysLocal, isOwner, hasLocalHistory, identidadSinConfirmar, ownerLockedMessage, falloDeLecturaDelHistorial, avisoHistorialIlegibleHtml } from './history-data.js?v=359';
+import { LLUVIA_VERSION } from '../history-keys.js?v=359';
+import { escapeHtml, pageHeader } from '../ui/components.js?v=359';
+import { fmtDia } from '../util/fecha.js?v=359';
+import { vigilarRuta } from '../util/vigencia-ruta.js?v=359';
 import {
   validarLluvia, diasLocalesValidos, filasDeLaVentana, resumir, porAnio, masLluviosos, lineaVentana,
-  fraseDiferencia, FRASE_NO_CAUSA, textoMinutos, textoMm, textoPct, trozosAtribucion,
-} from '../util/lluvia.js?v=358';
+  lineaRecorte, lineaAnios, FRASE_NO_CAUSA, textoMinutos, textoMm, textoPct, trozosAtribucion,
+} from '../util/lluvia.js?v=359';
 
 const num = (n) => Number(n).toLocaleString('es-ES');
 const SIN_ARCHIVO = 'La lluvia se cruza con el historial que está guardado en la app, y el tuyo no lo está.';
@@ -74,16 +74,18 @@ function pieHtml(lluvia) {
   </footer>`;
 }
 
-function vistaHtml(filas, lluvia) {
+function vistaHtml(filas, lluvia, dias) {
   const { con, sin } = resumir(filas);
-  const frase = fraseDiferencia(con.mediaD, sin.mediaD);
+  const recorte = lineaRecorte(dias, lluvia);
+  const anios = lineaAnios(porAnio(filas));
   return `<div class="lluvia" data-lluvia="lista">
     <p class="lluvia-linea" data-lluvia-linea>${escapeHtml(lineaVentana(filas))}</p>
+    <p class="lluvia-linea" data-lluvia-recorte title="${escapeHtml(recorte.title)}">${escapeHtml(recorte.texto)}</p>
     <div class="lluvia-tarjetas">
       ${tarjetaHtml('con', 'Días con lluvia', con)}
       ${tarjetaHtml('sin', 'Días sin lluvia', sin)}
     </div>
-    ${frase ? `<p class="lluvia-frase" data-lluvia-frase>${escapeHtml(frase)}</p>` : ''}
+    ${anios ? `<p class="lluvia-linea" data-lluvia-anios>${escapeHtml(anios)}</p>` : ''}
     <p class="lluvia-linea" data-lluvia-causa>${escapeHtml(FRASE_NO_CAUSA)}</p>
     ${tablaAniosHtml(filas)}
     ${tablaLluviososHtml(filas)}
@@ -143,6 +145,6 @@ export async function render(container) {
 
   const filas = filasDeLaVentana(dias, lluvia);
   content.innerHTML = filas.length
-    ? vistaHtml(filas, lluvia)
+    ? vistaHtml(filas, lluvia, dias)
     : notaHtml('sin-dias', 'Todavía no hay días con los dos datos para comparar.');
 }

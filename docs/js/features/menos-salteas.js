@@ -24,16 +24,16 @@
 // (memoizado) y 0 de lo demás; «Mostrar 25 más» cuesta 0. Después de cada `await`
 // se pregunta por la vigencia de la ruta (v=195).
 
-import { loadSkipStats, loadHistoryStats, loadArtistTracks, isOwner, ownerLockedMessage, hasLocalHistory } from './history-data.js?v=358';
-import { getBestAvailableLikes } from '../api.js?v=358';
-import { escapeHtml, pageHeader } from '../ui/components.js?v=358';
-import { vigilarRuta } from '../util/vigencia-ruta.js?v=358';
-import { coverUrl } from '../util/cover-size.js?v=358';
-import { openTrackCard } from './track-card.js?v=358';
+import { loadSkipStats, loadHistoryStats, loadArtistTracks, isOwner, ownerLockedMessage, hasLocalHistory } from './history-data.js?v=359';
+import { getBestAvailableLikes } from '../api.js?v=359';
+import { escapeHtml, pageHeader } from '../ui/components.js?v=359';
+import { vigilarRuta } from '../util/vigencia-ruta.js?v=359';
+import { coverUrl } from '../util/cover-size.js?v=359';
+import { openTrackCard } from './track-card.js?v=359';
 import {
   armarMenosSalteas, POR_PAGINA, indiceDeLikes, indiceDeArtistTracks, nombreDeFila,
   textoPct, textoCuentas, textoIntro,
-} from '../util/menos-salteas.js?v=358';
+} from '../util/menos-salteas.js?v=359';
 
 const TITULO = 'Las que menos te saltas';
 const num = (n) => Number(n || 0).toLocaleString('es-ES');

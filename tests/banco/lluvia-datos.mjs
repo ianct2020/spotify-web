@@ -69,12 +69,15 @@ export const LLUVIA = {
 //   Sonó algo en 10 de 16: 62,5 %. Media 508,5 / 16 = 31,78… → 318 décimas (31,8) → «32».
 //   Mediana: seis ceros y 5, 15, 20, 25, 30, 33, 45,5, 60, 75, 200 → (15 + 20) / 2 = 17,5 → «18».
 //
-// La diferencia: 722 − 318 = 404 décimas = 40,4 → 40 min más.
+// La línea de los años (v=359), en décimas: 2020, 477 contra 459, más alta; 2021, 967 contra 83, más alta.
+// El recorte (v=359): el historial va del 15/12/2020 al 13/01/2021 y la lluvia, del 01/12/2020 al 18/01/2021.
 export const ESPERADO = {
   linea: 'Del 16 dic 2020 al 12 ene 2021: 28 días. Un día con lluvia es uno con 1 mm o más.',
+  recorte: 'Son los días en que hay historial y lluvia a la vez; el primer y el último día de tu historial no entran porque pueden estar a medias.',
+  recorteTitle: 'Tu historial: del 15 dic 2020 al 13 ene 2021. La lluvia: del 1 dic 2020 al 18 ene 2021.',
   con: { dias: '12', sono: '9', pct: '75,0 %', media: '72', mediana: '58' },
   sin: { dias: '16', sono: '10', pct: '62,5 %', media: '32', mediana: '18' },
-  frase: 'Los días con lluvia escuchas de media 40 min más que los días sin lluvia.',
+  lineaAnios: 'Año por año, la media de los días con lluvia sale más alta en 2 y más baja en 0.',
   causa: 'Esto compara días: no dice que la lluvia sea la causa.',
   // 2020: con 120, 0, 90, 10, 0, 66 = 286 / 6 = 47,66… → «48»; sin 458,5 / 10 = 45,85 → 459 décimas → «46».
   // 2021: con 240, 50, 100, 0, 150, 40 = 580 / 6 = 96,66… → «97»; sin 50 / 6 = 8,33… → «8».

@@ -5050,8 +5050,8 @@ Costo de la app: ninguno; es un archivo del propio Pages.
 no, 1,0 sí). Sin tercera categoría ni selector. La ventana son los días con los dos datos, **sin el primero ni el último del
 historial** (pueden estar a medias). Un día sin reproducciones son 0 minutos, no «sin dato», y entra en la media. Las cuentas van
 en enteros: la media es `round(Σ décimas / N)`; la mediana, con N par, el promedio de los dos del medio; se enseñan los minutos
-sin decimales y los % con uno. La frase resta las dos medias en décimas y redondea la diferencia, así que puede diferir en 1 min
-de restar los dos números enseñados.
+sin decimales y los % con uno. Hasta v=358, la frase de la diferencia restaba las dos medias en décimas y redondeaba el resultado;
+desde v=359 esa frase no existe (ver la nota de abajo).
 
 **Con el dato de hoy** (REAL, contado el 05/11/2026 con `util/lluvia.js`): del 15/08/2018 al 21/10/2026, 2.990 días. Con lluvia
 824: sonó algo en 539 (65,4 %), media 96, mediana 61. Sin lluvia 2.166: sonó algo en 1.368 (63,2 %), media 91, mediana 51. ⚠️ **Esos
@@ -5083,6 +5083,25 @@ costo; **B** los números = la cuenta a mano; **C** el trío de la lluvia caída
 a 1366×591 y 390×844; **G** el pie; **H** el trío del historial caído; **I** el contraste en los cuatro presets. Peor contraste
 medido: violeta 6,36 · ámbar 6,20 · aguamarina 6,27 · papel 6,51. Capturas:
 `fonoteca-migracion/driver-capturas-t117-2026-11-05.mjs`.
+
+**v=359 (tanda 118): la frase de la diferencia se fue.** Decía «Los días con lluvia escuchas de media 5 min más que los días sin
+lluvia.». 🔴 **El criterio es del planificador**: 5 minutos entre 824 y 2.166 días no alcanzan para un titular, año por año el reparto
+es 5 para un lado y 4 para el otro (no hay un sentido que se repita), y entre años pesa más cuánto se escuchaba en esa época (de 13 a
+220 min por día) que la lluvia. La pantalla enseña los números y la vuelta por año, sin sacar conclusión. `fraseDiferencia()` y
+`.lluvia-frase` se borraron, y ninguna frase dice cuántos minutos de diferencia hay.
+
+- **La línea de los años** (`lineaAnios(porAnio(filas))`, `<p class="lluvia-linea" data-lluvia-anios>`, entre las tarjetas y
+  `[data-lluvia-causa]`): «Año por año, la media de los días con lluvia sale más alta en N y más baja en M.»; con empates, «… más alta
+  en N, más baja en M e igual en K.»; con años sin días con lluvia o sin días sin lluvia (`null`), que no cuentan, se agrega «(J sin días
+  de los dos tipos.)». 🔴 **Compara en décimas enteras** (`mediaConD > mediaSinD`), no los minutos redondeados de la tabla: 123,4 y 123,1
+  se enseñan los dos como «123» y no empatan. Con un solo año, la línea no sale.
+- **El recorte** (`lineaRecorte(dias, lluvia)`, `<p class="lluvia-linea" data-lluvia-recorte>`, justo debajo de `[data-lluvia-linea]`):
+  el cuerpo es una oración fija, para que el número de días no se lea como el período entero; las cuatro fechas van en el `title`,
+  leídas de los dos JSON con `fmtDia`. El último día del historial sale de `from` + `min.length − 1`.
+- **Las guardas**: `tests/lluvia.test.mjs` (`RAIZ_LLUVIA=<carpeta>` lo corre contra otra copia: lineaAnios, lineaRecorte con `TZ` de
+  Buenos Aires y Tokio, N = días con lluvia + sin lluvia = historial − 2 cuando la lluvia lo cubre, un caso que no es «− 2», y una lectura
+  estática de la vista) y la puerta B del banco `lluvia` (no existe `[data-lluvia-frase]`, la cuenta a mano de las dos líneas y su lugar).
+  Rojo contra v=358: 40 asserts del test, y el banco en la puerta B. La puerta I mide el contraste de las dos líneas nuevas.
 
 ## 💰 Cuánto cuesta abrir cada vista (2026-10-06)
 
