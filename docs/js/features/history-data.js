@@ -8,10 +8,10 @@
 // Otro user cualquiera sin historial local ve el ownerLockedMessage que
 // invita a subir su ZIP.
 
-import { idbGetCached, idbSetCached, idbDel } from '../idb.js?v=357';
-import { getCurrentUserId } from '../api.js?v=357';
-import { OWNER_KEYS, LOCAL_HISTORY_PREFIX, STATS_VERSION, PLAYS_VERSION, LISTENED_VERSION, SKIP_VERSION, DETAIL_VERSION, RECORDS_VERSION, ARTIST_TRACKS_VERSION, SIMILARES_VERSION } from '../history-keys.js?v=357';
-import { mostrarBannerDegradadoVista } from '../ui/degraded-banner.js?v=357';
+import { idbGetCached, idbSetCached, idbDel } from '../idb.js?v=358';
+import { getCurrentUserId } from '../api.js?v=358';
+import { OWNER_KEYS, LOCAL_HISTORY_PREFIX, STATS_VERSION, PLAYS_VERSION, LISTENED_VERSION, SKIP_VERSION, DETAIL_VERSION, RECORDS_VERSION, ARTIST_TRACKS_VERSION, SIMILARES_VERSION, DAYS_LOCAL_VERSION } from '../history-keys.js?v=358';
+import { mostrarBannerDegradadoVista } from '../ui/degraded-banner.js?v=358';
 
 const HISTORY_OWNER_ID = 'orhs6wu5ykk7ql80u92ujn74o';
 
@@ -158,7 +158,7 @@ function localKey(uid, kind) {
 }
 
 // Caches en memoria (por sesión de página). Se resetean al cambiar de user.
-let memCache = { uid: null, stats: null, plays: null, listened: null, skip: null, detail: null, records: null, artistTracks: null, similares: null, days: null };
+let memCache = { uid: null, stats: null, plays: null, listened: null, skip: null, detail: null, records: null, artistTracks: null, similares: null, days: null, daysLocal: null };
 
 // ── El registro de los fallos de lectura (v=352, tanda 109) ─────────────────
 //
@@ -217,7 +217,7 @@ async function ensureFreshMem() {
   // fallaba igual que antes, y `isOwner()` podía decir "sí sos el owner"
   // mientras `loadOne()` seguía sirviendo `null` — banner sin contenido atrás.
   const { id: uid } = await resolvedUserId();
-  if (memCache.uid !== uid) memCache = { uid, stats: null, plays: null, listened: null, skip: null, detail: null, records: null, artistTracks: null, similares: null, days: null };
+  if (memCache.uid !== uid) memCache = { uid, stats: null, plays: null, listened: null, skip: null, detail: null, records: null, artistTracks: null, similares: null, days: null, daysLocal: null };
   if (fallosDeLectura.uid !== uid) fallosDeLectura = { uid, porKind: {} };
   return uid;
 }
@@ -308,6 +308,9 @@ const OWNER_PREV_KEYS = {
   // `days` no tiene versiones anteriores porque no tiene versiones: nació en
   // v=289 y **el owner no tiene URL** de donde bajarlo (ver `loadDays`).
   days: [],
+  // Vacía desde que nació (v=358): no hay versión anterior. Si el formato cambia se sube
+  // `DAYS_LOCAL_VERSION` y esta lista sigue vacía: uno viejo pasaría el `sanityCheck` igual.
+  daysLocal: [],
 };
 
 // `opciones.tirarSiFalla` (v=351, tanda 108): con `true`, el `catch` FINAL del `fetch`
@@ -471,6 +474,11 @@ async function loadArtistSimilares() {
 async function loadRecords() {
   return loadOne('records', 'records', d => !!d.top_days, () => dataUrl('history-records.json', RECORDS_VERSION));
 }
+// Los minutos por día en hora de Mar del Plata (v=358, `#lluvia`). Lo emite `gen-stats.py`; el import
+// BYOH no lo produce, así que un amigo no tiene `local_<uid>_history_daysLocal` y le llega `null`.
+async function loadDaysLocal() {
+  return loadOne('daysLocal', 'daysLocal', d => typeof d.from === 'string' && Array.isArray(d.min), () => dataUrl('history-days-local.json', DAYS_LOCAL_VERSION));
+}
 
 /**
  * El detalle por día (`days`, el octavo payload) — v=289.
@@ -524,7 +532,7 @@ async function saveMyHistory(payload) {
     idbSetCached(localKey(uid, 'days'), payload.days, LOCAL_TTL_MIN),
   ]);
   // Invalido memoria para que la próxima carga vaya al IDB fresco
-  memCache = { uid: null, stats: null, plays: null, listened: null, skip: null, detail: null, records: null, artistTracks: null, similares: null, days: null };
+  memCache = { uid: null, stats: null, plays: null, listened: null, skip: null, detail: null, records: null, artistTracks: null, similares: null, days: null, daysLocal: null };
 }
 
 /**
@@ -570,7 +578,7 @@ async function clearMyHistory() {
   const kinds = ['stats', 'plays', 'listened', 'skip', 'detail', 'records', 'artistTracks', 'days'];
   const resultados = await Promise.allSettled(kinds.map(k => idbDel(localKey(uid, k))));
   // La memoria se vacía igual: algunas sí se borraron, y lo que quede se relee de IndexedDB.
-  memCache = { uid: null, stats: null, plays: null, listened: null, skip: null, detail: null, records: null, artistTracks: null, similares: null, days: null };
+  memCache = { uid: null, stats: null, plays: null, listened: null, skip: null, detail: null, records: null, artistTracks: null, similares: null, days: null, daysLocal: null };
   const fallos = resultados
     .map((r, i) => (r.status === 'rejected' ? { clave: localKey(uid, kinds[i]), error: r.reason } : null))
     .filter(Boolean);
@@ -737,7 +745,7 @@ function bindOwnerLockedButtons(openImportFn) {
 
 export {
   loadHistoryStats, loadTrackPlays, loadListenedAlbums, loadSkipStats, loadTrackDetail, loadRecords, loadArtistTracks,
-  loadArtistSimilares, loadDays, guardarSoloDias, localKey,
+  loadArtistSimilares, loadDays, loadDaysLocal, guardarSoloDias, localKey,
   playsFor, trackIdOf, isOwner, HISTORY_OWNER_ID, ownerLockedMessage,
   hasLocalHistory, saveMyHistory, clearMyHistory, bindOwnerLockedButtons,
   identidadSinConfirmar, motivoSinImportCompleto, identityLockedMessage,

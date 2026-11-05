@@ -35,6 +35,7 @@ import { render as renderPuertas } from './features/puertas.js';
 import { render as renderMenosSalteas } from './features/menos-salteas.js';
 import { render as renderGeneros } from './features/generos.js';
 import { render as renderMapaArtistas } from './features/mapa-artistas.js';
+import { render as renderLluvia } from './features/lluvia.js';
 import { openImportHistory } from './features/import-history.js';
 import { bindOwnerLockedButtons } from './features/history-data.js';
 import { render as renderZeroPlays } from './features/zero-plays.js';
@@ -514,6 +515,9 @@ function showApp(profile) {
           <a class="nav-link" data-route="mapa-artistas" href="#mapa-artistas">
             <span class="nav-link-icon">${ICONS.mapaartistas}</span> Mapa de artistas
           </a>
+          <a class="nav-link" data-route="lluvia" href="#lluvia">
+            <span class="nav-link-icon">${ICONS.lluvia}</span> Cuando llueve
+          </a>
           <a class="nav-link" data-route="covers" href="#covers">
             <span class="nav-link-icon">${ICONS.covers}</span> Mis tapas
           </a>
@@ -774,6 +778,7 @@ function showApp(profile) {
   registerRoute('menos-salteas', renderMenosSalteas);
   registerRoute('generos', renderGeneros);
   registerRoute('mapa-artistas', renderMapaArtistas);
+  registerRoute('lluvia', renderLluvia);
   registerRoute('zeroplays', renderZeroPlays);
   registerRoute('skips', renderSkips);
   registerRoute('search', renderSearchLikes);
@@ -804,6 +809,8 @@ const ICONS = {
   // v=313: dos etiquetas superpuestas (la «tags» de Lucide), para #generos: las etiquetas de
   // todos tus artistas. No es la de #genre (una etiqueta sola con su agujero).
   generos: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m15 5 6.3 6.3a2.4 2.4 0 0 1 0 3.4L17 19"/><path d="M9.586 5.586A2 2 0 0 0 8.172 5H3a1 1 0 0 0-1 1v5.172a2 2 0 0 0 .586 1.414L8.29 18.29a2.426 2.426 0 0 0 3.42 0l3.58-3.58a2.426 2.426 0 0 0 0-3.42z"/><circle cx="6.5" cy="9.5" r=".5" fill="currentColor"/></svg>',
+  // v=358: una nube con tres gotas (la «cloud-rain» de Lucide), para #lluvia.
+  lluvia: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 14.899A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 2.5 8.242"/><path d="M16 14v6"/><path d="M8 14v6"/><path d="M12 16v6"/></svg>',
   // v=315: tres nodos unidos (la «share-2» de Lucide), para #mapa-artistas: tus artistas y sus parecidos.
   mapaartistas: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>',
   dashboard: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>',
@@ -845,6 +852,7 @@ const HOME_SECTIONS = [
       { hash: 'menos-salteas', icon: ICONS.menossalteas, name: 'Las que menos te saltas', desc: 'Los temas que escuchas enteros y casi nunca te saltas.' },
       { hash: 'generos', icon: ICONS.generos, name: 'Tus géneros', desc: 'Los géneros que más escuchas, según las etiquetas de Last.fm.' },
       { hash: 'mapa-artistas', icon: ICONS.mapaartistas, name: 'Mapa de artistas', desc: 'Tus artistas acomodados por parecido, según Last.fm.' },
+      { hash: 'lluvia', icon: ICONS.lluvia, name: 'Cuando llueve', desc: 'Tus minutos en los días de lluvia de Mar del Plata.' },
       { hash: 'covers', icon: ICONS.covers, name: 'Mis tapas', desc: 'El mosaico de las portadas que escuchaste de verdad.' },
       { hash: 'search', icon: ICONS.search, name: 'Buscar likes', desc: 'Buscador instantáneo en tus likes, sin ir a Spotify.' },
       { hash: 'listened', icon: ICONS.listened, name: 'Álbumes escuchados', desc: 'Los álbumes de tu playlist de registro, agrupados.' },

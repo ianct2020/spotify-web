@@ -1,0 +1,100 @@
+<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>banco lluvia — la app entera, en un iframe</title>
+<link rel="stylesheet" href="/css/theme.css">
+<link rel="stylesheet" href="/css/components.css">
+<link rel="stylesheet" href="/css/main.css">
+<style>*,*::before,*::after{animation:none!important;transition:none!important}</style>
+</head><body>
+<div id="app"></div>
+<script type="module">
+// ── Un iframe del banco `lluvia.html` (v=358, tanda 117) ─────────────────────
+//
+// Arranca la app ENTERA (`/js/app.js`) en `#home`, contra la Spotify simulada de `simulado.mjs`, con
+// `/me` = el `uid` que pide la madre (`?uid=owner` es `HISTORY_OWNER_ID`). 🔴 Los dos JSON los CONTESTA
+// ESTE CASO, inventados (`lluvia-datos.mjs`): `data/history-days-local.json` y
+// `data/lluvia-mar-del-plata.json` no llegan a pedirse al servidor.
+//
+//   ?dias=ok|500|rechazo|html       cómo contesta el historial por día local (por defecto, ok)
+//   ?lluvia=ok|500|rechazo|html     cómo contesta la lluvia (por defecto, ok)
+//
+// `window.__frenoMe` y `window.__frenoLluvia`: si la madre pone acá una promesa, esa petición espera a
+// que se resuelva. Es la forma de dejar la vista colgada para probar que salir a mitad no escribe.
+// `window.__pedidosData`: cada `/data/…` que se pidió.
+//
+// Modo `?foto=1&uid=owner[&tema=papel]` (la captura, con un conductor externo y SIN reloj virtual): abre
+// `#lluvia` y marca `data-foto="listo"` cuando está pintada.
+
+import { instalarRedSimulada, esperarReal } from '/banco/simulado.mjs';
+
+const q = new URLSearchParams(location.search);
+window.__errores = [];
+window.__avisos = [];
+window.addEventListener('error', (e) => window.__errores.push('error: ' + (e.message || e)));
+window.addEventListener('unhandledrejection', (e) => window.__errores.push('rechazo: ' + String(e.reason?.message || e.reason)));
+const errorOriginal = console.error.bind(console);
+console.error = (...a) => { window.__errores.push('console.error: ' + a.map(String).join(' ').slice(0, 300)); errorOriginal(...a); };
+const avisoOriginal = console.warn.bind(console);
+console.warn = (...a) => { window.__avisos.push(a.map((x) => String(x?.message || x)).join(' ').slice(0, 300)); avisoOriginal(...a); };
+
+const { HISTORY_OWNER_ID } = await import('/js/features/history-data.js');
+const { DIAS_LOCAL, LLUVIA } = await import('/banco/lluvia-datos.mjs');
+const UID = q.get('uid') === 'owner' ? HISTORY_OWNER_ID : q.get('uid');
+const sim = instalarRedSimulada();
+window.__sim = sim;
+window.__frenoMe = null;
+window.__frenoLluvia = null;
+sim.ruta('GET', /^\/me$/, async () => {
+  if (window.__frenoMe) await window.__frenoMe;
+  return { id: UID, display_name: 'Banco' };
+});
+localStorage.setItem('fonoteca_last_user_id', UID);
+localStorage.setItem('fonoteca_perfil_v1', JSON.stringify({ id: UID, display_name: 'Banco' }));
+
+// Los dos JSON, por encima de la red simulada.
+window.__pedidosData = [];
+const fetchDeLaSimulada = window.fetch;
+const contestar = (modo, datos) => {
+  if (modo === 'rechazo') return Promise.reject(new TypeError('Failed to fetch (banco)'));
+  if (modo === '500') return Promise.resolve(new Response('error', { status: 500 }));
+  if (modo === 'html') return Promise.resolve(new Response('<!doctype html><title>no soy JSON</title>', { status: 200, headers: { 'content-type': 'text/html' } }));
+  return Promise.resolve(new Response(JSON.stringify(datos), { status: 200, headers: { 'content-type': 'application/json' } }));
+};
+window.fetch = async (entrada, opciones) => {
+  const href = typeof entrada === 'string' ? entrada : (entrada.href || entrada.url);
+  const abs = new URL(href, location.href);
+  if (abs.origin === location.origin && abs.pathname.startsWith('/data/')) {
+    window.__pedidosData.push(abs.pathname + abs.search);
+    if (abs.pathname === '/data/history-days-local.json') return contestar(q.get('dias') || 'ok', DIAS_LOCAL);
+    if (abs.pathname === '/data/lluvia-mar-del-plata.json') {
+      if (window.__frenoLluvia) await window.__frenoLluvia;
+      return contestar(q.get('lluvia') || 'ok', LLUVIA);
+    }
+  }
+  return fetchDeLaSimulada(entrada, opciones);
+};
+
+// El tema (para las capturas en Papel: `&tema=papel`) y `window.__ponerTema(id)`, que aplica un preset.
+const { prefKey } = await import('/js/storage.js');
+if (q.get('tema') && q.get('tema') !== 'violeta') {
+  const { PRESETS } = await import('/js/ui/theme-panel.js');
+  const p = PRESETS.find((x) => x.id === q.get('tema'));
+  if (!p) throw new Error('banco: no encontré el preset ' + q.get('tema'));
+  localStorage.setItem(prefKey('fonoteca_theme_v1'), JSON.stringify({ colors: p.colors, preset: p.id }));
+}
+window.__ponerTema = async (id) => {
+  const { PRESETS, applyTheme } = await import('/js/ui/theme-panel.js');
+  const p = PRESETS.find((x) => x.id === id);
+  if (!p) throw new Error('banco: no encontré el preset ' + id);
+  applyTheme(p.colors);
+};
+
+const FOTO = q.get('foto') === '1';
+location.hash = FOTO ? '#lluvia' : '#home';
+await import('/js/app.js');
+await esperarReal(() => document.getElementById('my-history-btn') && (FOTO || document.querySelector('.home-card')), { que: 'que la app arranque', vueltas: 4000 });
+window.__listo = true;
+if (FOTO) {
+  await esperarReal(() => document.querySelector('[data-lluvia="lista"]'), { que: 'que #lluvia pinte', vueltas: 4000 });
+  document.documentElement.dataset.foto = 'listo';
+}
+</script>
+</body></html>

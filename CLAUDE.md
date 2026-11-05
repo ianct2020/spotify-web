@@ -454,6 +454,9 @@ de la app, y el resultado es una baldosa de un año enseñando otro año.
   sea para borrarlos.
 - Guarda: **`tests/fecha-dia-del-dato.test.mjs`**, contra el JSON real del repo
   y con `TZ` fijada a Buenos Aires (en una máquina en UTC el bug no se ve).
+- **La única salvedad (v=358): `#lluvia`.** Cruza con la lluvia, que viene en días de Mar del Plata, así que usa un
+  archivo APARTE horneado en hora local (`history-days-local.json`). No cambia esta regla: las demás vistas siguen en
+  UTC y ninguna lee ese archivo. Ver «🌧️ `#lluvia`: cuando llueve (v=358)».
 
 ## `stats.totals` NO trae first_play ni last_play
 `gen-stats.py` las emite **solo por año**. `totals` tiene `plays_valid`,
@@ -5010,6 +5013,77 @@ en `prepush`**: espera a un conductor externo, como `mosaico.html` sin `auto=1`.
 El conductor vive en el repo privado
 (`fonoteca-migracion/driver-capturas-calendario-2026-10-10.mjs`).
 
+## 🌧️ `#lluvia`: cuando llueve (v=358)
+
+Tus minutos en los días de lluvia de Mar del Plata, contra los días sin lluvia. Ruta `#lluvia`, menú General, detrás de
+«Mapa de artistas», icono propio (`ICONS.lluvia`, la «cloud-rain» de Lucide), tarjeta de inicio y cabecera «Cuando llueve»
+(«Tus minutos en los días de lluvia de Mar del Plata.»). Tanda 117, con el dato de la 116.
+
+| archivo | qué | probado en |
+|---|---|---|
+| `src/data/lluvia-mar-del-plata.json` | la lluvia diaria, tal cual la dejó la tanda 116 (`sha256` `0a7908f6…0d57`) | `tests/lluvia.test.mjs` (el hash y la tabla por año de la 116) |
+| `scripts/gen-stats.py` → `src/data/history-days-local.json` | los minutos por día en hora de Mar del Plata: `{ version, zona_horaria, utc_offset_seconds, generated_at, from, min[] }` | `tests/lluvia-dia-local.test.mjs` |
+| `util/lluvia.js` | PURO: la ventana, la clase de cada día, las cuentas y los textos | `tests/lluvia.test.mjs` |
+| `features/lluvia.js` | la vista: carga, candado y pinta; `leerLluvia()` vive acá | `tests/banco/lluvia.html` (en `prepush`) |
+| `history-keys.js` / `features/history-data.js` | `DAYS_LOCAL_VERSION`, `LLUVIA_VERSION`, `OWNER_KEYS.daysLocal`, `loadDaysLocal()` con `OWNER_PREV_KEYS.daysLocal` VACÍA | `tests/likes-cache-policy.test.mjs` (nueve claves del owner) |
+
+**De dónde sale la lluvia.** Open-Meteo, API histórica, `precipitation_sum`: un **reanálisis** (un modelo meteorológico) en la
+celda de Mar del Plata, no el pluviómetro de la ciudad. 🔴 **No se vuelve a pedir**: el dato es el de la 116, se copió byte a
+byte y no se reformatea. La licencia es **CC BY 4.0 y el crédito es obligatorio**: el pie enseña `aviso` y `atribucion` del
+JSON (la vista no tiene su propia copia; `trozosAtribucion()` saca los paréntesis con las URL y arma los dos enlaces).
+Costo de la app: ninguno; es un archivo del propio Pages.
+
+**El día local, y por qué hace falta.** `years[].days` son días UTC: un día UTC D en Mar del Plata va de las 21:00 de D−1 a las
+21:00 de D, y cruzarlo contra la lluvia (días locales) mezcla tres horas del día anterior.
+- `build_stats(plays, img_idx, dias_local=None)` acumula en ms, **en el mismo sitio del bucle que `yb["days"]`**, con la fecha de
+  `ts − 3 h`. Es un parámetro y no un noveno valor de retorno: `main()` desempaqueta ocho y los tests leen `[-1]` y `[4]`.
+- Hora fija **UTC−3** (Argentina no tiene horario de verano desde 2009; el JSON de la lluvia dice −10800). Lo que se corre es la
+  fecha del HISTORIAL, nunca la de la lluvia. `util/lluvia.js` no suma ni resta ninguna hora: los dos JSON ya están en local.
+- `main()` compara las dos sumas en ms antes de abrir ningún archivo; si no cuadran, sale con la guarda y no escribe nada.
+- 🔴 **Las demás vistas siguen en UTC**, y ninguna lee este archivo (la regla de «Zona horaria…», arriba, no cambió).
+- Con el export de hoy: `Σ ms local 16601902926 = Σ ms UTC 16601902926`; 1.909 días locales con minutos contra los 1.910 de
+  `totals.days_active` (las mismas reproducciones, otro corte).
+- ⚠️ Con un export nuevo, se hornea igual que los otros. `verificar-rehorneado.py` todavía no mira este archivo (su lista son los
+  de antes): anotado en `PENDIENTES.md`.
+
+**La regla y la ventana.** 🔴 «Día con lluvia» = **1 mm o más**, comparado en décimas enteras (`Math.round(mm × 10) >= 10`: 0,9
+no, 1,0 sí). Sin tercera categoría ni selector. La ventana son los días con los dos datos, **sin el primero ni el último del
+historial** (pueden estar a medias). Un día sin reproducciones son 0 minutos, no «sin dato», y entra en la media. Las cuentas van
+en enteros: la media es `round(Σ décimas / N)`; la mediana, con N par, el promedio de los dos del medio; se enseñan los minutos
+sin decimales y los % con uno. La frase resta las dos medias en décimas y redondea la diferencia, así que puede diferir en 1 min
+de restar los dos números enseñados.
+
+**Con el dato de hoy** (REAL, contado el 05/11/2026 con `util/lluvia.js`): del 15/08/2018 al 21/10/2026, 2.990 días. Con lluvia
+824: sonó algo en 539 (65,4 %), media 96, mediana 61. Sin lluvia 2.166: sonó algo en 1.368 (63,2 %), media 91, mediana 51. ⚠️ **Esos
+5 min no dicen gran cosa**: la media por año va de 13 a 220 min, y por año la diferencia cambia de signo (5 años más, 4 menos). Por
+eso la pantalla dice que compara días, no causas, y por eso la tabla por año no se esconde.
+
+**Qué ve cada uno.**
+- Sin historial, el cartel de bloqueo de `#records`.
+- Un amigo con su historial importado, una línea («La lluvia se cruza con el historial que está guardado en la app, y el tuyo no
+  lo está.») y nada más: sin botón de importar y sin pedir ningún JSON. El import (`history-processor.js`) no produce el día local,
+  y la lluvia es de Mar del Plata.
+- `loadDaysLocal()` en `null` con anotación de `daysLocal`: `avisoHistorialIlegibleHtml()` en vez de la vista.
+- La lluvia que no se puede leer (500, `fetch` que rechaza, 200 con HTML): «No se ha podido leer la lluvia. Recarga la página para
+  volver a intentarlo.», el error crudo a `console.warn('[lluvia] …')` y ningún número.
+
+**El costo.** Abrir = **1 `/me`** (+1 del arranque) y **0 de todo lo demás**: ver «💰 Cuánto cuesta abrir cada vista» y «🤝 Qué anda
+sin los datos de Ian».
+
+**Lo que quedó AFUERA, a propósito.** Otras ciudades, fuentes o variables; `horas[]` en pantalla (está en el archivo y nadie la lee);
+otro umbral; cruzar con temas, artistas o géneros (pide el detalle por día, que es privado); pintar la lluvia en `#calendario` o
+en el Wrapped; pasar a local el historial de las otras vistas.
+
+**Las guardas.** `tests/lluvia-dia-local.test.mjs` (`main()` de verdad sobre reproducciones INVENTADAS, con las guardas de la tanda
+41 apagadas solo en ese proceso y `FONOTECA_OUT_DIR` a una carpeta temporal: `02:59:59Z` al día anterior, `03:00:00Z` al mismo, el
+borde del año, 29 s, sin uri, basura, un día en 0, las dos sumas, con tres `TZ`). `tests/lluvia.test.mjs` (lo puro, con días inventados
+contados a mano, y el JSON de la 116: los bytes, el `sha256`, la tabla por año, el aviso y la atribución). El banco
+`tests/banco/lluvia.html` + `lluvia-caso.html` + `lluvia-datos.mjs` (en `prepush`; el caso sirve los dos JSON, inventados): **A** el
+costo; **B** los números = la cuenta a mano; **C** el trío de la lluvia caída; **D** el amigo; **E** salir a mitad; **F** sin desborde
+a 1366×591 y 390×844; **G** el pie; **H** el trío del historial caído; **I** el contraste en los cuatro presets. Peor contraste
+medido: violeta 6,36 · ámbar 6,20 · aguamarina 6,27 · papel 6,51. Capturas:
+`fonoteca-migracion/driver-capturas-t117-2026-11-05.mjs`.
+
 ## 💰 Cuánto cuesta abrir cada vista (2026-10-06)
 
 Esta tabla **no existía** hasta hoy, y los cuatro encargos anteriores la daban por
@@ -5187,6 +5261,7 @@ fila sobrevivió así desde que se armó la tabla.
 | `#mapa-artistas` (v=315) | **1 `/me`** (+1 del arranque = **2**) · **0 Last.fm** · **0 CDN** | ídem | `render()` → `loadArtistTracks()` + `loadArtistSimilares()` → `loadOne` → `getCurrentUserId` (memoizado: las dos comparten el `/me`); los dos JSON salen del propio Pages (`data/`) o de IndexedDB | **fijo**, no escala con nada | **medida en el banco el 2026-10-18** (`tests/banco/mapa-artistas.html`, Spotify simulada, grafo inventado): abrir = 1 `/me` además del del arranque y 0 de lo demás, también al volver (0 `/me` más); 0 rutas sin simular, 0 hosts externos. En vivo, no |
 | ↳ **al tocar, arrastrar, hacer zoom, buscar o «Mostrar 50 más»** (v=315): **0** | — | **0** | ninguno: todo sale de lo cargado | — | **medida en el banco el 2026-10-18**: 0 peticiones a cualquier host. «Ver ficha» abre la ficha de artista y cuesta lo que cueste la ficha |
 | `#covers` | **1 `/me` + 1 + ceil(W/100)** = **33** | **2** | `isOwner()`/`loadListenedAlbums()` → `getCurrentUserId` · + 1 `/playlists/{id}?fields=snapshot_id` + págs. de `/playlists/{id}/items` | nº de pistas de «w three» | 🔴 **corregida el 2026-10-08, leída del código.** Decía **32** y se le olvidaba el `/me` propio |
+| `#lluvia` (v=358) | **1 `/me`** (+1 del arranque = **2**) · **0** de todo lo demás | ídem | `render()` → `loadDaysLocal()` → `loadOne` → `getCurrentUserId`; los dos JSON (`history-days-local.json`, de `loadOne()`, y `lluvia-mar-del-plata.json`, de `leerLluvia()`) salen del propio Pages, y ninguno es Spotify, Open-Meteo ni un CDN | **fijo**, no escala con nada | **medida en el banco el 2026-11-05** (`tests/banco/lluvia.html`, Spotify simulada, datos inventados): abrir = 1 `/me` y 0 de lo demás, 0 rutas sin simular, 0 hosts externos desde que se abre; un amigo, 1 `/me` y ninguno de los dos JSON |
 | `#mosaico` | **0** | **0** | **ninguno, a propósito** | — | **medida en vivo el 2026-10-06**: 10 mosaicos generados (hasta 43.200 celdas), **0 peticiones y 0 cortadas** con los topes de la API en CERO. Lo que sí sale a la red es el CDN de imágenes, que no gasta cuota |
 | `#search` | **0** | **0** | — | — | leída del código · **`/me` repasado el 2026-10-08**: su `render()` no llega a `getCurrentUserId()` |
 | `#listened` | **26** `/items` + 3 `/me` | **0** | snapshot + págs. de `/items` | pistas de la playlist elegida | **medida en vivo el 2026-10-04** (caché vencido) |
@@ -5568,6 +5643,7 @@ cuesta una carga de likes.** Lo que no puede es usar las tuyas.
 | `#puertas` (v=308) | — | **historial** (`artistTracks` **v3**: con el tema de entrada) | cartel de bloqueo, el mismo de `#records` (BYOH la abre con SUS datos). Con un historial importado antes de v=308 (sin el tema de entrada): «Para ver esto, vuelve a importar tu historial», con el botón de importar y 0 filas | **medida en el banco el 2026-10-15** (`tests/banco/puertas.html`: el owner, un amigo con su v3, uno con un historial viejo y uno sin datos) |
 | `#generos` (v=313; los géneros, v=314) | — | **historial** (`artistTracks`, cualquier versión: solo lee los minutos y los nombres) · y buscar en Last.fm (un botón, sin cuota de Spotify, con la key del código) | cartel de bloqueo, el mismo de `#records` (BYOH la abre con SUS datos), **sin botón de buscar**. Con datos, las cinco filas, «Tus 10 géneros» (vacío, con una línea, hasta que la búsqueda traiga alguno) y «Buscar géneros». Si no se pueden leer las etiquetas guardadas, lo dice y no ofrece buscar | **medida en el banco el 2026-10-17** (solo el owner; el amigo, leída del código) |
 | `#mapa-artistas` (v=315) | — | **historial** (`artistTracks`) **y el mapa horneado**, que es SOLO del owner (`history-artist-similares.json`: ni `gen-stats.py` ni el import BYOH lo producen) | sin historial, el cartel de bloqueo de `#records`; **con historial y sin mapa (un amigo con su BYOH), una línea: «El mapa todavía no existe para tu historial.»** y nada más | **medida en el banco el 2026-10-18** (el owner, un amigo con historial y sin mapa, uno sin nada) |
+| `#lluvia` (v=358) | — | **el historial por día local**, que es SOLO del owner (`history-days-local.json`: lo emite `gen-stats.py`, el import BYOH no) | sin historial, el cartel de bloqueo de `#records`; **con su historial importado (un amigo), una línea: «La lluvia se cruza con el historial que está guardado en la app, y el tuyo no lo está.»** y nada más, sin botón de importar y sin pedir ningún JSON | **medida en el banco el 2026-11-05** (el owner, un amigo con historial, uno sin nada) |
 | `#zeroplays` | — | **historial** (`plays`) · stats.fm opcional | cartel de bloqueo | leída del código |
 | `#skips` | — | **historial** (`skip`, versión ≥ 4) · stats.fm opcional | cartel de bloqueo | leída del código |
 

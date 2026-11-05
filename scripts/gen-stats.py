@@ -13,6 +13,8 @@ Salidas:
   · gid = id de grupo: los ids de Spotify del MISMO tema comparten gid
   · completas, saltos (v5, tanda 90) = desde CORTE_SKIPPED, las `trackdone` que no son
     salto y los saltos (la definición única de v=291). Los usa `#menos-salteas`.
+- src/data/history-days-local.json   Minutos por día en hora de Mar del Plata (v=358), solo para `#lluvia`:
+  todo lo demás sigue en UTC. Ver `armar_dias_local()`.
 
   v2 — el pipeline ya NO decide qué es un skip: emite el dato crudo y el
   veredicto se calcula en features/skips.js, que es el único lado que tiene el
@@ -399,6 +401,41 @@ def album_key(name, artist):
 def track_key(name, artist):
     return f"{(name or '').lower()}||{(artist or '').lower()}"
 
+# El día en hora de Mar del Plata (v=358, tanda 117), SOLO para `history-days-local.json`.
+# Hora fija: Argentina no tiene horario de verano desde 2009, y el JSON de la lluvia dice lo
+# mismo (`utc_offset_seconds`). 🔴 Todo lo demás de este archivo sigue en UTC.
+DAYS_LOCAL_VERSION = 1
+ZONA_LOCAL = "America/Argentina/Buenos_Aires"
+UTC_OFFSET_LOCAL_SECONDS = -10800
+
+
+def armar_dias_local(ms_por_dia, generated_at):
+    """El payload de `history-days-local.json`, de {día local: ms} (lo acumula `build_stats`).
+
+    `min` es contiguo, un valor por día, desde el de la primera reproducción válida hasta el
+    de la última, con un decimal, como `years[].days`. Un 0 es un día sin ninguna reproducción
+    válida, no un día sin dato.
+    """
+    serie = []
+    desde = None
+    if ms_por_dia:
+        dias = sorted(ms_por_dia)
+        desde = dias[0]
+        d = date.fromisoformat(dias[0])
+        hasta = date.fromisoformat(dias[-1])
+        while d <= hasta:
+            serie.append(round(ms_por_dia.get(d.isoformat(), 0) / 60000, 1))
+            d += timedelta(days=1)
+    return {
+        "version": DAYS_LOCAL_VERSION,
+        "zona_horaria": ZONA_LOCAL,
+        "utc_offset_seconds": UTC_OFFSET_LOCAL_SECONDS,
+        "generated_at": generated_at,
+        "from": desde,
+        "min": serie,
+    }
+
+
 def entrada_y_segundo(entrada, temas_dia, artist):
     """[6] y [7] de `totals` (v3): `[nombre, trackId]` del tema de entrada y el día
     de la primera play válida de un tema con OTRO `song_key`, o None. Espejo de
@@ -410,9 +447,15 @@ def entrada_y_segundo(entrada, temas_dia, artist):
     return [[entrada[1], entrada[2]], min(otros) if otros else None]
 
 
-def build_stats(plays, img_idx):
+def build_stats(plays, img_idx, dias_local=None):
+    # `dias_local` (v=358): un dict opcional donde se deja, en "local", {día de Mar del Plata: ms}
+    # y, en "utc", los `yb["days"]` de todos los años. Es un parámetro y no un noveno valor de
+    # retorno porque `main()` desempaqueta ocho y los tests leen `[-1]` y `[4]`: lo que devuelve
+    # esta función no cambia.
+    #
     # Orden cronológico ascendente para que "primer año", "descubrimiento" y
     # "primer día que cumple umbral" salgan correctos.
+    ms_dia_local = {}
     plays = sorted(plays, key=lambda r: r.get("ts", ""))
     # totales
     total_plays = len(plays)
@@ -664,6 +707,9 @@ def build_stats(plays, img_idx):
         yb["track_plays"][tk] += 1
         yb["months_ms"][month] += ms
         yb["days"][day] = yb["days"].get(day, 0) + ms
+        # v=358: las MISMAS reproducciones que la línea de arriba, con la fecha de `ts − 3 h`.
+        dia_local = (dt + timedelta(seconds=UTC_OFFSET_LOCAL_SECONDS)).date().isoformat()
+        ms_dia_local[dia_local] = ms_dia_local.get(dia_local, 0) + ms
         yb["active_days"].add(day)
         yb["plays"] += 1
         if yb["first_play"] is None or ts_str < yb["first_play"]:
@@ -1312,6 +1358,10 @@ def build_stats(plays, img_idx):
         "milestones": milestones,
     }
 
+    if dias_local is not None:
+        dias_local["local"] = ms_dia_local
+        dias_local["utc"] = {d: ms for yb in years.values() for d, ms in yb["days"].items()}
+
     return stats, track_plays_out, albums_played_out, listened_payload, skip_payload, detail_payload, records_payload, artist_tracks_payload
 
 
@@ -1335,7 +1385,16 @@ def main():
     print(f"  tapas indexadas: {len(img_idx):,}")
 
     print("Agregando…")
-    stats, track_plays, albums_played, listened, skip_stats, detail, records, artist_tracks = build_stats(plays, img_idx)
+    acumulado_dias = {}
+    stats, track_plays, albums_played, listened, skip_stats, detail, records, artist_tracks = build_stats(plays, img_idx, acumulado_dias)
+
+    # v=358: las mismas reproducciones en otra hora suman exactamente lo mismo, en ms y sin
+    # redondear. Si no, algo se contó dos veces o se perdió: no se escribe nada.
+    suma_local = sum(acumulado_dias["local"].values())
+    suma_utc = sum(acumulado_dias["utc"].values())
+    if suma_local != suma_utc:
+        abortar_sin_escribir(f"el día local no cuadra con el día UTC: Σ ms local {suma_local} y Σ ms UTC {suma_utc}.")
+    dias_local = armar_dias_local(acumulado_dias["local"], stats["generated_at"])
 
     stats_path = os.path.join(OUT_DIR, "history-stats.json")
     tp_path = os.path.join(OUT_DIR, "history-track-plays.json")
@@ -1344,7 +1403,10 @@ def main():
     detail_path = os.path.join(OUT_DIR, "history-track-detail.json")
     records_path = os.path.join(OUT_DIR, "history-records.json")
     at_path = os.path.join(OUT_DIR, "history-artist-tracks.json")
+    dias_local_path = os.path.join(OUT_DIR, "history-days-local.json")
 
+    with open(dias_local_path, "w") as f:
+        json.dump(dias_local, f, separators=(",", ":"), ensure_ascii=False)
     with open(at_path, "w") as f:
         json.dump(artist_tracks, f, separators=(",", ":"), ensure_ascii=False)
     with open(stats_path, "w") as f:
@@ -1372,6 +1434,8 @@ def main():
     print(f"OK → {listened_path} ({os.path.getsize(listened_path)/1024:.1f} KB)")
     print(f"OK → {skip_path} ({os.path.getsize(skip_path)/1024:.1f} KB)")
     print(f"OK → {at_path} ({os.path.getsize(at_path)/1024:.1f} KB, {len(artist_tracks['artists'])} artistas)")
+    print(f"OK → {dias_local_path} ({os.path.getsize(dias_local_path)/1024:.1f} KB, {len(dias_local['min'])} días locales desde {dias_local['from']})")
+    print(f"días locales: Σ ms local {suma_local} = Σ ms UTC {suma_utc}; con minutos: {sum(1 for m in dias_local['min'] if m > 0)} locales, {stats['totals']['days_active']} UTC (days_active)")
     print(f"totales stats: {stats['totals']}")
     print(f"totales listened: {listened['totals']} · years: {[y['year'] for y in listened['years']]}")
     print(f"skip stats: {len(skip_stats['tracks'])} tracks con >={SKIP_STATS_MIN_PLAYS} plays, {skip_stats['groups']} grupos (gid)")

@@ -35,6 +35,8 @@ const DETAIL_VERSION = 2;  // v2: contenido del export nuevo (tanda 84), mismo f
 const RECORDS_VERSION = 4;  // v4: contenido del export nuevo (tanda 84), mismo formato. v3: seis récords nuevos (día con más artistas, tema en más años, artista con más días, abandonado, crecimiento, racha de artista)
 const SIMILARES_VERSION = 3;  // v1 (v=315, tanda 64): `history-artist-similares.json`, el mapa de artistas horneado por `scripts/hornear-similares.mjs` (los parecidos de Last.fm entre tus artistas y sus posiciones). No lo produce `gen-stats.py` ni el import BYOH: es solo del owner. v2 (v=316, tanda 65): rehorneado con la regla del autocorrect (`util/autocorrect-lastfm.js`) y los sueltos en una franja aparte; sin el bump, quien abrió la v1 la seguiría viendo desde IndexedDB sin fallar y sin avisar. v3 (tanda 95): los 60 artistas del export nuevo (v=340) que no estaban en el mapa, con el avance reindexado por nombre (`reindexar` del script); la v2 pasa el `sanityCheck` y enseñaría el mapa sin ellos. `OWNER_PREV_KEYS.similares` VACÍA
 const ARTIST_TRACKS_VERSION = 4;  // v4: contenido del export nuevo (tanda 84), mismo formato. v3 (v=308): `totals` suma [6] el tema de entrada y [7] el día del segundo tema (`#puertas`). La lista de `OWNER_PREV_KEYS.artistTracks` sigue VACÍA: el v2 pasa el `sanityCheck` y migrarlo pintaría `#puertas` sin los campos. v2: `totals` lleva el día de la primera play válida del artista
+const DAYS_LOCAL_VERSION = 1;  // v1 (v=358, tanda 117): `history-days-local.json`, los minutos por día en hora de Mar del Plata (`#lluvia`). Lo emite `gen-stats.py`; el import BYOH no lo produce: es solo del owner. `OWNER_PREV_KEYS.daysLocal` VACÍA
+const LLUVIA_VERSION = 1;  // El `?v=` de la URL de `lluvia-mar-del-plata.json` (la tanda 116). No arma ninguna clave: la lluvia no es historial y no va a IndexedDB
 
 const OWNER_KEYS = {
   stats: `history_stats_v${STATS_VERSION}`,
@@ -45,6 +47,7 @@ const OWNER_KEYS = {
   records: `history_records_v${RECORDS_VERSION}`,
   artistTracks: `history_artist_tracks_v${ARTIST_TRACKS_VERSION}`,
   similares: `history_artist_similares_v${SIMILARES_VERSION}`,
+  daysLocal: `history_days_local_v${DAYS_LOCAL_VERSION}`,
 };
 
 /** Todas las claves del owner, para el guarda multiusuario. */
@@ -63,4 +66,5 @@ export {
   OWNER_KEYS, OWNER_KEY_LIST, LOCAL_HISTORY_PREFIX,
   STATS_VERSION, PLAYS_VERSION, LISTENED_VERSION, SKIP_VERSION,
   DETAIL_VERSION, RECORDS_VERSION, ARTIST_TRACKS_VERSION, SIMILARES_VERSION,
+  DAYS_LOCAL_VERSION, LLUVIA_VERSION,
 };

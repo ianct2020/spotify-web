@@ -266,8 +266,10 @@ ok(/from '\.\.\/history-keys\.js'/.test(histData),
   'history-data.js las toma del módulo compartido');
 // v=315 (tanda 64): ocho, con `history_artist_similares_v1` (el mapa de artistas horneado). El guarda
 // multiusuario la borra con las otras al cambiar de usuario: es dato de escucha del owner.
-ok(OWNER_KEY_LIST.length === Object.keys(OWNER_KEYS).length && OWNER_KEY_LIST.length === 8,
-  'la lista cubre las ocho claves del owner');
+// v=358 (tanda 117): nueve, con `history_days_local_v1` (los minutos por día en hora de Mar del Plata, de `#lluvia`).
+ok(OWNER_KEY_LIST.length === Object.keys(OWNER_KEYS).length && OWNER_KEY_LIST.length === 9,
+  'la lista cubre las nueve claves del owner');
+ok(OWNER_KEY_LIST.includes('history_days_local_v1'), 'incluye history_days_local_v1, el día local de #lluvia (tanda 117)');
 // v=316 (tanda 65): `SIMILARES_VERSION` 1 → 2 (el rehorneado con el autocorrect y los sueltos). El assert sigue a la versión.
 ok(OWNER_KEY_LIST.includes('history_artist_similares_v3') && !OWNER_KEY_LIST.includes('history_artist_similares_v2') && !OWNER_KEY_LIST.includes('history_artist_similares_v1'),
   'incluye history_artist_similares_v3, el mapa de artistas (tanda 95), y ya no la v2 ni la v1');

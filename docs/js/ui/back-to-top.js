@@ -17,9 +17,9 @@
 // 'backtotop', así que por construcción no puede taparse con el player: son dos
 // items del mismo flex column.
 
-import { mountBottom, publishHeight } from './bottom-layer.js?v=357';
-import { scrollRootOf } from './incremental-list.js?v=357';
-import { animationsEnabled } from './reveal.js?v=357';
+import { mountBottom, publishHeight } from './bottom-layer.js?v=358';
+import { scrollRootOf } from './incremental-list.js?v=358';
+import { animationsEnabled } from './reveal.js?v=358';
 
 // Aparece pasadas ~2 pantallas de scroll.
 const SHOW_AFTER_SCREENS = 2;

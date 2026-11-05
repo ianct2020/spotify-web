@@ -1,0 +1,288 @@
+<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>banco lluvia — cuando llueve, con datos de mentira</title>
+<style>html,body{margin:0;background:#111;color:#eee;font:13px system-ui}iframe{border:0;display:block}</style>
+</head><body>
+<pre id="progreso"></pre>
+<div id="marcos"></div>
+<script type="module">
+// ── Qué prueba este banco (v=358, tanda 117) ─────────────────────────────────
+//
+// `#lluvia` REAL, en la app ENTERA (`lluvia-caso.html`, uno por iframe), contra la Spotify simulada y
+// con el historial local y la lluvia INVENTADOS, que los sirve el caso (`lluvia-datos.mjs`). Nada sale
+// a la red, y los dos JSON del repo no se piden al servidor.
+//
+//   A. abrir `#lluvia` cuesta exactamente 1 `/me` y 0 de lo demás;
+//   B. los números de las dos tarjetas, la línea, la frase, la tabla y los diez más lluviosos son los de
+//      la cuenta a mano (`ESPERADO`);
+//   C. el trío de la lluvia caída (500, `fetch` que rechaza, 200 con HTML): la línea de error, el error
+//      crudo en `console.warn('[lluvia] …')` y ningún número;
+//   D. el amigo: con su historial importado, una línea y nada más (sin botón de importar, sin pedir la
+//      lluvia); sin historial, el cartel de bloqueo de `#records`;
+//   E. salir a mitad (con el `/me` frenado y con la lluvia frenada): 0 escrituras al DOM de la ruta nueva;
+//   F. a 1366×591 y 390×844, nada desborda, y a 390 las tarjetas van una debajo de la otra;
+//   G. el pie: el aviso del JSON y el crédito con sus dos enlaces;
+//   H. el trío del historial caído (`loadDaysLocal()` en `null` con la anotación): el aviso de siempre;
+//   I. el contraste de las etiquetas, las tarjetas y el pie, ≥ 4,5 en los cuatro presets.
+//
+// ⚠️ Todas las esperas van con `esperarReal` (ver PRESUPUESTO en `scripts/correr-banco.mjs`).
+
+import { esperarReal, anclar } from '/banco/simulado.mjs';
+import { fallar, listo } from '/banco/esperar.mjs';
+import { ESPERADO, AMIGO_STATS } from '/banco/lluvia-datos.mjs';
+
+const afirmar = (c, msg) => { if (!c) throw new Error('BANCO: ' + msg); };
+const progreso = (t) => { document.getElementById('progreso').textContent = t; };
+const VUELTAS = 20000;
+const igual = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+
+function abrirMarco(uid, nombre, { ancho = 1351, alto = 800, extra = '' } = {}) {
+  const f = document.createElement('iframe');
+  f.width = ancho; f.height = alto;
+  f.src = `/banco/lluvia-caso.html?uid=${encodeURIComponent(uid)}&marco=${nombre}${extra}`;
+  document.getElementById('marcos').appendChild(f);
+  return f;
+}
+const win = (f) => f.contentWindow;
+const $ = (f, s) => f.contentDocument?.querySelector(s);
+const $$ = (f, s) => [...(f.contentDocument?.querySelectorAll(s) || [])];
+const meDe = (f) => win(f).__sim.reg.llamadas.filter((l) => l.ruta === '/me').length;
+const texto = (el) => (el?.textContent || '').replace(/\s+/g, ' ').trim();
+const CIFRA = /\d/;
+async function arrancado(f, que) { await esperarReal(() => win(f)?.__listo, { que: `que arranque ${que}`, vueltas: VUELTAS }); }
+async function irA(f, hash, que, cond) { win(f).location.hash = hash; await esperarReal(cond, { que, vueltas: VUELTAS }); }
+
+const externosDe = (f) => win(f).performance.getEntriesByType('resource').map((e) => e.name).filter((u) => new URL(u).origin !== location.origin);
+const externosAlAbrir = new Map();
+const marcos = [];
+
+async function abrirLluvia(f, que, cond) {
+  const me0 = meDe(f), n0 = win(f).__sim.reg.llamadas.length;
+  const data0 = win(f).__pedidosData.length;
+  if (!externosAlAbrir.has(f)) externosAlAbrir.set(f, externosDe(f).length);
+  await irA(f, '#lluvia', que, cond);
+  const nuevas = win(f).__sim.reg.llamadas.slice(n0);
+  return { me: meDe(f) - me0, otras: nuevas.filter((l) => l.ruta !== '/me').map((l) => `${l.metodo} ${l.ruta}`), data: win(f).__pedidosData.slice(data0) };
+}
+function sinFugas(f, nombre) {
+  const s = win(f).__sim.reg;
+  afirmar(s.desconocidas.length === 0, `${nombre}: ninguna ruta sin simular: ${s.desconocidas.join(' · ')}`);
+  afirmar(s.externas.length === 0, `${nombre}: ninguna petición a un host externo: ${s.externas.join(' · ')}`);
+  const nuevos = externosDe(f).slice(externosAlAbrir.get(f) ?? 0);
+  afirmar(nuevos.length === 0, `${nombre}: nada bajado de otro origen desde que se abrió la vista: ${nuevos.join(' · ')}`);
+  afirmar(s.escrituras.length === 0, `${nombre}: 0 escrituras en la cuenta: ${s.escrituras.map((e) => e.metodo + ' ' + e.ruta).join(' · ')}`);
+}
+const dato = (f, tarjeta, nombre) => texto($(f, `[data-lluvia-tarjeta="${tarjeta}"] [data-dato="${nombre}"] .lluvia-num`));
+const etiqueta = (f, tarjeta, nombre) => texto($(f, `[data-lluvia-tarjeta="${tarjeta}"] [data-dato="${nombre}"] .lluvia-et`));
+const filasDe = (f, cual) => $$(f, `[data-lluvia-tabla="${cual}"] tbody tr`).map((tr) => [...tr.querySelectorAll('td')].map(texto));
+
+const datos = {};
+try {
+  const { OWNER_KEYS } = await import('/js/history-keys.js');
+  const { idbSetCached, idbDel } = await import('/js/idb.js');
+  const { localKey, HISTORY_OWNER_ID } = await import('/js/features/history-data.js');
+  const TTL = 100 * 365 * 24 * 60;
+  await anclar(idbDel(OWNER_KEYS.daysLocal));
+  await anclar(idbDel(localKey(HISTORY_OWNER_ID, 'daysLocal')));
+  await anclar(idbSetCached(localKey('amigo-con', 'stats'), AMIGO_STATS, TTL));
+  await anclar(idbDel(localKey('amigo-con', 'daysLocal')));
+  await anclar(idbDel(localKey('amigo-sin', 'stats')));
+
+  // ── A · el costo ───────────────────────────────────────────────────────────
+  progreso('A: abrir');
+  const A = abrirMarco('owner', 'A'); marcos.push(['A', A]);
+  await arrancado(A, 'el marco A');
+  afirmar(texto($(A, '.home-card[data-route="lluvia"] .home-card-name')) === 'Cuando llueve', 'el inicio tiene la tarjeta «Cuando llueve»');
+  afirmar($(A, '.nav-link[data-route="mapa-artistas"]')?.nextElementSibling?.matches('.nav-link[data-route="lluvia"]'), 'en el menú General, «Cuando llueve» va justo detrás de «Mapa de artistas»');
+  const abrir = await abrirLluvia(A, 'que #lluvia pinte', () => $(A, '[data-lluvia="lista"]'));
+  afirmar(abrir.me === 1, `PUERTA A: abrir cuesta exactamente 1 \`/me\` y costó ${abrir.me}`);
+  afirmar(abrir.otras.length === 0, `PUERTA A: y 0 de lo demás, hubo: ${abrir.otras.join(' · ')}`);
+  afirmar(igual(abrir.data.map((u) => u.split('?')[0]).sort(), ['/data/history-days-local.json', '/data/lluvia-mar-del-plata.json']), `PUERTA A: del propio Pages, los dos JSON y ninguno más: ${abrir.data.join(' · ')}`);
+  sinFugas(A, 'PUERTA A');
+  afirmar($(A, '.nav-link[data-route="lluvia"].active'), 'el menú la marca como activa');
+  afirmar(texto($(A, '.page-header-title')) === 'Cuando llueve', `la cabecera dice «Cuando llueve» («${texto($(A, '.page-header-title'))}»)`);
+
+  // ── B · los números = la cuenta a mano ─────────────────────────────────────
+  progreso('B: los números');
+  afirmar(texto($(A, '[data-lluvia-linea]')) === ESPERADO.linea, `PUERTA B: la línea: «${texto($(A, '[data-lluvia-linea]'))}»`);
+  for (const t of ['con', 'sin']) {
+    const e = ESPERADO[t];
+    const vino = { dias: dato(A, t, 'dias'), sono: dato(A, t, 'sono'), pct: (etiqueta(A, t, 'sono').match(/\(([^)]+)\)/) || [])[1], media: dato(A, t, 'media'), mediana: dato(A, t, 'mediana') };
+    afirmar(igual(vino, e), `PUERTA B (${t}): vino ${JSON.stringify(vino)} y la cuenta a mano dice ${JSON.stringify(e)}`);
+  }
+  afirmar(texto($(A, '[data-lluvia-tarjeta="con"] .lluvia-tit')) === 'Días con lluvia' && texto($(A, '[data-lluvia-tarjeta="sin"] .lluvia-tit')) === 'Días sin lluvia', 'PUERTA B: los títulos de las tarjetas');
+  afirmar(texto($(A, '[data-lluvia-frase]')) === ESPERADO.frase, `PUERTA B: la frase: «${texto($(A, '[data-lluvia-frase]'))}»`);
+  afirmar(texto($(A, '[data-lluvia-causa]')) === ESPERADO.causa, 'PUERTA B: «no dice que la lluvia sea la causa»');
+  afirmar(igual(filasDe(A, 'anios'), ESPERADO.anios), `PUERTA B: por año: ${JSON.stringify(filasDe(A, 'anios'))}`);
+  afirmar(igual(filasDe(A, 'lluviosos'), ESPERADO.lluviosos), `PUERTA B: los más lluviosos: ${JSON.stringify(filasDe(A, 'lluviosos'))}`);
+  afirmar(!/99,0|77,0/.test(texto($(A, '[data-lluvia-tabla="lluviosos"]'))), 'PUERTA B: el primero y el último del historial no entran');
+  datos.numeros = `con ${dato(A, 'con', 'dias')} días, media ${dato(A, 'con', 'media')}, mediana ${dato(A, 'con', 'mediana')} · sin ${dato(A, 'sin', 'dias')} días, media ${dato(A, 'sin', 'media')}, mediana ${dato(A, 'sin', 'mediana')}`;
+
+  // ── G · el pie ─────────────────────────────────────────────────────────────
+  progreso('G: el pie');
+  afirmar(texto($(A, '[data-lluvia-pie="aviso"]')) === ESPERADO.aviso, `PUERTA G: el aviso es el del JSON: «${texto($(A, '[data-lluvia-pie="aviso"]'))}»`);
+  afirmar(texto($(A, '[data-lluvia-pie="credito"]')) === ESPERADO.credito, `PUERTA G: el crédito: «${texto($(A, '[data-lluvia-pie="credito"]'))}»`);
+  const enlaces = $$(A, '[data-lluvia-pie="credito"] a').map((a) => [texto(a), a.href]);
+  afirmar(igual(enlaces, ESPERADO.enlaces), `PUERTA G: los dos enlaces: ${JSON.stringify(enlaces)}`);
+  afirmar($$(A, '[data-lluvia-pie="credito"] a').every((a) => a.target === '_blank' && a.rel.includes('noopener')), 'PUERTA G: abren aparte, con noopener');
+
+  // ── C · la lluvia caída ────────────────────────────────────────────────────
+  for (const modo of ['500', 'rechazo', 'html']) {
+    progreso(`C: la lluvia caída (${modo})`);
+    const f = abrirMarco('owner', `C${modo}`, { extra: `&lluvia=${modo}` }); marcos.push([`C${modo}`, f]);
+    await arrancado(f, `el marco C (${modo})`);
+    await abrirLluvia(f, `la línea de error (${modo})`, () => $(f, '[data-lluvia="lluvia-caida"]'));
+    const c = $(f, '#lluvia-content');
+    afirmar(texto(c) === 'No se ha podido leer la lluvia. Recarga la página para volver a intentarlo.', `PUERTA C (${modo}): la línea y nada más: «${texto(c)}»`);
+    afirmar(!CIFRA.test(texto(c)) && !$(f, '.lluvia-tarjeta') && !$(f, '.lluvia-tabla'), `PUERTA C (${modo}): ningún número`);
+    afirmar(win(f).__avisos.some((a) => a.startsWith('[lluvia]')), `PUERTA C (${modo}): el error crudo a console.warn('[lluvia] …'): ${win(f).__avisos.join(' | ')}`);
+    sinFugas(f, `PUERTA C (${modo})`);
+  }
+
+  // ── H · el historial caído ─────────────────────────────────────────────────
+  for (const modo of ['500', 'rechazo', 'html']) {
+    progreso(`H: el historial caído (${modo})`);
+    await anclar(idbDel(OWNER_KEYS.daysLocal));   // si no, lo lee del caché que dejó el marco A
+    const f = abrirMarco('owner', `H${modo}`, { extra: `&dias=${modo}` }); marcos.push([`H${modo}`, f]);
+    await arrancado(f, `el marco H (${modo})`);
+    const h = await abrirLluvia(f, `el aviso del historial (${modo})`, () => $(f, '[data-lluvia="historial-ilegible"]'));
+    afirmar($(f, '[data-lluvia="historial-ilegible"] .aviso-historial-ilegible'), `PUERTA H (${modo}): avisoHistorialIlegibleHtml()`);
+    afirmar(!CIFRA.test(texto($(f, '#lluvia-content'))) && !$(f, '.lluvia-tarjeta') && !$(f, '.olm-card'), `PUERTA H (${modo}): sin números y sin el candado`);
+    afirmar(!h.data.some((u) => u.includes('lluvia')), `PUERTA H (${modo}): y no se pide la lluvia: ${h.data.join(' · ')}`);
+    sinFugas(f, `PUERTA H (${modo})`);
+  }
+
+  // ── D · los amigos ─────────────────────────────────────────────────────────
+  progreso('D: los amigos');
+  const D1 = abrirMarco('amigo-con', 'D1'); marcos.push(['D1', D1]);
+  await arrancado(D1, 'el marco D1');
+  const d1 = await abrirLluvia(D1, 'la línea del amigo', () => $(D1, '[data-lluvia="sin-archivo"]'));
+  afirmar(d1.me === 1 && d1.otras.length === 0, `PUERTA D: 1 \`/me\` y nada más (${d1.me}; ${d1.otras.join(' · ')})`);
+  afirmar(texto($(D1, '#lluvia-content')) === 'La lluvia se cruza con el historial que está guardado en la app, y el tuyo no lo está.', `PUERTA D: la línea y nada más: «${texto($(D1, '#lluvia-content'))}»`);
+  afirmar(!$(D1, '#lluvia-content [data-open-import]') && !$(D1, '#lluvia-content button'), 'PUERTA D: sin botón de importar');
+  afirmar(d1.data.length === 0, `PUERTA D: un amigo no pide ninguno de los dos JSON: ${d1.data.join(' · ')}`);
+  sinFugas(D1, 'PUERTA D (con historial)');
+
+  const D2 = abrirMarco('amigo-sin', 'D2'); marcos.push(['D2', D2]);
+  await arrancado(D2, 'el marco D2');
+  const d2 = await abrirLluvia(D2, 'el cartel', () => $(D2, '#lluvia-content .olm-card'));
+  afirmar(/Necesito tu historial/.test(texto($(D2, '.olm-card'))) && /Cuando llueve usa el Extended Streaming History/.test(texto($(D2, '.olm-card'))), `PUERTA D: sin historial, el cartel de #records: «${texto($(D2, '.olm-card')).slice(0, 120)}»`);
+  afirmar($(D2, '.olm-card [data-open-import]'), 'PUERTA D: con su botón de importar');
+  afirmar(d2.data.length === 0, 'PUERTA D: y no pide ninguno de los dos JSON');
+  sinFugas(D2, 'PUERTA D (sin historial)');
+
+  // ── E · salir a mitad ──────────────────────────────────────────────────────
+  async function salirAMitad(nombre, frenar, soltarFreno, esperando) {
+    progreso(`E: salir a mitad (${nombre})`);
+    const F = abrirMarco('owner', `E${nombre}`); marcos.push([`E${nombre}`, F]);
+    await arrancado(F, `el marco E (${nombre})`);
+    let soltar;
+    frenar(F, new Promise((r) => { soltar = r; }));
+    await irA(F, '#lluvia', `que #lluvia quede esperando (${nombre})`, () => esperando(F));
+    await irA(F, '#home', 'que el inicio se pinte encima', () => $(F, '.home-card') && !$(F, '#lluvia-content'));
+    let asentar = 0;
+    await esperarReal(() => ++asentar > 40, { que: 'que el inicio se asiente', vueltas: 200 });
+    const main = $(F, '#main-content');
+    const antes = main.innerHTML;
+    let mutaciones = 0;
+    const cuales = [];
+    const obs = new (win(F).MutationObserver)((ms) => {
+      for (const m of ms) {
+        if (m.type === 'attributes' && m.attributeName === 'class' && m.target.dataset?.route) continue;
+        mutaciones++;
+        cuales.push(`${m.type} en <${m.target.nodeName?.toLowerCase()}>`);
+      }
+    });
+    obs.observe(main, { childList: true, subtree: true, characterData: true, attributes: true });
+    soltarFreno(F);
+    soltar();
+    let vueltas = 0;
+    await esperarReal(() => ++vueltas > 150, { que: 'que la carga colgada termine', vueltas: 400 });
+    obs.disconnect();
+    afirmar(mutaciones === 0, `PUERTA E (${nombre}): 0 escrituras al DOM de la ruta nueva, hubo ${mutaciones}: ${cuales.join(' ; ')}`);
+    const sinMarcas = (h) => h.replace(/ active"/g, '"');
+    afirmar(sinMarcas(main.innerHTML) === sinMarcas(antes) && !$(F, '[data-lluvia]'), `PUERTA E (${nombre}): el inicio quedó como estaba`);
+    afirmar(win(F).__errores.length === 0, `PUERTA E (${nombre}): 0 errores: ${win(F).__errores.join(' | ')}`);
+    return mutaciones;
+  }
+  await anclar(idbDel(OWNER_KEYS.daysLocal));
+  const e1 = await salirAMitad('me', (F, p) => { win(F).__frenoMe = p; }, (F) => { win(F).__frenoMe = null; }, (F) => meDe(F) > 0 && $(F, '#lluvia-content .spinner'));
+  const e2 = await salirAMitad('lluvia', (F, p) => { win(F).__frenoLluvia = p; }, (F) => { win(F).__frenoLluvia = null; }, (F) => win(F).__pedidosData.some((u) => u.includes('lluvia')) && $(F, '#lluvia-content .spinner'));
+  datos.salir = `${e1} y ${e2} escrituras`;
+
+  // ── I · el contraste, en los cuatro presets ────────────────────────────────
+  progreso('I: contraste');
+  // La cuenta de WCAG 2.x de `tests/tema-contraste.test.mjs`; el fondo se COMPONE capa por capa hasta uno opaco.
+  const rgbaDe = (css) => { const m = String(css).match(/rgba?\(([^)]+)\)/); if (!m) return null; const p = m[1].split(/[\s,/]+/).filter(Boolean).map(Number); return [p[0], p[1], p[2], p[3] ?? 1]; };
+  const lumDe = (c) => { const [r, g, b] = c.slice(0, 3).map((v) => { const s = v / 255; return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4; }); return 0.2126 * r + 0.7152 * g + 0.0722 * b; };
+  const contrasteDe = (a, b) => { const x = lumDe(a), y = lumDe(b); return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05); };
+  const sobre = (arriba, abajo) => { const a = arriba[3]; return [0, 1, 2].map((i) => arriba[i] * a + abajo[i] * (1 - a)).concat(1); };
+  function fondoDe(f, el) {
+    const capas = [];
+    for (let n = el; n && n.nodeType === 1; n = n.parentElement) { const c = rgbaDe(win(f).getComputedStyle(n).backgroundColor); if (c && c[3] > 0) { capas.push(c); if (c[3] >= 1) break; } }
+    let base = capas.length && capas.at(-1)[3] >= 1 ? capas.pop() : [255, 255, 255, 1];
+    while (capas.length) base = sobre(capas.pop(), base);
+    return base;
+  }
+  function colorDe(f, el) { const cs = win(f).getComputedStyle(el); const c = rgbaDe(cs.color); return sobre([c[0], c[1], c[2], c[3] * Number(cs.opacity || 1)], fondoDe(f, el)); }
+  await irA(A, '#lluvia', 'volver a #lluvia para medir', () => $(A, '[data-lluvia="lista"]'));
+  const medidos = {};
+  for (const id of ['violeta', 'ambar', 'aguamarina', 'papel']) {
+    await anclar(win(A).__ponerTema(id));
+    const piezas = [
+      ['línea de arriba', $(A, '[data-lluvia-linea]')], ['título de la tarjeta', $(A, '.lluvia-tit')], ['número de la tarjeta', $(A, '.lluvia-num')],
+      ['etiqueta de la tarjeta', $(A, '.lluvia-et')], ['frase', $(A, '[data-lluvia-frase]')], ['«no dice la causa»', $(A, '[data-lluvia-causa]')],
+      ['título de sección', $(A, '.lluvia-sec')], ['cabecera de la tabla', $(A, '.lluvia-tabla th')], ['celda de la tabla', $(A, '.lluvia-tabla td')],
+      ['aviso del pie', $(A, '[data-lluvia-pie="aviso"]')], ['crédito del pie', $(A, '[data-lluvia-pie="credito"]')], ['enlace del pie', $(A, '.lluvia-pie a')],
+    ];
+    let peor = Infinity, cual = '';
+    const piezasMedidas = {};
+    for (const [nombre, el] of piezas) {
+      afirmar(el, `PUERTA I (${id}): falta ${nombre}`);
+      const r = contrasteDe(colorDe(A, el), fondoDe(A, el));
+      piezasMedidas[nombre] = +r.toFixed(2);
+      if (r < peor) { peor = r; cual = nombre; }
+      afirmar(r >= 4.5, `PUERTA I (${id}): ${nombre} da ${r.toFixed(2)}:1 y AA pide 4,5`);
+    }
+    medidos[id] = { peor: +peor.toFixed(2), cual, piezas: piezasMedidas };
+  }
+  await anclar(win(A).__ponerTema('violeta'));
+  datos.contraste = Object.entries(medidos).map(([id, m]) => `${id} ${m.peor} (${m.cual})`).join(' · ');
+  document.documentElement.setAttribute('data-contraste', JSON.stringify(medidos));
+
+  // ── F · sin desborde ───────────────────────────────────────────────────────
+  progreso('F: desborde');
+  const desb = [];
+  for (const [ancho, alto] of [[1366, 591], [390, 844]]) {
+    const f = abrirMarco('owner', `F${ancho}`, { ancho, alto }); marcos.push([`F${ancho}`, f]);
+    await arrancado(f, `el marco de ${ancho}`);
+    await abrirLluvia(f, `#lluvia a ${ancho}`, () => $(f, '[data-lluvia="lista"]'));
+    const de = f.contentDocument.documentElement;
+    afirmar(de.scrollWidth <= win(f).innerWidth, `PUERTA F (${ancho}): sin barra horizontal (${de.scrollWidth} > ${win(f).innerWidth})`);
+    const malos = [$(f, '.lluvia'), $(f, '.lluvia-tarjetas'), ...$$(f, '.lluvia-tarjeta'), ...$$(f, '.lluvia-dato'), ...$$(f, '.lluvia-tabla-marco'), ...$$(f, '.lluvia-tabla'), ...$$(f, '.lluvia-tabla td'), $(f, '.lluvia-pie')]
+      .filter((el) => el && el.scrollWidth > el.clientWidth + 1).map((el) => `${el.className || el.nodeName} ${el.scrollWidth}>${el.clientWidth}`);
+    afirmar(malos.length === 0, `PUERTA F (${ancho}): nada desborda su caja (${malos.slice(0, 5).join(' · ')})`);
+    const cont = $(f, '.lluvia').getBoundingClientRect();
+    const fuera = [...$$(f, '.lluvia-tarjeta'), ...$$(f, '.lluvia-tabla'), $(f, '.lluvia-pie')].filter((el) => { const r = el.getBoundingClientRect(); return r.left < cont.left - 0.5 || r.right > cont.right + 0.5; });
+    afirmar(fuera.length === 0, `PUERTA F (${ancho}): todo dentro de la vista (${fuera.length} fuera)`);
+    const [t1, t2] = $$(f, '.lluvia-tarjeta').map((el) => el.getBoundingClientRect());
+    if (ancho <= 600) afirmar(t2.top >= t1.bottom - 0.5 && Math.abs(t1.left - t2.left) < 1, `PUERTA F (${ancho}): las tarjetas, una debajo de la otra`);
+    else afirmar(Math.abs(t1.top - t2.top) < 1 && t2.left >= t1.right - 0.5, `PUERTA F (${ancho}): las tarjetas, lado a lado`);
+    desb.push(`${ancho}×${alto}: página ${de.scrollWidth}/${win(f).innerWidth}`);
+    sinFugas(f, `PUERTA F (${ancho})`);
+  }
+  datos.desborde = desb.join(' · ');
+
+  // ── 0 errores en todos los marcos ──────────────────────────────────────────
+  const errores = marcos.flatMap(([n, f]) => win(f).__errores.map((e) => `${n}: ${e}`));
+  afirmar(errores.length === 0, `0 errores de consola: ${errores.join(' | ')}`);
+
+  const resumen = `A abrir: /me=${abrir.me} otras=${abrir.otras.length} · B ${datos.numeros} · C trío de la lluvia caída sin números · D amigo una línea, sin historial el cartel · ` +
+    `E salir a mitad: ${datos.salir} · F ${datos.desborde} · G pie con 2 enlaces · H trío del historial caído · I contraste peor: ${datos.contraste} · errores=${errores.length} · ` +
+    `reloj virtual=${Math.round(performance.now())} ms`;
+  document.documentElement.setAttribute('data-resumen', resumen);
+  progreso('ok · ' + resumen);
+  listo(resumen);
+} catch (e) {
+  fallar(e);
+}
+</script>
+</body></html>

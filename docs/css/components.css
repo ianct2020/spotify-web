@@ -2190,3 +2190,32 @@ body.con-aviso-copia { padding-top: 46px; }
   color: var(--color-text-secondary);
   text-decoration: underline;
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   #lluvia — cuando llueve (v=358, tanda 117). Clases propias `.lluvia-…`.
+   Los números en --color-text; las etiquetas y el pie en --color-text-secondary (nunca el muted).
+   ═══════════════════════════════════════════════════════════════════════════ */
+.lluvia { display: flex; flex-direction: column; gap: 14px; }
+.lluvia-linea { margin: 0; font-size: 13px; line-height: 1.5; color: var(--color-text-secondary); }
+.lluvia-tarjetas { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.lluvia-tarjeta { min-width: 0; padding: 14px 16px; border: 1px solid var(--color-border); border-radius: var(--radius-lg, 12px); background: var(--color-surface); }
+.lluvia-tit { margin: 0 0 10px; font-size: 15px; font-weight: 700; color: var(--color-text); }
+.lluvia-datos { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 14px; }
+.lluvia-dato { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.lluvia-num { font-size: 30px; font-weight: 700; line-height: 1.1; color: var(--color-text); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.lluvia-et { font-size: 13px; line-height: 1.4; color: var(--color-text-secondary); }
+.lluvia-frase { margin: 0; font-size: 16px; font-weight: 600; line-height: 1.4; color: var(--color-text); }
+.lluvia-sec { margin: 10px 0 0; font-size: 15px; font-weight: 700; color: var(--color-text); }
+.lluvia-tabla-marco { min-width: 0; max-width: 640px; }
+.lluvia-tabla { width: 100%; border-collapse: collapse; font-size: 13px; color: var(--color-text); font-variant-numeric: tabular-nums; }
+.lluvia-tabla th { padding: 6px 8px; text-align: right; font-weight: 600; color: var(--color-text-secondary); border-bottom: 1px solid var(--color-border); }
+.lluvia-tabla td { padding: 6px 8px; text-align: right; border-bottom: 1px solid var(--color-border); }
+.lluvia-tabla th:first-child, .lluvia-tabla td:first-child { text-align: left; }
+.lluvia-pie { display: flex; flex-direction: column; gap: 6px; margin-top: 6px; font-size: 12px; line-height: 1.5; color: var(--color-text-secondary); }
+.lluvia-pie p { margin: 0; }
+.lluvia-pie a { color: inherit; text-decoration: underline; }
+@media (max-width: 600px) {
+  .lluvia-tarjetas { grid-template-columns: minmax(0, 1fr); gap: 8px; }
+  .lluvia-num { font-size: 26px; }
+  .lluvia-tabla th, .lluvia-tabla td { padding: 6px 4px; }
+}
