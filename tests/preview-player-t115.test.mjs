@@ -190,7 +190,7 @@ comprobar('E4 la transición de la barra cuelga de .preview-pill-anim (la decide
 comprobar('E5 ninguna regla nueva usa prefers-reduced-motion para la barra', !/prefers-reduced-motion[^{]*\{[^}]*preview-pill-progress/.test(comp));
 const shaMain = createHash('sha256').update(readFileSync(join(RAIZ, 'src/css/main.css'))).digest('hex');
 // De v=356 a v=360 fue 409e0503…; la tanda 120 (v=361) cambió las reglas del chip elegido de `#wrapped`, y nada del pill.
-igual('E6 main.css no se tocó (sha256 de v=361)', shaMain, 'b7578fd08f8a654844de07e37fbce25646460efb5e3b79f5e6c30cfe5403a893');
+igual('E6 main.css no se tocó (sha256 de v=363)', shaMain, '3f96a87858caf15a4fe6b67f2ba67a6430b6fc77083f4d2f5c25693849fecf07');
 
 console.log(`preview-player-t115: ${ok} asserts OK · ${fallos} fallos (de ${ok + fallos})`);
 process.exit(fallos ? 1 : 0);

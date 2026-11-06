@@ -27,8 +27,9 @@ import { instalarDom } from './dobles/dom-t119-doble.mjs';
 const SRC = process.env.T119_SRC ? resolve(process.env.T119_SRC) : resolve(import.meta.dirname, '../src');
 register('./dobles/loader-t110.mjs', pathToFileURL(import.meta.filename), { data: { reales: ['features/artist-card.js'] } });
 
-// `sha256sum src/css/main.css` en v=361: lo único que cambió desde `f6f4df1` son las reglas del chip elegido de la tanda 120.
-const SHA_MAIN_CSS = 'b7578fd08f8a654844de07e37fbce25646460efb5e3b79f5e6c30cfe5403a893';
+// `sha256sum src/css/main.css` en v=363: lo único que cambió desde `f6f4df1` son las reglas del chip elegido de la tanda 120 y las de
+// `.wr-ap-label` y `.wr-ap-fila.uno` de la tanda 122.
+const SHA_MAIN_CSS = '3f96a87858caf15a4fe6b67f2ba67a6430b6fc77083f4d2f5c25693849fecf07';
 
 let bien = 0, mal = 0;
 const ok = (c, nombre) => { console.log(`  ${c ? '✓' : '✗'} ${nombre}`); c ? bien++ : mal++; };

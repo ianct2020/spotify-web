@@ -5515,7 +5515,7 @@ body.covers-fs .main {
   font-size: 11px;
   letter-spacing: 0.14em;
   text-transform: uppercase;
-  color: var(--color-accent);
+  color: color-mix(in srgb, var(--color-accent) 80%, var(--color-text));
   font-weight: 700;
   margin-bottom: 12px;
 }
@@ -5765,8 +5765,8 @@ body.covers-fs .main {
   line-height: 22px; font-size: 12px; color: var(--color-text);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
-.wr-ap-fila.uno .b { background: var(--color-accent); }
-.wr-ap-fila.uno .nom { color: #fff; font-weight: 600; }
+.wr-ap-fila.uno .b { box-shadow: inset 0 0 0 2px var(--color-accent); }
+.wr-ap-fila.uno .nom { color: var(--color-text); font-weight: 600; }
 .wr-ap-fila .val {
   text-align: right; font-size: 12px;
   color: var(--color-text-secondary); font-variant-numeric: tabular-nums;

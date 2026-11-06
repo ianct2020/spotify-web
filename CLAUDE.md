@@ -15,6 +15,7 @@
   - Máximo 40 URIs por request, usa query params (no body)
 - Save to library: `PUT /me/library?uris=spotify:track:{id},...` — **por QUERY, igual que el DELETE** (verificado en vivo 2026-08-15: body `{ids}` y body `{uris}` dan 400 «Missing required field: uris»; el query da 200). Hasta v=142 `saveToLibrary()` mandaba `{ids}` en el body, así que «+ Biblioteca» de #discover-artists y #new-releases fallaba siempre. Chunks de 40, como el DELETE.
 - **Guardar un ÁLBUM**: `PUT /me/library?uris=spotify:album:{id}` — **verificado en vivo 2026-08-18** con el ciclo completo sobre «Kind Of Blue» (`GET /me/albums` 33 → 34 → 33). `PUT /me/albums` da **403** en las DOS formas (body `{ids}` y query `?ids=`), y `GET /me/albums/contains?ids=` también da 403: para preguntar va `GET /me/library/contains?uris=spotify:album:{id}` → `[bool]`. `GET /me/albums` sí vive (lectura, paginado, con `added_at`). **La regla general**: `/me/library` es la ruta UNIFICADA post-migración y lo que cambia es el TIPO de la uri, no la ruta; las rutas por recurso (`/me/tracks`, `/me/albums`) quedaron para leer. Chunks de 40 como el resto. Ojo: **guardar el álbum NO likea sus pistas** y likear las pistas NO hace aparecer el disco en `/me/albums` — son dos escrituras distintas, y hasta v=147 la app tenía un solo botón («+ Biblioteca») que hacía lo segundo con nombre de lo primero. **Desde v=301 «Guardar single» usa este mismo `PUT`** (un single es un objeto álbum; `guardarLanzamiento()` de `features/discover-common.js` ya no decide por tamaño ni pide el tracklist): ⚠️ **con un lanzamiento de tipo `single` NO está verificado en vivo**, solo contra la Spotify simulada (`tests/banco/escrituras.html`, «F.3 bis»). Hasta v=300 un single iba a la playlist «fonoteca · sin escuchar».
+  - **La lectura y su caché**: `getSavedAlbums()` (`api.js`) pagina `GET /me/albums?limit=50` (tope 40 páginas) con 60 min de caché en `saved_albums_v1`, que **no lleva el uid**. **Desde v=363 el cambio de usuario la borra** (`revisarCambioDeUsuario()`, sin esperar, como las de al lado: queda una carrera de milisegundos, en `PENDIENTES.md`). La usan el filtro de descubrir y el chip «Solo los de tu biblioteca» de `#listened`. ⚠️ **Con un 200 que no es JSON no tira**: `spotifyFetch` da `null`, la lectura termina en `[]` y **ese `[]` queda en la caché**. El chip lo trata como no leído (una lectura sin ningún id no se aplica); el filtro de descubrir no.
 - **`GET /me/playlists` trae también las que SEGUÍS, y las ajenas están 403 para leer sus items.** Medido en vivo el 2026-08-23: 97 playlists en total, 41 propias, 56 ajenas, y `GET /playlists/{id}/items` de una ajena devuelve 403 (8 de 8 probadas). Cualquier barrido que recorra playlists tiene que filtrar por `owner.id === me.id` ANTES de pedir items, o gasta una request condenada al catch por cada ajena. El filtro compartido es `getOwnPlaylists()` de `util/playlist-add.js` (lo usan #dedupe, el picker de «Añadir a playlists» y, desde v=153, #zombies — que hasta entonces escaneaba las 97 y no terminaba nunca). Medido en #zombies con las 42 propias: **431 s la primera pasada** (caches de items fríos, se baja cada playlist entera con 600 ms de sleep entre páginas) y **20,4 s la segunda**, validando por snapshot contra el cache de IDB. O sea que el cuello de botella que queda no es el filtro sino el primer barrido.
 - **Likes sin NINGÚN metadato** (los ex «0000 · Unknown» de #versions, 6 en la biblioteca de Ian): `/me/tracks` los devuelve con `name`, `artists[0].name` y `album.name` en **cadena vacía**, `duration_ms: 0`, `is_playable: false`, sin tapa y `release_date: "0000"`. Verificado el 2026-08-23: **NO son archivos locales** —la uri es `spotify:track:…` normal, así que se pueden añadir a una playlist y de hecho se hizo— y `GET /me/library/contains` los da por guardados. El nombre **no se puede recuperar por ningún lado**: `oEmbed` devuelve `title: ""` y `GET /albums/{id}` devuelve un álbum de «Various Artists» con `name: ""`, `release_date: "0000"`, sin tapa y con sus 14 pistas igual de vacías. Ojo con agruparlos: cualquier normalización por nombre+artista los manda a todos a la misma clave y los hace parecer versiones del mismo tema (era el bug de #versions hasta v=153, donde «Borrar sobrantes» habría borrado likes sin relación entre sí).
 - Create playlist: `POST /me/playlists` (NO `POST /users/{id}/playlists`)
@@ -4020,6 +4021,32 @@ Guardas: `tests/wrapped-siempre-recorrido.test.mjs` (los dos módulos REALES; ro
 `siempre-y-play`. Dos cosas se dieron vuelta, porque codificaban «el recorrido de siempre todavía no existe»: los asserts de `#wrapped-apertura` en
 `tests/wrapped-siempre.test.mjs` y la puerta A. Con el dato real, en `fonoteca-migracion/` (este repo es público).
 
+**v=363 (tanda 122): el contraste de la etiqueta y del primer nombre.** Las dos clases son compartidas con el recorrido de un año, así que el
+defecto estaba vivo en el Wrapped de cada año desde antes y en «Siempre» desde v=362. Medido con el dato real, en los dos recorridos, en lista
+quieta y con el paso clavado, con las transiciones terminadas; da lo mismo en los cuatro casos:
+
+| clase | | violeta | ámbar | aguamarina | papel |
+|---|---|---|---|---|---|
+| `.wr-ap-label` | antes | **3,47** | 6,96 | 10,27 | 6,54 |
+| | después | 4,80 | 8,17 | 11,09 | 8,10 |
+| `.wr-ap-fila.uno .nom` | antes | 5,70 | **2,84** | **1,89** | 7,10 |
+| | después | 13,04 | 11,64 | 10,78 | 11,94 |
+
+- **La etiqueta**: `color-mix(in srgb, var(--color-accent) 80%, var(--color-text))`. **P = 80** es el mayor múltiplo de 5 que da ≥ 4,5:1 en los
+  cuatro presets contra el fondo donde se pinta de verdad, que es `--color-bg` en todos los pasos (con P = 85, Violeta da 4,39). Sigue en el tono del
+  acento; en Papel, donde el texto es oscuro, la mezcla oscurece.
+- **El primer nombre**: `.wr-ap-fila.uno .b` ya no pinta el acento lleno (queda el `--color-accent-tint` de las demás filas, que es el acento al 14 %) y
+  lleva el anillo `box-shadow: inset 0 0 0 2px var(--color-accent)`; `.nom` va en `--color-text` y conserva el 600. Es la regla de v=290 y v=361: nada de
+  blanco sobre el acento.
+- **El anillo no es texto y no lleva puerta.** El acento contra la pista con el tinte compuesto da 2,60 · 4,65 · 6,40 · 4,82. En Violeta queda por
+  debajo de 3:1: la primera fila se distingue además por el puesto y el peso.
+- ⚠️ **`color-mix()` hace que `getComputedStyle().color` devuelva `color(srgb r g b)`, no `rgb(…)`.** Un medidor que solo lee `rgb()` da «sin color»: los de
+  la puerta L, la F de `listened-biblioteca` y el conductor de capturas de la 122 leen las dos formas. La puerta E no lo necesita porque mide otro elemento.
+- 🟥 **Medido y sin tocar**: `.sort-btn.sort-active` de `#listened` pinta blanco sobre el acento y da 5,70 · **2,84** · **1,89** · 7,10. En `PENDIENTES.md`.
+
+Guarda: la puerta L del banco `siempre-y-play` (los cuatro presets, los dos recorridos, lista quieta y paso clavado, el tinte compuesto; roja contra v=362).
+`main.css` lleva el `sha256` fijado en `tests/ficha-artista-play.test.mjs` y en `tests/preview-player-t115.test.mjs`.
+
 **v=361 (tanda 120): el chip elegido con anillo.** Hasta v=360 `.wrapped-year-tab.active` pintaba blanco sobre el acento, en cualquier año
 elegido y en «Siempre», y fallaba AA en dos presets. Ahora es el patrón de `.covers-chip.is-on` (v=290): `--color-surface` de fondo,
 `--color-text` de texto, y la selección la dicen `border-color` y `box-shadow: 0 0 0 2px` del acento. Sin el anillo de 3 px de
@@ -5379,6 +5406,7 @@ fila sobrevivió así desde que se armó la tabla.
 | `#mosaico` | **0** | **0** | **ninguno, a propósito** | — | **medida en vivo el 2026-10-06**: 10 mosaicos generados (hasta 43.200 celdas), **0 peticiones y 0 cortadas** con los topes de la API en CERO. Lo que sí sale a la red es el CDN de imágenes, que no gasta cuota |
 | `#search` | **0** | **0** | — | — | leída del código · **`/me` repasado el 2026-10-08**: su `render()` no llega a `getCurrentUserId()` |
 | `#listened` | **26** `/items` + 3 `/me` | **0** | snapshot + págs. de `/items` | pistas de la playlist elegida | **medida en vivo el 2026-10-04** (caché vencido) |
+| ↳ al apretar «Solo los de tu biblioteca» | `ceil(n/50)` `GET /me/albums` (n = álbumes guardados) | **0** dentro de los 60 min de la caché | págs. de `/me/albums` | álbumes guardados | medida en el banco el 2026-11-06 (120 guardados: 3 y después 0). Abrir `#listened` no pide ninguna: las mismas rutas que en v=362, comparadas en la misma corrida |
 | ↳ lo que predice el código | 1 + ceil(n/100) | **0** (caché propio en IDB) | ídem | ídem | leída del código |
 | **Crear** | | | | | |
 | `#smart` | **ceil(L/50)** = **191** | **0** | `/me/tracks` paginado | **nº de me gusta** | leída del código · **`/me` repasado el 2026-10-08**: su `render()` no llega a `getCurrentUserId()` |

@@ -48,7 +48,7 @@ if npm test --silent 2>&1 | tail -4 | sed 's/^/      /'; [ "${PIPESTATUS[0]}" -e
 # `mosaico` y `toasts` entraron en v=273:
 # estaban en rojo desde antes del 04/10 y justamente por no estar acá nadie los
 # miraba, igual que le había pasado a `barra` entre v=241 y v=261.
-echo "2b. bancos (barra · pausa-search · toasts · mosaico · novedades · escrituras · ocultar-artista ×3 · covers-orden · calendario · import-guarda · ocultos-cache · mapa · puertas · cuota · letras · generos-cache · generos-escaneo · generos · mapa-artistas · versiones-deluxe · router-teardown · guard-ruta-vieja · postal · copia-completa · copia-importar · menos-salteas · rehacer-me-gusta · debug-ocultos-ancho · lluvia · siempre-y-play)"
+echo "2b. bancos (barra · pausa-search · toasts · mosaico · novedades · escrituras · ocultar-artista ×3 · covers-orden · calendario · import-guarda · ocultos-cache · mapa · puertas · cuota · letras · generos-cache · generos-escaneo · generos · mapa-artistas · versiones-deluxe · router-teardown · guard-ruta-vieja · postal · copia-completa · copia-importar · menos-salteas · rehacer-me-gusta · debug-ocultos-ancho · lluvia · siempre-y-play · listened-biblioteca)"
 # Los dos de `ocultar-artista` entraron en v=276: las TRES vistas que ocultan
 # artistas, reales, contra una Spotify simulada. Es el único sitio donde se puede
 # probar ocultar sin escribir en la cuenta de Ian, y el de `-disco` es el que
@@ -173,7 +173,10 @@ echo "2b. bancos (barra · pausa-search · toasts · mosaico · novedades · esc
 # ENTERA como el owner simulado, con el historial INVENTADO e iTunes simulado: elegir «Siempre» = 0 peticiones y ni la tarjeta del
 # año ni la apertura; el ▶ de la fila 2 suena, ⏸ en esa fila, `#ac-preview` en «▶ Preview», sin abrir la ficha de canción y 0 a
 # Spotify; 5, 2 y 0 filas; sin desborde a 1366×591 y 390×844.
-for B in barra pausa-search toasts mosaico novedades escrituras ocultar-artista ocultar-artista-disco ocultar-artista-novedades covers-orden calendario import-guarda ocultos-cache mapa puertas cuota letras generos-cache generos-escaneo generos mapa-artistas versiones-deluxe router-teardown guard-ruta-vieja postal copia-completa copia-importar menos-salteas rehacer-me-gusta debug-ocultos-ancho lluvia siempre-y-play; do
+# `listened-biblioteca` entró en v=363 (tanda 122): el chip «Solo los de tu biblioteca» de #listened, en la app ENTERA con la Spotify simulada
+# y datos INVENTADOS: abrir no pide /me/albums; apretar, 3 páginas y los 9 por id; búsqueda; 500, rechazo y 200 con HTML sin ningún «0»; salir
+# a mitad; el contraste en los cuatro presets; sin desborde a 1366×591 y 390×844.
+for B in barra pausa-search toasts mosaico novedades escrituras ocultar-artista ocultar-artista-disco ocultar-artista-novedades covers-orden calendario import-guarda ocultos-cache mapa puertas cuota letras generos-cache generos-escaneo generos mapa-artistas versiones-deluxe router-teardown guard-ruta-vieja postal copia-completa copia-importar menos-salteas rehacer-me-gusta debug-ocultos-ancho lluvia siempre-y-play listened-biblioteca; do
   if node scripts/correr-banco.mjs "$B" 2>&1 | sed 's/^/      /'; [ "${PIPESTATUS[0]}" -eq 0 ]; then
     ok "banco $B en verde"
   else

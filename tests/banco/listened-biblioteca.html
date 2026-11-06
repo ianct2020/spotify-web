@@ -1,0 +1,287 @@
+<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>banco listened-biblioteca — el chip «Solo los de tu biblioteca», con datos de mentira</title>
+<style>html,body{margin:0;background:#111;color:#eee;font:13px system-ui}iframe{border:0;display:block}</style>
+</head><body>
+<pre id="progreso"></pre>
+<div id="marcos"></div>
+<script type="module">
+// ── Qué prueba este banco (v=363, tanda 122) ─────────────────────────────────
+//
+// La app ENTERA (`listened-biblioteca-caso.html`, uno por iframe), con la Spotify simulada, una playlist «listened albums» INVENTADA de 30 discos y
+// una biblioteca INVENTADA de 120 guardados (3 páginas), de los que 10 están en la lista: 9 con su id y 1 como otra edición (otro id).
+//
+//   A. Abrir `#listened`, ruta por ruta. Es de CONSERVACIÓN y pasa también contra v=362: lo que afirma acá es solo que no pide `/me/albums`, y deja
+//      la lista entera en el resumen («A rutas: …»). 🔴 El delta contra la otra versión se saca corriendo este mismo banco en las dos raíces con
+//      `XQ=&solo=A` y comparando esas listas. Nada de un «0» absoluto escrito de antemano.
+//   B. Apretar el chip: 3 `GET /me/albums`; la grilla con los 9 por id; el resumen, «9 de 30…», escrito a mano. Se combina con el orden. Apagarlo y
+//      volver a apretarlo: 0 peticiones.
+//   C. Con búsqueda, el resumen combinado. Y con 0, «Ninguno de estos álbumes está en tu biblioteca.».
+//   D. `/me/albums` en 500, en un `fetch` que rechaza y en un 200 con HTML: la línea de fallo, el chip apagado, la grilla como estaba y ningún «0».
+//      ⚠️ Con el 200 con HTML `getSavedAlbums()` NO tira: devuelve `[]` y lo cachea. Lo ataja `listened.js` (una lectura sin ningún id no se aplica).
+//   E. Salir de la ruta con la petición retenida: 0 escrituras en el DOM nuevo. Y mientras baja: «Leyendo tu biblioteca…», deshabilitado.
+//   F. El contraste del chip, apagado y puesto, en los cuatro presets, ≥ 4,5:1, compuesto capa por capa y con las transiciones terminadas.
+//   G. Sin scroll horizontal a 1366×591 y a 390×844, con el chip apagado y puesto.
+//
+// `?solo=A,B` corre esas. ⚠️ Todas las esperas van con `esperarReal` (ver PRESUPUESTO en `scripts/correr-banco.mjs`).
+
+import { esperarReal, anclar } from '/banco/simulado.mjs';
+import { fallar, listo } from '/banco/esperar.mjs';
+import { LISTA, OTRA_EDICION, idDeLista } from '/banco/listened-biblioteca-datos.mjs';
+
+const afirmar = (c, msg) => { if (!c) throw new Error('BANCO: ' + msg); };
+const pasos = [];
+const progreso = (t) => { pasos.push(`${t} @${Math.round(performance.now())}`); document.getElementById('progreso').textContent = pasos.join(' · '); };
+const VUELTAS = 20000;
+const SOLO = (new URLSearchParams(location.search).get('solo') || '').split(',').filter(Boolean);
+const corre = (g) => !SOLO.length || SOLO.includes(g);
+const LINEA_FALLO = 'No se ha podido leer tu biblioteca de Spotify: el filtro no se ha aplicado.';
+const TITLE = 'Enseña solo los álbumes de esta lista que tienes guardados en tu biblioteca de Spotify. Cuenta el mismo disco, no otra edición.';
+
+function abrirMarco(nombre, ancho, alto, extra = '') {
+  const f = document.createElement('iframe');
+  f.width = ancho; f.height = alto;
+  f.src = `/banco/listened-biblioteca-caso.html?marco=${nombre}${extra}`;
+  document.getElementById('marcos').appendChild(f);
+  return f;
+}
+const win = (f) => f.contentWindow;
+const $ = (f, s) => f.contentDocument?.querySelector(s);
+const $$ = (f, s) => [...(f.contentDocument?.querySelectorAll(s) || [])];
+const chip = (f) => $(f, '.listened-chip-biblioteca');
+const tarjetas = (f) => $$(f, '#listened-grid-holder .playlist-card');
+const resumen = (f) => $(f, '#listened-summary')?.textContent ?? '';
+const llamadas = (f) => win(f).__sim.reg.llamadas;
+const aAlbumes = (f) => llamadas(f).filter((l) => l.ruta.startsWith('/me/albums')).length;
+async function abrirListened(f, que) {
+  await esperarReal(() => win(f)?.__listo, { que: `que arranque ${que}`, vueltas: VUELTAS });
+  win(f).location.hash = '#listened';
+  await esperarReal(() => tarjetas(f).length === LISTA.length, { que: `#listened (${que})`, vueltas: VUELTAS });
+}
+async function apretarYEsperar(f, que, pulsado = 'true') {
+  afirmar(!!chip(f), `${que}: el chip existe`);
+  chip(f).click();
+  await esperarReal(() => chip(f)?.getAttribute('aria-pressed') === pulsado && !chip(f).disabled, { que: `${que}: el chip con aria-pressed=${pulsado}`, vueltas: VUELTAS });
+}
+
+const datos = {};
+const marcos = [];
+try {
+  if (corre('A')) {
+    const f = abrirMarco('a', 1366, 591); marcos.push(['a', f]);
+    await esperarReal(() => win(f)?.__listo, { que: 'que arranque A', vueltas: VUELTAS });
+    const l0 = llamadas(f).length, j0 = win(f).__datosAjenos.length, e0 = win(f).__sim.reg.externas.length;
+    win(f).location.hash = '#listened';
+    await esperarReal(() => tarjetas(f).length === LISTA.length, { que: '#listened (A)', vueltas: VUELTAS });
+    // Unas vueltas con red de verdad (la del propio banco), para que lo que la vista dispare después de pintar también cuente.
+    for (let i = 0; i < 30; i++) await anclar(fetch('/banco/esperar.mjs', { cache: 'no-store' }).then((r) => r.text()));
+    const nuevas = llamadas(f).slice(l0).map((l) => `${l.metodo} ${l.ruta}`);
+    afirmar(!nuevas.some((r) => r.includes('/me/albums')), `A: abrir no pide /me/albums (${nuevas.join(' , ')})`);
+    const cuenta = new Map();
+    for (const r of nuevas) cuenta.set(r, (cuenta.get(r) || 0) + 1);
+    datos.a = [...cuenta.entries()].sort(([x], [y]) => x.localeCompare(y)).map(([r, n]) => `${r} ×${n}`).join(' , ');
+    datos.aOtros = `${win(f).__datosAjenos.length - j0} a /data/, ${win(f).__sim.reg.externas.length - e0} a hosts externos`;
+    progreso('A');
+  }
+
+  if (corre('B')) {
+    const f = abrirMarco('b', 1366, 591); marcos.push(['b', f]);
+    await abrirListened(f, 'B');
+    afirmar(!!chip(f), 'B: el chip está en la barra');
+    afirmar(chip(f).textContent.trim() === 'Solo los de tu biblioteca', `B: dice «Solo los de tu biblioteca» («${chip(f).textContent.trim()}»)`);
+    afirmar(chip(f).getAttribute('aria-pressed') === 'false', 'B: nace apagado');
+    afirmar(chip(f).title === TITLE, `B: el title («${chip(f).title}»)`);
+    afirmar(chip(f).parentElement.lastElementChild === chip(f) && !!chip(f).parentElement.querySelector('.sort-btn'), 'B: al final de los botones de orden');
+    afirmar(!chip(f).classList.contains('sort-active') && !chip(f).classList.contains('sort-btn'), 'B: no reusa .sort-active ni .sort-btn');
+    const resumenAntes = resumen(f), gridAntes = $(f, '#listened-grid-holder').innerHTML;
+    afirmar(aAlbumes(f) === 0, `B: antes de apretar, 0 a /me/albums (${aAlbumes(f)})`);
+    await apretarYEsperar(f, 'B');
+    afirmar(aAlbumes(f) === 3, `B: la primera vez, 3 GET /me/albums (${aAlbumes(f)})`);
+    afirmar(tarjetas(f).length === 9, `B: 9 tarjetas (${tarjetas(f).length})`);
+    const esperados = Array.from({ length: 9 }, (_, i) => idDeLista(i));
+    const vistos = tarjetas(f).map((t) => t.dataset.id);
+    afirmar(esperados.every((id) => vistos.includes(id)), 'B: son los 9 del id exacto');
+    afirmar(!vistos.includes(idDeLista(OTRA_EDICION)), 'B: el de la otra edición queda fuera');
+    afirmar(resumen(f) === '9 de 30 álbumes están en tu biblioteca.', `B: el resumen («${resumen(f)}»)`);
+    // Se combina con el orden.
+    const az = () => $(f, '.sort-btn[data-sort="name-asc"]');
+    az().click();
+    const nombres = () => $$(f, '#listened-grid-holder .playlist-card-name').map((n) => n.textContent);
+    afirmar(tarjetas(f).length === 9 && JSON.stringify(nombres()) === JSON.stringify([...nombres()].sort((a, b) => a.localeCompare(b))), 'B: con A-Z, los 9 en orden');
+    az().click();   // Vuelve a «Recientes»: el orden se guarda en localStorage, que comparten los iframes.
+    // Apagarlo y volver a apretarlo: 0 peticiones.
+    const l0 = llamadas(f).length;
+    await apretarYEsperar(f, 'B apagar', 'false');
+    afirmar(tarjetas(f).length === LISTA.length, `B: apagado, las 30 (${tarjetas(f).length})`);
+    afirmar(resumen(f) === resumenAntes, `B: apagado, el resumen de siempre («${resumen(f)}»)`);
+    afirmar($(f, '#listened-grid-holder').innerHTML === gridAntes, 'B: apagado, la grilla de antes');
+    await apretarYEsperar(f, 'B otra vez');
+    afirmar(tarjetas(f).length === 9, 'B: otra vez, las 9');
+    afirmar(llamadas(f).length === l0, `B: apagarlo y volver a apretarlo, 0 peticiones (${llamadas(f).length - l0})`);
+    datos.b = `${aAlbumes(f)} GET /me/albums, 9 de 30`;
+    progreso('B');
+  }
+
+  if (corre('C')) {
+    const f = abrirMarco('c', 1366, 591); marcos.push(['c', f]);
+    await abrirListened(f, 'C');
+    afirmar(!!chip(f), 'C: el chip existe');
+    await apretarYEsperar(f, 'C');
+    const buscar = (t) => { const i = $(f, '#listened-search'); i.value = t; i.dispatchEvent(new (win(f).Event)('input', { bubbles: true })); };
+    // De los 9 (del 0 al 8), los impares son 1, 3, 5 y 7.
+    buscar('impar');
+    afirmar(tarjetas(f).length === 4, `C: 4 tarjetas (${tarjetas(f).length})`);
+    afirmar(resumen(f) === '4 de 30 álbumes coinciden con "impar" y están en tu biblioteca.', `C: el resumen combinado («${resumen(f)}»)`);
+    // Existe en la lista y no está guardado.
+    buscar('disco inventado 29');
+    afirmar(tarjetas(f).length === 0, 'C: ninguna tarjeta');
+    afirmar($(f, '#listened-grid-holder').textContent.trim() === 'Ninguno de estos álbumes está en tu biblioteca.', `C: con 0 («${$(f, '#listened-grid-holder').textContent.trim()}»)`);
+    afirmar(resumen(f) === '0 de 30 álbumes coinciden con "disco inventado 29" y están en tu biblioteca.', `C: el resumen con 0 («${resumen(f)}»)`);
+    // Lo que no coincide con la búsqueda no es culpa de la biblioteca.
+    buscar('nada de esto existe');
+    afirmar($(f, '#listened-grid-holder').textContent.trim() === 'Ningún álbum coincide con "nada de esto existe".', `C: sin coincidencias, el texto de siempre («${$(f, '#listened-grid-holder').textContent.trim()}»)`);
+    buscar('');
+    afirmar(tarjetas(f).length === 9 && resumen(f) === '9 de 30 álbumes están en tu biblioteca.', 'C: sin búsqueda, los 9');
+    progreso('C');
+  }
+
+  if (corre('D')) {
+    // En este orden, cada uno en su iframe: el caso vacía la caché al arrancar, y el del HTML deja un `[]` en ella.
+    for (const fallo of ['500', 'rechazo', 'html']) {
+      const f = abrirMarco(`d${fallo}`, 1366, 591, `&fallo=${fallo}`); marcos.push([`d${fallo}`, f]);
+      await abrirListened(f, `D ${fallo}`);
+      afirmar(!!chip(f), `D ${fallo}: el chip existe`);
+      const resumenAntes = resumen(f), gridAntes = $(f, '#listened-grid-holder').innerHTML, a0 = win(f).__avisos.length;
+      chip(f).click();
+      await esperarReal(() => $(f, '#listened-biblioteca-aviso') && !$(f, '#listened-biblioteca-aviso').hidden, { que: `D ${fallo}: la línea de fallo`, vueltas: VUELTAS });
+      const aviso = $(f, '#listened-biblioteca-aviso');
+      afirmar(aviso.textContent.trim() === LINEA_FALLO, `D ${fallo}: la línea («${aviso.textContent.trim()}»)`);
+      afirmar(aviso.previousElementSibling === $(f, '#listened-summary'), `D ${fallo}: debajo del resumen`);
+      afirmar(chip(f).getAttribute('aria-pressed') === 'false' && !chip(f).disabled, `D ${fallo}: el chip apagado y habilitado`);
+      afirmar(chip(f).textContent.trim() === 'Solo los de tu biblioteca', `D ${fallo}: el chip vuelve a su texto («${chip(f).textContent.trim()}»)`);
+      afirmar($(f, '#listened-grid-holder').innerHTML === gridAntes && tarjetas(f).length === LISTA.length, `D ${fallo}: la grilla como estaba`);
+      afirmar(resumen(f) === resumenAntes, `D ${fallo}: el resumen como estaba («${resumen(f)}»)`);
+      const texto = $(f, '#listened-content').textContent;
+      afirmar(!/\b0 de \d+ álbumes/.test(texto) && !texto.includes('Ninguno de estos álbumes'), `D ${fallo}: ningún «0»`);
+      afirmar(win(f).__avisos.slice(a0).some((a) => a.startsWith('[listened]')), `D ${fallo}: el error crudo en console.warn('[listened] …')`);
+      progreso(`D ${fallo}`);
+    }
+  }
+
+  if (corre('E')) {
+    const f = abrirMarco('e', 1366, 591, '&retener=1'); marcos.push(['e', f]);
+    await abrirListened(f, 'E');
+    afirmar(!!chip(f), 'E: el chip existe');
+    chip(f).click();
+    await esperarReal(() => win(f).__albumes === 1, { que: 'E: la petición en vuelo', vueltas: VUELTAS });
+    afirmar(chip(f).textContent.trim() === 'Leyendo tu biblioteca…', `E: mientras baja, «Leyendo tu biblioteca…» («${chip(f).textContent.trim()}»)`);
+    afirmar(chip(f).disabled, 'E: mientras baja, deshabilitado');
+    win(f).location.hash = '#home';
+    await esperarReal(() => $(f, '.home-card') && !$(f, '#listened-content'), { que: 'E: #home', vueltas: VUELTAS });
+    const main = $(f, '#main-content'), html = main.innerHTML;
+    let escrituras = 0;
+    const obs = new (win(f).MutationObserver)((m) => { escrituras += m.length; });
+    obs.observe(main, { childList: true, subtree: true, characterData: true, attributes: true });
+    win(f).__soltarAlbumes();
+    await esperarReal(() => win(f).__albumes === 3, { que: 'E: que termine de bajar', vueltas: VUELTAS });
+    for (let i = 0; i < 30; i++) await anclar(fetch('/banco/esperar.mjs', { cache: 'no-store' }).then((r) => r.text()));
+    obs.disconnect();
+    afirmar(escrituras === 0 && main.innerHTML === html, `E: 0 escrituras en el DOM nuevo (${escrituras})`);
+    // Y al volver, la vista de siempre, con el chip apagado.
+    win(f).location.hash = '#listened';
+    await esperarReal(() => tarjetas(f).length === LISTA.length, { que: 'E: volver', vueltas: VUELTAS });
+    afirmar(chip(f).getAttribute('aria-pressed') === 'false' && !chip(f).disabled, 'E: al volver, el chip apagado y habilitado');
+    progreso('E');
+  }
+
+  if (corre('F')) {
+    const f = abrirMarco('f', 1366, 591); marcos.push(['f', f]);
+    await abrirListened(f, 'F');
+    afirmar(!!chip(f), 'F: el chip existe');
+    const colorDe = (css) => {
+      const s = String(css);
+      let m = s.match(/^color\(srgb\s+([\d.e-]+)\s+([\d.e-]+)\s+([\d.e-]+)(?:\s*\/\s*([\d.e-]+))?\)/);
+      if (m) return [m[1] * 255, m[2] * 255, m[3] * 255, m[4] === undefined ? 1 : +m[4]];
+      m = s.match(/rgba?\(([^)]+)\)/);
+      if (!m) return null;
+      const p = m[1].split(/[\s,/]+/).filter(Boolean).map(Number);
+      return [p[0], p[1], p[2], p[3] ?? 1];
+    };
+    const lum = (c) => { const [r, g, b] = c.slice(0, 3).map((v) => { const s = v / 255; return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4; }); return 0.2126 * r + 0.7152 * g + 0.0722 * b; };
+    const contraste = (a, b) => { const x = lum(a), y = lum(b); return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05); };
+    const sobre = (arriba, abajo) => { const a = arriba[3]; return [0, 1, 2].map((i) => arriba[i] * a + abajo[i] * (1 - a)).concat(1); };
+    function ratio(el) {
+      const cs = (n) => win(f).getComputedStyle(n);
+      const capas = []; let opacidad = 1, opaco = false;
+      for (let n = el; n && n.nodeType === 1; n = n.parentElement) {
+        opacidad *= Number(cs(n).opacity || 1);
+        const c = colorDe(cs(n).backgroundColor);
+        if (c && c[3] > 0 && !opaco) { capas.push(c); if (c[3] >= 1) opaco = true; }
+      }
+      let fondo = opaco ? capas.pop() : [255, 255, 255, 1];
+      while (capas.length) fondo = sobre(capas.pop(), fondo);
+      const t = colorDe(cs(el).color);
+      return contraste(sobre([t[0], t[1], t[2], t[3] * opacidad], fondo), fondo);
+    }
+    const terminar = () => f.contentDocument.getAnimations().forEach((a) => { try { a.finish(); } catch { /* las infinitas */ } });
+    const fallos = [], medidos = [], ordenElegido = [];
+    for (const id of ['violeta', 'ambar', 'aguamarina', 'papel']) {
+      await anclar(win(f).__ponerTema(id));
+      for (const estado of ['apagado', 'puesto']) {
+        const quiero = estado === 'puesto' ? 'true' : 'false';
+        if (chip(f).getAttribute('aria-pressed') !== quiero) await apretarYEsperar(f, `F ${id} ${estado}`, quiero);
+        win(f).getComputedStyle(chip(f)).color;
+        terminar();
+        const r = ratio(chip(f));
+        medidos.push(`${id} ${estado} ${r.toFixed(2)}`);
+        if (r < 4.5) fallos.push(`${id} ${estado} ${r.toFixed(2)}:1`);
+        const sombra = win(f).getComputedStyle(chip(f)).boxShadow;
+        if (estado === 'puesto' && !/\b0px 0px 0px 2px\b/.test(sombra)) fallos.push(`${id} puesto sin el anillo de 2 px (${sombra})`);
+      }
+      await apretarYEsperar(f, `F ${id} apagar`, 'false');
+      // `.sort-active` se mide y se anota, SIN puerta: no es de esta tanda (blanco sobre el acento, a `PENDIENTES.md` si falla).
+      terminar();
+      ordenElegido.push(`${id} ${ratio($(f, '.sort-btn.sort-active')).toFixed(2)}`);
+    }
+    await anclar(win(f).__ponerTema('violeta'));
+    afirmar(fallos.length === 0, `F: ${fallos.join(' · ')}`);
+    datos.f = `${medidos.join(', ')} · .sort-active, sin puerta: ${ordenElegido.join(', ')}`;
+    progreso('F');
+  }
+
+  if (corre('G')) {
+    const res = [];
+    for (const [ancho, alto] of [[1366, 591], [390, 844]]) {
+      const f = abrirMarco(`g${ancho}`, ancho, alto); marcos.push([`g${ancho}`, f]);
+      await abrirListened(f, `G ${ancho}`);
+      afirmar(!!chip(f), `G ${ancho}: el chip existe`);
+      const de = f.contentDocument.documentElement;
+      for (const estado of ['apagado', 'puesto']) {
+        if (estado === 'puesto') await apretarYEsperar(f, `G ${ancho}`);
+        afirmar(de.scrollWidth <= win(f).innerWidth, `G ${ancho} ${estado}: la página no desborda (${de.scrollWidth} > ${win(f).innerWidth})`);
+        const b = chip(f).getBoundingClientRect();
+        afirmar(b.left >= 0 && b.right <= win(f).innerWidth, `G ${ancho} ${estado}: el chip entra (${b.left.toFixed(0)}–${b.right.toFixed(0)})`);
+        res.push(`${ancho} ${estado} ${de.scrollWidth}/${win(f).innerWidth}`);
+      }
+    }
+    datos.g = res.join(', ');
+    progreso('G');
+  }
+
+  const errores = marcos.flatMap(([n, f]) => win(f).__errores.map((e) => `${n}: ${e}`));
+  afirmar(errores.length === 0, `0 errores de consola: ${errores.join(' | ')}`);
+  const ajenos = marcos.flatMap(([, f]) => win(f).__sim.reg.desconocidas);
+  const escrituras = marcos.flatMap(([, f]) => win(f).__sim.reg.escrituras);
+  afirmar(escrituras.length === 0, `0 escrituras en la cuenta (${escrituras.map((e) => e.ruta).join(', ')})`);
+  const resumenFinal = 'ok' +
+    (datos.a ? ` · A rutas: ${datos.a} · A otros: ${datos.aOtros}` : '') +
+    (datos.b ? ` · B: ${datos.b}` : '') +
+    (datos.f ? ` · F: ${datos.f}` : '') +
+    (datos.g ? ` · G: ${datos.g}` : '') +
+    ` · rutas sin simular=${ajenos.length} · errores=${errores.length} · reloj virtual=${Math.round(performance.now())} ms`;
+  document.documentElement.setAttribute('data-resumen', resumenFinal);
+  document.getElementById('progreso').textContent = resumenFinal;
+  listo(resumenFinal);
+} catch (e) {
+  fallar(e);
+}
+</script>
+</body></html>

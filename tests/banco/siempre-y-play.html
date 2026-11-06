@@ -28,6 +28,10 @@
 //   K. con una `img` remota, qué pide elegir «Siempre» desde el clic, medido: nada a Spotify, a iTunes ni a `/data/`, y a otro host
 //      solo esa tapa. ⚠️ La tarjeta «DE SIEMPRE» ya lleva esa misma tapa desde v=360 (`renderAllTime()`, con el `sha256` fijado), así que
 //      el «0» de la tabla de costos nunca midió una tapa: A corre con `img: null`. K deja el número a la vista en el resumen.
+//   L. (v=363, tanda 122) en los cuatro presets, en el recorrido del año por defecto y en el de «Siempre», en lista quieta y con el paso
+//      clavado, con las transiciones terminadas: toda `.wr-ap-label` y la `.wr-ap-fila.uno .nom` de cada ranking dan ≥ 4,5:1 contra el fondo
+//      compuesto capa por capa hasta una opaca, con el tinte de la barra incluido. Junta todos los fallos antes de tirar. Contra v=362, la
+//      etiqueta cae en Violeta (3,47) y el primer nombre en Ámbar (2,84) y Aguamarina (1,89).
 //
 // 🔴 Si T119b se cae por tiempo, B y C (y la parte de D de la ficha) se van con ella. `?solo=A,D` corre esas.
 // ⚠️ Todas las esperas van con `esperarReal` (ver PRESUPUESTO en `scripts/correr-banco.mjs`).
@@ -399,6 +403,82 @@ try {
     progreso('K');
   }
 
+  // ── El contraste de la etiqueta y del primer nombre (v=363, tanda 122) ──────────
+  if (corre('L')) {
+    const fallos = [], medidos = [];
+    // ⚠️ `color-mix()` hace que `getComputedStyle().color` devuelva `color(srgb r g b)`, no `rgb(…)`: esta lee las dos formas.
+    const colorDe = (css) => {
+      const s = String(css);
+      let m = s.match(/^color\(srgb\s+([\d.e-]+)\s+([\d.e-]+)\s+([\d.e-]+)(?:\s*\/\s*([\d.e-]+))?\)/);
+      if (m) return [m[1] * 255, m[2] * 255, m[3] * 255, m[4] === undefined ? 1 : +m[4]];
+      m = s.match(/rgba?\(([^)]+)\)/);
+      if (!m) return null;
+      const p = m[1].split(/[\s,/]+/).filter(Boolean).map(Number);
+      return [p[0], p[1], p[2], p[3] ?? 1];
+    };
+    const lum = (c) => { const [r, g, b] = c.slice(0, 3).map((v) => { const s = v / 255; return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4; }); return 0.2126 * r + 0.7152 * g + 0.0722 * b; };
+    const contraste = (a, b) => { const x = lum(a), y = lum(b); return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05); };
+    const sobre = (arriba, abajo) => { const a = arriba[3]; return [0, 1, 2].map((i) => arriba[i] * a + abajo[i] * (1 - a)).concat(1); };
+    // Capa por capa hasta una opaca. `extra` es lo que va DEBAJO del texto sin ser su ancestro: la barra `.b` de la fila.
+    function ratio(f, el, extra = null) {
+      const cs = (n) => win(f).getComputedStyle(n);
+      const capas = []; let opacidad = 1, opaco = false;
+      for (let n = el; n && n.nodeType === 1; n = n.parentElement) {
+        opacidad *= Number(cs(n).opacity || 1);
+        const c = colorDe(cs(n).backgroundColor);
+        if (c && c[3] > 0 && !opaco) { capas.push(c); if (c[3] >= 1) opaco = true; }
+      }
+      let fondo = opaco ? capas.pop() : [255, 255, 255, 1];
+      while (capas.length) fondo = sobre(capas.pop(), fondo);
+      if (extra) { const c = colorDe(cs(extra).backgroundColor); if (c && c[3] > 0) fondo = sobre(c, fondo); }
+      const t = colorDe(cs(el).color);
+      if (!t) return { r: 0, sinColor: cs(el).color };
+      return { r: contraste(sobre([t[0], t[1], t[2], t[3] * opacidad], fondo), fondo) };
+    }
+    const terminar = (f) => f.contentDocument.getAnimations().forEach((a) => { try { a.finish(); } catch { /* las infinitas */ } });
+    function medir(f, raiz, que) {
+      terminar(f);
+      for (const el of raiz.querySelectorAll('.wr-ap-label')) {
+        const x = ratio(f, el);
+        medidos.push(x.r);
+        if (x.r < 4.5) fallos.push(`${que} .wr-ap-label ${x.sinColor ? 'sin color: ' + x.sinColor : x.r.toFixed(2) + ':1'}`);
+      }
+      for (const el of raiz.querySelectorAll('.wr-ap-fila.uno .nom')) {
+        const x = ratio(f, el, el.parentElement.querySelector(':scope > .b'));
+        medidos.push(x.r);
+        if (x.r < 4.5) fallos.push(`${que} .wr-ap-fila.uno .nom ${x.sinColor ? 'sin color: ' + x.sinColor : x.r.toFixed(2) + ':1'}`);
+      }
+    }
+    for (const modo of ['nunca', 'siempre']) {
+      const f = abrirMarco(`l${modo}`, 1366, 591, `&hist=recorrido&anim=${modo}`); marcos.push([`l${modo}`, f]);
+      await arrancado(f, `L ${modo}`);
+      await abrirWrapped(f, `L ${modo}`);
+      for (const rec of ['año', 'siempre']) {
+        if (rec === 'siempre') await siempre(f, `L ${modo}`);
+        const armado = !!$(f, '#wrapped-apertura .wr-ap.js');
+        afirmar(armado === (modo === 'siempre'), `L ${modo} ${rec}: el recorrido ${modo === 'siempre' ? 'armado' : 'en lista quieta'}`);
+        afirmar($$(f, '#wrapped-apertura .wr-ap-label').length >= 5, `L ${modo} ${rec}: hay etiquetas que medir (${$$(f, '#wrapped-apertura .wr-ap-label').length})`);
+        afirmar($$(f, '#wrapped-apertura .wr-ap-fila.uno .nom').length >= 1, `L ${modo} ${rec}: hay un ranking que medir`);
+        for (const id of ['violeta', 'ambar', 'aguamarina', 'papel']) {
+          await anclar(win(f).__ponerTema(id));
+          if (modo === 'nunca') { medir(f, $(f, '#wrapped-apertura'), `${id} ${rec} lista`); continue; }
+          // Con el paso clavado: de a uno, cada uno a la vista y con sus transiciones terminadas.
+          const pasosDe = $$(f, '#wrapped-apertura .wr-ap-paso');
+          for (let i = 0; i < pasosDe.length; i++) {
+            $$(f, '#wrapped-apertura .wr-ap-disparo')[i].scrollIntoView({ block: 'center', behavior: 'instant' });
+            await esperarReal(() => pasosDe[i].classList.contains('on'), { que: `L: el paso ${pasosDe[i].dataset.id} clavado (${id} ${rec})`, vueltas: VUELTAS });
+            medir(f, pasosDe[i], `${id} ${rec} clavado ${pasosDe[i].dataset.id}`);
+          }
+          win(f).scrollTo({ top: 0, behavior: 'instant' });
+        }
+        await anclar(win(f).__ponerTema('violeta'));
+      }
+    }
+    afirmar(fallos.length === 0, `L: ${fallos.join(' · ')}`);
+    datos.l = `${medidos.length} mediciones, la peor ${Math.min(...medidos).toFixed(2)}:1`;
+    progreso('L');
+  }
+
   const errores = marcos.flatMap(([n, f]) => win(f).__errores.map((e) => `${n}: ${e}`));
   afirmar(errores.length === 0, `0 errores de consola: ${errores.join(' | ')}`);
   const ajenos = marcos.flatMap(([, f]) => win(f).__sim.reg.desconocidas);
@@ -409,6 +489,7 @@ try {
     (datos.f ? ` · F elegir: ${datos.f.peticiones} peticiones` : '') +
     (datos.j ? ` · J ${datos.j}` : '') +
     (datos.k ? ` · K con la tapa remota: ${datos.k}` : '') +
+    (datos.l ? ` · L etiqueta y primer nombre: ${datos.l}` : '') +
     ` · rutas sin simular=${ajenos.length} · errores=${errores.length} · reloj virtual=${Math.round(performance.now())} ms`;
   document.documentElement.setAttribute('data-resumen', resumen);
   document.getElementById('progreso').textContent = resumen;

@@ -1,0 +1,93 @@
+<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>banco listened-biblioteca — la app entera, en un iframe</title>
+<link rel="stylesheet" href="/css/theme.css">
+<link rel="stylesheet" href="/css/components.css">
+<link rel="stylesheet" href="/css/main.css">
+</head><body>
+<div id="app"></div>
+<script type="module">
+// ── Un iframe del banco `listened-biblioteca.html` (v=363, tanda 122) ────────
+//
+// La app ENTERA en `#home`, contra la Spotify simulada, con una cuenta INVENTADA (no el owner: ningún JSON del repo) y una playlist «listened
+// albums» INVENTADA. Las cachés de esta vista se vacían al arrancar: todos los iframes son del mismo origen y comparten la IndexedDB.
+//   · `?fallo=500|rechazo|html`: cómo contesta `/me/albums`.
+//   · `?retener=1`: la primera `/me/albums` se queda esperando hasta `__soltarAlbumes()`.
+//   · `?foto=apagado|puesto` (capturas, con un conductor externo): deja `#listened` lista y marca `data-foto="listo"`.
+
+import { instalarRedSimulada, esperarReal, anclar } from '/banco/simulado.mjs';
+import { LISTA, PLAYLIST_ID, PLAYLIST_NOMBRE, paginaDeBiblioteca } from '/banco/listened-biblioteca-datos.mjs';
+
+const q = new URLSearchParams(location.search);
+window.__errores = [];
+window.__avisos = [];
+window.addEventListener('error', (e) => window.__errores.push('error: ' + (e.message || e)));
+window.addEventListener('unhandledrejection', (e) => window.__errores.push('rechazo: ' + String(e.reason?.message || e.reason)));
+const errorOriginal = console.error.bind(console);
+console.error = (...a) => { window.__errores.push('console.error: ' + a.map(String).join(' ').slice(0, 300)); errorOriginal(...a); };
+const avisoOriginal = console.warn.bind(console);
+console.warn = (...a) => { window.__avisos.push(a.map((x) => String(x?.message ?? x)).join(' ').slice(0, 300)); avisoOriginal(...a); };
+
+const USUARIO = 'usuarioBancoInventado';
+const sim = instalarRedSimulada();
+window.__sim = sim;
+localStorage.setItem('fonoteca_last_user_id', USUARIO);
+localStorage.setItem('fonoteca_perfil_v1', JSON.stringify({ id: USUARIO, display_name: 'Banco' }));
+sim.ruta('GET', /^\/me$/, () => ({ id: USUARIO, display_name: 'Banco' }));
+sim.ruta('GET', /^\/me\/playlists/, () => ({ items: [], next: null, total: 0 }));
+sim.ruta('GET', /^\/me\/tracks/, () => ({ items: [], next: null, total: 0 }));
+sim.ruta('GET', new RegExp(`^/playlists/${PLAYLIST_ID}\\?`), () => ({ snapshot_id: 'snapshot-inventado' }));
+sim.ruta('GET', new RegExp(`^/playlists/${PLAYLIST_ID}/items`), () => ({ items: LISTA, next: null, total: LISTA.length }));
+sim.ruta('GET', /^\/me\/albums/, ({ url }) => paginaDeBiblioteca(url));
+
+// `/data/*`: 404 y anotado. Ningún JSON del repo.
+window.__datosAjenos = [];
+window.__albumes = 0;
+window.__soltarAlbumes = () => {};
+let retenida = q.get('retener') ? new Promise((r) => { window.__soltarAlbumes = r; }) : null;
+const debajo = window.fetch;
+window.fetch = async (entrada, opciones = {}) => {
+  const url = typeof entrada === 'string' ? entrada : (entrada instanceof URL ? entrada.href : entrada.url);
+  const abs = new URL(url, location.href);
+  if (abs.origin === location.origin && /\/data\//.test(abs.pathname)) {
+    window.__datosAjenos.push(abs.pathname);
+    return new Response('{}', { status: 404, headers: { 'content-type': 'application/json' } });
+  }
+  if (abs.hostname === 'api.spotify.com' && abs.pathname === '/v1/me/albums') {
+    window.__albumes++;
+    const fallo = q.get('fallo');
+    if (fallo === 'rechazo') throw new TypeError('banco: red caída');
+    if (fallo === '500') return new Response('{"error":{"status":500,"message":"banco"}}', { status: 500, headers: { 'content-type': 'application/json' } });
+    if (fallo === 'html') return new Response('<!doctype html><title>banco</title><p>esto no es JSON</p>', { status: 200, headers: { 'content-type': 'text/html' } });
+    if (retenida) { const r = retenida; retenida = null; await anclar(r, { vueltas: 20000 }); }
+  }
+  return debajo(url === entrada ? entrada : url, opciones);
+};
+
+window.Chart = class { destroy() {} resize() {} };   // `index.html` lo carga del CDN, y este caso no pasa por él.
+
+const { prefKey } = await import('/js/storage.js');
+localStorage.setItem(prefKey('fonoteca_anim_v1'), 'nunca');
+localStorage.setItem(prefKey('listened_albums_playlist_id'), PLAYLIST_ID);
+localStorage.setItem(prefKey('listened_albums_playlist_name'), PLAYLIST_NOMBRE);
+const { idbDel } = await import('/js/idb.js');
+for (const k of ['saved_albums_v1', `listened_grouped_${PLAYLIST_ID}_v2`, `playlist_items_${PLAYLIST_ID}`]) await anclar(idbDel(k));
+
+const FOTO = q.get('foto');
+location.hash = FOTO ? '#listened' : '#home';
+await import('/js/app.js');
+await esperarReal(() => document.getElementById('my-history-btn') && (FOTO || document.querySelector('.home-card')), { que: 'que la app arranque', vueltas: 4000 });
+window.__ponerTema = async (id) => {
+  const { PRESETS, applyTheme } = await import('/js/ui/theme-panel.js');
+  applyTheme(PRESETS.find((x) => x.id === id).colors);
+};
+window.__listo = true;
+
+if (FOTO) {
+  await esperarReal(() => document.querySelectorAll('#listened-grid-holder .playlist-card').length, { que: '#listened', vueltas: 8000 });
+  if (FOTO === 'puesto') {
+    document.querySelector('.listened-chip-biblioteca').click();
+    await esperarReal(() => document.querySelector('.listened-chip-biblioteca')?.getAttribute('aria-pressed') === 'true', { que: 'el chip puesto', vueltas: 8000 });
+  }
+  document.documentElement.dataset.foto = 'listo';
+}
+</script>
+</body></html>

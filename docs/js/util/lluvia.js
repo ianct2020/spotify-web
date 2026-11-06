@@ -14,7 +14,7 @@
 //   · Todas las cuentas en enteros (décimas de minuto y de mm). Se redondea al final, al enseñar.
 //
 // Guarda: `tests/lluvia.test.mjs`.
-import { fmtDia } from './fecha.js?v=362';
+import { fmtDia } from './fecha.js?v=363';
 
 /** 1 mm, en décimas. */
 export const UMBRAL_DECIMAS = 10;

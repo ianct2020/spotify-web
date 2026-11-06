@@ -1478,6 +1478,9 @@ async function revisarCambioDeUsuario(id) {
       // clave lleva el usuario de Stats.fm, pero puede quedar la vieja de una
       // sesión anterior a la actualización.
       idbDelByPrefix('statsfm_top_lifetime_v1').catch(() => {});
+      // (v=363) Los álbumes guardados: la clave no lleva el usuario, y desde el chip de `#listened` filtrarían tu lista con la biblioteca
+      // de la otra cuenta durante sus 60 min de caché. No se espera, como los de arriba.
+      idbDel(SAVED_ALBUMS_KEY).catch(() => {});
     } catch { /* ignora si no hay localStorage */ }
   }
   try { localStorage.setItem(LAST_USER_KEY, id); } catch { /* ignora si no hay localStorage */ }

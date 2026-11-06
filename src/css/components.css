@@ -1034,6 +1034,15 @@ input[type="checkbox"].keep-check:checked::after {
   border-color: var(--color-accent);
 }
 
+/* «Solo los de tu biblioteca» de `#listened` (v=363). Apagado es un `btn-secondary`; puesto, el patrón de `.covers-chip.is-on`: el anillo en
+   vez del blanco sobre el acento. Tres clases: tiene que ganarle a `.btn-secondary:hover`, y esta hoja carga antes que `main.css`. */
+.btn.listened-chip-biblioteca.is-on {
+  background: var(--color-surface);
+  color: var(--color-text);
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 2px var(--color-accent);
+}
+
 .pill-toggle {
   display: inline-flex;
   align-items: center;

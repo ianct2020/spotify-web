@@ -1,4 +1,4 @@
-import { getAllPlaylistItems, getBestAvailableLikes, addTracksToPlaylist, removeTracksFromPlaylist, getAllUserPlaylists, getCurrentUserId } from '../api.js';
+import { getAllPlaylistItems, getBestAvailableLikes, addTracksToPlaylist, removeTracksFromPlaylist, getAllUserPlaylists, getCurrentUserId, getSavedAlbums } from '../api.js';
 import { cargarEtiquetas, getCachedTags } from '../api/lastfm.js';
 import { esEPoAlbum } from '../util/release-size.js';
 import { idbGetCached, idbSetCached, idbGetTimestamp } from '../idb.js';
@@ -10,6 +10,8 @@ import { getListenedPlaylist, groupItemsByAlbum, openListenedAlbumsPicker, album
 import { openAlbumCard } from './album-card.js';
 import { prefKey, migratePrefKey } from '../storage.js';
 import { pedirYCachear, SOLO_CON_CONTENIDO } from '../util/cache-solo-exitos.js';
+import { idsDeBiblioteca, filtrarPorBiblioteca } from '../util/solo-biblioteca.js';
+import { vigilarRuta } from '../util/vigencia-ruta.js';
 
 const SORT_KEY = 'listened_sort_mode';
 const VALID_SORTS = new Set(['recent', 'year-desc', 'year-asc', 'artist-asc', 'likes-desc', 'name-asc']);
@@ -201,6 +203,11 @@ function setSortMode(v) {
 let albums = [];
 let filterText = '';
 let playlistInfo = null;
+// El chip «Solo los de tu biblioteca» (v=363): en memoria de esta carga, como `filterText`. Los guardados se piden al apretarlo, nunca al abrir.
+let soloBiblioteca = false;
+let idsGuardados = null;
+let leyendoBiblioteca = false;
+let falloBiblioteca = false;
 
 export async function render(container) {
   migratePrefKey(SORT_KEY);
@@ -212,6 +219,10 @@ export async function render(container) {
   migratePrefKey(UNREG_TYPE_KEY);
   albums = [];
   filterText = '';
+  soloBiblioteca = false;
+  idsGuardados = null;
+  leyendoBiblioteca = false;
+  falloBiblioteca = false;
 
   container.innerHTML = `
     ${pageHeader({ title: 'Álbumes escuchados' })}
@@ -706,10 +717,12 @@ function buildUI(totalTracks, ts) {
         <button class="btn btn-secondary btn-sm sort-btn ${mode === 'artist-asc' ? 'sort-active' : ''}" data-sort="artist-asc" title="Artista alfabético">Artista</button>
         <button class="btn btn-secondary btn-sm sort-btn ${mode === 'likes-desc' ? 'sort-active' : ''}" data-sort="likes-desc" title="Ordena por cuántas canciones de cada álbum tienes en tus Liked Songs">Más likeados ♥</button>
         <button class="btn btn-secondary btn-sm sort-btn ${mode === 'name-asc' ? 'sort-active' : ''}" data-sort="name-asc" title="Nombre del álbum alfabético">A-Z</button>
+        <button type="button" class="btn btn-secondary btn-sm listened-chip-biblioteca" aria-pressed="false" title="Enseña solo los álbumes de esta lista que tienes guardados en tu biblioteca de Spotify. Cuenta el mismo disco, no otra edición.">Solo los de tu biblioteca</button>
       </div>
     </div>
 
     <div id="listened-summary" style="margin-bottom:8px;color:var(--color-text-secondary);font-size:14px"></div>
+    <div id="listened-biblioteca-aviso" hidden style="margin-bottom:8px;color:var(--color-text-secondary);font-size:14px"></div>
     <div id="listened-grid-holder"></div>
   `;
 
@@ -764,7 +777,63 @@ function buildUI(totalTracks, ts) {
       renderGrid();
     };
   });
+  content.querySelector('.listened-chip-biblioteca').onclick = apretarChipBiblioteca;
 
+  pintarChipBiblioteca();
+  renderGrid();
+}
+
+// «Solo los de tu biblioteca» (v=363, tanda 122). Solo lee: nada aquí escribe en la cuenta.
+//
+// Un repintado de la vista (`buildUI`) rehace el botón a mitad de una lectura: por eso el estado vive en el módulo y lo pinta esta función,
+// que también lo llama `buildUI`.
+function pintarChipBiblioteca() {
+  const chip = document.querySelector('.listened-chip-biblioteca');
+  if (chip) {
+    chip.setAttribute('aria-pressed', soloBiblioteca ? 'true' : 'false');
+    chip.classList.toggle('is-on', soloBiblioteca);
+    chip.disabled = leyendoBiblioteca;
+    chip.textContent = leyendoBiblioteca ? 'Leyendo tu biblioteca…' : 'Solo los de tu biblioteca';
+  }
+  const aviso = document.getElementById('listened-biblioteca-aviso');
+  if (aviso) {
+    aviso.hidden = !falloBiblioteca;
+    aviso.textContent = falloBiblioteca ? 'No se ha podido leer tu biblioteca de Spotify: el filtro no se ha aplicado.' : '';
+  }
+}
+
+async function apretarChipBiblioteca() {
+  if (leyendoBiblioteca) return;
+  falloBiblioteca = false;
+  if (soloBiblioteca) {
+    soloBiblioteca = false;
+    pintarChipBiblioteca();
+    renderGrid();
+    return;
+  }
+  const ruta = vigilarRuta();
+  leyendoBiblioteca = true;
+  pintarChipBiblioteca();
+  let items = null;
+  try {
+    items = await getSavedAlbums();
+  } catch (e) {
+    console.warn('[listened] no se pudo leer la biblioteca:', e);
+  }
+  if (!ruta.vigente()) return;
+  leyendoBiblioteca = false;
+  const ids = idsDeBiblioteca(items);
+  // 🔴 Nunca «0 álbumes» por un fallo (v=154). Un 200 con algo que no es JSON no tira: `spotifyFetch` da `null` y la lectura termina en `[]`, igual
+  // que una biblioteca vacía. No se pueden distinguir desde aquí, y el filtro con cero guardados no enseñaría nada: se trata como no leída.
+  if (ids.size === 0) {
+    if (items) console.warn('[listened] la lectura de la biblioteca no trajo ningún álbum: el filtro no se aplica');
+    falloBiblioteca = true;
+    pintarChipBiblioteca();
+    return;
+  }
+  idsGuardados = ids;
+  soloBiblioteca = true;
+  pintarChipBiblioteca();
   renderGrid();
 }
 
@@ -798,16 +867,25 @@ function renderGrid() {
   const filtered = filterText
     ? albums.filter(a => a.name.toLowerCase().includes(filterText) || a.artist.toLowerCase().includes(filterText))
     : albums;
-  const sorted = sortAlbums(filtered);
+  const conChip = soloBiblioteca ? filtrarPorBiblioteca(filtered, idsGuardados) : filtered;
+  const sorted = sortAlbums(conChip);
 
-  if (filterText) {
+  if (soloBiblioteca) {
+    const n = sorted.length.toLocaleString('es-ES'), m = albums.length.toLocaleString('es-ES');
+    summary.textContent = filterText
+      ? `${n} de ${m} álbumes coinciden con "${filterText}" y están en tu biblioteca.`
+      : `${n} de ${m} álbumes están en tu biblioteca.`;
+  } else if (filterText) {
     summary.textContent = `${sorted.length} de ${albums.length} álbumes coinciden con "${filterText}"`;
   } else {
     summary.textContent = `${albums.length} álbumes únicos. Click en uno para ver los tracks que tienes de él.`;
   }
 
   if (sorted.length === 0) {
-    holder.innerHTML = `<div class="card"><p>Ningún álbum coincide con "${escapeHtml(filterText)}".</p></div>`;
+    // Con el chip puesto, si la búsqueda sí trajo discos, lo que falta es la biblioteca; si no trajo ninguno, el texto de siempre.
+    holder.innerHTML = soloBiblioteca && filtered.length > 0
+      ? `<div class="card"><p>Ninguno de estos álbumes está en tu biblioteca.</p></div>`
+      : `<div class="card"><p>Ningún álbum coincide con "${escapeHtml(filterText)}".</p></div>`;
     return;
   }
 
