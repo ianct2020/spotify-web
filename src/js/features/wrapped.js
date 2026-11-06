@@ -176,10 +176,10 @@ export async function render(container) {
   const dataTo = fmtDia(stats.totals?.last_play || yearsDesc[0].last_play);
   const dataPlays = stats.totals.plays_valid.toLocaleString('es-ES');
 
-  // El chip «Siempre» (v=360), el primero de la barra: la tarjeta «DE SIEMPRE» arriba, y ni la del año ni
-  // la apertura. Va pegado al `map` para que, con un año elegido, quitarlo deje la vista de v=359 byte a
-  // byte (lo vigila `tests/wrapped-siempre.test.mjs`). El recorrido por pasos de todo el historial todavía
-  // no existe: la apertura de `wrapped-apertura.js` es de un año.
+  // El chip «Siempre» (v=360), el primero de la barra: sin la tarjeta del año, con la «DE SIEMPRE» y, encima,
+  // el recorrido por pasos de todo el historial (v=362, `montarAperturaSiempre()` de `wrapped-apertura.js`).
+  // Va pegado al `map` para que, con un año elegido, quitarlo deje la vista de v=359 byte a byte (lo vigila
+  // `tests/wrapped-siempre.test.mjs`).
   content.innerHTML = `
     <div class="wrapped-year-bar">
       <div class="wrapped-year-bar-label">Elige el año</div>
@@ -254,10 +254,25 @@ function montarApertura(mod) {
   const host = document.getElementById('wrapped-apertura');
   if (!host || !mod || typeof mod.montarApertura !== 'function') return;
   try {
-    // Con «Siempre» no se monta (v=360), pero la del año del que venís sigue viva: sus oyentes son de
-    // `document` y `window`, y se irían recién al salir de la ruta. Sin contexto, `montarApertura` la
-    // destruye y no pinta nada.
-    if (selectedYear === SIEMPRE) { mod.montarApertura(host, null); return; }
+    // Con «Siempre», el recorrido de todo el historial (v=362). Las dos funciones destruyen primero la
+    // apertura viva del año del que venís: sus oyentes son de `document` y `window`, y se irían recién al
+    // salir de la ruta. Una pestaña con el módulo viejo en caché no tiene `montarAperturaSiempre`: cae a lo
+    // de v=360, `montarApertura` sin contexto, que destruye y no pinta nada.
+    if (selectedYear === SIEMPRE) {
+      if (typeof mod.montarAperturaSiempre === 'function') {
+        mod.montarAperturaSiempre(host, {
+          stats,
+          MESES,
+          MESES_LARGOS,
+          fmtMinutes,
+          fmtDia,
+          ultimoDia: (stats.years[stats.years.length - 1]?.last_play || '').slice(0, 10) || null,
+        });
+      } else {
+        mod.montarApertura(host, null);
+      }
+      return;
+    }
     const y = stats.years.find(yy => yy.year === selectedYear);
     if (!y) return;
     mod.montarApertura(host, {

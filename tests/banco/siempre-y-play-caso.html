@@ -2,6 +2,16 @@
 <link rel="stylesheet" href="/css/theme.css">
 <link rel="stylesheet" href="/css/components.css">
 <link rel="stylesheet" href="/css/main.css">
+<script>
+// (v=362, tanda 121) La puerta H retiene el módulo de la apertura: ver `siempre-y-play-apertura.mjs`.
+if (new URLSearchParams(location.search).get('retener')) window.__aperturaRetenida = new Promise((r) => { window.__soltarApertura = r; });
+</script>
+<script type="importmap">
+{
+  "imports": { "/js/features/wrapped-apertura.js": "/banco/siempre-y-play-apertura.mjs" },
+  "scopes": { "/banco/": { "/js/features/wrapped-apertura.js": "/js/features/wrapped-apertura.js" } }
+}
+</script>
 </head><body>
 <div id="app"></div>
 <script type="module">
@@ -18,9 +28,12 @@
 //
 // Modo `?foto=wrapped|ficha[&tema=papel]` (capturas, con un conductor externo y sin reloj virtual): deja la vista lista
 // (con «Siempre» elegido, o con la ficha y su fila 2 sonando) y marca `data-foto="listo"`.
+//
+// (v=362, tanda 121) Para el recorrido de «Siempre»: `?hist=recorrido` siembra `statsRecorrido()` (`&tapa=remota`, con una `img` remota),
+// `?anim=siempre` deja las animaciones prendidas (por defecto, «nunca»: la lista quieta) y `?retener=1`, ver arriba.
 
 import { instalarRedSimulada, esperarReal, anclar } from '/banco/simulado.mjs';
-import { statsInventadas, indiceInventado, itunesInventado } from '/banco/siempre-y-play-datos.mjs';
+import { statsInventadas, statsRecorrido, TAPA_REMOTA, indiceInventado, itunesInventado } from '/banco/siempre-y-play-datos.mjs';
 
 const q = new URLSearchParams(location.search);
 window.__errores = [];
@@ -38,7 +51,7 @@ sim.rutaExterna(/^https:\/\/itunes\.apple\.com\/search/, ({ url }) => itunesInve
 localStorage.setItem('fonoteca_last_user_id', HISTORY_OWNER_ID);
 localStorage.setItem('fonoteca_perfil_v1', JSON.stringify({ id: HISTORY_OWNER_ID, display_name: 'Banco' }));
 const { prefKey } = await import('/js/storage.js');
-localStorage.setItem(prefKey('fonoteca_anim_v1'), 'nunca');
+localStorage.setItem(prefKey('fonoteca_anim_v1'), q.get('anim') === 'siempre' ? 'siempre' : 'nunca');
 if (q.get('tema') && q.get('tema') !== 'violeta') {
   const { PRESETS } = await import('/js/ui/theme-panel.js');
   const p = PRESETS.find((x) => x.id === q.get('tema'));
@@ -73,7 +86,8 @@ HTMLMediaElement.prototype.play = function () {
 const { OWNER_KEYS } = await import('/js/history-keys.js');
 const { idbSetCached } = await import('/js/idb.js');
 const SIGLO = 100 * 365 * 24 * 60;
-await anclar(idbSetCached(OWNER_KEYS.stats, statsInventadas(), SIGLO));
+const stats = q.get('hist') === 'recorrido' ? statsRecorrido({ tapa: q.get('tapa') === 'remota' ? TAPA_REMOTA : null }) : statsInventadas();
+await anclar(idbSetCached(OWNER_KEYS.stats, stats, SIGLO));
 await anclar(idbSetCached(OWNER_KEYS.artistTracks, indiceInventado(), SIGLO));
 
 const FOTO = q.get('foto');

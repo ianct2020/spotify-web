@@ -15,15 +15,15 @@
 // Abrir cuesta 1 `/me` (el de `loadOne()`) y 0 de todo lo demás: los dos JSON salen del propio Pages.
 // 🔴 Después de cada `await` se pregunta por la vigencia de la ruta (v=195/v=329).
 
-import { loadDaysLocal, isOwner, hasLocalHistory, identidadSinConfirmar, ownerLockedMessage, falloDeLecturaDelHistorial, avisoHistorialIlegibleHtml } from './history-data.js?v=361';
-import { LLUVIA_VERSION } from '../history-keys.js?v=361';
-import { escapeHtml, pageHeader } from '../ui/components.js?v=361';
-import { fmtDia } from '../util/fecha.js?v=361';
-import { vigilarRuta } from '../util/vigencia-ruta.js?v=361';
+import { loadDaysLocal, isOwner, hasLocalHistory, identidadSinConfirmar, ownerLockedMessage, falloDeLecturaDelHistorial, avisoHistorialIlegibleHtml } from './history-data.js?v=362';
+import { LLUVIA_VERSION } from '../history-keys.js?v=362';
+import { escapeHtml, pageHeader } from '../ui/components.js?v=362';
+import { fmtDia } from '../util/fecha.js?v=362';
+import { vigilarRuta } from '../util/vigencia-ruta.js?v=362';
 import {
   validarLluvia, diasLocalesValidos, filasDeLaVentana, resumir, porAnio, masLluviosos, lineaVentana,
   lineaRecorte, lineaAnios, FRASE_NO_CAUSA, textoMinutos, textoMm, textoPct, trozosAtribucion,
-} from '../util/lluvia.js?v=361';
+} from '../util/lluvia.js?v=362';
 
 const num = (n) => Number(n).toLocaleString('es-ES');
 const SIN_ARCHIVO = 'La lluvia se cruza con el historial que está guardado en la app, y el tuyo no lo está.';

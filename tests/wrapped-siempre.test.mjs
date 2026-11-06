@@ -5,9 +5,11 @@
 //
 // Lo que se afirma:
 //   A. el chip existe, es el PRIMERO de la barra, lleva `data-siempre` y no `data-year`;
-//   B. al elegirlo: la tarjeta «DE SIEMPRE» en `#wrapped-alltime`, `#wrapped-year-card` y `#wrapped-apertura` vacíos, el
-//      chip `.active` y ningún año `.active`, sin postal; y la apertura que estaba montada se desmonta (`montarApertura(host,
-//      null)`: `destruirVivo()` corre y no se monta nada; sin eso le quedan vivos sus oyentes de `document`);
+//   B. al elegirlo: la tarjeta «DE SIEMPRE» en `#wrapped-alltime`, `#wrapped-year-card` vacío, el chip `.active` y ningún año
+//      `.active`, sin postal; y en `#wrapped-apertura`, el recorrido de siempre (v=362, tanda 121). 🔁 Hasta v=361 esto afirmaba
+//      el hueco vacío y `montarApertura(host, null)`: codificaba «el recorrido de siempre todavía no existe», y ya existe. La
+//      apertura del año anterior se destruye igual: la primera línea de `montarAperturaSiempre` es `destruirVivo()` (sin eso le
+//      quedan vivos sus oyentes de `document`). Corrido de verdad, en `tests/wrapped-siempre-recorrido.test.mjs`;
 //   C. con un año elegido, el HTML de `#wrapped-content` sin el chip da el mismo `sha256` que `f6f4df1`, el año por defecto
 //      y el más viejo. ⚠️ El HTML entero no puede dar igual: el chip vive DENTRO de `#wrapped-content`. Se quita el chip,
 //      exacto y nada más, y lo que queda es byte a byte lo de v=359;
@@ -60,7 +62,7 @@ const STATS = {
 };
 
 let statsAhora = STATS;
-const apertura = [];
+const apertura = [], aperturaSiempre = [];
 globalThis.__T110 = {
   valores: { AVISO_MEZCLA: 'aviso inventado' },
   stubs: {
@@ -79,6 +81,11 @@ globalThis.__T110 = {
     'features/wrapped-apertura.js:montarApertura': (host, ctx) => {
       apertura.push({ ctx });
       if (ctx) host.innerHTML = '<section class="wr-ap"></section>';
+      return null;
+    },
+    'features/wrapped-apertura.js:montarAperturaSiempre': (host, ctx) => {
+      aperturaSiempre.push({ ctx });
+      if (ctx) host.innerHTML = '<section class="wr-ap" data-de="siempre"></section>';
       return null;
     },
   },
@@ -121,10 +128,11 @@ const hayChip = await clic('[data-siempre]');
 ok(hayChip, 'se puede tocar');
 ok($('#wrapped-alltime .wrapped-hero-year')?.textContent === 'DE SIEMPRE', '#wrapped-alltime tiene la tarjeta «DE SIEMPRE»');
 ok(hayChip && $('#wrapped-year-card')?.innerHTML === '', '#wrapped-year-card vacío');
-ok(hayChip && $('#wrapped-apertura')?.innerHTML === '', '#wrapped-apertura vacío');
+ok(hayChip && $('#wrapped-apertura .wr-ap')?.dataset.de === 'siempre', '#wrapped-apertura lleva el recorrido de siempre');
 ok(activos().length === 1 && activos()[0].dataset.siempre !== undefined, 'el chip .active y ningún año');
 ok(hayChip && !$('.wrapped-postal-btn'), 'sin postal');
-ok(hayChip && apertura.slice(antes).length === 1 && apertura.at(-1).ctx === null, 'la apertura viva se desmonta y no se monta otra');
+ok(hayChip && apertura.slice(antes).length === 0 && aperturaSiempre.length === 1 && aperturaSiempre[0].ctx?.stats === STATS && !('y' in aperturaSiempre[0].ctx), 'se monta el recorrido de siempre, con las stats y sin año, y no el del año');
+ok(/export function montarAperturaSiempre\(host, ctx\) \{\s*destruirVivo\(\);/.test(readFileSync(`${SRC}/js/features/wrapped-apertura.js`, 'utf8')), 'y lo primero que hace es destruir la apertura viva del año');
 ok($('#wrapped-slide')?.classList.contains('wr-desliza-der'), 'E. a «Siempre» desde un año entra como uno más nuevo (wr-desliza-der)');
 
 console.log('D. se recuerda y se vuelve');

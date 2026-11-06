@@ -18,7 +18,7 @@
 //
 // Todo local, 0 peticiones.
 
-import { prefKey } from '../storage.js?v=361';
+import { prefKey } from '../storage.js?v=362';
 
 /** `nameLower` → `{ t: ISO del intento, motivo }`. */
 export function leerFallos(lsKey) {

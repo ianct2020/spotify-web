@@ -19,6 +19,15 @@
 //   E. (v=361, tanda 120) el chip elegido de la barra, un año y «Siempre», en los cuatro presets: el texto ≥ 4,5:1 contra su fondo
 //      compuesto capa por capa, con las transiciones terminadas, en reposo y con la regla de `:hover`; y el anillo del acento,
 //      que un chip sin elegir no tiene. Junta todos los fallos antes de tirar: contra v=360, el texto cae en Ámbar y Aguamarina.
+//   F. (v=362, tanda 121) elegir «Siempre», con las animaciones prendidas, monta el recorrido con sus cinco pasos y 0 peticiones a
+//      cualquier host desde el clic (con el historial de este banco, sin tapas remotas: las tapas son la puerta K).
+//   G. volver a un año monta el recorrido del año, con el mismo HTML que antes de pasar por «Siempre».
+//   H. salir de `#wrapped` a mitad, con el módulo de la apertura retenido: no se escribe en la ruta nueva; y al volver, el recorrido.
+//   I. con las animaciones en «nunca», la lista quieta: los pasos visibles y los números ya puestos.
+//   J. sin desborde a 1366×591 y 390×844: ni la página ni ningún paso clavado (`overflow: hidden` recortaría sin avisar).
+//   K. con una `img` remota, qué pide elegir «Siempre» desde el clic, medido: nada a Spotify, a iTunes ni a `/data/`, y a otro host
+//      solo esa tapa. ⚠️ La tarjeta «DE SIEMPRE» ya lleva esa misma tapa desde v=360 (`renderAllTime()`, con el `sha256` fijado), así que
+//      el «0» de la tabla de costos nunca midió una tapa: A corre con `img: null`. K deja el número a la vista en el resumen.
 //
 // 🔴 Si T119b se cae por tiempo, B y C (y la parte de D de la ficha) se van con ella. `?solo=A,D` corre esas.
 // ⚠️ Todas las esperas van con `esperarReal` (ver PRESUPUESTO en `scripts/correr-banco.mjs`).
@@ -34,10 +43,10 @@ const VUELTAS = 20000;
 const SOLO = (new URLSearchParams(location.search).get('solo') || '').split(',').filter(Boolean);
 const corre = (g) => !SOLO.length || SOLO.includes(g);
 
-function abrirMarco(nombre, ancho, alto) {
+function abrirMarco(nombre, ancho, alto, extra = '') {
   const f = document.createElement('iframe');
   f.width = ancho; f.height = alto;
-  f.src = `/banco/siempre-y-play-caso.html?marco=${nombre}`;
+  f.src = `/banco/siempre-y-play-caso.html?marco=${nombre}${extra}`;
   document.getElementById('marcos').appendChild(f);
   return f;
 }
@@ -80,12 +89,15 @@ try {
     await esperarReal(() => $(f, '[data-siempre].active'), { que: 'A: «Siempre» elegido', vueltas: VUELTAS });
     afirmar($(f, '#wrapped-alltime .wrapped-hero-year')?.textContent === 'DE SIEMPRE', 'A: la tarjeta «DE SIEMPRE» está');
     afirmar($(f, '#wrapped-year-card').innerHTML === '', 'A: #wrapped-year-card vacío');
-    afirmar($(f, '#wrapped-apertura').innerHTML === '', 'A: #wrapped-apertura vacío');
-    afirmar(!$(f, '.wr-con-apertura'), 'A: ninguna apertura viva');
+    // 🔁 v=362 (tanda 121): hasta v=361 afirmaba `#wrapped-apertura` vacío, ningún `.wr-con-apertura` y la tarjeta pegada a la barra,
+    // porque el recorrido de siempre no existía. Ahora está arriba de la tarjeta. Este marco va en «nunca»: la lista quieta, y por eso
+    // sin `.wr-con-apertura` (esa clase es de un recorrido armado: la puerta F). Que la del año se haya destruido lo mira el test en Node.
+    afirmar(!!$(f, '#wrapped-apertura .wr-ap[aria-label="Recorrido de todo tu historial"]'), 'A: el recorrido de siempre, montado');
+    afirmar(!$(f, '#wrapped-apertura .wr-ap[aria-label^="Recorrido del año"]'), 'A: y no el del año');
     afirmar(!$(f, '.wrapped-postal-btn'), 'A: sin postal');
     afirmar($$(f, '.wrapped-year-tab.active').length === 1, 'A: ningún año .active');
-    const hero = $(f, '#wrapped-alltime .wrapped-hero').getBoundingClientRect(), barra = $(f, '.wrapped-year-bar').getBoundingClientRect();
-    afirmar(hero.top >= barra.bottom && hero.top - barra.bottom < 40, `A: la tarjeta va arriba, justo debajo de la barra (${(hero.top - barra.bottom).toFixed(1)} px)`);
+    const hero = $(f, '#wrapped-alltime .wrapped-hero').getBoundingClientRect(), cierre = $(f, '#wrapped-apertura .wr-ap-cierre').getBoundingClientRect();
+    afirmar(hero.top >= cierre.bottom && hero.top - cierre.bottom < 80, `A: la tarjeta va justo debajo del recorrido (${(hero.top - cierre.bottom).toFixed(1)} px)`);
     const nuevas = llamadas(f).length - l0, json = win(f).__datosAjenos.length - json0;
     afirmar(nuevas === 0 && json === 0, `A: 0 peticiones al elegir (${nuevas} a Spotify o iTunes, ${json} a /data/)`);
     $(f, '.wrapped-year-tab[data-year="2022"]').click();
@@ -261,6 +273,132 @@ try {
     progreso('E');
   }
 
+  // ── El recorrido de «Siempre» (v=362, tanda 121) ───────────────────────────────
+  const CINCO = 'horas,anios,artista,album,racha';
+  const RECORRIDO = '#wrapped-apertura .wr-ap[aria-label="Recorrido de todo tu historial"]';
+  const idsDe = (f) => $$(f, '#wrapped-apertura .wr-ap-paso').map((p) => p.dataset.id).join();
+  const siempre = async (f, que) => {
+    $(f, '[data-siempre]').click();
+    await esperarReal(() => $(f, '[data-siempre].active') && $(f, '#wrapped-alltime .wrapped-hero-year'), { que: `${que}: «Siempre» elegido`, vueltas: VUELTAS });
+  };
+  // Unas vueltas con red de verdad (la del propio banco) para que lo que el clic haya pedido llegue a `performance`.
+  const reposar = async (vueltas = 30) => { for (let i = 0; i < vueltas; i++) await anclar(fetch('/banco/esperar.mjs', { cache: 'no-store' }).then((r) => r.text())); };
+  const nombresRecursos = (f) => win(f).performance.getEntriesByType('resource').map((e) => e.name);
+
+  if (corre('F')) {
+    const f = abrirMarco('f', 1366, 591, '&hist=recorrido&anim=siempre'); marcos.push(['f', f]);
+    await arrancado(f, 'F');
+    await abrirWrapped(f, 'F');
+    const l0 = llamadas(f).length, r0 = nombresRecursos(f).length, json0 = win(f).__datosAjenos.length;
+    await siempre(f, 'F');
+    await reposar();
+    const nuevas = llamadas(f).length - l0, json = win(f).__datosAjenos.length - json0, recursos = nombresRecursos(f).slice(r0);
+    afirmar(nuevas === 0 && json === 0 && recursos.length === 0, `F: 0 peticiones a cualquier host (${nuevas} a Spotify o iTunes, ${json} a /data/, ${recursos.length} recursos: ${recursos.join(' · ')})`);
+    afirmar(!!$(f, RECORRIDO), 'F: el recorrido de siempre, montado');
+    afirmar(idsDe(f) === CINCO, `F: los cinco pasos, en orden (${idsDe(f)})`);
+    afirmar($(f, RECORRIDO).classList.contains('js'), 'F: armado, con `.js`');
+    afirmar($(f, '#wrapped-slide').classList.contains('wr-con-apertura'), 'F: wr-con-apertura en el contenedor');
+    afirmar($(f, '.wr-ap-paso[data-id="horas"]').classList.contains('on'), 'F: arranca en el primer paso');
+    afirmar(!$(f, '.wr-ap-saltar').hidden && !$(f, '.wr-ap-prog').hidden, 'F: «Saltar al resumen ↓» y los puntos');
+    afirmar($$(f, '.wr-ap-info').length === 2, `F: el ⓘ en las horas y en los años (${$$(f, '.wr-ap-info').length})`);
+    datos.f = { peticiones: nuevas + json + recursos.length };
+    progreso('F');
+  }
+
+  if (corre('G')) {
+    const f = abrirMarco('g', 1366, 591, '&hist=recorrido'); marcos.push(['g', f]);
+    await arrancado(f, 'G');
+    await abrirWrapped(f, 'G');
+    const antes = $(f, '#wrapped-apertura').innerHTML;
+    afirmar(/aria-label="Recorrido del año 2024"/.test(antes), 'G: de entrada, el recorrido del año');
+    await siempre(f, 'G');
+    afirmar(!!$(f, RECORRIDO), 'G: pasa por el recorrido de siempre');
+    $(f, '.wrapped-year-tab[data-year="2024"]').click();
+    await esperarReal(() => $(f, '.wrapped-year-tab.active')?.dataset.year === '2024' && $(f, '#wrapped-apertura .wr-ap[aria-label="Recorrido del año 2024"]'), { que: 'G: volver a 2024', vueltas: VUELTAS });
+    afirmar($(f, '#wrapped-apertura').innerHTML === antes, 'G: el HTML del recorrido del año es el mismo que antes de pasar por «Siempre»');
+    progreso('G');
+  }
+
+  if (corre('H')) {
+    const f = abrirMarco('h', 1366, 591, '&hist=recorrido&retener=1'); marcos.push(['h', f]);
+    await arrancado(f, 'H');
+    await abrirWrapped(f, 'H');   // Con el módulo retenido, `cargarApertura()` se rinde a los 3 s y el Wrapped sale sin recorrido.
+    afirmar(!$(f, '.wr-ap'), 'H: el módulo está retenido: sin recorrido');
+    $(f, '[data-siempre]').click();   // `render()` vuelve a esperar el `import()`: acá la ruta se va con el render a medias.
+    win(f).location.hash = '#home';
+    await esperarReal(() => $(f, '.home-card'), { que: 'H: #home', vueltas: VUELTAS });
+    const html = $(f, '#main-content').innerHTML;
+    win(f).__soltarApertura();
+    const t0 = win(f).performance.now();
+    await esperarReal(() => win(f).performance.now() - t0 > 3500, { que: 'H: que pase la espera del módulo', vueltas: VUELTAS });
+    afirmar($(f, '#main-content').innerHTML === html, 'H: al soltarlo, no se escribe en la ruta nueva');
+    afirmar(!$(f, '.wr-ap') && !$(f, '.wr-con-apertura') && !$(f, '#wrapped-content'), 'H: ni recorrido ni nada del Wrapped en #home');
+    win(f).location.hash = '#wrapped';
+    await esperarReal(() => $(f, '#wrapped-alltime .wrapped-hero-year') && $(f, '[data-siempre].active'), { que: 'H: volver a #wrapped', vueltas: VUELTAS });
+    afirmar(!!$(f, RECORRIDO), 'H: al volver, con el módulo ya cargado, el recorrido de siempre');
+    progreso('H');
+  }
+
+  if (corre('I')) {
+    const f = abrirMarco('i', 1366, 591, '&hist=recorrido'); marcos.push(['i', f]);
+    await arrancado(f, 'I');
+    await abrirWrapped(f, 'I');
+    await siempre(f, 'I');
+    afirmar(!!$(f, RECORRIDO), 'I: el recorrido de siempre, montado');
+    afirmar(!$(f, RECORRIDO).classList.contains('js') && !$(f, '.wr-con-apertura'), 'I: sin `.js` ni wr-con-apertura: la lista');
+    afirmar(idsDe(f) === CINCO, `I: los cinco pasos (${idsDe(f)})`);
+    for (const p of $$(f, '#wrapped-apertura .wr-ap-paso')) {
+      const cs = win(f).getComputedStyle(p);
+      afirmar(cs.opacity === '1' && p.getBoundingClientRect().height > 40, `I: ${p.dataset.id} a la vista (opacidad ${cs.opacity}, alto ${p.getBoundingClientRect().height})`);
+    }
+    afirmar($(f, '.wr-ap-prog').hidden && $(f, '.wr-ap-saltar').hidden, 'I: sin puntos ni «Saltar»: no hay nada que saltar');
+    // 167.000 min = 2.783h 20m, escrito a mano: los números ya puestos, sin ningún contador corriendo.
+    afirmar($(f, '.wr-ap-paso[data-id="horas"] .wr-ap-num').textContent === '2783h 20m', `I: el total, puesto («${$(f, '.wr-ap-paso[data-id="horas"] .wr-ap-num').textContent}»)`);
+    const barras = $$(f, '.wr-ap-paso[data-id="anios"] .wr-ap-barra');
+    afirmar(barras.length === 4 && barras.every((b) => b.getBoundingClientRect().height > 0), 'I: las cuatro barras, con su alto');
+    afirmar($$(f, '.wr-ap-fila .b').every((b) => b.getBoundingClientRect().width > 0), 'I: las barras del ranking, con su ancho');
+    progreso('I');
+  }
+
+  if (corre('J')) {
+    const res = [];
+    for (const [ancho, alto] of [[1366, 591], [390, 844]]) {
+      const f = abrirMarco(`j${ancho}`, ancho, alto, '&hist=recorrido&anim=siempre'); marcos.push([`j${ancho}`, f]);
+      await arrancado(f, `J ${ancho}`);
+      await abrirWrapped(f, `J ${ancho}`);
+      await siempre(f, `J ${ancho}`);
+      afirmar(!!$(f, RECORRIDO), `J ${ancho}: el recorrido de siempre, montado`);
+      const de = f.contentDocument.documentElement;
+      afirmar(de.scrollWidth <= win(f).innerWidth, `J ${ancho}: la página no desborda (${de.scrollWidth} > ${win(f).innerWidth})`);
+      let holgura = Infinity;
+      for (const p of $$(f, '#wrapped-apertura .wr-ap-paso')) {
+        afirmar(p.scrollHeight <= p.clientHeight, `J ${ancho}: ${p.dataset.id} entra de alto (${p.scrollHeight} > ${p.clientHeight})`);
+        afirmar(p.scrollWidth <= p.clientWidth, `J ${ancho}: ${p.dataset.id} entra de ancho (${p.scrollWidth} > ${p.clientWidth})`);
+        holgura = Math.min(holgura, p.clientHeight - p.scrollHeight);
+      }
+      res.push(`${ancho}: holgura ${holgura}`);
+    }
+    datos.j = res.join(' · ');
+    progreso('J');
+  }
+
+  if (corre('K')) {
+    const f = abrirMarco('k', 1366, 591, '&hist=recorrido&anim=siempre&tapa=remota'); marcos.push(['k', f]);
+    await arrancado(f, 'K');
+    await abrirWrapped(f, 'K');
+    const l0 = llamadas(f).length, r0 = nombresRecursos(f).length, json0 = win(f).__datosAjenos.length;
+    await siempre(f, 'K');
+    await reposar();
+    const nuevas = llamadas(f).length - l0, json = win(f).__datosAjenos.length - json0, recursos = nombresRecursos(f).slice(r0);
+    const ajenas = recursos.filter((u) => !u.includes('tapas-inventadas.invalid'));
+    const medido = `${nuevas} a Spotify o iTunes, ${json} a /data/, ${recursos.length} recursos (${ajenas.length} que no son la tapa), recorrido ${$(f, RECORRIDO) ? 'montado' : 'NO montado'}`;
+    afirmar(nuevas === 0 && json === 0 && ajenas.length === 0, `K: solo la tapa (${medido})`);
+    afirmar(!!$(f, RECORRIDO), `K: el recorrido de siempre, montado (${medido})`);
+    afirmar($(f, '.wr-ap-paso[data-id="album"] img.wr-ap-tapa')?.getAttribute('src')?.includes('tapas-inventadas.invalid'), `K: el paso del disco lleva la tapa (${medido})`);
+    datos.k = medido;
+    progreso('K');
+  }
+
   const errores = marcos.flatMap(([n, f]) => win(f).__errores.map((e) => `${n}: ${e}`));
   afirmar(errores.length === 0, `0 errores de consola: ${errores.join(' | ')}`);
   const ajenos = marcos.flatMap(([, f]) => win(f).__sim.reg.desconocidas);
@@ -268,6 +406,9 @@ try {
     (datos.b ? ` · B: ${datos.b.itunes} a iTunes, ${datos.b.spotify} a Spotify` : '') +
     (datos.d ? ` · D ${datos.d}` : '') +
     (datos.e ? ` · E chip elegido, el peor por preset: ${datos.e}` : '') +
+    (datos.f ? ` · F elegir: ${datos.f.peticiones} peticiones` : '') +
+    (datos.j ? ` · J ${datos.j}` : '') +
+    (datos.k ? ` · K con la tapa remota: ${datos.k}` : '') +
     ` · rutas sin simular=${ajenos.length} · errores=${errores.length} · reloj virtual=${Math.round(performance.now())} ms`;
   document.documentElement.setAttribute('data-resumen', resumen);
   document.getElementById('progreso').textContent = resumen;

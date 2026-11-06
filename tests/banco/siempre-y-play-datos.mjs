@@ -30,6 +30,39 @@ export function statsInventadas() {
   };
 }
 
+// ── (v=362, tanda 121) El historial del recorrido de «Siempre» ───────────────────
+//
+// Cuatro años con las ventanas PEGADAS, a medias el primero y el último. Los totales salen de la misma serie, para que la racha y los
+// días con música cuadren: no es lo que se prueba acá (eso es `tests/wrapped-siempre-recorrido.test.mjs`, con la cuenta a mano), sino
+// que los cinco pasos salgan en la app entera. Los nombres largos están a propósito (puerta J).
+//
+// `tapa`: la `img` del disco de siempre. `null`, como el resto del banco, o una URL remota con la forma del CDN (puerta K).
+export const TAPA_REMOTA = 'https://tapas-inventadas.invalid/image/ab67616d0000b273inventada';
+export const ANIOS_RECORRIDO = [
+  { year: 2021, from: '2021-08-15', largo: 139, min: 14000 },
+  { year: 2022, from: '2022-01-01', largo: 365, min: 52000 },
+  { year: 2023, from: '2023-01-01', largo: 365, min: 61000 },
+  { year: 2024, from: '2024-01-01', largo: 296, min: 40000 },
+];
+export function statsRecorrido({ tapa = null } = {}) {
+  const s = statsInventadas();
+  s.years = ANIOS_RECORRIDO.map((a, n) => {
+    const y = anio(a.year, n + 1);
+    const hasta = new Date(Date.UTC(+a.from.slice(0, 4), +a.from.slice(5, 7) - 1, +a.from.slice(8, 10)) + (a.largo - 1) * 86400000).toISOString().slice(0, 10);
+    return { ...y, min: a.min, first_play: `${a.from}T08:00:00Z`, last_play: `${hasta}T21:00:00Z`, days: { from: a.from, min: Array.from({ length: a.largo }, (_, i) => ((i + n) % 11 === 10 ? 0 : 40 + (i % 90))) } };
+  });
+  s.monthly = [];
+  let racha = 0, larga = 0, activos = 0;
+  for (const y of s.years) for (const m of y.days.min) { if (m > 0) { racha++; activos++; larga = Math.max(larga, racha); } else racha = 0; }
+  s.totals = { ...s.totals, min: ANIOS_RECORRIDO.reduce((t, a) => t + a.min, 0), plays_valid: 123456, days_active: activos, longest_streak: larga };
+  s.top_artists_all_time = [
+    'Banda Cinco Inventada', 'Dúo Dos Inventado', 'Artista Sin Temas Inventado', 'Orquesta Sinfónica Inventada De La Ciudad Imaginaria De Muy Largo Nombre',
+    'Coro de Mentira', 'Solista Imaginaria', 'Trío Figurado', 'Cuarteto Supuesto', 'Noveno Que No Entra',
+  ].map((name, i) => ({ name, min: 30000 - i * 2500, plays: 3000 - i * 250, first_year: 2021 }));
+  s.top_albums_all_time = [{ name: 'Disco Inventado de Siempre Con Un Título Bastante Más Largo De Lo Que Suele Entrar', artist: 'Banda Cinco Inventada', min: 15000, plays: 1500, img: tapa }];
+  return s;
+}
+
 export const TEMAS_CINCO = ['Primer Tema Inventado', 'Segundo Tema Inventado', 'Tercer Tema Inventado', 'Cuarto Tema Inventado', 'Quinto Tema Con Un Nombre Larguísimo Que No Entra En La Fila De Ninguna Manera'];
 export const TEMAS_DOS = ['Sol Inventado', 'Luna Inventada'];
 // (v=361, tanda 120) El caso de una sola fila.

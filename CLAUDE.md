@@ -3969,24 +3969,56 @@ v=343). ⚠️ Solo el «Álbum del año»: la tarjeta «Álbum de siempre» usa
 
 ## «Siempre» en `#wrapped` (v=360, tanda 119)
 
-El primer chip de la barra de años, «Siempre» (`.wrapped-year-tab` con `data-siempre`, no `data-year`): `#wrapped-alltime` arriba y
-`#wrapped-year-card` y `#wrapped-apertura` vacíos. No hay ningún dato nuevo: es la tarjeta «DE SIEMPRE» de siempre (`renderAllTime()`,
-byte a byte). La elección vive en `selectedYear` (`'siempre'`), en memoria de esta carga, como la de un año. Sin postal: la postal es
-de un año.
+El primer chip de la barra de años, «Siempre» (`.wrapped-year-tab` con `data-siempre`, no `data-year`): `#wrapped-year-card` vacío, y en
+`#wrapped-alltime` la tarjeta «DE SIEMPRE» de siempre (`renderAllTime()`, byte a byte). Desde v=362, encima de ella, en `#wrapped-apertura`,
+el recorrido de todo el historial (ver la nota de abajo; hasta v=361 ese hueco quedaba vacío). La elección vive en `selectedYear`
+(`'siempre'`), en memoria de esta carga, como la de un año. Sin postal: la postal es de un año.
 
 - 🔴 **Con un año elegido, la vista es la de v=359 byte a byte, salvo el botón del chip.** El chip vive dentro de `#wrapped-content`, así
   que el HTML entero no puede dar igual: lo que se compara es ese HTML sin el chip, y da el `sha256` de `f6f4df1` (el año por defecto y
   el más viejo). La 119 lo probó con datos inventados; **la 120 lo probó con el dato real** (fuera de este repo, que es público: el año por
   defecto y 2018 difieren de v=359 en una sola inserción, el botón, y nada más).
-- ⚠️ **La apertura se destruye al elegir «Siempre»**: no alcanza con no montarla. La del año anterior tiene oyentes de `document` y
-  `window` que recién se irían con `routeteardown`. `montarApertura(host, null)` corre `destruirVivo()` y no pinta nada, sin tocar
-  `wrapped-apertura.js`.
+- ⚠️ **La apertura del año se destruye al elegir «Siempre»**: no alcanza con no montarla. Tiene oyentes de `document` y `window` que
+  recién se irían con `routeteardown`. `montarAperturaSiempre()` corre `destruirVivo()` primero, y `montarApertura(host, null)` también
+  (el camino de una pestaña con el módulo viejo en caché: destruye y no pinta nada).
 - El deslizamiento: «Siempre» cuenta como más nuevo que cualquier año, sin tocar `deslizar()`.
-- 🔴 **La apertura «de siempre» NO existe todavía.** Ian pidió el chip Y el recorrido por pasos (05/11/2026); el recorrido es una vista
-  nueva y va sola en la tanda 121.
 
 Guardas: `tests/wrapped-siempre.test.mjs` (`wrapped.js` REAL con `dobles/loader-t110.mjs` y `dobles/dom-t119-doble.mjs`, un DOM de
 mentira que parsea lo que se pinta; rojo contra `f6f4df1`) y las puertas A y D del banco `tests/banco/siempre-y-play.html`.
+
+**v=362 (tanda 121): el recorrido de siempre.** Ian pidió el chip Y el recorrido por pasos (05/11/2026). La misma mecánica que el de un
+año: `pasosDeSiempre(ctx)` arma los pasos, sin DOM, y `montarAperturaSiempre(host, ctx)` los monta con `montarRecorrido()`, **el mismo montaje
+del año** (solo cambia la lista de pasos y el `aria-label`, «Recorrido de todo tu historial»; no se copió, por lo de v=219). `visualMeses`
+pasó a ser `visualBarras` más la etiqueta del mes. Los pasos, todos de `history-stats.json`, sin hornear nada:
+
+| paso | de qué campo sale |
+|---|---|
+| `horas` | `totals.min`, `totals.plays_valid`, `years[0].first_play`; el ⓘ, `years[last].last_play` |
+| `anios` | `years[].min` (barras); el más alto, de todos; el más bajo, de los completos; el ⓘ, la ventana de los años a medias |
+| `artista` | `top_artists_all_time`, los 8 primeros; la bajada, `first_year` del primero |
+| `album` | `top_albums_all_time[0]`, con `img` como tapa si la trae |
+| `racha` | `years[].days` encadenados, comparados con `totals.longest_streak`; el cuerpo, `totals.days_active` |
+
+- 🔴 **El más bajo sale solo de los años COMPLETOS.** Completo = su ventana de `days` va del 1/1 al 31/12 (sin `days`, `first_play` y `last_play`).
+  Con menos de dos completos, no se nombra. Los años a medias se dicen en el cuerpo, a la vista, y sus fechas en el ⓘ: la barra de un año
+  a medias, sola, se lee como un año flojo.
+- 🔴 **La racha, o es `totals.longest_streak`, o no sale.** Sale de una cuenta propia (`rachaDeLosDias()`): `rachaVigente()` mira los días que
+  terminan en el último de un año y no sirve para la más larga sin cambiarle la salida. Con ventanas despegadas o un año sin `days`, tampoco
+  sale. Los días con música, solo si `totals.days_active` es igual a los días con minutos encadenados, y sin denominador.
+- **Lo que no entra, a propósito** (el porqué, encima de `pasosDeSiempre()`): el calendario (no entran ~3.000 días en una pantalla), «dentro de
+  todo» (compara un año con el total, y acá el total es lo que se mira), los saltos (el corte del 15/10/2022) y la postal (es de un año).
+- 🔴 **El recorrido de un año no cambió.** Con el dato real, el HTML de los nueve años, con animaciones y sin ellas, da el `sha256` de v=361
+  (`fonoteca-migracion/prueba-wrapped-siempre-t121-2026-11-05.mjs`, que hace falta porque los volcados de DOM solo traen el paso «dentro de
+  todo»); con datos inventados, lo afirma el test. Ninguna regla de CSS cambió: `main.css` sigue igual.
+- ⚠️ **`wr-con-apertura` no pega la barra, ni con un año ni con «Siempre», desde v=244.** `contenedor = host.parentElement` es `#wrapped-slide`,
+  y `.wrapped-year-bar` es su hermana: `.wr-con-apertura .wrapped-year-bar` no casa con nada. Medido: `position: static` con el recorrido armado, también
+  en v=361. Queda sin arreglar: es del recorrido de un año. Ver `fonoteca-migracion/PENDIENTES.md` (tanda 121).
+- ⚠️ **La tapa del disco de siempre sí se pide al CDN**, y ya se pedía en v=360: la tarjeta «DE SIEMPRE» lleva esa misma `img`. El banco medía el «0» con
+  `img: null`. La puerta K lo mide con una remota: 1 recurso, esa tapa, antes y después de esta tanda.
+
+Guardas: `tests/wrapped-siempre-recorrido.test.mjs` (los dos módulos REALES; rojo contra `d10e6a48`) y las puertas A y F-K del banco
+`siempre-y-play`. Dos cosas se dieron vuelta, porque codificaban «el recorrido de siempre todavía no existe»: los asserts de `#wrapped-apertura` en
+`tests/wrapped-siempre.test.mjs` y la puerta A. Con el dato real, en `fonoteca-migracion/` (este repo es público).
 
 **v=361 (tanda 120): el chip elegido con anillo.** Hasta v=360 `.wrapped-year-tab.active` pintaba blanco sobre el acento, en cualquier año
 elegido y en «Siempre», y fallaba AA en dos presets. Ahora es el patrón de `.covers-chip.is-on` (v=290): `--color-surface` de fondo,
@@ -5328,7 +5360,7 @@ fila sobrevivió así desde que se armó la tabla.
 | ↳ lo que decía antes (**0/0**) era FALSO: es el MISMO par que `#dashboard` | | | | | ver la nota de abajo |
 | ↳ sin historial (`renderLite`) | **2** | **2** | 2 × `/me/top/{artists,tracks}` | fijo | leída del código |
 | ↳ **al apretar «Descargar postal (PNG)»** (v=344): **0 a Spotify**, **0 al CDN** | — | ídem | nada de red: la postal «El año en días» no lleva tapas; solo `wrapped-postal.js` y `util/postal-anio.js` del propio Pages la primera vez; abrir «Wrapped» no cambia (0 del módulo) | fijo | **medida en el banco el 2026-10-28** (`tests/banco/postal.html`, historial inventado: 0 a la simulada, 0 pedidos de tapa, 0 a `/image/` con las `img` de 2023 con la forma del CDN). En vivo, no. Hasta v=343 (la postal de las tapas): ≤ 5 al CDN |
-| ↳ **al elegir «Siempre»** (v=360): **0** | — | **0** | ninguno: repinta con lo cargado | fijo | **medida en el banco** (`tests/banco/siempre-y-play.html`, historial inventado) |
+| ↳ **al elegir «Siempre»** (v=360; con el recorrido, v=362): **0** a Spotify, iTunes y `/data/`; **1 al CDN**, la tapa del disco de siempre, salvo que esté en caché | — | ídem | ninguno de la API: repinta con lo cargado. La tapa ya se pedía en v=360 (la tarjeta «DE SIEMPRE» lleva la misma `img`) | fijo | **medida en el banco el 2026-11-05** (`tests/banco/siempre-y-play.html`, historial inventado: puerta F, sin tapa, 0 a cualquier host; puerta K, con una remota, 1 recurso, la tapa, igual en v=361 y v=362). En vivo, no |
 | ↳ **la ficha de artista** (v=360): abrirla, igual que antes; **tocar un ▶ de fila = un preview** (iTunes/Deezer, cacheado), **0 a Spotify** | — | ídem | `getPreview()` sin `spotifyId` | fijo | **medida en el banco** (1 a iTunes, 0 a Spotify) |
 | `#records` | **1 `/me`** (+1 del arranque = **2**) | ídem | `render()` → `loadRecords()` (`records.js:50`) → `loadOne` → `ensureFreshMem` → `resolvedUserId` → `getCurrentUserId` | **fijo** | 🔴 **corregida el 2026-10-08, leída del código.** Decía **0/0** y es la MISMA pieza que `#dashboard` y `#wrapped` |
 | `#calendario` | **1 `/me`** (+1 del arranque = **2**) | ídem | `render()` → `loadHistoryStats()` + `loadDays()` → `loadOne` → `getCurrentUserId` (memoizado: los dos comparten el `/me`, es 1 y no 2) | **fijo**, no escala con nada | **medida en la Spotify simulada el 2026-10-10** (`tests/banco/calendario.html`): abrir = **1** petición y es `/me`; cambiar de año y abrir y cerrar el detalle de un día = **0 más**; **0** lecturas que no sean `/me`, 0 rutas sin simular, 0 hosts externos. En vivo, no |

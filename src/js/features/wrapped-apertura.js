@@ -75,6 +75,13 @@
 // antiguo de alguien con un solo año de datos no tiene contra qué compararse,
 // y un año que acabó con el último día en blanco no tiene racha que enseñar.
 // Con menos de dos pasos la apertura no se monta: no hay recorrido que hacer.
+//
+// ───────────────────────────────────────────────────────────────────────────
+// EL RECORRIDO DE «SIEMPRE» (v=362)
+//
+// La misma mecánica, sobre todo el historial: `pasosDeSiempre()` arma los pasos y
+// `montarRecorrido()`, abajo, es el MISMO montaje del de un año. Cuáles son y por
+// qué no entran los demás está encima de `pasosDeSiempre()`.
 
 import { animationsEnabled } from '../ui/reveal.js';
 import { calendarioAnual, aMs, isoDesde, diaSemanaLunes } from '../ui/calendario-anual.js';
@@ -555,18 +562,232 @@ export function pasoDentroDeTodo(ctx) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
+// LOS PASOS DE «SIEMPRE» (v=362)
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// Cinco: el total, los años, los artistas, el disco y la racha. Salen ENTEROS de
+// `history-stats.json`, sin pedir nada: `render()` ya lo tiene cargado.
+//
+// Lo que NO entra, a propósito:
+//   · el calendario: con ~3.000 días no entra en una pantalla;
+//   · «dentro de todo»: compara un año contra el total, y acá el total es lo que
+//     se mira;
+//   · los saltos: Spotify cambió la forma de anotarlos el 15/10/2022 (ver
+//     `util/corte-saltos.js`), así que un número de todo el historial mezcla dos
+//     formas de contar;
+//   · la postal: es de un año.
+//
+// 🔴 MEJOR QUE FALTE UN PASO A QUE SALGA UN NÚMERO QUE NO CUADRA CON SU FUENTE. Lo
+// que tiene dos fuentes en el dato (la racha, los días con música) se compara
+// contra las dos, y si no coinciden no sale. Por lo mismo no hay ningún «de N
+// días»: el denominador de todo el historial no está medido (ver `PENDIENTES.md`).
+
+const UN_DIA_MS = 86400000;
+
+function aniosEnOrden(stats) {
+  return [...(stats.years || [])].sort((a, b) => a.year - b.year);
+}
+
+/** De qué día a qué día cubre el historial ese año: de `days` y, si no trae, de las dos escuchas. */
+function ventanaDe(y) {
+  const D = y.days;
+  if (D && D.from && Array.isArray(D.min) && D.min.length) {
+    return { desde: D.from, hasta: isoDesde(aMs(D.from) + (D.min.length - 1) * UN_DIA_MS) };
+  }
+  return { desde: String(y.first_play || '').slice(0, 10), hasta: String(y.last_play || '').slice(0, 10) };
+}
+
+function esAnioCompleto(y) {
+  const v = ventanaDe(y);
+  return v.desde === `${y.year}-01-01` && v.hasta === `${y.year}-12-31`;
+}
+
+function listaDeAnios(anios) {
+  const n = anios.map(y => y.year);
+  return n.length < 2 ? String(n[0]) : `${n.slice(0, -1).join(', ')} y ${n[n.length - 1]}`;
+}
+
+function pasoSiempreHoras(ctx) {
+  const { stats, fmtDia } = ctx;
+  const t = stats.totals || {};
+  const anios = aniosEnOrden(stats);
+  if (!t.min || !anios.length) return null;
+  const reproducciones = t.plays_valid ? `${num(t.plays_valid)} reproducciones válidas ` : '';
+  return {
+    id: 'horas',
+    etiqueta: 'Todo tu historial',
+    num: [t.min, 'min'],
+    bajada: `de música: ${reproducciones}desde el ${fmtDia(anios[0].first_play)}`,
+    info: `El historial termina el ${fmtDia(anios[anios.length - 1].last_play)} porque ahí termina el export, ` +
+          `no porque ahí hayas parado: de ese día en adelante no hay datos. Para que llegue más lejos hay que ` +
+          `volver a importar el historial.`,
+  };
+}
+
+function pasoSiempreAnios(ctx) {
+  const { stats, fmtMinutes, fmtDia } = ctx;
+  const anios = aniosEnOrden(stats);
+  if (anios.length < 2) return null;
+  const max = Math.max(...anios.map(y => y.min));
+  const alto = anios.find(y => y.min === max);
+
+  // ⚠️ El más bajo sale SOLO de los años completos: el primero y el último suelen
+  // estar a medias, y uno de dos meses tiene menos minutos sin haber escuchado
+  // menos. Con un solo año completo no hay contra qué compararlo: no se nombra.
+  const completos = anios.filter(esAnioCompleto);
+  const medias = anios.filter(y => !esAnioCompleto(y));
+  const bajo = completos.length < 2 ? null
+    : completos.find(y => y.min === Math.min(...completos.map(c => c.min)));
+
+  const frases = [];
+  if (bajo) frases.push(`El más bajo de los años enteros fue ${bajo.year}, con ${fmtMinutes(bajo.min)}.`);
+  if (medias.length) {
+    frases.push(medias.length === 1
+      ? `${listaDeAnios(medias)} está a medias: su barra no es un año entero.`
+      : `${listaDeAnios(medias)} están a medias: sus barras no son un año entero.`);
+  }
+
+  // Va también en `cuerpo`, a la vista, y no solo en el ⓘ: sin eso, la barra corta
+  // de un año a medias se lee como un año flojo. El ⓘ da las fechas.
+  const info = medias.length
+    ? `⚠️ ${medias.length === 1 ? 'Esta barra no es un año entero' : 'Estas barras no son un año entero'}: ` +
+      medias.map(y => { const v = ventanaDe(y); return `${y.year}, del ${fmtDia(v.desde)} al ${fmtDia(v.hasta)}`; }).join(' · ') +
+      `. El historial empieza y termina donde empieza y termina el export.`
+    : undefined;
+
+  return {
+    id: 'anios',
+    etiqueta: 'Año a año',
+    titular: `${alto.year} fue el pico`,
+    chico: true,
+    bajada: fmtMinutes(alto.min),
+    visual: visualBarras(anios.map(y => ({ min: y.min, lbl: y.year })), max),
+    cuerpo: frases.join(' ') || undefined,
+    info,
+    extra: { alto: alto.year, bajo: bajo ? bajo.year : null, medias: medias.map(y => y.year) },
+  };
+}
+
+function pasoSiempreArtista(ctx) {
+  const { stats, fmtMinutes } = ctx;
+  const top = (stats.top_artists_all_time || []).slice(0, 8);
+  if (!top.length) return null;
+  const uno = top[0];
+  return {
+    id: 'artista',
+    etiqueta: 'Artistas de siempre',
+    titular: uno.name,
+    chico: true,
+    bajada: uno.first_year ? `Lo escuchas desde ${uno.first_year}` : fmtMinutes(uno.min),
+    visual: visualRanking(top, fmtMinutes),
+  };
+}
+
+function pasoSiempreAlbum(ctx) {
+  const { stats, fmtMinutes } = ctx;
+  const top = (stats.top_albums_all_time || [])[0];
+  if (!top) return null;
+  return {
+    id: 'album',
+    etiqueta: 'Disco de siempre',
+    titular: top.name,
+    chico: true,
+    tapa: top.img || null,
+    bajada: top.artist,
+    cuerpo: `${fmtMinutes(top.min)} en ${num(top.plays)} reproducciones.`,
+  };
+}
+
+/**
+ * La racha más larga y los días con música, encadenando los `days` de todos los años.
+ * `null` si un año no trae `days` o si dos ventanas no van pegadas: un hueco entre
+ * ventanas no es un día sin música, es un día sin datos (la misma condición que
+ * `rachaVigente()`).
+ *
+ * Es una cuenta aparte y no `rachaVigente()` porque aquella pregunta otra cosa:
+ * cuántos días seguidos terminan en el último día de un año. Sacar la más larga de
+ * ahí es cambiarle la salida, y de esa salida vive `pasoRacha()`.
+ */
+function rachaDeLosDias(anios) {
+  if (!anios.length) return null;
+  let actual = 0, largo = 0, fin = null, activos = 0;
+  for (let i = 0; i < anios.length; i++) {
+    const d = anios[i].days;
+    if (!d || !d.from || !Array.isArray(d.min) || !d.min.length) return null;
+    if (i > 0) {
+      const a = anios[i - 1].days;
+      if (aMs(a.from) + a.min.length * UN_DIA_MS !== aMs(d.from)) return null;
+    }
+    d.min.forEach((m, j) => {
+      if (m > 0) {
+        activos++;
+        actual++;
+        if (actual > largo) { largo = actual; fin = aMs(d.from) + j * UN_DIA_MS; }
+      } else {
+        actual = 0;
+      }
+    });
+  }
+  return { largo, activos, desde: fin === null ? null : isoDesde(fin - (largo - 1) * UN_DIA_MS), hasta: fin === null ? null : isoDesde(fin) };
+}
+
+function pasoSiempreRacha(ctx) {
+  const { stats, fmtDia } = ctx;
+  const t = stats.totals || {};
+  const r = rachaDeLosDias(aniosEnOrden(stats));
+  if (!r || r.largo < 1) return null;
+  // 🔴 O es `totals.longest_streak`, o no sale.
+  if (r.largo !== t.longest_streak) {
+    console.warn('[apertura] la racha encadenada no cuadra con totals.longest_streak:', r.largo, t.longest_streak);
+    return null;
+  }
+  const cuadran = r.activos === t.days_active;
+  return {
+    id: 'racha',
+    etiqueta: 'Tu racha más larga',
+    num: [r.largo, 'ent'],
+    bajada: `${r.largo === 1 ? 'día seguido' : 'días seguidos'} con música, del ${fmtDia(r.desde)} al ${fmtDia(r.hasta)}`,
+    cuerpo: cuadran ? `Has escuchado música ${num(r.activos)} días en todo tu historial.` : undefined,
+    extra: { desde: r.desde, hasta: r.hasta, longest_streak: t.longest_streak, diasConMusica: cuadran ? r.activos : null },
+  };
+}
+
+/** Un paso que tira se descarta y los demás siguen: es la misma red que la de un año. */
+function construirPasos(fabricas, ctx) {
+  return fabricas
+    .map(f => { try { return f(ctx); } catch (e) { console.warn('[apertura] paso descartado:', e); return null; } })
+    .filter(Boolean);
+}
+
+/**
+ * Los pasos de «Siempre», ya armados y sin tocar el DOM. Se exporta para que
+ * `tests/wrapped-siempre-recorrido.test.mjs` corra ESTA función y no una copia.
+ *
+ * @param {object} ctx  { stats, MESES, MESES_LARGOS, fmtMinutes, fmtDia, ultimoDia }
+ */
+export function pasosDeSiempre(ctx) {
+  if (!ctx || !ctx.stats) return [];
+  return construirPasos([pasoSiempreHoras, pasoSiempreAnios, pasoSiempreArtista, pasoSiempreAlbum, pasoSiempreRacha], ctx);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
 // LOS DIBUJOS — todos van DENTRO del panel, no en una columna al lado
 // ═══════════════════════════════════════════════════════════════════════════
 
-function visualMeses(meses, max, ctx) {
+// Las barras de los meses y las de los años son el mismo dibujo: cambia la etiqueta.
+function visualBarras(items, max) {
   return `<div class="wr-ap-visual ancho"><div class="wr-ap-meses">` +
-    meses.map(m => `
+    items.map(m => `
       <div class="wr-ap-mes${m.min === max ? ' pico' : ''}">
         <div class="wr-ap-mes-val"><span class="wr-ap-num" data-num="${m.min / 60}" data-fmt="pl">${Math.round(m.min / 60)}</span>h</div>
         <div class="wr-ap-barra" data-alto="${(m.min / max * 100).toFixed(2)}"></div>
-        <div class="wr-ap-mes-lbl">${mes(ctx, m.i - 1)}</div>
+        <div class="wr-ap-mes-lbl">${m.lbl}</div>
       </div>`).join('') +
     `</div></div>`;
+}
+
+function visualMeses(meses, max, ctx) {
+  return visualBarras(meses.map(m => ({ min: m.min, lbl: mes(ctx, m.i - 1) })), max);
 }
 
 function visualRanking(items, fmtMinutes) {
@@ -613,14 +834,34 @@ export function montarApertura(host, ctx) {
   destruirVivo();
   if (!host || !ctx || !ctx.y || !ctx.stats) return null;
 
-  const pasos = [pasoHoras, pasoMeses, pasoArtista, pasoAlbum, pasoDias, pasoRacha, pasoDentroDeTodo]
-    .map(f => { try { return f(ctx); } catch (e) { console.warn('[apertura] paso descartado:', e); return null; } })
-    .filter(Boolean);
+  const pasos = construirPasos([pasoHoras, pasoMeses, pasoArtista, pasoAlbum, pasoDias, pasoRacha, pasoDentroDeTodo], ctx);
 
   // Menos de tres pantallas no es un recorrido, es un tropiezo antes de la
   // grilla. Mejor no montar nada y que el Wrapped empiece donde siempre.
   if (pasos.length < 3) return null;
 
+  return montarRecorrido(host, ctx, pasos, `Recorrido del año ${ctx.y.year}`);
+}
+
+/**
+ * El recorrido de todo el historial (v=362). `ctx` no trae `y`, y lo vivo de abajo
+ * solo la lee en el lienzo de puntos, que necesita el paso `dentro`: acá no está.
+ *
+ * @param {HTMLElement} host  el hueco vacío que dejó `render()`
+ * @param {object} ctx        { stats, MESES, MESES_LARGOS, fmtMinutes, fmtDia, ultimoDia }
+ * @returns {{destruir:()=>void}|null}  null si no hay recorrido que hacer
+ */
+export function montarAperturaSiempre(host, ctx) {
+  destruirVivo();
+  if (!host || !ctx || !ctx.stats) return null;
+  const pasos = pasosDeSiempre(ctx);
+  if (pasos.length < 3) return null;
+  return montarRecorrido(host, ctx, pasos, 'Recorrido de todo tu historial');
+}
+
+// ⚠️ UN SOLO MONTAJE para los dos recorridos: pinta el HTML y arma todo lo vivo.
+// Copiarlo sería repetir lo de v=219, un resolutor escrito dos veces que divergió.
+function montarRecorrido(host, ctx, pasos, etiquetaRecorrido) {
   // ⚠️ `globo-abajo` (v=285) — por qué el ⓘ de una tarjeta CON dibujo no puede
   // colgar del mismo sitio que el de `racha`.
   //
@@ -639,7 +880,7 @@ export function montarApertura(host, ctx) {
   // está vacío. No es un componente nuevo ni cambia el JS del ⓘ: es una clase
   // más sobre la misma pieza, y las tarjetas sin dibujo no se enteran.
   host.innerHTML = `
-    <section class="wr-ap" aria-label="Recorrido del año ${ctx.y.year}">
+    <section class="wr-ap" aria-label="${etiquetaRecorrido}">
       <div class="wr-ap-pista">
         <div class="wr-ap-clavado">
           ${pasos.map((p, i) => `

@@ -1,23 +1,23 @@
 // Wrapped propio: mini-resumen tuyo por año, hecho con el Extended Streaming History.
 // A diferencia del Wrapped oficial (que corre oct-sept), este es del año calendario completo.
 
-import { loadHistoryStats, isOwner, ownerLockedMessage } from './history-data.js?v=361';
-import { escapeHtml, pageHeader } from '../ui/components.js?v=361';
-import { getPreview } from '../api/preview-providers.js?v=361';
-import { getArtistLikePreview, getAlbumLikePreview } from '../util/artist-preview.js?v=361';
-import { attachHover } from '../ui/preview-player.js?v=361';
-import { openTrackCard } from './track-card.js?v=361';
-import { openArtistCard } from './artist-card.js?v=361';
-import { openAlbumCard } from './album-card.js?v=361';
-import { getMyTop } from '../api.js?v=361';
-import { activateMarquee, marqueeSpan } from '../ui/marquee.js?v=361';
-import { openModal } from '../ui/modal-stack.js?v=361';
-import { armReveal, armRevealAll, releaseReveal, animationsEnabled } from '../ui/reveal.js?v=361';
-import { coverUrl } from '../util/cover-size.js?v=361';
-import { vigilarRuta } from '../util/vigencia-ruta.js?v=361';
-import { fmtDia } from '../util/fecha.js?v=361';
-import { anioSinCampoSkipped, esElAnioDelCorte, AVISO_MEZCLA } from '../util/corte-saltos.js?v=361';
-import { showToast } from '../ui/toast.js?v=361';
+import { loadHistoryStats, isOwner, ownerLockedMessage } from './history-data.js?v=362';
+import { escapeHtml, pageHeader } from '../ui/components.js?v=362';
+import { getPreview } from '../api/preview-providers.js?v=362';
+import { getArtistLikePreview, getAlbumLikePreview } from '../util/artist-preview.js?v=362';
+import { attachHover } from '../ui/preview-player.js?v=362';
+import { openTrackCard } from './track-card.js?v=362';
+import { openArtistCard } from './artist-card.js?v=362';
+import { openAlbumCard } from './album-card.js?v=362';
+import { getMyTop } from '../api.js?v=362';
+import { activateMarquee, marqueeSpan } from '../ui/marquee.js?v=362';
+import { openModal } from '../ui/modal-stack.js?v=362';
+import { armReveal, armRevealAll, releaseReveal, animationsEnabled } from '../ui/reveal.js?v=362';
+import { coverUrl } from '../util/cover-size.js?v=362';
+import { vigilarRuta } from '../util/vigencia-ruta.js?v=362';
+import { fmtDia } from '../util/fecha.js?v=362';
+import { anioSinCampoSkipped, esElAnioDelCorte, AVISO_MEZCLA } from '../util/corte-saltos.js?v=362';
+import { showToast } from '../ui/toast.js?v=362';
 
 let stats = null;
 // El año elegido en la barra, o `SIEMPRE` (v=360): se recuerda igual, en memoria de esta carga.
@@ -69,7 +69,7 @@ const ESPERA_APERTURA_MS = 3000;
 // después — montarlo tarde sería justo el flash que se está arreglando.
 function cargarApertura() {
   return Promise.race([
-    import('../features/wrapped-apertura.js?v=361').catch(e => {
+    import('../features/wrapped-apertura.js?v=362').catch(e => {
       console.warn('[wrapped] la apertura no cargó, el resumen queda entero:', e);
       return null;
     }),
@@ -176,10 +176,10 @@ export async function render(container) {
   const dataTo = fmtDia(stats.totals?.last_play || yearsDesc[0].last_play);
   const dataPlays = stats.totals.plays_valid.toLocaleString('es-ES');
 
-  // El chip «Siempre» (v=360), el primero de la barra: la tarjeta «DE SIEMPRE» arriba, y ni la del año ni
-  // la apertura. Va pegado al `map` para que, con un año elegido, quitarlo deje la vista de v=359 byte a
-  // byte (lo vigila `tests/wrapped-siempre.test.mjs`). El recorrido por pasos de todo el historial todavía
-  // no existe: la apertura de `wrapped-apertura.js` es de un año.
+  // El chip «Siempre» (v=360), el primero de la barra: sin la tarjeta del año, con la «DE SIEMPRE» y, encima,
+  // el recorrido por pasos de todo el historial (v=362, `montarAperturaSiempre()` de `wrapped-apertura.js`).
+  // Va pegado al `map` para que, con un año elegido, quitarlo deje la vista de v=359 byte a byte (lo vigila
+  // `tests/wrapped-siempre.test.mjs`).
   content.innerHTML = `
     <div class="wrapped-year-bar">
       <div class="wrapped-year-bar-label">Elige el año</div>
@@ -254,10 +254,25 @@ function montarApertura(mod) {
   const host = document.getElementById('wrapped-apertura');
   if (!host || !mod || typeof mod.montarApertura !== 'function') return;
   try {
-    // Con «Siempre» no se monta (v=360), pero la del año del que venís sigue viva: sus oyentes son de
-    // `document` y `window`, y se irían recién al salir de la ruta. Sin contexto, `montarApertura` la
-    // destruye y no pinta nada.
-    if (selectedYear === SIEMPRE) { mod.montarApertura(host, null); return; }
+    // Con «Siempre», el recorrido de todo el historial (v=362). Las dos funciones destruyen primero la
+    // apertura viva del año del que venís: sus oyentes son de `document` y `window`, y se irían recién al
+    // salir de la ruta. Una pestaña con el módulo viejo en caché no tiene `montarAperturaSiempre`: cae a lo
+    // de v=360, `montarApertura` sin contexto, que destruye y no pinta nada.
+    if (selectedYear === SIEMPRE) {
+      if (typeof mod.montarAperturaSiempre === 'function') {
+        mod.montarAperturaSiempre(host, {
+          stats,
+          MESES,
+          MESES_LARGOS,
+          fmtMinutes,
+          fmtDia,
+          ultimoDia: (stats.years[stats.years.length - 1]?.last_play || '').slice(0, 10) || null,
+        });
+      } else {
+        mod.montarApertura(host, null);
+      }
+      return;
+    }
     const y = stats.years.find(yy => yy.year === selectedYear);
     if (!y) return;
     mod.montarApertura(host, {
@@ -479,7 +494,7 @@ async function descargarPostal(y) {
   document.addEventListener('routeteardown', alSalir, { once: true });
   pintarBotonPostal(true);
   try {
-    const mod = await import('./wrapped-postal.js?v=361');
+    const mod = await import('./wrapped-postal.js?v=362');
     if (!ruta.vigente()) return;
     const r = await mod.generarPostal(y, { fmtMinutes, fmtDia, signal: ctrl.signal, vigente: ruta.vigente });
     if (!r || !ruta.vigente()) return;
