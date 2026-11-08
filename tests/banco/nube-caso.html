@@ -1,0 +1,239 @@
+<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>banco nube — la app entera, en un iframe</title>
+<link rel="stylesheet" href="/css/theme.css">
+<link rel="stylesheet" href="/css/components.css">
+<link rel="stylesheet" href="/css/main.css">
+<style>*,*::before,*::after{animation:none!important;transition:none!important}</style>
+</head><body>
+<div id="app"></div>
+<script type="module">
+// ── Un iframe del banco `nube.html` (tanda 123) ──────────────────────────────
+//
+// La app ENTERA (`/js/app.js`) en #dashboard, contra la Spotify simulada, con el perfil INVENTADO del banco
+// `copia-completa` (`copia-completa-datos.mjs`, reusado) para la cuenta «usuario-a». Cada iframe vacía el `localStorage`
+// y la IndexedDB del origen al arrancar (todos los del mismo origen las comparten) y siembra lo suyo.
+//
+// Las peticiones a `fonoteca-prueba.ejemplo.workers.dev` NO salen: el `fetch` de esta página se las pasa al Worker REAL
+// que corre en la madre (`parent.__nube.atender`), «en limpio» (método, cabeceras, bytes), con la cabecera `Origin` de
+// esta página. Y hace lo que haría el navegador con una petición a otro origen: antes de cada una que no es simple, un
+// preflight (`OPTIONS`), y la respuesta solo llega a la app si trae `Access-Control-Allow-Origin` con este origen. Así el
+// banco prueba también el CORS del Worker. Todo `fetch` queda anotado en `__red` (sin los de las esperas del banco).
+//
+//   ?marco=<nombre>      el nombre que la madre usa para elegir el entorno del Worker (KV, cuenta, fallos)
+//   ?modo=a              la puerta A, sola: cuenta abrir el Dashboard y abrir «Nube…» y avisa por `postMessage` (sirve
+//                        también desde OTRO origen, el de la versión vieja: `&base=` de la madre)
+//   ?tamano=ian          el perfil del tamaño de Ian (SEMBRADO, inventado)
+//   ?foto=sin|conectado|lista|error&tema=<preset>   para las capturas, sin madre: el Worker corre en esta misma página
+//                        con su KV doblado, deja el modal en ese estado y marca `data-foto="listo"`
+
+import { instalarRedSimulada, esperarReal, anclar } from '/banco/simulado.mjs';
+import { sembrarPerfil } from '/banco/copia-completa-datos.mjs';
+import { HOST, UID_A } from '/banco/nube-datos.mjs';
+
+const q = new URLSearchParams(location.search);
+const MARCO = q.get('marco') || 'suelto';
+const MODO = q.get('modo') || '';
+const FOTO = q.get('foto') || '';
+const IAN = q.get('tamano') === 'ian';
+const $ = (s, r = document) => r.querySelector(s);
+
+window.__errores = [];
+window.__avisos = [];
+window.addEventListener('error', (e) => window.__errores.push('error: ' + (e.message || e)));
+window.addEventListener('unhandledrejection', (e) => window.__errores.push('rechazo: ' + String(e.reason?.message || e.reason)));
+const errorOriginal = console.error.bind(console);
+console.error = (...a) => { window.__errores.push('console.error: ' + a.map(String).join(' ').slice(0, 300)); errorOriginal(...a); };
+const avisoOriginal = console.warn.bind(console);
+console.warn = (...a) => { window.__avisos.push(a.map((x) => String(x?.message ?? x)).join(' ').slice(0, 300)); avisoOriginal(...a); };
+
+function abrirIdb() {
+  return new Promise((res, rej) => {
+    const r = indexedDB.open('spotify-tools', 1);
+    r.onupgradeneeded = () => { if (!r.result.objectStoreNames.contains('kv')) r.result.createObjectStore('kv'); };
+    r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error);
+  });
+}
+async function idbHacer(f) {
+  const db = await abrirIdb();
+  await new Promise((res, rej) => { const t = db.transaction('kv', 'readwrite'); f(t.objectStore('kv')); t.oncomplete = res; t.onerror = () => rej(t.error); });
+  db.close();
+}
+// Unas vueltas con red de verdad (la del propio banco, sin pasar por `__red`), para que lo que la app dispare después de
+// pintar también llegue y cuente.
+async function quieto(n = 40) { for (let i = 0; i < n; i++) await anclar(window.__fetchOriginal('/banco/esperar.mjs', { cache: 'no-store' }).then((r) => r.text()), { vueltas: 20000 }); }
+
+// ── Las peticiones al Worker: a la madre (o, en las fotos, al Worker de esta página), como las vería el navegador ───
+async function atenderDe() {
+  if (window.__atenderWorker) return window.__atenderWorker;
+  try { if (parent !== window && parent.__nube?.atender) return parent.__nube.atender; } catch { /* la madre es de otro origen */ }
+  return null;
+}
+async function alWorker(abs, metodo, opciones) {
+  const atender = await atenderDe();
+  if (!atender) throw new TypeError('Failed to fetch (banco: no hay Worker en este marco)');
+  const cabeceras = [...new Headers(opciones.headers || {})];
+  const simple = (metodo === 'GET' || metodo === 'HEAD' || metodo === 'POST') && cabeceras.every(([k, v]) => ['accept', 'accept-language', 'content-language'].includes(k) || (k === 'content-type' && /^(text\/plain|application\/x-www-form-urlencoded|multipart\/form-data)\b/.test(v)));
+  const origen = ['origin', location.origin];
+  const corsOk = (hs) => new Headers(hs).get('access-control-allow-origin') === location.origin;
+  if (!simple) {
+    window.__red.push({ donde: 'preflight', metodo: 'OPTIONS', ruta: abs.pathname });
+    let pre;
+    try { pre = await atender(MARCO, { url: abs.href, method: 'OPTIONS', headers: [origen, ['access-control-request-method', metodo], ['access-control-request-headers', cabeceras.map(([k]) => k).join(',')]], body: null }); }
+    catch { throw new TypeError('Failed to fetch (banco: el preflight no llegó)'); }
+    const ph = new Headers(pre.headers);
+    const metodos = (ph.get('access-control-allow-methods') || '').split(',').map((s) => s.trim().toUpperCase());
+    const permitidas = (ph.get('access-control-allow-headers') || '').split(',').map((s) => s.trim().toLowerCase());
+    if (pre.status < 200 || pre.status > 299 || !corsOk(pre.headers) || !metodos.includes(metodo) || !cabeceras.every(([k]) => permitidas.includes(k))) {
+      window.__corsFallos.push(`preflight ${metodo} ${abs.pathname}: ${pre.status} ${ph.get('access-control-allow-origin')} ${metodos} ${permitidas}`);
+      throw new TypeError('Failed to fetch (banco: CORS del preflight)');
+    }
+  }
+  const body = opciones.body == null ? null : await new Response(opciones.body).arrayBuffer();
+  let r;
+  try { r = await atender(MARCO, { url: abs.href, method: metodo, headers: [...cabeceras, origen], body }); }
+  catch (e) { throw new TypeError(`Failed to fetch (banco: ${e?.message || e})`); }
+  if (!corsOk(r.headers)) { window.__corsFallos.push(`${metodo} ${abs.pathname}: ${r.status} sin Allow-Origin`); throw new TypeError('Failed to fetch (banco: CORS)'); }
+  return new Response([101, 204, 205, 304].includes(r.status) ? null : r.body, { status: r.status, headers: r.headers });
+}
+
+async function arrancar() {
+  // Vaciar lo que dejó otro marco del mismo origen.
+  localStorage.clear();
+  await anclar(idbHacer((s) => s.clear()), { vueltas: 20000 });
+
+  const sim = instalarRedSimulada();
+  window.__sim = sim;
+  sim.ruta('GET', /^\/me$/, () => ({ id: UID_A, display_name: 'Banco nube' }));
+  sim.ruta('GET', /^\/me\/playlists/, () => ({ items: [], total: 0, next: null }));
+
+  // La red, anotada. Lo de las esperas del banco va por `__fetchOriginal` y no pasa por acá.
+  window.__red = [];
+  window.__corsFallos = [];
+  const debajo = window.fetch;
+  window.fetch = async (entrada, opciones = {}) => {
+    const url = typeof entrada === 'string' ? entrada : entrada instanceof URL ? entrada.href : entrada.url;
+    const abs = new URL(url, location.href);
+    const metodo = String(opciones.method || (entrada instanceof Request ? entrada.method : 'GET')).toUpperCase();
+    if (abs.host === HOST) {
+      window.__red.push({ donde: 'worker', metodo, ruta: abs.pathname });
+      return alWorker(abs, metodo, entrada instanceof Request ? { headers: entrada.headers, body: await entrada.arrayBuffer(), ...opciones } : opciones);
+    }
+    const mismo = abs.origin === location.origin;
+    window.__red.push({ donde: mismo ? 'mismo' : abs.hostname === 'api.spotify.com' ? 'spotify' : 'externo', metodo, ruta: mismo ? abs.pathname : abs.hostname === 'api.spotify.com' ? abs.pathname.replace(/^\/v1/, '') + abs.search : abs.host + abs.pathname });
+    return debajo(typeof entrada === 'string' || entrada instanceof Request ? entrada : abs.href, opciones);
+  };
+
+  // El perfil: el sembrado del banco `copia-completa`, para «usuario-a».
+  const C = await import('/js/util/copia-completa.js');
+  const { idbPares, lsPares } = sembrarPerfil({ C, uid: UID_A, otro: 'usuario-otro-inventado', ian: IAN });
+  // La siembra pone una clave por fila del CENSO, también la dirección del Worker (`fonoteca_nube_url_v1`, con un valor
+  // inventado que no es una dirección): el caso arranca SIN dirección, así que esa no se escribe.
+  for (const [k, v] of lsPares) if (!k.startsWith('fonoteca_nube_')) localStorage.setItem(k, v);
+  localStorage.setItem('fonoteca_last_user_id', UID_A);
+  localStorage.setItem('fonoteca_perfil_v1', JSON.stringify({ id: UID_A, display_name: 'Banco nube' }));
+  localStorage.setItem(`fonoteca_anim_v1__${UID_A}`, 'nunca');
+  localStorage.setItem(`fonoteca_theme_v1__${UID_A}`, JSON.stringify(null));
+  await anclar(idbHacer((s) => { for (const [k, v] of idbPares) s.put(v, k); }), { vueltas: 40000 });
+
+  // La descarga, interceptada (no llega al disco).
+  const blobs = new Map();
+  window.__descargas = [];
+  const crearURL = URL.createObjectURL.bind(URL);
+  URL.createObjectURL = (b) => { const u = crearURL(b); blobs.set(u, b); return u; };
+  const clickOriginal = HTMLAnchorElement.prototype.click;
+  HTMLAnchorElement.prototype.click = function () { if (this.download) window.__descargas.push({ nombre: this.download, blob: blobs.get(this.href) }); else clickOriginal.call(this); };
+
+  window.Chart = class { destroy() {} resize() {} update() {} };   // `index.html` lo carga del CDN, y este caso no pasa por él.
+  window.__ponerTema = async (id) => {
+    const { PRESETS, applyTheme } = await import('/js/ui/theme-panel.js');
+    applyTheme(PRESETS.find((x) => x.id === id).colors);
+  };
+  window.__abrirNube = () => { $('#dash-cog-btn').click(); const item = $('[data-act="nube"]'); if (item) item.click(); return !!item; };
+  window.__exportarTodo = () => { $('#dash-cog-btn').click(); $('[data-act="export-todo"]').click(); };
+
+  location.hash = '#dashboard';
+  await import('/js/app.js');
+  await esperarReal(() => $('#dash-cog-btn') && $('[data-act="export-todo"]'), { que: 'que #dashboard pinte su ⚙', vueltas: 20000 });
+  window.name = MARCA;
+  window.__listo = true;
+  document.documentElement.dataset.listo = '1';
+}
+
+// ── La puerta A, sola (también desde el origen de la versión vieja) ─────────
+const contar = (lista) => {
+  const m = new Map();
+  for (const l of lista) { const k = `${l.donde} ${l.metodo} ${l.ruta}`; m.set(k, (m.get(k) || 0) + 1); }
+  return [...m].sort(([a], [b]) => a.localeCompare(b)).map(([k, n]) => `${k} ×${n}`);
+};
+async function puertaA() {
+  await quieto();
+  const n0 = window.__red.length;
+  const dashboard = contar(window.__red);
+  const hayNube = window.__abrirNube();
+  if (hayNube) await esperarReal(() => $('#nube-modal'), { que: 'el modal «Nube…»', vueltas: 20000 });
+  await quieto();
+  const modal = contar(window.__red.slice(n0));
+  const preguntas = { url: $('#nube-url')?.value ?? null, estado: $('#nube-estado')?.hidden === false ? $('#nube-estado').textContent : null };
+  return { dashboard, modal, hayNube, preguntas, errores: window.__errores.slice(), desconocidas: window.__sim.reg.desconocidas.slice() };
+}
+
+// ── Las fotos: sin madre, el Worker corre acá ───────────────────────────────
+async function prepararFoto() {
+  const W = await import('/worker/index.js');
+  const { crearKV, atender, FIRMA, ORIGENES_FIJOS, DIRECCION } = await import('/banco/nube-datos.mjs');
+  const env = { COPIAS: crearKV(), FIRMA, PERMITIDOS: UID_A, ORIGENES: `${ORIGENES_FIJOS},${location.origin}` };
+  window.__falloPut = null;
+  window.__atenderWorker = async (_marco, p) => {
+    if (window.__falloPut === '500' && p.method === 'PUT') return { status: 500, headers: [['access-control-allow-origin', location.origin], ['content-type', 'application/json']], body: new TextEncoder().encode('{"error":"inventado"}').buffer };
+    return atender(W.default, env, p);
+  };
+  return DIRECCION;
+}
+
+// La marca de «ya sembré» lleva la query de ESTA carga: `window.name` sobrevive a las navegaciones de la pestaña, y el
+// conductor de capturas navega la misma pestaña de un estado a otro (con la marca a secas, la segunda página se creía una
+// recarga y no arrancaba: lo vio la primera corrida de capturas). La recarga de «Cerrar sesión» conserva la query.
+const MARCA = `nube-caso-sembrado:${location.search}`;
+if (window.name === MARCA) {
+  // Una RECARGA de este marco (la de «Cerrar sesión»): no se siembra ni se arranca nada; la madre mira el localStorage.
+  window.__recargado = true;
+  document.documentElement.dataset.recargado = '1';
+} else {
+  try {
+    await arrancar();
+    if (MODO === 'a') {
+      const datos = await puertaA();
+      parent.postMessage({ banco: 'nube-a', marco: MARCO, ok: true, datos }, '*');
+    } else if (FOTO) {
+      const direccion = await prepararFoto();
+      await window.__ponerTema(q.get('tema') || 'violeta');
+      window.__abrirNube();
+      await esperarReal(() => $('#nube-modal'), { que: 'el modal', vueltas: 20000 });
+      if (FOTO !== 'sin') {
+        $('#nube-url').value = direccion;
+        $('#nube-conectar').click();
+        await esperarReal(() => (!$('#nube-estado').hidden && /Conectado como/.test($('#nube-estado').textContent)) || $('#nube-msg')?.dataset.tipo === 'error', { que: 'conectado', vueltas: 20000 });
+        // Si conectar dio error, que lo diga (con lo que fue a la consola), en vez de quedarse esperando.
+        if ($('#nube-msg')?.dataset.tipo === 'error') throw new Error(`conectar dio error: «${$('#nube-msg').textContent}» · avisos: ${window.__avisos.join(' | ')} · CORS: ${window.__corsFallos.join(' | ')} · red: ${window.__red.map((l) => `${l.donde} ${l.metodo} ${l.ruta}`).join(', ')}`);
+      }
+      if (FOTO === 'lista') {
+        $('#nube-guardar').click();
+        await esperarReal(() => /guardada/.test($('#nube-msg')?.textContent || '') && !$('#nube-guardar').disabled, { que: 'guardada', vueltas: 40000 });
+        $('#nube-ver').click();
+        await esperarReal(() => $('#nube-lista') && !$('#nube-lista').hidden && $('#nube-lista .nube-bajar'), { que: 'la lista', vueltas: 20000 });
+      }
+      if (FOTO === 'error') {
+        window.__falloPut = '500';
+        $('#nube-guardar').click();
+        await esperarReal(() => $('#nube-msg')?.dataset.tipo === 'error' && !$('#nube-guardar').disabled, { que: 'el error', vueltas: 40000 });
+      }
+      await quieto(10);
+      document.documentElement.dataset.foto = 'listo';
+    }
+  } catch (e) {
+    window.__errores.push('caso: ' + String(e?.message || e));
+    document.documentElement.dataset.fallo = String(e?.message || e);
+    if (MODO === 'a') parent.postMessage({ banco: 'nube-a', marco: MARCO, ok: false, error: String(e?.message || e) }, '*');
+  }
+}
+</script>
+</body></html>

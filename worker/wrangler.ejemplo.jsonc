@@ -1,0 +1,11 @@
+// La configuración del Worker de la copia en la nube, DE EJEMPLO.
+// Copiá este archivo a `wrangler.jsonc` (en esta misma carpeta) y cambiá PEGAR_AQUI_EL_ID por el id que te da
+// `npx wrangler kv namespace create COPIAS`. El `.gitignore` tapa `wrangler.jsonc`: el id no va al repo, que es público.
+// La clave de la firma y la lista de cuentas permitidas NO van acá: son secretos, con `npx wrangler secret put` (ver LEEME.md).
+{
+  "name": "fonoteca-nube",
+  "main": "index.js",
+  "compatibility_date": "2026-11-06",
+  "kv_namespaces": [{ "binding": "COPIAS", "id": "PEGAR_AQUI_EL_ID" }],
+  "vars": { "ORIGENES": "https://ianct2020.github.io,http://127.0.0.1:5500" }
+}

@@ -30,6 +30,9 @@ import { nombreArchivo } from '../util/copia-completa.js';
 import { resumenEnPalabras, importEscribio } from '../util/copia-importar.js';
 import { diferenciaDeLikes, urisDeLikes, textoConfirmacionRehacer, textoFinalRehacer } from '../util/likes-diferencia.js';
 import { vigilarRuta } from '../util/vigencia-ruta.js';
+import { leerConexion, conectarNube, guardarCopiaEnNube, listarCopiasDeNube, bajarCopiaDeNube } from '../api/nube.js';
+import { TEXTOS as TEXTOS_NUBE, validarDireccion, textoConectado, textoTodaviaNoAparece, textoTamano, textoGuardada, textoDescargada, horaLocal } from '../util/nube.js';
+import { fmtDiaCorto } from '../util/fecha.js';
 
 let charts = [];
 let _loadController = null;
@@ -92,6 +95,7 @@ export function render(container) {
         <button class="dash-cog-item" data-act="export-json" role="menuitem">Exportar JSON <span class="dash-cog-hint">likes + tags</span></button>
         <button class="dash-cog-item" data-act="export-todo" role="menuitem">Exportar todo <span class="dash-cog-hint">copia de seguridad</span></button>
         <button class="dash-cog-item" data-act="import-todo" role="menuitem">Importar todo <span class="dash-cog-hint">cargar una copia</span></button>
+        <button class="dash-cog-item" data-act="nube" role="menuitem">Nube… <span class="dash-cog-hint">copia en Cloudflare</span></button>
         <button class="dash-cog-item" data-act="export-csv" role="menuitem">Exportar CSV <span class="dash-cog-hint">solo likes, plano</span></button>
         <button class="dash-cog-item" data-act="import" role="menuitem">Importar JSON</button>
         <button class="dash-cog-item" data-act="refresh" role="menuitem">Actualizar datos</button>
@@ -143,6 +147,7 @@ export function render(container) {
       if (act === 'export-json') handleExportAll();
       else if (act === 'export-todo') handleExportTodo();
       else if (act === 'import-todo') importTodoInput.click();
+      else if (act === 'nube') abrirNube();
       else if (act === 'export-csv') handleExportCsv();
       else if (act === 'import') importInput.click();
       else if (act === 'refresh') handleRefresh();
@@ -559,6 +564,167 @@ async function handleExportTodo() {
     showToast(`Copia descargada, pero INCOMPLETA: no se han podido leer ${r.errores.length.toLocaleString('es-ES')} claves (están en «_errores» del archivo). ${mb}.`, 'error');
   } else {
     showToast(`Copia descargada: ${r.copia.likes.items.length.toLocaleString('es-ES')} me gusta y ${(Object.keys(r.copia.navegador.idb).length + Object.keys(r.copia.navegador.localStorage).length).toLocaleString('es-ES')} claves más del navegador, ${mb}.`, 'success');
+  }
+}
+
+// «Nube…» (tanda 123): la copia de «Exportar todo» en un Worker de Cloudflare del usuario (`api/nube.js`, `worker/`).
+// Se sube con un botón y se baja como archivo; para cargarla, «Importar todo». NO sincroniza ni importa nada solo.
+// - 🔴 Abrir el modal no pide nada, ni sin dirección ni con dirección y token guardados (`leerConexion()` solo lee
+//   `localStorage`): la lista se pide al apretar «Ver copias guardadas». Abrir el Dashboard cuesta lo mismo que antes:
+//   `render()` no llama a nada de `api/nube.js` (lo vigila `tests/nube-cliente.test.mjs`).
+// - El modal es el `alertModal` de siempre con la clase `.modal-nube`: dentro de ella el botón de cerrar va con el aspecto
+//   del secundario y el ícono con `--color-text` (el blanco sobre el acento del `.btn-primary` da 2,84 en Ámbar y 1,89 en
+//   Aguamarina, ver CLAUDE.md v=290; la regla general no se toca acá).
+// - Vigencia de ruta después de cada `await` (v=195): si saliste del Dashboard, no se escribe en el DOM. Cada botón se
+//   deshabilita en el mismo paso del clic: dos clics en «Guardar» = un `PUT` (y `guardarCopiaEnNube` además reusa la promesa).
+// - Lo último que guardó el `PUT` se recuerda EN MEMORIA (no en `localStorage`): si «Ver copias guardadas» no la trae (KV
+//   tarda en listar), o bajarla da 404, se dice que todavía no aparece; nunca «no existe» ni se la cambia por otra.
+let _nubeUltimaGuardada = null;
+const fechaDeCopia = (iso) => `${fmtDiaCorto(iso)}, ${horaLocal(iso)}`;
+
+function htmlListaNube(copias) {
+  const falta = _nubeUltimaGuardada && !copias.some((c) => c.fecha === _nubeUltimaGuardada)
+    ? `<p class="nube-aviso">${escapeHtml(textoTodaviaNoAparece(fechaDeCopia(_nubeUltimaGuardada)))}</p>` : '';
+  if (!copias.length) return `${falta}<p class="nube-vacia">${escapeHtml(TEXTOS_NUBE.SIN_COPIAS)}</p>`;
+  const filas = copias.map((c) => `
+    <li class="nube-copia" data-fecha="${escapeHtml(c.fecha)}">
+      <span class="nube-copia-fecha">${escapeHtml(fechaDeCopia(c.fecha))}</span>
+      <span class="nube-copia-tam">${escapeHtml(textoTamano(c.bytes))}</span>
+      <button type="button" class="btn btn-secondary btn-sm nube-bajar" data-fecha="${escapeHtml(c.fecha)}">Bajar</button>
+    </li>`).join('');
+  return `${falta}<ul class="nube-copias">${filas}</ul><p class="nube-para-cargar">${escapeHtml(TEXTOS_NUBE.PARA_CARGAR)}</p>`;
+}
+
+function abrirNube() {
+  const ruta = vigilarRuta();
+  const { url, conexion, descartado } = leerConexion();
+  alertModal('Copia en la nube', `
+    <div class="nube" id="nube-modal">
+      <label class="nube-etiqueta" for="nube-url">Dirección de tu Worker</label>
+      <div class="nube-fila">
+        <input class="input nube-url" id="nube-url" type="url" inputmode="url" autocomplete="off" spellcheck="false" placeholder="https://….workers.dev" value="${escapeHtml(url || '')}">
+        <button type="button" class="btn btn-secondary btn-sm" id="nube-conectar">Conectar</button>
+      </div>
+      <p class="nube-estado" id="nube-estado" hidden></p>
+      <div class="nube-acciones" id="nube-acciones" hidden>
+        <button type="button" class="btn btn-secondary btn-sm nube-guardar" id="nube-guardar">Guardar copia en la nube</button>
+        <button type="button" class="btn btn-secondary btn-sm" id="nube-ver">Ver copias guardadas</button>
+      </div>
+      <p class="nube-msg" id="nube-msg" role="status" aria-live="polite" hidden></p>
+      <div class="nube-lista" id="nube-lista" hidden></div>
+      <p class="nube-nota">${escapeHtml(TEXTOS_NUBE.NOTA)}</p>
+    </div>`, { confirmText: 'Cerrar', cancelText: null, variant: 'info' });
+  const raiz = document.getElementById('nube-modal');
+  if (!raiz) return;
+  raiz.closest('.modal')?.classList.add('modal-nube');
+  const $n = (id) => document.getElementById(id);
+  const vivo = () => ruta.vigente() && raiz.isConnected;
+  const input = $n('nube-url'), btnConectar = $n('nube-conectar'), btnGuardar = $n('nube-guardar'), btnVer = $n('nube-ver');
+  const lista = $n('nube-lista');
+
+  const decir = (texto, tipo) => {
+    const m = $n('nube-msg');
+    if (!texto) { m.hidden = true; m.textContent = ''; delete m.dataset.tipo; return; }
+    m.textContent = texto;
+    m.dataset.tipo = tipo;
+    m.hidden = false;
+  };
+  const pintarConexion = (c) => {
+    const est = $n('nube-estado');
+    est.textContent = c ? textoConectado(c.uid, fmtDiaCorto(c.vence)) : '';
+    est.hidden = !c;
+    $n('nube-acciones').hidden = !c;
+    if (!c) { lista.hidden = true; lista.innerHTML = ''; }
+  };
+  // Un error de la nube trae su texto; cualquier otra cosa es un error de programación: se dice igual y va crudo a la consola.
+  const fallo = (e, que) => {
+    if (!e?.texto) console.warn(`[nube] ${que}`, e);
+    if (e?.codigo === 'caducada' || e?.codigo === 'sin-conexion') pintarConexion(null);
+    decir(e?.texto || TEXTOS_NUBE.RED, 'error');
+  };
+
+  pintarConexion(conexion);
+  if (descartado === 'otra-cuenta') decir(TEXTOS_NUBE.OTRA_CUENTA_GUARDADA, 'error');
+  else if (descartado === 'vencido') decir(TEXTOS_NUBE.CADUCADA, 'error');
+
+  // Enter en el campo conecta (y no cierra el modal, que con Enter confirma).
+  input.addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter') return;
+    e.preventDefault();
+    e.stopPropagation();
+    btnConectar.click();
+  });
+
+  btnConectar.onclick = async () => {
+    if (btnConectar.disabled) return;
+    const v = validarDireccion(input.value);
+    if (!v.ok) { decir(v.texto, 'error'); return; }
+    btnConectar.disabled = true;
+    decir(TEXTOS_NUBE.CONECTANDO, 'info');
+    try {
+      const c = await conectarNube(input.value);
+      if (!vivo()) return;
+      input.value = v.url;
+      pintarConexion(c);
+      decir('', null);
+    } catch (e) {
+      if (!vivo()) return;
+      fallo(e, 'conectar');
+    } finally {
+      if (vivo()) btnConectar.disabled = false;
+    }
+  };
+
+  btnGuardar.onclick = async () => {
+    if (btnGuardar.disabled) return;
+    btnGuardar.disabled = true;   // en el mismo paso del clic: el segundo clic no llega a nada
+    decir(TEXTOS_NUBE.GUARDANDO, 'info');
+    try {
+      const g = await guardarCopiaEnNube();
+      _nubeUltimaGuardada = g.fecha;
+      if (!vivo()) return;
+      decir(textoGuardada({ fecha: fechaDeCopia(g.fecha), bytes: g.bytes, bytesSinComprimir: g.bytesSinComprimir, errores: g.errores }), g.errores ? 'error' : 'ok');
+    } catch (e) {
+      if (!vivo()) return;
+      fallo(e, 'guardar');
+    } finally {
+      if (vivo()) btnGuardar.disabled = false;
+    }
+  };
+
+  btnVer.onclick = async () => {
+    if (btnVer.disabled) return;
+    btnVer.disabled = true;
+    try {
+      const copias = await listarCopiasDeNube();
+      if (!vivo()) return;
+      lista.innerHTML = htmlListaNube(copias);
+      lista.hidden = false;
+      lista.querySelectorAll('.nube-bajar').forEach((b) => { b.onclick = () => bajar(b); });
+    } catch (e) {
+      if (!vivo()) return;
+      fallo(e, 'ver copias');
+    } finally {
+      if (vivo()) btnVer.disabled = false;
+    }
+  };
+
+  async function bajar(b) {
+    if (b.disabled) return;
+    b.disabled = true;
+    const fecha = b.dataset.fecha;
+    try {
+      const r = await bajarCopiaDeNube(fecha);
+      if (!vivo()) return;
+      decir(textoDescargada(r.nombre), 'ok');
+    } catch (e) {
+      if (!vivo()) return;
+      if (e?.codigo === 'no-aparece') {
+        decir(fecha === _nubeUltimaGuardada ? textoTodaviaNoAparece(fechaDeCopia(fecha)) : e.texto.replace(fecha, fechaDeCopia(fecha)), 'error');
+      } else fallo(e, 'bajar');
+    } finally {
+      if (vivo()) b.disabled = false;
+    }
   }
 }
 

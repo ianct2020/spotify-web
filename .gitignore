@@ -27,6 +27,12 @@ days-real*.json
 *-export-*.json
 deleted-clusters.json
 
+# El Worker de la copia en la nube (tanda 123): la configuración de verdad lleva el id del almacén KV de quien lo
+# despliega, y `.dev.vars` lleva secretos para probar en local. El repo es PÚBLICO: solo sube `wrangler.ejemplo.jsonc`.
+worker/wrangler.jsonc
+worker/.dev.vars*
+worker/.wrangler/
+
 # Basura compilada de Python
 __pycache__/
 *.pyc

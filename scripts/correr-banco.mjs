@@ -187,8 +187,20 @@ const server = spawn(process.execPath, ['scripts/dev-server.mjs'], {
   env: { ...process.env, PORT: String(puerto), HOST: '127.0.0.1' },
   stdio: ['ignore', 'ignore', 'inherit'],
 });
+// (tanda 123) `BASE_SRC=<carpeta con un src/ viejo>`: un SEGUNDO dev-server, en otro puerto (otro origen: su propio
+// localStorage y su propia IndexedDB), que sirve ese `src/` con los bancos de esta raíz (`RAIZ_SRC`, en dev-server.mjs).
+// El banco recibe su origen en `&base=` y cuenta las dos versiones en la MISMA corrida (la puerta A de `nube`). Sin la
+// variable, nada cambia.
+let serverBase = null, puertoBase = null;
+if (process.env.BASE_SRC) {
+  puertoBase = await elegirPuerto();
+  serverBase = spawn(process.execPath, ['scripts/dev-server.mjs'], {
+    env: { ...process.env, PORT: String(puertoBase), HOST: '127.0.0.1', RAIZ_SRC: process.env.BASE_SRC },
+    stdio: ['ignore', 'ignore', 'inherit'],
+  });
+}
 
-const cerrarServer = () => { try { server.kill('SIGTERM'); } catch { /* ignora */ } };
+const cerrarServer = () => { for (const s of [server, serverBase]) { try { s?.kill('SIGTERM'); } catch { /* ignora */ } } };
 process.on('exit', cerrarServer);
 
 // Que el server tenga tiempo de ligar el puerto (dev-server.mjs es sincrónico
@@ -196,7 +208,8 @@ process.on('exit', cerrarServer);
 await new Promise(r => setTimeout(r, 250));
 
 const URL = `http://127.0.0.1:${puerto}/banco/${BANCO}.html?ancho=${ANCHO}${process.env.XQ || ''}`
-  + (EXTRA[BANCO] ? '&' + EXTRA[BANCO] : '');
+  + (EXTRA[BANCO] ? '&' + EXTRA[BANCO] : '')
+  + (puertoBase ? `&base=${encodeURIComponent(`http://127.0.0.1:${puertoBase}`)}` : '');
 const perfil = mkdtempSync(join(tmpdir(), 'banco-chrome-'));
 
 // ⚠️ `process.exit()` NO corre el `finally`: hasta la tanda 82 había un `process.exit(0)` y un `process.exit(1)` dentro
@@ -217,7 +230,9 @@ try {
       // 20 s en v=273 porque el banco del mosaico hace trabajo de verdad
       // (empareja, baja 96 tapas y pinta) y a 20 s quedaba al borde: cuando
       // fallaba, el dump salia a medio camino y el rojo llegaba sin mensaje.
-      `--virtual-time-budget=${PRESUPUESTO[BANCO] || 45000}`,
+      // (tanda 123) `PRESUPUESTO_MS=<ms>` lo pisa para UNA corrida (los instrumentos, p. ej. `XQ="&tamano=ian"` de `nube`,
+      // que siembra el tamaño de Ian y no termina en 45 s); sin la variable, lo de siempre.
+      `--virtual-time-budget=${+process.env.PRESUPUESTO_MS || PRESUPUESTO[BANCO] || 45000}`,
       '--dump-dom',
       URL,
     ], { stdio: ['ignore', 'pipe', 'ignore'] });

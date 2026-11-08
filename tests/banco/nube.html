@@ -1,0 +1,486 @@
+<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>banco nube — la copia en la nube, con el Worker REAL dentro del banco</title>
+<style>html,body{margin:0;background:#111;color:#eee;font:13px system-ui}iframe{border:0;display:block}</style>
+</head><body>
+<pre id="progreso"></pre>
+<div id="marcos"></div>
+<script type="module">
+// ── Qué prueba este banco (tanda 123) ────────────────────────────────────────
+//
+// «Nube…» del ⚙ de #dashboard, en la app ENTERA (`nube-caso.html`, un iframe por vez: todos comparten el origen) con la
+// Spotify simulada y el perfil INVENTADO del banco `copia-completa`. 🔴 El Worker es el REAL: esta página importa
+// `/worker/index.js` (el dev-server monta `worker/`) y lo corre con un KV doblado por marco (`nube-datos.mjs`); su
+// `GET https://api.spotify.com/v1/me` lo contesta ESTA página (la Spotify simulada del Worker) y queda anotado. Nada
+// sale de la máquina: el caso le pasa al Worker cada petición a `fonoteca-prueba.ejemplo.workers.dev`, con su preflight
+// y su chequeo de CORS como los haría el navegador.
+//
+//   A. Abrir el Dashboard y abrir el modal sin dirección = las mismas peticiones, ruta por ruta, que la versión vieja.
+//      Con `&base=<origen>` (lo pone `correr-banco.mjs` con `BASE_SRC=<carpeta con el src/ viejo>`) se cuentan las DOS en
+//      la misma corrida, cada una en su origen. Sin `base`, se afirma lo que se puede afirmar con una sola versión: que
+//      abrir el modal no pide nada. De conservación: verde también contra el commit de la 122 (que no tiene el ítem).
+//   B. Pegar la dirección y «Conectar» = 1 `POST /sesion` y, del Worker, 1 `GET /v1/me`; 0 a Spotify desde el navegador.
+//      «Guardar» (con doble clic) = 1 `PUT`; «Ver copias guardadas» = 1 `GET`; «Bajar» = 1 `GET` y un archivo cuyo
+//      `JSON.parse` es igual al de «Exportar todo» del mismo perfil, sin contar `_exportedAt`.
+//   C. La Spotify simulada del Worker con un id que no está en PERMITIDOS → el texto del 403 y ningún token guardado.
+//   D. Con un secreto sembrado de forma que caiga en la copia → 0 `PUT` y el porqué en pantalla.
+//   E. El Worker en 500, un `fetch` que rechaza y un 200 con HTML → el error, nunca «guardada».
+//   F. «Cerrar sesión» → el token propio se fue (pelado y prefijado), la dirección quedó.
+//   G. El contraste de todo texto del modal en los cuatro presets, ≥ 4,5:1 (el alfa compuesto capa por capa), y sin
+//      desborde a 1366×591 y 390×844, en los estados sin dirección, conectado con la lista y con un error.
+//   H. El KV doblado no lista la última escritura en la primera lectura → «Ver copias guardadas» dice que la recién
+//      guardada todavía no aparece, y «Bajar» de cada una de las otras baja exactamente la de su fecha.
+//
+//   ?solo=A,B     corre esas.
+//   ?tamano=ian   el instrumento del peso: el perfil del tamaño de Ian (SEMBRADO), «Guardar» de verdad, y cuánto pesa la
+//                 copia sin comprimir y comprimida (no está en `prepush`).
+//
+// Cada puerta da su veredicto aparte (una roja no tapa a las demás) y el banco sale en verde solo si todas lo están.
+
+import { esperarReal, anclar } from '/banco/simulado.mjs';
+import { fallar, listo } from '/banco/esperar.mjs';
+import { crearKV, atender, FIRMA, ORIGENES_FIJOS, DIRECCION, UID_A, UID_FUERA } from '/banco/nube-datos.mjs';
+
+const q = new URLSearchParams(location.search);
+const BASE = q.get('base') || '';
+const SOLO = (q.get('solo') || '').split(',').filter(Boolean);
+const IAN = q.get('tamano') === 'ian';
+const corre = (p) => !SOLO.length || SOLO.includes(p);
+const VUELTAS = 40000;
+const pasos = [];
+const progreso = (t) => { pasos.push(t); document.getElementById('progreso').textContent = pasos.join('\n'); };
+const afirmar = (c, msg) => { if (!c) throw new Error(msg); };
+
+// Los textos, escritos a mano (no se importan de la app: el banco no puede darle la razón a la app con sus propios textos).
+const T = {
+  NOTA: 'La copia lleva lo mismo que «Exportar todo» y se guarda en tu cuenta de Cloudflare. No lleva tu sesión de Spotify.',
+  PARA_CARGAR: 'Para cargarla, usa «Importar todo» con el archivo.',
+  PERMITIDOS: 'Tu cuenta de Spotify no está en la lista de tu Worker (PERMITIDOS).',
+  RED: 'No se ha podido hablar con tu Worker.',
+  SECRETO: 'No se ha subido la copia: llevaba un dato de tu sesión de Spotify, y eso no puede salir del navegador.',
+  TODAVIA: /^La que acabas de guardar \(.+\) todavía no aparece: puede tardar un minuto\.$/,
+};
+
+// ── El Worker REAL, con un entorno por marco ────────────────────────────────
+let W = null;
+async function worker() {
+  if (!W) W = await import('/worker/index.js').catch((e) => { throw new Error(`no se pudo importar /worker/index.js (${e?.message || e})`); });
+  return W.default;
+}
+const envs = {};
+const envDe = (marco) => (envs[marco] ??= { COPIAS: crearKV({ listaAtrasada: marco === 'h' ? 2 : 0 }), FIRMA, PERMITIDOS: UID_A, ORIGENES: `${ORIGENES_FIJOS},${location.origin}` });
+const identidad = { c: UID_FUERA };          // con qué id contesta el /me del Worker en cada marco
+const fallo = {};                            // '500' | 'rechazo' | 'html' en el PUT de ese marco
+const spotifyDelWorker = [];                 // cada GET /v1/me que hizo el Worker
+const externasMadre = [];
+let marcoActual = null;
+const fetchMadre = window.fetch.bind(window);
+window.fetch = async (entrada, opciones = {}) => {
+  const url = typeof entrada === 'string' ? entrada : entrada.url;
+  const abs = new URL(url, location.href);
+  if (abs.origin === location.origin) return fetchMadre(entrada, opciones);
+  if (abs.href === 'https://api.spotify.com/v1/me') {
+    const h = new Headers(opciones.headers || (typeof entrada === 'object' ? entrada.headers : undefined) || {});
+    spotifyDelWorker.push({ marco: marcoActual, metodo: (opciones.method || 'GET').toUpperCase(), auth: h.get('authorization') });
+    return new Response(JSON.stringify({ id: identidad[marcoActual] || UID_A, display_name: 'Spotify simulada del Worker' }), { status: 200, headers: { 'content-type': 'application/json' } });
+  }
+  externasMadre.push(abs.href);
+  return new Response('{}', { status: 599 });
+};
+const conCors = (h) => [['access-control-allow-origin', location.origin], ['vary', 'Origin'], ...h];
+window.__nube = {
+  async atender(marco, p) {
+    marcoActual = marco;
+    const f = fallo[marco];
+    if (f && p.method === 'PUT') {
+      if (f === 'rechazo') throw new TypeError('banco: la red se cayó');
+      if (f === '500') return { status: 500, headers: conCors([['content-type', 'application/json']]), body: new TextEncoder().encode('{"error":"banco: el Worker se cayó"}').buffer };
+      if (f === 'html') return { status: 200, headers: conCors([['content-type', 'text/html']]), body: new TextEncoder().encode('<!doctype html><title>banco</title><p>esto no es JSON').buffer };
+    }
+    return atender(await worker(), envDe(marco), p);
+  },
+};
+
+// ── Los marcos ──────────────────────────────────────────────────────────────
+const win = (f) => f.contentWindow;
+const $ = (f, s) => f.contentDocument?.querySelector(s);
+const $$ = (f, s) => [...(f.contentDocument?.querySelectorAll(s) || [])];
+const marcos = [];
+const sinErrores = [];   // lo que cada marco dejó en su consola de errores y sus fallos de CORS, al cerrarlo
+function cerrarMarco() {
+  const f = marcos.at(-1);
+  if (f && f.contentWindow && f.src.startsWith(location.origin)) {
+    try { sinErrores.push(...(win(f).__errores || []).map((e) => `${f.dataset.marco}: ${e}`), ...(win(f).__corsFallos || []).map((e) => `${f.dataset.marco}: CORS ${e}`)); } catch { /* recargado */ }
+  }
+}
+function abrirMarco(nombre, { ancho = 1366, alto = 591, extra = '', origen = '' } = {}) {
+  cerrarMarco();
+  const f = document.createElement('iframe');
+  f.width = ancho; f.height = alto; f.dataset.marco = nombre;
+  f.src = `${origen}/banco/nube-caso.html?marco=${nombre}${extra}`;
+  document.getElementById('marcos').replaceChildren(f);   // uno por vez: comparten localStorage e IndexedDB
+  marcos.push(f);
+  return f;
+}
+async function arrancado(f) {
+  await esperarReal(() => win(f)?.__listo || $(f, 'html')?.dataset.fallo, { que: `que arranque ${f.dataset.marco}`, vueltas: VUELTAS });
+  afirmar(!$(f, 'html').dataset.fallo, `${f.dataset.marco}: el caso no arrancó (${$(f, 'html').dataset.fallo})`);
+}
+async function quieto(n = 30) { for (let i = 0; i < n; i++) await anclar(fetch('/banco/esperar.mjs', { cache: 'no-store' }).then((r) => r.text()), { vueltas: VUELTAS }); }
+async function abrirModal(f) {
+  afirmar(win(f).__abrirNube(), `${f.dataset.marco}: el ⚙ no tiene el ítem «Nube…»`);
+  await esperarReal(() => $(f, '#nube-modal'), { que: `${f.dataset.marco}: el modal`, vueltas: VUELTAS });
+}
+const visible = (el) => !!el && !el.hidden && el.getClientRects().length > 0;
+const msg = (f) => (visible($(f, '#nube-msg')) ? $(f, '#nube-msg').textContent.trim() : '');
+const estado = (f) => (visible($(f, '#nube-estado')) ? $(f, '#nube-estado').textContent.trim() : '');
+async function conectar(f, { esperar = 'conectado' } = {}) {
+  $(f, '#nube-url').value = DIRECCION;
+  $(f, '#nube-conectar').click();
+  if (esperar === 'conectado') await esperarReal(() => /^Conectado como /.test(estado(f)) || $(f, '#nube-msg')?.dataset.tipo === 'error', { que: `${f.dataset.marco}: conectar`, vueltas: VUELTAS });
+  else await esperarReal(() => $(f, '#nube-msg')?.dataset.tipo === 'error' && msg(f), { que: `${f.dataset.marco}: el error al conectar`, vueltas: VUELTAS });
+  if (esperar === 'conectado') afirmar(/^Conectado como /.test(estado(f)), `${f.dataset.marco}: no conectó («${msg(f)}»)`);
+}
+async function guardar(f, { dobleClic = false } = {}) {
+  $(f, '#nube-guardar').click();
+  if (dobleClic) $(f, '#nube-guardar').click();
+  await esperarReal(() => $(f, '#nube-msg')?.dataset.tipo && !$(f, '#nube-guardar').disabled && msg(f) && !/^Guardando/.test(msg(f)), { que: `${f.dataset.marco}: el resultado de guardar`, vueltas: VUELTAS * 4 });
+}
+const delWorker = (f, desde) => win(f).__red.slice(desde).filter((l) => l.donde === 'worker').map((l) => `${l.metodo} ${l.ruta}`);
+const aSpotify = (f, desde) => win(f).__red.slice(desde).filter((l) => l.donde === 'spotify').map((l) => `${l.metodo} ${l.ruta}`);
+const preflights = (f, desde) => win(f).__red.slice(desde).filter((l) => l.donde === 'preflight').length;
+const lsNube = () => Object.fromEntries(Object.keys(localStorage).filter((k) => k.startsWith('fonoteca_nube_')).map((k) => [k, localStorage.getItem(k)]));
+const sinFecha = (texto) => { const o = JSON.parse(texto); delete o._exportedAt; return JSON.stringify(o); };
+const gunzip = async (bytes) => new Response(new Blob([bytes]).stream().pipeThrough(new DecompressionStream('gzip'))).text();
+const gzip = async (texto) => new Uint8Array(await new Response(new Blob([texto]).stream().pipeThrough(new CompressionStream('gzip'))).arrayBuffer());
+
+const resultados = [];
+const datos = {};
+async function puerta(letra, fn) {
+  if (!corre(letra)) return;
+  try { await fn(); resultados.push([letra, true]); progreso(`${letra} ✓ ${datos[letra] || ''}`); }
+  catch (e) { resultados.push([letra, false, String(e?.message || e)]); progreso(`${letra} ✗ ${String(e?.message || e)}`); }
+}
+
+try {
+  if (IAN) {
+    // ── El instrumento del peso ───────────────────────────────────────────────
+    const f = abrirMarco('ian', { extra: '&tamano=ian' });
+    await arrancado(f);
+    await abrirModal(f);
+    await conectar(f);
+    const t0 = performance.now();
+    await guardar(f);
+    const ms = Math.round(performance.now() - t0);
+    const kv = envDe('ian').COPIAS;
+    const claves = [...kv.datos.keys()];
+    const comprimido = claves.length === 1 ? kv.datos.get(claves[0]).bytes : null;
+    const sin = comprimido ? new Blob([await anclar(gunzip(comprimido), { vueltas: VUELTAS })]).size : null;
+    const tope = 24 * 1024 * 1024;
+    const r = `tamaño de Ian (SEMBRADO): sin comprimir ${sin?.toLocaleString('es-ES')} bytes (${(sin / 1048576).toLocaleString('es-ES', { maximumFractionDigits: 2 })} MiB) · comprimida ${comprimido?.length.toLocaleString('es-ES')} bytes (${(comprimido?.length / 1048576).toLocaleString('es-ES', { maximumFractionDigits: 2 })} MiB) · ${comprimido && comprimido.length > tope ? 'PASA de 24 MiB' : 'por debajo de 24 MiB'} · guardar tardó ${ms} ms de reloj virtual · mensaje «${msg(f)}» · reloj virtual=${Math.round(performance.now())} ms`;
+    afirmar(comprimido, `no se guardó nada («${msg(f)}»)`);
+    document.documentElement.setAttribute('data-resumen', r);
+    progreso(r);
+    listo(r);
+  } else {
+    // ── A ─────────────────────────────────────────────────────────────────────
+    await puerta('A', async () => {
+      const correrA = async (origen, nombre) => {
+        let llegado = null;
+        const oir = (e) => { if (e.data?.banco === 'nube-a' && e.data.marco === nombre) llegado = e.data; };
+        window.addEventListener('message', oir);
+        abrirMarco(nombre, { extra: '&modo=a', origen });
+        await esperarReal(() => llegado, { que: `A: el conteo de ${nombre}`, vueltas: VUELTAS });
+        window.removeEventListener('message', oir);
+        afirmar(llegado.ok, `A ${nombre}: ${llegado.error}`);
+        return llegado.datos;
+      };
+      const juntar = (d) => { const m = new Map(); for (const l of [...d.dashboard, ...d.modal]) { const [k, n] = l.split(' ×'); m.set(k, (m.get(k) || 0) + Number(n)); } return [...m].sort(([a], [b]) => a.localeCompare(b)).map(([k, n]) => `${k} ×${n}`); };
+      const nueva = await correrA('', 'a');
+      afirmar(nueva.modal.length === 0, `abrir el modal sin dirección pidió algo: ${nueva.modal.join(' , ')}`);
+      if (nueva.hayNube) afirmar(nueva.preguntas.url === '' && nueva.preguntas.estado === null, `el modal sin dirección: campo vacío y sin estado (${JSON.stringify(nueva.preguntas)})`);
+      afirmar(nueva.errores.length === 0, `errores en la consola: ${nueva.errores.join(' | ')}`);
+      let texto = `esta versión: ítem «Nube…» ${nueva.hayNube ? 'sí' : 'NO'}, abrir el Dashboard = ${nueva.dashboard.join(' , ') || '—'} · abrir el modal = ${nueva.modal.join(' , ') || '0 peticiones'}`;
+      if (BASE) {
+        const vieja = await correrA(BASE, 'a-base');
+        const jn = juntar(nueva), jv = juntar(vieja);
+        texto += ` · versión de base (${BASE}): ítem ${vieja.hayNube ? 'sí' : 'NO'}, abrir el Dashboard${vieja.hayNube ? ' y el modal' : ' y el ⚙'} = ${jv.join(' , ') || '—'}`;
+        afirmar(JSON.stringify(jn) === JSON.stringify(jv), `🔴 no son las mismas peticiones: esta ${jn.join(' , ')} · base ${jv.join(' , ')}`);
+        texto += ' · IGUALES ruta por ruta';
+      } else texto += ' · base: no medida en esta corrida (sin BASE_SRC)';
+      datos.A = texto;
+    });
+
+    // ── B ─────────────────────────────────────────────────────────────────────
+    await puerta('B', async () => {
+      const f = abrirMarco('b');
+      await arrancado(f);
+      await quieto();
+      const n0 = win(f).__red.length;
+      await abrirModal(f);
+      await quieto(10);
+      afirmar(win(f).__red.length === n0, `abrir el modal pidió algo: ${win(f).__red.slice(n0).map((l) => `${l.donde} ${l.metodo} ${l.ruta}`).join(', ')}`);
+      afirmar($(f, '#nube-url').value === '' && !visible($(f, '#nube-acciones')) && !estado(f), 'sin dirección: el campo vacío, sin «Conectado» y sin los botones de guardar');
+      afirmar([...$$(f, '#nube-modal p')].some((p) => p.textContent.trim() === T.NOTA), `la nota «${T.NOTA}»`);
+      afirmar($(f, '#nube-conectar')?.textContent.trim() === 'Conectar' && /Dirección de tu Worker/.test($(f, '#nube-modal').textContent), 'el campo «Dirección de tu Worker» y «Conectar»');
+      // Conectar.
+      const n1 = win(f).__red.length, s1 = spotifyDelWorker.length;
+      await conectar(f);
+      const w1 = delWorker(f, n1);
+      afirmar(JSON.stringify(w1) === JSON.stringify(['POST /sesion']), `Conectar = 1 POST /sesion (${w1.join(', ')})`);
+      const sw = spotifyDelWorker.slice(s1);
+      afirmar(sw.length === 1 && sw[0].marco === 'b' && sw[0].metodo === 'GET' && sw[0].auth === `Bearer ${localStorage.getItem('sp_access_token')}`, `del Worker, 1 GET /v1/me con el token de la app (${JSON.stringify(sw)})`);
+      const sp1 = aSpotify(f, n1);
+      afirmar(sp1.length === 0, `0 a Spotify desde el navegador al conectar (${sp1.join(', ')})`);
+      afirmar(/^Conectado como usuario-a hasta el \d{2} [a-z]{3,4}\.? \d{4}$/.test(estado(f)), `«Conectado como usuario-a hasta el <fecha>» («${estado(f)}»)`);
+      const ls = lsNube();
+      afirmar(ls[`fonoteca_nube_url_v1__${UID_A}`] === DIRECCION && typeof ls[`fonoteca_nube_token_v1__${UID_A}`] === 'string' && Object.keys(ls).length === 2, `las dos claves con prefKey y nada más (${Object.keys(ls).join(', ')})`);
+      // Guardar, con doble clic.
+      const n2 = win(f).__red.length;
+      await guardar(f, { dobleClic: true });
+      const w2 = delWorker(f, n2);
+      afirmar(JSON.stringify(w2) === JSON.stringify(['PUT /copias']), `«Guardar» con doble clic = 1 PUT (${w2.join(', ')})`);
+      afirmar(/^Copia guardada/.test(msg(f)) && $(f, '#nube-msg').dataset.tipo === 'ok', `el mensaje de guardada («${msg(f)}»)`);
+      afirmar(aSpotify(f, n2).length === 0, 'guardar: 0 a Spotify');
+      const kv = envDe('b').COPIAS;
+      const claves = [...kv.datos.keys()];
+      afirmar(claves.length === 1 && claves[0].startsWith(`copia/${UID_A}/`), `el KV tiene 1 copia de usuario-a (${claves.join(', ')})`);
+      // Ver.
+      const n3 = win(f).__red.length;
+      $(f, '#nube-ver').click();
+      await esperarReal(() => visible($(f, '#nube-lista')) && $$(f, '#nube-lista .nube-bajar').length, { que: 'B: la lista', vueltas: VUELTAS });
+      const w3 = delWorker(f, n3);
+      afirmar(JSON.stringify(w3) === JSON.stringify(['GET /copias']), `«Ver copias guardadas» = 1 GET (${w3.join(', ')})`);
+      afirmar($$(f, '#nube-lista .nube-copia').length === 1 && !T.TODAVIA.test($(f, '#nube-lista').textContent), 'una copia en la lista, sin el aviso de «todavía no aparece»');
+      afirmar([...$$(f, '#nube-lista p')].some((p) => p.textContent.trim() === T.PARA_CARGAR), `«${T.PARA_CARGAR}» debajo de la lista`);
+      // Bajar.
+      const n4 = win(f).__red.length, d0 = win(f).__descargas.length;
+      $$(f, '#nube-lista .nube-bajar')[0].click();
+      await esperarReal(() => win(f).__descargas.length > d0, { que: 'B: la descarga de «Bajar»', vueltas: VUELTAS });
+      const w4 = delWorker(f, n4);
+      afirmar(w4.length === 1 && w4[0] === `GET /copias/${encodeURIComponent(claves[0].slice(`copia/${UID_A}/`.length))}`, `«Bajar» = 1 GET /copias/<fecha> (${w4.join(', ')})`);
+      const bajada = win(f).__descargas.at(-1);
+      afirmar(/^fonoteca-copia-\d{4}-\d{2}-\d{2}\.json$/.test(bajada.nombre), `el nombre (${bajada.nombre})`);
+      const textoBajado = await anclar(bajada.blob.text(), { vueltas: VUELTAS });
+      // «Exportar todo» del mismo perfil.
+      win(f).__exportarTodo();
+      await esperarReal(() => win(f).__descargas.length > d0 + 1, { que: 'B: la descarga de «Exportar todo»', vueltas: VUELTAS });
+      const textoExport = await anclar(win(f).__descargas.at(-1).blob.text(), { vueltas: VUELTAS });
+      afirmar(sinFecha(textoBajado) === sinFecha(textoExport), `🔴 lo bajado no es «Exportar todo» del mismo perfil (sin _exportedAt): ${textoBajado.length} y ${textoExport.length} caracteres`);
+      afirmar(!textoBajado.includes(localStorage.getItem(`fonoteca_nube_token_v1__${UID_A}`)) && !textoBajado.includes(localStorage.getItem('sp_access_token')), 'lo bajado no lleva ni el token propio ni el de Spotify');
+      afirmar(win(f).__descargas.length === d0 + 2, `solo esas dos descargas (${win(f).__descargas.length - d0})`);
+      datos.B = `conectar: ${w1.join(', ')} + del Worker ${sw.length} GET /v1/me, 0 a Spotify desde el navegador, ${preflights(f, n1) - preflights(f, n2)} preflight · guardar: ${w2.join(', ')} · ver: ${w3.join(', ')} · bajar: ${w4.length} GET, ${bajada.nombre}, ${textoBajado.length.toLocaleString('es-ES')} caracteres = «Exportar todo» sin _exportedAt · preflights en total ${preflights(f, n1)}`;
+    });
+
+    // ── C ─────────────────────────────────────────────────────────────────────
+    await puerta('C', async () => {
+      const f = abrirMarco('c');
+      await arrancado(f);
+      await abrirModal(f);
+      const n0 = win(f).__red.length;
+      await conectar(f, { esperar: 'error' });
+      afirmar(msg(f) === T.PERMITIDOS, `el texto del 403 («${msg(f)}»)`);
+      afirmar(JSON.stringify(delWorker(f, n0)) === JSON.stringify(['POST /sesion']), `1 POST /sesion (${delWorker(f, n0).join(', ')})`);
+      afirmar(!Object.keys(localStorage).some((k) => k.startsWith('fonoteca_nube_token_v1')), `ningún token en localStorage (${Object.keys(lsNube()).join(', ') || '—'})`);
+      afirmar(!visible($(f, '#nube-acciones')) && !/^Conectado/.test(estado(f)), 'ni «Conectado» ni los botones de guardar');
+      datos.C = `«${msg(f)}», 0 tokens en localStorage`;
+    });
+
+    // ── D ─────────────────────────────────────────────────────────────────────
+    await puerta('D', async () => {
+      const f = abrirMarco('d');
+      await arrancado(f);
+      await abrirModal(f);
+      await conectar(f);
+      // El secreto, sembrado en una preferencia que entra en la copia: el token de Spotify de la app.
+      localStorage.setItem(`listened_sort_mode__${UID_A}`, JSON.stringify({ nota: `pegado sin querer: ${localStorage.getItem('sp_access_token')}` }));
+      const n0 = win(f).__red.length;
+      await guardar(f);
+      afirmar(msg(f) === T.SECRETO && $(f, '#nube-msg').dataset.tipo === 'error', `el porqué en pantalla («${msg(f)}»)`);
+      afirmar(delWorker(f, n0).length === 0 && win(f).__red.slice(n0).length === 0, `🔴 0 PUT y ninguna petición (${win(f).__red.slice(n0).map((l) => `${l.donde} ${l.metodo} ${l.ruta}`).join(', ') || '0'})`);
+      afirmar(envDe('d').COPIAS.datos.size === 0, 'el KV sigue vacío');
+      datos.D = `«${msg(f)}», 0 peticiones`;
+    });
+
+    // ── E ─────────────────────────────────────────────────────────────────────
+    await puerta('E', async () => {
+      const vistos = [];
+      for (const modo of ['500', 'rechazo', 'html']) {
+        const nombre = `e-${modo}`;
+        const f = abrirMarco(nombre);
+        await arrancado(f);
+        await abrirModal(f);
+        await conectar(f);
+        fallo[nombre] = modo;
+        const n0 = win(f).__red.length, a0 = win(f).__avisos.length;
+        await guardar(f);
+        afirmar(msg(f) === T.RED && $(f, '#nube-msg').dataset.tipo === 'error', `${modo}: «${T.RED}» («${msg(f)}»)`);
+        // «Copia guardada», no «guardada» a secas: el botón «Ver copias guardadas» la contiene (lo vio la primera corrida).
+        afirmar(!/copia guardada/i.test($(f, '#nube-modal').textContent), `${modo}: nunca «Copia guardada»`);
+        afirmar(delWorker(f, n0).filter((r) => r === 'PUT /copias').length === 1, `${modo}: 1 PUT intentado (${delWorker(f, n0).join(', ')})`);
+        afirmar(win(f).__avisos.slice(a0).some((a) => a.startsWith('[nube]')), `${modo}: el error crudo en console.warn('[nube] …')`);
+        afirmar(!$(f, '#nube-guardar').disabled, `${modo}: el botón vuelve a estar habilitado`);
+        vistos.push(`${modo} → «${msg(f)}»`);
+      }
+      datos.E = vistos.join(' · ');
+    });
+
+    // ── F ─────────────────────────────────────────────────────────────────────
+    await puerta('F', async () => {
+      const f = abrirMarco('f');
+      await arrancado(f);
+      await abrirModal(f);
+      await conectar(f);
+      localStorage.setItem('fonoteca_nube_token_v1', 'token-propio-pelado-inventado-de-antes');
+      const antes = lsNube();
+      afirmar(antes[`fonoteca_nube_token_v1__${UID_A}`] && antes.fonoteca_nube_token_v1 && antes[`fonoteca_nube_url_v1__${UID_A}`], `antes: el token (pelado y prefijado) y la dirección (${Object.keys(antes).join(', ')})`);
+      const boton = $(f, '#logout-btn');
+      afirmar(!!boton, 'está el botón «Cerrar sesión» (#logout-btn)');
+      boton.click();
+      await esperarReal(() => { try { return win(f).__recargado; } catch { return false; } }, { que: 'F: la recarga de «Cerrar sesión»', vueltas: VUELTAS });
+      const despues = lsNube();
+      afirmar(!(`fonoteca_nube_token_v1__${UID_A}` in despues) && !('fonoteca_nube_token_v1' in despues), `🔴 el token propio se fue, pelado y prefijado (${Object.keys(despues).join(', ')})`);
+      afirmar(despues[`fonoteca_nube_url_v1__${UID_A}`] === DIRECCION, 'la dirección quedó');
+      afirmar(!localStorage.getItem('sp_access_token'), 'y la sesión de Spotify, como siempre');
+      datos.F = `antes ${Object.keys(antes).length} claves de la nube, después ${Object.keys(despues).join(', ')}`;
+    });
+
+    // ── G ─────────────────────────────────────────────────────────────────────
+    await puerta('G', async () => {
+      const MEDIDOR = (w) => {
+        const parse = (s) => {
+          s = String(s);
+          let m = s.match(/^color\(srgb\s+([\d.e-]+)\s+([\d.e-]+)\s+([\d.e-]+)(?:\s*\/\s*([\d.e-]+))?\)/);
+          if (m) return [m[1] * 255, m[2] * 255, m[3] * 255, m[4] === undefined ? 1 : +m[4]];
+          m = s.match(/rgba?\(([^)]+)\)/);
+          if (!m) return null;
+          const p = m[1].split(/[\s,/]+/).filter(Boolean).map(Number);
+          return [p[0], p[1], p[2], p.length > 3 ? p[3] : 1];
+        };
+        const lum = (c) => { const f = (v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; }; return 0.2126 * f(c[0]) + 0.7152 * f(c[1]) + 0.0722 * f(c[2]); };
+        const sobre = (a, f) => [a[0] * a[3] + f[0] * (1 - a[3]), a[1] * a[3] + f[1] * (1 - a[3]), a[2] * a[3] + f[2] * (1 - a[3])];
+        const cont = (a, b) => { const x = lum(a), y = lum(b); return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05); };
+        // El fondo: capa por capa hasta una opaca. Si no hay ninguna opaca en la cadena, queda el fondo del documento.
+        const fondo = (e) => {
+          const capas = []; let opacidad = 1, opaco = false;
+          for (let n = e; n && n.nodeType === 1; n = n.parentElement) {
+            const cs = w.getComputedStyle(n);
+            opacidad *= Number(cs.opacity || 1);
+            const c = parse(cs.backgroundColor);
+            if (c && c[3] > 0 && !opaco) { capas.push(c); if (c[3] >= 1) opaco = true; }
+          }
+          let f = opaco ? capas.pop().slice(0, 3) : (parse(w.getComputedStyle(w.document.body).backgroundColor) || [0, 0, 0]).slice(0, 3);
+          while (capas.length) f = sobre(capas.pop(), f);
+          return { f, opacidad };
+        };
+        return (raiz) => {
+          const out = [];
+          for (const e of raiz.querySelectorAll('*')) {
+            if (!e.getClientRects().length) continue;
+            const propio = [...e.childNodes].some((n) => n.nodeType === 3 && n.textContent.trim()) || (e.tagName === 'INPUT' && e.value);
+            if (!propio) continue;
+            const cs = w.getComputedStyle(e);
+            if (cs.visibility === 'hidden' || cs.display === 'none') continue;
+            const { f, opacidad } = fondo(e);
+            const c = parse(cs.color);
+            const r = c ? cont(sobre([c[0], c[1], c[2], c[3] * opacidad], f), f) : 0;
+            out.push({ que: e.tagName.toLowerCase() + (e.id ? '#' + e.id : '') + [...e.classList].map((x) => '.' + x).join(''), r, texto: (e.value || e.textContent).trim().slice(0, 40) });
+          }
+          return out;
+        };
+      };
+      const medidas = [], fallos = [], anchos = [];
+      for (const [ancho, alto] of [[1366, 591], [390, 844]]) {
+        const nombre = `g${ancho}`;
+        const f = abrirMarco(nombre, { ancho, alto });
+        await arrancado(f);
+        await abrirModal(f);
+        const modal = () => $(f, '#nube-modal').closest('.modal');
+        const desborde = (cuando) => {
+          const de = f.contentDocument.documentElement, m = modal();
+          const malos = [...m.querySelectorAll('*')].filter((e) => { const b = e.getBoundingClientRect(); return b.width && (b.left < -0.5 || b.right > win(f).innerWidth + 0.5); });
+          anchos.push(`${ancho} ${cuando}: página ${de.scrollWidth}/${win(f).innerWidth}, modal ${m.scrollWidth}/${m.clientWidth}`);
+          if (de.scrollWidth > win(f).innerWidth) fallos.push(`${ancho} ${cuando}: la página desborda (${de.scrollWidth} > ${win(f).innerWidth})`);
+          if (m.scrollWidth > m.clientWidth) fallos.push(`${ancho} ${cuando}: el modal desborda (${m.scrollWidth} > ${m.clientWidth})`);
+          if (malos.length) fallos.push(`${ancho} ${cuando}: se sale de la pantalla ${malos.map((e) => e.tagName.toLowerCase() + (e.id ? '#' + e.id : '')).join(', ')}`);
+        };
+        const contraste = async (cuando) => {
+          if (ancho !== 1366) return;
+          const medir = MEDIDOR(win(f));
+          for (const tema of ['violeta', 'ambar', 'aguamarina', 'papel']) {
+            await anclar(win(f).__ponerTema(tema), { vueltas: VUELTAS });
+            f.contentDocument.getAnimations().forEach((a) => { try { a.finish(); } catch { /* las infinitas */ } });
+            const ms = medir(modal());
+            const peor = ms.reduce((p, x) => (x.r < p.r ? x : p), { r: Infinity });
+            medidas.push(`${cuando} ${tema} peor ${peor.r.toFixed(2)} (${peor.que})`);
+            for (const x of ms) if (!(x.r >= 4.5)) fallos.push(`${cuando} ${tema}: ${x.que} «${x.texto}» ${x.r.toFixed(2)}:1`);
+          }
+          await anclar(win(f).__ponerTema('violeta'), { vueltas: VUELTAS });
+        };
+        desborde('sin dirección');
+        await contraste('sin dirección');
+        await conectar(f);
+        await guardar(f);
+        $(f, '#nube-ver').click();
+        await esperarReal(() => visible($(f, '#nube-lista')) && $$(f, '#nube-lista .nube-bajar').length, { que: `G ${ancho}: la lista`, vueltas: VUELTAS });
+        desborde('con la lista');
+        await contraste('con la lista');
+        fallo[nombre] = '500';
+        await guardar(f);
+        afirmar($(f, '#nube-msg').dataset.tipo === 'error', `G ${ancho}: el error se ve`);
+        desborde('con un error');
+        await contraste('con un error');
+      }
+      afirmar(fallos.length === 0, fallos.join(' · '));
+      datos.G = `${medidas.join(' · ')} · ${anchos.join(' · ')}`;
+    });
+
+    // ── H ─────────────────────────────────────────────────────────────────────
+    await puerta('H', async () => {
+      const kv = envDe('h').COPIAS;
+      const viejas = [['2026-11-01T10:00:00.000Z', '{"copia":"vieja inventada 1","n":1}'], ['2026-11-02T10:00:00.000Z', '{"copia":"vieja inventada 2","n":2}']];
+      for (const [fecha, texto] of viejas) { const b = await anclar(gzip(texto), { vueltas: VUELTAS }); kv.datos.set(`copia/${UID_A}/${fecha}`, { bytes: b, metadata: { bytes: b.length, fecha } }); }
+      const f = abrirMarco('h');
+      await arrancado(f);
+      await abrirModal(f);
+      await conectar(f);
+      await guardar(f);
+      afirmar(/^Copia guardada/.test(msg(f)), `guardada («${msg(f)}»)`);
+      afirmar(kv.datos.size === 3, `el KV tiene las 3 (${kv.datos.size})`);
+      $(f, '#nube-ver').click();
+      await esperarReal(() => visible($(f, '#nube-lista')) && $$(f, '#nube-lista .nube-bajar').length, { que: 'H: la lista', vueltas: VUELTAS });
+      const filas = $$(f, '#nube-lista .nube-copia').map((li) => li.dataset.fecha);
+      afirmar(JSON.stringify(filas) === JSON.stringify([viejas[1][0], viejas[0][0]]), `la lista trae solo las dos viejas, la más nueva primero (${filas.join(', ')})`);
+      const aviso = $$(f, '#nube-lista p').map((p) => p.textContent.trim()).find((t) => T.TODAVIA.test(t));
+      afirmar(!!aviso, `🔴 dice que la recién guardada todavía no aparece (${$(f, '#nube-lista').textContent.trim().slice(0, 200)})`);
+      const bajadas = [];
+      for (const [fecha, texto] of viejas) {
+        const d0 = win(f).__descargas.length, n0 = win(f).__red.length;
+        $(f, `#nube-lista .nube-copia[data-fecha="${fecha}"] .nube-bajar`).click();
+        await esperarReal(() => win(f).__descargas.length > d0, { que: `H: bajar ${fecha}`, vueltas: VUELTAS });
+        const d = win(f).__descargas.at(-1);
+        const t = await anclar(d.blob.text(), { vueltas: VUELTAS });
+        afirmar(t === texto, `🔴 «Bajar» de ${fecha} bajó otra cosa (${t.slice(0, 60)})`);
+        afirmar(JSON.stringify(delWorker(f, n0)) === JSON.stringify([`GET /copias/${encodeURIComponent(fecha)}`]), `«Bajar» de ${fecha} pidió esa fecha y nada más (${delWorker(f, n0).join(', ')})`);
+        bajadas.push(`${fecha.slice(0, 10)} → ${d.nombre}`);
+      }
+      // La siguiente lectura ya la ve, y el aviso se va.
+      $(f, '#nube-ver').click();
+      await esperarReal(() => $$(f, '#nube-lista .nube-copia').length === 3, { que: 'H: la segunda lista, con las 3', vueltas: VUELTAS });
+      afirmar(!T.TODAVIA.test($(f, '#nube-lista').textContent), 'en la segunda lectura ya aparece y el aviso se fue');
+      datos.H = `aviso «${aviso}» · ${bajadas.join(' · ')} · la segunda lectura trae las 3`;
+    });
+
+    cerrarMarco();
+    const malos = resultados.filter(([, b]) => !b);
+    const errores = sinErrores.filter((e) => !/console\.error: \[nube\]/.test(e));
+    const resumen = `${resultados.map(([l, b, m]) => `${l} ${b ? '✓' : '✗'}${b ? '' : ` (${m})`}`).join(' · ')} · ${Object.entries(datos).map(([l, t]) => `${l}: ${t}`).join(' · ')} · errores en los marcos=${errores.length}${errores.length ? ` (${errores.join(' | ')})` : ''} · al Spotify simulado del Worker=${spotifyDelWorker.length} · externas de la madre=${externasMadre.length} · reloj virtual=${Math.round(performance.now())} ms`;
+    document.documentElement.setAttribute('data-resumen', resumen);
+    if (malos.length || errores.length || externasMadre.length) throw new Error(resumen);
+    document.getElementById('progreso').textContent = resumen;
+    listo(resumen);
+  }
+} catch (e) {
+  document.documentElement.setAttribute('data-resumen', document.documentElement.getAttribute('data-resumen') || `${String(e?.message || e)} · reloj virtual=${Math.round(performance.now())} ms`);
+  fallar(e);
+}
+</script>
+</body></html>

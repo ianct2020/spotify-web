@@ -18,12 +18,18 @@ import { deflateSync } from 'node:zlib';
 import { stat } from 'node:fs/promises';
 import { extname, join, normalize, resolve } from 'node:path';
 
-const ROOT = resolve(import.meta.dirname, '..', 'src');
+// (tanda 123) `RAIZ_SRC` sirve el `src/` de OTRA raíz (p. ej. el de un commit viejo sacado a una carpeta), con los bancos
+// y el Worker de ESTA: así un banco puede contar la versión vieja y la nueva en la misma corrida, cada una en su origen.
+const ROOT = process.env.RAIZ_SRC ? resolve(process.env.RAIZ_SRC) : resolve(import.meta.dirname, '..', 'src');
 // Los bancos visuales viven FUERA de `src/` a propósito: `build.sh` hace
 // `cp -r src/*`, así que cualquier banco dentro de `src/` se publicaría en
 // `docs/` y acabaría en producción. Se montan acá, en dev y nada más.
 const BANCOS = resolve(import.meta.dirname, '..', 'tests', 'banco');
 const PREFIJO_BANCO = '/banco/';
+// (tanda 123) El Worker de Cloudflare (`worker/`, fuera de `src/`: no va a Pages) se monta en `/worker/` para que el
+// banco `nube` lo importe y lo corra de verdad dentro de la página. En dev y nada más, como los bancos.
+const WORKER = resolve(import.meta.dirname, '..', 'worker');
+const PREFIJO_WORKER = '/worker/';
 const PORT = Number(process.env.PORT) || 5500;
 const HOST = process.env.HOST || '127.0.0.1';
 
@@ -48,10 +54,13 @@ function rutaSegura(urlPath) {
   // `/banco/…` sale de `tests/banco/`; todo lo demás, de `src/`. Los bancos
   // importan `/js/…` y `/css/…` con ruta absoluta y siguen cayendo en `src/`,
   // que es lo que los hace probar el código REAL y no una copia.
-  const base = limpio.startsWith(PREFIJO_BANCO) ? BANCOS : ROOT;
-  const resto = limpio.startsWith(PREFIJO_BANCO) ? limpio.slice(PREFIJO_BANCO.length) : limpio;
+  const prefijo = limpio.startsWith(PREFIJO_BANCO) ? PREFIJO_BANCO : limpio.startsWith(PREFIJO_WORKER) ? PREFIJO_WORKER : null;
+  const base = prefijo === PREFIJO_BANCO ? BANCOS : prefijo === PREFIJO_WORKER ? WORKER : ROOT;
+  const resto = prefijo ? limpio.slice(prefijo.length) : limpio;
+  // Del Worker, solo los `.js`: `wrangler.jsonc` (con el id del KV de Ian) y `.dev.vars` (secretos) no se sirven nunca.
+  if (prefijo === PREFIJO_WORKER && !/^[\w.-]+\.js$/.test(resto)) return null;
   const destino = join(base, resto);
-  // Nada fuera de las dos raíces, ni con ../ ni con symlinks raros en la URL.
+  // Nada fuera de las tres raíces, ni con ../ ni con symlinks raros en la URL.
   return destino.startsWith(base) ? destino : null;
 }
 
@@ -104,7 +113,7 @@ createServer(async (req, res) => {
   }
 
   let destino = rutaSegura(req.url || '/');
-  if (!destino) return enviar(403, 'Fuera de src/ y de tests/banco/');
+  if (!destino) return enviar(403, 'Fuera de src/, de tests/banco/ y de los .js de worker/');
 
   try {
     let info = await stat(destino).catch(() => null);

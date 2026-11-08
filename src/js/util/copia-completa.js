@@ -24,7 +24,7 @@ import { crearAlmacenGeneros, prefijoGeneros, PREFIJO_GENEROS, CLAVE_MIGRADO } f
 import { LIKES_DE_OTRO_KEY, hayLikesDeOtro } from './likes-de-otro.js';
 
 export const COPIA_VERSION = 3;
-export const CENSO_VERSION = '2026-10-22';
+export const CENSO_VERSION = '2026-11-06';   // (tanda 123) + el token propio y la dirección del Worker de la nube
 export const LIKES_CLAVE = 'all_liked_tracks';
 export const LIKES_LEGADO_LS = 'spc_all_liked_tracks';
 export const ULTIMO_USUARIO = 'fonoteca_last_user_id';
@@ -80,6 +80,9 @@ export const CENSO = [
   e('ls', 'sp_token_expiry', 5, false, 'auth.js:151', 'cuándo vence el token'),
   e('ls', 'sp_code_verifier', 5, false, 'auth.js:49', 'el code_verifier del login (PKCE)'),
   e('ls', 'lastfm_api_key', 5, false, 'api/lastfm.js:41', 'la API key de Last.fm que el usuario escribió en el ⚙', { porUsuario: 'pref' }),
+  // (tanda 123) El token propio del Worker de la copia en la nube: un secreto. No entra nunca, y por ser clase 5
+  // `contieneSecreto` busca su valor en el texto sin tocar esa función.
+  e('ls', 'fonoteca_nube_token_v1', 5, false, 'api/nube.js (conectarNube)', 'el token propio del Worker de la copia en la nube', { porUsuario: 'pref' }),
 
   // ── IndexedDB ────────────────────────────────────────────────────────────────────────────────
   // Los me gusta van en `likes` (como en el v2), no en `navegador`: la excepción de la clase 4.
@@ -176,6 +179,8 @@ export const CENSO = [
     ['skips_close_ok', 'features/skips.js:633', 'un arreglo activado en #skips'],
   ].map(([k, quien, que]) => e('ls', k, 'preferencia', true, quien, que, { porUsuario: 'pref', fusion: TUYA })),
   e('ls', 'versions_dry_run', 'preferencia', true, '(se pone a mano; versions.js:79 solo la lee)', 'el modo ensayo de #versions', { fusion: TUYA }),
+  // (tanda 123) La dirección del Worker de la copia en la nube: una preferencia, entra (sin el token no sirve para nada).
+  e('ls', 'fonoteca_nube_url_v1', 'preferencia', true, 'api/nube.js (conectarNube)', 'la dirección de tu Worker de Cloudflare (la copia en la nube)', { porUsuario: 'pref', fusion: TUYA }),
 
   // ── localStorage: registros ──────────────────────────────────────────────────────────────────
   e('ls', 'discoverart_fallos', 'registro', true, 'util/escaneo-fallos.js:39', 'los escaneos que fallaron en Descubrir, con el día', { porUsuario: 'pref', fusion: TUYA }),

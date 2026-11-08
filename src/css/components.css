@@ -2248,3 +2248,36 @@ body.con-aviso-copia { padding-top: 46px; }
 .ac-col-tracks .ac-track-play:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 1px; }
 .ac-col-tracks .ac-track-play[data-sonando="1"] { color: var(--color-text); border-color: var(--color-accent); }
 .ac-col-tracks .ac-track-play:disabled { cursor: default; border-style: dashed; }
+
+/* ── «Nube…» del ⚙ del Dashboard (tanda 123): la copia en un Worker de Cloudflare ──────────────────────────────────
+   El modal es el `alertModal` de siempre con `.modal-nube`. Todo con DOS clases (o un id): esta hoja carga ANTES que
+   `main.css`, y `.modal p` / `.modal-alert-body p` de allá le ganarían a una regla de una clase.
+   Los textos van en `--color-text` o `--color-text-secondary` (nunca el atenuado, nunca un color de estado como texto):
+   el estado de un mensaje se marca con el borde. Dentro del modal, el botón «Cerrar» lleva el aspecto del secundario y el
+   ícono `--color-text`: el blanco sobre el acento no llega a 4,5:1 en Ámbar ni en Aguamarina (v=290), y el acento sobre
+   su tinte tampoco en Violeta. Lo mide el banco `nube` (puerta G). */
+.modal-nube [hidden] { display: none !important; }
+/* Tres clases: `.modal-alert-info .modal-alert-icon` de `main.css` tiene dos y carga después (con dos, el ícono quedaba en
+   el acento: 2,81:1 en Violeta, visto en el banco). */
+.modal-nube .modal-alert-head .modal-alert-icon { color: var(--color-text); }
+.modal-nube #modal-confirm { background: var(--color-surface); color: var(--color-text); border: 1px solid var(--color-border); }
+.modal-nube #modal-confirm:hover { background: var(--color-surface-hover); border-color: var(--color-accent); box-shadow: none; }
+.modal-nube .nube { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.modal-nube .nube-etiqueta { color: var(--color-text-secondary); font-size: 13px; font-weight: 600; }
+.modal-nube .nube-fila { display: flex; flex-wrap: wrap; gap: 8px; align-items: stretch; min-width: 0; }
+.modal-nube .nube-fila .nube-url { flex: 1 1 220px; width: auto; min-width: 0; }
+.modal-nube .nube-acciones { display: flex; flex-wrap: wrap; gap: 8px; }
+.modal-nube .nube-estado,
+.modal-nube .nube-msg,
+.modal-nube .nube-aviso { margin: 0; color: var(--color-text); font-size: 14px; line-height: 1.45; overflow-wrap: anywhere; }
+.modal-nube .nube-msg[data-tipo] { padding-left: 10px; border-left: 3px solid var(--color-border); }
+.modal-nube .nube-msg[data-tipo="ok"] { border-left-color: var(--color-accent); }
+.modal-nube .nube-msg[data-tipo="error"] { border-left-color: var(--color-error); }
+.modal-nube .nube-lista { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.modal-nube .nube-copias { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.modal-nube .nube-copias .nube-copia { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; margin: 0; padding: 8px 0; border-top: 1px solid var(--color-border); }
+.modal-nube .nube-copia .nube-copia-fecha { flex: 1 1 auto; min-width: 0; color: var(--color-text); }
+.modal-nube .nube-copia .nube-copia-tam { color: var(--color-text-secondary); font-variant-numeric: tabular-nums; }
+.modal-nube .nube-para-cargar,
+.modal-nube .nube-vacia,
+.modal-nube .nube-nota { margin: 0; color: var(--color-text-secondary); font-size: 13px; line-height: 1.45; }

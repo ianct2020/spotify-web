@@ -48,7 +48,7 @@ if npm test --silent 2>&1 | tail -4 | sed 's/^/      /'; [ "${PIPESTATUS[0]}" -e
 # `mosaico` y `toasts` entraron en v=273:
 # estaban en rojo desde antes del 04/10 y justamente por no estar acá nadie los
 # miraba, igual que le había pasado a `barra` entre v=241 y v=261.
-echo "2b. bancos (barra · pausa-search · toasts · mosaico · novedades · escrituras · ocultar-artista ×3 · covers-orden · calendario · import-guarda · ocultos-cache · mapa · puertas · cuota · letras · generos-cache · generos-escaneo · generos · mapa-artistas · versiones-deluxe · router-teardown · guard-ruta-vieja · postal · copia-completa · copia-importar · menos-salteas · rehacer-me-gusta · debug-ocultos-ancho · lluvia · siempre-y-play · listened-biblioteca)"
+echo "2b. bancos (barra · pausa-search · toasts · mosaico · novedades · escrituras · ocultar-artista ×3 · covers-orden · calendario · import-guarda · ocultos-cache · mapa · puertas · cuota · letras · generos-cache · generos-escaneo · generos · mapa-artistas · versiones-deluxe · router-teardown · guard-ruta-vieja · postal · copia-completa · copia-importar · menos-salteas · rehacer-me-gusta · debug-ocultos-ancho · lluvia · siempre-y-play · listened-biblioteca · nube)"
 # Los dos de `ocultar-artista` entraron en v=276: las TRES vistas que ocultan
 # artistas, reales, contra una Spotify simulada. Es el único sitio donde se puede
 # probar ocultar sin escribir en la cuenta de Ian, y el de `-disco` es el que
@@ -176,7 +176,13 @@ echo "2b. bancos (barra · pausa-search · toasts · mosaico · novedades · esc
 # `listened-biblioteca` entró en v=363 (tanda 122): el chip «Solo los de tu biblioteca» de #listened, en la app ENTERA con la Spotify simulada
 # y datos INVENTADOS: abrir no pide /me/albums; apretar, 3 páginas y los 9 por id; búsqueda; 500, rechazo y 200 con HTML sin ningún «0»; salir
 # a mitad; el contraste en los cuatro presets; sin desborde a 1366×591 y 390×844.
-for B in barra pausa-search toasts mosaico novedades escrituras ocultar-artista ocultar-artista-disco ocultar-artista-novedades covers-orden calendario import-guarda ocultos-cache mapa puertas cuota letras generos-cache generos-escaneo generos mapa-artistas versiones-deluxe router-teardown guard-ruta-vieja postal copia-completa copia-importar menos-salteas rehacer-me-gusta debug-ocultos-ancho lluvia siempre-y-play listened-biblioteca; do
+# `nube` entró en la tanda 123 (rama t123-nube, sin publicar): «Nube…» del ⚙ de #dashboard, en la app ENTERA con la Spotify
+# simulada y el perfil INVENTADO de `copia-completa`, contra el Worker REAL (`worker/index.js`) corriendo DENTRO del banco con
+# un KV doblado: abrir el modal sin dirección = 0 peticiones (contra la versión vieja, con `BASE_SRC`); conectar = 1 POST
+# /sesion + 1 GET /v1/me del Worker; guardar (doble clic) = 1 PUT; ver y bajar = 1 GET cada uno, y lo bajado = «Exportar todo»;
+# 403, secreto (0 PUT), 500/rechazo/HTML (nunca «guardada»), «Cerrar sesión» (el token se va, la dirección queda), contraste en
+# los cuatro presets y sin desborde a 1366×591 y 390×844, y la lista de KV atrasada. Con preflight y CORS como el navegador.
+for B in barra pausa-search toasts mosaico novedades escrituras ocultar-artista ocultar-artista-disco ocultar-artista-novedades covers-orden calendario import-guarda ocultos-cache mapa puertas cuota letras generos-cache generos-escaneo generos mapa-artistas versiones-deluxe router-teardown guard-ruta-vieja postal copia-completa copia-importar menos-salteas rehacer-me-gusta debug-ocultos-ancho lluvia siempre-y-play listened-biblioteca nube; do
   if node scripts/correr-banco.mjs "$B" 2>&1 | sed 's/^/      /'; [ "${PIPESTATUS[0]}" -eq 0 ]; then
     ok "banco $B en verde"
   else

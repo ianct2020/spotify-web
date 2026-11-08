@@ -1,3 +1,6 @@
+import { prefKey } from './storage.js';
+import { NUBE_TOKEN_KEY } from './util/nube.js';
+
 const AUTH = {
   CLIENT_ID: '0c8c92ad128e4b89be7097c6b8082797',
   SCOPES: [
@@ -183,6 +186,10 @@ function logout() {
   localStorage.removeItem(AUTH.REFRESH_KEY);
   localStorage.removeItem(AUTH.EXPIRY_KEY);
   localStorage.removeItem(AUTH.VERIFIER_KEY);
+  // (tanda 123) El token propio del Worker de la copia en la nube (`api/nube.js`): el de esta cuenta y el pelado. La
+  // dirección del Worker se queda (no sirve para entrar), y el de OTRA cuenta de este navegador también (es de esa cuenta).
+  localStorage.removeItem(prefKey(NUBE_TOKEN_KEY));
+  localStorage.removeItem(NUBE_TOKEN_KEY);
   window.location.hash = '';
   window.location.reload();
 }

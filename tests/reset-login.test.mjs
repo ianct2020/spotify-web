@@ -14,6 +14,10 @@
 // El botón de verdad: la plantilla y el código que lo conecta salen del FUENTE de `app.js` (el `catch` de la pantalla
 // «Error al conectar»), con un DOM de mentira que hace lo que hace el navegador con un `onclick="…"` en línea (lo corre
 // en el ámbito GLOBAL, donde no hay `import`), un `localStorage` de mentira y el `logout()` REAL. Todo INVENTADO.
+//
+// (tanda 123) La copia en la nube: `logout()` borra además el token propio del Worker, `fonoteca_nube_token_v1` (el de
+// `prefKey()` y el pelado): SEIS claves. La dirección del Worker, `fonoteca_nube_url_v1`, se queda, y el token de OTRA
+// cuenta de este navegador (`…__<otro uid>`) también: es de esa cuenta. Contra el commit de la 122, rojo (la sexta sigue).
 
 import { readFileSync, readdirSync } from 'node:fs';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -169,12 +173,17 @@ const authSrc = readFileSync(join(raiz, 'src/js/auth.js'), 'utf8');
 const CLAVES_LOGIN = [...new Set([...authSrc.matchAll(/\b[A-Z]+_KEY:\s*'([^']+)'/g)].map((m) => m[1]).concat('sp_granted_scopes'))];
 // Cada clave de c), pelada y con `prefKey()` (todas son `porUsuario: 'pref'`), con un valor inventado distinto.
 const SOBREVIVEN = CLASE1_LS.flatMap((c) => (c.porUsuario === 'pref' ? [c.clave, `${c.clave}__${UID}`] : [c.clave]));
-const DE_MAS = ['fonoteca_theme_v1__' + UID, 'fonoteca_hidden_pl_wthree_hidden_albums__' + UID, 'ocultos_sin_uri_v1', 'ocultos_sin_uri_v1__' + UID];
+// (tanda 123) La dirección del Worker (pelada y prefijada) y el token propio de OTRA cuenta se quedan.
+const DE_MAS = ['fonoteca_theme_v1__' + UID, 'fonoteca_hidden_pl_wthree_hidden_albums__' + UID, 'ocultos_sin_uri_v1', 'ocultos_sin_uri_v1__' + UID,
+  'fonoteca_nube_url_v1', 'fonoteca_nube_url_v1__' + UID, 'fonoteca_nube_token_v1__' + UID_ANTERIOR];
+// (tanda 123) La sexta: el token propio del Worker, el de `prefKey()` (con el uid de ahora) y el pelado.
+const CLAVES_NUBE = ['fonoteca_nube_token_v1', 'fonoteca_nube_token_v1__' + UID];
 function sembrar() {
   lsMapa.clear();
   recargas = 0;
   globalThis.location.hash = '#home';
   for (const k of CLAVES_LOGIN) lsMapa.set(k, `t105-login-inventado-${k}`);
+  for (const k of CLAVES_NUBE) lsMapa.set(k, `t123-token-propio-inventado.${k}`);
   lsMapa.set('fonoteca_last_user_id', UID);
   lsMapa.set('fonoteca_likes_de_otro_v1', UID_ANTERIOR);
   SOBREVIVEN.forEach((k, i) => lsMapa.set(k, JSON.stringify([`t105-valor-inventado-${i}`, k])));
@@ -184,6 +193,10 @@ function sembrar() {
 function afirmarConservado(antes, quien) {
   ok(CLAVES_LOGIN.length === 5, `${quien}: las cinco del login salen de auth.js (${CLAVES_LOGIN.join(', ')})`);
   for (const k of CLAVES_LOGIN) ok(!lsMapa.has(k), `${quien}: la del login «${k}» no está`);
+  for (const k of CLAVES_NUBE) ok(!lsMapa.has(k), `🔴 ${quien}: la sexta, el token propio del Worker «${k}», no está`);
+  const borradas = [...antes.keys()].filter((k) => !lsMapa.has(k));
+  ok(borradas.length === CLAVES_LOGIN.length + CLAVES_NUBE.length, `${quien}: se borraron exactamente las seis (cinco del login + el token propio, pelado y prefijado: ${borradas.length} claves → ${borradas.join(', ')})`);
+  ok(lsMapa.size === antes.size - borradas.length && [...antes].filter(([k]) => lsMapa.has(k)).every(([k, v]) => lsMapa.get(k) === v), `${quien}: todo lo demás sigue, byte a byte (${lsMapa.size} claves)`);
   const fallan = [];
   for (const k of SOBREVIVEN) {
     const sigue = lsMapa.get(k) === antes.get(k);

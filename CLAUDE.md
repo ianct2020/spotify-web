@@ -6138,3 +6138,69 @@ módulos; la copia rota no se commitea), el oráculo da rojo: 44 (chico) y 1.629
 son tiempo de pared**: cada vuelta de `esperarReal` suma sus 8 ms de `setTimeout` adelantados; con el destino lleno dan
 26.430 + 21.034 ms. Para el tiempo, `PARED_MS=400000`: Chrome sin reloj virtual y el corredor pregunta por DevTools
 (`--remote-debugging-pipe`) si el banco terminó.
+
+## ☁️ La copia en la nube (rama t123-nube, sin publicar)
+
+La tanda 123 (S1 del plan `fonoteca-migracion/investigaciones/SINCRONIZACION-CLOUDFLARE-2026-11-06.md`): una copia de
+seguridad en un Worker de Cloudflare del usuario, con su almacén KV. **Se sube con un botón y se baja como archivo. No
+sincroniza nada ni importa nada solo** (la unión de tres vías, la base, bajar al arrancar y subir solo son S2-S4).
+⚠️ **Nada de esto está desplegado ni publicado**: el Worker lo despliega Ian con `worker/LEEME.md` (la guía con el porqué,
+en `fonoteca-migracion/investigaciones/DESPLEGAR-WORKER-NUBE.md`), y la rama la publica una tanda posterior.
+
+**El Worker** (`worker/index.js`, fuera de `src/`: `build.sh` no lo lleva a `docs/`; sin dependencias). El entorno:
+`COPIAS` (el KV), `FIRMA` y `PERMITIDOS` (secretos), `ORIGENES` (variable). Sin `FIRMA` o `PERMITIDOS`, 500
+`falta-configuracion` en todo menos el preflight. Las rutas:
+
+| ruta | qué hace |
+|---|---|
+| `OPTIONS *` | 204 con CORS si el `Origin` está en `ORIGENES` (exacto); si no, 403 sin cabeceras CORS. `Vary: Origin` siempre |
+| `POST /sesion` | token de Spotify → UNA `GET /v1/me`: 401 → 401 `spotify-rechazo`; fuera de `PERMITIDOS` → 403 `no-permitido`; 429, 5xx, otra cosa o corte → 502 `spotify-no-contesta`; si vale, `{ token, uid, vence }` |
+| `PUT /copias` | token propio; el gzip tal cual (no lo abre); > 24 MiB → 413; no gzip → 400; `copia/<uid>/<fecha ISO>` con `{ bytes, fecha }`; poda a 5 |
+| `GET /copias` | `[{ fecha, bytes }]`, la más nueva primero |
+| `GET /copias/<fecha>` | los bytes, `application/gzip`; 404 si no está |
+
+- **El token propio**: `base64url(JSON {uid, vence, v: 1}).base64url(HMAC-SHA256(FIRMA, …))`, 30 días, verificado con
+  `crypto.subtle.verify`. El uid de cada ruta sale SOLO del token. 🔴 El token de Spotify no se guarda ni se loguea (el
+  `catch` loguea la ruta y `e.name`, nunca el mensaje).
+- **KV es eventualmente consistente**: cada copia es una clave NUEVA y ninguna se pisa (dos `PUT` en el mismo milisegundo
+  van a `+1 ms`). La poda borra solo las más viejas de lo que LISTA y nunca la recién escrita: con la lista atrasada quedan 6
+  un rato. Lo peor de ese minuto: que la lista no la traiga todavía o que bajarla dé 404, y la app lo dice.
+
+**El cliente**: `util/nube.js` (PURO, sin imports: validar la dirección —`https:`, `….workers.dev`, sin ruta, query ni `#`—,
+leer el token propio SIN verificarlo, los textos y el nombre del archivo) y `api/nube.js` (`conectarNube`,
+`guardarCopiaEnNube`, `listarCopiasDeNube`, `bajarCopiaDeNube`, `leerConexion`). El modal es el `alertModal` con
+`.modal-nube`, desde el ítem «Nube…» del ⚙ del Dashboard (debajo de «Importar todo»).
+- **Lo que se sube es `exportarCopiaCompleta()`**, no otra copia. 🔴 Si `secretos` o `contieneSecreto` dan algo, no hay
+  NINGÚN `fetch`. Si el gzip pasa de 24 MiB, tampoco. Dos «Guardar» = un `PUT`. «Bajar» descarga
+  `fonoteca-copia-<AAAA-MM-DD>.json` y NO importa: para cargarla, «Importar todo».
+- **Las dos claves nuevas del `CENSO`** (`CENSO_VERSION` `'2026-11-06'`), las dos con `prefKey()`:
+  `fonoteca_nube_url_v1` (preferencia, entra, «la tuya gana») y `fonoteca_nube_token_v1` (clase 5, no entra:
+  `contieneSecreto` busca su valor sin que se haya tocado esa función). Ninguna otra escritura local.
+- **`logout()`** borra además `fonoteca_nube_token_v1` (la de `prefKey()` y la pelada): seis claves. La dirección queda, y el
+  token de OTRA cuenta del navegador también. Lo vigila `tests/reset-login.test.mjs`.
+- El token propio vale solo con el uid de ahora (`fonoteca_last_user_id` al abrir el modal, `getCurrentUserId()` memoizado
+  antes de cada petición); si no, se borra. Un 401 del Worker, igual.
+- Los errores, sin silencio: «No se ha podido hablar con tu Worker.» (red, 500, 200 que no es JSON) con el crudo a
+  `console.warn('[nube] …')`; 403, «… (PERMITIDOS).»; 401, «… ha caducado: vuelve a conectar.»; 413, lo que pesa. Nunca
+  «guardada» sin un 200 con JSON. La fecha del último `PUT` se recuerda EN MEMORIA: si la lista no la trae, «La que acabas de
+  guardar (…) todavía no aparece: puede tardar un minuto.».
+- ⚠️ En `.modal-nube`, el «Cerrar» del `alertModal` va con el aspecto del secundario y el ícono con `--color-text`: el
+  `.btn-primary` (blanco sobre el acento) no llega a 4,5:1 en Ámbar ni en Aguamarina, y el acento sobre su tinte tampoco en
+  Violeta. La regla general NO se tocó.
+
+**Costos**: abrir el Dashboard, igual que antes (y abrir el modal, 0, con o sin dirección guardada: `render()` no llama a
+nada de `api/nube.js`). «Conectar» = 1 `POST` al Worker + 1 `GET /v1/me` del Worker a Spotify (cuenta en la cuota de la
+app). «Guardar» = 1 `PUT`. «Ver copias» y «Bajar» = 1 `GET` cada uno. **0 a Spotify desde el navegador** (con el Dashboard
+abierto, `getCurrentUserId()` ya está memoizado). El navegador además hace el preflight `OPTIONS` de cada una (lo cachea
+600 s según `Max-Age`; cuánto lo cachea Chrome de verdad, no medido).
+
+**No medido** (solo se puede ver desplegado): que el `PUT` de una copia de varios MB entre en los 10 ms de CPU del plan
+gratis; cuánto tarda en aparecer en la lista una copia recién guardada (KV no da garantía escrita para `list`); si los logs
+de la plataforma guardan las cabeceras de la petición; si `wrangler` acepta la `compatibility_date` del ejemplo.
+
+Guardas: `tests/nube-worker.test.mjs` (el Worker REAL en Node con el KV y Spotify doblados), `tests/nube-cliente.test.mjs`
+(los módulos REALES con `fetch` doblado), `tests/reset-login.test.mjs` y el banco `tests/banco/nube.html` (en `prepush`: la
+app ENTERA contra el Worker REAL corriendo dentro del banco, con el preflight y el CORS como el navegador; el dev-server
+monta `/worker/` —solo los `.js`—; con `BASE_SRC=<src viejo>`, `correr-banco.mjs` levanta un segundo origen y la puerta A
+cuenta las dos versiones en la misma corrida). La siembra del banco `copia-completa` vive desde la 123 en
+`tests/banco/copia-completa-datos.mjs`, que reusan los dos.
