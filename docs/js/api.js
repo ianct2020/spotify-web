@@ -1,18 +1,18 @@
-import { getValidToken, refreshAccessToken } from './auth.js?v=363';
-import { cacheGet, cacheGetRaw, cacheGetTimestamp, cacheSet, cacheClear, prefKey, migratePrefKey } from './storage.js?v=363';
-import { idbDel, idbDelByPrefix, idbGetCached, idbGetCachedRaw, idbGetTimestamp, idbSetCached, idbGet, idbAllKeys, idbEntriesByPrefix, idbSetVarios } from './idb.js?v=363';
-import { OWNER_KEY_LIST } from './history-keys.js?v=363';
-import { OCULTOS_ITEMS_PREFIX } from './util/ocultos-items-clave.js?v=363';
-import { showToast } from './ui/toast.js?v=363';
-import { artistIsSame, limpiaParaQuery } from './util/track-match.js?v=363';
-import { contadorCuota, cuotaDeEndpoint } from './util/cuota.js?v=363';
-import { exportarEtiquetas, importarEtiquetas } from './api/lastfm.js?v=363';
-import { leerNavegador, armarCopia, serializar, contieneSecreto, CENSO } from './util/copia-completa.js?v=363';
-import { leerCopia, planDeImport, segundaRed, importEscribio, TEXTOS as TEXTOS_IMPORT } from './util/copia-importar.js?v=363';
-import { MARCA_DESDE_COPIA, leerMarca, marcaTrasImport } from './util/ocultos-desde-copia.js?v=363';
-import { avisarCopiaImportada } from './util/canal-copia.js?v=363';
-import { BORRADOS_LOG_MAX } from './util/topes-registros.js?v=363';
-import { LIKES_DE_OTRO_KEY, hayLikesDeOtro } from './util/likes-de-otro.js?v=363';
+import { getValidToken, refreshAccessToken } from './auth.js?v=364';
+import { cacheGet, cacheGetRaw, cacheGetTimestamp, cacheSet, cacheClear, prefKey, migratePrefKey } from './storage.js?v=364';
+import { idbDel, idbDelByPrefix, idbGetCached, idbGetCachedRaw, idbGetTimestamp, idbSetCached, idbGet, idbAllKeys, idbEntriesByPrefix, idbSetVarios } from './idb.js?v=364';
+import { OWNER_KEY_LIST } from './history-keys.js?v=364';
+import { OCULTOS_ITEMS_PREFIX } from './util/ocultos-items-clave.js?v=364';
+import { showToast } from './ui/toast.js?v=364';
+import { artistIsSame, limpiaParaQuery } from './util/track-match.js?v=364';
+import { contadorCuota, cuotaDeEndpoint } from './util/cuota.js?v=364';
+import { exportarEtiquetas, importarEtiquetas } from './api/lastfm.js?v=364';
+import { leerNavegador, armarCopia, serializar, contieneSecreto, CENSO } from './util/copia-completa.js?v=364';
+import { leerCopia, planDeImport, segundaRed, importEscribio, TEXTOS as TEXTOS_IMPORT } from './util/copia-importar.js?v=364';
+import { MARCA_DESDE_COPIA, leerMarca, marcaTrasImport } from './util/ocultos-desde-copia.js?v=364';
+import { avisarCopiaImportada } from './util/canal-copia.js?v=364';
+import { BORRADOS_LOG_MAX } from './util/topes-registros.js?v=364';
+import { LIKES_DE_OTRO_KEY, hayLikesDeOtro } from './util/likes-de-otro.js?v=364';
 
 const BASE = 'https://api.spotify.com/v1';
 const MIN_RETRY_WAIT = 5000;
@@ -1005,7 +1005,7 @@ async function importarCopiaCompleta(texto, { ahora = new Date() } = {}) {
     plan.rechazo = { motivo: 'roto', texto: `El archivo no es un JSON válido (${e?.message || e}).` };
     return { plan };
   }
-  const { motivoSinImportCompleto } = await import('./features/history-data.js?v=363');
+  const { motivoSinImportCompleto } = await import('./features/history-data.js?v=364');
   const motivoOwner = await motivoSinImportCompleto();
   const uid = motivoOwner === 'identidad' ? null : _cachedUserId;
   const leido = await leerParaImportar();
@@ -1479,8 +1479,10 @@ async function revisarCambioDeUsuario(id) {
       // sesión anterior a la actualización.
       idbDelByPrefix('statsfm_top_lifetime_v1').catch(() => {});
       // (v=363) Los álbumes guardados: la clave no lleva el usuario, y desde el chip de `#listened` filtrarían tu lista con la biblioteca
-      // de la otra cuenta durante sus 60 min de caché. No se espera, como los de arriba.
+      // de la otra cuenta durante sus 60 min de caché. No se espera, como los de arriba. (v=364) Las dos claves: la de hoy y la `v1`
+      // que pudo dejar una versión anterior.
       idbDel(SAVED_ALBUMS_KEY).catch(() => {});
+      idbDel(SAVED_ALBUMS_KEY_VIEJA).catch(() => {});
     } catch { /* ignora si no hay localStorage */ }
   }
   try { localStorage.setItem(LAST_USER_KEY, id); } catch { /* ignora si no hay localStorage */ }
@@ -1848,7 +1850,17 @@ async function removeAlbumsFromLibrary(albumIds) {
  * Devuelve los items crudos (`{ added_at, album }`). Cache de 60 min: lo usa el
  * filtro de descubrimiento en cada repintado y no tiene sentido repreguntarlo.
  */
-const SAVED_ALBUMS_KEY = 'saved_albums_v1';
+// 🔴 (v=364) **Devuelve la biblioteca ENTERA o TIRA. Nunca un vacío ni una mitad que no son la verdad.** Hasta v=363 hacía
+// `r?.items || []`: con un 200 que no es JSON, un 204 o un cuerpo vacío `spotifyFetch` da `null` (es su contrato con el resto de la
+// app), el bucle se cortaba SIN error y lo juntado —`[]` si la rota era la primera página, una mitad si era otra— se guardaba 60
+// minutos. Arriba no se podía distinguir «no tienes álbumes guardados» de «no se pudo leer». Ahora una página que no es un objeto
+// con `items` como array tira, y la caché se escribe solo si se leyeron todas.
+//
+// La clave es `saved_albums_v2`: una `v1` escrita por la versión anterior puede ser un `[]` falso todavía vigente, y con la clave
+// vieja se leería como una biblioteca vacía de verdad. La constante de la clave vieja queda solo para borrarla al cambiar de usuario.
+const SAVED_ALBUMS_KEY = 'saved_albums_v2';
+const SAVED_ALBUMS_KEY_VIEJA = 'saved_albums_v1';
+const SAVED_ALBUMS_MAX_PAGINAS = 40;
 async function getSavedAlbums({ force = false } = {}) {
   if (!force) {
     const cached = await idbGetCached(SAVED_ALBUMS_KEY);
@@ -1857,11 +1869,16 @@ async function getSavedAlbums({ force = false } = {}) {
   const items = [];
   let url = '/me/albums?limit=50';
   // Tope de páginas por las dudas: 40 × 50 = 2.000 álbumes guardados.
-  for (let i = 0; i < 40 && url; i++) {
+  for (let i = 0; i < SAVED_ALBUMS_MAX_PAGINAS && url; i++) {
     const r = await spotifyFetch(url);
-    items.push(...(r?.items || []));
-    url = r?.next ? r.next.replace('https://api.spotify.com/v1', '') : null;
+    if (!r || typeof r !== 'object' || !Array.isArray(r.items)) {
+      throw new Error(`La biblioteca de Spotify devolvió una respuesta que no se puede leer (página ${i + 1}).`);
+    }
+    items.push(...r.items);
+    url = r.next ? r.next.replace('https://api.spotify.com/v1', '') : null;
   }
+  // Si quedó `next` es que se llegó al tope: se guarda igual que siempre, pero se dice (el tope no se arregla acá).
+  if (url) console.warn('[biblioteca] la lectura de álbumes guardados se cortó en 2.000 (40 páginas): puede haber más en tu biblioteca.');
   try { await idbSetCached(SAVED_ALBUMS_KEY, items, 60); } catch { /* ignora */ }
   return items;
 }

@@ -1771,3 +1771,27 @@ export function wireFiltroChips(root, estado, onChange) {
     onChange(k, estado);
   });
 }
+
+/**
+ * (v=364) La línea que dice que «Fuera los de tu biblioteca» no está descartando nada porque la biblioteca no se pudo leer
+ * (`ctx.bibliotecaFallo`, de `buildFilterContext()`). Solo con ese chip ENCENDIDO: apagado no descarta nada de todos modos.
+ *
+ * Una sola función para las dos vistas, que la llaman desde su `refreshList()`. La línea nace y muere acá, justo debajo de
+ * `#disco-filtros`: cuando no hace falta no queda ningún nodo (el DOM de la vista sana es el de siempre). Clase propia
+ * (`.disco-filtros-aviso-biblioteca`, en `components.css`), sin reusar `.disco-aviso` (la regla de `.wt-play-btn`, v=219).
+ */
+export const AVISO_BIBLIOTECA_FILTROS = 'No se ha podido leer tu biblioteca de Spotify: «Fuera los de tu biblioteca» no está descartando nada.';
+export function pintarAvisoBibliotecaFiltros(ctx, estado) {
+  const chips = document.getElementById('disco-filtros');
+  if (!chips) return;
+  const hace = !!ctx?.bibliotecaFallo && !!estado?.biblioteca;
+  let linea = chips.parentElement?.querySelector(':scope > .disco-filtros-aviso-biblioteca');
+  if (!hace) { linea?.remove(); return; }
+  if (!linea) {
+    linea = document.createElement('p');
+    linea.className = 'disco-filtros-aviso-biblioteca';
+    linea.setAttribute('role', 'status');
+    chips.insertAdjacentElement('afterend', linea);
+  }
+  if (linea.textContent !== AVISO_BIBLIOTECA_FILTROS) linea.textContent = AVISO_BIBLIOTECA_FILTROS;
+}

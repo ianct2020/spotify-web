@@ -1,0 +1,208 @@
+<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>banco singles-diagnostico — «Guardar single» en #new-releases, contra la Spotify simulada</title>
+<link rel="stylesheet" href="/css/theme.css">
+<link rel="stylesheet" href="/css/components.css">
+<link rel="stylesheet" href="/css/main.css">
+<style>html,body{margin:0;background:var(--color-bg);color:var(--color-text);font-family:var(--font-sans),system-ui}</style>
+</head><body class="sidebar-hidden">
+<div id="caja"><main class="main" id="main-content"></main></div>
+<script type="module">
+// ── Qué es esto (tanda 127, T127b) ───────────────────────────────────────────
+//
+// Un DIAGNÓSTICO, no una puerta: no está en `prepush` y casi no afirma nada. Abre la vista REAL de `#new-releases` con tres
+// lanzamientos INVENTADOS de un mismo artista (un single de 1 pista, un EP de 4 y un álbum de 10, más tres singles de repuesto),
+// contra la Spotify simulada (`simulado.mjs`: 0 peticiones reales, 0 escrituras reales), aprieta lo que apretaría el usuario y
+// DEJA ESCRITO lo que pasó: qué decía el botón, qué peticiones salieron, qué dijo el toast y qué quedó en la tarjeta.
+//
+//   1. El botón de la tarjeta, para el single, el EP y el álbum.
+//   2. Lo que ve después: el chip «Fuera los de tu biblioteca» con ese single ya guardado en `GET /me/albums`, con el mismo
+//      nombre, con «- Single» pegado al nombre y con otro artista principal. El filtro cruza por nombre + artista, no por id.
+//   3. La barra de selección: qué botones ofrece con un single marcado.
+//   4. Un `PUT` que falla: 403 y 400 «Missing required field: uris».
+//
+// 🔴 Esto NO dice si el `PUT /me/library?uris=spotify:album:{id}` REAL funciona con un single: la simulada contesta lo que se le
+// dice. Lo único que lo decide es guardar un single a mano y buscarlo en la biblioteca de álbumes de Spotify.
+//
+//   node scripts/correr-banco.mjs singles-diagnostico
+
+import { hojasLegibles, fallar, listo } from '/banco/esperar.mjs';
+import { instalarRedSimulada, crearLikes, ARTISTAS, esperarReal, anclar } from '/banco/simulado.mjs';
+
+window.__cons = [];
+window.addEventListener('unhandledrejection', e => window.__cons.push('rechazo: ' + (e.reason?.message || e.reason)));
+const afirmar = (c, msg) => { if (!c) throw new Error('BANCO: ' + msg); };
+const $ = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+const L = [];
+const decir = (t) => L.push(t);
+const VUELTAS = 20000;
+
+try {
+  await hojasLegibles(['/css/main.css', '/css/components.css']);
+  $('#caja').style.width = '1351px';
+  const sim = instalarRedSimulada();
+  window.__sim = sim;
+  const likes = crearLikes();
+
+  let guardadosEnSpotify = [];   // lo que contesta `GET /me/albums`
+  let putModo = 'ok';            // cómo contesta `PUT /me/library`
+  sim.ruta('GET', /^\/me$/, () => ({ id: 'usuario-banco', display_name: 'Banco' }));
+  sim.ruta('GET', /^\/me\/tracks/, ({ url }) => {
+    const off = +url.searchParams.get('offset') || 0, lim = +url.searchParams.get('limit') || 50;
+    return { items: likes.slice(off, off + lim), total: likes.length, next: off + lim < likes.length ? 'x' : null };
+  });
+  sim.ruta('GET', /^\/me\/playlists/, () => ({ items: [], total: 0, next: null }));
+  sim.ruta('POST', /^\/me\/playlists/, () => ({ id: 'pl-simulada', name: 'simulada', owner: { id: 'usuario-banco' } }));
+  sim.ruta('GET', /^\/playlists\/[^/]+\/items/, () => ({ items: [], total: 0, next: null }));
+  sim.ruta('POST', /^\/playlists\/[^/]+\/items/, () => ({ snapshot_id: 's' }));
+  sim.ruta('GET', /^\/me\/albums/, () => ({ items: guardadosEnSpotify, limit: 50, offset: 0, total: guardadosEnSpotify.length, next: null }));
+  sim.ruta('PUT', /^\/me\/library/, () => {
+    if (putModo === '403') return { __status: 403, body: { error: { status: 403, message: 'Forbidden (banco)' } } };
+    if (putModo === '400') return { __status: 400, body: { error: { status: 400, message: 'Missing required field: uris' } } };
+    return {};
+  });
+
+  // ── Sembrar: me gusta y la discografía del artista A ─────────────────────────
+  const { idbSetCached, idbDel } = await import('/js/idb.js');
+  const { crearBase, DISCO_BASE_PREFIX } = await import('/js/util/disco-base.js');
+  await anclar(idbSetCached('all_liked_tracks', likes, null));
+  const dia = (n) => new Date(Date.now() - n * 86400000).toISOString().slice(0, 10);
+  const id22 = (p) => p.padEnd(22, 'x').slice(0, 22);
+  const A = ARTISTAS[0];
+  const lanz = (clave, name, type, total, dias) => ({ clave, id: id22(`lanz${clave}Inventado`), name, type, img: null, release: dia(dias), total, artists: [{ id: A.id, name: A.name }] });
+  const LANZ = [
+    lanz('Single1', 'Tema Suelto Inventado', 'single', 1, 3),
+    lanz('Ep4', 'Cuatro Temas Inventados', 'single', 4, 5),
+    lanz('Album10', 'Disco Largo Inventado', 'album', 10, 7),
+    lanz('Single2', 'Otro Tema Inventado', 'single', 1, 9),
+    lanz('Single3', 'Tercer Tema Inventado', 'single', 1, 11),
+    lanz('Single4', 'Cuarto Tema Inventado', 'single', 1, 13),
+  ];
+  const por = Object.fromEntries(LANZ.map(l => [l.clave, l]));
+  for (const a of ARTISTAS) {
+    const items = a === A ? LANZ.map(({ clave, ...resto }) => resto) : [];
+    await anclar(idbSetCached(`${DISCO_BASE_PREFIX}${a.id}`, crearBase(items, { fuente: 'nativo', cortada: false }), null));
+  }
+  const { prefKey } = await import('/js/storage.js');
+  localStorage.setItem(prefKey('newrel_months'), '12');
+  localStorage.setItem(prefKey('newrel_min_likes'), '10');
+  localStorage.setItem(prefKey('fonoteca_anim_v1'), 'nunca');
+
+  const { render } = await import('/js/features/new-releases.js');
+  const { invalidateFilterContext } = await import('/js/util/discover-filters.js');
+  const tarjetas = () => $$('#newrel-list .dcard');
+  const boton = (l) => $(`#newrel-list [data-save-album="${l.id}"]`);
+  const enLista = (l) => !!boton(l);
+  const vueltasDeRed = async (n = 40) => { for (let i = 0; i < n; i++) await anclar(fetch('/banco/esperar.mjs', { cache: 'no-store' }).then(r => r.text())); };
+  const toasts = () => $$('.toast').map(t => `[${[...t.classList].filter(c => c.startsWith('toast-') && c !== 'toast-exit').join(' ')}] ${t.textContent.replace(/\s+/g, ' ').trim()}`);
+  const rutas = (desde) => sim.reg.llamadas.slice(desde).map(l => `${l.metodo} ${l.ruta}`);
+  const chipN = () => $('#disco-filtros [data-filtro="biblioteca"] .disco-filtro-n')?.textContent ?? '(sin chip)';
+  const aAlbumes = () => sim.reg.llamadas.filter(l => l.ruta.startsWith('/me/albums')).length;
+  const abrir = async (que) => {
+    render($('#main-content'));
+    await esperarReal(() => tarjetas().length > 0 || /Ningun|No hay|sin escuchar en/.test($('#newrel-list')?.textContent || ''), { que: `la lista (${que})`, vueltas: VUELTAS });
+    await vueltasDeRed(80);
+  };
+
+  await abrir('primera apertura');
+  decir(`ARRANQUE (#new-releases): ${tarjetas().length} tarjetas · en la lista: ${LANZ.filter(enLista).map(l => `${l.clave} «${l.name}» (${l.type}, ${l.total} pista/s)`).join(' | ')}`);
+  decir(`  chip «Fuera los de tu biblioteca»: aria-pressed=${$('#disco-filtros [data-filtro="biblioteca"]')?.getAttribute('aria-pressed')}, cuenta ${chipN()} · GET /me/albums hasta acá: ${aAlbumes()}`);
+  afirmar(LANZ.every(enLista), `los seis lanzamientos sembrados están en la lista (faltan: ${LANZ.filter(l => !enLista(l)).map(l => l.clave).join(', ')}) · visible: ${($('#main-content')?.textContent || '').replace(/\s+/g, ' ').slice(0, 300)}`);
+
+  // ── 1. El botón de la tarjeta ────────────────────────────────────────────────
+  decir('');
+  decir('1. EL BOTÓN DE LA TARJETA (la simulada contesta 200 al PUT)');
+  for (const clave of ['Single1', 'Ep4', 'Album10']) {
+    const l = por[clave];
+    const b = boton(l);
+    const texto = b.textContent.trim(), titulo = b.title;
+    const l0 = sim.reg.llamadas.length, t0 = toasts().length, e0 = sim.reg.escrituras.length;
+    b.click();
+    await esperarReal(() => sim.reg.llamadas.length > l0, { que: `la petición de ${clave}`, vueltas: VUELTAS });
+    await vueltasDeRed(10);
+    const textoTrasPut = boton(l)?.textContent.trim() ?? '(la tarjeta ya no está)';
+    // El repintado va a los 800 ms.
+    try { await esperarReal(() => !enLista(l), { que: 'que la tarjeta se vaya', vueltas: 400 }); } catch { /* se anota abajo */ }
+    await vueltasDeRed(20);
+    decir(`  ${clave} «${l.name}» (${l.type}, ${l.total} pista/s)`);
+    decir(`    botón antes: «${texto}» · title: «${titulo}»`);
+    decir(`    peticiones que salieron (${sim.reg.llamadas.length - l0}): ${rutas(l0).join(' , ')}`);
+    decir(`    escrituras: ${sim.reg.escrituras.slice(e0).map(e => `${e.metodo} ${e.ruta} cuerpo=${JSON.stringify(e.cuerpo)}`).join(' , ')}`);
+    decir(`    toast: ${toasts().slice(t0).join(' || ') || '(ninguno)'}`);
+    decir(`    botón justo después del PUT: «${textoTrasPut}» · tras el repintado, ¿sigue en la lista?: ${enLista(l) ? 'SÍ' : 'no, se fue'} · tarjetas ahora: ${tarjetas().length}`);
+  }
+  // ¿Y al volver a abrir la vista? (lo resuelto se guarda en el almacén de «escuchados» de la app)
+  await abrir('tras guardar los tres');
+  decir(`  al volver a abrir la vista: ${['Single1', 'Ep4', 'Album10'].map(c => `${c} ${enLista(por[c]) ? 'VOLVIÓ' : 'no volvió'}`).join(' · ')} · tarjetas: ${tarjetas().length} · GET /me/albums acumuladas: ${aAlbumes()}`);
+
+  // ── 2. Lo que ve después: el filtro de la biblioteca, sin pasar por el botón ──
+  decir('');
+  decir('2. EL CHIP «FUERA LOS DE TU BIBLIOTECA» CON EL SINGLE YA GUARDADO EN GET /me/albums (Single4, sin apretar su botón)');
+  const s4 = por.Single4;
+  const guardado = (name, artista) => ({ added_at: new Date().toISOString(), album: { id: s4.id, name, album_type: 'single', total_tracks: 1, images: [], artists: [{ id: A.id, name: artista }] } });
+  const estado = () => `cuenta del chip ${chipN()} · Single4 ${enLista(s4) ? 'EN la lista' : 'fuera de la lista'} · tarjetas ${tarjetas().length} · GET /me/albums acumuladas ${aAlbumes()}`;
+  decir(`  antes (la biblioteca simulada vacía): ${estado()}`);
+  guardadosEnSpotify = [guardado(s4.name, A.name)];
+  await abrir('guardado, sin vaciar nada');
+  decir(`  guardado con el MISMO nombre y artista, al volver a abrir la vista SIN recargar (la lectura de la biblioteca dura 60 min en caché y el contexto de filtros queda memoizado): ${estado()}`);
+  const fresco = async (que) => { for (const k of ['saved_albums_v1', 'saved_albums_v2']) await anclar(idbDel(k)); invalidateFilterContext(); await abrir(que); };
+  await fresco('guardado, lectura fresca');
+  decir(`  lo mismo, con la lectura FRESCA (como tras recargar con la caché de 60 min vencida): ${estado()}`);
+  guardadosEnSpotify = [guardado(`${s4.name} - Single`, A.name)];
+  await fresco('con - Single');
+  decir(`  guardado como «${s4.name} - Single» (mismo id, otro nombre), lectura fresca: ${estado()}`);
+  guardadosEnSpotify = [guardado(s4.name, 'Otra Banda Inventada')];
+  await fresco('otro artista principal');
+  decir(`  guardado con el mismo nombre y OTRO artista principal (mismo id), lectura fresca: ${estado()}`);
+  guardadosEnSpotify = [];
+  await fresco('vacía otra vez');
+
+  // ── 3. La barra de selección ─────────────────────────────────────────────────
+  decir('');
+  decir('3. LA BARRA DE SELECCIÓN CON UN SINGLE MARCADO (Single2)');
+  const s2 = por.Single2;
+  const casilla = boton(s2).closest('.dcard').querySelector('input[type="checkbox"]');
+  afirmar(!!casilla, 'la tarjeta del single tiene casilla de selección');
+  casilla.click();
+  await vueltasDeRed(10);
+  const barra = $('#newrel-actionbar');
+  decir(`  barra visible: ${barra && getComputedStyle(barra).display !== 'none' ? 'sí' : 'NO'} · «${$('#newrel-sel-count')?.textContent.trim()}»`);
+  decir(`  botones: ${$$('button', barra).map(b => `«${b.textContent.trim()}»`).join(' , ')}`);
+  decir(`  ¿alguno guarda en la biblioteca?: ${$$('button', barra).some(b => /bibliotec|guardar/i.test(b.textContent + ' ' + b.title)) ? 'SÍ' : 'NO: ninguno dice «guardar» ni «biblioteca»'}`);
+  $('#newrel-sel-clear')?.click();
+  await vueltasDeRed(10);
+
+  // ── 4. Un PUT que falla ──────────────────────────────────────────────────────
+  decir('');
+  decir('4. UN PUT QUE FALLA');
+  for (const [modo, clave] of [['403', 'Single2'], ['400', 'Single3']]) {
+    const l = por[clave];
+    putModo = modo;
+    const b = boton(l);
+    // Los toasts se anotan EN CADA VUELTA de la espera, no al final: la primera versión los leía al cabo de ~300 vueltas y un toast que
+    // ya se había ido salía como «(ninguno)».
+    const l0 = sim.reg.llamadas.length, antes = new Set(toasts()), vistos = new Set();
+    const mirar = () => { for (const t of toasts()) if (!antes.has(t)) vistos.add(t); };
+    b.click();
+    await esperarReal(() => { mirar(); return sim.reg.llamadas.length > l0; }, { que: `el PUT ${modo}`, vueltas: VUELTAS });
+    try { await esperarReal(() => { mirar(); return !enLista(l); }, { que: 'que la tarjeta se vaya (no debería)', vueltas: 300 }); } catch { /* lo esperado */ }
+    const nuevos = [...vistos];
+    decir(`  PUT → ${modo}${modo === '400' ? ' «Missing required field: uris»' : ''} (${clave})`);
+    decir(`    peticiones: ${rutas(l0).join(' , ')}`);
+    decir(`    toast: ${nuevos.join(' || ') || '(ninguno)'}`);
+    decir(`    botón después: «${boton(l)?.textContent.trim() ?? '(ya no está)'}», ${boton(l)?.disabled ? 'deshabilitado' : 'habilitado'} · ¿sigue en la lista?: ${enLista(l) ? 'sí' : 'NO, se fue'}`);
+    decir(`    ¿algún toast dice que se guardó?: ${nuevos.some(t => /guardado/i.test(t)) ? '🔴 SÍ' : 'no'}`);
+  }
+  putModo = 'ok';
+
+  decir('');
+  decir(`RED: llamadas a la simulada ${sim.reg.llamadas.length} · escrituras simuladas ${sim.reg.escrituras.length} (${[...new Set(sim.reg.escrituras.map(e => `${e.metodo} ${e.ruta.split('?')[0]}`))].join(' , ')}) · rutas sin simular: ${sim.reg.desconocidas.join(' | ') || 'ninguna'} · a hosts externos (bloqueadas): ${sim.reg.externas.join(' | ') || 'ninguna'} · consola: ${window.__cons.join(' || ') || 'nada'}`);
+  const texto = L.join('\n').replace(/</g, '‹');
+  const pre = document.createElement('pre'); pre.id = 'progreso'; pre.textContent = texto; document.body.prepend(pre);
+  document.documentElement.setAttribute('data-resumen', `diagnóstico · reloj virtual=${Math.round(performance.now())} ms`);
+  listo(texto);
+} catch (e) {
+  const r = window.__sim?.reg;
+  e.message += `\n── lo anotado hasta acá ──\n${L.join('\n')}\n[llamadas ${r?.llamadas.length}] desconocidas: ${r?.desconocidas.join(' | ') || '—'} · consola: ${window.__cons.join(' || ').slice(0, 500)}`;
+  fallar(e);
+}
+</script></body></html>

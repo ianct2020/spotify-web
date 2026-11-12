@@ -20,8 +20,8 @@
 //
 // El censo entero, con el porqué de cada clase, está en `fonoteca-migracion/CENSO-NAVEGADOR-2026-10-22.md`.
 
-import { crearAlmacenGeneros, prefijoGeneros, PREFIJO_GENEROS, CLAVE_MIGRADO } from './generos-artista.js?v=363';
-import { LIKES_DE_OTRO_KEY, hayLikesDeOtro } from './likes-de-otro.js?v=363';
+import { crearAlmacenGeneros, prefijoGeneros, PREFIJO_GENEROS, CLAVE_MIGRADO } from './generos-artista.js?v=364';
+import { LIKES_DE_OTRO_KEY, hayLikesDeOtro } from './likes-de-otro.js?v=364';
 
 export const COPIA_VERSION = 3;
 export const CENSO_VERSION = '2026-10-22';
@@ -98,7 +98,8 @@ export const CENSO = [
   p('idb', 'history_', 4, false, 'features/history-data.js:303, 320', 'el historial horneado del owner (sale de los JSON del repo)'),
   p('idb', 'playlist_items_', 4, false, 'api.js:1032, 1043', 'el contenido de cada playlist'),
   p('idb', 'ocultos_items_v1_', 4, false, 'util/hidden-sync.js:338', 'el contenido de las playlists de ocultos'),
-  e('idb', 'saved_albums_v1', 4, false, 'api.js:1494', 'los álbumes guardados'),
+  e('idb', 'saved_albums_v2', 4, false, 'api.js:1861', 'los álbumes guardados'),
+  e('idb', 'saved_albums_v1', 4, false, 'api.js:1862', 'los álbumes guardados, la clave de hasta v=363 (solo se borra al cambiar de usuario)'),
   p('idb', 'listened_grouped_', 4, false, 'features/listened.js:277, 317', 'la playlist «listened albums» agrupada'),
   e('idb', 'sin_clasificar_cross_v1', 4, false, 'features/sin-clasificar.js:286, 986', 'el cruce de «Sin clasificar»'),
   p('idb', 'discover_artist_id_', 4, false, 'features/discover-common.js:45, 54', 'el id de Spotify de cada artista'),

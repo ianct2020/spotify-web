@@ -9,7 +9,9 @@
 //
 // La app ENTERA en `#home`, contra la Spotify simulada, con una cuenta INVENTADA (no el owner: ningún JSON del repo) y una playlist «listened
 // albums» INVENTADA. Las cachés de esta vista se vacían al arrancar: todos los iframes son del mismo origen y comparten la IndexedDB.
-//   · `?fallo=500|rechazo|html`: cómo contesta `/me/albums`.
+//   · `?fallo=500|rechazo|html`: cómo contesta `/me/albums`. Desde la tanda 127 también `html2` (la página 1 bien y de la 2 en adelante, HTML) y
+//     `vacia` (un 200 con `items: []`: una biblioteca vacía de verdad). `__sanar()` la deja contestando bien.
+//   · `?foto=apretado`: como `puesto`, pero espera a que la lectura termine sin exigir que el chip quede puesto.
 //   · `?retener=1`: la primera `/me/albums` se queda esperando hasta `__soltarAlbumes()`.
 //   · `?foto=apagado|puesto` (capturas, con un conductor externo): deja `#listened` lista y marca `data-foto="listo"`.
 
@@ -42,6 +44,8 @@ sim.ruta('GET', /^\/me\/albums/, ({ url }) => paginaDeBiblioteca(url));
 window.__datosAjenos = [];
 window.__albumes = 0;
 window.__soltarAlbumes = () => {};
+let falloActual = q.get('fallo');
+window.__sanar = () => { falloActual = null; };   // (tanda 127) la simulada vuelve a contestar bien, para el segundo intento del caso I
 let retenida = q.get('retener') ? new Promise((r) => { window.__soltarAlbumes = r; }) : null;
 const debajo = window.fetch;
 window.fetch = async (entrada, opciones = {}) => {
@@ -53,10 +57,13 @@ window.fetch = async (entrada, opciones = {}) => {
   }
   if (abs.hostname === 'api.spotify.com' && abs.pathname === '/v1/me/albums') {
     window.__albumes++;
-    const fallo = q.get('fallo');
+    const fallo = falloActual;
+    const enHtml = () => new Response('<!doctype html><title>banco</title><p>esto no es JSON</p>', { status: 200, headers: { 'content-type': 'text/html' } });
     if (fallo === 'rechazo') throw new TypeError('banco: red caída');
     if (fallo === '500') return new Response('{"error":{"status":500,"message":"banco"}}', { status: 500, headers: { 'content-type': 'application/json' } });
-    if (fallo === 'html') return new Response('<!doctype html><title>banco</title><p>esto no es JSON</p>', { status: 200, headers: { 'content-type': 'text/html' } });
+    if (fallo === 'html') return enHtml();
+    if (fallo === 'html2' && +(abs.searchParams.get('offset') || 0) > 0) return enHtml();
+    if (fallo === 'vacia') return new Response('{"items":[],"limit":50,"offset":0,"total":0,"next":null}', { status: 200, headers: { 'content-type': 'application/json' } });
     if (retenida) { const r = retenida; retenida = null; await anclar(r, { vueltas: 20000 }); }
   }
   return debajo(url === entrada ? entrada : url, opciones);
@@ -69,7 +76,7 @@ localStorage.setItem(prefKey('fonoteca_anim_v1'), 'nunca');
 localStorage.setItem(prefKey('listened_albums_playlist_id'), PLAYLIST_ID);
 localStorage.setItem(prefKey('listened_albums_playlist_name'), PLAYLIST_NOMBRE);
 const { idbDel } = await import('/js/idb.js');
-for (const k of ['saved_albums_v1', `listened_grouped_${PLAYLIST_ID}_v2`, `playlist_items_${PLAYLIST_ID}`]) await anclar(idbDel(k));
+for (const k of ['saved_albums_v1', 'saved_albums_v2', `listened_grouped_${PLAYLIST_ID}_v2`, `playlist_items_${PLAYLIST_ID}`]) await anclar(idbDel(k));
 
 const FOTO = q.get('foto');
 location.hash = FOTO ? '#listened' : '#home';
@@ -83,6 +90,11 @@ window.__listo = true;
 
 if (FOTO) {
   await esperarReal(() => document.querySelectorAll('#listened-grid-holder .playlist-card').length, { que: '#listened', vueltas: 8000 });
+  if (FOTO === 'apretado') {
+    // (tanda 127) Aprieta y espera a que la lectura termine, salga como salga: sirve para fotografiar el antes y el después de un mismo caso.
+    document.querySelector('.listened-chip-biblioteca').click();
+    await esperarReal(() => window.__albumes >= 1 && document.querySelector('.listened-chip-biblioteca') && !document.querySelector('.listened-chip-biblioteca').disabled, { que: 'que termine la lectura', vueltas: 8000 });
+  }
   if (FOTO === 'puesto') {
     document.querySelector('.listened-chip-biblioteca').click();
     await esperarReal(() => document.querySelector('.listened-chip-biblioteca')?.getAttribute('aria-pressed') === 'true', { que: 'el chip puesto', vueltas: 8000 });

@@ -51,6 +51,7 @@ import {
   wireAlbumCards,
   renderFiltroChips,
   wireFiltroChips,
+  pintarAvisoBibliotecaFiltros,
   addAlbumsToPlaylists,
   hiddenAlbums,
   heardAlbums,
@@ -764,6 +765,8 @@ function pintarConteosFiltro(conteos) {
 function refreshList(content) {
   const listEl = document.getElementById('disco-list');
   if (!listEl) return;
+  // (v=364) Si la biblioteca no se pudo leer y «Fuera los de tu biblioteca» está encendido, se dice junto a los filtros.
+  pintarAvisoBibliotecaFiltros(state.filterCtx, state.filtros);
   // El pool depende del modo. En el normal se sacan los ocultos y los marcados
   // como escuchados: `unheardAlbums`/`unheardSingles` pueden venir del caché de
   // escaneo (7 días), calculados ANTES de que Ian marcara nada, así que el

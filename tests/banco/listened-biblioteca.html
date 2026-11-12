@@ -16,10 +16,14 @@
 //      volver a apretarlo: 0 peticiones.
 //   C. Con búsqueda, el resumen combinado. Y con 0, «Ninguno de estos álbumes está en tu biblioteca.».
 //   D. `/me/albums` en 500, en un `fetch` que rechaza y en un 200 con HTML: la línea de fallo, el chip apagado, la grilla como estaba y ningún «0».
-//      ⚠️ Con el 200 con HTML `getSavedAlbums()` NO tira: devuelve `[]` y lo cachea. Lo ataja `listened.js` (una lectura sin ningún id no se aplica).
+//      Hasta v=363, con el 200 con HTML `getSavedAlbums()` NO tiraba: devolvía `[]` y lo cacheaba, y lo atajaba `listened.js`. Desde v=364 tira.
 //   E. Salir de la ruta con la petición retenida: 0 escrituras en el DOM nuevo. Y mientras baja: «Leyendo tu biblioteca…», deshabilitado.
 //   F. El contraste del chip, apagado y puesto, en los cuatro presets, ≥ 4,5:1, compuesto capa por capa y con las transiciones terminadas.
 //   G. Sin scroll horizontal a 1366×591 y a 390×844, con el chip apagado y puesto.
+//   H. (v=364, tanda 127) Una biblioteca vacía DE VERDAD (un 200 con `items: []`): el chip se aplica, «Ninguno de estos álbumes…», «0 de 30…» y
+//      NINGUNA línea de error. Hasta v=363 salía la línea de fallo: un error que no pasó.
+//   I. (v=364) La página 1 bien y la 2 en HTML: la línea de fallo y el chip apagado; con la simulada ya sana, volver a apretar pide las 3 páginas
+//      otra vez (no quedó una mitad guardada). Hasta v=363 el chip se aplicaba con la mitad.
 //
 // `?solo=A,B` corre esas. ⚠️ Todas las esperas van con `esperarReal` (ver PRESUPUESTO en `scripts/correr-banco.mjs`).
 
@@ -266,6 +270,60 @@ try {
     progreso('G');
   }
 
+  if (corre('H')) {
+    // (tanda 127) Una biblioteca vacía DE VERDAD: un 200 con `items: []`. No es un fallo: el chip se aplica y dice que no hay ninguno.
+    const f = abrirMarco('h', 1366, 591, '&fallo=vacia'); marcos.push(['h', f]);
+    await abrirListened(f, 'H');
+    afirmar(!!chip(f), 'H: el chip existe');
+    const a0 = win(f).__avisos.length;
+    chip(f).click();
+    await esperarReal(() => win(f).__albumes >= 1 && !chip(f).disabled && chip(f).textContent.trim() === 'Solo los de tu biblioteca', { que: 'H: que termine la lectura', vueltas: VUELTAS });
+    const aviso = $(f, '#listened-biblioteca-aviso');
+    afirmar(!aviso || aviso.hidden, `H: ninguna línea de error con la biblioteca vacía («${aviso?.textContent.trim()}»)`);
+    afirmar(chip(f).getAttribute('aria-pressed') === 'true', `H: el chip se aplica (aria-pressed=${chip(f).getAttribute('aria-pressed')})`);
+    afirmar(tarjetas(f).length === 0, `H: ninguna tarjeta (${tarjetas(f).length})`);
+    afirmar($(f, '#listened-grid-holder').textContent.trim() === 'Ninguno de estos álbumes está en tu biblioteca.', `H: la grilla («${$(f, '#listened-grid-holder').textContent.trim()}»)`);
+    afirmar(resumen(f) === '0 de 30 álbumes están en tu biblioteca.', `H: el resumen («${resumen(f)}»)`);
+    afirmar(!win(f).__avisos.slice(a0).some((a) => a.startsWith('[listened]')), `H: ningún console.warn('[listened] …') (${win(f).__avisos.slice(a0).join(' | ')})`);
+    afirmar(win(f).__albumes === 1, `H: 1 GET /me/albums (${win(f).__albumes})`);
+    // Con búsqueda, el resumen combinado de siempre.
+    const buscar = (t) => { const i = $(f, '#listened-search'); i.value = t; i.dispatchEvent(new (win(f).Event)('input', { bubbles: true })); };
+    buscar('impar');
+    afirmar(resumen(f) === '0 de 30 álbumes coinciden con "impar" y están en tu biblioteca.', `H: el resumen con búsqueda («${resumen(f)}»)`);
+    buscar('');
+    // Apagarlo devuelve las 30; volver a apretarlo no pide nada (la biblioteca vacía quedó en la caché, y es un resultado).
+    await apretarYEsperar(f, 'H apagar', 'false');
+    afirmar(tarjetas(f).length === LISTA.length, `H: apagado, las 30 (${tarjetas(f).length})`);
+    await apretarYEsperar(f, 'H otra vez');
+    afirmar(win(f).__albumes === 1, `H: volver a apretarlo, 0 peticiones más (${win(f).__albumes})`);
+    datos.h = `${win(f).__albumes} GET /me/albums, 0 de 30, sin línea de error`;
+    progreso('H');
+  }
+
+  if (corre('I')) {
+    // (tanda 127) La página 1 bien y la 2 en HTML: es un fallo, y no puede quedar guardada una mitad.
+    const f = abrirMarco('i', 1366, 591, '&fallo=html2'); marcos.push(['i', f]);
+    await abrirListened(f, 'I');
+    afirmar(!!chip(f), 'I: el chip existe');
+    const resumenAntes = resumen(f), gridAntes = $(f, '#listened-grid-holder').innerHTML, a0 = win(f).__avisos.length;
+    chip(f).click();
+    await esperarReal(() => win(f).__albumes >= 2 && !chip(f).disabled && chip(f).textContent.trim() === 'Solo los de tu biblioteca', { que: 'I: que termine la lectura', vueltas: VUELTAS });
+    const aviso = $(f, '#listened-biblioteca-aviso');
+    afirmar(aviso && !aviso.hidden && aviso.textContent.trim() === LINEA_FALLO, `I: la línea de fallo («${aviso?.hidden ? '(oculta)' : aviso?.textContent.trim()}»; resumen «${resumen(f)}»)`);
+    afirmar(chip(f).getAttribute('aria-pressed') === 'false', 'I: el chip apagado');
+    afirmar($(f, '#listened-grid-holder').innerHTML === gridAntes && resumen(f) === resumenAntes, `I: la grilla y el resumen como estaban («${resumen(f)}»)`);
+    afirmar(win(f).__avisos.slice(a0).some((a) => a.startsWith('[listened]')), `I: el error crudo en console.warn('[listened] …')`);
+    afirmar(win(f).__albumes === 2, `I: 2 GET /me/albums, la buena y la rota (${win(f).__albumes})`);
+    // La simulada se sana: al volver a apretar se piden las TRES páginas otra vez. Si hubiera quedado la mitad en la caché, serían 0.
+    win(f).__sanar();
+    await apretarYEsperar(f, 'I otra vez');
+    afirmar(win(f).__albumes === 5, `I: al volver a apretar, 3 GET /me/albums otra vez (${win(f).__albumes - 2})`);
+    afirmar(tarjetas(f).length === 9 && resumen(f) === '9 de 30 álbumes están en tu biblioteca.', `I: ahora sí, 9 de 30 («${resumen(f)}»)`);
+    afirmar($(f, '#listened-biblioteca-aviso').hidden, 'I: la línea de fallo se fue');
+    datos.i = `2 + 3 GET /me/albums, la mitad no quedó guardada`;
+    progreso('I');
+  }
+
   const errores = marcos.flatMap(([n, f]) => win(f).__errores.map((e) => `${n}: ${e}`));
   afirmar(errores.length === 0, `0 errores de consola: ${errores.join(' | ')}`);
   const ajenos = marcos.flatMap(([, f]) => win(f).__sim.reg.desconocidas);
@@ -276,6 +334,8 @@ try {
     (datos.b ? ` · B: ${datos.b}` : '') +
     (datos.f ? ` · F: ${datos.f}` : '') +
     (datos.g ? ` · G: ${datos.g}` : '') +
+    (datos.h ? ` · H: ${datos.h}` : '') +
+    (datos.i ? ` · I: ${datos.i}` : '') +
     ` · rutas sin simular=${ajenos.length} · errores=${errores.length} · reloj virtual=${Math.round(performance.now())} ms`;
   document.documentElement.setAttribute('data-resumen', resumenFinal);
   document.getElementById('progreso').textContent = resumenFinal;

@@ -6,35 +6,35 @@
 //     (util/album-heard.js: historial completo + likes + listened + w-three)
 //   - permiten "+ Biblioteca" y "Crear playlist con lo elegido"
 
-import { idbGet, idbGetCached, idbSetCached, idbDel, idbEntriesByPrefix, idbAllKeys } from '../idb.js?v=363';
-import { getArtistAlbumsConFuente, buscarDiscografiaPorNombre, searchArtistByName, getAlbumTracks, saveToLibrary, saveAlbumsToLibrary, createPlaylist, addTracksToPlaylist } from '../api.js?v=363';
-import { albumKey } from '../util/album-key.js?v=363';
-import { cardKey, cardKeyLegacy, albumCreditName, keyOfPlaylistTrack } from '../util/discover-key.js?v=363';
-import { escapeHtml } from '../ui/components.js?v=363';
-import { openModal, closeTop } from '../ui/modal-stack.js?v=363';
-import { showToast } from '../ui/toast.js?v=363';
-import { openPlaylistPicker } from '../ui/playlist-picker.js?v=363';
-import { getOwnPlaylists, addUrisToPlaylists, toastAddResult } from '../util/playlist-add.js?v=363';
-import { openArtistCard } from './artist-card.js?v=363';
-import { openAlbumCard } from './album-card.js?v=363';
-import { createHiddenStore, createLocalStore } from '../util/hidden-sync.js?v=363';
-import { recuperarUriDeAlbumKey, REGLAS_VERSION } from '../util/hidden-recover.js?v=363';
-import { getPreview } from '../api/preview-providers.js?v=363';
-import { togglePreview, playingKey, attachHover } from '../ui/preview-player.js?v=363';
-import { coverUrl } from '../util/cover-size.js?v=363';
-import { fechaDelFallo } from '../util/escaneo-fallos.js?v=363';
-import { SCAN_TTL_MS, escaneoVencido, textoFrescura, crearMarcasDeFrescura } from '../util/frescura-escaneo.js?v=363';
-import { FILTROS as FILTROS_DEF, saveFiltros } from '../util/discover-filters.js?v=363';
-import { esEPoAlbum } from '../util/release-size.js?v=363';
-import { iconoPlay, iconoPausa, iconoPuntos, iconoOjo, iconoOjoTachado } from '../ui/icons.js?v=363';
+import { idbGet, idbGetCached, idbSetCached, idbDel, idbEntriesByPrefix, idbAllKeys } from '../idb.js?v=364';
+import { getArtistAlbumsConFuente, buscarDiscografiaPorNombre, searchArtistByName, getAlbumTracks, saveToLibrary, saveAlbumsToLibrary, createPlaylist, addTracksToPlaylist } from '../api.js?v=364';
+import { albumKey } from '../util/album-key.js?v=364';
+import { cardKey, cardKeyLegacy, albumCreditName, keyOfPlaylistTrack } from '../util/discover-key.js?v=364';
+import { escapeHtml } from '../ui/components.js?v=364';
+import { openModal, closeTop } from '../ui/modal-stack.js?v=364';
+import { showToast } from '../ui/toast.js?v=364';
+import { openPlaylistPicker } from '../ui/playlist-picker.js?v=364';
+import { getOwnPlaylists, addUrisToPlaylists, toastAddResult } from '../util/playlist-add.js?v=364';
+import { openArtistCard } from './artist-card.js?v=364';
+import { openAlbumCard } from './album-card.js?v=364';
+import { createHiddenStore, createLocalStore } from '../util/hidden-sync.js?v=364';
+import { recuperarUriDeAlbumKey, REGLAS_VERSION } from '../util/hidden-recover.js?v=364';
+import { getPreview } from '../api/preview-providers.js?v=364';
+import { togglePreview, playingKey, attachHover } from '../ui/preview-player.js?v=364';
+import { coverUrl } from '../util/cover-size.js?v=364';
+import { fechaDelFallo } from '../util/escaneo-fallos.js?v=364';
+import { SCAN_TTL_MS, escaneoVencido, textoFrescura, crearMarcasDeFrescura } from '../util/frescura-escaneo.js?v=364';
+import { FILTROS as FILTROS_DEF, saveFiltros } from '../util/discover-filters.js?v=364';
+import { esEPoAlbum } from '../util/release-size.js?v=364';
+import { iconoPlay, iconoPausa, iconoPuntos, iconoOjo, iconoOjoTachado } from '../ui/icons.js?v=364';
 import {
   DISCO_BASE_PREFIX, PRESUPUESTO_REFRESCO, RECIENTE_MAX_PAGINAS,
   crearBase, sumarCompleta, sumarReciente, tocaReciente, rangoReciente,
   fusionarBases, armarExportacion, leerImportacion,
-} from '../util/disco-base.js?v=363';
+} from '../util/disco-base.js?v=364';
 import {
   estimarCostoDeEscaneo, clasificarArtistas, totalizarCosto, costoDeUno, superaUmbral, PAGINAS_POR_ARTISTA,
-} from '../util/costo-escaneo.js?v=363';
+} from '../util/costo-escaneo.js?v=364';
 
 const DISCO_TTL_MIN = 30 * 24 * 60;       // 30 días
 const ARTIST_ID_TTL_MIN = 60 * 24 * 60;   // 60 días — los ids no cambian
@@ -958,7 +958,7 @@ export function yearOf(release) {
 // `releaseTs` vive ahora en `util/release-date.js` (v=246), junto al comparador
 // «más nuevo primero» de `#discover-artists`; se re-exporta acá para que
 // `#new-releases` siga importándolo de este archivo.
-export { releaseTs } from '../util/release-date.js?v=363';
+export { releaseTs } from '../util/release-date.js?v=364';
 
 // Deduplica ediciones del mismo álbum (deluxe, remaster, etc). Nos quedamos
 // con la primera edición (release date más antiguo).
@@ -1770,4 +1770,28 @@ export function wireFiltroChips(root, estado, onChange) {
     btn.setAttribute('aria-pressed', String(!!estado[k]));
     onChange(k, estado);
   });
+}
+
+/**
+ * (v=364) La línea que dice que «Fuera los de tu biblioteca» no está descartando nada porque la biblioteca no se pudo leer
+ * (`ctx.bibliotecaFallo`, de `buildFilterContext()`). Solo con ese chip ENCENDIDO: apagado no descarta nada de todos modos.
+ *
+ * Una sola función para las dos vistas, que la llaman desde su `refreshList()`. La línea nace y muere acá, justo debajo de
+ * `#disco-filtros`: cuando no hace falta no queda ningún nodo (el DOM de la vista sana es el de siempre). Clase propia
+ * (`.disco-filtros-aviso-biblioteca`, en `components.css`), sin reusar `.disco-aviso` (la regla de `.wt-play-btn`, v=219).
+ */
+export const AVISO_BIBLIOTECA_FILTROS = 'No se ha podido leer tu biblioteca de Spotify: «Fuera los de tu biblioteca» no está descartando nada.';
+export function pintarAvisoBibliotecaFiltros(ctx, estado) {
+  const chips = document.getElementById('disco-filtros');
+  if (!chips) return;
+  const hace = !!ctx?.bibliotecaFallo && !!estado?.biblioteca;
+  let linea = chips.parentElement?.querySelector(':scope > .disco-filtros-aviso-biblioteca');
+  if (!hace) { linea?.remove(); return; }
+  if (!linea) {
+    linea = document.createElement('p');
+    linea.className = 'disco-filtros-aviso-biblioteca';
+    linea.setAttribute('role', 'status');
+    chips.insertAdjacentElement('afterend', linea);
+  }
+  if (linea.textContent !== AVISO_BIBLIOTECA_FILTROS) linea.textContent = AVISO_BIBLIOTECA_FILTROS;
 }

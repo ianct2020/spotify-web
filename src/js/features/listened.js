@@ -823,10 +823,14 @@ async function apretarChipBiblioteca() {
   if (!ruta.vigente()) return;
   leyendoBiblioteca = false;
   const ids = idsDeBiblioteca(items);
-  // 🔴 Nunca «0 álbumes» por un fallo (v=154). Un 200 con algo que no es JSON no tira: `spotifyFetch` da `null` y la lectura termina en `[]`, igual
-  // que una biblioteca vacía. No se pueden distinguir desde aquí, y el filtro con cero guardados no enseñaría nada: se trata como no leída.
-  if (ids.size === 0) {
-    if (items) console.warn('[listened] la lectura de la biblioteca no trajo ningún álbum: el filtro no se aplica');
+  // 🔴 Nunca «0 álbumes» por un fallo (v=154), y nunca un fallo por «0 álbumes» (v=364). Desde v=364 la lectura de `api.js` devuelve la biblioteca
+  // entera o TIRA, así que aquí se distinguen tres cosas:
+  //   · tiró (`items` es null): no se pudo leer. La línea de fallo, y el chip no se aplica.
+  //   · devolvió `[]`: una biblioteca vacía DE VERDAD. Es un resultado: el chip se aplica y la grilla dice que ninguno está guardado.
+  //   · devolvió items y ninguno trae `album.id`: eso no es una biblioteca vacía, es una lectura rota. Va por el fallo.
+  const rota = Array.isArray(items) && items.length > 0 && ids.size === 0;
+  if (!Array.isArray(items) || rota) {
+    if (rota) console.warn(`[listened] la lectura de la biblioteca trajo ${items.length} elementos y ninguno con id de álbum: el filtro no se aplica`);
     falloBiblioteca = true;
     pintarChipBiblioteca();
     return;

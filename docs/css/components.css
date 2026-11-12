@@ -1043,6 +1043,16 @@ input[type="checkbox"].keep-check:checked::after {
   box-shadow: 0 0 0 2px var(--color-accent);
 }
 
+/* La línea de `#discover-artists` y `#new-releases` cuando la biblioteca no se pudo leer y «Fuera los de tu biblioteca» está encendido
+   (v=364). Va justo debajo de `.disco-filtros` (que deja 12 px abajo): el margen negativo la arrima a los chips. Clase propia, de
+   `features/discover-common.js` y de nadie más. */
+.disco-filtros-aviso-biblioteca {
+  margin: -4px 0 12px;
+  color: var(--color-text-secondary);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
 .pill-toggle {
   display: inline-flex;
   align-items: center;

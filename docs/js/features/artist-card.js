@@ -2,25 +2,25 @@
 // primer/último año, top tracks del artista, hover-play, y plays actuales
 // vía Stats.fm si aplica. Se abre desde cualquier feature con openArtistCard({ name }).
 
-import { loadHistoryStats, loadArtistTracks, isOwner, falloDeLecturaDelHistorial, avisoHistorialIlegibleHtml } from './history-data.js?v=363';
-import { escapeHtml } from '../ui/components.js?v=363';
-import { getPreview } from '../api/preview-providers.js?v=363';
-import { togglePreview, playingKey, isPlayingAudio, attachHover } from '../ui/preview-player.js?v=363';
-import { iconoPlay, iconoPausa } from '../ui/icons.js?v=363';
-import { hasUsername, loadTopLifetime } from '../api/statsfm.js?v=363';
-import { openTrackCard } from './track-card.js?v=363';
-import { spotifyFetch, getBestAvailableLikes } from '../api.js?v=363';
-import { openModal, closeTop } from '../ui/modal-stack.js?v=363';
-import { firstArtistName, artistNames, resolveArtistName, looksLikeArtistChain } from '../util/artist-name.js?v=363';
-import { coverUrl } from '../util/cover-size.js?v=363';
-import { getArtistLikePreview } from '../util/artist-preview.js?v=363';
-import { skelCardBody, skelTrackRows, skelBox } from '../ui/skeleton.js?v=363';
-import { fmtDia, fmtDiaCorto } from '../util/fecha.js?v=363';
-import { albumsDeArtista } from '../util/artist-albums.js?v=363';
-import { openAlbumCard } from './album-card.js?v=363';
-import { limpiaParaQuery, artistIsSame } from '../util/track-match.js?v=363';
-import { sinTildes } from '../util/texto.js?v=363';
-import { pedirYCachear, CUALQUIER_RESPUESTA } from '../util/cache-solo-exitos.js?v=363';
+import { loadHistoryStats, loadArtistTracks, isOwner, falloDeLecturaDelHistorial, avisoHistorialIlegibleHtml } from './history-data.js?v=364';
+import { escapeHtml } from '../ui/components.js?v=364';
+import { getPreview } from '../api/preview-providers.js?v=364';
+import { togglePreview, playingKey, isPlayingAudio, attachHover } from '../ui/preview-player.js?v=364';
+import { iconoPlay, iconoPausa } from '../ui/icons.js?v=364';
+import { hasUsername, loadTopLifetime } from '../api/statsfm.js?v=364';
+import { openTrackCard } from './track-card.js?v=364';
+import { spotifyFetch, getBestAvailableLikes } from '../api.js?v=364';
+import { openModal, closeTop } from '../ui/modal-stack.js?v=364';
+import { firstArtistName, artistNames, resolveArtistName, looksLikeArtistChain } from '../util/artist-name.js?v=364';
+import { coverUrl } from '../util/cover-size.js?v=364';
+import { getArtistLikePreview } from '../util/artist-preview.js?v=364';
+import { skelCardBody, skelTrackRows, skelBox } from '../ui/skeleton.js?v=364';
+import { fmtDia, fmtDiaCorto } from '../util/fecha.js?v=364';
+import { albumsDeArtista } from '../util/artist-albums.js?v=364';
+import { openAlbumCard } from './album-card.js?v=364';
+import { limpiaParaQuery, artistIsSame } from '../util/track-match.js?v=364';
+import { sinTildes } from '../util/texto.js?v=364';
+import { pedirYCachear, CUALQUIER_RESPUESTA } from '../util/cache-solo-exitos.js?v=364';
 
 // Cache de imágenes de artistas resueltas por Spotify search. TTL 30 días.
 // Se persiste el hit y la falta (null) para no reintentar contra tracks

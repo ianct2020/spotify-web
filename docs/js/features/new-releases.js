@@ -10,14 +10,14 @@
 //   - Umbral de likes: 5+ / 10+ / 20+
 //   - Ventana temporal: 3 / 6 / 12 / 24 meses, 5 años y «todo» (default 12)
 
-import { escapeHtml, confirmModal, pageHeader } from '../ui/components.js?v=363';
-import { showToast } from '../ui/toast.js?v=363';
-import { buildAlbumHeardIndex } from '../util/album-heard.js?v=363';
-import { releaseKind } from '../util/release-size.js?v=363';
-import { loadFiltros, buildFilterContext, applyDiscoverFilters } from '../util/discover-filters.js?v=363';
-import { createIncrementalList, scrollRootOf } from '../ui/incremental-list.js?v=363';
-import { createLazyImages } from '../ui/lazy-img.js?v=363';
-import { prefKey, migratePrefKey } from '../storage.js?v=363';
+import { escapeHtml, confirmModal, pageHeader } from '../ui/components.js?v=364';
+import { showToast } from '../ui/toast.js?v=364';
+import { buildAlbumHeardIndex } from '../util/album-heard.js?v=364';
+import { releaseKind } from '../util/release-size.js?v=364';
+import { loadFiltros, buildFilterContext, applyDiscoverFilters } from '../util/discover-filters.js?v=364';
+import { createIncrementalList, scrollRootOf } from '../ui/incremental-list.js?v=364';
+import { createLazyImages } from '../ui/lazy-img.js?v=364';
+import { prefKey, migratePrefKey } from '../storage.js?v=364';
 import {
   getArtistIdCached,
   getArtistDiscoCached,
@@ -42,6 +42,7 @@ import {
   wireAlbumCards,
   renderFiltroChips,
   wireFiltroChips,
+  pintarAvisoBibliotecaFiltros,
   addAlbumsToPlaylists,
   hiddenAlbums,
   cardKey,
@@ -57,17 +58,17 @@ import {
   avisarRonda,
   botonesBaseHtml,
   conectarBotonesBase,
-} from './discover-common.js?v=363';
-import { compararLanzamientos, ORDENES_LANZAMIENTO } from '../util/release-date.js?v=363';
-import { estadoNativoDiscografia } from '../api.js?v=363';
-import { leerElegidos, sumarElegidos, artistasBuscados, colaAutomatica } from '../util/cola-escaneo.js?v=363';
-import { leerFallos, marcarFallo, limpiarFallo, sinFallosMarcados } from '../util/escaneo-fallos.js?v=363';
-import { contarSinEscanear, sufijoSinEscanear, notaSinEscanear } from '../util/sin-escanear.js?v=363';
-import { estadoFrescura } from '../util/frescura-escaneo.js?v=363';
+} from './discover-common.js?v=364';
+import { compararLanzamientos, ORDENES_LANZAMIENTO } from '../util/release-date.js?v=364';
+import { estadoNativoDiscografia } from '../api.js?v=364';
+import { leerElegidos, sumarElegidos, artistasBuscados, colaAutomatica } from '../util/cola-escaneo.js?v=364';
+import { leerFallos, marcarFallo, limpiarFallo, sinFallosMarcados } from '../util/escaneo-fallos.js?v=364';
+import { contarSinEscanear, sufijoSinEscanear, notaSinEscanear } from '../util/sin-escanear.js?v=364';
+import { estadoFrescura } from '../util/frescura-escaneo.js?v=364';
 import {
   artistasOcultos, artistaEstaOculto, alternarArtistaOculto,
   botonMenuArtistaHtml, botonArtistasOcultosHtml, conectarMenuArtista, cerrarMenuArtista,
-} from './artistas-ocultos.js?v=363';
+} from './artistas-ocultos.js?v=364';
 
 const SCAN_KEY = 'new_releases';
 
@@ -868,6 +869,8 @@ async function pintarAvisoCortadas() {
 function refreshList(content) {
   const listEl = document.getElementById('newrel-list');
   if (!listEl) return;
+  // (v=364) Si la biblioteca no se pudo leer y «Fuera los de tu biblioteca» está encendido, se dice junto a los filtros.
+  pintarAvisoBibliotecaFiltros(state.filterCtx, state.filtros);
   pintarAvisoCortadas().catch(err => console.info('[newrel] aviso de cortadas:', err.message));
   const rows = releasesInWindow();
   document.getElementById('newrel-unheard-count').textContent = rows.length.toLocaleString('es-ES');

@@ -10,22 +10,22 @@
 // 100 artistas en lugar de 20. Lógica de fetch/cache/playlist compartida en
 // features/discover-common.js con #new-releases.
 
-import { escapeHtml, confirmModal, pageHeader } from '../ui/components.js?v=363';
-import { showToast } from '../ui/toast.js?v=363';
-import { openArtistCard } from './artist-card.js?v=363';
-import { createIncrementalList, scrollRootOf } from '../ui/incremental-list.js?v=363';
-import { createLazyImages } from '../ui/lazy-img.js?v=363';
-import { isJunkTrack } from '../util/junk.js?v=363';
-import { buildAlbumHeardIndex } from '../util/album-heard.js?v=363';
-import { loadFiltros, buildFilterContext, applyDiscoverFilters } from '../util/discover-filters.js?v=363';
-import { releaseKind } from '../util/release-size.js?v=363';
-import { masNuevoPrimero } from '../util/release-date.js?v=363';
-import { vigilarRuta } from '../util/vigencia-ruta.js?v=363';
-import { leerElegidos, sumarElegidos, artistasBuscados, colaAutomatica } from '../util/cola-escaneo.js?v=363';
-import { leerFallos, marcarFallo, limpiarFallo, sinFallosMarcados } from '../util/escaneo-fallos.js?v=363';
-import { contarSinEscanear, sufijoSinEscanear, notaSinEscanear } from '../util/sin-escanear.js?v=363';
-import { estadoFrescura } from '../util/frescura-escaneo.js?v=363';
-import { prefKey, migratePrefKey } from '../storage.js?v=363';
+import { escapeHtml, confirmModal, pageHeader } from '../ui/components.js?v=364';
+import { showToast } from '../ui/toast.js?v=364';
+import { openArtistCard } from './artist-card.js?v=364';
+import { createIncrementalList, scrollRootOf } from '../ui/incremental-list.js?v=364';
+import { createLazyImages } from '../ui/lazy-img.js?v=364';
+import { isJunkTrack } from '../util/junk.js?v=364';
+import { buildAlbumHeardIndex } from '../util/album-heard.js?v=364';
+import { loadFiltros, buildFilterContext, applyDiscoverFilters } from '../util/discover-filters.js?v=364';
+import { releaseKind } from '../util/release-size.js?v=364';
+import { masNuevoPrimero } from '../util/release-date.js?v=364';
+import { vigilarRuta } from '../util/vigencia-ruta.js?v=364';
+import { leerElegidos, sumarElegidos, artistasBuscados, colaAutomatica } from '../util/cola-escaneo.js?v=364';
+import { leerFallos, marcarFallo, limpiarFallo, sinFallosMarcados } from '../util/escaneo-fallos.js?v=364';
+import { contarSinEscanear, sufijoSinEscanear, notaSinEscanear } from '../util/sin-escanear.js?v=364';
+import { estadoFrescura } from '../util/frescura-escaneo.js?v=364';
+import { prefKey, migratePrefKey } from '../storage.js?v=364';
 import {
   getArtistIdCached,
   getArtistDiscoCached,
@@ -51,6 +51,7 @@ import {
   wireAlbumCards,
   renderFiltroChips,
   wireFiltroChips,
+  pintarAvisoBibliotecaFiltros,
   addAlbumsToPlaylists,
   hiddenAlbums,
   heardAlbums,
@@ -66,11 +67,11 @@ import {
   avisarRonda,
   botonesBaseHtml,
   conectarBotonesBase,
-} from './discover-common.js?v=363';
+} from './discover-common.js?v=364';
 import {
   artistasOcultos, artistaEstaOculto, alternarArtistaOculto,
   botonMenuArtistaHtml, botonArtistasOcultosHtml, conectarMenuArtista, cerrarMenuArtista,
-} from './artistas-ocultos.js?v=363';
+} from './artistas-ocultos.js?v=364';
 
 const SCAN_KEY = 'discover_artists';
 
@@ -764,6 +765,8 @@ function pintarConteosFiltro(conteos) {
 function refreshList(content) {
   const listEl = document.getElementById('disco-list');
   if (!listEl) return;
+  // (v=364) Si la biblioteca no se pudo leer y «Fuera los de tu biblioteca» está encendido, se dice junto a los filtros.
+  pintarAvisoBibliotecaFiltros(state.filterCtx, state.filtros);
   // El pool depende del modo. En el normal se sacan los ocultos y los marcados
   // como escuchados: `unheardAlbums`/`unheardSingles` pueden venir del caché de
   // escaneo (7 días), calculados ANTES de que Ian marcara nada, así que el

@@ -19,15 +19,15 @@
 // Normalizar más agresivamente `albumKey` fusionaría American Football LP3/LP4,
 // Crystal Castles I/II y Ed Sheeran ÷ vs =, que ya costó caro dos veces.
 
-import { albumKey } from './album-key.js?v=363';
-import { songKey, songKeysCandidatas, songKeyBase } from './song-identity.js?v=363';
-import { baseDeEdicion } from './edition-suffix.js?v=363';
-import { EP_MIN_TRACKS } from './release-size.js?v=363';
-import { getSavedAlbums, getBestAvailableLikes, getAllPlaylistItems } from '../api.js?v=363';
-import { getOwnPlaylists } from './playlist-add.js?v=363';
-import { loadListenedAlbums } from '../features/history-data.js?v=363';
-import { buildAlbumHeardIndex } from './album-heard.js?v=363';
-import { prefKey, migratePrefKey } from '../storage.js?v=363';
+import { albumKey } from './album-key.js?v=364';
+import { songKey, songKeysCandidatas, songKeyBase } from './song-identity.js?v=364';
+import { baseDeEdicion } from './edition-suffix.js?v=364';
+import { EP_MIN_TRACKS } from './release-size.js?v=364';
+import { getSavedAlbums, getBestAvailableLikes, getAllPlaylistItems } from '../api.js?v=364';
+import { getOwnPlaylists } from './playlist-add.js?v=364';
+import { loadListenedAlbums } from '../features/history-data.js?v=364';
+import { buildAlbumHeardIndex } from './album-heard.js?v=364';
+import { prefKey, migratePrefKey } from '../storage.js?v=364';
 
 const LS_KEY = 'discover_filtros_v1';
 
@@ -210,6 +210,11 @@ export async function buildFilterContext({ force = false } = {}) {
   const enSinEscuchar = new Set(); // claves de álbum y de tema ya guardados
 
   // 1) Biblioteca de álbumes guardados.
+  //
+  // (v=364) Si la lectura falla, `guardados` queda vacío y «Fuera los de tu biblioteca» no descarta nada. Hasta v=363 eso se decía solo
+  // por consola; ahora el contexto lleva `bibliotecaFallo` y las dos vistas lo dicen en pantalla (`pintarAvisoBibliotecaFiltros()`,
+  // en `features/discover-common.js`). Una biblioteca vacía NO es un fallo: `getSavedAlbums()` devuelve `[]` y `bibliotecaFallo` es false.
+  let bibliotecaFallo = false;
   try {
     for (const it of await getSavedAlbums()) {
       const alb = it?.album;
@@ -219,6 +224,7 @@ export async function buildFilterContext({ force = false } = {}) {
       basesTuyas.add(claveBaseDeEdicion(alb.name, art));
     }
   } catch (e) {
+    bibliotecaFallo = true;
     console.warn('[discover-filtros] no pude leer tu biblioteca de álbumes:', e.message);
   }
 
@@ -300,8 +306,11 @@ export async function buildFilterContext({ force = false } = {}) {
     console.warn('[discover-filtros] no pude leer «' + PLAYLIST_SIN_ESCUCHAR + '»:', e.message);
   }
 
-  ctxCache = { guardados, escuchados, basesTuyas, temaEnAlbum, enSinEscuchar };
-  return ctxCache;
+  const ctx = { guardados, escuchados, basesTuyas, temaEnAlbum, enSinEscuchar, bibliotecaFallo };
+  // 🔴 Los fracasos no se memoizan (v=219): un contexto con la biblioteca sin leer quedaba pegado hasta recargar. El que falló se
+  // devuelve (la vista lo usa en ESTA apertura: un repintado no vuelve a pedir `/me/albums`) y la próxima apertura lo intenta de nuevo.
+  if (!bibliotecaFallo) ctxCache = ctx;
+  return ctx;
 }
 
 /**

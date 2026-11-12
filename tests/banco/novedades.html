@@ -50,6 +50,13 @@ try {
   sim.ruta('POST', /^\/me\/playlists/, () => ({ id: 'pl-simulada', name: 'simulada', owner: { id: 'usuario-banco' } }));
   sim.ruta('GET', /^\/playlists\/[^/]+\/items/, () => ({ items: [], total: 0, next: null }));
   sim.ruta('POST', /^\/playlists\/[^/]+\/items/, () => ({ snapshot_id: 's' }));
+  // (v=364, tanda 127) La biblioteca de álbumes: sana y vacía hasta el caso del final, que la tira con 500. Hasta v=363 este banco no la
+  // simulaba (contestaba 404 «ruta sin simular» y el filtro seguía callado).
+  let albumesCaida = false;
+  sim.ruta('GET', /^\/me\/albums/, () => (albumesCaida ? sim.sinSimular(500) : { items: [], limit: 50, offset: 0, total: 0, next: null }));
+  window.__avisos = [];
+  const avisoOriginal = console.warn.bind(console);
+  console.warn = (...a) => { window.__avisos.push(a.map((x) => String(x?.message ?? x)).join(' ').slice(0, 300)); avisoOriginal(...a); };
 
   // ── Sembrar IndexedDB como lo deja la app: me gusta y discografías ──────────
   const { idbSetCached } = await import('/js/idb.js');
@@ -114,7 +121,8 @@ try {
     .map(e => { const r = e.getBoundingClientRect(); return r.top + r.height / 2; }).sort((a, b) => a - b);
   const filas = centros.reduce((n, c, i) => (i === 0 || c - centros[i - 1] > 8) ? n + 1 : n, 0);
   const geo = (sel) => { const r = $(sel).getBoundingClientRect(); return `${sel} x${Math.round(r.left)} w${Math.round(r.width)} y${Math.round(r.top)} h${Math.round(r.height)}`; };
-  afirmar(filas === 1, `la barra ocupa ${filas} filas a ${ANCHO} px (tiene que ser 1): ${geo('.disco-topbar')} ${geo('.disco-summary')} ${geo('.disco-controls')} · ` + $$('.disco-controls > *').map(e => { const r = e.getBoundingClientRect(); return `${(e.textContent || e.id).trim().slice(0, 12)}@${Math.round(r.left)},${Math.round(r.top)} w${Math.round(r.width)}`; }).join(' | '));
+  // Con `?paso=biblioteca` (la foto de la tanda 127, que también se saca a 390 px) la barra no se afirma: a 390 ocupa varias filas, y es lo esperado.
+  afirmar(PASO === 'biblioteca' || filas === 1, `la barra ocupa ${filas} filas a ${ANCHO} px (tiene que ser 1): ${geo('.disco-topbar')} ${geo('.disco-summary')} ${geo('.disco-controls')} · ` + $$('.disco-controls > *').map(e => { const r = e.getBoundingClientRect(); return `${(e.textContent || e.id).trim().slice(0, 12)}@${Math.round(r.left)},${Math.round(r.top)} w${Math.round(r.width)}`; }).join(' | '));
   const barra = $('.disco-controls'), ultimo = [...barra.children].filter(e => e.getBoundingClientRect().height).at(-1);
   const libres = Math.round(barra.getBoundingClientRect().right - ultimo.getBoundingClientRect().right);
 
@@ -127,7 +135,122 @@ try {
   afirmar(sim.reg.externas.length === 0, 'nada salió a la red externa');
   afirmar(sim.reg.escrituras.every(e => e.metodo === 'POST' && /\/me\/playlists$/.test(e.ruta)) || sim.reg.escrituras.length === 0,
     `solo pudo haber escrituras simuladas de la playlist de ocultos: ${JSON.stringify(sim.reg.escrituras)}`);
-  listo(`12 tarjetas · viejo = reverso exacto de nuevo · ${filas} fila a ${ANCHO} px (${libres} px libres a la derecha) · 0 peticiones reales`);
+
+  // ── (v=364, tanda 127) «Fuera los de tu biblioteca» con la biblioteca sin leer ──────────────────
+  //
+  // Si `/me/albums` falla, el chip no descarta nada. Hasta v=363 lo decía solo por consola; ahora va UNA línea junto a los filtros, y solo con
+  // el chip encendido. Un contexto que falló no se memoiza: la apertura siguiente vuelve a pedir; un repintado, no.
+  const { idbDel } = await import('/js/idb.js');
+  const LINEA = 'No se ha podido leer tu biblioteca de Spotify: «Fuera los de tu biblioteca» no está descartando nada.';
+  const VUELTAS = 20000;
+  const linea = () => $('.disco-filtros-aviso-biblioteca');
+  const chipBib = () => $('#disco-filtros [data-filtro="biblioteca"]');
+  const aAlbumes = () => sim.reg.llamadas.filter(l => l.ruta.startsWith('/me/albums')).length;
+  const avisosFiltro = () => window.__avisos.filter(a => a.startsWith('[discover-filtros] no pude leer tu biblioteca')).length;
+  const vueltasDeRed = async (n = 40) => { for (let i = 0; i < n; i++) await anclar(fetch('/banco/esperar.mjs', { cache: 'no-store' }).then(r => r.text())); };
+  const esperarLinea = async () => { try { await esperarReal(() => linea(), { que: 'la línea', vueltas: 600 }); } catch { /* lo dice el afirmar de después */ } };
+  const abrirOtraVez = async (que) => {
+    render($('#main-content'));
+    await esperarReal(() => $$('#newrel-list .dcard').length === 12, { que: `las 12 tarjetas (${que})`, vueltas: VUELTAS });
+  };
+
+  // 1) Sana (la apertura de arriba): nada.
+  afirmar(chipBib()?.getAttribute('aria-pressed') === 'true', 'biblioteca: el chip «Fuera los de tu biblioteca» nace encendido');
+  afirmar(!linea(), `biblioteca: con /me/albums sano no hay línea («${linea()?.textContent}»)`);
+  afirmar(aAlbumes() === 1, `biblioteca: la apertura sana pidió /me/albums una vez (${aAlbumes()})`);
+
+  // 2) Caída con 500 y el chip encendido: la línea. La caché de la lectura sana se vacía a mano; el contexto sano está memoizado, así que
+  //    lo que obliga a leer de nuevo es `?force`… que la vista no usa: se vacía el memo con la función exportada, como hace «Actualizar».
+  const { invalidateFilterContext } = await import('/js/util/discover-filters.js');
+  for (const k of ['saved_albums_v1', 'saved_albums_v2']) await anclar(idbDel(k));
+  invalidateFilterContext();
+  albumesCaida = true;
+  let n0 = aAlbumes(), a0 = avisosFiltro();
+  await abrirOtraVez('caída');
+  await esperarReal(() => avisosFiltro() > a0, { que: 'el console.warn de [discover-filtros] con /me/albums en 500', vueltas: VUELTAS });
+  await esperarLinea();
+  // `?paso=biblioteca`: se queda acá, con la lectura caída y el chip encendido, para fotografiarlo (el antes y el después).
+  if (PASO === 'biblioteca') { window.scrollTo(0, 0); throw Object.assign(new Error('biblioteca'), { parada: true }); }
+  afirmar(!!linea(), `biblioteca: con /me/albums en 500 y el chip encendido NO hay línea (pedidas ${aAlbumes() - n0}; avisos: ${window.__avisos.filter(a => a.startsWith('[discover-filtros]')).join(' | ')})`);
+  afirmar(linea().textContent.trim() === LINEA, `biblioteca: el texto («${linea().textContent.trim()}»)`);
+  afirmar($$('.disco-filtros-aviso-biblioteca').length === 1, 'biblioteca: UNA línea');
+  afirmar(linea().previousElementSibling === $('#disco-filtros'), 'biblioteca: junto a los filtros (justo debajo)');
+  const sonda = document.createElement('span'); sonda.style.color = 'var(--color-text-secondary)'; document.body.appendChild(sonda);
+  afirmar(getComputedStyle(linea()).color === getComputedStyle(sonda).color, `biblioteca: en --color-text-secondary (${getComputedStyle(linea()).color} vs ${getComputedStyle(sonda).color})`);
+  sonda.remove();
+  // El contraste de la línea en los cuatro presets, ≥ 4,5:1, con el fondo compuesto capa por capa y las transiciones terminadas.
+  const colorDe = (css) => {
+    const s = String(css);
+    let m = s.match(/^color\(srgb\s+([\d.e-]+)\s+([\d.e-]+)\s+([\d.e-]+)(?:\s*\/\s*([\d.e-]+))?\)/);
+    if (m) return [m[1] * 255, m[2] * 255, m[3] * 255, m[4] === undefined ? 1 : +m[4]];
+    m = s.match(/rgba?\(([^)]+)\)/);
+    if (!m) return null;
+    const p = m[1].split(/[\s,/]+/).filter(Boolean).map(Number);
+    return [p[0], p[1], p[2], p[3] ?? 1];
+  };
+  const lum = (c) => { const [r, g, b] = c.slice(0, 3).map((v) => { const s = v / 255; return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4; }); return 0.2126 * r + 0.7152 * g + 0.0722 * b; };
+  const contraste = (a, b) => { const x = lum(a), y = lum(b); return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05); };
+  const sobre = (arriba, abajo) => { const a = arriba[3]; return [0, 1, 2].map((i) => arriba[i] * a + abajo[i] * (1 - a)).concat(1); };
+  const medir = (el) => {
+    const capas = []; let opacidad = 1, opaco = false;
+    for (let n = el; n && n.nodeType === 1; n = n.parentElement) {
+      opacidad *= Number(getComputedStyle(n).opacity || 1);
+      const c = colorDe(getComputedStyle(n).backgroundColor);
+      if (c && c[3] > 0 && !opaco) { capas.push(c); if (c[3] >= 1) opaco = true; }
+    }
+    let fondo = opaco ? capas.pop() : [255, 255, 255, 1];
+    const base = fondo.slice(0, 3).map(Math.round).join(',');
+    while (capas.length) fondo = sobre(capas.pop(), fondo);
+    const t = colorDe(getComputedStyle(el).color);
+    return { r: contraste(sobre([t[0], t[1], t[2], t[3] * opacidad], fondo), fondo), texto: t.slice(0, 3).map(Math.round).join(','), fondo: fondo.slice(0, 3).map(Math.round).join(','), base, opaco, opacidad };
+  };
+  const { PRESETS, applyTheme } = await import('/js/ui/theme-panel.js');
+  const contrastes = [];
+  for (const id of ['violeta', 'ambar', 'aguamarina', 'papel']) {
+    applyTheme(PRESETS.find((x) => x.id === id).colors);
+    getComputedStyle(linea()).color;
+    document.getAnimations().forEach((a) => { try { a.finish(); } catch { /* las infinitas */ } });
+    const m = medir(linea());
+    contrastes.push(`${id} ${m.r.toFixed(2)} (texto ${m.texto} sobre ${m.fondo}${m.opaco ? '' : ', SIN fondo opaco'}${m.opacidad !== 1 ? `, opacidad ${m.opacidad}` : ''})`);
+    afirmar(m.opaco, `biblioteca: el fondo de la línea en ${id} llega a una capa opaca`);
+    afirmar(m.r >= 4.5, `biblioteca: el contraste de la línea en ${id} es ${m.r.toFixed(2)}:1 (tiene que ser ≥ 4,5)`);
+  }
+  applyTheme(PRESETS.find((x) => x.id === 'violeta').colors);
+  afirmar($$('#newrel-list .dcard').length === 12, 'biblioteca: la lista sigue con sus 12');
+  const caidaPedidas = aAlbumes() - n0;
+  afirmar(caidaPedidas >= 1, `biblioteca: la apertura caída pidió /me/albums (${caidaPedidas})`);
+
+  // 3) Con el chip apagado, nada; al encenderlo, vuelve. Y un repintado no vuelve a pedir.
+  n0 = aAlbumes();
+  chipBib().click();
+  afirmar(chipBib().getAttribute('aria-pressed') === 'false' && !linea(), 'biblioteca: con el chip apagado no hay línea');
+  chipBib().click();
+  afirmar(chipBib().getAttribute('aria-pressed') === 'true' && linea()?.textContent.trim() === LINEA, 'biblioteca: al encenderlo, la línea vuelve');
+  await vueltasDeRed();
+  afirmar(aAlbumes() === n0, `biblioteca: apagar y encender el chip no vuelve a pedir /me/albums (${aAlbumes() - n0})`);
+
+  // 4) Otra apertura, SIN vaciar el memo: como falló, no quedó memoizado y vuelve a pedir.
+  n0 = aAlbumes(); a0 = avisosFiltro();
+  await abrirOtraVez('caída, segunda apertura');
+  await esperarReal(() => avisosFiltro() > a0, { que: 'el segundo console.warn de [discover-filtros]', vueltas: VUELTAS });
+  await esperarLinea();
+  afirmar(aAlbumes() > n0, `biblioteca: la segunda apertura vuelve a pedir /me/albums (${aAlbumes() - n0})`);
+  afirmar(linea()?.textContent.trim() === LINEA && $$('.disco-filtros-aviso-biblioteca').length === 1, 'biblioteca: y la línea sigue, una sola');
+
+  // 5) Sana otra vez: la apertura siguiente vuelve a pedir, sale bien y la línea se va.
+  albumesCaida = false;
+  n0 = aAlbumes();
+  await abrirOtraVez('sana otra vez');
+  await esperarReal(() => aAlbumes() > n0, { que: 'que la apertura sana vuelva a pedir /me/albums', vueltas: VUELTAS });
+  try { await esperarReal(() => !linea(), { que: 'que la línea se vaya', vueltas: 600 }); } catch { /* lo dice el afirmar de después */ }
+  await vueltasDeRed();
+  afirmar(!linea(), `biblioteca: con /me/albums sano otra vez no hay línea («${linea()?.textContent}»)`);
+  afirmar(aAlbumes() === n0 + 1, `biblioteca: la apertura sana pidió una vez (${aAlbumes() - n0})`);
+  afirmar(sim.reg.externas.length === 0, 'biblioteca: nada salió a la red externa');
+
+  // (tanda 127) El resumen va también a un `<pre>` y a `data-resumen`: es de donde `scripts/correr-banco.mjs` lo lee (mensaje y reloj virtual).
+  const decirResumen = (t) => { document.documentElement.setAttribute('data-resumen', t); const pre = document.createElement('pre'); pre.id = 'progreso'; pre.textContent = t; document.body.prepend(pre); return t; };
+  listo(decirResumen(`12 tarjetas · viejo = reverso exacto de nuevo · ${filas} fila a ${ANCHO} px (${libres} px libres a la derecha) · biblioteca: línea con 500 y el chip encendido (${caidaPedidas} GET), nada con el chip apagado ni con la lectura sana · contraste de la línea: ${contrastes.join(', ')} · 0 peticiones reales · reloj virtual=${Math.round(performance.now())} ms`));
 } catch (e) {
   if (e.parada) {
     document.documentElement.dataset.banco = 'ok';

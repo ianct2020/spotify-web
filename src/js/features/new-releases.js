@@ -42,6 +42,7 @@ import {
   wireAlbumCards,
   renderFiltroChips,
   wireFiltroChips,
+  pintarAvisoBibliotecaFiltros,
   addAlbumsToPlaylists,
   hiddenAlbums,
   cardKey,
@@ -868,6 +869,8 @@ async function pintarAvisoCortadas() {
 function refreshList(content) {
   const listEl = document.getElementById('newrel-list');
   if (!listEl) return;
+  // (v=364) Si la biblioteca no se pudo leer y «Fuera los de tu biblioteca» está encendido, se dice junto a los filtros.
+  pintarAvisoBibliotecaFiltros(state.filterCtx, state.filtros);
   pintarAvisoCortadas().catch(err => console.info('[newrel] aviso de cortadas:', err.message));
   const rows = releasesInWindow();
   document.getElementById('newrel-unheard-count').textContent = rows.length.toLocaleString('es-ES');
