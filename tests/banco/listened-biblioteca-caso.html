@@ -39,6 +39,14 @@ sim.ruta('GET', /^\/me\/tracks/, () => ({ items: [], next: null, total: 0 }));
 sim.ruta('GET', new RegExp(`^/playlists/${PLAYLIST_ID}\\?`), () => ({ snapshot_id: 'snapshot-inventado' }));
 sim.ruta('GET', new RegExp(`^/playlists/${PLAYLIST_ID}/items`), () => ({ items: LISTA, next: null, total: LISTA.length }));
 sim.ruta('GET', /^\/me\/albums/, ({ url }) => paginaDeBiblioteca(url));
+// (tanda 129) «📚 Por escuchar»: el POST de «Ya lo escuché» a la playlist simulada (`?post=403` lo contesta con 403) y el tracklist de un
+// disco (la fuente (c) de la pista representativa). Lo que escriben queda en `sim.reg.escrituras`: nada sale de aquí.
+const POST_403 = q.get('post') === '403';
+sim.ruta('POST', new RegExp(`^/playlists/${PLAYLIST_ID}/items$`), () => (POST_403 ? sim.sinSimular(403) : { snapshot_id: 'snapshot-inventado-2' }));
+sim.ruta('GET', /^\/albums\/[A-Za-z0-9]+\/tracks/, ({ ruta }) => {
+  const id = ruta.split('/')[2];
+  return { items: [{ uri: `spotify:track:${(`tl${id}`).slice(0, 22)}`, name: 'Tema Del Tracklist Inventado', track_number: 1, duration_ms: 200000, artists: [{ name: 'Banda Inventada' }] }], next: null, total: 1 };
+});
 
 // `/data/*`: 404 y anotado. Ningún JSON del repo.
 window.__datosAjenos = [];

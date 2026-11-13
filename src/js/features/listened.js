@@ -1,4 +1,5 @@
-import { getAllPlaylistItems, getBestAvailableLikes, addTracksToPlaylist, removeTracksFromPlaylist, getAllUserPlaylists, getCurrentUserId, getSavedAlbums } from '../api.js';
+import { getAllPlaylistItems, getBestAvailableLikes, addTracksToPlaylist, removeTracksFromPlaylist, getAllUserPlaylists, getCurrentUserId, getSavedAlbums, getAlbumTracks } from '../api.js';
+import { indiceDelRegistro, estaRegistrado, leerPorEscuchar, marcarEscuchado, cabeceraPorEscuchar, TEXTO_FALLO_POR_ESCUCHAR } from '../util/registro-escuchados.js';
 import { cargarEtiquetas, getCachedTags } from '../api/lastfm.js';
 import { esEPoAlbum } from '../util/release-size.js';
 import { idbGetCached, idbSetCached, idbGetTimestamp } from '../idb.js';
@@ -519,22 +520,15 @@ function computeUnregistered(min = unregMin, type = 'all') {
   //    cualquiera de los artistas principales vistos a cada lado: el `artist`
   //    del registro sale del álbum y el de los likes sale de las pistas, así
   //    que para un mismo disco no tienen por qué coincidir (ver `artistAlts`).
+  //
+  // 🔴 Desde v=366 la regla vive en `util/registro-escuchados.js` y la comparte «📚 Por escuchar»: no se vuelve a escribir aquí.
+  // Lo descartado a mano sí se queda aquí: es de esta lista, no del registro.
   const dismissed = getDismissed();
-  const registeredKeys = new Set();
-  for (const a of albums) {
-    registeredKeys.add(albumKey(a.name, a.artist));
-    for (const alt of (a.artistAlts || [])) registeredKeys.add(albumKey(a.name, alt));
-  }
-  const registeredIds = new Set(albums.map(a => a.id));
-  const registeredUris = new Set();
-  for (const a of albums) for (const t of a.tracks) if (t.uri) registeredUris.add(t.uri);
+  const indice = indiceDelRegistro(albums, albumKey);
   const out = [];
   for (const [k, e] of likesByKey) {
     if (dismissed.has(k)) continue;
-    if (registeredKeys.has(k)) continue;
-    if (clavesDe(e).some(kk => registeredKeys.has(kk))) continue;
-    if ([...e.ids].some(id => registeredIds.has(id))) continue;
-    if (e.tracks.some(t => t.uri && registeredUris.has(t.uri))) continue;
+    if (estaRegistrado(indice, { claves: [k, ...clavesDe(e)], ids: [...e.ids], uris: e.tracks.map(t => t.uri) })) continue;
     if (e.tracks.length < min) continue;
     const kind = releaseKind(e);
     if (type !== 'all' && kind !== type) continue;
@@ -650,6 +644,7 @@ function buildUI(totalTracks, ts) {
       </div>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
         <button class="btn btn-secondary btn-sm" id="listened-unreg-btn" title="Álbumes con varias canciones tuyas en likes que no están en tu registro (ajustas el mínimo adentro)">🎧 Sin registrar (${unregistered.length})</button>
+        <button class="btn btn-secondary btn-sm" id="listened-porescuchar-btn" title="Los álbumes de tu biblioteca de Spotify que todavía no están en tu registro de escuchados">📚 Por escuchar</button>
         <button class="btn btn-secondary btn-sm" id="listened-dupes-btn" title="Álbumes registrados dos veces (deluxe Y normal): sacas la sobrante y queda una sola versión">💿 Duplicados (${dupes.length})</button>
         <button class="btn btn-secondary btn-sm" id="listened-repeated-btn" title="Álbumes con varios tracks en la playlist: dejas 1 track por álbum y sacas los demás">🎵 Repetidos (${computeRepeatedAlbums().length})</button>
         <button class="btn btn-secondary btn-sm" id="listened-history-btn" title="Álbumes que ESCUCHASTE de verdad (según tu historial de reproducción) y no tienes registrados">📊 Del historial (${computeHistoryUnregistered().length})</button>
@@ -730,6 +725,9 @@ function buildUI(totalTracks, ts) {
 
   const unregBtn = document.getElementById('listened-unreg-btn');
   if (unregBtn) unregBtn.onclick = () => openUnregistered();
+
+  const porEscucharBtn = document.getElementById('listened-porescuchar-btn');
+  if (porEscucharBtn) porEscucharBtn.onclick = () => openPorEscuchar();
 
   const historyBtn = document.getElementById('listened-history-btn');
   if (historyBtn) historyBtn.onclick = () => openHistory();
@@ -1303,6 +1301,153 @@ function openUnregistered() {
       updateAddBtn();
     }
   };
+}
+
+// ── «📚 Por escuchar» (v=366, tanda 129) ─────────────────────────────────────
+//
+// Los álbumes de tu biblioteca de Spotify que todavía no están en tu registro de escuchados. Pedido de Ian: verlos, oír los previews en
+// la ficha (y darle ♥ a lo que guste, que la ficha ya trae) y marcarlos.
+//
+// 🔴 Lo pendiente se CALCULA (biblioteca menos registro). No se crea ninguna playlist ni se guarda ningún estado nuevo: «escuchado» es la
+// playlist de escuchados de siempre, y la regla de «ya está registrado» es la de `computeUnregistered()`, en `util/registro-escuchados.js`.
+//
+// Costo: abrir `#listened` no pide la biblioteca (por eso el botón no lleva número). Abrir este modal, `getSavedAlbums()`: 0 peticiones
+// dentro de sus 60 min de caché. «Ya lo escuché»: 1 POST, +1 GET de tracklist si el disco no tiene pista en me gusta ni en lo guardado.
+function openPorEscuchar() {
+  const overlay = openModal({
+    id: 'listened-por-escuchar',
+    html: `
+    <div class="modal modal-picker" style="max-width:560px">
+      <h2 style="margin-bottom:4px">📚 Por escuchar</h2>
+      <div style="display:flex;gap:8px;align-items:center;justify-content:space-between;flex-wrap:wrap;margin-bottom:10px;flex-shrink:0">
+        <p id="porescuchar-cabecera" style="color:var(--color-text-secondary);font-size:13px;margin:0;flex:1 1 200px;min-width:0">Leyendo tu biblioteca…</p>
+        <button class="btn btn-secondary btn-sm" id="porescuchar-actualizar" title="Vuelve a leer tu biblioteca de Spotify (si no, se reusa la lectura de la última hora)" disabled>Actualizar</button>
+      </div>
+      <div id="porescuchar-error" hidden style="color:var(--color-text-secondary);font-size:12px;margin-bottom:8px;overflow-wrap:anywhere;flex-shrink:0"></div>
+      <div id="porescuchar-lista" class="picker-scroll"></div>
+      <div class="modal-actions" style="margin-top:12px">
+        <button class="btn btn-secondary" data-close-modal>Cerrar</button>
+      </div>
+    </div>
+  `,
+  });
+
+  const cabecera = overlay.querySelector('#porescuchar-cabecera');
+  const errorEl = overlay.querySelector('#porescuchar-error');
+  const holder = overlay.querySelector('#porescuchar-lista');
+  const actualizarBtn = overlay.querySelector('#porescuchar-actualizar');
+  let lista = [];
+  const enCurso = new Set();   // ids con un «Ya lo escuché» en vuelo: dos clics = un POST
+  const artistasDe = (al) => (al.artists || []).map(x => x?.name).filter(Boolean);
+  const tapaChica = (al) => { const imgs = al.images || []; return imgs.length ? imgs[imgs.length - 1].url : null; };
+  const tapaGrande = (al) => al.images?.[0]?.url || null;
+
+  const pintar = () => {
+    cabecera.textContent = cabeceraPorEscuchar(lista.length);
+    if (lista.length === 0) { holder.innerHTML = ''; return; }
+    holder.innerHTML = `
+      <div style="border:1px solid var(--color-border);border-radius:var(--radius-sm)">
+        ${lista.map(({ album: al }) => {
+          const tapa = tapaChica(al);
+          const ocupado = enCurso.has(al.id);
+          return `
+          <div class="pick-row porescuchar-fila" data-id="${escapeHtml(al.id)}" style="display:flex;align-items:center;gap:11px;padding:9px 12px;border-bottom:1px solid var(--color-border);flex-wrap:wrap">
+            ${tapa ? `<img src="${escapeHtml(tapa)}" loading="lazy" class="pick-cover" alt="">` : `<div class="pick-cover" style="background:var(--color-elevated);display:flex;align-items:center;justify-content:center;color:var(--color-text-muted);font-size:16px">♪</div>`}
+            <div style="flex:1 1 120px;min-width:0">
+              <div style="font-size:14px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${escapeHtml(al.name || '')}">${escapeHtml(al.name || '(sin nombre)')}</div>
+              <div style="font-size:12px;color:var(--color-text-secondary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(artistasDe(al).join(', '))}</div>
+            </div>
+            <div style="display:flex;gap:6px;flex-shrink:0;margin-left:auto">
+              <button class="btn btn-secondary btn-sm porescuchar-escuchar" data-id="${escapeHtml(al.id)}" title="Abre la ficha del álbum: el tracklist con los previews y el ♥ para darle me gusta">Escuchar</button>
+              <button class="btn btn-primary btn-sm porescuchar-ya" data-id="${escapeHtml(al.id)}" title="Lo añade a tu playlist de escuchados con una de sus pistas" ${ocupado ? 'disabled' : ''}>${ocupado ? 'Añadiendo…' : 'Ya lo escuché'}</button>
+            </div>
+          </div>`;
+        }).join('')}
+      </div>
+    `;
+    holder.querySelectorAll('.porescuchar-ya').forEach(b => { b.onclick = () => yaLoEscuche(b.dataset.id); });
+    holder.querySelectorAll('.porescuchar-escuchar').forEach(b => { b.onclick = () => abrirFicha(b.dataset.id); });
+  };
+
+  const abrirFicha = (id) => {
+    const entrada = lista.find(x => x.album.id === id);
+    if (!entrada) return;
+    const al = entrada.album;
+    openAlbumCard({
+      name: al.name,
+      artist: artistasDe(al)[0] || '',
+      img: tapaGrande(al) || tapaChica(al),
+      albumId: al.id,
+      totalTracks: al.total_tracks,
+      plays: 0,
+      min: 0,
+      acciones: [{
+        label: 'Ya lo escuché',
+        title: 'Lo añade a tu playlist de escuchados con una de sus pistas',
+        onClick: ({ cerrar } = {}) => yaLoEscuche(id, { cerrar }),
+      }],
+    });
+  };
+
+  // «Ya lo escuché»: sin confirmación, como los otros «añadir a escuchados» de la vista (pedido de Ian).
+  const yaLoEscuche = async (id, { cerrar } = {}) => {
+    if (enCurso.has(id)) return;
+    const entrada = lista.find(x => x.album.id === id);
+    if (!entrada) return;
+    // En el MISMO paso del clic: la marca y el botón deshabilitado. Un segundo clic no llega a otro POST.
+    enCurso.add(id);
+    holder.querySelectorAll(`.porescuchar-ya[data-id="${CSS.escape(id)}"]`).forEach(b => { b.disabled = true; b.textContent = 'Añadiendo…'; });
+    const al = entrada.album;
+    const artistas = artistasDe(al);
+    try {
+      const pista = await marcarEscuchado(al, {
+        playlistId: playlistInfo.id,
+        anadir: addTracksToPlaylist,
+        likesByKey,
+        claveDe: albumKey,
+        pedirPistas: getAlbumTracks,
+      });
+      console.info(`[listened] «Ya lo escuché»: la pista salió de ${pista.fuente}`);
+      enCurso.delete(id);
+      lista = lista.filter(x => x.album.id !== id);
+      showToast(`«${al.name || 'El álbum'}» añadido a escuchados`, 'success');
+      if (cerrar) cerrar();
+      if (overlay.isConnected) pintar();
+      await addAlbumsLocally([{
+        id: al.id, name: al.name, artist: artistas[0] || '', artistAlts: artistas,
+        year: (al.release_date || '').slice(0, 4), image: tapaChica(al), cover: tapaGrande(al), uri: pista.uri,
+      }]);
+    } catch (e) {
+      enCurso.delete(id);
+      console.warn('[listened] «Ya lo escuché» falló:', e);
+      showToast('Error al añadir: ' + (e?.message || e), 'error');
+      holder.querySelectorAll(`.porescuchar-ya[data-id="${CSS.escape(id)}"]`).forEach(b => { b.disabled = false; b.textContent = 'Ya lo escuché'; });
+    }
+  };
+
+  const cargar = async (force) => {
+    actualizarBtn.disabled = true;
+    cabecera.textContent = 'Leyendo tu biblioteca…';
+    errorEl.hidden = true;
+    errorEl.textContent = '';
+    holder.innerHTML = '';
+    const r = await leerPorEscuchar({ leer: () => getSavedAlbums({ force }), indice: indiceDelRegistro(albums, albumKey), claveDe: albumKey });
+    if (!overlay.isConnected) return;
+    actualizarBtn.disabled = false;
+    if (r.fallo) {
+      // Nunca «0 álbumes» por un fallo: se dice que no se leyó, con el error crudo.
+      console.warn('[listened] no se pudo leer la biblioteca para «Por escuchar»:', r.fallo);
+      lista = [];
+      cabecera.textContent = TEXTO_FALLO_POR_ESCUCHAR;
+      errorEl.textContent = String(r.fallo?.message || r.fallo);
+      errorEl.hidden = false;
+      return;
+    }
+    lista = r.lista;
+    pintar();
+  };
+  actualizarBtn.onclick = () => cargar(true);
+  cargar(false);
 }
 
 // Modal de álbumes registrados por duplicado (2+ ediciones). Se marca para sacar la

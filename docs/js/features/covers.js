@@ -9,27 +9,27 @@
 // placeholder→img. Botón "Pantalla completa" (Fullscreen API) que oculta
 // sidebar/header/toolbar y recalcula el lado.
 
-import { loadListenedAlbums, isOwner, ownerLockedMessage, falloDeLecturaDelHistorial, avisoHistorialIlegibleHtml } from './history-data.js?v=365';
-import { isJunkTrack } from '../util/junk.js?v=365';
-import { vigilarRuta } from '../util/vigencia-ruta.js?v=365';
-import { createIncrementalList, scrollRootOf } from '../ui/incremental-list.js?v=365';
-import { createLazyImages } from '../ui/lazy-img.js?v=365';
-import { getAllPlaylistItems, getBestAvailableLikes } from '../api.js?v=365';
-import { escapeHtml, pageHeader, showProgress, hideProgress } from '../ui/components.js?v=365';
-import { showToast } from '../ui/toast.js?v=365';
-import { openAlbumCard } from './album-card.js?v=365';
-import { openArtistCard } from './artist-card.js?v=365';
-import { albumKey, coverId, coverVariant } from '../util/album-key.js?v=365';
-import { generarWallpaper, descargarBlob, WALLPAPER_PRESETS } from './covers-wallpaper.js?v=365';
-import { buildAlbumStatsIndex } from '../util/album-stats.js?v=365';
-import { sortList, ORDENES_TAPAS } from '../util/orden-tapas.js?v=365';
-import { getPreview } from '../api/preview-providers.js?v=365';
-import { hoverIn, hoverOut } from '../ui/preview-player.js?v=365';
-import { coverUrl, tapaParaCelda } from '../util/cover-size.js?v=365';
-import { prefKey, migratePrefKey } from '../storage.js?v=365';
-import { leerColores, coloresAlVuelo } from './mosaico-colores.js?v=365';
-import { mediaDeRejilla, BYTES_POR_PORTADA } from '../util/cover-color.js?v=365';
-import { FAMILIAS, SIN_COLOR, SIN_COLOR_NOMBRE, familiaDeRgb } from '../util/familia-color.js?v=365';
+import { loadListenedAlbums, isOwner, ownerLockedMessage, falloDeLecturaDelHistorial, avisoHistorialIlegibleHtml } from './history-data.js?v=366';
+import { isJunkTrack } from '../util/junk.js?v=366';
+import { vigilarRuta } from '../util/vigencia-ruta.js?v=366';
+import { createIncrementalList, scrollRootOf } from '../ui/incremental-list.js?v=366';
+import { createLazyImages } from '../ui/lazy-img.js?v=366';
+import { getAllPlaylistItems, getBestAvailableLikes } from '../api.js?v=366';
+import { escapeHtml, pageHeader, showProgress, hideProgress } from '../ui/components.js?v=366';
+import { showToast } from '../ui/toast.js?v=366';
+import { openAlbumCard } from './album-card.js?v=366';
+import { openArtistCard } from './artist-card.js?v=366';
+import { albumKey, coverId, coverVariant } from '../util/album-key.js?v=366';
+import { generarWallpaper, descargarBlob, WALLPAPER_PRESETS } from './covers-wallpaper.js?v=366';
+import { buildAlbumStatsIndex } from '../util/album-stats.js?v=366';
+import { sortList, ORDENES_TAPAS } from '../util/orden-tapas.js?v=366';
+import { getPreview } from '../api/preview-providers.js?v=366';
+import { hoverIn, hoverOut } from '../ui/preview-player.js?v=366';
+import { coverUrl, tapaParaCelda } from '../util/cover-size.js?v=366';
+import { prefKey, migratePrefKey } from '../storage.js?v=366';
+import { leerColores, coloresAlVuelo } from './mosaico-colores.js?v=366';
+import { mediaDeRejilla, BYTES_POR_PORTADA } from '../util/cover-color.js?v=366';
+import { FAMILIAS, SIN_COLOR, SIN_COLOR_NOMBRE, familiaDeRgb } from '../util/familia-color.js?v=366';
 
 const LS_KEY_SIZE = 'covers_cell_size';
 const LS_KEY_SORT = 'covers_sort_mode';

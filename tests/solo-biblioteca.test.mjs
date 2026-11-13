@@ -86,8 +86,14 @@ ok(manejador !== null, 'encontré el manejador del chip');
 ok(render && !render.includes('getSavedAlbums'), 'render() no pide los guardados');
 ok(cargar && !cargar.includes('getSavedAlbums'), 'loadAlbums() no pide los guardados');
 ok(manejador && (manejador.match(/\bgetSavedAlbums\(/g) || []).length === 1, 'el manejador los pide una vez');
-const sinImport = vista.replace(/^import .*$/gm, '');
-igual('fuera del manejador no aparece en ningún otro sitio', (sinImport.match(/\bgetSavedAlbums\b/g) || []).length, 1);
+// (v=366, tanda 129) «📚 Por escuchar» es el segundo sitio que la pide, también al apretar un botón (su modal la lee al abrirse). Lo que
+// este guard defiende no cambió: abrir la vista (`render()`, `loadAlbums()`, `buildUI()`) no la pide. Los comentarios no cuentan.
+const porEscuchar = cuerpoDe(vista, 'function openPorEscuchar(');
+const buildUI = cuerpoDe(vista, 'function buildUI(');
+ok(!porEscuchar || (porEscuchar.match(/\bgetSavedAlbums\(/g) || []).length === 1, '«Por escuchar», si está, la pide una vez, dentro de su modal');
+ok(buildUI && !buildUI.includes('getSavedAlbums'), 'buildUI() no pide los guardados');
+const sinImport = vista.replace(/^import .*$/gm, '').replace(/^\s*\/\/.*$/gm, '');
+igual('fuera de los manejadores no aparece en ningún otro sitio', (sinImport.match(/\bgetSavedAlbums\b/g) || []).length, porEscuchar ? 2 : 1);
 ok(!/\/me\/albums/.test(vista.replace(/^\s*\/\/.*$/gm, '')), 'listened.js no escribe otra lectura de /me/albums');
 
 console.log(`${bien + mal} asserts · ${bien} ok · ${mal} fallan`);

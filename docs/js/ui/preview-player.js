@@ -42,11 +42,11 @@
 //   - Buscando y con el embed no hay botón ni barra: no hay nada que pausar ni
 //     ningún tiempo que leer (el iframe no avisa nada).
 
-import { escapeHtml } from './components.js?v=365';
-import { showToast } from './toast.js?v=365';
-import { mountBottom } from './bottom-layer.js?v=365';
-import { animationsEnabled } from './reveal.js?v=365';
-import { iconoPlay, iconoPausa } from './icons.js?v=365';
+import { escapeHtml } from './components.js?v=366';
+import { showToast } from './toast.js?v=366';
+import { mountBottom } from './bottom-layer.js?v=366';
+import { animationsEnabled } from './reveal.js?v=366';
+import { iconoPlay, iconoPausa } from './icons.js?v=366';
 
 const audio = new Audio();
 audio.preload = 'none';

@@ -24,12 +24,19 @@
 //      NINGUNA línea de error. Hasta v=363 salía la línea de fallo: un error que no pasó.
 //   I. (v=364) La página 1 bien y la 2 en HTML: la línea de fallo y el chip apagado; con la simulada ya sana, volver a apretar pide las 3 páginas
 //      otra vez (no quedó una mitad guardada). Hasta v=363 el chip se aplicaba con la mitad.
+//   J. (v=366, tanda 129) «📚 Por escuchar». El botón, sin número, junto a «🎧 Sin registrar»; abrir #listened no pide /me/albums. El modal:
+//      3 GET /me/albums con la caché fría; exactamente los no registrados (fuera los 9 por id y el que cruza por nombre y artista), del
+//      guardado más nuevo al más viejo; «Ya lo escuché» con dos clics = 1 POST con la pista que trajo /me/albums (0 tracklist), la fila se va,
+//      el toast verde y el número baja; desde la ficha («Escuchar», sin /search), 1 POST con la primera del tracklist (+1 GET) y la ficha se
+//      cierra; la segunda apertura, 0 /me/albums. Con el POST en 403: toast rojo, la fila se queda, el botón vuelve. Con /me/albums ilegible,
+//      el texto del fallo y nunca «0»; con la biblioteca vacía, «No te queda ningún álbum…». A 1366×591 y 390×844, el modal no desborda.
+//      Las escrituras de J van SOLO a la playlist simulada; los demás casos siguen en 0.
 //
 // `?solo=A,B` corre esas. ⚠️ Todas las esperas van con `esperarReal` (ver PRESUPUESTO en `scripts/correr-banco.mjs`).
 
 import { esperarReal, anclar } from '/banco/simulado.mjs';
 import { fallar, listo } from '/banco/esperar.mjs';
-import { LISTA, OTRA_EDICION, idDeLista } from '/banco/listened-biblioteca-datos.mjs';
+import { LISTA, OTRA_EDICION, idDeLista, PLAYLIST_ID, POR_CLAVE, CON_PISTA, PISTA_GUARDADA, PENDIENTES_ESPERADOS } from '/banco/listened-biblioteca-datos.mjs';
 
 const afirmar = (c, msg) => { if (!c) throw new Error('BANCO: ' + msg); };
 const pasos = [];
@@ -324,11 +331,145 @@ try {
     progreso('I');
   }
 
-  const errores = marcos.flatMap(([n, f]) => win(f).__errores.map((e) => `${n}: ${e}`));
+  if (corre('J')) {
+    // (tanda 129) «📚 Por escuchar»: los álbumes de la biblioteca que no están en el registro. Escribe SOLO en la playlist simulada.
+    const BTN = '#listened-porescuchar-btn';
+    const MODAL = '[data-stack-id="listened-por-escuchar"]';
+    const filas = (f) => $$(f, `${MODAL} .porescuchar-fila`).map((x) => x.dataset.id);
+    const cabecera = (f) => $(f, '#porescuchar-cabecera')?.textContent.trim() ?? '';
+    const posts = (f) => win(f).__sim.reg.escrituras.filter((e) => e.metodo === 'POST');
+    const getsTracklist = (f) => llamadas(f).filter((l) => l.metodo === 'GET' && /^\/albums\/[^/]+\/tracks/.test(l.ruta)).length;
+    const toasts = (f, tipo) => $$(f, `.toast-${tipo}`).map((t) => t.textContent);
+    const abrirModal = async (f, que) => {
+      $(f, BTN).click();
+      await esperarReal(() => $(f, MODAL) && cabecera(f) && cabecera(f) !== 'Leyendo tu biblioteca…', { que: `${que}: el modal leído`, vueltas: VUELTAS });
+    };
+    const cerrarModal = async (f, que) => {
+      $(f, `${MODAL} [data-close-modal]`).click();
+      await esperarReal(() => !$(f, MODAL), { que: `${que}: el modal cerrado`, vueltas: VUELTAS });
+    };
+    const texto = (n) => (n === 1 ? '1 álbum de tu biblioteca que todavía no has marcado como escuchado.' : `${n} álbumes de tu biblioteca que todavía no has marcado como escuchados.`);
+    const N = PENDIENTES_ESPERADOS.length;
+
+    // J1: la lista, «Ya lo escuché» directo (fuente b, doble clic = 1 POST) y desde la ficha (fuente c), y la segunda apertura.
+    const f = abrirMarco('j', 1366, 591); marcos.push(['j', f]);
+    await abrirListened(f, 'J');
+    const btn = $(f, BTN);
+    afirmar(!!btn && btn.textContent.trim() === '📚 Por escuchar', `J: el botón «📚 Por escuchar», sin número («${btn?.textContent.trim()}»)`);
+    afirmar(btn.previousElementSibling?.id === 'listened-unreg-btn', 'J: junto a «🎧 Sin registrar»');
+    afirmar(aAlbumes(f) === 0, `J: abrir #listened, 0 /me/albums (${aAlbumes(f)})`);
+    await abrirModal(f, 'J');
+    afirmar(aAlbumes(f) === 3, `J: abrir el modal con la caché fría, 3 GET /me/albums (${aAlbumes(f)})`);
+    afirmar(JSON.stringify(filas(f)) === JSON.stringify(PENDIENTES_ESPERADOS), `J: exactamente los ${N} no registrados, del más nuevo al más viejo (vi ${filas(f).length}; primeros ${filas(f).slice(0, 3).join(', ')})`);
+    afirmar(cabecera(f) === texto(N), `J: la cabecera («${cabecera(f)}»)`);
+    afirmar(!filas(f).includes(POR_CLAVE) && !filas(f).includes(idDeLista(0)), 'J: fuera el registrado por id y el registrado por clave');
+    afirmar(filas(f)[0] === CON_PISTA, `J: el primero es el guardado más nuevo (${filas(f)[0]})`);
+    const fila0 = $(f, `${MODAL} .porescuchar-fila[data-id="${CON_PISTA}"]`);
+    afirmar(!!fila0.querySelector('.porescuchar-escuchar') && fila0.querySelector('.porescuchar-ya')?.textContent.trim() === 'Ya lo escuché', 'J: la fila trae «Escuchar» y «Ya lo escuché»');
+    afirmar(fila0.textContent.includes('Disco Con Pista Inventado') && fila0.textContent.includes('Banda Con Pista Inventada'), 'J: la fila trae nombre y artista');
+    // «Ya lo escuché» directo, con DOS clics seguidos.
+    const tl0 = getsTracklist(f), verdes0 = toasts(f, 'success').length;
+    const ya = fila0.querySelector('.porescuchar-ya');
+    ya.click(); ya.click();
+    afirmar(ya.disabled, 'J: el botón se deshabilita en el mismo paso del clic');
+    await esperarReal(() => !filas(f).includes(CON_PISTA), { que: 'J: la fila se va', vueltas: VUELTAS });
+    await esperarReal(() => toasts(f, 'success').length > verdes0, { que: 'J: el toast verde', vueltas: VUELTAS });
+    afirmar(posts(f).length === 1, `J: dos clics = 1 POST (${posts(f).length})`);
+    afirmar(posts(f)[0].ruta === `/playlists/${PLAYLIST_ID}/items` && JSON.stringify(posts(f)[0].cuerpo) === JSON.stringify({ uris: [PISTA_GUARDADA] }), `J: a la playlist de escuchados, con la pista guardada (${posts(f)[0].ruta} ${JSON.stringify(posts(f)[0].cuerpo)})`);
+    afirmar(getsTracklist(f) === tl0, `J: con la pista en lo guardado, 0 GET de tracklist (${getsTracklist(f) - tl0})`);
+    afirmar(toasts(f, 'success').some((t) => t.includes('«Disco Con Pista Inventado» añadido a escuchados')), `J: el toast verde («${toasts(f, 'success').join(' | ')}»)`);
+    afirmar(cabecera(f) === texto(N - 1), `J: el número baja («${cabecera(f)}»)`);
+    await esperarReal(() => tarjetas(f).length === LISTA.length + 1, { que: 'J: el registro local suma el disco', vueltas: VUELTAS });
+    // Desde la ficha: «Escuchar» abre la ficha con el albumId (sin /search) y la acción «Ya lo escuché».
+    const id2 = filas(f)[0];
+    const busquedas0 = llamadas(f).filter((l) => l.ruta.startsWith('/search')).length;
+    $(f, `${MODAL} .porescuchar-escuchar[data-id="${id2}"]`).click();
+    const FICHA = `[data-stack-id="album-card:${id2}"]`;
+    await esperarReal(() => $(f, `${FICHA} [data-alb-accion="0"]`), { que: 'J: la ficha con la acción', vueltas: VUELTAS });
+    await esperarReal(() => getsTracklist(f) === tl0 + 1, { que: 'J: la ficha pide su tracklist', vueltas: VUELTAS });
+    afirmar($(f, `${FICHA} [data-alb-accion="0"]`).textContent.trim() === 'Ya lo escuché', 'J: la acción de la ficha dice «Ya lo escuché»');
+    afirmar(llamadas(f).filter((l) => l.ruta.startsWith('/search')).length === busquedas0, 'J: la ficha no gasta /search');
+    $(f, `${FICHA} [data-alb-accion="0"]`).click();
+    await esperarReal(() => !filas(f).includes(id2) && !$(f, FICHA), { que: 'J: desde la ficha, la fila se va y la ficha se cierra', vueltas: VUELTAS });
+    afirmar(posts(f).length === 2 && JSON.stringify(posts(f)[1].cuerpo) === JSON.stringify({ uris: [`spotify:track:${(`tl${id2}`).slice(0, 22)}`] }), `J: desde la ficha, 1 POST con la pista del tracklist (${JSON.stringify(posts(f)[1]?.cuerpo)})`);
+    afirmar(getsTracklist(f) === tl0 + 2, `J: sin me gusta ni lo guardado, +1 GET de tracklist (${getsTracklist(f) - tl0 - 1})`);
+    afirmar(!!$(f, MODAL) && cabecera(f) === texto(N - 2), `J: el modal sigue abierto y el número baja («${cabecera(f)}»)`);
+    // La segunda apertura: 0 /me/albums, y ya sin los dos marcados.
+    await cerrarModal(f, 'J');
+    const a1 = aAlbumes(f);
+    await abrirModal(f, 'J otra vez');
+    afirmar(aAlbumes(f) === a1, `J: la segunda apertura, 0 GET /me/albums (${aAlbumes(f) - a1})`);
+    afirmar(filas(f).length === N - 2 && !filas(f).includes(CON_PISTA) && !filas(f).includes(id2), `J: la segunda apertura, ${N - 2} filas sin los dos marcados (${filas(f).length})`);
+    afirmar(toasts(f, 'error').length === 0, `J: ningún toast rojo (${toasts(f, 'error').join(' | ')})`);
+    datos.j = `${N} pendientes, 3 GET /me/albums; directo: 1 POST, 0 tracklist (fuente guardada); ficha: 1 POST, +1 tracklist; 2.ª apertura 0`;
+    progreso('J');
+
+    // J403: el POST en 403 → toast rojo, la fila se queda y el botón vuelve.
+    const g = abrirMarco('j403', 1366, 591, '&post=403'); marcos.push(['j403', g]);
+    await abrirListened(g, 'J403');
+    await abrirModal(g, 'J403');
+    const yaG = $(g, `${MODAL} .porescuchar-ya[data-id="${CON_PISTA}"]`);
+    const avisos0 = win(g).__avisos.length;
+    yaG.click();
+    await esperarReal(() => toasts(g, 'error').length > 0, { que: 'J403: el toast rojo', vueltas: VUELTAS });
+    await esperarReal(() => { const b = $(g, `${MODAL} .porescuchar-ya[data-id="${CON_PISTA}"]`); return b && !b.disabled; }, { que: 'J403: el botón vuelve', vueltas: VUELTAS });
+    afirmar(toasts(g, 'error').some((t) => t.includes('Error al añadir')), `J403: el toast rojo con el error («${toasts(g, 'error').join(' | ')}»)`);
+    afirmar(toasts(g, 'success').length === 0, `J403: ningún toast verde (${toasts(g, 'success').join(' | ')})`);
+    afirmar(filas(g).includes(CON_PISTA) && cabecera(g) === texto(N), `J403: la fila se queda y el número no baja («${cabecera(g)}»)`);
+    afirmar($(g, `${MODAL} .porescuchar-ya[data-id="${CON_PISTA}"]`).textContent.trim() === 'Ya lo escuché', 'J403: el botón vuelve a su texto');
+    afirmar(win(g).__avisos.slice(avisos0).some((a) => a.startsWith('[listened]')), 'J403: el error crudo en console.warn(\'[listened] …\')');
+    afirmar(tarjetas(g).length === LISTA.length, `J403: el registro local no suma nada (${tarjetas(g).length})`);
+    progreso('J403');
+
+    // J fallo y vacía: nunca «0» por un fallo; la biblioteca vacía de verdad dice que no queda nada.
+    const h = abrirMarco('jhtml', 1366, 591, '&fallo=html'); marcos.push(['jhtml', h]);
+    await abrirListened(h, 'J html');
+    const avisosH = win(h).__avisos.length;
+    await abrirModal(h, 'J html');
+    afirmar(cabecera(h) === 'No se ha podido leer tu biblioteca de Spotify.', `J html: el texto del fallo («${cabecera(h)}»)`);
+    afirmar(!$(h, '#porescuchar-error').hidden && $(h, '#porescuchar-error').textContent.includes('no se puede leer'), `J html: el error crudo («${$(h, '#porescuchar-error').textContent}»)`);
+    afirmar(!/\b0 álbum/.test($(h, MODAL).textContent) && filas(h).length === 0, 'J html: ningún «0 álbumes»');
+    afirmar(win(h).__avisos.slice(avisosH).some((a) => a.startsWith('[listened]')), 'J html: el error crudo en console.warn(\'[listened] …\')');
+    const v = abrirMarco('jvacia', 1366, 591, '&fallo=vacia'); marcos.push(['jvacia', v]);
+    await abrirListened(v, 'J vacía');
+    await abrirModal(v, 'J vacía');
+    afirmar(cabecera(v) === 'No te queda ningún álbum de tu biblioteca por marcar.' && filas(v).length === 0 && $(v, '#porescuchar-error').hidden, `J vacía: el texto de nada («${cabecera(v)}»)`);
+    progreso('J fallos');
+
+    // J ancho: a 1366×591 y 390×844 el modal no desborda.
+    const res = [];
+    for (const [ancho, alto] of [[1366, 591], [390, 844]]) {
+      const w = abrirMarco(`jancho${ancho}`, ancho, alto); marcos.push([`jancho${ancho}`, w]);
+      await abrirListened(w, `J ${ancho}`);
+      await abrirModal(w, `J ${ancho}`);
+      const de = w.contentDocument.documentElement;
+      const caja = $(w, `${MODAL} .modal`).getBoundingClientRect();
+      const lista = $(w, '#porescuchar-lista');
+      const filaMasAncha = Math.max(...$$(w, `${MODAL} .porescuchar-fila`).map((x) => x.scrollWidth - x.clientWidth));
+      afirmar(de.scrollWidth <= win(w).innerWidth, `J ${ancho}: la página no desborda (${de.scrollWidth} > ${win(w).innerWidth})`);
+      afirmar(caja.left >= 0 && caja.right <= win(w).innerWidth && caja.bottom <= win(w).innerHeight, `J ${ancho}: el modal entra (${caja.left.toFixed(0)}–${caja.right.toFixed(0)}, abajo ${caja.bottom.toFixed(0)})`);
+      afirmar(lista.scrollWidth <= lista.clientWidth && filaMasAncha <= 0, `J ${ancho}: la lista no desborda (${lista.scrollWidth}/${lista.clientWidth}, fila ${filaMasAncha})`);
+      const b = $(w, `${MODAL} .porescuchar-ya`).getBoundingClientRect();
+      afirmar(b.right <= caja.right && b.left >= caja.left, `J ${ancho}: «Ya lo escuché» entra en el modal`);
+      res.push(`${ancho} ${de.scrollWidth}/${win(w).innerWidth} modal ${caja.width.toFixed(0)}`);
+    }
+    datos.jAncho = res.join(', ');
+    progreso('J ancho');
+  }
+
+  // (tanda 129) El marco `j403` provoca un 403 a propósito, y `spotifyFetch` lo anota con su `console.error` de siempre: ese, y solo ese, se
+  // espera ahí (y se exige). Cualquier otro error, en cualquier marco, sigue siendo un fallo.
+  const ESPERADO_J403 = `console.error: Spotify 403 on /playlists/${PLAYLIST_ID}/items`;
+  const erroresJ403 = marcos.filter(([n]) => n === 'j403').flatMap(([, f]) => win(f).__errores);
+  if (marcos.some(([n]) => n === 'j403')) afirmar(erroresJ403.length > 0 && erroresJ403.every((e) => e.startsWith(ESPERADO_J403)), `J403: el único error de consola es el 403 del POST (${erroresJ403.join(' | ')})`);
+  const errores = marcos.filter(([n]) => n !== 'j403').flatMap(([n, f]) => win(f).__errores.map((e) => `${n}: ${e}`));
   afirmar(errores.length === 0, `0 errores de consola: ${errores.join(' | ')}`);
   const ajenos = marcos.flatMap(([, f]) => win(f).__sim.reg.desconocidas);
-  const escrituras = marcos.flatMap(([, f]) => win(f).__sim.reg.escrituras);
+  // Los marcos J escriben a propósito (en la playlist SIMULADA) y sus escrituras las afirma el caso J. Los demás, ninguna.
+  const escrituras = marcos.filter(([n]) => !n.startsWith('j')).flatMap(([, f]) => win(f).__sim.reg.escrituras);
   afirmar(escrituras.length === 0, `0 escrituras en la cuenta (${escrituras.map((e) => e.ruta).join(', ')})`);
+  const escriturasJ = marcos.filter(([n]) => n.startsWith('j')).flatMap(([, f]) => win(f).__sim.reg.escrituras);
+  afirmar(escriturasJ.every((e) => e.metodo === 'POST' && e.ruta === `/playlists/${PLAYLIST_ID}/items`), `J: solo POST a la playlist de escuchados simulada (${escriturasJ.map((e) => `${e.metodo} ${e.ruta}`).join(', ')})`);
   const resumenFinal = 'ok' +
     (datos.a ? ` · A rutas: ${datos.a} · A otros: ${datos.aOtros}` : '') +
     (datos.b ? ` · B: ${datos.b}` : '') +
@@ -336,6 +477,8 @@ try {
     (datos.g ? ` · G: ${datos.g}` : '') +
     (datos.h ? ` · H: ${datos.h}` : '') +
     (datos.i ? ` · I: ${datos.i}` : '') +
+    (datos.j ? ` · J: ${datos.j}` : '') +
+    (datos.jAncho ? ` · J ancho: ${datos.jAncho}` : '') +
     ` · rutas sin simular=${ajenos.length} · errores=${errores.length} · reloj virtual=${Math.round(performance.now())} ms`;
   document.documentElement.setAttribute('data-resumen', resumenFinal);
   document.getElementById('progreso').textContent = resumenFinal;

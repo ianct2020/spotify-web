@@ -27,11 +27,29 @@ export const LISTA = Array.from({ length: 30 }, (_, i) => ({
 }));
 
 const guardado = (id, name) => ({ added_at: '2026-01-01T00:00:00Z', album: { id, name, album_type: 'album', total_tracks: 10, images: [], artists: [{ id: id22('bandaGuardada', 0), name: 'Banda Guardada Inventada' }] } });
+// (tanda 129) Dos más para «📚 Por escuchar», que el chip no ve (el chip cruza por id):
+//   · POR_CLAVE: otro id, pero el mismo nombre y el mismo artista que el disco 10 de la lista → para «Por escuchar» ya está registrado;
+//   · CON_PISTA: un ajeno que trae `tracks.items` como lo trae `/me/albums`, para la fuente (b) de la pista representativa.
+// Quedan 122 guardados (3 páginas). Pendientes para «Por escuchar»: 122 − 9 (por id) − 1 (por clave) = 112; la otra edición (9) va con
+// otro artista («Banda Guardada Inventada»), así que no cruza ni por id ni por clave y sí está pendiente.
+export const POR_CLAVE = id22('discoPorClave', 10);
+export const CON_PISTA = id22('discoConPista', 0);
+export const PISTA_GUARDADA = `spotify:track:${id22('pistaGuardada', 0)}`;
+const guardadoDe = (id, name, artista, added_at, extra = {}) => ({ added_at, album: { id, name, album_type: 'album', total_tracks: 10, images: [], artists: [{ id: id22('bandaLista', 0), name: artista }], ...extra } });
 export const BIBLIOTECA = [
   ...Array.from({ length: 9 }, (_, i) => guardado(idDeLista(i), nombreDeLista(i))),
   guardado(id22('discoOtraEdicion', OTRA_EDICION), `${nombreDeLista(OTRA_EDICION)} (Deluxe Edition)`),
   ...Array.from({ length: 110 }, (_, i) => guardado(id22('discoAjeno', i), `Disco Ajeno Inventado ${i}`)),
+  guardadoDe(POR_CLAVE, nombreDeLista(10), artistaDeLista(10), '2026-02-01T00:00:00Z'),
+  guardadoDe(CON_PISTA, 'Disco Con Pista Inventado', 'Banda Con Pista Inventada', '2026-03-01T00:00:00Z', { tracks: { items: [{ uri: PISTA_GUARDADA, name: 'Tema Guardado Inventado' }] } }),
 ];
+/** Los ids que «Por escuchar» tiene que listar, del guardado más nuevo al más viejo (a igual `added_at`, el orden de la biblioteca). */
+export const PENDIENTES_ESPERADOS = (() => {
+  const fuera = new Set([...Array.from({ length: 9 }, (_, i) => idDeLista(i)), POR_CLAVE]);
+  return BIBLIOTECA.filter((g) => !fuera.has(g.album.id))
+    .map((g, i) => ({ id: g.album.id, t: Date.parse(g.added_at), i }))
+    .sort((a, b) => b.t - a.t || a.i - b.i).map((x) => x.id);
+})();
 
 /** Una página de `GET /me/albums`, con el `next` absoluto de la API de verdad. */
 export function paginaDeBiblioteca(url) {

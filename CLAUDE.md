@@ -1025,6 +1025,51 @@ algo cacheado hay que bumpear la clave: `cacheKeyFor` pasó a
 `listened_grouped_{id}_v2`, sin eso el caché de 24 h seguía con la clave vieja.
 Suite: `tests/listened-cruce.test.mjs`, 10 asserts.
 
+## 📚 «Por escuchar» en `#listened` (v=366)
+
+La tanda 129, pedido de Ian: los álbumes de su biblioteca de Spotify que todavía no están en su registro de escuchados, para oírlos
+con los previews, darle ♥ a lo que guste y marcarlos.
+
+- **Qué hace.** En la cabecera de `#listened`, junto a «🎧 Sin registrar», un botón **«📚 Por escuchar»** (`#listened-porescuchar-btn`),
+  **sin número**: un número obligaría a pedir la biblioteca al abrir la vista. Abre un modal (`openPorEscuchar()`, `listened.js`) con los
+  álbumes de `getSavedAlbums()` que NO están en el registro, del guardado más nuevo al más viejo (`added_at`). Arriba, «N álbumes de tu
+  biblioteca que todavía no has marcado como escuchados.» y «Actualizar» (`getSavedAlbums({ force: true })`). Cada fila: tapa, nombre,
+  artistas, **«Escuchar»** (la ficha de álbum con `albumId`, o sea sin `/search`, con la acción «Ya lo escuché» por `acciones`;
+  `album-card.js` no se tocó) y **«Ya lo escuché»** directo.
+- **La regla del cruce, en UN sitio: `util/registro-escuchados.js`** (pura, no importa nada; la clave `albumKey` se la pasa quien
+  llama). `indiceDelRegistro(albums, claveDe)` y `estaRegistrado(indice, { claves, ids, uris })` los usan **las dos listas**:
+  `computeUnregistered()` (que ya no arma su propio índice; lo descartado a mano se queda en ella porque es de esa lista) y
+  `pendientesDeBiblioteca()` (para un álbum de la biblioteca, las señales son el id y la clave con CADA artista del álbum). ⚠️ **No
+  escribas otra copia del cruce** (la regla de v=219). `window.__unregDiag` conserva una copia vieja **a propósito**: mide el cruce de
+  antes de v=164 y no decide nada en pantalla.
+- **Por qué no hay playlist nueva ni estado nuevo.** Lo pendiente se CALCULA (biblioteca menos registro) y «escuchado» es la playlist de
+  escuchados de siempre. Ian había propuesto una playlist con una canción de cada álbum que se fuera vaciando: no se hizo, a propósito,
+  para no escribir en su cuenta nada que no fuera el registro. Ni IndexedDB ni `localStorage` nuevos.
+- **La pista representativa** (`elegirPista()`, en este orden): (a) una tuya de ese álbum en me gusta (`likesByKey`, por id del álbum o
+  por clave; 0 peticiones); (b) la primera de `album.tracks.items` si `/me/albums` la trajo (0 peticiones); (c) la primera de
+  `getAlbumTracks(id)` (1 GET). ⚠️ **Si `/me/albums` trae las pistas en la Spotify real NO lo verificó esta tanda.** El comentario de
+  `getSavedAlbums()` dice que el 22/08/2026 se vio en vivo «con el tracklist adentro», pero nadie lo volvió a mirar: de eso depende que
+  «Ya lo escuché» cueste 1 o 2 peticiones cuando el disco no tiene me gusta. En la simulada se ejercitan (b) y (c); (a), solo en Node.
+- **«Ya lo escuché»** (`marcarEscuchado()` + el modal): `addTracksToPlaylist(playlistInfo.id, [uri])` **sin confirmación** (como los
+  otros «añadir a escuchados» de la vista), toast verde ««X» añadido a escuchados», la fila se va, el número baja, `addAlbumsLocally()`
+  con id, nombre, artista, `artistAlts`, año y tapas, y si venía de la ficha, la ficha se cierra. **Dos clics = un POST**: el id entra
+  en `enCurso` y el botón se deshabilita en el mismo paso del clic. **No se comprueba después del POST** que la pista quedó (los otros
+  «añadir a escuchados» tampoco lo hacen).
+- **Si algo falla.** Sin pista, el POST en 403 o la red: toast rojo «Error al añadir: » + el error crudo (y `console.warn('[listened]
+  …')`), la fila se queda y el botón vuelve a «Ya lo escuché». Si `getSavedAlbums()` tira (o trae elementos sin ningún `album.id`):
+  «No se ha podido leer tu biblioteca de Spotify.» con el error crudo debajo y `console.warn('[listened] …')`; **nunca «0 álbumes»**
+  (`leerPorEscuchar()` devuelve `{ fallo }`, no una lista vacía). Biblioteca vacía de verdad, o todo registrado: «No te queda ningún
+  álbum de tu biblioteca por marcar.». Sin playlist de escuchados configurada el botón no existe (la vista enseña su pantalla de «no
+  configurada»).
+- **Guardas.** `tests/por-escuchar.test.mjs` (la función pura con álbumes INVENTADOS; la conservación de `computeUnregistered()` contra
+  la de c537fa7, sacada con `git show`, en 15 combinaciones de mínimo y tipo; las tres fuentes; «Ya lo escuché» con el `api.js` REAL y
+  `fetch` doblado: 1 POST con esa uri, el 403 que tira; `getSavedAlbums()` REAL ilegible → `{ fallo }`. Usa `dobles/loader-t127.mjs`;
+  `listened.js` NO se carga en Node: lo de pantalla lo mira el banco. `RAIZ_T129` la corre contra otra copia. Rojo contra c537fa7 en 11
+  de 15 asserts; uno de los 11 era un dato mal escrito en el propio test, corregido después, así que con el test de hoy deberían ser 10:
+  eso no se volvió a medir) y el caso J del banco `listened-biblioteca` (la app entera con la Spotify simulada; rojo contra c537fa7, verde después, y los
+  casos A–I verdes en las dos). ⚠️ El marco `j403` deja a propósito el `console.error` del 403 de `spotifyFetch`: el banco lo exige ahí
+  y sigue exigiendo 0 errores en los demás marcos.
+
 ## Una fila `<label>` se marca desde cualquier hijo (v=164)
 Las filas de ese modal son un `<label>` que **envuelve** el checkbox, así que un
 click en cualquier descendiente lo tilda aunque el descendiente tenga su propio
@@ -5427,6 +5472,8 @@ fila sobrevivió así desde que se armó la tabla.
 | `#search` | **0** | **0** | — | — | leída del código · **`/me` repasado el 2026-10-08**: su `render()` no llega a `getCurrentUserId()` |
 | `#listened` | **26** `/items` + 3 `/me` | **0** | snapshot + págs. de `/items` | pistas de la playlist elegida | **medida en vivo el 2026-10-04** (caché vencido) |
 | ↳ al apretar «Solo los de tu biblioteca» | `ceil(n/50)` `GET /me/albums` (n = álbumes guardados) | **0** dentro de los 60 min de la caché | págs. de `/me/albums` | álbumes guardados | medida en el banco el 2026-11-06 (120 guardados: 3 y después 0). Abrir `#listened` no pide ninguna: las mismas rutas que en v=362, comparadas en la misma corrida. **Con una biblioteca vacía (v=364) el chip se aplica**: 1 `GET /me/albums`, «0 de M…», y 0 al volver a apretarlo; si una página viene rota, no queda nada en la caché y el intento siguiente vuelve a pedir todas (medida en el banco el 2026-11-10, casos H e I) |
+| ↳ al apretar «📚 Por escuchar» (v=366) | `ceil(n/50)` `GET /me/albums` (n = álbumes guardados) | **0** dentro de los 60 min de la caché (la misma `saved_albums_v2` del chip) | págs. de `/me/albums` | álbumes guardados | medida en el banco el 2026-11-12 (122 guardados: 3 y después 0; caso J). Abrir `#listened` sigue en las mismas 3 rutas que en v=365 (`/me`, snapshot, `/items`), comparadas contra la corrida de v=365 |
+| ↳ «Ya lo escuché» (v=366) | **1** `POST /playlists/{id}/items`, **+1** `GET /albums/{id}/tracks` si el disco no tiene pista en me gusta ni en lo que trajo `/me/albums` | — | — | — | medida en el banco el 2026-11-12 (caso J: con la pista guardada, 1; desde la ficha, sin ella, 1 + 1). «Escuchar» cuesta lo de la ficha con `albumId`: 1 `GET /albums/{id}/tracks`, sin `/search` |
 | ↳ lo que predice el código | 1 + ceil(n/100) | **0** (caché propio en IDB) | ídem | ídem | leída del código |
 | **Crear** | | | | | |
 | `#smart` | **ceil(L/50)** = **191** | **0** | `/me/tracks` paginado | **nº de me gusta** | leída del código · **`/me` repasado el 2026-10-08**: su `render()` no llega a `getCurrentUserId()` |
