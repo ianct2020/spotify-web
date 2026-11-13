@@ -44,8 +44,13 @@ const iGL = common.indexOf('export async function guardarLanzamiento(');
 const cuerpoGL = sinComentarios(common.slice(iGL, common.indexOf('\n}\n', iGL)));
 ok(iGL > 0, 'sigue habiendo guardarLanzamiento');
 ok(!/addUrisToPlaylists\(/.test(cuerpoGL), 'guardarLanzamiento no llama a addUrisToPlaylists');
-ok(!/getAlbumTracks\(/.test(cuerpoGL), 'ni a getAlbumTracks (guardar cuesta una petición, no dos o tres)');
-ok(/await saveAlbumsToLibrary\(\[al\.id\]\);\s*return \{ destino: 'biblioteca' \};/.test(cuerpoGL), 'siempre saveAlbumsToLibrary([al.id]) y { destino: \'biblioteca\' }');
+ok(!/getAlbumTracks\(/.test(cuerpoGL), 'ni a getAlbumTracks (desde v=365 guardar cuesta el PUT y el GET contains, nada más)');
+// (v=365, tanda 128) Ya no devuelve con el solo 200 del PUT: pregunta con `albumsInLibrary([al.id])` y recién ahí devuelve.
+// El detalle de qué tira y cuándo lo mira `tests/guardar-verificado.test.mjs`.
+const iPut = cuerpoGL.indexOf('await saveAlbumsToLibrary([al.id]);');
+const iPregunta = cuerpoGL.indexOf('albumsInLibrary([al.id])');
+const iDevuelve = cuerpoGL.lastIndexOf("return { destino: 'biblioteca' };");
+ok(iPut > 0 && iPregunta > iPut && iDevuelve > iPregunta, 'siempre saveAlbumsToLibrary([al.id]), después albumsInLibrary([al.id]) y recién ahí { destino: \'biblioteca\' }');
 ok(!/es un single: /.test(codigoCommon), 'se fue el toast de «es un single: … en la playlist»');
 ok(codigoCommon.includes('Guardar el single en tu biblioteca de álbumes de Spotify'), 'el title de «Guardar single» nombra el destino');
 ok(/'Guardar álbum' : 'Guardar single'/.test(codigoCommon), 'y las etiquetas «Guardar álbum» / «Guardar single» se quedan');

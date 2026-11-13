@@ -6,35 +6,35 @@
 //     (util/album-heard.js: historial completo + likes + listened + w-three)
 //   - permiten "+ Biblioteca" y "Crear playlist con lo elegido"
 
-import { idbGet, idbGetCached, idbSetCached, idbDel, idbEntriesByPrefix, idbAllKeys } from '../idb.js?v=364';
-import { getArtistAlbumsConFuente, buscarDiscografiaPorNombre, searchArtistByName, getAlbumTracks, saveToLibrary, saveAlbumsToLibrary, createPlaylist, addTracksToPlaylist } from '../api.js?v=364';
-import { albumKey } from '../util/album-key.js?v=364';
-import { cardKey, cardKeyLegacy, albumCreditName, keyOfPlaylistTrack } from '../util/discover-key.js?v=364';
-import { escapeHtml } from '../ui/components.js?v=364';
-import { openModal, closeTop } from '../ui/modal-stack.js?v=364';
-import { showToast } from '../ui/toast.js?v=364';
-import { openPlaylistPicker } from '../ui/playlist-picker.js?v=364';
-import { getOwnPlaylists, addUrisToPlaylists, toastAddResult } from '../util/playlist-add.js?v=364';
-import { openArtistCard } from './artist-card.js?v=364';
-import { openAlbumCard } from './album-card.js?v=364';
-import { createHiddenStore, createLocalStore } from '../util/hidden-sync.js?v=364';
-import { recuperarUriDeAlbumKey, REGLAS_VERSION } from '../util/hidden-recover.js?v=364';
-import { getPreview } from '../api/preview-providers.js?v=364';
-import { togglePreview, playingKey, attachHover } from '../ui/preview-player.js?v=364';
-import { coverUrl } from '../util/cover-size.js?v=364';
-import { fechaDelFallo } from '../util/escaneo-fallos.js?v=364';
-import { SCAN_TTL_MS, escaneoVencido, textoFrescura, crearMarcasDeFrescura } from '../util/frescura-escaneo.js?v=364';
-import { FILTROS as FILTROS_DEF, saveFiltros } from '../util/discover-filters.js?v=364';
-import { esEPoAlbum } from '../util/release-size.js?v=364';
-import { iconoPlay, iconoPausa, iconoPuntos, iconoOjo, iconoOjoTachado } from '../ui/icons.js?v=364';
+import { idbGet, idbGetCached, idbSetCached, idbDel, idbEntriesByPrefix, idbAllKeys } from '../idb.js?v=365';
+import { getArtistAlbumsConFuente, buscarDiscografiaPorNombre, searchArtistByName, getAlbumTracks, saveToLibrary, saveAlbumsToLibrary, albumsInLibrary, createPlaylist, addTracksToPlaylist } from '../api.js?v=365';
+import { albumKey } from '../util/album-key.js?v=365';
+import { cardKey, cardKeyLegacy, albumCreditName, keyOfPlaylistTrack } from '../util/discover-key.js?v=365';
+import { escapeHtml } from '../ui/components.js?v=365';
+import { openModal, closeTop } from '../ui/modal-stack.js?v=365';
+import { showToast } from '../ui/toast.js?v=365';
+import { openPlaylistPicker } from '../ui/playlist-picker.js?v=365';
+import { getOwnPlaylists, addUrisToPlaylists, toastAddResult } from '../util/playlist-add.js?v=365';
+import { openArtistCard } from './artist-card.js?v=365';
+import { openAlbumCard } from './album-card.js?v=365';
+import { createHiddenStore, createLocalStore } from '../util/hidden-sync.js?v=365';
+import { recuperarUriDeAlbumKey, REGLAS_VERSION } from '../util/hidden-recover.js?v=365';
+import { getPreview } from '../api/preview-providers.js?v=365';
+import { togglePreview, playingKey, attachHover } from '../ui/preview-player.js?v=365';
+import { coverUrl } from '../util/cover-size.js?v=365';
+import { fechaDelFallo } from '../util/escaneo-fallos.js?v=365';
+import { SCAN_TTL_MS, escaneoVencido, textoFrescura, crearMarcasDeFrescura } from '../util/frescura-escaneo.js?v=365';
+import { FILTROS as FILTROS_DEF, saveFiltros } from '../util/discover-filters.js?v=365';
+import { esEPoAlbum } from '../util/release-size.js?v=365';
+import { iconoPlay, iconoPausa, iconoPuntos, iconoOjo, iconoOjoTachado } from '../ui/icons.js?v=365';
 import {
   DISCO_BASE_PREFIX, PRESUPUESTO_REFRESCO, RECIENTE_MAX_PAGINAS,
   crearBase, sumarCompleta, sumarReciente, tocaReciente, rangoReciente,
   fusionarBases, armarExportacion, leerImportacion,
-} from '../util/disco-base.js?v=364';
+} from '../util/disco-base.js?v=365';
 import {
   estimarCostoDeEscaneo, clasificarArtistas, totalizarCosto, costoDeUno, superaUmbral, PAGINAS_POR_ARTISTA,
-} from '../util/costo-escaneo.js?v=364';
+} from '../util/costo-escaneo.js?v=365';
 
 const DISCO_TTL_MIN = 30 * 24 * 60;       // 30 días
 const ARTIST_ID_TTL_MIN = 60 * 24 * 60;   // 60 días — los ids no cambian
@@ -958,7 +958,7 @@ export function yearOf(release) {
 // `releaseTs` vive ahora en `util/release-date.js` (v=246), junto al comparador
 // «más nuevo primero» de `#discover-artists`; se re-exporta acá para que
 // `#new-releases` siga importándolo de este archivo.
-export { releaseTs } from '../util/release-date.js?v=364';
+export { releaseTs } from '../util/release-date.js?v=365';
 
 // Deduplica ediciones del mismo álbum (deluxe, remaster, etc). Nos quedamos
 // con la primera edición (release date más antiguo).
@@ -1672,16 +1672,52 @@ export async function saveAlbumToLibrary(albumId) {
 // playlist se queda ahí (el criterio `sinescuchar` de `util/discover-filters.js`
 // la sigue leyendo); desde v=301 nadie escribe en ella.
 //
-// Y de paso guardar cuesta UNA petición: ya no hace falta el tracklist para
-// decidir el destino (antes, sin `al.total`, se pedía solo para eso).
+// Ya no hace falta el tracklist para decidir el destino (antes, sin `al.total`,
+// se pedía solo para eso).
+//
+// ── «Guardado» solo si Spotify dice que está (v=365, tanda 128) ─────────────
+//
+// Hasta v=364, con el 200 del `PUT` se daba por guardado sin preguntar nada, y
+// que ese `PUT` guarde un `single` nunca se verificó con la Spotify real: si
+// Spotify contestara 200 y no lo guardara, el toast verde mentiría. Ahora,
+// después del `PUT`, se pregunta con `albumsInLibrary()` (api.js, la de
+// siempre: `GET /me/library/contains`) y solo se devuelve si dice que está.
+// Si dice que no, o si no se pudo preguntar, se TIRA: los tres llamadores
+// (`#new-releases`, `#discover-artists`, la ficha de `#similar`) ya pintan en
+// rojo lo que se tire y devuelven el botón a su texto. Guardar cuesta DOS
+// peticiones (`PUT` + `GET contains`).
+//
+// 🔴 Sin reintentos y sin esperas: no está medido si el `contains` va
+// retrasado justo después del `PUT` (como el `snapshot_id` de las playlists).
+// Por eso el texto del «no» no afirma que falló: dice que todavía no aparece.
+// Si va retrasado, la app dirá eso de algo que sí quedó; volver a apretar es
+// seguro, el `PUT` es idempotente.
 
 /**
- * Guarda un lanzamiento —álbum, EP o single— en la biblioteca de álbumes.
+ * Guarda un lanzamiento —álbum, EP o single— en la biblioteca de álbumes y
+ * comprueba con Spotify que quedó. Tira si no lo puede confirmar.
  * @returns {Promise<{destino:'biblioteca'}>}
  */
 export async function guardarLanzamiento(al) {
   if (!al?.id) throw new Error('lanzamiento sin id');
-  await saveAlbumsToLibrary([al.id]);
+  const nombre = al.name || 'el lanzamiento';
+  try {
+    await saveAlbumsToLibrary([al.id]);
+  } catch (e) {
+    console.warn('[guardar] el PUT /me/library falló:', e);
+    throw e;
+  }
+  let enBiblioteca;
+  try {
+    enBiblioteca = (await albumsInLibrary([al.id])).get(al.id);
+  } catch (e) {
+    console.warn('[guardar] no se pudo preguntar a Spotify si quedó guardado:', e);
+    throw new Error(`No se ha podido comprobar si «${nombre}» ha quedado guardado en tu biblioteca: ${e?.message || e}`);
+  }
+  if (enBiblioteca !== true) {
+    console.warn(`[guardar] el PUT salió bien pero Spotify dice que ${al.id} no está en la biblioteca`);
+    throw new Error(`Spotify ha aceptado guardar «${nombre}», pero todavía no aparece en tu biblioteca de álbumes. Compruébalo en Spotify antes de volver a intentarlo.`);
+  }
   return { destino: 'biblioteca' };
 }
 

@@ -174,7 +174,10 @@ try {
     id: `p${i + 1}`, uri: `spotify:track:p${i + 1}`, name: `Pista ${i + 1}`, track_number: i + 1, duration_ms: 180000,
     artists: [{ id: 'art-a', name: 'Artista de ejemplo A' }] }));
   sim.ruta('GET', /^\/albums\/alb-1\/tracks/, () => ({ items: pistas(10), total: 10, next: null }));
-  sim.ruta('PUT', /^\/me\/library/, () => ({}));
+  // (v=365, tanda 128) Desde v=365 guardar pregunta después `GET /me/library/contains`: la simulada contesta con lo que se guardó con el PUT.
+  const guardadosT128 = new Set();
+  sim.ruta('PUT', /^\/me\/library/, ({ url }) => { for (const u of (url.searchParams.get('uris') || '').split(',')) if (u) guardadosT128.add(u); return {}; });
+  sim.ruta('GET', /^\/me\/library\/contains/, ({ url }) => (url.searchParams.get('uris') || '').split(',').filter(Boolean).map(u => guardadosT128.has(u)));
   const antes = escrituras().length;
 
   const fila = { album: 'Álbum de ejemplo', albumId: 'alb-1', albumTotal: 10, artist: 'Artista de ejemplo A',
@@ -244,7 +247,7 @@ try {
     `y es PUT /me/library con la uri del single: ${nuevas[0].metodo} ${nuevas[0].ruta}`);
   afirmar(!nuevas.some(w => w.metodo === 'POST' && w.ruta.startsWith('/me/playlists')), 'ningún POST /me/playlists (no se crea ninguna playlist)');
   afirmar(!nuevas.some(w => w.metodo === 'POST' && /^\/playlists\/[^/]+\/items/.test(w.ruta)), 'ningún POST /playlists/…/items (no se añade ninguna pista)');
-  afirmar(!sim.reg.llamadas.slice(llamadasAntes2).some(esTracklistDelSingle), 'ningún GET /albums/alb-2/tracks al guardar (guardar cuesta una petición)');
+  afirmar(!sim.reg.llamadas.slice(llamadasAntes2).some(esTracklistDelSingle), 'ningún GET /albums/alb-2/tracks al guardar (desde v=365 guardar cuesta el PUT y el GET contains, nada más)');
   afirmar(!/es un single: |Creé la playlist|sin escuchar/.test($('.toast-container')?.textContent || ''), 'ni el aviso de la playlist ni el de la playlist pública');
 
   document.getElementById('main-content').insertAdjacentHTML('beforeend', '');

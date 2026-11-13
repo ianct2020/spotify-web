@@ -55,11 +55,15 @@ try {
   sim.ruta('GET', /^\/playlists\/[^/]+\/items/, () => ({ items: [], total: 0, next: null }));
   sim.ruta('POST', /^\/playlists\/[^/]+\/items/, () => ({ snapshot_id: 's' }));
   sim.ruta('GET', /^\/me\/albums/, () => ({ items: guardadosEnSpotify, limit: 50, offset: 0, total: guardadosEnSpotify.length, next: null }));
-  sim.ruta('PUT', /^\/me\/library/, () => {
+  // (v=365, tanda 128) Lo que se guardó con un PUT que salió bien: desde v=365 la app pregunta `GET /me/library/contains` después.
+  const guardadosPorPut = new Set();
+  sim.ruta('PUT', /^\/me\/library/, ({ url }) => {
     if (putModo === '403') return { __status: 403, body: { error: { status: 403, message: 'Forbidden (banco)' } } };
     if (putModo === '400') return { __status: 400, body: { error: { status: 400, message: 'Missing required field: uris' } } };
+    for (const u of (url.searchParams.get('uris') || '').split(',')) if (u) guardadosPorPut.add(u);
     return {};
   });
+  sim.ruta('GET', /^\/me\/library\/contains/, ({ url }) => (url.searchParams.get('uris') || '').split(',').filter(Boolean).map(u => guardadosPorPut.has(u)));
 
   // ── Sembrar: me gusta y la discografía del artista A ─────────────────────────
   const { idbSetCached, idbDel } = await import('/js/idb.js');

@@ -7,7 +7,7 @@
 //   - permiten "+ Biblioteca" y "Crear playlist con lo elegido"
 
 import { idbGet, idbGetCached, idbSetCached, idbDel, idbEntriesByPrefix, idbAllKeys } from '../idb.js';
-import { getArtistAlbumsConFuente, buscarDiscografiaPorNombre, searchArtistByName, getAlbumTracks, saveToLibrary, saveAlbumsToLibrary, createPlaylist, addTracksToPlaylist } from '../api.js';
+import { getArtistAlbumsConFuente, buscarDiscografiaPorNombre, searchArtistByName, getAlbumTracks, saveToLibrary, saveAlbumsToLibrary, albumsInLibrary, createPlaylist, addTracksToPlaylist } from '../api.js';
 import { albumKey } from '../util/album-key.js';
 import { cardKey, cardKeyLegacy, albumCreditName, keyOfPlaylistTrack } from '../util/discover-key.js';
 import { escapeHtml } from '../ui/components.js';
@@ -1672,16 +1672,52 @@ export async function saveAlbumToLibrary(albumId) {
 // playlist se queda ahí (el criterio `sinescuchar` de `util/discover-filters.js`
 // la sigue leyendo); desde v=301 nadie escribe en ella.
 //
-// Y de paso guardar cuesta UNA petición: ya no hace falta el tracklist para
-// decidir el destino (antes, sin `al.total`, se pedía solo para eso).
+// Ya no hace falta el tracklist para decidir el destino (antes, sin `al.total`,
+// se pedía solo para eso).
+//
+// ── «Guardado» solo si Spotify dice que está (v=365, tanda 128) ─────────────
+//
+// Hasta v=364, con el 200 del `PUT` se daba por guardado sin preguntar nada, y
+// que ese `PUT` guarde un `single` nunca se verificó con la Spotify real: si
+// Spotify contestara 200 y no lo guardara, el toast verde mentiría. Ahora,
+// después del `PUT`, se pregunta con `albumsInLibrary()` (api.js, la de
+// siempre: `GET /me/library/contains`) y solo se devuelve si dice que está.
+// Si dice que no, o si no se pudo preguntar, se TIRA: los tres llamadores
+// (`#new-releases`, `#discover-artists`, la ficha de `#similar`) ya pintan en
+// rojo lo que se tire y devuelven el botón a su texto. Guardar cuesta DOS
+// peticiones (`PUT` + `GET contains`).
+//
+// 🔴 Sin reintentos y sin esperas: no está medido si el `contains` va
+// retrasado justo después del `PUT` (como el `snapshot_id` de las playlists).
+// Por eso el texto del «no» no afirma que falló: dice que todavía no aparece.
+// Si va retrasado, la app dirá eso de algo que sí quedó; volver a apretar es
+// seguro, el `PUT` es idempotente.
 
 /**
- * Guarda un lanzamiento —álbum, EP o single— en la biblioteca de álbumes.
+ * Guarda un lanzamiento —álbum, EP o single— en la biblioteca de álbumes y
+ * comprueba con Spotify que quedó. Tira si no lo puede confirmar.
  * @returns {Promise<{destino:'biblioteca'}>}
  */
 export async function guardarLanzamiento(al) {
   if (!al?.id) throw new Error('lanzamiento sin id');
-  await saveAlbumsToLibrary([al.id]);
+  const nombre = al.name || 'el lanzamiento';
+  try {
+    await saveAlbumsToLibrary([al.id]);
+  } catch (e) {
+    console.warn('[guardar] el PUT /me/library falló:', e);
+    throw e;
+  }
+  let enBiblioteca;
+  try {
+    enBiblioteca = (await albumsInLibrary([al.id])).get(al.id);
+  } catch (e) {
+    console.warn('[guardar] no se pudo preguntar a Spotify si quedó guardado:', e);
+    throw new Error(`No se ha podido comprobar si «${nombre}» ha quedado guardado en tu biblioteca: ${e?.message || e}`);
+  }
+  if (enBiblioteca !== true) {
+    console.warn(`[guardar] el PUT salió bien pero Spotify dice que ${al.id} no está en la biblioteca`);
+    throw new Error(`Spotify ha aceptado guardar «${nombre}», pero todavía no aparece en tu biblioteca de álbumes. Compruébalo en Spotify antes de volver a intentarlo.`);
+  }
   return { destino: 'biblioteca' };
 }
 

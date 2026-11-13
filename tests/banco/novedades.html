@@ -65,12 +65,15 @@ try {
   const dia = (n) => new Date(Date.now() - n * 86400000).toISOString().slice(0, 10);
   // Empates a propósito: el mismo día en dos artistas distintos, para ver el desempate.
   const lanz = { A: [12, 70, 200], B: [12, 33, 150], C: [33, 95, 260], D: [5, 70, 310] };
+  // (v=365, tanda 128) `r-D-1` es un SINGLE de 1 pista: su tarjeta dice «Guardar single», que es lo que aprieta el caso del final.
+  // El orden no mira ni el tipo ni las pistas, así que el oráculo de abajo no cambia.
+  const SINGLE_T128 = 'r-D-1';
   const esperadoNuevo = [];                       // [{ id, fecha, artista }]
   for (const a of ARTISTAS) {
     const k = a.name.slice(-1);
     const items = lanz[k].map((d, i) => ({
-      id: `r-${k}-${i + 1}`, name: `Lanzamiento ${k}${i + 1}`, type: 'album', img: null,
-      release: dia(d), total: 9 + i, artists: [{ id: a.id, name: a.name }],
+      id: `r-${k}-${i + 1}`, name: `Lanzamiento ${k}${i + 1}`, type: `r-${k}-${i + 1}` === SINGLE_T128 ? 'single' : 'album', img: null,
+      release: dia(d), total: `r-${k}-${i + 1}` === SINGLE_T128 ? 1 : 9 + i, artists: [{ id: a.id, name: a.name }],
     }));
     items.forEach(it => esperadoNuevo.push({ id: it.id, fecha: it.release, artista: a.name }));
     await anclar(idbSetCached(`${DISCO_BASE_PREFIX}${a.id}`, crearBase(items, { fuente: 'nativo', cortada: false }), null));
@@ -248,9 +251,41 @@ try {
   afirmar(aAlbumes() === n0 + 1, `biblioteca: la apertura sana pidió una vez (${aAlbumes() - n0})`);
   afirmar(sim.reg.externas.length === 0, 'biblioteca: nada salió a la red externa');
 
+  // ── (v=365, tanda 128) «Guardar single» con un PUT que sale bien y un contains que dice que no está ──────────────
+  //
+  // La simulada contesta 200 al `PUT /me/library` y `[false]` a `GET /me/library/contains`. Hasta v=364 la app no preguntaba y
+  // decía «guardado» en verde; desde v=365 pregunta, y como Spotify no lo confirma: toast rojo con «todavía no aparece…
+  // Compruébalo en Spotify», el botón vuelve a «Guardar single» y la tarjeta se queda.
+  sim.ruta('PUT', /^\/me\/library\?/, () => ({}));
+  sim.ruta('GET', /^\/me\/library\/contains\?/, ({ url }) => (url.searchParams.get('uris') || '').split(',').filter(Boolean).map(() => false));
+  const botonSingle = () => $(`#newrel-list [data-save-album="${SINGLE_T128}"]`);
+  afirmar(!!botonSingle(), `guardar: la tarjeta del single ${SINGLE_T128} está en la lista`);
+  afirmar(botonSingle().textContent.trim() === 'Guardar single', `guardar: el botón dice «Guardar single» («${botonSingle().textContent.trim()}»)`);
+  const toastsT128 = () => $$('.toast').map(t => ({ clase: t.className, texto: t.textContent.replace(/\s+/g, ' ').trim() }));
+  const vistosT128 = new Map();
+  const mirarToasts = () => { for (const t of toastsT128()) vistosT128.set(t.texto, t.clase); };
+  const l0 = sim.reg.llamadas.length;
+  botonSingle().click();
+  await esperarReal(() => { mirarToasts(); return [...vistosT128.keys()].some(t => /todavía no aparece|guardado en tu biblioteca/.test(t)); },
+    { que: 'el toast del guardado', vueltas: VUELTAS });
+  // El repintado de una tarjeta guardada va a los 800 ms: se le da tiempo de sobra para irse (no debería).
+  try { await esperarReal(() => { mirarToasts(); return !botonSingle(); }, { que: 'que la tarjeta se vaya (no debería)', vueltas: 400 }); } catch { /* lo esperado */ }
+  await vueltasDeRed();
+  mirarToasts();
+  const pedidasT128 = sim.reg.llamadas.slice(l0).map(l => `${l.metodo} ${decodeURIComponent(l.ruta)}`);
+  const vistos = [...vistosT128.entries()].map(([t, c]) => `[${c}] ${t}`);
+  afirmar(![...vistosT128.keys()].some(t => /guardado en tu biblioteca/.test(t)), `guardar: con contains [false] NO hay toast de «guardado» (toasts: ${vistos.join(' || ')})`);
+  const rojo = [...vistosT128.entries()].find(([t, c]) => /\btoast-error\b/.test(c) && /todavía no aparece/.test(t) && /Compruébalo en Spotify/.test(t));
+  afirmar(!!rojo, `guardar: un toast ROJO con «todavía no aparece… Compruébalo en Spotify» (toasts: ${vistos.join(' || ')})`);
+  afirmar(!!botonSingle(), 'guardar: la tarjeta se queda en la lista');
+  afirmar(botonSingle().textContent.trim() === 'Guardar single' && !botonSingle().disabled, `guardar: el botón vuelve a «Guardar single», habilitado («${botonSingle()?.textContent.trim()}»)`);
+  afirmar(pedidasT128.length === 2 && pedidasT128[0] === `PUT /me/library?uris=spotify:album:${SINGLE_T128}` && pedidasT128[1] === `GET /me/library/contains?uris=spotify:album:${SINGLE_T128}`,
+    `guardar: las peticiones son PUT + GET contains (${pedidasT128.join(' , ')})`);
+  afirmar(sim.reg.externas.length === 0, 'guardar: nada salió a la red externa');
+
   // (tanda 127) El resumen va también a un `<pre>` y a `data-resumen`: es de donde `scripts/correr-banco.mjs` lo lee (mensaje y reloj virtual).
   const decirResumen = (t) => { document.documentElement.setAttribute('data-resumen', t); const pre = document.createElement('pre'); pre.id = 'progreso'; pre.textContent = t; document.body.prepend(pre); return t; };
-  listo(decirResumen(`12 tarjetas · viejo = reverso exacto de nuevo · ${filas} fila a ${ANCHO} px (${libres} px libres a la derecha) · biblioteca: línea con 500 y el chip encendido (${caidaPedidas} GET), nada con el chip apagado ni con la lectura sana · contraste de la línea: ${contrastes.join(', ')} · 0 peticiones reales · reloj virtual=${Math.round(performance.now())} ms`));
+  listo(decirResumen(`12 tarjetas · viejo = reverso exacto de nuevo · ${filas} fila a ${ANCHO} px (${libres} px libres a la derecha) · biblioteca: línea con 500 y el chip encendido (${caidaPedidas} GET), nada con el chip apagado ni con la lectura sana · guardar con contains [false]: toast rojo, «Guardar single» y la tarjeta se queda (${pedidasT128.length} peticiones) · contraste de la línea: ${contrastes.join(', ')} · 0 peticiones reales · reloj virtual=${Math.round(performance.now())} ms`));
 } catch (e) {
   if (e.parada) {
     document.documentElement.dataset.banco = 'ok';

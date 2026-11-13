@@ -1,6 +1,6 @@
-import { prefKey, migratePrefKey } from '../storage.js?v=364';
-import { idbGet, idbSet, idbSetVarios, idbEntriesEnRango } from '../idb.js?v=364';
-import { crearAlmacenGeneros, CLAVE_MIGRADO, filtrarEtiquetasLastfm } from '../util/generos-artista.js?v=364';
+import { prefKey, migratePrefKey } from '../storage.js?v=365';
+import { idbGet, idbSet, idbSetVarios, idbEntriesEnRango } from '../idb.js?v=365';
+import { crearAlmacenGeneros, CLAVE_MIGRADO, filtrarEtiquetasLastfm } from '../util/generos-artista.js?v=365';
 
 const LASTFM_KEY_STORAGE = 'lastfm_api_key';
 const LASTFM_USER_STORAGE = 'lastfm_username';
