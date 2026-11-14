@@ -10,14 +10,14 @@
 //   - Umbral de likes: 5+ / 10+ / 20+
 //   - Ventana temporal: 3 / 6 / 12 / 24 meses, 5 años y «todo» (default 12)
 
-import { escapeHtml, confirmModal, pageHeader } from '../ui/components.js?v=367';
-import { showToast } from '../ui/toast.js?v=367';
-import { buildAlbumHeardIndex } from '../util/album-heard.js?v=367';
-import { releaseKind } from '../util/release-size.js?v=367';
-import { loadFiltros, buildFilterContext, applyDiscoverFilters } from '../util/discover-filters.js?v=367';
-import { createIncrementalList, scrollRootOf } from '../ui/incremental-list.js?v=367';
-import { createLazyImages } from '../ui/lazy-img.js?v=367';
-import { prefKey, migratePrefKey } from '../storage.js?v=367';
+import { escapeHtml, confirmModal, pageHeader } from '../ui/components.js?v=368';
+import { showToast } from '../ui/toast.js?v=368';
+import { buildAlbumHeardIndex } from '../util/album-heard.js?v=368';
+import { releaseKind } from '../util/release-size.js?v=368';
+import { loadFiltros, buildFilterContext, applyDiscoverFilters } from '../util/discover-filters.js?v=368';
+import { createIncrementalList, scrollRootOf } from '../ui/incremental-list.js?v=368';
+import { createLazyImages } from '../ui/lazy-img.js?v=368';
+import { prefKey, migratePrefKey } from '../storage.js?v=368';
 import {
   getArtistIdCached,
   getArtistDiscoCached,
@@ -58,17 +58,17 @@ import {
   avisarRonda,
   botonesBaseHtml,
   conectarBotonesBase,
-} from './discover-common.js?v=367';
-import { compararLanzamientos, ORDENES_LANZAMIENTO } from '../util/release-date.js?v=367';
-import { estadoNativoDiscografia } from '../api.js?v=367';
-import { leerElegidos, sumarElegidos, artistasBuscados, colaAutomatica } from '../util/cola-escaneo.js?v=367';
-import { leerFallos, marcarFallo, limpiarFallo, sinFallosMarcados } from '../util/escaneo-fallos.js?v=367';
-import { contarSinEscanear, sufijoSinEscanear, notaSinEscanear } from '../util/sin-escanear.js?v=367';
-import { estadoFrescura } from '../util/frescura-escaneo.js?v=367';
+} from './discover-common.js?v=368';
+import { compararLanzamientos, ORDENES_LANZAMIENTO } from '../util/release-date.js?v=368';
+import { estadoNativoDiscografia } from '../api.js?v=368';
+import { leerElegidos, sumarElegidos, artistasBuscados, colaAutomatica } from '../util/cola-escaneo.js?v=368';
+import { leerFallos, marcarFallo, limpiarFallo, sinFallosMarcados } from '../util/escaneo-fallos.js?v=368';
+import { contarSinEscanear, sufijoSinEscanear, notaSinEscanear } from '../util/sin-escanear.js?v=368';
+import { estadoFrescura } from '../util/frescura-escaneo.js?v=368';
 import {
   artistasOcultos, artistaEstaOculto, alternarArtistaOculto,
   botonMenuArtistaHtml, botonArtistasOcultosHtml, conectarMenuArtista, cerrarMenuArtista,
-} from './artistas-ocultos.js?v=367';
+} from './artistas-ocultos.js?v=368';
 
 const SCAN_KEY = 'new_releases';
 

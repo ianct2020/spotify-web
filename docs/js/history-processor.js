@@ -13,9 +13,9 @@
 //
 // Devuelve la misma forma que los JSONs del repo (mismos `version` numbers).
 
-import { isJunkTrack } from './util/junk.js?v=367';
-import { songKey } from './util/song-identity.js?v=367';
-import { PRIMER_SKIPPED_TRUE } from './util/corte-saltos.js?v=367';
+import { isJunkTrack } from './util/junk.js?v=368';
+import { songKey } from './util/song-identity.js?v=368';
+import { PRIMER_SKIPPED_TRUE } from './util/corte-saltos.js?v=368';
 
 // ---- Configuración (igual a gen-stats.py) ----
 const MIN_MS = 30000;
@@ -50,7 +50,15 @@ const SKIP_STATS_VERSION = 5;    // v5 (tanda 90, `#menos-salteas`): `tracks[id]
 const LISTENED_VERSION = 2;
 const TRACK_DETAIL_VERSION = 1;
 const RECORDS_VERSION = 3;
-const DAYS_VERSION = 1;    // v1: el detalle por día — el octavo payload, el que alimenta `#calendario` (v=289)
+// v1: el detalle por día — el octavo payload, el que alimenta `#calendario` (v=289).
+// v2 (v=368, tanda 131): suma `diasLocal`, lo mismo agrupado por el día de Mar del Plata, para el panel
+// de `#lluvia`. `dias` no cambia ni un byte. Nadie de `src/` compara esta versión (`loadDays()` mira
+// `!!d.dias`), y la clave de IndexedDB es la de siempre: un detalle v1 se sigue leyendo igual.
+const DAYS_VERSION = 2;
+// El día de Mar del Plata: la fecha de `ts − 3 h`, UTC−3 fija (Argentina no tiene horario de verano desde
+// 2009). La MISMA cuenta que `UTC_OFFSET_LOCAL_SECONDS` de `scripts/gen-stats.py` (el archivo del día local
+// del owner, que este import NO produce: lo vigila `tests/lluvia.test.mjs`).
+const UTC_OFFSET_LOCAL_MS = -3 * 3600 * 1000;
 // Récords v3 — espejo de gen-stats.py.
 // Corte de sesión de la racha de un artista (#18). Sin él, la racha "sin
 // intercalar otro artista" sobrevive a que te vayas a dormir: la ganadora sin
@@ -150,8 +158,15 @@ function round1(x) { return Math.round(x * 10) / 10; }
 //         saltos:  21,      // ver «la definición de salto», más abajo
 //         temas:   [ [i, min, veces], … ]  // i = índice en `temas`
 //       }, …
-//     }
+//     },
+//     diasLocal: { … }   // v2 (v=368): la MISMA forma que `dias`, por día de Mar del Plata
 //   }
+//
+// `diasLocal` (v=368, tanda 131) es lo que lee el panel de `#lluvia`: la lluvia viene en días de
+// Mar del Plata y los minutos por día local de `gen-stats.py` también, así que el detalle del día tiene
+// que estar cortado igual (la fecha de `ts − 3 h`). Sale del MISMO bucle, con las mismas reglas y el
+// mismo diccionario `temas`: cada reproducción se suma a su día UTC y a su día local a la vez. El orden
+// de los temas de un día local es el de su `ts` mínimo DENTRO de ese día local. `#calendario` no lo lee.
 //
 // Los temas de un día van en el orden de su **primera** reproducción de ese
 // día. Por eso NO hace falta el `sort` global de `processStreamingHistory()`:
@@ -185,6 +200,8 @@ function round1(x) { return Math.round(x * 10) / 10; }
 //      audiolibros), y sus minutos tampoco cuentan.
 //   3. **La misma agrupación por día, en UTC** (`parseTs`, que es `getUTC*`).
 //      Es lo que hace que `min` cuadre con `years[].days.min` día por día.
+//      (`diasLocal`, desde v=368, cuadra igual con los minutos por día local de `gen-stats.py`: lo
+//      vigila `tests/lluvia-dia-detalle.test.mjs` contra `gen-stats.py`.)
 //
 // ── LA DEFINICIÓN DE SALTO, Y UNA DISCREPANCIA DEL PIPELINE ────────────────
 //
@@ -214,6 +231,13 @@ function crearAcumuladorDeDias() {
   const vistas = new Set();
   // dia -> { ms, crudas, validas, saltos, temas: Map(trackId -> {ms, veces, ts}) }
   const dias = new Map();
+  // v=368: lo mismo, por día de Mar del Plata (`diasLocal`). Lo llenan las MISMAS líneas de abajo.
+  const diasLocal = new Map();
+  const entradaDe = (mapa, dia) => {
+    let d = mapa.get(dia);
+    if (!d) { d = { ms: 0, crudas: 0, validas: 0, saltos: 0, temas: new Map() }; mapa.set(dia, d); }
+    return d;
+  };
   // trackId -> { i, nombre, artista }. Un tema vive UNA vez, no una por día.
   const temas = new Map();
   let leidasTotal = 0;
@@ -239,36 +263,40 @@ function crearAcumuladorDeDias() {
       const parsed = parseTs(r.ts);
       if (!parsed) { tsIlegible++; continue; }
       const dia = parsed.day;
+      // v=368: el día de Mar del Plata, la fecha de `ts − 3 h` (la cuenta de `gen-stats.py`).
+      const diaLocal = new Date(parsed.d.getTime() + UTC_OFFSET_LOCAL_MS).toISOString().slice(0, 10);
       const ms = Number(r.ms_played) || 0;
       const track = r.master_metadata_track_name || '';
       const artista = r.master_metadata_album_artist_name || '';
 
-      let d = dias.get(dia);
-      if (!d) { d = { ms: 0, crudas: 0, validas: 0, saltos: 0, temas: new Map() }; dias.set(dia, d); }
+      // Los dos días de esta reproducción: el UTC (`dias`) y el local (`diasLocal`). Todo lo de abajo
+      // se aplica a los DOS con las mismas reglas: no hay una segunda copia de ninguna.
+      const destinos = [entradaDe(dias, dia), entradaDe(diasLocal, diaLocal)];
       // `crudas` se cuenta ANTES del filtro de basura, porque es el mismo
       // denominador que `totals.plays_raw` del pipeline (que tampoco la
       // descuenta: el `continue` de la basura va después del contador).
-      d.crudas++;
+      for (const d of destinos) d.crudas++;
 
       // Basura funcional (sonidos saca-agua, lluvia para dormir, 432 Hz…). El
       // pipeline la salta acá mismo, así que sus minutos no están en
       // `years[].days.min` y tampoco pueden estar en el nuestro.
       if (isJunkTrack(track, artista)) continue;
 
-      if (!!r.skipped || ((r.reason_end || '') === 'fwdbtn' && ms < MIN_MS)) d.saltos++;
+      if (!!r.skipped || ((r.reason_end || '') === 'fwdbtn' && ms < MIN_MS)) for (const d of destinos) d.saltos++;
       if (ms < MIN_MS) continue;
 
-      d.ms += ms;
-      d.validas++;
-
       const tid = uri.split(':').pop();
-      let t = d.temas.get(tid);
-      if (!t) { t = { ms: 0, veces: 0, ts: r.ts }; d.temas.set(tid, t); }
-      t.ms += ms;
-      t.veces++;
-      // El orden del día sale del `ts` MÍNIMO, así que no hace falta que los
-      // archivos lleguen ordenados ni que haya un `sort` global.
-      if (r.ts < t.ts) t.ts = r.ts;
+      for (const d of destinos) {
+        d.ms += ms;
+        d.validas++;
+        let t = d.temas.get(tid);
+        if (!t) { t = { ms: 0, veces: 0, ts: r.ts }; d.temas.set(tid, t); }
+        t.ms += ms;
+        t.veces++;
+        // El orden del día sale del `ts` MÍNIMO, así que no hace falta que los
+        // archivos lleguen ordenados ni que haya un `sort` global.
+        if (r.ts < t.ts) t.ts = r.ts;
+      }
 
       if (!temas.has(tid)) temas.set(tid, { i: temas.size, nombre: track, artista });
     }
@@ -279,25 +307,31 @@ function crearAcumuladorDeDias() {
     const temasOut = new Array(temas.size);
     for (const [tid, m] of temas) temasOut[m.i] = [tid, m.nombre, m.artista];
 
-    const diasOut = {};
-    for (const dia of [...dias.keys()].sort()) {
-      const d = dias.get(dia);
-      const lista = [...d.temas.entries()]
-        .sort((a, b) => (a[1].ts < b[1].ts ? -1 : a[1].ts > b[1].ts ? 1 : 0))
-        .map(([tid, t]) => [temas.get(tid).i, round1(t.ms / 60000), t.veces]);
-      diasOut[dia] = {
-        min: round1(d.ms / 60000),
-        crudas: d.crudas,
-        validas: d.validas,
-        saltos: d.saltos,
-        temas: lista,
-      };
-    }
+    // La MISMA salida para `dias` y para `diasLocal` (v=368).
+    const salida = (mapa) => {
+      const out = {};
+      for (const dia of [...mapa.keys()].sort()) {
+        const d = mapa.get(dia);
+        const lista = [...d.temas.entries()]
+          .sort((a, b) => (a[1].ts < b[1].ts ? -1 : a[1].ts > b[1].ts ? 1 : 0))
+          .map(([tid, t]) => [temas.get(tid).i, round1(t.ms / 60000), t.veces]);
+        out[dia] = {
+          min: round1(d.ms / 60000),
+          crudas: d.crudas,
+          validas: d.validas,
+          saltos: d.saltos,
+          temas: lista,
+        };
+      }
+      return out;
+    };
     return {
       version: DAYS_VERSION,
       generated_at: new Date().toISOString(),
       temas: temasOut,
-      dias: diasOut,
+      dias: salida(dias),
+      // v=368: por día de Mar del Plata, con el mismo diccionario `temas`. Lo lee SOLO `#lluvia`.
+      diasLocal: salida(diasLocal),
       // Para el reporte del import: cuántas líneas se leyeron de verdad y qué
       // se descartó. Un import que diga «listo» sin estos números no se puede
       // comprobar contra `totals.plays_raw`.

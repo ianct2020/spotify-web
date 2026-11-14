@@ -4872,6 +4872,11 @@ Cada día del historial, coloreado por los minutos que sonaron, con un panel por
 día que dice qué escuchaste. Ruta `calendario`, sección General, detrás de
 «Récords».
 
+➜ **Desde v=368 el payload `days` trae también `diasLocal`** (el mismo detalle por día de Mar del
+Plata, para `#lluvia`), y `DAYS_VERSION` es 2. **`#calendario` no lo lee**: sigue con `dias`, en UTC, y
+su panel es byte a byte el de v=367. Las listas del panel viven en `ui/dia-escuchado.js`. Ver
+«🌧️ Qué escuchaste los días de lluvia (v=368)».
+
 ### Un solo calendario: `ui/calendario-anual.js`
 
 El dibujo tipo GitHub era `visualCalendario()`, **privada** de
@@ -5351,6 +5356,86 @@ es 5 para un lado y 4 para el otro (no hay un sentido que se repita), y entre a�
   estática de la vista) y la puerta B del banco `lluvia` (no existe `[data-lluvia-frase]`, la cuenta a mano de las dos líneas y su lugar).
   Rojo contra v=358: 40 asserts del test, y el banco en la puerta B. La puerta I mide el contraste de las dos líneas nuevas.
 
+## 🌧️ Qué escuchaste los días de lluvia (v=368)
+
+La tanda 131, pedido de Ian: en `#lluvia`, tocar un día con lluvia y ver qué escuchó ese día (los artistas y los temas, con sus
+minutos), igual que el panel del día de `#calendario`.
+
+**`diasLocal`, el día de Mar del Plata dentro del detalle.** `crearAcumuladorDeDias()` (`history-processor.js`) agrupa cada
+reproducción **a la vez** por su día UTC (`dias`, lo de siempre) y por su día local (`diasLocal`, nuevo): la fecha de `ts − 3 h`,
+UTC−3 fija, **la misma cuenta que `UTC_OFFSET_LOCAL_SECONDS` de `gen-stats.py`** (Argentina no tiene horario de verano desde 2009).
+Misma forma (`{ min, crudas, validas, saltos, temas: [[i, min, veces]] }`), **el mismo diccionario `temas`**, y las mismas reglas en
+el mismo bucle (la deduplicación, sin uri fuera, la basura, los 30 s, el orden por `ts` mínimo DENTRO del día local): no hay
+segunda pasada ni segunda copia. 🔴 **`dias` no cambió ni un byte** (lo afirma el test con el `sha256` de `dias` y de `temas` de
+v=367). **`DAYS_VERSION` pasó de 1 a 2**; la clave de IndexedDB es la de siempre (`local_<uid>_history_days`) y ningún sitio de `src/`
+compara esa versión (`loadDays()` mira `!!d.dias`), así que un detalle v1 se sigue leyendo en `#calendario` igual que antes. Los dos
+caminos que escriben el detalle lo traen solos: la importación «solo el detalle» y el import completo de un amigo. Ninguna firma
+cambió. ⚠️ `tests/lluvia.test.mjs` sigue afirmando que `history-processor.js` no nombra `daysLocal` ni `days-local`, y sigue siendo
+cierto: el import no produce `history-days-local.json` (el archivo del owner); produce `diasLocal` dentro de `days`.
+
+**Por qué `#lluvia` no lee `dias[iso]`.** Es el día UTC, que en Mar del Plata va de las 21:00 del día anterior a las 21:00 de ése:
+sus temas no serían los de ese día y sus minutos no cuadrarían con los que la misma pantalla dice (que salen de
+`history-days-local.json`, en hora local). Enseñarlo sería mentir con formato de dato. `#calendario` sigue en UTC y **no lee
+`diasLocal`**.
+
+**Un detalle viejo** (cargado antes de v=368, sin `diasLocal`): el panel de `#lluvia` dice «Tu detalle por día se cargó con una versión
+anterior de la app y no sabe separar los días a la hora de Mar del Plata. Vuelve a cargarlo desde tu export para verlo aquí.» y el
+botón «Cargar el detalle por día desde tu export». **Nunca** las listas de `dias[iso]`. Para verlo, Ian tiene que volver a cargar el
+detalle una vez.
+
+**El módulo compartido: `ui/dia-escuchado.js`.** `armarDia(dia, temas)` (pura: los temas del día y los artistas por minutos),
+`temasConVeces()`, `listasDelDiaHtml(artistas, temas)` («Artistas del día» y «Temas del día») y `conectarListasDelDia(raiz)` (las
+fichas, `attachArtistCard` y `openTrackCard`, **solo dentro de la raíz**), más `fmtMinutes` y `num`, que se fueron de `calendario.js`.
+Lo usan `#calendario` (el panel del día) y `#lluvia`. 🔴 **El panel de `#calendario` es byte a byte el de v=367**: el `sha256` de su
+HTML en tres días (con detalle, con minutos sin detalle, sin nada) es el mismo, y `armarDia()` da lo mismo que el `datosDelDia()` de
+v=367 (sacado con `git show`) en 118 días. Las clases de las listas (`.cal-lista`, `.cal-fila`…, en `main.css`) se quedaron; su dueño
+es el módulo, y ningún listener de ninguna vista las barre en todo el documento. Los formateadores se importan, no van por
+parámetro: las dos vistas enseñan las mismas listas.
+
+**`#lluvia`, lo nuevo.**
+- Las fechas de «Los días más lluviosos» son un `<button type="button" class="lluvia-dia-btn" data-lluvia-dia>` (foco y teclado de
+  serie). El texto de la celda no cambió.
+- **«Todos los días con lluvia»** (`<section data-lluvia-todos>`, debajo de los más lluviosos): los días de la ventana con 1 mm o más
+  (`f.lluvia`, la MISMA clase de `util/lluvia.js`; `diasConLluvia()` solo los filtra y ordena), del más nuevo al más viejo, de a 25
+  (`DE_A`). El botón dice cuántos vienen: «Mostrar 25 más» y, al final, los que queden («Mostrar 9 más»). 🔴 Los minutos de cada fila
+  salen de `history-days-local.json`: **el detalle no se lee para pintar la lista**.
+- **El panel** (`panelDelDia(fila, detalle)`, exportada, devuelve `{ caso, html }`; un `openModal` con `.lluvia-panel`): la fecha y
+  «X mm · Y min» (Y de `history-days-local.json`) y, según el caso: `listas` (las de `ui/dia-escuchado.js`); `nada` («Ese día no sonó
+  nada.», con 0 min, y nada más); `sin-detalle` («Qué sonó cada día vive solo en tu navegador y todavía no está cargado.», la nota de
+  que no se publica y el botón); `version-anterior` (arriba); `sin-dia` («El detalle cargado no tiene este día: vuelve a cargarlo desde
+  tu export.» y el botón). Nunca listas vacías sin explicación. **Sin «Crear playlist con este día»**.
+- El detalle se lee con `loadDays()` **la primera vez que se toca un día** y queda en memoria de la vista; después de leerlo se
+  pregunta por la vigencia de la ruta (si te fuiste, no se abre nada). El botón llama a `importarSoloElDetalle()` tal cual; al terminar
+  bien, la vista relee el detalle con `loadDays()` y, si el panel sigue abierto, lo cierra y lo abre otra vez con el detalle nuevo.
+- El amigo, la lluvia caída y el historial caído no cambian: ahí no hay lista que tocar. Aunque el import de un amigo ahora traiga
+  `diasLocal`, la vista no le abre la lista (la lluvia es de Mar del Plata).
+- El CSS, en `components.css` (`.lluvia-dia-btn`, `.lluvia-todos`, `.lluvia-mas`, `.lluvia-panel…`; `.modal.lluvia-panel` con dos
+  clases para ganarle a `.modal` de `main.css`, que no se tocó). Textos en `--color-text-secondary`. Nada se mueve: ninguna media
+  query de movimiento nueva.
+
+**El costo.** Abrir `#lluvia`: **1 `/me`**, como antes, y **no lee el detalle**. Tocar un día, «Mostrar 25 más» y el panel: **0
+peticiones** a cualquier host (el detalle es IndexedDB). Cargar el detalle: lo de siempre de `importarSoloElDetalle()` (lee archivos
+locales, 0 red). Medido en el banco el 14/11/2026.
+
+**Lo que quedó FUERA, a propósito.** `#calendario` (y cualquier otra vista) en hora local; hornear o publicar el detalle; `#lluvia`
+para un amigo; «Crear playlist con este día» en `#lluvia`; otras ciudades, variables o umbrales, `horas[]`, y cruzar la lluvia con
+géneros o artistas de todo el historial; el tamaño de la copia completa y de la sincronización (el `CENSO` no se tocó: la fila de
+`local_` va con `fusion: TUYA`, que conserva el valor entero sin mirar adentro); volver a cargar el detalle de Ian (lo hace él).
+
+**Las guardas.** `tests/lluvia-dia-detalle.test.mjs` (`history-processor.js`, `ui/dia-escuchado.js`, `calendario.js` y `lluvia.js`
+REALES; `tests/dobles/loader-t110.mjs` para el resto; reproducciones INVENTADAS en `tests/dobles/dias-t131-datos.mjs`; el panel de
+`#calendario` por `tests/dobles/panel-calendario-t131.mjs`; `RAIZ_T131=<carpeta>` lo corre contra otra copia): `diasLocal` con los
+bordes contados a mano (`02:59:59Z` al día anterior, `03:00:00Z` al mismo, el 1/1 a las 02:00Z al 31/12, un tema en dos días
+locales); `dias` y `temas` con el `sha256` de v=367; **la paridad con `gen-stats.py`** (`main()` de verdad: 122 días locales, la misma
+lista, diferencia máxima 0,1 min); `DAYS_VERSION` 2; `armarDia()` contra `datosDelDia()` de v=367; los tres `sha256` del panel; los
+cinco casos del panel de `#lluvia`; las lecturas estáticas; ninguna media query de movimiento nueva y el `sha256` de `main.css`. Rojo
+contra v=367 en 11. El banco **`tests/banco/lluvia-dia.html`** (+ `-caso.html`, `-datos.mjs`, `-idb.mjs`; en `prepush`): **A** abrir = 1
+`/me` y 0 lecturas del detalle; **B** la lista = la cuenta a mano (59, 25 → 50 → 59, del 29/04 al 03/01), «Mostrar 25 más» = 0;
+**C** el 29/04 LOCAL (no el UTC), tocar = 0 y una sola lectura; **D** 0 min, sin entrada, detalle viejo, sin detalle; **E** salir con
+el detalle leyéndose (`lluvia-dia-idb.mjs` retiene la lectura por import map): 0 escrituras y ningún panel; **F** sin desborde a
+1366×591 y 390×844; **G** el contraste en los cuatro presets (peor 6,20, ámbar). Rojo contra v=367 en la puerta B. Reloj virtual 6,6 s:
+corre con el defecto de 45.
+
 ## 💰 Cuánto cuesta abrir cada vista (2026-10-06)
 
 Esta tabla **no existía** hasta hoy, y los cuatro encargos anteriores la daban por
@@ -5531,6 +5616,7 @@ fila sobrevivió así desde que se armó la tabla.
 | ↳ **al tocar, arrastrar, hacer zoom, buscar o «Mostrar 50 más»** (v=315): **0** | — | **0** | ninguno: todo sale de lo cargado | — | **medida en el banco el 2026-10-18**: 0 peticiones a cualquier host. «Ver ficha» abre la ficha de artista y cuesta lo que cueste la ficha |
 | `#covers` | **1 `/me` + 1 + ceil(W/100)** = **33** | **2** | `isOwner()`/`loadListenedAlbums()` → `getCurrentUserId` · + 1 `/playlists/{id}?fields=snapshot_id` + págs. de `/playlists/{id}/items` | nº de pistas de «w three» | 🔴 **corregida el 2026-10-08, leída del código.** Decía **32** y se le olvidaba el `/me` propio |
 | `#lluvia` (v=358) | **1 `/me`** (+1 del arranque = **2**) · **0** de todo lo demás | ídem | `render()` → `loadDaysLocal()` → `loadOne` → `getCurrentUserId`; los dos JSON (`history-days-local.json`, de `loadOne()`, y `lluvia-mar-del-plata.json`, de `leerLluvia()`) salen del propio Pages, y ninguno es Spotify, Open-Meteo ni un CDN | **fijo**, no escala con nada | **medida en el banco el 2026-11-05** (`tests/banco/lluvia.html`, Spotify simulada, datos inventados): abrir = 1 `/me` y 0 de lo demás, 0 rutas sin simular, 0 hosts externos desde que se abre; un amigo, 1 `/me` y ninguno de los dos JSON |
+| ↳ `#lluvia`: tocar un día, «Mostrar 25 más» y el panel del día (v=368) | **0** | **0** | el detalle por día sale de IndexedDB (`loadDays()`, la primera vez que se toca un día, y queda en memoria); la lista y la cabecera salen de `history-days-local.json`, ya leído al abrir. Abrir no lee el detalle | **fijo** | **medida en el banco el 2026-11-14** (`tests/banco/lluvia-dia.html`, Spotify simulada, datos inventados): «Mostrar 25 más» = 0, tocar un día = 0 a la simulada, 0 `/data/`, 0 hosts externos; el detalle, 1 lectura de IndexedDB en el primer toque y 0 en el segundo |
 | `#mosaico` | **0** | **0** | **ninguno, a propósito** | — | **medida en vivo el 2026-10-06**: 10 mosaicos generados (hasta 43.200 celdas), **0 peticiones y 0 cortadas** con los topes de la API en CERO. Lo que sí sale a la red es el CDN de imágenes, que no gasta cuota |
 | `#search` | **0** | **0** | — | — | leída del código · **`/me` repasado el 2026-10-08**: su `render()` no llega a `getCurrentUserId()` |
 | `#listened` | **26** `/items` + 3 `/me` | **0** | snapshot + págs. de `/items` | pistas de la playlist elegida | **medida en vivo el 2026-10-04** (caché vencido) |

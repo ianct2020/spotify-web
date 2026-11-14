@@ -1,0 +1,143 @@
+<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>banco lluvia-dia — la app entera, en un iframe</title>
+<link rel="stylesheet" href="/css/theme.css">
+<link rel="stylesheet" href="/css/components.css">
+<link rel="stylesheet" href="/css/main.css">
+<style>*,*::before,*::after{animation:none!important;transition:none!important}</style>
+<script type="importmap">
+{
+  "imports": { "/js/idb.js": "/banco/lluvia-dia-idb.mjs" },
+  "scopes": { "/banco/": { "/js/idb.js": "/js/idb.js" } }
+}
+</script>
+</head><body>
+<div id="app"></div>
+<script type="module">
+// ── Un iframe del banco `lluvia-dia.html` (v=368, tanda 131) ──────────────────
+//
+// Arranca la app ENTERA (`/js/app.js`) en `#home`, contra la Spotify simulada de `simulado.mjs`, como el
+// owner (`HISTORY_OWNER_ID`). 🔴 Los dos JSON los CONTESTA ESTE CASO, inventados (`lluvia-dia-datos.mjs`).
+// El detalle por día se SIEMBRA en la IndexedDB del owner antes de arrancar, armado con el
+// `crearAcumuladorDeDias()` REAL sobre reproducciones inventadas:
+//
+//   ?detalle=nuevo     con `diasLocal` (lo de v=368)
+//   ?detalle=viejo     el mismo sin `diasLocal` y con `version: 1` (uno cargado antes de v=368)
+//   ?detalle=no        sin detalle
+//
+// `/js/idb.js` va desviado a `lluvia-dia-idb.mjs` (el import map de arriba): `__retenerDetalle()` /
+// `__soltarDetalle()` dejan la lectura del detalle colgada, y `__lecturasDetalle` cuenta cuántas hubo.
+// `window.__pedidosData`: cada `/data/…` que se pidió.
+//
+// Modo `?foto=1` (las capturas, con un conductor externo y SIN reloj virtual): abre `#lluvia` y marca
+// `data-foto="listo"` cuando está pintada. `&tema=<preset>` y `&anim=siempre|nunca`.
+
+import { instalarRedSimulada, esperarReal } from '/banco/simulado.mjs';
+
+const q = new URLSearchParams(location.search);
+window.__errores = [];
+window.__avisos = [];
+window.addEventListener('error', (e) => window.__errores.push('error: ' + (e.message || e)));
+window.addEventListener('unhandledrejection', (e) => window.__errores.push('rechazo: ' + String(e.reason?.message || e.reason)));
+const errorOriginal = console.error.bind(console);
+console.error = (...a) => { window.__errores.push('console.error: ' + a.map(String).join(' ').slice(0, 300)); errorOriginal(...a); };
+const avisoOriginal = console.warn.bind(console);
+console.warn = (...a) => { window.__avisos.push(a.map((x) => String(x?.message || x)).join(' ').slice(0, 300)); avisoOriginal(...a); };
+
+const { HISTORY_OWNER_ID, localKey } = await import('/js/features/history-data.js');
+const { OWNER_KEYS } = await import('/js/history-keys.js');
+const { idbSetCached, idbDel } = await import('/js/idb.js');
+const { crearAcumuladorDeDias } = await import('/js/history-processor.js');
+const { DIAS_LOCAL, LLUVIA, PLAYS_DETALLE } = await import('/banco/lluvia-dia-datos.mjs');
+const UID = HISTORY_OWNER_ID;
+
+// El detalle, sembrado ANTES de arrancar la app (la IndexedDB es del origen: cada marco siembra el suyo).
+const TTL = 100 * 365 * 24 * 60;
+await idbDel(OWNER_KEYS.daysLocal);
+const modo = q.get('detalle') || 'nuevo';
+if (modo === 'no') {
+  await idbDel(localKey(UID, 'days'));
+} else {
+  const acu = crearAcumuladorDeDias();
+  acu.agregarArchivo(PLAYS_DETALLE);
+  const days = acu.cerrar();
+  if (modo === 'viejo') { delete days.diasLocal; days.version = 1; }
+  await idbSetCached(localKey(UID, 'days'), days, TTL);
+}
+window.__lecturasDetalle = 0;
+
+const sim = instalarRedSimulada();
+window.__sim = sim;
+sim.ruta('GET', /^\/me$/, async () => ({ id: UID, display_name: 'Banco' }));
+localStorage.setItem('fonoteca_last_user_id', UID);
+localStorage.setItem('fonoteca_perfil_v1', JSON.stringify({ id: UID, display_name: 'Banco' }));
+
+window.__pedidosData = [];
+const fetchDeLaSimulada = window.fetch;
+const json = (d) => Promise.resolve(new Response(JSON.stringify(d), { status: 200, headers: { 'content-type': 'application/json' } }));
+window.fetch = async (entrada, opciones) => {
+  const href = typeof entrada === 'string' ? entrada : (entrada.href || entrada.url);
+  const abs = new URL(href, location.href);
+  if (abs.origin === location.origin && abs.pathname.startsWith('/data/')) {
+    window.__pedidosData.push(abs.pathname + abs.search);
+    if (abs.pathname === '/data/history-days-local.json') return json(DIAS_LOCAL);
+    if (abs.pathname === '/data/lluvia-mar-del-plata.json') return json(LLUVIA);
+  }
+  return fetchDeLaSimulada(entrada, opciones);
+};
+
+const { prefKey } = await import('/js/storage.js');
+if (q.get('tema') && q.get('tema') !== 'violeta') {
+  const { PRESETS } = await import('/js/ui/theme-panel.js');
+  const p = PRESETS.find((x) => x.id === q.get('tema'));
+  if (!p) throw new Error('banco: no encontré el preset ' + q.get('tema'));
+  localStorage.setItem(prefKey('fonoteca_theme_v1'), JSON.stringify({ colors: p.colors, preset: p.id }));
+}
+if (q.get('anim')) localStorage.setItem(prefKey('fonoteca_anim_v1'), q.get('anim'));
+window.__ponerTema = async (id) => {
+  const { PRESETS, applyTheme } = await import('/js/ui/theme-panel.js');
+  const p = PRESETS.find((x) => x.id === id);
+  if (!p) throw new Error('banco: no encontré el preset ' + id);
+  applyTheme(p.colors);
+};
+
+// Las fotos de `#calendario` (`&ruta=calendario`) necesitan el historial horneado del owner: un
+// `history-stats` inventado, con 2023 en UTC (el 29/04 UTC son 12 min: «Tres» 7 y «Dos» 5).
+const RUTA = q.get('ruta') || 'lluvia';
+if (q.get('foto') === '1' && RUTA === 'calendario') {
+  const min = DIAS_LOCAL.min.slice();
+  min[118] = 12; min[119] = 10;
+  const anio = { year: 2023, min: Math.round(min.reduce((a, b) => a + b, 0) * 10) / 10, plays: 500, days_active: min.filter((v) => v > 0).length,
+    longest_streak: 5, skip_pct: 20, first_play: '2023-01-01T00:00:10Z', last_play: '2023-04-30T01:00:00Z', peak_day: { date: '2023-01-07', min: 99 },
+    peak_month: { month: 1, min: 900 }, discovery: null, days: { from: DIAS_LOCAL.from, min }, top_artists: [], top_albums: [], top_tracks: [] };
+  const stats = { version: 5, generated_at: '2026-11-14T00:00:00Z', totals: { plays_valid: 500, plays_raw: 600, min: anio.min, days_active: anio.days_active,
+    longest_streak: 5, unique_artists: 3, unique_albums: 3, unique_tracks: 3, skip_pct: 20 }, years: [anio], monthly: [], heatmap: [],
+    top_artists_all_time: [], top_albums_all_time: [], top_tracks_all_time: [] };
+  await idbSetCached(localKey(UID, 'stats'), stats, TTL);
+  try { localStorage.removeItem(prefKey('fonoteca_calendario_anio_v1')); } catch { /* da igual */ }
+}
+
+const FOTO = q.get('foto') === '1';
+location.hash = FOTO ? `#${RUTA}` : '#home';
+await import('/js/app.js');
+await esperarReal(() => document.getElementById('my-history-btn') && (FOTO || document.querySelector('.home-card')), { que: 'que la app arranque', vueltas: 4000 });
+window.__listo = true;
+if (FOTO) {
+  const abrir = q.get('abrir');
+  if (RUTA === 'calendario') {
+    await esperarReal(() => document.querySelector('.cal-anual .wr-ap-cal i[data-dia]'), { que: 'que #calendario pinte', vueltas: 4000 });
+    if (abrir) {
+      const i = Math.round((Date.parse(abrir) - Date.parse(DIAS_LOCAL.from)) / 86400000);
+      document.querySelector(`.cal-anual .wr-ap-cal i[data-dia="${i}"]`).dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await esperarReal(() => document.querySelector('.cal-panel'), { que: 'que se abra el panel del calendario', vueltas: 4000 });
+    }
+  } else {
+    await esperarReal(() => document.querySelector('[data-lluvia="lista"]'), { que: 'que #lluvia pinte', vueltas: 4000 });
+    if (q.get('ver') === 'todos') document.querySelector('[data-lluvia-todos]')?.scrollIntoView({ block: 'start' });
+    if (abrir) {
+      document.querySelector(`[data-lluvia-tabla="todos"] [data-lluvia-dia="${abrir}"]`).click();
+      await esperarReal(() => document.querySelector('.lluvia-panel'), { que: 'que se abra el panel de la lluvia', vueltas: 4000 });
+    }
+  }
+  document.documentElement.dataset.foto = 'listo';
+}
+</script>
+</body></html>

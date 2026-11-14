@@ -2279,6 +2279,35 @@ body.con-aviso-copia { padding-top: 46px; }
   .lluvia-tabla th, .lluvia-tabla td { padding: 6px 4px; }
 }
 
+/* ── #lluvia: qué escuchaste ese día (v=368, tanda 131) ─────────────────────
+   Los días que se tocan (`.lluvia-dia-btn`, la fecha de cada fila), «Todos los días con lluvia» y el panel
+   del día (`.lluvia-panel…`). Las LISTAS del panel llevan las clases de siempre (`.cal-lista`, `.cal-fila`…,
+   en main.css): su dueño es `ui/dia-escuchado.js`, que las comparte con #calendario. Esta hoja carga ANTES
+   que main.css: lo que tiene que ganarle a una regla de una clase de main.css va con dos clases
+   (`.modal.lluvia-panel`). Acá no se mueve nada, así que no hay ninguna media query de movimiento nueva. */
+.lluvia-tabla .lluvia-dia-btn {
+  padding: 2px 0; margin: 0; border: 0; background: none; color: inherit; font: inherit; text-align: left;
+  text-decoration: underline; text-decoration-color: var(--color-text-secondary); text-underline-offset: 3px;
+  cursor: pointer; border-radius: var(--radius-sm, 4px);
+}
+.lluvia-tabla .lluvia-dia-btn:hover { text-decoration-color: currentColor; }
+.lluvia-tabla .lluvia-dia-btn:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
+.lluvia-todos { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.lluvia-todos .lluvia-sec { margin-bottom: 0; }
+.lluvia-todos .lluvia-mas { align-self: flex-start; }
+.modal.lluvia-panel { display: flex; flex-direction: column; max-width: 620px; width: min(620px, 94vw); max-height: min(85vh, 680px); }
+.lluvia-panel-head { display: flex; align-items: flex-start; gap: 12px; margin-bottom: 12px; }
+.lluvia-panel-titulo { flex: 1; min-width: 0; }
+.lluvia-panel-t { margin: 0; font-size: 18px; color: var(--color-text); }
+.lluvia-panel-sub { margin-top: 4px; font-size: 12px; line-height: 1.5; color: var(--color-text-secondary); font-variant-numeric: tabular-nums; }
+.lluvia-panel-scroll { overflow-y: auto; flex: 1; min-height: 0; margin: 0 -4px; padding: 0 4px; }
+.lluvia-panel-texto { margin: 0 0 10px; font-size: 13px; line-height: 1.6; color: var(--color-text-secondary); }
+.lluvia-panel-nota { margin: 0 0 10px; font-size: 12px; line-height: 1.6; color: var(--color-text-secondary); }
+.lluvia-panel-scroll .btn { margin-top: 4px; }
+@media (max-width: 600px) {
+  .modal.lluvia-panel { padding: 20px 16px; }
+}
+
 /* El boton de play por fila de la ficha de artista (v=360). Dos clases porque esta hoja carga antes que main.css */
 .ac-col-tracks .ac-track-play {
   display: inline-flex;

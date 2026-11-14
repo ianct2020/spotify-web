@@ -1,0 +1,290 @@
+<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>banco lluvia-dia — qué escuchaste un día de lluvia</title>
+<style>html,body{margin:0;background:#111;color:#eee;font:13px system-ui}iframe{border:0;display:block}</style>
+</head><body>
+<pre id="progreso"></pre>
+<div id="marcos"></div>
+<script type="module">
+// ── Qué prueba este banco (v=368, tanda 131) ─────────────────────────────────
+//
+// `#lluvia` REAL, en la app ENTERA (`lluvia-dia-caso.html`, uno por iframe), como el owner simulado, con el
+// historial local, la lluvia y el detalle por día INVENTADOS (`lluvia-dia-datos.mjs`; el detalle, armado con
+// el acumulador REAL y sembrado en la IndexedDB). Nada sale a la red.
+//
+//   A. abrir `#lluvia` sigue costando 1 `/me` y 0 de lo demás, y NO lee el detalle;
+//   B. «Todos los días con lluvia» = la cuenta a mano: cuántos, el orden (del más nuevo al más viejo), los 25
+//      y los 25 más (0 peticiones), y el botón que se va al final; las filas de los más lluviosos, tocables;
+//   C. tocar el 29/04 abre el panel con los artistas y temas del 29/04 LOCAL (no los del UTC), con la cabecera
+//      «X mm · Y min»; tocar cuesta 0 peticiones a cualquier host; el detalle se lee una vez y queda en memoria;
+//   D. los otros casos del panel: un día con lluvia y 0 min; un día que no está en `diasLocal`; el detalle
+//      viejo (sin `diasLocal`): el texto de «versión anterior» y sin listas; sin detalle: el botón;
+//   E. salir de la ruta con el detalle leyéndose: 0 escrituras al DOM de la ruta nueva y ningún panel;
+//   F. a 1366×591 y 390×844, nada desborda la página ni el panel;
+//   G. el contraste de lo nuevo, ≥ 4,5 en los cuatro presets.
+//
+// ⚠️ Todas las esperas van con `esperarReal` (ver PRESUPUESTO en `scripts/correr-banco.mjs`).
+
+import { esperarReal, anclar } from '/banco/simulado.mjs';
+import { fallar, listo } from '/banco/esperar.mjs';
+import { ESPERADO, TODOS } from '/banco/lluvia-dia-datos.mjs';
+
+const afirmar = (c, msg) => { if (!c) throw new Error('BANCO: ' + msg); };
+const progreso = (t) => { document.getElementById('progreso').textContent = t; };
+const VUELTAS = 20000;
+const igual = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+
+function abrirMarco(nombre, { ancho = 1366, alto = 591, detalle = 'nuevo' } = {}) {
+  const f = document.createElement('iframe');
+  f.width = ancho; f.height = alto;
+  f.src = `/banco/lluvia-dia-caso.html?marco=${nombre}&detalle=${detalle}`;
+  document.getElementById('marcos').appendChild(f);
+  return f;
+}
+const win = (f) => f.contentWindow;
+const $ = (f, s) => f.contentDocument?.querySelector(s);
+const $$ = (f, s) => [...(f.contentDocument?.querySelectorAll(s) || [])];
+const texto = (el) => (el?.textContent || '').replace(/\s+/g, ' ').trim();
+const meDe = (f) => win(f).__sim.reg.llamadas.filter((l) => l.ruta === '/me').length;
+const externosDe = (f) => win(f).performance.getEntriesByType('resource').map((e) => e.name).filter((u) => new URL(u).origin !== location.origin);
+async function arrancado(f, que) { await esperarReal(() => win(f)?.__listo, { que: `que arranque ${que}`, vueltas: VUELTAS }); }
+async function irA(f, hash, que, cond) { win(f).location.hash = hash; await esperarReal(cond, { que, vueltas: VUELTAS }); }
+
+/** Cuenta lo que pide `accion`: llamadas a la simulada, `/data/…`, recursos de otro origen. */
+async function contar(f, accion) {
+  const n0 = win(f).__sim.reg.llamadas.length, d0 = win(f).__pedidosData.length, e0 = externosDe(f).length;
+  const r = await accion();
+  return { llamadas: win(f).__sim.reg.llamadas.slice(n0).map((l) => `${l.metodo} ${l.ruta}`), data: win(f).__pedidosData.slice(d0), externos: externosDe(f).slice(e0), r };
+}
+const nada = (c) => c.llamadas.length === 0 && c.data.length === 0 && c.externos.length === 0;
+const dicho = (c) => `simulada [${c.llamadas.join(' · ')}] data [${c.data.join(' · ')}] externos [${c.externos.join(' · ')}]`;
+function sinFugas(f, nombre) {
+  const s = win(f).__sim.reg;
+  afirmar(s.desconocidas.length === 0, `${nombre}: ninguna ruta sin simular: ${s.desconocidas.join(' · ')}`);
+  afirmar(s.externas.length === 0, `${nombre}: ninguna petición a un host externo: ${s.externas.join(' · ')}`);
+  afirmar(s.escrituras.length === 0, `${nombre}: 0 escrituras en la cuenta`);
+}
+
+const filasTodos = (f) => $$(f, '[data-lluvia-tabla="todos"] tbody tr').map((tr) => [...tr.querySelectorAll('td')].map(texto));
+const panel = (f) => $(f, '.lluvia-panel');
+const botonDia = (f, dia, donde = 'todos') => $(f, `[data-lluvia-tabla="${donde}"] [data-lluvia-dia="${dia}"]`);
+async function abrirPanel(f, dia, que, donde = 'todos') {
+  const b = botonDia(f, dia, donde);
+  afirmar(b && b.tagName === 'BUTTON' && b.type === 'button', `${que}: el día ${dia} es un <button type="button"> en «${donde}»`);
+  return contar(f, async () => {
+    b.click();
+    await esperarReal(() => panel(f), { que: `${que}: que se abra el panel`, vueltas: VUELTAS });
+  });
+}
+async function cerrarPanel(f) {
+  $(f, '.lluvia-panel [data-close-modal]').click();
+  await esperarReal(() => !panel(f), { que: 'que se cierre el panel', vueltas: VUELTAS });
+}
+async function mostrarTodos(f) {
+  for (let i = 0; i < 4 && $(f, '[data-lluvia-mas]'); i++) {
+    const antes = filasTodos(f).length;
+    $(f, '[data-lluvia-mas]').click();
+    await esperarReal(() => filasTodos(f).length > antes, { que: 'que lleguen 25 más', vueltas: VUELTAS });
+  }
+}
+
+const marcos = [];
+const datos = {};
+try {
+  // ── A · abrir ──────────────────────────────────────────────────────────────
+  progreso('A: abrir');
+  const A = abrirMarco('A'); marcos.push(['A', A]);
+  await arrancado(A, 'el marco A');
+  const abrir = await contar(A, () => irA(A, '#lluvia', 'que #lluvia pinte', () => $(A, '[data-lluvia="lista"]')));
+  const me = abrir.llamadas.filter((l) => l === 'GET /me').length;
+  afirmar(me === 1, `PUERTA A: abrir cuesta 1 \`/me\` y costó ${me}`);
+  afirmar(abrir.llamadas.length === 1 && abrir.externos.length === 0, `PUERTA A: y 0 de lo demás: ${dicho(abrir)}`);
+  afirmar(igual(abrir.data.map((x) => x.split('?')[0]).sort(), ['/data/history-days-local.json', '/data/lluvia-mar-del-plata.json']), `PUERTA A: del propio Pages, los dos JSON: ${abrir.data.join(' · ')}`);
+  afirmar(win(A).__lecturasDetalle === 0, `PUERTA A: abrir NO lee el detalle (${win(A).__lecturasDetalle} lecturas)`);
+
+  // ── B · la lista ───────────────────────────────────────────────────────────
+  progreso('B: la lista');
+  afirmar(texto($(A, '[data-lluvia-todos] .lluvia-sec')) === 'Todos los días con lluvia', `PUERTA B: el título «Todos los días con lluvia»: «${texto($(A, '[data-lluvia-todos] .lluvia-sec'))}»`);
+  afirmar($(A, '[data-lluvia-todos]') && $(A, '[data-lluvia-tabla="lluviosos"]')?.closest('.lluvia-tabla-marco')?.nextElementSibling === $(A, '[data-lluvia-todos]'), 'PUERTA B: la sección va justo debajo de «Los días más lluviosos»');
+  afirmar(texto($(A, '[data-lluvia-todos-n]')) === `${ESPERADO.cuantos} días con 1 mm o más, del más nuevo al más viejo.`, `PUERTA B: la línea de cuántos: «${texto($(A, '[data-lluvia-todos-n]'))}»`);
+  afirmar(igual(filasTodos(A), TODOS.slice(0, 25)), `PUERTA B: las 25 primeras = la cuenta a mano: ${JSON.stringify(filasTodos(A).slice(0, 3))}…`);
+  afirmar(filasTodos(A)[0][0] === ESPERADO.primero, 'PUERTA B: la primera, la más nueva');
+  const paginas = [filasTodos(A).length];
+  while ($(A, '[data-lluvia-mas]')) {
+    const antes = filasTodos(A).length;
+    // De a 25; la última vez dice cuántos quedan de verdad (59 − 50 = 9), no un 25 que no llega.
+    const esperado = `Mostrar ${Math.min(25, ESPERADO.cuantos - antes)} más`;
+    afirmar(texto($(A, '[data-lluvia-mas]')) === esperado, `PUERTA B: el botón dice «${esperado}»: «${texto($(A, '[data-lluvia-mas]'))}»`);
+    const c = await contar(A, async () => { $(A, '[data-lluvia-mas]').click(); await esperarReal(() => filasTodos(A).length > antes, { que: 'que lleguen 25 más', vueltas: VUELTAS }); });
+    afirmar(nada(c), `PUERTA B: «Mostrar 25 más» cuesta 0 peticiones: ${dicho(c)}`);
+    paginas.push(filasTodos(A).length);
+    afirmar(paginas.length < 6, 'PUERTA B: el botón no se va nunca');
+  }
+  afirmar(igual(paginas, ESPERADO.paginas), `PUERTA B: de a 25: ${paginas.join(' → ')}`);
+  afirmar(igual(filasTodos(A), TODOS), 'PUERTA B: la lista entera = la cuenta a mano, en orden');
+  afirmar(filasTodos(A).at(-1)[0] === ESPERADO.ultimo, 'PUERTA B: la última, la más vieja');
+  afirmar($$(A, '[data-lluvia-tabla="todos"] tbody tr').every((tr) => tr.querySelector('td:first-child > button[data-lluvia-dia]')), 'PUERTA B: cada fila de la lista, con su botón');
+  afirmar($$(A, '[data-lluvia-tabla="lluviosos"] tbody tr').every((tr) => tr.querySelector('td:first-child > button[data-lluvia-dia]')), 'PUERTA B: cada fila de los más lluviosos, con su botón');
+  datos.lista = `${filasTodos(A).length} días, ${paginas.join('→')}`;
+
+  // ── C · el panel del día con detalle ───────────────────────────────────────
+  progreso('C: el panel');
+  const c1 = await abrirPanel(A, ESPERADO.diaDetalle, 'PUERTA C');
+  afirmar(nada(c1), `PUERTA C: tocar un día cuesta 0 peticiones: ${dicho(c1)}`);
+  afirmar(win(A).__lecturasDetalle === 1, `PUERTA C: el detalle se lee al tocar el primer día (${win(A).__lecturasDetalle} lecturas)`);
+  afirmar(panel(A).dataset.lluviaPanel === 'listas', `PUERTA C: el panel con listas (${panel(A).dataset.lluviaPanel})`);
+  afirmar(texto($(A, '.lluvia-panel-t')) === ESPERADO.primero, `PUERTA C: el título es la fecha: «${texto($(A, '.lluvia-panel-t'))}»`);
+  afirmar(texto($(A, '.lluvia-panel-sub')) === ESPERADO.cabecera, `PUERTA C: la cabecera: «${texto($(A, '.lluvia-panel-sub'))}»`);
+  const arts = $$(A, '.lluvia-panel .cal-lista-art .cal-fila').map((b) => [texto(b.querySelector('.cal-fila-n')), texto(b.querySelector('.cal-fila-m'))]);
+  afirmar(igual(arts, ESPERADO.artistas), `PUERTA C: los artistas del día LOCAL: ${JSON.stringify(arts)}`);
+  const temas = $$(A, '.lluvia-panel .cal-lista-temas .cal-fila').map((b) => b.dataset.nombre);
+  afirmar(igual(temas, ESPERADO.temas), `PUERTA C: los temas del día LOCAL, en su orden: ${JSON.stringify(temas)}`);
+  afirmar(!texto(panel(A)).includes(ESPERADO.temaUtc), 'PUERTA C: el tema del día UTC (y no del local) no sale');
+  afirmar(!/Crear playlist/.test(texto(panel(A))), 'PUERTA C: sin «Crear playlist con este día»');
+  afirmar($$(A, '.lluvia-panel .cal-fila').every((b) => b.tagName === 'BUTTON'), 'PUERTA C: cada nombre es un botón');
+  await cerrarPanel(A);
+  // El mismo día desde los más lluviosos: el mismo panel, sin volver a leer el detalle.
+  const c2 = await abrirPanel(A, ESPERADO.diaDetalle, 'PUERTA C (desde los más lluviosos)', 'lluviosos');
+  afirmar(nada(c2) && win(A).__lecturasDetalle === 1, `PUERTA C: el segundo toque no lee nada (${win(A).__lecturasDetalle} lecturas; ${dicho(c2)})`);
+  afirmar(igual($$(A, '.lluvia-panel .cal-lista-temas .cal-fila').map((b) => b.dataset.nombre), ESPERADO.temas), 'PUERTA C: desde los más lluviosos, el mismo panel');
+  await cerrarPanel(A);
+
+  // ── D · los demás casos ────────────────────────────────────────────────────
+  progreso('D: los demás casos');
+  await abrirPanel(A, ESPERADO.diaNada, 'PUERTA D (0 min)');
+  afirmar(panel(A).dataset.lluviaPanel === 'nada' && texto($(A, '.lluvia-panel-scroll')) === ESPERADO.textos.nada, `PUERTA D: 0 min, «Ese día no sonó nada.» y nada más: «${texto($(A, '.lluvia-panel-scroll'))}»`);
+  await cerrarPanel(A);
+  await abrirPanel(A, ESPERADO.diaSinEntrada, 'PUERTA D (sin entrada)');
+  afirmar(panel(A).dataset.lluviaPanel === 'sin-dia' && texto($(A, '.lluvia-panel-scroll')).startsWith(ESPERADO.textos.sinDia), `PUERTA D: el día que no está: «${texto($(A, '.lluvia-panel-scroll'))}»`);
+  afirmar($(A, '.lluvia-panel [data-lluvia-cargar]') && !$(A, '.lluvia-panel .cal-lista'), 'PUERTA D: con el botón y sin listas vacías');
+  await cerrarPanel(A);
+  sinFugas(A, 'A');
+
+  progreso('D: el detalle viejo');
+  const V = abrirMarco('V', { detalle: 'viejo' }); marcos.push(['V', V]);
+  await arrancado(V, 'el marco V');
+  await irA(V, '#lluvia', 'que #lluvia pinte (V)', () => $(V, '[data-lluvia="lista"]'));
+  const cv = await abrirPanel(V, ESPERADO.diaDetalle, 'PUERTA D (viejo)');
+  afirmar(nada(cv), `PUERTA D (viejo): 0 peticiones: ${dicho(cv)}`);
+  afirmar(panel(V).dataset.lluviaPanel === 'version-anterior', `PUERTA D (viejo): el caso: ${panel(V).dataset.lluviaPanel}`);
+  afirmar(texto($(V, '.lluvia-panel-scroll')).startsWith(ESPERADO.textos.viejo), `PUERTA D (viejo): el texto: «${texto($(V, '.lluvia-panel-scroll'))}»`);
+  afirmar(texto($(V, '.lluvia-panel [data-lluvia-cargar]')) === ESPERADO.textos.boton, 'PUERTA D (viejo): el botón');
+  afirmar(!$(V, '.lluvia-panel .cal-lista') && !/Tema Inventado/.test(texto(panel(V))), 'PUERTA D (viejo): NUNCA las listas de dias[iso] (UTC)');
+  sinFugas(V, 'V');
+
+  progreso('D: sin detalle');
+  const N = abrirMarco('N', { detalle: 'no' }); marcos.push(['N', N]);
+  await arrancado(N, 'el marco N');
+  await irA(N, '#lluvia', 'que #lluvia pinte (N)', () => $(N, '[data-lluvia="lista"]'));
+  await abrirPanel(N, ESPERADO.diaDetalle, 'PUERTA D (sin detalle)');
+  afirmar(panel(N).dataset.lluviaPanel === 'sin-detalle' && texto($(N, '.lluvia-panel-scroll')).startsWith(ESPERADO.textos.sin), `PUERTA D (sin detalle): «${texto($(N, '.lluvia-panel-scroll'))}»`);
+  afirmar(/no se publica/.test(texto(panel(N))) && texto($(N, '.lluvia-panel [data-lluvia-cargar]')) === ESPERADO.textos.boton, 'PUERTA D (sin detalle): la nota y el botón');
+  sinFugas(N, 'N');
+
+  // ── E · salir con el detalle leyéndose ─────────────────────────────────────
+  progreso('E: salir a mitad');
+  const E = abrirMarco('E'); marcos.push(['E', E]);
+  await arrancado(E, 'el marco E');
+  await irA(E, '#lluvia', 'que #lluvia pinte (E)', () => $(E, '[data-lluvia="lista"]'));
+  win(E).__retenerDetalle();
+  botonDia(E, ESPERADO.diaDetalle).click();
+  await esperarReal(() => win(E).__detalleRetenido, { que: 'que la lectura del detalle quede retenida', vueltas: VUELTAS });
+  await irA(E, '#home', 'que el inicio se pinte encima', () => $(E, '.home-card') && !$(E, '#lluvia-content'));
+  let asentar = 0;
+  await esperarReal(() => ++asentar > 40, { que: 'que el inicio se asiente', vueltas: 200 });
+  const main = $(E, '#main-content');
+  const antes = main.innerHTML;
+  let mutaciones = 0;
+  const cuales = [];
+  const obs = new (win(E).MutationObserver)((ms) => {
+    for (const m of ms) {
+      if (m.type === 'attributes' && m.attributeName === 'class' && m.target.dataset?.route) continue;
+      mutaciones++; cuales.push(`${m.type} en <${m.target.nodeName?.toLowerCase()}>`);
+    }
+  });
+  obs.observe(main, { childList: true, subtree: true, characterData: true, attributes: true });
+  win(E).__soltarDetalle();
+  let vueltas = 0;
+  await esperarReal(() => ++vueltas > 150, { que: 'que la lectura colgada termine', vueltas: 400 });
+  obs.disconnect();
+  afirmar(mutaciones === 0, `PUERTA E: 0 escrituras al DOM de la ruta nueva, hubo ${mutaciones}: ${cuales.join(' ; ')}`);
+  afirmar(main.innerHTML.replace(/ active"/g, '"') === antes.replace(/ active"/g, '"'), 'PUERTA E: el inicio quedó como estaba');
+  afirmar(!panel(E) && !$(E, '.lluvia-panel-overlay'), 'PUERTA E: no se abrió ningún panel');
+  datos.salir = `${mutaciones} escrituras`;
+
+  // ── G · el contraste de lo nuevo ───────────────────────────────────────────
+  progreso('G: contraste');
+  const rgbaDe = (css) => { const m = String(css).match(/rgba?\(([^)]+)\)/); if (!m) return null; const p = m[1].split(/[\s,/]+/).filter(Boolean).map(Number); return [p[0], p[1], p[2], p[3] ?? 1]; };
+  const lumDe = (c) => { const [r, g, b] = c.slice(0, 3).map((v) => { const s = v / 255; return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4; }); return 0.2126 * r + 0.7152 * g + 0.0722 * b; };
+  const contrasteDe = (a, b) => { const x = lumDe(a), y = lumDe(b); return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05); };
+  const sobre = (arriba, abajo) => { const a = arriba[3]; return [0, 1, 2].map((i) => arriba[i] * a + abajo[i] * (1 - a)).concat(1); };
+  function fondoDe(f, el) {
+    const capas = [];
+    for (let n = el; n && n.nodeType === 1; n = n.parentElement) { const c = rgbaDe(win(f).getComputedStyle(n).backgroundColor); if (c && c[3] > 0) { capas.push(c); if (c[3] >= 1) break; } }
+    let base = capas.length && capas.at(-1)[3] >= 1 ? capas.pop() : [255, 255, 255, 1];
+    while (capas.length) base = sobre(capas.pop(), base);
+    return base;
+  }
+  function colorDe(f, el) { const cs = win(f).getComputedStyle(el); const c = rgbaDe(cs.color); return sobre([c[0], c[1], c[2], c[3] * Number(cs.opacity || 1)], fondoDe(f, el)); }
+  const medidos = {};
+  for (const [f, cual] of [[A, 'listas'], [V, 'version-anterior']]) {
+    if (!panel(f)) await abrirPanel(f, ESPERADO.diaDetalle, `PUERTA G (${cual})`);
+    for (const id of ['violeta', 'ambar', 'aguamarina', 'papel']) {
+      await anclar(win(f).__ponerTema(id));
+      const piezas = cual === 'listas'
+        ? [['botón del día (lista)', $(f, '[data-lluvia-tabla="todos"] [data-lluvia-dia]')], ['botón del día (más lluviosos)', $(f, '[data-lluvia-tabla="lluviosos"] [data-lluvia-dia]')],
+          ['línea de cuántos', $(f, '[data-lluvia-todos-n]')], ['título del panel', $(f, '.lluvia-panel-t')], ['cabecera del panel', $(f, '.lluvia-panel-sub')],
+          ['título de lista', $(f, '.lluvia-panel .cal-panel-h')], ['nombre de la fila', $(f, '.lluvia-panel .cal-fila-n')], ['artista de la fila', $(f, '.lluvia-panel .cal-fila-a')], ['minutos de la fila', $(f, '.lluvia-panel .cal-fila-m')]]
+        : [['texto del panel', $(f, '.lluvia-panel-texto')]];
+      let peor = Infinity, quien = '';
+      for (const [nombre, el] of piezas) {
+        afirmar(el, `PUERTA G (${id}): falta ${nombre}`);
+        const r = contrasteDe(colorDe(f, el), fondoDe(f, el));
+        if (r < peor) { peor = r; quien = nombre; }
+        afirmar(r >= 4.5, `PUERTA G (${id}): ${nombre} da ${r.toFixed(2)}:1 y AA pide 4,5`);
+      }
+      medidos[`${id}/${cual}`] = `${peor.toFixed(2)} (${quien})`;
+    }
+    await anclar(win(f).__ponerTema('violeta'));
+  }
+  datos.contraste = Object.entries(medidos).map(([k, v]) => `${k} ${v}`).join(' · ');
+  document.documentElement.setAttribute('data-contraste', JSON.stringify(medidos));
+  for (const f of [A, V]) if (panel(f)) await cerrarPanel(f);
+
+  // ── F · sin desborde ───────────────────────────────────────────────────────
+  progreso('F: desborde');
+  const desb = [];
+  for (const [ancho, alto] of [[1366, 591], [390, 844]]) {
+    const f = abrirMarco(`F${ancho}`, { ancho, alto }); marcos.push([`F${ancho}`, f]);
+    await arrancado(f, `el marco de ${ancho}`);
+    await irA(f, '#lluvia', `#lluvia a ${ancho}`, () => $(f, '[data-lluvia="lista"]'));
+    await mostrarTodos(f);
+    const de = f.contentDocument.documentElement;
+    afirmar(de.scrollWidth <= win(f).innerWidth, `PUERTA F (${ancho}): la página sin barra horizontal (${de.scrollWidth} > ${win(f).innerWidth})`);
+    const malos = [$(f, '[data-lluvia-todos]'), ...$$(f, '[data-lluvia-todos] .lluvia-tabla-marco'), ...$$(f, '[data-lluvia-tabla="todos"]'), ...$$(f, '.lluvia-tabla td')]
+      .filter((el) => el && el.scrollWidth > el.clientWidth + 1).map((el) => `${el.className || el.nodeName} ${el.scrollWidth}>${el.clientWidth}`);
+    afirmar(malos.length === 0, `PUERTA F (${ancho}): nada de la lista desborda (${malos.slice(0, 5).join(' · ')})`);
+    await abrirPanel(f, ESPERADO.diaDetalle, `PUERTA F (${ancho})`);
+    const p = panel(f), r = p.getBoundingClientRect();
+    afirmar(r.left >= -0.5 && r.right <= win(f).innerWidth + 0.5 && r.top >= -0.5 && r.bottom <= win(f).innerHeight + 0.5, `PUERTA F (${ancho}): el panel entra en la pantalla (${Math.round(r.left)},${Math.round(r.top)} – ${Math.round(r.right)},${Math.round(r.bottom)})`);
+    const malosPanel = [p, ...p.querySelectorAll('.lluvia-panel-head, .lluvia-panel-scroll, .cal-lista, .cal-fila')]
+      .filter((el) => el.scrollWidth > el.clientWidth + 1).map((el) => `${el.className} ${el.scrollWidth}>${el.clientWidth}`);
+    afirmar(malosPanel.length === 0, `PUERTA F (${ancho}): nada desborda el panel (${malosPanel.slice(0, 5).join(' · ')})`);
+    afirmar(de.scrollWidth <= win(f).innerWidth, `PUERTA F (${ancho}): con el panel abierto, la página sin barra horizontal`);
+    desb.push(`${ancho}×${alto}: página ${de.scrollWidth}/${win(f).innerWidth}, panel ${Math.round(r.width)}×${Math.round(r.height)}`);
+    sinFugas(f, `PUERTA F (${ancho})`);
+  }
+  datos.desborde = desb.join(' · ');
+
+  const errores = marcos.flatMap(([n, f]) => win(f).__errores.map((e) => `${n}: ${e}`));
+  afirmar(errores.length === 0, `0 errores de consola: ${errores.join(' | ')}`);
+
+  const resumen = `A abrir: /me=${me} otras=${abrir.llamadas.length - me} detalle leído=0 · B ${datos.lista}, «Mostrar 25 más» 0 peticiones · C panel del día LOCAL, tocar 0 peticiones · ` +
+    `D 0 min / sin entrada / viejo / sin detalle · E salir a mitad: ${datos.salir} · F ${datos.desborde} · G contraste peor: ${datos.contraste} · errores=${errores.length} · ` +
+    `reloj virtual=${Math.round(performance.now())} ms`;
+  document.documentElement.setAttribute('data-resumen', resumen);
+  progreso('ok · ' + resumen);
+  listo(resumen);
+} catch (e) {
+  fallar(e);
+}
+</script>
+</body></html>

@@ -49,8 +49,11 @@ import {
 import { escapeHtml, pageHeader, showProgress, hideProgress, promptPlaylistName, confirmModal } from '../ui/components.js';
 import { showToast } from '../ui/toast.js';
 import { openModal, closeModal } from '../ui/modal-stack.js';
-import { openTrackCard } from './track-card.js';
-import { attachArtistCard } from './artist-card.js';
+// v=368 (tanda 131): las listas del día, `fmtMinutes` y `num` viven en `ui/dia-escuchado.js`, que también
+// usa `#lluvia`. El panel de acá es byte a byte el de v=367 (`tests/lluvia-dia-detalle.test.mjs`).
+import {
+  fmtMinutes, num, armarDia, temasConVeces as soloLosQueSonaron, listasDelDiaHtml, conectarListasDelDia,
+} from '../ui/dia-escuchado.js';
 import { calendarioAnual, aMs, isoDelDia, ultimoDiaDelTramo } from '../ui/calendario-anual.js';
 import { fmtDia } from '../util/fecha.js';
 import { animationsEnabled, armRevealAll, releaseReveal } from '../ui/reveal.js';
@@ -65,24 +68,8 @@ const MESES_LARGOS = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio',
   'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
 const MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
 
-// El MISMO `fmtMinutes` que el Wrapped, y por el mismo camino: llega al
-// componente por `ctx`. No se escribe un formateador nuevo — hay cuatro copias
-// privadas de «un decimal en es-ES» anotadas en `PENDIENTES.md` y no hace falta
-// la quinta.
-function fmtMinutes(min) {
-  if (!min && min !== 0) return '—';
-  if (min >= 60) {
-    const h = Math.floor(min / 60);
-    const m = Math.round(min % 60);
-    return `${h.toLocaleString('es-ES')}h ${m}m`;
-  }
-  return `${Math.round(min)}m`;
-}
-
-function num(n) {
-  return Number(n || 0).toLocaleString('es-ES');
-}
-
+// `fmtMinutes` llega al componente por `ctx`, como en el Wrapped (desde v=368 se importa de
+// `ui/dia-escuchado.js`; ver su comentario).
 const ctxCalendario = { MESES, MESES_LARGOS, fmtMinutes, fmtDia };
 
 // ── estado de la vista ──────────────────────────────────────────────────────
@@ -329,25 +316,12 @@ function datosDelDia(iso) {
   const D = tramoDe(anioElegido).days;
   const i = Math.round((aMs(iso) - aMs(D.from)) / 86400000);
   const minutos = i >= 0 && i < D.min.length ? D.min[i] : 0;
+  // 🔴 `dias` (UTC), nunca `diasLocal`: el calendario va en UTC como todo el historial.
   const d = detalle?.dias?.[iso] || null;
   if (!d) return { iso, minutos, detalle: null };
 
-  const dic = detalle.temas || [];
-  const temas = (d.temas || []).map(([idx, min, veces]) => {
-    const t = dic[idx] || [];
-    return { id: t[0] || '', nombre: t[1] || '', artista: t[2] || '', min, veces };
-  });
-  // Artistas por MINUTOS, de mayor a menor. Se agrupa por el artista principal
-  // del tema, que es el único que el diccionario guarda.
-  const porArtista = new Map();
-  for (const t of temas) {
-    if (!t.artista) continue;
-    porArtista.set(t.artista, (porArtista.get(t.artista) || 0) + t.min);
-  }
-  const artistas = [...porArtista.entries()]
-    .sort((a, b) => b[1] - a[1])
-    .map(([nombre, min]) => ({ nombre, min }));
-
+  // Los temas y los artistas (por minutos, de mayor a menor): `armarDia()`, compartido con `#lluvia`.
+  const { temas, artistas } = armarDia(d, detalle.temas);
   return { iso, minutos, detalle: d, temas, artistas };
 }
 
@@ -370,7 +344,7 @@ function abrirDia(i, ruta) {
          <span title="Una reproducción puede durar más de 30 s y haber sido saltada, así que las dos cifras se solapan.">${num(d.detalle.crudas)} reproducciones · ${num(d.detalle.validas)} de más de 30 s · <span title="Un salto es una reproducción marcada como saltada, o un «siguiente» antes de los 30 segundos">${num(d.detalle.saltos)} saltadas</span></span>
        </div>`;
 
-  const temasConVeces = sinDetalle ? [] : d.temas.filter(t => t.veces > 0 && t.id);
+  const temasConVeces = sinDetalle ? [] : soloLosQueSonaron(d.temas);
 
   const cuerpo = sinDetalle
     ? `<div class="cal-panel-vacio">
@@ -382,30 +356,7 @@ function abrirDia(i, ruta) {
          <button class="btn btn-primary btn-sm" data-cal-cargar>Cargar el detalle por día desde tu export</button>
          ${importCompletoBloqueado ? '' : '<button class="btn btn-secondary btn-sm" data-cal-import-completo>Importar mi historial entero</button>'}`}
        </div>`
-    : `
-      ${d.artistas.length ? `
-        <h4 class="cal-panel-h">Artistas del día</h4>
-        <ul class="cal-lista cal-lista-art">
-          ${d.artistas.map(a => `
-            <li><button type="button" class="cal-fila" data-artista="${escapeHtml(a.nombre)}">
-              <span class="cal-fila-n">${escapeHtml(a.nombre)}</span>
-              <span class="cal-fila-m">${fmtMinutes(a.min)}</span>
-            </button></li>
-          `).join('')}
-        </ul>` : ''}
-
-      ${temasConVeces.length ? `
-        <h4 class="cal-panel-h">Temas del día <span class="cal-panel-h-hint">en orden de la primera vez que sonaron</span></h4>
-        <ul class="cal-lista cal-lista-temas">
-          ${temasConVeces.map(t => `
-            <li><button type="button" class="cal-fila" data-tema="${escapeHtml(t.id)}"
-                        data-nombre="${escapeHtml(t.nombre)}" data-artista-tema="${escapeHtml(t.artista)}">
-              <span class="cal-fila-n">${escapeHtml(t.nombre)}<span class="cal-fila-a">${escapeHtml(t.artista)}</span></span>
-              <span class="cal-fila-m">${fmtMinutes(t.min)}${t.veces > 1 ? ` · ${num(t.veces)} veces` : ''}</span>
-            </button></li>
-          `).join('')}
-        </ul>` : ''}
-    `;
+    : listasDelDiaHtml(d.artistas, temasConVeces);
 
   const botonPlaylist = temasConVeces.length
     ? `<button class="btn btn-primary btn-sm" data-cal-playlist>Crear playlist con este día (${num(temasConVeces.length)} temas)</button>`
@@ -428,19 +379,8 @@ function abrirDia(i, ruta) {
     `,
   });
 
-  // Las fichas: cada nombre abre la suya. `attachArtistCard` para los
-  // artistas y `openTrackCard` para los temas — las dos ya existen y no se
-  // reimplementan.
-  for (const b of overlay.querySelectorAll('[data-artista]')) {
-    attachArtistCard(b, b.dataset.artista);
-  }
-  for (const b of overlay.querySelectorAll('[data-tema]')) {
-    b.onclick = () => openTrackCard({
-      id: b.dataset.tema,
-      name: b.dataset.nombre,
-      artist: b.dataset.artistaTema,
-    });
-  }
+  // Las fichas: cada nombre abre la suya, solo dentro de este overlay (`ui/dia-escuchado.js`).
+  conectarListasDelDia(overlay);
 
   const cargar = overlay.querySelector('[data-cal-cargar]');
   if (cargar) cargar.onclick = () => { closeModal(overlay); cargarElDetalle(ruta); };

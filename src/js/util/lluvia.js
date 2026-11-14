@@ -107,6 +107,14 @@ export function masLluviosos(filas, cuantos = CUANTOS_LLUVIOSOS) {
   return [...filas].sort((a, b) => b.mmD - a.mmD || a.dia.localeCompare(b.dia)).slice(0, cuantos);
 }
 
+/** «Todos los días con lluvia» (v=368): los de la ventana con 1 mm o más (`f.lluvia`), del más nuevo al más viejo. */
+export function diasConLluvia(filas) {
+  return filas.filter((f) => f.lluvia).sort((a, b) => b.dia.localeCompare(a.dia));
+}
+
+/** De a cuántos se enseñan (v=368). */
+export const DE_A = 25;
+
 // ── Los textos ───────────────────────────────────────────────────────────────
 
 /** Minutos sin decimales, de décimas. «—» si no hay dato. */
