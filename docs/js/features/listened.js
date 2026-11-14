@@ -1,18 +1,18 @@
-import { getAllPlaylistItems, getBestAvailableLikes, addTracksToPlaylist, removeTracksFromPlaylist, getAllUserPlaylists, getCurrentUserId, getSavedAlbums, getAlbumTracks } from '../api.js?v=366';
-import { indiceDelRegistro, estaRegistrado, leerPorEscuchar, marcarEscuchado, cabeceraPorEscuchar, TEXTO_FALLO_POR_ESCUCHAR } from '../util/registro-escuchados.js?v=366';
-import { cargarEtiquetas, getCachedTags } from '../api/lastfm.js?v=366';
-import { esEPoAlbum } from '../util/release-size.js?v=366';
-import { idbGetCached, idbSetCached, idbGetTimestamp } from '../idb.js?v=366';
-import { escapeHtml, confirmModal, pageHeader } from '../ui/components.js?v=366';
-import { showToast } from '../ui/toast.js?v=366';
-import { isJunkTrack } from '../util/junk.js?v=366';
-import { openModal, closeTop } from '../ui/modal-stack.js?v=366';
-import { getListenedPlaylist, groupItemsByAlbum, openListenedAlbumsPicker, albumKey, baseName, norm } from './listened-shared.js?v=366';
-import { openAlbumCard } from './album-card.js?v=366';
-import { prefKey, migratePrefKey } from '../storage.js?v=366';
-import { pedirYCachear, SOLO_CON_CONTENIDO } from '../util/cache-solo-exitos.js?v=366';
-import { idsDeBiblioteca, filtrarPorBiblioteca } from '../util/solo-biblioteca.js?v=366';
-import { vigilarRuta } from '../util/vigencia-ruta.js?v=366';
+import { getAllPlaylistItems, getBestAvailableLikes, addTracksToPlaylist, removeTracksFromPlaylist, getAllUserPlaylists, getCurrentUserId, getSavedAlbums, getAlbumTracks } from '../api.js?v=367';
+import { indiceDelRegistro, estaRegistrado, leerPorEscuchar, marcarEscuchado, cabeceraPorEscuchar, TEXTO_FALLO_POR_ESCUCHAR } from '../util/registro-escuchados.js?v=367';
+import { cargarEtiquetas, getCachedTags } from '../api/lastfm.js?v=367';
+import { esEPoAlbum } from '../util/release-size.js?v=367';
+import { idbGetCached, idbSetCached, idbGetTimestamp } from '../idb.js?v=367';
+import { escapeHtml, confirmModal, pageHeader } from '../ui/components.js?v=367';
+import { showToast } from '../ui/toast.js?v=367';
+import { isJunkTrack } from '../util/junk.js?v=367';
+import { openModal, closeTop } from '../ui/modal-stack.js?v=367';
+import { getListenedPlaylist, groupItemsByAlbum, openListenedAlbumsPicker, albumKey, baseName, norm } from './listened-shared.js?v=367';
+import { openAlbumCard } from './album-card.js?v=367';
+import { prefKey, migratePrefKey } from '../storage.js?v=367';
+import { pedirYCachear, SOLO_CON_CONTENIDO } from '../util/cache-solo-exitos.js?v=367';
+import { idsDeBiblioteca, filtrarPorBiblioteca } from '../util/solo-biblioteca.js?v=367';
+import { vigilarRuta } from '../util/vigencia-ruta.js?v=367';
 
 const SORT_KEY = 'listened_sort_mode';
 const VALID_SORTS = new Set(['recent', 'year-desc', 'year-asc', 'artist-asc', 'likes-desc', 'name-asc']);
@@ -71,7 +71,7 @@ function dismissHistory(key) {
 // Solo lo bajamos si el user logueado es el dueño (Ian): son sus datos personales.
 async function loadHistoryData() {
   if (historyAlbums) return historyAlbums;
-  const { isOwner } = await import('./history-data.js?v=366');
+  const { isOwner } = await import('./history-data.js?v=367');
   if (!(await isOwner())) { historyAlbums = []; return historyAlbums; }
   try {
     const cached = await idbGetCached(HISTORY_CACHE_KEY);

@@ -1,0 +1,180 @@
+<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>banco tamano-fijo — el pill y las tarjetas, siempre del mismo tamaño</title>
+<style>html,body{margin:0;background:#111;color:#eee;font:13px system-ui}iframe{border:0;display:block}</style>
+</head><body>
+<pre id="progreso"></pre>
+<pre id="medidas"></pre>
+<div id="marcos"></div>
+<script type="module">
+// ── Qué prueba este banco (tanda 130, v=367) ─────────────────────────────────
+//
+// La app ENTERA (`tamano-fijo-caso.html`, una por iframe) con la Spotify simulada, previews simulados y datos INVENTADOS
+// (`tamano-fijo-datos.mjs`), a 1366×591 y 390×844, con las animaciones de la app en «siempre» y en «nunca», más un marco con
+// la columna de la grilla en su mínimo de 360 px:
+//
+//   A. el pill del reproductor: el MISMO ancho (diferencia 0 px) con un nombre de ≈ 15, ≈ 30 y ≈ 70 caracteres, en los cuatro
+//      estados del audio (buscando, cargando, sonando, en pausa) y con el embed; el MISMO alto en los cuatro estados del audio
+//      (el embed tiene el suyo, el iframe); a más de 768 px, 360 px de ancho;
+//   B. el nombre: con «siempre» y el nombre largo, `mq-on` en la etiqueta y un `--mq-shift` distinto de 0; con «nunca», sin
+//      `mq-on` y con el nombre entero en el `title`; al esconder el pill, sin `mq-on`; el `textContent` es el nombre;
+//   C. las tarjetas de `#skips` y de `#zeroplays`: todas con el MISMO alto (diferencia 0 px), con y sin etiqueta, con y sin
+//      segunda línea, con nombre corto y largo, una elegida; también DESPUÉS de que llegue la segunda tanda (y el mismo alto
+//      que antes de que llegara); cada botón de `.sc-actions` entero dentro de su tarjeta, sin `overflow: hidden`;
+//   D. el título de la tarjeta con la marquesina en hover (`.mq`): con «siempre», `mq-on` al entrar y apagado al salir; con
+//      «nunca», sin `mq-on` y con `title`;
+//   E. nada desborda la página; 0 peticiones a otro host mientras se mide (lo que ya pedía `main.css` al cargar —el `@import`
+//      de Google Fonts, de antes de esta tanda— se cuenta aparte y va en el resumen), 0 escrituras, ningún JSON del repo, 0 errores.
+//
+// `?medir=1` no afirma nada: deja todas las medidas en `<pre id="medidas">` (el punto de partida de la tanda, T130.0) y
+// barre el ancho del marco para encontrar dónde la columna queda en su mínimo.
+// ⚠️ Todas las esperas van con `esperarReal` (ver PRESUPUESTO en `scripts/correr-banco.mjs`).
+
+import { esperarReal } from '/banco/simulado.mjs';
+import { fallar, listo } from '/banco/esperar.mjs';
+import { NOMBRES_PILL } from '/banco/tamano-fijo-datos.mjs';
+
+const MEDIR = new URLSearchParams(location.search).get('medir') === '1';
+const afirmar = (c, msg) => { if (!c) throw new Error('BANCO tamano-fijo: ' + msg); };
+const pasos = [];
+const progreso = (t) => { pasos.push(`${t} @${Math.round(performance.now())}`); document.getElementById('progreso').textContent = pasos.join(' · '); };
+const VUELTAS = 40000;
+// El ancho del marco con la columna de la grilla en su mínimo (360 px): lo encontró el barrido de `?medir=1` (T130.0).
+const ANCHO_COLUMNA_MINIMA = 1208;
+
+function abrirMarco(nombre, ancho, alto, extra = '') {
+  const f = document.createElement('iframe');
+  f.width = ancho; f.height = alto;
+  f.src = `/banco/tamano-fijo-caso.html?marco=${nombre}${extra}`;
+  document.getElementById('marcos').appendChild(f);
+  return f;
+}
+const win = (f) => f.contentWindow;
+const resultado = (f, que) => esperarReal(() => win(f)?.__resultado, { que: `las medidas de ${que}`, vueltas: VUELTAS });
+
+const MARCOS = [
+  ['1366-siempre', 1366, 591, '&anim=siempre'],
+  ['1366-nunca', 1366, 591, '&anim=nunca'],
+  ['390-siempre', 390, 844, '&anim=siempre'],
+  ['390-nunca', 390, 844, '&anim=nunca'],
+  ['minima-siempre', ANCHO_COLUMNA_MINIMA, 700, '&anim=siempre&que=grillas'],
+];
+
+const medidas = {};
+try {
+  for (const [nombre, w, h, extra] of MARCOS) {
+    const f = abrirMarco(nombre, w, h, extra);
+    if (extra.includes('que=grillas')) {
+      // La columna en su mínimo: el ancho exacto depende de si este Chrome pinta barras de desplazamiento (el barrido de
+      // T130.0, sin barras, la encontró a 1208). Se busca en el momento, de 1190 a 1290, y se anota.
+      await esperarReal(() => win(f)?.__listoBarrido, { que: `el marco ${nombre}`, vueltas: VUELTAS });
+      let hallado = null;
+      for (let a = 1190; a <= 1290 && !hallado; a++) {
+        f.width = a;
+        let v = 0; await esperarReal(() => ++v > 1, { que: 'el relayout' });
+        const c = f.contentDocument.querySelector('#skips-list .sc-card');
+        const cw = c ? c.getBoundingClientRect().width : 0;
+        if (cw >= 360 && cw < 361) hallado = a;
+      }
+      afirmar(hallado, `${nombre}: ningún ancho de 1190 a 1290 deja la columna en [360, 361)`);
+      // Las esperas de adentro (`esperarReal`, una petición local por vuelta) anclan el reloj virtual: basta con esperarla.
+      medidas[nombre] = await win(f).__medirGrillas();
+      medidas[nombre].anchoMarco = hallado;
+    } else {
+      medidas[nombre] = await resultado(f, nombre);
+    }
+    progreso(nombre);
+    f.remove();
+  }
+
+  if (MEDIR) {
+    // El barrido: un marco con `#skips` abierto, que se ensancha de a 1 px. Anota el ancho de la columna en cada uno.
+    const f = abrirMarco('barrido', 900, 700, '&anim=siempre&que=barrido');
+    await esperarReal(() => win(f)?.__listoBarrido, { que: 'el marco del barrido', vueltas: VUELTAS });
+    const barrido = [];
+    for (let w = 900; w <= 1500; w++) {
+      f.width = w;
+      let v = 0; await esperarReal(() => ++v > 1, { que: 'el relayout' });
+      const c = f.contentDocument.querySelector('#skips-list .sc-card');
+      const z = f.contentDocument.querySelector('#skips-list');
+      if (c) barrido.push([w, Math.round(c.getBoundingClientRect().width * 100) / 100, Math.round(z.getBoundingClientRect().width * 100) / 100]);
+    }
+    medidas.barrido = barrido;
+    f.remove();
+    document.getElementById('medidas').textContent = JSON.stringify(medidas);
+    const resumen = `medidas de ${Object.keys(medidas).length} marcos · reloj virtual=${Math.round(performance.now())} ms`;
+    document.documentElement.setAttribute('data-resumen', resumen);
+    listo(resumen);
+  } else {
+    const fallos = [];
+    const exigir = (c, msg) => { if (!c) fallos.push(msg); };
+    const resumenes = [];
+    for (const [nombre, w] of MARCOS) {
+      const m = medidas[nombre];
+      // A y B, el pill (en los cuatro marcos que lo miden).
+      if (m.pill) {
+        const todos = [];
+        for (const n of Object.keys(NOMBRES_PILL)) for (const e of ['buscando', 'cargando', 'sonando', 'pausa', 'embed']) todos.push([n, e, m.pill[n][e]]);
+        const anchos = [...new Set(todos.map(([, , x]) => x.w))];
+        exigir(anchos.length === 1, `${nombre}: el pill con ${anchos.length} anchos distintos (${todos.map(([n, e, x]) => `${n}/${e}=${x.w}`).join(', ')})`);
+        if (w > 768) exigir(anchos.length === 1 && anchos[0] === 360, `${nombre}: el pill mide ${anchos.join('/')} px y no 360`);
+        const audio = todos.filter(([, e]) => e !== 'embed');
+        const altos = [...new Set(audio.map(([, , x]) => x.h))];
+        exigir(altos.length === 1, `${nombre}: el pill con ${altos.length} altos en los estados del audio (${audio.map(([n, e, x]) => `${n}/${e}=${x.h}`).join(', ')})`);
+        const largo = m.pill.largo.sonando;
+        exigir(largo.mq, `${nombre}: la etiqueta del pill sin el marcado .mq > .mq-t`);
+        exigir(largo.texto === NOMBRES_PILL.largo, `${nombre}: el textContent de la etiqueta es «${largo.texto}»`);
+        exigir(largo.titleEtiqueta === NOMBRES_PILL.largo, `${nombre}: el title de la etiqueta es «${largo.titleEtiqueta}»`);
+        if (m.anim === 'siempre') {
+          exigir(largo.mqOn, `${nombre}: con «siempre» y el nombre largo, la etiqueta sin mq-on`);
+          exigir(/^-\d/.test(largo.shift || '') && parseFloat(largo.shift) !== 0, `${nombre}: --mq-shift es «${largo.shift}»`);
+        } else {
+          exigir(!largo.mqOn, `${nombre}: con «nunca», la etiqueta con mq-on`);
+        }
+        exigir(!m.pill.alEsconder.mqOn && !m.pill.alEsconder.visible, `${nombre}: al esconder el pill, mq-on=${m.pill.alEsconder.mqOn}`);
+        exigir(!m.pill.corto.sonando.mqOn, `${nombre}: el nombre corto, que entra, con mq-on`);
+        resumenes.push(`${nombre}: pill ${anchos.join('/')}×${altos.join('/')} (etiqueta ${largo.etiqueta})`);
+      }
+      // C y D, las grillas.
+      for (const [vista, clave, hov] of [['#skips', 'skips', 'hoverSkips'], ['#zeroplays', 'zero', 'hoverZero']]) {
+        const v = m[clave];
+        exigir(v.tanda.despues > v.tanda.antes, `${nombre} ${vista}: la segunda tanda no llegó (${v.tanda.antes} → ${v.tanda.despues})`);
+        for (const [cual, g] of [['primera', v.primera], ['segunda', v.segunda]]) {
+          exigir(g.max - g.min === 0, `${nombre} ${vista} (${cual} tanda): altos de ${g.min} a ${g.max}`);
+          exigir(g.tarjetas.every((t) => t.fuera === 0), `${nombre} ${vista} (${cual}): ${g.tarjetas.filter((t) => t.fuera).length} tarjetas con un botón fuera`);
+          exigir(g.tarjetas.every((t) => t.actionsOverflow !== 'hidden'), `${nombre} ${vista}: .sc-actions con overflow hidden`);
+          exigir(g.tarjetas.every((t) => t.titulo === 'mq'), `${nombre} ${vista}: títulos sin .mq (${[...new Set(g.tarjetas.map((t) => t.titulo))].join(', ')})`);
+          exigir(g.desborda <= 0, `${nombre} ${vista}: la página desborda ${g.desborda} px`);
+        }
+        exigir(v.primera.min === v.segunda.min, `${nombre} ${vista}: la tanda nueva movió el alto (${v.primera.min} → ${v.segunda.min})`);
+        const t = v.segunda.tarjetas;
+        exigir(t.some((x) => x.etiqueta) && t.some((x) => x.sub) && t.some((x) => !x.sub) && t.some((x) => x.largo) && t.some((x) => !x.largo) && t.some((x) => x.sel),
+          `${nombre} ${vista}: falta alguna mezcla de tarjetas`);
+        if (vista === '#zeroplays') exigir(t.some((x) => !x.etiqueta), `${nombre} ${vista}: ninguna tarjeta sin etiqueta`);
+        const h = m[hov];
+        exigir(h, `${nombre} ${vista}: ninguna tarjeta con nombre largo para el hover`);
+        if (h) {
+          if (m.anim === 'siempre') exigir(h.dentro.mqOn && /^-\d/.test(h.dentro.shift), `${nombre} ${vista}: en hover, mq-on=${h.dentro.mqOn} shift=«${h.dentro.shift}»`);
+          else exigir(!h.dentro.mqOn && !!h.dentro.title, `${nombre} ${vista}: con «nunca», en hover mq-on=${h.dentro.mqOn} title=«${h.dentro.title}»`);
+          exigir(!h.fuera.mqOn, `${nombre} ${vista}: al salir, sigue con mq-on`);
+        }
+        resumenes.push(`${nombre} ${vista}: ${v.segunda.n} tarjetas de ${v.segunda.min} px (columna ${v.segunda.columna})`);
+      }
+      if (nombre.startsWith('minima')) exigir(Math.abs(m.skips.segunda.columna - 360) < 1, `${nombre}: la columna mide ${m.skips.segunda.columna}, no 360`);
+      // E, el costo y los errores.
+      exigir(m.ajenosNuevos.length === 0, `${nombre}: ${m.ajenosNuevos.length} peticiones a otro host (${m.ajenosNuevos.slice(0, 3).join(', ')})`);
+      exigir(m.externasSimulada.length === 0, `${nombre}: ${m.externasSimulada.length} fetch a otro host (${m.externasSimulada.slice(0, 3).join(', ')})`);
+      exigir(m.escrituras === 0, `${nombre}: ${m.escrituras} escrituras`);
+      exigir(m.datosAjenos.length === 0, `${nombre}: pidió JSON del repo (${m.datosAjenos.join(', ')})`);
+      exigir(m.errores.length === 0, `${nombre}: errores (${m.errores.slice(0, 3).join(' | ')})`);
+      exigir(m.audios.every((u) => u && u.startsWith('/banco/')), `${nombre}: un audio que no es del banco (${m.audios.join(', ')})`);
+    }
+    afirmar(fallos.length === 0, `${fallos.length} fallos:\n  · ${fallos.join('\n  · ')}`);
+    const fuentes = [...new Set(Object.values(medidas).flatMap((m) => m.ajenosAlArrancar || []))].length;
+    const resumen = `${resumenes.join(' · ')} · pedidos de main.css al cargar (Google Fonts, de antes)=${fuentes} · reloj virtual=${Math.round(performance.now())} ms`;
+    document.documentElement.setAttribute('data-resumen', resumen);
+    listo(resumen);
+  }
+} catch (e) {
+  fallar(e);
+}
+</script>
+</body></html>

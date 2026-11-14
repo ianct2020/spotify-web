@@ -42,11 +42,14 @@
 //   - Buscando y con el embed no hay botón ni barra: no hay nada que pausar ni
 //     ningún tiempo que leer (el iframe no avisa nada).
 
-import { escapeHtml } from './components.js?v=366';
-import { showToast } from './toast.js?v=366';
-import { mountBottom } from './bottom-layer.js?v=366';
-import { animationsEnabled } from './reveal.js?v=366';
-import { iconoPlay, iconoPausa } from './icons.js?v=366';
+import { escapeHtml } from './components.js?v=367';
+import { showToast } from './toast.js?v=367';
+import { mountBottom } from './bottom-layer.js?v=367';
+import { animationsEnabled } from './reveal.js?v=367';
+import { iconoPlay, iconoPausa } from './icons.js?v=367';
+// (v=367, tanda 130) El nombre del pill se mueve con la MISMA marquesina de las listas densas, sin esperar al mouse:
+// el pill tiene ahora un ancho fijo y un nombre largo ya no lo agranda. Ver `moverEtiqueta()`.
+import { hoverMarqueeSpan, prepararMarquesinaFila, pararMarquesinaFila } from './hover-marquee.js?v=367';
 
 const audio = new Audio();
 audio.preload = 'none';
@@ -229,9 +232,13 @@ function showPillAudio(label, provider, loading) {
   p.querySelector('.preview-pill-embed').hidden = true;
   p.querySelector('.preview-pill-embed').innerHTML = '';
   const labelEl = p.querySelector('.preview-pill-label');
-  labelEl.innerHTML = escapeHtml(label || '');
-  // (v=357) La etiqueta se corta con «…» a 420 px (`main.css`): el nombre entero
-  // va en el `title`, que es la única forma de leerlo desde el pill.
+  // (v=367) El nombre va dentro del marcado de `ui/hover-marquee.js` (`.mq > .mq-t`):
+  // en reposo se corta con «…», y si sobra se mueve de un lado al otro (ver
+  // `moverEtiqueta()`). El `textContent` de la etiqueta sigue siendo el nombre a
+  // secas: lo leen `fail()` y el banco `siempre-y-play`.
+  labelEl.innerHTML = hoverMarqueeSpan(escapeHtml(label || ''));
+  // (v=357) El nombre entero va en el `title`, que sin animaciones es la única
+  // forma de leerlo desde el pill.
   labelEl.title = label || '';
   const provEl = p.querySelector('.preview-pill-provider');
   provEl.textContent = loading ? 'buscando…' : (PROVIDER_LABEL[provider] || '');
@@ -243,6 +250,29 @@ function showPillAudio(label, provider, loading) {
   mostrarControles(!loading);
   if (!loading) actualizarBarra();
   p.classList.add('show');
+  moverEtiqueta();
+}
+
+// ── El nombre que no entra se mueve (v=367, tanda 130) ───────────────────────
+//
+// El pill ya no crece con el nombre (el ancho es fijo, en `components.css`), así
+// que un nombre largo no entra. Se mueve con la maquinaria de
+// `ui/hover-marquee.js` —la misma de `#wthree` y de las tarjetas: ida y vuelta,
+// con pausa en los dos extremos y «…» en reposo—, pero acá sin esperar al mouse:
+// el pill es uno solo, no una lista que marea. Se mide al cambiar el nombre y al
+// cambiar el tamaño de la ventana, y se para al esconder el pill.
+//
+// Quién anima lo decide `animationsEnabled()` (dentro de
+// `prepararMarquesinaFila`), nunca `prefers-reduced-motion`: Ian tiene las
+// animaciones del sistema apagadas y el interruptor de la app en «siempre». Sin
+// animaciones, quieto con «…» y el nombre entero en el `title`.
+function moverEtiqueta() {
+  if (!pill || !pill.classList.contains('show')) return;
+  const l = pill.querySelector('.preview-pill-label');
+  if (l) prepararMarquesinaFila(l);
+}
+if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
+  window.addEventListener('resize', () => moverEtiqueta());
 }
 
 // El track de Spotify sin preview propio no puede autoarrancar (política de
@@ -257,6 +287,7 @@ function showPillEmbed(url, label) {
   p.classList.remove('loading');
   p.querySelector('.preview-eq').style.display = 'none';
   p.querySelector('.preview-pill-main').style.display = 'none';
+  pararMarquesinaFila(p);   // (v=367) la etiqueta queda escondida: nada que mover
   pausadoPorUsuario = false;
   mostrarControles(false);
   const box = p.querySelector('.preview-pill-embed');
@@ -274,6 +305,7 @@ function hidePill() {
   if (pill) {
     pill.classList.remove('show');
     pill.classList.remove('is-playing');
+    pararMarquesinaFila(pill);   // (v=367) el nombre deja de moverse con el pill escondido
     // Limpia el iframe para que no siga cargando/reproduciendo en background
     const box = pill.querySelector('.preview-pill-embed');
     if (box) { box.innerHTML = ''; box.hidden = true; }

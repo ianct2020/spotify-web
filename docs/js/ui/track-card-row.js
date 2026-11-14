@@ -21,10 +21,15 @@
 //   - Cada tarjeta se resuelve por `data-id` contra un Map, nunca por índice.
 //   - La selección vive en un Set del feature, no en el DOM.
 
-import { escapeHtml } from './components.js?v=366';
-import { marqueeSpan } from './marquee.js?v=366';
-import { isPlayingAudio, playingProvider } from './preview-player.js?v=366';
-import { iconoPlay, iconoPausa, iconoOjo, iconoOjoTachado, iconoFicha } from './icons.js?v=366';
+import { escapeHtml } from './components.js?v=367';
+// (v=367, tanda 130) El título se mueve EN HOVER con `ui/hover-marquee.js`, no con
+// `ui/marquee.js`: aquella arranca sola en loop (una grilla de decenas de
+// tarjetas moviéndose a la vez marea), corta a mitad de letra sin «…» y la apaga
+// `prefers-reduced-motion`, o sea que para Ian no se movía nunca. Esta la decide
+// `animationsEnabled()`, tiene «…» en reposo y, sin animaciones, el `title`.
+import { hoverMarqueeSpan, wireHoverMarquee } from './hover-marquee.js?v=367';
+import { isPlayingAudio, playingProvider } from './preview-player.js?v=367';
+import { iconoPlay, iconoPausa, iconoOjo, iconoOjoTachado, iconoFicha } from './icons.js?v=367';
 
 const CHECK = `<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>`;
 // Corazón tachado: sacar de tus me gusta. Es la ÚNICA acción de la tarjeta que
@@ -97,7 +102,7 @@ export function renderTrackCardRow(r, opts = {}) {
       </div>
       <div class="sc-card-body">
         <div class="sc-info">
-          <div class="sc-title">${marqueeSpan(nombre)}</div>
+          <div class="sc-title">${hoverMarqueeSpan(nombre)}</div>
           <div class="sc-meta">${artistas}</div>
           ${sub ? `<div class="sc-meta sc-meta-sub">${sub}</div>` : ''}
         </div>
@@ -139,6 +144,13 @@ export function renderTrackCardRow(r, opts = {}) {
  */
 export function wireTrackCardGrid(grid, { rowById, onToggle, onPlay, onCard, onAdd, onHide, onUnlike } = {}) {
   if (!grid) return () => {};
+
+  // (v=367) La marquesina del título, en hover y por delegación: vale también
+  // para las tarjetas de las tandas que todavía no llegaron. Va acá y no en cada
+  // vista porque la tarjeta es la misma en las tres. `wireHoverMarquee` tiene su
+  // propia guarda contra el doble cableado del mismo grid, y sus listeners se van
+  // con el grid (cada repintado de la vista trae uno nuevo).
+  wireHoverMarquee(grid, '.sc-card');
 
   const onClick = (e) => {
     const card = e.target.closest('.sc-card');

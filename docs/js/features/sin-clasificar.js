@@ -16,27 +16,26 @@
 import {
   getAllUserPlaylists, getAllPlaylistItems, getBestAvailableLikes,
   getCurrentUserId, removeLikedTracks, checkLibraryContains,
-} from '../api.js?v=366';
-import { borrarLikesVerificado } from '../util/borrado-verificado.js?v=366';
-import { vigilarRuta } from '../util/vigencia-ruta.js?v=366';
-import { idbGetCached, idbSetCached, idbDel } from '../idb.js?v=366';
-import { createHiddenStore, uriDeTrackId, normPlaylistName } from '../util/hidden-sync.js?v=366';
-import { prefKey, migratePrefKey } from '../storage.js?v=366';
-import { addUrisToPlaylists, toastAddResult, getOwnPlaylists } from '../util/playlist-add.js?v=366';
-import { escapeHtml, pageHeader, showProgress, hideProgress, isCancelled, confirmModal, tarjetaSinLikes } from '../ui/components.js?v=366';
-import { openModal, closeTop } from '../ui/modal-stack.js?v=366';
-import { openPlaylistPicker } from '../ui/playlist-picker.js?v=366';
-import { showToast } from '../ui/toast.js?v=366';
-import { getPreview } from '../api/preview-providers.js?v=366';
-import { togglePreview, playingKey } from '../ui/preview-player.js?v=366';
-import { openTrackCard } from './track-card.js?v=366';
-import { normText } from '../util/track-match.js?v=366';
-import { activateMarquee } from '../ui/marquee.js?v=366';
-import { renderTrackCardRow, wireTrackCardGrid, paintCardSelection, paintPlayingCard } from '../ui/track-card-row.js?v=366';
-import { createIncrementalList, scrollRootOf } from '../ui/incremental-list.js?v=366';
-import { createLazyImages } from '../ui/lazy-img.js?v=366';
-import { coverAtSize } from '../util/cover-size.js?v=366';
-import { fmtDiaCorto } from '../util/fecha.js?v=366';
+} from '../api.js?v=367';
+import { borrarLikesVerificado } from '../util/borrado-verificado.js?v=367';
+import { vigilarRuta } from '../util/vigencia-ruta.js?v=367';
+import { idbGetCached, idbSetCached, idbDel } from '../idb.js?v=367';
+import { createHiddenStore, uriDeTrackId, normPlaylistName } from '../util/hidden-sync.js?v=367';
+import { prefKey, migratePrefKey } from '../storage.js?v=367';
+import { addUrisToPlaylists, toastAddResult, getOwnPlaylists } from '../util/playlist-add.js?v=367';
+import { escapeHtml, pageHeader, showProgress, hideProgress, isCancelled, confirmModal, tarjetaSinLikes } from '../ui/components.js?v=367';
+import { openModal, closeTop } from '../ui/modal-stack.js?v=367';
+import { openPlaylistPicker } from '../ui/playlist-picker.js?v=367';
+import { showToast } from '../ui/toast.js?v=367';
+import { getPreview } from '../api/preview-providers.js?v=367';
+import { togglePreview, playingKey } from '../ui/preview-player.js?v=367';
+import { openTrackCard } from './track-card.js?v=367';
+import { normText } from '../util/track-match.js?v=367';
+import { renderTrackCardRow, wireTrackCardGrid, paintCardSelection, paintPlayingCard } from '../ui/track-card-row.js?v=367';
+import { createIncrementalList, scrollRootOf } from '../ui/incremental-list.js?v=367';
+import { createLazyImages } from '../ui/lazy-img.js?v=367';
+import { coverAtSize } from '../util/cover-size.js?v=367';
+import { fmtDiaCorto } from '../util/fecha.js?v=367';
 
 const HIDDEN_KEY = 'sin_clasificar_ocultas';
 const EXCLUDED_KEY = 'sin_clasificar_excluidas';
@@ -556,12 +555,12 @@ function renderResults() {
       onBatch: ({ rendered, total, added, ms }) => {
         const perf = (window.__scPerf ||= { batches: [] });
         perf.batches.push({ added, rendered, total, ms: +ms.toFixed(1) });
-        // Marquee y tapas solo sobre lo recién insertado: medir toda la lista
-        // en cada lote sería cuadrático, y son medidas de layout, de las caras.
+        // Tapas solo sobre lo recién insertado: mirar toda la lista en cada lote
+        // sería cuadrático. (Desde v=367 el título no se mide al pintar: se mueve
+        // en hover, ver `wireTrackCardGrid` en ui/track-card-row.js.)
         const nuevas = grid.querySelectorAll('.sc-card:not([data-mq])');
         nuevas.forEach(c => c.setAttribute('data-mq', '1'));
         lazyCovers?.observe(nuevas);
-        activateMarquee(nuevas);
         if (window.__scDebug) {
           console.info(`[sin-clasificar] lote +${added} → ${rendered}/${total} en ${ms.toFixed(1)} ms`);
         }

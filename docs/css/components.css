@@ -2210,6 +2210,47 @@ body.con-aviso-copia { padding-top: 46px; }
   text-decoration: underline;
 }
 
+/* v=367 (tanda 130): el pill y las tarjetas de canción, siempre del mismo tamaño. Pedido de Ian: «debería tener siempre el
+   mismo tamaño y las letras se mueven de lado a lado». Todo con DOS clases (esta hoja carga antes que `main.css`, que no
+   se toca) y sin ninguna media query de movimiento reducido: lo que se mueve lo decide `animationsEnabled()` en el JS.
+
+   El pill (medido en T130.0 sobre v=366, Chrome headless): a 1366 medía 210 (buscando), 271, 310 o 420 px de ancho según el
+   nombre, y 47 px de alto buscando contra 62 en los otros tres estados.
+   - Ancho: 360 px a más de 768, en todos los estados y también con el embed (360 era ya su tope). Con 360, la etiqueta se
+     queda con ~241 px (medido a 390, donde el pill ya medía 360): sobra para los 140 que pedía el encargo. A 768 o menos no
+     hace falta nada: la capa de abajo lo estira (`align-items: stretch`, v=322) y ya medía 360 con cualquier nombre.
+   - El centro crece: así ⏸ y ✕ quedan siempre contra el borde derecho, también con un nombre corto.
+   - Alto: buscando, la barra de los 30 s está `hidden` y el pill perdía su renglón (15 px). Con `.loading` (solo
+     «buscando»: el JS la saca al llegar el audio, el embed o el error) el renglón se RESERVA con `visibility: hidden`: el
+     mismo marcado y la misma hoja que en los otros estados, así que el alto no depende de la fuente ni de un número
+     escrito a mano. El embed tiene su propio alto (el iframe) y no entra en esto. */
+@media (min-width: 769px) {
+  .preview-pill.show { width: 360px; }
+}
+.preview-pill .preview-pill-main { flex: 1 1 auto; }
+.preview-pill.loading .preview-pill-progress[hidden] { display: flex; visibility: hidden; }
+
+/* Las tarjetas `.sc-card` (`#skips`, `#zeroplays`, `#sin-clasificar`, ui/track-card-row.js). Medido en T130.0 sobre v=366: de
+   94 a 136 px en la misma grilla, según la tarjeta tuviera la etiqueta de plays (las acciones parten en dos renglones), la
+   segunda línea (`.sc-meta-sub`, 14 px) o no. El alto ya no sale de lo pintado, que llega de a tandas (una tarjeta más alta
+   en la tanda siguiente movía las de arriba): sale del PEOR CASO medido, reservado por partes.
+   - El texto: tres renglones siempre, con altos de línea en px (18 + 14 + 14 = 46, lo medido con las tres líneas), así que
+     el número no depende de la fuente: con o sin `.sc-meta-sub`, 46 px.
+   - Las acciones: dos renglones de botones de 26 px con su hueco de 6 (58, lo medido con la etiqueta y los seis botones, que
+     es el peor caso desde 320 px de pantalla). Con un renglón, los botones van abajo (`align-content: flex-end`). Ningún
+     botón se corta ni se esconde: nada de `overflow`, y si algún día no entraran en dos renglones la tarjeta crecería en
+     vez de taparlos (por eso son mínimos y no un alto clavado).
+   - Resultado (medido en v=367): 46 + 10 + 58 + 20 de relleno + 2 de borde = 136 px en `#zeroplays` (y en `#sin-clasificar`,
+     la misma tarjeta), a 1366, a 390 y con la columna en su mínimo de 360. En `#skips`, 148 (146 a 480 px o menos): la
+     tarjeta lleva un tercer renglón, el del embed de Spotify cerrado (`.skips-preview-slot`, alto 0), y el hueco de la
+     grilla de la tarjeta (12; 10 a 480 o menos) se suma igual, como antes (130 contra 118 en v=366). Dentro de cada grilla,
+     un solo alto. El embed de `#skips` ABIERTO dentro de la tarjeta (el iframe) sí la agranda mientras está abierto, como el
+     embed del pill. */
+.sc-grid .sc-card .sc-title { line-height: 18px; }
+.sc-grid .sc-card .sc-meta { line-height: 14px; }
+.sc-grid .sc-card .sc-info { min-height: 46px; }
+.sc-grid .sc-card .sc-actions { min-height: 58px; align-content: flex-end; }
+
 /* ═══════════════════════════════════════════════════════════════════════════
    #lluvia — cuando llueve (v=358, tanda 117). Clases propias `.lluvia-…`.
    Los números en --color-text; las etiquetas y el pie en --color-text-secondary (nunca el muted).

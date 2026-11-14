@@ -25,7 +25,6 @@ import { getPreview } from '../api/preview-providers.js';
 import { togglePreview, playingKey } from '../ui/preview-player.js';
 import { openTrackCard } from './track-card.js';
 import { firstArtistName, artistNames } from '../util/artist-name.js';
-import { activateMarquee } from '../ui/marquee.js';
 import { hasUsername, loadTopLifetime } from '../api/statsfm.js';
 import { createHiddenStore, uriDeTrackId } from '../util/hidden-sync.js';
 import { prefKey, migratePrefKey } from '../storage.js';
@@ -552,12 +551,12 @@ function renderResults() {
         // el reloj de pared no sirve en una pestaña en segundo plano).
         const perf = (window.__skipsPerf ||= { batches: [] });
         perf.batches.push({ added, rendered, total, ms: +ms.toFixed(1) });
-        // Marquee solo sobre lo recién insertado: medir toda la lista en cada
-        // lote sería cuadrático y son medidas de layout, de las caras.
+        // Tapas solo sobre lo recién insertado: mirar toda la lista en cada lote
+        // sería cuadrático. (Desde v=367 el título no se mide al pintar: se mueve
+        // en hover, ver `wireTrackCardGrid` en ui/track-card-row.js.)
         const nuevas = grid.querySelectorAll('.sc-card:not([data-mq])');
         nuevas.forEach(c => c.setAttribute('data-mq', '1'));
         lazyCovers?.observe(nuevas);
-        activateMarquee(nuevas);
         if (window.__skipsDebug) {
           console.info(`[skips] lote +${added} → ${rendered}/${total} en ${ms.toFixed(1)} ms`);
         }

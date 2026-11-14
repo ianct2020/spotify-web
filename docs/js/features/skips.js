@@ -16,25 +16,24 @@
 // Preview 30s instantáneo vía iTunes (arranca en el estribillo, no suma plays
 // en tu historial de Spotify). Fallback: iframe embed oficial si iTunes no lo tiene.
 
-import { getBestAvailableLikes, removeLikedTracks, checkLibraryContains } from '../api.js?v=366';
-import { borrarLikesVerificado } from '../util/borrado-verificado.js?v=366';
-import { loadSkipStats, trackIdOf, isOwner, ownerLockedMessage } from './history-data.js?v=366';
-import { escapeHtml, confirmModal, pageHeader, tarjetaSinLikes } from '../ui/components.js?v=366';
-import { showToast } from '../ui/toast.js?v=366';
-import { getPreview } from '../api/preview-providers.js?v=366';
-import { togglePreview, playingKey } from '../ui/preview-player.js?v=366';
-import { openTrackCard } from './track-card.js?v=366';
-import { firstArtistName, artistNames } from '../util/artist-name.js?v=366';
-import { activateMarquee } from '../ui/marquee.js?v=366';
-import { hasUsername, loadTopLifetime } from '../api/statsfm.js?v=366';
-import { createHiddenStore, uriDeTrackId } from '../util/hidden-sync.js?v=366';
-import { prefKey, migratePrefKey } from '../storage.js?v=366';
-import { vigilarRuta } from '../util/vigencia-ruta.js?v=366';
-import { createIncrementalList, scrollRootOf } from '../ui/incremental-list.js?v=366';
-import { createLazyImages } from '../ui/lazy-img.js?v=366';
-import { renderTrackCardRow, wireTrackCardGrid, paintCardSelection, paintPlayingCard, paintEmbedCard } from '../ui/track-card-row.js?v=366';
-import { coverAtSize } from '../util/cover-size.js?v=366';
-import { coverUrl } from '../util/cover-size.js?v=366';
+import { getBestAvailableLikes, removeLikedTracks, checkLibraryContains } from '../api.js?v=367';
+import { borrarLikesVerificado } from '../util/borrado-verificado.js?v=367';
+import { loadSkipStats, trackIdOf, isOwner, ownerLockedMessage } from './history-data.js?v=367';
+import { escapeHtml, confirmModal, pageHeader, tarjetaSinLikes } from '../ui/components.js?v=367';
+import { showToast } from '../ui/toast.js?v=367';
+import { getPreview } from '../api/preview-providers.js?v=367';
+import { togglePreview, playingKey } from '../ui/preview-player.js?v=367';
+import { openTrackCard } from './track-card.js?v=367';
+import { firstArtistName, artistNames } from '../util/artist-name.js?v=367';
+import { hasUsername, loadTopLifetime } from '../api/statsfm.js?v=367';
+import { createHiddenStore, uriDeTrackId } from '../util/hidden-sync.js?v=367';
+import { prefKey, migratePrefKey } from '../storage.js?v=367';
+import { vigilarRuta } from '../util/vigencia-ruta.js?v=367';
+import { createIncrementalList, scrollRootOf } from '../ui/incremental-list.js?v=367';
+import { createLazyImages } from '../ui/lazy-img.js?v=367';
+import { renderTrackCardRow, wireTrackCardGrid, paintCardSelection, paintPlayingCard, paintEmbedCard } from '../ui/track-card-row.js?v=367';
+import { coverAtSize } from '../util/cover-size.js?v=367';
+import { coverUrl } from '../util/cover-size.js?v=367';
 
 let cache = null;
 // Filas visibles con los filtros actuales, en el mismo orden que las tarjetas
@@ -552,12 +551,12 @@ function renderResults() {
         // el reloj de pared no sirve en una pestaña en segundo plano).
         const perf = (window.__skipsPerf ||= { batches: [] });
         perf.batches.push({ added, rendered, total, ms: +ms.toFixed(1) });
-        // Marquee solo sobre lo recién insertado: medir toda la lista en cada
-        // lote sería cuadrático y son medidas de layout, de las caras.
+        // Tapas solo sobre lo recién insertado: mirar toda la lista en cada lote
+        // sería cuadrático. (Desde v=367 el título no se mide al pintar: se mueve
+        // en hover, ver `wireTrackCardGrid` en ui/track-card-row.js.)
         const nuevas = grid.querySelectorAll('.sc-card:not([data-mq])');
         nuevas.forEach(c => c.setAttribute('data-mq', '1'));
         lazyCovers?.observe(nuevas);
-        activateMarquee(nuevas);
         if (window.__skipsDebug) {
           console.info(`[skips] lote +${added} → ${rendered}/${total} en ${ms.toFixed(1)} ms`);
         }

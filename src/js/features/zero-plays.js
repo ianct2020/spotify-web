@@ -27,7 +27,6 @@ import { togglePreview, playingKey } from '../ui/preview-player.js';
 import { renderTrackCardRow, wireTrackCardGrid, paintCardSelection, paintPlayingCard } from '../ui/track-card-row.js';
 import { createIncrementalList, scrollRootOf } from '../ui/incremental-list.js';
 import { createLazyImages } from '../ui/lazy-img.js';
-import { activateMarquee } from '../ui/marquee.js';
 import { coverAtSize } from '../util/cover-size.js';
 import { firstArtistName } from '../util/artist-name.js';
 import { createHiddenStore, uriDeTrackId } from '../util/hidden-sync.js';
@@ -407,7 +406,7 @@ function renderResults() {
         const nuevas = grid.querySelectorAll('.sc-card:not([data-mq])');
         nuevas.forEach(c => c.setAttribute('data-mq', '1'));
         lazyCovers?.observe(nuevas);
-        activateMarquee(nuevas);
+        // (v=367) El título ya no se mide al pintar: se mueve en hover (ui/track-card-row.js).
       },
     });
 

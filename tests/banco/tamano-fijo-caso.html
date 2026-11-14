@@ -1,0 +1,245 @@
+<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>banco tamano-fijo — la app entera, en un iframe</title>
+<link rel="stylesheet" href="/css/theme.css">
+<link rel="stylesheet" href="/css/components.css">
+<link rel="stylesheet" href="/css/main.css">
+</head><body>
+<div id="app"></div>
+<script type="module">
+// ── Un iframe del banco `tamano-fijo.html` (tanda 130, v=367) ────────────────
+//
+// La app ENTERA, contra la Spotify simulada, con un usuario que NO es el owner y su historial local INVENTADO sembrado en
+// IndexedDB (`tamano-fijo-datos.mjs`). Mide y deja los números en `window.__resultado`; la madre afirma.
+//
+//   ?anim=siempre|nunca   el interruptor de animaciones de la app (por defecto, «siempre»)
+//   ?que=todo|grillas     `grillas` no toca el pill (el marco de la columna en su mínimo)
+//   ?foto=pill-corto|pill-largo|skips   capturas: deja la escena lista, con el nombre en reposo, y marca `data-foto="listo"`
+//
+// Los previews son SIMULADOS: `togglePreview` (el de la app, el mismo módulo) con un `getter` de mentira. La URL del audio es
+// del propio banco y `HTMLMediaElement.prototype.play` lo reemplaza un doble (un `.click()` no es un gesto de usuario); el
+// embed apunta a `about:blank`. Ninguna URL real de audio, ningún host de fuera.
+
+import { instalarRedSimulada, esperarReal, anclar } from '/banco/simulado.mjs';
+import { UID, NOMBRES_PILL, sembrado, sembrarIdb, likes } from '/banco/tamano-fijo-datos.mjs';
+
+const q = new URLSearchParams(location.search);
+const ANIM = q.get('anim') === 'nunca' ? 'nunca' : 'siempre';
+const QUE = q.get('que') || 'todo';
+const FOTO = q.get('foto');
+const $ = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+window.__errores = [];
+window.addEventListener('error', (e) => window.__errores.push('error: ' + (e.message || e)));
+window.addEventListener('unhandledrejection', (e) => window.__errores.push('rechazo: ' + String(e.reason?.message || e.reason)));
+const errorOriginal = console.error.bind(console);
+console.error = (...a) => { window.__errores.push('console.error: ' + a.map(String).join(' ').slice(0, 300)); errorOriginal(...a); };
+
+// Lo que ya salió hacia otro host ANTES de que arranque la app (el `@import` de Google Fonts de `main.css`, que existe desde
+// antes de esta tanda) se cuenta aparte: lo que se afirma es que la app no pide nada de fuera mientras se mide.
+const ajenos = () => performance.getEntriesByType('resource').filter((e) => { try { return new URL(e.name).origin !== location.origin; } catch { return false; } }).map((e) => e.name);
+
+const sim = instalarRedSimulada();
+window.__sim = sim;
+const LIKES = likes();
+sim.ruta('GET', /^\/me$/, () => ({ id: UID, display_name: 'Banco' }));
+sim.ruta('GET', /^\/me\/playlists/, () => ({ items: [], total: 0, next: null }));
+sim.ruta('GET', /^\/me\/tracks/, ({ url }) => {
+  const off = +url.searchParams.get('offset') || 0, lim = +url.searchParams.get('limit') || 50;
+  return { items: LIKES.slice(off, off + lim), total: LIKES.length, offset: off, limit: lim, next: off + lim < LIKES.length ? 'x' : null };
+});
+localStorage.setItem('fonoteca_last_user_id', UID);
+localStorage.setItem('fonoteca_perfil_v1', JSON.stringify({ id: UID, display_name: 'Banco' }));
+const { prefKey } = await import('/js/storage.js');
+localStorage.setItem(prefKey('fonoteca_anim_v1'), ANIM);
+
+window.__datosAjenos = [];
+const debajo = window.fetch;
+window.fetch = (entrada, opciones = {}) => {
+  const url = typeof entrada === 'string' ? entrada : (entrada instanceof URL ? entrada.href : entrada.url);
+  const abs = new URL(url, location.href);
+  if (abs.origin === location.origin && /\/data\//.test(abs.pathname)) {
+    window.__datosAjenos.push(abs.pathname);
+    return Promise.resolve(new Response('{}', { status: 404, headers: { 'content-type': 'application/json' } }));
+  }
+  return debajo(url === entrada ? entrada : url, opciones);
+};
+window.Chart = class { destroy() {} resize() {} };
+
+// El audio: `play()` anota y NO avisa `playing` (eso es «cargando»); la madre/el caso lo dispara a mano para «sonando».
+window.__audios = [];
+HTMLMediaElement.prototype.play = function () { window.__audio = this; window.__audios.push(this.getAttribute('src')); return Promise.resolve(); };
+
+await anclar(sembrarIdb(sembrado()));
+location.hash = '#skips';
+await import('/js/app.js');
+const pp = await import('/js/ui/preview-player.js');
+const ajenosAlArrancar = ajenos();
+
+const vueltas = async (n = 30) => { let v = 0; await esperarReal(() => ++v > n, { que: 'que se asiente' }); };
+const rect = (el) => { const r = el.getBoundingClientRect(); return { x: r.x, y: r.y, w: Math.round(r.width * 100) / 100, h: Math.round(r.height * 100) / 100, r: r.right, b: r.bottom }; };
+const desborda = () => document.scrollingElement.scrollWidth - document.scrollingElement.clientWidth;
+
+// ── El pill ──────────────────────────────────────────────────────────────────
+function medirPill(estado) {
+  const p = $('.preview-pill');
+  const l = $('.preview-pill-label', p);
+  const mq = $('.mq', l);
+  const r = rect(p);
+  return {
+    estado, w: r.w, h: r.h,
+    etiqueta: rect(l).w,
+    texto: l.textContent,
+    titleEtiqueta: l.getAttribute('title'),
+    mq: !!mq, mqOn: !!mq?.classList.contains('mq-on'),
+    shift: mq ? mq.style.getPropertyValue('--mq-shift') : null,
+    titleMq: mq ? mq.getAttribute('title') : null,
+    desborda: desborda(),
+  };
+}
+let nKey = 0;
+async function pillEn(nombre, estado) {
+  pp.stopPreview();
+  await vueltas(4);
+  const key = `t130:${++nKey}`;
+  if (estado === 'buscando') {
+    pp.togglePreview(key, () => new Promise(() => {}));
+    await esperarReal(() => $('.preview-pill.show.loading'), { que: 'el pill buscando' });
+  } else if (estado === 'embed') {
+    await pp.togglePreview(key, async () => ({ url: 'about:blank', label: nombre, provider: 'spotify-embed', type: 'embed' }));
+    await esperarReal(() => $('.preview-pill.show.preview-pill-embedded'), { que: 'el pill con el embed' });
+  } else {
+    await pp.togglePreview(key, async () => ({ url: '/banco/t130-inventado.m4a', label: nombre, provider: 'itunes', type: 'audio' }));
+    await esperarReal(() => $('.preview-pill.show:not(.loading)'), { que: 'el pill cargando' });
+    if (estado === 'sonando' || estado === 'pausa') {
+      window.__audio.dispatchEvent(new Event('playing'));
+      await esperarReal(() => $('.preview-pill.is-playing'), { que: 'el pill sonando' });
+    }
+    if (estado === 'pausa') {
+      $('.preview-pill-toggle').click();
+      await esperarReal(() => $('.preview-pill.is-paused'), { que: 'el pill en pausa' });
+    }
+  }
+  await vueltas(4);
+  return medirPill(estado);
+}
+async function medirTodoElPill() {
+  const out = {};
+  for (const [n, nombre] of Object.entries(NOMBRES_PILL)) {
+    out[n] = {};
+    for (const e of ['buscando', 'cargando', 'sonando', 'pausa', 'embed']) out[n][e] = await pillEn(nombre, e);
+  }
+  // Al esconder el pill, la marquesina se para.
+  await pillEn(NOMBRES_PILL.largo, 'sonando');
+  pp.stopPreview();
+  await vueltas(4);
+  const mq = $('.preview-pill .preview-pill-label .mq');
+  out.alEsconder = { mqOn: !!mq?.classList.contains('mq-on'), visible: !!$('.preview-pill.show') };
+  return out;
+}
+
+// ── Las grillas ──────────────────────────────────────────────────────────────
+function medirGrilla(grid) {
+  const g = rect(grid);
+  const tarjetas = $$('.sc-card', grid).map((c) => {
+    const rc = rect(c);
+    const hijos = $$('.sc-actions > *', c);
+    const fuera = hijos.filter((b) => { const rb = b.getBoundingClientRect(); return rb.left < rc.x - 0.5 || rb.top < rc.y - 0.5 || rb.right > rc.r + 0.5 || rb.bottom > rc.b + 0.5 || rb.width < 1 || rb.height < 1; }).length;
+    // Renglones de verdad: uno nuevo solo si el elemento empieza por debajo del fondo del renglón anterior (la etiqueta
+    // es más baja que los botones y, centrada, empieza más abajo en el MISMO renglón).
+    let renglones = 0, fondo = -Infinity;
+    for (const b of hijos.map((x) => x.getBoundingClientRect()).sort((a, z) => a.top - z.top)) {
+      if (b.top >= fondo - 0.5) { renglones++; fondo = b.bottom; } else fondo = Math.max(fondo, b.bottom);
+    }
+    const info = rect($('.sc-info', c)).h, acciones = rect($('.sc-actions', c)).h;
+    const tituloMq = $('.sc-title .mq', c), tituloViejo = $('.sc-title .marquee-wrap', c);
+    return {
+      id: c.dataset.id, h: rc.h, w: rc.w, renglones, fuera, info, acciones,
+      etiqueta: !!$('.skips-badge, .zp-partial', c), sub: !!$('.sc-meta-sub', c), largo: $('.sc-title', c).textContent.length > 30,
+      sel: c.classList.contains('is-sel'),
+      titulo: tituloMq ? 'mq' : (tituloViejo ? 'marquee' : 'otro'),
+      actionsOverflow: getComputedStyle($('.sc-actions', c)).overflow,
+    };
+  });
+  const hs = tarjetas.map((t) => t.h);
+  return { anchoGrilla: g.w, columna: tarjetas[0]?.w ?? null, n: tarjetas.length, min: Math.min(...hs), max: Math.max(...hs), tarjetas, desborda: desborda() };
+}
+async function abrirGrilla(hash, sel) {
+  location.hash = hash;
+  return esperarReal(() => $$(`${sel} .sc-card`).length >= 12 && $(sel), { que: `la grilla de ${hash}`, vueltas: 20000 });
+}
+async function bajarHastaLaSegundaTanda(sel) {
+  const grid = $(sel);
+  const antes = $$('.sc-card', grid).length;
+  for (let i = 0; i < 400 && $$('.sc-card', grid).length <= antes; i++) {
+    grid.scrollTop = grid.scrollHeight;
+    window.scrollTo(0, document.scrollingElement.scrollHeight);
+    await vueltas(2);
+  }
+  return { antes, despues: $$('.sc-card', grid).length };
+}
+async function medirVista(hash, sel) {
+  await abrirGrilla(hash, sel);
+  await vueltas(10);
+  // Una tarjeta elegida (el borde y el fondo cambian; el alto no puede).
+  $(`${sel} .sc-card`).click();
+  await vueltas(4);
+  const primera = medirGrilla($(sel));
+  const tanda = await bajarHastaLaSegundaTanda(sel);
+  await vueltas(10);
+  const segunda = medirGrilla($(sel));
+  return { primera, tanda, segunda };
+}
+// En hover (`mouseover` sintético sobre la tarjeta): con animaciones y un nombre que sobra, `mq-on`; al salir, apagado.
+async function hoverTarjeta(sel) {
+  const c = $$(`${sel} .sc-card`).find((x) => $('.sc-title', x).textContent.length > 30);
+  if (!c) return null;
+  const t = $('.sc-title', c);
+  t.dispatchEvent(new MouseEvent('mouseover', { bubbles: true, relatedTarget: document.body }));
+  await vueltas(2);
+  const mq = $('.mq', t);
+  const dentro = { mqOn: !!mq?.classList.contains('mq-on'), shift: mq?.style.getPropertyValue('--mq-shift') || '', title: mq?.getAttribute('title') || null };
+  t.dispatchEvent(new MouseEvent('mouseout', { bubbles: true, relatedTarget: document.body }));
+  await vueltas(2);
+  return { dentro, fuera: { mqOn: !!$('.mq', t)?.classList.contains('mq-on') } };
+}
+
+async function medirGrillas(res) {
+  res.skips = await medirVista('#skips', '#skips-list');
+  res.hoverSkips = await hoverTarjeta('#skips-list');
+  if (QUE === 'todo') res.pill = await medirTodoElPill();
+  pp.stopPreview();
+  res.zero = await medirVista('#zeroplays', '#zp-list');
+  res.hoverZero = await hoverTarjeta('#zp-list');
+  res.ajenosAlArrancar = ajenosAlArrancar;
+  res.ajenosNuevos = ajenos().filter((x) => !ajenosAlArrancar.includes(x));
+  res.externasSimulada = sim.reg.externas;
+  res.desconocidas = sim.reg.desconocidas;
+  res.escrituras = sim.reg.escrituras.length;
+  res.datosAjenos = window.__datosAjenos;
+  res.errores = window.__errores;
+  res.audios = window.__audios;
+  return res;
+}
+
+if (QUE === 'barrido' || QUE === 'grillas') {
+  // `#skips` abierto y quieto: la madre le cambia el ancho al marco (el barrido de `?medir=1`, o buscar el ancho con la
+  // columna en su mínimo, que depende de si el Chrome que corre pinta barras de desplazamiento) y después, en `grillas`,
+  // pide las medidas con `__medirGrillas()`.
+  await abrirGrilla('#skips', '#skips-list');
+  window.__medirGrillas = () => medirGrillas({ anim: ANIM, ancho: innerWidth, alto: innerHeight, que: QUE });
+  window.__listoBarrido = true;
+} else if (FOTO) {
+  if (FOTO === 'skips') {
+    await abrirGrilla('#skips', '#skips-list');
+  } else {
+    await abrirGrilla('#skips', '#skips-list');
+    await pillEn(FOTO === 'pill-corto' ? NOMBRES_PILL.corto : NOMBRES_PILL.largo, 'sonando');
+    // El nombre en reposo: la marquesina se apaga para la foto (lo que se mueve lo prueba el banco, no la captura).
+    $$('.mq.mq-on').forEach((m) => m.classList.remove('mq-on'));
+  }
+  await vueltas(20);
+  document.documentElement.dataset.foto = 'listo';
+} else {
+  window.__resultado = await medirGrillas({ anim: ANIM, ancho: innerWidth, alto: innerHeight, que: QUE });
+}
+</script>
+</body></html>

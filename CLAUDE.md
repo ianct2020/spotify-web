@@ -1374,7 +1374,8 @@ evento `previewchange` (`{ key, provider, playing }`):
   media query. Sin animación salta de a pasos y el texto dice igual lo que falta. Buscando, con el embed y con error,
   sin botón ni barra.
 - **El nombre entero** en el `title` de `.preview-pill-label` (se corta con «…» a 420 px: a 1366 se cortaba incluso con
-  50 caracteres).
+  50 caracteres). ➜ **Desde v=367 el pill mide siempre lo mismo y el nombre que no entra se mueve**: ver «📏 El pill y las
+  tarjetas, siempre del mismo tamaño (v=367)».
 - **«Abrir en Spotify ↗»** del embed en `--color-text-secondary` subrayado (con el acento daba 2,89:1).
 
 ⚠️ **La especificidad**: el CSS de siempre del pill vive en `main.css` (`.preview-pill…`), que **no se toca** (importa
@@ -1406,6 +1407,68 @@ historial, del fallback o de stats.fm) lleva un `.ac-track-play`, armado por `bo
 
 Guardas: `tests/ficha-artista-play.test.mjs` y las puertas B, C y D del banco `tests/banco/siempre-y-play.html`. El banco reemplaza
 `HTMLMediaElement.prototype.play` y `Chart`: un `.click()` no es un gesto de usuario, y el caso no carga el CDN.
+
+## 📏 El pill y las tarjetas, siempre del mismo tamaño (v=367)
+
+La tanda 130, pedido de Ian del 12/11/2026: «debería tener siempre el mismo tamaño y las letras se mueven de lado a lado o
+para un lado y vuelven, así no varía el tamaño del player». Medido sobre v=366 (Chrome headless, la app entera con la Spotify
+simulada, datos INVENTADOS): a 1366 el pill medía **210 (buscando), 271, 310 o 420 px** de ancho según el nombre, y **47 px de
+alto buscando contra 62** en los otros estados; las tarjetas de `#zeroplays` iban de **118 a 136** en la misma grilla (de 94 a
+136 a 390) y las de `#skips`, a 390, de 105 a 119.
+
+**El pill** (`ui/preview-player.js` + `components.css`; `main.css` no se tocó):
+- **Ancho: 360 px a más de 768**, en los cuatro estados del audio y con el embed (360 era el tope que ya tenía el embed). Con
+  360 la etiqueta se queda con **241 px** (275 buscando, sin el ⏸): sobra para los 140 que se pedían. A 768 o menos no hizo falta
+  nada: la capa de abajo lo estira (`align-items: stretch`, v=322) y ya medía 360 con cualquier nombre a 390. El centro
+  (`.preview-pill-main`) crece, así ⏸ y ✕ quedan contra el borde derecho también con un nombre corto.
+- **Alto: 62 px en los cuatro estados** (buscando, cargando, sonando, en pausa). Buscando la barra va `hidden` y el pill perdía
+  su renglón; con `.loading` (que solo tiene «buscando») el renglón se RESERVA con `visibility: hidden`. Se eligió así y no un
+  `min-height` medido porque es el mismo marcado con la misma hoja: el alto no depende de la fuente ni de un número a mano. El
+  embed tiene su propio alto (el iframe, 161) y no entra.
+- **El nombre**: `.preview-pill-label` lleva el marcado de `hoverMarqueeSpan` (`.mq > .mq-t`) y lo mueve
+  `prepararMarquesinaFila()` de **`ui/hover-marquee.js`, sin esperar al mouse**: se mide al cambiar el nombre
+  (`showPillAudio`) y en el `resize` de la ventana (solo con el pill a la vista), y se para al esconder el pill y al pasar al
+  embed (`pararMarquesinaFila`). El `textContent` de la etiqueta sigue siendo el nombre a secas (lo leen `fail()` y el banco
+  `siempre-y-play`) y el `title` también (v=357). Ninguna firma, ningún export ni el evento `previewchange` cambiaron.
+
+**Las tarjetas `.sc-card`** (`#skips`, `#zeroplays`, `#sin-clasificar`; solo la tarjeta compartida, nada por vista):
+- **Un solo alto por grilla, que NO sale de lo pintado**: las tarjetas llegan de a tandas de 80, y una más alta en la tanda
+  siguiente movía las de arriba (por eso no vale `grid-auto-rows: 1fr`). Sale del **peor caso medido**, reservado por partes
+  con dos clases: el texto en tres renglones con altos de línea en px (18 + 14 + 14 = **46**, con o sin `.sc-meta-sub`) y las
+  acciones en dos renglones de botones (26 + 6 + 26 = **58**, la etiqueta «N plays cortas» más los seis botones, el peor caso
+  desde 320 px). Medido: **136 px** en `#zeroplays` a 1366, a 390 y con la columna en su mínimo de 360 (el marco a 1208 sin
+  barras de desplazamiento); **148 en `#skips` (146 a ≤480)**, porque su tarjeta lleva el renglón del embed cerrado y el hueco
+  de la grilla de la tarjeta se suma (pasaba igual antes: 130 contra 118). Son MÍNIMOS, no un alto clavado: ningún botón se
+  corta ni se esconde (nada de `overflow` en `.sc-actions`), y si algún día no entraran en dos renglones la tarjeta crecería.
+  El embed de `#skips` ABIERTO dentro de la tarjeta sí la agranda mientras está abierto.
+- **El título** pasa de `marqueeSpan` a `hoverMarqueeSpan`, y `wireTrackCardGrid` cablea `wireHoverMarquee(grid, '.sc-card')`
+  (por delegación: vale para las tandas que todavía no llegaron). **En hover, no solo**: una grilla de decenas de tarjetas
+  moviéndose a la vez es la marea que v=215 vino a evitar. `activateMarquee` se fue de las tres vistas (no le quedaba nada que
+  mover); en `#wrapped` y `#dashboard` sigue como estaba.
+
+**Por qué `hover-marquee.js` y no `marquee.js`**: la vieja arranca sola en loop, corta a mitad de letra sin «…» y la apaga
+`@media (prefers-reduced-motion: reduce)` de `main.css`, o sea que **para Ian no se movía nunca** (tiene las animaciones del
+sistema apagadas). La de v=215 tiene «…» en reposo, va y vuelve con pausa en los dos extremos y la decide
+**`animationsEnabled()`**, el interruptor de la app. Ninguna regla nueva lleva la media query, no hay ningún `@keyframes` nuevo
+(se reusa `mq-slide`) ni una tercera marquesina (la regla de v=219).
+
+**Sin animaciones** (interruptor en «nunca»): el nombre quieto con «…», y entero en el `title` (de `.mq`, que lo pone
+`prepararMarquesinaFila`, y en el pill también en el de la etiqueta).
+
+**Lo que cuesta: nada.** 0 peticiones nuevas a cualquier host (lo afirma el banco): **la tabla de costos no cambia**.
+
+**Lo que quedó FUERA** (en `fonoteca-migracion/PENDIENTES.md`, «Tanda 130»): a 390 el pill tapa el pie de la ficha (esto le
+fija el tamaño, no dónde va); el pill de error que no se ve, el trabado que dice «vía iTunes», el ⏸ de las tarjetas que para;
+el alto del embed; `marquee.js` en `#wrapped` y `#dashboard` (quieto para Ian); las otras tarjetas (`.smart-card`, descubrir,
+`#wthree`, `#listened`); el título de la tarjeta con el teclado (`wireHoverMarquee` no mira el foco).
+
+**Guardas**: `tests/tamano-fijo-t130.test.mjs` (el `preview-player.js` y el `track-card-row.js` REALES en Node con los dobles de
+la 115; `dobles/dom-preview-doble.mjs` ganó `style.setProperty`, `scrollWidth`/`clientWidth` por `globalThis.__medidas`,
+`closest`/`contains` y los listeners de `window`, sin cambiar lo que ya hacía; `RAIZ_T130` para correrlo contra otra raíz; rojo
+contra v=366 en 25 de 43) y el banco **`tests/banco/tamano-fijo.html`** (+ `-caso.html` y `-datos.mjs`, en `prepush`; la app
+entera a 1366×591 y 390×844, con «siempre» y «nunca», y la columna en su mínimo, que el banco busca en el momento porque
+depende de si el Chrome pinta barras; `?medir=1` vuelca todas las medidas sin afirmar; rojo contra v=366 con 59 fallos;
+reloj virtual 18,9 s, corre con el defecto de 45).
 
 ## #recs: preview y las dos fichas por fila (v=167)
 `features/recommendations.js`. Las filas son un `<label>` que envuelve el

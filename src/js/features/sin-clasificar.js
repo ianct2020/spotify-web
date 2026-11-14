@@ -31,7 +31,6 @@ import { getPreview } from '../api/preview-providers.js';
 import { togglePreview, playingKey } from '../ui/preview-player.js';
 import { openTrackCard } from './track-card.js';
 import { normText } from '../util/track-match.js';
-import { activateMarquee } from '../ui/marquee.js';
 import { renderTrackCardRow, wireTrackCardGrid, paintCardSelection, paintPlayingCard } from '../ui/track-card-row.js';
 import { createIncrementalList, scrollRootOf } from '../ui/incremental-list.js';
 import { createLazyImages } from '../ui/lazy-img.js';
@@ -556,12 +555,12 @@ function renderResults() {
       onBatch: ({ rendered, total, added, ms }) => {
         const perf = (window.__scPerf ||= { batches: [] });
         perf.batches.push({ added, rendered, total, ms: +ms.toFixed(1) });
-        // Marquee y tapas solo sobre lo recién insertado: medir toda la lista
-        // en cada lote sería cuadrático, y son medidas de layout, de las caras.
+        // Tapas solo sobre lo recién insertado: mirar toda la lista en cada lote
+        // sería cuadrático. (Desde v=367 el título no se mide al pintar: se mueve
+        // en hover, ver `wireTrackCardGrid` en ui/track-card-row.js.)
         const nuevas = grid.querySelectorAll('.sc-card:not([data-mq])');
         nuevas.forEach(c => c.setAttribute('data-mq', '1'));
         lazyCovers?.observe(nuevas);
-        activateMarquee(nuevas);
         if (window.__scDebug) {
           console.info(`[sin-clasificar] lote +${added} → ${rendered}/${total} en ${ms.toFixed(1)} ms`);
         }

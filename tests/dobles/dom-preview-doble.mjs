@@ -8,13 +8,31 @@
 
 const VACIOS = new Set(['br', 'img', 'input', 'meta', 'hr', 'source']);
 
+// (tanda 130) `style` sigue siendo un objeto plano (`style.width`, `style.display`), con `setProperty` /
+// `getPropertyValue` / `removeProperty` NO enumerables para las variables CSS (`--mq-shift`) de `ui/hover-marquee.js`.
+function crearEstilo() {
+  const s = {};
+  Object.defineProperties(s, {
+    setProperty: { value(k, v) { s[k] = String(v); } },
+    getPropertyValue: { value(k) { return s[k] ?? ''; } },
+    removeProperty: { value(k) { delete s[k]; } },
+  });
+  return s;
+}
+
 class Nodo {
   constructor(tag) {
     this.tagName = String(tag).toUpperCase();
     this.children = []; this.parentNode = null;
-    this._attrs = new Map(); this.style = {}; this._listeners = {}; this._text = '';
+    this._attrs = new Map(); this.style = crearEstilo(); this._listeners = {}; this._text = '';
     this.onclick = null;
   }
+  // (tanda 130) Sin layout: `scrollWidth` / `clientWidth` los contesta `globalThis.__medidas` si el caso lo pone
+  // (`{ scrollWidth(nodo), clientWidth(nodo) }`); si no, 0 (nada sobra, como antes).
+  get scrollWidth() { return globalThis.__medidas?.scrollWidth?.(this) ?? 0; }
+  get clientWidth() { return globalThis.__medidas?.clientWidth?.(this) ?? 0; }
+  closest(sel) { let n = this; while (n && n.matches) { if (n.matches(sel)) return n; n = n.parentNode; } return null; }
+  contains(otro) { let n = otro; while (n) { if (n === this) return true; n = n.parentNode; } return false; }
   get className() { return this._attrs.get('class') || ''; }
   set className(v) { this._attrs.set('class', String(v)); }
   get classList() {
@@ -150,5 +168,12 @@ export function instalar() {
   globalThis.CustomEvent ??= class CustomEvent { constructor(type, init = {}) { this.type = type; this.detail = init.detail; } };
   globalThis.Audio = AudioDoble;
   globalThis.window ??= globalThis;
+  // (tanda 130) El `resize` de la ventana: el pill vuelve a medir su etiqueta.
+  if (typeof globalThis.window.addEventListener !== 'function') {
+    const lWin = {};
+    globalThis.window.addEventListener = (t, fn) => { (lWin[t] ||= []).push(fn); };
+    globalThis.window.removeEventListener = (t, fn) => { lWin[t] = (lWin[t] || []).filter(f => f !== fn); };
+    globalThis.window.dispatchEvent = (ev) => { for (const fn of [...(lWin[ev.type] || [])]) fn(ev); return true; };
+  }
   return { body };
 }

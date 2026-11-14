@@ -17,10 +17,10 @@
 //     pregunta si el bloque sigue en el documento. Si la ficha se cerró, no se
 //     escribe en el DOM; lo que llegó SÍ se guarda si es un éxito o un 404.
 
-import { idbGetCached, idbSetCached } from '../idb.js?v=366';
-import { getBestAvailableLikes } from '../api.js?v=366';
-import { escapeHtml } from './components.js?v=366';
-import { claveLetra, urlLetra, clasificarRespuesta, decidir, esperaReintentoMs, TEXTOS } from '../util/letras.js?v=366';
+import { idbGetCached, idbSetCached } from '../idb.js?v=367';
+import { getBestAvailableLikes } from '../api.js?v=367';
+import { escapeHtml } from './components.js?v=367';
+import { claveLetra, urlLetra, clasificarRespuesta, decidir, esperaReintentoMs, TEXTOS } from '../util/letras.js?v=367';
 
 // Lo que la ficha mete en su HTML: el botón va en la fila de «▶ Preview» y el
 // bloque, plegado, debajo de la cabecera.
