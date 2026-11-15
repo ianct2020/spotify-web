@@ -1,16 +1,16 @@
-import { getAllLikedTracks, hayCargaDeLikesEnVuelo, getLikesPartialInfo, exportAllData, exportarCopiaCompleta, importarCopiaCompleta, aplicarPlan, importAllData, TEXTOS_LIKES_SIN_IMPORTAR, getCurrentUserId, syncLikesIncremental, getLikesCacheTimestamp, getBestAvailableLikes, getAllPlaylistItems } from '../api.js?v=368';
-import { showProgress, hideProgress, alertModal, infoModal, escapeHtml, pageHeader } from '../ui/components.js?v=368';
-import { openModal, closeTop } from '../ui/modal-stack.js?v=368';
-import { showToast } from '../ui/toast.js?v=368';
-import { openListenedAlbumsPicker, getListenedPlaylist } from './listened-shared.js?v=368';
-import { loadHistoryStats, loadListenedAlbums, falloDeLecturaDelHistorial, avisoHistorialIlegibleHtml } from './history-data.js?v=368';
-import { getArtistLikePreview } from '../util/artist-preview.js?v=368';
-import { hoverIn, hoverOut } from '../ui/preview-player.js?v=368';
-import { armRevealAll } from '../ui/reveal.js?v=368';
-import { hasUsername, getUsername, setUsername } from '../api/statsfm.js?v=368';
-import { getKey as getLastfmKey, setKey as setLastfmKey, clearKey as clearLastfmKey, isDefaultKey as lastfmIsDefaultKey } from '../api/lastfm.js?v=368';
-import { prefKey, migratePrefKey } from '../storage.js?v=368';
-import { alpha } from '../ui/theme-panel.js?v=368';
+import { getAllLikedTracks, hayCargaDeLikesEnVuelo, getLikesPartialInfo, exportAllData, exportarCopiaCompleta, importarCopiaCompleta, aplicarPlan, importAllData, TEXTOS_LIKES_SIN_IMPORTAR, getCurrentUserId, syncLikesIncremental, getLikesCacheTimestamp, getBestAvailableLikes, getAllPlaylistItems } from '../api.js?v=369';
+import { showProgress, hideProgress, alertModal, infoModal, escapeHtml, pageHeader } from '../ui/components.js?v=369';
+import { openModal, closeTop } from '../ui/modal-stack.js?v=369';
+import { showToast } from '../ui/toast.js?v=369';
+import { openListenedAlbumsPicker, getListenedPlaylist } from './listened-shared.js?v=369';
+import { loadHistoryStats, loadListenedAlbums, falloDeLecturaDelHistorial, avisoHistorialIlegibleHtml } from './history-data.js?v=369';
+import { getArtistLikePreview } from '../util/artist-preview.js?v=369';
+import { hoverIn, hoverOut } from '../ui/preview-player.js?v=369';
+import { armRevealAll } from '../ui/reveal.js?v=369';
+import { hasUsername, getUsername, setUsername } from '../api/statsfm.js?v=369';
+import { getKey as getLastfmKey, setKey as setLastfmKey, clearKey as clearLastfmKey, isDefaultKey as lastfmIsDefaultKey } from '../api/lastfm.js?v=369';
+import { prefKey, migratePrefKey } from '../storage.js?v=369';
+import { alpha } from '../ui/theme-panel.js?v=369';
 
 // Tres estados posibles, no dos: puede haber una key propia, la del código, o
 // —si algún día la constante queda vacía— ninguna. El hint del ⚙ tiene que
@@ -20,16 +20,16 @@ function estadoLastfm() {
   if (localStorage.getItem(prefKey('lastfm_api_key'))) return 'propia';
   return lastfmIsDefaultKey() ? 'la del código' : 'sin configurar';
 }
-import { loadHistoryStats as _loadStatsForCounter } from './history-data.js?v=368';
-import { openArtistCard } from './artist-card.js?v=368';
-import { openAlbumCard } from './album-card.js?v=368';
-import { activateMarquee, marqueeSpan } from '../ui/marquee.js?v=368';
-import { isJunkTrack } from '../util/junk.js?v=368';
-import { AVISO_MEZCLA } from '../util/corte-saltos.js?v=368';
-import { nombreArchivo } from '../util/copia-completa.js?v=368';
-import { resumenEnPalabras, importEscribio } from '../util/copia-importar.js?v=368';
-import { diferenciaDeLikes, urisDeLikes, textoConfirmacionRehacer, textoFinalRehacer } from '../util/likes-diferencia.js?v=368';
-import { vigilarRuta } from '../util/vigencia-ruta.js?v=368';
+import { loadHistoryStats as _loadStatsForCounter } from './history-data.js?v=369';
+import { openArtistCard } from './artist-card.js?v=369';
+import { openAlbumCard } from './album-card.js?v=369';
+import { activateMarquee, marqueeSpan } from '../ui/marquee.js?v=369';
+import { isJunkTrack } from '../util/junk.js?v=369';
+import { AVISO_MEZCLA } from '../util/corte-saltos.js?v=369';
+import { nombreArchivo } from '../util/copia-completa.js?v=369';
+import { resumenEnPalabras, importEscribio } from '../util/copia-importar.js?v=369';
+import { diferenciaDeLikes, urisDeLikes, textoConfirmacionRehacer, textoFinalRehacer } from '../util/likes-diferencia.js?v=369';
+import { vigilarRuta } from '../util/vigencia-ruta.js?v=369';
 
 let charts = [];
 let _loadController = null;

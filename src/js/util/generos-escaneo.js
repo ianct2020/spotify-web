@@ -255,3 +255,8 @@ export function textoLoQueFalta(est) {
   const rango = bajo === alto ? alto : `entre ${bajo} y ${alto}`;
   return `Quedan ~${fmtEs(est.peticiones)} peticiones: ${rango}, según cuántos fallos dé Last.fm.`;
 }
+
+// v=369 (tanda 132): `etiquetasDe` se exporta ACÁ, aparte, para que «Agrupar por estilo» de `#recs`
+// (`util/recs-estilo.js`) guarde exactamente lo mismo que este escaneo sin copiarla. La declaración de
+// arriba no se tocó: `tests/generos-regla.test.mjs` la vigila byte a byte desde v=313.
+export { etiquetasDe };

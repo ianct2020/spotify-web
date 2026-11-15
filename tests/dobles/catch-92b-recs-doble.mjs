@@ -26,3 +26,17 @@ export const alternarArtistaOculto = async () => false, artistaEstaOculto = () =
 export const iconoPlay = () => '', iconoPausa = () => '', iconoFicha = () => '';
 export const iconoDisco = () => '', iconoOjo = () => '', iconoOjoTachado = () => '';
 export const pedirYCachear = async () => null, CUALQUIER_RESPUESTA = () => true;
+// v=369 (tanda 132): lo que `recommendations.js` importa para «Agrupar por estilo». Este test no lo
+// ejercita (no hay recomendaciones en sus casos): solo tienen que existir para que el módulo cargue.
+export const getCurrentUserId = async () => 'uid-inventado', getKey = () => 'clave-inventada';
+export const pedirLastfmCrudo = async () => { throw Error('red prohibida'); };
+export const cargarEtiquetas = async () => {}, registroEtiquetas = () => null, setCachedTags = async () => true;
+export const urlEtiquetas = () => 'about:blank', resolverTemaEnSpotify = async () => ({ estado: 'error', error: Error('red prohibida') });
+export const pedirEtiquetas = async () => ({ motivo: 'completo', total: 0, pedidas: 0, guardados: [], noContesto: [] });
+export const pendientesDeEtiquetas = () => [], agruparPorEstilo = () => ({ estilos: [], cuentas: {}, porArtista: new Map() });
+export const textoSinEstilo = () => '', TEXTO_SIN_ESTILOS = '', ARTISTAS_POR_ESTILO = 6;
+export const planDeLista = () => ({ artistas: [], temas: 12, topePorArtista: 15, topeTotal: 0 }), textoCoste = () => '', TITULO_COSTE = '';
+export const armarLista = async () => ({ artistas: [], busquedas: 0, corte: null, sinBuscar: [] });
+export const textoCabecera = () => '', textoCorte = () => '', textoSinBuscar = () => '';
+export const nombreSugerido = () => '', descripcionPlaylist = () => '';
+export const TEMAS_MIN = 10, TEMAS_MAX = 15, TEMAS_DEFECTO = 12;

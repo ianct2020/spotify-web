@@ -1491,6 +1491,120 @@ y pide `limit=5` en vez de 1: al limpiar el apóstrofo la query queda más laxa,
 la regla de `limpiaParaQuery` dice que el que llama tiene que comparar contra el
 nombre real. Medido después del cambio: Sumo 20/20 con match, bleood 30/30.
 
+## 🎨 Playlists por estilo en Recomendaciones (v=369)
+
+La tanda 132, pedido de Ian: «playlist por estilo en Recomendados, 10-15 temas por artista». En `#recs`, con las recomendaciones a la
+vista (modo normal, 2 o más artistas), **«Agrupar por estilo»** → los estilos → un estilo → **«Armar la lista»** → **«Crear playlist»**.
+
+**En qué se diferencia de `#rabbit`, y por qué no es duplicarlo** (leído en `features/rabbit-hole.js` el 15/11/2026):
+
+| | `#rabbit` | lo nuevo de `#recs` |
+|---|---|---|
+| de dónde salen los artistas | `getTopArtistsByTag(tag, 50)`: los más populares de una etiqueta en Last.fm, de todo el mundo | **los que `#recs` ya te recomienda**: los primeros 50 no ocultos de `recommendations`, en su orden (similares a lo que scrobbleás, que no están en tus me gusta) |
+| qué es el estilo | lo escribís a mano («Género / tag»), o elegís una de las sugeridas fijas (`SUGGESTED_TAGS`) o una de las relacionadas que calcula con las etiquetas de sus 8 primeros artistas | sale de las etiquetas de **tus** recomendados, con la regla de `#generos` |
+| la playlist | **un** artista, sus 20 top tracks (`getArtistTopTracks(…, 20)`) | **varios** artistas del estilo (hasta 6), **10 a 15 temas de cada uno** |
+
+`#rabbit` no se tocó.
+
+**Los artistas y los estilos.**
+- Los artistas son los que la vista enseña: `shown` de `renderRecommendations()` (los primeros 50 no ocultos), en su orden.
+- Las etiquetas viven en el **almacén de `#generos`** (v=312): `cargarEtiquetas(await getCurrentUserId())` y, por artista, `yaBuscado(registroEtiquetas(nombre))`, los dos importados. **Lo ya buscado no se vuelve a pedir**: tampoco lo que `#generos` o `#genre` ya trajeron.
+- El estilo de un artista son sus `generos` canónicos de **`generosDeArtista`** (`util/generos-regla.js`, importada; ninguna lista nueva). Puede tener varios y aparece en cada uno.
+- Se enseñan los estilos con **2 o más** artistas, ordenados por cuántos tienen y, a igualdad, por nombre (la comparación simple de `universo()`). Cada uno es una pastilla `.recs-estilo-pastilla`; la elegida lleva el anillo del acento (el molde de `.covers-chip.is-on`), nunca blanco sobre el acento.
+- Debajo, una línea dice lo que no entró: «N sin estilo: X sin etiquetas de género, Y que Last.fm no tiene, Z sin buscar (Last.fm no contestó).», solo con las partes que no son cero. Dos partes son **más de lo que pedía el encargo**, para que ningún artista desaparezca sin decir por qué:
+  - «W sin buscar (paraste antes de llegar)», cuando se apretó «Parar»;
+  - «V con un estilo que no comparte ningún otro recomendado.», los que tienen estilo pero de uno solo.
+- Si ningún estilo tiene 2 artistas: «Tus recomendados no comparten ningún estilo.».
+
+**Qué cambia en `#generos`, `#genre` y la copia completa** (el almacén ahora recibe artistas que no son del historial):
+- `#generos`: nada. «Cuánto se sabe» y los géneros recorren `universo()` (el historial). Un registro de alguien que no está en el historial no entra en ninguna fila, y si ese artista entra después en el historial, ya está buscado.
+- `#genre`: lee las etiquetas por artista de los me gusta. Un recomendado que después likeás ya tiene sus etiquetas: 0 peticiones por él. ⚠️ **El «N artistas con tags» de su pantalla de inicio (`contarEtiquetasGuardadas()`) cuenta TODO el almacén**, así que sube con los recomendados agrupados. Es el número de registros guardados, no un error. Visto leyendo el código, no medido en pantalla.
+- La copia completa: `exportarEtiquetas()` exporta todo el almacén, también estos. Más entradas, mismo formato. Leído, no medido.
+
+**Qué se guarda y qué no de Last.fm** (la regla de `#generos`: `clasificar` y `etiquetasDe` de `util/generos-escaneo.js`, importadas):
+- **Se guarda**:
+  - una respuesta con `toptags`, aunque traiga 0;
+  - el «no encontrado» (6), como `[]`.
+  - En los dos casos va con **el nombre que devolvió Last.fm** (`toptags['@attr'].artist`), por `setCachedTags(nombre, tags, 'lastfm', { artista })`, para que el autocorrect a otro artista no cuente, igual que en `#generos`.
+- **No se guarda nunca**: un 29, un 5xx, un 429, un corte o un temporal. Ese artista queda «sin buscar» y la línea lo dice.
+- **Sin reintentos automáticos**: volver a apretar «Agrupar por estilo» pide solo esos.
+- Un 10 o un 26 (la key) paran y lo dicen.
+- Ritmo: de a una, **1.000 ms entre comienzos** (`INTERVALO_MS`, importado), con barra, «N de M» y «Parar».
+- Lo que ya llegó **se guarda antes** de mirar si hay que seguir: salir de la ruta o «Parar» no pierden una respuesta en la mano. Después de salir, 0 peticiones y 0 escrituras en la vista.
+- `getArtistTopTags` **no cambió** (lo afirma un test). La petición cruda es una función nueva, **`pedirLastfmCrudo(url)`** (`api/lastfm.js`): devuelve `{ status, datos }` sin decidir nada. Va con la URL de `urlEtiquetas`, la misma consulta.
+- Por qué no `lastfmFetch`: tira un `Error` pelado con el código solo en el texto, así que un 6 y un 29 no se distinguen. Por qué no `escanearGeneros`: reintenta solo.
+
+**El módulo puro y la resolución compartida.**
+- **`util/recs-estilo.js`**: sin red, DOM ni IndexedDB; todo inyectado. Tiene:
+  - `pedirEtiquetas`, `pendientesDeEtiquetas`;
+  - `agruparPorEstilo`, `textoSinEstilo`;
+  - `planDeLista`, `armarLista`;
+  - los textos (`textoCoste`, `TITULO_COSTE`, `textoCabecera`, `textoCorte`, `textoSinBuscar`, `nombreSugerido`, `descripcionPlaylist`);
+  - y las constantes.
+  - Va en `util/` como los otros puros de la regla de géneros (`generos-regla.js`, `generos-escaneo.js`), que son de los que depende.
+- **`util/resolver-tema.js`** (`resolverTemaEnSpotify(t, opciones)`): la búsqueda de UN tema, sacada del bucle de `resolveTracksOnSpotify()` sin cambiarle nada:
+  - la query `track:"…" artist:"…"` con `limpiaParaQuery`;
+  - `limit=5`;
+  - `titleMatches` + `artistMatches` entre los 5;
+  - la misma fila.
+- Distingue **tres** salidas: `encontrado` (con la fila), `sin-match` (Spotify contestó y no está) y **`error`** (tiró).
+- 🔴 **El camino de UN artista (`pickArtist`) quedó igual**: llama sin opciones (los reintentos de siempre de `spotifyFetch`) y trata `error` como «sin match». El `sha256` del HTML con un error en la búsqueda es el de v=368 (lo afirma `tests/recs-estilo.test.mjs`).
+  - ⚠️ **Ese es un defecto conocido y vivo**: un 429 o un corte se pinta como «Spotify no tiene ese tema». Está en `fonoteca-migracion/PENDIENTES.md`, «Tanda 132». Arreglarlo es otra tanda.
+- `#similar` y `#rabbit` tienen sus propias copias de la resolución, de antes: no se tocaron.
+
+**El tope** (`ARTISTAS_POR_ESTILO = 6`, temas de 10 a 15, por defecto 12, y `temas + 3` búsquedas por artista).
+- La búsqueda de Spotify tiene su propia cuota y la comparte toda la app: **429 `QUOTA_EXCEEDED` tras unas 700** (medido una vez, el 18/09/2026; no es un límite publicado).
+- El peor caso de una lista es 6 × (15 + 3) = **108** búsquedas: entran unas 6 listas antes de chocar.
+- Antes de buscar, la línea «Hasta N búsquedas en Spotify.» (N = artistas × (temas + 3)) lo dice, con el porqué en su `title`. Nada se busca solo.
+- 🔴 **No subas ninguno de los tres números sin decirlo.**
+
+**La lista.**
+- Por artista: `getArtistTopTracks(nombre, 30)` (1 llamada a Last.fm) y se resuelven **en orden** hasta juntar `temas` temas nuevos (en Spotify y no en tus me gusta), o agotar los candidatos, o gastar `temas + 3` búsquedas en ese artista.
+- 120 ms entre búsquedas (`PAUSA_ENTRE_BUSQUEDAS`, la de siempre). Si un tema ya salió para otro artista, se cuenta como repetido.
+- Las filas son las de siempre (`filaHtml`, `accionesDeFila`, `paintPlayingCard`), agrupadas por artista con una cabecera que dice cómo quedó: «8 de 12: 3 sin match en Spotify, 2 ya en tus me gusta.», más «Last.fm solo tiene N temas» o «se llegó al tope de N búsquedas» cuando es por eso.
+- Si `artist.gettoptracks` falla, ese artista dice «Last.fm no contestó» y se sigue (no gasta cuota de Spotify).
+- Todos tildados al terminar, la misma barra de selección (`barraSeleccionHtml()` y `cablearSeleccion()`, sacadas de `renderResolvedTracks` sin cambiarlas).
+- 🔴 **Si `/search` FALLA, no es «sin match»**: se para toda la lista ahí, con 0 búsquedas más (sin reintentos: `{ _maxRetries: 0 }`), y se queda lo encontrado. Arriba sale: «Spotify dejó de contestar después de N búsquedas: la lista está incompleta.», con el error crudo debajo y «Sin buscar: …» con los que no se llegaron a buscar. El error crudo va también a `console.warn('[recs] …')`.
+- «Parar» corta igual, pero diciendo «Paraste después de N búsquedas…».
+- «Volver a los estilos» no vuelve a pedir etiquetas.
+
+**«Crear playlist».** Es el mismo cuerpo de siempre, ahora `crearPlaylistDeSeleccion(sugerido, descripcion)` (`createPlaylistFromPicks()` lo llama con «Discover: <artista>»):
+- usa `promptPlaylistName`, `createPlaylist`, `addTracksToPlaylist` e `invalidatePlaylistsCache`;
+- sugiere «Recomendados: <estilo>» y la descripción «Recomendado desde tus scrobbles · <estilo>»;
+- solo escribe con el botón y con el nombre confirmado;
+- sale **pública** aunque se pida privada (ver «Crear playlists privadas — NO SE PUEDE»), igual que siempre.
+- Se probó solo contra la Spotify simulada del banco.
+
+**Por qué no `tag.gettoptracks`.** Medido el 14/11/2026 desde otra sesión: contesta, pero concentra (en un estilo, 200 temas de 62 artistas y dos artistas con 30 temas cada uno). No sirve para «10-15 por artista» y no sale de tus recomendados. Tampoco se usa `tag.gettopartists`, ni los similares horneados (`history-artist-similares.json`), ni ningún endpoint retirado de Spotify.
+
+**Lo que cuesta**: ver las `↳` de `#recs` en la tabla de costos.
+- Abrir: 0. «Generar recomendaciones»: igual que antes.
+- «Agrupar por estilo»: k `artist.gettoptags` a 1 s, 0 a Spotify; la segunda vez, 0.
+- Elegir un estilo, el selector y «Volver»: 0.
+- «Armar la lista»: hasta 6 `gettoptracks` y hasta artistas × (temas + 3) `/search`.
+- «Crear playlist»: 1 + ceil(n/100).
+
+**Lo que quedó FUERA**:
+- `#rabbit`;
+- el `catch` del camino de un artista;
+- más de 6 artistas o de 15 temas;
+- cualquier reintento automático;
+- estilos para el historial (eso es `#generos`);
+- agrupar subgéneros (`rap` y `hip hop` siguen aparte);
+- tocar `generos-regla.js`;
+- MusicBrainz o stats.fm;
+- la playlist privada.
+
+**Las guardas.**
+- **`tests/recs-estilo.test.mjs`**: el módulo puro, la resolución, `getArtistTopTags` y `pickArtist` REALES en Node, con `tests/dobles/loader-t132.mjs` y `t132-doble.mjs` y datos inventados. Rojo contra ce8098a.
+- **El banco `tests/banco/recs-estilo.html`** (+ `-caso.html` y `-datos.mjs`, en `prepush`): la app ENTERA con la Spotify simulada y un Last.fm simulado en la madre. Puertas A a I: abrir, las etiquetas, los estilos, la lista, el 429, «Crear playlist», salir a mitad, 1366×591 y 390×844, y el contraste en los cuatro presets (de 6,20 a 17,60).
+  - Rojo contra ce8098a (puerta B: no hay botón).
+  - Reloj virtual: ~56 s, así que tiene presupuesto propio de 150 s en `scripts/correr-banco.mjs`.
+  - ⚠️ La puerta G mira solo `#main-content`: el pie de cuota del menú (`p.sidebar-cuota-linea`) se actualiza con la búsqueda en vuelo que llega después de salir, y está bien que lo haga.
+- `tests/dobles/catch-92b-recs-doble.mjs` ganó los nombres nuevos que importa `recommendations.js` (solo para que el módulo cargue; sus asserts no cambiaron).
+- `util/generos-escaneo.js` solo ganó un `export { etiquetasDe };` al final, aparte. La declaración de la función quedó como en v=313: `tests/generos-regla.test.mjs` hashea su texto, y un `export ` delante de `function` lo ponía rojo (pasó en la primera corrida de `npm test` de la tanda).
+- El comentario nuevo de `components.css` no puede nombrar literalmente la media query de movimiento reducido: `tamano-fijo-t130` y `lluvia-dia-detalle` cuentan esas líneas en la hoja (6) y un comentario suma una (también pasó).
+
 ## Nombres largos en las tarjetas de la grilla (v=167)
 `.smart-card-title` (`#similar`, `#recs`, `#by-artist`, `#by-genre`,
 `#rabbit-hole`). La tarjeta es un flex column con `align-items: center`, y ahí
@@ -5635,7 +5749,12 @@ fila sobrevivió así desde que se armó la tabla.
 | `#similar` | **0** | **0** | — (la búsqueda es un acto explícito) | — | ✅ **confirmada el 2026-10-08**: `artistasOcultos.ready()` está en `pickSourceArtist` (`:177`, declarada en `:161`), que cuelga de un clic — no de `render()` |
 | ↳ y SIGUE en 0 con ocultar artistas (v=276) | **0** | **0** | el `ready()` del almacén de artistas va dentro de `pickSourceArtist`, no de `render()` | — | leída del código |
 | `#rabbit` | **0** | **0** | — | — | leída del código · **`/me` repasado el 2026-10-08**: su `render()` no llega a `getCurrentUserId()` |
-| `#recs` | **0** | **0** | — | — | ✅ **confirmada el 2026-10-08**: `hiddenArtists.ready()` está en `run()` (`:265`, declarada en `:187`), que cuelga de `#recs-run-btn` |
+| `#recs` | **0** | **0** | — | — | ✅ **confirmada el 2026-10-08**: `hiddenArtists.ready()` está en `run()` (`:265`, declarada en `:187`), que cuelga de `#recs-run-btn` · **re-medida en el banco el 2026-11-15** (`tests/banco/recs-estilo.html`, puerta A): 0 a Spotify y 0 a Last.fm en 5 s de reloj, igual con ce8098a (v=368) que con v=369 |
+| ↳ **«Generar recomendaciones»** | 1 `/me/tracks` + 1 `/me` + 1 `/me/playlists` con 3 me gusta inventados · **Last.fm: 1 `user.gettopartists` + 1 `artist.getsimilar` por top artista** | — | `getAllLikedTracks()` (págs. de `/me/tracks`, `ceil(L/50)` con la caché fría), el `ready()` de los ocultos y los similares de Last.fm | nº de me gusta y de top artistas (30) | **medida en el banco el 2026-11-15** con 3 top artistas: la misma en ce8098a y en v=369 (no cambió) |
+| ↳ **«Agrupar por estilo»** (v=369) | **0 a Spotify** (más el `/me` de `getCurrentUserId()` si nadie lo pagó en esa carga: en el banco ya estaba pagado) · **Last.fm: k `artist.gettoptags`**, de a una y a 1 s como mínimo | **0** la segunda vez (salvo los que Last.fm no contestó, si se vuelve a apretar) | `cargarEtiquetas()` + `artist.gettoptags` de los no buscados | **k** = los de los 50 a la vista que `yaBuscado` no da por buscados | **medida en el banco el 2026-11-15**: 10, después 2 (los dos que dieron 29 y 503) y después 0 |
+| ↳ elegir un estilo, el selector «Temas por artista», «Volver» y «Volver a los estilos» (v=369) | **0** | **0** | ninguno | — | **medida en el banco el 2026-11-15** |
+| ↳ **«Armar la lista»** (v=369) | **hasta artistas × (temas + 3)** `/search` (**108** con 6 × 15), sin reintentos · **Last.fm: hasta 6 `artist.gettoptracks`** | — | `/search?type=track&limit=5` por tema; para en el primer error | artistas del estilo (tope 6) y temas por artista (10 a 15) | **medida en el banco el 2026-11-15**: 31 `/search` + 4 `gettoptracks` con 4 artistas × 10 (tope 52); con un 429 en la 20.ª, 20 y 0 después |
+| ↳ **«Crear playlist»** de un estilo (v=369) | **1 + ceil(n/100)** POST | — | `POST /me/playlists` + `POST /playlists/{id}/items` de a 100 | **n** = temas tildados | **medida en el banco el 2026-11-15**: 2 con 23 tildados, con exactamente esas 23 uris |
 | `#discover-artists` | **32 + 2 + ceil(Hd/100)** = **43** | ídem que el frío menos «w three» | «w three» **+ la playlist de ocultos («descubrir»)** | pistas de «w three» **y nº de ocultos** | leída del código · **`/me` repasado el 2026-10-08**: `hiddenAlbums.ready()` (`:314`) SÍ está en el camino de `render()` (`:202`) y paga **1 `/me` propio**, ya contado en el «+2»; `artistasOcultos.ready()` (`:386`) reusa el memo y suma 0 |
 | ↳ **+2 desde v=276** (ocultar artistas) → **45** | **45** | ídem | **+ la playlist de ocultos («recomendados»)**: `1 /playlists/{id}` + `ceil(Ha/100)` | nº de artistas ocultos (**12** el 06/10) | leída del código |
 | ↳ 🟩 **los ocultos, medidos (v=299)**: frío **15**, caliente **3** (v=298: 15 y **13**) | **3** | **15** | frío: 1 `/me` + 1 `/playlists/{desc}` + **9** págs. + 1 `/playlists/{art}` + **1** pág. + `/me/albums` + `/me/playlists`. Caliente: 1 `/me` + los dos `GET /playlists/{id}`, **0** págs. | si la playlist cambió (snapshot nuevo) o el caché venció (24 h), esa playlist se baja entera | **medida en el banco el 2026-10-13** (`tests/banco/ocultos-cache.html`, Spotify simulada con **900 + 12** ocultos, ids guardados; el «antes» es el mismo banco contra el `src/` de v=298). **Sin «w three»** (no configurada en el banco): sus `1 + ceil(W/100)` van aparte y no cambiaron. Sin el `/me` del arranque |

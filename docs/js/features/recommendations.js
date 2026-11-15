@@ -1,22 +1,29 @@
-import { spotifyFetch, createPlaylist, addTracksToPlaylist, invalidatePlaylistsCache, getAllLikedTracks } from '../api.js?v=368';
-import { hasKey, setKey, hasUsername, getUsername, setUsername, getUserTopArtists, getSimilarArtists, getArtistTopTracks } from '../api/lastfm.js?v=368';
-import { showProgress, hideProgress, promptPlaylistName, escapeHtml, pageHeader } from '../ui/components.js?v=368';
-import { showToast } from '../ui/toast.js?v=368';
-import { getPreview } from '../api/preview-providers.js?v=368';
-import { togglePreview, playingKey, isPlayingAudio } from '../ui/preview-player.js?v=368';
-import { paintPlayingCard } from '../ui/track-card-row.js?v=368';
-import { openTrackCard } from './track-card.js?v=368';
-import { openAlbumCard } from './album-card.js?v=368';
-import { limpiaParaQuery, titleMatches, artistMatches } from '../util/track-match.js?v=368';
-import { vigilarRuta } from '../util/vigencia-ruta.js?v=368';
-import { recuperarUriDeArtistaKey } from '../util/hidden-recover.js?v=368';
+import { spotifyFetch, createPlaylist, addTracksToPlaylist, invalidatePlaylistsCache, getAllLikedTracks, getCurrentUserId } from '../api.js?v=369';
+import { hasKey, setKey, hasUsername, getUsername, setUsername, getUserTopArtists, getSimilarArtists, getArtistTopTracks, getKey, pedirLastfmCrudo, cargarEtiquetas, registroEtiquetas, setCachedTags } from '../api/lastfm.js?v=369';
+import { urlEtiquetas } from '../util/generos-escaneo.js?v=369';
+import { resolverTemaEnSpotify } from '../util/resolver-tema.js?v=369';
+import {
+  pedirEtiquetas, pendientesDeEtiquetas, agruparPorEstilo, textoSinEstilo, ARTISTAS_POR_ESTILO, TEXTO_SIN_ESTILOS, planDeLista, textoCoste, TITULO_COSTE,
+  armarLista, textoCabecera, textoCorte, textoSinBuscar, nombreSugerido, descripcionPlaylist,
+  TEMAS_MIN, TEMAS_MAX, TEMAS_DEFECTO,
+} from '../util/recs-estilo.js?v=369';
+import { showProgress, hideProgress, promptPlaylistName, escapeHtml, pageHeader } from '../ui/components.js?v=369';
+import { showToast } from '../ui/toast.js?v=369';
+import { getPreview } from '../api/preview-providers.js?v=369';
+import { togglePreview, playingKey, isPlayingAudio } from '../ui/preview-player.js?v=369';
+import { paintPlayingCard } from '../ui/track-card-row.js?v=369';
+import { openTrackCard } from './track-card.js?v=369';
+import { openAlbumCard } from './album-card.js?v=369';
+import { limpiaParaQuery, titleMatches, artistMatches } from '../util/track-match.js?v=369';
+import { vigilarRuta } from '../util/vigencia-ruta.js?v=369';
+import { recuperarUriDeArtistaKey } from '../util/hidden-recover.js?v=369';
 import {
   artistasOcultos as hiddenArtists,
   alternarArtistaOculto,
   artistaEstaOculto,
-} from './artistas-ocultos.js?v=368';
-import { iconoPlay, iconoPausa, iconoFicha, iconoDisco, iconoOjo, iconoOjoTachado } from '../ui/icons.js?v=368';
-import { pedirYCachear, CUALQUIER_RESPUESTA } from '../util/cache-solo-exitos.js?v=368';
+} from './artistas-ocultos.js?v=369';
+import { iconoPlay, iconoPausa, iconoFicha, iconoDisco, iconoOjo, iconoOjoTachado } from '../ui/icons.js?v=369';
+import { pedirYCachear, CUALQUIER_RESPUESTA } from '../util/cache-solo-exitos.js?v=369';
 
 // Iconos de las dos fichas. Los mismos trazos que usa la tarjeta compartida.
 // Mismos trazos que el ojo de discover-common.js (v=165), acá con 14px para
@@ -324,7 +331,9 @@ function renderRecommendations(ruta = vigilarRuta()) {
           ? `${shown.length} artista${shown.length === 1 ? '' : 's'} oculto${shown.length === 1 ? '' : 's'}.`
           : `${shown.length} artistas recomendados (filtrados los que ya tienes en likes). Click para ver top tracks.`}
       </div>
-      ${hiddenToggleBtn}
+      ${viewMode === 'normal' && shown.length >= 2
+        ? `<div class="recs-estilo-cabecera-botones"><button class="btn btn-secondary btn-sm" id="recs-estilo-btn" title="Agrupa estos ${shown.length} artistas por estilo según Last.fm, para armar una playlist de un estilo. Solo se piden las etiquetas que no están guardadas en este navegador.">Agrupar por estilo</button>${hiddenToggleBtn}</div>`
+        : hiddenToggleBtn}
     </div>
     <div class="smart-grid smart-grid-compact">
       ${shown.map((a, i) => renderArtistCard(a, i)).join('')}
@@ -353,6 +362,9 @@ function renderRecommendations(ruta = vigilarRuta()) {
     viewMode = viewMode === 'hidden' ? 'normal' : 'hidden';
     renderRecommendations();
   });
+  // Los MISMOS que la vista enseña (los primeros 50 no ocultos, en su orden).
+  const estiloBtn = document.getElementById('recs-estilo-btn');
+  if (estiloBtn) estiloBtn.onclick = () => agruparPorEstiloDe(shown.map(a => a.name));
 }
 
 function renderArtistCard(a, i) {
@@ -441,34 +453,12 @@ async function resolveTracksOnSpotify(topTracks, ruta = vigilarRuta()) {
   const raw = [];
   for (let i = 0; i < topTracks.length; i++) {
     const t = topTracks[i];
-    try {
-      const q = `track:"${limpiaParaQuery(t.name)}" artist:"${limpiaParaQuery(t.artist)}"`;
-      const data = await spotifyFetch(`/search?q=${encodeURIComponent(q)}&type=track&limit=5`);
-      const hit = (data.tracks?.items || []).find(c =>
-        titleMatches(t.name, c.name) && artistMatches(t.artist, (c.artists || []).map(a => a.name).join(', ')));
-      if (hit) {
-        const artistas = (hit.artists || []).map(a => a.name).filter(Boolean);
-        raw.push({
-          uri: hit.uri,
-          trackId: hit.id,
-          name: hit.name,
-          artist: artistas.join(', '),
-          // La lista entera, no el string unido: la cadena de proveedores acepta
-          // el match si coincide CUALQUIER artista, y con el string unido no hay
-          // más que un nombre imposible («A, B & C») contra el que comparar.
-          artistList: artistas,
-          album: hit.album?.name,
-          albumId: hit.album?.id,
-          image: hit.album?.images?.[hit.album.images.length - 1]?.url,
-          imageBig: hit.album?.images?.[0]?.url,
-          matched: true,
-        });
-      } else {
-        raw.push({ uri: null, name: t.name, artist: t.artist, matched: false });
-      }
-    } catch {
-      raw.push({ uri: null, name: t.name, artist: t.artist, matched: false });
-    }
+    // v=369: la búsqueda y la verificación viven en `util/resolver-tema.js` (la comparte el camino
+    // de un estilo). Este camino se queda como estaba: ⚠️ un ERROR (un 429, un corte) se sigue
+    // pintando como «sin match», que se lee como «Spotify no lo tiene». Es un defecto conocido,
+    // anotado en `PENDIENTES.md` («Tanda 132»), y se dejó así a propósito: arreglarlo es otra tanda.
+    const r = await resolverTemaEnSpotify(t);
+    raw.push(r.estado === 'encontrado' ? r.fila : { uri: null, name: t.name, artist: t.artist, matched: false });
     // 30 búsquedas con 120 ms de pausa entre cada una: el corte va acá, antes
     // de tocar el contador, y no solo al final del bucle.
     if (!ruta.vigente()) return;
@@ -588,15 +578,7 @@ function renderResolvedTracks(ruta = vigilarRuta()) {
       <div class="card" style="margin-bottom:16px"><p>Todos los top tracks de este artista ya están en tus likes. Vuelve y prueba con otro.</p></div>
     ` : ''}
 
-    <div style="position:sticky;top:0;z-index:50;background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-md);padding:12px 16px;margin-bottom:16px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;box-shadow:0 2px 8px rgba(0,0,0,0.2)">
-      <div style="font-size:13px;color:var(--color-text-secondary)">
-        <strong id="recs-picked-count">${pickedUris.size}</strong> tracks seleccionados
-      </div>
-      <div style="display:flex;gap:8px">
-        <button class="btn btn-secondary btn-sm" id="recs-clear-btn">Deseleccionar todo</button>
-        <button class="btn btn-primary" id="recs-create-btn">Crear playlist</button>
-      </div>
-    </div>
+    ${barraSeleccionHtml()}
 
     <div class="card">
       <div class="tracks-grid">
@@ -606,7 +588,25 @@ function renderResolvedTracks(ruta = vigilarRuta()) {
   `;
 
   accionesDeFila(tracksEl);
+  cablearSeleccion(tracksEl, createPlaylistFromPicks);
+}
 
+// v=369: la barra de «N tracks seleccionados» y su cableado, sacados de `renderResolvedTracks` SIN
+// cambiarlos, para que la lista de un estilo use los mismos.
+function barraSeleccionHtml() {
+  return `
+    <div style="position:sticky;top:0;z-index:50;background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-md);padding:12px 16px;margin-bottom:16px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;box-shadow:0 2px 8px rgba(0,0,0,0.2)">
+      <div style="font-size:13px;color:var(--color-text-secondary)">
+        <strong id="recs-picked-count">${pickedUris.size}</strong> tracks seleccionados
+      </div>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-secondary btn-sm" id="recs-clear-btn">Deseleccionar todo</button>
+        <button class="btn btn-primary" id="recs-create-btn">Crear playlist</button>
+      </div>
+    </div>`;
+}
+
+function cablearSeleccion(tracksEl, crear) {
   tracksEl.querySelectorAll('.recs-track-check').forEach(box => {
     box.onchange = () => {
       if (box.checked) pickedUris.add(box.dataset.uri);
@@ -619,22 +619,29 @@ function renderResolvedTracks(ruta = vigilarRuta()) {
     tracksEl.querySelectorAll('.recs-track-check').forEach(b => { b.checked = false; });
     document.getElementById('recs-picked-count').textContent = 0;
   };
-  document.getElementById('recs-create-btn').onclick = createPlaylistFromPicks;
+  document.getElementById('recs-create-btn').onclick = crear;
 }
 
-async function createPlaylistFromPicks() {
+function createPlaylistFromPicks() {
+  return crearPlaylistDeSeleccion(`Discover: ${currentPick.name}`, `Recomendado desde tus scrobbles`);
+}
+
+// v=369: el cuerpo de siempre de `createPlaylistFromPicks`, compartido con la lista de un estilo
+// (que sugiere «Recomendados: <estilo>» y lo dice en la descripción). Solo con el botón y con el
+// nombre confirmado en el modal. ⚠️ La playlist sale PÚBLICA aunque se pida `false`: la API ignora
+// `public` (sección «Crear playlists privadas — NO SE PUEDE» de `CLAUDE.md`).
+async function crearPlaylistDeSeleccion(suggested, descripcion) {
   if (pickedUris.size === 0) {
     showToast('No seleccionaste nada', 'error');
     return;
   }
   const uris = [...pickedUris];
-  const suggested = `Discover: ${currentPick.name}`;
   const name = await promptPlaylistName(suggested, { trackCount: uris.length });
   if (!name) return;
 
   try {
     showProgress(`Creando "${name}"...`, 0, uris.length);
-    const playlist = await createPlaylist(name, `Recomendado desde tus scrobbles`, false);
+    const playlist = await createPlaylist(name, descripcion, false);
     showProgress('Agregando tracks...', 0, uris.length);
     await addTracksToPlaylist(playlist.id, uris);
     invalidatePlaylistsCache();
@@ -643,5 +650,242 @@ async function createPlaylistFromPicks() {
   } catch (e) {
     hideProgress();
     showToast('Error: ' + e.message, 'error');
+  }
+}
+
+// ── Playlists por estilo (v=369, tanda 132) ──────────────────────────────────
+//
+// «Agrupar por estilo» → las etiquetas de los recomendados a la vista (solo las que no están
+// buscadas, de a una por segundo, en el almacén de `#generos`) → los estilos de 2 o más artistas →
+// un estilo → «Armar la lista» (hasta 6 artistas × 10-15 temas) → «Crear playlist». La lógica es
+// `util/recs-estilo.js` (puro); acá solo se pinta y se enchufa lo de verdad. Abrir `#recs` y
+// «Generar recomendaciones» no cambiaron de costo: nada de esto corre sin su botón.
+
+// La última agrupación: los nombres a la vista, los que Last.fm no contestó, si se paró, el estilo
+// elegido y los temas por artista. «Volver a los estilos» repinta con esto: 0 peticiones.
+let estiloCtx = null;
+
+const relojReal = { ahora: () => Date.now(), esperar: (ms) => sleep(ms) };
+
+function pintarFalloEstilo(texto, error = null) {
+  const panel = document.getElementById('recs-panel');
+  if (!panel) return;
+  panel.innerHTML = `
+    <div class="card recs-estilo" data-recs-estilo="fallo">
+      <p class="recs-estilo-nota">${escapeHtml(texto)}</p>
+      ${error ? `<p class="recs-estilo-crudo">${escapeHtml(String(error?.message || error))}</p>` : ''}
+      <button class="btn btn-secondary btn-sm" id="recs-estilo-volver">← Volver</button>
+    </div>`;
+  document.getElementById('recs-estilo-volver').onclick = () => renderRecommendations();
+}
+
+function pintarProgresoEtiquetas(hechos, total) {
+  const relleno = document.getElementById('recs-estilo-relleno');
+  const txt = document.getElementById('recs-estilo-progreso');
+  if (relleno) relleno.style.width = total ? `${(hechos / total) * 100}%` : '100%';
+  if (txt) {
+    txt.textContent = total
+      ? `${hechos} de ${total} artistas preguntados a Last.fm (uno por segundo).`
+      : 'Todo estaba guardado: no hace falta preguntar nada.';
+  }
+}
+
+async function agruparPorEstiloDe(nombres) {
+  const ruta = vigilarRuta();
+  const panel = document.getElementById('recs-panel');
+  if (!panel) return;
+  const parar = { pedido: false };
+  panel.innerHTML = `
+    <div class="card recs-estilo" data-recs-estilo="etiquetas">
+      <div class="recs-estilo-fila">
+        <div class="recs-estilo-titulo">Preguntando a Last.fm el estilo de tus recomendados…</div>
+        <button class="btn btn-secondary btn-sm" id="recs-estilo-parar">Parar</button>
+      </div>
+      <div class="recs-estilo-barra"><div class="recs-estilo-barra-relleno" id="recs-estilo-relleno"></div></div>
+      <div class="recs-estilo-nota" id="recs-estilo-progreso">Leyendo lo que ya está guardado…</div>
+    </div>`;
+  document.getElementById('recs-estilo-parar').onclick = (e) => {
+    parar.pedido = true;
+    e.currentTarget.disabled = true;
+    e.currentTarget.textContent = 'Parando…';
+  };
+
+  // Lo ya guardado no se vuelve a pedir: el almacén de `#generos`, cargado una vez por usuario
+  // (el `/me` va por el memo: si nadie lo pagó en esta carga, este es el único).
+  try {
+    const uid = await getCurrentUserId();
+    if (!ruta.vigente()) return;
+    await cargarEtiquetas(uid);
+  } catch (e) {
+    console.warn('[recs] no se pudieron leer las etiquetas guardadas:', e);
+    if (!ruta.vigente()) return;
+    pintarFalloEstilo('No se han podido leer las etiquetas de género que ya están guardadas en este navegador, así que no se ha agrupado nada (se volvería a pedir lo que ya está). Recarga la página para volver a intentarlo.', e);
+    return;
+  }
+  if (!ruta.vigente()) return;
+  pintarProgresoEtiquetas(0, pendientesDeEtiquetas(nombres, registroEtiquetas).length);
+
+  const key = getKey();
+  const r = await pedirEtiquetas({
+    nombres,
+    registro: registroEtiquetas,
+    pedir: (n) => pedirLastfmCrudo(urlEtiquetas(n, key)),
+    guardar: (n, tags, artista) => setCachedTags(n, tags, 'lastfm', artista === undefined ? null : { artista }),
+    reloj: relojReal,
+    seguir: () => ruta.vigente() && !parar.pedido,
+    onPaso: ({ hechos, total }) => { if (ruta.vigente()) pintarProgresoEtiquetas(hechos, total); },
+  });
+  if (r.noContesto.length) {
+    console.warn('[recs] Last.fm no contestó por estos artistas (no se guarda nada de ellos):',
+      r.noContesto.map(x => `${x.nombre} (${x.codigo ?? x.status})`).join(' · '));
+  }
+  if (!ruta.vigente()) return;
+  if (r.motivo === 'key') {
+    pintarFalloEstilo(`Last.fm no acepta la clave de la API (error ${r.codigo}), así que se ha parado. Lo que ya había contestado se ha guardado.`);
+    return;
+  }
+  if (r.motivo === 'no-guarda') {
+    pintarFalloEstilo('No se ha podido guardar lo que contestó Last.fm en este navegador, así que se ha parado para no pedir de más.');
+    return;
+  }
+  estiloCtx = {
+    nombres,
+    noContesto: new Set(r.noContesto.map(x => x.nombre)),
+    parado: r.motivo === 'parado',
+    estilos: [],
+    estilo: null,
+    temas: TEMAS_DEFECTO,
+  };
+  renderEstilos();
+}
+
+function renderEstilos() {
+  const panel = document.getElementById('recs-panel');
+  if (!panel || !estiloCtx) return;
+  const { estilos, cuentas } = agruparPorEstilo(estiloCtx.nombres, registroEtiquetas, estiloCtx.noContesto);
+  estiloCtx.estilos = estilos;
+  if (estiloCtx.estilo && !estilos.some(e => e.estilo === estiloCtx.estilo)) estiloCtx.estilo = null;
+  const sin = textoSinEstilo(cuentas);
+  panel.innerHTML = `
+    <div class="recs-estilo" data-recs-estilo="estilos" data-estilos="${estilos.length}">
+      <div class="recs-estilo-fila"><button class="btn btn-secondary btn-sm" id="recs-estilo-volver">← Volver</button></div>
+      ${estiloCtx.parado ? '<p class="recs-estilo-nota">Paraste antes de terminar: se agrupa con lo que ya había.</p>' : ''}
+      ${estilos.length
+        ? `<div class="recs-estilo-pastillas" role="group" aria-label="Estilos de tus recomendados">${estilos.map(e => `<button type="button" class="recs-estilo-pastilla${e.estilo === estiloCtx.estilo ? ' is-on' : ''}" data-estilo="${escapeHtml(e.estilo)}" aria-pressed="${e.estilo === estiloCtx.estilo}">${escapeHtml(e.estilo)} <span class="recs-estilo-cuenta">${e.artistas.length}</span></button>`).join('')}</div>`
+        : `<p class="recs-estilo-vacio">${TEXTO_SIN_ESTILOS}</p>`}
+      ${sin ? `<p class="recs-estilo-nota" data-recs-estilo-sin>${escapeHtml(sin)}</p>` : ''}
+      <div id="recs-estilo-plan"></div>
+    </div>`;
+  document.getElementById('recs-estilo-volver').onclick = () => renderRecommendations();
+  panel.querySelectorAll('.recs-estilo-pastilla').forEach(b => {
+    b.onclick = () => { estiloCtx.estilo = b.dataset.estilo; renderEstilos(); };
+  });
+  if (estiloCtx.estilo) renderPlan();
+}
+
+// Elegir un estilo, el selector y «Volver»: 0 peticiones. Nada se busca solo.
+function renderPlan() {
+  const cont = document.getElementById('recs-estilo-plan');
+  const e = estiloCtx?.estilos.find(x => x.estilo === estiloCtx.estilo);
+  if (!cont || !e) return;
+  const plan = planDeLista(e.artistas, estiloCtx.temas);
+  const opciones = [];
+  for (let n = TEMAS_MIN; n <= TEMAS_MAX; n++) opciones.push(`<option value="${n}"${n === plan.temas ? ' selected' : ''}>${n}</option>`);
+  const fuera = e.artistas.length - plan.artistas.length;
+  cont.innerHTML = `
+    <div class="card recs-estilo-plan" data-recs-estilo="plan">
+      <h3 class="recs-estilo-h">${escapeHtml(e.estilo)}</h3>
+      <p class="recs-estilo-nota">${plan.artistas.map(n => escapeHtml(n)).join(', ')}${fuera > 0 ? ` (y ${fuera} más que no entran: el tope es ${ARTISTAS_POR_ESTILO} artistas)` : ''}.</p>
+      <div class="recs-estilo-fila">
+        <label class="recs-estilo-temas">Temas por artista <select id="recs-estilo-temas">${opciones.join('')}</select></label>
+        <button class="btn btn-primary" id="recs-estilo-armar">Armar la lista</button>
+      </div>
+      <p class="recs-estilo-nota" id="recs-estilo-coste" title="${escapeHtml(TITULO_COSTE)}">${textoCoste(plan)}</p>
+    </div>`;
+  document.getElementById('recs-estilo-temas').onchange = (ev) => {
+    estiloCtx.temas = +ev.target.value;
+    document.getElementById('recs-estilo-coste').textContent = textoCoste(planDeLista(e.artistas, estiloCtx.temas));
+  };
+  document.getElementById('recs-estilo-armar').onclick = () => armarListaDe(e.estilo, planDeLista(e.artistas, estiloCtx.temas));
+}
+
+async function armarListaDe(estilo, plan) {
+  const ruta = vigilarRuta();
+  const panel = document.getElementById('recs-panel');
+  if (!panel) return;
+  const parar = { pedido: false };
+  let volvio = false;
+  currentPick = null;
+  resolvedTracks = [];
+  pickedUris.clear();
+  panel.innerHTML = `
+    <div class="recs-estilo" data-recs-estilo="lista">
+      <div class="recs-estilo-fila">
+        <button class="btn btn-secondary btn-sm" id="recs-estilo-volver">← Volver a los estilos</button>
+        <button class="btn btn-secondary btn-sm" id="recs-estilo-parar">Parar</button>
+      </div>
+      <div class="card recs-estilo-cabecera">
+        <h2 class="recs-estilo-h2">${escapeHtml(estilo)}</h2>
+        <div class="recs-estilo-nota">${plan.artistas.length} artistas · ${plan.temas} temas por artista · ${textoCoste(plan)}</div>
+      </div>
+      <div id="recs-tracks"><div class="empty-state"><div class="spinner spinner-lg"></div><div style="margin-top:16px" id="recs-estilo-buscando">Buscando en Spotify (0 de ${plan.topeTotal})…</div></div></div>
+    </div>`;
+  document.getElementById('recs-estilo-volver').onclick = () => { volvio = true; renderEstilos(); };
+  document.getElementById('recs-estilo-parar').onclick = (ev) => {
+    parar.pedido = true;
+    ev.currentTarget.disabled = true;
+    ev.currentTarget.textContent = 'Parando…';
+  };
+  const viva = () => ruta.vigente() && !volvio;
+
+  const r = await armarLista({
+    plan,
+    topTracks: (n) => getArtistTopTracks(n, TOP_TRACKS_POR_ARTISTA),
+    // Sin reintentos: si `/search` falla, la lista se para (seguir sería gastar una cuota que ya
+    // se acabó). El camino de un artista sigue con los de siempre.
+    resolver: (t) => resolverTemaEnSpotify(t, { _maxRetries: 0 }),
+    enMeGusta: (uri) => likedUris.has(uri),
+    seguir: () => viva() && !parar.pedido,
+    esperar: sleep,
+    pausaMs: PAUSA_ENTRE_BUSQUEDAS,
+    onPaso: ({ busquedas }) => {
+      if (!viva()) return;
+      const el = document.getElementById('recs-estilo-buscando');
+      if (el) el.textContent = `Buscando en Spotify (${busquedas} de ${plan.topeTotal})…`;
+    },
+  });
+  if (r.corte?.tipo === 'error') console.warn('[recs] Spotify dejó de contestar al armar la lista de un estilo:', r.corte.error);
+  for (const a of r.artistas) {
+    if (a.lastfmFallo) console.warn(`[recs] Last.fm no contestó los temas de «${a.nombre}»:`, a.lastfmFallo);
+  }
+  if (!viva()) return;
+  renderListaEstilo(estilo, plan, r);
+}
+
+function renderListaEstilo(estilo, plan, r) {
+  const tracksEl = document.getElementById('recs-tracks');
+  if (!tracksEl) return;
+  document.getElementById('recs-estilo-parar')?.remove();
+  resolvedTracks = r.artistas.flatMap(a => a.temas);
+  pickedUris.clear();
+  resolvedTracks.forEach(t => pickedUris.add(t.uri));
+  const aviso = r.corte ? `
+    <div class="card recs-estilo-corte" data-recs-estilo-corte="${r.corte.tipo}">
+      <p class="recs-estilo-nota">${escapeHtml(textoCorte(r.corte))}</p>
+      ${r.corte.tipo === 'error' ? `<p class="recs-estilo-crudo">${escapeHtml(String(r.corte.error?.message || r.corte.error))}</p>` : ''}
+      ${r.sinBuscar.length ? `<p class="recs-estilo-nota" data-recs-estilo-sin-buscar>${escapeHtml(textoSinBuscar(r.sinBuscar))}</p>` : ''}
+    </div>` : '';
+  tracksEl.innerHTML = `
+    ${aviso}
+    ${resolvedTracks.length ? barraSeleccionHtml() : '<div class="card" style="margin-bottom:16px"><p>No ha quedado ningún tema nuevo en esta lista.</p></div>'}
+    ${r.artistas.map(a => `
+      <section class="card recs-estilo-artista" data-artista="${escapeHtml(a.nombre)}">
+        <h3 class="recs-estilo-h">${escapeHtml(a.nombre)}</h3>
+        <p class="recs-estilo-nota recs-estilo-linea">${escapeHtml(textoCabecera(a, plan))}</p>
+        ${a.temas.length ? `<div class="tracks-grid">${a.temas.map(filaHtml).join('')}</div>` : ''}
+      </section>`).join('')}`;
+  accionesDeFila(tracksEl);
+  if (resolvedTracks.length) {
+    cablearSeleccion(tracksEl, () => crearPlaylistDeSeleccion(nombreSugerido(estilo), descripcionPlaylist(estilo)));
   }
 }

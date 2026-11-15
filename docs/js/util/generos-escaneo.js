@@ -30,11 +30,11 @@
 //     again later», 16 «temporarily unavailable, please try again» (temporales); 10 «Invalid API
 //     key» y 26 «API Key Suspended» (la key). Ninguno de esos se vio en la medición.
 
-import { esperaTrasFallo, FALLOS_PARA_PAUSAR, duracionCorta } from './mapa-escaneo.js?v=368';
-import { filtrarEtiquetasLastfm } from './generos-artista.js?v=368';
+import { esperaTrasFallo, FALLOS_PARA_PAUSAR, duracionCorta } from './mapa-escaneo.js?v=369';
+import { filtrarEtiquetasLastfm } from './generos-artista.js?v=369';
 // v=314: «Cuánto se sabe» decide con la regla del género (ver la cabecera de `generos-regla.js`, que importa
 // `yaBuscado` de acá: el import es circular a propósito y ninguno de los dos usa lo del otro al cargarse).
-import { generosDeArtista } from './generos-regla.js?v=368';
+import { generosDeArtista } from './generos-regla.js?v=369';
 
 export const BASE_LASTFM = 'https://ws.audioscrobbler.com/2.0/';
 // Una petición por vez y 1.000 ms como mínimo entre COMIENZOS. Las condiciones de uso de la API
@@ -255,3 +255,8 @@ export function textoLoQueFalta(est) {
   const rango = bajo === alto ? alto : `entre ${bajo} y ${alto}`;
   return `Quedan ~${fmtEs(est.peticiones)} peticiones: ${rango}, según cuántos fallos dé Last.fm.`;
 }
+
+// v=369 (tanda 132): `etiquetasDe` se exporta ACÁ, aparte, para que «Agrupar por estilo» de `#recs`
+// (`util/recs-estilo.js`) guarde exactamente lo mismo que este escaneo sin copiarla. La declaración de
+// arriba no se tocó: `tests/generos-regla.test.mjs` la vigila byte a byte desde v=313.
+export { etiquetasDe };

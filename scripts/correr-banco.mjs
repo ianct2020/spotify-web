@@ -151,7 +151,10 @@ const EXTRA = { mosaico: 'auto=1' };
 // medidos a tasa de acierto: se pusieron con margen (90 s y 120 s) y lo medido en la tanda está en `fonoteca-migracion/PENDIENTES.md`
 // («Tanda 127»). Si alguno falla «ausente», lo primero es medirlo en diez corridas, como los de arriba.
 // `singles-diagnostico` (tanda 127) no es una puerta ni va en `prepush`: es un diagnóstico que abre `#new-releases` ocho veces. 180 s, sin medir.
-const PRESUPUESTO = { 'listened-biblioteca': 90000, 'novedades': 120000, 'singles-diagnostico': 180000, 'calendario': 15000, 'ocultar-artista': 90000, 'import-guarda': 60000, 'ocultos-cache': 60000, 'mapa': 240000, 'generos-escaneo': 195000, 'router-teardown': 120000, 'guard-ruta-vieja': 90000, 'postal': 60000, 'rehacer-me-gusta': 60000 };
+// `recs-estilo` (v=369, tanda 132) abre la app ENTERA en seis iframes y espera las etiquetas de Last.fm a 1 s cada una (10 + 2
+// en B, 4 en G), más 5 s de reloj quieto al abrir y los 5 + 3 s de G: con el defecto de 45 s se cortaba (la primera pasada iba
+// por 44,5 s antes de las puertas H e I). El tope se puso con margen y lo medido está en el informe de la tanda 132.
+const PRESUPUESTO = { 'listened-biblioteca': 90000, 'novedades': 120000, 'singles-diagnostico': 180000, 'calendario': 15000, 'ocultar-artista': 90000, 'import-guarda': 60000, 'ocultos-cache': 60000, 'mapa': 240000, 'generos-escaneo': 195000, 'router-teardown': 120000, 'guard-ruta-vieja': 90000, 'postal': 60000, 'rehacer-me-gusta': 60000, 'recs-estilo': 150000 };
 // `XQ="&peor=1"` agrega parámetros a la URL del banco sin tocar este archivo: sirve
 // para medir (p. ej. el ancho mínimo en que la barra de novedades sigue en una fila).
 

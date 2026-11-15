@@ -121,6 +121,20 @@ async function getArtistTopTags(artistName) {
   return filtrarEtiquetasLastfm(list);
 }
 
+// v=369 (tanda 132): la petición CRUDA, para quien tiene que distinguir un «no encontrado» (6, que
+// Last.fm manda con un 200) de un 29, un 5xx o un corte. `lastfmFetch` no sirve para eso: tira un
+// `Error` pelado con el código solo en el texto. Esta devuelve `{ status, datos }` sin decidir nada
+// (decide `clasificar` de `util/generos-escaneo.js`) y TIRA solo si la red falla. Sin cabeceras
+// propias (una no simple provocaría una OPTIONS previa por pedido). La usa «Agrupar por estilo» de
+// `#recs`, con la URL de `urlEtiquetas` (la misma consulta que `getArtistTopTags`). `getArtistTopTags`
+// no cambió.
+async function pedirLastfmCrudo(url) {
+  const res = await fetch(url);
+  let datos = null;
+  try { datos = await res.json(); } catch { datos = null; }
+  return { status: res.status, datos };
+}
+
 async function getSimilarTags(tag) {
   const data = await lastfmFetch('tag.getsimilar', { tag });
   const list = data.similartags?.tag || [];
@@ -252,6 +266,7 @@ export {
   setUsername,
   hasUsername,
   lastfmFetch,
+  pedirLastfmCrudo,
   getSimilarArtists,
   getArtistTopTracks,
   getTopArtistsByTag,

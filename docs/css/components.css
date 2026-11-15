@@ -2328,3 +2328,47 @@ body.con-aviso-copia { padding-top: 46px; }
 .ac-col-tracks .ac-track-play:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 1px; }
 .ac-col-tracks .ac-track-play[data-sonando="1"] { color: var(--color-text); border-color: var(--color-accent); }
 .ac-col-tracks .ac-track-play:disabled { cursor: default; border-style: dashed; }
+
+/* Playlists por estilo en #recs (v=369, tanda 132). Clases propias `.recs-estilo-…`; los textos
+   secundarios en --color-text-secondary (nunca el muted). Nada de esto se anima: ni transición
+   en la barra ni en las pastillas, y ninguna media query de movimiento reducido nueva. La pastilla
+   elegida, con el molde de `.covers-chip.is-on` (v=290): el anillo del acento y el texto de
+   siempre sobre --color-surface, nunca blanco sobre el acento. */
+.recs-estilo-cabecera-botones { display: flex; gap: 8px; flex-wrap: wrap; }
+.recs-estilo-fila { display: flex; align-items: center; justify-content: space-between; gap: 8px 12px; flex-wrap: wrap; margin-bottom: 12px; }
+.recs-estilo-titulo { font-size: 14px; color: var(--color-text); min-width: 0; overflow-wrap: anywhere; }
+.recs-estilo-barra { height: 8px; background: var(--color-elevated); border-radius: 4px; overflow: hidden; margin-bottom: 6px; }
+.recs-estilo-barra-relleno { height: 100%; width: 0; background: var(--color-accent); }
+.recs-estilo-nota { font-size: 13px; line-height: 1.45; color: var(--color-text-secondary); margin: 0 0 8px; overflow-wrap: anywhere; }
+.recs-estilo-crudo { font-family: monospace; font-size: 12px; color: var(--color-text-secondary); margin: 0 0 8px; overflow-wrap: anywhere; white-space: pre-wrap; }
+.recs-estilo-vacio { font-size: 14px; color: var(--color-text); margin: 0 0 8px; }
+.recs-estilo-pastillas { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+.recs-estilo-pastilla {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  padding: 6px 12px;
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  background: var(--color-surface);
+  color: var(--color-text);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  overflow-wrap: anywhere;
+  text-align: left;
+}
+.recs-estilo-pastilla:hover { border-color: var(--color-accent); }
+.recs-estilo-pastilla:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
+.recs-estilo-pastilla.is-on { border-color: var(--color-accent); box-shadow: 0 0 0 2px var(--color-accent); background: var(--color-surface); color: var(--color-text); }
+.recs-estilo-cuenta { color: var(--color-text-secondary); font-variant-numeric: tabular-nums; }
+.recs-estilo-plan { margin-bottom: 16px; }
+.recs-estilo-h { font-size: 16px; margin: 0 0 4px; color: var(--color-text); overflow-wrap: anywhere; }
+.recs-estilo-h2 { font-size: 20px; margin: 0 0 2px; color: var(--color-text); overflow-wrap: anywhere; }
+.recs-estilo-temas { display: inline-flex; align-items: center; gap: 8px; font-size: 14px; color: var(--color-text); }
+.recs-estilo-temas select { padding: 6px 8px; background: var(--color-elevated); border: 1px solid var(--color-border); border-radius: var(--radius-sm); color: var(--color-text); font: inherit; }
+.recs-estilo-cabecera { margin-bottom: 16px; }
+.recs-estilo-corte { margin-bottom: 16px; }
+.recs-estilo-artista { margin-bottom: 16px; }
+.recs-estilo-artista .recs-estilo-linea { margin-bottom: 12px; }

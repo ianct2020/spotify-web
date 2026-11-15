@@ -1,0 +1,130 @@
+<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>banco recs-estilo — la app entera, en un iframe</title>
+<link rel="stylesheet" href="/css/theme.css">
+<link rel="stylesheet" href="/css/components.css">
+<link rel="stylesheet" href="/css/main.css">
+</head><body>
+<div id="app"></div>
+<script type="module">
+// ── Un iframe del banco `recs-estilo.html` (v=369, tanda 132) ────────────────
+//
+// Arranca la app ENTERA (`/js/app.js`) contra:
+//   · la Spotify simulada de `simulado.mjs` (`/me`, `/me/playlists`, `/me/tracks` con 3 me gusta
+//     INVENTADOS, `/search?type=track` con el catálogo inventado de `recs-estilo-datos.mjs`, y los dos
+//     POST de «Crear playlist»). Nada sale a `api.spotify.com`;
+//   · un Last.fm simulado que vive en la MADRE (`parent.__lf`), para que su registro sobreviva a los
+//     iframes. Nada sale a `ws.audioscrobbler.com`.
+// La madre conduce desde afuera (mismo origen): cambia el hash, aprieta botones y lee el DOM.
+//
+//   window.__search429En = N   la búsqueda número N (de este marco) contesta 429 (la cuota)
+//   window.__colgarSearch = true   la próxima búsqueda se queda colgada hasta `window.__soltarSearch()`
+//   window.__preset(id)        aplica uno de los cuatro presets de la paleta
+//
+// `?foto=estilos|lista|corte` (para las capturas SEMBRADAS, con un conductor externo): siembra el
+// almacén, usa un Last.fm local de mentira, conduce el flujo entero solo y marca `data-foto="listo"`.
+// `&preset=papel` aplica ese preset antes de la foto. Las animaciones de la app van en «siempre».
+
+import { instalarRedSimulada, esperarReal, anclar } from '/banco/simulado.mjs';
+import { UID, USUARIO_LASTFM, likes, buscar, crearLastfm, sembrarEtiquetas } from '/banco/recs-estilo-datos.mjs';
+
+const q = new URLSearchParams(location.search);
+const MARCO = q.get('marco') || 'x';
+const FOTO = q.get('foto');
+window.__errores = [];
+window.__avisos = [];
+window.addEventListener('error', (e) => window.__errores.push('error: ' + (e.message || e)));
+window.addEventListener('unhandledrejection', (e) => window.__errores.push('rechazo: ' + String(e.reason?.message || e.reason)));
+const errorOriginal = console.error.bind(console);
+console.error = (...a) => { window.__errores.push('console.error: ' + a.map(String).join(' ').slice(0, 300)); errorOriginal(...a); };
+const avisoOriginal = console.warn.bind(console);
+console.warn = (...a) => { window.__avisos.push(a.map((x) => (x instanceof Error ? x.message : String(x))).join(' ').slice(0, 400)); avisoOriginal(...a); };
+
+const sim = instalarRedSimulada();
+window.__sim = sim;
+const LIKES = likes();
+window.__busquedas = 0;
+window.__search429En = 0;
+window.__colgarSearch = false;
+sim.ruta('GET', /^\/me$/, () => ({ id: UID, display_name: 'Banco' }));
+sim.ruta('GET', /^\/me\/playlists/, () => ({ items: [], total: 0, limit: 50, offset: 0, next: null }));
+sim.ruta('GET', /^\/me\/tracks/, ({ url }) => {
+  const off = +url.searchParams.get('offset') || 0, lim = +url.searchParams.get('limit') || 50;
+  return { items: LIKES.slice(off, off + lim), total: LIKES.length, offset: off, limit: lim, next: off + lim < LIKES.length ? 'x' : null };
+});
+sim.ruta('GET', /^\/search\?/, ({ url }) => {
+  const n = ++window.__busquedas;
+  if (window.__search429En && n >= window.__search429En) {
+    return { __status: 429, body: { error: { status: 429, message: 'banco: QUOTA_EXCEEDED de mentira' } } };
+  }
+  const salida = buscar(url.searchParams.get('q') || '') || sim.sinSimular(400);
+  if (window.__colgarSearch) return new Promise((res) => { window.__colgadas = (window.__colgadas || 0) + 1; window.__soltarSearch = () => res(salida); });
+  return salida;
+});
+sim.ruta('POST', /^\/me\/playlists$/, ({ cuerpo }) => ({ id: 'playlistinventadat1320', name: cuerpo?.name, public: true, owner: { id: UID }, snapshot_id: 'snapshot-inventado-1' }));
+sim.ruta('POST', /^\/playlists\/playlistinventadat1320\/items/, () => ({ snapshot_id: 'snapshot-inventado-2' }));
+
+localStorage.setItem('fonoteca_last_user_id', UID);
+localStorage.setItem('fonoteca_perfil_v1', JSON.stringify({ id: UID, display_name: 'Banco' }));
+const { prefKey } = await import('/js/storage.js');
+localStorage.setItem(prefKey('lastfm_username'), USUARIO_LASTFM);
+localStorage.setItem(prefKey('fonoteca_anim_v1'), 'siempre');
+window.Chart = class { destroy() {} resize() {} };
+
+if (FOTO) {
+  await sembrarEtiquetas(anclar, UID);
+  window.__lfLocal = crearLastfm();
+}
+
+// El Last.fm simulado, por ENCIMA de la Spotify simulada (que bloquea todo host no declarado).
+const debajo = window.fetch;
+window.fetch = (entrada, opciones = {}) => {
+  const url = typeof entrada === 'string' ? entrada : (entrada instanceof URL ? entrada.href : entrada.url);
+  const abs = new URL(url, location.href);
+  if (abs.hostname !== 'ws.audioscrobbler.com') return debajo(entrada, opciones);
+  const lf = FOTO ? window.__lfLocal : parent.__lf;
+  return lf.responder(abs.href, { marco: MARCO, metodo: String(opciones.method || 'GET').toUpperCase() })
+    .then((r) => new Response(r.cuerpo, { status: r.status, headers: { 'content-type': 'application/json' } }));
+};
+
+window.__preset = async (id) => {
+  const { PRESETS, applyTheme } = await import('/js/ui/theme-panel.js');
+  applyTheme(PRESETS.find((x) => x.id === id).colors);
+};
+
+await import('/js/app.js');
+await esperarReal(() => document.getElementById('main-content'), { que: 'que la app arranque', vueltas: 4000 });
+window.__listo = true;
+
+if (FOTO) {
+  const $ = (s) => document.querySelector(s);
+  const vueltas = async (n) => { let v = 0; await esperarReal(() => ++v > n, { que: 'que se asiente' }); };
+  location.hash = '#recs';
+  await esperarReal(() => $('#recs-run-btn'), { que: '#recs', vueltas: 4000 });
+  $('#recs-run-btn').click();
+  await esperarReal(() => $('#recs-estilo-btn'), { que: 'las recomendaciones', vueltas: 8000 });
+  $('#recs-estilo-btn').click();
+  await esperarReal(() => $('[data-recs-estilo="estilos"]'), { que: 'los estilos', vueltas: 20000 });
+  if (FOTO === 'estilos') {
+    // Con uno elegido: se ve el anillo y la línea del costo (elegir cuesta 0).
+    [...document.querySelectorAll('.recs-estilo-pastilla')].find((b) => b.dataset.estilo === 'niebla pop').click();
+    await esperarReal(() => $('#recs-estilo-temas'), { que: 'el plan' });
+  }
+  if (FOTO === 'lista' || FOTO === 'corte') {
+    // La lista: «cumbia lunar», que empieza por el artista corto (Doble Bruma, 6 de 10), así se ve sin desplazar
+    // (una captura desplazada sale en negro). El corte: «niebla pop», donde cae el 429.
+    const estilo = FOTO === 'lista' ? 'cumbia lunar' : 'niebla pop';
+    [...document.querySelectorAll('.recs-estilo-pastilla')].find((b) => b.dataset.estilo === estilo).click();
+    await esperarReal(() => $('#recs-estilo-temas'), { que: 'el plan' });
+    $('#recs-estilo-temas').value = '10';
+    $('#recs-estilo-temas').dispatchEvent(new Event('change'));
+    if (FOTO === 'corte') window.__search429En = 20;
+    $('#recs-estilo-armar').click();
+    await esperarReal(() => document.querySelectorAll('.recs-estilo-artista').length > 0, { que: 'la lista', vueltas: 20000 });
+  }
+  if (q.get('preset')) await window.__preset(q.get('preset'));
+  document.getAnimations().forEach((a) => { try { a.finish(); } catch { /* las infinitas */ } });
+  window.scrollTo(0, 0);
+  await vueltas(20);
+  document.documentElement.dataset.foto = 'listo';
+}
+</script>
+</body></html>

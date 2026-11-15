@@ -48,7 +48,7 @@ if npm test --silent 2>&1 | tail -4 | sed 's/^/      /'; [ "${PIPESTATUS[0]}" -e
 # `mosaico` y `toasts` entraron en v=273:
 # estaban en rojo desde antes del 04/10 y justamente por no estar acá nadie los
 # miraba, igual que le había pasado a `barra` entre v=241 y v=261.
-echo "2b. bancos (barra · pausa-search · toasts · mosaico · novedades · escrituras · ocultar-artista ×3 · covers-orden · calendario · import-guarda · ocultos-cache · mapa · puertas · cuota · letras · generos-cache · generos-escaneo · generos · mapa-artistas · versiones-deluxe · router-teardown · guard-ruta-vieja · postal · copia-completa · copia-importar · menos-salteas · rehacer-me-gusta · debug-ocultos-ancho · lluvia · siempre-y-play · listened-biblioteca · tamano-fijo · lluvia-dia)"
+echo "2b. bancos (barra · pausa-search · toasts · mosaico · novedades · escrituras · ocultar-artista ×3 · covers-orden · calendario · import-guarda · ocultos-cache · mapa · puertas · cuota · letras · generos-cache · generos-escaneo · generos · mapa-artistas · versiones-deluxe · router-teardown · guard-ruta-vieja · postal · copia-completa · copia-importar · menos-salteas · rehacer-me-gusta · debug-ocultos-ancho · lluvia · siempre-y-play · listened-biblioteca · tamano-fijo · lluvia-dia · recs-estilo)"
 # Los dos de `ocultar-artista` entraron en v=276: las TRES vistas que ocultan
 # artistas, reales, contra una Spotify simulada. Es el único sitio donde se puede
 # probar ocultar sin escribir en la cuenta de Ian, y el de `-disco` es el que
@@ -187,7 +187,13 @@ echo "2b. bancos (barra · pausa-search · toasts · mosaico · novedades · esc
 # 1 `/me` y no lee el detalle; «Todos los días con lluvia» = la cuenta a mano, de a 25, con «Mostrar 25 más» a 0 peticiones; tocar
 # un día = 0 peticiones y el panel del día LOCAL (no el UTC); 0 min, sin entrada, detalle viejo y sin detalle; salir con el detalle
 # leyéndose; sin desborde a 1366×591 y 390×844; el contraste en los cuatro presets. Rojo contra v=367 (puerta B).
-for B in barra pausa-search toasts mosaico novedades escrituras ocultar-artista ocultar-artista-disco ocultar-artista-novedades covers-orden calendario import-guarda ocultos-cache mapa puertas cuota letras generos-cache generos-escaneo generos mapa-artistas versiones-deluxe router-teardown guard-ruta-vieja postal copia-completa copia-importar menos-salteas rehacer-me-gusta debug-ocultos-ancho lluvia siempre-y-play listened-biblioteca tamano-fijo lluvia-dia; do
+# `recs-estilo` entró en v=369 (tanda 132): playlists por estilo en #recs, en la app ENTERA con la Spotify simulada y un Last.fm
+# SIMULADO (en la madre), con usuario, artistas, etiquetas y temas INVENTADOS: abrir = 0; «Agrupar por estilo» pide exactamente los
+# no buscados, no guarda el 29 ni el 503, la tercera vez 0; los estilos y la línea de «sin estilo» = la cuenta a mano; «Armar la
+# lista» = la cuenta a mano y nunca más que el tope; un 429 a mitad para todo; «Crear playlist» = 1 POST + los de items con las
+# uris tildadas; salir a mitad = 0 peticiones y 0 escrituras al DOM; sin desborde a 1366×591 y 390×844; el contraste en los cuatro
+# presets. Rojo contra v=368 (puerta B: no hay botón).
+for B in barra pausa-search toasts mosaico novedades escrituras ocultar-artista ocultar-artista-disco ocultar-artista-novedades covers-orden calendario import-guarda ocultos-cache mapa puertas cuota letras generos-cache generos-escaneo generos mapa-artistas versiones-deluxe router-teardown guard-ruta-vieja postal copia-completa copia-importar menos-salteas rehacer-me-gusta debug-ocultos-ancho lluvia siempre-y-play listened-biblioteca tamano-fijo lluvia-dia recs-estilo; do
   if node scripts/correr-banco.mjs "$B" 2>&1 | sed 's/^/      /'; [ "${PIPESTATUS[0]}" -eq 0 ]; then
     ok "banco $B en verde"
   else

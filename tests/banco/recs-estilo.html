@@ -1,0 +1,400 @@
+<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>banco recs-estilo — playlists por estilo en Recomendaciones, con un Last.fm de mentira</title>
+<style>html,body{margin:0;background:#111;color:#eee;font:13px system-ui}iframe{border:0;display:block}</style>
+</head><body>
+<pre id="progreso"></pre>
+<div id="marcos"></div>
+<script type="module">
+// ── Qué prueba este banco (v=369, tanda 132) ─────────────────────────────────
+//
+// `#recs` REAL, en la app ENTERA (`recs-estilo-caso.html`, uno por iframe), contra la Spotify simulada
+// y un Last.fm SIMULADO que vive acá, en la madre. Usuario, artistas, etiquetas y temas INVENTADOS
+// (`recs-estilo-datos.mjs`). Nada sale a `ws.audioscrobbler.com` ni a `api.spotify.com`.
+//
+//   A. abrir `#recs` = 0 peticiones (las mismas que con ce8098a); y lo que cuesta «Generar
+//      recomendaciones» (se anota: es el mismo antes y después);
+//   B. «Agrupar por estilo» pide EXACTAMENTE los no buscados, guarda lo definitivo, no guarda el 29 ni
+//      el 503 sembrados; la segunda vez pide solo esos dos (Ian vuelve a apretar) y la tercera, 0;
+//   C. los estilos y la línea de «sin estilo» = la cuenta a mano; elegir, el selector y «Volver», 0;
+//   D. «Armar la lista» = las peticiones de la cuenta a mano, nunca más que el tope, y los artistas
+//      cortos con su línea;
+//   E. un 429 sembrado a mitad: para, 0 búsquedas después, el aviso con el error y los sin buscar;
+//   F. «Crear playlist» = 1 POST de playlist + los de items con EXACTAMENTE las uris tildadas;
+//   G. salir a mitad (de las etiquetas y de la lista): 0 escrituras al DOM y 0 peticiones después, y lo
+//      que ya llegó de Last.fm queda guardado;
+//   H. nada desborda a 1366×591 ni a 390×844 (los estilos y la lista);
+//   I. el contraste de lo nuevo en los cuatro presets, ≥ 4,5:1;
+//   y en todos: 0 rutas sin simular, 0 hosts externos fuera de los simulados, 0 errores.
+
+import { esperarReal, anclar } from '/banco/simulado.mjs';
+import { fallar, listo } from '/banco/esperar.mjs';
+import { UID, RECOMENDADOS, ESPERADO, crearLastfm, sembrarEtiquetas } from '/banco/recs-estilo-datos.mjs';
+
+const afirmar = (c, msg) => { if (!c) throw new Error('BANCO: ' + msg); };
+const progreso = (t) => { document.getElementById('progreso').textContent = t; };
+const VUELTAS = 60000;
+const lf = crearLastfm();
+window.__lf = lf;
+
+function abrirMarco(nombre, { ancho = 1351, alto = 900 } = {}) {
+  const f = document.createElement('iframe');
+  f.width = ancho; f.height = alto;
+  f.src = `/banco/recs-estilo-caso.html?marco=${nombre}`;
+  document.getElementById('marcos').appendChild(f);
+  return f;
+}
+const win = (f) => f.contentWindow;
+const $ = (f, s) => f.contentDocument?.querySelector(s);
+const $$ = (f, s) => [...(f.contentDocument?.querySelectorAll(s) || [])];
+const texto = (el) => (el?.textContent || '').replace(/\s+/g, ' ').trim();
+const reg = (f) => win(f).__sim.reg;
+const busquedas = (f) => reg(f).llamadas.filter((l) => l.ruta.startsWith('/search')).length;
+const delMarco = (m, metodo) => lf.log.filter((e) => e.marco === m && (!metodo || e.metodo === metodo));
+const sinErrores = (f, que) => afirmar(win(f).__errores.length === 0, `0 errores en ${que}: ${win(f).__errores.join(' | ')}`);
+const limpio = (f, que) => {
+  const s = reg(f);
+  afirmar(s.desconocidas.length === 0 && s.externas.length === 0, `${que}: 0 rutas sin simular y 0 hosts externos (${s.desconocidas.join(',')} ${s.externas.join(',')})`);
+};
+async function arrancado(f, que) { await esperarReal(() => win(f)?.__listo, { que: `que arranque ${que}`, vueltas: VUELTAS }); }
+async function reloj(ms, que) { const t0 = performance.now(); await esperarReal(() => performance.now() - t0 > ms, { que, vueltas: VUELTAS }); }
+async function irA(f, hash, que, cond) { win(f).location.hash = hash; await esperarReal(cond, { que, vueltas: VUELTAS }); }
+
+// Abre #recs y aprieta «Generar recomendaciones» hasta tener las tarjetas.
+async function generar(f, m) {
+  await irA(f, '#recs', `#recs en ${m}`, () => $(f, '#recs-run-btn'));
+  $(f, '#recs-run-btn').click();
+  await esperarReal(() => $$(f, '.art-card-pick').length === RECOMENDADOS.length && $(f, '#recs-estilo-btn'), { que: `las recomendaciones en ${m}`, vueltas: VUELTAS });
+}
+const enEstilos = (f) => $(f, '[data-recs-estilo="estilos"]');
+async function agrupar(f, m) {
+  $(f, '#recs-estilo-btn').click();
+  await esperarReal(() => enEstilos(f), { que: `los estilos en ${m}`, vueltas: VUELTAS });
+}
+const estilosEnPantalla = (f) => $$(f, '.recs-estilo-pastilla').map((b) => [b.dataset.estilo, +texto($(f, `.recs-estilo-pastilla[data-estilo="${b.dataset.estilo}"] .recs-estilo-cuenta`))]);
+const lineaSin = (f) => texto($(f, '[data-recs-estilo-sin]'));
+async function elegir(f, estilo, temas) {
+  $$(f, '.recs-estilo-pastilla').find((b) => b.dataset.estilo === estilo).click();
+  await esperarReal(() => $(f, '#recs-estilo-temas'), { que: 'el plan' });
+  const sel = $(f, '#recs-estilo-temas');
+  sel.value = String(temas);
+  sel.dispatchEvent(new Event('change'));
+}
+async function armar(f, m) {
+  $(f, '#recs-estilo-armar').click();
+  await esperarReal(() => $$(f, '.recs-estilo-artista').length > 0 && !$(f, '#recs-estilo-parar'), { que: `la lista en ${m}`, vueltas: VUELTAS });
+}
+const cabeceras = (f) => Object.fromEntries($$(f, '.recs-estilo-artista').map((s) => [s.dataset.artista, texto(s.querySelector('.recs-estilo-linea'))]));
+// Cuántas veces se escribió en el contenido de la vista (`#main-content`, cualquier mutación) mientras
+// corre `fn`. Solo la vista: el pie del menú cuenta las búsquedas que ya salieron (la cuota a la vista,
+// v=310) y se actualiza con la que llega después de salir, que es lo que tiene que hacer.
+async function mutacionesDurante(f, fn) {
+  let n = 0;
+  const obs = new (win(f).MutationObserver)((l) => { n += l.length; });
+  obs.observe($(f, '#main-content'), { childList: true, subtree: true, characterData: true, attributes: true });
+  // Lo de fuera de la vista se anota (dónde), sin afirmar: para saber qué es.
+  const main = $(f, '#main-content');
+  const fuera = new (win(f).MutationObserver)((l) => {
+    for (const m of l) {
+      const el = m.target.nodeType === 1 ? m.target : m.target.parentElement;
+      if (el && !main.contains(el)) datos.fueraDeLaVista.push(`${el.tagName.toLowerCase()}${el.id ? '#' + el.id : ''}${el.className && typeof el.className === 'string' ? '.' + el.className.trim().split(/\s+/).join('.') : ''}`);
+    }
+  });
+  fuera.observe(f.contentDocument.body, { childList: true, subtree: true, characterData: true, attributes: true });
+  await fn();
+  obs.disconnect();
+  fuera.disconnect();
+  return n;
+}
+const desborda = (f) => { const d = f.contentDocument.scrollingElement; return d.scrollWidth - d.clientWidth; };
+
+// El contraste (la cuenta de WCAG), con el fondo compuesto capa por capa (la del banco `novedades`).
+const colorDe = (css) => {
+  const s = String(css);
+  let m = s.match(/^color\(srgb\s+([\d.e-]+)\s+([\d.e-]+)\s+([\d.e-]+)(?:\s*\/\s*([\d.e-]+))?\)/);
+  if (m) return [m[1] * 255, m[2] * 255, m[3] * 255, m[4] === undefined ? 1 : +m[4]];
+  m = s.match(/rgba?\(([^)]+)\)/);
+  if (!m) return null;
+  const p = m[1].split(/[\s,/]+/).filter(Boolean).map(Number);
+  return [p[0], p[1], p[2], p[3] ?? 1];
+};
+const lum = (c) => { const [r, g, b] = c.slice(0, 3).map((v) => { const s = v / 255; return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4; }); return 0.2126 * r + 0.7152 * g + 0.0722 * b; };
+const contraste = (a, b) => { const x = lum(a), y = lum(b); return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05); };
+const sobre = (arriba, abajo) => { const a = arriba[3]; return [0, 1, 2].map((i) => arriba[i] * a + abajo[i] * (1 - a)).concat(1); };
+function medirContraste(f, el) {
+  const gcs = (n) => win(f).getComputedStyle(n);
+  const capas = []; let opacidad = 1, opaco = false;
+  for (let n = el; n && n.nodeType === 1; n = n.parentElement) {
+    opacidad *= Number(gcs(n).opacity || 1);
+    const c = colorDe(gcs(n).backgroundColor);
+    if (c && c[3] > 0 && !opaco) { capas.push(c); if (c[3] >= 1) opaco = true; }
+  }
+  let fondo = opaco ? capas.pop() : [255, 255, 255, 1];
+  while (capas.length) fondo = sobre(capas.pop(), fondo);
+  const t = colorDe(gcs(el).color);
+  return { r: contraste(sobre([t[0], t[1], t[2], t[3] * opacidad], fondo), fondo), opaco };
+}
+
+const datos = { fueraDeLaVista: [] };
+try {
+  const { idbDel } = await import('/js/idb.js');
+  const G = await import('/js/util/generos-artista.js');
+  await sembrarEtiquetas(anclar, UID);
+  localStorage.setItem('fonoteca_last_user_id', UID);
+  const registroIdb = async (n) => {
+    const { idbGet } = await import('/js/idb.js');
+    return anclar(idbGet(G.claveGeneros(UID, n.toLowerCase())));
+  };
+  const borrarEtiquetas = async () => { for (const n of RECOMENDADOS) if (n !== 'Niebla Guardada') await anclar(idbDel(G.claveGeneros(UID, n.toLowerCase()))); };
+
+  // ── A. Abrir #recs no pide nada ───────────────────────────────────────────
+  progreso('A: abrir #recs');
+  const A = abrirMarco('A');
+  await arrancado(A, 'el marco A');
+  const spotAntes = reg(A).llamadas.length;
+  await irA(A, '#recs', '#recs en A', () => $(A, '#recs-run-btn'));
+  await reloj(5000, '5 s de reloj después de abrir #recs');
+  datos.abrir = { lastfm: lf.log.length, spotify: reg(A).llamadas.length - spotAntes, boton: texto($(A, '#recs-run-btn')) };
+  afirmar(datos.abrir.lastfm === 0 && datos.abrir.spotify === 0, `A: abrir #recs cuesta 0 (Last.fm ${datos.abrir.lastfm}, Spotify ${datos.abrir.spotify})`);
+  // «Generar recomendaciones»: se anota lo que cuesta (es lo mismo con ce8098a; no cambió).
+  const spotAntesRun = reg(A).llamadas.length;
+  $(A, '#recs-run-btn').click();
+  await esperarReal(() => $$(A, '.art-card-pick').length === RECOMENDADOS.length, { que: 'las recomendaciones en A', vueltas: VUELTAS });
+  await reloj(2000, '2 s de reloj después de generar');
+  const llamadasRun = reg(A).llamadas.slice(spotAntesRun);
+  datos.generar = {
+    lastfm: lf.log.map((e) => e.metodo),
+    spotify: llamadasRun.map((l) => `${l.metodo} ${l.ruta.split('?')[0]}`),
+    tarjetas: $$(A, '.art-card-pick .smart-card-title').map(texto),
+  };
+  afirmar(JSON.stringify(datos.generar.tarjetas) === JSON.stringify(RECOMENDADOS), `A: las recomendaciones son las de la cuenta a mano, en su orden (${datos.generar.tarjetas.join(', ')})`);
+  afirmar(datos.generar.lastfm.length === 4 && datos.generar.lastfm[0] === 'user.gettopartists' && datos.generar.lastfm.slice(1).every((m) => m === 'artist.getsimilar'), `A: «Generar recomendaciones» = 1 user.gettopartists + 3 artist.getsimilar (${datos.generar.lastfm.join(', ')})`);
+  afirmar(datos.generar.spotify.every((r) => !r.includes('/search')), 'A: y ninguna búsqueda en Spotify');
+  const boton = $(A, '#recs-estilo-btn');
+  afirmar(boton && texto(boton) === 'Agrupar por estilo', 'B: con 2 o más artistas a la vista, el botón «Agrupar por estilo»');
+  afirmar(delMarco('A', 'artist.gettoptags').length === 0, 'B: generar no pidió ninguna etiqueta');
+
+  // ── G (etiquetas). Salir a mitad ──────────────────────────────────────────
+  progreso('G: salir a mitad de las etiquetas');
+  const logAntesG = lf.log.length;
+  boton.click();
+  await esperarReal(() => lf.log.filter((e) => e.marco === 'A' && e.metodo === 'artist.gettoptags' && e.status !== null).length >= 3, { que: 'tres etiquetas contestadas en A', vueltas: VUELTAS });
+  lf.congelado = true;
+  await esperarReal(() => lf.colgadas.length === 1, { que: 'que A se quede esperando una etiqueta', vueltas: VUELTAS });
+  const colgado = lf.log[lf.log.length - 1].artista;
+  await irA(A, '#home', 'que el inicio pinte', () => $(A, '.home-grid') && !$(A, '.recs-estilo'));
+  await reloj(1000, 'que el inicio se asiente');
+  const pedidasAlSalir = lf.log.length;
+  const mutG = await mutacionesDurante(A, async () => { lf.soltar(); await reloj(5000, '5 s de reloj después de soltar'); });
+  datos.salirEtiquetas = { colgado, despues: lf.log.length - pedidasAlSalir, mutaciones: mutG, guardado: !!(await registroIdb(colgado))?.fuentes?.lastfm };
+  afirmar(datos.salirEtiquetas.despues === 0, `G: 0 peticiones a Last.fm después de salir (${datos.salirEtiquetas.despues})`);
+  afirmar(mutG === 0, `G: 0 escrituras al DOM después de salir (${mutG})`);
+  afirmar(datos.salirEtiquetas.guardado, `G: la respuesta que estaba en vuelo (${colgado}) llegó y SÍ quedó guardada`);
+  sinErrores(A, 'A');
+  limpio(A, 'A');
+  A.remove();
+  // Para B, todo como al principio: solo Niebla Guardada en el almacén, y el Last.fm sin historia.
+  await borrarEtiquetas();
+  lf.log.length = 0;
+  lf.vecesPorArtista = {};
+  datos.pedidasG = pedidasAlSalir - logAntesG;
+
+  // ── B y C. Agrupar por estilo ─────────────────────────────────────────────
+  progreso('B y C: agrupar por estilo');
+  const B = abrirMarco('B');
+  await arrancado(B, 'el marco B');
+  await generar(B, 'B');
+  const lfAntes = lf.log.length, spAntes = reg(B).llamadas.length;
+  await agrupar(B, 'B');
+  const pedidas1 = lf.log.slice(lfAntes);
+  datos.agrupar1 = {
+    pedidos: pedidas1.map((e) => e.artista), metodos: [...new Set(pedidas1.map((e) => e.metodo))],
+    spotify: reg(B).llamadas.slice(spAntes).map((l) => l.ruta.split('?')[0]),
+    estilos: estilosEnPantalla(B), sin: lineaSin(B),
+  };
+  afirmar(JSON.stringify(datos.agrupar1.pedidos) === JSON.stringify(ESPERADO.pedidos1), `B: se piden EXACTAMENTE los no buscados, en orden (${datos.agrupar1.pedidos.join(', ')})`);
+  afirmar(datos.agrupar1.metodos.length === 1 && datos.agrupar1.metodos[0] === 'artist.gettoptags', `B: solo artist.gettoptags (${datos.agrupar1.metodos})`);
+  afirmar(datos.agrupar1.spotify.every((r) => r === '/me'), `B: 0 a Spotify salvo, como mucho, el /me (${datos.agrupar1.spotify.join(', ')})`);
+  for (const n of ESPERADO.guardados1) afirmar((await registroIdb(n))?.fuentes?.lastfm, `B: lo definitivo de ${n} se guardó`);
+  afirmar(!(await registroIdb('Cuota Llena')) && !(await registroIdb('Caido Cinco')), 'B: el 29 y el 503 NO se guardaron');
+  afirmar((await registroIdb('Nombre Cambiado'))?.fuentes?.lastfm?.artista === 'Otro Nombre Oficial', 'B: se guarda el nombre que devolvió Last.fm');
+  afirmar(JSON.stringify((await registroIdb('Nadie Conocido'))?.fuentes?.lastfm?.tags) === '[]', 'B: el «no encontrado» se guarda como []');
+  afirmar(JSON.stringify(datos.agrupar1.estilos) === JSON.stringify(ESPERADO.estilos1), `C: los estilos = la cuenta a mano (${JSON.stringify(datos.agrupar1.estilos)})`);
+  afirmar(datos.agrupar1.sin === ESPERADO.sin1, `C: la línea de «sin estilo» = la cuenta a mano («${datos.agrupar1.sin}»)`);
+  // La segunda vez: solo los dos que no contestaron.
+  $(B, '#recs-estilo-volver').click();
+  await esperarReal(() => $(B, '#recs-estilo-btn'), { que: 'volver a las recomendaciones' });
+  const lf2 = lf.log.length;
+  await agrupar(B, 'B (2)');
+  datos.agrupar2 = { pedidos: lf.log.slice(lf2).map((e) => e.artista), estilos: estilosEnPantalla(B), sin: lineaSin(B) };
+  afirmar(JSON.stringify(datos.agrupar2.pedidos) === JSON.stringify(ESPERADO.pedidos2), `B: la segunda vez se piden solo los que no contestaron (${datos.agrupar2.pedidos.join(', ')})`);
+  afirmar(JSON.stringify(datos.agrupar2.estilos) === JSON.stringify(ESPERADO.estilos2) && datos.agrupar2.sin === ESPERADO.sin2, `C: y los estilos cambian con lo nuevo (${JSON.stringify(datos.agrupar2.estilos)} · «${datos.agrupar2.sin}»)`);
+  $(B, '#recs-estilo-volver').click();
+  await esperarReal(() => $(B, '#recs-estilo-btn'), { que: 'volver a las recomendaciones' });
+  const lf3 = lf.log.length, sp3 = reg(B).llamadas.length;
+  await agrupar(B, 'B (3)');
+  datos.agrupar3 = { lastfm: lf.log.length - lf3, spotify: reg(B).llamadas.length - sp3 };
+  afirmar(datos.agrupar3.lastfm === 0 && datos.agrupar3.spotify === 0, `B: la tercera vez, 0 (${JSON.stringify(datos.agrupar3)})`);
+  // Elegir, el selector y «Volver»: 0.
+  const lf4 = lf.log.length, sp4 = reg(B).llamadas.length;
+  await elegir(B, 'niebla pop', 10);
+  const elegida = $(B, '.recs-estilo-pastilla.is-on');
+  const cs = win(B).getComputedStyle(elegida);
+  datos.elegida = { estilo: elegida?.dataset.estilo, sombra: cs.boxShadow, color: cs.color, fondo: cs.backgroundColor, coste: texto($(B, '#recs-estilo-coste')), title: $(B, '#recs-estilo-coste').title };
+  afirmar(datos.elegida.estilo === 'niebla pop' && /2px/.test(datos.elegida.sombra) && !/rgb\(255, 255, 255\)/.test(datos.elegida.color), `C: la pastilla elegida lleva el anillo y no es blanco sobre el acento (${JSON.stringify(datos.elegida)})`);
+  afirmar(datos.elegida.coste === `Hasta ${ESPERADO.lista.tope} búsquedas en Spotify.` && /700/.test(datos.elegida.title), `D: la línea del costo antes de buscar («${datos.elegida.coste}»), con el porqué en el title`);
+  afirmar(lf.log.length === lf4 && reg(B).llamadas.length === sp4, 'C: elegir un estilo y el selector, 0 peticiones');
+
+  // ── D. Armar la lista ─────────────────────────────────────────────────────
+  progreso('D: armar la lista');
+  const lfD = lf.log.length, bD = busquedas(B);
+  await armar(B, 'B');
+  datos.lista = {
+    busquedas: busquedas(B) - bD, toptracks: lf.log.slice(lfD).filter((e) => e.metodo === 'artist.gettoptracks').length,
+    otrasLastfm: lf.log.slice(lfD).filter((e) => e.metodo !== 'artist.gettoptracks').length,
+    cabeceras: cabeceras(B), tildados: $$(B, '.recs-track-check').filter((c) => c.checked).length, filas: $$(B, '.recs-track-check').length,
+    corte: !!$(B, '[data-recs-estilo-corte]'),
+  };
+  afirmar(datos.lista.busquedas === ESPERADO.lista.busquedas && datos.lista.busquedas <= ESPERADO.lista.tope, `D: ${datos.lista.busquedas} búsquedas = la cuenta a mano (${ESPERADO.lista.busquedas}), nunca más que el tope (${ESPERADO.lista.tope})`);
+  afirmar(datos.lista.toptracks === ESPERADO.lista.toptracks && datos.lista.otrasLastfm === 0, `D: ${datos.lista.toptracks} artist.gettoptracks y nada más a Last.fm`);
+  afirmar(JSON.stringify(datos.lista.cabeceras) === JSON.stringify(ESPERADO.lista.cabeceras), `D: cada artista con su línea (${JSON.stringify(datos.lista.cabeceras)})`);
+  afirmar(datos.lista.tildados === ESPERADO.lista.temas && datos.lista.filas === ESPERADO.lista.temas && !datos.lista.corte, `D: ${datos.lista.tildados} temas, todos tildados, sin aviso de corte`);
+  afirmar(reg(B).escrituras.length === 0, 'D: armar la lista no escribe nada en Spotify');
+
+  // ── F. Crear playlist ─────────────────────────────────────────────────────
+  progreso('F: crear playlist');
+  const primera = $(B, '.recs-estilo-artista[data-artista="Doble Bruma"] .recs-track-check');
+  primera.checked = false;
+  primera.dispatchEvent(new Event('change'));
+  const tildadas = $$(B, '.recs-track-check').filter((c) => c.checked).map((c) => c.dataset.uri);
+  $(B, '#recs-create-btn').click();
+  await esperarReal(() => $(B, '#playlist-name-input'), { que: 'el modal del nombre' });
+  datos.crear = { sugerido: $(B, '#playlist-name-input').value };
+  afirmar(reg(B).escrituras.length === 0, 'F: abrir el modal no escribe nada');
+  $(B, '#modal-confirm').click();
+  await esperarReal(() => reg(B).escrituras.length >= 2 && !$(B, '#playlist-name-input') && /creada/.test(B.contentDocument.body.textContent), { que: 'que la playlist se cree', vueltas: VUELTAS });
+  await reloj(1000, 'que se asiente');
+  const esc = reg(B).escrituras;
+  const items = esc.filter((e) => /^\/playlists\/playlistinventadat1320\/items/.test(e.ruta));
+  const urisMandadas = items.flatMap((e) => e.cuerpo?.uris || []);
+  datos.crear = { ...datos.crear, escrituras: esc.map((e) => `${e.metodo} ${e.ruta.split('?')[0]}`), cuerpo: esc[0]?.cuerpo, uris: urisMandadas.length, tildadas: tildadas.length };
+  afirmar(datos.crear.sugerido === 'Recomendados: niebla pop', `F: el nombre sugerido («${datos.crear.sugerido}»)`);
+  afirmar(esc.length === 2 && esc[0].metodo === 'POST' && esc[0].ruta === '/me/playlists' && items.length === Math.ceil(tildadas.length / 100), `F: 1 POST de playlist + ${Math.ceil(tildadas.length / 100)} de items (${datos.crear.escrituras.join(', ')})`);
+  afirmar(esc[0].cuerpo?.name === 'Recomendados: niebla pop' && esc[0].cuerpo?.description === 'Recomendado desde tus scrobbles · niebla pop', `F: con su nombre y su descripción (${JSON.stringify(esc[0].cuerpo)})`);
+  afirmar(tildadas.length === ESPERADO.lista.temas - 1 && JSON.stringify([...urisMandadas].sort()) === JSON.stringify([...tildadas].sort()), `F: exactamente las ${tildadas.length} uris tildadas (${urisMandadas.length} mandadas)`);
+  sinErrores(B, 'B');
+  limpio(B, 'B');
+  B.remove();
+
+  // ── E. Un 429 a mitad ─────────────────────────────────────────────────────
+  progreso('E: un 429 a mitad de la lista');
+  const Em = abrirMarco('E');
+  await arrancado(Em, 'el marco E');
+  await generar(Em, 'E');
+  const lfE = lf.log.length;
+  await agrupar(Em, 'E');
+  afirmar(lf.log.length === lfE, 'E: con todo guardado, agrupar = 0 a Last.fm (otra carga de la página)');
+  await elegir(Em, 'niebla pop', 10);
+  win(Em).__search429En = ESPERADO.corte.en;
+  await armar(Em, 'E');
+  const bE = busquedas(Em);
+  await reloj(3000, '3 s de reloj después del corte');
+  datos.corte = {
+    busquedas: bE, despues: busquedas(Em) - bE, aviso: texto($(Em, '[data-recs-estilo-corte="error"] .recs-estilo-nota')),
+    crudo: texto($(Em, '[data-recs-estilo-corte="error"] .recs-estilo-crudo')), sinBuscar: texto($(Em, '[data-recs-estilo-sin-buscar]')),
+    cabecera: cabeceras(Em)['Bruma Corta'], avisos: win(Em).__avisos.filter((a) => a.startsWith('[recs]')),
+  };
+  afirmar(datos.corte.busquedas === ESPERADO.corte.en && datos.corte.despues === 0, `E: para en la búsqueda ${datos.corte.busquedas} y 0 después (${datos.corte.despues})`);
+  afirmar(datos.corte.aviso === ESPERADO.corte.aviso, `E: el aviso («${datos.corte.aviso}»)`);
+  afirmar(/429/.test(datos.corte.crudo), `E: con el error crudo debajo («${datos.corte.crudo}»)`);
+  afirmar(datos.corte.sinBuscar === ESPERADO.corte.sinBuscar, `E: y los que no se buscaron («${datos.corte.sinBuscar}»)`);
+  afirmar(datos.corte.cabecera === ESPERADO.corte.cabecera, `E: el artista cortado lo dice («${datos.corte.cabecera}»)`);
+  afirmar(datos.corte.avisos.some((a) => /429/.test(a)), `E: el error crudo va a console.warn('[recs] …') (${datos.corte.avisos.join(' | ')})`);
+  sinErrores(Em, 'E');
+  limpio(Em, 'E');
+  Em.remove();
+
+  // ── G (lista). Salir a mitad de la lista ──────────────────────────────────
+  progreso('G: salir a mitad de la lista');
+  const G2 = abrirMarco('G2');
+  await arrancado(G2, 'el marco G2');
+  await generar(G2, 'G2');
+  await agrupar(G2, 'G2');
+  await elegir(G2, 'niebla pop', 10);
+  win(G2).__colgarSearch = true;
+  $(G2, '#recs-estilo-armar').click();
+  await esperarReal(() => win(G2).__colgadas === 1, { que: 'una búsqueda colgada', vueltas: VUELTAS });
+  await irA(G2, '#home', 'que el inicio pinte', () => $(G2, '.home-grid') && !$(G2, '.recs-estilo'));
+  await reloj(1000, 'que el inicio se asiente');
+  const bG = busquedas(G2), lfG = lf.log.length;
+  win(G2).__colgarSearch = false;
+  const mutG2 = await mutacionesDurante(G2, async () => { win(G2).__soltarSearch(); await reloj(3000, '3 s de reloj después de soltar'); });
+  datos.salirLista = { despues: busquedas(G2) - bG, lastfm: lf.log.length - lfG, mutaciones: mutG2 };
+  afirmar(datos.salirLista.despues === 0 && datos.salirLista.lastfm === 0, `G: 0 peticiones después de salir de la lista (${JSON.stringify(datos.salirLista)})`);
+  afirmar(mutG2 === 0, `G: 0 escrituras al DOM después de salir de la lista (${mutG2})`);
+  sinErrores(G2, 'G2');
+  limpio(G2, 'G2');
+  G2.remove();
+
+  // ── H e I. Los anchos y el contraste ──────────────────────────────────────
+  for (const [nombre, ancho, alto] of [['H1366', 1366, 591], ['H390', 390, 844]]) {
+    progreso(`H: ${ancho}×${alto}`);
+    const H = abrirMarco(nombre, { ancho, alto });
+    await arrancado(H, `el marco ${nombre}`);
+    await generar(H, nombre);
+    await agrupar(H, nombre);
+    await elegir(H, 'niebla pop', 15);
+    const enEst = desborda(H);
+    const pastillas = $$(H, '.recs-estilo-pastilla').every((p) => p.getBoundingClientRect().right <= H.contentDocument.documentElement.clientWidth + 0.5);
+    const contrastes = [];
+    if (ancho === 1366) {
+      for (const id of ['violeta', 'ambar', 'aguamarina', 'papel']) {
+        await win(H).__preset(id);
+        H.contentDocument.getAnimations().forEach((a) => { try { a.finish(); } catch { /* infinitas */ } });
+        for (const [que, el] of [['pastilla', $(H, '.recs-estilo-pastilla:not(.is-on)')], ['elegida', $(H, '.recs-estilo-pastilla.is-on')],
+          ['cuenta', $(H, '.recs-estilo-cuenta')], ['sin estilo', $(H, '[data-recs-estilo-sin]')], ['costo', $(H, '#recs-estilo-coste')], ['estilo', $(H, '.recs-estilo-plan .recs-estilo-h')]]) {
+          const m = medirContraste(H, el);
+          contrastes.push(`${id}/${que} ${m.r.toFixed(2)}`);
+          afirmar(m.opaco && m.r >= 4.5, `I: el contraste de «${que}» en ${id} es ${m.r.toFixed(2)}:1 (≥ 4,5)`);
+        }
+      }
+      await win(H).__preset('violeta');
+    }
+    await armar(H, nombre);
+    const enLista = desborda(H);
+    if (ancho === 1366) {
+      for (const id of ['violeta', 'ambar', 'aguamarina', 'papel']) {
+        await win(H).__preset(id);
+        for (const [que, el] of [['línea del artista', $(H, '.recs-estilo-linea')], ['nombre del artista', $(H, '.recs-estilo-artista .recs-estilo-h')], ['cabecera', $(H, '.recs-estilo-cabecera .recs-estilo-nota')]]) {
+          const m = medirContraste(H, el);
+          contrastes.push(`${id}/${que} ${m.r.toFixed(2)}`);
+          afirmar(m.opaco && m.r >= 4.5, `I: el contraste de «${que}» en ${id} es ${m.r.toFixed(2)}:1 (≥ 4,5)`);
+        }
+      }
+      await win(H).__preset('violeta');
+      datos.contraste = contrastes;
+    }
+    datos[nombre] = { enEstilos: enEst, enLista, pastillas };
+    afirmar(enEst <= 0 && enLista <= 0 && pastillas, `H: a ${ancho}×${alto} nada desborda (estilos ${enEst}, lista ${enLista}, pastillas dentro: ${pastillas})`);
+    sinErrores(H, nombre);
+    limpio(H, nombre);
+    H.remove();
+  }
+
+  const resumen =
+    `A: abrir = Last.fm ${datos.abrir.lastfm} / Spotify ${datos.abrir.spotify}; generar = Last.fm ${datos.generar.lastfm.length} (${datos.generar.lastfm.join(', ')}) / Spotify ${datos.generar.spotify.length} (${datos.generar.spotify.join(', ')}) · ` +
+    `B: agrupar 1 = ${datos.agrupar1.pedidos.length} gettoptags + Spotify [${datos.agrupar1.spotify.join(', ')}], 2 = ${datos.agrupar2.pedidos.length}, 3 = ${datos.agrupar3.lastfm} · ` +
+    `C: ${JSON.stringify(datos.agrupar1.estilos)} «${datos.agrupar1.sin}» · ` +
+    `D: ${datos.lista.busquedas} /search + ${datos.lista.toptracks} gettoptracks (tope ${ESPERADO.lista.tope}), ${datos.lista.tildados} tildados · ` +
+    `E: 429 en la ${datos.corte.busquedas}, ${datos.corte.despues} después · F: ${datos.crear.escrituras.join(' + ')} con ${datos.crear.uris} uris · ` +
+    `G: etiquetas ${datos.salirEtiquetas.despues} pedidas y ${datos.salirEtiquetas.mutaciones} mutaciones (guardada la en vuelo: ${datos.salirEtiquetas.guardado}); lista ${datos.salirLista.despues} y ${datos.salirLista.mutaciones} · ` +
+    `G (fuera de la vista, sin afirmar): ${[...new Set(datos.fueraDeLaVista)].join(', ') || 'nada'} · ` +
+    `H: 1366 ${datos.H1366.enEstilos}/${datos.H1366.enLista}, 390 ${datos.H390.enEstilos}/${datos.H390.enLista} · I: ${datos.contraste.join(', ')} · errores=0 · ` +
+    `reloj virtual=${Math.round(performance.now())} ms`;
+  document.documentElement.setAttribute('data-resumen', resumen);
+  progreso(resumen);
+  listo();
+} catch (e) {
+  document.documentElement.setAttribute('data-resumen', 'reloj virtual=' + Math.round(performance.now()) + ' ms');
+  fallar(new Error(String(e?.message || e) + ' · ' + JSON.stringify(datos).slice(0, 2500)));
+}
+</script>
+</body></html>
