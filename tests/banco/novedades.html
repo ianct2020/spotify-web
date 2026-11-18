@@ -283,9 +283,77 @@ try {
     `guardar: las peticiones son PUT + GET contains (${pedidasT128.join(' , ')})`);
   afirmar(sim.reg.externas.length === 0, 'guardar: nada salió a la red externa');
 
+  // ── (v=370, tanda 133) «Fuera los de tu biblioteca» cruza también por id ─────────────────────────────────────────────
+  //
+  // La biblioteca sembrada trae cuatro álbumes guardados (INVENTADOS) que son lanzamientos de la lista:
+  //   · r-A-2 con el MISMO id y otro nombre («… - Single»): hasta v=369 no caía (la clave nombre+artista no coincide);
+  //   · r-B-2 con el MISMO id y otro artista principal: tampoco caía;
+  //   · r-C-1 con el MISMO id y «Deluxe» pegado al nombre: hasta v=369 caía por «edicion» (la base coincide); desde v=370, por «biblioteca»;
+  //   · r-D-2 guardado con OTRO id, el mismo nombre y el mismo artista (otra edición): cae por «biblioteca» por la clave, antes y después.
+  // Las peticiones de abrir y de apretar el chip tienen que ser las MISMAS que con v=369 (medidas con `?medir=t133` contra fd3f085, que
+  // no afirma nada de esta tanda: solo cuenta y lo dice en el resumen). Con fd3f085 dio: abrir = [GET /me/albums?limit=50], el chip = [],
+  // 10 tarjetas con el chip (fuera r-C-1 y r-D-2), cuentas biblioteca 1 y edicion 1, y 11 sin el chip (r-C-1 seguía fuera por «edicion»).
+  const MEDIR_T133 = q.get('medir') === 't133';
+  const ANTES_ABRIR_T133 = ['GET /me/albums?limit=50'];   // las peticiones de abrir #new-releases con esta biblioteca, medidas contra fd3f085
+  const ANTES_CHIP_T133 = [];                             // las de apagar y volver a encender el chip, medidas contra fd3f085
+  const OTRO_T133 = { id: '9zZzZzZzZzZzZzZzZzZzZz', name: 'Otro artista inventado' };
+  const artistaT133 = (k) => ARTISTAS.find((a) => a.name.endsWith(' ' + k));
+  const guardadoT133 = (id, name, a) => ({ added_at: '2026-01-01T00:00:00Z', album: { id, name, album_type: 'album', total_tracks: 9, images: [], artists: [{ id: a.id, name: a.name }] } });
+  const BIBLIOTECA_T133 = [
+    guardadoT133('r-A-2', 'Lanzamiento A2 - Single', artistaT133('A')),
+    guardadoT133('r-B-2', 'Lanzamiento B2', OTRO_T133),
+    guardadoT133('r-C-1', 'Lanzamiento C1 Deluxe', artistaT133('C')),
+    guardadoT133('otraEdicionInventadaD2', 'Lanzamiento D2', artistaT133('D')),
+  ];
+  const FUERA_T133 = ['r-A-2', 'r-B-2', 'r-C-1', 'r-D-2'];
+  sim.ruta('GET', /^\/me\/albums/, () => ({ items: BIBLIOTECA_T133, limit: 50, offset: 0, total: BIBLIOTECA_T133.length, next: null }));
+  for (const k of ['saved_albums_v1', 'saved_albums_v2']) await anclar(idbDel(k));
+  invalidateFilterContext();
+  const tarjetasT133 = () => $$('#newrel-list [data-open-album].dcard-name').map((b) => b.dataset.openAlbum);
+  const cuentaChip = (f) => $(`#disco-filtros [data-filtro="${f}"] .disco-filtro-n`)?.textContent.trim();
+  const llamadasDesde = (i) => sim.reg.llamadas.slice(i).map((l) => `${l.metodo} ${decodeURIComponent(l.ruta)}`);
+  const iAbrir = sim.reg.llamadas.length, nAlbT133 = aAlbumes();
+  render($('#main-content'));
+  await esperarReal(() => aAlbumes() > nAlbT133 && $$('#newrel-list .dcard').length > 0, { que: 'T133: la apertura con la biblioteca sembrada', vueltas: VUELTAS });
+  await vueltasDeRed(80);
+  const abrirT133 = llamadasDesde(iAbrir);
+  const chipEncendidoT133 = chipBib()?.getAttribute('aria-pressed') === 'true';
+  const conChipT133 = tarjetasT133();
+  const cuentasT133 = { biblioteca: cuentaChip('biblioteca'), edicion: cuentaChip('edicion') };
+  const iChip = sim.reg.llamadas.length;
+  chipBib().click();
+  await vueltasDeRed();
+  const sinChipT133 = tarjetasT133();
+  const cuentasSinChipT133 = { biblioteca: cuentaChip('biblioteca'), edicion: cuentaChip('edicion') };
+  chipBib().click();
+  await vueltasDeRed();
+  const chipT133 = llamadasDesde(iChip);
+  const otraVezT133 = tarjetasT133();
+  const fueraConChip = FUERA_T133.filter((id) => !conChipT133.includes(id));
+  const resumenT133 = `T133: abrir = ${abrirT133.length} peticiones [${abrirT133.join(' , ')}] · apagar y encender el chip = ${chipT133.length} [${chipT133.join(' , ')}]`
+    + ` · chip encendido al abrir: ${chipEncendidoT133} · con el chip: ${conChipT133.length} tarjetas, fuera de las 4 de la biblioteca: ${fueraConChip.join(' ') || 'ninguna'}`
+    + ` · cuentas con el chip: biblioteca ${cuentasT133.biblioteca}, edicion ${cuentasT133.edicion} (apagado: ${cuentasSinChipT133.biblioteca}, ${cuentasSinChipT133.edicion})`
+    + ` · sin el chip: ${sinChipT133.length} tarjetas`;
+  if (!MEDIR_T133) {
+    afirmar(chipEncendidoT133, `T133: el chip «Fuera los de tu biblioteca» está encendido al abrir (${resumenT133})`);
+    afirmar(fueraConChip.length === 4 && conChipT133.length === 8,
+      `T133: con el chip, no se ven el «- Single», el de otro artista, el «Deluxe» guardado con el mismo id ni la otra edición (${resumenT133})`);
+    afirmar(cuentasT133.biblioteca === '4' && cuentasT133.edicion === '0',
+      `T133: la cuenta del chip los incluye (4) y el «Deluxe» guardado con el mismo id ya no suma en «edicion» (${resumenT133})`);
+    afirmar(cuentasSinChipT133.biblioteca === '4' && cuentasSinChipT133.edicion === '0', `T133: con el chip apagado las cuentas no cambian (${resumenT133})`);
+    afirmar(sinChipT133.length === 12 && ['r-A-2', 'r-B-2'].every((id) => sinChipT133.includes(id)),
+      `T133: con el chip apagado se ven las 12, también el «- Single» y el de otro artista (${resumenT133})`);
+    afirmar(JSON.stringify(otraVezT133) === JSON.stringify(conChipT133), `T133: al encenderlo otra vez, la misma lista que al abrir (${resumenT133})`);
+    afirmar(ANTES_ABRIR_T133 !== null && JSON.stringify(abrirT133) === JSON.stringify(ANTES_ABRIR_T133),
+      `T133: abrir pide lo MISMO que con v=369 (${JSON.stringify(ANTES_ABRIR_T133)}) · ${resumenT133}`);
+    afirmar(ANTES_CHIP_T133 !== null && JSON.stringify(chipT133) === JSON.stringify(ANTES_CHIP_T133),
+      `T133: apretar el chip pide lo MISMO que con v=369 (${JSON.stringify(ANTES_CHIP_T133)}) · ${resumenT133}`);
+    afirmar(sim.reg.externas.length === 0, 'T133: nada salió a la red externa');
+  }
+
   // (tanda 127) El resumen va también a un `<pre>` y a `data-resumen`: es de donde `scripts/correr-banco.mjs` lo lee (mensaje y reloj virtual).
   const decirResumen = (t) => { document.documentElement.setAttribute('data-resumen', t); const pre = document.createElement('pre'); pre.id = 'progreso'; pre.textContent = t; document.body.prepend(pre); return t; };
-  listo(decirResumen(`12 tarjetas · viejo = reverso exacto de nuevo · ${filas} fila a ${ANCHO} px (${libres} px libres a la derecha) · biblioteca: línea con 500 y el chip encendido (${caidaPedidas} GET), nada con el chip apagado ni con la lectura sana · guardar con contains [false]: toast rojo, «Guardar single» y la tarjeta se queda (${pedidasT128.length} peticiones) · contraste de la línea: ${contrastes.join(', ')} · 0 peticiones reales · reloj virtual=${Math.round(performance.now())} ms`));
+  listo(decirResumen(`12 tarjetas · viejo = reverso exacto de nuevo · ${filas} fila a ${ANCHO} px (${libres} px libres a la derecha) · biblioteca: línea con 500 y el chip encendido (${caidaPedidas} GET), nada con el chip apagado ni con la lectura sana · guardar con contains [false]: toast rojo, «Guardar single» y la tarjeta se queda (${pedidasT128.length} peticiones) · ${resumenT133} · contraste de la línea: ${contrastes.join(', ')} · 0 peticiones reales · reloj virtual=${Math.round(performance.now())} ms`));
 } catch (e) {
   if (e.parada) {
     document.documentElement.dataset.banco = 'ok';

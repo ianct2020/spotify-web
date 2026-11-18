@@ -45,22 +45,22 @@
 
 import {
   loadHistoryStats, loadDays, isOwner, ownerLockedMessage, motivoSinImportCompleto,
-} from './history-data.js?v=369';
-import { escapeHtml, pageHeader, showProgress, hideProgress, promptPlaylistName, confirmModal } from '../ui/components.js?v=369';
-import { showToast } from '../ui/toast.js?v=369';
-import { openModal, closeModal } from '../ui/modal-stack.js?v=369';
+} from './history-data.js?v=370';
+import { escapeHtml, pageHeader, showProgress, hideProgress, promptPlaylistName, confirmModal } from '../ui/components.js?v=370';
+import { showToast } from '../ui/toast.js?v=370';
+import { openModal, closeModal } from '../ui/modal-stack.js?v=370';
 // v=368 (tanda 131): las listas del día, `fmtMinutes` y `num` viven en `ui/dia-escuchado.js`, que también
 // usa `#lluvia`. El panel de acá es byte a byte el de v=367 (`tests/lluvia-dia-detalle.test.mjs`).
 import {
   fmtMinutes, num, armarDia, temasConVeces as soloLosQueSonaron, listasDelDiaHtml, conectarListasDelDia,
-} from '../ui/dia-escuchado.js?v=369';
-import { calendarioAnual, aMs, isoDelDia, ultimoDiaDelTramo } from '../ui/calendario-anual.js?v=369';
-import { fmtDia } from '../util/fecha.js?v=369';
-import { animationsEnabled, armRevealAll, releaseReveal } from '../ui/reveal.js?v=369';
-import { vigilarRuta } from '../util/vigencia-ruta.js?v=369';
-import { prefKey, migratePrefKey } from '../storage.js?v=369';
-import { createPlaylist, addTracksToPlaylist, invalidatePlaylistsCache } from '../api.js?v=369';
-import { openImportHistory, importarSoloElDetalle } from './import-history.js?v=369';
+} from '../ui/dia-escuchado.js?v=370';
+import { calendarioAnual, aMs, isoDelDia, ultimoDiaDelTramo } from '../ui/calendario-anual.js?v=370';
+import { fmtDia } from '../util/fecha.js?v=370';
+import { animationsEnabled, armRevealAll, releaseReveal } from '../ui/reveal.js?v=370';
+import { vigilarRuta } from '../util/vigencia-ruta.js?v=370';
+import { prefKey, migratePrefKey } from '../storage.js?v=370';
+import { createPlaylist, addTracksToPlaylist, invalidatePlaylistsCache } from '../api.js?v=370';
+import { openImportHistory, importarSoloElDetalle } from './import-history.js?v=370';
 
 const PREF_ANIO = 'fonoteca_calendario_anio_v1';
 

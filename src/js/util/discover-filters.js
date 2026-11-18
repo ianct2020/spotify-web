@@ -214,7 +214,12 @@ export async function buildFilterContext({ force = false } = {}) {
   // (v=364) Si la lectura falla, `guardados` queda vacío y «Fuera los de tu biblioteca» no descarta nada. Hasta v=363 eso se decía solo
   // por consola; ahora el contexto lleva `bibliotecaFallo` y las dos vistas lo dicen en pantalla (`pintarAvisoBibliotecaFiltros()`,
   // en `features/discover-common.js`). Una biblioteca vacía NO es un fallo: `getSavedAlbums()` devuelve `[]` y `bibliotecaFallo` es false.
+  //
+  // (v=370) `idsEnBiblioteca`: los ids de Spotify de esos mismos álbumes. Hasta v=369 el `alb.id` se tiraba y el cruce iba solo por
+  // `albumKey(nombre, artista principal)`, así que un lanzamiento guardado con otro nombre («X - Single») o con otro artista principal no
+  // caía. Se arma en el MISMO bucle: si la lectura tira, queda vacío igual que `guardados`. Un item sin `album.id` entra solo por nombre.
   let bibliotecaFallo = false;
+  const idsEnBiblioteca = new Set();
   try {
     for (const it of await getSavedAlbums()) {
       const alb = it?.album;
@@ -222,6 +227,7 @@ export async function buildFilterContext({ force = false } = {}) {
       const art = alb.artists?.[0]?.name || '';
       guardados.add(albumKey(alb.name, art));
       basesTuyas.add(claveBaseDeEdicion(alb.name, art));
+      if (alb.id) idsEnBiblioteca.add(alb.id);
     }
   } catch (e) {
     bibliotecaFallo = true;
@@ -306,7 +312,7 @@ export async function buildFilterContext({ force = false } = {}) {
     console.warn('[discover-filtros] no pude leer «' + PLAYLIST_SIN_ESCUCHAR + '»:', e.message);
   }
 
-  const ctx = { guardados, escuchados, basesTuyas, temaEnAlbum, enSinEscuchar, bibliotecaFallo };
+  const ctx = { guardados, idsEnBiblioteca, escuchados, basesTuyas, temaEnAlbum, enSinEscuchar, bibliotecaFallo };
   // 🔴 Los fracasos no se memoizan (v=219): un contexto con la biblioteca sin leer quedaba pegado hasta recargar. El que falló se
   // devuelve (la vista lo usa en ESTA apertura: un repintado no vuelve a pedir `/me/albums`) y la próxima apertura lo intenta de nuevo.
   if (!bibliotecaFallo) ctxCache = ctx;
@@ -344,8 +350,11 @@ export function motivosDeDescarte(al, artista, artistaId, ctx) {
 
   const k = albumKey(al.name, artista);
 
-  // C2 — ya está guardado en la biblioteca.
-  if (ctx.guardados.has(k)) out.push('biblioteca');
+  // C2 — ya está guardado en la biblioteca: por la clave (nombre + artista) O, desde v=370, por el id del lanzamiento. El id cubre
+  // lo que la clave no ve: el mismo álbum guardado como «X - Single» o a nombre de otro artista principal. Sin `al.id`, solo la clave.
+  // ⚠️ Un lanzamiento guardado con su mismo id y un agregado en el nombre («X Deluxe») caía hasta v=369 por «edicion» (C4) y ahora cae
+  // por «biblioteca»: C4 no suma si ya cayó por aquí. Los contadores se mueven de uno al otro; el lanzamiento se esconde igual.
+  if (ctx.guardados.has(k) || (al.id && ctx.idsEnBiblioteca?.has(al.id))) out.push('biblioteca');
 
   // C3 — ya figura en el historial de escuchas.
   if (ctx.escuchados.has(k)) out.push('listened');

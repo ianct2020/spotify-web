@@ -952,6 +952,40 @@ en los cuatro presets: 6,51 a 6,99). ⚠️ En pantalla se midió `#new-releases
 tiene banco propio para esto. ⚠️ «Guardar álbum» / «Guardar single» **no invalida** ni la caché de `getSavedAlbums()` ni este
 contexto: lo recién guardado sale de la lista por `markAlbumResolved()`, no por este chip (`PENDIENTES.md`, «Tanda 127»).
 
+#### El cruce por id (v=370)
+
+La tanda 133. **Antes**, `buildFilterContext()` guardaba de cada álbum de la biblioteca solo `albumKey(nombre, artista principal)` (en
+`guardados`) y su base de edición (en `basesTuyas`), y **tiraba el `alb.id`**. C2 de `motivosDeDescarte()` cruzaba el lanzamiento solo por
+`albumKey(al.name, artista)`, donde `artista` es el artista que estás explorando (el `a.name` que pasan `#discover-artists` y
+`#new-releases`), no el del lanzamiento. **Ahora** el contexto lleva además **`idsEnBiblioteca`**: los `alb.id`, en el MISMO bucle (si la
+lectura tira, queda vacío como `guardados` y `bibliotecaFallo` dice lo mismo que antes; el memo de v=364 no cambió). C2 descarta por
+«biblioteca» si la clave está en `guardados` **o** si `al.id` existe y está en `idsEnBiblioteca`.
+
+- **Lo que arregla** (las formas 2 y 3 de la tanda 127): el mismo lanzamiento guardado como «X - Single» (mismo id, otro nombre) y el
+  guardado a nombre de **otro artista principal**. Las dos daban «0» en la cuenta del chip.
+- **Lo que NO arregla**: lo recién guardado sin recargar (la caché de 60 min de `saved_albums_v2` y el `ctxCache` memoizado; la forma 1).
+  Es la tanda 134.
+- **El cruce por nombre se quedó tal cual.** Un item de la biblioteca sin `album.id` entra solo por nombre; un lanzamiento sin `id` (la
+  base guarda los que llegan sin id en `unirItems`, aunque `slimDe` siempre copia `al.id`) se cruza solo por nombre, sin tirar. C2 usa
+  `ctx.idsEnBiblioteca?.has(…)`: un contexto armado a mano sin el conjunto tampoco tira.
+- ⚠️ **El movimiento de «edicion» a «biblioteca».** Un lanzamiento guardado con su MISMO id y un agregado en el nombre guardado («X Deluxe»
+  en la biblioteca, «X» en la discografía) caía hasta v=369 por `edicion` (C4) y ahora por `biblioteca`: C4 no suma si ya cayó por C2. Se
+  esconde igual con los dos chips encendidos; lo que cambia son los contadores, y que con «Fuera los de tu biblioteca» APAGADO ahora se ve
+  (antes lo escondía «edicion»). En el banco sembrado: con fd3f085, biblioteca 1 y edicion 1, 10 tarjetas con el chip y 11 sin él; con
+  v=370, biblioteca 4 y edicion 0, 8 con el chip y 12 sin él. Se movió 1 (el «Deluxe»).
+- **Cuesta 0 peticiones**: el id ya venía en la respuesta de `/me/albums`. Medido en el banco contra fd3f085 y contra v=370: abrir
+  `#new-releases` = `[GET /me/albums?limit=50]`, apagar y encender el chip = `[]`. La tabla de costos no cambia.
+- Ninguna otra regla cambió: ni `listened`, `edicion`, `single`, `repetido`, `sinescuchar`, ni `albumKey`, `claveBaseDeEdicion`,
+  `getSavedAlbums()` o la caché. El chip «Solo los de tu biblioteca» de `#listened` no usa este contexto (tiene su propio cruce por
+  `album.id`, `idsDeBiblioteca()` en `listened.js`) y no se tocó.
+
+Guardas: **`tests/biblioteca-por-id.test.mjs`** (`api.js` y `discover-filters.js` REALES con `dobles/loader-t127.mjs`, datos inventados;
+los casos (a)-(h) y la conservación (i): sobre 36 lanzamientos con todos los criterios ejercitados, los mismos motivos que fd3f085 —sacado
+con `git show` y cargado en el mismo proceso como `data:`— en los 32 que no están por id. `RAIZ_T133` para correrlo contra otra copia;
+rojo contra fd3f085 en 7 de 32) y el caso T133 del banco **`tests/banco/novedades.html`** (la app entera con la Spotify simulada y cuatro
+álbumes guardados inventados; `?medir=t133` solo cuenta, sin afirmar: así se midió el «antes»). El banco: rojo contra fd3f085 en 3 de 3
+corridas, y verde en **10 de 10** corridas contra v=370 (reloj virtual 44.275-44.448 ms, dentro de los 120 s de su presupuesto).
+
 ### La playlist «fonoteca · sin escuchar» NO EXISTE
 🟩 **Desde v=301 la app ya no escribe en ella**: «Guardar single» va a la
 biblioteca de álbumes, como «Guardar álbum» (ver «Guardar un ÁLBUM» en
