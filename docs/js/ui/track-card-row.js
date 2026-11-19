@@ -21,15 +21,15 @@
 //   - Cada tarjeta se resuelve por `data-id` contra un Map, nunca por índice.
 //   - La selección vive en un Set del feature, no en el DOM.
 
-import { escapeHtml } from './components.js?v=370';
+import { escapeHtml } from './components.js?v=371';
 // (v=367, tanda 130) El título se mueve EN HOVER con `ui/hover-marquee.js`, no con
 // `ui/marquee.js`: aquella arranca sola en loop (una grilla de decenas de
 // tarjetas moviéndose a la vez marea), corta a mitad de letra sin «…» y la apaga
 // `prefers-reduced-motion`, o sea que para Ian no se movía nunca. Esta la decide
 // `animationsEnabled()`, tiene «…» en reposo y, sin animaciones, el `title`.
-import { hoverMarqueeSpan, wireHoverMarquee } from './hover-marquee.js?v=370';
-import { isPlayingAudio, playingProvider } from './preview-player.js?v=370';
-import { iconoPlay, iconoPausa, iconoOjo, iconoOjoTachado, iconoFicha } from './icons.js?v=370';
+import { hoverMarqueeSpan, wireHoverMarquee } from './hover-marquee.js?v=371';
+import { isPlayingAudio, playingProvider } from './preview-player.js?v=371';
+import { iconoPlay, iconoPausa, iconoOjo, iconoOjoTachado, iconoFicha } from './icons.js?v=371';
 
 const CHECK = `<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>`;
 // Corazón tachado: sacar de tus me gusta. Es la ÚNICA acción de la tarjeta que

@@ -2372,3 +2372,20 @@ body.con-aviso-copia { padding-top: 46px; }
 .recs-estilo-corte { margin-bottom: 16px; }
 .recs-estilo-artista { margin-bottom: 16px; }
 .recs-estilo-artista .recs-estilo-linea { margin-bottom: 12px; }
+
+/* ── La ficha de álbum: tus me gusta de otra edición (v=371, tanda 134) ─────────
+   Una línea de texto plano debajo de «N de M pistas en tus me gusta»: «K de ellas están en otra edición y J más que este disco
+   no tiene». En el secundario, nunca el atenuado. Dos clases porque es un <p> dentro del modal y `.modal p` de main.css
+   (0,1,1, y main.css carga DESPUÉS) le pondría 14 px y 20 px de margen. */
+.album-modal-likes .album-modal-otra-edicion {
+  margin: -4px 0 8px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--color-text-secondary);
+  overflow-wrap: anywhere;
+}
+/* A 390 px, con 12 px la frase más larga («… y 1 más que este disco no tiene», ~357 px) no entra en los ~330 de la columna y
+   partía en dos renglones: la ficha crecía dos. En pantallas angostas va un punto más chica, para que quede en uno. */
+@media (max-width: 480px) {
+  .album-modal-likes .album-modal-otra-edicion { font-size: 11px; letter-spacing: -0.01em; }
+}

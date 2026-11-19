@@ -1,0 +1,213 @@
+<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>banco likes-de-la-obra — la ficha y la tarjeta cuentan tus me gusta con una regla</title>
+<style>html,body{margin:0;background:#111;color:#eee;font:13px system-ui}iframe{border:0;display:block}</style>
+</head><body>
+<pre id="progreso"></pre>
+<div id="marcos"></div>
+<script type="module">
+// ── Qué prueba este banco (v=371, tanda 134) ─────────────────────────────────
+//
+// La app ENTERA (`likes-de-la-obra-caso.html`, uno por iframe), con la Spotify simulada, una playlist de escuchados INVENTADA y la caché de
+// me gusta SEMBRADA con el caso 1 de la tanda: registrado «Disco Obra Inventado», likeadas 3 pistas de su «(Deluxe Edition)» (otros ids),
+// una de ellas la bonus. Lo esperado está escrito en `likes-de-la-obra-datos.mjs` (ESPERADO), antes de correr nada.
+//
+//   A. Abrir `#listened`: la tarjeta dice ♥ 3. Abrir la ficha desde la tarjeta: «2 de 6 pistas en tus me gusta», ♥ lleno en las pistas 1 y 2
+//      y en ninguna otra, y la línea de debajo. Abrir la ficha pide exactamente `GET /albums/<id>/tracks` y nada más (lo mismo que en 970d486:
+//      la lista se deja en el resumen para compararla).
+//   B. El botón de añadir a me gusta NO está en las dos que cuentan por otra edición; sí en las otras cuatro.
+//   C. «Disco Sin Likes Inventado»: la tarjeta sin ♥; la ficha, «0 de 4 pistas en tus me gusta» y NINGUNA línea (conservación).
+//   D. A 1366×591 y 390×844: la línea no desborda, ocupa un renglón y la ficha no crece más de un renglón por ella; la página no desborda.
+//   E. El contraste de la línea en los cuatro presets, compuesto capa por capa, ≥ 4,5.
+//
+// `?medir=1` vuelca lo que ve (tarjeta, ficha, filas, línea, botones, peticiones) SIN afirmar: así se mide el «antes» contra 970d486.
+// `?solo=A,C` corre esas. ⚠️ Todas las esperas van con `esperarReal` (ver PRESUPUESTO en `scripts/correr-banco.mjs`).
+
+import { esperarReal, anclar } from '/banco/simulado.mjs';
+import { fallar, listo } from '/banco/esperar.mjs';
+import { DISCO, SIN_LIKES, ESPERADO, TRACKLISTS } from '/banco/likes-de-la-obra-datos.mjs';
+
+const q = new URLSearchParams(location.search);
+const MEDIR = q.get('medir') === '1';
+const afirmar = (c, msg) => { if (!c && !MEDIR) throw new Error('BANCO: ' + msg); };
+const pasos = [];
+const progreso = (t) => { pasos.push(`${t} @${Math.round(performance.now())}`); document.getElementById('progreso').textContent = pasos.join(' · '); };
+const VUELTAS = 20000;
+const SOLO = (q.get('solo') || '').split(',').filter(Boolean);
+const corre = (g) => !SOLO.length || SOLO.includes(g);
+
+function abrirMarco(nombre, ancho, alto, extra = '') {
+  const f = document.createElement('iframe');
+  f.width = ancho; f.height = alto;
+  f.src = `/banco/likes-de-la-obra-caso.html?marco=${nombre}${extra}`;
+  document.getElementById('marcos').appendChild(f);
+  return f;
+}
+const win = (f) => f.contentWindow;
+const $ = (f, s) => f.contentDocument?.querySelector(s);
+const $$ = (f, s) => [...(f.contentDocument?.querySelectorAll(s) || [])];
+const llamadas = (f) => win(f).__sim.reg.llamadas;
+const tarjeta = (f, id) => $(f, `#listened-grid-holder .playlist-card[data-id="${id}"]`);
+const corazonDeTarjeta = (f, id) => {
+  const t = tarjeta(f, id);
+  const m = (t?.textContent || '').match(/♥\s*(\d+)/);
+  return m ? +m[1] : 0;
+};
+const titulo = (f) => $(f, '#alb-likes .album-modal-likes-title')?.textContent.trim() ?? '';
+const linea = (f) => $(f, '#alb-likes .album-modal-otra-edicion');
+const filas = (f) => $$(f, '#alb-likes .album-modal-like-row');
+const nombreDe = (fila) => fila.querySelector('.album-modal-like-name')?.textContent.trim() ?? '';
+const conCorazon = (f) => filas(f).filter((r) => r.querySelector('.album-modal-like-heart:not(.is-off)')).map(nombreDe);
+const conBoton = (f) => filas(f).filter((r) => r.querySelector('.album-modal-like-add')).map(nombreDe);
+
+async function abrirListened(f, que) {
+  await esperarReal(() => win(f)?.__listo, { que: `que arranque ${que}`, vueltas: VUELTAS });
+  win(f).location.hash = '#listened';
+  await esperarReal(() => tarjeta(f, DISCO.id) && tarjeta(f, SIN_LIKES.id), { que: `#listened (${que})`, vueltas: VUELTAS });
+}
+async function abrirFicha(f, disco, que) {
+  const l0 = llamadas(f).length;
+  tarjeta(f, disco.id).click();
+  await esperarReal(() => titulo(f) && filas(f).length === TRACKLISTS[disco.id].length, { que: `la ficha de ${disco.name} (${que})`, vueltas: VUELTAS });
+  // Unas vueltas con red de verdad (la del propio banco), para que lo que la ficha dispare después de pintar también cuente.
+  for (let i = 0; i < 20; i++) await anclar(fetch('/banco/esperar.mjs', { cache: 'no-store' }).then((r) => r.text()));
+  return llamadas(f).slice(l0).map((l) => `${l.metodo} ${l.ruta}`);
+}
+
+const datos = {};
+const marcos = [];
+try {
+  if (corre('A') || corre('B')) {
+    const f = abrirMarco('a', 1366, 591); marcos.push(['a', f]);
+    await abrirListened(f, 'A');
+    const corazon = corazonDeTarjeta(f, DISCO.id);
+    const pedidas = await abrirFicha(f, DISCO, 'A');
+    const ln = linea(f)?.textContent.trim() ?? '(ninguna)';
+    datos.a = `tarjeta ♥ ${corazon} · ficha «${titulo(f)}» · ♥ lleno: ${conCorazon(f).join(' | ') || '(ninguna)'} · línea: «${ln}» · botón añadir en: ${conBoton(f).join(' | ') || '(ninguna)'} · abrir la ficha pide: ${pedidas.join(' , ') || '(nada)'}`;
+    afirmar(corazon === ESPERADO.tarjetaDisco, `A: la tarjeta dice ♥ ${ESPERADO.tarjetaDisco} (dice ${corazon})`);
+    afirmar(titulo(f) === ESPERADO.fichaDisco, `A: la ficha dice «${ESPERADO.fichaDisco}» («${titulo(f)}»)`);
+    afirmar(JSON.stringify(conCorazon(f)) === JSON.stringify(ESPERADO.filasConCorazon), `A: ♥ lleno en ${ESPERADO.filasConCorazon.join(' y ')} y en ninguna otra (${conCorazon(f).join(' | ')})`);
+    afirmar(ln === ESPERADO.linea, `A: la línea dice «${ESPERADO.linea}» («${ln}»)`);
+    const esperadas = [`GET /albums/${DISCO.id}/tracks?limit=50`];
+    afirmar(JSON.stringify(pedidas) === JSON.stringify(esperadas), `A: abrir la ficha pide solo el tracklist (${pedidas.join(' , ')})`);
+    progreso('A');
+    if (corre('B')) {
+      const otras = TRACKLISTS[DISCO.id].map((t) => t.name).filter((n) => !ESPERADO.filasConCorazon.includes(n));
+      afirmar(ESPERADO.filasConCorazon.every((n) => !conBoton(f).includes(n)), `B: sin el botón de añadir en las de otra edición (${conBoton(f).join(' | ')})`);
+      afirmar(JSON.stringify(conBoton(f)) === JSON.stringify(otras), `B: el botón en las otras ${otras.length} (${conBoton(f).join(' | ')})`);
+      progreso('B');
+    }
+  }
+
+  if (corre('C')) {
+    const f = abrirMarco('c', 1366, 591); marcos.push(['c', f]);
+    await abrirListened(f, 'C');
+    const corazon = corazonDeTarjeta(f, SIN_LIKES.id);
+    const pedidas = await abrirFicha(f, SIN_LIKES, 'C');
+    datos.c = `tarjeta ♥ ${corazon} · ficha «${titulo(f)}» · línea: ${linea(f) ? `«${linea(f).textContent.trim()}»` : '(ninguna)'} · pide: ${pedidas.join(' , ')}`;
+    afirmar(corazon === ESPERADO.tarjetaSinLikes, `C: la tarjeta sin ♥ (${corazon})`);
+    afirmar(titulo(f) === ESPERADO.fichaSinLikes, `C: «${ESPERADO.fichaSinLikes}» («${titulo(f)}»)`);
+    afirmar(!linea(f), 'C: ninguna línea debajo del contador');
+    afirmar(conCorazon(f).length === 0, `C: ningún ♥ lleno (${conCorazon(f).join(' | ')})`);
+    progreso('C');
+  }
+
+  if (corre('D')) {
+    const res = [];
+    for (const [ancho, alto] of [[1366, 591], [390, 844]]) {
+      const f = abrirMarco(`d${ancho}`, ancho, alto); marcos.push([`d${ancho}`, f]);
+      await abrirListened(f, `D ${ancho}`);
+      await abrirFicha(f, DISCO, `D ${ancho}`);
+      const de = f.contentDocument.documentElement;
+      const l = linea(f);
+      afirmar(!!l, `D ${ancho}: la línea está`);
+      if (!l) { res.push(`${ancho} sin línea`); continue; }
+      const cs = win(f).getComputedStyle(l);
+      const renglon = parseFloat(cs.lineHeight) || parseFloat(cs.fontSize) * 1.4;
+      const alto1 = l.getBoundingClientRect().height;
+      const modal = l.closest('.modal');
+      const conLinea = modal.offsetHeight, scrollCon = modal.scrollHeight;
+      l.style.display = 'none';
+      const sinLinea = modal.offsetHeight, scrollSin = modal.scrollHeight;
+      l.style.display = '';
+      const crece = Math.max(conLinea - sinLinea, scrollCon - scrollSin);
+      const margen = parseFloat(cs.marginTop) + parseFloat(cs.marginBottom);
+      afirmar(l.scrollWidth <= l.clientWidth, `D ${ancho}: la línea no desborda (${l.scrollWidth} > ${l.clientWidth})`);
+      afirmar(alto1 <= renglon * 1.25, `D ${ancho}: la línea ocupa un renglón (${alto1.toFixed(1)} px, renglón ${renglon.toFixed(1)})`);
+      afirmar(crece <= renglon + margen + 1, `D ${ancho}: la ficha crece como mucho un renglón (${crece.toFixed(1)} > ${(renglon + margen).toFixed(1)})`);
+      afirmar(de.scrollWidth <= win(f).innerWidth, `D ${ancho}: la página no desborda (${de.scrollWidth} > ${win(f).innerWidth})`);
+      const caja = modal.getBoundingClientRect();
+      afirmar(caja.left >= 0 && caja.right <= win(f).innerWidth, `D ${ancho}: la ficha entra a lo ancho (${caja.left.toFixed(0)}–${caja.right.toFixed(0)})`);
+      res.push(`${ancho} línea ${alto1.toFixed(1)}/${renglon.toFixed(1)} px, ${l.scrollWidth}/${l.clientWidth}, la ficha +${crece.toFixed(1)} px, página ${de.scrollWidth}/${win(f).innerWidth}`);
+    }
+    datos.d = res.join(', ');
+    progreso('D');
+  }
+
+  if (corre('E')) {
+    const f = abrirMarco('e', 1366, 591); marcos.push(['e', f]);
+    await abrirListened(f, 'E');
+    await abrirFicha(f, DISCO, 'E');
+    const colorDe = (css) => {
+      const s = String(css);
+      let m = s.match(/^color\(srgb\s+([\d.e-]+)\s+([\d.e-]+)\s+([\d.e-]+)(?:\s*\/\s*([\d.e-]+))?\)/);
+      if (m) return [m[1] * 255, m[2] * 255, m[3] * 255, m[4] === undefined ? 1 : +m[4]];
+      m = s.match(/rgba?\(([^)]+)\)/);
+      if (!m) return null;
+      const p = m[1].split(/[\s,/]+/).filter(Boolean).map(Number);
+      return [p[0], p[1], p[2], p[3] ?? 1];
+    };
+    const lum = (c) => { const [r, g, b] = c.slice(0, 3).map((v) => { const s = v / 255; return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4; }); return 0.2126 * r + 0.7152 * g + 0.0722 * b; };
+    const contraste = (a, b) => { const x = lum(a), y = lum(b); return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05); };
+    const sobre = (arriba, abajo) => { const a = arriba[3]; return [0, 1, 2].map((i) => arriba[i] * a + abajo[i] * (1 - a)).concat(1); };
+    function ratio(el) {
+      const cs = (n) => win(f).getComputedStyle(n);
+      const capas = []; let opacidad = 1, opaco = false;
+      for (let n = el; n && n.nodeType === 1; n = n.parentElement) {
+        opacidad *= Number(cs(n).opacity || 1);
+        const c = colorDe(cs(n).backgroundColor);
+        if (c && c[3] > 0 && !opaco) { capas.push(c); if (c[3] >= 1) opaco = true; }
+      }
+      let fondo = opaco ? capas.pop() : [255, 255, 255, 1];
+      while (capas.length) fondo = sobre(capas.pop(), fondo);
+      const t = colorDe(cs(el).color);
+      return contraste(sobre([t[0], t[1], t[2], t[3] * opacidad], fondo), fondo);
+    }
+    const terminar = () => f.contentDocument.getAnimations().forEach((a) => { try { a.finish(); } catch { /* las infinitas */ } });
+    const fallos = [], medidos = [];
+    for (const id of ['violeta', 'ambar', 'aguamarina', 'papel']) {
+      await anclar(win(f).__ponerTema(id));
+      terminar();
+      const l = linea(f);
+      if (!l) { fallos.push(`${id}: no hay línea`); medidos.push(`${id} sin línea`); continue; }
+      const r = ratio(l);
+      medidos.push(`${id} ${r.toFixed(2)}`);
+      if (r < 4.5) fallos.push(`${id} ${r.toFixed(2)}:1`);
+    }
+    await anclar(win(f).__ponerTema('violeta'));
+    afirmar(fallos.length === 0, `E: ${fallos.join(' · ')}`);
+    datos.e = medidos.join(', ');
+    progreso('E');
+  }
+
+  const errores = marcos.flatMap(([n, f]) => win(f).__errores.map((e) => `${n}: ${e}`));
+  afirmar(errores.length === 0, `0 errores de consola: ${errores.join(' | ')}`);
+  const ajenos = marcos.flatMap(([, f]) => win(f).__sim.reg.desconocidas);
+  const escrituras = marcos.flatMap(([, f]) => win(f).__sim.reg.escrituras);
+  afirmar(escrituras.length === 0, `0 escrituras en la cuenta (${escrituras.map((e) => `${e.metodo} ${e.ruta}`).join(', ')})`);
+  const externas = marcos.flatMap(([, f]) => win(f).__sim.reg.externas);
+  afirmar(externas.length === 0, `0 peticiones a hosts externos (${externas.join(', ')})`);
+  const meTracks = marcos.flatMap(([, f]) => llamadas(f)).filter((l) => l.ruta.startsWith('/me/tracks')).length;
+  afirmar(meTracks === 0, `0 GET /me/tracks: los me gusta salen de la caché (${meTracks})`);
+  const resumenFinal = (MEDIR ? 'medido' : 'ok') +
+    (datos.a ? ` · A: ${datos.a}` : '') +
+    (datos.c ? ` · C: ${datos.c}` : '') +
+    (datos.d ? ` · D: ${datos.d}` : '') +
+    (datos.e ? ` · E: ${datos.e}` : '') +
+    ` · /me/tracks=${meTracks} · externas=${externas.length} · rutas sin simular=${ajenos.length} (${ajenos.join(', ')}) · errores=${errores.length}${errores.length ? ` (${errores.join(' | ')})` : ''} · reloj virtual=${Math.round(performance.now())} ms`;
+  document.documentElement.setAttribute('data-resumen', resumenFinal);
+  document.getElementById('progreso').textContent = resumenFinal;
+  listo(resumenFinal);
+} catch (e) {
+  fallar(e);
+}
+</script>
+</body></html>

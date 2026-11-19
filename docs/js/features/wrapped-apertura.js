@@ -83,9 +83,9 @@
 // `montarRecorrido()`, abajo, es el MISMO montaje del de un año. Cuáles son y por
 // qué no entran los demás está encima de `pasosDeSiempre()`.
 
-import { animationsEnabled } from '../ui/reveal.js?v=370';
-import { calendarioAnual, aMs, isoDesde, diaSemanaLunes } from '../ui/calendario-anual.js?v=370';
-import { anioSinCampoSkipped, esElAnioDelCorte, AVISO_MEZCLA, lineaBaseSaltos } from '../util/corte-saltos.js?v=370';
+import { animationsEnabled } from '../ui/reveal.js?v=371';
+import { calendarioAnual, aMs, isoDesde, diaSemanaLunes } from '../ui/calendario-anual.js?v=371';
+import { anioSinCampoSkipped, esElAnioDelCorte, AVISO_MEZCLA, lineaBaseSaltos } from '../util/corte-saltos.js?v=371';
 
 // ── un solo recorrido vivo por vez ──────────────────────────────────────────
 //

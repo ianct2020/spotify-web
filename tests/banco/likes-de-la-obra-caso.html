@@ -1,0 +1,85 @@
+<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>banco likes-de-la-obra — la app entera, en un iframe</title>
+<link rel="stylesheet" href="/css/theme.css">
+<link rel="stylesheet" href="/css/components.css">
+<link rel="stylesheet" href="/css/main.css">
+</head><body>
+<div id="app"></div>
+<script type="module">
+// ── Un iframe del banco `likes-de-la-obra.html` (v=371, tanda 134) ───────────
+//
+// La app ENTERA en `#home`, contra la Spotify simulada, con una cuenta INVENTADA (no el owner: ningún JSON del repo), una playlist de
+// escuchados INVENTADA y la caché de me gusta SEMBRADA con el caso 1 de la tanda (`likes-de-la-obra-datos.mjs`). `/me/tracks` contesta vacío
+// y queda anotado: la ficha y la tarjeta tienen que salir de la caché, sin bajar nada.
+//   · `?foto=1&tema=violeta|papel` (capturas, con un conductor externo): abre `#listened`, la ficha de «Disco Obra Inventado», espera a que
+//     se hidrate y marca `data-foto="listo"`.
+
+import { instalarRedSimulada, esperarReal, anclar } from '/banco/simulado.mjs';
+import { LISTA, PLAYLIST_ID, PLAYLIST_NOMBRE, TRACKLISTS, LIKES, DISCO } from '/banco/likes-de-la-obra-datos.mjs';
+
+const q = new URLSearchParams(location.search);
+window.__errores = [];
+window.addEventListener('error', (e) => window.__errores.push('error: ' + (e.message || e)));
+window.addEventListener('unhandledrejection', (e) => window.__errores.push('rechazo: ' + String(e.reason?.message || e.reason)));
+const errorOriginal = console.error.bind(console);
+console.error = (...a) => { window.__errores.push('console.error: ' + a.map(String).join(' ').slice(0, 300)); errorOriginal(...a); };
+
+const USUARIO = 'usuarioObraInventado';
+const sim = instalarRedSimulada();
+window.__sim = sim;
+localStorage.setItem('fonoteca_last_user_id', USUARIO);
+localStorage.setItem('fonoteca_perfil_v1', JSON.stringify({ id: USUARIO, display_name: 'Banco' }));
+sim.ruta('GET', /^\/me$/, () => ({ id: USUARIO, display_name: 'Banco' }));
+sim.ruta('GET', /^\/me\/playlists/, () => ({ items: [], next: null, total: 0 }));
+sim.ruta('GET', /^\/me\/tracks/, () => ({ items: [], next: null, total: 0 }));
+sim.ruta('GET', new RegExp(`^/playlists/${PLAYLIST_ID}\\?`), () => ({ snapshot_id: 'snapshot-obra-inventado' }));
+sim.ruta('GET', new RegExp(`^/playlists/${PLAYLIST_ID}/items`), () => ({ items: LISTA, next: null, total: LISTA.length }));
+sim.ruta('GET', /^\/albums\/[A-Za-z0-9]+\/tracks/, ({ ruta }) => {
+  const id = ruta.split('/')[2].split('?')[0];
+  const items = (TRACKLISTS[id] || []).map((t) => ({ ...t, uri: `spotify:track:${t.id}`, duration_ms: 200000, disc_number: 1, artists: [{ name: 'Banda Obra Inventada' }] }));
+  return { items, next: null, total: items.length };
+});
+
+// `/data/*`: 404 y anotado. Ningún JSON del repo.
+window.__datosAjenos = [];
+const debajo = window.fetch;
+window.fetch = async (entrada, opciones = {}) => {
+  const url = typeof entrada === 'string' ? entrada : (entrada instanceof URL ? entrada.href : entrada.url);
+  const abs = new URL(url, location.href);
+  if (abs.origin === location.origin && /\/data\//.test(abs.pathname)) {
+    window.__datosAjenos.push(abs.pathname);
+    return new Response('{}', { status: 404, headers: { 'content-type': 'application/json' } });
+  }
+  return debajo(url === entrada ? entrada : url, opciones);
+};
+
+window.Chart = class { destroy() {} resize() {} };   // `index.html` lo carga del CDN, y este caso no pasa por él.
+
+const { prefKey } = await import('/js/storage.js');
+localStorage.setItem(prefKey('fonoteca_anim_v1'), 'nunca');
+localStorage.setItem(prefKey('listened_albums_playlist_id'), PLAYLIST_ID);
+localStorage.setItem(prefKey('listened_albums_playlist_name'), PLAYLIST_NOMBRE);
+localStorage.setItem(prefKey('listened_sort_mode'), 'name-asc');
+const { idbDel, idbSetCached } = await import('/js/idb.js');
+for (const k of [`listened_grouped_${PLAYLIST_ID}_v2`, `playlist_items_${PLAYLIST_ID}`]) await anclar(idbDel(k));
+await anclar(idbSetCached('all_liked_tracks', LIKES, null));
+
+const FOTO = q.get('foto');
+location.hash = FOTO ? '#listened' : '#home';
+await import('/js/app.js');
+await esperarReal(() => document.getElementById('my-history-btn') && (FOTO || document.querySelector('.home-card')), { que: 'que la app arranque', vueltas: 4000 });
+window.__ponerTema = async (id) => {
+  const { PRESETS, applyTheme } = await import('/js/ui/theme-panel.js');
+  applyTheme(PRESETS.find((x) => x.id === id).colors);
+};
+window.__listo = true;
+
+if (FOTO) {
+  if (q.get('tema')) await anclar(window.__ponerTema(q.get('tema')));
+  await esperarReal(() => document.querySelector(`#listened-grid-holder .playlist-card[data-id="${DISCO.id}"]`), { que: '#listened', vueltas: 8000 });
+  document.querySelector(`#listened-grid-holder .playlist-card[data-id="${DISCO.id}"]`).click();
+  await esperarReal(() => document.querySelector('#alb-likes .album-modal-likes-title'), { que: 'la ficha hidratada', vueltas: 8000 });
+  document.getAnimations().forEach((a) => { try { a.finish(); } catch { /* las infinitas */ } });
+  document.documentElement.dataset.foto = 'listo';
+}
+</script>
+</body></html>

@@ -16,8 +16,8 @@ import { showToast } from '../ui/toast.js';
 import { openArtistCard, knownArtist } from './artist-card.js';
 import { openModal, closeTop } from '../ui/modal-stack.js';
 import { getBestAvailableLikes, getAlbumTracks, anadirLikes } from '../api.js';
-import { albumKey, coverId } from '../util/album-key.js';
-import { artistMatches } from '../util/track-match.js';
+import { albumKey } from '../util/album-key.js';
+import { indexarLikes, likesDeLaObra, cancionesDeLaObra, cruzarConTracklist, textoOtraEdicion } from '../util/likes-de-la-obra.js';
 // `limpiaParaQuery` ya no se importa acá: desde v=219 la aplica el resolutor,
 // que es quien arma la query. Es a propósito — cuando la limpieza era tarea del
 // llamador, `wthree.js` se olvidaba del apóstrofo y nadie se enteraba. El
@@ -152,52 +152,32 @@ function artistsOf(t, alb) {
   return out;
 }
 
-// Del cache de likes, devuelve las canciones que pertenecen a este álbum.
-// Tres criterios, de más fuerte a más flojo:
-//   1. album.id, si el llamador lo trajo.
-//   2. coverId() de la tapa — el hash de la imagen es la identidad real del
-//      disco (util/album-key.js) y es lo que ya usa el mosaico.
-//   3. albumKey() exacto, y si no, mismo nombre de álbum + algún artista en
-//      común. Este último es el que rescata los discos colaborativos: el
-//      mosaico puede llamarlo «Kanye West» y los likes decir «¥$», y sin él la
-//      ficha aparecía sin ninguna pista.
-function likesInAlbum(likes, a) {
-  if (!Array.isArray(likes) || likes.length === 0) return [];
-  const targetKey = albumKey(a.name, a.artist);
-  const targetNameKey = albumKey(a.name, '');
-  const targetAlbumId = a.albumId || a.id || null;
-  const targetCover = coverId(a.img);
-  const out = [];
-  const seen = new Set();
-  for (const it of likes) {
-    const t = it?.track || it;
-    if (!t || !t.name) continue;
-    const alb = t.album || {};
-    const artistas = artistsOf(t, alb);
-    const artistName = artistas[0] || '';
-    const matchById = targetAlbumId && alb.id && alb.id === targetAlbumId;
-    const matchByCover = !matchById && targetCover
-      && (alb.images || []).some(im => coverId(im?.url) === targetCover);
-    const mismoNombre = albumKey(alb.name || '', '') === targetNameKey;
-    const matchByKey = !matchById && !matchByCover
-      && (albumKey(alb.name || '', artistName) === targetKey
-        || (mismoNombre && (!a.artist || artistMatches(artistas, a.artist))));
-    if (!matchById && !matchByCover && !matchByKey) continue;
-    if (t.id && seen.has(t.id)) continue;
-    if (t.id) seen.add(t.id);
-    out.push({
-      id: t.id || null,
-      name: t.name,
-      artist: artistName,
-      artists: artistas,
-      album: alb.name || a.name,
-      img: coverUrl(alb.images, 'grande'),
-      trackNumber: t.track_number || 0,
-    });
-  }
-  out.sort((x, y) => (x.trackNumber || 999) - (y.trackNumber || 999) || x.name.localeCompare(y.name, 'es'));
-  return out;
+// Tus me gusta de este disco: la regla de `util/likes-de-la-obra.js` (v=371), la MISMA que cuenta el ♥ de la tarjeta de
+// #listened. Hasta v=370 esto tenía su propio filtro (id, tapa, `albumKey` y nombre + artista) y cruzaba las pistas por
+// `trackNameKey`, que solo quitaba lo de entre paréntesis: un like de «Disco Deluxe» o un «Tema - Remastered 2011» de otra
+// edición no se veía aquí y la tarjeta sí lo contaba («0 de N» contra «♥ K»). El criterio vive allá entero; aquí no se
+// escribe otra copia (la regla de v=219).
+//
+// El índice se arma una vez por lista de likes: la misma lista (el memo de abajo) da el mismo índice.
+let _indiceMemo = { likes: null, indice: null };
+function indiceDeLikes(likes) {
+  if (_indiceMemo.likes !== likes) _indiceMemo = { likes, indice: indexarLikes(likes) };
+  return _indiceMemo.indice;
 }
+
+// La forma de siempre de una fila de la ficha, a partir de un like de la regla.
+function filaDeLike(it, a) {
+  return {
+    id: it.id,
+    name: it.name,
+    artist: it.artist,
+    artists: it.artists,
+    album: it.album || a.name,
+    img: coverUrl(it.images, 'grande'),
+    trackNumber: it.trackNumber,
+  };
+}
+const porNumeroDePista = (x, y) => (x.trackNumber || 999) - (y.trackNumber || 999) || x.name.localeCompare(y.name, 'es');
 
 // ── Tracklist completo del álbum (v=144) ────────────────────────────────────
 //
@@ -218,13 +198,6 @@ function likesInAlbum(likes, a) {
 // apóstrofo, la comparación contra el nombre real, el artista de verdad entre
 // los del álbum y el rechazo del candidato que trae versión de más— junto con
 // el memo, que desde v=219 guarda SOLO los éxitos.
-
-// Clave "misma canción aunque sea otra edición": el id no sirve para cruzar un
-// like del deluxe contra el tracklist del original. Es la misma normalización
-// que usa la tracklist de W-Three (features/wthree.js).
-function trackNameKey(name) {
-  return (name || '').toLowerCase().replace(/\s*[([].*?[)\]]/g, '').trim();
-}
 
 // Devuelve `{ tracks, motivo }`. El `motivo` NO es decorativo: es lo único que
 // separa «este disco no se pudo identificar» de «este disco no tiene pistas», y
@@ -447,38 +420,38 @@ async function hydrateLikes(overlay, a) {
   const holder = overlay.querySelector('#alb-likes');
   if (!holder) return;
   const likes = await loadLikesMemo();
-  const enLikes = likesInAlbum(likes, a);
+  const indice = indiceDeLikes(likes);
 
   // Los likes salen de caché (o del memo del módulo); el tracklist es la única
   // ida a la red de esta función.
   const { tracks: tracklist, motivo: motivoFallo } = await loadAlbumTracklist(a);
 
-  // Índices de "está en tus me gusta": por id y por nombre normalizado, porque
-  // un like puede venir de otra edición del disco y ahí el id no coincide.
-  const likedIds = new Set(enLikes.map(t => t.id).filter(Boolean));
-  const likedNames = new Set(enLikes.map(t => trackNameKey(t.name)));
-  const likeByKey = new Map(enLikes.map(t => [trackNameKey(t.name), t]));
-
-  // Con tracklist: se pintan TODAS las pistas del disco y el ♥ distingue.
+  // Con tracklist: se pintan TODAS las pistas del disco y el ♥ distingue. Una
+  // pista cuenta (v=371) si su id está en tus me gusta (a) o si es la MISMA
+  // canción que un like de otra edición de este disco (b): ver
+  // `util/likes-de-la-obra.js`. Las de (b) llevan el ♥ lleno igual que las de
+  // (a), y por eso no ofrecen «añadir»: sería likear un duplicado.
   // Sin tracklist (endpoint caído, álbum no resuelto): se degrada a lo de
-  // antes — solo los likes, todos con corazón.
+  // antes — solo los likes de esta obra, uno por canción, todos con corazón.
   const completo = tracklist.length > 0;
+  const cruce = completo ? cruzarConTracklist(indice, a, tracklist) : null;
   const matched = completo
-    ? tracklist.map(t => {
-      const k = trackNameKey(t.name);
-      const like = likeByKey.get(k);
+    ? tracklist.map((t, i) => {
+      const { cuenta, like } = cruce.pistas[i];
       return {
         id: t.id || like?.id || null,
         name: t.name,
         artist: t.artists[0] || like?.artist || a.artist || '',
         artists: t.artists.length ? t.artists : (like?.artists || []),
         album: a.name,
-        img: like?.img || a.img || null,
+        img: (like && coverUrl(like.images, 'grande')) || a.img || null,
         trackNumber: t.trackNumber,
-        liked: (t.id && likedIds.has(t.id)) || likedNames.has(k),
+        liked: !!cuenta,
       };
     })
-    : enLikes.map(t => ({ ...t, liked: true }));
+    : cancionesDeLaObra(indice, a, likesDeLaObra(indice, a))
+      .map(it => ({ ...filaDeLike(it, a), liked: true }))
+      .sort(porNumeroDePista);
 
   // ⚠️ Con la caché de me gusta fría NO se sabe nada: ver `likesConocidos()`.
   // El contador y los corazones tienen que decir eso y no «ninguna».
@@ -494,6 +467,13 @@ async function hydrateLikes(overlay, a) {
       : nLiked > 0
         ? `${nLiked} pista${nLiked === 1 ? '' : 's'} en tus me gusta`
         : 'no tienes ninguna en tus me gusta';
+
+  // Debajo del contador, UNA línea de texto plano (v=371): cuántas de las que
+  // cuentan están en otra edición (K) y cuántas canciones que te gustan de esta
+  // obra no tiene este disco (J). Así «N de M» más J da el ♥ de la tarjeta de
+  // #listened. Solo con el tracklist (K y J lo necesitan) y con la caché de me
+  // gusta cargada: con la caché fría no se sabe nada y lo dice el aviso de abajo.
+  const lineaOtraEdicion = (conocidos && cruce) ? textoOtraEdicion(cruce.k, cruce.j) : '';
 
   // El ♥ marca "está en tus me gusta", igual que en la tracklist de W-Three.
   // Antes ahí había un punto: era el NÚMERO DE PISTA, que nunca se llegó a ver
@@ -547,6 +527,7 @@ async function hydrateLikes(overlay, a) {
     <div class="album-modal-likes-head">
       <div class="album-modal-likes-title">${escapeHtml(countLine)}</div>
     </div>
+    ${lineaOtraEdicion ? `<p class="album-modal-otra-edicion">${escapeHtml(lineaOtraEdicion)}</p>` : ''}
     ${avisoHtml}
     ${avisoLikesHtml}
     ${matched.length === 0 ? '' : `

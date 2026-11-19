@@ -8,20 +8,20 @@
 // acá y no se propaga: ver `util/artist-name.js`. Los nombres se pintan como
 // **enlaces separados** y cada uno abre SU ficha de artista.
 
-import { loadTrackPlays, loadTrackDetail, loadHistoryStats, isOwner, falloDeLecturaDelHistorial, avisoHistorialIlegibleHtml, AVISO_HISTORIAL_ILEGIBLE } from './history-data.js?v=370';
-import { escapeHtml } from '../ui/components.js?v=370';
-import { getPreview } from '../api/preview-providers.js?v=370';
-import { togglePreview, playingKey } from '../ui/preview-player.js?v=370';
-import { hasUsername, findTrackId, getTrackCurrentStats, loadTopLifetime } from '../api/statsfm.js?v=370';
-import { openAlbumCard } from './album-card.js?v=370';
-import { openArtistCard, knownArtist } from './artist-card.js?v=370';
-import { openModal, closeTop } from '../ui/modal-stack.js?v=370';
-import { getBestAvailableLikes } from '../api.js?v=370';
-import { showToast } from '../ui/toast.js?v=370';
-import { skelCardBody, skelBox } from '../ui/skeleton.js?v=370';
-import { resolveArtistList } from '../util/artist-name.js?v=370';
-import { coverUrl } from '../util/cover-size.js?v=370';
-import { botonLetraHtml, bloqueLetraHtml, conectarLetra } from '../ui/letra-ficha.js?v=370';
+import { loadTrackPlays, loadTrackDetail, loadHistoryStats, isOwner, falloDeLecturaDelHistorial, avisoHistorialIlegibleHtml, AVISO_HISTORIAL_ILEGIBLE } from './history-data.js?v=371';
+import { escapeHtml } from '../ui/components.js?v=371';
+import { getPreview } from '../api/preview-providers.js?v=371';
+import { togglePreview, playingKey } from '../ui/preview-player.js?v=371';
+import { hasUsername, findTrackId, getTrackCurrentStats, loadTopLifetime } from '../api/statsfm.js?v=371';
+import { openAlbumCard } from './album-card.js?v=371';
+import { openArtistCard, knownArtist } from './artist-card.js?v=371';
+import { openModal, closeTop } from '../ui/modal-stack.js?v=371';
+import { getBestAvailableLikes } from '../api.js?v=371';
+import { showToast } from '../ui/toast.js?v=371';
+import { skelCardBody, skelBox } from '../ui/skeleton.js?v=371';
+import { resolveArtistList } from '../util/artist-name.js?v=371';
+import { coverUrl } from '../util/cover-size.js?v=371';
+import { botonLetraHtml, bloqueLetraHtml, conectarLetra } from '../ui/letra-ficha.js?v=371';
 
 const MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
 

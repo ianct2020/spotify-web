@@ -1,18 +1,19 @@
-import { getAllPlaylistItems, getBestAvailableLikes, addTracksToPlaylist, removeTracksFromPlaylist, getAllUserPlaylists, getCurrentUserId, getSavedAlbums, getAlbumTracks } from '../api.js?v=370';
-import { indiceDelRegistro, estaRegistrado, leerPorEscuchar, marcarEscuchado, cabeceraPorEscuchar, TEXTO_FALLO_POR_ESCUCHAR } from '../util/registro-escuchados.js?v=370';
-import { cargarEtiquetas, getCachedTags } from '../api/lastfm.js?v=370';
-import { esEPoAlbum } from '../util/release-size.js?v=370';
-import { idbGetCached, idbSetCached, idbGetTimestamp } from '../idb.js?v=370';
-import { escapeHtml, confirmModal, pageHeader } from '../ui/components.js?v=370';
-import { showToast } from '../ui/toast.js?v=370';
-import { isJunkTrack } from '../util/junk.js?v=370';
-import { openModal, closeTop } from '../ui/modal-stack.js?v=370';
-import { getListenedPlaylist, groupItemsByAlbum, openListenedAlbumsPicker, albumKey, baseName, norm } from './listened-shared.js?v=370';
-import { openAlbumCard } from './album-card.js?v=370';
-import { prefKey, migratePrefKey } from '../storage.js?v=370';
-import { pedirYCachear, SOLO_CON_CONTENIDO } from '../util/cache-solo-exitos.js?v=370';
-import { idsDeBiblioteca, filtrarPorBiblioteca } from '../util/solo-biblioteca.js?v=370';
-import { vigilarRuta } from '../util/vigencia-ruta.js?v=370';
+import { getAllPlaylistItems, getBestAvailableLikes, addTracksToPlaylist, removeTracksFromPlaylist, getAllUserPlaylists, getCurrentUserId, getSavedAlbums, getAlbumTracks } from '../api.js?v=371';
+import { indiceDelRegistro, estaRegistrado, leerPorEscuchar, marcarEscuchado, cabeceraPorEscuchar, TEXTO_FALLO_POR_ESCUCHAR } from '../util/registro-escuchados.js?v=371';
+import { cargarEtiquetas, getCachedTags } from '../api/lastfm.js?v=371';
+import { esEPoAlbum } from '../util/release-size.js?v=371';
+import { idbGetCached, idbSetCached, idbGetTimestamp } from '../idb.js?v=371';
+import { escapeHtml, confirmModal, pageHeader } from '../ui/components.js?v=371';
+import { showToast } from '../ui/toast.js?v=371';
+import { isJunkTrack } from '../util/junk.js?v=371';
+import { openModal, closeTop } from '../ui/modal-stack.js?v=371';
+import { getListenedPlaylist, groupItemsByAlbum, openListenedAlbumsPicker, albumKey, baseName, norm } from './listened-shared.js?v=371';
+import { openAlbumCard } from './album-card.js?v=371';
+import { prefKey, migratePrefKey } from '../storage.js?v=371';
+import { pedirYCachear, SOLO_CON_CONTENIDO } from '../util/cache-solo-exitos.js?v=371';
+import { idsDeBiblioteca, filtrarPorBiblioteca } from '../util/solo-biblioteca.js?v=371';
+import { vigilarRuta } from '../util/vigencia-ruta.js?v=371';
+import { indexarLikes, cancionesDeLaObra } from '../util/likes-de-la-obra.js?v=371';
 
 const SORT_KEY = 'listened_sort_mode';
 const VALID_SORTS = new Set(['recent', 'year-desc', 'year-asc', 'artist-asc', 'likes-desc', 'name-asc']);
@@ -31,6 +32,11 @@ const HISTORY_VERSION = 2; // subir cuando regenero data/listening-history.json 
 const HISTORY_CACHE_KEY = `history_albums_v${HISTORY_VERSION}`;
 
 let likesByKey = null; // Map albumKey -> { id, ids:Set, name, artist, year, image, tracks:[{name,artists,uri}] }
+// El índice de `util/likes-de-la-obra.js` sobre TODOS tus me gusta (v=371): de ahí sale el ♥ de cada tarjeta (`a.likes`), con la
+// misma regla que la ficha de álbum. `likesByKey` sigue siendo el cruce de REGISTRO («Sin registrar»), que no se tocó.
+let indiceObra = null;
+// Las canciones likeadas de la obra de un álbum registrado, con la forma de siempre de `a.likes`: `{ name, artists, uri }`.
+const likesDeTarjeta = (a) => (indiceObra ? cancionesDeLaObra(indiceObra, a).map(it => ({ name: it.name, artists: it.artistasDePista, uri: it.uri })) : []);
 let historyAlbums = null; // array de { a, ar, u, dt, min, y1, img } del historial de reproducción (data/ committeado)
 let historyMin = 5; // mín. de tracks distintos escuchados para sugerir desde el historial
 let lastTotalTracks = 0; // para rebuild optimista sin re-bajar la playlist de Spotify
@@ -71,7 +77,7 @@ function dismissHistory(key) {
 // Solo lo bajamos si el user logueado es el dueño (Ian): son sus datos personales.
 async function loadHistoryData() {
   if (historyAlbums) return historyAlbums;
-  const { isOwner } = await import('./history-data.js?v=370');
+  const { isOwner } = await import('./history-data.js?v=371');
   if (!(await isOwner())) { historyAlbums = []; return historyAlbums; }
   try {
     const cached = await idbGetCached(HISTORY_CACHE_KEY);
@@ -352,7 +358,7 @@ async function addAlbumsLocally(entries) {
       tracks: [{ name: '', artists: e.artist || '', uri: e.uri || null }],
       addedAt: Date.now(),
     };
-    a.likes = likesByKey?.get(albumKey(a.name, a.artist))?.tracks || [];
+    a.likes = likesDeTarjeta(a);
     albums.push(a);
     added++;
   }
@@ -374,8 +380,13 @@ async function removeAlbumEntriesLocally(albumObjs) {
 //     y eso partía el conteo en pedazos.
 //  2) después fusionamos deluxe + normal (misma obra) por albumKey, deduplicando por nombre
 //     de canción para no contar dos veces el mismo tema.
+//
+// v=371: el ♥ de la tarjeta (`a.likes`) YA NO sale de aquí abajo. Sale de `util/likes-de-la-obra.js`, la misma regla que la
+// ficha de álbum: hasta v=370 la ficha decía «0 de N» y la tarjeta «♥ K» del mismo disco. `likesByKey` se sigue armando
+// como siempre porque es el cruce de REGISTRO («Quizás escuchaste y no registraste», `__unregDiag`), que no es de likes.
 async function attachLikes(albumList) {
   likesByKey = new Map();
+  indiceObra = null;
   let items = [];
   try {
     ({ items } = await getBestAvailableLikes());
@@ -384,6 +395,7 @@ async function attachLikes(albumList) {
     for (const a of albumList) a.likes = [];
     return;
   }
+  indiceObra = indexarLikes(items);
 
   // 1) Una entrada por lanzamiento físico (album.id) con TODOS sus tracks likeados.
   const byId = new Map();
@@ -446,9 +458,12 @@ async function attachLikes(albumList) {
   for (const m of likesByKey.values()) { delete m._repCount; delete m._seen; }
 
   for (const a of albumList) {
-    a.likes = likesByKey.get(albumKey(a.name, a.artist))?.tracks || [];
+    a.likes = likesDeTarjeta(a);
   }
 }
+
+// Para los tests en Node (v=371): la tarjeta con el módulo REAL, sin montar la vista. No lo llama nadie en `src/`.
+export const _attachLikes = attachLikes;
 
 // ── Tipo de lanzamiento (v=127) ──────────────────────────────────────────────
 //

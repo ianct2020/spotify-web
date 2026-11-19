@@ -196,6 +196,92 @@ arreglado el import):
   álbum de `#listened` (otro código) o la vista entera de `#covers`, que con
   2.449 tapas tarda bastante más.
 
+## Tus me gusta de otra edición (v=371)
+
+La tanda 134. Ian, el 16/11/2026: la ficha de un disco de `#listened` decía «0 de N pistas en tus me gusta» y la tarjeta del mismo
+disco decía «♥ K» con K > 0. Era **el mismo número calculado con dos reglas**:
+
+- **La ficha** (`features/album-card.js`, hasta v=370): `likesInAlbum()` (164-200) filtraba los likes «de este disco» por id de álbum,
+  tapa (`coverId`), `albumKey(nombre, artista)` de `util/album-key.js` o el mismo nombre + `artistMatches`. Después `hydrateLikes()`
+  cruzaba el tracklist por id o por `trackNameKey()` (225), que solo quitaba lo de entre paréntesis. `albumKey` saca «(Deluxe
+  Edition)» pero **no «Disco Deluxe»**, y `trackNameKey` **no junta «Tema - Remastered 2011» con «Tema»**: un like de otra edición
+  se quedaba afuera.
+- **La tarjeta** (`features/listened.js`, `attachLikes()`, 377-451): agrupaba por `album.id`, fusionaba con **la `albumKey` de
+  `listened-shared.js`** (otra función: borra «deluxe», «edition», «version»… en cualquier posición, y entre paréntesis también
+  «acoustic», «instrumental», «unplugged») y contaba nombres distintos con `norm`, que **no** junta un remaster (contaba dos veces
+  «Tema» y «Tema - Remastered» likeadas en dos ediciones).
+
+⚠️ El caso de la deluxe con las pistas con el mismo nombre ya funcionaba: «0 de N» sale con el «Deluxe» pegado, con colas de edición
+en el nombre de la pista o con otro artista principal.
+
+**La regla, una sola: `util/likes-de-la-obra.js`** (pura: sin red, sin DOM, sin IndexedDB). La importan la ficha y la tarjeta, y
+nadie más escribe el cruce (la regla de v=219).
+
+- **Qué likes son «de esta obra»**, por cualquiera de cinco criterios:
+  1. el mismo id de álbum;
+  2. la misma tapa;
+  3. la misma `albumKey(nombre, artista principal)`;
+  4. el mismo nombre (`albumKey(nombre, '')`) con `artistMatches`, o el disco sin artista;
+  5. **la misma `albumKey(baseDeEdicion(nombre), '')` de los dos lados, con `artistMatches`**.
+
+  Los cuatro primeros son los de la ficha de antes y el quinto es el nuevo. `baseDeEdicion` (importada) solo saca colas cuyas
+  palabras están todas en su lista: «(LP2)», «II» o «÷» siguen separados (el test lo afirma).
+- **Qué pistas del tracklist cuentan**:
+  - **(a)** su id está en tus me gusta (en toda la caché);
+  - **(b)** es **la misma canción** que un like de la obra: la misma **identidad**, que es `songKey(nombre, artista principal)` más
+    el conjunto de marcadores de **`VERSION_MARKERS`** (`util/versions-guard.js`, importada) del nombre crudo.
+- **Por qué el marcador**: `songKey` junta «Tema - Live» y «Tema - Acoustic» con «Tema» (`REMIX_TAIL` y la `EDITION_TAIL` de
+  `normText`). `VERSION_MARKERS` tiene remix, live, acoustic, en vivo, sped up, slowed, instrumental, karaoke, taylor's version,
+  extended… y **no** tiene remaster, deluxe ni bonus. Por eso **un remaster, una deluxe o una bonus cuentan y un acústico, un en
+  vivo, un remix o un sped up no**.
+- **Por qué no `tokensDeVersion`**: cuenta «remaster» como versión, así que hubiera dejado afuera justo lo que se buscaba.
+- 🔴 **`songKey` y `REMIX_TAIL` no se tocaron** (están portadas a Python en `gen-stats.py`): el test compara su `sha256` de texto
+  contra 970d486.
+- La regla **no filtra `isJunkTrack`**: si lo filtrara un lado y el otro no, volverían a contar distinto. `likesByKey`, el cruce de
+  **registro** («Sin registrar», `__unregDiag`), lo sigue filtrando y no se tocó.
+
+**La ficha**:
+- «N de M pistas en tus me gusta» cuenta (a) y (b). Las de (b) llevan el ♥ lleno, y por eso no ofrecen «añadir» (`wireAnadirLikes`
+  ya lo ofrecía solo en las `!liked`): likearlas sería un duplicado de otra edición.
+- Debajo va **una línea de texto plano**, `.album-modal-otra-edicion`, en `--color-text-secondary`, y solo si K > 0 o J > 0:
+  - «K de ellas están en otra edición» (K = las que cuentan solo por (b));
+  - «y J más que este disco no tiene» (J = las canciones likeadas de la obra, una por identidad, que no corresponden a ninguna
+    pista del tracklist: la bonus de la deluxe);
+  - con K = 0: «J canciones que te gustan de este disco no están en esta edición»;
+  - en singular cuando toca.
+- La clase es nueva, en `components.css`, con dos clases (`.album-modal-likes .album-modal-otra-edicion`) para ganarle a `.modal p`.
+- **Sin tracklist**: la lista de la obra, una fila por canción, todas con ♥, sin la línea.
+- **Con la caché fría**: lo de antes, sin la línea.
+
+**La tarjeta**: `a.likes` (el «♥ N», el orden «Más likeados ♥» y la lista «De este álbum en tus Liked Songs») sale de
+`cancionesDeLaObra()`: las canciones likeadas de la obra, una por identidad. `abrirFichaDeAlbum` no le pasa nada a la ficha: con la
+misma regla sobre la misma caché, las dos dan lo mismo.
+
+Lo que cambia en la tarjeta, a propósito:
+- un disco «(Acoustic)» o «(Unplugged)» ya no se junta con el normal;
+- la misma canción en dos ediciones cuenta una vez;
+- los likes «basura» de un disco registrado ahora suman.
+
+🔴 **El invariante**: para el mismo disco y los mismos likes, **♥ de la tarjeta = canciones distintas del tracklist que cuentan +
+J**. Se cumple por construcción, porque la tarjeta deduplica y J se calcula con la misma identidad.
+
+**Cuesta 0 peticiones**: los likes salen de la caché (`getBestAvailableLikes()`, sin `allowFetch`) y el tracklist es el que ya se
+pedía. En el banco, abrir la ficha pide `GET /albums/{id}/tracks?limit=50` y nada más, igual que en 970d486. La tabla de costos no
+cambia.
+
+**Guardas**:
+- **`tests/likes-de-la-obra.test.mjs`**: `album-card.js`, `listened.js` (por `_attachLikes`, exportada solo para el test) y la regla
+  REALES, con `dobles/loader-t110.mjs` y datos inventados. Cubre los casos 1-10 de la tanda (deluxe, remaster, «Deluxe» pegado, lo
+  que no cuenta, conservación, otro artista, dos ediciones, sin tracklist, caché fría, el invariante y las lecturas estáticas).
+  `RAIZ_T134` lo corre contra otra copia. Rojo contra 970d486 en 37 de 59 asserts; verde con 62 de 62.
+- **El banco `tests/banco/likes-de-la-obra.html`** (+ `-caso.html` y `-datos.mjs`, en `prepush`): la app entera con la Spotify
+  simulada y la caché de me gusta sembrada. Tiene las puertas A-E: la tarjeta, la ficha, sus peticiones, el botón de añadir, la
+  conservación, 1366×591 y 390×844, y el contraste en los cuatro presets. `?medir=1` vuelca sin afirmar (así se midió el «antes»).
+  Rojo contra 970d486 en 3 de 3 corridas (puerta A: no hay línea). La primera tanda de 10 corridas contra el código nuevo dio **rojo
+  10 de 10** (puerta D: a 390 la línea partía en dos renglones, 33,6 px contra 16,8). Desde entonces la línea va a **11 px por debajo
+  de 480 px** (`components.css`) y la segunda tanda dio **verde 10 de 10** (reloj virtual de 4.149 a 4.680 ms; a 390, un renglón de
+  15,4 px y la ficha +19 px). El contraste de la línea da Violeta 6,36, Ámbar 6,20, Aguamarina 6,27 y Papel 7,08.
+
 ## Dos `catch` que decían «hecho» (v=341, tanda 86)
 
 La lección de v=154 aplicada a dos sitios que seguían rompiéndola:
@@ -1058,6 +1144,8 @@ cruce se leía como un bug de otra vista**. Desde v=164 los dos lados llevan
 algo cacheado hay que bumpear la clave: `cacheKeyFor` pasó a
 `listened_grouped_{id}_v2`, sin eso el caché de 24 h seguía con la clave vieja.
 Suite: `tests/listened-cruce.test.mjs`, 10 asserts.
+➜ **Desde v=371 el ♥ de la tarjeta ya no sale de `attachLikes` a solas**: `a.likes` lo cuenta `util/likes-de-la-obra.js`, la misma
+regla que la ficha de álbum (ver «Tus me gusta de otra edición (v=371)»). `likesByKey` y este cruce de registro no cambiaron.
 
 ## 📚 «Por escuchar» en `#listened` (v=366)
 
