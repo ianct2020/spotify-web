@@ -1,0 +1,188 @@
+<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>banco preview-siguiente — la tecla y el botón de adelante pasan al preview siguiente del álbum</title>
+<style>html,body{margin:0;background:#111;color:#eee;font:13px system-ui}iframe{border:0;display:block}</style>
+</head><body>
+<pre id="progreso"></pre>
+<div id="marcos"></div>
+<script type="module">
+// ── Qué prueba este banco (v=373, tanda 136) ─────────────────────────────────
+//
+// La app ENTERA (`preview-siguiente-caso.html`, en un iframe de 1366×591), con la Spotify y el iTunes simulados y un disco INVENTADO de
+// 5 pistas, la 3.ª sin preview (`preview-siguiente-datos.mjs`, con lo esperado escrito antes de correr nada). La ficha se abre por el
+// llamador real: la tarjeta del disco en `#listened`.
+//
+//   A. ▶ de la 1.ª. Después, el handler que la app registró en `navigator.mediaSession` (`nexttrack`), un `keydown` `MediaTrackNext` y un
+//      `mouseup` + `auxclick` con `button: 4` hacen sonar, en orden, la 2.ª, la 4.ª (salta la sin preview) y la 5.ª. En cada paso: el pill
+//      dice ese nombre y el ⏸ está en esa fila y en ninguna otra. El `mouseup` y el `auxclick` quedan con `defaultPrevented`.
+//   B. En la 5.ª, «siguiente» no cambia nada: ni el pill, ni las filas, ni las peticiones.
+//   C. El botón 3 con la cola: no queda `defaultPrevented` y no cambia nada. Con la ficha cerrada: el botón 4 no queda `defaultPrevented`,
+//      el botón 3 tampoco, y `mediaSession` quedó sin handler de `nexttrack`.
+//   D. Las peticiones de cada paso, por host y ruta: 0 a Spotify en todas las «siguiente»; lo de iTunes y lo de Deezer, contado.
+//   E. Conservación: este banco es nuevo; los de antes (`siempre-y-play`, `tamano-fijo`, `likes-de-la-obra` y el resto) son los de
+//      `prepush`, sin tocar.
+//
+// Entre una vía y otra se dejan pasar 600 ms de reloj: dos vías distintas dentro de 400 ms son UNA pulsación para la app (a propósito).
+// ⚠️ Lo que este banco NO puede probar: que una tecla de medios REAL llegue a la página y que el botón lateral REAL no navegue después del
+// `preventDefault()`. Un evento sintético no hace navegar al navegador. Eso queda «no medido».
+// `?medir=1` vuelca lo que ve sin afirmar (así se mide contra 2553389).
+
+import { esperarReal, anclar } from '/banco/simulado.mjs';
+import { fallar, listo } from '/banco/esperar.mjs';
+import { DISCO, TEMAS, SIN_PREVIEW } from '/banco/preview-siguiente-datos.mjs';
+
+const q = new URLSearchParams(location.search);
+const MEDIR = q.get('medir') === '1';
+const fallosMedidos = [];
+const afirmar = (c, msg) => { if (c) return; if (MEDIR) { fallosMedidos.push(msg); return; } throw new Error('BANCO: ' + msg); };
+const pasos = [];
+const progreso = (t) => { pasos.push(`${t} @${Math.round(performance.now())}`); document.getElementById('progreso').textContent = pasos.join(' · '); };
+const VUELTAS = 20000;
+const esperarReloj = (ms) => new Promise((r) => setTimeout(r, ms));
+
+const f = document.createElement('iframe');
+f.width = 1366; f.height = 591;
+f.src = '/banco/preview-siguiente-caso.html?marco=a';
+document.getElementById('marcos').appendChild(f);
+const win = () => f.contentWindow;
+const $ = (s) => f.contentDocument?.querySelector(s);
+const $$ = (s) => [...(f.contentDocument?.querySelectorAll(s) || [])];
+const llamadas = () => win().__sim.reg.llamadas;
+const filas = () => $$('#alb-likes .album-modal-like-play');
+const etiqueta = () => ($('.preview-pill.show .preview-pill-label')?.textContent || '').trim();
+// El pill dice «nombre — artista»: alcanza con que traiga el nombre (como `siempre-y-play`).
+const dice = (i) => etiqueta().includes(TEMAS[i]);
+const conPausa = () => filas().map((b, i) => (b.innerHTML === win().__iconoPausa ? i : -1)).filter((i) => i >= 0);
+const sonando = () => !!$('.preview-pill.show.is-playing');
+
+// Las peticiones nuevas desde `desde`, agrupadas por host y ruta.
+function porHost(desdeLl, desdeDz) {
+  const nuevas = llamadas().slice(desdeLl).map((l) => (/^https?:/.test(l.ruta) ? (() => { const u = new URL(l.ruta); return `${u.host}${u.pathname}`; })() : `api.spotify.com ${l.ruta.split('?')[0]}`));
+  const dz = win().__deezer.slice(desdeDz);
+  const cuenta = {};
+  for (const k of [...nuevas, ...dz]) cuenta[k] = (cuenta[k] || 0) + 1;
+  return { cuenta, spotify: nuevas.filter((k) => k.startsWith('api.spotify.com')).length };
+}
+const fmt = (c) => Object.entries(c.cuenta).map(([k, n]) => `${k}×${n}`).join(', ') || 'ninguna';
+
+function lateral(button) {
+  const d = f.contentDocument;
+  const up = new (win().MouseEvent)('mouseup', { button, bubbles: true, cancelable: true });
+  const aux = new (win().MouseEvent)('auxclick', { button, bubbles: true, cancelable: true });
+  d.body.dispatchEvent(up); d.body.dispatchEvent(aux);
+  return [up.defaultPrevented, aux.defaultPrevented];
+}
+function tecla() {
+  const e = new (win().KeyboardEvent)('keydown', { key: 'MediaTrackNext', bubbles: true, cancelable: true });
+  f.contentDocument.body.dispatchEvent(e);
+}
+
+const tabla = [];
+async function paso(via, disparar, esperado) {
+  const l0 = llamadas().length, d0 = win().__deezer.length;
+  const extra = disparar();
+  await esperarReal(() => dice(esperado) && sonando(), { que: `${via}: suena «${TEMAS[esperado]}» (el pill dice «${etiqueta()}»)`, vueltas: 600 }).catch((e) => { if (!MEDIR) throw e; });
+  const pet = porHost(l0, d0);
+  const fila = { via, fila: esperado + 1, pill: etiqueta(), pausa: conPausa().map((i) => i + 1).join(',') || '—', peticiones: fmt(pet), spotify: pet.spotify, extra };
+  tabla.push(fila);
+  afirmar(dice(esperado), `${via}: el pill dice «${TEMAS[esperado]}» (dice «${etiqueta()}»)`);
+  afirmar(JSON.stringify(conPausa()) === JSON.stringify([esperado]), `${via}: el ⏸ en la fila ${esperado + 1} y en ninguna otra (está en ${fila.pausa})`);
+  afirmar(pet.spotify === 0, `${via}: 0 peticiones a Spotify (${fmt(pet)})`);
+  return fila;
+}
+
+const datos = {};
+try {
+  progreso('esperando la app');
+  await esperarReal(() => win()?.__listo, { que: 'que arranque la app', vueltas: VUELTAS });
+  progreso('app');
+  afirmar(win().__haySesionDeMedios, 'el Chrome del banco tiene navigator.mediaSession');
+
+  // Abrir la ficha por el llamador real: la tarjeta de #listened.
+  win().location.hash = '#listened';
+  await esperarReal(() => $(`#listened-grid-holder .playlist-card[data-id="${DISCO.id}"]`), { que: '#listened', vueltas: VUELTAS });
+  progreso('#listened');
+  $(`#listened-grid-holder .playlist-card[data-id="${DISCO.id}"]`).click();
+  await esperarReal(() => $('#alb-likes .album-modal-likes-title') || $('.album-modal-aviso'), { que: 'la ficha hidratada', vueltas: VUELTAS });
+  progreso(`ficha (${filas().length} ▶; errores ${win().__errores.length}: ${win().__errores.join(' | ').slice(0, 200)})`);
+  await esperarReal(() => filas().length === 5, { que: 'la ficha con sus 5 ▶', vueltas: VUELTAS });
+  afirmar(!win().__handlers.nexttrack, 'A: antes de tocar nada, sin handler de `nexttrack`');
+  {
+    const [u, a] = lateral(4);
+    afirmar(!u && !a, 'C: ficha abierta sin nada sonado: el botón 4 no queda `defaultPrevented`');
+  }
+
+  // ── A ──
+  await paso('click en el ▶ de la 1.ª', () => { filas()[0].click(); }, 0);
+  afirmar(typeof win().__handlers.nexttrack === 'function', 'A: con la 1.ª sonando, la app registró el handler de `nexttrack`');
+  await esperarReloj(600);
+  await paso('medios (handler de nexttrack)', () => { win().__handlers.nexttrack?.({ action: 'nexttrack' }); }, 1);
+  await esperarReloj(600);
+  await paso('teclado (keydown MediaTrackNext)', () => { tecla(); }, 3);
+  const f3 = filas()[SIN_PREVIEW];
+  afirmar(f3.disabled && /Sin preview/.test(f3.textContent), `A: la 3.ª queda deshabilitada con «Sin preview» («${f3.textContent.trim()}»)`);
+  await esperarReloj(600);
+  let prevenido = null;
+  await paso('mouse (mouseup + auxclick, button 4)', () => { prevenido = lateral(4); return prevenido; }, 4);
+  afirmar(prevenido && prevenido[0] && prevenido[1], `A: el mouseup y el auxclick con \`defaultPrevented\` (${prevenido})`);
+  progreso('A');
+
+  // ── B ──
+  await esperarReloj(600);
+  {
+    const l0 = llamadas().length, d0 = win().__deezer.length, html0 = $('#alb-likes').innerHTML;
+    win().__handlers.nexttrack?.({ action: 'nexttrack' });
+    await esperarReloj(600);
+    tecla();
+    await esperarReloj(600);
+    const pl = lateral(4);
+    await esperarReloj(1500);
+    const pet = porHost(l0, d0);
+    afirmar(dice(4) && sonando(), `B: en la 5.ª, sigue la 5.ª («${etiqueta()}»)`);
+    afirmar($('#alb-likes').innerHTML === html0, 'B: las filas no cambiaron');
+    afirmar(Object.keys(pet.cuenta).length === 0, `B: ninguna petición (${fmt(pet)})`);
+    datos.b = `en la 5.ª: pill «${etiqueta()}», filas iguales, peticiones: ${fmt(pet)}, botón 4 prevenido=${pl}`;
+  }
+  progreso('B');
+
+  // ── C ──
+  {
+    const l0 = llamadas().length;
+    const [u, a] = lateral(3);
+    await esperarReloj(600);
+    afirmar(!u && !a, 'C: con la cola, el botón 3 no queda `defaultPrevented`');
+    afirmar(dice(4) && llamadas().length === l0, 'C: con la cola, el botón 3 no cambia nada');
+    $$('[data-close-modal]').forEach((b) => b.click());
+    await esperarReal(() => !$('.album-modal'), { que: 'C: la ficha se cerró', vueltas: VUELTAS });
+    afirmar(win().__handlers.nexttrack === null, `C: con la ficha cerrada, el handler de \`nexttrack\` quedó en null (${win().__handlers.nexttrack})`);
+    const [u4, a4] = lateral(4);
+    const [u3, a3] = lateral(3);
+    afirmar(!u4 && !a4, 'C: ficha cerrada: el botón 4 no queda `defaultPrevented`');
+    afirmar(!u3 && !a3, 'C: ficha cerrada: el botón 3 no queda `defaultPrevented`');
+    datos.c = `botón 3 con cola: ${u}/${a}; cerrada: botón 4 ${u4}/${a4}, botón 3 ${u3}/${a3}; handler nexttrack=${win().__handlers.nexttrack}`;
+  }
+  progreso('C');
+
+  // ── D ──
+  const spotifyEnSiguientes = tabla.slice(1).reduce((s, x) => s + x.spotify, 0);
+  afirmar(spotifyEnSiguientes === 0, `D: 0 peticiones a Spotify en las «siguiente» (${spotifyEnSiguientes})`);
+  datos.tabla = tabla.map((x) => `${x.via} → fila ${x.fila} | pill «${x.pill}» | ⏸ en ${x.pausa} | peticiones: ${x.peticiones}`).join(' ;; ');
+  progreso('D');
+
+  const errores = win().__errores;
+  afirmar(errores.length === 0, `0 errores de consola: ${errores.join(' | ')}`);
+  const escrituras = win().__sim.reg.escrituras;
+  afirmar(escrituras.length === 0, `0 escrituras en la cuenta (${escrituras.map((e) => `${e.metodo} ${e.ruta}`).join(', ')})`);
+  const externas = win().__sim.reg.externas;
+  afirmar(externas.length === 0, `0 peticiones a hosts externos sin simular (${externas.join(', ')})`);
+  const resumenFinal = (MEDIR ? `medido (fallarían ${fallosMedidos.length}: ${fallosMedidos.join(' | ')})` : 'ok') +
+    ` · A/D: ${datos.tabla}` +
+    (datos.b ? ` · B: ${datos.b}` : '') +
+    (datos.c ? ` · C: ${datos.c}` : '') +
+    ` · audios=${win().__audios.length} · externas=${externas.length} · rutas sin simular=${win().__sim.reg.desconocidas.length} (${win().__sim.reg.desconocidas.join(', ')}) · errores=${errores.length} · reloj virtual=${Math.round(performance.now())} ms`;
+  document.documentElement.setAttribute('data-resumen', resumenFinal);
+  document.getElementById('progreso').textContent = resumenFinal;
+  listo(resumenFinal);
+} catch (e) {
+  fallar(e);
+}
+</script>
+</body></html>

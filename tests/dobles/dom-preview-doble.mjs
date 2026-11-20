@@ -66,16 +66,28 @@ class Nodo {
   dispatchEvent(ev) { ev.target ??= this; for (const fn of [...(this._listeners[ev.type] || [])]) fn.call(this, ev); return true; }
   click() { const ev = { type: 'click', target: this, preventDefault() {}, stopPropagation() {} }; if (this.onclick) this.onclick(ev); this.dispatchEvent(ev); }
   focus() { globalThis.document.activeElement = this; }
+  // (tanda 136) `dataset`, como el del navegador: `dataset.playId` lee y escribe `data-play-id`. Lo pide la ficha de álbum.
+  get dataset() {
+    const n = this;
+    const attr = (k) => 'data-' + String(k).replace(/[A-Z]/g, (c) => '-' + c.toLowerCase());
+    return new Proxy({}, {
+      get: (_, k) => (typeof k === 'string' && n._attrs.has(attr(k)) ? n._attrs.get(attr(k)) : undefined),
+      set: (_, k, v) => { n._attrs.set(attr(k), String(v)); return true; },
+      has: (_, k) => n._attrs.has(attr(k)),
+    });
+  }
   // Selectores: `.a`, `.a.b`, `[atributo]`, `[atributo=valor]`, `tag`, y la lista separada por comas.
+  // (tanda 136) Y `#id` (solo o delante de las clases): lo pide la ficha de álbum (`#alb-likes`). Lo de antes no cambia.
   matches(sel) {
     return sel.split(',').map(s => s.trim()).some((s) => {
-      const m = /^([a-z]+)?((?:\.[\w-]+)*)(?:\[([\w-]+)(?:=["']?([^"'\]]+)["']?)?\])?$/i.exec(s);
+      const m = /^([a-z]+)?(?:#([\w-]+))?((?:\.[\w-]+)*)(?:\[([\w-]+)(?:=["']?([^"'\]]+)["']?)?\])?$/i.exec(s);
       if (!m) throw new Error(`el doble no soporta el selector ${s}`);
       if (m[1] && this.tagName !== m[1].toUpperCase()) return false;
-      const clases = (m[2] || '').split('.').filter(Boolean);
+      if (m[2] && this._attrs.get('id') !== m[2]) return false;
+      const clases = (m[3] || '').split('.').filter(Boolean);
       if (clases.some(c => !this.classList.contains(c))) return false;
-      if (m[3] && !this._attrs.has(m[3])) return false;
-      if (m[3] && m[4] !== undefined && this._attrs.get(m[3]) !== m[4]) return false;
+      if (m[4] && !this._attrs.has(m[4])) return false;
+      if (m[4] && m[5] !== undefined && this._attrs.get(m[4]) !== m[5]) return false;
       return true;
     });
   }

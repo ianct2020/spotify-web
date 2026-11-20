@@ -330,6 +330,9 @@ export function openAlbumCard(entrada) {
   // reordenan con `order` en el CSS. El corte lo hace una media query, sin JS.
   const overlay = openModal({
     id: modalId,
+    // (v=373) Al cerrarse ESTA ficha (aunque queden otras debajo y no salga `modalstackempty`), su cola de
+    // «siguiente» se va. Sin cola de esta ficha, el player no hace nada.
+    onClose: () => document.dispatchEvent(new CustomEvent('previewcola', { detail: { duena: overlay } })),
     html: `
     <div class="modal card-modal album-modal" style="max-width:820px;width:min(820px,94vw)">
       <div class="card-modal-head-simple">
@@ -570,27 +573,63 @@ async function hydrateLikes(overlay, a) {
   // solo mandáramos el del álbum, un disco acreditado a un alias («¥$») no
   // matchea en ningún proveedor y se cae entero al embed de Spotify, que en un
   // iframe cross-origin no puede autoarrancar.
-  holder.querySelectorAll('.album-modal-like-play').forEach(btn => {
+  //
+  // (v=373) El cuerpo del click vive en `tocarFila(btn)`, que devuelve lo que devolvió `togglePreview`:
+  // el click la llama igual que antes, y «siguiente» (la tecla de medios o el botón de adelante del mouse,
+  // ver `ui/preview-player.js`) la llama sobre la fila que sigue. Así «siguiente» es exactamente apretar
+  // el ▶ de la fila siguiente: la misma clave, el mismo ⏸, el mismo «Sin preview».
+  const filas = () => [...holder.querySelectorAll('.album-modal-like-play')];
+  const esMia = (key) => filas().some(b => `alb:${b.dataset.playId}` === key);
+  let ultimaFila = null;   // el BOTÓN de la última fila que sonó (no la clave: sobrevive a la pausa y al `ended`)
+  let avanzando = false;
+
+  async function tocarFila(btn) {
     const id = btn.dataset.playId;
     const name = btn.dataset.playName;
     const t = matched.find(x => x.id === id);
-    const setLabel = () => {
-      btn.innerHTML = playingKey() === `alb:${id}` ? iconoPausa(10) : iconoPlay(10);
-    };
-    setLabel();
+    btn.innerHTML = iconoPuntos(10);
+    const res = await togglePreview(`alb:${id}`, async () => {
+      return await getPreview({ name, artists: t?.artists, artist: a.artist, spotifyId: id });
+    });
+    if (res === true) {
+      btn.innerHTML = iconoPausa(10);
+      ultimaFila = btn;
+      // La cola de «siguiente» es de esta ficha. El player la acepta solo si lo que suena es suyo y no
+      // es el embed de Spotify (después del embed no hay «siguiente»).
+      document.dispatchEvent(new CustomEvent('previewcola', { detail: { duena: overlay, esMia, siguiente } }));
+    }
+    // Sin preview: LO DICE. Hasta v=149 esto ponía un «—» pelado y gris, que
+    // desde la fila se lee como «a esta canción le falta el ▶» — fue el
+    // reporte de Ian sobre «Love$ick (feat. A$AP Rocky)».
+    else if (res === null) { btn.innerHTML = SIN_PREVIEW_HTML; btn.classList.add('sin-preview'); btn.title = 'Sin preview en iTunes ni en Deezer'; btn.disabled = true; }
+    else btn.innerHTML = iconoPlay(10);
+    return res;
+  }
+
+  // La fila siguiente a la última que sonó, en el orden de la ficha. Una ya deshabilitada se salta; una que
+  // da `null` queda con «Sin preview» (lo hace `tocarFila`, como el click) y se prueba la próxima. En la
+  // última no hace nada: no vuelve a la primera.
+  async function siguiente() {
+    if (avanzando || !ultimaFila || !ultimaFila.isConnected) return;
+    avanzando = true;
+    try {
+      const lista = filas();
+      for (let i = lista.indexOf(ultimaFila) + 1; i > 0 && i < lista.length; i++) {
+        if (lista[i].disabled) continue;
+        const res = await tocarFila(lista[i]);
+        if (res !== null) return;   // sonó (`true`) o tocaste otra cosa mientras buscaba (`false`)
+      }
+    } finally {
+      avanzando = false;
+    }
+  }
+
+  filas().forEach(btn => {
+    btn.innerHTML = playingKey() === `alb:${btn.dataset.playId}` ? iconoPausa(10) : iconoPlay(10);
     btn.addEventListener('click', async (e) => {
       e.preventDefault();
       e.stopPropagation();
-      btn.innerHTML = iconoPuntos(10);
-      const res = await togglePreview(`alb:${id}`, async () => {
-        return await getPreview({ name, artists: t?.artists, artist: a.artist, spotifyId: id });
-      });
-      if (res === true) btn.innerHTML = iconoPausa(10);
-      // Sin preview: LO DICE. Hasta v=149 esto ponía un «—» pelado y gris, que
-      // desde la fila se lee como «a esta canción le falta el ▶» — fue el
-      // reporte de Ian sobre «Love$ick (feat. A$AP Rocky)».
-      else if (res === null) { btn.innerHTML = SIN_PREVIEW_HTML; btn.classList.add('sin-preview'); btn.title = 'Sin preview en iTunes ni en Deezer'; btn.disabled = true; }
-      else btn.innerHTML = iconoPlay(10);
+      await tocarFila(btn);
     });
   });
 

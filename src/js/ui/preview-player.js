@@ -110,7 +110,8 @@ function ensurePill() {
     <button type="button" class="preview-pill-toggle" aria-label="Pausar preview" title="Pausar" hidden></button>
     <button class="preview-pill-close" title="Parar preview">✕</button>
   `;
-  pill.querySelector('.preview-pill-close').onclick = () => stopPreview();
+  // (v=373) El ✕ además suelta la cola de «siguiente» (ver al final del archivo).
+  pill.querySelector('.preview-pill-close').onclick = () => { soltarCola(); stopPreview(); };
   pill.querySelector('.preview-pill-toggle').onclick = () => alternarPausa();
   // El pill ya no se posiciona solo: es un item más de la capa de abajo, que
   // es la que garantiza que no se pise con el progreso ni con los toasts.
@@ -589,7 +590,104 @@ function attachHover(el, key, getter, delay = 400) {
 // La señal de modal es "la pila quedó VACÍA", no "se cerró un modal
 // cualquiera": si estás oyendo un preview lanzado desde una lista y encima se
 // abre y se cierra el selector de playlists, el audio no tiene por qué cortarse.
-document.addEventListener('routeteardown', () => stopPreview());
-document.addEventListener('modalstackempty', () => stopPreview());
+document.addEventListener('routeteardown', () => { soltarCola(); stopPreview(); });
+document.addEventListener('modalstackempty', () => { soltarCola(); stopPreview(); });
+
+// ── ⏭ «Siguiente» (v=373, tanda 136) ─────────────────────────────────────────
+//
+// Con la ficha de un álbum abierta y un preview suyo sonando, la tecla de medios «siguiente» y el botón
+// «adelante» del mouse hacen sonar la pista siguiente de ESE álbum. La regla: «siguiente» es LO MISMO que
+// apretar el ▶ de la fila siguiente. La que sabe qué fila sigue es la ficha (`features/album-card.js`); acá
+// vive la COLA (quién la tiene y cuándo se va) y los TRES listeners, que no viven en ningún otro archivo.
+//
+// La ficha la registra con el evento `previewcola` en `document` y no con un export: los ocho exports de este
+// módulo son un contrato que vigilan `preview-player-t115` y `tamano-fijo-t130`. Es el mismo camino que
+// `routeteardown` y `modalstackempty`.
+//   detail: { duena, esMia(key), siguiente() }  → registra (solo si lo que suena ahora es suyo y no es el embed);
+//   detail: { duena }                           → la suelta, si es de esa dueña.
+//
+// La cola se va con: algo que suena y no es de la ficha (`esMia` dice que no), el embed (el iframe no avisa
+// nada: después de él no hay «siguiente»), el ✕ del pill, `modalstackempty`, `routeteardown`, el cierre de la
+// ficha (su `onClose`) y, por si acaso, una dueña que ya no está en el DOM. NO se va con `key: null` a secas:
+// `ended`, el ⏸ de una fila y el `null` de una fila sin preview la dejan, así «siguiente» sigue andando.
+//
+// Una pulsación, una «siguiente»: la misma tecla puede llegar por `mediaSession` y por `keydown`, y un clic
+// lateral por `mouseup` y por `auxclick`. Una vía DISTINTA de la última aceptada, dentro de los
+// `MISMA_PULSACION_MS`, es la misma pulsación y no avanza (en el mouse igual se hace el `preventDefault()`).
+// La misma vía dos veces son dos pulsaciones.
+//
+// 🔴 El botón de atrás del mouse (el 3) no se toca nunca: cambiaría de ruta y cerraría la ficha.
+// Sin cola, el de adelante tampoco: el navegador hace lo de siempre.
+const MISMA_PULSACION_MS = 400;
+let cola = null;               // { duena, esMia, siguiente }
+let ultimaPulsacion = null;    // { via, t }
+
+function ponerHandlerDeMedios(fn) {
+  const ms = (typeof navigator !== 'undefined' && navigator) ? navigator.mediaSession : null;
+  if (!ms || typeof ms.setActionHandler !== 'function') return;
+  try { ms.setActionHandler('nexttrack', fn); } catch { /* el navegador no conoce la acción: no hay medios */ }
+}
+
+function soltarCola() {
+  if (!cola) return;
+  cola = null;
+  ultimaPulsacion = null;
+  ponerHandlerDeMedios(null);
+}
+
+function colaViva() {
+  if (!cola) return false;
+  if (cola.duena && cola.duena.isConnected === false) { soltarCola(); return false; }
+  return true;
+}
+
+function pedirSiguiente(via) {
+  if (!colaViva()) return false;
+  const t = Date.now();
+  if (ultimaPulsacion && ultimaPulsacion.via !== via && t - ultimaPulsacion.t < MISMA_PULSACION_MS) return true;
+  ultimaPulsacion = { via, t };
+  try {
+    Promise.resolve(cola.siguiente()).catch(err => console.warn('[preview] siguiente:', err));
+  } catch (err) { console.warn('[preview] siguiente:', err); }
+  return true;
+}
+
+document.addEventListener('previewcola', (e) => {
+  const d = e.detail || {};
+  if (typeof d.siguiente !== 'function') {
+    if (cola && cola.duena === d.duena) soltarCola();
+    return;
+  }
+  if (!currentKey || currentProvider === 'spotify-embed' || typeof d.esMia !== 'function' || !d.esMia(currentKey)) {
+    soltarCola();
+    return;
+  }
+  cola = { duena: d.duena || null, esMia: d.esMia, siguiente: d.siguiente };
+  ponerHandlerDeMedios(() => pedirSiguiente('medios'));
+});
+
+// Lo que suena decide si la cola sigue: otra clave que no es de la ficha, o el embed, la sueltan.
+document.addEventListener('previewchange', (e) => {
+  if (!cola) return;
+  const { key, provider } = e.detail || {};
+  if (provider === 'spotify-embed') { soltarCola(); return; }
+  if (key && !cola.esMia(key)) soltarCola();
+});
+
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'MediaTrackNext') pedirSiguiente('teclado');
+});
+
+function botonAdelante(via) {
+  // Solo el de adelante y solo con cola. El de atrás ni se mira; sin cola, el navegador hace lo suyo.
+  return (e) => {
+    if (e.button === 4 && colaViva()) {
+      e.preventDefault();
+      pedirSiguiente(via);
+    }
+  };
+}
+document.addEventListener('mouseup', botonAdelante('mouseup'));
+document.addEventListener('auxclick', botonAdelante('auxclick'));
 
 export { togglePreview, stopPreview, playingKey, playingProvider, isPlayingAudio, hoverIn, hoverOut, attachHover };

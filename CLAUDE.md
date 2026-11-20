@@ -1536,6 +1536,65 @@ historial, del fallback o de stats.fm) lleva un `.ac-track-play`, armado por `bo
 Guardas: `tests/ficha-artista-play.test.mjs` y las puertas B, C y D del banco `tests/banco/siempre-y-play.html`. El banco reemplaza
 `HTMLMediaElement.prototype.play` y `Chart`: un `.click()` no es un gesto de usuario, y el caso no carga el CDN.
 
+### ⏭ Pasar al preview siguiente (v=373)
+
+La tanda 136, pedido de Ian del 18/11/2026: «pasar de pista con la tecla o el next del mouse, y que suene el preview siguiente». Con la
+ficha de un álbum abierta y un preview suyo sonando, la tecla de medios «siguiente» y el botón «adelante» del mouse hacen sonar el preview
+de la pista siguiente de ESE álbum.
+
+- **La regla: «siguiente» es apretar el ▶ de la fila siguiente de la ficha.** Ni más, ni menos. El cuerpo del click vive en
+  `tocarFila(btn)` (`features/album-card.js`), que lo llama el click y lo llama `siguiente()`: la misma clave `alb:`, el mismo
+  `togglePreview`, el mismo ⏸ y el mismo «Sin preview». `siguiente()` recorre las filas que siguen a la ÚLTIMA QUE SONÓ (el botón, no la
+  clave: sobrevive a la pausa y al `ended`) en el orden de la ficha (`matched`): una ya deshabilitada se salta; una que da `null` queda con
+  «Sin preview» y se prueba la próxima; en la última no hace nada (no vuelve a la primera). Mientras una «siguiente» busca, otra se ignora.
+  En pausa pasa igual a la siguiente, y después de un `ended` también, mientras la ficha siga abierta. `ended` **sigue sin avanzar solo**.
+- **La cola es de la ficha, y el dueño de la cola y de los tres listeners es `ui/preview-player.js`** (ningún otro archivo escucha
+  `nexttrack`, `MediaTrackNext`, `mouseup` ni `auxclick`). La ficha la registra con el evento **`previewcola`** en `document`
+  (`{ duena, esMia(key), siguiente }`; sin `siguiente`, la suelta), **no con un export**: los ocho exports del player son un contrato que
+  vigilan `preview-player-t115` (A1) y `tamano-fijo-t130` (D1), y un noveno los pone rojos. Es el mismo camino que `routeteardown` y
+  `modalstackempty`. El player solo la acepta si lo que suena es de la ficha y no es el embed.
+- **Cuándo se va la cola** (`soltarCola()`): suena algo que la ficha dice que no es suyo (cualquier clave de otra vista); el proveedor pasa
+  al embed; el ✕ del pill; `modalstackempty`; `routeteardown`; el cierre de ESA ficha aunque queden otras debajo (`openModal` le pasa un
+  `onClose` que manda la baja: `modalstackempty` solo sale con la pila vacía); y una dueña que ya no está en el DOM. **No se va con
+  `key: null` a secas**: `ended`, el ⏸ de una fila y el `null` de una sin preview (que llama a `stopPreview()`) la dejan.
+- **De dónde llega, y por qué se oye UNA vez.** Las tres vías van a `pedirSiguiente(via)`:
+  - medios: `navigator.mediaSession.setActionHandler('nexttrack', …)` al registrar la cola y `('nexttrack', null)` al soltarla. Se lee
+    `navigator.mediaSession` en el momento y va en un `try`: sin `mediaSession` no tira, y el teclado y el mouse andan igual;
+  - teclado: `keydown` en `document` con `e.key === 'MediaTrackNext'`, por si el navegador lo manda a la página;
+  - mouse: `mouseup` y `auxclick` en `document` con `button === 4`, **solo con cola**: `preventDefault()` (que el navegador no vaya
+    «adelante» en el historial) y «siguiente».
+  Una vía **distinta** de la última aceptada, dentro de **400 ms** (`MISMA_PULSACION_MS`), es la misma pulsación y no avanza (en el mouse
+  igual se hace el `preventDefault()`): así `mediaSession` + `keydown` de la misma tecla, o `mouseup` + `auxclick` del mismo clic, suenan
+  una vez. La misma vía dos veces son dos pulsaciones. El costo: una tecla y un clic lateral de verdad a menos de 400 ms cuentan como uno.
+  Se eligió la hora y no «lo que esté en curso» porque la segunda vía puede llegar después de que la primera terminó de buscar.
+- **Sin cola, el mouse no se toca**: el botón 4 hace lo de siempre. 🔴 **El botón de atrás (el 3) no se toca NUNCA**, con cola o sin ella:
+  cambiaría de ruta y cerraría la ficha. Ni aparece en el player.
+- **El embed.** Si la siguiente cae al embed de Spotify, se abre como con un click y ahí se corta la cola: el iframe no avisa nada (ni
+  `playing` ni `ended`), así que después de él no hay «siguiente». ⚠️ **En la ficha, una pista CON id que no está en iTunes ni en Deezer NO
+  da «Sin preview»: da el embed** (`getPreview` con `spotifyId`, `api/preview-providers.js`). O sea que «salta la que no tiene preview»
+  solo pasa con filas ya deshabilitadas o sin id (casi nunca con tracklist); lo normal, ante una pista sin audio, es que «siguiente» abra
+  el embed y la cadena se corte ahí. El banco usa una pista SIN id para ejercitar el salto.
+- **Cuesta lo mismo que apretar el ▶ de esa fila**: un `getPreview` (caché de iTunes/Deezer o una búsqueda). 0 a Spotify. **La tabla de
+  costos no cambia.**
+- **Lo que quedó FUERA, a propósito**: adelantar dentro de los 30 s; el player de `#skips` (el iframe de `toggleEmbed()`); «📚 Por
+  escuchar» a pantalla completa; el repaso de playlists contra me gusta; «anterior» (ni `previoustrack`, ni la tecla de atrás, ni el botón
+  de atrás); pausa y play con la tecla de medios; avanzar solo al terminar; «siguiente» en cualquier otra vista (W-Three, `#skips`,
+  `#zeroplays`, `#sin-clasificar`, la ficha de artista, `#recs`, `#similar`, descubrir); atajos con flechas u otras teclas; y los abiertos
+  del reproductor que ya estaban en `PENDIENTES.md`.
+- 🔴 **Lo que el banco NO puede probar** (es «no medido», nunca «0»): que una tecla de medios REAL llegue a la página (ni por `mediaSession`
+  ni por `keydown`: ninguna de las dos vías se probó con una tecla física), y que el botón lateral REAL no
+  navegue después del `preventDefault()`. Un evento sintético no hace navegar al navegador. Lo prueba Ian.
+
+Guardas: **`tests/preview-siguiente-t136.test.mjs`** (`preview-player.js` y `album-card.js` REALES en Node con `dobles/loader-t110.mjs`,
+las funciones de `dobles/preview-t115-doble.mjs` y `dobles/dom-preview-doble.mjs`, que ganó `dataset` y los selectores `#id` sin cambiar
+lo que hacía; `loader-t115.mjs` no sirve acá porque cambia `components.js` para cualquier importador y la ficha necesita `confirmModal`;
+los 14 casos de la tanda; `RAIZ_T136` para otra raíz; rojo contra 2553389 en 31 de 62, verde 62 de 62) y el banco
+**`tests/banco/preview-siguiente.html`** (+ `-caso.html` y `-datos.mjs`, en `prepush`; la app entera con la Spotify y el iTunes simulados,
+la ficha abierta desde la tarjeta de `#listened`; el handler de `mediaSession` se captura envolviendo `setActionHandler`; puertas A-D;
+`?medir=1` vuelca sin afirmar). Rojo contra 2553389 en 3 de 3 corridas (puerta A: no hay handler de `nexttrack`); verde en 10 de 10
+contra v=373, reloj virtual de 6.365 a 6.822 ms (corre con el defecto de 45 s). En el banco, cada «siguiente» pide lo mismo que el ▶ de
+esa fila: una búsqueda en iTunes (la que salta la sin preview, dos en iTunes y un intento de Deezer por JSONP) y 0 a Spotify.
+
 ## 📏 El pill y las tarjetas, siempre del mismo tamaño (v=367)
 
 La tanda 130, pedido de Ian del 12/11/2026: «debería tener siempre el mismo tamaño y las letras se mueven de lado a lado o

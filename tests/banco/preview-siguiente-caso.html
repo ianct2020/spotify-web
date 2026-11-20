@@ -1,0 +1,108 @@
+<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>banco preview-siguiente — la app entera, en un iframe</title>
+<link rel="stylesheet" href="/css/theme.css">
+<link rel="stylesheet" href="/css/components.css">
+<link rel="stylesheet" href="/css/main.css">
+</head><body>
+<div id="app"></div>
+<script type="module">
+// ── Un iframe del banco `preview-siguiente.html` (v=373, tanda 136) ──────────
+//
+// La app ENTERA en `#home`, contra la Spotify simulada, con una cuenta INVENTADA (no el owner: ningún JSON del repo), una playlist de
+// escuchados INVENTADA con un disco de 5 pistas (`preview-siguiente-datos.mjs`) y la caché de me gusta vacía. Por encima:
+//   · iTunes lo contesta `itunesInventado()` (por `rutaExterna`). Deezer va por JSONP, un <script>: el banco no lo contesta, el resolutor
+//     de Chrome del corredor lo corta y `getPreview` sigue. Cada <script> de Deezer que la app agrega queda contado en `__deezer`.
+//   · `HTMLMediaElement.prototype.play`: lo reemplaza un doble que anota la URL y avisa `playing` (como `siempre-y-play`): un `.click()`
+//     de la madre no es un gesto de usuario y no hay ningún audio en el repo.
+//   · `navigator.mediaSession.setActionHandler`: envuelto ANTES de cargar la app, guarda cada handler en `__handlers` (y llama al de
+//     verdad). Así la madre puede apretar el «siguiente» de medios llamando al handler que la app registró.
+//   · `/data/*`: 404 y anotado.
+
+import { instalarRedSimulada, esperarReal, anclar } from '/banco/simulado.mjs';
+import { LISTA, PLAYLIST_ID, PLAYLIST_NOMBRE, TRACKLIST, ARTISTA, itunesInventado } from '/banco/preview-siguiente-datos.mjs';
+
+window.__errores = [];
+window.addEventListener('error', (e) => window.__errores.push('error: ' + (e.message || e)));
+window.addEventListener('unhandledrejection', (e) => window.__errores.push('rechazo: ' + String(e.reason?.message || e.reason)));
+const errorOriginal = console.error.bind(console);
+console.error = (...a) => { window.__errores.push('console.error: ' + a.map(String).join(' ').slice(0, 300)); errorOriginal(...a); };
+
+const USUARIO = 'usuarioSiguienteInventado';
+const sim = instalarRedSimulada();
+window.__sim = sim;
+localStorage.setItem('fonoteca_last_user_id', USUARIO);
+localStorage.setItem('fonoteca_perfil_v1', JSON.stringify({ id: USUARIO, display_name: 'Banco' }));
+sim.ruta('GET', /^\/me$/, () => ({ id: USUARIO, display_name: 'Banco' }));
+sim.ruta('GET', /^\/me\/playlists/, () => ({ items: [], next: null, total: 0 }));
+sim.ruta('GET', /^\/me\/tracks/, () => ({ items: [], next: null, total: 0 }));
+sim.ruta('GET', /^\/search/, () => ({ artists: { items: [] }, albums: { items: [] }, tracks: { items: [] } }));
+sim.ruta('GET', new RegExp(`^/playlists/${PLAYLIST_ID}\\?`), () => ({ snapshot_id: 'snapshot-siguiente-inventado' }));
+sim.ruta('GET', new RegExp(`^/playlists/${PLAYLIST_ID}/items`), () => ({ items: LISTA, next: null, total: LISTA.length }));
+sim.ruta('GET', /^\/albums\/[A-Za-z0-9]+\/tracks/, () => {
+  const items = TRACKLIST.map((t) => ({ ...t, uri: t.id ? `spotify:track:${t.id}` : null, duration_ms: 200000, disc_number: 1, artists: [{ name: ARTISTA }] }));
+  return { items, next: null, total: items.length };
+});
+sim.rutaExterna(/^https:\/\/itunes\.apple\.com\/search/, ({ url }) => itunesInventado(url));
+
+window.__datosAjenos = [];
+const debajo = window.fetch;
+window.fetch = async (entrada, opciones = {}) => {
+  const url = typeof entrada === 'string' ? entrada : (entrada instanceof URL ? entrada.href : entrada.url);
+  const abs = new URL(url, location.href);
+  if (abs.origin === location.origin && /\/data\//.test(abs.pathname)) {
+    window.__datosAjenos.push(abs.pathname);
+    return new Response('{}', { status: 404, headers: { 'content-type': 'application/json' } });
+  }
+  return debajo(url === entrada ? entrada : url, opciones);
+};
+
+window.Chart = class { destroy() {} resize() {} };   // `index.html` lo carga del CDN, y este caso no pasa por él.
+
+window.__audios = [];
+HTMLMediaElement.prototype.play = function () {
+  window.__audios.push(this.getAttribute('src'));
+  setTimeout(() => this.dispatchEvent(new Event('playing')), 0);
+  return Promise.resolve();
+};
+
+// Los handlers de `mediaSession` que registre la app.
+window.__handlers = {};
+window.__llamadasMedios = [];
+const ms = navigator.mediaSession;
+window.__haySesionDeMedios = !!(ms && typeof ms.setActionHandler === 'function');
+if (window.__haySesionDeMedios) {
+  const original = ms.setActionHandler.bind(ms);
+  ms.setActionHandler = (accion, fn) => {
+    window.__handlers[accion] = fn;
+    window.__llamadasMedios.push([accion, typeof fn === 'function']);
+    try { original(accion, fn); } catch { /* como el de verdad */ }
+  };
+}
+
+// Deezer: cada <script> que la app agrega con su host, contado.
+window.__deezer = [];
+new MutationObserver((ms2) => {
+  for (const m of ms2) for (const n of m.addedNodes) {
+    if (n.tagName === 'SCRIPT' && /deezer\.com/.test(n.src || '')) window.__deezer.push(new URL(n.src).host + new URL(n.src).pathname);
+  }
+}).observe(document.documentElement, { childList: true, subtree: true });
+
+const { prefKey } = await import('/js/storage.js');
+localStorage.setItem(prefKey('fonoteca_anim_v1'), 'nunca');
+localStorage.setItem(prefKey('listened_albums_playlist_id'), PLAYLIST_ID);
+localStorage.setItem(prefKey('listened_albums_playlist_name'), PLAYLIST_NOMBRE);
+const { idbDel, idbSetCached } = await import('/js/idb.js');
+for (const k of [`listened_grouped_${PLAYLIST_ID}_v2`, `playlist_items_${PLAYLIST_ID}`]) await anclar(idbDel(k));
+await anclar(idbSetCached('all_liked_tracks', [], null));
+
+const { iconoPausa } = await import('/js/ui/icons.js');
+// El ⏸ tal como lo serializa el navegador (no como está escrito en el fuente): con eso se compara el `innerHTML` de cada fila.
+const ref = document.createElement('button');
+ref.innerHTML = iconoPausa(10);
+window.__iconoPausa = ref.innerHTML;
+
+location.hash = '#home';
+await import('/js/app.js');
+await esperarReal(() => document.getElementById('my-history-btn') && document.querySelector('.home-card'), { que: 'que la app arranque', vueltas: 4000 });
+window.__listo = true;
+</script>
+</body></html>

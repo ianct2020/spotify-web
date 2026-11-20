@@ -11,32 +11,32 @@
 // tus me gusta" en cada fila y previews que prueban contra TODOS los artistas
 // del track.
 
-import { escapeHtml, confirmModal } from '../ui/components.js?v=372';
-import { showToast } from '../ui/toast.js?v=372';
-import { openArtistCard, knownArtist } from './artist-card.js?v=372';
-import { openModal, closeTop } from '../ui/modal-stack.js?v=372';
-import { getBestAvailableLikes, getAlbumTracks, anadirLikes } from '../api.js?v=372';
-import { albumKey } from '../util/album-key.js?v=372';
-import { indexarLikes, likesDeLaObra, cancionesDeLaObra, cruzarConTracklist, textoOtraEdicion } from '../util/likes-de-la-obra.js?v=372';
+import { escapeHtml, confirmModal } from '../ui/components.js?v=373';
+import { showToast } from '../ui/toast.js?v=373';
+import { openArtistCard, knownArtist } from './artist-card.js?v=373';
+import { openModal, closeTop } from '../ui/modal-stack.js?v=373';
+import { getBestAvailableLikes, getAlbumTracks, anadirLikes } from '../api.js?v=373';
+import { albumKey } from '../util/album-key.js?v=373';
+import { indexarLikes, likesDeLaObra, cancionesDeLaObra, cruzarConTracklist, textoOtraEdicion } from '../util/likes-de-la-obra.js?v=373';
 // `limpiaParaQuery` ya no se importa acá: desde v=219 la aplica el resolutor,
 // que es quien arma la query. Es a propósito — cuando la limpieza era tarea del
 // llamador, `wthree.js` se olvidaba del apóstrofo y nadie se enteraba. El
 // antecedente: hasta v=153 el import FALTABA en este archivo y cada ficha
 // tiraba un ReferenceError que el catch convertía en «no pude resolver el
 // álbum», o sea un error de programación con cara de resultado normal.
-import { resolveAlbumId } from '../util/album-resolver.js?v=372';
-import { indiceIdsDeAlbum, idLocalDelAlbum } from '../util/album-id-local.js?v=372';
-import { pedirYCachear } from '../util/cache-solo-exitos.js?v=372';
-import { skelTracklist } from '../ui/skeleton.js?v=372';
-import { firstArtistName, resolveArtistName } from '../util/artist-name.js?v=372';
-import { coverUrl } from '../util/cover-size.js?v=372';
-import { lookupAlbumStats } from '../util/album-stats.js?v=372';
-import { falloDeLecturaDelHistorial, AVISO_HISTORIAL_ILEGIBLE } from './history-data.js?v=372';
-import { fmtDia } from '../util/fecha.js?v=372';
-import { getPreview } from '../api/preview-providers.js?v=372';
-import { togglePreview, playingKey } from '../ui/preview-player.js?v=372';
-import { openTrackCard } from './track-card.js?v=372';
-import { iconoPlay, iconoPausa, iconoPuntos } from '../ui/icons.js?v=372';
+import { resolveAlbumId } from '../util/album-resolver.js?v=373';
+import { indiceIdsDeAlbum, idLocalDelAlbum } from '../util/album-id-local.js?v=373';
+import { pedirYCachear } from '../util/cache-solo-exitos.js?v=373';
+import { skelTracklist } from '../ui/skeleton.js?v=373';
+import { firstArtistName, resolveArtistName } from '../util/artist-name.js?v=373';
+import { coverUrl } from '../util/cover-size.js?v=373';
+import { lookupAlbumStats } from '../util/album-stats.js?v=373';
+import { falloDeLecturaDelHistorial, AVISO_HISTORIAL_ILEGIBLE } from './history-data.js?v=373';
+import { fmtDia } from '../util/fecha.js?v=373';
+import { getPreview } from '../api/preview-providers.js?v=373';
+import { togglePreview, playingKey } from '../ui/preview-player.js?v=373';
+import { openTrackCard } from './track-card.js?v=373';
+import { iconoPlay, iconoPausa, iconoPuntos } from '../ui/icons.js?v=373';
 
 // Mismo corazón que la tracklist de W-Three (features/wthree.js).
 const HEART_SVG = `<svg viewBox="0 0 24 24" width="11" height="11" fill="currentColor" aria-hidden="true"><path d="M12 21s-7.5-4.6-9.5-9A5 5 0 0 1 12 6.5 5 5 0 0 1 21.5 12c-2 4.4-9.5 9-9.5 9z"/></svg>`;
@@ -330,6 +330,9 @@ export function openAlbumCard(entrada) {
   // reordenan con `order` en el CSS. El corte lo hace una media query, sin JS.
   const overlay = openModal({
     id: modalId,
+    // (v=373) Al cerrarse ESTA ficha (aunque queden otras debajo y no salga `modalstackempty`), su cola de
+    // «siguiente» se va. Sin cola de esta ficha, el player no hace nada.
+    onClose: () => document.dispatchEvent(new CustomEvent('previewcola', { detail: { duena: overlay } })),
     html: `
     <div class="modal card-modal album-modal" style="max-width:820px;width:min(820px,94vw)">
       <div class="card-modal-head-simple">
@@ -570,27 +573,63 @@ async function hydrateLikes(overlay, a) {
   // solo mandáramos el del álbum, un disco acreditado a un alias («¥$») no
   // matchea en ningún proveedor y se cae entero al embed de Spotify, que en un
   // iframe cross-origin no puede autoarrancar.
-  holder.querySelectorAll('.album-modal-like-play').forEach(btn => {
+  //
+  // (v=373) El cuerpo del click vive en `tocarFila(btn)`, que devuelve lo que devolvió `togglePreview`:
+  // el click la llama igual que antes, y «siguiente» (la tecla de medios o el botón de adelante del mouse,
+  // ver `ui/preview-player.js`) la llama sobre la fila que sigue. Así «siguiente» es exactamente apretar
+  // el ▶ de la fila siguiente: la misma clave, el mismo ⏸, el mismo «Sin preview».
+  const filas = () => [...holder.querySelectorAll('.album-modal-like-play')];
+  const esMia = (key) => filas().some(b => `alb:${b.dataset.playId}` === key);
+  let ultimaFila = null;   // el BOTÓN de la última fila que sonó (no la clave: sobrevive a la pausa y al `ended`)
+  let avanzando = false;
+
+  async function tocarFila(btn) {
     const id = btn.dataset.playId;
     const name = btn.dataset.playName;
     const t = matched.find(x => x.id === id);
-    const setLabel = () => {
-      btn.innerHTML = playingKey() === `alb:${id}` ? iconoPausa(10) : iconoPlay(10);
-    };
-    setLabel();
+    btn.innerHTML = iconoPuntos(10);
+    const res = await togglePreview(`alb:${id}`, async () => {
+      return await getPreview({ name, artists: t?.artists, artist: a.artist, spotifyId: id });
+    });
+    if (res === true) {
+      btn.innerHTML = iconoPausa(10);
+      ultimaFila = btn;
+      // La cola de «siguiente» es de esta ficha. El player la acepta solo si lo que suena es suyo y no
+      // es el embed de Spotify (después del embed no hay «siguiente»).
+      document.dispatchEvent(new CustomEvent('previewcola', { detail: { duena: overlay, esMia, siguiente } }));
+    }
+    // Sin preview: LO DICE. Hasta v=149 esto ponía un «—» pelado y gris, que
+    // desde la fila se lee como «a esta canción le falta el ▶» — fue el
+    // reporte de Ian sobre «Love$ick (feat. A$AP Rocky)».
+    else if (res === null) { btn.innerHTML = SIN_PREVIEW_HTML; btn.classList.add('sin-preview'); btn.title = 'Sin preview en iTunes ni en Deezer'; btn.disabled = true; }
+    else btn.innerHTML = iconoPlay(10);
+    return res;
+  }
+
+  // La fila siguiente a la última que sonó, en el orden de la ficha. Una ya deshabilitada se salta; una que
+  // da `null` queda con «Sin preview» (lo hace `tocarFila`, como el click) y se prueba la próxima. En la
+  // última no hace nada: no vuelve a la primera.
+  async function siguiente() {
+    if (avanzando || !ultimaFila || !ultimaFila.isConnected) return;
+    avanzando = true;
+    try {
+      const lista = filas();
+      for (let i = lista.indexOf(ultimaFila) + 1; i > 0 && i < lista.length; i++) {
+        if (lista[i].disabled) continue;
+        const res = await tocarFila(lista[i]);
+        if (res !== null) return;   // sonó (`true`) o tocaste otra cosa mientras buscaba (`false`)
+      }
+    } finally {
+      avanzando = false;
+    }
+  }
+
+  filas().forEach(btn => {
+    btn.innerHTML = playingKey() === `alb:${btn.dataset.playId}` ? iconoPausa(10) : iconoPlay(10);
     btn.addEventListener('click', async (e) => {
       e.preventDefault();
       e.stopPropagation();
-      btn.innerHTML = iconoPuntos(10);
-      const res = await togglePreview(`alb:${id}`, async () => {
-        return await getPreview({ name, artists: t?.artists, artist: a.artist, spotifyId: id });
-      });
-      if (res === true) btn.innerHTML = iconoPausa(10);
-      // Sin preview: LO DICE. Hasta v=149 esto ponía un «—» pelado y gris, que
-      // desde la fila se lee como «a esta canción le falta el ▶» — fue el
-      // reporte de Ian sobre «Love$ick (feat. A$AP Rocky)».
-      else if (res === null) { btn.innerHTML = SIN_PREVIEW_HTML; btn.classList.add('sin-preview'); btn.title = 'Sin preview en iTunes ni en Deezer'; btn.disabled = true; }
-      else btn.innerHTML = iconoPlay(10);
+      await tocarFila(btn);
     });
   });
 
