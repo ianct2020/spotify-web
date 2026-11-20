@@ -11,32 +11,32 @@
 // tus me gusta" en cada fila y previews que prueban contra TODOS los artistas
 // del track.
 
-import { escapeHtml, confirmModal } from '../ui/components.js?v=371';
-import { showToast } from '../ui/toast.js?v=371';
-import { openArtistCard, knownArtist } from './artist-card.js?v=371';
-import { openModal, closeTop } from '../ui/modal-stack.js?v=371';
-import { getBestAvailableLikes, getAlbumTracks, anadirLikes } from '../api.js?v=371';
-import { albumKey } from '../util/album-key.js?v=371';
-import { indexarLikes, likesDeLaObra, cancionesDeLaObra, cruzarConTracklist, textoOtraEdicion } from '../util/likes-de-la-obra.js?v=371';
+import { escapeHtml, confirmModal } from '../ui/components.js?v=372';
+import { showToast } from '../ui/toast.js?v=372';
+import { openArtistCard, knownArtist } from './artist-card.js?v=372';
+import { openModal, closeTop } from '../ui/modal-stack.js?v=372';
+import { getBestAvailableLikes, getAlbumTracks, anadirLikes } from '../api.js?v=372';
+import { albumKey } from '../util/album-key.js?v=372';
+import { indexarLikes, likesDeLaObra, cancionesDeLaObra, cruzarConTracklist, textoOtraEdicion } from '../util/likes-de-la-obra.js?v=372';
 // `limpiaParaQuery` ya no se importa acá: desde v=219 la aplica el resolutor,
 // que es quien arma la query. Es a propósito — cuando la limpieza era tarea del
 // llamador, `wthree.js` se olvidaba del apóstrofo y nadie se enteraba. El
 // antecedente: hasta v=153 el import FALTABA en este archivo y cada ficha
 // tiraba un ReferenceError que el catch convertía en «no pude resolver el
 // álbum», o sea un error de programación con cara de resultado normal.
-import { resolveAlbumId } from '../util/album-resolver.js?v=371';
-import { indiceIdsDeAlbum, idLocalDelAlbum } from '../util/album-id-local.js?v=371';
-import { pedirYCachear } from '../util/cache-solo-exitos.js?v=371';
-import { skelTracklist } from '../ui/skeleton.js?v=371';
-import { firstArtistName, resolveArtistName } from '../util/artist-name.js?v=371';
-import { coverUrl } from '../util/cover-size.js?v=371';
-import { lookupAlbumStats } from '../util/album-stats.js?v=371';
-import { falloDeLecturaDelHistorial, AVISO_HISTORIAL_ILEGIBLE } from './history-data.js?v=371';
-import { fmtDia } from '../util/fecha.js?v=371';
-import { getPreview } from '../api/preview-providers.js?v=371';
-import { togglePreview, playingKey } from '../ui/preview-player.js?v=371';
-import { openTrackCard } from './track-card.js?v=371';
-import { iconoPlay, iconoPausa, iconoPuntos } from '../ui/icons.js?v=371';
+import { resolveAlbumId } from '../util/album-resolver.js?v=372';
+import { indiceIdsDeAlbum, idLocalDelAlbum } from '../util/album-id-local.js?v=372';
+import { pedirYCachear } from '../util/cache-solo-exitos.js?v=372';
+import { skelTracklist } from '../ui/skeleton.js?v=372';
+import { firstArtistName, resolveArtistName } from '../util/artist-name.js?v=372';
+import { coverUrl } from '../util/cover-size.js?v=372';
+import { lookupAlbumStats } from '../util/album-stats.js?v=372';
+import { falloDeLecturaDelHistorial, AVISO_HISTORIAL_ILEGIBLE } from './history-data.js?v=372';
+import { fmtDia } from '../util/fecha.js?v=372';
+import { getPreview } from '../api/preview-providers.js?v=372';
+import { togglePreview, playingKey } from '../ui/preview-player.js?v=372';
+import { openTrackCard } from './track-card.js?v=372';
+import { iconoPlay, iconoPausa, iconoPuntos } from '../ui/icons.js?v=372';
 
 // Mismo corazón que la tracklist de W-Three (features/wthree.js).
 const HEART_SVG = `<svg viewBox="0 0 24 24" width="11" height="11" fill="currentColor" aria-hidden="true"><path d="M12 21s-7.5-4.6-9.5-9A5 5 0 0 1 12 6.5 5 5 0 0 1 21.5 12c-2 4.4-9.5 9-9.5 9z"/></svg>`;

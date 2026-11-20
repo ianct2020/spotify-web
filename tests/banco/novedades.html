@@ -264,6 +264,10 @@ try {
   const toastsT128 = () => $$('.toast').map(t => ({ clase: t.className, texto: t.textContent.replace(/\s+/g, ' ').trim() }));
   const vistosT128 = new Map();
   const mirarToasts = () => { for (const t of toastsT128()) vistosT128.set(t.texto, t.clase); };
+  // (tanda 135, puerta C) Con el guardado sin confirmar, la caché de la biblioteca sigue y el contador del chip no cambia.
+  const { idbGetCached: leerCacheC135 } = await import('/js/idb.js');
+  const cacheAntesC135 = await anclar(leerCacheC135('saved_albums_v2'));
+  const cuentaAntesC135 = $('#disco-filtros [data-filtro="biblioteca"] .disco-filtro-n')?.textContent.trim();
   const l0 = sim.reg.llamadas.length;
   botonSingle().click();
   await esperarReal(() => { mirarToasts(); return [...vistosT128.keys()].some(t => /todavía no aparece|guardado en tu biblioteca/.test(t)); },
@@ -282,6 +286,12 @@ try {
   afirmar(pedidasT128.length === 2 && pedidasT128[0] === `PUT /me/library?uris=spotify:album:${SINGLE_T128}` && pedidasT128[1] === `GET /me/library/contains?uris=spotify:album:${SINGLE_T128}`,
     `guardar: las peticiones son PUT + GET contains (${pedidasT128.join(' , ')})`);
   afirmar(sim.reg.externas.length === 0, 'guardar: nada salió a la red externa');
+  const cacheDespuesC135 = await anclar(leerCacheC135('saved_albums_v2'));
+  const cuentaDespuesC135 = $('#disco-filtros [data-filtro="biblioteca"] .disco-filtro-n')?.textContent.trim();
+  const resumenC135 = `C135: caché antes ${Array.isArray(cacheAntesC135) ? `[${cacheAntesC135.length}]` : 'no está'} y después ${Array.isArray(cacheDespuesC135) ? `[${cacheDespuesC135.length}]` : 'no está'}, chip ${cuentaAntesC135} → ${cuentaDespuesC135}`;
+  afirmar(Array.isArray(cacheAntesC135) && Array.isArray(cacheDespuesC135) && cacheDespuesC135.length === cacheAntesC135.length,
+    `T135 C: con contains [false] la caché de la biblioteca sigue (${resumenC135})`);
+  afirmar(cuentaAntesC135 !== undefined && cuentaDespuesC135 === cuentaAntesC135, `T135 C: con contains [false] el contador del chip no cambia (${resumenC135})`);
 
   // ── (v=370, tanda 133) «Fuera los de tu biblioteca» cruza también por id ─────────────────────────────────────────────
   //
@@ -351,9 +361,131 @@ try {
     afirmar(sim.reg.externas.length === 0, 'T133: nada salió a la red externa');
   }
 
+  // ── (v=372, tanda 135) Lo que guardás cuenta como «en tu biblioteca» al instante ─────────────────────────────────────
+  //
+  // Hasta v=371 un guardado confirmado no tocaba la caché de `getSavedAlbums()` (`saved_albums_v2`, 60 min): el chip «Solo los de tu
+  // biblioteca» y «📚 Por escuchar» de `#listened` seguían leyendo la biblioteca de ANTES de guardar. Desde v=372 `guardarLanzamiento()` la
+  // tira cuando Spotify confirma el guardado. La biblioteca de esta parte la lleva la simulada: el `PUT` agrega el disco, el `contains`
+  // contesta lo que hay y `/me/albums` devuelve la lista de ese momento. Los discos son INVENTADOS:
+  //   · r-A-1, que está en tu registro de escuchados (la playlist de `#listened`) y NO en la biblioteca: el chip tiene que enseñarlo;
+  //   · r-B-1, que no está en el registro ni en la biblioteca: «Por escuchar» tiene que listarlo;
+  //   · r-C-3, en el registro y nunca guardado: con el chip no se ve (el control).
+  // La caché arranca FRESCA y sin ninguno de los dos: la escribió la apertura del caso T133, hace un momento.
+  // ⚠️ El contador de «Fuera los de tu biblioteca» NO sube al guardar: `markAlbumResolved()` mete el disco en «escuchados» de la vista y
+  // `albumIsUnheard()` lo saca de la lista ANTES de los filtros, así que el disco no llega a contarse por ningún criterio. Pasaba igual en
+  // v=371 (medido con `?medir=t135` contra 6b1087b, que no afirma nada de esta tanda: solo cuenta y lo dice en el resumen).
+  const MEDIR_T135 = q.get('medir') === 't135';
+  const { idbGetCached } = await import('/js/idb.js');
+  const REG_T135 = 'r-A-1', PEND_T135 = 'r-B-1', CONTROL_T135 = 'r-C-3';
+  const nombreT135 = (id) => `Lanzamiento ${id.slice(2, 3)}${id.slice(-1)}`;
+  const bibT135 = [...BIBLIOTECA_T133];
+  const urisT135 = (url) => (url.searchParams.get('uris') || '').split(',').filter(Boolean).map((u) => u.split(':').pop());
+  sim.ruta('GET', /^\/me\/albums/, () => ({ items: [...bibT135], limit: 50, offset: 0, total: bibT135.length, next: null }));
+  sim.ruta('PUT', /^\/me\/library\?/, ({ url }) => {
+    for (const id of urisT135(url)) {
+      if (!bibT135.some((g) => g.album.id === id)) bibT135.push(guardadoT133(id, nombreT135(id), artistaT133(id.slice(2, 3))));
+    }
+    return {};
+  });
+  sim.ruta('GET', /^\/me\/library\/contains\?/, ({ url }) => urisT135(url).map((id) => bibT135.some((g) => g.album.id === id)));
+  // `/data/*` (el historial del repo): 404 y anotado, como en `listened-biblioteca`. La cuenta del banco no es el owner.
+  window.__datosT135 = [];
+  const debajoT135 = window.fetch;
+  window.fetch = async (entrada, opciones = {}) => {
+    const abs = new URL(typeof entrada === 'string' ? entrada : entrada.url, location.href);
+    if (abs.origin === location.origin && /\/data\//.test(abs.pathname)) {
+      window.__datosT135.push(abs.pathname);
+      return new Response('{}', { status: 404, headers: { 'content-type': 'application/json' } });
+    }
+    return debajoT135(entrada, opciones);
+  };
+  window.Chart ??= class { destroy() {} resize() {} };
+
+  const cacheT135 = async () => { const c = await anclar(idbGetCached('saved_albums_v2')); return Array.isArray(c) ? c.map((g) => g?.album?.id) : null; };
+  const cacheAlEmpezarT135 = await cacheT135();
+  const guardarT135 = async (id) => {
+    const boton = () => $(`#newrel-list [data-save-album="${id}"]`);
+    afirmar(!!boton(), `T135: la tarjeta de ${id} está en la lista con su «Guardar»`);
+    const nombre = nombreT135(id);
+    const cuentaAntes = cuentaChip('biblioteca');
+    const i = sim.reg.llamadas.length, nAlb = aAlbumes();
+    const vistos = new Map();
+    const mirar = () => { for (const t of toastsT128()) if (t.texto.includes(`«${nombre}»`)) vistos.set(t.texto, t.clase); };
+    boton().click();
+    await esperarReal(() => { mirar(); return vistos.size > 0; }, { que: `T135: el toast del guardado de ${id}`, vueltas: VUELTAS });
+    try { await esperarReal(() => !boton(), { que: `T135: que la tarjeta de ${id} se vaya`, vueltas: 4000 }); } catch { /* lo dice el resumen */ }
+    await vueltasDeRed();
+    mirar();
+    return {
+      pedidas: llamadasDesde(i), albumes: aAlbumes() - nAlb, cuentaAntes, cuentaDespues: cuentaChip('biblioteca'), seFue: !boton(),
+      verde: [...vistos.entries()].some(([t, c]) => /\btoast-success\b/.test(c) && t.includes(`«${nombre}» guardado en tu biblioteca de álbumes`)),   // el texto del toast trae también el ícono y el ✕
+      toasts: [...vistos.entries()].map(([t, c]) => `[${c}] ${t}`), cache: await cacheT135(),
+    };
+  };
+  const gReg = await guardarT135(REG_T135);
+  const gPend = await guardarT135(PEND_T135);
+
+  // `#listened` con una playlist de escuchados INVENTADA: r-A-1 y r-C-3.
+  const PL_T135 = 'playlistT135Inventada0';
+  const pistaT135 = (albumId, i) => {
+    const a = artistaT133(albumId.slice(2, 3)), tid = `pistaT135Inventada000${i}`;
+    return { added_at: `2026-01-0${i}T00:00:00Z`, item: { type: 'track', id: tid, uri: `spotify:track:${tid}`, name: `Tema T135 ${i}`, duration_ms: 200000,
+      explicit: false, is_playable: true, track_number: 1, artists: [{ id: a.id, name: a.name }],
+      album: { id: albumId, name: nombreT135(albumId), album_type: 'album', total_tracks: 9, release_date: '2026-01-01', images: [], artists: [{ id: a.id, name: a.name }] } } };
+  };
+  const LISTA_T135 = [pistaT135(REG_T135, 1), pistaT135(CONTROL_T135, 2)];
+  sim.ruta('GET', new RegExp(`^/playlists/${PL_T135}\\?`), () => ({ snapshot_id: 'snapshot-t135' }));
+  sim.ruta('GET', new RegExp(`^/playlists/${PL_T135}/items`), () => ({ items: LISTA_T135, next: null, total: LISTA_T135.length }));
+  localStorage.setItem(prefKey('listened_albums_playlist_id'), PL_T135);
+  localStorage.setItem(prefKey('listened_albums_playlist_name'), 'Escuchados inventados T135');
+  const vistaListened = await import('/js/features/listened.js');
+  await anclar(Promise.resolve(vistaListened.render($('#main-content'))), { vueltas: VUELTAS });
+  const tarjetasListened = () => $$('#listened-grid-holder .playlist-card').map((b) => b.dataset.id);
+  await esperarReal(() => tarjetasListened().length === 2, { que: 'T135: las 2 tarjetas de #listened', vueltas: VUELTAS });
+  const chipListened = () => $('.listened-chip-biblioteca');
+  const iChipL = sim.reg.llamadas.length;
+  chipListened().click();
+  await esperarReal(() => chipListened()?.getAttribute('aria-pressed') === 'true' && !chipListened().disabled, { que: 'T135: el chip «Solo los de tu biblioteca» puesto', vueltas: VUELTAS });
+  await vueltasDeRed();
+  const chipL = { pedidas: llamadasDesde(iChipL), tarjetas: tarjetasListened() };
+  const iPorE = sim.reg.llamadas.length;
+  $('#listened-porescuchar-btn').click();
+  await esperarReal(() => { const c = $('#porescuchar-cabecera')?.textContent || ''; return c && c !== 'Leyendo tu biblioteca…'; }, { que: 'T135: «Por escuchar» leído', vueltas: VUELTAS });
+  await vueltasDeRed();
+  const porE = { pedidas: llamadasDesde(iPorE), filas: $$('.porescuchar-fila').map((f) => f.dataset.id), cabecera: $('#porescuchar-cabecera')?.textContent.trim() };
+
+  const lado = (g) => `${g.pedidas.length} peticiones [${g.pedidas.join(' , ')}], ${g.albumes} GET /me/albums, chip «Fuera los de tu biblioteca» ${g.cuentaAntes} → ${g.cuentaDespues}, la tarjeta ${g.seFue ? 'se fue' : 'se quedó'}, toast verde ${g.verde}, caché después: ${g.cache ? `[${g.cache.join(' ')}]` : 'no está'}`;
+  const resumenT135 = `T135: caché al empezar [${(cacheAlEmpezarT135 || []).join(' ')}] · guardar ${REG_T135}: ${lado(gReg)} · guardar ${PEND_T135}: ${lado(gPend)}`
+    + ` · #listened, «Solo los de tu biblioteca»: ${chipL.pedidas.length} peticiones [${chipL.pedidas.join(' , ')}], tarjetas [${chipL.tarjetas.join(' ')}]`
+    + ` · «Por escuchar»: ${porE.pedidas.length} peticiones [${porE.pedidas.join(' , ')}], filas [${porE.filas.join(' ')}] («${porE.cabecera}»)`
+    + ` · /data/ pedidos: ${window.__datosT135.length}`;
+  if (!MEDIR_T135) {
+    afirmar(Array.isArray(cacheAlEmpezarT135) && !cacheAlEmpezarT135.includes(REG_T135) && !cacheAlEmpezarT135.includes(PEND_T135),
+      `T135: la caché arranca sembrada y sin los dos discos (${resumenT135})`);
+    for (const [id, g] of [[REG_T135, gReg], [PEND_T135, gPend]]) {
+      afirmar(g.verde, `T135 A: guardar ${id} da el toast verde de siempre (${g.toasts.join(' || ')})`);
+      afirmar(g.pedidas.length === 2 && g.pedidas[0] === `PUT /me/library?uris=spotify:album:${id}` && g.pedidas[1] === `GET /me/library/contains?uris=spotify:album:${id}`,
+        `T135 A: guardar ${id} pide exactamente PUT + GET contains, las mismas 2 que en v=371 (${g.pedidas.join(' , ')})`);
+      afirmar(g.albumes === 0, `T135 A: guardar ${id} no pide /me/albums (${g.albumes})`);
+      afirmar(g.cache === null, `T135 A: después de guardar ${id}, \`saved_albums_v2\` ya no está (${g.cache ? g.cache.join(' ') : '—'})`);
+      afirmar(g.seFue, `T135 A: la tarjeta de ${id} se va, como en v=371`);
+      afirmar(g.cuentaDespues === g.cuentaAntes, `T135 A: el contador del chip no cambia (${g.cuentaAntes} → ${g.cuentaDespues}): el disco sale por «escuchados» antes de los filtros, como en v=371`);
+    }
+    afirmar(chipL.pedidas.filter((p) => p.startsWith('GET /me/albums')).length === 1,
+      `T135 B: «Solo los de tu biblioteca» vuelve a leer la biblioteca, UNA vez (${resumenT135})`);
+    afirmar(chipL.tarjetas.includes(REG_T135) && !chipL.tarjetas.includes(CONTROL_T135),
+      `T135 B: con el chip se ve ${REG_T135} (recién guardado) y no ${CONTROL_T135} (nunca guardado) (${resumenT135})`);
+    afirmar(porE.filas.includes(PEND_T135) && !porE.filas.includes(REG_T135),
+      `T135 B: «Por escuchar» lista ${PEND_T135} (recién guardado, sin registrar) y no ${REG_T135} (registrado) (${resumenT135})`);
+    afirmar(porE.pedidas.filter((p) => p.startsWith('GET /me/albums')).length === 0,
+      `T135 B: «Por escuchar» usa la lectura que acaba de hacer el chip, 0 GET /me/albums (${resumenT135})`);
+    afirmar(window.__datosT135.length === 0, `T135: ningún /data/ (${window.__datosT135.join(' ')})`);
+    afirmar(sim.reg.externas.length === 0, 'T135: nada salió a la red externa');
+  }
+
   // (tanda 127) El resumen va también a un `<pre>` y a `data-resumen`: es de donde `scripts/correr-banco.mjs` lo lee (mensaje y reloj virtual).
   const decirResumen = (t) => { document.documentElement.setAttribute('data-resumen', t); const pre = document.createElement('pre'); pre.id = 'progreso'; pre.textContent = t; document.body.prepend(pre); return t; };
-  listo(decirResumen(`12 tarjetas · viejo = reverso exacto de nuevo · ${filas} fila a ${ANCHO} px (${libres} px libres a la derecha) · biblioteca: línea con 500 y el chip encendido (${caidaPedidas} GET), nada con el chip apagado ni con la lectura sana · guardar con contains [false]: toast rojo, «Guardar single» y la tarjeta se queda (${pedidasT128.length} peticiones) · ${resumenT133} · contraste de la línea: ${contrastes.join(', ')} · 0 peticiones reales · reloj virtual=${Math.round(performance.now())} ms`));
+  listo(decirResumen(`12 tarjetas · viejo = reverso exacto de nuevo · ${filas} fila a ${ANCHO} px (${libres} px libres a la derecha) · biblioteca: línea con 500 y el chip encendido (${caidaPedidas} GET), nada con el chip apagado ni con la lectura sana · guardar con contains [false]: toast rojo, «Guardar single» y la tarjeta se queda (${pedidasT128.length} peticiones; ${resumenC135}) · ${resumenT133} · ${resumenT135} · contraste de la línea: ${contrastes.join(', ')} · 0 peticiones reales · reloj virtual=${Math.round(performance.now())} ms`));
 } catch (e) {
   if (e.parada) {
     document.documentElement.dataset.banco = 'ok';

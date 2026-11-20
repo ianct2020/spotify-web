@@ -6,35 +6,35 @@
 //     (util/album-heard.js: historial completo + likes + listened + w-three)
 //   - permiten "+ Biblioteca" y "Crear playlist con lo elegido"
 
-import { idbGet, idbGetCached, idbSetCached, idbDel, idbEntriesByPrefix, idbAllKeys } from '../idb.js?v=371';
-import { getArtistAlbumsConFuente, buscarDiscografiaPorNombre, searchArtistByName, getAlbumTracks, saveToLibrary, saveAlbumsToLibrary, albumsInLibrary, createPlaylist, addTracksToPlaylist } from '../api.js?v=371';
-import { albumKey } from '../util/album-key.js?v=371';
-import { cardKey, cardKeyLegacy, albumCreditName, keyOfPlaylistTrack } from '../util/discover-key.js?v=371';
-import { escapeHtml } from '../ui/components.js?v=371';
-import { openModal, closeTop } from '../ui/modal-stack.js?v=371';
-import { showToast } from '../ui/toast.js?v=371';
-import { openPlaylistPicker } from '../ui/playlist-picker.js?v=371';
-import { getOwnPlaylists, addUrisToPlaylists, toastAddResult } from '../util/playlist-add.js?v=371';
-import { openArtistCard } from './artist-card.js?v=371';
-import { openAlbumCard } from './album-card.js?v=371';
-import { createHiddenStore, createLocalStore } from '../util/hidden-sync.js?v=371';
-import { recuperarUriDeAlbumKey, REGLAS_VERSION } from '../util/hidden-recover.js?v=371';
-import { getPreview } from '../api/preview-providers.js?v=371';
-import { togglePreview, playingKey, attachHover } from '../ui/preview-player.js?v=371';
-import { coverUrl } from '../util/cover-size.js?v=371';
-import { fechaDelFallo } from '../util/escaneo-fallos.js?v=371';
-import { SCAN_TTL_MS, escaneoVencido, textoFrescura, crearMarcasDeFrescura } from '../util/frescura-escaneo.js?v=371';
-import { FILTROS as FILTROS_DEF, saveFiltros } from '../util/discover-filters.js?v=371';
-import { esEPoAlbum } from '../util/release-size.js?v=371';
-import { iconoPlay, iconoPausa, iconoPuntos, iconoOjo, iconoOjoTachado } from '../ui/icons.js?v=371';
+import { idbGet, idbGetCached, idbSetCached, idbDel, idbEntriesByPrefix, idbAllKeys } from '../idb.js?v=372';
+import { getArtistAlbumsConFuente, buscarDiscografiaPorNombre, searchArtistByName, getAlbumTracks, saveToLibrary, saveAlbumsToLibrary, albumsInLibrary, olvidarBibliotecaGuardada, createPlaylist, addTracksToPlaylist } from '../api.js?v=372';
+import { albumKey } from '../util/album-key.js?v=372';
+import { cardKey, cardKeyLegacy, albumCreditName, keyOfPlaylistTrack } from '../util/discover-key.js?v=372';
+import { escapeHtml } from '../ui/components.js?v=372';
+import { openModal, closeTop } from '../ui/modal-stack.js?v=372';
+import { showToast } from '../ui/toast.js?v=372';
+import { openPlaylistPicker } from '../ui/playlist-picker.js?v=372';
+import { getOwnPlaylists, addUrisToPlaylists, toastAddResult } from '../util/playlist-add.js?v=372';
+import { openArtistCard } from './artist-card.js?v=372';
+import { openAlbumCard } from './album-card.js?v=372';
+import { createHiddenStore, createLocalStore } from '../util/hidden-sync.js?v=372';
+import { recuperarUriDeAlbumKey, REGLAS_VERSION } from '../util/hidden-recover.js?v=372';
+import { getPreview } from '../api/preview-providers.js?v=372';
+import { togglePreview, playingKey, attachHover } from '../ui/preview-player.js?v=372';
+import { coverUrl } from '../util/cover-size.js?v=372';
+import { fechaDelFallo } from '../util/escaneo-fallos.js?v=372';
+import { SCAN_TTL_MS, escaneoVencido, textoFrescura, crearMarcasDeFrescura } from '../util/frescura-escaneo.js?v=372';
+import { FILTROS as FILTROS_DEF, saveFiltros } from '../util/discover-filters.js?v=372';
+import { esEPoAlbum } from '../util/release-size.js?v=372';
+import { iconoPlay, iconoPausa, iconoPuntos, iconoOjo, iconoOjoTachado } from '../ui/icons.js?v=372';
 import {
   DISCO_BASE_PREFIX, PRESUPUESTO_REFRESCO, RECIENTE_MAX_PAGINAS,
   crearBase, sumarCompleta, sumarReciente, tocaReciente, rangoReciente,
   fusionarBases, armarExportacion, leerImportacion,
-} from '../util/disco-base.js?v=371';
+} from '../util/disco-base.js?v=372';
 import {
   estimarCostoDeEscaneo, clasificarArtistas, totalizarCosto, costoDeUno, superaUmbral, PAGINAS_POR_ARTISTA,
-} from '../util/costo-escaneo.js?v=371';
+} from '../util/costo-escaneo.js?v=372';
 
 const DISCO_TTL_MIN = 30 * 24 * 60;       // 30 días
 const ARTIST_ID_TTL_MIN = 60 * 24 * 60;   // 60 días — los ids no cambian
@@ -958,7 +958,7 @@ export function yearOf(release) {
 // `releaseTs` vive ahora en `util/release-date.js` (v=246), junto al comparador
 // «más nuevo primero» de `#discover-artists`; se re-exporta acá para que
 // `#new-releases` siga importándolo de este archivo.
-export { releaseTs } from '../util/release-date.js?v=371';
+export { releaseTs } from '../util/release-date.js?v=372';
 
 // Deduplica ediciones del mismo álbum (deluxe, remaster, etc). Nos quedamos
 // con la primera edición (release date más antiguo).
@@ -1717,6 +1717,15 @@ export async function guardarLanzamiento(al) {
   if (enBiblioteca !== true) {
     console.warn(`[guardar] el PUT salió bien pero Spotify dice que ${al.id} no está en la biblioteca`);
     throw new Error(`Spotify ha aceptado guardar «${nombre}», pero todavía no aparece en tu biblioteca de álbumes. Compruébalo en Spotify antes de volver a intentarlo.`);
+  }
+  // (v=372, tanda 135) Confirmado: la caché de la biblioteca se tira, así «Solo los de tu biblioteca» y «📚 Por escuchar» de `#listened`
+  // lo ven sin esperar 60 minutos. Solo aquí, nunca si el `PUT` o el `contains` fallaron. Si el borrado falla, el guardado sigue siendo
+  // un éxito (el disco SÍ quedó en Spotify): el error crudo a la consola y nada en rojo. 0 peticiones.
+  // No se toca el contexto de los filtros de descubrir: la vista saca el disco por `markAlbumResolved()` antes de que lleguen los filtros.
+  try {
+    await olvidarBibliotecaGuardada();
+  } catch (e) {
+    console.warn('[guardar] guardado, pero no se pudo tirar la caché de tu biblioteca (saved_albums_v2):', e);
   }
   return { destino: 'biblioteca' };
 }

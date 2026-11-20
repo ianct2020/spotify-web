@@ -7,7 +7,7 @@
 //   - permiten "+ Biblioteca" y "Crear playlist con lo elegido"
 
 import { idbGet, idbGetCached, idbSetCached, idbDel, idbEntriesByPrefix, idbAllKeys } from '../idb.js';
-import { getArtistAlbumsConFuente, buscarDiscografiaPorNombre, searchArtistByName, getAlbumTracks, saveToLibrary, saveAlbumsToLibrary, albumsInLibrary, createPlaylist, addTracksToPlaylist } from '../api.js';
+import { getArtistAlbumsConFuente, buscarDiscografiaPorNombre, searchArtistByName, getAlbumTracks, saveToLibrary, saveAlbumsToLibrary, albumsInLibrary, olvidarBibliotecaGuardada, createPlaylist, addTracksToPlaylist } from '../api.js';
 import { albumKey } from '../util/album-key.js';
 import { cardKey, cardKeyLegacy, albumCreditName, keyOfPlaylistTrack } from '../util/discover-key.js';
 import { escapeHtml } from '../ui/components.js';
@@ -1717,6 +1717,15 @@ export async function guardarLanzamiento(al) {
   if (enBiblioteca !== true) {
     console.warn(`[guardar] el PUT salió bien pero Spotify dice que ${al.id} no está en la biblioteca`);
     throw new Error(`Spotify ha aceptado guardar «${nombre}», pero todavía no aparece en tu biblioteca de álbumes. Compruébalo en Spotify antes de volver a intentarlo.`);
+  }
+  // (v=372, tanda 135) Confirmado: la caché de la biblioteca se tira, así «Solo los de tu biblioteca» y «📚 Por escuchar» de `#listened`
+  // lo ven sin esperar 60 minutos. Solo aquí, nunca si el `PUT` o el `contains` fallaron. Si el borrado falla, el guardado sigue siendo
+  // un éxito (el disco SÍ quedó en Spotify): el error crudo a la consola y nada en rojo. 0 peticiones.
+  // No se toca el contexto de los filtros de descubrir: la vista saca el disco por `markAlbumResolved()` antes de que lleguen los filtros.
+  try {
+    await olvidarBibliotecaGuardada();
+  } catch (e) {
+    console.warn('[guardar] guardado, pero no se pudo tirar la caché de tu biblioteca (saved_albums_v2):', e);
   }
   return { destino: 'biblioteca' };
 }

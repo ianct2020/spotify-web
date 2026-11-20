@@ -1883,6 +1883,14 @@ async function getSavedAlbums({ force = false } = {}) {
   return items;
 }
 
+// (v=372, tanda 135) Tira la caché de `getSavedAlbums()` y espera. La llama SOLO `guardarLanzamiento()` (`features/discover-common.js`),
+// después de que Spotify confirmó el guardado: sin esto, el chip «Solo los de tu biblioteca» y «📚 Por escuchar» de `#listened` leían la
+// biblioteca de antes de guardar durante 60 minutos (también tras recargar: la caché vive en IndexedDB). La próxima lectura sin `force`
+// va a la red. Solo la clave de hoy: la `v1` ya nadie la lee y la borra el cambio de usuario. Si el borrado falla, TIRA: decide quien llama.
+async function olvidarBibliotecaGuardada() {
+  await idbDel(SAVED_ALBUMS_KEY);
+}
+
 /**
  * ¿Están estos álbumes en la biblioteca? Devuelve Map<albumId, bool>.
  * Mismo tope de 40 que el `contains` de pistas: `LIBRARY_URIS_POR_REQUEST`.
@@ -2252,6 +2260,7 @@ export {
   removeAlbumsFromLibrary,
   albumsInLibrary,
   getSavedAlbums,
+  olvidarBibliotecaGuardada,
   getArtistAlbums,
   getArtistAlbumsConFuente,
   buscarDiscografiaPorNombre,

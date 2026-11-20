@@ -18,8 +18,8 @@
 // y el filtro de las etiquetas es `etiquetasDe` (el mismo `filtrarEtiquetasLastfm` de siempre).
 // `escanearGeneros` NO se usa: reintenta solo, y aquí no hay ningún reintento automático.
 
-import { generosDeArtista } from './generos-regla.js?v=371';
-import { yaBuscado, clasificar, etiquetasDe, INTERVALO_MS } from './generos-escaneo.js?v=371';
+import { generosDeArtista } from './generos-regla.js?v=372';
+import { yaBuscado, clasificar, etiquetasDe, INTERVALO_MS } from './generos-escaneo.js?v=372';
 
 // ── Los topes ────────────────────────────────────────────────────────────────
 //

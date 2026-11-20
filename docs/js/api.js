@@ -1,18 +1,18 @@
-import { getValidToken, refreshAccessToken } from './auth.js?v=371';
-import { cacheGet, cacheGetRaw, cacheGetTimestamp, cacheSet, cacheClear, prefKey, migratePrefKey } from './storage.js?v=371';
-import { idbDel, idbDelByPrefix, idbGetCached, idbGetCachedRaw, idbGetTimestamp, idbSetCached, idbGet, idbAllKeys, idbEntriesByPrefix, idbSetVarios } from './idb.js?v=371';
-import { OWNER_KEY_LIST } from './history-keys.js?v=371';
-import { OCULTOS_ITEMS_PREFIX } from './util/ocultos-items-clave.js?v=371';
-import { showToast } from './ui/toast.js?v=371';
-import { artistIsSame, limpiaParaQuery } from './util/track-match.js?v=371';
-import { contadorCuota, cuotaDeEndpoint } from './util/cuota.js?v=371';
-import { exportarEtiquetas, importarEtiquetas } from './api/lastfm.js?v=371';
-import { leerNavegador, armarCopia, serializar, contieneSecreto, CENSO } from './util/copia-completa.js?v=371';
-import { leerCopia, planDeImport, segundaRed, importEscribio, TEXTOS as TEXTOS_IMPORT } from './util/copia-importar.js?v=371';
-import { MARCA_DESDE_COPIA, leerMarca, marcaTrasImport } from './util/ocultos-desde-copia.js?v=371';
-import { avisarCopiaImportada } from './util/canal-copia.js?v=371';
-import { BORRADOS_LOG_MAX } from './util/topes-registros.js?v=371';
-import { LIKES_DE_OTRO_KEY, hayLikesDeOtro } from './util/likes-de-otro.js?v=371';
+import { getValidToken, refreshAccessToken } from './auth.js?v=372';
+import { cacheGet, cacheGetRaw, cacheGetTimestamp, cacheSet, cacheClear, prefKey, migratePrefKey } from './storage.js?v=372';
+import { idbDel, idbDelByPrefix, idbGetCached, idbGetCachedRaw, idbGetTimestamp, idbSetCached, idbGet, idbAllKeys, idbEntriesByPrefix, idbSetVarios } from './idb.js?v=372';
+import { OWNER_KEY_LIST } from './history-keys.js?v=372';
+import { OCULTOS_ITEMS_PREFIX } from './util/ocultos-items-clave.js?v=372';
+import { showToast } from './ui/toast.js?v=372';
+import { artistIsSame, limpiaParaQuery } from './util/track-match.js?v=372';
+import { contadorCuota, cuotaDeEndpoint } from './util/cuota.js?v=372';
+import { exportarEtiquetas, importarEtiquetas } from './api/lastfm.js?v=372';
+import { leerNavegador, armarCopia, serializar, contieneSecreto, CENSO } from './util/copia-completa.js?v=372';
+import { leerCopia, planDeImport, segundaRed, importEscribio, TEXTOS as TEXTOS_IMPORT } from './util/copia-importar.js?v=372';
+import { MARCA_DESDE_COPIA, leerMarca, marcaTrasImport } from './util/ocultos-desde-copia.js?v=372';
+import { avisarCopiaImportada } from './util/canal-copia.js?v=372';
+import { BORRADOS_LOG_MAX } from './util/topes-registros.js?v=372';
+import { LIKES_DE_OTRO_KEY, hayLikesDeOtro } from './util/likes-de-otro.js?v=372';
 
 const BASE = 'https://api.spotify.com/v1';
 const MIN_RETRY_WAIT = 5000;
@@ -1005,7 +1005,7 @@ async function importarCopiaCompleta(texto, { ahora = new Date() } = {}) {
     plan.rechazo = { motivo: 'roto', texto: `El archivo no es un JSON válido (${e?.message || e}).` };
     return { plan };
   }
-  const { motivoSinImportCompleto } = await import('./features/history-data.js?v=371');
+  const { motivoSinImportCompleto } = await import('./features/history-data.js?v=372');
   const motivoOwner = await motivoSinImportCompleto();
   const uid = motivoOwner === 'identidad' ? null : _cachedUserId;
   const leido = await leerParaImportar();
@@ -1883,6 +1883,14 @@ async function getSavedAlbums({ force = false } = {}) {
   return items;
 }
 
+// (v=372, tanda 135) Tira la caché de `getSavedAlbums()` y espera. La llama SOLO `guardarLanzamiento()` (`features/discover-common.js`),
+// después de que Spotify confirmó el guardado: sin esto, el chip «Solo los de tu biblioteca» y «📚 Por escuchar» de `#listened` leían la
+// biblioteca de antes de guardar durante 60 minutos (también tras recargar: la caché vive en IndexedDB). La próxima lectura sin `force`
+// va a la red. Solo la clave de hoy: la `v1` ya nadie la lee y la borra el cambio de usuario. Si el borrado falla, TIRA: decide quien llama.
+async function olvidarBibliotecaGuardada() {
+  await idbDel(SAVED_ALBUMS_KEY);
+}
+
 /**
  * ¿Están estos álbumes en la biblioteca? Devuelve Map<albumId, bool>.
  * Mismo tope de 40 que el `contains` de pistas: `LIBRARY_URIS_POR_REQUEST`.
@@ -2252,6 +2260,7 @@ export {
   removeAlbumsFromLibrary,
   albumsInLibrary,
   getSavedAlbums,
+  olvidarBibliotecaGuardada,
   getArtistAlbums,
   getArtistAlbumsConFuente,
   buscarDiscografiaPorNombre,

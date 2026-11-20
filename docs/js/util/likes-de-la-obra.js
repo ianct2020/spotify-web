@@ -35,11 +35,11 @@
 //
 // No filtra `isJunkTrack`: si lo hiciera un lado y el otro no, las dos pantallas volverían a contar distinto.
 
-import { albumKey, coverId } from './album-key.js?v=371';
-import { baseDeEdicion } from './edition-suffix.js?v=371';
-import { artistMatches } from './track-match.js?v=371';
-import { songKey } from './song-identity.js?v=371';
-import { VERSION_MARKERS } from './versions-guard.js?v=371';
+import { albumKey, coverId } from './album-key.js?v=372';
+import { baseDeEdicion } from './edition-suffix.js?v=372';
+import { artistMatches } from './track-match.js?v=372';
+import { songKey } from './song-identity.js?v=372';
+import { VERSION_MARKERS } from './versions-guard.js?v=372';
 
 const MARCADORES = new RegExp(VERSION_MARKERS.source, 'gi');
 
