@@ -1,0 +1,258 @@
+<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>banco preview-adelantar — clic, arrastre y teclado dentro de los 30 s del preview</title>
+<style>html,body{margin:0;background:#111;color:#eee;font:13px system-ui}iframe{border:0;display:block}</style>
+</head><body>
+<pre id="progreso"></pre>
+<div id="marcos"></div>
+<script type="module">
+// ── Qué prueba este banco (v=374, tanda 137) ─────────────────────────────────
+//
+// La app ENTERA (`preview-adelantar-caso.html`), con la Spotify y el iTunes simulados y un disco INVENTADO de 3 pistas
+// (`preview-adelantar-datos.mjs`, con lo esperado escrito antes de correr nada). La ficha se abre desde la tarjeta de `#listened`
+// y se aprieta el ▶ de la 1.ª. El `<audio>` lo dobla el caso: `duration` 30 y `currentTime` de lectura y escritura.
+//
+//   A. clic (pointerdown + pointerup) al 50 % de la pista → currentTime 15 ± 0,5; «faltan» dice −0:15.
+//   B. arrastre del 20 % al 70 % → currentTime 21 ± 0,5; en el medio (50 %), aria-valuenow 15.
+//   C. con foco en la barra, desde 10: → 15, ↑ 20, ← 15, ↓ 10, Home 0; un espía de `keydown` en `document` ve 0 de esas teclas.
+//   D. en pausa, un clic al 40 % la deja en pausa en 12; un arrastre hasta el 100 % queda en 29,5 y el pill sigue abierto.
+//   E. el pill 360 × 62 en los cuatro estados (buscando, cargando, sonando, en pausa) a 1366 × 591, y 62 de alto a 390 × 844;
+//      la pista ≥ 16 px de alto; 0 peticiones a Spotify, iTunes y Deezer desde que el preview suena hasta el final de D;
+//      0 errores de consola.
+//   F. el contraste del contorno del foco contra el fondo del pill, en los cuatro presets, ≥ 3:1 (con el alfa compuesto y las
+//      animaciones terminadas).
+//
+// Los clics, arrastres y teclas son `PointerEvent` y `KeyboardEvent` con `dispatchEvent`, en las coordenadas de
+// `getBoundingClientRect()` de la pista.
+// ⚠️ Lo que este banco NO puede probar (es «no medido», nunca «0»): que un audio real de iTunes o Deezer salte bien (no reproduce
+// audio), cuántos bytes pide el `<audio>` al saltar, y el arrastre con el dedo en un celular real.
+// `?medir=1` vuelca lo que ve sin afirmar (así se mide contra e1a10cb).
+
+import { esperarReal } from '/banco/simulado.mjs';
+import { fallar, listo } from '/banco/esperar.mjs';
+import { PRESETS } from '/banco/preview-adelantar-datos.mjs';
+
+const q = new URLSearchParams(location.search);
+const MEDIR = q.get('medir') === '1';
+const fallosMedidos = [];
+const afirmar = (c, msg) => { if (c) return; if (MEDIR) { fallosMedidos.push(msg); return; } throw new Error('BANCO: ' + msg); };
+const pasos = [];
+const progreso = (t) => { pasos.push(`${t} @${Math.round(performance.now())}`); document.getElementById('progreso').textContent = pasos.join(' · '); };
+const VUELTAS = 20000;
+const esperarReloj = (ms) => new Promise((r) => setTimeout(r, ms));
+
+function marco(ancho, alto, id) {
+  const f = document.createElement('iframe');
+  f.width = ancho; f.height = alto;
+  f.src = `/banco/preview-adelantar-caso.html?marco=${id}`;
+  document.getElementById('marcos').appendChild(f);
+  return f;
+}
+const f = marco(1366, 591, 'a');
+const win = () => f.contentWindow;
+const $ = (s) => f.contentDocument?.querySelector(s);
+const audio = () => win().__audio;
+const barra = () => $('.preview-pill-progress');
+const pista = () => $('.preview-pill-progress-bar');
+const pill = () => $('.preview-pill');
+const valor = () => barra()?.getAttribute('aria-valuenow') ?? null;
+const faltan = () => $('.preview-pill-time-falta')?.textContent ?? null;
+const ct = () => Math.round((audio()?.currentTime ?? NaN) * 100) / 100;
+const enPausa = () => !!audio()?.paused && $('.preview-pill-toggle')?.getAttribute('aria-label') === 'Seguir preview';
+const estado = () => (enPausa() ? 'en pausa' : (audio() && !audio().paused ? 'sonando' : '¿?'));
+
+function puntero(tipo, frac, extra = {}) {
+  const r = pista().getBoundingClientRect();
+  const ev = new (win().PointerEvent)(tipo, { clientX: r.left + r.width * frac, clientY: r.top + r.height / 2, button: tipo === 'pointermove' ? -1 : 0, buttons: tipo === 'pointerup' ? 0 : 1, pointerId: 1, pointerType: 'mouse', isPrimary: true, bubbles: true, cancelable: true, ...extra });
+  pista().dispatchEvent(ev);
+  return ev;
+}
+const clic = (frac) => { puntero('pointerdown', frac); puntero('pointerup', frac); };
+function tecla(key) {
+  const ev = new (win().KeyboardEvent)('keydown', { key, bubbles: true, cancelable: true });
+  barra().dispatchEvent(ev);
+  return ev;
+}
+function ponerTiempo(t) { audio().currentTime = t; audio().dispatchEvent(new Event('timeupdate')); }
+
+// Peticiones nuevas por host.
+function porHost(l0, d0, x0) {
+  const reg = win().__sim.reg;
+  const nuevas = reg.llamadas.slice(l0).map((l) => (/^https?:/.test(l.ruta) ? new URL(l.ruta).host : 'api.spotify.com'));
+  const cuenta = { 'api.spotify.com': 0, 'itunes.apple.com': 0, 'deezer (JSONP)': win().__deezer.length - d0, 'otros sin simular': reg.externas.length - x0 };
+  for (const h of nuevas) cuenta[h] = (cuenta[h] || 0) + 1;
+  return cuenta;
+}
+const fmt = (c) => Object.entries(c).map(([k, n]) => `${k} ${n}`).join(', ');
+
+const tabla = [];
+function fila(puerta, accion, antes, extra = '') {
+  tabla.push(`${puerta} | ${accion} | ${antes} → ${ct()} | aria-valuenow ${valor()} | texto ${$('.preview-pill-time-va')?.textContent} / ${faltan()} | ${estado()}${extra ? ' | ' + extra : ''}`);
+}
+
+const datos = {};
+try {
+  progreso('esperando la app');
+  await esperarReal(() => win()?.__listo, { que: 'que arranque la app', vueltas: VUELTAS });
+  progreso('app');
+
+  // ── E (1/2): los cuatro estados del pill a 1366 ──
+  const medir = () => { const r = pill().getBoundingClientRect(); return [Math.round(r.width), Math.round(r.height)]; };
+  const tam = {};
+  win().__itunesColgado = true;
+  await win().__abrirYSonar(0);
+  await esperarReal(() => $('.preview-pill.show.loading'), { que: 'E: el pill buscando', vueltas: VUELTAS });
+  tam.buscando = medir();
+  win().__colgarPlaying = true;
+  win().__itunesColgado = false;
+  win().__soltarItunes();
+  await esperarReal(() => $('.preview-pill.show') && !$('.preview-pill.loading') && audio(), { que: 'E: el pill cargando', vueltas: VUELTAS });
+  await esperarReloj(50);
+  tam.cargando = medir();
+  win().__colgarPlaying = false;
+  audio().dispatchEvent(new Event('playing'));
+  await esperarReal(() => $('.preview-pill.show.is-playing') && !barra().hasAttribute('aria-disabled'), { que: 'E: sonando y con duración', vueltas: VUELTAS });
+  tam.sonando = medir();
+  progreso('suena');
+
+  const reg = win().__sim.reg;
+  const l0 = reg.llamadas.length, d0 = win().__deezer.length, x0 = reg.externas.length;
+  const ev0 = [];
+  f.contentDocument.addEventListener('previewchange', (e) => ev0.push(e.detail));
+
+  // ── A ──
+  ponerTiempo(3);
+  let antes = ct();
+  clic(0.5);
+  fila('A', 'clic al 50 %', antes);
+  afirmar(Math.abs(ct() - 15) <= 0.5, `A: clic al 50 % → currentTime 15 ± 0,5 (${ct()})`);
+  afirmar(faltan() === '−0:15', `A: «faltan» dice −0:15 (${faltan()})`);
+  progreso('A');
+
+  // ── B ──
+  ponerTiempo(2);
+  antes = ct();
+  puntero('pointerdown', 0.2);
+  puntero('pointermove', 0.5);
+  const enMedio = valor();
+  ponerTiempo(2.3);   // un timeupdate a mitad del arrastre
+  const enMedioTrasTimeupdate = valor();
+  puntero('pointermove', 0.7);
+  puntero('pointerup', 0.7);
+  fila('B', 'arrastre 20 % → 70 %', antes, `en el medio aria-valuenow ${enMedio} (tras un timeupdate: ${enMedioTrasTimeupdate})`);
+  afirmar(enMedio === '15', `B: en el medio, aria-valuenow 15 (${enMedio})`);
+  afirmar(enMedioTrasTimeupdate === '15', `B: un timeupdate en el medio no lo pisa (${enMedioTrasTimeupdate})`);
+  afirmar(Math.abs(ct() - 21) <= 0.5, `B: al soltar, currentTime 21 ± 0,5 (${ct()})`);
+  progreso('B');
+
+  // ── C ──
+  barra().focus();
+  const espia = [];
+  const TECLAS = ['ArrowRight', 'ArrowUp', 'ArrowLeft', 'ArrowDown', 'Home', 'End'];
+  const alEspia = (e) => { if (TECLAS.includes(e.key)) espia.push(e.key); };
+  f.contentDocument.addEventListener('keydown', alEspia);
+  ponerTiempo(10);
+  const serie = [];
+  for (const k of ['ArrowRight', 'ArrowUp', 'ArrowLeft', 'ArrowDown', 'Home']) {
+    antes = ct();
+    const ev = tecla(k);
+    fila('C', k, antes, `defaultPrevented ${ev.defaultPrevented}`);
+    serie.push(ct());
+  }
+  f.contentDocument.removeEventListener('keydown', alEspia);
+  afirmar(JSON.stringify(serie) === JSON.stringify([15, 20, 15, 10, 0]), `C: desde 10, → ↑ ← ↓ Home = 15, 20, 15, 10, 0 (${serie})`);
+  afirmar(espia.length === 0, `C: el espía de document ve 0 flechas (${espia})`);
+  datos.focoVisible = barra().matches(':focus-visible');
+  progreso('C');
+
+  // ── D ──
+  $('.preview-pill-toggle').click();
+  await esperarReal(() => enPausa(), { que: 'D: en pausa', vueltas: VUELTAS });
+  tam.pausa = medir();
+  antes = ct();
+  clic(0.4);
+  fila('D', 'clic al 40 % en pausa', antes);
+  afirmar(enPausa() && Math.abs(ct() - 12) <= 0.5, `D: en pausa, el clic al 40 % la deja en pausa en 12 (${estado()}, ${ct()})`);
+  antes = ct();
+  puntero('pointerdown', 0.5);
+  puntero('pointermove', 1);
+  puntero('pointerup', 1);
+  fila('D', 'arrastre hasta el 100 %', antes, `pill ${pill().classList.contains('show') ? 'abierto' : 'CERRADO'}`);
+  afirmar(Math.abs(ct() - 29.5) <= 0.01, `D: el arrastre hasta el 100 % queda en 29,5 (${ct()})`);
+  afirmar(pill().classList.contains('show') && enPausa(), 'D: el pill sigue abierto y en pausa');
+  progreso('D');
+
+  // Peticiones desde que sonó, y eventos.
+  const pet = porHost(l0, d0, x0);
+  datos.peticiones = fmt(pet);
+  afirmar(Object.values(pet).every((n) => n === 0), `E: 0 peticiones desde que suena (${fmt(pet)})`);
+  // El clic del ⏸ emite (es la pausa); adelantar no agrega nada: solo ese.
+  datos.eventos = ev0.length;
+  afirmar(ev0.length === 1 && ev0[0].playing === false, `adelantar no emite previewchange: solo el de la pausa (${JSON.stringify(ev0)})`);
+
+  // ── E (2/2) ──
+  for (const [k, v] of Object.entries(tam)) afirmar(v[0] === 360 && v[1] === 62, `E: a 1366 el pill mide 360 × 62 ${k} (${v})`);
+  const rp = pista().getBoundingClientRect();
+  datos.toque = Math.round(rp.height * 10) / 10;
+  afirmar(rp.height >= 16, `E: la pista mide ≥ 16 px de alto (${rp.height})`);
+  datos.tam = Object.entries(tam).map(([k, v]) => `${k} ${v.join('×')}`).join(', ');
+
+  // ── F: el contraste del foco en los cuatro presets ──
+  const lum = ([r, g, b]) => { const c = [r, g, b].map((v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; }); return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]; };
+  const contraste = (a, b) => { const x = lum(a), y = lum(b); return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05); };
+  // `rgb(…)`/`rgba(…)` van de 0 a 255; un `color-mix` sale como `color(srgb r g b / a)`, de 0 a 1.
+  const rgba = (s) => {
+    const m = s.match(/[\d.]+/g).map(Number);
+    if (/^color\(srgb/.test(s)) return [m[0] * 255, m[1] * 255, m[2] * 255, m[3] ?? 1];
+    return [m[0], m[1], m[2], m[3] ?? 1];
+  };
+  const sobre = (c, fondo) => [0, 1, 2].map((i) => c[i] * c[3] + fondo[i] * (1 - c[3])).concat(1);
+  const contrastes = {};
+  barra().focus();
+  for (const p of PRESETS) {
+    await win().__ponerTema(p);
+    await esperarReloj(50);
+    f.contentDocument.getAnimations().forEach((x) => { try { x.finish(); } catch { /* las infinitas */ } });
+    const cs = win().getComputedStyle(barra());
+    // El fondo del pill compuesto sobre el del documento (por si trae alfa).
+    const fondoDoc = rgba(win().getComputedStyle(f.contentDocument.body).backgroundColor);
+    const fondo = sobre(rgba(win().getComputedStyle(pill()).backgroundColor), sobre(fondoDoc, [0, 0, 0, 1]));
+    const contorno = sobre(rgba(cs.outlineColor), fondo);
+    contrastes[p] = Math.round(contraste(contorno, fondo) * 100) / 100;
+    afirmar(cs.outlineStyle === 'solid' && parseFloat(cs.outlineWidth) === 2, `F: ${p}: con foco, contorno de 2 px (${cs.outlineStyle} ${cs.outlineWidth})`);
+    afirmar(contrastes[p] >= 3, `F: ${p}: contraste del foco ≥ 3 (${contrastes[p]})`);
+  }
+  datos.contrastes = Object.entries(contrastes).map(([k, v]) => `${k} ${v}`).join(', ');
+  progreso('F');
+
+  // ── E a 390 × 844 ──
+  const g = marco(390, 844, 'b');
+  await esperarReal(() => g.contentWindow?.__listo, { que: '390: que arranque la app', vueltas: VUELTAS });
+  await g.contentWindow.__abrirYSonar(0);
+  await esperarReal(() => g.contentDocument.querySelector('.preview-pill.show.is-playing'), { que: '390: suena', vueltas: VUELTAS });
+  const r390 = g.contentDocument.querySelector('.preview-pill').getBoundingClientRect();
+  const pista390 = g.contentDocument.querySelector('.preview-pill-progress-bar').getBoundingClientRect();
+  datos.a390 = `pill ${Math.round(r390.width)}×${Math.round(r390.height)}, pista ${Math.round(pista390.height * 10) / 10} px de alto, borde derecho ${Math.round(r390.right)}`;
+  afirmar(Math.round(r390.width) === 360 && Math.round(r390.height) === 62, `E: a 390 el pill mide 360 × 62, lo de hoy (${datos.a390})`);
+  // (El borde derecho se anota y no se afirma: el encargo pide «lo mismo que hoy», que es el 360 × 62 de la 130. La primera tanda de 10
+  // corridas afirmaba también `right <= 390` —no lo pedía nadie— y dio 391 en las 10: el adelantar no mueve el pill, solo la pista de
+  // adentro, y ese píxel no se midió contra e1a10cb. Anotado en PENDIENTES, tanda 137.)
+
+  const errores = [...win().__errores, ...g.contentWindow.__errores];
+  afirmar(errores.length === 0, `E: 0 errores de consola: ${errores.join(' | ')}`);
+  const escrituras = win().__sim.reg.escrituras;
+  afirmar(escrituras.length === 0, `0 escrituras en la cuenta (${escrituras.map((e) => `${e.metodo} ${e.ruta}`).join(', ')})`);
+
+  const resumenFinal = (MEDIR ? `medido (fallarían ${fallosMedidos.length}: ${fallosMedidos.join(' | ')})` : 'ok') +
+    ` · TABLA: ${tabla.join(' ;; ')}` +
+    ` · peticiones desde que suena: ${datos.peticiones} · previewchange desde que suena: ${datos.eventos} (el de la pausa)` +
+    ` · pill a 1366: ${datos.tam} · pista ${datos.toque} px · a 390: ${datos.a390}` +
+    ` · foco visible con focus(): ${datos.focoVisible} · contraste del foco: ${datos.contrastes}` +
+    ` · seeks=${win().__seeks.length} · audios=${win().__audios.length} · errores=${errores.length}` +
+    ` · NO MEDIDO: audio real, bytes del <audio> al saltar, el dedo en un celular real · reloj virtual=${Math.round(performance.now())} ms`;
+  document.documentElement.setAttribute('data-resumen', resumenFinal);
+  document.getElementById('progreso').textContent = resumenFinal;
+  listo(resumenFinal);
+} catch (e) {
+  fallar(e);
+}
+</script>
+</body></html>

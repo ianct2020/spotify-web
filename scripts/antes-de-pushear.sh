@@ -48,7 +48,7 @@ if npm test --silent 2>&1 | tail -4 | sed 's/^/      /'; [ "${PIPESTATUS[0]}" -e
 # `mosaico` y `toasts` entraron en v=273:
 # estaban en rojo desde antes del 04/10 y justamente por no estar acá nadie los
 # miraba, igual que le había pasado a `barra` entre v=241 y v=261.
-echo "2b. bancos (barra · pausa-search · toasts · mosaico · novedades · escrituras · ocultar-artista ×3 · covers-orden · calendario · import-guarda · ocultos-cache · mapa · puertas · cuota · letras · generos-cache · generos-escaneo · generos · mapa-artistas · versiones-deluxe · router-teardown · guard-ruta-vieja · postal · copia-completa · copia-importar · menos-salteas · rehacer-me-gusta · debug-ocultos-ancho · lluvia · siempre-y-play · listened-biblioteca · tamano-fijo · lluvia-dia · recs-estilo · likes-de-la-obra · preview-siguiente)"
+echo "2b. bancos (barra · pausa-search · toasts · mosaico · novedades · escrituras · ocultar-artista ×3 · covers-orden · calendario · import-guarda · ocultos-cache · mapa · puertas · cuota · letras · generos-cache · generos-escaneo · generos · mapa-artistas · versiones-deluxe · router-teardown · guard-ruta-vieja · postal · copia-completa · copia-importar · menos-salteas · rehacer-me-gusta · debug-ocultos-ancho · lluvia · siempre-y-play · listened-biblioteca · tamano-fijo · lluvia-dia · recs-estilo · likes-de-la-obra · preview-siguiente · preview-adelantar)"
 # Los dos de `ocultar-artista` entraron en v=276: las TRES vistas que ocultan
 # artistas, reales, contra una Spotify simulada. Es el único sitio donde se puede
 # probar ocultar sin escribir en la cuenta de Ian, y el de `-disco` es el que
@@ -203,7 +203,12 @@ echo "2b. bancos (barra · pausa-search · toasts · mosaico · novedades · esc
 # hacen sonar, en orden, la 2.ª, la 4.ª (salta la 3.ª, sin preview) y la 5.ª de un disco INVENTADO, en la app ENTERA con la Spotify y el
 # iTunes simulados: el pill y el ⏸ en cada paso, 0 peticiones a Spotify, nada en la última, el botón 3 nunca prevenido, y con la ficha
 # cerrada sin handler y el botón 4 libre. Rojo contra 2553389 (puerta A: no hay handler).
-for B in barra pausa-search toasts mosaico novedades escrituras ocultar-artista ocultar-artista-disco ocultar-artista-novedades covers-orden calendario import-guarda ocultos-cache mapa puertas cuota letras generos-cache generos-escaneo generos mapa-artistas versiones-deluxe router-teardown guard-ruta-vieja postal copia-completa copia-importar menos-salteas rehacer-me-gusta debug-ocultos-ancho lluvia siempre-y-play listened-biblioteca tamano-fijo lluvia-dia recs-estilo likes-de-la-obra preview-siguiente; do
+# `preview-adelantar` entró en v=374 (tanda 137): adelantar dentro de los 30 s del preview con la barra del pill, en la app ENTERA con
+# la Spotify y el iTunes simulados y el `<audio>` doblado (duración 30, `currentTime` de lectura y escritura): clic al 50 % → 15; arrastre
+# del 20 % al 70 % → 21, sin que `timeupdate` pise el arrastre; ← → ↑ ↓ Home de a 5 s sin que ninguna flecha llegue a `document`; en
+# pausa sigue en pausa; el tope en 29,5 sin cerrar el pill; el pill 360 × 62 en los cuatro estados y la pista de ≥ 16 px; 0 peticiones;
+# el contraste del foco en los cuatro presets. Rojo contra e1a10cb (puerta A: el clic no mueve nada).
+for B in barra pausa-search toasts mosaico novedades escrituras ocultar-artista ocultar-artista-disco ocultar-artista-novedades covers-orden calendario import-guarda ocultos-cache mapa puertas cuota letras generos-cache generos-escaneo generos mapa-artistas versiones-deluxe router-teardown guard-ruta-vieja postal copia-completa copia-importar menos-salteas rehacer-me-gusta debug-ocultos-ancho lluvia siempre-y-play listened-biblioteca tamano-fijo lluvia-dia recs-estilo likes-de-la-obra preview-siguiente preview-adelantar; do
   if node scripts/correr-banco.mjs "$B" 2>&1 | sed 's/^/      /'; [ "${PIPESTATUS[0]}" -eq 0 ]; then
     ok "banco $B en verde"
   else

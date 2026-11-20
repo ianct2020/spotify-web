@@ -23,7 +23,7 @@
 // Hasta v=356 el único control del pill era el ✕, que para Y cierra. Ahora hay
 // un botón de pausa (`.preview-pill-toggle`, «Pausar preview» / «Seguir
 // preview») que deja el pill a la vista y sigue desde donde estaba, y una barra
-// (`role="progressbar"`) con lo que va a la izquierda y lo que falta a la
+// (`role="progressbar"`; desde v=374, `role="slider"`: ver «Adelantar») con lo que va a la izquierda y lo que falta a la
 // derecha («0:12 ━━━━──── −0:18»). Ninguna firma ni el evento cambiaron: una
 // pausa es `previewchange` con el mismo `key` y `playing: false`, que es el
 // camino que las tarjetas ya pintaban (el del buffering y el embed).
@@ -42,14 +42,14 @@
 //   - Buscando y con el embed no hay botón ni barra: no hay nada que pausar ni
 //     ningún tiempo que leer (el iframe no avisa nada).
 
-import { escapeHtml } from './components.js?v=373';
-import { showToast } from './toast.js?v=373';
-import { mountBottom } from './bottom-layer.js?v=373';
-import { animationsEnabled } from './reveal.js?v=373';
-import { iconoPlay, iconoPausa } from './icons.js?v=373';
+import { escapeHtml } from './components.js?v=374';
+import { showToast } from './toast.js?v=374';
+import { mountBottom } from './bottom-layer.js?v=374';
+import { animationsEnabled } from './reveal.js?v=374';
+import { iconoPlay, iconoPausa } from './icons.js?v=374';
 // (v=367, tanda 130) El nombre del pill se mueve con la MISMA marquesina de las listas densas, sin esperar al mouse:
 // el pill tiene ahora un ancho fijo y un nombre largo ya no lo agranda. Ver `moverEtiqueta()`.
-import { hoverMarqueeSpan, prepararMarquesinaFila, pararMarquesinaFila } from './hover-marquee.js?v=373';
+import { hoverMarqueeSpan, prepararMarquesinaFila, pararMarquesinaFila } from './hover-marquee.js?v=374';
 
 const audio = new Audio();
 audio.preload = 'none';
@@ -100,7 +100,7 @@ function ensurePill() {
     <div class="preview-pill-main">
       <div class="preview-pill-label"></div>
       <div class="preview-pill-provider"></div>
-      <div class="preview-pill-progress" role="progressbar" aria-label="Avance del preview" aria-valuemin="0" aria-valuemax="30" aria-valuenow="0" hidden>
+      <div class="preview-pill-progress" role="slider" tabindex="0" aria-label="Avance del preview" aria-valuemin="0" aria-valuemax="30" aria-valuenow="0" aria-disabled="true" hidden>
         <span class="preview-pill-time-va">0:00</span>
         <span class="preview-pill-progress-bar"><span class="preview-pill-progress-fill"></span></span>
         <span class="preview-pill-time-falta"></span>
@@ -113,6 +113,7 @@ function ensurePill() {
   // (v=373) El ✕ además suelta la cola de «siguiente» (ver al final del archivo).
   pill.querySelector('.preview-pill-close').onclick = () => { soltarCola(); stopPreview(); };
   pill.querySelector('.preview-pill-toggle').onclick = () => alternarPausa();
+  conectarAdelantar(pill.querySelector('.preview-pill-progress'), pill.querySelector('.preview-pill-progress-bar'));
   // El pill ya no se posiciona solo: es un item más de la capa de abajo, que
   // es la que garantiza que no se pise con el progreso ni con los toasts.
   mountBottom('player', pill);
@@ -149,6 +150,7 @@ function pintarBotonPausa() {
 // Botón y barra: a la vista solo con audio nuestro (no buscando, no embed, no error).
 function mostrarControles(on) {
   if (!pill) return;
+  if (!on) arrastre = null;   // (v=374) sin barra a la vista no hay nada que arrastrar
   pill.querySelector('.preview-pill-toggle').hidden = !on;
   pill.querySelector('.preview-pill-progress').hidden = !on;
 }
@@ -158,11 +160,124 @@ const mmss = (s) => {
   return `${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}`;
 };
 
+// ── ⏩ Adelantar dentro del preview (v=374, tanda 137) ────────────────────────
+//
+// «Adelantar» es poner `audio.currentTime` donde dice el usuario. Ni más, ni menos: no hay `play()`, ni `pause()`,
+// ni `pausadoPorUsuario`, ni `emit()`. Por eso en pausa sigue en pausa, lo que suena sigue sonando y adelantar no
+// emite ningún `previewchange` nuevo.
+//
+// La barra (`.preview-pill-progress`) es un `role="slider"` con `tabindex="0"`: el teclado va sobre ella. El puntero va
+// sobre la PISTA (`.preview-pill-progress-bar`), y la fracción se mide contra la pista y no contra el renglón, que lleva
+// a los costados «0:12» y «−0:18». Un clic es un `pointerdown` + `pointerup` en el mismo punto: el mismo camino que
+// arrastrar, sin un listener de `click` aparte.
+//
+// Mientras se arrastra, `actualizarBarra()` pinta el punto del usuario (`arrastre.t`) y no `audio.currentTime`: un
+// `timeupdate` a mitad del arrastre vuelve a pintar ese punto y no lo pisa. Al soltar se fija el tiempo.
+//
+// El tope es `duration − 0,5 s`: un salto al final no llega a disparar `ended`, así que el pill no se cierra solo por
+// adelantar. Sin duración (antes de `loadedmetadata`, o `NaN`/`Infinity`/0) la barra no mueve nada y lleva
+// `aria-disabled="true"`.
+//
+// Solo el botón principal (`button === 0`): el 3 y el 4 siguen hasta `document`, donde la 136 escucha «siguiente». Las
+// seis teclas de la barra (← → ↑ ↓ Home End) llevan `preventDefault()` y `stopPropagation()`: no scrollean la página ni
+// llegan a los otros `keydown`. Con Alt, Ctrl o Meta siguen su camino (Alt+← es «atrás» del navegador), y cualquier otra
+// tecla también: `MediaTrackNext` llega a la 136.
+const SALTO_TECLA_S = 5;
+const MARGEN_FINAL_S = 0.5;
+let arrastre = null;   // { id, t } mientras se arrastra la pista
+
+function duracionValida() {
+  return Number.isFinite(audio.duration) && audio.duration > 0 ? audio.duration : null;
+}
+
+function topar(t, dur) {
+  return Math.min(Math.max(0, t), Math.max(0, dur - MARGEN_FINAL_S));
+}
+
+// ¿Hay un preview nuestro con la barra a la vista? (No buscando, no embed, no error: ahí la barra está escondida.)
+function barraActiva() {
+  const barra = pill?.querySelector('.preview-pill-progress');
+  return !!(barra && !barra.hidden && currentKey && currentProvider !== 'spotify-embed' && audio.getAttribute('src'));
+}
+
+function fijarTiempo(t) {
+  const dur = duracionValida();
+  if (!dur) return;
+  audio.currentTime = topar(t, dur);
+  actualizarBarra();
+}
+
+function conectarAdelantar(barra, pista) {
+  const tiempoEn = (clientX, dur) => {
+    const r = pista.getBoundingClientRect();
+    if (!r || !(r.width > 0)) return null;
+    const f = Math.min(1, Math.max(0, (clientX - r.left) / r.width));
+    return topar(f * dur, dur);
+  };
+  const soltarCaptura = (id) => {
+    try { if (pista.hasPointerCapture?.(id)) pista.releasePointerCapture(id); } catch { /* ya no la tenía */ }
+  };
+
+  pista.addEventListener('pointerdown', (e) => {
+    if (e.button !== 0 || arrastre || !barraActiva()) return;
+    const dur = duracionValida();
+    if (!dur) return;
+    const t = tiempoEn(e.clientX, dur);
+    if (t === null) return;
+    e.preventDefault();   // que no seleccione texto
+    try { barra.focus({ preventScroll: true }); } catch { /* sin foco igual se puede arrastrar */ }
+    try { pista.setPointerCapture(e.pointerId); } catch { /* sin captura, el arrastre termina al salir de la pista */ }
+    arrastre = { id: e.pointerId, t };
+    actualizarBarra();
+  });
+  pista.addEventListener('pointermove', (e) => {
+    if (!arrastre || e.pointerId !== arrastre.id) return;
+    const dur = duracionValida();
+    const t = dur ? tiempoEn(e.clientX, dur) : null;
+    if (t === null) return;
+    arrastre.t = t;
+    actualizarBarra();
+  });
+  pista.addEventListener('pointerup', (e) => {
+    if (!arrastre || e.pointerId !== arrastre.id) return;
+    const dur = duracionValida();
+    const t = dur ? (tiempoEn(e.clientX, dur) ?? arrastre.t) : null;
+    arrastre = null;
+    soltarCaptura(e.pointerId);
+    if (t === null || !barraActiva()) { actualizarBarra(); return; }
+    fijarTiempo(t);
+  });
+  // Sin `pointerup` (el navegador canceló, o se perdió la captura): no se fija nada y la barra vuelve a decir lo del audio.
+  const cancelar = (e) => {
+    if (!arrastre || e.pointerId !== arrastre.id) return;
+    arrastre = null;
+    soltarCaptura(e.pointerId);
+    actualizarBarra();
+  };
+  pista.addEventListener('pointercancel', cancelar);
+  pista.addEventListener('lostpointercapture', cancelar);
+
+  barra.addEventListener('keydown', (e) => {
+    if (e.altKey || e.ctrlKey || e.metaKey) return;
+    const paso = { ArrowRight: SALTO_TECLA_S, ArrowUp: SALTO_TECLA_S, ArrowLeft: -SALTO_TECLA_S, ArrowDown: -SALTO_TECLA_S }[e.key];
+    if (paso === undefined && e.key !== 'Home' && e.key !== 'End') return;
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.key === 'End' || arrastre || !barraActiva() || !duracionValida()) return;
+    fijarTiempo(e.key === 'Home' ? 0 : (audio.currentTime || 0) + paso);
+  });
+}
+
 function actualizarBarra() {
   if (!pill) return;
   const barra = pill.querySelector('.preview-pill-progress');
-  const dur = Number.isFinite(audio.duration) && audio.duration > 0 ? audio.duration : 30;
-  const va = Math.min(dur, Math.max(0, audio.currentTime || 0));
+  const durValida = duracionValida();
+  // (v=374) Sin duración la barra no mueve nada, y lo dice.
+  if (durValida) barra.removeAttribute('aria-disabled');
+  else barra.setAttribute('aria-disabled', 'true');
+  const dur = durValida || 30;
+  // (v=374) Mientras se arrastra, la barra dice el punto del usuario, no el del audio: `timeupdate` no lo pisa.
+  const va = Math.min(dur, Math.max(0, arrastre ? arrastre.t : (audio.currentTime || 0)));
   // Los textos van en segundos enteros; el relleno, en el mismo segundo que el
   // texto, para que la barra y el número nunca digan dos cosas distintas.
   const vaS = Math.round(va), durS = Math.round(dur);
@@ -247,6 +362,7 @@ function showPillAudio(label, provider, loading) {
   // Quietas hasta que el <audio> avise que está sonando de verdad.
   p.classList.remove('is-playing');
   pausadoPorUsuario = false;
+  arrastre = null;   // (v=374) un preview nuevo no hereda el arrastre del anterior
   pintarBotonPausa();
   mostrarControles(!loading);
   if (!loading) actualizarBarra();
@@ -303,6 +419,7 @@ function showPillEmbed(url, label) {
 }
 
 function hidePill() {
+  arrastre = null;   // (v=374)
   if (pill) {
     pill.classList.remove('show');
     pill.classList.remove('is-playing');

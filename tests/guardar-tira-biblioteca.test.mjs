@@ -216,7 +216,8 @@ try { apiVieja = execFileSync('git', ['-C', repo, 'show', '6b1087b:src/js/api.js
 ok(!!textoDe(apiVieja, 'getSavedAlbums') && textoDe(apiTexto, 'getSavedAlbums') === textoDe(apiVieja, 'getSavedAlbums'), '7: getSavedAlbums, su paginado, su tope y su TTL, iguales que en 6b1087b (texto)');
 const sha = (p) => createHash('sha256').update(readFileSync(p)).digest('hex');
 ok(sha(join(raiz, 'src', 'css', 'main.css')) === '3f96a87858caf15a4fe6b67f2ba67a6430b6fc77083f4d2f5c25693849fecf07', '7: main.css igual byte a byte');
-ok(sha(join(raiz, 'src', 'css', 'components.css')) === 'd8f9ac141e2b28daf0d192885c8ff8a29c6dad2c8320382af41b30023be6738a', '7: components.css igual byte a byte');
+// (tanda 137, con el OK de Ian del 20/11) El hash es el de `components.css` de v=374: la 137 le agregó las reglas de la barra del pill.
+ok(sha(join(raiz, 'src', 'css', 'components.css')) === '16a3c38db2963c845f8da40c919c0774dbb2dacedaf8f87a5648dada59412f88', '7: components.css igual byte a byte');
 
 decir(`\n${pasaron} asserts OK · ${fallaron} fallaron`);
 process.exit(fallaron ? 1 : 0);

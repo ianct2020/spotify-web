@@ -1,0 +1,149 @@
+<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>banco preview-adelantar — la app entera, en un iframe</title>
+<link rel="stylesheet" href="/css/theme.css">
+<link rel="stylesheet" href="/css/components.css">
+<link rel="stylesheet" href="/css/main.css">
+</head><body>
+<div id="app"></div>
+<script type="module">
+// ── Un iframe del banco `preview-adelantar.html` (v=374, tanda 137) ──────────
+//
+// La app ENTERA en `#home`, contra la Spotify simulada, con una cuenta INVENTADA, una playlist de escuchados INVENTADA con un
+// disco de 3 pistas (`preview-adelantar-datos.mjs`) y la caché de me gusta vacía. Por encima:
+//   · iTunes lo contesta `itunesInventado()` (por `rutaExterna`). Con `__itunesColgado = true`, la respuesta espera a que la
+//     madre la suelte (`__soltarItunes()`): así se mide el pill «buscando». Deezer va por JSONP: cada <script> queda en `__deezer`.
+//   · El `<audio>` sin audio real (no hay ningún archivo de audio en el repo, y un `.click()` de la madre no es un gesto de usuario):
+//     `HTMLMediaElement.prototype` cambia `play`, `pause`, `paused`, `duration` y `currentTime`. `play()` anota la URL, marca
+//     sonando y, en el próximo turno, pone `duration` en 30 (con `durationchange` y `loadedmetadata`) y avisa `playing`; con
+//     `__colgarPlaying = true` no avisa `playing` (el pill «cargando»). `currentTime` se lee y se escribe en una propiedad propia y
+//     cada escritura queda en `__seeks`. `pause()` marca en pausa y avisa `pause`.
+//   · `/data/*`: 404 y anotado.
+//   · `?foto=reposo|foco|arrastre&tema=<preset>`: deja la app lista para una captura y pone `data-foto="listo"`.
+
+import { instalarRedSimulada, esperarReal, anclar } from '/banco/simulado.mjs';
+import { LISTA, PLAYLIST_ID, PLAYLIST_NOMBRE, TRACKLIST, ARTISTA, DISCO, itunesInventado } from '/banco/preview-adelantar-datos.mjs';
+
+const q = new URLSearchParams(location.search);
+window.__errores = [];
+window.addEventListener('error', (e) => window.__errores.push('error: ' + (e.message || e)));
+window.addEventListener('unhandledrejection', (e) => window.__errores.push('rechazo: ' + String(e.reason?.message || e.reason)));
+const errorOriginal = console.error.bind(console);
+console.error = (...a) => { window.__errores.push('console.error: ' + a.map(String).join(' ').slice(0, 300)); errorOriginal(...a); };
+
+const USUARIO = 'usuarioAdelantarInventado';
+const sim = instalarRedSimulada();
+window.__sim = sim;
+localStorage.setItem('fonoteca_last_user_id', USUARIO);
+localStorage.setItem('fonoteca_perfil_v1', JSON.stringify({ id: USUARIO, display_name: 'Banco' }));
+sim.ruta('GET', /^\/me$/, () => ({ id: USUARIO, display_name: 'Banco' }));
+sim.ruta('GET', /^\/me\/playlists/, () => ({ items: [], next: null, total: 0 }));
+sim.ruta('GET', /^\/me\/tracks/, () => ({ items: [], next: null, total: 0 }));
+sim.ruta('GET', /^\/search/, () => ({ artists: { items: [] }, albums: { items: [] }, tracks: { items: [] } }));
+sim.ruta('GET', new RegExp(`^/playlists/${PLAYLIST_ID}\\?`), () => ({ snapshot_id: 'snapshot-adelantar-inventado' }));
+sim.ruta('GET', new RegExp(`^/playlists/${PLAYLIST_ID}/items`), () => ({ items: LISTA, next: null, total: LISTA.length }));
+sim.ruta('GET', /^\/albums\/[A-Za-z0-9]+\/tracks/, () => {
+  const items = TRACKLIST.map((t) => ({ ...t, uri: `spotify:track:${t.id}`, duration_ms: 200000, disc_number: 1, artists: [{ name: ARTISTA }] }));
+  return { items, next: null, total: items.length };
+});
+window.__itunesColgado = false;
+let soltarItunes = null;
+window.__soltarItunes = () => { if (soltarItunes) { const s = soltarItunes; soltarItunes = null; s(); } };
+sim.rutaExterna(/^https:\/\/itunes\.apple\.com\/search/, async ({ url }) => {
+  if (window.__itunesColgado) await new Promise((r) => { soltarItunes = r; });
+  return itunesInventado(url);
+});
+
+window.__datosAjenos = [];
+const debajo = window.fetch;
+window.fetch = async (entrada, opciones = {}) => {
+  const url = typeof entrada === 'string' ? entrada : (entrada instanceof URL ? entrada.href : entrada.url);
+  const abs = new URL(url, location.href);
+  if (abs.origin === location.origin && /\/data\//.test(abs.pathname)) {
+    window.__datosAjenos.push(abs.pathname);
+    return new Response('{}', { status: 404, headers: { 'content-type': 'application/json' } });
+  }
+  return debajo(url === entrada ? entrada : url, opciones);
+};
+
+window.Chart = class { destroy() {} resize() {} };   // `index.html` lo carga del CDN, y este caso no pasa por él.
+
+// El <audio> sin audio real.
+window.__audios = [];
+window.__seeks = [];
+window.__colgarPlaying = false;
+const P = HTMLMediaElement.prototype;
+Object.defineProperty(P, 'duration', { configurable: true, get() { return this.__dur ?? NaN; } });
+Object.defineProperty(P, 'currentTime', { configurable: true, get() { return this.__ct ?? 0; }, set(v) { this.__ct = Number(v); window.__seeks.push(this.__ct); } });
+Object.defineProperty(P, 'paused', { configurable: true, get() { return this.__pausado ?? true; } });
+P.play = function () {
+  window.__audio = this;
+  window.__audios.push(this.getAttribute('src'));
+  this.__pausado = false;
+  this.dispatchEvent(new Event('play'));
+  setTimeout(() => {
+    if (this.__dur == null) { this.__dur = 30; this.dispatchEvent(new Event('durationchange')); this.dispatchEvent(new Event('loadedmetadata')); }
+    if (!window.__colgarPlaying) this.dispatchEvent(new Event('playing'));
+  }, 0);
+  return Promise.resolve();
+};
+P.pause = function () {
+  const antes = this.__pausado ?? true;
+  this.__pausado = true;
+  if (!antes) this.dispatchEvent(new Event('pause'));
+};
+
+// Deezer: cada <script> que la app agrega con su host, contado.
+window.__deezer = [];
+new MutationObserver((ms2) => {
+  for (const m of ms2) for (const n of m.addedNodes) {
+    if (n.tagName === 'SCRIPT' && /deezer\.com/.test(n.src || '')) window.__deezer.push(new URL(n.src).host + new URL(n.src).pathname);
+  }
+}).observe(document.documentElement, { childList: true, subtree: true });
+
+const { prefKey } = await import('/js/storage.js');
+localStorage.setItem(prefKey('fonoteca_anim_v1'), 'nunca');
+localStorage.setItem(prefKey('listened_albums_playlist_id'), PLAYLIST_ID);
+localStorage.setItem(prefKey('listened_albums_playlist_name'), PLAYLIST_NOMBRE);
+const { idbDel, idbSetCached } = await import('/js/idb.js');
+for (const k of [`listened_grouped_${PLAYLIST_ID}_v2`, `playlist_items_${PLAYLIST_ID}`]) await anclar(idbDel(k));
+await anclar(idbSetCached('all_liked_tracks', [], null));
+
+window.__ponerTema = async (id) => {
+  const { PRESETS, applyTheme } = await import('/js/ui/theme-panel.js');
+  applyTheme(PRESETS.find((x) => x.id === id).colors);
+};
+
+// Abre la ficha desde la tarjeta de #listened y aprieta el ▶ de la pista `i`.
+window.__abrirYSonar = async (i = 0) => {
+  if (location.hash !== '#listened') location.hash = '#listened';
+  await esperarReal(() => document.querySelector(`#listened-grid-holder .playlist-card[data-id="${DISCO.id}"]`), { que: '#listened', vueltas: 8000 });
+  if (!document.querySelector('#alb-likes')) document.querySelector(`#listened-grid-holder .playlist-card[data-id="${DISCO.id}"]`).click();
+  await esperarReal(() => document.querySelectorAll('#alb-likes .album-modal-like-play').length === TRACKLIST.length, { que: 'la ficha con sus ▶', vueltas: 8000 });
+  document.querySelectorAll('#alb-likes .album-modal-like-play')[i].click();
+};
+
+location.hash = '#home';
+await import('/js/app.js');
+await esperarReal(() => document.getElementById('my-history-btn') && document.querySelector('.home-card'), { que: 'que la app arranque', vueltas: 4000 });
+window.__listo = true;
+
+const FOTO = q.get('foto');
+if (FOTO) {
+  await anclar(window.__ponerTema(q.get('tema') || 'violeta'));
+  await window.__abrirYSonar(0);
+  await esperarReal(() => document.querySelector('.preview-pill.show.is-playing') && !document.querySelector('.preview-pill-progress').hasAttribute('aria-disabled'), { que: 'suena', vueltas: 8000 });
+  const a = window.__audio;
+  a.currentTime = 12; a.dispatchEvent(new Event('timeupdate'));
+  const barra = document.querySelector('.preview-pill-progress');
+  const pista = document.querySelector('.preview-pill-progress-bar');
+  if (FOTO === 'foco') barra.focus();
+  if (FOTO === 'arrastre') {
+    const r = pista.getBoundingClientRect();
+    const y = r.top + r.height / 2;
+    pista.dispatchEvent(new PointerEvent('pointerdown', { clientX: r.left + r.width * 0.2, clientY: y, button: 0, buttons: 1, pointerId: 1, pointerType: 'mouse', isPrimary: true, bubbles: true, cancelable: true }));
+    pista.dispatchEvent(new PointerEvent('pointermove', { clientX: r.left + r.width * 0.6, clientY: y, button: -1, buttons: 1, pointerId: 1, pointerType: 'mouse', isPrimary: true, bubbles: true, cancelable: true }));
+  }
+  document.getAnimations().forEach((x) => { try { x.finish(); } catch { /* las infinitas */ } });
+  document.documentElement.dataset.foto = 'listo';
+}
+</script>
+</body></html>

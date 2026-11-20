@@ -1595,6 +1595,54 @@ la ficha abierta desde la tarjeta de `#listened`; el handler de `mediaSession` s
 contra v=373, reloj virtual de 6.365 a 6.822 ms (corre con el defecto de 45 s). En el banco, cada «siguiente» pide lo mismo que el ▶ de
 esa fila: una búsqueda en iTunes (la que salta la sin preview, dos en iTunes y un intento de Deezer por JSONP) y 0 a Spotify.
 
+### ⏩ Adelantar dentro del preview (v=374)
+
+La tanda 137, pedido de Ian del 18/11/2026: «poder adelantar dentro del preview». Con un preview de iTunes o Deezer en el pill, sonando o
+en pausa, la barra de los 30 s se toca: con un clic, arrastrando o con el teclado.
+
+- **La regla: adelantar es poner `audio.currentTime` donde dice el usuario.** Ni más, ni menos: ni `play()`, ni `pause()`, ni
+  `pausadoPorUsuario`, ni `emit()`. Por eso en pausa sigue en pausa (en el tiempo nuevo), lo que suena sigue sonando y adelantar **no emite
+  ningún `previewchange` nuevo**. Todo vive en `ui/preview-player.js` (`conectarAdelantar()`, llamada desde `ensurePill()`) y el CSS en
+  `components.css`. Ninguna firma ni la cantidad de exports cambió (siguen ocho).
+- **Cuándo se puede**: solo con la barra a la vista (buscando, con el embed o con el error sigue escondida, como antes). Sin una duración
+  finita y mayor que 0 (antes de `loadedmetadata`) la barra no mueve nada y lleva `aria-disabled="true"` (lo pone `actualizarBarra()`).
+- **El mouse o el dedo**: los listeners van en la PISTA (`.preview-pill-progress-bar`) y la fracción se mide contra ella, no contra el
+  renglón (que lleva «0:12» y «−0:18» a los costados). `pointerdown` (solo `button === 0`) toma el puntero con `setPointerCapture`,
+  `pointermove` mueve el relleno, el texto y `aria-valuenow`, y `pointerup` fija el tiempo donde se soltó. Un clic es el mismo camino, sin
+  un listener de `click` aparte. **Mientras se arrastra, `actualizarBarra()` pinta el punto del usuario (`arrastre.t`) y no
+  `audio.currentTime`**: un `timeupdate` a mitad del arrastre no lo pisa. `pointercancel` o `lostpointercapture` sin `pointerup` no fijan
+  nada. Los botones 3 y 4 siguen de largo hasta `document`, donde los maneja la 136 sin cambios.
+- **El teclado**: la barra (`.preview-pill-progress`) tiene `tabindex="0"`. → y ↑ suman 5 s, ← y ↓ restan 5 s, Home va a 0 y End no hace
+  nada. Las seis llevan `preventDefault()` (la página no scrollea) y `stopPropagation()` (no llegan a los otros `keydown` de `document`). Con
+  Alt, Ctrl o Meta siguen su camino (Alt+← es «atrás» del navegador), y cualquier otra tecla también: `MediaTrackNext` llega a la 136. De
+  los otros `keydown` de `document` ninguno mira flechas (todos miran `Escape`); el de captura de `artistas-ocultos.js` corre antes que la
+  barra, pero solo existe con su menú abierto y solo actúa con `Escape`.
+- **El tope**: el tiempo nunca pasa de `duration − 0,5 s` ni baja de 0. Así un salto al final **no dispara `ended`** y el pill no se
+  cierra solo por adelantar. Avanzar solo al terminar sigue FUERA.
+- **A11y**: la barra pasó de `role="progressbar"` a **`role="slider"`**, con los mismos `aria-*`. **La única excepción en la 115**: el
+  selector de su línea 95 (`[role=progressbar]` → `[role=slider]`) y el texto de C1. Y, con el OK de Ian del 20/11, el `sha256` de
+  `components.css` de la línea 352 de la 136 (un candado de «no se tocó nada más» de esa tanda), al del archivo nuevo. Foco visible: contorno
+  de 2 px del acento **mezclado un 25 % hacia `--color-text`** (`:focus-visible`): el acento a secas sobre `--color-elevated` da 2,89:1 en
+  Violeta (lo midió el banco) y un indicador de foco pide 3:1. Y cursor de mano en la pista.
+- **El tamaño**: la pista mide **16 px de alto** para el toque, con márgenes de −6,5 px arriba y abajo, así su caja de márgenes sigue en 3 px
+  y el pill sigue en **360 × 62** (la 130). La línea que se ve (3 px; 5 px con el mouse encima o con el foco) la dibujan el `::before` y el
+  relleno. `touch-action: none` en la pista: con el dedo, arrastrar no scrollea la página.
+- **Cuesta 0 peticiones** a Spotify, a iTunes y a Deezer. Lo que el `<audio>` le pida al servidor del archivo al saltar (rangos) es «no
+  medido». **La tabla de costos no cambia.**
+- **Lo que quedó FUERA, a propósito**: el player de `#skips` (el iframe de `toggleEmbed()`); «📚 Por escuchar» a pantalla completa; el repaso
+  de playlists contra me gusta; el aviso «no tengo tus me gusta cargados»; «anterior»; avanzar solo al terminar; que «siguiente» se salte las
+  pistas que caerían al embed (decidido que sí, otra tanda); adelantar o pausar con la tecla de medios (`seekforward`, `seekbackward`,
+  `seekto`); adelantar en el embed de Spotify (un iframe ajeno); y los abiertos del reproductor que ya estaban en `PENDIENTES.md`.
+- 🔴 **Lo que el banco NO puede probar** (es «no medido», nunca «0»): que un audio real de iTunes o Deezer salte bien (el banco no reproduce
+  audio), cuántos bytes pide el `<audio>` al saltar, y el arrastre con el dedo en un celular real. Con audio real, un salto puede disparar
+  `waiting`/`playing` del navegador, y con eso los `previewchange` de siempre: no lo emite el adelantar.
+
+Guardas: **`tests/preview-adelantar-t137.test.mjs`** (`preview-player.js` REAL con los dobles de la 115; `dobles/dom-preview-doble.mjs`
+ganó `getBoundingClientRect` por `__medidas.rect`, la captura del puntero, la propagación de los eventos con `bubbles: true` hasta el
+`document` y `evento()`, sin cambiar lo que hacía; `RAIZ_T137` para otra raíz; rojo contra e1a10cb en 29 de 60, verde 60 de 60) y el banco
+**`tests/banco/preview-adelantar.html`** (+ `-caso.html` y `-datos.mjs`, en `prepush`; la app entera con la Spotify y el iTunes simulados y
+el `<audio>` doblado en el prototipo: `duration` 30 después de `play()` y `currentTime` de lectura y escritura; puertas A-F).
+
 ## 📏 El pill y las tarjetas, siempre del mismo tamaño (v=367)
 
 La tanda 130, pedido de Ian del 12/11/2026: «debería tener siempre el mismo tamaño y las letras se mueven de lado a lado o

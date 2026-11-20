@@ -92,8 +92,8 @@ igual('A9 suena: playing true', [playingKey(), isPlayingAudio(), eventos.at(-1).
 igual('D1 la etiqueta lleva el nombre entero en el title', pill.querySelector('.preview-pill-label')?.getAttribute('title') ?? null, 'Tema t115inventada 1 — Banda t115inventada');
 
 // ── C. la barra ──────────────────────────────────────────────────────────────
-const barra = pill.querySelector('[role=progressbar]');
-comprobar('C1 hay una barra con role="progressbar"', !!barra);
+const barra = pill.querySelector('[role=slider]');
+comprobar('C1 hay una barra con role="slider"', !!barra);
 audio.duration = 30; audio.emitir('loadedmetadata');
 audio.currentTime = 12; audio.emitir('timeupdate');
 igual('C2 aria-valuenow / aria-valuemax', [barra?.getAttribute('aria-valuenow') ?? null, barra?.getAttribute('aria-valuemax') ?? null], ['12', '30']);

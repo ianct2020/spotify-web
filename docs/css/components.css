@@ -2190,20 +2190,53 @@ body.con-aviso-copia { padding-top: 46px; }
   font-variant-numeric: tabular-nums;
 }
 .preview-pill .preview-pill-progress[hidden] { display: none; }
+/* v=374 (tanda 137): adelantar dentro del preview. La barra es un `role="slider"` (`ui/preview-player.js`): clic, arrastre y
+   teclado. Todo con dos clases, sin ninguna media query de movimiento reducido.
+   - La pista mide 16 px de alto para el toque, pero con márgenes de −6,5 px arriba y abajo su caja de márgenes sigue en 3 px:
+     el renglón (10 px de texto) no crece y el pill sigue en 360 × 62 (la 130).
+   - La línea que se ve (3 px; 5 px con el mouse encima o con el foco del teclado) la dibujan el `::before` (el riel) y el
+     relleno, centrados en la pista. El relleno tiene su propio borde redondeado: la pista ya no recorta (`overflow`), porque
+     es más alta que la línea.
+   - `touch-action: none`: con el dedo, arrastrar mueve el tiempo y no scrollea la página.
+   - El foco del teclado: el contorno de 2 px del acento, el mismo de ⏸ y ✕. */
 .preview-pill .preview-pill-progress-bar {
+  position: relative;
+  display: flex;
+  align-items: center;
   flex: 1 1 auto;
   min-width: 90px;
+  height: 16px;
+  margin: -6.5px 0;
+  cursor: pointer;
+  touch-action: none;
+}
+.preview-pill .preview-pill-progress-bar::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
   height: 3px;
+  transform: translateY(-50%);
   border-radius: 2px;
   background: color-mix(in srgb, var(--color-text) 18%, transparent);
-  overflow: hidden;
 }
 .preview-pill .preview-pill-progress-fill {
+  position: relative;
   display: block;
-  height: 100%;
+  height: 3px;
   width: 0;
+  border-radius: 2px;
   background: var(--color-accent);
 }
+.preview-pill .preview-pill-progress-bar:hover::before,
+.preview-pill .preview-pill-progress:focus-visible .preview-pill-progress-bar::before,
+.preview-pill .preview-pill-progress-bar:hover .preview-pill-progress-fill,
+.preview-pill .preview-pill-progress:focus-visible .preview-pill-progress-fill { height: 5px; }
+/* El contorno del foco: el acento mezclado un 25 % hacia el texto. El acento a secas sobre `--color-elevated` da 2,89:1 en Violeta
+   (medido por el banco `preview-adelantar`, puerta F; el mismo 2,89 que la 115 midió para «Abrir en Spotify ↗»), y un indicador de
+   foco pide 3:1. Hacia el texto sube en los temas oscuros y baja en Papel: en los cuatro se aleja del fondo. */
+.preview-pill .preview-pill-progress:focus-visible { outline: 2px solid color-mix(in srgb, var(--color-accent) 75%, var(--color-text)); outline-offset: 1px; border-radius: 2px; }
 .preview-pill.preview-pill-anim .preview-pill-progress-fill { transition: width 0.25s linear; }
 .preview-pill .preview-pill-embed-link {
   color: var(--color-text-secondary);

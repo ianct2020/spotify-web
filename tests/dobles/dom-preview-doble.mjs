@@ -63,7 +63,26 @@ class Nodo {
   get isConnected() { let n = this; while (n.parentNode) n = n.parentNode; return n === globalThis.document?.body; }
   addEventListener(t, fn) { (this._listeners[t] ||= []).push(fn); }
   removeEventListener(t, fn) { this._listeners[t] = (this._listeners[t] || []).filter(f => f !== fn); }
-  dispatchEvent(ev) { ev.target ??= this; for (const fn of [...(this._listeners[ev.type] || [])]) fn.call(this, ev); return true; }
+  // (tanda 137) Un evento con `bubbles: true` sube por los padres hasta el <body> y de ahí al `document`, salvo que algún
+  // listener llame a `stopPropagation()` (lo marca `_parado`; ver `evento()` abajo). Sin `bubbles: true`, lo de siempre: solo
+  // los listeners del propio nodo (así arman sus eventos la 115, la 130 y la 136, que no cambian).
+  dispatchEvent(ev) {
+    ev.target ??= this;
+    for (const fn of [...(this._listeners[ev.type] || [])]) fn.call(this, ev);
+    if (ev.bubbles === true && !ev._parado) {
+      const arriba = this.parentNode ?? (this === globalThis.document?.body ? globalThis.document : null);
+      if (arriba) arriba.dispatchEvent(ev);
+    }
+    return !ev.defaultPrevented;
+  }
+  // (tanda 137) Sin layout: el rectángulo lo contesta `globalThis.__medidas.rect(nodo)` si el caso lo pone; si no, todo en 0.
+  getBoundingClientRect() {
+    return globalThis.__medidas?.rect?.(this) ?? { left: 0, top: 0, right: 0, bottom: 0, width: 0, height: 0, x: 0, y: 0 };
+  }
+  // (tanda 137) La captura del puntero, anotada: `hasPointerCapture` dice si la tiene.
+  setPointerCapture(id) { this._captura = id; }
+  releasePointerCapture(id) { if (this._captura === id) this._captura = undefined; }
+  hasPointerCapture(id) { return this._captura === id; }
   click() { const ev = { type: 'click', target: this, preventDefault() {}, stopPropagation() {} }; if (this.onclick) this.onclick(ev); this.dispatchEvent(ev); }
   focus() { globalThis.document.activeElement = this; }
   // (tanda 136) `dataset`, como el del navegador: `dataset.playId` lee y escribe `data-play-id`. Lo pide la ficha de álbum.
@@ -161,6 +180,17 @@ export class AudioDoble {
   }
 }
 AudioDoble.instancias = [];
+
+// ── (tanda 137) Un evento que sube, como el del navegador ────────────────────
+// `evento('keydown', { key: 'ArrowRight' })` o `evento('pointerdown', { button: 0, pointerId: 1, clientX: 50 })`: con
+// `bubbles: true`, `defaultPrevented` y `stopPropagation()`. Es lo único que usa la propagación de `dispatchEvent`.
+export function evento(type, props = {}) {
+  return {
+    type, bubbles: true, defaultPrevented: false, _parado: false, ...props,
+    preventDefault() { this.defaultPrevented = true; },
+    stopPropagation() { this._parado = true; },
+  };
+}
 
 // ── Instalar el `document` y el `Audio` globales ─────────────────────────────
 export function instalar() {
