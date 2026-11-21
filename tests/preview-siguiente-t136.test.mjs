@@ -350,7 +350,7 @@ ok(JSON.stringify(registran) === JSON.stringify(['features/album-card.js', 'ui/p
 ok(!/button\s*===\s*3/.test(readFileSync(join(JS, 'ui/preview-player.js'), 'utf8')), 'el botón 3 no aparece en el player');
 ok(sha(readFileSync(join(RAIZ, 'src/css/main.css'))) === '3f96a87858caf15a4fe6b67f2ba67a6430b6fc77083f4d2f5c25693849fecf07', '`main.css` byte a byte igual que en 2553389');
 // (tanda 137, con el OK de Ian del 20/11) El hash es el de `components.css` de v=374: la 137 le agregó las reglas de la barra del pill.
-ok(sha(readFileSync(join(RAIZ, 'src/css/components.css'))) === '16a3c38db2963c845f8da40c919c0774dbb2dacedaf8f87a5648dada59412f88', '`components.css` byte a byte igual que en v=374 (la 137 le sumó la barra)');
+ok(sha(readFileSync(join(RAIZ, 'src/css/components.css'))) === 'a8c6289fddf730d59992d62465e605eb4797a083dfa2039a581b4687440606e0','`components.css` byte a byte igual que en v=374 (la 137 le sumó la barra)');
 const nExports = Object.keys(player).length;
 ok(nExports === 8, `el player sigue exportando ocho cosas (${nExports})`);
 

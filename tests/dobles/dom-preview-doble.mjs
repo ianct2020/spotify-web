@@ -97,13 +97,23 @@ class Nodo {
   }
   // Selectores: `.a`, `.a.b`, `[atributo]`, `[atributo=valor]`, `tag`, y la lista separada por comas.
   // (tanda 136) Y `#id` (solo o delante de las clases): lo pide la ficha de álbum (`#alb-likes`). Lo de antes no cambia.
+  // (tanda 138) Dos formas más, que antes tiraban «no soporta» y por eso no cambian nada de lo que ya andaba: clases DESPUÉS
+  // del atributo (`.a[data-id="x"].b`) y el descendiente con espacios (`#lista .a`), que solo se prueba si el selector entero
+  // no es uno de los simples de siempre. Las pide `features/skips.js`.
   matches(sel) {
     return sel.split(',').map(s => s.trim()).some((s) => {
-      const m = /^([a-z]+)?(?:#([\w-]+))?((?:\.[\w-]+)*)(?:\[([\w-]+)(?:=["']?([^"'\]]+)["']?)?\])?$/i.exec(s);
-      if (!m) throw new Error(`el doble no soporta el selector ${s}`);
+      const m = /^([a-z]+)?(?:#([\w-]+))?((?:\.[\w-]+)*)(?:\[([\w-]+)(?:=["']?([^"'\]]+)["']?)?\])?((?:\.[\w-]+)*)$/i.exec(s);
+      if (!m) {
+        const partes = s.split(/\s+/);
+        if (partes.length < 2) throw new Error(`el doble no soporta el selector ${s}`);
+        if (!this.matches(partes[partes.length - 1])) return false;
+        let i = partes.length - 2;
+        for (let n = this.parentNode; n && n.matches && i >= 0; n = n.parentNode) if (n.matches(partes[i])) i--;
+        return i < 0;
+      }
       if (m[1] && this.tagName !== m[1].toUpperCase()) return false;
       if (m[2] && this._attrs.get('id') !== m[2]) return false;
-      const clases = (m[3] || '').split('.').filter(Boolean);
+      const clases = ((m[3] || '') + (m[6] || '')).split('.').filter(Boolean);
       if (clases.some(c => !this.classList.contains(c))) return false;
       if (m[4] && !this._attrs.has(m[4])) return false;
       if (m[4] && m[5] !== undefined && this._attrs.get(m[4]) !== m[5]) return false;

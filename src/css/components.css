@@ -1433,19 +1433,6 @@ input[type="checkbox"].keep-check:checked::after {
 .skips-badge-danger { background: rgba(239,68,68,.12); color: #ef4444; }
 
 
-/* Va como tercera celda de la tarjeta, cruzando las dos columnas (tapa +
-   cuerpo), así que el embed sale debajo de todo y a lo ancho. */
-.skips-preview-slot {
-  grid-column: 1 / -1;
-  max-height: 0;
-  overflow: hidden;
-  transition: max-height .2s ease;
-}
-.skips-preview-slot.open {
-  max-height: 100px;
-  padding-top: 8px;
-}
-
 /* Abajo de 900px: una sola columna. */
 @media (max-width: 899px) {
   .skips-grid {
@@ -2274,11 +2261,10 @@ body.con-aviso-copia { padding-top: 46px; }
      botón se corta ni se esconde: nada de `overflow`, y si algún día no entraran en dos renglones la tarjeta crecería en
      vez de taparlos (por eso son mínimos y no un alto clavado).
    - Resultado (medido en v=367): 46 + 10 + 58 + 20 de relleno + 2 de borde = 136 px en `#zeroplays` (y en `#sin-clasificar`,
-     la misma tarjeta), a 1366, a 390 y con la columna en su mínimo de 360. En `#skips`, 148 (146 a 480 px o menos): la
-     tarjeta lleva un tercer renglón, el del embed de Spotify cerrado (`.skips-preview-slot`, alto 0), y el hueco de la
-     grilla de la tarjeta (12; 10 a 480 o menos) se suma igual, como antes (130 contra 118 en v=366). Dentro de cada grilla,
-     un solo alto. El embed de `#skips` ABIERTO dentro de la tarjeta (el iframe) sí la agranda mientras está abierto, como el
-     embed del pill. */
+     la misma tarjeta), a 1366, a 390 y con la columna en su mínimo de 360. Desde v=375 (tanda 138), `#skips` también: hasta
+     v=374 medía 148 (146 a 480 px o menos) porque su tarjeta llevaba un tercer renglón, el del embed de Spotify cerrado, y el
+     hueco de la grilla de la tarjeta se sumaba igual; ese embed ahora lo abre el pill y el renglón ya no existe. Dentro de
+     cada grilla, un solo alto. */
 .sc-grid .sc-card .sc-title { line-height: 18px; }
 .sc-grid .sc-card .sc-meta { line-height: 14px; }
 .sc-grid .sc-card .sc-info { min-height: 46px; }

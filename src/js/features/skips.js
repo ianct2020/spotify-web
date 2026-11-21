@@ -14,7 +14,8 @@
 //   2. Un `fwdbtn` con >=80 % de la pista deja de contar como skip.
 //   3. Un cierre (endplay/logout/…) con >=80 % de la pista cuenta como ok.
 // Preview 30s instantáneo vía iTunes (arranca en el estribillo, no suma plays
-// en tu historial de Spotify). Fallback: iframe embed oficial si iTunes no lo tiene.
+// en tu historial de Spotify). Fallback: el embed oficial de Spotify, que abre el
+// pill de abajo a la derecha como en el resto de la app (v=375).
 
 import { getBestAvailableLikes, removeLikedTracks, checkLibraryContains } from '../api.js';
 import { borrarLikesVerificado } from '../util/borrado-verificado.js';
@@ -31,7 +32,7 @@ import { prefKey, migratePrefKey } from '../storage.js';
 import { vigilarRuta } from '../util/vigencia-ruta.js';
 import { createIncrementalList, scrollRootOf } from '../ui/incremental-list.js';
 import { createLazyImages } from '../ui/lazy-img.js';
-import { renderTrackCardRow, wireTrackCardGrid, paintCardSelection, paintPlayingCard, paintEmbedCard } from '../ui/track-card-row.js';
+import { renderTrackCardRow, wireTrackCardGrid, paintCardSelection, paintPlayingCard } from '../ui/track-card-row.js';
 import { coverAtSize } from '../util/cover-size.js';
 import { coverUrl } from '../util/cover-size.js';
 
@@ -578,8 +579,9 @@ function renderResults() {
 
 // La tarjeta es la MISMA que la de `#sin-clasificar` desde v=140:
 // `ui/track-card-row.js`, tapa de 96px y selección de la tarjeta entera. Lo
-// único propio de esta vista es el badge del ratio, que va antes de los botones,
-// y el slot del embed de Spotify, que se cuelga al final de la tarjeta.
+// único propio de esta vista es el badge del ratio, que va antes de los botones.
+// (Hasta v=374 llevaba además un renglón para el embed de Spotify al final de la
+// tarjeta; desde v=375 el embed lo abre el pill, como en `#zeroplays`.)
 //
 // Se identifica por `data-id` y no por índice: con la lista incremental las
 // tarjetas se appendean en tandas y los handlers están delegados en el grid, así
@@ -620,7 +622,6 @@ function renderRow(r) {
       playing: playingKey() === `sk:${r.id}`,
       hidden: showingHidden,
       badge,
-      extra: `<div class="skips-preview-slot" data-id="${r.id}"></div>`,
     },
   );
 }
@@ -692,7 +693,7 @@ function wireRows() {
     // `user-select: none` de `.sc-card` ya estaba puesto, que era la otra mitad
     // del asunto (sin él, shift+click arrastra la selección de texto).
     onToggle: (id, { range = false } = {}) => toggleSeleccion(id, range),
-    onPlay: (r, card) => onPlayClick(r, card.querySelector('.sc-play')),
+    onPlay: (r) => onPlayClick(r),
     onCard: (r) => {
       const imgs = r.track.album?.images || [];
       openTrackCard({
@@ -750,28 +751,23 @@ function wireRows() {
   };
 }
 
-// Preview: primero iTunes (instantáneo, sin plays en el historial); si no está
-// el tema ahí, cae al iframe embed de Spotify en el slot de la tarjeta.
-async function onPlayClick(r, btn) {
-  const content = document.getElementById('skips-content');
-  // Si este tema ya tiene el embed fallback abierto, este click lo cierra.
-  const slot = content.querySelector(`.skips-preview-slot[data-id="${r.id}"].open`);
-  if (slot) {
-    closeEmbeds(content);
-    return;
-  }
-  closeEmbeds(content);
+// Preview: primero iTunes (instantáneo, sin plays en el historial), después
+// Deezer; si ninguno tiene el tema, la cadena devuelve el embed de Spotify (por
+// eso va el `spotifyId`) y lo abre el pill de abajo a la derecha, como en
+// `#zeroplays`. La tarjeta no abre nada (v=375; hasta v=374 el embed iba en un
+// renglón de la tarjeta). El ▶ queda marcado igual: `paintPlayingCard` pinta el
+// embed del pill con su título propio.
+async function onPlayClick(r) {
   // TODOS los artistas del track, no solo el primero: la cadena de proveedores
   // acepta el match si coincide cualquiera (util/track-match.js), y con los
   // álbumes acreditados a un alias («¥$») el primero es justo el que no matchea.
   const artists = (r.track.artists || []).map(a => a.name || a).filter(Boolean);
-  // No pasamos spotifyId a getPreview a propósito: en Skips el iframe embed va
-  // INLINE en la tarjeta (toggleEmbed) — no queremos que la cadena lo abra en el
-  // pill flotante y encima una segunda fuente en la tarjeta.
   const res = await togglePreview(`sk:${r.id}`, async () => {
-    return await getPreview({ name: r.track.name || '', artists });
+    return await getPreview({ name: r.track.name || '', artists, spotifyId: r.id });
   });
-  if (res === null) toggleEmbed(r.id, btn);   // ni iTunes ni Deezer → embed Spotify inline
+  // Con `spotifyId` la cadena casi siempre tiene algo (el embed); `null` queda
+  // para un tema sin nombre o un «none» en caché. Se dice, como en `#zeroplays`.
+  if (res === null) showToast(`Sin preview disponible de «${r.track.name || ''}»`, 'info');
 }
 
 function onHideClick(id) {
@@ -799,40 +795,3 @@ function onHideClick(id) {
 document.addEventListener('previewchange', (e) => {
   paintPlayingCard(document.getElementById('skips-list'), 'sk', e.detail);
 });
-
-// Cierra los embeds abiertos Y apaga el botón de su tarjeta. Antes el botón se
-// apagaba solo en el camino de "volver a tocar el mismo": abrir el embed de
-// otra fila dejaba la anterior tintada.
-function closeEmbeds(content) {
-  content.querySelectorAll('.skips-preview-slot.open').forEach(s => {
-    s.classList.remove('open');
-    s.innerHTML = '';
-    paintEmbedCard(s.closest('.sc-card')?.querySelector('.sc-play'), false);
-  });
-}
-
-// Fallback: toggle del iframe embed oficial de Spotify (30s sin auth).
-// Solo se usa cuando iTunes no tiene el tema. Ojo: este SÍ puede sumar al historial.
-function toggleEmbed(id, btn) {
-  const content = document.getElementById('skips-content');
-  const slot = content.querySelector(`.skips-preview-slot[data-id="${id}"]`);
-  if (!slot) return;
-
-  const isOpen = slot.classList.contains('open');
-  closeEmbeds(content);
-
-  if (!isOpen) {
-    slot.innerHTML = `
-      <iframe
-        src="https://open.spotify.com/embed/track/${id}?theme=0"
-        width="100%" height="80"
-        frameborder="0" allowtransparency="true"
-        allow="encrypted-media"
-        style="border-radius:8px;display:block"></iframe>
-    `;
-    slot.classList.add('open');
-    // Tintado pero con el ▶: el iframe de Spotify no nos dice si está sonando,
-    // así que un ⏸ acá sería una promesa que no podemos cumplir.
-    paintEmbedCard(btn, true);
-  }
-}

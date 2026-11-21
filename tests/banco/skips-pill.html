@@ -1,0 +1,103 @@
+<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>banco skips-pill — el ▶ de «Skips crónicos» suena en el pill</title>
+<style>html,body{margin:0;background:#111;color:#eee;font:13px system-ui}iframe{border:0;display:block}</style>
+</head><body>
+<pre id="progreso"></pre>
+<pre id="medidas"></pre>
+<div id="marcos"></div>
+<script type="module">
+// ── Qué prueba este banco (tanda 138, v=375) ─────────────────────────────────
+//
+// La app ENTERA (`skips-pill-caso.html`, una por iframe) con la Spotify simulada, iTunes simulado y datos INVENTADOS
+// (`skips-pill-datos.mjs`), a 1366×591 y a 390×844. Lo esperado, escrito ANTES de correr nada:
+//
+//   A. ▶ en la tarjeta del tema CON match en iTunes → el pill a la vista (abajo a la derecha) con su barra y sin <iframe>;
+//      0 <iframe> dentro de `#skips-list`; el ▶ de esa tarjeta pintado como sonando (`.playing`, «Parar preview»);
+//   B. ▶ en la tarjeta del tema SIN match → UN <iframe> dentro del pill, con `src` que contiene `embed/track/<id de esa
+//      tarjeta>`; 0 dentro de `#skips-list`; el ▶ de esa tarjeta pintado como el embed del pill (`.playing`, «Reproductor de
+//      Spotify abierto abajo»: el `esEmbed` de `paintPlayingCard`) y el de la otra, apagado;
+//   C. las tarjetas de `#skips` miden lo mismo que las de `#zeroplays` en la misma pantalla, y no cambian con el embed abierto;
+//   D. después de los dos ▶: 0 peticiones a la API de Spotify, ninguna a otro host simulado que no sea iTunes; las de iTunes
+//      y los intentos de Deezer, contados; todos los <iframe> nacieron en el pill; 0 errores, 0 escrituras, ningún JSON del repo.
+//      Los intentos del <iframe> hacia `open.spotify.com` y los del <script> JSONP de Deezer que queden en Resource Timing se
+//      cuentan aparte (no salen: ver el caso). ⚠️ El «ResizeObserver loop completed with undelivered notifications» que sale a
+//      390 px también con 6c2f87a no es de esta tanda: se cuenta aparte y no cuenta como error (ver el caso y `PENDIENTES.md`).
+//
+// Lo que NO puede probar (es «no medido», nunca «0»): que el embed cargue y suene de verdad dentro del pill; si el embed del
+// pill suma reproducciones al historial de Spotify; el audio real de iTunes o de Deezer.
+//
+// `?medir=1` no afirma nada: deja todas las medidas en `<pre id="medidas">` (así se mide el «antes» contra 6c2f87a).
+
+import { esperarReal } from '/banco/simulado.mjs';
+import { fallar, listo } from '/banco/esperar.mjs';
+import { CON_PREVIEW, SIN_PREVIEW } from '/banco/skips-pill-datos.mjs';
+
+const MEDIR = new URLSearchParams(location.search).get('medir') === '1';
+const afirmar = (c, msg) => { if (!c) throw new Error('BANCO skips-pill: ' + msg); };
+const pasos = [];
+const progreso = (t) => { pasos.push(`${t} @${Math.round(performance.now())}`); document.getElementById('progreso').textContent = pasos.join(' · '); };
+const MARCOS = [['1366', 1366, 591], ['390', 390, 844]];
+
+const medidas = {};
+try {
+  for (const [nombre, w, h] of MARCOS) {
+    const f = document.createElement('iframe');
+    f.width = w; f.height = h;
+    f.src = `/banco/skips-pill-caso.html?marco=${nombre}`;
+    document.getElementById('marcos').appendChild(f);
+    medidas[nombre] = await esperarReal(() => f.contentWindow?.__resultado, { que: `las medidas de ${nombre}`, vueltas: 40000 });
+    progreso(nombre);
+    f.remove();
+  }
+
+  if (MEDIR) {
+    document.getElementById('medidas').textContent = JSON.stringify(medidas);
+    const resumen = `medidas de ${Object.keys(medidas).length} marcos · reloj virtual=${Math.round(performance.now())} ms`;
+    document.documentElement.setAttribute('data-resumen', resumen);
+    listo(resumen);
+  } else {
+    const fallos = [];
+    const exigir = (c, msg) => { if (!c) fallos.push(msg); };
+    const resumenes = [];
+    for (const [nombre] of MARCOS) {
+      const m = medidas[nombre];
+      // A
+      exigir(m.A.pill.existe && m.A.pill.show, `${nombre} A: el pill no está a la vista`);
+      exigir(m.A.pill.abajoDerecha, `${nombre} A: el pill no está abajo a la derecha`);
+      exigir(m.A.pill.barra, `${nombre} A: el pill sin su barra`);
+      exigir(m.A.pill.iframes === 0, `${nombre} A: ${m.A.pill.iframes} <iframe> en el pill`);
+      exigir(m.A.iframesLista === 0, `${nombre} A: ${m.A.iframesLista} <iframe> en #skips-list`);
+      exigir(m.A.boton?.playing && m.A.boton?.aria === 'Parar preview', `${nombre} A: el ▶ de la tarjeta ${JSON.stringify(m.A.boton)}`);
+      exigir(m.A.llamadas.spotify.length === 0, `${nombre} A: ${m.A.llamadas.spotify.length} peticiones a Spotify (${m.A.llamadas.spotify.join(', ')})`);
+      exigir(m.A.llamadas.itunes >= 1, `${nombre} A: ninguna búsqueda en iTunes`);
+      exigir(m.A.audios.length > 0 && m.A.audios.every((u) => u && u.startsWith('/banco/')), `${nombre} A: audios ${JSON.stringify(m.A.audios)}`);
+      // B
+      exigir(m.B.pill.iframes === 1, `${nombre} B: ${m.B.pill.iframes} <iframe> en el pill`);
+      exigir(m.B.pill.src.every((s) => s && s.includes(`embed/track/${SIN_PREVIEW.id}`)), `${nombre} B: el src del pill es ${JSON.stringify(m.B.pill.src)}`);
+      exigir(m.B.iframesLista === 0, `${nombre} B: ${m.B.iframesLista} <iframe> en #skips-list (${m.B.srcLista.join(', ')})`);
+      exigir(m.B.boton?.playing && m.B.boton?.aria === 'Reproductor de Spotify abierto abajo', `${nombre} B: el ▶ de la tarjeta ${JSON.stringify(m.B.boton)}`);
+      exigir(m.B.botonA && !m.B.botonA.playing, `${nombre} B: el ▶ de la tarjeta de A sigue marcado`);
+      // C
+      const sk = [...new Set(m.altosSkipsAntes)], skE = [...new Set(m.altosSkipsConEmbed)], zp = [...new Set(m.altosZero)];
+      exigir(sk.length === 1 && zp.length === 1 && sk[0] === zp[0], `${nombre} C: #skips ${sk.join('/')} contra #zeroplays ${zp.join('/')}`);
+      exigir(JSON.stringify(skE) === JSON.stringify(sk), `${nombre} C: con el embed abierto #skips mide ${skE.join('/')} (antes ${sk.join('/')})`);
+      // D
+      exigir(m.D.spotifyTotal.length === 0, `${nombre} D: ${m.D.spotifyTotal.length} peticiones a Spotify`);
+      exigir(m.D.otrasTotal.length === 0, `${nombre} D: peticiones a otro host simulado (${m.D.otrasTotal.join(', ')})`);
+      exigir(m.D.externasSimulada.length === 0, `${nombre} D: fetch a otro host (${m.D.externasSimulada.slice(0, 3).join(', ')})`);
+      exigir(m.D.ajenosNuevos.length === 0, `${nombre} D: recursos de otro host (${m.D.ajenosNuevos.slice(0, 3).join(', ')})`);
+      exigir(m.D.iframes.length > 0 && m.D.iframes.every((x) => x.enPill && !x.enLista), `${nombre} D: <iframe> fuera del pill ${JSON.stringify(m.D.iframes)}`);
+      exigir(m.D.escrituras === 0, `${nombre} D: ${m.D.escrituras} escrituras`);
+      exigir(m.D.datosAjenos.length === 0, `${nombre} D: pidió JSON del repo (${m.D.datosAjenos.join(', ')})`);
+      exigir(m.D.errores.length === 0, `${nombre} D: errores (${m.D.errores.slice(0, 3).join(' | ')})`);
+      resumenes.push(`${nombre}: #skips ${sk.join('/')} = #zeroplays ${zp.join('/')} px · pill ${m.A.pill.w}×${m.A.pill.h} · Spotify ${m.D.spotifyTotal.length} · iTunes ${m.D.itunesTotal} · Deezer ${m.D.deezerTotal} · iframes ${m.D.iframes.length} (en el pill) · intentos del embed en Resource Timing ${m.D.intentosEmbed.length} · intentos de Deezer en Resource Timing ${m.D.intentosDeezer.length} · avisos de ResizeObserver (de antes, aparte) ${m.D.erroresResizeObserver}`);
+    }
+    afirmar(fallos.length === 0, `${fallos.length} fallos:\n  · ${fallos.join('\n  · ')}`);
+    const resumen = `${resumenes.join(' · ')} · reloj virtual=${Math.round(performance.now())} ms`;
+    document.documentElement.setAttribute('data-resumen', resumen);
+    listo(resumen);
+  }
+} catch (e) {
+  fallar(e);
+}
+</script>
+</body></html>

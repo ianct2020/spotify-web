@@ -1379,11 +1379,14 @@ es lo que Ian ve** — él ve la cabecera de la lista, que es el peor tramo por
 construcción. Cuando algo «pasa siempre» y la métrica dice 4 %, mirar si la
 métrica está muestreando donde el usuario mira.
 
-⚠️ **`#skips` y `#zero-plays` NO piden el preview igual**: `#skips` **no manda
+⚠️ ~~**`#skips` y `#zero-plays` NO piden el preview igual**: `#skips` **no manda
 `spotifyId` a propósito** (su embed va inline en la tarjeta, no en el pill), así
 que ahí `getPreview` devuelve `null` y el embed lo abre la vista. En
 `#zero-plays` sí lo manda y el embed sale de la cadena. Las dos cosas cuentan
-como «embed» al medir, pero son dos códigos distintos.
+como «embed» al medir, pero son dos códigos distintos.~~
+🟩 **Ya no vale desde v=375 (tanda 138)**, a pedido de Ian: `#skips` manda
+`spotifyId` como `#zero-plays`, y el embed lo abre el pill. Ver «🎧 `#skips` usa
+el pill (v=375)».
 
 ### Los tres sospechosos, uno por uno
 1. **Que las vistas pasaran solo el primer artista** (el bug de la tanda 2):
@@ -1576,7 +1579,7 @@ de la pista siguiente de ESE álbum.
   el embed y la cadena se corte ahí. El banco usa una pista SIN id para ejercitar el salto.
 - **Cuesta lo mismo que apretar el ▶ de esa fila**: un `getPreview` (caché de iTunes/Deezer o una búsqueda). 0 a Spotify. **La tabla de
   costos no cambia.**
-- **Lo que quedó FUERA, a propósito**: adelantar dentro de los 30 s; el player de `#skips` (el iframe de `toggleEmbed()`); «📚 Por
+- **Lo que quedó FUERA, a propósito**: adelantar dentro de los 30 s (🟩 hecho en v=374); el player de `#skips` (el iframe de `toggleEmbed()`; 🟩 hecho en v=375: ahora abre el pill); «📚 Por
   escuchar» a pantalla completa; el repaso de playlists contra me gusta; «anterior» (ni `previoustrack`, ni la tecla de atrás, ni el botón
   de atrás); pausa y play con la tecla de medios; avanzar solo al terminar; «siguiente» en cualquier otra vista (W-Three, `#skips`,
   `#zeroplays`, `#sin-clasificar`, la ficha de artista, `#recs`, `#similar`, descubrir); atajos con flechas u otras teclas; y los abiertos
@@ -1629,7 +1632,7 @@ en pausa, la barra de los 30 s se toca: con un clic, arrastrando o con el teclad
   relleno. `touch-action: none` en la pista: con el dedo, arrastrar no scrollea la página.
 - **Cuesta 0 peticiones** a Spotify, a iTunes y a Deezer. Lo que el `<audio>` le pida al servidor del archivo al saltar (rangos) es «no
   medido». **La tabla de costos no cambia.**
-- **Lo que quedó FUERA, a propósito**: el player de `#skips` (el iframe de `toggleEmbed()`); «📚 Por escuchar» a pantalla completa; el repaso
+- **Lo que quedó FUERA, a propósito**: el player de `#skips` (el iframe de `toggleEmbed()`; 🟩 hecho en v=375: ahora abre el pill); «📚 Por escuchar» a pantalla completa; el repaso
   de playlists contra me gusta; el aviso «no tengo tus me gusta cargados»; «anterior»; avanzar solo al terminar; que «siguiente» se salte las
   pistas que caerían al embed (decidido que sí, otra tanda); adelantar o pausar con la tecla de medios (`seekforward`, `seekbackward`,
   `seekto`); adelantar en el embed de Spotify (un iframe ajeno); y los abiertos del reproductor que ya estaban en `PENDIENTES.md`.
@@ -1642,6 +1645,50 @@ ganó `getBoundingClientRect` por `__medidas.rect`, la captura del puntero, la p
 `document` y `evento()`, sin cambiar lo que hacía; `RAIZ_T137` para otra raíz; rojo contra e1a10cb en 29 de 60, verde 60 de 60) y el banco
 **`tests/banco/preview-adelantar.html`** (+ `-caso.html` y `-datos.mjs`, en `prepush`; la app entera con la Spotify y el iTunes simulados y
 el `<audio>` doblado en el prototipo: `duration` 30 después de `play()` y `currentTime` de lectura y escritura; puertas A-F).
+
+### 🎧 `#skips` usa el pill (v=375)
+
+La tanda 138, pedido de Ian del 16/11/2026: «el player de skips abajo a la derecha, como los demás». **Revierte la decisión de v=167**,
+que decía que `#skips` «no manda `spotifyId` a propósito (su embed va inline en la tarjeta, no en el pill)»: hasta v=374, sin match en
+iTunes ni en Deezer, `getPreview` daba `null` y la vista abría su propio `<iframe>` del embed de Spotify en un renglón al final de la
+tarjeta (`toggleEmbed()`).
+
+- **La regla**: el ▶ de la tarjeta llama a `togglePreview(\`sk:${r.id}\`, …)` con `getPreview({ name, artists, spotifyId: r.id })`: la
+  misma clave y la misma lista de TODOS los artistas que antes, más el `spotifyId`. Sin match, la cadena devuelve el embed
+  (`spotify-embed`) y **lo abre el pill de abajo a la derecha**, como en `#zeroplays`. La tarjeta no abre nada. El ▶ queda marcado por
+  el listener de `previewchange` de siempre: `paintPlayingCard` lo pinta con el título del embed («Reproductor de Spotify abierto
+  abajo»). Si `togglePreview` da `null` (casi imposible con `spotifyId`: un tema sin nombre o un `none` en caché), un toast
+  «Sin preview disponible de «…»», el mismo de `#zeroplays`.
+- **Lo que se borró**: `closeEmbeds()`, `toggleEmbed()`, el `extra` con `.skips-preview-slot` de `renderRow`, el `paintEmbedCard` del
+  `import` y las dos reglas `.skips-preview-slot` de `components.css`.
+- **`paintEmbedCard` (`ui/track-card-row.js`) quedó exportada y SIN llamadores, a propósito**: la exportan también dos dobles
+  (`tests/dobles/vista-catch-t92a.mjs` y `vista-t104.mjs`) y sacarla es otra limpieza (en `fonoteca-migracion/PENDIENTES.md`).
+  `track-card-row.js`, `preview-player.js` y `preview-providers.js` no se tocaron.
+- **El alto de las tarjetas**: 136 px en `#skips`, el mismo que `#zeroplays` en la misma pantalla, a 1366×591 y a 390×844. Con
+  6c2f87a medía 148 y 146 (el renglón del embed cerrado más el hueco de la grilla), y con el embed abierto, 234-236.
+- **La clave de caché de `getPreview` cambia con `spotifyId`** (`…|<id>`): lo que estaba cacheado para `#skips` sin id no se reusa,
+  así que la primera vez cuesta una búsqueda más por tema (el caché de URL de iTunes sí sirve). **La tabla de costos no cambia**: tocar ▶
+  cuesta lo mismo que en `#zeroplays`, un `getPreview` y 0 a Spotify. El `<iframe>` del embed pide `open.spotify.com`, como pedía el de
+  la tarjeta.
+- **Lo que quedó FUERA, a propósito**: «📚 Por escuchar» a pantalla completa; el repaso de playlists contra me gusta; el aviso «no
+  tengo tus me gusta cargados»; el «sin match» de `#recs`; el ⏸ de las tarjetas que para en vez de pausar (en `#skips` y en todas);
+  los otros abiertos de `preview-player.js` que ya estaban en `PENDIENTES.md`; que «siguiente» se salte las pistas que caerían al embed
+  (y `#skips` no tiene cola); sacar `paintEmbedCard`; cualquier otra vista.
+- 🔴 **Lo que el banco NO puede probar** (es «no medido», nunca «0»): que el embed cargue y suene de verdad dentro del pill; si el
+  embed del pill suma reproducciones al historial de Spotify (el comentario viejo de `toggleEmbed` decía que el de la tarjeta sí); el
+  audio real de iTunes o de Deezer.
+
+Guardas: **`tests/skips-pill-t138.test.mjs`** (`skips.js` REAL en Node con `dobles/loader-t104.mjs` + `vista-t104.mjs`, que ganó
+`__T104.ganchos` sin cambiar lo que hacía, y el DOM de `dobles/dom-preview-doble.mjs`, que ganó las clases después del atributo y el
+selector descendiente; `RAIZ_T138` para otra raíz; rojo contra 6c2f87a en 19 de 37, verde 37 de 37) y el banco
+**`tests/banco/skips-pill.html`** (+ `-caso.html` y `-datos.mjs`, en `prepush`; la app entera con la Spotify y el iTunes simulados, un
+usuario BYOH sembrado; puertas A-D a 1366×591 y 390×844; `?medir=1` vuelca sin afirmar). Rojo contra 6c2f87a en 3 de 3 corridas
+(puertas B, C y D: el `<iframe>` nacía en la tarjeta) y verde en 10 de 10 contra v=375, reloj virtual de 2.158 a 2.389 ms (corre con
+el defecto de 45 s). Cada marco arranca con el `localStorage` vacío: los dos son del mismo origen, y sin eso el de 390 reusaba el
+preview de iTunes del de 1366. El `<iframe>` del embed se cuenta con su `src` y no sale: el corredor va
+dentro de `bwrap --unshare-net` y con `--host-resolver-rules`, y un fallo de carga de un iframe no es un error de la página. ⚠️ El
+«ResizeObserver loop completed with undelivered notifications» que pasa por el crash-guard a 390 px sale también con 6c2f87a: el banco
+lo cuenta aparte y no lo afirma (en `PENDIENTES.md`).
 
 ## 📏 El pill y las tarjetas, siempre del mismo tamaño (v=367)
 
@@ -1672,10 +1719,13 @@ alto buscando contra 62** en los otros estados; las tarjetas de `#zeroplays` iba
   con dos clases: el texto en tres renglones con altos de línea en px (18 + 14 + 14 = **46**, con o sin `.sc-meta-sub`) y las
   acciones en dos renglones de botones (26 + 6 + 26 = **58**, la etiqueta «N plays cortas» más los seis botones, el peor caso
   desde 320 px). Medido: **136 px** en `#zeroplays` a 1366, a 390 y con la columna en su mínimo de 360 (el marco a 1208 sin
-  barras de desplazamiento); **148 en `#skips` (146 a ≤480)**, porque su tarjeta lleva el renglón del embed cerrado y el hueco
-  de la grilla de la tarjeta se suma (pasaba igual antes: 130 contra 118). Son MÍNIMOS, no un alto clavado: ningún botón se
+  barras de desplazamiento); ~~**148 en `#skips` (146 a ≤480)**, porque su tarjeta lleva el renglón del embed cerrado y el hueco
+  de la grilla de la tarjeta se suma (pasaba igual antes: 130 contra 118)~~ — 🟩 **desde v=375 (tanda 138), 136 también en
+  `#skips`**, a 1366×591 y a 390×844, lo mismo que `#zeroplays` en la misma pantalla (medido por el banco `skips-pill`; con
+  6c2f87a, 148 y 146): el renglón del embed se fue con el embed, que ahora abre el pill. Son MÍNIMOS, no un alto clavado: ningún botón se
   corta ni se esconde (nada de `overflow` en `.sc-actions`), y si algún día no entraran en dos renglones la tarjeta crecería.
-  El embed de `#skips` ABIERTO dentro de la tarjeta sí la agranda mientras está abierto.
+  ~~El embed de `#skips` ABIERTO dentro de la tarjeta sí la agranda mientras está abierto.~~ (Hasta v=374: con 6c2f87a la
+  tarjeta pasaba a 234-236 px con el embed abierto. Desde v=375 ya no hay embed en la tarjeta.)
 - **El título** pasa de `marqueeSpan` a `hoverMarqueeSpan`, y `wireTrackCardGrid` cablea `wireHoverMarquee(grid, '.sc-card')`
   (por delegación: vale para las tandas que todavía no llegaron). **En hover, no solo**: una grilla de decenas de tarjetas
   moviéndose a la vez es la marea que v=215 vino a evitar. `activateMarquee` se fue de las tres vistas (no le quedaba nada que

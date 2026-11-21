@@ -1,0 +1,212 @@
+<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>banco skips-pill — la app entera, en un iframe</title>
+<link rel="stylesheet" href="/css/theme.css">
+<link rel="stylesheet" href="/css/components.css">
+<link rel="stylesheet" href="/css/main.css">
+</head><body>
+<div id="app"></div>
+<script type="module">
+// ── Un iframe del banco `skips-pill.html` (tanda 138, v=375) ─────────────────
+//
+// La app ENTERA en `#skips`, contra la Spotify simulada, con un usuario que NO es el owner y su historial local INVENTADO
+// sembrado en IndexedDB (`skips-pill-datos.mjs`). Toca el ▶ de dos tarjetas, mide, y deja los números en
+// `window.__resultado`; la madre afirma.
+//   · iTunes lo contesta `itunesInventado()` (por `rutaExterna`): «con preview» sí, «sin preview» no. Deezer va por JSONP (un
+//     <script>): el banco no lo contesta, el resolutor del corredor lo corta y `getPreview` sigue. Cada uno, contado.
+//   · `HTMLMediaElement.prototype.play`: un doble que anota la URL y avisa `playing` (un `.click()` no es un gesto de usuario).
+//   · El `<iframe>` del embed: lo pinta la app tal cual, con su `src` de `open.spotify.com/embed/track/<id>`, y el banco lo
+//     CUENTA (dónde nació y con qué `src`). No sale: el corredor corre dentro de `bwrap --unshare-net` y con
+//     `--host-resolver-rules` que mandan todo nombre que no sea local a NOTFOUND, así que la carga del iframe falla dentro de
+//     Chrome sin una sola petición afuera. Un fallo de carga de un iframe no dispara `error` en la página ni pasa por
+//     `console.error`, así que no se cuenta como error de la página; los intentos que deje en Resource Timing hacia
+//     `open.spotify.com` se cuentan APARTE (`intentosEmbed`), y cualquier otro host de fuera, como ajeno.
+//   · `/data/*`: 404 y anotado.
+//
+//   ?foto=reposo|match|embed [&tema=papel]   capturas: deja la escena lista y marca `data-foto="listo"`
+//   ?medir=1                                  la madre no afirma; el caso mide igual (no hay diferencia aquí)
+
+import { instalarRedSimulada, esperarReal, anclar } from '/banco/simulado.mjs';
+import { UID, CON_PREVIEW, SIN_PREVIEW, SKIPS, ZERO, sembrado, sembrarIdb, likes, itunesInventado } from '/banco/skips-pill-datos.mjs';
+
+const q = new URLSearchParams(location.search);
+const FOTO = q.get('foto');
+const $ = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+window.__errores = [];
+window.addEventListener('error', (e) => window.__errores.push('error: ' + (e.message || e)));
+window.addEventListener('unhandledrejection', (e) => window.__errores.push('rechazo: ' + String(e.reason?.message || e.reason)));
+const errorOriginal = console.error.bind(console);
+console.error = (...a) => { window.__errores.push('console.error: ' + a.map(String).join(' ').slice(0, 300)); errorOriginal(...a); };
+
+const fuera = () => performance.getEntriesByType('resource').filter((e) => { try { return new URL(e.name).origin !== location.origin; } catch { return false; } }).map((e) => e.name);
+
+// Cada marco arranca con el `localStorage` vacío: los dos marcos son del mismo origen y, sin esto, el de 390 encontraba el
+// preview de iTunes ya cacheado por el de 1366 y no buscaba nada (medido en la primera tanda de corridas de la 138).
+localStorage.clear();
+const sim = instalarRedSimulada();
+window.__sim = sim;
+const LIKES = likes();
+sim.ruta('GET', /^\/me$/, () => ({ id: UID, display_name: 'Banco' }));
+sim.ruta('GET', /^\/me\/playlists/, () => ({ items: [], total: 0, next: null }));
+sim.ruta('GET', /^\/me\/tracks/, ({ url }) => {
+  const off = +url.searchParams.get('offset') || 0, lim = +url.searchParams.get('limit') || 50;
+  return { items: LIKES.slice(off, off + lim), total: LIKES.length, offset: off, limit: lim, next: off + lim < LIKES.length ? 'x' : null };
+});
+sim.rutaExterna(/^https:\/\/itunes\.apple\.com\/search/, ({ url }) => itunesInventado(url));
+localStorage.setItem('fonoteca_last_user_id', UID);
+localStorage.setItem('fonoteca_perfil_v1', JSON.stringify({ id: UID, display_name: 'Banco' }));
+const { prefKey } = await import('/js/storage.js');
+localStorage.setItem(prefKey('fonoteca_anim_v1'), 'nunca');
+if (q.get('tema') === 'papel') {
+  // El preset «Papel», escrito como lo escribe el panel de paleta: los OCHO colores, por usuario.
+  const { PRESETS } = await import('/js/ui/theme-panel.js');
+  const papel = PRESETS.find((p) => p.id === 'papel');
+  if (!papel) throw new Error('BANCO: no encuentro el preset Papel');
+  localStorage.setItem(prefKey('fonoteca_theme_v1'), JSON.stringify({ colors: papel.colors, preset: papel.id }));
+}
+
+window.__datosAjenos = [];
+const debajo = window.fetch;
+window.fetch = (entrada, opciones = {}) => {
+  const url = typeof entrada === 'string' ? entrada : (entrada instanceof URL ? entrada.href : entrada.url);
+  const abs = new URL(url, location.href);
+  if (abs.origin === location.origin && /\/data\//.test(abs.pathname)) {
+    window.__datosAjenos.push(abs.pathname);
+    return Promise.resolve(new Response('{}', { status: 404, headers: { 'content-type': 'application/json' } }));
+  }
+  return debajo(url === entrada ? entrada : url, opciones);
+};
+window.Chart = class { destroy() {} resize() {} };
+
+window.__audios = [];
+HTMLMediaElement.prototype.play = function () {
+  window.__audios.push(this.getAttribute('src'));
+  setTimeout(() => this.dispatchEvent(new Event('playing')), 0);
+  return Promise.resolve();
+};
+
+// Cada <script> de Deezer y cada <iframe> que la app agregue, con dónde nació.
+window.__deezer = [];
+window.__iframes = [];
+new MutationObserver((ms) => {
+  for (const m of ms) for (const n of m.addedNodes) {
+    if (n.nodeType !== 1) continue;
+    if (n.tagName === 'SCRIPT' && /deezer\.com/.test(n.src || '')) window.__deezer.push(new URL(n.src).host + new URL(n.src).pathname);
+    for (const f of [n, ...n.querySelectorAll('iframe')]) {
+      if (f.tagName !== 'IFRAME') continue;
+      window.__iframes.push({ src: f.getAttribute('src'), enPill: !!f.closest('.preview-pill'), enLista: !!f.closest('#skips-list') });
+    }
+  }
+}).observe(document.documentElement, { childList: true, subtree: true });
+
+await anclar(sembrarIdb(sembrado()));
+location.hash = '#skips';
+await import('/js/app.js');
+const pp = await import('/js/ui/preview-player.js');
+const fueraAlArrancar = fuera();
+
+const vueltas = async (n = 30) => { let v = 0; await esperarReal(() => ++v > n, { que: 'que se asiente' }); };
+const altos = (sel) => $$(`${sel} .sc-card`).map((c) => Math.round(c.getBoundingClientRect().height * 100) / 100);
+const tarjeta = (id) => $(`#skips-list .sc-card[data-id="${id}"]`);
+function boton(id) {
+  const b = tarjeta(id)?.querySelector('.sc-play');
+  return b ? { playing: b.classList.contains('playing'), aria: b.getAttribute('aria-label'), title: b.getAttribute('title') } : null;
+}
+function pill() {
+  const p = $('.preview-pill');
+  if (!p) return { existe: false };
+  const r = p.getBoundingClientRect();
+  const barra = $('.preview-pill-progress', p);
+  const ifr = $$('iframe', p);
+  return {
+    existe: true, show: p.classList.contains('show'), w: Math.round(r.width), h: Math.round(r.height),
+    abajoDerecha: r.right > innerWidth / 2 && r.bottom > innerHeight / 2,
+    barra: !!barra && !barra.hidden, iframes: ifr.length, src: ifr.map((f) => f.getAttribute('src')),
+    etiqueta: $('.preview-pill-label', p)?.textContent || '',
+  };
+}
+function llamadasDesde(n) {
+  const nuevas = sim.reg.llamadas.slice(n);
+  return {
+    spotify: nuevas.filter((x) => !/^https?:/.test(x.ruta)).map((x) => `${x.metodo} ${x.ruta}`),
+    itunes: nuevas.filter((x) => /^https:\/\/itunes\.apple\.com\//.test(x.ruta)).length,
+    otras: nuevas.filter((x) => /^https?:/.test(x.ruta) && !/^https:\/\/itunes\.apple\.com\//.test(x.ruta)).map((x) => x.ruta),
+  };
+}
+
+async function abrirSkips() {
+  return esperarReal(() => $$('#skips-list .sc-card').length >= SKIPS.length, { que: 'la grilla de #skips', vueltas: 20000 });
+}
+
+if (FOTO) {
+  await abrirSkips();
+  if (FOTO === 'match') {
+    tarjeta(CON_PREVIEW.id).querySelector('.sc-play').click();
+    await esperarReal(() => $('.preview-pill.show.is-playing'), { que: 'el pill sonando', vueltas: 20000 });
+  } else if (FOTO === 'embed') {
+    tarjeta(SIN_PREVIEW.id).querySelector('.sc-play').click();
+    await esperarReal(() => $('.preview-pill iframe') || $('#skips-list iframe'), { que: 'el embed', vueltas: 20000 });
+  }
+  await vueltas(20);
+  document.documentElement.dataset.foto = 'listo';
+} else {
+  const res = { ancho: innerWidth, alto: innerHeight };
+  await abrirSkips();
+  await vueltas(10);
+  res.altosSkipsAntes = altos('#skips-list');
+  res.botonesReposo = SKIPS.map((t) => boton(t.id));
+
+  // A: el ▶ del tema con match.
+  const n0 = sim.reg.llamadas.length;
+  const d0 = window.__deezer.length;
+  tarjeta(CON_PREVIEW.id).querySelector('.sc-play').click();
+  await esperarReal(() => $('.preview-pill.show.is-playing'), { que: 'el pill sonando (A)', vueltas: 20000 });
+  await vueltas(6);
+  res.A = {
+    pill: pill(), iframesLista: $$('#skips-list iframe').length, boton: boton(CON_PREVIEW.id),
+    llamadas: llamadasDesde(n0), deezer: window.__deezer.length - d0, audios: [...window.__audios],
+  };
+
+  // B: el ▶ del tema sin match. Se espera al primer <iframe>, nazca donde nazca (en v=374 nacía en la tarjeta).
+  const n1 = sim.reg.llamadas.length;
+  const d1 = window.__deezer.length;
+  tarjeta(SIN_PREVIEW.id).querySelector('.sc-play').click();
+  await esperarReal(() => $('.preview-pill iframe') || $('#skips-list iframe'), { que: 'el embed (B)', vueltas: 20000 });
+  await vueltas(6);
+  res.B = {
+    pill: pill(), iframesLista: $$('#skips-list iframe').length, srcLista: $$('#skips-list iframe').map((f) => f.getAttribute('src')),
+    boton: boton(SIN_PREVIEW.id), botonA: boton(CON_PREVIEW.id), llamadas: llamadasDesde(n1), deezer: window.__deezer.length - d1,
+  };
+  res.altosSkipsConEmbed = altos('#skips-list');
+  // Lo que costaron los dos ▶ (antes de cambiar de vista).
+  const tras = llamadasDesde(n0);
+  const deezerTras = window.__deezer.length - d0;
+
+  // C: los altos de #zeroplays, en la misma pantalla.
+  pp.stopPreview();
+  await vueltas(4);
+  location.hash = '#zeroplays';
+  await esperarReal(() => $$('#zp-list .sc-card').length >= ZERO.length, { que: 'la grilla de #zeroplays', vueltas: 20000 });
+  await vueltas(10);
+  res.altosZero = altos('#zp-list');
+
+  // D: el costo y los errores.
+  res.D = {
+    spotifyTotal: tras.spotify, itunesTotal: tras.itunes, otrasTotal: tras.otras, deezerTotal: deezerTras,
+    iframes: window.__iframes,
+    intentosEmbed: fuera().filter((u) => /^https:\/\/open\.spotify\.com\//.test(u)),
+    // El <script> JSONP de Deezer es el intento que la cadena hace siempre (el corredor lo corta): se cuenta aparte.
+    intentosDeezer: fuera().filter((u) => /^https:\/\/api\.deezer\.com\//.test(u)),
+    ajenosNuevos: fuera().filter((u) => !fueraAlArrancar.includes(u) && !/^https:\/\/(open\.spotify\.com|api\.deezer\.com)\//.test(u)),
+    fueraAlArrancar,
+    externasSimulada: sim.reg.externas, desconocidas: sim.reg.desconocidas, escrituras: sim.reg.escrituras.length,
+    datosAjenos: window.__datosAjenos,
+    // ⚠️ «ResizeObserver loop completed with undelivered notifications» sale a 390 px también con 6c2f87a (medido en la tanda
+    // 138, antes de tocar nada): no es de esta tanda y queda en `PENDIENTES.md`. Se cuenta aparte, SOLO con ese texto exacto;
+    // cualquier otro error sigue contando.
+    errores: window.__errores.filter((x) => !/ResizeObserver loop completed with undelivered notifications/.test(x)),
+    erroresResizeObserver: window.__errores.filter((x) => /ResizeObserver loop completed with undelivered notifications/.test(x)).length,
+  };
+  window.__resultado = res;
+}
+</script>
+</body></html>

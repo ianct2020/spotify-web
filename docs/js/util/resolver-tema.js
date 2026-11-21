@@ -17,8 +17,8 @@
 // El camino de un artista sigue tratando `error` como «sin match» (lo de siempre, con su defecto
 // anotado en `PENDIENTES.md`); el de un estilo PARA la lista.
 
-import { spotifyFetch } from '../api.js?v=374';
-import { limpiaParaQuery, titleMatches, artistMatches } from './track-match.js?v=374';
+import { spotifyFetch } from '../api.js?v=375';
+import { limpiaParaQuery, titleMatches, artistMatches } from './track-match.js?v=375';
 
 /**
  * @param {{ name: string, artist: string }} t   un top track de Last.fm

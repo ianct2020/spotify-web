@@ -1,9 +1,12 @@
 // Doble de red, almacén y UI. Ningún nombre ni llamada pertenece a Ian.
 const s = globalThis.__T104;
+// (tanda 138) `s.ganchos`: si el caso pone una función con el mismo nombre, el doble la llama a ella. Sin `ganchos` (las
+// suites de antes), cada doble hace lo mismo que hacía.
+const g = (nombre, defecto) => (...a) => (s.ganchos?.[nombre] ? s.ganchos[nombre](...a) : defecto(...a));
 const PISTA = { track: { id: 'pista-inventada', uri: 'spotify:track:pista-inventada', name: 'Pista inventada', artists: [], album: { images: [] }, duration_ms: 180000 } };
-export const getBestAvailableLikes = async () => ({ items: s.sinLikes ? [] : [PISTA] });
+export const getBestAvailableLikes = g('getBestAvailableLikes', async () => ({ items: s.sinLikes ? [] : [PISTA] }));
 export const loadTrackPlays = async () => (s.sinHistorial ? null : { tracks: { 'pista-inventada': [1, 180000] } });
-export const loadSkipStats = async () => (s.sinHistorial ? null : { tracks: {} });
+export const loadSkipStats = g('loadSkipStats', async () => (s.sinHistorial ? null : { tracks: {} }));
 export const trackIdOf = uri => uri?.split(':').at(-1);
 export const isOwner = async () => s.dueno;
 export const ownerLockedMessage = vista => `<div class="marca-bloqueo">BLOQUEO-INVENTADO ${vista}</div>`;
@@ -16,11 +19,11 @@ export const pageHeader = ({ title }) => `<h1>${title}</h1>`;
 export const tarjetaSinLikes = vista => `<div class="marca-sin-likes">SIN-LIKES-INVENTADO ${vista}</div>`;
 export const escapeHtml = v => String(v).replaceAll('&', '&amp;').replaceAll('<', '&lt;');
 export const createHiddenStore = () => ({ size: 0, ready: async () => {}, has: () => false });
-export const createIncrementalList = () => ({ destroy() {}, rendered: 0 });
-export const createLazyImages = () => ({ destroy() {}, stats: null });
+export const createIncrementalList = g('createIncrementalList', () => ({ destroy() {}, rendered: 0 }));
+export const createLazyImages = g('createLazyImages', () => ({ destroy() {}, stats: null }));
 export const scrollRootOf = () => null;
-export const renderTrackCardRow = () => '';
-export const wireTrackCardGrid = () => {};
+export const renderTrackCardRow = g('renderTrackCardRow', () => '');
+export const wireTrackCardGrid = g('wireTrackCardGrid', () => {});
 export const paintCardSelection = () => {};
 export const paintPlayingCard = () => {};
 export const paintEmbedCard = () => {};
@@ -31,9 +34,9 @@ export const firstArtistName = () => '';
 export const artistNames = () => [];
 export const uriDeTrackId = id => `spotify:track:${id}`;
 export const fmtDiaCorto = () => '';
-export const getPreview = async () => null;
-export const togglePreview = () => {};
-export const playingKey = () => null;
+export const getPreview = g('getPreview', async () => null);
+export const togglePreview = g('togglePreview', () => {});
+export const playingKey = g('playingKey', () => null);
 export const showToast = () => {};
 export const openTrackCard = () => {};
 export const removeLikedTracks = async () => {};
