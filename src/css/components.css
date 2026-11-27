@@ -2408,3 +2408,117 @@ body.con-aviso-copia { padding-top: 46px; }
 @media (max-width: 480px) {
   .album-modal-likes .album-modal-otra-edicion { font-size: 11px; letter-spacing: -0.01em; }
 }
+
+/* ── «📚 Por escuchar» a pantalla completa (v=376, tanda 139) ───────────────────
+   El modal sigue siendo `.modal.modal-picker` (flex column, la lista scrollea adentro) y suma `porescuchar-pantalla`, que ocupa la
+   ventana con un margen chico. Dos clases para ganarle a `.modal` de main.css (que carga DESPUÉS), y va DESPUÉS de
+   `.modal.modal-picker` en esta hoja porque tiene su misma especificidad y le pisa el `max-height`. `.modal.modal-picker` no se toca:
+   la comparten muchos. */
+.modal.porescuchar-pantalla {
+  width: calc(100vw - 32px);
+  max-width: none;
+  height: calc(100vh - 32px);
+  max-height: calc(100vh - 32px);
+}
+/* La barra de arriba: la cabecera (que crece), el buscador, el orden y «Actualizar», en una fila a 1366. */
+.porescuchar-pantalla .porescuchar-barra {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+  flex-shrink: 0;
+}
+.porescuchar-barra .porescuchar-buscar {
+  flex: 0 1 260px;
+  width: 260px;
+  min-width: 140px;
+  padding: 6px 10px;
+  font-size: 13px;
+}
+.porescuchar-barra .porescuchar-orden {
+  flex: 0 0 auto;
+  width: auto;
+  max-width: 100%;
+  padding: 6px 10px;
+  font-size: 13px;
+}
+.porescuchar-barra .porescuchar-buscar::placeholder {
+  color: var(--color-text-secondary);
+  opacity: 1;
+}
+.porescuchar-barra .porescuchar-buscar:disabled,
+.porescuchar-barra .porescuchar-orden:disabled {
+  cursor: not-allowed;
+}
+/* La cuenta del buscador. Dos clases: `.modal p` (0,1,1) le pondría 14 px y 20 px de margen. */
+.modal .porescuchar-cuenta {
+  margin: -4px 0 8px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--color-text-secondary);
+  overflow-wrap: anywhere;
+  flex-shrink: 0;
+}
+/* La grilla: columnas de 200 px como mínimo. El encargo decía 168, pero «Ya lo escuché» a 13 px pide un botón de 94 px y los dos
+   botones lado a lado, una tarjeta de 194 (medido en el banco, tanda 139): con 168 el texto se salía. Decidido con Ian el 27/11. */
+.porescuchar-pantalla .porescuchar-grilla {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 16px;
+}
+.porescuchar-grilla > .porescuchar-fila {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+.porescuchar-grilla > .porescuchar-fila[hidden] {
+  display: none;
+}
+.porescuchar-fila .porescuchar-tapa {
+  display: block;
+  width: 100%;
+  aspect-ratio: 1;
+  object-fit: cover;
+  border-radius: var(--radius-md);
+  background: var(--color-elevated);
+}
+.porescuchar-fila .porescuchar-sin-tapa {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-text-secondary);
+  font-size: 40px;
+}
+/* El nombre, hasta dos renglones (entero en el `title`); los artistas, uno con «…». */
+.porescuchar-fila .porescuchar-nombre {
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.3;
+  color: var(--color-text);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+}
+.porescuchar-fila .porescuchar-artistas {
+  font-size: 12px;
+  color: var(--color-text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* Los dos botones, en una fila del ancho de la tarjeta. La letra es la de `.btn-sm` (13 px); lo que se achica es el relleno. */
+.porescuchar-fila .porescuchar-botones {
+  display: flex;
+  gap: 6px;
+  margin-top: auto;
+}
+.porescuchar-botones .btn {
+  flex: 1 1 0;
+  min-width: 0;
+  padding: 6px 8px;
+  white-space: nowrap;
+}

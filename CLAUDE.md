@@ -1197,6 +1197,52 @@ con los previews, darle ♥ a lo que guste y marcarlos.
   eso no se volvió a medir) y el caso J del banco `listened-biblioteca` (la app entera con la Spotify simulada; rojo contra c537fa7, verde después, y los
   casos A–I verdes en las dos). ⚠️ El marco `j403` deja a propósito el `console.error` del 403 de `spotifyFetch`: el banco lo exige ahí
   y sigue exigiendo 0 errores en los demás marcos.
+- ➜ **Desde v=376 es a pantalla completa**, con buscador y orden: ver «📚 «Por escuchar» a pantalla completa (v=376)».
+
+## 📚 «Por escuchar» a pantalla completa (v=376)
+
+La tanda 139, pedido 7(b) de Ian: el modal de 560 px con filas pasa a una **grilla de tapas a pantalla completa**, con un buscador y un orden.
+**Cambia cómo se VE; no cambia qué álbumes salen, ni cómo se leen, ni qué hace «Ya lo escuché».**
+
+- **Lo que NO cambió**: `getSavedAlbums()`, `leerPorEscuchar()`, `pendientesDeBiblioteca()`, `elegirPista()`, `marcarEscuchado()` (el test fija el
+  `sha256` de su texto contra 9a26fef), `abrirFicha()`, «Actualizar», los textos de fallo y de nada, y los ids y clases que mira el caso J
+  (`#porescuchar-cabecera`, `#porescuchar-actualizar`, `#porescuchar-error`, `#porescuchar-lista`, `.porescuchar-fila[data-id]`,
+  `.porescuchar-escuchar`, `.porescuchar-ya`): cada tarjeta ES la `.porescuchar-fila`. Ningún `localStorage`, IndexedDB ni estado nuevo: el texto y el
+  orden vuelven a su valor al abrir.
+- **El modal**: sigue siendo `openModal` con `.modal.modal-picker` y suma `porescuchar-pantalla` (`components.css`, al final y con dos clases:
+  `calc(100vw - 32px)` × `calc(100vh - 32px)`, sin `max-width`). `.modal.modal-picker` y `main.css` no se tocaron.
+- **La barra**: `#porescuchar-cabecera` (siempre el total), `#porescuchar-buscar` («Buscar por álbum o artista»), `#porescuchar-orden` (Guardados:
+  más nuevos / más viejos primero; Lanzamiento: más nuevos / más viejos primero; por defecto el primero, que es el orden de siempre) y
+  «Actualizar», en una fila a 1366. Debajo, `#porescuchar-cuenta` solo con texto: «Con «x»: N de M.» o «Ningún álbum coincide con «x».».
+  Leyendo, con fallo o con 0, el buscador y el orden van `disabled`. **No hay «fecha de escucha»**: el registro no la guarda.
+- **La regla, pura: `util/por-escuchar-vista.js`** (`coincide`, `ordenar`, `textoCuenta`, `ORDENES_POR_ESCUCHAR`, `ORDEN_POR_DEFECTO`). Normaliza con
+  `normalizarNombre` de `util/mb-pais.js` (importada; «contiene», en el álbum o en cualquier artista) y lee el lanzamiento con `releaseTs` de
+  `util/release-date.js` (importada; «0000» cuenta como sin fecha). Lo que no tiene fecha va **al final en los dos sentidos**. 🔴 **El desempate es el
+  guardado más nuevo y después el orden en que vino** (sort estable), no el nombre: el encargo pedía nombre e id y eso rompía la conservación,
+  porque `pendientesDeBiblioteca()` deja a igual `added_at` el orden de la biblioteca (el caso J tiene 111 con la misma fecha). Decidido con Ian el
+  27/11. Así `ordenar(…, 'guardado-nuevo')` es exactamente el orden de antes.
+- 🔴 **Escribir no rehace las tarjetas.** `pintar()` arma la grilla UNA vez por lista (al cargar y con «Actualizar»); el buscador pone y saca `hidden`
+  y el orden MUEVE los mismos nodos (`append`). Así no se crea otro `<img>` ni se vuelve a pedir la tapa por una tecla. «Ya lo escuché» quita del DOM
+  solo esa tarjeta (`quitarTarjeta()`); el texto y el orden se quedan. Al cambiar el texto o el orden, la grilla vuelve arriba.
+- **La tarjeta**: tapa cuadrada (`tapaParaCelda(tapaGrande(al), 200)` de `util/cover-size.js`: la de 300), el nombre en dos renglones como mucho, los
+  artistas en uno con «…» (enteros en el `title`), y los dos botones lado a lado. Sin tapa, el «♪» en `--color-text-secondary`.
+- **La columna mínima es de 200 px, no de 168** (decidido con Ian el 27/11): «Ya lo escuché» a 13 px pide un botón de 94 px (con el relleno lateral
+  en 8 px), o sea una tarjeta de 194. Con 168 el texto se salía. Medido a 1366×591: **5 columnas de 237 px**, el modal de 1318×559 y el botón
+  115/115. (Con 168 eran 6 columnas de 195 px y el botón entraba con 1 px de margen.)
+- **Contraste** (la cuenta, el nombre, los artistas, el «♪» y el placeholder, con el fondo compuesto): el peor es el «♪» en los cuatro presets,
+  Violeta 5,83, Ámbar 5,64, Aguamarina 5,67 y Papel 5,99.
+- **Cuesta lo mismo**: abrir, `getSavedAlbums()` (1 GET en el banco con la caché fría); escribir y ordenar, **0** peticiones. La tabla de costos no
+  cambia.
+- ⚠️ Dos candados de «no se tocó nada más» de otras tandas fijan el `sha256` de `components.css` entero (`guardar-tira-biblioteca.test.mjs` y
+  `preview-siguiente-t136.test.mjs`): se actualizaron al de v=376 con el OK de Ian del 27/11.
+
+Guardas: **`tests/por-escuchar-vista.test.mjs`** (el módulo y `registro-escuchados.js` REALES; `coincide`, los cuatro órdenes contados a mano, las tres
+formas de `release_date`, la conservación sobre 30 inventados con fechas repetidas, `textoCuenta` y la lectura estática; `RAIZ_T139` para otra copia;
+rojo contra 9a26fef en 50 de 60, verde 60 de 60) y el **caso K** del banco `listened-biblioteca` (otra biblioteca inventada de 40, `?biblio=k`, tapas
+en `data:`: K1 pantalla completa, K2 buscador, K3 los cuatro órdenes contra lo que calcula la madre, K4 los mismos nodos y ningún `<img>` nuevo, K5 0
+peticiones, K6 «Ya lo escuché» con texto y orden, K7 contraste; `?medir=k` vuelca sin afirmar). Rojo contra 9a26fef («K: el buscador y el orden
+existen»; el antes: modal de 560×502 y una columna); verde 10 de 10 con A–J sin tocar, reloj virtual de 38.346 a 40.104 ms (presupuesto 90.000).
+`tests/mb-pais.test.mjs` suma `util/por-escuchar-vista.js` a quien importa `normalizarNombre`. No se diseñó para celular: a 390 no desborda.
 
 ## Una fila `<label>` se marca desde cualquier hijo (v=164)
 Las filas de ese modal son un `<label>` que **envuelve** el checkbox, así que un

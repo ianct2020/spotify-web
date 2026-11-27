@@ -1,29 +1,29 @@
-import { spotifyFetch, createPlaylist, addTracksToPlaylist, invalidatePlaylistsCache, getAllLikedTracks, getCurrentUserId } from '../api.js?v=375';
-import { hasKey, setKey, hasUsername, getUsername, setUsername, getUserTopArtists, getSimilarArtists, getArtistTopTracks, getKey, pedirLastfmCrudo, cargarEtiquetas, registroEtiquetas, setCachedTags } from '../api/lastfm.js?v=375';
-import { urlEtiquetas } from '../util/generos-escaneo.js?v=375';
-import { resolverTemaEnSpotify } from '../util/resolver-tema.js?v=375';
+import { spotifyFetch, createPlaylist, addTracksToPlaylist, invalidatePlaylistsCache, getAllLikedTracks, getCurrentUserId } from '../api.js?v=376';
+import { hasKey, setKey, hasUsername, getUsername, setUsername, getUserTopArtists, getSimilarArtists, getArtistTopTracks, getKey, pedirLastfmCrudo, cargarEtiquetas, registroEtiquetas, setCachedTags } from '../api/lastfm.js?v=376';
+import { urlEtiquetas } from '../util/generos-escaneo.js?v=376';
+import { resolverTemaEnSpotify } from '../util/resolver-tema.js?v=376';
 import {
   pedirEtiquetas, pendientesDeEtiquetas, agruparPorEstilo, textoSinEstilo, ARTISTAS_POR_ESTILO, TEXTO_SIN_ESTILOS, planDeLista, textoCoste, TITULO_COSTE,
   armarLista, textoCabecera, textoCorte, textoSinBuscar, nombreSugerido, descripcionPlaylist,
   TEMAS_MIN, TEMAS_MAX, TEMAS_DEFECTO,
-} from '../util/recs-estilo.js?v=375';
-import { showProgress, hideProgress, promptPlaylistName, escapeHtml, pageHeader } from '../ui/components.js?v=375';
-import { showToast } from '../ui/toast.js?v=375';
-import { getPreview } from '../api/preview-providers.js?v=375';
-import { togglePreview, playingKey, isPlayingAudio } from '../ui/preview-player.js?v=375';
-import { paintPlayingCard } from '../ui/track-card-row.js?v=375';
-import { openTrackCard } from './track-card.js?v=375';
-import { openAlbumCard } from './album-card.js?v=375';
-import { limpiaParaQuery, titleMatches, artistMatches } from '../util/track-match.js?v=375';
-import { vigilarRuta } from '../util/vigencia-ruta.js?v=375';
-import { recuperarUriDeArtistaKey } from '../util/hidden-recover.js?v=375';
+} from '../util/recs-estilo.js?v=376';
+import { showProgress, hideProgress, promptPlaylistName, escapeHtml, pageHeader } from '../ui/components.js?v=376';
+import { showToast } from '../ui/toast.js?v=376';
+import { getPreview } from '../api/preview-providers.js?v=376';
+import { togglePreview, playingKey, isPlayingAudio } from '../ui/preview-player.js?v=376';
+import { paintPlayingCard } from '../ui/track-card-row.js?v=376';
+import { openTrackCard } from './track-card.js?v=376';
+import { openAlbumCard } from './album-card.js?v=376';
+import { limpiaParaQuery, titleMatches, artistMatches } from '../util/track-match.js?v=376';
+import { vigilarRuta } from '../util/vigencia-ruta.js?v=376';
+import { recuperarUriDeArtistaKey } from '../util/hidden-recover.js?v=376';
 import {
   artistasOcultos as hiddenArtists,
   alternarArtistaOculto,
   artistaEstaOculto,
-} from './artistas-ocultos.js?v=375';
-import { iconoPlay, iconoPausa, iconoFicha, iconoDisco, iconoOjo, iconoOjoTachado } from '../ui/icons.js?v=375';
-import { pedirYCachear, CUALQUIER_RESPUESTA } from '../util/cache-solo-exitos.js?v=375';
+} from './artistas-ocultos.js?v=376';
+import { iconoPlay, iconoPausa, iconoFicha, iconoDisco, iconoOjo, iconoOjoTachado } from '../ui/icons.js?v=376';
+import { pedirYCachear, CUALQUIER_RESPUESTA } from '../util/cache-solo-exitos.js?v=376';
 
 // Iconos de las dos fichas. Los mismos trazos que usa la tarjeta compartida.
 // Mismos trazos que el ojo de discover-common.js (v=165), acá con 14px para

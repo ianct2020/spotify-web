@@ -164,9 +164,11 @@ console.log('10. módulo hoja, la importan solo mapa-paises.js, mapa-escaneo.js,
   };
   recorrer(join(RAIZ, 'src/js'));
   const importan = quienes.filter((p) => /from\s+['"][^'"]*mb-pais\.js(\?v=\d+)?['"]/.test(readFileSync(p, 'utf8')));
-  const permitidos = ['mapa-paises.js', 'mapa-escaneo.js', 'autocorrect-lastfm.js', 'mapa-artistas.js'].map((f) => join('src', 'js', 'util', f));
-  ok(importan.length === 4 && importan.every((p) => permitidos.some((f) => p.endsWith(f))),
-    `de src/js la importan solo util/mapa-paises.js (la regla), util/mapa-escaneo.js (las consultas), util/autocorrect-lastfm.js y util/mapa-artistas.js (normalizarNombre) (la importan: ${importan.join(', ') || 'nadie'})`);
+  // v=376 (tanda 139): `util/por-escuchar-vista.js` normaliza el buscador de «📚 Por escuchar» con `normalizarNombre`, importada para no
+  // escribir otra regla (v=219).
+  const permitidos = ['mapa-paises.js', 'mapa-escaneo.js', 'autocorrect-lastfm.js', 'mapa-artistas.js', 'por-escuchar-vista.js'].map((f) => join('src', 'js', 'util', f));
+  ok(importan.length === 5 && importan.every((p) => permitidos.some((f) => p.endsWith(f))),
+    `de src/js la importan solo util/mapa-paises.js (la regla), util/mapa-escaneo.js (las consultas), util/autocorrect-lastfm.js, util/mapa-artistas.js y util/por-escuchar-vista.js (normalizarNombre) (la importan: ${importan.join(', ') || 'nadie'})`);
 }
 
 console.log('11. varios-mismo-pais exige país en TODOS (v=303)');

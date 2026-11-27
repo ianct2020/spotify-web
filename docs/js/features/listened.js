@@ -1,19 +1,21 @@
-import { getAllPlaylistItems, getBestAvailableLikes, addTracksToPlaylist, removeTracksFromPlaylist, getAllUserPlaylists, getCurrentUserId, getSavedAlbums, getAlbumTracks } from '../api.js?v=375';
-import { indiceDelRegistro, estaRegistrado, leerPorEscuchar, marcarEscuchado, cabeceraPorEscuchar, TEXTO_FALLO_POR_ESCUCHAR } from '../util/registro-escuchados.js?v=375';
-import { cargarEtiquetas, getCachedTags } from '../api/lastfm.js?v=375';
-import { esEPoAlbum } from '../util/release-size.js?v=375';
-import { idbGetCached, idbSetCached, idbGetTimestamp } from '../idb.js?v=375';
-import { escapeHtml, confirmModal, pageHeader } from '../ui/components.js?v=375';
-import { showToast } from '../ui/toast.js?v=375';
-import { isJunkTrack } from '../util/junk.js?v=375';
-import { openModal, closeTop } from '../ui/modal-stack.js?v=375';
-import { getListenedPlaylist, groupItemsByAlbum, openListenedAlbumsPicker, albumKey, baseName, norm } from './listened-shared.js?v=375';
-import { openAlbumCard } from './album-card.js?v=375';
-import { prefKey, migratePrefKey } from '../storage.js?v=375';
-import { pedirYCachear, SOLO_CON_CONTENIDO } from '../util/cache-solo-exitos.js?v=375';
-import { idsDeBiblioteca, filtrarPorBiblioteca } from '../util/solo-biblioteca.js?v=375';
-import { vigilarRuta } from '../util/vigencia-ruta.js?v=375';
-import { indexarLikes, cancionesDeLaObra } from '../util/likes-de-la-obra.js?v=375';
+import { getAllPlaylistItems, getBestAvailableLikes, addTracksToPlaylist, removeTracksFromPlaylist, getAllUserPlaylists, getCurrentUserId, getSavedAlbums, getAlbumTracks } from '../api.js?v=376';
+import { indiceDelRegistro, estaRegistrado, leerPorEscuchar, marcarEscuchado, cabeceraPorEscuchar, TEXTO_FALLO_POR_ESCUCHAR } from '../util/registro-escuchados.js?v=376';
+import { cargarEtiquetas, getCachedTags } from '../api/lastfm.js?v=376';
+import { esEPoAlbum } from '../util/release-size.js?v=376';
+import { idbGetCached, idbSetCached, idbGetTimestamp } from '../idb.js?v=376';
+import { escapeHtml, confirmModal, pageHeader } from '../ui/components.js?v=376';
+import { showToast } from '../ui/toast.js?v=376';
+import { isJunkTrack } from '../util/junk.js?v=376';
+import { openModal, closeTop } from '../ui/modal-stack.js?v=376';
+import { getListenedPlaylist, groupItemsByAlbum, openListenedAlbumsPicker, albumKey, baseName, norm } from './listened-shared.js?v=376';
+import { openAlbumCard } from './album-card.js?v=376';
+import { prefKey, migratePrefKey } from '../storage.js?v=376';
+import { pedirYCachear, SOLO_CON_CONTENIDO } from '../util/cache-solo-exitos.js?v=376';
+import { idsDeBiblioteca, filtrarPorBiblioteca } from '../util/solo-biblioteca.js?v=376';
+import { vigilarRuta } from '../util/vigencia-ruta.js?v=376';
+import { indexarLikes, cancionesDeLaObra } from '../util/likes-de-la-obra.js?v=376';
+import { coincide, ordenar, textoCuenta, ORDEN_POR_DEFECTO } from '../util/por-escuchar-vista.js?v=376';
+import { tapaParaCelda } from '../util/cover-size.js?v=376';
 
 const SORT_KEY = 'listened_sort_mode';
 const VALID_SORTS = new Set(['recent', 'year-desc', 'year-asc', 'artist-asc', 'likes-desc', 'name-asc']);
@@ -77,7 +79,7 @@ function dismissHistory(key) {
 // Solo lo bajamos si el user logueado es el dueño (Ian): son sus datos personales.
 async function loadHistoryData() {
   if (historyAlbums) return historyAlbums;
-  const { isOwner } = await import('./history-data.js?v=375');
+  const { isOwner } = await import('./history-data.js?v=376');
   if (!(await isOwner())) { historyAlbums = []; return historyAlbums; }
   try {
     const cached = await idbGetCached(HISTORY_CACHE_KEY);
@@ -1328,16 +1330,29 @@ function openUnregistered() {
 //
 // Costo: abrir `#listened` no pide la biblioteca (por eso el botón no lleva número). Abrir este modal, `getSavedAlbums()`: 0 peticiones
 // dentro de sus 60 min de caché. «Ya lo escuché»: 1 POST, +1 GET de tracklist si el disco no tiene pista en me gusta ni en lo guardado.
+//
+// (v=376, tanda 139) A pantalla completa: una grilla de tapas con un buscador y un orden. Lo que sale, cómo se lee y qué hace «Ya lo
+// escuché» NO cambió. La regla del buscador y del orden es `util/por-escuchar-vista.js` (pura). 🔴 Las tarjetas se arman UNA vez por
+// lista (`pintar()`, al cargar y con «Actualizar»): escribir esconde y muestra las que ya están, y el orden las MUEVE. Así una tecla no
+// crea otro `<img>` ni le vuelve a pedir la tapa al CDN. El texto y el orden viven en este modal y vuelven a su valor al abrirlo.
 function openPorEscuchar() {
   const overlay = openModal({
     id: 'listened-por-escuchar',
     html: `
-    <div class="modal modal-picker" style="max-width:560px">
+    <div class="modal modal-picker porescuchar-pantalla">
       <h2 style="margin-bottom:4px">📚 Por escuchar</h2>
-      <div style="display:flex;gap:8px;align-items:center;justify-content:space-between;flex-wrap:wrap;margin-bottom:10px;flex-shrink:0">
+      <div class="porescuchar-barra">
         <p id="porescuchar-cabecera" style="color:var(--color-text-secondary);font-size:13px;margin:0;flex:1 1 200px;min-width:0">Leyendo tu biblioteca…</p>
+        <input type="search" id="porescuchar-buscar" class="input porescuchar-buscar" placeholder="Buscar por álbum o artista" aria-label="Buscar por álbum o artista" autocomplete="off" disabled>
+        <select id="porescuchar-orden" class="input porescuchar-orden" aria-label="Ordenar" disabled>
+          <option value="guardado-nuevo">Guardados: más nuevos primero</option>
+          <option value="guardado-viejo">Guardados: más viejos primero</option>
+          <option value="lanzamiento-nuevo">Lanzamiento: más nuevos primero</option>
+          <option value="lanzamiento-viejo">Lanzamiento: más viejos primero</option>
+        </select>
         <button class="btn btn-secondary btn-sm" id="porescuchar-actualizar" title="Vuelve a leer tu biblioteca de Spotify (si no, se reusa la lectura de la última hora)" disabled>Actualizar</button>
       </div>
+      <p id="porescuchar-cuenta" class="porescuchar-cuenta" hidden></p>
       <div id="porescuchar-error" hidden style="color:var(--color-text-secondary);font-size:12px;margin-bottom:8px;overflow-wrap:anywhere;flex-shrink:0"></div>
       <div id="porescuchar-lista" class="picker-scroll"></div>
       <div class="modal-actions" style="margin-top:12px">
@@ -1351,28 +1366,65 @@ function openPorEscuchar() {
   const errorEl = overlay.querySelector('#porescuchar-error');
   const holder = overlay.querySelector('#porescuchar-lista');
   const actualizarBtn = overlay.querySelector('#porescuchar-actualizar');
+  const buscar = overlay.querySelector('#porescuchar-buscar');
+  const ordenSel = overlay.querySelector('#porescuchar-orden');
+  const cuenta = overlay.querySelector('#porescuchar-cuenta');
+  buscar.value = '';
+  ordenSel.value = ORDEN_POR_DEFECTO;
   let lista = [];
+  const tarjetas = new Map();  // id → la tarjeta ya armada (la misma mientras no cambie la lista)
   const enCurso = new Set();   // ids con un «Ya lo escuché» en vuelo: dos clics = un POST
   const artistasDe = (al) => (al.artists || []).map(x => x?.name).filter(Boolean);
   const tapaChica = (al) => { const imgs = al.images || []; return imgs.length ? imgs[imgs.length - 1].url : null; };
   const tapaGrande = (al) => al.images?.[0]?.url || null;
+  // La tarjeta mide como mínimo 200 px (la columna de la grilla, `components.css`): con eso el CDN da la de 300.
+  const LADO_TAPA = 200;
+
+  const controles = (activos) => { buscar.disabled = !activos; ordenSel.disabled = !activos; };
+
+  // La cabecera dice SIEMPRE el total; la cuenta, solo con texto en el buscador.
+  const pintarCuenta = () => {
+    cabecera.textContent = cabeceraPorEscuchar(lista.length);
+    const visibles = lista.reduce((n, e) => n + (tarjetas.get(e.album.id)?.hidden ? 0 : 1), 0);
+    const t = lista.length ? textoCuenta(visibles, lista.length, buscar.value) : '';
+    cuenta.textContent = t;
+    cuenta.hidden = !t;
+  };
+
+  // Esconde y muestra según el texto; con `reordenar`, mueve las MISMAS tarjetas al orden elegido (no rehace nada).
+  const aplicarVista = ({ reordenar = false, arriba = false } = {}) => {
+    const grilla = holder.querySelector('.porescuchar-grilla');
+    if (!grilla) { pintarCuenta(); return; }
+    if (reordenar) {
+      for (const e of ordenar(lista, ordenSel.value)) {
+        const t = tarjetas.get(e.album.id);
+        if (t) grilla.append(t);
+      }
+    }
+    for (const e of lista) {
+      const t = tarjetas.get(e.album.id);
+      if (t) t.hidden = !coincide(e, buscar.value);
+    }
+    pintarCuenta();
+    if (arriba) holder.scrollTop = 0;
+  };
 
   const pintar = () => {
-    cabecera.textContent = cabeceraPorEscuchar(lista.length);
-    if (lista.length === 0) { holder.innerHTML = ''; return; }
+    tarjetas.clear();
+    if (lista.length === 0) { holder.innerHTML = ''; controles(false); pintarCuenta(); return; }
     holder.innerHTML = `
-      <div style="border:1px solid var(--color-border);border-radius:var(--radius-sm)">
-        ${lista.map(({ album: al }) => {
-          const tapa = tapaChica(al);
+      <div class="porescuchar-grilla">
+        ${ordenar(lista, ordenSel.value).map(({ album: al }) => {
+          const tapa = tapaGrande(al) || tapaChica(al);
           const ocupado = enCurso.has(al.id);
+          const nombre = al.name || '(sin nombre)';
+          const artistas = artistasDe(al).join(', ');
           return `
-          <div class="pick-row porescuchar-fila" data-id="${escapeHtml(al.id)}" style="display:flex;align-items:center;gap:11px;padding:9px 12px;border-bottom:1px solid var(--color-border);flex-wrap:wrap">
-            ${tapa ? `<img src="${escapeHtml(tapa)}" loading="lazy" class="pick-cover" alt="">` : `<div class="pick-cover" style="background:var(--color-elevated);display:flex;align-items:center;justify-content:center;color:var(--color-text-muted);font-size:16px">♪</div>`}
-            <div style="flex:1 1 120px;min-width:0">
-              <div style="font-size:14px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${escapeHtml(al.name || '')}">${escapeHtml(al.name || '(sin nombre)')}</div>
-              <div style="font-size:12px;color:var(--color-text-secondary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(artistasDe(al).join(', '))}</div>
-            </div>
-            <div style="display:flex;gap:6px;flex-shrink:0;margin-left:auto">
+          <div class="porescuchar-fila" data-id="${escapeHtml(al.id)}">
+            ${tapa ? `<img src="${escapeHtml(tapaParaCelda(tapa, LADO_TAPA))}" loading="lazy" class="porescuchar-tapa" alt="">` : `<div class="porescuchar-tapa porescuchar-sin-tapa" aria-hidden="true">♪</div>`}
+            <div class="porescuchar-nombre" title="${escapeHtml(nombre)}">${escapeHtml(nombre)}</div>
+            <div class="porescuchar-artistas" title="${escapeHtml(artistas)}">${escapeHtml(artistas)}</div>
+            <div class="porescuchar-botones">
               <button class="btn btn-secondary btn-sm porescuchar-escuchar" data-id="${escapeHtml(al.id)}" title="Abre la ficha del álbum: el tracklist con los previews y el ♥ para darle me gusta">Escuchar</button>
               <button class="btn btn-primary btn-sm porescuchar-ya" data-id="${escapeHtml(al.id)}" title="Lo añade a tu playlist de escuchados con una de sus pistas" ${ocupado ? 'disabled' : ''}>${ocupado ? 'Añadiendo…' : 'Ya lo escuché'}</button>
             </div>
@@ -1380,9 +1432,23 @@ function openPorEscuchar() {
         }).join('')}
       </div>
     `;
+    holder.querySelectorAll('.porescuchar-fila').forEach(t => tarjetas.set(t.dataset.id, t));
     holder.querySelectorAll('.porescuchar-ya').forEach(b => { b.onclick = () => yaLoEscuche(b.dataset.id); });
     holder.querySelectorAll('.porescuchar-escuchar').forEach(b => { b.onclick = () => abrirFicha(b.dataset.id); });
+    controles(true);
+    aplicarVista();
   };
+
+  // Después de «Ya lo escuché»: se va SOLO esa tarjeta; las demás, el texto y el orden se quedan.
+  const quitarTarjeta = (id) => {
+    tarjetas.get(id)?.remove();
+    tarjetas.delete(id);
+    if (lista.length === 0) pintar();
+    else pintarCuenta();
+  };
+
+  buscar.addEventListener('input', () => aplicarVista({ arriba: true }));
+  ordenSel.addEventListener('change', () => aplicarVista({ reordenar: true, arriba: true }));
 
   const abrirFicha = (id) => {
     const entrada = lista.find(x => x.album.id === id);
@@ -1427,7 +1493,7 @@ function openPorEscuchar() {
       lista = lista.filter(x => x.album.id !== id);
       showToast(`«${al.name || 'El álbum'}» añadido a escuchados`, 'success');
       if (cerrar) cerrar();
-      if (overlay.isConnected) pintar();
+      if (overlay.isConnected) quitarTarjeta(id);
       await addAlbumsLocally([{
         id: al.id, name: al.name, artist: artistas[0] || '', artistAlts: artistas,
         year: (al.release_date || '').slice(0, 4), image: tapaChica(al), cover: tapaGrande(al), uri: pista.uri,
@@ -1446,6 +1512,10 @@ function openPorEscuchar() {
     errorEl.hidden = true;
     errorEl.textContent = '';
     holder.innerHTML = '';
+    tarjetas.clear();
+    controles(false);
+    cuenta.hidden = true;
+    cuenta.textContent = '';
     const r = await leerPorEscuchar({ leer: () => getSavedAlbums({ force }), indice: indiceDelRegistro(albums, albumKey), claveDe: albumKey });
     if (!overlay.isConnected) return;
     actualizarBtn.disabled = false;

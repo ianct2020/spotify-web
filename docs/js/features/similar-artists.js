@@ -1,20 +1,20 @@
-import { spotifyFetch, createPlaylist, addTracksToPlaylist, invalidatePlaylistsCache } from '../api.js?v=375';
-import { hasKey, setKey, getSimilarArtists, getArtistTopTracks } from '../api/lastfm.js?v=375';
-import { showProgress, hideProgress, promptPlaylistName, alertModal, escapeHtml, pageHeader } from '../ui/components.js?v=375';
-import { showToast } from '../ui/toast.js?v=375';
-import { getPreview } from '../api/preview-providers.js?v=375';
-import { togglePreview, playingKey, isPlayingAudio } from '../ui/preview-player.js?v=375';
-import { paintPlayingCard } from '../ui/track-card-row.js?v=375';
-import { openTrackCard } from './track-card.js?v=375';
-import { openAlbumCard } from './album-card.js?v=375';
-import { guardarLanzamientoConAviso } from './discover-common.js?v=375';
-import { esEPoAlbum } from '../util/release-size.js?v=375';
-import { limpiaParaQuery, titleMatches, artistMatches } from '../util/track-match.js?v=375';
-import { iconoPlay, iconoPausa, iconoFicha, iconoDisco } from '../ui/icons.js?v=375';
+import { spotifyFetch, createPlaylist, addTracksToPlaylist, invalidatePlaylistsCache } from '../api.js?v=376';
+import { hasKey, setKey, getSimilarArtists, getArtistTopTracks } from '../api/lastfm.js?v=376';
+import { showProgress, hideProgress, promptPlaylistName, alertModal, escapeHtml, pageHeader } from '../ui/components.js?v=376';
+import { showToast } from '../ui/toast.js?v=376';
+import { getPreview } from '../api/preview-providers.js?v=376';
+import { togglePreview, playingKey, isPlayingAudio } from '../ui/preview-player.js?v=376';
+import { paintPlayingCard } from '../ui/track-card-row.js?v=376';
+import { openTrackCard } from './track-card.js?v=376';
+import { openAlbumCard } from './album-card.js?v=376';
+import { guardarLanzamientoConAviso } from './discover-common.js?v=376';
+import { esEPoAlbum } from '../util/release-size.js?v=376';
+import { limpiaParaQuery, titleMatches, artistMatches } from '../util/track-match.js?v=376';
+import { iconoPlay, iconoPausa, iconoFicha, iconoDisco } from '../ui/icons.js?v=376';
 import {
   artistasOcultos, artistaEstaOculto, alternarArtistaOculto,
   botonMenuArtistaHtml, botonArtistasOcultosHtml, conectarMenuArtista, cerrarMenuArtista,
-} from './artistas-ocultos.js?v=375';
+} from './artistas-ocultos.js?v=376';
 
 // Mismo componente que #recs (recommendations.js): preview, ficha y ficha de
 // álbum sobre la fila resuelta. Los iconos son idénticos a los de esa vista.

@@ -58,3 +58,48 @@ export function paginaDeBiblioteca(url) {
   const siguiente = offset + limit;
   return { items, limit, offset, total: BIBLIOTECA.length, next: siguiente < BIBLIOTECA.length ? `https://api.spotify.com/v1/me/albums?offset=${siguiente}&limit=${limit}` : null };
 }
+
+// ── (tanda 139) El caso K: «📚 Por escuchar» a pantalla completa ─────────────
+//
+// OTRA biblioteca, de 40 guardados que no están en la lista (los 40 pendientes), solo para los marcos `?biblio=k`. Una página.
+//   · `release_date` en las tres formas (AAAA, AAAA-MM, AAAA-MM-DD) y 3 sin fecha: dos vacíos y un «0000» (los álbumes sin metadatos).
+//   · `added_at` distintos salvo DOS pares repetidos (11 = 10, 31 = 30), y la biblioteca NO viene ordenada por fecha.
+//   · 3 sin tapa (el «♪»); las demás, un SVG en `data:` (ninguna tapa sale a la red, ni al CDN).
+//   · «buscable» está en exactamente 3: en un nombre (5), como segundo artista (12) y como único artista (27).
+//   · Cada uno trae su pista en `tracks.items` (la fuente (b) de «Ya lo escuché»: 0 GET de tracklist).
+export const K_TOTAL = 40;
+export const K_BUSCABLE = 'buscable';
+export const K_SIN_TAPA = [3, 18, 33];
+export const idDeK = (i) => id22('discoK', i);
+export const pistaDeK = (i) => `spotify:track:${id22('pistaK', i)}`;
+const dos = (n) => String(n).padStart(2, '0');
+const fechaDeK = (i) => {
+  if (i === 7 || i === 22) return '';
+  if (i === 35) return '0000';
+  if (i % 3 === 0) return `${1990 + (i % 23)}`;
+  if (i % 3 === 1) return `${1990 + (i % 19)}-${dos(1 + (i % 12))}`;
+  return `${1990 + (i % 17)}-${dos(1 + (i % 12))}-${dos(1 + (i % 28))}`;
+};
+const guardadoK = (i) => {
+  const dia = (i === 11 ? 10 : i === 31 ? 30 : i) * 17 % 40;   // revuelto (17 y 40 son coprimos), con los dos pares repetidos
+  const artistas = i === 12 ? ['Banda Kappa Inventada', 'Trío Buscable Inventado'] : i === 27 ? ['Trío Buscable Inventado'] : [i % 3 === 0 ? 'Banda Kappa Inventada' : 'Grupo Ka Inventado'];
+  const color = `hsl(${(i * 37) % 360} 45% 40%)`;
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64"><rect width="64" height="64" fill="${color}"/></svg>`;
+  return {
+    added_at: new Date(Date.UTC(2025, 0, 1 + dia * 5, 10)).toISOString(),
+    album: {
+      id: idDeK(i), name: i === 5 ? 'Buscable de Noche Inventado' : `Disco K ${dos(i)} Inventado`, album_type: 'album', total_tracks: 10,
+      release_date: fechaDeK(i),
+      images: K_SIN_TAPA.includes(i) ? [] : [{ url: `data:image/svg+xml,${encodeURIComponent(svg)}`, width: 640, height: 640 }],
+      artists: artistas.map((name, j) => ({ id: id22(`bandaK${j}`, i), name })),
+      tracks: { items: [{ uri: pistaDeK(i), name: `Tema K ${i} Inventado` }] },
+    },
+  };
+};
+export const BIBLIOTECA_K = Array.from({ length: K_TOTAL }, (_, i) => guardadoK(i));
+export function paginaDeBibliotecaK(url) {
+  const limit = +(url.searchParams.get('limit') || 20), offset = +(url.searchParams.get('offset') || 0);
+  const items = BIBLIOTECA_K.slice(offset, offset + limit);
+  const siguiente = offset + limit;
+  return { items, limit, offset, total: BIBLIOTECA_K.length, next: siguiente < BIBLIOTECA_K.length ? `https://api.spotify.com/v1/me/albums?offset=${siguiente}&limit=${limit}` : null };
+}

@@ -16,7 +16,7 @@
 //   · `?foto=apagado|puesto` (capturas, con un conductor externo): deja `#listened` lista y marca `data-foto="listo"`.
 
 import { instalarRedSimulada, esperarReal, anclar } from '/banco/simulado.mjs';
-import { LISTA, PLAYLIST_ID, PLAYLIST_NOMBRE, paginaDeBiblioteca } from '/banco/listened-biblioteca-datos.mjs';
+import { LISTA, PLAYLIST_ID, PLAYLIST_NOMBRE, paginaDeBiblioteca, paginaDeBibliotecaK } from '/banco/listened-biblioteca-datos.mjs';
 
 const q = new URLSearchParams(location.search);
 window.__errores = [];
@@ -38,7 +38,9 @@ sim.ruta('GET', /^\/me\/playlists/, () => ({ items: [], next: null, total: 0 }))
 sim.ruta('GET', /^\/me\/tracks/, () => ({ items: [], next: null, total: 0 }));
 sim.ruta('GET', new RegExp(`^/playlists/${PLAYLIST_ID}\\?`), () => ({ snapshot_id: 'snapshot-inventado' }));
 sim.ruta('GET', new RegExp(`^/playlists/${PLAYLIST_ID}/items`), () => ({ items: LISTA, next: null, total: LISTA.length }));
-sim.ruta('GET', /^\/me\/albums/, ({ url }) => paginaDeBiblioteca(url));
+// (tanda 139) `?biblio=k`: la biblioteca de 40 del caso K en vez de la de 122.
+const BIBLIO_K = q.get('biblio') === 'k';
+sim.ruta('GET', /^\/me\/albums/, ({ url }) => (BIBLIO_K ? paginaDeBibliotecaK(url) : paginaDeBiblioteca(url)));
 // (tanda 129) «📚 Por escuchar»: el POST de «Ya lo escuché» a la playlist simulada (`?post=403` lo contesta con 403) y el tracklist de un
 // disco (la fuente (c) de la pista representativa). Lo que escriben queda en `sim.reg.escrituras`: nada sale de aquí.
 const POST_403 = q.get('post') === '403';
@@ -106,6 +108,17 @@ if (FOTO) {
   if (FOTO === 'puesto') {
     document.querySelector('.listened-chip-biblioteca').click();
     await esperarReal(() => document.querySelector('.listened-chip-biblioteca')?.getAttribute('aria-pressed') === 'true', { que: 'el chip puesto', vueltas: 8000 });
+  }
+  if (FOTO === 'porescuchar') {
+    // (tanda 139) «📚 Por escuchar» abierto y leído; `&buscar=…` y `&orden=…` lo dejan con un texto y un orden puestos, y `&tema=…` con
+    // otro preset (`papel`).
+    if (q.get('tema')) await window.__ponerTema(q.get('tema'));
+    document.getElementById('listened-porescuchar-btn').click();
+    await esperarReal(() => { const c = document.getElementById('porescuchar-cabecera')?.textContent || ''; return c && c !== 'Leyendo tu biblioteca…'; }, { que: 'Por escuchar leído', vueltas: 8000 });
+    const buscar = document.getElementById('porescuchar-buscar'), orden = document.getElementById('porescuchar-orden');
+    if (q.get('orden') && orden) { orden.value = q.get('orden'); orden.dispatchEvent(new Event('change')); }
+    if (q.get('buscar') && buscar) { buscar.value = q.get('buscar'); buscar.dispatchEvent(new Event('input')); }
+    document.getAnimations().forEach((a) => { try { a.finish(); } catch { /* las infinitas */ } });
   }
   document.documentElement.dataset.foto = 'listo';
 }

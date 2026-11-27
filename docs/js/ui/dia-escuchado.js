@@ -22,9 +22,9 @@
 // raíz que se le pasa a `conectarListasDelDia()`: ningún listener de ninguna vista barre esas clases en
 // todo el documento (la regla de `.wt-play-btn`, v=219).
 
-import { escapeHtml } from './components.js?v=375';
-import { openTrackCard } from '../features/track-card.js?v=375';
-import { attachArtistCard } from '../features/artist-card.js?v=375';
+import { escapeHtml } from './components.js?v=376';
+import { openTrackCard } from '../features/track-card.js?v=376';
+import { attachArtistCard } from '../features/artist-card.js?v=376';
 
 // El MISMO `fmtMinutes` que el Wrapped, y por el mismo camino: llega al
 // componente por `ctx`. No se escribe un formateador nuevo — hay cuatro copias

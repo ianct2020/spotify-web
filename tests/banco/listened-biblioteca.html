@@ -31,12 +31,19 @@
 //      cierra; la segunda apertura, 0 /me/albums. Con el POST en 403: toast rojo, la fila se queda, el botón vuelve. Con /me/albums ilegible,
 //      el texto del fallo y nunca «0»; con la biblioteca vacía, «No te queda ningún álbum…». A 1366×591 y 390×844, el modal no desborda.
 //      Las escrituras de J van SOLO a la playlist simulada; los demás casos siguen en 0.
+//   K. (v=376, tanda 139) «📚 Por escuchar» a pantalla completa, con OTRA biblioteca inventada de 40 pendientes (`?biblio=k`). K1: a 1366×591
+//      el modal mide al menos 1300×540, la primera fila de tarjetas entera a la vista con sus dos botones, nada desborda y la barra en una
+//      fila. K2: el buscador (3 visibles, la cuenta, la cabecera con 40; 0 y «Ningún álbum…»; borrado, 40 y la cuenta escondida). K3: los
+//      cuatro órdenes = el que calcula la madre por su lado, con los sin fecha al final en los dos de lanzamiento. K4: escribir y ordenar no
+//      rehacen nada (los mismos nodos, ningún <img> nuevo). K5: 0 peticiones desde el modal leído. K6: «Ya lo escuché» con texto y orden
+//      puestos: 1 POST, se va esa tarjeta y las demás son las mismas. K7: el contraste en los cuatro presets. `?medir=k` vuelca sin afirmar.
 //
 // `?solo=A,B` corre esas. ⚠️ Todas las esperas van con `esperarReal` (ver PRESUPUESTO en `scripts/correr-banco.mjs`).
 
 import { esperarReal, anclar } from '/banco/simulado.mjs';
 import { fallar, listo } from '/banco/esperar.mjs';
 import { LISTA, OTRA_EDICION, idDeLista, PLAYLIST_ID, POR_CLAVE, CON_PISTA, PISTA_GUARDADA, PENDIENTES_ESPERADOS } from '/banco/listened-biblioteca-datos.mjs';
+import { BIBLIOTECA_K, K_BUSCABLE, K_SIN_TAPA, idDeK, pistaDeK } from '/banco/listened-biblioteca-datos.mjs';
 
 const afirmar = (c, msg) => { if (!c) throw new Error('BANCO: ' + msg); };
 const pasos = [];
@@ -457,6 +464,208 @@ try {
     progreso('J ancho');
   }
 
+  if (corre('K')) {
+    // (tanda 139) «📚 Por escuchar» a pantalla completa, con la biblioteca de 40 de `?biblio=k`. `?medir=k` vuelca las medidas sin
+    // afirmar (así se midió el «antes»). Las puertas, en el comentario de arriba.
+    const MEDIR = new URLSearchParams(location.search).get('medir') === 'k';
+    const sinAfirmar = [];
+    const puerta = (c, msg) => { if (MEDIR) { if (!c) sinAfirmar.push(msg); } else afirmar(c, msg); };
+    const MODAL = '[data-stack-id="listened-por-escuchar"]';
+    const cabeceraK = (f) => $(f, '#porescuchar-cabecera')?.textContent.trim() ?? '';
+    const filasK = (f) => $$(f, `${MODAL} .porescuchar-fila`);
+    const visiblesK = (f) => filasK(f).filter((x) => !x.hidden && x.getClientRects().length > 0).map((x) => x.dataset.id);
+    const terminarK = (f) => f.contentDocument.getAnimations().forEach((a) => { try { a.finish(); } catch { /* las infinitas */ } });
+    const textoK = (n) => (n === 1 ? '1 álbum de tu biblioteca que todavía no has marcado como escuchado.' : `${n} álbumes de tu biblioteca que todavía no has marcado como escuchados.`);
+    const indiceK = new Map(BIBLIOTECA_K.map((g, i) => [g.album.id, i]));
+
+    // El orden, calculado por la madre por su lado (sin importar la regla de la app). La base es la de `pendientesDeBiblioteca()`: del
+    // guardado más nuevo al más viejo y, a igual fecha, el orden de la biblioteca.
+    const msG = (s) => { const t = Date.parse(s || ''); return Number.isFinite(t) && t !== 0 ? t : null; };
+    const msL = (r) => {
+      const m = String(r || '').match(/^(\d{4})(?:-(\d{2}))?(?:-(\d{2}))?/);
+      if (!m || +m[1] === 0) return null;
+      return Date.UTC(+m[1], (m[2] ? +m[2] : 6) - 1, m[3] ? +m[3] : 15);
+    };
+    const baseK = BIBLIOTECA_K.map((g, i) => ({ id: g.album.id, g: msG(g.added_at), l: msL(g.album.release_date), i }))
+      .sort((a, b) => ((b.g ?? 0) - (a.g ?? 0)) || (a.i - b.i)).map((e, pos) => ({ ...e, pos }));
+    const primeroSinNulos = (x, y, s) => (x === null && y === null ? 0 : x === null ? 1 : y === null ? -1 : s * (y - x));
+    const esperadoK = (o) => [...baseK].sort((a, b) => {
+      const lanz = o.startsWith('lanzamiento');
+      return primeroSinNulos(lanz ? a.l : a.g, lanz ? b.l : b.g, o.endsWith('-nuevo') ? 1 : -1) || primeroSinNulos(a.g, b.g, 1) || (a.pos - b.pos);
+    }).map((e) => e.id);
+    const SIN_FECHA_K = [7, 22, 35].map(idDeK);
+
+    const f = abrirMarco('k', 1366, 591, '&biblio=k'); marcos.push(['k', f]);
+    await abrirListened(f, 'K');
+    $(f, '#listened-porescuchar-btn').click();
+    await esperarReal(() => $(f, MODAL) && cabeceraK(f) && cabeceraK(f) !== 'Leyendo tu biblioteca…', { que: 'K: el modal leído', vueltas: VUELTAS });
+    terminarK(f);
+    const albumesLectura = aAlbumes(f);
+    const l0 = llamadas(f).length, d0 = win(f).__datosAjenos.length, e0 = win(f).__sim.reg.externas.length;
+    const buscar = $(f, '#porescuchar-buscar'), orden = $(f, '#porescuchar-orden');
+    const cuentaEl = () => $(f, '#porescuchar-cuenta');
+    const listaEl = $(f, '#porescuchar-lista');
+    const modalEl = $(f, `${MODAL} .modal`);
+    const med = {};
+
+    // K1: pantalla completa, la primera fila entera, nada desborda.
+    const caja = modalEl.getBoundingClientRect();
+    listaEl.scrollTop = 0;
+    const lr = listaEl.getBoundingClientRect();
+    const cards = filasK(f);
+    const top0 = cards[0]?.getBoundingClientRect().top;
+    const fila1 = cards.filter((c) => Math.abs(c.getBoundingClientRect().top - top0) < 1);
+    const dentro = (r) => r.top >= lr.top - 0.5 && r.bottom <= lr.bottom + 0.5 && r.left >= lr.left - 0.5 && r.right <= lr.right + 0.5;
+    const botonesDe = (c) => [...c.querySelectorAll('button')];
+    const ya0 = cards[0]?.querySelector('.porescuchar-ya');
+    med.modal = `${caja.width.toFixed(0)}×${caja.height.toFixed(0)}`;
+    med.columnas = fila1.length;
+    med.tarjeta = cards[0] ? cards[0].getBoundingClientRect().width.toFixed(1) : '—';
+    med.ya = ya0 ? `${ya0.scrollWidth}/${ya0.clientWidth}` : '—';
+    puerta(!!buscar && !!orden, 'K: el buscador y el orden existen');
+    puerta(caja.width >= 1300 && caja.height >= 540, `K1: el modal mide al menos 1300×540 (${med.modal})`);
+    puerta(fila1.length > 0 && fila1.every((c) => dentro(c.getBoundingClientRect()) && botonesDe(c).length === 2 && botonesDe(c).every((b) => dentro(b.getBoundingClientRect()))),
+      `K1: la primera fila entera a la vista, con sus dos botones (${fila1.length} tarjetas; lista ${lr.top.toFixed(0)}–${lr.bottom.toFixed(0)})`);
+    puerta(modalEl.scrollWidth <= modalEl.clientWidth && listaEl.scrollWidth <= listaEl.clientWidth, `K1: el modal y la lista no desbordan (${modalEl.scrollWidth}/${modalEl.clientWidth}, ${listaEl.scrollWidth}/${listaEl.clientWidth})`);
+    const tarjetasQueDesbordan = cards.filter((c) => c.scrollWidth > c.clientWidth).length;
+    const botonesQueNoEntran = cards.flatMap(botonesDe).filter((b) => b.scrollWidth > b.clientWidth).length;
+    puerta(tarjetasQueDesbordan === 0 && botonesQueNoEntran === 0, `K1: ninguna tarjeta desborda y los botones entran (${tarjetasQueDesbordan} tarjetas, ${botonesQueNoEntran} botones; «Ya lo escuché» ${med.ya})`);
+    if (buscar && orden) {
+      const barra = [$(f, '#porescuchar-cabecera'), buscar, orden, $(f, '#porescuchar-actualizar')].map((x) => x.getBoundingClientRect());
+      const centros = barra.map((r) => r.top + r.height / 2);
+      puerta(Math.max(...centros) - Math.min(...centros) < 4, `K1: la barra en una fila (centros ${centros.map((x) => x.toFixed(0)).join(', ')})`);
+      puerta(barra[0].right <= barra[1].left && barra[1].right <= barra[2].left && barra[2].right <= barra[3].left, 'K1: cabecera, buscador, orden y «Actualizar», en ese orden');
+    }
+    progreso('K1');
+
+    if (buscar && orden) {
+      const opciones = [...orden.options].map((o) => `${o.value}=${o.textContent.trim()}`);
+      puerta(JSON.stringify(opciones) === JSON.stringify(['guardado-nuevo=Guardados: más nuevos primero', 'guardado-viejo=Guardados: más viejos primero', 'lanzamiento-nuevo=Lanzamiento: más nuevos primero', 'lanzamiento-viejo=Lanzamiento: más viejos primero']), `K: las cuatro opciones del orden (${opciones.join(' | ')})`);
+      puerta(orden.value === 'guardado-nuevo' && buscar.value === '' && !buscar.disabled && !orden.disabled, 'K: al abrir, «Guardados: más nuevos primero», el buscador vacío y los dos activos');
+      puerta(buscar.placeholder === 'Buscar por álbum o artista' && buscar.getAttribute('aria-label') === 'Buscar por álbum o artista' && orden.getAttribute('aria-label') === 'Ordenar', 'K: el placeholder y las etiquetas');
+      puerta(JSON.stringify(visiblesK(f)) === JSON.stringify(esperadoK('guardado-nuevo')), 'K: al abrir, el orden de siempre');
+      puerta(cuentaEl().hidden && cuentaEl().textContent === '', 'K: sin texto, la cuenta escondida y vacía');
+      const refs = filasK(f);
+      const imgs = $$(f, `${MODAL} img`);
+      med.imgs = imgs.length;
+      const escribir = (t) => { buscar.value = t; buscar.dispatchEvent(new (win(f).Event)('input', { bubbles: true })); };
+      const ordenar = (o) => { orden.value = o; orden.dispatchEvent(new (win(f).Event)('change', { bubbles: true })); };
+
+      // K2: el buscador.
+      listaEl.scrollTop = 200;
+      escribir(K_BUSCABLE);
+      puerta(visiblesK(f).length === 3, `K2: «${K_BUSCABLE}» deja 3 visibles (${visiblesK(f).length})`);
+      puerta([5, 12, 27].map(idDeK).every((id) => visiblesK(f).includes(id)), 'K2: por un nombre, por un segundo artista y por el único artista');
+      puerta(!cuentaEl().hidden && cuentaEl().textContent === `Con «${K_BUSCABLE}»: 3 de 40.`, `K2: la cuenta («${cuentaEl().textContent}»)`);
+      puerta(cabeceraK(f) === textoK(40), `K2: la cabecera sigue con 40 («${cabeceraK(f)}»)`);
+      puerta(listaEl.scrollTop === 0, 'K2: la grilla vuelve arriba');
+      escribir('TRÍO');
+      puerta(visiblesK(f).length === 2, `K2: «TRÍO» encuentra a «Trío» (${visiblesK(f).length})`);
+      escribir('zzzz');
+      puerta(visiblesK(f).length === 0 && cuentaEl().textContent === 'Ningún álbum coincide con «zzzz».', `K2: lo que no está, 0 y «Ningún álbum…» («${cuentaEl().textContent}»)`);
+      escribir('');
+      puerta(visiblesK(f).length === 40 && cuentaEl().hidden, `K2: borrado, 40 y la cuenta escondida (${visiblesK(f).length})`);
+      progreso('K2');
+
+      // K3: el orden, con las cuatro opciones.
+      const vistos = [];
+      for (const o of ['guardado-viejo', 'lanzamiento-nuevo', 'lanzamiento-viejo', 'guardado-nuevo']) {
+        listaEl.scrollTop = 200;
+        ordenar(o);
+        const v = visiblesK(f);
+        puerta(JSON.stringify(v) === JSON.stringify(esperadoK(o)), `K3: ${o}, el orden que calcula la madre (primeros ${v.slice(0, 3).map((id) => indiceK.get(id)).join(', ')})`);
+        if (o.startsWith('lanzamiento')) puerta(SIN_FECHA_K.every((id) => v.slice(-3).includes(id)), `K3: ${o}, los 3 sin fecha al final`);
+        puerta(listaEl.scrollTop === 0, `K3: ${o}, la grilla vuelve arriba`);
+        vistos.push(`${o}: ${v.slice(0, 2).map((id) => indiceK.get(id)).join(',')}…${v.slice(-1).map((id) => indiceK.get(id))}`);
+      }
+      med.ordenes = vistos.join(' · ');
+      progreso('K3');
+
+      // K4: no se rehace nada.
+      const ahora = filasK(f), imgsAhora = $$(f, `${MODAL} img`);
+      puerta(ahora.length === refs.length && ahora.every((x) => refs.includes(x)), 'K4: las 40 tarjetas son los mismos nodos');
+      puerta(imgsAhora.length === imgs.length && imgsAhora.every((x) => imgs.includes(x)), `K4: ningún <img> nuevo (${imgsAhora.length} contra ${imgs.length})`);
+      puerta(imgs.every((x) => x.src.startsWith('data:')) && imgs.length === 40 - K_SIN_TAPA.length, `K4: ${imgs.length} tapas, todas en data: (sin red)`);
+      progreso('K4');
+
+      // K5: 0 peticiones desde el modal leído hasta acá.
+      const nuevas = llamadas(f).slice(l0).map((l) => `${l.metodo} ${l.ruta}`);
+      med.peticiones = `${albumesLectura} GET /me/albums para leer; después ${nuevas.length} a la Spotify simulada, ${win(f).__datosAjenos.length - d0} a /data/, ${win(f).__sim.reg.externas.length - e0} a otro host`;
+      puerta(nuevas.length === 0 && win(f).__datosAjenos.length === d0 && win(f).__sim.reg.externas.length === e0, `K5: 0 peticiones (${med.peticiones}; ${nuevas.join(' , ')})`);
+      progreso('K5');
+
+      // K6: «Ya lo escuché» con un texto y un orden puestos.
+      escribir(K_BUSCABLE);
+      ordenar('lanzamiento-viejo');
+      const objetivo = visiblesK(f)[0];
+      const otros = filasK(f).filter((x) => x.dataset.id !== objetivo);
+      const posts0 = win(f).__sim.reg.escrituras.filter((e) => e.metodo === 'POST').length;
+      $(f, `${MODAL} .porescuchar-ya[data-id="${objetivo}"]`).click();
+      await esperarReal(() => !filasK(f).some((x) => x.dataset.id === objetivo), { que: 'K6: la tarjeta se va', vueltas: VUELTAS });
+      const posts = win(f).__sim.reg.escrituras.filter((e) => e.metodo === 'POST');
+      puerta(posts.length === posts0 + 1 && JSON.stringify(posts.at(-1).cuerpo) === JSON.stringify({ uris: [pistaDeK(indiceK.get(objetivo))] }), `K6: 1 POST con la pista del disco ${indiceK.get(objetivo)} (${JSON.stringify(posts.at(-1)?.cuerpo)})`);
+      puerta(buscar.value === K_BUSCABLE && orden.value === 'lanzamiento-viejo', 'K6: el texto y el orden siguen');
+      puerta(cuentaEl().textContent === `Con «${K_BUSCABLE}»: 2 de 39.` && cabeceraK(f) === textoK(39), `K6: la cuenta y la cabecera bajan en 1 («${cuentaEl().textContent}» · «${cabeceraK(f)}»)`);
+      puerta(filasK(f).length === 39 && filasK(f).every((x) => otros.includes(x)), 'K6: las demás tarjetas son los mismos nodos');
+      puerta(JSON.stringify(visiblesK(f)) === JSON.stringify(esperadoK('lanzamiento-viejo').filter((id) => id !== objetivo && [5, 12, 27].map(idDeK).includes(id))), 'K6: las que quedan, en el orden elegido');
+      progreso('K6');
+
+      // K7: el contraste, con el fondo compuesto capa por capa, en los cuatro presets.
+      const colorDe = (css) => {
+        const s = String(css);
+        let m = s.match(/^color\(srgb\s+([\d.e-]+)\s+([\d.e-]+)\s+([\d.e-]+)(?:\s*\/\s*([\d.e-]+))?\)/);
+        if (m) return [m[1] * 255, m[2] * 255, m[3] * 255, m[4] === undefined ? 1 : +m[4]];
+        m = s.match(/rgba?\(([^)]+)\)/);
+        if (!m) return null;
+        const p = m[1].split(/[\s,/]+/).filter(Boolean).map(Number);
+        return [p[0], p[1], p[2], p[3] ?? 1];
+      };
+      const lum = (c) => { const [r, g, b] = c.slice(0, 3).map((v) => { const s = v / 255; return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4; }); return 0.2126 * r + 0.7152 * g + 0.0722 * b; };
+      const contraste = (a, b) => { const x = lum(a), y = lum(b); return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05); };
+      const sobre = (arriba, abajo) => { const a = arriba[3]; return [0, 1, 2].map((i) => arriba[i] * a + abajo[i] * (1 - a)).concat(1); };
+      const ratio = (el, colorTexto) => {
+        const cs = (n) => win(f).getComputedStyle(n);
+        const capas = []; let opacidad = 1, opaco = false;
+        for (let n = el; n && n.nodeType === 1; n = n.parentElement) {
+          opacidad *= Number(cs(n).opacity || 1);
+          const c = colorDe(cs(n).backgroundColor);
+          if (c && c[3] > 0 && !opaco) { capas.push(c); if (c[3] >= 1) opaco = true; }
+        }
+        let fondo = opaco ? capas.pop() : [255, 255, 255, 1];
+        while (capas.length) fondo = sobre(capas.pop(), fondo);
+        const t = colorDe(colorTexto ?? cs(el).color);
+        return contraste(sobre([t[0], t[1], t[2], t[3] * opacidad], fondo), fondo);
+      };
+      escribir('inventad');
+      ordenar('guardado-nuevo');
+      const fallos = [], peores = [];
+      for (const id of ['violeta', 'ambar', 'aguamarina', 'papel']) {
+        await anclar(win(f).__ponerTema(id));
+        terminarK(f);
+        const tarjeta = filasK(f).find((x) => !x.hidden && x.querySelector('img'));
+        const sinTapa = $(f, `${MODAL} .porescuchar-sin-tapa`);
+        const medidosK = [
+          ['cuenta', ratio(cuentaEl())],
+          ['nombre', ratio(tarjeta.querySelector('.porescuchar-nombre'))],
+          ['artistas', ratio(tarjeta.querySelector('.porescuchar-artistas'))],
+          ['♪', ratio(sinTapa)],
+          ['placeholder', ratio(buscar, win(f).getComputedStyle(buscar, '::placeholder').color)],
+        ];
+        for (const [que, r] of medidosK) if (!(r >= 4.5)) fallos.push(`${id} ${que} ${r.toFixed(2)}:1`);
+        const peor = medidosK.reduce((a, b) => (b[1] < a[1] ? b : a));
+        peores.push(`${id} ${peor[1].toFixed(2)} (${peor[0]})`);
+      }
+      await anclar(win(f).__ponerTema('violeta'));
+      med.contraste = peores.join(', ');
+      puerta(fallos.length === 0, `K7: ≥ 4,5:1 en los cuatro presets (${fallos.join(' · ')})`);
+      progreso('K7');
+    }
+    datos.k = `modal ${med.modal}, ${med.columnas} columnas, tarjeta ${med.tarjeta} px, «Ya lo escuché» ${med.ya}` +
+      (med.imgs !== undefined ? ` · ${med.imgs} img · ${med.peticiones} · ${med.ordenes} · peor contraste: ${med.contraste}` : '') +
+      (MEDIR ? ` · sin afirmar (${sinAfirmar.length}): ${sinAfirmar.join(' | ')}` : '');
+    progreso('K');
+  }
+
   // (tanda 129) El marco `j403` provoca un 403 a propósito, y `spotifyFetch` lo anota con su `console.error` de siempre: ese, y solo ese, se
   // espera ahí (y se exige). Cualquier otro error, en cualquier marco, sigue siendo un fallo.
   const ESPERADO_J403 = `console.error: Spotify 403 on /playlists/${PLAYLIST_ID}/items`;
@@ -465,10 +674,12 @@ try {
   const errores = marcos.filter(([n]) => n !== 'j403').flatMap(([n, f]) => win(f).__errores.map((e) => `${n}: ${e}`));
   afirmar(errores.length === 0, `0 errores de consola: ${errores.join(' | ')}`);
   const ajenos = marcos.flatMap(([, f]) => win(f).__sim.reg.desconocidas);
-  // Los marcos J escriben a propósito (en la playlist SIMULADA) y sus escrituras las afirma el caso J. Los demás, ninguna.
-  const escrituras = marcos.filter(([n]) => !n.startsWith('j')).flatMap(([, f]) => win(f).__sim.reg.escrituras);
+  // Los marcos J escriben a propósito (en la playlist SIMULADA) y sus escrituras las afirma el caso J. Desde la tanda 139, el marco K
+  // también (el POST de K6, que afirma K). Los demás, ninguna.
+  const escribe = (n) => n.startsWith('j') || n === 'k';
+  const escrituras = marcos.filter(([n]) => !escribe(n)).flatMap(([, f]) => win(f).__sim.reg.escrituras);
   afirmar(escrituras.length === 0, `0 escrituras en la cuenta (${escrituras.map((e) => e.ruta).join(', ')})`);
-  const escriturasJ = marcos.filter(([n]) => n.startsWith('j')).flatMap(([, f]) => win(f).__sim.reg.escrituras);
+  const escriturasJ = marcos.filter(([n]) => escribe(n)).flatMap(([, f]) => win(f).__sim.reg.escrituras);
   afirmar(escriturasJ.every((e) => e.metodo === 'POST' && e.ruta === `/playlists/${PLAYLIST_ID}/items`), `J: solo POST a la playlist de escuchados simulada (${escriturasJ.map((e) => `${e.metodo} ${e.ruta}`).join(', ')})`);
   const resumenFinal = 'ok' +
     (datos.a ? ` · A rutas: ${datos.a} · A otros: ${datos.aOtros}` : '') +
@@ -479,6 +690,7 @@ try {
     (datos.i ? ` · I: ${datos.i}` : '') +
     (datos.j ? ` · J: ${datos.j}` : '') +
     (datos.jAncho ? ` · J ancho: ${datos.jAncho}` : '') +
+    (datos.k ? ` · K: ${datos.k}` : '') +
     ` · rutas sin simular=${ajenos.length} · errores=${errores.length} · reloj virtual=${Math.round(performance.now())} ms`;
   document.documentElement.setAttribute('data-resumen', resumenFinal);
   document.getElementById('progreso').textContent = resumenFinal;
