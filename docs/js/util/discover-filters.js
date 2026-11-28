@@ -19,15 +19,15 @@
 // Normalizar más agresivamente `albumKey` fusionaría American Football LP3/LP4,
 // Crystal Castles I/II y Ed Sheeran ÷ vs =, que ya costó caro dos veces.
 
-import { albumKey } from './album-key.js?v=376';
-import { songKey, songKeysCandidatas, songKeyBase } from './song-identity.js?v=376';
-import { baseDeEdicion } from './edition-suffix.js?v=376';
-import { EP_MIN_TRACKS } from './release-size.js?v=376';
-import { getSavedAlbums, getBestAvailableLikes, getAllPlaylistItems } from '../api.js?v=376';
-import { getOwnPlaylists } from './playlist-add.js?v=376';
-import { loadListenedAlbums } from '../features/history-data.js?v=376';
-import { buildAlbumHeardIndex } from './album-heard.js?v=376';
-import { prefKey, migratePrefKey } from '../storage.js?v=376';
+import { albumKey } from './album-key.js?v=377';
+import { songKey, songKeysCandidatas, songKeyBase } from './song-identity.js?v=377';
+import { baseDeEdicion } from './edition-suffix.js?v=377';
+import { EP_MIN_TRACKS } from './release-size.js?v=377';
+import { getSavedAlbums, getBestAvailableLikes, getAllPlaylistItems } from '../api.js?v=377';
+import { getOwnPlaylists } from './playlist-add.js?v=377';
+import { loadListenedAlbums } from '../features/history-data.js?v=377';
+import { buildAlbumHeardIndex } from './album-heard.js?v=377';
+import { prefKey, migratePrefKey } from '../storage.js?v=377';
 
 const LS_KEY = 'discover_filtros_v1';
 
@@ -274,8 +274,11 @@ export async function buildFilterContext({ force = false } = {}) {
   //    álbum de verdad (≥ 4 pistas): un tema likeado ES un tema conocido, y el
   //    álbum largo es lo que distingue «salió dentro de un álbum» de «salió
   //    como single».
+  // (v=377) `likesVacios`: la misma regla que `buildAlbumHeardIndex()`, `true` solo con `source: 'empty'`.
+  let likesVacios = false;
   try {
     const res = await getBestAvailableLikes();
+    likesVacios = res?.source === 'empty';
     for (const it of (res?.items || [])) {
       const t = it?.track;
       const alb = t?.album?.name;
@@ -312,10 +315,11 @@ export async function buildFilterContext({ force = false } = {}) {
     console.warn('[discover-filtros] no pude leer «' + PLAYLIST_SIN_ESCUCHAR + '»:', e.message);
   }
 
-  const ctx = { guardados, idsEnBiblioteca, escuchados, basesTuyas, temaEnAlbum, enSinEscuchar, bibliotecaFallo };
+  const ctx = { guardados, idsEnBiblioteca, escuchados, basesTuyas, temaEnAlbum, enSinEscuchar, bibliotecaFallo, likesVacios };
   // 🔴 Los fracasos no se memoizan (v=219): un contexto con la biblioteca sin leer quedaba pegado hasta recargar. El que falló se
   // devuelve (la vista lo usa en ESTA apertura: un repintado no vuelve a pedir `/me/albums`) y la próxima apertura lo intenta de nuevo.
-  if (!bibliotecaFallo) ctxCache = ctx;
+  // (v=377) Lo mismo con los me gusta vacíos: `temaEnAlbum` armado sin ellos no puede quedar pegado después de cargarlos.
+  if (!bibliotecaFallo && !likesVacios) ctxCache = ctx;
   return ctx;
 }
 

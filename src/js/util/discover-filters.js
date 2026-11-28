@@ -274,8 +274,11 @@ export async function buildFilterContext({ force = false } = {}) {
   //    álbum de verdad (≥ 4 pistas): un tema likeado ES un tema conocido, y el
   //    álbum largo es lo que distingue «salió dentro de un álbum» de «salió
   //    como single».
+  // (v=377) `likesVacios`: la misma regla que `buildAlbumHeardIndex()`, `true` solo con `source: 'empty'`.
+  let likesVacios = false;
   try {
     const res = await getBestAvailableLikes();
+    likesVacios = res?.source === 'empty';
     for (const it of (res?.items || [])) {
       const t = it?.track;
       const alb = t?.album?.name;
@@ -312,10 +315,11 @@ export async function buildFilterContext({ force = false } = {}) {
     console.warn('[discover-filtros] no pude leer «' + PLAYLIST_SIN_ESCUCHAR + '»:', e.message);
   }
 
-  const ctx = { guardados, idsEnBiblioteca, escuchados, basesTuyas, temaEnAlbum, enSinEscuchar, bibliotecaFallo };
+  const ctx = { guardados, idsEnBiblioteca, escuchados, basesTuyas, temaEnAlbum, enSinEscuchar, bibliotecaFallo, likesVacios };
   // 🔴 Los fracasos no se memoizan (v=219): un contexto con la biblioteca sin leer quedaba pegado hasta recargar. El que falló se
   // devuelve (la vista lo usa en ESTA apertura: un repintado no vuelve a pedir `/me/albums`) y la próxima apertura lo intenta de nuevo.
-  if (!bibliotecaFallo) ctxCache = ctx;
+  // (v=377) Lo mismo con los me gusta vacíos: `temaEnAlbum` armado sin ellos no puede quedar pegado después de cargarlos.
+  if (!bibliotecaFallo && !likesVacios) ctxCache = ctx;
   return ctx;
 }
 

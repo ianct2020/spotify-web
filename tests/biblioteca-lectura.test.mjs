@@ -93,8 +93,13 @@ let nCaso = 0;
 const cargarApi = () => import(pathToFileURL(join(raiz, 'src/js/api.js')).href + `?caso=${++nCaso}`);
 const cargarFiltros = () => import(pathToFileURL(join(raiz, 'src/js/util/discover-filters.js')).href + `?caso=${++nCaso}`);
 
-function escenario({ modo = 'bien', total = 120, ultimo = A, me = A } = {}) {
+// (tanda 140, con el OK de Ian del 27/11) `meGusta`: siembra UN me gusta inventado en la caché. Desde v=377 un contexto armado con la caché
+// de me gusta vacía (`source: 'empty'`) no se memoiza, y los casos del memo de la biblioteca sana (la sección 7) corrían con ella vacía.
+// Solo el setup: los asserts no cambiaron.
+const ME_GUSTA_T140 = { added_at: '2026-01-01T00:00:00Z', track: { id: 'pistaSembradaT140n1', uri: 'spotify:track:pistaSembradaT140n1', name: 'Tema sembrado T140', duration_ms: 200000, artists: [{ id: 'bandaSembradaT140', name: 'Banda sembrada T140' }], album: { id: 'discoSembradoT140', name: 'Disco sembrado T140', album_type: 'album', total_tracks: 10, images: [] } } };
+function escenario({ modo = 'bien', total = 120, ultimo = A, me = A, meGusta = false } = {}) {
   globalThis.__IDB_OTRA = { kv: new Map(), lecturas: [], intentos: [], borrados: [], escrituras: [], fallanBorrar: new Set(), demoraBorrar: 0 };
+  if (meGusta) globalThis.__IDB_OTRA.kv.set('all_liked_tracks', { value: [ME_GUSTA_T140], storedAt: Date.now(), expiry: null });
   lsMapa.clear();
   lsMapa.set('sp_access_token', 'tok-inventado-t127');
   lsMapa.set('sp_token_expiry', String(Date.now() + 3_600_000));
@@ -231,7 +236,7 @@ escenario({ total: 120 });
 
 // ── 7. `buildFilterContext()`: el fallo se dice y no se memoiza ─────────────────────────────────
 decir('· buildFilterContext() con la lectura que tira');
-escenario({ modo: 'html' });
+escenario({ modo: 'html', meGusta: true });
 {
   const F = await cargarFiltros();
   const r1 = await sinTirar(() => F.buildFilterContext());
@@ -254,7 +259,7 @@ escenario({ modo: 'html' });
 }
 
 decir('· buildFilterContext() con la lectura buena');
-escenario({ total: 120 });
+escenario({ total: 120, meGusta: true });
 {
   const F = await cargarFiltros();
   const r1 = await sinTirar(() => F.buildFilterContext());
@@ -265,7 +270,7 @@ escenario({ total: 120 });
   const r2 = await sinTirar(() => F.buildFilterContext());
   ok(r2.valor === r1.valor && red.pedidas === 3, `la segunda llamada es el mismo contexto y no pide (${red.pedidas})`);
 }
-escenario({ total: 0 });
+escenario({ total: 0, meGusta: true });
 {
   const F = await cargarFiltros();
   const r1 = await sinTirar(() => F.buildFilterContext());

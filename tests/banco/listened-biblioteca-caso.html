@@ -16,7 +16,7 @@
 //   · `?foto=apagado|puesto` (capturas, con un conductor externo): deja `#listened` lista y marca `data-foto="listo"`.
 
 import { instalarRedSimulada, esperarReal, anclar } from '/banco/simulado.mjs';
-import { LISTA, PLAYLIST_ID, PLAYLIST_NOMBRE, paginaDeBiblioteca, paginaDeBibliotecaK } from '/banco/listened-biblioteca-datos.mjs';
+import { LISTA, PLAYLIST_ID, PLAYLIST_NOMBRE, paginaDeBiblioteca, paginaDeBibliotecaK, LIKES_L } from '/banco/listened-biblioteca-datos.mjs';
 
 const q = new URLSearchParams(location.search);
 window.__errores = [];
@@ -85,11 +85,16 @@ const { prefKey } = await import('/js/storage.js');
 localStorage.setItem(prefKey('fonoteca_anim_v1'), 'nunca');
 localStorage.setItem(prefKey('listened_albums_playlist_id'), PLAYLIST_ID);
 localStorage.setItem(prefKey('listened_albums_playlist_name'), PLAYLIST_NOMBRE);
-const { idbDel } = await import('/js/idb.js');
+const { idbDel, idbSetCached } = await import('/js/idb.js');
 for (const k of ['saved_albums_v1', 'saved_albums_v2', `listened_grouped_${PLAYLIST_ID}_v2`, `playlist_items_${PLAYLIST_ID}`]) await anclar(idbDel(k));
+// (tanda 140) `?likes=llenos` siembra la caché de me gusta con `LIKES_L` (inventados); `?likes=vacios` la borra. Sin el parámetro no se
+// toca: los casos A–K no la sembraron nunca (corren con ella vacía). Los iframes comparten la IndexedDB: el caso L va el último.
+if (q.get('likes') === 'llenos') await anclar(idbSetCached('all_liked_tracks', LIKES_L, null));
+if (q.get('likes') === 'vacios') await anclar(idbDel('all_liked_tracks'));
 
 const FOTO = q.get('foto');
-location.hash = FOTO ? '#listened' : '#home';
+// (tanda 140) `?foto=nr`: la foto es de `#new-releases` (con `&likes=vacios|llenos`), no de `#listened`.
+location.hash = FOTO === 'nr' ? '#new-releases' : (FOTO ? '#listened' : '#home');
 await import('/js/app.js');
 await esperarReal(() => document.getElementById('my-history-btn') && (FOTO || document.querySelector('.home-card')), { que: 'que la app arranque', vueltas: 4000 });
 window.__ponerTema = async (id) => {
@@ -98,7 +103,9 @@ window.__ponerTema = async (id) => {
 };
 window.__listo = true;
 
-if (FOTO) {
+if (FOTO === 'nr') {
+  await esperarReal(() => document.querySelector('#newrel-list .card, #newrel-list .dcard'), { que: '#new-releases', vueltas: 8000 });
+} else if (FOTO) {
   await esperarReal(() => document.querySelectorAll('#listened-grid-holder .playlist-card').length, { que: '#listened', vueltas: 8000 });
   if (FOTO === 'apretado') {
     // (tanda 127) Aprieta y espera a que la lectura termine, salga como salga: sirve para fotografiar el antes y el después de un mismo caso.
@@ -118,6 +125,13 @@ if (FOTO) {
     const buscar = document.getElementById('porescuchar-buscar'), orden = document.getElementById('porescuchar-orden');
     if (q.get('orden') && orden) { orden.value = q.get('orden'); orden.dispatchEvent(new Event('change')); }
     if (q.get('buscar') && buscar) { buscar.value = q.get('buscar'); buscar.dispatchEvent(new Event('input')); }
+    document.getAnimations().forEach((a) => { try { a.finish(); } catch { /* las infinitas */ } });
+  }
+}
+if (FOTO) {
+  // (tanda 140) `&tema=papel` también para las otras fotos (las del aviso de me gusta y las de `#new-releases`).
+  if (q.get('tema') && FOTO !== 'porescuchar') {
+    await window.__ponerTema(q.get('tema'));
     document.getAnimations().forEach((a) => { try { a.finish(); } catch { /* las infinitas */ } });
   }
   document.documentElement.dataset.foto = 'listo';

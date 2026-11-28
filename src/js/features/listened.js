@@ -3,7 +3,7 @@ import { indiceDelRegistro, estaRegistrado, leerPorEscuchar, marcarEscuchado, ca
 import { cargarEtiquetas, getCachedTags } from '../api/lastfm.js';
 import { esEPoAlbum } from '../util/release-size.js';
 import { idbGetCached, idbSetCached, idbGetTimestamp } from '../idb.js';
-import { escapeHtml, confirmModal, pageHeader } from '../ui/components.js';
+import { escapeHtml, confirmModal, pageHeader, avisoSinLikesHtml } from '../ui/components.js';
 import { showToast } from '../ui/toast.js';
 import { isJunkTrack } from '../util/junk.js';
 import { openModal, closeTop } from '../ui/modal-stack.js';
@@ -37,6 +37,10 @@ let likesByKey = null; // Map albumKey -> { id, ids:Set, name, artist, year, ima
 // El índice de `util/likes-de-la-obra.js` sobre TODOS tus me gusta (v=371): de ahí sale el ♥ de cada tarjeta (`a.likes`), con la
 // misma regla que la ficha de álbum. `likesByKey` sigue siendo el cruce de REGISTRO («Sin registrar»), que no se tocó.
 let indiceObra = null;
+// (v=377) `true` si la última `attachLikes()` leyó `source: 'empty'`: la caché de me gusta de este navegador vacía (o de otra
+// cuenta). Lo lee `buildUI()` para pintar `#listened-likes-aviso`. Si la lectura tiró, queda en `false`: eso es otro fallo.
+let likesVaciosListened = false;
+const AVISO_LIKES_LISTENED = 'los ♥ de estas tarjetas no cuentan tus me gusta';
 // Las canciones likeadas de la obra de un álbum registrado, con la forma de siempre de `a.likes`: `{ name, artists, uri }`.
 const likesDeTarjeta = (a) => (indiceObra ? cancionesDeLaObra(indiceObra, a).map(it => ({ name: it.name, artists: it.artistasDePista, uri: it.uri })) : []);
 let historyAlbums = null; // array de { a, ar, u, dt, min, y1, img } del historial de reproducción (data/ committeado)
@@ -389,14 +393,18 @@ async function removeAlbumEntriesLocally(albumObjs) {
 async function attachLikes(albumList) {
   likesByKey = new Map();
   indiceObra = null;
+  likesVaciosListened = false;
   let items = [];
+  let source = null;
   try {
-    ({ items } = await getBestAvailableLikes());
+    ({ items, source } = await getBestAvailableLikes());
   } catch (e) {
     console.warn('No se pudieron cargar likes para el cruce:', e.message);
     for (const a of albumList) a.likes = [];
     return;
   }
+  // Fuera del `catch`, a propósito: `tests/cache-solo-exitos.test.mjs` no deja escribir una variable de módulo desde un `catch`.
+  likesVaciosListened = source === 'empty';
   indiceObra = indexarLikes(items);
 
   // 1) Una entrada por lanzamiento físico (album.id) con TODOS sus tracks likeados.
@@ -466,6 +474,8 @@ async function attachLikes(albumList) {
 
 // Para los tests en Node (v=371): la tarjeta con el módulo REAL, sin montar la vista. No lo llama nadie en `src/`.
 export const _attachLikes = attachLikes;
+// (v=377) Lo mismo para `tests/likes-sin-cargar.test.mjs`: lo que dejó la última `attachLikes()` para el aviso.
+export const _likesVaciosListened = () => likesVaciosListened;
 
 // ── Tipo de lanzamiento (v=127) ──────────────────────────────────────────────
 //
@@ -734,7 +744,7 @@ function buildUI(totalTracks, ts) {
     </div>
 
     <div id="listened-summary" style="margin-bottom:8px;color:var(--color-text-secondary);font-size:14px"></div>
-    <div id="listened-biblioteca-aviso" hidden style="margin-bottom:8px;color:var(--color-text-secondary);font-size:14px"></div>
+    <div id="listened-biblioteca-aviso" hidden style="margin-bottom:8px;color:var(--color-text-secondary);font-size:14px"></div>${likesVaciosListened ? `<div id="listened-likes-aviso">${avisoSinLikesHtml(AVISO_LIKES_LISTENED)}</div>` : ''}
     <div id="listened-grid-holder"></div>
   `;
 

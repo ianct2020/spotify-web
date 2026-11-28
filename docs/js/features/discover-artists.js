@@ -10,22 +10,22 @@
 // 100 artistas en lugar de 20. Lógica de fetch/cache/playlist compartida en
 // features/discover-common.js con #new-releases.
 
-import { escapeHtml, confirmModal, pageHeader } from '../ui/components.js?v=376';
-import { showToast } from '../ui/toast.js?v=376';
-import { openArtistCard } from './artist-card.js?v=376';
-import { createIncrementalList, scrollRootOf } from '../ui/incremental-list.js?v=376';
-import { createLazyImages } from '../ui/lazy-img.js?v=376';
-import { isJunkTrack } from '../util/junk.js?v=376';
-import { buildAlbumHeardIndex } from '../util/album-heard.js?v=376';
-import { loadFiltros, buildFilterContext, applyDiscoverFilters } from '../util/discover-filters.js?v=376';
-import { releaseKind } from '../util/release-size.js?v=376';
-import { masNuevoPrimero } from '../util/release-date.js?v=376';
-import { vigilarRuta } from '../util/vigencia-ruta.js?v=376';
-import { leerElegidos, sumarElegidos, artistasBuscados, colaAutomatica } from '../util/cola-escaneo.js?v=376';
-import { leerFallos, marcarFallo, limpiarFallo, sinFallosMarcados } from '../util/escaneo-fallos.js?v=376';
-import { contarSinEscanear, sufijoSinEscanear, notaSinEscanear } from '../util/sin-escanear.js?v=376';
-import { estadoFrescura } from '../util/frescura-escaneo.js?v=376';
-import { prefKey, migratePrefKey } from '../storage.js?v=376';
+import { escapeHtml, confirmModal, pageHeader, tarjetaSinLikes } from '../ui/components.js?v=377';
+import { showToast } from '../ui/toast.js?v=377';
+import { openArtistCard } from './artist-card.js?v=377';
+import { createIncrementalList, scrollRootOf } from '../ui/incremental-list.js?v=377';
+import { createLazyImages } from '../ui/lazy-img.js?v=377';
+import { isJunkTrack } from '../util/junk.js?v=377';
+import { buildAlbumHeardIndex } from '../util/album-heard.js?v=377';
+import { loadFiltros, buildFilterContext, applyDiscoverFilters } from '../util/discover-filters.js?v=377';
+import { releaseKind } from '../util/release-size.js?v=377';
+import { masNuevoPrimero } from '../util/release-date.js?v=377';
+import { vigilarRuta } from '../util/vigencia-ruta.js?v=377';
+import { leerElegidos, sumarElegidos, artistasBuscados, colaAutomatica } from '../util/cola-escaneo.js?v=377';
+import { leerFallos, marcarFallo, limpiarFallo, sinFallosMarcados } from '../util/escaneo-fallos.js?v=377';
+import { contarSinEscanear, sufijoSinEscanear, notaSinEscanear } from '../util/sin-escanear.js?v=377';
+import { estadoFrescura } from '../util/frescura-escaneo.js?v=377';
+import { prefKey, migratePrefKey } from '../storage.js?v=377';
 import {
   getArtistIdCached,
   getArtistDiscoCached,
@@ -67,11 +67,11 @@ import {
   avisarRonda,
   botonesBaseHtml,
   conectarBotonesBase,
-} from './discover-common.js?v=376';
+} from './discover-common.js?v=377';
 import {
   artistasOcultos, artistaEstaOculto, alternarArtistaOculto,
   botonMenuArtistaHtml, botonArtistasOcultosHtml, conectarMenuArtista, cerrarMenuArtista,
-} from './artistas-ocultos.js?v=376';
+} from './artistas-ocultos.js?v=377';
 
 const SCAN_KEY = 'discover_artists';
 
@@ -273,7 +273,11 @@ export async function render(container) {
     .sort((a, b) => b.likes - a.likes);
 
   if (!candidates.length) {
-    content.innerHTML = `<div class="card"><p>Necesito al menos un artista con ${MIN_LIKES} canciones en likes para armar esta vista. Guarda más canciones y vuelve.</p></div>`;
+    // (v=377) Con la caché de me gusta vacía (`source: 'empty'`), «guarda más canciones» era mentira: no faltan canciones, faltan
+    // cargarlas. Ahí va la tarjeta de siempre de las vistas sin me gusta. Con me gusta y ningún artista que llegue, el texto de antes.
+    content.innerHTML = idx.likesVacios
+      ? tarjetaSinLikes()
+      : `<div class="card"><p>Necesito al menos un artista con ${MIN_LIKES} canciones en likes para armar esta vista. Guarda más canciones y vuelve.</p></div>`;
     return teardown;
   }
 

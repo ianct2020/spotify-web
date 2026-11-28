@@ -483,9 +483,92 @@ try {
     afirmar(sim.reg.externas.length === 0, 'T135: nada salió a la red externa');
   }
 
+  // ── (v=377, tanda 140) La caché de me gusta vacía ─────────────────────────────────────────────────────────────────────────────────────
+  //
+  // En las dos vistas de descubrir los artistas SALEN de los me gusta: sin ellos no hay artistas ni discos (decidido con Ian el 27/11: no
+  // hay línea bajo `#disco-filtros`). Lo que se prueba: N1, con la caché vacía `#new-releases` dice su «Todavía no tengo tus likes
+  // cargados…» y no pinta ningún `.aviso-sin-likes` (con el chip de la biblioteca encendido y apagado); N5, `#discover-artists` corta con
+  // la tarjeta de sin me gusta (no con «Guarda más canciones»); N3, el vacío no se memoiza: sembrar los me gusta y volver sin recargar trae
+  // los artistas, y lo «ya escuchado» por un me gusta no sale (contra 1389edd, rojo: memoizaba el vacío); N2, con me gusta nada nuevo;
+  // N4, las peticiones de abrir. `?medir=t140` vuelca sin afirmar.
+  const MEDIR_T140 = q.get('medir') === 't140';
+  const sinAfirmarT140 = [];
+  const puertaT140 = (c, msg) => { if (MEDIR_T140) { if (!c) sinAfirmarT140.push(msg); } else afirmar(c, msg); };
+  // Las peticiones de abrir `#new-releases` con la caché llena, medidas con `?medir=t140` contra 1389edd.
+  // Medido el 27/11 (la corrida del verificador `v1-n-base`): 0 peticiones. En este banco la «w three» no está configurada y la biblioteca y los
+  // ocultos ya están en caché; con la «w three» configurada, el costo de rearmar el índice es el de su snapshot (leído del código).
+  const ANTES_LLENA_T140 = [];
+  const TEXTO_SIN_T140 = 'Todavía no tengo tus likes cargados. Abre el Dashboard para descargarlos y vuelve.';
+  const TARJETA_SIN_T140 = 'No hay me gusta en la caché local.';
+  const { invalidateAlbumHeardIndex } = await import('/js/util/album-heard.js');
+  const vistaDA = await import('/js/features/discover-artists.js');
+  const textoMain = () => ($('#main-content')?.textContent || '').replace(/\s+/g, ' ').trim();
+  const abrirT140 = async (vista, que, cond) => {
+    const i = sim.reg.llamadas.length;
+    await anclar(Promise.resolve(vista.render($('#main-content'))), { vueltas: VUELTAS });
+    await esperarReal(cond, { que, vueltas: VUELTAS });
+    await vueltasDeRed(80);
+    return llamadasDesde(i);
+  };
+  const vistaNR = { render };
+  const med140 = {};
+
+  // N2: con la caché llena y los memos vacíos (como una carga nueva de la página), nada nuevo. `r-C-3` está en la lista.
+  invalidateAlbumHeardIndex(); invalidateFilterContext();
+  med140.llena = await abrirT140(vistaNR, 'T140 N2: abrir con me gusta', () => $$('#newrel-list .dcard').length > 0);
+  puertaT140($$('.aviso-sin-likes').length === 0, `T140 N2: con me gusta, ningún .aviso-sin-likes (${$$('.aviso-sin-likes').length})`);
+  puertaT140(tarjetasT133().includes('r-C-3'), `T140 N2: r-C-3 está en la lista (${tarjetasT133().join(' ')})`);
+  puertaT140(ANTES_LLENA_T140 !== null && JSON.stringify(med140.llena) === JSON.stringify(ANTES_LLENA_T140),
+    `T140 N4: con la caché llena, abrir pide lo mismo que en 1389edd (${JSON.stringify(ANTES_LLENA_T140)}) · ahora: ${JSON.stringify(med140.llena)}`);
+
+  // Desde acá, una «w three» INVENTADA configurada (vacía), para que N4 mida lo que paga rearmar el índice: sin memo, cada armado lee su
+  // snapshot (y sus items si cambió). La de N2 no la tiene: esa medida es la de 1389edd.
+  const WTHREE_T140 = 'playlistWthreeT140inv';
+  sim.ruta('GET', new RegExp(`^/playlists/${WTHREE_T140}\\?`), () => ({ snapshot_id: 'snapshot-wthree-t140' }));
+  localStorage.setItem(prefKey('wthree_playlist_id'), WTHREE_T140);
+
+  // N1: la caché de me gusta VACÍA, con los memos vacíos.
+  await anclar(idbDel('all_liked_tracks'));
+  invalidateAlbumHeardIndex(); invalidateFilterContext();
+  med140.vacia1 = await abrirT140(vistaNR, 'T140 N1: abrir sin me gusta', () => textoMain().includes(TEXTO_SIN_T140));
+  puertaT140(textoMain().includes(TEXTO_SIN_T140) && $$('#newrel-list .dcard').length === 0, `T140 N1: sin me gusta, «${TEXTO_SIN_T140}» y ninguna tarjeta`);
+  puertaT140($$('.aviso-sin-likes').length === 0, `T140 N1: ningún .aviso-sin-likes con el chip encendido (${$$('.aviso-sin-likes').length})`);
+  chipBib()?.click();
+  await vueltasDeRed(20);
+  puertaT140($$('.aviso-sin-likes').length === 0 && textoMain().includes(TEXTO_SIN_T140), 'T140 N1: ni con el chip apagado');
+  chipBib()?.click();
+  await vueltasDeRed(20);
+  // N4: la segunda apertura con la caché vacía (sin memo: vuelve a armar el índice y el contexto).
+  med140.vacia2 = await abrirT140(vistaNR, 'T140 N4: abrir otra vez sin me gusta', () => textoMain().includes(TEXTO_SIN_T140));
+  const deMas = med140.vacia2.filter((r, k, a) => a.indexOf(r) === k && med140.vacia2.filter((x) => x === r).length > med140.vacia1.filter((x) => x === r).length);
+
+  // N5: `#discover-artists` sin me gusta: la tarjeta de siempre de las vistas sin me gusta, con su enlace al Dashboard.
+  med140.da = await abrirT140(vistaDA, 'T140 N5: #discover-artists sin me gusta', () => textoMain().includes(TARJETA_SIN_T140) || textoMain().includes('Necesito al menos'));
+  puertaT140(textoMain().includes(TARJETA_SIN_T140) && !!$('#main-content a[href="#dashboard"]') && !textoMain().includes('Guarda más canciones'),
+    `T140 N5: #discover-artists sin me gusta dice «${TARJETA_SIN_T140}» con el enlace al Dashboard («${textoMain().slice(0, 160)}»)`);
+
+  // N3: sembrar los me gusta (los de siempre más uno INVENTADO de «Lanzamiento C3») y volver a `#new-releases` SIN tocar los memos.
+  const artistaC = ARTISTAS.find((a) => a.name.endsWith(' C'));
+  const likeC3 = { added_at: '2026-01-01T00:00:00Z', track: { id: 'pistaT140C3inventada00', uri: 'spotify:track:pistaT140C3inventada00', name: 'Tema T140 de C3',
+    duration_ms: 200000, explicit: false, is_playable: true, track_number: 1, artists: [{ id: artistaC.id, name: artistaC.name }],
+    album: { id: 'r-C-3', name: 'Lanzamiento C3', release_date: '2026-01-01', album_type: 'album', total_tracks: 11, images: [] } } };
+  await anclar(idbSetCached('all_liked_tracks', [...likes, likeC3], null));
+  med140.vuelta = await abrirT140(vistaNR, 'T140 N3: volver con me gusta', () => $$('#newrel-list .dcard').length > 0 || textoMain().includes(TEXTO_SIN_T140));
+  puertaT140($$('#newrel-list .dcard').length > 0 && !textoMain().includes(TEXTO_SIN_T140), `T140 N3: al volver sin recargar, los artistas están (${$$('#newrel-list .dcard').length} tarjetas; «${textoMain().slice(0, 120)}»)`);
+  puertaT140(!tarjetasT133().includes('r-C-3'), `T140 N3: r-C-3, ya escuchado por un me gusta, no sale (${tarjetasT133().join(' ')})`);
+  puertaT140($$('.aviso-sin-likes').length === 0, 'T140 N3: ningún .aviso-sin-likes');
+  // Y `#discover-artists` con me gusta: ni la tarjeta de sin me gusta ni la de «Necesito al menos».
+  await abrirT140(vistaDA, 'T140 N5: #discover-artists con me gusta', () => !!$('#disco-filtros') || textoMain().includes(TARJETA_SIN_T140) || textoMain().includes('Necesito al menos'));
+  puertaT140(!!$('#disco-filtros') && !textoMain().includes(TARJETA_SIN_T140), `T140 N5: con me gusta, #discover-artists se arma («${textoMain().slice(0, 120)}»)`);
+  localStorage.removeItem(prefKey('wthree_playlist_id'));
+  const resumenT140 = `T140: abrir con me gusta = ${med140.llena.length} [${med140.llena.join(' , ')}] · sin me gusta, 1.ª = ${med140.vacia1.length} [${med140.vacia1.join(' , ')}]`
+    + ` · 2.ª = ${med140.vacia2.length} [${med140.vacia2.join(' , ')}] (de más: ${deMas.join(' , ') || 'nada'}) · #discover-artists sin me gusta = ${med140.da.length} [${med140.da.join(' , ')}]`
+    + ` · volver con me gusta = ${med140.vuelta.length}` + (MEDIR_T140 ? ` · sin afirmar (${sinAfirmarT140.length}): ${sinAfirmarT140.join(' | ')}` : '');
+  puertaT140(sim.reg.externas.length === 0, 'T140: nada salió a la red externa');
+
   // (tanda 127) El resumen va también a un `<pre>` y a `data-resumen`: es de donde `scripts/correr-banco.mjs` lo lee (mensaje y reloj virtual).
   const decirResumen = (t) => { document.documentElement.setAttribute('data-resumen', t); const pre = document.createElement('pre'); pre.id = 'progreso'; pre.textContent = t; document.body.prepend(pre); return t; };
-  listo(decirResumen(`12 tarjetas · viejo = reverso exacto de nuevo · ${filas} fila a ${ANCHO} px (${libres} px libres a la derecha) · biblioteca: línea con 500 y el chip encendido (${caidaPedidas} GET), nada con el chip apagado ni con la lectura sana · guardar con contains [false]: toast rojo, «Guardar single» y la tarjeta se queda (${pedidasT128.length} peticiones; ${resumenC135}) · ${resumenT133} · ${resumenT135} · contraste de la línea: ${contrastes.join(', ')} · 0 peticiones reales · reloj virtual=${Math.round(performance.now())} ms`));
+  listo(decirResumen(`12 tarjetas · viejo = reverso exacto de nuevo · ${filas} fila a ${ANCHO} px (${libres} px libres a la derecha) · biblioteca: línea con 500 y el chip encendido (${caidaPedidas} GET), nada con el chip apagado ni con la lectura sana · guardar con contains [false]: toast rojo, «Guardar single» y la tarjeta se queda (${pedidasT128.length} peticiones; ${resumenC135}) · ${resumenT133} · ${resumenT135} · ${resumenT140} · contraste de la línea: ${contrastes.join(', ')} · 0 peticiones reales · reloj virtual=${Math.round(performance.now())} ms`));
 } catch (e) {
   if (e.parada) {
     document.documentElement.dataset.banco = 'ok';

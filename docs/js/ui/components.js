@@ -1,6 +1,6 @@
-import { openModal, closeTop } from './modal-stack.js?v=376';
-import { mountBottomHtml } from './bottom-layer.js?v=376';
-import { coverUrl } from '../util/cover-size.js?v=376';
+import { openModal, closeTop } from './modal-stack.js?v=377';
+import { mountBottomHtml } from './bottom-layer.js?v=377';
+import { coverUrl } from '../util/cover-size.js?v=377';
 
 function renderTrackRow(track, extra = '') {
   const art = coverUrl(track.album?.images, 'grande') || '';
@@ -418,4 +418,15 @@ function tarjetaSinLikes(queCruza) {
   `;
 }
 
-export { renderTrackRow, showProgress, hideProgress, progressController, isCancelled, confirmModal, typeConfirmModal, promptPlaylistName, alertModal, infoModal, PLAYLIST_NAME_MAX, escapeHtml, renderPlaylistGrid, bindPlaylistGrid, pageHeader, tarjetaSinLikes };
+// La línea que dice que el cruce con tus me gusta salió sin ellos (v=377, tanda 140). Es la hermana chica de `tarjetaSinLikes()`:
+// la tarjeta va cuando la vista NO puede hacer nada sin me gusta; esta línea, cuando la vista sí se pinta pero algo de lo que enseña
+// sale sin ellos (los ♥ de `#listened`). La llama quien vio `source === 'empty'` de `getBestAvailableLikes()`, nunca un
+// `items.length === 0` (un doble sin `source` no la tiene que ver). Estilo en línea, como la tarjeta: no se toca ninguna hoja.
+// El color es el secundario (nunca el muted) y el enlace va subrayado en el mismo color: con el acento daba 2,89:1 (v=357).
+function avisoSinLikesHtml(queSaleSin) {
+  return `<p class="aviso-sin-likes" role="status" style="color:var(--color-text-secondary);font-size:13px;margin:0 0 8px">`
+    + `No hay me gusta en la caché de este navegador, así que ${escapeHtml(queSaleSin)}. `
+    + `<a href="#dashboard" style="color:inherit;text-decoration:underline">Cárgalos desde el Dashboard</a>.</p>`;
+}
+
+export { renderTrackRow, showProgress, hideProgress, progressController, isCancelled, confirmModal, typeConfirmModal, promptPlaylistName, alertModal, infoModal, PLAYLIST_NAME_MAX, escapeHtml, renderPlaylistGrid, bindPlaylistGrid, pageHeader, tarjetaSinLikes, avisoSinLikesHtml };

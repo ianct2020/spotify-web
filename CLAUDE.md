@@ -1244,6 +1244,43 @@ peticiones, K6 «Ya lo escuché» con texto y orden, K7 contraste; `?medir=k` vu
 existen»; el antes: modal de 560×502 y una columna); verde 10 de 10 con A–J sin tocar, reloj virtual de 38.346 a 40.104 ms (presupuesto 90.000).
 `tests/mb-pais.test.mjs` suma `util/por-escuchar-vista.js` a quien importa `normalizarNombre`. No se diseñó para celular: a 390 no desborda.
 
+## 🫙 El aviso «no tengo tus me gusta cargados» (v=377)
+
+La tanda 140. `getBestAvailableLikes()` no baja nada nunca: con la caché de me gusta de este navegador vacía (o de otra cuenta, la marca de
+v=345) devuelve `{ items: [], source: 'empty' }`. Siete vistas ya lo decían con `tarjetaSinLikes()`; en `#listened` el cero se colaba como
+resultado (♥ 0 en cada tarjeta) y en descubrir el vacío quedaba memoizado (la regla de v=154 y la de v=219).
+
+- **La señal es `source === 'empty'`, y nada más.** Nunca `items.length === 0`: varios dobles de los tests (`catch-92b-wthree-doble.mjs`,
+  `fallo-lectura-doble.mjs`, los de `historial-caido-*`…) devuelven `{ items: [] }` sin `source` y fijan el `sha256` del HTML de su vista.
+  Que la lectura TIRE tampoco cuenta: es otro fallo.
+- **Una función: `avisoSinLikesHtml(queSaleSin)`** (`ui/components.js`, al lado de `tarjetaSinLikes()`): un `<p class="aviso-sin-likes"
+  role="status">` de una línea, «No hay me gusta en la caché de este navegador, así que <queSaleSin>. Cárgalos desde el Dashboard.», con el
+  enlace a `#dashboard` subrayado en el mismo color. Estilo en línea, en `--color-text-secondary` (nunca el muted): **ninguna hoja de CSS
+  cambió**. La clase no tiene reglas; está para que la encuentren el test y el banco.
+- **`#listened`**: `attachLikes()` guarda el `source` en `likesVaciosListened` (fuera del `catch`: `cache-solo-exitos` no deja escribir una
+  variable de módulo ahí) y `buildUI()` pinta `#listened-likes-aviso` entre `#listened-biblioteca-aviso` y `#listened-grid-holder`, con
+  «los ♥ de estas tarjetas no cuentan tus me gusta». Con me gusta, el template es byte a byte el de antes (la interpolación va pegada a la
+  línea anterior: no deja ni un espacio). Lo que calcula `attachLikes()` no cambió.
+- **Descubrir (`#new-releases`, `#discover-artists`)**: 🔴 el encargo pedía una línea bajo `#disco-filtros` («lo que ya conoces por tus me
+  gusta puede salir aquí como no escuchado») y **la premisa era falsa**: los artistas de las dos vistas SALEN de los me gusta
+  (`idx.likesByArtist`), así que sin ellos no hay ningún disco. Decidido con Ian el 27/11: **ninguna línea**; `#new-releases` ya decía
+  «Todavía no tengo tus likes cargados…» en la lista, y `#discover-artists`, que cortaba con «Guarda más canciones y vuelve» (falso con la
+  caché vacía), corta con `tarjetaSinLikes()` cuando `idx.likesVacios`. No existe `pintarAvisoSinLikes`.
+- **El vacío no se memoiza.** `buildAlbumHeardIndex()` y `buildFilterContext()` suman `likesVacios` (misma regla) y, con `true`, no dejan
+  nada en `cache` / `ctxCache`. Antes, cargar los me gusta en el Dashboard y volver sin recargar seguía sin artistas.
+- **El costo** (medido en el banco `novedades`, caso T140, con una «w three» inventada): con la caché vacía cada apertura arma el índice
+  **dos veces** (la vista y `buildFilterContext()`), así que paga **2 snapshots** de «w three» (y sus páginas si cambió: la primera vez, 1).
+  Con me gusta, abrir cuesta lo mismo que en 1389edd (en el banco, 0). `#listened` pide lo mismo con y sin me gusta (`/me`, snapshot,
+  `/items`), igual que en 1389edd. Ver la tabla de costos.
+- **Contraste** (línea y enlace, fondo compuesto; el peor es la línea): Violeta 6,99, Ámbar 6,87, Aguamarina 6,82, Papel 6,51.
+
+Guardas: **`tests/likes-sin-cargar.test.mjs`** (los módulos REALES con `dobles/loader-t110.mjs`; los de 1389edd por `git show`, como
+`data:`; `RAIZ_T140` para otra copia; rojo contra 1389edd en 25 de 42, verde 42 de 42), el **caso L** de `listened-biblioteca` (los casos
+A–K corren con la caché de me gusta VACÍA, como siempre, y desde v=377 ven la línea; L siembra `LIKES_L` con `?likes=llenos`) y el **caso
+T140** de `novedades`. Rojos contra 1389edd (L1; N5), verdes 10 de 10 (reloj virtual 40.906-41.276 ms y 59.181-59.493 ms). Para que
+`biblioteca-lectura` y `biblioteca-por-id` siguieran probando el memo de la biblioteca sana, su `escenario()` siembra UN me gusta inventado
+(`meGusta: true`, con el OK de Ian del 27/11; los asserts no cambiaron).
+
 ## Una fila `<label>` se marca desde cualquier hijo (v=164)
 Las filas de ese modal son un `<label>` que **envuelve** el checkbox, así que un
 click en cualquier descendiente lo tilda aunque el descendiente tenga su propio
@@ -6091,11 +6128,13 @@ fila sobrevivió así desde que se armó la tabla.
 | ↳ 🟩 **los ocultos, medidos (v=299)**: frío **15**, caliente **3** (v=298: 15 y **13**) | **3** | **15** | frío: 1 `/me` + 1 `/playlists/{desc}` + **9** págs. + 1 `/playlists/{art}` + **1** pág. + `/me/albums` + `/me/playlists`. Caliente: 1 `/me` + los dos `GET /playlists/{id}`, **0** págs. | si la playlist cambió (snapshot nuevo) o el caché venció (24 h), esa playlist se baja entera | **medida en el banco el 2026-10-13** (`tests/banco/ocultos-cache.html`, Spotify simulada con **900 + 12** ocultos, ids guardados; el «antes» es el mismo banco contra el `src/` de v=298). **Sin «w three»** (no configurada en el banco): sus `1 + ceil(W/100)` van aparte y no cambiaron. Sin el `/me` del arranque |
 | `#follow-artists` | **1 `/me` + ceil(A/40)** = **10** | **1** | **`artistasOcultos.ready()` está DENTRO de `render()`** (`follow-artists.js:175`, `render` en `:17`) → `getCurrentUserId` · + `/me/library/contains?uris=spotify:artist:…` | **nº de discografías en la base** | 🔴 **corregida el 2026-10-08, leída del código.** Decía **9** y se le olvidaba el `/me` propio |
 | ↳ **+2 desde v=276** (ocultar artistas) → **11** | **2** | **+ la playlist de ocultos («recomendados»)** | ídem que arriba | nº de artistas ocultos | leída del código |
+| ↳ 🫙 **con la caché de me gusta VACÍA** (v=377): cada apertura, **2** `GET /playlists/{W}?fields=snapshot_id` (+ las págs. de `/items` si cambió) | — | **2**, también la segunda vez: el índice ya no se memoiza vacío y se arma dos veces por apertura (la vista y `buildFilterContext()`) | snapshot de «w three» | 0 sin «w three» configurada | **medida en el banco el 2026-11-27** (`novedades`, caso T140, «w three» inventada vacía: 2 snapshots al abrir sin me gusta). Hasta v=376 la segunda era 0 (el vacío memoizado): leído del código |
 | `#new-releases` | **12** `/items` + **5** `/me` | **1** | snapshot + págs. de `/items` de «w three» | pistas de «w three» | **medida en vivo el 2026-09-30** |
 | ↳ lo que predice el código | 1 + ceil(W/100) = **32** **+ 2 + ceil(Hd/100)** | ídem | «w three» + ocultos («descubrir»), el MISMO store que `#discover-artists` | ídem | leída del código |
 | ↳ **+2 desde v=278** (ocultar artistas) → **45** | **45** | ídem | **+ la playlist de ocultos («recomendados»)**: `1 /playlists/{id}` + `ceil(Ha/100)`; el `/me` ya lo pagó `hiddenAlbums` | nº de artistas ocultos (**12** el 06/10) | **medida el 2026-10-07 contra una Spotify simulada** con la forma de Ian (ids de playlist guardados, 12 dentro): 5 → 7 peticiones, **+2 exactos**. En vivo, no |
 | ↳ 🟩 **los ocultos, medidos (v=299)**: frío **13**, caliente **3** (v=298: 13 y **13**) | **3** | **13** | ídem que `#discover-artists`, sin `/me/albums` ni `/me/playlists` (en el banco ya los había pagado otra carga) | ídem | **medida en el banco el 2026-10-13**, igual que la fila de `#discover-artists`. Abierta **después** de `#discover-artists` en la misma carga suma **0**, en v=298 y en v=299 (los almacenes comparten el `ready()`) |
 | ↳ **al apretar «Guardar álbum» / «Guardar single»** (`#new-releases`, `#discover-artists` y la ficha de `#similar`; desde v=365): **2** | — | **2** | `PUT /me/library?uris=spotify:album:{id}` + `GET /me/library/contains?uris=spotify:album:{id}` (hasta v=364, **1**: solo el `PUT`) | fijo (un lanzamiento por clic) | **medida en el banco el 2026-11-12** (`tests/banco/novedades.html`, el caso de la tanda 128: PUT + GET, nada más) |
+| ↳ 🫙 **con la caché de me gusta VACÍA** (v=377): la 1.ª apertura **3** (2 snapshots de «w three» + su página), la 2.ª **2** (los 2 snapshots); con me gusta, lo mismo que en 1389edd | — | **2** (hasta v=376, **0**: el vacío quedaba memoizado y la vista seguía sin artistas al volver) | snapshot (y págs. si cambió) de «w three», dos veces por apertura | 0 sin «w three» configurada | **medida en el banco el 2026-11-27** (`novedades`, caso T140, «w three» inventada vacía; 10 de 10 corridas iguales). Con me gusta: 0 en el banco, igual que contra 1389edd |
 | **Limpieza** | | | | | |
 | `#sync` | **~285** | **2** | `ceil(L/50)` + `ceil(P/50)` + 1 `/items?limit=1` + 1 snapshot + `ceil(T/100)` | me gusta **y** pistas de la espejo | leída del código · **`/me` repasado el 2026-10-08**: su `render()` no llega a `getCurrentUserId()` |
 | `#dedupe` | **ceil(P/50) + 1** = **3** | **0–1** | `/me/playlists` + 1 `/me` | nº de playlists | leída del código · **`/me` repasado el 2026-10-08**: el `getCurrentUserId()` de `dedupe.js:22` está en `loadAndShowGrid()`, que cuelga de `render()`. **El 1 `/me` que la fila ya contaba es el propio**, y está bien |

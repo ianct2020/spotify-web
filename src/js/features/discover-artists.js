@@ -10,7 +10,7 @@
 // 100 artistas en lugar de 20. Lógica de fetch/cache/playlist compartida en
 // features/discover-common.js con #new-releases.
 
-import { escapeHtml, confirmModal, pageHeader } from '../ui/components.js';
+import { escapeHtml, confirmModal, pageHeader, tarjetaSinLikes } from '../ui/components.js';
 import { showToast } from '../ui/toast.js';
 import { openArtistCard } from './artist-card.js';
 import { createIncrementalList, scrollRootOf } from '../ui/incremental-list.js';
@@ -273,7 +273,11 @@ export async function render(container) {
     .sort((a, b) => b.likes - a.likes);
 
   if (!candidates.length) {
-    content.innerHTML = `<div class="card"><p>Necesito al menos un artista con ${MIN_LIKES} canciones en likes para armar esta vista. Guarda más canciones y vuelve.</p></div>`;
+    // (v=377) Con la caché de me gusta vacía (`source: 'empty'`), «guarda más canciones» era mentira: no faltan canciones, faltan
+    // cargarlas. Ahí va la tarjeta de siempre de las vistas sin me gusta. Con me gusta y ningún artista que llegue, el texto de antes.
+    content.innerHTML = idx.likesVacios
+      ? tarjetaSinLikes()
+      : `<div class="card"><p>Necesito al menos un artista con ${MIN_LIKES} canciones en likes para armar esta vista. Guarda más canciones y vuelve.</p></div>`;
     return teardown;
   }
 

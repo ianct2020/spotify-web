@@ -11,8 +11,8 @@
 // gana el guardado más nuevo y, si también empata, **el orden en que vino la lista** (el `sort` es estable). Así `guardado-nuevo` da
 // exactamente el orden de `pendientesDeBiblioteca()`, que a igual `added_at` respeta el orden de la biblioteca.
 
-import { normalizarNombre } from './mb-pais.js?v=376';
-import { releaseTs } from './release-date.js?v=376';
+import { normalizarNombre } from './mb-pais.js?v=377';
+import { releaseTs } from './release-date.js?v=377';
 
 export const ORDENES_POR_ESCUCHAR = ['guardado-nuevo', 'guardado-viejo', 'lanzamiento-nuevo', 'lanzamiento-viejo'];
 export const ORDEN_POR_DEFECTO = 'guardado-nuevo';

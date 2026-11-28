@@ -37,6 +37,11 @@
 //      cuatro órdenes = el que calcula la madre por su lado, con los sin fecha al final en los dos de lanzamiento. K4: escribir y ordenar no
 //      rehacen nada (los mismos nodos, ningún <img> nuevo). K5: 0 peticiones desde el modal leído. K6: «Ya lo escuché» con texto y orden
 //      puestos: 1 POST, se va esa tarjeta y las demás son las mismas. K7: el contraste en los cuatro presets. `?medir=k` vuelca sin afirmar.
+//   L. (v=377, tanda 140) El aviso «no tengo tus me gusta cargados». ⚠️ Los casos A–K corren con la caché de me gusta VACÍA (no la
+//      siembran nunca), así que desde v=377 ven la línea; no se tocaron. L1 (`?likes=vacios`): `#listened-likes-aviso` con su texto, su
+//      enlace a #dashboard, entre la línea de la biblioteca y la grilla. L2 (`?likes=llenos`, `LIKES_L` inventados): ningún
+//      `.aviso-sin-likes`. L3: abrir pide lo mismo con y sin me gusta, y lo mismo que en 1389edd. L4: el contraste de la línea y del
+//      enlace en los cuatro presets. Y a 390, nada desborda. Va el último (deja la caché sembrada). `?medir=l` vuelca sin afirmar.
 //
 // `?solo=A,B` corre esas. ⚠️ Todas las esperas van con `esperarReal` (ver PRESUPUESTO en `scripts/correr-banco.mjs`).
 
@@ -666,6 +671,105 @@ try {
     progreso('K');
   }
 
+  if (corre('L')) {
+    // (tanda 140) El aviso «no tengo tus me gusta cargados». Va el ÚLTIMO: `?likes=llenos` deja la caché de me gusta sembrada en la
+    // IndexedDB que comparten los iframes. `?medir=l` vuelca las medidas sin afirmar (así se midió el «antes» contra 1389edd).
+    const MEDIR = new URLSearchParams(location.search).get('medir') === 'l';
+    const sinAfirmar = [];
+    const puerta = (c, msg) => { if (MEDIR) { if (!c) sinAfirmar.push(msg); } else afirmar(c, msg); };
+    const TEXTO_L = 'No hay me gusta en la caché de este navegador, así que los ♥ de estas tarjetas no cuentan tus me gusta. Cárgalos desde el Dashboard.';
+    // Las peticiones de abrir `#listened` desde `#home`, medidas con `?medir=l` contra 1389edd (con la caché de me gusta vacía y llena).
+    // Medido el 27/11 (la corrida del verificador `v1-l-base`): las mismas con la caché vacía y llena.
+    const ANTES_ABRIR_L = `GET /me ×1 , GET /playlists/${PLAYLIST_ID}?fields=snapshot_id ×1 , GET /playlists/${PLAYLIST_ID}/items?limit=100&offset=0 ×1`;
+    async function abrirContando(f, que) {
+      await esperarReal(() => win(f)?.__listo, { que: `que arranque ${que}`, vueltas: VUELTAS });
+      const l0 = llamadas(f).length;
+      win(f).location.hash = '#listened';
+      await esperarReal(() => tarjetas(f).length === LISTA.length, { que: `#listened (${que})`, vueltas: VUELTAS });
+      for (let i = 0; i < 30; i++) await anclar(fetch('/banco/esperar.mjs', { cache: 'no-store' }).then((r) => r.text()));
+      const cuenta = new Map();
+      for (const l of llamadas(f).slice(l0)) { const r = `${l.metodo} ${l.ruta}`; cuenta.set(r, (cuenta.get(r) || 0) + 1); }
+      return [...cuenta.entries()].sort(([x], [y]) => x.localeCompare(y)).map(([r, n]) => `${r} ×${n}`).join(' , ');
+    }
+    const med = {};
+
+    // L1: con la caché de me gusta VACÍA, la línea, con su texto y su enlace, entre la de la biblioteca y la grilla.
+    const f1 = abrirMarco('l1', 1366, 591, '&likes=vacios'); marcos.push(['l1', f1]);
+    med.vacia = await abrirContando(f1, 'L1');
+    const av = $(f1, '#listened-likes-aviso');
+    puerta(!!av, 'L1: con la caché vacía está #listened-likes-aviso');
+    puerta(av?.textContent.trim() === TEXTO_L, `L1: el texto («${av?.textContent.trim()}»)`);
+    puerta(av?.querySelector('a')?.getAttribute('href') === '#dashboard', 'L1: el enlace va a #dashboard');
+    puerta(!!av?.querySelector('p.aviso-sin-likes[role="status"]'), 'L1: un <p class="aviso-sin-likes" role="status">');
+    puerta(av?.previousElementSibling === $(f1, '#listened-biblioteca-aviso') && av?.nextElementSibling === $(f1, '#listened-grid-holder'),
+      'L1: entre #listened-biblioteca-aviso y #listened-grid-holder');
+    puerta($$(f1, '.aviso-sin-likes').length === 1, `L1: una sola línea (${$$(f1, '.aviso-sin-likes').length})`);
+    progreso('L1');
+
+    // L2: con la caché llena (`LIKES_L`, inventados), ningún nodo nuevo.
+    const f2 = abrirMarco('l2', 1366, 591, '&likes=llenos'); marcos.push(['l2', f2]);
+    med.llena = await abrirContando(f2, 'L2');
+    puerta($$(f2, '.aviso-sin-likes').length === 0 && !$(f2, '#listened-likes-aviso'), `L2: con me gusta, ningún .aviso-sin-likes (${$$(f2, '.aviso-sin-likes').length})`);
+    puerta($(f2, '#listened-biblioteca-aviso')?.nextElementSibling === $(f2, '#listened-grid-holder'), 'L2: la grilla va justo después de la línea de la biblioteca, como antes');
+    progreso('L2');
+
+    // L3: abrir cuesta lo mismo con y sin la caché de me gusta, y lo mismo que en 1389edd.
+    puerta(med.vacia === med.llena, `L3: las mismas peticiones con la caché vacía y llena (vacía: ${med.vacia} · llena: ${med.llena})`);
+    puerta(ANTES_ABRIR_L !== null && med.vacia === ANTES_ABRIR_L, `L3: lo mismo que en 1389edd (${ANTES_ABRIR_L}) · ahora: ${med.vacia}`);
+    progreso('L3');
+
+    // L4: el contraste de la línea y de su enlace, con el fondo compuesto capa por capa, en los cuatro presets.
+    const colorDe = (css) => {
+      const s = String(css);
+      let m = s.match(/^color\(srgb\s+([\d.e-]+)\s+([\d.e-]+)\s+([\d.e-]+)(?:\s*\/\s*([\d.e-]+))?\)/);
+      if (m) return [m[1] * 255, m[2] * 255, m[3] * 255, m[4] === undefined ? 1 : +m[4]];
+      m = s.match(/rgba?\(([^)]+)\)/);
+      if (!m) return null;
+      const p = m[1].split(/[\s,/]+/).filter(Boolean).map(Number);
+      return [p[0], p[1], p[2], p[3] ?? 1];
+    };
+    const lum = (c) => { const [r, g, b] = c.slice(0, 3).map((v) => { const s = v / 255; return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4; }); return 0.2126 * r + 0.7152 * g + 0.0722 * b; };
+    const contraste = (a, b) => { const x = lum(a), y = lum(b); return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05); };
+    const sobre = (arriba, abajo) => { const a = arriba[3]; return [0, 1, 2].map((i) => arriba[i] * a + abajo[i] * (1 - a)).concat(1); };
+    const ratio = (el) => {
+      const cs = (n) => win(f1).getComputedStyle(n);
+      const capas = []; let opacidad = 1, opaco = false;
+      for (let n = el; n && n.nodeType === 1; n = n.parentElement) {
+        opacidad *= Number(cs(n).opacity || 1);
+        const c = colorDe(cs(n).backgroundColor);
+        if (c && c[3] > 0 && !opaco) { capas.push(c); if (c[3] >= 1) opaco = true; }
+      }
+      let fondo = opaco ? capas.pop() : [255, 255, 255, 1];
+      while (capas.length) fondo = sobre(capas.pop(), fondo);
+      const t = colorDe(cs(el).color);
+      return contraste(sobre([t[0], t[1], t[2], t[3] * opacidad], fondo), fondo);
+    };
+    const fallos = [], peores = [];
+    for (const id of ['violeta', 'ambar', 'aguamarina', 'papel']) {
+      await anclar(win(f1).__ponerTema(id));
+      f1.contentDocument.getAnimations().forEach((a) => { try { a.finish(); } catch { /* las infinitas */ } });
+      const p = $(f1, '#listened-likes-aviso .aviso-sin-likes'), a = p?.querySelector('a');
+      const medidos = [['línea', p ? ratio(p) : 0], ['enlace', a ? ratio(a) : 0]];
+      for (const [que, r] of medidos) if (!(r >= 4.5)) fallos.push(`${id} ${que} ${r.toFixed(2)}:1`);
+      const peor = medidos.reduce((x, y) => (y[1] < x[1] ? y : x));
+      peores.push(`${id} ${peor[1].toFixed(2)} (${peor[0]})`);
+    }
+    await anclar(win(f1).__ponerTema('violeta'));
+    med.contraste = peores.join(', ');
+    puerta(fallos.length === 0, `L4: ≥ 4,5:1 en los cuatro presets (${fallos.join(' · ')})`);
+    progreso('L4');
+
+    // A 390 px solo se exige que nada desborde.
+    const f3 = abrirMarco('l390', 390, 844, '&likes=vacios'); marcos.push(['l390', f3]);
+    await abrirListened(f3, 'L 390');
+    const de3 = f3.contentDocument.documentElement;
+    puerta(!!$(f3, '#listened-likes-aviso') && de3.scrollWidth <= win(f3).innerWidth, `L 390: la línea está y la página no desborda (${de3.scrollWidth}/${win(f3).innerWidth})`);
+    med.ancho390 = `${de3.scrollWidth}/${win(f3).innerWidth}`;
+    datos.l = `abrir con la caché vacía: ${med.vacia} · llena: ${med.llena} · peor contraste: ${med.contraste} · 390: ${med.ancho390}`
+      + (MEDIR ? ` · sin afirmar (${sinAfirmar.length}): ${sinAfirmar.join(' | ')}` : '');
+    progreso('L');
+  }
+
   // (tanda 129) El marco `j403` provoca un 403 a propósito, y `spotifyFetch` lo anota con su `console.error` de siempre: ese, y solo ese, se
   // espera ahí (y se exige). Cualquier otro error, en cualquier marco, sigue siendo un fallo.
   const ESPERADO_J403 = `console.error: Spotify 403 on /playlists/${PLAYLIST_ID}/items`;
@@ -691,6 +795,7 @@ try {
     (datos.j ? ` · J: ${datos.j}` : '') +
     (datos.jAncho ? ` · J ancho: ${datos.jAncho}` : '') +
     (datos.k ? ` · K: ${datos.k}` : '') +
+    (datos.l ? ` · L: ${datos.l}` : '') +
     ` · rutas sin simular=${ajenos.length} · errores=${errores.length} · reloj virtual=${Math.round(performance.now())} ms`;
   document.documentElement.setAttribute('data-resumen', resumenFinal);
   document.getElementById('progreso').textContent = resumenFinal;

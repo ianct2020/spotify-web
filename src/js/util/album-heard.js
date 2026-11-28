@@ -52,9 +52,13 @@ export async function buildAlbumHeardIndex({ force = false } = {}) {
 
   // 1) Likes: fuente autoritativa, no depende de owner-guard.
   let likes = [];
+  // (v=377) `true` SOLO si la caché de me gusta dijo `source: 'empty'` (vacía o de otra cuenta). Un array vacío sin `source`, o
+  // que la lectura tire, no cuenta: eso no es «no hay me gusta cargados».
+  let likesVacios = false;
   try {
     const res = await getBestAvailableLikes();
     likes = Array.isArray(res?.items) ? res.items : (Array.isArray(res) ? res : []);
+    likesVacios = res?.source === 'empty';
   } catch { /* seguimos con lo que tengamos */ }
 
   for (const it of likes) {
@@ -125,7 +129,7 @@ export async function buildAlbumHeardIndex({ force = false } = {}) {
     }
   } catch { /* ignora */ }
 
-  cache = {
+  const idx = {
     heard,
     heardBases,
     likedIds,
@@ -133,8 +137,13 @@ export async function buildAlbumHeardIndex({ force = false } = {}) {
     artistDisplay,
     artistImage,
     artistIds,
+    likesVacios,
   };
-  return cache;
+  // 🔴 El vacío no se memoiza (v=377, la regla de v=219). Sin me gusta, las dos vistas de descubrir no tienen artistas; si esto quedaba
+  // en `cache`, cargarlos en el Dashboard y volver sin recargar seguía dando la vista vacía. Se devuelve igual, para ESTA apertura.
+  // El costo: con la caché vacía, cada llamada vuelve a leer el historial y la W-Three (medido en el banco, en CLAUDE.md).
+  if (!likesVacios) cache = idx;
+  return idx;
 }
 
 export function invalidateAlbumHeardIndex() {

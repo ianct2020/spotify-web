@@ -43,6 +43,10 @@ export const BIBLIOTECA = [
   guardadoDe(POR_CLAVE, nombreDeLista(10), artistaDeLista(10), '2026-02-01T00:00:00Z'),
   guardadoDe(CON_PISTA, 'Disco Con Pista Inventado', 'Banda Con Pista Inventada', '2026-03-01T00:00:00Z', { tracks: { items: [{ uri: PISTA_GUARDADA, name: 'Tema Guardado Inventado' }] } }),
 ];
+// (tanda 140) La caché de me gusta del caso L (`?likes=llenos`): las mismas pistas de los discos 0, 1 y 2 de la lista, como las trae
+// `/me/tracks` (`{ added_at, track }`). Los casos A–K no la siembran: corren con la caché de me gusta VACÍA, como hasta la 139.
+export const LIKES_L = LISTA.slice(0, 3).map((x) => ({ added_at: x.added_at, track: x.item }));
+
 /** Los ids que «Por escuchar» tiene que listar, del guardado más nuevo al más viejo (a igual `added_at`, el orden de la biblioteca). */
 export const PENDIENTES_ESPERADOS = (() => {
   const fuera = new Set([...Array.from({ length: 9 }, (_, i) => idDeLista(i)), POR_CLAVE]);
