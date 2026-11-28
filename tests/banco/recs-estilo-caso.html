@@ -19,7 +19,8 @@
 //   window.__colgarSearch = true   la próxima búsqueda se queda colgada hasta `window.__soltarSearch()`
 //   window.__preset(id)        aplica uno de los cuatro presets de la paleta
 //
-// `?foto=estilos|lista|corte` (para las capturas SEMBRADAS, con un conductor externo): siembra el
+// `?foto=estilos|lista|corte|artista|artista-corte` (para las capturas SEMBRADAS, con un conductor externo; los dos
+// últimos, de la tanda 141, tocan UN artista: sin errores o con un 429 en su 2.ª búsqueda): siembra el
 // almacén, usa un Last.fm local de mentira, conduce el flujo entero solo y marca `data-foto="listo"`.
 // `&preset=papel` aplica ese preset antes de la foto. Las animaciones de la app van en «siempre».
 
@@ -100,9 +101,18 @@ if (FOTO) {
   location.hash = '#recs';
   await esperarReal(() => $('#recs-run-btn'), { que: '#recs', vueltas: 4000 });
   $('#recs-run-btn').click();
-  await esperarReal(() => $('#recs-estilo-btn'), { que: 'las recomendaciones', vueltas: 8000 });
-  $('#recs-estilo-btn').click();
-  await esperarReal(() => $('[data-recs-estilo="estilos"]'), { que: 'los estilos', vueltas: 20000 });
+  // `?foto=artista|artista-corte` (tanda 141): tocar UN artista (Niebla Alta), sin errores o con un 429 en su 2.ª búsqueda.
+  const unArtista = FOTO === 'artista' || FOTO === 'artista-corte';
+  if (unArtista) {
+    await esperarReal(() => document.querySelectorAll('.art-card-pick').length > 0, { que: 'las recomendaciones', vueltas: 8000 });
+    if (FOTO === 'artista-corte') window.__search429En = window.__busquedas + 2;
+    [...document.querySelectorAll('.art-card-pick')].find((el) => el.querySelector('.smart-card-title')?.textContent.trim() === 'Niebla Alta').click();
+    await esperarReal(() => $('#recs-tracks .results-summary'), { que: 'los temas del artista', vueltas: 20000 });
+  } else {
+    await esperarReal(() => $('#recs-estilo-btn'), { que: 'las recomendaciones', vueltas: 8000 });
+    $('#recs-estilo-btn').click();
+    await esperarReal(() => $('[data-recs-estilo="estilos"]'), { que: 'los estilos', vueltas: 20000 });
+  }
   if (FOTO === 'estilos') {
     // Con uno elegido: se ve el anillo y la línea del costo (elegir cuesta 0).
     [...document.querySelectorAll('.recs-estilo-pastilla')].find((b) => b.dataset.estilo === 'niebla pop').click();

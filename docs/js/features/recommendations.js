@@ -1,29 +1,29 @@
-import { spotifyFetch, createPlaylist, addTracksToPlaylist, invalidatePlaylistsCache, getAllLikedTracks, getCurrentUserId } from '../api.js?v=377';
-import { hasKey, setKey, hasUsername, getUsername, setUsername, getUserTopArtists, getSimilarArtists, getArtistTopTracks, getKey, pedirLastfmCrudo, cargarEtiquetas, registroEtiquetas, setCachedTags } from '../api/lastfm.js?v=377';
-import { urlEtiquetas } from '../util/generos-escaneo.js?v=377';
-import { resolverTemaEnSpotify } from '../util/resolver-tema.js?v=377';
+import { spotifyFetch, createPlaylist, addTracksToPlaylist, invalidatePlaylistsCache, getAllLikedTracks, getCurrentUserId } from '../api.js?v=378';
+import { hasKey, setKey, hasUsername, getUsername, setUsername, getUserTopArtists, getSimilarArtists, getArtistTopTracks, getKey, pedirLastfmCrudo, cargarEtiquetas, registroEtiquetas, setCachedTags } from '../api/lastfm.js?v=378';
+import { urlEtiquetas } from '../util/generos-escaneo.js?v=378';
+import { resolverTemaEnSpotify } from '../util/resolver-tema.js?v=378';
 import {
   pedirEtiquetas, pendientesDeEtiquetas, agruparPorEstilo, textoSinEstilo, ARTISTAS_POR_ESTILO, TEXTO_SIN_ESTILOS, planDeLista, textoCoste, TITULO_COSTE,
-  armarLista, textoCabecera, textoCorte, textoSinBuscar, nombreSugerido, descripcionPlaylist,
+  armarLista, textoCabecera, textoCorte, textoSinBuscar, textoSinResolver, nombreSugerido, descripcionPlaylist,
   TEMAS_MIN, TEMAS_MAX, TEMAS_DEFECTO,
-} from '../util/recs-estilo.js?v=377';
-import { showProgress, hideProgress, promptPlaylistName, escapeHtml, pageHeader } from '../ui/components.js?v=377';
-import { showToast } from '../ui/toast.js?v=377';
-import { getPreview } from '../api/preview-providers.js?v=377';
-import { togglePreview, playingKey, isPlayingAudio } from '../ui/preview-player.js?v=377';
-import { paintPlayingCard } from '../ui/track-card-row.js?v=377';
-import { openTrackCard } from './track-card.js?v=377';
-import { openAlbumCard } from './album-card.js?v=377';
-import { limpiaParaQuery, titleMatches, artistMatches } from '../util/track-match.js?v=377';
-import { vigilarRuta } from '../util/vigencia-ruta.js?v=377';
-import { recuperarUriDeArtistaKey } from '../util/hidden-recover.js?v=377';
+} from '../util/recs-estilo.js?v=378';
+import { showProgress, hideProgress, promptPlaylistName, escapeHtml, pageHeader } from '../ui/components.js?v=378';
+import { showToast } from '../ui/toast.js?v=378';
+import { getPreview } from '../api/preview-providers.js?v=378';
+import { togglePreview, playingKey, isPlayingAudio } from '../ui/preview-player.js?v=378';
+import { paintPlayingCard } from '../ui/track-card-row.js?v=378';
+import { openTrackCard } from './track-card.js?v=378';
+import { openAlbumCard } from './album-card.js?v=378';
+import { limpiaParaQuery, titleMatches, artistMatches } from '../util/track-match.js?v=378';
+import { vigilarRuta } from '../util/vigencia-ruta.js?v=378';
+import { recuperarUriDeArtistaKey } from '../util/hidden-recover.js?v=378';
 import {
   artistasOcultos as hiddenArtists,
   alternarArtistaOculto,
   artistaEstaOculto,
-} from './artistas-ocultos.js?v=377';
-import { iconoPlay, iconoPausa, iconoFicha, iconoDisco, iconoOjo, iconoOjoTachado } from '../ui/icons.js?v=377';
-import { pedirYCachear, CUALQUIER_RESPUESTA } from '../util/cache-solo-exitos.js?v=377';
+} from './artistas-ocultos.js?v=378';
+import { iconoPlay, iconoPausa, iconoFicha, iconoDisco, iconoOjo, iconoOjoTachado } from '../ui/icons.js?v=378';
+import { pedirYCachear, CUALQUIER_RESPUESTA } from '../util/cache-solo-exitos.js?v=378';
 
 // Iconos de las dos fichas. Los mismos trazos que usa la tarjeta compartida.
 // Mismos trazos que el ojo de discover-common.js (v=165), acá con 14px para
@@ -114,6 +114,9 @@ let recommendations = [];
 let currentPick = null;
 let resolvedTracks = [];
 let alreadyLikedInResolution = 0;
+// v=378 (tanda 141): si Spotify dejó de contestar al resolver los temas de un artista, el corte
+// (`{ busquedas, error, sinResolver }`); `null` si no hubo error. Lo lee `renderResolvedTracks()`.
+let corteResolucion = null;
 const pickedUris = new Set();
 const likedUris = new Set();
 // 'normal' = lo que queda por descubrir · 'hidden' = los que ocultaste.
@@ -388,6 +391,7 @@ async function pickArtist(artist) {
   const ruta = vigilarRuta();
   currentPick = artist;
   resolvedTracks = [];
+  corteResolucion = null;
   pickedUris.clear();
 
   const panel = document.getElementById('recs-panel');
@@ -454,10 +458,21 @@ async function resolveTracksOnSpotify(topTracks, ruta = vigilarRuta()) {
   for (let i = 0; i < topTracks.length; i++) {
     const t = topTracks[i];
     // v=369: la búsqueda y la verificación viven en `util/resolver-tema.js` (la comparte el camino
-    // de un estilo). Este camino se queda como estaba: ⚠️ un ERROR (un 429, un corte) se sigue
-    // pintando como «sin match», que se lee como «Spotify no lo tiene». Es un defecto conocido,
-    // anotado en `PENDIENTES.md` («Tanda 132»), y se dejó así a propósito: arreglarlo es otra tanda.
+    // de un estilo). v=378 (tanda 141): un ERROR (un 429, la pausa de `/search`, un 5xx o un corte
+    // de red ya reintentados) ya no se pinta como «sin match», que se leía como «Spotify no lo
+    // tiene»: en el primero se PARA (ni una búsqueda ni un `sleep` más), como el camino de un
+    // estilo, y `renderResolvedTracks()` lo dice. Los reintentos son los de siempre: la llamada va
+    // sin opciones, sin `_maxRetries`.
     const r = await resolverTemaEnSpotify(t);
+    if (r.estado === 'error') {
+      corteResolucion = {
+        busquedas: i + 1,   // contando la que falló, como `armarLista`
+        error: r.error,
+        sinResolver: topTracks.slice(i).map(x => x.name),
+      };
+      console.warn('[recs] Spotify dejó de contestar al resolver los temas de un artista:', r.error);
+      break;
+    }
     raw.push(r.estado === 'encontrado' ? r.fila : { uri: null, name: t.name, artist: t.artist, matched: false });
     // 30 búsquedas con 120 ms de pausa entre cada una: el corte va acá, antes
     // de tocar el contador, y no solo al final del bucle.
@@ -558,8 +573,18 @@ function renderResolvedTracks(ruta = vigilarRuta()) {
   const tracksEl = document.getElementById('recs-tracks');
   const matched = resolvedTracks.filter(t => t.matched);
   matched.forEach(t => pickedUris.add(t.uri));
+  // v=378 (tanda 141): si Spotify dejó de contestar, la tarjeta del camino de un estilo (las mismas
+  // clases y el mismo `textoCorte`), arriba de todo. Los temas sin resolver NO son filas ni suman a
+  // «Sin match». Sin corte queda vacío y va pegado al backtick: el HTML es byte a byte el de antes.
+  const c = corteResolucion;
+  const aviso = c ? `
+    <div class="card recs-estilo-corte" data-recs-corte="error">
+      <p class="recs-estilo-nota">${escapeHtml(textoCorte({ tipo: 'error', busquedas: c.busquedas }))}</p>
+      <p class="recs-estilo-crudo">${escapeHtml(String(c.error?.message || c.error))}</p>
+      <p class="recs-estilo-nota" data-recs-sin-resolver>${escapeHtml(textoSinResolver(c.sinResolver))}</p>
+    </div>` : '';
 
-  tracksEl.innerHTML = `
+  tracksEl.innerHTML = `${aviso}
     <div class="results-summary">
       <div class="stat-card">
         <div class="stat-value">${matched.length}</div>
@@ -574,7 +599,7 @@ function renderResolvedTracks(ruta = vigilarRuta()) {
         <div class="stat-label">Sin match</div>
       </div>
     </div>
-    ${matched.length === 0 ? `
+    ${matched.length === 0 && !c ? `
       <div class="card" style="margin-bottom:16px"><p>Todos los top tracks de este artista ya están en tus likes. Vuelve y prueba con otro.</p></div>
     ` : ''}
 

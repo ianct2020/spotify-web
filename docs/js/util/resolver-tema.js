@@ -14,11 +14,11 @@
 //   · `{ estado: 'encontrado', fila }`: la fila, con la MISMA forma que pintaba `#recs`;
 //   · `{ estado: 'sin-match' }`: Spotify contestó y ninguno de los 5 es ese tema;
 //   · `{ estado: 'error', error }`: la búsqueda TIRÓ (un 429, un corte, una respuesta ilegible).
-// El camino de un artista sigue tratando `error` como «sin match» (lo de siempre, con su defecto
-// anotado en `PENDIENTES.md`); el de un estilo PARA la lista.
+// Los dos caminos PARAN en el primer `error`: el de un estilo desde v=369 y el de un artista desde
+// v=378 (tanda 141), que hasta entonces lo pintaba como «sin match».
 
-import { spotifyFetch } from '../api.js?v=377';
-import { limpiaParaQuery, titleMatches, artistMatches } from './track-match.js?v=377';
+import { spotifyFetch } from '../api.js?v=378';
+import { limpiaParaQuery, titleMatches, artistMatches } from './track-match.js?v=378';
 
 /**
  * @param {{ name: string, artist: string }} t   un top track de Last.fm

@@ -8,9 +8,9 @@
 //      y qué no de Last.fm (un 29, un 5xx, un 429 o un corte: nada) con 1.000 ms entre comienzos;
 //   2. la resolución compartida REAL (`util/resolver-tema.js`) con `spotifyFetch` doblado: tres salidas;
 //   3. la conservación de `getArtistTopTags` (`api/lastfm.js` REAL, `fetch` doblado);
-//   4. la conservación del camino de UN artista (`recommendations.js` REAL): con un error en la
-//      búsqueda, pinta lo mismo que en ce8098a (el `sha256` del HTML, sacado corriendo este test
-//      contra ce8098a) y sigue diciendo «sin match».
+//   4. el camino de UN artista (`recommendations.js` REAL) con un error en la búsqueda: hasta la tanda 140
+//      afirmaba el defecto («sin match»); desde la 141 (v=378) afirma la tarjeta del corte y un «Sin match»
+//      honesto (ver `tests/recs-un-artista-corte.test.mjs`).
 //
 // Los imports del código nuevo son dinámicos y con `catch`: contra ce8098a (donde no existe) el test
 // corre igual y falla assert por assert, en vez de caerse al importar.
@@ -41,9 +41,12 @@ globalThis.localStorage = {
 const E = await import(url('src/js/util/recs-estilo.js')).catch((e) => { console.log('  (no se pudo importar recs-estilo.js: ' + e.message + ')'); return null; });
 const R = await import(url('src/js/util/resolver-tema.js')).catch((e) => { console.log('  (no se pudo importar resolver-tema.js: ' + e.message + ')'); return null; });
 const fn = (m, n) => (m && typeof m[n] === 'function' ? m[n] : null);
-// El `sha256` (normalizado) del HTML que pinta el camino de UN artista en el caso [7], sacado corriendo
-// ESTE test contra ce8098a (tanda 132). Si cambia, cambió lo que ve Ian al tocar un artista.
-const HASH_PICK_CE8098A = '4574f5fe902b9f00c2efd0f93fd2e2d438c7fcdc88a140458ec700eef2dc6e12';
+// El `sha256` (normalizado) del HTML que pinta el camino de UN artista en el caso [7].
+// Historia: en la tanda 132 era `HASH_PICK_CE8098A` = '4574f5fe902b9f00c2efd0f93fd2e2d438c7fcdc88a140458ec700eef2dc6e12',
+// sacado contra ce8098a, y fijaba A PROPÓSITO el defecto de entonces (el 429 de «Tema Roto» pintado como «— sin match»).
+// Desde la tanda 141 (v=378) el camino de un artista PARA en el primer error y lo dice con la tarjeta [data-recs-corte]:
+// este es el HTML CON el corte, sacado corriendo este test contra el código de v=378. Si cambia, cambió lo que ve Ian.
+const HASH_PICK_CORTE_T141 = '6b50012959ccf961805723ddb9d2f396ce681e60062329237195dcf7ca39666c';
 
 // ── Un almacén inventado (la forma de `crearAlmacenGeneros`) ─────────────────
 const T = (name, count = 100) => ({ name, count });
@@ -276,11 +279,18 @@ console.log('[7] pickArtist (conservación)');
   const hash = createHash('sha256').update(html.replace(/\s+/g, ' ').trim()).digest('hex');
   console.log('  HTML de #recs-tracks, sha256 normalizado:', hash);
   const busquedas = S.llamadas.filter((a) => String(a[0]).startsWith('/search'));
-  ok(busquedas.length === 3 && busquedas.every((a) => a.length === 1), `3 búsquedas, con la llamada de siempre (un argumento: los reintentos de siempre) (${busquedas.length})`);
+  ok(busquedas.length === 3 && busquedas.every((a) => a.length === 1), `3 búsquedas, con la llamada de siempre (un argumento: los reintentos de siempre; Roto es la última, no hay nada que parar) (${busquedas.length})`);
+  // Tanda 141: dado vuelta. Hasta v=377 afirmaba el defecto (1 nuevo, 2 sin match, la fila de Roto con «— sin match»).
   ok(/<div class="stat-value">1<\/div>\s*<div class="stat-label">Nuevos en Spotify/.test(html)
-    && /<div class="stat-value" style="color:var\(--color-text-muted\)">2<\/div>\s*<div class="stat-label">Sin match/.test(html), 'el error se sigue contando como «sin match» (1 nuevo, 2 sin match): el defecto de siempre, anotado');
-  ok((html.match(/— sin match/g) || []).length === 2 && html.includes('Tema Roto'), 'y la fila del tema que dio error dice «sin match», como antes');
-  ok(hash === HASH_PICK_CE8098A, `el HTML es el de ce8098a (${hash})`);
+    && /<div class="stat-value" style="color:var\(--color-text-muted\)">1<\/div>\s*<div class="stat-label">Sin match/.test(html), 'el error ya NO cuenta como «sin match» (1 nuevo, 1 sin match: solo Tema Sin)');
+  const grilla = html.split('<div class="tracks-grid">')[1] || '';
+  ok((grilla.match(/— sin match/g) || []).length === 1 && !grilla.includes('Tema Roto'), 'una sola fila «— sin match» (Tema Sin) y ninguna de Tema Roto');
+  ok(/data-recs-corte="error"/.test(html)
+    && html.includes('<p class="recs-estilo-nota">Spotify dejó de contestar después de 3 búsquedas: la lista está incompleta.</p>')
+    && html.includes('<p class="recs-estilo-crudo">Spotify 429: /search agotó su cuota (inventado)</p>')
+    && html.includes('<p class="recs-estilo-nota" data-recs-sin-resolver>Sin resolver: Tema Roto.</p>'), 'la tarjeta [data-recs-corte] con el aviso, el 429 crudo y «Sin resolver: Tema Roto.»');
+  ok(/data-uri="spotify:track:inventado1" checked/.test(grilla), 'lo encontrado (Tema Bien) sale tildado');
+  ok(hash === HASH_PICK_CORTE_T141, `el HTML con el corte es el de la tanda 141 (${hash})`);
 }
 
 console.log(`${bien} asserts OK · ${mal} fallos`);

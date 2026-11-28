@@ -18,8 +18,8 @@
 // y el filtro de las etiquetas es `etiquetasDe` (el mismo `filtrarEtiquetasLastfm` de siempre).
 // `escanearGeneros` NO se usa: reintenta solo, y aquí no hay ningún reintento automático.
 
-import { generosDeArtista } from './generos-regla.js?v=377';
-import { yaBuscado, clasificar, etiquetasDe, INTERVALO_MS } from './generos-escaneo.js?v=377';
+import { generosDeArtista } from './generos-regla.js?v=378';
+import { yaBuscado, clasificar, etiquetasDe, INTERVALO_MS } from './generos-escaneo.js?v=378';
 
 // ── Los topes ────────────────────────────────────────────────────────────────
 //
@@ -283,6 +283,10 @@ export function textoCorte(corte) {
 }
 
 export const textoSinBuscar = (nombres) => `Sin buscar: ${nombres.join(', ')}.`;
+// v=378 (tanda 141): el camino de UN artista, cuando Spotify deja de contestar. Los nombres son los temas que
+// quedaron sin resolver (el que falló y los que no se llegaron a buscar), en el orden de Last.fm. La misma forma
+// que `textoSinBuscar`, a propósito: no se inventa otra regla de listas.
+export const textoSinResolver = (nombres) => `Sin resolver: ${nombres.join(', ')}.`;
 
 export const nombreSugerido = (estilo) => `Recomendados: ${estilo}`;
 export const descripcionPlaylist = (estilo) => `Recomendado desde tus scrobbles · ${estilo}`;

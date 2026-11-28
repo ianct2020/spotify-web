@@ -10,8 +10,18 @@ export async function spotifyFetch(...args) {
   s().llamadas.push(args);
   return s().spotify(...args);
 }
-export const createPlaylist = async () => { throw Error('doble t132: escritura prohibida'); };
-export const addTracksToPlaylist = createPlaylist;
+// Tanda 141 (sumado, sin cambiar lo de antes): si el test pone `__T132.escrituras = []`, las dos escrituras
+// se anotan ahí en vez de tirar. Sin `escrituras`, tiran como siempre.
+export const createPlaylist = async (...args) => {
+  if (!s().escrituras) throw Error('doble t132: escritura prohibida');
+  s().escrituras.push(['createPlaylist', ...args]);
+  return { id: 'playlistinventadat141' };
+};
+export const addTracksToPlaylist = async (...args) => {
+  if (!s().escrituras) throw Error('doble t132: escritura prohibida');
+  s().escrituras.push(['addTracksToPlaylist', ...args]);
+  return { snapshot_id: 'snapshot-inventado-t141' };
+};
 export const invalidatePlaylistsCache = () => {};
 export const getAllLikedTracks = async () => s().likes;
 export const getCurrentUserId = async () => 'uid-inventado-t132';
@@ -24,7 +34,7 @@ export const getArtistTopTracks = async (nombre) => s().topTracks(nombre);
 export const pedirLastfmCrudo = async () => { throw Error('doble t132: red prohibida'); };
 export const cargarEtiquetas = async () => {}, registroEtiquetas = () => null, setCachedTags = async () => true;
 
-export const showProgress = () => {}, hideProgress = () => {}, promptPlaylistName = async () => null;
+export const showProgress = () => {}, hideProgress = () => {}, promptPlaylistName = async () => s().nombrePlaylist ?? null;
 export const escapeHtml = (x) => String(x), pageHeader = () => '';
 export const showToast = () => {}, getPreview = async () => null;
 export const togglePreview = () => {}, playingKey = () => '', isPlayingAudio = () => false;

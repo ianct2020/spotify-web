@@ -283,6 +283,10 @@ export function textoCorte(corte) {
 }
 
 export const textoSinBuscar = (nombres) => `Sin buscar: ${nombres.join(', ')}.`;
+// v=378 (tanda 141): el camino de UN artista, cuando Spotify deja de contestar. Los nombres son los temas que
+// quedaron sin resolver (el que falló y los que no se llegaron a buscar), en el orden de Last.fm. La misma forma
+// que `textoSinBuscar`, a propósito: no se inventa otra regla de listas.
+export const textoSinResolver = (nombres) => `Sin resolver: ${nombres.join(', ')}.`;
 
 export const nombreSugerido = (estilo) => `Recomendados: ${estilo}`;
 export const descripcionPlaylist = (estilo) => `Recomendado desde tus scrobbles · ${estilo}`;

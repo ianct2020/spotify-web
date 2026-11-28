@@ -33,19 +33,19 @@
 
 import {
   loadDaysLocal, loadDays, isOwner, hasLocalHistory, identidadSinConfirmar, ownerLockedMessage, falloDeLecturaDelHistorial, avisoHistorialIlegibleHtml,
-} from './history-data.js?v=377';
-import { LLUVIA_VERSION } from '../history-keys.js?v=377';
-import { escapeHtml, pageHeader } from '../ui/components.js?v=377';
-import { openModal, closeModal } from '../ui/modal-stack.js?v=377';
-import { armarDia, temasConVeces, listasDelDiaHtml, conectarListasDelDia } from '../ui/dia-escuchado.js?v=377';
-import { importarSoloElDetalle } from './import-history.js?v=377';
-import { fmtDia } from '../util/fecha.js?v=377';
-import { vigilarRuta } from '../util/vigencia-ruta.js?v=377';
+} from './history-data.js?v=378';
+import { LLUVIA_VERSION } from '../history-keys.js?v=378';
+import { escapeHtml, pageHeader } from '../ui/components.js?v=378';
+import { openModal, closeModal } from '../ui/modal-stack.js?v=378';
+import { armarDia, temasConVeces, listasDelDiaHtml, conectarListasDelDia } from '../ui/dia-escuchado.js?v=378';
+import { importarSoloElDetalle } from './import-history.js?v=378';
+import { fmtDia } from '../util/fecha.js?v=378';
+import { vigilarRuta } from '../util/vigencia-ruta.js?v=378';
 import {
   validarLluvia, diasLocalesValidos, filasDeLaVentana, resumir, porAnio, masLluviosos, lineaVentana,
   lineaRecorte, lineaAnios, FRASE_NO_CAUSA, textoMinutos, textoMm, textoPct, trozosAtribucion,
   diasConLluvia, DE_A,
-} from '../util/lluvia.js?v=377';
+} from '../util/lluvia.js?v=378';
 
 const num = (n) => Number(n).toLocaleString('es-ES');
 const SIN_ARCHIVO = 'La lluvia se cruza con el historial que está guardado en la app, y el tuyo no lo está.';

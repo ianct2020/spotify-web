@@ -1,21 +1,21 @@
-import { getAllPlaylistItems, getBestAvailableLikes, addTracksToPlaylist, removeTracksFromPlaylist, getAllUserPlaylists, getCurrentUserId, getSavedAlbums, getAlbumTracks } from '../api.js?v=377';
-import { indiceDelRegistro, estaRegistrado, leerPorEscuchar, marcarEscuchado, cabeceraPorEscuchar, TEXTO_FALLO_POR_ESCUCHAR } from '../util/registro-escuchados.js?v=377';
-import { cargarEtiquetas, getCachedTags } from '../api/lastfm.js?v=377';
-import { esEPoAlbum } from '../util/release-size.js?v=377';
-import { idbGetCached, idbSetCached, idbGetTimestamp } from '../idb.js?v=377';
-import { escapeHtml, confirmModal, pageHeader, avisoSinLikesHtml } from '../ui/components.js?v=377';
-import { showToast } from '../ui/toast.js?v=377';
-import { isJunkTrack } from '../util/junk.js?v=377';
-import { openModal, closeTop } from '../ui/modal-stack.js?v=377';
-import { getListenedPlaylist, groupItemsByAlbum, openListenedAlbumsPicker, albumKey, baseName, norm } from './listened-shared.js?v=377';
-import { openAlbumCard } from './album-card.js?v=377';
-import { prefKey, migratePrefKey } from '../storage.js?v=377';
-import { pedirYCachear, SOLO_CON_CONTENIDO } from '../util/cache-solo-exitos.js?v=377';
-import { idsDeBiblioteca, filtrarPorBiblioteca } from '../util/solo-biblioteca.js?v=377';
-import { vigilarRuta } from '../util/vigencia-ruta.js?v=377';
-import { indexarLikes, cancionesDeLaObra } from '../util/likes-de-la-obra.js?v=377';
-import { coincide, ordenar, textoCuenta, ORDEN_POR_DEFECTO } from '../util/por-escuchar-vista.js?v=377';
-import { tapaParaCelda } from '../util/cover-size.js?v=377';
+import { getAllPlaylistItems, getBestAvailableLikes, addTracksToPlaylist, removeTracksFromPlaylist, getAllUserPlaylists, getCurrentUserId, getSavedAlbums, getAlbumTracks } from '../api.js?v=378';
+import { indiceDelRegistro, estaRegistrado, leerPorEscuchar, marcarEscuchado, cabeceraPorEscuchar, TEXTO_FALLO_POR_ESCUCHAR } from '../util/registro-escuchados.js?v=378';
+import { cargarEtiquetas, getCachedTags } from '../api/lastfm.js?v=378';
+import { esEPoAlbum } from '../util/release-size.js?v=378';
+import { idbGetCached, idbSetCached, idbGetTimestamp } from '../idb.js?v=378';
+import { escapeHtml, confirmModal, pageHeader, avisoSinLikesHtml } from '../ui/components.js?v=378';
+import { showToast } from '../ui/toast.js?v=378';
+import { isJunkTrack } from '../util/junk.js?v=378';
+import { openModal, closeTop } from '../ui/modal-stack.js?v=378';
+import { getListenedPlaylist, groupItemsByAlbum, openListenedAlbumsPicker, albumKey, baseName, norm } from './listened-shared.js?v=378';
+import { openAlbumCard } from './album-card.js?v=378';
+import { prefKey, migratePrefKey } from '../storage.js?v=378';
+import { pedirYCachear, SOLO_CON_CONTENIDO } from '../util/cache-solo-exitos.js?v=378';
+import { idsDeBiblioteca, filtrarPorBiblioteca } from '../util/solo-biblioteca.js?v=378';
+import { vigilarRuta } from '../util/vigencia-ruta.js?v=378';
+import { indexarLikes, cancionesDeLaObra } from '../util/likes-de-la-obra.js?v=378';
+import { coincide, ordenar, textoCuenta, ORDEN_POR_DEFECTO } from '../util/por-escuchar-vista.js?v=378';
+import { tapaParaCelda } from '../util/cover-size.js?v=378';
 
 const SORT_KEY = 'listened_sort_mode';
 const VALID_SORTS = new Set(['recent', 'year-desc', 'year-asc', 'artist-asc', 'likes-desc', 'name-asc']);
@@ -83,7 +83,7 @@ function dismissHistory(key) {
 // Solo lo bajamos si el user logueado es el dueño (Ian): son sus datos personales.
 async function loadHistoryData() {
   if (historyAlbums) return historyAlbums;
-  const { isOwner } = await import('./history-data.js?v=377');
+  const { isOwner } = await import('./history-data.js?v=378');
   if (!(await isOwner())) { historyAlbums = []; return historyAlbums; }
   try {
     const cached = await idbGetCached(HISTORY_CACHE_KEY);

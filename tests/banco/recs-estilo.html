@@ -23,11 +23,16 @@
 //      que ya llegó de Last.fm queda guardado;
 //   H. nada desborda a 1366×591 ni a 390×844 (los estilos y la lista);
 //   I. el contraste de lo nuevo en los cuatro presets, ≥ 4,5:1;
+//   J. (v=378, tanda 141) TOCAR UN ARTISTA con un 429 en su 2.ª búsqueda: J1 la tarjeta [data-recs-corte] con el aviso, el
+//      crudo y los sin resolver, y «Sin match» solo con los de verdad; J2 0 búsquedas en 10 s después; J3 lo encontrado,
+//      tildado, y «Crear playlist» = 1 + ceil(n/100) POST con esas uris; J4 otro artista sin errores, como antes; J5 el
+//      contraste de los tres renglones en los cuatro presets; J6 nada desborda a 1366×591 ni a 390×844. `?medir=j` vuelca
+//      J sin afirmar (A–I afirman igual);
 //   y en todos: 0 rutas sin simular, 0 hosts externos fuera de los simulados, 0 errores.
 
 import { esperarReal, anclar } from '/banco/simulado.mjs';
 import { fallar, listo } from '/banco/esperar.mjs';
-import { UID, RECOMENDADOS, ESPERADO, crearLastfm, sembrarEtiquetas } from '/banco/recs-estilo-datos.mjs';
+import { UID, RECOMENDADOS, ESPERADO, crearLastfm, sembrarEtiquetas, idDe } from '/banco/recs-estilo-datos.mjs';
 
 const afirmar = (c, msg) => { if (!c) throw new Error('BANCO: ' + msg); };
 const progreso = (t) => { document.getElementById('progreso').textContent = t; };
@@ -379,7 +384,108 @@ try {
     H.remove();
   }
 
+  // ── J. Tocar UN artista con un 429 a mitad (v=378, tanda 141) ─────────────
+  // `?medir=j` vuelca lo de J sin afirmar (así se midió el «antes», contra c627756).
+  const MEDIR_J = new URLSearchParams(location.search).get('medir') === 'j';
+  datos.medirJ = [];
+  const afirmarJ = MEDIR_J ? (c, msg) => { datos.medirJ.push(`${c ? 'sí' : 'NO'}: ${msg}`); } : afirmar;
+  const tarjetaDe = (f, nombre) => $$(f, '.art-card-pick').find((el) => texto(el.querySelector('.smart-card-title')) === nombre);
+  const stats = (f) => $$(f, '#recs-tracks .results-summary .stat-value').map((el) => +texto(el));
+  async function tocarArtista(f, nombre, con429) {
+    if (con429) win(f).__search429En = win(f).__busquedas + 2;   // la 2.ª búsqueda de este artista
+    const b0 = busquedas(f);
+    tarjetaDe(f, nombre).click();
+    await esperarReal(() => $(f, '#recs-tracks .results-summary'), { que: `los temas de ${nombre}`, vueltas: VUELTAS });
+    return busquedas(f) - b0;
+  }
+  const corteJ = (f) => ({
+    tarjeta: !!$(f, '#recs-tracks [data-recs-corte="error"]'),
+    nota: texto($(f, '[data-recs-corte="error"] .recs-estilo-nota:not([data-recs-sin-resolver])')),
+    crudo: texto($(f, '[data-recs-corte="error"] .recs-estilo-crudo')),
+    sinResolver: texto($(f, '[data-recs-corte="error"] [data-recs-sin-resolver]')),
+  });
+  const sinResolverNA = `Sin resolver: ${Array.from({ length: 13 }, (_, i) => `Canción ${i + 2} de Niebla Alta`).join(', ')}.`;
+
+  progreso('J: un 429 al tocar un artista (1366×591)');
+  const J = abrirMarco('J', { ancho: 1366, alto: 591 });
+  await arrancado(J, 'el marco J');
+  await generar(J, 'J');
+  const bJ = await tocarArtista(J, 'Niebla Alta', true);
+  const cJ = corteJ(J);
+  datos.J1 = { busquedas: bJ, ...cJ, stats: stats(J), filasSinMatch: $$(J, '#recs-tracks .tracks-grid .pretty-check-row').filter((r) => /sin match/.test(texto(r))).length,
+    todos: /Todos los top tracks/.test(texto($(J, '#recs-tracks'))), avisos: win(J).__avisos.filter((a) => a.startsWith('[recs] Spotify dejó de contestar al resolver')) };
+  afirmarJ(cJ.tarjeta, 'J1: la tarjeta [data-recs-corte] al tocar el artista');
+  afirmarJ(cJ.nota === 'Spotify dejó de contestar después de 2 búsquedas: la lista está incompleta.', `J1: el aviso («${cJ.nota}»)`);
+  afirmarJ(/429/.test(cJ.crudo), `J1: el error crudo («${cJ.crudo}»)`);
+  afirmarJ(cJ.sinResolver === sinResolverNA, `J1: los sin resolver («${cJ.sinResolver}»)`);
+  afirmarJ(JSON.stringify(datos.J1.stats) === '[1,0,0]' && datos.J1.filasSinMatch === 0, `J1: «Sin match» solo con los de verdad: Nuevos/Ya en likes/Sin match = ${JSON.stringify(datos.J1.stats)}, ${datos.J1.filasSinMatch} filas «sin match»`);
+  afirmarJ(!datos.J1.todos && datos.J1.avisos.length === 1, `J1: sin «Todos los top tracks…» y con el console.warn('[recs] …') (${datos.J1.avisos.length})`);
+  // J2: ninguna búsqueda más en 10 s de reloj.
+  const bJ2 = busquedas(J);
+  await reloj(10000, '10 s de reloj después del 429');
+  datos.J2 = { hasta429: bJ, despues: busquedas(J) - bJ2 };
+  afirmarJ(bJ === 2 && datos.J2.despues === 0, `J2: 2 /search (la 2.ª, el 429) y 0 después en 10 s (${bJ}, ${datos.J2.despues})`);
+  // J5: el contraste de los tres renglones de la tarjeta, en los cuatro presets.
+  datos.J5 = {};
+  for (const id of ['violeta', 'ambar', 'aguamarina', 'papel']) {
+    await win(J).__preset(id);
+    J.contentDocument.getAnimations().forEach((a) => { try { a.finish(); } catch { /* infinitas */ } });
+    let peor = Infinity;
+    for (const el of $$(J, '[data-recs-corte="error"] p')) {
+      const m = medirContraste(J, el);
+      peor = Math.min(peor, m.r);
+      afirmarJ(m.opaco && m.r >= 4.5, `J5: el contraste de «${el.className}» en ${id} es ${m.r.toFixed(2)}:1 (≥ 4,5)`);
+    }
+    datos.J5[id] = Number.isFinite(peor) ? +peor.toFixed(2) : null;
+  }
+  await win(J).__preset('violeta');
+  // J6 (1366×591): nada desborda.
+  datos.J6 = { j1366: desborda(J) };
+  afirmarJ(datos.J6.j1366 <= 0, `J6: a 1366×591 nada desborda (${datos.J6.j1366})`);
+  // J3: lo encontrado antes del corte, tildado; «Crear playlist» con el nombre confirmado.
+  const tildadasJ = $$(J, '.recs-track-check').filter((c) => c.checked).map((c) => c.dataset.uri);
+  const escAntes = reg(J).escrituras.length;
+  $(J, '#recs-create-btn')?.click();
+  await esperarReal(() => $(J, '#playlist-name-input'), { que: 'el modal del nombre en J' });
+  $(J, '#modal-confirm').click();
+  await esperarReal(() => reg(J).escrituras.length >= escAntes + 2 && !$(J, '#playlist-name-input') && /creada/.test(J.contentDocument.body.textContent), { que: 'que la playlist se cree en J', vueltas: VUELTAS });
+  await reloj(1000, 'que se asiente');
+  const escJ = reg(J).escrituras.slice(escAntes);
+  const itemsJ = escJ.filter((e) => /^\/playlists\/playlistinventadat1320\/items/.test(e.ruta));
+  const urisJ = itemsJ.flatMap((e) => e.cuerpo?.uris || []);
+  datos.J3 = { tildadas: tildadasJ.length, escrituras: escJ.map((e) => `${e.metodo} ${e.ruta.split('?')[0]}`), uris: urisJ.length };
+  afirmarJ(tildadasJ.length === 1 && tildadasJ[0] === 'spotify:track:' + idDe('Niebla Alta', 1), `J3: lo encontrado antes del corte (1) está tildado (${tildadasJ.join(', ')})`);
+  afirmarJ(escJ.length === 1 + Math.ceil(tildadasJ.length / 100) && escJ[0]?.ruta === '/me/playlists' && JSON.stringify([...urisJ].sort()) === JSON.stringify([...tildadasJ].sort()),
+    `J3: 1 + ${Math.ceil(tildadasJ.length / 100)} POST con esas uris (${datos.J3.escrituras.join(', ')})`);
+  sinErrores(J, 'J');
+  limpio(J, 'J');
+  J.remove();
+
+  progreso('J: otro artista sin errores y el corte a 390×844');
+  const J390 = abrirMarco('J390', { ancho: 390, alto: 844 });
+  await arrancado(J390, 'el marco J390');
+  await generar(J390, 'J390');
+  // J4: Bruma Corta, sin errores: 20 temas, del 1 al 5 no están en Spotify.
+  const bJ4 = await tocarArtista(J390, 'Bruma Corta', false);
+  datos.J4 = { busquedas: bJ4, tarjeta: !!$(J390, '[data-recs-corte]'), stats: stats(J390), tildados: $$(J390, '.recs-track-check').filter((c) => c.checked).length,
+    filasSinMatch: $$(J390, '#recs-tracks .tracks-grid .pretty-check-row').filter((r) => /sin match/.test(texto(r))).length, avisos: win(J390).__avisos.filter((a) => a.startsWith('[recs]')).length };
+  afirmarJ(!datos.J4.tarjeta && bJ4 === 20 && JSON.stringify(datos.J4.stats) === '[15,0,5]' && datos.J4.tildados === 15 && datos.J4.filasSinMatch === 5 && datos.J4.avisos === 0,
+    `J4: otro artista sin errores, todo como antes (${JSON.stringify(datos.J4)})`);
+  $(J390, '#recs-back-btn').click();
+  await esperarReal(() => tarjetaDe(J390, 'Niebla Alta'), { que: 'volver a las recomendaciones en J390' });
+  await tocarArtista(J390, 'Niebla Alta', true);
+  datos.J6.j390 = desborda(J390);
+  const anchoJ390 = J390.contentDocument.documentElement.clientWidth;
+  const dentro = $$(J390, '[data-recs-corte="error"] p').every((p) => p.getBoundingClientRect().right <= anchoJ390 + 0.5);
+  afirmarJ(corteJ(J390).tarjeta && datos.J6.j390 <= 0 && dentro, `J6: a 390×844 la tarjeta del corte no desborda (${datos.J6.j390}, renglones dentro: ${dentro})`);
+  sinErrores(J390, 'J390');
+  limpio(J390, 'J390');
+  J390.remove();
+
   const resumen =
+    `J: ${MEDIR_J ? `MEDIR [${datos.medirJ.join(' | ')}] ` : ''}429 en la ${datos.J2.hasta429}.ª, ${datos.J2.despues} después en 10 s; stats ${JSON.stringify(datos.J1.stats)}; tarjeta ${datos.J1.tarjeta}; ` +
+    `J3 ${datos.J3.escrituras.join(' + ')} con ${datos.J3.uris} uris; J4 ${JSON.stringify(datos.J4.stats)} sin tarjeta ${!datos.J4.tarjeta}; ` +
+    `J5 peor ${Object.entries(datos.J5).map(([k, v]) => `${k} ${v}`).join(', ')}; J6 1366 ${datos.J6.j1366}, 390 ${datos.J6.j390} · ` +
     `A: abrir = Last.fm ${datos.abrir.lastfm} / Spotify ${datos.abrir.spotify}; generar = Last.fm ${datos.generar.lastfm.length} (${datos.generar.lastfm.join(', ')}) / Spotify ${datos.generar.spotify.length} (${datos.generar.spotify.join(', ')}) · ` +
     `B: agrupar 1 = ${datos.agrupar1.pedidos.length} gettoptags + Spotify [${datos.agrupar1.spotify.join(', ')}], 2 = ${datos.agrupar2.pedidos.length}, 3 = ${datos.agrupar3.lastfm} · ` +
     `C: ${JSON.stringify(datos.agrupar1.estilos)} «${datos.agrupar1.sin}» · ` +

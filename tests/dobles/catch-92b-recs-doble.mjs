@@ -38,5 +38,6 @@ export const textoSinEstilo = () => '', TEXTO_SIN_ESTILOS = '', ARTISTAS_POR_EST
 export const planDeLista = () => ({ artistas: [], temas: 12, topePorArtista: 15, topeTotal: 0 }), textoCoste = () => '', TITULO_COSTE = '';
 export const armarLista = async () => ({ artistas: [], busquedas: 0, corte: null, sinBuscar: [] });
 export const textoCabecera = () => '', textoCorte = () => '', textoSinBuscar = () => '';
+export const textoSinResolver = () => '';   // tanda 141: lo importa `recommendations.js` desde v=378
 export const nombreSugerido = () => '', descripcionPlaylist = () => '';
 export const TEMAS_MIN = 10, TEMAS_MAX = 15, TEMAS_DEFECTO = 12;

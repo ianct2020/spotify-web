@@ -42,14 +42,14 @@
 //   - Buscando y con el embed no hay botón ni barra: no hay nada que pausar ni
 //     ningún tiempo que leer (el iframe no avisa nada).
 
-import { escapeHtml } from './components.js?v=377';
-import { showToast } from './toast.js?v=377';
-import { mountBottom } from './bottom-layer.js?v=377';
-import { animationsEnabled } from './reveal.js?v=377';
-import { iconoPlay, iconoPausa } from './icons.js?v=377';
+import { escapeHtml } from './components.js?v=378';
+import { showToast } from './toast.js?v=378';
+import { mountBottom } from './bottom-layer.js?v=378';
+import { animationsEnabled } from './reveal.js?v=378';
+import { iconoPlay, iconoPausa } from './icons.js?v=378';
 // (v=367, tanda 130) El nombre del pill se mueve con la MISMA marquesina de las listas densas, sin esperar al mouse:
 // el pill tiene ahora un ancho fijo y un nombre largo ya no lo agranda. Ver `moverEtiqueta()`.
-import { hoverMarqueeSpan, prepararMarquesinaFila, pararMarquesinaFila } from './hover-marquee.js?v=377';
+import { hoverMarqueeSpan, prepararMarquesinaFila, pararMarquesinaFila } from './hover-marquee.js?v=378';
 
 const audio = new Audio();
 audio.preload = 'none';

@@ -4,7 +4,7 @@ import { urlEtiquetas } from '../util/generos-escaneo.js';
 import { resolverTemaEnSpotify } from '../util/resolver-tema.js';
 import {
   pedirEtiquetas, pendientesDeEtiquetas, agruparPorEstilo, textoSinEstilo, ARTISTAS_POR_ESTILO, TEXTO_SIN_ESTILOS, planDeLista, textoCoste, TITULO_COSTE,
-  armarLista, textoCabecera, textoCorte, textoSinBuscar, nombreSugerido, descripcionPlaylist,
+  armarLista, textoCabecera, textoCorte, textoSinBuscar, textoSinResolver, nombreSugerido, descripcionPlaylist,
   TEMAS_MIN, TEMAS_MAX, TEMAS_DEFECTO,
 } from '../util/recs-estilo.js';
 import { showProgress, hideProgress, promptPlaylistName, escapeHtml, pageHeader } from '../ui/components.js';
@@ -114,6 +114,9 @@ let recommendations = [];
 let currentPick = null;
 let resolvedTracks = [];
 let alreadyLikedInResolution = 0;
+// v=378 (tanda 141): si Spotify dejó de contestar al resolver los temas de un artista, el corte
+// (`{ busquedas, error, sinResolver }`); `null` si no hubo error. Lo lee `renderResolvedTracks()`.
+let corteResolucion = null;
 const pickedUris = new Set();
 const likedUris = new Set();
 // 'normal' = lo que queda por descubrir · 'hidden' = los que ocultaste.
@@ -388,6 +391,7 @@ async function pickArtist(artist) {
   const ruta = vigilarRuta();
   currentPick = artist;
   resolvedTracks = [];
+  corteResolucion = null;
   pickedUris.clear();
 
   const panel = document.getElementById('recs-panel');
@@ -454,10 +458,21 @@ async function resolveTracksOnSpotify(topTracks, ruta = vigilarRuta()) {
   for (let i = 0; i < topTracks.length; i++) {
     const t = topTracks[i];
     // v=369: la búsqueda y la verificación viven en `util/resolver-tema.js` (la comparte el camino
-    // de un estilo). Este camino se queda como estaba: ⚠️ un ERROR (un 429, un corte) se sigue
-    // pintando como «sin match», que se lee como «Spotify no lo tiene». Es un defecto conocido,
-    // anotado en `PENDIENTES.md` («Tanda 132»), y se dejó así a propósito: arreglarlo es otra tanda.
+    // de un estilo). v=378 (tanda 141): un ERROR (un 429, la pausa de `/search`, un 5xx o un corte
+    // de red ya reintentados) ya no se pinta como «sin match», que se leía como «Spotify no lo
+    // tiene»: en el primero se PARA (ni una búsqueda ni un `sleep` más), como el camino de un
+    // estilo, y `renderResolvedTracks()` lo dice. Los reintentos son los de siempre: la llamada va
+    // sin opciones, sin `_maxRetries`.
     const r = await resolverTemaEnSpotify(t);
+    if (r.estado === 'error') {
+      corteResolucion = {
+        busquedas: i + 1,   // contando la que falló, como `armarLista`
+        error: r.error,
+        sinResolver: topTracks.slice(i).map(x => x.name),
+      };
+      console.warn('[recs] Spotify dejó de contestar al resolver los temas de un artista:', r.error);
+      break;
+    }
     raw.push(r.estado === 'encontrado' ? r.fila : { uri: null, name: t.name, artist: t.artist, matched: false });
     // 30 búsquedas con 120 ms de pausa entre cada una: el corte va acá, antes
     // de tocar el contador, y no solo al final del bucle.
@@ -558,8 +573,18 @@ function renderResolvedTracks(ruta = vigilarRuta()) {
   const tracksEl = document.getElementById('recs-tracks');
   const matched = resolvedTracks.filter(t => t.matched);
   matched.forEach(t => pickedUris.add(t.uri));
+  // v=378 (tanda 141): si Spotify dejó de contestar, la tarjeta del camino de un estilo (las mismas
+  // clases y el mismo `textoCorte`), arriba de todo. Los temas sin resolver NO son filas ni suman a
+  // «Sin match». Sin corte queda vacío y va pegado al backtick: el HTML es byte a byte el de antes.
+  const c = corteResolucion;
+  const aviso = c ? `
+    <div class="card recs-estilo-corte" data-recs-corte="error">
+      <p class="recs-estilo-nota">${escapeHtml(textoCorte({ tipo: 'error', busquedas: c.busquedas }))}</p>
+      <p class="recs-estilo-crudo">${escapeHtml(String(c.error?.message || c.error))}</p>
+      <p class="recs-estilo-nota" data-recs-sin-resolver>${escapeHtml(textoSinResolver(c.sinResolver))}</p>
+    </div>` : '';
 
-  tracksEl.innerHTML = `
+  tracksEl.innerHTML = `${aviso}
     <div class="results-summary">
       <div class="stat-card">
         <div class="stat-value">${matched.length}</div>
@@ -574,7 +599,7 @@ function renderResolvedTracks(ruta = vigilarRuta()) {
         <div class="stat-label">Sin match</div>
       </div>
     </div>
-    ${matched.length === 0 ? `
+    ${matched.length === 0 && !c ? `
       <div class="card" style="margin-bottom:16px"><p>Todos los top tracks de este artista ya están en tus likes. Vuelve y prueba con otro.</p></div>
     ` : ''}
 
